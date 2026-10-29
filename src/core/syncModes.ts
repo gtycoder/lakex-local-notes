@@ -15,7 +15,7 @@
  * 出网判据不在这里 —— 统一走 core 的 canTouchNetwork(cloudStateOf(...))（AGENTS §3#20），
  * 定时器只负责「到点触发」，能不能出网由引擎侧判。
  */
-import type { SyncSettings } from "../lib/types.js";
+import type { SyncSettings } from "./sharedTypes.js";
 
 export interface SyncAutoModeOption {
   value: SyncSettings["autoMode"];

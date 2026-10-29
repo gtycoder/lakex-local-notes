@@ -1,3 +1,27 @@
+/**
+ * 渲染层 / IPC 对外类型（UI 与 Electron 共用）。
+ *
+ * CORE-10 tail（261028）：**两端共享的领域类型已下沉为 src/core/sharedTypes.ts 的定义处**，这里
+ * re-export 保持既有 import 路径不变；core 生产文件不再 import 本文件（依赖方向 = lib → core）。
+ * 渲染层/外壳专属类型（NoteSummary、SyncResult、SyncProgress、S3 设置、诊断报告…）仍定义在本文件。
+ */
+import type { S3v3DiagnosticReport } from "../core/s3v3Report";
+import type { QuickNoteSummary, SyncWarning } from "../core/sharedTypes";
+
+export type {
+  NoteInfo,
+  NoteInfoAsset,
+  QuickNoteContent,
+  QuickNoteDocument,
+  QuickNoteImage,
+  QuickNoteSummary,
+  SyncSettings,
+  SyncWarning,
+  SyncWarningKind,
+  TreeNode,
+  TreeNodeType,
+} from "../core/sharedTypes";
+
 export interface NoteSummary {
   id: string;
   title: string;
@@ -32,66 +56,6 @@ export interface NoteDigest {
   deleted: boolean;
 }
 
-export interface NoteInfoAsset {
-  filename: string;
-  size: number;
-  kind: string;
-}
-
-/** 文档属性（"属性"弹窗数据）。 */
-export interface NoteInfo {
-  id: string;
-  title: string;
-  /** 所属路径（笔记本 / 分组 …），根下为空 */
-  parentPath: string;
-  /** 所属路径链（自根向下，带 id，供跳转） */
-  parents: Array<{ id: string; title: string }>;
-  /** 卡片统计（图片/视频/附件/代码块/表格…） */
-  cardStats: Array<{ key: string; label: string; count: number }>;
-  createdAt: string | null;
-  updatedAt: string;
-  isDirty?: boolean;
-  isPurged?: boolean;
-  /** v3：云端已彻底删除、本机仅保留回收站副本。 */
-  cloudDeleted?: boolean;
-  isConflict: boolean;
-  isEditLocked: boolean;
-  lakePath: string;
-  assetsDir: string;
-  sizeBytes: number;
-  charCount: number;
-  wordCount: number;
-  /** 当前正文（已落盘那份）的 sha256：历史面板用来标出"与当前版本一致"的快照。 */
-  contentHash: string;
-  assets: NoteInfoAsset[];
-  assetTotalBytes: number;
-  history: Array<{ id: number; createdAt: string; size: number; contentHash: string }>;
-}
-
-export type TreeNodeType = "notebook" | "group" | "note";
-
-export interface TreeNode {
-  id: string;
-  workspaceId: string;
-  parentId: string | null;
-  nodeType: TreeNodeType;
-  title: string;
-  noteFileId: string | null;
-  sortOrder: number;
-  createdAt: string;
-  updatedAt: string;
-  isPurged?: boolean;
-  isDirty?: boolean;
-  /** v3：云端已彻底删除、本机仅保留回收站副本。 */
-  cloudDeleted?: boolean;
-  isConflict: boolean;
-  icon?: string | null;
-  description?: string | null;
-  summary?: string | null;
-  /** 文档类型（doc | usheet | bitable | board | ink；缺省 doc）：宿主据此对非 doc 隐藏导出/大纲等。 */
-  kind?: "doc" | "usheet" | "bitable" | "board" | "ink";
-}
-
 export interface WorkspaceSnapshot {
   workspaceId: string;
   workspaceName: string;
@@ -100,23 +64,10 @@ export interface WorkspaceSnapshot {
   sync: SyncStatus;
 }
 
-export interface SyncSettings {
-  enabled: boolean;
-  autoMode: "interval" | "onOpenClose" | "manual";
-  autoIntervalMinutes: number;
-  /** 按需资产（P0-4，261026）：首拉只同步 pointer/索引/正文，媒体字节打开/预览时补拉。
-   *  缺省 false（全量语义）；移动端从「按需下载附件」开关写入。 */
-  deferAssets?: boolean;
-}
-
 export interface S3GcSettings {
   gcRetentionDays: number;
   gcIntervalHours: number;
   trashAutoPurgeDays: number;
-}
-export interface S3GcPendingItem {
-  key: string;
-  markedAt: string;
 }
 export interface S3GcLogItem {
   id: number;
@@ -143,15 +94,8 @@ export interface QuickNoteTrashItem {
   cloudDeleted?: boolean;
 }
 
-export interface S3Settings {
-  endpoint: string;
-  region: string;
-  bucket: string;
-  prefix: string;
-  accessKeyId: string;
-  secretAccessKey: string;
-  forcePathStyle: boolean;
-}
+/** S3 连接配置：单一来源 = src/core/syncUtils.ts（261029 三处定义收口；本文件只 re-export）。 */
+export type { S3Settings } from "../core/syncUtils";
 
 export interface SyncStatus {
   phase: "idle" | "syncing" | "success" | "error";
@@ -185,29 +129,6 @@ export interface QuickNotesSyncStatus {
   error?: string;
 }
 
-/** 同步警告：远端对象/资源缺失时「跳过受影响条目、不覆盖本地、其余继续」（V5 §5.5 B 方案）的结构化报告。
- *  由 core 直接产出（不再拼字符串让消费方正则反解）；UI 据此展示与点击定位。 */
-export type SyncWarningKind =
-  | "remote_incomplete"
-  | "asset_missing"
-  /** 本地正文文件缺失（被手动删除等），且没有可拉回的云端副本 ⇒ 跳过，不上传空正文。 */
-  | "local_body_missing"
-  /** 本地正文缺失但云端有副本：已自动拉回恢复。 */
-  | "local_body_restored"
-  /** 本地附件未落地/读不出（不是用户删除）⇒ 保留云端声明，避免误删云端附件。 */
-  | "asset_kept_remote";
-export interface SyncWarning {
-  kind: SyncWarningKind;
-  /** 受影响文档 id（能定位时）。 */
-  noteId?: string;
-  /** 文档标题（core 能取到时带上，省 UI 一次回查）。 */
-  title?: string;
-  /** 资源文件名（asset_missing 且能定位到具体文件时）。 */
-  filename?: string;
-  /** 人类可读一行（日志/兜底展示；UI 优先用 title/filename）。 */
-  message: string;
-}
-
 export interface SyncResult {
   uploaded: number;
   downloaded: number;
@@ -219,6 +140,11 @@ export interface SyncResult {
   foldersDownloaded?: number;
   uploadedBytes?: number;
   downloadedBytes?: number;
+  /** 261028：上传/下载细分（文档/小记）；旧 uploaded/downloaded 仍为总数。 */
+  uploadedDocuments?: number;
+  downloadedDocuments?: number;
+  uploadedQuickNotes?: number;
+  downloadedQuickNotes?: number;
   /** 本次同步总耗时（毫秒）。 */
   durationMs?: number;
   /** 本次同步移入回收站的文档数。 */
@@ -268,11 +194,17 @@ export interface SyncProgress {
   supersededNotes?: Array<{ id: string; title: string }>;
   /** 同步失败时附带错误信息（自动同步失败也能让状态栏变为“同步失败”）。 */
   error?: string;
+  /** 同步失败时的域错误码（S3v3SyncError.code；未知为 "unknown"）。 */
+  errorCode?: string;
+  /** 同步失败分类：retryable（可重试）/ action-required（需人工处理）/ fatal（数据损坏）。 */
+  errorClass?: "retryable" | "action-required" | "fatal";
 }
 
 export interface SyncStatusInfo {
   lastSyncedAt: string | null;
   lastResult: SyncResult | null;
+  /** SD-13：最近 3 轮 v3 同步诊断（阶段耗时/对象数/字节/失败对象），设置页「同步诊断」复制。 */
+  v3Reports?: S3v3DiagnosticReport[];
 }
 
 export interface ImportedResource {
@@ -318,44 +250,18 @@ export interface CleanOrphanResult {
   freedBytes: number;
 }
 
-/** 小记独立内容空间（V1 仅文本 + 图片，不复用 Lake 文档格式）。 */
-export interface QuickNoteImage {
-  id: string;
-  filename: string;
-  mimeType: string;
-  width: number | null;
-  height: number | null;
-  size: number;
-  hash: string;
-  url?: string;
-}
-
-export interface QuickNoteContent {
-  version: number;
-  /** 纯文本镜像（预览/搜索/移动端降级显示）；v2 起不再是唯一真相。 */
-  text: string;
-  /** v2：内核形态正文（Lake HTML）。桌面编辑态由内核产出，其它入口由 text 合成。 */
-  body: string;
-  images: QuickNoteImage[];
-  /** 读取模型：关联表里的标签 ID（标签目录/关联表是唯一事实，`.qnote` 不落盘标签）。 */
+/**
+ * 小记列表投影（DT-05）：列表 IPC **不读 .qnote 正文**，只带列表/筛选/预览占位所需字段。
+ * - 标签从关联表 + 标签目录投影（不读正文）；
+ * - 资源只留 mime 清单（类型筛选用），字节/正文在打开单条时经 read_quick_note 取。
+ */
+export interface QuickNoteListSummary extends QuickNoteSummary {
+  /** 关联表里的标签 ID（与 QuickNoteContent.tagIds 同口径）。 */
   tagIds: string[];
-  /** 展示用标签名（由标签目录解析，不落盘）；与 tagIds 一一对应。 */
+  /** 展示用标签名（与 tagIds 一一对应）。 */
   tags: string[];
-}
-
-export interface QuickNoteSummary {
-  id: string;
-  createdAt: string;
-  updatedAt: string;
-  previewText: string;
-  imageCount: number;
-  contentHash: string;
-  syncState: "local" | "synced" | "conflict";
-  isConflict: boolean;
-}
-
-export interface QuickNoteDocument extends QuickNoteSummary {
-  content: QuickNoteContent;
+  /** 资源清单里出现过的 mime 类型（去重；类型筛选「图片/附件」用）。 */
+  assetMimeTypes: string[];
 }
 
 export interface SaveQuickNoteInput {

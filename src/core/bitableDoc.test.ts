@@ -33,7 +33,9 @@ import {
   filterOperatorLabel,
   bitableFilterRuleCount,
   bitableFillBackgroundTokens,
+  bitableViewNeedsClock,
   buildBitableFillProjection,
+  canonicalBitableNav,
   createBitableFillRule,
   groupRecords,
   defaultViewName,
@@ -95,7 +97,9 @@ import {
   filterValueKindFor,
   isAiFieldType,
   sortModesForField,
+  type BitableDateFilterMode,
   type BitableField,
+  type BitableFilterRule,
   type BitableTable,
 } from "./bitableDoc.js";
 
@@ -1202,6 +1206,156 @@ describe("bitableDoc 数据模型", () => {
   });
 });
 
+describe("CORE 审计回归（261027）", () => {
+  describe("CORE-05 导航归一（正文恒写第一表/第一视图）", () => {
+    function navTable(id: string, viewIds: string[], activeViewId: string): BitableTable {
+      const table = createDefaultBitableTable(id, id);
+      table.views = viewIds.map((viewId) => ({ ...createBitableView("grid", viewId), id: viewId }));
+      table.activeViewId = activeViewId;
+      return table;
+    }
+
+    it("每张表的 activeViewId 归一到第一个视图（桌面/移动端调同一份 core）", () => {
+      const t1 = navTable("tbl-nav-1", ["v1a", "v1b"], "v1b");
+      const t2 = navTable("tbl-nav-2", ["v2a"], "v2a");
+      const parsed = parseBitableBody(bitablesToBody([t1, t2]))!;
+      expect(parsed.tables.map((table) => table.activeViewId)).toEqual(["v1a", "v2a"]);
+    });
+
+    it("activeTableId 缺省/非法 → 第一张表；显式且存在 → 保留（导出/快照等保真场景）", () => {
+      const t1 = navTable("tbl-nav-a", ["va"], "va");
+      const t2 = navTable("tbl-nav-b", ["vb"], "vb");
+      expect(parseBitableBody(bitablesToBody([t1, t2]))!.activeTableId).toBe(t1.id);
+      expect(parseBitableBody(bitablesToBody([t1, t2], "tbl-missing"))!.activeTableId).toBe(t1.id);
+      expect(parseBitableBody(bitablesToBody([t1, t2], t2.id))!.activeTableId).toBe(t2.id);
+    });
+
+    it("切视图不改正文字节（纯导航不标脏、不触发同步）", () => {
+      const base = navTable("tbl-nav-c", ["va", "vb"], "va");
+      const first = bitablesToBody([base]);
+      const second = bitablesToBody([{ ...base, activeViewId: "vb" }]);
+      expect(second).toBe(first);
+    });
+
+    it("空视图列表不崩、保留原 activeViewId（补默认视图是 parse 的职责）", () => {
+      const bare: BitableTable = { id: "tbl-nav-bare", name: "空", fields: [], views: [], activeViewId: "v-old", records: [] };
+      const canonical = canonicalBitableNav([bare]);
+      expect(canonical.tables[0].activeViewId).toBe("v-old");
+      expect(canonical.activeTableId).toBe(bare.id);
+    });
+  });
+
+  describe("CORE-08 滚动日期窗口（含今天共 N 个日历日）", () => {
+    const dayCount = (start: string, end: string): number => {
+      const [y1, m1, d1] = start.split("-").map(Number);
+      const [y2, m2, d2] = end.split("-").map(Number);
+      return Math.round((new Date(y2, m2 - 1, d2).getTime() - new Date(y1, m1 - 1, d1).getTime()) / 86_400_000) + 1;
+    };
+
+    const cases: Array<[string, BitableDateFilterMode, Date, string, string]> = [
+      ["月中 · 过去7天", "last7days", new Date(2026, 9, 28, 12), "2026-10-22", "2026-10-28"],
+      ["跨月 · 过去7天", "last7days", new Date(2026, 10, 3, 8), "2026-10-28", "2026-11-03"],
+      ["跨年 · 过去7天", "last7days", new Date(2027, 0, 2, 23, 59, 59), "2026-12-27", "2027-01-02"],
+      ["闰日 · 过去7天", "last7days", new Date(2028, 1, 29, 0, 0, 1), "2028-02-23", "2028-02-29"],
+      ["月中 · 未来7天", "next7days", new Date(2026, 9, 28, 12), "2026-10-28", "2026-11-03"],
+      ["跨年 · 未来7天", "next7days", new Date(2026, 11, 30, 1), "2026-12-30", "2027-01-05"],
+      ["跨月 · 过去30天", "last30days", new Date(2026, 9, 28, 9), "2026-09-29", "2026-10-28"],
+      ["跨年 · 未来30天", "next30days", new Date(2026, 11, 20, 9), "2026-12-20", "2027-01-18"],
+    ];
+
+    it.each(cases)("%s：起点/终点与「恰好 N 天」", (_label, mode, now, start, end) => {
+      expect(dateFilterRangeFor(mode, now)).toEqual({ start, end });
+      expect(dayCount(start, end)).toBe(mode.endsWith("7days") ? 7 : 30);
+    });
+
+    it("今天/昨天按本地日历日，不随 now 的时分秒漂移（月末/月初边界）", () => {
+      const lateNight = new Date(2026, 9, 28, 23, 59, 59, 999);
+      expect(dateFilterRangeFor("today", lateNight)).toEqual({ start: "2026-10-28", end: "2026-10-28" });
+      expect(dateFilterRangeFor("yesterday", lateNight)).toEqual({ start: "2026-10-27", end: "2026-10-27" });
+      expect(dateFilterRangeFor("yesterday", new Date(2026, 10, 1, 0, 0, 0))).toEqual({ start: "2026-10-31", end: "2026-10-31" });
+    });
+
+    it("边界日：过去7天含今天与第 7 天前，不含第 8 天前（修复「多算一天」）", () => {
+      const now = new Date(2026, 9, 28, 12);
+      const field = createBitableField("date", "日期", "f-date-window");
+      // 动态模式的 value 存模式名本身（与筛选编辑器写入口径一致），否则会被当成「未填完 = 不拦截」。
+      const rule: BitableFilterRule = { fieldId: field.id, operator: "equalTo", value: "last7days", valueMode: "last7days" };
+      expect(evaluateFilter(field, "2026-10-28", rule, now)).toBe(true);
+      expect(evaluateFilter(field, "2026-10-22", rule, now)).toBe(true);
+      expect(evaluateFilter(field, "2026-10-21", rule, now)).toBe(false);
+    });
+  });
+
+  describe("CORE-06 重算时机（只有动态日期才依赖 clock）", () => {
+    function clockTable(): BitableTable {
+      const table = createDefaultBitableTable("时钟", "tbl-clock");
+      table.fields = [
+        ...table.fields,
+        createBitableField("date", "日期", "f-date-clock"),
+        createBitableField("createdTime", "创建时间", "f-created-clock"),
+      ];
+      return table;
+    }
+
+    it("筛选全静态 → 不需要随 clock 重算", () => {
+      const table = clockTable();
+      const text = table.fields[0];
+      const view = table.views[0];
+      expect(bitableViewNeedsClock(table, view)).toBe(false);
+      view.filters = [{ fieldId: text.id, operator: "contains", value: "a" }];
+      expect(bitableViewNeedsClock(table, view)).toBe(false);
+      view.filters = [{ fieldId: "f-date-clock", operator: "equalTo", value: "2026-10-28", valueMode: "custom" }];
+      expect(bitableViewNeedsClock(table, view)).toBe(false);
+    });
+
+    it("动态日期（含嵌套分组 / 系统时间字段）→ 需要", () => {
+      const table = clockTable();
+      const text = table.fields[0];
+      const view = table.views[0];
+      view.filters = [{ fieldId: "f-date-clock", operator: "equalTo", valueMode: "last7days" }];
+      expect(bitableViewNeedsClock(table, view)).toBe(true);
+      view.filters = [{
+        operator: "or",
+        filters: [
+          { fieldId: text.id, operator: "isEmpty" },
+          { fieldId: "f-created-clock", operator: "greaterThan", valueMode: "today" },
+        ],
+      }];
+      expect(bitableViewNeedsClock(table, view)).toBe(true);
+    });
+
+    it("填色规则走同一判定；column / 无背景色不依赖当天；无视图 → false", () => {
+      const table = clockTable();
+      const view = table.views[0];
+      view.fillRules = [{ id: "f-row", mode: "row", color: "#FFE8E6", condition: { fieldId: "f-date-clock", operator: "equalTo", valueMode: "yesterday" } }];
+      expect(bitableViewNeedsClock(table, view)).toBe(true);
+      view.fillRules = [{ id: "f-col", mode: "column", color: "#D4EEFC", fieldId: "f-date-clock" }];
+      expect(bitableViewNeedsClock(table, view)).toBe(false);
+      view.fillRules = [{ id: "f-none", mode: "row", color: BITABLE_FILL_NO_COLOR, condition: { fieldId: "f-date-clock", operator: "equalTo", valueMode: "today" } }];
+      expect(bitableViewNeedsClock(table, view)).toBe(false);
+      expect(bitableViewNeedsClock(table, undefined)).toBe(false);
+    });
+
+    it("填色投影：未配置规则被跳过但原始下标不丢（候选顺序/混色不变）", () => {
+      const table = createDefaultBitableTable("填色", "tbl-fill-idx");
+      const text = table.fields[0];
+      const record = createBitableRecord("r1");
+      record.values[text.id] = "A";
+      table.records = [record];
+      const view = table.views[0];
+      view.fillRules = [
+        { id: "skip", mode: "row", color: "#FFE8E6", condition: { fieldId: text.id, operator: "contains" } },
+        { id: "row", mode: "row", color: "#FADB14", condition: { fieldId: text.id, operator: "contains", value: "A" } },
+        { id: "cell", mode: "cell", color: "#FFA39E", condition: { fieldId: text.id, operator: "contains", value: "A" } },
+      ];
+      const projection = buildBitableFillProjection(table, view, table.records);
+      expect(projection.row.get("r1")).toEqual({ ruleIndex: 1, color: "#FADB14" });
+      expect(projection.cell.get("r1:" + text.id)).toEqual({ ruleIndex: 2, color: "#FFA39E" });
+      expect(bitableFillBackgroundTokens(projection, "r1", text.id)).toEqual(["#FADB14", "#FFA39E"]);
+    });
+  });
+});
+
 describe("AI 字段（261003 · 单一类型 · 命令在字段里）", () => {
   const T = "2026-10-03T00:00:00.000Z";
 
@@ -1309,5 +1463,28 @@ describe("AI 字段（261003 · 单一类型 · 命令在字段里）", () => {
     expect(bitableFieldValue(record, aiField)).toBe("已生成的旧值");
     expect(bitableFieldText(record, aiField)).toBe("已生成的旧值");
     expect(bitableToSearchText(bitablesToBody([table], table.id))).toContain("已生成的旧值");
+  });
+
+  it("markdown / AI 字段筛选走文本口径：不可能命中的规则返回 false（不再静默恒真）", () => {
+    const markdown = createBitableField("markdown", "复盘", "f-md");
+    const text = createBitableField("text", "文本", "f-text");
+    expect(filterOperatorsFor(markdown)).toEqual(filterOperatorsFor(text));
+    expect(filterValueKindFor(markdown, "contains")).toBe("text");
+    expect(evaluateFilter(markdown, "## 复盘\n本周完成同步修复", { fieldId: markdown.id, operator: "contains", value: "同步修复" })).toBe(true);
+    expect(evaluateFilter(markdown, "## 复盘\n本周完成同步修复", { fieldId: markdown.id, operator: "startsWith", value: "## 复盘" })).toBe(true);
+    // 以前 markdown 落到末尾 return true ⇒ 下面两条都会「命中」
+    expect(evaluateFilter(markdown, "## 复盘", { fieldId: markdown.id, operator: "contains", value: "不存在的词" })).toBe(false);
+    expect(evaluateFilter(markdown, "## 复盘", { fieldId: markdown.id, operator: "endsWith", value: "ZZZ" })).toBe(false);
+    expect(evaluateFilter(markdown, "## 复盘", { fieldId: markdown.id, operator: "notContains", value: "不存在的词" })).toBe(true);
+    expect(evaluateFilter(markdown, "", { fieldId: markdown.id, operator: "isEmpty" })).toBe(true);
+    expect(evaluateFilter(markdown, "有值", { fieldId: markdown.id, operator: "isNotEmpty" })).toBe(true);
+
+    const table = aiFixture();
+    const aiField = table.fields.find((field) => field.id === "f-ai")!;
+    const aiValue = bitableFieldValue(table.records[0], aiField);
+    expect(filterValueKindFor(aiField, "contains")).toBe("text");
+    expect(evaluateFilter(aiField, aiValue, { fieldId: aiField.id, operator: "contains", value: "旧值" })).toBe(true);
+    expect(evaluateFilter(aiField, aiValue, { fieldId: aiField.id, operator: "contains", value: "不存在的值" })).toBe(false);
+    expect(evaluateFilter(aiField, aiValue, { fieldId: aiField.id, operator: "endsWith", value: "新鲜值" })).toBe(false);
   });
 });

@@ -1,35 +1,45 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { gzipSync, gunzipSync } from "node:zlib";
-import { TRASH_NOTEBOOK_ID, type Store } from "../store.js";
+import { type Store } from "../store.js";
 import type { QuickNotesStore } from "../quickNotes.js";
-import type { SyncNote } from "../noteQueries.js";
-import type { LakeFolderEntry, LakeNoteEntry, QuickNoteEntry, QuickNoteTagEntry } from "../../src/core/s3v3Index.js";
-import { sha256Hex } from "../../src/core/syncUtils.js";
-import type { DeviceBaseline, DeviceState, PendingAssetRetry, S3v3DeviceStore } from "./deviceStore.js";
-
-/** 资源文件名安全字符集（与 core isSafePathSegment 同口径；纯防御，声明/键已校验）。 */
-const SAFE_ASSET_FILENAME = /^[A-Za-z0-9._-]+$/;
+import type { DeviceBaseline, DeviceState, S3v3DeviceStore } from "./deviceStore.js";
+import { migratePersisted } from "../../src/core/s3v3/state/intentLogState.js";
+import {
+  createDeviceStoreMeta, createFileBackedAssetIo, mergeSyncMarkers,
+  type AssetIoPort, type DeviceStoreMeta,
+} from "../../src/core/s3v3/state/deviceStore.js";
+import { createDesktopPlatformPort } from "./desktopPlatformPort.js";
+import { createNodeFileDriver } from "./nodeFileDriver.js";
 
 /**
- * 桌面现有 Store → S3v3DeviceStore 适配器（v1：Lake 文档/目录/附件）。
- * - 元数据以 Store 为准；sync 专属状态（baseline/intents/pending/remotePurged/restorePending/assetsHash）落 sidecar。
- * - 小记暂不支持：检测到 quick-notes 库即抛错，绝不静默跳过。
+ * 桌面现有 Store → S3v3DeviceStore 适配器（E2-4：**薄壳**）。
+ *
+ * 决策/映射（loadState/saveState/saveFolders/saveQuickNotes/资产 IO/信封迁移）都在
+ * src/core/s3v3/state/deviceStore.ts；本文件只做：
+ * - 平台装配：`PlatformDataPort`（Store/QuickNotesStore）＋ `FileDriver`（fs）；
+ * - 平台私有生命周期：正文 staging（引擎 writeBody → saveState 落盘）、正文 hash 缓存、
+ *   「资产目录延迟删」（行/正文落库后再删）、quick-notes 库存在性护栏；
+ * - baseline 文件（gzip）与 saveBaseline 的 UI dirty 清理。
  */
 export class DesktopStoreDevice implements S3v3DeviceStore {
+  static readonly MISSING_SCAN_INTERVAL_MS = 15 * 60_000;
   private readonly store: Store;
   private readonly stateFile: string;
   private readonly baselineFile: string;
-  private readonly stagingDir: string;
-  private stagedBodies = new Map<string, Uint8Array>();
-  /** 已直写落盘的资产（仅用于诊断/断言，不再在内存里存字节：1.7GB 首拉峰值的主因）。 */
-  private clearedAssets = new Set<string>();
+  private readonly stagedBodies = new Map<string, Uint8Array>();
+  /** 已登记删除的资产目录：延迟到该篇正文/行落库之后再真删（P0-3 顺序要求）。 */
+  private readonly clearedAssets = new Set<string>();
   private readonly skipQuickNotesGuard: boolean;
   /** 正文 hash 缓存：文件 mtime+size 未变则复用，避免每轮全库读正文。首次/变更文件才重算。 */
-  private hashCache = new Map<string, { mtimeMs: number; size: number; hash: string }>();
+  private readonly hashCache = new Map<string, { mtimeMs: number; size: number; hash: string }>();
   private readonly quickNotes?: QuickNotesStore;
   /** 同步期兜底创建/复用的目录（未进远端索引）：同轮 deleteMissing 不得删，否则文档父级悬空。 */
   private readonly protectedFolderIds = new Set<string>();
+  /** 本轮 loadState 时缺正文队列是否非空（决定 saveState 收尾要不要清库；正常轮为 false）。 */
+  private sawRecoverySeen = false;
+  private readonly assetIo: AssetIoPort;
+  private readonly meta: DeviceStoreMeta;
 
   constructor(store: Store, storeRoot: string, opts: { stateFile?: string; baselineFile?: string; skipQuickNotesGuard?: boolean; quickNotes?: QuickNotesStore } = {}) {
     this.skipQuickNotesGuard = !!opts.skipQuickNotesGuard;
@@ -38,12 +48,44 @@ export class DesktopStoreDevice implements S3v3DeviceStore {
     const dir = path.join(storeRoot, "sync-v3");
     this.stateFile = opts.stateFile ?? path.join(dir, "state.json");
     this.baselineFile = opts.baselineFile ?? path.join(dir, "baseline.json.gz");
-    this.stagingDir = path.join(dir, "staging");
+    const files = createNodeFileDriver();
+    const quick = this.quickNotes;
+    this.assetIo = createFileBackedAssetIo({
+      files,
+      assetDirFor: (noteId: string) => this.store.noteAssetsPathFor(noteId),
+      ...(quick ? { quickAssetDirFor: (quickNoteId: string) => quick.quickNoteAssetsPathFor(quickNoteId) } : {}),
+      // 桌面：删除资产目录必须延迟到正文/行落库之后，这里只登记（saveState 内按篇 flush）。
+      removeAssetsDir: async (noteId: string) => { this.clearedAssets.add(noteId); },
+    });
+    this.meta = createDeviceStoreMeta({
+      platform: createDesktopPlatformPort(store, quick),
+      files,
+      assets: this.assetIo,
+      state: {
+        read: () => this.readJson<unknown>(this.stateFile),
+        write: (persisted) => this.writeAtomic(this.stateFile, JSON.stringify(persisted)),
+      },
+      baseline: { load: () => this.loadBaseline() },
+      stagedBodies: this.stagedBodies,
+      hashCache: this.hashCache,
+      protectedFolderIds: this.protectedFolderIds,
+      markRecoverySeen: (seen: boolean) => { this.sawRecoverySeen = seen; },
+      recoveryConsumed: () => {
+        if (!this.sawRecoverySeen) return;
+        try { this.store.clearBodyRecoveryPending(); } catch { /* 清理失败不影响同步结果 */ }
+        this.sawRecoverySeen = false;
+      },
+      flushAssetDirDeletion: async (noteId: string) => {
+        if (!this.clearedAssets.has(noteId)) return;
+        try { await fs.rm(this.store.getNotePaths(noteId).assetsDir, { recursive: true, force: true }); } catch { /* ignore */ }
+      },
+      clearAssetDirDeletions: () => this.clearedAssets.clear(),
+      log: (message: string) => this.store.logScopes.sync.info(message),
+    });
   }
 
   async init(): Promise<void> {
     await fs.mkdir(path.dirname(this.stateFile), { recursive: true });
-    await fs.mkdir(this.stagingDir, { recursive: true });
     if (!this.quickNotes && !this.skipQuickNotesGuard) {
       const quickDb = path.join(path.dirname(this.stateFile), "..", "quick-notes", "metadata.sqlite3");
       if (await this.exists(quickDb)) throw new Error("DesktopStoreDevice: quick notes store 未注入（拒绝静默跳过小记）");
@@ -60,304 +102,9 @@ export class DesktopStoreDevice implements S3v3DeviceStore {
     await fs.rename(tmp, file);
   }
 
-  private sidecarShape(state: DeviceState) {
-    return {
-      intents: state.intents, pending: state.pending, quickPurgeTimes: state.quickPurgeTimes ?? {},
-      remotePurged: state.remotePurged ?? [], restorePending: state.restorePending ?? [], archived: state.archived ?? [],
-      pendingAssets: state.pendingAssets ?? [],
-      assetsHash: Object.fromEntries(state.lake.notes.map((n) => [n.id, n.assetsHash]).filter(([, v]) => v)),
-      quickAssetsHash: Object.fromEntries((state.quickNotes.items ?? []).map((n) => [n.id, n.assetsHash]).filter(([, v]) => v)),
-      hashCache: Object.fromEntries(this.hashCache),
-    };
-  }
-
-  async loadState(): Promise<DeviceState | null> {
-    const folders: LakeFolderEntry[] = this.store.listFoldersForSync().map((f) => ({
-      id: f.id, title: f.title, parentId: f.parentId, sortOrder: f.sortOrder, nodeType: f.nodeType, icon: f.icon, updatedAt: f.updatedAt,
-      ...(f.trashedAt !== undefined && f.trashedAt !== null ? { trashedAt: f.trashedAt } : {}),
-      ...(f.deletedFromParentId !== undefined && f.deletedFromParentId !== null ? { deletedFromParentId: f.deletedFromParentId } : {}),
-    }));
-    const side = await this.readJson<{ intents: DeviceState["intents"]; pending: DeviceState["pending"]; quickPurgeTimes?: Record<string, string>; remotePurged: string[]; restorePending: string[]; archived: DeviceState["archived"]; assetsHash: Record<string, string>; quickAssetsHash?: Record<string, string>; hashCache?: Record<string, { mtimeMs: number; size: number; hash: string }>; pendingAssets?: PendingAssetRetry[] }>(this.stateFile);
-    this.hashCache = new Map(Object.entries(side?.hashCache ?? {}));
-    const notes: LakeNoteEntry[] = [];
-    // 单 SQL 轻量元数据：避免逐篇 getNoteInfo（读正文/算字数/扫资产卡片，20k 文档会退化到秒级+）
-    for (const n of this.store.listNotesSyncMeta()) {
-      let contentHash = n.contentHash;
-      if (!contentHash) {
-        const lakePath = this.store.getNotePaths(n.id).lakePath;
-        let stat: { mtimeMs: number; size: number };
-        try { stat = await fs.stat(lakePath); }
-        catch {
-          // P0：正文文件被删后，sidecar 里的 hash 缓存必须失效；否则 saveState 会误以为
-          // 「本地已有同 hash 正文」而跳过落盘，云端拉回的正文永远不恢复（0 PUT/0 警告/不恢复）。
-          this.hashCache.delete(n.id);
-          continue;
-        }
-        const cached = this.hashCache.get(n.id);
-        if (cached && cached.mtimeMs === stat.mtimeMs && cached.size === stat.size) contentHash = cached.hash;
-        else {
-          try { contentHash = sha256Hex(await fs.readFile(lakePath)); } catch { continue; }
-          this.hashCache.set(n.id, { mtimeMs: stat.mtimeMs, size: stat.size, hash: contentHash });
-        }
-      }
-      if (!contentHash) continue;
-      notes.push({
-        id: n.id, title: n.title, parentId: n.parentId, sortOrder: n.sortOrder, updatedAt: n.updatedAt, contentHash,
-        ...(n.kind && n.kind !== "doc" ? { kind: n.kind } : {}), ...(n.icon !== null ? { icon: n.icon } : {}),
-        isLocked: n.isEditLocked, lockedAt: n.editLockedAt, isConflict: n.isConflict,
-        ...(n.trashedAt ? { trashedAt: n.trashedAt } : {}), ...(n.deletedFromParentId !== null ? { deletedFromParentId: n.deletedFromParentId } : {}),
-        ...(side?.assetsHash?.[n.id] ? { assetsHash: side.assetsHash[n.id] } : {}),
-      });
-    }
-    const quickItems: QuickNoteEntry[] = [];
-    const quickTags: QuickNoteTagEntry[] = [];
-    const quickDeletes: string[] = [];
-    const quickPurges: string[] = [];
-    const quickPurgeTimes: Record<string, string> = { ...(side?.quickPurgeTimes ?? {}) };
-    if (this.quickNotes) {
-      for (const q of this.quickNotes.listQuickNotesForSync()) {
-        const tagIds = this.quickNotes.listQuickNoteTagIds(q.id);
-        const tagsUpdatedAt = this.quickNotes.links.tagsUpdatedAt(q.id);
-        quickItems.push({
-          id: q.id, createdAt: q.createdAt, updatedAt: q.updatedAt, contentHash: q.contentHash,
-          ...(q.isConflict ? { isConflict: true } : {}),
-          ...(side?.quickAssetsHash?.[q.id] ? { assetsHash: side.quickAssetsHash[q.id] } : {}),
-          ...(tagIds.length ? { tagIds } : {}),
-          ...(tagsUpdatedAt ? { tagsUpdatedAt } : {}),
-        });
-      }
-      for (const t of this.quickNotes.tags.list({ includeDeleted: true })) {
-        quickTags.push({ id: t.id, name: t.name, sortOrder: t.sortOrder, pinned: t.pinned, createdAt: t.createdAt, updatedAt: t.updatedAt, ...(t.deletedAt ? { deletedAt: t.deletedAt } : {}) });
-      }
-      for (const d of this.quickNotes.listAllDeleted()) {
-        quickDeletes.push(d.id);
-        if (d.purgedAt) { quickPurges.push(d.id); quickPurgeTimes[d.id] = d.purgedAt; }
-      }
-    }
-    // 本地 purge（deleted_notes.purged_at）→ v3 删除意图：否则远端条目会被当成“本地缺失”重新拉回。
-    const baseline = await this.loadBaseline();
-    const intents = [...(side?.intents ?? [])];
-    const knownIntents = new Set(intents.map((it) => it.noteId));
-    for (const t of this.store.listPurgedTombstones()) {
-      if (knownIntents.has(t.id)) continue;
-      intents.push({ noteId: t.id, targetEpoch: baseline?.epoch ?? "", targetGeneration: baseline?.generation ?? 0, ...(t.purgedAt ? { purgedAt: t.purgedAt } : {}) });
-    }
-    // 显式恢复标记以 DB 为准（restoreTrashItem 写 notes.restore_pending_at、restoreQuickNote 写
-    // quick_notes.restore_pending_at）：引擎只认 state.restorePending。sidecar 里的是上次未收尾的残留，
-    // 两者取并集（缺了它 ⇒ 用户已恢复的副本会被当成「本地缺失」，永远不重新上传）。
-    const restorePending = [...new Set([
-      ...(side?.restorePending ?? []),
-      ...this.store.listRestorePendingNoteIds(),
-      ...(this.quickNotes?.listRestorePendingQuickNoteIds() ?? []),
-    ])].sort();
-    const state: DeviceState = {
-      lake: { v: 3, space: "lake", notes, folders },
-      quickNotes: { v: 3, space: "quickNotes", items: quickItems, tags: quickTags, ...(quickPurges.length ? { purged: quickPurges } : {}) },
-      quickDeletes,
-      quickPurges,
-      quickPurgeTimes,
-      folders,
-      intents, pending: side?.pending ?? [],
-      remotePurged: side?.remotePurged ?? [], restorePending, archived: side?.archived ?? [],
-      pendingAssets: side?.pendingAssets ?? [],
-    };
-    return state;
-  }
-
-  async saveState(state: DeviceState): Promise<void> {
-    // 目录必须先于文档落库：他端新建的笔记本/分组 id 在本地还不存在，先建目录才能建子文档。
-    // 删除目录则放到文档之后（避免先删父目录导致子文档归位失败）。
-    await this.saveFolders(state.folders, false);
-    const current = new Map(this.store.listNotesSyncMeta().map((n) => [n.id, n]));
-    const wanted = new Map(state.lake.notes.map((n) => [n.id, n]));
-    for (const n of wanted.values()) {
-      const content = this.stagedBodies.has(n.id) ? new TextDecoder().decode(this.stagedBodies.get(n.id)) : null;
-      const cur = current.get(n.id);
-      const curHash = cur ? (this.hashCache.get(n.id)?.hash ?? cur.contentHash) : "";
-      // C5：远端 parent 可能是本机还没有/已删的目录（首拉父未落库）——不得直接落库；
-      // 非法父回落到兜底笔记本（懒建「未分类」），与旧协议 validParents 回落同义。
-      const resolvedParentId = n.trashedAt ? TRASH_NOTEBOOK_ID : this.resolveRemoteParent(n.parentId);
-      try {
-        if (!cur) {
-          // P0-2 分块应用：正文还没下到的条目先不建行（否则会先落一个空正文），等它的分块/下一轮。
-          if (content === null) continue;
-          // 走 importRemoteNote：它支持原样 id / 远端 trashedAt / deletedFromParentId / 冲突标记，
-          // 而 createNoteInAtTopWithContent 会拒绝“回收站”父目录（他端已删文档首次拉取会炸）。
-          // 资产已由 writeAsset 直写进 assetsDir，这里传空数组（importNote 不会清已有目录）。
-          const assets: Array<{ filename: string; bytes: Buffer }> = [];
-          const syncNote = {
-            id: n.id, title: n.title, parentId: resolvedParentId, sortOrder: n.sortOrder, updatedAt: n.updatedAt,
-            contentHash: n.contentHash, isConflict: !!n.isConflict, isEditLocked: !!n.isLocked,
-            editLockedAt: n.lockedAt ?? null, icon: n.icon ?? null, trashedAt: n.trashedAt ?? null,
-            deletedFromParentId: n.deletedFromParentId ?? null, kind: n.kind ?? "doc",
-          };
-          this.store.importRemoteNote(syncNote as never, Buffer.from(content ?? "", "utf8"), assets);
-          if (n.icon) this.store.setNodeIcon(n.id, n.icon);
-        } else {
-          // 只有引擎真的写入了新正文（staged）才保存，避免每轮读全库正文
-          const contentChanged = content !== null && sha256Hex(new TextEncoder().encode(content)) !== curHash;
-          if (contentChanged) {
-            const bodyPath = this.store.notePathFor(n.id);
-            if (await this.exists(bodyPath)) {
-              this.store.saveNote(n.id, n.title, content);
-            } else {
-              // P0：本地正文文件被删（DB 行还在）⇒ 普通 saveNote 会以「笔记不存在」拒绝；
-              // 这是「从云端拉回正文」的恢复路径，必须走 importRemoteNote 重建文件。
-              const assets: Array<{ filename: string; bytes: Buffer }> = [];
-              this.store.importRemoteNote({
-                id: n.id, title: n.title, parentId: resolvedParentId, sortOrder: n.sortOrder, updatedAt: n.updatedAt,
-                contentHash: n.contentHash, isConflict: !!n.isConflict, isEditLocked: !!n.isLocked,
-                editLockedAt: n.lockedAt ?? null, ...(n.icon !== undefined ? { icon: n.icon } : {}),
-                trashedAt: n.trashedAt ?? null, deletedFromParentId: n.deletedFromParentId ?? null, kind: n.kind ?? "doc",
-              } as never, Buffer.from(content), assets);
-            }
-          }
-          if (n.trashedAt && !cur.trashedAt) {
-            // 远端墓碑 → 回收站：必须走 deleteNote（不能 moveTreeNode 到回收站隐藏笔记本）
-            this.store.deleteNote(n.id);
-          } else if (!n.trashedAt && cur.trashedAt) {
-            this.store.restoreTrashItem(n.id);
-          }
-          // P1（v3 空发布抖动根因）：本轮合并结果的元数据必须原样落库，尤其 updatedAt。
-          // 只按字段调 moveTreeNode/setNodeIcon 时它们会用 now() 改写 updated_at，且正文未变时
-          // 根本不会写 updated_at ⇒ 本地行永远停留在旧时间戳，下一轮三方合并又把它判成
-          // 「本地元数据更新/远端元数据更新」再发布一次，两端空跑隔轮各 +1 generation。
-          const metaDiffers = contentChanged
-            || (!!n.trashedAt !== !!cur.trashedAt)
-            || n.updatedAt !== cur.updatedAt
-            || n.title !== cur.title
-            || (resolvedParentId ?? null) !== (cur.parentId ?? null)
-            || n.sortOrder !== cur.sortOrder
-            || !!n.isConflict !== !!cur.isConflict
-            || (n.trashedAt ?? null) !== (cur.trashedAt ?? null)
-            || (n.deletedFromParentId ?? null) !== (cur.deletedFromParentId ?? null)
-            || (n.icon !== undefined && (cur.icon ?? null) !== (n.icon ?? null));
-          if (metaDiffers) {
-            const syncNote: SyncNote = {
-              id: n.id, title: n.title, parentId: resolvedParentId, sortOrder: n.sortOrder, updatedAt: n.updatedAt,
-              isConflict: !!n.isConflict, isEditLocked: !!n.isLocked, editLockedAt: n.lockedAt ?? null,
-              ...(n.icon !== undefined ? { icon: n.icon } : {}),
-              trashedAt: n.trashedAt ?? null, deletedFromParentId: n.deletedFromParentId ?? null,
-              kind: n.kind as SyncNote["kind"],
-            };
-            this.store.applyRemoteNoteMeta(syncNote);
-          }
-          if (!!cur.isEditLocked !== !!n.isLocked || (cur.editLockedAt ?? null) !== (n.lockedAt ?? null)) {
-            this.store.applyRemoteEditLock(n.id, !!n.isLocked, n.lockedAt ?? null);
-          }
-        }
-        if (this.clearedAssets.has(n.id)) await this.flushStagedAssets(n.id);
-        if (content !== null) {
-          try {
-            const lakePath = this.store.getNotePaths(n.id).lakePath;
-            const st = await fs.stat(lakePath);
-            this.hashCache.set(n.id, { mtimeMs: st.mtimeMs, size: st.size, hash: sha256Hex(new TextEncoder().encode(content)) });
-          } catch { /* 文件缺失时下轮重新计算 */ }
-        }
-      } catch (e) {
-        throw new Error("DesktopStoreDevice.saveState 失败(" + n.id + "): " + (e as Error).message);
-      }
-    }
-    for (const cur of current.values()) {
-      if (wanted.has(cur.id)) continue;
-      this.hashCache.delete(cur.id);
-      try { this.store.deleteNote(cur.id); this.store.purgeTrashItem(cur.id); } catch { /* 已不在 */ }
-    }
-    await this.saveQuickNotes(state);
-    await this.saveFolders(state.folders, true);
-    // 引擎持久化的 remotePurged（远端已彻底删除、本机保留回收站副本）→ 本地展示位 cloud_deleted。
-    // 只保留「本地仍有行」的 id：本地主动 purge 后行已物理删除，必须从 sidecar 清掉——
-    // 否则永远打标、且引擎每轮都把它当已删条目空转（本地 purge 后不得再有任何 S3 行为）。
-    const remotePurged = (state.remotePurged ?? []).filter((id) => this.store.hasNote(id));
-    this.store.applyNotesCloudDeleted(remotePurged);
-    await this.writeAtomic(this.stateFile, JSON.stringify({ ...this.sidecarShape(state), remotePurged }));
-    this.stagedBodies.clear();
-    this.clearedAssets.clear();
-  }
-
-  private async saveQuickNotes(state: DeviceState): Promise<void> {
-    if (!this.quickNotes) return;
-    const qn = this.quickNotes;
-    const current = new Map(qn.listQuickNotesForSync().map((q) => [q.id, q] as const));
-    const wanted = new Map(state.quickNotes.items.map((q) => [q.id, q] as const));
-    for (const item of wanted.values()) {
-      const cur = current.get(item.id);
-      try {
-        if (!cur || cur.contentHash !== item.contentHash) {
-          const body = await this.readQuickBody(item.id);
-          // P0-2 分块应用：正文尚未下到的条目先跳过（行保持旧态/不新建），等正文流水线完成后再落。
-          if (!body) { if (!cur) continue; else continue; }
-          const assets: Array<{ filename: string; bytes: Buffer }> = [];
-          for (const filename of await this.listQuickAssets(item.id)) {
-            const bytes = await this.readQuickAsset(item.id, filename);
-            if (bytes) assets.push({ filename, bytes: Buffer.from(bytes) });
-          }
-          qn.importRemoteQuickNote({ id: item.id, createdAt: item.createdAt, updatedAt: item.updatedAt, contentHash: item.contentHash, isConflict: !!item.isConflict }, Buffer.from(body), assets);
-        } else {
-          // 本地上传成功：仅当同步期间未被编辑才标 synced（I2 守卫）。
-          qn.markSyncedIfUnchanged(item.id, item.contentHash);
-        }
-        qn.applyRemoteQuickNoteTagLinks(item.id, item.tagIds ?? [], item.tagsUpdatedAt ?? "");
-      } catch (err) {
-        throw new Error("DesktopStoreDevice.saveQuickNotes 失败(" + item.id + "): " + (err as Error).message);
-      }
-    }
-    // 合并标签目录（含墓碑；LWW 在 QuickNoteTagsStore 内）。
-    qn.tags.mergeRemote((state.quickNotes.tags ?? []).map((t) => ({
-      id: t.id, name: t.name, sortOrder: t.sortOrder ?? t.order ?? 0, pinned: !!t.pinned,
-      createdAt: t.createdAt, updatedAt: t.updatedAt, deletedAt: t.deletedAt ?? null,
-    })));
-    const remoteDeletedQuickIds: string[] = [];
-    for (const cur of current.values()) {
-      if (wanted.has(cur.id)) continue;
-      const purge = state.intents.some((it) => it.noteId === cur.id) || (state.quickPurges ?? []).includes(cur.id);
-      try {
-        if (purge) {
-          try { qn.purgeQuickNote(cur.id); }
-          catch { qn.deleteQuickNote(cur.id); qn.purgeQuickNote(cur.id); }
-        } else {
-          // 远端彻底删除（不是本地 purge）：进回收站保留正文/附件，并打「云端已删除 · 仅本地」标。
-          // 本地主动 purge 走上面的分支——purgeQuickNote 会显式清标，之后不得再有任何 S3 行为。
-          qn.deleteQuickNote(cur.id);
-          remoteDeletedQuickIds.push(cur.id);
-        }
-      } catch { /* 已不在 active */ }
-    }
-    if (remoteDeletedQuickIds.length > 0) qn.markQuickNoteTrashCloudDeleted(remoteDeletedQuickIds);
-  }
-
-  private async saveFolders(folders: LakeFolderEntry[], deleteMissing: boolean): Promise<void> {
-    const cur = new Map(this.store.listFoldersForSync().map((f) => [f.id, f]));
-    for (const f of folders) {
-      const c = cur.get(f.id);
-      try {
-        const parentId = this.resolveRemoteFolderParent(f);
-        if (!c) {
-          // 远端目录 id 必须原样落库（createNotebook/createGroup 会生成新 id，跨端子文档将找不到父）
-          this.store.importRemoteFolder({ ...f, parentId } as never);
-        } else {
-          // P1（v3 空发布抖动根因）：目录同样要把合并结果的 updatedAt/元数据原样落库。
-          // moveTreeNode/setNodeIcon 会改成 now()，且不能把「远端较旧但胜出」的时间戳写回；
-          // 本地行时间戳一旦与 baseline 不一致，下一轮就再发布一次（隔轮 +1 generation）。
-          const changed = c.title !== f.title
-            || (c.parentId ?? null) !== (parentId ?? null)
-            || c.sortOrder !== f.sortOrder
-            || (c.icon ?? null) !== (f.icon ?? null)
-            || c.updatedAt !== f.updatedAt;
-          if (changed) this.store.applyRemoteFolderMeta({ ...f, parentId } as never);
-        }
-      } catch (e) { throw new Error("DesktopStoreDevice.saveFolders 失败(" + f.id + "): " + (e as Error).message); }
-    }
-    if (deleteMissing) for (const c of cur.values()) {
-      if (folders.some((f) => f.id === c.id) || this.protectedFolderIds.has(c.id)) continue;
-      try { this.store.deleteTreeNode(c.id); } catch { /* ignore */ }
-    }
-  }
-
-  /** 资产已「下载即落盘」；这里只执行「远端已移除整目录」的清理（延迟到正文/行落库之后）。 */
-  private async flushStagedAssets(noteId: string): Promise<void> {
-    if (this.clearedAssets.has(noteId)) await fs.rm(this.store.getNotePaths(noteId).assetsDir, { recursive: true, force: true });
-  }
+  // ===== E2-4：世界状态编排 = core 单一实现 =====
+  async loadState(): Promise<DeviceState | null> { return this.meta.loadState(); }
+  async saveState(state: DeviceState): Promise<void> { return this.meta.saveState(state); }
 
   async loadBaseline(): Promise<DeviceBaseline | null> {
     try { return JSON.parse(gunzipSync(await fs.readFile(this.baselineFile)).toString("utf8")) as DeviceBaseline; } catch { return null; }
@@ -368,12 +115,19 @@ export class DesktopStoreDevice implements S3v3DeviceStore {
     this.store.markNotesSynced(baseline.lake.notes.map((n) => n.id));
   }
 
+  /**
+   * 缺正文清单（261028，内核自愈用）：staging 优先；其余走 Store.readNote 一次读盘。
+   * 「真的观察到正文缺失才入队」（事件驱动，正常同步不扫描）。
+   */
   async readBody(id: string): Promise<Uint8Array | null> {
     const staged = this.stagedBodies.get(id);
     if (staged) return staged;
     try {
       const doc = this.store.readNote(id);
-      if (doc.bodyMissing) return null;
+      if (doc.bodyMissing) {
+        this.store.markBodyRecoveryPending([id]);
+        return null;
+      }
       return new TextEncoder().encode(doc.content);
     } catch { return null; }
   }
@@ -385,24 +139,15 @@ export class DesktopStoreDevice implements S3v3DeviceStore {
   }
   async archiveBody(id: string, bytes: Uint8Array | null): Promise<void> { if (bytes) await this.writeHistory(id, bytes); }
 
-  async listAssets(id: string): Promise<string[]> {
-    // 用 noteAssetsPathFor（纯路径）而不是 getNotePaths（要求 DB 行已存在）：
-    // 首拉时资产落盘发生在 importRemoteNote 建行之前（下载即落盘，P0-3）。
-    const dir = this.store.noteAssetsPathFor(id);
-    try { return (await fs.readdir(dir)).filter((f) => !f.includes(".tmp")).sort(); } catch { return []; }
-  }
-  async readAsset(id: string, filename: string): Promise<Uint8Array | null> {
-    if (!SAFE_ASSET_FILENAME.test(filename)) return null;
-    try { return new Uint8Array(await fs.readFile(path.join(this.store.noteAssetsPathFor(id), filename))); } catch { return null; }
-  }
-  /** 下载即落盘（P0-3）：不再把整轮 1.7GB 资产 stage 在内存；单对象写完即可继续下一个。 */
-  async writeAsset(id: string, filename: string, bytes: Uint8Array): Promise<void> {
-    if (!SAFE_ASSET_FILENAME.test(filename)) throw new Error("非法资源文件名: " + filename);
-    const dir = this.store.noteAssetsPathFor(id);
-    await fs.mkdir(dir, { recursive: true });
-    await this.writeAtomic(path.join(dir, filename), bytes);
-  }
-  async deleteAssetsDir(id: string): Promise<void> { this.clearedAssets.add(id); }
+  // ===== E2-4：资产 IO = core 单一实现（这里只委托）=====
+  async listAssets(id: string): Promise<string[]> { return this.assetIo.listAssets(id); }
+  async readAsset(id: string, filename: string): Promise<Uint8Array | null> { return this.assetIo.readAsset(id, filename); }
+  async writeAsset(id: string, filename: string, bytes: Uint8Array): Promise<void> { return this.assetIo.writeAsset(id, filename, bytes); }
+  async deleteAssetsDir(id: string): Promise<void> { return this.assetIo.deleteAssetsDir(id); }
+  async listQuickAssets(id: string): Promise<string[]> { return this.assetIo.listQuickAssets(id); }
+  async readQuickAsset(id: string, filename: string): Promise<Uint8Array | null> { return this.assetIo.readQuickAsset(id, filename); }
+  async writeQuickAsset(id: string, filename: string, bytes: Uint8Array): Promise<void> { return this.assetIo.writeQuickAsset(id, filename, bytes); }
+  async deleteQuickAssetsDir(id: string): Promise<void> { return this.assetIo.deleteQuickAssetsDir(id); }
 
   async readQuickBody(id: string): Promise<Uint8Array | null> {
     if (!this.quickNotes) return null;
@@ -418,54 +163,14 @@ export class DesktopStoreDevice implements S3v3DeviceStore {
     if (!this.quickNotes) return;
     try { await fs.unlink(this.quickNotes.quickNotePathFor(id)); } catch { /* 已不存在 */ }
   }
-  async listQuickAssets(id: string): Promise<string[]> {
-    if (!this.quickNotes) return [];
-    try { return (await fs.readdir(this.quickNotes.quickNoteAssetsPathFor(id))).filter((f) => !f.includes(".tmp")).sort(); } catch { return []; }
-  }
-  async readQuickAsset(id: string, filename: string): Promise<Uint8Array | null> {
-    if (!this.quickNotes) return null;
-    try { return new Uint8Array(await fs.readFile(path.join(this.quickNotes.quickNoteAssetsPathFor(id), filename))); } catch { return null; }
-  }
-  async writeQuickAsset(id: string, filename: string, bytes: Uint8Array): Promise<void> {
-    if (!this.quickNotes) throw new Error("quickNotes 未注入");
-    const dir = this.quickNotes.quickNoteAssetsPathFor(id);
-    await fs.mkdir(dir, { recursive: true });
-    await this.writeAtomic(path.join(dir, filename), bytes);
-  }
-  async deleteQuickAssetsDir(id: string): Promise<void> {
-    if (!this.quickNotes) return;
-    try { await fs.rm(this.quickNotes.quickNoteAssetsPathFor(id), { recursive: true, force: true }); } catch { /* ignore */ }
-  }
 
-  /**
-   * C5 父目录兜底：远端 parent 必须能在本机解析后才落库。
-   * - null / 回收站 → 原样；
-   * - 已存在的树节点 → 原样；
-   * - 其余（首拉父未落库 / 父已被删 / 非法 id）→ 兜底笔记本（懒建「未分类」，沿用旧协议语义）。
-   */
-  private resolveRemoteParent(parentId: string | null): string | null {
-    if (parentId === null || parentId === TRASH_NOTEBOOK_ID) return parentId;
-    try { if (this.store.hasTreeNode(parentId)) return parentId; } catch { /* fallthrough */ }
-    try {
-      const id = this.store.defaultNotebookId();
-      this.protectedFolderIds.add(id);
-      return id;
-    } catch { return null; }
-  }
-
-  /** 目录 version：笔记本只能根层（回收站除外）；分组的父按文档同一套兜底。 */
-  private resolveRemoteFolderParent(f: LakeFolderEntry): string | null {
-    if (f.parentId === TRASH_NOTEBOOK_ID) return TRASH_NOTEBOOK_ID;
-    if (f.nodeType === "notebook") return null;
-    return this.resolveRemoteParent(f.parentId);
-  }
-
-  /** 轻量落盘同步标记：不跑整轮 saveState（不碰正文/脏标记），只清 sidecar 标记 + DB cloud_deleted 投影。 */
+  /** 轻量落盘同步标记：不跑整轮 saveState（不碰正文/脏标记），只清信封标记 + DB cloud_deleted 投影。 */
   async persistSyncMarkers(markers: { remotePurged: string[]; restorePending: string[] }): Promise<void> {
     try { this.store.applyNotesCloudDeleted(markers.remotePurged); } catch { /* 投影失败不阻断 */ }
-    const side = await this.readJson<Record<string, unknown>>(this.stateFile);
-    if (!side) return;
-    await this.writeAtomic(this.stateFile, JSON.stringify({ ...side, remotePurged: markers.remotePurged, restorePending: markers.restorePending }));
+    // E3-1 信封化后：必须把标记并进 envelope（spread 旧 JSON + 覆盖顶层键会静默丢标记）。
+    const persisted = migratePersisted(await this.readJson<unknown>(this.stateFile));
+    if (!persisted) return;
+    await this.writeAtomic(this.stateFile, JSON.stringify(mergeSyncMarkers(persisted, markers)));
   }
 
   /** 单条推送记账：markSynced 同时清 restore_pending_at；按内容 hash 未变才标（I2 守卫）。 */

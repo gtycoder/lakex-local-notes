@@ -2,6 +2,7 @@ import type { DbLike } from "./dbLike.js";
 import type { SecretCipher } from "../src/core/secretCipher.js";
 import type { S3Settings, SyncSettings, S3GcSettings, HistorySettings } from "./storeTypes.js";
 import { defaultAiSettings, normalizeAiSettings, type AiSettings } from "../src/core/aiProviders.js";
+import { normalizeSyncSettings } from "../src/core/syncSettings.js";
 
 /**
  * settings 表存取（S3 / 同步 / S3 GC / 历史保留策略 + 密钥加解密）。
@@ -147,14 +148,8 @@ export class SettingsRepository {
     const def: SyncSettings = { enabled: this.hasS3Settings(), autoMode: "manual", autoIntervalMinutes: 15 };
     if (!row) return def;
     try {
-      const parsed = JSON.parse(row.value) as Partial<SyncSettings>;
-      return {
-        enabled: typeof parsed.enabled === "boolean" ? parsed.enabled : def.enabled,
-        autoMode: parsed.autoMode === "interval" || parsed.autoMode === "onOpenClose" || parsed.autoMode === "manual" ? parsed.autoMode : def.autoMode,
-        autoIntervalMinutes: typeof parsed.autoIntervalMinutes === "number" && parsed.autoIntervalMinutes >= 1 ? Math.floor(parsed.autoIntervalMinutes) : def.autoIntervalMinutes,
-        // 按需资产（P0-4）：缺省 undefined = 全量语义。
-        ...(parsed.deferAssets === true ? { deferAssets: true } : {}),
-      };
+      // 归一单一来源 = core/syncSettings（CORE-14）；本端只提供 fallback（enabled 默认 = 是否已配置 S3）。
+      return normalizeSyncSettings(JSON.parse(row.value), def);
     } catch {
       return def;
     }

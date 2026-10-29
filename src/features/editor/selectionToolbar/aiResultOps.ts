@@ -10,6 +10,10 @@
  */
 import { applyModelRange, positionAfterModelRange, type CapturedModelRange } from "./aiModelSelection";
 import { buildAiInsertMarkdown } from "./aiInsertMarker";
+import type { LakeEditorInstance } from "../lakeRuntime";
+
+/** AI 结果落点只需要内核命令面（`insertAtPosition` / `insertAtSelection`），不是整个编辑器。 */
+type AiCommandTarget = Pick<LakeEditorInstance, "execCommand">;
 
 /**
  * AI 结果自动选中新内容时要认的**行级块**。
@@ -49,7 +53,7 @@ export function selectNewBlocks(container: HTMLElement, before: Set<Element>, sk
 }
 
 /** 「插入到选区后」：落点 = 模型选区末端所在顶层块之后。返回是否执行。 */
-export function applyAiInsertAfter(editor: any, container: HTMLElement, range: CapturedModelRange | null, text: string): boolean {
+export function applyAiInsertAfter(editor: AiCommandTarget, container: HTMLElement, range: CapturedModelRange | null, text: string): boolean {
   try {
     const pos = positionAfterModelRange(range);
     if (!pos) return false;   // 拿不到模型选区落点就不改文档（宁可不动，也不破坏原格式）
@@ -65,7 +69,7 @@ export function applyAiInsertAfter(editor: any, container: HTMLElement, range: C
  * 「替换选区」：模型选区优先（设回内核 ⇒ 非折叠 = 替换）；模型选区可能已随渲染失效，
  * 故可再补一条 DOM 兜底（`domRange`：打开前的 DOM 选区）。返回是否执行。
  */
-export function applyAiReplace(editor: any, container: HTMLElement, range: CapturedModelRange | null, text: string, domRange?: Range | null): boolean {
+export function applyAiReplace(editor: AiCommandTarget, container: HTMLElement, range: CapturedModelRange | null, text: string, domRange?: Range | null): boolean {
   try {
     const before = blockSetOf(container);
     applyModelRange(editor, range);   // best-effort

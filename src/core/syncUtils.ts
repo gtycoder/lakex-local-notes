@@ -6,13 +6,13 @@
  * - Buffer → Uint8Array（core 禁 node:）
  * - Buffer.toString("utf8") → TextDecoder（等价测试）
  * - node:crypto sha256 → sha256Sync（纯 JS 同步，等价测试）
- * - node:path.extname → extnameLikeNode（纯 JS 复刻，等价测试）
- * 常量（MANIFEST_VERSION / MAX_MANIFEST_* 系列 / SAFE_KEY_RE / GZIP_MAGIC）由各端直接从此模块导入。
+ *
+ * CORE-05（261028）：manifest v2 的清单解析 / 逐字段校验 / 版本白名单 / 键构造 / 线上形态映射
+ * 已随 v3 转正整体删除（v3 云端只有 pointer + 内容寻址索引，见 src/core/s3v3/protocol/）。
+ * 协议版本事实也迁到 `S3V3_POINTER_VERSION`（src/core/s3v3/protocol/s3v3Types.ts），
+ * 本模块不再承载任何「协议版本」常量。这里只留两端仍在用的通用工具。
  */
 import { sha256Sync } from "./sha256Sync.js";
-import type { Manifest, ManifestFolder, ManifestNote } from "./manifestTypes.js";
-import { mergeEditLockState } from "./syncDecision.js";
-import { NOTE_KINDS } from "./noteKind.js";
 
 // ===== 共享类型 =====
 export interface S3Settings {
@@ -20,114 +20,13 @@ export interface S3Settings {
   accessKeyId: string; secretAccessKey: string; forcePathStyle: boolean;
 }
 
-// ===== Manifest 版本 =====
-/**
- * Manifest 版本 2：在 V1 schema 上新增 `kind="ink"`（手写板）。
- * V1 仍可读（用于已有云端清单升级），但新端写出 V2；旧端不得继续写入该空间。
- */
-export const MANIFEST_VERSION = 2;
-const READABLE_MANIFEST_VERSIONS = new Set([1, 2]);
-export const MAX_MANIFEST_BYTES = 20 * 1024 * 1024;
-export const MAX_MANIFEST_NOTES = 200_000;
-export const MAX_MANIFEST_FOLDERS = 50_000;
 /** gzip 魔数（0x1f 0x8b）。JSON/PNG/JPEG 等实际内容不可能以此开头，可按魔数安全识别 gzip 对象。 */
 const GZIP_MAGIC = [0x1f, 0x8b];
 /** 键构造统一 ASCII 校验：防非 ASCII 键导致 ListObjectsV2 编码不一致（fail fast）。 */
 const SAFE_KEY_RE = /^[A-Za-z0-9._/-]+$/;
 
-// ===== 清单线上形态（S3 JSON 键冻结）=====
-// 内存类型用 isEditLocked / editLockedAt（"锁编辑"，不是文档加密）；
-// 线上清单 JSON 的键**冻结**为 isLocked / lockedAt（跨端与旧数据契约，不得改）。
-// 两个边界各一处显式映射：解析 parseLakeManifest → manifestFromWire；写出 manifestToWire（syncEngine 发布处）。
-// ⇒ 除这两个方向外，任何地方都不要再手写 isLocked / lockedAt 的改名转换。
-export interface ManifestNoteWire extends Omit<ManifestNote, "isEditLocked" | "editLockedAt"> {
-  isLocked?: boolean;
-  lockedAt?: string | null;
-}
-export interface ManifestWire extends Omit<Manifest, "notes"> {
-  notes: ManifestNoteWire[];
-}
-
-/** 线上条目 → 内存条目（锁字段归一成 isEditLocked/editLockedAt；键缺席则保持缺席）。 */
-function manifestNoteFromWire(wire: ManifestNoteWire): ManifestNote {
-  const { isLocked, lockedAt, ...rest } = wire;
-  const note: ManifestNote = { ...rest };
-  if (isLocked !== undefined) note.isEditLocked = isLocked;
-  if (lockedAt !== undefined) note.editLockedAt = lockedAt;
-  return note;
-}
-
-/** 线上清单 → 内存清单（解析边界）。 */
-export function manifestFromWire(wire: ManifestWire): Manifest {
-  return { ...wire, notes: wire.notes.map(manifestNoteFromWire) };
-}
-
-/** 内存条目 → 线上条目（锁字段写回冻结键；未定义则不写键，墓碑保持精简）。 */
-export function manifestNoteToWire(note: ManifestNote): ManifestNoteWire {
-  const { isEditLocked, editLockedAt, ...rest } = note;
-  const wire: ManifestNoteWire = { ...rest };
-  if (isEditLocked !== undefined) wire.isLocked = isEditLocked;
-  if (editLockedAt !== undefined) wire.lockedAt = editLockedAt;
-  return wire;
-}
-
-/** 内存清单 → 线上清单（写出边界）：syncEngine 发布 manifest 前必须经过这里。 */
-export function manifestToWire(manifest: Manifest): ManifestWire {
-  return { ...manifest, notes: manifest.notes.map(manifestNoteToWire) };
-}
-
-// ===== 记账快照（V5 §5.2：构造 markSyncedIfUnchanged 的"同步后应为状态"） =====
-export function syncSnapshot(local: {
-  title: string; parentId: string | null; sortOrder: number; updatedAt: string;
-  isEditLocked?: boolean; editLockedAt?: string | null; icon?: string | null;
-}, localHash: string, rn: ManifestNote, metaApplied: boolean, effectiveParent: string | null) {
-  const merged = mergeEditLockState(!!local.isEditLocked, local.editLockedAt ?? null, !!rn.isEditLocked, rn.editLockedAt ?? null);
-  return {
-    contentHash: localHash,
-    updatedAt: metaApplied ? rn.updatedAt : local.updatedAt,
-    title: metaApplied ? rn.title : local.title,
-    parentId: metaApplied ? effectiveParent : local.parentId,
-    sortOrder: metaApplied ? rn.sortOrder : local.sortOrder,
-    isEditLocked: merged.locked,
-    editLockedAt: merged.at,
-    icon: metaApplied ? (rn.icon ?? null) : (local.icon ?? null),
-  };
-}
-
-/** 解析并校验 Lake 清单：字节上限 → JSON.parse → 结构/条目校验 → 锁字段归一（解析边界）。上限可注入（测试用）。 */
-export function parseLakeManifest(
-  bytes: Uint8Array,
-  limits: { maxBytes?: number; maxNotes?: number; maxFolders?: number } = {},
-): Manifest {
-  const maxBytes = limits.maxBytes ?? MAX_MANIFEST_BYTES;
-  if (bytes.length > maxBytes) {
-    throw new Error(`清单过大（${bytes.length} 字节 > ${maxBytes}），拒绝加载`);
-  }
-  let parsed: unknown;
-  try { parsed = JSON.parse(new TextDecoder("utf-8").decode(bytes)); }
-  catch { throw new Error("同步清单不是合法 JSON"); }
-  validateManifest(parsed, { maxNotes: limits.maxNotes ?? MAX_MANIFEST_NOTES, maxFolders: limits.maxFolders ?? MAX_MANIFEST_FOLDERS });
-  // 解析边界：线上键 isLocked/lockedAt → 内存 isEditLocked/editLockedAt（见本文件「清单线上形态」）。
-  return manifestFromWire(parsed);
-}
-
 export function isGzip(bytes: Uint8Array): boolean {
   return bytes.length >= 2 && bytes[0] === GZIP_MAGIC[0] && bytes[1] === GZIP_MAGIC[1];
-}
-
-export function objectKey(noteId: string, contentHash: string): string {
-  return `objects/${noteId}-${contentHash}.lake`;
-}
-
-/** GC 引用收集（纯 Set 运算）。 */
-export function collectManifestRefs(manifest: Manifest, out: Set<string>): void {
-  for (const note of manifest.notes) {
-    // deleted 墓碑保护删除前正文对象（真实 hash；占位符对象不在云端，加入无害）。
-    // 软删笔记的资源由 runDeepCleanup 按"软删前缀"保护（墓碑不携带资源清单）。
-    out.add(objectKey(note.id, note.contentHash));
-    if (note.deleted) continue;
-    for (const asset of note.assets ?? []) out.add(`assets/${note.id}/${asset.filename}`);
-  }
 }
 
 /** 参照思源 util.NormalizeEndpoint：规范化 S3 endpoint */
@@ -180,46 +79,6 @@ export function sha256Hex(bytes: Uint8Array): string {
   return sha256Sync(bytes);
 }
 
-/**
- * 纯 JS 复刻 node:path.extname（core 禁 node:path）。
- * 对资产文件名（安全段 `^[A-Za-z0-9._/-]+$`，无反斜杠）行为与 path.extname 完全一致；
- * 等价测试覆盖边界（.gitignore / a. / a.b.c / 目录前缀 / 中文）。
- * 算法参考 node:path posix 实现。
- */
-export function extnameLikeNode(p: string): string {
-  let startDot = -1;
-  let startIndex = 0;
-  let endIndex = -1;
-  let matchedSlash = true;
-  let preDotState = 0;
-  for (let i = p.length - 1; i >= 0; --i) {
-    const code = p.charCodeAt(i);
-    if (code === 47 /* / */) {
-      if (!matchedSlash) { startIndex = i + 1; break; }
-      continue;
-    }
-    if (endIndex === -1) { matchedSlash = false; endIndex = i + 1; }
-    if (code === 46 /* . */) {
-      if (startDot === -1) { startDot = i; }
-      else if (preDotState !== 1) { preDotState = 1; }
-    } else if (startDot !== -1) { preDotState = -1; }
-  }
-  if (startDot === -1 || endIndex === -1 || preDotState === 0 || (preDotState === 1 && startDot === endIndex - 1 && startDot === startIndex + 1)) {
-    return "";
-  }
-  return p.slice(startDot, endIndex);
-}
-
-export function mimeTypeFor(filename: string): string {
-  const ext = extnameLikeNode(filename).toLowerCase();
-  const map: Record<string, string> = {
-    ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
-    ".gif": "image/gif", ".webp": "image/webp", ".avif": "image/avif",
-    ".svg": "image/svg+xml",
-  };
-  return map[ext] ?? "application/octet-stream";
-}
-
 export function assertSafeKey(key: string): void {
   if (!SAFE_KEY_RE.test(key)) throw new Error(`S3 键包含非法字符: ${key}`);
 }
@@ -228,69 +87,4 @@ export function chunkArray<T>(items: T[], size: number): T[][] {
   const out: T[][] = [];
   for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
   return out;
-}
-
-/** 审计 #3/#19：远程 manifest 运行时 schema 校验（远程 JSON 不可信，不能直接断言类型） */
-export function validateManifest(manifest: unknown, limits: { maxNotes: number; maxFolders: number }): asserts manifest is ManifestWire {
-  if (!manifest || typeof manifest !== "object") throw new Error("清单格式无效：非对象");
-  const m = manifest as Partial<ManifestWire>;
-  if (!READABLE_MANIFEST_VERSIONS.has(m.version as number)) {
-    throw new Error(`清单版本不兼容（本地 ${MANIFEST_VERSION}，远端 ${String(m.version)}）`);
-  }
-  if (typeof m.workspaceId !== "string" || typeof m.commitId !== "string" || typeof m.createdAt !== "string") {
-    throw new Error("清单格式无效：workspaceId/commitId/createdAt 字段缺失");
-  }
-  if (m.prevCommitId !== undefined && m.prevCommitId !== null && typeof m.prevCommitId !== "string") {
-    throw new Error("清单格式无效：prevCommitId 非法");
-  }
-  if (!Array.isArray(m.notes)) throw new Error("清单格式无效：notes 不是数组");
-  if (m.notes.length > limits.maxNotes) throw new Error(`清单条目过多（${m.notes.length} > ${limits.maxNotes}），拒绝加载`);
-  for (const note of m.notes) {
-    if (!note || typeof note !== "object") throw new Error("清单格式无效：note 非对象");
-    const n = note as Partial<ManifestNoteWire>;
-    if (typeof n.id !== "string" || typeof n.title !== "string" || typeof n.contentHash !== "string") {
-      throw new Error(`清单格式无效：note 缺少 id/title/contentHash（id=${String(n.id)}）`);
-    }
-    // deleted 墓碑的 contentHash 是占位符（= note id），不做 sha256 hex 校验；仅 active 笔记要求 64 位 hex。
-    if (n.deleted !== true && !/^[a-f0-9]{64}$/.test(n.contentHash)) {
-      throw new Error(`清单格式无效：contentHash 非法（id=${String(n.id)}）`);
-    }
-    if (n.parentId !== null && typeof n.parentId !== "string") throw new Error("清单格式无效：parentId 非法");
-    // 未知 kind 显式拒绝（不静默当 doc，否则会把表格/画板正文喂给 Lake 编辑器 → 保存即毁数据）
-    // 白名单走 NOTE_KINDS 单一来源：260925 修「v7 新增 board 时此硬编码列表漏更新 ⇒
-    // 含画板的清单写出去后自己读不回（parseLakeManifest 抛 kind 非法）」。
-    if (n.kind !== undefined && !(NOTE_KINDS as readonly unknown[]).includes(n.kind)) {
-      throw new Error(`清单格式无效：kind 非法（id=${String(n.id)}）`);
-    }
-    if (typeof n.sortOrder !== "number" || typeof n.updatedAt !== "string") throw new Error("清单格式无效：sortOrder/updatedAt 非法");
-    if (n.assets !== undefined && !Array.isArray(n.assets)) throw new Error("清单格式无效：assets 非数组");
-    for (const asset of n.assets ?? []) {
-      if (!asset || typeof asset !== "object") throw new Error("清单格式无效：asset 非对象");
-      const a = asset as Partial<ManifestNote["assets"][number]>;
-      if (typeof a.filename !== "string" || typeof a.size !== "number" || typeof a.hash !== "string") {
-        throw new Error("清单格式无效：asset 缺少 filename/size/hash");
-      }
-      if (!/^[a-f0-9]{64}$/.test(a.hash)) throw new Error("清单格式无效：asset hash 非法");
-    }
-    // 线上键（冻结）：仍是 isLocked / lockedAt；错误文案也按线上键写，便于和云端 JSON 对照。
-    if (n.isLocked !== undefined && typeof n.isLocked !== "boolean") throw new Error("清单格式无效：isLocked 非法");
-    if (n.lockedAt !== undefined && n.lockedAt !== null && typeof n.lockedAt !== "string") throw new Error("清单格式无效：lockedAt 非法");
-    if (n.deleted !== undefined && typeof n.deleted !== "boolean") throw new Error("清单格式无效：deleted 非法");
-    if (n.deletedAt !== undefined && typeof n.deletedAt !== "string") throw new Error("清单格式无效：deletedAt 非法");
-    if (n.trashedAt !== undefined && n.trashedAt !== null && typeof n.trashedAt !== "string") throw new Error("清单格式无效：trashedAt 非法");
-    if (n.deletedFromParentId !== undefined && n.deletedFromParentId !== null && typeof n.deletedFromParentId !== "string") throw new Error("清单格式无效：deletedFromParentId 非法");
-  }
-  if (!Array.isArray(m.folders)) throw new Error("清单格式无效：folders 非数组");
-  if (m.folders.length > limits.maxFolders) throw new Error(`清单目录条目过多（${m.folders.length} > ${limits.maxFolders}），拒绝加载`);
-  for (const folder of m.folders) {
-    if (!folder || typeof folder !== "object") throw new Error("清单格式无效：folder 非对象");
-    const f = folder as Partial<ManifestFolder>;
-    if (typeof f.id !== "string" || typeof f.title !== "string" || typeof f.sortOrder !== "number") {
-      throw new Error("清单格式无效：folder 缺少 id/title/sortOrder");
-    }
-    if (f.parentId !== null && typeof f.parentId !== "string") throw new Error("清单格式无效：folder.parentId 非法");
-    if (f.nodeType !== "notebook" && f.nodeType !== "group") throw new Error("清单格式无效：folder.nodeType 非法");
-    if (f.trashedAt !== undefined && f.trashedAt !== null && typeof f.trashedAt !== "string") throw new Error("清单格式无效：folder.trashedAt 非法");
-    if (f.deletedFromParentId !== undefined && f.deletedFromParentId !== null && typeof f.deletedFromParentId !== "string") throw new Error("清单格式无效：folder.deletedFromParentId 非法");
-  }
 }

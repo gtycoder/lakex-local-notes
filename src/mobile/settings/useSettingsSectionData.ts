@@ -6,6 +6,7 @@ import { getNativeErrorMessage, reportNativeActionError } from "../../lib/native
 import { mobileAppInfoPort } from "../native/appInfoPort";
 import { mobileCachePort } from "../native/cachePort";
 import { showToast } from "../ui/toastBus";
+import { notifyHistorySettingsChanged } from "../lib/historySettingsSync";
 
 type OrphanAsset = { id: number; noteId: string; filename: string; size: number; mimeType: string };
 type Diagnostics = {
@@ -40,14 +41,19 @@ export function useSettingsSectionData(sections: {
     setHistory((current) => {
       if (!current) return current;
       const next = { ...current, ...patch };
-      void bridge.saveHistorySettings(next).catch(() => {
-        // 乐观 UI 不能停留在未落盘的值；失败后重新读取真实设置并明确提示。
-        void bridge.getHistorySettings().then(setHistory).catch((error) => {
-          reportNativeActionError("回读历史设置", error);
-          setHistory(current);
+      void bridge.saveHistorySettings(next)
+        .then(() => {
+          // MOB-17：落盘成功后广播，定时快照等订阅方据此重挂（不必重启 App）。
+          notifyHistorySettingsChanged(next);
+        })
+        .catch(() => {
+          // 乐观 UI 不能停留在未落盘的值；失败后重新读取真实设置并明确提示。
+          void bridge.getHistorySettings().then(setHistory).catch((error) => {
+            reportNativeActionError("回读历史设置", error);
+            setHistory(current);
+          });
+          showToast("历史设置保存失败，已恢复原值", { type: "error" });
         });
-        showToast("历史设置保存失败，已恢复原值", { type: "error" });
-      });
       return next;
     });
   }, []);

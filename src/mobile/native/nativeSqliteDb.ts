@@ -43,7 +43,7 @@ export class NativeSqliteDb implements MobileDb {
     return this.txDepth > 0 ? fn() : this.withLock(fn);
   }
 
-  static async open(database = "local-lakex-notes-mobile"): Promise<NativeSqliteDb> {
+  static async open(database = "lakex-local-notes-mobile"): Promise<NativeSqliteDb> {
     const connection = {
       database,
       encrypted: false,
@@ -117,7 +117,7 @@ export class NativeSqliteDb implements MobileDb {
         await CapacitorSQLite.commitTransaction({ database: this.database, readonly: false });
         return result as Awaited<ReturnType<T>>;
       } catch (error) {
-        try { await CapacitorSQLite.rollbackTransaction({ database: this.database, readonly: false }); } catch { /* 已无事务 */ }
+        try { await CapacitorSQLite.rollbackTransaction({ database: this.database, readonly: false }); } catch { /* 事务已被原生端回收（begin 失败/已回滚）：原始错误才是要上报的 */ }
         throw error;
       } finally {
         this.txDepth -= 1;

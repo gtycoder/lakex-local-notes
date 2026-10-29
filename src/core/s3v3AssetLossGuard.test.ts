@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { sha256Hex } from "./syncUtils.js";
-import { buildAssetDeclaration, indexHashOf, serializeDeclaration, serializeLakeIndex, serializeQuickNotesIndex, type LakeIndex, type QuickNotesIndex } from "./s3v3Index.js";
-import { assetKey, declarationKey, indexKey, lakeBodyKey } from "./s3v3Keys.js";
+import { buildAssetDeclaration, indexHashOf, serializeDeclaration, serializeLakeIndex, serializeQuickNotesIndex, type LakeIndex, type QuickNotesIndex } from "./s3v3/protocol/s3v3Index.js";
+import { assetKey, declarationKey, indexKey, lakeBodyKey } from "./s3v3/protocol/s3v3Keys.js";
 import { S3v3SyncEngine } from "./s3v3Engine.js";
 import type { S3v3Remote, RemoteObjectInfo } from "./s3v3Ports.js";
 import type { DeviceBaseline, DeviceState, S3v3DeviceStore } from "./s3v3DeviceStore.js";
@@ -81,7 +81,7 @@ describe("v3 附件声明数据安全（261026 真机事故回归）", () => {
     const state: DeviceState = {
       lake: { v: 3, space: "lake", notes: [localNote], folders: [] },
       quickNotes: quick, folders: [], intents: [], pending: [],
-      remotePurged: [], restorePending: [], quickPurges: [], quickPurgeTimes: {}, quickDeletes: [], archived: [],
+      remotePurged: [], restorePending: [], quickPurges: [], quickPurgeTimes: {}, quickDeletes: [],
     };
     const device = new LossyDevice(state, baseline);
     const engine = new S3v3SyncEngine({ remote, device, deviceId: "test-device" });

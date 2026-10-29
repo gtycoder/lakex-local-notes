@@ -351,7 +351,7 @@ readNoteBody(kind,id)（src/mobile/data/noteBodies.ts）→ lakeHtmlToPlain()（
 ### 10.6 隐私与密钥
 
 - Key 只在原生：写入时 JS 传一次明文到原生（aiSaveSettings({apiKey})），读取只回 keyTail（sk-****1234）。
-- 存 Android Keystore（AES-GCM）+ SharedPreferences：复用 SecureStorePlugin.kt 的模式，**把加解密抽成 SecretBox.kt 单一实现**，两个插件共用；新别名 local-lakex-notes.ai.v1、prefs local-lakex-notes-ai。
+- 存 Android Keystore（AES-GCM）+ SharedPreferences：复用 SecureStorePlugin.kt 的模式，**把加解密抽成 SecretBox.kt 单一实现**，两个插件共用；新别名 lakex-local-notes.ai.v1、prefs lakex-local-notes-ai。
 - 日志：请求/响应只记长度与状态码，**不记 key、不记正文**。
 - 资料外发提示：发送前提示行 + 首次使用一次性说明（设置页文案，不做弹窗）。
 - 退出即清：内存会话 + 临时文件全清（cacheDir/ai-*）。
@@ -360,7 +360,7 @@ readNoteBody(kind,id)（src/mobile/data/noteBodies.ts）→ lakeHtmlToPlain()（
 
 ## 11. 原生通道（P0 核心）
 
-### 11.1 插件接口（android/app/src/main/java/com/locallakexnotes/mobile/AiChatPlugin.kt）
+### 11.1 插件接口（android/app/src/main/java/com/lakexlocalnotes/mobile/AiChatPlugin.kt）
 
 Capacitor 插件名 AiChat，注册进 MainActivity 的插件列表。
 
@@ -380,7 +380,7 @@ Capacitor 插件名 AiChat，注册进 MainActivity 的插件列表。
 - SSE 解析：按空行分帧，取以 data: 开头的行；[DONE] 结束；取 choices[0].delta.content；P1 忽略 reasoning_content。
 - 超时：连接 15s / 空闲 60s / 总 180s；aiCancel 关连接。
 - 错误归类：401/403 → auth；429 → rate；超时 → timeout；无网 → network；5xx → server；解析失败 → protocol；中文文案由共享 aiErrors 的 aiErrorTextFromCode(code, httpStatus?) 产出（P0 在 core 新增，桌面复用同一张表）。
-- 命名：包名 com.locallakexnotes.mobile；存储键、prefs、别名统一 local-lakex-notes-*（旧 com.lakenotes.* / lake-notes-* 不再使用）。
+- 命名：包名 com.lakexlocalnotes.android；存储键、prefs、别名统一 lakex-local-notes-*（旧 com.lakenotes.* / lake-notes-* 不再使用）。
 
 ### 11.3 JS 侧
 

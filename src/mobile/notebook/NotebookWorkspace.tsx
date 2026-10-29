@@ -7,6 +7,7 @@
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import { ArrowLeft, List, Files, Pencil, X, ChevronRight, FolderOpen, FolderPlus, File, Plus, Check, ArrowLeftRight, Trash, SmilePlus, Move, History, CloudUpload, FilePlus, Info, Table, Database, PenTool, PenLine, Book, Search, Star } from "lucide-react";
 import { useLongPress } from "../ui/useLongPress";
+import { pushBackHandler } from "../ui/backStack";
 import { NoteInfoSheet } from "../ui/NoteInfoSheet";
 import { MobileNodeIconPicker } from "../ui/NodeIconPicker";
 import { MobileNodeIconGlyph } from "../ui/NodeIconGlyph";
@@ -17,8 +18,9 @@ import type { LakeEditorInstance } from "../../features/editor/lakeRuntime";
 import { usePanelDrag, type PanelSide } from "../hooks/usePanelDrag";
 import { computeDropPosition, createDragGhost, moveDragGhost, removeDragGhost, type DragGhost } from "../../components/model/treeDrag";
 import { MobileSheetMenu, type MobileSheetItem } from "../ui/MobileSheetMenu";
-import { useSwipeToClose } from "../ui/useSwipeToClose";
+import { MobileSheet } from "../ui/MobileSheet";
 import { showToast } from "../ui/toastBus";
+import { reportMobileActionError } from "../lib/reportMobileActionError";
 import { getNativeErrorMessage } from "../../lib/nativeErrors";
 import { successFeedback, warnFeedback } from "../ui/haptics";
 import { useAutoSave } from "../hooks/useAutoSave";
@@ -26,14 +28,15 @@ import type { LocalNote } from "../data/noteRepository";
 import { chromeAfterScroll, type ChromeScrollState } from "./scrollChrome";
 import { isFavorite, toggleFavorite } from "../data/favorites";
 import { MobileBoardViewer } from "../board/MobileBoardViewer";
-import { notebookTabsStorageKey, useNotebookTabs, type NotebookTab } from "./useNotebookTabs";
+import { useNotebookTabs, type NotebookTab } from "./useNotebookTabs";
 import { useNotebookTreeData, type NotebookTreeItem } from "./useNotebookTreeData";
 import { useNotebookTreeActions } from "./useNotebookTreeActions";
+import { SELF_REGISTERED_OVERLAY_KINDS, useWorkspaceOverlays } from "./useWorkspaceOverlays";
 import { NotebookTreeList } from "./NotebookTreeList";
 export type { NotebookTreeItem } from "./useNotebookTreeData";
-/** 表格 / 多维表只读视图按需加载：只有真的打开这类文档才进分包（首屏不含它们）。 */
+/** 表格 / 多维表视图按需加载：只有真的打开这类文档才进分包（首屏不含它们）。 */
 const MobileBitableViewer = lazy(() => import("../bitable/MobileBitableViewer").then((m) => ({ default: m.MobileBitableViewer })));
-/** 表格（usheet）：与桌面同一套 Univer 内核的**只读**查看器（Univer 运行时随之按需加载）。 */
+/** 表格（usheet）：与桌面同一套 Univer 内核的查看/编辑器（261020 起可编辑；运行时按需加载）。 */
 const MobileUsheetViewer = lazy(() => import("../usheet/MobileUsheetViewer").then((m) => ({ default: m.MobileUsheetViewer })));
 /** 手写板：共享 InkPad + perfect-freehand，按需分包。 */
 const MobileInkPad = lazy(() => import("../ink/MobileInkPad").then((m) => ({ default: m.MobileInkPad })));
@@ -98,11 +101,13 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   const {
     tabs,
     tabsRef: tabsStateRef,
+    savedTabIds,
     active,
     activeId,
     mountedIds,
     freshId,
     openTab,
+    restore,
     loadTabBody,
     removeTab,
     clearTabs,
@@ -117,21 +122,35 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     onDrop: dropTabResources,
   });
 
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [outlineOpen, setOutlineOpen] = useState(false);
+  /**
+   * 工作区浮层**唯一 owner**（MOB-02）：目录抽屉 / 大纲 / 查找条 / 标签全屏 / 切换笔记本 / 新建 /
+   * 行菜单 / 属性 / 图标 / 历史版本都只是 `overlay` 的一个值；打开一个自动收掉其它的（互斥只在 owner 里）。
+   * 下面这些布尔与节点是**派生值**（不是状态），只为让 JSX 与既有类名分支保持原样。
+   */
+  const { overlay, open: openOverlay, close: closeOverlay, toggle: toggleOverlay } = useWorkspaceOverlays();
+  const overlayKind = overlay?.kind ?? null;
+  const sidebarOpen = overlayKind === "sidebar";
+  const outlineOpen = overlayKind === "outline";
+  const findOpen = overlayKind === "find";
+  const tabsOpen = overlayKind === "tabs";
+  const notebookSwitchOpen = overlayKind === "notebookSwitch";
+  const createOpen = overlayKind === "create";
+  const menuFor = overlay?.kind === "menu" ? overlay.node : null;
+  const infoFor = overlay?.kind === "info" ? overlay.node : null;
+  const iconFor = overlay?.kind === "icon" ? overlay.node : null;
+  const historyFor = overlay?.kind === "history" ? overlay.node : null;
+  /** 目录「新建」建到哪个节点下：抽屉工具栏 ＋ = 笔记本根，行内 ＋ = 该行节点（复用同一个面板）。 */
+  const createParent = overlay?.kind === "create" ? overlay.parentId : notebookId;
   /** 文档内查找条：只对 Lake 文档（doc）开放；切文档时自动收起（查找条绑定当前正文）。 */
-  const [findOpen, setFindOpen] = useState(false);
-  useEffect(() => { setFindOpen(false); }, [activeId]);
-  const [tabsOpen, setTabsOpen] = useState(false);
-  const [notebookSwitchOpen, setNotebookSwitchOpen] = useState(false);
-  /** 目录抽屉的「新建」菜单（与桌面同一份清单；移动端只有文档/分组能落地，其余置灰）。
-   *  `createParent` = 建到哪个节点下：抽屉工具栏的 ＋ = 笔记本根，行内 ＋ = 该行节点（复用同一个面板）。 */
-  const [createOpen, setCreateOpen] = useState(false);
-  const [createParent, setCreateParent] = useState<string>(notebookId);
+  useEffect(() => { closeOverlay("find"); }, [activeId, closeOverlay]);
 
-  // 思源：左右两侧面板互斥（都是 100vw 全屏抽屉，同时开会互相盖住）
-  const openSidebar = useCallback((v: boolean) => { setSidebarOpen(v); if (v) { setOutlineOpen(false); setTabsOpen(false); } }, []);
-  const openOutline = useCallback((v: boolean) => { setOutlineOpen(v); if (v) { setSidebarOpen(false); setTabsOpen(false); } }, []);
+  // 抽屉开合（名字保留：调用点遍布拖拽/胶囊/遮罩）。互斥由 overlay owner 保证：打开时先收掉其它浮层。
+  const openSidebar = useCallback((v: boolean) => {
+    if (v) openOverlay({ kind: "sidebar" }); else closeOverlay("sidebar");
+  }, [closeOverlay, openOverlay]);
+  const openOutline = useCallback((v: boolean) => {
+    if (v) openOverlay({ kind: "outline" }); else closeOverlay("outline");
+  }, [closeOverlay, openOverlay]);
   const autoOpenedRef = useRef(false);
   const closingRef = useRef(false);
 
@@ -147,8 +166,6 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   const ghostRef = useRef<DragGhost | null>(null);
   /** 长按目标（hook 只能挂一次 ⇒ 用 ref 传"当前按下的那一行"）。 */
   const pressedNode = useRef<NotebookTreeItem | null>(null);
-  const iconSheetRef = useRef<HTMLDivElement>(null);
-  const historySheetRef = useRef<HTMLDivElement>(null);
 
   /** 大纲只属于 Lake 文档：表格 / 多维表 / 画板没有大纲（与顶栏「编辑」按钮同一口径）。 */
   const outlineAvailable = !!active && (active.kind ?? "doc") === "doc";
@@ -207,38 +224,38 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   });
 
   // 切到没有大纲的文档类型（表格 / 多维表 / 画板）时收掉已展开的大纲抽屉，别停在空面板上
-  useEffect(() => { if (!outlineAvailable) setOutlineOpen(false); }, [outlineAvailable]);
+  useEffect(() => { if (!outlineAvailable) closeOverlay("outline"); }, [outlineAvailable, closeOverlay]);
 
   // 初次进入（仅一次）：
-  //  - 显式指定了要打开的文档（首页/搜索/新建）→ 优先开它并置为活动标签（修"从首页点文档直达不了"）；
-  //    其余上次已存的标签（不含它）补开，不覆盖它的激活态；
-  //  - 否则恢复上次打开的标签（本地持久化）；
+  //  - 显式指定了要打开的文档（首页/搜索/新建）→ 它排第一并激活（修"从首页点文档直达不了"），
+  //    其余上次已存的标签（不含它）按原顺序跟在后面，不覆盖它的激活态；
+  //  - 否则恢复上次打开的标签（本地持久化，最后一个是上次的活动页）；
   //  - 否则开树中第一个。
+  // 这里只做「按目录已知 id 过滤」，顺序/上限/激活页全部交给 hook 的 restore()（一次 dispatch，
+  // 不再靠 openTab 的调用顺序 + effect 执行顺序这种隐式协议）。
   useEffect(() => {
     if (autoOpenedRef.current) return;
-    let saved: string[] = [];
-    try { saved = JSON.parse(localStorage.getItem(notebookTabsStorageKey(notebookId)) ?? "[]") as string[]; } catch { saved = []; }
     const knownNoteIds = new Set(tree.filter((item) => item.kind === "note").map((item) => item.id));
-    saved = saved.filter((id) => knownNoteIds.has(id) || id === initialNoteId);
+    const saved = savedTabIds.filter((id) => knownNoteIds.has(id) || id === initialNoteId);
     if (initialNoteId) {
       autoOpenedRef.current = true;
-      // 先把当前文档的读取发出去（其它历史标签排后面，避免它的 readNote 被队头拖慢）
-      void openTab(initialNoteId, { enterEditor: initialMode === "editor" });
-      saved.filter((id) => id !== initialNoteId).forEach((id) => void openTab(id, { activate: false, load: false }));
+      restore([initialNoteId, ...saved.filter((id) => id !== initialNoteId)], initialNoteId, { enterEditor: initialMode === "editor" });
       return;
     }
     if (saved.length > 0) {
       autoOpenedRef.current = true;
-      // 先按上次顺序登记历史标签（不读正文），最后再激活上次的活动页：
-      // 这样标签顺序不会在每次重启后反转；历史标签 load:false ⇒ 不会拖慢活动页的 readNote。
-      saved.slice(0, -1).forEach((id) => void openTab(id, { activate: false, load: false }));
-      void openTab(saved[saved.length - 1], { activate: true });
+      restore(saved, saved[saved.length - 1]);
       return;
     }
-    if (firstNote) { autoOpenedRef.current = true; void openTab(firstNote.id); }
+    if (firstNote) {
+      autoOpenedRef.current = true;
+      restore([firstNote.id], firstNote.id);
+      return;
+    }
+    // 目录里没有任何可用文档：把存档里已失效的占位清掉（hook 的 initial state 可能还带着它们）。
+    if (savedTabIds.length > 0) restore([], null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tree, firstNote]);
+  }, [tree, firstNote, savedTabIds, initialNoteId, initialMode, restore]);
 
   // 已进入工作区后又被指定文档（新建 / 首页 / 搜索）：组件 key 是 notebookId，
   // 同一笔记本内再指定文档不会重挂载，「初次进入」那段被 autoOpenedRef 挡住 ⇒ 必须在这里显式打开，
@@ -250,8 +267,11 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     void openTab(initialNoteId, { enterEditor: initialMode === "editor" });
   }, [initialNoteId, initialMode, openTab]);
 
-  /** 活动占位页统一在这里补读正文；openTab / 自愈 / 恢复都共用同一条懒加载路径。 */
+  /** 活动占位页统一在这里补读正文；openTab / 自愈 / 恢复都共用同一条懒加载路径。
+   *  恢复决策（autoOpenedRef）落定前不读：initial state 还带着未按目录过滤的存档 id，
+   *  抢先读可能读到已删文档并误弹「不存在」。 */
   useEffect(() => {
+    if (!autoOpenedRef.current) return;
     if (!active || active.loaded) return;
     void loadTabBody(active.id);
   }, [active?.id, active?.loaded, loadTabBody]);
@@ -286,10 +306,12 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     try {
       await flushAllTabs();
       clearTabs();
-      setTabsOpen(false);
-    } catch { /* useAutoSave.onError 已给出可见原因；保留全部标签供重试 */ }
+      closeOverlay("tabs");
+    } catch (error) { /* useAutoSave.onError 已给出可见原因；保留全部标签供重试 */
+      reportMobileActionError("关闭全部标签", error);
+    }
     finally { closingRef.current = false; }
-  }, [clearTabs, flushAllTabs]);
+  }, [clearTabs, closeOverlay, flushAllTabs]);
 
   const closeTab = useCallback(async (id: string) => {
     if (closingRef.current) return;
@@ -299,7 +321,9 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     try {
       await captureAndSaveTab(closing);
       removeTab(id);
-    } catch { /* 保留当前 tab 与编辑器，允许重试 */ }
+    } catch (error) { /* 保留当前 tab 与编辑器，允许重试 */
+      reportMobileActionError("关闭标签", error);
+    }
     finally { closingRef.current = false; }
   }, [captureAndSaveTab, removeTab]);
 
@@ -309,29 +333,44 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   }, [removeTab]);
 
   const {
-    menuFor,
-    setMenuFor,
-    infoFor,
-    setInfoFor,
     renamingId,
     setRenamingId,
     renameValue,
     setRenameValue,
-    iconFor,
-    setIconFor,
-    historyFor,
-    setHistoryFor,
     historyList,
     applyRename,
     applyIcon,
     applyDelete,
     applyMove,
-    openHistory,
-    restoreHistory: applyRestoreHistory,
+    loadHistory,
+    restoreHistory: restoreHistoryVersion,
     deleteHistory,
   } = useNotebookTreeActions({ tree, loadTree, discardTab });
-  useSwipeToClose(iconSheetRef, () => setIconFor(null), !!iconFor);
-  useSwipeToClose(historySheetRef, () => setHistoryFor(null), !!historyFor);
+
+  /** 历史版本面板 =「开面板」（overlay owner）+「读快照」（actions）两步；节点由调用方传，不在 hook 里存。 */
+  const openHistorySheet = useCallback((node: NotebookTreeItem) => {
+    openOverlay({ kind: "history", node });
+    void loadHistory(node);
+  }, [loadHistory, openOverlay]);
+
+  /** 恢复历史版本：真的成功才收面板（失败保留面板让用户重试）。 */
+  const applyRestoreHistory = useCallback(async (historyId: number) => {
+    if (await restoreHistoryVersion(historyId)) closeOverlay("history");
+  }, [closeOverlay, restoreHistoryVersion]);
+
+  /**
+   * 返回键（MOB-01）：工作区浮层必须自己消费返回，否则会落回父层「退出工作区」
+   * （整轮 flushAllTabs + 出场转场回首页），用户以为只是关抽屉。
+   * 浮层现在只有一个（MOB-02 的 overlay）⇒ 一次只可能关这一层。
+   * 自带返回栈的种类（菜单 Sheet / 底部 Sheet 原语，见 SELF_REGISTERED_OVERLAY_KINDS）
+   * 不在这里重复登记 —— 否则返回键会跳过子菜单下钻直接关面板。
+   * 无浮层时不登记 ⇒ 返回键走原有「退工作区（含保存屏障）」。
+   */
+  useEffect(() => {
+    // 单一 owner（MOB-02）之后只剩一条判据：overlay.kind。任一浮层打开就登记 ⇒ 返回键只关它。
+    if (!overlayKind || SELF_REGISTERED_OVERLAY_KINDS.has(overlayKind)) return;
+    return pushBackHandler(() => { closeOverlay(overlayKind); return true; });
+  }, [overlayKind, closeOverlay]);
 
   /** 返回首页：等待所有正文与文档保存落盘后才交给路由转场；失败留在当前界面。 */
   const handleBack = useCallback(async () => {
@@ -340,7 +379,9 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     try {
       await flushAllTabs();
       onBack();
-    } catch { /* useAutoSave.onError 已给出可见原因 */ }
+    } catch (error) { /* useAutoSave.onError 已给出可见原因 */
+      reportMobileActionError("返回首页", error);
+    }
     finally { closingRef.current = false; }
   }, [flushAllTabs, onBack]);
 
@@ -351,7 +392,9 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     try {
       await flushAllTabs();
       onSwitchNotebook(id);
-    } catch { /* 保存失败时保持当前工作区 */ }
+    } catch (error) { /* 保存失败时保持当前工作区 */
+      reportMobileActionError("切换笔记本", error);
+    }
     finally { closingRef.current = false; }
   }, [notebookId, flushAllTabs, onSwitchNotebook]);
 
@@ -383,7 +426,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
       await loadTree();
       const activeTab = tabsStateRef.current.find((t) => t.id === activeId);
       if (activeTab && !activeTab.editing) await loadTabBody(activeTab.id, true);
-      const w = r.notes?.warnings?.length ?? 0;
+      const w = r.warnings?.length ?? 0;
       showToast((r.message || "已同步") + (w > 0 ? `，${w} 项被跳过` : ""));
     } catch (e) { showToast("同步失败：" + (e as Error).message, { type: "error" }); }
   }, [loadTree, openTab, activeId]);
@@ -425,11 +468,11 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
             : kind === "board" ? await bridge.createBoard("无标题画板", pid)
               : await bridge.createInk("无标题手写板", pid);
       await loadTree();
-      setSidebarOpen(false);
+      closeOverlay("sidebar");
       // 手写板沿用 remote ink 批的行为：建完停在阅读态（与文档一致），需要时再点顶栏「编辑」
       await openTab(n.id, { enterEditor: kind === "usheet" || kind === "bitable" || kind === "board" });
     } catch { showToast("新建失败", { type: "error" }); }
-  }, [loadTree, openTab, notebookId]);
+  }, [closeOverlay, loadTree, openTab, notebookId]);
 
   /** 行内 ＋ → 新建分组：在该节点下建子分组并展开父节点。 */
   const createChildGroup = useCallback(async (parentId: string) => {
@@ -598,15 +641,17 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   // 菜单是针对 menuFor 这个节点打开的（sheet 传进来的 item 就是它的根项），所以直接读 menuFor
   const onTreeMenuSelect = (_item: MobileSheetItem, path: MobileSheetItem[]) => {
     const node = menuFor;
-    setMenuFor(null);
+    closeOverlay("menu");
     if (!node) return;
     const root = path[0]?.id;
     if (root === "move") { void applyMove(node, path[1]?.id === "__root" ? notebookId : String(path[1]?.id)); return; }
-    if (root === "rename") { setRenamingId(node.id); setRenameValue(node.title); return; }
-    if (root === "icon") { setIconFor(node); return; }
+    // 互斥（MOB-02）：开行菜单时目录抽屉已经被收掉；重命名是**行内编辑**，必须把抽屉重新拉出来，
+    // 否则输入框在关着的抽屉里（看不见的输入框 + autoFocus 抢焦点）。
+    if (root === "rename") { openOverlay({ kind: "sidebar" }); setRenamingId(node.id); setRenameValue(node.title); return; }
+    if (root === "icon") { openOverlay({ kind: "icon", node }); return; }
     if (root === "favorite") { const on = toggleFavorite(node.id); showToast(on ? "已设为常用" : "已取消常用"); return; }
-    if (root === "history") { void openHistory(node); return; }
-    if (root === "info") { setInfoFor(node); return; }
+    if (root === "history") { openHistorySheet(node); return; }
+    if (root === "info") { openOverlay({ kind: "info", node }); return; }
     if (root === "delete") { void applyDelete(node); }
   };
 
@@ -646,7 +691,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
             故入口收在这里、由 MobileFindBar 做 DOM 内查找；工作区胶囊是定稿四格、不放搜索。 */}
         <button
           className={"toolbar__button" + (findOpen ? " toolbar__icon--active" : "")}
-          onClick={() => setFindOpen((v) => !v)}
+          onClick={() => toggleOverlay("find")}
           disabled={!active?.loaded || (active.kind ?? "doc") !== "doc"}
           aria-label="在文档中查找"
           title={(active?.kind ?? "doc") !== "doc" ? "该文档类型不支持查找" : "在文档中查找"}
@@ -665,7 +710,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
             <>
             {/* 标题只在顶栏（思源 #toolbarName 口径）；正文区不再重复一个标题输入框 */}
             {t.kind === "board" ? (
-              // 画板：移动端只读查看（同一套 Drawnix 引擎，绝不给 Lake 编辑器；也不保存）
+              // 画板：移动端查看/编辑（同一套 Drawnix 引擎；正文只进画板实例，绝不喂 Lake 编辑器）
               <MobileBoardViewer
                 noteId={t.id}
                 content={t.content}
@@ -704,7 +749,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
                 />
               </Suspense>
             ) : t.kind === "usheet" ? (
-              // 表格：移动端只读呈现（同一套 Univer 内核；只读、不保存，正文 JSON 绝不喂 Lake 编辑器）
+              // 表格：移动端查看/编辑（同一套 Univer 内核；正文 JSON 绝不喂 Lake 编辑器）
               <Suspense fallback={<div className="mb-empty">正在加载表格…</div>}>
                 <MobileUsheetViewer
                   noteId={t.id}
@@ -735,7 +780,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
               documents={[]}
               hidePanels
               findOpen={findOpen && t.id === activeId}
-              onCloseFind={() => setFindOpen(false)}
+              onCloseFind={() => closeOverlay("find")}
               onEditorInstance={(ed) => {
                 // DS 复核 A2：卸载时 onEditorReady(noteId, null) —— 必须 delete，不能 set(null)
                 // （否则 closeTab 里 delete 后又会被 set 写回键）。get(activeId) ?? null 已兼容 undefined。
@@ -776,10 +821,10 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
         aria-hidden={(active?.editing || chromeHiddenNow) ? "true" : "false"}
       >
         <button className={"mobile-bottom-bar__item" + (sidebarOpen ? " active" : "")} onClick={() => openSidebar(!sidebarOpen)} aria-label="文档树" title="文档树"><Files /></button>
-        <button className={"mobile-bottom-bar__item" + (tabsOpen ? " active" : "")} onClick={() => setTabsOpen(true)} aria-label="标签页" title="标签页"><File />{tabs.length > 0 && <span className="bottom-bar-count">{tabs.length}</span>}</button>
+        <button className={"mobile-bottom-bar__item" + (tabsOpen ? " active" : "")} onClick={() => openOverlay({ kind: "tabs" })} aria-label="标签页" title="标签页"><File />{tabs.length > 0 && <span className="bottom-bar-count">{tabs.length}</span>}</button>
         <button className={"mobile-bottom-bar__item" + (outlineOpen ? " active" : "")} onClick={() => openOutline(!outlineOpen)} disabled={!outlineAvailable} aria-label="大纲" title={outlineAvailable ? "大纲" : "该文档类型没有大纲"}><List /></button>
         {/* 261014 用户点单：最后一格「更多」已无意义（编辑在顶栏、新建在抽屉/行内）⇒ 直接把「切换笔记本」做成这一格 */}
-        <button className="mobile-bottom-bar__item" onClick={() => setNotebookSwitchOpen(true)} aria-label="切换笔记本" title={"切换笔记本（当前：" + title + "）"}><ArrowLeftRight /></button>
+        <button className="mobile-bottom-bar__item" onClick={() => openOverlay({ kind: "notebookSwitch" })} aria-label="切换笔记本" title={"切换笔记本（当前：" + title + "）"}><ArrowLeftRight /></button>
       </nav>
 
       {/* 目录抽屉「新建」（261014 用户点单）：**清单与桌面 Sidebar 的 CREATE_CHILD_ITEMS 同款同序**
@@ -795,9 +840,9 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
           { id: "ink", label: "新建手写板", icon: PenLine },
           { id: "group", label: "新建分组", icon: FolderPlus },
         ]}
-        onClose={() => setCreateOpen(false)}
+        onClose={() => closeOverlay("create")}
         onSelect={(it) => {
-          setCreateOpen(false);
+          closeOverlay("create");
           // 复用目录树的同一份创建通道（行内 ＋ / 抽屉「新建」同源），不新造第二条；作用域 = 本次打开它的那个节点
           const kind = CREATE_MENU_KINDS[it.id];
           if (kind) void createChildDocument(kind, createParent);
@@ -828,7 +873,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
           </div>
           {/* 笔记本这一层**不放** ⋮（用户 261014：抽屉里的编辑入口去掉，改到首页「知识库」长按卡片） */}
           {/* 261014 用户点单：目录栏加「新建」（桌面同款清单） */}
-          <span className="toolbar__icon" role="button" tabIndex={0} onClick={() => { setCreateParent(notebookId); setCreateOpen(true); }} aria-label="新建" title="新建"><Plus /></span>
+          <span className="toolbar__icon" role="button" tabIndex={0} onClick={() => openOverlay({ kind: "create", parentId: notebookId })} aria-label="新建" title="新建"><Plus /></span>
           <span className="toolbar__icon" role="button" tabIndex={0} onClick={() => openSidebar(false)} aria-label="收起"><ChevronRight /></span>
         </div>
         {/* 树行 = 可见行扁平数组 + 视口窗口化（2000 节点时不一次挂 2000 个按钮，见 NotebookTreeList）。
@@ -851,35 +896,35 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
             if (childrenOf(item.id).length > 0) { toggleGroup(item.id); return; }
             if (item.kind === "note") { openSidebar(false); void openTab(item.id); }
           }}
-          onOpenMenu={(item) => setMenuFor(item)}
-          onOpenCreate={(item) => { setCreateParent(item.id); setCreateOpen(true); }}
+          onOpenMenu={(item) => openOverlay({ kind: "menu", node: item })}
+          onOpenCreate={(item) => openOverlay({ kind: "create", parentId: item.id })}
         />
       </aside>
 
       {/* 右大纲抽屉 (.side-panel--right) */}
-      <OutlineSheet side open={outlineOpen} editor={activeId ? (editorsRef.current.get(activeId) ?? null) : null} onClose={() => setOutlineOpen(false)} />
+      <OutlineSheet side open={outlineOpen} editor={activeId ? (editorsRef.current.get(activeId) ?? null) : null} onClose={() => closeOverlay("outline")} />
 
       {/* 全屏 tab 列表 (.model，思源 #toolbarTabs → #model) */}
       {tabsOpen && (
-        <div className="mobile-model-mask" onClick={() => setTabsOpen(false)}>
+        <div className="mobile-model-mask" onClick={() => closeOverlay("tabs")}>
           <div className="mobile-model" onClick={(e) => e.stopPropagation()}>
             <div className="toolbar toolbar--border mobile-model-head">
               <span className="toolbar__text">标签页</span>
               {tabs.length > 0 && (
                 <button className="mobile-model-closeall" onClick={closeAllTabs} aria-label="关闭全部标签页">关闭全部</button>
               )}
-              <span className="toolbar__icon" role="button" tabIndex={0} onClick={() => setTabsOpen(false)} aria-label="关闭"><X /></span>
+              <span className="toolbar__icon" role="button" tabIndex={0} onClick={() => closeOverlay("tabs")} aria-label="关闭"><X /></span>
             </div>
             <div className="mobile-model-body">
               {tabs.length === 0 && <div className="mb-empty">暂无打开的文档</div>}
               {tabs.map((t) => (
-                <div key={t.id} className={"mb-row" + (t.id === activeId ? " is-selected" : "")} onClick={() => { void openTab(t.id); setTabsOpen(false); }}>
+                <div key={t.id} className={"mb-row" + (t.id === activeId ? " is-selected" : "")} onClick={() => { void openTab(t.id); closeOverlay("tabs"); }}>
                   {itemById(t.id)?.icon && <span className="mb-tree-icon"><MobileNodeIconGlyph value={itemById(t.id)?.icon} /></span>}
                   <span className="mb-row__title">{t.title || "无标题"}</span>
                   <button className="mb-iconbtn mb-row__action" onClick={(e) => { e.stopPropagation(); void closeTab(t.id); }} aria-label="关闭"><X size={16} /></button>
                 </div>
               ))}
-              <button className="mb-btn mb-btn--secondary model-add" onClick={() => { setTabsOpen(false); openSidebar(true); }}><Plus size={16} />打开文档</button>
+              <button className="mb-btn mb-btn--secondary model-add" onClick={() => openSidebar(true)}><Plus size={16} />打开文档</button>
             </div>
           </div>
         </div>
@@ -889,15 +934,15 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
       <MobileSheetMenu
         open={notebookSwitchOpen}
         items={notebooks.map((nb) => ({ id: nb.id, label: nb.title, icon: FolderOpen, note: nb.id === notebookId ? "当前" : undefined }))}
-        onClose={() => setNotebookSwitchOpen(false)}
-        onSelect={(it) => { setNotebookSwitchOpen(false); if (it.id !== notebookId) void switchNotebook(it.id); }}
+        onClose={() => closeOverlay("notebookSwitch")}
+        onSelect={(it) => { closeOverlay("notebookSwitch"); if (it.id !== notebookId) void switchNotebook(it.id); }}
       />
 
       {/* 目录树长按菜单 */}
       <MobileSheetMenu
         open={!!menuFor}
         items={menuFor ? treeMenuItems(menuFor) : []}
-        onClose={() => setMenuFor(null)}
+        onClose={() => closeOverlay("menu")}
         onSelect={onTreeMenuSelect}
       />
 
@@ -907,46 +952,38 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
         <NoteInfoSheet
           noteFileId={infoFor.id}
           title={infoFor.title}
-          onClose={() => setInfoFor(null)}
-          onOpenHistory={() => { const n = infoFor; setInfoFor(null); void openHistory(n); }}
+          onClose={() => closeOverlay("info")}
+          onOpenHistory={() => { const n = infoFor; closeOverlay("info"); openHistorySheet(n); }}
         />
       )}
 
-      {/* 图标选择器 */}
+      {/* 图标选择器（MOB-11：scrim / 右滑 / 返回栈 / 焦点 / 滚动锁交给 MobileSheet，类名与 DOM 不变） */}
       {iconFor && (
-        <div className="mb-scrim" data-prevent-swipe onClick={() => setIconFor(null)}>
-          <div ref={iconSheetRef} className="mb-sheet" data-prevent-swipe onClick={(e) => e.stopPropagation()}>
-            <div className="mb-sheet__head">
-              <span className="mb-sheet__title">设置图标</span>
-              <button className="mobile-icon-btn" onClick={() => setIconFor(null)} aria-label="关闭"><X size={20} /></button>
-            </div>
-            <div className="mb-sheet__body">
-              <MobileNodeIconPicker key={iconFor.id} nodeType={iconFor.kind} value={iconFor.icon} onPick={(icon) => void applyIcon(icon)} />
-            </div>
-          </div>
-        </div>
+        <MobileSheet open title="设置图标" onClose={() => closeOverlay("icon")}>
+          <MobileNodeIconPicker key={iconFor.id} nodeType={iconFor.kind} value={iconFor.icon}
+            onPick={(icon) => {
+              const target = iconFor;
+              if (!target) return;
+              void applyIcon(target, icon).then((next) => {
+                // 面板开着时把选中的图标同步回 overlay 的载荷（否则 picker 仍显示旧值）
+                if (next !== null) openOverlay({ kind: "icon", node: { ...target, icon: next } });
+              });
+            }} />
+        </MobileSheet>
       )}
 
-      {/* 历史版本 sheet */}
+      {/* 历史版本 sheet（MOB-11：骨架交给 MobileSheet；正文类名 mb-list 逐字保留） */}
       {historyFor && (
-        <div className="mb-scrim" data-prevent-swipe onClick={() => setHistoryFor(null)}>
-          <div ref={historySheetRef} className="mb-sheet" data-prevent-swipe onClick={(e) => e.stopPropagation()}>
-            <div className="mb-sheet__head">
-              <span className="mb-sheet__title">历史版本</span>
-              <button className="mobile-icon-btn" onClick={() => setHistoryFor(null)} aria-label="关闭"><X size={20} /></button>
+        <MobileSheet open title="历史版本" bodyClassName="mb-list" onClose={() => closeOverlay("history")}>
+          {historyList.length === 0 && <p className="mb-empty mb-empty--inset">暂无历史版本</p>}
+          {historyList.map((h) => (
+            <div key={h.id} className="mb-row" onClick={() => void applyRestoreHistory(h.id)}>
+              <span className="mb-row__title">{h.title || "无标题"}</span>
+              <span className="mb-row__meta">{new Date(h.createdAt).toLocaleString("zh-CN")}</span>
+              <button className="mb-iconbtn mb-row__action" onClick={(e) => { e.stopPropagation(); void deleteHistory(h.id); }} aria-label="删除"><X size={16} /></button>
             </div>
-            <div className="mb-sheet__body mb-list">
-              {historyList.length === 0 && <p className="mb-empty mb-empty--inset">暂无历史版本</p>}
-              {historyList.map((h) => (
-                <div key={h.id} className="mb-row" onClick={() => void applyRestoreHistory(h.id)}>
-                  <span className="mb-row__title">{h.title || "无标题"}</span>
-                  <span className="mb-row__meta">{new Date(h.createdAt).toLocaleString("zh-CN")}</span>
-                  <button className="mb-iconbtn mb-row__action" onClick={(e) => { e.stopPropagation(); void deleteHistory(h.id); }} aria-label="删除"><X size={16} /></button>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
+          ))}
+        </MobileSheet>
       )}
 
     </div>

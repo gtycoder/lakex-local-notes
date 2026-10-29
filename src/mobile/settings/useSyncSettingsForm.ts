@@ -2,8 +2,9 @@ import { useCallback, useEffect, useState } from "react";
 import type { SyncSettings, SyncWarning } from "../../lib/types";
 import { bridge } from "../bridge";
 import { writeSyncSettings } from "../sync/syncSettingsStore";
-import { describeSyncStatus, readSyncStatus, subscribeSyncStatus, type MobileSyncStatus } from "../sync/syncStatusStore";
+import { describeSyncBreakdown, describeSyncStatus, readSyncStatus, subscribeSyncStatus, type MobileSyncStatus } from "../sync/syncStatusStore";
 import { describeSyncProgress, readSyncProgress, subscribeSyncProgress, type SyncProgressSnapshot } from "../sync/syncProgressStore";
+import type { S3v3DiagnosticReport } from "../../core/s3v3Report";
 
 const DEFAULT_SYNC_SETTINGS: SyncSettings = { enabled: true, autoMode: "manual", autoIntervalMinutes: 15 };
 
@@ -15,6 +16,17 @@ export function useSyncSettingsForm(open: boolean, onRefresh: () => Promise<void
   const [supersededNotes, setSupersededNotes] = useState<Array<{ id: string; title: string }>>([]);
   const [lastSync, setLastSync] = useState<MobileSyncStatus | null>(() => readSyncStatus());
   const [syncProgress, setSyncProgress] = useState<SyncProgressSnapshot | null>(() => readSyncProgress());
+  // SD-13：最近 3 轮同步诊断（bridge 在每轮同步结束写入 device_state）。
+  const [syncReports, setSyncReports] = useState<S3v3DiagnosticReport[]>([]);
+
+  const reloadSyncReports = useCallback(async () => {
+    try { setSyncReports(await bridge.getSyncDiagnostics()); } catch { setSyncReports([]); }
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    void reloadSyncReports();
+  }, [open, reloadSyncReports]);
 
   useEffect(() => {
     if (!open) return;
@@ -37,14 +49,16 @@ export function useSyncSettingsForm(open: boolean, onRefresh: () => Promise<void
     try {
       const result = await bridge.syncNow();
       setSyncMsg(result.message);
-      // v3 把结构化回执放在顶层（notes 为 null）：warningDetails / supersededNotes 都要读。
-      setWarnings(result.warnings ?? result.notes?.warnings ?? []);
+      // v3 把结构化回执放在顶层（warningDetails / supersededNotes 都要读）；v2 notes 字段已删（D-7）。
+      setWarnings(result.warnings ?? []);
       setSupersededNotes(result.supersededNotes ?? []);
       await onRefresh();
     } catch (error) {
       setSyncMsg("同步失败: " + (error as Error).message);
     }
-  }, [onRefresh]);
+    // 成功/失败都读一次：诊断由 bridge.syncNow 写在本轮结束时。
+    await reloadSyncReports();
+  }, [onRefresh, reloadSyncReports]);
 
   return {
     syncSettings,
@@ -55,6 +69,9 @@ export function useSyncSettingsForm(open: boolean, onRefresh: () => Promise<void
     supersededNotes,
     lastSync,
     lastSyncText: lastSync ? describeSyncStatus(lastSync) : "本机还没有同步记录",
+    lastSyncBreakdown: lastSync ? describeSyncBreakdown(lastSync) : null,
+    syncReports,
+    reloadSyncReports,
     runSync,
   };
 }

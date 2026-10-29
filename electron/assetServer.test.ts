@@ -107,10 +107,10 @@ describe("ACAO 回显（W-8：不再使用 \"*\"）", () => {
     expect(res.headers.get("access-control-allow-origin")).toBeNull();
   });
 
-  it("Origin: locallakexnotes://app（A1 起打包版渲染层的私有协议来源）+ token → 200 且 ACAO 回显该 Origin", async () => {
-    const res = await fetch(`${BASE}/note1/img.png?token=${TOKEN}`, { headers: { Origin: "locallakexnotes://app" } });
+  it("Origin: lakexlocalnotes://app（A1 起打包版渲染层的私有协议来源）+ token → 200 且 ACAO 回显该 Origin", async () => {
+    const res = await fetch(`${BASE}/note1/img.png?token=${TOKEN}`, { headers: { Origin: "lakexlocalnotes://app" } });
     expect(res.status).toBe(200);
-    expect(res.headers.get("access-control-allow-origin")).toBe("locallakexnotes://app");
+    expect(res.headers.get("access-control-allow-origin")).toBe("lakexlocalnotes://app");
     expect(res.headers.get("vary")).toContain("Origin");
   });
 
@@ -165,10 +165,11 @@ describe("quick-notes 资源", () => {
 });
 
 describe("vendor/cdn 镜像", () => {
-  it("命中返回内容 + immutable 缓存头", async () => {
+  it("命中返回内容 + private immutable 缓存头", async () => {
     const res = await fetch(`${BASE}/vendor/cdn/os/lib/x.js`);
     expect(res.status).toBe(200);
-    expect(res.headers.get("cache-control")).toContain("immutable");
+    // SEC-13f：不允许 public（避免共享缓存/profile 跨用户复用），private 对单机行为不变。
+    expect(res.headers.get("cache-control")).toBe("private, max-age=31536000, immutable");
     expect(await res.text()).toBe("console.log(1)");
   });
 
@@ -207,7 +208,7 @@ describe("按需缩略图（?w=）", () => {
     expect(res.headers.get("content-type")).toBe("image/png");
     expect((await sharp(buf).metadata()).width).toBe(128);
     expect(buf.length).toBeLessThan(original.buf.length);
-    expect(res.headers.get("cache-control")).toContain("immutable");
+    expect(res.headers.get("cache-control")).toBe("private, max-age=31536000, immutable");
   });
 
   it("请求宽度超过原图（withoutEnlargement）→ 不放大，仍是原尺寸", async () => {
@@ -272,6 +273,8 @@ describe("安全响应头（260923 A3：nosniff + SVG CSP）", () => {
       expect(res.headers.get("content-type"), file).toBe(mime);
       expect(res.headers.get("x-content-type-options"), file).toBe("nosniff");
       expect(res.headers.get("content-security-policy"), file).toBeNull();
+      // SEC-13f：资产响应缓存必须 private（public 语义会在共享缓存/profile 下跨用户复用）。
+      expect(res.headers.get("cache-control"), file).toBe("private, max-age=31536000, immutable");
     }
   });
 

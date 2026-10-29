@@ -1,10 +1,10 @@
 /**
  * 移动端「文档内查找」的 DOM 引擎（261016）。
  *
- * 为什么自研：内核虽有查找替换面板（`.ne-ui-search-panel`），但它在**移动端不存在** ——
- * 移动端关掉了内核工具栏插件（`showToolbar:false` ⇒ `disabledPlugins:["save","toolbar"]`），
- * 而该面板只随工具栏的 search descriptor 一起挂载（见 docs/LAKEX-CONTRACT.md §5.39）。
- * 移动端文档编辑面开了 `disableVirtualRendering:true`（整篇正文都在 DOM 里）⇒ DOM 内查找是准确的。
+ * 261029 起：移动端查找**优先走内核 search 服务**（`ISearchService.onSearch`，与桌面工具栏查找同源，
+ * 见 `kernelFind.ts` 与 docs/LAKEX-CONTRACT.md §5.39）；本文件是**降级引擎**，只在取不到内核服务时使用
+ * （内核升级/异常实例）。旧结论「移动端没有查找面板 ⇒ 只能 DOM 扫」仍成立（面板确实不在），但命中计算不必自研。
+ * DOM 降级的前提：移动端文档编辑面开了 `disableVirtualRendering:true`（整篇正文都在 DOM 里）。
  *
  * 高亮走 CSS Custom Highlight API（`CSS.highlights` + `::highlight()`）：不改 DOM、可多命中、能直接给出 `n/m`；
  * 宿主不支持该 API 时降级为「只滚动定位、不高亮」。

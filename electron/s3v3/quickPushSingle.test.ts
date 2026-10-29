@@ -4,7 +4,7 @@ import path from "node:path";
 import { gunzipSync, gzipSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
 import { sha256Hex } from "../../src/core/syncUtils.js";
-import { serializeLakeIndex, serializeQuickNotesIndex, indexHashOf, type LakeIndex, type QuickNotesIndex } from "../../src/core/s3v3Index.js";
+import { serializeLakeIndex, serializeQuickNotesIndex, indexHashOf, type LakeIndex, type QuickNotesIndex } from "../../src/core/s3v3/protocol/s3v3Index.js";
 import { S3v3SyncEngine } from "./syncEngine.js";
 import { FileDeviceStore, type DeviceState } from "./fileDeviceStore.js";
 import type { RemoteObjectInfo, S3v3Remote } from "./ports.js";

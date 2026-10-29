@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { countChars, countWords } from "./textStats.js";
+import { countChars, countTextStats, countWords } from "./textStats.js";
 
 describe("countWords（内核 wordCount 同语义）", () => {
   it("空串 → 0", () => {
@@ -41,5 +41,40 @@ describe("countChars", () => {
   it("去掉空白后计数", () => {
     expect(countChars("a b\nc")).toBe(3);
     expect(countChars("你好 世界")).toBe(4);
+  });
+});
+
+describe("countTextStats（CORE-10：字数/字符数的唯一派生入口）", () => {
+  // 两端属性页与状态栏兜底都只调它 ⇒ 下面钉住「同输入同输出」，
+  // 以后谁把其中一项改成分开算，这里会先红。
+  const corpus = [
+    "",
+    "   \n\t ",
+    "hello world",
+    "你好世界",
+    "你好，世界\n第二段",
+    "Здравствуй мир",
+    "👍🏽 emoji 与中文混排",
+    "a -- b",
+    "# 标题\n\n- 列表\n\n> 引用",
+    "3.14 2.71 %",
+  ];
+
+  it("与 countWords / countChars 逐项一致（同一输入）", () => {
+    for (const text of corpus) {
+      expect(countTextStats(text)).toEqual({ wordCount: countWords(text), charCount: countChars(text) });
+    }
+  });
+
+  it("空/纯空白 → 0/0（属性页显示 0 而不是空白）", () => {
+    expect(countTextStats("")).toEqual({ wordCount: 0, charCount: 0 });
+    expect(countTextStats("  \n\t ")).toEqual({ wordCount: 0, charCount: 0 });
+  });
+
+  it("中文/emoji/连字符口径与内核同语义（与 countWords 单测同一批期望值）", () => {
+    expect(countTextStats("你好，世界")).toEqual({ wordCount: 5, charCount: 5 });
+    // 字符数是去掉空白后的 UTF-16 长度（现状口径，不改）：emoji 记 2。
+    expect(countTextStats("👍")).toEqual({ wordCount: 1, charCount: 2 });
+    expect(countTextStats("a -- b")).toEqual({ wordCount: 3, charCount: 4 });
   });
 });

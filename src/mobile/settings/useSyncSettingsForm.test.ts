@@ -17,6 +17,8 @@ vi.mock("../sync/syncSettingsStore", () => ({ writeSyncSettings: mocks.writeSync
 vi.mock("../sync/syncStatusStore", () => ({
   readSyncStatus: mocks.readSyncStatus,
   describeSyncStatus: mocks.describeSyncStatus,
+  // 261028：上传/下载细分（本测试聚焦配置/消息，不校验细分文案）。
+  describeSyncBreakdown: () => null,
   subscribeSyncStatus: mocks.subscribeSyncStatus,
 }));
 
@@ -79,7 +81,8 @@ describe("useSyncSettingsForm", () => {
 
   it("手动同步成功时更新消息/告警并刷新 App 数据", async () => {
     const onRefresh = await render();
-    mocks.syncNow.mockResolvedValue({ message: "同步完成", notes: { warnings: [{ kind: "asset_missing" }] } });
+    // v3 结构化回执在顶层（v2 的 notes.warnings 通道已随 D-7 删除）。
+    mocks.syncNow.mockResolvedValue({ message: "同步完成", warnings: [{ kind: "asset_missing" }] });
     await act(async () => { await api.runSync(); });
     expect(api.syncMsg).toBe("同步完成");
     expect(api.warnings).toHaveLength(1);

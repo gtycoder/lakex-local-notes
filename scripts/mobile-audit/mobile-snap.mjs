@@ -48,14 +48,14 @@ const clickText = async (page, sel, text) => {
 // 实测 261013 前：按钮文案在「列表」视图下是"切换到书架"，而 home-library-list 找的是"切换到列表"
 // ⇒ clickText 静默 no-op，home-library-list 与 home-library 是**同一个态**（元素数完全相同）。
 const setLibraryView = async (page, view) =>
-  page.evaluate("(function(){try{localStorage.setItem('local-lakex-notes-mobile.libraryView'," + JSON.stringify(view) + ");}catch(e){}return true;})()");
+  page.evaluate("(function(){try{localStorage.setItem('lakex-local-notes-mobile.libraryView'," + JSON.stringify(view) + ");}catch(e){}return true;})()");
 
-// 261013：**清掉工作区标签持久化**（local-lakex-notes-mobile.tabs.<notebookId>）。
+// 261013：**清掉工作区标签持久化**（lakex-local-notes-mobile.tabs.<notebookId>）。
 // App 会恢复上次打开的标签，而整页快照把 keep-alive 的**隐藏 pane 也算进元素数** ⇒ 同一份代码在不同
 // 历史下会得到不同计数（实测 home-library 1784/1755 抖动、home-doc 2943/2937/2926 漂移，都是这个原因）。
 // 门禁要的是可复现：每态都从"零标签"起步，活动 pane 也就只有本次导航打开的那一个。
 const clearTabs = async (page) =>
-  page.evaluate("(function(){try{var ks=[];for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);if(k&&k.indexOf('local-lakex-notes-mobile.tabs.')===0)ks.push(k);}ks.forEach(function(k){localStorage.removeItem(k);});return ks.length;}catch(e){return -1;}})()");
+  page.evaluate("(function(){try{var ks=[];for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);if(k&&k.indexOf('lakex-local-notes-mobile.tabs.')===0)ks.push(k);}ks.forEach(function(k){localStorage.removeItem(k);});return ks.length;}catch(e){return -1;}})()");
 
 /** 每态都从"冷启动首页"开始：清标签 + 钉住视图 → reload → 等 .mobile-htab → 导航 → 等静默 */
 const reload = async (page, view) => {

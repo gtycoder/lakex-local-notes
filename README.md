@@ -1,6 +1,6 @@
 # Local Lakex Notes
 
-[![Release](https://img.shields.io/github/v/release/gtycoder/local-lakex-notes?label=release&color=2ea44f)](https://github.com/gtycoder/local-lakex-notes/releases)
+[![Release](https://img.shields.io/github/v/release/gtycoder/lakex-local-notes?label=release&color=2ea44f)](https://github.com/gtycoder/lakex-local-notes/releases)
 
 **本地优先的语雀 Lakex 编辑器笔记应用（非官方）**：桌面 macOS + Android，本地是唯一真相，S3 只做多端镜像。
 
@@ -71,23 +71,23 @@ Local Lakex Notes 是一个自持数据的个人笔记应用：笔记、表格�
 
 **应用标识**
 
-- 桌面 appId：`com.locallakexnotes.desktop`
-- Android applicationId / 包名：`com.locallakexnotes.mobile`
+- 桌面 appId：`com.lakexlocalnotes.desktop`
+- Android applicationId / 包名：`com.lakexlocalnotes.android`
 
 **本地数据目录**
 
 | 用途 | 路径 |
 | --- | --- |
-| 开发数据 | `~/Library/Application Support/local-lakex-notes-dev` |
-| 正式数据 | `~/Library/Application Support/local-lakex-notes` |
-| 日志 | 对应数据目录下 `logs/local-lakex-notes.log` |
+| 开发数据 | `~/Library/Application Support/lakex-local-notes-dev` |
+| 正式数据 | `~/Library/Application Support/lakex-local-notes` |
+| 日志 | 对应数据目录下 `logs/lakex-local-notes.log` |
 | Android 数据 | 应用私有目录（SQLite + 正文文件） |
 
 > ⚠️ 正式数据目录只属于你本人；开发/测试请用 `LAKE_USER_DATA` 覆盖到独立目录，**不要触碰正式数据**。
 
 **S3 同步**
 
-- 对象前缀默认 `local-lakex-notes`；清单为单文件 manifest，资产按清单声明的差集同步
+- 对象前缀默认 `lakex-local-notes`；清单为单文件 manifest，资产按清单声明的差集同步
 - 同步顺序：先拉远端（带冲突判定）→ 再推合并后的本地
 - 关闭云同步 = 完全没配置（任何路径不出网）
 
@@ -112,6 +112,8 @@ cd <repo>
 npm install
 ```
 
+**首次 clone 后跑一次 `npm run setup:remotes`**：git 的 remote 配置存在每个 clone 自己的 `.git/config`（**不入库、不随 clone 走**）。该脚本把 `origin` 指到 Gitee、`github` 指到 GitHub，并让 `git push origin` 一次推两边（地址写死在 `scripts/setup-remotes.mjs`，换仓库改那里）。
+
 维护者可用 `npm run backup:lakex` 把三处内核产物导出为仓库外归档（默认 `../private/lakex-private-<stamp>.tar.gz` + `.json` 元数据），用于备份或换机恢复；`npm run setup:lakex` 可从该归档恢复。
 
 ## 本地开发
@@ -131,7 +133,7 @@ Android 模拟器调试见 `docs/DEVELOPMENT.md` 与 `docs/MOBILE-TECH-STACK.md`
 
 ## 测试与门禁
 
-每次改动至少跑（约 20s）：
+每次改动至少跑（约 25s；全量 vitest 含 perf 门禁，大档 perf 走手动脚本）：
 
 ```bash
 npx tsc --noEmit
@@ -172,7 +174,7 @@ bash scripts/android-build.sh --sync --install # 构建并安装到已连接设�
 
 ## 打包与发布
 
-- 推荐用 **GitHub Actions** 发版：打 tag（如 `v0.1.2`）后自动构建并发布 macOS `.dmg/.zip`、Windows `.exe`、Android `.apk` 到 GitHub Releases；配置 `GITEE_TOKEN` 后同步上传 Gitee 发行版
+- 推荐用 **GitHub Actions** 发版：**只有推 tag**（如 `v0.1.2`）才触发打包（普通 push 不构建、不消耗 macOS runner）；自动发布 macOS `.dmg/.zip`、Windows `.exe`、Android `.apk` 到 GitHub Releases；配置 `GITEE_TOKEN` 后同步上传 Gitee 发行版
 - 也可本地打包：`npx vite build && npx electron-builder --mac`（Windows 包建议交给 CI 的 `windows-latest`；Linux target 尚未配置）
 - ⚠️ 构建产物**包含闭源 Lakex 内核**（仓库已 vendored）；公开分发（Release 附件）前请确认你接受相应风险，详见 `NOTICE`
 - 当前为**未签名**构建：macOS 首次打开需右键 → 打开；Windows 会弹 SmartScreen，需「更多信息 → 仍要运行」
@@ -186,7 +188,7 @@ bash scripts/android-build.sh --sync --install # 构建并安装到已连接设�
 | [AGENTS.md](AGENTS.md) | **长期红线与机制**（会话启动必读） |
 | [docs/PRODUCT.md](docs/PRODUCT.md) · [docs/DESIGN.md](docs/DESIGN.md) | 产品定位 / 设计系统（令牌、层序、组件规范） |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 进程结构、关键文件、数据流 |
-| [docs/SYNC-PROTOCOL.md](docs/SYNC-PROTOCOL.md) · [docs/S3-GC-DESIGN.md](docs/S3-GC-DESIGN.md) · [docs/STORAGE-LAYERS.md](docs/STORAGE-LAYERS.md) · [docs/S3-MANIFEST-SCALE-RESEARCH.md](docs/S3-MANIFEST-SCALE-RESEARCH.md) · [docs/S3-REDESIGN.md](docs/S3-REDESIGN.md) | 同步协议 / GC / 存储分层 / 清单规模调研 / S3 重设计草案（零痕迹删除） |
+| [docs/SYNC-PROTOCOL.md](docs/SYNC-PROTOCOL.md) · [docs/STORAGE-LAYERS.md](docs/STORAGE-LAYERS.md) | 同步协议（含 GC / 保留链 §13–§14）/ 存储分层 |
 | [docs/LAKEX-CONTRACT.md](docs/LAKEX-CONTRACT.md) | 闭源 Lakex 内核已核实行为 + 调试速查 |
 | [docs/USHEET-UPGRADE.md](docs/USHEET-UPGRADE.md) | Univer 表格触点、升级 playbook、能力路线 |
 | [docs/MOBILE-TECH-STACK.md](docs/MOBILE-TECH-STACK.md) · [docs/MOBILE-DESIGN.md](docs/MOBILE-DESIGN.md) | 移动端架构与设计 |

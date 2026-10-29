@@ -6,11 +6,13 @@ import { restoreMissingBodyFromCloud } from "../syncEngineController.js";
 import { testConnection } from "../s3Store.js";
 import type { SyncProgress } from "../syncTypes.js";
 import { runV3DeepCleanup } from "../s3v3/desktopSync.js";
+import { readSyncErrorInfo } from "../s3v3/syncErrorInfo.js";
 import { AppError } from "../../src/core/storeErrors.js";
 import { canTouchNetwork, cloudStateHint, cloudStateOf } from "../../src/core/cloudState.js";
 import { decodeS3ConfigTransfer, s3ConfigTransferFileName, summarizeS3Settings } from "../../src/core/s3ConfigTransfer.js";
 import { readS3ConfigFile, writeS3ConfigFile } from "../s3ConfigTransferFile.js";
 import { IpcInputError } from "../ipcLimits.js";
+import { normalizeEndpoint, validateS3Settings, type S3Settings } from "../../src/core/syncUtils.js";
 import type { IpcRegistrar } from "./registrar.js";
 
 const MAX_S3_STRING_LENGTH = 2048;
@@ -43,6 +45,19 @@ function assertS3Settings(settings: unknown): asserts settings is ValidatedS3Set
     }
   }
   if (typeof s.forcePathStyle !== "boolean") throw new IpcInputError("S3 配置 forcePathStyle 无效");
+  // SEC-02：保存前走与同步/测连通**同一套**校验（强制 https、非法 URL 拒绝）。
+  // 否则恶意 endpoint 能先存进设置表，等下一次 sync_now 才生效——那时看着就是"同步成功"，
+  // 而全库正文/附件已经上传到攻击者的桶。
+  try {
+    validateS3Settings(s as unknown as S3Settings);
+  } catch (error) {
+    throw new IpcInputError(error instanceof Error ? error.message : "S3 配置无效");
+  }
+}
+
+/** endpoint 比较口径：与上传/下载同用 normalizeEndpoint（尾斜杠、缺协议不算变更）。 */
+function sameS3Endpoint(a: string, b: string): boolean {
+  return normalizeEndpoint(a) === normalizeEndpoint(b);
 }
 
 function clampNum(value: unknown, fallback: number, min: number, max: number): number {
@@ -83,7 +98,12 @@ export function registerSyncIpc(ipc: IpcRegistrar, deps: SyncIpcDeps): void {
     if (next.secretAccessKey === S3_SECRET_MASK) {
       next.secretAccessKey = store.getS3Settings()?.secretAccessKey ?? "";
     }
+    const previous = store.getS3Settings();
     store.saveS3Settings(next);
+    // SEC-02：同步目标被改向时只记一条 warn（不弹窗打扰用户），事后能对账"什么时候传到哪儿去了"。
+    if (previous && !sameS3Endpoint(previous.endpoint, next.endpoint)) {
+      store.logScopes.s3.warn(`[s3] 同步目标 endpoint 已变更: ${previous.endpoint} -> ${next.endpoint}`);
+    }
   });
   /**
    * S3 配置迁移（对应思源「导入 / 导出 S3 配置」）：
@@ -169,12 +189,12 @@ export function registerSyncIpc(ipc: IpcRegistrar, deps: SyncIpcDeps): void {
       void runFullSync().catch((error) => {
         const message = error instanceof Error ? error.message : String(error);
         console.warn("[sync] 重新开启后的对齐失败:", message);
-        broadcastSyncProgress({ phase: "done", message: "同步失败", error: message });
+        const info = readSyncErrorInfo(error);
+        broadcastSyncProgress({ phase: "done", message: "同步失败", error: message, errorCode: info.code, errorClass: info.className });
       });
     }
     return { ...store.getSyncSettings(), alignWarning };
   });
-  ipc.handle("list_s3_gc_pending", () => store.listS3GcPending());
   ipc.handle("list_s3_gc_log", () => store.listS3GcLog());
   ipc.handle("run_s3_deep_cleanup", (dryRun: boolean, _ignoreRetention = false) => {
     requireCloud();
@@ -193,7 +213,8 @@ export function registerSyncIpc(ipc: IpcRegistrar, deps: SyncIpcDeps): void {
     };
     return runFullSync(send);
   });
-  ipc.handle("get_sync_status", () => store.getSyncStatus());
+  // SD-13：同一个通道带出最近 3 轮 v3 同步诊断（不再新增 IPC 通道；渲染层按可选字段消费）。
+  ipc.handle("get_sync_status", () => ({ ...store.getSyncStatus(), v3Reports: store.listV3SyncReports() }));
   ipc.handle("get_sync_pending_summary", () => {
     const lake = store.getSyncPendingSummary();
     const quick = quickNotes.getPendingSyncSummary();

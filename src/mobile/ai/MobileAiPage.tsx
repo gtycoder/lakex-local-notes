@@ -69,6 +69,12 @@ export function MobileAiPage({ open, onClose, onChanged }: MobileAiPageProps) {
     return pushBackHandler(() => { onClose(); return true; });
   }, [open, onClose]);
 
+  // MOB-11：附件 ActionSheet 也是浮层 —— 返回键先关它，不能直接退出整个 AI 页。
+  useEffect(() => {
+    if (!actionsOpen) return;
+    return pushBackHandler(() => { setActionsOpen(false); return true; });
+  }, [actionsOpen]);
+
   useEffect(() => {
     const node = listRef.current;
     if (node && followRef.current) node.scrollTop = node.scrollHeight;

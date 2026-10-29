@@ -13,7 +13,7 @@ function nodeSha256(bytes: Uint8Array): string {
 const textCases: Array<{ name: string; text: string }> = [
   { name: "空串", text: "" },
   { name: "英文", text: "hello world" },
-  { name: "中文", text: "你好，这是 LocalLakexNotes 的同步测试" },
+  { name: "中文", text: "你好，这是 LakexLocalNotes 的同步测试" },
   { name: "中文+英文混排", text: "abc 中文 def 测试 🎉 emoji" },
   { name: "长文本 100KB", text: "x".repeat(100_000) },
   { name: "Lake 内容样例", text: '<p id="x-body" class="ne-p">段落内容<br></p>' },

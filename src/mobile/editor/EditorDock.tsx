@@ -16,6 +16,7 @@ import { Plus, Bold, Italic, Underline, Strikethrough, List, ListOrdered, ListTo
 import type { LakeEditorInstance } from "../../features/editor/lakeRuntime";
 import { editorCommandFailureMessage, execEditorCommandResult } from "./execCommand";
 import { showToast } from "../ui/toastBus";
+import { reportMobileActionError } from "../lib/reportMobileActionError";
 import { useSnapshotUndo } from "./useSnapshotUndo";
 import type { StackLimits } from "./snapshotUndoModel";
 import { MARK_COMMANDS, BLOCK_INSERT_COMMANDS, STYLE_BLOCKS, FONT_SIZE_OPTIONS } from "../../features/editor/editorCommands";
@@ -130,7 +131,7 @@ function isCommandActive(editor: LakeEditorInstance | null, name: string): boole
     const v = ed.queryCommandState?.(name) ?? ed.renderer?.queryCommandState?.(name);
     if (typeof v === "boolean") return v;
     if (typeof v === "number") return v === 1;   // 1=生效，0=未生效，-1=不确定 → 不当生效处理
-  } catch { /* 忽略 */ }
+  } catch { /* 内核未实现该命令查询 / 实例销毁：按「未生效」返回，避免误点亮工具栏 */ }
   return false;
 }
 
@@ -279,8 +280,8 @@ export function EditorDock({ editor, editing, undoBackend = "kernel", undoLimits
 
   const focusEditor = () => {
     // 输入法由 useEditSurface 的 restoreIme() 放回（它就在 closePanel 里）；这里只把**焦点**交还正文。
-    try { const ce = document.querySelector<HTMLElement>(".doc-pane.active [contenteditable]"); ce?.focus(); } catch { /* 忽略 */ }
-    try { execRef.current("focus"); } catch { /* 忽略 */ }
+    try { const ce = document.querySelector<HTMLElement>(".doc-pane.active [contenteditable]"); ce?.focus(); } catch (error) { reportMobileActionError("聚焦正文", error); }
+    try { execRef.current("focus"); } catch (error) { reportMobileActionError("聚焦正文（内核命令）", error); }
   };
   focusEditorRef.current = focusEditor;
   /** 收起输入法（面板要占键盘区）：**保留焦点与光标**（口径见 useEditSurface.ts） */

@@ -18,8 +18,12 @@ if not str(out).startswith(('/tmp/lake-packaged-perf-fixture-', '/private/tmp/la
 shutil.copytree(seed, out)
 root = out / 'workspace-default'
 c = sqlite3.connect(root / 'metadata.sqlite3')
+# 261029 Del-6：declared_assets / sync_base 已从 schema 删除（旧库可能残留空表）⇒ 只清仍存在的表。
+def table_exists(name):
+    return c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (name,)).fetchone() is not None
 for t in ('notes', 'tree_nodes', 'orphan_assets', 'declared_assets', 'sync_base', 'deleted_notes', 'note_history', 'search_index', 'notes_fts'):
-    c.execute('DELETE FROM ' + t)
+    if table_exists(t):
+        c.execute('DELETE FROM ' + t)
 c.execute('DELETE FROM settings')
 c.execute("INSERT INTO settings VALUES('sync_settings',?)", (json.dumps({'enabled': False, 'autoMode': 'manual', 'autoIntervalMinutes': 15}),))
 c.execute("DELETE FROM device_state WHERE key NOT IN ('seed_initialized')")
@@ -72,13 +76,11 @@ def add(note_id, title, kind='doc', body=None, parent='notebook-personal', order
             encoded = urllib.parse.quote(json.dumps(value,ensure_ascii=False,separators=(',',':')),safe='')
             body += f'<p id="u{0x800000+j:08x}" data-lake-id="u{0x800000+j:08x}"><card type="inline" name="file" value="data:{encoded}"></card></p>'
             assets.append({'filename':filename,'size':len(asset_bytes),'hash':asset_hash})
-            c.execute('INSERT INTO declared_assets VALUES(?,?,?,?)',(note_id,filename,len(asset_bytes),asset_hash))
     ext, directory = {'doc':('lake','notes'),'usheet':('usheet.json','usheets'),'bitable':('bitable.json','bitables'),'board':('board.json','boards')}[kind]
     (root/directory/f'{note_id}.{ext}').write_text(body)
     content_hash = hashlib.sha256(body.encode()).hexdigest()
     c.execute("INSERT INTO notes(id,title,parent_id,sort_order,updated_at,sync_state,kind,text_cache,md_cache) VALUES(?,?,?,?,?,'synced',?,?,?)",(note_id,title,parent,order,now,kind,plain,plain))
     c.execute("INSERT INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,sync_state) VALUES(?,'default',?,'note',?,?,?,?,?,'synced')",(note_id,parent,title,note_id,order,now,now))
-    c.execute('INSERT INTO sync_base(note_id,content_hash,last_synced_meta_at,last_uploaded_hash) VALUES(?,?,?,?)',(note_id,content_hash,now,content_hash))
     rowid = len(notes)+1
     # Ledger prevents unrelated FTS rebuild work on every audited launch; search itself is out of scope.
     title_hash=hashlib.sha256(title.encode()).hexdigest(); body_hash=hashlib.sha256(plain.encode()).hexdigest()

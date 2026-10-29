@@ -10,12 +10,12 @@ export default async ({ page, args }) => {
   for (const [theme, list] of [["light", light], ["dark", dark]]) {
     if (!list.length) continue;
     await page.evaluate(`(() => {
-      const k = "local-lakex-notes-v1.settings";
+      const k = "lakex-local-notes-v1.settings";
       const s = JSON.parse(localStorage.getItem(k) || "{}");
       s.theme = ${JSON.stringify(theme)}; s.outlineEnhance = false;
       localStorage.setItem(k, JSON.stringify(s));
-      localStorage.setItem("local-lakex-notes-v2.sidebar-mode", "docked");
-      localStorage.setItem("local-lakex-notes-v2.outline-sidebar-mode", "collapsed");
+      localStorage.setItem("lakex-local-notes-v2.sidebar-mode", "docked");
+      localStorage.setItem("lakex-local-notes-v2.outline-sidebar-mode", "collapsed");
     })()`);
     const first = list[0].split(":");
     await page.send("Emulation.setDeviceMetricsOverride", { width: Number(first[1]), height: 868, deviceScaleFactor: 1, mobile: false });
@@ -35,7 +35,7 @@ export default async ({ page, args }) => {
       // 状态漂移会把"抽屉开/关"当成巨大像素差异（本轮踩到过 29%）。
       const shellCls = await page.evaluate(`document.querySelector(".app-shell").className`);
       if (!/\bsidebar-docked\b/.test(shellCls)) {
-        await page.evaluate(`localStorage.setItem("local-lakex-notes-v2.sidebar-mode","docked")`);
+        await page.evaluate(`localStorage.setItem("lakex-local-notes-v2.sidebar-mode","docked")`);
         await page.send("Page.reload", { ignoreCache: false });
         await page.sleep(3400);
         if (SCREENS[screen]) await SCREENS[screen](page);

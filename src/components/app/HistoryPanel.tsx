@@ -4,6 +4,7 @@ import { Camera, Clock, File, History, RotateCcw, Trash, X } from "lucide-react"
 import { native } from "../../lib/native";
 import { createRequestVersion } from "../../core/requestVersion";
 import { useFloatingDialog } from "../hooks/useFloatingDialog";
+import { useConfirm } from "../../hooks/useConfirm";
 import { DialogResizeHandles } from "../ui/DialogResizeHandles";
 import { SplitPane } from "../ui/SplitPane";
 import { getNativeErrorMessage } from "../../lib/nativeErrors";
@@ -90,6 +91,8 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
     else if (rowRect.bottom > listRect.bottom) list.scrollTop += rowRect.bottom - listRect.bottom;
   };
   const floating = useFloatingDialog({ id: "history", initialSize: { w: 900, h: 640 }, minSize: { w: 680, h: 440 } });
+  /** 确认浮层（DT-02）：替代 window.confirm（恢复历史版本会覆盖当前正文）。 */
+  const { confirm, confirmElement } = useConfirm();
   const dataVersionRef = useRef(createRequestVersion());
   const previewVersionRef = useRef(createRequestVersion());
 
@@ -171,7 +174,11 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
   };
 
   const restore = async (historyId: number) => {
-    if (!window.confirm("恢复该版本会覆盖当前内容（含只读/锁定文档）？当前版本会先存入历史。")) return;
+    if (!(await confirm({
+      title: "恢复这个历史版本？",
+      body: "会覆盖当前内容（含只读/锁定文档）；当前版本会先存入历史快照。",
+      confirmText: "恢复",
+    }))) return;
     try {
       await native.restoreHistory(historyId);
       await refreshHistory();
@@ -380,6 +387,7 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
           </div>
         </SplitPane>
         <DialogResizeHandles onResize={floating.startResize} />
+        {confirmElement}
     </Dialog>
   );
 }

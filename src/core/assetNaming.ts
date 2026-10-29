@@ -7,6 +7,7 @@
  * 引用提取：正文/卡片 value 里出现的资产文件名（canonical URL 的末段），
  * 覆盖任意 <=10 位小写字母数字扩展名 —— 附件（pdf/docx/zip/mp4/...）与图片同规。
  */
+import { randomBytes } from "./randomId.js";
 
 /** 13位时间戳 + 下划线 + 8位小写hex + 点 + 1~10位小写字母数字扩展名（单扩展名；上传时归一化到小写）。 */
 export const ASSET_NAME_RE = /\d{13}_[0-9a-f]{8}\.[a-z0-9]{1,10}/g;
@@ -107,8 +108,19 @@ const SHELL_OPEN_DENY_EXTS = new Set([
 ]);
 
 /**
+ * 允许交给系统默认应用、但**绝不在应用内渲染**的扩展名（261029：HTML 附件）。
+ *
+ * HTML 只在**外部浏览器**里执行——等价于用户自己在 Finder 里双击一个 HTML 文件，
+ * 不是我们的安全边界；关键在于我们自己的源里**不提供 text/html**（`MIME_BY_EXT` 不含 html，
+ * 资源服务对未知扩展名一律 octet-stream + nosniff）⇒ 它不会变成「应用内脚本执行面」，
+ * 移动端 native 侧仍有自己的白名单（OpenFilePlugin.isSafeShellOpenName，暂不放开）。
+ */
+const SHELL_OPEN_EXTERNAL_ONLY_EXTS = new Set(["html", "htm"]);
+
+/**
  * 是否允许 shell.openPath / 系统应用打开。
  * - 命中执行类黑名单 → false；
+ * - html/htm → true（仅外部浏览器打开，见上）；
  * - 扩展名不在资产清单（未知）→ false（fail-closed）；
  * - 其余（文档/媒体/图片/压缩包）→ true。
  */
@@ -117,6 +129,7 @@ export function isSafeShellOpenFilename(filename: string): boolean {
   if (dot <= 0 || dot === filename.length - 1) return false;
   const ext = filename.slice(dot + 1).toLowerCase();
   if (SHELL_OPEN_DENY_EXTS.has(ext)) return false;
+  if (SHELL_OPEN_EXTERNAL_ONLY_EXTS.has(ext)) return true;
   return isAssetExtension(ext);
 }
 
@@ -177,15 +190,9 @@ export function extOf(filename: string): string {
   return i >= 0 ? filename.slice(i + 1) : "";
 }
 
-/** 8 位小写 hex（平台无关：优先 crypto.getRandomValues，兜底 Math.random）。 */
+/** 8 位小写 hex（平台无关；随机源单一来源 = src/core/randomId.ts，后台兜底已确定化）。 */
 export function randomHex4(): string {
-  const c = globalThis.crypto;
-  if (c && typeof c.getRandomValues === "function") {
-    const b = new Uint8Array(4);
-    c.getRandomValues(b);
-    return Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
-  }
-  return Math.floor(Math.random() * 0xffffffff).toString(16).padStart(8, "0");
+  return Array.from(randomBytes(4), (x) => x.toString(16).padStart(2, "0")).join("");
 }
 
 /**

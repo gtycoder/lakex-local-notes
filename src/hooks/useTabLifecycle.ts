@@ -4,15 +4,20 @@ import { useCallback } from "react";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { native } from "../lib/native";
 import { getNativeErrorMessage } from "../lib/nativeErrors";
+import { rlog } from "../lib/log";
 import { reportNativeActionError } from "../lib/nativeErrors";
-import { clearScrollMemory, locateEditorSearchHit } from "../features/editor/EditorTab";
+import { clearScrollMemory, locateEditorSearchHit } from "../features/editor/editorViewport";
 import { selectEvictionIds, trimTabsToLimit } from "../core/tabLimit";
-import type { DraftJournalEntry } from "../lib/types";
+import { runPoolSettled } from "../core/s3v3Pool";
+import type { DraftJournalEntry, NoteDocument } from "../lib/types";
 import type { OpenTab } from "../desktop/desktopTypes";
 import type { PersistOutcome, SaveState } from "./useSavePipeline";
 
 /** 「正文缺失」提示每篇文档每个会话只弹一次（用户 261023：缺数据不要每次都提示）。 */
 const bodyMissingNotified = new Set<string>();
+
+/** 标签会话恢复时的正文读取并发（DT-15）：有界并发，别为 N 个标签拉满 IPC/读盘。 */
+export const TAB_RESTORE_READ_CONCURRENCY = 4;
 
 export interface UseTabLifecycleOptions {
   settingsMaxOpenTabs: number;
@@ -57,6 +62,29 @@ export function useTabLifecycle({
     return { evictedIds, failedIds };
   }, [settingsMaxOpenTabs, pinnedNoteIds, persistTab, openTabsRef]);
 
+  /** note → OpenTab（含"打开即只读"判定与缺正文一次性提示）：openNote 与 restoreTabs 共用，避免两套构造逻辑漂移。 */
+  const openTabFromNote = useCallback((note: NoteDocument, lastAccessedAt: number): OpenTab => {
+    resetRevision(note.id, 0);
+    // 打开即判定：回收站里 / 已被他端 purge 的文档直接以"已删除"标签打开（只读 + 不保存），
+    // 不等下一次同步才标记——否则重启自动重开"最后文档"时会看到能编辑的已删文档。
+    const bodyMissing = note.bodyMissing === true;
+    if (bodyMissing && !bodyMissingNotified.has(note.id)) {
+      bodyMissingNotified.add(note.id);
+      // 一次性提示（不挡操作）：详细处置在标签内的专用面板里。
+      showNotice(`《${note.title || "无标题"}》的正文文件已丢失（可能被手动删除）：已按只读打开，可恢复历史或删除该文档。`);
+    }
+    return {
+      noteId: note.id,
+      title: note.title,
+      content: note.content,
+      dirty: false,
+      lastAccessedAt,
+      deleted: isGoneNote(note),
+      bodyMissing,
+      kind: note.kind ?? "doc",
+    };
+  }, [resetRevision, showNotice]);
+
   const openNote = useCallback(async (id: string, locateQuery = "", _newTab = false): Promise<boolean> => {
     const locate = () => {
       if (!locateQuery) return;
@@ -75,7 +103,7 @@ export function useTabLifecycle({
         try {
           const t0 = performance.now();
           const note = await native.readNote(id);
-          console.log("[sync-tab] openNote reload-deleted", JSON.stringify({ noteId: id, readMs: Math.round(performance.now() - t0) }));
+          rlog.debug("sync-tab", "openNote reload-deleted", { noteId: id, readMs: Math.round(performance.now() - t0) });
           const gone = isGoneNote(note);
           if (openTabsRef.current.some((t) => t.noteId === id)) {
             setOpenTabs((tabs) => tabs.map((tab) => tab.noteId === id
@@ -97,16 +125,7 @@ export function useTabLifecycle({
         setActiveNoteId(id);
         return true;
       }
-      resetRevision(note.id, 0);
-      // 打开即判定：回收站里 / 已被他端 purge 的文档直接以"已删除"标签打开（只读 + 不保存），
-      // 不等下一次同步才标记——否则重启自动重开"最后文档"时会看到能编辑的已删文档。
-      const bodyMissing = note.bodyMissing === true;
-      if (bodyMissing && !bodyMissingNotified.has(note.id)) {
-        bodyMissingNotified.add(note.id);
-        // 一次性提示（不挡操作）：详细处置在标签内的专用面板里。
-        showNotice(`《${note.title || "无标题"}》的正文文件已丢失（可能被手动删除）：已按只读打开，可恢复历史或删除该文档。`);
-      }
-      const newTab: OpenTab = { noteId: note.id, title: note.title, content: note.content, dirty: false, lastAccessedAt: Date.now(), deleted: isGoneNote(note), bodyMissing, kind: note.kind ?? "doc" };
+      const newTab: OpenTab = openTabFromNote(note, Date.now());
       const nextForEvict = openTabsRef.current.some((t) => t.noteId === id)
         ? openTabsRef.current
         : [...openTabsRef.current, newTab];
@@ -132,7 +151,42 @@ export function useTabLifecycle({
       setError(getNativeErrorMessage(reason));
       return false;
     }
-  }, [evictTabsForLimit, settingsMaxOpenTabs, pinnedNoteIds, showNotice, openTabsRef, setOpenTabs, setActiveNoteId, setPinnedNoteIds, resetRevision]);
+  }, [evictTabsForLimit, settingsMaxOpenTabs, pinnedNoteIds, showNotice, openTabsRef, setOpenTabs, setActiveNoteId, setPinnedNoteIds, openTabFromNote]);
+
+  /**
+   * DT-15：启动时批量恢复上次标签会话。
+   * - 有界并发读正文（TAB_RESTORE_READ_CONCURRENCY），不再 N 次串行 `await openNote()`；
+   * - **一次** setOpenTabs 提交（不再逐篇提交 + 途中淘汰）；
+   * - 会话顺序 / 活动标签 / 淘汰语义不变：调用方已按 maxOpenTabs 截断（这里再防御性截一次），
+   *   lastAccessedAt 按位置递增（越靠后越新），仍由 trimTabsToLimit 兜底封顶。
+   * 返回真正恢复的标签数（全部失败 = 0，调用方据此回落冷启动落点）。
+   */
+  const restoreTabs = useCallback(async (ids: readonly string[], activeId: string | null): Promise<number> => {
+    const unique = Array.from(new Set(ids.filter((id): id is string => typeof id === "string" && id.length > 0)));
+    // 会话按打开顺序存（末尾最新）⇒ 超限时保留最近 N 个，与"自动淘汰最旧"同向。
+    const planned = settingsMaxOpenTabs > 0 ? unique.slice(-settingsMaxOpenTabs) : unique;
+    if (planned.length === 0) return 0;
+    const startedAt = Date.now();
+    const { results, errors } = await runPoolSettled(planned, TAB_RESTORE_READ_CONCURRENCY, async (id, index) => {
+      const note = await native.readNote(id);
+      return openTabFromNote(note, startedAt - (planned.length - 1) + index);
+    });
+    const tabs = results.filter((tab): tab is OpenTab => tab !== undefined);
+    if (errors.length > 0) setError(getNativeErrorMessage(errors[0].error));
+    if (tabs.length === 0) return 0;
+    const resolvedActiveId = activeId && tabs.some((tab) => tab.noteId === activeId)
+      ? activeId
+      : tabs[tabs.length - 1].noteId;
+    setOpenTabs((current) => {
+      if (current.length === 0) return tabs;
+      // 启动时通常为空；万一已有并发打开的标签，按 id 去重后仍强制封顶（不丢已打开标签）。
+      const restoredIds = new Set(tabs.map((tab) => tab.noteId));
+      const merged = [...current.filter((tab) => !restoredIds.has(tab.noteId)), ...tabs];
+      return trimTabsToLimit(merged, { limit: settingsMaxOpenTabs, activeNoteId: resolvedActiveId, pinnedNoteIds });
+    });
+    setActiveNoteId(resolvedActiveId);
+    return tabs.length;
+  }, [settingsMaxOpenTabs, pinnedNoteIds, openTabFromNote, setOpenTabs, setActiveNoteId, setError]);
 
   const restoreDraft = useCallback(async (entry: DraftJournalEntry) => {
     // 先确认正式文档仍存在。否则不能从恢复对话框中静默移除草稿，让用户误以为恢复成功。
@@ -154,5 +208,5 @@ export function useTabLifecycle({
     setDraftEntries((entries) => entries.filter((entry) => entry.noteId !== noteId));
   }, [setDraftEntries]);
 
-  return { evictTabsForLimit, openNote, restoreDraft, discardDraft };
+  return { evictTabsForLimit, openNote, restoreTabs, restoreDraft, discardDraft };
 }

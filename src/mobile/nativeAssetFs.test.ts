@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 const F = readFileSync(new URL("./native/assetFs.ts", import.meta.url), "utf8");
-const P = readFileSync(new URL("../../android/app/src/main/java/com/locallakexnotes/mobile/AssetSyncPlugin.kt", import.meta.url), "utf8");
+const P = readFileSync(new URL("../../android/app/src/main/java/com/lakexlocalnotes/android/AssetSyncPlugin.kt", import.meta.url), "utf8");
 describe("移动端资产文件操作原生化（261026）", () => {
   it("AssetSync 插件提供本地资产读写/删除/列目录（原子写）", () => {
     for (const name of ["writeLocal", "readLocal", "removeLocal", "listLocal"]) {

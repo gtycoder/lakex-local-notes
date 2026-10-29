@@ -7,7 +7,9 @@ import {
   formatFileSize,
   parseFileCardValue,
   scanFileCards,
+  type AttachmentKind,
 } from "./fileCard.js";
+import { fileKindOf as assetFileKindOf, type AssetFileKind } from "./assetNaming.js";
 
 /** 构造一个与 Lake 序列化一致的 card 文本：<card type="block" name="file" value="data:{enc}"> */
 function cardHtml(value: Record<string, unknown>): string {
@@ -86,5 +88,71 @@ describe("fileCard", () => {
     expect(formatFileSize(2048)).toBe("2 KB");
     expect(formatFileSize(25 * 1024 * 1024)).toBe("25 MB");
     expect(formatFileSize(3.5 * 1024 * 1024)).toBe("3.5 MB");
+  });
+});
+
+describe("CORE-07 fileKindOf 与图标分类同源", () => {
+  // 图标分流 = assetNaming.fileKindOf（11 类，文件的单一扩展名表）；
+  // 预览分流 = fileCard.fileKindOf（7 桶）。这里锁死「预览类型 = 图标类型的投影」。
+  // Record<AssetFileKind, …> 同时是完整性护栏：新增 11 类之一时此表必须跟着改。
+  const previewOfIconKind: Record<AssetFileKind, AttachmentKind> = {
+    image: "image",
+    pdf: "pdf",
+    audio: "audio",
+    video: "video",
+    archive: "archive",
+    doc: "document",
+    sheet: "document",
+    slide: "document",
+    code: "document",
+    text: "document",
+    file: "other",
+  };
+
+  const extMatrix = [
+    "png", "jpg", "jpeg", "gif", "webp", "avif", "svg", "bmp", "tiff",
+    "pdf",
+    "doc", "docx", "rtf", "epub", "odt", "pages",
+    "xls", "xlsx", "csv", "tsv", "numbers",
+    "ppt", "pptx", "key",
+    "zip", "rar", "7z", "tar", "gz", "xz",
+    "mp3", "wav", "flac", "ogg", "m4a",
+    "mp4", "mov", "webm", "mkv", "avi",
+    "txt", "md", "markdown", "log",
+    "ts", "tsx", "js", "json", "py", "yml", "yaml", "sql", "apk", "bin",
+  ];
+
+  it("每个扩展名：预览类型 = 图标类型的投影（单一来源）", () => {
+    for (const ext of extMatrix) {
+      const iconKind = assetFileKindOf("x." + ext);
+      expect(previewOfIconKind[iconKind], ext).toBe(fileKindOf("x." + ext));
+    }
+  });
+
+  it("图标认得出来的扩展名，预览不得落到「其他」", () => {
+    // 修前红：x.ts 图标 = code（代码文件），预览却 = other（其他）——「图标对、行为错」。
+    for (const ext of extMatrix) {
+      const iconKind = assetFileKindOf("x." + ext);
+      expect(iconKind, ext).not.toBe("file");
+      expect(fileKindOf("x." + ext), ext).not.toBe("other");
+    }
+    // 具体分歧点的定点断言
+    expect(assetFileKindOf("x.ts")).toBe("code");
+    expect(fileKindOf("x.ts")).toBe("document");
+    expect(fileKindOf("x.docx")).toBe("document"); // doc → document（同类型、不同桶名）
+  });
+
+  it("未知 / 无扩展名 / 空串：图标 file ⇔ 预览 other", () => {
+    for (const name of ["x.qqq", "README", "", "x.", "【未命名】"]) {
+      expect(assetFileKindOf(name), name).toBe("file");
+      expect(fileKindOf(name), name).toBe("other");
+    }
+  });
+
+  it("大小写 / 带点 / URL 末段同口径（调用点传 name || src）", () => {
+    expect(fileKindOf("A.PNG")).toBe("image");
+    expect(fileKindOf(".PDF")).toBe("pdf");
+    expect(fileKindOf("http://127.0.0.1:19876/note-assets/n/1789800370840_0eff2c68.ts")).toBe("document");
+    expect(fileKindOf("http://127.0.0.1:19876/note-assets/n/1789800370840_0eff2c68.mp4")).toBe("video");
   });
 });

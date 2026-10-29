@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { gzipSync } from "node:zlib";
 import { decodeRemoteObject } from "./s3Remote.js";
-import { isGzipMetadataKey } from "../../src/core/s3v3Keys.js";
+import { isGzipMetadataKey } from "../../src/core/s3v3/protocol/s3v3Keys.js";
 
 /** P0：v3 S3 端口只对 meta/ 与 quick-notes/meta/ 解压；正文/附件按原始字节返回。 */
 describe("v3 远端对象 gzip 判定（按 key，不按魔数）", () => {

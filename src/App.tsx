@@ -7,7 +7,7 @@ import { useWindowShortcuts } from "./hooks/useWindowShortcuts";
 import { useTopMenus } from "./hooks/useTopMenus";
 import { DesktopStatusBar } from "./components/app/DesktopStatusBar";
 import { getDocumentStatus } from "./components/model/documentStatusModel";
-import { clearScrollMemory } from "./features/editor/EditorTab";
+import { clearScrollMemory } from "./features/editor/editorViewport";
 import { setNoteRefHost } from "./features/editor/noteRef";
 import { TablePasteGuardDialog } from "./features/editor/TablePasteGuardDialog";
 import { OutlineSidebar } from "./features/outline/OutlineSidebar";
@@ -46,6 +46,7 @@ import { DesktopLibrary } from "./desktop/DesktopLibrary";
 import { DesktopQuickNotes } from "./desktop/DesktopQuickNotes";
 import { useDesktopShell } from "./desktop/useDesktopShell";
 import { DesktopSplitButton, DesktopTopBarLeading, DesktopTopBarSearch } from "./desktop/DesktopTopBar";
+import { DesktopWorkspaceSlotProvider } from "./desktop/desktopWorkspaceSlot";
 import { BrandLaunchMark } from "./components/app/BrandLaunchMark";
 import { TrashPanel } from "./components/app/TrashPanel";
 import { AssetsBrowser } from "./components/app/AssetsBrowser";
@@ -191,7 +192,7 @@ export function App() {
     }).catch((reason) => setError("保留多维表草稿失败：" + getNativeErrorMessage(reason)));
   }, [saveTimers, draftTimers, bumpRevision, openTabsRef, setDraftEntries, showNotice, setError]);
 
-  const { evictTabsForLimit, openNote, restoreDraft, discardDraft } = useTabLifecycle({
+  const { evictTabsForLimit, openNote, restoreTabs, restoreDraft, discardDraft } = useTabLifecycle({
     settingsMaxOpenTabs: settings.maxOpenTabs,
     pinnedNoteIds,
     openTabsRef,
@@ -282,7 +283,7 @@ export function App() {
 
   useBootstrap({
     setWorkspace, setNotes, setSync, setCloudEnabled, setS3Settings, setCloudConfigured,
-    setConflictSnapshotNotice, setPendingSummary, setDraftEntries, setTreeNodes, setError, openNote, showNotice,
+    setConflictSnapshotNotice, setPendingSummary, setDraftEntries, setTreeNodes, setError, openNote, restoreTabs, showNotice,
   });
 
   // 桌面标签会话（device-local）：标签/活动页变化即落盘；开启「退出时关闭全部标签」时清掉、不恢复。
@@ -296,7 +297,9 @@ export function App() {
   useSyncProgress({
     setSync, setCloudEnabled, setNotes, setTreeNodes, setOpenTabs,
     setConflictSnapshotNotice, setHistoryNoteId, setHistoryOpen, setNotice, setTrashOpen,
-    showNoticeWithAction, quickNotesRef, openTabsRef,
+    showNoticeWithAction, showNotice, quickNotesRef, openTabsRef,
+    // 261028 P1：epoch 不一致时状态栏提示里的「打开同步设置」入口（最小新增 prop）。
+    openSyncSettings: () => { setSettingsCategory("sync"); setSettingsOpen(true); },
   });
 
 
@@ -538,7 +541,7 @@ export function App() {
 
   // 跟踪当前文档是否为空大纲；切换标签时清除豁免、重新评估。
 
-  /** 只读锁切换：先保存脏草稿，再写 SQLite（锁状态经 manifest v3 同步） */
+  /** 只读锁切换：先保存脏草稿，再写 SQLite（锁状态随 v3 索引条目同步；v3 无 manifest） */
   if (!workspace) return <main className="loading-screen"><BrandLaunchMark label="正在打开本地知识库" />{error && <small>{error}</small>}</main>;
 
   // 字数/图片统计（W-2-A）：从渲染体移出，避免每次按键对整篇正文跑两次 O(n) 正则。
@@ -552,49 +555,23 @@ export function App() {
     desktopWorkspace, activeOutlineEmpty, outlineEmptyOverride, outlineMode,
     sidebarWidth, sidebarMode, narrowOverlay, outlineSidebarWidth,
   });
-  const topBarLeadingProps = {
-    desktopWorkspace,
-    sync: sync,
-    pendingSummary,
-    cloudEnabled,
-    cloudConfigured,
-    conflictSnapshots: conflictSnapshotNotice,
-    onToggleWorkspaceMenu: () => { setWorkspaceMenuOpen((o) => !o); setTopMenuOpen(false); },
-    onSync: () => { void runSync(); },
-    onOpenSettings: () => { setSettingsCategory("sync"); setSettingsOpen(true); },
-    onOpenHistory: (noteId: string) => { setHistoryNoteId(noteId); setHistoryOpen(true); },
-    onOpenNote: (noteId: string) => { void openNote(noteId); },
-  };
-  const libraryTopBarLeading = (
+  /** 顶栏左侧 = **唯一渲染点**（DT-09）：四个空间共用这一个元素，各自在顶栏槽位用
+   *  `DesktopWorkspaceSlotProvider` 声明归属；可见性与共享 ref 由组件按槽位推导（四态逐项等价）。 */
+  const topBarLeading = (
     <DesktopTopBarLeading
-      {...topBarLeadingProps}
-      visible={desktopWorkspace === "library"}
-      wsMenuWrapRef={desktopWorkspace === "library" ? wsMenuWrapRef : undefined}
-      syncBtnRef={desktopWorkspace === "library" ? syncBtnRef : undefined}
-    />
-  );
-  const quickNotesTopBarLeading = (
-    <DesktopTopBarLeading
-      {...topBarLeadingProps}
-      visible={desktopWorkspace === "quick-notes"}
-      wsMenuWrapRef={desktopWorkspace === "quick-notes" ? wsMenuWrapRef : undefined}
-      syncBtnRef={desktopWorkspace === "quick-notes" ? syncBtnRef : undefined}
-    />
-  );
-  const trashTopBarLeading = (
-    <DesktopTopBarLeading
-      {...topBarLeadingProps}
-      visible={desktopWorkspace === "trash"}
-      wsMenuWrapRef={desktopWorkspace === "trash" ? wsMenuWrapRef : undefined}
-      syncBtnRef={desktopWorkspace === "trash" ? syncBtnRef : undefined}
-    />
-  );
-  const resourcesTopBarLeading = (
-    <DesktopTopBarLeading
-      {...topBarLeadingProps}
-      visible={desktopWorkspace === "resources"}
-      wsMenuWrapRef={desktopWorkspace === "resources" ? wsMenuWrapRef : undefined}
-      syncBtnRef={desktopWorkspace === "resources" ? syncBtnRef : undefined}
+      desktopWorkspace={desktopWorkspace}
+      sync={sync}
+      pendingSummary={pendingSummary}
+      cloudEnabled={cloudEnabled}
+      cloudConfigured={cloudConfigured}
+      conflictSnapshots={conflictSnapshotNotice}
+      wsMenuWrapRef={wsMenuWrapRef}
+      syncBtnRef={syncBtnRef}
+      onToggleWorkspaceMenu={() => { setWorkspaceMenuOpen((o) => !o); setTopMenuOpen(false); }}
+      onSync={() => { void runSync(); }}
+      onOpenSettings={() => { setSettingsCategory("sync"); setSettingsOpen(true); }}
+      onOpenHistory={(noteId: string) => { setHistoryNoteId(noteId); setHistoryOpen(true); }}
+      onOpenNote={(noteId: string) => { void openNote(noteId); }}
     />
   );
   /** 文档页顶栏最右侧：全文搜索（原在左侧工作空间下拉里；⇧⌘F 亦可）。 */
@@ -671,7 +648,7 @@ export function App() {
             activeNoteId={activeNoteId}
             tocEnabled={tocEnabled}
             outlineEnhance={outlineEnhance}
-            topbarLeading={libraryTopBarLeading}
+            topbarLeading={topBarLeading}
             topbarTrailing={topBarTrailing}
             splitPair={splitPair}
             onExitSplit={exitSplit}
@@ -723,7 +700,7 @@ export function App() {
             // 判据用 cloudState 的 **UI 判据** isCloudActive（= 已配置 且 开关打开）；关了开关/没配置都算本地、不出网
             cloudReady={isCloudActive(cloudConfigured, cloudEnabled)}
             quickNotesRef={quickNotesRef}
-            topbarLeading={quickNotesTopBarLeading}
+            topbarLeading={topBarLeading}
             onDirtyChange={setQuickNotesDirty}
             onConverted={(note) => void handleQuickNoteConverted(note)}
             />
@@ -731,7 +708,9 @@ export function App() {
         {/* 回收站空间：与小记同构（顶栏 + 整页 pane），非弹窗 */}
         <div className={"workspace-view" + (desktopWorkspace === "trash" ? "" : " workspace-view--hidden")}>
           <header className="tab-bar desktop-only" aria-label="顶栏">
-            <div className="tabbar-leading">{trashTopBarLeading}</div>
+            <div className="tabbar-leading">
+              <DesktopWorkspaceSlotProvider workspace="trash">{topBarLeading}</DesktopWorkspaceSlotProvider>
+            </div>
             <div className="tab-items" />
             <div className="tabbar-trailing">{topBarSearch}</div>
           </header>
@@ -746,7 +725,9 @@ export function App() {
         {/* 资源空间：与回收站同构（顶栏 + 整页 pane）；左 2/3 列表、右 1/3 纯预览。261006 */}
         <div className={"workspace-view" + (desktopWorkspace === "resources" ? "" : " workspace-view--hidden")}>
           <header className="tab-bar desktop-only" aria-label="顶栏">
-            <div className="tabbar-leading">{resourcesTopBarLeading}</div>
+            <div className="tabbar-leading">
+              <DesktopWorkspaceSlotProvider workspace="resources">{topBarLeading}</DesktopWorkspaceSlotProvider>
+            </div>
             <div className="tab-items" />
             <div className="tabbar-trailing">{topBarSearch}</div>
           </header>

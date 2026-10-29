@@ -50,10 +50,12 @@ describe("活动标签判定：唯一来源 data-active（261005）", () => {
     // 编辑器顶边：不再把 pane 下**所有** .ne-ui 当候选
     expect(TOP_VAR).toContain("activeEditorHost()");
     expect(TOP_VAR).not.toMatch(/pane\.querySelectorAll<HTMLElement>\("\.protyle-breadcrumb, \.ne-ui"\)/);
-    // 「活动编辑器滚动归零」的兜底：不再用 getComputedStyle(host).display !== "none" 过滤
-    //（隐藏标签现在保留布局，display 恒为 block ⇒ 会命中所有标签，把所有编辑器都滚到顶）
-    expect(DERIVED).toContain("activeEditorHost()");
-    expect(DERIVED).not.toMatch(/getComputedStyle\(host\)\.display/);
+    // 「活动编辑器滚动归零」的 DOM 副作用已从纯计算模块拆出（DT-14，261028）：原
+    // scrollActiveEditorToTop 自 261008 面包屑下沉后已无调用方（回顶由各宿主自己负责），
+    // 与滚动记忆/搜索定位一起从 desktopDerivedState/EditorTab 迁走。
+    // 纯计算模块**不得再读 DOM**，更不得用 display/几何猜「哪个是活动标签」。
+    expect(DERIVED).not.toContain("activeEditorHost()");
+    expect(DERIVED).not.toMatch(/document\.|getComputedStyle|querySelector/);
     // EditorTab 里不得再用 host.style.display 判「本标签是否在显示」（inline display 已移除，恒为空串）
     expect(EDITOR_TAB).not.toMatch(/style\.display === "none"/);
   });

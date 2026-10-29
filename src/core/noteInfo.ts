@@ -16,7 +16,7 @@
  * 与 `lib/formatBytes`（只到 MB、恒 1 位）与 `lib/formatBytesCompact`（到 GB、≥100 取整）都不同。
  * 按 B1 的结论：**不同口径不合并**，但同一口径只能有一份实现。
  */
-import type { NoteInfo } from "../lib/types.js";
+import type { NoteInfo } from "./sharedTypes.js";
 import { formatDateTime } from "./dateFormat.js";
 
 /** 同步状态 → 文案（两端共用；未知状态原样回显）。 */

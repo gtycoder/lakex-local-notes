@@ -15,10 +15,6 @@ vi.mock("./native/assetFs", () => ({
   removeAssetBytesFs: vi.fn(async () => {}),
 }));
 
-vi.mock("../core/syncAssets.js", () => ({
-  downloadNoteAssets: vi.fn(),
-}));
-
 // 旧 legacy 引擎已删除；移动端同步入口 = v3（本文件只测目录树，不需要它真正跑）。
 vi.mock("./v3/sync.js", () => ({
   runMobileV3Sync: vi.fn(async () => ({ downloadedNotes: 0, uploadedNotes: 0, deletedObjects: 0, published: false, generation: null, warnings: [] })),

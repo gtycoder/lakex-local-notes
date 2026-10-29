@@ -4,7 +4,7 @@
 
 ## 已覆盖的工作
 
-- 真实 `.app`：`app.isPackaged=true`、`locallakexnotes://app`、默认 GPU、sandbox/contextIsolation 开启；不得加 `--disable-gpu` 或 `--no-sandbox`。
+- 真实 `.app`：`app.isPackaged=true`、`lakexlocalnotes://app`、默认 GPU、sandbox/contextIsolation 开启；不得加 `--disable-gpu` 或 `--no-sandbox`。
 - 5000 篇文档 + 20000 个 4KiB 合成附件（约 78MiB 附件，不代表 20GB 传输）。媒体字段来自真实编辑器插入附件的序列化。
 - 空应用缓存启动 3 次 / 同数据缓存启动 3 次；不是重启电脑后的磁盘冷启动。
 - 富文本（普通 / 约512KB / 约2MB / 24附件）、表格（1000/5000×20）、多维表（200/5000×20）、100图形画板。
@@ -31,7 +31,7 @@ CSC_IDENTITY_AUTO_DISCOVERY=false npx electron-builder --dir --mac --arm64 --pub
 所有下面的环境变量都只用于本次命令，不写真实设置或仓库凭证：
 
 ```bash
-export LAKE_PERF_APP="/absolute/path/LocalLakexNotes.app/Contents/MacOS/LocalLakexNotes"
+export LAKE_PERF_APP="/absolute/path/LakexLocalNotes.app/Contents/MacOS/LakexLocalNotes"
 export LAKE_PERF_SEED="/tmp/lake-packaged-perf-seed-<unique>"
 export LAKE_PERF_TEMPLATE="/absolute/path/fixture-template.json"
 node scripts/packaged-performance/seed.mjs
@@ -65,7 +65,7 @@ node scripts/packaged-performance/run.mjs
 `sidebar-regression.mjs` 用全新隔离数据目录验证公共目录UI（不是私有组件测试）：真实点按/拖拽、重命名/锁/创建/删除恢复、浮出目录、三主题×宽窄窗。
 
 ```bash
-LAKE_PERF_APP="/absolute/path/LocalLakexNotes.app/Contents/MacOS/LocalLakexNotes" \
+LAKE_PERF_APP="/absolute/path/LakexLocalNotes.app/Contents/MacOS/LakexLocalNotes" \
 LAKE_PERF_EVIDENCE="/absolute/path/sidebar-evidence" \
 node scripts/packaged-performance/sidebar-regression.mjs
 ```
@@ -79,7 +79,7 @@ node scripts/packaged-performance/sidebar-regression.mjs
 
 ```bash
 export PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH"
-export LAKE_PACKAGED_EXECUTABLE="/absolute/path/LocalLakexNotes.app/Contents/MacOS/LocalLakexNotes"
+export LAKE_PACKAGED_EXECUTABLE="/absolute/path/LakexLocalNotes.app/Contents/MacOS/LakexLocalNotes"
 export LAKE_PERF_FIXTURE="/tmp/lake-packaged-perf-fixture-<unique>" # 上文造出的5000文档/2万合成附件库
 export LAKE_PERF_EVIDENCE="/absolute/path/evidence-parent"
 # 可选：LAKE_PERF_CDP_PORT=9301（main inspector=+1），LAKE_PERF_ASSET_PORT=19901

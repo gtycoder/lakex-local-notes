@@ -6,7 +6,7 @@ import {
   DeleteObjectCommand,
 } from "@aws-sdk/client-s3";
 import { gunzipSync, gzipSync } from "node:zlib";
-import { isGzipMetadataKey } from "../../src/core/s3v3Keys.js";
+import { isGzipMetadataKey } from "../../src/core/s3v3/protocol/s3v3Keys.js";
 import type { RemoteObjectInfo, S3v3Remote, S3v3Settings } from "./ports.js";
 
 const GZIP_MAGIC_0 = 0x1f;

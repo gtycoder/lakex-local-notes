@@ -30,7 +30,9 @@ const calls: {
   commandHandler?: (event: { id?: string }) => void;
   /** executeCommand 调用记录（「选中区域被盖住才最小滚动」的护栏）。 */
   commands: Array<{ id: string; params?: Record<string, unknown> }>;
-} = { created: 0, disposed: 0, editable: [], core: null, container: null, setValue: [], setFormula: [], fontSize: [], insertSheet: 0, commands: [] };
+  /** 测试可替换的内核 save() 快照（CORE-03：模拟真实改动 / 改回原样）。 */
+  savedBook: Record<string, unknown> | null;
+} = { created: 0, disposed: 0, editable: [], core: null, container: null, setValue: [], setFormula: [], fontSize: [], insertSheet: 0, commands: [], savedBook: null };
 
 const range = {
   getCellStyleData: () => ({ bl: 0 }),
@@ -95,7 +97,7 @@ vi.mock("@univerjs/presets", () => ({
       univerAPI: {
         createWorkbook: () => ({
           setEditable: (v: boolean) => { calls.editable.push(v); },
-          save: () => ({ id: "workbook", sheetOrder: ["s1"], sheets: { s1: { id: "s1", name: "Sheet1", rowCount: 5, columnCount: 3, cellData: {} } } }),
+          save: () => calls.savedBook ?? ({ id: "workbook", sheetOrder: ["s1"], sheets: { s1: { id: "s1", name: "Sheet1", rowCount: 5, columnCount: 3, cellData: {} } } }),
         }),
         setTheme: () => undefined,
         getActiveWorkbook: () => workbook,
@@ -132,13 +134,19 @@ const BODY = JSON.stringify({
 Object.defineProperty(window.HTMLElement.prototype, "clientHeight", { configurable: true, get: () => 320 });
 window.requestAnimationFrame = ((cb: FrameRequestCallback) => { cb(0); return 0; }) as typeof window.requestAnimationFrame;
 
-async function mount(active: boolean, editing = false) {
+async function mount(
+  active: boolean,
+  editing = false,
+  content = BODY,
+  onCapture?: (capture: (() => string | null) | null) => void,
+  onChange: (next: string) => void = () => undefined,
+) {
   const host = document.createElement("div");
   document.body.appendChild(host);
   const root = createRoot(host);
   const { act } = await import("react");
   await act(async () => {
-    root.render(createElement(MobileUsheetViewer, { noteId: "n1", content: BODY, active, editing, onChange: () => undefined }));
+    root.render(createElement(MobileUsheetViewer, { noteId: "n1", content, active, editing, onChange, onCapture }));
   });
   for (let i = 0; i < 8; i += 1) await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
   return { root, host };
@@ -216,6 +224,21 @@ describe("移动端表格查看/编辑器（dock v5）", () => {
     const closingPanel = host.querySelector(".mb-usheet-panel");
     // 关闭过渡中：panel 仍挂载且带 data-closing=1（等键盘盖住才卸载，与文档 dock 同款）。
     expect(!closingPanel || closingPanel.getAttribute("data-closing") === "1" || closingPanel.getAttribute("data-open") === "0").toBe(true);
+    root.unmount();
+  });
+
+  it("面板⇄键盘互斥（MOB-07）：开面板收原生编辑，关面板放回键盘", async () => {
+    const { root, host } = await mount(true, true);
+    calls.commands.length = 0;
+    await click(host, "文字格式");
+    // 面板吃键盘区：先关内核原生编辑（公式栏不得浮在面板上）。
+    expect(calls.commands).toContainEqual({ id: "sheet.operation.set-cell-edit-visible", params: { visible: false, eventType: 3 } });
+    // 表格不接管外壳高：--mb-app-h 只由文档编辑面写（表格自己的可视区用 --mb-usheet-kb-offset）。
+    expect(document.documentElement.style.getPropertyValue("--mb-app-h")).toBe("");
+    calls.commands.length = 0;
+    // 关面板 = restore 档：放回键盘（与文档编辑面同一条路）。
+    await click(host, "关闭文字格式");
+    expect(calls.commands).toContainEqual({ id: "sheet.operation.set-cell-edit-visible", params: { visible: true, eventType: 3 } });
     root.unmount();
   });
 
@@ -336,6 +359,63 @@ describe("移动端表格查看/编辑器（dock v5）", () => {
     await click(host, "高亮当前行列");
     expect(host.querySelector<HTMLButtonElement>('.mb-usheet-topbar button[aria-label="高亮当前行列"]')!.getAttribute("aria-pressed")).toBe("true");
     root.unmount();
+  });
+
+  it("坏正文：只读保护（横幅 + 编辑面不出现 + capture 恒 null），合法空正文仍可编辑", async () => {
+    calls.created = 0; calls.editable.length = 0;
+    let capture: (() => string | null) | null = null;
+    const { root, host } = await mount(true, true, "{ 不是 JSON", (c) => { capture = c; });
+    const banner = host.querySelector("[data-usheet-parse-error]");
+    expect(banner?.getAttribute("role")).toBe("status");
+    expect(banner?.textContent).toContain("无法解析");
+    // 坏正文不挂可编辑形态：内核一次 setEditable(true) 都不能发生；编辑面（公式栏/dock）不出现。
+    expect(calls.created).toBe(1);
+    expect(calls.editable).not.toContain(true);
+    expect(host.querySelector(".mb-usheet-fbar")).toBeNull();
+    expect(host.querySelector(".mb-usheet-dock")).toBeNull();
+    // 阅读条保留（只读查看），capture 恒 null ⇒ 任何保存路径都拿不到可写正文。
+    expect(host.querySelector(".mb-usheet-readingbar")).toBeTruthy();
+    expect(typeof capture).toBe("function");
+    expect(capture!()).toBeNull();
+    root.unmount();
+
+    // 合法空正文 = 可编辑空表（不能把「空」误判成「坏」）。
+    calls.created = 0; calls.editable.length = 0;
+    const empty = await mount(true, true, "");
+    expect(empty.host.querySelector("[data-usheet-parse-error]")).toBeNull();
+    expect(calls.editable).toContain(true);
+    empty.root.unmount();
+  });
+
+  it("CORE-03：无改动 capture 返回磁盘原文；改回原样不写盘；真实改动才 onChange", async () => {
+    calls.created = 0; calls.editable.length = 0;
+    calls.savedBook = {
+      id: "workbook", sheetOrder: ["s1"],
+      sheets: { s1: { id: "s1", name: "Sheet1", rowCount: 5, columnCount: 3, cellData: { "0": { "0": { v: "季度预算" } } } } },
+    };
+    let capture: (() => string | null) | null = null;
+    const changes: string[] = [];
+    const { root, host } = await mount(true, true, BODY, (c) => { capture = c; }, (next) => { changes.push(next); });
+    try {
+      // 无改动：内核 save() 缺 defaultStyle 等字段（要靠 normalize 补），capture 仍返回磁盘原文。
+      expect(capture!()).toBe(BODY);
+      expect(changes).toEqual([]);
+      // 内容输入判据与桌面同款：键盘/粘贴/dock 点击才允许把差异当编辑。
+      host.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "a" }));
+      const sheet = (calls.savedBook!.sheets as Record<string, { cellData: Record<string, Record<string, unknown>> }>).s1;
+      sheet.cellData["0"]["0"] = { v: "已改" };
+      const changed = capture!();
+      expect(changed).not.toBe(BODY);
+      expect(changed).toContain("已改");
+      expect(changes.length).toBe(1);
+      // 改回原样：与磁盘原文规范化后等价 ⇒ 返回磁盘原文，且不再通知外层。
+      sheet.cellData["0"]["0"] = { v: "季度预算" };
+      expect(capture!()).toBe(BODY);
+      expect(changes.length).toBe(1);
+    } finally {
+      calls.savedBook = null;
+      root.unmount();
+    }
   });
 
   it("图片 source：资产 filename 走本机 AssetServer canonical URL；http/data 原样", () => {

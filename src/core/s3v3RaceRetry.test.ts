@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { sha256Hex } from "./syncUtils.js";
-import { indexHashOf, serializeLakeIndex, serializeQuickNotesIndex, type LakeIndex, type QuickNotesIndex } from "./s3v3Index.js";
-import { indexKey, lakeBodyKey } from "./s3v3Keys.js";
+import { indexHashOf, serializeLakeIndex, serializeQuickNotesIndex, type LakeIndex, type QuickNotesIndex } from "./s3v3/protocol/s3v3Index.js";
+import { indexKey, lakeBodyKey } from "./s3v3/protocol/s3v3Keys.js";
 import { S3v3SyncEngine } from "./s3v3Engine.js";
 import type { S3v3Remote, RemoteObjectInfo } from "./s3v3Ports.js";
 import type { DeviceState, S3v3DeviceStore } from "./s3v3DeviceStore.js";
@@ -32,7 +32,7 @@ class RecDevice implements S3v3DeviceStore {
   state: DeviceState = {
     lake: { v: 3, space: "lake", notes: [], folders: [] },
     quickNotes: { v: 3, space: "quickNotes", items: [] }, folders: [], intents: [], pending: [],
-    remotePurged: [], restorePending: [], quickPurges: [], quickPurgeTimes: {}, quickDeletes: [], archived: [],
+    remotePurged: [], restorePending: [], quickPurges: [], quickPurgeTimes: {}, quickDeletes: [],
   };
   writtenBodies: string[] = [];
   async init(): Promise<void> {}

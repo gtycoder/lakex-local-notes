@@ -21,6 +21,7 @@ const BoardEditor = lazy(() => import("../board/BoardEditor").then((m) => ({ def
 /** 手写板编辑器（共享 InkPad + perfect-freehand，懒加载）。 */
 const DesktopInkPad = lazy(() => import("../ink/DesktopInkPad").then((m) => ({ default: m.DesktopInkPad })));
 import type { LakeEditorPrefs } from "./lakeRuntime";
+import type { EditorCaptureRegistrar } from "../../core/editorCapture";
 
 const EMPTY_PINNED: ReadonlySet<string> = new Set();
 
@@ -69,7 +70,7 @@ interface MultiTabEditorProps {
   prefs?: LakeEditorPrefs;
   onEditorReady?: (noteId: string, editor: import("./lakeRuntime").LakeEditorInstance | null) => void;
   /** 审计 F15：usheet/Board 注册按需同步序列化（关闭/保存/退出时现取），null 表示卸载。 */
-  onEditorCapture?: (noteId: string, capture: (() => string | null) | null) => void;
+  onEditorCapture?: EditorCaptureRegistrar;
   /** 外部改动正文后重载该文档 tab（附件重命名用） */
   onReloadNote?: (noteId: string) => void;
   /** 「正文缺失」面板：打开该文档的历史版本（由上层接 HistoryPanel）。 */
@@ -169,7 +170,7 @@ export function MultiTabEditor({
   const tabMenuRef = useRef<HTMLDivElement>(null);
   const [tabMenuOpen, setTabMenuOpen] = useState(false);
   const [tabMenuWidth, setTabMenuWidth] = useState<number>(() => {
-    const v = Number(localStorage.getItem("local-lakex-notes-v3.tab-switcher-width"));
+    const v = Number(localStorage.getItem("lakex-local-notes-v3.tab-switcher-width"));
     return Number.isFinite(v) && v >= 160 && v <= 440 ? v : 220;
   });
   const tabMenuWidthRef = useRef(tabMenuWidth);
@@ -185,7 +186,7 @@ export function MultiTabEditor({
     const onUp = () => {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
-      writeLocalStorage("local-lakex-notes-v3.tab-switcher-width", String(tabMenuWidthRef.current));
+      writeLocalStorage("lakex-local-notes-v3.tab-switcher-width", String(tabMenuWidthRef.current));
     };
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
@@ -667,7 +668,7 @@ export function MultiTabEditor({
           <h2>开始写第一篇笔记</h2>
           <p className="empty-workspace-hint">新建文档开始记录，或按 ⌘K 搜索已有笔记</p>
           {emptyAction}
-        </section> : <Suspense fallback={<div className="empty-workspace-hint">正在加载表格编辑器…</div>}>{tabs.map((tab) => (
+        </section> : <Suspense fallback={<div className="empty-workspace-hint">正在加载编辑器…</div>}>{tabs.map((tab) => (
           tab.bodyMissing ? (
             <MissingBodyPanel
               key={"mb-" + tab.noteId}
@@ -687,7 +688,7 @@ export function MultiTabEditor({
                 readOnly={(lockedNoteIds?.has(tab.noteId) ?? false) || tab.deleted === true}
                 onChange={(content) => handleChange(tab.noteId, content)}
                 onDirty={() => handleChange(tab.noteId)}
-                onEditorCapture={(capture) => onEditorCapture?.(tab.noteId, capture)}
+                onCapture={(capture) => onEditorCapture?.(tab.noteId, capture)}
               />
             </EditorErrorBoundary>
           ) : tab.kind === "bitable" ? (
@@ -704,7 +705,7 @@ export function MultiTabEditor({
                 onExportCsv={onExportBitableCsv ? () => onExportBitableCsv(tab.noteId) : undefined}
                 onChange={(content) => handleChange(tab.noteId, content)}
                 onDirty={() => handleChange(tab.noteId)}
-                onEditorCapture={(capture) => onEditorCapture?.(tab.noteId, capture)}
+                onCapture={(capture) => onEditorCapture?.(tab.noteId, capture)}
                 onPreserveDraft={onPreserveBitableDraft ? (content) => onPreserveBitableDraft(tab.noteId, content) : undefined}
               />
             </EditorErrorBoundary>
@@ -719,12 +720,13 @@ export function MultiTabEditor({
                 readOnly={(lockedNoteIds?.has(tab.noteId) ?? false) || tab.deleted === true}
                 onChange={(content) => handleChange(tab.noteId, content)}
                 onDirty={() => handleChange(tab.noteId)}
-                onEditorCapture={(capture) => onEditorCapture?.(tab.noteId, capture)}
+                onCapture={(capture) => onEditorCapture?.(tab.noteId, capture)}
               />
             </EditorErrorBoundary>
           ) : tab.kind === "ink" ? (
             <EditorErrorBoundary key={"ink-" + tab.noteId + "-" + (tab.reloadKey ?? 0)} noteId={tab.noteId}>
               <DesktopInkPad
+                noteId={tab.noteId}
                 content={tab.content}
                 visible={visible && paneVisible(tab.noteId)}
                 focused={tab.noteId === activeNoteId}
@@ -732,14 +734,17 @@ export function MultiTabEditor({
                 readOnly={(lockedNoteIds?.has(tab.noteId) ?? false) || tab.deleted === true}
                 onChange={(content) => handleChange(tab.noteId, content)}
                 onDirty={() => handleChange(tab.noteId)}
-                onEditorCapture={(capture) => onEditorCapture?.(tab.noteId, capture)}
+                onCapture={(capture) => onEditorCapture?.(tab.noteId, capture)}
               />
             </EditorErrorBoundary>
           ) : (
+          /* DT-01（261027）：doc 是唯一挂闭源 Lake 内核的 kind，必须与其余四支一样按标签隔离 ——
+             内核 render 抛错时只坏该标签，不能打穿整个 React 根（其余标签的未落盘编辑会一起丢）。 */
+          <EditorErrorBoundary key={"doc-" + tab.noteId + "-" + (tab.reloadKey ?? 0)} noteId={tab.noteId}>
           <EditorTab
             key={`${tab.noteId}-${tab.reloadKey ?? 0}`}
             noteId={tab.noteId}
-            locked={(lockedNoteIds?.has(tab.noteId) ?? false) || tab.deleted === true}
+            readOnly={(lockedNoteIds?.has(tab.noteId) ?? false) || tab.deleted === true}
             content={tab.content}
             visible={visible && paneVisible(tab.noteId)}
             focused={tab.noteId === activeNoteId}
@@ -754,6 +759,7 @@ export function MultiTabEditor({
             onEditorReady={onEditorReady}
             onReloadNote={onReloadNote}
           />
+          </EditorErrorBoundary>
           )
         ))}</Suspense>}
         {splitActive && (

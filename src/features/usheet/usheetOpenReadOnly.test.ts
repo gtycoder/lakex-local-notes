@@ -9,8 +9,8 @@ import { describe, expect, it } from "vitest";
  * 修复分两层：
  *   ① 正文规范化（core/usheetDoc.ts 的 normalizeUsheetWorkbook，写盘/比较的统一形式）；
  *   ② **结构性保证**：打开后的第一次 flush 只对齐基线（不写盘、不标脏），只有用户真的产生
- *      内容输入（键盘/粘贴/剪切/拖放/工具栏点击）时才允许把差异当编辑；capture 在无真实改动时
- *      返回磁盘原文。
+ *      内容输入（键盘/粘贴/剪切/拖放/工具栏点击）时才允许把差异当编辑；capture 在无真实改动 /
+ *      改回原样时返回磁盘原文——后者由 core/docBaseline 的单一判据回答（CORE-03）。
  *
  * 本测试**锁住第 ② 层的代码形态**：删掉任何一处，都会退回到「打开即脏」。
  */
@@ -36,13 +36,18 @@ describe("usheet 打开只读（结构护栏）", () => {
   });
 
   it("capture：无真实改动 / 改过又改回原样 都返回磁盘原文（避免为规范化写盘）", () => {
-    // 无改动 → persistedBodyRef；改动后再回到基线（撤销/改回原值）→ 同样返回磁盘原文
+    // 无改动 → persistedBodyRef；改动后再回到基线（撤销/改回原值）→ 走 core 单一判据（CORE-03）。
     expect(SOURCE).toMatch(/if \(!changedSinceOpenRef\.current\) return persistedBodyRef\.current;/);
-    expect(SOURCE).toMatch(/state\.last === persistedNormalizedRef\.current/);
-    expect(SOURCE).toContain("persistedNormalizedRef");
+    expect(SOURCE).toContain('docBaselineSettled("usheet", persistedBodyRef.current, state.last)');
+    expect(SOURCE).toContain("return persistedBodyRef.current;");
   });
 
   it("写入/比较统一走规范化（打开基线与每次 flush 都调用）", () => {
     expect(SOURCE.match(/normalizeUsheetWorkbook\(/g)?.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("字体族走 core 的 canonical 常量，不读运行时 CSS 变量（CORE-04）", () => {
+    expect(SOURCE).not.toContain("lakeFontFamily");
+    expect(SOURCE).not.toContain("applyFontPolicy");
   });
 });

@@ -5,7 +5,7 @@ import { Readable } from "node:stream";
 import { APP_SCHEME, APP_HOST, DIST_MIME, resolveAppDistFile } from "./appOrigin.js";
 
 /**
- * `locallakexnotes://app` 的协议注册与静态服务（真正的实现在 appOrigin.ts，本文件只做 electron 接线）。
+ * `lakexlocalnotes://app` 的协议注册与静态服务（真正的实现在 appOrigin.ts，本文件只做 electron 接线）。
  *
  * 为什么不用 file://（打包版旧做法）：file:// 的 origin 是 opaque/可变的，localStorage、
  * CSP 的 'self'、fetch 的 CORS 行为都与浏览器端的 http://127.0.0.1:19880 不一致，
@@ -22,7 +22,7 @@ export function registerAppSchemePrivileges(): void {
   ]);
 }
 
-/** app ready 之后调用：把 `locallakexnotes://app/<path>` 映射到 distDir 下的真实文件（只读、仅 GET/HEAD）。 */
+/** app ready 之后调用：把 `lakexlocalnotes://app/<path>` 映射到 distDir 下的真实文件（只读、仅 GET/HEAD）。 */
 export function serveAppDist(distDir: string): void {
   protocol.handle(APP_SCHEME, async (request) => {
     let url: URL;

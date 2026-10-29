@@ -8,8 +8,8 @@ import { OutlineMinimap } from "./OutlineMinimap";
 import { getOutlineTab, getOutlineTabsVersion, subscribeOutlineTabs } from "./registry";
 import { OUTLINE_HOVER_HIDE_DELAY_MS } from "./outlineInteraction";
 import { OUTLINE_SIDEBAR_DEFAULT_WIDTH } from "../../desktop/desktopTypes";
-import { clampPopoverPosition } from "../../hooks/topMenuPosition";
-import { Menu } from "../../components/ui/Overlay";
+// 「展开到级别」菜单的 open/锚点/aria/测量式定位统一走锚定菜单原语（DT-12，内部仍是 usePopoverPosition）
+import { useAnchoredMenu } from "../../hooks/useAnchoredMenu";
 import { rubberBandWidth, SplitHandle } from "../../components/ui/SplitHandle";
 
 function noopSubscribe(): () => void {
@@ -64,10 +64,10 @@ export function OutlineSidebar({
   // 筛选输入框默认隐藏，点头部图标展开（与目录栏共用同一状态机与视觉）
   const filter = useDockFilter(filterDraft, setFilterDraft);
   const filterTimer = useRef<number | null>(null);
-  const [levelMenuOpen, setLevelMenuOpen] = useState(false);
   const [railHovered, setRailHovered] = useState(false);
   const hideHoverTimerRef = useRef<number | null>(null);
-  const [levelMenuPos, setLevelMenuPos] = useState<{ top: number; left: number } | null>(null);
+  // 「展开到级别」菜单（DT-12）：开关/锚点/aria 由 hook 管；定位仍测量真实尺寸（DT-03，不再传 132x220 估算值）。
+  const levelMenu = useAnchoredMenu({ gap: 6, margin: 6 });
   const asideRef = useRef<HTMLElement>(null);
   // 拖拽生命周期只用来挡住"悬停预览关闭"（拖拽中指针会暂时离开 aside）。
   const splitDraggingRef = useRef(false);
@@ -241,25 +241,20 @@ export function OutlineSidebar({
           </button>
           <div className="outline-sidebar__level">
             <button
-              className={`dock-icon-btn ln-iconbtn ln-iconbtn--compact ln-iconbtn--accent level-btn${levelMenuOpen ? " is-active" : ""}`}
+              className={`dock-icon-btn ln-iconbtn ln-iconbtn--compact ln-iconbtn--accent level-btn${levelMenu.open ? " is-active" : ""}`}
               title="展开到级别"
-              onClick={(event) => {
-                if (levelMenuOpen) { setLevelMenuOpen(false); return; }
-                const rect = event.currentTarget.getBoundingClientRect();
-                setLevelMenuPos(clampPopoverPosition(rect, { width: window.innerWidth, height: window.innerHeight }, { width: 132, height: 220 }, 6));
-                setLevelMenuOpen(true);
-              }}
+              {...levelMenu.anchorProps()}
             >
               <ExpandLevelIcon size={14} />
             </button>
-            <Menu open={levelMenuOpen} onDismiss={() => setLevelMenuOpen(false)} surfaceClassName="outline-sidebar__level-menu" style={levelMenuPos ?? undefined}>
-              <button role="menuitem" onClick={() => { controller?.expandAll(); setLevelMenuOpen(false); }}>全部展开</button>
+            {levelMenu.menu(<>
+              <button role="menuitem" onClick={() => { controller?.expandAll(); levelMenu.close(); }}>全部展开</button>
               {[1, 2, 3, 4, 5, 6].map((n) => (
-                <button key={n} role="menuitem" onClick={() => { controller?.expandToLevel(n); setLevelMenuOpen(false); }}>
+                <button key={n} role="menuitem" onClick={() => { controller?.expandToLevel(n); levelMenu.close(); }}>
                   展开到 {n} 级
                 </button>
               ))}
-            </Menu>
+            </>, "outline-sidebar__level-menu")}
           </div>
           </div>
         </div>

@@ -4,7 +4,7 @@ import path from "node:path";
 import { gunzipSync, gzipSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
 import { sha256Hex } from "../../src/core/syncUtils.js";
-import type { LakeNoteEntry } from "../../src/core/s3v3Index.js";
+import type { LakeNoteEntry } from "../../src/core/s3v3/protocol/s3v3Index.js";
 import { S3v3SyncEngine, S3v3SyncError } from "./syncEngine.js";
 import { FileDeviceStore, type DeviceState } from "./fileDeviceStore.js";
 import type { RemoteObjectInfo, S3v3Remote } from "./ports.js";
@@ -231,7 +231,8 @@ describe("S3v3 同步引擎（双端）", () => {
     await engine(remote, a.store, "A").sync({ onEmptyCloud: "upload" });
     await remote.put("meta/lock.json", new TextEncoder().encode(JSON.stringify({ deviceId: "other", time: Date.now(), ttl: 120000 })));
     await addDoc(a.store, "n1", "v2");
-    await expect(new S3v3SyncEngine({ remote, device: a.store, deviceId: "A", lockWaitMs: 300 }).sync()).rejects.toMatchObject({ code: "lock-busy" });
+    // 锁被别的端长期占着：单次等锁与退避都调小，验证「有界等待后明确抛 lock-busy」（不无限空转）。
+    await expect(new S3v3SyncEngine({ remote, device: a.store, deviceId: "A", lockWaitMs: 300, publishLockWaitMs: 0 }).sync()).rejects.toMatchObject({ code: "lock-busy" });
     await remote.deleteMany(["meta/lock.json"]);
   });
 

@@ -246,6 +246,65 @@ export function mergeAiSettings(current: AiSettings, patch: AiSettingsPatch): Ai
   return { version: 1, activeProviderId, providers };
 }
 
+// ===== SEC-01：AI 服务地址（baseUrl）准入 =====
+// baseUrl 决定"已存 API Key 发往哪里"，是渲染层能间接影响的主进程出网目标 ⇒ 必须校验。
+
+/** AI 服务地址长度上限（与 S3/IPC 字段同档，防超长串灌进 URL 解析）。 */
+export const MAX_AI_BASE_URL_LENGTH = 2048;
+
+/** 本机地址（本地调试：Ollama / OneAPI 等 http 端点只允许落在本机）。 */
+function isLocalAiHost(hostname: string): boolean {
+  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1" || hostname === "[::1]";
+}
+
+/**
+ * 校验 AI 服务地址：合法返回 null，否则返回**可直接展示给用户**的错误信息。
+ * 只允许 http(s)（推荐 https）；http 仅放行本机（127.0.0.1 / localhost / ::1）；
+ * 拒绝 userinfo（防凭据被拼进 URL 送走）、拒绝空/超长/非法 URL。
+ */
+export function validateAiBaseUrl(url: unknown): string | null {
+  if (typeof url !== "string" || !url.trim()) return "服务地址不能为空";
+  const value = url.trim();
+  if (value.length > MAX_AI_BASE_URL_LENGTH) return `服务地址不能超过 ${MAX_AI_BASE_URL_LENGTH} 字符`;
+  let parsed: URL;
+  try { parsed = new URL(value); } catch { return "服务地址不是合法 URL"; }
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return "服务地址必须以 http:// 或 https:// 开头";
+  if (parsed.username || parsed.password) return "服务地址不能包含用户名或密码";
+  if (parsed.protocol === "http:" && !isLocalAiHost(parsed.hostname)) {
+    return "服务地址必须使用 HTTPS（本地调试可用 http://127.0.0.1 或 http://localhost）";
+  }
+  return null;
+}
+
+/** 地址比较口径：按 URL 规范化 + 去尾部斜杠（主机大小写、默认端口、多写一个 / 都不算变更）。 */
+function canonicalAiBaseUrl(value: string): string {
+  const trimmed = value.trim();
+  try { return new URL(trimmed).toString().replace(/\/+$/, ""); }
+  catch { return trimmed.replace(/\/+$/, ""); }
+}
+function sameAiBaseUrl(a: string, b: string): boolean {
+  return canonicalAiBaseUrl(a) === canonicalAiBaseUrl(b);
+}
+
+/**
+ * 草稿/补丁改 baseUrl 的准入判据（测试连接 / 拉模型 / 保存三条 IPC 路径共用）。
+ * 返回错误信息；null = 允许。规则：
+ * ① 给了 baseUrl 就必须过 validateAiBaseUrl；
+ * ② 与已存值不同、且本次**没有**显式提供 apiKey（也没 clearApiKey）⇒ 拒绝——否则 mergeAiSettings
+ *    会沿用已存 Key，把它静默发往渲染层指定的新地址（等价于渲染层可读主进程凭据）。
+ */
+export function aiBaseUrlChangeError(current: AiProviderConfig | null | undefined, patch: AiProviderPatch): string | null {
+  const next = typeof patch.baseUrl === "string" ? patch.baseUrl.trim() : "";
+  if (!next) return null; // 没改地址（沿用已存值，如只改 model/temperature）
+  const invalid = validateAiBaseUrl(next);
+  if (invalid) return invalid;
+  if (typeof patch.apiKey === "string" && patch.apiKey.trim()) return null; // 显式重填了 Key ⇒ 可以换地址
+  if (patch.clearApiKey) return null; // 明确清除 Key ⇒ 不会复用已存凭据
+  if (!current?.apiKey) return null; // 没有已存 Key 可复用
+  if (sameAiBaseUrl(current.baseUrl ?? "", next)) return null;
+  return "修改服务地址时必须重新填写 API Key";
+}
+
 /** 脱敏成渲染层视图：绝不含 apiKey。 */
 export function aiSettingsView(settings: AiSettings): AiSettingsView {
   return {

@@ -75,6 +75,20 @@ describe("历史快照结构化预览", () => {
     expect(JSON.stringify(blocks)).toContain("未接入手写文字识别");
   });
 
+  it("画板可读性走 core 单一判据：plaitValue 方言也认，非画板 JSON 仍给「无法解析」", () => {
+    // parseBoardBodyChecked 同时认 elements / plaitValue（与 CORE-02 的宿主只读判定同口径）；
+    // 旧实现只认 elements ⇒ 老方言快照会被误报成"无法解析"。
+    const legacy = JSON.stringify({
+      kind: "board", version: 1, engine: "drawnix", preset: "drawing",
+      plaitValue: [{ id: "a", type: "geometry", text: "旧方言" }],
+    });
+    const blocks = snapshotPreview("board", legacy);
+    const facts = blocks.find((b) => b.type === "facts");
+    expect(facts && facts.type === "facts" ? facts.items.map((x) => x[1]) : []).toContain("1 个");
+    // JSON 能解析、但没有 elements / plaitValue ⇒ 依旧不是画板正文
+    expect(snapshotPreview("board", JSON.stringify({ hello: "world" }))[0].type).toBe("empty");
+  });
+
   it("兜底：坏正文/非本类型正文都给「无法解析」提示，绝不渲染成误导性的空内容", () => {
     expect(snapshotPreview("usheet", "<p>这是一篇 Lake 文档</p>")[0]).toEqual({ type: "empty", text: "无法解析这份 Univer 表格快照。" });
     expect(snapshotPreview("bitable", "not json")[0].type).toBe("empty");

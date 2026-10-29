@@ -30,11 +30,11 @@ nohup emulator -avd lake_gate -no-snapshot -no-boot-anim -gpu host &
 # 2) 装包 + CDP 转发到 9336（别占用用户那台的 9335）
 export ANDROID_SERIAL=emulator-5556
 adb install -r android/app/build/outputs/apk/debug/app-debug.apk
-adb shell am start -n com.locallakexnotes.mobile/.MainActivity
+adb shell am start -n com.lakexlocalnotes.android/.MainActivity
 bash scripts/emu-cdp.sh 9336
 
 # 3) 灌固定夹具（幂等；**先 pm clear 保证干净**）
-adb shell pm clear com.locallakexnotes.mobile && adb shell am start -n com.locallakexnotes.mobile/.MainActivity && sleep 8
+adb shell pm clear com.lakexlocalnotes.android && adb shell am start -n com.lakexlocalnotes.android/.MainActivity && sleep 8
 bash scripts/emu-cdp.sh 9336
 node scripts/cdp-eval.mjs 9336 @scripts/mobile-audit/gate-fixture.mjs
 
@@ -121,10 +121,27 @@ node scripts/css-audit/drive.mjs 9335 scripts/mobile-audit/keyboard-toggle.mjs
 - 模拟器上 **`adb shell input tap/swipe` 与 `sendevent` 对本 App 都无效**（只有 CDP `Input.dispatch*` 有用）；
   原生滚动的"跟手"性质属于浏览器默认行为，验证到"容器可滚 + 吸附 + 页码回写"即可，别硬造手势。
 
+## 长文档 DOM 探针（MOB-04 保守版，261028 起）
+
+移动端文档编辑面恒传 `disableVirtualRendering:true`（自研 DOM 查找需要整篇正文在 DOM 里），长文档编辑态 = 全量 DOM。
+要不要为开虚拟渲染重做查找，先用探针量化（**不切换**）：
+
+```bash
+bash scripts/emu-cdp.sh 9336     # 只用专用门禁实例
+node scripts/mobile-audit/long-doc-dom.mjs 9336                 # 500 块 / 200 图
+node scripts/mobile-audit/long-doc-dom.mjs 9336 --no-idle        # 与 boot-timeline 同口径
+node scripts/mobile-audit/long-doc-dom.mjs 9336 --out .css-audit/long-doc/baseline.json
+node scripts/mobile-audit/long-doc-dom.mjs 9336 --baseline .css-audit/long-doc/baseline.json
+node scripts/mobile-audit/long-doc-dom.mjs --self-check          # 不连设备，CI 可用
+```
+
+用法/字段/A/B 方案/验收判据见 **`docs/MOBILE-LONG-DOC-PROBE.md`**。
+⚠️ 探针会造数据（一篇固定标题文档 + 200 个 1×1 PNG，且该篇会被置 `is_dirty=1`）⇒ 跑过之后要重烤门禁基线；别在配了 S3 的日常机上跑。
+
 ## 环境（260923 实测可用）
 ```bash
 export PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH"
-cd /Users/admin/file/local-lake/local-lakex-notes
+cd /Users/admin/file/local-lake/lakex-local-notes
 bash scripts/emu-up.sh --no-window              # AVD lake_mobile；起来后 adb devices 应见 emulator-5554
 bash scripts/android-build.sh --sync --install  # sync dist-mobile → gradle assembleDebug → adb install → 启动 App
 bash scripts/emu-cdp.sh                         # 转发 webview_devtools_remote_* → tcp:9335

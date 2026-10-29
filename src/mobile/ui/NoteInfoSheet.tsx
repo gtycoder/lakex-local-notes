@@ -8,11 +8,12 @@
  * 数据与动作复用 `native.*`（移动端 bridge 已实现 getNoteInfo / openAttachment）。
  */
 import { useEffect, useState } from "react";
-import { Copy, History, Paperclip, X } from "lucide-react";
+import { Copy, History, Paperclip } from "lucide-react";
 import { native } from "../../lib/native";
 import { getNativeErrorMessage } from "../../lib/nativeErrors";
 import type { NoteInfo } from "../../lib/types";
 import { showToast } from "./toastBus";
+import { MobileSheet } from "./MobileSheet";
 import { formatNoteInfoSize, formatNoteInfoTime, noteInfoRows } from "../../core/noteInfo.js";
 
 /** 附件/历史条目的渲染上限。**比桌面更小**（桌面 200）：移动端一次渲染过多节点更伤滚动；
@@ -58,68 +59,67 @@ export function NoteInfoSheet({ noteFileId, title, onClose, onOpenHistory }: Not
   const rows: Array<[string, string]> = info ? noteInfoRows(info) : [];
 
   return (
-    <div className="mb-scrim" onClick={onClose}>
-      <div className="mb-sheet" onClick={(e) => e.stopPropagation()}>
-        <div className="mb-sheet__grab" />
-        <div className="mb-sheet__head">
-          <span className="mb-sheet__title mb-ellipsis">{info?.title || title || "文档属性"}</span>
-          <button className="mobile-icon-btn" onClick={onClose} aria-label="关闭"><X size={20} /></button>
-        </div>
-        <div className="mb-sheet__body">
-          {error && <p className="mb-empty mb-empty--inset">{error}</p>}
-          {!info && !error && <p className="mb-empty mb-empty--inset">读取中…</p>}
-          {info && (
-            <div className="minfo">
-              <dl className="minfo-rows">
-                {rows.map(([k, v]) => (<div key={k}><dt>{k}</dt><dd>{v}</dd></div>))}
-              </dl>
+    // MOB-11：scrim / 右滑关闭 / 返回栈 / 焦点与滚动锁统一由 MobileSheet 负责
+    //（本抽屉此前漏了返回栈：打开后按返回键会落到父层「退工作区」）。类名/结构与手写版一致。
+    <MobileSheet
+      open
+      title={info?.title || title || "文档属性"}
+      titleClassName="mb-ellipsis"
+      ariaLabel={info?.title || title || "文档属性"}
+      onClose={onClose}
+    >
+      {error && <p className="mb-empty mb-empty--inset">{error}</p>}
+      {!info && !error && <p className="mb-empty mb-empty--inset">读取中…</p>}
+      {info && (
+        <div className="minfo">
+          <dl className="minfo-rows">
+            {rows.map(([k, v]) => (<div key={k}><dt>{k}</dt><dd>{v}</dd></div>))}
+          </dl>
 
-              <div className="minfo-section">
-                <div className="minfo-title"><Copy size={14} /><span>文档 ID</span>
-                  <button className="minfo-action" onClick={copyId}>复制</button>
-                </div>
-                <div className="minfo-path">{info.id}</div>
-              </div>
+          <div className="minfo-section">
+            <div className="minfo-title"><Copy size={14} /><span>文档 ID</span>
+              <button className="minfo-action" onClick={copyId}>复制</button>
+            </div>
+            <div className="minfo-path">{info.id}</div>
+          </div>
 
-              {info.parentPath !== "" && (
-                <div className="minfo-section">
-                  <div className="minfo-title"><span>位置</span></div>
-                  <div className="minfo-path">{info.parentPath}</div>
-                </div>
-              )}
-
-              <div className="minfo-section">
-                <div className="minfo-title"><Paperclip size={14} /><span>附件 {info.assets.length} 个 · {formatNoteInfoSize(info.assetTotalBytes)}</span></div>
-                {info.assets.length === 0 ? <p className="minfo-empty">无附件</p> : (
-                  <ul className="minfo-list">
-                    {info.assets.slice(0, ITEM_LIMIT).map((a) => (
-                      <li key={a.filename}>
-                        <button className="minfo-row" onClick={() => openAsset(a.filename)} title={a.filename}>
-                          <span className="mb-ellipsis">{a.filename}</span><em>{formatNoteInfoSize(a.size)}</em>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-
-              <div className="minfo-section">
-                <div className="minfo-title"><History size={14} /><span>历史版本 {info.history.length} 个</span>
-                  <button className="minfo-action" onClick={onOpenHistory}>打开历史版本</button>
-                </div>
-                {info.history.length === 0 ? <p className="minfo-empty">暂无历史快照</p> : (
-                  <ul className="minfo-list">
-                    {info.history.slice(0, ITEM_LIMIT).map((h) => (
-                      <li key={h.id}><div className="minfo-row"><span>{formatNoteInfoTime(h.createdAt)}</span><em>{formatNoteInfoSize(h.size)}</em></div></li>
-                    ))}
-                  </ul>
-                )}
-              </div>
+          {info.parentPath !== "" && (
+            <div className="minfo-section">
+              <div className="minfo-title"><span>位置</span></div>
+              <div className="minfo-path">{info.parentPath}</div>
             </div>
           )}
+
+          <div className="minfo-section">
+            <div className="minfo-title"><Paperclip size={14} /><span>附件 {info.assets.length} 个 · {formatNoteInfoSize(info.assetTotalBytes)}</span></div>
+            {info.assets.length === 0 ? <p className="minfo-empty">无附件</p> : (
+              <ul className="minfo-list">
+                {info.assets.slice(0, ITEM_LIMIT).map((a) => (
+                  <li key={a.filename}>
+                    <button className="minfo-row" onClick={() => openAsset(a.filename)} title={a.filename}>
+                      <span className="mb-ellipsis">{a.filename}</span><em>{formatNoteInfoSize(a.size)}</em>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          <div className="minfo-section">
+            <div className="minfo-title"><History size={14} /><span>历史版本 {info.history.length} 个</span>
+              <button className="minfo-action" onClick={onOpenHistory}>打开历史版本</button>
+            </div>
+            {info.history.length === 0 ? <p className="minfo-empty">暂无历史快照</p> : (
+              <ul className="minfo-list">
+                {info.history.slice(0, ITEM_LIMIT).map((h) => (
+                  <li key={h.id}><div className="minfo-row"><span>{formatNoteInfoTime(h.createdAt)}</span><em>{formatNoteInfoSize(h.size)}</em></div></li>
+                ))}
+              </ul>
+            )}
+          </div>
         </div>
-      </div>
-    </div>
+      )}
+    </MobileSheet>
   );
 }
 

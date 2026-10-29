@@ -7,9 +7,9 @@
  */
 import { writeLocalStorage } from "../../lib/localStorageSafe";
 
-const KEY = "local-lakex-notes-mobile.favorites";
-const OPEN_KEY = "local-lakex-notes-mobile.favoritesOpen";
-const EVENT = "local-lakex-notes-mobile.favorites-change";
+const KEY = "lakex-local-notes-mobile.favorites";
+const OPEN_KEY = "lakex-local-notes-mobile.favoritesOpen";
+const EVENT = "lakex-local-notes-mobile.favorites-change";
 
 /** 读取常用文档 id（去重、只保留非空字符串；坏值静默回落空表）。 */
 export function readFavoriteIds(): string[] {

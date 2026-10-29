@@ -1,8 +1,43 @@
-import type { CleanOrphanResult, DataHealthReport, DeepCleanupResult, DraftJournalEntry, LastHistoryCleanup, NoteDigest, NoteDocument, NoteInfo, OrphanAsset, QuickNoteDocument, QuickNoteImage, QuickNoteTag, QuickNoteTrashItem, ResourceUploadInput, ResourceUploadOutput, S3GcLogItem, S3GcPendingItem, S3GcSettings, S3Settings, SaveQuickNoteInput, SyncProgress, SyncResult, SyncSettings, SyncStatusInfo, TreeNode, WorkspaceSnapshot } from "./types";
+import type { CleanOrphanResult, DataHealthReport, DeepCleanupResult, DraftJournalEntry, LastHistoryCleanup, NoteDigest, NoteDocument, NoteInfo, OrphanAsset, QuickNoteDocument, QuickNoteImage, QuickNoteListSummary, QuickNoteTag, QuickNoteTrashItem, ResourceUploadInput, ResourceUploadOutput, S3GcLogItem, S3GcSettings, S3Settings, SaveQuickNoteInput, SyncProgress, SyncResult, SyncSettings, SyncStatusInfo, TreeNode, WorkspaceSnapshot } from "./types";
 import type { TrashItem } from "../core/trashPolicy";
 import type { MissingBodyDoc, MissingQuickNoteDoc } from "../core/missingBody";
 import type { AiChatMessage, AiChatResult, AiListModelsResult, AiProviderPatch, AiSettingsPatch, AiSettingsView, AiStreamEvent, AiTestResult } from "../core/aiProviders";
 import type { S3TransferSummary } from "../core/s3ConfigTransfer";
+import type { HostCapabilityFlags } from "./hostCapabilities";
+
+/** 全库搜索命中（IPC search_notes 返回项；DT-16：内联匿名类型改命名类型）。 */
+export interface NoteSearchHit {
+  id: string;
+  kind?: "note" | "quick-note";
+  title: string;
+  snippet: string;
+  matchType: "title" | "body";
+  updatedAt?: string;
+  parentTitle?: string | null;
+}
+
+/** 历史快照条目（IPC list_note_history 返回项）。 */
+export interface NoteHistoryEntry {
+  id: number;
+  createdAt: string;
+  size: number;
+  contentHash: string;
+  refCount: number;
+  filePath: string;
+  protectedUntil: string | null;
+  /** 文档类型（同篇快照同类型）：渲染层据此预热预览分包。 */
+  kind: "doc" | "usheet" | "bitable" | "board" | "ink";
+}
+
+/** 缺正文文档从云端拉回的结果（失败以 reason 回报）。 */
+export type RestoreMissingBodyResult =
+  | { ok: true; title: string }
+  | { ok: false; reason: "cloud-off" | "no-cloud-config" | "not-in-cloud" | "object-missing" | "hash-mismatch" };
+
+/** 缺正文小记从云端拉回的结果（小记没有历史快照，这是唯一无损来源）。 */
+export type RestoreMissingQuickNoteResult =
+  | { ok: true }
+  | { ok: false; reason: "cloud-off" | "no-cloud-config" | "not-in-cloud" | "object-missing" | "hash-mismatch" | "invalid-content" };
 
 /** 小记 staging 入参：桌面传 `Uint8Array`（IPC 结构化克隆），移动端走 HTTP JSON 传 `number[]`。 */
 export interface QuickNoteStageInput {
@@ -13,8 +48,8 @@ export interface QuickNoteStageInput {
 export interface LakeNative {
   /** 本地资源服务器端口（可被 LAKE_ASSET_PORT 覆盖，多端同机双开用）。 */
   assetPort: number;
-  /** 宿主能力：Web 客户端由 shim 下发（nativeDialog=false）；桌面/移动缺省按桌面处理。 */
-  capabilities?: { browserClient: boolean; nativeDialog: boolean };
+  /** 宿主能力：Web 客户端由 shim 下发；桌面/移动缺省按桌面处理。归一成显式字段见 lib/hostCapabilities.ts。 */
+  capabilities?: HostCapabilityFlags;
   bootstrap(): Promise<WorkspaceSnapshot>;
   readNote(id: string): Promise<NoteDocument>;
   /** 正文文件是否缺失（只 stat；启动跳过缺正文文档用）。 */
@@ -22,13 +57,13 @@ export interface LakeNative {
   /** 资源页「缺正文」清单（只 stat；带历史快照数 / 同步基线 / 云可恢复判据）。 */
   listMissingBodies(): Promise<MissingBodyDoc[]>;
   /** 缺正文：从云端拉回该篇正文（显式动作；失败以 reason 回报）。 */
-  restoreMissingBodyFromCloud(noteId: string): Promise<{ ok: true; title: string } | { ok: false; reason: "cloud-off" | "no-cloud-config" | "not-in-cloud" | "object-missing" | "hash-mismatch" }>;
+  restoreMissingBodyFromCloud(noteId: string): Promise<RestoreMissingBodyResult>;
   /** 缺正文：彻底删除该文档（移入回收站 → purge 写墓碑）。 */
   purgeMissingBody(noteId: string): Promise<void>;
   /** 缺正文小记清单（只 stat；带同步基线 / 搜索缓存 / 可恢复性）。 */
   listMissingQuickNotes(): Promise<MissingQuickNoteDoc[]>;
   /** 缺正文小记：从云端拉回（小记没有历史快照，这是唯一无损来源）。 */
-  restoreMissingQuickNoteFromCloud(id: string): Promise<{ ok: true } | { ok: false; reason: "cloud-off" | "no-cloud-config" | "not-in-cloud" | "object-missing" | "hash-mismatch" | "invalid-content" }>;
+  restoreMissingQuickNoteFromCloud(id: string): Promise<RestoreMissingQuickNoteResult>;
   /** 缺正文小记：用搜索索引缓存重建纯文本（图片/格式丢失）。 */
   restoreMissingQuickNoteFromText(id: string): Promise<QuickNoteDocument>;
   /** 缺正文小记：彻底删除（墓碑 + purge）。 */
@@ -77,7 +112,7 @@ export interface LakeNative {
   prepareCloudRestore(): Promise<{ quarantinePath: string }>;
   confirmRelaunch(): Promise<boolean>;
   setNodeIcon(id: string, icon: string | null): Promise<TreeNode>;
-  searchNotes(query: string, limit?: number): Promise<Array<{ id: string; kind?: "note" | "quick-note"; title: string; snippet: string; matchType: "title" | "body"; updatedAt?: string; parentTitle?: string | null }>>;
+  searchNotes(query: string, limit?: number): Promise<NoteSearchHit[]>;
   rebuildSearchIndex(): Promise<boolean>;
   deleteNote(id: string): Promise<void>;
   listTreeNodes(): Promise<TreeNode[]>;
@@ -105,11 +140,7 @@ export interface LakeNative {
   purgeTrash(id: string): Promise<void>;
   emptyTrash(): Promise<void>;
   createHistorySnapshot(noteId: string, content?: string, force?: boolean): Promise<number | null>;
-  listNoteHistory(noteId: string): Promise<Array<{
-    id: number; createdAt: string; size: number; contentHash: string; refCount: number; filePath: string; protectedUntil: string | null;
-    /** 文档类型（同篇快照同类型）：渲染层据此预热预览分包。 */
-    kind: "doc" | "usheet" | "bitable" | "board" | "ink";
-  }>>;
+  listNoteHistory(noteId: string): Promise<NoteHistoryEntry[]>;
   restoreHistory(historyId: number): Promise<void>;
   deleteHistory(historyId: number): Promise<void>;
   cleanupHistory(): Promise<{ deletedSnapshots: number; freedBytes: number }>;
@@ -163,7 +194,9 @@ export interface LakeNative {
   syncNow(): Promise<SyncResult>;
   getSyncStatus(): Promise<SyncStatusInfo>;
   getSyncPendingSummary(): Promise<import("./types").SyncPendingSummary>;
-  listQuickNotes(): Promise<QuickNoteDocument[]>;
+  /** 列表只回投影（DT-05：不读正文）；单条完整文档用 readQuickNote。 */
+  listQuickNotes(): Promise<QuickNoteListSummary[]>;
+  readQuickNote(id: string): Promise<QuickNoteDocument>;
   createQuickNote(input: SaveQuickNoteInput): Promise<QuickNoteDocument>;
   updateQuickNote(id: string, input: SaveQuickNoteInput): Promise<QuickNoteDocument>;
   /** 标签关系（独立 API）：整组替换，返回更新后的小记。 */
@@ -190,7 +223,6 @@ export interface LakeNative {
   purgeQuickNote(id: string): Promise<void>;
   getS3GcSettings(): Promise<S3GcSettings>;
   saveS3GcSettings(settings: S3GcSettings): Promise<void>;
-  listS3GcPending(): Promise<S3GcPendingItem[]>;
   listS3GcLog(): Promise<S3GcLogItem[]>;
   runDataHealthCheck(): Promise<DataHealthReport>;
   readAppLog(opts: { keyword?: string; maxLines?: number; context?: number }): Promise<{ matches: Array<{ line: string; hit: boolean }>; file: string; truncated: boolean; generatedAt: string }>;
@@ -240,7 +272,7 @@ function api(): LakeNative {
 
 export const native = {
   /** 宿主能力（Web shim 下发；桌面/移动缺省 = 桌面）。 */
-  get capabilities(): { browserClient: boolean; nativeDialog: boolean } {
+  get capabilities(): HostCapabilityFlags {
     return api().capabilities ?? { browserClient: false, nativeDialog: true };
   },
   bootstrap: () => api().bootstrap(),
@@ -344,6 +376,7 @@ export const native = {
   getSyncStatus: () => api().getSyncStatus(),
   getSyncPendingSummary: () => api().getSyncPendingSummary(),
   listQuickNotes: () => api().listQuickNotes(),
+  readQuickNote: (id: string) => api().readQuickNote(id),
   createQuickNote: (input: SaveQuickNoteInput) => api().createQuickNote(input),
   updateQuickNote: (id: string, input: SaveQuickNoteInput) => api().updateQuickNote(id, input),
   setQuickNoteTags: (id: string, tagIds: string[]) => api().setQuickNoteTags(id, tagIds),
@@ -369,7 +402,6 @@ export const native = {
   purgeMissingQuickNote: (id: string) => api().purgeMissingQuickNote(id),
   getS3GcSettings: () => api().getS3GcSettings(),
   saveS3GcSettings: (settings: S3GcSettings) => api().saveS3GcSettings(settings),
-  listS3GcPending: () => api().listS3GcPending(),
   listS3GcLog: () => api().listS3GcLog(),
   runDataHealthCheck: () => api().runDataHealthCheck(),
   readAppLog: (opts: { keyword?: string; maxLines?: number; context?: number }) => api().readAppLog(opts),

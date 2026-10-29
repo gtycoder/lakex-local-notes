@@ -10,7 +10,7 @@
  * 其余类型（附件/图片/关联/系统时间/AI/Markdown）**只读展示并写明理由**（触屏没有 hover，不能静默）。
  */
 import { useEffect, useRef, useState } from "react";
-import { Plus, X } from "lucide-react";
+import { Plus } from "lucide-react";
 import {
   BITABLE_RATING_MAX,
   bitableFieldText,
@@ -24,8 +24,7 @@ import {
   dateInputValue, isMobileEditableField, mobileFieldNote, progressValue, ratingValue,
   selectedOptionIds, textInputValue,
 } from "./mobileBitableEdit";
-import { pushBackHandler } from "../ui/backStack";
-import { useSwipeToClose } from "../ui/useSwipeToClose";
+import { MobileSheet } from "../ui/MobileSheet";
 
 export interface MobileBitableRecordSheetProps {
   table: BitableTable;
@@ -224,59 +223,47 @@ function ProgressControl({ value, onChange }: { value: unknown; onChange: (value
 }
 
 export function MobileBitableRecordSheet({ table, fields, record, ctx, onPatch, onAddOption, onDelete, onClose }: MobileBitableRecordSheetProps) {
-  const sheetRef = useRef<HTMLDivElement>(null);
-  useSwipeToClose(sheetRef, onClose, true);
-  // 安卓返回键：先关面板（不退出页面）
-  useEffect(() => pushBackHandler(() => { onClose(); return true; }), [onClose]);
-
+  // MOB-11：scrim / 右滑 / 返回栈 / 焦点 / 滚动锁统一由 MobileSheet 负责；
+  // 类名与 DOM 结构沿用原手写版（.mb-sheet__title.mb-ellipsis + .mb-sheet__body--form，视觉不变）。
   return (
-    <>
-      <div className="mb-scrim" data-prevent-swipe onClick={onClose} aria-hidden="true" />
-      <div ref={sheetRef} className="mb-sheet" role="dialog" aria-modal="true" aria-label="编辑记录" data-prevent-swipe>
-        <div className="mb-sheet__head">
-          <span className="mb-sheet__title mb-ellipsis">{"编辑记录 · " + table.name}</span>
-          <button type="button" className="mobile-icon-btn" onClick={onClose} aria-label="关闭"><X size={20} /></button>
-        </div>
-        <div className="mb-sheet__body mb-sheet__body--form">
-          <div className="mb-set-section">
-            {fields.map((field) => {
-              const value = record.values[field.id];
-              const editable = isMobileEditableField(field);
-              return (
-                <div key={field.id} className="mb-set-item mb-set-item--field">
-                  <div className="mb-set-item__main">
-                    <span className="mb-set-name">{field.name}</span>
-                    {!editable && <span className="mb-set-item__note">{mobileFieldNote(field)}</span>}
-                  </div>
-                  <div className="mb-set-item__ctl">
-                    {!editable ? (
-                      <span className="mbt-record-readonly">{bitableFieldText(record, field, ctx) || "—"}</span>
-                    ) : field.type === "boolean" ? (
-                      <BooleanControl value={value} onChange={(next) => onPatch(field.id, next)} />
-                    ) : field.type === "select" || field.type === "multiSelect" ? (
-                      <SelectControl field={field} value={value} onChange={(next) => onPatch(field.id, next)} onAddOption={(name) => onAddOption(field.id, name)} />
-                    ) : field.type === "date" ? (
-                      <DateControl value={value} onChange={(next) => onPatch(field.id, next)} />
-                    ) : field.type === "number" ? (
-                      <NumberControl value={value} onChange={(next) => onPatch(field.id, next)} />
-                    ) : field.type === "rating" ? (
-                      <RatingControl value={value} onChange={(next) => onPatch(field.id, next)} />
-                    ) : field.type === "progress" ? (
-                      <ProgressControl value={value} onChange={(next) => onPatch(field.id, next)} />
-                    ) : (
-                      <TextControl value={value} onChange={(next) => onPatch(field.id, next)} />
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-          <div className="mbt-record-actions">
-            <button type="button" className="mb-btn mb-btn--danger mb-btn--block" onClick={onDelete}>删除记录</button>
-          </div>
-        </div>
+    <MobileSheet open title={"编辑记录 · " + table.name} titleClassName="mb-ellipsis" ariaLabel="编辑记录" bodyClassName="mb-sheet__body--form" onClose={onClose}>
+      <div className="mb-set-section">
+        {fields.map((field) => {
+          const value = record.values[field.id];
+          const editable = isMobileEditableField(field);
+          return (
+            <div key={field.id} className="mb-set-item mb-set-item--field">
+              <div className="mb-set-item__main">
+                <span className="mb-set-name">{field.name}</span>
+                {!editable && <span className="mb-set-item__note">{mobileFieldNote(field)}</span>}
+              </div>
+              <div className="mb-set-item__ctl">
+                {!editable ? (
+                  <span className="mbt-record-readonly">{bitableFieldText(record, field, ctx) || "—"}</span>
+                ) : field.type === "boolean" ? (
+                  <BooleanControl value={value} onChange={(next) => onPatch(field.id, next)} />
+                ) : field.type === "select" || field.type === "multiSelect" ? (
+                  <SelectControl field={field} value={value} onChange={(next) => onPatch(field.id, next)} onAddOption={(name) => onAddOption(field.id, name)} />
+                ) : field.type === "date" ? (
+                  <DateControl value={value} onChange={(next) => onPatch(field.id, next)} />
+                ) : field.type === "number" ? (
+                  <NumberControl value={value} onChange={(next) => onPatch(field.id, next)} />
+                ) : field.type === "rating" ? (
+                  <RatingControl value={value} onChange={(next) => onPatch(field.id, next)} />
+                ) : field.type === "progress" ? (
+                  <ProgressControl value={value} onChange={(next) => onPatch(field.id, next)} />
+                ) : (
+                  <TextControl value={value} onChange={(next) => onPatch(field.id, next)} />
+                )}
+              </div>
+            </div>
+          );
+        })}
       </div>
-    </>
+      <div className="mbt-record-actions">
+        <button type="button" className="mb-btn mb-btn--danger mb-btn--block" onClick={onDelete}>删除记录</button>
+      </div>
+    </MobileSheet>
   );
 }
 

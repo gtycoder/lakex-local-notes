@@ -135,13 +135,20 @@ describe("桌面 × 移动混合端 conformance（同一 MemoryRemote）", () =>
       if (settled[0].status === "rejected") await desktop.sync();
       if (settled[1].status === "rejected") await mobile.sync();
       await converge(desktop, mobile);
-      expect(await desktop.activeIds()).toEqual(await mobile.activeIds());
+      // I0（261027 P0）：全量重拉只归档「本地独有」条目，不删除也不上传 ⇒ 首轮并发上传时
+      // 两台设备的活跃集合**允许**各自多出本地独有数据（各自保留、可恢复）。
+      // 收敛判据改为：① 双方共有 id 的正文一致；② 各自的本地独有数据仍在（不丢）。
       const idsA = await desktop.activeIds();
       const idsB = await mobile.activeIds();
-      expect(idsA).toEqual(idsB);
-      for (const id of idsA) {
+      const common = idsA.filter((id) => idsB.includes(id));
+      expect(common.length).toBeGreaterThan(0);
+      for (const id of common) {
         expect(await desktop.readBody(id)).toBe(await mobile.readBody(id));
       }
+      // I0（261028 用户裁决）：输家的本地独有文档进回收站（不再物理删除）⇒
+      // 正文仍可读、但不在活跃集合里。两台设备各自保留自己的本地独有数据。
+      expect(await desktop.readBody("n1")).not.toBeNull();
+      expect(await mobile.readBody("m1")).not.toBeNull();
     } finally { await desktop.close(); await mobile.close(); }
   }, 240_000);
 

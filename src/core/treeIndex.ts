@@ -1,4 +1,4 @@
-import type { TreeNode } from "./types.js";
+import type { TreeNode } from "./sharedTypes.js";
 
 export interface TreeIndex {
   childrenByParent: ReadonlyMap<string | null, readonly TreeNode[]>;
@@ -25,7 +25,8 @@ export function buildTreeIndex(nodes: TreeNode[], query: string): TreeIndex {
     if (known !== undefined) return known;
     if (visiting.has(node.id)) return false;
     visiting.add(node.id);
-    const direct = node.title.toLocaleLowerCase().includes(query);
+    // 折叠与搜索链路同口径（CORE-10：locale-independent，toLocaleLowerCase 会随宿主 locale 变形）
+    const direct = node.title.toLowerCase().includes(query.toLowerCase());
     const descendant = (children.get(node.id) ?? []).some(matches);
     visiting.delete(node.id);
     const result = direct || descendant;

@@ -31,7 +31,7 @@ import "@univerjs/sheets-filter-ui/lib/index.css";
 import { createDesktopSortFilterPlugins } from "./univerSortFilter";
 import { buildUniverTheme } from "./univerTheme";
 import { USHEET_FOOTER_CONFIG } from "./usheetKernelContract";
-import { lakeFontFamily } from "./usheetFont";
+import { USHEET_CANONICAL_FONT_FAMILY } from "../../core/usheetDoc.js";
 
 export type UsheetUniverCore = ReturnType<typeof createUniver>["univer"];
 
@@ -56,8 +56,8 @@ export function createUsheetUniver({ container, toolbar, formulaBar }: CreateUsh
         container,
         toolbar,
         formulaBar,
-        // 字体策略（非工具栏工程）：字体表收窄成唯一一项 = 应用字体令牌 MiSans。
-        customFontFamily: { override: true, list: [{ value: lakeFontFamily(), label: "MiSans" }] },
+        // 字体策略（非工具栏工程）：字体表收窄成唯一一项 = core 的 canonical 字体族（CORE-04，不再读运行时 CSS 变量）。
+        customFontFamily: { override: true, list: [{ value: USHEET_CANONICAL_FONT_FAMILY, label: "MiSans" }] },
         // 工作表标签「＋」新建的工作表默认 50 行 × 16 列（用户 261010）。内核默认是 1000×20，
         // 只有这个入口能配（footer.addSheetButtonConfig），所以显式给全 footer 的四个开关避免覆盖掉默认值。
         // ⚠️ 两处口径必须一致：空表在 src/core/usheetDoc.ts 的 emptyUsheetWorkbook（同一组 50×16）。

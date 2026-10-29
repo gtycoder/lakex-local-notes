@@ -32,10 +32,9 @@ import {
   setBitableCellValue,
 } from "../../core/bitableMutations.js";
 
-/** 正文序列化：导航字段一律写默认（第一表 / 第一视图）。 */
+/** 正文序列化：导航字段一律写默认（第一表 / 第一视图）——归一收口在 core（`bitablesToBody` → `canonicalBitableNav`，CORE-05）。 */
 export function serializeBitableBody(tables: BitableTable[]): string {
-  const canonical = tables.map((table) => ({ ...table, activeViewId: table.views[0]?.id ?? table.activeViewId }));
-  return bitablesToBody(canonical, canonical[0]?.id);
+  return bitablesToBody(tables);
 }
 
 /** 移动端 P0 允许**新建/编辑**的字段类型（其余类型只读展示并给出理由，见 mobileFieldNote）。 */

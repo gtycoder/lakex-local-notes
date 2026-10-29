@@ -111,7 +111,7 @@ export class HistoryLifecycle {
   /** 恢复历史版本。
    * 1) 恢复前留档当前版本（可反悔；同 hash 24h 内已有则跳过，避免重复）
    * 2) 解压写回 .lake + 更新缓存/FTS
-   * 3) 重算 hash → setBaseHash + markSynced（恢复=新基线，非本地新修改，P0-1）
+   * 3) 只标本地待上传（P0-1：恢复 = 本地新修改，不回写任何基线；Del-6 后也没有 v2 hash 账本可写）
    */
   restoreHistory(historyId: number): void {
     const t0 = Date.now();
@@ -133,8 +133,8 @@ export class HistoryLifecycle {
       this.ctx.updateNoteCaches(noteId, markdown, plain);
     }
     // 4) 同步语义（P0-1，与 S3-GC v4 §5.2 一致）：恢复 = 本地写回 + 待上传。
-    // 不再 setBaseHash/setLastUploadedHash/markSynced；保持恢复前 base/lastUploaded，
-    // 下次同步上传覆盖（远端被他人改则接受远端、恢复版已入历史）。
+    // 不写任何基线（v3 基线由下一次成功同步的 saveBaseline 落盘），下次同步上传覆盖
+    //（远端被他人改则接受远端、恢复版已入历史）。
     const now = new Date().toISOString();
     const tx = this.ctx.db.transaction(() => {
       this.ctx.db.prepare("UPDATE notes SET is_dirty=1, updated_at=? WHERE id=?").run(now, noteId);

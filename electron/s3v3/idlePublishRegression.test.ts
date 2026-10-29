@@ -2,7 +2,7 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { gunzipSync, gzipSync } from "node:zlib";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { Store } from "../store.js";
 import { QuickNotesStore } from "../quickNotes.js";
 import { S3v3SyncEngine } from "../../src/core/s3v3Engine.js";
@@ -86,6 +86,9 @@ describe("v3 空跑不发布（P1 回归：索引版本抖动）", () => {
     expect(first.published).toBe(false);
     const gen = remote.pointer().generation;
     const commit = remote.pointer().lake.commit;
+    // SD-07：零变更轮不得重写 baseline（gzip 全索引 + 2 万行 markNotesSynced 是空跑的主要成本）。
+    const saveBaselineA = vi.spyOn(a.adapter, "saveBaseline");
+    const saveBaselineB = vi.spyOn(b.adapter, "saveBaseline");
 
     for (let round = 0; round < 5; round++) {
       for (const [who, engine] of [["A", ea], ["B", eb]] as const) {
@@ -102,6 +105,8 @@ describe("v3 空跑不发布（P1 回归：索引版本抖动）", () => {
     }
     expect(remote.pointer().generation).toBe(gen);
     expect(remote.pointer().lake.commit).toBe(commit);
+    expect(saveBaselineA).not.toHaveBeenCalled();
+    expect(saveBaselineB).not.toHaveBeenCalled();
   }, 120_000);
 
   it("真实增量下载后立即回闲：本地 metadata 与 baseline 对齐，下一轮不再补发布", async () => {
@@ -117,8 +122,13 @@ describe("v3 空跑不发布（P1 回归：索引版本抖动）", () => {
     // A 改正文并发布 → B 下载（saveNote 会把 updated_at 写成 now，修前下一轮 B 会误判本地更新再发布）
     a.store.saveNote("n1", "Doc", "v2-body");
     await ea.sync();
+    const saveBaselineB = vi.spyOn(b.adapter, "saveBaseline");
     const down = await eb.sync();
     expect(down.downloadedNotes).toBe(1);
+    // 追平远端（pointer 已前进）必须更新 baseline：否则下一轮会拿旧基线判成三方冲突。
+    expect(saveBaselineB).toHaveBeenCalledTimes(1);
+    saveBaselineB.mockClear();
+    const saveBaselineA = vi.spyOn(a.adapter, "saveBaseline");
     const gen = remote.pointer().generation;
     for (let round = 0; round < 3; round++) {
       for (const [who, engine] of [["A", ea], ["B", eb]] as const) {
@@ -129,5 +139,7 @@ describe("v3 空跑不发布（P1 回归：索引版本抖动）", () => {
       }
     }
     expect(remote.pointer().generation).toBe(gen);
+    expect(saveBaselineA).not.toHaveBeenCalled();
+    expect(saveBaselineB).not.toHaveBeenCalled();
   }, 120_000);
 });

@@ -1,5 +1,5 @@
 {
-  "name": "local-lakex-notes",
+  "name": "lakex-local-notes",
   "version": "0.1.4",
   "private": true,
   "description": "本地优先的 Lake 编辑器笔记应用（Electron 桌面端）",
@@ -32,12 +32,14 @@
     "test:tab-switch": "node scripts/e2e-tab-switch-smoke.mjs",
     "preinstall": "node scripts/setup-lakex-private.mjs",
     "setup:lakex": "node scripts/setup-lakex-private.mjs",
+    "setup:remotes": "node scripts/setup-remotes.mjs",
     "backup:lakex": "node scripts/setup-lakex-private.mjs --backup",
     "postinstall": "install-electron && patch-package --patch-dir vendor/lakex-doc-react/patches && patch-package --patch-dir patches",
     "build:vendor": "npm --prefix vendor/lakex-doc-react run build",
     "build:web": "vite build",
     "build:web:watch": "vite build --watch",
     "check:mobileui": "node scripts/check-mobile-ui.mjs",
+    "check:android-release": "node scripts/check-android-release-config.mjs",
     "test:bitable:packaged": "node scripts/packaged-performance/bitable/run.mjs"
   },
   "dependencies": {
@@ -102,8 +104,8 @@
     "vitest": "^5.0.5"
   },
   "build": {
-    "appId": "com.locallakexnotes.desktop",
-    "productName": "LocalLakexNotes",
+    "appId": "com.lakexlocalnotes.desktop",
+    "productName": "LakexLocalNotes",
     "files": [
       "dist/**/*",
       "dist-electron/**/*",

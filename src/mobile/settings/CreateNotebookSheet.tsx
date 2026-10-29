@@ -1,9 +1,9 @@
-/** 新建知识库 Sheet（§5：名称必填；默认图标不落库；自定义 Emoji 一次性提交 CreateNotebookInput）。 */
-import { useRef, useState } from "react";
-import { Book, X } from "lucide-react";
+/** 新建知识库 Sheet（§5：名称必填；默认图标不落库；自定义 Emoji 一次性提交）。 */
+import { useState } from "react";
+import { Book } from "lucide-react";
 import { MobileNodeIconPicker } from "../ui/NodeIconPicker";
 import { MobileNodeIconGlyph } from "../ui/NodeIconGlyph";
-import { useSwipeToClose } from "../ui/useSwipeToClose";
+import { MobileSheet } from "../ui/MobileSheet";
 
 export interface CreateNotebookSheetProps {
   open: boolean;
@@ -19,9 +19,6 @@ export function CreateNotebookSheet(props: CreateNotebookSheetProps) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-
-  const sheetRef = useRef<HTMLDivElement>(null);
-  useSwipeToClose(sheetRef, () => { if (!saving) onClose(); }, open);
 
   if (!open) return null;
 
@@ -41,39 +38,38 @@ export function CreateNotebookSheet(props: CreateNotebookSheetProps) {
     }
   };
 
+  // MOB-11：scrim / 右滑关闭 / 返回栈 / 焦点与滚动锁统一由 MobileSheet 负责；
+  // 类名与 DOM 结构沿用原手写版（.mb-scrim + .mb-sheet，视觉快照不变）。
+  // 创建中（saving）不允许关闭：遮罩 / 右滑 / × 走同一个 onClose。
   return (
-    <div className="mb-scrim" data-prevent-swipe onClick={() => !saving && onClose()}>
-      <div ref={sheetRef} className="mb-sheet" data-prevent-swipe onClick={(e) => e.stopPropagation()}>
-        <div className="mb-sheet__grab" />
-        <div className="mb-sheet__head">
-          <span className="mb-sheet__title">基本信息</span>
-          <button className="mobile-icon-btn" onClick={onClose} aria-label="关闭"><X size={20} /></button>
-        </div>
-        <div className="mb-sheet__body mb-sheet__body--form">
-          <div className="create-nb-row">
-            <button className="create-nb-icon" onClick={() => setShowEmoji((v) => !v)} aria-label="选择图标">
-              {icon ? <span className="create-nb-emoji"><MobileNodeIconGlyph value={icon} /></span> : <Book size={22} />}
-            </button>
-            <input
-              className="create-nb-input"
-              placeholder="知识库名称"
-              value={title}
-              autoFocus
-              onChange={(e) => { setTitle(e.target.value); setError(null); }}
-              onKeyDown={(e) => { if (e.key === "Enter") void submit(); }}
-            />
-          </div>
-          {showEmoji && (
-            <div className="create-nb-emoji-picker">
-              <MobileNodeIconPicker nodeType="notebook" value={icon} onPick={setIcon} />
-            </div>
-          )}
-          {error && <div className="create-nb-error">{error}</div>}
-          <button className="create-nb-submit" disabled={!trimmed || saving} onClick={() => void submit()}>
-            {saving ? "创建中…" : "创建"}
-          </button>
-        </div>
+    <MobileSheet
+      open
+      title="基本信息"
+      onClose={() => { if (!saving) onClose(); }}
+      bodyClassName="mb-sheet__body--form"
+    >
+      <div className="create-nb-row">
+        <button className="create-nb-icon" onClick={() => setShowEmoji((v) => !v)} aria-label="选择图标">
+          {icon ? <span className="create-nb-emoji"><MobileNodeIconGlyph value={icon} /></span> : <Book size={22} />}
+        </button>
+        <input
+          className="create-nb-input"
+          placeholder="知识库名称"
+          value={title}
+          autoFocus
+          onChange={(e) => { setTitle(e.target.value); setError(null); }}
+          onKeyDown={(e) => { if (e.key === "Enter") void submit(); }}
+        />
       </div>
-    </div>
+      {showEmoji && (
+        <div className="create-nb-emoji-picker">
+          <MobileNodeIconPicker nodeType="notebook" value={icon} onPick={setIcon} />
+        </div>
+      )}
+      {error && <div className="create-nb-error">{error}</div>}
+      <button className="create-nb-submit" disabled={!trimmed || saving} onClick={() => void submit()}>
+        {saving ? "创建中…" : "创建"}
+      </button>
+    </MobileSheet>
   );
 }

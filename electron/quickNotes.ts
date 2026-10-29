@@ -9,6 +9,14 @@ import sharp from "sharp";
 import { ASSET_PORT } from "./assetServer.js";
 import { localAssetHttpUrl } from "../src/core/assetUrl.js";
 import { buildAssetFilename, mimeTypeForFilename } from "../src/core/assetNaming.js";
+import {
+  QUICK_NOTES_SEARCH_LEDGER_ROWID_INDEX,
+  QUICK_NOTES_SEARCH_LEDGER_TABLE,
+  SEARCH_LEDGER_COLUMN,
+  quickNotesFtsDDL,
+  searchLedgerDDL,
+  searchLedgerRowidIndexDDL,
+} from "../src/core/search/schema.js";
 import { MAX_ATTACHMENT_BYTES } from "../src/core/storeLimits.js";
 import { sanitizeDisplayName } from "./resourceRepository.js";
 import { AppError } from "../src/core/storeErrors.js";
@@ -31,6 +39,7 @@ import { QuickNoteTagsStore } from "./quickNoteTagsStore.js";
 import { QuickNoteTagLinksStore } from "./quickNoteTagLinksStore.js";
 import { QuickNoteTagService } from "./quickNoteTagService.js";
 import type { QuickNoteDeleted, QuickNoteDocument, QuickNoteImage, QuickNoteImageInput, SaveQuickNoteInput } from "./quickNoteTypes.js";
+import type { QuickNoteListSummary } from "../src/lib/types.js";
 import { missingQuickNoteRecovery, type MissingQuickNoteDoc } from "../src/core/missingBody.js";
 import { QuickNotesQueries, type QuickNoteConversionRow, type QuickNoteDeletedRow, type QuickNoteRow } from "./quickNotesQueries.js";
 import { buildMatchExpression, buildSnippet, segmentToIndexText } from "../src/core/search/index.js";
@@ -204,26 +213,37 @@ export class QuickNotesStore {
     // 标签子系统（目录 + 关联）在各自的 store 里建表；这里只建小记自己的表。
     // V5 Phase 6：小记独立全文索引（与文档 notes_fts 分开，避免跨库 / tree_nodes join）。
     // body/tags 都由 src/core/search 的分词器预分词；ledger 保留 text_cache 供 buildSnippet。
-    this.db.exec("CREATE VIRTUAL TABLE IF NOT EXISTS quick_notes_fts USING fts5(body, tags, tokenize='unicode61')");
+    // CORE-13：与桌面文档账本、移动端同一份 DDL 字符串来源（src/core/search/schema.ts）。
+    this.db.exec(quickNotesFtsDDL());
     this.db.exec(
-      "CREATE TABLE IF NOT EXISTS quick_notes_search_index (" +
-      "quick_note_id TEXT PRIMARY KEY, " +
-      "fts_rowid INTEGER NOT NULL, " +
-      "text_hash TEXT NOT NULL, " +
-      "text_cache TEXT NOT NULL, " +
-      "tags TEXT NOT NULL, " +
-      "indexed_at TEXT NOT NULL)"
+      searchLedgerDDL(QUICK_NOTES_SEARCH_LEDGER_TABLE, [
+        SEARCH_LEDGER_COLUMN.quickNoteId,
+        SEARCH_LEDGER_COLUMN.ftsRowid,
+        SEARCH_LEDGER_COLUMN.textHash,
+        SEARCH_LEDGER_COLUMN.textCache,
+        SEARCH_LEDGER_COLUMN.tags,
+        SEARCH_LEDGER_COLUMN.indexedAt,
+      ]),
     );
-    this.db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_quick_notes_search_rowid ON quick_notes_search_index(fts_rowid)");
+    this.db.exec(searchLedgerRowidIndexDDL(QUICK_NOTES_SEARCH_LEDGER_ROWID_INDEX, QUICK_NOTES_SEARCH_LEDGER_TABLE));
     const deletedCols = this.db.prepare("PRAGMA table_info(quick_note_deleted)").all() as Array<{ name: string }>;
     if (!deletedCols.some((c) => c.name === "purged_at")) {
       this.db.exec("ALTER TABLE quick_note_deleted ADD COLUMN purged_at TEXT");
     }
-    // 墓碑发布记账（对齐 Lake deleted_notes.published_at）：发布到 manifest 后写入，
-    // 只表示"本机墓碑已上云"，记录本身保留供下载方向 LWW（墓碑 vs 远端恢复）判定。
-    if (!deletedCols.some((c) => c.name === "published_at")) {
-      this.db.exec("ALTER TABLE quick_note_deleted ADD COLUMN published_at TEXT");
+    // Del-6（261029）：墓碑发布记账从「逐行 published_at」改为**水线**（设备级标量）：
+    //   小记库没有 device_state ⇒ 补建同形表；键 quick_tombstones_published_at = 上次成功同步完成时间；
+    //   待同步判据 = deleted_at > 水线；首次升级 = COALESCE(MAX(published_at),'0')，随后删列。
+    // 记录本身仍保留（供下载方向 LWW：墓碑 vs 远端恢复判定）。
+    this.db.exec("CREATE TABLE IF NOT EXISTS device_state (key TEXT PRIMARY KEY, value TEXT NOT NULL)");
+    const hasPublishedAt = deletedCols.some((c) => c.name === "published_at");
+    const waterline = this.db.prepare("SELECT value FROM device_state WHERE key='quick_tombstones_published_at'").get() as { value: string } | undefined;
+    if (!waterline) {
+      const legacy = hasPublishedAt
+        ? (this.db.prepare("SELECT COALESCE(MAX(published_at),'0') AS m FROM quick_note_deleted").get() as { m: string | null })
+        : undefined;
+      this.db.prepare("INSERT INTO device_state(key,value) VALUES('quick_tombstones_published_at',?)").run(legacy?.m || "0");
     }
+    if (hasPublishedAt) this.db.exec("ALTER TABLE quick_note_deleted DROP COLUMN published_at");
     // 恢复标记（墓碑权威的显式例外）：restoreQuickNote 写入，markSynced 清除。
     const quickCols = this.db.prepare("PRAGMA table_info(quick_notes)").all() as Array<{ name: string }>;
     if (!quickCols.some((c) => c.name === "restore_pending_at")) {
@@ -286,7 +306,44 @@ export class QuickNotesStore {
     return this.queries.readRow(id);
   }
 
-  listQuickNotes(): QuickNoteDocument[] {
+  /**
+   * DT-05：列表只回投影（**不读 .qnote 正文**）——2 万小记时 body 是最大的一块 IPC payload。
+   * 正文/资源在打开单条时走 readQuickNote；列表只读 DB 行 + 关联表 + 资源 mime。
+   */
+  listQuickNotes(): QuickNoteListSummary[] {
+    const rows = this.db.prepare(
+      "SELECT id, created_at, updated_at, preview_text, image_count, content_hash, is_dirty, is_conflict " +
+      "FROM quick_notes ORDER BY created_at DESC"
+    ).all() as QuickNoteRow[];
+    const tagNames = new Map(this.tags.list().filter((tag) => !tag.deletedAt).map((tag) => [tag.id, tag.name] as const));
+    const links = this.links.listAll();
+    const assetMimeTypes = new Map<string, string[]>();
+    const assets = this.db.prepare("SELECT DISTINCT quick_note_id, mime_type FROM quick_note_assets").all() as Array<{ quick_note_id: string; mime_type: string }>;
+    for (const asset of assets) {
+      const list = assetMimeTypes.get(asset.quick_note_id);
+      if (list) list.push(asset.mime_type);
+      else assetMimeTypes.set(asset.quick_note_id, [asset.mime_type]);
+    }
+    return rows.map((row) => {
+      const tagIds = links.get(row.id) ?? [];
+      return {
+        id: row.id,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+        previewText: row.preview_text,
+        imageCount: row.image_count,
+        contentHash: row.content_hash,
+        syncState: row.is_dirty ? "local" as const : "synced" as const,
+        isConflict: !!row.is_conflict,
+        tagIds: [...tagIds],
+        tags: tagIds.map((id) => tagNames.get(id) ?? ""),
+        assetMimeTypes: assetMimeTypes.get(row.id) ?? [],
+      };
+    });
+  }
+
+  /** 同步/搜索索引重建需要完整文档（正文 + 资源 URL）；**不要**把它接回列表 IPC。 */
+  listQuickNoteDocuments(): QuickNoteDocument[] {
     return this.queries.list();
   }
 
@@ -460,7 +517,7 @@ export class QuickNotesStore {
 
   /** 设置页「重建索引」/启动对账用：只重建小记自己的 FTS。 */
   rebuildSearchIndex(): void {
-    const docs = this.listQuickNotes();
+    const docs = this.listQuickNoteDocuments();
     const tx = this.db.transaction(() => {
       this.db.exec("DELETE FROM quick_notes_fts");
       this.db.exec("DELETE FROM quick_notes_search_index");
@@ -1000,11 +1057,36 @@ export class QuickNotesStore {
   // ===== Quick Note S3 sync adapter =====
   getPendingSyncSummary(): { items: number; resources: number } {
     const row = this.db.prepare("SELECT COUNT(*) AS items, COALESCE(SUM(image_count), 0) AS resources FROM quick_notes WHERE is_dirty=1").get() as { items: number; resources: number };
-    // 墓碑计数只算"可发布"的（ready=1 且未发布）；已发布（published_at 非空）不再计入待同步
-    const deleted = this.db.prepare("SELECT COUNT(*) AS items FROM quick_note_deleted WHERE ready_to_sync=1 AND published_at IS NULL").get() as { items: number };
+    // 墓碑计数只算「可发布且晚于成功同步水线」的（Del-6：deleted_at > waterline，替代逐行 published_at）
+    const deleted = this.db.prepare("SELECT COUNT(*) AS items FROM quick_note_deleted WHERE ready_to_sync=1 AND deleted_at > COALESCE((SELECT value FROM device_state WHERE key='quick_tombstones_published_at'),'0')").get() as { items: number };
     return { items: row.items + deleted.items, resources: row.resources };
   }
-  listQuickNotesForSync(): QuickNoteDocument[] { return this.listQuickNotes(); }
+
+  /** Del-6：小记墓碑发布水线（成功同步后由 desktopSync 写入；替代逐行 published_at 记账）。 */
+  markTombstonesWaterline(at: string = nowIso()): void {
+    this.db.prepare("INSERT INTO device_state(key,value) VALUES('quick_tombstones_published_at',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(at);
+  }
+  getTombstonesWaterline(): string {
+    const row = this.db.prepare("SELECT value FROM device_state WHERE key='quick_tombstones_published_at'").get() as { value: string } | undefined;
+    return row?.value ?? "0";
+  }
+  listQuickNotesForSync(): QuickNoteDocument[] { return this.queries.listForSync(); }
+  /** 正文文件缺失的行 id（同步侧自愈用）。 */
+  listMissingQuickNoteIds(): string[] { return this.queries.listMissingItemIds(); }
+  /** 直接清掉「正文文件已丢失」的孤儿行（不读正文）：供同步侧按墓碑语义收尸。 */
+  purgeOrphanQuickNote(id: string): void {
+    if (!isSafeSegment(id)) return;
+    const now = nowIso();
+    try {
+      this.db.prepare("INSERT INTO quick_note_deleted(id,created_at,updated_at,deleted_at,conversion_target_note_id,ready_to_sync,purged_at,cloud_deleted) VALUES(?,?,?,?,NULL,1,?,0) ON CONFLICT(id) DO UPDATE SET deleted_at=excluded.deleted_at, ready_to_sync=1, purged_at=excluded.purged_at, cloud_deleted=0").run(id, now, now, now, now);
+      this.db.prepare("DELETE FROM quick_notes WHERE id=?").run(id);
+      this.db.prepare("DELETE FROM quick_note_sync_base WHERE quick_note_id=?").run(id);
+      this.links.removeNote(id);
+      this.removeSearchIndex([id]);
+      try { fs.rmSync(this.itemPath(id), { force: true }); } catch { /* best effort */ }
+      try { fs.rmSync(this.assetDirFor(id), { force: true, recursive: true }); } catch { /* best effort */ }
+    } catch { /* 收尸失败不阻断同步 */ }
+  }
   quickNotePathFor(id: string): string { return this.itemPath(id); }
   quickNoteAssetsPathFor(id: string): string { return this.assetDirFor(id); }
   baseHash(id: string): string | null {
@@ -1038,11 +1120,6 @@ export class QuickNotesStore {
   markLocal(id: string): void { this.db.prepare("UPDATE quick_notes SET is_dirty=1 WHERE id=?").run(id); }
   listDeletedForSync(): QuickNoteDeleted[] {
     return this.queries.listDeletedForSync();
-  }
-
-  /** 墓碑已发布到 manifest → 清除待同步标记。 */
-  markDeletedPublished(ids: string[]): void {
-    this.queries.markDeletedPublished(ids);
   }
 
   /** 全部墓碑记录（含已发布）：下载方向 LWW 判定用。 */

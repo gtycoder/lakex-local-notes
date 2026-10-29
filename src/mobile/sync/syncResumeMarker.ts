@@ -9,7 +9,7 @@
 import type { MobileDb } from "../data/sqliteDb.js";
 
 const DB_KEY = "sync_interrupted_at";
-const LS_KEY = "local-lakex-notes-mobile.syncInterruptedAt";
+const LS_KEY = "lakex-local-notes-mobile.syncInterruptedAt";
 
 function lsGet(): string | null {
   try { return globalThis.localStorage?.getItem(LS_KEY) ?? null; } catch { return null; }

@@ -7,7 +7,7 @@ import { Cdp, wait, waitFor, stats } from "./cdp.mjs";
 import { loopbackS3 } from "./loopback-s3.mjs";
 const appPath = path.resolve(
   process.env.LAKE_PERF_APP ||
-    "release/mac-arm64/LocalLakexNotes.app/Contents/MacOS/LocalLakexNotes",
+    "release/mac-arm64/LakexLocalNotes.app/Contents/MacOS/LakexLocalNotes",
 );
 const fixture = path.resolve(
   process.env.LAKE_PERF_FIXTURE || "/tmp/lake-packaged-perf-fixture-261013",
@@ -55,7 +55,7 @@ const result = {
   }).format(new Date()),
   appPath,
   fixture,
-  protocol: "locallakexnotes://app",
+  protocol: "lakexlocalnotes://app",
   args: [
     `--remote-debugging-port=${port}`,
     `--inspect=127.0.0.1:${inspectPort}`,

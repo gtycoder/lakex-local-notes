@@ -1,7 +1,7 @@
 import { performance } from "node:perf_hooks";
 import { describe, expect, it } from "vitest";
 import { sha256Hex } from "./syncUtils.js";
-import { buildAssetDeclaration, declarationHashOf, indexHashOf, parseLakeIndexBytes, serializeLakeIndex, serializeDeclaration, validateAssetDeclaration, type LakeIndex, type LakeNoteEntry } from "./s3v3Index.js";
+import { buildAssetDeclaration, declarationHashOf, indexHashOf, parseLakeIndexBytes, serializeLakeIndex, serializeDeclaration, validateAssetDeclaration, type LakeIndex, type LakeNoteEntry } from "./s3v3/protocol/s3v3Index.js";
 import { planLakeMerge } from "./s3v3Merge.js";
 import { planLakeDeletes } from "./s3v3Gc.js";
 import { gatePendingDelete, type CurrentWorld, type PendingDelete } from "./s3v3Gate.js";

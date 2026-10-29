@@ -3,7 +3,9 @@ import { buildLakeImageCardValue, lakeEmptyParagraph, lakeImageCardParagraph, la
 import { sniffImageFormat, type ImageDimensions, type ImageFormat } from "./imageUtils.js";
 import { sha256Sync } from "./sha256Sync.js";
 import { MAX_IMAGE_BYTES, MAX_IMAGE_PIXELS } from "./storeLimits.js";
-import type { QuickNoteImage } from "./types.js";
+import { randomUuid } from "./randomId.js";
+import { isSafePathSegment } from "./storeUtils.js";
+import type { QuickNoteImage } from "./sharedTypes.js";
 
 /**
  * 小记正文**只存内容**（text/body/images）。标签是独立子系统：
@@ -139,16 +141,6 @@ export function rewriteQuickNoteAssetScope(body: string, fromScope: string, toSc
   return body.split(fromScope).join(toScope).split(encodedFrom).join(encodedTo);
 }
 
-/** 兼容 Web/Node 的 UUID（小记图片 id）。 */
-function randomUUID(): string {
-  const c = globalThis.crypto;
-  if (c && typeof c.randomUUID === "function") return c.randomUUID();
-  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (ch) => {
-    const r = (Math.random() * 16) | 0;
-    return (ch === "x" ? r : (r & 0x3) | 0x8).toString(16);
-  });
-}
-
 /**
  * 从上传图片文件构造小记图片条目 + 落盘文件对。
  * ⚠️ 唯一名（buildAssetFilename）只生成一次：content JSON 引用的 filename 与落盘文件名必须一致——
@@ -162,7 +154,7 @@ export function buildQuickNoteImageFiles(
   for (const f of imageFiles) {
     const name = buildAssetFilename(f.filename);
     images.push({
-      id: randomUUID(),
+      id: randomUuid(),
       filename: name,
       mimeType: f.mimeType,
       width: f.width,
@@ -253,6 +245,7 @@ function validateQuickNoteImage(raw: unknown, seen: Set<string>): StoredQuickNot
   };
 }
 
+/** 远端内容里的 id/filename 同样按 core 的唯一路径段判据校验（CORE-09）。 */
 function isSafeSegment(value: string): boolean {
-  return value.length > 0 && value !== "." && value !== ".." && !value.includes("/") && !value.includes("\\");
+  return isSafePathSegment(value);
 }

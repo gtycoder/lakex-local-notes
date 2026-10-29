@@ -18,10 +18,16 @@ export interface IpcRegistrar {
   readonly registry: ReadonlyMap<string, (args: unknown[]) => Promise<unknown>>;
 }
 
-/** HTTP 调用方的替代 event：sync_now 的 send 是进度推送，无窗口可推时为 no-op。 */
-const HTTP_STUB_EVENT = {
-  sender: { send: () => {} },
-} as unknown as IpcMainInvokeEvent;
+/** HTTP 调用方的替代 event 工厂：send 走注入的广播（AI 流式/同步进度），未注入时 no-op。 */
+function createHttpStubEvent(httpSend?: (channel: string, payload: unknown) => void): IpcMainInvokeEvent {
+  return {
+    sender: {
+      send: (channel: string, payload: unknown) => {
+        try { httpSend?.(channel, payload); } catch { /* 广播失败不影响 IPC 调用 */ }
+      },
+    },
+  } as unknown as IpcMainInvokeEvent;
+}
 
 /** 超过这个耗时的通道记 warn（正式环境也留，便于事后定位慢 IPC）。 */
 const SLOW_IPC_MS = 200;
@@ -42,13 +48,17 @@ function logIpcCall(channel: string, startedAt: number, error?: unknown): void {
   else log.ipc.debug("[perf] ipc." + channel + " " + ms + "ms");
 }
 
-export function createIpcRegistrar(validateSender: (event: IpcMainInvokeEvent) => void, afterInvoke?: (channel: string) => void): IpcRegistrar {
+export function createIpcRegistrar(
+  validateSender: (event: IpcMainInvokeEvent) => void,
+  afterInvoke?: (channel: string) => void,
+  httpSend?: (channel: string, payload: unknown) => void,
+): IpcRegistrar {
   const registry = new Map<string, (args: unknown[]) => Promise<unknown>>();
   const handleEvent = <Args extends IpcArgs>(channel: string, handler: IpcEventHandler<Args>) => {
     registry.set(channel, async (args: unknown[]) => {
       const startedAt = Date.now();
       try {
-        const result = await handler(HTTP_STUB_EVENT, ...(args as Args));
+        const result = await handler(createHttpStubEvent(httpSend), ...(args as Args));
         afterInvoke?.(channel);
         logIpcCall(channel, startedAt);
         return result;

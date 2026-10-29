@@ -5,8 +5,9 @@
  * 映射依赖，新增取值回归面最大）。缺省 "doc" 兼容旧库与旧清单。
  * 见 docs/STORAGE-LAYERS.md §4.3、docs/STORAGE-LAYERS.md。
  *
- * ⚠️ 新增取值必须同时升 MANIFEST_VERSION（src/core/syncUtils.ts）：未知 kind 会被旧端
- * normalizeNoteKind 静默降级成 doc ⇒ 旧端把画板 JSON 当 Lake 文档导入并保存 = 毁正文。
+ * ⚠️ 新增取值必须确认两端 NOTE_KINDS 白名单同步：未知 kind 会被旧端 normalizeNoteKind
+ * 静默降级成 doc ⇒ 旧端把画板 JSON 当 Lake 文档导入并保存 = 毁正文。
+ * （manifest 时代已结束，CORE-05：不再有 MANIFEST_VERSION 可升；v3 索引的 kind 白名单就是这里。）
  */
 export type NoteKind = "doc" | "usheet" | "bitable" | "board" | "ink";
 

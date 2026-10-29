@@ -14,6 +14,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { LakeEditorInstance } from "../../features/editor/lakeRuntime";
 import { execEditorCommand } from "./execCommand";
+import { reportMobileActionError } from "../lib/reportMobileActionError";
 import { applyKernelSelection, readKernelSelection } from "./kernelSelection";
 import {
   canRedo,
@@ -150,14 +151,14 @@ export function useSnapshotUndo(
       applyingRef.current = true;
       try {
         editor.setDocument("text/lake", snap.doc);
-      } catch { /* 恢复失败不阻断 */ }
+      } catch (error) { reportMobileActionError("恢复撤销快照", error); }
       // **先恢复内核模型选区**（决定下一个输入落在哪里），再还原可见光标
       applyKernelSelection(editor, snap.sel);
       restoreCaret(snap.pos);
       window.setTimeout(() => {
         try {
           execEditorCommand(editor, "focus");
-        } catch { /* 忽略 */ }
+        } catch (error) { reportMobileActionError("恢复撤销焦点", error); }
         applyKernelSelection(editor, snap.sel);
         restoreCaret(snap.pos);
         if (scroller) scroller.scrollTop = scrollTop;
@@ -185,7 +186,7 @@ export function useSnapshotUndo(
     };
     try {
       editor.on("contentchange", onChange);
-    } catch { /* 内核不可达时忽略 */ }
+    } catch (error) { reportMobileActionError("订阅撤销快照", error); }
     return () => {
       if (timerRef.current !== null) {
         window.clearTimeout(timerRef.current);
@@ -193,7 +194,7 @@ export function useSnapshotUndo(
       }
       try {
         editor.off?.("contentchange", onChange);
-      } catch { /* 忽略 */ }
+      } catch { /* 卸载路径：内核已销毁/无 off 方法，取消订阅失败无需处理 */ }
     };
   }, [editor, enabled, readDoc, sync, commit]);
 

@@ -1,6 +1,7 @@
 import { sqlParameterBatches } from "../../core/sqlParameterBatch.js";
 import { executeBatchInTransaction, type MobileBatchStatement, type MobileDb } from "./sqliteDb";
 import { deleteNoteBodies, deleteHistorySnapshot } from "./noteBodies.js";
+import { removeNoteAssetsDirFs } from "../native/assetFs";
 
 interface ParentedNode {
   id: string;
@@ -219,7 +220,6 @@ export async function purgeTreeItem(d: MobileDb, id: string, kind: "folder" | "n
       await collectHistory(id);
       purgedNoteIds.push(id);
       statements.push({ statement: "DELETE FROM notes WHERE id=?", values: [id] });
-      statements.push({ statement: "DELETE FROM sync_base WHERE note_id=?", values: [id] });
       statements.push({ statement: "DELETE FROM note_history WHERE note_id=?", values: [id] });
       await executeBatchInTransaction(d, statements);
       return;
@@ -242,12 +242,19 @@ export async function purgeTreeItem(d: MobileDb, id: string, kind: "folder" | "n
       await collectHistory(n.id);
       purgedNoteIds.push(n.id);
       statements.push({ statement: "DELETE FROM notes WHERE id=?", values: [n.id] });
-      statements.push({ statement: "DELETE FROM sync_base WHERE note_id=?", values: [n.id] });
       statements.push({ statement: "DELETE FROM note_history WHERE note_id=?", values: [n.id] });
     }
     await executeBatchInTransaction(d, statements);
   });
   // 文件删除放在事务外：失败只留孤儿文件，不影响"已彻底删除"的 DB 判定。
-  for (const noteId of purgedNoteIds) await deleteNoteBodies(noteId).catch(() => undefined);
+  for (const noteId of purgedNoteIds) {
+    await deleteNoteBodies(noteId).catch(() => undefined);
+    // MOB-06（261027 审计）：彻底删除必须连附件目录一起清（note-assets/{noteId}/）。
+    // 旧实现只删正文/历史 ⇒ 图片/附件以明文留在应用私有目录，与「彻底删除 = 零痕迹」不符。
+    // 子节点由上面收集的 purgedNoteIds 覆盖；失败只告警（墓碑已写、索引已清，残留只是孤儿资源）。
+    await removeNoteAssetsDirFs(noteId).catch((error) => {
+      console.warn("[trash] 彻底删除附件目录失败（残留为孤儿资源，可在资源管理清理）", noteId, error);
+    });
+  }
   for (const filePath of historyFiles) await deleteHistorySnapshot(filePath).catch(() => undefined);
 }

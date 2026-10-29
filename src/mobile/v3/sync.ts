@@ -10,8 +10,8 @@ import { createMobileS3v3Remote } from "./s3v3Remote.js";
  * 注意：v1 只同步 Lake 文档（无附件/小记/目录写入）；真实库若含这些数据不得切 v3。
  */
 
-const DEVICE_ID_KEY = "local-lakex-notes-mobile.v3.deviceId";
-const EMPTY_CLOUD_KEY = "local-lakex-notes-mobile.v3.emptyCloud";
+const DEVICE_ID_KEY = "lakex-local-notes-mobile.v3.deviceId";
+const EMPTY_CLOUD_KEY = "lakex-local-notes-mobile.v3.emptyCloud";
 
 function mobileDeviceId(): string {
   try {
@@ -56,7 +56,7 @@ export async function runMobileV3Sync(db: MobileDb, settings: S3v3Settings, opts
     try {
       const override = localStorage.getItem(EMPTY_CLOUD_KEY);
       if (override === "upload" || override === "stay" || override === "throw") mode = override;
-    } catch { /* ignore */ }
+    } catch { /* 设备本地调试开关读不到 ⇒ 按默认 upload（不参与同步数据） */ }
   }
   return engine.sync({ ...(mode === "throw" ? {} : { onEmptyCloud: mode }), ...(opts.deferAssets ? { deferAssets: true } : {}) });
 }

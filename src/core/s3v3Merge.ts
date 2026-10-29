@@ -1,5 +1,5 @@
 import { decideItem } from "./s3v3Decision.js";
-import type { LakeFolderEntry, LakeIndex, LakeNoteEntry, QuickNoteEntry, QuickNotesIndex } from "./s3v3Index.js";
+import type { LakeFolderEntry, LakeIndex, LakeNoteEntry, QuickNoteEntry, QuickNotesIndex } from "./s3v3/protocol/s3v3Index.js";
 
 /** 三方合并计划（纯逻辑）：输入基线×本地×远端，输出每条的下载/上传/删除/归档意图。 */
 
@@ -7,9 +7,6 @@ export interface LakeMergeContext {
   restorePending: ReadonlySet<string>;
   purgeIntents: ReadonlySet<string>;
   folderPurgeIntents: ReadonlySet<string>;
-  /** 乐观合法父集合（回收站 + 本地/远端目录与文档 id + 基线；缺省 = 不做父合法性过滤）。
-   *  用于"父目录尚未落库/被删"时的环检测与元数据判定；真正落库兜底在适配器（见 C5）。 */
-  validParents?: ReadonlySet<string>;
 }
 
 /** 环检测（对齐旧协议 syncPerf.isRemoteDescendant）：nodeId 在远端树中是否为 ancestorId 的子孙。
@@ -54,7 +51,7 @@ export interface LakeNotePlan {
 
 export interface LakeFolderPlan {
   id: string;
-  kind: "upload" | "download" | "local-purge" | "remote-purged-trash" | "none";
+  kind: "upload" | "download" | "local-purge" | "local-delete" | "remote-purged-trash" | "none";
   applyRemote: boolean;
   uploadLocal: boolean;
   local?: LakeFolderEntry;
@@ -166,8 +163,10 @@ export function planLakeMerge(base: LakeIndex | null, local: LakeIndex, remote: 
       continue;
     }
     if (!l && r) {
-      // 本地无、远端有：基线存在 = 本地缺失（按云端恢复下载）；否则 = 远端新建。
-      folders.push({ id, kind: "download", applyRemote: true, uploadLocal: false, local: undefined, remote: r });
+      // 本地无、远端有：**基线存在 = 用户删了本地目录 ⇒ 删除要传播**（发布不含它的新索引，对端跟随进回收站）；
+      // 无基线 = 远端新建 ⇒ 下载。
+      if (b) folders.push({ id, kind: "local-delete", applyRemote: false, uploadLocal: false, local: undefined, remote: r });
+      else folders.push({ id, kind: "download", applyRemote: true, uploadLocal: false, local: undefined, remote: r });
       continue;
     }
     if (!l || !r) continue;

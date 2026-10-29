@@ -11,7 +11,7 @@ import fs from "node:fs";
 
 const ANDROID_SDK = "/opt/homebrew/share/android-commandlinetools";
 const ADB = path.join(ANDROID_SDK, "platform-tools", "adb");
-const PKG = "com.locallakexnotes.mobile";
+const PKG = "com.lakexlocalnotes.android";
 const port = Number(process.env.LAKE_CDP_PORT || 9337);
 const apk = path.resolve("android/app/build/outputs/apk/debug/app-debug.apk");
 const NL = String.fromCharCode(10);

@@ -1,5 +1,5 @@
 import type { RemoteObjectInfo, S3v3Remote, S3v3Settings } from "../../core/s3v3Ports.js";
-import { isGzipMetadataKey } from "../../core/s3v3Keys.js";
+import { isGzipMetadataKey } from "../../core/s3v3/protocol/s3v3Keys.js";
 import { assertSafeKey, isGzip, isNoSuchKey, normalizeEndpoint } from "../../core/syncUtils.js";
 import { createMobileS3Client } from "../native/s3Store.js";
 import { NativeAssetSync, nativeAssetSyncSupported } from "../native/nativeAssetSync.js";

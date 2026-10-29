@@ -5,7 +5,7 @@ import type { IpcRegistrar } from "./registrar.js";
 import { IpcInputError } from "../ipcLimits.js";
 import { tailLinesMatching, type LogTailMatch } from "../logReader.js";
 
-/** F1 日志查看 IPC：白名单路径 = userData/logs/local-lakex-notes.log（electron-log 主文件；.old 为轮转产物，一并纳入尾部）。
+/** F1 日志查看 IPC：白名单路径 = userData/logs/lakex-local-notes.log（electron-log 主文件；.old 为轮转产物，一并纳入尾部）。
  * 渲染层只传 keyword/maxLines，绝不接受任意路径。 */
 export function registerLogIpc(ipc: IpcRegistrar): void {
   ipc.handle("read_app_log", (opts: unknown) => {
@@ -15,8 +15,8 @@ export function registerLogIpc(ipc: IpcRegistrar): void {
     const context = typeof o.context === "number" && o.context >= 0 ? Math.min(Math.floor(o.context), 5) : 1;
     const keyword = typeof o.keyword === "string" ? o.keyword.slice(0, 200) : undefined;
     const logDir = path.join(app.getPath("userData"), "logs");
-    const mainPath = path.join(logDir, "local-lakex-notes.log");
-    const oldPath = path.join(logDir, "local-lakex-notes.old.log");
+    const mainPath = path.join(logDir, "lakex-local-notes.log");
+    const oldPath = path.join(logDir, "lakex-local-notes.old.log");
     const readTail = (filePath: string): string => {
       try { return fs.readFileSync(filePath, "utf8"); } catch { return ""; }
     };

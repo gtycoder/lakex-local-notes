@@ -12,8 +12,9 @@ export interface QuickNoteSearchable {
   };
 }
 
+/** 查询归一：**locale-independent** 折叠（CORE-10；toLocaleLowerCase 会随宿主 locale 变形）。 */
 export function normalizeQuickNoteQuery(query: string): string {
-  return query.trim().toLocaleLowerCase();
+  return query.trim().toLowerCase();
 }
 
 export function quickNoteMatchesQuery(note: QuickNoteSearchable, query: string): boolean {
@@ -21,7 +22,7 @@ export function quickNoteMatchesQuery(note: QuickNoteSearchable, query: string):
   if (!needle) return true;
   const haystack = [note.previewText ?? "", note.content?.text ?? "", ...(note.content?.tags ?? [])]
     .join(" ")
-    .toLocaleLowerCase();
+    .toLowerCase();
   return haystack.includes(needle);
 }
 

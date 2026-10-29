@@ -4,8 +4,10 @@
  */
 import { useRef, type ReactNode, type RefObject } from "react";
 import { useEditorTopVar } from "../hooks/useEditorTopVar";
+import { DesktopWorkspaceSlotProvider } from "./desktopWorkspaceSlot";
 import { MultiTabEditor, type TabInfo } from "../features/editor/MultiTabEditor";
 import type { LakeEditorInstance } from "../features/editor/lakeRuntime";
+import type { EditorCaptureRegistrar } from "../core/editorCapture";
 
 export interface DesktopLibraryProps {
   tabs: TabInfo[];
@@ -49,7 +51,7 @@ export interface DesktopLibraryProps {
   onContentChange: (noteId: string, content?: string) => void;
   onPreserveBitableDraft?: (noteId: string, content: string) => void;
   onEditorReady: (noteId: string, editor: LakeEditorInstance | null) => void;
-  onEditorCapture?: (noteId: string, capture: (() => string | null) | null) => void;
+  onEditorCapture?: EditorCaptureRegistrar;
   /** 外部改动正文后重载该文档 tab（附件重命名用） */
   onReloadNote: (noteId: string) => void;
   onCreateNote: () => void;
@@ -88,7 +90,7 @@ export function DesktopLibrary(props: DesktopLibraryProps) {
         activeNoteId={activeNoteId}
         tocEnabled={tocEnabled}
         outlineEnhance={outlineEnhance}
-        topbarLeading={topbarLeading}
+        topbarLeading={<DesktopWorkspaceSlotProvider workspace="library">{topbarLeading}</DesktopWorkspaceSlotProvider>}
         topbarTrailing={topbarTrailing}
         notePathTitle={notePathTitle}
         moreMenuWrapRef={moreMenuWrapRef}

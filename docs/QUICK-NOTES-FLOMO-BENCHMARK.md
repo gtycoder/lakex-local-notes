@@ -148,7 +148,7 @@
 | 桌面 DB | `quick_notes` 无 tags 列；列表时逐条读 `.qnote` | `electron/quickNotes.ts:108-117`、`electron/quickNotesQueries.ts:73-76` |
 | 移动 DB | 有派生列 `tags_json`，仅列表投影；不是标签目录 | `src/mobile/data/schema.ts:104-117` |
 | FTS | 两端独立 `quick_notes_fts(body, tags)`，标签以空格拼接进索引 | `electron/quickNotes.ts:168-179`、`src/mobile/data/schema.ts:242-252` |
-| S3 | 小记**确实同步**：独立 `quick-notes/` 前缀 + Manifest v1；标签随内容对象同步，Manifest 没有 tags 字段 | `docs/QUICK-NOTES-SPEC.md:174-187`、`src/core/quickNoteKeys.ts:21-68`、`src/core/manifestTypes.ts:55-73` |
+| S3 | 小记**确实同步**：独立 `quick-notes/` 前缀 + Manifest v1；标签随内容对象同步，Manifest 没有 tags 字段 | `docs/QUICK-NOTES-SPEC.md:174-187`、`src/core/s3v3Keys.ts`（小记键单一来源；旧 `quickNoteKeys.ts` 已于 261028 删除）、`src/core/manifestTypes.ts:55-73` |
 | tag-only 修改 | 会改 contentHash（会同步），但保留原 `updatedAt`，不会把卡片顶到最前 | `docs/QUICK-NOTES-SPEC.md:9`、`src/core/quickNoteModel.ts:205-209` |
 | 标签规则 | NFC、trim、连续空白压成一个空格；每条 ≤20 个、单个 ≤32 字符；`无标签` 是保留筛选名 | `src/core/quickNoteTags.ts:15-24` |
 

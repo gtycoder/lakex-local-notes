@@ -41,7 +41,7 @@ describe("移动端入口不静态引入 Lake 内核", () => {
   it("静态快捷方式用 intent 的 android:data 属性携带深链（嵌套 data 元素会被 ShortcutParser 忽略）", () => {
     const xml = read("../../android/app/src/main/res/xml/shortcuts.xml");
     const code = xml.replace(/<!--[\s\S]*?-->/g, ""); // 去掉注释，避免注释文字误伤断言
-    expect(code).toMatch(/android:data="locallakexnotes:\/\/quick-note"/);
+    expect(code).toMatch(/android:data="lakexlocalnotes:\/\/quick-note"/);
     // 260920 实测：退回嵌套 data 元素 ⇒ 快捷方式点开丢深链、进不了速记框
     expect(code).not.toMatch(/<data[\s>]/);
   });

@@ -3,6 +3,7 @@
  */
 import type { ReactNode, Ref, RefObject } from "react";
 import { QuickNotesWorkspace, type QuickNotesWorkspaceHandle } from "../components/app/QuickNotesWorkspace";
+import { DesktopWorkspaceSlotProvider } from "./desktopWorkspaceSlot";
 import type { TreeNode } from "../lib/types";
 
 export interface DesktopQuickNotesProps {
@@ -22,7 +23,9 @@ export function DesktopQuickNotes(props: DesktopQuickNotesProps) {
   return (
     <>
       <header className="tab-bar desktop-only" aria-label="顶栏">
-        <div className="tabbar-leading">{topbarLeading}</div>
+        <div className="tabbar-leading">
+          <DesktopWorkspaceSlotProvider workspace="quick-notes">{topbarLeading}</DesktopWorkspaceSlotProvider>
+        </div>
       </header>
       <QuickNotesWorkspace ref={quickNotesRef as Ref<QuickNotesWorkspaceHandle>} notebooks={notebooks} visible={visible} cloudReady={cloudReady} onDirtyChange={onDirtyChange} onConverted={onConverted} />
     </>

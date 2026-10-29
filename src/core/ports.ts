@@ -1,30 +1,8 @@
 /**
  * 共享端口接口（跨端契约；移动端现状与边界见 docs/MOBILE-TECH-STACK.md）。
- * - 只定义接口与类型，不包含实现——桌面/移动端 adapter 各自实现；
- * - 位于共享层 src/core（纯类型，零平台依赖），桌面与移动端从同一入口消费；
- * - 桌面 IPC 契约不变：桌面 adapter 组合现有 store/noteMetadataRepository 方法实现这些接口。
+ * - 只定义接口与类型，不包含实现——平台 adapter 各自实现；
+ * - 位于共享层 src/core（纯类型，零平台依赖），桌面与移动端从同一入口消费。
  */
-import type { TreeNode } from "./types.js";
-
-/** 新建 notebook 的一次性输入（名称必填；icon 可空=默认图标）。 */
-export interface CreateNotebookInput {
-  title: string;
-  icon: string | null;
-}
-
-/**
- * 目录树 Repository（两端各自实现：桌面 src/desktop/treeRepositoryAdapter.ts，移动 src/mobile/bridge.ts）。
- * 与桌面 noteMetadataRepository 方法对齐（createNotebook/createGroup/renameTreeNode/
- * setNodeIcon/moveTreeNodeOrdered），移动端不重新实现这些规则。
- */
-export interface TreeRepository {
-  listTreeNodes(): Promise<TreeNode[]>;
-  createNotebook(input: CreateNotebookInput): Promise<TreeNode>;
-  createGroup(parentId: string, title: string): Promise<TreeNode>;
-  renameTreeNode(id: string, title: string): Promise<TreeNode>;
-  setNodeIcon(id: string, icon: string | null): Promise<TreeNode>;
-  moveTreeNodeOrdered(id: string, parentId: string | null, orderedIds: string[]): Promise<TreeNode>;
-}
 
 /**
  * 平台安全密钥存储（桌面 safeStorage / 移动 native-SecretStore —— 见 src/mobile/native/secretStore.ts 头注释的现状与硬约束）。

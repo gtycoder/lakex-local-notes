@@ -65,7 +65,10 @@ const TEST_SEAM: string[] = [
   // 移动端 GC 账本 / 墓碑三族：**生产走的是 gcRepository 直调与 dbPort**（见 bridge.ts L902/950/954/963、L1009-1012），
   // 这几个只是把它们再暴露一份；现存单测用它们做「播种 + 观测」来验证真实行为（GC 分批删除 / 维护队列 / 墓碑发布 / folder 防复活）。
   "addS3GcPending", "removeS3GcPending", "recordS3GcLog",
-  "listDeletedNotesForSync", "readDeletedContent", "markTombstonesPublished", "isFolderPurged",
+  // 261028：桌面端 s3_gc_pending 链路已删；移动端保留（资源管理诊断显示 gcPendingCount 走
+  // diagnosticsRepository 直读，桥方法仅单测/预留），因此登记为 test seam。
+  "listS3GcPending",
+  "listDeletedNotesForSync", "readDeletedContent", "isFolderPurged",
 ];
 
 describe("契约面归属（bridge 每个方法都要有主）", () => {

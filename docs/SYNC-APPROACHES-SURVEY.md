@@ -1,7 +1,7 @@
 # 同类软件怎么同步（261025 市场调研 · 大白话版）
 
 > 用途：回答「为什么我们的同步这么复杂、别人怎么做的」。只看产品/逻辑，不含代码。
-> 状态：调研文档，未改任何协议或代码。详细内部测算见 [S3-MANIFEST-SCALE-RESEARCH.md](./S3-MANIFEST-SCALE-RESEARCH.md)；墓碑专项对照见 [S3-GC-DESIGN.md](./S3-GC-DESIGN.md) 第 7 节。
+> 状态：调研文档，未改任何协议或代码。详细内部测算与墓碑专项对照原在两份过程文档（`S3-MANIFEST-SCALE-RESEARCH.md` / `S3-GC-DESIGN.md` §7），**已按 SD-11 删除**（git 可查）；现行协议见 [SYNC-PROTOCOL.md](./SYNC-PROTOCOL.md)。
 
 ## 0. 一句话结论
 
@@ -84,7 +84,7 @@ Obsidian 的 Remotely Save 在 S3 上同步时，并不是「无状态搬文件�
 - Joplin（已核实）：官方同步规范 readme/dev/spec/sync.md、同步锁规范 readme/dev/spec/sync_lock.md、docs/apps/sync/index.md；另有 BaseItem.ts、file-api.ts、LockHandler.ts、S3 官方文档（S3 标 Beta）、冲突文档、issue #11238、PR #16177。
 - Standard Notes（已核实）：官方 docker-compose 与服务端 ItemProps（deleted 软删标记）。
 - Trilium(Next)（已核实）：Synchronisation.md、Entity change tombstones.md（isErased 永久墓碑）。
-- 思源/dejavu（已核实）：dejavu 源码 entity/index.go、store.go、repo.go、sync_lock.go；本仓库 S3-GC-DESIGN.md 第 7 节。
+- 思源/dejavu（已核实）：dejavu 源码 entity/index.go、store.go、repo.go、sync_lock.go；本仓库原 S3-GC-DESIGN 第 7 节（过程文档已删，git 可查）。
 - Logseq / Syncthing / Git 插件（已核实）：logseq/docs、syncthing/docs、obsidian-git 的 README 与冲突说明。
 - Anytype / Notesnook / AppFlowy：本轮无一手来源，**未核实，不引用**。
-- 详细内部数据（体积、断点、方案收益）：S3-MANIFEST-SCALE-RESEARCH.md。
+- 详细内部数据（体积、断点、方案收益）：原 S3-MANIFEST-SCALE-RESEARCH.md（过程文档已删，git 可查）。

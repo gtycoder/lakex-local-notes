@@ -1,16 +1,39 @@
 /**
- * 双端设备适配器一致性（conformance）规格（261026）。
+ * 设备存储**单实现契约（E2-4 phase C-3c）**：共享编排 + 端口驱动。
  *
- * 同一组「同步行为规格」分别跑桌面 store 与移动 store，防止后续重构/优化把两端语义改歪：
- * 首轮上传、空跑零写、第二设备拉取、双端编辑互相同步。
- * 只依赖 core 端口 + 引擎，不碰平台细节；平台 harness 负责 seed/edit/read。
+ * 背景：E2-4 之前桌面/移动各自实现 saveState，本套规格是「双端对拍」；切换后两端的决策/映射/落库顺序
+ * 全部收敛到 `src/core/s3v3/state/deviceStore.ts`（`createDeviceStoreMeta`），平台只实现窄端口
+ * `PlatformDataPort` + `FileDriver`。因此本套规格**只跑一次**（移动 harness，见
+ * `src/mobile/v3/deviceConformance.mobile.test.ts`）——断言的是「同一份共享实现 + 端口语义」，
+ * 不再为「两份实现是否对齐」写用例。
+ *
+ * 跨端混合（桌面 × 移动接同一 MemoryRemote 的并发收敛）在 `deviceConformance.mixed.test.ts`，
+ * 不属于本契约；两台「设备」在契约里只是同一实现的两次独立实例（验证状态机/收敛，不验证端差异）。
+ *
+ * 端口级差异**不在本契约里统一**（不再用 capabilities 条件分支），全部登记在
+ * `docs/SYNC-DEVICE-CONTRACT.md` §5「共享实现 + 端口差异」矩阵；本文件只在相关断言旁注明「端口差异」。
+ *
+ * 场景矩阵（编号即报告里的场景号）：
+ *  1 首传 / 2 空跑   ——「首轮上传建立基线；空跑零下载零写入」
+ *  3 双设备          ——「第二台设备首拉拿到同 id / 同正文」
+ *  4 双端编辑        ——「双端编辑互相同步」/「三端交错编辑」
+ *  5 锁传播          ——「【场景 5】…」（E2-4 后两端同口径：纯锁变更按 locked_at 字段级 LWW 传播）
+ *  6 恢复            ——「【场景 6】…」（云端已删副本显式恢复 = local-wins 重新上传）
+ *  7 purge           ——「【场景 7】…」（发起端删对象、对端保留回收站副本且不回传）
+ *  8 全量重拉        ——「【场景 8】…」（resetFromCloud：本地多出条目软删进回收站、不上传）
+ *  9 deferAssets     ——「【场景 9】…」（首拉不搬媒体；普通增量不补，只有全量/按需路径补）
+ * 10 声明保留        ——「【场景 10】…」（本地附件未落地时上传正文不得清空声明/自删云端附件）
+ *
+ * 其余用例 = 端口/引擎语义护栏：正文与 staging（中断重试/不重下）、墓碑三态（trash/restore/purge）、
+ * cloud_deleted 投影、quick 删除、目录兜底/删除传播、恢复标记、附件失败重试。
  */
 import { describe, expect, it } from "vitest";
 import { gzipSync, gunzipSync } from "node:zlib";
 import type { S3v3Remote, RemoteObjectInfo } from "../../src/core/s3v3Ports.js";
 import type { S3v3SyncReport } from "../../src/core/s3v3Engine.js";
 import { sha256Hex } from "../../src/core/syncUtils.js";
-import { lakeBodyKey } from "../../src/core/s3v3Keys.js";
+import { S3V3_POINTER_KEY, assetKey, declarationKey, indexKey, lakeBodyKey } from "../../src/core/s3v3/protocol/s3v3Keys.js";
+import { parseLakeIndexBytes, type LakeIndex } from "../../src/core/s3v3/protocol/s3v3Index.js";
 
 /** 弱网注入计划：remaining 次（可按 key 过滤）的 GET/PUT 抛错；消耗完自动恢复。 */
 interface FailurePlan {
@@ -85,8 +108,25 @@ export class MemoryRemote implements S3v3Remote {
   async deleteByPrefix(prefix: string): Promise<number> { const ks = [...this.objects.keys()].filter((k) => k.startsWith(prefix)); for (const k of ks) this.objects.delete(k); return ks.length; }
 }
 
-export interface ConformanceHarness {
-  sync(opts?: { onEmptyCloud?: "upload" | "stay" }): Promise<S3v3SyncReport>;
+const textDecoder = new TextDecoder();
+
+/** 读云端当前 lake 索引（指针 → 内容寻址索引）；用于「声明保留」等需要看发布结果的断言。 */
+async function readCloudLakeIndex(remote: MemoryRemote): Promise<{ generation: number; index: LakeIndex }> {
+  const pointerBytes = await remote.get(S3V3_POINTER_KEY);
+  if (!pointerBytes) throw new Error("conformance: 云端缺少 v3 pointer");
+  const pointer = JSON.parse(textDecoder.decode(pointerBytes)) as { generation: number; lake: { commit: string } };
+  const indexBytes = await remote.get(indexKey("lake", pointer.lake.commit));
+  if (!indexBytes) throw new Error("conformance: 云端缺少 lake 索引 " + pointer.lake.commit);
+  return { generation: pointer.generation, index: parseLakeIndexBytes(indexBytes).index };
+}
+
+const keysUnder = (remote: MemoryRemote, prefix: string): string[] => [...remote.objects.keys()].filter((k) => k.startsWith(prefix));
+
+/** 平台 harness：只做 seed/edit/read（不含任何同步决策；决策在 core 共享实现里）。 */
+export interface ContractHarness {
+  sync(opts?: { onEmptyCloud?: "upload" | "stay"; deferAssets?: boolean }): Promise<S3v3SyncReport>;
+  /** 全量重拉（引擎 resetFromCloud）：云端赢，本地多出的条目归档/软删。 */
+  resetFromCloud(): Promise<S3v3SyncReport>;
   /** parentId 缺省 = 平台自选目录；指定时必须原样落在该目录下（跨端 id 保真）。 */
   seedNote(id: string, title: string, body: string, parentId?: string): Promise<void>;
   /** 用指定 id 新建笔记本（用于跨端目录 id 保真与父子关系断言）。 */
@@ -107,23 +147,24 @@ export interface ConformanceHarness {
   restoreNote(id: string): Promise<void>;
   purgeNote(id: string): Promise<void>;
   readBody(id: string): Promise<string | null>;
+  /** 设置编辑锁（平台 API；移动端没有锁 UI，harness 直接写 DB 模拟平台能力，仅测试用）。 */
+  setEditLock(id: string, locked: boolean): Promise<void>;
+  /** 读编辑锁字段：locked 来自 is_locked，lockedAt 来自 locked_at（E2-4 后端与桌面同口径落盘）。 */
+  readEditLock(id: string): Promise<{ locked: boolean; lockedAt: string | null }>;
   close(): Promise<void>;
 }
 
-export type HarnessFactory = ((remote: S3v3Remote) => Promise<ConformanceHarness>) & {
-  /**
-   * 平台能力声明（只用于已确认的跨端差异，不改规格本身）：
-   * - restoreFallsBackToDefaultNotebook=false：恢复文档时原父已删**不会**回落到兜底笔记本
-   *   （移动端已知缺口）。该场景对这类平台记为 expected-fail（it.fails），平台修好后删掉此标志即可转正。
-   */
-  capabilities?: { restoreFallsBackToDefaultNotebook?: boolean };
-};
+export type ContractHarnessFactory = (remote: S3v3Remote) => Promise<ContractHarness>;
 
-async function newDevice(make: HarnessFactory, remote: MemoryRemote): Promise<ConformanceHarness> {
+async function newDevice(make: ContractHarnessFactory, remote: MemoryRemote): Promise<ContractHarness> {
   return await make(remote);
 }
 
-export function defineDeviceConformance(name: string, make: HarnessFactory): void {
+/**
+ * 定义「单实现契约」：一份规格 = 共享编排 + 端口语义。只允许实例化一次（移动 harness）；
+ * 桌面/移动的端口差异登记在 docs/SYNC-DEVICE-CONTRACT.md §5，不在这里分支。
+ */
+export function defineDeviceContract(name: string, make: ContractHarnessFactory): void {
   describe(name, () => {
     it("首轮上传建立基线；空跑零下载零写入", async () => {
       const remote = new MemoryRemote();
@@ -292,7 +333,7 @@ export function defineDeviceConformance(name: string, make: HarnessFactory): voi
     }, 240_000);
 
     /** 活跃文档不得挂在「不存在的活跃目录」上（用户可见的悬空判定）。 */
-    const assertNoDanglingActive = async (dev: ConformanceHarness): Promise<void> => {
+    const assertNoDanglingActive = async (dev: ContractHarness): Promise<void> => {
       const folders = new Set(await dev.listFolderIds());
       for (const id of await dev.listActiveIds()) {
         const pid = await dev.noteParentId(id);
@@ -329,9 +370,9 @@ export function defineDeviceConformance(name: string, make: HarnessFactory): voi
       } finally { await a.close(); await b.close(); }
     }, 180_000);
 
-    const cap = make.capabilities ?? {};
-    const restoreFallbackIt = cap.restoreFallsBackToDefaultNotebook === false ? it.fails : it;
-    restoreFallbackIt("恢复文档时原父已删 → 落兜底笔记本（父目录可解析、对端同父）", async () => {
+    // 目录兜底（C5）：恢复时原父已删 ⇒ 回落兜底笔记本。单实现契约下这是共享编排的固定语义
+    //（曾经因移动端缺口在这里用 it.fails 钉住，缺口已修 ⇒ 转正）。
+    it("恢复文档时原父已删 → 落兜底笔记本（父目录可解析、对端同父）", async () => {
       const remote = new MemoryRemote();
       const a = await newDevice(make, remote);
       const b = await newDevice(make, remote);
@@ -491,6 +532,208 @@ export function defineDeviceConformance(name: string, make: HarnessFactory): voi
         const aPull = await a.sync();
         expect(aPull.downloadedNotes).toBe(1);
         expect(await a.readBody("n2")).toBe("<p>B改过的正文二</p>");
+      } finally { await a.close(); await b.close(); }
+    }, 180_000);
+
+    it("【场景 5】锁传播：纯锁变更按 locked_at 字段级 LWW 传播（E2-4 后两端同口径）", async () => {
+      const remote = new MemoryRemote();
+      const a = await newDevice(make, remote);
+      const b = await newDevice(make, remote);
+      try {
+        await a.seedNote("n1", "锁测试", "<p>v1</p>");
+        await a.sync({ onEmptyCloud: "upload" });
+        await b.sync();
+
+        // ① 仅锁字段变化（不 bump updatedAt/正文）：两端都读写 locked_at ⇒ 纯锁变更也传播。
+        await a.setEditLock("n1", true);
+        await a.sync();
+        await b.sync();
+        const pureLock = await b.readEditLock("n1");
+        expect(pureLock.locked).toBe(true);
+        expect(pureLock.lockedAt).not.toBeNull();
+
+        // ② 正文也改一次：锁字段随条目一起传播，且时间戳一致（字段级 LWW 拷贝）。
+        await a.editNote("n1", "锁测试", "<p>v2 锁定中</p>");
+        await a.sync();
+        await b.sync();
+        const aLock = await a.readEditLock("n1");
+        const bLock = await b.readEditLock("n1");
+        expect(aLock.locked).toBe(true);
+        expect(bLock.locked).toBe(true);
+        expect(aLock.lockedAt).not.toBeNull();
+        expect(bLock.lockedAt).toBe(aLock.lockedAt);
+
+        // ③ 解锁同样随正文变更传播；两端都不应卡在旧锁态。
+        await a.setEditLock("n1", false);
+        await a.editNote("n1", "锁测试", "<p>v3 解锁</p>");
+        await a.sync();
+        await b.sync();
+        expect((await b.readEditLock("n1")).locked).toBe(false);
+      } finally { await a.close(); await b.close(); }
+    }, 180_000);
+
+    it("【场景 6】恢复：从「云端已删除·仅本地」副本显式恢复 → local-wins 重新上传、对端复活", async () => {
+      const remote = new MemoryRemote();
+      const a = await newDevice(make, remote);
+      const b = await newDevice(make, remote);
+      try {
+        await a.seedNote("n1", "标题一", "<p>正文一</p>");
+        await a.sync({ onEmptyCloud: "upload" });
+        await b.sync();
+        await a.purgeNote("n1");
+        await a.sync();
+        await b.sync();
+        // 前置：B 只剩「云端已删除·仅本地」的回收站副本（见场景 7 的同一路径）。
+        expect(await b.listActiveIds()).not.toContain("n1");
+        expect(await b.listCloudDeletedIds()).toContain("n1");
+
+        // 显式恢复 = 唯一提前例外：恢复标记让本地版本 local-wins，重新发布为活跃条目。
+        await b.restoreNote("n1");
+        await b.sync();
+        await a.sync();
+        for (const dev of [a, b]) {
+          expect(await dev.listActiveIds()).toContain("n1");
+          expect(await dev.listTrashIds()).not.toContain("n1");
+          expect(await dev.listCloudDeletedIds()).not.toContain("n1");
+          expect(await dev.readBody("n1")).toBe("<p>正文一</p>");
+        }
+        // 再空跑一轮：恢复后的条目不得被旧 purge 标记重新压回回收站。
+        await a.sync();
+        await b.sync();
+        expect(await b.listActiveIds()).toContain("n1");
+      } finally { await a.close(); await b.close(); }
+    }, 180_000);
+
+    it("【场景 7】purge：发起端删对象、对端保留回收站副本与正文，且不回传", async () => {
+      const remote = new MemoryRemote();
+      const a = await newDevice(make, remote);
+      const b = await newDevice(make, remote);
+      const img = new Uint8Array([137, 80, 78, 71, 21, 22, 23, 24, 250]);
+      try {
+        await a.seedNote("n1", "带图文档", "<p>正文一</p>");
+        await a.seedAsset("n1", "a.png", img);
+        await a.sync({ onEmptyCloud: "upload" });
+        await b.sync();
+        expect(await b.readAsset("n1", "a.png")).not.toBeNull();
+
+        // 发起端彻底删除：索引条目 + 正文/附件/声明对象一起按前缀清掉（删除 = 缺席，无墓碑）。
+        await a.purgeNote("n1");
+        await a.sync();
+        expect(keysUnder(remote, "objects/n1-")).toHaveLength(0);
+        expect(keysUnder(remote, "assets/n1/")).toHaveLength(0);
+        expect(keysUnder(remote, "meta/assets/n1/")).toHaveLength(0);
+        expect(await a.listTrashIds()).not.toContain("n1"); // 发起端是物理删，不在回收站
+
+        // 对端：保留回收站副本/正文/附件 + 打「云端已删除」标；连续两轮都不得把副本传回云端。
+        await b.sync();
+        expect(await b.listActiveIds()).not.toContain("n1");
+        expect(await b.listTrashIds()).toContain("n1");
+        expect(await b.listCloudDeletedIds()).toContain("n1");
+        expect(await b.readBody("n1")).toBe("<p>正文一</p>");
+        expect(Array.from((await b.readAsset("n1", "a.png")) as Uint8Array)).toEqual(Array.from(img));
+        remote.resetCounters();
+        await b.sync();
+        await b.sync();
+        expect(remote.puts).toBe(0);
+        expect(keysUnder(remote, "objects/n1-")).toHaveLength(0);
+        expect(keysUnder(remote, "assets/n1/")).toHaveLength(0);
+      } finally { await a.close(); await b.close(); }
+    }, 180_000);
+
+    it("【场景 8】全量重拉：本地多出的条目软删进回收站并打标，不上传、不丢正文", async () => {
+      const remote = new MemoryRemote();
+      const a = await newDevice(make, remote);
+      const b = await newDevice(make, remote);
+      try {
+        await a.seedNote("n1", "标题一", "<p>正文一</p>");
+        await a.sync({ onEmptyCloud: "upload" });
+        await b.sync();
+        // 云端删掉 n1；B 另有一条从未同步过的本地文档 m1。
+        await a.purgeNote("n1");
+        await a.sync();
+        await b.seedNote("m1", "B 独有", "<p>B 的正文</p>");
+
+        const putsBefore = remote.puts;
+        const report = await b.resetFromCloud();
+        // I0（261027/261028）：全量重拉只收敛不删除、不推送 —— 「本机有、云上没有」一律软删进回收站 + 打标。
+        expect(report.published).toBe(false);
+        expect(remote.puts).toBe(putsBefore);
+        for (const id of ["n1", "m1"]) {
+          expect(await b.listActiveIds()).not.toContain(id);
+          expect(await b.listTrashIds()).toContain(id);
+          expect(await b.listCloudDeletedIds()).toContain(id);
+        }
+        expect(await b.readBody("n1")).toBe("<p>正文一</p>");
+        expect(await b.readBody("m1")).toBe("<p>B 的正文</p>");
+        // 再空跑一轮：不得因为「本地还在回收站」重新上传或清掉标记。
+        await b.sync();
+        expect(await b.listCloudDeletedIds()).toEqual(expect.arrayContaining(["n1", "m1"]));
+      } finally { await a.close(); await b.close(); }
+    }, 180_000);
+
+    it("【场景 9】deferAssets：首拉不搬媒体；普通增量不补，全量重拉才补字节", async () => {
+      const remote = new MemoryRemote();
+      const a = await newDevice(make, remote);
+      const b = await newDevice(make, remote);
+      const img = new Uint8Array([1, 31, 139, 8, 0, 2, 3, 4, 250, 255]);
+      const key = assetKey("n1", "a.png");
+      try {
+        await a.seedNote("n1", "带图文档", "<p>正文一</p>");
+        await a.seedAsset("n1", "a.png", img);
+        await a.sync({ onEmptyCloud: "upload" });
+        remote.resetCounters();
+
+        // 按需首拉：只拿 pointer/索引/正文/声明，媒体字节为 0。
+        await b.sync({ deferAssets: true });
+        expect(await b.listActiveIds()).toContain("n1");
+        expect(await b.readBody("n1")).toBe("<p>正文一</p>");
+        // 端口语义：deferAssets 首拉只拿 pointer/索引/正文/声明，附件字节既未落本地、也未请求云端。
+        expect(await b.readAsset("n1", "a.png")).toBeNull();
+        expect(remote.getsByKey.get(key) ?? 0).toBe(0);
+
+        // 普通增量轮不重调度资产（当前实现：失败才进 pendingAssets；按需补拉走打开/预览路径）
+        // ⇒ 再跑一轮普通 sync 仍不下载。此处钉住现状，不把它当「已补齐」。
+        await b.sync();
+        expect(await b.readAsset("n1", "a.png")).toBeNull();
+        expect(remote.getsByKey.get(key) ?? 0).toBe(0);
+
+        // 全量重拉（deferAssets=false）会按声明差集补字节。
+        await b.resetFromCloud();
+        expect(Array.from((await b.readAsset("n1", "a.png")) as Uint8Array)).toEqual(Array.from(img));
+        expect(remote.getsByKey.get(key)).toBe(1);
+      } finally { await a.close(); await b.close(); }
+    }, 180_000);
+
+    it("【场景 10】声明保留：本地附件未落地时上传正文不得清空声明、不得自删云端附件", async () => {
+      const remote = new MemoryRemote();
+      const a = await newDevice(make, remote);
+      const b = await newDevice(make, remote);
+      const img = new Uint8Array([7, 7, 7, 1, 2, 3, 4, 5, 6]);
+      try {
+        await a.seedNote("n1", "带图文档", "<p>正文一</p>");
+        await a.seedAsset("n1", "a.png", img);
+        await a.sync({ onEmptyCloud: "upload" });
+        // B 按需首拉：有声明、无附件字节 —— 正是「本地附件目录为空」的危险状态。
+        await b.sync({ deferAssets: true });
+        expect(await b.readAsset("n1", "a.png")).toBeNull();
+        const before = await readCloudLakeIndex(remote);
+        const oldDeclHash = before.index.notes.find((n) => n.id === "n1")?.assetsHash;
+        expect(oldDeclHash).toBeTruthy();
+        const declKey = declarationKey("lake", "n1", oldDeclHash!);
+
+        // 只改正文：上传分支必须识别「附件未落地 ≠ 用户删光附件」，保留云端声明并自愈补拉。
+        await b.editNote("n1", "带图文档", "<p>正文二</p>");
+        remote.resetCounters();
+        const r = await b.sync();
+        expect(r.published).toBe(true);
+        expect(r.warningDetails.some((w) => w.kind === "asset_kept_remote" && w.noteId === "n1")).toBe(true);
+        expect(remote.objects.has(declKey)).toBe(true); // 旧声明对象仍在（不可变对象，未删）
+        expect(remote.putsByKey.get(declKey) ?? 0).toBe(0); // 也没有重写一份声明
+        const after = await readCloudLakeIndex(remote);
+        expect(after.index.notes.find((n) => n.id === "n1")?.assetsHash).toBe(oldDeclHash);
+        expect(keysUnder(remote, "assets/n1/")).toEqual([assetKey("n1", "a.png")]);
+        // 自愈：本轮已把缺失附件按声明补下来。
+        expect(Array.from((await b.readAsset("n1", "a.png")) as Uint8Array)).toEqual(Array.from(img));
       } finally { await a.close(); await b.close(); }
     }, 180_000);
   });

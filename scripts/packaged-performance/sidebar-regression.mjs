@@ -7,7 +7,7 @@ import { spawn } from "node:child_process";
 import { Cdp, wait, waitFor } from "./cdp.mjs";
 const app = path.resolve(
   process.env.LAKE_PERF_APP ||
-    "release/mac-arm64/LocalLakexNotes.app/Contents/MacOS/LocalLakexNotes",
+    "release/mac-arm64/LakexLocalNotes.app/Contents/MacOS/LakexLocalNotes",
 );
 if (!fs.existsSync(app) || !app.includes(".app/Contents/MacOS/"))
   throw Error("real .app required");
@@ -259,7 +259,7 @@ try {
     for (const width of [1280, 680]) {
       await check(`${theme}-${width}-sidebar`, async () => {
         await page.evaluate(
-          `(()=>{const k='local-lakex-notes-v1.settings';const s=JSON.parse(localStorage.getItem(k)||'{}');s.theme=${JSON.stringify(theme)};localStorage.setItem(k,JSON.stringify(s));localStorage.setItem('local-lakex-notes-v2.sidebar-mode','docked');return true})()`,
+          `(()=>{const k='lakex-local-notes-v1.settings';const s=JSON.parse(localStorage.getItem(k)||'{}');s.theme=${JSON.stringify(theme)};localStorage.setItem(k,JSON.stringify(s));localStorage.setItem('lakex-local-notes-v2.sidebar-mode','docked');return true})()`,
         );
         await main.evaluate(
           `(()=>{const e=process.getBuiltinModule('module').createRequire(process.cwd()+'/package.json')('electron');e.BrowserWindow.getAllWindows()[0].setSize(${width},820);return true})()`,

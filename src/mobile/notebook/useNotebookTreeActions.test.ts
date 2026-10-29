@@ -106,16 +106,43 @@ describe("useNotebookTreeActions", () => {
     expect(discardTab).toHaveBeenCalledWith("n1");
   });
 
-  it("历史版本打开、恢复与单条删除走同一状态所有者", async () => {
+  it("设置图标：成功返回落库值（调用方据此刷新图标面板），失败返回 null", async () => {
+    const note = node("g1", "group");
+    render([note]);
+    let next: string | null = "unset";
+    await act(async () => { next = await api.applyIcon(note, "⭐"); });
+    expect(mocks.setNodeIcon).toHaveBeenCalledWith("g1", "⭐");
+    expect(loadTree).toHaveBeenCalledTimes(1);
+    expect(next).toBe("⭐");
+
+    mocks.setNodeIcon.mockRejectedValueOnce(new Error("boom"));
+    let failed: string | null = "unset";
+    await act(async () => { failed = await api.applyIcon(note, null); });
+    expect(failed).toBeNull();
+    expect(mocks.showToast).toHaveBeenCalled();
+  });
+
+  it("历史版本：读快照 / 恢复返回结果 / 单条删除；面板归属不在这里（MOB-02）", async () => {
     const note = node("n1", "note");
     render([note]);
-    await act(async () => { await api.openHistory(note); });
-    expect(api.historyFor).toEqual(note);
+    // 面板"看哪个节点"由 useWorkspaceOverlays 拥有 ⇒ 本 hook 只接节点、不存目标
+    expect(api).not.toHaveProperty("historyFor");
+    expect(api).not.toHaveProperty("openHistory");
+
+    await act(async () => { await api.loadHistory(note); });
+    expect(mocks.listNoteHistory).toHaveBeenCalledWith("n1");
     expect(api.historyList).toHaveLength(1);
 
-    await act(async () => { await api.restoreHistory(1); });
+    let restored = false;
+    await act(async () => { restored = await api.restoreHistory(1); });
     expect(mocks.restoreHistory).toHaveBeenCalledWith(1);
-    expect(api.historyFor).toBeNull();
+    expect(restored).toBe(true);
+
+    // 用户取消确认框 ⇒ false（调用方据此决定不收面板）
+    mocks.confirmMobile.mockResolvedValueOnce(false);
+    let cancelled = true;
+    await act(async () => { cancelled = await api.restoreHistory(1); });
+    expect(cancelled).toBe(false);
 
     await act(async () => { await api.deleteHistory(1); });
     expect(api.historyList).toEqual([]);

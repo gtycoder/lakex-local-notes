@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- 长按桌面图标出现的静态快捷方式（Android App Shortcuts）。
-     「小记」= 直接进入新建小记：走 locallakexnotes://quick-note 深链，App 侧由 @capacitor/app 的
+     「小记」= 直接进入新建小记：走 lakexlocalnotes://quick-note 深链，App 侧由 @capacitor/app 的
      appUrlOpen / getLaunchUrl 接住（见 src/mobile/quickNoteShortcut.ts）。 -->
 <shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
     <shortcut
@@ -12,9 +12,9 @@
         <!-- 深链必须用 intent 的 android:data 属性；嵌套 <data> 会被 ShortcutParser 忽略（快捷方式就会丢深链） -->
         <intent
             android:action="android.intent.action.VIEW"
-            android:targetPackage="com.locallakexnotes.mobile"
-            android:targetClass="com.locallakexnotes.mobile.QuickNoteAlias"
-            android:data="locallakexnotes://quick-note" />
+            android:targetPackage="com.lakexlocalnotes.android"
+            android:targetClass="com.lakexlocalnotes.android.QuickNoteAlias"
+            android:data="lakexlocalnotes://quick-note" />
         <categories android:name="android.shortcut.conversation" />
     </shortcut>
 </shortcuts>

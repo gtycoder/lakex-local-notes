@@ -12,6 +12,7 @@
  * - 附件字段存 filename，走现有 assets/{noteId}/{filename} 资产管线（与文档/小记同一套）。
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
+import type { EditorHostProps } from "../editor/editorHost";
 import { writeLocalStorage } from "../../lib/localStorageSafe";
 import { Dialog, Menu } from "../../components/ui/Overlay";
 import {
@@ -20,7 +21,7 @@ import {
 } from "lucide-react";
 import {
   BITABLE_DOC_KIND, BITABLE_DOC_VERSION, BITABLE_FIELD_TYPE_LABEL,
-  BITABLE_OPTION_COLORS, aiPromptFieldNames, applyViewToRecords, bitableDisplayValue, bitableFieldText, bitableFieldValue, bitableFillBackgroundTokens, bitableFilterRuleCount, buildBitableFillProjection, createRelationPair, defaultRecordValues, duplicateValues, optionColorHex, unpairRelationFields,
+  BITABLE_OPTION_COLORS, aiPromptFieldNames, applyViewToRecords, bitableDisplayValue, bitableFieldText, bitableFieldValue, bitableFillBackgroundTokens, bitableFilterRuleCount, bitableViewNeedsClock, buildBitableFillProjection, createRelationPair, defaultRecordValues, duplicateValues, optionColorHex, unpairRelationFields,
   createBitableField, createBitableRecord, createBitableView, createDefaultBitableTable,
   BITABLE_STAT_LABEL, groupRecords, isAttachmentLikeField, isImplementedViewType,
   BITABLE_PROGRESS_MAX, BITABLE_RATING_MAX, applySortMode, changeSortField, kanbanGroupField, sortModeLabel, sortModeOf, sortModesForField, statDisplayText, statForField, statsForField,
@@ -131,18 +132,10 @@ function isGridShortcut(event: KeyboardEvent, root: HTMLElement | null): boolean
   return root.contains(target) && Boolean(target.closest(".bt-grid-wrap"));
 }
 
-export interface BitableEditorProps {
-  noteId: string;
-  content: string;
-  visible: boolean;
-  readOnly: boolean;
-  onChange: (content: string) => void;
+/** DT-06：共用 prop 词表见 features/editor/editorHost.ts，这里只补宿主专有项。 */
+export interface BitableEditorProps extends EditorHostProps {
   /** 进入只读时保留先前合法但尚未发布的输入；不写回只读正文。 */
   onPreserveDraft?: (content: string) => void;
-  /** 审计 F15：用户一改动立即通知（早于内部 800ms 防抖）。 */
-  onDirty?: () => void;
-  /** 审计 F15：注册按需同步序列化（关闭/保存/退出时现取）。 */
-  onEditorCapture?: (capture: (() => string | null) | null) => void;
   /** 是否显示编辑器外壳（数据表列表 / 视图页签 / 工具条，默认 true）。历史快照预览传 false。 */
   chrome?: boolean;
   /** 文档是否处于「锁定（只读）」态（与 readOnly 区分：readOnly 还包含回收站 / 被他端 purge）。 */
@@ -151,13 +144,9 @@ export interface BitableEditorProps {
   onToggleLock?: () => void;
   /** 从本编辑器导出当前数据表 CSV（由外壳注入导出管线）。 */
   onExportCsv?: () => void;
-  /** 分屏（261008）：本实例是否为**焦点栏**（决定 data-active；全局唯一）。缺省 = visible（旧行为）。 */
-  focused?: boolean;
-  /** 分屏里所在栏位（left/right）；未分屏不传。仅用于布局（data-pane）。 */
-  pane?: "left" | "right" | null;
 }
 
-export function BitableEditor({ noteId, content, visible, readOnly: readOnlyProp, locked = false, focused, pane, onChange, onPreserveDraft, onDirty, onEditorCapture, onToggleLock, onExportCsv, chrome = true }: BitableEditorProps) {
+export function BitableEditor({ noteId, content, visible, readOnly: readOnlyProp, locked = false, focused, pane, onChange, onPreserveDraft, onDirty, onCapture: onEditorCapture, onToggleLock, onExportCsv, chrome = true }: BitableEditorProps) {
   /**
    * 正文无法解析（文件损坏 / 版本不兼容）⇒ **只读兜底 + 横幅**，绝不把它当成"空表"让人继续写。
    * 261019 review：旧行为 parse 失败会静默换默认表，用户一编辑就覆盖原文（历史/S3 之外没有副本）。
@@ -237,14 +226,16 @@ export function BitableEditor({ noteId, content, visible, readOnly: readOnlyProp
   /** 已折叠的分组 key（本机展示态，不进正文）。 */
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [tablesWidth, setTablesWidth] = useState<number>(() => {
-    const v = Number(localStorage.getItem("local-lakex-notes-v3.bitable-tables-width"));
+    const v = Number(localStorage.getItem("lakex-local-notes-v3.bitable-tables-width"));
     return Number.isFinite(v) && v >= 140 && v <= 420 ? v : 190;
   });
-  const [tablesCollapsed, setTablesCollapsed] = useState<boolean>(() => localStorage.getItem("local-lakex-notes-v3.bitable-tables-collapsed") === "1");
+  const [tablesCollapsed, setTablesCollapsed] = useState<boolean>(() => localStorage.getItem("lakex-local-notes-v3.bitable-tables-collapsed") === "1");
 
   const activeTable = doc.tables.find((t) => t.id === doc.activeTableId) ?? doc.tables[0];
   const activeView = activeTable.views.find((v) => v.id === activeTable.activeViewId) ?? activeTable.views[0];
   const groupRule = activeView.groups?.[0];
+  /** CORE-06：视图里是否存在「动态日期」条件（决定 clock 是否参与重算）。 */
+  const needsClock = useMemo(() => bitableViewNeedsClock(activeTable, activeView), [activeTable, activeView]);
   const interactionRef = useRef({ tableId: activeTable.id, viewId: activeView.id, cellSel });
   interactionRef.current = { tableId: activeTable.id, viewId: activeView.id, cellSel };
   /** 关联解析上下文（同一文档的 tables）：表格 / 看板 / 画册 / 日历 / 表单 / 记录详情 / 搜索共用一套。 */
@@ -262,7 +253,11 @@ export function BitableEditor({ noteId, content, visible, readOnly: readOnlyProp
     document.addEventListener("visibilitychange", refresh);
     return () => { window.removeEventListener("focus", refresh); document.removeEventListener("visibilitychange", refresh); };
   }, [visible]);
-  const viewRecords = useMemo(() => applyViewToRecords(activeTable, activeView), [activeTable, activeView, clock]);
+  // CORE-06（重算时机）：只有筛选 / 填色里真的存在动态日期条件时，clock 才参与重算。
+  // 全是静态条件时，切回窗口或跨日把整表重算一遍（5k≈40ms、20k≈100ms）是纯浪费；
+  // 求值本身仍只走 applyViewToRecords / buildBitableFillProjection（不改变单一来源）。
+  const clockKey = needsClock ? clock.getTime() : 0;
+  const viewRecords = useMemo(() => applyViewToRecords(activeTable, activeView), [activeTable, activeView, needsClock, clockKey]);
   const shownRecords = useMemo(() => {
     if (!findQuery.trim()) return viewRecords;
     const q = findQuery.trim().toLowerCase();
@@ -271,7 +266,7 @@ export function BitableEditor({ noteId, content, visible, readOnly: readOnlyProp
   }, [viewRecords, findQuery, activeTable, displayCtx]);
   const fillProjection = useMemo(
     () => buildBitableFillProjection(activeTable, activeView, shownRecords),
-    [activeTable, activeView, shownRecords, clock],
+    [activeTable, activeView, shownRecords, needsClock, clockKey],
   );
   const fillBackgroundImage = useCallback((recordId: string, fieldId: string) => {
     const tokens = bitableFillBackgroundTokens(fillProjection, recordId, fieldId);
@@ -712,8 +707,8 @@ export function BitableEditor({ noteId, content, visible, readOnly: readOnlyProp
     return () => document.removeEventListener("keydown", onKey);
   }, [rowCtx]);
 
-  useEffect(() => { writeLocalStorage("local-lakex-notes-v3.bitable-tables-width", String(tablesWidth)); }, [tablesWidth]);
-  useEffect(() => { writeLocalStorage("local-lakex-notes-v3.bitable-tables-collapsed", tablesCollapsed ? "1" : "0"); }, [tablesCollapsed]);
+  useEffect(() => { writeLocalStorage("lakex-local-notes-v3.bitable-tables-width", String(tablesWidth)); }, [tablesWidth]);
+  useEffect(() => { writeLocalStorage("lakex-local-notes-v3.bitable-tables-collapsed", tablesCollapsed ? "1" : "0"); }, [tablesCollapsed]);
 
   /** 数据表列表宽度拖拽（对齐钉钉：右边缘可左右调；收起后留一条窄栏）。 */
   const startTablesResize = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {

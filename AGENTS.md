@@ -1,4 +1,4 @@
-# LocalLakexNotes Electron — 项目记忆（AGENTS.md）
+# LakexLocalNotes Electron — 项目记忆（AGENTS.md）
 
 > 本项目的**长期记忆**，每次会话自动加载。接手顺序 **README → docs/HANDOFF.md → AGENTS.md**：README 看概览，HANDOFF 看当前状态/待办/坑，本文看长期红线与机制。
 > **本文只写长期内容**：分支名、commit、测试计数、当前焦点等易过期事实一律进 `docs/HANDOFF.md`。
@@ -6,10 +6,10 @@
 
 ## 1. 项目是什么
 
-LocalLakexNotes = **本地优先**笔记应用：Electron 44.3 + React 18.3 + better-sqlite3 13 + 语雀 Lake 内核 + S3 同步（七牛 Kodo，S3 兼容）。**本地是真相，S3 只是镜像。**
+LakexLocalNotes = **本地优先**笔记应用：Electron 44.3 + React 18.3 + better-sqlite3 13 + 语雀 Lake 内核 + S3 同步（七牛 Kodo，S3 兼容）。**本地是真相，S3 只是镜像。**
 
-- 目录 `/Users/admin/file/local-lake/local-lakex-notes`（目录名 local-lakex-notes；数据目录：开发 local-lakex-notes-dev / 正式 local-lakex-notes，见 §5）；主分支 `master`（唯一持续演进的业务分支，历史分支已合入并删除）
-- **身份已标准化为 `local-lakex-notes`（261022）**：productName `LocalLakexNotes`；npm `local-lakex-notes`；appId `com.locallakexnotes.desktop` / `com.locallakexnotes.mobile`；数据目录 `local-lakex-notes-dev` / `local-lakex-notes`；localStorage `local-lakex-notes-v3.*` / `local-lakex-notes-mobile.*`；S3 迁移码 `LLN1.`；私有协议 `locallakexnotes://app`；深链 `locallakexnotes://quick-note`。**保留不动**：`LAKE_*` 开发环境变量、`--lake-*` 设计令牌、`lakex` 内核名与 `.lake` 格式。
+- 目录 `/Users/admin/file/local-lake/lakex-local-notes`（目录名 lakex-local-notes；数据目录：开发 lakex-local-notes-dev / 正式 lakex-local-notes，见 §5）；主分支 `master`（唯一持续演进的业务分支，历史分支已合入并删除）
+- **身份已标准化为 `lakex-local-notes`（261029 全量改名：旧词序 `local-`+`lakex-notes`、旧驼峰与无分隔写法均已全仓清零，grep 三串 = 0）**：productName `LakexLocalNotes`；npm `lakex-local-notes`；**包名按平台区分**：桌面 `com.lakexlocalnotes.desktop`、Android `com.lakexlocalnotes.android`（`capacitor.config.ts appId` + `android/app/build.gradle namespace/applicationId` + Kotlin 包 `com.lakexlocalnotes.android`）、**iOS 预留 `com.lakexlocalnotes.ios`（尚无 ios 工程，建工程时用这个 bundle identifier，不要复用 Android id）**；数据目录 `lakex-local-notes-dev` / `lakex-local-notes`；localStorage `lakex-local-notes-v3.*` / `lakex-local-notes-mobile.*`；S3 迁移码 `LLN1.`（缩写仍是 Lakex Local Notes）；私有协议 `lakexlocalnotes://app`；深链 `lakexlocalnotes://quick-note`；日志 `lakex-local-notes.log`。**保留不动**：`LAKE_*` 开发环境变量、`--lake-*` 设计令牌、`lakex` 内核名与 `.lake` 格式。
 - Node **必须 24**（`$HOME/.nvm/versions/node/v24.18.0/bin`）
 - **目标量级 = 2 万文档 / 20 万附件（v3 定稿，261026）**：性能与同步决策按此验证，**别用"小库正常"下结论**。索引硬上限 = 10 万文档（`S3V3_MAX_LAKE_NOTES`）/ 2 万小记；超过 2 万文档后的下一步是 v3.1 按篇增量索引（当前变更轮整份拉索引约 3MB gzip），**不分片**。
 
@@ -24,8 +24,8 @@ LocalLakexNotes = **本地优先**笔记应用：Electron 44.3 + React 18.3 + be
   ③ **源码字典对照** `lake-editor-main/`（第三方 VSCode 插件）与 `lake-main/`（lakejs 社区版，**序列化方言已分叉、结论不可套用**）。
   **最终仲裁 = vendor bundle `vendor/lakex-doc-react/src/components/lakex/lakex.js` + 运行时实测**（冲突时以实测为准）。
 - **内核已 vendored 并 pin（v1.99.0），不要随意升级**；必须改行为时按 `vendor/lakex-doc-react/LOCAL-CHANGES.md` 最小改。
-- **闭源内核分发（261022 定稿）**：语雀闭源内核产物（`vendor/lakex-doc-react/`、`public/vendor/lakex-doc/`、`public/vendor/lakex/`）**以 vendored 形式随本仓库与构建产物公开分发**；本项目未取得语雀/蚂蚁授权，风险自担（声明见 `NOTICE`，权利人要求即移除）。三个仓库（Gitee private / Gitee public / GitHub public）内容一致，用 `git push publish` 一次推三处。`npm run backup:lakex` 生成仓库外归档、`npm run setup:lakex` 从归档恢复（换机/核对用）。
-- **表格 = 第三方 Univer**（`@univerjs/*` 全部精确锁版本）：动之前先读 `src/features/usheet/usheetKernelContract.ts`（每处触点写了失效表现）；**升级只走 `docs/USHEET-UPGRADE.md` 的 playbook**（静态护栏 `univerContract.test.ts` + 运行时探针 `scripts/usheet-kernel-probes.mjs`），一次全升、**不要 npm update**。对 Univer 只有**一处**补丁 `patches/@univerjs+ui+1.0.3.patch`（floating 容器留 `document.body` + `data-lake-owner`，应用侧按可见标签收起；**不要挂回实例宿主**——261022 排序对话框死循环）；**除它之外不要再给依赖打 patch**。
+- **闭源内核分发（261022 定稿）**：语雀闭源内核产物（`vendor/lakex-doc-react/`、`public/vendor/lakex-doc/`、`public/vendor/lakex/`）**以 vendored 形式随本仓库与构建产物公开分发**；本项目未取得语雀/蚂蚁授权，风险自担（声明见 `NOTICE`，权利人要求即移除）。**两处托管**：Gitee `git@gitee.com:gtycoder/lakex-local-notes.git`（日常拉取源，origin）＋ GitHub `https://github.com/gtycoder/lakex-local-notes.git`（**发版主仓 / Actions 所在**）。**remote 配置不入库** ⇒ 每个 clone 跑一次 `npm run setup:remotes`（`scripts/setup-remotes.mjs`，地址写死在脚本里）恢复双推；之后 `git push origin <branch>` 一次推两边，**GitHub 只在推 tag 时打包**（普通 push 不构建）。`npm run backup:lakex` 生成仓库外归档、`npm run setup:lakex` 从归档恢复（换机/核对用）。
+- **表格 = 第三方 Univer**（`@univerjs/*` 全部精确锁版本）：动之前先读 `src/features/usheet/usheetKernelContract.ts`（每处触点写了失效表现）；**升级只走 `docs/USHEET-UPGRADE.md` 的 playbook**（静态护栏 `univerContract.test.ts` + 运行时探针 `scripts/usheet-kernel-probes.mjs`），一次全升、**不要 npm update**。对 Univer 的补丁只有 `patches/@univerjs+ui+1.0.3.patch`（floating 容器留 `document.body` + `data-lake-owner`，应用侧按可见标签收起；**不要挂回实例宿主**——261022 排序对话框死循环）。**补丁面 = 3 处 / 两个目录（261028 对齐现状，别再写「只有一处」）**：`patches/@univerjs+ui+1.0.3.patch`（上一条）、`patches/@plait+draw+0.93.4.patch`（画板蓝点快创：提交权交给宿主、`hoverPreview:false` 时只关预览视觉，22.8KB）、`vendor/lakex-doc-react/patches/@xiangfa+mindmap+0.7.1.patch`（思维导图 `disableAutoFit`：双击编辑时不再自动重适配视图）。三处都打在依赖构建产物上，重建 = `PATH=/usr/bin:$PATH npx patch-package --patch-dir patches`（vendor 侧换成 `--patch-dir vendor/lakex-doc-react/patches`；`postinstall` 已是这条），打完必须确认补丁语义真的生效（依赖小版本变化会出现「patch 打上了但没命中」）。**除这 3 处外不要再给依赖打 patch**（新增须先过 §3#17 并在此登记作用/重建/升级如何验）。
 - **多维表 Grid / 关联选择器的行窗口**：动视口或屏外交互前读 `docs/BITABLE-VIEWPORT.md` —— 记录全集不裁剪，主表/选择器共用一套有界行窗口；缓存不留滚过的全格；编辑/IME/选区/粘贴/统计/填色/搜索必须按完整模型验证，**只读与保存/历史协议不因性能改动放宽**。
 - **文档分工（防漂移）**：`README` 概览（不维护进度/计数）· `HANDOFF` 唯一交接 · `AGENTS` 长期红线。**已完成的研究/计划/spike/审计直接删**（git 可查），不建 archive 目录。
 
@@ -42,13 +42,13 @@ LocalLakexNotes = **本地优先**笔记应用：Electron 44.3 + React 18.3 + be
 7. **不为旧数据写兼容/迁移**：判断标准 = **"这些数据能否删了重建？"能，就绝不写兼容**。
 8. KISS/DRY；不引入未经验证的抽象、不加无谓依赖（见 17）。
 9. **多表写必须事务**（`db.transaction`）。
-11. **资产存在性 = 远端声明差集（v3：每篇文档一份不可变声明）**：`meta/assets/{noteId}/{declHash}.json` 是「该文档云端在用集」的权威快照（先对象后声明），索引条目的 `assetsHash` 指向它；**禁止逐对象 HEAD/GET、禁止"本机记过=已上传"的持久缓存**。上传只对声明里缺失的资产 PUT，声明**永远全量**。下载侧同样走差集：按本地实扫 size+sha256 跳过；`active→trash` 仅在**实读正文 sha256 相等**时复用本地。两个契约外前提：① 无带外删除；② 资产按 filename 内容寻址（`buildAssetFilename` 保证同名同内容）。旧清单的资产差集工具（`core/syncAssets.ts`）仍保留给恢复/预览补拉。
+11. **资产存在性 = 远端声明差集（v3：每篇文档一份不可变声明）**：`meta/assets/{noteId}/{declHash}.json` 是「该文档云端在用集」的权威快照（先对象后声明），索引条目的 `assetsHash` 指向它；**禁止逐对象 HEAD/GET、禁止"本机记过=已上传"的持久缓存**。上传只对声明里缺失的资产 PUT，声明**永远全量**。下载侧同样走差集：按本地实扫 size+sha256 跳过；`active→trash` 仅在**实读正文 sha256 相等**时复用本地。两个契约外前提：① 无带外删除；② 资产按 filename 内容寻址（`buildAssetFilename` 保证同名同内容）。旧清单的资产差集工具（`core/syncAssets.ts`）已于 261028 随 manifest 时代死代码删除；恢复/预览补拉走 `src/core/s3v3AssetBackfill.ts`。
 12. **兜底"未分类"笔记本只惰性创建**（真正回落到兜底父时才建；不在下载或冲突探测里提前解析）。
 13. **S3 并发上限 = 12（261026 用户批准，8 → 12；实测首同步约 1.5x）**：v3 传输池默认 `DEFAULT_TRANSFER_CONCURRENCY=12`（引擎可配 `transferConcurrency`，硬夹 32）、`deleteMany` 并发 12。**不得**为吞吐调到 16+（provider 限流/移动端内存）。
 14. **桌面 UI = 自有设计系统**（规格在 `docs/DESIGN.md` + `.impeccable/design.json`）：
     - **令牌是唯一来源**：颜色/圆角/间距/字号/动效只用 `--lake-*`，定义在 `src/styles/themes/*`；**颜色字面量只允许出现在 themes/**。字号一律 `--lake-font-size-*`（离档值向上取档；要整体抬一档就改 `themes/base.css` 的令牌值）。
     - **同一个交互语义，全仓只能有一套视觉与几何**：改前先 grep 复用；一旦又写一套（新类名/近似几何/另一套间距）**先合并到单一来源**。权威单一来源：行/菜单/图标钮/输入/页签/省略 = `kit.css` 的 `ln-*`（`.ln-row.is-selected` · `.ln-menu__item` · `.ln-iconbtn` · `.ln-tabs`（横向页签唯一）· `.ln-input__field` · `.ln-ellipsis` · `.ln-imgfill` · `.ln-tip`）；浮层表面 = `components/ui/Overlay.tsx` 的 `.ln-dialog/.ln-menu/.ln-popover`（**不要手写 createPortal**）；浮层定位 = `usePopoverPosition` + `topMenuPosition.placeVertical`（**禁止估算高度自己夹**）；分栏分隔条 = `components/ui/SplitHandle.tsx`；附件/图片展示 = `AttachmentChipList` + `FileKindIcon`/`fileKindOf()`；表格与多维表「添加」= `.bt-add-round`；Markdown = `components/ui/markdown/MarkdownView.tsx`；AI 正文 = `features/ai/AiMessageBody.tsx`、AI 结果落库 = `selectionToolbar/aiResultOps.ts`、AI 附件解析 = `electron/ai/aiContentResolver.ts`（跨 IPC 只传 `{noteId,filename}` 引用，字节只在主进程）、AI 消息块模型 = `core/aiProviders.ts`；应用内选色 = `core/colorPalette.ts`（最近使用按入口分桶；Lake 编辑器走 `LakeColorBoard` 适配器）。**判定数据只认** `scripts/css-audit/audit-lookalike.mjs` 与 `audit-primitives.mjs` + 实机几何。**两条已结案、别再立项**：面包屑链接 `.protyle-breadcrumb__item` 与小记列表行的主区按钮 `.quick-note-index-main` 都是**行内可点击文本条目**，**不并入** `.ln-row`/`.ln-input`。
-    - **层序即优先级**：`@layer vendor, legacy, tokens, kit, shell, feature, overlay, a11y`；新样式写进对应层即可压过旧样式，**不靠特异性/!important 取胜**。**`vendor` 层由构建自动填充**（`scripts/vendorCssLayer.ts` 把 JS import 的第三方 CSS 包进该层，排最底），**不要手写规则进 vendor**。`!important` **桌面守 11 条允许清单**（`scripts/ui-metrics.mjs` 的 `IMPORTANT_ALLOWLIST`，逐条写明"压谁"；清单外新增直接失败、只许降；移动端 19 条棘轮）。**不是"一点不能用"**（用户 261016 定）：唯一例外仍是"要压内核/第三方写进 element 的 inline style"或"要压 legacy 的 `!important`"，且必须写理由。
+    - **层序即优先级**：`@layer vendor, legacy, tokens, kit, shell, feature, overlay, a11y`；新样式写进对应层即可压过旧样式，**不靠特异性/!important 取胜**。**`vendor` 层由构建自动填充**（`scripts/vendorCssLayer.ts` 把 JS import 的第三方 CSS 包进该层，排最底），**不要手写规则进 vendor**。`!important` **桌面守 10 条允许清单**（`scripts/ui-metrics.mjs` 的 `IMPORTANT_ALLOWLIST`，逐条写明"压谁"；清单外新增直接失败、只许降；移动端 19 条棘轮）。**不是"一点不能用"**（用户 261016 定）：唯一例外仍是"要压内核/第三方写进 element 的 inline style"或"要压 legacy 的 `!important`"，且必须写理由。
     - **改落点**：找到根位置**就地改**，禁止一层层套覆盖；组件里不写 `style={{}}`；不要用 emoji/系统字形当图标（图标只有 lucide，描边 1.75）。
     - **两条护栏**（改样式必跑）：`src/styles/cssLayers.test.ts`（逐文件声明数/重复组只许降）+ `node scripts/ui-metrics.mjs`（b3 引用 0 / 非主题颜色 0 / 字号字面量 0 / !important 逐条对允许清单 / 文字色误用裸 accent 0 / 跨文件重复组只许降 / 入口 b3 import 0）。
     - **文字色阶口径**：`--lake-text-*` 按「实际会铺到的最浅/最深表面」标定（text-3 浅/暖 `#5f6874`、深 `#9398a1`；text-4 是**有意的 3:1 档，不要提亮**）。**文字一律用 `--lake-accent-text`**；`--lake-accent` 只做图形/边框/焦点环/底纹。
@@ -64,7 +64,7 @@ LocalLakexNotes = **本地优先**笔记应用：Electron 44.3 + React 18.3 + be
 19. **多维表条件求值单一来源**：视图筛选 / 关联选择器临时筛选 / 条件填色统一用 `BitableFilterRule/Node`、`filterOperatorsFor()`、`evaluateFilterNode()` 与共享编辑器；字段取值走 `bitableFieldValue()`；**禁止**为某个视图另造操作符/空值语义/条件 UI；填色的 `cell/row/column` alpha 混色与 `rowSide` 语义不得改。
 20. **云同步只有一套状态判据（`src/core/cloudState.ts`，两端共用）**：`cloudStateOf()` → `unconfigured|offline|manual|auto`；`canTouchNetwork()` 是「能不能出网」的**唯一**判据，`isCloudActive()` 是 UI（状态灯/禁用态）判据。**关闭云同步 = 完全没配置**（任何路径不出网）；离线文案统一 `cloudStateHint()`。恢复**不等网络**（立刻生效 + 后台补拉 + 明确提示）。**「启用云同步」的默认值 = 是否已配置 S3（261022 用户定稿）**：没配置时默认关（全新安装不再显示为开）、已配置的旧库默认开、显式存过的值优先——桌面 `settingsRepository.getSyncSettings()`（`hasS3Settings()`，只判行存在）与移动 `bridge/context.readSyncSettings()`（`S3_STORAGE_KEY` 是否存过）同口径；判据仍只有 `cloudState` 一套。护栏：`electron/settingsRepository.test.ts`、`electron/syncDualAB.test.ts`、`src/mobile/bridgeCloudState.test.ts`。
 21. **门禁分层（通用规则，两端各自对应）**：
-    ① **每次改动都跑**（≈20s，**这就是"门禁"的正式含义**）：`npx tsc --noEmit` + 相关 `vitest`（全库 ≈10–20s）+ `git diff --check`；改样式再加 `ui-metrics` 与对应侧层围栏。
+    ① **每次改动都跑**（≈24s，**这就是"门禁"的正式含义**）：`npx tsc --noEmit` + 相关 `vitest`（全库 ≈24s，含 perf 门禁）+ `git diff --check`；改样式再加 `ui-metrics` 与对应侧层围栏。
     ② **只有动了视觉/设备那一层才跑样式/设备装置，且只跑受影响的 1~2 个态/屏**：桌面 `check-stylesnap.mjs --states "…"`；移动 `check-mobile-snap.mjs --states home-quicknotes` + 走查传屏名。**全量**（桌面 42 态 / 移动 6 态 + 23 屏）只在换夹具、改装置、发版前跑。
     ③ **动了外壳几何/构成，或重灌夹具 ⇒ 必须先重烤一次基线**（`--from <warm>.json --write-baseline`），否则下次全量必红；这是一次性成本。
     顺序恒定：**先本地 → 再定点 → 最后全量**。
@@ -84,16 +84,16 @@ LocalLakexNotes = **本地优先**笔记应用：Electron 44.3 + React 18.3 + be
 ## 4. 关键机制速览
 
 - **S3 协议 v3（261026 转正）**：云端只有 `meta/pointer.json`（约 200B）+ 两个不可变索引（`meta/index/{hash}.json` / `quick-notes/meta/index/{hash}.json`）+ 每篇文档资产声明 + 内容寻址正文/附件；**无墓碑、无 manifest 链、无全局资产清单**。发布 = 写索引 → 取锁 → 读回 pointer → 写 pointer（无 CAS，靠锁 + 读回 + 重试）；零变更轮只读 pointer。旧 `manifests/latest.json` **不读、不迁移、不删除**（孤儿）。核心纯逻辑 `src/core/s3v3*.ts`，适配器/远端 `electron/s3v3/*`、`src/mobile/v3/*`。
-- **壳层双 origin**：打包版页面 = 私有协议 `locallakexnotes://app`（`appOrigin.ts` + `appProtocol.ts` 服务 `dist/`），dev 走 vite。**判页面来源禁止比 `URL.origin`**（非特殊 scheme 在 Node 里恒为 `"null"`）⇒ 比 scheme+host（`isAppOriginUrl`）；资产服务白名单/ACAO 要同时放行 `APP_ORIGIN`。**主进程 external 从 `package.json.dependencies` 派生**（+ `@smithy/`），别退回首写清单。
+- **壳层双 origin**：打包版页面 = 私有协议 `lakexlocalnotes://app`（`appOrigin.ts` + `appProtocol.ts` 服务 `dist/`），dev 走 vite。**判页面来源禁止比 `URL.origin`**（非特殊 scheme 在 Node 里恒为 `"null"`）⇒ 比 scheme+host（`isAppOriginUrl`）；资产服务白名单/ACAO 要同时放行 `APP_ORIGIN`。**主进程 external 从 `package.json.dependencies` 派生**（+ `@smithy/`），别退回首写清单。
 - **冲突判定 = 三方合并**（`src/core/s3v3Decision.ts` + `s3v3Merge.ts`，两端共用）：base×local×remote，顺序 = 恢复标记 → 本地删除意图 → 缺席/新增 → contentHash 变更；远端已发布 ⇒ 远端胜，本地被覆盖版本先强制 `createHistorySnapshot`。设备基线落 `sync-v3/baseline.json.gz`（移动 `sync_v3_state`），**绝不上传云端**。
 - `folders[]` 必填；手动同步只发触发窗口、自动同步广播所有窗口；同步/GC/深度清理共用 `enqueueMaintenance` 串行队列（进程内唯一必需互斥）。
 - **v3 资产传输**：按每文档 `declaration` 差集并发 PUT/GET（`runPool`，并发 12）；上传失败的笔记本轮不进新索引（回退远端旧条目，下轮重试）。
 - **旧 manifest 链已废弃**：v3 索引按 commit 内容寻址、无链；深度清理 = 列举对象与当前 pointer/索引/声明对比，删孤儿（`deepCleanup`）。
 - 小记独立前缀 `quick-notes/` + 独立库 `quick-notes/metadata.sqlite3`。
 - **编辑器「本机视图」= 设备本地**（用户定稿）：当前工作表/缩放/选区/滚动/折叠/画板视口 **不进正文、不标脏、不进 S3**；表格列宽行高隐藏冻结、多维表视图配置仍属文档数据。`onDirty` 只在正文真变时触发。
-- **编辑器「打开 = 只读」（261023）**：打开文档**不得**因序列化/规范化差异写盘、标脏或触发同步。usheet 三件套（缺一即回归）：`core/usheetDoc.ts` 的 `normalizeUsheetWorkbook`（写入/比较的规范形式）、`UniverSheetEditor` 首次 flush 只对齐基线（`baselineSettledRef` + 内容输入判据）、capture 在**无真实改动或改回原样**时返回磁盘原文。护栏 `usheetOpenReadOnly.test.ts`。**移动端 usheet 保存路径尚未接同一 helper**。
+- **编辑器「打开 = 只读」（261023）**：打开文档**不得**因序列化/规范化差异写盘、标脏或触发同步。usheet 三件套（缺一即回归）：`core/usheetDoc.ts` 的 `normalizeUsheetWorkbook`（写入/比较的规范形式）、`UniverSheetEditor` 首次 flush 只对齐基线（`baselineSettledRef` + 内容输入判据）、capture 在**无真实改动或改回原样**时返回磁盘原文。护栏 `usheetOpenReadOnly.test.ts`。**移动端 usheet 保存路径已接同一 helper（261028；capture/基线都先 normalize）**。
 - **手动删数据（正文文件缺失）= 显式一次、可处置、不重复打扰（261023）**：`store.readNote` 遇 ENOENT 返回 `bodyMissing`（**不抛错**）⇒ 启动跳过 + 打开时只读专用面板（历史恢复 / 重新读取 / 关闭标签），每篇每会话只提示一次；同步**绝不上传空正文**（云端有副本 → 拉回恢复并给 warning；没有 → `local_body_missing` 跳过）；删除仍走目录右键（单一来源）；**资源页「缺正文」页签**按「可云恢复 / 仅历史 / 无备份」分组，行内可 从云端拉回 / 恢复最新历史 / 彻底删除（先移入回收站再 purge 清索引/对象）。护栏 `store.test.ts` / `electron/s3v3/syncEngine.test.ts` / `desktopDerivedState.test.ts`。**小记没有历史快照**：缺正文小记只有两条路——云端镜像（按 contentHash 校验）或搜索索引全文缓存（有损，重建纯文本后标 local）；判据 `missingQuickNoteRecovery`，入口 = 资源页「缺小记」页签（`quickNotes.purgeMissingQuickNote` 直接写含 purged_at 墓碑，不读正文）。**不要**退回"每次打开都弹 ENOENT"。
-- **多维表导航 = 设备本地**：`activeTableId`/`activeViewId` 不写正文（序列化恒写第一张表/第一个视图），只写 `localStorage`（`local-lakex-notes-v3.bitable-nav.<noteId>`）。**不要**把导航写回正文（纯导航会触发一次 S3 上传）。
+- **多维表导航 = 设备本地**：`activeTableId`/`activeViewId` 不写正文（序列化恒写第一张表/第一个视图），只写 `localStorage`（`lakex-local-notes-v3.bitable-nav.<noteId>`）。**不要**把导航写回正文（纯导航会触发一次 S3 上传）。
 - **互斥域**（判据单一来源 `src/core/maintenancePolicy.ts`；移动端 `mobile/sync/maintenanceLocks.ts`）：**写域**（本地写 + 同步引擎的 DB 片段）／**维护域**（syncNow / GC / 资产补拉）／**高优先域**（用户当场发起、不得排在整轮同步后面的 `syncQuickNote`，判据 `PRIORITY_OPS`）。三条不变量：**I1** 网络往返不得持有写域；**I2** 跨网络窗口的「读 → 标记/落地」必须靠"未变才标 / 未变才应用"守卫（内容 hash），不靠全局互斥；**I3** 同域串行、**禁止同域嵌套**（`KeyedAsyncQueue` 无重入 ⇒ 自锁）。护栏：`electron/maintenanceQueueScope.test.ts`、`src/mobile/maintenancePolicyCoverage.test.ts`。
 - **同步要"看得见"**：移动端把「上次同步（时间/结果/失败原因）」落盘并**常驻设置页**（`mobile/sync/syncStatusStore.ts`，设备本地；**写入点唯一** = `bridge.syncNow()`；"离线没尝试"不写）；桌面有 `SyncStatusPopover`。
 - **S3 配置迁移（261017）**：主路径 = 桌面导出 `.json` 文件 → 手机选文件导入；内层统一走 `src/core/s3ConfigTransfer.ts` 的 `LLN1.` 迁移码（AES-GCM）。桌面**在主进程**弹框/封装/解码（渲染层不接触明文 Secret，不破 W-14），移动端导入强制虚拟托管（D2）；迁移码仅作备用。**固定种子只是防误读封装，不是安全边界**——文件/迁移码别外传，怀疑泄露就轮换 S3 密钥。
@@ -121,10 +121,10 @@ LocalLakexNotes = **本地优先**笔记应用：Electron 44.3 + React 18.3 + be
 
 | 项 | 路径 |
 | --- | --- |
-| 开发数据 | `~/Library/Application Support/local-lakex-notes-dev`（可重建） |
-| 正式数据 | `~/Library/Application Support/local-lakex-notes`（**禁止触碰**） |
+| 开发数据 | `~/Library/Application Support/lakex-local-notes-dev`（可重建） |
+| 正式数据 | `~/Library/Application Support/lakex-local-notes`（**禁止触碰**） |
 | B 端开发数据 | `$TMPDIR/lake-device-b` |
-| 日志 | 上面两个目录下的 `logs/local-lakex-notes.log` |
+| 日志 | 上面两个目录下的 `logs/lakex-local-notes.log` |
 | 只读检查 DB | `workspace-default/metadata.sqlite3`（小记 `workspace-default/quick-notes/metadata.sqlite3`） |
 
 - **移动端 S3 密钥不落 WebView 存储**：走 Android Keystore（`android/**/SecureStorePlugin.kt` + `src/mobile/native/keystoreSecretStore.ts`），密文在应用私有 SharedPreferences；`localStorageSecretStore` 只是 web/vitest 后端与历史值迁移来源。
@@ -133,9 +133,10 @@ LocalLakexNotes = **本地优先**笔记应用：Electron 44.3 + React 18.3 + be
 
 ```bash
 export PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH"
-cd /Users/admin/file/local-lake/local-lakex-notes
+cd /Users/admin/file/local-lake/lakex-local-notes
+npm run setup:remotes                                           # 首次/新 clone：配 Gitee+GitHub 双推（remote 不入库）
 npm run setup:lakex                                             # 首次/新 clone：从私有归档恢复闭源内核（缺归档会报错并给指引）
-npx tsc --noEmit && npx vitest run && git diff --check          # 日常门禁（≈20s）
+npx tsc --noEmit && npx vitest run && git diff --check          # 日常门禁（≈24s）
 npx vite build && npx vite build -c vite.mobile.config.ts       # 两条构建
 node scripts/ui-metrics.mjs && npm run check:core && npm run check:mobileui && npm run check:bundle
 # 设备/视觉门禁只在动了那一层时跑，且优先只跑受影响态/屏（口径见 §3#21）
@@ -163,7 +164,7 @@ node scripts/s3-ls.mjs --count | --note <id> | --prefix <prefix>   # 云端对�
 8. **`ObjectStore.test()` 必须用 ListObjectsV2**（七牛 HeadBucket 对存在的桶也 404）。正确配置：Endpoint `https://s3.cn-north-1.qiniucs.com` / Region `cn-north-1` / Bucket `local-lake-hebei` / `forcePathStyle=false`。
 9. 主进程 external **从 dependencies 派生**（别硬编码）；better-sqlite3 是 Electron ABI（系统 Node 跑不了，bench 用 python3 sqlite3）；vitest 下 electron-log 要静音。
 10. 打包：`electron-builder` 弱网会整批失败 ⇒ 换 `ELECTRON_MIRROR=https://registry.npmmirror.com/-/binary/electron/`；打包版默认写**正式数据目录** ⇒ 自测必须覆盖 `LAKE_USER_DATA`。
-11. e2e 里"非 http(s) 页面"不要写死 `file:`（打包版是 `locallakexnotes://app`）。
+11. e2e 里"非 http(s) 页面"不要写死 `file:`（打包版是 `lakexlocalnotes://app`）。
 12. `KeyedAsyncQueue` **无重入** ⇒ 同域嵌套会永久挂起（按 I3 自查）。
 
 ### 移动端

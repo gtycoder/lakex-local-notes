@@ -1,5 +1,5 @@
-import { assetKey, declarationKey, lakeBodyKey, lakePurgePrefixes, quickNoteAssetKey, quickNoteBodyKey, quickNotePurgePrefixes } from "./s3v3Keys.js";
-import type { LakeIndex, QuickNotesIndex } from "./s3v3Index.js";
+import { assetKey, declarationKey, lakeBodyKey, lakePurgePrefixes, quickNoteAssetKey, quickNoteBodyKey, quickNotePurgePrefixes } from "./s3v3/protocol/s3v3Keys.js";
+import type { LakeIndex, QuickNotesIndex } from "./s3v3/protocol/s3v3Index.js";
 
 /** 待删键规划（纯逻辑）：按旧/新世界差集生成；执行时仍须过 §5.2 门禁。 */
 

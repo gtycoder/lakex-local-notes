@@ -7,7 +7,7 @@ import type { NoteSummary, S3Settings, SyncPendingSummary, SyncStatus, TreeNode,
 import type { DraftJournalEntry } from "../lib/types";
 import { chooseColdStartNoteId } from "../core/coldStartNote.js";
 import { loadSettings } from "../lib/settings";
-import { clearTabSession, readTabSession, sanitizeTabSession } from "../desktop/tabSession";
+import { clearTabSession, readTabSession, restoreTabSessionForLimit, sanitizeTabSession } from "../desktop/tabSession";
 
 export interface UseBootstrapOptions {
   setWorkspace: Dispatch<SetStateAction<WorkspaceSnapshot | null>>;
@@ -22,6 +22,11 @@ export interface UseBootstrapOptions {
   setTreeNodes: Dispatch<SetStateAction<TreeNode[]>>;
   setError: Dispatch<SetStateAction<string | null>>;
   openNote: (id: string) => Promise<boolean>;
+  /**
+   * 批量恢复上次标签（DT-15，= useTabLifecycle.restoreTabs）：有界并发读 + 一次 setOpenTabs。
+   * 缺省（未注入）时退回逐篇 openNote 的旧行为。
+   */
+  restoreTabs?: (ids: string[], activeId: string | null) => Promise<number>;
   /** 一次性提示（缺正文文档跳过等；不阻塞启动）。 */
   showNotice: (text: string) => void;
 }
@@ -29,11 +34,12 @@ export interface UseBootstrapOptions {
 /** 启动 bootstrap（从 App.tsx 抽出，逐字搬移）：初始化工作区/同步/S3/草稿/树 → 打开 lastOpenedNoteId（含 fallback）。 */
 export function useBootstrap({
   setWorkspace, setNotes, setSync, setCloudEnabled, setS3Settings, setCloudConfigured,
-  setConflictSnapshotNotice, setPendingSummary, setDraftEntries, setTreeNodes, setError, openNote, showNotice,
+  setConflictSnapshotNotice, setPendingSummary, setDraftEntries, setTreeNodes, setError, openNote, restoreTabs, showNotice,
 }: UseBootstrapOptions) {
   useEffect(() => {
     // 标签会话必须在任何异步/渲染落盘之前同步读走：App 的会话写入 effect 可能在恢复完成前先把 [] 写回去。
-    const clearOnExit = loadSettings().clearTabsOnExit === true;
+    const settings = loadSettings();
+    const clearOnExit = settings.clearTabsOnExit === true;
     const savedSession = clearOnExit ? null : readTabSession();
     if (clearOnExit) clearTabSession();
     // 启动速度优先：不加人为最短展示；桌面 boot 窗口负责遮住真实加载时间。
@@ -54,16 +60,25 @@ export function useBootstrap({
         void Promise.all(orphaned.map((entry) => native.deleteDraftJournal(entry.noteId).catch((error) => reportNativeActionError("删除孤儿草稿", error))));
       }).catch((error) => reportNativeActionError("启动读取", error));
       setTreeNodes(await native.listTreeNodes());
-      // 恢复上次打开的标签（261027）：先过滤已删除/已 purge 的文档，再按顺序打开；
+      // 恢复上次打开的标签（261027）：先过滤已删除/已 purge 的文档，再按 maxOpenTabs 截断（DT-15：
+      // 会话按打开顺序存，只恢复最近 N 个——先全开再逐次淘汰会静默丢标签且线性拉长首屏）；
       // clearTabsOnExit=true 时上面已清空会话，走原有冷启动落点。
       const liveIds = new Set(snapshot.notes.map((note) => note.id));
       const restored = savedSession ? sanitizeTabSession(savedSession, liveIds) : null;
-      if (restored) {
-        let opened = 0;
-        for (const id of restored.ids) { if (await openNote(id)) opened += 1; }
-        if (opened > 0) {
-          if (restored.activeId) await openNote(restored.activeId);
-          return;
+      const planned = restored ? restoreTabSessionForLimit(restored, settings.maxOpenTabs) : null;
+      if (planned) {
+        if (restoreTabs) {
+          // 一次 setOpenTabs 恢复整批（有界并发读正文）。
+          const opened = await restoreTabs(planned.ids, planned.activeId);
+          if (opened > 0) return;
+        } else {
+          // 兼容未注入 restoreTabs 的调用方：逐篇打开（旧行为）。
+          let opened = 0;
+          for (const id of planned.ids) { if (await openNote(id)) opened += 1; }
+          if (opened > 0) {
+            if (planned.activeId) await openNote(planned.activeId);
+            return;
+          }
         }
       }
       // 冷启动落点：Lake 文档优先、其次多维表（用户 261022 定）——别把首开成本高的表格/画板钉在启动交互上。

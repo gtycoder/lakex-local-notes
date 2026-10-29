@@ -28,16 +28,16 @@ describe("native SQLite database adapter", () => {
   });
 
   it("opens a connection and enables WAL through query", async () => {
-    await NativeSqliteDb.open("local-lakex-notes-mobile");
+    await NativeSqliteDb.open("lakex-local-notes-mobile");
 
     expect(plugin.createConnection).toHaveBeenCalledWith({
-      database: "local-lakex-notes-mobile",
+      database: "lakex-local-notes-mobile",
       encrypted: false,
       mode: "no-encryption",
       version: 1,
       readonly: false,
     });
-    expect(plugin.open).toHaveBeenCalledWith({ database: "local-lakex-notes-mobile", readonly: false });
+    expect(plugin.open).toHaveBeenCalledWith({ database: "lakex-local-notes-mobile", readonly: false });
     expect(plugin.query).toHaveBeenCalledWith(
       expect.objectContaining({ statement: "PRAGMA journal_mode=WAL" }),
     );
@@ -45,18 +45,18 @@ describe("native SQLite database adapter", () => {
 
   it("reuses an existing connection without closing and recreating it", async () => {
     plugin.createConnection.mockRejectedValueOnce(
-      new Error("Connection local-lakex-notes-mobile already exists"),
+      new Error("Connection lakex-local-notes-mobile already exists"),
     );
 
-    await NativeSqliteDb.open("local-lakex-notes-mobile");
+    await NativeSqliteDb.open("lakex-local-notes-mobile");
 
     expect(plugin.createConnection).toHaveBeenCalledTimes(1);
     expect(plugin.closeConnection).not.toHaveBeenCalled();
-    expect(plugin.open).toHaveBeenCalledWith({ database: "local-lakex-notes-mobile", readonly: false });
+    expect(plugin.open).toHaveBeenCalledWith({ database: "lakex-local-notes-mobile", readonly: false });
   });
 
   it("supports statement reads, writes, and row normalization", async () => {
-    const db = await NativeSqliteDb.open("local-lakex-notes-mobile");
+    const db = await NativeSqliteDb.open("lakex-local-notes-mobile");
     plugin.query.mockResolvedValue({ values: [{ id: 1, title: "Lake" }] });
     plugin.run.mockResolvedValue({ changes: { changes: 3, lastId: 9 } });
 
@@ -76,7 +76,7 @@ describe("native SQLite database adapter", () => {
   });
 
   it("commits successful transactions and rolls back failures", async () => {
-    const db = await NativeSqliteDb.open("local-lakex-notes-mobile");
+    const db = await NativeSqliteDb.open("lakex-local-notes-mobile");
     const order: string[] = [];
     plugin.beginTransaction.mockImplementation(async () => {
       order.push("begin");
@@ -102,7 +102,7 @@ describe("native SQLite database adapter", () => {
   });
 
   it("routes PRAGMA through query and DDL through execute", async () => {
-    const db = await NativeSqliteDb.open("local-lakex-notes-mobile");
+    const db = await NativeSqliteDb.open("lakex-local-notes-mobile");
 
     await db.exec("PRAGMA foreign_keys=ON");
     await db.exec("CREATE TABLE notes (id TEXT PRIMARY KEY)");
@@ -120,7 +120,7 @@ describe("native SQLite database adapter", () => {
 
   it("事务与并发的 executeSet/语句串行化（真机 CommitTransaction 报错回归）", async () => {
     const events: string[] = [];
-    const db = await NativeSqliteDb.open("local-lakex-notes-mobile");
+    const db = await NativeSqliteDb.open("lakex-local-notes-mobile");
     plugin.beginTransaction.mockImplementation(async () => { events.push("begin"); return { changes: { changes: 0 } }; });
     plugin.commitTransaction.mockImplementation(async () => { events.push("commit"); return { changes: { changes: 0 } }; });
     plugin.executeSet.mockImplementation(async () => { events.push("executeSet"); return { changes: { changes: 0 } }; });
@@ -138,7 +138,7 @@ describe("native SQLite database adapter", () => {
   });
 
   it("事务内的 executeSet 不再自带事务（transaction:false）", async () => {
-    const db = await NativeSqliteDb.open("local-lakex-notes-mobile");
+    const db = await NativeSqliteDb.open("lakex-local-notes-mobile");
     await db.transaction(async () => {
       await db.executeSet([{ statement: "INSERT INTO t VALUES (1)", values: [] }]);
     });
@@ -148,7 +148,7 @@ describe("native SQLite database adapter", () => {
   });
 
   it("computes database size from SQLite page pragmas", async () => {
-    const db = await NativeSqliteDb.open("local-lakex-notes-mobile");
+    const db = await NativeSqliteDb.open("lakex-local-notes-mobile");
     plugin.query.mockImplementation(async ({ statement }) => ({
       values:
         statement === "PRAGMA page_count"

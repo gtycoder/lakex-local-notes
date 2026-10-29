@@ -2,7 +2,7 @@ import { connect } from './cdpclient.mjs';
 import { execSync } from 'node:child_process';
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
-const require = createRequire('/Users/admin/file/local-lake/local-lakex-notes/package.json');
+const require = createRequire('/Users/admin/file/local-lake/lakex-local-notes/package.json');
 const Database = require('better-sqlite3');
 const ADB = '/opt/homebrew/share/android-commandlinetools/platform-tools/adb';
 const ENDS = [
@@ -23,8 +23,8 @@ async function syncAll(creator) { for (const id of [creator].concat(IDS.filter(f
 async function tree(id) { return ev(id, 'window.lakeNative.getHomeSnapshot().then(function(s){return s.treeNodes;}).then(function(t){return t.map(function(n){return {id:n.id,title:n.title,type:n.nodeType,parentId:n.parentId,sortOrder:n.sortOrder,icon:n.icon||null};});})'); }
 function pullMobile(e) {
   const dir = '/tmp/lake5/db-' + e.serial; fs.mkdirSync(dir, { recursive: true });
-  for (const f of ['local-lakex-notes-mobileSQLite.db', 'local-lakex-notes-mobileSQLite.db-wal']) { try { const b = execSync(ADB + ' -s ' + e.serial + ' exec-out run-as com.locallakexnotes.mobile cat databases/' + f, { maxBuffer: 200 * 1024 * 1024 }); fs.writeFileSync(dir + '/' + f, b); } catch (err) {} }
-  const db = new Database(dir + '/local-lakex-notes-mobileSQLite.db', { readonly: true });
+  for (const f of ['lakex-local-notes-mobileSQLite.db', 'lakex-local-notes-mobileSQLite.db-wal']) { try { const b = execSync(ADB + ' -s ' + e.serial + ' exec-out run-as com.lakexlocalnotes.android cat databases/' + f, { maxBuffer: 200 * 1024 * 1024 }); fs.writeFileSync(dir + '/' + f, b); } catch (err) {} }
+  const db = new Database(dir + '/lakex-local-notes-mobileSQLite.db', { readonly: true });
   try { return db.prepare('SELECT id,title,parent_id,sort_order,icon,doc_kind FROM notes').all().map(function (r) { return { id: String(r.id), title: String(r.title), parentId: r.parent_id, sortOrder: r.sort_order, icon: r.icon || null, kind: r.doc_kind || 'doc' }; }); }
   finally { db.close(); }
 }
@@ -105,10 +105,7 @@ for (const id of IDS) { const fc = (await tree(id)).filter(function (x) { return
 
 console.log('== F6: S3 sync ops smoke (connection / GC diagnostics / dry-run cleanup) ==');
 for (const id of IDS) { const s = await ev(id, 'window.lakeNative.testS3Connection()'); check(id + ' S3 connection', typeof s === 'string' && (s.indexOf('OK') === 0 || s.indexOf('连接成功') >= 0), String(s).slice(0, 40)); }
-const diag = await ev('D1', 'window.lakeNative.runS3GcDiagnostics()');
-check('D1 GC diagnostics', !!diag && typeof diag === 'object', JSON.stringify(diag).slice(0, 80));
-const pending = await ev('D1', 'window.lakeNative.listS3GcPending()');
-check('D1 GC pending list', Array.isArray(pending), 'pending=' + pending.length);
+// 261028：GC 诊断/pending 清单随 manifest 时代链路删除（v3 深度清理直接看 runS3DeepCleanup 结果）。
 const activeBefore = (await tree('D1')).filter(function (x) { return x.type === 'note'; }).length;
 const dry = await ev('D1', 'window.lakeNative.runS3DeepCleanup(true)');
 const activeAfter = (await tree('D1')).filter(function (x) { return x.type === 'note'; }).length;

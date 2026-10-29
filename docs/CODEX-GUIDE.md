@@ -36,7 +36,7 @@
 
 // 1) 静态服务器 serve dist/（常驻 node_repl）
 const http = await import("node:http"), fs = await import("node:fs"), path = await import("node:path");
-const DIST = "/Users/admin/file/local-lake/local-lakex-notes/dist";
+const DIST = "/Users/admin/file/local-lake/lakex-local-notes/dist";
 const MIME = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".json": "application/json", ".png": "image/png", ".svg": "image/svg+xml", ".woff2": "font/woff2" };
 globalThis.staticServer = http.createServer((req, res) => {
   try {
@@ -53,9 +53,9 @@ await new Promise(r => staticServer.listen(1421, "127.0.0.1", r));
 // 2) 启动应用
 const { _electron } = await import("playwright");
 globalThis.app = await _electron.launch({
-  executablePath: "/Users/admin/file/local-lake/local-lakex-notes/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron",
+  executablePath: "/Users/admin/file/local-lake/lakex-local-notes/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron",
   args: ["."],
-  cwd: "/Users/admin/file/local-lake/local-lakex-notes",
+  cwd: "/Users/admin/file/local-lake/lakex-local-notes",
   timeout: 60000,
 });
 const win = await app.firstWindow();
@@ -82,7 +82,7 @@ await win.screenshot({ path: "/tmp/xxx.png" });  // 截图给用户看
 ### 测试纪律（很重要）
 - **测试数据会写进用户真实笔记**：粘贴/建笔记后必须清理（从 .lake 文件按块删除），
   并全库扫描验证无残留；`.lake` 是 HTML+URL 编码文本，grep 用编码后的模式
-- **杀进程只 `grep "local-lakex-notes"`**（禁 `pkill -f Electron`，会误杀 Trae CN）
+- **杀进程只 `grep "lakex-local-notes"`**（禁 `pkill -f Electron`，会误杀 Trae CN）
 - **单实例锁**：dev 与打包版不能同时跑；端口 1421 冲突先 `lsof -ti tcp:1421 | xargs kill -9`
 - 结束前关闭应用 + 静态服务器，释放端口
 

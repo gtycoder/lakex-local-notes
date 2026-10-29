@@ -74,7 +74,7 @@ describe("小记排序：本机持久化与旧值迁移", () => {
 
   it("写读往返（键 = 桌面 260915 起沿用的那个）", () => {
     const store = stub(null);
-    expect(QUICK_NOTE_SORT_KEY).toBe("local-lakex-notes-v3.quick-notes-sort");
+    expect(QUICK_NOTE_SORT_KEY).toBe("lakex-local-notes-v3.quick-notes-sort");
     expect(readQuickNoteSort()).toBe(QUICK_NOTE_SORT_DEFAULT);
     writeQuickNoteSort("oldest");
     expect(store.get(QUICK_NOTE_SORT_KEY)).toBe("oldest");

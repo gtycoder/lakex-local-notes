@@ -28,6 +28,26 @@ async function putDoc(store: FileDeviceStore, id: string, body: string) {
   await store.saveState(state);
 }
 
+// 容量档公用夹具：n 端各自编辑一篇自己的文档后同时 sync，返回耗时与错误。
+async function capacityRun(n: number): Promise<{ n: number; ms: number; errors: string[] }> {
+  const remote = new LatencyRemote();
+  const devices = await Promise.all(Array.from({ length: n }, (_, i) => device("cap" + i)));
+  for (let i = 0; i < n; i++) await putDoc(devices[0].store, "own-" + i, "seed-" + i);
+  const engines = devices.map((d, i) => new S3v3SyncEngine({ remote, device: d.store, deviceId: "cap-" + i }));
+  await engines[0].sync({ onEmptyCloud: "upload" });
+  for (let i = 1; i < n; i++) await engines[i].sync();
+  for (let i = 0; i < n; i++) await putDoc(devices[i].store, "own-" + i, "edited-" + i);
+  const t = Date.now();
+  const rs = await Promise.allSettled(engines.map((e2) => e2.sync()));
+  const result = {
+    n,
+    ms: Date.now() - t,
+    errors: rs.filter((r) => r.status === "rejected").map((r) => String((r as PromiseRejectedResult).reason)),
+  };
+  console.log("CONC-CAP " + JSON.stringify(result));
+  return result;
+}
+
 describe("6 端并发推拉（假 S3 + 延迟）", () => {
   it("6 端同时编辑同一文档并 sync：记录错误/分叉/收敛", async () => {
     const remote = new LatencyRemote();
@@ -80,26 +100,29 @@ describe("6 端并发推拉（假 S3 + 延迟）", () => {
     }
   }, 120_000);
 
-  it("并发发布容量：12/20 端同时推送的锁等待与错误", { retry: 2, timeout: 300_000 }, async () => {
+});
+
+// 门禁只锁「已承诺的能力」：12 端并发发布 0 错误（实测 4.4–6s，本机 261028）。
+// 不再用 retry 掩盖偶发失败：失败即红。
+describe("并发发布容量（默认门禁）", () => {
+  it("12 端同时推送必须 0 错", { timeout: 120_000 }, async () => {
+    const r = await capacityRun(12);
+    expect(r.errors).toEqual([]);
+  });
+});
+
+// 20/28 端是「无 CAS provider」下的已知上限（锁 TTL + 重试上限，见 docs/SYNC-PROTOCOL.md §12.1）：
+// 只记录可对比 JSON，不做通过/失败断言，不进默认门禁。
+// 手动运行：node scripts/s3v3-manual-capacity.mjs [20,28]
+const MANUAL_CAPACITY = process.env.S3V3_CONC_CAPACITY === "1";
+describe.skipIf(!MANUAL_CAPACITY)("并发发布容量（手动档：20/28 端，不进默认门禁）", () => {
+  it("记录锁等待与错误（可对比 JSON）", { timeout: 300_000 }, async () => {
+    const sizes = (process.env.S3V3_CONC_CAPACITY_SIZES || "20,28")
+      .split(",").map(Number).filter((n) => Number.isFinite(n) && n > 12);
+    expect(sizes.length).toBeGreaterThan(0);
     const out: Array<{ n: number; ms: number; errors: string[] }> = [];
-    for (const n of [12, 20, 28]) {
-      const remote = new LatencyRemote();
-      const devices = await Promise.all(Array.from({ length: n }, (_, i) => device("cap" + i)));
-      for (let i = 0; i < n; i++) await putDoc(devices[0].store, "own-" + i, "seed-" + i);
-      const engines = devices.map((d, i) => new S3v3SyncEngine({ remote, device: d.store, deviceId: "cap-" + i }));
-      await engines[0].sync({ onEmptyCloud: "upload" });
-      for (let i = 1; i < n; i++) await engines[i].sync();
-      for (let i = 0; i < n; i++) await putDoc(devices[i].store, "own-" + i, "edited-" + i);
-      const t = Date.now();
-      const rs = await Promise.allSettled(engines.map((e2) => e2.sync()));
-      const errors = rs.filter((r) => r.status === "rejected").map((r) => String((r as PromiseRejectedResult).reason));
-      out.push({ n, ms: Date.now() - t, errors });
-      console.log("CONC-CAP " + JSON.stringify({ n, ms: Date.now() - t, errors }));
-    }
-    expect(out.length).toBe(3);
-    // 容量结论固化：≤20 端并发发布无错误；28 端出现频发发布冲突（锁串行 + 重试超限）
-    // 三点：12 端正常；20 端偶发（允许 0~少量错误，实测 0~2）；28 端频发（实测 6~7）
-    expect(out.find((r) => r.n === 12)!.errors).toEqual([]);
-    expect(out.find((r) => r.n === 28)!.errors.length).toBeGreaterThanOrEqual(3);
+    for (const n of sizes) out.push(await capacityRun(n));
+    console.log("CONC-CAP-SUMMARY " + JSON.stringify({ sizes, results: out.map((r) => ({ n: r.n, ms: r.ms, errors: r.errors.length })) }));
+    expect(out.map((r) => r.n)).toEqual(sizes);
   });
 });

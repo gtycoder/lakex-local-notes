@@ -209,6 +209,43 @@ describe("DesktopStoreDevice（真实 Store）", () => {
     expect(lake.notes.some((n) => n.id === "p1")).toBe(false);
   }, 60_000);
 
+  it("远端改正文后同步：不打开文档就能搜到新关键词（text_cache + FTS 随正文落库）", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "s3v3-sync-cache-"));
+    const store = new Store(root);
+    store.bootstrap();
+    const nb = store.createNotebook("NB");
+    store.createNoteInAtTopWithContent(nb.id, "Cache", "<p>同步前的旧正文</p>", [], "c1");
+    // 关键前提：text_cache 已有旧内容（文档曾被打开/保存过）。否则 SearchRepository 会从磁盘
+    // 重新派生并顺手写入缓存，把「同步写正文不带缓存」的缺口掩盖掉。
+    store.updateNoteCaches("c1", null, "同步前的旧正文");
+    expect(store.searchNotes("星空大海")).toEqual([]);
+    const remote = new MemoryRemote();
+    const adapter = new DesktopStoreDevice(store, root);
+    await adapter.init();
+    const engineA = new S3v3SyncEngine({ remote, device: adapter, deviceId: "A" });
+    await engineA.sync({ onEmptyCloud: "upload" });
+    const b = await fileDevice();
+    const engineB = new S3v3SyncEngine({ remote, device: b.store, deviceId: "B" });
+    await engineB.sync();
+
+    // 他端改正文并发布
+    const st = (await b.store.loadState())!;
+    const entry = st.lake.notes.find((x) => x.id === "c1")!;
+    const bytes = new TextEncoder().encode("<p>远端新词星空大海</p>");
+    await b.store.writeBody("c1", bytes);
+    entry.contentHash = sha256Hex(bytes);
+    entry.updatedAt = new Date(Date.now() + 2000).toISOString();
+    await b.store.saveState(st);
+    await engineB.sync();
+
+    // 本机只同步（不打开文档）：正文、text_cache、FTS 必须一起更新
+    const r = await engineA.sync();
+    expect(r.downloadedNotes).toBe(1);
+    expect(store.readNote("c1").content).toContain("星空大海");
+    expect(store.readNoteCaches("c1").plain).toContain("星空大海");
+    expect(store.searchNotes("星空大海").map((x) => x.id)).toContain("c1");
+  }, 60_000);
+
   it("检测到 quick-notes 库时拒绝（不静默丢小记）", async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "s3v3-q-"));
     const store = new Store(root);
@@ -217,5 +254,99 @@ describe("DesktopStoreDevice（真实 Store）", () => {
     await fs.writeFile(path.join(root, "quick-notes", "metadata.sqlite3"), "");
     const adapter = new DesktopStoreDevice(store, root);
     await expect(adapter.init()).rejects.toThrow(/quick notes store 未注入/);
+  });
+
+  it("writeQuickAsset 拒绝非法 filename（SEC-13a：与 writeAsset 同断言）", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "s3v3-quick-asset-"));
+    const store = new Store(root);
+    store.bootstrap();
+    const adapter = new DesktopStoreDevice(store, root);
+    for (const bad of ["../escape.png", "a/b.png", "a\\b.png", "a b.png"]) {
+      await expect(adapter.writeQuickAsset("q1", bad, new Uint8Array([1]))).rejects.toThrow(/非法资源文件名/);
+    }
+  });
+});
+
+describe("DesktopStoreDevice：state 信封 v3（E3-1 phase2a）", () => {
+  const statePath = (root: string): string => path.join(root, "sync-v3", "state.json");
+  async function seed(root: string): Promise<{ store: Store; adapter: DesktopStoreDevice }> {
+    const store = new Store(root);
+    store.bootstrap();
+    const nb = store.createNotebook("NB");
+    store.createNoteInAtTopWithContent(nb.id, "Doc", "hello", [], "n1");
+    const adapter = new DesktopStoreDevice(store, root, { skipQuickNotesGuard: true });
+    await adapter.init();
+    return { store, adapter };
+  }
+
+  it("saveState 只写 v3 records 信封（+资产投影+hashCache），loadState 无损还原", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "s3v3-env-"));
+    const { store, adapter } = await seed(root);
+    const state = (await adapter.loadState())!;
+    state.intents = [{ noteId: "n1", targetEpoch: "e1", targetGeneration: 1, purgedAt: "2026-10-02T00:00:00.000Z" }];
+    state.pending = [{ kind: "body", key: "objects/n1-x.lake", noteId: "n1", targetEpoch: "e1", targetGeneration: 1, targetCommit: "c1", createdAt: "2026-10-02T00:00:00.000Z" } as never];
+    state.remotePurged = ["n1"];
+    state.restorePending = ["n2"];
+    state.quickDeletes = ["q2"];
+    state.quickPurges = ["q3"];
+    state.quickPurgeTimes = { q3: "2026-10-03T00:00:00.000Z" };
+    state.pendingAssets = [{ space: "lake", id: "n1", filename: "a.png", size: 3, hash: "e".repeat(64), attempts: 1 }];
+    state.lake.notes.find((n) => n.id === "n1")!.assetsHash = "f".repeat(64);
+    await adapter.saveState(state);
+
+    const raw = JSON.parse(await fs.readFile(statePath(root), "utf8")) as Record<string, any>;
+    expect(raw.version).toBe(3);
+    // 落盘形状 = 一条 records（不再是 9 组字段）
+    expect(raw).not.toHaveProperty("remotePurged");
+    expect(raw).not.toHaveProperty("restorePending");
+    expect(raw).not.toHaveProperty("assetsHash");
+    const byKind = (kind: string): Array<Record<string, unknown>> => (raw.records as Array<Record<string, unknown>>).filter((r) => r.kind === kind);
+    expect(byKind("cloud-deleted").map((r) => r.id)).toEqual(["n1"]);
+    expect(byKind("restore").map((r) => r.noteId)).toEqual(["n2"]);
+    expect(byKind("quick-delete").map((r) => r.id)).toEqual(["q2"]);
+    expect(byKind("quick-purge").map((r) => r.id)).toEqual(["q3"]);
+    expect(byKind("quick-purge")[0].at).toBe("2026-10-03T00:00:00.000Z");
+    expect(byKind("asset-retry")).toHaveLength(1);
+    expect(byKind("delete-intent")).toHaveLength(1);
+    expect(raw.assets.lake.n1).toBe("f".repeat(64));
+    expect(raw.hashCache.n1).toBeTruthy();
+
+    const adapter2 = new DesktopStoreDevice(store, root, { skipQuickNotesGuard: true });
+    await adapter2.init();
+    const back = (await adapter2.loadState())!;
+    expect(back.intents).toEqual(state.intents);
+    expect(back.pending).toEqual(state.pending);
+    expect(back.remotePurged).toEqual(["n1"]);
+    expect(back.restorePending).toContain("n2");
+    expect(back.pendingAssets).toEqual(state.pendingAssets);
+    expect(back.lake.notes.find((n) => n.id === "n1")!.assetsHash).toBe("f".repeat(64));
+  });
+
+  it("旧 sidecar（无 version）加载时逐字段迁移；下一次 saveState 升级为 v3 信封", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "s3v3-env-legacy-"));
+    const { adapter } = await seed(root);
+    await fs.mkdir(path.join(root, "sync-v3"), { recursive: true });
+    await fs.writeFile(statePath(root), JSON.stringify({
+      intents: [{ noteId: "n1", targetEpoch: "e1", targetGeneration: 1 }],
+      pending: [],
+      quickPurgeTimes: { q3: "2026-10-03T00:00:00.000Z" },
+      remotePurged: ["n1"],
+      restorePending: ["n2"],
+      pendingAssets: [],
+      assetsHash: { n1: "a".repeat(64) },
+      quickAssetsHash: {},
+      hashCache: {},
+    }));
+    const loaded = (await adapter.loadState())!;
+    expect(loaded.intents).toHaveLength(1);
+    expect(loaded.remotePurged).toEqual(["n1"]);
+    expect(loaded.restorePending).toContain("n2");
+    expect(loaded.lake.notes.find((n) => n.id === "n1")!.assetsHash).toBe("a".repeat(64));
+
+    await adapter.saveState(loaded);
+    const raw = JSON.parse(await fs.readFile(statePath(root), "utf8")) as Record<string, any>;
+    expect(raw.version).toBe(3);
+    expect((raw.records as Array<Record<string, unknown>>).filter((r) => r.kind === "cloud-deleted").map((r) => r.id)).toEqual(["n1"]);
+    expect(raw).not.toHaveProperty("remotePurged");
   });
 });

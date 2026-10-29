@@ -29,7 +29,7 @@ describe("mobile schema", () => {
       expect(Number(column!.notnull)).toBe(1);
       expect(String(column!.dflt_value)).toBe("0");
     }
-    expect(MOBILE_SCHEMA_VERSION).toBe(9);
+    expect(MOBILE_SCHEMA_VERSION).toBe(10);
   });
 
   it("261021：版本已到 ⇒ 第二次应用整体跳过（冷启动省 ~2.4s 的建表往返）", async () => {
@@ -73,6 +73,32 @@ describe("mobile schema", () => {
     expect(allStatements.some((sql) => sql.includes("INSERT OR IGNORE INTO folders"))).toBe(true);
     expect(allStatements).toContain("CREATE INDEX IF NOT EXISTS idx_notes_active_parent_sort ON notes(parent_id, sort_order) WHERE trashed_at IS NULL");
     expect(allStatements).toContain("CREATE INDEX IF NOT EXISTS idx_quick_notes_active_updated ON quick_notes(updated_at DESC, id DESC) WHERE deleted_at IS NULL");
+  });
+
+  it("CORE-13：搜索 DDL 来自 core/search/schema 单一来源（逐字节冻结契约）", async () => {
+    const sets: Array<Array<{ statement: string; values: unknown[] }>> = [];
+    const fake = {
+      prepare: () => ({ get: async () => undefined, all: async () => [], run: async () => ({ changes: 0, lastInsertRowid: 0 }) }),
+      pragma: async () => [{ user_version: 0 }],
+      exec: async () => undefined,
+      executeSet: async (set: Array<{ statement: string; values: unknown[] }>) => { sets.push(set); },
+      transaction: async <T,>(fn: T) => fn,
+      databaseSizeBytes: async () => 0,
+      close: async () => undefined,
+    };
+    await applyMobileSchema(fake as never);
+    const all = sets.flat().map((item) => item.statement);
+    // 逐字节断言：这些字符串是已落库的 DDL 契约，改造（抽单一来源）不得改变一个字符。
+    expect(all).toContain("CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(title, body, tokenize='unicode61')");
+    expect(all).toContain(
+      "CREATE TABLE IF NOT EXISTS search_index (note_id TEXT PRIMARY KEY, fts_rowid INTEGER NOT NULL, title TEXT NOT NULL, raw_hash TEXT, title_hash TEXT NOT NULL, body_hash TEXT NOT NULL, indexed_at TEXT NOT NULL)",
+    );
+    expect(all).toContain("CREATE UNIQUE INDEX IF NOT EXISTS idx_search_index_rowid ON search_index(fts_rowid)");
+    expect(all).toContain("CREATE VIRTUAL TABLE IF NOT EXISTS quick_notes_fts USING fts5(body, tags, tokenize='unicode61')");
+    expect(all).toContain(
+      "CREATE TABLE IF NOT EXISTS quick_notes_search_index (quick_note_id TEXT PRIMARY KEY, fts_rowid INTEGER NOT NULL, content_hash TEXT NOT NULL, text_cache TEXT NOT NULL, tags TEXT NOT NULL, indexed_at TEXT NOT NULL)",
+    );
+    expect(all).toContain("CREATE UNIQUE INDEX IF NOT EXISTS idx_quick_notes_search_rowid ON quick_notes_search_index(fts_rowid)");
   });
 
   it("does not revive a deleted seed notebook on reapplication", async () => {

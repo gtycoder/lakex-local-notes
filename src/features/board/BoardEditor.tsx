@@ -12,6 +12,7 @@
  * - keep-alive：首次可见前不挂载画布（隐藏态量到 0 尺寸会画不出来，与 UniverSheetEditor 同因）。
  */
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { EditorHostProps } from "../editor/editorHost";
 import { loadDrawnixBoardCore } from "@dlient/lakex-doc-react";
 import type { DrawingBoardAIConfig, DrawnixBoardCoreProps } from "@dlient/lakex-doc-react";
 import "./boardEditor.css";
@@ -19,7 +20,9 @@ import { uploadLakeResource } from "../editor/resourceUpload";
 import { native } from "../../lib/native";
 import { cancelAiChat, newAiRequestId, runAiChat } from "../../lib/ai";
 import { parseLocalAssetUrl } from "../../core/assetUrl";
-import { boardToBody, parseBoardBody, type BoardDoc, type BoardViewport } from "../../core/boardDoc.js";
+import { boardToBody, createBoardDoc, type BoardDoc, type BoardViewport } from "../../core/boardDoc.js";
+import { checkDocBody } from "../../core/docBodySafety.js";
+import { docBaselineSettled } from "../../core/docBaseline.js";
 import { collectBoardAssetUrls, collectInlineImageUrls, replaceInlineImageUrls } from "./boardImageAssets.js";
 import { readBoardView, writeBoardView } from "./boardViewStore.js";
 import { registerBoardExport, triggerBoardExport } from "./boardExport";
@@ -43,21 +46,8 @@ interface BoardCardValue {
   plaitViewport?: BoardViewport;
 }
 
-export interface BoardEditorProps {
-  noteId: string;
-  content: string;
-  visible: boolean;
-  readOnly: boolean;
-  onChange: (content: string) => void;
-  /** 审计 F15：用户一改动立即通知（早于内部 800ms 防抖）。 */
-  onDirty?: () => void;
-  /** 审计 F15：注册按需同步序列化（关闭/保存时现取）。 */
-  onEditorCapture?: (capture: (() => string | null) | null) => void;
-  /** 分屏（261008）：本实例是否为**焦点栏**（决定 data-active；全局唯一）。缺省 = visible（旧行为）。 */
-  focused?: boolean;
-  /** 分屏里所在栏位（left/right）；未分屏不传。仅用于布局（data-pane）。 */
-  pane?: "left" | "right" | null;
-}
+/** DT-06：共用 prop 词表见 features/editor/editorHost.ts（本宿主暂无专有 prop）。 */
+export type BoardEditorProps = EditorHostProps;
 
 function cardValueOf(doc: BoardDoc, viewport: BoardViewport | null): BoardCardValue {
   const value: BoardCardValue = {
@@ -95,13 +85,21 @@ function currentLocale(): "zh-CN" | "en-US" {
   return navigator.language?.toLowerCase().startsWith("zh") === false ? "en-US" : "zh-CN";
 }
 
-export function BoardEditor({ noteId, content, visible, readOnly, focused, pane, onChange, onDirty, onEditorCapture }: BoardEditorProps) {
+export function BoardEditor({ noteId, content, visible, readOnly: readOnlyProp, focused, pane, onChange, onDirty, onCapture: onEditorCapture }: BoardEditorProps) {
+  /**
+   * CORE-02：坏正文必须只读。board 的解析器是**宽容退化**（坏数据 → 空白画板，保证文档打得开），
+   * 所以不能只看 doc；可读性由 core 的单一判据回答（usheet/board/ink 同一套）。
+   * 非空但 readable=false ⇒ 只读 + 横幅，否则用户画一笔就会把「空白 + 新元素」覆盖回原文。
+   */
+  const [bodyCheck] = useState(() => checkDocBody("board", content));
+  const bodyUnreadable = bodyCheck.status === "unreadable";
+  const readOnly = readOnlyProp || bodyUnreadable;
   /**
    * 打开时的视图：**本机记下的优先**（用户上次拖/缩到的位置），其次才是正文里那份
    * （历史遗留的 viewport）。两者都没有 = 交给引擎自适应。见 boardViewStore.ts。
    */
   const [initial] = useState(() => {
-    const doc = parseBoardBody(content);
+    const doc = bodyCheck.status === "ok" ? bodyCheck.doc : createBoardDoc();
     const view = readBoardView(noteId);
     return { doc, view, viewport: view?.viewport ?? doc.viewport ?? null };
   });
@@ -124,7 +122,12 @@ export function BoardEditor({ noteId, content, visible, readOnly, focused, pane,
   /** 恢复尚未完成时不采集（那时的滚动量是临时值，写进去会把记下的位置覆盖掉）。 */
   const viewReadyRef = useRef(viewReady);
   viewReadyRef.current = viewReady;
-  /** 上一次已落盘的正文（规范化后）：相同则跳过，避免「打开即标脏」。 */
+  /**
+   * 打开时的磁盘原文（CORE-03 的基线）。capture 在「无真实改动 / 改过又改回原样」时原样返回它，
+   * 外层看到的正文与磁盘逐字节一致 ⇒ 不写盘、不产生新 contentHash。
+   */
+  const diskBodyRef = useRef<string>(content);
+  /** 上一次已落盘的正文（规范化后）：相同则跳过，避免「打开即标脏」（首次基线 = 磁盘原文的规范形态）。 */
   const lastSerializedRef = useRef<string>(boardToBody(initialDoc));
   const timerRef = useRef<number | null>(null);
   /** 正在进行的「内联图片 → 资产文件」提升任务数：>0 时**推迟保存**（正文绝不落 base64）。 */
@@ -294,6 +297,8 @@ export function BoardEditor({ noteId, content, visible, readOnly, focused, pane,
   }, []);
 
   const flush = useCallback(() => {
+    // 坏正文 / 只读：绝不落盘（否则空白画板会覆盖原文；CORE-02）。
+    if (readOnlyRef.current) return;
     // 提升未落地前不保存：否则会把 data:image 版本写进 boards/*.board.json（正文膨胀 + 不走资产管线）。
     // 提升落地会再触发一次变更 → 那时才真正落盘（正文里已是 canonical URL）。
     if (promoteInFlightRef.current > 0) {
@@ -311,6 +316,11 @@ export function BoardEditor({ noteId, content, visible, readOnly, focused, pane,
     // 这里沿用正文里原有的 viewport（历史字段，已不再维护）⇒ 同一份内容序列化稳定，不多产生保存。
     const json = boardToBody(docOf(forDisk, initialDoc.viewport ?? null));
     if (json === lastSerializedRef.current) return;
+    // CORE-03：改过又改回原样（撤销 / 元素被删回原值）——规范化后与磁盘原文等价 ⇒ 不写盘、不标脏。
+    if (docBaselineSettled("board", diskBodyRef.current, json)) {
+      lastSerializedRef.current = json;
+      return;
+    }
     lastSerializedRef.current = json;
     changeRef.current(json);
   }, [initialDoc, scheduleSave]);
@@ -323,7 +333,10 @@ export function BoardEditor({ noteId, content, visible, readOnly, focused, pane,
       ...cardValueRef.current,
       plaitValue: replaceInlineImageUrls(cardValueRef.current.plaitValue, promotedRef.current) as unknown[],
     };
-    return boardToBody(docOf(forDisk, initialDoc.viewport ?? null));
+    const json = boardToBody(docOf(forDisk, initialDoc.viewport ?? null));
+    // CORE-03：与磁盘原文等价（打开后没动 / 改过又改回原样）⇒ **返回磁盘原文**：
+    // 外层落盘写的还是同一份字节 ⇒ contentHash 不变，避免为规范化差异（键序 / 未知键被丢）多写一次盘。
+    return docBaselineSettled("board", diskBodyRef.current, json) ? diskBodyRef.current : json;
   }, [initialDoc]);
   useEffect(() => {
     onEditorCaptureRef.current?.(captureContent);
@@ -499,7 +512,13 @@ export function BoardEditor({ noteId, content, visible, readOnly, focused, pane,
       data-pane-visible={visible ? "true" : undefined}
       data-pane={pane ?? undefined}
     >
-      {everVisible && (
+      {bodyUnreadable ? (
+        <div className="tab-gone-banner" role="status" data-board-parse-error>
+          <span>画板正文无法解析（文件损坏或版本不兼容）：已锁定为只读，不会覆盖原文。请从「历史版本」或云端备份恢复。</span>
+        </div>
+      ) : null}
+      {/* 坏正文：不挂画布（空白画布会让人以为「本来就没内容」），只留横幅（CORE-02）。 */}
+      {!bodyUnreadable && everVisible && (
         <Suspense fallback={<div className="board-editor-loading" />}>
           <DrawnixBoardCore
             value={cardValue}

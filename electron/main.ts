@@ -5,7 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Store } from "./store.js";
 import { canTouchNetwork, cloudStateOf } from "../src/core/cloudState.js";
-import { shouldSyncOnOpenClose } from "../src/core/syncModes.js";
+import { autoSyncIntervalMs, shouldSyncOnOpenClose } from "../src/core/syncModes.js";
 import { createSafeStorageSecretCipher } from "./secretCipher.js";
 import { QuickNotesStore } from "./quickNotes.js";
 import { startAssetServer, ASSET_PORT } from "./assetServer.js";
@@ -19,7 +19,9 @@ import { mapRendererConsoleLevel } from "./rendererLogLevel.js";
 import { errorFields, formatLogFields, perfMessage } from "../src/core/logFormat.js";
 import { ConsoleNoiseFilter } from "./consoleNoise.js";
 import { setQuickNotesStoreForV3 } from "./s3v3/quickNotesRegistry.js";
+import { readSyncErrorInfo } from "./s3v3/syncErrorInfo.js";
 import { readDevS3Settings } from "./devConfig.js";
+import { installNativeSha256 } from "./sha256Native.js";
 import { readAndRemoveS3RestoreSeed } from "./workspaceBackup.js";
 import { createIpcRegistrar } from "./ipc/registrar.js";
 import { registerNotesIpc } from "./ipc/registerNotes.js";
@@ -43,7 +45,7 @@ const isDev = !app.isPackaged;
 let bootWindow: BrowserWindow | null = null;
 
 // userData 隔离（必须在 app ready 前设置）：
-// - dev 默认 local-lakex-notes-dev（空库+种子），打包版默认 local-lakex-notes（正式数据）；
+// - dev 默认 lakex-local-notes-dev（空库+种子），打包版默认 lakex-local-notes（正式数据）；
 // - 两者路径不同、单实例锁各自独立，可同时运行。
 // - 任意模式可用 LAKE_USER_DATA 覆盖：dev 模拟多「设备」，打包版隔离测试（避免触碰正式数据）。
 const userDataOverride = process.env.LAKE_USER_DATA?.trim();
@@ -51,15 +53,15 @@ app.setPath(
   "userData",
   userDataOverride ||
     (isDev
-      ? path.join(app.getPath("appData"), "local-lakex-notes-dev")
-      : path.join(app.getPath("appData"), "local-lakex-notes")),
+      ? path.join(app.getPath("appData"), "lakex-local-notes-dev")
+      : path.join(app.getPath("appData"), "lakex-local-notes")),
 );
 // dev server 地址可经 LAKE_DEV_SERVER_URL 覆盖：多端/隔离冒烟时避开默认 1421（IPC 信任判定同用此值）。
 const DEV_SERVER_URL = process.env.LAKE_DEV_SERVER_URL?.trim() || "http://127.0.0.1:1421";
 /**
  * 渲染层加载方式（对齐 DSH 桌面壳：不打 file://）：
  * - `vite`：dev 默认走 vite dev server（保留 HMR；LAKE_DEV_SERVER_URL 可覆盖）；
- * - `scheme`：打包版走私有协议 locallakexnotes://app（服务构建产物 dist/）。dev 下亦可用
+ * - `scheme`：打包版走私有协议 lakexlocalnotes://app（服务构建产物 dist/）。dev 下亦可用
  *   LAKE_RENDERER=scheme 强制走这条路径（需先 vite build），用于本机验证该分支。
  */
 const rendererMode: "vite" | "scheme" = !isDev || process.env.LAKE_RENDERER?.trim() === "scheme" ? "scheme" : "vite";
@@ -71,6 +73,10 @@ function rendererDistDir(): string {
 
 // 私有协议必须在 app ready 之前注册（Electron 要求）。
 registerAppSchemePrivileges();
+
+// CORE-06：桌面进程内 SHA-256 走 node:crypto（core 默认纯 JS）。必须在任何正文/资产
+// hash 计算（同步、索引、历史）之前注入 —— 放在 app ready 之前的模块初始化段。
+installNativeSha256();
 
 /**
  * 资产服务器访问令牌（审计：防外部网页 CORS 读本地笔记图片）。
@@ -163,6 +169,9 @@ async function runFullSync(onProgress?: (p: SyncProgress) => void): Promise<Sync
       // 小记已随 v3 同一轮同步；旧 quick-notes 通道已移除。
       result.quickNotes = { uploaded: 0, downloaded: 0, conflicts: 0, completedAt: new Date().toISOString() };
       store.recordSyncResult(JSON.stringify(result));
+      // 验收发现（261028）：v3 路径只写了 last_sync_result，从没写过 last_synced_at ⇒
+      // 同步浮窗/状态栏的「上次同步」一直是旧值（新机器上则永远为空）。两条都写。
+      try { store.markSyncComplete(result.completedAt ?? new Date().toISOString()); } catch { /* 状态表异常不阻断同步 */ }
       try { store.clearSyncInterrupted(); } catch { /* 同上 */ }
       report({ phase: "done", message: "同步完成", supersededNotes: result.supersededNotes });
       log.sync.info(`[perf] runFullSync done ${Date.now() - fullSyncStart}ms (uploaded=${result.uploaded}, downloaded=${result.downloaded}, conflicts=${result.conflicts}, superseded=${result.supersededNotes.length}, quickNotes=${result.quickNotes?.error ? "error" : "ok"})`);
@@ -191,7 +200,7 @@ const trustedWebContents = new Set<number>();
 function isAppPageUrl(url: string): boolean {
   let parsed: URL;
   try { parsed = new URL(url); } catch { return false; }
-  // 私有协议：只信任 locallakexnotes://app 自己的页面（该 origin 下只有 dist 产物，无第三方内容）。
+  // 私有协议：只信任 lakexlocalnotes://app 自己的页面（该 origin 下只有 dist 产物，无第三方内容）。
   // 判定走 isAppOriginUrl（比 scheme+host）——非特殊 scheme 在 Node 里 URL.origin 恒为 "null"。
   if (rendererMode === "scheme") return isAppOriginUrl(url);
   return parsed.origin === DEV_SERVER_URL;
@@ -270,7 +279,7 @@ function createBootWindow() {
     frame: false,
     resizable: false,
     movable: true,
-    title: "LocalLakexNotes",
+    title: "LakexLocalNotes",
     backgroundColor: nativeTheme.shouldUseDarkColors ? "#1e2126" : "#f3f4f6",
     webPreferences: {
       sandbox: true,
@@ -526,7 +535,11 @@ function registerIpc(): ReadonlyMap<string, (args: unknown[]) => Promise<unknown
   };
   const ipc = createIpcRegistrar((event) => {
     if (!isTrustedSenderFrame(event.senderFrame, event.sender)) throw new Error("IPC 调用来源不受信任");
-  }, afterInvoke);
+  }, afterInvoke, (channel, payload) => {
+    // HTTP 调用方（浏览器端）没有 Electron 窗口：handleEvent 的 send 统一转到 SSE 广播
+    //（sync-progress / ai:stream 等），否则浏览器端收不到流式与进度。
+    webServerController?.broadcast(channel, payload);
+  });
 
   registerNotesIpc(ipc, store, quickNotes, drafts, workspaceRoot(), (targetRoot) => {
     // A1 一致性快照：主库 + 小记库各经其连接 VACUUM INTO（单文件、可独立打开）
@@ -681,14 +694,18 @@ if (!app.requestSingleInstanceLock()) {
     const startSyncTimers = () => {
       if (syncTimer) { clearInterval(syncTimer); syncTimer = null; }
       const cfg = store.getSyncSettings();
-      if (!cfg.enabled || cfg.autoMode !== "interval" || cfg.autoIntervalMinutes < 1) return;
+      // CORE-14：interval 判据单一来源 = core/syncModes.autoSyncIntervalMs（与设置归一/移动端同口径）。
+      const intervalMs = autoSyncIntervalMs(cfg);
+      if (intervalMs === null) return;
       syncTimer = setInterval(() => {
         void runFullSync().catch((error) => {
           const msg = error instanceof Error ? error.message : String(error);
           console.warn("[sync] 自动同步失败:", msg);
-          broadcastSyncProgress({ phase: "done", message: "同步失败", error: msg });
+          // 261028 P1：广播里带上分类 ⇒ 渲染层能把「另一台设备在发布」当软提示，不弹红。
+          const info = readSyncErrorInfo(error);
+          broadcastSyncProgress({ phase: "done", message: "同步失败", error: msg, errorCode: info.code, errorClass: info.className });
         });
-      }, cfg.autoIntervalMinutes * 60 * 1000);
+      }, intervalMs);
     };
     startSyncTimers();
     restartSyncTimers = startSyncTimers;
@@ -705,7 +722,8 @@ if (!app.requestSingleInstanceLock()) {
       void runFullSync().catch((error) => {
         const msg = error instanceof Error ? error.message : String(error);
         console.warn("[sync] 开启同步失败:", msg);
-        broadcastSyncProgress({ phase: "done", message: "同步失败", error: msg });
+        const info = readSyncErrorInfo(error);
+        broadcastSyncProgress({ phase: "done", message: "同步失败", error: msg, errorCode: info.code, errorClass: info.className });
       });
     }
 

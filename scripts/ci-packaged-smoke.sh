@@ -8,7 +8,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-APP="release/mac-arm64/LocalLakexNotes.app"
+APP="release/mac-arm64/LakexLocalNotes.app"
 
 if [ -L node_modules ]; then
   echo "ERROR: node_modules 是软链（$(readlink node_modules)）。" >&2
@@ -35,7 +35,7 @@ fi
 echo "==> 自检 1：asar 内 @img 条目（sharp 平台包）"
 node -e '
 const a = require("@electron/asar");
-const files = a.listPackage("release/mac-arm64/LocalLakexNotes.app/Contents/Resources/app.asar");
+const files = a.listPackage("release/mac-arm64/LakexLocalNotes.app/Contents/Resources/app.asar");
 const n = files.filter((f) => f.includes("@img")).length;
 console.log("asar @img entries:", n);
 if (n === 0) { console.error("ERROR: asar 里没有 @img（sharp 平台包缺失，打包版主进程会崩）"); process.exit(1); }

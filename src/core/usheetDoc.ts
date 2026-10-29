@@ -51,29 +51,30 @@ export interface UsheetWorkbook {
   [key: string]: unknown;
 }
 
-/** 字族字符串的**跨构建规范形式**：单引号族名 → 双引号。
- *  原因：dev 的 `--lake-font-family` 是 'MiSans', …，打包构建压缩 CSS 后会变成 "MiSans", …
- *  ⇒ 同一文档在 dev / 打包版之间打开会来回改写正文（contentHash 变化 → 触发同步上传）。 */
-export function normalizeFontFamily(value: string): string {
-  return value.replace(/'([^']*)'/g, '"$1"');
-}
+/** 表格正文字体族的 canonical 值（**写盘与比较的唯一值**，261027 CORE-04）。
+ *  值 = `src/styles/themes/base.css` 的 `--lake-font-family` 字体栈，引号统一成双引号。
+ *  为什么钉在 core：运行时 CSS 变量随构建变（dev 是 'MiSans', …，打包压缩 CSS 后是 "MiSans", …），
+ *  改字体令牌还会改写全库正文；`ff` 只认这个常量，渲染仍由 CSS 令牌负责。
+ *  ⚠️ 与 base.css 保持同值（护栏见 usheetDoc.test.ts）。 */
+export const USHEET_CANONICAL_FONT_FAMILY = '"MiSans", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Noto Sans CJK SC", "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif';
 
 /**
- * 正文规范化（**写盘与比较的唯一形式**，261023）：
+ * 正文规范化（**写盘与比较的唯一形式**，261023 / 261027）：
  * 1) plugin resource 的 `data === ""` → `"{}"`：Univer 首次 `save()` 与首个命令之后的序列化对未初始化资源
  *    给出不同形态（实测 SHEET_NOTE_PLUGIN 首帧 ""、首个命令后 "{}"），不规范化 ⇒ **每次打开表格**
  *    首次 flush 都判为"有差异"→ onChange → 待保存 → 自动同步上传（用户 261023 报「一打开就黄色待保存」）。
- * 2) 字族引号统一（见 normalizeFontFamily）。
+ * 2) 字体族 canonical 化（CORE-04，用户 261027 裁决）：`defaultStyle` 与所有命名 styles 的 `ff`
+ *    **一律写成 `USHEET_CANONICAL_FONT_FAMILY`**（缺失也补）⇒ 同内容同字节，跨端/跨构建打开不再改写正文。
  * 幂等；就地修改传入 workbook（编辑器在序列化前调用）。
  */
 export function normalizeUsheetWorkbook(workbook: UsheetWorkbook): void {
   const wb = workbook as unknown as { defaultStyle?: unknown; styles?: unknown; resources?: unknown };
-  if (isRecord(wb.defaultStyle) && typeof wb.defaultStyle.ff === "string") {
-    wb.defaultStyle.ff = normalizeFontFamily(wb.defaultStyle.ff);
-  }
+  const base = isRecord(wb.defaultStyle) ? wb.defaultStyle : {};
+  base.ff = USHEET_CANONICAL_FONT_FAMILY;
+  wb.defaultStyle = base;
   if (isRecord(wb.styles)) {
     for (const style of Object.values(wb.styles)) {
-      if (isRecord(style) && typeof style.ff === "string") style.ff = normalizeFontFamily(style.ff);
+      if (isRecord(style)) style.ff = USHEET_CANONICAL_FONT_FAMILY;
     }
   }
   if (Array.isArray(wb.resources)) {

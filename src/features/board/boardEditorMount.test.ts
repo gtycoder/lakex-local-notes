@@ -87,7 +87,7 @@ describe("画板编辑器护栏", () => {
     expect(EDITOR).toMatch(/const onPointerUp = \(event: PointerEvent\) => \{[\s\S]{0,200}host\.contains\(target\)/);
     // 位置只在本机（localStorage，L3）：不进正文、不进 S3
     const STORE = readFileSync(new URL("./boardViewStore.ts", import.meta.url), "utf8");
-    expect(STORE).toMatch(/local-lakex-notes-v3\.board-views/);
+    expect(STORE).toMatch(/lakex-local-notes-v3\.board-views/);
     expect(STORE).toMatch(/localStorage/);
   });
 
@@ -138,8 +138,9 @@ describe("画板编辑器护栏", () => {
     // 261020 P1：视口记忆按笔记 id 索引 ⇒ 宿主必须把 noteId 传给查看器（参数顺序不钉死）
     expect(MOBILE_WORKSPACE).toMatch(/<MobileBoardViewer[\s\S]{0,240}noteId=\{t\.id\}/);
     expect(MOBILE_WORKSPACE).toMatch(/<MobileBoardViewer[\s\S]{0,240}editing=\{t\.editing\}/);
-    // 查看器：editing 切换 readOnly + 无记忆才自适应 + 懒加载同一份引擎分包；正文永远不交给 Lake 编辑器
-    expect(MOBILE_VIEWER).toMatch(/readOnly=\{!editing\}/);
+    // 查看器：editing（且正文可读）才可写 + 无记忆才自适应 + 懒加载同一份引擎分包；正文永远不交给 Lake 编辑器
+    // CORE-02：坏正文时 canEdit=false ⇒ readOnly=true（下方 boardCorruptBody.test.ts 锁这条）。
+    expect(MOBILE_VIEWER).toMatch(/readOnly=\{!canEdit\}/);
     expect(MOBILE_VIEWER).toMatch(/fitOnInit=\{fitOnInit\}/);
     expect(MOBILE_VIEWER).toMatch(/onCapture/);
     expect(MOBILE_VIEWER).toMatch(/loadDrawnixBoardCore/);

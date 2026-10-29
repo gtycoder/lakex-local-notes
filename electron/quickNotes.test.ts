@@ -31,13 +31,44 @@ beforeEach(() => {
 });
 
 describe("QuickNotesStore", () => {
-  it("pending 摘要按未同步小记和图片事实计数，删除后保留 tombstone 计数", async () => {
+  it("pending 摘要按未同步小记和图片事实计数；墓碑按「晚于成功同步水线」计数（Del-6）", async () => {
     const draftId = crypto.randomUUID();
     const image = await quickNotes.stageImage(draftId, { bytes: [...PNG], filename: "summary.png" });
     const note = quickNotes.createQuickNote({ text: "待同步摘要", draftId, stagedImageIds: [image.id] });
     expect(quickNotes.getPendingSyncSummary()).toEqual({ items: 1, resources: 1 });
     quickNotes.deleteQuickNote(note.id);
+    // 墓碑 deleted_at 晚于水线（初始 "0"）⇒ 计入待同步；逐行 published_at 已删
     expect(quickNotes.getPendingSyncSummary()).toEqual({ items: 1, resources: 0 });
+    expect(quickNotes.listDeletedForSync().map((item) => item.id)).toContain(note.id);
+    // 成功同步后推进小记水线 ⇒ 墓碑清零（记录本身保留供 LWW）
+    quickNotes.markTombstonesWaterline(new Date(Date.now() + 60_000).toISOString());
+    expect(quickNotes.getPendingSyncSummary()).toEqual({ items: 0, resources: 0 });
+    expect(quickNotes.listDeletedForSync()).toEqual([]);
+    expect(quickNotes.listAllDeleted().map((item) => item.id)).toContain(note.id);
+  });
+
+  it("Del-6 迁移：旧快速库 quick_note_deleted.published_at 回填水线后删列", () => {
+    const legacyRoot = fs.mkdtempSync(path.join(os.tmpdir(), "lake-quick-del6-"));
+    const dbPath = path.join(legacyRoot, "quick-notes", "metadata.sqlite3");
+    fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+    const raw = new Database(dbPath);
+    raw.exec("CREATE TABLE quick_note_deleted (id TEXT PRIMARY KEY, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, deleted_at TEXT NOT NULL, conversion_target_note_id TEXT, ready_to_sync INTEGER NOT NULL DEFAULT 1, purged_at TEXT, cloud_deleted INTEGER NOT NULL DEFAULT 0, published_at TEXT)");
+    const insert = raw.prepare("INSERT INTO quick_note_deleted(id,created_at,updated_at,deleted_at,ready_to_sync,published_at) VALUES(?,?,?,?,1,?)");
+    insert.run("q-published", "2026-10-01T00:00:00.000Z", "2026-10-01T00:00:00.000Z", "2026-10-01T00:00:00.000Z", "2026-10-02T00:00:00.000Z");
+    insert.run("q-pending", "2026-10-03T00:00:00.000Z", "2026-10-03T00:00:00.000Z", "2026-10-03T00:00:00.000Z", null);
+    raw.close();
+    const legacy = new QuickNotesStore(legacyRoot);
+    try {
+      expect(legacy.getTombstonesWaterline()).toBe("2026-10-02T00:00:00.000Z");
+      expect(legacy.listDeletedForSync().map((item) => item.id)).toEqual(["q-pending"]);
+      const check = new Database(dbPath, { readonly: true });
+      try {
+        const cols = check.prepare("PRAGMA table_info(quick_note_deleted)").all() as Array<{ name: string }>;
+        expect(cols.some((c) => c.name === "published_at")).toBe(false);
+      } finally { check.close(); }
+    } finally {
+      fs.rmSync(legacyRoot, { recursive: true, force: true });
+    }
   });
 
   it("无标题文字小记保存为独立 .qnote，并按时间线读取", () => {
@@ -46,6 +77,24 @@ describe("QuickNotesStore", () => {
     expect(saved.previewText).toBe("临时想法 第二行");
     expect(fs.existsSync(path.join(root, "quick-notes", "items", `${saved.id}.qnote`))).toBe(true);
     expect(quickNotes.listQuickNotes().map((item) => item.id)).toContain(saved.id);
+  });
+
+  it("DT-05：列表只回 summary（不含正文），单条 read 才带 body", () => {
+    const saved = quickNotes.createQuickNote({ text: "列表投影", body: "<p>会被投影掉的正文</p>", draftId: crypto.randomUUID(), stagedImageIds: [] });
+    const summary = quickNotes.listQuickNotes().find((item) => item.id === saved.id);
+    expect(summary).toBeTruthy();
+    // 列表 payload 里没有 content/body（body 是 2 万小记时最大的一块 IPC payload）。
+    expect(summary).not.toHaveProperty("content");
+    expect(JSON.stringify(summary)).not.toContain("会被投影掉的正文");
+    expect(summary!.previewText).toContain("列表投影");
+    // 标签也从关联表投影，不需要读正文。
+    const tagId = quickNotes.tagService.create("列表标签").id;
+    quickNotes.setQuickNoteTags(saved.id, [tagId]);
+    const tagged = quickNotes.listQuickNotes().find((item) => item.id === saved.id)!;
+    expect(tagged.tagIds).toEqual([tagId]);
+    expect(tagged.tags).toEqual(["列表标签"]);
+    // 打开单条能取到正文。
+    expect(quickNotes.readQuickNote(saved.id).content.body).toContain("会被投影掉的正文");
   });
 
   it("标签独立于正文：保存正文不动关联表，改标签不重写 .qnote", () => {

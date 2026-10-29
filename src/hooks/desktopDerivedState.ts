@@ -1,8 +1,4 @@
 import type { CSSProperties } from "react";
-import { activeEditorHost } from "../features/editor/activeEditor";
-import { clearScrollMemory } from "../features/editor/EditorTab";
-import { escapeId } from "../lib/cssEscape";
-import { resolveScrollNode } from "../features/editor/lakeRuntime";
 import type { TabInfo } from "../features/editor/MultiTabEditor";
 import type { OutlineMode } from "../features/outline/OutlineController";
 import { OUTLINE_HOVER_TRIGGER_WIDTH, OUTLINE_SCROLLBAR_CLEARANCE } from "../features/outline/outlineInteraction";
@@ -32,7 +28,14 @@ export interface DesktopViewInput {
   outlineSidebarWidth: number;
 }
 
-/** 从 App 状态派生的「视图模型」：面包屑/大纲/锁/标签信息/顶栏样式（纯计算，从 App.tsx 抽出）。 */
+/**
+ * 从 App 状态派生的「视图模型」：面包屑/大纲/锁/标签信息/顶栏样式（纯计算，从 App.tsx 抽出）。
+ *
+ * 261028 DT-14：这里**只出值**，不再读 DOM / 返回带副作用的闭包。原先的「活动标签滚回顶部」
+ * 自 261008 面包屑下沉进 EditorTab 后已无调用方，回顶由各编辑器宿主自己负责
+ * （`EditorTab.handleScrollTop`），故整段移除；滚动记忆/搜索定位两个纯函数搬到
+ * `features/editor/editorViewport.ts`。
+ */
 export function deriveDesktopView(input: DesktopViewInput) {
   const {
     activeNoteId, treeNodes, notes, openTabs, iconByNoteId,
@@ -50,27 +53,6 @@ export function deriveDesktopView(input: DesktopViewInput) {
 
   // 编辑器面包屑：活动文档路径（思源 protyle-breadcrumb）
   const activePath = activeNoteId ? treeNodePath(treeNodes, activeNoteId) : [];
-
-  const scrollActiveEditorToTop = () => {
-    if (!activeNoteId) return;
-    clearScrollMemory(activeNoteId);
-    const activeHost = document.querySelector<HTMLElement>(`.lake-editor-tab[data-note-id="${escapeId(activeNoteId)}"]`);
-    // 正常路径按 activeNoteId 定位；多标签切换/懒加载的瞬间如果属性还未回流，
-    // 再兜底处理**当前显示中**的编辑器，避免点击后仍停留在旧滚动位置。
-    // ⚠️ 兜底判据用显式信号 data-active（activeEditorHost），**不要**再用 display/几何猜可见：
-    // 261005 起非活动标签保留布局尺寸（opacity+visibility 隐藏），display 恒为 block ⇒ 会命中的所有标签。
-    const fallback = activeEditorHost();
-    const hosts = activeHost ? [activeHost] : fallback ? [fallback] : [];
-    for (const host of hosts) {
-      const scroller = resolveScrollNode(host);
-      try {
-        scroller.scrollTop = 0;
-        scroller.scrollTo({ top: 0, behavior: "auto" });
-      } catch {
-        scroller.scrollTop = 0;
-      }
-    }
-  };
 
   /** 每个文档 tab 的**笔记本名**（面包屑首段）：EditorTab 按自己的 noteId 取，不再依赖活动文档。 */
   const notePathTitle = (noteId: string): string | null => {
@@ -119,7 +101,7 @@ export function deriveDesktopView(input: DesktopViewInput) {
   } as CSSProperties;
 
   return {
-    activeNodeDirty, activeNodeConflict, editorPrefs, activePath, scrollActiveEditorToTop, notePathTitle,
+    activeNodeDirty, activeNodeConflict, editorPrefs, activePath, notePathTitle,
     tabInfos, outlineVisible, lockedNoteIds, cloudDeletedNoteIds, effectiveOutlineMode, shellStyle, activeKind,
   };
 }

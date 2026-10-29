@@ -36,9 +36,9 @@ describe("移动端「常用」文档（261019，仅设备本地）", () => {
     expect(m.isFavorite("a")).toBe(true);
     expect(m.toggleFavorite("a")).toBe(false);
     expect(m.readFavoriteIds()).toEqual(["b"]);
-    localStorage.setItem("local-lakex-notes-mobile.favorites", "{bad json");
+    localStorage.setItem("lakex-local-notes-mobile.favorites", "{bad json");
     expect(m.readFavoriteIds()).toEqual([]);
-    localStorage.setItem("local-lakex-notes-mobile.favorites", JSON.stringify(["x", "x", 5, ""]));
+    localStorage.setItem("lakex-local-notes-mobile.favorites", JSON.stringify(["x", "x", 5, ""]));
     expect(m.readFavoriteIds()).toEqual(["x"]);
   });
 

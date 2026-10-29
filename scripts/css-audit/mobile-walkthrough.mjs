@@ -96,6 +96,9 @@ async function goHome() {
       ' var findByAria = function (aria, scope) { var els = [].slice.call((scope || document).querySelectorAll("[aria-label]")); for (var i = 0; i < els.length; i++) { if (els[i].getAttribute("aria-label") === aria && hit(els[i])) return els[i]; } return null; };' +
       ' var collapse = findByAria(COLLAPSE, document.querySelector(".side-panel--left.on") || document);' +
       ' if (collapse) return { kind: "collapse-tree", pt: center(collapse) };' +
+      // 261029：抽屉打开的另一种形态没有「收起」按钮（底部栏「文档树」是 toggle）⇒ 先点 toggle 关抽屉，
+      // 否则 返回 被抽屉容器遮挡、hit() 失败 ⇒ goHome 卡住（实测 doc-history 起全红）。
+      ' if (document.querySelector(".side-panel--left.on")) { var TREE = String.fromCharCode(0x6587, 0x6863, 0x6811); var tb = [].slice.call(document.querySelectorAll(".mobile-bottom-bar__item")).filter(function (e) { var a = (e.getAttribute("aria-label") || "") + e.title; return a.indexOf(TREE) >= 0 && e.getBoundingClientRect().width > 0; })[0]; if (tb) return { kind: "close-drawer", pt: center(tb) }; }' +
       ' var back = findByAria(BACK);' +
       ' if (back) return { kind: "back", pt: center(back) };' +
       ' var cancel = [].slice.call(document.querySelectorAll(".mobile-qn-actions button")).filter(function (e) { return e.textContent === String.fromCharCode(0x53d6, 0x6d88) && hit(e); })[0];' +
@@ -115,9 +118,12 @@ async function goHome() {
   throw new Error("goHome: 超过重试");
 }
 async function openNotebook() {
-  const has = await pageRef.evaluate('Boolean(document.querySelector(".nb-row, .nb-shelf-card"))');
-  if (!has) { await tapExpr(centerByText(".mobile-htab", "知识库"), "知识库 tab", 1300); }
-  const pt = await pageRef.evaluate('(function () { var e = document.querySelector(".nb-row") || document.querySelector(".nb-shelf-card"); if (!e) return null; var r = e.getBoundingClientRect(); return [Math.round(r.x + r.width / 2), Math.round(r.y + r.height / 2)]; })()');
+  // 261029：keep-alive 下小记/知识库两页都在 DOM ⇒ 只判「存在」会点到 offscreen 的 .nb-row（点击无效）。
+  // 改为等「可见入口」：不可见就点知识库 tab，再等它真正进视口。
+  const visibleNb = async () => pageRef.evaluate('(function(){ var els=[].slice.call(document.querySelectorAll(".nb-row,.nb-shelf-card")); for (var i=0;i<els.length;i++){ var r=els[i].getBoundingClientRect(); if (r.width>0&&r.height>0&&r.top>=0&&r.bottom<=innerHeight&&r.left>=0&&r.right<=innerWidth) return true; } return false; })()');
+  if (!(await visibleNb())) { await tapExpr(centerByText(".mobile-htab", "知识库"), "知识库 tab", 1300); }
+  for (var i = 0; i < 10 && !(await visibleNb()); i += 1) await sleep(200);
+  const pt = await pageRef.evaluate('(function () { var els=[].slice.call(document.querySelectorAll(".nb-row,.nb-shelf-card")); for (var i=0;i<els.length;i++){ var r=els[i].getBoundingClientRect(); if (r.width>0&&r.height>0&&r.top>=0&&r.bottom<=innerHeight&&r.left>=0&&r.right<=innerWidth) return [Math.round(r.x+r.width/2),Math.round(r.y+r.height/2)]; } return null; })()');
   if (!pt) throw new Error("no notebook entry");
   await pageRef.send("Input.dispatchMouseEvent", { type: "mousePressed", x: pt[0], y: pt[1], button: "left", clickCount: 1 });
   await pageRef.send("Input.dispatchMouseEvent", { type: "mouseReleased", x: pt[0], y: pt[1], button: "left", clickCount: 1 });
@@ -126,6 +132,12 @@ async function openNotebook() {
   if (!rowsVisible) {
     const btn = await pageRef.evaluate('(function () { var TREE = String.fromCharCode(0x6587, 0x6863, 0x6811); var els = [].slice.call(document.querySelectorAll(".mobile-bottom-bar__item")).filter(function (e) { var a = (e.getAttribute("aria-label") || "") + e.title; return a.indexOf(TREE) >= 0 && e.getBoundingClientRect().width > 0; }); var e = els[0]; if (!e) return null; var r = e.getBoundingClientRect(); return [Math.round(r.x + r.width / 2), Math.round(r.y + r.height / 2)]; })()');
     if (btn) { await pageRef.click(btn[0], btn[1]); await sleep(1100); }
+  }
+  // 261029：从首页进知识库默认落在文档列表页（DocList），行 ⋮ 动作在「文档树」抽屉里 ⇒ 抽屉没开就开它。
+  const drawerOpen = await pageRef.evaluate('Boolean(document.querySelector(".side-panel--left.on"))');
+  if (!drawerOpen) {
+    const btn2 = await pageRef.evaluate('(function () { var TREE = String.fromCharCode(0x6587, 0x6863, 0x6811); var els = [].slice.call(document.querySelectorAll(".mobile-bottom-bar__item")).filter(function (e) { var a = (e.getAttribute("aria-label") || "") + e.title; return a.indexOf(TREE) >= 0 && e.getBoundingClientRect().width > 0; }); var e = els[0]; if (!e) return null; var r = e.getBoundingClientRect(); return [Math.round(r.x + r.width / 2), Math.round(r.y + r.height / 2)]; })()');
+    if (btn2) { await pageRef.click(btn2[0], btn2[1]); await sleep(1100); }
   }
 }
 async function openDoc(n) { await openNotebook(); await tapExpr(nthRow(n), "doc row #" + n, 2600); }

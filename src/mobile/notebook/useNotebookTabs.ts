@@ -22,7 +22,31 @@ export interface OpenNotebookTabOptions {
 }
 
 export function notebookTabsStorageKey(notebookId: string): string {
-  return "local-lakex-notes-mobile.tabs." + notebookId;
+  return "lakex-local-notes-mobile.tabs." + notebookId;
+}
+
+/** 读上次保存的标签 id（**只读**；损坏/无存储 ⇒ []）。恢复顺序由 workspace 过滤后交给 restore()。 */
+function readSavedNotebookTabIds(notebookId: string): string[] {
+  try {
+    const raw = localStorage.getItem(notebookTabsStorageKey(notebookId));
+    const parsed = raw ? JSON.parse(raw) as unknown : [];
+    return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === "string" && id.length > 0) : [];
+  } catch {
+    return [];
+  }
+}
+
+/** 恢复/初始占位标签：正文未读（loaded=false），lastAccessedAt 用递增序号 —— 都比之后新开的标签旧（LRU 先淘汰它们）。 */
+function placeholderTab(id: string, title: string, order: number): NotebookTab {
+  return {
+    id,
+    title: title || "无标题文档",
+    content: "",
+    editing: false,
+    loaded: false,
+    lastAccessedAt: order,
+    kind: "doc",
+  };
 }
 
 interface UseNotebookTabsOptions {
@@ -38,8 +62,18 @@ interface UseNotebookTabsOptions {
 
 /** NotebookWorkspace 的标签会话所有者：tabs / active / loaded / mounted / LRU / 关闭全部。 */
 export function useNotebookTabs(opts: UseNotebookTabsOptions) {
-  const [tabs, setTabs] = useState<NotebookTab[]>([]);
-  const [activeId, setActiveId] = useState<string | null>(opts.initialNoteId ?? null);
+  const tabsKey = notebookTabsStorageKey(opts.notebookId);
+  /**
+   * 挂载时读一次存档，直接作为 tabs 的 **initial state**：
+   * - 不再依赖「首次持久化 effect 跳过写」这种隐式约定（旧实现与 workspace 恢复 effect 有顺序耦合：
+   *   一旦顺序变化/新增 effect，挂载首帧就会把上次存档写成 []，表现为「每次进笔记本只剩第一篇」）；
+   * - 首帧写回的仍是同一份存档（幂等），之后的变化（含关闭全部写 []）照常落盘。
+   */
+  const savedIdsRef = useRef<string[] | null>(null);
+  if (savedIdsRef.current === null) savedIdsRef.current = readSavedNotebookTabIds(opts.notebookId);
+  const savedIds = savedIdsRef.current ?? [];
+  const [tabs, setTabs] = useState<NotebookTab[]>(() => savedIds.map((id, i) => placeholderTab(id, opts.getTitle(id) ?? "", i)));
+  const [activeId, setActiveId] = useState<string | null>(opts.initialNoteId ?? (savedIds.length > 0 ? savedIds[savedIds.length - 1] : null));
   const [mountedIds, setMountedIds] = useState<Set<string>>(() => new Set());
   const [freshId, setFreshId] = useState<string | null>(null);
   const [readTick, setReadTick] = useState(0);
@@ -144,6 +178,30 @@ export function useNotebookTabs(opts: UseNotebookTabsOptions) {
     }
   }, []);
 
+  /**
+   * 恢复一份标签会话（**一次 setTabs + 一次 setActiveId**，不再逐个 openTab ⇒ 不会出现中间态顺序）：
+   * workspace 负责按目录已知 id 过滤，hook 负责顺序/去重/上限/激活页。
+   * 只建占位（不读正文）：活动页由既有的「活动页未加载则补读」effect 懒加载，其它页切到时再读。
+   */
+  const restore = useCallback((ids: string[], nextActiveId: string | null, options: { enterEditor?: boolean } = {}) => {
+    const unique: string[] = [];
+    for (const id of ids) if (id && !unique.includes(id)) unique.push(id);
+    const active = nextActiveId && unique.includes(nextActiveId) ? nextActiveId : (unique.length > 0 ? unique[unique.length - 1] : null);
+    tabEpochRef.current += 1;
+    pendingIdsRef.current.clear();
+    const evicted = selectEvictionIds(
+      unique.map((id, i) => ({ noteId: id, lastAccessedAt: i })),
+      { limit: loadSettings().maxOpenTabs, activeNoteId: active, pinnedNoteIds: new Set() },
+    );
+    const evictedSet = new Set(evicted);
+    const restored = unique
+      .filter((id) => !evictedSet.has(id))
+      .map((id, i) => ({ ...placeholderTab(id, getTitleRef.current(id) ?? "", i), editing: options.enterEditor === true && id === active }));
+    activeIdRef.current = active;
+    setTabs(restored);
+    setActiveId(active);
+  }, []);
+
   const clearTabs = useCallback(() => {
     tabEpochRef.current += 1;
     pendingIdsRef.current.clear();
@@ -159,14 +217,9 @@ export function useNotebookTabs(opts: UseNotebookTabsOptions) {
 
   const active = useMemo(() => tabs.find((tab) => tab.id === activeId) ?? null, [tabs, activeId]);
 
-  // 标签保持：打开标签变化即落本地（仅本机，不参与同步）
-  // ⚠️ 首次挂载（tabs 还是空数组）**不能写**：工作区的恢复逻辑在另一个 effect 里读这份
-  // localStorage，若挂载时先写 [] 就会把上次的标签清掉，表现为「每次进笔记本只剩第一篇」。
-  // 挂载后的所有变化（含关闭全部写 []）照常落盘。
-  const tabsKey = notebookTabsStorageKey(opts.notebookId);
-  const firstPersistRef = useRef(true);
+  // 标签保持：变化即落本地（仅本机，不参与同步）。首帧写回的 = initial state 里那份存档（幂等），
+  // 因此不需要「首次跳过写」；关闭全部照常写 []（clearTabsOnExit 的语义仍由启动时清存档承担）。
   useEffect(() => {
-    if (firstPersistRef.current) { firstPersistRef.current = false; return; }
     writeLocalStorage(tabsKey, JSON.stringify(tabs.map((tab) => tab.id)));
   }, [tabs, tabsKey]);
 
@@ -211,11 +264,13 @@ export function useNotebookTabs(opts: UseNotebookTabsOptions) {
   return {
     tabs,
     tabsRef,
+    savedTabIds: savedIds,
     active,
     activeId,
     mountedIds,
     freshId,
     openTab,
+    restore,
     loadTabBody,
     removeTab,
     clearTabs,

@@ -1,5 +1,5 @@
 ---
-name: LocalLakexNotes
+name: LakexLocalNotes
 description: 本地优先的 Lake 编辑器笔记应用（Android 端）——自有设计语言，仿语雀形态 + 本项目色阶
 colors:
   accent: "#3f5fa0"
@@ -51,7 +51,7 @@ components:
   toast: { rounded: "{rounded.card}", surface: "{colors.surface-panel}" }
 ---
 
-# Design System: LocalLakexNotes
+# Design System: LakexLocalNotes
 
 ## Overview
 
@@ -198,6 +198,10 @@ Toast        .mb-toast-host > .mb-toast[--error] > (.mb-toast__text, .mb-toast__
   `.is-open`，用于自带 presence 状态、需要**退出也淡出**的浮层）。表面与层序只有一份。
 - **关闭方式三件套**：遮罩点击、下拉手势（`useSwipeToClose`）、安卓返回（`backStack`，先退子菜单再关面板）。
 - 安全区：底部内距一律含 `--mobile-bottom-safe-area`。
+- **底部 Sheet 骨架已收敛为 `ui/MobileSheet.tsx`（MOB-11）**：scrim / 右滑关闭 / 返回栈 / 焦点 / 滚动锁只此一份。
+  头部结构或语义不同的浮层（AI 三面板的文字动作按钮头、无头的新建面板、带 listbox 的选择器、ActionSheet 语义的
+  确认框/附件菜单、可下钻的菜单 Sheet）**保留各自原语**，逐条理由见 `docs/MOBILE-SHEET-EXCEPTIONS.md`。
+  **不要为统一改交互，也不要在原语里加视觉开关。**
 - **禁止原生 `<select>` 的系统弹层**（用户 261012 反馈"有点丑"）：系统弹层不跟主题/字号走（深色下也是白底、
   选中态是系统蓝绿圈），与移动端浮层语言割裂。选项类交互一律走 `PickerSheet`（底部 Sheet 列表 + 打勾），
   触发器沿用 `.mb-select` 外观但是 `<button>`。与桌面 kit 的同类规则同源（桌面也不用原生 select 弹层）。

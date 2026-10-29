@@ -17,7 +17,7 @@ if ! $ADB devices | grep -q "emulator-.*device"; then
 fi
 # socket 名带的是**宿主进程 PID**：App 重启后旧 socket 仍在 /proc/net/unix 里挂着，
 # 直接 tail -1 可能取到旧进程的 socket（/json/list 恒为空）。优先按当前 App PID 精确取。
-APP_PID="$($ADB shell pidof com.locallakexnotes.mobile 2>/dev/null | tr -d '\r' | awk '{print $1}')"
+APP_PID="$($ADB shell pidof com.lakexlocalnotes.android 2>/dev/null | tr -d '\r' | awk '{print $1}')"
 SOCK=""
 if [ -n "$APP_PID" ]; then
   SOCK="$($ADB shell cat /proc/net/unix 2>/dev/null | grep -oE "webview_devtools_remote_${APP_PID}$" | head -1)"

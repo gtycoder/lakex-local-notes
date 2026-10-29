@@ -5,10 +5,10 @@ import path from "node:path";
 import { APP_ORIGIN, APP_SCHEME, DIST_MIME, isAppOriginUrl, resolveAppDistFile } from "./appOrigin.js";
 
 /**
- * locallakexnotes://app 的静态解析（A1）：打包版渲染层不再跑 file://。
+ * lakexlocalnotes://app 的静态解析（A1）：打包版渲染层不再跑 file://。
  * 这里只测纯逻辑（不依赖 electron）：映射、目录穿越、编码绕过、缺失与目录。
  */
-describe("locallakexnotes://app 静态解析", () => {
+describe("lakexlocalnotes://app 静态解析", () => {
   let dist: string;
   beforeAll(() => {
     dist = fs.mkdtempSync(path.join(os.tmpdir(), "lake-appdist-"));
@@ -20,17 +20,17 @@ describe("locallakexnotes://app 静态解析", () => {
   afterAll(() => { fs.rmSync(dist, { recursive: true, force: true }); });
 
   it("协议常量：scheme/host/origin 与 MIME 表可用", () => {
-    expect(APP_SCHEME).toBe("locallakexnotes");
-    expect(APP_ORIGIN).toBe("locallakexnotes://app");
+    expect(APP_SCHEME).toBe("lakexlocalnotes");
+    expect(APP_ORIGIN).toBe("lakexlocalnotes://app");
     expect(DIST_MIME[".html"]).toContain("text/html");
     expect(DIST_MIME[".woff2"]).toBe("font/woff2");
   });
 
-  it("页面来源判定不能依赖 URL.origin（Node 对非特殊 scheme 返回 \"null\"，Chromium 返回 locallakexnotes://app）", () => {
-    expect(new URL("locallakexnotes://app/index.html").origin).toBe("null"); // 这条正是踩过的坑
-    expect(isAppOriginUrl("locallakexnotes://app/index.html")).toBe(true);
-    expect(isAppOriginUrl("locallakexnotes://app/")).toBe(true);
-    expect(isAppOriginUrl("locallakexnotes://other/index.html")).toBe(false);
+  it("页面来源判定不能依赖 URL.origin（Node 对非特殊 scheme 返回 \"null\"，Chromium 返回 lakexlocalnotes://app）", () => {
+    expect(new URL("lakexlocalnotes://app/index.html").origin).toBe("null"); // 这条正是踩过的坑
+    expect(isAppOriginUrl("lakexlocalnotes://app/index.html")).toBe(true);
+    expect(isAppOriginUrl("lakexlocalnotes://app/")).toBe(true);
+    expect(isAppOriginUrl("lakexlocalnotes://other/index.html")).toBe(false);
     expect(isAppOriginUrl("http://127.0.0.1:1421/")).toBe(false);
     expect(isAppOriginUrl("not a url")).toBe(false);
   });

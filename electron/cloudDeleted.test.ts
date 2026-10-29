@@ -110,15 +110,19 @@ describe("cloudDeleted：v3 desktop adapter（remotePurged → 本地标）", ()
     state.remotePurged = ["n1"];
     await adapter.saveState(state);
     expect(store.listCloudDeletedNoteIds()).toEqual(["n1"]);
-    const saved = JSON.parse(await fs.readFile(sidecar(root), "utf8")) as { remotePurged: string[] };
-    expect(saved.remotePurged).toEqual(["n1"]);
+    // E3-1 phase2a：sidecar = v3 信封（remotePurged → cloud-deleted records）
+    const idsOf = async (): Promise<string[]> => {
+      const raw = JSON.parse(await fs.readFile(sidecar(root), "utf8")) as { records?: Array<{ kind: string; id?: string }> };
+      return (raw.records ?? []).filter((r) => r.kind === "cloud-deleted").map((r) => r.id!);
+    };
+    expect(await idsOf()).toEqual(["n1"]);
 
     // 恢复并重新上传成功：引擎从 remotePurged 移除 → 下一次 saveState 清标
     const next = (await adapter.loadState())!;
     next.remotePurged = [];
     await adapter.saveState(next);
     expect(store.listCloudDeletedNoteIds()).toEqual([]);
-    expect((JSON.parse(await fs.readFile(sidecar(root), "utf8")) as { remotePurged: string[] }).remotePurged).toEqual([]);
+    expect(await idsOf()).toEqual([]);
   });
 
   it("本地主动 purge 后：标记行没了，sidecar 的 remotePurged 也被清掉（不再有 S3 行为）", async () => {
@@ -139,7 +143,10 @@ describe("cloudDeleted：v3 desktop adapter（remotePurged → 本地标）", ()
     const after = (await adapter.loadState())!; // sidecar 仍带 p1
     expect(after.remotePurged).toContain("p1");
     await adapter.saveState(after);
-    expect((JSON.parse(await fs.readFile(sidecar(root), "utf8")) as { remotePurged: string[] }).remotePurged).toEqual([]);
+    {
+      const raw = JSON.parse(await fs.readFile(sidecar(root), "utf8")) as { records?: Array<{ kind: string; id?: string }> };
+      expect((raw.records ?? []).filter((r) => r.kind === "cloud-deleted").map((r) => r.id)).toEqual([]);
+    }
     // purge 墓碑仍是"下次同步要传播的删除意图"，但不再有 remotePurged 打标
     expect(store.listPurgedTombstones().map((t) => t.id)).toContain("p1");
   });

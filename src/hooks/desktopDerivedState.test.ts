@@ -1,11 +1,7 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
-// deriveDesktopView 运行时 import 了编辑器/大纲重模块（会拉入 Lake vendor bundle，node 环境无 DOM）。
-// 本测试只验证 tabInfos 投影，先在这些边界处 stub 掉，避免加载内核。
-vi.mock("../features/editor/EditorTab", () => ({ clearScrollMemory: () => {} }));
-vi.mock("../features/editor/lakeRuntime", () => ({ resolveScrollNode: () => ({}) }));
-vi.mock("../features/outline/registry", () => ({ getOutlineTab: () => null }));
-
+// DT-14（261028）后 deriveDesktopView 是**纯计算**：不再 import EditorTab/lakeRuntime，也不读 DOM，
+// 因此这里不再需要 stub 编辑器/大纲重模块 —— 本文件在 node 环境跑，本身就是「纯函数不碰 DOM」的护栏。
 import { deriveDesktopView, type DesktopViewInput } from "./desktopDerivedState";
 
 /**
@@ -69,6 +65,16 @@ describe("deriveDesktopView — tabInfos 文档类型透传", () => {
  * `--lake-outline-inset` 是唯一会"占住编辑区右缘"的量，关闭时必须为 0。
  * 锁死：默认关闭 ⇒ 不挂载且不让位；开启 + 固定态 ⇒ 按面板宽让位。
  */
+/**
+ * 261028 DT-14：派生模块只出值。原先的「活动标签滚回顶部」（读 DOM + 改 scrollTop）自面包屑
+ * 下沉进 EditorTab 后已无调用方，整段移除；这里锁死「不再把 DOM 副作用混进纯计算」。
+ */
+describe("deriveDesktopView — 纯计算（DT-14）", () => {
+  it("不返回带 DOM 副作用的回顶闭包", () => {
+    expect(deriveDesktopView(input([]))).not.toHaveProperty("scrollActiveEditorToTop");
+  });
+});
+
 describe("deriveDesktopView — 大纲增强关闭时的零占位（260923 W6）", () => {
   const insetOf = (style: unknown) => (style as Record<string, string>)["--lake-outline-inset"];
 

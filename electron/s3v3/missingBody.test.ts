@@ -40,6 +40,7 @@ describe("P0 v3 本地正文缺失（.lake 被删）", () => {
     await eb.sync();
     const gen = remote.pointer().generation;
     await fs.unlink(a.store.getNotePaths("n1").lakePath);
+    a.store.listMissingBodies(); // 事件驱动：体检/打开发现缺正文才入队，同步本身不扫描
     remote.reset();
     const r = await ea.sync();
     expect(r.downloadedNotes).toBe(1);
@@ -65,6 +66,7 @@ describe("P0 v3 本地正文缺失（.lake 被删）", () => {
     const gen = remote.pointer().generation;
     const bodyKey = [...remote.objects.keys()].find((k) => k.startsWith("objects/n2-"))!;
     await fs.unlink(a.store.getNotePaths("n2").lakePath);
+    a.store.listMissingBodies();
     remote.objects.delete(bodyKey);
     remote.reset();
     const r = await ea.sync();

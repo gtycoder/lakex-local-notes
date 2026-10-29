@@ -178,7 +178,7 @@ describe("多维表编辑会话行为", () => {
     act(() => host.querySelectorAll<HTMLElement>(".bt-table-item")[1].click());
     act(() => vi.advanceTimersByTime(801));
     expect(change).not.toHaveBeenCalled();
-    expect(JSON.parse(localStorage.getItem("local-lakex-notes-v3.bitable-nav.a")!).tableId).toBe("bt");
+    expect(JSON.parse(localStorage.getItem("lakex-local-notes-v3.bitable-nav.a")!).tableId).toBe("bt");
   });
 
   it("隐藏 Lake 内核提前 preventDefault 时，活动网格撤销仍只由本表处理", () => {

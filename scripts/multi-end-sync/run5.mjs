@@ -1,9 +1,11 @@
+// ⚠️ 已失效（261029，CORE-05/SD-11）：本脚本是 **v2 时代** 多端演练（读 manifests/latest.json + version===7），
+// v3 无 manifest/清单链 ⇒ Phase 8 等断言必然失败。**不要运行**；现行协议见 docs/SYNC-PROTOCOL.md。
 import { connect } from './cdpclient.mjs';
 import { execSync } from 'node:child_process';
 import fs from 'node:fs';
 import zlib from 'node:zlib';
 import { createRequire } from 'node:module';
-const require = createRequire('/Users/admin/file/local-lake/local-lakex-notes/package.json');
+const require = createRequire('/Users/admin/file/local-lake/lakex-local-notes/package.json');
 const Database = require('better-sqlite3');
 const { S3Client, GetObjectCommand } = require('@aws-sdk/client-s3');
 const ADB = '/opt/homebrew/share/android-commandlinetools/platform-tools/adb';
@@ -32,14 +34,14 @@ function pullMobile(e) {
   const dir = '/tmp/lake5/db-' + e.serial; fs.mkdirSync(dir, { recursive: true });
   for (let i = 0; i < 3; i++) {
     try {
-      for (const f of ['local-lakex-notes-mobileSQLite.db', 'local-lakex-notes-mobileSQLite.db-wal']) {
-        const b = execSync(ADB + ' -s ' + e.serial + ' exec-out run-as com.locallakexnotes.mobile cat databases/' + f, { maxBuffer: 200 * 1024 * 1024 });
+      for (const f of ['lakex-local-notes-mobileSQLite.db', 'lakex-local-notes-mobileSQLite.db-wal']) {
+        const b = execSync(ADB + ' -s ' + e.serial + ' exec-out run-as com.lakexlocalnotes.android cat databases/' + f, { maxBuffer: 200 * 1024 * 1024 });
         fs.writeFileSync(dir + '/' + f, b);
       }
       break;
     } catch (err) { if (i === 2) throw err; }
   }
-  const db = new Database(dir + '/local-lakex-notes-mobileSQLite.db', { readonly: true });
+  const db = new Database(dir + '/lakex-local-notes-mobileSQLite.db', { readonly: true });
   try { return db.prepare('SELECT id,title,doc_kind,content,trashed_at FROM notes').all().map(function (r) { return { id: String(r.id), title: String(r.title), kind: r.doc_kind || 'doc', content: String(r.content), trashed: !!r.trashed_at }; }); }
   finally { db.close(); }
 }

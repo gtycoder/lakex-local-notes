@@ -65,8 +65,8 @@ export function useDesktopLifecycle({
       draftTimers.current.clear();
       // 拖动过程只更新视觉状态；卸载时补一次合法的最终布局提交。
       const widths = layoutWidthsRef.current;
-      writeLocalStorage("local-lakex-notes-v3.sidebar-width", String(Math.round(Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, widths.sidebar)))));
-      writeLocalStorage("local-lakex-notes-v3.outline-sidebar-width", String(Math.round(Math.min(OUTLINE_SIDEBAR_MAX_WIDTH, Math.max(OUTLINE_SIDEBAR_MIN_WIDTH, widths.outline)))));
+      writeLocalStorage("lakex-local-notes-v3.sidebar-width", String(Math.round(Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, widths.sidebar)))));
+      writeLocalStorage("lakex-local-notes-v3.outline-sidebar-width", String(Math.round(Math.min(OUTLINE_SIDEBAR_MAX_WIDTH, Math.max(OUTLINE_SIDEBAR_MIN_WIDTH, widths.outline)))));
     };
   }, [flushTimers, openTabsRef, draftTimers, layoutWidthsRef]);
 

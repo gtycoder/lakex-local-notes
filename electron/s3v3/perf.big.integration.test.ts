@@ -31,8 +31,10 @@ describeIt("2 万文档本地引擎/适配器基准（绕过 Store API 造数）
     const db2 = new Database(path.join(root, "metadata.sqlite3"));
     const wsId = (db2.prepare("SELECT workspace_id FROM tree_nodes WHERE id=?").get(nb.id) as { workspace_id: string }).workspace_id;
     const now = new Date().toISOString();
-    const insertNote = db2.prepare("INSERT INTO notes(id,title,parent_id,sort_order,updated_at,sync_state,is_conflict,kind) VALUES(?,?,?,?,?,'local',0,'doc')");
-    const insertTree = db2.prepare("INSERT INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,sync_state,is_conflict) VALUES(?,?,?,'note',?,?,?,?,?,'local',0)");
+    // 绕过 Store API 造数：列以当前 schema（electron/schemaInit.ts）为准；旧的 sync_state 列已删，
+    // 用 is_dirty=1 表达「本地待上传」（引擎首传按 state 全量上传，不依赖该列）。
+    const insertNote = db2.prepare("INSERT INTO notes(id,title,parent_id,sort_order,updated_at,is_dirty,is_conflict,kind) VALUES(?,?,?,?,?,1,0,'doc')");
+    const insertTree = db2.prepare("INSERT INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,is_dirty,is_conflict) VALUES(?,?,?,'note',?,?,?,?,?,1,0)");
     db2.transaction(() => {
       for (let i = 0; i < DOCS; i++) {
         const id = "big" + String(i).padStart(6, "0");

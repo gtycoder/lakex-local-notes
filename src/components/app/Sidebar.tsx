@@ -20,6 +20,8 @@ import { SIDEBAR_DEFAULT_WIDTH } from "../../desktop/desktopTypes";
 import { Dialog, Menu, Popover, Submenu } from "../ui/Overlay";
 import { rubberBandWidth, SplitHandle } from "../ui/SplitHandle";
 import { usePopoverPosition } from "../../hooks/usePopoverPosition";
+// 行内重命名的 Enter/Esc/空名口径统一走共用原语（DT-12；目录这里保留「弹窗 + 空名不提交」的现状）
+import { InlineRenameInput } from "../ui/InlineRenameInput";
 
 type CreateKind = "notebook" | "group" | "note" | "usheet" | "bitable" | "board" | "ink";
 type DropPosition = "before" | "inside" | "after";
@@ -923,15 +925,18 @@ function TreeRenameDialog({ initial, onCancel, onConfirm }: { initial: string; o
       <div className="ln-dialog__head"><span className="ln-dialog__title">重命名</span></div>
       <div className="ln-dialog__body">
         <span className="ln-input">
-          <input
-            ref={inputRef}
+          {/* 空名策略 = fallback：回车不提交、保持原名（与「确定」按钮的 disabled={!canConfirm} 同一条口径）。 */}
+          <InlineRenameInput
+            inputRef={inputRef}
             className="ln-input__field"
+            ariaLabel="节点名称"
             value={value}
-            aria-label="节点名称"
             autoFocus
-            onChange={(event) => setValue(event.target.value)}
-            onFocus={(event) => event.currentTarget.select()}
-            onKeyDown={(event) => { if (event.key === "Enter" && canConfirm) onConfirm(trimmed); }}
+            selectOnFocus
+            emptyPolicy="fallback"
+            onChange={setValue}
+            onCommit={onConfirm}
+            onCancel={onCancel}
           />
         </span>
       </div>

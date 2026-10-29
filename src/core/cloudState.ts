@@ -1,4 +1,4 @@
-import type { SyncSettings } from "../lib/types.js";
+import type { SyncSettings } from "./sharedTypes.js";
 
 /**
  * 云同步的**状态判据（单一来源）**。

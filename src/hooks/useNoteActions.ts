@@ -1,6 +1,7 @@
 import { useCallback } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { native } from "../lib/native";
+import { hostCapabilities } from "../lib/hostCapabilities";
 import { usheetActiveSheetId } from "../features/usheet/usheetActiveSheet";
 import { exportBoardImage } from "../features/board/boardExport";
 import { getNativeErrorMessage } from "../lib/nativeErrors";
@@ -37,7 +38,7 @@ export function useNoteActions({ showNotice, setError, setTreeNodes }: UseNoteAc
   const exportNoteById = useCallback(async (noteId: string | null, format: ExportFormat) => {
     if (!noteId) { showNotice("该节点不是文档"); return; }
     // 画板 PNG/SVG：转给画板内已有的导出（走浏览器下载，不需要系统目录框）。
-    // 必须放在 nativeDialog 守卫之前：浏览器端这条路径本来就能用。
+    // 必须放在宿主能力守卫之前：浏览器端这条路径本来就能用。
     if (format === "png" || format === "svg") {
       const ok = await exportBoardImage(noteId, format);
       showNotice(ok
@@ -45,41 +46,48 @@ export function useNoteActions({ showNotice, setError, setTreeNodes }: UseNoteAc
         : "请先打开画板再导出（画板工具栏里也有「导出 SVG / PNG」）");
       return;
     }
-    // 浏览器端：导出靠系统目录选择框（宿主专属），暂不支持 —— 明确提示，不弹桌面弹窗
-    if (!native.capabilities.nativeDialog) { showNotice("浏览器端暂不支持导出（请在桌面端操作）"); return; }
+    // 宿主能力：桌面有本机文件系统 ⇒ 先选导出目录；浏览器 Web 端不选目录，
+    // 由主进程生成到默认导出目录后经 /download 下载路由交给浏览器（shim 覆盖导出方法）。
+    const caps = hostCapabilities();
+    let dir: string | undefined;
     try {
-      const dir = await native.pickExportDir();
-      if (!dir) return; // 用户取消
+      if (caps.localFileSystem) {
+        const picked = await native.pickExportDir();
+        if (!picked) return; // 用户取消
+        dir = picked;
+      }
+      /** 桌面 = 本机路径；浏览器 = 已交给下载（不把宿主机绝对路径当文案给用户）。 */
+      const dest = (path: string): string => (dir ? `：${path}` : "（已开始下载）");
       if (format === "csv") {
         // 表格类统一入口：多维表 = 活动数据表；表格 = 当前打开的工作表（没打开 ⇒ 后端回退第一张并在提示里写明表名）。
         const result = await native.exportTableCsv(noteId, dir, usheetActiveSheetId(noteId) ?? undefined);
         showNotice(result.sheetName
-          ? `已导出 CSV：${result.exportPath}（工作表「${result.sheetName}」，${result.rowCount} 行）`
-          : `已导出 CSV：${result.exportPath}（${result.rowCount} 条记录）`);
+          ? `已导出 CSV${dest(result.exportPath)}（工作表「${result.sheetName}」，${result.rowCount} 行）`
+          : `已导出 CSV${dest(result.exportPath)}（${result.rowCount} 条记录）`);
         return;
       }
       if (format === "xlsx") {
         const result = await native.exportUsheetXlsx(noteId, dir);
         const skippedText = result.skipped > 0 ? `（${result.skipped} 张图片缺失已跳过）` : "";
-        showNotice(`已导出 Excel：${result.exportPath}（${result.sheetCount} 个工作表，${result.rowCount} 行，${result.imageCount} 张图片内嵌${skippedText}）`);
+        showNotice(`已导出 Excel${dest(result.exportPath)}（${result.sheetCount} 个工作表，${result.rowCount} 行，${result.imageCount} 张图片内嵌${skippedText}）`);
         return;
       }
       if (format === "zip") {
         const result = await native.exportBitableZip(noteId, dir);
         const skippedText = result.skipped > 0 ? `（${result.skipped} 个附件缺失已跳过）` : "";
-        showNotice(`已导出压缩包：${result.exportPath}（${result.fileCount} 个附件${skippedText}）`);
+        showNotice(`已导出压缩包${dest(result.exportPath)}（${result.fileCount} 个附件${skippedText}）`);
         return;
       }
       const result = await native.exportNote(noteId, format, dir);
       const skippedText = result.skipped > 0 ? `（${result.skipped} 张图片缺失已跳过）` : "";
       if (format === "markdown") {
-        showNotice(`已导出 Markdown 资料包到 ${result.exportPath}（${result.imageCount} 张图片${skippedText}）`);
+        showNotice(`已导出 Markdown 资料包${dir ? `到 ${result.exportPath}` : "（已开始下载）"}（${result.imageCount} 张图片${skippedText}）`);
       } else if (format === "html") {
-        showNotice(`已导出 HTML：${result.exportPath}（${result.imageCount} 张图片${skippedText}）`);
+        showNotice(`已导出 HTML${dest(result.exportPath)}（${result.imageCount} 张图片${skippedText}）`);
       } else if (format === "docx") {
-        showNotice(`已导出 Word：${result.exportPath}（${result.imageCount} 张图片内嵌${skippedText}）`);
+        showNotice(`已导出 Word${dest(result.exportPath)}（${result.imageCount} 张图片内嵌${skippedText}）`);
       } else {
-        showNotice(`已导出 PDF：${result.exportPath}（${result.imageCount} 张图片内嵌${skippedText}）`);
+        showNotice(`已导出 PDF${dest(result.exportPath)}（${result.imageCount} 张图片内嵌${skippedText}）`);
       }
     } catch (reason) {
       setError("导出失败: " + (getNativeErrorMessage(reason)));

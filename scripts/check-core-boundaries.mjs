@@ -6,7 +6,7 @@
  * 退出码：0 = 通过；1 = 发现违规。
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join, relative, resolve } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 
 const ROOT = resolve(import.meta.dirname, "..");
 const CORE_DIR = join(ROOT, "src", "core");
@@ -77,9 +77,19 @@ function scanFile(file) {
       if (FORBIDDEN_IMPORT_SUBSTRINGS.some((s) => spec.includes(s))) {
         issues.push(`L${n} 禁止导入 electron 侧路径：${spec}`);
       }
-      // 依赖面收紧：core 只能导入 core 内部模块 + 共享类型（../lib/types.js）+ 测试框架 vitest
-      if (!spec.startsWith("./") && !spec.startsWith("../core/") && spec !== "../lib/types.js" && spec !== "./types.js" && spec !== "vitest") {
-        issues.push(`L${n} 禁止导入 core 之外模块（仅允许 ./ 内部 / ../lib/types.js）：${spec}`);
+      // 依赖面收紧：core 只能导入 **src/core 内部**模块 + 测试框架 vitest。
+      // 261029（CORE-10）：core→../lib/types 反向依赖已清零（共享类型下沉 src/core/sharedTypes.ts，lib/types 改为 re-export），
+      // 白名单同步删除，防止回退。
+      // 261028：core 已按 v4 RFC 分子目录（s3v3/protocol、s3v3/plan…），所以不能再用「以 ./ 开头」
+      // 这种扁平目录假设；改为解析真实路径、判定是否仍在 src/core 内（意图不变，规则更准确）。
+      const isRelative = spec.startsWith("./") || spec.startsWith("../");
+      const insideCore = isRelative && (() => {
+        const target = resolve(dirname(file), spec);
+        return target === CORE_DIR || target.startsWith(CORE_DIR + "/");
+      })();
+      const allowedExplicit = spec === "vitest";
+      if (!insideCore && !allowedExplicit) {
+        issues.push(`L${n} 禁止导入 core 之外模块（仅允许 src/core 内部）：${spec}`);
       }
     }
 

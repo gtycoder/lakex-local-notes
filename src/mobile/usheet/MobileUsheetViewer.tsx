@@ -10,6 +10,8 @@
  * 分包、首次可见才挂载、图片 URL、主题跟随的约束与只读版保持一致。
  */
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import type { EditorCaptureHandler } from "../../core/editorCapture";
+import { reportMobileActionError } from "../lib/reportMobileActionError";
 import { createUniver, LocaleType, mergeLocales, type FUniver, type IPresetPlugin } from "@univerjs/presets";
 
 
@@ -32,7 +34,9 @@ import { UniverFindReplaceMobileUIPlugin } from "@univerjs/find-replace";
 import { UniverSheetsFindReplaceMobileUIPlugin } from "@univerjs/sheets-find-replace";
 import "@univerjs/sheets-find-replace/facade";
 import { buildMobileUniverTheme } from "./mobileUniverTheme";
-import { emptyUsheetWorkbook, mapUsheetImageSources, parseUsheetBody, usheetToBody } from "../../core/usheetDoc.js";
+import { emptyUsheetWorkbook, mapUsheetImageSources, normalizeUsheetWorkbook, parseUsheetBody, usheetToBody, type UsheetWorkbook } from "../../core/usheetDoc.js";
+import { checkDocBody } from "../../core/docBodySafety.js";
+import { docBaselineSettled } from "../../core/docBaseline.js";
 import { localAssetHttpUrl } from "../../core/assetUrl.js";
 import { withAssetAccessToken } from "../../lib/assetPort";
 import { SheetPopCard } from "./SheetPopCard";
@@ -41,7 +45,8 @@ import { SheetTopBar } from "./SheetTopBar";
 import { SheetDock } from "./SheetDock";
 import { SheetDockPanel } from "./SheetDockPanel";
 import { useKeyboard } from "../hooks/useKeyboard";
-import { capturePanelHeight, dockKbOffset } from "../editor/editSurfaceModel";
+import { dockKbOffset } from "../editor/editSurfaceModel";
+import { useEditSurface } from "../editor/useEditSurface";
 import { showToast } from "../ui/toastBus";
 import { SHEET_PANEL_MIN_HEIGHT, SHEET_ZOOM_LEVELS, sheetPanelNeedsFade, type SheetDockId, type SheetMoreId } from "./usheetChromeModel";
 import { createMobileSheetsCorePreset, createMobileSheetsDrawingPreset, createMobileSheetsHyperLinkPreset } from "./mobileUniverPreset";
@@ -82,13 +87,33 @@ export interface MobileUsheetViewerProps {
   /** 编辑命令防抖后的正文变化。 */
   onChange: (content: string) => void;
   /** “完成”/关标签前同步取最新正文；null 表示该实例已卸载。 */
-  onCapture?: (capture: (() => string | null) | null) => void;
+  onCapture?: EditorCaptureHandler;
 }
 
 export function MobileUsheetViewer({ noteId, content, active, editing, onChange, onCapture }: MobileUsheetViewerProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const [everActive, setEverActive] = useState(active);
   const [ready, setReady] = useState(false);
+  /**
+   * CORE-02：非空且解析不出来的正文一律只读（父级仍可能把 editing 置 true）。
+   * 编辑入口（dock / 公式栏 / 双击）与所有保存路径都按 editable / bodyUnreadable 收口。
+   */
+  const [bodyCheck] = useState(() => checkDocBody("usheet", content));
+  const bodyUnreadable = bodyCheck.status === "unreadable";
+  const editable = editing && !bodyUnreadable;
+  const bodyUnreadableRef = useRef(bodyUnreadable);
+  bodyUnreadableRef.current = bodyUnreadable;
+  /**
+   * 「打开 = 只读」core 判据（CORE-03，与桌面同一函数）：
+   * - diskBodyRef：磁盘原文（无真实改动时 capture 返回它，避免为规范化差异写盘）；
+   * - baselineSettledRef：内核初始化后的第一次 capture 只对齐基线，不写盘、不标脏；
+   * - contentInputRef：用户是否产生过「可能改内容」的输入（键盘/粘贴/拖放/工具栏点击）；
+   * - changedSinceOpenRef：是否真的发生过正文变化（外部 content 刷新时不再改写磁盘基线）。
+   */
+  const diskBodyRef = useRef(content);
+  const baselineSettledRef = useRef(false);
+  const contentInputRef = useRef(false);
+  const changedSinceOpenRef = useRef(false);
   const containerId = "mobile-usheet-" + noteId;
   const instanceRef = useRef<{ univer: { dispose: () => void }; univerAPI: FUniver; book: UniverBook; last: string } | null>(null);
   const timerRef = useRef<number | null>(null);
@@ -108,16 +133,7 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
     if (setUsheetCrosshair(api, next)) setCrosshairOn(next);
   }, [crosshairOn, getUniverAPI]);
 
-  /** 编辑态 dock 面板状态机（照文档 EditorDock：open/closing/closingHold/panelHeight，覆盖键盘区、滑入滑出）。 */
-  const [dockPanel, setDockPanel] = useState<SheetDockId | null>(null);
-  const [renderedPanel, setRenderedPanel] = useState<SheetDockId | null>(null);
-  const [panelOpen, setPanelOpen] = useState(false);
-  const [panelClosing, setPanelClosing] = useState(false);
-  const [panelClosingHold, setPanelClosingHold] = useState(false);
-  const [panelHeight, setPanelHeight] = useState(300);
-  const panelCloseTimerRef = useRef(0);
-  const panelFallbackTimerRef = useRef(0);
-  /** 更多面板内的下钻（数字格式 / 边框 / 公式）。 */
+  /** 更多面板内的下钻（数字格式 / 边框 / 公式）；面板开合状态机在 useEditSurface（见下方 surface）。 */
   const [dockSub, setDockSub] = useState<"numfmt" | "border" | "formula" | null>(null);
   const [sheetListAnchor, setSheetListAnchor] = useState<HTMLElement | null>(null);
   /** 面板内容是否溢出：只由 DOM 实测（滚动余量）驱动，用于底部渐隐提示；放得下/已贴底时不提示。 */
@@ -146,17 +162,45 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
     zoomBy,
   } = useSheetChromeState(getUniverAPI);
   const { nativeEditing, nativeExpanded, caretRef, openNativeEditor, closeNativeEditor } = useNativeSheetFormulaBar({
-    editing,
+    editing: editable,
     hostRef,
     address: cellFmt.address,
     getUniverAPI,
   });
+  /**
+   * 编辑态面板 = **文档编辑面同一个 owner**（useEditSurface；261028 MOB-07）。
+   * 表格只提供自己的口径参数：无默认面板（panelDefault=null）、面板下限 300、捕获占位时用历史最大键盘高、
+   * 输入法抑制限定在本宿主且不回焦（回焦会触发内核公式栏 onFocus 反把面板关掉）、不装"点正文收面板"守卫
+   * （表格输入面是 canvas/原生公式栏）、不接管外壳高（表格自己的可视区由 --mb-usheet-kb-offset 承担）。
+   */
+  const surface = useEditSurface<SheetDockId>({
+    editing: editable,
+    dockRef: hostRef,
+    restoreFocus: openNativeEditor,
+    panelDefault: null,
+    minPanelHeight: SHEET_PANEL_MIN_HEIGHT,
+    keyboardHeightHint: Math.max(keyboardHeight, keyboardHeightRef.current),
+    scopeRef: hostRef,
+    refocusOnSuppress: false,
+    focusGuard: false,
+    writeAppHeight: false,
+  });
+  const {
+    panelMode: dockPanel,
+    renderedPanel,
+    closing: panelClosing,
+    closingHold: panelClosingHold,
+    panelHeight,
+    openPanel,
+    closePanel,
+    restoreIme,
+  } = surface;
   const {
     toggleFormatPainter,
     openFindDialog,
     dispatchMenu,
   } = useSheetCommandActions({
-    editing,
+    editing: editable,
     getUniverAPI,
     refreshCellFormat: refreshCellFmt,
   });
@@ -197,14 +241,34 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
 
   /** 同步取最新正文；只有真的变更才通知外层。 */
   const capture = useCallback((): string | null => {
+    // 坏正文：绝不回调 onChange（否则外层会把空表/空白画板当成新正文写回原文）。
+    if (bodyUnreadableRef.current) return null;
     // 读态本机筛选绝不落盘：先把运行时筛选摘掉，再取正文（见 usheetReadFilter.ts）。
     restoreReadFilter();
     const state = instanceRef.current;
     if (!state) return null;
     try {
-      const body = usheetToBody(state.book.save() as never);
+      // 与桌面同一规范形式（CORE-04 / MOB-05）：先 normalize 再序列化，移动端写出的字节才与桌面一致。
+      const snapshot = state.book.save() as unknown as UsheetWorkbook;
+      normalizeUsheetWorkbook(snapshot);
+      const body = usheetToBody(snapshot);
+      // CORE-03：内核 save() 不幂等。打开后的第一次 capture 只对齐基线（不写盘、不标脏），
+      // 除非用户已经产生过内容输入（否则会把「打开」当成一次编辑）。
+      if (!baselineSettledRef.current) {
+        baselineSettledRef.current = true;
+        if (!contentInputRef.current) {
+          state.last = body;
+          return diskBodyRef.current;
+        }
+      }
+      // 无真实改动 / 改过又改回原样：与磁盘原文规范化后等价 ⇒ 返回磁盘原文（不为规范化差异写盘）。
+      if (docBaselineSettled("usheet", diskBodyRef.current, body)) {
+        state.last = body;
+        return diskBodyRef.current;
+      }
       if (body !== state.last) {
         state.last = body;
+        changedSinceOpenRef.current = true;
         changeRef.current(body);
       }
       return body;
@@ -214,7 +278,7 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
   }, [restoreReadFilter]);
 
   const scheduleFlush = useCallback(() => {
-    if (!editingRef.current) return;
+    if (!editingRef.current || bodyUnreadableRef.current) return;
     if (timerRef.current !== null) window.clearTimeout(timerRef.current);
     timerRef.current = window.setTimeout(() => {
       timerRef.current = null;
@@ -233,65 +297,18 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
     });
   }, [refreshCellFmt, refreshSheetChrome]);
 
-  /** 收起/放回输入法：面板占键盘区期间加 inputmode=none + blur/focus（与文档 dock 同一实测口径）。 */
-  const setImeSuppressed = useCallback((on: boolean) => {
-    const host = hostRef.current;
-    if (!host) return;
-    if (on) {
-      const active = document.activeElement as HTMLElement | null;
-      if (active && host.contains(active)) {
-        // 只加 inputmode=none + blur：**不回焦**（回焦会触发公式栏 onFocus，反过来把刚打开的面板关掉）。
-        active.setAttribute("inputmode", "none");
-        try { active.blur(); } catch { /* 忽略 */ }
-      }
-    } else {
-      host.querySelectorAll<HTMLElement>('[inputmode="none"]').forEach((el) => el.removeAttribute("inputmode"));
-    }
-  }, []);
-
-
-  const finishPanelClose = useCallback(() => {
-    if (panelCloseTimerRef.current) { window.clearTimeout(panelCloseTimerRef.current); panelCloseTimerRef.current = 0; }
-    if (panelFallbackTimerRef.current) { window.clearTimeout(panelFallbackTimerRef.current); panelFallbackTimerRef.current = 0; }
-    setPanelClosing(false);
-    setPanelClosingHold(false);
-    setRenderedPanel(null);
-  }, []);
-
-  /** 收面板：restore = 放回键盘（用户定稿：一级 ✕ 就是恢复键盘）。内容保持到键盘盖住（closingHold）再撤。 */
-  const closeDockPanel = useCallback((restoreKeyboard: boolean) => {
-    setDockPanel(null);
-    setDockSub(null);
-    setPanelOpen(false);
-    setImeSuppressed(false);
-    if (!restoreKeyboard) { finishPanelClose(); return; }
-    setPanelClosing(true);
-    setPanelClosingHold(true);
-    openNativeEditor();
-    if (panelFallbackTimerRef.current) window.clearTimeout(panelFallbackTimerRef.current);
-    panelFallbackTimerRef.current = window.setTimeout(finishPanelClose, 1800);
-  }, [setImeSuppressed, openNativeEditor, finishPanelClose]);
-
+  /** 打开面板：面板吃键盘区 ⇒ 先收原生公式栏（别让它浮在面板上）；输入法由 hook 在下一帧收起（不与面板对撞）。 */
   const openDockPanel = useCallback((id: SheetDockId) => {
-    if (panelCloseTimerRef.current) { window.clearTimeout(panelCloseTimerRef.current); panelCloseTimerRef.current = 0; }
-    if (panelFallbackTimerRef.current) { window.clearTimeout(panelFallbackTimerRef.current); panelFallbackTimerRef.current = 0; }
-    setDockPanel(id);
     setDockSub(null);
-    setRenderedPanel(id);
-    setPanelOpen(true);
-    setPanelClosing(false);
-    setPanelClosingHold(false);
-    setImeSuppressed(true);
+    openPanel(id);
     closeNativeEditor();
-    // 面板高度 = 打开时捕获的键盘区高度（照文档 capturePanelHeight；优先用历史实测键盘高）。
-    // 表格面板下限用 SHEET_PANEL_MIN_HEIGHT（280 放不下「更多」7 行 / T 面板 ⇒ 阅读→编辑→直接开面板会被裁）。
-    setPanelHeight(capturePanelHeight(Math.max(keyboardHeight, keyboardHeightRef.current), SHEET_PANEL_MIN_HEIGHT));
-  }, [setImeSuppressed, closeNativeEditor, keyboardOpen, keyboardHeight]);
+  }, [openPanel, closeNativeEditor]);
 
+  /** 一级 ✕ / ⌨ = restore：关面板 + 放回键盘；内容保持到键盘盖住（hook 的 closingHold）再撤。 */
   const toggleDockPanel = useCallback((id: SheetDockId) => {
-    if (dockPanel === id) { closeDockPanel(true); return; }
+    if (dockPanel === id) { closePanel("restore"); return; }
     openDockPanel(id);
-  }, [dockPanel, closeDockPanel, openDockPanel]);
+  }, [dockPanel, closePanel, openDockPanel]);
 
   /** 量一次面板的滚动余量（面板高度 = 键盘区，随设备/键盘高度变化）。 */
   const measurePanelFade = useCallback(() => {
@@ -315,18 +332,18 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
       window.cancelAnimationFrame(raf);
       window.clearTimeout(timer);
     };
-  }, [renderedPanel, dockSub, panelOpen, measurePanelFade]);
+  }, [renderedPanel, dockSub, dockPanel, measurePanelFade]);
 
   /** 键盘键：面板开着 = 收面板并放回键盘；键盘开着 = 收起；否则 = 展开。 */
   const onDockKeyboard = useCallback(() => {
-    if (dockPanel) { closeDockPanel(true); return; }
+    if (dockPanel) { closePanel("restore"); return; }
     if (keyboardOpen) {
-      try { (document.activeElement as HTMLElement | null)?.blur(); } catch { /* 忽略 */ }
+      try { (document.activeElement as HTMLElement | null)?.blur(); } catch { /* 收起键盘：没有可失焦元素时无副作用 */ }
       return;
     }
-    setImeSuppressed(false);
+    restoreIme();
     openNativeEditor();
-  }, [dockPanel, keyboardOpen, closeDockPanel, setImeSuppressed, openNativeEditor]);
+  }, [dockPanel, keyboardOpen, closePanel, restoreIme, openNativeEditor]);
 
   /** 撤销/重做：无历史时给提示（撤销/重做按钮的可用态由 undoDepth/redoDepth 控制）。 */
   const handleUndo = useCallback(() => {
@@ -335,7 +352,7 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
     historySuppressUntilRef.current = Date.now() + 400;
     setUndoDepth((value) => Math.max(0, value - 1));
     setRedoDepth((value) => value + 1);
-    try { getUniverAPI()?.getActiveWorkbook()?.undo(); } catch { /* 忽略 */ }
+    try { getUniverAPI()?.getActiveWorkbook()?.undo(); } catch (error) { reportMobileActionError("撤销", error); }
   }, [undoDepth, getUniverAPI]);
 
   const handleRedo = useCallback(() => {
@@ -343,7 +360,7 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
     historySuppressUntilRef.current = Date.now() + 400;
     setUndoDepth((value) => value + 1);
     setRedoDepth((value) => Math.max(0, value - 1));
-    try { getUniverAPI()?.getActiveWorkbook()?.redo(); } catch { /* 忽略 */ }
+    try { getUniverAPI()?.getActiveWorkbook()?.redo(); } catch (error) { reportMobileActionError("重做", error); }
   }, [redoDepth, getUniverAPI]);
 
   /** 新建工作表（顶部行 ＋）：插入一张新表并切过去。 */
@@ -385,7 +402,7 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
         workbook.getActiveSheet().getRange(range.getRow(), range.getColumn()).setValue(new Date().toLocaleDateString("zh-CN"));
         refreshCellFmt();
         scheduleFlush();
-      } catch { /* 忽略 */ }
+      } catch (error) { reportMobileActionError("插入日期", error); }
       return;
     }
     const label = id === "image" ? "单元格图片" : id === "sign" ? "手写签名" : id === "attachment" ? "附件" : id === "chart" ? "图表" : "批注";
@@ -409,7 +426,7 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
       target.setFrozenRows?.(next === "row" ? 1 : 0);
       target.setFrozenColumns?.(next === "col" ? 1 : 0);
       refreshSheetChrome();
-    } catch { /* 忽略 */ }
+    } catch (error) { reportMobileActionError("冻结行列", error); }
   }, [freezeState, getUniverAPI, refreshSheetChrome]);
 
   const handleZoomLevel = useCallback((value: number) => {
@@ -430,20 +447,11 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
     dispatchMenu(id);
   }, [dispatchMenu]);
 
-  // 键盘盖住面板区后，再把面板内容撤掉（文档 dock 的 closingHold 同款；避免「面板先消失、键盘还没升」的闪烁）。
-  useEffect(() => {
-    if (!panelClosing) return;
-    if (!keyboardOpen) return;
-    if (panelCloseTimerRef.current) window.clearTimeout(panelCloseTimerRef.current);
-    panelCloseTimerRef.current = window.setTimeout(finishPanelClose, 240);
-    return () => { if (panelCloseTimerRef.current) { window.clearTimeout(panelCloseTimerRef.current); panelCloseTimerRef.current = 0; } };
-  }, [panelClosing, keyboardOpen, finishPanelClose]);
-
   // 编辑态**双击单元格** → 自动把焦点放到公式栏输入框（光标在末尾），接着打字就进公式栏。
   // 自实现双击（触屏 WebView 对 canvas 的 dblclick 不可靠）：320ms / 28px 内两次 **pointerdown** 视为双击。
   // 第二下 pointerdown 直接 preventDefault + stopPropagation：不让内核起 in-cell 编辑器抢焦点，并在同一手势里聚焦公式栏（键盘随之弹起）。
   useEffect(() => {
-    if (!editing) return;
+    if (!editable) return;
     const host = hostRef.current;
     if (!host) return;
     let lastTap = { at: 0, x: 0, y: 0 };
@@ -462,18 +470,20 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
     };
     host.addEventListener("pointerdown", onPointerDown, true);
     return () => host.removeEventListener("pointerdown", onPointerDown, true);
-  }, [editing, openNativeEditor]);
+  }, [editable, openNativeEditor]);
 
-  // 退出编辑态：收起面板（避免面板挂在阅读态上）。
+  // 退出编辑态：面板状态机由 useEditSurface 自己复位（它持有 panelMode/closing/closingHold），
+  // 这里只清本组件的下钻态（避免面板挂在阅读态上）。
   useEffect(() => {
     if (editing) return;
-    setDockPanel(null);
     setDockSub(null);
-    setPanelOpen(false);
-    setPanelClosing(false);
-    setPanelClosingHold(false);
-    setRenderedPanel(null);
   }, [editing]);
+
+  // 外部正文刷新（同一挂载内 content 变化）时更新磁盘基线；已产生真实改动则不动（与桌面同口径）。
+  useEffect(() => {
+    if (changedSinceOpenRef.current) return;
+    diskBodyRef.current = content;
+  }, [content]);
 
   useEffect(() => {
     if (active) setEverActive(true);
@@ -500,6 +510,8 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
     const host = hostRef.current;
     if (!ready || !host) return;
     const workbook = parseUsheetBody(content)?.workbook ?? emptyUsheetWorkbook();
+    // 与桌面同序：先 canonical 化再 createWorkbook（CORE-04：字体族不读运行时 CSS 变量）。
+    normalizeUsheetWorkbook(workbook);
     mapUsheetImageSources(workbook, (src) => usheetImageSrc(src, noteId));
     let created: { univer: { dispose: () => void }; univerAPI: FUniver; book: UniverBook } | null = null;
     const disposables: Array<{ dispose: () => void }> = [];
@@ -531,11 +543,34 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
         ],
       });
       const book = univerAPI.createWorkbook(workbook as never) as unknown as UniverBook;
-      book.setEditable(editingRef.current);
+      book.setEditable(editingRef.current && !bodyUnreadableRef.current);
       // 261022 晚：十字高亮**默认关闭**（内核初始即关；需要时点 ⋯ →「十字高亮」开，纯本机视图）。
-      const last = usheetToBody(book.save() as never);
+      // 首次基线同样先 normalize（与 capture 同口径），否则打开后第一次 capture 会被误判为改动。
+      const baseline = book.save() as unknown as UsheetWorkbook;
+      normalizeUsheetWorkbook(baseline);
+      const last = usheetToBody(baseline);
       created = { univer, univerAPI, book };
       instanceRef.current = { ...created, last };
+      // CORE-03 输入判据（与桌面同款）：网格内单击只是选格，不算「可能改内容」；
+      // 键盘 / 粘贴 / 剪切 / 拖放 / 工具栏·公式栏·dock 点击才算。
+      const markContentInput = () => { contentInputRef.current = true; };
+      for (const type of ["keydown", "beforeinput", "paste", "cut", "drop"]) {
+        host.addEventListener(type, markContentInput, true);
+      }
+      const onHostPointerDown = (event: PointerEvent) => {
+        const target = event.target as Element | null;
+        const onGrid = target?.closest?.('canvas[data-u-comp="render-canvas"]');
+        if (!onGrid) contentInputRef.current = true;
+      };
+      host.addEventListener("pointerdown", onHostPointerDown, true);
+      disposables.push({
+        dispose: () => {
+          for (const type of ["keydown", "beforeinput", "paste", "cut", "drop"]) {
+            host.removeEventListener(type, markContentInput, true);
+          }
+          host.removeEventListener("pointerdown", onHostPointerDown, true);
+        },
+      });
       disposables.push(univerAPI.addEvent(univerAPI.Event.CommandExecuted, (event) => {
         // 格式刷状态由内核 operation 回填（点目标套用后会自动回 0）——不靠前端猜，也不自建第二套状态。
         if (event?.id === "sheet.operation.set-format-painter") {
@@ -558,34 +593,35 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
       console.error("移动端表格挂载失败", error);
     }
     const observer = new MutationObserver(() => {
-      try { created?.univerAPI.setTheme(buildMobileUniverTheme() as never); } catch { /* ignore */ }
+      try { created?.univerAPI.setTheme(buildMobileUniverTheme() as never); } catch { /* 实例重建/销毁瞬间没有 univerAPI：下次挂载会重设主题 */ }
     });
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
     return () => {
       if (timerRef.current !== null) { window.clearTimeout(timerRef.current); timerRef.current = null; }
       if (chromeRafRef.current) { window.cancelAnimationFrame(chromeRafRef.current); chromeRafRef.current = 0; }
       capture();
-      for (const item of disposables) { try { item.dispose(); } catch { /* ignore */ } }
+      for (const item of disposables) { try { item.dispose(); } catch { /* 卸载时逐个 dispose：单个失败不阻断其余（实例即将销毁） */ } }
       observer.disconnect();
-      try { created?.univer.dispose(); } catch { /* ignore */ }
+      try { created?.univer.dispose(); } catch { /* 销毁失败不阻断卸载：引用已置空，交由 GC 回收 */ }
       instanceRef.current = null;
       captureCallbackRef.current?.(null);
     };
   }, [ready, noteId, scheduleFlush, refreshCellFmt, refreshSheetChrome]);
 
   // 编辑/阅读切换；从编辑切回阅读时同步落一次，避免防抖窗口内点“完成”丢最后修改。
+  // 坏正文（editable=false）按「切回阅读」处理：清掉防抖计时器，capture 恒返回 null。
   useEffect(() => {
     const state = instanceRef.current;
     // 读态本机筛选绝不能被"切回编辑态"带走：先还原，再切换可编辑性。
-    if (editing) restoreReadFilter();
+    if (editable) restoreReadFilter();
     if (state) {
-      try { state.book.setEditable(editing); } catch { /* ignore */ }
+      try { state.book.setEditable(editable); } catch (error) { reportMobileActionError("切换表格编辑态", error); }
     }
-    if (!editing) {
+    if (!editable) {
       if (timerRef.current !== null) { window.clearTimeout(timerRef.current); timerRef.current = null; }
       capture();
     }
-  }, [editing, capture, restoreReadFilter]);
+  }, [editable, capture, restoreReadFilter]);
 
   // 切走 tab 时落一次；不要求关掉编辑态（编辑态可随 tab 保留）。
   useEffect(() => {
@@ -654,10 +690,10 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
   // 每次渲染后（layout 阶段、paint 前）都用**实时** innerHeight 覆写变量：
   // 不再由 React 内联 style 写旧值（那正是慢一帧、把刚写对的值又覆盖回去的来源）。
   useLayoutEffect(() => {
-    if (editing) applyGeometry();
+    if (editable) applyGeometry();
   });
   useLayoutEffect(() => {
-    if (!editing) return;
+    if (!editable) return;
     const onResize = () => applyGeometry();
     window.addEventListener("resize", onResize, { passive: true });
     window.visualViewport?.addEventListener("resize", onResize, { passive: true });
@@ -665,7 +701,7 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
       window.removeEventListener("resize", onResize);
       window.visualViewport?.removeEventListener("resize", onResize);
     };
-  }, [editing, applyGeometry]);
+  }, [editable, applyGeometry]);
   /**
    * 选中区域被键盘/展开的工具栏盖住时才滚动，且只滚到"刚好露出来"：
    * 用内核的 scroll-to-cell（目标已在视口内 = no-op；在视口外才最小滚动）。
@@ -689,7 +725,7 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
         forceTop: false,
         forceLeft: false,
       });
-    } catch { /* 忽略 */ }
+    } catch { /* 实例销毁/无活动表时 scroll-to-cell 不可用：只影响自动滚动，几何变化会重试 */ }
   }, [getUniverAPI]);
 
   // 几何变化（展开多行 / 面板开合 / 键盘）后让内核按**真实可视区**重算：
@@ -721,22 +757,17 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
     return () => window.cancelAnimationFrame(raf);
   }, [ready, editing, cellFmt.address, ensureActiveCellVisible]);
 
-  // 退出编辑态时收起面板（避免面板挂在阅读态上）。
-  useEffect(() => {
-    if (editing) return;
-    setDockPanel(null);
-    setDockSub(null);
-    setPanelOpen(false);
-    setPanelClosing(false);
-    setPanelClosingHold(false);
-    setRenderedPanel(null);
-  }, [editing]);
   return (
     <div
-      className={"mobile-usheet" + (editing ? " is-editing" : " is-readonly")}
+      className={"mobile-usheet" + (editable ? " is-editing" : " is-readonly")}
       ref={hostRef}
       data-prevent-swipe
     >
+      {bodyUnreadable && (
+        <div className="mb-empty" role="status" data-usheet-parse-error>
+          表格正文无法解析（文件损坏或版本不兼容）：已锁定为只读，不会覆盖原文。请从「历史版本」恢复。
+        </div>
+      )}
       {ready && (
         <SheetTopBar
           sheets={sheets}
@@ -750,7 +781,7 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
           onAddSheet={onAddSheet}
         />
       )}
-      {!editing && ready && (
+      {!editable && ready && (
         <MobileSheetReadingBar
           filterEnabled={readFilterAvailable.enabled}
           filterDisabledReason={readFilterAvailable.reason}
@@ -760,9 +791,9 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
         />
       )}
       {ready ? <div id={containerId} className="mobile-usheet-root" /> : <div className="mb-empty">正在加载表格…</div>}
-      {editing && ready && <div className="mb-usheet-chrome-spacer" aria-hidden="true" />}
-      {editing && <span ref={caretRef} className="mb-usheet-caret" aria-hidden="true" />}
-      {editing && ready && (
+      {editable && ready && <div className="mb-usheet-chrome-spacer" aria-hidden="true" />}
+      {editable && <span ref={caretRef} className="mb-usheet-caret" aria-hidden="true" />}
+      {editable && ready && (
         <>
           {!nativeEditing && !nativeExpanded && !dockPanel && (
             <button type="button" className="mb-usheet-fbar" aria-label="编辑单元格" onClick={() => openNativeEditor()}>
@@ -780,15 +811,16 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
             onRedo={handleRedo}
             onKeyboard={onDockKeyboard}
           />
-          {renderedPanel && (
+          {/* 只在这两种状态挂载：开着 / 收起过渡中（内容要留到键盘盖住）；关完就卸载，不留常驻的隐藏面板。 */}
+          {renderedPanel && (dockPanel !== null || panelClosing) && (
             <div
               className="mb-usheet-panel"
               data-kind={renderedPanel}
-              data-open={panelOpen || panelClosingHold ? "1" : "0"}
+              data-open={dockPanel !== null || panelClosingHold ? "1" : "0"}
               data-closing={panelClosing ? "1" : undefined}
               data-scrollable={panelFade ? "1" : undefined}
               style={{ ["--mb-usheet-panel-h" as string]: panelHeight + "px" }}
-              aria-hidden={!panelOpen}
+              aria-hidden={dockPanel === null}
             >
               <div className="mb-usheet-panel__inner" ref={panelInnerRef} onScroll={measurePanelFade}>
                 <SheetDockPanel

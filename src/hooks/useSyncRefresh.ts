@@ -2,6 +2,7 @@ import { useCallback, useEffect } from "react";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { native } from "../lib/native";
 import { reportNativeActionError } from "../lib/nativeErrors";
+import { rlog } from "../lib/log";
 import type { DraftJournalEntry, NoteSummary, SyncPendingSummary, TreeNode } from "../lib/types";
 import type { OpenTab } from "../desktop/desktopTypes";
 import type { NoteReloadGuard } from "../core/requestVersion";
@@ -69,13 +70,13 @@ export function useSyncRefresh({
           const note = await native.readNote(tab.noteId);
           if (!noteReloadGuardRef.current.isCurrent(token)) continue;
           const gone = isGoneNote(note);
-          console.log("[sync-tab] trash-restore reload", JSON.stringify({ noteId: tab.noteId, restoredId: restoredId ?? null, gone, readMs: Math.round(performance.now() - readT0) }));
+          rlog.debug("sync-tab", "trash-restore reload", { noteId: tab.noteId, restoredId: restoredId ?? null, gone, readMs: Math.round(performance.now() - readT0) });
           setOpenTabs((tabs) => tabs.map((t) => t.noteId === tab.noteId
             ? { ...t, title: note.title, content: note.content, dirty: false, deleted: gone, reloadKey: (t.reloadKey ?? 0) + 1, lastDigest: { title: note.title, updatedAt: note.updatedAt } }
             : t));
         } catch { /* 该文档未恢复或仍不存在，保持标记 */ }
       }
-      console.log("[sync-tab] trash-restore done", JSON.stringify({ totalMs: Math.round(performance.now() - t0) }));
+      rlog.perf("sync-tab.trash-restore", performance.now() - t0);
     })();
   }, [refreshDraftEntries, setTreeNodes, setNotes, setOpenTabs, noteReloadGuardRef, openTabsRef]);
 
@@ -89,7 +90,7 @@ export function useSyncRefresh({
         const t0 = performance.now();
         const updated = await native.readNote(restoredId);
         if (!noteReloadGuardRef.current.isCurrent(token)) return;
-        console.log("[sync-tab] history-restore reload", JSON.stringify({ noteId: restoredId, readMs: Math.round(performance.now() - t0) }));
+        rlog.debug("sync-tab", "history-restore reload", { noteId: restoredId, readMs: Math.round(performance.now() - t0) });
         setOpenTabs((tabs) => tabs.map((tab) => tab.noteId === restoredId
           ? { ...tab, title: updated.title, content: updated.content, dirty: false, reloadKey: (tab.reloadKey ?? 0) + 1 }
           : tab));

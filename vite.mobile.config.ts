@@ -11,7 +11,8 @@ import { lakexAlipayLocal, lakexGwUrlLocalPostcss } from "./scripts/lakexLocaliz
 
 
 /** 移动端 CSP —— **唯一来源**（mobile.html 只留 %MOBILE_CSP% 占位符，构建期注入）：
- * - Capacitor Android WebView 默认 scheme：https://localhost（androidScheme=https）
+ * - 页面 scheme = http://localhost（capacitor.config.ts 特意把 Capacitor 默认的 https 改成 http，
+ *   否则 <audio>/<video> 加载 127.0.0.1 资源会被混合内容策略拒；同行的 https://localhost 是历史兼容项）
  * - connect-src 放行七牛 S3 endpoint（https://s3.cn-north-1.qiniucs.com）与桌面资源端口（http://127.0.0.1:*）
  * - 资源全本地化（public/vendor + vendor/cdn），不放行外部 CDN
  * - script-src **已收紧（261010）**：不放开 unsafe-inline / unsafe-eval，内联 KITCHEN_URL 只按 sha256 hash 放行
@@ -38,7 +39,7 @@ const MOBILE_PREVIEW_HTML = `<!doctype html>
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>LocalLakexNotes 移动端预览</title>
+<title>LakexLocalNotes 移动端预览</title>
 <style>
   html,body{margin:0;height:100vh;height:100dvh;background:#2b2b30;overflow:hidden;}
   .stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;}
@@ -49,7 +50,7 @@ const MOBILE_PREVIEW_HTML = `<!doctype html>
 </head>
 <body>
   <div class="stage"><div class="phone"><iframe src="index.html" allow="clipboard-read; clipboard-write"></iframe></div></div>
-  <div class="hint">LocalLakexNotes 移动端预览 · 390×844 · DevTools 设备模式可调试</div>
+  <div class="hint">LakexLocalNotes 移动端预览 · 390×844 · DevTools 设备模式可调试</div>
   <script>
     function fit(){
       const p=document.querySelector('.phone');

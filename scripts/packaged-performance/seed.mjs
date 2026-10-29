@@ -6,7 +6,7 @@ import { spawn } from "node:child_process";
 import { Cdp, wait, waitFor } from "./cdp.mjs";
 const app = path.resolve(
   process.env.LAKE_PERF_APP ||
-    "release/mac-arm64/LocalLakexNotes.app/Contents/MacOS/LocalLakexNotes",
+    "release/mac-arm64/LakexLocalNotes.app/Contents/MacOS/LakexLocalNotes",
 );
 const seed = path.resolve(
   process.env.LAKE_PERF_SEED || `/tmp/lake-packaged-perf-seed-${Date.now()}`,
@@ -56,7 +56,7 @@ try {
   );
   await wait(1000);
   const value = await cdp.evaluate(
-    `(async()=>{const api=window.lakeNative,canonical=window.__desktopEditor.getDocument('text/lake'),seeds={};await api.saveNote('welcome-note','欢迎来到 LocalLakexNotes',canonical);for(const [key,method] of [['doc','createNoteIn'],['sheet','createUsheetIn'],['bitable','createBitableIn'],['board','createBoardIn']])seeds[key]=await api[method]('notebook-personal','验收·'+key);return {canonical,seeds}})()`,
+    `(async()=>{const api=window.lakeNative,canonical=window.__desktopEditor.getDocument('text/lake'),seeds={};await api.saveNote('welcome-note','欢迎来到 LakexLocalNotes',canonical);for(const [key,method] of [['doc','createNoteIn'],['sheet','createUsheetIn'],['bitable','createBitableIn'],['board','createBoardIn']])seeds[key]=await api[method]('notebook-personal','验收·'+key);return {canonical,seeds}})()`,
   );
   fs.mkdirSync(path.dirname(template), { recursive: true });
   fs.writeFileSync(template, JSON.stringify(value, null, 2));

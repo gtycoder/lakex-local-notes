@@ -53,22 +53,22 @@ export interface NoticeState {
 }
 
 export function initialOutlineMode(): OutlineMode {
-  const stored = localStorage.getItem("local-lakex-notes-v2.outline-sidebar-mode");
+  const stored = localStorage.getItem("lakex-local-notes-v2.outline-sidebar-mode");
   if (stored === "docked" || stored === "collapsed") return stored;
   // 首次进入默认只显示常驻窄 rail；点击或悬停后再显示大纲面板。
   return "collapsed";
 }
 
 export function initialSidebarMode(): SidebarMode {
-  const stored = localStorage.getItem("local-lakex-notes-v2.sidebar-mode");
+  const stored = localStorage.getItem("lakex-local-notes-v2.sidebar-mode");
   if (stored === "docked" || stored === "collapsed") return stored;
-  return localStorage.getItem("local-lakex-notes-v1.sidebar") === "collapsed" ? "collapsed" : "docked";
+  return localStorage.getItem("lakex-local-notes-v1.sidebar") === "collapsed" ? "collapsed" : "docked";
 }
 
 export function initialSidebarWidth(): number {
   // ⚠️ 不能直接 Number(localStorage.getItem(...))：没存过时 getItem 返回 null，而 Number(null) === 0，
   // Number.isFinite(0) 为真 ⇒ 首次启动会被钳到**最小值**（实测：目录一直是 160 而不是默认 224）。
-  const raw = localStorage.getItem("local-lakex-notes-v3.sidebar-width");
+  const raw = localStorage.getItem("lakex-local-notes-v3.sidebar-width");
   const stored = raw === null || raw.trim() === "" ? Number.NaN : Number(raw);
   return Number.isFinite(stored)
     ? Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, stored))
@@ -77,7 +77,7 @@ export function initialSidebarWidth(): number {
 
 export function initialOutlineSidebarWidth(): number {
   // 同上：Number(null) === 0 会把首次启动钳到最小值（大纲一直 200 而不是默认 280）。
-  const raw = localStorage.getItem("local-lakex-notes-v3.outline-sidebar-width");
+  const raw = localStorage.getItem("lakex-local-notes-v3.outline-sidebar-width");
   const stored = raw === null || raw.trim() === "" ? Number.NaN : Number(raw);
   return Number.isFinite(stored)
     ? Math.min(OUTLINE_SIDEBAR_MAX_WIDTH, Math.max(OUTLINE_SIDEBAR_MIN_WIDTH, stored))

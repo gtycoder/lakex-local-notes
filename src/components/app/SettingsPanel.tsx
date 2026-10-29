@@ -17,16 +17,21 @@ function fieldErrorFor(message: string, retryable?: boolean): Record<string, str
 }
 import { LAKE_THEMES } from "../../lib/themes";
 import { native } from "../../lib/native";
-import type { DataHealthReport, S3GcPendingItem, S3Settings, SyncSettings } from "../../lib/types";
-import { gcCutoffMs, parseIsoMs, pendingKeyReason } from "../../core/gcPolicy";
+import { hostCapabilities } from "../../lib/hostCapabilities";
+import type { DataHealthReport, S3Settings, SyncSettings } from "../../lib/types";
 import { SYNC_AUTO_MODE_OPTIONS, SYNC_OPEN_CLOSE_NOTE } from "../../core/syncModes";
 import { useFloatingDialog } from "../hooks/useFloatingDialog";
+import { useConfirm } from "../../hooks/useConfirm";
+// DT-13：异步动作的 busy/提示统一走共用原语（不再逐组手写 setBusy/setMsg/try/catch/finally）
+import { useAsyncAction } from "../../hooks/useAsyncAction";
 import { DialogResizeHandles } from "../ui/DialogResizeHandles";
 import { filterSettingsNav, searchSettingItems, type SettingItemEntry } from "../model/settingsSearch";
 import { getNativeErrorMessage, reportNativeActionError } from "../../lib/nativeErrors";
 import { S3ConfigImportDialog } from "./S3ConfigImportDialog";
 import { formatBytes } from "../../lib/formatBytes";
 import { formatDateTime } from "../../core/dateFormat";
+import { formatS3v3Diagnostics, type S3v3DiagnosticReport } from "../../core/s3v3Report";
+import { effectiveS3Settings, isQiniuEndpoint, s3ConfigFingerprint } from "../../lib/s3FormState";
 
 export type SettingsCategory = "editor" | "appearance" | "shortcuts" | "history" | "sync" | "ai" | "trash" | "browser" | "logs" | "about";
 
@@ -44,7 +49,7 @@ interface SettingsPanelProps {
   cloudEnabled?: boolean;
 }
 
-const S3_DEFAULTS: S3Settings = { endpoint: "", region: "cn-east-1", bucket: "", prefix: "local-lakex-notes", accessKeyId: "", secretAccessKey: "", forcePathStyle: false };
+const S3_DEFAULTS: S3Settings = { endpoint: "", region: "cn-east-1", bucket: "", prefix: "lakex-local-notes", accessKeyId: "", secretAccessKey: "", forcePathStyle: false };
 
 /** 让浏览器先把 data URL 解码好再上屏：<img> 换 src 的那一帧若未解码完会画空白（闪烁的另一半来源）。 */
 
@@ -53,38 +58,43 @@ import { Group, Section, Item, Field, Block, Switch, Shortcut, Seg, NumField, Te
 
 export function SettingsPanel({ open, settings, onClose, onChange, openCategory = "editor", onS3SettingsChanged, onSyncSettingsChanged, cloudConfigured = false, cloudEnabled = false }: SettingsPanelProps) {
   const [category, setCategory] = useState<SettingsCategory>(openCategory);
+/** 模块级：本次会话内「测试通过」的配置指纹（面板关闭/重开不丢；改字段即失效）。 */
+let verifiedS3Fingerprint: string | null = null;
+
   const [navQuery, setNavQuery] = useState("");
   const navSearchRef = useRef<HTMLInputElement>(null);
   const floating = useFloatingDialog({ id: "settings", initialSize: { w: 840, h: 600 }, minSize: { w: 620, h: 420 } });
+  /** 确认/提示浮层（DT-02）：替代 window.confirm / window.alert（云端恢复这类不可逆动作走它）。 */
+  const { confirm, notice, confirmElement } = useConfirm();
 
   const [stats, setStats] = useState<{ snapshotCount: number; totalBytes: number } | null>(null);
   const [histCfg, setHistCfg] = useState<{ maxSnapshots: number; retentionDays: number; cleanupIntervalHours: number; snapshotIntervalMinutes: number } | null>(null);
-  const [histMsg, setHistMsg] = useState<string | null>(null);
-  const [histBusy, setHistBusy] = useState(false);
   const [lastCleanup, setLastCleanup] = useState<{ at: string; deletedSnapshots: number; freedBytes: number } | null>(null);
   // A3 数据体检：只读三查报告
   const [health, setHealth] = useState<DataHealthReport | null>(null);
-  const [healthBusy, setHealthBusy] = useState(false);
-  const [searchBusy, setSearchBusy] = useState(false);
-  const [searchMsg, setSearchMsg] = useState<string | null>(null);
   // A1/A2 备份与恢复
-  const [backupMsg, setBackupMsg] = useState<string | null>(null);
-  const [backupBusy, setBackupBusy] = useState(false);
-  // F1 日志查看
+  // F1 日志查看（busy/提示走 useAsyncAction，见下方 DT-13 段）
   const [logRows, setLogRows] = useState<Array<{ line: string; hit: boolean }>>([]);
   const [logKeyword, setLogKeyword] = useState("");
-  const [logBusy, setLogBusy] = useState(false);
-  const [logInfo, setLogInfo] = useState<string | null>(null);
 
   const [s3, setS3] = useState<S3Settings>(S3_DEFAULTS);
-  /** 本次会话内 S3 连接测试是否通过：通过后才允许开启云同步；改动任一 S3 字段即失效。 */
-  const [s3Verified, setS3Verified] = useState(false);
+  /**
+   * 连接测试通过的状态按**配置指纹**绑定（261028 验收修复）：
+   *  - 测试通过 ⇒ 记住当时的指纹；「保存配置」不改变指纹 ⇒ 不会让测试结果失效（旧实现靠一个 boolean，
+   *    面板重挂/重读设置就丢了，用户必须先保存再测一次才能开云同步）；
+   *  - 改动任一连接字段 ⇒ 指纹变化 ⇒ 自动失效（必须重新测试）。
+   * 指纹模块级缓存：面板关闭再打开仍保留（同一份配置就是同一次测试结果）。
+   */
+  const [s3VerifiedFp, setS3VerifiedFp] = useState<string | null>(verifiedS3Fingerprint);
+  const s3Verified = s3VerifiedFp !== null && s3VerifiedFp === s3ConfigFingerprint(s3);
+  const markS3Verified = () => { verifiedS3Fingerprint = s3ConfigFingerprint(s3); setS3VerifiedFp(verifiedS3Fingerprint); };
+  const invalidateS3Verified = () => { verifiedS3Fingerprint = null; setS3VerifiedFp(null); };
   /** S3 配置文件迁移：粘贴迁移码弹窗（备用路径）。 */
   const [s3ImportOpen, setS3ImportOpen] = useState(false);
   // AI：设置只在打开该分类时读取（Key 已脱敏，永不进渲染层）。
   // 采用**草稿式**：编辑不落盘，先「拉模型 / 测试」验证草稿，通过（或用户选择仍要保存）才写回。
   const [aiView, setAiView] = useState<AiSettingsView | null>(null);
-  const [aiBusy, setAiBusy] = useState(false);
+  /** AI 动作的结果提示（保存 / 测试 / 拉模型列表共用这一条通道，谁最后写谁显示）。 */
   const [aiMsg, setAiMsg] = useState<string | null>(null);
   /** 字段级错误（键：apiKey / baseUrl / model / all）——比一个笼统提示好用。 */
   const [aiErr, setAiErr] = useState<Record<string, string>>({});
@@ -95,7 +105,6 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
   const [aiModels, setAiModels] = useState<string[] | null>(null);
   /** 模型列表存在时仍强制手填（select 里选「手填…」）。 */
   const [aiManualModel, setAiManualModel] = useState(false);
-  const [aiModelsBusy, setAiModelsBusy] = useState(false);
   /** 连通测试失败但可重试（网络/限流）⇒ 允许「仍要保存」。 */
   const [aiForceSave, setAiForceSave] = useState(false);
   const activeAi = useMemo(() => aiView?.providers.find((p) => p.id === aiView.activeProviderId) ?? null, [aiView]);
@@ -118,9 +127,11 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
     void native.aiGetSettings().then((v) => { if (alive) { setAiView(v); setAiDraft({}); setAiKeyVisible(false); setAiErr({}); setAiForceSave(false); } }).catch(() => {});
     return () => { alive = false; };
   }, [open, category]);
+  // 保存不是 busy 动作（「测试并保存」要在 aiRun 的忙碌窗口内调用它，走 run 会被重入守卫吞掉）；
+  // 成功清空、失败写错误，都落在同一条 aiMsg 通道上（与原实现一致）。
   const saveAi = async (patch: AiSettingsPatch) => {
-    try { setAiView(await native.aiSaveSettings(patch)); setAiMsg(null); }
-    catch (e) { setAiMsg(getNativeErrorMessage(e)); }
+    try { setAiView(await native.aiSaveSettings(patch)); aiRun.setMessage(null); }
+    catch (e) { aiRun.setMessage(getNativeErrorMessage(e)); }
   };
   /** 待保存字段的补丁（Key 只在编辑态才带上）。 */
   const aiPendingPatch = () => ({
@@ -130,7 +141,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
   });
   /** 切供应商：按该家默认初始化，并清空草稿与模型列表。 */
   const switchAiProvider = async (id: string) => {
-    resetAiDraft(); setAiModels(null); setAiMsg(null);
+    resetAiDraft(); setAiModels(null); aiRun.setMessage(null);
     await saveAi({ activeProviderId: id, providers: [{ id }] });
   };
   /** 拉模型列表：本身就是一次轻量连通验证；失败按字段贴错、回落手填。 */
@@ -139,165 +150,162 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
     // （用户实测坑：配完 Key 但没走「测试并保存」，Key 未落盘，点拉列表只看到"未配置 API Key"）。
     if (!activeAi?.hasApiKey && !aiDraft.apiKey) {
       setAiErr({ apiKey: "请先填写 API Key（拉取模型列表需要它）" });
-      setAiMsg("请先填写 API Key，再获取模型列表");
+      aiModelsRun.setMessage("请先填写 API Key，再获取模型列表");
       return;
     }
-    setAiModelsBusy(true); setAiErr({}); setAiMsg(null); setAiForceSave(false);
-    try {
+    setAiErr({}); setAiForceSave(false);
+    await aiModelsRun.run(async () => {
       const r = await native.aiListModels(aiPending);
       if (r.ok) {
         const ms = r.models ?? [];
         setAiModels(ms); setAiManualModel(false);
-        setAiMsg("已获取模型列表：" + ms.length + " 个");
         // 还没选模型（如「自定义」默认模型为空）→ 自动选第一个，省得用户对着空下拉
         setAiDraft((d) => (d.model ?? activeAi?.model) ? d : { ...d, model: ms[0] ?? "" });
+      } else {
+        setAiModels(null);
+        setAiErr(fieldErrorFor(r.error ?? "未知错误", r.retryable));
       }
-      else { setAiModels(null); setAiErr(fieldErrorFor(r.error ?? "未知错误", r.retryable)); setAiMsg("拉取模型列表失败：" + (r.error ?? "未知错误")); }
-    } catch (e) { setAiMsg("拉取模型列表失败：" + getNativeErrorMessage(e)); }
-    finally { setAiModelsBusy(false); }
+      return r;
+    }, {
+      success: (r) => r.ok
+        ? "已获取模型列表：" + (r.models ?? []).length + " 个"
+        : "拉取模型列表失败：" + (r.error ?? "未知错误"),
+      errorPrefix: "拉取模型列表失败：",
+    });
   };
   const testAi = async () => {
-    setAiBusy(true); setAiMsg(null); setAiErr({});
-    try {
+    await aiRun.run(async () => {
+      setAiErr({});
       const r = await native.aiTestConnection(aiPending);
-      setAiMsg(r.ok ? "连接成功 ✓" : "失败：" + (r.error ?? "未知错误"));
       if (!r.ok) setAiErr(fieldErrorFor(r.error ?? "", r.retryable));
-    } catch (e) { setAiMsg("失败：" + getNativeErrorMessage(e)); }
-    finally { setAiBusy(false); }
+      return r;
+    }, {
+      success: (r) => r.ok ? "连接成功 ✓" : "失败：" + (r.error ?? "未知错误"),
+      errorPrefix: "失败：",
+    });
   };
   /** 保存前 gate：先测草稿。鉴权/模型类硬拦；网络/限流给「仍要保存」。 */
   const testAndSaveAi = async () => {
-    setAiBusy(true); setAiErr({}); setAiMsg(null); setAiForceSave(false);
-    try {
+    await aiRun.run(async () => {
+      setAiErr({}); setAiForceSave(false);
       const r = await native.aiTestConnection(aiPending);
-      if (r.ok) {
-        await saveAi({ providers: [aiPendingPatch()] });
-        resetAiDraft();
-        setAiMsg("连接成功，已保存 ✓");
-        // 连通已证明可用：顺手拉一次列表（用**已保存**配置），让模型下拉马上能选
-        void native.aiListModels().then((lr) => { if (lr.ok && lr.models?.length) { setAiModels(lr.models); setAiManualModel(false); } }).catch(() => {});
+      if (!r.ok) {
+        setAiErr(fieldErrorFor(r.error ?? "未知错误", r.retryable));
+        setAiForceSave(Boolean(r.retryable));
+        return r;
       }
-      else { setAiErr(fieldErrorFor(r.error ?? "未知错误", r.retryable)); setAiMsg("连接失败：" + (r.error ?? "未知错误")); setAiForceSave(Boolean(r.retryable)); }
-    } catch (e) { setAiMsg("连接失败：" + getNativeErrorMessage(e)); }
-    finally { setAiBusy(false); }
+      await saveAi({ providers: [aiPendingPatch()] });
+      resetAiDraft();
+      // 连通已证明可用：顺手拉一次列表（用**已保存**配置），让模型下拉马上能选
+      void native.aiListModels().then((lr) => { if (lr.ok && lr.models?.length) { setAiModels(lr.models); setAiManualModel(false); } }).catch(() => {});
+      return r;
+    }, {
+      success: (r) => r.ok ? "连接成功，已保存 ✓" : "连接失败：" + (r.error ?? "未知错误"),
+      errorPrefix: "连接失败：",
+    });
   };
-  /** 仅保存不测试（只在「仍要保存」路径出现）。 */
+  /** 仅保存不测试（只在「仍要保存」路径出现）。原实现不置 busy、也不禁用按钮 ⇒ 这里只把文案写进同一通道。 */
   const forceSaveAi = async () => {
     await saveAi({ providers: [aiPendingPatch()] });
-    resetAiDraft(); setAiForceSave(false); setAiMsg("已保存（未通过连通测试）");
+    resetAiDraft(); setAiForceSave(false); aiRun.setMessage("已保存（未通过连通测试）");
   };
   const [gcCfg, setGcCfg] = useState<{ gcRetentionDays: number; gcIntervalHours: number; trashAutoPurgeDays: number } | null>(null);
-  const [gcPending, setGcPending] = useState<number>(0);
   const [gcLog, setGcLog] = useState<Array<{ id: number; ts: string; action: string; key: string; reason: string; ok: boolean }>>([]);
-  const [gcBusy, setGcBusy] = useState(false);
   const [syncMsg, setSyncMsg] = useState<string | null>(null);
   const [webStatus, setWebStatus] = useState<{ enabled: boolean; port: number; url: string } | null>(null);
-  const [webBusy, setWebBusy] = useState(false);
-  const [webMsg, setWebMsg] = useState<string | null>(null);
   const [syncCfg, setSyncCfg] = useState<SyncSettings | null>(null);
-  const [syncCfgBusy, setSyncCfgBusy] = useState(false);
   // 云同步状态（单一判据）：App 的 cloudConfigured（与顶栏同一来源）+ 面板里的真实 syncCfg。
   // ⚠️ 不要用本面板的 s3 —— 它只是表单初值、永远是对象（判"已配置"会永远为真）。
   // enabled 用 App 的 cloudEnabled（与顶栏同一来源），autoMode 用面板里的真实 syncCfg。
   const cloudState = cloudStateOf(cloudConfigured, syncCfg && { enabled: cloudEnabled, autoMode: syncCfg.autoMode });
   const cloudOffline = !canTouchNetwork(cloudState);
-  const [gcPendingRows, setGcPendingRows] = useState<S3GcPendingItem[]>([]);
   const [sysInfo, setSysInfo] = useState<import("../../lib/types").SystemInfo | null>(null);
   const [pendingHit, setPendingHit] = useState<string | null>(null);
   const [diagMsg, setDiagMsg] = useState<string | null>(null);
+  // SD-13：最近 3 轮 v3 同步诊断（device_state，经 get_sync_status 带出；不新增 IPC 通道）。
+  const [syncReports, setSyncReports] = useState<S3v3DiagnosticReport[]>([]);
+  const [syncDiagMsg, setSyncDiagMsg] = useState<string | null>(null);
 
-  /** A1 整库备份：选目录 → 备份到 <dir>/local-lakex-notes-backup-<ts>/。 */
+  // DT-13（261028）：十组手写 busy/msg（历史清理 / 数据体检 / 搜索索引 / 备份恢复 / 深度清理 / 同步策略 /
+  // 日志读取 / 浏览器端 / AI 测试 / AI 拉模型）改走 useAsyncAction —— 成功/失败文案仍由调用方给，UI 结构与文案不变。
+  // gc 与「同步策略」历史上共用状态栏那一条 syncMsg（谁最后写谁显示）⇒ 用 channel 保持这条语义。
+  // AI 的「测试」与「拉模型列表」历史上也共用一条 aiMsg ⇒ 两个实例传同一条 channel（busy 仍各自独立）。
+  const hist = useAsyncAction();
+  const healthCheck = useAsyncAction();
+  const searchIndex = useAsyncAction();
+  const backup = useAsyncAction();
+  const gcRun = useAsyncAction({ channel: { message: syncMsg, setMessage: setSyncMsg } });
+  const syncCfgRun = useAsyncAction({ channel: { message: syncMsg, setMessage: setSyncMsg } });
+  const logLoad = useAsyncAction();
+  const webRun = useAsyncAction();
+  const aiRun = useAsyncAction({ channel: { message: aiMsg, setMessage: setAiMsg } });
+  const aiModelsRun = useAsyncAction({ channel: { message: aiMsg, setMessage: setAiMsg } });
+
+  /** A1 整库备份：选目录 → 备份到 <dir>/lakex-local-notes-backup-<ts>/。 */
   const runBackup = async () => {
-    if (!native.capabilities.nativeDialog) { setBackupMsg("浏览器端暂不支持整库备份（请在桌面端操作）"); return; }
-    if (backupBusy) return;
-    setBackupBusy(true);
-    setBackupMsg(null);
-    try {
+    // 整库备份需要本机文件系统（浏览器端没有）——判据归一到宿主能力矩阵。
+    if (!hostCapabilities().localFileSystem) { backup.setMessage("浏览器端暂不支持整库备份（请在桌面端操作）"); return; }
+    await backup.run(async () => {
       const dir = await native.pickBackupDir();
-      if (!dir) return;
+      // 用户在系统框里取消：不写任何提示（与原实现早退一致）。
+      if (!dir) return null;
       const r = await native.runWorkspaceBackup(dir);
-      setBackupMsg(`备份完成：${r.backupPath}（目录 ${r.copiedDirs.length} 个）`);
-    } catch (e) {
-      setBackupMsg(`备份失败：${getNativeErrorMessage(e)}`);
-    } finally {
-      setBackupBusy(false);
-    }
+      return `备份完成：${r.backupPath}（目录 ${r.copiedDirs.length} 个）`;
+    }, { success: (text) => text, errorPrefix: "备份失败：" });
   };
 
   /** A2 云端恢复（换机/坏库）：隔离备份当前数据 → 全新空库 → 重启后首次同步全量拉取。 */
   const runCloudRestore = async () => {
-    if (!native.capabilities.nativeDialog) { setBackupMsg("浏览器端不支持云端恢复（需重启本机应用，请在桌面端操作）"); return; }
-    if (!window.confirm("从云端恢复将：① 把当前全部本地数据改名隔离保存（可手动找回）；② 清空工作区为全新空库；③ 重启后首次同步从云端全量拉取（只拉不打）。继续？")) return;
-    setBackupBusy(true);
-    setBackupMsg(null);
-    try {
+    // 云端恢复要隔离本机数据并重启应用，同样依赖本机文件系统/进程（浏览器端没有）。
+    if (!hostCapabilities().localFileSystem) { backup.setMessage("浏览器端不支持云端恢复（需重启本机应用，请在桌面端操作）"); return; }
+    if (!(await confirm({
+      title: "从云端恢复？",
+      body: "将：① 把当前全部本地数据改名隔离保存（可手动找回）；② 清空工作区为全新空库；③ 重启后首次同步从云端全量拉取（只拉不传）。",
+      confirmText: "继续",
+      danger: true,
+    }))) return;
+    await backup.run(async () => {
       const { quarantinePath } = await native.prepareCloudRestore();
-      window.alert(`当前数据已隔离备份到：\n${quarantinePath}\n\n应用即将重启并从云端恢复。`);
+      await notice({
+        title: "本地数据已隔离备份",
+        body: <>当前数据已隔离备份到：<div className="note-info-path">{quarantinePath}</div>应用即将重启并从云端恢复。</>,
+      });
       await native.confirmRelaunch();
-    } catch (e) {
-      setBackupMsg(`云端恢复失败：${getNativeErrorMessage(e)}`);
-    } finally {
-      setBackupBusy(false);
-    }
+    }, { errorPrefix: "云端恢复失败：" });
   };
 
   /** F1 日志查看：尾部关键字过滤（GC/sync/trash 等），纯读。 */
   const runLogLoad = async (keyword: string) => {
-    setLogBusy(true);
-    try {
-      const r = await native.readAppLog({ keyword: keyword.trim() || undefined, maxLines: 200, context: 1 });
-      setLogRows(r.matches);
-      setLogInfo(r.matches.length === 0 ? "无匹配日志" : r.truncated ? `显示最近 ${r.matches.length} 行（已截断）` : `共 ${r.matches.length} 行`);
-    } catch (e) {
-      setLogRows([]);
-      setLogInfo(`日志读取失败：${getNativeErrorMessage(e)}`);
-    } finally {
-      setLogBusy(false);
-    }
+    await logLoad.run(async () => {
+      try {
+        const r = await native.readAppLog({ keyword: keyword.trim() || undefined, maxLines: 200, context: 1 });
+        setLogRows(r.matches);
+        return r;
+      } catch (e) {
+        // 与原实现一致：读取失败清掉上一次的列表，避免把旧结果显示成这次的结果。
+        setLogRows([]);
+        throw e;
+      }
+    }, {
+      success: (r) => (r.matches.length === 0 ? "无匹配日志" : r.truncated ? `显示最近 ${r.matches.length} 行（已截断）` : `共 ${r.matches.length} 行`),
+      errorPrefix: "日志读取失败：",
+      // 原实现读取期间保留上一条提示，结果回来再覆盖。
+      clearOnStart: false,
+    });
   };
 
   /** A3 数据体检：只读三查（notes↔文件/hash、history↔文件、orphan 登记↔文件）。 */
   const runHealth = async () => {
-    setHealthBusy(true);
-    try {
-      const report = await native.runDataHealthCheck();
-      setHealth(report);
-    } catch (e) {
-      setHistMsg(`数据体检失败：${getNativeErrorMessage(e)}`);
-    } finally {
-      setHealthBusy(false);
-    }
-  };
-
-  const refreshGcPending = async () => {
-    try {
-      const items = await native.listS3GcPending();
-      setGcPendingRows(items);
-      setGcPending(items.length);
-    } catch { /* 忽略：下次打开/操作后再刷新 */ }
-  };
-
-  /** 待回收行拆分：已过窗口（自动对账可删）/ 窗口内（最早何时到期）/ 时间未知。 */
-  const gcSummary = useMemo(() => {
-    const now = Date.now();
-    const retention = gcCfg?.gcRetentionDays ?? 7;
-    const cutoff = gcCutoffMs(now, retention);
-    let due = 0;
-    let inWindow = 0;
-    let unknown = 0;
-    let earliest: number | null = null;
-    for (const row of gcPendingRows) {
-      const ms = parseIsoMs(row.markedAt);
-      if (ms === null) { unknown += 1; continue; }
-      if (ms <= cutoff) { due += 1; }
-      else {
-        inWindow += 1;
-        const at = ms + retention * 86_400_000;
-        if (earliest === null || at < earliest) earliest = at;
+    await healthCheck.run(async () => {
+      try {
+        setHealth(await native.runDataHealthCheck());
+      } catch (reason) {
+        // 体检失败一直显示在「文档历史」那条状态行里（迁移前就是写 histMsg），这里仍走 hist 的提示通道。
+        hist.setMessage("数据体检失败：" + getNativeErrorMessage(reason));
+        throw reason;
       }
-    }
-    return { due, inWindow, unknown, earliest };
-  }, [gcPendingRows, gcCfg]);
+    });
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -309,7 +317,6 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
     void native.getS3GcSettings().then(setGcCfg).catch((error) => reportNativeActionError("设置页读取", error));
     void native.getSyncSettings().then(setSyncCfg).catch((error) => reportNativeActionError("设置页读取", error));
     void native.getWebStatus().then(setWebStatus).catch((error) => reportNativeActionError("设置页读取", error));
-    void refreshGcPending();
     void native.listS3GcLog().then(setGcLog).catch((error) => reportNativeActionError("设置页读取", error));
   }, [open, openCategory]);
 
@@ -341,6 +348,17 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
     return () => { window.clearTimeout(timer); el.classList.remove("is-hit"); };
   }, [pendingHit, category]);
 
+  // 同步诊断：只在「云端与同步」分类打开时读取（失败静默为「无记录」）。
+  useEffect(() => {
+    if (!open || category !== "sync") return;
+    let alive = true;
+    setSyncDiagMsg(null);
+    native.getSyncStatus()
+      .then((info) => { if (alive) setSyncReports(info.v3Reports ?? []); })
+      .catch(() => { if (alive) setSyncReports([]); });
+    return () => { alive = false; };
+  }, [open, category]);
+
   useEffect(() => {
     const ids = new Set(itemHits.map((h) => h.id));
     for (const el of Array.from(document.querySelectorAll<HTMLElement>(".settings-content [data-set-id]"))) {
@@ -356,7 +374,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
     if (!sysInfo) return;
     const st = sysInfo.storage;
     const lines = [
-      `LocalLakexNotes ${sysInfo.app.version}${sysInfo.packaged ? "" : "（开发实例）"}`,
+      `LakexLocalNotes ${sysInfo.app.version}${sysInfo.packaged ? "" : "（开发实例）"}`,
       `Electron ${sysInfo.runtime.electron} · Chromium ${sysInfo.runtime.chromium} · Node ${sysInfo.runtime.node} · ${sysInfo.runtime.platform}/${sysInfo.runtime.arch}`,
       `依赖：${Object.entries(sysInfo.deps).map(([k, v]) => `${k}@${v}`).join(", ")}`,
       `数据目录：${st.root}`,
@@ -370,6 +388,16 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
       await navigator.clipboard.writeText(lines.join("\n"));
       setDiagMsg("诊断信息已复制到剪贴板");
     } catch { setDiagMsg("复制失败（剪贴板不可用）"); }
+  };
+
+  const syncDiagText = useMemo(() => formatS3v3Diagnostics(syncReports), [syncReports]);
+
+  const copySyncDiagnostics = async () => {
+    if (!syncDiagText) { setSyncDiagMsg("本机还没有 v3 同步记录"); return; }
+    try {
+      await navigator.clipboard.writeText(syncDiagText);
+      setSyncDiagMsg("同步诊断已复制到剪贴板");
+    } catch { setSyncDiagMsg("复制失败（剪贴板不可用）"); }
   };
 
   const nav = [
@@ -405,35 +433,41 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
     const next = { ...histCfg, ...patch };
     setHistCfg(next);
     void native.saveHistorySettings(next).catch((reason) => {
-      setHistMsg("历史设置保存失败：" + getNativeErrorMessage(reason));
+      hist.setMessage("历史设置保存失败：" + getNativeErrorMessage(reason));
       void native.getHistorySettings().then(setHistCfg).catch((error) => reportNativeActionError("重读历史设置", error));
     });
   };
 
   const runCleanup = async () => {
-    if (histBusy) return;
-    setHistBusy(true); setHistMsg(null);
-    try {
+    await hist.run(async () => {
       const r = await native.cleanupHistory();
       setStats(await native.getHistoryStats());
-      setHistMsg(r.deletedSnapshots > 0 ? `已清理 ${r.deletedSnapshots} 份过期快照` : "无过期快照");
-    } catch (e) { setHistMsg(getNativeErrorMessage(e)); }
-    finally { setHistBusy(false); }
+      return r.deletedSnapshots > 0 ? `已清理 ${r.deletedSnapshots} 份过期快照` : "无过期快照";
+    }, { success: (text) => text });
   };
 
-  const setS3Field = (key: keyof S3Settings, value: string | boolean) => { setS3((c) => ({ ...c, [key]: value })); setS3Verified(false); };
+  const setS3Field = (key: keyof S3Settings, value: string | boolean) => { setS3((c) => ({ ...c, [key]: value })); invalidateS3Verified(); };
   const saveS3 = async () => {
     setSyncMsg(null);
-    try { await native.saveS3Settings(s3); onS3SettingsChanged?.(s3); setSyncMsg("S3 配置已保存在当前设备"); }
-    catch (e) { setSyncMsg(getNativeErrorMessage(e)); }
+    // 七牛 Kodo 不支持 Path-style：保存时强制纠正（旧配置里误开的开关也一起纠正）。
+    const effective = effectiveS3Settings(s3);
+    try {
+      await native.saveS3Settings(effective);
+      if (effective !== s3) setS3(effective);
+      onS3SettingsChanged?.(effective);
+      setSyncMsg("S3 配置已保存在当前设备");
+    } catch (e) { setSyncMsg(getNativeErrorMessage(e)); }
   };
   const testS3 = async () => {
     setSyncMsg("正在连接...");
+    const effective = effectiveS3Settings(s3);
     try {
-      await native.saveS3Settings(s3); onS3SettingsChanged?.(s3);
+      await native.saveS3Settings(effective);
+      if (effective !== s3) setS3(effective);
+      onS3SettingsChanged?.(effective);
       setSyncMsg(await native.testS3Connection());
-      setS3Verified(true);
-    } catch (e) { setS3Verified(false); setSyncMsg(getNativeErrorMessage(e)); }
+      markS3Verified();
+    } catch (e) { invalidateS3Verified(); setSyncMsg(getNativeErrorMessage(e)); }
   };
   /** 导出到文件：系统保存框 + 加密封装都在主进程（渲染层不接触明文 Secret）。 */
   const exportS3ConfigFile = async () => {
@@ -452,7 +486,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
       if (result.canceled) return;
       const saved = await native.getS3Settings();
       if (saved) { setS3(saved); onS3SettingsChanged?.(saved); }
-      setS3Verified(false);
+      invalidateS3Verified();
       setSyncMsg("S3 配置已从文件导入，请点「测试连接」确认后再使用云同步");
     } catch (e) { setSyncMsg(getNativeErrorMessage(e)); }
   };
@@ -461,66 +495,66 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
     await native.importS3Config(code);
     const saved = await native.getS3Settings();
     if (saved) { setS3(saved); onS3SettingsChanged?.(saved); }
-    setS3Verified(false);
+    invalidateS3Verified();
     setSyncMsg("S3 配置已导入，请点「测试连接」确认后再使用云同步");
   };
 
   const saveSyncCfg = async (patch: Partial<SyncSettings>) => {
-    if (!syncCfg || syncCfgBusy) return;
+    if (!syncCfg) return;
     const next = { ...syncCfg, ...patch };
-    setSyncCfgBusy(true); setSyncMsg(null);
-    try {
-      // 只有 S3 配置可保存且连通测试通过，才允许开启云同步；测试失败则保持关闭、不写 enabled。
-      if (patch.enabled === true) {
-        setSyncMsg("正在测试 S3 连接...");
-        try {
-          await native.saveS3Settings(s3);
-          onS3SettingsChanged?.(s3);
-          setSyncMsg(await native.testS3Connection());
-          setS3Verified(true);
-        } catch (e) {
-          setS3Verified(false);
-          setSyncMsg(getNativeErrorMessage(e) + "（未通过测试，云同步保持关闭）");
-          return;
+    await syncCfgRun.run(async () => {
+      try {
+        // 只有 S3 配置可保存且连通测试通过，才允许开启云同步；测试失败则保持关闭、不写 enabled。
+        if (patch.enabled === true) {
+          setSyncMsg("正在测试 S3 连接...");
+          try {
+            await native.saveS3Settings(effectiveS3Settings(s3));
+            onS3SettingsChanged?.(s3);
+            setSyncMsg(await native.testS3Connection());
+            markS3Verified();
+          } catch (e) {
+            invalidateS3Verified();
+            setSyncMsg(getNativeErrorMessage(e) + "（未通过测试，云同步保持关闭）");
+            return;
+          }
         }
+        const saved = await native.saveSyncSettings(next);
+        setSyncCfg(saved);
+        onSyncSettingsChanged?.(saved);
+        setSyncMsg(saved.enabled
+          ? "同步策略已保存"
+          : saved.alignWarning
+            ? "云同步已关闭（未能完成最后对齐，下次开启同步时会继续）"
+            : "云同步已关闭（已完成最后一次对齐）");
+      } catch (e) {
+        // 失败后把面板里的策略读回真实值（与原来 catch 里同一条重读路径）；错误文案由 hook 落到状态栏。
+        void native.getSyncSettings().then(setSyncCfg).catch((error) => reportNativeActionError("设置页读取", error));
+        throw e;
       }
-      const saved = await native.saveSyncSettings(next);
-      setSyncCfg(saved);
-      onSyncSettingsChanged?.(saved);
-      setSyncMsg(saved.enabled
-        ? "同步策略已保存"
-        : saved.alignWarning
-          ? "云同步已关闭（未能完成最后对齐，下次开启同步时会继续）"
-          : "云同步已关闭（已完成最后一次对齐）");
-    } catch (e) {
-      setSyncMsg(getNativeErrorMessage(e));
-      void native.getSyncSettings().then(setSyncCfg).catch((error) => reportNativeActionError("设置页读取", error));
-    } finally {
-      setSyncCfgBusy(false);
-    }
+    });
   };
 
   const setWeb = async (enabled: boolean) => {
-    if (webBusy) return;
-    setWebBusy(true); setWebMsg(null);
-    try {
-      const st = await native.setWebEnabled(enabled);
-      setWebStatus(st);
-      setWebMsg(st.enabled ? null : "已关闭");
-    } catch (e) {
-      setWebMsg(getNativeErrorMessage(e));
-      void native.getWebStatus().then(setWebStatus).catch((error) => reportNativeActionError("设置页读取", error));
-    } finally {
-      setWebBusy(false);
-    }
+    // 重入由 useAsyncAction 兜住（替代迁移前的 `if (webBusy) return`）。
+    await webRun.run(async () => {
+      try {
+        const st = await native.setWebEnabled(enabled);
+        setWebStatus(st);
+        return st;
+      } catch (e) {
+        // 失败后读回真实状态（与原 catch 里同一条重读路径）；错误文案由 hook 落到同一条提示。
+        void native.getWebStatus().then(setWebStatus).catch((error) => reportNativeActionError("设置页读取", error));
+        throw e;
+      }
+    }, { success: (st) => (st.enabled ? null : "已关闭") });
   };
 
   const openWeb = async () => {
     try {
       const r = await native.openWebClient();
-      if (!r.ok) setWebMsg(r.reason ?? "打开失败");
+      if (!r.ok) webRun.setMessage(r.reason ?? "打开失败");
     } catch (e) {
-      setWebMsg(getNativeErrorMessage(e));
+      webRun.setMessage(getNativeErrorMessage(e));
     }
   };
 
@@ -534,16 +568,24 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
     });
   };
   const runGcAction = async (dryRun: boolean) => {
-    if (gcBusy) return;
-    setGcBusy(true); setSyncMsg(null);
-    try {
+    await gcRun.run(async () => {
       // 手动清理 = 显式清云端：无视 7 天窗口，直接列出/删除当前全部未引用对象（自动定时仍按窗口）
       const r = await native.runS3DeepCleanup(dryRun, true);
-      await refreshGcPending();
-      setSyncMsg(dryRun ? `预览：可清理 ${r.deleted.length} 个对象` : `已清理 ${r.deleted.length} 个对象`);
-    } catch (e) { setSyncMsg(getNativeErrorMessage(e)); }
-    finally { setGcBusy(false); }
+      return dryRun ? `预览：可清理 ${r.deleted.length} 个对象` : `已清理 ${r.deleted.length} 个对象`;
+    }, { success: (text) => text });
   };
+
+  /** 重建全文搜索索引（成功后给一句提示，失败落同一处）。 */
+  const rebuildSearchIndex = async () => {
+    await searchIndex.run(() => native.rebuildSearchIndex(), { success: "已重建搜索索引" });
+  };
+
+  // 提示文案仍落在原来的位置（同一个元素、同一个类名）：只是数据源从手写 state 换成 useAsyncAction。
+  const histText = hist.error ?? hist.message;
+  const searchText = searchIndex.error ?? searchIndex.message;
+  const backupText = backup.error ?? backup.message;
+  const logText = logLoad.error ?? logLoad.message;
+  const webText = webRun.error ?? webRun.message;
 
   return (
     <div className="settings-overlay" onMouseDown={(event) => { if (event.target === event.currentTarget && !floating.interactionRef.current) onClose(); }}>
@@ -643,9 +685,9 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                       {lastCleanup && <span>上次清理 {formatDateTime(new Date(lastCleanup.at))} · {lastCleanup.deletedSnapshots} 份 · {formatBytes(lastCleanup.freedBytes)}</span>}
                     </div>
                     <div className="config-block__actions">
-                      <button className="ln-btn ln-btn--secondary" onClick={() => void runCleanup()} disabled={histBusy}><Trash size={14} /> {histBusy ? "清理中…" : "立即清理"}</button>
+                      <button className="ln-btn ln-btn--secondary" onClick={() => void runCleanup()} disabled={hist.busy}><Trash size={14} /> {hist.busy ? "清理中…" : "立即清理"}</button>
                     </div>
-                    {histMsg && <div className="block__text">{histMsg}</div>}
+                    {histText && <div className="block__text">{histText}</div>}
                   </Block>
                   {histCfg && (
                     <>
@@ -659,8 +701,8 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                 <Group title="数据体检（只读诊断）" icon={<Info size={16} />}>
                   <Block itemId="history-data-health" name="一致性检查" desc="只读比对正文文件、历史快照、孤儿登记与引用资源；不自动修复。发现问题请从备份/云端恢复对应文件。">
                     <div className="config-block__actions">
-                      <button className="ln-btn ln-btn--secondary" onClick={() => void runHealth()} disabled={healthBusy}><Search size={14} /> {healthBusy ? "检查中…" : "运行检查"}</button>
-                      {health && !healthBusy && (
+                      <button className="ln-btn ln-btn--secondary" onClick={() => void runHealth()} disabled={healthCheck.busy}><Search size={14} /> {healthCheck.busy ? "检查中…" : "运行检查"}</button>
+                      {health && !healthCheck.busy && (
                         <span className="config-stats"><span>笔记 {health.notesChecked} · 快照 {health.historyChecked} · 孤儿登记 {health.orphanRowsChecked} · 树节点 {health.treeChecked}</span></span>
                       )}
                     </div>
@@ -708,7 +750,16 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                   <Field itemId="s3-bucket" name="Bucket"><TextField label="Bucket" value={s3.bucket} onSave={(v) => setS3Field("bucket", v)} /></Field>
                   <Field itemId="s3-region" name="Region"><TextField label="Region" value={s3.region} onSave={(v) => setS3Field("region", v)} /></Field>
                   <Field itemId="s3-prefix" name="对象前缀"><TextField label="对象前缀" value={s3.prefix} onSave={(v) => setS3Field("prefix", v)} /></Field>
-                  <Switch itemId="s3-path-style" name="使用 Path-style URL" desc="自建 MinIO 等需要开启；七牛 Kodo 关闭即可。" checked={s3.forcePathStyle} onChange={(checked) => setS3Field("forcePathStyle", checked)} />
+                  <Switch
+                    itemId="s3-path-style"
+                    name="使用 Path-style URL"
+                    desc={isQiniuEndpoint(s3.endpoint)
+                      ? "当前 Endpoint 是七牛 Kodo：必须关闭 Path-style（此项已自动忽略；保存/测试时都会强制关闭）。"
+                      : "自建 MinIO 等需要开启；七牛 Kodo 关闭即可。"}
+                    checked={isQiniuEndpoint(s3.endpoint) ? false : s3.forcePathStyle}
+                    disabled={isQiniuEndpoint(s3.endpoint)}
+                    onChange={(checked) => setS3Field("forcePathStyle", checked)}
+                  />
                   <Block itemId="s3-connection" name="连接" desc="测试仅探测桶可读性，不写入数据。">
                     <div className="config-block__actions">
                       <button className="ln-btn ln-btn--secondary" onClick={() => void testS3()}>测试连接</button>
@@ -726,7 +777,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                 <Group title="同步策略（仅保存在当前设备）" icon={<Cloud size={16} />}>
                   {syncCfg && (
                     <>
-                      <Switch itemId="sync-enabled" name="启用云同步" desc={s3Verified || syncCfg.enabled ? "关闭后本机按纯本地空间工作：不连 S3、不自动同步，回收站恢复/预览也不会去云端补拉缺失资源；重新开启后下次同步会自动补拉。S3 配置与同步策略都只保存在本机，A 端关闭不影响 B 端。" : "先在上方「S3 对象存储」完成配置并点「测试连接」通过，才能开启云同步。"} note={<><span className="ln-tag ln-tag--pending">{CLOUD_PRIVACY_NOTICE.badge}</span>{" "}{CLOUD_PRIVACY_NOTICE.text}</>} checked={syncCfg.enabled} disabled={syncCfgBusy || (!syncCfg.enabled && !s3Verified)} onChange={(checked) => void saveSyncCfg({ enabled: checked })} />
+                      <Switch itemId="sync-enabled" name="启用云同步" desc={s3Verified || syncCfg.enabled ? "关闭后本机按纯本地空间工作：不连 S3、不自动同步，回收站恢复/预览也不会去云端补拉缺失资源；重新开启后下次同步会自动补拉。S3 配置与同步策略都只保存在本机，A 端关闭不影响 B 端。" : "先在上方「S3 对象存储」完成配置并点「测试连接」通过，才能开启云同步。"} note={<><span className="ln-tag ln-tag--pending">{CLOUD_PRIVACY_NOTICE.badge}</span>{" "}{CLOUD_PRIVACY_NOTICE.text}</>} checked={syncCfg.enabled} disabled={syncCfgRun.busy || (!syncCfg.enabled && !s3Verified)} onChange={(checked) => void saveSyncCfg({ enabled: checked })} />
                       {syncCfg.enabled && (
                         <>
                           <Field itemId="sync-auto-mode" name="自动同步模式" desc={SYNC_OPEN_CLOSE_NOTE}>
@@ -741,20 +792,29 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                     </>
                   )}
                 </Group>
+                <Group title="同步诊断" icon={<Terminal size={16} />}>
+                  <Block itemId="sync-diagnostics" name="最近 3 轮同步" desc="每轮同步的阶段耗时、对象数/字节与失败对象（只存本机 device_state，不上传）。反馈同步变慢/失败时直接复制给维护者。">
+                    {syncDiagText ? (
+                      <div className="config-readonly">
+                        {syncDiagText.split("\n").map((line, i) => <div key={i}>{line.trim() ? line : "\u00a0"}</div>)}
+                      </div>
+                    ) : (
+                      <div className="block__text">本机还没有 v3 同步记录。</div>
+                    )}
+                    <div className="config-block__actions">
+                      <button className="ln-btn ln-btn--secondary" onClick={() => void copySyncDiagnostics()} disabled={!syncDiagText}>复制同步诊断</button>
+                    </div>
+                    {syncDiagMsg && <div className="block__text">{syncDiagMsg}</div>}
+                  </Block>
+                </Group>
                 <Group title="云端回收（S3 GC）" icon={<Trash size={16} />}>
                   {cloudOffline && (
                     <Block desc={cloudStateHint(cloudState) ?? "云同步未启用：按纯本地空间工作，云端相关操作一律不联网。"} />
                   )}
                   <Block itemId="gc-status" name="回收状态" desc="手动按钮会立即删除当前未被清单/历史引用的云端对象；自动对账按回收窗口到期后定期清理。结果偏少通常是被引用保护，不是漏删。">
-                    <div className="config-stats">
-                      <span>待回收键 <strong>{gcPending}</strong> 个</span>
-                      <span>可删 <strong>{gcSummary.due}</strong></span>
-                      <span>窗口内 <strong>{gcSummary.inWindow}</strong>{gcSummary.earliest !== null ? " · 最早 " + formatDateTime(new Date(gcSummary.earliest)) + " 到期" : ""}</span>
-                      {gcSummary.unknown > 0 && <span>时间未知 {gcSummary.unknown}</span>}
-                    </div>
                     <div className="config-block__actions">
-                      <button className="ln-btn ln-btn--secondary" onClick={() => void runGcAction(true)} disabled={gcBusy || cloudOffline}>深度清理预览</button>
-                      <button className="ln-btn ln-btn--secondary ln-btn--danger-text" onClick={() => void runGcAction(false)} disabled={gcBusy || cloudOffline}>执行深度清理</button>
+                      <button className="ln-btn ln-btn--secondary" onClick={() => void runGcAction(true)} disabled={gcRun.busy || cloudOffline}>深度清理预览</button>
+                      <button className="ln-btn ln-btn--secondary ln-btn--danger-text" onClick={() => void runGcAction(false)} disabled={gcRun.busy || cloudOffline}>执行深度清理</button>
                     </div>
                   </Block>
                   {gcCfg && (
@@ -764,15 +824,6 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                     </>
                   )}
                   <Block itemId="gc-mirror" name="云端只是镜像" desc="删除云端冗余不影响本地正文/回收站/历史快照（“彻底删除/清空回收站”除外）。" />
-                  {gcPendingRows.length > 0 && (
-                    <Block itemId="gc-pending-list" name={`待回收键明细（${gcPendingRows.length} 条）`} desc="按标记时间升序；[原因] 标注该键为何进入待回收。">
-                      <div className="config-readonly">
-                        {gcPendingRows.slice().sort((a, b) => (parseIsoMs(a.markedAt) ?? Infinity) - (parseIsoMs(b.markedAt) ?? Infinity)).map((row) => (
-                          <div key={row.key} title={row.markedAt}>{row.markedAt.slice(0, 10)} [{pendingKeyReason(row.key)}] {row.key}</div>
-                        ))}
-                      </div>
-                    </Block>
-                  )}
                   <Block itemId="gc-log" name={`删除记录（最近 ${gcLog.length > 0 ? Math.min(gcLog.length, 30) : 0} 条 · 只读审计）`}>
                     {gcLog.length > 0 ? (
                       <div className="config-readonly">
@@ -786,15 +837,15 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                 <Group title="备份与恢复" icon={<Archive size={16} />}>
                   <Block itemId="backup-export" name="整库备份" desc="数据库 + 全部笔记/资源/历史快照 + 小记，导出到所选目录（不覆盖非空目录）。">
                     <div className="config-block__actions">
-                      <button className="ln-btn ln-btn--secondary" onClick={() => void runBackup()} disabled={backupBusy}><Archive size={14} /> {backupBusy ? "备份中…" : "整库备份到…"}</button>
+                      <button className="ln-btn ln-btn--secondary" onClick={() => void runBackup()} disabled={backup.busy}><Archive size={14} /> {backup.busy ? "备份中…" : "整库备份到…"}</button>
                     </div>
                   </Block>
                   <Block itemId="backup-restore" name="从云端恢复" desc="当前数据先改名隔离保存，再以全新空库从云端全量拉取（只拉不打）。用于换机或本地库损坏。">
                     <div className="config-block__actions">
-                      <button className="ln-btn ln-btn--secondary ln-btn--danger-text" onClick={() => void runCloudRestore()} disabled={backupBusy || cloudOffline} title={cloudOffline ? "云同步未启用：不会联网" : undefined}>从云端恢复（换机/坏库）…</button>
+                      <button className="ln-btn ln-btn--secondary ln-btn--danger-text" onClick={() => void runCloudRestore()} disabled={backup.busy || cloudOffline} title={cloudOffline ? "云同步未启用：不会联网" : undefined}>从云端恢复（换机/坏库）…</button>
                     </div>
                   </Block>
-                  {backupMsg && <Block name={backupMsg} />}
+                  {backupText && <Block name={backupText} />}
                 </Group>
               </>
             )}
@@ -812,7 +863,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
 
             {category === "browser" && (
               <Group title="浏览器端" icon={<Globe size={16} />}>
-                <Switch itemId="browser-enabled" name="启用浏览器端" desc="在本机浏览器中打开 LocalLakexNotes（与桌面端同一份本地数据）。仅监听 127.0.0.1，不做局域网伺服、不允许其它设备访问。开关即时生效、无需重启；应用重启后恢复为关闭。" checked={webStatus?.enabled ?? false} disabled={!webStatus || webBusy} onChange={(checked) => void setWeb(checked)} />
+                <Switch itemId="browser-enabled" name="启用浏览器端" desc="在本机浏览器中打开 LakexLocalNotes（与桌面端同一份本地数据）。仅监听 127.0.0.1，不做局域网伺服、不允许其它设备访问。开关即时生效、无需重启；应用重启后恢复为关闭。" checked={webStatus?.enabled ?? false} disabled={!webStatus || webRun.busy} onChange={(checked) => void setWeb(checked)} />
                 <Block name="这是什么" desc="浏览器端不是「伺服」：不对外开放、不监听局域网。它只是把桌面端这一份本地库（同一个数据库、同一批文件）通过回环地址 http://127.0.0.1:19880/ 交给本机浏览器，数据不经过网络。打开开关后，用 Chrome 等浏览器打开该地址即可。" />
                 <Block name="现状" desc="读写与本机同一份数据；同步进度/待办计数走 SSE 实时推送；图片「另存为」走浏览器下载、附件在新标签打开。导出/整库备份等需要系统目录框的操作仍请在桌面端使用。此开关不落盘（每次启动应用都从关闭开始）。" />
                 {webStatus?.enabled && (
@@ -820,7 +871,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                     <button className="ln-btn ln-btn--secondary" onClick={() => void openWeb()}><ExternalLink size={14} /> 打开浏览器</button>
                   </Item>
                 )}
-                {webMsg && <Block desc={webMsg} />}
+                {webText && <Block desc={webText} />}
               </Group>
             )}
 
@@ -829,19 +880,12 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
               {/* 261006：索引重建从「资源」挪到「日志」（维护动作归一处，后续再整理） */}
               <Group title="全文搜索" icon={<Search size={16} />}>
                 <Item itemId="search-rebuild" name="重建全文搜索索引" desc="标题/正文全文索引（FTS5，中文单字分词）。正常由增量账本自动维护；索引异常或换分词器后可手动重建。">
-                  {searchMsg && <span className="ln-label__text">{searchMsg}</span>}
-                  <button className="ln-btn ln-btn--secondary" disabled={searchBusy} onClick={() => {
-                    setSearchBusy(true);
-                    setSearchMsg(null);
-                    void native.rebuildSearchIndex()
-                      .then(() => setSearchMsg("已重建搜索索引"))
-                      .catch((error) => setSearchMsg(getNativeErrorMessage(error)))
-                      .finally(() => setSearchBusy(false));
-                  }}>{searchBusy ? "重建中…" : "重建"}</button>
+                  {searchText && <span className="ln-label__text">{searchText}</span>}
+                  <button className="ln-btn ln-btn--secondary" disabled={searchIndex.busy} onClick={() => void rebuildSearchIndex()}>{searchIndex.busy ? "重建中…" : "重建"}</button>
                 </Item>
               </Group>
               <Group title="应用日志（只读）" icon={<Terminal size={16} />}>
-                <Block itemId="logs-main" name="主进程日志" desc="GC / 同步 / 回收站 / 历史清理写入 userData/logs/local-lakex-notes.log。按关键字过滤，每条命中附带前后一行上下文。">
+                <Block itemId="logs-main" name="主进程日志" desc="GC / 同步 / 回收站 / 历史清理写入 userData/logs/lakex-local-notes.log。按关键字过滤，每条命中附带前后一行上下文。">
                   <div className="config-block__actions">
                     <input
                       className="ln-text-field logs__filter"
@@ -852,9 +896,9 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                       placeholder="过滤（如 GC / sync / trash / purge / snapshot）"
                       aria-label="日志关键字过滤"
                     />
-                    <button className="ln-btn ln-btn--secondary" onClick={() => void runLogLoad(logKeyword)} disabled={logBusy}><Search size={14} /> {logBusy ? "读取中…" : "读取"}</button>
+                    <button className="ln-btn ln-btn--secondary" onClick={() => void runLogLoad(logKeyword)} disabled={logLoad.busy}><Search size={14} /> {logLoad.busy ? "读取中…" : "读取"}</button>
                   </div>
-                  {logInfo && <div className="block__text">{logInfo}</div>}
+                  {logText && <div className="block__text">{logText}</div>}
                 </Block>
                 <Block>
                   {logRows.length > 0 ? (
@@ -862,7 +906,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                       {logRows.map((row, i) => <div key={i} className={row.hit ? "logs__hit" : undefined}>{row.line}</div>)}
                     </div>
                   ) : (
-                    !logBusy && <div className="config-empty">尚无日志或未读取。</div>
+                    !logLoad.busy && <div className="config-empty">尚无日志或未读取。</div>
                   )}
                 </Block>
               </Group>
@@ -929,7 +973,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                           {aiModels && aiModels.length > 0 && <button className="ln-btn ln-btn--secondary" onClick={() => setAiManualModel(false)}>用列表</button>}
                         </>
                       )}
-                      <button className="ln-btn ln-btn--secondary" disabled={aiModelsBusy} onClick={() => void fetchAiModels()}>{aiModelsBusy ? "拉取中…" : "获取模型列表"}</button>
+                      <button className="ln-btn ln-btn--secondary" disabled={aiModelsRun.busy} onClick={() => void fetchAiModels()}>{aiModelsRun.busy ? "拉取中…" : "获取模型列表"}</button>
                     </Field>
                     {activeDef.supportsReasoning && (
                       <Item itemId="ai-reasoning" name="思考强度" desc="DeepSeek 的 reasoning_effort（默认 high）。思考模式下 temperature 不生效。">
@@ -951,8 +995,8 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                   <Section title="连通性">
                     <Block itemId="ai-test" name="测试并保存" desc="保存前先发一次最小真实请求：鉴权 / 模型类错误会拦住保存；网络 / 限流可选择仍要保存。">
                       <div className="config-block__actions">
-                        <button className="ln-btn ln-btn--primary" disabled={aiBusy} onClick={() => void testAndSaveAi()}>{aiBusy ? "测试中…" : "测试并保存"}</button>
-                        <button className="ln-btn ln-btn--secondary" disabled={aiBusy} onClick={() => void testAi()}>仅测试</button>
+                        <button className="ln-btn ln-btn--primary" disabled={aiRun.busy} onClick={() => void testAndSaveAi()}>{aiRun.busy ? "测试中…" : "测试并保存"}</button>
+                        <button className="ln-btn ln-btn--secondary" disabled={aiRun.busy} onClick={() => void testAi()}>仅测试</button>
                         {aiForceSave && <button className="ln-btn ln-btn--secondary" onClick={() => void forceSaveAi()}>仍要保存</button>}
                       </div>
                       {aiErr.all && <div className="config-item__error">{aiErr.all}</div>}
@@ -976,7 +1020,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                 {sysInfo && (
                   <>
                     <Group title="关于" icon={<Info size={16} />}>
-                      <Block itemId="about-app" name={`LocalLakexNotes ${sysInfo.app.version}${sysInfo.packaged ? "" : "（开发实例）"}`} desc="本地优先 · 离线可用 · 数据保存在本机，S3 仅作云端镜像备份。" />
+                      <Block itemId="about-app" name={`LakexLocalNotes ${sysInfo.app.version}${sysInfo.packaged ? "" : "（开发实例）"}`} desc="本地优先 · 离线可用 · 数据保存在本机，S3 仅作云端镜像备份。" />
                       <Block itemId="about-fonts" name="字体" desc="界面与正文使用内置 MiSans（小米科技，依《MiSans 字体知识产权许可协议》免费商用；此处按协议注明使用）。代码块使用 JetBrains Mono（SIL OFL 1.1）。两者均随应用内置、离线可用。" />
                     </Group>
 
@@ -1065,6 +1109,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
             onImport={importS3Config}
           />
         )}
+        {confirmElement}
       </div>
     </div>
   );

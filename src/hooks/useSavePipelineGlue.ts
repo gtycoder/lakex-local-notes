@@ -6,6 +6,7 @@ import { patchNoteById, patchTabById, readEditorDocumentCaches, summaryOf, type 
 import { stripAssetAccessToken } from "../lib/assetPort";
 import type { DraftJournalEntry, NoteDocument, NoteSummary, SyncStatus, TreeNode } from "../lib/types";
 import type { LakeEditorInstance } from "../features/editor/lakeRuntime";
+import type { EditorCapture, EditorCaptureRegistrar } from "../core/editorCapture";
 
 export interface UseSavePipelineGlueOptions {
   setNotes: Dispatch<SetStateAction<NoteSummary[]>>;
@@ -42,10 +43,10 @@ export function useSavePipelineGlue({
   const handleGetEditorCaches = useCallback((noteId: string) => {
     return readEditorDocumentCaches(editorsRef.current.get(noteId)) ?? { markdown: null, plain: null };
   }, [editorsRef]);
-  /** 捕获契约：按需取当前 text/lake 正文（doc 走 Lake 实例；sheet/board 不在此注册，返回 undefined 由调用方兜底）。 */
+  /** 捕获契约：按需取当前 text/lake 正文（doc 走 Lake 实例；sheet/board/ink 走下面的 capturesRef 注册，优先级更高）。 */
   // 审计 F15：Sheet/Board 注册的按需序列化（优先级高于 Lake 实例的 getDocument）。
-  const capturesRef = useRef<Map<string, () => string | null>>(new Map());
-  const handleCaptureReady = useCallback((noteId: string, capture: (() => string | null) | null) => {
+  const capturesRef = useRef<Map<string, EditorCapture>>(new Map());
+  const handleCaptureReady = useCallback<EditorCaptureRegistrar>((noteId, capture) => {
     if (capture) capturesRef.current.set(noteId, capture); else capturesRef.current.delete(noteId);
   }, []);
   const handleCaptureContent = useCallback((noteId: string): string | undefined => {

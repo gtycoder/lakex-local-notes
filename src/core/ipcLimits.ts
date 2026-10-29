@@ -4,8 +4,13 @@
  * 渲染层即便被 XSS/导航绕过，主进程也拒绝超大负载与异常长度的写入。全部纯函数，便于单元测试。
  */
 
-/** 单篇笔记正文（Lake HTML）字节上限：防止异常大文档整片进内存/落盘。 */
-export const MAX_NOTE_CONTENT_BYTES = 32 * 1024 * 1024;
+import { MAX_DOC_BODY_BYTES } from "./storeLimits.js";
+
+/**
+ * 单篇笔记正文（Lake HTML）字节上限：防止异常大文档整片进内存/落盘。
+ * CORE-09 起真值在 storeLimits.MAX_DOC_BODY_BYTES；这里保留别名以兼容既有导入。
+ */
+export const MAX_NOTE_CONTENT_BYTES = MAX_DOC_BODY_BYTES;
 /** 节点/笔记标题字符上限。 */
 export const MAX_TITLE_LENGTH = 500;
 /** 节点自定义图标（emoji 或短文本）长度上限。 */

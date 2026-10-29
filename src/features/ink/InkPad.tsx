@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
+import type { EditorCaptureHandler } from "../../core/editorCapture";
 import { ChevronLeft, ChevronRight, Eraser, Highlighter, LayoutGrid, Minus, Pen, Plus, Redo2, Undo2 } from "lucide-react";
 import { COLOR_BOARD_GROUPS, QUICK_TEXT_COLORS } from "../../core/colorPalette.js";
 import {
@@ -12,8 +13,16 @@ import {
   type InkStroke,
   type InkTool,
 } from "../../core/inkDoc.js";
+import { canonicalDocBody } from "../../core/docBaseline.js";
 import { hitTestStroke, strokeToSvgPath } from "./inkGeometry.js";
-import { pushBoundedHistory } from "./history.js";
+import {
+  applyInkPatch,
+  inkOrderDelta,
+  inkPagePatch,
+  pushBoundedHistory,
+  type InkHistoryEntry,
+  type InkPatch,
+} from "./history.js";
 import { InkPaper } from "./InkPaper.js";
 import InkPageStrip from "./InkPageStrip.js";
 
@@ -28,7 +37,7 @@ export interface InkPadProps {
   pane?: "left" | "right" | null;
   onChange?: (content: string) => void;
   onDirty?: () => void;
-  onEditorCapture?: (capture: (() => string | null) | null) => void;
+  onEditorCapture?: EditorCaptureHandler;
 }
 
 const SAVE_DEBOUNCE_MS = 500;
@@ -105,14 +114,15 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
   const [activeStroke, setActiveStroke] = useState<InkStroke | null>(null);
   const [historyVersion, setHistoryVersion] = useState(0);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const undoRef = useRef<string[]>([]);
-  const redoRef = useRef<string[]>([]);
+  // 撤销/重做只存页级补丁；整篇正文序列化只用于保存。
+  const undoRef = useRef<InkHistoryEntry[]>([]);
+  const redoRef = useRef<InkHistoryEntry[]>([]);
   const saveTimerRef = useRef<number | null>(null);
   const pendingSaveBodyRef = useRef<string | null>(null);
   const activePointerRef = useRef<{ id: number; type: string } | null>(null);
   const penDownRef = useRef(false);
   const activeStrokeRef = useRef<InkStroke | null>(null);
-  const eraseBeforeRef = useRef<InkDoc | null>(null);
+  const eraseBeforeRef = useRef<InkPage | null>(null);
   const erasedIdsRef = useRef<Set<string>>(new Set());
   const lastPointRef = useRef<InkPoint | null>(null);
   const onChangeRef = useRef(onChange);
@@ -121,6 +131,23 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
   onDirtyRef.current = onDirty;
   const onEditorCaptureRef = useRef(onEditorCapture);
   onEditorCaptureRef.current = onEditorCapture;
+
+  /** 打开时的磁盘原文（CORE-03 基线）：保存/捕获在「与磁盘等价」时原样返回它，不写盘。 */
+  const diskBodyRef = useRef(content);
+  /** 磁盘原文的规范形态：惰性算一次。 */
+  const diskCanonicalRef = useRef<string | null | undefined>(undefined);
+  /**
+   * 当前正文与磁盘原文是否等价（CORE-03：打开后未动 / 撤销回原样）。
+   * body 一律由 inkToBody 产出（同一规范形态）⇒ 与磁盘原文的规范形态逐字节相等即 core 判据的结论；
+   * 盘上原文非规范（缺 activePageId / 坐标被 clamp 过）时同样判等价，不为一处格式差异写盘。
+   * 缓存磁盘侧的规范形态：正文可达 10 MiB，不能每次保存都把两侧整篇解析一遍（CORE-07）。
+   */
+  const sameAsDisk = useCallback((body: string): boolean => {
+    if (diskCanonicalRef.current === undefined) {
+      diskCanonicalRef.current = canonicalDocBody("ink", diskBodyRef.current);
+    }
+    return diskCanonicalRef.current !== null && diskCanonicalRef.current === body;
+  }, []);
 
   const page = useMemo(() => {
     if (!doc) return null;
@@ -170,6 +197,16 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
   }, []);
 
   const scheduleSaveBody = useCallback((body: string) => {
+    // CORE-03：与磁盘原文等价（打开后未动 / 撤销回原样）⇒ 不标脏、不排保存
+    // （只丢弃这次待写的规范化差异；绝不丢笔迹 —— 等价 = 正文与磁盘逐字节同内容）。
+    if (sameAsDisk(body)) {
+      pendingSaveBodyRef.current = null;
+      if (saveTimerRef.current !== null) {
+        window.clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = null;
+      }
+      return;
+    }
     onDirtyRef.current?.();
     pendingSaveBodyRef.current = body;
     if (saveTimerRef.current !== null) window.clearTimeout(saveTimerRef.current);
@@ -179,7 +216,7 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
       pendingSaveBodyRef.current = null;
       if (pending !== null) onChangeRef.current?.(pending);
     }, SAVE_DEBOUNCE_MS);
-  }, []);
+  }, [sameAsDisk]);
 
   const flushSave = useCallback(() => {
     const hadPending = saveTimerRef.current !== null;
@@ -189,15 +226,17 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
     }
     const pending = pendingSaveBodyRef.current;
     pendingSaveBodyRef.current = null;
-    if (hadPending && pending !== null) onChangeRef.current?.(pending);
-  }, []);
+    // CORE-03：落盘前再判一次等价（撤销回原样 / 打开后没动）⇒ 不写盘。
+    if (hadPending && pending !== null && !sameAsDisk(pending)) onChangeRef.current?.(pending);
+  }, [sameAsDisk]);
 
-  const commit = useCallback((next: InkDoc, pushHistory = true) => {
+  /** patch=null 表示这次改动不进入撤销栈（没有历史语义）。 */
+  const commit = useCallback((next: InkDoc, patch: InkPatch | null) => {
     if (readOnly || !docRef.current) return;
     const nextBody = serializeDoc(next);
     if (nextBody === null) return;
-    if (pushHistory) {
-      pushBoundedHistory(undoRef.current, inkToBody(docRef.current));
+    if (patch) {
+      pushBoundedHistory(undoRef.current, patch);
       redoRef.current = [];
     }
     docRef.current = next;
@@ -207,14 +246,13 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
   }, [readOnly, scheduleSaveBody, serializeDoc]);
 
   const undo = useCallback(() => {
-    const previous = undoRef.current[undoRef.current.length - 1];
-    if (!previous || !docRef.current) return;
-    const next = parseInkBody(previous);
-    if (!next) return;
+    const entry = undoRef.current[undoRef.current.length - 1];
+    if (!entry || !docRef.current) return;
+    const next = applyInkPatch(docRef.current, entry.patch, "undo");
     const nextBody = serializeDoc(next);
     if (nextBody === null) return;
     undoRef.current.pop();
-    pushBoundedHistory(redoRef.current, inkToBody(docRef.current));
+    pushBoundedHistory(redoRef.current, entry.patch);
     docRef.current = next;
     setDoc(next);
     setHistoryVersion((value) => value + 1);
@@ -222,14 +260,13 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
   }, [scheduleSaveBody, serializeDoc]);
 
   const redo = useCallback(() => {
-    const serialized = redoRef.current[redoRef.current.length - 1];
-    if (!serialized || !docRef.current) return;
-    const next = parseInkBody(serialized);
-    if (!next) return;
+    const entry = redoRef.current[redoRef.current.length - 1];
+    if (!entry || !docRef.current) return;
+    const next = applyInkPatch(docRef.current, entry.patch, "redo");
     const nextBody = serializeDoc(next);
     if (nextBody === null) return;
     redoRef.current.pop();
-    pushBoundedHistory(undoRef.current, inkToBody(docRef.current));
+    pushBoundedHistory(undoRef.current, entry.patch);
     docRef.current = next;
     setDoc(next);
     setHistoryVersion((value) => value + 1);
@@ -240,13 +277,17 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
     onEditorCaptureRef.current?.(() => {
       const current = docRef.current;
       if (!current) return null;
-      try { return inkToBody(current); } catch { return null; }
+      try {
+        const body = inkToBody(current);
+        // CORE-03：与磁盘原文等价 ⇒ 返回磁盘原文（打开后没动 / 改过又改回原样都不产生写盘）。
+        return sameAsDisk(body) ? diskBodyRef.current : body;
+      } catch { return null; }
     });
     return () => {
       onEditorCaptureRef.current?.(null);
       flushSave();
     };
-  }, [flushSave]);
+  }, [flushSave, sameAsDisk]);
 
   useEffect(() => {
     if (!doc || !page) return;
@@ -258,14 +299,20 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
   }, [doc, page]);
 
   const addPage = useCallback(() => {
-    if (!docRef.current || readOnly) return;
+    const current = docRef.current;
+    if (!current || readOnly) return;
     const nextPage = createInkPage(newId("page"), "blank");
-    commit({ ...docRef.current, pages: [...docRef.current.pages, nextPage], activePageId: nextPage.id });
+    const next = { ...current, pages: [...current.pages, nextPage], activePageId: nextPage.id };
+    const patch: InkPatch = inkPagePatch(null, nextPage);
+    const order = inkOrderDelta(current.pages, next.pages);
+    if (order) patch.order = order;
+    commit(next, patch);
   }, [commit, readOnly]);
 
   const selectPage = useCallback((id: string) => {
     const current = docRef.current;
     if (!current || !current.pages.some((item) => item.id === id)) return;
+    // activePageId 是纯视图字段，不进 patch；切页不产生撤销步骤。
     const updated = { ...current, activePageId: id };
     docRef.current = updated;
     setDoc(updated);
@@ -284,7 +331,8 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
     const pages = [...current.pages];
     const [moved] = pages.splice(index, 1);
     pages.splice(target, 0, moved);
-    commit({ ...current, pages });
+    const order = inkOrderDelta(current.pages, pages);
+    commit({ ...current, pages }, order ? { pages: [], order } : null);
   }, [commit, readOnly]);
 
   const requestDeletePage = useCallback((id: string) => {
@@ -298,12 +346,16 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
     if (!current || !id || readOnly || current.pages.length <= 1) return;
     const index = current.pages.findIndex((item) => item.id === id);
     if (index < 0) { setPendingDeletePageId(null); return; }
+    const removed = current.pages[index];
     const pages = current.pages.filter((item) => item.id !== id);
     const activePageId = current.activePageId === id
       ? pages[Math.max(0, index - 1)]?.id ?? pages[0]?.id
       : current.activePageId;
     setPendingDeletePageId(null);
-    commit({ ...current, pages, activePageId });
+    const patch: InkPatch = inkPagePatch(removed, null);
+    const order = inkOrderDelta(current.pages, pages);
+    if (order) patch.order = order;
+    commit({ ...current, pages, activePageId }, patch);
   }, [commit, pendingDeletePageId, readOnly]);
 
   const switchPage = useCallback((delta: number) => {
@@ -318,17 +370,22 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
   const setBackground = useCallback((background: InkBackground) => {
     const current = docRef.current;
     if (!current || !page || readOnly) return;
-    commit(replacePage(current, { ...page, background }));
+    const before = current.pages.find((item) => item.id === page.id);
+    if (!before) return;
+    const nextPage = { ...before, background };
+    commit(replacePage(current, nextPage), inkPagePatch(before, nextPage));
   }, [commit, page, readOnly]);
 
   const finishStroke = useCallback(() => {
     const stroke = activeStrokeRef.current;
     const current = docRef.current;
     if (!stroke || !current || !page) return;
-    const nextPage = { ...page, strokes: [...page.strokes, stroke] };
+    const before = current.pages.find((item) => item.id === page.id);
+    if (!before) return;
+    const nextPage = { ...before, strokes: [...before.strokes, stroke] };
     activeStrokeRef.current = null;
     setActiveStroke(null);
-    commit(replacePage(current, nextPage));
+    commit(replacePage(current, nextPage), inkPagePatch(before, nextPage));
   }, [commit, page]);
 
   const eraseAt = useCallback((point: InkPoint) => {
@@ -357,7 +414,7 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
     const point = pointFromClient(event.clientX, event.clientY, event.pointerType, event.pressure, event.currentTarget.getBoundingClientRect(), page);
     lastPointRef.current = point;
     if (mode === "eraser") {
-      eraseBeforeRef.current = docRef.current;
+      eraseBeforeRef.current = page;
       erasedIdsRef.current = new Set();
       eraseAt(point);
       return;
@@ -409,18 +466,15 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
       const erased = erasedIdsRef.current.size > 0;
       eraseBeforeRef.current = null;
       erasedIdsRef.current = new Set();
-      if (before && current && erased) {
-        pushBoundedHistory(undoRef.current, inkToBody(before));
-        redoRef.current = [];
-        setHistoryVersion((value) => value + 1);
-        const body = serializeDoc(current);
-        if (body !== null) scheduleSaveBody(body);
+      const erasedPage = before && current ? current.pages.find((item) => item.id === before.id) : undefined;
+      if (before && current && erasedPage && erased) {
+        commit(current, inkPagePatch(before, erasedPage));
       }
     } else {
       finishStroke();
     }
     if (event.pointerType === "pen") penDownRef.current = false;
-  }, [finishStroke, mode, scheduleSaveBody, serializeDoc]);
+  }, [commit, finishStroke, mode]);
 
   const cancelPointer = useCallback((event: ReactPointerEvent<SVGSVGElement>) => {
     if (activePointerRef.current?.id !== event.pointerId) return;

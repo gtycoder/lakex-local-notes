@@ -1,6 +1,5 @@
 import { writeLocalStorage } from "../../lib/localStorageSafe";
 import { listAssetKeysFs, loadAssetBytesFs, saveAssetBytesFs, listNoteAssetKeysFs, listQuickNoteAssetKeysFs } from "../native/assetFs";
-import type { SyncReport } from "../../core/syncEngineTypes.js";
 import { backfillV3Assets, type AssetBackfillPort } from "../../core/s3v3AssetBackfill.js";
 import { createMobileS3v3Remote } from "../v3/s3v3Remote.js";
 import { normalizeEndpoint, validateS3Settings } from "../../core/syncUtils.js";
@@ -16,18 +15,20 @@ import { DEFAULT_S3_PREFIX, S3_STORAGE_KEY, SYNC_STORAGE_KEY, readSyncSettings, 
 import { resolveDeferAssets } from "../sync/deferAssetsDefault";
 import { reconcileIndex } from "../data/searchIndex.js";
 import { backfillTextCache } from "../data/textCacheBackfill.js";
-import { loadV3State } from "../data/v3StateRepository.js";
+import { clearV3State, loadV3State } from "../data/v3StateRepository.js";
 import { MobileDeviceStore } from "../v3/mobileDeviceStore.js";
-import { declarationKey, assetKey, quickNoteAssetKey } from "../../core/s3v3Keys.js";
-import { validateAssetDeclaration, type AssetDeclaration } from "../../core/s3v3Index.js";
+import { declarationKey, assetKey, quickNoteAssetKey } from "../../core/s3v3/protocol/s3v3Keys.js";
+import { validateAssetDeclaration, type AssetDeclaration } from "../../core/s3v3/protocol/s3v3Index.js";
 import { runTransferPipeline } from "../../core/s3v3Transfer.js";
 import { runMobileV3DeepCleanup, runMobileV3PushQuickNote, runMobileV3Sync } from "../v3/sync.js";
 import { beginSyncProgress, endSyncProgress, pushSyncProgress } from "../sync/syncProgressStore";
 import { clearSyncInterrupted, markSyncInterrupted } from "../sync/syncResumeMarker";
+import { appendSyncDiagnostic, readSyncDiagnostics } from "../sync/syncDiagnosticsStore";
+import { buildS3v3DiagnosticReport, createS3v3PhaseCollector, type S3v3DiagnosticReport } from "../../core/s3v3Report";
+import { classifyS3v3Error } from "../../core/s3v3Engine.js";
 
 export interface MobileSyncResult {
   message: string;
-  notes: SyncReport | null;
   quickNotes: QuickNotesSyncResult | { error: string } | null;
   /** 同步收尾对账搜索索引的耗时（ms）；移动端性能专项观测用。 */
   indexMs?: number;
@@ -147,7 +148,7 @@ export async function ensureAssetsNative(
           if (status === "ok") return t.size;
           if (status === "missing" || status === "corrupt") return 0;
         }
-      } catch { /* 回退字节路径 */ }
+      } catch { /* 原生直传不可用/失败 ⇒ 回退下面的字节 GET 路径（不是错误） */ }
     }
     const bytes = await remote.get(objectKey);
     if (!bytes || bytes.length !== t.size) return 0;
@@ -226,6 +227,29 @@ function scheduleSearchReconcile(db: import("../data/sqliteDb.js").MobileDb): vo
       .catch((error) => console.warn("[sync] 后台搜索索引重建失败（下次同步再试）", error))
       .finally(() => { searchReconcileRunning = false; });
   }, 1500);
+}
+
+/**
+ * 同步失败文案（261028 P1）：保留引擎的真实原因，按错误码追加可操作指引。
+ * epoch 不一致 = 云端是另一套数据：直接指到设置页「从云端恢复（换机/坏库）」入口（261028 移动端已补）。
+ */
+function syncFailureHint(message: string, code: string | undefined): string {
+  if (code === "lock-busy") return message + "（另一台设备正在发布，请稍后重试）";
+  if (code === "epoch-mismatch") return message + "（云端是另一套数据，可在「设置 → 同步设置 → 从云端恢复（换机/坏库）」重建本机）";
+  return message;
+}
+
+/** 在途整轮同步数（restoreFromCloud 的前置检查）：在途同步收尾会把旧基线写回 ⇒ 必须先拦住，否则清基线无效。 */
+let syncRoundsInFlight = 0;
+
+/** 把带指引的文案交给调用方（保留原错误名/code；文案没变时原样抛出，避免无谓包装）。 */
+function withSyncFailureHint(error: unknown, message: string): unknown {
+  if (error instanceof Error && error.message === message) return error;
+  const next = new Error(message);
+  if (error instanceof Error) next.name = error.name;
+  const code = (error as { code?: unknown } | null)?.code;
+  if (typeof code === "string") Object.defineProperty(next, "code", { value: code, enumerable: true });
+  return next;
 }
 
 export const syncDomain = {
@@ -362,8 +386,16 @@ export const syncDomain = {
   async syncNow(): Promise<MobileSyncResult> {
     // 关闭云同步 = 纯离线本地空间：直接说明原因，**零请求**（与桌面同一判据）。
     if ((await mobileCloudState()) === "offline") {
-      return { message: cloudStateHint("offline") ?? "云同步已关闭", notes: null, quickNotes: null };
+      return { message: cloudStateHint("offline") ?? "云同步已关闭", quickNotes: null };
     }
+    // 在途标记：restoreFromCloud 靠它拒绝"同步进行中恢复"（否则在途轮次收尾会把旧基线写回）。
+    syncRoundsInFlight += 1;
+    // SD-13：阶段耗时/对象数/字节收集器（成功/失败都落一轮诊断，落 device_state 同键）。
+    const startedAt = Date.now();
+    const diag = createS3v3PhaseCollector();
+    const progress: Array<{ phase: string; ms: number }> = [];
+    // 用引用包一层：赋值发生在 runMaintenance 回调里，TS 控制流看不到 ⇒ 直接 let 会被收窄成 null。
+    const summaryRef: { current: { uploaded: number; downloaded: number; deleted: number; warnings: NonNullable<MobileSyncResult["warnings"]>; conflicts: number; generation: number | null; published: boolean; uploadedDocuments: number; downloadedDocuments: number; uploadedQuickNotes: number; downloadedQuickNotes: number; uploadedFolders: number; downloadedFolders: number; uploadedBytes: number; downloadedBytes: number } | null } = { current: null };
     try {
       beginSyncProgress();
       // 断点续传：成功才清标记；失败/被杀保留 ⇒ 下次进入自动续上（261026）。
@@ -372,10 +404,9 @@ export const syncDomain = {
       await markSyncInterrupted(resumeDb);
       const result = await runMaintenance("syncNow", async () => {
         const cfg = await syncDomain.getS3Settings();
-        if (!cfg) return { message: "未配置 S3", notes: null, quickNotes: null };
-        try { assertS3Credentials(cfg); } catch (e) { return { message: (e as Error).message, notes: null, quickNotes: null }; }
+        if (!cfg) return { message: "未配置 S3", quickNotes: null };
+        try { assertS3Credentials(cfg); } catch (e) { return { message: (e as Error).message, quickNotes: null }; }
         const d = await ensureDb();
-        const progress: Array<{ phase: string; ms: number }> = [];
         // 按需资产（P0-4）：设置里打开时首拉只搬正文/元数据，媒体打开/预览时补拉。
         // 261027：全新设备（从未同步过且没存过设置）默认开，并立刻固化 → 打开文档时的按需补拉同样生效。
         const resolved = await resolveDeferAssets(d);
@@ -385,39 +416,123 @@ export const syncDomain = {
         }
         const deferAssets = resolved.deferAssets;
         const v3 = await runMobileV3Sync(d, { endpoint: cfg.endpoint, region: cfg.region, bucket: cfg.bucket, accessKeyId: cfg.accessKeyId, secretAccessKey: cfg.secretAccessKey, prefix: cfg.prefix }, {
-          onPhase: (phase, ms) => progress.push({ phase, ms }),
-          onProgress: (p) => pushSyncProgress(p),
+          onPhase: (phase, ms) => { progress.push({ phase, ms }); diag.phase(phase, ms); },
+          onProgress: (p) => { diag.progress(p); pushSyncProgress(p); },
           ...(deferAssets ? { deferAssets: true } : {}),
         });
         // P0-5：全文索引（text_cache/FTS reconcile）不进同步关键路径——首拉先把正文/行落库让文档可打开，
         // 派生索引在后台队列构建（失败只影响搜索，不回滚同步结果）。
         scheduleSearchReconcile(d);
+        summaryRef.current = {
+          uploaded: v3.uploadedNotes, downloaded: v3.downloadedNotes, deleted: v3.deletedObjects,
+          warnings: v3.warningDetails, conflicts: v3.supersededNotes.length,
+          generation: v3.generation, published: v3.published,
+          uploadedDocuments: v3.uploadedDocuments ?? v3.uploadedNotes,
+          downloadedDocuments: v3.downloadedDocuments ?? v3.downloadedNotes,
+          uploadedQuickNotes: v3.uploadedQuickNotes ?? 0,
+          downloadedQuickNotes: v3.downloadedQuickNotes ?? 0,
+          uploadedFolders: v3.uploadedFolders ?? 0,
+          downloadedFolders: v3.downloadedFolders ?? 0,
+          uploadedBytes: v3.uploadedBytes ?? 0,
+          downloadedBytes: v3.downloadedBytes ?? 0,
+        };
         const message = v3.warningDetails.length > 0
           ? `v3 同步完成：↑${v3.uploadedNotes} ↓${v3.downloadedNotes}（${v3.warningDetails.length} 项被跳过）`
           : `v3 同步完成：↑${v3.uploadedNotes} ↓${v3.downloadedNotes}`;
         return {
-          message, notes: null, quickNotes: null,
+          message, quickNotes: null,
           ...(v3.warningDetails.length > 0 ? { warnings: v3.warningDetails } : {}),
           ...(v3.supersededNotes.length > 0 ? { supersededNotes: v3.supersededNotes } : {}),
           progress,
         };
       });
-      writeSyncStatus({ at: new Date().toISOString(), ok: true, message: result.message });
+      const summary = summaryRef.current;
+      writeSyncStatus({
+        at: new Date().toISOString(), ok: true, message: result.message,
+        durationMs: Date.now() - startedAt,
+        ...(summary ? {
+          uploadedDocuments: summary.uploadedDocuments, downloadedDocuments: summary.downloadedDocuments,
+          uploadedQuickNotes: summary.uploadedQuickNotes, downloadedQuickNotes: summary.downloadedQuickNotes,
+          uploadedFolders: summary.uploadedFolders, downloadedFolders: summary.downloadedFolders,
+          uploadedBytes: summary.uploadedBytes, downloadedBytes: summary.downloadedBytes,
+        } : {}),
+      });
+      // 诊断落盘失败绝不影响同步结果（设置页只少一行可复制的记录）。
+      // summary 为空 = 本轮根本没跑引擎（未配置/凭证缺失）⇒ 不写「假成功」记录（与「没尝试不写」同口径）。
+      try {
+        const s = summary;
+        if (s) {
+          await appendSyncDiagnostic(resumeDb, buildS3v3DiagnosticReport({
+            at: new Date().toISOString(), ok: true, durationMs: Date.now() - startedAt,
+            generation: s.generation, published: s.published,
+            uploaded: s.uploaded, downloaded: s.downloaded,
+            deleted: s.deleted, conflicts: s.conflicts,
+            warnings: s.warnings, phases: diag.snapshot(),
+          }));
+        }
+      } catch { /* 同步诊断落盘失败：不阻断本轮同步结果 */ }
       await clearSyncInterrupted(resumeDb);
       return result;
     } catch (error) {
-      writeSyncStatus({ at: new Date().toISOString(), ok: false, message: (error as Error)?.message ?? String(error) });
-      throw error;
+      const code = (error as { code?: string } | null)?.code;
+      const baseMessage = (error as Error)?.message ?? String(error);
+      // 261028 P1：状态行与 toast 都显示「原因 + 可操作指引」；诊断里仍记原始原因。
+      const message = syncFailureHint(baseMessage, code);
+      writeSyncStatus({ at: new Date().toISOString(), ok: false, message, durationMs: Date.now() - startedAt });
+      try {
+        const db = await ensureDb();
+        await appendSyncDiagnostic(db, buildS3v3DiagnosticReport({
+          at: new Date().toISOString(), ok: false, durationMs: Date.now() - startedAt,
+          phases: diag.snapshot(),
+          error: {
+            code: code ?? "unknown",
+            errorClass: classifyS3v3Error(error),
+            message: baseMessage,
+          },
+        }));
+      } catch { /* 失败诊断落盘失败：原始同步错误照旧抛出 */ }
+      throw withSyncFailureHint(error, message);
     } finally {
+      syncRoundsInFlight -= 1;
       endSyncProgress();
     }
+  },
+
+  /**
+   * 从云端恢复（换机 / 本机库损坏，261028 用户批准）：**以云端为准重建本机**。
+   *
+   * 1) 只清本机 v3 同步账本（baseline/intents/pending…）—— 不删表行/正文/历史/已下载附件，
+   *    不隔离数据目录、不重启 App（移动端附件可能 1.6GB，隔离整库代价过高；桌面那套不照抄）；
+   * 2) 紧接着跑一轮整轮同步：基线没了 + 云端有 pointer ⇒ 引擎走 pullAll（**只拉不打**，不上传任何本机内容）；
+   *    云端没有、本机独有的文档/小记由 pullRound 归档进回收站并标「云端已删除 · 仅本地」（正文/历史保留，可恢复）。
+   *
+   * I3：本方法**不**自己取维护域 —— 整轮网络由 syncNow 自己进维护域；在这里再包 runMaintenance 会自锁。
+   * 失败原样上抛：syncNow 已把失败写进 syncStatusStore 与同步诊断，UI 只负责显示原因。
+   */
+  async restoreFromCloud(): Promise<{ ok: boolean; message: string }> {
+    const cloudState = await mobileCloudState();
+    if (cloudState === "offline") return { ok: false, message: cloudStateHint("offline") ?? "云同步已关闭" };
+    const cfg = await syncDomain.getS3Settings();
+    if (!cfg) return { ok: false, message: "未配置 S3" };
+    // 在途同步收尾会把旧基线与删除意图写回（saveState）⇒ 先拦住，用户稍后重试即可。
+    if (syncRoundsInFlight > 0) return { ok: false, message: "正在同步，请稍后再恢复" };
+    // 顺序有测试锁住：先清账本（写域短锁），再跑整轮「只拉不打」。
+    await runWrite("restoreFromCloud", async () => {
+      const d = await ensureDb();
+      await clearV3State(d);
+    });
+    const result = await syncDomain.syncNow();
+    return { ok: true, message: "已从云端恢复：" + result.message };
+  },
+
+  /** SD-13：最近 3 轮同步诊断（设置页「同步诊断」一键复制）。 */
+  async getSyncDiagnostics(): Promise<S3v3DiagnosticReport[]> {
+    return await readSyncDiagnostics(await ensureDb());
   },
 
   async listDeletedNotesForSync() { return dbPort.listDeletedNotesForSync!(); },
 
   readDeletedContent(id: string) { return dbPort.readDeletedContent!(id); },
-
-  async markTombstonesPublished(ids: string[]) { await dbPort.markTombstonesPublished!(ids); },
 
   async isFolderPurged(id: string): Promise<boolean> { return dbPort.isFolderPurged!(id); },
 };

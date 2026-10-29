@@ -3,7 +3,7 @@
 > **目的**：验证"本地编辑 → S3 同步 → 多端收敛 → 数据完整"全链路可靠性；把**体检(A3)**从"手动诊断"升级为"每次同步后的自动化断言"。
 > **适用范围**：桌面 Electron 版（同步 / 数据保全核心）。安卓端另列（见 §7）。
 > **前提**：你已认可"数据保全（体检 / A1 / A2）**保留**"，本方案只**加验证**、**不改语义**。A2 云端恢复预留讨论。
-> **关联**：`AGENTS.md`(§3 原则 11~13·15·16) · `HANDOFF.md`(§6 命令) · `docs/SYNC-PROTOCOL.md` · `docs/S3-GC-DESIGN.md` · `docs/CODEX-GUIDE.md`(CDP 驱动)。
+> **关联**：`AGENTS.md`(§3 原则 11~13·15·16) · `HANDOFF.md`(§6 命令) · `docs/SYNC-PROTOCOL.md`（含 GC/保留链 §13/§14） · `docs/CODEX-GUIDE.md`(CDP 驱动)。
 
 ---
 

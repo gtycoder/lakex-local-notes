@@ -1,18 +1,18 @@
 import { createRequire } from 'node:module';
 import fs from 'node:fs';
 import { execSync } from 'node:child_process';
-const req = createRequire("/Users/admin/file/local-lake/local-lakex-notes/package.json");
+const req = createRequire("/Users/admin/file/local-lake/lakex-local-notes/package.json");
 const Database = req('better-sqlite3');
 const ADB = '/opt/homebrew/share/android-commandlinetools/platform-tools/adb';
 const dir = '/tmp/lake5/db-perf'; fs.mkdirSync(dir, { recursive: true });
-for (const f of ['local-lakex-notes-mobileSQLite.db','local-lakex-notes-mobileSQLite.db-wal']) { try { fs.writeFileSync(dir+'/'+f, execSync(ADB+' -s emulator-5554 exec-out run-as com.locallakexnotes.mobile cat databases/'+f, { maxBuffer: 300*1024*1024 })); } catch(e){} }
-const db = new Database(dir + '/local-lakex-notes-mobileSQLite.db', { readonly: true });
+for (const f of ['lakex-local-notes-mobileSQLite.db','lakex-local-notes-mobileSQLite.db-wal']) { try { fs.writeFileSync(dir+'/'+f, execSync(ADB+' -s emulator-5554 exec-out run-as com.lakexlocalnotes.android cat databases/'+f, { maxBuffer: 300*1024*1024 })); } catch(e){} }
+const db = new Database(dir + '/lakex-local-notes-mobileSQLite.db', { readonly: true });
 const row = db.prepare("SELECT COUNT(*) c, SUM(LENGTH(content)) s FROM notes").get();
 db.close();
 console.log('perf notes=' + row.c + ' total_body_bytes=' + row.s + ' avg=' + Math.round(row.s / row.c));
 const { S3Client, GetObjectCommand, ListObjectsV2Command } = req('@aws-sdk/client-s3');
 const c = new S3Client({ endpoint: process.env.S3_ENDPOINT, region: process.env.S3_REGION, credentials: { accessKeyId: process.env.S3_AK, secretAccessKey: process.env.S3_SK }, forcePathStyle: false });
-const P = 'local-lakex-notes-stress2-260910';
+const P = 'lakex-local-notes-stress2-260910';
 const g = await c.send(new GetObjectCommand({ Bucket: process.env.S3_BUCKET, Key: P + '/manifests/latest.json' }));
 const bytes = Buffer.from(await g.Body.transformToByteArray());
 console.log('real manifest stored bytes=' + bytes.length + ' gzip=' + (bytes[0]===0x1f&&bytes[1]===0x8b));

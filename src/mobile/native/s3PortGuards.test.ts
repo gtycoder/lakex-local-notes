@@ -6,6 +6,8 @@
  *   · D6：`new S3Client` 在 src/mobile 下只能有**一处**（共用工厂），checksum 绕行同理；
  *   · D1：端口方法必须调用 core 的 `assertSafeKey`（桌面一直有，移动端原先没有）；
  *   · D4：404 判定必须用 core 的 `isNoSuchKey`（不能只认状态码 / 只认 NoSuchKey）。
+ * D-7（261028）后 v2 `S3Store` 适配器（createCapacitorS3Store）已删，端口护栏改钉 **v3 远端**
+ * （src/mobile/v3/s3v3Remote.ts）：它是当前唯一在跑的移动端 S3 端口实现。
  *
  * 为什么用源码级而不是行为级：这两个端口在实现内部动态 import @aws-sdk 并 new client，
  * 没有可注入点（为测试而拆注入点属过度设计）。源码级护栏只保证"接线在、且没有走回头路"，
@@ -50,7 +52,7 @@ describe("移动端 S3 端口护栏（P1 漂移修复）", () => {
   });
 
   it("D5：移动端 gzip PUT 必须带 Content-Encoding（与桌面一致）", () => {
-    const mobile = read("mobile/native/s3Store.ts");
+    const mobile = read("mobile/v3/s3v3Remote.ts");
     const desktop = readFileSync(path.join(SRC, "..", "electron/s3Store.ts"), "utf8");
     expect(mobile, "移动端 gzip 分支必须设置 ContentEncoding").toMatch(/ContentEncoding:\s*"gzip"/);
     expect(mobile, "移动端 gzip 正文必须按二进制发送").toMatch(/ContentType:\s*"application\/octet-stream"/);
@@ -68,24 +70,25 @@ describe("移动端 S3 端口护栏（P1 漂移修复）", () => {
   });
 
   it("D1：端口方法必须过 core 的 assertSafeKey（对齐桌面 ObjectStore）", () => {
-    const store = read("mobile/native/s3Store.ts");
-    expect(/import \{[^}]*assertSafeKey[^}]*\} from "\.\.\/\.\.\/core\/syncUtils\.js"/.test(store), "必须从 core 引 assertSafeKey（单一来源，别在移动端另写一份）").toBe(true);
-    // 校验点 = getObject / putObject / deleteMany / putObjectStream / getObjectToFile
-    expect(count(store, /assertSafeKey\(/g), "校验点少于 5 个：可能有端口方法漏了键校验").toBeGreaterThanOrEqual(5);
+    const remote = read("mobile/v3/s3v3Remote.ts");
+    expect(/import \{[^}]*assertSafeKey[^}]*\} from "\.\.\/\.\.\/core\/syncUtils\.js"/.test(remote), "必须从 core 引 assertSafeKey（单一来源，别在移动端另写一份）").toBe(true);
+    // 校验点 = get / put / deleteMany（list 接收前缀、deleteByPrefix 走 list，不是单键）
+    expect(count(remote, /assertSafeKey\(/g), "单键端口方法都要校验：少于 3 个说明有漏").toBeGreaterThanOrEqual(3);
   });
 
-  it("Android 原生流式 PUT 失败必须 fail-fast，不得静默回退 JS 字节路径", () => {
-    const store = read("mobile/native/s3Store.ts");
-    expect(store).toMatch(/await NativeAssetSync\.putFile\(\{ key, localKey \}\);/);
-    expect(store).not.toMatch(/NativeAssetSync\.putFile[\s\S]{0,180}catch\s*\{/);
+  it("Android 原生流式传输挂在 v3 remote 上（putFromFile / getToFile）", () => {
+    const remote = read("mobile/v3/s3v3Remote.ts");
+    expect(remote).toMatch(/remote\.putFromFile = async/);
+    expect(remote).toMatch(/NativeAssetSync\.putFile\(/);
+    expect(remote).toMatch(/remote\.getToFile = async/);
   });
 
   it("D4：404 判定必须用 core 的 isNoSuchKey（别在移动端另写一套）", () => {
-    const store = read("mobile/native/s3Store.ts");
-    expect(/import \{[^}]*isNoSuchKey[^}]*\} from "\.\.\/\.\.\/core\/syncUtils\.js"/.test(store), "必须从 core 引 isNoSuchKey").toBe(true);
-    expect(/isNoSuchKey\(/.test(store), "必须调用它").toBe(true);
+    const remote = read("mobile/v3/s3v3Remote.ts");
+    expect(/import \{[^}]*isNoSuchKey[^}]*\} from "\.\.\/\.\.\/core\/syncUtils\.js"/.test(remote), "必须从 core 引 isNoSuchKey").toBe(true);
+    expect(/isNoSuchKey\(/.test(remote), "必须调用它").toBe(true);
     // 桌面判据还认 NotFound（七牛/AWS 实测会返回）⇒ 自己拼 404 判定会漏
-    expect(/httpStatusCode\s*===\s*404/.test(store), "不得再自己拼 404 判定（见 SYNC-PROTOCOL §7.3 D4）").toBe(false);
+    expect(/httpStatusCode\s*===\s*404/.test(remote), "不得再自己拼 404 判定（见 SYNC-PROTOCOL §7.3 D4）").toBe(false);
   });
 
   it("D6：七牛 checksum 绕行只允许出现在共用工厂里（一次）", () => {

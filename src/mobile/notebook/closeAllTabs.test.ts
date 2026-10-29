@@ -10,7 +10,7 @@ const CSS = readFileSync(new URL("../mobile.css", import.meta.url), "utf8");
 describe("标签页「关闭全部」（261019）", () => {
   it("保存屏障通过后清空标签会话，并关闭抽屉", () => {
     expect(WS).toContain("const closeAllTabs = useCallback");
-    expect(WS).toMatch(/await flushAllTabs\(\);\s*\n\s*clearTabs\(\);\s*\n\s*setTabsOpen\(false\);/);
+    expect(WS).toMatch(/await flushAllTabs\(\);\s*\n\s*clearTabs\(\);\s*\n\s*closeOverlay\("tabs"\);/);
     expect(SESSION).toMatch(/setTabs\(\[\]\);\s*\n\s*activeIdRef\.current = null;\s*\n\s*setActiveId\(null\);/);
   });
 

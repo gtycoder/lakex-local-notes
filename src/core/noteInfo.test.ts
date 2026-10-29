@@ -8,7 +8,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import type { NoteInfo } from "../lib/types.js";
+import type { NoteInfo } from "./sharedTypes.js";
 import { formatNoteInfoSize, formatNoteInfoTime, noteInfoRows } from "./noteInfo.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");

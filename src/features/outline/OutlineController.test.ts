@@ -117,7 +117,7 @@ describe("OutlineController", () => {
     expect(c2.isCollapsed("a")).toBe(true);
     // 清空折叠后移除存储
     c2.expandAll();
-    expect(storage.getItem("local-lakex-notes:outline:collapsed:doc7")).toBeNull();
+    expect(storage.getItem("lakex-local-notes:outline:collapsed:doc7")).toBeNull();
   });
 
   it("notifies subscribers and guards subscriber errors", () => {

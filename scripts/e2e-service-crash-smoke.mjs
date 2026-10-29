@@ -7,7 +7,7 @@ import { execFileSync } from "node:child_process";
 import { spawn } from "node:child_process";
 
 if (process.platform !== "darwin") { console.log("service crash smoke skipped: macOS only"); process.exit(0); }
-const appPath = process.env.LAKE_PACKAGED_EXECUTABLE || path.resolve("release/mac-arm64/LocalLakexNotes.app/Contents/MacOS/LocalLakexNotes");
+const appPath = process.env.LAKE_PACKAGED_EXECUTABLE || path.resolve("release/mac-arm64/LakexLocalNotes.app/Contents/MacOS/LakexLocalNotes");
 const port = Number(process.env.LAKE_CDP_PORT || 9341);
 if (!existsSync(appPath)) throw new Error(`找不到 packaged executable: ${appPath}`);
 const dataDir = mkdtempSync(path.join(os.tmpdir(), "lake-service-crash-smoke-"));
@@ -35,7 +35,7 @@ async function waitForCdp() {
 }
 async function waitForLog(pattern, timeout = 15_000) {
   const started = Date.now();
-  const logPath = path.join(dataDir, "logs", "local-lakex-notes.log");
+  const logPath = path.join(dataDir, "logs", "lakex-local-notes.log");
   while (Date.now() - started < timeout) {
     const text = existsSync(logPath) ? readFileSync(logPath, "utf8") : "";
     if (pattern.test(text)) return text;

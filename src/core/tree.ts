@@ -1,4 +1,4 @@
-import type { TreeNode } from "./types.js";
+import type { TreeNode } from "./sharedTypes.js";
 
 export function subtreeIds(nodes: TreeNode[], rootId: string): Set<string> {
   const result = new Set([rootId]);

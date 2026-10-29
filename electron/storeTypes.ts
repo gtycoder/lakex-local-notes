@@ -18,24 +18,12 @@ export interface HistoryCleanupResult {
   freedBytes: number;
 }
 
-/** S3 连接配置（密钥落盘前经 SecretCipher 加密） */
-export interface S3Settings {
-  endpoint: string; region: string; bucket: string; prefix: string;
-  accessKeyId: string; secretAccessKey: string; forcePathStyle: boolean;
-}
+/** S3 连接配置（密钥落盘前经 SecretCipher 加密）：单一来源 = src/core/syncUtils.ts（261029 收口）。 */
+export type { S3Settings } from "../src/core/syncUtils.js";
 
-/** 云同步开关与自动/手动同步策略（v4，可配置；存 settings 表，纯本地） */
-export interface SyncSettings {
-  /** 云同步总开关：false 时完全不执行任何 S3 后台任务/同步（纯本地）。 */
-  enabled: boolean;
-  /** 自动同步模式：interval=按间隔；onOpenClose=仅在开启/关闭时；manual=完全手动。 */
-  autoMode: "interval" | "onOpenClose" | "manual";
-  /** autoMode=interval 时的间隔分钟数（>=1）。 */
-  autoIntervalMinutes: number;
-  /** 按需资产（P0-4，261026，与移动端同口径）：首拉只同步 pointer/索引/正文，媒体打开/预览时补拉。
-   *  缺省 false（全量语义）。 */
-  deferAssets?: boolean;
-}
+/** 云同步开关与自动/手动同步策略：单一来源 = src/lib/types.ts（CORE-14 双定义已删）。
+ *  渲染层/移动端用同一份；主进程只 re-export，不再维护第二份字段表（避免一侧加字段另一侧漏）。 */
+export type { SyncSettings } from "../src/lib/types.js";
 
 /** S3 GC 保留策略配置（v4，可配置；存 settings 表，纯本地） */
 export interface S3GcSettings {

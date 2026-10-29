@@ -14,6 +14,7 @@
  * 边界：本文件属 src/core（禁平台/第三方依赖），故不 import 任何 UI/Electron 模块；只依赖同层 core。
  */
 import { extOf, isAssetFilename, isImageExtension } from "./assetNaming.js";
+import { randomUuid } from "./randomId.js";
 import { formatDateTime as formatDateTimeCore, formatYmd } from "./dateFormat.js";
 import { contrastTextColor, DEFAULT_LIGHT_COLORS, isHexColor } from "./colorPalette.js";
 import type { AiChatMessage, AiContentPart } from "./aiProviders.js";
@@ -428,20 +429,9 @@ export interface BitableDoc {
 
 // ---- id / 时间 ----
 
-/** 兼容 Web/Node 的 UUID（与 syncEngine 同口径；src/core 禁 node: 导入）。 */
-function randomUUID(): string {
-  const c = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto;
-  if (c && typeof c.randomUUID === "function") return c.randomUUID();
-  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (ch) => {
-    const r = (Math.random() * 16) | 0;
-    const v = ch === "x" ? r : (r & 0x3) | 0x8;
-    return v.toString(16);
-  });
-}
-
 /** 生成带前缀的内部 id（表/字段/选项/记录/视图）。 */
 export function newBitableId(prefix: string): string {
-  return prefix + randomUUID().replace(/-/g, "").slice(0, 12);
+  return prefix + randomUuid().replace(/-/g, "").slice(0, 12);
 }
 
 function nowIso(): string {
@@ -543,13 +533,37 @@ export function emptyBitableBody(): string {
 
 // ---- 序列化 / 解析 ----
 
-/** tables + activeTableId → 正文 JSON（紧凑、不 pretty-print）。 */
+/**
+ * 导航字段归一（CORE-05，261006 用户选 C）——**core 单一来源**。
+ *
+ * 正文里恒写「第一张表 / 每张表的第一个视图」：`activeTableId`/`activeViewId` 是
+ * **设备本地 UI 状态**（localStorage 的 `bitable-nav.*`），不是文档数据。
+ * 切表 / 切视图因此不得改变正文字节，否则纯导航会标脏并触发一次 S3 上传。
+ * 桌面 `useBitableSession` 与移动端 `serializeBitableBody` 都只调它，不再各抄一份 map。
+ */
+export function canonicalBitableNav(
+  tables: BitableTable[],
+  activeTableId?: string,
+): { tables: BitableTable[]; activeTableId: string } {
+  // 已经是第一个视图时复用原表对象（不制造无意义的浅拷贝）。
+  const canonicalTables = tables.map((table) => {
+    const firstViewId = table.views[0]?.id;
+    return firstViewId && firstViewId !== table.activeViewId ? { ...table, activeViewId: firstViewId } : table;
+  });
+  return {
+    tables: canonicalTables,
+    activeTableId: activeTableId && canonicalTables.some((t) => t.id === activeTableId) ? activeTableId : canonicalTables[0]?.id ?? "",
+  };
+}
+
+/** tables + activeTableId → 正文 JSON（紧凑、不 pretty-print；导航字段先走 canonicalBitableNav）。 */
 export function bitablesToBody(tables: BitableTable[], activeTableId?: string): string {
+  const canonical = canonicalBitableNav(tables, activeTableId);
   const doc: BitableDoc = {
     kind: BITABLE_DOC_KIND,
     version: BITABLE_DOC_VERSION,
-    tables,
-    activeTableId: activeTableId && tables.some((t) => t.id === activeTableId) ? activeTableId : tables[0]?.id ?? "",
+    tables: canonical.tables,
+    activeTableId: canonical.activeTableId,
   };
   return JSON.stringify(doc);
 }
@@ -1914,10 +1928,40 @@ export function dateFilterRangeFor(mode: BitableDateFilterMode, now: Date = new 
   if (mode === "lastMonth") return { start: localDateString(new Date(now.getFullYear(), now.getMonth() - 1, 1)), end: localDateString(new Date(now.getFullYear(), now.getMonth(), 0)) };
   if (mode === "nextMonth") return { start: localDateString(new Date(now.getFullYear(), now.getMonth() + 1, 1)), end: localDateString(new Date(now.getFullYear(), now.getMonth() + 2, 0)) };
   if (mode === "thisYear") return { start: localDateString(new Date(now.getFullYear(), 0, 1)), end: localDateString(new Date(now.getFullYear(), 11, 31)) };
-  if (mode === "last7days") return { start: localDateString(addLocalDays(now, -7)), end: localDateString(now) };
-  if (mode === "next7days") return { start: localDateString(now), end: localDateString(addLocalDays(now, 7)) };
-  if (mode === "last30days") return { start: localDateString(addLocalDays(now, -30)), end: localDateString(now) };
-  return { start: localDateString(now), end: localDateString(addLocalDays(now, 30)) };
+  // 滚动窗口口径 = **含今天共 N 个日历日**（本地时区按天取整；不跟着 now 的时分秒漂移）。
+  // 此前写 -N/+N ⇒ 文案「过去7天内」实际覆盖 8 个日历日、边界日多算一天（CORE-08）。
+  const today = startOfLocalDay(now);
+  if (mode === "last7days") return { start: localDateString(addLocalDays(today, -6)), end: localDateString(today) };
+  if (mode === "next7days") return { start: localDateString(today), end: localDateString(addLocalDays(today, 6)) };
+  if (mode === "last30days") return { start: localDateString(addLocalDays(today, -29)), end: localDateString(today) };
+  // 其余 = next30days
+  return { start: localDateString(today), end: localDateString(addLocalDays(today, 29)) };
+}
+
+/** 动态日期条件是否读「今天」：只有日期/系统时间字段 + 非 custom 模式会依赖 now。 */
+function filterRuleUsesClock(field: BitableField | undefined, rule: BitableFilterRule): boolean {
+  if (!field) return false;
+  if (field.type !== "date" && !isSystemTimeField(field.type)) return false;
+  return (rule.valueMode ?? "custom") !== "custom";
+}
+
+/**
+ * 视图求值是否真的依赖「今天」（CORE-06 重算时机）。
+ *
+ * 只有筛选 / 填色里存在**动态日期**条件时才需要随 clock 重算；全是静态条件时，
+ * 切回窗口 / 跨日重算整表（5k≈40ms、20k≈100ms）是纯浪费。求值本身仍走
+ * applyViewToRecords / buildBitableFillProjection 这唯一来源（这里只回答「要不要重算」）。
+ */
+export function bitableViewNeedsClock(table: BitableTable, view: BitableView | undefined): boolean {
+  if (!view) return false;
+  const fieldById = new Map(table.fields.map((field) => [field.id, field] as const));
+  const nodeUsesClock = (node: BitableFilterNode): boolean =>
+    isBitableFilterGroup(node) ? node.filters.some(nodeUsesClock) : filterRuleUsesClock(fieldById.get(node.fieldId), node);
+  if ((view.filters ?? []).some(nodeUsesClock)) return true;
+  return (view.fillRules ?? []).some((rule) => {
+    if (rule.mode === "column" || rule.color === BITABLE_FILL_NO_COLOR) return false;
+    return filterRuleUsesClock(fieldById.get(rule.condition.fieldId), rule.condition);
+  });
 }
 
 function ruleExpectedIsEmpty(rule: BitableFilterRule): boolean {
@@ -2007,7 +2051,10 @@ export function evaluateFilter(field: BitableField, value: unknown, rule: Bitabl
   }
   if (operator === "isNotEmpty" || operator === "isNotEmptySelect") return !evaluateFilter(field, value, { ...rule, operator: operator === "isNotEmptySelect" ? "isEmptySelect" : "isEmpty" }, now);
   if (field.type === "date" || isSystemTimeField(field.type)) return dateMatches(value, rule, now);
-  if (field.type === "text" || field.type === "link") return textMatches(bitableDisplayValue(field, value), String(rule.value ?? ""), operator);
+  // markdown / ai 同样是文本域：漏掉会落到末尾 return true ⇒ 筛选静默恒真（CORE-01，2026-10-27 审计）
+  if (field.type === "text" || field.type === "link" || field.type === "ai" || field.type === "markdown") {
+    return textMatches(bitableDisplayValue(field, value), String(rule.value ?? ""), operator);
+  }
   if (isNumericFieldType(field.type)) return numericMatches(value, String(rule.value ?? ""), operator, field.type === "rating" || field.type === "progress");
   if (field.type === "boolean") {
     const actual = value === true || value === "true";
@@ -2108,26 +2155,38 @@ export function buildBitableFillProjection(
     projection.column.set(rule.fieldId, { ruleIndex: index, color: rule.color });
   }
 
+  // CORE-06：配置判定（操作符/值是否填完）与字段查找与记录无关，先提出来算一次。
+  // 此前是 records × rules 双层循环里每条记录每条规则都重算一次（20k × 40 规则 = 80 万次）。
+  // 保留原始下标 ⇒ 候选顺序与混色结果不变。
+  const activeRules: Array<{ index: number; rule: Exclude<BitableFillRule, { mode: "column" }>; field: BitableField }> = [];
+  for (let index = 0; index < rules.length; index += 1) {
+    const rule = rules[index];
+    if (rule.color === BITABLE_FILL_NO_COLOR || rule.mode === "column") continue;
+    const field = fieldById.get(rule.condition.fieldId);
+    if (!field || !isBitableFilterRuleConfigured(field, rule.condition)) continue;
+    activeRules.push({ index, rule, field });
+  }
+
   for (const record of records) {
     let rowMatched = false;
     let sideMatched = false;
-    for (let index = 0; index < rules.length; index += 1) {
-      const rule = rules[index];
-      if (rule.color === BITABLE_FILL_NO_COLOR) continue;
-      if (rule.mode === "column") continue;
-      const field = fieldById.get(rule.condition.fieldId);
-      if (!field || !isBitableFilterRuleConfigured(field, rule.condition)) continue;
+    for (const { index, rule, field } of activeRules) {
+      // 已命中整行/色条后，后续同模式规则本来就会被丢弃 ⇒ 直接跳过求值（纯浪费消除，结果不变）。
+      if (rule.mode === "row" && rowMatched) continue;
+      if (rule.mode === "rowSide" && sideMatched) continue;
+      // 同一格只取首个命中：已着色的 cell key 无需再对后面的规则求值。
+      const cellKey = rule.mode === "cell" ? fillCellKey(record.id, rule.condition.fieldId) : "";
+      if (cellKey && projection.cell.has(cellKey)) continue;
       if (!evaluateFilter(field, bitableFieldValue(record, field), rule.condition, now)) continue;
 
-      if (rule.mode === "row" && !rowMatched) {
+      if (rule.mode === "row") {
         projection.row.set(record.id, { ruleIndex: index, color: rule.color });
         rowMatched = true;
-      } else if (rule.mode === "rowSide" && !sideMatched) {
+      } else if (rule.mode === "rowSide") {
         projection.rowSide.set(record.id, { ruleIndex: index, color: rule.color });
         sideMatched = true;
-      } else if (rule.mode === "cell") {
-        const key = fillCellKey(record.id, rule.condition.fieldId);
-        if (!projection.cell.has(key)) projection.cell.set(key, { ruleIndex: index, color: rule.color });
+      } else {
+        projection.cell.set(cellKey, { ruleIndex: index, color: rule.color });
       }
     }
   }

@@ -4,7 +4,6 @@ import { describe, expect, it } from "vitest";
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
 const KIND = read("../../core/noteKind.ts");
 const PATHS = read("../../core/noteBodyPaths.ts");
-const SYNC = read("../../core/syncUtils.ts");
 const STORE = read("../../../electron/store.ts");
 const IPC = read("../../../electron/ipc/registerNotes.ts");
 const DESKTOP = read("../editor/MultiTabEditor.tsx");
@@ -22,11 +21,6 @@ describe("手写板正式端到端接线", () => {
     expect(KIND).toContain('"ink"');
     expect(PATHS).toContain('ink: "inks"');
     expect(PATHS).toContain('ink: ".ink.json"');
-  });
-
-  it("Manifest 升级到 V2，并保留 V1 读取升级路径", () => {
-    expect(SYNC).toContain("MANIFEST_VERSION = 2");
-    expect(SYNC).toContain("new Set([1, 2])");
   });
 
   it("桌面手写板与其它标签占用同一格，并遵守 data-active 隐藏契约", () => {
@@ -57,6 +51,14 @@ describe("手写板正式端到端接线", () => {
   it("静态笔迹层 memo 化，避免正在书写时重渲染全部历史路径", () => {
     expect(INK_PAD).toContain("const StaticStrokeLayer = memo(");
     expect(INK_PAD).toContain("<StaticStrokeLayer strokes={renderedStrokes} />");
+  });
+
+  it("撤销栈只存页级补丁，不再把整篇正文压栈", () => {
+    expect(INK_PAD).toContain('applyInkPatch(docRef.current, entry.patch, "undo")');
+    expect(INK_PAD).toContain('applyInkPatch(docRef.current, entry.patch, "redo")');
+    expect(INK_PAD).toContain("inkPagePatch(");
+    expect(INK_PAD).not.toContain("pushBoundedHistory(undoRef.current, inkToBody");
+    expect(INK_PAD).not.toContain("pushBoundedHistory(redoRef.current, inkToBody");
   });
 
   it("纸张底纹使用 SVG 逻辑坐标，缩放页面时密度不漂移", () => {

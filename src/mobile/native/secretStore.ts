@@ -19,9 +19,9 @@ import type { SecretStore } from "../../core/ports.js";
 import { keystoreAvailable, keystoreSecretStore } from "./keystoreSecretStore";
 
 /** localStorage 键前缀（密文；格式 ivB64:dataB64）。 */
-const LS_PREFIX = "local-lakex-notes-mobile.secret.";
+const LS_PREFIX = "lakex-local-notes-mobile.secret.";
 /** 密钥固定派生：同一安装内稳定（换机/重装后无法解密旧值，提示重新填写——对齐桌面 safeStorage 密钥丢失语义）。 */
-const KEY_MATERIAL = "local-lakex-notes-mobile.secret-key.v1";
+const KEY_MATERIAL = "lakex-local-notes-mobile.secret-key.v1";
 
 let keyPromise: Promise<CryptoKey> | null = null;
 
@@ -69,7 +69,7 @@ export const localStorageSecretStore: SecretStore = {
     localStorage.setItem(LS_PREFIX + key, await encrypt(value));
   },
   async remove(key) {
-    try { localStorage.removeItem(LS_PREFIX + key); } catch { /* ignore */ }
+    try { localStorage.removeItem(LS_PREFIX + key); } catch { /* localStorage 被禁用：删除失败等同不存在（读取路径会解密失败返回 null） */ }
   },
 };
 

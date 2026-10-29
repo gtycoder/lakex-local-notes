@@ -1,4 +1,5 @@
-import { MAX_QUICK_NOTE_ATTACHMENT_BYTES, MAX_QUICK_NOTE_IMAGE_BYTES, QuickNotesStore } from "../quickNotes.js";
+import { MAX_ATTACHMENT_BYTES as MAX_QUICK_NOTE_ATTACHMENT_BYTES, MAX_IMAGE_BYTES as MAX_QUICK_NOTE_IMAGE_BYTES } from "../../src/core/storeLimits.js";
+import { QuickNotesStore } from "../quickNotes.js";
 import { convertQuickNoteToLake } from "../quickNoteConversion.js";
 import { pushQuickNoteViaEngine } from "../syncEngineController.js";
 import { S3v3S3Remote } from "../s3v3/s3Remote.js";
@@ -7,6 +8,7 @@ import type { QuickNotePushOutcome } from "../../src/core/quickNoteSyncTypes.js"
 import { canTouchNetwork, cloudStateOf, cloudStateHint } from "../../src/core/cloudState.js";
 import type { Store } from "../store.js";
 import type { IpcRegistrar } from "./registrar.js";
+import { toUint8Array } from "./bytes.js";
 
 interface QuickNoteImageInput {
   bytes: number[];
@@ -27,7 +29,9 @@ export function registerQuickNotesIpc(
   /** 维护域串行队列（网络操作必须与整轮同步/GC 互斥，但**不得**占用写域 —— F16 红线）。 */
   enqueueMaintenance: <T>(task: () => Promise<T>) => Promise<T>,
 ): void {
+  // DT-05：列表只回 summary（不读正文）；编辑/预览按 id 取单条完整文档。
   ipc.handle("list_quick_notes", () => quickNotes.listQuickNotes());
+  ipc.handle("read_quick_note", (id: string) => quickNotes.readQuickNote(id));
   ipc.handle("create_quick_note", (input: SaveQuickNoteInput) => quickNotes.createQuickNote(input));
   ipc.handle("update_quick_note", (id: string, input: SaveQuickNoteInput) => quickNotes.updateQuickNote(id, input));
   ipc.handle("delete_quick_note", (id: string) => quickNotes.deleteQuickNote(id));
@@ -74,16 +78,18 @@ export function registerQuickNotesIpc(
   ipc.handle("discard_quick_note_draft", (draftId: string) => quickNotes.discardDraft(draftId));
   ipc.handle("discard_staged_quick_note_image", (draftId: string, imageId: string) => quickNotes.discardStagedImage(draftId, imageId));
   ipc.handle("stage_quick_note_image", (draftId: string, input: QuickNoteImageInput) => {
-    // 桌面 IPC 传 Uint8Array（结构化克隆，省内存/时间）；移动端 HTTP JSON 传 number[]，两种都收。
-    if (!input || !(input.bytes instanceof Uint8Array) && !Array.isArray(input.bytes)) throw new Error("图片数据无效");
-    if (input.bytes.length > MAX_QUICK_NOTE_IMAGE_BYTES) throw new Error("图片超过 25 MiB");
-    return quickNotes.stageImage(draftId, input);
+    // 桌面 IPC 传 Uint8Array；Web/移动端经 HTTP JSON 传 number[]（toUint8Array 单一来源）。
+    const bytes = toUint8Array(input?.bytes);
+    if (!bytes) throw new Error("图片数据无效");
+    if (bytes.length > MAX_QUICK_NOTE_IMAGE_BYTES) throw new Error("图片超过 25 MiB");
+    return quickNotes.stageImage(draftId, { ...input, bytes });
   });
   // 小记附件（内核 file 卡）：与图片共用 staging/promote，但走附件上限（设置项在渲染层先拦一道）。
   ipc.handle("stage_quick_note_file", (draftId: string, input: QuickNoteImageInput) => {
-    if (!input || !(input.bytes instanceof Uint8Array) && !Array.isArray(input.bytes)) throw new Error("附件数据无效");
-    if (input.bytes.length > MAX_QUICK_NOTE_ATTACHMENT_BYTES) throw new Error("附件超过 100 MiB");
-    return quickNotes.stageFile(draftId, input);
+    const bytes = toUint8Array(input?.bytes);
+    if (!bytes) throw new Error("附件数据无效");
+    if (bytes.length > MAX_QUICK_NOTE_ATTACHMENT_BYTES) throw new Error("附件超过 100 MiB");
+    return quickNotes.stageFile(draftId, { ...input, bytes });
   });
   ipc.handle("convert_quick_note", (quickNoteId: string, notebookId: string) => convertQuickNoteToLake(quickNotes, store, quickNoteId, notebookId));
   /**

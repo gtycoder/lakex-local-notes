@@ -58,11 +58,11 @@ export function useEditorCommandDispatcher(opts: {
   const runInline = useCallback((command: string, ...args: unknown[]) => {
     if (composingRef.current) {
       const active = document.activeElement as HTMLElement | null;
-      try { active?.blur(); } catch { /* 忽略 */ }
+      try { active?.blur(); } catch { /* 合成期间切焦点：元素可能已卸载；命令仍会执行 */ }
       composingRef.current = false;
       // 等一拍让内核收到 compositionend 并记账，再执行命令并交还焦点。
       window.setTimeout(() => {
-        try { active?.focus(); } catch { /* 忽略 */ }
+        try { active?.focus(); } catch { /* 同上：交还焦点尽力而为，失败不阻断命令 */ }
         exec(command, ...args);
         snapshotSelection();
         refreshActive();

@@ -14,7 +14,7 @@
   实测文档「测试表格」`https://www.yuque.com/yuqueyonghutxhihv/ro9qct/pg2ex880s9laepwq`。
 - 语雀表格是 WebView 里的 web 应用（`lake-sheet-*` 类名）；已接 CDP（9444）取 DOM / 计算样式 / canvas 像素。
 - 组件 CSS 已整份导出：`/tmp/lake-sheet-inline.css`（语雀页面内联 style，53KB）；颜色令牌来自页面 `:root` 的 `--yq-*`。
-- 我方对照：同设备 `com.locallakexnotes.mobile`（master@88fcb0f8）截图与 DOM。
+- 我方对照：同设备 `com.lakexlocalnotes.android`（master@88fcb0f8）截图与 DOM。
 - 本地证据留存（gitignore，不入库）：`.css-audit/usheet-parity-261020/`（语雀编辑态/阅读态/⋯ 面板截图、我方现状截图、组件 CSS 全文）。
 
 **复现原则：表格页内的 chrome（工具条/公式栏/网格视觉/底栏/面板）精确复刻；应用外壳（我们的工作区顶栏、

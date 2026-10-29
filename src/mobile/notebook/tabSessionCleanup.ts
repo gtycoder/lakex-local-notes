@@ -5,7 +5,7 @@
  * 与「退出即清」的可观察结果一致，且不依赖 appStateChange（切后台不应清标签）。
  * 仅本机 localStorage；不进正文、不进 S3。
  */
-export const MOBILE_TABS_KEY_PREFIX = "local-lakex-notes-mobile.tabs.";
+export const MOBILE_TABS_KEY_PREFIX = "lakex-local-notes-mobile.tabs.";
 
 type RemoveStorage = {
   readonly length: number;
@@ -13,7 +13,7 @@ type RemoveStorage = {
   removeItem(key: string): void;
 };
 
-/** 清掉所有 local-lakex-notes-mobile.tabs.*，返回清掉的条数（幂等）。 */
+/** 清掉所有 lakex-local-notes-mobile.tabs.*，返回清掉的条数（幂等）。 */
 export function clearPersistedNotebookTabs(storage: RemoveStorage = localStorage): number {
   const keys: string[] = [];
   for (let i = 0; i < storage.length; i += 1) {

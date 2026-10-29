@@ -6,15 +6,21 @@ import { describe, expect, it } from "vitest";
  * 状态机与懒读行为由 useNotebookTabs.test.ts 验证；本文件只卡工作区接线。
  */
 const WS = readFileSync(new URL("./NotebookWorkspace.tsx", import.meta.url), "utf8");
+const SESSION = readFileSync(new URL("./useNotebookTabs.ts", import.meta.url), "utf8");
 
 describe("工作区正文懒挂载接线", () => {
-  it("标签会话交给 useNotebookTabs；恢复历史标签只让活动页读正文", () => {
+  it("标签会话交给 useNotebookTabs；恢复只建占位、活动页正文按需补读", () => {
     expect(WS).toContain("useNotebookTabs({");
-    expect(WS).toContain("load: false");
-    expect(WS).toMatch(/void openTab\(initialNoteId, \{ enterEditor: initialMode === "editor" \}\);/);
-    expect(WS).toMatch(/saved\.filter\(\(id\) => id !== initialNoteId\)\.forEach\(\(id\) => void openTab\(id, \{ activate: false, load: false \}\)\)/);
-    expect(WS).toMatch(/void openTab\(saved\[saved\.length - 1\], \{ activate: true \}\);/);
-    expect(WS).toMatch(/saved\.slice\(0, -1\)\.forEach\(\(id\) => void openTab\(id, \{ activate: false, load: false \}\)\)/);
+    // MOB-12：恢复走 hook 的 restore()（一次 dispatch；顺序/上限/激活页都在 hook 里），
+    // workspace 只按目录已知 id 过滤。
+    expect(WS).toMatch(/restore\(\[initialNoteId, \.\.\.saved\.filter\(\(id\) => id !== initialNoteId\)\], initialNoteId, \{ enterEditor: initialMode === "editor" \}\);/);
+    expect(WS).toMatch(/restore\(saved, saved\[saved\.length - 1\]\);/);
+    expect(WS).toContain("const saved = savedTabIds.filter");
+    // restore 只建未加载的占位（不读正文）⇒ 只有活动页会被"未加载则补读"的 effect 读到
+    expect(SESSION).toMatch(/const restore = useCallback/);
+    expect(SESSION).toContain("function placeholderTab");
+    expect(SESSION).toMatch(/loaded: false/);
+    expect(WS).toMatch(/if \(!active \|\| active\.loaded\) return;\s*\n\s*void loadTabBody\(active\.id\);/);
     expect(WS).not.toContain("pendingEditRef");
     expect(WS).toMatch(/enterEditor: kind === "usheet" \|\| kind === "bitable" \|\| kind === "board"/);
   });

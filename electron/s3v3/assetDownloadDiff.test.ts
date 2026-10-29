@@ -4,7 +4,7 @@ import path from "node:path";
 import { gunzipSync, gzipSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
 import { sha256Hex } from "../../src/core/syncUtils.js";
-import type { LakeNoteEntry } from "../../src/core/s3v3Index.js";
+import type { LakeNoteEntry } from "../../src/core/s3v3/protocol/s3v3Index.js";
 import { S3v3SyncEngine } from "./syncEngine.js";
 import { FileDeviceStore, type DeviceState } from "./fileDeviceStore.js";
 import type { RemoteObjectInfo, S3v3Remote } from "./ports.js";
@@ -88,7 +88,10 @@ describe("P0 v3 资产下载差集（localHave：size+sha256 相同跳过 GET）
     // 关键：附件一个都不 GET；声明对象已按 declHash 进程内缓存 ⇒ 也不再重复 GET（P0-1 残余）
     const assetGets = remote.gets.filter((k) => k.startsWith("assets/") || k.startsWith("quick-notes/assets/"));
     expect(assetGets).toEqual([]);
-    expect(remote.gets.filter((k) => k.startsWith("meta/assets/") || k.startsWith("quick-notes/meta/assets/"))).toEqual([]);
+    // v4 契约：声明按「本轮变化的条目」读取（每个 declHash 至多一次），但不重下附件字节。
+    const declGets = remote.gets.filter((k) => k.startsWith("meta/assets/") || k.startsWith("quick-notes/meta/assets/"));
+    expect(new Set(declGets).size).toBe(declGets.length); // 不重复读同一份声明
+    expect(declGets.length).toBeLessThanOrEqual(3);
     expect(new TextDecoder().decode((await b.store.readBody("n1"))!)).toBe("body-1-edited");
   }, 60_000);
 

@@ -13,6 +13,8 @@ export interface SyncToastData {
   /** 完成/错误时的补充说明（如：远端覆盖本地、已存入历史版本） */
   detail?: string;
   onConfigure?: () => void;
+  /** 需要用户处理的动作入口（如 epoch 不一致 → 打开同步设置）；任意 kind 都可渲染。 */
+  action?: { label: string; onClick: () => void };
 }
 
 const PHASE_LABEL: Record<SyncProgress["phase"], string> = {
@@ -62,9 +64,11 @@ export function SyncToast({ data, onClose, anchorRect }: { data: SyncToastData; 
           </div>
         )}
         {data.detail && <div className="sync-toast-detail">{data.detail}</div>}
-        {data.kind === "unavailable" && data.onConfigure && (
+        {data.action ? (
+          <button className="ln-btn ln-btn--primary sync-toast-action" onClick={data.action.onClick}>{data.action.label}</button>
+        ) : data.kind === "unavailable" && data.onConfigure ? (
           <button className="ln-btn ln-btn--primary sync-toast-action" onClick={data.onConfigure}>去配置</button>
-        )}
+        ) : null}
       </div>
       <button className="sync-toast-close" onClick={onClose} aria-label="关闭"><X size={14} /></button>
     </div>

@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
+import { gunzipSync } from "node:zlib";
 import type { DbLike } from "./dbLike.js";
 import { extractAssetRefs } from "../src/core/storeUtils.js";
 import type { OrphanAssetRow } from "./assetRepository.js";
@@ -83,8 +84,26 @@ export class Diagnostics {
     };
   }
 
-  /** 只读三查：① notes↔.lake 文件存在 + sync_base 有基线的读盘 sha256 一致；② note_history↔快照文件存在；
-   *  ③ orphan_assets 登记文件是否存在（漂移抽查）。返回结构化报告（不做任何写操作）。 */
+  /**
+   * v3 同步基线（sync-v3/baseline.json.gz）里的 per-note contentHash 投影。
+   * 缺失/损坏 → null（体检退化为"只查文件存在"，不误报哈希不符）。只读，不写盘。
+   */
+  private loadV3BaselineHashes(): Map<string, string> | null {
+    try {
+      const raw = gunzipSync(fs.readFileSync(path.join(this.ctx.root, "sync-v3", "baseline.json.gz"))).toString("utf8");
+      const parsed = JSON.parse(raw) as { lake?: { notes?: Array<{ id?: unknown; contentHash?: unknown }> } };
+      const out = new Map<string, string>();
+      for (const n of parsed.lake?.notes ?? []) {
+        if (typeof n.id === "string" && typeof n.contentHash === "string" && n.contentHash) out.set(n.id, n.contentHash);
+      }
+      return out;
+    } catch { return null; }
+  }
+
+  /** 只读三查：① notes↔.lake 文件存在 + **v3 同步基线**（sync-v3/baseline.json.gz 的 per-note contentHash）
+   *  与读盘 sha256 一致；② note_history↔快照文件存在；③ orphan_assets 登记文件是否存在（漂移抽查）。
+   *  Del-6：原判据读 v2 的 sync_base（v3 从不写 ⇒ 永远"无基线"、比对形同虚设），改为直接对拍 v3 基线。
+   *  返回结构化报告（不做任何写操作）。 */
   runDataHealthCheck(): {
     notesChecked: number;
     notesMissingFile: Array<{ id: string; title: string }>;
@@ -104,6 +123,7 @@ export class Diagnostics {
     const checkedAt = new Date().toISOString();
     const notesMissingFile: Array<{ id: string; title: string }> = [];
     const notesHashMismatch: Array<{ id: string; title: string }> = [];
+    const baselineHashes = this.loadV3BaselineHashes();
     const noteRows = this.ctx.db.prepare("SELECT id,title,parent_id,is_dirty FROM notes WHERE deleted_at IS NULL AND parent_id != ?").all(this.ctx.trashNotebookId) as Array<{ id: string; title: string; is_dirty: number }>;
     for (const n of noteRows) {
       const lakePath = this.ctx.notePathFor(n.id);
@@ -111,13 +131,14 @@ export class Diagnostics {
         notesMissingFile.push({ id: n.id, title: n.title });
         continue;
       }
-      const base = this.ctx.db.prepare("SELECT content_hash FROM sync_base WHERE note_id=?").get(n.id) as { content_hash: string } | undefined;
+      // 基线源 = v3 baseline.lake.notes[].contentHash（Del-6：sync_base 已删）。基线文件缺失/损坏 ⇒ 只查存在。
+      const baseHash = baselineHashes?.get(n.id);
       // 只在"我们自认为与云端一致"（synced）时比对基线 hash：本地已编辑待上传（local）的正文
       // 与基线不同是**正常状态**，比了就是天天误报"可能被外部改动"，诊断就失去意义。
-      if (!base || n.is_dirty === 1) continue; // 无基线/本地未上传 → 只查存在，不比 hash
+      if (!baseHash || n.is_dirty === 1) continue; // 无基线/本地未上传 → 只查存在，不比 hash
       try {
         const diskHash = crypto.createHash("sha256").update(fs.readFileSync(lakePath)).digest("hex");
-        if (diskHash !== base.content_hash) notesHashMismatch.push({ id: n.id, title: n.title });
+        if (diskHash !== baseHash) notesHashMismatch.push({ id: n.id, title: n.title });
       } catch { notesMissingFile.push({ id: n.id, title: n.title }); }
     }
     const histRows = this.ctx.db.prepare("SELECT id,note_id,file_path FROM note_history").all() as Array<{ id: number; note_id: string; file_path: string }>;

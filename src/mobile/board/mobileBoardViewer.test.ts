@@ -56,7 +56,7 @@ const BODY = JSON.stringify({
 async function mount(
   active: boolean,
   editing = false,
-  opts: { onChange?: (c: string) => void; onCapture?: (c: (() => string | null) | null) => void; noteId?: string } = {},
+  opts: { onChange?: (c: string) => void; onCapture?: (c: (() => string | null) | null) => void; noteId?: string; content?: string } = {},
 ) {
   const host = document.createElement("div");
   document.body.appendChild(host);
@@ -64,7 +64,7 @@ async function mount(
   const { act } = await import("react");
   act(() => root.render(createElement(MobileBoardViewer, {
     noteId: opts.noteId ?? "board-1",
-    content: BODY, active, editing,
+    content: opts.content ?? BODY, active, editing,
     onChange: opts.onChange,
     onCapture: opts.onCapture,
   })));
@@ -129,6 +129,86 @@ describe("移动端画板查看/编辑器", () => {
     expect(body).toContain('"id":"n2"');
     expect(changed.some((c) => c.includes('"id":"n2"'))).toBe(true);
     root.unmount();
+  });
+
+  it("打开非规范正文：改过又改回原样 ⇒ 不写盘/不标脏，capture 返回磁盘原文（CORE-03）", async () => {
+    resetBoardViews();
+    rendered.length = 0;
+    // 非规范形态（键序不同 + 多余未知键，旧版/卡片方言）：规范化后与画布内容等价。
+    const disk = JSON.stringify({
+      elements: [{ id: "n1", type: "geometry" }],
+      legacyNote: "老方言遗留字段",
+      version: 1,
+      engine: "drawnix",
+      kind: "board",
+      preset: "drawing",
+    });
+    let capture: (() => string | null) | null = null;
+    const changed: string[] = [];
+    const noteId = "board-revert";
+    const { root } = await mount(true, true, {
+      noteId,
+      content: disk,
+      onChange: (c) => changed.push(c),
+      onCapture: (c) => { capture = c; },
+    });
+    const { act } = await import("react");
+    const onChange = rendered[rendered.length - 1].onChange as (p: unknown) => void;
+
+    // 打开后没动：不写盘、不标脏（非规范正文也不能被当成一次编辑）。
+    expect(capture!()).toBeNull();
+    expect(changed).toHaveLength(0);
+
+    // 真的改一步：照旧落盘（返回新正文并回调 onChange）。
+    act(() => onChange({ plaitValue: [{ id: "n2", type: "geometry" }] }));
+    const edited = capture!();
+    expect(edited).not.toBe(disk);
+    expect(edited).toContain('"id":"n2"');
+    expect(changed).toHaveLength(1);
+
+    // 又改回原样（撤销 / 元素删回原值）：规范化后与磁盘原文等价 ⇒ flush 不回调。
+    act(() => onChange({ plaitValue: [{ id: "n1", type: "geometry" }] }));
+    // 从编辑切回阅读会立即 flush（不等 800ms 防抖）——基线等价的分支不得写盘/标脏。
+    act(() => root.render(createElement(MobileBoardViewer, {
+      noteId, content: disk, active: true, editing: false,
+      onChange: (c: string) => changed.push(c),
+      onCapture: (c: (() => string | null) | null) => { capture = c; },
+    })));
+    expect(changed).toHaveLength(1);
+    // capture 返回磁盘原文（外层按字节比较即「没改」），不是规范化后的内存形态。
+    expect(capture!()).toBe(disk);
+    root.unmount();
+    resetBoardViews();
+  });
+
+  it("坏正文：只读保护（横幅 + 不挂画布 + capture 恒 null）；合法空正文仍可编辑", async () => {
+    resetBoardViews();
+    rendered.length = 0;
+    let capture: (() => string | null) | null = null;
+    const changed: string[] = [];
+    const { root, host } = await mount(true, true, {
+      content: "{ 不是 JSON",
+      onChange: (c) => changed.push(c),
+      onCapture: (c) => { capture = c; },
+    });
+    const banner = host.querySelector("[data-board-parse-error]");
+    expect(banner?.getAttribute("role")).toBe("status");
+    expect(banner?.textContent).toContain("无法解析");
+    // 不挂画布：否则会显示一张空白画板，让人误以为「本来就没内容」。
+    expect(rendered).toHaveLength(0);
+    expect(typeof capture).toBe("function");
+    expect(capture!()).toBeNull();
+    expect(changed).toHaveLength(0);
+    root.unmount();
+
+    // 合法空正文 = 可编辑空画板（不能把「空」误判成「坏」）。
+    rendered.length = 0;
+    const empty = await mount(true, true, { content: "" });
+    expect(empty.host.querySelector("[data-board-parse-error]")).toBeNull();
+    expect(rendered.length).toBeGreaterThan(0);
+    expect(rendered[rendered.length - 1].readOnly).toBe(false);
+    empty.root.unmount();
+    resetBoardViews();
   });
 
   it("视口记忆（261020 P1）：有本机记忆时不再 fit，按记忆喂 plaitViewport", async () => {

@@ -1,6 +1,6 @@
 # 文档历史（快照）设计 — 完整实现规格
 
-> 本文是当前历史快照实现规格；回收/保留语义与 `S3-GC-DESIGN.md` 为准。
+> 本文是当前历史快照实现规格；回收/保留语义与 `SYNC-PROTOCOL.md`（§14 GC 保留窗口）为准。
 > 目标：为 Lake Notes 增加"文档历史版本"能力（查看/恢复/清理），纯本地、不参与同步，资源按"refs 引用清单"管理。
 > 关联：依赖已完成的软删除+回收站（`f51379b`），历史功能要接 `purgeTrashItem`/孤儿机制。
 
@@ -235,7 +235,7 @@ cleanNoteOrphans(noteId: string, filenames?: string[]): { count, freedBytes }
   - **软删除**（进回收站）：历史**保留**（恢复文档后历史还在，用户可找回更早版本）。
   - **彻底删除**（`purgeTrashItem`）：**连历史快照 + 历史引用的资源一起物理删**（彻底清除语义，用户确认）；删 `history/{noteId}/` 目录 + `note_history` 记录 + 被历史引用的资源 + .lake + note-assets + DB + FTS + 墓碑。
 - **孤儿机制**：`detectOrphans` 仍按"当前正文引用"判定孤儿（保存时，不查历史）；历史保护在**清理动作**时实时判定（不污染孤儿表）。
-- **同步**：历史目录不进 manifest；恢复后 **不再 setBaseHash/setLastUploadedHash/markSynced**，保持恢复前 base/lastUploaded 值、`sync_state='local'`（notes + tree_nodes 双表），由下次同步上传覆盖（P0-1，见 S3-GC-DESIGN §5.2）；同步冲突判定用 `last_uploaded_hash`（P0-1）。
+- **同步**：历史目录不进 manifest；恢复后 **不再 setBaseHash/setLastUploadedHash/markSynced**，保持恢复前 base/lastUploaded 值、`sync_state='local'`（notes + tree_nodes 双表），由下次同步上传覆盖（P0-1，原见 S3-GC-DESIGN §5.2，过程文档已删）；同步冲突判定用 `last_uploaded_hash`（P0-1）。
 - **锁定缓存**：恢复走 `ensureNoteCaches` 兜底。
 
 ## 11. 风险与权衡

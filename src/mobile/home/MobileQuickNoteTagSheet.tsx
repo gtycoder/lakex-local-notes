@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, Plus, Tag, X } from "lucide-react";
+import { Check, Plus, Tag } from "lucide-react";
 import { normalizeQuickNoteTag, type QuickNoteTagSummary } from "../../core/quickNoteTags";
+import { MobileSheet } from "../ui/MobileSheet";
 
 export interface MobileQuickNoteTagSheetProps {
   open: boolean;
@@ -33,7 +34,8 @@ export function MobileQuickNoteTagSheet({ open, options, selected, onAdd, onCrea
     return () => window.clearTimeout(timer);
   }, [open]);
 
-  if (!open) return null;
+  // 返回键 / 右滑 / 遮罩 / 焦点与滚动锁：MOB-11 起统一由 ui/MobileSheet 负责
+  //（此前这里是手写骨架 + 单独登记返回栈，返回栈有两处实现就容易漏）。
 
   let candidate = "";
   let candidateError = "";
@@ -66,63 +68,60 @@ export function MobileQuickNoteTagSheet({ open, options, selected, onAdd, onCrea
   };
 
   return (
-    <div className="mb-scrim" data-prevent-swipe onClick={onClose}>
-      <div className="mb-sheet qn-tag-sheet" data-prevent-swipe onClick={(event) => event.stopPropagation()}>
-        <div className="mb-sheet__grab" />
-        <div className="mb-sheet__head">
-          <span className="mb-sheet__title">添加标签</span>
-          <button type="button" className="mobile-icon-btn" onClick={onClose} aria-label="关闭"><X size={20} /></button>
-        </div>
-        <div className="mb-sheet__body qn-tag-sheet__body">
-          <div className="qn-tag-sheet__input-row">
-            <span className="mb-input qn-tag-sheet__input">
-              <input
-                ref={inputRef}
-                value={query}
-                onChange={(event) => { setQuery(event.target.value); setError(null); }}
-                onKeyDown={(event) => {
-                  if (event.key !== "Enter" || !candidate || candidateError) return;
-                  event.preventDefault();
-                  if (existing && !selectedSet.has(existing.id)) addExisting(existing.id);
-                  else if (!exactExists) void create();
-                }}
-                placeholder="输入标签名..."
-                aria-label="标签名"
-              />
-            </span>
+    <MobileSheet
+      open={open}
+      title="添加标签"
+      onClose={onClose}
+      className="qn-tag-sheet"
+      bodyClassName="qn-tag-sheet__body"
+    >
+      <div className="qn-tag-sheet__input-row">
+        <span className="mb-input qn-tag-sheet__input">
+          <input
+            ref={inputRef}
+            value={query}
+            onChange={(event) => { setQuery(event.target.value); setError(null); }}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter" || !candidate || candidateError) return;
+              event.preventDefault();
+              if (existing && !selectedSet.has(existing.id)) addExisting(existing.id);
+              else if (!exactExists) void create();
+            }}
+            placeholder="输入标签名..."
+            aria-label="标签名"
+          />
+        </span>
+        <button
+          type="button"
+          disabled={!candidate || !!candidateError || exactExists || creating}
+          onClick={() => { if (existing && !selectedSet.has(existing.id)) addExisting(existing.id); else void create(); }}
+        >添加</button>
+      </div>
+      {(candidateError || error) && <div className="qn-tag-sheet__error">{error || candidateError}</div>}
+      {candidate && !candidateError && !exactExists && (
+        <button type="button" className="qn-tag-sheet__create" disabled={creating} onClick={() => void create()}>
+          <Plus size={16} /><span>创建标签 “{candidate}”</span>
+        </button>
+      )}
+      <div className="qn-tag-sheet__section"><Tag size={14} /><span>已有标签（{options.length}）</span></div>
+      <div className="qn-tag-sheet__list">
+        {visible.map((option) => {
+          const checked = selectedSet.has(option.id);
+          return (
             <button
               type="button"
-              disabled={!candidate || !!candidateError || exactExists || creating}
-              onClick={() => { if (existing && !selectedSet.has(existing.id)) addExisting(existing.id); else void create(); }}
-            >添加</button>
-          </div>
-          {(candidateError || error) && <div className="qn-tag-sheet__error">{error || candidateError}</div>}
-          {candidate && !candidateError && !exactExists && (
-            <button type="button" className="qn-tag-sheet__create" disabled={creating} onClick={() => void create()}>
-              <Plus size={16} /><span>创建标签 “{candidate}”</span>
+              key={option.id}
+              className={"qn-tag-sheet__item" + (checked ? " is-selected" : "")}
+              disabled={checked}
+              onClick={() => addExisting(option.id)}
+            >
+              <span className="mb-ellipsis">{option.name}</span>
+              {checked ? <Check size={17} /> : <span className="qn-tag-sheet__count">{option.count}</span>}
             </button>
-          )}
-          <div className="qn-tag-sheet__section"><Tag size={14} /><span>已有标签（{options.length}）</span></div>
-          <div className="qn-tag-sheet__list">
-            {visible.map((option) => {
-              const checked = selectedSet.has(option.id);
-              return (
-                <button
-                  type="button"
-                  key={option.id}
-                  className={"qn-tag-sheet__item" + (checked ? " is-selected" : "")}
-                  disabled={checked}
-                  onClick={() => addExisting(option.id)}
-                >
-                  <span className="mb-ellipsis">{option.name}</span>
-                  {checked ? <Check size={17} /> : <span className="qn-tag-sheet__count">{option.count}</span>}
-                </button>
-              );
-            })}
-            {visible.length === 0 && !candidate && <div className="qn-tag-sheet__empty">暂无已有标签</div>}
-          </div>
-        </div>
+          );
+        })}
+        {visible.length === 0 && !candidate && <div className="qn-tag-sheet__empty">暂无已有标签</div>}
       </div>
-    </div>
+    </MobileSheet>
   );
 }

@@ -33,7 +33,7 @@
 20. **性能优化破坏 TOC（历史教训，已被 2026-08-02 会话推翻/解决）**：历史上 `content-visibility: auto`、`virtualRendering`、Tab 离屏销毁、MutationObserver 懒加载都曾破坏 TOC。**现已证明可行**：`virtualRendering` + `scrollNode` 指对真实滚动容器（`.ne-editor-wrap`）+ setDocument 后重放 `tocChange`，TOC 正常工作（打开时延迟 ~600ms 出现）；高亮/点击/列表跟随由自研 `setupTocScrollFollow` 补齐。
 21. **overflow 修改影响 Lake 浮动 UI（已演进）**：`.multi-tab-editor`/`.tab-panels` 设 overflow 曾裁剪表格工具栏与 TOC 按钮。最终方案：**每标签独立滚动容器**——`.lake-editor-tab` 固定高度外壳（`overflow:hidden`）+ 高度链让 Lake 原生 `.ne-editor-wrap`（`height:100%; overflow-y:auto`）内部滚动；`.multi-tab-editor` 用 `height:100%`（确定高度）而非 `min-height`（否则内容撑高、内部滚动失效、外层裁剪）。
 22. **`-webkit-app-region: drag` 原生层吃点击**：`pointer-events: none` 无效。`.tab-bar` 设 drag、`.tab-item` 设 no-drag。
-23. **CSS 修改铁律**：改前先看样式层叠顺序（`scripts/css-audit/README.md`；改了声明量必须跑 `vitest src/styles/cssLayers.test.ts` 对基线，只允许变小或合法抬高并注明），别造第四套类名；绝不加 `content-visibility`/`contain` 到引擎层。（原 `local-lakex-notes-tauri-poc` CSS 基准仓库已清理，历史 diff 走 git 历史。）
+23. **CSS 修改铁律**：改前先看样式层叠顺序（`scripts/css-audit/README.md`；改了声明量必须跑 `vitest src/styles/cssLayers.test.ts` 对基线，只允许变小或合法抬高并注明），别造第四套类名；绝不加 `content-visibility`/`contain` 到引擎层。（原 `lakex-local-notes-tauri-poc` CSS 基准仓库已清理，历史 diff 走 git 历史。）
 24. **Drawnix CSS 不能直接 import**：包的 exports 没导出 CSS。复制到 `src/vendor/` 从本地路径导入。
 25. **DefaultEditorConfig 必须递归深合并**：一层合并丢嵌套配置（`deepMerge` 已实现）。
 26. **scrollNode 必须指向真实滚动容器**（虚拟渲染/大纲定位前提）：本项目桌面多标签下是 `.ne-editor-wrap`（高度链修复后）；`body` 是 `overflow:hidden`，Lake 默认回退 `document.scrollingElement || document.body` 会拿错，导致视口测量/TOC 全乱。
@@ -42,7 +42,7 @@
 29. **TOC 条目是 `div.ne-toc-item`，不是 `<a>`**：探测/选择器用 `a` 会数出 0 造成误判。
 30. **多标签共用滚动容器 → 滚动位置共享**：`.document-pane` 包所有标签时，A 标签滚到中部，切 B 也在中部。解法：每标签独立滚动容器。
 31. **`npm run dev` 会启动两个 Electron**：`vite-plugin-electron` 默认自动拉起 Electron，脚本里再 `wait-on && electron .` 就是双实例 → 单实例锁冲突 + ERR_FAILED。已修：dev 只跑 vite（commit 3b7db20）。
-32. **打包版卸载后 SingletonLock 残留**：`~/Library/Application Support/local-lakex-notes/SingletonLock|SingletonSocket|SingletonCookie` 残留会挡 dev 启动（"Failed to create SingletonLock: File exists"）。确认无进程后改名 `.stale-bak` 即可（沙箱禁 `rm -f`，用 mv）。
+32. **打包版卸载后 SingletonLock 残留**：`~/Library/Application Support/lakex-local-notes/SingletonLock|SingletonSocket|SingletonCookie` 残留会挡 dev 启动（"Failed to create SingletonLock: File exists"）。确认无进程后改名 `.stale-bak` 即可（沙箱禁 `rm -f`，用 mv）。
 33. **埋点/日志坑**：`console.debug` 被 DevTools 默认过滤（改用 `console.log`）；HMR 不重建已创建的编辑器实例（测新埋点必须 Cmd+R 或重启）；`editor.on("tocChange")` 收不到内核事件（要走 `editor.kernel.onPluginEvent`）。
 34. **docInitPerf 探针**：monitorLog 走内核 emitter，`editor.on("monitorLog")` 收不到（facade 不转发）；当前 `__lakePerfReport` 的 docInitPerf 采集是否生效取决于订阅路径，非功能问题。
 55. **原生大纲点击把整个壳滚乱（260916）**：内核 TOC 点击除 `scrollByNodeId` 外还会 `location.hash = 标题节点id`（`toc.allowModifyHash` 内核默认 true）→ 浏览器锚点导航滚锚点的**整条祖先滚动链** → `html` 被滚满 42px（=topbar 高，html 未锁 overflow）→ 整壳上移、topbar 滚出视野、tab 栏顶到第一行、fixed 状态栏不动（观感即「点一下大纲布局全乱」）。双层修复：① `toc: { allowModifyHash: false }`（**扁平 schema**——`toc.editing/reading` 嵌套是 LakexEditor 组件层转换，直传 `Doc.createOpenEditor` 无效）；② `html,body { overflow: hidden }`（base.css，原来只锁 body）兜底一切内核误滚 html 的路径。详见 LAKEX-CONTRACT §5.1。
@@ -56,11 +56,13 @@
 58. **审计装置会随 UI 批次漂移（260917）**：`scripts/css-audit/css-audit.mjs` 的 `nav.search` 一直在左上角下拉里找"全文搜索"菜单项，而 260917 该入口已搬到文档页右上角 → 跑 `ab2` 全矩阵时 `search-empty` 状态**在装置准备阶段直接抛 `no 全文搜索`**（崩的是状态准备、不是比对结果，容易误读成"清理导致回归"）。修法 = 按 `title/aria` 找右上角搜索按钮。**两个连带坑**：① 跑审计装置前先确认它跟得上最近的 UI 搬位；② `ab2` 的 `only` 过滤是**状态全名精确匹配**（传 `search-empty` 匹配不到 `search-empty:1315:light`，会被**静默跳过**）。另外 `ab2 plan` 模式**测不了 `app/*.css`**（被 Vite 内联进 `src/styles.css` 那张表）——必须用 `SPEC` 注入整份内联内容，否则给假 PASS（见 `scripts/css-audit/README.md` §七）。
 
 59. **浏览器端 = 本机附属窗口，不是伺服（260917）**：`electron/webApiServer.ts` 起的 HTTP 服务（默认端口 19880）把桌面渲染层交给**本机**浏览器：`POST /api/<channel>` 复用同一批 IPC handler、静态服务 `dist/`、`/__native.js` 注入 `window.lakeNative` 的 HTTP shim；**只绑 127.0.0.1**。用户 260917 明确**不做伺服**（不监听局域网、不对外开放）。开关在「设置 → 浏览器端」：**不落盘**（内存态，每次启动默认关闭）、**打开/关闭即时起停、无需重启**（`createWebServerController`）。「打开浏览器」按钮走 IPC `open_web_client` → 主进程 `shell.openExternal(url)`；**URL 由主进程按固定端口构造、渲染层不传 URL**（防开放重定向）。已知缺口（本批未做）：推送缺失（shim 里 `onSyncProgress`/`onPendingSummaryChanged` 是 no-op）、`dialog`/`shell`/`clipboard` 类通道在浏览器里语义错（会操作桌面机）、`/api/*` 只校验 `x-lake-token`（复用 assetToken、不校验 Origin）、`/__native.js` 不校验 token。
+
+> **261028 更新**：上述缺口已处理——SSE 推送已实现（含 `ai:stream`）；`/__native.js` 不再含 token（HttpOnly cookie + Origin 校验）；`/api` 与 `/__events` 统一鉴权；新增 `GET /download` 白名单下载（导出）。**浏览器端按用户裁决保留**（桌面端分屏读笔记；移动端不做），不再按"待删"处理。见 `docs/audit-261027/11-browser-end-plan.md`。
 60. **改 `electron/preload.cjs` 在 dev 不会热重启（260917）**：vite-plugin-electron 只 watch 入口 `electron/main.ts`，而 dev 下 preload 是**直接读源文件** `../electron/preload.cjs`（不是 `dist-electron/` 里的构建产物）。改完 preload 必须**手动重启 Electron**（或 `touch electron/main.ts` 触发重建）才生效；否则渲染层还是旧方法，症状是 `window.lakeNative.xxx is not a function`。
 
 ## E. 环境与工具
 
-35. **杀进程误杀 Trae CN**：永远用 `grep "local-lakex-notes"` 精确匹配，禁 `pkill -f Electron`。
+35. **杀进程误杀 Trae CN**：永远用 `grep "lakex-local-notes"` 精确匹配，禁 `pkill -f Electron`。
 36. **npm 私有镜像不可达**：显式用 `registry.npmmirror.com` + 独立 cache 目录。
 37. **better-sqlite3 ABI**：装完必须 `@electron/rebuild`（Node ABI ≠ Electron ABI）。
 38. **React StrictMode**：useEffect 双执行，setOpenTabs 需去重（`tabs.some(...)`）。

@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { gunzipSync, gzipSync } from "node:zlib";
 import { sha256Hex } from "./syncUtils.js";
-import { buildAssetDeclaration, indexHashOf, serializeDeclaration, serializeLakeIndex, serializeQuickNotesIndex, type LakeIndex, type QuickNotesIndex } from "./s3v3Index.js";
-import { assetKey, declarationKey, indexKey, lakeBodyKey } from "./s3v3Keys.js";
+import { buildAssetDeclaration, indexHashOf, serializeDeclaration, serializeLakeIndex, serializeQuickNotesIndex, type LakeIndex, type QuickNotesIndex } from "./s3v3/protocol/s3v3Index.js";
+import { assetKey, declarationKey, indexKey, lakeBodyKey } from "./s3v3/protocol/s3v3Keys.js";
 import { S3v3SyncEngine } from "./s3v3Engine.js";
 import type { S3v3Remote, RemoteObjectInfo } from "./s3v3Ports.js";
 import type { DeviceState, S3v3DeviceStore } from "./s3v3DeviceStore.js";
@@ -42,7 +42,7 @@ class RecDevice implements S3v3DeviceStore {
   state: DeviceState = {
     lake: { v: 3, space: "lake", notes: [], folders: [] },
     quickNotes: { v: 3, space: "quickNotes", items: [] }, folders: [], intents: [], pending: [],
-    remotePurged: [], restorePending: [], quickPurges: [], quickPurgeTimes: {}, quickDeletes: [], archived: [],
+    remotePurged: [], restorePending: [], quickPurges: [], quickPurgeTimes: {}, quickDeletes: [],
   };
   writtenAssets: string[] = [];
   assetBytes = new Map<string, Uint8Array>();

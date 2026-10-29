@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildTreeIndex } from "./treeIndex.js";
-import type { TreeNode } from "./types.js";
+import type { TreeNode } from "./sharedTypes.js";
 
 const nodes: TreeNode[] = [
   { id: "book", parentId: null, nodeType: "notebook", title: "工作", sortOrder: 0, updatedAt: "", workspaceId: "ws", noteFileId: null, createdAt: "", isConflict: false },

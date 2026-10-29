@@ -4,7 +4,8 @@ const BRIDGE = readFileSync(new URL("./bridge/sync.ts", import.meta.url), "utf8"
 const V3 = readFileSync(new URL("./v3/sync.ts", import.meta.url), "utf8");
 const DRAWER = readFileSync(new URL("./settings/SettingsDrawer.tsx", import.meta.url), "utf8");
 const NOTES = readFileSync(new URL("./bridge/notes.ts", import.meta.url), "utf8");
-const TYPES = readFileSync(new URL("../lib/types.ts", import.meta.url), "utf8");
+// CORE-10 tail：共享类型定义已下沉 core/sharedTypes.ts（lib/types.ts 只是 re-export）。
+const TYPES = readFileSync(new URL("../core/sharedTypes.ts", import.meta.url), "utf8");
 
 describe("移动端按需资产（P0-4，261026）", () => {
   it("设置项 deferAssets 贯通：类型 → 同步选项 → 引擎", () => {

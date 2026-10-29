@@ -20,6 +20,7 @@ import { quickNoteBodyFromTextAndImages, type StoredQuickNoteImage } from "../co
 import { localAssetHttpUrl } from "../core/assetUrl.js";
 import { buildQuickNoteTagIndex, buildQuickNoteTagOptions, type QuickNoteTag } from "../core/quickNoteTags.js";
 import { installMissingAssetPlaceholders } from "./editor/missingAssetPlaceholder";
+import { subscribeHistorySettings } from "./lib/historySettingsSync";
 
 /**
  * 小记写作区（懒加载）：261010 起 **深链/长按那条 capture 路径与工作台共用同一个内核卡片**
@@ -29,7 +30,6 @@ import { installMissingAssetPlaceholders } from "./editor/missingAssetPlaceholde
  */
 // 小记编辑器 = 按需加载壳（预取过则同步渲染；未预取先骨架）——见 home/quickNoteComposerLazy.tsx
 import { CreateNotebookSheet } from "./settings/CreateNotebookSheet";
-import { SearchSheet } from "./settings/SearchSheet";
 import { SettingsDrawer } from "./settings/SettingsDrawer";
 import { useBackHandler } from "./hooks/useBackHandler";
 import { useRouteTransition } from "./hooks/useRouteTransition";
@@ -42,10 +42,11 @@ import { MobileBrandLaunchMark } from "./ui/BrandLaunchMark";
 import { subscribeQuickNoteShortcut } from "./native/quickNoteShortcut";
 import { ConfirmHost } from "./ui/ConfirmDialog";
 import { showToast } from "./ui/toastBus";
-import { reportNativeActionError } from "../lib/nativeErrors";
+import { getNativeErrorMessage, reportNativeActionError } from "../lib/nativeErrors";
 import { successFeedback, warnFeedback } from "./ui/haptics";
 import { runNativeSqliteSpike } from "./native/nativeSqlite";
 import { buildLakeNative } from "./native/lakeNativeContract";
+import { mobileCachePort } from "./native/cachePort";
 import "./mobile.css";
 import "./brand-launch.css";
 
@@ -54,6 +55,9 @@ import "./brand-launch.css";
 const NotebookWorkspace = lazy(() => import("./notebook/NotebookWorkspace").then((m) => ({ default: m.NotebookWorkspace })));
 /** AI 全屏页按需加载：不进首页首屏（与内核/表格一样不加重入口）。 */
 const MobileAiPage = lazy(() => import("./ai/MobileAiPage").then((m) => ({ default: m.MobileAiPage })));
+/** 搜索 Sheet 按需加载（MOB-15 首屏预算）：只在点「搜索」时打开，静态引入会把它的依赖链
+ *  （reportMobileActionError → toastBus/nativeErrors）拆成入口预加载 chunk（261028 实测 +3）。 */
+const SearchSheet = lazy(() => import("./settings/SearchSheet").then((m) => ({ default: m.SearchSheet })));
 
 /**
  * 退出 App（Android：结束任务）。
@@ -158,30 +162,73 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
     });
   }, [refreshAll]);
 
-  useEffect(() => {
+  /**
+   * 启动失败（MOB-08）：错误对象只保留在 ref 里给「复制诊断」用；界面状态只存可读文案。
+   * 之前 catch 里只 setError 不退出 booting ⇒ 失败后永远停在骨架 + 启动遮罩，用户没有任何出路。
+   */
+  const bootErrorRef = useRef<unknown>(null);
+  const boot = useCallback(async () => {
     // 启动速度优先：不加人为最短展示；native splash + WebView overlay 只覆盖真实加载时间。
-    (async () => {
-      try {
-        await bridge.init();
-        // lakeNative 调试/测试契约（对齐桌面端）：供 CDP 驱动与真机调试直接调用 bridge 端口
-        // lakeNative 调试/测试契约（对齐桌面端）：供 CDP 驱动与真机调试直接调用 bridge 端口。
-        // 实现从 bridge / 附加入口**派生**（名字清单单一来源见 ./lakeNativeContract）。
-        (window as unknown as Record<string, unknown>).lakeNative = buildLakeNative({
-          bridge: bridge as unknown as Record<string, unknown>,
-          extra: { runNativeSqliteSpike },
-        });
-        // 资产传输性能观测（CDP 诊断：__lakePerf.reset() / __lakePerf.snapshot()）。
-        (window as unknown as Record<string, unknown>).__lakePerf = {
-          reset: resetAssetPerf,
-          snapshot: snapshotAssetPerf,
-        };
-        await refreshAll();
-        setPhase("ready");
-      } catch (e) {
-        setError((e as Error).message);
-      }
-    })();
+    setError(null);
+    try {
+      await bridge.init();
+      // lakeNative 调试/测试契约（对齐桌面端）：供 CDP 驱动与真机调试直接调用 bridge 端口。
+      // 实现从 bridge / 附加入口**派生**（名字清单单一来源见 ./lakeNativeContract）。
+      (window as unknown as Record<string, unknown>).lakeNative = buildLakeNative({
+        bridge: bridge as unknown as Record<string, unknown>,
+        extra: { runNativeSqliteSpike },
+      });
+      // 资产传输性能观测（CDP 诊断：__lakePerf.reset() / __lakePerf.snapshot()）。
+      (window as unknown as Record<string, unknown>).__lakePerf = {
+        reset: resetAssetPerf,
+        snapshot: snapshotAssetPerf,
+      };
+      await refreshAll();
+      setPhase("ready");
+    } catch (e) {
+      bootErrorRef.current = e;
+      setError(getNativeErrorMessage(e));
+    }
   }, [refreshAll]);
+  useEffect(() => { void boot(); }, [boot]);
+
+  /** 「复制诊断」：错误 + 运行环境 + 现有 getDiagnostics 计数（DB 没打开时如实说明）。 */
+  const copyBootDiagnostics = useCallback(async () => {
+    const lines = [
+      "时间：" + new Date().toISOString(),
+      "错误：" + (error ?? "未知"),
+      "环境：" + (typeof navigator === "undefined" ? "unknown" : navigator.userAgent),
+    ];
+    const raw = bootErrorRef.current;
+    if (raw instanceof Error && raw.stack) lines.push("堆栈：\n" + raw.stack);
+    try {
+      const d = await bridge.getDiagnostics();
+      lines.push(
+        "诊断：文档 " + d.noteCount + " / 分组 " + d.folderCount + " / 小记 " + d.quickNoteCount
+        + " / 资源 " + d.resourceCount + " / 孤儿 " + d.orphanCount + " / 待回收 " + d.gcPendingCount
+        + " / 快照 " + d.snapshotCount + " / 库 " + d.dbBytes + " B",
+      );
+    } catch {
+      lines.push("诊断：数据库未打开，读取失败");
+    }
+    try {
+      await navigator.clipboard.writeText(lines.join("\n"));
+      showToast("诊断信息已复制");
+    } catch {
+      showToast("复制失败，请记录屏幕上的错误信息", { type: "error" });
+    }
+  }, [error]);
+
+  /** 「清派生缓存后重试」：只用现有 cachePort（只清可重建数据，不动正文/资源/未同步修改）。 */
+  const clearCacheAndRetry = useCallback(async () => {
+    try {
+      await mobileCachePort.clearDerivedCaches();
+    } catch (reason) {
+      showToast("清理缓存失败：" + getNativeErrorMessage(reason), { type: "error" });
+      return;
+    }
+    await boot();
+  }, [boot]);
 
   // 自动同步（261012）：autoMode=interval 起定时器；onOpenClose 在冷启动就绪 + 回到前台时补一次。
   useAutoSync(phase === "ready");
@@ -209,21 +256,37 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
   }), []);
 
   // 定时自动快照：按历史设置 snapshotIntervalMinutes（0=关）周期给当前打开笔记留档
-  // （当前活动文档由工作区经 onActiveNoteChange 上报到 activeIdRef）
+  // （当前活动文档由工作区经 onActiveNoteChange 上报到 activeIdRef）。
+  // MOB-17：设置页保存历史设置后经 subscribeHistorySettings 广播 ⇒ 这里先清旧定时器再按新间隔重挂，
+  // 不再"挂载时读一次、改设置要重启才生效"。
   useEffect(() => {
     let timer: number | null = null;
-    void bridge.getHistorySettings().then((cfg) => {
+    /** effect 已卸载（App 切 capture / StrictMode 双挂载）时不再起新定时器。 */
+    let disposed = false;
+    /** 首次读库返回前用户已经改过设置 ⇒ 丢弃这次旧值，避免把新间隔覆盖回去。 */
+    let changedByUser = false;
+    const apply = (cfg: { snapshotIntervalMinutes: number }) => {
+      if (disposed) return;
+      if (timer != null) { window.clearInterval(timer); timer = null; }
       if (cfg.snapshotIntervalMinutes <= 0) return;
       timer = window.setInterval(() => {
         const id = activeIdRef.current;
         if (id) void bridge.snapshotNote(id).catch((error) => reportNativeActionError("自动快照", error));
       }, Math.max(1, cfg.snapshotIntervalMinutes) * 60 * 1000);
-    }).catch((error) => reportNativeActionError("读取快照设置", error));
-    return () => { if (timer != null) window.clearInterval(timer); };
+    };
+    void bridge.getHistorySettings()
+      .then((cfg) => { if (!changedByUser) apply(cfg); })
+      .catch((error) => reportNativeActionError("读取快照设置", error));
+    const unsubscribe = subscribeHistorySettings((cfg) => { changedByUser = true; apply(cfg); });
+    return () => {
+      disposed = true;
+      unsubscribe();
+      if (timer != null) window.clearInterval(timer);
+    };
   }, []);
 
   /**
-   * 本次 capture 是否由**快捷入口**（长按桌面图标 / `locallakexnotes://quick-note` 深链）拉起 —— 决定两件事（用户 261013 定稿）：
+   * 本次 capture 是否由**快捷入口**（长按桌面图标 / `lakexlocalnotes://quick-note` 深链）拉起 —— 决定两件事（用户 261013 定稿）：
    *  ① **手动退出时直接退 App 回桌面**（"假单独模块"，模仿思源的闪念速记；首页底栏「新建小记」那条不受影响）；
    *  ② 这次会话**不主动发起同步**（见 `useAutoSync` 的 capture 会话判定：入口 / 回前台 / 进后台三处都跳过）。
    */
@@ -446,8 +509,16 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
     );
   }
 
+  // 启动失败优先于骨架：否则 catch 后 phase 仍停在 booting，用户只能看着永久骨架（MOB-08）。
+  if (error) return (
+    <MobileBootErrorPage
+      message={error}
+      onRetry={() => void boot()}
+      onClearCacheAndRetry={() => void clearCacheAndRetry()}
+      onCopyDiagnostics={() => void copyBootDiagnostics()}
+    />
+  );
   if (phase === "booting") return <MobileHomeSkeleton />;
-  if (error) return <div className="poc-center poc-error">{error}</div>;
 
   return (
     <div className="mobile-app">
@@ -519,12 +590,14 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
           } catch { showToast("新建失败", { type: "error" }); warnFeedback(); }
         }}
       />
-      <SearchSheet
-        open={searchOpen}
-        onClose={() => setSearchOpen(false)}
-        onOpenNote={(id) => void openNote(id, "viewer")}
-        onOpenQuickNote={openQuickNoteFromSearch}
-      />
+      <Suspense fallback={null}>
+        <SearchSheet
+          open={searchOpen}
+          onClose={() => setSearchOpen(false)}
+          onOpenNote={(id) => void openNote(id, "viewer")}
+          onOpenQuickNote={openQuickNoteFromSearch}
+        />
+      </Suspense>
       {aiOpen && (
         <Suspense fallback={null}>
           <MobileAiPage open onClose={() => setAiOpen(false)} onChanged={() => void refreshAll()} />
@@ -538,6 +611,47 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
     </div>
   );
 
+}
+
+/**
+ * 启动失败页（MOB-08）：可处置 —— 重试 / 清派生缓存后重试 / 复制诊断。
+ * 只用现有原语（toolbar + mobile-settings-content + mb-card/mb-btn/mb-set-*），不写内联样式、不新增 CSS。
+ */
+function MobileBootErrorPage(props: {
+  message: string;
+  onRetry: () => void;
+  onClearCacheAndRetry: () => void;
+  onCopyDiagnostics: () => void;
+}) {
+  return (
+    <div className="mobile-app">
+      <div className="mobile-home">
+        <header className="toolbar toolbar--border mobile-topbar">
+          <span className="mobile-topbar-gap" aria-hidden="true" />
+          <span className="mobile-topbar-title">启动失败</span>
+          <span className="mobile-topbar-gap" aria-hidden="true" />
+        </header>
+        <div className="mobile-settings-content">
+          <div className="mb-set-group">
+            <div className="mb-set-title">本地知识库未能打开</div>
+            <div className="mb-card">
+              <div className="mb-card__head">错误信息</div>
+              <div className="mb-card__body">
+                <p className="mb-form__desc">{props.message}</p>
+                <p className="mb-form__desc">数据仍在本机：重试不会改动正文、附件或未同步的修改。</p>
+              </div>
+            </div>
+            <div className="mb-set-items">
+              <button type="button" className="mb-btn mb-btn--primary mb-btn--block" onClick={props.onRetry}>重试</button>
+              <button type="button" className="mb-btn mb-btn--block" onClick={props.onClearCacheAndRetry}>清理缓存后重试</button>
+              <button type="button" className="mb-btn mb-btn--ghost mb-btn--block" onClick={props.onCopyDiagnostics}>复制诊断信息</button>
+            </div>
+            <p className="mb-form__desc">「清理缓存」只清可重建的派生数据，不删除正文、历史快照和已下载资源。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 /**

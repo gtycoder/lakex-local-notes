@@ -17,9 +17,10 @@
  *      `themes/` `fonts/` `kernel-theme.css` `compat.css` —— 暂未使用的原语/令牌是**迁移目标**，不是死代码。
  *   5) 移动端单独标注（`src/mobile/**`）：改动前先与移动端会话对齐。
  *
- * 用法：node scripts/css-audit/audit-dead-css.mjs [--all]
- *   --all  连「被动态模式保护 / 内核命名空间 / 设计词表」的也打印出来（默认只打印真候选）
- * 退出码恒为 0（审计报告，不是门禁）；判定仍需人工过一眼上面 5 条口径。
+ * 用法：node scripts/css-audit/audit-dead-css.mjs [--all] [--selfcheck]
+ *   --all       连「被动态模式保护 / 内核命名空间 / 设计词表」的也打印出来（默认只打印真候选）
+ *   --selfcheck 用已知样本自证「模板串前缀拼接」识别仍有效（失败退出码 1，供测试/CI 用）
+ * 退出码恒为 0（审计报告，不是门禁；--selfcheck 例外）；判定仍需人工过一眼上面 5 条口径。
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -28,6 +29,7 @@ import { fileURLToPath } from "node:url";
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, "../..");
 const SHOW_ALL = process.argv.includes("--all");
+const SELF_CHECK = process.argv.includes("--selfcheck");
 
 const SKIP_CSS = [
   /\/themes\//, /\/fonts\//, /kernel-theme\.css$/, /compat\.css$/, /^src\/styles\/index\.css$/,
@@ -52,18 +54,30 @@ const usage = [
   ...collect(path.join(REPO, "scripts"), (f) => /\.(mjs|js|ts)$/.test(f) && !/css-audit\/plans\//.test(f)),
   path.join(REPO, "index.html"),
 ].filter((f) => fs.existsSync(f));
-const corpus = usage.map((f) => fs.readFileSync(f, "utf8")).join("\n");
+const sources = usage.map((f) => ({ file: f, text: fs.readFileSync(f, "utf8") }));
+const corpus = sources.map((s) => s.text).join("\n");
 
 // —— 动态拼接片段（模板字符串 / 字符串拼接）——
+// 必须**逐文件**扫模板：整仓 join 成一个字符串再配对反引号时，任何一个文件里落单的反引号
+// （正则字面量 / 注释里的 `code`）都会让其后所有文件的配对整体错位，前缀被吞 ⇒ 假阳性。
+// 已知样本：OutlineMinimap.tsx 的 template 前缀拼接 `toc-minimap__item--d${depth}` 必须被识别。
 const prefixes = new Set(), suffixes = new Set();
-for (const tpl of corpus.matchAll(/`([^`]*)`/gs)) {
-  for (const m of tpl[1].matchAll(/([A-Za-z][\w-]*)\$\{/g)) prefixes.add(m[1]);
-  for (const m of tpl[1].matchAll(/\}\s*([A-Za-z][\w-]*)/g)) suffixes.add(m[1]);
-}
-for (const m of corpus.matchAll(/["']([A-Za-z][\w-]*)["']\s*\+/g)) prefixes.add(m[1]);
-for (const m of corpus.matchAll(/\+\s*["']([A-Za-z][\w-]*)["']/g)) suffixes.add(m[1]);
+const collectAffixes = (text) => {
+  // 模板串（允许 \` 转义）：前缀 = 紧邻 ${ 前的类名片段；后缀 = ${…} 之后紧跟的类名片段。
+  for (const tpl of text.matchAll(/`(?:\\[\s\S]|[^\\`])*`/g)) {
+    for (const m of tpl[0].matchAll(/([A-Za-z][\w-]*)\$\{/g)) prefixes.add(m[1]);
+    for (const m of tpl[0].matchAll(/\}\s*([A-Za-z][\w-]*)/g)) suffixes.add(m[1]);
+  }
+  // 字符串拼接：`"prefix-" + x` / `x + "-suffix"`
+  for (const m of text.matchAll(/["']([A-Za-z][\w-]*)["']\s*\+/g)) prefixes.add(m[1]);
+  for (const m of text.matchAll(/\+\s*["']([A-Za-z][\w-]*)["']/g)) suffixes.add(m[1]);
+};
+for (const s of sources) collectAffixes(s.text);
 const isDynamic = (cls) => [...prefixes].some((p) => p.length > 2 && cls.startsWith(p))
   || [...suffixes].some((s) => s.length > 2 && cls.endsWith(s));
+
+/** 已知样本自证（--selfcheck）：这些类名由「模板串前缀 + 变量」拼出，必须落在动态模式里。 */
+const SELF_CHECK_SAMPLES = ["toc-minimap__item--d1", "toc-minimap__item--d6"];
 
 // —— 提取规则里的类名 ——
 const rules = [];
@@ -116,3 +130,12 @@ if (SHOW_ALL && excluded.length) {
   for (const e of excluded) console.log("  ." + e.cls + "  [" + e.why + "]  " + e.file);
 }
 console.log("\nΣ 排除 " + excluded.length + " 个零引用类名（内核命名空间 / 动态拼接 / 设计词表）。");
+
+if (SELF_CHECK) {
+  const missed = SELF_CHECK_SAMPLES.filter((cls) => !isDynamic(cls));
+  if (missed.length) {
+    console.error("selfcheck FAILED：模板串前缀拼接未被识别 ⇒ " + missed.join(", "));
+    process.exit(1);
+  }
+  console.log("selfcheck OK：模板串前缀拼接识别有效（" + SELF_CHECK_SAMPLES.join(", ") + "）。");
+}

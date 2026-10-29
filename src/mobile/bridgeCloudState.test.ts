@@ -12,8 +12,9 @@ vi.mock("./native/assetFs", () => ({
   removeAssetBytesFs: vi.fn(async () => {}),
 }));
 
-vi.mock("../core/syncAssets.js", () => ({
-  downloadNoteAssets: vi.fn(async () => {}),
+vi.mock("./v3/s3v3Remote.js", () => ({
+  // 261028：core/syncAssets.ts（manifest v2 差集）已删；补拉走 v3 声明差集 ⇒ 「零请求」判据 = 连远端都没创建。
+  createMobileS3v3Remote: vi.fn(() => { throw new Error("不应创建 S3 远端（零请求）"); }),
 }));
 
 // 旧 legacy 引擎已删除；移动端同步入口 = v3（这里只断言"没被调用" ⇒ 零请求）。
@@ -31,7 +32,7 @@ vi.mock("./native/secretStore.js", () => ({
 }));
 
 import { bridge } from "./bridge.js";
-import { downloadNoteAssets } from "../core/syncAssets.js";
+import { createMobileS3v3Remote } from "./v3/s3v3Remote.js";
 import { runMobileV3Sync } from "./v3/sync.js";
 
 const S3 = {
@@ -57,7 +58,7 @@ describe("移动端云同步状态闸门", () => {
 
   it("未配置 S3 ⇒ 资源补拉入口不发任何请求", async () => {
     await bridge.ensureTrashNoteAssets("n1");
-    expect(downloadNoteAssets).not.toHaveBeenCalled();
+    expect(createMobileS3v3Remote).not.toHaveBeenCalled();
   });
 
   it("未配置 S3 ⇒ 「启用云同步」默认关闭；配置后默认开启（与桌面同口径，用户 261022）", async () => {
@@ -73,7 +74,7 @@ describe("移动端云同步状态闸门", () => {
     expect(bridge.getSyncSettings().enabled).toBe(false);  // 关掉后持久化生效
 
     await bridge.ensureTrashNoteAssets("n1");
-    expect(downloadNoteAssets).not.toHaveBeenCalled();
+    expect(createMobileS3v3Remote).not.toHaveBeenCalled();
 
     const result = await bridge.syncNow();
     expect(runMobileV3Sync).not.toHaveBeenCalled();      // ← 引擎没被调用 = 零请求

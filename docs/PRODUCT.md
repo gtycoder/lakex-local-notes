@@ -7,7 +7,7 @@ init 说明（本次）：`impeccable init` 的实时问答工具在当前模式
 因此本文全部结论来自仓库既有事实（README.md / AGENTS.md / HANDOFF.md / docs/ 与源码），
 其中推断而非逐条确认的条目一律标注「（推断）」。若与实际不符，请直接改本文。
 
-工作区布局：本文件位于应用仓库 `local-lakex-notes/`（独立 git 仓库），即本项目根。
+工作区布局：本文件位于应用仓库 `lakex-local-notes/`（独立 git 仓库），即本项目根。
 其父目录 `local-lake/` 只是容器，里面的兄弟目录（siyuan-master / lake-main / lake-editor-main /
 lakex-doc-react-main / yuque-developer-docs）是只读参考资料。
 -->
@@ -43,7 +43,7 @@ web
 - 桌面端 = Electron 44 桌面应用（macOS arm64 优先）；移动端 = Vite + Capacitor Android（正式端之一）。
 - 数据后端：桌面 better-sqlite3 + 文件系统；移动 sql.js / Capacitor SQLite。
 - 资源：图片/附件按笔记分目录 `note-assets/{noteId}/`，本地 HTTP 资源服务（:19876）供编辑器与「复制到微信」使用（webp→png）；Lake 编辑器约 35 个 CDN 资源全量本地镜像，保证离线。
-- S3：七牛 Kodo（S3 兼容 API），同步并发上限 8；协议见 `docs/SYNC-PROTOCOL.md`，GC 与保留链见 `docs/S3-GC-DESIGN.md`，存储分层见 `docs/STORAGE-LAYERS.md`。
+- S3：七牛 Kodo（S3 兼容 API），同步并发上限 8；协议、GC 与保留链见 `docs/SYNC-PROTOCOL.md`（§13/§14），存储分层见 `docs/STORAGE-LAYERS.md`。
 - 文档分工：`README.md` 概览 / `HANDOFF.md` 唯一交接（当前状态/待办/坑）/ `AGENTS.md` 长期红线；`docs/` 按主题存契约（`LAKEX-CONTRACT.md` 等）。文档与界面均为简体中文。
 - 开发环境：Node 24（必须）、Gitee 远程 `origin`、主分支 `master`、macOS。
 
@@ -65,7 +65,7 @@ web
 
 ## Brand Commitments
 
-- 名称：LocalLakexNotes（桌面）/ LocalLakexNotes（Android）；应用 id `com.locallakexnotes.desktop` / `com.locallakexnotes.mobile`。
+- 名称：LakexLocalNotes（桌面）/ LakexLocalNotes（Android）；应用 id `com.lakexlocalnotes.desktop` / `com.lakexlocalnotes.android`。
 - 界面语言：简体中文（`<html lang="zh-CN">`）。
 - 气质：务实、工程师导向、自觉拒绝炫技；明确不弹「正在加载」之类的 toast（README 核心理念）。
 - 现有资源：`build/icon.icns`、`build/icon.png`。
@@ -80,8 +80,8 @@ web
 
 ## Evidence on Hand
 
-- 真实代码与测试：`local-lakex-notes/`（vitest 1600+ 用例、多份 e2e 脚本，真实 Electron 实测记录见 `HANDOFF.md`）。
-- 架构/协议文档：`docs/ARCHITECTURE.md`、`docs/SYNC-PROTOCOL.md`、`docs/S3-GC-DESIGN.md`、`docs/STORAGE-LAYERS.md`、`docs/LAKEX-CONTRACT.md`、`docs/QUICK-NOTES-SPEC.md`、`docs/MOBILE-*.md` 等。
+- 真实代码与测试：`lakex-local-notes/`（vitest 1600+ 用例、多份 e2e 脚本，真实 Electron 实测记录见 `HANDOFF.md`）。
+- 架构/协议文档：`docs/ARCHITECTURE.md`、`docs/SYNC-PROTOCOL.md`、`docs/STORAGE-LAYERS.md`、`docs/LAKEX-CONTRACT.md`、`docs/QUICK-NOTES-SPEC.md`、`docs/MOBILE-*.md` 等。
 - 只读参考仓库：`siyuan-master`（思源 v3.8.0，AGPL-3.0，样式/同步参考，移植需留 NOTICE）、`lake-main`（lakejs 社区版，仅机制字典）、`lake-editor-main`（第三方 VSCode 插件）、`yuque-developer-docs`（语雀官方文档本地副本，内核资料第一顺位）。
 - 缺面：没有用户研究、真实客户/案例、基准数据出处；后续工作**不得**编造 testimonials、客户、定价或部署声明。
 

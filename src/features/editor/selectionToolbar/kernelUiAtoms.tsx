@@ -11,13 +11,47 @@
  * 承接冒泡（display:contents 不生成盒子，不影响 toolbar 的 flex 布局与相邻选择器），
  * 只在外层挂一次 onClick，避免透传+冒泡双触发。
  */
-import { createElement, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
+import { createElement, useState, type ComponentType, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Doc } from "@dlient/lakex-doc-react";
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
-function uiLib(): Record<string, any> {
-  return ((Doc as unknown as { FrameworkUiLib?: Record<string, any> }).FrameworkUiLib) ?? {};
+/** 内核 Switch（antd）的实测 props：只声明本文件真正传的字段。 */
+interface KernelSwitchProps { checked: boolean; size?: "small" | "default"; onChange: (checked: boolean) => void }
+interface KernelCheckboxProps { checked: boolean; onChange: (event: { target?: { checked?: boolean } }) => void; children?: ReactNode }
+interface KernelIconProps { type: string; size?: number }
+interface KernelEmbedIconProps { type: string; fill?: string }
+/** 内核 AU 输入框：onChange 收事件（取 `target.value`），onKeyDown 收键盘事件。 */
+interface KernelInputProps {
+  value: string;
+  disabled?: boolean;
+  placeholder?: string;
+  onChange: (event: { target: { value?: string } }) => void;
+  onKeyDown?: (event: { key?: string; preventDefault?: () => void }) => void;
+}
+interface KernelButtonProps { onClick?: () => void; disabled?: boolean; children?: ReactNode }
+interface KernelToolbarButtonProps {
+  name: string;
+  className?: string;
+  disabled?: boolean;
+  "aria-label"?: string;
+  "aria-pressed"?: boolean;
+  children?: ReactNode;
+}
+
+/** 内核 FrameworkUiLib 原语表：只序列化本文件用到的项（闭源 bundle，多一项就多一处会漂的契约）。 */
+interface KernelUiLib {
+  Switch?: ComponentType<KernelSwitchProps>;
+  Checkbox?: ComponentType<KernelCheckboxProps>;
+  Icon?: ComponentType<KernelIconProps>;
+  EmbedIcon?: ComponentType<KernelEmbedIconProps>;
+  Input?: ComponentType<KernelInputProps>;
+  Button?: ComponentType<KernelButtonProps>;
+  ToolbarButton?: ComponentType<KernelToolbarButtonProps>;
+}
+
+/** 取内核原语表（`Doc.FrameworkUiLib` 在 lakex 的 d.ts 里只落在索引签名上 ⇒ 此边界收敛一次）。 */
+function uiLib(): KernelUiLib {
+  return (Doc.FrameworkUiLib as KernelUiLib | undefined) ?? {};
 }
 
 /**
@@ -55,20 +89,20 @@ export function kernelHotkey(editor: unknown, name: string): string {
 
 /** 内核 Switch（antd，绿色）—— 边距开关与云端同款。 */
 export function KSwitch({ checked, onChange }: { checked: boolean; onChange: (value: boolean) => void }) {
-  const S: any = uiLib().Switch;
+  const S = uiLib().Switch;
   if (!S) return null;
   return createElement(S, { checked, size: "small", onChange });
 }
 
 /** 内核 Checkbox（antd）—— 链接弹窗「在当前页面打开」。 */
 export function KCheckbox({ checked, onChange, children }: { checked: boolean; onChange: (value: boolean) => void; children?: ReactNode }) {
-  const C: any = uiLib().Checkbox;
+  const C = uiLib().Checkbox;
   if (!C) return null;
   return createElement(C, { checked, onChange: (e: { target?: { checked?: boolean } }) => onChange(e?.target?.checked === true) }, children);
 }
 
 export function KIcon({ type, size }: { type: string; size?: number }) {
-  const Icon: any = uiLib().Icon;
+  const Icon = uiLib().Icon;
   if (!Icon) return null;
   return createElement(Icon, { type: type.startsWith('icon-') ? type : 'icon-' + type, size });
 }
@@ -79,7 +113,7 @@ export function KIcon({ type, size }: { type: string; size?: number }) {
  * 浮动颜色按钮必须用它，才能和固定栏一样显示「上次使用色 / 默认色」。
  */
 export function KEmbedIcon({ variant, color }: { variant: "text" | "bg"; color: string }) {
-  const Embed: any = uiLib().EmbedIcon;
+  const Embed = uiLib().EmbedIcon;
   if (!Embed) return null;
   return createElement(Embed, { type: variant === "text" ? "t-font-color" : "t-bg-color", fill: color });
 }
@@ -94,8 +128,8 @@ export function KLinkEditor({ text, src, allowModifyText, invalid, onChangeText,
   onChangeText: (value: string) => void; onChangeSrc: (value: string) => void; onConfirm: () => void;
 }) {
   const lib = uiLib();
-  const Input: any = lib.Input;
-  const Button: any = lib.Button;
+  const Input = lib.Input;
+  const Button = lib.Button;
   if (!Input || !Button) return null;
   const onKeyDown = (event: { key?: string; preventDefault?: () => void }) => {
     if (event.key === "Enter") { event.preventDefault?.(); onConfirm(); }
@@ -108,7 +142,7 @@ export function KLinkEditor({ text, src, allowModifyText, invalid, onChangeText,
       { className: "ne-link-editor-field" },
       createElement("label", null,
         createElement("div", { className: "ne-link-editor-field-title" }, "文本"),
-        createElement(Input, { value: text, disabled: !allowModifyText, placeholder: "添加描述", onChange: (e: any) => onChangeText(e.target.value ?? ""), onKeyDown }),
+        createElement(Input, { value: text, disabled: !allowModifyText, placeholder: "添加描述", onChange: (e) => onChangeText(e.target.value ?? ""), onKeyDown }),
       ),
     ),
     createElement(
@@ -116,7 +150,7 @@ export function KLinkEditor({ text, src, allowModifyText, invalid, onChangeText,
       { className: "ne-link-editor-field" },
       createElement("label", null,
         createElement("div", { className: "ne-link-editor-field-title" }, "链接"),
-        createElement(Input, { value: src, placeholder: "链接地址", onChange: (e: any) => onChangeSrc(e.target.value ?? ""), onKeyDown }),
+        createElement(Input, { value: src, placeholder: "链接地址", onChange: (e) => onChangeSrc(e.target.value ?? ""), onKeyDown }),
       ),
       invalid ? createElement("div", { className: "ne-link-error-tip" }, "请输入正确的链接") : null,
     ),
@@ -128,7 +162,7 @@ export function KToolbarButton({ name, icon, caret, caretClass, checked, disable
   name: string; icon?: string; caret?: boolean; caretClass?: string; checked?: boolean; disabled?: boolean;
   className?: string; title?: string; hotkey?: string; onClick?: (event: ReactMouseEvent<HTMLButtonElement>) => void; children?: ReactNode;
 }) {
-  const Tb: any = uiLib().ToolbarButton;
+  const Tb = uiLib().ToolbarButton;
   const [tip, setTip] = useState<{ x: number; y: number; above: boolean } | null>(null);
   if (!Tb) return null;
   const cls = [className ?? "", checked ? "checked" : ""].filter(Boolean).join(" ");

@@ -11,6 +11,7 @@
  * 读取点：设置页「连接与同步」区块的那一行。
  */
 import { writeLocalStorage } from "../../lib/localStorageSafe";
+import { formatBytesCompact } from "../../lib/formatBytes";
 import { formatDateTime } from "../../core/dateFormat";
 
 export interface MobileSyncStatus {
@@ -19,9 +20,19 @@ export interface MobileSyncStatus {
   ok: boolean;
   /** 成功 = 引擎返回的摘要；失败 = 失败原因（短句，已在 UI 上展示给用户看）。 */
   message: string;
+  /** 261028：上传/下载细分（文档/目录/小记/字节），设置页一行展示；失败或旧记录可缺省。 */
+  durationMs?: number;
+  uploadedDocuments?: number;
+  downloadedDocuments?: number;
+  uploadedQuickNotes?: number;
+  downloadedQuickNotes?: number;
+  uploadedFolders?: number;
+  downloadedFolders?: number;
+  uploadedBytes?: number;
+  downloadedBytes?: number;
 }
 
-const KEY = "local-lakex-notes-mobile.lastSync";
+const KEY = "lakex-local-notes-mobile.lastSync";
 const listeners = new Set<() => void>();
 
 function parse(raw: string | null): MobileSyncStatus | null {
@@ -29,7 +40,15 @@ function parse(raw: string | null): MobileSyncStatus | null {
   try {
     const value = JSON.parse(raw) as Partial<MobileSyncStatus>;
     if (!value || typeof value.at !== "string" || typeof value.ok !== "boolean" || typeof value.message !== "string") return null;
-    return { at: value.at, ok: value.ok, message: value.message };
+    const num = (v: unknown): number | undefined => (typeof v === "number" && Number.isFinite(v) ? v : undefined);
+    return {
+      at: value.at, ok: value.ok, message: value.message,
+      durationMs: num(value.durationMs),
+      uploadedDocuments: num(value.uploadedDocuments), downloadedDocuments: num(value.downloadedDocuments),
+      uploadedQuickNotes: num(value.uploadedQuickNotes), downloadedQuickNotes: num(value.downloadedQuickNotes),
+      uploadedFolders: num(value.uploadedFolders), downloadedFolders: num(value.downloadedFolders),
+      uploadedBytes: num(value.uploadedBytes), downloadedBytes: num(value.downloadedBytes),
+    };
   } catch {
     return null;
   }
@@ -62,4 +81,12 @@ export function describeSyncStatus(status: MobileSyncStatus): string {
   const time = valid ? formatDateTime(at) : status.at;
   if (status.ok) return `${time} · 同步成功${status.message ? `（${status.message}）` : ""}`;
   return `${time} · 同步失败：${status.message}`;
+}
+
+/** 261028：上传/下载细分一行（文档/目录/小记/字节；旧记录没有细分时返回 null）。 */
+export function describeSyncBreakdown(status: MobileSyncStatus): string | null {
+  if (status.uploadedDocuments == null && status.downloadedDocuments == null) return null;
+  const up = `上传 ${status.uploadedDocuments ?? 0}/${status.uploadedFolders ?? 0}/${status.uploadedQuickNotes ?? 0} · ${formatBytesCompact(status.uploadedBytes ?? 0)}`;
+  const down = `下载 ${status.downloadedDocuments ?? 0}/${status.downloadedFolders ?? 0}/${status.downloadedQuickNotes ?? 0} · ${formatBytesCompact(status.downloadedBytes ?? 0)}`;
+  return `${up} · ${down}（文档/目录/小记）`;
 }

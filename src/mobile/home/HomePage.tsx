@@ -10,13 +10,14 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { writeLocalStorage } from "../../lib/localStorageSafe";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { ChevronDown, ChevronRight, CloudUpload, List, LayoutGrid, ArrowUpDown, BookMarked, Feather, MoreHorizontal, Pencil, Plus, Search, Settings, SmilePlus, Sparkles, Tag, Trash, X } from "lucide-react";
+import { ChevronDown, ChevronRight, CloudUpload, List, LayoutGrid, ArrowUpDown, BookMarked, Feather, MoreHorizontal, Pencil, Plus, Search, Settings, SmilePlus, Sparkles, Tag, Trash } from "lucide-react";
 import type { TreeNode } from "../../lib/types";
 import type { LocalNoteSummary } from "../data/noteRepository";
 import { NotebookGrid } from "./NotebookGrid";
 import { QuickNotePreview } from "../../features/quickNotes/QuickNotePreview";
 import type { StoredQuickNoteImage } from "../../core/quickNoteModel.js";
 import { MobileSheetMenu, type MobileSheetItem } from "../ui/MobileSheetMenu";
+import { MobileSheet } from "../ui/MobileSheet";
 import { CreateSheet, type CreateActionId } from "../ui/CreateSheet";
 import { CREATE_LONG_PRESS_MS, blockPressRelease, createPressArmed, createPressRevealed } from "../ui/createPress";
 import { pickLocalFile } from "../ui/pickFile";
@@ -24,10 +25,11 @@ import { longPressFeedback } from "../ui/haptics";
 import { MobileNodeIconPicker } from "../ui/NodeIconPicker";
 import { confirmMobile } from "../ui/ConfirmDialog";
 import { showToast } from "../ui/toastBus";
+import { reportMobileActionError } from "../lib/reportMobileActionError";
 import { bridge } from "../bridge";
 import { describeSyncProgress, readSyncProgress, subscribeSyncProgress, type SyncProgressSnapshot } from "../sync/syncProgressStore";
 import { escapeId } from "../../lib/cssEscape";
-import { HOME_TABS, pagerScrollLeft, settledIndex, tabAt, tabIndex } from "./tabPager";
+import { useTabPager } from "./useTabPager";
 // 小记排序：**两端共用的单一来源**（档位/文案/比较器/本机持久化都在这里；261015 用户要求桌面与移动统一）
 import { quickNoteSortTime, type QuickNoteSort } from "../../core/quickNoteSort";
 import { localAssetHttpUrl, withAssetWidth } from "../../core/assetUrl.js";
@@ -102,7 +104,7 @@ type ComposerState =
   | { mode: "edit"; id: string }
   | null;
 
-const VIEW_KEY = "local-lakex-notes-mobile.libraryView";
+const VIEW_KEY = "lakex-local-notes-mobile.libraryView";
 
 /**
  * 卡片封面缩略图档位。封面是整列宽、最高 210px（`.qn-card__img` max-width 100% / max-height 210px），
@@ -164,107 +166,18 @@ export function HomePage(props: HomePageProps) {
   }, [tab]);
 
   /**
-   * 首层 tab = **横向分页**（261019 用户点单，对齐语雀 App）：
+   * 首层 tab = **横向分页**（261019 用户点单，对齐语雀 App；261028 MOB-03 收口成纯状态机）：
    * 两页常驻在同一个原生横向滚动容器里 ⇒ 手指跟手拖动、松手由 `scroll-snap` 吸附，
-   * 等价于语雀 RN 侧的 `react-native-pager-view`。这里只负责：
-   * ① tab → 滚动位置对齐（点 tab / 路由变化 / 横竖屏宽度变化）；② 滚动结束把页码回写成 tab；
+   * 等价于语雀 RN 侧的 `react-native-pager-view`。
+   * 判据/事件流在 tabPager.reducePager（纯函数 + 单测），DOM 接线在 useTabPager（只负责 scrollTo）：
+   * ① tab → 滚动位置对齐（点 tab / 路由变化 / 横竖屏宽度变化）；② 滚动过半把页码回写成 tab；
    * ③ 非活动页 inert；④ 写作会话中锁横滑（否则父级 [tab] effect 会清掉草稿）。
    */
-  const stageRef = useRef<HTMLDivElement | null>(null);
+  const { stageRef } = useTabPager({ tab, onTabChange });
   const quickPaneRef = useRef<HTMLElement | null>(null);
   const quickScrollRef = useRef<HTMLDivElement | null>(null);
   const quickCardsRef = useRef<HTMLDivElement | null>(null);
   const libraryPaneRef = useRef<HTMLElement | null>(null);
-  const tabRef = useRef(tab);
-  tabRef.current = tab;
-  const onTabChangeRef = useRef(onTabChange);
-  onTabChangeRef.current = onTabChange;
-  const tabIndexNow = tabIndex(tab);
-  const tabIndexRef = useRef(tabIndexNow);
-  tabIndexRef.current = tabIndexNow;
-  /** 手指正按在分页上（touchstart..touchend）：此时只让原生滚动驱动，不做程序化对齐（否则会跟手指抢）。 */
-  const interactingRef = useRef(false);
-  /** 这次 tab 变化是"滚动过半"自己回写的 ⇒ 不要再程序化滚一次（否则会打断惯性/吸附）。 */
-  const commitByScrollRef = useRef(false);
-  /** 正在做程序化滚动（点 tab / 宽度重对齐）：期间的 scroll 事件不代表用户意图，不能回写 tab。 */
-  const programmaticRef = useRef(false);
-  const programmaticTimerRef = useRef(0);
-
-  /** 把分页滚到当前 tab 对应的那页；宽度未量到/已对齐时不动。 */
-  const alignStage = (behavior: ScrollBehavior): void => {
-    const el = stageRef.current;
-    if (!el || interactingRef.current) return;
-    const target = pagerScrollLeft(tabIndexRef.current, el.clientWidth, HOME_TABS.length);
-    if (Math.abs(el.scrollLeft - target) <= 1) return;
-    // 程序化滚动期间产生的 scroll 事件不是用户意图：先压住回写，滚动结束/超时再放开。
-    programmaticRef.current = true;
-    window.clearTimeout(programmaticTimerRef.current);
-    programmaticTimerRef.current = window.setTimeout(() => { programmaticRef.current = false; }, 600);
-    el.scrollTo({ left: target, behavior });
-  };
-
-  // ① tab → 滚动位置：点顶部 tab / 父级改路由时把分页滚过去（动效按 reduced-motion 降级）。
-  //    ⚠️ ResizeObserver **必须单独挂一次**：若在这里 new/observe，每次 tab 变化都会触发一次
-  //    "初始回调" → 紧跟在本 effect 的 smooth 之后再来一次 auto，把动画当场取消（实测点击 tab 瞬跳）。
-  useEffect(() => {
-    // 这是滚动回写造成的 tab 变化：内容自己已经滚到位/正在滚，不能再发一次程序化滚动（会打断惯性）。
-    if (commitByScrollRef.current) { commitByScrollRef.current = false; return; }
-    const reduce = typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    alignStage(reduce ? "auto" : "smooth");
-  }, [tabIndexNow]);
-
-  // ①b 宽度变化（横竖屏 / 窗口变化）：立即重新对齐，否则会停在半页。高度变化（键盘）不动横向位置。
-  useEffect(() => {
-    const el = stageRef.current;
-    if (!el || typeof ResizeObserver === "undefined") return;
-    const ro = new ResizeObserver(() => alignStage("auto"));
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-
-  // ② 滚动 → tab：**过半就回写**（不等到 scrollend）。
-  //    原因（261019 用户实测反馈）：若只在滚动结束回写，吸附动画期间/刚到位时会短暂出现
-  //    "内容已经是小记、顶部还着重知识库" 的错位；过半回写让标签始终跟着"当前多数可见页"。
-  //    只写"与当前 tab 不同"的情况，避免自触发循环；监听只挂一次（用 ref 读最新值）。
-  useEffect(() => {
-    const el = stageRef.current;
-    if (!el) return;
-    const commit = (): void => {
-      if (programmaticRef.current) return;
-      const w = el.clientWidth;
-      if (!w) return;
-      const next = tabAt(settledIndex(el.scrollLeft, w, HOME_TABS.length), HOME_TABS.length);
-      if (next !== tabRef.current) {
-        commitByScrollRef.current = true;
-        onTabChangeRef.current(next);
-      }
-    };
-    const onTouchStart = (): void => {
-      interactingRef.current = true;
-      // 用户接管：程序化滚动（含动画）作废，之后按真实滚动回写。
-      programmaticRef.current = false;
-      window.clearTimeout(programmaticTimerRef.current);
-    };
-    const onTouchEnd = (): void => { interactingRef.current = false; };
-    const onScrollEnd = (): void => {
-      programmaticRef.current = false;
-      window.clearTimeout(programmaticTimerRef.current);
-      commit();
-    };
-    el.addEventListener("scroll", commit, { passive: true });
-    el.addEventListener("scrollend", onScrollEnd);
-    el.addEventListener("touchstart", onTouchStart, { passive: true });
-    el.addEventListener("touchend", onTouchEnd, { passive: true });
-    el.addEventListener("touchcancel", onTouchEnd, { passive: true });
-    return () => {
-      window.clearTimeout(programmaticTimerRef.current);
-      el.removeEventListener("scroll", commit);
-      el.removeEventListener("scrollend", onScrollEnd);
-      el.removeEventListener("touchstart", onTouchStart);
-      el.removeEventListener("touchend", onTouchEnd);
-      el.removeEventListener("touchcancel", onTouchEnd);
-    };
-  }, []);
 
   // ③ 非活动页 inert：两页都在 DOM 里，不能让读屏/焦点摸到屏幕外那页。
   useEffect(() => {
@@ -351,7 +264,7 @@ export function HomePage(props: HomePageProps) {
       if (!full) return;
       setEditNote({ id, text: full.content.text, body: full.content.body, images: full.content.images, tagIds: full.tagIds });
       setComposer({ mode: "edit", id });
-    } catch { /* 读取失败忽略 */ }
+    } catch (error) { reportMobileActionError("打开小记", error); }
   };
   const closeComposer = (): void => { setComposer(null); setEditNote(null); };
 
@@ -396,7 +309,7 @@ export function HomePage(props: HomePageProps) {
       const r = await bridge.syncNow();
       // 同步可能改了远端小记/目录：刷新首页数据，否则列表停留在旧快照。
       await Promise.all([onQuickNotesChanged(), onTreeChanged()]);
-      const w = r.notes?.warnings?.length ?? 0;
+      const w = r.warnings?.length ?? 0;
       showToast((r.message || "已同步") + (w > 0 ? `，${w} 项被跳过` : ""));
     } catch (e) { showToast("同步失败：" + (e as Error).message, { type: "error" }); }
   };
@@ -771,7 +684,7 @@ export function HomePage(props: HomePageProps) {
       {/* 底部胶囊栏（首页，用户 261014 定稿）：搜索 | ＋ | AI。
           · 排序 / 视图 与 云同步**都在顶栏右上角**（不在胶囊里）；
           · 「＋」是**统一加号**（不再按 tab 换成"新建知识库"图标）：短按开新建面板、长按上滑速记；
-          · AI 只占位（用户定：先加图标，接入方案另行立项）。
+          · AI 已是真实入口（261023 P1 接入 MobileAiPage；开启开关与接口配置在 设置 → AI 助手）。
           ⚠️ 小记写作时**让位**：写作卡底部挂的是文档编辑那条 dock（用户 261013 定稿），
           两条都贴底会打架（胶囊 z-index 更高会把 dock 盖住）⇒ 编辑会话期间不渲染胶囊。 */}
       {composer === null && (
@@ -847,19 +760,12 @@ export function HomePage(props: HomePageProps) {
         }}
       />
 
-      {/* 节点选择器与目录树 / 新建知识库共用；正文输入表情独立。 */}
+      {/* 节点选择器与目录树 / 新建知识库共用；正文输入表情独立。
+          MOB-11：scrim / 右滑 / 返回栈 / 焦点 / 滚动锁交给 MobileSheet（此前漏了返回栈）。 */}
       {iconNb && (
-        <div className="mb-scrim" data-prevent-swipe onClick={() => setIconNb(null)}>
-          <div className="mb-sheet" data-prevent-swipe onClick={(e) => e.stopPropagation()}>
-            <div className="mb-sheet__head">
-              <span className="mb-sheet__title">设置图标</span>
-              <button className="mobile-icon-btn" onClick={() => setIconNb(null)} aria-label="关闭"><X size={20} /></button>
-            </div>
-            <div className="mb-sheet__body">
-              <MobileNodeIconPicker key={iconNb.id} nodeType="notebook" value={iconNb.icon ?? null} onPick={(icon) => void applyNotebookIcon(icon)} />
-            </div>
-          </div>
-        </div>
+        <MobileSheet open title="设置图标" onClose={() => setIconNb(null)}>
+          <MobileNodeIconPicker key={iconNb.id} nodeType="notebook" value={iconNb.icon ?? null} onPick={(icon) => void applyNotebookIcon(icon)} />
+        </MobileSheet>
       )}
 
       {/* 筛选 / 排序 */}

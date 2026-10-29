@@ -10,11 +10,11 @@ import type { Store } from "./store.js";
 import { ObjectStore } from "./s3Store.js";
 import type { SyncProgress, SyncResult } from "./syncTypes.js";
 import { sha256Hex, validateS3Settings, type S3Settings } from "../src/core/syncUtils.js";
-import { S3V3_POINTER_KEY, indexKey, lakeBodyKey } from "../src/core/s3v3Keys.js";
+import { S3V3_POINTER_KEY, indexKey, lakeBodyKey } from "../src/core/s3v3/protocol/s3v3Keys.js";
 import { backfillV3Assets, type AssetBackfillPort } from "../src/core/s3v3AssetBackfill.js";
 import type { QuickNotePushOutcome } from "../src/core/quickNoteSyncTypes.js";
-import { parseLakeIndexBytes } from "../src/core/s3v3Index.js";
-import { validatePointer, type S3v3Pointer } from "../src/core/s3v3Types.js";
+import { parseLakeIndexBytes } from "../src/core/s3v3/protocol/s3v3Index.js";
+import { validatePointer, type S3v3Pointer } from "../src/core/s3v3/protocol/s3v3Types.js";
 import { S3v3S3Remote } from "./s3v3/s3Remote.js";
 import type { S3v3Remote } from "./s3v3/ports.js";
 import { canTouchNetwork, cloudStateOf, type CloudState } from "../src/core/cloudState.js";
@@ -162,7 +162,8 @@ export async function restoreMissingBodyFromCloud(
   if (!bytes) return { ok: false, reason: "object-missing" };
   if (sha256Hex(bytes) !== entry.contentHash) return { ok: false, reason: "hash-mismatch" };
   store.writeRestoredBody(noteId, new TextDecoder().decode(bytes));
-  store.setBaseHash(noteId, entry.contentHash);
+  // Del-6：不再回写 v2 的 sync_base（已随死账本删除）。恢复后的基线一致性由下一次成功同步写
+  // sync-v3/baseline.json.gz 保证；这里只需把本地行标 synced（正文 == 云端内容，无需再上传）。
   store.markSynced(noteId);
   store.logScopes.sync.info(perfMessage("missing-body.restoreFromCloud", Date.now() - startedAt, { noteId, bytes: bytes.length }));
   return { ok: true, title: entry.title };

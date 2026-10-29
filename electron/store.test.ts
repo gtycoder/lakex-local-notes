@@ -6,12 +6,11 @@ import crypto from "node:crypto";
 import zlib from "node:zlib";
 import Database from "better-sqlite3";
 import { Store, AppError, selectHistoryDrops, isoWeekKey } from "./store.js";
-import { createStoreSyncPort } from "./syncAdapters.js";
 import { DraftJournal, draftJournalDir, readDraftEntry } from "./draftJournal.js";
 import { createSafeStorageSecretCipher } from "./secretCipher.js";
-import { SQL_PARAMETER_BATCH_SIZE } from "../src/core/sqlParameterBatch.js";
 import { noteBodyRelativePath } from "../src/core/noteBodyPaths.js";
 import { extractAssetRefs } from "../src/core/storeUtils.js";
+import { buildS3v3DiagnosticReport } from "../src/core/s3v3Report.js";
 
 // ===== electron mock（Store 模块加载即需要；DB 用例只用 safeStorage 的 S3 密钥加解密） =====
 const electronMock = vi.hoisted(() => {
@@ -62,6 +61,12 @@ function rawDbValue(sql: string): string | undefined {
 function makeNote(): { id: string; title: string } {
   const note = store.createNote("测试笔记");
   return { id: note.id, title: note.title };
+}
+
+/** Del-6：诊断的哈希基线源 = v3 同步基线文件（sync-v3/baseline.json.gz），不再有 sync_base 表。 */
+function writeV3Baseline(notes: Array<{ id: string; contentHash: string }>): void {
+  fs.mkdirSync(path.join(dir, "sync-v3"), { recursive: true });
+  fs.writeFileSync(path.join(dir, "sync-v3", "baseline.json.gz"), zlib.gzipSync(JSON.stringify({ lake: { notes } })));
 }
 
 // 构造可被 referencedFilenames 识别的资源文件名
@@ -839,7 +844,7 @@ describe("文档历史（快照，纯本地）", () => {
     expect(store.listNoteHistory(id).length).toBe(2);
   });
 
-  it("restoreHistory 恢复正文 + 更新缓存/FTS + 重置 sync_base（P0-1）", () => {
+  it("restoreHistory 恢复正文 + 更新缓存/FTS（P0-1：只标本地待上传）", () => {
     const { id } = makeNote();
     store.saveNote(id, "历史测试", "<p>版本1 含独特词：北斗七星</p>");
     store.createHistorySnapshot(id);
@@ -897,23 +902,19 @@ describe("文档历史（快照，纯本地）", () => {
     expect(store.searchNotes("北斗七星画板").some((h) => h.id === board.id)).toBe(true);
   });
 
-  it("restoreHistory 后 last_uploaded_hash 重置为恢复版 hash（P0-1 语义）", () => {
+  it("restoreHistory 只标本地待上传，不写任何同步基线（Del-6：v2 hash 账本已删）", () => {
     const { id } = makeNote();
     store.saveNote(id, "历史测试", "<p>版本1</p>");
     store.createHistorySnapshot(id);
     store.saveNote(id, "历史测试", "<p>版本2</p>");
-    const v2hash = store.contentHash(id);
-    // 模拟本机上传过版本2
-    store.setBaseHash(id, v2hash);
-    store.setLastUploadedHash(id, v2hash);
+    const baselineFile = path.join(dir, "sync-v3", "baseline.json.gz");
+    const baselineExisted = fs.existsSync(baselineFile);
     // 恢复版本1
     const hist = store.listNoteHistory(id);
-    const v1 = hist[hist.length - 1];
-    store.restoreHistory(v1.id);
-    // P0-1（S3-GC v4 §5.2）：恢复后保持恢复前 base/lastUploaded，仅标 local 待上传
-    expect(store.baseHash(id)).toBe(v2hash);
-    expect(store.lastUploadedHash(id)).toBe(v2hash);
+    store.restoreHistory(hist[hist.length - 1].id);
     expect(store.readNote(id).isDirty).toBe(true);
+    // v3 基线只由「成功同步后 saveBaseline」写；恢复历史不得顺手写基线文件
+    expect(fs.existsSync(baselineFile)).toBe(baselineExisted);
   });
 
   it("deleteHistory 删除快照文件 + DB 记录", () => {
@@ -1025,24 +1026,6 @@ describe("文档历史（快照，纯本地）", () => {
     store.createHistorySnapshot(id, "<p>旧快照3</p>", true);
     store.cleanupHistory();
     expect(fs.existsSync(path.join(assetsDir, pasted))).toBe(false);
-  });
-
-  it("审计 260918 D1/D2：桌面留档 adapter 不再静默吞失败（空正文 / 写盘失败都抛）", async () => {
-    const { id } = makeNote();
-    store.saveNote(id, "留档", "<p>本地编辑</p>");
-    const port = createStoreSyncPort(store);
-    const meta = { title: "留档", parentId: null, sortOrder: 0, protectedDays: 7 };
-    // 空正文 = 正文缺失/读盘失败（应用永不产出空 .lake：新建文档是 emptyLakeBody）→ 视为留档失败
-    await expect(port.createHistorySnapshot(id, "", meta)).rejects.toThrow(/留档内容为空/);
-    // 快照写盘失败（history/{id} 被同名文件占位）→ 必须抛出，绝不静默覆盖后谎报"已存历史"
-    fs.mkdirSync(path.join(dir, "history"), { recursive: true });
-    fs.writeFileSync(path.join(dir, "history", id), "blocker");
-    await expect(port.createHistorySnapshot(id, "<p>本地编辑</p>", meta)).rejects.toThrow();
-    fs.rmSync(path.join(dir, "history", id));
-    // 正常路径仍可留档；24h 同 hash 去重（返回 null）不算失败
-    await expect(port.createHistorySnapshot(id, "<p>本地编辑</p>", meta)).resolves.toBeUndefined();
-    await expect(port.createHistorySnapshot(id, "<p>本地编辑</p>", meta)).resolves.toBeUndefined();
-    expect(store.listNoteHistory(id).length).toBe(1);
   });
 
   it("listNoteOrphans / cleanNoteOrphans：被历史引用保护，未引用可清", () => {
@@ -1399,7 +1382,7 @@ describe("S3 配置（safeStorage 加密落盘）", () => {
     endpoint: "https://s3.cn-north-1.qiniucs.com",
     region: "cn-north-1",
     bucket: "local-lake-hebei",
-    prefix: "local-lakex-notes",
+    prefix: "lakex-local-notes",
     accessKeyId: "ak",
     secretAccessKey: "sk-secret",
     forcePathStyle: true,
@@ -1445,15 +1428,12 @@ describe("S3 配置（safeStorage 加密落盘）", () => {
 });
 
 describe("同步状态 / 导入", () => {
-  it("contentHash 稳定、baseHash 读写", () => {
+  it("contentHash 稳定（Del-6：v2 baseHash 账本已删，只留读盘 hash 工具）", () => {
     const { id } = makeNote();
     const h1 = store.contentHash(id);
     const h2 = store.contentHash(id);
     expect(h1).toBe(h2);
     expect(h1).toMatch(/^[0-9a-f]{64}$/);
-    expect(store.baseHash(id)).toBeNull();
-    store.setBaseHash(id, h1);
-    expect(store.baseHash(id)).toBe(h1);
   });
 
   it("markSynced / markSyncComplete / recordSyncResult / getSyncStatus", () => {
@@ -1464,6 +1444,17 @@ describe("同步状态 / 导入", () => {
     const status = store.getSyncStatus();
     expect(status.lastSyncedAt).toBe("2026-08-02T10:00:00.000Z");
     expect(status.lastResult).toEqual({ uploaded: 1 });
+  });
+
+  it("v3 同步诊断：最近 3 轮环形落 device_state，坏数据当空（SD-13）", () => {
+    const build = (at: string) => buildS3v3DiagnosticReport({ at, ok: true, durationMs: 10, uploaded: 1 });
+    for (const at of ["a", "b", "c", "d"]) store.recordV3SyncReport(build(at));
+    expect(store.listV3SyncReports().map((r) => r.at)).toEqual(["b", "c", "d"]);
+    // 结构损坏（外部写入/旧版本）⇒ 读回空列表，不抛错
+    new Database(path.join(dir, "metadata.sqlite3"))
+      .prepare("INSERT INTO device_state(key,value) VALUES('sync_v3_reports','{bad') ON CONFLICT(key) DO UPDATE SET value=excluded.value")
+      .run();
+    expect(store.listV3SyncReports()).toEqual([]);
   });
 
   it("pruneTombstones 剪除墓碑（墓碑仅 purge 产生；软删 = 移动无墓碑）", () => {
@@ -1477,30 +1468,6 @@ describe("同步状态 / 导入", () => {
     store.pruneTombstones([id]);
     expect(store.listDeletedNotesForSync().some((d) => d.id === id)).toBe(false);
     store.pruneTombstones([]); // 空数组安全
-  });
-
-  it("removeS3GcPending 按 SQLite 参数上限分批删除", () => {
-    const keys = Array.from(
-      { length: SQL_PARAMETER_BATCH_SIZE + 1 },
-      (_, index) => `gc-key-${index}`,
-    );
-    for (const key of keys) store.addS3GcPending(key);
-
-    const db = (store as any).db as InstanceType<typeof Database>;
-    const prepare = vi.spyOn(db, "prepare");
-    try {
-      store.removeS3GcPending(keys);
-      const deleteSqls = prepare.mock.calls
-        .map((call) => String(call[0]))
-        .filter((sql) => sql.includes("DELETE FROM s3_gc_pending"));
-
-      expect(deleteSqls).toHaveLength(2);
-      expect(deleteSqls[0]?.match(/\?/g)).toHaveLength(SQL_PARAMETER_BATCH_SIZE);
-      expect(deleteSqls[1]?.match(/\?/g)).toHaveLength(1);
-      expect(store.listS3GcPending()).toEqual([]);
-    } finally {
-      prepare.mockRestore();
-    }
   });
 
   it("purge 墓碑带 node_type：文档=note（发布方向），笔记本/分组=folder（仅本地下载过滤）", () => {
@@ -1546,8 +1513,10 @@ describe("同步状态 / 导入", () => {
     const note = store.createNoteIn(nb.id, "体检-改过未传");
     store.saveNote(note.id, "体检-改过未传", "<p>v1</p>");
     (store as any).db.prepare("UPDATE notes SET is_dirty=0 WHERE id=?").run(note.id);
-    (store as any).db.prepare("INSERT INTO sync_base(note_id,content_hash) VALUES(?,?)")
-      .run(note.id, (require("node:crypto") as typeof import("node:crypto")).createHash("sha256").update(fs.readFileSync(path.join(dir, "notes", note.id + ".lake"))).digest("hex"));
+    writeV3Baseline([{
+      id: note.id,
+      contentHash: crypto.createHash("sha256").update(fs.readFileSync(path.join(dir, "notes", note.id + ".lake"))).digest("hex"),
+    }]);
     expect(store.runDataHealthCheck().notesHashMismatch).toHaveLength(0);
     // 本地编辑（未上传）→ 与基线必然不同，属正常，不得误报
     store.saveNote(note.id, "体检-改过未传", "<p>v2</p>");
@@ -1569,7 +1538,7 @@ describe("同步状态 / 导入", () => {
     expect(report.treeDanglingParent.some((t) => t.id === note.id && t.parentId === nb.id)).toBe(true);
   });
 
-  it("markTombstonesPublished + getSyncPendingSummary：未发布 note 墓碑计入待上传，已发布/文件夹墓碑不计", () => {
+  it("Del-6：墓碑待同步判据 = deleted_at > 水线（成功同步后 markTombstonesWaterline 清零）；folder 墓碑不计", () => {
     // 基线（含 welcome-note 等本地待上传）；folder 墓碑永不计数
     const base = store.getSyncPendingSummary().documents;
     const nb = store.createNotebook("待彻底删-计数");
@@ -1577,11 +1546,35 @@ describe("同步状态 / 导入", () => {
     store.saveNote(note.id, "子笔记", "<p>内容</p>");
     store.deleteTreeNode(nb.id);
     store.purgeTrashItem(nb.id);
-    // 未发布 note 墓碑 → +1（folder 墓碑不计入）
+    // 晚于水线的 note 墓碑 → +1（folder 墓碑不计入）
     expect(store.getSyncPendingSummary().documents).toBe(base + 1);
-    // 发布 note 墓碑 → 回到基线（folder 墓碑仍不计）
-    store.markTombstonesPublished([note.id]);
+    expect(store.pendingSignature().split(":")[2]).toBe("1");
+    // 成功同步后推进水线（逐行 published_at 已删）→ 回到基线（folder 墓碑仍不计）
+    store.markTombstonesWaterline(new Date(Date.now() + 60_000).toISOString());
     expect(store.getSyncPendingSummary().documents).toBe(base);
+    expect(store.pendingSignature().split(":")[2]).toBe("0");
+  });
+
+  it("Del-6 迁移：旧库 deleted_notes.published_at 回填水线后删列（未发布旧行仍计待同步）", () => {
+    const legacyRoot = fs.mkdtempSync(path.join(os.tmpdir(), "lake-del6-migrate-"));
+    const raw = new Database(path.join(legacyRoot, "metadata.sqlite3"));
+    raw.exec("CREATE TABLE deleted_notes (id TEXT PRIMARY KEY, title TEXT NOT NULL, parent_id TEXT, sort_order INTEGER NOT NULL, updated_at TEXT NOT NULL, deleted_at TEXT NOT NULL, node_type TEXT NOT NULL DEFAULT 'note', published_at TEXT, purged_at TEXT)");
+    const insert = raw.prepare("INSERT INTO deleted_notes(id,title,parent_id,sort_order,updated_at,deleted_at,node_type,published_at) VALUES(?,?,NULL,0,?,?,'note',?)");
+    insert.run("t-published", "已发布", "2026-10-01T00:00:00.000Z", "2026-10-01T00:00:00.000Z", "2026-10-02T00:00:00.000Z");
+    insert.run("t-pending", "未发布", "2026-10-03T00:00:00.000Z", "2026-10-03T00:00:00.000Z", null);
+    raw.close();
+    const migrated = new Store(legacyRoot);
+    try {
+      // 水线 = COALESCE(MAX(published_at),0)；列已删
+      expect(migrated.getTombstonesWaterline()).toBe("2026-10-02T00:00:00.000Z");
+      const cols = (migrated as unknown as { db: { prepare: (sql: string) => { all: () => Array<{ name: string }> } } }).db.prepare("PRAGMA table_info(deleted_notes)").all();
+      expect(cols.some((c) => c.name === "published_at")).toBe(false);
+      // 未发布旧行 deleted_at 晚于水线 ⇒ 仍算待同步（保留升级前 pending 语义）
+      expect(migrated.pendingSignature().split(":")[2]).toBe("1");
+      expect(migrated.listDeletedNotesForSync().map((d) => d.id)).toEqual(expect.arrayContaining(["t-published", "t-pending"]));
+    } finally {
+      fs.rmSync(legacyRoot, { recursive: true, force: true });
+    }
   });
 
   it("listNotesForSync 返回未删除笔记（含回收站条目，它们上云）", () => {
@@ -2093,34 +2086,6 @@ describe("R2：本地同步快照保护（V5 §5.2，markSyncedIfUnchanged）", 
 });
 
 
-describe("A 方案 declared_assets（桌面 store）", () => {
-  it("recordDeclaredAssets 写入并 upsert；listDeclaredAssets 按 note 返回", () => {
-    const note = store.createNote("资源笔记");
-    store.recordDeclaredAssets(note.id, [
-      { filename: "1234567890123_a1b2c3d4.png", size: 200, hash: "ab".repeat(32) },
-      { filename: "1234567890124_b2c3d4e5.pdf", size: 99, hash: "cd".repeat(32) },
-    ]);
-    expect(store.listDeclaredAssets(note.id)).toEqual([
-      { filename: "1234567890123_a1b2c3d4.png", size: 200, hash: "ab".repeat(32) },
-      { filename: "1234567890124_b2c3d4e5.pdf", size: 99, hash: "cd".repeat(32) },
-    ]);
-    // upsert：同名更新 size/hash，不新增行
-    store.recordDeclaredAssets(note.id, [{ filename: "1234567890123_a1b2c3d4.png", size: 300, hash: "ef".repeat(32) }]);
-    const listed = store.listDeclaredAssets(note.id);
-    expect(listed).toHaveLength(2);
-    expect(listed.find((x) => x.filename === "1234567890123_a1b2c3d4.png")).toEqual({ filename: "1234567890123_a1b2c3d4.png", size: 300, hash: "ef".repeat(32) });
-  });
-
-  it("不同笔记的 declared_assets 互不串（按 note_id 隔离）", () => {
-    const a = store.createNote("A 笔记");
-    const b = store.createNote("B 笔记");
-    store.recordDeclaredAssets(a.id, [{ filename: "1234567890123_a1b2c3d4.png", size: 1, hash: "ab".repeat(32) }]);
-    store.recordDeclaredAssets(b.id, [{ filename: "1234567890124_b2c3d4e5.pdf", size: 2, hash: "cd".repeat(32) }]);
-    expect(store.listDeclaredAssets(a.id)).toHaveLength(1);
-    expect(store.listDeclaredAssets(b.id)).toHaveLength(1);
-  });
-});
-
 describe("关于页数据概览（getStorageOverview，只读）", () => {
   it("计数来自库与资源目录：笔记/笔记本/分组/资源文件与体积/历史快照", () => {
     const nb = store.createNotebook("概览笔记本");
@@ -2172,10 +2137,10 @@ describe("A3 数据体检（runDataHealthCheck，只读）", () => {
   it("正文文件缺失/哈希不符被识别", () => {
     const note = store.createNote("体检缺失");
     store.saveNote(note.id, "体检缺失", "<p>v1</p>");
-    // 建立基线（setBaseHash 模拟已同步），然后删 .lake → 缺失
+    // 建立 v3 基线（模拟已同步），然后删 .lake → 缺失
     const lakePath = (store as any).notePath(note.id);
     const hash1 = crypto.createHash("sha256").update(fs.readFileSync(lakePath)).digest("hex");
-    store.setBaseHash(note.id, hash1);
+    writeV3Baseline([{ id: note.id, contentHash: hash1 }]);
     // 只有"自认已与云端一致"（synced）的笔记才比对基线：本地已编辑待上传时 hash 必然不同，属正常
     (store as any).db.prepare("UPDATE notes SET is_dirty=0 WHERE id=?").run(note.id);
     // 用脏内容覆盖 .lake → hash 不符

@@ -16,9 +16,12 @@
  *   移动端只注入「读回」与「上传」两个能力（桌面同一口径，不另写一套）。
  */
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
+import type { EditorCaptureHandler } from "../../core/editorCapture";
 import { loadDrawnixBoardCore } from "@dlient/lakex-doc-react";
 import type { DrawnixBoardCoreProps } from "@dlient/lakex-doc-react";
-import { boardToBody, parseBoardBody, type BoardDoc, type BoardPreset, type BoardViewport } from "../../core/boardDoc.js";
+import { boardToBody, createBoardDoc, type BoardDoc, type BoardPreset, type BoardViewport } from "../../core/boardDoc.js";
+import { docBaselineSettled } from "../../core/docBaseline.js";
+import { checkDocBody } from "../../core/docBodySafety.js";
 import { readBoardView, writeBoardView } from "../../features/board/boardViewStore";
 import {
   boardAssetHydrationMapping,
@@ -66,13 +69,22 @@ export interface MobileBoardViewerProps {
   /** 编辑命令防抖后的正文变化。 */
   onChange?: (content: string) => void;
   /** “完成”/关标签前同步取最新正文；null 表示该实例已卸载。 */
-  onCapture?: (capture: (() => string | null) | null) => void;
+  onCapture?: EditorCaptureHandler;
 }
 
 export function MobileBoardViewer({ noteId, content, active, editing = false, onChange, onCapture }: MobileBoardViewerProps) {
+  /**
+   * CORE-02：坏正文只读。board 的解析器是宽容退化（坏数据 → 空白画板，保证打得开），
+   * 可读性由 core 的单一判据回答；非空但不可读 ⇒ 不挂画布、只显示横幅，capture 恒返回 null。
+   */
+  const [bodyCheck] = useState(() => checkDocBody("board", content));
+  const bodyUnreadable = bodyCheck.status === "unreadable";
+  const canEdit = editing && !bodyUnreadable;
+  const bodyUnreadableRef = useRef(bodyUnreadable);
+  bodyUnreadableRef.current = bodyUnreadable;
   /** 打开时的视图：本机记下的优先（上次拖/缩到的位置），其次正文里的历史字段。 */
   const [initial] = useState(() => {
-    const doc = parseBoardBody(content);
+    const doc = bodyCheck.status === "ok" ? bodyCheck.doc : createBoardDoc();
     const view = readBoardView(noteId);
     return { doc, view, viewport: view?.viewport ?? doc.viewport ?? null };
   });
@@ -92,6 +104,12 @@ export function MobileBoardViewer({ noteId, content, active, editing = false, on
   captureCallbackRef.current = onCapture;
   /** 已通知给父级的正文；避免切 tab/卸载时把未变化的内容重复标脏。 */
   const lastBodyRef = useRef(boardToBody({ ...doc, viewport: null }));
+  /**
+   * CORE-03：打开时的**磁盘原文**。与桌面 BoardEditor 同一条判据（core/docBaseline）：
+   * 当前正文规范化后与它等价（打开后没动 / 改过又改回原样）⇒ 不写盘、不标脏，capture 返回这段原文，
+   * 避免为非规范正文（键序不同 / 带未知键 / 老 plaitValue 方言）多写一次盘、多一次 contentHash 与同步。
+   */
+  const diskBodyRef = useRef<string>(content);
   const dirtyRef = useRef(false);
   const timerRef = useRef<number | null>(null);
   const [everActive, setEverActive] = useState(active);
@@ -130,9 +148,14 @@ export function MobileBoardViewer({ noteId, content, active, editing = false, on
   }, []);
 
   const emit = useCallback(() => {
-    if (!dirtyRef.current) return;
+    if (!dirtyRef.current || bodyUnreadableRef.current) return;
     const body = serialize();
     if (body === lastBodyRef.current) return;
+    // CORE-03：改过又改回原样（撤销 / 元素删回原值）——与磁盘原文等价 ⇒ 不写盘、不标脏。
+    if (docBaselineSettled("board", diskBodyRef.current, body)) {
+      lastBodyRef.current = body;
+      return;
+    }
     lastBodyRef.current = body;
     changeRef.current?.(body);
   }, [serialize]);
@@ -149,7 +172,7 @@ export function MobileBoardViewer({ noteId, content, active, editing = false, on
   }, [emit]);
 
   const scheduleSave = useCallback(() => {
-    if (!editingRef.current) return;
+    if (!editingRef.current || bodyUnreadableRef.current) return;
     if (timerRef.current !== null) window.clearTimeout(timerRef.current);
     timerRef.current = window.setTimeout(() => {
       timerRef.current = null;
@@ -159,9 +182,16 @@ export function MobileBoardViewer({ noteId, content, active, editing = false, on
 
   /** 同步取最新正文；提升在途时返回 null（避免把内联 data URL 落盘，提升完成会再落一次）。 */
   const capture = useCallback((): string | null => {
+    if (bodyUnreadableRef.current) return null;
     if (!dirtyRef.current) return null;
     if (promoteInflightRef.current > 0) return null;
     const body = serialize();
+    // CORE-03：与磁盘原文等价（打开后没动 / 改过又改回原样）⇒ **返回磁盘原文**：外层落盘写的还是同一份
+    // 字节 ⇒ contentHash 不变，不为规范化差异多写一次盘；真实改动照旧返回当前正文并回调 onChange。
+    if (docBaselineSettled("board", diskBodyRef.current, body)) {
+      lastBodyRef.current = body;
+      return diskBodyRef.current;
+    }
     if (body !== lastBodyRef.current) {
       lastBodyRef.current = body;
       changeRef.current?.(body);
@@ -197,7 +227,7 @@ export function MobileBoardViewer({ noteId, content, active, editing = false, on
   }, [noteId, flush]);
 
   const handleCoreChange = useCallback<NonNullable<DrawnixBoardCoreProps["onChange"]>>((partial) => {
-    if (!editingRef.current) return;
+    if (!editingRef.current || bodyUnreadableRef.current) return;
     setCardValue((prev) => {
       const next: BoardCardValue = {
         ...prev,
@@ -266,9 +296,9 @@ export function MobileBoardViewer({ noteId, content, active, editing = false, on
 
   // 编辑态（含老正文里遗留的内联图片）：把 data URL 提升成资产文件（与桌面同一路径）。
   useEffect(() => {
-    if (!ready || !editing) return;
+    if (!ready || !canEdit) return;
     void promoteInlineImages(valueRef.current.plaitValue);
-  }, [ready, editing, promoteInlineImages]);
+  }, [ready, canEdit, promoteInlineImages]);
 
   /**
    * 视口记忆（261020 P1）：缩放走内核被动回调；**平移在这是"滚动画布容器"**（实测口径同桌面），
@@ -338,9 +368,18 @@ export function MobileBoardViewer({ noteId, content, active, editing = false, on
     };
   }, [everActive, active, ready, noteId]);
 
-  const className = "mobile-board-viewer" + (editing ? " is-editing" : "");
+  const className = "mobile-board-viewer" + (canEdit ? " is-editing" : "");
   const fitOnInit = !initial.viewport && !initial.view?.scroll;
   if (!everActive) return <div ref={hostRef} className={className} data-prevent-swipe />;
+  if (bodyUnreadable) {
+    return (
+      <div ref={hostRef} className={className} data-prevent-swipe>
+        <div className="mb-empty" role="status" data-board-parse-error>
+          画板正文无法解析（文件损坏或版本不兼容）：已锁定为只读，不会覆盖原文。请从「历史版本」恢复。
+        </div>
+      </div>
+    );
+  }
   return (
     <div ref={hostRef} className={className} data-prevent-swipe>
       <Suspense fallback={<div className="mobile-board-loading" />}>
@@ -349,7 +388,7 @@ export function MobileBoardViewer({ noteId, content, active, editing = false, on
             value={cardValue}
             locale="zh-CN"
             theme={theme}
-            readOnly={!editing}
+            readOnly={!canEdit}
             fitOnInit={fitOnInit}
             onChange={handleCoreChange}
             onViewportPersist={(next) => {

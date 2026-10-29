@@ -4,7 +4,6 @@ import type { QuickNoteDocument, QuickNoteDeleted } from "./quickNoteTypes.js";
 import { AppError } from "../src/core/storeErrors.js";
 import { parseQuickNoteContent, validateQuickNoteContent, type StoredQuickNoteContent } from "../src/core/quickNoteModel.js";
 import { mapQuickNoteDeletedRow, mapQuickNoteRow, mapTrashRow } from "../src/core/quickNoteQueries.js";
-import { sqlParameterBatches } from "../src/core/sqlParameterBatch.js";
 import type { QuickNoteTag } from "../src/core/quickNoteTags.js";
 
 export interface QuickNoteRow {
@@ -90,6 +89,26 @@ export class QuickNotesQueries {
     return rows.map((row) => this.mapDocument(row, this.readStoredContent(row.id), links.get(row.id) ?? [], tagNames));
   }
 
+  /** 正文文件缺失的 quick_notes 行 id（同步侧自愈/清理用）。 */
+  listMissingItemIds(): string[] {
+    return (this.deps.db.prepare("SELECT id FROM quick_notes").all() as Array<{ id: string }>)
+      .map((r) => r.id)
+      .filter((id) => !fs.existsSync(this.deps.itemPath(id)));
+  }
+
+  /** 同步专用：单条小记正文文件缺失（外部删除/半截写入）时**跳过该行**，不让整轮同步炸掉。 */
+  listForSync(): QuickNoteDocument[] {
+    const rows = this.deps.db.prepare("SELECT * FROM quick_notes ORDER BY created_at DESC").all() as QuickNoteRow[];
+    const tagNames = this.tagNameResolver();
+    const links = this.deps.allTagIds();
+    const out: QuickNoteDocument[] = [];
+    for (const row of rows) {
+      try { out.push(this.mapDocument(row, this.readStoredContent(row.id), links.get(row.id) ?? [], tagNames)); }
+      catch { /* 缺正文/坏数据：跳过（由资源页「缺小记」与同步侧收尸负责处置） */ }
+    }
+    return out;
+  }
+
   listTrash(): Array<{ id: string; createdAt: string; updatedAt: string; deletedAt: string; cloudDeleted: boolean }> {
     return (this.deps.db.prepare(
       "SELECT id,created_at,updated_at,deleted_at,cloud_deleted FROM quick_note_deleted WHERE conversion_target_note_id IS NULL AND purged_at IS NULL ORDER BY deleted_at DESC"
@@ -118,23 +137,17 @@ export class QuickNotesQueries {
     } : null;
   }
 
+  /** 待同步墓碑：可发布（ready_to_sync=1）且晚于「上次成功同步水线」（Del-6：deleted_at > waterline）。
+   *  逐行 published_at 已删；发布成功后水线推进 ⇒ 更早的墓碑自然不再计入。 */
   listDeletedForSync(): QuickNoteDeleted[] {
-    return this.mapDeletedRows(this.deps.db.prepare("SELECT * FROM quick_note_deleted WHERE ready_to_sync=1 AND published_at IS NULL ORDER BY deleted_at").all() as QuickNoteDeletedRow[]);
+    return this.mapDeletedRows(this.deps.db.prepare(
+      "SELECT * FROM quick_note_deleted WHERE ready_to_sync=1 AND deleted_at > COALESCE((SELECT value FROM device_state WHERE key='quick_tombstones_published_at'),'0') ORDER BY deleted_at"
+    ).all() as QuickNoteDeletedRow[]);
   }
 
-  /** 全部墓碑记录（含已发布）：下载方向 LWW 判定用（记录保留，发布只写 published_at 记账）。 */
+  /** 全部墓碑记录（含已发布）：下载方向 LWW 判定用（记录保留，发布只推进水线）。 */
   listAllDeleted(): QuickNoteDeleted[] {
     return this.mapDeletedRows(this.deps.db.prepare("SELECT * FROM quick_note_deleted ORDER BY deleted_at").all() as QuickNoteDeletedRow[]);
-  }
-
-  /** 墓碑已发布到 manifest → 写发布记账（对齐 Lake deleted_notes.published_at；记录保留供下载 LWW 判定）。 */
-  markDeletedPublished(ids: string[]): void {
-    if (ids.length === 0) return;
-    const publishedAt = new Date().toISOString();
-    for (const batch of sqlParameterBatches(ids)) {
-      const placeholders = batch.map(() => "?").join(",");
-      this.deps.db.prepare(`UPDATE quick_note_deleted SET published_at=? WHERE id IN (${placeholders}) AND published_at IS NULL`).run(publishedAt, ...batch);
-    }
   }
 
   listDeferredDeletedForSync(): QuickNoteDeleted[] {

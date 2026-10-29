@@ -55,6 +55,9 @@ export const WRITE_OPS = [
   "addS3GcPending", "removeS3GcPending", "recordS3GcLog",
   // 回收站（软删 / 恢复 / 彻底删除）
   "trashNote", "trashTreeItem", "restoreTreeItem", "purgeTreeItem",
+  // 从云端恢复（261028 用户批准，换机/坏库）：只清本机 v3 同步账本（baseline/intents/pending）；
+  // 随后的整轮「只拉不打」网络工作由 syncNow 的维护域自己取锁（本方法内**不**再取维护域，I3）。
+  "restoreFromCloud",
 ] as const;
 
 /**
@@ -107,10 +110,12 @@ export const NONE_OPS = [
   "listOrphanAssets", "listS3GcPending", "getHistorySettings",
   "listTrashed", "listTrashTree", "listDeletedNotesForSync", "readDeletedContent",
   "getSyncSettings", "getS3Settings", "getDiagnostics", "isFolderPurged",
+  // SD-13（261028）：只读最近 3 轮同步诊断（device_state / localStorage），不写库、不出网
+  "getSyncDiagnostics",
   // 只读：UI 用它给「保存并同步」置灰（关云同步时）
   "getCloudState",
   // 委托型写（内部调用已入队的写方法，由被委托方取锁）
-  "createNote", "createUsheet", "createBoard", "createBitable", "restoreNote", "restoreHistory", "markTombstonesPublished",
+  "createNote", "createUsheet", "createBoard", "createBitable", "restoreNote", "restoreHistory",
   // 设置写入（device_state / 密钥，同步不触碰同表）
   "saveSyncSettings", "saveS3Settings",
   // 单发网络（见 MAINTENANCE_OPS 注释）

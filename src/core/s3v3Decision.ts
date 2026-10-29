@@ -1,7 +1,7 @@
 /**
  * 三方（base × local × remote）单条目决策（纯逻辑）。
  * 判定顺序固定：restore_pending → 本地彻底删除意图 → 缺席/新增 → 常规变更。
- * 设计：docs/S3-REDESIGN.md §4.2/§4.3（含审计 P4-B / 第二份 P3-B）。
+ * 设计：docs/SYNC-PROTOCOL.md §9（历史 §4.2/§4.3 已删，git 可查；含审计 P4-B / 第二份 P3-B）。
  */
 export type ItemAction =
   | "none"

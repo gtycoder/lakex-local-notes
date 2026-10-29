@@ -1,7 +1,7 @@
 import { connect } from './cdpclient.mjs';
 import { execSync } from 'node:child_process';
 import { createRequire } from 'node:module';
-const require = createRequire('/Users/admin/file/local-lake/local-lakex-notes/package.json');
+const require = createRequire('/Users/admin/file/local-lake/lakex-local-notes/package.json');
 const Database = require('better-sqlite3');
 const ADB = '/opt/homebrew/share/android-commandlinetools/platform-tools/adb';
 const ENDS = [
@@ -29,8 +29,8 @@ async function evT(id, expr, ms) {
 async function syncT(id, ms) { const t0 = Date.now(); const v = await evT(id, 'window.lakeNative.syncNow()', ms); return { value: v.value, ms: Date.now() - t0 }; }
 function pullMobile(e) {
   const dir = '/tmp/lake5/db-' + e.serial; const fs = require('node:fs'); fs.mkdirSync(dir, { recursive: true });
-  for (const f of ['local-lakex-notes-mobileSQLite.db', 'local-lakex-notes-mobileSQLite.db-wal']) { try { const b = execSync(ADB + ' -s ' + e.serial + ' exec-out run-as com.locallakexnotes.mobile cat databases/' + f, { maxBuffer: 300 * 1024 * 1024 }); fs.writeFileSync(dir + '/' + f, b); } catch (err) {} }
-  const db = new Database(dir + '/local-lakex-notes-mobileSQLite.db', { readonly: true });
+  for (const f of ['lakex-local-notes-mobileSQLite.db', 'lakex-local-notes-mobileSQLite.db-wal']) { try { const b = execSync(ADB + ' -s ' + e.serial + ' exec-out run-as com.lakexlocalnotes.android cat databases/' + f, { maxBuffer: 300 * 1024 * 1024 }); fs.writeFileSync(dir + '/' + f, b); } catch (err) {} }
+  const db = new Database(dir + '/lakex-local-notes-mobileSQLite.db', { readonly: true });
   try { return db.prepare('SELECT id,doc_kind,content FROM notes').all().map(function (r) { return { id: String(r.id), kind: r.doc_kind || 'doc', len: String(r.content).length }; }); }
   finally { db.close(); }
 }
@@ -79,7 +79,7 @@ for (const id of IDS) { const e = find(id); let len = 0; if (e.type === 'desktop
 
 console.log('== T7: liveness + eval latency ==');
 for (const id of IDS) { const t = await evT(id, '1+1', 10000); check(id + ' responsive', t.value === 2, 'eval=' + t.ms + 'ms'); }
-for (const e of ENDS.filter(function (x) { return x.type === 'android'; })) { let alive = false; try { alive = execSync(ADB + ' -s ' + e.serial + ' shell pidof com.locallakexnotes.mobile').toString().trim().length > 0; } catch (err) {} check(e.id + ' process alive', alive); }
+for (const e of ENDS.filter(function (x) { return x.type === 'android'; })) { let alive = false; try { alive = execSync(ADB + ' -s ' + e.serial + ' shell pidof com.lakexlocalnotes.android').toString().trim().length > 0; } catch (err) {} check(e.id + ' process alive', alive); }
 
 console.log('== T8: idempotent second sync D1 ==');
 const s2 = await syncT('D1', 1200000);

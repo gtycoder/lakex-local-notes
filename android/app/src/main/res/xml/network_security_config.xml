@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 本地资源服务（http://127.0.0.1:19876）需要明文 HTTP。
-     Network Security Config 的 domain 不支持 IP 字面量，base-config 直接放行（开发版）。 -->
+<!-- 这是**发布**配置（不是仅开发版）：本地资源服务 http://127.0.0.1:19876 需要明文 HTTP。
+     Network Security Config 的 domain 不支持 IP 字面量，所以只能用 base-config 放行；
+     页面出网面已由 CSP 收窄（127.0.0.1:* 与七牛 https），S3 保存时强制 https。
+     261029 安全复核：SEC-08 判为「不做」（发布既定配置，理由见 docs/audit-261027/02-security.md §6）。 -->
 <network-security-config>
     <base-config cleartextTrafficPermitted="true" />
 </network-security-config>

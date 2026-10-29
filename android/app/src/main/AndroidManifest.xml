@@ -25,7 +25,7 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <!-- 系统分享 → LocalLakexNotes（文本 / 图片）：@capacitor 的 SharedContentPlugin 接住后再打开「小记」框 -->
+            <!-- 系统分享 → LakexLocalNotes（文本 / 图片）：@capacitor 的 SharedContentPlugin 接住后再打开「小记」框 -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -56,7 +56,7 @@
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="locallakexnotes" android:host="quick-note" />
+                <data android:scheme="lakexlocalnotes" android:host="quick-note" />
             </intent-filter>
         </activity-alias>
 

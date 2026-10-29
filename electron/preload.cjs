@@ -12,6 +12,7 @@ const parseIpcError = (rawMessage) => {
   const match = rawMessage.match(/\[LAKE_IPC_CODE:(NOT_FOUND|INVALID_INPUT|NOT_CONFIGURED|INTERNAL)\]\s*([\s\S]*?)(?:\s+__LAKE_IPC_ERROR__.*)?$/);
   return match ? { name: "IpcError", message: match[2], code: match[1] } : null;
 };
+const SYNC_ERROR_CLASSES = new Set(["retryable", "action-required", "fatal"]);
 const invoke = (channel, ...args) => ipcRenderer.invoke(channel, ...args).catch((raw) => {
   const rawMessage = typeof raw?.message === "string" ? raw.message : String(raw);
   const payload = parseIpcError(rawMessage);
@@ -20,6 +21,10 @@ const invoke = (channel, ...args) => ipcRenderer.invoke(channel, ...args).catch(
   const error = new Error(code ? `[LAKE_IPC_CODE:${code}] ${message}` : message);
   error.name = typeof payload?.name === "string" ? payload.name : (typeof raw?.name === "string" ? raw.name : "IpcError");
   if (code) Object.defineProperty(error, "code", { value: code, enumerable: true });
+  // 261028 P1：同步错误码/分类随 envelope 透到渲染层（src/lib/nativeErrors.ts 读取）。
+  const syncCode = typeof payload?.syncCode === "string" ? payload.syncCode : "";
+  if (syncCode) Object.defineProperty(error, "syncCode", { value: syncCode, enumerable: true });
+  if (SYNC_ERROR_CLASSES.has(payload?.syncClass)) Object.defineProperty(error, "syncClass", { value: payload.syncClass, enumerable: true });
   throw error;
 });
 
@@ -120,6 +125,7 @@ contextBridge.exposeInMainWorld("lakeNative", {
   getSyncStatus: () => invoke("get_sync_status"),
   getSyncPendingSummary: () => invoke("get_sync_pending_summary"),
   listQuickNotes: () => invoke("list_quick_notes"),
+  readQuickNote: (id) => invoke("read_quick_note", id),
   createQuickNote: (input) => invoke("create_quick_note", input),
   updateQuickNote: (id, input) => invoke("update_quick_note", id, input),
   setQuickNoteTags: (id, tagIds) => invoke("set_quick_note_tags", id, tagIds),
@@ -145,7 +151,6 @@ contextBridge.exposeInMainWorld("lakeNative", {
   purgeMissingQuickNote: (id) => invoke("purge_missing_quick_note", id),
   getS3GcSettings: () => invoke("get_s3_gc_settings"),
   saveS3GcSettings: (settings) => invoke("save_s3_gc_settings", settings),
-  listS3GcPending: () => invoke("list_s3_gc_pending"),
   listS3GcLog: () => invoke("list_s3_gc_log"),
   runDataHealthCheck: () => invoke("run_data_health_check"),
   readAppLog: (opts) => invoke("read_app_log", opts),

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { sha256Hex } from "./syncUtils.js";
-import { buildAssetDeclaration, indexHashOf, serializeDeclaration, serializeLakeIndex, serializeQuickNotesIndex, type LakeIndex, type QuickNotesIndex } from "./s3v3Index.js";
+import { buildAssetDeclaration, indexHashOf, serializeDeclaration, serializeLakeIndex, serializeQuickNotesIndex, type LakeIndex, type QuickNotesIndex } from "./s3v3/protocol/s3v3Index.js";
 
 import { S3v3SyncEngine } from "./s3v3Engine.js";
 import type { S3v3Remote, RemoteObjectInfo } from "./s3v3Ports.js";
@@ -38,7 +38,7 @@ class NativeDevice implements S3v3DeviceStore {
     quickNotes: { v: 3, space: "quickNotes", items: [
       { id: "q1", createdAt: ISO, updatedAt: ISO, contentHash: H("quick-body") },
     ] },
-    folders: [], intents: [], pending: [], remotePurged: [], restorePending: [], quickPurges: [], quickPurgeTimes: {}, quickDeletes: [], archived: [],
+    folders: [], intents: [], pending: [], remotePurged: [], restorePending: [], quickPurges: [], quickPurgeTimes: {}, quickDeletes: [],
   };
   private bodies = new Map<string, Uint8Array>([["n1", enc("body-1")], ["q1", enc("quick-body")]]);
   async init(): Promise<void> {}

@@ -5,7 +5,6 @@ import {
   previewQuickNote,
   sameQuickNoteContent,
   serializeQuickNoteContent,
-  validateQuickNoteContent,
   validateQuickNoteImageBytes,
   validateQuickNoteImageDimensions,
 } from "../../core/quickNoteModel.js";
@@ -338,9 +337,8 @@ export async function restoreQuickNote(d: MobileDb, id: string): Promise<void> {
 export async function purgeQuickNote(
   d: MobileDb,
   id: string,
-  removeAssetFile: (key: string) => Promise<void>,
+  removeAssetsDir: (quickNoteId: string) => Promise<void>,
 ): Promise<void> {
-  const prev = await readBodyContent(id);
   await d.transaction(async () => {
     // 兼容"直接彻底删除未进回收站的小记"的调用：deleted_at 为空时用当前时间补墓碑时间（原 SQL 会撞 NOT NULL）。
     // purged_at 非空 = 本地彻底删除墓碑（v3 quickPurges）；只有软删语义的墓碑 purged_at 保持 NULL。
@@ -350,13 +348,12 @@ export async function purgeQuickNote(
     await removeQuickNoteLinks(d, id);
   });
   await deleteQuickNoteBody(id).catch(() => undefined);
-  if (!prev) return;
-  try {
-    const parsed = validateQuickNoteContent(prev);
-    for (const img of parsed.images) {
-      await removeAssetFile("quick-notes/" + id + "/" + img.filename).catch(() => undefined);
-    }
-  } catch { /* 内容解析失败不阻断 purge */ }
+  // 彻底删除 = 零痕迹：图片目录整份清掉。旧实现按正文里引用到的文件名逐个删 ——
+  // 正文缺失/解析失败（「缺正文小记」是既有场景）时整目录会残留，且始终留下空目录。
+  // 失败只告警：墓碑已写、行已删，残留只是孤儿资源（不阻断"已彻底删除"的判定）。
+  await removeAssetsDir(id).catch((error) => {
+    console.warn("[quick-notes] 彻底删除图片目录失败（残留为孤儿资源，可在资源管理清理）", id, error);
+  });
 }
 
 /* ---------------------------------------------------------------------------

@@ -3,7 +3,7 @@ import { execSync } from 'node:child_process';
 import fs from 'node:fs';
 import zlib from 'node:zlib';
 import { createRequire } from 'node:module';
-const require = createRequire('/Users/admin/file/local-lake/local-lakex-notes/package.json');
+const require = createRequire('/Users/admin/file/local-lake/lakex-local-notes/package.json');
 const Database = require('better-sqlite3');
 const { S3Client, GetObjectCommand, ListObjectsV2Command } = require('@aws-sdk/client-s3');
 const ADB = '/opt/homebrew/share/android-commandlinetools/platform-tools/adb';
@@ -29,10 +29,10 @@ async function sync(id) { return ev(id, 'window.lakeNative.syncNow()'); }
 async function syncAll(creator) { for (const id of [creator].concat(IDS.filter(function (x) { return x !== creator; }))) await sync(id); }
 function pullMobile(e) {
   const dir = '/tmp/lake5/db-' + e.serial; fs.mkdirSync(dir, { recursive: true });
-  for (const f of ['local-lakex-notes-mobileSQLite.db', 'local-lakex-notes-mobileSQLite.db-wal']) {
-    try { const b = execSync(ADB + ' -s ' + e.serial + ' exec-out run-as com.locallakexnotes.mobile cat databases/' + f, { maxBuffer: 200 * 1024 * 1024 }); fs.writeFileSync(dir + '/' + f, b); } catch (err) {}
+  for (const f of ['lakex-local-notes-mobileSQLite.db', 'lakex-local-notes-mobileSQLite.db-wal']) {
+    try { const b = execSync(ADB + ' -s ' + e.serial + ' exec-out run-as com.lakexlocalnotes.android cat databases/' + f, { maxBuffer: 200 * 1024 * 1024 }); fs.writeFileSync(dir + '/' + f, b); } catch (err) {}
   }
-  const db = new Database(dir + '/local-lakex-notes-mobileSQLite.db', { readonly: true });
+  const db = new Database(dir + '/lakex-local-notes-mobileSQLite.db', { readonly: true });
   try { return db.prepare('SELECT id,title,doc_kind,content,trashed_at FROM notes').all().map(function (r) { return { id: String(r.id), title: String(r.title), kind: r.doc_kind || 'doc', content: String(r.content), trashed: !!r.trashed_at }; }); }
   finally { db.close(); }
 }

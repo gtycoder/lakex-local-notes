@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assetKey, declarationKey, indexKey, lakeBodyKey, lakePurgePrefixes, quickNoteBodyKey, quickNotePurgePrefixes } from "./s3v3Keys.js";
+import { assetKey, declarationKey, indexKey, lakeBodyKey, lakePurgePrefixes, quickNoteBodyKey, quickNotePurgePrefixes } from "./s3v3/protocol/s3v3Keys.js";
 import {
   buildAssetDeclaration,
   canonicalJson,
@@ -12,7 +12,7 @@ import {
   type LakeIndex,
   type LakeNoteEntry,
   type QuickNotesIndex,
-} from "./s3v3Index.js";
+} from "./s3v3/protocol/s3v3Index.js";
 import { planLakeMerge, planQuickNotesMerge } from "./s3v3Merge.js";
 import { planLakeDeletes, planQuickNotesDeletes } from "./s3v3Gc.js";
 

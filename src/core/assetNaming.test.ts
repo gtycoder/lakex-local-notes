@@ -62,6 +62,9 @@ describe("assetNaming", () => {
     expect(isSafeShellOpenFilename("1787733338672_05581394.sh")).toBe(false);
     expect(isSafeShellOpenFilename("1787733338672_05581394.xyzzy")).toBe(false);
     expect(isSafeShellOpenFilename("noext")).toBe(false);
+    // 261029：HTML 附件按「外部浏览器打开」放行（应用内不渲染 HTML、资源服务不返回 text/html）
+    expect(isSafeShellOpenFilename("1787733338672_05581394.html")).toBe(true);
+    expect(isSafeShellOpenFilename("1787733338672_05581394.htm")).toBe(true);
   });
 
   it("isSafeShellOpenFilename（DS 复核 A4 边界）：apk/bin/svg/大写/双扩展/宏文档/lnk", () => {

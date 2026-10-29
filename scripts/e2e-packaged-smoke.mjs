@@ -3,7 +3,7 @@ import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import path from "node:path";
 
-const appPath = process.env.LAKE_PACKAGED_EXECUTABLE || path.resolve("release/mac-arm64/LocalLakexNotes.app/Contents/MacOS/LocalLakexNotes");
+const appPath = process.env.LAKE_PACKAGED_EXECUTABLE || path.resolve("release/mac-arm64/LakexLocalNotes.app/Contents/MacOS/LakexLocalNotes");
 const port = Number(process.env.LAKE_CDP_PORT || 9333);
 if (!existsSync(appPath)) throw new Error(`找不到 packaged executable: ${appPath}`);
 // 受限/沙箱环境（如 agent 宿主的 seatbelt）里 Chromium 自身 sandbox 会初始化失败，
@@ -13,7 +13,7 @@ const extraArgs = (process.env.LAKE_PACKAGED_ARGS || "").split(/\s+/).filter(Boo
 const child = spawn(appPath, [`--remote-debugging-port=${port}`, ...extraArgs], {
   env: {
     ...process.env,
-    LAKE_USER_DATA: process.env.LAKE_USER_DATA || path.join("/tmp", "local-lakex-notes-packaged-smoke-data"),
+    LAKE_USER_DATA: process.env.LAKE_USER_DATA || path.join("/tmp", "lakex-local-notes-packaged-smoke-data"),
     // Dev Electron 通常占用 19876；packaged smoke 使用独立资源端口，避免
     // 启动阶段 listen EADDRINUSE 阻塞主进程并让 CDP 看起来“无响应”。
     LAKE_ASSET_PORT: process.env.LAKE_ASSET_PORT || "29876",
@@ -36,10 +36,10 @@ async function waitForCdp() {
     try {
       const response = await fetch(`http://127.0.0.1:${port}/json/list`, { signal: controller.signal });
       if (response.ok) {
-        // 只等「CDP 有响应」不够：打包版会先暴露 about:blank 目标，随后才导航到 locallakexnotes://app；
+        // 只等「CDP 有响应」不够：打包版会先暴露 about:blank 目标，随后才导航到 lakexlocalnotes://app；
         // 若此时就跑 smoke，会抓到空页面（.tab-bar 缺失）而误判失败。必须等到真正的应用页。
         const list = await response.json().catch(() => null);
-        if (Array.isArray(list) && list.some((t) => t.type === "page" && String(t.url || "").includes("locallakexnotes://"))) {
+        if (Array.isArray(list) && list.some((t) => t.type === "page" && String(t.url || "").includes("lakexlocalnotes://"))) {
           await new Promise((resolve) => setTimeout(resolve, 1500)); // 再等 React 挂载外壳
           return;
         }

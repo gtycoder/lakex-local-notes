@@ -31,12 +31,23 @@ export function sha256Sync(input: Uint8Array): string {
 }
 
 /**
- * 注入自定义实现（桌面端在 adapter 注入 node:crypto，吞吐高于纯 JS 10-20 倍）。
+ * 注入自定义实现（桌面主进程在 electron/main.ts 启动处注入 node:crypto 包装，
+ * 吞吐高于纯 JS 10-20 倍；注入模块 = electron/sha256Native.ts）。
  * 默认纯 JS（移动端 WebView 未注入时保持）。输出必须与 sha256SyncPure 一致
- * （等价性由 sha256Sync.test.ts 保证）。core 不 import node:，注入由平台端口完成。
+ * （等价性由 sha256Sync.test.ts / electron/sha256Native.test.ts 保证）。
+ * core 不 import node:，注入由平台边界完成。
  */
 export function setSha256HexImpl(impl: (input: Uint8Array) => string): void {
   sha256Impl = impl;
+}
+
+/**
+ * 当前生效实现（诊断/断言用）：**桌面主进程必须等于注入的 native 包装**——CORE-06 的
+ * 事故形态就是「注入代码在、但唯一调用方是死模块 ⇒ 生产一直跑纯 JS」，所以这里必须可断言。
+ * 移动端 = 纯 JS（预期）。
+ */
+export function currentSha256HexImpl(): (input: Uint8Array) => string {
+  return sha256Impl;
 }
 
 let sha256Impl: (input: Uint8Array) => string = sha256SyncPure;

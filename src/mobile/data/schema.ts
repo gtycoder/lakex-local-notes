@@ -1,5 +1,17 @@
-import { buildQuickNotesSyncSchemaStatements } from "./quickNotesDbPort.js";
 import type { MobileDb } from "./sqliteDb.js";
+import {
+  NOTES_FTS_TABLE,
+  NOTES_SEARCH_LEDGER_ROWID_INDEX,
+  NOTES_SEARCH_LEDGER_TABLE,
+  QUICK_NOTES_SEARCH_LEDGER_ROWID_INDEX,
+  QUICK_NOTES_SEARCH_LEDGER_TABLE,
+  SEARCH_FTS_TOKENIZER,
+  SEARCH_LEDGER_COLUMN,
+  notesFtsDDL,
+  quickNotesFtsDDL,
+  searchLedgerDDL,
+  searchLedgerRowidIndexDDL,
+} from "../../core/search/schema.js";
 
 /**
  * 移动端 SQLite schema。
@@ -27,7 +39,7 @@ import type { MobileDb } from "./sqliteDb.js";
  *
  * ⚠️ 只用于"建表/加列/建索引"这类幂等 DDL；**数据迁移仍然每次都按判据检查**（如旧库识别）。
  */
-export const MOBILE_SCHEMA_VERSION = 9; // 261026：notes/folders/quick_notes 加 cloud_deleted（远端彻底删除·仅本地副本标记）
+export const MOBILE_SCHEMA_VERSION = 10; // 261029 Del-6：deleted_notes 去掉 published_at（墓碑发布改 waterline 判据）
 
 /**
  * 读当前库的 schema 版本（PRAGMA user_version；空库 = 0）。
@@ -84,8 +96,7 @@ export function baseSchemaStatements(): SchemaStatement[] {
     updated_at TEXT NOT NULL,
     deleted_at TEXT NOT NULL,
     node_type TEXT NOT NULL DEFAULT 'note',
-    purged_at TEXT,
-    published_at TEXT
+    purged_at TEXT
   )`);
   push(`CREATE TABLE IF NOT EXISTS folders (
     id TEXT PRIMARY KEY,
@@ -145,19 +156,9 @@ export function baseSchemaStatements(): SchemaStatement[] {
   )`);
   push("CREATE INDEX IF NOT EXISTS idx_tag_links_tag ON tag_links(tag_id)");
   push("CREATE INDEX IF NOT EXISTS idx_tag_links_target ON tag_links(target_kind, target_id)");
-  push(`CREATE TABLE IF NOT EXISTS sync_base (
-    note_id TEXT PRIMARY KEY,
-    content_hash TEXT NOT NULL,
-    last_synced_meta_at TEXT,
-    last_uploaded_hash TEXT
-  )`);
-  push(`CREATE TABLE IF NOT EXISTS declared_assets (
-    note_id TEXT NOT NULL,
-    filename TEXT NOT NULL,
-    size INTEGER NOT NULL,
-    hash TEXT NOT NULL,
-    PRIMARY KEY(note_id, filename)
-  )`);
+  // Del-6（261029）：v2 的两张死账本不再建表——sync_base（v3 基线在 sync_v3_state 的 baseline，
+  // 移动端自 021 删除旧同步引擎后无人写）与 declared_assets（v3 声明是每篇一份的云端对象，从不写本地）。
+  // 旧库残留空表无害，不为旧数据写迁移/清理（AGENTS §3#7）；不带 DROP（保留用户数据目录只读）。
   push(`CREATE TABLE IF NOT EXISTS note_history (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     note_id TEXT NOT NULL,
@@ -224,24 +225,25 @@ export async function collectSchemaStatements(db: MobileDb): Promise<SchemaState
   addNoteColumn("text_cache", "TEXT");
 
   // 全文搜索 v2：FTS5 + unicode61（中文单字预分词，src/core/search）。旧库若为 trigram 则重建。
-  const ftsRow = await db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='notes_fts'").get() as { sql: string | null } | undefined;
-  if (ftsRow?.sql && !ftsRow.sql.includes("unicode61")) {
-    push("DROP TABLE notes_fts", { optional: true });
-    push("DROP TABLE IF EXISTS search_index", { optional: true });
+  // CORE-13：建表语句 / 表名 / 列名 / 分词器 / 索引名统一取自 core/search/schema（字符串单一来源，
+  // 桌面侧后续接同一批常量；本段语句与改造前逐字节等价）。
+  const ftsRow = await db.prepare(`SELECT sql FROM sqlite_master WHERE type='table' AND name='${NOTES_FTS_TABLE}'`).get() as { sql: string | null } | undefined;
+  if (ftsRow?.sql && !ftsRow.sql.includes(SEARCH_FTS_TOKENIZER)) {
+    push(`DROP TABLE ${NOTES_FTS_TABLE}`, { optional: true });
+    push(`DROP TABLE IF EXISTS ${NOTES_SEARCH_LEDGER_TABLE}`, { optional: true });
   }
   // 测试环境 sql.js 无 FTS5 模块 → 跳过虚拟表（生产 SQLCipher 有；searchIndex 会按 sqlite_master 探测）。
-  push("CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(title, body, tokenize='unicode61')", { optional: true });
-  push(
-    "CREATE TABLE IF NOT EXISTS search_index (" +
-    "note_id TEXT PRIMARY KEY, " +
-    "fts_rowid INTEGER NOT NULL, " +
-    "title TEXT NOT NULL, " +
-    "raw_hash TEXT, " +
-    "title_hash TEXT NOT NULL, " +
-    "body_hash TEXT NOT NULL, " +
-    "indexed_at TEXT NOT NULL)",
-  );
-  push("CREATE UNIQUE INDEX IF NOT EXISTS idx_search_index_rowid ON search_index(fts_rowid)");
+  push(notesFtsDDL(), { optional: true });
+  push(searchLedgerDDL(NOTES_SEARCH_LEDGER_TABLE, [
+    SEARCH_LEDGER_COLUMN.noteId,
+    SEARCH_LEDGER_COLUMN.ftsRowid,
+    SEARCH_LEDGER_COLUMN.title,
+    SEARCH_LEDGER_COLUMN.rawHash,
+    SEARCH_LEDGER_COLUMN.titleHash,
+    SEARCH_LEDGER_COLUMN.bodyHash,
+    SEARCH_LEDGER_COLUMN.indexedAt,
+  ]));
+  push(searchLedgerRowidIndexDDL(NOTES_SEARCH_LEDGER_ROWID_INDEX, NOTES_SEARCH_LEDGER_TABLE));
 
   const deletedColumns = (
     (await db.prepare("PRAGMA table_info(deleted_notes)").all()) as Array<{ name: string }>
@@ -252,8 +254,10 @@ export async function collectSchemaStatements(db: MobileDb): Promise<SchemaState
   if (!deletedColumns.includes("purged_at")) {
     push("ALTER TABLE deleted_notes ADD COLUMN purged_at TEXT");
   }
-  if (!deletedColumns.includes("published_at")) {
-    push("ALTER TABLE deleted_notes ADD COLUMN published_at TEXT");
+  // Del-6（261029）：旧库若还有 published_at 列则删掉（发布判据改 device_state waterline，不再逐行记账）。
+  // DROP COLUMN 需 SQLite ≥3.35（Android 14 满足）；更老设备 optional 失败时列留着也无害（无人读写）。
+  if (deletedColumns.includes("published_at")) {
+    push("ALTER TABLE deleted_notes DROP COLUMN published_at", { optional: true });
   }
 
   const folderColumns = (
@@ -279,24 +283,75 @@ export async function collectSchemaStatements(db: MobileDb): Promise<SchemaState
     if (!columns.includes("cloud_deleted")) push(`ALTER TABLE ${table} ADD COLUMN cloud_deleted INTEGER NOT NULL DEFAULT 0`);
   }
 
-  for (const statement of await buildQuickNotesSyncSchemaStatements(db)) push(statement);
+  // CORE-12（audit 10-core-services）：原 mobile/data/quickNotesDbPort.ts 的建表/加列 DDL 迁到这里，
+  // 那份「30+ 方法死端口」已删除；语句、顺序与原实现逐字节一致（保持 MOBILE_SCHEMA_VERSION/DDL 等价）。
+  const quickCols = (
+    (await db.prepare("PRAGMA table_info(quick_notes)").all()) as Array<{ name: string }>
+  ).map((column) => column.name);
+  if (!quickCols.includes("deleted_at")) push("ALTER TABLE quick_notes ADD COLUMN deleted_at TEXT");
+  if (!quickCols.includes("base_hash")) push("ALTER TABLE quick_notes ADD COLUMN base_hash TEXT");
+  // ready_to_sync：0 = 纯本地归档（冲突归档新 id，不向云端发布删除记录，防幽灵墓碑，对齐桌面）；1 = 可同步的删除墓碑
+  if (!quickCols.includes("ready_to_sync")) push("ALTER TABLE quick_notes ADD COLUMN ready_to_sync INTEGER NOT NULL DEFAULT 1");
+  // 标签在独立目录/关联表（方案 B）：正文不带标签，也不再建 tags_json/tag_ids_json 投影列。
+  if (!quickCols.includes("tags_updated_at")) push("ALTER TABLE quick_notes ADD COLUMN tags_updated_at TEXT NOT NULL DEFAULT ''");
+  if (!quickCols.includes("first_image")) push("ALTER TABLE quick_notes ADD COLUMN first_image TEXT");
+  if (!quickCols.includes("list_metadata_version")) push("ALTER TABLE quick_notes ADD COLUMN list_metadata_version INTEGER NOT NULL DEFAULT 0");
+  push(`CREATE TABLE IF NOT EXISTS tags (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    pinned INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    deleted_at TEXT
+  )`);
+  push(`CREATE TABLE IF NOT EXISTS tag_links (
+    target_kind TEXT NOT NULL,
+    target_id TEXT NOT NULL,
+    tag_id TEXT NOT NULL,
+    position INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY(target_kind, target_id, tag_id)
+  )`);
+  push(`CREATE TABLE IF NOT EXISTS tag_link_versions (
+    target_kind TEXT NOT NULL,
+    target_id TEXT NOT NULL,
+    links_updated_at TEXT NOT NULL,
+    PRIMARY KEY(target_kind, target_id)
+  )`);
+  push("CREATE INDEX IF NOT EXISTS idx_tag_links_tag ON tag_links(tag_id)");
+  push(`CREATE TABLE IF NOT EXISTS quick_note_deleted (
+    id TEXT PRIMARY KEY,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    deleted_at TEXT NOT NULL,
+    purged_at TEXT
+  )`);
+  // 261026：本表同时承载「软删/远端学习墓碑」与「本地彻底删除墓碑」。只有 purged_at 非空才是永久删除
+  // （v3 quickPurges）；软删/学习墓碑在 v3 里属于 quickDeletes。旧表补列（不迁移旧值：旧行语义无法区分）。
+  const tombstoneExists = await db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='quick_note_deleted'").get();
+  if (tombstoneExists) {
+    const tombstoneColumns = (
+      (await db.prepare("PRAGMA table_info(quick_note_deleted)").all()) as Array<{ name: string }>
+    ).map((column) => column.name);
+    if (!tombstoneColumns.includes("purged_at")) push("ALTER TABLE quick_note_deleted ADD COLUMN purged_at TEXT");
+  }
   // 列表/树/小记时间线的最小索引集合（261022 代码 review P1-3）；列必须在上面的 ALTER 之后建索引。
   push("CREATE INDEX IF NOT EXISTS idx_notes_active_parent_sort ON notes(parent_id, sort_order) WHERE trashed_at IS NULL");
   push("CREATE INDEX IF NOT EXISTS idx_notes_active_updated ON notes(updated_at DESC) WHERE trashed_at IS NULL");
   push("CREATE INDEX IF NOT EXISTS idx_folders_active_parent_sort ON folders(parent_id, sort_order) WHERE trashed_at IS NULL");
   push("CREATE INDEX IF NOT EXISTS idx_quick_notes_active_updated ON quick_notes(updated_at DESC, id DESC) WHERE deleted_at IS NULL");
   // 小记独立 FTS（与文档 notes_fts 分开；quick_notes 不在 notes 表，不能共用 join）。
-  push("CREATE VIRTUAL TABLE IF NOT EXISTS quick_notes_fts USING fts5(body, tags, tokenize='unicode61')", { optional: true });
-  push(
-    "CREATE TABLE IF NOT EXISTS quick_notes_search_index (" +
-    "quick_note_id TEXT PRIMARY KEY, " +
-    "fts_rowid INTEGER NOT NULL, " +
-    "content_hash TEXT NOT NULL, " +
-    "text_cache TEXT NOT NULL, " +
-    "tags TEXT NOT NULL, " +
-    "indexed_at TEXT NOT NULL)",
-  );
-  push("CREATE UNIQUE INDEX IF NOT EXISTS idx_quick_notes_search_rowid ON quick_notes_search_index(fts_rowid)");
+  // CORE-13：同上，全部走 core/search/schema 的单一来源。
+  push(quickNotesFtsDDL(), { optional: true });
+  push(searchLedgerDDL(QUICK_NOTES_SEARCH_LEDGER_TABLE, [
+    SEARCH_LEDGER_COLUMN.quickNoteId,
+    SEARCH_LEDGER_COLUMN.ftsRowid,
+    SEARCH_LEDGER_COLUMN.contentHash,
+    SEARCH_LEDGER_COLUMN.textCache,
+    SEARCH_LEDGER_COLUMN.tags,
+    SEARCH_LEDGER_COLUMN.indexedAt,
+  ]));
+  push(searchLedgerRowidIndexDDL(QUICK_NOTES_SEARCH_LEDGER_ROWID_INDEX, QUICK_NOTES_SEARCH_LEDGER_TABLE));
 
   let seeded: { value?: string } | undefined;
   try {

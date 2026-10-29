@@ -27,7 +27,7 @@ const MOBILE_APP_SRC = read("../../mobile/MobileApp.tsx");
 
 describe("小记版式切换（列表 / 小记）", () => {
   it("版式是纯展示偏好：存 localStorage，不进设置/同步", () => {
-    expect(WORKSPACE_SRC).toMatch(/const VIEW_KEY = "local-lakex-notes-v3\.quick-notes-view"/);
+    expect(WORKSPACE_SRC).toMatch(/const VIEW_KEY = "lakex-local-notes-v3\.quick-notes-view"/);
     expect(WORKSPACE_SRC).toMatch(/writeLocalStorage\(VIEW_KEY/);
     expect(WORKSPACE_SRC).not.toMatch(/native\.saveSettings\([\s\S]{0,80}viewMode/);
   });
@@ -228,7 +228,8 @@ describe("小记标签（独立标签表，随 Manifest 同步）", () => {
 describe("小记类型筛选（261021，对齐语雀 dashboard/notes）", () => {
   it("类型筛选菜单与标签筛选共用一套清筛选/收编辑口径", () => {
     expect(WORKSPACE_SRC).toContain("QUICK_NOTE_TYPE_OPTIONS");
-    expect(WORKSPACE_SRC).toContain("filterQuickNotesByType(filtered, typeFilter)");
+    // DT-05：列表只有 summary，类型筛选的资源清单由投影的 mime 清单包成判据形状。
+    expect(WORKSPACE_SRC).toContain("filterQuickNotesByType(filtered, typeFilter, (item) => item.assetMimeTypes");
     expect(WORKSPACE_SRC).toMatch(/async function changeTypeFilter\(next: QuickNoteTypeFilter\)/);
     // 语雀语义：类型筛选与标签筛选互斥（切类型清标签；类型非「小记」时标签条不渲染）
     expect(WORKSPACE_SRC).toMatch(/setTagFilter\(\{ kind: "all" \}\);\s*setTypeFilter\(next\);/);

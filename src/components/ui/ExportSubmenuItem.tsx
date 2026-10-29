@@ -1,5 +1,6 @@
 import { Download } from "lucide-react";
 import { Submenu } from "./Overlay";
+import { hostCapabilities } from "../../lib/hostCapabilities";
 
 /** 已实现的文档导出格式（仅 doc 文档可用）。 */
 export type DocExportFormat = "markdown" | "html" | "pdf" | "docx";
@@ -26,12 +27,14 @@ export interface ExportSubmenuItemProps {
  * - usheet：CSV（活动工作表）/ Excel（全部工作表）；
  * - bitable：CSV（活动数据表）；
  * - board：PNG / SVG（已接线：复用画板内 Drawnix 导出；画板需已打开）。
- * - ink：PNG / PDF 暂为禁用占位，正式 v1 不提供导出。
+ * - ink：正式 v1 不提供导出（子菜单只有下面的资料路径工具）。
  * 「导出资料路径（本机 AI）」是与格式无关的本地路径工具，各类型都保留。
  *
  * 视觉/交互/定位全部交给标准原语 `<Submenu>`；本组件只提供行文案与菜单项。
  */
 export function ExportSubmenuItem({ kind, onExportAs, onCopyMarkdown, onCopyPaths, onClose }: ExportSubmenuItemProps) {
+  // 宿主能力门禁：没有文件导入导出的宿主不显示导出入口（桌面 / 浏览器 Web 端都支持导出）。
+  if (!hostCapabilities().importExport) return null;
   const run = (action: () => void) => () => { action(); onClose(); };
   const type = kind === "usheet" ? "sheet" : kind === "bitable" || kind === "board" || kind === "ink" ? kind : "doc";
 
@@ -64,13 +67,7 @@ export function ExportSubmenuItem({ kind, onExportAs, onCopyMarkdown, onCopyPath
           <button role="menuitem" onClick={run(() => onExportAs("svg"))}>导出为 SVG</button>
         </>
       )}
-      {type === "ink" && (
-        <>
-          <button role="menuitem" disabled title="开发中">PNG 导出（开发中）</button>
-          <button role="menuitem" disabled title="开发中">PDF 导出（开发中）</button>
-        </>
-      )}
-      <div className="context-menu-sep" />
+      {type !== "ink" && <div className="context-menu-sep" />}
       <button role="menuitem" onClick={run(onCopyPaths)}>导出资料路径（本机 AI）</button>
     </Submenu>
   );

@@ -22,7 +22,7 @@ interface Range {
 function collectRanges(windowLower: string, terms: string[]): Range[] {
   const ranges: Range[] = [];
   for (const term of terms) {
-    const needle = term.toLocaleLowerCase();
+    const needle = term.toLowerCase();
     if (!needle) continue;
     let from = 0;
     for (;;) {
@@ -64,11 +64,11 @@ export function buildSnippet(
   const fallback = escapeHtml(text.slice(0, before + after));
   if (terms.length === 0) return fallback;
 
-  const lower = text.toLocaleLowerCase();
+  const lower = text.toLowerCase();
   let hit = -1;
   let hitLength = 0;
   for (const term of terms) {
-    const index = lower.indexOf(term.toLocaleLowerCase());
+    const index = lower.indexOf(term.toLowerCase());
     if (index >= 0 && (hit < 0 || index < hit)) {
       hit = index;
       hitLength = term.length;
@@ -79,7 +79,7 @@ export function buildSnippet(
   const start = Math.max(0, hit - before);
   const end = Math.min(text.length, hit + hitLength + after);
   const windowText = text.slice(start, end);
-  const ranges = collectRanges(windowText.toLocaleLowerCase(), terms);
+  const ranges = collectRanges(windowText.toLowerCase(), terms);
   const prefix = start > 0 ? "…" : "";
   const suffix = end < text.length ? "…" : "";
   let out = "";

@@ -153,7 +153,7 @@ describe("MobileDeviceStore ↔ core v3 引擎（双移动端，假 S3）", () =
     const state: DeviceState = {
       lake: { v: 3, space: "lake", notes: [], folders: [] },
       quickNotes: { v: 3, space: "quickNotes", items: [{ id: "q1", createdAt: "2026-10-27T00:00:00.000Z", updatedAt: "2026-10-27T00:00:00.000Z", contentHash }] },
-      folders: [], intents: [], pending: [], remotePurged: [], restorePending: [], quickPurges: [], quickPurgeTimes: {}, quickDeletes: [], archived: [],
+      folders: [], intents: [], pending: [], remotePurged: [], restorePending: [], quickPurges: [], quickPurgeTimes: {}, quickDeletes: [],
     };
     await store.saveState(state);
     const page = await listQuickNotePage(db);

@@ -144,15 +144,16 @@ describe("useNotebookTabs 行为", () => {
     expect(onDrop).toHaveBeenCalledWith("a");
   });
 
-  it("首次挂载不覆盖上次保存的标签（避免进笔记本只剩第一篇）", async () => {
-    const key = "local-lakex-notes-mobile.tabs.nb-1";
+  it("首次挂载不覆盖上次保存的标签（initial state 来自存档）", async () => {
+    const key = "lakex-local-notes-mobile.tabs.nb-1";
     localStorage.setItem(key, JSON.stringify(["a", "b"]));
     render({ readBody: async (id) => note(id) });
-    // 挂载后的第一次提交（tabs=[]）不得把上次保存的标签清掉
+    // 首帧就是存档里的标签（不是空数组），写回内容保持不变
+    expect(session.tabs.map((tab) => tab.id)).toEqual(["a", "b"]);
     expect(localStorage.getItem(key)).toBe(JSON.stringify(["a", "b"]));
-    // 之后的真实变化照常落盘（含关闭全部写空数组）
+    // 之后的真实变化照常落盘：新开的标签追加在恢复的标签之后（含关闭全部写空数组）
     await act(async () => { await session.openTab("c", { load: false }); });
-    expect(localStorage.getItem(key)).toBe(JSON.stringify(["c"]));
+    expect(localStorage.getItem(key)).toBe(JSON.stringify(["a", "b", "c"]));
     act(() => session.clearTabs());
     expect(localStorage.getItem(key)).toBe("[]");
   });

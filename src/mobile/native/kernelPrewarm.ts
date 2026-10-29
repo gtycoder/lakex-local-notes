@@ -78,7 +78,7 @@ export async function runKernelPrewarmNow(): Promise<"ok" | "failed"> {
   } catch {
     return "failed";
   } finally {
-    try { mount?.remove(); } catch { /* ignore */ }
+    try { mount?.remove(); } catch { /* 预热容器已移除/未挂载：清理失败不影响主流程 */ }
   }
 }
 

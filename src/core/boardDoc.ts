@@ -77,25 +77,41 @@ export function emptyBoardBody(): string {
   return boardToBody(createBoardDoc("drawing"));
 }
 
+/** 宽容解析的结果：`doc` 永远可打开；`readable` 决定宿主能不能让它可编辑（CORE-02）。 */
+export interface BoardBodyParseResult {
+  doc: BoardDoc;
+  /**
+   * 空正文 = true（新建/清空）；
+   * 非空但不像画板正文（坏 JSON / 非对象 / 既没有 `elements` 也没有 `plaitValue`）= false。
+   * 判定为 false 时宿主要**只读 + 横幅**，绝不能用退化后的空白画板覆盖原文。
+   */
+  readable: boolean;
+}
+
 /**
- * 正文 → BoardDoc（归一化，**不抛错**）：坏数据/空正文当作空白画板打开，避免打不开。
+ * 正文 → BoardDoc + 可读性（归一化，**不抛错**）。
+ *
+ * 宽容解析保留（坏数据仍退化成空白画板，保证文档打得开），但额外回答「原文是不是画板正文」，
+ * 供 `core/docBodySafety.checkDocBody` 做只读判据。空正文算可读的空画板。
  * 兼容 `elements` 与卡片序列化里的 `plaitValue` 两种键名。
  */
-export function parseBoardBody(content: string | null | undefined): BoardDoc {
-  if (!content) return createBoardDoc();
+export function parseBoardBodyChecked(content: string | null | undefined): BoardBodyParseResult {
+  if (!content || content.trim().length === 0) return { doc: createBoardDoc(), readable: true };
   let raw: unknown;
   try {
     raw = JSON.parse(content);
   } catch {
-    return createBoardDoc();
+    return { doc: createBoardDoc(), readable: false };
   }
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return createBoardDoc();
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return { doc: createBoardDoc(), readable: false };
   const record = raw as Record<string, unknown>;
   const elements = Array.isArray(record.elements)
     ? (record.elements as unknown[])
     : Array.isArray(record.plaitValue)
       ? (record.plaitValue as unknown[])
-      : [];
+      : null;
+  // 两个键名都没有 ⇒ 不是画板正文（可能是别的 kind、被截断的 JSON、或一篇 Lake 文档被误改名）。
+  if (!elements) return { doc: createBoardDoc(), readable: false };
   const doc: BoardDoc = {
     kind: BOARD_BODY_KIND,
     version: 1,
@@ -105,7 +121,16 @@ export function parseBoardBody(content: string | null | undefined): BoardDoc {
     viewport: normalizeViewport(record.viewport ?? record.plaitViewport),
   };
   if (record.presetInitialized === true) doc.presetInitialized = true;
-  return doc;
+  return { doc, readable: true };
+}
+
+/**
+ * 正文 → BoardDoc（归一化，**不抛错**）：坏数据/空正文当作空白画板打开，避免打不开。
+ * 兼容 `elements` 与卡片序列化里的 `plaitValue` 两种键名。
+ * ⚠️ 「宽容」≠「可写」：坏正文的可读性判定见 `parseBoardBodyChecked`，编辑器必须按它进只读（CORE-02）。
+ */
+export function parseBoardBody(content: string | null | undefined): BoardDoc {
+  return parseBoardBodyChecked(content).doc;
 }
 
 /** 序列化（稳定字段顺序：kind → version → engine → preset → … → elements → viewport）。 */

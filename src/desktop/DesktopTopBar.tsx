@@ -5,14 +5,15 @@ import { useCallback, useEffect, useRef, useState, type Ref, type RefObject } fr
 import { Menu } from "../components/ui/Overlay";
 import { usePopoverPosition } from "../hooks/usePopoverPosition";
 import { SyncStatusPopover } from "../components/app/SyncStatusPopover";
+import { topBarLeadingSlotView, useDesktopWorkspaceSlot } from "./desktopWorkspaceSlot";
 import type { DesktopWorkspace } from "./desktopTypes";
 import type { SyncStatus, SyncPendingSummary } from "../lib/types";
 
 export interface DesktopTopBarLeadingProps {
   desktopWorkspace: DesktopWorkspace;
+  /** 共享 ref：由组件按所在槽位判断是否接管（只有活动空间那一份挂，见 desktopWorkspaceSlot）。 */
   wsMenuWrapRef?: RefObject<HTMLDivElement>;
   syncBtnRef?: RefObject<HTMLButtonElement>;
-  visible?: boolean;
   sync: SyncStatus;
   pendingSummary: SyncPendingSummary;
   cloudEnabled: boolean;
@@ -34,17 +35,23 @@ const SPACE_META: Record<DesktopWorkspace, { label: string; Icon: typeof Files }
 
 /** 顶栏左侧：当前空间（空间图标 + 名 + ▾；点开合一菜单）+ 存储/同步段。
  *  同一个悬浮弹窗（复用 SyncStatusPopover）：云同步已启用且配置有效 = 云端同步内容；
- *  否则 = 本地空间图标 + 「当前仅本地」内容 + 「去设置云同步」入口。 */
+ *  否则 = 本地空间图标 + 「当前仅本地」内容 + 「去设置云同步」入口。
+ *
+ *  DT-09：四个空间共用**同一个**渲染点（App 里只构造一份元素）。本组件按
+ *  `DesktopWorkspaceSlotProvider` 声明的槽位推导 `visible` 与共享 ref 归属，
+ *  保证 keep-alive 下只有活动副本可见且接管 ref（见 desktopWorkspaceSlot）。 */
 export function DesktopTopBarLeading(props: DesktopTopBarLeadingProps) {
   const {
-    desktopWorkspace, wsMenuWrapRef, syncBtnRef, visible = true, sync,
+    desktopWorkspace, wsMenuWrapRef, syncBtnRef, sync,
     pendingSummary, cloudEnabled, cloudConfigured, conflictSnapshots,
     onToggleWorkspaceMenu, onSync, onOpenSettings, onOpenHistory, onOpenNote,
   } = props;
+  const slot = useDesktopWorkspaceSlot();
+  const { visible, sharedRefs } = topBarLeadingSlotView(desktopWorkspace, slot);
   const space = SPACE_META[desktopWorkspace] ?? SPACE_META.library;
   return (
     <>
-      <div className="toolbar__menu-wrap" data-top-menu-trigger="workspace" ref={wsMenuWrapRef as Ref<HTMLDivElement> | undefined}>
+      <div className="toolbar__menu-wrap" data-top-menu-trigger="workspace" ref={sharedRefs ? (wsMenuWrapRef as Ref<HTMLDivElement> | undefined) : undefined}>
         <button className="toolbar__item toolbar__workspace" onClick={onToggleWorkspaceMenu}
           title={`空间：${space.label}`} aria-label="切换空间">
           <span className="toolbar__space-ico" aria-hidden="true"><space.Icon size={12} /></span>
@@ -52,7 +59,7 @@ export function DesktopTopBarLeading(props: DesktopTopBarLeadingProps) {
         </button>
       </div>
       <SyncStatusPopover
-        buttonRef={syncBtnRef}
+        buttonRef={sharedRefs ? syncBtnRef : undefined}
         visible={visible}
         sync={sync}
         pendingDocuments={pendingSummary.documents}

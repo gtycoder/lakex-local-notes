@@ -19,6 +19,10 @@ import { vendorCssLayerPlugin } from "./scripts/vendorCssLayer";
 // FileReader），而画板的内存口径是 data URL（磁盘口径是资产 URL）⇒ 不放行 data: 时 fetch 被 CSP 拦掉、
 // 「导出 PNG/SVG」静默失败。data: 无网络来源，放行它不构成外发通道（img-src/font-src 早已放行 data:）。
 const DEV_CSP = "default-src 'self'; script-src 'self' 'unsafe-inline' http://127.0.0.1:*; style-src 'self' 'unsafe-inline' http://127.0.0.1:*; img-src 'self' data: blob: http://127.0.0.1:*; font-src 'self' data: http://127.0.0.1:*; connect-src 'self' data: http://127.0.0.1:* ws://127.0.0.1:1421; media-src 'self' data: blob: http://127.0.0.1:*; worker-src 'self' blob:; object-src http://127.0.0.1:*; frame-src http://127.0.0.1:*; base-uri 'none'; form-action 'none'";
+// 261028 复核（用户指正 + git 对照）：`http://127.0.0.1:*` 是**有意保留**的通配——
+// ① PDF/音视频内联预览、画板 data URL fetch 等功能需要（git 1ce3d3c2 / 4c2d2b49 为修预览放开的）；
+// ② 属于此前「去掉冗余/过度防御」的既有决定，不要再收窄成固定端口（会破坏自定义 LAKE_ASSET_PORT
+//    与内联预览，且不是新的可利用面）。
 const PROD_CSP = "default-src 'self'; script-src 'self' 'sha256-r1Dc4EBzntnjCYkAEc8BC4xSaA3dOE5dL5hlL2pG/6s='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: http://127.0.0.1:*; font-src 'self' data: http://127.0.0.1:*; connect-src 'self' data: http://127.0.0.1:*; media-src 'self' data: blob: http://127.0.0.1:*; worker-src 'self' blob:; object-src http://127.0.0.1:*; frame-src http://127.0.0.1:*; base-uri 'none'; form-action 'none'";
 
 /** 移动端/桌面共用的本地化实现见 scripts/lakexLocalize.ts（见该文件头注释与「未结项」登记）。 */

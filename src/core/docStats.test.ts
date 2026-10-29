@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { computeDocStats, kernelWordCount, resolveDocStats } from "./docStats.js";
+import { computeDocStats, docPlainText, kernelWordCount, resolveDocStats } from "./docStats.js";
+import { countTextStats } from "./textStats.js";
 
 describe("computeDocStats（正文兜底：内核 wordCount 同语义）", () => {
   it("空内容 → 0/0", () => {
@@ -53,5 +54,32 @@ describe("resolveDocStats", () => {
   it("内核为 null → 正文兜底；图片数照常", () => {
     const stats = resolveDocStats(null, '<p>你好</p><card name="image"></card>');
     expect(stats).toEqual({ wordCount: 2, imageCount: 1 });
+  });
+});
+
+describe("CORE-10 字数派生单一口径", () => {
+  // 状态栏兜底、主进程属性页、移动端属性页的「字数」必须都来自
+  // textStats.countTextStats（同一输入 → 同一输出），这里钉住 core 侧这一跳。
+  const contents = [
+    "",
+    "<p>你好 world</p>",
+    "<div><p>a<b>b</b></p></div>",
+    '<p>正文</p><card name="image" value="data:%7B%22text/plain%22%3A%22%E5%9B%BE%E8%AF%B4%22%7D"></card>',
+    "<p>one</p><p>two -- three</p>",
+  ];
+
+  it("兜底字数 = countTextStats(docPlainText(content)).wordCount（不是另写一套）", () => {
+    for (const content of contents) {
+      expect(computeDocStats(content).wordCount).toBe(countTextStats(docPlainText(content)).wordCount);
+    }
+  });
+
+  it("输入源差异登记：图片卡只贡献 value 里的 text/plain（含图说示例）", () => {
+    // 内核走 getDocument("text/plain")，兜底走 lakeHtmlToMarkdown：卡片的可读文本只来自 value；
+    // 没有 text/plain 的图片卡不贡献字数（差异已知，有内核时以内核为准，见 docStats 头注释）。
+    const withCaption = '<p>正文</p><card name="image" value="data:%7B%22text/plain%22%3A%22%E5%9B%BE%E8%AF%B4%22%7D"></card>';
+    const withoutCaption = '<p>正文</p><card name="image"></card>';
+    expect(computeDocStats(withCaption).wordCount).toBe(4); // 正文(2) + 图说(2)
+    expect(computeDocStats(withoutCaption).wordCount).toBe(2);
   });
 });

@@ -101,7 +101,7 @@ export async function detectOrphans(
   }
 }
 
-/** 某笔记的孤儿文件名集合（listLocalAssets 跳过 → 孤儿不上传，对齐桌面 syncAdapters）。 */
+/** 某笔记的孤儿文件名集合（listLocalAssets 跳过 → 孤儿不上传，对齐桌面适配器（manifest 时代 syncAdapters 已删，语义由 delta 判据承担））。 */
 export async function orphanFilenamesForNote(d: MobileDb, noteId: string): Promise<Set<string>> {
   const rows = await d.prepare("SELECT filename FROM orphan_assets WHERE note_id=?").all(noteId) as Array<{ filename: string }>;
   return new Set(rows.map((r) => r.filename));

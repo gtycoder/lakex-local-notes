@@ -94,7 +94,7 @@ export function useNativeSheetFormulaBar({ editing, hostRef, address, getUniverA
             }
           }
         }
-      } catch { /* 忽略像素读取失败 */ }
+      } catch { /* canvas 被清空/跨域污染导致读像素失败：按「无文字宽度」兜底（只影响公式栏左内边距） */ }
       const ratio = canvas.width > 0 ? rect.width / canvas.width : 1;
       const left = rect.x + (right >= 0 ? (right + 2) * ratio : 2);
       const height = Math.max(14, Math.min(22, rect.height));

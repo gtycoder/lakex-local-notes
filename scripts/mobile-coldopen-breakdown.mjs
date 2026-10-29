@@ -4,7 +4,7 @@
  * 为什么量三条：语雀把小记做成"单独编辑器 + 离线包"，而我们已经有 `QuickNoteFlashComposer`（**不挂内核**）。
  * 要回答的问题是：**小记是否已经够快？内核是不是文档与小记的共同瓶颈？**
  *
- *   P1 深链小记  = `locallakexnotes://quick-note` → 统一后的**内核卡片**（261010：不再有不挂内核的轻量框）
+ *   P1 深链小记  = `lakexlocalnotes://quick-note` → 统一后的**内核卡片**（261010：不再有不挂内核的轻量框）
  *   P2 首页小记写作卡 = 首页底栏「新建小记」→ QuickNoteComposer（**挂内核**）
  *   P3 打开文档   = 知识库 → 书架 → 文档卡片（**挂内核**）
  *
@@ -82,7 +82,7 @@ const p1 = [];
 for (let i = 0; i < RUNS; i += 1) {
   await resetPage();
   await arm("flash");
-  try { execSync(`adb shell am start -a android.intent.action.VIEW -d "locallakexnotes://quick-note" com.locallakexnotes.mobile`, { stdio: "ignore" }); } catch { /* ignore */ }
+  try { execSync(`adb shell am start -a android.intent.action.VIEW -d "lakexlocalnotes://quick-note" com.lakexlocalnotes.android`, { stdio: "ignore" }); } catch { /* ignore */ }
   const t0 = Date.now(); let v = null;
   while (Date.now() - t0 < 8000) { v = await readArmed(); if (typeof v === "number") break; await sleep(60); }
   p1.push(typeof v === "number" ? Math.round(v) : null);

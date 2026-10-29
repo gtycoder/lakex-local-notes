@@ -1,7 +1,12 @@
 import { useEffect, useRef } from "react";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { isDesktop, native } from "../lib/native";
-import { reportNativeActionError } from "../lib/nativeErrors";
+import { getNativeSyncErrorInfo, reportNativeActionError } from "../lib/nativeErrors";
+import {
+  SYNC_EPOCH_MISMATCH_ACTION_LABEL, SYNC_EPOCH_MISMATCH_MESSAGE, SYNC_EPOCH_MISMATCH_NOTICE,
+  retryableStatusMessage,
+} from "../lib/syncFailureText";
+import { rlog } from "../lib/log";
 import { planTabReload } from "../core/planTabReload";
 import { createRequestVersion } from "../core/requestVersion";
 import type { NoteDigest, NoteSummary, SyncStatus, TreeNode } from "../lib/types";
@@ -20,6 +25,10 @@ export interface UseSyncProgressOptions {
   setNotice: Dispatch<SetStateAction<NoticeState | null>>;
   setTrashOpen: Dispatch<SetStateAction<boolean>>;
   showNoticeWithAction: (text: string, action: NoticeState["action"]) => void;
+  /** 状态栏软提示（可重试失败等：不弹红、不当作硬错误）。 */
+  showNotice: (text: string) => void;
+  /** 打开 设置 → 同步（epoch 不一致时的「从云端恢复」引导入口）。 */
+  openSyncSettings: () => void;
   quickNotesRef: MutableRefObject<QuickNotesWorkspaceHandle | null>;
   openTabsRef: MutableRefObject<OpenTab[]>;
 }
@@ -28,7 +37,7 @@ export interface UseSyncProgressOptions {
 export function useSyncProgress({
   setSync, setCloudEnabled, setNotes, setTreeNodes, setOpenTabs,
   setConflictSnapshotNotice, setHistoryNoteId, setHistoryOpen, setNotice, setTrashOpen,
-  showNoticeWithAction, quickNotesRef, openTabsRef,
+  showNoticeWithAction, showNotice, openSyncSettings, quickNotesRef, openTabsRef,
 }: UseSyncProgressOptions) {
   // 审计 F03：全库同步是一整轮任务，用它自己的 run id 取消——不再与"按文档 reload"共用一个 guard。
   const syncRunRef = useRef(createRequestVersion());
@@ -46,6 +55,22 @@ export function useSyncProgress({
       void quickNotesRef.current?.refresh();
     };
     return native.onSyncProgress((progress) => {
+      // 261028 P1：失败广播带分类 —— 可重试（另一台设备在发布）走状态栏软提示，不弹红；
+      // epoch 不一致（本机与云端不是同一套数据）给「设置 → 同步 → 从云端恢复」的指路入口。
+      if (progress.error) {
+        const info = getNativeSyncErrorInfo({ syncCode: progress.errorCode, syncClass: progress.errorClass });
+        if (info?.className === "retryable") {
+          const soft = retryableStatusMessage(info.code);
+          setSync((current) => ({ ...current, phase: "idle", message: soft }));
+          showNotice(soft);
+          return;
+        }
+        if (info?.className === "action-required" && info.code === "epoch-mismatch") {
+          setSync((current) => ({ ...current, phase: "error", message: SYNC_EPOCH_MISMATCH_MESSAGE }));
+          showNoticeWithAction(SYNC_EPOCH_MISMATCH_NOTICE, { label: SYNC_EPOCH_MISMATCH_ACTION_LABEL, onClick: openSyncSettings });
+          return;
+        }
+      }
       const message = progress.message || (progress.phase === "done" ? "同步完成" : "同步中...");
       setSync((current) => ({ ...current, phase: progress.error ? "error" : progress.phase === "done" ? "success" : "syncing", message }));
       if (progress.phase !== "done" && !progress.error) refreshListsProgressively();
@@ -83,7 +108,7 @@ export function useSyncProgress({
         const tabRefreshStart = performance.now();
         const reloadVersion = syncRunRef.current.next();
         const tabsAtSync = openTabsRef.current.slice();
-        console.log("[sync-tab] refresh start", JSON.stringify({ open: tabsAtSync.length, superseded: supersededList.length }));
+        rlog.debug("sync-tab", "refresh start", { open: tabsAtSync.length, superseded: supersededList.length });
         void (async () => {
           const deletedIds: string[] = [];
           let reloaded = 0;
@@ -101,7 +126,7 @@ export function useSyncProgress({
             // 前置检查同时让 TS 收窄 digest 非空（reload 分支无需非空断言）。
             if (!digest || digest.deleted) {
               deletedIds.push(tab.noteId);
-              console.log("[sync-tab] tab", JSON.stringify({ noteId: tab.noteId, action: "deleted", digestMs, superseded }));
+              rlog.debug("sync-tab", "tab", { noteId: tab.noteId, action: "deleted", digestMs, superseded });
               continue;
             }
             // V5 Phase 4：digest 阶段决策收敛到纯函数 planTabReload（unchanged-skip / reload）。
@@ -115,7 +140,7 @@ export function useSyncProgress({
             if (plan.action === "deleted") continue;
             if (plan.action === "skip") {
               skipped += 1;
-              console.log("[sync-tab] tab", JSON.stringify({ noteId: tab.noteId, action: plan.reason === "dirty-pending" ? "skip-dirty" : "skip-unchanged", digestMs }));
+              rlog.debug("sync-tab", "tab", { noteId: tab.noteId, action: plan.reason === "dirty-pending" ? "skip-dirty" : "skip-unchanged", digestMs });
               continue; // 正文/元数据未变化，无需重载
             }
             try {
@@ -132,22 +157,23 @@ export function useSyncProgress({
                 const liveTab = openTabsRef.current.find((t) => t.noteId === tab.noteId);
                 if (!superseded && liveTab && (liveTab.dirty || liveTab.content !== tab.content)) {
                   skipped += 1;
-                  console.log("[sync-tab] tab", JSON.stringify({ noteId: tab.noteId, action: "skip-edited-during-sync", digestMs, readMs }));
+                  rlog.debug("sync-tab", "tab", { noteId: tab.noteId, action: "skip-edited-during-sync", digestMs, readMs });
                   continue;
                 }
                 reloaded += 1;
-                console.log("[sync-tab] tab", JSON.stringify({ noteId: tab.noteId, action: superseded ? "reload-superseded" : "reload", digestMs, readMs, title: fresh.title }));
+                rlog.debug("sync-tab", "tab", { noteId: tab.noteId, action: superseded ? "reload-superseded" : "reload", digestMs, readMs, title: fresh.title });
                 setOpenTabs((tabs) => tabs.map((t) => t.noteId === tab.noteId
                   ? { ...t, title: fresh.title, content: fresh.content, dirty: false, reloadKey: (t.reloadKey ?? 0) + 1, lastDigest: { title: digest.title, updatedAt: digest.updatedAt } }
                   : t));
               } else {
                 skipped += 1;
-                console.log("[sync-tab] tab", JSON.stringify({ noteId: tab.noteId, action: "skip-content-equal", digestMs, readMs }));
+                rlog.debug("sync-tab", "tab", { noteId: tab.noteId, action: "skip-content-equal", digestMs, readMs });
               }
             } catch { /* 读取失败（已删除等）则跳过 */ }
           }
           if (!syncRunRef.current.isCurrent(reloadVersion)) return;
-          console.log("[sync-tab] refresh done", JSON.stringify({ totalMs: Math.round(performance.now() - tabRefreshStart), open: openTabsRef.current.length, reloaded, deleted: deletedIds.length, skipped }));
+          // 一轮同步只在末尾留一条 info 级耗时（[perf]，正式环境保留；逐 tab 明细走 debug）。
+          rlog.perf("sync-tab.refresh", performance.now() - tabRefreshStart, { open: openTabsRef.current.length, reloaded, deleted: deletedIds.length, skipped });
           if (deletedIds.length > 0) {
             const deletedSet = new Set(deletedIds);
             setOpenTabs((tabs) => tabs.map((t) => deletedSet.has(t.noteId) ? { ...t, deleted: true } : t));

@@ -16,7 +16,7 @@ export S3_PREFIX="${S3_PREFIX:-ab-test-$(date +%Y%m%d%H%M)}"
 
 [ -z "${S3_AK:-}" ] || [ -z "${S3_SK:-}" ] && { echo "需要 S3_AK / S3_SK 环境变量"; exit 1; }
 
-export DEVICE_A_DATA="$HOME/Library/Application Support/local-lakex-notes-dev"
+export DEVICE_A_DATA="$HOME/Library/Application Support/lakex-local-notes-dev"
 export DEVICE_B_DATA="${TMPDIR:-/tmp}/lake-device-b"
 VITE_CFG="vite.config.ts"; VITE_CFG_BAK="$VITE_CFG.multidev-bak"
 PID_FILE="${TMPDIR:-/tmp}/lake-ab.pids"

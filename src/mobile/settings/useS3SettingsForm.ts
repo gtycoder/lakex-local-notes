@@ -22,7 +22,7 @@ const EMPTY_FORM: S3FormValues = {
   endpoint: "https://s3.cn-north-1.qiniucs.com",
   region: "cn-north-1",
   bucket: "",
-  prefix: "local-lakex-notes",
+  prefix: "lakex-local-notes",
   accessKeyId: "",
   secretAccessKey: S3_SECRET_MASK,
 };

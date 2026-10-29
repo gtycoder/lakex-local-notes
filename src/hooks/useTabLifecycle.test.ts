@@ -3,11 +3,12 @@ import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const editorMocks = vi.hoisted(() => ({ clearScrollMemory: vi.fn(), locateEditorSearchHit: vi.fn() }));
+const viewportMocks = vi.hoisted(() => ({ clearScrollMemory: vi.fn(), locateEditorSearchHit: vi.fn() }));
 vi.mock("../lib/native", () => ({ native: {} }));
-vi.mock("../features/editor/EditorTab", () => ({
-  clearScrollMemory: editorMocks.clearScrollMemory,
-  locateEditorSearchHit: editorMocks.locateEditorSearchHit,
+// DT-14：滚动记忆/搜索定位已从 EditorTab 组件模块搬到 editorViewport（视口域）。
+vi.mock("../features/editor/editorViewport", () => ({
+  clearScrollMemory: viewportMocks.clearScrollMemory,
+  locateEditorSearchHit: viewportMocks.locateEditorSearchHit,
 }));
 
 import { useTabLifecycle } from "./useTabLifecycle";
@@ -44,7 +45,7 @@ let host: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-  editorMocks.clearScrollMemory.mockClear();
+  viewportMocks.clearScrollMemory.mockClear();
   host = document.createElement("div"); document.body.append(host); root = createRoot(host);
 });
 afterEach(() => { act(() => root.unmount()); host.remove(); vi.unstubAllGlobals(); evict = null; });
@@ -68,6 +69,6 @@ describe("useTabLifecycle 淘汰契约（审计 F01）", () => {
     // 封顶时受保护标签不被顺手淘汰（不补位）
     const trimmed = trimTabsToLimit(openTabsRef.current, { limit: 2, activeNoteId: "c", pinnedNoteIds: new Set(), protectNoteIds: new Set(out.failedIds) });
     expect(trimmed.map((t) => t.noteId)).toEqual(["a", "b", "c"]);
-    expect(editorMocks.clearScrollMemory).not.toHaveBeenCalledWith("b");
+    expect(viewportMocks.clearScrollMemory).not.toHaveBeenCalledWith("b");
   });
 });

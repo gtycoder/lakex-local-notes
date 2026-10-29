@@ -1,5 +1,12 @@
 name: Release
 
+# SEC-12（261029 用户确认「后期要发版、走 GitHub Actions」）：所有 action 钉到**不可变 commit SHA**
+# （行尾注释 = 等价版本号），不用 mutable major tag（`@v4` 可被上游重指 ⇒ 发布链路投毒面）。
+# 升级 = 换 SHA + 顺手改注释版本；不要退回 `@v4`。
+#
+# 触发口径（用户 261029 定）：**只有推 tag 才打包/发版**，普通 push 不触发打包；
+# 手动 workflow_dispatch 仅用于失败重跑（输入已存在的 tag）。
+
 on:
   push:
     tags: ["v*"]
@@ -14,15 +21,15 @@ permissions:
 
 env:
   GITEE_OWNER: gtycoder
-  GITEE_REPO: local-lakex-notes
+  GITEE_REPO: lakex-local-notes
 
 jobs:
   macos:
     name: macOS (dmg/zip)
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24
           cache: npm
@@ -40,7 +47,7 @@ jobs:
       # 261027：发布前先证明「安装包能启动」（sharp @img/* 必须在 asar.unpacked 里；防主进程启动崩溃）。
       - name: Packaged smoke (launch check)
         run: SKIP_BUILD=1 bash scripts/ci-packaged-smoke.sh
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: macos
           path: |
@@ -49,16 +56,15 @@ jobs:
           if-no-files-found: error
 
   android:
-    name: Android (debug apk)
+    name: Android (release apk)
     runs-on: ubuntu-24.04
-    continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24
           cache: npm
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
         with:
           distribution: temurin
           java-version: "21"
@@ -71,6 +77,9 @@ jobs:
           ls "$sdk" >/dev/null
       - name: Install dependencies
         run: npm ci
+      # SEC-03 静态门禁：先断言「CI/gradle 的 release 配置」本身没退回 debug 包，再花时间构建。
+      - name: Check Android release config (static)
+        run: node scripts/check-android-release-config.mjs
       - name: Build mobile web & sync Capacitor
         run: |
           npx vite build --config vite.mobile.config.ts
@@ -80,19 +89,35 @@ jobs:
           # 阿里云镜像对个别构件返回 502（j2objc-annotations:1.3），Gradle 会直接禁用该仓库
           # CI 在国外访问 google/mavenCentral 正常 ⇒ 构建前移除 aliyun 镜像（仅 CI checkout 内）
           sed -i '/maven.aliyun.com/d' android/build.gradle android/settings.gradle
-      - name: Assemble debug APK
+      - name: Assemble release APK
         working-directory: android
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon --stacktrace
+          # SEC-03：出 release 变体（debug keystore 签，debuggable=false）；用 debug 包发版等于
+          # 把「可调试安装包」发给所有人——任何装机者都能读应用私有目录与给 WebView 挂调试器。
+          ./gradlew assembleRelease --no-daemon --stacktrace
+      - name: Assert APK is not debuggable
+        working-directory: android
+        shell: bash
+        run: |
+          # SEC-03 验收：release 变体必须 debuggable=false。签名缺失是已定决策，但"可调试包发版"
+          # 等于把 adb/WebView 调试注入能力发给所有装机者，必须由 CI 拦住。
+          APK="app/build/outputs/apk/release/app-release.apk"
+          SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          AAPT="$(ls "$SDK"/build-tools/*/aapt 2>/dev/null | sort -V | tail -1)"
+          if [ -z "$AAPT" ]; then echo "找不到 aapt（SDK=$SDK）"; exit 1; fi
+          if "$AAPT" dump badging "$APK" | grep -q "application-debuggable"; then
+            echo "::error::release APK 仍是 debuggable（android:debuggable=true）"; exit 1
+          fi
+          echo "APK 非 debuggable ✓"
       - name: Rename APK with product name + version
         run: |
           version=$(node -p "require('./package.json').version")
-          mv android/app/build/outputs/apk/debug/app-debug.apk              "android/app/build/outputs/apk/debug/LocalLakexNotes-${version}-android-debug.apk"
-      - uses: actions/upload-artifact@v4
+          mv android/app/build/outputs/apk/release/app-release.apk "android/app/build/outputs/apk/release/LakexLocalNotes-${version}-android-release.apk"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: android
-          path: android/app/build/outputs/apk/debug/*.apk
+          path: android/app/build/outputs/apk/release/*.apk
           if-no-files-found: error
 
   windows:
@@ -100,8 +125,8 @@ jobs:
     runs-on: windows-latest
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24
           cache: npm
@@ -115,7 +140,7 @@ jobs:
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
         run: npx electron-builder --win nsis --publish never
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: windows
           path: release/*.exe
@@ -124,17 +149,20 @@ jobs:
   release:
     name: Publish Release
     needs: [macos, android, windows]
+    # SEC-03（261029 用户裁决「放宽」）：Android 失败不再阻断发版——Android 只阻断自己的产物
+    # （失败时无 android artifact，Release 里就没有 APK；macOS/Windows 产物照常发布）。
+    # Android job 仍无 continue-on-error：它自己会红、aapt 断言仍会拦住 debuggable 包。
     if: always() && needs.macos.result == 'success'
     runs-on: ubuntu-24.04
     env:
       GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           path: dist
           merge-multiple: true
       - name: GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
           tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}
           name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}

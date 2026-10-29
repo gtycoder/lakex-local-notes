@@ -2,6 +2,7 @@ import fs from "node:fs";
 import crypto from "node:crypto";
 import type { DbLike } from "./dbLike.js";
 import { sqlParameterBatches } from "../src/core/sqlParameterBatch.js";
+import { parseS3v3DiagnosticReports, pushS3v3DiagnosticReport, type S3v3DiagnosticReport } from "../src/core/s3v3Report.js";
 import type { SyncNote } from "./noteQueries.js";
 import type { HistoryCleanupResult } from "./storeTypes.js";
 
@@ -38,51 +39,12 @@ export class SyncReconciliation {
     this.ctx = ctx;
   }
 
-  // ===== hash 账本（sync_base） =====
+  // ===== 正文 hash（只读工具） =====
+  // Del-6（261029）：v2 的 hash 账本 sync_base 已删除——v3 的基线在 sync-v3/baseline.json.gz，
+  // 这里只留「读盘算正文 sha256」这一纯工具（markSyncedIfUnchanged 的 I2 守卫用）。
 
   contentHash(id: string): string {
     return crypto.createHash("sha256").update(fs.readFileSync(this.ctx.notePathFor(id))).digest("hex");
-  }
-
-  baseHash(id: string): string | null {
-    const row = this.ctx.db.prepare("SELECT content_hash FROM sync_base WHERE note_id=?").get(id) as { content_hash: string } | undefined;
-    return row?.content_hash ?? null;
-  }
-
-  setBaseHash(id: string, hash: string): void {
-    this.ctx.db.prepare("INSERT INTO sync_base(note_id,content_hash) VALUES(?,?) ON CONFLICT(note_id) DO UPDATE SET content_hash=excluded.content_hash")
-      .run(id, hash);
-  }
-
-  /** P0-1：本机最后一次成功上传某文档的 hash（同步上传成功后调用）；hash 传 null = 清除（两端一致 skip 记账用）。
-   * null 走 UPDATE 而非 INSERT——INSERT VALUES(id,null,null) 即使 ON CONFLICT 也会触发 content_hash NOT NULL（SQLite upsert 行为）。 */
-  setLastUploadedHash(id: string, hash: string | null): void {
-    if (hash === null) {
-      this.ctx.db.prepare("UPDATE sync_base SET last_uploaded_hash=NULL WHERE note_id=?").run(id);
-      return;
-    }
-    this.ctx.db.prepare("INSERT INTO sync_base(note_id,content_hash,last_uploaded_hash) VALUES(?,?,?) ON CONFLICT(note_id) DO UPDATE SET last_uploaded_hash=excluded.last_uploaded_hash")
-      .run(id, hash, hash);
-  }
-
-  /** P0-1：读本机最后一次上传的 hash（无则 null） */
-  lastUploadedHash(id: string): string | null {
-    const row = this.ctx.db.prepare("SELECT last_uploaded_hash FROM sync_base WHERE note_id=?").get(id) as { last_uploaded_hash: string | null } | undefined;
-    return row?.last_uploaded_hash ?? null;
-  }
-
-  /** 统一冲突语义：读本设备"上次成功同步时该笔记的 updated_at"（元数据已确认版本；无则 null）。
-   * 下载对账：远端 updatedAt 新于它 → 远端是未确认的新变更（先同步者胜，应用远端）；
-   * 否则远端是本设备已确认版本（保留本地续编/改名，上传回写）。 */
-  lastSyncedMetaAt(id: string): string | null {
-    const row = this.ctx.db.prepare("SELECT last_synced_meta_at FROM sync_base WHERE note_id=?").get(id) as { last_synced_meta_at: string | null } | undefined;
-    return row?.last_synced_meta_at ?? null;
-  }
-
-  /** 批量读 hash 账本：同步环一次全表读，替代逐条 getSyncBase（每条在移动端都是一次原生往返）。 */
-  getAllSyncBases(): Map<string, { contentHash: string; lastUploadedHash: string | null; lastSyncedMetaAt: string | null }> {
-    const rows = this.ctx.db.prepare("SELECT note_id,content_hash,last_uploaded_hash,last_synced_meta_at FROM sync_base").all() as Array<{ note_id: string; content_hash: string; last_uploaded_hash: string | null; last_synced_meta_at: string | null }>;
-    return new Map(rows.map((r) => [r.note_id, { contentHash: r.content_hash, lastUploadedHash: r.last_uploaded_hash, lastSyncedMetaAt: r.last_synced_meta_at }]));
   }
 
   // ===== 同步标记 =====
@@ -112,9 +74,8 @@ export class SyncReconciliation {
         "UPDATE notes SET is_dirty=0, restore_pending_at=NULL WHERE id=? AND updated_at=?"
       ).run(noteId, expected.updatedAt);
       if (info.changes === 0) return false;
-      // 4) 归位 + 记录元数据已确认版本（与原 markSynced 语义一致）
+      // 4) 归位（Del-6：原「记录元数据已确认版本」写 sync_base，账本删除后由 v3 baseline 承担）
       this.ctx.db.prepare("UPDATE tree_nodes SET is_dirty=0 WHERE note_file_id=?").run(noteId);
-      this.ctx.db.prepare("UPDATE sync_base SET last_synced_meta_at=? WHERE note_id=?").run(expected.updatedAt, noteId);
       return true;
     })();
   }
@@ -125,13 +86,9 @@ export class SyncReconciliation {
       // 残留标记会让本设备永远 local-wins、压住后续墓碑（墓碑永胜被破坏）。
       this.ctx.db.prepare("UPDATE notes SET is_dirty=0, restore_pending_at=NULL WHERE id=?").run(id);
       // 侧栏/状态栏读的是 tree_nodes.sync_state，必须同步置为 synced。
+      // Del-6：原「记录元数据已确认版本」写 sync_base（v2 账本）；v3 的同一事实在 baseline.lake 条目里，
+      // 由 saveBaseline 落盘，这里不再写第二份。
       this.ctx.db.prepare("UPDATE tree_nodes SET is_dirty=0 WHERE note_file_id=?").run(id);
-      // 统一冲突语义：记录本次成功同步时笔记的 updated_at（元数据已确认版本），供下次对账 LWW。
-      // 真实同步流中 sync_base 行已由 setBaseHash/setLastUploadedHash 创建，这里仅更新；
-      // 无行时（如单测直接调用）跳过，last_synced_meta_at 保持 null（远端视为未确认 → 应用远端）。
-      this.ctx.db.prepare(
-        "UPDATE sync_base SET last_synced_meta_at=(SELECT updated_at FROM notes WHERE id=?) WHERE note_id=?"
-      ).run(id, id);
     });
     tx();
   }
@@ -240,26 +197,26 @@ export class SyncReconciliation {
   // ===== 墓碑（deleted_notes） =====
 
   /** 记录"从云端学到的删除"（本设备从未持有该笔记）：与本地删除同语义，
-   * 防止 manifest 的 deleted 标记因设备清空/换机而丢失（审计 #2）。 */
+   * 防止 deleted 标记因设备清空/换机而丢失（审计 #2）。
+   * Del-6：已删「逐行 published_at」——学到即已发布；待同步判据是 deleted_at > 水线，
+   * 本轮成功同步后水线推进到 now 即自然清零（学到的墓碑 deleted_at 是云端旧时间）。 */
   rememberDeleted(note: SyncNote, deletedAt: string): void {
     // 不用 INSERT OR REPLACE：purge 后该行已带 purged_at，若被远端墓碑重插会清空 purged_at，
     // 导致 listPurgedNotesForSync 漏掉、S3 对象前缀永远不删。
-    // node_type=note（只有 manifest.notes 条目会触发 remember）；
-    // published_at=deletedAt：学到即已在云端发布（该墓碑来自 manifest），不计入待上传；
-    // ON CONFLICT 不清已有 published_at（本地 purge 后恰逢远端墓碑重插时不误标已发布）。
+    // node_type=note（只有索引 notes 条目会触发 remember）。
     this.ctx.db.prepare(
-      "INSERT INTO deleted_notes(id,title,parent_id,sort_order,updated_at,deleted_at,node_type,published_at) VALUES(?,?,?,?,?,?,?,?) " +
-      "ON CONFLICT(id) DO UPDATE SET title=excluded.title, parent_id=excluded.parent_id, sort_order=excluded.sort_order, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, node_type=excluded.node_type, published_at=COALESCE(deleted_notes.published_at, excluded.published_at)"
-    ).run(note.id, note.title, note.parentId, note.sortOrder, note.updatedAt, deletedAt, "note", deletedAt);
+      "INSERT INTO deleted_notes(id,title,parent_id,sort_order,updated_at,deleted_at,node_type) VALUES(?,?,?,?,?,?,?) " +
+      "ON CONFLICT(id) DO UPDATE SET title=excluded.title, parent_id=excluded.parent_id, sort_order=excluded.sort_order, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, node_type=excluded.node_type"
+    ).run(note.id, note.title, note.parentId, note.sortOrder, note.updatedAt, deletedAt, "note");
   }
 
   /** v5：记录"从云端学到的 folder 删除"（本设备从未持有该目录）——node_type='folder' 墓碑防复活。
-   * 不写 purged_at（S3 对象前缀由发起端清理）；published_at=deletedAt（墓碑来自 manifest，已发布）。 */
+   * 不写 purged_at（S3 对象前缀由发起端清理）；Del-6：不再写 published_at（水线判据，见上）。 */
   rememberFolderDeleted(folder: { id: string; title: string; parentId: string | null; sortOrder: number; updatedAt?: string }, deletedAt: string): void {
     this.ctx.db.prepare(
-      "INSERT INTO deleted_notes(id,title,parent_id,sort_order,updated_at,deleted_at,node_type,published_at) VALUES(?,?,?,?,?,?,?,?) " +
-      "ON CONFLICT(id) DO UPDATE SET title=excluded.title, parent_id=excluded.parent_id, sort_order=excluded.sort_order, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, node_type=excluded.node_type, published_at=COALESCE(deleted_notes.published_at, excluded.published_at)"
-    ).run(folder.id, folder.title, folder.parentId, folder.sortOrder, folder.updatedAt ?? deletedAt, deletedAt, "folder", deletedAt);
+      "INSERT INTO deleted_notes(id,title,parent_id,sort_order,updated_at,deleted_at,node_type) VALUES(?,?,?,?,?,?,?) " +
+      "ON CONFLICT(id) DO UPDATE SET title=excluded.title, parent_id=excluded.parent_id, sort_order=excluded.sort_order, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, node_type=excluded.node_type"
+    ).run(folder.id, folder.title, folder.parentId, folder.sortOrder, folder.updatedAt ?? deletedAt, deletedAt, "folder");
   }
 
   /** v5：收到他端 folder 墓碑（deleted:true）且本地有活跃副本 → folder 子树移入回收站标 purged
@@ -309,18 +266,19 @@ export class SyncReconciliation {
     });
   }
 
-  /** 墓碑已发布到 manifest（发布成功后由 syncEngine 调用）：标记 published_at，从待上传计数中移除。
-   * 墓碑本体永久保留（防 manifest 删除标记因他端 B4 移除而丢失 → 离线设备复活，审计 #2）。
-   * v5：folder 墓碑同样参与（发布进 manifest.folders）——放开旧版的 node_type != 'folder' 过滤。 */
-  markTombstonesPublished(ids: string[]): void {
-    if (ids.length === 0) return;
-    const publishedAt = nowIso();
-    for (const batch of sqlParameterBatches(ids)) {
-      const placeholders = batch.map(() => "?").join(",");
-      this.ctx.db.prepare(
-        "UPDATE deleted_notes SET published_at=COALESCE(published_at, ?) WHERE id IN (" + placeholders + ")"
-      ).run(publishedAt, ...batch);
-    }
+  // ===== 墓碑发布水线（Del-6：替代逐行 published_at） =====
+
+  /** 上次成功同步完成时间（device_state.tombstones_published_at；缺省 "0" = 全部墓碑都算待同步）。
+   * 待同步判据统一为 deleted_at > 水线（三种 pending 查询共用）。 */
+  getTombstonesWaterline(): string {
+    const row = this.ctx.db.prepare("SELECT value FROM device_state WHERE key='tombstones_published_at'").get() as { value: string } | undefined;
+    return row?.value ?? "0";
+  }
+
+  /** 成功同步后推进水线（desktopSync 调用，替代旧 markTombstonesPublished 的逐行 UPDATE）。
+   * 墓碑本体永久保留（防删除标记因他端移除而丢失 → 离线设备复活，审计 #2）。 */
+  markTombstonesWaterline(at: string = nowIso()): void {
+    this.ctx.db.prepare("INSERT INTO device_state(key,value) VALUES('tombstones_published_at',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(at);
   }
 
   /** 已写入同步清单的删除标记可安全剪除，避免 deleted_notes 无限累积 */
@@ -381,7 +339,7 @@ export class SyncReconciliation {
   /** 廉价 pending 指纹（三个索引级 COUNT，微秒级）：IPC 层每次调用后 diff，变化才广播完整摘要。 */
   pendingSignature(): string {
     const docs = this.ctx.db.prepare("SELECT COUNT(*) AS c FROM notes WHERE is_dirty=1 AND deleted_at IS NULL").get() as { c: number };
-    const tombs = this.ctx.db.prepare("SELECT COUNT(*) AS c FROM deleted_notes WHERE (node_type IS NULL OR node_type != 'folder') AND published_at IS NULL").get() as { c: number };
+    const tombs = this.ctx.db.prepare("SELECT COUNT(*) AS c FROM deleted_notes WHERE (node_type IS NULL OR node_type != 'folder') AND deleted_at > COALESCE((SELECT value FROM device_state WHERE key='tombstones_published_at'),'0')").get() as { c: number };
     const folders = this.ctx.db.prepare("SELECT COUNT(*) AS c FROM tree_nodes WHERE note_file_id IS NULL AND deleted_at IS NULL AND is_dirty=1 AND id != ?").get(this.ctx.trashNotebookId) as { c: number };
     return `${docs.c}:${folders.c}:${tombs.c}`;
   }
@@ -396,10 +354,11 @@ export class SyncReconciliation {
     const pendingFolders = (this.ctx.db.prepare(
       "SELECT COUNT(*) AS count FROM tree_nodes WHERE note_file_id IS NULL AND deleted_at IS NULL AND is_dirty=1 AND id != ?"
     ).get(this.ctx.trashNotebookId) as { count: number }).count;
-    // 待同步墓碑 = 未发布（published_at IS NULL）的 note 墓碑。
+    // 待同步墓碑 = 晚于「上次成功同步水线」（deleted_at > waterline）的 note 墓碑。
+    // Del-6：不再有逐行 published_at；成功同步后水线推进 ⇒ 本轮之前发布的墓碑自然清零。
     // 资源不在本地维护上传 ledger，不能把正文引用数冒充为待上传数；真实资源 diff 在同步阶段完成。
     const tombstones = (this.ctx.db.prepare(
-      "SELECT COUNT(*) AS count FROM deleted_notes WHERE (node_type IS NULL OR node_type != 'folder') AND published_at IS NULL"
+      "SELECT COUNT(*) AS count FROM deleted_notes WHERE (node_type IS NULL OR node_type != 'folder') AND deleted_at > COALESCE((SELECT value FROM device_state WHERE key='tombstones_published_at'),'0')"
     ).get() as { count: number }).count;
     return { documents: pendingDocs + tombstones, folders: pendingFolders, resources: 0, generatedAt: nowIso() };
   }
@@ -416,52 +375,14 @@ export class SyncReconciliation {
       "SELECT 1 FROM tree_nodes WHERE is_dirty=1 AND note_file_id IS NULL AND id != ? LIMIT 1"
     ).get(this.ctx.trashNotebookId);
     if (groupRow) return true;
-    // 未发布的 purge 墓碑 = 待上传事实：墓碑环节要把它发布/对齐记账（markTombstonesPublished）。
+    // 晚于成功同步水线的 purge 墓碑 = 待上传事实：墓碑环节要把它发布/对齐记账（desktopSync 成功后推进水线）。
     // 若不计入 → purge 与他端发布撞车（远端已带墓碑 → 收敛减枝无需发布）时早退吞掉整轮，
     // 墓碑永不上传/记账 → pending documents 永久挂起（260910 实测：B 端 122891ab/efbc6884）。
-    const tombRow = this.ctx.db.prepare("SELECT 1 FROM deleted_notes WHERE published_at IS NULL LIMIT 1").get();
+    const tombRow = this.ctx.db.prepare("SELECT 1 FROM deleted_notes WHERE deleted_at > COALESCE((SELECT value FROM device_state WHERE key='tombstones_published_at'),'0') LIMIT 1").get();
     return !!tombRow;
   }
 
-  /** 批量读取同步基线信息（一次性取回，替代逐条 lastSyncedMetaAt 查询 + 支撑记账去重）。 */
-  allSyncBaseInfo(): Map<string, { syncState: string; updatedAt: string; baseHash: string | null; lastSyncedMetaAt: string | null; lastUploadedHash: string | null }> {
-    const rows = this.ctx.db.prepare(
-      "SELECT n.id,n.is_dirty,n.updated_at,s.content_hash,s.last_synced_meta_at,s.last_uploaded_hash FROM notes n LEFT JOIN sync_base s ON s.note_id=n.id WHERE n.deleted_at IS NULL"
-    ).all() as Array<{ id: string; is_dirty: number; updated_at: string; content_hash: string | null; last_synced_meta_at: string | null; last_uploaded_hash: string | null }>;
-    return new Map(rows.map((r) => [r.id, {
-      syncState: r.is_dirty ? "local" : "synced", updatedAt: r.updated_at, baseHash: r.content_hash ?? null,
-      lastSyncedMetaAt: r.last_synced_meta_at ?? null, lastUploadedHash: r.last_uploaded_hash ?? null,
-    }]));
-  }
-
-  // ===== S3 GC pending / log =====
-
-  addS3GcPending(key: string, markedAt: string = nowIso()): void {
-    this.ctx.db.prepare("INSERT INTO s3_gc_pending(key,marked_at) VALUES(?,?) ON CONFLICT(key) DO NOTHING").run(key, markedAt);
-  }
-
-  removeS3GcPending(keys: string[]): void {
-    if (keys.length === 0) return;
-    for (const batch of sqlParameterBatches(keys)) {
-      const placeholders = batch.map(() => "?").join(",");
-      this.ctx.db.prepare(`DELETE FROM s3_gc_pending WHERE key IN (${placeholders})`).run(...batch);
-    }
-  }
-
-  listS3GcPending(): Array<{ key: string; markedAt: string }> {
-    return this.ctx.db.prepare("SELECT key,marked_at AS markedAt FROM s3_gc_pending ORDER BY marked_at").all() as Array<{ key: string; markedAt: string }>;
-  }
-  /** A 方案：记录 manifest 声明的资产元数据（即使本地文件缺失，上传 union 仍可正确声明）。 */
-  recordDeclaredAssets(noteId: string, assets: Array<{ filename: string; size: number; hash: string }>): void {
-    const stmt = this.ctx.db.prepare(`INSERT INTO declared_assets(note_id,filename,size,hash) VALUES(?,?,?,?)
-      ON CONFLICT(note_id,filename) DO UPDATE SET size=excluded.size, hash=excluded.hash`);
-    for (const a of assets) stmt.run(noteId, a.filename, a.size, a.hash);
-  }
-
-  /** A 方案：列出该笔记已声明（含本地缺失但 manifest 声明过）的资产元数据。 */
-  listDeclaredAssets(noteId: string): Array<{ filename: string; size: number; hash: string }> {
-    return this.ctx.db.prepare(`SELECT filename,size,hash FROM declared_assets WHERE note_id=?`).all(noteId) as Array<{ filename: string; size: number; hash: string }>;
-  }
+  // ===== S3 GC log（261028：manifest 时代的 s3_gc_pending 待回收表已删，仅保留深清理真实写入的审计日志） =====
 
   recordS3GcLog(action: string, key: string, reason: string, commitId: string | null, deviceId: string | null, ok: boolean): void {
     this.ctx.db.prepare("INSERT INTO s3_gc_log(ts,action,key,reason,commit_id,device_id,ok) VALUES(?,?,?,?,?,?,?)")
@@ -481,6 +402,22 @@ export class SyncReconciliation {
 
   recordSyncResult(json: string): void {
     this.ctx.db.prepare("INSERT INTO device_state(key,value) VALUES('last_sync_result',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(json);
+  }
+
+  /**
+   * SD-13：最近 3 轮 v3 同步诊断（阶段耗时/对象数/字节/失败对象/warnings）落 `device_state`。
+   * 单独一个键（不覆盖 `last_sync_result`）：后者是渲染层状态栏读的稳定摘要，结构不能随意扩张。
+   */
+  recordV3SyncReport(report: S3v3DiagnosticReport): void {
+    const next = pushS3v3DiagnosticReport(this.listV3SyncReports(), report);
+    this.ctx.db.prepare("INSERT INTO device_state(key,value) VALUES('sync_v3_reports',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(JSON.stringify(next));
+  }
+
+  /** 读取最近 3 轮 v3 同步诊断（坏数据一律当空，不抛错）。 */
+  listV3SyncReports(): S3v3DiagnosticReport[] {
+    const row = this.ctx.db.prepare("SELECT value FROM device_state WHERE key='sync_v3_reports'").get() as { value: string } | undefined;
+    if (!row) return [];
+    try { return parseS3v3DiagnosticReports(JSON.parse(row.value)); } catch { return []; }
   }
 
   /** P4：记录最近一次历史清理结果（自动/手动），供设置面板展示与排查 */

@@ -1,10 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { defineTreeBehaviorContract, type TreeBehaviorAdapter } from "../core/treeBehaviorContract.js";
-import { defineResourceBehaviorContract, type ResourceBehaviorAdapter } from "../core/resourceBehaviorContract.js";
+import { defineTreeBehaviorContract, type TreeBehaviorAdapter } from "../testing/treeBehaviorContract.js";
+import { defineResourceBehaviorContract, type ResourceBehaviorAdapter } from "../testing/resourceBehaviorContract.js";
 
 vi.mock("./native/nativeSqliteDb.js", async () =>
   (await import("./native/nativeSqliteDbTestMock.js")).createNativeSqliteDbMockModule(),
 );
+
+const assetFsMocks = vi.hoisted(() => ({
+  removeNoteAssetsDirFs: vi.fn(async (_noteId: string) => {}),
+  removeQuickNoteAssetsDirFs: vi.fn(async (_quickNoteId: string) => {}),
+}));
 
 vi.mock("./native/assetFs", () => ({
   saveAssetBytesFs: vi.fn(async () => {}),
@@ -12,9 +17,12 @@ vi.mock("./native/assetFs", () => ({
   listAssetKeysFs: vi.fn(async () => []),
   listNoteAssetKeysFs: vi.fn(async () => []),
   removeAssetBytesFs: vi.fn(async () => {}),
+  removeNoteAssetsDirFs: assetFsMocks.removeNoteAssetsDirFs,
+  removeQuickNoteAssetsDirFs: assetFsMocks.removeQuickNoteAssetsDirFs,
 }));
 
 import { bridge } from "./bridge.js";
+import { removeNoteAssetsDirFs } from "./native/assetFs";
 
 function createMobileAdapter(): TreeBehaviorAdapter {
   return {
@@ -111,17 +119,6 @@ describe("mobile purge 删除传播", () => {
     expect(tombstones.find((t) => t.id === NID)?.nodeType).toBe("note");
   });
 
-  it("markTombstonesPublished 幂等：purge 墓碑发布标记不改变 deletedAt", async () => {
-    const NID = "purge-note-2";
-    await bridge.saveNote(NID, "待删", "<p>内容</p>", null);
-    await bridge.trashNote(NID);
-    await bridge.purgeTreeItem(NID, "note");
-    const tombBefore = (await bridge.listDeletedNotesForSync()).find((t) => t.id === NID);
-    await bridge.markTombstonesPublished([NID]);
-    const tombAfter = (await bridge.listDeletedNotesForSync()).find((t) => t.id === NID);
-    expect(tombAfter!.deletedAt).toBe(tombBefore!.deletedAt);
-  });
-
   it("trashTreeItem(folder)：整棵子树（深层 folders + 子树 notes）进回收站，同步列表带 trashedAt", async () => {
     const nbRow = await bridge.createNotebook({ title: "待删库", icon: null });
     const grp = await bridge.createGroup(nbRow.id, "内层分组");
@@ -196,6 +193,43 @@ describe("mobile purge 删除传播", () => {
     const tombstones = await bridge.listDeletedNotesForSync();
     expect(tombstones.find((item) => item.id === "purge-nested-parent")?.nodeType).toBe("note");
     expect(tombstones.find((item) => item.id === "purge-nested-child")?.nodeType).toBe("note");
+  });
+
+  it("MOB-06：purge note 事务外清附件目录（note-assets/{id}/ 不留明文残）", async () => {
+    const NID = "purge-assets-note-1";
+    await bridge.saveNote(NID, "带附件文档", "<p>内容</p>", null);
+    await bridge.trashNote(NID);
+
+    await bridge.purgeTreeItem(NID, "note");
+
+    expect(removeNoteAssetsDirFs).toHaveBeenCalledWith(NID);
+  });
+
+  it("MOB-06：purge folder 子树时每个 noteId（含嵌套子文档）都清附件目录", async () => {
+    const nb = await bridge.createNotebook({ title: "带附件子树", icon: null });
+    const group = await bridge.createGroup(nb.id, "分组");
+    await bridge.saveNote("purge-assets-parent", "父文档", "<p>p</p>", group.id);
+    await bridge.saveNote("purge-assets-child", "子文档", "<p>c</p>", "purge-assets-parent");
+    await bridge.trashTreeItem(nb.id, "folder");
+
+    await bridge.purgeTreeItem(nb.id, "folder");
+
+    expect(removeNoteAssetsDirFs).toHaveBeenCalledWith("purge-assets-parent");
+    expect(removeNoteAssetsDirFs).toHaveBeenCalledWith("purge-assets-child");
+  });
+
+  it("MOB-06：附件目录删除失败只告警，不阻断墓碑（仍算彻底删除）", async () => {
+    const NID = "purge-assets-fail";
+    await bridge.saveNote(NID, "删目录失败", "<p>x</p>", null);
+    await bridge.trashNote(NID);
+    vi.mocked(removeNoteAssetsDirFs).mockRejectedValueOnce(new Error("EACCES"));
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    try {
+      await expect(bridge.purgeTreeItem(NID, "note")).resolves.toBeUndefined();
+      expect(warn).toHaveBeenCalled();
+      expect((await bridge.listDeletedNotesForSync()).some((t) => t.id === NID)).toBe(true);
+      expect((await bridge.listTrashTree()).some((t) => t.id === NID)).toBe(false);
+    } finally { warn.mockRestore(); }
   });
 
   it("审计 F06：purge 后晚到保存不复活文档（墓碑守卫），也不做 upsert 自愈", async () => {

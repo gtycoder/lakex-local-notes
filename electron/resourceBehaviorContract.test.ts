@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { defineResourceBehaviorContract, type ResourceBehaviorAdapter } from "../src/core/resourceBehaviorContract.js";
+import { defineResourceBehaviorContract, type ResourceBehaviorAdapter } from "../src/testing/resourceBehaviorContract.js";
 import { ResourceRepository } from "./resourceRepository.js";
 
 function createDesktopAdapter(): ResourceBehaviorAdapter {

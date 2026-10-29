@@ -1,7 +1,7 @@
 import { sha256Hex } from "./syncUtils.js";
-import { S3V3_POINTER_KEY, assetKey, declarationKey, indexKey, quickNoteAssetKey } from "./s3v3Keys.js";
-import { declarationHashOf, parseLakeIndexBytes, parseQuickNotesIndexBytes, validateAssetDeclaration, type AssetDeclaration } from "./s3v3Index.js";
-import { validatePointer } from "./s3v3Types.js";
+import { S3V3_POINTER_KEY, assetKey, declarationKey, indexKey, quickNoteAssetKey } from "./s3v3/protocol/s3v3Keys.js";
+import { declarationHashOf, parseLakeIndexBytes, parseQuickNotesIndexBytes, validateAssetDeclaration, type AssetDeclaration } from "./s3v3/protocol/s3v3Index.js";
+import { validatePointer } from "./s3v3/protocol/s3v3Types.js";
 import type { S3v3Remote } from "./s3v3Ports.js";
 import { runPoolSettled } from "./s3v3Pool.js";
 

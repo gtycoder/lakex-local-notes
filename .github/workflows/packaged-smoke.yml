@@ -1,12 +1,16 @@
 name: Packaged smoke (macOS, unsigned)
 
+# SEC-12（261029 用户确认「后期要发版、走 GitHub Actions」）：所有 action 钉到**不可变 commit SHA**
+# （行尾注释 = 等价版本号），不用 mutable major tag（`@v4` 可被上游重指 ⇒ 发布链路投毒面）。
+# 升级 = 换 SHA + 顺手改注释版本；不要退回 `@v4`。
+
 # 261027：防止「打包版主进程起不来」类问题（sharp @img/* 缺失、asar 解包漏文件）混进 release。
 # 本地等价命令：bash scripts/ci-packaged-smoke.sh
 
+# 触发口径（用户 261029 定）：**普通 push 不跑**（只有 PR 与手动）；打包/冒烟只在 tag 上由
+# release.yml 兜底。理由：macOS runner 有 10× 计费倍率，日常提交不值得整包构建。
 on:
   pull_request:
-  push:
-    branches: [master]
   workflow_dispatch:
 
 permissions:
@@ -21,8 +25,8 @@ jobs:
       CSC_IDENTITY_AUTO_DISCOVERY: "false"
       ELECTRON_MIRROR: https://registry.npmmirror.com/-/binary/electron/
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24
           cache: npm
@@ -32,10 +36,10 @@ jobs:
         run: bash scripts/ci-packaged-smoke.sh
       - name: Collect smoke logs on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: packaged-smoke-logs
           path: |
-            /tmp/local-lakex-notes-packaged-smoke-data/**/*.log
-            release/mac-arm64/LocalLakexNotes.app/Contents/Resources/app.asar.unpacked/node_modules/@img
+            /tmp/lakex-local-notes-packaged-smoke-data/**/*.log
+            release/mac-arm64/LakexLocalNotes.app/Contents/Resources/app.asar.unpacked/node_modules/@img
           if-no-files-found: ignore

@@ -11,7 +11,7 @@
  * 供桌面"点击卡片 → 打开附件"、移动端"文件卡打开/分享"复用。
  */
 import { parseLocalAssetUrl, type LocalAssetRef } from "./assetUrl.js";
-import { extOf } from "./assetNaming.js";
+import { extOf, fileKindOf as assetFileKindOf, type AssetFileKind } from "./assetNaming.js";
 
 export type FileCardStatus = "pending" | "done" | "error" | "uploading" | "transfering";
 export type FileCardMode = "card" | "embed" | "title" | "inline";
@@ -163,25 +163,34 @@ export function buildDoneFileCardValue(input: { src: string; name: string; size:
   };
 }
 
-/** 附件类型分流（图标/内联预览决策用）。 */
+/**
+ * 附件**预览分流**类型（打开方式/内联预览决策用）。
+ *
+ * 这是 [AssetFileKind] 的**投影**，不是第二套扩展名表（CORE-07）：图标分流用
+ * `assetNaming.fileKindOf`（11 类），预览分流只需要更少的桶；两者同源才不会出现
+ * 「列表里显示代码文件图标、点开却按『其他』处理」。新增扩展名**只改 assetNaming 一张表**。
+ */
 export type AttachmentKind = "image" | "pdf" | "audio" | "video" | "document" | "archive" | "other";
 
-const KIND_BY_EXT: Record<string, AttachmentKind> = {
-  png: "image", jpg: "image", jpeg: "image", gif: "image", webp: "image", avif: "image",
-  bmp: "image", svg: "image", ico: "image", tiff: "image", tif: "image",
+const PREVIEW_KIND_BY_ASSET_KIND: Record<AssetFileKind, AttachmentKind> = {
+  image: "image",
   pdf: "pdf",
-  mp3: "audio", wav: "audio", m4a: "audio", aac: "audio", flac: "audio", ogg: "audio", wma: "audio",
-  mp4: "video", mov: "video", mkv: "video", avi: "video", webm: "video", m4v: "video", wmv: "video", flv: "video",
-  doc: "document", docx: "document", xls: "document", xlsx: "document", ppt: "document", pptx: "document",
-  txt: "document", md: "document", csv: "document", rtf: "document", key: "document", pages: "document",
-  numbers: "document", epub: "document",
-  zip: "archive", rar: "archive", "7z": "archive", tar: "archive", gz: "archive", bz2: "archive", xz: "archive",
+  audio: "audio",
+  video: "video",
+  archive: "archive",
+  // 文档类：doc/sheet/slide 都走「信息 + 系统应用打开」；code/text 同样是信息预览，
+  // 但图标仍按 11 类细分为代码/文本（图标页不需要再分桶）。
+  doc: "document",
+  sheet: "document",
+  slide: "document",
+  code: "document",
+  text: "document",
+  file: "other",
 };
 
-/** 按文件名判定附件类型（默认 other）。 */
+/** 按文件名判定附件预览类型（派生自 assetNaming.fileKindOf；未知扩展名 → other）。 */
 export function fileKindOf(filename: string): AttachmentKind {
-  const ext = extOf(filename).toLowerCase();
-  return KIND_BY_EXT[ext] ?? "other";
+  return PREVIEW_KIND_BY_ASSET_KIND[assetFileKindOf(filename)];
 }
 
 /** 人类可读文件大小（B/KB/MB/GB，一位小数）。 */

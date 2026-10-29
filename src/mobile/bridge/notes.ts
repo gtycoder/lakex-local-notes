@@ -6,7 +6,7 @@ import { backfillTextCache } from "../data/textCacheBackfill.js";
 import { scanAssetCards, fileKindOf } from "../../core/fileCard.js";
 import { lakeHtmlToPlain } from "../../core/lakeCaches.js";
 import { searchTextForKind } from "../../core/noteSearchText.js";
-import { countChars, countWords } from "../../core/textStats.js";
+import { countTextStats } from "../../core/textStats.js";
 import { emptyLakeBody } from "../../core/lakeDocForm.js";
 import { emptyMobileUsheetBody } from "../usheet/mobileSheetGrid.js";
 import { emptyBoardBody } from "../../core/boardDoc.js";
@@ -103,8 +103,7 @@ export const notesDomain = {
     // 与搜索索引共用同一条按 kind 分派的派生口径；表格/多维表/画板正文是 JSON，不能喂 Lake HTML 解析器。
     const plain = searchTextForKind(note.kind, note.content).plain ?? "";
     // 字数/字符数 = 与内核 wordCount 同语义的单一来源（261016，B1；此前这里另写了一套正则）。
-    const charCount = countChars(plain);
-    const wordCount = countWords(plain);
+    const { charCount, wordCount } = countTextStats(plain);
     const seen = new Set<string>();
     const assets: Array<{ filename: string; size: number; kind: string }> = [];
     for (const card of scanAssetCards(note.content)) {

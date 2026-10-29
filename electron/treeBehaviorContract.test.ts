@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { defineTreeBehaviorContract, type TreeBehaviorAdapter } from "../src/core/treeBehaviorContract.js";
+import { defineTreeBehaviorContract, type TreeBehaviorAdapter } from "../src/testing/treeBehaviorContract.js";
 import { Store } from "./store.js";
 
 function createDesktopAdapter(): TreeBehaviorAdapter {

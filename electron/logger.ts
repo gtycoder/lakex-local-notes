@@ -9,7 +9,7 @@
  * 约定（docs/LOGGING.md）：
  * - 耗时一律 [perf] <label> <ms>ms key=value（perfMessage，跨进程同一来源 src/core/logFormat.ts）；
  * - 错误一律带 error="Name: message" + 前 3 帧调用栈；不记录正文内容/密钥；
- * - 落盘目录 userData/logs/local-lakex-notes.log，10MB 轮转（electron-log 默认保留一份 .old）。
+ * - 落盘目录 userData/logs/lakex-local-notes.log，10MB 轮转（electron-log 默认保留一份 .old）。
  *
  * 渲染层：不 import 本模块；console.* 由 main.ts 的 console-message 转发（按级别映射 + CSP 折叠）。
  */
@@ -46,7 +46,7 @@ export function initLogger(options: { isPackaged?: boolean } = {}): LogLevelConf
   if (!isElectronMain) return activeLevels;
   electronLog.initialize();
   electronLog.transports.file.resolvePathFn = () =>
-    path.join(app.getPath("userData"), "logs", "local-lakex-notes.log");
+    path.join(app.getPath("userData"), "logs", "lakex-local-notes.log");
   electronLog.transports.file.maxSize = LOG_FILE_MAX_BYTES;
   electronLog.transports.file.format = lineFormat();
   electronLog.transports.file.level = activeLevels.file;

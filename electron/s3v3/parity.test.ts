@@ -66,6 +66,8 @@ describe("v3 与旧协议对齐（261026 parity：进度/冲突留档/警告/缺
     a.store.createNoteInAtTopWithContent(nb.id, "Doc", "body", [], "n1");
     await syncWithV3(a.store, undefined, { remote, deviceId: "A" });
     await fs.unlink(a.store.getNotePaths("n1").lakePath);
+    // 事件驱动：体检（资源页/打开文档）发现缺正文才入队，同步本身不扫描。
+    a.store.listMissingBodies();
     const r = await syncWithV3(a.store, undefined, { remote, deviceId: "A" });
     expect(r.warnings?.some((w) => w.kind === "local_body_restored" && w.noteId === "n1")).toBe(true);
   }, 60_000);

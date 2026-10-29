@@ -242,3 +242,25 @@ export async function listAssetKeysFs(): Promise<string[]> {
   }
   return keys;
 }
+
+/**
+ * 删除整份资产目录（彻底删除 / purge 用；不存在时静默成功）。
+ * 先列后逐个删（Filesystem 的 rmdir 不支持递归），再尽力把空目录本身也删掉（已不存在/非空则忽略）。
+ * 单个文件删除失败照旧上抛：由调用方决定告警方式（purge 路径不阻断墓碑判定）。
+ */
+async function removeAssetDirFs(root: string, id: string, listKeys: () => Promise<string[]>): Promise<void> {
+  for (const key of await listKeys()) await removeAssetBytesFs(key);
+  await Filesystem.rmdir({ path: root + "/" + id, directory: Directory.Data }).catch(() => undefined);
+}
+
+/** 彻底删除某篇文档时清空 note-assets/{noteId}/（图片/附件，本地明文不留残）。 */
+export async function removeNoteAssetsDirFs(noteId: string): Promise<void> {
+  if (!isSafePathSegment(noteId)) return;
+  await removeAssetDirFs(ROOT, noteId, () => listNoteAssetKeysFs(noteId));
+}
+
+/** 彻底删除单条小记时清空 quick-notes/assets/{id}/（与 note 空间同构，见上）。 */
+export async function removeQuickNoteAssetsDirFs(quickNoteId: string): Promise<void> {
+  if (!isSafePathSegment(quickNoteId)) return;
+  await removeAssetDirFs(QUICK_ROOT, quickNoteId, () => listQuickNoteAssetKeysFs(quickNoteId));
+}

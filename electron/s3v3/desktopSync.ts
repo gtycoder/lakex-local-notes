@@ -4,9 +4,11 @@ import type { Store } from "../store.js";
 import { S3v3S3Remote } from "./s3Remote.js";
 import { DesktopStoreDevice } from "./desktopStoreAdapter.js";
 import { S3v3SyncEngine, S3v3SyncError, classifyS3v3Error } from "./syncEngine.js";
+import { annotateSyncError } from "./syncErrorInfo.js";
 import type { S3v3Remote } from "./ports.js";
 import { getQuickNotesStoreForV3 } from "./quickNotesRegistry.js";
 import type { QuickNotePushOutcome } from "../../src/core/quickNoteSyncTypes.js";
+import { buildS3v3DiagnosticReport, createS3v3PhaseCollector, type S3v3DiagnosticReport } from "../../src/core/s3v3Report.js";
 
 /**
  * 桌面 v3 同步入口（feature flag: LAKE_SYNC_PROTOCOL=v3）。
@@ -25,6 +27,11 @@ export function localHistoryAssetRefs(store: Store): Set<string> {
     }
   } catch { /* 历史库异常不应阻断清理；保守起见按空集处理（下一次清理再保护） */ }
   return refs;
+}
+
+/** SD-13：把本轮同步诊断写进 device_state（最近 3 轮环形）；失败不阻断同步结果。 */
+function recordV3Diagnostic(store: Store, report: S3v3DiagnosticReport): void {
+  try { store.recordV3SyncReport(report); } catch { /* 诊断落盘失败不影响同步 */ }
 }
 
 /** 桌面设备 id（整轮与单条推送必须同 id，才能共用发布锁/基线语义）。 */
@@ -64,6 +71,8 @@ export async function syncWithV3(
 ): Promise<SyncResult> {
   const startedAt = Date.now();
   const report = (p: SyncProgress) => { try { onProgress?.(p); } catch { /* window closed */ } };
+  // SD-13：阶段耗时 + 对象数/字节（成功/失败都落 device_state，设置页可一键复制）。
+  const diag = createS3v3PhaseCollector();
   const settings = store.getS3Settings();
   if (!settings && !deps.remote) throw new Error("请先保存 S3 配置");
   const remote = deps.remote ?? new S3v3S3Remote({
@@ -97,6 +106,10 @@ export async function syncWithV3(
     "publish-pointer": { phase: "manifest", message: "v3：发布指针..." },
     "publish-finalize": { phase: "manifest", message: "v3：确认发布..." },
     pending: { phase: "manifest", message: "v3：清理待删对象..." },
+    // v4 四相内核（E2-3）：映射到与既有路径相同的可观察阶段，UI/进度条不用改。
+    "round-plan": { phase: "download", message: "v4：读取并合并云端状态..." },
+    "round-apply": { phase: "download", message: "v4：应用远端变更..." },
+    "round-finalize": { phase: "manifest", message: "v4：发布收尾..." },
   };
   // 引擎进度（每个对象完成回调一次）→ IPC 有节流：2 万个附件不能把桥打满。
   let lastProgressAt = 0;
@@ -119,8 +132,9 @@ export async function syncWithV3(
   const engine = new S3v3SyncEngine({
     remote, device, deviceId,
     ...(largeAssetChunkBytes !== undefined && Number.isFinite(largeAssetChunkBytes) ? { largeAssetChunkBytes } : {}),
-    onProgress: (p) => reportTransferProgress(p),
+    onProgress: (p) => { diag.progress(p); reportTransferProgress(p); },
     onPhase: (phase, ms) => {
+      diag.phase(phase, ms);
       if (ms >= 1000) store.logScopes.sync.warn(`[v3][slow] ${phase} ${ms}ms`);
       else store.logScopes.sync.debug(`[v3] ${phase} ${ms}ms`);
       const mapped = PHASE_PROGRESS[phase];
@@ -133,21 +147,70 @@ export async function syncWithV3(
   const deferAssets = store.getSyncSettings().deferAssets === true;
   try {
     const r = await engine.sync({ ...(emptyMode === "throw" ? {} : { onEmptyCloud: emptyMode }), ...(deferAssets ? { deferAssets: true } : {}) });
+    // SD-04 + Del-6（261027/261029）：本轮成功同步后推进「墓碑发布水线」（替代逐行 published_at 记账）。
+    // 判据 = deleted_at > 水线 ⇒ 本轮之前（含本轮）的 purge 墓碑清零；下一轮新增 purge 仍待同步。
+    // 记账失败不影响同步结果；下一轮成功后水线继续前进即可覆盖。
+    try {
+      const at = new Date().toISOString();
+      store.markTombstonesWaterline(at);
+      quickNotes?.markTombstonesWaterline(at);
+    } catch { /* 记账失败不影响同步结果；下一轮再补 */ }
+    // SD-03（261027）：把已发布到云端的文档 id 回填给 Store（供给「缺正文」的「可云恢复」判据）。
+    try {
+      const baseline = await device.loadBaseline();
+      if (baseline) store.markRemoteNoteIds(baseline.lake.notes.map((n) => n.id));
+    } catch { /* 读基线失败时保持上一轮集合 */ }
     for (const w of r.warnings) store.logScopes.sync.warn("[v3] " + w);
     const result: SyncResult = {
       uploaded: r.uploadedNotes, downloaded: r.downloadedNotes, conflicts: r.supersededNotes.length,
       manifestId: "v3-g" + r.generation, completedAt: new Date().toISOString(),
       durationMs: Date.now() - startedAt, supersededNotes: r.supersededNotes,
+      // 261028：浮窗「上传/下载细分」数据（引擎 report 直接给出；缺省回退到总数）。
+      uploadedDocuments: r.uploadedDocuments ?? r.uploadedNotes,
+      downloadedDocuments: r.downloadedDocuments ?? r.downloadedNotes,
+      uploadedQuickNotes: r.uploadedQuickNotes ?? 0,
+      downloadedQuickNotes: r.downloadedQuickNotes ?? 0,
+      foldersUploaded: r.uploadedFolders ?? 0,
+      foldersDownloaded: r.downloadedFolders ?? 0,
+      uploadedBytes: r.uploadedBytes ?? 0,
+      downloadedBytes: r.downloadedBytes ?? 0,
       // 旧协议有的结构化警告（UI SyncStatusPopover 读取 warnings；只增不减）。
       ...(r.warningDetails.length > 0 ? { warnings: r.warningDetails } : {}),
     };
     store.logScopes.sync.info("[v3] sync done " + JSON.stringify({ published: r.published, gen: r.generation, warnings: r.warnings.length, ms: result.durationMs }));
+    recordV3Diagnostic(store, buildS3v3DiagnosticReport({
+      at: result.completedAt,
+      ok: true,
+      durationMs: Date.now() - startedAt,
+      generation: r.generation,
+      published: r.published,
+      uploaded: r.uploadedNotes,
+      downloaded: r.downloadedNotes,
+      deleted: r.deletedObjects,
+      conflicts: r.supersededNotes.length,
+      warnings: r.warningDetails,
+      phases: diag.snapshot(),
+    }));
     return result;
   } catch (e) {
     const code = e instanceof S3v3SyncError ? e.code : (e as { code?: string } | null)?.code;
-    store.logScopes.sync.warn(`[v3][error] class=${classifyS3v3Error(e)} code=${code ?? "unknown"} msg=${(e as Error).message}`);
-    if (e instanceof S3v3SyncError && e.code === "empty-cloud") throw new Error("云端为空：请确认是否首次上传（设置 LAKE_S3V3_EMPTY_CLOUD=upload 以初始化）");
-    throw e;
+    const errorClass = classifyS3v3Error(e);
+    store.logScopes.sync.warn(`[v3][error] class=${errorClass} code=${code ?? "unknown"} msg=${(e as Error).message}`);
+    // 失败轮同样落一轮诊断（阶段耗时能区分「卡在锁」还是「卡在传输」）。
+    recordV3Diagnostic(store, buildS3v3DiagnosticReport({
+      at: new Date().toISOString(),
+      ok: false,
+      durationMs: Date.now() - startedAt,
+      phases: diag.snapshot(),
+      error: { code: code ?? "unknown", errorClass, message: (e as Error).message },
+    }));
+    // 261028 P1：分类随错误一起跨 IPC（errors.ts 读 syncCode/syncClass）⇒ 渲染层区分
+    // 「另一台设备在发布（可重试）」与「epoch 不一致（需人工处理）」，不再统一当 INTERNAL。
+    if (e instanceof S3v3SyncError && e.code === "empty-cloud") {
+      const wrapped = new Error("云端为空：请确认是否首次上传（设置 LAKE_S3V3_EMPTY_CLOUD=upload 以初始化）");
+      throw annotateSyncError(wrapped, { code: e.code, className: errorClass });
+    }
+    throw annotateSyncError(e, { code: code ?? "unknown", className: errorClass });
   }
 }
 

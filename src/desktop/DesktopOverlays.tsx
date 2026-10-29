@@ -4,7 +4,7 @@
  * 所有状态与回调由 App（或后续 useDesktopShell）注入，本组件不持有业务状态。
  */
 import { Menu } from "../components/ui/Overlay";
-import type { RefObject } from "react";
+import { useMemo, type MutableRefObject, type RefObject } from "react";
 import { Focus, Lock, LockOpen, Sparkles } from "lucide-react";
 import { ConfirmDelete } from "../components/app/Sidebar";
 import { ExportSubmenuItem, type ExportFormat } from "../components/ui/ExportSubmenuItem";
@@ -18,7 +18,18 @@ import { DesktopWorkspaceMenuItems } from "./DesktopTopBar";
 import type { DesktopWorkspace } from "./desktopTypes";
 import type { AppSettings } from "../lib/settings";
 import type { DraftJournalEntry, S3Settings, TreeNode } from "../lib/types";
-import { clampPopoverPosition } from "../hooks/topMenuPosition";
+import { usePopoverPosition } from "../hooks/usePopoverPosition";
+
+/**
+ * 一个表面只能挂一个 ref：顶栏菜单既要让 usePopoverPosition 量真实尺寸，
+ * 又要让 useTopMenus 判「点在菜单内」⇒ 合成一个（外部 ref 先写，再转给测量回调）。
+ */
+function mergeSurfaceRef(external: RefObject<HTMLElement | null>, measured: (el: HTMLElement | null) => void) {
+  return (el: HTMLElement | null) => {
+    (external as MutableRefObject<HTMLElement | null>).current = el;
+    measured(el);
+  };
+}
 
 export interface DesktopOverlaysProps {
   confirmDelete: TreeNode | null;
@@ -107,6 +118,20 @@ export function DesktopOverlays(props: DesktopOverlaysProps) {
     onS3SettingsChanged, onSyncSettingsChanged, cloudConfigured, cloudEnabled,
   } = props;
 
+  // 顶栏两个下拉改**测量式**定位（DT-03）：表面先挂到屏外量真实宽高，再按既有几何口径
+  // （gap/margin 6、下方优先、放不下翻上、最后夹进视口）落位。旧实现喂 220x260 / 236x200
+  // 估算尺寸，行集随 activeKind 变化时必然错（贴底被裁或提前翻转）。
+  const workspaceMenuPos = usePopoverPosition({ open: workspaceMenuOpen, anchor: wsMenuWrapRef.current, gap: 6, margin: 6 });
+  const moreMenuPos = usePopoverPosition({ open: topMenuOpen, anchor: moreMenuWrapRef.current, gap: 6, margin: 6 });
+  const workspaceSurfaceRef = useMemo(
+    () => mergeSurfaceRef(workspaceMenuRef, workspaceMenuPos.surfaceRef),
+    [workspaceMenuRef, workspaceMenuPos.surfaceRef],
+  );
+  const moreSurfaceRef = useMemo(
+    () => mergeSurfaceRef(moreMenuRef, moreMenuPos.surfaceRef),
+    [moreMenuRef, moreMenuPos.surfaceRef],
+  );
+
   return (
     <>
       {confirmDelete && (
@@ -116,11 +141,8 @@ export function DesktopOverlays(props: DesktopOverlaysProps) {
       )}
       {/* 顶栏下拉用 portal 渲染到 body 根部，避免被 app-shell 内部堆叠上下文/overflow 覆盖 */}
       {workspaceMenuOpen && (
-        <Menu surfaceClassName="top-menu top-menu--workspace" label="工作空间" onDismiss={onCloseWorkspaceMenu} surfaceRef={workspaceMenuRef}
-          style={(() => {
-            const rect = wsMenuWrapRef.current?.getBoundingClientRect();
-            return rect ? clampPopoverPosition(rect, { width: window.innerWidth, height: window.innerHeight }, { width: 220, height: 260 }, 6) : undefined;
-          })()}>
+        <Menu surfaceClassName="top-menu top-menu--workspace" label="工作空间" onDismiss={onCloseWorkspaceMenu} surfaceRef={workspaceSurfaceRef}
+          style={workspaceMenuPos.style ?? undefined}>
           <DesktopWorkspaceMenuItems
             desktopWorkspace={desktopWorkspace}
             onSwitchWorkspace={onSwitchWorkspace}
@@ -129,11 +151,8 @@ export function DesktopOverlays(props: DesktopOverlaysProps) {
         </Menu>
       )}
       {topMenuOpen && (
-        <Menu surfaceClassName="top-menu top-menu--more" label="文档操作" onDismiss={onCloseTopMenu} surfaceRef={moreMenuRef}
-          style={(() => {
-            const rect = moreMenuWrapRef.current?.getBoundingClientRect();
-            return rect ? clampPopoverPosition(rect, { width: window.innerWidth, height: window.innerHeight }, { width: 236, height: 200 }, 6) : undefined;
-          })()}>
+        <Menu surfaceClassName="top-menu top-menu--more" label="文档操作" onDismiss={onCloseTopMenu} surfaceRef={moreSurfaceRef}
+          style={moreMenuPos.style ?? undefined}>
           <button role="menuitem" onClick={onOpenAiAssistant}>
             <Sparkles size={15} /><span>AI 助手<small>对话</small></span>
           </button>

@@ -24,7 +24,11 @@ async function dev(name: string) {
   await device.init();
   return { root, store, device, sidecar: path.join(root, "sync-v3", "state.json") };
 }
-const readSide = async (p: string) => JSON.parse(await fs.readFile(p, "utf8")) as { remotePurged: string[]; restorePending: string[] };
+/** E3-1 phase2a：sidecar = v3 信封（records 判别联合）。 */
+type SideRecords = Array<{ kind: string; id?: string; noteId?: string }>;
+const readSide = async (p: string) => JSON.parse(await fs.readFile(p, "utf8")) as { version?: number; records: SideRecords };
+const idsOf = (side: { records: SideRecords }, kind: "cloud-deleted" | "restore"): string[] =>
+  side.records.filter((r) => r.kind === kind).map((r) => (kind === "restore" ? r.noteId! : r.id!));
 
 describe("恢复标记持久化（无发布轮 + 单条推送路径）", () => {
   it("恢复后连续多轮无发布：sidecar remotePurged/restorePending 都清空", async () => {
@@ -38,20 +42,21 @@ describe("恢复标记持久化（无发布轮 + 单条推送路径）", () => {
     a.store.deleteNote("n1"); a.store.purgeTrashItem("n1");
     await new S3v3SyncEngine({ remote, device: a.device, deviceId: "A" }).sync();
     await new S3v3SyncEngine({ remote, device: b.device, deviceId: "B" }).sync();
-    expect((await readSide(b.sidecar)).remotePurged).toContain("n1");
-    // B 显式恢复
-    const s = await readSide(b.sidecar); s.restorePending = ["n1"];
+    expect(idsOf(await readSide(b.sidecar), "cloud-deleted")).toContain("n1");
+    // B 显式恢复（v3：替换 restore records）
+    const s = await readSide(b.sidecar);
+    s.records = [...s.records.filter((r) => r.kind !== "restore"), { kind: "restore", noteId: "n1" }];
     await fs.writeFile(b.sidecar, JSON.stringify(s));
     const restoreRound = await new S3v3SyncEngine({ remote, device: b.device, deviceId: "B" }).sync();
     expect(restoreRound.uploadedNotes).toBeGreaterThanOrEqual(1);
-    expect((await readSide(b.sidecar)).remotePurged).toEqual([]);
+    expect(idsOf(await readSide(b.sidecar), "cloud-deleted")).toEqual([]);
     // 再连续两轮无发布：标记不得回潮
     for (let i = 0; i < 2; i++) {
       const r = await new S3v3SyncEngine({ remote, device: b.device, deviceId: "B" }).sync();
       expect(r.published).toBe(false);
       const side = await readSide(b.sidecar);
-      expect(side.remotePurged).toEqual([]);
-      expect(side.restorePending).toEqual([]);
+      expect(idsOf(side, "cloud-deleted")).toEqual([]);
+      expect(idsOf(side, "restore")).toEqual([]);
     }
   }, 120_000);
 });

@@ -1,5 +1,5 @@
 /**
- * 小记 capture 路径（长按桌面图标 / `locallakexnotes://quick-note` 深链）护栏 —— **261010 统一后的口径**。
+ * 小记 capture 路径（长按桌面图标 / `lakexlocalnotes://quick-note` 深链）护栏 —— **261010 统一后的口径**。
  *
  * 决策修订：260920 定的是「capture = 不挂内核的轻量框（秒开、不可展开）」，工作台才用内核编辑器；
  * 261010 用户改为**统一**：capture 与工作台共用**同一个内核卡片**（桌面同款未展开版式：图片/待办/有序/无序/分割线
@@ -34,7 +34,7 @@ const BRIDGE = ["bridge.ts", "bridge/sync.ts", "bridge/notes.ts", "bridge/quickN
 const SYNC_STATUS = code(read("../sync/syncStatusStore.ts"));
 const SHORTCUT = code(read("../native/quickNoteShortcut.ts"));
 const MAIN = code(read("../main.tsx"));
-const MAIN_ACTIVITY = read("../../../android/app/src/main/java/com/locallakexnotes/mobile/MainActivity.kt");
+const MAIN_ACTIVITY = read("../../../android/app/src/main/java/com/lakexlocalnotes/android/MainActivity.kt");
 const MANIFEST = read("../../../android/app/src/main/AndroidManifest.xml");
 const SHORTCUTS = read("../../../android/app/src/main/res/xml/shortcuts.xml");
 const ANDROID_STYLES = read("../../../android/app/src/main/res/values/styles.xml");
@@ -107,7 +107,7 @@ describe("小记 capture 路径（261010 统一为内核卡片）", () => {
   it("快捷 capture 自动弹键盘（WebView 程序化 focus 不弹 ⇒ 走原生 ShowKeyboard 插件）", () => {
     expect(MOBILE_APP, "capture 写作卡应传 raiseKeyboard（页面路有手势，不传）").toMatch(/raiseKeyboard/);
     expect(COMPOSER, "聚焦之后请原生弹一次键盘").toMatch(/showNativeKeyboard\(\)/);
-    const mainActivity = read("../../../android/app/src/main/java/com/locallakexnotes/mobile/MainActivity.kt");
+    const mainActivity = read("../../../android/app/src/main/java/com/lakexlocalnotes/android/MainActivity.kt");
     expect(mainActivity, "原生插件必须在 MainActivity 注册，否则 JS 调用只会 reject").toMatch(/registerPlugin\(ShowKeyboardPlugin::class\.java\)/);
   });
 
@@ -160,9 +160,9 @@ describe("capture 首帧（261022，零等待）", () => {
   it("入口分离（对齐思源的「普通启动带 logo / 速记不带」思路）：capture 走 alias 的独立主题", () => {
     expect(MANIFEST).toContain('android:name=".QuickNoteAlias"');
     expect(MANIFEST).toContain('android:theme="@style/AppTheme.NoActionBarLaunchNoLogo"');
-    // locallakexnotes://quick-note 只由 alias 接；MainActivity 保留普通 launcher / 分享入口
+    // lakexlocalnotes://quick-note 只由 alias 接；MainActivity 保留普通 launcher / 分享入口
     expect((MANIFEST.match(/android:host="quick-note"/g) ?? [])).toHaveLength(1);
-    expect(SHORTCUTS).toContain('android:targetClass="com.locallakexnotes.mobile.QuickNoteAlias"');
+    expect(SHORTCUTS).toContain('android:targetClass="com.lakexlocalnotes.android.QuickNoteAlias"');
     expect(ANDROID_STYLES).toContain("AppTheme.NoActionBarLaunchNoLogo");
     expect(ANDROID_STYLES_V31).toContain('<item name="windowSplashScreenAnimatedIcon">@drawable/launch_splash_none</item>');
     expect(ANDROID_STYLES_V31).toContain('<item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>');

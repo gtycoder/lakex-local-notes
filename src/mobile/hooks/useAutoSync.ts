@@ -24,6 +24,7 @@ import { readSyncSettings, subscribeSyncSettings } from "../sync/syncSettingsSto
 import { whenQuickNoteLaunchResolved } from "../native/quickNoteShortcut";
 import { reportNativeActionError } from "../../lib/nativeErrors";
 import { hasInterruptedSync } from "../sync/syncResumeMarker";
+import { runScheduledHistoryCleanup } from "../sync/historyCleanupScheduler";
 import { ensureDb } from "../bridge/context";
 
 /**
@@ -73,6 +74,25 @@ export function useAutoSync(ready = true): void {
       return captureSession;
     };
 
+    /**
+     * 历史快照低频清理（MOB-09）：移动端没有桌面那样常驻的 cleanupTimer ⇒ 在「就绪/回前台」
+     * 这次检查是否到期（默认 24h，0 = 关），上次时间落 device_state。**静默**、不 await，
+     * 不挡同步/首屏；清理失败只留日志，等下个间隔再试。
+     */
+    let historyCleanupRunning = false;
+    const runHistoryCleanupOnce = () => {
+      // 就绪空闲与回前台可能同时触发：在途去重，别叠两次清理。
+      if (historyCleanupRunning) return;
+      historyCleanupRunning = true;
+      void runScheduledHistoryCleanup({
+        readSettings: () => bridge.getHistorySettings(),
+        cleanup: () => bridge.cleanupHistory(),
+        db: async () => { try { return await ensureDb(); } catch { return null; } },
+      })
+        .catch((error) => console.warn("[history] 定期清理失败（下次到期再试）", error))
+        .finally(() => { historyCleanupRunning = false; });
+    };
+
     // 开/关应用补同步（261013：interval 也补，manual 不补；与桌面「应用就绪 + 退出前」对应）。
     let foregroundHandler: (() => void) | null = null;
     let backgroundHandler: (() => void) | null = null;
@@ -87,6 +107,8 @@ export function useAutoSync(ready = true): void {
           // 不看 autoMode —— 用户点过同步、退出再进来必须接着下（manual 也续）。
           if (await hasInterruptedSync(await ensureDb())) { runOnce("续传未完成的同步"); return; }
           if (shouldSyncOnOpenClose(readSettings())) runOnce("回到前台同步");
+          // 本次「开应用/回前台」已由上面判定为可主动做事 ⇒ 顺带检查历史清理是否到期（本地维护，不出网）。
+          runHistoryCleanupOnce();
         })();
       };
       // 进后台 = 移动端唯一可靠的"离开设备"时机（桌面没有对应物，桌面是 before-quit 真等待）。

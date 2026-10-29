@@ -6,7 +6,7 @@
  * 这条扫描则封住**面**：源码里任何地方再出现「manifest v<数字>」这种写死版本号的文案，直接失败。
  *
  * 判据：去掉注释后，源码（.ts/.tsx）里不得出现 /manifest\s*v\s*\d/i。
- * 正确写法 = 从单一来源取（`String(MANIFEST_VERSION)` / appInfo.protocolVersion）。
+ * 正确写法 = 从单一来源取（`String(S3V3_POINTER_VERSION)` / appInfo.protocolVersion）。
  */
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
@@ -44,7 +44,7 @@ describe("用户可见的协议版本号必须来自单一来源", () => {
     }
     expect(
       hits,
-      "写死的协议版本号会随协议升级而漂（历史上出现过 manifest v4）；请改成从 MANIFEST_VERSION / appInfo.protocolVersion 取：\n  " +
+      "写死的协议版本号会随协议升级而漂（历史上出现过 manifest v4）；请改成从 S3V3_POINTER_VERSION / appInfo.protocolVersion 取：\n  " +
         hits.join("\n  ")
     ).toEqual([]);
   });

@@ -40,6 +40,7 @@ vi.mock("../../lib/nativeErrors", () => ({
 vi.mock("../ui/toastBus", () => ({ showToast: mocks.showToast }));
 
 import { useSettingsSectionData } from "./useSettingsSectionData";
+import { subscribeHistorySettings } from "../lib/historySettingsSync";
 
 const history = {
   maxSnapshots: 100,
@@ -84,7 +85,7 @@ beforeEach(() => {
   mocks.deleteOrphanAsset.mockResolvedValue(undefined);
   mocks.gcDeepCleanup.mockResolvedValue({ deletedCount: 2, candidateCount: 4, keys: ["a", "b"] });
   mocks.getDiagnostics.mockResolvedValue(diagnostics);
-  mocks.getAppInfo.mockResolvedValue({ name: "LocalLakexNotes", version: "1", build: "1", protocolVersion: 1, platform: "android" });
+  mocks.getAppInfo.mockResolvedValue({ name: "LakexLocalNotes", version: "1", build: "1", protocolVersion: 1, platform: "android" });
   mocks.getCacheSummary.mockResolvedValue(cache);
   mocks.clearDerivedCaches.mockResolvedValue({ cleared: { runtimeBlobBytes: 3 } });
   host = document.createElement("div");
@@ -104,7 +105,7 @@ describe("useSettingsSectionData", () => {
     expect(data.history).toEqual(history);
     expect(data.orphans).toEqual([orphan]);
     expect(data.cacheSummary).toEqual(cache);
-    expect(data.appInfo?.name).toBe("LocalLakexNotes");
+    expect(data.appInfo?.name).toBe("LakexLocalNotes");
     expect(data.diagnostics).toEqual(diagnostics);
   });
 
@@ -123,6 +124,19 @@ describe("useSettingsSectionData", () => {
     expect(mocks.saveHistorySettings).toHaveBeenCalledWith(expect.objectContaining({ maxSnapshots: 5 }));
     expect(mocks.showToast).toHaveBeenCalledWith("历史设置保存失败，已恢复原值", { type: "error" });
     expect(data.history?.maxSnapshots).toBe(100);
+  });
+
+  it("保存成功后广播历史设置（供自动快照定时器重挂）", async () => {
+    await render();
+    const seen: Array<{ snapshotIntervalMinutes: number }> = [];
+    const off = subscribeHistorySettings((next) => seen.push(next));
+    await act(async () => {
+      data.updateHistory({ snapshotIntervalMinutes: 30 });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    off();
+    expect(seen.at(-1)?.snapshotIntervalMinutes).toBe(30);
   });
 
   it("清理孤儿资源与单个删除都更新本地列表", async () => {

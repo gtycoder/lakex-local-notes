@@ -1,8 +1,13 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
+/**
+ * appId 只服务 Android（applicationId = com.lakexlocalnotes.android）。
+ * 未来 iOS 工程建立后，bundle identifier 用 **com.lakexlocalnotes.ios**（平台包名必须区分，
+ * 不要复用 Android 的 id：跨平台同 id 会让签名、App Store 记录与数据容器语义混淆）。
+ */
 const config: CapacitorConfig = {
-  appId: 'com.locallakexnotes.mobile',
-  appName: 'LocalLakexNotes',
+  appId: 'com.lakexlocalnotes.android',
+  appName: 'LakexLocalNotes',
   webDir: 'dist-mobile',
   // 与原生 splash 同色的纯色底（261022）：页面首帧前不闪白；不是遮罩、不延迟任何东西。
   backgroundColor: '#ededf1',

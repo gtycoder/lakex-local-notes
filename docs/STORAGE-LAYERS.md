@@ -27,11 +27,11 @@
 
 ## 2. 桌面磁盘布局
 
-工作区根 = `app.getPath("userData")/workspace-default`（`electron/main.ts:161`）；开发版 userData = `local-lakex-notes-dev`。
+工作区根 = `app.getPath("userData")/workspace-default`（`electron/main.ts:161`）；开发版 userData = `lakex-local-notes-dev`。
 
 ```
-~/Library/Application Support/local-lakex-notes-dev/
-├─ logs/local-lakex-notes.log                 # 日志（不属于工作区）
+~/Library/Application Support/lakex-local-notes-dev/
+├─ logs/lakex-local-notes.log                 # 日志（不属于工作区）
 └─ workspace-default/                   # 工作区根
    ├─ metadata.sqlite3 (+ -wal/-shm)    # 主库
    ├─ notes/{noteId}.lake               # 文档正文（kind=doc）        L1（对象）
@@ -69,7 +69,7 @@
 
 ## 3. 移动端磁盘布局
 
-App 沙盒 `com.locallakexnotes.mobile`；`Directory.Data` = `/data/data/com.locallakexnotes.mobile/files`。
+App 沙盒 `com.lakexlocalnotes.android`；`Directory.Data` = `/data/data/com.lakexlocalnotes.android/files`。
 
 ```
 files/
@@ -83,7 +83,7 @@ files/
 ├─ note-assets/{noteId}/{filename}       # 文档附件/图片               L1（assets/）
 ├─ history/{noteId}/*.body.gz            # 历史快照（gzip 文件）        L3（本地）
 ├─ draft-journal/{id}.json               # 未提交草稿（纯本机）         L3
-databases/local-lakex-notes-mobile              # 主库（Capacitor SQLite, WAL；只存元数据/账本/派生缓存）
+databases/lakex-local-notes-mobile              # 主库（Capacitor SQLite, WAL；只存元数据/账本/派生缓存）
 ```
 
 > **261019 起移动端正文与桌面同构**：正文/小记/历史全部落文件（相对路径由 `src/core/noteBodyPaths.ts` 单一来源给出），
@@ -133,8 +133,8 @@ manifest 字段（`src/core/manifestTypes.ts`）：
 - `notes_fts` / `search_index`（派生索引，可重建）
 - `notes.md_cache` / `notes.text_cache`（正文派生缓存：doc=Markdown/纯文本，usheet/bitable/board=按 kind 派生的纯文本；可重建，**不是正文真相**）
 - `quick_note_*`（小记同步 journal / 转换 / 文件操作）
-- localStorage（桌面+移动）：`local-lakex-notes-v3.dialog-states`、`local-lakex-notes-v3.sidebar-width`、`local-lakex-notes-v3.outline-sidebar-width`、`local-lakex-notes-v3.tab-switcher-width`、`local-lakex-notes-v3.board-views`（画板视图位置 = 平移滚动量 + 缩放；**本机**记忆，见 260926 决定）、`local-lakex-notes-v3.bitable-nav.<noteId>` / `local-lakex-notes-v3.bitable-tables-width` / `local-lakex-notes-v3.bitable-tables-collapsed` / `local-lakex-notes-v3.bitable-drawer-width` / `local-lakex-notes-v3.bitable-expand-size`（多维表**设备本地**导航与面板几何：导航恒不写正文、切表/切视图不标脏；261019 补登）、`local-lakex-notes-v1.sidebar`、`local-lakex-notes-mobile.tabs.*`、`libraryView`、`local-lakex-notes-v3.emoji-recents` + `local-lakex-notes-v3.emoji-recents.input`（「最近使用」的**两个分桶**：`icon` = 设置图标面板 / `input` = 输入态表情面板；按入口分桶见 AGENTS §3#14；**本机**记忆，261013 加；见 `src/lib/emojiRecents.ts`）、`local-lakex-notes-mobile.s3`（密钥另经 `src/mobile/native/secretStore.ts` AES-GCM）、
-  **`local-lakex-notes-v3.quick-notes-sort`**（小记排序偏好：**桌面与移动同一键、同一份四档**（最近/最早 × 更新/创建）；
+- localStorage（桌面+移动）：`lakex-local-notes-v3.dialog-states`、`lakex-local-notes-v3.sidebar-width`、`lakex-local-notes-v3.outline-sidebar-width`、`lakex-local-notes-v3.tab-switcher-width`、`lakex-local-notes-v3.board-views`（画板视图位置 = 平移滚动量 + 缩放；**本机**记忆，见 260926 决定）、`lakex-local-notes-v3.bitable-nav.<noteId>` / `lakex-local-notes-v3.bitable-tables-width` / `lakex-local-notes-v3.bitable-tables-collapsed` / `lakex-local-notes-v3.bitable-drawer-width` / `lakex-local-notes-v3.bitable-expand-size`（多维表**设备本地**导航与面板几何：导航恒不写正文、切表/切视图不标脏；261019 补登）、`lakex-local-notes-v1.sidebar`、`lakex-local-notes-mobile.tabs.*`、`libraryView`、`lakex-local-notes-v3.emoji-recents` + `lakex-local-notes-v3.emoji-recents.input`（「最近使用」的**两个分桶**：`icon` = 设置图标面板 / `input` = 输入态表情面板；按入口分桶见 AGENTS §3#14；**本机**记忆，261013 加；见 `src/lib/emojiRecents.ts`）、`lakex-local-notes-mobile.s3`（密钥另经 `src/mobile/native/secretStore.ts` AES-GCM）、
+  **`lakex-local-notes-v3.quick-notes-sort`**（小记排序偏好：**桌面与移动同一键、同一份四档**（最近/最早 × 更新/创建）；
   纯展示偏好、只影响本端顺序，**不进 S3 / 不进 manifest**；单一来源 `src/core/quickNoteSort.ts`。
   261015 用户要求"两端统一 + 仅本地持久化"；旧两值 `updated`/`created` 读到时映射到 `recent`/`createdNew`，用户既有偏好不丢）
 - 移动历史快照表 `note_history`（与桌面同表名，语义一致）

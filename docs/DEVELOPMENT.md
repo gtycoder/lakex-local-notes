@@ -18,7 +18,7 @@
 ## 二、开发
 
 ```bash
-cd /Users/admin/file/local-lake/local-lakex-notes
+cd /Users/admin/file/local-lake/lakex-local-notes
 PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH" npm run dev
 ```
 - Vite dev server：`http://127.0.0.1:1421/`
@@ -28,10 +28,10 @@ PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH" npm run dev
 
 **杀进程时绝不能用 `pkill -f "Electron"`**——Trae CN（用户的 IDE）也是 Electron 应用，会被误杀。正确方式：
 ```bash
-kill $(ps aux | grep "local-lakex-notes" | grep -v grep | awk '{print $2}')
+kill $(ps aux | grep "lakex-local-notes" | grep -v grep | awk '{print $2}')
 ```
 
-**dev 与打包版 userData 隔离**（dev=`local-lakex-notes-dev`，打包版=`local-lakex-notes`），单实例锁按
+**dev 与打包版 userData 隔离**（dev=`lakex-local-notes-dev`，打包版=`lakex-local-notes`），单实例锁按
 userData 各自独立，**可同时运行**；同一 userData 内第二实例会被单实例锁直接退出。
 
 ## 三、构建与打包
@@ -44,19 +44,19 @@ PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH" node node_modules/vite/bin/vi
 ./node_modules/.bin/electron-builder --mac
 ```
 产物输出到 `release/`（已在 .gitignore）：
-- `release/LocalLakexNotes-0.1.0-arm64.dmg`（约 158MB）
-- `release/LocalLakexNotes-0.1.0-arm64-mac.zip` + 两个 `.blockmap`
-- `release/mac-arm64/LocalLakexNotes.app`（未打包的应用）
+- `release/LakexLocalNotes-0.1.0-arm64.dmg`（约 158MB）
+- `release/LakexLocalNotes-0.1.0-arm64-mac.zip` + 两个 `.blockmap`
+- `release/mac-arm64/LakexLocalNotes.app`（未打包的应用）
 
 **打包版注意事项**：
 - 未签名/未公证：首次打开需右键 → 打开（或系统设置 → 隐私与安全性）
 - 默认 Electron 图标（尚未做应用图标）
-- **userData 隔离**：dev 用 `~/Library/Application Support/local-lakex-notes-dev`（可重建），打包版默认
-  `~/Library/Application Support/local-lakex-notes`（正式数据，**禁止随意触碰**）。
+- **userData 隔离**：dev 用 `~/Library/Application Support/lakex-local-notes-dev`（可重建），打包版默认
+  `~/Library/Application Support/lakex-local-notes`（正式数据，**禁止随意触碰**）。
 - **打包版测试隔离**（避免打开正式数据）：任意模式都支持 `LAKE_USER_DATA` 覆盖，例如：
   ```bash
-  LAKE_USER_DATA="$HOME/Library/Application Support/local-lakex-notes-test" \
-    "release/mac-arm64/LocalLakexNotes.app/Contents/MacOS/LocalLakexNotes"
+  LAKE_USER_DATA="$HOME/Library/Application Support/lakex-local-notes-test" \
+    "release/mac-arm64/LakexLocalNotes.app/Contents/MacOS/LakexLocalNotes"
   ```
   不设 `LAKE_USER_DATA` 时打包版才走正式数据路径。
 

@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { sha256Hex } from "./syncUtils.js";
-import type { LakeIndex } from "./s3v3Index.js";
+import type { LakeIndex } from "./s3v3/protocol/s3v3Index.js";
 import { S3v3SyncEngine } from "./s3v3Engine.js";
 import type { DeviceBaseline, DeviceState, S3v3DeviceStore } from "./s3v3DeviceStore.js";
 import type { RemoteObjectInfo, S3v3Remote } from "./s3v3Ports.js";
-import type { QuickNotesIndex } from "./s3v3Index.js";
-import { S3V3_POINTER_KEY } from "./s3v3Keys.js";
+import type { QuickNotesIndex } from "./s3v3/protocol/s3v3Index.js";
+import { S3V3_POINTER_KEY } from "./s3v3/protocol/s3v3Keys.js";
 
 /**
  * v3 · 「云端已彻底删除 · 仅本地」（state.remotePurged）语义护栏（用户 261026 定稿）：
@@ -190,7 +190,7 @@ describe("v3 · 云端已彻底删除 · 仅本地（remotePurged）", () => {
     const hash = H("gone-restored");
     await remote.put("objects/n2-" + hash + ".lake", new TextEncoder().encode("gone-restored"));
     index.notes = [...index.notes, { id: "n2", title: "T n2", parentId: null, sortOrder: 0, updatedAt: "2026-10-26T03:00:00.000Z", contentHash: hash }].sort((x, y) => (x.id < y.id ? -1 : 1));
-    const { serializeLakeIndex, indexHashOf } = await import("./s3v3Index.js");
+    const { serializeLakeIndex, indexHashOf } = await import("./s3v3/protocol/s3v3Index.js");
     const serialized = serializeLakeIndex(index);
     const commit = indexHashOf(serialized);
     await remote.put("meta/index/" + commit + ".json", new TextEncoder().encode(serialized));

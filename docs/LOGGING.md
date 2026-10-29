@@ -69,8 +69,8 @@
 
 ## 6. 排查手册
 
-- 日志路径：`<userData>/logs/local-lakex-notes.log`（10MB 轮转，上一份是 `.old.log`）。
-  开发 `~/Library/Application Support/local-lakex-notes-dev/logs/`；正式 `…/local-lakex-notes/logs/`。
+- 日志路径：`<userData>/logs/lakex-local-notes.log`（10MB 轮转，上一份是 `.old.log`）。
+  开发 `~/Library/Application Support/lakex-local-notes-dev/logs/`；正式 `…/lakex-local-notes/logs/`。
   应用内：设置 → 日志（`read_app_log` IPC，只读白名单路径）。
 - **先看时序，不先看内容**：卡顿类问题先看关键行的时间戳是否成簇、中间有没有空档 —— 空档 = 主线程被占住，
   日志本身不会是原因（详见 `docs/TROUBLESHOOTING.md` §M）。

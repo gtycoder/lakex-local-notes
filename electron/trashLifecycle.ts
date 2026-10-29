@@ -225,7 +225,7 @@ export class TrashLifecycle {
       const nodeStmt = this.ctx.db.prepare("SELECT note_file_id FROM tree_nodes WHERE id=?");
       const noteMeta = this.ctx.db.prepare("SELECT id,title,parent_id,sort_order,updated_at FROM notes WHERE id=?");
       // node_type：note（进 manifest.notes 发布 deleted:true）vs folder（仅本地下载过滤，不进 manifest）。
-      // 新墓碑 published_at=NULL（未发布，计入待上传）；ON CONFLICT 不清已发布的 published_at（幂等重复 purge 场景）。
+      // Del-6：墓碑不再有逐行 published_at；待同步判据 = deleted_at > 成功同步水线（见 syncReconciliation）。
       const tombstone = this.ctx.db.prepare(
         "INSERT INTO deleted_notes(id,title,parent_id,sort_order,updated_at,deleted_at,purged_at,node_type) VALUES(?,?,?,?,?,?,?,?) " +
         "ON CONFLICT(id) DO UPDATE SET title=excluded.title, parent_id=excluded.parent_id, sort_order=excluded.sort_order, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, purged_at=excluded.purged_at, node_type=excluded.node_type"

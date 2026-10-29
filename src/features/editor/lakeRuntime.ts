@@ -2,6 +2,8 @@ import React from "react";
 import { renderToString } from "react-dom/server";
 import { Doc, GetDefaultEditorConfig } from "@dlient/lakex-doc-react";
 import { isDesktop } from "../../lib/native";
+import { rlog } from "../../lib/log";
+import { errorFields } from "../../core/logFormat";
 import {
   QuickNoteAttachmentToolbarItem,
   QuickNoteDateToolbarItem,
@@ -19,34 +21,24 @@ import { ASSET_ORIGIN } from "../../lib/assetPort";
 import type { LocalAssetRef } from "../../core/assetUrl.js";
 import type { AttachmentPreviewItem } from "../attachment/attachmentPreviewController.js";
 
-/** 与下方 math.KaTexURL 保持同一份相对路径，供预注入脚本去重匹配。 */
-const LAKE_KATEX_SCRIPT = "./vendor/cdn/os/lib/katex/0.16.8/dist/katex.min.js";
-const LAKE_MHCHEM_SCRIPT = "./vendor/cdn/os/lib/katex/0.16.8/dist/contrib/mhchem.min.js";
-
-/**
- * 按 katex → mhchem 顺序把本地镜像脚本注入 <body>。
- * 动态脚本默认 async=true，执行顺序无保证；显式 async=false 后经典脚本
- * 按插入顺序执行，保证 mhchem 运行时 window.katex 一定已就绪。
- * 复用 Lake gJ 的 loaded/error 属性协议，避免其再次注入或等待永不触发的 load 事件。
- */
-function injectKatexScriptsInOrder(): void {
-  if (typeof document === "undefined") return;
-  const ensure = (src: string): void => {
-    if (document.querySelector(`script[src="${src}"]`)) return;
-    const el = document.createElement("script");
-    el.src = src;
-    el.async = false;
-    el.addEventListener("load", () => el.setAttribute("loaded", "true"), { once: true });
-    el.addEventListener("error", () => el.setAttribute("error", "true"), { once: true });
-    document.body.appendChild(el);
-  };
-  ensure(LAKE_KATEX_SCRIPT);
-  ensure(LAKE_MHCHEM_SCRIPT);
-}
+// DT-07：KaTeX/mhchem 顺序注入、audio 卡重试、TOC 滚动跟随、perf 订阅各自成模块，
+// createLakeDocument 只做编排与 __disposeExtras 汇总（行为/时序不变）。
+import { injectKatexScriptsInOrder, LAKE_KATEX_SCRIPT, LAKE_MHCHEM_SCRIPT } from "./lakeKatexInjection";
+import { setupAudioCardRetry } from "./lakeAudioCardRetry";
+import { setupTocScrollFollow } from "./lakeTocScrollFollow";
+import { subscribeDocInitPerf, type LakeDocInitPerf } from "./lakePerfSubscription";
 
 export interface LakeKernelInstance {
   /** 内核命令入口（style/insertCard/insertAtSelection/delete… 与编辑器同一套命令）。 */
   execCommand?(name: string, ...args: unknown[]): unknown;
+}
+
+/** 内核渲染器的事件/命令面（闭源 lakex 无类型声明：字段全可选，缺失时静默降级）。 */
+export interface LakeRendererBus {
+  execCommand?(name: string, ...args: unknown[]): unknown;
+  scrollByNodeId?(id: string): unknown;
+  on?(event: string, listener: () => void): unknown;
+  off?(event: string, listener: () => void): unknown;
 }
 
 export interface LakeEditorInstance {
@@ -70,31 +62,48 @@ export interface LakeEditorInstance {
   destory?: () => void;
   /** 请求对当前可见卡片执行一次懒初始化水合。 */
   requestCardHydration?: () => void;
+  /** 内核渲染器（tileRenderCompleted/generalRenderCompleted 的事件源；与 lakeBridge.renderer 同一对象）。 */
+  renderer?: LakeRendererBus;
+  /** 应用侧挂载的「额外清理」清单（见 appendDisposeExtras；内核实例不带，由本文件附加）。 */
+  __disposeExtras?: () => void;
+  /** bookmark 卡降级补丁的清理函数（见 installBookmarkCardDegrade）。 */
+  __disposeBookmarkDegrade?: () => void;
+  /** 内核插件集合（数组 / Map / 普通对象三种形态都可能出现，见 findNativeTocSidebar）。 */
+  _plugins?: unknown;
 }
 
 /**
  * Lake 内核运行时桥接（闭源 lakex 无类型声明）：kernel/renderer/事件系统集中在此声明，
- * 调用方经 lakeBridge(editor) 访问，避免散落的 (editor as any)（PROJECT-AUDIT 建议收敛）。
+ * 调用方经 lakeBridge(editor) 访问，避免调用点各自写内核私有字段的断言（PROJECT-AUDIT 建议收敛）。
  */
 export interface LakeKernelBridge {
   kernel?: {
     getDocExtraContent?(): { toc?: unknown };
     onPluginEvent?(event: string, listener: () => void): (() => void) | undefined;
+    /** 内核未返回退订函数时的回退路径（toc 重放监听）。 */
+    offPluginEvent?(event: string, listener: () => void): void;
+    /** 重放内核事件（刷新大纲时补发 tocChange）。 */
+    emitPluginEvent?(event: string, payload?: unknown): unknown;
   };
-  renderer?: {
-    execCommand?(name: string, ...args: unknown[]): unknown;
-    scrollByNodeId?(id: string): unknown;
-    on?(event: string, listener: () => void): unknown;
-    off?(event: string, listener: () => void): unknown;
-  };
+  renderer?: LakeRendererBus;
   on?(event: string, listener: () => void): unknown;
   off?(event: string, listener: () => void): unknown;
 }
 
-/** 类型安全的 Lake 内核桥接访问器（内部一次性断言，调用点不再出现 as any）。 */
+/** 类型安全的 Lake 内核桥接访问器（内部一次边界断言，调用点不再各自断言）。 */
 export function lakeBridge(editor: LakeEditorInstance | undefined): LakeKernelBridge {
   return (editor ?? {}) as unknown as LakeKernelBridge;
 }
+
+/**
+ * 内核编辑器工厂（DT-16）。lakex 的 d.ts 把 createOpenEditor 的 options 与返回值都写成
+ * 未标注类型、createOpenViewer 只落在索引签名里 ⇒ 这里按**实测返回形状**（可当
+ * LakeEditorInstance 用）收敛一次，调用点不再各自断言。直接复用 `Doc` 本体作接收者
+ * （工厂是 Doc 上的方法，抽成裸函数会丢 this）。
+ */
+type LakeDocOpener = (this: unknown, mount: HTMLElement, options: Record<string, unknown>) => LakeEditorInstance;
+const openLakeEditor: LakeDocOpener = Doc.createOpenEditor;
+const openLakeViewer: LakeDocOpener = Doc.createOpenViewer;
 
 /** Deep merge: defaults ← overrides */
 function deepMerge(base: Record<string, unknown>, overrides: Record<string, unknown>): Record<string, unknown> {
@@ -146,10 +155,29 @@ function withCanvasWheelGate(Comp: React.ComponentType<Record<string, unknown>>)
   });
 }
 
+/** vendor customCard 条目（lakex-doc-react `configs/customCard.ts`）：只声明本文件改写到的字段。 */
+interface VendorCardSlashEntry {
+  label?: string | (() => { zhCN: string });
+  description?: string | (() => { zhCN: string });
+  mainSearch?: string;
+}
+
+interface VendorCustomCardConfig {
+  name?: unknown;
+  slash?: VendorCardSlashEntry;
+  viewerComponent?: React.ComponentType<Record<string, unknown>>;
+  editorComponent?: React.ComponentType<Record<string, unknown>>;
+}
+
+/** cards 数组在 prepareCustomCards 后存的是**展开后的 config**（沿用既有实现），所以两者字段都允许。 */
+interface VendorCustomCardEntry extends VendorCustomCardConfig {
+  config?: VendorCustomCardConfig;
+}
+
 function prepareCustomCards(config: Record<string, unknown>): void {
-  const cc = config.customCard as { cards?: unknown[] } | undefined;
+  const cc = config.customCard as { cards?: VendorCustomCardEntry[] } | undefined;
   if (!cc?.cards) return;
-  cc.cards = cc.cards.map((card: any) => {
+  cc.cards = cc.cards.map((card) => {
     if (!card.config) return card;
     const cfg = card.config;
     const slash = { ...cfg.slash };
@@ -184,20 +212,21 @@ function prepareCustomCards(config: Record<string, unknown>): void {
           isCanvasCard
             ? withCanvasWheelGate(
                 isMindmap
-                  ? React.forwardRef((props: any, ref: any) => {
-                      const editor = props.editor?.theme?.currentThemeSchema
-                        ? props.editor
+                  ? React.forwardRef<unknown, Record<string, unknown>>((props, ref) => {
+                      const injected = props as { editor?: { theme?: { currentThemeSchema?: unknown } } };
+                      const editor = injected.editor?.theme?.currentThemeSchema
+                        ? injected.editor
                         : { theme: { currentThemeSchema: { colorScheme: "auto" } } };
-                      return React.createElement(cfg.viewerComponent as any, { ...props, editor, ref });
+                      return React.createElement(cfg.viewerComponent as React.ComponentType<Record<string, unknown>>, { ...props, editor, ref });
                     })
-                  : (cfg.viewerComponent as any),
+                  : cfg.viewerComponent,
               )
-            : (cfg.viewerComponent as any),
+            : cfg.viewerComponent,
           cardName
         )
       : undefined;
     const editorComponent = isCanvasCard && cfg.editorComponent
-      ? withCardBoundary(withCanvasWheelGate(cfg.editorComponent as any), cardName)
+      ? withCardBoundary(withCanvasWheelGate(cfg.editorComponent), cardName)
       : cfg.editorComponent;
     return {
       ...cfg,
@@ -229,7 +258,8 @@ class CardErrorBoundary extends React.Component<CardErrorBoundaryProps, CardErro
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo): void {
-    console.error(`[card-error] ${this.props.cardName} render failed:`, error, errorInfo);
+    // DT-08：错误来自内核/第三方卡片组件（Drawnix/mindmap）的渲染，属于我们这一层的兜底失败路径 ⇒ 走 rlog。
+    rlog.error("editor", "卡片渲染失败", error, { card: this.props.cardName, componentStack: errorInfo.componentStack ?? undefined });
   }
 
   render(): React.ReactNode {
@@ -322,7 +352,7 @@ function ensureLakeLongTaskObserver(): void {
   } catch { /* 环境不支持则忽略 */ }
 }
 
-let lakeLastDocInitPerf: Record<string, unknown> | null = null;
+let lakeLastDocInitPerf: LakeDocInitPerf | null = null;
 
 if (typeof window !== "undefined") {
   window.__lakePerfReport = () => {
@@ -338,7 +368,7 @@ if (typeof window !== "undefined") {
         .map((m) => ({ name: m.name, t: `${Math.round(m.startTime)}ms` }));
       console.table(marks);
     } catch (error) {
-      console.warn("__lakePerfReport failed", error);
+      rlog.warn("editor", "__lakePerfReport 生成失败", { ...errorFields(error) });
     }
     try {
       if (lakeLongTasks.length) {
@@ -348,14 +378,14 @@ if (typeof window !== "undefined") {
         console.table([...lakeLongTasks].sort((a, b) => a.start - b.start).map((t) => ({ start: `${t.start}ms`, duration: `${t.duration}ms` })));
         console.groupEnd();
       } else {
-        console.warn("未观测到长任务（可能尚未打开文档，或未在编辑器创建前启用观测）");
+        rlog.warn("editor", "未观测到长任务（可能尚未打开文档，或未在编辑器创建前启用观测）");
       }
       if (lakeLastDocInitPerf) {
         console.group("Lake docInitPerf（parseTime/renderTime/nodeLength）");
         console.table([lakeLastDocInitPerf]);
         console.groupEnd();
       } else {
-        console.log("尚未收到 Lake docInitPerf（若编辑器已打开，说明 monitorLog 订阅未生效）");
+        rlog.info("editor", "尚未收到 Lake docInitPerf（若编辑器已打开，说明 monitorLog 订阅未生效）");
       }
       // TOC 探测：区分「侧边栏没创建 / 数据为空 / 数据有但 CSS 隐藏」
       try {
@@ -392,10 +422,10 @@ if (typeof window !== "undefined") {
       if (images.length) {
         console.group("本地图片请求（按发起时间排序）");
         console.table(images);
-        console.log(`首图发起: ${images[0].start}，共 ${images.length} 个请求，最后一个: ${images[images.length - 1].start}`);
+        rlog.info("editor", `首图发起: ${images[0].start}，共 ${images.length} 个请求，最后一个: ${images[images.length - 1].start}`);
         console.groupEnd();
       } else {
-        console.warn("未发现本地图片请求（文档可能没有图片，或尚未打开）");
+        rlog.warn("editor", "未发现本地图片请求（文档可能没有图片，或尚未打开）");
       }
     } catch { /* 忽略 */ }
   };
@@ -440,8 +470,11 @@ const VIRTUAL_RENDERING = {
  *  - 仅 `.lake-editor-tab`（桌面多标签）启用内部滚动；移动端单编辑器路径
  *    （无 scrollNode 参数）仍走外层 .document-pane，行为不变。
  */
-export function resolveScrollNode(scrollNode?: HTMLElement | null): HTMLElement {
-  const hostNode = (scrollNode
+export function resolveScrollNode(scrollNode?: HTMLElement | null | (() => HTMLElement | null)): HTMLElement {
+  // 允许传 getter：宿主组件挂载晚于编辑器创建时（移动端 .mobile-doc-body 的 ref 在首帧才有值），
+  // 内核在每次测量时会重新调用本函数 ⇒ 用 getter 才能拿到真实滚动容器。
+  const resolved = typeof scrollNode === "function" ? scrollNode() : scrollNode;
+  const hostNode = (resolved
     || (document.querySelector(VIRTUAL_RENDERING.scrollContainerSelector) as HTMLElement | null)
     || document.scrollingElement
     || document.body) as HTMLElement;
@@ -699,13 +732,28 @@ function installBookmarkCardDegrade(
   };
 }
 
+/**
+ * DT-07：把一段「额外清理」挂到 editor.__disposeExtras 上。
+ *
+ * 顺序与原写法一致（LIFO：后注册的先清），createLakeDocument 只负责汇总；
+ * 每一段清理各自 try/catch，单段失败不影响其余（与原嵌套 prevDispose 行为相同）。
+ */
+function appendDisposeExtras(editor: LakeEditorInstance, dispose: () => void): void {
+  const prevDispose = editor.__disposeExtras;
+  editor.__disposeExtras = () => {
+    try { if (typeof prevDispose === "function") prevDispose(); } catch { /* ignore */ }
+    try { dispose(); } catch { /* ignore */ }
+  };
+}
+
 export function createLakeDocument(
   element: HTMLElement,
   mode: "viewer" | "editor",
   onChange: () => void,
   tocEnabled: boolean,
   noteId: string,
-  scrollNode?: HTMLElement | null,
+  /** 真实滚动容器；可传 getter（移动端宿主 ref 首帧才有值），内核每次测量时求值。 */
+  scrollNode?: HTMLElement | null | (() => HTMLElement | null),
   prefs?: LakeEditorPrefs,
   /** 覆盖资源上传落盘（小记编辑态用它把图片写进 quick-notes 空间；缺省走文档资源空间）。 */
   uploadResource?: (request: unknown) => Promise<ResourceUploadOutput>
@@ -740,6 +788,15 @@ export function createLakeDocument(
   mount.style.fontSize = `${prefsSize}px`;
   // lakex-doc-react 的默认配置是函数（按语言生成）；本项目固定 zh-cn。
   const defaultConfig = GetDefaultEditorConfig("zh-cn") as Record<string, unknown>;
+  /** vendor 默认配置里「斜杠面板分组」的最小形状（只读、用于过滤第三方分组）。 */
+  const vendorSlash = defaultConfig as {
+    slash?: {
+      cardSelect?: {
+        general?: { groups?: Array<{ name?: string }> };
+        table?: { groups?: Array<{ name?: string }> };
+      };
+    };
+  };
   const customOptions: Record<string, unknown> = {
     // 编辑态不禁用 emoji 插件：unicodeEmoji 卡片的表情选择器依赖其默认数据，
     // 禁用后选择器渲染为空（0x0）。Viewer 仍保持纯只读。
@@ -858,8 +915,8 @@ export function createLakeDocument(
         general: {
           groups: withLockedTextSlashItem(
             withNoteRefSlashItem(
-              ((defaultConfig as any).slash?.cardSelect?.general?.groups || []).filter(
-                (g: any) => g.name !== "third-party-services"
+              (vendorSlash.slash?.cardSelect?.general?.groups || []).filter(
+                (g) => g.name !== "third-party-services"
               )
             )
           ),
@@ -867,8 +924,8 @@ export function createLakeDocument(
         table: {
           groups: withLockedTextSlashItem(
             withNoteRefSlashItem(
-              ((defaultConfig as any).slash?.cardSelect?.table?.groups || []).filter(
-                (g: any) => g.name !== "third-party-services"
+              (vendorSlash.slash?.cardSelect?.table?.groups || []).filter(
+                (g) => g.name !== "third-party-services"
               )
             )
           ),
@@ -914,20 +971,23 @@ export function createLakeDocument(
   // "Cannot read properties of undefined (reading '__defineMacro')"。
   // 这里在编辑器创建前按顺序预注入（async=false 强制经典脚本顺序执行），
   // Lake 稍后通过 script[src] 去重复用，不再重复注入。
-  injectKatexScriptsInOrder();
+  // DT-07：注入是全局副作用，单独成模块；它的 dispose 是契约性空操作（脚本进程级共享）。
+  const disposeKatexInjection = injectKatexScriptsInOrder();
+  // `.call(Doc)` 保持内核工厂的接收者（与原先直接 `Doc.createOpenXxx(...)` 一致）。
   const editor = mode === "viewer"
-    ? (Doc as any).createOpenViewer(mount, mergedOptions)
-    : (Doc as any).createOpenEditor(mount, mergedOptions);
+    ? openLakeViewer.call(Doc, mount, mergedOptions)
+    : openLakeEditor.call(Doc, mount, mergedOptions);
 
   lakeMark("lake:create:end");
   lakeMeasure("lake:create:openEditor", "lake:create:start", "lake:create:end");
   hardenDestroyedHotKeyLookup(editor);
+  appendDisposeExtras(editor, disposeKatexInjection);
   if (mode === "editor") {
     editor.on("contentchange", onChange);
   }
   // 语雀 bookmark 卡本地降级为普通超链接（ne-link），见 installBookmarkCardDegrade。
   if (mode === "editor") {
-    try { (editor as any).__disposeBookmarkDegrade = installBookmarkCardDegrade(mount, editor); } catch { /* 忽略 */ }
+    try { editor.__disposeBookmarkDegrade = installBookmarkCardDegrade(mount, editor); } catch { /* 忽略 */ }
   }
   // 仅编辑态启用 virtualRendering + cardLazyInit，因此可见卡片水合只挂在编辑器实例；
   // 锁定态 Viewer 明确关闭虚拟渲染，避免自定义卡片停留在 hole 空壳。
@@ -950,12 +1010,24 @@ export function createLakeDocument(
         editor.requestCardHydration = hydration.requestHydration;
       } catch { /* 忽略 */ }
       if (mode === "editor" && !prefs?.disableNativeToc) {
-        try { disposes.push(setupTocScrollFollow(element, editor, () => resolveScrollNode(scrollNode))); } catch { /* 忽略 */ }
+        // DT-07：TOC watcher 独立成模块；TOC 数据与内核事件在这里注入（避免循环 import）。
+        const getTocIds = (): string[] => {
+          try {
+            const toc = lakeBridge(editor).kernel?.getDocExtraContent?.()?.toc;
+            return Array.isArray(toc) ? toc.map((t: { id?: string }) => t?.id).filter((id): id is string => Boolean(id)) : [];
+          } catch { return []; }
+        };
+        try {
+          disposes.push(setupTocScrollFollow(element, editor, () => resolveScrollNode(scrollNode), getTocIds, lakeBridge(editor).kernel));
+        } catch { /* 忽略 */ }
       }
       if (mode === "editor") {
         try { disposes.push(setupCardToolbarHoverBridge(element)); } catch { /* 忽略 */ }
       }
-      (editor as any).__disposeExtras = () => {
+      // 保留先注册的清理（DT-07 的 katex 注入 dispose）再按原数组顺序清理这三段。
+      const prevDispose = editor.__disposeExtras;
+      editor.__disposeExtras = () => {
+        try { if (typeof prevDispose === "function") prevDispose(); } catch { /* ignore */ }
         for (const dispose of disposes) {
           try { dispose(); } catch { /* 忽略 */ }
         }
@@ -966,99 +1038,30 @@ export function createLakeDocument(
   if (mode === "editor") {
     try {
       const disposeAutoOpen = setupInsertedCardAutoOpen(element);
-      const prevDispose = (editor as any).__disposeExtras;
-      (editor as any).__disposeExtras = () => {
+      const prevDispose = editor.__disposeExtras;
+      editor.__disposeExtras = () => {
         try { if (typeof prevDispose === "function") prevDispose(); } catch { /* ignore */ }
         try { disposeAutoOpen(); } catch { /* ignore */ }
       };
     } catch { /* 非编辑器环境忽略 */ }
   }
   // 订阅 Lake 内置性能监控：docInitPerf（code 55），直接给出异步渲染管线的
-  // parseTime / renderTime / nodeLength，用于量化 setDocument 之后的主线程耗时
-  try {
-    (editor as any).on?.("monitorLog", (payload: any) => {
-      const d = payload?.data;
-      if (d && typeof d.m1 === "number" && typeof d.m2 === "number") {
-        lakeMark("lake:render:completed");
-        lakeLastDocInitPerf = {
-          parseTime: d.m1,
-          renderTime: d.m2,
-          nodeLength: d.m4,
-          total: (d.m1 || 0) + (d.m2 || 0),
-        };
-      }
-    });
-  } catch { /* 非编辑器环境忽略 */ }
+  // parseTime / renderTime / nodeLength，用于量化 setDocument 之后的主线程耗时。
+  // DT-07：订阅独立成模块并带 dispose（此前只订阅、从不退订）。
+  appendDisposeExtras(editor, subscribeDocInitPerf(editor, (perf) => {
+    lakeMark("lake:render:completed");
+    lakeLastDocInitPerf = perf;
+  }));
   // audio 卡内嵌播放兜底（桌面/移动端共用）：Lake 的 queryAudioUrl 自动触发在「加载已有卡」时
   // 不稳定（渲染成版权/错误链接，点击会跳系统浏览器打开附件 URL）。直接调 onTranscodeSuccess
   // 设置播放器（audio 元素 src=canonical，应用内嵌播放）。卡渲染完成后调用才生效——持续重试
-  // （最长 ~20s）直到播放器出现；编辑器销毁时经 __disposeExtras 清理。
-  {
-    const audioTimers: number[] = [];
-    const tryEnsureAudio = (tries: number): void => {
-      let allReady = true;
-      try {
-        // audio + video 卡都覆盖：两者初次渲染都可能撞上 AssetServer 启动竞态（error 4）。
-        // §6.1-#4：扫描范围收窄到本实例自己的 mount——此前用 document.querySelectorAll 扫全工作区，
-        // 每个 keep-alive 编辑器实例都重复扫同一批卡（实测 8 标签 ~53 次/前 6s）。卡都在本 mount 内。
-        const cards = mount.querySelectorAll('ne-card[name="audio"], NE-CARD[data-card-name="audio"], ne-card[name="video"], NE-CARD[data-card-name="video"]');
-        if (cards.length === 0) {
-          // 卡尚未渲染（setDocument 异步）——前几轮继续等待；之后无媒体卡则停止（避免白跑）
-          allReady = tries >= 5;
-        } else {
-          cards.forEach((card) => {
-            // 播放器已渲染但加载失败（server 启动竞态/瞬时失败 → networkState 3 + error）→ 重载
-            const mediaEl = card.querySelector("audio, video") as HTMLMediaElement | null;
-            if (mediaEl && mediaEl.networkState === 3 && mediaEl.error) {
-              const s = mediaEl.getAttribute("src");
-              if (s) { mediaEl.preload = "metadata"; mediaEl.src = s; mediaEl.load(); }
-            }
-            if (card.querySelector("audio, video")) return;
-            if (card.getAttribute("name") === "video" || card.getAttribute("data-card-name") === "video") return; // video 卡无 onTranscodeSuccess 流程
-            allReady = false;
-            // 编辑器实例在 _virtualNode._instance；viewer（只读）实例在 _neRef._instance
-            const inst = (card as unknown as { _neRef?: { _virtualNode?: { _instance?: { cardData?: unknown; _cardData?: unknown; onTranscodeSuccess?: (e: unknown) => void }; }; _instance?: { cardData?: unknown; _cardData?: unknown; onTranscodeSuccess?: (e: unknown) => void } } })._neRef?._virtualNode?._instance
-              ?? (card as unknown as { _neRef?: { _instance?: { cardData?: unknown; _cardData?: unknown; onTranscodeSuccess?: (e: unknown) => void } } })._neRef?._instance;
-            const cd = inst?.cardData ?? inst?._cardData;
-            const info = (cd as { getAudioInfo?: () => { id?: string | null } } | null | undefined)?.getAudioInfo?.();
-            const url = info?.id;
-            if (!url) return;
-            const status = (cd as { getStatus?: () => string } | null | undefined)?.getStatus?.();
-            if (status === "error") return;
-            if (typeof inst?.onTranscodeSuccess === "function") {
-              inst.onTranscodeSuccess({ success: true, data: { audio: url, origin: url } });
-            } else {
-              // viewer 实例无 onTranscodeSuccess（Lake viewer audio 卡不跑查询流程）→
-              // 直接写 audioInfo.url = canonical + sync(true) + rerender（实测三者缺一不可：
-              // sync 触发渲染、rerender 传 audioUrl/uiStatus 给播放器组件）
-              const instAny = inst as { cardData?: { setAudioInfo?: (v: unknown) => void; sync?: (u: boolean) => void }; _cardUI?: { uiViewProxy?: { rerender?: (p: unknown) => void } }; _$cardUI?: { uiViewProxy?: { rerender?: (p: unknown) => void } } } | null | undefined;
-              const cd2 = instAny?.cardData;
-              if (cd2 && typeof cd2.setAudioInfo === "function") {
-                cd2.setAudioInfo({ ...info, url });
-                try { cd2.sync?.(true); } catch { /* 忽略 */ }
-              }
-              const ui = instAny?._cardUI ?? instAny?._$cardUI;
-              try { ui?.uiViewProxy?.rerender?.({ audioUrl: url, uiStatus: "transcoded" }); } catch { /* 忽略 */ }
-            }
-          });
-        }
-      } catch { /* 单卡兜底失败不阻断 */ }
-      if (!allReady && tries < 25) {
-        audioTimers.push(window.setTimeout(() => tryEnsureAudio(tries + 1), 800));
-      }
-    };
-    audioTimers.push(window.setTimeout(() => tryEnsureAudio(0), 80));
-    const prevDispose = (editor as any).__disposeExtras;
-    (editor as any).__disposeExtras = () => {
-      try { if (typeof prevDispose === "function") prevDispose(); } catch { /* ignore */ }
-      audioTimers.forEach((t) => window.clearTimeout(t));
-    };
-  }
+  // （最长 ~20s）直到播放器出现；DT-07：重试计时器与清理都收进 lakeAudioCardRetry.ts。
+  appendDisposeExtras(editor, setupAudioCardRetry(mount));
   // 块悬浮手柄 + 块操作菜单（桌面编辑态 opt-in；见 blockHandleMount 的安全边界说明）
   if (mode === "editor" && prefs?.blockHandle) {
     const disposeHandle = mountBlockHoverHandle(element, mount, editor, noteId);
-    const prevDispose = (editor as any).__disposeExtras;
-    (editor as any).__disposeExtras = () => {
+    const prevDispose = editor.__disposeExtras;
+    editor.__disposeExtras = () => {
       try { if (typeof prevDispose === "function") prevDispose(); } catch { /* ignore */ }
       disposeHandle();
     };
@@ -1066,14 +1069,48 @@ export function createLakeDocument(
   // 浮动工具栏（桌面编辑态 opt-in）：选中文字/图片时在选区上方弹出浮框。
   if (mode === "editor" && prefs?.floatingToolbar) {
     const disposeSelectionToolbar = mountSelectionToolbar(element, mount, editor, noteId);
-    const prevDispose = (editor as any).__disposeExtras;
-    (editor as any).__disposeExtras = () => {
+    const prevDispose = editor.__disposeExtras;
+    editor.__disposeExtras = () => {
       try { if (typeof prevDispose === "function") prevDispose(); } catch { /* ignore */ }
       disposeSelectionToolbar();
     };
   }
   registerEditorInstance(mount, editor);
   return editor;
+}
+
+/**
+ * 内核卡片 DOM 上的私有 ref（`_neRef._virtualNode`）：虚拟渲染的 appear 状态 + 卡片实例。
+ * 闭源 lakex 无类型声明 ⇒ 只声明本文件实测用到的字段，全部可选（结构变了就静默降级）。
+ */
+interface LakeCardVirtualNode {
+  isAppear?: boolean;
+  $appear?: () => void;
+  _instance?: LakeCardInstance;
+}
+
+/** 卡片实例上挂 UI 控制器的两个位置（不同卡片类型各用其一）。 */
+interface LakeCardInstance {
+  _$cardUI?: LakeCardUiController;
+  _ui?: LakeCardUiController;
+}
+
+/** 卡片 UI 控制器（表情选择器/公式编辑器）：focus() 打开浮层，getReactRef() 取 React ref。 */
+interface LakeCardUiController {
+  focus?: () => void;
+  uiViewProxy?: { getReactRef?: () => LakeUiReactRef | null };
+  _uiViewProxy?: { getReactRef?: () => LakeUiReactRef | null };
+}
+
+/** 内核 UI 的 React 组件 ref（卡片浮层挂 `_overlay`；TOC 侧栏 ref 上挂 `setNormalViewStatus`）。 */
+interface LakeUiReactRef {
+  _overlay?: unknown;
+  setNormalViewStatus?: (normal: boolean) => void;
+}
+
+/** 带内核私有 ref 的卡片 DOM 元素（querySelector 结果按需断言到它）。 */
+interface LakeCardElement extends Element {
+  _neRef?: { _virtualNode?: LakeCardVirtualNode };
 }
 
 /** 虚拟渲染 + cardLazyInit 下，粘贴/新建的卡片可能永远停留在未水合的空壳
@@ -1086,11 +1123,11 @@ function ensureCardsInViewHydrated(host: HTMLElement, getScrollNode: () => HTMLE
     const scroller = getScrollNode();
     const vp = scroller.getBoundingClientRect();
     host.querySelectorAll("ne-card").forEach((card) => {
-      const vn = (card as any)._neRef?._virtualNode;
+      const vn = (card as LakeCardElement)._neRef?._virtualNode;
       if (!vn || vn.isAppear) return;
       const r = card.getBoundingClientRect();
       if (r.top < vp.bottom && r.bottom > vp.top && r.width > 0 && r.height > 0) {
-        vn.$appear();
+        vn.$appear?.();
       }
     });
   } catch { /* 忽略 */ }
@@ -1119,9 +1156,9 @@ function setupInsertedCardAutoOpen(host: HTMLElement): () => void {
     const name = (el as HTMLElement).dataset?.cardName || "";
     return name === "unicodeEmoji" || name === "math";
   };
-  const getController = (el: Element): any => {
+  const getController = (el: Element): LakeCardUiController | null => {
     try {
-      const inst = (el as any)._neRef?._virtualNode?._instance;
+      const inst = (el as LakeCardElement)._neRef?._virtualNode?._instance;
       return inst?._$cardUI || inst?._ui || null;
     } catch { return null; }
   };
@@ -1135,7 +1172,7 @@ function setupInsertedCardAutoOpen(host: HTMLElement): () => void {
       return !!container && el.contains(container);
     } catch { return false; }
   };
-  const overlayOpened = (controller: any): boolean => {
+  const overlayOpened = (controller: LakeCardUiController | null): boolean => {
     try {
       // 数学编辑器/表情选择器可能渲染到卡片外的 overlay 容器，做全局可见性检测
       const editors = document.querySelectorAll('[data-testid="ne-math-editor"], .ne-math-editor');
@@ -1267,8 +1304,8 @@ function setupVisibleCardHydration(
   if (observeContentChange) {
     try { editor?.on?.("contentchange", onContentChange); } catch { /* 忽略 */ }
   }
-  let renderer: any = null;
-  try { renderer = (editor as any)?.renderer; } catch { /* 忽略 */ }
+  let renderer: LakeKernelBridge["renderer"];
+  try { renderer = lakeBridge(editor ?? undefined).renderer; } catch { /* 忽略 */ }
   renderer?.on?.("tileRenderCompleted", onTileRender);
   renderer?.on?.("generalRenderCompleted", onTileRender);
   requestHydration();
@@ -1411,211 +1448,6 @@ function setupCardToolbarHoverBridge(host: HTMLElement): () => void {
   };
 }
 
-/** 虚拟渲染下 Lake 原生 TOC watcher 失效（二分探测视口外标题无 DOM，永远 -1 不选中）。
- * 自研滚动跟随高亮 + 点击精确滚动：
- *  - 高亮：滚动时按文档序遍历 toc 标题，取位于视口上 1/3 带内的最后（即当前）标题，
- *    给对应 .ne-toc-item 加 ne-toc-selected（与 Lake 的 selected 状态同语义）。
- *  - 点击：Lake 的 scrollByNodeId 负责渲染目标单元并初滚；cardLazyInit 下邻近卡片
- *    是占位高度，首次定位会偏，这里在 50/200ms 做两次精确校正。
- * 返回清理函数。 */
-function setupTocScrollFollow(
-  host: HTMLElement,
-  editor: LakeEditorInstance | null,
-  getScrollNode: () => HTMLElement
-): () => void {
-  let cleanup: (() => void) | null = null;
-  let sidebar: HTMLElement | null = null;
-  let activeId: string | null = null;
-  let pollTimer: number | undefined;
-  let scrollTimer: number | undefined;
-  let removeTocChangeListener: (() => void) | null = null;
-  const pendingTimers = new Set<number>();
-  const later = (fn: () => void, ms: number): number => {
-    const id = window.setTimeout(() => {
-      pendingTimers.delete(id);
-      fn();
-    }, ms);
-    pendingTimers.add(id);
-    return id;
-  };
-  const clearLater = (id: number | undefined): void => {
-    if (id === undefined) return;
-    window.clearTimeout(id);
-    pendingTimers.delete(id);
-  };
-
-  const getTocIds = (): string[] => {
-    try {
-      const toc = (editor as any)?.kernel?.getDocExtraContent?.()?.toc;
-      return Array.isArray(toc) ? toc.map((t: any) => t?.id).filter(Boolean) : [];
-    } catch { return []; }
-  };
-
-  const apply = (id: string | null, force = false): void => {
-    if (!force && id === activeId) return;
-    activeId = id;
-    if (!sidebar) return;
-    sidebar.querySelectorAll(".ne-toc-item").forEach((el) => {
-      el.classList.toggle("ne-toc-selected", (el as HTMLElement).dataset.id === id);
-    });
-    // 长大纲跟随：把选中项滚到列表可视区（复刻 Lake GY._makeVisible 的居中逻辑）。
-    // Lake 原逻辑挂在自身 watcher 的 _reset 上，虚拟渲染下 watcher 失效永不触发，
-    // 自研高亮需要自己补这一段。
-    if (id) {
-      const scroller = sidebar.querySelector(".ne-toc-view-inner") as HTMLElement | null;
-      const item = scroller?.querySelector(`.ne-toc-item[data-id="${id}"]`) as HTMLElement | null;
-      if (scroller && item) {
-        const vp = scroller.getBoundingClientRect();
-        const r = item.getBoundingClientRect();
-        if (r.top <= vp.top + 10 || r.bottom >= vp.bottom - 10) {
-          scroller.scrollTop += r.top - (vp.top + vp.height / 2);
-        }
-      }
-    }
-  };
-
-  const update = (): void => {
-    const scroller = getScrollNode();
-    const ids = getTocIds();
-    if (!ids.length) return;
-    const vpTop = scroller.getBoundingClientRect().top;
-    let current: string | null = null;
-    for (const id of ids) {
-      const el = host.querySelector(`[id="${id}"]`) as HTMLElement | null;
-      if (!el) continue; // 虚拟渲染：视口外标题无 DOM，跳过
-      const top = el.getBoundingClientRect().top;
-      // 标题顶部越过视口顶 → 成为当前小节（经典大纲语义）
-      if (top <= vpTop) current = id;
-      else break; // 标题按文档序递增，之后的都在下方
-    }
-    if (current !== null) apply(current);
-    // 文档开头是正文/引言（首个标题在视口之下）：回到顶部时高亮第一个标题，
-    // 避免残留滚动到底部的旧高亮
-    else if (scroller.scrollTop < 4) apply(ids[0]);
-  };
-
-  // 虚拟渲染是异步重建 DOM：滚动瞬间视口顶的标题可能还没渲染出来，
-  // 单次 update 会漏算。滚动后按 80/250/500ms 重算 + 每次渲染批次完成后重算。
-  // 所有延迟定时器统一登记，destroy 时清理（避免销毁后回调空跑）。
-  const clearPendingTimers = (): void => {
-    for (const id of pendingTimers) window.clearTimeout(id);
-    pendingTimers.clear();
-  };
-  const scheduleUpdate = (): void => {
-    clearLater(scrollTimer);
-    scrollTimer = later(update, 80);
-    // 虚拟渲染异步重建 DOM：延迟重算；卡片水合由独立订阅处理，
-    // 以便 disableNativeToc=true 的桌面自建大纲同样生效。
-    later(update, 250);
-    later(update, 500);
-  };
-
-  const correctScrollTo = (id: string): void => {
-    const el = host.querySelector(`[id="${id}"]`) as HTMLElement | null;
-    const scroller = getScrollNode();
-    if (!el || !scroller) return;
-    const delta = el.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
-    if (Math.abs(delta) > 2) scroller.scrollTop += delta;
-  };
-
-  const onScroll = (): void => {
-    scheduleUpdate();
-  };
-
-  const onClick = (event: Event): void => {
-    const target = event.target as HTMLElement | null;
-    const item = target?.closest?.(".ne-toc-item") as HTMLElement | null;
-    const id = item?.getAttribute?.("data-id");
-    if (!id) return;
-    // Lake 的 item onClick（冒泡阶段）会先执行 scrollByNodeId 渲染目标单元并初滚；
-    // 懒卡片占位高度导致的偏差在渲染/水合稳定后校正两次。
-    later(() => correctScrollTo(id), 50);
-    later(() => correctScrollTo(id), 200);
-  };
-
-  const bind = (): boolean => {
-    const el = host.querySelector?.(".ne-toc-sidebar") as HTMLElement | null;
-    if (!el) return false;
-    if (el === sidebar && cleanup) return true;
-    if (cleanup) { cleanup(); cleanup = null; }
-    sidebar = el;
-    activeId = null;
-    const scroller = getScrollNode();
-    scroller.addEventListener("scroll", onScroll, { passive: true });
-    el.addEventListener("click", onClick, true);
-    const observer = new MutationObserver(() => apply(activeId, true));
-    observer.observe(el, { childList: true, subtree: true });
-    // contentchange（粘贴/编辑/插入卡片）：异步等卡片落位后水合 + 刷新高亮。
-    // 审计 #15：600/1500ms 曾把裸函数传给 setTimeout → host 为 undefined →
-    // querySelectorAll 抛错被吞、水合重试完全失效；改箭头闭包并登记定时器。
-    let contentChangeTimer: number | undefined;
-    const onContentChange = (): void => {
-      clearLater(contentChangeTimer);
-      contentChangeTimer = later(update, 120);
-    };
-    try { (editor as any)?.on?.("contentchange", onContentChange); } catch { /* 忽略 */ }
-    // 虚拟渲染每批重建完成后重算高亮（滚动瞬间视口顶标题可能尚未渲染）
-    let renderer = null;
-    try { renderer = (editor as any)?.renderer; } catch { /* 忽略 */ }
-    const onTileRender = (): void => update();
-    renderer?.on?.("tileRenderCompleted", onTileRender);
-    renderer?.on?.("generalRenderCompleted", onTileRender);
-    cleanup = () => {
-      scroller.removeEventListener("scroll", onScroll);
-      el.removeEventListener("click", onClick, true);
-      try { (editor as any)?.off?.("contentchange", onContentChange); } catch { /* 忽略 */ }
-      clearLater(contentChangeTimer);
-      clearPendingTimers();
-      observer.disconnect();
-      renderer?.off?.("tileRenderCompleted", onTileRender);
-      renderer?.off?.("generalRenderCompleted", onTileRender);
-      window.clearTimeout(scrollTimer);
-      sidebar = null;
-      activeId = null;
-    };
-    later(update, 0);
-    return true;
-  };
-
-  const tryBind = (): void => {
-    if (bind()) {
-      window.clearInterval(pollTimer);
-      return;
-    }
-    // 轮询收敛：最多 20 次（250ms × 20 ≈ 5s）；后续由 tocChange 钩子重绑
-    pollCount += 1;
-    if (pollCount >= 20) window.clearInterval(pollTimer);
-  };
-  let pollCount = 0;
-
-  // 侧边栏创建时机晚于编辑器 ready（ready 早于 tocChange）；轮询 + tocChange 后重绑
-  later(tryBind, 0);
-  later(tryBind, 600);
-  pollTimer = window.setInterval(tryBind, 250);
-  try {
-    const kernel = (editor as any)?.kernel;
-    const onTocChange = (): void => {
-      later(tryBind, 0);
-      later(() => apply(activeId, true), 60);
-    };
-    const unsubscribe = kernel?.onPluginEvent?.("tocChange", onTocChange);
-    if (typeof unsubscribe === "function") {
-      removeTocChangeListener = unsubscribe;
-    } else if (typeof kernel?.offPluginEvent === "function") {
-      removeTocChangeListener = () => kernel.offPluginEvent("tocChange", onTocChange);
-    }
-  } catch { /* 忽略 */ }
-
-  return () => {
-    window.clearInterval(pollTimer);
-    clearLater(scrollTimer);
-    removeTocChangeListener?.();
-    removeTocChangeListener = null;
-    clearPendingTimers();
-    cleanup?.();
-  };
-}
-
 /** 原生 TOC 侧栏实例的应用侧可用面（编辑态/阅读态插件同构：bundle 179515 / 236760 均有 update，
  * close/open 两态同名）。全部可选：内核 bundle 改结构时静默降级。
  * setNormalView：展开/收纳统一入口——阅读态实例自带 setNormalViewStatus；编辑态实例没有，
@@ -1628,13 +1460,23 @@ export interface NativeTocSidebar {
   setNormalView?: (normal: boolean) => void;
 }
 
+/** 内核侧栏实例的真实形状（闭源 bundle：编辑器态自带 update/open/close + setNormalViewStatus，
+ *  部分形态只有组件 ref；`_view` 是 React 组件包装，ref 上才是 setNormalViewStatus）。 */
+interface NativeTocSidebarInternals {
+  update?: (toc: unknown) => void;
+  open?: () => void;
+  close?: () => void;
+  setNormalViewStatus?: (normal: boolean) => void;
+  _view?: { getReactRef?: () => LakeUiReactRef | null };
+}
+
 /** 取原生 TOC 侧栏实例（bundle: 编辑器 toc 插件 afterInit `this._tocSidebar = ao(qY, …)`；
  * 阅读态插件同构，同挂点 `_tocSidebar`）。返回绑定包装（不改动内核实例）。
  * 插件实例挂在 editor._plugins（数组/Map/对象），逐个找带 `_tocSidebar.update` 的那个。
  * 属私有结构 hack：找不到返回 null，调用方回退到 tocChange 事件重放。 */
 function findNativeTocSidebar(editor: LakeEditorInstance | null): NativeTocSidebar | null {
   try {
-    const ps = (editor as any)?._plugins;
+    const ps = editor?._plugins;
     const list: unknown[] = Array.isArray(ps)
       ? ps
       : ps && typeof (ps as Map<unknown, unknown>).values === "function"
@@ -1643,17 +1485,17 @@ function findNativeTocSidebar(editor: LakeEditorInstance | null): NativeTocSideb
           ? Object.values(ps as Record<string, unknown>)
           : [];
     for (const p of list) {
-      const sb = (p as { _tocSidebar?: Record<string, unknown> })?._tocSidebar;
+      const sb = (p as { _tocSidebar?: NativeTocSidebarInternals })?._tocSidebar;
       if (sb && typeof sb.update === "function") {
-        const anySb = sb as any;
+        const sidebar = sb;
         return {
-          update: (toc) => anySb.update(toc),
-          open: () => anySb.open?.(),
-          close: () => anySb.close?.(),
+          update: (toc) => sidebar.update?.(toc),
+          open: () => sidebar.open?.(),
+          close: () => sidebar.close?.(),
           setNormalView: (normal) => {
-            if (typeof anySb.setNormalViewStatus === "function") { anySb.setNormalViewStatus(normal); return; }
+            if (typeof sidebar.setNormalViewStatus === "function") { sidebar.setNormalViewStatus(normal); return; }
             // 编辑态：组件 ref 上 setNormalViewStatus（ek0 为编辑/阅读共用组件）
-            const ref = anySb._view?.getReactRef?.();
+            const ref = sidebar._view?.getReactRef?.();
             if (ref && typeof ref.setNormalViewStatus === "function") ref.setNormalViewStatus(normal);
           },
         };
@@ -1693,8 +1535,7 @@ export function refreshTocSidebar(
   };
   const tryOnce = (): void => {
     try {
-      const anyEditor = editor as any;
-      const kernel = anyEditor?.kernel;
+      const kernel = lakeBridge(editor ?? undefined).kernel;
       const tocData = kernel?.getDocExtraContent?.()?.toc;
       // 数据就绪即重放，不前置检查侧栏 DOM：
       // ① 编辑态侧栏在 afterInit 就挂载（.ne-toc-sidebar），直接 update 绕过 1s 节流（实测 ~90ms）；
@@ -1723,7 +1564,7 @@ export function refreshTocSidebar(
         later(tryOnce, 120);
       }
     } catch (error) {
-      console.warn("refreshTocSidebar failed", error);
+      rlog.warn("editor", "refreshTocSidebar 失败", { ...errorFields(error) });
     }
   };
   later(tryOnce, 0);
@@ -1736,17 +1577,17 @@ export function refreshTocSidebar(
 
 export function destroyLakeEditor(editor: LakeEditorInstance | null): void {
   try {
-    (editor as any)?.__disposeExtras?.();
+    editor?.__disposeExtras?.();
   } catch (error) {
-    console.warn("Lake editor extras cleanup failed", error);
+    rlog.warn("editor", "Lake editor extras cleanup failed", { ...errorFields(error) });
   }
   try {
-    (editor as any)?.__disposeBookmarkDegrade?.();
+    editor?.__disposeBookmarkDegrade?.();
   } catch { /* 忽略 */ }
   try {
     editor?.destroy?.();
     if (!editor?.destroy) editor?.destory?.();
   } catch (error) {
-    console.warn("Lake editor cleanup failed", error);
+    rlog.warn("editor", "Lake editor cleanup failed", { ...errorFields(error) });
   }
 }

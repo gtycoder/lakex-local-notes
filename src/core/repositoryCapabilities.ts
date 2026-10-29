@@ -89,6 +89,6 @@ export const DESKTOP_ONLY_CAPABILITIES: readonly { desktop: string; note: string
   { desktop: "setNoteEditLocked", note: "文档锁定（移动端不提供）" },
   { desktop: "updateNoteCaches / readNoteCaches / ensureNoteCaches", note: "markdown/纯文本缓存（移动端检索走自己的 searchIndex，不维护该缓存）" },
   { desktop: "renameAssetDisplay / readAssetPreview / previewNoteOrphan", note: "资产展示名与预览（移动端资产入口不同）" },
-  { desktop: "importRemoteNote / moveTreeNode", note: "同步内部使用（移动端同语义在 syncDbPort 内）" },
+  { desktop: "importRemoteNote / moveTreeNode", note: "同步内部使用（移动端同语义在 v3 设备存储 mobile/v3/mobileDeviceStore 内）" },
   { desktop: "listNoteIdsWithHistory / getHistoryStats / getLastHistoryCleanup / markHistoryDirty / flushHistorySnapshots / recordHistoryCleanup", note: "桌面历史维护细节（移动端历史功能较薄）" },
 ];

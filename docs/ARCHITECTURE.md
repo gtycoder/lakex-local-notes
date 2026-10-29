@@ -81,7 +81,7 @@ Preload (electron/preload.cjs)：原生 CJS，contextBridge 暴露 window.lakeNa
 ### 4.1 本地目录结构
 
 ```text
-~/Library/Application Support/local-lakex-notes/workspace-default/
+~/Library/Application Support/lakex-local-notes/workspace-default/
 ├── metadata.sqlite3          # Lake 主数据库（WAL 模式）
 ├── notes/
 │   └── {noteId}.lake         # Lake 文档（含 http://127.0.0.1:19876/{noteId}/{filename} 引用）
@@ -124,10 +124,17 @@ Preload (electron/preload.cjs)：原生 CJS，contextBridge 暴露 window.lakeNa
 
 详见 [QUICK-NOTES-SPEC.md](./QUICK-NOTES-SPEC.md)。
 
-### 4.4 S3 云端布局（prefix = `local-lakex-notes`）
+### 4.4 S3 云端布局（prefix = `lakex-local-notes`）
+
+> **261028 更新：以下 §4.4/§5 是 Manifest V2 时代描述，已过期。** 自 261026 S3 v3 转正起，云端只有
+> `meta/pointer.json` + 两个不可变索引 `meta/index/{hash}.json` + 每篇声明 `meta/assets/{noteId}/{declHash}.json`
+> + 内容寻址对象（`objects/{id}-{hash}.lake` / `assets/{id}/{filename}`）；**无 manifest 链、无墓碑、无全局资产清单**。
+> 现行唯一协议见 [`SYNC-PROTOCOL.md`](SYNC-PROTOCOL.md)；旧 `manifests/*` 仅作历史孤儿，不读不迁移。
+
+<details><summary>（历史：Manifest V2 布局）</summary>
 
 ```text
-local-lakex-notes/
+lakex-local-notes/
 ├── objects/{noteId}-{contentHash}.lake   # 文档内容（内容寻址；五种 kind 共用，扩展名沿用 .lake）
 ├── assets/{noteId}/{filename}        # 资源（跳过 orphan_assets）
 ├── manifests/
@@ -139,13 +146,15 @@ local-lakex-notes/
     └── manifests/latest.json
 ```
 
+</details>
+
 ### 4.5 七牛云已验证配置（用户真实账号）
 
 ```
 Endpoint:    https://s3.cn-north-1.qiniucs.com
 Region:      cn-north-1
 Bucket:      local-lake-hebei     ← 不是 local-lake！
-对象前缀:     local-lakex-notes
+对象前缀:     lakex-local-notes
 Path-style:  ✅ 勾选
 ```
 - AK/SK 保存在本机 settings 表（含密钥，勿外泄、勿提交）

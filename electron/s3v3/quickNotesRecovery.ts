@@ -9,10 +9,10 @@ import {
   quickNoteAssetKey,
   quickNoteBodyKey,
   S3V3_POINTER_KEY,
-} from "../../src/core/s3v3Keys.js";
-import { parseQuickNotesIndexBytes, validateAssetDeclaration, type QuickNoteEntry } from "../../src/core/s3v3Index.js";
+} from "../../src/core/s3v3/protocol/s3v3Keys.js";
+import { parseQuickNotesIndexBytes, validateAssetDeclaration, type QuickNoteEntry } from "../../src/core/s3v3/protocol/s3v3Index.js";
 import type { S3v3Remote } from "../../src/core/s3v3Ports.js";
-import { validatePointer } from "../../src/core/s3v3Types.js";
+import { validatePointer } from "../../src/core/s3v3/protocol/s3v3Types.js";
 
 export interface V3QuickNoteSnapshot {
   entry: QuickNoteEntry;

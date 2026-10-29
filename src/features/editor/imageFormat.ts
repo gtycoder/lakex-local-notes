@@ -1,6 +1,8 @@
 import type { ResourceUploadInput, ResourceUploadOutput } from "../../lib/types";
+import { MAX_IMAGE_BYTES } from "../../core/storeLimits.js";
 
-export const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
+/** 图片体积上限的唯一来源在 core/storeLimits（CORE-09）；这里 re-export 保持既有导入。 */
+export { MAX_IMAGE_BYTES };
 
 interface ImageFormat {
   mimeType: string;

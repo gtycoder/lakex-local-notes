@@ -4,6 +4,7 @@ import { ChevronRight, Folder, File, RotateCcw, Trash, X } from "lucide-react";
 import { native } from "../../lib/native";
 import { createRequestVersion } from "../../core/requestVersion";
 import { useFloatingDialog } from "../hooks/useFloatingDialog";
+import { useConfirm } from "../../hooks/useConfirm";
 import { DialogResizeHandles } from "../ui/DialogResizeHandles";
 import { SplitPane } from "../ui/SplitPane";
 import { getNativeErrorMessage } from "../../lib/nativeErrors";
@@ -117,6 +118,8 @@ export function TrashPanel({ open, embed = false, onClose, onChanged, onRestored
   // C1：回收站自动过期配置（trashAutoPurgeDays；0=关闭不显示倒计时/提示条）
   const [trashAutoPurgeDays, setTrashAutoPurgeDays] = useState<number | null>(null);
   const floating = useFloatingDialog({ id: "trash", initialSize: { w: 1000, h: 640 }, minSize: { w: 740, h: 460 } });
+  /** 确认浮层（DT-02）：替代 window.confirm；弹窗与成页共用同一份 body，所以渲染在 body 里。 */
+  const { confirm, confirmElement } = useConfirm();
   const docsVersionRef = useRef(createRequestVersion());
   const previewVersionRef = useRef(createRequestVersion());
   const quickVersionRef = useRef(createRequestVersion());
@@ -223,7 +226,12 @@ export function TrashPanel({ open, embed = false, onClose, onChanged, onRestored
     catch (e) { setError(getNativeErrorMessage(e)); }
   };
   const purgeQuick = async (id: string) => {
-    if (!window.confirm("彻底删除小记：本机立即移除、云端立即删除且不可恢复；其他设备若仍持有可恢复副本，直到它们也处理。确定删除？")) return;
+    if (!(await confirm({
+      title: "彻底删除这条小记？",
+      body: "本机立即移除，云端立即删除且无法恢复（小记不备份）；其他设备若仍持有可恢复副本，会在它们各自处理时一并清除。",
+      confirmText: "彻底删除",
+      danger: true,
+    }))) return;
     try { await native.purgeQuickNote(id); await refreshQuick(); }
     catch (e) { setError(getNativeErrorMessage(e)); }
   };
@@ -231,7 +239,11 @@ export function TrashPanel({ open, embed = false, onClose, onChanged, onRestored
   const restore = async (id: string) => {
     const item = items.find((it) => it.id === id);
     const label = item?.title || "该文档";
-    if (!window.confirm(`恢复「${label}」及其全部内容到原位置？`)) return;
+    if (!(await confirm({
+      title: `恢复「${label}」？`,
+      body: "将把该文档及其全部内容恢复到原位置。",
+      confirmText: "恢复",
+    }))) return;
     try {
       await native.restoreTrash(id);
       setSelected(null);
@@ -256,7 +268,12 @@ export function TrashPanel({ open, embed = false, onClose, onChanged, onRestored
     const isRoot = !item?.parentId || !items.some((it) => it.id === item.parentId);
     const label = item?.title || "该节点";
     const hint = isRoot ? `「${label}」及其全部内容` : `「${label}」及其子项`;
-    if (!window.confirm(`彻底删除${hint}：本机立即移除、云端正文/资源立即删除且不可恢复（非回收窗口）；其他设备仍保留可恢复副本直到它们处理。确定删除？`)) return;
+    if (!(await confirm({
+      title: `彻底删除${hint}？`,
+      body: "彻底删除后无法恢复：本机立即移除，云端正文/资源立即删除，文档历史快照也会一起清除（非回收窗口）。其他设备仍保留可恢复副本，直到它们各自处理。",
+      confirmText: "彻底删除",
+      danger: true,
+    }))) return;
     try {
       await native.purgeTrash(id);
       if (selected?.id === id) setSelected(null);
@@ -269,7 +286,12 @@ export function TrashPanel({ open, embed = false, onClose, onChanged, onRestored
 
   const empty = async () => {
     if (items.length === 0) return;
-    if (!window.confirm(`清空回收站（${buildTrashTree(items).length} 项）？将彻底删除：本机立即移除、云端正文/资源立即删除且不可恢复；其他设备保留可恢复副本直到它们处理。此操作不可撤销。`)) return;
+    if (!(await confirm({
+      title: "清空回收站？",
+      body: `将彻底删除 ${buildTrashTree(items).length} 项：本机立即移除，云端正文/资源立即删除，文档历史快照也会一起清除，且无法恢复（非回收窗口）。其他设备保留可恢复副本直到它们处理。此操作不可撤销。`,
+      confirmText: "清空回收站",
+      danger: true,
+    }))) return;
     try {
       await native.emptyTrash();
       setSelected(null);
@@ -379,6 +401,7 @@ export function TrashPanel({ open, embed = false, onClose, onChanged, onRestored
         </div>
       )}
       {!embed && <DialogResizeHandles onResize={floating.startResize} />}
+      {confirmElement}
     </>
   );
 

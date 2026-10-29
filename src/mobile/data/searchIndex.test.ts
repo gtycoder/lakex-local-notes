@@ -5,6 +5,14 @@ import type { MobileDb, MobileDbStatement } from "./sqliteDb.js";
 import { sha256Sync } from "../../core/sha256Sync.js";
 import { writeNoteBody } from "./noteBodies.js";
 import { normalizeNoteKind } from "../../core/noteKind.js";
+import {
+  NOTES_SEARCH_LEDGER_ROWID_INDEX,
+  NOTES_SEARCH_LEDGER_TABLE,
+  SEARCH_LEDGER_COLUMN,
+  notesFtsDDL,
+  searchLedgerDDL,
+  searchLedgerRowidIndexDDL,
+} from "../../core/search/schema.js";
 
 /** better-sqlite3 上的异步 MobileDb 适配器：用生产同款 FTS5(unicode61) 验证移动端搜索逻辑。 */
 function adapt(raw: Database.Database): MobileDb {
@@ -37,9 +45,18 @@ function makeRawDb(): Database.Database {
   raw.exec([
     "CREATE TABLE notes (id TEXT PRIMARY KEY, title TEXT NOT NULL, parent_id TEXT, updated_at TEXT NOT NULL, content_hash TEXT, text_cache TEXT, trashed_at TEXT, doc_kind TEXT NOT NULL DEFAULT 'doc');",
     "CREATE TABLE folders (id TEXT PRIMARY KEY, title TEXT NOT NULL, parent_id TEXT);",
-    "CREATE VIRTUAL TABLE notes_fts USING fts5(title, body, tokenize='unicode61');",
-    "CREATE TABLE search_index (note_id TEXT PRIMARY KEY, fts_rowid INTEGER NOT NULL, title TEXT NOT NULL, raw_hash TEXT, title_hash TEXT NOT NULL, body_hash TEXT NOT NULL, indexed_at TEXT NOT NULL);",
-    "CREATE UNIQUE INDEX idx_search_index_rowid ON search_index(fts_rowid);",
+    // 夹具也用生产同款单一来源 DDL（CORE-13），避免测试与生产各写一份。
+    notesFtsDDL() + ";",
+    searchLedgerDDL(NOTES_SEARCH_LEDGER_TABLE, [
+      SEARCH_LEDGER_COLUMN.noteId,
+      SEARCH_LEDGER_COLUMN.ftsRowid,
+      SEARCH_LEDGER_COLUMN.title,
+      SEARCH_LEDGER_COLUMN.rawHash,
+      SEARCH_LEDGER_COLUMN.titleHash,
+      SEARCH_LEDGER_COLUMN.bodyHash,
+      SEARCH_LEDGER_COLUMN.indexedAt,
+    ]) + ";",
+    searchLedgerRowidIndexDDL(NOTES_SEARCH_LEDGER_ROWID_INDEX, NOTES_SEARCH_LEDGER_TABLE) + ";",
   ].join("\n"));
   return raw;
 }

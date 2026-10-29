@@ -14,8 +14,9 @@ import { confirmMobile } from "../ui/ConfirmDialog";
 import { aiErrorInfoFromCode } from "../../core/aiErrors";
 import { PickerSheet } from "../ui/PickerSheet";
 import { SYNC_AUTO_MODE_OPTIONS, SYNC_OPEN_CLOSE_NOTE, syncIntervalOptions } from "../../core/syncModes";
-import { MANIFEST_VERSION } from "../../core/syncUtils";
+import { S3V3_POINTER_VERSION } from "../../core/s3v3/protocol/s3v3Types";
 import { usePanelDrag } from "../hooks/usePanelDrag";
+import { pushBackHandler } from "../ui/backStack";
 import { TrashList } from "./TrashList";
 import { formatBytes } from "../../lib/formatBytes";
 import { probePinShortcut, requestPinQuickNoteShortcut } from "../native/quickNoteShortcut";
@@ -23,6 +24,7 @@ import { CLOUD_PRIVACY_NOTICE, canTouchNetwork, cloudStateOf } from "../../core/
 import { useS3SettingsForm } from "./useS3SettingsForm";
 import { useSettingsSectionData } from "./useSettingsSectionData";
 import { useSyncSettingsForm } from "./useSyncSettingsForm";
+import { formatS3v3Diagnostics } from "../../core/s3v3Report";
 
 /** 回收站只读预览（内含 Lake 内核编辑器）：**按需加载**——设置页/首屏都不需要内核。 */
 const TrashPreviewPage = lazy(() => import("../trash/TrashPreviewPage").then((m) => ({ default: m.TrashPreviewPage })));
@@ -58,7 +60,8 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
   /** 小记桌面快捷方式：部分机型不展示静态快捷方式，这里给「添加到桌面」兜底（对齐思源）。 */
   const [pinState, setPinState] = useState<{ available: boolean; pinned: boolean } | null>(null);
   const [pinMsg, setPinMsg] = useState("");
-  useEffect(() => { void probePinShortcut().then(setPinState); }, []);  const [previewNoteId, setPreviewNoteId] = useState<string | null>(null);
+  useEffect(() => { void probePinShortcut().then(setPinState); }, []);
+  const [previewNoteId, setPreviewNoteId] = useState<string | null>(null);
   const [listKey, setListKey] = useState(0);
   const {
     settings: s3,
@@ -100,11 +103,53 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
     updateSyncSettings,
     syncMsg,
     syncProgressText,
+    lastSyncBreakdown,
     warnings: syncWarnings,
     supersededNotes: syncSuperseded,
     lastSyncText,
+    syncReports,
+    reloadSyncReports,
     runSync,
   } = useSyncSettingsForm(open, onRefresh);
+  // SD-13：同步诊断文本（最近 3 轮；只存本机，复制给维护者排障）。
+  const syncDiagText = formatS3v3Diagnostics(syncReports);
+  const [syncDiagMsg, setSyncDiagMsg] = useState("");
+  const copySyncDiagnostics = async (): Promise<void> => {
+    if (!syncDiagText) { setSyncDiagMsg("本机还没有同步诊断记录"); return; }
+    try {
+      await navigator.clipboard.writeText(syncDiagText);
+      setSyncDiagMsg("同步诊断已复制到剪贴板");
+    } catch {
+      setSyncDiagMsg("无法写入剪贴板，请长按下方文本手动复制");
+    }
+  };
+  /** 「从云端恢复（换机/坏库）」（261028 用户批准）：清空本机同步基线 → 立即整轮只拉不打。 */
+  const [restoreMsg, setRestoreMsg] = useState("");
+  const [restoreBusy, setRestoreBusy] = useState(false);
+  const restoreFromCloud = async (): Promise<void> => {
+    if (restoreBusy) return;
+    const ok = await confirmMobile({
+      title: "从云端恢复？",
+      body: "本机同步基线会被清空，然后以云端为准全量重拉。云端没有的本机文档会移入回收站（可恢复），本机附件不会被删除，也不会向云端上传任何本机内容。",
+      confirmText: "开始恢复",
+      danger: true,
+    });
+    if (!ok) return;
+    setRestoreBusy(true);
+    setRestoreMsg("正在从云端恢复…");
+    try {
+      const result = await bridge.restoreFromCloud();
+      setRestoreMsg(result.message);
+      // 与「立即同步」之后同口径：刷新首页/工作区数据（同步状态行由 syncStatusStore 自己广播）。
+      if (result.ok) await onRefresh();
+    } catch (error) {
+      setRestoreMsg("恢复失败：" + (error as Error).message);
+    } finally {
+      setRestoreBusy(false);
+    }
+    // 成功/失败都读一次诊断（失败也会由 syncNow 落一轮，同 runSync 口径）。
+    await reloadSyncReports();
+  };
   const cloudState = cloudStateOf(Boolean(s3), syncCfg);
   const cloudBlockReason = canTouchNetwork(cloudState)
     ? null
@@ -160,6 +205,17 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
     isOpen: (side) => side === "left" && open && !isSub,
     commit: (side, next) => { if (side === "left" && !next) onClose(); },
   });
+
+  // 返回键（MOB-01）：子页（含回收站预览）只回菜单 / 上一层，不把整个抽屉关掉
+  // （父层 useBackHandler 的 drawerOpen 分支会直接 onClose 回首页，用户得重新开设置）。
+  useEffect(() => {
+    if (!open || (!isSub && !previewNoteId)) return;
+    return pushBackHandler(() => {
+      if (previewNoteId) { setPreviewNoteId(null); return true; }
+      setView("menu");
+      return true;
+    });
+  }, [open, isSub, previewNoteId]);
 
   if (!open) return null;
 
@@ -461,6 +517,43 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                       上次同步：{lastSyncText}
                       {syncCfg?.enabled === false ? "（云同步当前已关闭，不会联网）" : ""}
                     </div>
+                    {lastSyncBreakdown && <div className="mb-set-item__desc">{lastSyncBreakdown}</div>}
+                  </div>
+                  {/* 261028（用户批准）：移动端补「从云端恢复（换机/坏库）」——
+                      清本机同步基线后整轮只拉不打；不照抄桌面的「整库改名隔离 + 重启」（移动端附件可能 1.6GB，隔离整库代价过高）。 */}
+                  <div className="mb-set-block">
+                    <div className="mb-set-block__name">从云端恢复（换机/坏库）</div>
+                    <div className="mb-set-item__desc">
+                      以云端为准重建本机：清空本机同步基线后全量重拉（只拉不打，不上传本机内容）。
+                      云端没有的本机文档/小记会移入回收站并标「云端已删除 · 仅本地」，正文与历史保留可恢复。
+                      用于换机、本机库损坏，或提示「云端是另一套数据（epoch 不一致）」时。
+                    </div>
+                    <div className="mb-set-block__actions">
+                      <button
+                        type="button"
+                        className="mb-btn mb-btn--secondary mb-btn--danger"
+                        disabled={syncCfg?.enabled === false || restoreBusy}
+                        title={syncCfg?.enabled === false ? "云同步已关闭：不会联网" : undefined}
+                        onClick={() => void restoreFromCloud()}
+                      >{restoreBusy ? "正在恢复…" : "从云端恢复…"}</button>
+                    </div>
+                    {restoreMsg && <div className="mb-set-item__desc" aria-live="polite">{restoreMsg}</div>}
+                  </div>
+                  {/* SD-13：同步诊断（最近 3 轮；阶段耗时/对象数/字节/失败对象），可一键复制 */}
+                  <div className="mb-set-block">
+                    <div className="mb-set-block__name">同步诊断</div>
+                    <div className="mb-set-item__desc">最近 3 轮同步的阶段耗时、对象数/字节与失败对象（只存本机，不上传）。同步变慢或失败时复制给维护者。</div>
+                    {syncDiagText ? (
+                      <div className="mb-input mb-input--multiline">
+                        <textarea rows={5} readOnly spellCheck={false} value={syncDiagText} aria-label="最近 3 轮同步诊断" />
+                      </div>
+                    ) : (
+                      <div className="mb-set-item__desc">本机还没有 v3 同步记录。</div>
+                    )}
+                    <div className="mb-set-block__actions">
+                      <button className="mb-btn mb-btn--secondary" disabled={!syncDiagText} onClick={() => void copySyncDiagnostics()}>复制同步诊断</button>
+                    </div>
+                    {syncDiagMsg && <div className="mb-set-item__desc">{syncDiagMsg}</div>}
                   </div>
                   {syncSuperseded.length > 0 && (
                     <div className="mb-set-block">
@@ -528,9 +621,9 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
               <div className="mb-set-title"><Info size={16} />关于</div>
               <div className="mb-set-items">
                 <div className="mb-set-block">
-                  <div className="mb-set-block__name">{appInfo?.name ?? "LocalLakexNotes"}</div>
+                  <div className="mb-set-block__name">{appInfo?.name ?? "LakexLocalNotes"}</div>
                   <div className="mb-set-item__desc">版本：{appInfo?.version ?? "…"}（build {appInfo?.build ?? "…"}）</div>
-                  <div className="mb-set-item__desc">协议：manifest v{appInfo?.protocolVersion ?? String(MANIFEST_VERSION)} · 本地为真相，S3 为同步镜像</div>
+                  <div className="mb-set-item__desc">同步内核 v4（plan→apply→commit→finalize） · 协议 v{String(S3V3_POINTER_VERSION)}（pointer + 内容寻址索引） · 本地为真相，S3 为同步镜像</div>
                   <div className="mb-set-item__desc">平台：{appInfo?.platform === "web" ? "Web 预览 (Capacitor 未就绪)" : "Android (Capacitor + native SQLite)"}</div>
                   <div className="mb-set-item__desc">本地优先笔记应用（Electron + 安卓共享同步层）</div>
                   <div className="mb-set-item__desc">字体：内置 MiSans（小米科技，依《MiSans 字体知识产权许可协议》免费商用并注明）+ JetBrains Mono（SIL OFL 1.1）</div>

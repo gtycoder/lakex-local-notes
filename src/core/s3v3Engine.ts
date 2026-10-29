@@ -6,58 +6,52 @@ import {
   indexKey,
   lakeBodyKey,
   quickNoteAssetKey,
-  quickNoteBodyKey,
-} from "./s3v3Keys.js";
+  quickNoteBodyKey } from "./s3v3/protocol/s3v3Keys.js";
 import {
   buildAssetDeclaration,
   declarationHashOf,
   indexHashOf,
   parseLakeIndexBytes,
   parseQuickNotesIndexBytes,
+  pruneQuickPurgedIds,
   serializeDeclaration,
-  serializeLakeIndex,
   serializeQuickNotesIndex,
   validateAssetDeclaration,
   type AssetDeclaration,
   type LakeIndex,
   type QuickNoteEntry,
-  type QuickNotesIndex,
-} from "./s3v3Index.js";
-import { classifyCloudState } from "./s3v3Pointer.js";
-import type { S3v3Pointer } from "./s3v3Types.js";
-import { validatePointer } from "./s3v3Types.js";
-import { planLakeMerge, planQuickNotesMerge } from "./s3v3Merge.js";
-import { planLakeDeletes, planQuickNotesDeletes, type PlannedDelete } from "./s3v3Gc.js";
-import { gatePendingDelete, type CurrentWorld, type PendingDelete } from "./s3v3Gate.js";
-import { shouldClearDeletionIntent, type DeletionIntent } from "./s3v3Intent.js";
-import { TRASH_NOTEBOOK_ID } from "./syncDecisions.js";
-import type { DeviceBaseline, DeviceState, PendingAssetRetry, S3v3DeviceStore } from "./s3v3DeviceStore.js";
-import type { SyncWarning } from "../lib/types.js";
+  type QuickNotesIndex } from "./s3v3/protocol/s3v3Index.js";
+import type { S3v3Pointer } from "./s3v3/protocol/s3v3Types.js";
+import { validatePointer } from "./s3v3/protocol/s3v3Types.js";
+import { runSyncRound } from "./s3v3/commit/runSyncRound.js";
+import { initialRound } from "./s3v3/commit/initialRound.js";
+import { pullRound, readRemoteIndexes } from "./s3v3/commit/pullRound.js";
+import { finalizeRemotePurged, mergeRoundIntoState, planStateOf, planWorldOf } from "./s3v3/commit/engineBridge.js";
+import { createRoundPorts } from "./s3v3/commit/roundPorts.js";
+import type { DeviceBaseline, DeviceState, S3v3DeviceStore } from "./s3v3DeviceStore.js";
+import type { SyncWarning } from "./sharedTypes.js";
 import type { S3v3Remote } from "./s3v3Ports.js";
 import { runPoolSettled } from "./s3v3Pool.js";
 import { runTransferPipeline } from "./s3v3Transfer.js";
-import { mergeQuickNoteTags, type QuickNoteTag } from "./quickNoteTags.js";
 
 const DEFAULT_TRANSFER_CONCURRENCY = 12; // 上传并发（用户批准：8 → 12）
 /** 下载流水线并发（正文/声明/资产统一调度；用户批准 16–24，实测七牛/真机带宽在此区间打满）。 */
-const DEFAULT_DOWNLOAD_CONCURRENCY = 20;
 
 const LOCK_KEY = "meta/lock.json";
 const LOCK_TTL_MS = 120_000;
 /** 锁重试：无 CAS 的 provider 下，靠「写后静置再读回」降低双持窗口。 */
 const LOCK_DEADLINE_MS = 15_000;
-const LOCK_SETTLE_MS = 40; // 单用户场景下减少固定发布延迟；多端冲突仍由锁重试/归属复核兜底
-/** 回收站父节点 id 与 Store/移动端一致（曾误写 "trash"，会把回收站条目挂到不存在的父节点）。 */
-const TRASH_ID = TRASH_NOTEBOOK_ID;
+const LOCK_SETTLE_MS = 40;
 const MAX_PUBLISH_RETRIES = 6;
 /** 「首轮并发首传」竞态重试上限（261027）：两端同时空桶首传时，后到者可能先读到 pointer=null、
  *  再 list 到对端已上传的对象 ⇒ pointer-corrupt。等对端发布完 pointer 再同步一次即可（若真是损坏，
  *  重试仍失败、错误码不变，不会掩盖问题）。 */
 const MAX_CLOUD_RACE_RETRIES = 2;
-/** 单条待补资产最多重试轮数（超过即丢弃：声明里的对象可能已被清理，不能无限重试）。 */
-const MAX_PENDING_ASSET_ATTEMPTS = 3;
-/** 待补资产账本上限（防止极端情况下账本无限增长拖慢每轮同步）。 */
-const MAX_PENDING_ASSETS = 500;
+/** 四相内核的发布锁等待（ms）：**只在锁被别人持有时才产生等待**，正常轮零成本。
+ *  3s（commitPlan 默认）在 6~7 端同时发布时会把「锁忙」当失败（并发压测 42 次里 7 次），故提到 10s。 */
+const PUBLISH_LOCK_WAIT_MS = 10_000;
+/** 锁忙的外层总预算（含上面单次等待 + 退避）：超了才把 lock-busy 抛给 UI，避免无界空转。 */
+const PUBLISH_LOCK_BUSY_BUDGET_MS = 20_000;
 /** 单条推送的发布重试（pointer 被别的端改动时重来一次）。 */
 const SINGLE_PUSH_MAX_RETRIES = 3;
 
@@ -101,12 +95,21 @@ export interface S3v3SyncOptions {
 export interface S3v3SyncReport {
   downloadedNotes: number;
   uploadedNotes: number;
+  /** 细分（261028）：文档/小记/目录/字节；旧字段保留给兼容调用方。 */
+  uploadedDocuments?: number;
+  downloadedDocuments?: number;
+  uploadedQuickNotes?: number;
+  downloadedQuickNotes?: number;
+  uploadedFolders?: number;
+  downloadedFolders?: number;
+  uploadedBytes?: number;
+  downloadedBytes?: number;
   deletedObjects: number;
   published: boolean;
   generation: number | null;
   /** 兼容旧调用方/日志的一行式消息（与 warningDetails 一一对应子集）。 */
   warnings: string[];
-  /** 结构化警告（UI 展示/点击定位；SyncWarningKind 见 src/lib/types.ts）。 */
+  /** 结构化警告（UI 展示/点击定位；SyncWarningKind 见 src/core/sharedTypes.ts）。 */
   warningDetails: SyncWarning[];
   /** 本轮被远端覆盖、已强制写本地历史的文档（UI 冲突清单/角标；对齐旧协议 supersededNotes）。 */
   supersededNotes: Array<{ id: string; title: string }>;
@@ -158,6 +161,8 @@ export interface S3v3EngineOptions {
   now?: () => Date;
   /** 发布锁最长等待（ms）；测试可调小。默认 LOCK_DEADLINE_MS。 */
   lockWaitMs?: number;
+  /** 四相内核（本轮发布）的锁等待（ms）：只在锁被别的端持有时才等；默认 PUBLISH_LOCK_WAIT_MS。 */
+  publishLockWaitMs?: number;
   /** 阶段耗时回调（诊断慢同步/卡顿）：phase + 距上一阶段毫秒数。 */
   onPhase?: (phase: string, ms: number) => void;
   /** 结构化进度回调（阶段 + 计数 + 字节；桥接层负责节流，引擎不节流）。 */
@@ -170,16 +175,6 @@ export interface S3v3EngineOptions {
   largeAssetChunkBytes?: number;
 }
 
-function tagEntryToTag(e: { id: string; name: string; sortOrder?: number; order?: number; pinned?: boolean; createdAt: string; updatedAt: string; deletedAt?: string | null }): QuickNoteTag {
-  return { id: e.id, name: e.name, sortOrder: e.sortOrder ?? e.order ?? 0, pinned: !!e.pinned, createdAt: e.createdAt, updatedAt: e.updatedAt, deletedAt: e.deletedAt ?? null };
-}
-function tagToEntry(t: QuickNoteTag) {
-  return { id: t.id, name: t.name, sortOrder: t.sortOrder, pinned: t.pinned, createdAt: t.createdAt, updatedAt: t.updatedAt, ...(t.deletedAt ? { deletedAt: t.deletedAt } : {}) };
-}
-function sortTagEntries<T extends { id: string }>(tags: readonly T[]): T[] {
-  return [...tags].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
-}
-
 const emptyState = (): DeviceState => ({
   lake: { v: 3, space: "lake", notes: [], folders: [] },
   quickNotes: { v: 3, space: "quickNotes", items: [], tags: [] },
@@ -188,25 +183,7 @@ const emptyState = (): DeviceState => ({
   intents: [],
   pending: [],
   remotePurged: [],
-  restorePending: [],
-});
-
-/** 单轮同步的工作集：本地状态与「待发布索引」由同一 API 维护，避免 B14 式漏同步。 */
-class WorkingSet<T extends { id: string }> {
-  private readonly local = new Map<string, T>();
-  private readonly index = new Map<string, T>();
-  constructor(entries: Iterable<T>) {
-    for (const entry of entries) { this.local.set(entry.id, entry); this.index.set(entry.id, entry); }
-  }
-  get(id: string): T | undefined { return this.local.get(id); }
-  localValues(): T[] { return [...this.local.values()]; }
-  indexValues(): T[] { return [...this.index.values()]; }
-  /** 下载应用/上传成功/新建：本地与索引同时更新。 */
-  set(id: string, entry: T): void { this.local.set(id, entry); this.index.set(id, entry); }
-  delete(id: string): void { this.local.delete(id); this.index.delete(id); }
-  /** 上传失败：仅索引回退到远端/移出；本地保留重试意图。 */
-  failUpload(id: string, remote: T | null): void { if (remote) this.index.set(id, remote); else this.index.delete(id); }
-}
+  restorePending: [] });
 
 export class S3v3SyncEngine {
   private readonly remote: S3v3Remote;
@@ -214,15 +191,35 @@ export class S3v3SyncEngine {
   private readonly deviceId: string;
   private readonly now: () => Date;
   private readonly lockWaitMs: number;
+  private readonly publishLockWaitMs: number;
   private readonly onPhase?: (phase: string, ms: number) => void;
   private readonly onProgress?: (progress: S3v3Progress) => void;
   private readonly transferConcurrency: number;
-  private readonly downloadConcurrency: number;
   /** 大对象分片阈值（261027）：超过则按 Range 并发下载；0 = 关闭。 */
   private readonly largeAssetChunkBytes: number;
   private phaseStart = 0;
   private uploadOps: Array<{ space: "lake" | "quickNotes"; noteId: string; key: string; bytes?: Uint8Array; fromFile?: string; gzip?: boolean; /** 字节数（fromFile 也带上，供上传进度用） */ size?: number }> = [];
+  /** 当前轮 report（细分统计累加；syncOnce 入口重置）。 */
+  private report: S3v3SyncReport | null = null;
+  private addUploadedBytes(n: number): void { if (this.report) this.report.uploadedBytes = (this.report.uploadedBytes ?? 0) + n; }
+  /**
+   * 云端正文缓存（仅 lake）：同一轮里「预取 → 应用」复用同一份字节，避免同一篇再 GET 一次。
+   *
+   * 生命周期（SD-02）——**只服务当前批/当前轮，绝不跨轮常驻**：
+   *  · pullAll（首拉/全量重拉）：每下完 BODY_CHUNK 篇并落库后立即 clearBodyCache()，峰值 = 一批；
+   *  · incrementalSync：预取的正文在 apply 写盘后逐篇 dropBody()（缓存随消费下降），应用环结束再整体清空；
+   *  · restoreMissingBody：拉回并落盘后立即释放，不留「每条缺正文一份」；
+   *  · sync() 每轮结束（含异常/发布重试）finally 兜底清空，引擎实例不会带着正文进下一轮；
+   *  · 硬上限 = BODY_CACHE_MAX_ENTRIES / BODY_CACHE_MAX_BYTES（FIFO 淘汰）：任何漏清的调用点也只多占一批。
+   */
   private readonly bodyCache = new Map<string, Uint8Array>();
+  /** bodyCache 当前字节数（插入/删除同步记账，避免每次求和）。 */
+  private bodyCacheBytes = 0;
+  /** 诊断/护栏（SD-02）：引擎生命周期内的峰值条目/字节（测试断言「不随库大小线性增长」）。 */
+  private bodyCachePeakEntries = 0;
+  private bodyCachePeakBytes = 0;
+  /** 本轮/本引擎实例里「发布锁被别人占着」的次数（诊断与并发回归用；正常轮恒 0）。 */
+  publishLockBusyRetries = 0;
   private warnings: string[] = [];
   private warningDetails: SyncWarning[] = [];
   private supersededNotes: Array<{ id: string; title: string }> = [];
@@ -233,10 +230,10 @@ export class S3v3SyncEngine {
     this.deviceId = opts.deviceId;
     this.now = opts.now ?? (() => new Date());
     this.lockWaitMs = opts.lockWaitMs ?? LOCK_DEADLINE_MS;
+    this.publishLockWaitMs = Math.max(0, Math.floor(opts.publishLockWaitMs ?? PUBLISH_LOCK_WAIT_MS));
     this.onPhase = opts.onPhase;
     this.onProgress = opts.onProgress;
     this.transferConcurrency = Math.max(1, Math.min(32, opts.transferConcurrency ?? DEFAULT_TRANSFER_CONCURRENCY));
-    this.downloadConcurrency = Math.max(1, Math.min(32, opts.downloadConcurrency ?? DEFAULT_DOWNLOAD_CONCURRENCY));
     this.largeAssetChunkBytes = Math.max(0, Math.floor(opts.largeAssetChunkBytes ?? 8 * 1024 * 1024));
   }
 
@@ -254,14 +251,6 @@ export class S3v3SyncEngine {
   private emitProgress(progress: S3v3Progress): void {
     try { this.onProgress?.(progress); } catch { /* UI 回调自行负责 */ }
   }
-
-  /**
-   * 资产下载任务队列（P0-1）：不再按篇 runPool（有效并发 ≈ 每篇池 + 逐篇 barrier），
-   * 而是全部登记后由 flushAssetTasks 用**全局有界流水线**统一跑。
-   */
-  private assetTasks: Array<{ space: "lake" | "quickNotes"; noteId: string; filename: string; key: string; size: number; hash: string }> = [];
-  /** 待补资产账本（261027）：与 state.pendingAssets 同一引用，失败即记账、成功即销账。 */
-  private pendingAssets: PendingAssetRetry[] = [];
 
   /** 记录一条结构化警告（同时保留一行式消息给日志/旧调用方）。 */
   private warn(message: string, extra: Omit<SyncWarning, "message"> = { kind: "remote_incomplete" }): void {
@@ -300,6 +289,9 @@ export class S3v3SyncEngine {
           }
         }
         throw e;
+      } finally {
+        // SD-02：本轮结束（成功/异常/发布重试都算）立刻释放正文缓存，绝不带到下一轮。
+        this.clearBodyCache();
       }
     }
     throw new S3v3SyncError("publish-conflict", "发布冲突重试超限: " + String(lastErr));
@@ -377,16 +369,15 @@ export class S3v3SyncEngine {
     const entry: QuickNoteEntry = {
       ...local,
       contentHash,
-      ...(decl ? { assetsHash: decl.declHash } : {}),
-    };
+      ...(decl ? { assetsHash: decl.declHash } : {}) };
     if (!decl) delete (entry as { assetsHash?: string }).assetsHash;
     const items = [...remoteIndex.items.filter((q) => q.id !== id), entry].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
-    const purged = remoteTombs.filter((x) => x !== id);
+    // SD-09：单条推送也是一次发布，同样按保留窗口裁剪（否则这条路径会把旧墓碑重新带回云端）。
+    const purged = pruneQuickPurgedIds(remoteTombs.filter((x) => x !== id), state.quickPurgeTimes, this.now());
     const nextIndex: QuickNotesIndex = {
       v: 3, space: "quickNotes", items,
       ...(remoteIndex.tags !== undefined ? { tags: remoteIndex.tags } : {}),
-      ...(purged.length ? { purged: [...purged].sort() } : {}),
-    };
+      ...(purged.length ? { purged: [...purged].sort() } : {}) };
     const serialized = serializeQuickNotesIndex(nextIndex);
     const commit = indexHashOf(serialized);
     const uploadedContent = remoteEntry?.contentHash !== contentHash;
@@ -403,8 +394,7 @@ export class S3v3SyncEngine {
         const nextPointer: S3v3Pointer = {
           v: 3, epoch: pointer.epoch, generation,
           lake: { commit: pointer.lake.commit }, quickNotes: { commit },
-          createdAt: this.iso(), deviceId: this.deviceId,
-        };
+          createdAt: this.iso(), deviceId: this.deviceId };
         await this.assertLockOwned();
         await this.remote.put(S3V3_POINTER_KEY, new TextEncoder().encode(JSON.stringify(nextPointer)));
         const check = await this.readPointer();
@@ -418,8 +408,7 @@ export class S3v3SyncEngine {
     await this.device.saveBaseline({
       epoch: pointer.epoch, generation,
       lakeCommit: pointer.lake.commit, quickNotesCommit: commit,
-      lake: baseline.lake, quickNotes: nextIndex,
-    });
+      lake: baseline.lake, quickNotes: nextIndex });
     // 单条推送不走整轮 saveState：如果该条此前是「云端已删除·仅本地」副本（remotePurged）
     // 或正处于显式恢复（restorePending），必须把清除后的标记单独落盘；否则 sidecar/DB 残留旧标记，
     // 回收站徽标不消失、下轮还可能把它重新压回「仅本地」。
@@ -473,890 +462,431 @@ export class S3v3SyncEngine {
     return decl;
   }
 
-  private async getBody(space: "lake", noteId: string, hash: string): Promise<Uint8Array | null> {
-    const cacheKey = space + "/" + noteId + "/" + hash;
-    if (this.bodyCache.has(cacheKey)) return this.bodyCache.get(cacheKey)!;
-    const key = lakeBodyKey(noteId, hash);
-    const bytes = await this.remote.get(key);
-    if (!bytes) return null;
-    if (sha256Hex(bytes) !== hash) throw new S3v3SyncError("body-hash-mismatch", "正文 hash 不符: " + noteId);
-    this.bodyCache.set(cacheKey, bytes);
-    return bytes;
+  /** SD-02：正文缓存的诊断口径（条目/字节 + 引擎生命周期内峰值），供测试与日志使用。 */
+  bodyCacheStats(): { entries: number; bytes: number; peakEntries: number; peakBytes: number } {
+    return { entries: this.bodyCache.size, bytes: this.bodyCacheBytes, peakEntries: this.bodyCachePeakEntries, peakBytes: this.bodyCachePeakBytes };
   }
 
-  private async getQuickBody(hash: string): Promise<Uint8Array | null> {
-    const bytes = await this.remote.get(quickNoteBodyKey(hash));
-    if (!bytes) return null;
-    if (sha256Hex(bytes) !== hash) throw new S3v3SyncError("quick-body-hash-mismatch", "小记正文 hash 不符: " + hash);
-    return bytes;
+  /** 整批/整轮释放：pullAll 每批落库后、sync 每轮 finally 都走这里。 */
+  private clearBodyCache(): void {
+    this.bodyCache.clear();
+    this.bodyCacheBytes = 0;
   }
 
   private async syncOnce(opts: S3v3SyncOptions): Promise<S3v3SyncReport> {
     const report: S3v3SyncReport = { downloadedNotes: 0, uploadedNotes: 0, deletedObjects: 0, published: false, generation: null, warnings: this.warnings, warningDetails: this.warningDetails, supersededNotes: this.supersededNotes };
+    this.report = report;
     const state = (await this.device.loadState()) ?? emptyState();
     // 待补资产账本（261027）：与 state 同一引用；适配器持久化，失败记账、成功销账。
     state.pendingAssets ??= [];
-    this.pendingAssets = state.pendingAssets;
     const baseline = await this.device.loadBaseline();
     const pointer = await this.readPointer();
-    const cloudHasObjects = pointer ? true : (await this.remote.list("objects/")).length > 0 || (await this.remote.list("meta/index/")).length > 0;
-    const cloudState = classifyCloudState({ pointer, baseline, cloudHasObjects });
-    this.phase("load-state");
-
+    // v4 四相内核是唯一实现（旧 v3 增量/首拉/重拉路径已删除）。四条分支覆盖全部入口。
+    if (pointer && baseline) {
+      // 云端状态分类（原判据不变）：epoch 不一致 / 代际回滚 / 同代不同 commit（分叉）都必须显式失败，
+      // 不能带着错基线继续跑（会把两端都"修"成同一份错误数据）。
+      if (pointer.epoch !== baseline.epoch) throw new S3v3SyncError("epoch-mismatch", "云端是另一套数据（epoch 不一致）");
+      if (pointer.generation < baseline.generation) throw new S3v3SyncError("generation-rollback", "云端回滚到旧备份");
+      if (pointer.generation === baseline.generation && (pointer.lake.commit !== baseline.lakeCommit || pointer.quickNotes.commit !== baseline.quickNotesCommit)) {
+        throw new S3v3SyncError("fork", "同 generation 不同 commit：分叉/迟到覆盖");
+      }
+      return await this.syncOnceRound(state, baseline, pointer, report, opts);
+    }
     if (!baseline) {
-      if (pointer) return await this.pullAll(pointer, state, report, true, opts.deferAssets === true);
-      if (cloudHasObjects) throw new S3v3SyncError("pointer-corrupt", "pointer 缺失但云端已有对象");
-      const hasLocal = state.lake.notes.length > 0 || state.quickNotes.items.length > 0;
-      if (!hasLocal) return report;
-      if (opts.onEmptyCloud === "upload") return await this.initialUpload(state, report);
-      if (opts.onEmptyCloud === "stay") return report;
-      throw new S3v3SyncError("empty-cloud", "云端为空，需要选择上传本地或保持为空");
+      if (pointer) return await this.syncPullAllRound(pointer, state, report, opts);
+      // 首轮并发现身竞态（两个新设备同时首传）：pointer 还没写、对象已在云上 ⇒ 短暂重试再判。
+      // 只做**一次**前缀列举判空（旧实现 objects/ + meta/index/ 各列一次 = 空桶也 2~4 次 RTT）。
+      for (let i = 0; i < 3; i++) {
+        if ((await this.remote.list("")).length === 0) break;
+        await sleep(150 + Math.floor(Math.random() * 250));
+        const again = await this.readPointer();
+        if (again) return await this.syncPullAllRound(again, state, report, opts);
+      }
+      if ((await this.remote.list("")).length > 0) throw new S3v3SyncError("pointer-corrupt", "pointer 缺失但云端已有对象");
+      return await this.syncFirstRound(state, report, opts);
     }
-
-    if (cloudState === "empty-cloud") {
-      const hasLocal = state.lake.notes.length > 0 || state.quickNotes.items.length > 0;
-      if (!hasLocal) return report;
-      if (opts.onEmptyCloud === "upload") return await this.initialUpload(state, report);
-      if (opts.onEmptyCloud === "stay") return report;
-      throw new S3v3SyncError("empty-cloud", "云端为空，需要选择上传本地或保持为空");
-    }
-    if (cloudState === "pointer-corrupt") throw new S3v3SyncError("pointer-corrupt", "pointer 缺失但云端已有对象");
-    if (cloudState === "epoch-mismatch") throw new S3v3SyncError("epoch-mismatch", "云端是另一套数据（epoch 不一致）");
-    if (cloudState === "generation-rollback") throw new S3v3SyncError("generation-rollback", "云端回滚到旧备份");
-    if (cloudState === "fork") throw new S3v3SyncError("fork", "同 generation 不同 commit：分叉/迟到覆盖");
-    if (!pointer) throw new S3v3SyncError("pointer-corrupt", "基线存在但 pointer 缺失");
-
-    return await this.incrementalSync(pointer, baseline, state, report);
+    // 有基线却没有 pointer：被清空或换桶 ⇒ 必须显式失败（走「从云端恢复」）。
+    throw new S3v3SyncError("pointer-corrupt", "本机有基线但云端 pointer 缺失（被清空或换桶），请走「从云端恢复」");
   }
 
   /** 新设备/全量重拉：只拉不推，建立基线。 */
-  private async pullAll(pointer: S3v3Pointer, state: DeviceState, report: S3v3SyncReport, archiveLocal: boolean, deferAssets = false): Promise<S3v3SyncReport> {
-    // 两份索引互不依赖：并行取，省一个 RTT（首拉时索引可能是几 MB/条 gzip 对象）。
-    const [lake, quick] = await Promise.all([
-      this.readIndex("lake", pointer.lake.commit) as Promise<LakeIndex>,
-      this.readIndex("quickNotes", pointer.quickNotes.commit) as Promise<QuickNotesIndex>,
-    ]);
-    this.phase("read-index");
-    this.emitProgress({ phase: "metadata", done: 1, total: 1 });
-    if (archiveLocal) {
-      // 断点续传（261026）：本地状态里的 contentHash 与云端一致的条目**不是被覆盖**，
-      // 不用读正文、更不用写历史（否则一次「首拉中途退出再进入」要把几百 MB 正文过一遍桥/读盘）。
-      // 只有 hash 不一致（会被远端覆盖/已从远端消失）的条目才读正文留档。
-      const remoteById = new Map(lake.notes.map((n) => [n.id, n] as const));
-      for (const n of state.lake.notes) {
-        const remote = remoteById.get(n.id);
-        if (remote && remote.contentHash === n.contentHash) continue;
-        const bytes = await this.readLocalBody("lake", n.id);
-        if (!bytes) continue;
-        await this.device.archiveBody(n.id, bytes);
-      }
-      const remoteQuickById = new Map(quick.items.map((q) => [q.id, q] as const));
-      for (const q of state.quickNotes.items) {
-        const remote = remoteQuickById.get(q.id);
-        if (remote && remote.contentHash === q.contentHash) continue;
-        const bytes = await this.readLocalBody("quickNotes", q.id);
-        if (!bytes) continue;
-        await this.device.writeHistory("quick-" + q.id, bytes);
+  /**
+   * v4 四相内核的一轮（E2-3）：外层只负责读 pointer/索引、写 state/基线、上报；
+   * 「决策 + IO」整段交给 runSyncRound（plan → apply → assets → publishIndex → commit → 清理 → 意图）。
+   * 首拉/无基线/无 pointer 不在本路径（会抛错，由调用方回退既有路径）。
+   */
+  private async syncOnceRound(state: DeviceState, baseline: DeviceBaseline | null, pointer: S3v3Pointer | null, report: S3v3SyncReport, opts: S3v3SyncOptions): Promise<S3v3SyncReport> {
+    if (!pointer) throw new S3v3SyncError("pointer-corrupt", "四相内核需要云端 pointer（首拉/空桶请走既有路径）");
+    let forcePublish = false;
+    // 本轮因超窗被裁掉的墓碑 id：远端索引里还留着它们（还没来得及发布）——回填时必须跳过，否则永远裁不掉。
+    const prunedThisRound = new Set<string>();
+    // 小记墓碑保留窗口（事件驱动：只有存在墓碑时才裁剪）：判不出年龄的保守保留。
+    if ((state.quickPurges ?? []).length > 0) {
+      const pruned = pruneQuickPurgedIds(state.quickPurges ?? [], state.quickPurgeTimes, this.now());
+      if (pruned.length !== (state.quickPurges ?? []).length) {
+        const keep = new Set(pruned);
+        for (const id of state.quickPurges ?? []) if (!pruned.includes(id)) prunedThisRound.add(id);
+        state.quickPurges = pruned;
+        forcePublish = true;
+        if (state.quickPurgeTimes) for (const id of Object.keys(state.quickPurgeTimes)) if (!keep.has(id)) delete state.quickPurgeTimes[id];
       }
     }
-    const newState: DeviceState = {
+    if (!baseline) throw new S3v3SyncError("no-baseline", "四相内核需要设备基线（首拉/换机请走既有路径）");
+    // 他端显式恢复让位（事件驱动，极低频）：本地有 purge 墓碑且「远端同 id 条目的 updatedAt 晚于本地 purgedAt」
+    // ⇒ 判定为对端恢复，删除意图放弃（否则本端下一轮会把它再删一次）。只有存在墓碑且远端已变化时才多读一次索引。
+    if (state.intents.some((i) => !!i.purgedAt) && (pointer.lake.commit !== baseline.lakeCommit || pointer.quickNotes.commit !== baseline.quickNotesCommit)) {
+      try {
+        const remoteNow = (await this.readIndex("lake", pointer.lake.commit)) as LakeIndex;
+        const byId = new Map(remoteNow.notes.map((n) => [n.id, n] as const));
+        state.intents = state.intents.filter((i) => {
+          const e = byId.get(i.noteId);
+          if (!e || !i.purgedAt) return true;
+          return !(e.updatedAt > i.purgedAt);
+        });
+      } catch { /* 读失败保持原状，下一轮再判 */ }
+    }
+    // 待补资产重试（事件驱动）：账本只有下载失败时才非空；正常轮这里是空数组、零成本。
+    if ((state.pendingAssets ?? []).length > 0) {
+      const keep: NonNullable<DeviceState["pendingAssets"]> = [];
+      for (const e of state.pendingAssets ?? []) {
+        const key = e.space === "lake" ? assetKey(e.id, e.filename) : quickNoteAssetKey(e.id, e.filename);
+        try {
+          const bytes = await this.remote.get(key);
+          if (bytes && sha256Hex(bytes) === e.hash) {
+            if (e.space === "lake") await this.device.writeAsset(e.id, e.filename, bytes);
+            else await this.device.writeQuickAsset(e.id, e.filename, bytes);
+            continue;
+          }
+        } catch { /* 下一轮再试 */ }
+        if (e.attempts + 1 < 3) keep.push({ ...e, attempts: e.attempts + 1 });
+      }
+      state.pendingAssets = keep;
+    }
+
+    // 缺正文自愈（先于决策）：**事件驱动**。队列只在真的观察到缺失时才有内容（打开文档/资源页体检/读失败），
+    // 正常增量同步这里是空数组 ⇒ 零扫描、零额外 IO。命中项按云端同 contentHash 拉回并 sha256 校验。
+    const missingIds = [...(state.bodyRecoveryPending ?? [])];
+    if (missingIds.length > 0) state.bodyRecoveryPending = [];
+    if (missingIds.length > 0) {
+      const remoteLakeNow = (await this.readIndex("lake", pointer.lake.commit)) as LakeIndex;
+      const keepPending: string[] = [];
+      for (const id of missingIds) {
+        const entry = remoteLakeNow.notes.find((n) => n.id === id);
+        if (!entry) { keepPending.push(id); this.warn("缺正文且云端索引已无该条目: " + id, { kind: "local_body_missing", noteId: id }); continue; }
+        let healed = false;
+        try {
+          const bytes = await this.remote.get(lakeBodyKey(id, entry.contentHash));
+          if (!bytes || sha256Hex(bytes) !== entry.contentHash) { healed = false; }
+          else { await this.device.writeBody(id, bytes); healed = true; this.warn("本地缺正文，已从云端拉回: " + id, { kind: "local_body_restored", noteId: id, title: entry.title }); }
+        } catch { /* 自愈失败：保持现状，下一轮再试 */ }
+        // 云端也没有 / 校验不过 ⇒ 明确报缺正文（UI 可见），并留在队列里下轮再试（不上传空正文）。
+        if (!healed) {
+          this.warn("缺正文且云端无可用副本: " + id, { kind: "local_body_missing", noteId: id, ...(entry.title ? { title: entry.title } : {}) });
+          keepPending.push(id);
+        }
+      }
+      if (keepPending.length > 0) state.bodyRecoveryPending = keepPending;
+    }
+    this.phase("round-plan");
+    // 并发发布重试（与既有路径 PublishRetry 等价）：内核自己返回 retry，这里做退避重试，
+    // 否则 12 端同时发布会把「pointer 被抢先」当成失败。
+    let lastRound: Awaited<ReturnType<typeof runSyncRound>> | null = null;
+    let lastRemoteLake: LakeIndex | null = null;
+    let lastRemoteQuick: QuickNotesIndex | null = null;
+    // 锁忙预算：只在真的遇到锁忙/发布冲突时消耗；零变更/正常增量轮一分钱不花。
+    const lockBusyDeadline = Date.now() + PUBLISH_LOCK_BUSY_BUDGET_MS;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const currentPointer = attempt === 0 ? pointer : await this.readPointer();
+      if (!currentPointer) break;
+      // 零变更快路径（与旧路径同等下行预算）：pointer 与基线完全一致 ⇒ 远端没变，直接用基线世界，**不读索引**。
+      const sameAsBaseline = currentPointer.lake.commit === baseline.lakeCommit && currentPointer.quickNotes.commit === baseline.quickNotesCommit;
+      const remoteLake = (sameAsBaseline ? baseline.lake : await this.readIndex("lake", currentPointer.lake.commit)) as LakeIndex;
+      const remoteQuick = (sameAsBaseline ? baseline.quickNotes : await this.readIndex("quickNotes", currentPointer.quickNotes.commit)) as QuickNotesIndex;
+      // 他端墓碑（不可恢复删除）：本端不留副本（小记不备份语义），只记 purged 墓碑继续传播。
+      if ((remoteQuick.purged ?? []).length > 0) {
+        const have = new Set(state.quickPurges ?? []);
+        const times = { ...(state.quickPurgeTimes ?? {}) };
+        let changed = false;
+        for (const id of remoteQuick.purged ?? []) {
+          if (prunedThisRound.has(id)) continue; // 本轮刚裁掉：不要从远端旧索引回填
+          if (!have.has(id)) { have.add(id); changed = true; }
+          if (!times[id]) { times[id] = this.iso(); changed = true; }
+        }
+        if (changed) { state.quickPurges = [...have]; state.quickPurgeTimes = times; forcePublish = true; }
+      }
+      // 他端显式恢复小记（远端重新出现该 id）⇒ 本地 purged 墓碑/软删标记让位，跟随远端拉回。
+      // 只有「远端条目比墓碑更新」才算他端显式恢复（条目早于 purge 时间出现 ⇒ 是旧副本，不是恢复）。
+      const purgeTimes = state.quickPurgeTimes ?? {};
+      if ((state.quickPurges ?? []).some((id) => remoteQuick.items.some((q) => q.id === id && q.updatedAt > (purgeTimes[id] ?? "9999-12-31")))) {
+        const revived = new Set(remoteQuick.items.map((q) => q.id));
+        state.quickPurges = (state.quickPurges ?? []).filter((id) => !revived.has(id));
+        if (state.quickPurgeTimes) for (const id of [...Object.keys(state.quickPurgeTimes)]) if (revived.has(id)) delete state.quickPurgeTimes[id];
+        state.quickDeletes = (state.quickDeletes ?? []).filter((id) => !revived.has(id));
+        forcePublish = true;
+      }
+      lastRemoteLake = remoteLake;
+      lastRemoteQuick = remoteQuick;
+      lastRound = await this.runRoundOnce(state, baseline, currentPointer, remoteLake, remoteQuick, opts, forcePublish);
+      if (lastRound.commit.status === "retry" && lastRound.commit.reason === "lock-busy") this.publishLockBusyRetries += 1;
+      if (lastRound.commit.status !== "retry") break;
+      // 并发发布：commitPlan 已在 publishLockWaitMs 内退避等锁（只有锁被别人持有时才等）。
+      // 外层再给一次有界退避（合计不超过 lockBusyDeadline），真等不到才把 lock-busy 抛给 UI。
+      const budgetLeft = lockBusyDeadline - Date.now();
+      if (lastRound.commit.reason === "lock-busy" && budgetLeft < 600) break;
+      await sleep(lastRound.commit.reason === "lock-busy"
+        ? 300 + Math.floor(Math.random() * 500)
+        : 120 + Math.floor(Math.random() * (attempt + 1) * 220));
+    }
+    if (!lastRound) throw new S3v3SyncError("pointer-corrupt", "四相内核重试期间 pointer 丢失");
+    // 三次退避仍拿不到锁 ⇒ 明确报 lock-busy（与旧路径同文案；并发同步不应变成静默无结果）。
+    if (lastRound.commit.status === "retry") {
+      if (lastRound.commit.reason === "lock-busy") throw new S3v3SyncError("lock-busy", "另一台设备正在发布同步，请稍后重试");
+      // 其它并发冲突（pointer 被抢先/读回被覆盖）走外层 PublishRetry 重试环（与旧路径同语义）。
+      throw new PublishRetry();
+    }
+    const round = lastRound;
+    // 上传失败（PUT 抛错）⇒ 结构化警告 + 保持 local 下轮重试（已由 applyPlan 记入 failedUploads 并回退索引）。
+    // 注意：绝不在这里「从云端拉回正文」——那是「本地缺正文」的语义，用错会把用户的本地编辑覆盖掉。
+    for (const e of round.apply.errors) {
+      if (e.op !== "upload") continue;
+      const id = e.detail?.split(":")[1];
+      this.warn("上传失败，保持 local 下轮重试: " + (id ?? "") + " " + (e.error instanceof Error ? e.error.message : String(e.error)), { kind: "remote_incomplete", ...(id ? { noteId: id } : {}) });
+    }
+    // 资产下载失败落账（下一轮开头事件驱动重试；正常轮不产生任何账本）。
+    if (round.assets.failedDownloads.length > 0) {
+      const ledger = state.pendingAssets ?? (state.pendingAssets = []);
+      for (const f of round.assets.failedDownloads) {
+        const found = ledger.find((e) => e.space === f.space && e.id === f.id && e.filename === f.filename);
+        if (found) found.attempts += 1;
+        else ledger.push({ space: f.space, id: f.id, filename: f.filename, size: f.size, hash: f.hash, attempts: 1 });
+      }
+    }
+    this.phase("round-apply");
+    // 与既有路径一致：即使本轮没发布，也要把「当前云端代际」报给上层（否则日志/状态栏显示 gen=null）。
+    report.generation = round.nextPointer.generation;
+    const bodyFailed = new Set(round.apply.entries.filter((e) => e.status !== "applied").map((e) => e.space + ":" + e.id));
+    const merged = mergeRoundIntoState(state, round, { bodyFailed });
+    // 标记结算要用**本轮发布后的**远端视图：恢复轮自己的发布内容也必须计入（否则恢复成功的副本仍挂着"云端已删除"标）。
+    const effectiveLake = round.publish?.lake ?? lastRemoteLake;
+    const effectiveQuick = round.publish?.quickNotes ?? lastRemoteQuick;
+    let nextState = effectiveLake && effectiveQuick
+      ? finalizeRemotePurged(merged, { remoteIds: [...effectiveLake.notes.map((n) => n.id), ...effectiveQuick.items.map((q) => q.id)], restorePending: state.restorePending ?? [] })
+      : merged;
+    // 本地把「仅本地」副本也彻底删掉（有删除意图、副本已不在索引里）⇒ 标记没有对象可指，一并作废。
+    const intentIds = new Set(state.intents.map((i) => i.noteId));
+    if ((nextState.remotePurged ?? []).some((id) => intentIds.has(id))) {
+      const localIds = new Set([...nextState.lake.notes.map((n) => n.id), ...nextState.quickNotes.items.map((q) => q.id)]);
+      nextState = { ...nextState, remotePurged: (nextState.remotePurged ?? []).filter((id) => localIds.has(id)) };
+    }
+    await this.device.saveState(nextState);
+    if (round.commit.status === "published" && round.publish) {
+      await this.device.saveBaseline({
+        epoch: round.nextPointer.epoch,
+        generation: round.nextPointer.generation,
+        lakeCommit: round.commit.lakeCommit,
+        quickNotesCommit: round.commit.quickNotesCommit,
+        lake: round.publish.lake,
+        quickNotes: round.publish.quickNotes });
+      report.published = true;
+      report.generation = round.commit.generation;
+      // 旧正文对象清理（与旧引擎同语义）：已发布的新索引不再引用旧 hash ⇒ 删除旧对象；
+      // 失败只降级为 warning（发布已成功，清理失败由 deepCleanup 兜底）。
+      if (lastRemoteLake && lastRemoteQuick) {
+        try {
+          const nextLakeById = new Map(round.publish.lake.notes.map((n) => [n.id, n] as const));
+          const nextQuickById = new Map(round.publish.quickNotes.items.map((q) => [q.id, q] as const));
+          const stale: string[] = [];
+          for (const n of lastRemoteLake.notes) {
+            const nx = nextLakeById.get(n.id);
+            if (!nx || nx.contentHash !== n.contentHash) stale.push(lakeBodyKey(n.id, n.contentHash));
+          }
+          for (const q of lastRemoteQuick.items) {
+            const nx = nextQuickById.get(q.id);
+            if (!nx || nx.contentHash !== q.contentHash) stale.push(quickNoteBodyKey(q.contentHash));
+          }
+          if (stale.length > 0) await this.remote.deleteMany(stale);
+        } catch (e) {
+          this.warn("旧正文对象清理失败（已发布，下一轮重试）: " + (e instanceof Error ? e.message : String(e)), { kind: "remote_incomplete" });
+        }
+      }
+    }
+    // 纯拉取轮也要把基线推进到云端 pointer（否则下一轮拿旧基线判三方冲突/重复发布）。
+    if (round.commit.status !== "published" && lastRemoteLake && lastRemoteQuick
+      && (round.nextPointer.lake.commit !== baseline.lakeCommit || round.nextPointer.quickNotes.commit !== baseline.quickNotesCommit)) {
+      await this.device.saveBaseline({
+        epoch: round.nextPointer.epoch,
+        generation: round.nextPointer.generation,
+        lakeCommit: round.nextPointer.lake.commit,
+        quickNotesCommit: round.nextPointer.quickNotes.commit,
+        lake: lastRemoteLake,
+        quickNotes: lastRemoteQuick });
+    }
+
+    // 计数：正文段来自 apply，资产段只影响文件级计数（不混入文档数）。
+    report.downloadedDocuments = round.apply.downloaded.documents;
+    report.downloadedQuickNotes = round.apply.downloaded.quickNotes;
+    report.uploadedDocuments = round.apply.uploaded.documents;
+    report.uploadedQuickNotes = round.apply.uploaded.quickNotes;
+    report.downloadedBytes = round.apply.downloaded.bytes + round.assets.downloaded.bytes;
+    report.uploadedBytes = round.apply.uploaded.bytes + round.assets.uploaded.bytes;
+    report.downloadedNotes = round.apply.downloaded.documents + round.apply.downloaded.quickNotes;
+    report.uploadedNotes = round.apply.uploaded.documents + round.apply.uploaded.quickNotes;
+    report.deletedObjects = round.deleted;
+    report.warnings = this.warnings;
+    for (const w of round.warnings) {
+      const assetKept = w.code === "asset_missing" && (w.detail ?? "").includes("保留云端声明");
+      const kind = assetKept ? "asset_kept_remote" : w.code === "hash_mismatch" || w.code === "conflict_kept_history" || w.code === "cleanup_failed" ? "remote_incomplete" : w.code;
+      this.warn(w.code + (w.detail ? " " + w.detail : "") + (w.id ? " [" + w.id + "]" : ""), { kind, ...(w.id ? { noteId: w.id } : {}), ...(w.filename ? { filename: w.filename } : {}) });
+    }
+    // 冲突留档清单：既有路径在 pull 循环里 push，内核用 plan 的 conflict_kept_history 回填（UI 冲突清单/角标依赖）。
+    for (const w of round.warnings) {
+      if (w.code === "conflict_kept_history" && w.id && !this.supersededNotes.some((n) => n.id === w.id)) {
+        this.supersededNotes.push({ id: w.id, title: w.title ?? (w.space === "quickNotes" ? "小记" : w.id) });
+      }
+    }
+    this.phase("round-finalize");
+    return report;
+  }
+
+  /** v4 全量重拉（换机/坏库）：云端是真相，本地收敛 + 本地独有进回收站（不发布 pointer）。 */
+  private async syncPullAllRound(pointer: S3v3Pointer, state: DeviceState, report: S3v3SyncReport, opts: S3v3SyncOptions): Promise<S3v3SyncReport> {
+    this.phase("round-pull");
+    const ports = createRoundPorts({
+      remote: this.remote,
+      device: this.device,
+      largeAssetChunkBytes: this.largeAssetChunkBytes,
+      loadIntentLog: async () => ({ intents: state.intents, restorePending: state.restorePending ?? [] }),
+      saveIntentLog: async (log) => { state.intents = log.intents; state.restorePending = log.restorePending; },
+      loadPending: async () => state.pending,
+      savePending: async (pending) => { state.pending = pending; } });
+    const remote = await readRemoteIndexes(pointer, ports);
+    const out = await pullRound({
+      state: { lake: state.lake, quickNotes: state.quickNotes, folders: state.folders, remotePurged: state.remotePurged ?? [] },
+      remote,
+      now: () => this.iso(),
+      deferAssets: opts.deferAssets === true,
+      archiveLocal: true,
+      progress: (p: { phase: string; done: number; total: number; bytesDone: number }) => {
+        const phase = p.phase === "reads" || p.phase === "asset-get" ? "bodies" : p.phase === "uploads" || p.phase === "asset-put" ? "uploads" : "apply";
+        this.emitProgress({ phase, done: p.done, total: p.total, bytesDone: p.bytesDone });
+      } }, ports);
+    const nextState: DeviceState = {
       ...emptyState(),
-      lake,
-      quickNotes: quick,
-      folders: lake.folders,
+      lake: out.state.lake,
+      quickNotes: out.state.quickNotes,
+      folders: out.state.folders,
       intents: state.intents,
       pending: state.pending,
-      remotePurged: [],
+      remotePurged: out.state.remotePurged,
       restorePending: [],
-      pendingAssets: state.pendingAssets ?? [],
-    };
-    this.pendingAssets = newState.pendingAssets!;
-    // 全量重拉 = 元数据对账 + 本地内容复用（S3-REDESIGN §15）：本地正文/附件已持同内容就不重下字节。
-    const hadLake = new Set(state.lake.notes.map((n) => n.id));
-    const hadQuick = new Set(state.quickNotes.items.map((q) => q.id));
-    // 快速复用（261026）：状态里的 contentHash 与远端一致 + 文件 stat 存在 ⇒ 直接算复用，**不读正文**。
-    // 依据：device.loadState 的 contentHash 来自 DB content_hash（每次保存/导入都会更新），代表本地正文 hash；
-    // 外部手工改文件不在支持范围内（改了会因 hash 失配在后续读取/保存路径暴露）。文件被删（stat=false）时回退下载。
-    // 没有 stat 端口（桌面）或 stat 缺失时回退「批量读 + 逐条 sha256」，保证不会把坏文件当复用。
-    const stateLakeById = new Map(state.lake.notes.map((n) => [n.id, n] as const));
-    const stateQuickById = new Map(state.quickNotes.items.map((q) => [q.id, q] as const));
-    const hashMatchedLake = lake.notes.filter((n) => hadLake.has(n.id) && stateLakeById.get(n.id)?.contentHash === n.contentHash).map((n) => n.id);
-    const hashMatchedQuick = quick.items.filter((q) => hadQuick.has(q.id) && stateQuickById.get(q.id)?.contentHash === q.contentHash).map((q) => q.id);
-    const fastLake = await this.statLocalBodies("lake", hashMatchedLake);
-    const fastQuick = await this.statLocalBodies("quickNotes", hashMatchedQuick);
-    const reusableLakeIds = new Set<string>();
-    for (const id of hashMatchedLake) {
-      const st = fastLake?.get(id);
-      if (st && st.exists && st.size > 0) reusableLakeIds.add(id);
-    }
-    const reusableQuickIds = new Set<string>();
-    for (const id of hashMatchedQuick) {
-      const st = fastQuick?.get(id);
-      if (st && st.exists && st.size > 0) reusableQuickIds.add(id);
-    }
-    const fallbackLakeIds = [...hadLake].filter((id) => !reusableLakeIds.has(id));
-    const reusableLakeBodies = await this.readLocalBodies("lake", fallbackLakeIds);
-    const lakeNeed: LakeIndex["notes"] = [];
-    for (const n of lake.notes) {
-      if (reusableLakeIds.has(n.id)) continue;
-      const local = reusableLakeBodies.get(n.id);
-      const reusable = hadLake.has(n.id) && !!local && sha256Hex(local) === n.contentHash;
-      if (!reusable) lakeNeed.push(n);
-    }
-    const fallbackQuickIds = [...hadQuick].filter((id) => !reusableQuickIds.has(id));
-    const reusableQuickBodies = await this.readLocalBodies("quickNotes", fallbackQuickIds);
-    const quickNeed: QuickNotesIndex["items"] = [];
-    for (const q of quick.items) {
-      if (reusableQuickIds.has(q.id)) continue;
-      const local = reusableQuickBodies.get(q.id);
-      const reusableQuick = hadQuick.has(q.id) && !!local && sha256Hex(local) === q.contentHash;
-      if (!reusableQuick) quickNeed.push(q);
-    }
-    // 首拉 P0-2：**正文先下、分块应用**（文档先出来）——每 CHUNK 篇落一次库，已下正文的文档/目录
-    // 立刻可打开阅读；资产与后续批次的正文继续在后台流水线里跑。内存峰值也被 CHUNK 限住。
-    const BODY_CHUNK = 100;
-    const totalBodies = lakeNeed.length + quickNeed.length;
-    let applied = 0;
-    const downloadBodies = async (items: Array<LakeIndex["notes"][number] | QuickNotesIndex["items"][number]>, space: "lake" | "quickNotes", apply: boolean) => {
-      const pipeline = await runTransferPipeline(items, this.downloadConcurrency, async (item) => {
-        const bytes = space === "lake"
-          ? await this.getBody("lake", (item as LakeIndex["notes"][number]).id, item.contentHash)
-          : await this.getQuickBody(item.contentHash);
-        if (!bytes) {
-          this.warn((space === "lake" ? "缺正文: " : "缺小记正文: ") + item.id, { kind: "remote_incomplete", noteId: item.id, title: (item as { title?: string }).title });
-          return 0;
-        }
-        if (space === "lake") await this.device.writeBody(item.id, bytes);
-        else await this.device.writeQuickBody(item.id, bytes);
-        report.downloadedNotes++;
-        return bytes.length;
-      }, {
-        phase: "bodies",
-        totalOverride: totalBodies,
-        offsetDone: applied,
-        onProgress: (p) => this.emitProgress(p),
-      });
-      // 单对象失败不炸整轮，但必须留结构化警告：否则“少了一篇”是静默的（重试/诊断都看不到）。
-      for (const failure of pipeline.errors) {
-        const item = items[failure.index] as { id: string; title?: string } | undefined;
-        const reason = failure.error instanceof Error ? failure.error.message : String(failure.error);
-        this.warn((space === "lake" ? "正文下载失败: " : "小记正文下载失败: ") + (item?.id ?? ""), {
-          kind: "remote_incomplete", ...(item?.id ? { noteId: item.id } : {}), ...(item?.title ? { title: item.title } : {}),
-        });
-        this.warnings[this.warnings.length - 1] += " " + reason;
+      pendingAssets: state.pendingAssets ?? [] };
+    // 拉取轮失败的资产同样落账（下一轮开头事件驱动重试）。
+    if (out.assets.failedDownloads.length > 0) {
+      const ledger = nextState.pendingAssets ?? (nextState.pendingAssets = []);
+      for (const f of out.assets.failedDownloads) {
+        const found = ledger.find((e) => e.space === f.space && e.id === f.id && e.filename === f.filename);
+        if (found) found.attempts += 1; else ledger.push({ space: f.space, id: f.id, filename: f.filename, size: f.size, hash: f.hash, attempts: 1 });
       }
-      applied += items.length;
-      if (apply) {
-        await this.device.saveState(newState); // 分块应用：正文已就绪的条目立即落库（可打开）
-        this.emitProgress({ phase: "apply", done: applied, total: totalBodies });
-      }
-    };
-    for (let i = 0; i < lakeNeed.length; i += BODY_CHUNK) await downloadBodies(lakeNeed.slice(i, i + BODY_CHUNK), "lake", true);
-    if (lakeNeed.length === 0) await this.device.saveState(newState); // 没有 lake 需要下载也要先把目录/行落下
-    // 小记：正文先下、但**等小记图片声明/资源就绪后再落库**（importRemoteQuickNote 会校验图片完整性）。
-    if (quickNeed.length > 0) await downloadBodies(quickNeed, "quickNotes", false);
-    this.phase("apply");
-    // 按需资产（P0-4）：首拉只拉 pointer/索引/正文/声明元数据，媒体字节延后到打开/预览时
-    // 由 assetBackfill 补拉（声明与索引仍完整，删除/清理语义不受影响）。
-    if (!deferAssets && quick.items.some((q) => q.assetsHash)) {
-      await runTransferPipeline(
-        quick.items.filter((q) => q.assetsHash).map((q) => ({ space: "quickNotes" as const, id: q.id, declHash: q.assetsHash! })),
-        this.downloadConcurrency,
-        async (t) => { await this.getDeclaration(t.space, t.id, t.declHash); return 0; },
-        { phase: "declarations", onProgress: (p) => this.emitProgress(p) });
-      for (const q of quick.items) await this.scheduleAssets("quickNotes", q.id, q.assetsHash);
-      await this.flushAssetTasks();
     }
-    await this.device.saveState(newState);
-    await this.device.saveBaseline({ epoch: pointer.epoch, generation: pointer.generation, lakeCommit: pointer.lake.commit, quickNotesCommit: pointer.quickNotes.commit, lake, quickNotes: quick });
-    this.phase("save");
-    // Lake 资产：先并发取「声明」（小对象），再按全局流水线只补本地缺失/损坏的字节。
-    // deferAssets=true（按需资产）：以上全部跳过，首拉不搬媒体字节。
-    if (!deferAssets) {
-      const lakeDecls = lake.notes.filter((n) => n.assetsHash);
-      // P0：这里把声明取回的同时按 id 留一份，下面 scheduleAssets 直接复用——
-      // 否则 2k 篇会再串行 GET 一遍声明（声明 LRU 有上限，必然大部分 miss）。
-      const fetchedDecls = new Map<string, AssetDeclaration | null>();
-      await runTransferPipeline(
-        lakeDecls.map((n) => ({ space: "lake" as const, id: n.id, declHash: n.assetsHash! })),
-        this.downloadConcurrency,
-        async (t) => { const d = await this.getDeclaration(t.space, t.id, t.declHash); fetchedDecls.set(t.space + "/" + t.id, d); return 0; },
-        { phase: "declarations", onProgress: (p) => this.emitProgress(p) });
-      for (const n of lake.notes) await this.scheduleAssets("lake", n.id, n.assetsHash, fetchedDecls.get("lake/" + n.id));
-      await this.flushAssetTasks();
+    // 全量重拉的「仅本地」标记结算：远端仍有该 id ⇒ 副本跟随（标记失效）；显式恢复 ⇒ 标记失效。
+    nextState.remotePurged = finalizeRemotePurged(nextState, {
+      remoteIds: [...remote.lake.notes.map((n) => n.id), ...remote.quickNotes.items.map((q) => q.id)],
+      restorePending: state.restorePending ?? [] }).remotePurged ?? [];
+    await this.device.saveState(nextState);
+    await this.device.saveBaseline({
+      epoch: pointer.epoch, generation: pointer.generation,
+      lakeCommit: pointer.lake.commit, quickNotesCommit: pointer.quickNotes.commit,
+      lake: remote.lake, quickNotes: remote.quickNotes });
+    report.downloadedDocuments = out.apply.downloaded.documents;
+    report.downloadedQuickNotes = out.apply.downloaded.quickNotes;
+    report.downloadedBytes = out.apply.downloaded.bytes + out.assets.downloaded.bytes;
+    report.downloadedNotes = out.apply.downloaded.documents + out.apply.downloaded.quickNotes;
+    report.downloadedFolders = remote.lake.folders.length;
+    for (const w of out.warnings) {
+      const assetKept = w.code === "asset_missing" && (w.detail ?? "").includes("保留云端声明");
+      const kind = assetKept ? "asset_kept_remote" : w.code === "hash_mismatch" || w.code === "cleanup_failed" || w.code === "conflict_kept_history" ? "remote_incomplete" : w.code;
+      this.warn(w.code + (w.detail ? " " + w.detail : "") + (w.id ? " [" + w.id + "]" : ""), { kind, ...(w.id ? { noteId: w.id } : {}), ...(w.filename ? { filename: w.filename } : {}) });
     }
-    this.phase("downloads");
-    await this.device.saveState(newState);
-    this.emitProgress({ phase: "finalize", done: 1, total: 1 });
-    return { ...report, generation: pointer.generation };
+    report.warnings = this.warnings;
+    this.phase("round-pull-done");
+    return report;
   }
 
-  /** 云端为空 + 用户选择上传本地：初始化 epoch。 */
-  private async initialUpload(state: DeviceState, report: S3v3SyncReport): Promise<S3v3SyncReport> {
-    const pointer = await this.readPointer();
-    if (pointer) throw new S3v3SyncError("cloud-changed", "初始化时云端已有数据");
-    const { lake, quickNotes } = await this.buildAndUploadAll(state, report);
-    this.phase("upload");
-    if (!(await this.acquireLock())) throw new S3v3SyncError("lock-busy", "另一台设备正在发布同步");
-    try {
-      const again = await this.readPointer();
-      if (again) throw new PublishRetry();
-      const epoch = globalThis.crypto.randomUUID();
-      const lakeSerialized = serializeLakeIndex(lake);
-      const quickSerialized = serializeQuickNotesIndex(quickNotes);
-      const lakeCommit = indexHashOf(lakeSerialized);
-      const quickCommit = indexHashOf(quickSerialized);
-      await this.writeIndex("lake", lakeCommit, lakeSerialized);
-      await this.writeIndex("quickNotes", quickCommit, quickSerialized);
-      const p: S3v3Pointer = { v: 3, epoch, generation: 1, lake: { commit: lakeCommit }, quickNotes: { commit: quickCommit }, createdAt: this.iso(), deviceId: this.deviceId };
-      await this.assertLockOwned();
-      await this.remote.put(S3V3_POINTER_KEY, new TextEncoder().encode(JSON.stringify(p)));
-      const check = await this.readPointer();
-      if (!check || check.generation !== 1 || check.lake.commit !== lakeCommit) throw new PublishRetry();
-      this.phase("publish");
-      const newState = { ...state, lake, quickNotes, folders: lake.folders };
-      await this.device.saveState(newState);
-      await this.device.saveBaseline({ epoch, generation: 1, lakeCommit, quickNotesCommit: quickCommit, lake, quickNotes });
-      return { ...report, published: true, generation: 1 };
-    } finally {
-      await this.releaseLock();
-    }
+  /** v4 首传（空桶/无 pointer）：本地就是真相，全部上传后发布 generation 1。 */
+  private async syncFirstRound(state: DeviceState, report: S3v3SyncReport, opts: S3v3SyncOptions): Promise<S3v3SyncReport> {
+    const hasLocal = state.lake.notes.length > 0 || state.quickNotes.items.length > 0 || state.folders.length > 0;
+    if (!hasLocal) return report;
+    if (opts.onEmptyCloud === "stay") return report;
+    if (opts.onEmptyCloud !== "upload") throw new S3v3SyncError("empty-cloud", "云端为空，需要选择上传本地或保持为空");
+    this.phase("round-initial");
+    const ports = createRoundPorts({
+      remote: this.remote,
+      device: this.device,
+      largeAssetChunkBytes: this.largeAssetChunkBytes,
+      loadIntentLog: async () => ({ intents: state.intents, restorePending: state.restorePending ?? [] }),
+      saveIntentLog: async (log) => { state.intents = log.intents; state.restorePending = log.restorePending; },
+      loadPending: async () => state.pending,
+      savePending: async (pending) => { state.pending = pending; } });
+    const round = await initialRound({
+      local: planWorldOf(state), deviceId: this.deviceId, deferAssets: opts.deferAssets === true,
+      progress: (p: { phase: string; done: number; total: number; bytesDone: number }) => {
+        const phase = p.phase === "reads" || p.phase === "asset-get" ? "bodies" : p.phase === "uploads" || p.phase === "asset-put" ? "uploads" : "apply";
+        this.emitProgress({ phase, done: p.done, total: p.total, bytesDone: p.bytesDone });
+      } }, ports, { lockWaitMs: this.publishLockWaitMs });
+    if (round.commit.status !== "published" || !round.publish) return report;
+    const nextState = mergeRoundIntoState(state, { ...round, nextPointer: round.commit.pointer, deleted: 0, remainingPending: state.pending, intents: { intents: state.intents, restorePending: state.restorePending ?? [] } } as never);
+    await this.device.saveState(nextState);
+    await this.device.saveBaseline({
+      epoch: round.commit.pointer.epoch, generation: round.commit.pointer.generation,
+      lakeCommit: round.commit.lakeCommit, quickNotesCommit: round.commit.quickNotesCommit,
+      lake: round.publish.lake, quickNotes: round.publish.quickNotes });
+    report.published = true;
+    report.generation = round.commit.generation;
+    report.uploadedDocuments = round.apply.uploaded.documents;
+    report.uploadedQuickNotes = round.apply.uploaded.quickNotes;
+    report.uploadedBytes = round.apply.uploaded.bytes + round.assets.uploaded.bytes;
+    report.uploadedNotes = round.apply.uploaded.documents + round.apply.uploaded.quickNotes;
+    this.phase("round-initial-done");
+    return report;
   }
 
-  /**
-   * 「云端已彻底删除·仅本地」标记（state.remotePurged）的本轮视图：
-   * 标记语义 = 「该 id 在远端索引里已不存在，本地保留的副本仅作回收站用途」。
-   * 因此只要前提不成立，标记就必须失效——
-   *   · restorePending（本地显式恢复，唯一提前例外）：标记清除，恢复走正常上传；
-   *   · 远端重新出现同 id 条目（他端恢复/重建）：标记清除，本地陈旧副本作废（revived），跟随远端下载，
-   *     否则会被状态保留的旧副本盖回索引，等于把别人的恢复又删掉。
-   * 其余情况保持标记：本地副本不参与合并 → 不上传、不复活（用户定稿 261026）。
-   */
-  private resolveRemotePurged(
-    state: DeviceState,
-    remoteLake: LakeIndex,
-    remoteQuick: QuickNotesIndex,
-    restore: ReadonlySet<string>,
-  ): { purged: Set<string>; revived: Set<string> } {
-    const purged = new Set(state.remotePurged ?? []);
-    const revived = new Set<string>();
-    for (const id of restore) purged.delete(id);
-    const remoteIds = new Set<string>();
-    for (const n of remoteLake.notes) remoteIds.add(n.id);
-    for (const q of remoteQuick.items) remoteIds.add(q.id);
-    for (const id of [...purged]) {
-      if (!remoteIds.has(id)) continue;
-      purged.delete(id);
-      revived.add(id);
-    }
-    // 本地已把「仅本地」副本也彻底删除（有删除意图、副本已不在状态里）→ 标记无对象可指，一并作废，
-    // 避免 sidecar 无限累积。小记侧有墓碑证据时不作废：quick 回收站副本可能本就不在 items 里
-    //（适配器按契约保留时），标记是它「云端已删除」的依据。
-    const localIds = new Set<string>([...state.lake.notes.map((n) => n.id), ...state.quickNotes.items.map((q) => q.id)]);
-    const quickSideEvidence = new Set<string>([...(state.quickPurges ?? []), ...(state.quickDeletes ?? [])]);
-    for (const id of [...purged]) {
-      if (localIds.has(id) || quickSideEvidence.has(id)) continue;
-      if (state.intents.some((it) => it.noteId === id)) purged.delete(id);
-    }
-    return { purged, revived };
-  }
-
-  private async incrementalSync(pointer: S3v3Pointer, baseline: DeviceBaseline, state: DeviceState, report: S3v3SyncReport): Promise<S3v3SyncReport> {
-    // 261027：上一轮失败的附件先补（普通增量轮不会重新调度资产，不补就永久缺失）。
-    await this.retryPendingAssets();
-    const remoteLake = pointer.lake.commit === baseline.lakeCommit ? baseline.lake : ((await this.readIndex("lake", pointer.lake.commit)) as LakeIndex);
-    const remoteQuick = pointer.quickNotes.commit === baseline.quickNotesCommit ? baseline.quickNotes : ((await this.readIndex("quickNotes", pointer.quickNotes.commit)) as QuickNotesIndex);
-    this.phase("read-index");
-    this.emitProgress({ phase: "metadata", done: 1, total: 1 });
-    const baselineLake = baseline.lake;
-    const baselineQuick = baseline.quickNotes;
-
-    const restore = new Set(state.restorePending ?? []);
-    // 「恢复是唯一显式例外」：远端条目 updatedAt 晚于本地 purgedAt → 视为他端显式恢复，删除意图让位。
-    const yieldedIntents = new Set<string>();
-    for (const it of state.intents) {
-      const remote = remoteLake.notes.find((n) => n.id === it.noteId);
-      if (remote && it.purgedAt && remote.updatedAt > it.purgedAt) yieldedIntents.add(it.noteId);
-    }
-    const intentIds = new Set(state.intents.filter((i) => !yieldedIntents.has(i.noteId)).map((i) => i.noteId));
-    // 目录删除意图让位（D4 的配套）：远端同 id 目录重新出现且更新时间不早于本机 purge 时间
-    // ⇒ 他端已显式恢复。否则「A purge 目录 → B 恢复 → A 下一轮又把它删掉」（删除意图永不让位）。
-    const yieldedFolderIntents = new Set<string>();
-    for (const it of state.intents) {
-      const rf = remoteLake.folders.find((x) => x.id === it.noteId);
-      if (rf && (!it.purgedAt || rf.updatedAt > it.purgedAt)) yieldedFolderIntents.add(it.noteId);
-    }
-    const folderIntentIds = new Set([...intentIds].filter((id) => !yieldedFolderIntents.has(id)));
-    // 「云端已彻底删除·仅本地」标记的本轮视图（见 resolveRemotePurged）：
-    // · 显式恢复 → 标记失效，恢复走正常上传（用户定稿：远端删除不限制恢复）；
-    // · 远端同 id 条目回来了（他端恢复）→ 标记不再成立，本轮跟随远端下载（revived 的陈旧本地副本不得再进索引）。
-    const { purged, revived } = this.resolveRemotePurged(state, remoteLake, remoteQuick, restore);
-    // 他端恢复小记：远端索引重新出现该 id，而本地仍有 purged 墓碑 ⇒ 删除意图让位（用户定稿 261026：
-    // 别的端恢复后就是正常小记，删除方也跟随恢复）。不需要时间戳比较：v3 里 active 条目出现即
-    // 表示它被显式恢复/重建；本地 purged 副本必须作废，跟随远端内容下载。
-    // 只有「远端恢复时间晚于本地 purge 时间」才算他端恢复；否则会把本端尚未发布的 purge 直接让位掉。
-    const quickRestoredIds = new Set(
-      (state.quickPurges ?? []).filter((id) => {
-        const purgedAt = state.quickPurgeTimes?.[id];
-        const remote = remoteQuick.items.find((q) => q.id === id);
-        return !!purgedAt && !!remote && remote.updatedAt > purgedAt;
-      }),
-    );
-    for (const id of quickRestoredIds) purged.delete(id);
-    const lakeLocal: LakeIndex = { v: 3, space: "lake", notes: state.lake.notes.filter((n) => !purged.has(n.id) && !revived.has(n.id)), folders: state.folders };
-    // 乐观合法父集合（C5）：回收站 + 本地/远端/基线的目录与文档 id。
-    // 用途：① 环检测（C4）只在远端父可解释时成立；② 给适配器一个"远端父是否本机可解析"的参考口径
-    // （真正落库兜底在适配器：非法 parent 回落兜底笔记本，不得直接写库）。
-    const validParents = new Set<string>([TRASH_ID]);
-    for (const f of remoteLake.folders) validParents.add(f.id);
-    for (const f of state.folders) validParents.add(f.id);
-    for (const f of baselineLake.folders) validParents.add(f.id);
-    for (const n of remoteLake.notes) validParents.add(n.id);
-    for (const n of state.lake.notes) validParents.add(n.id);
-    const lakePlan = planLakeMerge(baselineLake, lakeLocal, remoteLake, { restorePending: restore, purgeIntents: intentIds, folderPurgeIntents: folderIntentIds, validParents });
-    // 显式恢复/他端恢复优先：恢复的 id 从 quick 墓碑集合剔除，否则本端会再次发布 purge、把恢复弹回回收站。
-    const mergedQuickPurges = [...new Set([...(state.quickPurges ?? []), ...(remoteQuick.purged ?? [])])]
-      .filter((id) => !restore.has(id) && !quickRestoredIds.has(id)).sort();
-    const purgedQuickIds = new Set(mergedQuickPurges);
-    const quickPurgeTimes = Object.fromEntries(Object.entries(state.quickPurgeTimes ?? {}).filter(([id]) => purgedQuickIds.has(id)));
-    // 小记同理：标记内的条目（若适配器按契约保留了回收站只读副本）不参与三方合并 → 不上传、不复活。
-    const quickLocal: QuickNotesIndex = {
-      ...state.quickNotes,
-      items: state.quickNotes.items.filter((q) => !purged.has(q.id) && !revived.has(q.id) && !quickRestoredIds.has(q.id)),
-    };
-    const quickPlan = planQuickNotesMerge(baselineQuick, quickLocal, remoteQuick, restore, intentIds, new Set(state.quickDeletes ?? []), purgedQuickIds);
-    // 标签目录单独做 id LWW（含墓碑）；条目标签关系仍走 quickPlan。
-    const mergedQuickTags = mergeQuickNoteTags(
-      (state.quickNotes.tags ?? []).map(tagEntryToTag),
-      (remoteQuick.tags ?? []).map(tagEntryToTag),
-    ).map(tagToEntry);
-    const tagsChanged = JSON.stringify(sortTagEntries(mergedQuickTags)) !== JSON.stringify(sortTagEntries(state.quickNotes.tags ?? []));
-    this.phase("merge");
-
-    const lakeWS = new WorkingSet(state.lake.notes);
-    const quickWS = new WorkingSet(state.quickNotes.items);
-    const newLakeDecls = new Map<string, { declHash: string; filenames: string[] }>();
-    const prevDecls = new Map<string, { declHash: string; filenames: string[] }>();
-    const newQuickDecls = new Map<string, { declHash: string; filenames: string[] }>();
-    const prevQuickDecls = new Map<string, { declHash: string; filenames: string[] }>();
-
-    // ---- P0-1 全局有界流水线：先把本轮要应用的正文/声明并发取回（进缓存），再逐条应用 ----
-    // 旧实现逐篇 await 正文 GET（2k 篇 = 2k 个串行 RTT）；资产又是按篇 runPool（per-note barrier）。
-    const bodyTasks: Array<{ space: "lake" | "quickNotes"; id: string; hash: string; title?: string }> = [];
-    for (const plan of lakePlan.notes) {
-      if (!plan.applyRemote || !plan.remote) continue;
-      const localEntry = lakeWS.get(plan.id);
-      const needBody = !localEntry || localEntry.contentHash !== plan.remote.contentHash || plan.kind === "download" || plan.kind === "remote-wins-history";
-      if (needBody) bodyTasks.push({ space: "lake", id: plan.remote.id, hash: plan.remote.contentHash, title: plan.remote.title });
-    }
-    for (const plan of quickPlan.items) {
-      if (!plan.applyRemote || !plan.remote) continue;
-      const localEntry = quickWS.get(plan.id);
-      const needBody = !localEntry || localEntry.contentHash !== plan.remote.contentHash || plan.kind === "download" || plan.kind === "remote-wins-history";
-      if (needBody) bodyTasks.push({ space: "quickNotes", id: plan.remote.id, hash: plan.remote.contentHash });
-    }
-    if (bodyTasks.length > 0) {
-      this.phase("bodies");
-      await runTransferPipeline(bodyTasks, this.downloadConcurrency, async (t) => {
-        const bytes = t.space === "lake" ? await this.getBody("lake", t.id, t.hash) : await this.getQuickBody(t.hash);
-        if (!bytes) {
-          this.warn((t.space === "lake" ? "缺正文: " : "缺小记正文: ") + t.id, { kind: "remote_incomplete", noteId: t.id, title: t.title });
-          return 0;
-        }
-        return bytes.length;
-      }, { phase: "bodies", totalOverride: bodyTasks.length, onProgress: (p) => this.emitProgress(p) });
-    }
-    // 声明：上传/应用都可能需要（内容寻址、按 declHash 缓存），先并发取回，避免应用环里串行 GET。
-    const declTasks: Array<{ space: "lake" | "quickNotes"; id: string; declHash: string }> = [];
-    const seenDecl = new Set<string>();
-    for (const plan of lakePlan.notes) {
-      const dh = plan.remote?.assetsHash;
-      // 上传分支（本地元数据变更）也要用声明：本地附件未落地时按远端声明自愈，
-      // 不在上传环里串行 GET（2k 篇 = 2k 个 RTT，真机上几分钟的静默卡顿）。
-      const need = plan.applyRemote || plan.uploadLocal;
-      if (dh && need && !seenDecl.has("lake:" + plan.id + ":" + dh)) {
-        seenDecl.add("lake:" + plan.id + ":" + dh);
-        declTasks.push({ space: "lake", id: plan.id, declHash: dh });
-      }
-    }
-    for (const plan of quickPlan.items) {
-      const dh = plan.remote?.assetsHash;
-      const need = plan.applyRemote || plan.uploadLocal;
-      if (dh && need && !seenDecl.has("quickNotes:" + plan.id + ":" + dh)) {
-        seenDecl.add("quickNotes:" + plan.id + ":" + dh);
-        declTasks.push({ space: "quickNotes", id: plan.id, declHash: dh });
-      }
-    }
-    if (declTasks.length > 0) {
-      this.phase("declarations");
-      await runTransferPipeline(declTasks, this.downloadConcurrency, async (t) => {
-        await this.getDeclaration(t.space, t.id, t.declHash);
-        return 0;
-      }, { phase: "declarations", totalOverride: declTasks.length, onProgress: (p) => this.emitProgress(p) });
-    }
-
-    // ---- 拉取/应用远端 ----
-    for (const plan of lakePlan.notes) {
-      const remote = plan.remote;
-      if (plan.kind === "remote-purged-trash") {
-        const local = lakeWS.get(plan.id);
-        if (local) {
-          if (plan.archiveLocal) await this.device.archiveBody(plan.id, await this.device.readBody(plan.id));
-          local.trashedAt = this.iso();
-          local.deletedFromParentId = local.parentId;
-          local.parentId = TRASH_ID;
-          purged.add(plan.id);
-        }
-        continue;
-      }
-      if (!remote || !plan.applyRemote) continue;
-      if (plan.kind === "remote-wins-history") this.supersededNotes.push({ id: plan.id, title: remote.title });
-      const local = lakeWS.get(plan.id);
-      if (plan.applyRemote && remote) {
-        if (plan.archiveLocal && local) await this.device.archiveBody(plan.id, await this.device.readBody(plan.id));
-        const needBody = !local || local.contentHash !== remote.contentHash || plan.kind === "download" || plan.kind === "remote-wins-history";
-        if (needBody) {
-          const bytes = await this.getBody("lake", remote.id, remote.contentHash);
-          if (!bytes) {
-            // 本地正文也缺失 ⇒ 两边都没有内容：绝不能把条目发布成"有正文"。
-            const localBody = await this.readLocalBody("lake", remote.id);
-            if (!localBody) this.warn("本地与云端都缺正文，跳过: " + remote.id, { kind: "local_body_missing", noteId: remote.id, title: remote.title });
-            else this.warn("远端缺正文，跳过: " + remote.id, { kind: "remote_incomplete", noteId: remote.id, title: remote.title });
-            // 正文对象暂时缺失不得把条目从云端索引删掉（否则一次半失败就成了永久删除）：
-            // 保留远端条目（索引 = 远端），下轮对象恢复后自然对齐。
-            lakeWS.set(remote.id, { ...remote });
-            continue;
-          }
-          if (!local && baseline.lake.notes.some((n) => n.id === remote.id)) {
-            // 基线里有、本地行/正文却没了（如 .lake 被手动删除）⇒ 已从云端拉回。
-            this.warn("本地缺正文，已从云端拉回: " + remote.id, { kind: "local_body_restored", noteId: remote.id, title: remote.title });
-          }
-          await this.device.writeBody(remote.id, bytes);
-          report.downloadedNotes++;
-        }
-        const oldDecl = local?.assetsHash;
-        if (oldDecl && oldDecl !== remote.assetsHash) {
-          const d = await this.getDeclaration("lake", remote.id, oldDecl);
-          if (d) prevDecls.set(remote.id, { declHash: oldDecl, filenames: d.assets.map((a) => a.filename) });
-        }
-        const decl = await this.scheduleAssets("lake", remote.id, remote.assetsHash);
-        if (decl) newLakeDecls.set(remote.id, { declHash: remote.assetsHash!, filenames: decl.assets.map((a) => a.filename) });
-        lakeWS.set(remote.id, { ...remote });
-      }
-    }
-    for (const plan of lakePlan.notes) {
-      if (plan.kind === "local-purge") {
-        lakeWS.delete(plan.id);
-        // 本地彻底删除：标记随之作废（副本已不存在，「仅本地」不再有意义），避免标记无限累积。
-        purged.delete(plan.id);
-        await this.device.deleteBody(plan.id);
-        await this.device.deleteAssetsDir(plan.id);
-      }
-    }
-    for (const f of lakePlan.folders) {
-      if (f.kind === "download" && f.remote) {
-        const idx = state.folders.findIndex((x) => x.id === f.id);
-        if (idx >= 0) state.folders[idx] = { ...f.remote };
-        else state.folders.push({ ...f.remote });
-      } else if (f.kind === "remote-purged-trash") {
-        state.folders = state.folders.filter((x) => x.id !== f.id);
-      } else if (f.kind === "local-purge") {
-        state.folders = state.folders.filter((x) => x.id !== f.id);
-      }
-    }
-
-    // 小记拉取/删除
-    for (const plan of quickPlan.items) {
-      const remote = plan.remote;
-      const local = quickWS.get(plan.id);
-      if (plan.kind === "local-delete") {
-        // 删除语义交给设备端：桌面小记要进回收站（保留正文/附件），不能在这里物理删。
-        quickWS.delete(plan.id);
-        continue;
-      }
-      if (plan.kind === "local-purge") { quickWS.delete(plan.id); purged.delete(plan.id); continue; }
-      if (!remote || !plan.applyRemote) continue;
-      if (plan.kind === "remote-wins-history") this.supersededNotes.push({ id: plan.id, title: "小记" });
-      if (plan.archiveLocal && local) {
-        // 冲突副本（parity C8）：优先由设备端把本地版本归档进小记回收站（旧协议语义）；
-        // 设备未实现时退化为历史快照尝试（桌面 createHistorySnapshot 对小记无实际归档）。
-        if (this.device.archiveQuickNote) {
-          try { await this.device.archiveQuickNote(plan.id); }
-          catch (e) { this.warn("小记冲突归档失败（远端继续覆盖）: " + plan.id + " " + (e as Error).message, { kind: "remote_incomplete", noteId: plan.id }); }
-        } else {
-          const bytes = await this.device.readQuickBody(plan.id);
-          if (bytes) await this.device.writeHistory("quick-" + plan.id, bytes);
-        }
-      }
-      const needBody = !local || local.contentHash !== remote.contentHash || plan.kind === "download" || plan.kind === "remote-wins-history";
-      if (needBody) {
-        const bytes = await this.getQuickBody(remote.contentHash);
-        if (!bytes) {
-          this.warn("远端缺小记正文，跳过: " + remote.id, { kind: "remote_incomplete", noteId: remote.id });
-          quickWS.set(remote.id, { ...remote });
-          continue;
-        }
-        await this.device.writeQuickBody(remote.id, bytes);
-        report.downloadedNotes++;
-      }
-      const oldDecl = local?.assetsHash;
-      if (oldDecl && oldDecl !== remote.assetsHash) {
-        const d = await this.getDeclaration("quickNotes", remote.id, oldDecl);
-        if (d) prevQuickDecls.set(remote.id, { declHash: oldDecl, filenames: d.assets.map((a) => a.filename) });
-      }
-      const decl = await this.scheduleAssets("quickNotes", remote.id, remote.assetsHash);
-      if (decl) newQuickDecls.set(remote.id, { declHash: remote.assetsHash!, filenames: decl.assets.map((a) => a.filename) });
-      quickWS.set(remote.id, { ...remote });
-    }
-
-    // 资产：全局流水线（与上面的正文/声明同一调度器；失败只影响该对象）。
-    await this.flushAssetTasks();
-    this.emitProgress({ phase: "apply", done: lakePlan.notes.length + quickPlan.items.length, total: lakePlan.notes.length + quickPlan.items.length });
-
-    // ---- 上传 ----
-    for (const plan of lakePlan.notes) {
-      if (!plan.uploadLocal) continue;
-      const entry = lakeWS.get(plan.id);
-      if (!entry) continue;
-      try {
-        const body = await this.device.readBody(plan.id);
-        if (!body) {
-          // P0：上传前本地正文缺失 → 先按远端同条目 contentHash 尝试拉回（校验一致才落盘）。
-          const restored = await this.restoreMissingBody("lake", plan.id, plan.remote?.contentHash ?? entry.contentHash);
-          if (restored) {
-            this.warn("本地缺正文，已从云端拉回: " + plan.id, { kind: "local_body_restored", noteId: plan.id, title: entry.title });
-            entry.contentHash = sha256Hex(restored);
-            // 云端已有同内容正文：本轮无需上传（索引仍以合并结果为准）。
-            continue;
-          }
-          // 云端也没有可拉回的副本：跳过 + 绝不把空正文上传/声明进新索引。
-          this.warn("本地缺正文，跳过上传: " + plan.id, { kind: "local_body_missing", noteId: plan.id, title: entry.title });
-          lakeWS.failUpload(plan.id, plan.remote ? { ...plan.remote } : null);
-          newLakeDecls.delete(plan.id);
-          prevDecls.delete(plan.id);
-          continue;
-        }
-        const hash = sha256Hex(body);
-        entry.contentHash = hash;
-        const remoteDecl = plan.remote?.assetsHash ? await this.getDeclaration("lake", plan.id, plan.remote.assetsHash) : null;
-        // 数据安全（261026 真机事故）：本地附件目录为空 ≠ 用户删光了附件。
-        // 首拉未完成/附件还没落地/外部清缓存时目录同样是空的；此时若按 uploadAssets 的结果把
-        // entry.assetsHash 置空，新索引会「声明该条目没有附件」，随后 planLakeDeletes 会把这台的
-        // 全部云端附件判成孤儿执行物理删除（真机上一次性删掉 2 万对象）。没有本地证据就不改声明。
-        const localAssetsEmpty = (await this.device.listAssets(plan.id)).length === 0;
-        if (localAssetsEmpty && plan.remote?.assetsHash) {
-          entry.assetsHash = plan.remote.assetsHash;
-          this.warn("本地附件未落地，保留云端声明不删附件: " + plan.id, { kind: "asset_kept_remote", noteId: plan.id, title: entry.title });
-          // 顺手自愈：把缺失的附件按远端声明补下来（本次循环后在下方统一 flush）。
-          const decl = await this.scheduleAssets("lake", plan.id, plan.remote.assetsHash);
-          if (decl) newLakeDecls.set(plan.id, { declHash: plan.remote.assetsHash, filenames: decl.assets.map((a) => a.filename) });
-        } else {
-          const decl = await this.uploadAssets("lake", plan.id, remoteDecl);
-          if (decl) {
-          this.uploadOps.push({ space: "lake", noteId: plan.id, key: declarationKey("lake", plan.id, decl.declHash), bytes: new TextEncoder().encode(serializeDeclaration(decl.declaration)), gzip: true });
-          entry.assetsHash = decl.declHash;
-          newLakeDecls.set(plan.id, { declHash: decl.declHash, filenames: decl.declaration.assets.map((a) => a.filename) });
-            if (plan.remote?.assetsHash && plan.remote.assetsHash !== decl.declHash) {
-              const old = await this.getDeclaration("lake", plan.id, plan.remote.assetsHash);
-              if (old) prevDecls.set(plan.id, { declHash: plan.remote.assetsHash, filenames: old.assets.map((a) => a.filename) });
-            }
-          } else if (plan.remote?.assetsHash) {
-            // 本地有文件但读不出字节（IO 异常等）：同样不能丢声明，保留远端版本。
-            entry.assetsHash = plan.remote.assetsHash;
-            this.warn("附件读取失败，保留云端声明: " + plan.id, { kind: "asset_kept_remote", noteId: plan.id, title: entry.title });
-          } else {
-            entry.assetsHash = undefined;
-            if (plan.remote?.assetsHash) {
-              const old = await this.getDeclaration("lake", plan.id, plan.remote.assetsHash);
-              if (old) prevDecls.set(plan.id, { declHash: plan.remote.assetsHash, filenames: old.assets.map((a) => a.filename) });
-            }
-          }
-        }
-        // 仅在正文内容真的变化时 PUT（锁/图标等元数据变更不必重传正文）。
-        if (plan.remote?.contentHash !== hash) {
-          this.uploadOps.push({ space: "lake", noteId: plan.id, key: lakeBodyKey(plan.id, hash), bytes: body });
-          report.uploadedNotes++;
-        }
-      } catch (e) {
-        this.warn("上传失败，保持 local 下轮重试: " + plan.id + " " + (e as Error).message, { kind: "remote_incomplete", noteId: plan.id, title: entry.title });
-        // 关键：失败笔记不得进入本轮新索引（否则索引引用未落盘正文/声明），回退到远端旧条目或移出。
-        lakeWS.failUpload(plan.id, plan.remote ? { ...plan.remote } : null);
-        newLakeDecls.delete(plan.id);
-        prevDecls.delete(plan.id);
-      }
-    }
-    // 上传分支里登记的自愈资产任务（本地附件未落地但远端有声明）在这里统一下载，失败只影响该对象。
-    await this.flushAssetTasks();
-    for (const plan of quickPlan.items) {
-      if (!plan.uploadLocal) continue;
-      const entry = quickWS.get(plan.id);
-      if (!entry) continue;
-      try {
-        const body = await this.device.readQuickBody(plan.id);
-        if (!body) {
-          const restored = await this.restoreMissingBody("quickNotes", plan.id, plan.remote?.contentHash ?? entry.contentHash);
-          if (restored) {
-            this.warn("本地缺小记正文，已从云端拉回: " + plan.id, { kind: "local_body_restored", noteId: plan.id });
-            entry.contentHash = sha256Hex(restored);
-            continue;
-          }
-          this.warn("本地缺小记正文，跳过上传: " + plan.id, { kind: "local_body_missing", noteId: plan.id });
-          quickWS.failUpload(plan.id, plan.remote ? { ...plan.remote } : null);
-          newQuickDecls.delete(plan.id);
-          prevQuickDecls.delete(plan.id);
-          continue;
-        }
-        entry.contentHash = sha256Hex(body);
-        const remoteDecl = plan.remote?.assetsHash ? await this.getDeclaration("quickNotes", plan.id, plan.remote.assetsHash) : null;
-        // 与 Lake 同一条数据安全规则：本地图片目录为空不能当成「用户删光了图片」。
-        const localQuickAssetsEmpty = (await this.device.listQuickAssets(plan.id)).length === 0;
-        if (localQuickAssetsEmpty && plan.remote?.assetsHash) {
-          entry.assetsHash = plan.remote.assetsHash;
-          this.warn("本地小记图片未落地，保留云端声明: " + plan.id, { kind: "asset_kept_remote", noteId: plan.id });
-          const decl = await this.scheduleAssets("quickNotes", plan.id, plan.remote.assetsHash);
-          if (decl) newQuickDecls.set(plan.id, { declHash: plan.remote.assetsHash, filenames: decl.assets.map((a) => a.filename) });
-        } else {
-        const decl = await this.uploadQuickAssets(plan.id, remoteDecl);
-        if (decl) {
-          this.uploadOps.push({ space: "quickNotes", noteId: plan.id, key: declarationKey("quickNotes", plan.id, decl.declHash), bytes: new TextEncoder().encode(serializeDeclaration(decl.declaration)), gzip: true });
-          entry.assetsHash = decl.declHash;
-          newQuickDecls.set(plan.id, { declHash: decl.declHash, filenames: decl.declaration.assets.map((a) => a.filename) });
-          if (plan.remote?.assetsHash && plan.remote.assetsHash !== decl.declHash) {
-            const old = await this.getDeclaration("quickNotes", plan.id, plan.remote.assetsHash);
-            if (old) prevQuickDecls.set(plan.id, { declHash: plan.remote.assetsHash, filenames: old.assets.map((a) => a.filename) });
-          }
-        } else if (plan.remote?.assetsHash) {
-          entry.assetsHash = plan.remote.assetsHash;
-          this.warn("小记图片读取失败，保留云端声明: " + plan.id, { kind: "asset_kept_remote", noteId: plan.id });
-        } else {
-          entry.assetsHash = undefined;
-        }
-        }
-        if (plan.remote?.contentHash !== entry.contentHash) {
-          this.uploadOps.push({ space: "quickNotes", noteId: plan.id, key: quickNoteBodyKey(entry.contentHash), bytes: body });
-          report.uploadedNotes++;
-        }
-      } catch (e) {
-        this.warn("小记上传失败，保持 local 下轮重试: " + plan.id + " " + (e as Error).message, { kind: "remote_incomplete", noteId: plan.id });
-        quickWS.failUpload(plan.id, plan.remote ? { ...plan.remote } : null);
-        newQuickDecls.delete(plan.id);
-        prevQuickDecls.delete(plan.id);
-      }
-    }
-
-    // 小记上传分支的自愈任务同样在这里下载。
-    await this.flushAssetTasks();
-    this.phase("downloads");
-    // 全局传输（≤8）：all-or-isolate，失败笔记不进本轮索引。
-    const uploadFailures = await this.flushUploadOps();
-    this.phase("uploads");
-    for (const [key, msg] of uploadFailures) {
-      const [space, id] = key.split(":");
-      this.warn((space === "lake" ? "上传失败，保持 local 下轮重试: " : "小记上传失败，保持 local 下轮重试: ") + id + " " + msg, { kind: "remote_incomplete", noteId: id });
-      if (space === "lake") {
-        const plan = lakePlan.notes.find((p) => p.id === id);
-        lakeWS.failUpload(id, plan?.remote ? { ...plan.remote } : null);
-        newLakeDecls.delete(id);
-        prevDecls.delete(id);
-      } else {
-        const plan = quickPlan.items.find((p) => p.id === id);
-        quickWS.failUpload(id, plan?.remote ? { ...plan.remote } : null);
-        newQuickDecls.delete(id);
-        prevQuickDecls.delete(id);
-      }
-    }
-
-    const lakeChanged = lakePlan.notes.some((p) => p.kind !== "none" || p.uploadLocal || p.applyRemote) || lakePlan.folders.some((f) => f.kind !== "none" || f.applyRemote);
-    // 小记标签关系（tagIds/tagsUpdatedAt）独立于正文 hash：关系版本较新的一侧胜出。
-    const remoteQuickById = new Map(remoteQuick.items.map((q) => [q.id, q] as const));
-    let quickLinksChanged = false;
-    for (const [id, localEntry] of new Map(quickWS.indexValues().map((q) => [q.id, q] as const))) {
-      const remoteEntry = remoteQuickById.get(id);
-      if (!remoteEntry) continue;
-      const lt = localEntry.tagsUpdatedAt ?? "";
-      const rt = remoteEntry.tagsUpdatedAt ?? "";
-      if (rt > lt) {
-        localEntry.tagIds = remoteEntry.tagIds ? [...remoteEntry.tagIds] : undefined;
-        localEntry.tagsUpdatedAt = remoteEntry.tagsUpdatedAt;
-        quickLinksChanged = true;
-      } else if ((localEntry.tagIds ?? []).join("\u0000") !== (remoteEntry.tagIds ?? []).join("\u0000") || lt !== rt) {
-        quickLinksChanged = true;
-      }
-    }
-    const purgesChanged = JSON.stringify(mergedQuickPurges) !== JSON.stringify([...(remoteQuick.purged ?? [])].sort());
-    const quickChanged = tagsChanged || quickLinksChanged || purgesChanged || quickPlan.items.some((p) => p.kind !== "none" || p.uploadLocal || p.applyRemote);
-    // 本地状态保留「远端已彻底删除、本机回收站副本」（remotePurged），但不进同步索引。
-    const stateNotes = lakeChanged ? lakeWS.localValues().sort((a, b) => (a.id < b.id ? -1 : 1)) : state.lake.notes;
-    const stateFolders = [...state.folders].sort((a, b) => (a.id < b.id ? -1 : 1));
-    const newLake: LakeIndex = lakeChanged ? { v: 3, space: "lake", notes: lakeWS.indexValues().filter((n) => !purged.has(n.id)).sort((a, b) => (a.id < b.id ? -1 : 1)), folders: stateFolders } : remoteLake;
-    // 小记：发布索引同样剔除「云端已删除」的副本；本地状态保留它们（适配器据此留 quick 回收站只读副本）。
-    const quickKeptCopies = state.quickNotes.items.filter((q) => purged.has(q.id) && !revived.has(q.id));
-    const newQuick: QuickNotesIndex = quickChanged ? { v: 3, space: "quickNotes", items: quickWS.indexValues().filter((q) => !purged.has(q.id)).sort((a, b) => (a.id < b.id ? -1 : 1)), tags: mergedQuickTags, ...(mergedQuickPurges.length ? { purged: mergedQuickPurges } : {}) } : remoteQuick;
-    const quickState: QuickNotesIndex = quickKeptCopies.length === 0 ? newQuick : (() => {
-      const byId = new Map(newQuick.items.map((q) => [q.id, q] as const));
-      for (const q of quickKeptCopies) if (!byId.has(q.id)) byId.set(q.id, q);
-      return { ...newQuick, items: [...byId.values()].sort((a, b) => (a.id < b.id ? -1 : 1)) };
-    })();
-    // 标记持久化：本轮视图（恢复/远端复活/本地 purge 已相应剔除）原样落盘，下一轮才能继续挡住复活。
-    const remotePurged = [...purged].sort();
-    // 无变化的半边不做全量序列化/哈希（大库空跑时这是主要 CPU）
-    const lakeSerialized = lakeChanged ? serializeLakeIndex(newLake) : "";
-    const quickSerialized = quickChanged ? serializeQuickNotesIndex(newQuick) : "";
-    const lakeCommit = lakeChanged ? indexHashOf(lakeSerialized) : pointer.lake.commit;
-    const quickCommit = quickChanged ? indexHashOf(quickSerialized) : pointer.quickNotes.commit;
-    const needPublish = lakeCommit !== pointer.lake.commit || quickCommit !== pointer.quickNotes.commit;
-
-
-    if (!needPublish) {
-      // 注意（勿删这里的 saveState）：无发布轮也必须落盘 state —— resolveRemotePurged 本轮可能已经把
-      // 「显式恢复 / 远端复活 / 本地 purge」的 id 从 state.remotePurged 剔除，restorePending 也可能已清；
-      // 不落盘就会让 sidecar/DB 残留旧标记（下次加载又当「云端已删除·仅本地」，回收站徽标不消失）。
-      // 恢复成功的 id 同时包含文档与小记：只清文档会让 quick 的 restorePending 在 sidecar 里长期残留，
-      // 下一轮又把同内容小记重 PUT 一次（幂等但违背“恢复完成后不再产生 S3 行为”）。
-      const restoredIds = new Set([
-        ...lakePlan.notes.filter((p) => p.kind === "upload" && restore.has(p.id)).map((p) => p.id),
-        ...quickPlan.items.filter((p) => p.kind === "upload" && restore.has(p.id)).map((p) => p.id),
-      ]);
-      const intents = this.clearIntentsOnSync(state.intents, pointer.epoch, pointer.generation, new Set(newLake.notes.map((n) => n.id)), restoredIds).filter((it) => !yieldedIntents.has(it.noteId) && !yieldedFolderIntents.has(it.noteId));
-      const newState: DeviceState = { ...state, lake: { v: 3, space: "lake", notes: lakeChanged ? stateNotes : state.lake.notes, folders: stateFolders }, quickNotes: quickState, quickPurges: mergedQuickPurges, quickPurgeTimes, folders: stateFolders, remotePurged, intents, restorePending: (state.restorePending ?? []).filter((id) => !restoredIds.has(id)) };
-      await this.device.saveState(newState);
-      await this.device.saveBaseline({ epoch: pointer.epoch, generation: pointer.generation, lakeCommit: pointer.lake.commit, quickNotesCommit: pointer.quickNotes.commit, lake: newLake, quickNotes: newQuick });
-      await this.executePending(newLake, newQuick, pointer.lake.commit, pointer.quickNotes.commit, newState, report);
-      this.phase("pending");
-      this.emitProgress({ phase: "finalize", done: 1, total: 1 });
-      return { ...report, generation: pointer.generation };
-    }
-
-    const generation = pointer.generation + 1;
-    const planned: PendingDelete[] = [
-      ...planLakeDeletes({ previous: remoteLake, next: newLake, previousDecls: prevDecls, nextDecls: newLakeDecls, previousCommit: pointer.lake.commit, nextCommit: lakeCommit }),
-      ...planQuickNotesDeletes({ previous: remoteQuick, next: newQuick, previousDecls: prevQuickDecls, nextDecls: newQuickDecls, previousCommit: pointer.quickNotes.commit, nextCommit: quickCommit }),
-    ].map((d) => this.toPending(d, pointer.epoch, generation, d.space === "quickNotes" ? quickCommit : lakeCommit));
-    const dedup = new Map<string, PendingDelete>();
-    for (const p of state.pending) dedup.set(p.key + "|" + p.kind, p);
-    for (const p of planned) dedup.set(p.key + "|" + p.kind, p);
-    const pending = [...dedup.values()];
-
-    const newState: DeviceState = { ...state, lake: { v: 3, space: "lake", notes: stateNotes, folders: stateFolders }, quickNotes: quickState, quickPurges: mergedQuickPurges, quickPurgeTimes, folders: stateFolders, remotePurged, pending };
-    await this.device.saveState(newState);
-    this.phase("publish-save-state");
-    if (!(await this.acquireLock())) throw new S3v3SyncError("lock-busy", "另一台设备正在发布同步，请稍后重试");
-    this.phase("publish-lock");
-    try {
-      const now = await this.readPointer();
-      if (!now || now.epoch !== pointer.epoch || now.generation !== pointer.generation || now.lake.commit !== pointer.lake.commit || now.quickNotes.commit !== pointer.quickNotes.commit) {
-        throw new PublishRetry();
-      }
-      if (lakeChanged) await this.writeIndex("lake", lakeCommit, lakeSerialized);
-      if (quickChanged) await this.writeIndex("quickNotes", quickCommit, quickSerialized);
-      this.phase("publish-index");
-      const nextPointer: S3v3Pointer = { v: 3, epoch: pointer.epoch, generation, lake: { commit: lakeCommit }, quickNotes: { commit: quickCommit }, createdAt: this.iso(), deviceId: this.deviceId };
-      await this.assertLockOwned();
-      await this.remote.put(S3V3_POINTER_KEY, new TextEncoder().encode(JSON.stringify(nextPointer)));
-      const check = await this.readPointer();
-      if (!check || check.generation !== generation || check.lake.commit !== lakeCommit || check.quickNotes.commit !== quickCommit) throw new PublishRetry();
-      this.phase("publish-pointer");
-      // 恢复成功的 id 同时包含文档与小记：只清文档会让 quick 的 restorePending 在 sidecar 里长期残留，
-      // 下一轮又把同内容小记重 PUT 一次（幂等但违背“恢复完成后不再产生 S3 行为”）。
-      const restoredIds = new Set([
-        ...lakePlan.notes.filter((p) => p.kind === "upload" && restore.has(p.id)).map((p) => p.id),
-        ...quickPlan.items.filter((p) => p.kind === "upload" && restore.has(p.id)).map((p) => p.id),
-      ]);
-      const publishedPurgeIds = new Set([...lakePlan.notes.filter((p) => p.kind === "local-purge").map((p) => p.id), ...quickPlan.items.filter((p) => p.kind === "local-purge").map((p) => p.id)]);
-      const updatedIntents = this.bumpIntentsAfterPublish(state.intents, pointer.epoch, generation, restoredIds, publishedPurgeIds).filter((it) => !yieldedIntents.has(it.noteId) && !yieldedFolderIntents.has(it.noteId));
-      const finalState: DeviceState = { ...newState, intents: updatedIntents, restorePending: (state.restorePending ?? []).filter((id) => !restoredIds.has(id)) };
-      await this.device.saveState(finalState);
-      await this.device.saveBaseline({ epoch: pointer.epoch, generation, lakeCommit, quickNotesCommit: quickCommit, lake: newLake, quickNotes: newQuick });
-      this.phase("publish-finalize");
-      const deleted = await this.executePending(newLake, newQuick, lakeCommit, quickCommit, finalState, report);
-      this.phase("pending");
-      this.emitProgress({ phase: "finalize", done: 1, total: 1 });
-      return { ...report, published: true, generation, deletedObjects: deleted };
-    } finally {
-      await this.releaseLock();
-    }
-  }
-
-  private toPending(d: PlannedDelete, epoch: string, generation: number, commit: string): PendingDelete {
-    const base = { key: d.key, targetEpoch: epoch, targetGeneration: generation, targetCommit: commit, createdAt: this.iso() };
-    switch (d.kind) {
-      case "body": return { ...base, kind: "body", noteId: d.noteId!, oldHash: d.oldHash! };
-      case "asset": return { ...base, kind: "asset", noteId: d.noteId!, filename: d.filename! };
-      case "declaration": return { ...base, kind: "declaration", noteId: d.noteId!, oldDeclHash: d.oldDeclHash! };
-      case "purge-prefix": return { ...base, kind: "purge-prefix", noteId: d.noteId! };
-      case "index": return { ...base, kind: "index", space: d.space!, oldIndexHash: d.oldHash! };
-      case "quick-note-body": return { ...base, kind: "quick-note-body", noteId: d.noteId!, oldHash: d.oldHash! };
-      case "quick-note-asset": return { ...base, kind: "quick-note-asset", noteId: d.noteId!, filename: d.filename! };
-      case "quick-note-declaration": return { ...base, kind: "quick-note-declaration", noteId: d.noteId!, oldDeclHash: d.oldDeclHash! };
-      case "quick-note-purge-prefix": return { ...base, kind: "quick-note-purge-prefix", noteId: d.noteId! };
-    }
-  }
-
-  /** 发布成功后：把本轮真正发布的删除意图钉到本轮 generation（不立即清除，防迟到覆盖）。 */
-  private bumpIntentsAfterPublish(intents: DeletionIntent[], epoch: string, generation: number, restoredIds: Set<string>, publishedIds: Set<string>): DeletionIntent[] {
-    return intents
-      .filter((it) => !restoredIds.has(it.noteId))
-      .map((it) => (it.targetEpoch === epoch && publishedIds.has(it.noteId) ? { ...it, targetGeneration: generation } : it));
-  }
-
-  /** 增量轮（未发布）：满足「更高 generation 且索引不含该 id」才清除。 */
-  private clearIntentsOnSync(intents: DeletionIntent[], epoch: string, generation: number, indexIds: Set<string>, restoredIds: Set<string>): DeletionIntent[] {
-    return intents.filter(
-      (it) => !restoredIds.has(it.noteId) && !shouldClearDeletionIntent(it, { pointerEpoch: epoch, pointerGeneration: generation, indexHasId: indexIds.has(it.noteId), restored: false }),
-    );
-  }
-
-  private async executePending(lake: LakeIndex, quick: QuickNotesIndex, lakeCommit: string, quickCommit: string, state: DeviceState, report: S3v3SyncReport): Promise<number> {
-    if (state.pending.length === 0) return 0;
-    const world: CurrentWorld = { lakeCommit, quickNotesCommit: quickCommit, notes: lake.notes, quickNotes: quick.items, declarations: {}, quickDeclarations: {} };
-    // 声明并发取（261026）：待删项多时（批量 purge / 首轮 GC）逐条 RTT 会很慢；只读、可安全并发 8。
-    const declTasks: Array<{ space: "lake" | "quickNotes"; id: string; declHash: string }> = [];
-    const seenDecl = new Set<string>();
-    for (const p of state.pending) {
-      if (p.kind === "asset" || p.kind === "declaration" || p.kind === "quick-note-asset" || p.kind === "quick-note-declaration") {
-        const space: "lake" | "quickNotes" = p.kind.startsWith("quick") ? "quickNotes" : "lake";
-        const list = space === "quickNotes" ? world.quickNotes : world.notes;
-        const n = list.find((x) => x.id === p.noteId);
-        if (!n?.assetsHash) continue;
-        const key = space + "/" + n.id;
-        if (seenDecl.has(key)) continue;
-        seenDecl.add(key);
-        declTasks.push({ space, id: n.id, declHash: n.assetsHash });
-      }
-    }
-    if (declTasks.length > 0) {
-      const { errors } = await runTransferPipeline(declTasks, Math.min(8, this.transferConcurrency), async (t) => {
-        const d = await this.getDeclaration(t.space, t.id, t.declHash);
-        if (d) {
-          const target = t.space === "quickNotes" ? world.quickDeclarations : world.declarations;
-          target[t.id] = { declHash: t.declHash, filenames: d.assets.map((a) => a.filename) };
-        }
-        return 0;
-      });
-      const firstError = errors[0]?.error;
-      if (firstError) throw firstError;
-    }
-    let deleted = 0;
-    const deleteKeys: string[] = [];
-    const deletePrefixes: string[] = [];
-    for (const p of state.pending) {
-      const gate = gatePendingDelete(p, world);
-      if (!gate.execute) continue; // 仍被引用 → 跳过并出队
-      if (p.kind === "purge-prefix" || p.kind === "quick-note-purge-prefix") deletePrefixes.push(p.key);
-      else deleteKeys.push(p.key);
-    }
-    try {
-      for (const prefix of deletePrefixes) deleted += await this.remote.deleteByPrefix(prefix);
-      if (deleteKeys.length > 0) { await this.remote.deleteMany(deleteKeys); deleted += deleteKeys.length; }
-      state.pending = [];
-    } catch (e) {
-      this.warnings.push("待删执行失败，下轮重试: " + (e as Error).message);
-      state.pending = state.pending.filter((p) => gatePendingDelete(p, world).execute);
-    }
-    state.pending = state.pending;
-    await this.device.saveState(state);
-    report.deletedObjects += deleted;
-    return deleted;
+  /** 单次四相执行（不含重试/回写；供 syncOnceRound 的重试环调用）。 */
+  private async runRoundOnce(state: DeviceState, baseline: DeviceBaseline, pointer: S3v3Pointer, remoteLake: LakeIndex, remoteQuick: QuickNotesIndex, opts: S3v3SyncOptions, forcePublish = false): Promise<Awaited<ReturnType<typeof runSyncRound>>> {
+    // 发布锁等待交给 commitPlan：只有在别的端持锁时才等（正常轮不产生任何额外往返）。
+    const ports = createRoundPorts({
+      remote: this.remote,
+      device: this.device,
+      largeAssetChunkBytes: this.largeAssetChunkBytes,
+      loadIntentLog: async () => ({ intents: state.intents, restorePending: state.restorePending ?? [] }),
+      saveIntentLog: async (log) => { state.intents = log.intents; state.restorePending = log.restorePending; },
+      loadPending: async () => state.pending,
+      savePending: async (pending) => { state.pending = pending; } });
+    // 字段级变更（is_locked/locked_at/icon/title/parentId/sortOrder）不 bump updatedAt，
+    // 内容级合并判据看不见它们 ⇒ 用「本地 vs 基线」的字段 diff 显式喂给 plan。
+    const baseById = new Map(baseline.lake.notes.map((n) => [n.id, n] as const));
+    const fieldChangedIds = state.lake.notes.filter((n) => {
+      const b = baseById.get(n.id);
+      if (!b || b.contentHash !== n.contentHash) return false;
+      return b.isLocked !== n.isLocked
+        || (b.lockedAt ?? "") !== (n.lockedAt ?? "")
+        || b.title !== n.title
+        || (b.icon ?? "") !== (n.icon ?? "")
+        || b.parentId !== n.parentId
+        || b.sortOrder !== n.sortOrder;
+    }).map((n) => n.id);
+    return runSyncRound({
+      local: planWorldOf(state),
+      base: { lake: baseline.lake, quickNotes: baseline.quickNotes, folders: baseline.lake.folders },
+      remote: { lake: remoteLake, quickNotes: remoteQuick, folders: remoteLake.folders },
+      basePointer: pointer,
+      deviceId: this.deviceId,
+      state: { ...planStateOf(state), fieldChangedIds, ...(forcePublish ? { forcePublish: true } : {}) },
+      progress: (p: { phase: string; done: number; total: number; bytesDone: number }) => {
+        const phase = p.phase === "reads" || p.phase === "asset-get" ? "bodies" : p.phase === "uploads" || p.phase === "asset-put" ? "uploads" : "apply";
+        this.emitProgress({ phase, done: p.done, total: p.total, bytesDone: p.bytesDone });
+      },
+      deferAssets: opts.deferAssets === true,
+      commitOptions: { lockWaitMs: this.publishLockWaitMs } }, ports);
   }
 
   private async lockOwner(): Promise<string | null> {
@@ -1403,52 +933,6 @@ export class S3v3SyncEngine {
     try {
       if ((JSON.parse(new TextDecoder().decode(raw)) as { deviceId: string }).deviceId === this.deviceId) await this.remote.deleteMany([LOCK_KEY]);
     } catch { /* ignore */ }
-  }
-
-  private async buildAndUploadAll(state: DeviceState, report: S3v3SyncReport): Promise<{ lake: LakeIndex; quickNotes: QuickNotesIndex }> {
-    // 初始化上传也不得复活「云端已彻底删除·仅本地」的副本（用户定稿：本地只保留，不产生 S3 行为）。
-    const purgedIds = new Set(state.remotePurged ?? []);
-    const lakeEntries = new Map(state.lake.notes.filter((n) => !purgedIds.has(n.id)).map((n) => [n.id, { ...n }]));
-    for (const entry of lakeEntries.values()) {
-      const body = await this.device.readBody(entry.id);
-      if (!body) {
-        // 云端为空时没有可拉回的副本：跳过且不得声明进初始化索引（否则索引引用不存在的正文）。
-        this.warn("缺正文，跳过初始化上传: " + entry.id, { kind: "local_body_missing", noteId: entry.id, title: entry.title });
-        lakeEntries.delete(entry.id);
-        continue;
-      }
-      entry.contentHash = sha256Hex(body);
-      const decl = await this.uploadAssets("lake", entry.id, null);
-      if (decl) {
-        this.uploadOps.push({ space: "lake", noteId: entry.id, key: declarationKey("lake", entry.id, decl.declHash), bytes: new TextEncoder().encode(serializeDeclaration(decl.declaration)), gzip: true });
-        entry.assetsHash = decl.declHash;
-      }
-      this.uploadOps.push({ space: "lake", noteId: entry.id, key: lakeBodyKey(entry.id, entry.contentHash), bytes: body });
-      report.uploadedNotes++;
-    }
-    const quickEntries = new Map(state.quickNotes.items.filter((q) => !purgedIds.has(q.id)).map((q) => [q.id, { ...q }]));
-    for (const entry of quickEntries.values()) {
-      const body = await this.device.readQuickBody(entry.id);
-      if (!body) {
-        this.warn("缺小记正文，跳过初始化上传: " + entry.id, { kind: "local_body_missing", noteId: entry.id });
-        quickEntries.delete(entry.id);
-        continue;
-      }
-      entry.contentHash = sha256Hex(body);
-      const decl = await this.uploadQuickAssets(entry.id, null);
-      if (decl) {
-        this.uploadOps.push({ space: "quickNotes", noteId: entry.id, key: declarationKey("quickNotes", entry.id, decl.declHash), bytes: new TextEncoder().encode(serializeDeclaration(decl.declaration)), gzip: true });
-        entry.assetsHash = decl.declHash;
-      }
-      this.uploadOps.push({ space: "quickNotes", noteId: entry.id, key: quickNoteBodyKey(entry.contentHash), bytes: body });
-      report.uploadedNotes++;
-    }
-    const failures = await this.flushUploadOps();
-    if (failures.size > 0) throw new Error("初始化上传失败: " + [...failures.values()][0]);
-    return {
-      lake: { v: 3, space: "lake", notes: [...lakeEntries.values()].sort((a, b) => (a.id < b.id ? -1 : 1)), folders: state.folders },
-      quickNotes: { v: 3, space: "quickNotes", items: [...quickEntries.values()].sort((a, b) => (a.id < b.id ? -1 : 1)), tags: state.quickNotes.tags, ...((state.quickPurges ?? []).length ? { purged: [...(state.quickPurges ?? [])].sort() } : {}) },
-    };
   }
 
   /** 原生资产路径（261027）：lake/quickNotes 都走原生流式上传；无能力时返回 null ⇒ 回退字节路径。 */
@@ -1529,6 +1013,7 @@ export class S3v3SyncEngine {
         this.emitProgress({ phase: "uploads", done, total, bytesDone, bytesTotal });
       }
     });
+    this.addUploadedBytes(bytesDone);
     const failed = new Map<string, string>();
     for (const err of errors) {
       const op = ops[err.index];
@@ -1539,258 +1024,6 @@ export class S3v3SyncEngine {
 
   private async uploadQuickAssets(id: string, remoteDecl: AssetDeclaration | null) {
     return this.uploadAssets("quickNotes", id, remoteDecl);
-  }
-
-  /**
-   * 批量读本地正文（261026）：设备端口支持 readBodies 时按 100 篇一批读（移动端一次桥一批），
-   * 否则回退逐篇。缺失/异常一律 null（与 readLocalBody 同语义）。
-   */
-  private async readLocalBodies(space: "lake" | "quickNotes", ids: string[]): Promise<Map<string, Uint8Array | null>> {
-    const out = new Map<string, Uint8Array | null>();
-    const batchFn = space === "lake" ? this.device.readBodies : this.device.readQuickBodies;
-    const CHUNK = 100;
-    for (let i = 0; i < ids.length; i += CHUNK) {
-      const part = ids.slice(i, i + CHUNK);
-      if (batchFn) {
-        try {
-          const got = await batchFn.call(this.device, part);
-          part.forEach((id, j) => out.set(id, got[j] ?? null));
-          continue;
-        } catch { /* 端口异常：回退逐篇 */ }
-      }
-      for (const id of part) out.set(id, await this.readLocalBody(space, id));
-    }
-    return out;
-  }
-
-  /** 批量 stat 本地正文（261026）：端口不支持/异常返回 null（调用方回退读内容比对）。 */
-  private async statLocalBodies(space: "lake" | "quickNotes", ids: string[]): Promise<Map<string, { exists: boolean; size: number }> | null> {
-    if (ids.length === 0) return new Map();
-    const statFn = space === "lake" ? this.device.statBodies : this.device.statQuickBodies;
-    if (!statFn) return null;
-    const out = new Map<string, { exists: boolean; size: number }>();
-    const CHUNK = 100;
-    try {
-      for (let i = 0; i < ids.length; i += CHUNK) {
-        const part = ids.slice(i, i + CHUNK);
-        const got = await statFn.call(this.device, part);
-        part.forEach((id, j) => out.set(id, got[j] ?? { exists: false, size: 0 }));
-      }
-      return out;
-    } catch { return null; }
-  }
-
-  /** 读本地正文（缺失/异常一律 null；用于差集判定，不参与同步语义）。 */
-  private async readLocalBody(space: "lake" | "quickNotes", id: string): Promise<Uint8Array | null> {
-    try { return space === "lake" ? await this.device.readBody(id) : await this.device.readQuickBody(id); }
-    catch { return null; }
-  }
-
-  /** 本轮每篇的本地资产 size/hash 缓存（原生统计；仅移动端支持时填充）。 */
-  private localAssetStatsCache = new Map<string, Array<{ filename: string; size: number; hash: string }>>();
-
-  /** 本地资产清单（filename 集合）；扫描失败回退空集 = 全量下载（不改旧行为）。 */
-  private async localAssetNames(space: "lake" | "quickNotes", id: string): Promise<Set<string>> {
-    try {
-      const statsFn = space === "lake" ? this.device.listAssetStats : this.device.listQuickAssetStats;
-      if (statsFn) {
-        try {
-          const stats = await statsFn.call(this.device, id);
-          this.localAssetStatsCache.set(space + "/" + id, stats);
-          return new Set(stats.map((s) => s.filename));
-        } catch { /* 旧 APK/不支持：回退名字列表 */ }
-      }
-      return new Set(space === "lake" ? await this.device.listAssets(id) : await this.device.listQuickAssets(id));
-    } catch { return new Set(); }
-  }
-
-  private async readLocalAsset(space: "lake" | "quickNotes", id: string, filename: string): Promise<Uint8Array | null> {
-    try { return space === "lake" ? await this.device.readAsset(id, filename) : await this.device.readQuickAsset(id, filename); }
-    catch { return null; }
-  }
-
-  /** P0 资产下载差集：本地已持「同名 + 同 size + 同 sha256」⇒ 内容寻址下逐字节等价，跳过 GET。 */
-  private async localAssetMatches(space: "lake" | "quickNotes", id: string, a: AssetDeclaration["assets"][number], localNames: Set<string>): Promise<boolean> {
-    if (!localNames.has(a.filename)) return false;
-    // 移动端原生清单（261026）：size/hash 在原生算好并缓存（每篇只取一次），
-    // 避免把 20k 张图读回 JS 再逐字节 sha256（原 P0 热点）。
-    const cachedStats = this.localAssetStatsCache.get(space + "/" + id);
-    const hit = cachedStats?.find((s) => s.filename === a.filename);
-    if (hit) return hit.size === a.size && hit.hash === a.hash;
-    if (cachedStats) return false;
-    const have = await this.readLocalAsset(space, id, a.filename);
-    return !!have && have.length === a.size && sha256Hex(have) === a.hash;
-  }
-
-  /** 上传前正文缺失：按远端内容 hash 尝试从云端拉回（校验一致才落盘）。 */
-  private async restoreMissingBody(space: "lake" | "quickNotes", id: string, expectedHash?: string): Promise<Uint8Array | null> {
-    if (!expectedHash) return null;
-    const bytes = space === "lake" ? await this.getBody("lake", id, expectedHash) : await this.getQuickBody(expectedHash);
-    if (!bytes || sha256Hex(bytes) !== expectedHash) return null;
-    if (space === "lake") await this.device.writeBody(id, bytes);
-    else await this.device.writeQuickBody(id, bytes);
-    return bytes;
-  }
-
-  /**
-   * 登记某条的资产下载任务（P0-1）：只做「声明读取 + 本地差集判定」，真正 GET 由全局流水线执行。
-   * 与旧 downloadAssets 的差异：不再 per-note runPool（按篇 barrier，有效并发吃不满）。
-   */
-  private async scheduleAssets(space: "lake" | "quickNotes", id: string, declHash?: string, preloaded?: AssetDeclaration | null): Promise<AssetDeclaration | null> {
-    if (!declHash) return null;
-    const decl = preloaded !== undefined ? preloaded : await this.getDeclaration(space, id, declHash);
-    if (!decl) {
-      this.warn((space === "lake" ? "缺资产声明: " : "缺小记图片声明: ") + id, { kind: "remote_incomplete", noteId: id });
-      return null;
-    }
-    const localNames = await this.localAssetNames(space, id);
-    for (const a of decl.assets) {
-      if (await this.localAssetMatches(space, id, a, localNames)) continue; // 本地已持同内容：不产生 GET
-      this.assetTasks.push({
-        space, noteId: id, filename: a.filename,
-        key: space === "lake" ? assetKey(id, a.filename) : quickNoteAssetKey(id, a.filename),
-        size: a.size, hash: a.hash,
-      });
-    }
-    return decl;
-  }
-
-  /** 全局有界流水线执行全部资产下载：对象级失败隔离，谁先完成谁写盘。 */
-  private async flushAssetTasks(): Promise<void> {
-    const tasks = this.assetTasks;
-    this.assetTasks = [];
-    if (tasks.length === 0) return;
-    const bytesTotal = tasks.reduce((sum, t) => sum + (Number.isFinite(t.size) ? t.size : 0), 0);
-    this.phase("assets");
-    const result = await runTransferPipeline(tasks, this.downloadConcurrency, async (t) => {
-      // P0-4：原生流式下载（移动端 OkHttp 直写文件 + 原生 size/sha256 校验，字节不过 JS 桥）。
-      // 261027 Phase2：小记图片（quick-notes/assets）也走同一条原生通道。
-      if (this.remote.getToFile && (this.device.assetNativePathFor || this.device.assetNativePath)) {
-        try {
-          const dest = this.device.assetNativePathFor
-            ? await this.device.assetNativePathFor(t.space, t.noteId, t.filename)
-            : (t.space === "lake" && this.device.assetNativePath ? await this.device.assetNativePath(t.noteId, t.filename) : null);
-          if (dest) {
-            const status = await this.remote.getToFile(t.key, dest, { size: t.size, sha256: t.hash });
-            if (status === "ok") { this.clearPendingAsset(t); return t.size; }
-            if (status === "missing") {
-              this.warn("缺附件: " + t.noteId + "/" + t.filename, { kind: "asset_missing", noteId: t.noteId, filename: t.filename });
-              this.markPendingAsset(t);
-              return 0;
-            }
-            if (status === "corrupt") {
-              this.warn("附件校验失败: " + t.noteId + "/" + t.filename, { kind: "asset_missing", noteId: t.noteId, filename: t.filename });
-              this.markPendingAsset(t);
-              return 0;
-            }
-            // unsupported → 回退下面的字节路径
-          }
-        } catch { /* 原生路径异常 → 回退字节路径，保证可用性 */ }
-      }
-      // 261027：桌面端大对象走 Range 分片并发（移动端有原生整对象流式，不在此列）。
-      const ranged = t.space === "lake" && !this.remote.getToFile
-        ? await this.downloadAssetByRanges(t.key, t.size, t.hash)
-        : null;
-      const bytes = ranged ?? await this.remote.get(t.key);
-      if (!bytes) {
-        this.warn((t.space === "lake" ? "缺附件: " : "缺小记图片: ") + t.noteId + "/" + t.filename, { kind: "asset_missing", noteId: t.noteId, filename: t.filename });
-        this.markPendingAsset(t);
-        return 0;
-      }
-      if (bytes.length !== t.size || sha256Hex(bytes) !== t.hash) {
-        this.warn((t.space === "lake" ? "附件校验失败: " : "小记图片校验失败: ") + t.noteId + "/" + t.filename, { kind: "asset_missing", noteId: t.noteId, filename: t.filename });
-        this.markPendingAsset(t);
-        return 0;
-      }
-      try {
-        if (t.space === "lake") await this.device.writeAsset(t.noteId, t.filename, bytes);
-        else await this.device.writeQuickAsset(t.noteId, t.filename, bytes);
-      } catch (e) {
-        this.warn("附件落盘失败: " + t.noteId + "/" + t.filename + " " + (e as Error).message, { kind: "asset_missing", noteId: t.noteId, filename: t.filename });
-        this.markPendingAsset(t);
-        return 0;
-      }
-      this.clearPendingAsset(t);
-      return bytes.length;
-    }, {
-      phase: "assets",
-      totalOverride: tasks.length,
-      bytesTotal,
-      onProgress: (p) => this.emitProgress(p),
-    });
-    for (const err of result.errors) {
-      const t = tasks[err.index];
-      if (!t) continue;
-      this.warn("附件下载异常: " + t.noteId + "/" + t.filename + " " + ((err.error as Error)?.message ?? String(err.error)), { kind: "asset_missing", noteId: t.noteId, filename: t.filename });
-      this.markPendingAsset(t);
-    }
-  }
-
-  /** 记账：本轮失败的资产 → 待补账本（同一条目合并、attempts 累加，超限丢弃）。 */
-  private markPendingAsset(t: { space: "lake" | "quickNotes"; noteId: string; filename: string; size: number; hash: string }): void {
-    const hit = this.pendingAssets.find((e) => e.space === t.space && e.id === t.noteId && e.filename === t.filename);
-    if (hit) {
-      hit.attempts += 1;
-      hit.size = t.size;
-      hit.hash = t.hash;
-    } else {
-      this.pendingAssets.push({ space: t.space, id: t.noteId, filename: t.filename, size: t.size, hash: t.hash, attempts: 1 });
-    }
-    // 超限丢弃（对象可能已被云端清理/声明过期）：只清本数组内的过期项，不打断调用方。
-    for (let i = this.pendingAssets.length - 1; i >= 0; i--) {
-      if (this.pendingAssets[i].attempts > MAX_PENDING_ASSET_ATTEMPTS) this.pendingAssets.splice(i, 1);
-    }
-    if (this.pendingAssets.length > MAX_PENDING_ASSETS) this.pendingAssets.splice(0, this.pendingAssets.length - MAX_PENDING_ASSETS);
-  }
-
-  /** 销账：本轮成功的资产从待补账本移除。 */
-  private clearPendingAsset(t: { space: "lake" | "quickNotes"; noteId: string; filename: string }): void {
-    const idx = this.pendingAssets.findIndex((e) => e.space === t.space && e.id === t.noteId && e.filename === t.filename);
-    if (idx >= 0) this.pendingAssets.splice(idx, 1);
-  }
-
-  /**
-   * 重试上一轮失败的资产（261027）：普通增量轮不会 applyRemote 重调度资产，失败即永久缺失
-   * （旧协议「每变更轮差集」的退步）。每轮同步开头把账本里的条目重新排进全局流水线，
-   * 失败继续留账（attempts+1），成功销账；账本随 state 持久化，重启后仍生效。
-   */
-  private async retryPendingAssets(): Promise<void> {
-    if (this.pendingAssets.length === 0) return;
-    for (const e of this.pendingAssets) {
-      this.assetTasks.push({
-        space: e.space, noteId: e.id, filename: e.filename,
-        key: e.space === "lake" ? assetKey(e.id, e.filename) : quickNoteAssetKey(e.id, e.filename),
-        size: e.size, hash: e.hash,
-      });
-    }
-    await this.flushAssetTasks();
-  }
-
-  /**
-   * 大对象 Range 分片并发下载（261027）：按 chunkBytes 切成 2–8 片并行 GET，拼回并校验 sha256。
-   * 任一失败/校验不符返回 null（调用方回退整对象 GET）。仅用于字节路径（桌面），移动端原生流式优先。
-   */
-  private async downloadAssetByRanges(key: string, size: number, hash: string): Promise<Uint8Array | null> {
-    const getRange = this.remote.getRange;
-    const chunk = this.largeAssetChunkBytes;
-    if (!getRange || chunk <= 0 || size <= chunk) return null;
-    const parts = Math.min(8, Math.max(2, Math.ceil(size / chunk)));
-    const partSize = Math.ceil(size / parts);
-    try {
-      const slices = await Promise.all(Array.from({ length: parts }, (_, index) => {
-        const start = index * partSize;
-        if (start >= size) return Promise.resolve(new Uint8Array(0));
-        return getRange.call(this.remote, key, start, Math.min(size, start + partSize));
-      }));
-      if (slices.some((slice) => slice === null)) return null;
-      const total = slices.reduce((sum, slice) => sum + (slice?.length ?? 0), 0);
-      if (total !== size) return null;
-      const out = new Uint8Array(size);
-      let offset = 0;
-      for (const slice of slices) { out.set(slice!, offset); offset += slice!.length; }
-      if (sha256Hex(out) !== hash) return null;
-      return out;
-    } catch { return null; }
   }
 
   /**
@@ -1885,11 +1118,13 @@ export class S3v3SyncEngine {
     return { deleted: toDelete, kept: keep.size, dryRun: !!opts.dryRun, skippedRecent, ageUnknown, previousIndexes };
   }
 
-  /** 全量重拉（epoch/回滚/换桶后由 UI 调用）：云端赢，本地多出的归档。 */
+  /** 全量重拉（epoch/回滚/换桶后由 UI 调用）：云端赢，本地多出的归档（v4 四相）。 */
   async resetFromCloud(): Promise<S3v3SyncReport> {
     const pointer = await this.readPointer();
     if (!pointer) throw new S3v3SyncError("pointer-corrupt", "云端没有 pointer，无法全量重拉");
     const state = (await this.device.loadState()) ?? emptyState();
-    return this.pullAll(pointer, { ...state, pending: [] }, { downloadedNotes: 0, uploadedNotes: 0, deletedObjects: 0, published: false, generation: null, warnings: [], warningDetails: [], supersededNotes: [] }, true);
+    const report: S3v3SyncReport = { downloadedNotes: 0, uploadedNotes: 0, deletedObjects: 0, published: false, generation: null, warnings: this.warnings, warningDetails: this.warningDetails, supersededNotes: this.supersededNotes };
+    this.report = report;
+    return this.syncPullAllRound(pointer, { ...state, pending: [] }, report, {});
   }
 }

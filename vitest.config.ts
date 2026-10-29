@@ -16,7 +16,11 @@ export default defineConfig({
     },
   },
   test: {
-    include: ["electron/**/*.test.ts", "src/**/*.test.ts"],
+    // 默认仍只收 node 环境的 .test.ts；额外两条例外各自最小：
+    // - src/**/*.render.test.tsx：DT-04 桌面行为护栏试点（文件头用 @vitest-environment jsdom 逐文件切换环境，
+    //   不改变全局 node 默认；扩展方式 = 复制该命名 + 只在文件内 render，不要引入 testing-library）；
+    // - scripts/**/*.test.ts：只收 CSS 审计等脚本的自证用例（同样是 node 环境）。
+    include: ["electron/**/*.test.ts", "src/**/*.test.ts", "src/**/*.render.test.tsx", "scripts/**/*.test.ts"],
     environment: "node",
     setupFiles: ["src/mobile/testSetup.ts"],
   },

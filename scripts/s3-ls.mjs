@@ -18,7 +18,7 @@ const cfg = {
   endpoint: process.env.S3_ENDPOINT || "https://s3.cn-north-1.qiniucs.com",
   region: process.env.S3_REGION || "cn-north-1",
   bucket: process.env.S3_BUCKET || "local-lake-hebei",
-  prefix: process.env.S3_PREFIX || "local-lakex-notes",
+  prefix: process.env.S3_PREFIX || "lakex-local-notes",
   accessKeyId: process.env.S3_AK?.trim() || "",
   secretAccessKey: process.env.S3_SK?.trim() || "",
 };

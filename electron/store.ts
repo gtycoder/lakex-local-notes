@@ -18,11 +18,12 @@ import { emptyBitableBody } from "../src/core/bitableDoc.js";
 import { emptyBoardBody } from "../src/core/boardDoc.js";
 import { emptyInkBody } from "../src/core/inkDoc.js";
 import { searchTextForKind } from "../src/core/noteSearchText.js";
-import { countChars, countWords } from "../src/core/textStats.js";
+import { countTextStats } from "../src/core/textStats.js";
 import { missingBodyRecovery, type MissingBodyDoc } from "../src/core/missingBody.js";
 import { canTouchNetwork, cloudStateOf } from "../src/core/cloudState.js";
 import { SearchRepository } from "./searchRepository.js";
 import type { SearchResult } from "../src/core/searchTypes.js";
+import type { S3v3DiagnosticReport } from "../src/core/s3v3Report.js";
 import { HistoryRepository, type HistorySnapshotPreview, type HistorySnapshotSummary } from "./historyRepository.js";
 import { TrashRepository } from "./trashRepository.js";
 import { TrashLifecycle } from "./trashLifecycle.js";
@@ -47,13 +48,15 @@ import { draftJournalDir, readDraftEntry } from "./draftJournal.js";
 import { RemoteImportRepository } from "./remoteImportRepository.js";
 import type { ResourceUploadOutput, HistorySettings, HistoryCleanupResult, S3Settings, SyncSettings, S3GcSettings } from "./storeTypes.js";
 import { fileKindOf, renameFileCardDisplay, scanAssetCards } from "../src/core/fileCard.js";
+import { TRASH_NOTEBOOK_ID } from "../src/core/syncDecisions.js";
 
 export { ASSET_NAME_RE, extractAssetRefs, isoWeekKey, selectHistoryDrops, sanitizeFileName } from "../src/core/storeUtils.js";
 
 const DEFAULT_WORKSPACE_ID = "default";
 const DEFAULT_NOTEBOOK_ID = "notebook-personal";
-/** 隐藏回收站笔记本（固定 ID，每端本地初始化、不同步 folder；软删 = 移入此处）。 */
-export const TRASH_NOTEBOOK_ID = "notebook-trash";
+/** 隐藏回收站笔记本（固定 ID，每端本地初始化、不同步 folder；软删 = 移入此处）。
+ * **单一来源 = `src/core/syncDecisions.ts`（CORE-09）**：上面 import 后在此再导出，值仍是 "notebook-trash"。 */
+export { TRASH_NOTEBOOK_ID };
 
 export { MAX_IMAGE_BYTES, MAX_IMAGE_PIXELS } from "../src/core/storeLimits.js";
 
@@ -160,6 +163,10 @@ export class Store {
   private orphanLifecycle: OrphanLifecycle;
   private diagnostics: Diagnostics;
   private syncReconciliation: SyncReconciliation;
+  /** v3（261027 P0 止血配套）：最近一次已发布到云端的文档 id 集合（内存态）。
+   *  「缺正文」面板的「可云恢复」判据读它（Del-6：v2 的 sync_base 账本已删，这里是唯一事实）；
+   *  重启后由下一次同步回填（首轮同步前保持空 = 退回「仅历史」）。 */
+  private remoteNoteIds = new Set<string>();
   private settingsRepository: SettingsRepository;
   private noteExport: NoteExport;
   private schemaInit: SchemaInit;
@@ -417,7 +424,7 @@ export class Store {
     const last = this.db.prepare("SELECT value FROM device_state WHERE key='last_opened_note_id'").get() as { value: string } | undefined;
     return {
       workspaceId: DEFAULT_WORKSPACE_ID,
-      workspaceName: "LocalLakexNotes 本地仓库",
+      workspaceName: "LakexLocalNotes 本地仓库",
       notes,
       lastOpenedNoteId: last?.value ?? null,
       sync: { phase: "idle", message: "仅本地保存", lastSyncedAt: null, pendingChanges: 0 },
@@ -752,8 +759,7 @@ export class Store {
     const sizeBytes = fs.existsSync(lakePath) ? fs.statSync(lakePath).size : 0;
     const plain = this.readNoteCaches(id).plain ?? this.searchTextFor(id, doc.content).plain ?? "";
     // 字数/字符数 = 与内核 wordCount 同语义的单一来源（261016，B1；此前这里另写了一套正则）。
-    const charCount = countChars(plain);
-    const wordCount = countWords(plain);
+    const { charCount, wordCount } = countTextStats(plain);
     const seen = new Set<string>();
     const assets: NoteInfoAsset[] = [];
     for (const card of scanAssetCards(doc.content)) {
@@ -1188,18 +1194,17 @@ export class Store {
     return !fs.existsSync(this.notePath(id));
   }
   /**
-   * 资源页「缺正文」清单（261023）：只 stat、不读正文；带历史快照数 / 同步基线 / 云配置，
+   * 资源页「缺正文」清单（261023）：只 stat、不读正文；带历史快照数 / v3 云端事实 / 云配置，
    * 供 UI 分组（云可恢复 / 仅历史 / 无备份）与处置。
    */
   listMissingBodies(): MissingBodyDoc[] {
     const rows = this.db.prepare(`
       SELECT n.id, n.title, n.kind, n.updated_at, n.parent_id,
              (SELECT COUNT(*) FROM note_history h WHERE h.note_id = n.id) AS history_count,
-             (SELECT MAX(h.id) FROM note_history h WHERE h.note_id = n.id) AS last_history_id,
-             (SELECT 1 FROM sync_base b WHERE b.note_id = n.id) AS has_sync_base
+             (SELECT MAX(h.id) FROM note_history h WHERE h.note_id = n.id) AS last_history_id
       FROM notes n
       WHERE n.deleted_at IS NULL AND n.parent_id != ?
-    `).all(TRASH_NOTEBOOK_ID) as Array<{ id: string; title: string; kind: string | null; updated_at: string; parent_id: string | null; history_count: number; last_history_id: number | null; has_sync_base: number | null }>;
+    `).all(TRASH_NOTEBOOK_ID) as Array<{ id: string; title: string; kind: string | null; updated_at: string; parent_id: string | null; history_count: number; last_history_id: number | null }>;
     // 可云恢复 = 已配置 S3 **且**允许出网（「关闭云同步 = 完全没配置」红线：关闭时任何路径不出网）。
     // 只配置但关闭同步的库，这条判据为 false，UI 会归到"仅历史 / 无备份"，不会诱导点击后报"云同步不可用"。
     const cloudConfigured = canTouchNetwork(cloudStateOf(this.getS3Settings() !== null, this.getSyncSettings()));
@@ -1207,7 +1212,9 @@ export class Store {
     for (const row of rows) {
       if (fs.existsSync(this.notePath(row.id))) continue;
       const historyCount = Number(row.history_count) || 0;
-      const hasSyncBase = row.has_sync_base === 1;
+      // 「曾经同步过」的 v3 事实 = 上一轮成功同步后回填的云端文档集合（desktopSync → markRemoteNoteIds）。
+      // Del-6：删掉 sync_base 旧兜底后这是唯一判据（v3 从不写 sync_base，读它只会永远漏判）。
+      const hasSyncBase = this.remoteNoteIds.has(row.id);
       out.push({
         id: row.id,
         title: row.title,
@@ -1222,7 +1229,25 @@ export class Store {
       });
     }
     out.sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""));
+    // 事件驱动：体检确实发现了缺正文才入队（正常同步不扫描、零额外 IO）。
+    if (out.length > 0) this.markBodyRecoveryPending(out.map((d) => d.id));
     return out;
+  }
+
+  /** 缺正文恢复队列（事件驱动）：只在体检/读失败时入队，同步侧只消费一个小数组，不做全库扫描。 */
+  markBodyRecoveryPending(ids: string[]): void {
+    if (ids.length === 0) return;
+    const cur = this.listBodyRecoveryPending();
+    const next = [...new Set([...cur, ...ids])];
+    this.db.prepare("INSERT INTO device_state(key,value) VALUES('body_recovery_pending',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(JSON.stringify(next));
+  }
+  listBodyRecoveryPending(): string[] {
+    const row = this.db.prepare("SELECT value FROM device_state WHERE key='body_recovery_pending'").get() as { value: string } | undefined;
+    if (!row) return [];
+    try { const arr = JSON.parse(row.value); return Array.isArray(arr) ? arr.filter((x) => typeof x === "string") : []; } catch { return []; }
+  }
+  clearBodyRecoveryPending(): void {
+    this.db.prepare("DELETE FROM device_state WHERE key='body_recovery_pending'").run();
   }
 
   /** 从云端恢复正文时落盘（原子写；调用方负责校验 hash 与记账）。 */
@@ -1293,35 +1318,7 @@ export class Store {
     return this.syncReconciliation.contentHash(id);
   }
 
-  baseHash(id: string): string | null {
-    return this.syncReconciliation.baseHash(id);
-  }
-
-  setBaseHash(id: string, hash: string): void {
-    this.syncReconciliation.setBaseHash(id, hash);
-  }
-
-  /** P0-1：本机最后一次成功上传某文档的 hash；null = 清除（两端一致 skip 记账用）。 */
-  setLastUploadedHash(id: string, hash: string | null): void {
-    this.syncReconciliation.setLastUploadedHash(id, hash);
-  }
-
-  /** P0-1：读本机最后一次上传的 hash（无则 null） */
-  lastUploadedHash(id: string): string | null {
-    return this.syncReconciliation.lastUploadedHash(id);
-  }
-
-  /** 统一冲突语义：本设备"上次成功同步时该笔记的 updated_at"（元数据已确认版本；无则 null）。 */
-  lastSyncedMetaAt(id: string): string | null {
-    return this.syncReconciliation.lastSyncedMetaAt(id);
-  }
-
-  /** 批量读 hash 账本（同步环一次预载）。 */
-  getAllSyncBases(): Map<string, { contentHash: string; lastUploadedHash: string | null; lastSyncedMetaAt: string | null }> {
-    return this.syncReconciliation.getAllSyncBases();
-  }
-
-  /** 只读锁：本地操作；不触碰正文/updated_at，锁同步走 manifest v3 独立字段 */
+  /** 只读锁：本地操作；不触碰正文/updated_at，锁同步走 v3 索引条目字段（v3 无 manifest） */
   setNoteEditLocked(id: string, locked: boolean): void {
     this.noteMetadata.setNoteEditLocked(id, locked);
   }
@@ -1374,27 +1371,6 @@ export class Store {
     this.settingsRepository.saveSyncSettings(settings);
   }
 
-  addS3GcPending(key: string, markedAt?: string): void {
-    this.syncReconciliation.addS3GcPending(key, markedAt);
-  }
-
-  removeS3GcPending(keys: string[]): void {
-    this.syncReconciliation.removeS3GcPending(keys);
-  }
-
-  listS3GcPending(): Array<{ key: string; markedAt: string }> {
-    return this.syncReconciliation.listS3GcPending();
-  }
-  /** A 方案：记录 manifest 声明的资产元数据（即使本地文件缺失，上传 union 仍可正确声明）。 */
-  recordDeclaredAssets(noteId: string, assets: Array<{ filename: string; size: number; hash: string }>): void {
-    this.syncReconciliation.recordDeclaredAssets(noteId, assets);
-  }
-
-  /** A 方案：列出该笔记已声明（含本地缺失但 manifest 声明过）的资产元数据。 */
-  listDeclaredAssets(noteId: string): Array<{ filename: string; size: number; hash: string }> {
-    return this.syncReconciliation.listDeclaredAssets(noteId);
-  }
-
   recordS3GcLog(action: string, key: string, reason: string, commitId: string | null, deviceId: string | null, ok: boolean): void {
     this.syncReconciliation.recordS3GcLog(action, key, reason, commitId, deviceId, ok);
   }
@@ -1409,6 +1385,15 @@ export class Store {
 
   recordSyncResult(json: string): void {
     this.syncReconciliation.recordSyncResult(json);
+  }
+
+  /** SD-13：最近 3 轮 v3 同步诊断（device_state.sync_v3_reports；设置页「同步诊断」一键复制）。 */
+  recordV3SyncReport(report: S3v3DiagnosticReport): void {
+    this.syncReconciliation.recordV3SyncReport(report);
+  }
+
+  listV3SyncReports(): S3v3DiagnosticReport[] {
+    return this.syncReconciliation.listV3SyncReports();
   }
 
   /** P4：记录最近一次历史清理结果（自动/手动），供设置面板展示与排查 */
@@ -1525,9 +1510,18 @@ export class Store {
       .map((r) => ({ id: r.id, purgedAt: r.purged_at }));
   }
 
-  /** 墓碑已发布到 manifest：标记 published_at；墓碑本体永久保留（审计 #2）。 */
-  markTombstonesPublished(ids: string[]): void {
-    this.syncReconciliation.markTombstonesPublished(ids);
+  /** v3 同步成功后回填：这批文档在云端有副本（缺正文时可尝试从云端拉回）。 */
+  markRemoteNoteIds(ids: string[]): void {
+    this.remoteNoteIds = new Set(ids);
+  }
+
+  /** Del-6（261029）：墓碑发布**水线**（替代逐行 published_at；desktopSync 成功后写入）。
+   * 待同步判据 = deleted_at > 水线（见 syncReconciliation）。 */
+  markTombstonesWaterline(at?: string): void {
+    this.syncReconciliation.markTombstonesWaterline(at);
+  }
+  getTombstonesWaterline(): string {
+    return this.syncReconciliation.getTombstonesWaterline();
   }
 
   /** 零变更早退：本设备上次成功读/写的 manifest commitId（device_state）。 */
@@ -1576,11 +1570,6 @@ export class Store {
   /** 是否有本地待上传变更（早退判定；详见 syncReconciliation）。 */
   hasLocalPendingNotes(): boolean {
     return this.syncReconciliation.hasLocalPendingNotes();
-  }
-
-  /** 批量读取同步基线信息（一次性取回，替代逐条 lastSyncedMetaAt 查询 + 支撑记账去重）。 */
-  allSyncBaseInfo(): Map<string, { syncState: string; updatedAt: string; baseHash: string | null; lastSyncedMetaAt: string | null; lastUploadedHash: string | null }> {
-    return this.syncReconciliation.allSyncBaseInfo();
   }
 
   /** 本地已彻底删除（purge）过的 folder/group（永久判定，node_type='folder' 墓碑；详见 syncReconciliation）。 */

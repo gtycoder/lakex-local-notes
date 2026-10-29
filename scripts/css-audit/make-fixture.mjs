@@ -10,7 +10,7 @@
  *      env -u ELECTRON_RUN_AS_NODE LAKE_USER_DATA="$RUN" LAKE_ASSET_PORT=19810 \
  *        ./node_modules/.bin/electron --disable-gpu --remote-debugging-port=9231 .
  *   2) node scripts/css-audit/drive.mjs 9231 scripts/css-audit/make-fixture.mjs
- *   3) 结束实例 → 把 $RUN 冻到 ~/Library/Caches/local-lakex-notes-css-audit/fixture（**整份重烤一次**基线）
+ *   3) 结束实例 → 把 $RUN 冻到 ~/Library/Caches/lakex-local-notes-css-audit/fixture（**整份重烤一次**基线）
  * 注意：笔记 id 是 uuid ⇒ **每次重新生成都会换一套 id**，所以重新生成后必须整份重烤。
  */
 

@@ -177,7 +177,7 @@ r.tokensGuard = { forbiddenAliasRefs: aliasHits, undefinedLakeRefs: undefHits, a
 //   ③ 「文字一律用 --lake-accent-text」与「同一 (选择器,属性) 不得跨文件重复」都没有判据。
 // 基线 = 首次实测存量，**只许降**（清理时同步调小；清理批次见 CODE-REVIEW §7 的 B2）。
 const BASELINE = {
-  desktopImportant: 11,        // = IMPORTANT_ALLOWLIST.length（见下）；只许降，且不得出现清单外的 !important
+  desktopImportant: 10,        // = IMPORTANT_ALLOWLIST.length（见下）；只许降，且不得出现清单外的 !important
   mobileImportant: 19,         // 移动端 !important 棘轮（主要是 edit-surface-kernel.css 压内核未分层样式）
   mobileColorLiterals: 0,      // 261016 B2 已清零：28 处收编进 src/mobile/theme/tokens.css（取值不变）⇒ 与桌面同为硬 0
   accentTextMisuse: 0,         // 261016 B2 已清零（原 36）：文字色一律 --lake-accent-text
@@ -197,7 +197,6 @@ const IMPORTANT_ALLOWLIST = [
   { file: 'styles/tokens.css', sel: '.create-menu, .context-menu', prop: 'backdrop-filter', why: 'prefers-reduced-transparency 契约：要压所有浮层的毛玻璃，含第三方/内核浮层' },
   { file: 'styles/tokens.css', sel: '.create-menu, .context-menu', prop: '-webkit-backdrop-filter', why: '同上（-webkit- 前缀）' },
   { file: 'styles/tokens.css', sel: '.create-menu, .context-menu', prop: 'background', why: '同上（改用不透明面板底）' },
-  { file: 'styles/compat.css', sel: '.fn__none', prop: 'display', why: '思源遗留的隐藏类仍作 JSX/内核钩子用；本条在 legacy 层，被隐藏的元素可能带内核未分层样式 ⇒ 需要 important' },
   { file: 'styles/app/quick-notes.css', sel: '.quick-notes-pane .lake-editor-mount.ne-ui-fullscreen', prop: 'position', why: '内核 legacy 里有 position:fixed!important（实测仍会盖住红绿灯）' },
   { file: 'features/usheet/usheetEditor.css', sel: '.usheet-editor section:has([data-u-comp="slide-tab-bar"])', prop: 'height', why: '内核把高度写成 **inline style** style="height: 36px"（实测；非类非变量）' },
 ];

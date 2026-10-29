@@ -6,27 +6,28 @@
  * 域之间的少量 helper（mobileCloudState 等）由 sync 域导出给 bridge/quickNotes 复用。
  */
 import { NativeSqliteDb } from "../native/nativeSqliteDb";
-import { saveAssetBytesFs, loadAssetBytesFs, removeAssetBytesFs, listNoteAssetKeysFs } from "../native/assetFs";
+
 import { applyMobileSchema } from "../data/schema";
 import { ensureV3StateTable } from "../data/v3StateRepository";
 import { reconcileIndex } from "../data/searchIndex";
-import { createMobileSyncDbPort } from "../data/syncDbPort";
+import { createMobileLocalStorePort, type MobileLocalStorePort } from "../data/localStorePort";
 import { sniffImageFormat, readImageDimensions } from "../../core/imageUtils.js";
 import { MAX_ATTACHMENT_BYTES, MAX_IMAGE_BYTES, MAX_IMAGE_PIXELS } from "../../core/storeLimits.js";
+import { loadSettings } from "../../lib/settings";
 import { classifyOp, type MaintenanceOp, type PriorityOp, type WriteOp } from "../../core/maintenancePolicy.js";
+import { normalizeSyncSettings } from "../../core/syncSettings.js";
 import { maintenanceQueue, priorityQueue, writeLock } from "../sync/maintenanceLocks";
 import { createMobileS3Client } from "../native/s3Store";
-import type { SyncDbPort } from "../../core/syncEngineTypes.js";
 import type { S3Settings, SyncSettings } from "../../lib/types";
 
-/** 与桌面一致的默认同步 prefix（对齐桌面 store.ts 默认 "local-lakex-notes"；P1-7 GPT 审计：ab-test-verify 仅限测试） */
-export const DEFAULT_S3_PREFIX = "local-lakex-notes";
+/** 与桌面一致的默认同步 prefix（对齐桌面 store.ts 默认 "lakex-local-notes"；P1-7 GPT 审计：ab-test-verify 仅限测试） */
+export const DEFAULT_S3_PREFIX = "lakex-local-notes";
 
-export const S3_STORAGE_KEY = "local-lakex-notes-mobile.s3";
+export const S3_STORAGE_KEY = "lakex-local-notes-mobile.s3";
 /** 云同步开关 / 自动同步节奏（与桌面 SyncSettings 同形）。关闭 = 纯离线本地空间（用户 261006 定稿）。 */
-export const SYNC_STORAGE_KEY = "local-lakex-notes-mobile.sync";
+export const SYNC_STORAGE_KEY = "lakex-local-notes-mobile.sync";
 export const DEFAULT_SYNC_SETTINGS: SyncSettings = { enabled: true, autoMode: "manual", autoIntervalMinutes: 15 };
-const MOBILE_DATABASE = "local-lakex-notes-mobile";
+const MOBILE_DATABASE = "lakex-local-notes-mobile";
 
 /** 是否已存过 S3 配置（只判本地是否存在，不读密钥；密钥在 Keystore）。 */
 function hasStoredS3Settings(): boolean {
@@ -49,18 +50,12 @@ export function hasStoredSyncSettings(): boolean {
 export function readSyncSettings(): SyncSettings {
   // 261022（用户点单，与桌面同口径）：**默认开关 = 是否已配置 S3** —— 全新安装没有任何 S3 配置时
   // 「启用云同步」默认关闭（没配置与关掉语义等价）；已配置的旧库仍默认开着（不回归）；存过的值优先。
-  const fallback = { ...DEFAULT_SYNC_SETTINGS, enabled: hasStoredS3Settings() };
+  const fallback: SyncSettings = { ...DEFAULT_SYNC_SETTINGS, enabled: hasStoredS3Settings() };
   try {
     const raw = localStorage.getItem(SYNC_STORAGE_KEY);
     if (!raw) return fallback;
-    const parsed = JSON.parse(raw) as Partial<SyncSettings>;
-    return {
-      enabled: parsed.enabled !== false,
-      autoMode: parsed.autoMode === "interval" || parsed.autoMode === "onOpenClose" ? parsed.autoMode : "manual",
-      autoIntervalMinutes: typeof parsed.autoIntervalMinutes === "number" ? parsed.autoIntervalMinutes : 15,
-      // 按需资产（P0-4）：缺省 false（全量），存过 true 才生效。
-      ...(parsed.deferAssets === true ? { deferAssets: true } : {}),
-    };
+    // 归一单一来源 = core/syncSettings（CORE-14）：与桌面同一套白名单 / interval≥1 / deferAssets 缺省。
+    return normalizeSyncSettings(JSON.parse(raw), fallback);
   } catch {
     return fallback;
   }
@@ -70,6 +65,14 @@ export let db: NativeSqliteDb | null = null;
 let dbInitialization: Promise<NativeSqliteDb> | null = null;
 /** 运行期资源缓存（新上传/同步中使用）；持久化资源不在启动时全量载入。key = "{noteId}/{filename}" */
 export const assets = new Map<string, Uint8Array>();
+
+/** 附件实际上限 = 设置里的「附件大小上限」（与设置页同键），并夹到协议上限。
+ *  图片仍走 MAX_IMAGE_BYTES（图片档位与附件档位是两件事，不合并）。 */
+export function effectiveAttachmentLimitBytes(): number {
+  const configured = loadSettings().maxAttachmentBytes;
+  if (!Number.isFinite(configured) || configured <= 0) return MAX_ATTACHMENT_BYTES;
+  return Math.min(configured, MAX_ATTACHMENT_BYTES);
+}
 
 export function assertResourceBytes(bytes: Uint8Array): void {
   if (sniffImageFormat(bytes) != null) {
@@ -81,7 +84,8 @@ export function assertResourceBytes(bytes: Uint8Array): void {
     return;
   }
   if (bytes.length === 0) throw new Error("附件为空");
-  if (bytes.length > MAX_ATTACHMENT_BYTES) throw new Error(`附件超过 ${MAX_ATTACHMENT_BYTES / 1024 / 1024} MiB 协议上限`);
+  const limit = effectiveAttachmentLimitBytes();
+  if (bytes.length > limit) throw new Error(`附件超过 ${limit / 1024 / 1024} MiB 上传上限`);
 }
 
 export async function initializeDb(): Promise<NativeSqliteDb> {
@@ -121,13 +125,8 @@ export async function createS3Client(cfg: S3Settings): Promise<import("@aws-sdk/
   });
 }
 
-export const dbPort: SyncDbPort = createMobileSyncDbPort(() => db!, {
-  assets,
-  saveAssetFile: saveAssetBytesFs,
-  loadAssetFile: loadAssetBytesFs,
-  removeAssetFile: removeAssetBytesFs,
-  listNoteAssetKeys: listNoteAssetKeysFs,
-});
+/** 同步仍需要的本地存储最小面（D-7 收口后：兜底笔记本 + 墓碑族；v2 SyncDbPort 其余方法已删）。 */
+export const dbPort: MobileLocalStorePort = createMobileLocalStorePort(() => db!);
 
 /** 判据校验：调用点声明的类别必须与 src/core/maintenancePolicy.ts 的表一致（写错当场抛，不静默降级）。 */
 export function assertOpClass(op: string, expected: "write" | "maintenance" | "priority"): void {

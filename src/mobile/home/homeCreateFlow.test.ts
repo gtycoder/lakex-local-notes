@@ -31,6 +31,9 @@ const COMPOSER = code(read("./QuickNoteComposer.tsx"));
 const MOBILE_APP = code(read("../MobileApp.tsx"));
 const PRESS = code(read("../ui/createPress.ts"));
 const CSS = code(read("../mobile.css"));
+/** 分页状态机（纯函数 + DOM 适配层）：判据不再写在 HomePage 里。 */
+const TAB_PAGER = code(read("./tabPager.ts"));
+const PAGER = code(read("./useTabPager.ts"));
 
 describe("首页新建流（261014）", () => {
   it("从工作区回到首页会刷新列表（261020：新建/编辑后笔记本计数不能停在旧值）", () => {
@@ -139,16 +142,22 @@ describe("首页新建流（261014）", () => {
     expect((HOME.match(/className="mobile-tab-pane"/g) || []).length).toBe(2);
     expect(HOME).not.toContain("useHorizontalSwipe");
     expect(HOME).not.toMatch(/key=\{tab\}/);
-    // 分页判据 = 纯函数单一来源（home/tabPager），HomePage 只做接线
-    expect(HOME).toMatch(/settledIndex\(el\.scrollLeft/);
-    expect(HOME).toMatch(/pagerScrollLeft\(tabIndexRef\.current/);
-    // 标签跟随：**过半即回写**（不能等 scrollend，否则会短暂"页是新的、标签还是旧的"）+ 触摸期间不做程序化对齐
-    expect(HOME).toContain('addEventListener("scroll", commit');
-    expect(HOME).toContain("interactingRef.current = true");
-    expect(HOME).toMatch(/alignStage[\s\S]{0,120}interactingRef\.current\) return/);
-    // 程序化滚动（点 tab / 宽度重对齐）期间的 scroll 事件不能回写 tab，否则动画开头会把标签弹回旧页
-    expect(HOME).toContain("programmaticRef.current = true");
-    expect(HOME).toMatch(/if \(programmaticRef\.current\) return/);
+    // 分页判据/状态机 = 纯函数单一来源（home/tabPager 的 reducePager + 单测 tabPager.test.ts），
+    // HomePage 只接线；四份 ref 镜像（interacting/commitByScroll/programmatic/timer）与 alignStage 已删除。
+    expect(TAB_PAGER).toContain("export function reducePager");
+    expect(PAGER).toContain("reducePager(");
+    expect(HOME).toContain("useTabPager({ tab, onTabChange })");
+    for (const dead of ["interactingRef", "commitByScrollRef", "programmaticRef", "programmaticTimerRef", "alignStage", "settledIndex(", "pagerScrollLeft("]) {
+      expect(HOME, "HomePage 不再自己做分页判据：" + dead).not.toContain(dead);
+    }
+    // DOM 只负责 scrollTo；过半回写由 reducer 的 commitTab 给出（不等 scrollend）。
+    expect(PAGER).toMatch(/el\.scrollTo\(\{ left: effect\.scrollLeft/);
+    expect(PAGER).toContain('addEventListener("scroll", onScroll');
+    expect(PAGER).toContain('addEventListener("touchstart", onTouchStart');
+    expect(PAGER).toContain("onTabChangeRef.current(transition.commitTab)");
+    // 定时器只剩"没有 scrollend 的老 WebView"的单次兜底：有 scrollend 时一个都不挂（旧的 600ms 常驻定时器已删）。
+    expect(PAGER).toContain('"onscrollend" in window');
+    expect(PAGER.match(/setTimeout\(/g) || []).toHaveLength(1);
     // 写作/编辑小记期间锁横滑（否则父级 [tab] effect 清掉写作卡 = 丢草稿）
     expect(HOME).toMatch(/composer !== null \? " mobile-tab-stage--locked" : ""/);
     // 舞台 = 原生横向滚动 + 吸附；锁定态只留纵向滚动

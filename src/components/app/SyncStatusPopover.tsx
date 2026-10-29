@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { Cloud, CloudOff, HardDrive, History, LoaderCircle, Settings2, TriangleAlert, CloudUpload } from "lucide-react";
 import { isCloudActive } from "../../core/cloudState";
-import type { SyncStatus, SyncStatusInfo, SyncWarning } from "../../lib/types";
+import type { SyncStatus, SyncStatusInfo } from "../../lib/types";
 import { buildSyncStatusModel } from "./syncStatusModel";
 import { native } from "../../lib/native";
 import { formatBytesCompact } from "../../lib/formatBytes";
 import { formatDateTime } from "../../core/dateFormat";
 import { reportNativeActionError } from "../../lib/nativeErrors";
-import { chooseVisibleAnchor, clampPopoverPosition } from "../../hooks/topMenuPosition";
+import { chooseVisibleAnchor } from "../../hooks/topMenuPosition";
+import { usePopoverPosition } from "../../hooks/usePopoverPosition";
 import { HoverPopover } from "../ui/Overlay";
 
 export interface SyncStatusPopoverProps {
@@ -50,13 +51,6 @@ function formatDuration(ms: number | undefined): string {
   return ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} 秒`;
 }
 
-/** 同步警告的一行展示：主文本取文档标题（缺则 id），副文本标注缺失类型/文件名。 */
-function warningPrimary(w: SyncWarning): string {
-  return w.title || w.noteId || "未命名文档";
-}
-function warningMeta(w: SyncWarning): string {
-  return w.kind === "asset_missing" ? (w.filename ?? "资源缺失") : "正文缺失";
-}
 
 
 export function SyncStatusPopover({
@@ -73,10 +67,10 @@ export function SyncStatusPopover({
   onSync,
   onOpenSettings,
   onOpenHistory,
-  onOpenNote,
 }: SyncStatusPopoverProps) {
   const [open, setOpen] = useState(false);
-  const [position, setPosition] = useState<{ top: number; left: number } | null>(null);
+  /** 当前可见的顶栏同步按钮（keep-alive 下同一个 ref 可能指向隐藏副本）。 */
+  const [anchorEl, setAnchorEl] = useState<HTMLButtonElement | null>(null);
   const [lastResult, setLastResult] = useState<SyncStatusInfo["lastResult"]>(null);
   const localButtonRef = useRef<HTMLButtonElement | null>(null);
   const resolvedButtonRef = buttonRef ?? localButtonRef;
@@ -96,36 +90,43 @@ export function SyncStatusPopover({
     void native.getSyncStatus().then((info) => setLastResult(info.lastResult)).catch((error) => reportNativeActionError("读取同步结果", error));
   }, [open, sync.lastSyncedAt]);
 
-  const updatePosition = useCallback(() => {
-    if (typeof window === "undefined") return;
+  /** 顶栏在 keep-alive 下可能同时存在多份按钮：按可见性挑真正的那一个（与旧定位同口径）。 */
+  const resolveAnchor = useCallback((): HTMLButtonElement | null => {
+    if (typeof document === "undefined") return null;
     const candidates = [...document.querySelectorAll<HTMLButtonElement>("[data-sync-status-button]")];
-    const anchor = chooseVisibleAnchor(resolvedButtonRef.current, candidates);
-    if (!anchor) {
-      setPosition(null);
-      return;
-    }
-    const rect = anchor.getBoundingClientRect();
-    const width = Math.min(320, Math.max(0, window.innerWidth - 16));
-    setPosition(clampPopoverPosition(rect, { width: window.innerWidth, height: window.innerHeight }, { width, height: 380 }, 7));
+    return chooseVisibleAnchor(resolvedButtonRef.current, candidates);
   }, [resolvedButtonRef]);
 
   useLayoutEffect(() => {
     if (!open) {
-      setPosition(null);
+      setAnchorEl(null);
       return;
     }
-    updatePosition();
-    const onViewportChange = () => updatePosition();
+    setAnchorEl(resolveAnchor());
+    const onViewportChange = () => setAnchorEl(resolveAnchor());
     window.addEventListener("resize", onViewportChange);
     window.addEventListener("scroll", onViewportChange, true);
     return () => {
       window.removeEventListener("resize", onViewportChange);
       window.removeEventListener("scroll", onViewportChange, true);
     };
-  }, [open, updatePosition]);
+  }, [open, resolveAnchor]);
+
+  // 面板定位走**测量式**（DT-03）：真实宽高由表面量出（内容随同步结果变化还会 ResizeObserver 重排），
+  // 不再用「宽 min(320, vw-16) + 高 380」的估算去夹视口。gap/margin 保持原 7。
+  const popoverPos = usePopoverPosition({ open, anchor: anchorEl, gap: 7, margin: 7 });
 
   const qn = lastResult?.quickNotes;
   const stats = lastResult;
+  // 261028：浮窗只保留「上传/下载细分 + 状态/时间/待同步 + 异常计数」；明细进设置→同步诊断。
+  const upDocs = stats?.uploadedDocuments ?? stats?.uploaded ?? 0;
+  const downDocs = stats?.downloadedDocuments ?? stats?.downloaded ?? 0;
+  const upQuick = stats?.uploadedQuickNotes ?? qn?.uploaded ?? 0;
+  const downQuick = stats?.downloadedQuickNotes ?? qn?.downloaded ?? 0;
+  const upFolders = stats?.foldersUploaded ?? 0;
+  const downFolders = stats?.foldersDownloaded ?? 0;
+  const upBytes = stats?.uploadedBytes ?? 0;
+  const downBytes = stats?.downloadedBytes ?? 0;
 
   const icon = localOnly ? <HardDrive size={14} /> : model.statusClass === "syncing" ? <LoaderCircle className="spin" size={14} /> : model.statusClass === "error" ? <TriangleAlert size={14} /> : model.statusClass === "disabled" ? <CloudOff size={14} /> : model.statusClass === "synced" ? <CloudCheckIcon size={14} /> : model.statusClass === "pending" ? <CloudUpload size={14} /> : <Cloud size={14} />;
 
@@ -154,7 +155,8 @@ export function SyncStatusPopover({
         onDismiss={() => setOpen(false)}
         ignoreOutside={(target) => controlRef.current?.contains(target) ?? false}
         className="sync-status-popover"
-        style={position ?? undefined}
+        panelRef={popoverPos.surfaceRef}
+        style={popoverPos.style ?? undefined}
         label={localOnly ? "本地空间" : "云端同步状态"}
       >
           {localOnly ? (
@@ -164,10 +166,9 @@ export function SyncStatusPopover({
                 <span className="sync-status-dot" aria-hidden="true" />
               </header>
               <section className="sync-status-section">
-                <p className="sync-status-local-note">尚未开启云同步，数据仅保存在本机。开启后可多端同步与备份。</p>
+                <p className="sync-status-local-note">数据仅保存在本机；开启云同步后可多端同步与备份。</p>
               </section>
               <footer className="sync-status-actions">
-                <span className="sync-status-footer-state">数据仅在本机</span>
                 <button type="button" className="ln-btn ln-btn--secondary" onClick={() => { setOpen(false); onOpenSettings(); }}><Settings2 size={14} />去设置云同步</button>
               </footer>
             </>
@@ -180,24 +181,15 @@ export function SyncStatusPopover({
           <section className="sync-status-section">
             <dl>
               <div><dt>上次同步</dt><dd>{formatTime(sync.lastSyncedAt)}{stats?.durationMs ? ` · ${formatDuration(stats.durationMs)}` : ""}</dd></div>
-              {stats && (
-                <>
-                  <div>
-                    <dt>上传</dt>
-                    <dd>{stats.uploaded} 文档 · {stats.foldersUploaded ?? 0} 目录 · {qn?.uploaded ?? 0} 小记 · {formatBytesCompact(stats.uploadedBytes)}</dd>
-                  </div>
-                  <div>
-                    <dt>下载</dt>
-                    <dd>{stats.downloaded} 文档 · {stats.foldersDownloaded ?? 0} 目录 · {qn?.downloaded ?? 0} 小记 · {formatBytesCompact(stats.downloadedBytes)}</dd>
-                  </div>
-                  {(stats.trashed ?? 0) > 0 && (
-                    <div>
-                      <dt>移入回收站</dt>
-                      <dd>{stats.trashed} 文档</dd>
-                    </div>
-                  )}
-                </>
-              )}
+              {/* 上传/下载细分：用户要求始终展示（0 也显示）；字节仅统计正文+资源。 */}
+              <div>
+                <dt>上传</dt>
+                <dd>{upDocs} 文档 · {upFolders} 目录 · {upQuick} 小记 · {formatBytesCompact(upBytes)}</dd>
+              </div>
+              <div>
+                <dt>下载</dt>
+                <dd>{downDocs} 文档 · {downFolders} 目录 · {downQuick} 小记 · {formatBytesCompact(downBytes)}</dd>
+              </div>
               <div>
                 <dt>待同步</dt>
                 <dd>{model.pendingTotal === 0 ? "全部已同步" : `${model.pendingTotal} 项（文档 ${pendingDocuments} · 目录 ${pendingFolders} · 小记 ${pendingQuickNotes}）`}</dd>
@@ -210,14 +202,11 @@ export function SyncStatusPopover({
               <div>
                 <strong>已保留历史快照 · {conflictSnapshots.length}</strong>
                 <span>{conflictSnapshotText ?? "检测到远端版本差异，已保留历史快照"}</span>
-                <div className="sync-status-history-list ln-list-panel ln-list-panel--background" role="list">
-                  {conflictSnapshots.map((item) => (
-                    <button key={item.noteId} type="button" className="ln-list-item" onClick={() => onOpenHistory?.(item.noteId)}>
-                      <span className="ln-list-item__text ln-ellipsis">{item.title || "无标题"}</span>
-                      <span className="ln-list-item__meta">查看历史</span>
-                    </button>
-                  ))}
-                </div>
+                <button
+                  type="button"
+                  className="ln-btn ln-btn--secondary sync-status-inline-action"
+                  onClick={() => { setOpen(false); onOpenHistory?.(conflictSnapshots[0]!.noteId); }}
+                >查看历史</button>
               </div>
             </section>
           )}
@@ -226,29 +215,12 @@ export function SyncStatusPopover({
               <TriangleAlert size={14} aria-hidden="true" />
               <div>
                 <strong>同步有 {stats.warnings.length} 项被跳过</strong>
-                <span>远端缺少对象/资源，已跳过受影响条目；本地内容未改动，下次同步会重试。</span>
-                <div className="sync-status-history-list ln-list-panel ln-list-panel--background" role="list">
-                  {stats.warnings.map((w, i) => (
-                    <button
-                      key={`${w.kind}-${w.noteId ?? i}-${w.filename ?? ""}`}
-                      type="button"
-                      className="ln-list-item"
-                      disabled={!w.noteId || !onOpenNote}
-                      onClick={() => { if (w.noteId) onOpenNote?.(w.noteId); }}
-                    >
-                      <span className="ln-list-item__text ln-ellipsis">{warningPrimary(w)}</span>
-                      <span className="ln-list-item__meta">{warningMeta(w)}</span>
-                    </button>
-                  ))}
-                </div>
+                <span>本地内容未改动，下次同步会重试；逐项原因见「设置 → 同步诊断」。</span>
               </div>
             </section>
           )}
           <footer className="sync-status-actions">
-            <span className="sync-status-footer-state" aria-live="polite">
-              上次同步 {formatTime(sync.lastSyncedAt)}
-              {model.pendingTotal > 0 && ` · 未同步 ${model.pendingTotal} 项`}
-            </span>
+            {/* 「上次同步」已在上方明细行里（含耗时）；页脚不再重复，只留入口。 */}
             <button type="button" className="ln-btn ln-btn--secondary" onClick={() => { setOpen(false); onOpenSettings(); }}><Settings2 size={14} />同步设置</button>
           </footer>
             </>

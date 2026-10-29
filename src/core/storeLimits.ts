@@ -1,3 +1,10 @@
+/**
+ * 正文/文档字节上限（CORE-09：全仓单一事实源）。
+ * 覆盖「全 kind 的正文协议上限」：IPC 入参校验、同步正文内存缓存、草稿日志等正文量级护栏都引用它。
+ * 各 kind 自身的结构/字符上限（如 ink 的 16 MiB、lockedText 的 20 万字符）仍归各自模块。
+ */
+export const MAX_DOC_BODY_BYTES = 32 * 1024 * 1024;
+
 export const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
 export const MAX_IMAGE_PIXELS = 50_000_000;
 

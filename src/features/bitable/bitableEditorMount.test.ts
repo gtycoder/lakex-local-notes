@@ -1151,7 +1151,7 @@ describe("Markdown 字段与展开浮窗护栏（261004）", () => {
     expect(CARDS).toContain('className="bt-secondary"');
     expect(CARDS).toContain('remember="text"');
     expect(CARDS).toContain('remember="md"');
-    expect(CARDS).toContain("local-lakex-notes-v3.bitable-expand-size");
+    expect(CARDS).toContain("lakex-local-notes-v3.bitable-expand-size");
     // 不再用 legacy 分段（.seg / b3-button--outline），也不再自写繁写头 / 小按钮规则
     expect(CARDS).not.toMatch(/seg__item/);
     expect(CARDS).not.toContain("bt-md-expand-head");

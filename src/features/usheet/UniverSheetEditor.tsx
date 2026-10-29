@@ -15,14 +15,18 @@
  * - 正文 = `usheets/{id}.usheet.json`（Univer IWorkbookData 快照），见 `core/usheetDoc.ts`。
  */
 import { useEffect, useRef, useState } from "react";
+import type { EditorHostProps } from "../editor/editorHost";
 import { ICommandService, CommandType, DOCS_NORMAL_EDITOR_UNIT_ID_KEY, type FUniver } from "@univerjs/presets";
 import { DocSelectionRenderService } from "@univerjs/preset-sheets-core";
 import { buildUniverTheme } from "./univerTheme";
 import "./usheetEditor.css";
 import { createUsheetUniver, type UsheetUniverCore } from "./usheetUniverFactory";
-import { lakeFontFamily } from "./usheetFont";
 import { editorCaretPoint, shouldPlaceCaretAfterDoubleClick } from "./usheetCellEdit";
 import { emptyUsheetWorkbook, mapUsheetImageSources, normalizeUsheetWorkbook, parseUsheetBody, usheetToBody, type UsheetWorkbook } from "../../core/usheetDoc.js";
+import { checkDocBody } from "../../core/docBodySafety.js";
+import { docBaselineSettled } from "../../core/docBaseline.js";
+import { rlog } from "../../lib/log";
+import { errorFields } from "../../core/logFormat";
 import { imageFilesFromClipboard, isPureImageClipboard, pasteImageTarget } from "./usheetImagePaste";
 import { registerUsheetActiveSheet } from "./usheetActiveSheet";
 import {
@@ -34,7 +38,7 @@ import { localAssetHttpUrl, parseLocalAssetUrl } from "../../core/assetUrl.js";
 import { ASSET_PORT } from "../../lib/assetPort";
 import { uploadLakeResource } from "../editor/resourceUpload";
 import type { ResourceUploadOutput } from "../../lib/types";
-import { ChevronDown, ChevronUp } from "lucide-react";
+import { ChevronDown, ChevronUp, TriangleAlert } from "lucide-react";
 import { IRenderManagerService } from "@univerjs/engine-render";
 
 /** 自动保存防抖：合并连续命令，停顿后落一次。 */
@@ -42,7 +46,7 @@ const AUTOSAVE_DEBOUNCE_MS = 800;
 
 
 /** 工具栏「收起 / 展开」偏好（设备本地；遵 AGENTS §4，不进正文 / S3 / 历史）。 */
-const RIBBON_COLLAPSED_KEY = "local-lakex-notes-v3.usheet.ribbon-collapsed";
+const RIBBON_COLLAPSED_KEY = "lakex-local-notes-v3.usheet.ribbon-collapsed";
 
 /** 只声明本文件用到的 FWorkbook 方法；不直接 import FWorkbook（避免依赖 facade 的导出形状）。 */
 type UniverBook = {
@@ -61,19 +65,6 @@ const HAS_SCHEME_RE = /^[a-z][a-z0-9+.-]*:/i;
 
 function deepCloneWorkbook(workbook: UsheetWorkbook): UsheetWorkbook {
   return JSON.parse(JSON.stringify(workbook)) as UsheetWorkbook;
-}
-
-/**
- * 磁盘原文 → 规范化正文：用于判断「改过又改回去」（如编辑后撤销）时是否真的需要写盘。
- * 解析失败返回 null（调用方按"有过改动"处理，宁可多存一次也不丢）。
- */
-function normalizedBodyOf(body: string): string | null {
-  const parsed = parseUsheetBody(body);
-  if (!parsed) return null;
-  const workbook = deepCloneWorkbook(parsed.workbook);
-  applyFontPolicy(workbook, lakeFontFamily());
-  normalizeUsheetWorkbook(workbook);
-  return usheetToBody(workbook);
 }
 
 /** 磁盘 filename → 可渲染 URL（打开时喂给 createWorkbook）。 */
@@ -117,18 +108,6 @@ function resizeUniverRender(instance: unknown): void {
     }
     if (resized === 0) renderManager?.defaultEngine?.resize?.();
   } catch { /* 重排失败不影响收起动作本身 */ }
-}
-
-/** 把 workbook 的默认样式与所有命名样式的 ff 钉到应用字体（打开、落盘、canonical 各过一遍）。 */
-function applyFontPolicy(workbook: UsheetWorkbook, fontStack: string): void {
-  const wb = workbook as unknown as { defaultStyle?: unknown; styles?: Record<string, unknown> };
-  const base = wb.defaultStyle && typeof wb.defaultStyle === "object" ? wb.defaultStyle as Record<string, unknown> : {};
-  wb.defaultStyle = { ...base, ff: fontStack };
-  if (wb.styles) {
-    for (const style of Object.values(wb.styles)) {
-      if (style && typeof style === "object") (style as Record<string, unknown>).ff = fontStack;
-    }
-  }
 }
 
 /** File → data URL：粘贴时上传失败的兜底（至少把图保住；落盘时 promoteInlineSource 会把它提升成资产）。 */
@@ -183,26 +162,21 @@ async function promoteInlineSource(src: string, noteId: string): Promise<string 
   return ref ? ref.filename : null;
 }
 
-export interface UsheetEditorProps {
-  noteId: string;
-  content: string;
-  visible: boolean;
-  readOnly: boolean;
-  onChange: (content: string) => void;
-  /** 审计 F15：用户一改动立即通知（早于内部 800ms 防抖），让外层 dirty / 关闭 / 退出及时看到。 */
-  onDirty?: () => void;
-  /** 审计 F15：注册按需同步序列化（关闭/保存时现取），避免「改完 <800ms 就关」丢最后编辑。 */
-  onEditorCapture?: (capture: (() => string | null) | null) => void;
+/** DT-06：共用 prop 词表见 features/editor/editorHost.ts，这里只补宿主专有项。 */
+export interface UsheetEditorProps extends EditorHostProps {
   /** 是否显示内核工具条（默认 true）。历史快照预览传 false ⇒ 只读预览不要"半个编辑器"的观感。 */
   showToolbar?: boolean;
-  /** 分屏（261008）：本实例是否为**焦点栏**（决定 data-active；全局唯一）。缺省 = visible（旧行为）。 */
-  focused?: boolean;
-  /** 分屏里所在栏位（left/right）；未分屏不传。仅用于布局（data-pane）。 */
-  pane?: "left" | "right" | null;
 }
 
-export function UniverSheetEditor({ noteId, content, visible, readOnly, onChange, onDirty, onEditorCapture, showToolbar = true, focused, pane }: UsheetEditorProps) {
+export function UniverSheetEditor({ noteId, content, visible, readOnly: readOnlyProp, onChange, onDirty, onCapture: onEditorCapture, showToolbar = true, focused, pane }: UsheetEditorProps) {
   const hostRef = useRef<HTMLDivElement>(null);
+  /**
+   * CORE-02：坏正文必须只读。非空且解析不出来 ⇒ 不进可编辑路径（否则内核会拿空表打开，
+   * 用户改一格就把原文覆盖）。判据在 core（usheet/board/ink 同一套），宿主只做接线。
+   */
+  const [bodyCheck] = useState(() => checkDocBody("usheet", content));
+  const bodyUnreadable = bodyCheck.status === "unreadable";
+  const readOnly = readOnlyProp || bodyUnreadable;
   const [everVisible, setEverVisible] = useState(visible);
   const [ready, setReady] = useState(false);
   /** 挂载失败：上面 catch 掉的异常外层 ErrorBoundary 看不到 ⇒ 必须自己给可见出口（不许静默空白）。 */
@@ -232,10 +206,10 @@ export function UniverSheetEditor({ noteId, content, visible, readOnly, onChange
   const contentInputRef = useRef(false);
   const changedSinceOpenRef = useRef(false);
   const persistedBodyRef = useRef(content);
-  /** 磁盘原文的规范化形态（判断「改过又改回去」用；content 变化时刷新）。 */
-  const persistedNormalizedRef = useRef<string | null>(null);
   const captureRef = useRef(onEditorCapture); captureRef.current = onEditorCapture;
   const readOnlyRef = useRef(readOnly); readOnlyRef.current = readOnly;
+  /** 坏正文的只读是**永久**的（正文不会变好），capture 一律不给正文 ⇒ 任何保存路径都写不回原文。 */
+  const bodyUnreadableRef = useRef(bodyUnreadable); bodyUnreadableRef.current = bodyUnreadable;
   /** 最近一次的**磁盘形态**正文（正文真相）：隐藏释放实例后，显示时按它重建。 */
   const lastBodyRef = useRef<string>(content);
   /** data:/blob: 源 → 资产 filename（同一会话内缓存，避免每次 flush 重复上传同一张图）。 */
@@ -249,12 +223,11 @@ export function UniverSheetEditor({ noteId, content, visible, readOnly, onChange
   useEffect(() => {
     if (changedSinceOpenRef.current) return;
     persistedBodyRef.current = content;
-    persistedNormalizedRef.current = normalizedBodyOf(content);
   }, [content]);
 
   // 首次可见后量高度：隐藏容器会量到 0，retry 到有高度为止（避免 Univer 挂在 0 尺寸容器里）。
   useEffect(() => {
-    if (!everVisible || ready || !visible) return;
+    if (!everVisible || ready || !visible || bodyUnreadable) return;
     const host = hostRef.current;
     if (!host) return;
     let raf = 0;
@@ -273,7 +246,6 @@ export function UniverSheetEditor({ noteId, content, visible, readOnly, onChange
     flushInflightRef.current = true;
     try {
       const snapshot = deepCloneWorkbook(state.book.save() as unknown as UsheetWorkbook);
-      applyFontPolicy(snapshot, lakeFontFamily());
       normalizeUsheetWorkbook(snapshot);
       // 1) 收集尚未提升的内联图（data:/blob:），提升成资产文件并记住映射。
       const inline: string[] = [];
@@ -283,7 +255,7 @@ export function UniverSheetEditor({ noteId, content, visible, readOnly, onChange
           const filename = await promoteInlineSource(src, noteId);
           if (filename) promotedRef.current.set(src, filename);
         } catch (error) {
-          console.warn("[usheet] 内联图片提升为资产失败（保持内联形态）", error);
+          rlog.warn("usheet", "内联图片提升为资产失败（保持内联形态）", { ...errorFields(error) });
         }
       }
       // 2) 落盘口径：已提升 → filename；本地资产 URL → filename；其余原样。
@@ -319,11 +291,12 @@ export function UniverSheetEditor({ noteId, content, visible, readOnly, onChange
 
   // 挂载 Univer（首次可见 + 有高度后一次）。key 由宿主按 noteId/reloadKey 给，切文档整棵重挂。
   useEffect(() => {
-    if (!ready || instanceRef.current) return;
+    // 坏正文不挂内核：没有可信内容可显示，挂个空表反而让人以为「本来就空」（CORE-02）。
+    if (!ready || bodyUnreadable || instanceRef.current) return;
     const parsed = parseUsheetBody(lastBodyRef.current);
     const workbook = parsed?.workbook ?? emptyUsheetWorkbook();
-    // 图表一律用应用字体令牌（MiSans），禁止自定义字体：默认样式 + 所有命名样式都钉死。
-    applyFontPolicy(workbook, lakeFontFamily());
+    // 字体族由 core 的 canonical 常量统一（CORE-04：不再读运行时 CSS 变量），打开/首次 flush/每次 flush/canonical 同源。
+    normalizeUsheetWorkbook(workbook);
     // 打开：正文里的 filename → 资产服务器 URL（Univer 直接把 source 当图渲染）。
     mapUsheetImageSources(workbook, (src) => renderSource(src, noteId));
     let created: { univer: UniverCore; univerAPI: FUniver; book: UniverBook } | null = null;
@@ -336,12 +309,10 @@ export function UniverSheetEditor({ noteId, content, visible, readOnly, onChange
       created = { univer, univerAPI, book };
       // last = 规范化后的**磁盘形态**正文；避免打开即被判为"有改动"或把 URL 写回正文。
       const canonical = deepCloneWorkbook(book.save() as unknown as UsheetWorkbook);
-      applyFontPolicy(canonical, lakeFontFamily());
       normalizeUsheetWorkbook(canonical);
       mapUsheetImageSources(canonical, (src) => promotedRef.current.get(src) ?? diskSource(src));
       const canonicalBody = usheetToBody(canonical);
       lastBodyRef.current = canonicalBody;
-      persistedNormalizedRef.current = normalizedBodyOf(persistedBodyRef.current);
       instanceRef.current = { ...created, last: canonicalBody };
       // 导出 CSV 要知道「用户正看着哪张工作表」（本机视图：不写正文、不进 S3）。
       // 只登记可编辑的实例：历史快照预览也是 usheet，但它的工作表选择不属于当前文档。
@@ -421,6 +392,8 @@ export function UniverSheetEditor({ noteId, content, visible, readOnly, onChange
             editorRender.with(DocSelectionRenderService).setCursorManually(point.x, point.y, true, true, { strict: false });
             clearCaretTimers();
           } catch (error) {
+            // DT-08 保留项：这段在 Univer 双击编辑窗口的回调链里，失败多是内核时序抖动；
+            // 每次双击都会重试，保持裸 console.warn（错误对象完整留给 DevTools），不额外叠日志噪音。
             if (attempt + 1 >= delays.length) console.warn("[usheet] 双击落光标失败", error);
             else scheduleCaretAttempt(generation, attempt + 1, x, y);
           }
@@ -479,7 +452,7 @@ export function UniverSheetEditor({ noteId, content, visible, readOnly, onChange
           try {
             url = await uploadPickedFile(file, noteId);
           } catch (error) {
-            console.warn("[usheet] 插图上传失败", error);
+            rlog.warn("usheet", "插图上传失败", { ...errorFields(error) });
             return false;
           }
           if (!url) return false;
@@ -519,12 +492,12 @@ export function UniverSheetEditor({ noteId, content, visible, readOnly, onChange
           try {
             url = await uploadPickedFile(files[0], noteId);
           } catch (error) {
-            console.warn("[usheet] 粘贴图片上传失败，退回内联 data URL", error);
+            rlog.warn("usheet", "粘贴图片上传失败，退回内联 data URL", { ...errorFields(error) });
           }
           // 兜底：上传失败也**绝不丢图** —— 内联 data URL 先插进去，落盘时 promoteInlineSource 会提升成资产
           if (!url) url = await fileToDataUrl(files[0]);
           if (!url) {
-            console.warn("[usheet] 粘贴图片失败：上传与 data URL 兜底都不可用");
+            rlog.warn("usheet", "粘贴图片失败：上传与 data URL 兜底都不可用");
             return;
           }
           await range.insertCellImageAsync(url);
@@ -552,7 +525,7 @@ export function UniverSheetEditor({ noteId, content, visible, readOnly, onChange
           order: 4, // 内核「插入」子菜单现有 4 项（0..3）之后
         }).appendTo(UNIVER_CONTEXT_MENU_INSERT_PATH);
       } catch (error) {
-        console.warn("[usheet] 右键菜单「插入单元格图片」注册失败", error);
+        rlog.warn("usheet", "右键菜单「插入单元格图片」注册失败", { ...errorFields(error) });
       }
       (univerAPI as unknown as { updateMenuConfig: (config: Record<string, unknown>) => void }).updateMenuConfig({
         [UNIVER_COMMAND_IDS.insertFloatImage]: { commandId: UNIVER_COMMAND_IDS.ourInsertFloatImage },
@@ -562,17 +535,19 @@ export function UniverSheetEditor({ noteId, content, visible, readOnly, onChange
       // capture 契约：**没有真实改动时返回磁盘原文**（而不是规范化后的内存形态），
       // 否则"打开后直接关闭"也会因规范化差异写盘、触发一次同步。
       captureRef.current?.(() => {
+        if (bodyUnreadableRef.current) return null;
         const state = instanceRef.current;
         if (!state) return null;
         if (!changedSinceOpenRef.current) return persistedBodyRef.current;
-        // 改过又改回原样（撤销 / 改回原值）：规范化后与磁盘原文等价 ⇒ 返回磁盘原文，避免为规范化差异写盘。
-        if (persistedNormalizedRef.current !== null && state.last === persistedNormalizedRef.current) {
+        // 改过又改回原样（撤销 / 改回原值）：core 单一判据（CORE-03）规范化后与磁盘原文等价
+        // ⇒ 返回磁盘原文，避免为规范化差异写盘。
+        if (docBaselineSettled("usheet", persistedBodyRef.current, state.last)) {
           return persistedBodyRef.current;
         }
         return state.last;
       });
     } catch (error) {
-      console.error("Univer 表格挂载失败", error);
+      rlog.error("usheet", "Univer 表格挂载失败", error);
       created = null;
       setMountFailed(true);
     }
@@ -591,6 +566,16 @@ export function UniverSheetEditor({ noteId, content, visible, readOnly, onChange
     if (!state) return;
     try { state.book.setEditable(!readOnly); } catch { /* ignore */ }
   }, [readOnly, ready]);
+
+  /**
+   * 坏正文：不挂内核，但仍注册一个「恒 null」的按需捕获。
+   * 与 InkPad 的 doc===null 分支同口径：外层永远拿不到可写正文，也就没有任何保存路径能覆盖原文。
+   */
+  useEffect(() => {
+    if (!bodyUnreadable) return;
+    captureRef.current?.(() => null);
+    return () => captureRef.current?.(null);
+  }, [bodyUnreadable]);
 
   // 主题跟随 data-theme
   useEffect(() => {
@@ -672,24 +657,33 @@ export function UniverSheetEditor({ noteId, content, visible, readOnly, onChange
       data-pane-visible={visible ? "true" : undefined}
       data-pane={pane ?? undefined}
     >
-      <div id={"univer-sheet-" + noteId} className="usheet-univer-root" />
-      {mountFailed ? (
-        <div className="empty-workspace-hint" role="alert">
-          表格打开失败：编辑器内核初始化异常（详情见日志）。可切换标签或重新打开本文档重试。
+      {bodyUnreadable ? (
+        <div className="tab-gone-banner" role="status" data-usheet-parse-error>
+          <TriangleAlert size={14} aria-hidden="true" />
+          <span>表格正文无法解析（文件损坏或版本不兼容）：已锁定为只读，不会覆盖原文。请从「历史版本」或云端备份恢复。</span>
         </div>
-      ) : null}
-      {showToolbar ? (
-        <button
-          type="button"
-          className="usheet-ribbon-toggle"
-          aria-label={ribbonCollapsed ? "展开工具栏" : "收起工具栏"}
-          aria-expanded={!ribbonCollapsed}
-          title={ribbonCollapsed ? "展开工具栏" : "收起工具栏"}
-          onClick={toggleRibbonCollapsed}
-        >
-          {ribbonCollapsed ? <ChevronDown size={16} aria-hidden /> : <ChevronUp size={16} aria-hidden />}
-        </button>
-      ) : null}
+      ) : (
+        <>
+          <div id={"univer-sheet-" + noteId} className="usheet-univer-root" />
+          {mountFailed ? (
+            <div className="empty-workspace-hint" role="alert">
+              表格打开失败：编辑器内核初始化异常（详情见日志）。可切换标签或重新打开本文档重试。
+            </div>
+          ) : null}
+          {showToolbar ? (
+            <button
+              type="button"
+              className="usheet-ribbon-toggle"
+              aria-label={ribbonCollapsed ? "展开工具栏" : "收起工具栏"}
+              aria-expanded={!ribbonCollapsed}
+              title={ribbonCollapsed ? "展开工具栏" : "收起工具栏"}
+              onClick={toggleRibbonCollapsed}
+            >
+              {ribbonCollapsed ? <ChevronDown size={16} aria-hidden /> : <ChevronUp size={16} aria-hidden />}
+            </button>
+          ) : null}
+        </>
+      )}
     </div>
   );
 }

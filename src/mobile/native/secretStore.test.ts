@@ -36,7 +36,7 @@ describe("mobileSecretStore（密文进 localStorage，跨重启可用）", () =
   it("落盘的是密文（不是明文）且形如 iv:data", async () => {
     const { mobileSecretStore } = await import("./secretStore");
     await mobileSecretStore.write("s3.secretAccessKey", "s3-secret-value");
-    const raw = store.get("local-lakex-notes-mobile.secret.s3.secretAccessKey");
+    const raw = store.get("lakex-local-notes-mobile.secret.s3.secretAccessKey");
     expect(raw).toBeTruthy();
     expect(raw).not.toContain("s3-secret-value");
     expect(String(raw).split(":")).toHaveLength(2);

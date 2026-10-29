@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { Check, GripVertical, Merge, Pencil, Pin, PinOff, Search, Trash, X } from "lucide-react";
 import { Dialog } from "../../components/ui/Overlay";
+// 行内重命名的 Enter/Esc/空名口径统一走共用原语（DT-12；标签这里保持「空名不提交」的现状）
+import { InlineRenameInput } from "../../components/ui/InlineRenameInput";
+import { useConfirm } from "../../hooks/useConfirm";
 import { native } from "../../lib/native";
 import { getNativeErrorMessage } from "../../lib/nativeErrors";
 import type { QuickNoteTagSummary } from "../../core/quickNoteTags";
@@ -25,6 +28,8 @@ export function QuickNoteTagManager({ open, tags, onClose, onChanged, onError }:
   const [mergeSource, setMergeSource] = useState<QuickNoteTagSummary | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  /** 确认浮层（DT-02）：替代 window.confirm（删标签 / 合并标签都要先说清影响面）。 */
+  const { confirm, confirmElement } = useConfirm();
 
   useEffect(() => {
     if (open) return;
@@ -60,13 +65,21 @@ export function QuickNoteTagManager({ open, tags, onClose, onChanged, onError }:
   }
 
   async function remove(tag: QuickNoteTagSummary): Promise<void> {
-    if (!window.confirm(`删除标签“${tag.name}”？将从 ${tag.count} 条小记移除该标签，不会删除小记。`)) return;
+    if (!(await confirm({
+      title: `删除标签「${tag.name}」？`,
+      body: `将从 ${tag.count} 条小记移除该标签，不会删除小记。`,
+      confirmText: "删除标签",
+    }))) return;
     await run(() => native.deleteQuickNoteTag(tag.id));
     if (mergeSource?.id === tag.id) setMergeSource(null);
   }
 
   async function merge(source: QuickNoteTagSummary, target: QuickNoteTagSummary): Promise<void> {
-    if (!window.confirm(`把“${source.name}”合并到“${target.name}”？合并后源标签消失，受影响的小记保留。`)) return;
+    if (!(await confirm({
+      title: `把「${source.name}」合并到「${target.name}」？`,
+      body: "合并后源标签消失，受影响的小记保留。",
+      confirmText: "合并",
+    }))) return;
     await run(() => native.mergeQuickNoteTags(source.id, target.id));
     setMergeSource(null);
   }
@@ -136,16 +149,16 @@ export function QuickNoteTagManager({ open, tags, onClose, onChanged, onError }:
                     onClick={() => void run(() => native.updateQuickNoteTag(tag.id, { pinned: !tag.pinned }))}
                   >{tag.pinned ? <PinOff size={14} /> : <Pin size={14} />}</button>
                   {editingId === tag.id ? (
-                    <input
+                    /* 空名策略 = reject：空名直接退出编辑、不改名（与 saveRename 的 `if (!name …)` 同口径）。 */
+                    <InlineRenameInput
                       className="ln-input__field quick-note-tag-manager__rename"
                       autoFocus
                       value={editName}
-                      onChange={(event) => setEditName(event.target.value)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter") void saveRename(tag);
-                        if (event.key === "Escape") setEditingId(null);
-                      }}
-                      aria-label={`重命名标签 ${tag.name}`}
+                      ariaLabel={`重命名标签 ${tag.name}`}
+                      emptyPolicy="reject"
+                      onChange={setEditName}
+                      onCommit={() => void saveRename(tag)}
+                      onCancel={() => setEditingId(null)}
                     />
                   ) : (
                     <span className="quick-note-tag-manager__name ln-ellipsis">{tag.name}</span>
@@ -171,6 +184,7 @@ export function QuickNoteTagManager({ open, tags, onClose, onChanged, onError }:
           </>
         )}
       </div>
+      {confirmElement}
     </Dialog>
   );
 }

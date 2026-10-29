@@ -38,10 +38,10 @@ describe("移动端断点续传标记（device_state 持久化）", () => {
   it("迁移兼容：只有 localStorage 旧值时也能读到；清除会同时清两份", async () => {
     stubLocalStorage();
     const db = await freshDb();
-    localStorage.setItem("local-lakex-notes-mobile.syncInterruptedAt", "2026-10-26T11:00:00.000Z");
+    localStorage.setItem("lakex-local-notes-mobile.syncInterruptedAt", "2026-10-26T11:00:00.000Z");
     expect(await readSyncInterruptedAt(db)).toBe("2026-10-26T11:00:00.000Z");
     await clearSyncInterrupted(db);
-    expect(localStorage.getItem("local-lakex-notes-mobile.syncInterruptedAt")).toBeNull();
+    expect(localStorage.getItem("lakex-local-notes-mobile.syncInterruptedAt")).toBeNull();
   });
 
   it("没有数据库（极端环境）时退化为 localStorage，不抛错", async () => {

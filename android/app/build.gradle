@@ -2,10 +2,10 @@ apply plugin: 'com.android.application'
 apply plugin: 'kotlin-android'
 
 android {
-    namespace = "com.locallakexnotes.mobile"
+    namespace = "com.lakexlocalnotes.android"
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "com.locallakexnotes.mobile"
+        applicationId "com.lakexlocalnotes.android"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 3
@@ -19,6 +19,12 @@ android {
     }
     buildTypes {
         release {
+            // SEC-03：release 变体必须配置签名，否则只能发 debug 包（android:debuggable=true ⇒
+            // 任何装机者可 run-as 读私有目录里的明文笔记，也能给 WebView 挂调试器注入 JS）。
+            // 这里用 debug keystore 签：签名强度不变，但 debuggable=false 立刻生效；
+            // 正式发布换 release keystore 时只改这一行（+ 在 CI 注入对应 secrets）。
+            signingConfig signingConfigs.debug
+            // 维持 false：R8/Capacitor 反射面未验证，收紧混淆不在本轮范围。
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }

@@ -210,12 +210,12 @@ export function startAssetServer(noteAssetsDir: string, vendorCdnDir: string, qu
   fs.mkdirSync(noteAssetsDir, { recursive: true });
   if (quickNotesDir) fs.mkdirSync(quickNotesDir, { recursive: true });
 
-  // 审计 #16：本地资源服务仅允许应用自身页面跨域读取（dev origin / 私有协议 locallakexnotes://app / Web 客户端 / 旧 file 页），
+  // 审计 #16：本地资源服务仅允许应用自身页面跨域读取（dev origin / 私有协议 lakexlocalnotes://app / Web 客户端 / 旧 file 页），
   // 拒绝任意网站的 CORS 读取（恶意网页无法 fetch 笔记图片）。非 CORS 请求（<img>/
   // 直接访问）不带 Origin，不构成可读数据泄露。
   const isAllowedOrigin = (origin: string | undefined): boolean => {
     if (!origin) return true; // 非 CORS 请求
-    return origin === APP_ORIGIN                     // 桌面渲染层（打包版：locallakexnotes://app，A1 起不再用 file://）
+    return origin === APP_ORIGIN                     // 桌面渲染层（打包版：lakexlocalnotes://app，A1 起不再用 file://）
       || origin === "http://127.0.0.1:1421"
       || origin === "http://localhost:1421"
       || origin === "http://127.0.0.1:19880"   // Web 客户端（webApiServer）
@@ -266,7 +266,7 @@ export function startAssetServer(noteAssetsDir: string, vendorCdnDir: string, qu
         const mime = mimeForExtWith(vendorFile, ext) ?? await sniffMimeFromFile(vendorFile) ?? "application/octet-stream";
         streamFile(res, vendorFile, stat, {
           "Content-Type": mime,
-          "Cache-Control": "public, max-age=31536000, immutable",
+          "Cache-Control": "private, max-age=31536000, immutable",
           ...corsHeaders(req.headers.origin),
         }, req.headers.range);
         return;
@@ -363,7 +363,7 @@ export function startAssetServer(noteAssetsDir: string, vendorCdnDir: string, qu
           res.writeHead(200, {
             "Content-Type": mime,
             "Content-Length": thumb.length,
-            "Cache-Control": "public, max-age=31536000, immutable",
+            "Cache-Control": "private, max-age=31536000, immutable",
             ...securityHeaders,
             ...corsHeaders(req.headers.origin),
           });
@@ -374,7 +374,7 @@ export function startAssetServer(noteAssetsDir: string, vendorCdnDir: string, qu
 
       streamFile(res, filePath, stat, {
         "Content-Type": mime,
-        "Cache-Control": "public, max-age=31536000, immutable",
+        "Cache-Control": "private, max-age=31536000, immutable",
         ...securityHeaders,
         ...corsHeaders(req.headers.origin),
       }, req.headers.range);

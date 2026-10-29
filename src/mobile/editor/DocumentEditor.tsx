@@ -167,7 +167,7 @@ export function DocumentEditor(props: DocumentEditorProps) {
   return (
     <>
       {/* 文档内查找条（移动端；入口 = 工作区顶栏右上角） */}
-      {findOpen && <MobileFindBar root={findRoot} revision={content} onClose={() => onCloseFind?.()} />}
+      {findOpen && <MobileFindBar root={findRoot} revision={content} editor={editorInstance} onClose={() => onCloseFind?.()} />}
       {/* data-mb-edit-host / data-mb-kernel：编辑面契约（内核几何收口见 edit-surface-kernel.css） */}
       <section className="mobile-doc-body" ref={setBody} data-mb-edit-host data-mb-kernel="doc">
         <LakeEditor
@@ -175,6 +175,8 @@ export function DocumentEditor(props: DocumentEditorProps) {
           content={content}
           mode={editing ? "editor" : "viewer"}
           tocEnabled={false}
+          // 内核虚拟渲染/大纲定位要真实滚动容器；bodyRef 首帧才有值 ⇒ 传 getter（resolveScrollNode 每次测量时调用）。
+          scrollNode={() => bodyRef.current}
           onChange={(c) => onContentChange(c, plainFromEditor(editorRef.current))}
           onEditorReady={(_noteId, editor) => {
             (window as unknown as Record<string, unknown>).__mobileEditor = editor;
@@ -182,7 +184,9 @@ export function DocumentEditor(props: DocumentEditorProps) {
             setEditorInstance(editor);
             onEditorInstance?.(editor);
           }}
-          prefs={{ fontSize: loadSettings().fontSize, showToolbar: !editing, disableVirtualRendering: true, attachment: attachmentPrefs }}
+          // MOB-04（261029 切换）：查找已接内核（不依赖全量 DOM）⇒ 编辑态开内核虚拟渲染；
+          // 只保留视口附近节点（实测 500 块文档编辑节点 5552→2202、进编辑 5117→2102ms）。
+          prefs={{ fontSize: loadSettings().fontSize, showToolbar: !editing, disableVirtualRendering: false, attachment: attachmentPrefs }}
         />
       </section>
       {/* 编辑态底部 dock（app 化工具栏，悬浮输入法上方；替代 Lake 桌面样式原生工具栏）。

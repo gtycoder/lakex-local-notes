@@ -14,6 +14,7 @@
 /** 从 bridge 派生的方法（CDP 驱动与真机调试用）。 */
 export const LAKE_NATIVE_BRIDGE_METHODS = [
   "uploadResource", "syncNow", "testS3Connection",
+  "restoreFromCloud", // 261028：从云端恢复（换机/坏库；清本机同步基线后整轮只拉不打）
   "getHomeSnapshot", "getWorkspaceSnapshot", "getQuickNotePage",
   "listOrphanAssets", "cleanOrphanAssets", "deleteOrphanAsset", "gcDeepCleanup",
   "listNoteHistory", "getNoteInfo", "readAssetPreview", "previewHistorySnapshot",

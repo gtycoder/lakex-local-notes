@@ -57,7 +57,7 @@ describe("工作区「更多」菜单（261014）", () => {
     expect(WORKSPACE).toContain('bridge.createBoard("无标题画板", pid)');
     expect(WORKSPACE).toContain('bridge.createInk("无标题手写板", pid)');
     // 新建后关掉目录抽屉：否则编辑器在抽屉后面打开（设备实测）
-    expect(WORKSPACE).toMatch(/createBoard\("无标题画板", pid\)[\s\S]{0,200}await loadTree\(\);[\s\S]{0,80}setSidebarOpen\(false\);/);
+    expect(WORKSPACE).toMatch(/createBoard\("无标题画板", pid\)[\s\S]{0,200}await loadTree\(\);[\s\S]{0,80}closeOverlay\("sidebar"\);/);
     // 表格/数据表/画板建完直接进编辑态（文档与手写板停在阅读态）
     expect(WORKSPACE).toMatch(/await openTab\(n\.id, \{ enterEditor: kind === "usheet" \|\| kind === "bitable" \|\| kind === "board" \}\);/);
     // 菜单只把文档类交给创建通道，group 走分组创建

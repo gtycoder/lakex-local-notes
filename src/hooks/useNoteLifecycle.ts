@@ -3,7 +3,7 @@ import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { native } from "../lib/native";
 import { getNativeErrorMessage } from "../lib/nativeErrors";
 import { reportNativeActionError } from "../lib/nativeErrors";
-import { clearScrollMemory } from "../features/editor/EditorTab";
+import { clearScrollMemory } from "../features/editor/editorViewport";
 import { trimTabsToLimit } from "../core/tabLimit";
 import { subtreeIds } from "../core/tree";
 import { summaryOf } from "../desktop/desktopTypes";

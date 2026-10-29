@@ -9,9 +9,15 @@
  *  - 没有实例（锁定预览 / 未挂载 / 主进程 / 移动端属性页）时用 src/core/textStats.ts 的
  *    同语义实现兜底，纯文本来源与移动端文档属性一致（lakeHtmlToMarkdown）。
  * 图片数仍由正文解析（内核没有对应查询）。
+ *
+ * 261027（CORE-10）**输入源差异登记**（派生已收口到 textStats.countTextStats，这里只登记不猜）：
+ *  - 内核字数来自 getDocument("text/plain")（内核自己决定卡片贡献什么文本）；
+ *  - 兜底来自 docPlainText = lakeHtmlToMarkdown：剥标签 + 空行压缩，卡片只取 value 里的
+ *    text/plain / text / data-content，取不到就保留卡片内部文本。
+ *  ⇒ 图片卡标题、表格单元格、附件展示名这类结构性内容，两侧可能差几个字；有内核时以内核为准。
  */
 import { lakeHtmlToMarkdown } from "./lakeCaches.js";
-import { countWords } from "./textStats.js";
+import { countTextStats } from "./textStats.js";
 
 export interface DocStats {
   /** 字数（内核口径：非 ASCII 按字素、ASCII 按空白分词） */
@@ -54,7 +60,7 @@ export function kernelWordCount(editor: WordCountQueryable | null | undefined): 
 export function resolveDocStats(wordCount: number | null, content: string): DocStats {
   const imageCount = (content.match(IMAGE_CARD_RE) || []).length;
   if (wordCount !== null && wordCount > 0) return { wordCount, imageCount };
-  const fallback = countWords(docPlainText(content));
+  const fallback = countTextStats(docPlainText(content)).wordCount;
   return { wordCount: fallback, imageCount };
 }
 

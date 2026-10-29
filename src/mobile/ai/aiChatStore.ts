@@ -14,6 +14,7 @@ import { aiCanTouchNetwork, aiNetworkHint } from "../../core/aiNetwork";
 import { AI_SYSTEM_PROMPT } from "../../features/ai/aiPrompts";
 import { bridge } from "../bridge";
 import { ensureDb } from "../bridge/context";
+import { reportMobileActionError } from "../lib/reportMobileActionError";
 import {
   deleteAiConversation,
   latestAiConversationId,
@@ -277,7 +278,7 @@ export async function deleteConversation(id: string): Promise<void> {
     await deleteAiConversation(db, id);
     await deleteConversationFile(id);
     await deleteConversationImages(id);
-  } catch { /* 忽略 */ }
+  } catch (error) { reportMobileActionError("删除历史对话", error); }
   if (id === currentId) {
     // 正在流的会话被删除：先取消请求，否则 delta 会继续写进已被清空的 messages（busy 卡死）。
     if (activeRequestId) {
@@ -309,7 +310,7 @@ export async function clearAllConversations(): Promise<void> {
       await deleteConversationImages(id);
     }
     await sweepOrphanConversationDirs([]);
-  } catch { /* 忽略 */ }
+  } catch (error) { reportMobileActionError("清空历史对话", error); }
   await deleteLegacyConversationFile();
   currentId = null;
   currentCreatedAt = null;

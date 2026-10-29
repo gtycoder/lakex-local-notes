@@ -21,12 +21,14 @@ interface LakeEditorProps {
   tocEnabled: boolean;
   onChange: (content: string) => void;
   prefs?: LakeEditorPrefs;
+  /** 真实滚动容器（虚拟渲染/大纲定位用）。可传 getter：宿主 ref 首帧才有值。缺省走 lakeRuntime 回退。 */
+  scrollNode?: HTMLElement | (() => HTMLElement | null) | null;
   /** 宿主元素的额外类名：两端各自的外观由**各端自己的样式**定义（移动端传自有前缀，见 MOBILE-TECH-STACK §一）。 */
   hostClassName?: string;
   onEditorReady?: (noteId: string, editor: LakeEditorInstance | null) => void;
 }
 
-export function LakeEditor({ noteId, content, mode = "editor", tocEnabled, onChange, prefs, onEditorReady, hostClassName }: LakeEditorProps) {
+export function LakeEditor({ noteId, content, mode = "editor", tocEnabled, onChange, prefs, scrollNode, onEditorReady, hostClassName }: LakeEditorProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<LakeEditorInstance | null>(null);
   const latestDocumentRef = useRef("");
@@ -148,7 +150,7 @@ export function LakeEditor({ noteId, content, mode = "editor", tocEnabled, onCha
         if (!shouldAcceptEditorChange({ initializing: setting, previous: latestDocumentRef.current, next })) return;
         latestDocumentRef.current = next;
         onChangeRef.current(next);
-      }, tocEnabled, noteId, undefined, prefs);
+      }, tocEnabled, noteId, scrollNode ?? undefined, prefs);
       latestDocumentRef.current = stripAssetAccessToken(content);
       editor.setDocument("text/lake", addAssetAccessToken(content));
       // 修复：Lake TOC 侧边栏创建时用空 toc 渲染，setDocument 后补一次数据同步。

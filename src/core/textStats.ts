@@ -67,3 +67,19 @@ export function countWords(plain: string): number {
 export function countChars(plain: string): number {
   return plain.replace(/\s+/g, "").length;
 }
+
+export interface TextStats {
+  wordCount: number;
+  charCount: number;
+}
+
+/**
+ * 字数 + 字符数的**唯一派生入口**（CORE-10）。
+ *
+ * 桌面主进程属性页、移动端属性页、状态栏兜底都调它——过去是三处各自调
+ * `countChars` + `countWords`，只改一处就会端间口径不一致。这里只负责「同输入同输出」，
+ * 输入源（text_cache / searchTextForKind / lakeHtmlToMarkdown）仍由调用方决定并各自登记。
+ */
+export function countTextStats(plain: string): TextStats {
+  return { wordCount: countWords(plain), charCount: countChars(plain) };
+}

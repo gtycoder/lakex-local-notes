@@ -17,6 +17,7 @@ import {
   clampSearchLimit,
 } from "../ipcLimits.js";
 import type { IpcRegistrar } from "./registrar.js";
+import { toUint8Array } from "./bytes.js";
 import { ensureTrashNoteAssets } from "../syncEngineController.js";
 import { prepareAttachmentOpen } from "../attachmentOpen.js";
 import { exportWorkspaceBackup, prepareCloudRestore, relaunchApp, writeS3RestoreSeed } from "../workspaceBackup.js";
@@ -156,7 +157,7 @@ export function registerNotesIpc(
     if (dir !== lastPickedBackupDir) throw new IpcInputError("备份目录无效：请先通过系统选择框选择目录");
     return enqueueMaintenance(async () => {
       const ts = new Date().toISOString().replace(/[:T]/g, "-").slice(0, 19);
-      const target = path.join(dir, `local-lakex-notes-backup-${ts}`);
+      const target = path.join(dir, `lakex-local-notes-backup-${ts}`);
       const log = (msg: string) => store.logScopes.sync.info(msg);
       const result = exportWorkspaceBackup(workspaceRoot, target, backupDatabases, log);
       return { backupPath: result.backupPath, copiedDirs: result.copiedDirs };
@@ -225,9 +226,11 @@ export function registerNotesIpc(
   ipc.handle("purge_trash", (id: string) => store.purgeTrashItem(id));
   ipc.handle("empty_trash", () => store.emptyTrash());
   ipc.handle("upload_resource", (input: ResourceUploadInput, noteId: string) => {
-    if (!input || !(input.bytes instanceof Uint8Array)) throw new Error("资源数据无效");
-    if (input.bytes.length > MAX_ATTACHMENT_BYTES) throw new Error(`资源超过 ${MAX_ATTACHMENT_BYTES / 1024 / 1024} MiB 协议上限`);
-    return store.uploadResource(input, noteId);
+    // 桌面 IPC 传 Uint8Array；Web 客户端经 HTTP JSON 传 number[]（浏览器端插图/附件）。
+    const bytes = toUint8Array(input?.bytes);
+    if (!bytes) throw new Error("资源数据无效");
+    if (bytes.length > MAX_ATTACHMENT_BYTES) throw new Error(`资源超过 ${MAX_ATTACHMENT_BYTES / 1024 / 1024} MiB 协议上限`);
+    return store.uploadResource({ ...input, bytes }, noteId);
   });
   ipc.handle("download_remote_resource", (url: string, noteId: string) => store.downloadRemoteResource(url, noteId));
   ipc.handle("list_orphan_assets", () => store.listOrphanAssets());

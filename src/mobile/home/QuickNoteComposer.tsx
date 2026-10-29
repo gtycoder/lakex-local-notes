@@ -54,7 +54,7 @@ export interface QuickNoteComposerProps {
   /** 新建标签（写标签子系统后返回 ID；由上层负责刷新目录）。 */
   onCreateTag?: (name: string) => Promise<string>;
   /**
-   * 草稿模式（261010：长按图标 / `locallakexnotes://quick-note` 深链那条 capture 路径用）：
+   * 草稿模式（261010：长按图标 / `lakexlocalnotes://quick-note` 深链那条 capture 路径用）：
    * 挂载时恢复上一次未提交的草稿（含富内容 body）、输入防抖落库、保存/取消清除。
    * 工作台里的「新建小记 / 编辑」不传（行为不变）。
    */
@@ -195,7 +195,7 @@ export function QuickNoteComposer({ editNote, tagOptions, onCreateTag, onSaved, 
    */
   const autoFocusIfCreating = useCallback(() => {
     if (editNote) return;
-    const tryFocus = () => { try { apiRef.current?.focus(); } catch { /* 忽略：内核未就绪 */ } };
+    const tryFocus = () => { try { apiRef.current?.focus(); } catch { /* 内核这一刻还没就绪：聚焦是尽力而为（立即 + 150ms 各试一次），用户可手动点正文 */ } };
     tryFocus();
     window.setTimeout(tryFocus, 150);
     // 没手势的入口（快捷 capture / 分享）：DOM 焦点不够，Android 不会自己弹键盘 ⇒ 请原生动一次手（AGENTS §7.28）。
@@ -223,7 +223,7 @@ export function QuickNoteComposer({ editNote, tagOptions, onCreateTag, onSaved, 
       if (!result.ok && result.reason !== "editor-unavailable") showToast(editorCommandFailureMessage(pending.command, result), { type: "error" });
     }
     if (pending.files?.length) {
-      window.setTimeout(() => { try { apiRef.current?.focus(); } catch { /* 忽略：内核未就绪 */ } }, 0);
+      window.setTimeout(() => { try { apiRef.current?.focus(); } catch { /* 同上：插入文件后补一次聚焦，内核不可达时用户可手动点正文 */ } }, 0);
     }
   }, [editorInstance]);
 

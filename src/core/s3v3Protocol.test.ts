@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { validatePointer, S3V3_HASH_RE } from "./s3v3Types.js";
-import { classifyCloudState } from "./s3v3Pointer.js";
+import { validatePointer, S3V3_HASH_RE } from "./s3v3/protocol/s3v3Types.js";
+import { classifyCloudState } from "./s3v3/protocol/s3v3Pointer.js";
 import { decideItem, type ItemDecisionInput } from "./s3v3Decision.js";
 import { gatePendingDelete, type CurrentWorld, type PendingDelete } from "./s3v3Gate.js";
-import { shouldClearDeletionIntent, isDeletionIntentActive, shouldRepublishPurge } from "./s3v3Intent.js";
+import { shouldClearDeletionIntent } from "./s3v3Intent.js";
 
 const H = (c: string) => c.repeat(64);
 const EPOCH = "123e4567-e89b-42d3-a456-426614174000";
@@ -116,11 +116,8 @@ describe("deletionIntent 生命周期", () => {
   it("同 generation 不同 commit（分叉）→ 不清除", () => {
     expect(shouldClearDeletionIntent(intent, ctx({ pointerGeneration: 5, indexHasId: true }))).toBe(false);
   });
-  it("更高 generation 但索引又含该 id（迟到覆盖）→ 不清除且需重新压制", () => {
-    const c = ctx({ indexHasId: true });
-    expect(shouldClearDeletionIntent(intent, c)).toBe(false);
-    expect(isDeletionIntentActive(intent, c)).toBe(true);
-    expect(shouldRepublishPurge(intent, c)).toBe(true);
+  it("更高 generation 但索引又含该 id（迟到覆盖）→ 不清除", () => {
+    expect(shouldClearDeletionIntent(intent, ctx({ indexHasId: true }))).toBe(false);
   });
   it("显式 restore 是唯一提前清除条件", () => {
     expect(shouldClearDeletionIntent(intent, ctx({ pointerGeneration: 5, indexHasId: true, restored: true }))).toBe(true);

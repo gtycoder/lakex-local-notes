@@ -1,7 +1,7 @@
 /** C3-5 第③步：quickNotes 域（从 bridge.ts 抽取，行为保持）。 */
 import { assets, ensureDb, runPriority, runWrite } from "./context";
 
-import { saveAssetBytesFs, loadAssetBytesFs, removeAssetBytesFs } from "../native/assetFs";
+import { saveAssetBytesFs, loadAssetBytesFs, removeQuickNoteAssetsDirFs } from "../native/assetFs";
 import type { QuickNotePushOutcome } from "../../core/quickNoteSyncTypes.js";
 import { buildAssetFilename, mimeTypeForFilename } from "../../core/assetNaming.js";
 import { localAssetHttpUrl } from "../../core/assetUrl.js";
@@ -179,7 +179,8 @@ export const quickNotesDomain = {
   async purgeQuickNote(id: string): Promise<void> {
     return runWrite("purgeQuickNote", async () => {
       const d = await ensureDb();
-      await quickNotesRepository.purgeQuickNote(d, id, removeAssetBytesFs);
+      // MOB-06：彻底删除连图片目录一起清（quick-notes/assets/{id}/）；失败由仓储告警、不阻断墓碑。
+      await quickNotesRepository.purgeQuickNote(d, id, removeQuickNoteAssetsDirFs);
     });
   },
 };

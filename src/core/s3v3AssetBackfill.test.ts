@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { sha256Hex } from "./syncUtils.js";
-import { buildAssetDeclaration, indexHashOf, serializeDeclaration, serializeLakeIndex, type LakeIndex } from "./s3v3Index.js";
-import { assetKey, declarationKey, indexKey } from "./s3v3Keys.js";
+import { buildAssetDeclaration, indexHashOf, serializeDeclaration, serializeLakeIndex, type LakeIndex } from "./s3v3/protocol/s3v3Index.js";
+import { assetKey, declarationKey, indexKey } from "./s3v3/protocol/s3v3Keys.js";
 import { backfillV3Assets, type AssetBackfillPort } from "./s3v3AssetBackfill.js";
 import type { RemoteObjectInfo, S3v3Remote } from "./s3v3Ports.js";
 

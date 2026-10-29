@@ -13,7 +13,7 @@ import os from "node:os";
 const port = Number(process.env.LAKE_CDP_PORT || 9373);
 const assetPort = String(Number(process.env.LAKE_ASSET_PORT || 29899));
 const home = os.homedir();
-const userData = process.env.LAKE_TARGET_USER_DATA || path.join(home, "Library", "Application Support", "local-lakex-notes-dev");
+const userData = process.env.LAKE_TARGET_USER_DATA || path.join(home, "Library", "Application Support", "lakex-local-notes-dev");
 const sizesMB = (process.env.LAKE_LARGE_SIZES || "2,5,10").split(",").map(Number);
 const appPath = path.resolve("node_modules/electron/dist/Electron.app/Contents/MacOS/Electron");
 const NL = String.fromCharCode(10);

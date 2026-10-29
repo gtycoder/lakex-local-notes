@@ -22,23 +22,18 @@ import { openAssetEntry } from "../attachment/openAssetEntry";
 import { CardContextMenu, TextContextMenu, cutCardElement } from "./CardContextMenu";
 import { AssetRenameDialog } from "./AssetRenameDialog";
 import { installMediaCardCategoryRouter } from "./mediaCardRouting";
+import { readEditorScroll, rememberEditorScroll } from "./editorViewport";
 import { rlog } from "../../lib/log";
+import type { EditorHostProps } from "./editorHost";
 
-export interface EditorTabProps {
-  noteId: string;
-  content: string;
-  visible: boolean;
+export interface EditorTabProps extends Omit<EditorHostProps, "onCapture"> {
   tocEnabled: boolean;
   outlineEnhance: boolean;
   /** 只通知「有变更」（捕获契约）：正文不再随每次按键回传，由保存/草稿/关闭按需 capture。 */
   onChange: () => void;
   prefs?: LakeEditorPrefs;
   /** 只读锁：true 时重建为 Lake 原生 Viewer（真只读，含画板/表格/代码块） */
-  locked?: boolean;
-  /** 分屏（261008）：本实例是否为**焦点栏**（决定 data-active；全局唯一）。缺省 = visible（旧行为）。 */
-  focused?: boolean;
-  /** 分屏里所在栏位（left/right）；未分屏不传。仅用于布局（data-pane）。 */
-  pane?: "left" | "right" | null;
+  readOnly: boolean;
   /** 面包屑（261008）：本栏文档所属**笔记本名**；null = 不渲染面包屑（如非文档栏 / 无路径）。 */
   pathTitle?: string | null;
   /** 面包屑右端「更多」的锚点。**只在单栏时渲染该按钮**（分屏下按用户定稿隐藏）。 */
@@ -50,9 +45,6 @@ export interface EditorTabProps {
   /** 外部改动正文后重载该 tab（附件重命名后主进程改写了正文） */
   onReloadNote?: (noteId: string) => void;
 }
-
-/** 跨 remount（外部刷新/冲突重载）保留滚动位置；仅内存态，关闭应用后不保留。 */
-const scrollMemory = new Map<string, number>();
 
 /**
  * 锁/解锁「延迟销毁」参数（见 pendingDisposeRef）：
@@ -72,42 +64,7 @@ const OUTGOING_DISPOSE_FALLBACK_MS = 1400;
 /** 切换后「钉住锚点」的窗口：内核虚拟渲染/图片水合在这段时间里还会改版式，偏离就立刻纠回 */
 const ANCHOR_PIN_WINDOW_MS = 1200;
 
-/** Info 项：tab 关闭时清理滚动记忆条目，防长会话缓慢累积（remount 不受影响）。 */
-export function clearScrollMemory(noteId: string): void {
-  scrollMemory.delete(noteId);
-}
-
-/** Locate body hits for global search without changing Lake's editor API.
- * 高亮全部命中块（上限 200）、长词优先、滚动到第一个命中。 */
-export function locateEditorSearchHit(noteId: string, query: string): boolean {
-  const host = document.querySelector<HTMLElement>(`.lake-editor-tab[data-note-id="${escapeId(noteId)}"]`);
-  if (!host || !query.trim()) return false;
-  const terms = query.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean).sort((a, b) => b.length - a.length);
-  if (terms.length === 0) return false;
-  const walker = document.createTreeWalker(host, NodeFilter.SHOW_TEXT);
-  const blocks: HTMLElement[] = [];
-  const seen = new Set<HTMLElement>();
-  const MAX_BLOCKS = 200;
-  let node: Text | null = null;
-  while ((node = walker.nextNode() as Text | null)) {
-    const value = node.nodeValue ?? "";
-    if (!value) continue;
-    const lower = value.toLocaleLowerCase();
-    if (!terms.some((term) => lower.includes(term))) continue;
-    const block = node.parentElement?.closest<HTMLElement>("[data-node-id], .ne-p, .ne-h, .ne-block, p, h1, h2, h3, h4, h5, h6") ?? node.parentElement;
-    if (!block || seen.has(block)) continue;
-    seen.add(block);
-    blocks.push(block);
-    block.classList.add("lake-search-hit-target");
-    if (blocks.length >= MAX_BLOCKS) break;
-  }
-  if (blocks.length === 0) return false;
-  blocks[0].scrollIntoView({ block: "center", behavior: "smooth" });
-  window.setTimeout(() => { for (const block of blocks) block.classList.remove("lake-search-hit-target"); }, 1800);
-  return true;
-}
-
-export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance, onChange, prefs, locked, focused, pane, pathTitle = null, moreMenuWrapRef, onToggleMoreMenu, onEditorReady, onReloadNote }: EditorTabProps) {
+export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance, onChange, prefs, readOnly: locked, focused, pane, pathTitle = null, moreMenuWrapRef, onToggleMoreMenu, onEditorReady, onReloadNote }: EditorTabProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const editorMountRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<LakeEditorInstance | null>(null);
@@ -643,7 +600,7 @@ export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance
           const jumpedToTop = previous >= 100 && current < 50;
           previous = current;
           lastScrollTopRef.current = current;
-          scrollMemory.set(noteId, current);
+          rememberEditorScroll(noteId, current);
           if (current >= 50) {
             stableScrollTopRef.current = current;
             window.clearTimeout(stableScrollCommitTimer);
@@ -994,17 +951,17 @@ export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance
   }, [visible]);
 
   // 外部刷新/冲突重载会 remount EditorTab，恢复上次滚动位置，避免跳到顶部。
-  // 锁/解锁例外：那是同一文档换渲染模式，scrollMemory 存的是上一态的像素值、跨态没有可比性——
+  // 锁/解锁例外：那是同一文档换渲染模式，滚动记忆存的是上一态的像素值、跨态没有可比性——
   // 实测锁定方向这个 250ms 恢复会把阅读态打到编辑态的像素值（t≈860ms 锚点被顶出视口 ~1.2k px、
   // 约 50ms 后才被 800ms 那次锚点恢复拉回）。跨态位置交给 base effect 的锚点恢复。
   useEffect(() => {
     if (!editorState) return;
     // 有锚点 = 这次是「同文档换渲染模式/自愈重建」，位置已由 base effect 的锚点恢复负责。
-    // 这里再按 scrollMemory 的像素值恢复会先把新实例打到上一态的位置（实测锁定方向 t≈750ms
+    // 这里再按滚动记忆的像素值恢复会先把新实例打到上一态的位置（实测锁定方向 t≈750ms
     // 锚点被顶出视口 ~1.2k px、约 50ms 后才被下一次锚点恢复拉回）。真 remount（冲突重载/
     // 外部刷新）锚点 ref 是空的，仍走这条像素恢复。
     if (scrollAnchorRef.current) return;
-    const saved = scrollMemory.get(noteId);
+    const saved = readEditorScroll(noteId);
     if (!saved || saved <= 0) return;
     const timer = window.setTimeout(() => {
       const scroller = resolveScrollNode(hostRef.current);

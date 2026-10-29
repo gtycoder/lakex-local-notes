@@ -14,9 +14,15 @@ const USHEET = read("src/mobile/usheet/MobileUsheetViewer.tsx");
 const HOOK_CALL = /\buse(?:State|Ref|Effect|LayoutEffect|Callback|Memo|Context)\s*\(/g;
 
 describe("编辑面：必要结构护栏", () => {
-  it("表格侧面板状态机为**用户定稿的独立实现**（261023：照抄文档 dock 的展开/收起），但仍不得复用 useEditSurface", () => {
-    // 261023 用户明确要求「全盘参考文档工具栏展开收起，不行就照抄」⇒ 表格侧自持 open/closing/closingHold。
-    expect(USHEET).not.toContain("useEditSurface(");
+  it("表格侧编辑面复用同一个 owner（261028 MOB-07，取代 261023 的独立实现）", () => {
+    // 表格只提供自己的口径参数（无默认面板 / 面板下限 300 / 不接管外壳高），
+    // 面板状态机与 1800/2500ms 定时器全部由 useEditSurface 持有，表格侧不再自建 open/closing/closingHold。
+    expect(USHEET).toContain("useEditSurface<SheetDockId>");
+    expect(USHEET).toContain("panelDefault: null");
+    expect(USHEET).toContain("writeAppHeight: false");
+    expect(USHEET).not.toContain("useState<SheetDockId | null>");
+    expect(USHEET).not.toContain("panelCloseTimerRef");
+    expect(USHEET).not.toContain("setPanelHeight");
     expect(USHEET).toContain("closingHold");
     expect(USHEET).toContain("data-open");
   });
