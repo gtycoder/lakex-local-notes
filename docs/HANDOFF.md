@@ -25,7 +25,7 @@
 - **回归（桌面 80 例 `✅74/❌4/➖2`、移动 50 例，P0=0）**：报告 `.css-audit/regression-261029-{desktop,mobile}/REPORT.md`。
   - P1 修复 3：① 桌面状态栏「云关闭仍待同步」→ `documentStatusModel` 入参改 `cloudEnabled`，`App` 传 `isCloudActive(cloudConfigured, cloudEnabled)`；② 移动未配置 S3 点「立即同步」被记「同步成功」→ `bridge/sync.ts` 仅在 summary 非空时写状态；③ 移动首次打开 AI 的 `readdir` ENOENT console.error → `aiImageStore.sweepOrphanConversationDirs` 先建目录再读。
   - P2 修复 5（移动）：设置根页可见关闭按钮；新建面板标题「新建文档知识库」→「文档与知识库」；多维表元信息去掉重复「视图」并占满；空画板加空态；大纲右侧抽屉「让位底部胶囊」曾修后按用户 261029 决定**已回退为全高**（大纲/目录是临时切换、不长期驻留；左侧抽屉同样不做让位）。
-  - P2 结论（桌面）：工具栏按钮 disabled/插入面板点不开 = 冷启动未聚焦 + 后台窗口首击伪影（点正文后正常，dev/scheme 一致，非回归）；状态栏字数/图片保持**不可点**（顶栏同步入口已足够）；内核工具栏 **a11y 只做低成本项**——`vendor-focus.css` 补 `.lake-editor-mount .ne-ui-toolbar .ant-btn:focus-visible` 2px 主色焦点环（完整 aria-label 注入仍未做）。
+  - P2 结论（桌面）：工具栏按钮 disabled/插入面板点不开 = 冷启动未聚焦 + 后台窗口首击伪影（点正文后正常，dev/scheme 一致，非回归）；状态栏字数/图片保持**不可点**（顶栏同步入口已足够）；内核工具栏 **a11y 不做**（用户 261029 决定：不为读屏用户适配；此前试过的焦点环也一并回滚）。
   - **二次补测（移动）**：回收站 移入→恢复→再移入→彻底删除 闭环通过（未配置 S3 时无假云端标记）；「清理云端」二次确认（取消不执行）；首页胶囊长按上滑速记进入写作卡；Lake 文档插入表格 = **内核原生表格卡**（非 Univer；独立「新建表格」文档才走 Univer）；手写板入口确认存在（工作区→文档树→新建→新建手写板，非缺口）。报告 `REPORT2.md`。
 - **用户手册**：新增 `guide/`（15 篇 Markdown + 31 张真实截图，中文、相对链接+锚点、桌面/Android 分列）。
 - **基线**：移动 6 态重烤（settings 元素 1909→1912 = 设置根页关闭按钮；大纲回退后 home-doc hash 再变一次，仅 1 态），重烤后门禁连跑 **0 差异**。

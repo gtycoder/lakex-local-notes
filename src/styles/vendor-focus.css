@@ -23,14 +23,3 @@
   box-shadow: 0 0 0 2px var(--lake-focus-halo);
   outline: 0;
 }
-
-/**
- * 内核工具栏按钮的**键盘焦点环**（261029 FIX-D3 a11y 低成本项）。
- * 内核/antd 的 `.ant-btn` 自带 `outline: none`、且没有 :focus-visible 视觉 ⇒ 键盘用户看不到焦点。
- * 只在桌面编辑器宿主内补令牌环（2px 主色 + 1px offset，与自有控件同一口径）；
- * 作用域限定 `.ne-ui-toolbar`，不压其它第三方焦点规则，也不用 !important（本文件未分层，优先级最高）。
- */
-.lake-editor-mount .ne-ui-toolbar .ant-btn:focus-visible {
-  outline: var(--lake-focus-ring-width) solid var(--lake-accent);
-  outline-offset: 1px;
-}
