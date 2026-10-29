@@ -10,6 +10,9 @@
  *   1) origin.url = Gitee；2) github 远端 = GitHub（fetch 用，拉 PR 合并结果）；
  *   3) origin 的 pushurl = Gitee + GitHub（`git push origin` 一次推两处）。
  *
+ * Gitee / GitHub 都走 **SSH**（不弹密码）。若你这台机器默认 ssh key 不是 GitHub 登记的那把，
+ * 在 `~/.ssh/config` 加 `Host github.com / IdentityFile <你的key> / IdentitiesOnly yes`。
+ *
  * 用法：node scripts/setup-remotes.mjs   （或 npm run setup:remotes）
  *
  * 换仓库/换账号时**改这里的两行常量即可**（地址很少变，写死比再引入环境变量清楚）。
@@ -17,7 +20,7 @@
 import { spawnSync } from "node:child_process";
 
 const GITEE_URL = "git@gitee.com:gtycoder/lakex-local-notes.git";
-const GITHUB_URL = "https://github.com/gtycoder/lakex-local-notes.git";
+const GITHUB_URL = "git@github.com:gtycoder/lakex-local-notes.git";
 
 /** 本机 /usr/local/bin/git 是坏的（Bad CPU type），优先绝对路径 /usr/bin/git（AGENTS §7）。 */
 const GIT_BIN = (() => {
