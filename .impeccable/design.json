@@ -32,10 +32,10 @@
       { "name": "dialog", "value": "0 0 0 1px rgba(16,24,40,.06), 0 16px 40px -12px rgba(16,24,40,.16), 0 40px 88px -32px rgba(16,24,40,.20)", "purpose": "对话框。" }
     ],
     "motion": [
-      { "name": "instant", "value": "80ms", "purpose": "按压等即时反馈。" },
-      { "name": "fast", "value": "130ms", "purpose": "状态色/底色过渡的默认时长。" },
-      { "name": "panel", "value": "190ms", "purpose": "浮层入场。" },
-      { "name": "ease-standard", "value": "cubic-bezier(.2,.8,.24,1)", "purpose": "默认缓动。" }
+      { "name": "instant", "value": "80ms", "purpose": "按压/焦点等即时反馈（必须跟手）。" },
+      { "name": "fast", "value": "250ms", "purpose": "入场/展开档；状态切换已改瞬时，不再有状态色过渡。" },
+      { "name": "panel", "value": "250ms", "purpose": "浮层/对话框/抽屉入场（与 fast 同值，有意）。" },
+      { "name": "ease-standard", "value": "ease-out", "purpose": "唯一曲线（261029 收敛；emphasized/exit/overshoot 同值，overshoot 名仅历史兼容）。" }
     ],
     "breakpoints": [
       { "name": "desktop", "value": "761px", "purpose": "窄窗/宽窗的分界（外壳几何的分水岭）。" }
@@ -53,7 +53,7 @@
       "refersTo": "button-primary",
       "description": "主操作；一屏最多一个。",
       "html": "<button class=\"ds-btn ds-btn--primary\">保存</button>",
-      "css": ".ds-btn { display:inline-flex; align-items:center; gap:5px; height:var(--lake-ctl-h); padding:0 11px; border:1px solid transparent; border-radius:var(--lake-ctl-rad); font-family:inherit; font-size:var(--lake-font-size-small); font-weight:var(--lake-font-weight-medium); line-height:1; cursor:pointer; transition:background-color var(--lake-motion-fast) var(--lake-ease-standard), border-color var(--lake-motion-fast) var(--lake-ease-standard), color var(--lake-motion-fast) var(--lake-ease-standard); } .ds-btn--primary { color:var(--lake-text-on-accent); background:var(--lake-accent-ink); } .ds-btn--primary:hover { background:var(--lake-accent-ink-hover); } .ds-btn--primary:active { background:var(--lake-accent-ink-press); } .ds-btn:focus-visible { outline:var(--lake-focus-ring-width) solid var(--lake-accent); outline-offset:var(--lake-focus-ring-offset); } .ds-btn:disabled { opacity:var(--lake-disabled-opacity); cursor:default; }"
+      "css": ".ds-btn { display:inline-flex; align-items:center; gap:5px; height:var(--lake-ctl-h); padding:0 11px; border:0.5px solid transparent; border-radius:var(--lake-ctl-rad); font-family:inherit; font-size:var(--lake-font-size-small); font-weight:var(--lake-font-weight-medium); line-height:1; cursor:pointer; transition:background-color var(--lake-motion-fast) var(--lake-ease-standard), border-color var(--lake-motion-fast) var(--lake-ease-standard), color var(--lake-motion-fast) var(--lake-ease-standard); } .ds-btn--primary { color:var(--lake-text-on-accent); background:var(--lake-accent-ink); } .ds-btn--primary:hover { background:var(--lake-accent-ink-hover); } .ds-btn--primary:active { background:var(--lake-accent-ink-press); } .ds-btn:focus-visible { outline:var(--lake-focus-ring-width) solid var(--lake-accent); outline-offset:var(--lake-focus-ring-offset); } .ds-btn:disabled { opacity:var(--lake-disabled-opacity); cursor:default; }"
     },
     {
       "name": "Secondary Button",
@@ -61,7 +61,7 @@
       "refersTo": "button-secondary",
       "description": "次要操作；描边控件边。",
       "html": "<button class=\"ds-btn ds-btn--secondary\">取消</button>",
-      "css": ".ds-btn { display:inline-flex; align-items:center; gap:5px; height:var(--lake-ctl-h); padding:0 11px; border:1px solid transparent; border-radius:var(--lake-ctl-rad); font-family:inherit; font-size:var(--lake-font-size-small); font-weight:var(--lake-font-weight-medium); line-height:1; cursor:pointer; } .ds-btn--secondary { color:var(--lake-text-1); border-color:var(--lake-ctl-border); } .ds-btn--secondary:hover { background:var(--lake-bg-hover); } .ds-btn--secondary:active { background:var(--lake-bg-press); }"
+      "css": ".ds-btn { display:inline-flex; align-items:center; gap:5px; height:var(--lake-ctl-h); padding:0 11px; border:0.5px solid transparent; border-radius:var(--lake-ctl-rad); font-family:inherit; font-size:var(--lake-font-size-small); font-weight:var(--lake-font-weight-medium); line-height:1; cursor:pointer; } .ds-btn--secondary { color:var(--lake-text-1); border-color:var(--lake-ctl-border); } .ds-btn--secondary:hover { background:var(--lake-bg-hover); } .ds-btn--secondary:active { background:var(--lake-bg-press); }"
     },
     {
       "name": "Icon Button",
@@ -77,7 +77,7 @@
       "refersTo": "input",
       "description": "输入框；静息边用控件边，聚焦用主色边 + 柔光环。",
       "html": "<span class=\"ds-input\"><input class=\"ds-input__field\" placeholder=\"搜索\" /></span>",
-      "css": ".ds-input { display:flex; align-items:center; gap:6px; height:var(--lake-ctl-h); padding:0 9px; border:1px solid var(--lake-ctl-border); border-radius:var(--lake-ctl-rad); background:var(--lake-bg-panel); color:var(--lake-text-1); font-size:var(--lake-font-size-small); transition:border-color var(--lake-motion-fast) var(--lake-ease-standard), box-shadow var(--lake-motion-fast) var(--lake-ease-standard); } .ds-input:hover { border-color:var(--lake-border-strong); } .ds-input:focus-within { border-color:var(--lake-accent); box-shadow:0 0 0 2px var(--lake-focus-halo); } .ds-input__field { flex:1 1 auto; min-width:0; border:0; outline:0; background:transparent; color:inherit; font:inherit; } .ds-input__field::placeholder { color:var(--lake-text-4); }"
+      "css": ".ds-input { display:flex; align-items:center; gap:6px; height:var(--lake-ctl-h); padding:0 9px; border:0.5px solid var(--lake-ctl-border); border-radius:var(--lake-ctl-rad); background:var(--lake-bg-panel); color:var(--lake-text-1); font-size:var(--lake-font-size-small); transition:border-color var(--lake-motion-fast) var(--lake-ease-standard), box-shadow var(--lake-motion-fast) var(--lake-ease-standard); } .ds-input:hover { border-color:var(--lake-border-strong); } .ds-input:focus-within { border-color:var(--lake-accent); box-shadow:0 0 0 2px var(--lake-focus-halo); } .ds-input__field { flex:1 1 auto; min-width:0; border:0; outline:0; background:transparent; color:inherit; font:inherit; } .ds-input__field::placeholder { color:var(--lake-text-4); }"
     },
     {
       "name": "Select Trigger",
@@ -85,7 +85,7 @@
       "refersTo": "input",
       "description": "下拉触发器；弹层是自有菜单表面，不用原生 select。",
       "html": "<button class=\"ds-select\"><span class=\"ds-select__value\">16 px</span><svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"m6 9 6 6 6-6\"/></svg></button>",
-      "css": ".ds-select { display:inline-flex; align-items:center; gap:6px; min-width:140px; height:var(--lake-ctl-h); padding:0 8px; border:1px solid var(--lake-ctl-border); border-radius:var(--lake-ctl-rad); background:var(--lake-bg-panel); color:var(--lake-text-1); font:inherit; font-size:var(--lake-font-size-small); cursor:pointer; } .ds-select:hover { border-color:var(--lake-border-strong); } .ds-select[aria-expanded=\"true\"], .ds-select:focus-visible { outline:0; border-color:var(--lake-accent); box-shadow:0 0 0 2px var(--lake-focus-halo); } .ds-select__value { flex:1 1 auto; min-width:0; overflow:hidden; white-space:nowrap; text-align:left; }"
+      "css": ".ds-select { display:inline-flex; align-items:center; gap:6px; min-width:140px; height:var(--lake-ctl-h); padding:0 8px; border:0.5px solid var(--lake-ctl-border); border-radius:var(--lake-ctl-rad); background:var(--lake-bg-panel); color:var(--lake-text-1); font:inherit; font-size:var(--lake-font-size-small); cursor:pointer; } .ds-select:hover { border-color:var(--lake-border-strong); } .ds-select[aria-expanded=\"true\"], .ds-select:focus-visible { outline:0; border-color:var(--lake-accent); box-shadow:0 0 0 2px var(--lake-focus-halo); } .ds-select__value { flex:1 1 auto; min-width:0; overflow:hidden; white-space:nowrap; text-align:left; }"
     },
     {
       "name": "List Row",
@@ -99,9 +99,9 @@
       "name": "Menu Surface",
       "kind": "card",
       "refersTo": "menu-surface",
-      "description": "菜单/气泡表面；实心面板 + 1px 细线 + 浮层阴影。",
+      "description": "菜单/气泡表面；实心面板 + 0.5px 细线 + 浮层阴影。",
       "html": "<div class=\"ds-menu\"><button class=\"ds-menu__item is-selected\"><span class=\"ds-menu__check\">✓</span><span class=\"ds-menu__label\">16 px</span></button><button class=\"ds-menu__item\"><span class=\"ds-menu__check\"></span><span class=\"ds-menu__label\">19 px</span></button></div>",
-      "css": ".ds-menu { display:flex; flex-direction:column; min-width:206px; padding:var(--lake-space-sm); border:1px solid var(--lake-border-1); border-radius:var(--lake-radius-md); background:var(--lake-bg-panel); box-shadow:var(--lake-shadow-popover); color:var(--lake-text-1); } .ds-menu__item { display:flex; width:100%; align-items:center; gap:8px; min-height:var(--lake-ctl-h); padding:0 8px; border:0; border-radius:var(--lake-ctl-rad-sm); color:var(--lake-text-1); background:transparent; font:inherit; font-size:var(--lake-font-size-small); text-align:left; cursor:pointer; } .ds-menu__item:hover, .ds-menu__item.is-selected { color:var(--lake-accent-text); background:var(--lake-accent-tint); font-weight:var(--lake-font-weight-semibold); } .ds-menu__check { flex:0 0 auto; width:16px; color:var(--lake-accent); } .ds-menu__label { flex:1 1 auto; min-width:0; overflow:hidden; white-space:nowrap; }"
+      "css": ".ds-menu { display:flex; flex-direction:column; min-width:206px; padding:var(--lake-space-sm); border:0.5px solid var(--lake-border-1); border-radius:var(--lake-radius-md); background:var(--lake-bg-panel); box-shadow:var(--lake-shadow-popover); color:var(--lake-text-1); } .ds-menu__item { display:flex; width:100%; align-items:center; gap:8px; min-height:var(--lake-ctl-h); padding:0 8px; border:0; border-radius:var(--lake-radius-2xs); color:var(--lake-text-1); background:transparent; font:inherit; font-size:var(--lake-font-size-small); text-align:left; cursor:pointer; } .ds-menu__item:hover, .ds-menu__item.is-selected { color:var(--lake-accent-text); background:var(--lake-accent-tint); font-weight:var(--lake-font-weight-semibold); } .ds-menu__check { flex:0 0 auto; width:16px; color:var(--lake-accent); } .ds-menu__label { flex:1 1 auto; min-width:0; overflow:hidden; white-space:nowrap; }"
     },
     {
       "name": "Switch",
@@ -109,7 +109,7 @@
       "refersTo": "control-height-sm",
       "description": "开/关；选中主色实心，旋钮为白色圆形。",
       "html": "<button class=\"ds-switch\" role=\"switch\" aria-checked=\"true\"><span class=\"ds-switch__knob\"></span></button>",
-      "css": ".ds-switch { position:relative; display:inline-flex; align-items:center; width:32px; height:19px; padding:0; border:1px solid var(--lake-ctl-border); border-radius:var(--lake-radius-pill); background:transparent; cursor:pointer; transition:background-color var(--lake-motion-fast) var(--lake-ease-standard), border-color var(--lake-motion-fast) var(--lake-ease-standard); } .ds-switch__knob { position:absolute; left:1px; width:15px; height:15px; border-radius:var(--lake-radius-pill); background:var(--lake-bg-raised); box-shadow:var(--lake-shadow-knob); transition:transform var(--lake-motion-fast) var(--lake-ease-standard); } .ds-switch[aria-checked=\"true\"] { background:var(--lake-accent); border-color:var(--lake-accent); } .ds-switch[aria-checked=\"true\"] .ds-switch__knob { transform:translateX(13px); } .ds-switch:focus-visible { outline:var(--lake-focus-ring-width) solid var(--lake-accent); outline-offset:var(--lake-focus-ring-offset); }"
+      "css": ".ds-switch { position:relative; display:inline-flex; align-items:center; width:32px; height:19px; padding:0; border:0.5px solid var(--lake-ctl-border); border-radius:var(--lake-radius-pill); background:transparent; cursor:pointer; transition:background-color var(--lake-motion-fast) var(--lake-ease-standard), border-color var(--lake-motion-fast) var(--lake-ease-standard); } .ds-switch__knob { position:absolute; left:1px; width:15px; height:15px; border-radius:var(--lake-radius-pill); background:var(--lake-bg-raised); box-shadow:var(--lake-shadow-knob); transition:transform var(--lake-motion-fast) var(--lake-ease-standard); } .ds-switch[aria-checked=\"true\"] { background:var(--lake-accent); border-color:var(--lake-accent); } .ds-switch[aria-checked=\"true\"] .ds-switch__knob { transform:translateX(13px); } .ds-switch:focus-visible { outline:var(--lake-focus-ring-width) solid var(--lake-accent); outline-offset:var(--lake-focus-ring-offset); }"
     }
   ],
   "narrative": {
@@ -128,12 +128,12 @@
       { "name": "The Tabular Rule", "body": "一切会变化的数字（计数、字数、进度、表格数值）必须 font-variant-numeric: tabular-nums。", "section": "typography" },
       { "name": "The One-Step Rule", "body": "相邻层级的字重差至少一档（400↔500↔600），不要靠 1px 字号差表达层级。", "section": "typography" },
       { "name": "The Flat-By-Default Rule", "body": "静息态是平的。阴影只回答「这一层比下一层高多少」；没有偏移与模糊的光圈是装饰。", "section": "elevation" },
-      { "name": "The One Declaration Rule", "body": "一个面要么靠 1px 边，要么靠阴影，不要「细边 + 大软阴影」同时上。", "section": "elevation" }
+      { "name": "The One Declaration Rule", "body": "一个面要么靠 0.5px 边，要么靠阴影，不要「细边 + 大软阴影」同时上。", "section": "elevation" }
     ],
     "dos": [
       "Do 颜色只走 --lake-* 令牌；令牌的唯一定义处是 src/styles/themes/*。",
       "Do 同一种交互语义复用 kit 的 ln-* 原语；需要新外观时改原语，不在调用点另写一套。",
-      "Do 用表面价值（三级）表达层级，用 1px 边或阴影二选一。",
+      "Do 用表面价值（三级）表达层级，用 0.5px 边或阴影二选一。",
       "Do 让主色只出现在焦点 / 选中 / 主操作 / 链接上。",
       "Do 交互状态六态齐全：default / hover / active / focus-visible / selected / disabled。"
     ],

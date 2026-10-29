@@ -122,7 +122,7 @@ components:
   menu-item:
     backgroundColor: "transparent"
     textColor: "{colors.ink-1}"
-    rounded: "{rounded.xs}"
+    rounded: "{rounded.2xs}"
     height: "27px"
   row:
     backgroundColor: "transparent"
@@ -226,30 +226,31 @@ components:
 
 **The Flat-By-Default Rule.** 静息态是平的。阴影只回答一个问题："这一层比下一层高多少"。没有偏移与模糊的"光圈"是装饰，不是纵深。
 
-**The One Declaration Rule.** 一个面要么靠 1px 边，要么靠阴影，不要「细边 + 大软阴影」同时上（那是幽灵卡片）。
+**The One Declaration Rule.** 一个面要么靠 0.5px 边，要么靠阴影，不要「细边 + 大软阴影」同时上（那是幽灵卡片）。
 
 ## Motion
 
-**动效只表达状态变化，不做装饰。**（261017 A 批；数值唯一来源 = `src/styles/themes/base.css` 的 `--lake-motion-*` / `--lake-ease-*`。）
+**动效只表达状态变化，不做装饰。**（261017 立，261029 动效收敛；数值唯一来源 = `src/styles/themes/base.css` 的 `--lake-motion-*` / `--lake-ease-*`。）
 
 ### Duration Tokens
+261029 起入场只剩**一档 250ms**（三档同值是**有意**的：一个交互语义只有一档时长，档位名保留给未来分档，别改回不同值）。
 - `--lake-motion-instant` **80ms**：按压回弹、焦点环显隐（必须跟手）。
-- `--lake-motion-fast` **130ms**：hover / 颜色 / 边框 / 大小面板入场（**默认档**）。
-- `--lake-motion-panel` **190ms**：对话框、抽屉、菜单表面入场。
-- `--lake-motion-slow` **240ms**：大面板收起/展开（大纲）。
+- `--lake-motion-press` **90ms**：按压 `transform` 微缩放（必须快于入场档，保跟手）。
+- `--lake-motion-fast` / `--lake-motion-panel` / `--lake-motion-slow` 全部 **250ms**：菜单/气泡/对话框/抽屉/大面板的**入场与结构展开**都走这一档。
 
 ### Curves
-- `--lake-ease-standard`：默认（悬停、颜色、位移）。
-- `--lake-ease-emphasized`：浮层/对话框入场。
-- `--lake-ease-exit`：保留给未来的出场相位（当前未使用）。
-- `--lake-ease-overshoot`：**只给有实体的控件回弹**（开关滑块、按压），不用于颜色。
+261029 起**只有一条曲线**：`ease-out`（四个 `--lake-ease-*` 令牌的值全部 = `ease-out`）。
+- `--lake-ease-standard` / `--lake-ease-emphasized` / `--lake-ease-exit`：同一条曲线；入场用它，出场相位暂不做（要做出场，另立项改 Overlay 常驻）。
+- `--lake-ease-overshoot`：**名字保留只是历史兼容**（此前是 overshoot 配方，261029 已收敛）；值 = `ease-out`，只给有实体的控件位移，不用于颜色。
+- **不要再自造 `cubic-bezier`**：新建曲线前先证明 `ease-out` 不够（本仓唯一一次例外就是已废止的那条 overshoot）。
 
 ### Rules
-1. **状态切换用 `transition`，挂载出现用 `animation`**；只动 `opacity / transform / color / background / border-color / box-shadow`，**不动布局属性**（width/height/top/left/margin/padding）。
+1. **只有「入场 / 展开 / 位移」用 `transition` 或 `animation`**（浮层入场、抽屉、面板、结构展开）；**状态切换一律瞬时**（hover / 选中 / 颜色 / 背景 / 边框 / 阴影**不做过渡**，261029 起已删）。只动 `opacity / transform`（颜色类属性只允许瞬时切换），**不动布局属性**（width/height/top/left/margin/padding）。
 2. **浮层入场只做 "in"**：菜单/气泡挂在 `.ln-overlay-surface` 原语上、挂载帧起播（定位 hook 的落位在首帧绘制前完成）；**不要用 rAF/相位门控**（隐藏窗口里 rAF 不触发会把菜单卡成不可见）。出场相位暂不做（要改 Overlay 常驻，另立项）。
 3. **按压反馈只放在 kit 原语上**（`.ln-btn` / `.ln-iconbtn` 的 `transform`），不在业务组件里另写一套。
 4. **一个交互语义只有一档时长**：同一类元素不只换曲线、不各写毫秒值；新动效先找既有令牌。
 5. **reduced-motion 由 a11y 层统一兜底**（`animation-duration: 1ms` + 位移过渡白名单），组件不写自己的 reduce 分支。
+6. **尽量不做装饰性过渡（261029 定稿）**：颜色 / 背景 / 边框 / 阴影的 hover 与状态切换已删过渡 ⇒ 瞬时切换；保留的过渡只有**浮层入场/退场**与**有实体的位移**（抽屉、面板、指示线、滑块）。给 hover 加回过渡 = 回退，评审直接打回。
 
 ### Scroll Edges
 - 长列表的滚动边缘用 **7 档非线性 alpha 遮罩**（28px）：小记列表 / 下拉弹层两个接入点共用 kit 的同一组选择器；由 `useScrollFade` 只在**真有内容被裁**的一侧打 `data-fade-top/bottom`，到顶/到底归零。
@@ -260,7 +261,17 @@ components:
 ## Shapes
 
 形体语言是**克制的小圆角**：控件 8px（紧凑件 6px），浮层表面 10px，对话框 14px，胶囊只用于开关与徽标。
-边界一律 1px；**禁止 >1px 的单侧色条**（卡片、列表项、提示条上的左侧粗色条是 AI 生成界面的典型痕迹）。
+边界一律 **0.5px**（发丝线与表面边框，261029 统一；此前是 1px）。例外只有**必须被看见的图形描边**：`outline` 焦点环（2px，`--lake-focus-ring-width`）、对勾/勾选符号、进度环与画板笔迹。**文档正文/编辑器内部等「具体内容区」不参与这条统一**（markdown 引用竖线、表格线等保持内容语义原值）。**禁止 >1px 的单侧色条**（卡片、列表项、提示条上的左侧粗色条是 AI 生成界面的典型痕迹）。
+
+**同心圆角（261029 用户定稿，光学对齐）**：贴在外层表面角落里的内层表面，半径 = **外层半径 − 外层到内层的间距**，**下限 2px**。内外同半径会让悬停/选中底色在四角与边上留白不匀（角上窄、边上宽）——那正是"看起来圆、实际不对齐"的来源。
+
+| 外层表面 | 外层半径 | 内距 | 内层半径 | 现行落点 |
+| --- | --- | --- | --- | --- |
+| 菜单 / 气泡 `.ln-menu` | 10（`{rounded.md}`） | 6（`--lake-space-sm`） | **4**（`{rounded.2xs}`） | `.ln-menu__item` 及其所有复用者（下拉/右键/＋菜单/选择器选项） |
+| 对话框 `.ln-dialog` | 14（`{rounded.lg}`） | 16（`--lake-space-xl`） | 14 − 16 < 0 ⇒ **不设** | 贴角内容**由对话框 `overflow:hidden` 裁切** |
+
+- **靠 `overflow:hidden` 裁切的列表行不单独设半径**：外层既然会裁，内层再写半径只会多出一圈错位的浅弧（对话框正文里的行/表格/输入块按这条走）。
+- **控件自身半径不受本规则约束**：按钮 / 输入框 / 图标钮 / 开关仍按控件规格（8px，紧凑件 6px）——它们是浮在内容上的独立实体，不是"贴角内层表面"。
 
 ## Components
 
@@ -283,7 +294,7 @@ components:
 - **Items:** 复用菜单项规格；**整行**高亮（`accent-tint` + `accent-text` + 600），勾选位在**右侧**，标签左对齐。
 
 ### Rows / Menu Items
-- **Shape:** 通用行/菜单高27px；**桌面目录行**用14px标题（`--lake-font-size-body`，与内核原生大纲同档）、上下2px内距、左右8px，**实测普通行27px / 笔记本行29px**（笔记本行有独立 `min-height` 下限）。261015 试调过 15px 与 14.5px 均偏大，已回滚到 14px；**目录字号不要再单独抬档**。行圆角8px、菜单项圆角6px。
+- **Shape:** 通用行/菜单高27px；**桌面目录行**用14px标题（`--lake-font-size-body`，与内核原生大纲同档）、上下2px内距、左右8px，**实测普通行27px / 笔记本行29px**（笔记本行有独立 `min-height` 下限）。261015 试调过 15px 与 14.5px 均偏大，已回滚到 14px；**目录字号不要再单独抬档**。行圆角8px、菜单项圆角4px（与菜单表面 10 − 内距 6 同心，见 Shapes）。
 - **States:** hover = `surface-hover`；active = `surface-press`；selected = `accent-tint` + `accent-text` + 600；disabled = `.45` 透明。
 
 ### Selection & Hover Surfaces（261017 用户定稿）
@@ -298,18 +309,34 @@ components:
 - **Style:** 开关 32×19（胶囊，选中主色实心）；勾选件自绘 15×15（圆角 6，radio 为圆），静息边 `control-border`、选中主色实心、勾选符号用**边框旋转**绘制。
 
 ### Menu / Dialog Surfaces
-- **Menu:** 实心 `surface-panel` + 1px `hairline` + `popover` 阴影，圆角 10px，内距 6px。
-- **Dialog:** 实心 + `dialog` 阴影，圆角 14px。
+- **Menu:** 实心 `surface-panel` + 0.5px `hairline` + `popover` 阴影，圆角 10px，内距 6px ⇒ **菜单项圆角 4px**（`{rounded.2xs}`，同心圆角：10 − 6，见 Shapes）。
+- **Dialog:** 实心 + `dialog` 阴影，圆角 14px，内距 16px ⇒ 内层 14 − 16 < 0，贴角内容由对话框 `overflow:hidden` 裁切，**不单独设半径**。
 
 ### Tooltips
 - **Style:** `.ln-tip` —— 深墨底 + 白字，圆角 6px，`z-tooltip`；**原生 `title` 一律由全局拦截器换成它**（约 1s 的系统延迟不可接受）。
+
+## Voice & Copy（文案基调，261029）
+
+**读者 = 个人笔记作者**，不是管理员、不是开发者。语气像"一个懂行的同事在旁边说明"：说清发生了什么、我能做什么；不口语化、不卖萌、不堆术语。
+
+- **易懂**：一句话讲清「发生了什么 / 我能做什么」；概念一律用下方固定术语，不临场造词。
+- **长度贴合场景**：按钮 ≤6 字；行内说明一句；确认对话框给**后果 + 是否可逆**；错误信息给**下一步动作**。
+- **不冗余**：不重复标题已经说过的信息；不写"请 / 请注意 / 您的"这类填充；同一个意思全仓只有一种说法。
+- **不自造词**：新概念先找既有术语；确实需要新词时先定义一次，并回填本节。
+- **界面文案禁止用中点「·」作分隔符**（261029 定）：改用「，」「；」，或拆成两行 / 两个标签。中点只出现在**用户自己写的内容**里（正文、标签名），我们自己产出的文案一律不用。
+- **固定术语**（不得改写、不得换说法）：
+
+| 场景 | 固定写法 |
+| --- | --- |
+| 远端已彻底删除、本机仅存一份可恢复副本 | **云端已删除（仅本地）** |
+| 说明正文与密钥的关系 | **隐私数据（云端不加密）** |
 
 ## Do's and Don'ts
 
 ### Do:
 - **Do** 颜色只走 `--lake-*` 令牌；令牌的唯一定义处是 `src/styles/themes/*`。
 - **Do** 同一种交互语义复用 kit 的 `ln-*` 原语；需要新外观时改原语，不在调用点另写一套。
-- **Do** 用表面价值（三级）表达层级，用 1px 边或阴影二选一。
+- **Do** 用表面价值（三级）表达层级，用 0.5px 边或阴影二选一。
 - **Do** 让主色只出现在焦点 / 选中 / 主操作 / 链接上。
 - **Do** 交互状态六态齐全：default / hover / active / focus-visible / selected / disabled。
 - **Do** 动效走 `--lake-motion-*` / `--lake-ease-*` 令牌：状态切换用 transition、挂载出现用 animation，只动 opacity/transform（见「Motion」）。

@@ -195,6 +195,7 @@ bash scripts/android-build.sh --sync --install # 构建并安装到已连接设�
 | [docs/MOBILE-OPS.md](docs/MOBILE-OPS.md) | **Android 构建 / 安装 / AVD / CDP / 门禁 / 点按口径**（唯一运维手册） |
 | [docs/MOBILE-AI.md](docs/MOBILE-AI.md) | 移动端 AI 设计与实施契约（资料集 / 预算 / 原生通道 / 分期） |
 | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) · [docs/CODEX-GUIDE.md](docs/CODEX-GUIDE.md) · [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | 环境/命令 / CDP 驱动指南 / 排错 |
+| [guide/README.md](guide/README.md) | **中文用户使用手册**（15 篇 + 截图，按桌面/Android 分步说明） |
 
 ## 数据与隐私
 

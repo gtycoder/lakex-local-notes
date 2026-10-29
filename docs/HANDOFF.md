@@ -13,11 +13,22 @@
 > **真机/真 S3 验收（261028）**：桌面（隔离副本 + 真 dev 桶 `lakex-notes-dev3`）与 `lake_gate` 模拟器（现场构建 debug APK）均通过；首轮 1 文档上传/移动 1 文档下载、增量零变更轮不发布、浮窗两行细分与移动新细分行渲染正确、无 console error。**验收中修掉 P1**：`last_synced_at` 在 v3 路径无写入点 ⇒「上次同步」永远旧时间/为空（补 `store.markSyncComplete` + `electron/syncStatusWiring.test.ts` 静态锁）。待用户裁决 3 条观感项（浮窗「上次同步」重复出现 / 保存后需重测才能开开关 / Path-style 对七牛须关）。详见 08 §32、截图 `.css-audit/accept-261028/`。
 
 
-> **当前基线**：`master` @ **d02a7144（261029 运维文档批）+ 其上一条 `docs(handoff)` 记录提交；仅本地提交、未 push**（此前 03ef3fb3 / ea576a80 已过期）；项目/身份 = **lakex-local-notes**（productName `LakexLocalNotes`；appId `com.lakexlocalnotes.desktop` / `com.lakexlocalnotes.android`；数据目录 `lakex-local-notes-dev` / `lakex-local-notes`；私有协议 `lakexlocalnotes://app`；S3 迁移码 `LLN1.`）。文档：根 `README.md` / `AGENTS.md`，其余在 `docs/`。门禁：以 `docs/audit-261027/08-ab-execution.md` 最新记录为准（261029 最新：tsc 0 / vitest 514 文件 3144 例 / 25s）；**S3 v3 已完成并转正合并**（旧协议备份分支 `backup/master-pre-s3v3-261027`）。
+> **当前基线**：`master` @ **261029 本轮大批次（见 git log 首条）；仅本地提交、未 push**（上一基线 d02a7144，再前 03ef3fb3 / ea576a80 已过期）；项目/身份 = **lakex-local-notes**（productName `LakexLocalNotes`；appId `com.lakexlocalnotes.desktop` / `com.lakexlocalnotes.android`；数据目录 `lakex-local-notes-dev` / `lakex-local-notes`；私有协议 `lakexlocalnotes://app`；S3 迁移码 `LLN1.`）。文档：根 `README.md` / `AGENTS.md`，其余在 `docs/`。门禁：以 `docs/audit-261027/08-ab-execution.md` 最新记录为准（261029 最新：tsc 0 / vitest 514 文件 3144 例 / 25s）；**S3 v3 已完成并转正合并**（旧协议备份分支 `backup/master-pre-s3v3-261027`）。
 > **待用户验收**：表格 P4/P5 桌面侧、小记搜索/标签（桌面+Android）、CSS 层修复、长按 capture 启动、移动端表格「链接/十字高亮」设备点按、多维表重命名单边框 + 创建项「新建多维表」、默认标题/筛选单边框/云同步默认关、AI 面板全文开关只给无选区入口、macOS 全屏顶栏去掉红绿灯让位、表格第三方输入框单边框（vendor 焦点归属）、全屏附件预览/顶栏不加红绿灯让位。
 > **待用户裁决**：① 移动端表格 ⋯ 面板逐项去留（29 项：22 可点 + 7 置灰占位；已给出逐项功能与建议，等用户点单后再裁）；② **缺正文 / 缺小记的移动端入口**（要不要做"移动资源页"；桌面判据 `missingBodyRecovery` / `missingQuickNoteRecovery` 可直接复用，但手机端有没有这个场景/放哪层入口属产品决定）；③ **表格「单元格保护 / 阅读态筛选·排序·冻结」的语义**（写正文 vs 设备本机视图——决定 P4-4 与 P5 剩余怎么收口；桌面/移动同一套判据）。
 > **下一会话焦点**：① 表格 P4/P5 剩余（移动阅读态/保护语义）——**先等待用户裁决③**；② 移动端文本格式缺口（H5/H6、缩进、行高、清除格式、格式刷）；③ 画图插入项解禁；④ 逐页走查；⑤ GitHub Releases 与签名/公证；⑥ **移动端缺正文 / 缺小记的恢复入口** —— **先等待用户裁决②**（判据已在 `src/core/missingBody.ts`，桌面资源页是现成样板）。
 > **已定不再讨论**：长期红线见 `AGENTS.md` §3；历史决定见 git。
+
+### 261029 本轮 · S3 迁移码 / AI 防御开启 / 两端对齐与 UI 审计 / 全面回归 / 用户手册 · **本地提交（见 git log 首条，未 push）**
+- **功能**：移动端 S3 支持「粘贴迁移码」（与桌面 `S3ConfigImportDialog` 同形同构，坏码就地报错）；AI 开关默认关、必须「测试连通性」通过才能开（与 S3 同一逻辑；未验证点击只提示不打开）；「启用云同步」点击时未配置/未验证给可见提示；「执行深度清理 / 清理云端」加二次确认；关于页加回技术身份。
+- **视觉/文案（用户 5+1 条口径）**：两端边框 **0.5px**（内容区/焦点环/对勾/进度环/画板笔迹例外）；动效统一 **ease-out 250ms** 并删装饰性过渡；圆角字面量收敛到令牌、删装饰阴影；界面文案人话化、**禁中点「·」**（固定术语「云端已删除（仅本地）」「隐私数据（云端不加密）」）；两端光学对齐 + 同心圆角（外 R − 间距）；信息秩序重排（桌面设置导航/云端组，移动根菜单/AI/同步页）。设计口径已回填 `docs/DESIGN.md` §Shapes/§Motion/§Voice & Copy、`docs/MOBILE-DESIGN.md`、`.impeccable/design.json`、`AGENTS.md` §3#14 观感红线。
+- **回归（桌面 80 例 `✅74/❌4/➖2`、移动 50 例，P0=0）**：报告 `.css-audit/regression-261029-{desktop,mobile}/REPORT.md`。
+  - P1 修复 3：① 桌面状态栏「云关闭仍待同步」→ `documentStatusModel` 入参改 `cloudEnabled`，`App` 传 `isCloudActive(cloudConfigured, cloudEnabled)`；② 移动未配置 S3 点「立即同步」被记「同步成功」→ `bridge/sync.ts` 仅在 summary 非空时写状态；③ 移动首次打开 AI 的 `readdir` ENOENT console.error → `aiImageStore.sweepOrphanConversationDirs` 先建目录再读。
+  - P2 修复 5（移动）：设置根页可见关闭按钮；新建面板标题「新建文档知识库」→「文档与知识库」；多维表元信息去掉重复「视图」并占满；大纲右侧抽屉让出底部胶囊（842→746）；空画板加空态。
+  - P2 结论（桌面）：工具栏按钮 disabled/插入面板点不开 = 冷启动未聚焦 + 后台窗口首击伪影（点正文后正常，dev/scheme 一致，非回归）；状态栏字数/图片保持**不可点**（顶栏同步入口已足够）；内核工具栏 a11y 缺口记录不修。
+- **用户手册**：新增 `guide/`（15 篇 Markdown + 31 张真实截图，中文、相对链接+锚点、桌面/Android 分列）。
+- **基线**：移动 6 态重烤（settings 元素 1909→1912 = 设置根页关闭按钮；其余 hash 变动来自 0.5px/文案），重烤后门禁连跑 **0 差异**。
+- **门禁**：tsc 0 / vitest 505 文件 3156 例 / check:core 133 文件 0 / check:mobileui / check:bundle / ui-metrics / `git diff --check`。
 
 ### 261029 · 运维文档重建（Android 使用方法）+ lake_gate 换新包 · **已提交 d02a7144（仅本地，未 push）**
 - **背景**：旧 HANDOFF §8「移动端速查」在 `03ef3fb3` 随重写被删，但 HANDOFF 头注释、`docs/MOBILE-TECH-STACK.md`、`docs/LAKEX-CONTRACT.md`、README 仍指向 §8 ⇒ 安卓端「怎么构建 / 怎么装 / 怎么连 CDP / 怎么跑门禁」失去单一来源。
