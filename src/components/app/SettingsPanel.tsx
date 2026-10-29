@@ -45,6 +45,7 @@ import { formatBytes } from "../../lib/formatBytes";
 import { formatDateTime } from "../../core/dateFormat";
 import { formatS3v3Diagnostics, type S3v3DiagnosticReport } from "../../core/s3v3Report";
 import { effectiveS3Settings, isQiniuEndpoint, s3ConfigFingerprint } from "../../lib/s3FormState";
+import { loadAiEnabled, saveAiEnabled } from "../../lib/aiEnabled";
 
 export type SettingsCategory = "editor" | "appearance" | "shortcuts" | "history" | "sync" | "ai" | "trash" | "browser" | "logs" | "about";
 
@@ -111,6 +112,10 @@ let verifiedS3Fingerprint: string | null = null;
   const [aiView, setAiView] = useState<AiSettingsView | null>(null);
   /** AI 动作的结果提示（保存 / 测试 / 拉模型列表共用这一条通道，谁最后写谁显示）。 */
   const [aiMsg, setAiMsg] = useState<string | null>(null);
+  /** AI 总开关（设备本地；关闭后任何路径不出网，配置与 Key 保留）。 */
+  const [aiEnabled, setAiEnabled] = useState(() => loadAiEnabled());
+  /** 尝试在未配置 Key 时开启 AI 的行内提示。 */
+  const [aiEnableAlert, setAiEnableAlert] = useState<string | null>(null);
   /** 字段级错误（键：apiKey / baseUrl / model / all）——比一个笼统提示好用。 */
   const [aiErr, setAiErr] = useState<Record<string, string>>({});
   /** 未保存的编辑值；apiKey 只在本组件内存里，测通后才落盘。 */
@@ -1044,6 +1049,23 @@ let verifiedS3Fingerprint: string | null = null;
                       {aiErr.all && <div className="config-item__error">{aiErr.all}</div>}
                       {aiMsg && <div className="config-note">{aiMsg}</div>}
                     </Block>
+                    <Switch
+                      itemId="ai-enabled"
+                      name="AI 助手"
+                      desc="关闭后 AI 助手不出网，配置与 API Key 保留；重新打开即可继续使用。"
+                      alert={aiEnableAlert}
+                      checked={aiEnabled}
+                      onChange={(checked) => {
+                        // 与「启用云同步」同口径：没有可用配置就别让用户以为已经能用；配好后可随时关/开。
+                        if (checked && !activeAi?.hasApiKey) {
+                          setAiEnableAlert("先在上方填好供应商与 API Key 并保存，再开启 AI 助手。");
+                          return;
+                        }
+                        setAiEnableAlert(null);
+                        saveAiEnabled(checked);
+                        setAiEnabled(checked);
+                      }}
+                    />
                   </Section>
                 </Group>
                 <Group title="说明">

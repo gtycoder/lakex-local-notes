@@ -19,6 +19,16 @@
 > **下一会话焦点**：① 表格 P4/P5 剩余（移动阅读态/保护语义）——**先等待用户裁决③**；② 移动端文本格式缺口（H5/H6、缩进、行高、清除格式、格式刷）；③ 画图插入项解禁；④ 逐页走查；⑤ GitHub Releases 与签名/公证；⑥ **移动端缺正文 / 缺小记的恢复入口** —— **先等待用户裁决②**（判据已在 `src/core/missingBody.ts`，桌面资源页是现成样板）。
 > **已定不再讨论**：长期红线见 `AGENTS.md` §3；历史决定见 git。
 
+### 261029 补丁 · 首启欢迎页统一（Android 小记 + 桌面文档）/ 桌面 AI 总开关 / AI 页分组标题去灰底 · **本地提交（见 git log 首条，未 push）**
+- **首启欢迎页（用户点单）**：桌面欢迎文档与 Android 默认「欢迎」小记使用同一份内容（`src/core/lakeDocForm.ts` 的 `WELCOME_TITLE`/`WELCOME_INTRO`/`WELCOME_GUIDE_LINKS`；桌面 `welcomeLakeBody()` 带可点击链接，小记 body 同源 + `welcomeQuickNoteText()` 纯文本镜像）。内容含 **Gitee / GitHub 使用说明** 两个入口（`…/blob/master/guide/README.md`）。
+  - Android 仅在**全新库**创建一次（固定 id `welcome-quick-note`，标记 `welcome_quick_note_initialized`；用户删除后不复活；有数据的旧库只补标记不插入；失败只 warn 不阻断启动）。新增 `src/mobile/data/welcomeQuickNote.ts` + 判据单测。
+  - 门禁夹具（`scripts/mobile-audit/gate-fixture.mjs`）会物理删除这条欢迎小记，保持「4 条小记」的确定性夹具（否则每次新装快照都会多一条）。
+- **桌面 AI 总开关（用户点单）**：设置 → AI → **连通性** 分组新增 `ai-enabled` Switch（设备本地 `localStorage`，默认开，保持旧行为）；关闭后 `lib/ai.ts` 的 `runAiChat` 直接拒绝、**任何路径不出网**，配置与 Key 保留；未配置 API Key 时尝试开启会给行内提示（同「启用云同步」口径）。`settingsSearch` 已登记 `ai-enabled`。
+- **AI 页观感**：`.settings-panel .config-section__title` 去掉灰底色（`--lake-bg-subtle` → transparent），分组边界只由卡片 0.5px 边承担（用户反馈"灰色衔接条很丑"）；手册 `desktop-settings-ai.png` 已重拍。
+- **手册**：01/10/12 章补首启欢迎小记、桌面 AI 开关位置与语义。
+- **基线**：新装夹具后 `home-doc` 指纹变化（文档 id 变化，元素数不变）⇒ 6 态重烤；之后门禁连跑 **0 差异**。
+- **门禁**：tsc 0 / vitest 508 文件 3165 例 / ui-metrics / check:core / check:mobileui / mobile build / check:bundle / diff-check。
+
 ### 261029 本轮 · S3 迁移码 / AI 防御开启 / 两端对齐与 UI 审计 / 全面回归 / 用户手册 · **本地提交（见 git log 首条，未 push）**
 - **功能**：移动端 S3 支持「粘贴迁移码」（与桌面 `S3ConfigImportDialog` 同形同构，坏码就地报错）；AI 开关默认关、必须「测试连通性」通过才能开（与 S3 同一逻辑；未验证点击只提示不打开）；「启用云同步」点击时未配置/未验证给可见提示；「执行深度清理 / 清理云端」加二次确认；关于页加回技术身份。
 - **视觉/文案（用户 5+1 条口径）**：两端边框 **0.5px**（内容区/焦点环/对勾/进度环/画板笔迹例外）；动效统一 **ease-out 250ms** 并删装饰性过渡；圆角字面量收敛到令牌、删装饰阴影；界面文案人话化、**禁中点「·」**（固定术语「云端已删除（仅本地）」「隐私数据（云端不加密）」）；两端光学对齐 + 同心圆角（外 R − 间距）；信息秩序重排（桌面设置导航/云端组，移动根菜单/AI/同步页）。设计口径已回填 `docs/DESIGN.md` §Shapes/§Motion/§Voice & Copy、`docs/MOBILE-DESIGN.md`、`.impeccable/design.json`、`AGENTS.md` §3#14 观感红线。

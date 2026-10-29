@@ -6,7 +6,10 @@ import {
   lakeEmptyParagraph,
   lakeImageCardParagraph,
   lakeTextParagraph,
+  WELCOME_GUIDE_LINKS,
   WELCOME_NOTE_BODY,
+  WELCOME_TITLE,
+  welcomeQuickNoteText,
 } from "./lakeDocForm";
 
 describe("Lake 正文写入形态（单一来源）", () => {
@@ -14,9 +17,21 @@ describe("Lake 正文写入形态（单一来源）", () => {
     expect(emptyLakeBody("abc")).toBe('<p id="abc-body" class="ne-p"><br></p>');
   });
 
-  it("欢迎笔记正文固定不变（全设备一致）", () => {
+  it("欢迎页：桌面文档与 Android 小记共用同一份内容，含 Gitee/GitHub 使用说明链接", () => {
     expect(WELCOME_NOTE_BODY).toContain('<h1 id="welcome" class="ne-h1">');
-    expect(WELCOME_NOTE_BODY).toContain('<p id="welcome-body" class="ne-p">');
+    expect(WELCOME_NOTE_BODY).toContain(WELCOME_TITLE);
+    expect(WELCOME_NOTE_BODY).toContain('<p data-lake-id="welcome-body" id="welcome-body" class="ne-p">');
+    for (const link of WELCOME_GUIDE_LINKS) {
+      expect(WELCOME_NOTE_BODY).toContain('href="' + link.url + '"');
+      expect(WELCOME_NOTE_BODY).toContain(link.label);
+    }
+    // 纯文本镜像（Android 默认小记的 text 字段 / 预览 / 搜索）同样带两个链接入口。
+    const text = welcomeQuickNoteText();
+    expect(text).toContain(WELCOME_TITLE);
+    for (const link of WELCOME_GUIDE_LINKS) expect(text).toContain(link.url);
+    // 界面文案禁用中点。
+    expect(WELCOME_NOTE_BODY.includes("·")).toBe(false);
+    expect(text.includes("·")).toBe(false);
   });
 
   it("段落：含 data-lake-id / id / 内层 span，且文本按 Lake 规则转义", () => {

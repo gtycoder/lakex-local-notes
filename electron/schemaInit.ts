@@ -1,5 +1,5 @@
 import type { DbLike } from "./dbLike.js";
-import { WELCOME_NOTE_BODY } from "../src/core/lakeDocForm.js";
+import { WELCOME_NOTE_BODY, WELCOME_TITLE } from "../src/core/lakeDocForm.js";
 import {
   NOTES_SEARCH_LEDGER_ROWID_INDEX,
   NOTES_SEARCH_LEDGER_TABLE,
@@ -205,9 +205,9 @@ export class SchemaInit {
       const content = WELCOME_NOTE_BODY;
       const tx = this.ctx.db.transaction(() => {
         this.ctx.db.prepare("INSERT INTO notes(id,title,parent_id,sort_order,updated_at,is_dirty) VALUES(?,?,?,?,?,1)")
-          .run(id, "欢迎来到 LakexLocalNotes", parent, sortOrder, updatedAt);
+          .run(id, WELCOME_TITLE, parent, sortOrder, updatedAt);
         this.ctx.db.prepare("INSERT INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,is_dirty,is_conflict) VALUES(?,?,?,'note',?,?,?,?,?,1,0)")
-          .run(id, this.ctx.workspaceId, parent, "欢迎来到 LakexLocalNotes", id, sortOrder, updatedAt, updatedAt);
+          .run(id, this.ctx.workspaceId, parent, WELCOME_TITLE, id, sortOrder, updatedAt, updatedAt);
         this.ctx.atomicWrite(this.ctx.notePathFor(id), content);
       });
       tx();

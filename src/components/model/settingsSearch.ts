@@ -46,6 +46,7 @@ export const SETTING_ITEMS: SettingItemEntry[] = [
   { id: "ai-reasoning", category: "ai", label: "AI 思考强度", keywords: "AI reasoning_effort 思考强度 effort low high max deepseek 推理" },
   { id: "ai-thinking", category: "ai", label: "AI 思考模式", keywords: "AI thinking 思考模式 开关 推理 deepseek" },
   { id: "ai-test", category: "ai", label: "AI 连通性测试", keywords: "AI 测试 连接 test 可用" },
+  { id: "ai-enabled", category: "ai", label: "AI 助手开关", keywords: "AI 开关 启用 关闭 不出网 enable disable" },
   { id: "search-rebuild", category: "logs", label: "重建全文搜索索引", keywords: "搜索 索引 fts 重建 修复 分词" },
   { id: "shortcut-esc", category: "shortcuts", label: "关闭当前菜单或浮层", keywords: "关闭 浮层 菜单 Esc" },
   { id: "history-stats", category: "history", label: "快照占用", keywords: "快照 占用 大小 清理" },

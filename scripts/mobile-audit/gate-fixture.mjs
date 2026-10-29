@@ -44,6 +44,15 @@
     qnMade += 1;
   }
 
+  // 261029：全新安装会自带一条「欢迎」小记（固定 id welcome-quick-note，内容是欢迎页 + 使用说明链接）。
+  // 门禁夹具要求**确定性 4 条小记**（快照基线依赖），这里把它物理删除；产品功能不受影响（其它设备照常）。
+  let welcomeRemoved = false;
+  const qnNow = await L.getQuickNotePage().then(function(p){return p.items;});
+  if (qnNow.some(function(q){ return q.id === "welcome-quick-note"; })) {
+    await L.purgeQuickNote("welcome-quick-note");
+    welcomeRemoved = true;
+  }
+
   const [nbAfter, notesAfter, qnAfter] = [await findNb(), await L.getHomeSnapshot().then(function(s){return s.notes;}), await L.getQuickNotePage().then(function(p){return p.items;})];
   return {
     notebook: nbAfter ? { id: nbAfter.id, title: nbAfter.title } : null,
@@ -51,6 +60,7 @@
     docsCreated: made.length,
     quickTotal: qnAfter.length,
     quickCreated: qnMade,
+    welcomeRemoved,
     treeNodes: nodes.length,
   };
 })()

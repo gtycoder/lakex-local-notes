@@ -50,10 +50,12 @@ pre {
   background: var(--lake-bg-panel);
   overflow: hidden;
 }
+/* 261029 用户点单：去掉分组标题的灰底色（此前 --lake-bg-subtle 在 AI 页被当成"灰色衔接条"，很丑）。
+   标题只做文字层级 + 一条细线；分组边界由卡片自身的 0.5px 边承担。 */
 .settings-panel .config-section__title {
   padding: 10px 16px;
   border-bottom: 0.5px solid var(--lake-border-2);
-  background: var(--lake-bg-subtle);
+  background: transparent;
   color: var(--lake-text-3);
   font-size: var(--lake-font-size-tiny);
   font-weight: var(--lake-font-weight-semibold);

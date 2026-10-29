@@ -8,6 +8,7 @@
 import { NativeSqliteDb } from "../native/nativeSqliteDb";
 
 import { applyMobileSchema } from "../data/schema";
+import { seedWelcomeQuickNote } from "../data/welcomeQuickNote";
 import { ensureV3StateTable } from "../data/v3StateRepository";
 import { reconcileIndex } from "../data/searchIndex";
 import { createMobileLocalStorePort, type MobileLocalStorePort } from "../data/localStorePort";
@@ -95,6 +96,9 @@ export async function initializeDb(): Promise<NativeSqliteDb> {
   // 打开文档补拉（ensureAssetsNative）会在首次同步前读它 ⇒ 全新安装直接报 no such table。统一在开库时建。
   await ensureV3StateTable(openedDb);
   db = openedDb;
+  // 首启默认小记（261029 用户点单）：全新库写入与桌面欢迎文档同一份欢迎页（含 Gitee/GitHub 使用说明链接）。
+  // 必须在 reconcileIndex 之前写，索引重建才能把它一起收进去；内部失败只 warn，不阻断启动。
+  try { await seedWelcomeQuickNote(openedDb); } catch (error) { console.warn("[welcome] 默认小记初始化异常：", error); }
   try { await reconcileIndex(openedDb); } catch (error) { console.warn("[search] reconcile failed:", error); }
   return openedDb;
 }

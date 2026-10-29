@@ -1,4 +1,5 @@
 import { native } from "./native";
+import { loadAiEnabled } from "./aiEnabled";
 import type { AiChatMessage, AiChatResult, AiListModelsResult, AiProviderPatch, AiSettingsPatch, AiSettingsView, AiTestResult } from "../core/aiProviders";
 
 /**
@@ -36,6 +37,10 @@ export async function runAiChat(
   messages: AiChatMessage[],
   onDelta?: (delta: string) => void,
 ): Promise<AiChatResult> {
+  // 总开关：关闭时**任何路径都不出网**（与「关闭云同步 = 完全没配置」同语义；配置与 Key 保留）。
+  if (!loadAiEnabled()) {
+    throw new Error("AI 助手已关闭：到「设置 → AI 助手 → 连通性」重新开启后再试。");
+  }
   const off = onDelta ? native.onAiStream((chunk) => { if (chunk.requestId === requestId) onDelta(chunk.delta); }) : null;
   try {
     return await native.aiChat(requestId, messages);

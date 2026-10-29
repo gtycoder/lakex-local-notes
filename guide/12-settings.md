@@ -72,7 +72,7 @@ Android：首页左上角齿轮。根菜单顺序为同步设置、AI 助手、�
 
 ![桌面设置 AI](assets/screenshots/desktop-settings-ai.png)
 
-供应商、Base URL、API Key、模型（获取模型列表）、温度、多轮对话说明、测试与开关。详见 [10 AI 助手](10-ai.md)。
+供应商、Base URL、API Key、模型（获取模型列表）、温度、多轮对话说明、测试与开关（开关在「连通性」分组：配好密钥后可随时关闭，关闭后不出网）。详见 [10 AI 助手](10-ai.md)。
 
 ### 浏览器端
 

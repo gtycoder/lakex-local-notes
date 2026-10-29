@@ -18,9 +18,57 @@ export function emptyLakeBody(noteId: string): string {
   return `<p id="${noteId}-body" class="ne-p"><br></p>`;
 }
 
-/** 首启欢迎笔记正文。固定 id：全设备一致，S3 同步不会产生重复。 */
-export const WELCOME_NOTE_BODY =
-  `<h1 id="welcome" class="ne-h1">欢迎来到 LakexLocalNotes</h1><p id="welcome-body" class="ne-p">这是一个基于 Lake 编辑器的本地优先笔记应用（Electron 桌面端）。</p>`;
+/** 首启欢迎页：桌面欢迎文档与 Android 默认小记共用同一份内容（固定标题/正文块）。 */
+export const WELCOME_TITLE = "欢迎来到 LakexLocalNotes";
+/** Android 首启默认小记的固定 id（与桌面 welcome-note 同理：全设备一致，同步不产生重复）。 */
+export const WELCOME_QUICK_NOTE_ID = "welcome-quick-note";
+/** 使用说明（仓库里的 guide/）——文档放在 Gitee 与 GitHub 两边，链接写死这两个入口。 */
+export const WELCOME_GUIDE_LINKS = [
+  { label: "使用说明（Gitee）", url: "https://gitee.com/gtycoder/lakex-local-notes/blob/master/guide/README.md" },
+  { label: "使用说明（GitHub）", url: "https://github.com/gtycoder/lakex-local-notes/blob/master/guide/README.md" },
+] as const;
+
+const WELCOME_INTRO = [
+  "这是一个本地优先的笔记应用：笔记、表格、多维表、画板、手写板和小记都保存在本机，不依赖云端也能写作与检索。",
+  "如果要在多台设备之间同步，可以在「设置」里填入你自己的 S3（七牛 Kodo、阿里云 OSS、Cloudflare R2 等）。S3 只作镜像，本地始终是真相。",
+  "小提示：桌面按 ⌘K 全局搜索；Android 从首页胶囊搜索。删除的文档会先进回收站，默认 90 天后自动清理。",
+] as const;
+
+function lakeLinkParagraph(paragraphId: string, textId: string, label: string, url: string): string {
+  return `<p data-lake-id="${paragraphId}" id="${paragraphId}" class="ne-p"><span data-lake-id="${textId}" id="${textId}"><a href="${escapeLakeHtml(url)}" target="_blank" rel="noreferrer">${escapeLakeHtml(label)}</a></span></p>`;
+}
+
+/** 首启欢迎笔记正文（Lake HTML）。固定 id：全设备一致，S3 同步不会产生重复。 */
+export function welcomeLakeBody(): string {
+  const parts = [
+    `<h1 id="welcome" class="ne-h1">${WELCOME_TITLE}</h1>`,
+    lakeTextParagraph("welcome-body", "welcome-body-text", WELCOME_INTRO[0]),
+    lakeTextParagraph("welcome-sync", "welcome-sync-text", WELCOME_INTRO[1]),
+    lakeTextParagraph("welcome-tips", "welcome-tips-text", WELCOME_INTRO[2]),
+    lakeTextParagraph("welcome-guide", "welcome-guide-text", "使用说明："),
+  ];
+  WELCOME_GUIDE_LINKS.forEach((link, index) => {
+    parts.push(lakeLinkParagraph(`welcome-guide-${index + 1}`, `welcome-guide-${index + 1}-text`, link.label, link.url));
+  });
+  return parts.join("");
+}
+
+/** 首启欢迎小记的纯文本镜像（移动端预览/搜索用；正文 body 用 welcomeLakeBody）。 */
+export function welcomeQuickNoteText(): string {
+  return [
+    WELCOME_TITLE,
+    "",
+    WELCOME_INTRO[0],
+    WELCOME_INTRO[1],
+    "",
+    "使用说明：",
+    ...WELCOME_GUIDE_LINKS.map((link) => `${link.label}：${link.url}`),
+    "",
+    WELCOME_INTRO[2],
+  ].join("\n");
+}
+
+export const WELCOME_NOTE_BODY = welcomeLakeBody();
 
 /** Lake 正文里文本节点的最小转义（与内核写入时一致）。 */
 export function escapeLakeHtml(value: string): string {
