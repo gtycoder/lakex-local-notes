@@ -617,6 +617,8 @@ if (!app.requestSingleInstanceLock()) {
         onOpenSettings: () => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("open-settings"); },
         onOpenDocs: () => { void shell.openExternal(PROJECT_URL + "#readme"); },
         onFeedback: () => { void shell.openExternal(PROJECT_URL + "/issues/new"); },
+        // 数据目录 = userData（workspace-default / logs / sync-v3 都在它下面），与设置页同名动作同语义。
+        onOpenDataFolder: () => { void shell.openPath(app.getPath("userData")); },
       })));
     }
     initLogger({ isPackaged: app.isPackaged });

@@ -23,6 +23,8 @@ export interface AppMenuActions {
   onOpenDocs: () => void;
   /** 反馈问题（外部链接）。 */
   onFeedback: () => void;
+  /** 打开数据目录（userData，Finder 里打开；与设置页「打开数据目录」同语义）。 */
+  onOpenDataFolder: () => void;
 }
 
 /** 纯函数：只产出 template，不碰 Electron 运行时（便于单测断言结构/role/label）。 */
@@ -31,6 +33,7 @@ export function buildAppMenuTemplate(actions: AppMenuActions): MenuItemConstruct
   const helpItems: MenuItemConstructorOptions[] = [
     { label: "使用文档", click: () => actions.onOpenDocs() },
     { label: "反馈问题", click: () => actions.onFeedback() },
+    { label: "打开数据目录", click: () => actions.onOpenDataFolder() },
   ];
   if (isDev) {
     helpItems.push({ type: "separator" }, { role: "toggleDevTools", label: "开发者工具" });

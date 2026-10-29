@@ -24,6 +24,7 @@ function actions(over: Partial<AppMenuActions> = {}): AppMenuActions {
     onOpenSettings: vi.fn(),
     onOpenDocs: vi.fn(),
     onFeedback: vi.fn(),
+    onOpenDataFolder: vi.fn(),
     ...over,
   };
 }
@@ -55,7 +56,8 @@ describe("buildAppMenuTemplate（macOS 菜单）", () => {
   it("编辑/窗口全用 role（语义 + 系统加速键），帮助项回调到文档/反馈", () => {
     const onOpenDocs = vi.fn();
     const onFeedback = vi.fn();
-    const template = buildAppMenuTemplate(actions({ onOpenDocs, onFeedback })) as unknown as Item[];
+    const onOpenDataFolder = vi.fn();
+    const template = buildAppMenuTemplate(actions({ onOpenDocs, onFeedback, onOpenDataFolder })) as unknown as Item[];
     const editRoles = (group(template, "editMenu").submenu ?? []).map((x) => x.role).filter(Boolean);
     expect(editRoles).toEqual(expect.arrayContaining(["undo", "redo", "cut", "copy", "paste", "selectAll"]));
     const windowRoles = (group(template, "windowMenu").submenu ?? []).map((x) => x.role).filter(Boolean);
@@ -63,8 +65,10 @@ describe("buildAppMenuTemplate（macOS 菜单）", () => {
     const help = (group(template, "help").submenu ?? []) as Item[];
     help.find((x) => x.label === "使用文档")?.click?.();
     help.find((x) => x.label === "反馈问题")?.click?.();
+    help.find((x) => x.label === "打开数据目录")?.click?.();
     expect(onOpenDocs).toHaveBeenCalledTimes(1);
     expect(onFeedback).toHaveBeenCalledTimes(1);
+    expect(onOpenDataFolder).toHaveBeenCalledTimes(1);
   });
 
   it("开发者工具只在开发版出现", () => {
