@@ -9,7 +9,9 @@
     "node": ">=20.19.0"
   },
   "scripts": {
-    "dev": "vite --host 127.0.0.1 --port 1421",
+    "dev": "node scripts/dev.mjs",
+    "dev:doctor": "node scripts/dev.mjs --doctor",
+    "dev:clean": "node scripts/dev-clean.mjs",
     "dev:vite": "vite --host 127.0.0.1 --port 1421",
     "dev:electron": "electron .",
     "build": "tsc --noEmit && vite build && electron-builder",

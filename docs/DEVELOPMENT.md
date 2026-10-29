@@ -15,12 +15,29 @@
 - **better-sqlite3 13.x（N-API）**：单二进制同时兼容 Node 与 Electron，**无需 @electron/rebuild**，
   不再有双 ABI 问题（Electron 升级后无需重编译）。
 
-## 二、开发
+## 二、开发（`npm run dev` 打不开时先看这里）
 
 ```bash
-cd /Users/admin/file/local-lake/lakex-local-notes
-PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH" npm run dev
+cd /Users/admin/file/local-lake/lakex-local-notes   # 一定要在正库，不要在 private/ 的旧副本里
+export PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH"   # 必须 Node 24
+npm run dev
 ```
+
+`npm run dev` 现在走 `scripts/dev.mjs` 启动器，**失败时直接说原因并给命令**（不再"窗口不出现"）：
+Node < 24、端口 1421 被占、dev Electron(9222) 已在跑、从旧副本 `private/…obsolete…` 启动、
+宿主注入的 `ELECTRON_RUN_AS_NODE`，都会被前置检查拦下。
+
+| 命令 | 用途 |
+| --- | --- |
+| `npm run dev` | 启动桌面 dev（vite 1421 + Electron CDP 9222）；已在运行会提示而不是失败 |
+| `npm run dev:doctor` | 只体检：Node / 仓库路径 / 1421 与 9222 占用（含占用进程 cwd）/ userData 单实例锁 |
+| `npm run dev:clean` | 只清**本项目**的 dev 进程（vite 1421 + Electron CDP 9222 + cwd 三重判据，不碰其它 Electron） |
+
+「打不开」排查顺序：① `npm run dev:doctor`；② 有残留 → `npm run dev:clean` 再起；
+③ 确认没在 `private/` 的旧副本里（那份 node_modules 是旧的、共享 dev userData，会把库写坏；
+该副本的 dev 脚本已改成直接报错指路）；④ 仍不行看 `~/Library/Application Support/lakex-local-notes-dev/logs/lakex-local-notes.log` 尾部。
+注意：两次 `npm run dev` 共用同一 userData，第二实例只会聚焦已有窗口（单实例锁），不会开第二个窗口。
+
 - Vite dev server：`http://127.0.0.1:1421/`
 - 本地图片服务器（asset server）：`http://127.0.0.1:19876/`
 - `vite-plugin-electron` 监听 `electron/*.ts` 变更自动重建并重启 Electron；渲染层走 HMR
