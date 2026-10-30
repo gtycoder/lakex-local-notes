@@ -6,6 +6,14 @@
 
 > 使用语雀的 Lakex 编辑器内核（本地私有引入、已 pin），但本项目**与语雀官方无关**，不代表语雀官方立场；该闭源内核以 **vendored** 形式随本仓库公开分发（未经语雀/蚂蚁授权，风险自担，见 `NOTICE`）。
 
+## 📖 使用说明（用户手册）
+
+> **第一次用？先看用户手册 → [guide/README.md](guide/README.md)**（5 分钟上手 · 界面总览 · 文档/表格/多维表/画板/小记/AI/云同步/设置逐条 · 常见问题，含桌面与 Android 分步截图）。
+
+- 在线阅读（GitHub）：<https://github.com/gtycoder/lakex-local-notes/blob/master/guide/README.md>
+- 在线阅读（Gitee）：<https://gitee.com/gtycoder/lakex-local-notes/blob/master/guide/README.md>（镜像仓库；若是私有库需先登录）
+- 应用内：首次启动的「欢迎」小记 / 欢迎文档里也有入口
+
 ## 项目简介
 
 Local Lakex Notes 是一个自持数据的个人笔记应用：笔记、表格、多维表、画板、小记全部保存在本地（SQLite + 文件），S3（七牛 Kodo / S3 兼容）只用于多端备份与同步。不存在账号体系、团队协作或云端依赖；没有网络也能完整写作与检索。

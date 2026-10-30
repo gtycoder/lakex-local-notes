@@ -22,10 +22,10 @@ export function emptyLakeBody(noteId: string): string {
 export const WELCOME_TITLE = "欢迎来到 LakexLocalNotes";
 /** Android 首启默认小记的固定 id（与桌面 welcome-note 同理：全设备一致，同步不产生重复）。 */
 export const WELCOME_QUICK_NOTE_ID = "welcome-quick-note";
-/** 使用说明（仓库里的 guide/）——文档放在 Gitee 与 GitHub 两边，链接写死这两个入口。 */
+/** 项目主页（使用说明放在 README 首屏的醒目位置；此前直接链 guide/README.md 在 Gitee 会 404）。 */
 export const WELCOME_GUIDE_LINKS = [
-  { label: "使用说明（Gitee）", url: "https://gitee.com/gtycoder/lakex-local-notes/blob/master/guide/README.md" },
-  { label: "使用说明（GitHub）", url: "https://github.com/gtycoder/lakex-local-notes/blob/master/guide/README.md" },
+  { label: "项目主页（Gitee）", url: "https://gitee.com/gtycoder/lakex-local-notes" },
+  { label: "项目主页（GitHub）", url: "https://github.com/gtycoder/lakex-local-notes" },
 ] as const;
 
 const WELCOME_INTRO = [
@@ -45,7 +45,7 @@ export function welcomeLakeBody(): string {
     lakeTextParagraph("welcome-body", "welcome-body-text", WELCOME_INTRO[0]),
     lakeTextParagraph("welcome-sync", "welcome-sync-text", WELCOME_INTRO[1]),
     lakeTextParagraph("welcome-tips", "welcome-tips-text", WELCOME_INTRO[2]),
-    lakeTextParagraph("welcome-guide", "welcome-guide-text", "使用说明："),
+    lakeTextParagraph("welcome-guide", "welcome-guide-text", "使用说明与更新都在项目主页（README 首屏有用户手册入口）："),
   ];
   WELCOME_GUIDE_LINKS.forEach((link, index) => {
     parts.push(lakeLinkParagraph(`welcome-guide-${index + 1}`, `welcome-guide-${index + 1}-text`, link.label, link.url));
@@ -61,7 +61,7 @@ export function welcomeQuickNoteText(): string {
     WELCOME_INTRO[0],
     WELCOME_INTRO[1],
     "",
-    "使用说明：",
+    "使用说明与更新都在项目主页（README 首屏有用户手册入口）：",
     ...WELCOME_GUIDE_LINKS.map((link) => `${link.label}：${link.url}`),
     "",
     WELCOME_INTRO[2],
