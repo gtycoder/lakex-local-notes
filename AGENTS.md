@@ -119,6 +119,7 @@ LakexLocalNotes = **本地优先**笔记应用：Electron 44.3 + React 18.3 + be
   目录抽屉 = 笔记本行（**只展示图标 + ＋，不放 ⋮**）+ 每一行 `[⋮][＋]`（**新建统一走 ＋ / 抽屉工具栏「新建」**；行 ⋮ = 重命名/设置图标/设为常用/移动到…/历史/属性/删除 —— 261019 用户点单去掉「新建文档 / 新建分组」）；
   **笔记本的编辑入口 = 首页「知识库」长按卡片**（重命名 / 设置图标 / 删除笔记本；**不含**新建文档·新建分组，用户明确去掉）；
   长按唯一实现 = `src/mobile/ui/useLongPress.ts`（卡片 10px 取消；目录行 `moveCancelPx:0`），**别再写第二份计时器**。
+- **发版 / 版本号单一来源 = `package.json`（261030 起）**：发版只 `npm version patch --no-git-tag-version` + 提交 + **注解 tag `vX.Y.Z`** 并推 tag（只有 tag 触发 CI）；**不要手改** `android/app/build.gradle` 的版本号 —— 它从根 `package.json` 派生（versionName = 语义版本；versionCode = 1000 + major×10000 + minor×100 + patch，**只增不减**，否则 `adb install -r` 会因 `INSTALL_FAILED_VERSION_DOWNGRADE` 失败）。发出去的 tag **不可移动**，发错只能 bump 版本再发。
 
 ## 5. 数据路径与安全
 
