@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import {
   BITABLE_DOC_KIND, BITABLE_DOC_VERSION, BITABLE_FIELD_TYPE_LABEL,
+  BITABLE_DATE_FORMAT_OPTIONS, BITABLE_NUMBER_FORMAT_OPTIONS,
   BITABLE_OPTION_COLORS, aiPromptFieldNames, applyViewToRecords, bitableDisplayValue, bitableFieldText, bitableFieldValue, bitableFillBackgroundTokens, bitableFilterRuleCount, bitableViewNeedsClock, buildBitableFillProjection, createRelationPair, defaultRecordValues, duplicateValues, optionColorHex, unpairRelationFields,
   createBitableField, createBitableRecord, createBitableView, createDefaultBitableTable,
   BITABLE_STAT_LABEL, groupRecords, isAttachmentLikeField, isImplementedViewType,
@@ -30,7 +31,7 @@ import {
   type BitableRelation, type BitableRowHeight, type BitableSortMode, type BitableStatType, type BitableTable, type BitableView, type BitableViewType,
 } from "../../core/bitableDoc.js";
 import { fillSurfaceColor } from "../../core/colorPalette.js";
-import { addBitableRecord, addBitableRecordWithValues, appendBitableAttachments, deleteBitableField, deleteBitableRecords, duplicateBitableField, renameAiFieldToken, setBitableCellValue, setBitableRecordValues, stripViewRefsForFieldType } from "../../core/bitableMutations.js";
+import { addBitableRecord, addBitableRecordWithValues, appendBitableAttachments, convertBitableFieldType, deleteBitableField, deleteBitableRecords, deleteBitableTable, fieldHasData, pruneBitableOptionValues, duplicateBitableField, duplicateBitableTable, renameAiFieldToken, renameBitableTable, setBitableCellValue, setBitableRecordValues, stripViewRefsForFieldType } from "../../core/bitableMutations.js";
 import { applyBitableNav, readBitableNav, writeBitableNav } from "./bitableNavStore.js";
 import { parseCsv, defaultCsvMapping, importCsvRows, type CsvColumnMapping, type CsvImportResult } from "../../core/bitableCsv.js";
 import { StatCell } from "./bitableCells";
@@ -200,6 +201,8 @@ export function BitableEditor({ noteId, content, visible, readOnly: readOnlyProp
   const [viewEditor, setViewEditor] = useState<string | null>(null);
   const viewNameRef = useRef<HTMLInputElement>(null);
   const [tableEditor, setTableEditor] = useState<{ id: string; draft: string } | null>(null);
+  /** 数据表行 ⋮ 菜单（重命名 / 复制 / 删除；锚定在被点的行上）。 */
+  const [tableMenu, setTableMenu] = useState<{ id: string; anchor: HTMLElement } | null>(null);
   const [csvImport, setCsvImport] = useState<{ fileName: string; header: string[]; rows: string[][]; mapping: CsvColumnMapping[] } | null>(null);
   const [csvResult, setCsvResult] = useState<CsvImportResult | null>(null);
   const [findOpen, setFindOpen] = useState(false);
@@ -436,14 +439,18 @@ export function BitableEditor({ noteId, content, visible, readOnly: readOnlyProp
       return { ...prev, tables: [...prev.tables, table], activeTableId: table.id };
     });
   }, [updateDoc]);
+  // 表级写入统一走 core（移动端抽屉 ⋮ 与桌面这里同一份语义）
   const renameTable = useCallback((id: string, name: string) => {
-    patchTable(id, (table) => ({ ...table, name: name.trim() || "数据表" }));
-  }, [patchTable]);
+    updateDoc((prev) => renameBitableTable(prev, id, name));
+  }, [updateDoc]);
   const deleteTable = useCallback((id: string) => {
+    updateDoc((prev) => deleteBitableTable(prev, id));
+  }, [updateDoc]);
+  const duplicateTable = useCallback((id: string) => {
     updateDoc((prev) => {
-      if (prev.tables.length <= 1) return prev;
-      const tables = prev.tables.filter((t) => t.id !== id);
-      return { ...prev, tables, activeTableId: prev.activeTableId === id ? tables[0].id : prev.activeTableId };
+      const result = duplicateBitableTable(prev, id);
+      if (result.doc === prev || !result.tableId) return prev;
+      return { ...result.doc, activeTableId: result.tableId };
     });
   }, [updateDoc]);
   const reorderTables = useCallback((fromId: string, toId: string) => {
@@ -1089,15 +1096,31 @@ export function BitableEditor({ noteId, content, visible, readOnly: readOnlyProp
                     onKeyDown={(event) => { if (event.key === "Enter") { renameTable(table.id, tableEditor.draft); setTableEditor(null); } if (event.key === "Escape") setTableEditor(null); }} />
                 : <span className="bt-table-name ln-ellipsis">{table.name}</span>}
               <span className="bt-table-count">{table.records.length}</span>
-              <button type="button" className="bt-icon-btn bt-table-more" title="重命名/删除" aria-label="数据表操作" disabled={readOnly}
-                onClick={(event) => { event.stopPropagation(); setTableEditor({ id: table.id, draft: table.name }); }}><MoreHorizontal size={13} /></button>
-              {doc.tables.length > 1 && (
-                <button type="button" className="bt-icon-btn bt-table-del" title="删除数据表" aria-label="删除数据表" disabled={readOnly}
-                  onClick={(event) => { event.stopPropagation(); deleteTable(table.id); }}><Trash2 size={13} /></button>
-              )}
+              <button type="button" className="bt-icon-btn bt-table-more" title="数据表操作" aria-label="数据表操作" disabled={readOnly}
+                onClick={(event) => { event.stopPropagation(); setTableMenu({ id: table.id, anchor: event.currentTarget }); }}><MoreHorizontal size={13} /></button>
             </div>
           ))}
         </div>
+        <Popover open={Boolean(tableMenu)} anchor={tableMenu?.anchor ?? null} onClose={() => setTableMenu(null)} width={190}>
+          <div className="bt-panel">
+            <button type="button" className="bt-menu-item ln-menu__item" onClick={() => {
+              if (!tableMenu) return;
+              const target = doc.tables.find((t) => t.id === tableMenu.id);
+              setTableEditor({ id: tableMenu.id, draft: target?.name ?? "" });
+              setTableMenu(null);
+            }}><Pencil size={14} />重命名</button>
+            <button type="button" className="bt-menu-item ln-menu__item" disabled={readOnly} onClick={() => {
+              if (!tableMenu) return;
+              duplicateTable(tableMenu.id);
+              setTableMenu(null);
+            }}><Copy size={14} />复制数据表</button>
+            <button type="button" className="bt-menu-item ln-menu__item" disabled={readOnly || doc.tables.length <= 1} onClick={() => {
+              if (!tableMenu) return;
+              deleteTable(tableMenu.id);
+              setTableMenu(null);
+            }}><Trash2 size={14} />删除数据表</button>
+          </div>
+        </Popover>
         <div className="bt-tables-resize" role="separator" aria-label="调整数据表宽度" onPointerDown={startTablesResize} />
       </aside>
       )}
@@ -1647,7 +1670,12 @@ export function BitableEditor({ noteId, content, visible, readOnly: readOnlyProp
               const before = activeTable.fields.find((f) => f.id === fieldId);
               const wasPaired = typeof before?.relation?.pairedFieldId === "string";
               const wantsPair = patch.type === "relationTwoWay";
-              updateField(fieldId, options ? { ...patch, options } : patch);
+              const typeChanged = typeof patch.type === "string" && before && patch.type !== before.type;
+              // 类型互转走 core（重建字段、清旧配置、清视图里失效引用）；直接把 type 浅合并会留下旧 options/默认值。
+              if (typeChanged) updateDoc((prev) => convertBitableFieldType(prev, prev.activeTableId, fieldId, patch.type as string).doc);
+              const { type: _nextType, ...rest } = patch;
+              updateField(fieldId, options ? { ...rest, options } : rest);
+              if (options) updateDoc((prev) => pruneBitableOptionValues(prev, prev.activeTableId, fieldId));
               // 双向开关：新建配对（在目标表生成反向字段）或解除配对（对侧降级为单向、数据保留）
               if (wantsPair && !wasPaired) updateDoc((prev) => ({ ...prev, tables: createRelationPair(prev.tables, prev.activeTableId, fieldId) }));
               else if (!wantsPair && wasPaired) updateDoc((prev) => ({ ...prev, tables: unpairRelationFields(prev.tables, prev.activeTableId, fieldId) }));
@@ -1662,6 +1690,7 @@ export function BitableEditor({ noteId, content, visible, readOnly: readOnlyProp
             if (patch.defaultValue !== undefined) field.defaultValue = patch.defaultValue;
             if (patch.dateAutoFill) field.dateAutoFill = true;
             if (patch.progressColor) field.progressColor = patch.progressColor;
+            if (patch.format) field.format = patch.format;
             if (patch.relation) field.relation = patch.relation;
             if (patch.ai) field.ai = patch.ai;
             patchActiveTable((table) => ({ ...table, fields: [...table.fields, field] }));
@@ -1775,12 +1804,16 @@ interface FieldEditorModalProps {
   onClose: () => void;
   onSave: (patch: Partial<BitableField>, options?: BitableField["options"]) => void;
   onDelete: () => void;
-  onAddField: (patch: { name: string; type: string; required?: boolean; options?: BitableField["options"]; defaultValue?: unknown; dateAutoFill?: boolean; progressColor?: string; relation?: BitableRelation; ai?: BitableAiConfig }) => void;
+  onAddField: (patch: { name: string; type: string; required?: boolean; options?: BitableField["options"]; defaultValue?: unknown; dateAutoFill?: boolean; progressColor?: string; relation?: BitableRelation; ai?: BitableAiConfig; format?: string }) => void;
 }
 
 function FieldEditorModal({ field, readOnly, tables, tableId, onClose, onSave, onDelete, onAddField }: FieldEditorModalProps) {
   const isNew = field === null;
+  /** 有数据 ⇒ 不允许改字段类型（用户 261030：有数据不能互转；没数据才能转）。 */
+  const dataTable = tables.find((table) => table.id === tableId);
+  const hasData = !isNew && field && dataTable ? fieldHasData(dataTable, field.id) : false;
   const [name, setName] = useState(field?.name ?? "");
+  const [format, setFormat] = useState<string>(typeof field?.format === "string" ? field.format : "");
   const [type, setType] = useState<string>(field?.type ?? "text");
   const [required, setRequired] = useState<boolean>(field?.required ?? false);
   const [options, setOptions] = useState(field?.options ?? []);
@@ -1892,8 +1925,9 @@ function FieldEditorModal({ field, readOnly, tables, tableId, onClose, onSave, o
     const ai: BitableAiConfig | undefined = isAi
       ? { prompt: aiPrompt.trim(), ...(aiIncludeAttachments ? { includeAttachments: true } : {}) }
       : undefined;
-    if (isNew) { onAddField({ name: name.trim() || fallbackName, type, required, options: nextOptions, defaultValue: nextDefault, dateAutoFill, progressColor: nextColor, relation, ai }); return; }
-    onSave({ name: name.trim() || field!.name, type, required, defaultValue: nextDefault, dateAutoFill, progressColor: nextColor, relation: isRelation ? relation : undefined, ai }, nextOptions);
+    const nextFormat = knownType === "date" || knownType === "number" ? format : undefined;
+    if (isNew) { onAddField({ name: name.trim() || fallbackName, type, required, options: nextOptions, defaultValue: nextDefault, dateAutoFill, progressColor: nextColor, relation, ai, format: nextFormat }); return; }
+    onSave({ name: name.trim() || field!.name, type, required, defaultValue: nextDefault, dateAutoFill, progressColor: nextColor, relation: isRelation ? relation : undefined, ai, format: nextFormat }, nextOptions);
   };
   return (
     <Dialog open onDismiss={onClose} label={isNew ? "新增字段" : "编辑字段"} className="bt-dialog">
@@ -1903,9 +1937,26 @@ function FieldEditorModal({ field, readOnly, tables, tableId, onClose, onSave, o
           <input className="bt-input" autoFocus value={name} readOnly={readOnly} onChange={(event) => setName(event.target.value)} />
         </label>
         <div className="bt-field-label"><span>字段类型</span>
-          <FieldTypeSelect value={type} disabled={readOnly} onPick={setType} />
+          <FieldTypeSelect value={type} disabled={readOnly || hasData} onPick={(next) => {
+            if (next === type) return;
+            setType(next);
+            // 换类型按新类型重建：旧类型的默认值/选项/颜色/格式不能带过去（261030 review）。
+            setDefaultValue("");
+            setDateMode("none");
+            setOptions([]);
+            setProgressColor(undefined);
+            setFormat("");
+          }} />
         </div>
+        {hasData && <div className="bt-field-note">该字段已有数据，不能修改类型（清空该列的值后才能转）。</div>}
         <label className="bt-field-check"><input type="checkbox" checked={required} disabled={readOnly} onChange={(event) => setRequired(event.target.checked)} />必填</label>
+        {(knownType === "date" || knownType === "number") && (
+          <label className="bt-field-label"><span>显示格式</span>
+            <SelectMenu value={format} disabled={readOnly} placeholder="原样"
+              onChange={setFormat}
+              options={(knownType === "date" ? BITABLE_DATE_FORMAT_OPTIONS : BITABLE_NUMBER_FORMAT_OPTIONS).map((option) => ({ value: option.value, label: option.label }))} />
+          </label>
+        )}
         {(knownType === "text" || knownType === "number" || knownType === "date" || knownType === "select" || knownType === "link" || knownType === "boolean" || knownType === "rating" || knownType === "progress") && (
           <label className="bt-field-label"><span>默认值（新建记录时预填）</span>
             {knownType === "select" ? (

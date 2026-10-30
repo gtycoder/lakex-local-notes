@@ -13,7 +13,9 @@
 import {
   applyRelationMirror,
   bitableAttachments,
+  createBitableField,
   createBitableRecord,
+  isKnownFieldType,
   defaultRecordValues,
   isAttachmentLikeField,
   isBitableFilterGroup,
@@ -26,6 +28,7 @@ import {
   type BitableAttachment,
   type BitableDoc,
   type BitableField,
+  type BitableFieldOption,
   type BitableFilterNode,
   type BitableRecord,
   type BitableTable,
@@ -255,6 +258,188 @@ export function addBitableRecordWithValues(tables: readonly BitableTable[], tabl
   return { tables: next, recordId: record.id };
 }
 
+// ---- 数据表级（261030 用户点单：重命名 / 删除 / 复制；移动端抽屉与桌面左侧列表共用） ----
+
+/** 重命名数据表（空名 / 无变化返回原引用，避免空写入）。 */
+export function renameBitableTable(doc: BitableDoc, tableId: string, name: string): BitableDoc {
+  const table = doc.tables.find((t) => t.id === tableId);
+  if (!table) return doc;
+  const next = name.trim();
+  if (!next || next === table.name) return doc;
+  return { ...doc, tables: doc.tables.map((t) => (t.id === tableId ? { ...t, name: next } : t)) };
+}
+
+/**
+ * 删除数据表：**至少保留一张**（返回原引用 = 拒绝）。活动表被删时回落到第一张。
+ * 与桌面既有行为一致：只摘表本身，不追改其它表里指向它的关联字段（展示层会标「关联已失效」）。
+ */
+export function deleteBitableTable(doc: BitableDoc, tableId: string): BitableDoc {
+  if (doc.tables.length <= 1) return doc;
+  if (!doc.tables.some((t) => t.id === tableId)) return doc;
+  const tables = doc.tables.filter((t) => t.id !== tableId);
+  const activeTableId = doc.activeTableId === tableId ? tables[0].id : doc.activeTableId;
+  return { ...doc, tables, activeTableId };
+}
+
+/** 视图配置里的「字段 id 引用」换 id（复制表用；未知 id 原样保留）。 */
+function remapViewFieldIds(view: BitableView, map: Map<string, string>): BitableView {
+  const one = (id: string | undefined): string | undefined => (id ? map.get(id) ?? id : id);
+  const list = (ids: string[] | undefined): string[] | undefined => (ids ? ids.map((id) => map.get(id) ?? id) : ids);
+  const keys = <T>(obj: Record<string, T> | undefined): Record<string, T> | undefined => {
+    if (!obj) return obj;
+    const out: Record<string, T> = {};
+    for (const [key, value] of Object.entries(obj)) out[map.get(key) ?? key] = value;
+    return out;
+  };
+  const filters = (nodes: BitableFilterNode[] | undefined): BitableFilterNode[] | undefined => {
+    if (!nodes) return nodes;
+    return nodes.map((node) => (isBitableFilterGroup(node)
+      ? { ...node, filters: filters(node.filters) ?? [] }
+      : { ...node, fieldId: map.get(node.fieldId) ?? node.fieldId }));
+  };
+  const next: BitableView = { ...view };
+  (["hiddenFieldIds", "fieldOrder", "formFieldIds", "highlightDuplicateFieldIds", "kanbanFieldIds", "galleryFieldIds"] as const)
+    .forEach((key) => { if (view[key]) next[key] = list(view[key]); });
+  if (view.formDescriptions) next.formDescriptions = keys(view.formDescriptions);
+  if (view.columnStats) next.columnStats = keys(view.columnStats);
+  if (view.columnTextColors) next.columnTextColors = keys(view.columnTextColors);
+  if (view.sorts) next.sorts = view.sorts.map((rule) => ({ ...rule, fieldId: map.get(rule.fieldId) ?? rule.fieldId }));
+  if (view.groups) next.groups = view.groups.map((rule) => ({ ...rule, fieldId: map.get(rule.fieldId) ?? rule.fieldId }));
+  if (view.filters) next.filters = filters(view.filters);
+  if (view.fillRules) {
+    next.fillRules = view.fillRules.map((rule) => (rule.mode === "column"
+      ? { ...rule, fieldId: map.get(rule.fieldId) ?? rule.fieldId }
+      : { ...rule, condition: { ...rule.condition, fieldId: map.get(rule.condition.fieldId) ?? rule.condition.fieldId } }));
+  }
+  if (view.kanbanGroupFieldId) next.kanbanGroupFieldId = one(view.kanbanGroupFieldId);
+  if (view.galleryCoverFieldId) next.galleryCoverFieldId = one(view.galleryCoverFieldId);
+  if (view.calendarStartFieldId) next.calendarStartFieldId = one(view.calendarStartFieldId);
+  if (view.calendarEndFieldId) next.calendarEndFieldId = one(view.calendarEndFieldId);
+  if (view.calendarTitleFieldId) next.calendarTitleFieldId = one(view.calendarTitleFieldId);
+  if (view.calendarColorFieldId) next.calendarColorFieldId = one(view.calendarColorFieldId);
+  return next;
+}
+
+/**
+ * 复制数据表（结构 + 记录，id 全部重新生成；追加到末尾并返回新表 id）。
+ * - 记录值按字段 id 映射；关联字段在副本里**清空已选值、去掉双向配对**（对侧仍指向原表，避免镜像打架）；
+ * - 视图配置里的字段引用全部换 id；活动视图换成副本里的对应视图；
+ * - 名称 = 「原名 副本」（已是副本再追加序号）。
+ */
+export function duplicateBitableTable(doc: BitableDoc, tableId: string): { doc: BitableDoc; tableId: string } {
+  const table = doc.tables.find((t) => t.id === tableId);
+  if (!table) return { doc, tableId: "" };
+  const fieldIds = new Map<string, string>();
+  const fields = table.fields.map((field) => {
+    const id = newBitableId("fld");
+    fieldIds.set(field.id, id);
+    if (!isRelationFieldType(field.type)) return { ...field, id };
+    const relation = { ...(field.relation ?? {}), pairedFieldId: undefined };
+    return { ...field, id, relation };
+  });
+  const viewIds = new Map<string, string>();
+  const views = table.views.map((view) => {
+    const id = newBitableId("vew");
+    viewIds.set(view.id, id);
+    return { ...remapViewFieldIds(view, fieldIds), id };
+  });
+  const records = table.records.map((record) => {
+    const values: Record<string, unknown> = {};
+    for (const field of table.fields) {
+      if (isRelationFieldType(field.type)) continue;
+      const value = record.values[field.id];
+      if (value !== undefined) values[fieldIds.get(field.id) ?? field.id] = value;
+    }
+    return { ...record, id: newBitableId("rec"), values };
+  });
+  const name = table.name.endsWith(" 副本") ? table.name + " 2" : table.name + " 副本";
+  const copy: BitableTable = {
+    ...table,
+    id: newBitableId("tbl"),
+    name,
+    fields,
+    records,
+    views,
+    activeViewId: viewIds.get(table.activeViewId) ?? views[0]?.id ?? "",
+  };
+  return { doc: { ...doc, tables: [...doc.tables, copy] }, tableId: copy.id };
+}
+
+/** 字段是否已有数据（任一记录该字段「非空」即算）——类型互转的前置判据。 */
+export function fieldHasData(table: BitableTable, fieldId: string): boolean {
+  return table.records.some((record) => {
+    const value = record.values[fieldId];
+    if (value === undefined || value === null) return false;
+    if (typeof value === "string") return value.trim() !== "";
+    if (Array.isArray(value)) return value.length > 0;
+    if (typeof value === "number") return Number.isFinite(value);
+    return true;
+  });
+}
+
+/** 删选项后清掉记录里对已不存在选项的引用（单选置空 / 多选过滤），避免显示裸 option id。 */
+export function pruneBitableOptionValues(doc: BitableDoc, tableId: string, fieldId: string): BitableDoc {
+  const table = doc.tables.find((t) => t.id === tableId);
+  const field = table?.fields.find((f) => f.id === fieldId);
+  if (!table || !field || (field.type !== "select" && field.type !== "multiSelect")) return doc;
+  const allowed = new Set((field.options ?? []).map((option) => option.id));
+  let changed = false;
+  const records = table.records.map((record) => {
+    const value = record.values[fieldId];
+    if (value === undefined || value === null) return record;
+    if (field.type === "select") {
+      if (typeof value === "string" && value && !allowed.has(value)) { changed = true; const values = { ...record.values }; delete values[fieldId]; return { ...record, values }; }
+      return record;
+    }
+    if (!Array.isArray(value)) return record;
+    const filtered = value.filter((item): item is string => typeof item === "string" && allowed.has(item));
+    if (filtered.length === value.length) return record;
+    changed = true;
+    return { ...record, values: { ...record.values, [fieldId]: filtered } };
+  });
+  if (!changed) return doc;
+  return { ...doc, tables: doc.tables.map((t) => (t.id !== tableId ? t : { ...t, records })) };
+}
+
+export type BitableFieldConvertFailure = "missing" | "unknown-type" | "has-data";
+
+/**
+ * 字段类型互转（261030 用户定稿：**只有没数据的字段才能转**）。
+ * 无数据 ⇒ 按新类型重建字段（id/名称/必填/列宽保留，旧类型专属配置全部丢弃），并把视图里
+ * 已失效的类型专属引用清掉（看板分组/画册封面/日历字段，走 stripViewRefsForFieldType）。
+ * 有数据 ⇒ 拒绝并回 reason，由 UI 说明「有数据不能修改类型」。
+ */
+export function convertBitableFieldType(
+  doc: BitableDoc,
+  tableId: string,
+  fieldId: string,
+  nextType: string,
+): { doc: BitableDoc; ok: boolean; reason?: BitableFieldConvertFailure } {
+  const table = doc.tables.find((t) => t.id === tableId);
+  const field = table?.fields.find((f) => f.id === fieldId);
+  if (!table || !field) return { doc, ok: false, reason: "missing" };
+  if (field.type === nextType) return { doc, ok: true };
+  if (!isKnownFieldType(nextType)) return { doc, ok: false, reason: "unknown-type" };
+  if (fieldHasData(table, fieldId)) return { doc, ok: false, reason: "has-data" };
+  const base = createBitableField(nextType, field.name, field.id);
+  const nextField: BitableField = {
+    ...base,
+    ...(field.required === true ? { required: true } : {}),
+    ...(typeof field.width === "number" ? { width: field.width } : {}),
+  };
+  return {
+    doc: {
+      ...doc,
+      tables: doc.tables.map((t) => (t.id !== tableId ? t : {
+        ...t,
+        fields: t.fields.map((f) => (f.id === fieldId ? nextField : f)),
+        views: t.views.map((view) => stripViewRefsForFieldType(view, nextField)),
+      })),
+    },
+    ok: true,
+  };
+}
+
 /**
  * 复制字段（AR-F7 续）：**不继承双向配对**——复制出来的关联字段回落为单向，
  * 否则两个来源字段会共用同一条反向字段。字段/选项 id 重新生成，原字段不动。
@@ -313,6 +498,64 @@ export function renameBitableField(doc: BitableDoc, tableId: string, fieldId: st
       fields: fields.map((f) => renameAiFieldToken(f, before.name, nextName)),
     })),
   };
+}
+
+/**
+ * 字段配置更新（261030 移动端「修改字段」用；桌面 FieldEditorModal 的语义收窄版）：
+ * 名称走 renameBitableField（联动 AI 命令变量），其余按类型写 required / defaultValue / dateAutoFill /
+ * progressColor / options。**用 hasOwnProperty 判「传了没有」**：显式传 undefined = 清空该配置。
+ * 无变化返回原引用（不产生空写入）。
+ */
+export interface BitableFieldConfigPatch {
+  name?: string;
+  required?: boolean;
+  defaultValue?: unknown;
+  dateAutoFill?: boolean;
+  progressColor?: string;
+  options?: BitableFieldOption[];
+  /** 字段级显示格式（日期 / 数字；undefined = 清空）。 */
+  format?: string;
+}
+
+export function updateBitableField(doc: BitableDoc, tableId: string, fieldId: string, patch: BitableFieldConfigPatch): BitableDoc {
+  const has = (key: keyof BitableFieldConfigPatch): boolean => Object.prototype.hasOwnProperty.call(patch, key);
+  let next = doc;
+  if (has("name") && typeof patch.name === "string") next = renameBitableField(next, tableId, fieldId, patch.name);
+  const table = next.tables.find((t) => t.id === tableId);
+  const before = table?.fields.find((f) => f.id === fieldId);
+  if (!table || !before) return next;
+  const field: BitableField = { ...before };
+  if (has("required")) {
+    if (patch.required === true) field.required = true;
+    else delete field.required;
+  }
+  if (has("defaultValue")) {
+    if (patch.defaultValue === undefined) delete field.defaultValue;
+    else field.defaultValue = patch.defaultValue;
+  }
+  if (has("dateAutoFill")) {
+    if (patch.dateAutoFill === true) field.dateAutoFill = true;
+    else delete field.dateAutoFill;
+  }
+  if (has("progressColor")) {
+    if (typeof patch.progressColor === "string" && patch.progressColor) field.progressColor = patch.progressColor;
+    else delete field.progressColor;
+  }
+  if (has("options")) {
+    if (patch.options) field.options = patch.options;
+    else delete field.options;
+  }
+  if (has("format")) {
+    if (typeof patch.format === "string" && patch.format) field.format = patch.format;
+    else delete field.format;
+  }
+  if (JSON.stringify(field) === JSON.stringify(before)) return next;
+  const updated: BitableDoc = {
+    ...next,
+    tables: next.tables.map((t) => (t.id !== tableId ? t : { ...t, fields: t.fields.map((f) => (f.id === fieldId ? field : f)) })),
+  };
+  // 选项被删/改名不影响值（值存 id）；但**删掉**的 id 必须在记录里清掉，否则显示裸 option id。
+  return has("options") ? pruneBitableOptionValues(updated, tableId, fieldId) : updated;
 }
 
 /**

@@ -46,7 +46,11 @@ const GALLERY = readFileSync(new URL("./BitableGalleryView.tsx", import.meta.url
 const CALENDAR = readFileSync(new URL("./BitableCalendarView.tsx", import.meta.url), "utf8");
 const PANELS = readFileSync(new URL("./BitableViewConfigPanels.tsx", import.meta.url), "utf8");
 const FORM = readFileSync(new URL("./BitableFormView.tsx", import.meta.url), "utf8");
+/** 261030：表单语义（题目顺序/必填/提交值）上收 core，两端共用。 */
+const CORE_FORM = readFileSync(new URL("../../core/bitableForm.ts", import.meta.url), "utf8");
 const MOBILE = readFileSync(new URL("../../mobile/bitable/MobileBitableViewer.tsx", import.meta.url), "utf8");
+/** 261030：字段值渲染（附件/选项/评分/进度/关联）抽到独立单一来源，附件判定改在这里查。 */
+const MOBILE_VALUE = readFileSync(new URL("../../mobile/bitable/MobileBitableValue.tsx", import.meta.url), "utf8");
 const PREVIEW = readFileSync(new URL("../editor/imagePreview.ts", import.meta.url), "utf8");
 const KANBAN_CSS = readFileSync(new URL("./bitableKanbanView.css", import.meta.url), "utf8");
 const ATTACH_CTRL = readFileSync(new URL("../attachment/attachmentPreviewController.ts", import.meta.url), "utf8");
@@ -285,8 +289,10 @@ describe("多维表编辑器护栏", () => {
   });
 
   it("阶段优化批（260929-OPT）：表单题序 / 系统时间复制·查重 / 搜索口径 / 删字段清理 / 令牌", () => {
-    // A1 表单题目顺序 = formFieldIds 顺序（不是表字段顺序）
-    expect(FORM).toMatch(/includedIds[\s\S]{0,24}?\.map\(\(id\) => formableFields\.find/);
+    // A1 表单题目顺序 = formFieldIds 顺序（不是表字段顺序）——语义单一来源在 core，两端只消费
+    expect(CORE_FORM).toMatch(/view\?\.formFieldIds/);
+    expect(CORE_FORM).toMatch(/\.map\(\(id\) => formable\.find\(\(field\) => field\.id === id\)\)/);
+    expect(FORM).toMatch(/bitableFormFields\(table, view\)/);
     // A2 查重走记录级取值（系统时间字段的值不在 record.values 里）
     expect(EDITOR).toMatch(/bitableDisplayValue\(field, bitableFieldValue\(record, field\), displayCtx\)/);
     // A3 复制所见：系统时间复制到分钟，不是空串
@@ -299,8 +305,8 @@ describe("多维表编辑器护栏", () => {
     expect(EDITOR).toMatch(/deleteBitableField\(prev, tableId, fieldId\)/);
     // A5 statForField 不走原型链
     expect(DOC).toMatch(/Object\.prototype\.hasOwnProperty\.call\(BITABLE_STAT_LABEL, stat\)/);
-    // 单一来源：移动端附件判定复用 isAttachmentLikeField
-    expect(MOBILE).toMatch(/isAttachmentLikeField\(field\.type\)/);
+    // 单一来源：移动端附件判定复用 isAttachmentLikeField（261030 起在 MobileBitableValue）
+    expect(MOBILE_VALUE).toMatch(/isAttachmentLikeField\(field\.type\)/);
     // 令牌唯一来源：桌面组件 CSS 不再有颜色字面量（抽屉阴影除外，无对应令牌）
     expect(CSS).not.toMatch(/#fff|#1f1f1f/);
   });
@@ -1119,7 +1125,8 @@ describe("AI 字段护栏（261003 · 单一类型 / 命令在字段里 / 手动
     expect(EDITOR).toContain("插入字段");
     expect(EDITOR).toContain("insertAiToken");
     expect(EDITOR).toMatch(/filter\(\(candidate\) => candidate\.id !== field\?\.id\)/);
-    expect(FORM).toContain("!isAiFieldType(f.type)");
+    // 261030：表单可填字段（排除 AI / 系统时间）语义上收 core，两端共用。
+    expect(CORE_FORM).toMatch(/!isAiFieldType\((field|f)\.type\)/);
     expect(CSV).toContain("AI 字段由生成产生，不能从 CSV 导入");
     // 样式走新文件且由使用方 import（AGENTS §3 #14：新 CSS 必须登记 + 被 import）
     expect(AI_CSS).toContain(".bt-cell-ai");

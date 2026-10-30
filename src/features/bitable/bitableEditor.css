@@ -442,3 +442,6 @@
 .bt-attachment-plus { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; flex: 0 0 auto; border: 0; background: var(--lake-bg-block); border-radius: var(--lake-radius-2xs); cursor: pointer; color: var(--lake-text-2); padding: 0; }
 .bt-attachment-plus:hover { background: var(--lake-bg-hover); color: var(--lake-text-1); }
 .bt-attachment-hint { flex: 1; min-width: 0; color: var(--lake-text-3); font-size: var(--lake-font-size-small); cursor: text; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* 字段编辑弹窗的行内说明（261030：有数据不能改类型） */
+.bt-field-note { margin: -2px 0 2px; color: var(--lake-text-3); font-size: var(--lake-font-size-micro); line-height: 1.5; }

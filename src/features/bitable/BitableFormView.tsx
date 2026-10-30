@@ -9,9 +9,12 @@
 import { useState } from "react";
 import { Check, Plus, X } from "lucide-react";
 import {
-  bitableAttachments, bitableDisplayValue, isAiFieldType, isSystemTimeField, removeBitableAttachment, renameBitableAttachment, reorderBitableAttachments,
+  bitableAttachments, removeBitableAttachment, renameBitableAttachment, reorderBitableAttachments,
   type BitableAttachment, type BitableDisplayContext, type BitableField, type BitableTable, type BitableView,
 } from "../../core/bitableDoc.js";
+import {
+  bitableFormFields, bitableFormValues, formableBitableFields, missingRequiredBitableFields,
+} from "../../core/bitableForm.js";
 import { AttachmentCell, CellEditor, FieldTypeIcon } from "./bitableCells.js";
 import "./bitableFormView.css";
 
@@ -43,15 +46,13 @@ export function BitableFormView(props: BitableFormViewProps) {
   const [error, setError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
 
-  // 未配置时沿用 v1 口径：默认收入全部字段（不是"空表单"）
-  /** 表单可用字段：排除系统时间字段（值来自记录时间戳）与 AI 字段（值由生成产生），表单无法录入。 */
-  const formableFields = table.fields.filter((f) => !isSystemTimeField(f.type) && !isAiFieldType(f.type));
+  // 表单语义（可填字段 / 题目顺序 / 必填 / 提交值）**单一来源在 core**（261030 与移动端共用）：
+  // 未配置 formFieldIds = 默认收入全部可填写字段（不是"空表单"）；配置了则严格按 formFieldIds 顺序。
+  const formableFields = formableBitableFields(table);
   const includedIds = view.formFieldIds ?? formableFields.map((f) => f.id);
-  /** 题目顺序 = formFieldIds 顺序（契约见 BitableView.formFieldIds），不是表字段顺序。 */
-  const includedFields = includedIds
-    .map((id) => formableFields.find((f) => f.id === id))
-    .filter((f): f is BitableField => !!f);
-  const availableFields = formableFields.filter((f) => !includedIds.includes(f.id));
+  const includedFields = bitableFormFields(table, view);
+  const includedFieldIds = new Set(includedFields.map((f) => f.id));
+  const availableFields = formableFields.filter((f) => !includedFieldIds.has(f.id));
   const title = view.formTitle?.trim() || view.name || "表单";
   const description = view.formDescription?.trim() || "填写后将在当前数据表新增一条记录";
 
@@ -62,13 +63,14 @@ export function BitableFormView(props: BitableFormViewProps) {
   };
   const setDraftValue = (fieldId: string, value: unknown) => setDraft((prev) => ({ ...prev, [fieldId]: value }));
   const submit = () => {
-    const missing = includedFields.filter((f) => f.required && bitableDisplayValue(f, draft[f.id], props.ctx).trim() === "");
+    const missing = missingRequiredBitableFields(includedFields, draft, props.ctx);
     if (missing.length > 0) {
       setError("必填项未填写：" + missing.map((f) => f.name).join("、"));
       setSubmitted(false);
       return;
     }
-    props.onSubmit(draft);
+    // 提交值也走 core：补齐非表单字段的默认值（与移动端同一口径；未知键丢弃）。
+    props.onSubmit(bitableFormValues(table, draft));
     setDraft({ ...props.defaults });
     setError(null);
     setSubmitted(true);

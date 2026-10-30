@@ -70,8 +70,8 @@ describe("MobileBitableViewer 只读单元", () => {
     expect(html).toContain("2026-09-01 08:00");
   });
 
-  it("非 grid 视图给明确只读回退提示（不空白）", () => {
-    const kanban = JSON.stringify({
+  it("未知视图类型给明确只读回退提示（不空白）", () => {
+    const unknown = JSON.stringify({
       kind: "bitable",
       version: 1,
       activeTableId: "t1",
@@ -79,16 +79,38 @@ describe("MobileBitableViewer 只读单元", () => {
         {
           id: "t1",
           name: "表",
-          activeViewId: "vk",
-          views: [{ id: "vk", name: "看板视图", type: "kanban", rowHeight: "low" }],
+          activeViewId: "vg",
+          views: [{ id: "vg", name: "甘特视图", type: "gantt", rowHeight: "low" }],
           fields: [{ id: "f", name: "文本", type: "text" }],
           records: [{ id: "r", createdAt: ts, updatedAt: ts, values: { f: "x" } }],
         },
       ],
     });
-    const html = render(kanban);
+    const html = render(unknown);
     expect(html).toContain("mbt-view-notice");
-    expect(html).toContain("移动端暂以表格只读展示");
+    expect(html).toContain("不支持「gantt」视图");
+  });
+
+  it("P2：看板 / 画册 / 日历视图分派到对应移动端实现（不再回退表格）", () => {
+    const make = (type: string, extra: Record<string, unknown>) => JSON.stringify({
+      kind: "bitable", version: 1, activeTableId: "t1",
+      tables: [{
+        id: "t1", name: "表", activeViewId: "v1",
+        views: [{ id: "v1", name: "视图", type, rowHeight: "low", ...extra }],
+        fields: [
+          { id: "f-type", name: "类型", type: "select", options: [{ id: "o1", name: "复盘", color: "green" }] },
+          { id: "f-text", name: "文本", type: "text" },
+          { id: "f-date", name: "日期", type: "date" },
+          { id: "f-file", name: "附件", type: "attachment" },
+        ],
+        records: [{ id: "r1", createdAt: ts, updatedAt: ts, values: { "f-type": "o1", "f-text": "x", "f-date": "2026-06-09" } }],
+      }],
+    });
+    expect(render(make("kanban", { kanbanGroupFieldId: "f-type" }))).toContain("mbt-kanban");
+    expect(render(make("gallery", { galleryCoverFieldId: "f-file" }))).toContain("mbt-gallery");
+    expect(render(make("calendar", { calendarStartFieldId: "f-date" }))).toContain("mbt-calendar");
+    // 这三种已实现视图不再出现「暂以表格展示」回退提示
+    expect(render(make("kanban", { kanbanGroupFieldId: "f-type" }))).not.toContain("mbt-view-notice");
   });
 
   it("附件字段用文档类型图标（图片字段仍是缩略图）", () => {
@@ -207,5 +229,49 @@ describe("MobileBitableViewer 只读单元", () => {
     expect(html).toContain("linear-gradient(color-mix(in srgb, #FFE8E6 62%, transparent), color-mix(in srgb, #FFE8E6 62%, transparent))");
     expect(html).toContain('data-fill-side=""');
     expect(html).toContain("--mbt-fill-side:#FA541C");
+  });
+});
+
+const docWithForm = JSON.stringify({
+  kind: "bitable", version: 1, activeTableId: "t1",
+  tables: [{
+    id: "t1", name: "收集表", activeViewId: "v-grid",
+    views: [
+      { id: "v-grid", name: "内容", type: "grid", rowHeight: "low" },
+      { id: "v-form", name: "表单", type: "form", formFieldIds: ["f-type", "f-content"], formTitle: "观点收集", formDescription: "填完提交" },
+    ],
+    fields: [
+      { id: "f-type", name: "类型", type: "select", required: true, options: [{ id: "o1", name: "复盘", color: "#2b7350" }] },
+      { id: "f-content", name: "内容", type: "text", required: true },
+    ],
+    records: [{ id: "r1", createdAt: ts, updatedAt: ts, values: { "f-type": "o1", "f-content": "一条" } }],
+  }],
+});
+
+describe("MobileBitableViewer 表单优先（261030）", () => {
+  it("有表单视图时默认落在表单（填写态）：页签、必填标记、提交按钮、只读徽标", () => {
+    const html = render(docWithForm);
+    // 视图页签：表单 / 内容
+    expect(html).toContain('aria-label="视图"');
+    expect(html).toContain(">表单<");
+    expect(html).toContain(">内容<");
+    // 表单结构（填写态）：261030 用户点单去掉封面/重复标题/说明，只剩字段 + 提交
+    expect(html).toContain("mbt-form-fields");
+    expect(html).not.toContain("mbt-form-cover");
+    expect(html).not.toContain("mbt-form-title");
+    expect(html).toContain('aria-label="必填"');
+    expect(html).toContain(">提交<");
+    expect(html).toContain("mbt-form-meta");
+    // 只读徽标仍在
+    expect(html).toContain(">只读<");
+    // 多数据表入口（261030 用户点单：对齐钉钉的抽屉切换）始终可见
+    expect(html).toContain('aria-label="数据表"');
+    // 表单视图下没有表格
+    expect(html).not.toContain("mbt-grid");
+  });
+
+  it("表单提交按钮默认可用；必填项没填时不会静默（错误只在交互后出现，静态渲染没有错误文案）", () => {
+    const html = render(docWithForm);
+    expect(html).not.toContain("必填项未填写");
   });
 });

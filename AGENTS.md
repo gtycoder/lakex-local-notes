@@ -67,7 +67,7 @@ LakexLocalNotes = **本地优先**笔记应用：Electron 44.3 + React 18.3 + be
 20. **云同步只有一套状态判据（`src/core/cloudState.ts`，两端共用）**：`cloudStateOf()` → `unconfigured|offline|manual|auto`；`canTouchNetwork()` 是「能不能出网」的**唯一**判据，`isCloudActive()` 是 UI（状态灯/禁用态）判据。**关闭云同步 = 完全没配置**（任何路径不出网）；离线文案统一 `cloudStateHint()`。恢复**不等网络**（立刻生效 + 后台补拉 + 明确提示）。**「启用云同步」的默认值 = 是否已配置 S3（261022 用户定稿）**：没配置时默认关（全新安装不再显示为开）、已配置的旧库默认开、显式存过的值优先——桌面 `settingsRepository.getSyncSettings()`（`hasS3Settings()`，只判行存在）与移动 `bridge/context.readSyncSettings()`（`S3_STORAGE_KEY` 是否存过）同口径；判据仍只有 `cloudState` 一套。护栏：`electron/settingsRepository.test.ts`、`electron/syncDualAB.test.ts`、`src/mobile/bridgeCloudState.test.ts`。
 21. **门禁分层（通用规则，两端各自对应）**：
     ① **每次改动都跑**（≈24s，**这就是"门禁"的正式含义**）：`npx tsc --noEmit` + 相关 `vitest`（全库 ≈24s，含 perf 门禁）+ `git diff --check`；改样式再加 `ui-metrics` 与对应侧层围栏。
-    ② **只有动了视觉/设备那一层才跑样式/设备装置，且只跑受影响的 1~2 个态/屏**：桌面 `check-stylesnap.mjs --states "…"`；移动 `check-mobile-snap.mjs --states home-quicknotes` + 走查传屏名。**全量**（桌面 42 态 / 移动 6 态 + 23 屏）只在换夹具、改装置、发版前跑。
+    ② **只有动了视觉/设备那一层才跑样式/设备装置，且只跑受影响的 1~2 个态/屏**：桌面 `check-stylesnap.mjs --states "…"`；移动 `check-mobile-snap.mjs --states home-quicknotes` + 走查传屏名；**多维表专项** `npm run check:bitablesnap`（表单/内容·表格/内容·卡片 3 态，夹具自建自删）。**全量**（桌面 42 态 / 移动 6 态 + 23 屏）只在换夹具、改装置、发版前跑。
     ③ **动了外壳几何/构成，或重灌夹具 ⇒ 必须先重烤一次基线**（`--from <warm>.json --write-baseline`），否则下次全量必红；这是一次性成本。
     顺序恒定：**先本地 → 再定点 → 最后全量**。
 22. **依赖准入（261021 调研定稿）**：新依赖**四问缺一不引入**（先过 §3#17「拒绝迎合式找需求」）——

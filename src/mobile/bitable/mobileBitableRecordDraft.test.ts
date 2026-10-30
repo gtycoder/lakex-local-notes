@@ -33,7 +33,7 @@ describe("多维表记录面板 draft", () => {
   it("连续输入不逐字符上提，停顿 250ms 后只提交最终文本", () => {
     const onPatch = vi.fn();
     act(() => root.render(createElement(MobileBitableRecordSheet, {
-      table, fields, record, ctx: { tables: [table] }, onPatch, onAddOption: () => null, onDelete: () => {}, onClose: () => {},
+      noteId: "n1", table, fields, record, ctx: { tables: [table] }, onPatch, onAddOption: () => null, onDelete: () => {}, onClose: () => {},
     })));
     const input = host.querySelector<HTMLInputElement>('input[aria-label="文本值"]')!;
     act(() => {

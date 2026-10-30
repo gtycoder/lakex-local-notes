@@ -199,6 +199,7 @@ bash scripts/android-build.sh --sync --install # 构建并安装到已连接设�
 | [docs/SYNC-PROTOCOL.md](docs/SYNC-PROTOCOL.md) · [docs/STORAGE-LAYERS.md](docs/STORAGE-LAYERS.md) | 同步协议（含 GC / 保留链 §13–§14）/ 存储分层 |
 | [docs/LAKEX-CONTRACT.md](docs/LAKEX-CONTRACT.md) | 闭源 Lakex 内核已核实行为 + 调试速查 |
 | [docs/USHEET-UPGRADE.md](docs/USHEET-UPGRADE.md) | Univer 表格触点、升级 playbook、能力路线 |
+| [docs/MOBILE-BITABLE-DINGTALK.md](docs/MOBILE-BITABLE-DINGTALK.md) | 移动端多维表：钉钉实机实测 + 复刻方案与实施记录（含可点的 [样机](docs/mockups/mobile-bitable.html)） |
 | [docs/MOBILE-TECH-STACK.md](docs/MOBILE-TECH-STACK.md) · [docs/MOBILE-DESIGN.md](docs/MOBILE-DESIGN.md) | 移动端架构与设计 |
 | [docs/MOBILE-OPS.md](docs/MOBILE-OPS.md) | **Android 构建 / 安装 / AVD / CDP / 门禁 / 点按口径**（唯一运维手册） |
 | [docs/MOBILE-AI.md](docs/MOBILE-AI.md) | 移动端 AI 设计与实施契约（资料集 / 预算 / 原生通道 / 分期） |

@@ -20,6 +20,7 @@ const fields = [
   createBitableField("rating", "评分"),
   createBitableField("progress", "进度"),
   createBitableField("attachment", "附件"),
+  createBitableField("relationOneWay", "关联"),
 ];
 const table: BitableTable = {
   id: "t1",
@@ -49,6 +50,7 @@ const record: BitableRecord = {
 };
 
 const html = renderToStaticMarkup(createElement(MobileBitableRecordSheet, {
+  noteId: "n1",
   table,
   fields,
   record,
@@ -75,14 +77,18 @@ describe("MobileBitableRecordSheet", () => {
   it("文本/数字/日期/链接给输入框（日期走系统 date 控件）", () => {
     expect(html).toContain('aria-label="文本值"');
     expect(html).toContain('aria-label="数字值"');
-    expect(html).toContain('type="date"');
+    // 261030：日期改自有选择器（不再用系统 date 控件）
+    expect(html).toContain("mbt-date-trigger");
     expect(html).toContain("2026-10-20");
     expect(html).toContain("https://example.com/x");
   });
 
-  it("不可编辑字段只读展示 + 明确理由（触屏没有 hover，不能静默）", () => {
+  it("附件/图片可上传（261030 P1）；关联等不可编辑字段仍只读 + 明确理由", () => {
+    expect(html).toContain("mbt-file-add");
+    expect(html).toContain("上传附件");
+    expect(html).not.toContain("附件字段：移动端暂只读");
     expect(html).toContain("mbt-record-readonly");
-    expect(html).toContain("附件字段：移动端暂只读，请在桌面编辑");
+    expect(html).toContain("关联字段：移动端暂只读");
   });
 
   it("有删除记录入口，且面板标题带表名", () => {

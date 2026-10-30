@@ -1,13 +1,13 @@
 /**
- * 移动端多维表「字段」面板（261020 P0）：重命名 / 删除 / 新增基础字段。
+ * 移动端多维表「字段」面板（261020 P0；261030 改：行内铅笔 → 打开「修改字段」面板）。
  *
- * - 新增类型只暴露移动端 P0 可编辑的 9 种（文本/数字/日期/单选/多选/复选框/链接/评分/进度）；
- *   其余类型（附件/图片/关联/系统时间/AI/Markdown）不做入口 —— 不做「建得出来但改不了」的字段。
+ * - 行内铅笔 = 编辑该字段（名称 + 类型专属设置 + 必填 + 选项，见 MobileBitableFieldEditorSheet）；
+ *   对齐钉钉「字段面板 → 铅笔 → 修改字段 → 确认」的触发与交互，设置项用桌面端已有能力。
+ * - 新增类型仍只暴露移动端可编辑的 9 种；其余类型（附件/图片/关联/系统时间/AI/Markdown）不做入口。
  * - 删除带确认，并说明「所有视图里的相关配置会一并清除」；只剩一个字段时明确拒绝（core 同一判据）。
- * - 命名缺省用类型名；重命名联动改写同表 AI 命令变量（core `renameBitableField`）。
  */
 import { useState } from "react";
-import { Check, Pencil, Plus, Trash2 } from "lucide-react";
+import { Pencil, Plus, Trash2 } from "lucide-react";
 import {
   BITABLE_FIELD_TYPE_LABEL,
   type BitableField,
@@ -22,27 +22,18 @@ import { MobileSheet } from "../ui/MobileSheet";
 export interface MobileBitableFieldSheetProps {
   table: BitableTable;
   fields: BitableField[];
-  onRename: (fieldId: string, name: string) => void;
+  /** 点行内铅笔：打开「修改字段」（名称 + 类型专属设置 + 必填 + 选项）。 */
+  onEdit: (field: BitableField) => void;
   onDelete: (fieldId: string) => void;
   onAdd: (type: BitableFieldType, name: string) => void;
   onClose: () => void;
 }
 
-export function MobileBitableFieldSheet({ table, fields, onRename, onDelete, onAdd, onClose }: MobileBitableFieldSheetProps) {
-  const [renamingId, setRenamingId] = useState<string | null>(null);
-  const [renameValue, setRenameValue] = useState("");
+export function MobileBitableFieldSheet({ table, fields, onEdit, onDelete, onAdd, onClose }: MobileBitableFieldSheetProps) {
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState("");
   const [newType, setNewType] = useState<BitableFieldType>("text");
 
-  const startRename = (field: BitableField) => { setRenamingId(field.id); setRenameValue(field.name); };
-  const commitRename = () => {
-    if (!renamingId) return;
-    const name = renameValue.trim();
-    setRenamingId(null);
-    if (!name) return;
-    onRename(renamingId, name);
-  };
   const askDelete = async (field: BitableField) => {
     if (fields.length <= 1) { showToast("至少保留一个字段", { type: "error" }); return; }
     const ok = await confirmMobile({
@@ -69,27 +60,11 @@ export function MobileBitableFieldSheet({ table, fields, onRename, onDelete, onA
         {fields.map((field) => (
           <div key={field.id} className="mb-set-item">
             <div className="mb-set-item__main">
-              {renamingId === field.id ? (
-                <span className="mb-input">
-                  <input
-                    autoFocus
-                    value={renameValue}
-                    aria-label="字段名称"
-                    onChange={(event) => setRenameValue(event.target.value)}
-                    onKeyDown={(event) => { if (event.key === "Enter") commitRename(); if (event.key === "Escape") setRenamingId(null); }}
-                  />
-                </span>
-              ) : (
-                <span className="mb-set-name mb-ellipsis">{field.name}</span>
-              )}
+              <span className="mb-set-name mb-ellipsis">{field.name}</span>
               <span className="mb-set-item__note">{BITABLE_FIELD_TYPE_LABEL[field.type as BitableFieldType] ?? field.type}</span>
             </div>
             <div className="mb-set-item__ctl">
-              {renamingId === field.id ? (
-                <button type="button" className="mb-iconbtn" aria-label="保存字段名称" onClick={commitRename}><Check size={18} /></button>
-              ) : (
-                <button type="button" className="mb-iconbtn" aria-label={"重命名字段 " + field.name} onClick={() => startRename(field)}><Pencil size={17} /></button>
-              )}
+              <button type="button" className="mb-iconbtn" aria-label={"编辑字段 " + field.name} onClick={() => onEdit(field)}><Pencil size={17} /></button>
               <button type="button" className="mb-iconbtn" aria-label={"删除字段 " + field.name} onClick={() => void askDelete(field)}><Trash2 size={17} /></button>
             </div>
           </div>

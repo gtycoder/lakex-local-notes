@@ -57,6 +57,22 @@ node scripts/mobile-audit/check-mobile-snap.mjs --port 9336                     
 ⚠️ **261016 实测到的确切成因**：`home-doc` 的指纹 row key 里带**文档节点 id**（形如 `ne-p$<uuid>-body#0`）⇒ 每次 `pm clear` + 重灌夹具都会生成**新 id**，
 即使元素数完全相同，指纹也会变（本次实测 `1880 → 1880` 但指纹不同，逐行对拍只差这一条）⇒ **重灌夹具后必须重烤**；只盯元素数会误判成"没变"。
 
+## 多维表专项快照（261030 起，动移动端多维表时跑）
+
+6 态整页快照与 23 屏走查都**不含** bitable 屏；把多维表塞进共享夹具会影响 `home-doc`（最近文档顺序）与走查行序号，
+所以这里是一套**独立装置**：夹具由脚本自建（固定 id 的 grid+form 双视图 + 3 条记录，标题「门禁多维表」）、**跑完即删**，
+不碰共享夹具与既有基线。
+
+```bash
+npm run check:bitablesnap                     # 3 态：表单 / 内容·表格 / 内容·卡片（默认端口 9336）
+node scripts/mobile-audit/check-bitable-snap.mjs --port 9336 --write-baseline   # 首次或有意改 UI 后重烤
+```
+
+- 快照/折叠/比对逻辑与 6 态共用 `snap-gate.mjs`（261030 从 check-mobile-snap 抽出，口径不变）。
+- 基线：`baseline/bitable-snap.json`；详细快照在 `.css-audit/snap/bitable-<tag>.json`。
+- 夹具每次用**新 noteId**（先删后建）⇒ 设备本地布局偏好天然从默认（表格）起步，三态顺序稳定；实测两轮 0 差异。
+- 共享装置的导航/静默工具在 `snap-lib.mjs`（`tapByText` 等），6 态脚本与它共用。
+
 ## 编辑面不变量（261014 起，动 dock / 输入法 / 键盘适配时必跑）
 
 ```bash

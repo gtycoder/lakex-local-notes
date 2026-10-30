@@ -177,16 +177,21 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   const [chrome, setChrome] = useState<ChromeScrollState>({ hidden: false, acc: 0 });
   const chromeRef = useRef(chrome);
   chromeRef.current = chrome;
+  /** 子页全屏请求（261030：多维表「记录详情」这类页内整页）——独立于滚动 chrome，由子组件声明。 */
+  const [subpageFullscreen, setSubpageFullscreen] = useState(false);
   const bodyRef = useRef<HTMLElement | null>(null);
   const activeMetaRef = useRef({ kind: "doc" as string, editing: false });
   activeMetaRef.current = { kind: active?.kind ?? "doc", editing: !!active?.editing };
-  const chromeHiddenNow = chrome.hidden && !active?.editing && (active?.kind ?? "doc") === "doc";
+  const chromeHiddenNow = subpageFullscreen || (chrome.hidden && !active?.editing && (active?.kind ?? "doc") === "doc");
   const showChrome = useCallback(() => {
     if (chromeRef.current.hidden || chromeRef.current.acc) setChrome({ hidden: false, acc: 0 });
   }, []);
   // 切文档 / 进出编辑 / 打开浮层：导航必须回来（否则用户要操作时看不见入口）
   useEffect(() => { setChrome({ hidden: false, acc: 0 }); }, [activeId]);
   useEffect(() => { if (active?.editing) setChrome({ hidden: false, acc: 0 }); }, [active?.editing]);
+  // 切文档 / 进出编辑：子页全屏请求必须复位（否则换了文档顶栏还藏着）。
+  useEffect(() => { setSubpageFullscreen(false); }, [activeId]);
+  useEffect(() => { if (active?.editing) setSubpageFullscreen(false); }, [active?.editing]);
   useEffect(() => {
     if (sidebarOpen || outlineOpen || tabsOpen || notebookSwitchOpen) showChrome();
   }, [sidebarOpen, outlineOpen, tabsOpen, notebookSwitchOpen, showChrome]);
@@ -443,6 +448,8 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     const nextContent = captured ?? active.content;
     if (active.editing) {
       cancelAutoSave(active.id); // 旧 timer 里的 content 可能落后于 captured
+      // 再等**在途**的自动保存落完，避免旧快照后落盘覆盖下面的新内容（261030 review）。
+      try { await flushAutoSave(active.id); } catch { /* 旧快照失败已 toast；继续显式保存最新 */ }
       try {
         await bridge.saveNote(active.id, active.title, nextContent);
       } catch (reason) {
@@ -746,6 +753,14 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
                     updateTab(t.id, { content: c });
                     if (t.editing) scheduleAutoSave(t.id, t.title, c);
                   }}
+                  // 只读文档里提交表单必须真正落盘（不走「编辑态才自动保存」的防抖路径）：
+                  // 与「完成编辑」同一条写边界（bridge.saveNote），失败抛出由 viewer 提示。
+                  onPersistNow={async (c) => {
+                    updateTab(t.id, { content: c });
+                    await bridge.saveNote(t.id, t.title, c);
+                  }}
+                  // 记录详情 = 子页全屏：请求隐藏工作区顶栏/底部胶囊（单一入口，child 只声明状态）。
+                  onFullscreenChange={setSubpageFullscreen}
                 />
               </Suspense>
             ) : t.kind === "usheet" ? (

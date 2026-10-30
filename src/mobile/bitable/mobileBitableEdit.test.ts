@@ -147,7 +147,9 @@ describe("移动端多维表 · 窗口与取值", () => {
       expect(isMobileEditableField(createBitableField(type))).toBe(true);
     }
     const attachment = createBitableField("attachment");
-    expect(isMobileEditableField(attachment)).toBe(false);
+    // 261030 P1：附件/图片改为可上传（表单 + 记录面板共用上传控件）
+    expect(isMobileEditableField(attachment)).toBe(true);
+    expect(isMobileEditableField(createBitableField("image"))).toBe(true);
     expect(mobileFieldNote(attachment)).toContain("附件");
     expect(mobileFieldNote(createBitableField("relationOneWay"))).toContain("关联");
     expect(mobileFieldNote(createBitableField("createdTime"))).toContain("自动生成");

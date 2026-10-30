@@ -6,8 +6,8 @@
  * 飞书/语雀移动端多维表同样是「点格开记录面板」，一个面板即可覆盖全部字段类型（见 HANDOFF 261020 决策）。
  * 布尔值另有快路径：网格里单击直接切换，不必进面板。
  *
- * 覆盖范围（P0）：文本 / 数字 / 日期 / 单选 / 多选 / 复选框 / 链接 / 评分 / 进度。
- * 其余类型（附件/图片/关联/系统时间/AI/Markdown）**只读展示并写明理由**（触屏没有 hover，不能静默）。
+ * 覆盖范围：文本 / 数字 / 日期 / 单选 / 多选 / 复选框 / 链接 / 评分 / 进度 / **附件 / 图片上传**（261030 P1，
+ * 与表单共用 MobileBitableAttachmentEditor）。其余类型（关联/系统时间/AI/Markdown）**只读展示并写明理由**。
  */
 import { useEffect, useRef, useState } from "react";
 import { Plus } from "lucide-react";
@@ -21,12 +21,16 @@ import {
   type BitableTable,
 } from "../../core/bitableDoc.js";
 import {
-  dateInputValue, isMobileEditableField, mobileFieldNote, progressValue, ratingValue,
+  isMobileEditableField, mobileFieldNote, progressValue, ratingValue,
   selectedOptionIds, textInputValue,
 } from "./mobileBitableEdit";
+import { MobileBitableDateField } from "./MobileBitableDateField";
+import { dismissKeyboardOnPointerDown } from "../ui/dismissKeyboard";
 import { MobileSheet } from "../ui/MobileSheet";
+import { MobileBitableAttachmentEditor } from "./MobileBitableAttachmentEditor";
 
 export interface MobileBitableRecordSheetProps {
+  noteId: string;
   table: BitableTable;
   /** 与网格同序的可见字段（视图投影后的顺序）。 */
   fields: BitableField[];
@@ -93,19 +97,6 @@ function NumberControl({ value, onChange }: { value: unknown; onChange: (value: 
   return <DraftInputControl value={value} onChange={onChange} numeric />;
 }
 
-/** 日期：走系统日期选择器（WebView 原生 date 控件，触屏上比自绘月历更稳）。正文仍是 YYYY-MM-DD。 */
-function DateControl({ value, onChange }: { value: unknown; onChange: (value: unknown) => void }) {
-  return (
-    <label className="mb-input">
-      <input
-        type="date"
-        value={dateInputValue(value)}
-        onChange={(event) => onChange(event.target.value)}
-        aria-label="日期值"
-      />
-    </label>
-  );
-}
 
 function SelectControl({ field, value, onChange, onAddOption }: {
   field: BitableField; value: unknown; onChange: (value: unknown) => void; onAddOption: (name: string) => string | null;
@@ -222,12 +213,12 @@ function ProgressControl({ value, onChange }: { value: unknown; onChange: (value
   );
 }
 
-export function MobileBitableRecordSheet({ table, fields, record, ctx, onPatch, onAddOption, onDelete, onClose }: MobileBitableRecordSheetProps) {
+export function MobileBitableRecordSheet({ noteId, table, fields, record, ctx, onPatch, onAddOption, onDelete, onClose }: MobileBitableRecordSheetProps) {
   // MOB-11：scrim / 右滑 / 返回栈 / 焦点 / 滚动锁统一由 MobileSheet 负责；
   // 类名与 DOM 结构沿用原手写版（.mb-sheet__title.mb-ellipsis + .mb-sheet__body--form，视觉不变）。
   return (
     <MobileSheet open title={"编辑记录：" + table.name} titleClassName="mb-ellipsis" ariaLabel="编辑记录" bodyClassName="mb-sheet__body--form" onClose={onClose}>
-      <div className="mb-set-section">
+      <div className="mb-set-section" onPointerDown={dismissKeyboardOnPointerDown}>
         {fields.map((field) => {
           const value = record.values[field.id];
           const editable = isMobileEditableField(field);
@@ -240,12 +231,15 @@ export function MobileBitableRecordSheet({ table, fields, record, ctx, onPatch, 
               <div className="mb-set-item__ctl">
                 {!editable ? (
                   <span className="mbt-record-readonly">{bitableFieldText(record, field, ctx) || "—"}</span>
+                ) : field.type === "attachment" || field.type === "image" ? (
+                  <MobileBitableAttachmentEditor noteId={noteId} field={field} value={value}
+                    onChange={(next) => onPatch(field.id, next)} />
                 ) : field.type === "boolean" ? (
                   <BooleanControl value={value} onChange={(next) => onPatch(field.id, next)} />
                 ) : field.type === "select" || field.type === "multiSelect" ? (
                   <SelectControl field={field} value={value} onChange={(next) => onPatch(field.id, next)} onAddOption={(name) => onAddOption(field.id, name)} />
                 ) : field.type === "date" ? (
-                  <DateControl value={value} onChange={(next) => onPatch(field.id, next)} />
+                  <MobileBitableDateField value={value} ariaLabel={field.name} onChange={(next) => onPatch(field.id, next)} />
                 ) : field.type === "number" ? (
                   <NumberControl value={value} onChange={(next) => onPatch(field.id, next)} />
                 ) : field.type === "rating" ? (

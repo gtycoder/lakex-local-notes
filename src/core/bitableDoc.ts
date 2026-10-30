@@ -140,7 +140,58 @@ export interface BitableField {
   progressColor?: string;
   /** 表格视图默认列宽（视图可覆盖；v1 直接写字段上）。 */
   width?: number;
+  /** 字段级显示格式（日期 / 数字；空/缺省 = 原样）。只影响展示，不改存储值。 */
+  format?: string;
   [key: string]: unknown;
+}
+
+/** 字段级「显示格式」（261030）：只影响展示（单元格/卡片/表单/日历/搜索文本），不改存储值。 */
+export const BITABLE_DATE_FORMAT_OPTIONS: ReadonlyArray<{ value: string; label: string }> = [
+  { value: "", label: "2026-06-09" },
+  { value: "slash", label: "2026/06/09" },
+  { value: "md", label: "6月9日" },
+  { value: "cny", label: "2026年6月9日" },
+];
+export const BITABLE_NUMBER_FORMAT_OPTIONS: ReadonlyArray<{ value: string; label: string }> = [
+  { value: "", label: "原样" },
+  { value: "thousands", label: "1,234" },
+  { value: "decimal0", label: "整数（四舍五入）" },
+  { value: "decimal1", label: "1 位小数" },
+  { value: "decimal2", label: "2 位小数" },
+];
+
+/** 数字格式：返回展示文本；非法数字原样返回。 */
+export function formatBitableNumber(value: unknown, format: string | undefined): string {
+  const raw = String(value ?? "");
+  if (!format) return raw;
+  const num = typeof value === "number" ? value : Number(raw.replace(/,/g, ""));
+  if (!Number.isFinite(num)) return raw;
+  const grouped = (min: number, max: number): string =>
+    num.toLocaleString("en-US", { minimumFractionDigits: min, maximumFractionDigits: max });
+  if (format === "thousands") return grouped(0, 6);
+  if (format === "decimal0") return grouped(0, 0);
+  if (format === "decimal1") return grouped(1, 1);
+  if (format === "decimal2") return grouped(2, 2);
+  return raw;
+}
+
+/** 日期格式：存储形状 YYYY-MM-DD，按 field.format 输出展示文本；非法日期原样返回。 */
+export function formatBitableDate(value: unknown, format: string | undefined): string {
+  const raw = typeof value === "string" ? value : "";
+  const matched = /^(\d{4})-(\d{2})-(\d{2})/.exec(raw);
+  if (!matched) return raw;
+  const year = matched[1];
+  const month = matched[2];
+  const day = matched[3];
+  if (format === "slash") return year + "/" + month + "/" + day;
+  if (format === "md") return String(Number(month)) + "月" + String(Number(day)) + "日";
+  if (format === "cny") return year + "年" + String(Number(month)) + "月" + String(Number(day)) + "日";
+  return year + "-" + month + "-" + day;
+}
+
+/** 当前字段是否有「显示格式」可选（日期 / 数字）。 */
+export function fieldSupportsFormat(type: string): boolean {
+  return type === "date" || type === "number";
 }
 
 export interface BitableRecord {
@@ -863,7 +914,7 @@ export function computeColumnStat(field: BitableField, records: BitableRecord[],
     if (stat === "unchecked") return String(total - checked);
     return stat === "percentChecked" ? statPct(checked, total) : statPct(total - checked, total);
   }
-  const texts = records.map((record) => bitableDisplayValue(field, bitableFieldValue(record, field)).trim());
+  const texts = records.map((record) => bitableRawDisplayValue(field, bitableFieldValue(record, field)).trim());
   const filledCount = texts.filter((text) => text !== "").length;
   const uniqueCount = new Set(texts.filter((text) => text !== "")).size;
   if (stat === "filled") return String(filledCount);
@@ -875,7 +926,7 @@ export function computeColumnStat(field: BitableField, records: BitableRecord[],
   if (isNumericFieldType(field.type)) {
     const nums = records
       .map((record) => {
-        const text = bitableDisplayValue(field, bitableFieldValue(record, field)).trim();
+        const text = bitableRawDisplayValue(field, bitableFieldValue(record, field)).trim();
         if (text === "") return Number.NaN;   // 空格子不能当 0 参与求和/平均
         const raw = bitableFieldValue(record, field);
         return typeof raw === "number" ? raw : Number(text);
@@ -1231,7 +1282,7 @@ function optionName(field: BitableField, value: unknown): string {
  * 字段值 → 人类可读文本（列表/搜索/记录标题统一口径）。
  * `ctx` 只在**关联字段**需要：它提供同一文档的 tables 以解析目标记录主字段；不传则关联展示为空。
  */
-export function bitableDisplayValue(field: BitableField, value: unknown, ctx?: BitableDisplayContext): string {
+function bitableValueText(field: BitableField, value: unknown, ctx: BitableDisplayContext | undefined, formatted: boolean): string {
   if (value == null) return "";
   switch (field.type) {
     case "select":
@@ -1253,9 +1304,12 @@ export function bitableDisplayValue(field: BitableField, value: unknown, ctx?: B
         .join(", ");
     }
     case "number":
+      return formatted ? formatBitableNumber(value, typeof field.format === "string" ? field.format : undefined) : String(value);
     case "rating":
     case "progress":
       return String(value);
+    case "date":
+      return formatted ? formatBitableDate(value, typeof field.format === "string" ? field.format : undefined) : (typeof value === "string" ? value.slice(0, 10) : "");
     case "boolean":
       return value === true ? "是" : value === false ? "否" : "";
     case "link":
@@ -1267,6 +1321,19 @@ export function bitableDisplayValue(field: BitableField, value: unknown, ctx?: B
     default:
       return typeof value === "string" ? value : typeof value === "number" || typeof value === "boolean" ? String(value) : "";
   }
+}
+
+/**
+ * 展示文本（UI 用）：日期/数字按 field.format 输出。
+ * **语义计算不要用它** —— 排序/分组/筛选/统计/查重一律用 bitableRawDisplayValue（261030：改显示格式不能改数据语义）。
+ */
+export function bitableDisplayValue(field: BitableField, value: unknown, ctx?: BitableDisplayContext): string {
+  return bitableValueText(field, value, ctx, true);
+}
+
+/** 原始展示文本（忽略 field.format；供排序/分组/筛选/统计/查重等语义计算）。 */
+export function bitableRawDisplayValue(field: BitableField, value: unknown, ctx?: BitableDisplayContext): string {
+  return bitableValueText(field, value, ctx, false);
 }
 
 /**
@@ -1761,8 +1828,8 @@ function compareSortValues(field: BitableField, a: unknown, b: unknown, rule: Bi
 }
 
 function compareValues(field: BitableField, a: unknown, b: unknown): number {
-  const sa = bitableDisplayValue(field, a);
-  const sb = bitableDisplayValue(field, b);
+  const sa = bitableRawDisplayValue(field, a);
+  const sb = bitableRawDisplayValue(field, b);
   if (isNumericFieldType(field.type)) {
     const na = typeof a === "number" ? a : Number(sa);
     const nb = typeof b === "number" ? b : Number(sb);
@@ -2265,6 +2332,11 @@ export function applyViewToRecords(table: BitableTable, view: BitableView | unde
 
 /** 分组用的组键：单选取选项名、多选取选项名拼接、其余取展示值；空 = ""。 */
 function groupKeyOf(field: BitableField, value: unknown): string {
+  // 分组 key 必须用**原始值**：field.format 只影响展示，若用格式化后的展示值当 key，
+  // 「6月9日」这种格式会把不同年份的同月同日合并成一组（显示格式改变分组 = 数据语义被改）。
+  if (field.type === "date" || field.type === "number" || isSystemTimeField(field.type)) {
+    return bitableRawDisplayValue(field, value);
+  }
   if (field.type === "select") {
     const opt = (field.options ?? []).find((o) => o.id === value);
     return opt ? opt.name : "";
@@ -2310,7 +2382,7 @@ export function groupRecords(
 export function duplicateValues(field: BitableField, records: BitableRecord[]): Set<string> {
   const counts = new Map<string, number>();
   for (const record of records) {
-    const value = bitableDisplayValue(field, bitableFieldValue(record, field)).trim();
+    const value = bitableRawDisplayValue(field, bitableFieldValue(record, field)).trim();
     if (!value) continue;
     counts.set(value, (counts.get(value) ?? 0) + 1);
   }

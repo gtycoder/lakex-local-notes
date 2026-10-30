@@ -135,6 +135,7 @@ node scripts/css-audit/drive.mjs 9336 scripts/css-audit/mobile-walkthrough.mjs
 | 插入面板几何 G1–G6 | 同上换 `insert-panel-geometry.mjs` | 动插入面板排布 |
 | 键盘开合 K1–K3 | 同上换 `keyboard-toggle.mjs` | 动 ⌨ / `viewportShell` / 外壳高 |
 | 长文档 DOM 探针 | `node scripts/mobile-audit/long-doc-dom.mjs 9336` | 动文档编辑面 / 查找；**会造数据 ⇒ 跑后重烤基线**，别在配了 S3 的机器上跑 |
+| 多维表专项快照（表单 / 内容表格 / 内容卡片） | `npm run check:bitablesnap`（默认 9336） | 动移动端多维表视图/布局/表单；**夹具自建自删**，不污染 6 态与走查 |
 
 （前三项前置都是 `bash scripts/emu-cdp.sh 9335`；口径与判据细节见 `scripts/mobile-audit/README.md` 与 `docs/MOBILE-LONG-DOC-PROBE.md`。）
 
@@ -179,15 +180,15 @@ node scripts/css-audit/drive.mjs 9336 scripts/css-audit/mobile-walkthrough.mjs
 | 走查整屏 ERR（键盘态卡住） | 没单独冷启动（键盘弹着 / 停在设置子页） | 严格按 §5.4 的 force-stop → start → emu-cdp 顺序 |
 | App 停在「启动中…」 | 在浏览器预览里跑（无原生 SQLite） | 换模拟器/真机（§4） |
 
-## 9. 261029 设备现状（会过期，只写这里）
+## 9. 261030 设备现状（会过期，只写这里）
 
 | 项 | 261029 实测 |
 | --- | --- |
 | Node / JDK / SDK | v24.18.0 / jdk-21 / `/opt/homebrew/share/android-commandlinetools`（与 §1 一致） |
 | AVD 列表 | `lake_body` / `lake_gate` / `lake_lock` / `lake_meas` / `lake_mobile` / `lake_sheet`（6 个） |
 | 在跑 | 3 台：`emulator-5554` / `emulator-5560` / `emulator-5562`；`lake_gate` 这轮落在 **`emulator-5562`**（CDP 转发 9336） |
-| 已装包 | **`lake_gate`（5562）已装新包 `com.lakexlocalnotes.android`**（261029 16:13 构建安装；旧包 `com.locallakexnotes.mobile` 仍在、未卸）；`emulator-5554` / `5560` 仍是旧包 ⇒ 要跑它们先重装 |
-| 门禁基线 | 261029 16:19 在 lake_gate 重烤（6 态元素数不变，仅 `home-doc` 指纹 `br6io → xy3qs9`，属文档 id 变化） |
+| 已装包 | **`lake_gate`（5562）已装 `com.lakexlocalnotes.android`**（261030 16:49 本轮构建安装；旧包 `com.locallakexnotes.mobile` 仍在、未卸）；`emulator-5554` / `5560` 仍是旧包 ⇒ 要跑它们先重装 |
+| 门禁基线 | 261030 在 lake_gate 复跑：`check:bitablesnap` 3 态 **0 差异**（2100/2082/2095）、`check-mobile-snap` 6 态 **0 差异**（1822/1822/1827/1996/1912/1849）；**未重烤**（基线文件 sha256 与 HEAD 一致） |
 | 设备画面 | 1080×2400 / dpr 2.625 ⇒ CSS viewport 412×842；按 CSS 值裁图时 y = `CSS_y × 2.625 + 128`（状态栏） |
 
 ⚠️ **serial 与 AVD 的对应关系不固定**（按启动顺序分配）⇒ 用 `adb devices` 现场确认，别照抄 `emulator-5562`。

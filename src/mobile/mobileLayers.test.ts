@@ -41,6 +41,7 @@ const FILES = [
   "mobile/editor/mobile-find.css", // 261016：移动端文档内查找条（容器 + 命中高亮 ::highlight），控件复用 kit 的 .mb-input/.mb-iconbtn
   "mobile/usheet/usheet-chrome.css", // 261021：表格 Yuque 式 chrome（40px 工具条 / 21px 公式栏 / 锚定卡片 / 32px 底栏 / 阅读态 5 项）；旧底部 dock 路线已覆盖
   "mobile/ai/ai.css", // 261023：AI 全屏功能页（布局 + 对话流 + Markdown）；控件复用 kit/floating 原语
+  "mobile/bitable/mobileBitable.css", // 261030：多维表 P0（视图页签 / 表单填写 / 卡片布局 / 只读详情 / 视图配置）；令牌取值，无字面量
 ];
 
 /** 基线（只允许变小）。261012 P0 实测。 */
@@ -72,6 +73,7 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   // 261020 P1 新文件（表格 chrome）；基线按实测回填（只许降）
   "mobile/usheet/usheet-chrome.css": { decls: 543, dupGroups: 0 }, // 261025 清理：删自绘公式栏 + fx 面板 CSS，接收原生公式栏/只读条/caret；573→543。单一来源。 // 261024 A 批（对齐钉钉）：468→496（去掉 dock 重复的 ✓ 后 −8） = T 面板分组标题 + 浅灰 chip + 字号步进 + 40 方块色板 + 列表行图标/46 行高 + 面板白底 + dock ✓；dup 4→0 = 旧的 fboard/fsw/fcolors 重复组随重写删除（只降）。 // 261024：467→468 = 色板「当前背景色」反显环（.mb-usheet-fsw.is-on）；455→467 = 面板底部渐隐提示（::after 10 声明 + [data-scrollable] 1）+ 末块列表去 8px 尾巴（1）；列表行高 46→40、面板内距为取值变化不计声明。 // 261023 v5：302→401 = 顶部工作表行 + 公式栏 + dock + 面板（新增交互形态，用户定稿）；dup 0→4 为同一批交互态的同名属性，接受。// 261022 晚：+52 = 两行工具条（行容器 / 次行分隔线）+ 文字格式一级标签 T + T 卡（四个开关 / 8 色圆点）+ 底栏十字高亮开关——属**新增交互形态**（用户点单：两行、常用外置、T 二级展开、十字高亮移到缩放左侧），不是覆盖叠层 // 261021 P4-2：+29 = 二级选择器两种形态（圆点色板 12 / 图标行 17），语雀同款且与 SheetMenuBody 单一来源 // 261021 P4：+5 = 一级「小数位」按钮（语雀 toolbar-decimal-inc：文字 .00 + 小加号；min-width / gap / 字号 / 行高 / 字距）——属新增一级工具项，不是覆盖叠层 // 261021：工具条 40 / 锚定卡片 / ⋯ 七行图标 / 底栏 32 / 阅读态 5 项（替换旧 dock 路线）
   "mobile/ai/ai.css": { decls: 341, dupGroups: 1 }, // 261023：+12 = 消息内图片（用户气泡方向 + 3 列网格） // 261023：+10 = 「回到底部」浮钮 // 261023：+52 = 图片附件（待发送缩略图 6 + 资料图片网格 8 + 其余布局） // 261023：+16 = 历史对话独立页（层序/元信息/操作区/行尾删除） // 261023：+14 = GFM 表格（wrapper/table/th/td/对齐）；+3 = 解析器共用后的 hr // 261023：AI 页（布局 / 对话流 / Markdown / 设置页按钮组）；dupGroups 1 = reduced-motion 关掉入场动画（本文件既有登记模式）
+  "mobile/bitable/mobileBitable.css": { decls: 914, dupGroups: 0 }, // 261030 P2：+208 = 看板/画册/日历三套视图 + 表单编辑态（新增交互形态，非覆盖叠层）；此前 +21 = 附件上传、+2 = 上传区占满宽度；新增交互形态，非覆盖叠层。 // 261030 新文件：多维表 P0 = 视图页签 / 表单填写 / 卡片布局 / 只读详情 / 视图配置 / 视图列表（新增交互形态，非覆盖叠层；取值全走令牌）
   "mobile/editor/edit-surface-kernel.css": { decls: 24, dupGroups: 0 }, // 261014 P2：把散在 mobile.css（doc 侧）/ quick-notes.css（note 侧）的内核几何收口**合成一份**（doc/note 共用 data-mb-edit-host 契约） // 261013：+1 = 表情面板分类条在 dock 里拉满面板边（当时口径：9 个分类 ≈45.8px、一屏放得下不横滚；261014 已改「一屏 8 格 + 横滑 + 钉住的动作键」，见 kit.css）
 };
 

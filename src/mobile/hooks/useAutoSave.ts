@@ -64,7 +64,8 @@ export function useAutoSave(save: Save, options: Options = {}) {
   const schedule = useCallback((id: string, title: string, content: string, plain?: string) => {
     clearTimer(id);
     const timer = window.setTimeout(() => {
-      timers.current.delete(id);
+      // ⚠️ 不要先 delete 再 drain：drain 靠 timers 里的快照取内容（删掉 = 静默不保存）。
+      // 261030 实测定位：旧实现先 delete，防抖到点后 drain 取不到 entry 直接 return，自动保存从未落盘。
       void drain(id).catch(() => undefined);
     }, DEBOUNCE_MS);
     timers.current.set(id, { timer, title, content, plain });
@@ -72,11 +73,16 @@ export function useAutoSave(save: Save, options: Options = {}) {
 
   /** 立即保存挂起的文档（关闭/完成/返回前调用）；不传 id = 全部。返回真正落盘完成的 Promise。 */
   const flush = useCallback(async (id?: string): Promise<void> => {
-    const entries: Array<[string, Pending]> = id === undefined
-      ? [...timers.current.entries()]
-      : (timers.current.has(id) ? [[id, timers.current.get(id)!]] : []);
-    const ids = new Set(entries.map(([key]) => key));
-    if (id === undefined) inFlight.current.forEach((_promise, key) => ids.add(key));
+    const ids = new Set<string>();
+    if (id === undefined) {
+      timers.current.forEach((_entry, key) => ids.add(key));
+      inFlight.current.forEach((_promise, key) => ids.add(key));
+    } else {
+      // ⚠️ 指定 id 时也必须等**在途**写：只等 pending timer 会立刻返回，
+      // 让调用方（完成编辑）的显式 saveNote 与旧快照并发，旧快照后落盘会覆盖新内容（261030 review）。
+      if (timers.current.has(id)) ids.add(id);
+      if (inFlight.current.has(id)) ids.add(id);
+    }
     await Promise.all([...ids].map((key) => drain(key)));
   }, [drain]);
 

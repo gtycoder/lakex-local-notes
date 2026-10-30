@@ -45,12 +45,13 @@ afterEach(() => {
 
 const renderFieldSheet = (onClose: () => void) => act(() => {
   root.render(createElement(MobileBitableFieldSheet, {
-    table, fields, onRename: () => undefined, onDelete: () => undefined, onAdd: () => undefined, onClose,
+    table, fields, onEdit: () => undefined, onDelete: () => undefined, onAdd: () => undefined, onClose,
   }));
 });
 
 const renderRecordSheet = (onClose: () => void) => act(() => {
   root.render(createElement(MobileBitableRecordSheet, {
+    noteId: "n1",
     table, fields, record, ctx: { tables: [table] }, onPatch: () => undefined, onAddOption: () => null, onDelete: () => undefined, onClose,
   }));
 });

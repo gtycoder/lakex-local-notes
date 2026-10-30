@@ -52,7 +52,11 @@ describe("多维表只读共享语义（C1-6）", () => {
   });
 
   it("两端都从本模块取只读语义（防再次各写一份）", () => {
-    const mobile = readFileSync(path.join(process.cwd(), "src/mobile/bitable/MobileBitableViewer.tsx"), "utf8");
+    // 261030：字段值渲染抽到 MobileBitableValue.tsx（单一来源），两端语义守卫合并读这两份。
+    const mobile = [
+      readFileSync(path.join(process.cwd(), "src/mobile/bitable/MobileBitableViewer.tsx"), "utf8"),
+      readFileSync(path.join(process.cwd(), "src/mobile/bitable/MobileBitableValue.tsx"), "utf8"),
+    ].join("\n");
     const desktop = readFileSync(path.join(process.cwd(), "src/features/bitable/bitableCells.tsx"), "utf8");
     for (const name of ["readOnlyAttachments", "readOnlyBoolean", "readOnlyLink", "readOnlyOptions", "readOnlyProgress", "readOnlyRating", "readOnlyRelation"]) {
       expect(mobile, "移动端必须使用 " + name).toContain(name + "(");

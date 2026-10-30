@@ -40,6 +40,8 @@ export function serializeBitableBody(tables: BitableTable[]): string {
 /** 移动端 P0 允许**新建/编辑**的字段类型（其余类型只读展示并给出理由，见 mobileFieldNote）。 */
 export const MOBILE_EDITABLE_FIELD_TYPES: readonly BitableFieldType[] = [
   "text", "number", "date", "select", "multiSelect", "boolean", "link", "rating", "progress",
+  // 261030 P1：附件/图片改为可上传（系统选择器 → bridge.uploadResource，映射与桌面一致）
+  "attachment", "image",
 ] as const;
 
 export function isMobileEditableField(field: BitableField): boolean {
@@ -50,8 +52,6 @@ export function isMobileEditableField(field: BitableField): boolean {
 export function mobileFieldNote(field: BitableField): string {
   if (isMobileEditableField(field)) return BITABLE_FIELD_TYPE_LABEL[field.type as BitableFieldType] ?? "";
   switch (field.type) {
-    case "attachment": return "附件字段：移动端暂只读，请在桌面编辑";
-    case "image": return "图片字段：移动端暂只读，请在桌面编辑";
     case "createdTime": return "创建时间：自动生成，不可编辑";
     case "updatedTime": return "修改时间：自动生成，不可编辑";
     case "relationOneWay":
