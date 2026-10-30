@@ -114,12 +114,12 @@ export function MobileBitableFormView({ noteId, table, view, ctx, onSubmit, edit
       const multi = field.type === "multiSelect";
       if (options.length === 0) return <span className="mbt-field-note">这个字段还没有选项</span>;
       return (
-        <div className="mbt-form-chips" role={multi ? "group" : "radiogroup"} aria-label={field.name}>
+        <div className="mb-chip-row" role={multi ? "group" : "radiogroup"} aria-label={field.name}>
           {options.map((option) => {
             const on = selected.includes(option.id);
             return (
               <button key={option.id} type="button" role={multi ? "checkbox" : "radio"} aria-checked={on}
-                className={"mbt-form-chip" + (on ? " is-on" : "")} style={on ? optionChipStyle(option.color) : undefined}
+                className={"mb-chip" + (on ? " is-on" : "")} style={on ? optionChipStyle(option.color) : undefined}
                 onClick={() => {
                   if (multi) setValue(field.id, on ? selected.filter((id) => id !== option.id) : [...selected, option.id]);
                   else setValue(field.id, on ? "" : option.id);

@@ -65,9 +65,9 @@ describe("MobileBitableRecordSheet", () => {
   it("按字段类型给控件：布尔=开关、单选/多选=选项 chips、评分=星、进度=滑杆", () => {
     expect(html).toContain('role="switch"');
     expect(html).toContain('aria-checked="true"');
-    expect(html).toContain("mbt-option-chips");
+    expect(html).toContain("mb-chip-row");
     expect(html).toContain("进行中");
-    expect(html).toContain("mbt-option is-on"); // 已选中的单选
+    expect(html).toContain("mb-chip is-on"); // 已选中的单选
     expect(html).toContain('aria-label="新建选项"');
     expect(html).toContain("mbt-rating-btn");
     expect(html).toContain('type="range"');

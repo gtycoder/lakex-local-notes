@@ -95,12 +95,15 @@
   --lake-z-overlay-menu-raised: 715; /* 对话框内打开的菜单/气泡：须高于 dialog、低于 lightbox（记录详情/字段弹窗里的嵌套下拉） */
   --lake-z-overlay-lightbox: 720;  /* 图片 / 附件预览 */
   /* 字号/字重/行高 */
-  /* 移动端字号档（P2，用户 261012 定稿 §5.3）：7 档 = 12/13/14/16/18/20/24（主用 14/16）+ 徽标 nano 11。
-     触屏正文比桌面大一档（desktop body 14 → mobile 16），令牌名不变、取值移动端自有。 */
-  --lake-font-size-nano: 11px;   /* 徽标数字 / 表格统计 */
-  --lake-font-size-micro: 12px;  /* 元信息 / 标签 */
-  --lake-font-size-tiny: 13px;   /* 副标题 / 计数 */
-  --lake-font-size-small: 14px;  /* 次级正文 / 菜单项 */
+  /* 移动端字号档（P2，用户 261012 定 7 档；261030 用户反馈「除文档正文外整体偏小」⇒ **小档整体抬一档**）：
+     12/13/14/15/16/18/20/24 —— nano 11→12 / micro 12→13 / tiny 13→14 / small 14→15；
+     body 16 与行标题 16 **不动**（触屏正文档已达标；编辑器正文字号另有设置项，不归这条 ramp）。
+     触屏正文比桌面大一档（desktop body 14 → mobile 16），令牌名不变、取值移动端自有。
+     §The Token-Size Rule：要再抬一档就改这里的值，不要去改使用处。 */
+  --lake-font-size-nano: 12px;   /* 徽标数字 / 表格统计 */
+  --lake-font-size-micro: 13px;  /* 元信息 / 标签 */
+  --lake-font-size-tiny: 14px;   /* 副标题 / 计数 / 说明 */
+  --lake-font-size-small: 15px;  /* 次级正文 / 菜单项 */
   --lake-font-size-body: 16px;   /* 正文主档（触屏） */
   --lake-font-size-bodyMd: 16px; /* 两行列表行的标题 */
   --lake-font-size-bodyLg: 18px;
@@ -235,6 +238,9 @@
   --mb-tap-min: 44px;
   --mb-list-item-h: 56px;      /* 两行列表行（标题 + 副标题） */
   --mb-page-pad: 16px;         /* 页面左右内距（语雀主档 16） */
+  /* 阅读面左右内距（261030 用户反馈「文档左右边界非常贴边」）：比页面内距再宽一档，
+   * 只给「连续长文/整页阅读」的容器（文档正文 / 记录详情），不给表单与列表。 */
+  --mb-reader-pad: 20px;
   --mb-gap: 8px;
   /* 圆角：主 8 / 卡片 12 / 小件 6 / 面板顶 20（语雀主档） */
   --mb-radius: 8px;

@@ -30,7 +30,7 @@ export function MobileBitableKanbanView({ noteId, table, view, records, ctx, onO
         <section key={column.key || "ungrouped"} className="mbt-kanban-col" role="listitem">
           <header className="mbt-kanban-head">
             {column.optionId
-              ? <span className="mbt-option" style={optionChipStyle(column.color)}>{column.label}</span>
+              ? <span className="mb-tag" style={optionChipStyle(column.color)}>{column.label}</span>
               : <span className="mbt-kanban-head__title">{column.label}</span>}
             <span className="mbt-kanban-count">{column.records.length}</span>
           </header>

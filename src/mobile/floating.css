@@ -51,7 +51,11 @@
   content: ""; position: absolute; top: 6px; left: calc(50% - 16px); width: 32px; height: 4px;
   border-radius: var(--lake-radius-hairline); background: var(--lake-text-3); opacity: .45;
 }
-.mb-sheet__title { font-size: var(--lake-font-size-body); line-height: var(--lake-line-height-tight); color: var(--lake-text-2); }
+.mb-sheet__title {
+  flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: var(--lake-font-size-title); font-weight: var(--lake-font-weight-semibold);
+  line-height: var(--lake-line-height-tight); color: var(--lake-text-1);
+}
 .mb-sheet__body {
   flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 6px 0 calc(16px + var(--mobile-bottom-safe-area));
   scrollbar-width: none;
@@ -60,6 +64,14 @@
 /* 横向内距必须 = 页内距：头部标题由 head 的 --mb-page-pad 定位，body 写 18px 时
  * 标题 16 / 表单 18 差 2px（261029 实测「粘贴迁移码」面板）。 */
 .mb-sheet__body--form { padding: var(--mb-page-pad) var(--mb-page-pad) calc(20px + var(--mobile-bottom-safe-area)); }
+/* Sheet 底栏（footer 槽）：唯一来源 —— 左右与正文同页内距、底部让开安全区。
+ * 使用方只写「一行容器 + .mb-btn」，不要各自再写 padding（261030：四个 bitable 面板曾各写一套）。 */
+.mb-sheet__foot {
+  flex: 0 0 auto; display: flex; align-items: center; gap: var(--lake-space-md);
+  padding: var(--lake-space-md) var(--mb-page-pad) calc(var(--lake-space-xxl) + var(--mobile-bottom-safe-area));
+  border-top: .5px solid var(--lake-border-2);
+  background: var(--lake-bg-panel);
+}
 /* （261013 A 批：浮层内空态改用 .mb-empty.mb-empty--inset —— 见 kit.css，空态只有一处定义。） */
 .mb-sheet--search { max-height: 70%; }
 

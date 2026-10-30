@@ -57,12 +57,12 @@ export function MobileBitableDateField({ value, onChange, ariaLabel, placeholder
         open={open}
         title="选择日期"
         onClose={() => setOpen(false)}
-        bodyClassName="mbt-date-sheet"
+        bodyClassName="mbt-date-sheet mb-sheet__body--form"
         footer={
-          <div className="mbt-date-foot">
+          <div className="mb-sheet__foot">
             <button type="button" className="mb-btn mb-btn--secondary mb-btn--sm" onClick={() => { onChange(""); setOpen(false); }}>清除</button>
             <button type="button" className="mb-btn mb-btn--secondary mb-btn--sm" onClick={() => { setDraft(today); setCursor(monthOf(today)); }}>今天</button>
-            <button type="button" className="mb-btn mb-btn--primary" onClick={() => { onChange(draft); setOpen(false); }}>确定</button>
+            <button type="button" className="mb-btn mb-btn--primary mb-flex1" onClick={() => { onChange(draft); setOpen(false); }}>确定</button>
           </div>
         }
       >

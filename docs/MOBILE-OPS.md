@@ -187,8 +187,8 @@ node scripts/css-audit/drive.mjs 9336 scripts/css-audit/mobile-walkthrough.mjs
 | Node / JDK / SDK | v24.18.0 / jdk-21 / `/opt/homebrew/share/android-commandlinetools`（与 §1 一致） |
 | AVD 列表 | `lake_body` / `lake_gate` / `lake_lock` / `lake_meas` / `lake_mobile` / `lake_sheet`（6 个） |
 | 在跑 | 3 台：`emulator-5554` / `emulator-5560` / `emulator-5562`；`lake_gate` 这轮落在 **`emulator-5562`**（CDP 转发 9336） |
-| 已装包 | **`lake_gate`（5562）已装 `com.lakexlocalnotes.android`**（261030 16:49 本轮构建安装；旧包 `com.locallakexnotes.mobile` 仍在、未卸）；`emulator-5554` / `5560` 仍是旧包 ⇒ 要跑它们先重装 |
-| 门禁基线 | 261030 在 lake_gate 复跑：`check:bitablesnap` 3 态 **0 差异**（2100/2082/2095）、`check-mobile-snap` 6 态 **0 差异**（1822/1822/1827/1996/1912/1849）；**未重烤**（基线文件 sha256 与 HEAD 一致） |
+| 已装包 | **`lake_gate`（5562）与 `lake_mobile`（5554）都装了 `com.lakexlocalnotes.android` 的 261030 UI 整改构建**（18:00 左右安装；旧包 `com.locallakexnotes.mobile` 仍在、未卸）；`emulator-5560` 仍是旧包 ⇒ 要跑它先重装 |
+| 门禁基线 | 261030 UI 整改（字号小档 +1 档 / 面板与文档内距）改变了**计算值指纹、元素数不变** ⇒ 已按 §5.3 **重烤两份基线**（`baseline/mobile-snap.json` 6 态、`baseline/bitable-snap.json` 3 态），重烤后连跑 0 差异（元素数 1822/1822/1827/1996/1912/1849 与 2100/2082/2095） |
 | 设备画面 | 1080×2400 / dpr 2.625 ⇒ CSS viewport 412×842；按 CSS 值裁图时 y = `CSS_y × 2.625 + 128`（状态栏） |
 
 ⚠️ **serial 与 AVD 的对应关系不固定**（按启动顺序分配）⇒ 用 `adb devices` 现场确认，别照抄 `emulator-5562`。

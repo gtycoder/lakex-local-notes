@@ -44,9 +44,10 @@ export function MobileBitableTableActions({ open, tableName, recordCount, editab
     <MobileSheet
       open={open}
       title={mode === "rename" ? "重命名数据表" : tableName}
+      bodyClassName="mb-sheet__body--form"
       onClose={onClose}
       footer={mode === "rename" ? (
-        <div className="mbt-actions-foot">
+        <div className="mb-sheet__foot">
           <button type="button" className="mb-btn mb-btn--secondary" onClick={() => setMode("menu")}>取消</button>
           <button type="button" className="mb-btn mb-btn--primary" disabled={!draft.trim()} onClick={() => onRename(draft)}>确定</button>
         </div>

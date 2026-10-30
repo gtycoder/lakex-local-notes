@@ -48,7 +48,7 @@ describe("MobileBitableFieldEditorSheet（修改字段）", () => {
   it("类型：没数据时可互转（回调第二个参数）；有数据时只读并说明原因", () => {
     const onSave = vi.fn();
     render(createBitableField("text", "内容", "f-text"), onSave);
-    expect(host.querySelectorAll(".mbt-feditor__choice").length).toBeGreaterThan(3);
+    expect(host.querySelectorAll(".mb-chip").length).toBeGreaterThan(3);
     act(() => btnByText("日期")!.click());
     act(() => btnByText("确认")!.click());
     expect(onSave.mock.calls[0][1]).toBe("date");

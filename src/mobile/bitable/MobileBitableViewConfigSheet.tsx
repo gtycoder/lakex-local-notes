@@ -50,7 +50,7 @@ export function MobileBitableViewConfigSheet({ open, table, view, layout, prefs,
   const titleId = layout.titleField?.id ?? "";
 
   return (
-    <MobileSheet open={open} title="视图配置" onClose={onClose} bodyClassName="mbt-vcfg">
+    <MobileSheet open={open} title="视图配置" onClose={onClose} bodyClassName="mbt-vcfg mb-sheet__body--form">
       <div className="mbt-vcfg-tabs" role="tablist" aria-label="视图配置">
         {([["filter", "筛选"], ["sort", "排序"], ["layout", "布局"]] as Array<[ConfigTab, string]>).map(([key, label]) => (
           <button key={key} type="button" role="tab" aria-selected={tab === key}
@@ -131,7 +131,7 @@ export function MobileBitableViewConfigSheet({ open, table, view, layout, prefs,
                   <span className="mbt-vcfg-pick__k">主标题</span>
                   <div className="mbt-chips-row">
                     {table.fields.map((field) => (
-                      <button key={field.id} type="button" className={"mbt-chip" + (field.id === titleId ? " is-on" : "")}
+                      <button key={field.id} type="button" className={"mb-chip" + (field.id === titleId ? " is-on" : "")}
                         onClick={() => onPatchPrefs({ titleFieldId: field.id })}>{field.name}</button>
                     ))}
                   </div>
@@ -139,10 +139,10 @@ export function MobileBitableViewConfigSheet({ open, table, view, layout, prefs,
                 <div className="mbt-vcfg-pick">
                   <span className="mbt-vcfg-pick__k">副标题</span>
                   <div className="mbt-chips-row">
-                    <button type="button" className={"mbt-chip" + (!subtitleId ? " is-on" : "")}
+                    <button type="button" className={"mb-chip" + (!subtitleId ? " is-on" : "")}
                       onClick={() => onPatchPrefs({ subtitleFieldId: "" })}>不显示</button>
                     {table.fields.map((field) => (
-                      <button key={field.id} type="button" className={"mbt-chip" + (field.id === subtitleId ? " is-on" : "")}
+                      <button key={field.id} type="button" className={"mb-chip" + (field.id === subtitleId ? " is-on" : "")}
                         onClick={() => onPatchPrefs({ subtitleFieldId: field.id })}>{field.name}</button>
                     ))}
                   </div>

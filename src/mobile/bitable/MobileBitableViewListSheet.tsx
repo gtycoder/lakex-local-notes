@@ -19,7 +19,7 @@ export interface MobileBitableViewListSheetProps {
 
 export function MobileBitableViewListSheet({ open, table, activeViewId, onSelect, onClose }: MobileBitableViewListSheetProps) {
   return (
-    <MobileSheet open={open} title="视图" onClose={onClose} bodyClassName="mbt-viewlist">
+    <MobileSheet open={open} title="视图" onClose={onClose} bodyClassName="mbt-viewlist mb-sheet__body--form">
       <div className="mbt-viewlist-rows">
         {table.views.map((view: BitableView) => {
           const on = view.id === activeViewId;

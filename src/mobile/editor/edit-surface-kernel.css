@@ -38,4 +38,4 @@ body.lake-mobile [data-mb-edit-host][data-mb-kernel="doc"] .ne-engine { padding-
 body.lake-mobile [data-mb-edit-host][data-mb-kernel="doc"] .ne-layout-mode-fixed:not(.ne-normal-toc):not(.ne-ui-sidebar-visible) .ne-engine > * { max-width: 100% !important; }
 body.lake-mobile [data-mb-edit-host][data-mb-kernel="doc"] .ne-layout-mode-fixed .ne-editor-extra-box,
 body.lake-mobile [data-mb-edit-host][data-mb-kernel="doc"] .ne-layout-mode-fixed .ne-editor-footer-box { max-width: 100% !important; padding-left: 0 !important; padding-right: 0 !important; }
-body.lake-mobile [data-mb-edit-host][data-mb-kernel="doc"] .lake-editor { padding-left: 14px; padding-right: 14px; }
+body.lake-mobile [data-mb-edit-host][data-mb-kernel="doc"] .lake-editor { padding-left: var(--mb-reader-pad); padding-right: var(--mb-reader-pad); }

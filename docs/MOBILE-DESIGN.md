@@ -18,10 +18,10 @@ colors:
 typography:
   fontFamily: "MiSans, -apple-system, 'PingFang SC', 'Noto Sans CJK SC', sans-serif"
   mono: "'JetBrains Mono', ui-monospace, Menlo, monospace"
-  scale: ["11px", "12px", "13px", "14px", "16px", "18px", "20px", "24px"]
+  scale: ["12px", "13px", "14px", "15px", "16px", "18px", "20px", "24px"]
   body: "16px / 1.5"
   rowTitle: "16px / 1.45 (500)"
-  caption: "13px / 1.5"
+  caption: "14px / 1.5"
 geometry:
   topbar: "44px"
   bottom-bar: "56px"
@@ -91,12 +91,16 @@ components:
 ## Typography
 
 **正文与界面同族：MiSans**（与桌面同一逻辑、同一份内置切片资源）；数字/代码用 JetBrains Mono。
-字号**只走令牌**（`--lake-font-size-*`，7 档 12/13/14/16/18/20/24 + 徽标 11），禁止字面量 px。
+字号**只走令牌**（`--lake-font-size-*`，7 档 12/13/14/15/16/18/20/24 + 徽标 12），禁止字面量 px。
 
 - **Body 16 / 1.5**：列表行、设置行、正文界面（触屏比桌面大一档：桌面 body 是 14）。
 - **Row title 16 / 1.45（500）**：两行列表行的标题。
-- **Caption 13 / 1.5**：说明、副标题、计数。
-- **Micro 12 / Nano 11**：标签、徽标。
+- **Caption 14 / 1.5**：说明、副标题、计数。
+- **Micro 13 / Nano 12**：标签、徽标。
+
+**261030 小档整体抬一档（用户反馈「除文档正文外整体偏小」）**：nano 11→12 / micro 12→13 / tiny 13→14 / small 14→15；
+body 16 与行标题 16 不动（触屏正文档已达标）。**编辑器正文字号是独立的设置项**（`lakeRuntime` 把 prefsSize 挂在 `.lake-editor-mount` 上），
+不归这条 ramp；多维表/表格/卡片/表单等所有走令牌的界面文字随这条 ramp 一起抬。
 
 ### Named Rules
 
@@ -114,7 +118,8 @@ components:
 | 触达 | 主 **48** / 常规 **44** / 紧凑 **36**（44 是触屏最小点按目标） |
 | 列表行 | 单行 **44** / 两行 **56**；设置页行 **48** |
 | 行高档收敛（261013 A） | 只用 **44 / 48 / 56** —— 原先并存的 40 与 52 已消除 |
-| 页面左右内距 | **16** |
+| 页面左右内距 | **16**（`--mb-page-pad`） |
+| 阅读面左右内距 | **20**（`--mb-reader-pad`，261030：只给「连续长文/整页阅读」的容器 —— 文档正文 / 记录详情；表单与列表仍 16） |
 | 圆角 | 控件 **8**（`--mb-radius`）/ 卡片 **12**（`--mb-radius-card`）/ 小件 6（`--mb-radius-sm`）/ 面板顶 **20**（`--mb-radius-sheet`）/ 胶囊 999（`--lake-radius-pill`）——**不写字面量** |
 
 **外壳（冻结的结构）**：顶栏（返回 / 标题 / 编辑·完成 / 同步）→ 内容 → 底部 dock；抽屉（文档树 / 大纲 /
@@ -220,7 +225,7 @@ Toast        .mb-toast-host > .mb-toast[--error] > (.mb-toast__text, .mb-toast__
 `mb-btn`（--primary/--secondary/--ghost/--danger、--lg/--sm/--block）· `mb-iconbtn`（--compact）·
 `mb-row`（--two-line、__icon/__main/__title/__sub/__meta/__chevron/__action/__actions、.is-selected）·
 `mb-list`/`mb-list-item`（__text/__meta）· `mb-input`（--num）· `mb-select` · `mb-tag`(--pending/--ok/--error) ·
-`mb-segment`/__item · `mb-card`（__head/__body）· `mb-form__desc` · `mb-menu-note`/`mb-menu-head-action` ·
+`mb-segment`/__item · `mb-chip`/`mb-chip-row`（选项胶囊：字段类型/筛选值/多选值；261030 把 bitable 并存的 `.mbt-feditor__choice`/`.mbt-chip`/`.mbt-form-chip` 三套收敛成这一件）· `mb-card`（__head/__body）· `mb-form__desc` · `mb-menu-note`/`mb-menu-head-action` ·
 `mb-chevron`/--spacer · `mb-tree-icon` · `mb-indent` · `mb-spacer`/`mb-flex1`/`mb-ellipsis` ·
 **选择器 = `PickerSheet`（`mb-select--trigger` 触发器 + `mb-sheet--picker` 底部列表、选中项打勾）** ·
 **设置页骨架** `mb-set-group/title/items/section/item(--field)/name/desc/note/ctl/error/block/stats` ·
@@ -231,6 +236,10 @@ Toast        .mb-toast-host > .mb-toast[--error] > (.mb-toast__text, .mb-toast__
 **冷启动骨架 = `.mb-skel`（--icon/--tab/--group/--row/--baritem；结构与首页同构、尺寸同源，填充不跳动；
 `prefers-reduced-motion` 下关掉呼吸）** ·
 `mb-switch` · `mb-kbd` · **勾选原语**（`.mobile-app input[type=checkbox|radio]`，排除内核待办框）。
+
+**Sheet 内页内容的两件契约（261030 固化为原语）**：页内距用 `mb-sheet__body--form`（= `--mb-page-pad`；行内列表再给自带内距的类时用 `--flush` 语义的裸 body），
+底部动作栏用 `mb-sheet__foot`（左右页内距 + 底部安全区 + 发丝线；不要再在业务里写 footer padding）。
+多维表「修改字段 / 编辑记录 / 视图配置 / 视图列表 / 选择日期 / 数据表操作」六个面板已统一到同一骨架。
 
 页内交互（② 层）已定：设置页 = 抽屉九页 + 移动端自有版式原语（`src/mobile/ui/settingsPrimitives.tsx`，
 `data-set-id` 契约与桌面 `settingsSearch.ts` 对齐，**只共享语义不共享组件**）；小记 = 时间线 + 写作卡九项工具条。
@@ -258,7 +267,7 @@ node scripts/css-audit/drive.mjs 9335 scripts/css-audit/mobile-walkthrough.mjs  
 `!important`（现状 **18**，新增须写明理由；都是压「内核行内样式 / 未分层内核 CSS」的必需项 ——
 未分层的普通声明会压过我们 @layer 里的普通声明，只有「分层里的 !important」才强于「未分层的 !important」，
 即 CSS Cascade 5 的 important 层序反转；261013 的 +2 来自压内核桌面引擎几何 `min-height:1024` 与 90px 底内距）·
-移动端 **字号字面量**（现状 **46** = mobile.css 38 + editor-dock.css 8，基线 49、只许降；由 `ui-metrics.mjs` 卡住，
+移动端 **字号字面量**（现状 **48** = mobile.css 37 + editor-dock.css 11，基线 49、只许降；由 `ui-metrics.mjs` 卡住，
 新增字面量直接 exit 1 —— 桌面是硬 0，移动端先做单调下降）·
 **移动端 CSS 不得再出现桌面类名选择器**（`ln-`/`b3-`/`fn__`/`config-`，`mobileLayers.test.ts` 恒为 0；
 261013 立：P5 之后还留着一批挂在 `.ln-row` 上的规则永不命中 —— 拖拽落点线就是这么静默丢的）。

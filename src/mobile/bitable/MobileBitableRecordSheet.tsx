@@ -116,43 +116,41 @@ function SelectControl({ field, value, onChange, onAddOption }: {
     onChange(multi ? [...new Set([...selected, optionId])] : optionId);
   };
   return (
-    <div className="mbt-option-edit">
-      <div className="mbt-option-chips" role={multi ? "group" : "radiogroup"} aria-label={field.name}>
-        {(field.options ?? []).map((option) => {
-          const on = selected.includes(option.id);
-          return (
-            <button
-              key={option.id}
-              type="button"
-              role={multi ? "checkbox" : "radio"}
-              aria-checked={on}
-              className={"mbt-option" + (on ? " is-on" : "")}
-              style={optionChipStyle(option.color)}
-              onClick={() => {
-                if (multi) onChange(on ? selected.filter((id) => id !== option.id) : [...selected, option.id]);
-                else onChange(on ? "" : option.id);
-              }}
-            >{option.name}</button>
-          );
-        })}
-        {drafting ? (
-          <span className="mb-input mbt-option-add">
-            <input
-              autoFocus
-              value={draft}
-              placeholder="新选项名称"
-              onChange={(event) => setDraft(event.target.value)}
-              onKeyDown={(event) => { if (event.key === "Enter") commit(); }}
-              onBlur={commit}
-              aria-label="新选项名称"
-            />
-          </span>
-        ) : (
-          <button type="button" className="mbt-option mbt-option-new" onClick={() => setDrafting(true)} aria-label="新建选项">
-            <Plus size={13} />选项
-          </button>
-        )}
-      </div>
+    <div className="mb-chip-row" role={multi ? "group" : "radiogroup"} aria-label={field.name}>
+      {(field.options ?? []).map((option) => {
+        const on = selected.includes(option.id);
+        return (
+          <button
+            key={option.id}
+            type="button"
+            role={multi ? "checkbox" : "radio"}
+            aria-checked={on}
+            className={"mb-chip" + (on ? " is-on" : "")}
+            style={optionChipStyle(option.color)}
+            onClick={() => {
+              if (multi) onChange(on ? selected.filter((id) => id !== option.id) : [...selected, option.id]);
+              else onChange(on ? "" : option.id);
+            }}
+          >{option.name}</button>
+        );
+      })}
+      {drafting ? (
+        <span className="mb-input mbt-option-add">
+          <input
+            autoFocus
+            value={draft}
+            placeholder="新选项名称"
+            onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={(event) => { if (event.key === "Enter") commit(); }}
+            onBlur={commit}
+            aria-label="新选项名称"
+          />
+        </span>
+      ) : (
+        <button type="button" className="mb-chip" onClick={() => setDrafting(true)} aria-label="新建选项">
+          <Plus size={14} />选项
+        </button>
+      )}
     </div>
   );
 }

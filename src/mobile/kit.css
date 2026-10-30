@@ -111,6 +111,8 @@
   border-radius: var(--mb-radius-sm); background: var(--lake-bg-block); color: var(--lake-text-2);
   font-size: var(--lake-font-size-micro); font-weight: var(--lake-font-weight-medium);
 }
+/* 相邻徽标（一个单元格里的多个选项）之间留 4：多选值不靠外层容器包一层（那会改 DOM 元素数 ⇒ 快照计数涨）。 */
+.mb-tag + .mb-tag { margin-left: var(--lake-space-xs); }
 .mb-tag--pending { background: var(--lake-status-pending-soft); color: var(--lake-status-pending); }
 .mb-tag--ok { background: var(--lake-status-ok-soft); color: var(--lake-status-ok); }
 .mb-tag--error { background: var(--lake-status-error-soft); color: var(--lake-status-error); }
@@ -124,6 +126,30 @@
   cursor: pointer; -webkit-tap-highlight-color: transparent;
 }
 .mb-segment__item.is-active { background: var(--lake-bg-panel); color: var(--lake-accent-text); }
+
+/* ── 选项胶囊（.mb-chip / .mb-chip-row；261030 新增，唯一来源）──────────────
+ * 语义 = 「从一组有限取值里选一个/多个」（字段类型、显示格式、默认值、单选/多选选项、视图配置的字段）。
+ * 此前 bitable 里并存三套近似实现（.mbt-feditor__choice / .mbt-chip / .mbt-form-chip）⇒ 收敛成这一件。
+ * 视觉：紧凑档高 36（--mb-ctl-h-sm），胶囊圆角；命中区由 mobile.css 的触达补足注册表补到 44。
+ * 选中态用「选中语义三件套」（--lake-bg-selected / --lake-fg-selected），与 .mb-row.is-selected 同口径。
+ * 颜色例外：多选/选项自带颜色时由使用方给**数据驱动**的 inline style（同 .mbt-form-chip 旧口径）。 */
+.mb-chip {
+  display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+  min-height: var(--mb-ctl-h-sm); padding: 0 14px;
+  border: .5px solid var(--lake-border-strong); border-radius: var(--lake-radius-pill);
+  background: var(--lake-bg-panel); color: var(--lake-text-2);
+  font-family: inherit; font-size: var(--lake-font-size-small); font-weight: var(--lake-font-weight-regular);
+  line-height: var(--lake-line-height-tight); white-space: nowrap;
+  cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+}
+.mb-chip:active:not(:disabled) { background: var(--lake-bg-press); }
+.mb-chip.is-on {
+  border-color: transparent; background: var(--lake-bg-selected); color: var(--lake-fg-selected);
+  font-weight: var(--lake-font-weight-medium);
+}
+.mb-chip:disabled { opacity: var(--lake-disabled-opacity); cursor: default; }
+/* 胶囊行：换行铺开（字段类型/显示格式这类多候选取值）；单行横滑用 .mbt-chips-row。 */
+.mb-chip-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--lake-space-md); }
 
 /* ── 卡片（.mb-card）────────────────────────────────────────────────── */
 .mb-card { border: .5px solid var(--lake-border-1); border-radius: var(--mb-radius-card); background: var(--lake-bg-panel); }

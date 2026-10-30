@@ -33,7 +33,7 @@ describe("MobileBitableFormView（填写态）", () => {
     expect(html).not.toContain("mbt-form-cover");
     expect(html).not.toContain("收集表");
     expect(html).toContain('aria-label="必填"');
-    expect(html).toContain("mbt-form-chip");
+    expect(html).toContain("mb-chip");
     expect(html).toContain(">提交<");
     expect(html).toContain("已提交 0 条");
   });

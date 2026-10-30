@@ -25,7 +25,7 @@ const body = JSON.stringify({
 const fillAndSubmit = async (onPersistNow: (content: string) => Promise<void>) => {
   act(() => root.render(createElement(MobileBitableViewer, { noteId: "n1", content: body, onPersistNow })));
   act(() => {
-    const chip = [...host.querySelectorAll<HTMLButtonElement>(".mbt-form-chip")].find((b) => b.textContent === "复盘");
+    const chip = [...host.querySelectorAll<HTMLButtonElement>(".mb-chip")].find((b) => b.textContent === "复盘");
     chip?.click();
     const area = host.querySelector<HTMLTextAreaElement>(".mbt-form-textarea")!;
     const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!;

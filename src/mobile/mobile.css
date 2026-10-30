@@ -467,9 +467,9 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
    每格横向固定 --mb-tap-min(44) ⇒ **横向天然达标、无相邻重叠**；只有视觉高度按用户要求压到 36
    （--mb-emoji-cat-h）⇒ 由本注册表把命中区补到 44（上下各 4px，正好落在分类条与正文之间的 8px 间隙里，不压正文）。
    末尾动作键同理（宽就是 44）。 */
-.mb-tap, .toolbar__icon, .mobile-settings-close, .mb-segment__item, .mbt-table-tab, .mbt-link, .minfo-action,
+.mb-tap, .toolbar__icon, .mobile-settings-close, .mb-segment__item, .mb-chip, .mbt-table-tab, .mbt-link, .minfo-action,
 .med-f-sw, .med-f-btn, .mobile-trash-action, .mb-emoji-cat { position: relative; }
-.mb-tap::after, .toolbar__icon::after, .mobile-settings-close::after, .mb-segment__item::after,
+.mb-tap::after, .toolbar__icon::after, .mobile-settings-close::after, .mb-segment__item::after, .mb-chip::after,
 .mbt-table-tab::after, .mbt-link::after, .minfo-action::after, .med-f-sw::after, .med-f-btn::after,
 .mobile-trash-action::after, .mb-emoji-cat::after {
   content: ""; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
@@ -758,7 +758,8 @@ body.nb-drag-active .side-panel-body { overscroll-behavior: none; }
   flex-direction: column;
   height: 100%;
   min-height: 0;
-  padding: 10px 10px 0;
+  /* 261030：多维表内容区左右内距跟页面内距对齐（原来 10 太贴边，卡片/表格贴着边框）。 */
+  padding: var(--lake-space-md) var(--mb-page-pad) 0;
   overflow: hidden;
 }
 .mbt-tables {
@@ -858,13 +859,6 @@ body.nb-drag-active .side-panel-body { overscroll-behavior: none; }
 }
 .mbt-cell-empty {
   color: var(--lake-text-3);
-}
-.mbt-option {
-  display: inline-block;
-  margin: 0 4px 0 0;
-  padding: 1px 8px;
-  border-radius: var(--mb-radius-sm);
-  font-size: 12px;
 }
 .mbt-bool {
   width: 18px;
@@ -1025,28 +1019,6 @@ body.nb-drag-active .side-panel-body { overscroll-behavior: none; }
 }
 .mbt-record-actions {
   margin-top: 16px;
-}
-.mbt-option-chips {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-}
-button.mbt-option {
-  border: 0;
-  font-family: inherit;
-  cursor: pointer;
-}
-.mbt-option.is-on {
-  box-shadow: inset 0 0 0 1px var(--lake-accent);
-  font-weight: var(--lake-font-weight-semibold);
-}
-.mbt-option-new {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  background: var(--lake-bg-hover);
-  color: var(--lake-text-2);
 }
 .mbt-option-add {
   min-height: var(--mb-ctl-h-sm);

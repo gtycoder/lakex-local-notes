@@ -7,6 +7,12 @@
  *   评分=无/1-5 星；进度=0-100 + 颜色；单选=无/选项。
  * - 选项：单选/多选可增删改名（id 保留，记录值不迁移）。
  * - 类型修改、关联配置、AI 命令、附件属性仍只在桌面端（移动端只显示说明，不做半截转换）。
+ *
+ * 外观（261030 二轮 UI 整改）：**只接已有原语**，不再自造一套表单几何 ——
+ * 骨架/行 = kit 的 .mb-set-section / .mb-set-item（与「编辑记录」面板同一形态）、
+ * 取值胶囊 = .mb-chip、输入 = .mbt-form-input（多维表自有输入）、开关 = .mb-switch、
+ * 底栏 = .mb-sheet__foot、页内距 = .mb-sheet__body--form（--mb-page-pad）。
+ * 本文件只保留「选项行 / 色板」两个布局槽（数据驱动）。
  */
 import { useEffect, useMemo, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
@@ -111,158 +117,176 @@ export function MobileBitableFieldEditorSheet({ open, field, hasData, onSave, on
     onSave(patch, typeDraft !== field.type ? typeDraft : undefined);
   };
 
+  /** 取值胶囊：同一交互语义只有 .mb-chip 一件（选中态走 .is-on）。 */
+  const chip = (key: string, text: string, on: boolean, onPick: () => void, pressed?: boolean) => (
+    <button key={key} type="button" className={"mb-chip" + (on ? " is-on" : "")}
+      aria-pressed={pressed ?? on} onClick={onPick}>{text}</button>
+  );
+
   if (!open || !field) return null;
   return (
-    <MobileSheet open={open} title="修改字段" onClose={onClose}
+    <MobileSheet open={open} title="修改字段" bodyClassName="mb-sheet__body--form" onClose={onClose}
       footer={
-        <div className="mbt-feditor-foot">
-          <button type="button" className="mb-btn mb-btn--secondary" onClick={onClose}>取消</button>
-          <button type="button" className="mb-btn mb-btn--primary" onClick={save}>确认</button>
+        <div className="mb-sheet__foot">
+          <button type="button" className="mb-btn mb-btn--secondary mb-flex1" onClick={onClose}>取消</button>
+          <button type="button" className="mb-btn mb-btn--primary mb-flex1" onClick={save}>确认</button>
         </div>
       }>
       <div className="mbt-feditor" onPointerDown={dismissKeyboardOnPointerDown}>
-        <label className="mbt-feditor__field">
-          <span className="mbt-feditor__label">标题</span>
-          <input className="mbt-form-input" value={name} aria-label="字段标题"
-            onChange={(event) => setName(event.target.value)} />
-        </label>
-
-        {hasData ? (
-          <>
-            <div className="mbt-feditor__row">
-              <span className="mbt-feditor__label">字段类型</span>
-              <span className="mbt-feditor__value">{label}</span>
-            </div>
-            <div className="mbt-feditor__note">该字段已有数据，不能修改类型（把该列的值清空后才能转）。</div>
-          </>
-        ) : (
-          <div className="mbt-feditor__section">
-            <div className="mbt-feditor__label">字段类型（没有数据时可以互转）</div>
-            <div className="mbt-feditor__choices">
-              {CONVERTIBLE_TYPES.map((candidate) => (
-                <button key={candidate} type="button" aria-pressed={typeDraft === candidate}
-                  className={"mbt-feditor__choice" + (typeDraft === candidate ? " is-on" : "")}
-                  onClick={() => {
-                    if (candidate === typeDraft) return;
-                    setTypeDraft(candidate);
-                    if (candidate === field.type) {
-                      // 切回原类型：恢复原配置（否则「手滑切走后切回」会把选项/默认值全清空并写回）。
-                      setOptions(field.options ? field.options.map((option) => ({ ...option })) : []);
-                      setProgressColor(typeof field.progressColor === "string" ? field.progressColor : undefined);
-                      setDateMode(field.dateAutoFill === true ? "created" : (typeof field.defaultValue === "string" && field.defaultValue ? "fixed" : "none"));
-                      setDefaultText(field.defaultValue == null ? "" : String(field.defaultValue));
-                      setFormat(typeof field.format === "string" ? field.format : "");
-                      return;
-                    }
-                    // 换类型 = 按新类型重建字段：旧类型的默认值/选项/格式草稿必须清掉，否则会把旧值带进新字段。
-                    setDefaultText("");
-                    setDateMode("none");
-                    setProgressColor(undefined);
-                    setOptions([]);
-                    setFormat("");
-                  }}>{BITABLE_FIELD_TYPE_LABEL[candidate]}</button>
-              ))}
-            </div>
-            {typeDraft !== field.type && <div className="mbt-feditor__note">转换会按新类型重建字段，旧类型的配置（选项/默认值等）会清掉。</div>}
-          </div>
-        )}
-
-        {fieldSupportsFormat(typeDraft) && (
-          <div className="mbt-feditor__section">
-            <div className="mbt-feditor__label">显示格式</div>
-            <div className="mbt-feditor__choices">
-              {(typeDraft === "date" ? BITABLE_DATE_FORMAT_OPTIONS : BITABLE_NUMBER_FORMAT_OPTIONS).map((option) => (
-                <button key={option.value} type="button" aria-pressed={format === option.value}
-                  className={"mbt-feditor__choice" + (format === option.value ? " is-on" : "")}
-                  onClick={() => setFormat(option.value)}>{option.label}</button>
-              ))}
+        <section className="mb-set-section">
+          <div className="mb-set-item mb-set-item--field">
+            <div className="mb-set-item__main"><span className="mb-set-name">标题</span></div>
+            <div className="mb-set-item__ctl">
+              <input className="mbt-form-input" value={name} aria-label="字段标题"
+                onChange={(event) => setName(event.target.value)} />
             </div>
           </div>
-        )}
+
+          {hasData ? (
+            <div className="mb-set-item">
+              <div className="mb-set-item__main">
+                <span className="mb-set-name">字段类型</span>
+                <span className="mb-set-item__note">该字段已有数据，不能修改类型（把该列的值清空后才能转）</span>
+              </div>
+              <div className="mb-set-item__ctl"><span className="mb-menu-note">{label}</span></div>
+            </div>
+          ) : (
+            <div className="mb-set-item mb-set-item--field">
+              <div className="mb-set-item__main">
+                <span className="mb-set-name">字段类型</span>
+                <span className="mb-set-item__desc">没有数据时可以互转</span>
+              </div>
+              <div className="mb-set-item__ctl">
+                <div className="mbt-feditor__group">
+                  <div className="mb-chip-row">
+                    {CONVERTIBLE_TYPES.map((candidate) => chip(candidate, BITABLE_FIELD_TYPE_LABEL[candidate], typeDraft === candidate, () => {
+                      if (candidate === typeDraft) return;
+                      setTypeDraft(candidate);
+                      if (candidate === field.type) {
+                        // 切回原类型：恢复原配置（否则「手滑切走后切回」会把选项/默认值全清空并写回）。
+                        setOptions(field.options ? field.options.map((option) => ({ ...option })) : []);
+                        setProgressColor(typeof field.progressColor === "string" ? field.progressColor : undefined);
+                        setDateMode(field.dateAutoFill === true ? "created" : (typeof field.defaultValue === "string" && field.defaultValue ? "fixed" : "none"));
+                        setDefaultText(field.defaultValue == null ? "" : String(field.defaultValue));
+                        setFormat(typeof field.format === "string" ? field.format : "");
+                        return;
+                      }
+                      // 换类型 = 按新类型重建字段：旧类型的默认值/选项/格式草稿必须清掉，否则会把旧值带进新字段。
+                      setDefaultText("");
+                      setDateMode("none");
+                      setProgressColor(undefined);
+                      setOptions([]);
+                      setFormat("");
+                    }))}
+                  </div>
+                  {typeDraft !== field.type && (
+                    <div className="mb-form__desc">转换会按新类型重建字段，旧类型的配置（选项/默认值等）会清掉。</div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {fieldSupportsFormat(typeDraft) && (
+            <div className="mb-set-item mb-set-item--field">
+              <div className="mb-set-item__main"><span className="mb-set-name">显示格式</span></div>
+              <div className="mb-set-item__ctl">
+                <div className="mb-chip-row">
+                  {(typeDraft === "date" ? BITABLE_DATE_FORMAT_OPTIONS : BITABLE_NUMBER_FORMAT_OPTIONS).map((option) =>
+                    chip(option.value || "raw", option.label, format === option.value, () => setFormat(option.value)))}
+                </div>
+              </div>
+            </div>
+          )}
+        </section>
 
         {supportsOptions && (
-          <div className="mbt-feditor__section">
-            <div className="mbt-feditor__label">选项</div>
-            <div className="mbt-feditor__options">
-              {options.map((option, index) => (
-                <div key={option.id} className="mbt-feditor__option">
-                  <span className="mbt-feditor__swatch" style={optionColorHex(option.color) ? { background: optionColorHex(option.color) } : undefined} aria-hidden="true" />
-                  <input className="mbt-form-input" value={option.name} placeholder={"选项 " + (index + 1)} aria-label={"选项 " + (index + 1)}
-                    onChange={(event) => commitOptionName(option.id, event.target.value)} />
-                  <button type="button" className="mb-iconbtn" aria-label={"删除选项 " + (option.name || index + 1)} onClick={() => removeOption(option.id)}><Trash2 size={16} /></button>
+          <section className="mb-set-section">
+            <div className="mb-set-item mb-set-item--field">
+              <div className="mb-set-item__main"><span className="mb-set-name">选项</span></div>
+              <div className="mb-set-item__ctl">
+                <div className="mbt-feditor__options">
+                  {options.map((option, index) => (
+                    <div key={option.id} className="mbt-feditor__option">
+                      <span className="mbt-feditor__swatch" style={optionColorHex(option.color) ? { background: optionColorHex(option.color) } : undefined} aria-hidden="true" />
+                      <input className="mbt-form-input" value={option.name} placeholder={"选项 " + (index + 1)} aria-label={"选项 " + (index + 1)}
+                        onChange={(event) => commitOptionName(option.id, event.target.value)} />
+                      <button type="button" className="mb-iconbtn" aria-label={"删除选项 " + (option.name || index + 1)} onClick={() => removeOption(option.id)}><Trash2 size={17} /></button>
+                    </div>
+                  ))}
+                  <button type="button" className="mb-btn mb-btn--secondary mb-btn--sm" onClick={addOption}><Plus size={16} />添加选项</button>
                 </div>
-              ))}
-              <button type="button" className="mb-btn mb-btn--secondary mb-btn--sm" onClick={addOption}><Plus size={14} />添加选项</button>
+              </div>
+            </div>
+          </section>
+        )}
+
+        <section className="mb-set-section">
+          {supportsDefault && (
+            <div className="mb-set-item mb-set-item--field">
+              <div className="mb-set-item__main"><span className="mb-set-name">默认值</span><span className="mb-set-item__desc">新建记录时预填</span></div>
+              <div className="mb-set-item__ctl">
+                <div className="mbt-feditor__group">
+                  {type === "date" ? (
+                    <>
+                      <div className="mb-chip-row">
+                        {([["none", "无"], ["fixed", "指定日期"], ["created", "添加记录当天"]] as const).map(([value, text]) =>
+                          chip(value, text, dateMode === value, () => setDateMode(value)))}
+                      </div>
+                      {dateMode === "fixed" && (
+                        <MobileBitableDateField value={defaultText} ariaLabel="默认日期" onChange={(next) => setDefaultText(next)} />
+                      )}
+                    </>
+                  ) : type === "boolean" ? (
+                    <div className="mb-chip-row">
+                      {[["", "无"], ["true", "是"], ["false", "否"]].map(([value, text]) =>
+                        chip(value || "none", text, defaultText === value, () => setDefaultText(value)))}
+                    </div>
+                  ) : type === "select" ? (
+                    <div className="mb-chip-row">
+                      {chip("none", "无", defaultText === "", () => setDefaultText(""))}
+                      {optionChoices.map((option) => chip(option.id, option.name, defaultText === option.id, () => setDefaultText(option.id)))}
+                    </div>
+                  ) : type === "rating" ? (
+                    <div className="mb-chip-row">
+                      {chip("none", "无", defaultText === "", () => setDefaultText(""))}
+                      {[1, 2, 3, 4, 5].map((stars) => chip(String(stars), stars + " 星", defaultText === String(stars), () => setDefaultText(String(stars))))}
+                    </div>
+                  ) : type === "progress" ? (
+                    <>
+                      <input className="mbt-form-input" inputMode="numeric" value={defaultText} aria-label="进度默认值" placeholder="0-100"
+                        onChange={(event) => setDefaultText(event.target.value.replace(/[^0-9]/g, ""))} />
+                      <span className="mb-form__desc">进度条颜色</span>
+                      <div className="mbt-feditor__colors">
+                        <button type="button" className={"mbt-feditor__color" + (!progressColor ? " is-on" : "")} aria-label="默认颜色" onClick={() => setProgressColor(undefined)} />
+                        {BITABLE_OPTION_PALETTE.slice(0, 8).map((color) => (
+                          <button key={color} type="button" aria-label={"颜色 " + color}
+                            className={"mbt-feditor__color" + (progressColor === color ? " is-on" : "")}
+                            style={{ background: optionColorHex(color) ?? color }} onClick={() => setProgressColor(color)} />
+                        ))}
+                      </div>
+                    </>
+                  ) : (
+                    <input className="mbt-form-input" type={type === "number" ? "number" : "text"} value={defaultText} aria-label="默认值"
+                      placeholder={type === "link" ? "https://" : undefined}
+                      onChange={(event) => setDefaultText(event.target.value)} />
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="mb-set-item">
+            <div className="mb-set-item__main"><span className="mb-set-name">必填</span></div>
+            <div className="mb-set-item__ctl">
+              <button type="button" className="mb-switch" role="switch" aria-checked={required} aria-label="必填"
+                onClick={() => setRequired((on) => !on)}><span className="mb-switch__knob" /></button>
             </div>
           </div>
-        )}
-
-        {supportsDefault && (
-          <div className="mbt-feditor__section">
-            <div className="mbt-feditor__label">默认值（新建记录时预填）</div>
-            {type === "date" ? (
-              <div className="mbt-feditor__stack">
-                {([["none", "无"], ["fixed", "指定日期"], ["created", "添加记录当天"]] as const).map(([value, text]) => (
-                  <button key={value} type="button" className={"mbt-feditor__choice" + (dateMode === value ? " is-on" : "")}
-                    aria-pressed={dateMode === value} onClick={() => setDateMode(value)}>{text}</button>
-                ))}
-                {dateMode === "fixed" && (
-                  <MobileBitableDateField value={defaultText} ariaLabel="默认日期" onChange={(next) => setDefaultText(next)} />
-                )}
-              </div>
-            ) : type === "boolean" ? (
-              <div className="mbt-feditor__choices">
-                {[["", "无"], ["true", "是"], ["false", "否"]].map(([value, text]) => (
-                  <button key={value} type="button" className={"mbt-feditor__choice" + (defaultText === value ? " is-on" : "")}
-                    aria-pressed={defaultText === value} onClick={() => setDefaultText(value)}>{text}</button>
-                ))}
-              </div>
-            ) : type === "select" ? (
-              <div className="mbt-feditor__choices">
-                <button type="button" className={"mbt-feditor__choice" + (defaultText === "" ? " is-on" : "")} onClick={() => setDefaultText("")}>无</button>
-                {optionChoices.map((option) => (
-                  <button key={option.id} type="button" className={"mbt-feditor__choice" + (defaultText === option.id ? " is-on" : "")}
-                    aria-pressed={defaultText === option.id} onClick={() => setDefaultText(option.id)}>{option.name}</button>
-                ))}
-              </div>
-            ) : type === "rating" ? (
-              <div className="mbt-feditor__choices">
-                <button type="button" className={"mbt-feditor__choice" + (defaultText === "" ? " is-on" : "")} onClick={() => setDefaultText("")}>无</button>
-                {[1, 2, 3, 4, 5].map((stars) => (
-                  <button key={stars} type="button" className={"mbt-feditor__choice" + (defaultText === String(stars) ? " is-on" : "")}
-                    aria-pressed={defaultText === String(stars)} onClick={() => setDefaultText(String(stars))}>{stars} 星</button>
-                ))}
-              </div>
-            ) : type === "progress" ? (
-              <div className="mbt-feditor__stack">
-                <input className="mbt-form-input" inputMode="numeric" value={defaultText} aria-label="进度默认值" placeholder="0-100"
-                  onChange={(event) => setDefaultText(event.target.value.replace(/[^0-9]/g, ""))} />
-                <div className="mbt-feditor__label">进度条颜色</div>
-                <div className="mbt-feditor__colors">
-                  <button type="button" className={"mbt-feditor__color" + (!progressColor ? " is-on" : "")} aria-label="默认颜色" onClick={() => setProgressColor(undefined)} />
-                  {BITABLE_OPTION_PALETTE.slice(0, 8).map((color) => (
-                    <button key={color} type="button" aria-label={"颜色 " + color}
-                      className={"mbt-feditor__color" + (progressColor === color ? " is-on" : "")}
-                      style={{ background: optionColorHex(color) ?? color }} onClick={() => setProgressColor(color)} />
-                  ))}
-                </div>
-              </div>
-            ) : (
-              <input className="mbt-form-input" type={type === "number" ? "number" : "text"} value={defaultText} aria-label="默认值"
-                placeholder={type === "link" ? "https://" : undefined}
-                onChange={(event) => setDefaultText(event.target.value)} />
-            )}
-          </div>
-        )}
-
-        <div className="mbt-feditor__row">
-          <span className="mbt-feditor__label">必填</span>
-          <button type="button" className="mb-switch" role="switch" aria-checked={required} aria-label="必填"
-            onClick={() => setRequired((on) => !on)}><span className="mb-switch__knob" /></button>
-        </div>
+        </section>
 
         {!supportsDefault && !supportsOptions && (
-          <div className="mbt-feditor__note">
+          <div className="mb-form__desc">
             {RELATION_TYPES.has(type) ? "关联字段的目标表/视图/是否多选请在桌面端修改。" : "这类字段的更多配置请在桌面端修改（附件/图片属性、AI 命令等）。"}
           </div>
         )}

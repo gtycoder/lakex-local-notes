@@ -60,7 +60,7 @@ export function OptionChips({ field, value }: { field: BitableField; value: unkn
   return (
     <>
       {options.map((option) => (
-        <span key={option.id} className="mbt-option" style={optionChipStyle(option.color)}>{option.name}</span>
+        <span key={option.id} className="mb-tag" style={optionChipStyle(option.color)}>{option.name}</span>
       ))}
     </>
   );
