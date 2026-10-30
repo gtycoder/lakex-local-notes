@@ -1,6 +1,20 @@
 apply plugin: 'com.android.application'
 apply plugin: 'kotlin-android'
 
+// 版本号单一来源 = 仓库根 package.json（与桌面 / Release 产物名一致，「关于」页读的也是它）。
+// versionCode 由 semver 推导并加 1000 偏移：1002 起只会随版本单调递增（本机既有安装是 3）；
+// 不要改回小于上一版的号码 —— Android 会以 INSTALL_FAILED_VERSION_DOWNGRADE 拒绝覆盖安装。
+def appSemver = (rootProject.file('../package.json').text =~ /"version"\s*:\s*"([0-9]+)\.([0-9]+)\.([0-9]+)"/)
+def appVersionName = '0.0.0'
+def appVersionCode = 1000
+if (appSemver.find()) {
+    def major = appSemver.group(1) as int
+    def minor = appSemver.group(2) as int
+    def patch = appSemver.group(3) as int
+    appVersionName = major + '.' + minor + '.' + patch
+    appVersionCode = 1000 + major * 10000 + minor * 100 + patch
+}
+
 android {
     namespace = "com.lakexlocalnotes.android"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -8,8 +22,8 @@ android {
         applicationId "com.lakexlocalnotes.android"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 3
-        versionName "1.2"
+        versionCode appVersionCode
+        versionName appVersionName
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
