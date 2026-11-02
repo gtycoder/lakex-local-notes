@@ -37,6 +37,8 @@ export interface InkPadProps {
   content: string;
   readOnly?: boolean;
   variant: "desktop" | "mobile";
+  /** 平板（expanded）：工具坞里把 8 色 / 4 笔宽**平铺**（桌面单行观感），不再收成悬浮色板。 */
+  inlineTools?: boolean;
   active?: boolean;
   paneVisible?: boolean;
   pane?: "left" | "right" | null;
@@ -122,7 +124,7 @@ const StaticStrokeLayer = memo(function StaticStrokeLayer({ strokes }: { strokes
   );
 });
 
-export function InkPad({ content, readOnly = false, variant, active, paneVisible, pane, onChange, onDirty, onEditorCapture, onImportImages, onImportPdf }: InkPadProps) {
+export function InkPad({ content, readOnly = false, variant, inlineTools = false, active, paneVisible, pane, onChange, onDirty, onEditorCapture, onImportImages, onImportPdf }: InkPadProps) {
   // 正文只在挂载时解析；父层保存会更新 content，但编辑器不应因此反复解析整份大 JSON。
   // 外部真正需要换正文时由宿主 bump reloadKey 重挂载。
   const [doc, setDoc] = useState<InkDoc | null>(() => parseInkBody(content));
@@ -895,26 +897,53 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
             <button className={["ink-tool", mode === "highlighter" ? "is-active" : ""].join(" ")} onClick={() => setMode("highlighter")} aria-label="高亮笔" title="高亮笔"><Highlighter size={18} /></button>
             <button className={["ink-tool", mode === "eraser" ? "is-active" : ""].join(" ")} onClick={() => setMode("eraser")} aria-label="整笔橡皮" title="整笔橡皮"><Eraser size={18} /></button>
             <span className="ink-toolbar__sep" />
-            {/* 颜色收成一个当前色按钮（44 盒 + 28 内圆），点开悬浮色板 */}
-            <button
-              className={["ink-color", paletteOpen ? "is-active" : ""].join(" ")}
-              data-popover-trigger="color"
-              onClick={() => { setPaletteOpen((open) => !open); setWidthsOpen(false); setInsertOpen(false); }}
-              aria-label="选择颜色"
-              title="选择颜色"
-              aria-expanded={paletteOpen}
-            ><span style={{ backgroundColor: color }} /></button>
-            <span className="ink-toolbar__sep" />
-            {/* 笔宽收成一个当前笔宽按钮，点开悬浮 4 档面板 */}
-            <button
-              className={["ink-width", widthsOpen ? "is-active" : ""].join(" ")}
-              data-popover-trigger="width"
-              onClick={() => { setWidthsOpen((open) => !open); setPaletteOpen(false); setInsertOpen(false); }}
-              aria-label="选择笔宽"
-              title="选择笔宽"
-              aria-expanded={widthsOpen}
-            ><span style={{ width: widthDotSize(activeWidth), height: widthDotSize(activeWidth) }} /></button>
-            <span className="ink-toolbar__sep" />
+            {inlineTools ? (
+              <>
+                {COLORS.map((value) => (
+                  <button
+                    key={value}
+                    className={["ink-color", color === value ? "is-active" : ""].join(" ")}
+                    onClick={() => { setColor(value); if (mode === "eraser") setMode("pen"); }}
+                    aria-label={"颜色 " + value}
+                    title={"颜色 " + value}
+                  ><span style={{ backgroundColor: value }} /></button>
+                ))}
+                <span className="ink-toolbar__sep" />
+                {WIDTHS.map((value) => (
+                  <button
+                    key={value}
+                    className={["ink-width", activeWidth === value ? "is-active" : ""].join(" ")}
+                    onClick={() => { if (mode === "highlighter") setHighlighterWidth(value); else setPenWidth(value); }}
+                    aria-label={"笔宽 " + value}
+                    title={"笔宽 " + value}
+                  ><span style={{ width: widthDotSize(value), height: widthDotSize(value) }} /></button>
+                ))}
+                <span className="ink-toolbar__sep" />
+              </>
+            ) : (
+              <>
+                {/* 手机：颜色收成一个当前色按钮（44 盒 + 28 内圆），点开悬浮色板 */}
+                <button
+                  className={["ink-color", paletteOpen ? "is-active" : ""].join(" ")}
+                  data-popover-trigger="color"
+                  onClick={() => { setPaletteOpen((open) => !open); setWidthsOpen(false); setInsertOpen(false); }}
+                  aria-label="选择颜色"
+                  title="选择颜色"
+                  aria-expanded={paletteOpen}
+                ><span style={{ backgroundColor: color }} /></button>
+                <span className="ink-toolbar__sep" />
+                {/* 手机：笔宽收成一个当前笔宽按钮，点开悬浮 4 档面板 */}
+                <button
+                  className={["ink-width", widthsOpen ? "is-active" : ""].join(" ")}
+                  data-popover-trigger="width"
+                  onClick={() => { setWidthsOpen((open) => !open); setPaletteOpen(false); setInsertOpen(false); }}
+                  aria-label="选择笔宽"
+                  title="选择笔宽"
+                  aria-expanded={widthsOpen}
+                ><span style={{ width: widthDotSize(activeWidth), height: widthDotSize(activeWidth) }} /></button>
+                <span className="ink-toolbar__sep" />
+              </>
+            )}
             <button className="ink-tool" onClick={undo} aria-label="撤销" title="撤销" disabled={!canUndo}><Undo2 size={18} /></button>
             <button className="ink-tool" onClick={redo} aria-label="重做" title="重做" disabled={!canRedo}><Redo2 size={18} /></button>
           </div>
@@ -923,7 +952,7 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
               <button key={item.value} className={page.background === item.value ? "is-active" : ""} onClick={() => setBackground(item.value)}>{item.label}</button>
             ))}
           </div>
-          {paletteOpen && (
+          {paletteOpen && !inlineTools && (
             <div role="group" aria-label="选择颜色" data-overlay="palette">
               {COLORS.map((value) => (
                 <button
@@ -936,7 +965,7 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
               ))}
             </div>
           )}
-          {widthsOpen && (
+          {widthsOpen && !inlineTools && (
             <div role="group" aria-label="选择笔宽" data-overlay="widths">
               {WIDTHS.map((value) => (
                 <button
