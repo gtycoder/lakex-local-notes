@@ -677,3 +677,24 @@
 }
 .mbt-vcfg-rule__modes { display: flex; align-items: center; flex-wrap: wrap; gap: var(--lake-space-xs); }
 
+
+/* 筛选规则（261102）：头行（字段 + 删除）+ 操作符胶囊 + 值控件；取值全走令牌 */
+.mbt-filter-rule {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lake-space-sm);
+  padding: var(--lake-space-md) 0;
+  border-bottom: .5px solid var(--lake-border-1);
+}
+.mbt-filter-rule__head { display: flex; align-items: center; gap: var(--lake-space-md); }
+.mbt-filter-rule__field {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--lake-font-size-body);
+  color: var(--lake-text-1);
+}
+.mbt-filter-value { display: flex; flex-direction: column; gap: var(--lake-space-sm); }
+
