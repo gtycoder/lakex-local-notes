@@ -1,10 +1,12 @@
-/* ── 平板外壳（261102 · pad 适配批次）────────────────────────────────────
+/* ── 平板外壳（261102 · pad 适配批次；261102 十四批改为「更宽的移动端外壳」）──────────
  * 判据唯一来源 = src/mobile/pad/formFactor.ts（按**窗口宽**分三档：<600 / 600–799 / ≥800）。
- * 本文件只放平板形态的外壳布局；手机（compact）不受影响 —— 所有规则都带
- * html[data-form-factor="…"] 前缀，且取值只走 --lake-* / --mb-* 令牌。
+ * 本文件只放平板形态的外壳布局；手机（compact）不受影响 —— 除三条基础结构规则外，
+ * 所有规则都带 html[data-form-factor="…"] 前缀，且取值只走 --lake-* / --mb-* 令牌。
  *
- * expanded = **单栏正文 + 悬浮目录/大纲**：目录（280）与大纲（240）是 position:fixed 的覆盖层，
- * 不占布局、不挤压正文（默认收起，顶栏按钮/点正文即收起；见 NotebookWorkspace）。
+ * **十四批口径（用户定调）**：桌面式工具栏不适合触屏 ⇒ 平板 = 更宽的移动端外壳：
+ * 胶囊 / 底部 dock / 各编辑器工具条与手机**完全一致**；平板只多两件事 ——
+ *   ① 正文与知识库更宽（正文满宽 + 阅读内距 32；知识库 1080）；
+ *   ② 树 / 大纲默认**悬浮覆盖**，可点固定按钮**停靠**（停靠后占布局、可编辑空间随之收窄）。
  * medium 仍单栏，只是内容限宽（规则在 mobile.css 的平板块，选择器同步为 data-form-factor）。
  */
 
@@ -21,12 +23,15 @@ html[data-form-factor="expanded"] {
   min-height: 0;
 }
 
+/* 有面板被固定（停靠）时，主列改成横向：左树 280 ｜ 正文 ｜ 右大纲 240 —— 与桌面三栏同构。 */
+html[data-form-factor="expanded"] .pad-main--docked { flex-direction: row; }
+
 /* 悬浮左目录：默认不渲染（display:none 兜底，JS 也只在 expanded 且开合为真时挂载） */
 .pad-tree { display: none; }
 
-/* 平板：树/大纲都是**悬浮覆盖层**（不占布局、不挤压正文）；正文吃满可视编辑空间。
+/* 平板：树/大纲默认是**悬浮覆盖层**（不占布局、不挤压正文）；正文吃满可视编辑空间。
  * 悬浮层从顶栏下沿开始，圆角 + popover 阴影（与抽屉同一套表面语言）；
- * 收起路径 = 顶栏按钮 / 点正文（NotebookWorkspace 的 onPointerDown）/ Esc（usePadShortcuts）。
+ * 收起路径 = 底部胶囊（文档树/大纲）/ 点正文（NotebookWorkspace 的 onPointerDown）/ Esc。
  * 层序走**移动端外壳令牌**（--mobile-z-drawer=45，与手机抽屉同层）：高于页面(30)、低于底部 Sheet(70)；
  * 不要用 --lake-z-sidebar(250) —— 那套是桌面外壳的数值，在移动端会压住 Sheet/菜单/对话框。 */
 html[data-form-factor="expanded"] .pad-tree {
@@ -42,6 +47,17 @@ html[data-form-factor="expanded"] .pad-tree {
   border-radius: 0 var(--lake-radius-card) var(--lake-radius-card) 0;
   box-shadow: var(--lake-shadow-popover);
   overflow: hidden;
+}
+
+/* 固定（停靠）：回到布局流，成为主列的第一栏；圆角/阴影退场，只留一条发丝线分隔。 */
+html[data-form-factor="expanded"] .pad-tree--pinned {
+  position: static;
+  flex: 0 0 280px;
+  width: 280px;
+  z-index: auto;
+  border-radius: 0;
+  border-right: .5px solid var(--lake-border-1);
+  box-shadow: none;
 }
 
 .pad-tree__head {
@@ -64,7 +80,7 @@ html[data-form-factor="expanded"] .pad-tree {
   color: var(--lake-text-1);
 }
 
-/* tree list 自带的 .side-panel-body 在悬浮左栏里就是滚动区（padding/overscroll 沿用原规则） */
+/* tree list 自带的 .side-panel-body 在左栏里就是滚动区（padding/overscroll 沿用原规则） */
 html[data-form-factor="expanded"] .pad-tree > .side-panel-body {
   flex: 1 1 auto;
   min-height: 0;
@@ -87,46 +103,27 @@ html[data-form-factor="expanded"] .mobile-doc-body .ne-engine {
 /* 平板阅读/编辑内距：内容占满，但两侧留出可读边距（比手机 20 宽一档）。 */
 html[data-form-factor="expanded"] .mobile-doc-body { --mb-reader-pad: 32px; }
 
-/* 知识库页（书架/列表）在平板上加宽：手机仍是 760，别把时间线也拉宽。 */
+/* 正文画布吃满可视编辑空间（用户 261102 十四批点单「内容占满」）：内核的 .lake-editor / mount 是
+ * 按内容高度撑开的（实测只有 85px），所以滚动容器明明 692 高、下面却是一块点不到的空白。
+ * 平板把这两层钉到宿主高度 ⇒ .ne-editor/.ne-editor-wrap 的既有 100% 链才真正生效、白板可点。
+ * 只作用于 expanded（手机既有行为/快照不动）；长文仍在 .mobile-doc-body 里滚（平板本来就不自动收顶栏）。 */
+html[data-form-factor="expanded"] .mobile-doc-body > .lake-editor { height: 100%; }
+
+html[data-form-factor="expanded"] .mobile-doc-body .lake-editor-mount { height: 100%; }
+
+/* 知识库页（书架/列表）在平板上加宽；小记时间线仍走 mobile.css 的 760（长文更好读）。
+ * 书架列数按可用宽度自适应（手机 3 列 → 平板 1080 下约 10 列），不做"大号卡片"。 */
 html[data-form-factor="expanded"] .mobile-library { max-width: 1080px; }
 
-/* 平板没有 dock（编辑走内核工具栏），底部不再留 dock 的 80px 让位。 */
-html[data-form-factor="expanded"] .mobile-doc-body { padding-bottom: 24px; }
+html[data-form-factor="expanded"] .nb-shelf,
+html[data-form-factor="expanded"] .nb-list { max-width: 1080px; margin-left: auto; margin-right: auto; }
 
-/* 触屏命中：内核工具栏 26×26 → 40×40（下拉选择保留自身宽度，只抬高度）。 */
-html[data-form-factor="expanded"] .ne-ui-toolbar .ne-ui-toolbar-button,
-html[data-form-factor="expanded"] .ne-ui-toolbar .ne-ui-toolbar-toggle-button,
-html[data-form-factor="expanded"] .ne-ui-toolbar .ne-ui-toolbar-dbl-toggle-button,
-html[data-form-factor="expanded"] .ne-ui-toolbar .ne-ui-toolbar-clear-format {
-  width: 40px;
-  height: 40px;
+html[data-form-factor="expanded"] .nb-shelf {
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
 }
 
 
-/* ── 平板顶栏（expanded）：笔记本切换 + 文档页签 + 动作组 ───────────────── */
-.pad-nb {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex: 0 0 auto;
-  max-width: 190px;
-  height: 32px;
-  padding: 0 8px;
-  border: 0;
-  border-radius: var(--lake-radius-sm);
-  background: transparent;
-  color: var(--lake-text-2);
-}
-
-.pad-nb__name {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: var(--lake-font-size-tiny);
-  color: var(--lake-text-1);
-}
-
+/* ── 平板顶栏（expanded）：文档页签 + 动作组（笔记本切换/树/大纲在底部胶囊里）────── */
 .pad-tabs {
   display: flex;
   align-items: center;
@@ -197,7 +194,7 @@ html[data-form-factor="expanded"] .ne-ui-toolbar .ne-ui-toolbar-clear-format {
   flex: 0 0 auto;
 }
 
-/* ── 平板右栏大纲（悬浮覆盖，不挤压正文）────────────────────────────── */
+/* ── 平板右栏大纲（默认悬浮覆盖；固定按钮可停靠）──────────────────────── */
 .pad-outline {
   display: flex;
   flex-direction: column;
@@ -207,11 +204,21 @@ html[data-form-factor="expanded"] .ne-ui-toolbar .ne-ui-toolbar-clear-format {
   bottom: 0;
   width: 240px;
   z-index: var(--mobile-z-drawer); /* 同 .pad-tree：移动端外壳层，低于 Sheet */
-
   background: var(--lake-bg-panel);
   border-radius: var(--lake-radius-card) 0 0 var(--lake-radius-card);
   box-shadow: var(--lake-shadow-popover);
   overflow: hidden;
+}
+
+/* 固定（停靠）：回到布局流、成为主列第三栏。 */
+html[data-form-factor="expanded"] .pad-outline--pinned {
+  position: static;
+  flex: 0 0 240px;
+  width: 240px;
+  z-index: auto;
+  border-radius: 0;
+  border-left: .5px solid var(--lake-border-1);
+  box-shadow: none;
 }
 
 .pad-outline__head {
@@ -231,10 +238,9 @@ html[data-form-factor="expanded"] .ne-ui-toolbar .ne-ui-toolbar-clear-format {
   min-height: 0;
 }
 
-/* 顶栏里的笔记本切换（不用 .toolbar__button：那是 44×44 纯图标按钮，会把名称裁掉） */
-.pad-nb:hover { background: var(--lake-bg-hover); }
-
-.pad-nb > svg { width: 16px; height: 16px; flex: none; }
+/* 左树/右大纲头里的「固定」按钮：选中态走 kit 图标钮的 active 口径。 */
+.pad-tree__head .mb-iconbtn.is-on,
+.pad-outline__head .mb-iconbtn.is-on { color: var(--lake-accent-text); background: var(--lake-bg-selected); }
 
 
 /* 顶栏页签/动作是 <button>，UA 默认会画出 2px outset 边框（其他移动端按钮都由各自原语重置）⇒ 这里统一重置 */
@@ -259,20 +265,7 @@ html[data-form-factor="expanded"] .mobile-tab-stage {
 }
 
 
-/* 平板没有 dock ⇒ 给一个明确的「收起键盘」浮钮（键盘弹起时才出现；点顶栏任意处也会收）。
- * 它挂在 .mobile-topbar 里（顶栏 z=3 自成层），固定定位脱离顶栏高度；不再自写字面量 z-index。 */
-.pad-kb-dismiss {
-  position: fixed;
-  right: 16px;
-  bottom: calc(16px + var(--mobile-bottom-safe-area));
-}
-
-
 /* 首页顶部 tab 与加宽后的知识库对齐（否则 1080 内容挂在 760 的 tab 下会左偏）。
  * 注意：mobile.css 的平板块把 .mobile-home-tabs / .mobile-scroll 限到 760，本文件在其后加载
  * （main.tsx 的 import 顺序），同特异性覆盖成 1080；时间线（.mobile-scroll 非 .mobile-library）仍是 760。 */
 html[data-form-factor="expanded"] .mobile-home-tabs { max-width: 1080px; }
-
-/* 平板没有底部胶囊 ⇒ 首页不再为它预留 96px 底距（mobile.css 的 .mobile-scroll 是给手机的）。 */
-html[data-form-factor="expanded"] .mobile-scroll { padding-bottom: calc(24px + var(--mobile-bottom-safe-area)); }
-

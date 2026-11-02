@@ -45,7 +45,6 @@ import { SheetTopBar } from "./SheetTopBar";
 import { SheetDock } from "./SheetDock";
 import { SheetDockPanel } from "./SheetDockPanel";
 import { useKeyboard } from "../hooks/useKeyboard";
-import { useFormFactor } from "../pad/useFormFactor";
 import { dockKbOffset } from "../editor/editSurfaceModel";
 import { useEditSurface } from "../editor/useEditSurface";
 import { showToast } from "../ui/toastBus";
@@ -174,8 +173,6 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
    * 输入法抑制限定在本宿主且不回焦（回焦会触发内核公式栏 onFocus 反把面板关掉）、不装"点正文收面板"守卫
    * （表格输入面是 canvas/原生公式栏）、不接管外壳高（表格自己的可视区由 --mb-usheet-kb-offset 承担）。
    */
-  // 平板（expanded）：表格 chrome 常驻（dock 只读也显示），手机保持原状。
-  const padSheet = useFormFactor() === "expanded";
   const surface = useEditSurface<SheetDockId>({
     editing: editable,
     dockRef: hostRef,
@@ -762,7 +759,7 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
 
   return (
     <div
-      className={"mobile-usheet" + (editable ? " is-editing" : " is-readonly")}
+      className="mobile-usheet"
       ref={hostRef}
       data-prevent-swipe
     >
@@ -794,10 +791,9 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
         />
       )}
       {ready ? <div id={containerId} className="mobile-usheet-root" /> : <div className="mb-empty">正在加载表格…</div>}
-      {ready && (editable || padSheet) && <div className="mb-usheet-chrome-spacer" aria-hidden="true" />}
+      {ready && editable && <div className="mb-usheet-chrome-spacer" aria-hidden="true" />}
       {editable && <span ref={caretRef} className="mb-usheet-caret" aria-hidden="true" />}
-      {/* 平板（expanded）：dock 常驻（只读时整条禁用、隐藏键盘键），避免进出编辑时整块网格上下跳。 */}
-      {ready && (editable || padSheet) && (
+      {ready && editable && (
         <SheetDock
           open={dockPanel}
           keyboardOpen={keyboardOpen}
@@ -807,7 +803,6 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
           onUndo={handleUndo}
           onRedo={handleRedo}
           onKeyboard={onDockKeyboard}
-          readOnly={!editable}
         />
       )}
       {editable && ready && (

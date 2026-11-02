@@ -256,11 +256,11 @@ Toast        .mb-toast-host > .mb-toast[--error] > (.mb-toast__text, .mb-toast__
 
 判据唯一来源 = `src/mobile/pad/formFactor.ts`（按**窗口宽**三档：<600 compact / 600–799 medium / ≥800 expanded，写 `html[data-form-factor]`）。外壳规则只在 `src/mobile/pad/pad.css`，手机（compact）零命中。
 
-- **expanded = 单栏正文 + 悬浮目录/大纲**（`.pad-tree` 280 / `.pad-outline` 240，`position:fixed`，top = `--pad-float-top` = 顶栏 44 + 8 + 安全区溢出；**默认收起**；顶栏按钮 / 点正文 / Esc 三路收起）。层序 = `--mobile-z-drawer`(45)，**不要用桌面 `--lake-z-sidebar`(250)**。
-- **正文满宽**：`.lake-editor-mount` / `.ne-engine` 不再限 760，改 `--mb-reader-pad: 32px`（手机仍 20）；首页知识库与顶部页签加宽到 1080，小记时间线仍 760。
-- **平板没有底部胶囊**（工作区胶囊退场）⇒ 首页 `.mobile-scroll` 不再预留 96px 底距；编辑态没有 dock（Lake 走内核固定工具栏，见 AGENTS 平板例外）⇒ 键盘弹起时顶栏出「收起键盘」浮钮（44 触达）。
-- **44 Rule 的平板例外（有意，已在 `mobileLayers` / 本文件登记）**：内核工具栏图标按钮 40×40、顶栏页签关闭 26、页签「＋」28、笔记本切换 32 —— 顶栏高 44、页签条 30，抬到 44 会互相重叠；它们仍在顶栏内、靠 hover/active 给反馈。**除这四个以外，平板新增控件一律 `--mb-tap-min`(44)**。
-- 细节规格以 `docs/PAD-ADAPTATION.md` §10 最新一批为准（该文件是长期 pad 规格，不再按"落地后删除"处理）。
+**261102 十四批定稿（用户）：平板 = 更宽的移动端外壳，不是桌面板。** 桌面那套工具栏/密度不适合触屏，已整体回退：
+- **胶囊 / 底部 dock / 各编辑器工具条与手机完全一致**（Lake 编辑态走 `EditorDockHost`、多维表紧凑工具条、表格手机 dock、手写板 v3 悬浮色板）。**不要再给平板开第二套工具条**（内核固定工具栏/9 项文字条/内联色板/常驻只读 dock 都已试过并回退）。
+- **expanded 只多两件事**：① 更宽 —— 正文满宽 + `--mb-reader-pad: 32px`（手机 20），知识库 `.nb-shelf/.nb-list` 1080（书架列按 `repeat(auto-fill, minmax(96px,1fr))` 自适应），小记时间线仍 760；② 树 / 大纲默认**悬浮覆盖**（`.pad-tree` 280 / `.pad-outline` 240，top = `--pad-float-top`；层序 `--mobile-z-drawer`(45)，**不要用桌面 `--lake-z-sidebar`(250)**），收起路径 = 胶囊 / 点正文 / Esc；面板头有**固定按钮**，固定 = `position:static` 停靠进布局（`.pad-main--docked` 三栏、可编辑空间收窄），再次点击回到悬浮。固定状态只在本会话（设备本地视图，不持久化）。
+- **正文画布吃满可视编辑空间**：`.mobile-doc-body > .lake-editor` 与 `.lake-editor-mount` 在 expanded 下 `height:100%`（内核原本按内容撑成 ~85px ⇒ 下方一大块空白点不到）。
+- 细节规格以 `docs/PAD-ADAPTATION.md` §10 最新一批为准（该文件是长期 pad 规格）。
 
 ## Motion
 

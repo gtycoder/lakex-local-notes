@@ -699,16 +699,6 @@
 .mbt-filter-value { display: flex; flex-direction: column; gap: var(--lake-space-sm); }
 
 
-/* 平板工具条（261102）：桌面同序的 9 项文字按钮，超宽横滚；手机仍是紧凑图标行 */
-.mbt-toolbar--pad {
-  gap: var(--lake-space-xs);
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-.mbt-toolbar--pad::-webkit-scrollbar { display: none; }
-.mbt-toolbar--pad .mb-btn { flex: none; }
-.mbt-toolbar--pad .mbt-toolbar__spacer { flex: 1 0 var(--lake-space-md); }
-
 /* 行高：桌面/移动同一映射（core bitableRowHeightPx），行高数据仍写视图配置 */
 .mbt-grid tbody tr[role="row"] td { height: var(--mbt-row-h, 44px); }
 

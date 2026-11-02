@@ -6,7 +6,7 @@
  * 焦点与滚动锁统一由 MobileSheet 负责；side 抽屉由全局 usePanelDrag 管手势，不套本原语。
  */
 import { useEffect, useState } from "react";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, Pin, PinOff } from "lucide-react";
 import { lakeBridge, resolveScrollNode, type LakeEditorInstance } from "../../features/editor/lakeRuntime";
 import { execEditorCommand } from "./execCommand";
 import { MobileSheet } from "../ui/MobileSheet";
@@ -27,11 +27,14 @@ export interface OutlineSheetProps {
   onClose: () => void;
   /** 渲染为右侧抽屉(.side-panel--right)而非底部 sheet。缺省为底部 sheet。 */
   side?: boolean;
-  /** 平板：渲染为**悬浮右栏**（position:fixed 覆盖层，不是抽屉、不带遮罩）；由工作区在 expanded 下挂载。 */
+  /** 平板：渲染为右栏（悬浮覆盖层；`pinned` 时停靠进布局）。由工作区在 expanded 下挂载。 */
   rail?: boolean;
+  /** 平板右栏是否固定（停靠）：固定后占布局、收窄可编辑空间；不固定则悬浮覆盖。 */
+  pinned?: boolean;
+  onTogglePin?: () => void;
 }
 
-export function OutlineSheet({ open, editor, onClose, side, rail }: OutlineSheetProps) {
+export function OutlineSheet({ open, editor, onClose, side, rail, pinned = false, onTogglePin }: OutlineSheetProps) {
   const [entries, setEntries] = useState<TocEntry[]>([]);
 
   useEffect(() => {
@@ -99,9 +102,17 @@ export function OutlineSheet({ open, editor, onClose, side, rail }: OutlineSheet
   // 平板右栏：无遮罩/无滑动的**悬浮覆盖层**（position:fixed，不挤压正文；开合由 NotebookWorkspace 顶栏管）。
   if (rail) {
     return (
-      <aside className="pad-outline" aria-label="大纲">
+      <aside className={"pad-outline" + (pinned ? " pad-outline--pinned" : "")} aria-label="大纲">
         <div className="pad-outline__head">
           <span>大纲</span>
+          {onTogglePin && (
+            <button
+              className={"mb-iconbtn" + (pinned ? " is-on" : "")}
+              onClick={onTogglePin}
+              aria-label={pinned ? "取消固定" : "固定大纲"}
+              title={pinned ? "取消固定（改回悬浮）" : "固定（停靠，占布局）"}
+            >{pinned ? <PinOff size={16} /> : <Pin size={16} />}</button>
+          )}
           <button className="mb-iconbtn" onClick={onClose} aria-label="收起大纲" title="收起大纲"><ChevronLeft size={16} /></button>
         </div>
         <div className="side-panel-body">{list}</div>

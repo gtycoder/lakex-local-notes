@@ -12,9 +12,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from "vitest";
 
-// 本文件验的是**手机**（compact）语义：jsdom 默认 1024 宽会命中平板 expanded 分支（dock 只读常驻），
-// 与这些断言无关，这里把视口钉到 412。
-Object.defineProperty(window, "innerWidth", { configurable: true, writable: true, value: 412 });
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 import { createElement } from "react";
 import { createRoot } from "react-dom/client";
@@ -418,6 +415,24 @@ describe("移动端表格查看/编辑器（dock v5）", () => {
     } finally {
       calls.savedBook = null;
       root.unmount();
+    }
+  });
+
+  it("平板宽度（≥800）也走手机语义：只读不渲染 dock/spacer，编辑才渲染", async () => {
+    const prev = window.innerWidth;
+    Object.defineProperty(window, "innerWidth", { configurable: true, writable: true, value: 1024 });
+    try {
+      const readonly = await mount(true, false);
+      expect(readonly.host.querySelector(".mb-usheet-dock")).toBeNull();
+      expect(readonly.host.querySelector(".mb-usheet-chrome-spacer")).toBeNull();
+      readonly.root.unmount();
+
+      const editing = await mount(true, true);
+      expect(editing.host.querySelector(".mb-usheet-dock")).toBeTruthy();
+      expect(editing.host.querySelector(".mb-usheet-chrome-spacer")).toBeTruthy();
+      editing.root.unmount();
+    } finally {
+      Object.defineProperty(window, "innerWidth", { configurable: true, writable: true, value: prev });
     }
   });
 

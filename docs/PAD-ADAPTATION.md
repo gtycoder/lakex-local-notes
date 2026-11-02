@@ -654,4 +654,19 @@ P0 体面单栏（1–2）→ P1 双栏（3–5）→ 工具栏 T0（5–7，§8
 - **收起键盘浮钮**：平板没有 dock ⇒ `useKeyboard().keyboardOpen` 时顶栏内渲染 `.pad-kb-dismiss`（fixed 右下、`.mb-btn` 44 触达）；顶栏 `onPointerDown` 一律 blur 收 IME。
 - **门禁与基线**：平板 6 态**重烤**（home-doc 2012 → 1913：树不再常驻挂载 + 正文几何变；其余 1822/1822/1827/1912/1849 不变），连跑两轮 0 差异；手机 6 态元素数全不变（1997/1822/1822/1827/1912/1849），`pm clear` 重灌夹具后只有 home-doc 指纹变（行 key 带文档 id，装置既有约定）⇒ 按 README 重烤 `mobile-snap.json` 后 0 差异。`mobileLayers.test.ts` 的 `pad.css` 基线 **152 → 151**。
 - **设备实测（lake_tab / emulator-5582，1280×800）**：默认 tree/outline 不渲染；开树 280 / z=45；点树行开文档 → 树收起；点正文 → 收起；Esc → 收起；大纲 240 同理；键盘模拟（视口压到 400）→ 「收起键盘」浮钮 85×44 出现在右下，点顶栏后 activeElement=BODY、恢复视口后浮钮消失。
-- **已知没做（有意）**：无遮罩；跨档 32px 滞后（§3.2#5）；横屏左右 `safe-area-inset-left/right`；顶栏小按钮（页签关闭 26 / ＋ 28 / 笔记本切换 32）低于 44 Rule —— 例外登记在 `docs/MOBILE-DESIGN.md` 的「Pad shell」一节。
+- **已知没做（有意）**：无遮罩；跨档 32px 滞后（§3.2#5）；横屏左右 `safe-area-inset-left/right`；顶栏小按钮（页签关闭 26 / ＋ 28）低于 44 Rule —— 例外登记在 `docs/MOBILE-DESIGN.md` 的「Pad shell」一节。
+
+### 10.16 第十四批：**口径反转** —— 工具条全部回移动端 + 胶囊回归 + 树/大纲可固定（分支 `feat/pad-touch-ui`）
+
+> ⚠️ **本条覆盖 §10.4（胶囊退场 / 桌面式顶栏）、§10.7（表格只读常驻 dock）、§10.9（手写板内联色板）、§10.12（多维表 9 项工具条 + 行高）**，以及 §8「工具栏向桌面看齐」的整体路线：
+> 用户结论 = **「即使使用 pad，桌面端那套逻辑也不适合触屏」**。平板从「桌面式」回到 **「更宽的移动端外壳」**。
+> **不受影响**：§10.9–§10.11 的「视图配置 筛选/排序/分组可写」（手机也在用、与形态无关）；§10.5/10.6/10.13/10.14/10.15 的判据、门禁、多窗口、快捷键、悬浮层与正文满宽仍然有效。
+
+- **工具条（一律与手机一致）**：Lake 编辑态回 `EditorDockHost`（`showToolbar:!editing`，内核固定工具栏不再启用）；多维表删 9 项文字条 + 行高入口（筛选/排序/分组从「视图配置」页签进）；手写板删 `inlineTools`（回 v3 悬浮色板/笔宽，prop 已整体删除）；表格删只读常驻 dock（只读=无 dock，编辑态 fixed + 96px spacer）。**不要再给平板开第二套工具条**。
+- **胶囊**：工作区胶囊（文档树/标签页/大纲/切换笔记本）在 expanded 恢复渲染；平板顶栏只留「返回 + 文档页签条 + 查找/编辑/同步」；胶囊编辑态隐藏（手机同款）。AGENTS 的「平板不挂胶囊」例外已撤回。
+- **树/大纲**：默认收起 + 默认**悬浮**（fixed，280/240，z=`--mobile-z-drawer`45）；面板头 **Pin 固定按钮** → `position:static` 停靠进布局，`.pad-main--docked` 改 row 三栏、可编辑空间收窄（实测正文 1280→1000）；再点回悬浮。收起 = 胶囊/点正文/Esc，**固定态不吃这些收起路径**（它不是临时浮层）；点开文档自动收悬浮左栏。**固定状态仅会话内**，不写 localStorage/不进正文。
+- **宽度**：正文满宽 + `--mb-reader-pad:32`（沿 10.15）之上，知识库补齐 —— `.mobile-library`/`.nb-shelf`/`.nb-list` 1080 + 书架列 `repeat(auto-fill,minmax(96px,1fr))`（1280 实测 9 列、书架 976）；小记时间线仍 760。
+- **画布高度**：`.mobile-doc-body > .lake-editor` 与 `.lake-editor-mount` 在 expanded 下 `height:100%`（内核按内容撑成 ~85px，挂载实高 85→612）。**已知**：点画布空白处不会落光标（内核只认引擎内点击，与手机一致）——如需"点空白即定位文末"要另加 JS。
+- **键盘**：dock 的 `.med-btn--kb` 就是收起/展开键盘（手机同一条）；十三批的 `.pad-kb-dismiss` 浮钮与顶栏 `onPointerDown` 已删。
+- **门禁**：tsc 0 / vitest 548 文件 3408 例 / check:core 135 / check:mobileui / 双 build / check:bundle / diff-check；`mobileLayers` 基线收紧（pad.css 144、usheet-chrome 542、bitable 896）。
+- **设备**：见 HANDOFF §0 第十四批（lake_tab，胶囊 4 项 / 固定前后 position 与正文宽度 / 编辑态 dock 与内核工具栏 0 / 知识库 976·9 列 / 画布 612）。平板 6 态重烤后两轮 0 差异（home-doc 1913→1922），手机 6 态 0 差异。

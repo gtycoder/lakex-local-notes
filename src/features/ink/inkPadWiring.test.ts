@@ -123,14 +123,16 @@ describe("手写板正式端到端接线", () => {
     expect(MOBILE_INK_CSS).toContain('.ink-pad--mobile > [data-overlay="dock"]');
     expect(MOBILE_INK_CSS).toMatch(/bottom: calc\(var\(--lake-space-md\) \+ var\(--mobile-bottom-safe-area\)\);/);
     expect(MOBILE_INK_CSS).toContain("border-radius: var(--lake-radius-card)");
-    // 颜色/笔宽：手机 = 当前值按钮 + 坞内悬浮面板；平板 = inlineTools 门控的 8 色/4 档平铺
+    // 颜色/笔宽：工具行只有「当前值按钮」，色板/笔宽收进坞内悬浮面板（平板与手机同一套，261102 晚点单回退）
     expect(mobileToolRow()).toContain('data-popover-trigger="color"');
     expect(mobileToolRow()).toContain('data-popover-trigger="width"');
     expect(mobileToolRow()).toContain('aria-label="选择颜色"');
     expect(mobileToolRow()).toContain('aria-label="选择笔宽"');
-    expect(mobileToolRow()).toContain("inlineTools ?");
-    expect(mobileToolRow()).toContain("COLORS.map");
-    expect(mobileToolRow()).toContain("WIDTHS.map");
+    expect(mobileToolRow()).not.toContain("COLORS.map");
+    expect(mobileToolRow()).not.toContain("WIDTHS.map");
+    // 第七批的平板内联分支已整体删除：InkPad 无 inlineTools，移动端不再按形态注入
+    expect(INK_PAD).not.toContain("inlineTools");
+    expect(MOBILE_INK_PAD).not.toContain("useFormFactor");
     expect(mobileDock()).toContain('data-overlay="palette"');
     expect(mobileDock()).toContain('data-overlay="widths"');
     // 纸张只在编辑态工具坞里可点（阅读态没有 background 按钮渲染路径）
@@ -146,9 +148,11 @@ describe("手写板正式端到端接线", () => {
     const withInsertRow = 8 * 44 + 4 * 1 + 4;
     expect(withInsertRow).toBe(360);
     expect(withInsertRow).toBeLessThanOrEqual(412 - 16 - 2);
-    // 结构侧：**＋（插入）必须排在第一位**，其后才是笔工具；内联色板只允许出现在 inlineTools 分支
+    // 结构侧：**＋（插入）必须排在第一位**，其后才是笔工具；工具行不内联色板（色板只在坞内悬浮面板）
     const toolRow = mobileToolRow();
-    expect(toolRow).toContain("inlineTools ?");
+    expect(toolRow).not.toContain("inlineTools");
+    expect(toolRow).not.toContain("COLORS.map");
+    expect(toolRow).not.toContain("WIDTHS.map");
     expect(toolRow.indexOf('aria-label="插入"')).toBeGreaterThan(-1);
     expect(toolRow.indexOf('aria-label="插入"')).toBeLessThan(toolRow.indexOf('aria-label="画笔"'));
     expect(toolRow).toContain('aria-label="撤销"');

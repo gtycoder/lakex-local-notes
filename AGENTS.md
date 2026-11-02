@@ -106,7 +106,7 @@ LakexLocalNotes = **本地优先**笔记应用：Electron 44.3 + React 18.3 + be
 - **小记预览 = 快路径 + 内核只读兜底**：自研解析器（`src/features/quickNotes/quickNotePreviewParser.ts`）只画纯文字/列表/媒体（**零内核实例**，冷开不受影响）；出现它还原不了的块（表格/代码块/公式/画板/思维导图/日历/日期/表情…）⇒ **整条卡片交给内核只读视图**（`QuickNoteKernelPreview`，`createLakeDocument(host,"viewer",…)` + `IntersectionObserver` 只挂视口内）。判据 = 解析器自己的 `unsupported` 节点（`hasUnsupportedNodes`），**不另立清单**。⇒ 格式覆盖度由内核保证；「+」插入面板 = 内核全量。
 - **小记写作卡工具条 = 用户指定七项**：日期·表情·图片·附件·待办·无序·分隔线（精简掉引用/有序）。唯一来源 `src/features/editor/lakeRuntime.ts` 的 `QUICK_NOTE_TOOLBAR_ITEMS`，顺序由 `quickNoteToolbar.test.ts` 卡住。字符串 id 必须内核有效（**无效 id 会被静默丢弃**）；日期/表情/附件走**自定义工具项类**（`features/quickNotes/quickNoteToolbarWidgets.ts`）；**移动端不提供「展开」**。
 - **内核浮层 portal 到 `body`**（`.ne-overlay-container`）⇒ 移动端要覆盖内核浮层**必须用 body 级选择器**（入口已加 `body.lake-mobile`）。
-- **移动端 Lake 输入面 = 底部 dock，没有第二条路**：移动端编辑态内核工具栏**整条不存在**（`showToolbar:false` ⇒ `disabledPlugins:["save","toolbar"]`）、块悬浮手柄/选区浮栏不挂载、`/` 斜杠面板不可用 ⇒ **能输入什么只取决于 dock 接线了什么**（桌面固定栏 27 项 + 插入面板 22 项里没接进 dock 的，移动端能显示、不能输入）。新增移动端输入能力一律走 dock。**平板例外（261102）**：`html[data-form-factor="expanded"]`（窗口 ≥800）改走内核固定工具栏（桌面同款 items）+ 不挂 dock；判据/几何见 `docs/PAD-ADAPTATION.md` 与 `src/mobile/pad/`，手机（<800）不变。**收面板→键盘（restore 档）必须让面板内容保持到被键盘盖住**（`closingHold`；提前播滑出/淡出 = 键盘还在升、面板先空一块，261019 用户报「闪烁」）。
+- **移动端 Lake 输入面 = 底部 dock，没有第二条路**：移动端编辑态内核工具栏**整条不存在**（`showToolbar:false` ⇒ `disabledPlugins:["save","toolbar"]`）、块悬浮手柄/选区浮栏不挂载、`/` 斜杠面板不可用 ⇒ **能输入什么只取决于 dock 接线了什么**（桌面固定栏 27 项 + 插入面板 22 项里没接进 dock 的，移动端能显示、不能输入）。新增移动端输入能力一律走 dock。**平板（261102 十四批定稿）同样只走 dock**：曾试过「expanded 改内核固定工具栏」，用户判定桌面工具条不适合触屏，已整体回退；平板只保留外壳层的宽/侧栏差异（`src/mobile/pad/`，规格见 `docs/PAD-ADAPTATION.md` §10.16）。**收面板→键盘（restore 档）必须让面板内容保持到被键盘盖住**（`closingHold`；提前播滑出/淡出 = 键盘还在升、面板先空一块，261019 用户报「闪烁」）。
 - **移动端正文 = 文件（261019 与桌面同构）**：正文/小记/历史/草稿落 App 私有 Data（相对路径单一来源 `src/core/noteBodyPaths.ts`，原生 `BodyStorePlugin` 原子写 + gzip 快照）；**SQLite 只存元数据/hash/同步账本/派生 text_cache+FTS**。旧库 `notes.content` 升级时**整库重置一次**（§3#7），**不要**为 content 列写兼容读取；浏览器预览的正文是内存（刷新即丢），真机/模拟器才是文件。
 - **移动端 SQLite schema = 版本门 + 批量 DDL**（261021，冷启动 DDL 2.4s → 185ms）：`applyMobileSchema` 先读 `PRAGMA user_version`（`MOBILE_SCHEMA_VERSION`，`src/mobile/data/schema.ts`），版本已到就整段跳过；首次把 DDL 拆两批走 `executeSet`（底表一批 / 条件语句一批）。**改表/索引必须 +1 版本号**；新增 DDL 只加到 `baseSchemaStatements`（不依赖读状态）或 `collectSchemaStatements`（依赖读状态），**不要再回到逐条 `db.exec`**（原生端一条 = 一次桥往返，实测 ~68ms）。
 - **移动端有自己的设计与样式层**（`src/mobile/**`，`mb-*` + 移动端 theme）：**不引桌面样式层**，两端 UI 不共享。
@@ -115,7 +115,7 @@ LakexLocalNotes = **本地优先**笔记应用：Electron 44.3 + React 18.3 + be
 - **移动端入口分工（261014 用户逐条定稿，都是"别再搬回去"型契约）**：
   首页胶囊 = **搜索 · ＋ · AI**（整块长按上滑 = 速记；＋ 短按 = 新建面板），排序/视图与云同步在**顶栏右上角**；
   工作区胶囊 = **文档树 · 标签页 · 大纲 · 切换笔记本**（原「更多」已删 —— 编辑在顶栏、新建在抽屉与行内）；
-  **平板例外（261102）**：`html[data-form-factor="expanded"]`（窗口 ≥800）**不渲染工作区胶囊** —— 树/页签/大纲/切换笔记本都在顶栏与悬浮栏里；手机（<800）不变。规格见 `docs/PAD-ADAPTATION.md` §10.15 与 `src/mobile/pad/`。
+  **平板（261102 十四批定稿）与手机同一套胶囊**：曾把胶囊换成顶栏按钮/常驻侧栏，用户判定"和移动端一模一样就行"已回退；平板只多「更宽 + 树/大纲默认悬浮、可固定」。
   工作区菜单里**不许再放搜索 / 设置**（设置 = 首页齿轮；搜索 = 首页胶囊，且是全库范围而非"笔记本内搜索"）；
   目录抽屉 = 笔记本行（**只展示图标 + ＋，不放 ⋮**）+ 每一行 `[⋮][＋]`（**新建统一走 ＋ / 抽屉工具栏「新建」**；行 ⋮ = 重命名/设置图标/设为常用/移动到…/历史/属性/删除 —— 261019 用户点单去掉「新建文档 / 新建分组」）；
   **笔记本的编辑入口 = 首页「知识库」长按卡片**（重命名 / 设置图标 / 删除笔记本；**不含**新建文档·新建分组，用户明确去掉）；

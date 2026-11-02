@@ -3,7 +3,6 @@ import InkPad, { type InkPadProps } from "../../features/ink/InkPad";
 import { importInkImagePages, pickInkImageFiles } from "../../features/ink/inkImageImport";
 import { pickPdfFile } from "../../features/ink/pdfImport";
 import { bridge } from "../bridge";
-import { useFormFactor } from "../pad/useFormFactor";
 import { setStylusHandwritingEnabled } from "../native/stylusInput";
 import { importPdfPagesToAssets } from "./mobilePdfImport";
 import "./inkPad.shared.css";
@@ -15,8 +14,6 @@ export type MobileInkPadProps = Omit<InkPadProps, "variant"> & {
 };
 
 export function MobileInkPad({ noteId, active = false, readOnly = false, ...props }: MobileInkPadProps) {
-  // 平板（expanded）：工具坞里 8 色 / 4 笔宽平铺（桌面单行观感）；手机保持收起 + 悬浮色板。
-  const inlineTools = useFormFactor() === "expanded";
   useEffect(() => {
     if (!active || readOnly) return;
     void setStylusHandwritingEnabled(false);
@@ -55,7 +52,6 @@ export function MobileInkPad({ noteId, active = false, readOnly = false, ...prop
       active={active}
       readOnly={readOnly}
       variant="mobile"
-      inlineTools={inlineTools}
       onImportImages={noteId ? onImportImages : undefined}
       onImportPdf={noteId ? onImportPdf : undefined}
     />

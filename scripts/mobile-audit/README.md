@@ -65,7 +65,7 @@ node scripts/mobile-audit/check-mobile-snap.mjs --port 9336                     
 - **视口钉死 1280×800**（CDP `Emulation.setDeviceMetricsOverride`，dpr 2）⇒ 与 `lake_tab` 的状态栏/导航栏实际高度解耦；
   在 `lake_tab`（pixel_tablet）或手机上都能复现同一套布局。
 - **基线独立**：`scripts/mobile-audit/baseline/mobile-snap-tablet.json`（手机基线 `mobile-snap.json` 不动）。
-- **home-doc 走平板路径**：先点顶栏「文档树」打开**悬浮左栏**（`.pad-tree`，261102 十三批起默认收起）再点行，不再依赖底部胶囊「文档树」。
+- **home-doc 走平板路径**：点底部胶囊「文档树」打开**悬浮左栏**（`.pad-tree`，默认收起；十四批起平板与手机同壳，胶囊回来了）再点行。
 
 ```bash
 # 前置：专用实例 + 固定夹具（与 6 态同一份 gate-fixture）
@@ -79,7 +79,7 @@ npm run check:tabletsnap -- --port 9340 --write-baseline
 npm run check:tabletsnap -- --port 9340
 ```
 
-实测（261102）：6 态 = home-library 1822 / home-quicknotes 1822 / home-library-list 1827 / home-doc 2012 / settings 1912 / settings-appearance 1849，
+实测（261102 十四批）：6 态 = home-library 1822 / home-quicknotes 1822 / home-library-list 1827 / **home-doc 1922**（胶囊回归 + 知识库加宽 + 画布高度；十三批曾是 1913）/ settings 1912 / settings-appearance 1849，
 连跑两轮 **0 差异**。⚠️ 与手机基线同理：**基线绑定"专用实例 + 夹具"**，换数据/换设备必红，那是预期。
 ⚠️ **烤基线前必须回到干净夹具**：平板 `home-doc` 会把 `home-doc` 的左栏树行数算进元素数（每多一篇文档 ≈ +8~17 元素）——
 261102 实测过一次「在已有测试文档（表格/多维表）的实例上烤基线」⇒ 之后干净夹具上必红。
