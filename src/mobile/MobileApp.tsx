@@ -113,13 +113,15 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
   const [searchOpen, setSearchOpen] = useState(false);
   // 平板外接键盘：⌘/Ctrl+K = 全局搜索（手机不挂；判据见 pad/usePadShortcuts）。
   const padShell = useFormFactor() === "expanded";
+  // 平板：⌘/Ctrl+K 全局搜索；Esc 逐层收（本层没东西可关时返回 false，把 Esc 让给工作区那条监听）。
   usePadShortcuts(padShell, {
     search: () => setSearchOpen(true),
     escape: () => {
-      if (searchOpen) { setSearchOpen(false); return; }
-      if (aiOpen) { setAiOpen(false); return; }
-      if (drawerOpen) { setDrawerOpen(false); return; }
-      if (createNbOpen) { setCreateNbOpen(false); }
+      if (searchOpen) { setSearchOpen(false); return true; }
+      if (aiOpen) { setAiOpen(false); return true; }
+      if (drawerOpen) { setDrawerOpen(false); return true; }
+      if (createNbOpen) { setCreateNbOpen(false); return true; }
+      return false;
     },
   });
   const [aiOpen, setAiOpen] = useState(false);

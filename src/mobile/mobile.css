@@ -1230,7 +1230,7 @@ body.lake-mobile .ne-ui-boundary-popover:has(.ne-ui-search-card-menu) { top: 120
 
 /* ===== 平板 / 折叠屏（261102：判据改为 html[data-form-factor]，来源 src/mobile/pad/formFactor.ts）=====
  * medium（600–799）与 expanded（≥800）都算平板；内容限宽居中 / 设置页加宽；信息架构与页面层级不变。
- * 双栏（expanded 的常驻左目录）在 src/mobile/pad/pad.css，不在这里。 */
+ * 平板外壳（expanded 的悬浮目录/大纲、正文满宽、内核工具栏命中）在 src/mobile/pad/pad.css，不在这里。 */
 html[data-form-factor="medium"] .mobile-settings-page,
 html[data-form-factor="expanded"] .mobile-settings-page { width: min(92%, 440px); }
 html[data-form-factor="medium"] .nb-shelf,

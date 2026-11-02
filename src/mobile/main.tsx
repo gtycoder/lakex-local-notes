@@ -21,7 +21,7 @@ import "./editor-dark.css"; // 自写：桌面同源深色桥（已去 --b3-*，
 import "./editor/editor-dock.css";
 import "./kit.css"; // P2：移动端自有原语库 mb-*（触屏密度；一个交互语义只有一套）
 import "./floating.css"; // P3：浮层原语（mb-sheet / mb-actionsheet / mb-toast / mb-menusheet + 遮罩）
-import "./pad/pad.css"; // 261102：平板外壳（双栏工作区 + 左目录常驻；判据见 pad/formFactor.ts）
+import "./pad/pad.css"; // 261102：平板外壳（正文满宽 + 悬浮目录/大纲；判据见 pad/formFactor.ts）
 import "./features.css"; // P6：图片 Lightbox / 附件预览的**移动端外观**（结构类名共享、视觉各端自有）
 import "./quick-notes.css"; // P6b：小记编辑器宿主与只读预览的移动端外观（自桌面那份抽取移动端子集）
 import "./ai/ai.css"; // 261023：AI 全屏功能页（布局 + Markdown），不进入口以外的作用域

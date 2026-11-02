@@ -7,7 +7,17 @@
 
 ## 0. 最新交接（261027）
 
-### 261102 · 平板（pad）适配第一批（分支 `feat/pad-adaptation`，worktree `../lakex-pad`，**未 push**）
+### 261102 · 平板第十三批：悬浮目录/大纲 + 正文满宽 + 收起键盘 · **本地提交（本批已验收，待 push）**
+- **为什么改**：第十二批的 280 左栏 + 240 右栏是**占布局**的（正文被挤成窄条）；用户口径「正文满宽」。本批把两者改成 **position:fixed 悬浮覆盖层**（不占布局、不挤压正文），正文吃满窗口，只靠阅读内距 32 留边。
+- **改了什么**：① `pad.css`：`.pad-tree` 280 / `.pad-outline` 240 改 fixed（top = `--pad-float-top` = 顶栏 44 + margin 8 + 安全区溢出；圆角 + popover 阴影；**无遮罩**）；**层序改 `--mobile-z-drawer`(45)** —— 旧 `--lake-z-sidebar`(250)/`--lake-z-outline`(260) 是桌面数值，在移动端会盖住 Sheet(70)/菜单(81)/对话框(90)；`.lake-editor-mount`/`.ne-engine` 全网宽、`.mobile-doc-body` 加 `--mb-reader-pad:32`；`.mobile-library` 与 `.mobile-home-tabs` 1080（小记时间线仍 760）；平板首页不再预留胶囊 96px 底距；两处**未定义的 `--hairline`** 改 `--lake-border-1`（分隔线此前根本没画）。② `NotebookWorkspace`：**默认都收起**（覆盖层会盖正文）；**三路收起** = 顶栏按钮 / 点正文（`.mobile-workspace-body` 的 onPointerDown）/ **Esc**（`usePadShortcuts`，逐层：浮层 → 树 → 大纲）；点开文档自动收左栏；空态文案按平板改写。③ 平板无 dock ⇒ 键盘弹起时顶栏出「收起键盘」浮钮（`.pad-kb-dismiss`，44 触达），点顶栏任意处也会 blur 收 IME。
+- **实测（lake_tab / emulator-5582，1280×800，重装本批 APK + 干净夹具）**：默认 tree/outline 均不渲染、`.mobile-workspace-main` column、`.lake-editor` padding 32；点顶栏「文档树」→ `.pad-tree` 280 / computed z-index **45**；点树行打开文档 → 树自动收起；再开树点正文 → 收起；再开树按 **Esc → 收起**（修前收不掉，根因见下）；大纲 240 同理；键盘模拟（视口压到 400）→ 浮钮出现（85×44，右下），点顶栏后 activeElement=BODY，恢复视口后浮钮消失。
+- **🩹 本批修掉的真 bug（Esc 收不掉树）**：`MobileApp` 的 `usePadShortcuts` 无条件挂 `escape` handler ⇒ 它的监听注册得比工作区早、每次 Esc 都 `preventDefault`，而 hook 里有 `defaultPrevented` 守卫 ⇒ 工作区那条「Esc 收悬浮树/大纲」永远被吃掉。修法 = **Esc 逐层语义**：handler 返回 `false` 表示「本层没东西可关」⇒ 不 preventDefault，让后面的监听者继续；`MobileApp.escape` 改成真的关掉东西才返回 true。（浮层能收、树收不掉就是这个分叉。）
+- **门禁**：tsc 0 / 全量 vitest **548 文件 3408 例（12 skipped）** / `check:core` 135 文件 0 / `check:mobileui` + ui-metrics（!important 19/19、字号字面量 48/49、颜色字面量 0、跨文件重复 13/13）/ 桌面+移动 build / `check:bundle`（mobile entry JS 77,971/81,920、CSS 137,547/141,312、preload 20/23）/ `git diff --check`。`mobileLayers.test.ts` 的 pad.css 基线 **152 → 151**。
+- **快照门禁（两个实例都实跑）**：平板 6 态**重烤**后连跑两轮 **0 差异**（home-doc **2012 → 1913**：树不再常驻挂载、正文满宽；其余 1822/1822/1827/1912/1849 不变）；手机 6 态元素数全不变（1997/1822/1822/1827/1912/1849）——`pm clear` 重灌夹具后 home-doc **只有指纹变**（行 key 带文档 id，装置既有约定）⇒ 按 README 重烤 `mobile-snap.json`（只 hash 一行变），复跑 **0 差异**。
+- **APK 体积（同线对比，隔离 worktree 实建）**：debug **+8,364 B（+0.022%）**，其中 pad **+6,392 B**、同批 ink/PDF +1,972 B；release +6,856 B（+0.020%）。dex / so 逐字节不变（pad 只动 web assets 压缩后体积）。**结论：pad 适配没有让安装包变大**（见 git 首条 commit message 与本次会话报告）。
+- **仍缺（有意不做 / 已知）**：① 悬浮层不做遮罩（有默认收起 + 三路收起）；② 跨档 32px 滞后（PAD-ADAPTATION §3.2#5）未做（CSS-only 瞬时切换，实测无抖动）；③ 顶栏页签关闭 26×26 / ＋ 28 / 笔记本切换 32 低于 44 Rule —— 已在 `docs/MOBILE-DESIGN.md` 的 Pad shell 记为例外（顶栏高 44、页签条 30，抬到 44 会互相重叠）；④ `useKeyboard` 仍被加在工作区（手机也订阅，量小，未抽组件）；⑤ 横屏左右安全区（`env(safe-area-inset-left/right)`）仍未接。
+
+### 261102 · 平板（pad）适配第一批（分支 `feat/pad-adaptation`，worktree `../lakex-pad`，**已合入 master**）
 - **范围**：只做「平板外壳 + 文档工具栏」，手机布局零改动。判据 = **窗口宽**（不是设备属性）：`src/mobile/pad/formFactor.ts` 三档 `<600 compact / 600–799 medium / ≥800 expanded`，写 `html[data-form-factor]`；原生 `smallestScreenWidthDp` 只作提示（`window.__lakeSetTablet` 保留，但布局不再依赖它；`native/deviceProfile.ts` 已删）。
 - **双栏工作区**：`NotebookWorkspace` 在 expanded 渲染常驻左栏 `.pad-tree`（复用 `NotebookTreeList`，与抽屉共用同一份 `treeList`；平板下抽屉不再渲染第二份树，避免 `.side-panel-body` 双实例破坏拖拽查询）；胶囊「文档树」在平板 = 左栏开合。CSS 落 `src/mobile/pad/pad.css`（已登记 `mobileLayers.test.ts`：38 声明 / 0 重复组）；原 `body.lake-tablet` 7 条规则改为 `html[data-form-factor="medium|expanded"]`。
 - **文档工具栏**：`DocumentEditor` 在 expanded 编辑态 `showToolbar:true`（内核固定工具栏 = 桌面同款 items，溢出进「…」）并**不挂 `EditorDockHost`**（手机不变）。几何：工具栏吃满文档列、`.ne-engine` 限宽 760 居中、`.mobile-doc-body` 底部不再留 dock 的 80px；内核工具栏命中 26→40（只抬图标按钮，下拉保留自身宽度）。AGENTS「移动端输入面=底部 dock」已加平板例外条款。

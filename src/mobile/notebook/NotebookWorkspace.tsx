@@ -24,6 +24,7 @@ import { reportMobileActionError } from "../lib/reportMobileActionError";
 import { getNativeErrorMessage } from "../../lib/nativeErrors";
 import { successFeedback, warnFeedback } from "../ui/haptics";
 import { useAutoSave } from "../hooks/useAutoSave";
+import { useKeyboard } from "../hooks/useKeyboard";
 import type { LocalNote } from "../data/noteRepository";
 import { chromeAfterScroll, type ChromeScrollState } from "./scrollChrome";
 import { isFavorite, toggleFavorite } from "../data/favorites";
@@ -133,11 +134,20 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   const { overlay, open: openOverlay, close: closeOverlay, toggle: toggleOverlay } = useWorkspaceOverlays();
   const overlayKind = overlay?.kind ?? null;
   const sidebarOpen = overlayKind === "sidebar";
-  // 261102 pad：expanded 走双栏（左目录常驻），手机仍用抽屉。
+  // 261102 pad：expanded 的树/大纲是**悬浮覆盖层**（不占布局、不挤压正文），手机仍用抽屉。
   const formFactor = useFormFactor();
   const padTwoPane = formFactor === "expanded";
-  const [padTreeOpen, setPadTreeOpen] = useState(true);
+  // 十三批：既然是覆盖层，默认就都收起（正文优先）；顶栏「文档树 / 大纲」两个按钮负责打开。
+  const [padTreeOpen, setPadTreeOpen] = useState(false);
   const [padOutlineOpen, setPadOutlineOpen] = useState(false);
+  /** 平板没有 dock：用「软键盘是否弹起」决定要不要给一个明确的收起入口。 */
+  const { keyboardOpen } = useKeyboard();
+  const dismissKeyboard = useCallback(() => {
+    const active = document.activeElement as HTMLElement | null;
+    active?.blur?.();
+    // 内核编辑区焦点可能挂在容器/引擎上：一并 blur，WebView 收 IME 靠这个。
+    (document.querySelector(".ne-engine") as HTMLElement | null)?.blur?.();
+  }, []);
   const outlineOpen = overlayKind === "outline";
   const findOpen = overlayKind === "find";
   const tabsOpen = overlayKind === "tabs";
@@ -154,7 +164,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
 
   // 抽屉开合（名字保留：调用点遍布拖拽/胶囊/遮罩）。互斥由 overlay owner 保证：打开时先收掉其它浮层。
   const openSidebar = useCallback((v: boolean) => {
-    // 平板双栏里「目录」= 常驻左栏的开合，不再拉抽屉（避免两份树实例 / 全屏遮罩）。
+    // 平板里「目录」= 悬浮左栏的开合，不再拉抽屉（避免两份树实例 / 全屏遮罩）。
     if (padTwoPane) { setPadTreeOpen(v); return; }
     if (v) openOverlay({ kind: "sidebar" }); else closeOverlay("sidebar");
   }, [closeOverlay, openOverlay, padTwoPane]);
@@ -192,7 +202,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   const bodyRef = useRef<HTMLElement | null>(null);
   const activeMetaRef = useRef({ kind: "doc" as string, editing: false });
   activeMetaRef.current = { kind: active?.kind ?? "doc", editing: !!active?.editing };
-  // 平板双栏不自动收顶栏：顶栏里有文档页签，滚动时闪掉会晃眼（手机保持思源式自动收起）。
+  // 平板不自动收顶栏：顶栏里有文档页签，滚动时闪掉会晃眼（手机保持思源式自动收起）。
   const chromeHiddenNow = subpageFullscreen || (!padTwoPane && chrome.hidden && !active?.editing && (active?.kind ?? "doc") === "doc");
   const showChrome = useCallback(() => {
     if (chromeRef.current.hidden || chromeRef.current.acc) setChrome({ hidden: false, acc: 0 });
@@ -241,7 +251,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
 
   // 切到没有大纲的文档类型（表格 / 多维表 / 画板）时收掉已展开的大纲抽屉，别停在空面板上
   useEffect(() => { if (!outlineAvailable) closeOverlay("outline"); }, [outlineAvailable, closeOverlay]);
-  // 平板常驻大纲栏同理：切到没有大纲的文档类型时自动收起。
+  // 平板悬浮大纲栏同理：切到没有大纲的文档类型时自动收起。
   useEffect(() => { if (!outlineAvailable) setPadOutlineOpen(false); }, [outlineAvailable]);
 
   // 初次进入（仅一次）：
@@ -679,8 +689,8 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   };
 
   /**
-   * 目录树 = 抽屉与平板常驻左栏**共用同一份**（同一套 props / 虚拟化 / 拖拽 / 长按）。
-   * 平板双栏里点文档**不关左栏**（openSidebar(false) 只在手机抽屉语义下需要）。
+   * 目录树 = 抽屉与平板悬浮左栏**共用同一份**（同一套 props / 虚拟化 / 拖拽 / 长按）。
+   * 平板里点开文档后**收起左栏**（覆盖层会盖住刚打开的正文）；手机抽屉同理。
    */
   const treeList = (
     <NotebookTreeList
@@ -699,7 +709,10 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
       onActivate={(item) => {
         // 与原实现同序：有子节点先展开/折叠；没有子的文档才打开。
         if (childrenOf(item.id).length > 0) { toggleGroup(item.id); return; }
-        if (item.kind === "note") { if (!padTwoPane) openSidebar(false); void openTab(item.id); }
+        if (item.kind === "note") {
+          if (padTwoPane) setPadTreeOpen(false); else openSidebar(false);
+          void openTab(item.id);
+        }
       }}
       onOpenMenu={(item) => openOverlay({ kind: "menu", node: item })}
       onOpenCreate={(item) => openOverlay({ kind: "create", parentId: item.id })}
@@ -710,7 +723,12 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   usePadShortcuts(padTwoPane, {
     find: () => { if (active && (active.kind ?? "doc") === "doc") toggleOverlay("find"); },
     newNote: () => { void createChildDocument("doc", notebookId); },
-    escape: () => { if (overlayKind) closeOverlay(); },
+    // Esc 逐层收：先收浮层，再收悬浮树/大纲（它们不是 overlay owner 的值，要单独处理）。
+    escape: () => {
+      if (overlayKind) { closeOverlay(); return; }
+      if (padTreeOpen) { setPadTreeOpen(false); return; }
+      if (padOutlineOpen) setPadOutlineOpen(false);
+    },
   });
 
   return (
@@ -719,11 +737,16 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
       <header
         className={"toolbar toolbar--border mobile-topbar" + (!padTwoPane && chromeHiddenNow ? " mobile-topbar--auto-hidden" : "")}
         aria-hidden={!padTwoPane && chromeHiddenNow ? "true" : "false"}
+        onPointerDown={padTwoPane ? () => dismissKeyboard() : undefined}
       >
+        {/* 平板没有 dock：键盘弹起时给一个明确的收起入口（点顶栏也会收）。 */}
+        {padTwoPane && keyboardOpen && (
+          <button type="button" className="mb-btn mb-btn--secondary pad-kb-dismiss" onClick={dismissKeyboard}>收起键盘</button>
+        )}
         {padTwoPane ? (
           <>
             <button className="toolbar__button" onClick={handleBack} aria-label="返回知识库" title="返回知识库"><ArrowLeft /></button>
-            {/* 平板：左 = 笔记本切换（树常驻，不再需要"打开目录"入口；文档重命名走树行 ⋮） */}
+            {/* 平板：左 = 笔记本切换（树是顶栏开合的悬浮层；文档重命名走树行 ⋮） */}
             <button className="pad-nb" onClick={() => openOverlay({ kind: "notebookSwitch" })} aria-label="切换笔记本" title="切换笔记本">
               {nbIcon ? <MobileNodeIconGlyph value={nbIcon} /> : <Book size={16} />}
               <span className="pad-nb__name">{title}</span>
@@ -803,7 +826,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
       </header>
 
       <div className="mobile-workspace-main">
-        {/* 平板双栏（expanded）：左目录常驻，正文在右；手机不渲染这段（padTwoPane=false） */}
+        {/* 平板（expanded）：悬浮左目录（覆盖层，不占布局）；手机不渲染这段（padTwoPane=false） */}
         {padTwoPane && padTreeOpen && (
           <aside className="pad-tree" aria-label="目录">
             <div className="pad-tree__head">
@@ -817,7 +840,14 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
         )}
 
         {/* 文档层（正文） */}
-        <section className="mobile-workspace-body" ref={bodyRef}>
+        <section
+          className="mobile-workspace-body"
+          ref={bodyRef}
+          // 十三批：悬浮树/大纲没有遮罩 ⇒ 点正文就收起（否则 280/240 宽会一直盖在正文上）。
+          onPointerDown={padTwoPane && (padTreeOpen || padOutlineOpen)
+            ? () => { setPadTreeOpen(false); setPadOutlineOpen(false); }
+            : undefined}
+        >
         {/* ⚠️ 已挂载的 keep-alive 页**必须一直留在 DOM 里**（只允许非活动页 display:none）：
             旧实现是「活动页没挂载 ⇒ 用骨架替换整份 pane 列表」，于是打开一篇本会话还没挂载的文档时，
             别的标签的 pane 被一起卸载、scrollTop 归零（R2：切走再切回 752→0）。
@@ -936,12 +966,12 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
               <span className="mb-skel mb-doc-skeleton__line mb-doc-skeleton__line--short" />
             </div>
           ) : (
-            <div className="mb-empty">暂无打开的文档，点左目录或底部打开</div>
+            <div className="mb-empty">{padTwoPane ? "暂无打开的文档，点顶栏「文档树」打开" : "暂无打开的文档，点左目录或底部打开"}</div>
           )
         ) : null}
         </section>
 
-        {/* 平板双栏：右侧大纲常驻栏（手机仍是 .side-panel--right 抽屉；rail 只在 expanded 渲染） */}
+        {/* 平板：右侧大纲悬浮覆盖层（手机仍是 .side-panel--right 抽屉；rail 只在 expanded 渲染） */}
         {padTwoPane && padOutlineOpen && (
           <OutlineSheet
             rail
@@ -954,7 +984,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
 
       {/* 底部胶囊栏（思源 #mobileBottomBar：纯图标）——只放阅读相关（文档树/标签/大纲/更多）；
           编辑与同步在顶栏右侧，避免打字时误触（用户 260909）。编辑态整条下滑淡出而不是卸载。
-          平板双栏不挂胶囊：树/页签/大纲/切换笔记本都已在顶栏与常驻栏里（手机保持原样）。 */}
+          平板不挂胶囊：树/页签/大纲/切换笔记本都已在顶栏与悬浮栏里（手机保持原样）。 */}
       {!padTwoPane && (<nav
         className={"mobile-bottom-bar"
           + ((active?.editing || chromeHiddenNow) ? " mobile-bottom-bar--hidden" : "")
@@ -1021,7 +1051,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
         </div>
         {/* 树行 = 可见行扁平数组 + 视口窗口化（2000 节点时不一次挂 2000 个按钮，见 NotebookTreeList）。
             虚拟滚动下拖拽/长按仍靠行上的 data-node-id 与 .side-panel-body 命中（手指下的行必在窗口内）。
-            平板双栏时树挂在常驻左栏（.pad-tree），抽屉不渲染第二份实例。 */}
+            平板时树挂在悬浮左栏（.pad-tree），抽屉不渲染第二份实例。 */}
         {!padTwoPane && treeList}
       </aside>
 

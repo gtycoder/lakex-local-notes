@@ -9,7 +9,7 @@
  * iPad 10.9/11 竖屏（820–834）也能进双栏）：
  *   compact  <600   手机 / Slide Over / 分屏窄窗 → 现行手机布局，零改动
  *   medium   600–799 8" 平板、iPad mini 竖屏 → 单栏 + 内容限宽 + 浮层收敛
- *   expanded ≥800   10–11" 平板竖屏 / 任意横屏 → 双栏工作区 + 桌面式工具栏
+ *   expanded ≥800   10–11" 平板竖屏 / 任意横屏 → 正文满宽 + 悬浮目录/大纲 + 桌面式工具栏
  *
  * 写入：`<html data-form-factor="...">`（CSS 唯一判据）+ `body.lake-tablet`（历史类名兼容）。
  * 原生 `lakeDevice.isTablet()` 只作提示（折叠/形态遥测），不参与布局 —— iPad 没有该桥。

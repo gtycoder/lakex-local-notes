@@ -252,6 +252,16 @@ Toast        .mb-toast-host > .mb-toast[--error] > (.mb-toast__text, .mb-toast__
 页内交互（② 层）已定：设置页 = 抽屉九页 + 移动端自有版式原语（`src/mobile/ui/settingsPrimitives.tsx`，
 `data-set-id` 契约与桌面 `settingsSearch.ts` 对齐，**只共享语义不共享组件**）；小记 = 时间线 + 写作卡九项工具条。
 
+## Pad shell（平板外壳，261102 起）
+
+判据唯一来源 = `src/mobile/pad/formFactor.ts`（按**窗口宽**三档：<600 compact / 600–799 medium / ≥800 expanded，写 `html[data-form-factor]`）。外壳规则只在 `src/mobile/pad/pad.css`，手机（compact）零命中。
+
+- **expanded = 单栏正文 + 悬浮目录/大纲**（`.pad-tree` 280 / `.pad-outline` 240，`position:fixed`，top = `--pad-float-top` = 顶栏 44 + 8 + 安全区溢出；**默认收起**；顶栏按钮 / 点正文 / Esc 三路收起）。层序 = `--mobile-z-drawer`(45)，**不要用桌面 `--lake-z-sidebar`(250)**。
+- **正文满宽**：`.lake-editor-mount` / `.ne-engine` 不再限 760，改 `--mb-reader-pad: 32px`（手机仍 20）；首页知识库与顶部页签加宽到 1080，小记时间线仍 760。
+- **平板没有底部胶囊**（工作区胶囊退场）⇒ 首页 `.mobile-scroll` 不再预留 96px 底距；编辑态没有 dock（Lake 走内核固定工具栏，见 AGENTS 平板例外）⇒ 键盘弹起时顶栏出「收起键盘」浮钮（44 触达）。
+- **44 Rule 的平板例外（有意，已在 `mobileLayers` / 本文件登记）**：内核工具栏图标按钮 40×40、顶栏页签关闭 26、页签「＋」28、笔记本切换 32 —— 顶栏高 44、页签条 30，抬到 44 会互相重叠；它们仍在顶栏内、靠 hover/active 给反馈。**除这四个以外，平板新增控件一律 `--mb-tap-min`(44)**。
+- 细节规格以 `docs/PAD-ADAPTATION.md` §10 最新一批为准（该文件是长期 pad 规格，不再按"落地后删除"处理）。
+
 ## Motion
 
 **261029 动效收敛（与桌面同口径）**：状态切换一律**瞬时**（hover / 颜色 / 背景 / 边框不再做过渡），只保留浮层入场/退场与结构展开。

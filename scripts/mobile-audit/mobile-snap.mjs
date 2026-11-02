@@ -41,8 +41,13 @@ export const STATES = [
       opened = await page.evaluate("Boolean(document.querySelector('.mobile-workspace'))");
     }
     await expectOn(page, "!!document.querySelector('.mobile-workspace')", "第二层工作区");
-    // 平板（html[data-form-factor=expanded]）：左栏常驻、没有底栏胶囊 ⇒ 直接点 .pad-tree 的文档行。
-    if (await page.evaluate("!!document.querySelector('.pad-tree .mb-row')")) {
+    // 平板（html[data-form-factor=expanded]）：没有底栏胶囊 ⇒ 走 .pad-tree 的文档行。
+    // 261102 十三批：左栏改成**悬浮覆盖层且默认收起** ⇒ 没开就先点顶栏「文档树」再点行。
+    if (await page.evaluate("document.documentElement.dataset.formFactor === 'expanded'")) {
+      if (!(await page.evaluate("!!document.querySelector('.pad-tree .mb-row')"))) {
+        if (!(await tapByLabel(page, ".mobile-topbar .toolbar__button", "文档树", 1200))) throw new Error("home-doc: 平板顶栏找不到「文档树」入口");
+        if (!(await page.evaluate("!!document.querySelector('.pad-tree .mb-row')"))) throw new Error("home-doc: 点开文档树后左栏仍没有文档行");
+      }
       if (!(await tapSel(page, ".pad-tree .mb-row", 2400))) throw new Error("home-doc: 平板左栏没有可点的文档行");
     } else {
       const rowsOpen = "!!document.querySelector('.side-panel--left.on .mb-row')";

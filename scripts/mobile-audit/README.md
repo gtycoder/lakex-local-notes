@@ -59,13 +59,13 @@ node scripts/mobile-audit/check-mobile-snap.mjs --port 9336                     
 
 ## 平板专项快照（261102 起，动 pad 外壳 / 平板工具栏时跑）
 
-平板（`html[data-form-factor="expanded"]`）与手机是**两套外壳**，手机 6 态覆盖不到平板的双栏/页签/常驻大纲，
+平板（`html[data-form-factor="expanded"]`）与手机是**两套外壳**，手机 6 态覆盖不到平板的页签/悬浮目录与大纲，
 所以单独一套装置（同一份 `snap-gate.mjs` / `mobile-snap.mjs`，只换视口与基线）：
 
 - **视口钉死 1280×800**（CDP `Emulation.setDeviceMetricsOverride`，dpr 2）⇒ 与 `lake_tab` 的状态栏/导航栏实际高度解耦；
   在 `lake_tab`（pixel_tablet）或手机上都能复现同一套布局。
 - **基线独立**：`scripts/mobile-audit/baseline/mobile-snap-tablet.json`（手机基线 `mobile-snap.json` 不动）。
-- **home-doc 走平板路径**：左栏常驻（`.pad-tree`）⇒ 直接点左栏行，不再依赖底部胶囊「文档树」。
+- **home-doc 走平板路径**：先点顶栏「文档树」打开**悬浮左栏**（`.pad-tree`，261102 十三批起默认收起）再点行，不再依赖底部胶囊「文档树」。
 
 ```bash
 # 前置：专用实例 + 固定夹具（与 6 态同一份 gate-fixture）

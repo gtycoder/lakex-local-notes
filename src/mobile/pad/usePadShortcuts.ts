@@ -39,11 +39,14 @@ export function isTypingTarget(target: EventTarget | null): boolean {
   return !!el.closest('input, textarea, select, [contenteditable="true"], [contenteditable=""], .ne-engine, .ne-editor, .lake-editor-mount, .mobile-usheet-root');
 }
 
+/** 返回值约定：只有 Esc 关心 —— 返回 false = 「我这一层没东西可关」，不抢键（见下）。 */
+export type PadShortcutHandler = () => void | boolean;
+
 export interface PadShortcutHandlers {
-  search?: () => void;
-  find?: () => void;
-  newNote?: () => void;
-  escape?: () => void;
+  search?: PadShortcutHandler;
+  find?: PadShortcutHandler;
+  newNote?: PadShortcutHandler;
+  escape?: PadShortcutHandler;
 }
 
 export function usePadShortcuts(enabled: boolean, handlers: PadShortcutHandlers): void {
@@ -61,10 +64,20 @@ export function usePadShortcuts(enabled: boolean, handlers: PadShortcutHandlers)
       if (!action) return;
       const handler = action === "search" ? search : action === "find" ? find : action === "new-note" ? newNote : escape;
       if (!handler) return;
+      if (action === "escape") {
+        // Esc 是「逐层收」：handler 返回 false = 这一层没东西可关 ⇒ **不 preventDefault**，
+        // 让后注册的监听者继续收下一层（此前 MobileApp 无条件 preventDefault，把工作区的
+        // 「Esc 收悬浮树/大纲」整条吃掉了 —— 261102 十三批实测：Esc 收得掉浮层、收不掉树）。
+        if (handler() !== false) event.preventDefault();
+        return;
+      }
       event.preventDefault();
       handler();
     };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    // **捕获阶段**：内核在 window/document 冒泡阶段会对 Escape 调 preventDefault（实测：合成 keydown
+    // defaultPrevented=true ⇒ 下面的守卫直接 return，平板 Esc 永远收不掉悬浮树/大纲）。捕获先跑，
+    // 真键盘事件的目标是页面里的元素，所以这里总能先于内核看到尚未被 preventDefault 的事件。
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [enabled, search, find, newNote, escape]);
 }

@@ -27,7 +27,7 @@ export interface OutlineSheetProps {
   onClose: () => void;
   /** 渲染为右侧抽屉(.side-panel--right)而非底部 sheet。缺省为底部 sheet。 */
   side?: boolean;
-  /** 平板双栏：渲染为**常驻右栏**（不是抽屉、不带遮罩）；由工作区在 expanded 下挂载。 */
+  /** 平板：渲染为**悬浮右栏**（position:fixed 覆盖层，不是抽屉、不带遮罩）；由工作区在 expanded 下挂载。 */
   rail?: boolean;
 }
 
@@ -96,7 +96,7 @@ export function OutlineSheet({ open, editor, onClose, side, rail }: OutlineSheet
     ))
   );
 
-  // 平板常驻右栏：无遮罩/无滑动，作为 .mobile-workspace-main 的第三列。
+  // 平板右栏：无遮罩/无滑动的**悬浮覆盖层**（position:fixed，不挤压正文；开合由 NotebookWorkspace 顶栏管）。
   if (rail) {
     return (
       <aside className="pad-outline" aria-label="大纲">

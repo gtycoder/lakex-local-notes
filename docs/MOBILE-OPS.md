@@ -136,7 +136,7 @@ node scripts/css-audit/drive.mjs 9336 scripts/css-audit/mobile-walkthrough.mjs
 | 键盘开合 K1–K3 | 同上换 `keyboard-toggle.mjs` | 动 ⌨ / `viewportShell` / 外壳高 |
 | 长文档 DOM 探针 | `node scripts/mobile-audit/long-doc-dom.mjs 9336` | 动文档编辑面 / 查找；**会造数据 ⇒ 跑后重烤基线**，别在配了 S3 的机器上跑 |
 | 多维表专项快照（表单 / 内容表格 / 内容卡片） | `npm run check:bitablesnap`（默认 9336） | 动移动端多维表视图/布局/表单；**夹具自建自删**，不污染 6 态与走查 |
-| 平板专项快照（6 态，视口钉 1280×800） | `npm run check:tabletsnap -- --port 9340`（基线 `baseline/mobile-snap-tablet.json`） | 动平板外壳（双栏/页签/常驻大纲/平板工具栏）；与手机基线互不影响，详见 `scripts/mobile-audit/README.md` |
+| 平板专项快照（6 态，视口钉 1280×800） | `npm run check:tabletsnap -- --port 9340`（基线 `baseline/mobile-snap-tablet.json`） | 动平板外壳（顶栏页签 / 悬浮目录与大纲 / 平板工具栏）；与手机基线互不影响，详见 `scripts/mobile-audit/README.md` |
 
 （前三项前置都是 `bash scripts/emu-cdp.sh 9335`；口径与判据细节见 `scripts/mobile-audit/README.md` 与 `docs/MOBILE-LONG-DOC-PROBE.md`。）
 
