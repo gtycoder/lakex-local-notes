@@ -21,6 +21,8 @@ import { fillSurfaceColor } from "../../core/colorPalette.js";
 import {
   applyViewToRecords,
   bitableFillBackgroundTokens,
+  bitableRowHeightPx,
+  BITABLE_ROW_HEIGHT_OPTIONS,
   BITABLE_VIEW_TYPE_LABEL,
   buildBitableFillProjection,
   createDefaultBitableTable,
@@ -59,6 +61,8 @@ import { MobileBitableKanbanView } from "./MobileBitableKanbanView";
 import { MobileBitableGalleryView } from "./MobileBitableGalleryView";
 import { MobileBitableCalendarView } from "./MobileBitableCalendarView";
 import { MobileBitableViewConfigSheet } from "./MobileBitableViewConfigSheet";
+import { MobileSheet } from "../ui/MobileSheet";
+import { useFormFactor } from "../pad/useFormFactor";
 import { MobileBitableViewListSheet } from "./MobileBitableViewListSheet";
 import { MobileBitableViewActions } from "./MobileBitableViewActions";
 import { FieldValue } from "./MobileBitableValue";
@@ -121,6 +125,10 @@ export function MobileBitableViewer({ noteId, content, editing = false, onChange
   /** 正在编辑配置的字段 id（「修改字段」面板）。 */
   const [editingFieldId, setEditingFieldId] = useState<string | null>(null);
   const [configOpen, setConfigOpen] = useState(false);
+  /** 平板工具条 8 项：点筛选/分组/排序直接打开视图配置对应页签。 */
+  const [configTab, setConfigTab] = useState<"filter" | "sort" | "group" | "layout">("layout");
+  const [rowHeightOpen, setRowHeightOpen] = useState(false);
+  const padBitable = useFormFactor() === "expanded";
   const [tableDrawerOpen, setTableDrawerOpen] = useState(false);
   /** 数据表操作面板：独立于抽屉（抽屉关闭后再弹，避免两个层抢 z-index）。 */
   const [actionsTableId, setActionsTableId] = useState<string | null>(null);
@@ -218,6 +226,11 @@ export function MobileBitableViewer({ noteId, content, editing = false, onChange
   const showCardLayout = layout.mode === "card" && isGridLike;
 
   /** 表单编辑态（261030 P2）：只改**视图配置**（标题/描述/题目勾选），仅在文档编辑态可用。 */
+  const openViewConfig = (tab: "filter" | "sort" | "group" | "layout") => {
+    setConfigTab(tab);
+    setConfigOpen(true);
+  };
+
   const updateView = (patch: Partial<BitableView>) => {
     mutate((current) => ({
       ...current,
@@ -528,6 +541,32 @@ export function MobileBitableViewer({ noteId, content, editing = false, onChange
           editable={editable} onUpdateView={editable ? updateView : undefined} />
       ) : (
         <>
+          {padBitable ? (
+            /* 平板（expanded）：桌面同序的 9 项文字按钮（表格配置/视图/筛选/分组/排序/行高/填色/导入 CSV + 添加记录）。
+               能力确实没有的（填色 / 导入 CSV）置灰并在 title 写明原因，不做假入口。 */
+            <div className="mbt-toolbar mbt-toolbar--pad" data-prevent-swipe role="toolbar" aria-label="多维表工具">
+              <button type="button" className="mb-btn mb-btn--ghost mb-btn--sm" aria-label="表格配置"
+                disabled={!editable} title={editable ? "字段与表格配置" : "只读状态：点右上角编辑后可改"}
+                onClick={() => setFieldSheetOpen(true)}>表格配置</button>
+              <button type="button" className="mb-btn mb-btn--ghost mb-btn--sm" aria-label="视图列表" onClick={() => setViewListOpen(true)}>视图</button>
+              <button type="button" className="mb-btn mb-btn--ghost mb-btn--sm" aria-label="筛选" onClick={() => openViewConfig("filter")}>筛选</button>
+              <button type="button" className="mb-btn mb-btn--ghost mb-btn--sm" aria-label="分组" onClick={() => openViewConfig("group")}>分组</button>
+              <button type="button" className="mb-btn mb-btn--ghost mb-btn--sm" aria-label="排序" onClick={() => openViewConfig("sort")}>排序</button>
+              <button type="button" className="mb-btn mb-btn--ghost mb-btn--sm" aria-label="行高"
+                disabled={!editable} title={editable ? "行高（写视图配置）" : "只读状态：点右上角编辑后可改"}
+                onClick={() => setRowHeightOpen(true)}>行高</button>
+              <button type="button" className="mb-btn mb-btn--ghost mb-btn--sm" aria-label="填色" disabled
+                title="填色规则请在桌面配置（移动端暂不支持）">填色</button>
+              <button type="button" className="mb-btn mb-btn--ghost mb-btn--sm" aria-label="导入 CSV" disabled
+                title="导入 CSV 请在桌面完成（需要列映射）">导入 CSV</button>
+              <span className="mbt-toolbar__spacer" />
+              {editable && (
+                <button type="button" className="mb-btn mb-btn--primary mb-btn--sm" aria-label="新增记录" onClick={addRecord}>
+                  <Plus size={15} />添加记录
+                </button>
+              )}
+            </div>
+          ) : (
           <div className="mbt-toolbar" data-prevent-swipe role="toolbar" aria-label="多维表工具">
             {/* 字段是**文档结构**、与当前视图无关：任何内容视图的编辑态都要能进字段管理（钉钉同）。 */}
             {editable && (
@@ -547,6 +586,7 @@ export function MobileBitableViewer({ noteId, content, editing = false, onChange
               </button>
             )}
           </div>
+          )}
 
           {!isKnownViewType(view.type) && (
             <div className="mbt-view-notice" role="status">
@@ -588,7 +628,7 @@ export function MobileBitableViewer({ noteId, content, editing = false, onChange
               )}
             </div>
           ) : (
-            <div className="mbt-grid-wrap">
+            <div className="mbt-grid-wrap" style={{ ["--mbt-row-h" as string]: bitableRowHeightPx(view.rowHeight) + "px" }}>
               <table className="mbt-grid">
                 <thead>
                   <tr>
@@ -726,8 +766,21 @@ export function MobileBitableViewer({ noteId, content, editing = false, onChange
         editable={editable}
         onPatchPrefs={patchPrefs}
         onUpdateView={editable ? updateView : undefined}
+        initialTab={configTab}
         onClose={() => setConfigOpen(false)}
       />
+      <MobileSheet open={rowHeightOpen} title="行高" onClose={() => setRowHeightOpen(false)} bodyClassName="mb-sheet__body--form">
+        <div className="mb-chip-row" role="group" aria-label="行高">
+          {BITABLE_ROW_HEIGHT_OPTIONS.map((option) => (
+            <button key={String(option.value)} type="button"
+              className={"mb-chip" + (view.rowHeight === option.value ? " is-on" : "")}
+              onClick={() => { updateView({ rowHeight: option.value }); setRowHeightOpen(false); }}>
+              {option.label}
+            </button>
+          ))}
+        </div>
+        <p className="mbt-vcfg-hint">行高写视图配置（随正文同步）；只读状态不可改。</p>
+      </MobileSheet>
       <MobileBitableTableDrawer
         open={tableDrawerOpen}
         tables={doc.tables}

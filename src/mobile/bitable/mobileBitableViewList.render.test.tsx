@@ -15,6 +15,9 @@ import { createDefaultBitableTable, type BitableTable } from "../../core/bitable
 import { MobileBitableViewListSheet } from "./MobileBitableViewListSheet";
 import { MobileBitableViewer } from "./MobileBitableViewer";
 
+// 本文件验**手机**（compact）的工具条/面板语义：jsdom 默认 1024 宽会命中平板 expanded 分支（9 项工具条），
+// 这里把视口钉到 412。
+Object.defineProperty(window, "innerWidth", { configurable: true, writable: true, value: 412 });
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 let host: HTMLDivElement;

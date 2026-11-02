@@ -398,6 +398,22 @@ export interface BitableGroupRule {
 /** 行高：预设档位或自定义像素。 */
 export type BitableRowHeight = "low" | "medium" | "high" | "xhigh" | number;
 
+/** 行高面板的可选档位（桌面/移动共用；「低」= 云端 --lt-size-grid-row-height）。 */
+export const BITABLE_ROW_HEIGHT_OPTIONS: ReadonlyArray<{ value: BitableRowHeight; label: string }> = [
+  { value: "low", label: "低" },
+  { value: "medium", label: "中" },
+  { value: "high", label: "高" },
+];
+
+/** 行高档位 → 像素（唯一映射；桌面 estimate 与移动端 CSS 变量都取这里）。 */
+export function bitableRowHeightPx(value: BitableRowHeight | undefined): number {
+  if (typeof value === "number") return value;
+  if (value === "medium") return 44;
+  if (value === "high") return 64;
+  if (value === "xhigh") return 96;
+  return 36;
+}
+
 export interface BitableView {
   id: string;
   name: string;

@@ -7,9 +7,11 @@ import { FORM_FACTOR_BREAKPOINTS, formFactorOf, type FormFactor } from "./formFa
  * jsdom / 老 WebView 没有 matchMedia 时只靠 resize（不要因此崩掉组件树）。
  */
 export function useFormFactor(): FormFactor {
-  const [formFactor, setFormFactor] = useState<FormFactor>(() => formFactorOf(window.innerWidth));
+  // SSR / node 测试（renderToStaticMarkup）没有 window：按手机（compact）渲染，效果与生产首帧一致。
+  const [formFactor, setFormFactor] = useState<FormFactor>(() => (typeof window === "undefined" ? "compact" : formFactorOf(window.innerWidth)));
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
     const update = (): void => setFormFactor(formFactorOf(window.innerWidth));
     const media = (minWidth: number): MediaQueryList | null =>
       typeof window.matchMedia === "function" ? window.matchMedia(`(min-width: ${minWidth}px)`) : null;
