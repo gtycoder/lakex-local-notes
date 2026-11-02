@@ -72,7 +72,7 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   //      + 全局预览改悬浮覆盖（9 条：absolute/z-index 1/导航下方 top/左右 8/45dvh 内部滚动/卡面/去流内 margin）；
   //   ② −1 = 删掉旧的「预览条 margin-top 让位」流内规则（改悬浮后不再把画布往下推）；
   //   ③ +1 = 悬浮面共用选择器并入 preview。
-  "mobile/ink/inkPad.mobile.css": { decls: 99, dupGroups: 0 }, // 261102 v3 收口：+2 = 色板极窄屏兜底 overflow-x:auto（色板面板）+ widths 面板 overflow-x:visible（覆盖继承）；属新增交互形态非覆盖叠层。
+  "mobile/ink/inkPad.mobile.css": { decls: 102, dupGroups: 0 }, // 261102 v3 收口：99→102 = +1 = 悬浮条尺寸变量（--ink-mobile-nav-h / --ink-mobile-dock-h）+1 = 画布上下内距（纸面在悬浮条之间居中）+1 = 编辑态底部内距；属新增交互形态非覆盖叠层。（上一轮 +2 = 色板极窄屏兜底 overflow-x）
   "mobile/ink/inkPad.shared.css": { decls: 188, dupGroups: 0 }, // 手写板：移动端只覆盖工具栏尺寸、页面适配和 footer 换行；通用结构与桌面共用 inkPad.shared.css。
   "mobile/editor/mobile-find.css": { decls: 15, dupGroups: 0 }, // 261016：新文件 = 查找条容器（6）+ 计数（6）+ ::highlight 命中/当前命中（3）
   // 261020 P1 新文件（表格 chrome）；基线按实测回填（只许降）

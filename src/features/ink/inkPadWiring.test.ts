@@ -262,6 +262,15 @@ describe("手写板正式端到端接线", () => {
     expect(MOBILE_INK_CSS).toContain(".ink-pad--mobile .ink-page-strip__add");
   });
 
+  it("纸面在「悬浮导航—悬浮工具坞」之间的可视区居中（stage 上下补出悬浮条高度）", () => {
+    // 261102 用户报「100% 时上下空白不均」：页面按整屏居中时，底部工具坞悬浮在留白里 ⇒ 顶部空白被视觉放大。
+    // 修法 = 画布上下补出与悬浮条等高的内距（尺寸用 --ink-mobile-* 变量，与悬浮条规则同源）。
+    expect(MOBILE_INK_CSS).toContain("--ink-mobile-nav-h: calc(var(--mb-tap-min) + 1px);");
+    expect(MOBILE_INK_CSS).toContain("--ink-mobile-dock-h: calc(var(--mb-tap-min) * 2 + var(--lake-space-xs) + 1px);");
+    expect(MOBILE_INK_CSS).toMatch(/\.ink-pad--mobile \.ink-page-stage \{[\s\S]{0,160}?padding: calc\(var\(--lake-space-md\) \* 2 \+ var\(--ink-mobile-nav-h\)\) var\(--lake-space-md\) var\(--lake-space-md\);/);
+    expect(MOBILE_INK_CSS).toMatch(/\.ink-pad--mobile:not\(\[data-readonly="true"\]\) \.ink-page-stage \{[\s\S]{0,120}?padding-bottom: calc\(var\(--lake-space-md\) \* 2 \+ var\(--ink-mobile-dock-h\)\);/);
+  });
+
   it("桌面创建、IPC、路由与移动端创建/路由均已接通", () => {
     expect(STORE).toContain("createInkIn(");
     expect(IPC).toContain('ipc.handle("create_ink_in"');

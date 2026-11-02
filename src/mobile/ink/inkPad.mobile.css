@@ -1,5 +1,10 @@
 /* 移动端手写板 v2（261102 用户反馈）：导航条与编辑工具坞都做成**悬浮 overlay**，不占布局；
    只读态画布吃满高度；悬浮面全部走 --lake-* 令牌（panel/边/阴影/圆角），不做毛玻璃。 */
+/* 悬浮条尺寸（供「纸面在可视区居中」用）：导航 45（44 按钮 + 0.5px 边）、工具坞 89（工具行 48 + 纸张行 40 + 1px 边）。 */
+.ink-pad--mobile {
+  --ink-mobile-nav-h: calc(var(--mb-tap-min) + 1px);
+  --ink-mobile-dock-h: calc(var(--mb-tap-min) * 2 + var(--lake-space-xs) + 1px);
+}
 
 /* 触达 ≥44：所有可点按钮盒统一 --mb-tap-min（视觉更小由内圆/图标/纸张行高度收）。 */
 .ink-pad--mobile .ink-tool,
@@ -63,7 +68,15 @@
 .ink-pad--mobile .ink-color.is-active { border: 0; box-shadow: none; }
 .ink-pad--mobile .ink-color.is-active > span { box-shadow: 0 0 0 var(--lake-focus-ring-width) var(--lake-accent); }
 
-.ink-pad--mobile .ink-page-stage { padding: 8px; overflow: auto; align-items: safe center; justify-content: safe center; }
+/* 纸面在「悬浮导航—悬浮工具坞」之间的**可视区**居中：画布上下补出与悬浮条等高的内距，
+   否则页面按整屏居中、空白全被顶部吃掉（用户 261102 报的上下空白不均）。 */
+.ink-pad--mobile .ink-page-stage {
+  padding: calc(var(--lake-space-md) * 2 + var(--ink-mobile-nav-h)) var(--lake-space-md) var(--lake-space-md);
+  overflow: auto; align-items: safe center; justify-content: safe center;
+}
+.ink-pad--mobile:not([data-readonly="true"]) .ink-page-stage {
+  padding-bottom: calc(var(--lake-space-md) * 2 + var(--ink-mobile-dock-h));
+}
 .ink-pad--mobile .ink-page-frame { width: min(100%, calc((100dvh - 202px) * 0.707)); max-height: 100%; aspect-ratio: 794 / 1123; }
 /* 保存失败横幅也被悬浮导航条压着 ⇒ 下移一条导航的高度（只在移动端）。 */
 .ink-pad--mobile > .ink-invalid-banner { margin-top: calc(var(--mb-tap-min) + var(--lake-space-xl)); }
