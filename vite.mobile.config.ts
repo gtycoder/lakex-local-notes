@@ -75,6 +75,9 @@ function mobileBundleFinalize(): Plugin {
     writeBundle() {
       fs.copyFileSync("dist-mobile/mobile.html", "dist-mobile/index.html");
       fs.writeFileSync("dist-mobile/preview.html", MOBILE_PREVIEW_HTML);
+      // 桌面 PDF 导入用的 pdf.js CMap 数据在 public/vendor/pdfjs（约 1.6MB）：移动端用原生 PdfRenderer，
+      // 不需要这份数据 ⇒ 从 APK 产物里剔掉，别白白增大安装包。
+      fs.rmSync("dist-mobile/vendor/pdfjs", { recursive: true, force: true });
     },
   };
 }

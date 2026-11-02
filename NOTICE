@@ -15,6 +15,8 @@ Local Lakex Notes — 第三方组件与许可说明
 
 二、其它第三方
 - Univer：Apache-2.0（@univerjs/* 1.0.3，精确锁）
+- PDF.js：Apache-2.0（pdfjs-dist 6.4.299 的 cmaps 数据文件；随 `public/vendor/pdfjs/` 分发，LICENSE 随附）
+- unpdf：MIT（AI PDF 文本抽取；内置 pdf.js 渲染器供桌面 PDF 导入使用）
 - Drawnix / plait：见 vendor/lakex-drawnix* 包内许可
 - Lucide：ISC
 - MiSans：小米 MiSans 字体许可
