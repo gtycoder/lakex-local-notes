@@ -57,6 +57,12 @@ function byLabel(container: HTMLElement, label: string): HTMLButtonElement | und
   return Array.from(container.querySelectorAll("button")).find((b) => b.getAttribute("aria-label") === label) as HTMLButtonElement | undefined;
 }
 
+/** 编辑态工具坞「插入」→ 悬浮菜单里点一项（图片/PDF 两个入口都收在这里）。 */
+async function importFromInsertMenu(container: HTMLElement, label: string): Promise<void> {
+  await act(async () => { byLabel(container, "插入")!.click(); });
+  await act(async () => { byLabel(container, label)!.click(); });
+}
+
 beforeAll(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   class ResizeObserverStub {
@@ -111,26 +117,31 @@ describe("图片页渲染", () => {
 });
 
 describe("导入图片入口", () => {
-  it("移动端：入口在编辑态的全局预览里；导入后追加成页、切到新页并关预览", async () => {
+  it("移动端：入口在编辑态工具坞的「插入」菜单；导入后追加成页、切到新页并关菜单", async () => {
     const imported: InkPage = inkImagePage({ url: localAssetHttpUrl("note-1", "1700000000001_abcdef13.png"), fit: "contain" }, "imported-1");
     const onImportImages = vi.fn(async () => ({ pages: [imported], errors: [] }));
     const view = await mount({ content: inkToBody(createInkDoc("p1")), variant: "mobile", readOnly: false, onImportImages });
 
+    // 工具坞里有「插入」且排在第一位；预览面板里不再有导入入口
+    const toolRow = view.container.querySelector('[data-overlay="dock"] .ink-toolbar[aria-label="画笔工具"]')!;
+    expect(toolRow.querySelector("button")!.getAttribute("aria-label")).toBe("插入");
     await act(async () => { byLabel(view.container, "全局预览")!.click(); });
-    const importButton = byLabel(view.container, "导入图片");
-    expect(importButton).not.toBeNull();
-    expect(importButton!.disabled).toBe(false);
-    await act(async () => { importButton!.click(); });
+    expect(byLabel(view.container, "导入图片")).toBeUndefined();
+    expect(view.container.querySelector("[data-ink-import]")).toBeNull();
+    await act(async () => { byLabel(view.container, "全局预览")!.click(); });
+
+    await importFromInsertMenu(view.container, "导入图片");
+    const menu = view.container.querySelector('[data-overlay="insert"]');
+    expect(menu).toBeNull(); // 选完即关
     expect(onImportImages).toHaveBeenCalledTimes(1);
-    // 新页成为当前页、关预览、SVG 里出现新图
     expect(view.container.querySelector(".ink-pages span")!.textContent).toContain("第 2 / 2 页");
-    expect(view.container.querySelector('[data-overlay="preview"]')).toBeNull();
     expect(view.container.querySelector(".ink-page-svg image")!.getAttribute("href")).toBe(imported.backgroundImage!.url);
     await view.unmount();
   });
 
-  it("移动端阅读态：预览里没有导入入口（正文写操作只在编辑态）", async () => {
+  it("移动端阅读态：没有「插入」、预览里也没有导入入口（正文写操作只在编辑态）", async () => {
     const view = await mount({ content: inkToBody(createInkDoc("p1")), variant: "mobile", readOnly: true, onImportImages: async () => null });
+    expect(byLabel(view.container, "插入")).toBeUndefined();
     await act(async () => { byLabel(view.container, "全局预览")!.click(); });
     expect(byLabel(view.container, "导入图片")).toBeUndefined();
     await view.unmount();
@@ -151,8 +162,7 @@ describe("导入图片入口", () => {
   it("导入失败：给可见错误横幅（role=alert），不成页", async () => {
     const onImportImages = vi.fn(async () => ({ pages: [], errors: ["big.png：超过 25 MiB 上限"] }));
     const view = await mount({ content: inkToBody(createInkDoc("p1")), variant: "mobile", readOnly: false, onImportImages });
-    await act(async () => { byLabel(view.container, "全局预览")!.click(); });
-    await act(async () => { byLabel(view.container, "导入图片")!.click(); });
+    await importFromInsertMenu(view.container, "导入图片");
     const alert = view.container.querySelector('[role="alert"]');
     expect(alert).not.toBeNull();
     expect(alert!.textContent).toContain("超过 25 MiB 上限");

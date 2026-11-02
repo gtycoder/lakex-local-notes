@@ -27,7 +27,7 @@ export interface ExportSubmenuItemProps {
  * - usheet：CSV（活动工作表）/ Excel（全部工作表）；
  * - bitable：CSV（活动数据表）；
  * - board：PNG / SVG（已接线：复用画板内 Drawnix 导出；画板需已打开）。
- * - ink：正式 v1 不提供导出（子菜单只有下面的资料路径工具）。
+ * - ink：只提供「导出为 PDF」（逐页压平：背景图 + 矢量笔迹）；其它格式对 ink 仍不提供。
  * 「导出资料路径（本机 AI）」是与格式无关的本地路径工具，各类型都保留。
  *
  * 视觉/交互/定位全部交给标准原语 `<Submenu>`；本组件只提供行文案与菜单项。
@@ -67,7 +67,10 @@ export function ExportSubmenuItem({ kind, onExportAs, onCopyMarkdown, onCopyPath
           <button role="menuitem" onClick={run(() => onExportAs("svg"))}>导出为 SVG</button>
         </>
       )}
-      {type !== "ink" && <div className="context-menu-sep" />}
+      {type === "ink" && (
+        <button role="menuitem" onClick={run(() => onExportAs("pdf"))}>导出为 PDF（手写压平）</button>
+      )}
+      <div className="context-menu-sep" />
       <button role="menuitem" onClick={run(onCopyPaths)}>导出资料路径（本机 AI）</button>
     </Submenu>
   );

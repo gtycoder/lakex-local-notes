@@ -59,5 +59,8 @@ describe("系统分享接入（ACTION_SEND）", () => {
     expect(share).toMatch(/export function sharedContentKind/);
     expect(share).toMatch(/kind !== "image"/);
     expect(share).toMatch(/application\/pdf/);
+    // 261102 T2-D：PDF 字节读取 helper（分享→自动导入的读取口）；pdf 分支交给它消费，seed 里不删
+    expect(share).toMatch(/export async function readSharedContentBytes\(content: SharedContent\)/);
+    expect(share).toMatch(/if \(kind === "file" && path\)/);
   });
 });
