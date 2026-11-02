@@ -34,6 +34,7 @@ import { useNotebookTreeActions } from "./useNotebookTreeActions";
 import { SELF_REGISTERED_OVERLAY_KINDS, useWorkspaceOverlays } from "./useWorkspaceOverlays";
 import { NotebookTreeList } from "./NotebookTreeList";
 import { useFormFactor } from "../pad/useFormFactor";
+import { readPadPanelPrefs, writePadPanelPrefs } from "../pad/padPanelPrefs";
 import { usePadShortcuts } from "../pad/usePadShortcuts";
 export type { NotebookTreeItem } from "./useNotebookTreeData";
 /** 表格 / 多维表视图按需加载：只有真的打开这类文档才进分包（首屏不含它们）。 */
@@ -138,11 +139,14 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   const formFactor = useFormFactor();
   const padTwoPane = formFactor === "expanded";
   // 树/大纲默认收起、默认**悬浮**（不占布局）；固定 = 停靠进布局、可编辑区随之收窄。
-  // 只在本会话生效（设备本地视图，不进正文/不进 S3；每次冷启回到"收起+悬浮"）。
-  const [padTreeOpen, setPadTreeOpen] = useState(false);
-  const [padOutlineOpen, setPadOutlineOpen] = useState(false);
-  const [padTreePinned, setPadTreePinned] = useState(false);
-  const [padOutlinePinned, setPadOutlinePinned] = useState(false);
+  // 固定偏好**持久化**（设备本地 localStorage，不进正文/不进 S3）；冷启时曾固定的面板按固定态打开。
+  const [padPanelPrefs] = useState(readPadPanelPrefs);
+  const [padTreeOpen, setPadTreeOpen] = useState(padPanelPrefs.tree);
+  const [padOutlineOpen, setPadOutlineOpen] = useState(padPanelPrefs.outline);
+  const [padTreePinned, setPadTreePinned] = useState(padPanelPrefs.tree);
+  const [padOutlinePinned, setPadOutlinePinned] = useState(padPanelPrefs.outline);
+  // 只记 pinned（开合不记：冷启按 pinned 决定是否直接停靠展开）。
+  useEffect(() => { writePadPanelPrefs({ tree: padTreePinned, outline: padOutlinePinned }); }, [padTreePinned, padOutlinePinned]);
   const padDocked = padTwoPane && ((padTreeOpen && padTreePinned) || (padOutlineOpen && padOutlinePinned));
   const togglePadTree = useCallback(() => setPadTreeOpen((v) => !v), []);
   const closePadTree = useCallback(() => setPadTreeOpen(false), []);
@@ -251,6 +255,13 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   useEffect(() => { if (!outlineAvailable) closeOverlay("outline"); }, [outlineAvailable, closeOverlay]);
   // 平板悬浮大纲栏同理：切到没有大纲的文档类型时自动收起。
   useEffect(() => { if (!outlineAvailable) setPadOutlineOpen(false); }, [outlineAvailable]);
+  // 「固定」偏好持久化后，冷启进工作区时往往**还没有活动文档**（大纲被上面的 auto-close 收掉）⇒
+  // 切到一篇文章时把固定的大纲重新出现。用户在本次会话里手动收起的不会被立刻强开（只在换文档时补开）。
+  const padOutlineOpenRef = useRef(padOutlineOpen);
+  padOutlineOpenRef.current = padOutlineOpen;
+  useEffect(() => {
+    if (padTwoPane && padOutlinePinned && outlineAvailable && !padOutlineOpenRef.current) setPadOutlineOpen(true);
+  }, [activeId, padTwoPane, padOutlinePinned, outlineAvailable]);
 
   // 初次进入（仅一次）：
   //  - 显式指定了要打开的文档（首页/搜索/新建）→ 它排第一并激活（修"从首页点文档直达不了"），

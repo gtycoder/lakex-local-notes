@@ -664,7 +664,7 @@ P0 体面单栏（1–2）→ P1 双栏（3–5）→ 工具栏 T0（5–7，§8
 
 - **工具条（一律与手机一致）**：Lake 编辑态回 `EditorDockHost`（`showToolbar:!editing`，内核固定工具栏不再启用）；多维表删 9 项文字条 + 行高入口（筛选/排序/分组从「视图配置」页签进）；手写板删 `inlineTools`（回 v3 悬浮色板/笔宽，prop 已整体删除）；表格删只读常驻 dock（只读=无 dock，编辑态 fixed + 96px spacer）。**不要再给平板开第二套工具条**。
 - **胶囊**：工作区胶囊（文档树/标签页/大纲/切换笔记本）在 expanded 恢复渲染；平板顶栏只留「返回 + 文档页签条 + 查找/编辑/同步」；胶囊编辑态隐藏（手机同款）。AGENTS 的「平板不挂胶囊」例外已撤回。
-- **树/大纲**：默认收起 + 默认**悬浮**（fixed，280/240，z=`--mobile-z-drawer`45）；面板头 **Pin 固定按钮** → `position:static` 停靠进布局，`.pad-main--docked` 改 row 三栏、可编辑空间收窄（实测正文 1280→1000）；再点回悬浮。收起 = 胶囊/点正文/Esc，**固定态不吃这些收起路径**（它不是临时浮层）；点开文档自动收悬浮左栏。**固定状态仅会话内**，不写 localStorage/不进正文。
+- **树/大纲**：默认收起 + 默认**悬浮**（fixed，280/240，z=`--mobile-z-drawer`45）；面板头 **Pin 固定按钮** → `position:static` 停靠进布局，`.pad-main--docked` 改 row 三栏、可编辑空间收窄（实测正文 1280→1000）；再点回悬浮。收起 = 胶囊/点正文/Esc，**固定态不吃这些收起路径**（它不是临时浮层）；点开文档自动收悬浮左栏。**固定状态持久化**：`lakex-local-notes-mobile.pad-panels`（只存 {tree,outline} 的 pinned；设备本地视图，不写正文/不进 S3；冷启直接按固定态停靠展开；坏值/缺字段回落 false）。门禁装置每态前会清掉这个 key（`snap-lib.clearPadPanels`），保证基线只认「无固定」的默认态。
 - **宽度**：正文满宽 + `--mb-reader-pad:32`（沿 10.15）之上，知识库补齐 —— `.mobile-library`/`.nb-shelf`/`.nb-list` 1080 + 书架列 `repeat(auto-fill,minmax(96px,1fr))`（1280 实测 9 列、书架 976）；小记时间线仍 760。
 - **画布高度**：`.mobile-doc-body > .lake-editor` 与 `.lake-editor-mount` 在 expanded 下 `height:100%`（内核按内容撑成 ~85px，挂载实高 85→612）。**已知**：点画布空白处不会落光标（内核只认引擎内点击，与手机一致）——如需"点空白即定位文末"要另加 JS。
 - **键盘**：dock 的 `.med-btn--kb` 就是收起/展开键盘（手机同一条）；十三批的 `.pad-kb-dismiss` 浮钮与顶栏 `onPointerDown` 已删。

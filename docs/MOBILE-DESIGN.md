@@ -258,7 +258,7 @@ Toast        .mb-toast-host > .mb-toast[--error] > (.mb-toast__text, .mb-toast__
 
 **261102 十四批定稿（用户）：平板 = 更宽的移动端外壳，不是桌面板。** 桌面那套工具栏/密度不适合触屏，已整体回退：
 - **胶囊 / 底部 dock / 各编辑器工具条与手机完全一致**（Lake 编辑态走 `EditorDockHost`、多维表紧凑工具条、表格手机 dock、手写板 v3 悬浮色板）。**不要再给平板开第二套工具条**（内核固定工具栏/9 项文字条/内联色板/常驻只读 dock 都已试过并回退）。
-- **expanded 只多两件事**：① 更宽 —— 正文满宽 + `--mb-reader-pad: 32px`（手机 20），知识库 `.nb-shelf/.nb-list` 1080（书架列按 `repeat(auto-fill, minmax(96px,1fr))` 自适应），小记时间线仍 760；② 树 / 大纲默认**悬浮覆盖**（`.pad-tree` 280 / `.pad-outline` 240，top = `--pad-float-top`；层序 `--mobile-z-drawer`(45)，**不要用桌面 `--lake-z-sidebar`(250)**），收起路径 = 胶囊 / 点正文 / Esc；面板头有**固定按钮**，固定 = `position:static` 停靠进布局（`.pad-main--docked` 三栏、可编辑空间收窄），再次点击回到悬浮。固定状态只在本会话（设备本地视图，不持久化）。
+- **expanded 只多两件事**：① 更宽 —— 正文满宽 + `--mb-reader-pad: 32px`（手机 20），知识库 `.nb-shelf/.nb-list` 1080（书架列按 `repeat(auto-fill, minmax(96px,1fr))` 自适应），小记时间线仍 760；② 树 / 大纲默认**悬浮覆盖**（`.pad-tree` 280 / `.pad-outline` 240，top = `--pad-float-top`；层序 `--mobile-z-drawer`(45)，**不要用桌面 `--lake-z-sidebar`(250)**），收起路径 = 胶囊 / 点正文 / Esc；面板头有**固定按钮**，固定 = `position:static` 停靠进布局（`.pad-main--docked` 三栏、可编辑空间收窄），再次点击回到悬浮。固定状态**持久化**（设备本地 `lakex-local-notes-mobile.pad-panels`，只存 pinned；不进正文/同步；门禁每态前清掉以保证基线稳定）。
 - **正文画布吃满可视编辑空间**：`.mobile-doc-body > .lake-editor` 与 `.lake-editor-mount` 在 expanded 下 `height:100%`（内核原本按内容撑成 ~85px ⇒ 下方一大块空白点不到）。
 - 细节规格以 `docs/PAD-ADAPTATION.md` §10 最新一批为准（该文件是长期 pad 规格）。
 

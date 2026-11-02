@@ -66,6 +66,7 @@ node scripts/mobile-audit/check-mobile-snap.mjs --port 9336                     
   在 `lake_tab`（pixel_tablet）或手机上都能复现同一套布局。
 - **基线独立**：`scripts/mobile-audit/baseline/mobile-snap-tablet.json`（手机基线 `mobile-snap.json` 不动）。
 - **home-doc 走平板路径**：点底部胶囊「文档树」打开**悬浮左栏**（`.pad-tree`，默认收起；十四批起平板与手机同壳，胶囊回来了）再点行。
+- **每态前清平板「目录/大纲固定」偏好**（`lakex-local-notes-mobile.pad-panels`，`snap-lib.clearPadPanels`）：它是设备本地持久偏好，不清会把人为固定过的停靠布局带进快照。
 
 ```bash
 # 前置：专用实例 + 固定夹具（与 6 态同一份 gate-fixture）

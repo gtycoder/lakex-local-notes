@@ -49,9 +49,15 @@ export const setLibraryView = async (page, view) =>
 export const clearTabs = async (page) =>
   page.evaluate("(function(){try{var ks=[];for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);if(k&&k.indexOf('lakex-local-notes-mobile.tabs.')===0)ks.push(k);}ks.forEach(function(k){localStorage.removeItem(k);});return ks.length;}catch(e){return -1;}})()");
 
+/** 平板「目录/大纲固定」是**设备本地持久偏好**（261102 十四批）⇒ 门禁每态前清掉：
+ *  否则上一次人为固定过的面板会把停靠布局带进快照（基线只认"无固定"的默认态）。 */
+export const clearPadPanels = async (page) =>
+  page.evaluate("(function(){try{localStorage.removeItem('lakex-local-notes-mobile.pad-panels');return true;}catch(e){return false;}})()");
+
 /** 每态都从"冷启动首页"开始：清标签 + 钉住视图 → reload → 等 .mobile-htab → 导航 → 等静默 */
 export const reload = async (page, view) => {
   await clearTabs(page);
+  await clearPadPanels(page);
   if (view) await setLibraryView(page, view);
   await page.send("Page.reload", { ignoreCache: false });
   await page.sleep(1200);
