@@ -118,7 +118,8 @@
 }
 /* 全局预览里的「导入图片」（仅编辑态；v2 图片页）：一行居中，按钮盒仍 44、文字走 tiny 档。 */
 .ink-pad--mobile > [data-overlay="preview"] [data-ink-import] {
-  display: flex; justify-content: center;
+  display: flex; flex-wrap: wrap; justify-content: center;
+  gap: var(--lake-space-md);
   padding: 0 var(--lake-space-md) var(--lake-space-md);
 }
 .ink-pad--mobile > [data-overlay="preview"] [data-ink-import] .ink-tool {
@@ -126,4 +127,12 @@
   padding: 0 var(--lake-space-lg);
   color: var(--lake-accent-text);
   font-size: var(--lake-font-size-tiny);
+}
+/* PDF 导入进度（编辑态横幅）：文案 + 取消按钮一行排开；按钮沿用 .ink-tool（44 盒）。 */
+.ink-pad--mobile > [data-ink-pdf-progress] {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--lake-space-md);
+}
+.ink-pad--mobile > [data-ink-pdf-progress] .ink-tool {
+  min-width: auto; padding: 0 var(--lake-space-lg);
 }

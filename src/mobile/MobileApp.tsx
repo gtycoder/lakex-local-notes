@@ -12,7 +12,7 @@ import { isGoneNote } from "../core/syncDecisions";
 import { setNoteRefHost } from "../features/editor/noteRef";
 import type { TreeNode } from "../lib/types";
 import { HomePage, type MobileQuickNote } from "./home/HomePage";
-import { consumeSharedContent, sharedContentToSeed, subscribeSharedContent, type QuickNoteSeed } from "./native/sharedContent";
+import { consumeSharedContent, sharedContentToSeed, sharedContentUnsupportedHint, subscribeSharedContent, type QuickNoteSeed } from "./native/sharedContent";
 import { sha256Sync } from "../core/sha256Sync.js";
 import { scheduleComposerPrewarm, scheduleKernelPrewarm } from "./native/kernelPrewarm";
 import { QuickNoteComposerLazy } from "./home/quickNoteComposerLazy";
@@ -320,6 +320,9 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
       const content = await consumeSharedContent();
       if (!alive || !content) return;
       if (content.imageError) showToast(content.imageError, { type: "error" });
+      // 261102 T2-C：PDF/文件分享先给可见提示（PDF 导入 UI 未接通），**不静默当图片**；只有 image 才进小记 seed。
+      const unsupported = sharedContentUnsupportedHint(content);
+      if (unsupported) showToast(unsupported, { type: "error" });
       const seed = await sharedContentToSeed(content);
       if (alive && seed) { setCaptureSeed(seed); setCaptureNonce((n) => n + 1); setCaptureOpen(true); }
     })();
@@ -328,6 +331,9 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
   useEffect(() => subscribeSharedContent((content) => {
     void (async () => {
       if (content.imageError) showToast(content.imageError, { type: "error" });
+      // 261102 T2-C：PDF/文件分享先给可见提示（PDF 导入 UI 未接通），**不静默当图片**；只有 image 才进小记 seed。
+      const unsupported = sharedContentUnsupportedHint(content);
+      if (unsupported) showToast(unsupported, { type: "error" });
       const seed = await sharedContentToSeed(content);
       if (seed) { setCaptureSeed(seed); setCaptureNonce((n) => n + 1); setCaptureOpen(true); }
     })();

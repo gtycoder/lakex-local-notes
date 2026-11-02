@@ -22,3 +22,8 @@
 .ink-pad--desktop .ink-page-frame { height: min(100%, calc(100dvh - 156px)); aspect-ratio: 794 / 1123; box-shadow: var(--lake-shadow-card); }
 .ink-pad--desktop .ink-footer { padding: 5px 8px; }
 .ink-pad--desktop .ink-footer { justify-content: flex-start; gap: 16px; }
+/* PDF 导入进度（桌面工具条下方的横幅）：文案 + 取消按钮一行排开。 */
+.ink-pad--desktop [data-ink-pdf-progress] {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px;
+}

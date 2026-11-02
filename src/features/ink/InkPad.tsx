@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import type { EditorCaptureHandler } from "../../core/editorCapture";
-import { ChevronLeft, ChevronRight, Eraser, Highlighter, ImagePlus, LayoutGrid, Minus, Pen, Plus, Redo2, Undo2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Eraser, FileText, Highlighter, ImagePlus, LayoutGrid, Minus, Pen, Plus, Redo2, Undo2 } from "lucide-react";
 import { COLOR_BOARD_GROUPS, QUICK_TEXT_COLORS } from "../../core/colorPalette.js";
 import {
   createInkPage,
@@ -29,6 +29,7 @@ import { InkPaper } from "./InkPaper.js";
 import InkPageStrip from "./InkPageStrip.js";
 import { newInkId } from "./ids.js";
 import type { InkImageImportOutcome } from "./inkImageImport.js";
+import { INK_PDF_MAX_PAGES, planPdfPageInsert, type PdfImportOutcome } from "./pdfImport.js";
 
 export type InkPadMode = InkTool | "eraser";
 
@@ -47,6 +48,14 @@ export interface InkPadProps {
    * 返回 null = 用户取消；pages 会被追加成新页并切到第一张新页（只能在编辑态调用）。
    */
   onImportImages?: () => Promise<InkImageImportOutcome | null>;
+  /**
+   * v2 PDF 页导入（两端各自注入：选 PDF + 落原文件 + 逐页栅格化 + 上传）。
+   * onProgress 用于「第 n/N 页」；signal 用于「取消」（abort 后实现方应尽快停止）。
+   */
+  onImportPdf?: (options: {
+    onProgress: (done: number, total: number) => void;
+    signal: AbortSignal;
+  }) => Promise<PdfImportOutcome | null>;
 }
 
 const SAVE_DEBOUNCE_MS = 500;
@@ -113,7 +122,7 @@ const StaticStrokeLayer = memo(function StaticStrokeLayer({ strokes }: { strokes
   );
 });
 
-export function InkPad({ content, readOnly = false, variant, active, paneVisible, pane, onChange, onDirty, onEditorCapture, onImportImages }: InkPadProps) {
+export function InkPad({ content, readOnly = false, variant, active, paneVisible, pane, onChange, onDirty, onEditorCapture, onImportImages, onImportPdf }: InkPadProps) {
   // 正文只在挂载时解析；父层保存会更新 content，但编辑器不应因此反复解析整份大 JSON。
   // 外部真正需要换正文时由宿主 bump reloadKey 重挂载。
   const [doc, setDoc] = useState<InkDoc | null>(() => parseInkBody(content));
@@ -135,8 +144,12 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
   const [saveError, setSaveError] = useState<string | null>(null);
   // v2 图片页导入：进行中标记 + 可见错误（失败/超限要能看见）
   const [importing, setImporting] = useState(false);
+  const [pdfImporting, setPdfImporting] = useState(false);
+  const [pdfProgress, setPdfProgress] = useState<{ done: number; total: number } | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
   const importingRef = useRef(false);
+  const pdfImportingRef = useRef(false);
+  const pdfAbortRef = useRef<AbortController | null>(null);
   // 撤销/重做只存页级补丁；整篇正文序列化只用于保存。
   const undoRef = useRef<InkHistoryEntry[]>([]);
   const redoRef = useRef<InkHistoryEntry[]>([]);
@@ -156,6 +169,8 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
   onEditorCaptureRef.current = onEditorCapture;
   const onImportImagesRef = useRef(onImportImages);
   onImportImagesRef.current = onImportImages;
+  const onImportPdfRef = useRef(onImportPdf);
+  onImportPdfRef.current = onImportPdf;
   /** 阅读态：翻页/缩放只改本地视图，capture 绝不可交出可写正文（桌面锁定文档的保存管线会按需 capture）。 */
   const readOnlyRef = useRef(readOnly);
   readOnlyRef.current = readOnly;
@@ -385,14 +400,14 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
    */
   const importImages = useCallback(async () => {
     const importer = onImportImagesRef.current;
-    if (!importer || readOnly || importingRef.current) return;
+    if (!importer || readOnly || importingRef.current || pdfImportingRef.current) return;
     importingRef.current = true;
     setImporting(true);
     setImportError(null);
     try {
       const outcome = await importer();
       if (!outcome) return; // 用户取消
-      if (outcome.errors.length > 0) setImportError(outcome.errors.join("；"));
+      if (outcome.errors.length > 0) setImportError("导入图片失败：" + outcome.errors.join("；"));
       const current = docRef.current;
       if (!current || outcome.pages.length === 0) return;
       const added = outcome.pages;
@@ -405,12 +420,62 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
       setPagesOpen(false);
       setPendingDeletePageId(null);
     } catch (reason) {
-      setImportError(reason instanceof Error ? reason.message : "导入图片失败");
+      setImportError("导入图片失败：" + (reason instanceof Error ? reason.message : String(reason)));
     } finally {
       importingRef.current = false;
       setImporting(false);
     }
   }, [commit, readOnly]);
+
+  /**
+   * v2：导入 PDF（编辑态）。宿主负责选 PDF / 落原文件 / 逐页栅格化 / 上传；
+   * 这里管进度、取消、成页（空白单页文档用第一页替换）与可见错误。
+   */
+  const importPdf = useCallback(async () => {
+    const importer = onImportPdfRef.current;
+    if (!importer || readOnly || importingRef.current || pdfImportingRef.current) return;
+    pdfImportingRef.current = true;
+    setPdfImporting(true);
+    setPdfProgress({ done: 0, total: 0 });
+    setImportError(null);
+    const controller = new AbortController();
+    pdfAbortRef.current = controller;
+    try {
+      const outcome = await importer({
+        onProgress: (done, total) => setPdfProgress({ done, total }),
+        signal: controller.signal,
+      });
+      if (!outcome) return; // 用户取消选文件
+      if (outcome.cancelled) {
+        setImportError("已取消 PDF 导入");
+        return;
+      }
+      if (outcome.errors.length > 0) setImportError(outcome.errors.join("；"));
+      if (outcome.truncated) {
+        const truncatedHint = `PDF 共 ${outcome.pageCount} 页，本次只导入前 ${outcome.importedPageCount} 页（上限 ${INK_PDF_MAX_PAGES} 页）`;
+        setImportError((previous) => (previous ? previous + "；" + truncatedHint : truncatedHint));
+      }
+      const current = docRef.current;
+      if (!current || outcome.pages.length === 0) return;
+      const plan = planPdfPageInsert(current, outcome.pages, outcome.sourcePdf);
+      if (!plan) return;
+      commit(plan.next, plan.patch);
+      // 导入后落在第一张 PDF 页上继续批注
+      setPagesOpen(false);
+      setPendingDeletePageId(null);
+    } catch (reason) {
+      setImportError(reason instanceof Error ? reason.message : "导入 PDF 失败");
+    } finally {
+      pdfImportingRef.current = false;
+      pdfAbortRef.current = null;
+      setPdfImporting(false);
+      setPdfProgress(null);
+    }
+  }, [commit, readOnly]);
+
+  const cancelPdfImport = useCallback(() => {
+    pdfAbortRef.current?.abort();
+  }, []);
 
   const selectPage = useCallback((id: string) => {
     const current = docRef.current;
@@ -648,10 +713,15 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
           <span className="ink-toolbar__sep" />
           <button className="ink-tool" onClick={undo} aria-label="撤销" title="撤销" disabled={readOnly || !canUndo}><Undo2 size={16} /></button>
           <button className="ink-tool" onClick={redo} aria-label="重做" title="重做" disabled={readOnly || !canRedo}><Redo2 size={16} /></button>
-          {onImportImages && (
+          {(onImportImages || onImportPdf) && (
             <>
               <span className="ink-toolbar__sep" />
-              <button className="ink-tool" onClick={() => void importImages()} aria-label="导入图片" title="导入图片" disabled={readOnly || importing}><ImagePlus size={16} /></button>
+              {onImportImages && (
+                <button className="ink-tool" onClick={() => void importImages()} aria-label="导入图片" title="导入图片" disabled={readOnly || importing || pdfImporting}><ImagePlus size={16} /></button>
+              )}
+              {onImportPdf && (
+                <button className="ink-tool" onClick={() => void importPdf()} aria-label="导入 PDF" title="导入 PDF" disabled={readOnly || importing || pdfImporting}><FileText size={16} /></button>
+              )}
             </>
           )}
           {variant === "desktop" && (
@@ -693,7 +763,17 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
       )}
 
       {saveError && <div className="ink-invalid-banner" role="alert">{saveError}；本次修改未写入。</div>}
-      {importError && <div className="ink-invalid-banner" role="alert">导入图片失败：{importError}</div>}
+      {importError && <div className="ink-invalid-banner" role="alert">{importError}</div>}
+      {pdfImporting && (
+        <div className="ink-invalid-banner" role="status" data-ink-pdf-progress>
+          <span>
+            {pdfProgress && pdfProgress.total > 0
+              ? `正在导入 PDF：第 ${pdfProgress.done} / ${pdfProgress.total} 页`
+              : "正在导入 PDF：准备中…"}
+          </span>
+          <button className="ink-tool" onClick={cancelPdfImport} aria-label="取消 PDF 导入" title="取消 PDF 导入">取消</button>
+        </div>
+      )}
 
       {pagesOpen && (variant === "desktop" ? (
         <InkPageStrip
@@ -725,11 +805,18 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
             onClose={() => { setPagesOpen(false); setPendingDeletePageId(null); }}
             readOnly={readOnly}
           />
-          {!readOnly && onImportImages && (
+          {!readOnly && (onImportImages || onImportPdf) && (
             <div data-ink-import>
-              <button className="ink-tool" onClick={() => void importImages()} aria-label="导入图片" title="导入图片" disabled={importing}>
-                <ImagePlus size={18} /><span>导入图片</span>
-              </button>
+              {onImportImages && (
+                <button className="ink-tool" onClick={() => void importImages()} aria-label="导入图片" title="导入图片" disabled={importing || pdfImporting}>
+                  <ImagePlus size={18} /><span>导入图片</span>
+                </button>
+              )}
+              {onImportPdf && (
+                <button className="ink-tool" onClick={() => void importPdf()} aria-label="导入 PDF" title="导入 PDF" disabled={importing || pdfImporting}>
+                  <FileText size={18} /><span>导入 PDF</span>
+                </button>
+              )}
             </div>
           )}
         </div>

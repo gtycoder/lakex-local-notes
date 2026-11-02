@@ -74,7 +74,8 @@ v1 不包含：OCR/手写转文字、套索、局部像素橡皮、导出 PNG/PD
 - 手写正文暂不进入全文搜索（无 OCR）；标题仍按 `notes.title` 搜索。
 - 历史快照按页面/笔迹/采样点数量生成结构化预览，不尝试识别文字，也不把 ink JSON 误挂到画板预览器。
 - **v2（261102 T1：图片页）**：`version=2`（读 1|2、写 2）；每页可选 `backgroundImage`（必须是本笔记空间 canonical 本地资产 URL，末段磁盘名参与资产声明 / GC；`fit` contain|cover|stretch、`opacity`、`pixelWidth/Height`、`source` image|pdf-page、`pdf` {url,page,pageCount}），整篇可选 `sourcePdf` {url,pageCount}。图片页不再画纸张底纹；渲染 = 在 InkPaper 之前加 SVG `<image>`（页面逻辑坐标、`pointer-events:none`）；缩略图取资产 `?w=256` 低清档。v1 文档打开不写盘，首次真实编辑写回 v2（无迁移脚本）。
-- **图片导入入口（v2）**：移动端编辑态「全局预览」面板「导入图片」、桌面编辑态工具条「导入图片」；可多选，每张图各成一页（A4 794×1123 + fit contain），上限复用 `MAX_IMAGE_BYTES`(25MiB) / `MAX_IMAGE_PIXELS`(5000 万)；逐文件容错、错误走 `role=alert` 横幅。PDF 导入（T2）尚未接。
+- **图片导入入口（v2）**：移动端编辑态「全局预览」面板「导入图片」、桌面编辑态工具条「导入图片」；可多选，每张图各成一页（A4 794×1123 + fit contain），上限复用 `MAX_IMAGE_BYTES`(25MiB) / `MAX_IMAGE_PIXELS`(5000 万)；逐文件容错、错误走 `role=alert` 横幅。
+- **PDF 导入（261102 T2）**：编辑态「导入 PDF」（移动端在全局预览面板、桌面在工具条）。原 PDF 先落 note-assets（正文 `sourcePdf` 引用、防孤儿清理）→ 逐页栅格化（桌面用仓内 unpdf 自带 pdf.js，动态懒加载 + `public/vendor/pdfjs/cmaps`；移动端用系统 `PdfRenderer` 原生插件）→ 每页 WebP 走资产通道 → 每页建 `backgroundImage`（`source:'pdf-page'`、`pdf:{url,page,pageCount}`、fit contain）+ `InkPage.width/height` = pt×4/3（A4 793×1123，与桌面同口径；页图 `pixelWidth/Height` 为栅格像素，宽=maxWidth 1600）。产品上限 300 页（超出明示截断、原 PDF 保留），core 1000 页硬上限不变；进度/取消可见，加密/损坏/超 100MiB 给可读错误；当前文档只有 1 页空白 A4 时第一页替换而非追加。
 
 ## 5. 存储与同步
 

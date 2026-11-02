@@ -7,7 +7,9 @@
  *
  * 原生侧口径（PdfRenderPlugin.kt）：
  *  · 输入二选一：path = 相对 files/ 的路径；noteId + filename = files/note-assets/{noteId}/{filename}；
- *  · 逐页串行渲染，RGB_565 + 降采样 maxWidth（默认 1600），WebP（默认 quality 80）落 app cacheDir；
+ *  · 逐页串行渲染，ARGB_8888 + **始终**缩放到目标宽 maxWidth（默认 1600），WebP（默认 quality 80）落 app cacheDir；
+ *  · 页尺寸两套（261102 T2 设备验收修复）：width/height = **逻辑尺寸**（PDF pt×96/72，A4=794×1123，与桌面一致，
+ *    写 InkPage.width/height）；pixelWidth/pixelHeight = **位图像素**（如 1600×2264，写 backgroundImage.pixelWidth/Height）；
  *  · 返回 pages[].file 是**宿主机绝对路径**（cacheDir 下），调用方需要自己转成可显示 URL 或读成字节；
  *    这些文件是缓存产物，系统可回收 —— 导入成功后应复制到正式资产目录（走 assetFs），不要长期引用 cacheDir。
  *  · 每页发 progress 事件；cancelPdfRender() 每页边界生效（已完成页仍返回）。
@@ -17,8 +19,13 @@ import { Capacitor, registerPlugin } from "@capacitor/core";
 export interface PdfRenderPage {
   /** 1-based 页码。 */
   page: number;
+  /** 页**逻辑尺寸**（PDF pt × 96/72；A4=794×1123，与桌面导入同口径）→ InkPage.width/height。 */
   width: number;
   height: number;
+  /** 位图实际像素宽高（如 1600×2264）→ backgroundImage.pixelWidth/Height。
+   *  旧 APK（261102 修复前）没有这两个字段 ⇒ 调用方用 width/height 兜底（旧包本身也没有正确像素尺寸）。 */
+  pixelWidth?: number;
+  pixelHeight?: number;
   /** 宿主机绝对路径（app cacheDir/pdf-render/<uuid>/page-N.webp）。 */
   file: string;
   bytes: number;
@@ -90,4 +97,16 @@ export async function cancelPdfRender(): Promise<void> {
   } catch {
     // 没有在渲染 / 桥不可用：取消是尽力而为，不把错误抛给关闭动作
   }
+}
+/**
+ * 读取原生渲染落盘的页图字节（cacheDir 绝对路径 → convertFileSrc → fetch）。
+ * 插件按约定返回宿主机绝对路径；Android 的 convertFileSrc 对以 "/" 开头的绝对路径返回
+ * `<webviewServerUrl>/_capacitor_file_<path>`（同源 HTTP，可取 arrayBuffer）。
+ * 导入成功后字节走 uploadResource 复制进正式资产目录，cacheDir 文件只是中间产物。
+ */
+export async function readRenderedPdfFileBytes(file: string): Promise<Uint8Array> {
+  const url = Capacitor.convertFileSrc(file);
+  const response = await fetch(url);
+  if (!response.ok) throw new Error("读取 PDF 渲染结果失败（HTTP " + response.status + "）");
+  return new Uint8Array(await response.arrayBuffer());
 }

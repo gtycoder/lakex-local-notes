@@ -22,7 +22,12 @@ import java.util.concurrent.atomic.AtomicBoolean
  * 平台能力来自系统自带的 [PdfRenderer]（API 21+ / minSdk 24），**离线、零第三方依赖、零新打包体积**。
  * 口径：
  *  · 逐页**串行**渲染（PdfRenderer 只允许一页打开），每页渲染完立刻 recycle bitmap + close page；
- *  · 默认降采样到 maxWidth（A4 595pt → 1600px ≈ 2.7x），RGB_565 省一半内存，WebP 有损压缩落 cacheDir；
+ *  · **始终**缩放到目标宽 maxWidth（默认 1600；A4 595pt ⇒ 1600×2264px，不只缩不放），**ARGB_8888**（261102 修复：
+ *    WebP 编码器不支持 RGB_565 的压缩路径，compress 会抛 Unsupported pixel format；A4@1600 单页约 14.5MB，
+ *    串行 + 立即 recycle 可接受），WebP 有损压缩落 cacheDir；
+ *  · 输出尺寸**分两套**（261102 T2 设备验收修复）：`width/height` = 逻辑尺寸 = pt×96/72（A4 595pt → 793×1123，
+ *    与桌面 unpdf 的 pt×4/3 一致，供 InkPage.width/height）；`pixelWidth/pixelHeight` = 位图实际像素（如 1600×2264，
+ *    供 backgroundImage.pixelWidth/Height）。两者不许混用（曾把 595pt 当位图宽写进 InkPage.pixelWidth）；
  *  · 每页发一次 progress 事件（page/pageCount/尺寸/字节），cancel 标志**每页检查**（长文档可中断）；
  *  · 输出只写 app 私有 cacheDir（可被系统回收，调用方负责把它当临时产物）。
  *
@@ -42,6 +47,8 @@ class PdfRenderPlugin : Plugin() {
         private const val DEFAULT_QUALITY = 80
         /** 输出子目录（cacheDir 下；同一批渲染共用一个 uuid 目录，便于整体清理）。 */
         private const val OUT_DIR = "pdf-render"
+        /** PDF pt（72dpi）→ 逻辑 CSS px（96dpi）的换算：与桌面 unpdf 的 pt×4/3 同一口径（A4 595pt → 793px）。 */
+        private const val LOGICAL_PX_PER_PT = 96.0 / 72.0
     }
 
     /** 单飞：同一时刻只允许一次渲染（PdfRenderer 实例/内存都不能并发铺开）。 */
@@ -109,8 +116,9 @@ class PdfRenderPlugin : Plugin() {
     /**
      * 渲染整份 PDF 的每一页。
      * options: { path? , noteId?+filename? , maxWidth?=1600, quality?=80 }
-     * result:  { pageCount, pages:[{page,width,height,file,bytes}], cancelled, elapsedMs }
-     * 事件:    progress { page, pageCount, width, height, bytes, file }
+     * result:  { pageCount, pages:[{page,width,height,pixelWidth,pixelHeight,file,bytes}], cancelled, elapsedMs }
+     *   width/height = 逻辑尺寸（pt×96/72）；pixelWidth/pixelHeight = 位图像素。
+     * 事件:    progress { page, pageCount, width, height, pixelWidth, pixelHeight, bytes, file }
      */
     @PluginMethod
     fun renderPdf(call: PluginCall) {
@@ -149,19 +157,31 @@ class PdfRenderPlugin : Plugin() {
                     var bitmap: Bitmap? = null
                     try {
                         // PdfRenderer 的宽高单位 = 72dpi 下的像素（A4 = 595x842）。
-                        val scale = if (page.width > maxWidth) maxWidth.toFloat() / page.width else 1f
-                        val width = (page.width * scale).toInt().coerceAtLeast(1)
-                        val height = (page.height * scale).toInt().coerceAtLeast(1)
-                        bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.RGB_565)
-                        // render 只画页面内容、不清底 ⇒ 先铺白（RGB_565 画白底可省一半内存）。
+                        val pageWidth = page.width.coerceAtLeast(1)
+                        val pageHeight = page.height.coerceAtLeast(1)
+                        // 逻辑尺寸（pt → 96dpi 的 CSS px，与桌面 pt×4/3 一致）：InkPage.width/height 用这一套。
+                        val logicalWidth = Math.round(pageWidth * LOGICAL_PX_PER_PT).toInt()
+                        val logicalHeight = Math.round(pageHeight * LOGICAL_PX_PER_PT).toInt()
+                        // 渲染像素：**始终**缩放到目标宽 maxWidth。旧实现只在 page.width > maxWidth 时缩，
+                        // A4 595pt 永远不放大 ⇒ 页图只有 595px，高分屏下发糊（设备验收 261102）。
+                        val pixelWidth = maxWidth
+                        val pixelHeight = Math.round(pageHeight * (maxWidth.toFloat() / pageWidth)).coerceAtLeast(1)
+                        // ARGB_8888：唯一同时被 PdfRenderer 与 Bitmap.compress(WEBP/WEBP_LOSSY) 支持的配置
+                        // （RGB_565 渲染能出图，但 WebP 编码器不认，设备验收实测抛 Unsupported pixel format）。
+                        // 峰值 = pixelWidth*pixelHeight*4（A4@1600 ≈ 14.5MB），逐页串行 + finally 立即 recycle。
+                        bitmap = Bitmap.createBitmap(pixelWidth, pixelHeight, Bitmap.Config.ARGB_8888)
+                        // render 只画页面内容、不清底 ⇒ 先铺不透明白底（否则未绘制区域是透明像素，WebP 会带 alpha）。
                         bitmap.eraseColor(Color.WHITE)
                         page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
                         val out = File(outDir, "page-" + (index + 1) + ".webp")
                         compressToWebp(bitmap, out, quality)
                         val item = JSObject()
                         item.put("page", index + 1)
-                        item.put("width", width)
-                        item.put("height", height)
+                        // 逻辑尺寸（与桌面一致）与位图像素分开给，JS 不再把 width 当 pixelWidth（261102 修复）。
+                        item.put("width", logicalWidth)
+                        item.put("height", logicalHeight)
+                        item.put("pixelWidth", pixelWidth)
+                        item.put("pixelHeight", pixelHeight)
                         item.put("file", out.absolutePath)
                         item.put("bytes", out.length())
                         pages.put(item)

@@ -3,6 +3,7 @@ package com.lakexlocalnotes.android
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.provider.OpenableColumns
 import android.util.Log
 import com.getcapacitor.JSObject
 import com.getcapacitor.Plugin
@@ -15,24 +16,30 @@ import java.io.InputStream
 import java.io.OutputStream
 import java.util.UUID
 
-internal class SharedContentTooLargeException(maxBytes: Long) :
-    Exception("分享的图片超过 ${maxBytes / 1024 / 1024} MiB，未导入")
+internal class SharedContentTooLargeException(maxBytes: Long, label: String = "文件") :
+    Exception("分享的${label}超过 ${maxBytes / 1024 / 1024} MiB，未导入")
 
-/** 边读边计数，超过上限立刻停止；调用方负责删除临时文件。 */
-internal fun copyStreamToFile(input: InputStream, output: OutputStream, maxBytes: Long): Long {
+/** 边读边计数，超过上限立刻停止；调用方负责删除临时文件。label 只用于可见报错文案。 */
+internal fun copyStreamToFile(input: InputStream, output: OutputStream, maxBytes: Long, label: String = "文件"): Long {
     val buf = ByteArray(64 * 1024)
     var total = 0L
     while (true) {
         val n = input.read(buf)
         if (n < 0) break
         total += n
-        if (total > maxBytes) throw SharedContentTooLargeException(maxBytes)
+        if (total > maxBytes) throw SharedContentTooLargeException(maxBytes, label)
         output.write(buf, 0, n)
     }
     return total
 }
 
-private data class InboxCopy(val filename: String? = null, val error: String? = null)
+private data class InboxCopy(
+    val filename: String? = null,
+    val mimeType: String? = null,
+    /** 261102 T2-C：显式分类 image | pdf | file（JS 不再靠 imageFilename 猜；旧字段仍在，保回滚兼容）。 */
+    val kind: String? = null,
+    val error: String? = null,
+)
 
 /**
  * 系统「分享 → LakexLocalNotes」入口（ACTION_SEND）。
@@ -90,8 +97,11 @@ class SharedContentPlugin : Plugin() {
                 }
             }
             if (copied.filename != null) {
+                // 261102 T2-C：新字段 filename + kind（显式分类）；imageFilename 保留给旧 JS/回滚。
+                out.put("filename", copied.filename)
+                out.put("kind", copied.kind ?: KIND_FILE)
                 out.put("imageFilename", copied.filename)
-                out.put("mimeType", mime ?: "application/octet-stream")
+                out.put("mimeType", copied.mimeType ?: mime ?: "application/octet-stream")
             }
             if (copied.error != null) out.put("imageError", copied.error)
         }
@@ -100,16 +110,23 @@ class SharedContentPlugin : Plugin() {
 
     private fun copyToInbox(uri: Uri, mime: String?): InboxCopy {
         val dir = File(getContext().filesDir, INBOX)
-        val out = File(dir, UUID.randomUUID().toString().replace("-", "") + extensionFor(mime))
+        // MIME 可能是 application/octet-stream（分享方对 PDF 很常见）⇒ 用 DISPLAY_NAME 后缀兜底定扩展名/分类。
+        val displayName = queryDisplayName(uri)
+        val extension = extensionFor(mime, displayName)
+        val kind = classifyShared(mime, extension)
+        // 261102 T2-C：PDF 单独 32MiB 档（与桌面 AI_PDF_MAX_BYTES 同量级）；图片/其它仍 25MiB —— 不影响图片路径。
+        val maxBytes = if (kind == KIND_PDF) MAX_PDF_INBOX_BYTES else MAX_INBOX_BYTES
+        val label = if (kind == KIND_PDF) "PDF" else "文件"
+        val out = File(dir, UUID.randomUUID().toString().replace("-", "") + extension)
         val partial = File(dir, out.name + ".part")
         return try {
             if (!dir.exists() && !dir.mkdirs()) throw IllegalStateException("cannot create shared inbox")
             getContext().contentResolver.openInputStream(uri).use { input ->
                 if (input == null) throw IllegalStateException("cannot open shared content")
-                FileOutputStream(partial).use { os -> copyStreamToFile(input, os, MAX_INBOX_BYTES) }
+                FileOutputStream(partial).use { os -> copyStreamToFile(input, os, maxBytes, label) }
             }
             if (!partial.renameTo(out)) throw IllegalStateException("cannot finalize shared content")
-            InboxCopy(filename = out.name)
+            InboxCopy(filename = out.name, mimeType = mime ?: "application/octet-stream", kind = kind)
         } catch (e: Exception) {
             Log.w("SharedContentPlugin", "copyToInbox failed", e)
             partial.delete()
@@ -118,14 +135,37 @@ class SharedContentPlugin : Plugin() {
         }
     }
 
-    private fun extensionFor(mime: String?): String = when {
-        mime == null -> ".bin"
-        mime.startsWith("image/png") -> ".png"
-        mime.startsWith("image/jpeg") -> ".jpg"
-        mime.startsWith("image/gif") -> ".gif"
-        mime.startsWith("image/webp") -> ".webp"
-        mime.startsWith("image/avif") -> ".avif"
-        else -> ".bin"
+    /** 分享文件的显示名：octet-stream 时靠后缀判 PDF。查询失败不抛错，回退 uri 末段。 */
+    private fun queryDisplayName(uri: Uri): String? {
+        return try {
+            getContext().contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst() && !cursor.isNull(0)) cursor.getString(0) else null
+            } ?: uri.lastPathSegment
+        } catch (e: Exception) {
+            uri.lastPathSegment
+        }
+    }
+
+    /** MIME → 扩展名；MIME 不可信（octet-stream/缺失）时看 DISPLAY_NAME 的 .pdf 后缀。 */
+    private fun extensionFor(mime: String?, displayName: String?): String {
+        when {
+            mime == null -> {}
+            mime.startsWith("image/png") -> return ".png"
+            mime.startsWith("image/jpeg") -> return ".jpg"
+            mime.startsWith("image/gif") -> return ".gif"
+            mime.startsWith("image/webp") -> return ".webp"
+            mime.startsWith("image/avif") -> return ".avif"
+            mime.startsWith("application/pdf") -> return ".pdf"
+        }
+        if (displayName?.lowercase()?.endsWith(".pdf") == true) return ".pdf"
+        return ".bin"
+    }
+
+    /** 显式分类（261102 T2-C）：image | pdf | file。extension 来自 extensionFor（已含 displayName 兜底）。 */
+    private fun classifyShared(mime: String?, extension: String): String = when {
+        extension == ".pdf" || mime?.startsWith("application/pdf") == true -> KIND_PDF
+        extension in IMAGE_EXTENSIONS || mime?.startsWith("image/") == true -> KIND_IMAGE
+        else -> KIND_FILE
     }
 
     /** JS 启动/回前台时取一次性分享内容（取完即清）。 */
@@ -143,5 +183,12 @@ class SharedContentPlugin : Plugin() {
         const val INBOX = "shared-inbox"
         /** 与共享图片协议上限 MAX_IMAGE_BYTES 对齐（Kotlin 无法直接引用 TS 常量）。 */
         const val MAX_INBOX_BYTES = 25L * 1024 * 1024
+        /** 261102 T2-C：PDF 单独一档（与桌面 AI_PDF_MAX_BYTES 32MiB 对齐）；图片/其它仍 25MiB。 */
+        const val MAX_PDF_INBOX_BYTES = 32L * 1024 * 1024
+        /** 分享内容显式分类，输出到 JS 的 `kind` 字段（JS 不再靠 imageFilename 猜）。 */
+        const val KIND_IMAGE = "image"
+        const val KIND_PDF = "pdf"
+        const val KIND_FILE = "file"
+        val IMAGE_EXTENSIONS = setOf(".png", ".jpg", ".gif", ".webp", ".avif")
     }
 }

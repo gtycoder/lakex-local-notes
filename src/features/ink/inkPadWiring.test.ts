@@ -18,6 +18,9 @@ const TABS_CSS = read("../../styles/app/tabs.css");
 const MOBILE_INK_CSS = read("../../mobile/ink/inkPad.mobile.css");
 const MOBILE_INK_PAD = read("../../mobile/ink/MobileInkPad.tsx");
 const INK_DOC = read("../../core/inkDoc.ts");
+const PDF_IMPORT = read("./pdfImport.ts");
+const PDF_RASTER = read("./pdfRasterDesktop.ts");
+const MOBILE_PDF_RENDER = read("../../mobile/native/pdfRender.ts");
 
 describe("手写板正式端到端接线", () => {
   it("kind=ink 已进入 NoteKind / 正文路径", () => {
@@ -210,12 +213,14 @@ describe("手写板正式端到端接线", () => {
     expect(PAGE_STRIP).toContain("onClick={() => onSelect(page.id)}");
   });
 
-  it("桌面结构：本任务只新增「导入图片」入口，顶部工具条 + 底部页码/纸张/缩放逐字不变", () => {
+  it("桌面结构：只新增「导入图片 / 导入 PDF」入口，顶部工具条 + 底部页码/纸张/缩放逐字不变", () => {
     const branch = desktopBranch();
-    // v2 图片页入口（桌面唯一新增）：工具条里、编辑态可用
+    // v2 图片/PDF 页入口（桌面新增）：工具条里、编辑态可用
     expect(branch).toContain('aria-label="导入图片"');
-    expect(branch).toContain("disabled={readOnly || importing}");
+    expect(branch).toContain('aria-label="导入 PDF"');
+    expect(branch).toContain("disabled={readOnly || importing || pdfImporting}");
     expect(branch).toContain("onClick={() => void importImages()}");
+    expect(branch).toContain("onClick={() => void importPdf()}");
     expect(branch).toContain('role="toolbar" aria-label="手写工具"');
     expect(branch).toContain('aria-label="画笔"');
     expect(branch).toContain('aria-label="高亮笔"');
@@ -260,19 +265,51 @@ describe("手写板正式端到端接线", () => {
   });
 
   it("导入入口：移动端在编辑态的全局预览里、桌面在编辑态工具条；正文只在编辑态写", () => {
-    // 移动端预览面板里的导入行（!readOnly && onImportImages 才渲染）
+    // 移动端预览面板里的导入行（!readOnly && (图片|PDF) 才渲染）
     expect(INK_PAD).toContain("data-ink-import");
-    expect(INK_PAD).toContain("{!readOnly && onImportImages && (");
-    // 两端入口同一份 importImages（仅编辑态可写）
-    expect(INK_PAD).toMatch(/const importImages = useCallback\(async \(\) => \{\s*const importer = onImportImagesRef\.current;\s*if \(!importer \|\| readOnly \|\| importingRef\.current\) return;/);
+    expect(INK_PAD).toContain("{!readOnly && (onImportImages || onImportPdf) && (");
+    // 两端入口同一份 importImages / importPdf（图片与 PDF 共用 busy 守卫，仅编辑态可写）
+    expect(INK_PAD).toMatch(/const importImages = useCallback\(async \(\) => \{\s*const importer = onImportImagesRef\.current;\s*if \(!importer \|\| readOnly \|\| importingRef\.current \|\| pdfImportingRef\.current\) return;/);
+    expect(INK_PAD).toMatch(/const importPdf = useCallback\(async \(\) => \{\s*const importer = onImportPdfRef\.current;\s*if \(!importer \|\| readOnly \|\| importingRef\.current \|\| pdfImportingRef\.current\) return;/);
     expect(INK_PAD).toContain("inkPageDelta(null, page)");
     // host 注入：桌面走 native.uploadResource + noteId；移动端走 bridge.uploadResource + noteId
     expect(DESKTOP_INK).toContain("native.uploadResource(input, noteId)");
     expect(DESKTOP_INK).toContain("onImportImages={onImportImages}");
+    expect(DESKTOP_INK).toContain("onImportPdf={onImportPdf}");
     expect(MOBILE_INK_PAD).toContain("bridge.uploadResource(input, noteId)");
+    expect(MOBILE_INK_PAD).toContain("onImportPdf={noteId ? onImportPdf : undefined}");
     expect(MOBILE).toContain("noteId={t.id}");
     // 移动端导入 CSS（预览面板里一行）
     expect(MOBILE_INK_CSS).toContain('[data-ink-import]');
+  });
+
+  it("PDF 导入编排：300 页上限、pdf-page 背景图、sourcePdf、替换空白首页、进度/取消", () => {
+    expect(PDF_IMPORT).toContain("export const INK_PDF_MAX_PAGES = 300");
+    expect(PDF_IMPORT).toContain("source: \"pdf-page\"");
+    expect(PDF_IMPORT).toContain("pdf: { url: pdfUrl, page: item.page, pageCount }");
+    expect(PDF_IMPORT).toContain("sourcePdf: { url: pdfUrl, pageCount }");
+    expect(PDF_IMPORT).toContain("raster.pages.slice(0, maxPages)");
+    expect(PDF_IMPORT).toContain("shouldReplaceEmptyFirstPage");
+    expect(PDF_IMPORT).toContain("planPdfPageInsert");
+    expect(PDF_IMPORT).toContain("signal?.aborted");
+    expect(PDF_IMPORT).toContain("MAX_ATTACHMENT_BYTES");
+    // 宿主只做注入：桌面 unpdf / 移动原生 PdfRender
+    expect(DESKTOP_INK).toContain("renderPdfPagesDesktop(input.bytes, options)");
+    expect(MOBILE_INK_PAD).toContain("renderPdfPages(");
+    expect(MOBILE_INK_PAD).toContain("cancelPdfRender");
+    expect(MOBILE_PDF_RENDER).toContain("Capacitor.convertFileSrc(file)");
+    expect(MOBILE_PDF_RENDER).toContain("readRenderedPdfFileBytes");
+  });
+
+  it("PDF 导入进度/取消 UI + 桌面栅格化懒加载契约", () => {
+    expect(INK_PAD).toContain('data-ink-pdf-progress');
+    expect(INK_PAD).toContain('aria-label="取消 PDF 导入"');
+    expect(INK_PAD).toContain("pdfAbortRef.current?.abort()");
+    expect(INK_PAD).toContain("正在导入 PDF：第");
+    expect(MOBILE_INK_CSS).toContain("[data-ink-pdf-progress]");
+    // unpdf 动态 import、cMapUrl、WebP 见 pdfRasterDesktop 静态测试；这里钉住文件不被静态引进入口
+    expect(PDF_RASTER).toContain('await import("unpdf")');
+    expect(INK_PAD).not.toContain("unpdf");
   });
 
   it("只读态 capture 交父层最新正文（桌面锁定文档不会被只读翻页写盘）", () => {

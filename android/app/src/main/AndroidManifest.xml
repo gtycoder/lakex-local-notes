@@ -25,7 +25,7 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <!-- 系统分享 → LakexLocalNotes（文本 / 图片）：@capacitor 的 SharedContentPlugin 接住后再打开「小记」框 -->
+            <!-- 系统分享 → LakexLocalNotes（文本 / 图片 / PDF）：@capacitor 的 SharedContentPlugin 接住后再按 kind 分流 -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -35,6 +35,14 @@
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="image/*" />
+            </intent-filter>
+            <!-- 261102 T2-C：PDF 分享入口。只声明 application/pdf（不声明 application/octet-stream：
+                 那会让 App 出现在所有二进制的分享目标里）；octet-stream 的发送方由插件按 DISPLAY_NAME 兜底，
+                 只有在 intent 真的到达时才有机会命中。 -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="application/pdf" />
             </intent-filter>
 
             <!-- 长按桌面图标 → 静态快捷方式列表（res/xml/shortcuts.xml） -->
