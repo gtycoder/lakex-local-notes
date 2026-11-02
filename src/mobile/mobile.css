@@ -1228,11 +1228,18 @@ body.lake-mobile .ne-ui-boundary-popover:has(.ne-ui-search-card-menu) { top: 120
   cursor: pointer;
 }
 
-/* ===== 平板 / 折叠屏展开（body.lake-tablet，由原生 smallestScreenWidthDp>=600 注入；261027）=====
- * 只做内容限宽居中 / 设置页加宽；信息架构与页面层级不变（IA 冻结）。 */
-body.lake-tablet .mobile-settings-page { width: min(92%, 440px); }
-body.lake-tablet .nb-shelf,
-body.lake-tablet .nb-list,
-body.lake-tablet .mobile-scroll,
-body.lake-tablet .mobile-home-tabs,
-body.lake-tablet .mobile-doc-body .lake-editor-mount { max-width: 760px; margin-left: auto; margin-right: auto; }
+/* ===== 平板 / 折叠屏（261102：判据改为 html[data-form-factor]，来源 src/mobile/pad/formFactor.ts）=====
+ * medium（600–799）与 expanded（≥800）都算平板；内容限宽居中 / 设置页加宽；信息架构与页面层级不变。
+ * 双栏（expanded 的常驻左目录）在 src/mobile/pad/pad.css，不在这里。 */
+html[data-form-factor="medium"] .mobile-settings-page,
+html[data-form-factor="expanded"] .mobile-settings-page { width: min(92%, 440px); }
+html[data-form-factor="medium"] .nb-shelf,
+html[data-form-factor="medium"] .nb-list,
+html[data-form-factor="medium"] .mobile-scroll,
+html[data-form-factor="medium"] .mobile-home-tabs,
+html[data-form-factor="medium"] .mobile-doc-body .lake-editor-mount,
+html[data-form-factor="expanded"] .nb-shelf,
+html[data-form-factor="expanded"] .nb-list,
+html[data-form-factor="expanded"] .mobile-scroll,
+html[data-form-factor="expanded"] .mobile-home-tabs,
+html[data-form-factor="expanded"] .mobile-doc-body .lake-editor-mount { max-width: 760px; margin-left: auto; margin-right: auto; }

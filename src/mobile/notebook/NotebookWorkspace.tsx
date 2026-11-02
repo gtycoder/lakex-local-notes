@@ -5,7 +5,7 @@
  * 多 tab 的「顶部 tab 条」是桌面版；移动端是底部胶囊栏 #toolbarTabs 弹全屏列表（子代理已核对源码）。
  */
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
-import { ArrowLeft, List, Files, Pencil, X, ChevronRight, FolderOpen, FolderPlus, File, Plus, Check, ArrowLeftRight, Trash, SmilePlus, Move, History, CloudUpload, FilePlus, Info, Table, Database, PenTool, PenLine, Book, Search, Star } from "lucide-react";
+import { ArrowLeft, List, Files, Pencil, X, ChevronRight, ChevronLeft, FolderOpen, FolderPlus, File, Plus, Check, ArrowLeftRight, Trash, SmilePlus, Move, History, CloudUpload, FilePlus, Info, Table, Database, PenTool, PenLine, Book, Search, Star } from "lucide-react";
 import { useLongPress } from "../ui/useLongPress";
 import { pushBackHandler } from "../ui/backStack";
 import { NoteInfoSheet } from "../ui/NoteInfoSheet";
@@ -33,6 +33,7 @@ import { useNotebookTreeData, type NotebookTreeItem } from "./useNotebookTreeDat
 import { useNotebookTreeActions } from "./useNotebookTreeActions";
 import { SELF_REGISTERED_OVERLAY_KINDS, useWorkspaceOverlays } from "./useWorkspaceOverlays";
 import { NotebookTreeList } from "./NotebookTreeList";
+import { useFormFactor } from "../pad/useFormFactor";
 export type { NotebookTreeItem } from "./useNotebookTreeData";
 /** 表格 / 多维表视图按需加载：只有真的打开这类文档才进分包（首屏不含它们）。 */
 const MobileBitableViewer = lazy(() => import("../bitable/MobileBitableViewer").then((m) => ({ default: m.MobileBitableViewer })));
@@ -131,6 +132,10 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   const { overlay, open: openOverlay, close: closeOverlay, toggle: toggleOverlay } = useWorkspaceOverlays();
   const overlayKind = overlay?.kind ?? null;
   const sidebarOpen = overlayKind === "sidebar";
+  // 261102 pad：expanded 走双栏（左目录常驻），手机仍用抽屉。
+  const formFactor = useFormFactor();
+  const padTwoPane = formFactor === "expanded";
+  const [padTreeOpen, setPadTreeOpen] = useState(true);
   const outlineOpen = overlayKind === "outline";
   const findOpen = overlayKind === "find";
   const tabsOpen = overlayKind === "tabs";
@@ -147,8 +152,10 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
 
   // 抽屉开合（名字保留：调用点遍布拖拽/胶囊/遮罩）。互斥由 overlay owner 保证：打开时先收掉其它浮层。
   const openSidebar = useCallback((v: boolean) => {
+    // 平板双栏里「目录」= 常驻左栏的开合，不再拉抽屉（避免两份树实例 / 全屏遮罩）。
+    if (padTwoPane) { setPadTreeOpen(v); return; }
     if (v) openOverlay({ kind: "sidebar" }); else closeOverlay("sidebar");
-  }, [closeOverlay, openOverlay]);
+  }, [closeOverlay, openOverlay, padTwoPane]);
   const openOutline = useCallback((v: boolean) => {
     if (v) openOverlay({ kind: "outline" }); else closeOverlay("outline");
   }, [closeOverlay, openOverlay]);
@@ -658,13 +665,41 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     if (root === "move") { void applyMove(node, path[1]?.id === "__root" ? notebookId : String(path[1]?.id)); return; }
     // 互斥（MOB-02）：开行菜单时目录抽屉已经被收掉；重命名是**行内编辑**，必须把抽屉重新拉出来，
     // 否则输入框在关着的抽屉里（看不见的输入框 + autoFocus 抢焦点）。
-    if (root === "rename") { openOverlay({ kind: "sidebar" }); setRenamingId(node.id); setRenameValue(node.title); return; }
+    if (root === "rename") { if (!padTwoPane) openOverlay({ kind: "sidebar" }); setRenamingId(node.id); setRenameValue(node.title); return; }
     if (root === "icon") { openOverlay({ kind: "icon", node }); return; }
     if (root === "favorite") { const on = toggleFavorite(node.id); showToast(on ? "已设为常用" : "已取消常用"); return; }
     if (root === "history") { openHistorySheet(node); return; }
     if (root === "info") { openOverlay({ kind: "info", node }); return; }
     if (root === "delete") { void applyDelete(node); }
   };
+
+  /**
+   * 目录树 = 抽屉与平板常驻左栏**共用同一份**（同一套 props / 虚拟化 / 拖拽 / 长按）。
+   * 平板双栏里点文档**不关左栏**（openSidebar(false) 只在手机抽屉语义下需要）。
+   */
+  const treeList = (
+    <NotebookTreeList
+      rows={visibleRows}
+      expanded={expanded}
+      hasChildren={(id) => childrenOf(id).length > 0}
+      activeId={activeId}
+      drag={drag}
+      renamingId={renamingId}
+      renameValue={renameValue}
+      onRenameChange={setRenameValue}
+      onRenameCommit={() => void applyRename()}
+      onRenameCancel={() => setRenamingId(null)}
+      longPress={longPressRows}
+      onPressRow={(item) => { pressedNode.current = item; }}
+      onActivate={(item) => {
+        // 与原实现同序：有子节点先展开/折叠；没有子的文档才打开。
+        if (childrenOf(item.id).length > 0) { toggleGroup(item.id); return; }
+        if (item.kind === "note") { if (!padTwoPane) openSidebar(false); void openTab(item.id); }
+      }}
+      onOpenMenu={(item) => openOverlay({ kind: "menu", node: item })}
+      onOpenCreate={(item) => openOverlay({ kind: "create", parentId: item.id })}
+    />
+  );
 
   return (
     <div className="mobile-workspace">
@@ -710,8 +745,22 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
         <button className="toolbar__button" onClick={() => void runSync()} aria-label="立即同步" title="立即同步"><CloudUpload /></button>
       </header>
 
-      {/* 文档层（正文） */}
-      <section className="mobile-workspace-body" ref={bodyRef}>
+      <div className="mobile-workspace-main">
+        {/* 平板双栏（expanded）：左目录常驻，正文在右；手机不渲染这段（padTwoPane=false） */}
+        {padTwoPane && padTreeOpen && (
+          <aside className="pad-tree" aria-label="目录">
+            <div className="pad-tree__head">
+              <span className="mb-tree-icon" aria-hidden="true">{nbIcon ? <MobileNodeIconGlyph value={nbIcon} /> : <Book size={16} />}</span>
+              <span className="pad-tree__title">{title}</span>
+              <button className="mb-iconbtn" onClick={() => openOverlay({ kind: "create", parentId: notebookId })} aria-label="新建" title="新建"><Plus size={18} /></button>
+              <button className="mb-iconbtn" onClick={() => setPadTreeOpen(false)} aria-label="收起目录" title="收起目录"><ChevronLeft size={18} /></button>
+            </div>
+            {treeList}
+          </aside>
+        )}
+
+        {/* 文档层（正文） */}
+        <section className="mobile-workspace-body" ref={bodyRef}>
         {/* ⚠️ 已挂载的 keep-alive 页**必须一直留在 DOM 里**（只允许非活动页 display:none）：
             旧实现是「活动页没挂载 ⇒ 用骨架替换整份 pane 列表」，于是打开一篇本会话还没挂载的文档时，
             别的标签的 pane 被一起卸载、scrollTop 归零（R2：切走再切回 752→0）。
@@ -833,7 +882,8 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
             <div className="mb-empty">暂无打开的文档，点左目录或底部打开</div>
           )
         ) : null}
-      </section>
+        </section>
+      </div>
 
       {/* 底部胶囊栏（思源 #mobileBottomBar：纯图标）——只放阅读相关（文档树/标签/大纲/更多）；
           编辑与同步在顶栏右侧，避免打字时误触（用户 260909）。编辑态整条下滑淡出而不是卸载。 */}
@@ -845,7 +895,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
         data-prevent-swipe
         aria-hidden={(active?.editing || chromeHiddenNow) ? "true" : "false"}
       >
-        <button className={"mobile-bottom-bar__item" + (sidebarOpen ? " active" : "")} onClick={() => openSidebar(!sidebarOpen)} aria-label="文档树" title="文档树"><Files /></button>
+        <button className={"mobile-bottom-bar__item" + ((padTwoPane ? padTreeOpen : sidebarOpen) ? " active" : "")} onClick={() => (padTwoPane ? setPadTreeOpen(!padTreeOpen) : openSidebar(!sidebarOpen))} aria-label="文档树" title="文档树"><Files /></button>
         <button className={"mobile-bottom-bar__item" + (tabsOpen ? " active" : "")} onClick={() => openOverlay({ kind: "tabs" })} aria-label="标签页" title="标签页"><File />{tabs.length > 0 && <span className="bottom-bar-count">{tabs.length}</span>}</button>
         <button className={"mobile-bottom-bar__item" + (outlineOpen ? " active" : "")} onClick={() => openOutline(!outlineOpen)} disabled={!outlineAvailable} aria-label="大纲" title={outlineAvailable ? "大纲" : "该文档类型没有大纲"}><List /></button>
         {/* 261014 用户点单：最后一格「更多」已无意义（编辑在顶栏、新建在抽屉/行内）⇒ 直接把「切换笔记本」做成这一格 */}
@@ -902,28 +952,9 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
           <span className="toolbar__icon" role="button" tabIndex={0} onClick={() => openSidebar(false)} aria-label="收起"><ChevronRight /></span>
         </div>
         {/* 树行 = 可见行扁平数组 + 视口窗口化（2000 节点时不一次挂 2000 个按钮，见 NotebookTreeList）。
-            虚拟滚动下拖拽/长按仍靠行上的 data-node-id 与 .side-panel-body 命中（手指下的行必在窗口内）。 */}
-        <NotebookTreeList
-          rows={visibleRows}
-          expanded={expanded}
-          hasChildren={(id) => childrenOf(id).length > 0}
-          activeId={activeId}
-          drag={drag}
-          renamingId={renamingId}
-          renameValue={renameValue}
-          onRenameChange={setRenameValue}
-          onRenameCommit={() => void applyRename()}
-          onRenameCancel={() => setRenamingId(null)}
-          longPress={longPressRows}
-          onPressRow={(item) => { pressedNode.current = item; }}
-          onActivate={(item) => {
-            // 与原实现同序：有子节点先展开/折叠；没有子的文档才打开。
-            if (childrenOf(item.id).length > 0) { toggleGroup(item.id); return; }
-            if (item.kind === "note") { openSidebar(false); void openTab(item.id); }
-          }}
-          onOpenMenu={(item) => openOverlay({ kind: "menu", node: item })}
-          onOpenCreate={(item) => openOverlay({ kind: "create", parentId: item.id })}
-        />
+            虚拟滚动下拖拽/长按仍靠行上的 data-node-id 与 .side-panel-body 命中（手指下的行必在窗口内）。
+            平板双栏时树挂在常驻左栏（.pad-tree），抽屉不渲染第二份实例。 */}
+        {!padTwoPane && treeList}
       </aside>
 
       {/* 右大纲抽屉 (.side-panel--right) */}

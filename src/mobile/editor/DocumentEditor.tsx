@@ -15,6 +15,7 @@ import { OutlineSheet } from "./OutlineSheet";
 import { DocListSheet, type DocListItem } from "./DocListSheet";
 import { loadSettings } from "../../lib/settings";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useFormFactor } from "../pad/useFormFactor";
 import { clampScrollTop } from "./scrollPosition";
 import { LakeEditor } from "../../features/editor/LakeEditor";
 import type { LakeEditorInstance, LakeEditorPrefs } from "../../features/editor/lakeRuntime";
@@ -71,6 +72,9 @@ export function DocumentEditor(props: DocumentEditorProps) {
     outlineOpen: outlineOpenProp, onToggleOutline, docListOpen: docListOpenProp, onToggleDocList,
     hidePanels, onEditorInstance, findOpen = false, onCloseFind,
   } = props;
+  // 平板（expanded）走内核固定工具栏，不再挂底部 dock（手机/vitest 保持原样）。
+  const formFactor = useFormFactor();
+  const padToolbar = formFactor === "expanded";
   const editorRef = useRef<LakeEditorInstance | null>(null);
   const [outlineOpenS, setOutlineOpenS] = useState(false);
   const [docListOpenS, setDocListOpenS] = useState(false);
@@ -186,14 +190,15 @@ export function DocumentEditor(props: DocumentEditorProps) {
           }}
           // MOB-04（261029 切换）：查找已接内核（不依赖全量 DOM）⇒ 编辑态开内核虚拟渲染；
           // 只保留视口附近节点（实测 500 块文档编辑节点 5552→2202、进编辑 5117→2102ms）。
-          prefs={{ fontSize: loadSettings().fontSize, showToolbar: !editing, disableVirtualRendering: false, attachment: attachmentPrefs }}
+          // 平板：编辑态打开内核固定工具栏（桌面同款 items；放不下的进「…」）；手机仍是 off + 底部 dock。
+          prefs={{ fontSize: loadSettings().fontSize, showToolbar: padToolbar ? editing : !editing, disableVirtualRendering: false, attachment: attachmentPrefs }}
         />
       </section>
       {/* 编辑态底部 dock（app 化工具栏，悬浮输入法上方；替代 Lake 桌面样式原生工具栏）。
           插入接线（隐藏 file input + insertFiles / table）在 EditorDockHost 里 —— 与小记编辑器共用同一份。 */}
       {/* 文档也用前端快照栈：kernel history 会把连续输入合并成一帧（"一次撤一段、再撤没有"），
           用户 261017 要求文档也能逐步撤销；DOC_LIMITS 更保守（25 条 / 4M 字符）。 */}
-      <EditorDockHost editor={editorInstance} editing={editing} undoBackend="snapshot" undoLimits={DOC_LIMITS} />
+      {!padToolbar && <EditorDockHost editor={editorInstance} editing={editing} undoBackend="snapshot" undoLimits={DOC_LIMITS} />}
       {!hidePanels && (
         <>
           <OutlineSheet open={outlineOpen} editor={editorRef.current} onClose={toggleOutline} />

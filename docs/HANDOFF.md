@@ -7,6 +7,16 @@
 
 ## 0. 最新交接（261027）
 
+### 261102 · 平板（pad）适配第一批（分支 `feat/pad-adaptation`，worktree `../lakex-pad`，**未 push**）
+- **范围**：只做「平板外壳 + 文档工具栏」，手机布局零改动。判据 = **窗口宽**（不是设备属性）：`src/mobile/pad/formFactor.ts` 三档 `<600 compact / 600–799 medium / ≥800 expanded`，写 `html[data-form-factor]`；原生 `smallestScreenWidthDp` 只作提示（`window.__lakeSetTablet` 保留，但布局不再依赖它；`native/deviceProfile.ts` 已删）。
+- **双栏工作区**：`NotebookWorkspace` 在 expanded 渲染常驻左栏 `.pad-tree`（复用 `NotebookTreeList`，与抽屉共用同一份 `treeList`；平板下抽屉不再渲染第二份树，避免 `.side-panel-body` 双实例破坏拖拽查询）；胶囊「文档树」在平板 = 左栏开合。CSS 落 `src/mobile/pad/pad.css`（已登记 `mobileLayers.test.ts`：38 声明 / 0 重复组）；原 `body.lake-tablet` 7 条规则改为 `html[data-form-factor="medium|expanded"]`。
+- **文档工具栏**：`DocumentEditor` 在 expanded 编辑态 `showToolbar:true`（内核固定工具栏 = 桌面同款 items，溢出进「…」）并**不挂 `EditorDockHost`**（手机不变）。几何：工具栏吃满文档列、`.ne-engine` 限宽 760 居中、`.mobile-doc-body` 底部不再留 dock 的 80px；内核工具栏命中 26→40（只抬图标按钮，下拉保留自身宽度）。AGENTS「移动端输入面=底部 dock」已加平板例外条款。
+- **验收**：新建 AVD `lake_tab`（pixel_tablet / android-36 google_apis arm64，端口 5580 / CDP 9340），装本批 APK 实测：`data-form-factor=expanded`、左栏 280、`main` flex-row、内核工具栏 906×50、按钮 40×40、`med-toolbar` 不存在、编辑态可输入；截图 `.css-audit/pad-mockup/` 与 `/tmp/pad-editor3.png`（gitignored 目录）。
+- **门禁**：tsc 0 / `vitest run src/mobile` 182 文件 836 例全绿（含新增 `pad/formFactor.test.ts`）/ `check:mobileui`（含 ui-metrics）/ `git diff --check`；**手机 6 态快照未跑**（lake_gate 未启动，改动按 data-form-factor 门控，预期零差异，下一批补跑）。
+- **未做 / 下一步**：① 工作区顶栏仍手机样式（无桌面式文档页签；胶囊暂保留——标签页/大纲/切换笔记本仍靠它）；② 右大纲常驻栏未做（仍是抽屉）；③ 首页 expanded：内容已限宽 760，但横滑分页未禁；④ 表格 ribbon / 多维表横向工具条 / 手写板桌面工具条 = §8 的 T0–T2；⑤ 平板 MD 编辑器附件/图片插入走内核面板，需实测上传链路；⑥ 平板快照装置（`check-mobile-snap --viewport`）未加。
+- **复现**：`cd ../lakex-pad && ANDROID_SERIAL=emulator-5580 bash scripts/android-build.sh --sync --install`；`bash scripts/emu-cdp.sh 9340`；`node scripts/cdp-eval.mjs 9340 @scripts/mobile-audit/gate-fixture.mjs`。
+
+
 ### 261102 · 用户点单五条（多维表新建视图 + 字段自动编辑 / 手写板分页纸张 / 设置输入行 / 小记标签 / 浮层留白）· **本地提交（未 push）**
 - **① 多维表新建视图（移动端优先表单）**：core 新增 `addBitableView(doc, tableId, type)`（`src/core/bitableMutations.ts`：kanban 第一个 select / gallery 第一个附件 / calendar 第一个 date / form 不写 formFieldIds；导航不改），桌面 `BitableEditor.addView` 改调 core（同一笔写入把 activeViewId 指到新视图，行为逐字不变）。移动端 `MobileBitableViewListSheet` 编辑态给「新建视图」：**「新建表单视图」主按钮排第一** + 表格/看板/画册/日历 `.mb-chip`；只读态禁用并明写「只读状态不能新建视图，点右上角「编辑」后可新建」；入口 = 视图页签行条件 `(viewTabs.length > 1 || editable)`（只读单视图不变 ⇒ 快照不受影响，编辑态单视图也能进列表）；建完自动 `switchView`（设备本地导航）。
 - **② 新增字段即进入编辑（两端）**：`addMobileField` 返回 `{doc, fieldId}`；移动端「字段面板 → 添加」后自动打开「修改字段」面板（字段面板保持打开、同铅笔路径层序）；桌面 `addField`（表头/面板类型网格）与 `insertField`（插入列）落字段后自动弹 `FieldEditorModal` 编辑它。**语义 = 先落字段再编辑，取消后字段保留**（有意）。

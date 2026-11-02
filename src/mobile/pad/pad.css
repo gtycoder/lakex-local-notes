@@ -1,0 +1,84 @@
+/* ── 平板外壳（261102 · pad 适配批次）────────────────────────────────────
+ * 判据唯一来源 = src/mobile/pad/formFactor.ts（按**窗口宽**分三档：<600 / 600–799 / ≥800）。
+ * 本文件只放平板形态的外壳布局；手机（compact）不受影响 —— 所有规则都带
+ * html[data-form-factor="…"] 前缀，且取值只走 --lake-* / --mb-* 令牌。
+ *
+ * expanded = 双栏：左目录常驻（280）+ 正文（原有 .mobile-workspace-body）。
+ * medium 仍单栏，只是内容限宽（规则在 mobile.css 的平板块，选择器同步为 data-form-factor）。
+ */
+
+/* 工作区主体：手机仍纵向单栏（与旧 DOM 等价：header 下方直接是 workspace-body） */
+.mobile-workspace-main {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* 左目录常驻：默认不渲染（display:none 兜底，JS 也只在 expanded 挂载） */
+.pad-tree { display: none; }
+
+html[data-form-factor="expanded"] .mobile-workspace-main { flex-direction: row; }
+
+html[data-form-factor="expanded"] .pad-tree {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 280px;
+  width: 280px;
+  min-height: 0;
+  background: var(--lake-bg-panel);
+  border-right: .5px solid var(--hairline);
+}
+
+.pad-tree__head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 44px;
+  padding: 0 4px 0 12px;
+  border-bottom: .5px solid var(--hairline);
+}
+
+.pad-tree__title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--lake-font-size-small);
+  color: var(--lake-text-1);
+}
+
+/* tree list 自带的 .side-panel-body 在双栏里就是左栏滚动区（padding/overscroll 沿用原规则） */
+html[data-form-factor="expanded"] .pad-tree > .side-panel-body {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* 双栏里的正文：工具栏/正文容器吃满文档列（左栏 280 + 右栏），
+ * 阅读宽仍限 760 —— 只限 .ne-engine（正文），不像 mobile.css 那样连 .lake-editor-mount（含工具栏）一起限。 */
+html[data-form-factor="expanded"] .mobile-doc-body .lake-editor-mount {
+  max-width: none;
+  margin-left: 0;
+  margin-right: 0;
+}
+
+html[data-form-factor="expanded"] .mobile-doc-body .ne-engine {
+  max-width: 760px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* 平板没有 dock（编辑走内核工具栏），底部不再留 dock 的 80px 让位。 */
+html[data-form-factor="expanded"] .mobile-doc-body { padding-bottom: 24px; }
+
+/* 触屏命中：内核工具栏 26×26 → 40×40（下拉选择保留自身宽度，只抬高度）。 */
+html[data-form-factor="expanded"] .ne-ui-toolbar .ne-ui-toolbar-button,
+html[data-form-factor="expanded"] .ne-ui-toolbar .ne-ui-toolbar-toggle-button,
+html[data-form-factor="expanded"] .ne-ui-toolbar .ne-ui-toolbar-dbl-toggle-button,
+html[data-form-factor="expanded"] .ne-ui-toolbar .ne-ui-toolbar-clear-format {
+  width: 40px;
+  height: 40px;
+}
+

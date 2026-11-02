@@ -5,7 +5,7 @@ import { applyTheme } from "../lib/theme";
 import { loadSettings, subscribeSettings } from "../lib/settings";
 import { clearPersistedNotebookTabs } from "./notebook/tabSessionCleanup";
 import { installSafeAreaInsets } from "./native/safeAreaInsets";
-import { installDeviceProfile } from "./native/deviceProfile";
+import { installFormFactor } from "./pad/formFactor";
 import { applySystemBarTheme } from "./native/systemBars";
 import { isQuickNoteShortcutUrl, readLaunchUrlHint } from "./native/quickNoteShortcut";
 import { installPasteInterceptor } from "../features/editor/clipboardHtml"; // 与桌面 src/main.tsx 一致：粘贴前先装 getData 升级拦截器
@@ -21,6 +21,7 @@ import "./editor-dark.css"; // 自写：桌面同源深色桥（已去 --b3-*，
 import "./editor/editor-dock.css";
 import "./kit.css"; // P2：移动端自有原语库 mb-*（触屏密度；一个交互语义只有一套）
 import "./floating.css"; // P3：浮层原语（mb-sheet / mb-actionsheet / mb-toast / mb-menusheet + 遮罩）
+import "./pad/pad.css"; // 261102：平板外壳（双栏工作区 + 左目录常驻；判据见 pad/formFactor.ts）
 import "./features.css"; // P6：图片 Lightbox / 附件预览的**移动端外观**（结构类名共享、视觉各端自有）
 import "./quick-notes.css"; // P6b：小记编辑器宿主与只读预览的移动端外观（自桌面那份抽取移动端子集）
 import "./ai/ai.css"; // 261023：AI 全屏功能页（布局 + Markdown），不进入口以外的作用域
@@ -34,8 +35,9 @@ document.body.classList.add("lake-mobile");
 
 // 261027：系统栏/刘海安全区（原生 WindowInsets → CSS 变量；env() 不靠谱的 ROM 走这里兜底）。
 installSafeAreaInsets();
-// 261027：平板/折叠屏形态（只切布局类，不改信息架构）。
-installDeviceProfile();
+// 261102：平板形态判据（按**窗口宽**分 compact/medium/expanded，写 html[data-form-factor]）。
+// 原生 smallestScreenWidthDp 只作提示（分屏/多任务下窗口宽才是真相，见 pad/formFactor.ts）。
+installFormFactor();
 
 // M3：移动端深色模式——与桌面同语义：settings.theme 为权威（light=daylight / dark=midnight）。
 // 启动即应用；saveSettings 的订阅回调让设置面板切换立即生效（桌面此前一直如此，移动端曾缺失
