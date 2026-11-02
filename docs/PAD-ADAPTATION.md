@@ -563,3 +563,16 @@ P0 体面单栏（1–2）→ P1 双栏（3–5）→ 工具栏 T0（5–7，§8
 - **多维表工具栏「添加记录」**：在现有 `.mbt-toolbar` 右侧加主按钮（复用已有 `addRecord`：先落盘再改界面、窗口覆盖新记录、自动打开记录面板），位置对齐桌面「添加记录」。设备实测：点击后 `4 → 5 条记录`，新记录面板自动打开。
 - **平板基线纠错**：上一批在**脏实例**（中途创建的「无标题表格」会多一行树行）上重烤过 `home-doc`（2029）⇒ 本批在 `pm clear` + 干净夹具上重烤回 **2012**，连跑两轮 **0 差异**。教训已写进 `scripts/mobile-audit/README.md`：平板基线只认"干净实例 + 固定夹具"。
 
+
+### 10.9 第七批：手写板平板工具坞内联色板 + 手机/平板基线复核
+
+- **手写板（T0 剩余）**：`InkPad` 新增 `inlineTools` 开关（默认 false）。平板 `expanded` 下工具坞把**色板（COLORS）与 4 档笔宽平铺**进工具行（44 触达，桌面单行观感），坞内悬浮色板/笔宽面板不再渲染；手机保持 v3「当前值按钮 + 悬浮面板」。
+  - 接线：`MobileInkPad` 用 `useFormFactor() === "expanded"` 注入；桌面 `DesktopInkPad` 不变。
+  - 设备实测（lake_tab）：dock 984×89，内联 6 色 + 4 档，无 `[data-overlay=palette/widths]`；编辑态正常。
+  - 护栏：`inkPadWiring` 静态断言改为「内联只在 `inlineTools` 分支」；`MobileInkPad.render.test.tsx` 视口钉 412（手机语义）+ 新增 expanded 内联用例。
+- **手机 6 态门禁（首次真正跑通）**：`lake_gate` 起在 5582 / CDP 9336，装合并后 APK + 干净夹具。
+  - 首轮 1 态差异：`home-doc 1996 → 1997` —— 根因 = `NotebookWorkspace` 平板批次多了 `.mobile-workspace-main` 包装层（手机也 +1 元素，属有意结构）。
+  - 重烤 `baseline/mobile-snap.json` 后连跑两轮 **0 差异**（手机其余 5 态元素数不变）。
+- **平板 6 态门禁**：`pm clear` + 夹具后因 `home-doc` 指纹带文档 node id（已知装置约束）而重烤一次（元素数 2012 不变），连跑两轮 **0 差异**。
+- **教训（再次确认）**：两份基线都只认「专用实例 + 干净夹具」；`pm clear`/重灌夹具/创建测试文档后必须重烤，否则必假红。
+
