@@ -19,6 +19,10 @@ import { QUICK_TEXT_COLORS } from "../../core/colorPalette";
 import { createInkDoc, createInkPage, inkToBody, type InkDoc } from "../../core/inkDoc";
 import { MobileInkPad } from "./MobileInkPad";
 
+// 本文件验的是**手机**（compact）语义：jsdom 默认 1024 宽会命中平板 expanded 分支（工具坞内联 8 色/4 档），
+// 与这些断言无关；个别平板用例自己临时改宽。
+Object.defineProperty(window, "innerWidth", { configurable: true, writable: true, value: 412 });
+
 function twoPageBody(): string {
   const base = createInkDoc("page-1");
   const doc: InkDoc = { ...base, pages: [...base.pages, createInkPage("page-2", "blank")], activePageId: "page-1" };
@@ -91,6 +95,24 @@ beforeAll(() => {
     disconnect() { /* no-op */ }
   }
   (globalThis as { ResizeObserver?: unknown }).ResizeObserver = ResizeObserverStub;
+});
+
+describe("MobileInkPad 平板 expanded：工具坞内联色板", () => {
+  it("色板 + 4 档笔宽平铺进工具行；不再渲染坞内悬浮色板/笔宽面板", async () => {
+    const prev = window.innerWidth;
+    Object.defineProperty(window, "innerWidth", { configurable: true, writable: true, value: 1280 });
+    try {
+      const view = await mount({ content: twoPageBody(), readOnly: false });
+      const inlineColors = view.container.querySelectorAll(".ink-pad--mobile .ink-toolbar .ink-color").length;
+      expect(inlineColors).toBeGreaterThanOrEqual(4);
+      expect(view.container.querySelectorAll(".ink-pad--mobile .ink-toolbar .ink-width").length).toBe(4);
+      expect(view.container.querySelector('[data-overlay="palette"]')).toBeNull();
+      expect(view.container.querySelector('[data-overlay="widths"]')).toBeNull();
+      await view.unmount();
+    } finally {
+      Object.defineProperty(window, "innerWidth", { configurable: true, writable: true, value: prev });
+    }
+  });
 });
 
 describe("MobileInkPad 阅读态（默认打开态）", () => {
