@@ -545,3 +545,12 @@ P0 体面单栏（1–2）→ P1 双栏（3–5）→ 工具栏 T0（5–7，§8
 - 表格现状（平板阅读态）：`SheetTopBar` + 网格 + 底部公式栏；编辑态再加 `SheetDock`——在 1280 宽下可用，不是这次要解决的问题。
 - **基线重烤（本批唯一一次）**：首页那条 CSS 改变了 `.mobile-tab-stage` 的计算样式 ⇒ 平板 6 态**元素数不变、指纹全变**（快照按元素计算值取指纹）⇒ 按 AGENTS §3#21③ 重烤 `baseline/mobile-snap-tablet.json`，重烤后连跑 **0 差异**。手机基线不受影响。
 
+
+### 10.7 第五批：平板表格只读 dock 常驻
+
+- **问题**：手机表格在阅读态只有「阅读工具条」，dock 只在编辑态出现 ⇒ 进出编辑时网格整块上下跳；桌面是工具栏常驻。
+- **改法**：`SheetDock` 新增 `readOnly` 文案/禁用态（工具全禁用、隐藏键盘键）；`MobileUsheetViewer` 在 `expanded` 下**只读也渲染 dock**，并用 `.mobile-usheet.is-readonly .mb-usheet-dock { position: static }` 让它进流常驻，`.mb-usheet-chrome-spacer { height: 0 }`（只读时不再为 fixed dock 预留 96px）。手机（compact）与编辑态完全不变（编辑态仍 fixed + 96px spacer + 键盘键）。
+- **实测**（lake_tab 阅读态）：dock 存在、`position: static`、7/7 按钮 disabled、无键盘键、spacer 0；切编辑态：`position: fixed`、8 按钮（含键盘）、spacer 96、阅读工具条隐藏 —— 与手机语义一致。
+- **顺带修**：`useFormFactor` 在 `matchMedia` 缺失时不再崩（jsdom / 老 WebView 只靠 resize）；`mobileUsheetViewer.test.ts` 把 innerWidth 钉到 412（这组用例验的是手机 compact 语义，jsdom 默认 1024 会命中平板分支）。
+- **门禁**：tsc 0 / 全量 vitest **543 文件 3360 例** / `check:mobileui` / `git diff --check` / **平板快照 6 态 0 差异**（本批未动平板外壳）。
+
