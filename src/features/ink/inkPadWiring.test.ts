@@ -77,6 +77,20 @@ describe("手写板正式端到端接线", () => {
     return INK_PAD.slice(toolbarStart, toolbarEnd) + INK_PAD.slice(footerStart, footerEnd);
   };
 
+  /** 移动端底部工具坞的 JSX 片段（到 `) : null}` 为止；里面含色板/笔宽两个悬浮面板）。 */
+  const mobileDock = (): string => {
+    const start = INK_PAD.indexOf('data-overlay="dock"');
+    const end = INK_PAD.indexOf(") : null}", start);
+    return INK_PAD.slice(start, end);
+  };
+  /** 工具行片段（toolbar group 内部；不含两个悬浮面板）。 */
+  const mobileToolRow = (): string => {
+    const dock = mobileDock();
+    const start = dock.indexOf('aria-label="画笔工具"');
+    const end = dock.indexOf("</div>", start);
+    return dock.slice(start, end);
+  };
+
   it("移动端顶部导航是悬浮面（overlay 不占布局）：翻页 / 缩放 / 全局预览，两态同一条", () => {
     expect(INK_PAD).toContain('aria-label="手写板导航"');
     expect(INK_PAD).toContain('aria-label="全局预览"');
@@ -91,7 +105,7 @@ describe("手写板正式端到端接线", () => {
     expect(MOBILE_INK_CSS).not.toContain("backdrop-filter");
   });
 
-  it("移动端底部工具坞是悬浮面且只在编辑态出现；纸张/说明行已从阅读态移除", () => {
+  it("移动端底部工具坞是悬浮面且只在编辑态出现；颜色/笔宽收成「当前值按钮 + 悬浮面板」", () => {
     expect(INK_PAD).toContain(") : !readOnly ? (");
     expect(INK_PAD).toContain('role="toolbar" aria-label="手写工具"');
     expect(INK_PAD).toContain('data-overlay="dock"');
@@ -103,8 +117,49 @@ describe("手写板正式端到端接线", () => {
     expect(MOBILE_INK_CSS).toContain('.ink-pad--mobile > [data-overlay="dock"]');
     expect(MOBILE_INK_CSS).toMatch(/bottom: calc\(var\(--lake-space-md\) \+ var\(--mobile-bottom-safe-area\)\);/);
     expect(MOBILE_INK_CSS).toContain("border-radius: var(--lake-radius-card)");
+    // 颜色/笔宽：工具行只有「当前值按钮」，7 色 / 4 档收进坞内悬浮面板
+    expect(mobileToolRow()).toContain('data-popover-trigger="color"');
+    expect(mobileToolRow()).toContain('data-popover-trigger="width"');
+    expect(mobileToolRow()).toContain('aria-label="选择颜色"');
+    expect(mobileToolRow()).toContain('aria-label="选择笔宽"');
+    expect(mobileToolRow()).not.toContain("COLORS.map");
+    expect(mobileToolRow()).not.toContain("WIDTHS.map");
+    expect(mobileDock()).toContain('data-overlay="palette"');
+    expect(mobileDock()).toContain('data-overlay="widths"');
     // 纸张只在编辑态工具坞里可点（阅读态没有 background 按钮渲染路径）
     expect(INK_PAD).toContain("onClick={() => setBackground(item.value)}");
+  });
+
+  it("工具行一屏放得下：7 个 44 按钮 + 3 个分隔，360 宽也不用横滑", () => {
+    // 7×44 + 3×(1px + 2×2px margin) + 工具坞内距 4 = 327 ≤ 360 − 16（坞左右 8）− 2（0.5 边×2）= 342
+    const rowWidth = 7 * 44 + 3 * 5 + 4; // = 327
+    expect(rowWidth).toBe(327);
+    expect(rowWidth).toBeLessThanOrEqual(360 - 16 - 2); // 360 宽下可用 342
+    // 结构侧：工具行不再内联颜色/笔宽列表（7 色/4 档在面板里），只剩 3 工具 + 2 当前值 + 撤销/重做
+    const toolRow = mobileToolRow();
+    expect(toolRow).not.toContain("COLORS.map");
+    expect(toolRow).not.toContain("WIDTHS.map");
+    expect(toolRow).toContain('aria-label="撤销"');
+    expect(toolRow).toContain('aria-label="重做"');
+    expect(MOBILE_INK_CSS).toContain('.ink-pad--mobile > [data-overlay="dock"] .ink-toolbar');
+  });
+
+  it("色板/笔宽面板：悬浮在工具坞上方 8、同套卡面；选值关闭、点外部也关闭", () => {
+    // 面板卡面：absolute 在坞上方 8，面板底/边/阴影/圆角全走令牌
+    expect(MOBILE_INK_CSS).toContain('.ink-pad--mobile > [data-overlay="dock"] [data-overlay="palette"],');
+    expect(MOBILE_INK_CSS).toContain("bottom: calc(100% + var(--lake-space-md));");
+    expect(MOBILE_INK_CSS).toContain("border-radius: var(--lake-radius-card)");
+    expect(MOBILE_INK_CSS).toContain("box-shadow: var(--lake-shadow-popover)");
+    expect(MOBILE_INK_CSS).not.toContain("backdrop-filter");
+    // 色板复用 .ink-color（44 盒 + 28 内圆同一份 CSS）；笔宽复用 .ink-width（44 盒）
+    expect(INK_PAD).toContain("aria-label=\"选择颜色\"");
+    expect(INK_PAD).toContain("aria-label=\"选择笔宽\"");
+    expect(INK_PAD).toContain("data-popover-trigger");
+    // 选值关闭
+    expect(INK_PAD).toContain("setPaletteOpen(false)");
+    expect(INK_PAD).toContain("setWidthsOpen(false)");
+    // 点「面板/触发按钮」之外关闭（pointerdown 捕获）
+    expect(INK_PAD).toContain('[data-overlay="palette"], [data-overlay="widths"], [data-popover-trigger]');
   });
 
   it("移动端阅读态让开底部胶囊：胶囊 stack（状态栏+间隔+安全区+胶囊）+ 8", () => {
@@ -133,7 +188,16 @@ describe("手写板正式端到端接线", () => {
     expect(INK_PAD).toMatch(/if \(!readOnly\) \{\n\s+const body = serializeDoc\(updated\);/);
   });
 
-  it("全局预览的编辑项（新建/前移/后移/删除）在阅读态禁用，缩略图选页仍可用", () => {
+  it("全局预览：移动端悬浮覆盖（不推画布），桌面仍是流内面板；阅读态编辑项禁用、选页可用", () => {
+    // 移动端 = 包装在 data-overlay="preview" 里；桌面 = 三元分支的 else 之外、直接流内节点
+    expect(INK_PAD).toContain('<div data-overlay="preview">');
+    expect(INK_PAD).toMatch(/\{pagesOpen && \(variant === "desktop" \? \(\s*<InkPageStrip/);
+    expect(MOBILE_INK_CSS).toContain('.ink-pad--mobile > [data-overlay="preview"]');
+    expect(MOBILE_INK_CSS).toContain("top: calc(var(--mb-tap-min) + var(--lake-space-xl));");
+    expect(MOBILE_INK_CSS).toContain("max-height: 45dvh; overflow-y: auto;");
+    expect(MOBILE_INK_CSS).toContain("z-index: 1;"); // 高于画布、低于导航/工具坞（z 2）
+    // 不再用流内 margin-top 把画布往下推
+    expect(MOBILE_INK_CSS).not.toContain(".ink-pad--mobile > .ink-page-strip { margin-top:");
     expect(INK_PAD).toContain("readOnly={readOnly}");
     expect(PAGE_STRIP).toContain("readOnly?: boolean");
     expect(PAGE_STRIP).toContain("disabled={readOnly || index === 0}");
@@ -163,6 +227,12 @@ describe("手写板正式端到端接线", () => {
     // 移动端新增入口不得混进桌面分支
     expect(branch).not.toContain("手写板导航");
     expect(branch).not.toContain("全局预览");
+    expect(branch).not.toContain("选择颜色");
+    expect(branch).not.toContain("选择笔宽");
+    expect(branch).not.toContain("data-popover-trigger");
+    expect(branch).not.toContain("data-overlay");
+    // 桌面预览面板保持「流内、直接渲染 InkPageStrip」——不套悬浮包装
+    expect(INK_PAD).toMatch(/\{pagesOpen && \(variant === "desktop" \? \(\s*<InkPageStrip/);
   });
 
   it("只读态 capture 交父层最新正文（桌面锁定文档不会被只读翻页写盘）", () => {
@@ -174,7 +244,7 @@ describe("手写板正式端到端接线", () => {
     expect(MOBILE).toMatch(/active\.kind === "usheet" \|\| active\.kind === "board" \|\| active\.kind === "ink"/);
   });
 
-  it("触达 ≥44：按钮盒走 --mb-tap-min；颜色是 44 盒 + 28 内圆；纸张视觉 36 + ::after 补 44", () => {
+  it("触达 ≥44：按钮盒走 --mb-tap-min；当前色/色板 44 盒 + 28 内圆；纸张视觉 36 + ::after 补 44", () => {
     expect(MOBILE_INK_CSS).toContain(".ink-pad--mobile .ink-pages button");
     expect(MOBILE_INK_CSS).toContain(".ink-pad--mobile .ink-backgrounds button");
     expect(MOBILE_INK_CSS).toContain(".ink-pad--mobile .ink-tool");

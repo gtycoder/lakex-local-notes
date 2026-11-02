@@ -13,7 +13,8 @@
 
 /* 悬浮面共用：绝对定位（不占布局）+ 面板底 + 0.5px 边 + popover 阴影。 */
 .ink-pad--mobile > [data-overlay="nav"],
-.ink-pad--mobile > [data-overlay="dock"] {
+.ink-pad--mobile > [data-overlay="dock"],
+.ink-pad--mobile > [data-overlay="preview"] {
   position: absolute; z-index: 2; left: var(--lake-space-md); right: var(--lake-space-md);
   border: .5px solid var(--lake-border-1);
   background: var(--lake-bg-panel); box-shadow: var(--lake-shadow-popover);
@@ -66,8 +67,26 @@
 .ink-pad--mobile .ink-page-frame { width: min(100%, calc((100dvh - 202px) * 0.707)); max-height: 100%; aspect-ratio: 794 / 1123; }
 /* 保存失败横幅也被悬浮导航条压着 ⇒ 下移一条导航的高度（只在移动端）。 */
 .ink-pad--mobile > .ink-invalid-banner { margin-top: calc(var(--mb-tap-min) + var(--lake-space-xl)); }
-/* 全局预览（InkPageStrip）仍是布局内面板（本轮不改浮层）⇒ 让到悬浮导航条下面。 */
-.ink-pad--mobile > .ink-page-strip { margin-top: calc(var(--mb-tap-min) + var(--lake-space-xl)); }
+/* 色板/笔宽小面板：悬浮在工具坞上方 8（不占布局），与工具坞同套卡面；一行铺开。 */
+.ink-pad--mobile > [data-overlay="dock"] [data-overlay="palette"],
+.ink-pad--mobile > [data-overlay="dock"] [data-overlay="widths"] {
+  position: absolute; left: 0; right: 0; bottom: calc(100% + var(--lake-space-md));
+  display: flex; align-items: center; justify-content: center;
+  gap: var(--lake-space-xxs); padding: var(--lake-space-md);
+  border: .5px solid var(--lake-border-1); border-radius: var(--lake-radius-card);
+  background: var(--lake-bg-panel); box-shadow: var(--lake-shadow-popover);
+}
+.ink-pad--mobile > [data-overlay="dock"] [data-overlay="widths"] { gap: var(--lake-space-sm); }
+/* 全局预览：移动端改成**悬浮覆盖**（顶部导航条下方，不推画布；桌面仍是流内面板），内部滚动。 */
+.ink-pad--mobile > [data-overlay="preview"] {
+  position: absolute; z-index: 1;
+  top: calc(var(--mb-tap-min) + var(--lake-space-xl));
+  max-height: 45dvh; overflow-y: auto;
+  border-radius: var(--lake-radius-card);
+}
+.ink-pad--mobile > [data-overlay="preview"] .ink-page-strip {
+  border-bottom: 0; background: transparent;
+}
 /* 全局预览在手机上把 18×18 的操作钮放大到 --mb-tap-min：
    缩略图卡片整体加宽（缩略图 + 一行 44 高操作），整条仍横向滚动；桌面保持 64 / 18 不变。 */
 .ink-pad--mobile .ink-page-thumb { width: calc(var(--mb-tap-min) * 3 + var(--lake-space-md)); }

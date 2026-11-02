@@ -53,6 +53,11 @@ const BACKGROUNDS: ReadonlyArray<{ value: InkBackground; label: string }> = [
   { value: "dot", label: "点阵" },
 ];
 
+/** 当前笔宽按钮里的视觉点尺寸：上限 20（高亮笔初始宽 18 → ×2 = 36 会撑满 44 盒）。 */
+function widthDotSize(width: number): number {
+  return Math.min(20, Math.max(4, Math.round(width * 2)));
+}
+
 function newId(prefix: string): string {
   const uuid = globalThis.crypto?.randomUUID?.();
   return uuid ? `${prefix}-${uuid}` : `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -108,6 +113,9 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
   const [highlighterWidth, setHighlighterWidth] = useState<number>(18);
   const [zoom, setZoom] = useState(1);
   const [pagesOpen, setPagesOpen] = useState(false);
+  // 移动端编辑工具坞的两个悬浮面板（当前色板 / 当前笔宽）；桌面不渲染它们。
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [widthsOpen, setWidthsOpen] = useState(false);
   const [pendingDeletePageId, setPendingDeletePageId] = useState<string | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
   const [fitSize, setFitSize] = useState<{ width: number; height: number } | null>(null);
@@ -191,8 +199,28 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
   }, [pageHeight, pageWidth]);
   const canUndo = historyVersion >= 0 && undoRef.current.length > 0;
   const canRedo = historyVersion >= 0 && redoRef.current.length > 0;
+  const activeWidth = mode === "highlighter" ? highlighterWidth : penWidth;
   const zoomIn = useCallback(() => setZoom((value) => Math.min(ZOOM_MAX, Math.round((value + ZOOM_STEP) * 100) / 100)), []);
   const zoomOut = useCallback(() => setZoom((value) => Math.max(ZOOM_MIN, Math.round((value - ZOOM_STEP) * 100) / 100)), []);
+  const closeSwatches = useCallback(() => {
+    setPaletteOpen(false);
+    setWidthsOpen(false);
+  }, []);
+  /** 色板/笔宽面板：点「面板本体 / 触发按钮」之外的任意处关闭（捕获 pointerdown，不误吞画布手势）。 */
+  useEffect(() => {
+    if (!paletteOpen && !widthsOpen) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Element | null;
+      if (target?.closest?.('[data-overlay="palette"], [data-overlay="widths"], [data-popover-trigger]')) return;
+      closeSwatches();
+    };
+    document.addEventListener("pointerdown", onPointerDown, true);
+    return () => document.removeEventListener("pointerdown", onPointerDown, true);
+  }, [closeSwatches, paletteOpen, widthsOpen]);
+  // 退回阅读态时工具坞整体卸载：把面板状态一起收掉，下次进编辑态不会凭空弹开。
+  useEffect(() => {
+    if (readOnly) closeSwatches();
+  }, [closeSwatches, readOnly]);
 
   const serializeDoc = useCallback((value: InkDoc): string | null => {
     try {
@@ -597,7 +625,7 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
 
       {saveError && <div className="ink-invalid-banner" role="alert">{saveError}；本次修改未写入。</div>}
 
-      {pagesOpen && (
+      {pagesOpen && (variant === "desktop" ? (
         <InkPageStrip
           pages={doc.pages}
           activePageId={doc.activePageId}
@@ -611,7 +639,24 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
           onClose={() => { setPagesOpen(false); setPendingDeletePageId(null); }}
           readOnly={readOnly}
         />
-      )}
+      ) : (
+        // 移动端：全局预览 = 悬浮覆盖（不再把画布往下推；桌面仍是流内面板，结构不变）
+        <div data-overlay="preview">
+          <InkPageStrip
+            pages={doc.pages}
+            activePageId={doc.activePageId}
+            pendingDeleteId={pendingDeletePageId}
+            onSelect={selectPage}
+            onMove={movePage}
+            onAdd={addPage}
+            onRequestDelete={requestDeletePage}
+            onConfirmDelete={confirmDeletePage}
+            onCancelDelete={() => setPendingDeletePageId(null)}
+            onClose={() => { setPagesOpen(false); setPendingDeletePageId(null); }}
+            readOnly={readOnly}
+          />
+        </div>
+      ))}
 
       <div className="ink-page-stage" ref={stageRef}>
         <div
@@ -670,26 +715,25 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
             <button className={["ink-tool", mode === "highlighter" ? "is-active" : ""].join(" ")} onClick={() => setMode("highlighter")} aria-label="高亮笔" title="高亮笔"><Highlighter size={18} /></button>
             <button className={["ink-tool", mode === "eraser" ? "is-active" : ""].join(" ")} onClick={() => setMode("eraser")} aria-label="整笔橡皮" title="整笔橡皮"><Eraser size={18} /></button>
             <span className="ink-toolbar__sep" />
-            {COLORS.map((value) => (
-              // 触达 44 盒 + 视觉内圆 28（内圆由 CSS 收口，见 inkPad.mobile.css）
-              <button
-                key={value}
-                className={["ink-color", color === value ? "is-active" : ""].join(" ")}
-                onClick={() => { setColor(value); if (mode === "eraser") setMode("pen"); }}
-                aria-label={`颜色 ${value}`}
-                title={`颜色 ${value}`}
-              ><span style={{ backgroundColor: value }} /></button>
-            ))}
+            {/* 颜色收成一个当前色按钮（44 盒 + 28 内圆），点开悬浮色板 */}
+            <button
+              className={["ink-color", paletteOpen ? "is-active" : ""].join(" ")}
+              data-popover-trigger="color"
+              onClick={() => { setPaletteOpen((open) => !open); setWidthsOpen(false); }}
+              aria-label="选择颜色"
+              title="选择颜色"
+              aria-expanded={paletteOpen}
+            ><span style={{ backgroundColor: color }} /></button>
             <span className="ink-toolbar__sep" />
-            {WIDTHS.map((value) => (
-              <button
-                key={value}
-                className={["ink-width", (mode === "highlighter" ? highlighterWidth : penWidth) === value ? "is-active" : ""].join(" ")}
-                onClick={() => mode === "highlighter" ? setHighlighterWidth(value) : setPenWidth(value)}
-                aria-label={`笔宽 ${value}`}
-                title={`笔宽 ${value}`}
-              ><span style={{ width: Math.max(4, value * 2), height: Math.max(4, value * 2) }} /></button>
-            ))}
+            {/* 笔宽收成一个当前笔宽按钮，点开悬浮 4 档面板 */}
+            <button
+              className={["ink-width", widthsOpen ? "is-active" : ""].join(" ")}
+              data-popover-trigger="width"
+              onClick={() => { setWidthsOpen((open) => !open); setPaletteOpen(false); }}
+              aria-label="选择笔宽"
+              title="选择笔宽"
+              aria-expanded={widthsOpen}
+            ><span style={{ width: widthDotSize(activeWidth), height: widthDotSize(activeWidth) }} /></button>
             <span className="ink-toolbar__sep" />
             <button className="ink-tool" onClick={undo} aria-label="撤销" title="撤销" disabled={!canUndo}><Undo2 size={18} /></button>
             <button className="ink-tool" onClick={redo} aria-label="重做" title="重做" disabled={!canRedo}><Redo2 size={18} /></button>
@@ -699,6 +743,32 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
               <button key={item.value} className={page.background === item.value ? "is-active" : ""} onClick={() => setBackground(item.value)}>{item.label}</button>
             ))}
           </div>
+          {paletteOpen && (
+            <div role="group" aria-label="选择颜色" data-overlay="palette">
+              {COLORS.map((value) => (
+                <button
+                  key={value}
+                  className={["ink-color", color === value ? "is-active" : ""].join(" ")}
+                  onClick={() => { setColor(value); if (mode === "eraser") setMode("pen"); setPaletteOpen(false); }}
+                  aria-label={`颜色 ${value}`}
+                  title={`颜色 ${value}`}
+                ><span style={{ backgroundColor: value }} /></button>
+              ))}
+            </div>
+          )}
+          {widthsOpen && (
+            <div role="group" aria-label="选择笔宽" data-overlay="widths">
+              {WIDTHS.map((value) => (
+                <button
+                  key={value}
+                  className={["ink-width", activeWidth === value ? "is-active" : ""].join(" ")}
+                  onClick={() => { if (mode === "highlighter") setHighlighterWidth(value); else setPenWidth(value); setWidthsOpen(false); }}
+                  aria-label={`笔宽 ${value}`}
+                  title={`笔宽 ${value}`}
+                ><span style={{ width: widthDotSize(value), height: widthDotSize(value) }} /></button>
+              ))}
+            </div>
+          )}
         </div>
       ) : null}
 

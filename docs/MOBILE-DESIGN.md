@@ -247,7 +247,7 @@ Toast        .mb-toast-host > .mb-toast[--error] > (.mb-toast__text, .mb-toast__
 
 **小记标签（261102）**：`.qn-tag` = 浅灰绿实底 `--lake-quick-tag-bg`（浅/深两套）+ `border:0` + 内距 `--lake-space-lg` + `--lake-text-1`；选中态保留 accent（筛选选中要一眼可辨）。颜色只落 `theme/light.css` / `theme/dark.css`。
 
-**手写板（261102，布局 v2：悬浮 overlay）**：页面 / 纸张 / 笔迹都是正文数据 —— **纸张只能编辑态改**；翻页 / 缩放 / 全局预览是视图操作，两端（阅读/编辑）都可用且不写盘。移动端 = **顶部悬浮 pill**（翻页 ｜ 缩放 ｜ 全局预览，阅读/编辑同一条，absolute 不占布局）+ **底部悬浮工具坞仅编辑态**（absolute、bottom 8 + 安全区；工具行 48 / 纸张行 40，图标 18，颜色 44 盒 + 28 视觉内圆，纸张 36 视觉 + `::after` 命中 44）；阅读态没有底部工具坞/说明行，底部只剩工作区胶囊（pad 让位走「状态栏 + 间隔 + 安全区 + 胶囊 + 8」tokens 表达式）。悬浮面用 `--lake-bg-panel` + 0.5px 边 + `--lake-shadow-popover`，**不做毛玻璃/backdrop-filter**。
+**手写板（261102，布局 v3：悬浮 overlay + 精简工具）**：页面 / 纸张 / 笔迹都是正文数据 —— **纸张只能编辑态改**；翻页 / 缩放 / 全局预览是视图操作，两端（阅读/编辑）都可用且不写盘。移动端 = **顶部悬浮 pill**（翻页 ｜ 缩放 ｜ 全局预览，阅读/编辑同一条，absolute 不占布局）+ **底部悬浮工具坞仅编辑态**（absolute、bottom 8 + 安全区）：工具行收成一屏 7 键（笔/高亮/橡皮 + 当前色 + 当前笔宽 + 撤销/重做，44 盒；颜色 28 视觉内圆、点开悬浮色板；笔宽点开 4 档小面板），纸张行 40（视觉 36 + `::after` 命中 44）；**全局预览为悬浮覆盖**（导航下方、45dvh 内滚动、不推画布）；阅读态无工具坞/说明行，底部只剩工作区胶囊（pad 让位走「状态栏 + 间隔 + 安全区 + 胶囊 + 8」tokens 表达式）。悬浮面用 `--lake-bg-panel` + 0.5px 边 + `--lake-shadow-popover`，**不做毛玻璃/backdrop-filter**。
 
 页内交互（② 层）已定：设置页 = 抽屉九页 + 移动端自有版式原语（`src/mobile/ui/settingsPrimitives.tsx`，
 `data-set-id` 契约与桌面 `settingsSearch.ts` 对齐，**只共享语义不共享组件**）；小记 = 时间线 + 写作卡九项工具条。

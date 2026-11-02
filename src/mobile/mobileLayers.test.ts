@@ -67,15 +67,12 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "mobile/brand-launch.css": { decls: 20, dupGroups: 2 },   // 261020 新文件：启动覆盖层/标记/动画/静态兜底；2 个重复组 = prefers-reduced-motion 对 anim/poster 的 display 切换
   "mobile/editor-dark.css": { decls: 13, dupGroups: 0 }, // P1：取值迁 theme/dark.css（54 → 13，只留组件级边界修）
   "mobile/editor/editor-dock.css": { decls: 258, dupGroups: 0 }, // 261019(八)：+1 = 收起过渡期面板内容保持可见时不再接受点击（.med-panel[data-closing="1"]）。 // 261017 撤销后端：`.med-btn:disabled` 置灰 +2（255 → 257）。261015：「＋」= 方块网格（两组 8+10 × 4 列、组间 16、方块 52、浅灰底）；「Aa」面板压缩上下间距（行距 8→6、卡内距 3→2、条目 44→40 走注册表补足、色板 37→34、内距 12/14→6/6）+ 图标 17→20、文字/图标色 text-2→text-1。261017（B6）：一级面板统一灰底（selector 加 data-kind=font，声明数不变）；「更多」改行式白卡 + 每项文字说明 + 工具栏中间横滑/键盘固定尾键（删 `.med-ins-glyph` -9、补 `.med-f-btn:disabled` +2 / 行内文字与行标签/不换行 +21 / 工具栏横滑区 + `.med-btn--kb` +5）⇒ 237 → 255
-  // 261102 v2（用户点单：导航条/工具坞改悬浮 + 工具栏整体缩小）38 → 76，全部是**新增交互形态**，不是覆盖叠层：
-  //   ① 悬浮面收口 17 条 = 顶部导航/底部工具坞共用的「absolute + 面板底 + 0.5px 边 + popover 阴影」
-  //      （7）+ 导航 top/padding/圆角（4）+ 工具坞 bottom+safe/纵向两行/圆角（6）——从布局流里移除后
-  //      画布拿到这段高度，这是用户要的效果本身，不是装饰；
-  //   ② 底部工具坞两行缩小 19 条 = 工具行 48 / 纸张行 40 / 纸张按钮视觉 36 + ::after 补命中 44；
-  //   ③ 颜色 44 盒 + 28 内圆 14 条 = 颜色按钮盒与内圆 span 的尺寸/边框/active 环（触达不降、视觉缩小）；
-  //   ④ 悬浮导航/面板在流内的让位 2 条（保存横幅、全局预览条下移一个导航高度）；
-  //   ⑤ 其余 +3 = 旧 footer 两行规则改为悬浮 dock 专有选择器。
-  "mobile/ink/inkPad.mobile.css": { decls: 76, dupGroups: 0 },
+  // 261102 v3（用户点单：颜色/笔宽收菜单 + 全局预览悬浮）76 → 97，全部是**新增交互形态**，不是覆盖叠层：
+  //   ① +21 = 色板/笔宽两个悬浮面板（12 条：absolute 在坞上方 8 + 卡面/边/阴影/圆角/横排/内距）
+  //      + 全局预览改悬浮覆盖（9 条：absolute/z-index 1/导航下方 top/左右 8/45dvh 内部滚动/卡面/去流内 margin）；
+  //   ② −1 = 删掉旧的「预览条 margin-top 让位」流内规则（改悬浮后不再把画布往下推）；
+  //   ③ +1 = 悬浮面共用选择器并入 preview。
+  "mobile/ink/inkPad.mobile.css": { decls: 97, dupGroups: 0 },
   "mobile/ink/inkPad.shared.css": { decls: 188, dupGroups: 0 }, // 手写板：移动端只覆盖工具栏尺寸、页面适配和 footer 换行；通用结构与桌面共用 inkPad.shared.css。
   "mobile/editor/mobile-find.css": { decls: 15, dupGroups: 0 }, // 261016：新文件 = 查找条容器（6）+ 计数（6）+ ::highlight 命中/当前命中（3）
   // 261020 P1 新文件（表格 chrome）；基线按实测回填（只许降）
