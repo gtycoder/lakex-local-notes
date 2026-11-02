@@ -15,6 +15,8 @@ import { usheetSheetCsv } from "../src/core/usheetCsv.js";
 import { buildUsheetXlsx } from "./usheetXlsxExport.js";
 import { collectMarkdownImageSources, markdownToDocx, type DocxImage } from "../src/core/docx.js";
 import { parseLocalAssetUrl } from "../src/core/assetUrl.js";
+import { parseInkBody, type InkBackgroundImageFit, type InkDoc } from "../src/core/inkDoc.js";
+import { strokeToSvgPath } from "../src/features/ink/inkGeometry.js";
 import { ZipWriter } from "../src/core/zipArchive.js";
 
 /** 同名附件归档时的去重后缀：a.pdf → a (2).pdf。 */
@@ -35,6 +37,78 @@ export function localAssetHtmlImgRe(port: number): RegExp {
 }
 export function localAssetMdImgRe(port: number): RegExp {
   return new RegExp(`!\\[[^\\]]*\\]\\((http://127\\.0\\.0\\.1:${port}/([^/)]+)/([^/)]+))\\)`, "g");
+}
+
+/** 手写板 PDF 打印样式：每页一块 A4 比例画布（210mm 宽，打印时随可打印宽度收窄），页间强制分页。
+ *  注意 printToPDF 的 A4 页边距参数保持不变（electron/pdfRenderer.ts）⇒ 页面宽度用 max-width:100% 适配可打印区，
+ *  否则 210mm 会被页边距裁掉右侧。 */
+export const INK_PDF_PRINT_CSS = [
+  "<style>",
+  "body { max-width: none; margin: 0; padding: 0; background: #fff; }",
+  ".ink-pdf { margin: 0; padding: 0; background: #fff; }",
+  ".ink-page { position: relative; width: 210mm; max-width: 100%; aspect-ratio: 210 / 297; overflow: hidden; page-break-after: always; break-after: page; background: #fff; }",
+  ".ink-page:last-child { page-break-after: auto; break-after: auto; }",
+  ".ink-page__bg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }",
+  ".ink-page__ink { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }",
+  "</style>",
+].join("");
+
+/** 背景图 <img style> 的铺放方式（与屏内 SVG preserveAspectRatio 语义对齐）。 */
+export function inkBackgroundFitCss(fit: InkBackgroundImageFit | undefined): string {
+  if (fit === "cover") return "cover";
+  if (fit === "stretch") return "fill";
+  return "contain";
+}
+
+function escapeHtmlAttr(value: string): string {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+export interface InkPdfBodyDeps {
+  /** 背景图 URL → data URI（调用方做路径校验/读盘；读不到返回 null）。 */
+  imageDataUri: (url: string) => string | null;
+}
+
+export interface InkPdfBodyResult {
+  bodyHtml: string;
+  imageCount: number;
+  skipped: number;
+}
+
+/**
+ * 手写板 → 逐页压平 HTML（纯函数、无 fs/electron 依赖，便于单测）。
+ * 每页：可选背景图（data URI，object-fit 按 fit）+ 矢量笔迹 SVG（viewBox=页面逻辑尺寸、contain 映射整页）；
+ * 没有背景图的页 = 白底（导出是「压平当前内容」，不画纸张底纹）。高亮笔 = opacity .3 + mix-blend-mode:multiply。
+ */
+export function buildInkPdfBody(doc: InkDoc, deps: InkPdfBodyDeps): InkPdfBodyResult {
+  let imageCount = 0;
+  let skipped = 0;
+  const pages = doc.pages.map((page, index) => {
+    let background = "";
+    if (page.backgroundImage) {
+      const uri = deps.imageDataUri(page.backgroundImage.url);
+      if (uri) {
+        imageCount++;
+        const pixelAttrs = page.backgroundImage.pixelWidth && page.backgroundImage.pixelHeight
+          ? ` data-pixel-width="${page.backgroundImage.pixelWidth}" data-pixel-height="${page.backgroundImage.pixelHeight}"`
+          : "";
+        background = `<img class="ink-page__bg" alt="" src="${escapeHtmlAttr(uri)}" style="object-fit:${inkBackgroundFitCss(page.backgroundImage.fit)}"${pixelAttrs} />`;
+      } else {
+        skipped++; // 缺图：占位白底（页仍在，笔迹照常输出）
+      }
+    }
+    const paths = page.strokes.map((stroke) => {
+      const d = strokeToSvgPath(stroke, true);
+      if (!d) return "";
+      const highlighter = stroke.tool === "highlighter";
+      const style = highlighter ? ' opacity="0.3" style="mix-blend-mode:multiply"' : "";
+      return `<path d="${d}" fill="${escapeHtmlAttr(stroke.color)}"${style} />`;
+    }).join("");
+    return `<div class="ink-page" data-page="${index + 1}">${background}`
+      + `<svg class="ink-page__ink" viewBox="0 0 ${page.width} ${page.height}" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">${paths}</svg>`
+      + "</div>";
+  }).join("");
+  return { bodyHtml: `<div class="ink-pdf">${pages}</div>`, imageCount, skipped };
 }
 
 /** 导出上下文：DB + 路径 + 缓存读取（由 Store 装配）。 */
@@ -270,7 +344,7 @@ export class NoteExport {
     const kind = row?.kind ?? "doc";
     if (kind === "doc") return;
     const label = kind === "usheet" ? "表格" : kind === "bitable" ? "多维表" : kind === "board" ? "画板" : kind === "ink" ? "手写板" : kind;
-    throw new AppError("InvalidInput", `${label}文档暂不支持导出（仅文档可导出 Markdown/HTML/PDF/资料包）`);
+    throw new AppError("InvalidInput", `${label}文档暂不支持导出（仅文档可导出 Markdown/HTML/资料包；手写板仅支持导出 PDF）`);
   }
 
   /**
@@ -329,6 +403,46 @@ export class NoteExport {
   }
 
   /**
+   * 手写板（kind=ink）导出 PDF 的内容准备：读 ink 正文 → 每页压平 HTML（背景图 data URI + 矢量笔迹 SVG）
+   * → 自包含临时 HTML + 唯一 pdf 目标路径。渲染仍由 electron/export.ts 的隐藏窗口 printToPDF 完成。
+   * 只导出「当前内容」：不管阅读/编辑态、不管视口；没有背景图的页是白底（不画纸张底纹）。
+   */
+  exportInkPdfHtml(id: string, baseDir?: string): { htmlPath: string; tempDir: string; pdfPath: string; imageCount: number; skipped: number } {
+    if (!isSafePathSegment(id)) throw new AppError("InvalidInput", `无效的笔记 ID: ${id}`);
+    const row = this.ctx.db.prepare("SELECT title, kind FROM notes WHERE id=?").get(id) as { title?: string; kind?: string | null } | undefined;
+    if (!row) throw new AppError("NotFound", `笔记不存在: ${id}`);
+    if ((row.kind ?? "doc") !== "ink") throw new AppError("InvalidInput", "该文档不是手写板，无法导出 PDF");
+    const bodyPath = this.ctx.notePathFor(id);
+    if (!fs.existsSync(bodyPath)) throw new AppError("NotFound", `笔记不存在: ${id}`);
+    const doc = parseInkBody(fs.readFileSync(bodyPath, "utf8"));
+    if (!doc) throw new AppError("InvalidInput", "手写板正文无法解析，无法导出 PDF");
+    const title = sanitizeFileName(row.title ?? "未命名");
+    const base = baseDir ?? this.defaultExportBase();
+    fs.mkdirSync(base, { recursive: true });
+    const pdfPath = this.uniqueExportFile(base, title, "pdf");
+    const uriCache = new Map<string, string | null>();
+    const imageDataUri = (url: string): string | null => {
+      if (uriCache.has(url)) return uriCache.get(url)!;
+      let uri: string | null = null;
+      const ref = parseLocalAssetUrl(url);
+      if (ref && ref.space === "note" && !ref.staging && isSafePathSegment(ref.noteId) && isSafePathSegment(ref.filename)) {
+        const file = path.join(this.ctx.noteAssetsDir, ref.noteId, ref.filename);
+        try {
+          if (fs.existsSync(file)) uri = `data:${mimeTypeForFilename(ref.filename)};base64,${fs.readFileSync(file).toString("base64")}`;
+        } catch { /* 读失败算跳过（页仍输出笔迹） */ }
+      }
+      uriCache.set(url, uri);
+      return uri;
+    };
+    const { bodyHtml, imageCount, skipped } = buildInkPdfBody(doc, { imageDataUri });
+    const page = wrapHtmlPage(title, bodyHtml).replace("</head>", `${INK_PDF_PRINT_CSS}</head>`);
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "lake-export-ink-pdf-"));
+    const htmlPath = path.join(tempDir, "index.html");
+    fs.writeFileSync(htmlPath, page, "utf8");
+    return { htmlPath, tempDir, pdfPath, imageCount, skipped };
+  }
+
+  /**
    * M3：PDF 导出内容准备（本方法无 electron 依赖、可测）：缓存 Markdown → HTML →
    * 图片 data URI 内嵌（单文件交付，临时页 loadFile 无 data URL 导航大小限制）→
    * 自包含临时 HTML + 唯一 pdf 目标路径。渲染（隐藏窗口 printToPDF）由 electron/export.ts
@@ -336,6 +450,9 @@ export class NoteExport {
    */
   exportPdfHtml(id: string, baseDir?: string): { htmlPath: string; tempDir: string; pdfPath: string; imageCount: number; skipped: number } {
     if (!isSafePathSegment(id)) throw new AppError("InvalidInput", `无效的笔记 ID: ${id}`);
+    // PDF 按 kind 分流：ink = 逐页压平（背景图 + 矢量笔迹）；doc = Markdown→HTML；其余显式拒绝。
+    const kindRow = this.ctx.db.prepare("SELECT kind FROM notes WHERE id=?").get(id) as { kind?: string | null } | undefined;
+    if ((kindRow?.kind ?? "doc") === "ink") return this.exportInkPdfHtml(id, baseDir);
     this.assertDocKind(id);
     const caches = this.ctx.readNoteCaches(id);
     const markdown = caches.markdown ?? "";

@@ -1,0 +1,194 @@
+/**
+ * 手写板（kind=ink）导出 PDF 的**内容准备**测试（不跑 printToPDF：那需要 Electron 隐藏窗口）。
+ *
+ * 覆盖：逐页 A4 结构 / 多页分页 / 背景图 data URI（fit + pixel 提示）/ 缺图 skipped /
+ * 矢量笔迹 path（pen 实心、highlighter opacity .3 + multiply）/ 无背景图白底 /
+ * kind 分流（ink 的 pdf 内容准备成功，markdown/html/docx 仍拒绝）/ UI 与 export.ts 静态契约。
+ */
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import crypto from "node:crypto";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { localAssetHttpUrl } from "../src/core/assetUrl.js";
+import { createInkDoc, createInkPage, inkToBody, type InkDoc } from "../src/core/inkDoc.js";
+import { Store } from "./store.js";
+import { createSafeStorageSecretCipher } from "./secretCipher.js";
+import { INK_PDF_PRINT_CSS, buildInkPdfBody, inkBackgroundFitCss } from "./noteExport.js";
+
+const electronMock = vi.hoisted(() => {
+  const secrets = new Map<string, string>();
+  return {
+    secrets,
+    encryptString: (value: string) => {
+      const id = crypto.randomUUID();
+      secrets.set(id, value);
+      return Buffer.from(id);
+    },
+    decryptString: (buf: Buffer) => secrets.get(buf.toString()) ?? "",
+  };
+});
+
+vi.mock("electron", () => ({
+  safeStorage: {
+    isEncryptionAvailable: () => true,
+    encryptString: electronMock.encryptString,
+    decryptString: electronMock.decryptString,
+  },
+  net: { fetch: vi.fn() },
+}));
+
+const read = (rel: string): string => fs.readFileSync(new URL(rel, import.meta.url), "utf8");
+
+function twoPageDoc(): InkDoc {
+  const doc = createInkDoc("p1");
+  doc.pages[0] = {
+    ...doc.pages[0],
+    backgroundImage: { url: localAssetHttpUrl("n1", "1700000000000_abcdef12.png"), fit: "cover", pixelWidth: 1600, pixelHeight: 2263 },
+    strokes: [{ id: "s1", tool: "pen", color: "#112233", width: 2, points: [{ x: 10, y: 10, pressure: 0.5 }, { x: 60, y: 40, pressure: 0.5 }] }],
+  };
+  doc.pages.push({
+    ...createInkPage("p2", "blank"),
+    strokes: [{ id: "s2", tool: "highlighter", color: "#ffcc00", width: 18, points: [{ x: 20, y: 20, pressure: 0.5 }, { x: 120, y: 30, pressure: 0.5 }] }],
+  });
+  doc.activePageId = "p2";
+  return doc;
+}
+
+describe("buildInkPdfBody（纯内容准备）", () => {
+  it("每页一块 A4 比例画布 + 强制分页；笔迹 SVG 用页面逻辑坐标 viewBox", () => {
+    const { bodyHtml } = buildInkPdfBody(twoPageDoc(), { imageDataUri: () => null });
+    expect(bodyHtml).toContain('<div class="ink-pdf">');
+    expect((bodyHtml.match(/class="ink-page"/g) ?? []).length).toBe(2);
+    expect(bodyHtml).toContain('data-page="1"');
+    expect(bodyHtml).toContain('viewBox="0 0 794 1123"');
+    expect(bodyHtml).toContain('preserveAspectRatio="xMidYMid meet"');
+    // A4 页面结构与分页规则
+    expect(INK_PDF_PRINT_CSS).toContain("width: 210mm");
+    expect(INK_PDF_PRINT_CSS).toContain("aspect-ratio: 210 / 297");
+    expect(INK_PDF_PRINT_CSS).toContain("page-break-after: always");
+    // pen：实心 path（无高亮 opacity）
+    expect(bodyHtml).toMatch(/<path d="M [\d.]+ [\d.]+(?: L [\d.]+ [\d.]+)+ Z" fill="#112233" \/>/);
+    // highlighter：opacity .3 + mix-blend-mode multiply
+    expect(bodyHtml).toMatch(/fill="#ffcc00" opacity="0\.3" style="mix-blend-mode:multiply"/);
+  });
+
+  it("背景图 data URI 内嵌（fit→object-fit，pixel 尺寸仅带提示属性）", () => {
+    const uri = "data:image/png;base64,AAAA";
+    const { bodyHtml, imageCount, skipped } = buildInkPdfBody(twoPageDoc(), { imageDataUri: () => uri });
+    expect(imageCount).toBe(1);
+    expect(skipped).toBe(0);
+    expect(bodyHtml).toContain('class="ink-page__bg"');
+    expect(bodyHtml).toContain(`src="${uri}"`);
+    expect(bodyHtml).toContain("object-fit:cover");
+    expect(bodyHtml).toContain('data-pixel-width="1600"');
+    expect(bodyHtml).toContain('data-pixel-height="2263"');
+  });
+
+  it("缺图：skipped++、不渲染 img，但页与笔迹照常输出（不产出空白页）", () => {
+    const { bodyHtml, imageCount, skipped } = buildInkPdfBody(twoPageDoc(), { imageDataUri: () => null });
+    expect(imageCount).toBe(0);
+    expect(skipped).toBe(1);
+    expect(bodyHtml).not.toContain("ink-page__bg");
+    expect(bodyHtml).toMatch(/fill="#112233"/);
+  });
+
+  it("无背景图的页是白底（不画纸张底纹/不渲染 img）", () => {
+    const doc = createInkDoc("p1");
+    const { bodyHtml, imageCount } = buildInkPdfBody(doc, { imageDataUri: () => "data:image/png;base64,AAAA" });
+    expect(imageCount).toBe(0);
+    expect(bodyHtml).not.toContain("ink-page__bg");
+    expect(bodyHtml).not.toContain("pattern");
+  });
+
+  it("fit 映射：contain/cover/stretch", () => {
+    expect(inkBackgroundFitCss(undefined)).toBe("contain");
+    expect(inkBackgroundFitCss("contain")).toBe("contain");
+    expect(inkBackgroundFitCss("cover")).toBe("cover");
+    expect(inkBackgroundFitCss("stretch")).toBe("fill");
+  });
+});
+
+describe("NoteExport 的 ink PDF 内容准备 + kind 守卫", () => {
+  let dir: string;
+  let store: Store;
+  let outDir: string;
+
+  beforeEach(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), "lake-ink-pdf-test-"));
+    electronMock.secrets.clear();
+    store = new Store(dir, createSafeStorageSecretCipher());
+    outDir = fs.mkdtempSync(path.join(os.tmpdir(), "lake-ink-pdf-out-"));
+  });
+
+  function makeInkNote(): { id: string } {
+    const note = store.createInkIn(null, "手写测试");
+    const paths = store.getNotePaths(note.id);
+    const filename = "1700000000000_abcdef12.png";
+    fs.mkdirSync(paths.assetsDir, { recursive: true });
+    fs.writeFileSync(path.join(paths.assetsDir, filename), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+    const doc = twoPageDoc();
+    doc.pages[0] = { ...doc.pages[0], backgroundImage: { url: localAssetHttpUrl(note.id, filename), fit: "contain" } };
+    fs.mkdirSync(path.dirname(paths.lakePath), { recursive: true });
+    fs.writeFileSync(paths.lakePath, inkToBody(doc), "utf8");
+    return { id: note.id };
+  }
+
+  it("ink 的 PDF 内容准备成功：两页 HTML + 背景图 data URI 内嵌，产出唯一 pdf 路径", () => {
+    const { id } = makeInkNote();
+    const prep = store.exportPdfHtml(id, outDir);
+    const html = fs.readFileSync(prep.htmlPath, "utf8");
+    expect(html).toContain('class="ink-pdf"');
+    expect((html.match(/class="ink-page"/g) ?? []).length).toBe(2);
+    expect(html).toContain("base64,");
+    // 压平后的 HTML 不依赖资产服务器：背景图全部内嵌 data URI（无 http://127.0.0.1 引用）
+    expect(html).not.toContain("http://127.0.0.1");
+    expect(prep.imageCount).toBe(1);
+    expect(prep.skipped).toBe(0);
+    expect(prep.pdfPath.endsWith(".pdf")).toBe(true);
+    expect(fs.existsSync(prep.tempDir)).toBe(true);
+    fs.rmSync(prep.tempDir, { recursive: true, force: true });
+  });
+
+  it("markdown / html / docx 对 ink 仍拒绝，提示只保留 PDF", async () => {
+    const { id } = makeInkNote();
+    expect(() => store.exportNotePackage(id)).toThrow(/手写板/);
+    expect(() => store.exportNotePackage(id)).toThrow(/仅支持导出 PDF/);
+    expect(() => store.exportNotePackage(id)).toThrow(/Markdown\/HTML\/资料包/);
+    expect(() => store.exportHtmlNote(id)).toThrow(/手写板/);
+    await expect(store.exportDocxNote(id)).rejects.toThrow(/手写板/);
+    // PDF 内容准备本身成功（唯一对 ink 放开的格式）
+    const prep = store.exportPdfHtml(id);
+    expect(fs.existsSync(prep.htmlPath)).toBe(true);
+    fs.rmSync(prep.tempDir, { recursive: true, force: true });
+  });
+});
+
+describe("静态契约：export.ts 分流 + UI 只对 ink 放开 PDF", () => {
+  it("export.ts 的 pdf 分支注明按 kind 分流并走 NoteExport.exportPdfHtml", () => {
+    const src = read("./export.ts");
+    expect(src).toContain("内容准备按 kind 分流");
+    expect(src).toContain("store.exportPdfHtml(id, baseDir)");
+    expect(src).toContain("ink = 逐页压平");
+  });
+
+  it("NoteExport 里 ink 走 exportInkPdfHtml，非 ink 才 assertDocKind", () => {
+    const src = read("./noteExport.ts");
+    expect(src).toContain("exportInkPdfHtml(");
+    expect(src).toContain('if ((kindRow?.kind ?? "doc") === "ink") return this.exportInkPdfHtml(id, baseDir);');
+    expect(src).toContain("strokeToSvgPath");
+    // perfect-freehand 必须在 dependencies（main 的 external 从 dependencies 派生）
+    const pkg = JSON.parse(read("../package.json")) as { dependencies?: Record<string, string> };
+    expect(pkg.dependencies?.["perfect-freehand"]).toBeTruthy();
+  });
+
+  it("导出菜单：ink 只有「导出为 PDF（手写压平）」", () => {
+    const src = read("../src/components/ui/ExportSubmenuItem.tsx");
+    expect(src).toMatch(/type === "ink"/);
+    expect(src).toContain("导出为 PDF（手写压平）");
+    // ink 分支里的 pdf 动作
+    expect(src).toMatch(/type === "ink"[\s\S]{0,200}onExportAs\("pdf"\)/);
+    // ink 不再走不存在的 markdown/html/docx 导出
+    expect(src).not.toMatch(/type === "ink"[\s\S]{0,200}onExportAs\("docx"\)/);
+  });
+});

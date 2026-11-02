@@ -63,6 +63,8 @@ export async function exportNote(store: Store, id: string, format: ExportFormat,
     }
     case "pdf": {
       // 内容准备（HTML 临时文件，可测）与渲染（隐藏窗口 printToPDF，主进程）分层；
+      // 内容准备按 kind 分流（NoteExport.exportPdfHtml）：doc = Markdown→HTML（图片 data URI）；
+      // ink = 逐页压平（每页背景图 data URI + 矢量笔迹 SVG）；markdown/html/docx 对 ink 仍抛错。
       // 临时目录用完即删，PDF 单文件交付。
       const prep = store.exportPdfHtml(id, baseDir);
       try {
