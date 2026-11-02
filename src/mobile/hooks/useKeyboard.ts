@@ -11,8 +11,8 @@
  *   height       —— 键盘实际高度（两种模式统一：adjustResize 用基准回落、edge-to-edge 用 vv 差）
  *   keyboardOpen —— 键盘是否弹出（height>8）
  */
-import { useEffect, useState } from "react";
-import { noteViewport, resetShellHeight, shellHeight } from "./viewportShell";
+import { useEffect, useRef, useState } from "react";
+import { noteViewport, resetShellHeight, shellHeight, widthChanged } from "./viewportShell";
 
 export function useKeyboard() {
   // ⚠️ 初值直接取当前视口高，**不要给 0**：`base` 被 EditorDock 用来写 `--mb-app-h`（外壳高度），
@@ -23,9 +23,17 @@ export function useKeyboard() {
   const [offset, setOffset] = useState(0);
   const [height, setHeight] = useState(0);
   const [keyboardOpen, setKeyboardOpen] = useState(false);
+  /** 上一次的窗口宽：宽度显著变化 = 分屏/自由窗口/折叠展开 ⇒ 稳定外壳高必须重学（261102）。 */
+  const lastWidthRef = useRef(typeof window === "undefined" ? 0 : window.innerWidth);
 
   useEffect(() => {
     const update = () => {
+      const iw = window.innerWidth;
+      // 261102：先按宽度变化重置基准（IME 不会改宽度；否则拖窄窗口后 keyboardOpen 永久为真）。
+      if (widthChanged(lastWidthRef.current, iw)) {
+        lastWidthRef.current = iw;
+        resetShellHeight();
+      }
       const ih = window.innerHeight;
       const vv = window.visualViewport;
       const vvH = Math.round(vv ? vv.height : ih);

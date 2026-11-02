@@ -10,6 +10,10 @@
  * **为什么单调取最大值**：只有「键盘收起时的视口高」才是稳定值；取历史最大值可以避开
  * 「实例挂载时键盘正好开着」（拿到 530）以及 keep-alive 隐藏实例的时序问题。方向变化时重置
  * （横竖屏的外壳高不同，竖屏的值带到横屏会把页面撑高）。
+ *
+ * **261102：窗口宽度显著变化也要重置**（分屏 / 自由窗口 / 折叠展开）。此前只在 orientationchange 重置，
+ * 于是 `lake_tab` 上把应用拖窄后 `shell - innerHeight` 永久 > 8 ⇒ `keyboardOpen` 永远为真（⌨ 收不起来、
+ * 外壳高错位）。IME 不会改宽度，所以「宽度变了」是一个安全的重置信号；纯高度拖拽仍是已知盲区。
  */
 let shell = 0;
 
@@ -40,4 +44,12 @@ export function shellHeight(): number {
 /** 方向变化时重置（横竖屏切换后重新学习；否则竖屏的 842 会把横屏页面撑高）。 */
 export function resetShellHeight(): void {
   shell = 0;
+}
+
+/**
+ * 窗口宽度是否显著变化（分屏 / 自由窗口 / 折叠展开 / 旋转）。
+ * 阈值 24 CSS px：滤掉滚动条/取整抖动，同时任何真实分屏都远超它。IME 不改宽度 ⇒ 不会误判。
+ */
+export function widthChanged(prevWidth: number, width: number): boolean {
+  return Math.abs(width - prevWidth) >= 24;
 }

@@ -4,7 +4,7 @@
  * 所以这个值才是"面板 ⇄ 输入法切换时内容盒高度不变"的基准；方向变化时重置。
  */
 import { beforeEach, describe, expect, it } from "vitest";
-import { noteViewport, resetShellHeight, shellHeight } from "./viewportShell";
+import { noteViewport, resetShellHeight, shellHeight, widthChanged } from "./viewportShell";
 
 describe("viewportShell：稳定外壳高", () => {
   beforeEach(() => resetShellHeight());
@@ -36,6 +36,15 @@ describe("viewportShell：稳定外壳高", () => {
   it("两通道一致时，更大的视口仍然更新（旋转/分屏走 reset 或一致观测）", () => {
     expect(noteViewport(842, 842)).toBe(842);
     expect(noteViewport(900, 900)).toBe(900);
+  });
+
+  // 261102：分屏/自由窗口/折叠展开会改宽度 ⇒ 稳定外壳高必须重学；IME 不改宽度，所以不会误判。
+  it("窗口宽度显著变化才重置（分屏/自由窗口）；IME 抖动与取整抖动不算", () => {
+    expect(widthChanged(1280, 1280)).toBe(false);
+    expect(widthChanged(412, 430)).toBe(false);      // 18px：滚动条/取整抖动
+    expect(widthChanged(1280, 800)).toBe(true);      // 分屏
+    expect(widthChanged(800, 1280)).toBe(true);      // 折叠展开 / 退出分屏
+    expect(widthChanged(412, 1280)).toBe(true);      // 平板横竖屏
   });
 
   it("首次观测两通道不一致（edge-to-edge 且键盘弹着）⇒ 不建立基准，等可信观测", () => {

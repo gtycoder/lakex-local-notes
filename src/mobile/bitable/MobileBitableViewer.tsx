@@ -540,6 +540,12 @@ export function MobileBitableViewer({ noteId, content, editing = false, onChange
             {isGridLike && (
               <button type="button" className="mb-iconbtn" aria-label="视图配置" onClick={() => setConfigOpen(true)}><SlidersHorizontal size={16} /></button>
             )}
+            {/* 桌面工具栏的「添加记录」在右侧主操作位；手机上网格末尾也有同一个入口，这里给常驻位。 */}
+            {editable && (
+              <button type="button" className="mb-btn mb-btn--primary mb-btn--sm" aria-label="新增记录" onClick={addRecord}>
+                <Plus size={15} />添加记录
+              </button>
+            )}
           </div>
 
           {!isKnownViewType(view.type) && (
