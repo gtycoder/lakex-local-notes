@@ -81,6 +81,9 @@ npm run check:tabletsnap -- --port 9340
 
 实测（261102）：6 态 = home-library 1822 / home-quicknotes 1822 / home-library-list 1827 / home-doc 2012 / settings 1912 / settings-appearance 1849，
 连跑两轮 **0 差异**。⚠️ 与手机基线同理：**基线绑定"专用实例 + 夹具"**，换数据/换设备必红，那是预期。
+⚠️ **烤基线前必须回到干净夹具**：平板 `home-doc` 会把 `home-doc` 的左栏树行数算进元素数（每多一篇文档 ≈ +8~17 元素）——
+261102 实测过一次「在已有测试文档（表格/多维表）的实例上烤基线」⇒ 之后干净夹具上必红。
+正确顺序：`pm clear` → 启动 → `gate-fixture.mjs` → `--write-baseline` → 连跑两轮验证。
 
 ## 多维表专项快照（261030 起，动移动端多维表时跑）
 
