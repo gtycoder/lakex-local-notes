@@ -725,6 +725,7 @@ export function MobileBitableViewer({ noteId, content, editing = false, onChange
         cardFields={table.fields}
         editable={editable}
         onPatchPrefs={patchPrefs}
+        onUpdateView={editable ? updateView : undefined}
         onClose={() => setConfigOpen(false)}
       />
       <MobileBitableTableDrawer

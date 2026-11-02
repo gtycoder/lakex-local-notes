@@ -7,13 +7,14 @@
  * - 筛选 / 排序在只读态**只展示、不可改**（改了会写正文 ⇒ 违反「打开 = 只读」）；
  *   编辑态也只是只读展示 + 明确指路桌面（移动端 P0 不做筛选/排序编辑）。
  */
+import { X } from "lucide-react";
 import { MobileSheet } from "../ui/MobileSheet";
-import type { BitableField, BitableTable, BitableView } from "../../core/bitableDoc.js";
+import { applySortMode, BITABLE_SORT_MODE_LABEL, sortModeLabel, sortModeOf, sortModesForField, type BitableField, type BitableTable, type BitableView } from "../../core/bitableDoc.js";
 import type { BitableRecordLayoutPrefs } from "../../core/bitableRecordLayout";
 import type { BitableResolvedRecordLayout } from "../../core/bitableRecordLayout";
 import { useEffect, useState } from "react";
 
-type ConfigTab = "filter" | "sort" | "layout";
+type ConfigTab = "filter" | "sort" | "group" | "layout";
 
 export interface MobileBitableViewConfigSheetProps {
   open: boolean;
@@ -25,6 +26,8 @@ export interface MobileBitableViewConfigSheetProps {
   cardFields: BitableField[];
   editable: boolean;
   onPatchPrefs: (patch: Partial<BitableRecordLayoutPrefs>) => void;
+  /** 编辑态写视图配置（排序/分组写正文；只读态不传 ⇒ 面板保持只读说明）。 */
+  onUpdateView?: (patch: Partial<BitableView>) => void;
   onClose: () => void;
 }
 
@@ -40,7 +43,7 @@ function sortSummary(view: BitableView): string {
   return "已有 " + count + " 条排序规则";
 }
 
-export function MobileBitableViewConfigSheet({ open, table, view, layout, prefs, cardFields, editable, onPatchPrefs, onClose }: MobileBitableViewConfigSheetProps) {
+export function MobileBitableViewConfigSheet({ open, table, view, layout, prefs, cardFields, editable, onPatchPrefs, onUpdateView, onClose }: MobileBitableViewConfigSheetProps) {
   const [tab, setTab] = useState<ConfigTab>("layout");
   useEffect(() => { if (open) setTab("layout"); }, [open]);
 
@@ -52,7 +55,7 @@ export function MobileBitableViewConfigSheet({ open, table, view, layout, prefs,
   return (
     <MobileSheet open={open} title="视图配置" onClose={onClose} bodyClassName="mbt-vcfg mb-sheet__body--form">
       <div className="mbt-vcfg-tabs" role="tablist" aria-label="视图配置">
-        {([["filter", "筛选"], ["sort", "排序"], ["layout", "布局"]] as Array<[ConfigTab, string]>).map(([key, label]) => (
+        {([["filter", "筛选"], ["sort", "排序"], ["group", "分组"], ["layout", "布局"]] as Array<[ConfigTab, string]>).map(([key, label]) => (
           <button key={key} type="button" role="tab" aria-selected={tab === key}
             className={"mbt-vcfg-tab" + (tab === key ? " is-on" : "")} onClick={() => setTab(key)}>{label}</button>
         ))}
@@ -67,11 +70,79 @@ export function MobileBitableViewConfigSheet({ open, table, view, layout, prefs,
       )}
 
       {tab === "sort" && (
-        <div className="mbt-vcfg-empty">
-          <p>{sortSummary(view)}</p>
-          <p className="mbt-vcfg-hint">{editable ? "移动端暂不支持编辑排序；需要排序请到桌面编辑视图。" : "只读状态下不能修改排序；需要排序请到桌面编辑视图。"}</p>
-          <button type="button" className="mb-btn mb-btn--secondary mb-btn--block" disabled>+ 添加排序</button>
-        </div>
+        editable && onUpdateView ? (
+          <div className="mbt-vcfg-list">
+            {(view.sorts ?? []).map((rule, index) => {
+              const field = table.fields.find((item) => item.id === rule.fieldId);
+              const modes = field ? sortModesForField(field) : (["asc", "desc"] as const);
+              return (
+                <div className="mbt-vcfg-rule" key={(rule.fieldId || "rule") + index}>
+                  <span className="mbt-vcfg-rule__name">{field?.name ?? "未知字段"}</span>
+                  <div className="mbt-vcfg-rule__modes">
+                    {modes.map((mode) => (
+                      <button key={mode} type="button" className={"mb-chip" + (sortModeOf(rule) === mode ? " is-on" : "")}
+                        onClick={() => onUpdateView({ sorts: (view.sorts ?? []).map((item, i) => (i === index ? applySortMode(item, mode) : item)) })}>
+                        {field ? sortModeLabel(field, mode) : BITABLE_SORT_MODE_LABEL[mode]}
+                      </button>
+                    ))}
+                  </div>
+                  <button type="button" className="mb-iconbtn mb-iconbtn--compact" aria-label="删除排序"
+                    onClick={() => onUpdateView({ sorts: (view.sorts ?? []).filter((_, i) => i !== index) })}>
+                    <X size={14} />
+                  </button>
+                </div>
+              );
+            })}
+            {(view.sorts?.length ?? 0) === 0 && <p className="mbt-vcfg-hint">暂无排序规则：点下方字段追加一条升序规则。</p>}
+            <div className="mbt-vcfg-pick">
+              <span className="mbt-vcfg-pick__k">排序</span>
+              <div className="mbt-chips-row">
+                {table.fields.map((field) => (
+                  <button key={field.id} type="button" className="mb-chip"
+                    onClick={() => onUpdateView({ sorts: [...(view.sorts ?? []), { fieldId: field.id }] })}>+ {field.name}</button>
+                ))}
+              </div>
+            </div>
+            <p className="mbt-vcfg-hint">排序写视图配置（随正文同步）；只读状态不可改。</p>
+          </div>
+        ) : (
+          <div className="mbt-vcfg-empty">
+            <p>{sortSummary(view)}</p>
+            <p className="mbt-vcfg-hint">只读状态下不能修改排序；请点右上角「编辑」或到桌面修改。</p>
+            <button type="button" className="mb-btn mb-btn--secondary mb-btn--block" disabled>+ 添加排序</button>
+          </div>
+        )
+      )}
+
+      {tab === "group" && (
+        editable && onUpdateView ? (
+          <div className="mbt-vcfg-list">
+            {(view.groups?.length ?? 0) > 0 ? (
+              <div className="mbt-vcfg-rule">
+                <span className="mbt-vcfg-rule__name">{table.fields.find((item) => item.id === view.groups?.[0]?.fieldId)?.name ?? "未知字段"}</span>
+                <button type="button" className="mb-iconbtn mb-iconbtn--compact" aria-label="取消分组"
+                  onClick={() => onUpdateView({ groups: [] })}><X size={14} /></button>
+              </div>
+            ) : (
+              <p className="mbt-vcfg-hint">暂无分组：点下方字段按它分组（只支持一级）。</p>
+            )}
+            <div className="mbt-vcfg-pick">
+              <span className="mbt-vcfg-pick__k">分组</span>
+              <div className="mbt-chips-row">
+                {table.fields.map((field) => (
+                  <button key={field.id} type="button" className={"mb-chip" + (view.groups?.[0]?.fieldId === field.id ? " is-on" : "")}
+                    onClick={() => onUpdateView({ groups: [{ fieldId: field.id }] })}>{field.name}</button>
+                ))}
+              </div>
+            </div>
+            <p className="mbt-vcfg-hint">分组写视图配置（随正文同步）；只读状态不可改。</p>
+          </div>
+        ) : (
+          <div className="mbt-vcfg-empty">
+            <p>{(view.groups?.length ?? 0) === 0 ? "暂无分组" : "已按「" + (table.fields.find((item) => item.id === view.groups?.[0]?.fieldId)?.name ?? "未知字段") + "」分组"}</p>
+            <p className="mbt-vcfg-hint">只读状态下不能修改分组；请点右上角「编辑」或到桌面修改。</p>
+          </div>
+        )
       )}
 
       {tab === "layout" && (
