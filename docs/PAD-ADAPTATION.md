@@ -534,3 +534,13 @@ P0 体面单栏（1–2）→ P1 双栏（3–5）→ 工具栏 T0（5–7，§8
 - **基线（干净实例 + gate-fixture）**：home-library 1822 / home-quicknotes 1822 / home-library-list 1827 / home-doc 2012 / settings 1912 / settings-appearance 1849；**连跑两轮 0 差异**。
 - **文档**：`scripts/mobile-audit/README.md` 新增「平板专项快照」节，`docs/MOBILE-OPS.md` §5.5 装置表登记。
 
+
+### 10.6 第四批：首页收口 + 表格 ribbon 实验（结论：不做）
+
+- **平板首页禁横滑翻页**：`html[data-form-factor="expanded"] .mobile-tab-stage { overflow-x: hidden; touch-action: pan-y; scroll-snap-type: none }`。顶部页签仍可用（`useTabPager` 用程序化 `scrollTo`，`overflow:hidden` 不拦程序化滚动）；手机保持原生分页手势。设备实测计算值 `overflow-x: hidden / touch-action: pan-y`。
+- **表格 ribbon 实验**（临时把 `createMobileSheetsCorePreset` 的 `toolbar` 在 expanded 置 true，已回滚）：
+  - 实际多出来的是 **Univer 的 mobile compact strip**（一行：网格 / 筛选 / 排序 / 查找 ｜ 撤销 / 重做 / 底色 / ⋯），不是桌面那套「开始/插入/公式/数据/视图」分组 ribbon。
+  - 与现有自建 chrome **重复**（`SheetTopBar` 已有工作表/网格/缩放/＋/☰；编辑态 `SheetDock` 已有 ＋/T/筛选/⋯/撤销/重做），且会让表格多一行、压缩网格高度。
+  - ⇒ **T1 不做**。真要桌面 ribbon 只能「自挂 Ribbon（2–3 天，24px 命中）」或打 `sheets-ui` 补丁（与补丁白名单冲突），两者都不划算。
+- 表格现状（平板阅读态）：`SheetTopBar` + 网格 + 底部公式栏；编辑态再加 `SheetDock`——在 1280 宽下可用，不是这次要解决的问题。
+
