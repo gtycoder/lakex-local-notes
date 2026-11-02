@@ -15,7 +15,7 @@
 - **门禁**：tsc 0 / `vitest run src/mobile` 182 文件 836 例全绿（含新增 `pad/formFactor.test.ts`）/ `check:mobileui`（含 ui-metrics）/ `git diff --check`；**手机 6 态快照未跑**（lake_gate 未启动，改动按 data-form-factor 门控，预期零差异，下一批补跑）。
 - **未做 / 下一步**：① 工作区顶栏仍手机样式（无桌面式文档页签；胶囊暂保留——标签页/大纲/切换笔记本仍靠它）；② 右大纲常驻栏未做（仍是抽屉）；③ 首页 expanded：内容已限宽 760，但横滑分页未禁；④ 表格 ribbon / 多维表横向工具条 / 手写板桌面工具条 = §8 的 T0–T2；⑤ 平板 MD 编辑器附件/图片插入走内核面板，需实测上传链路；⑥ 平板快照装置（`check-mobile-snap --viewport`）未加。
 - **复现**：`cd ../lakex-pad && ANDROID_SERIAL=emulator-5580 bash scripts/android-build.sh --sync --install`；`bash scripts/emu-cdp.sh 9340`；`node scripts/cdp-eval.mjs 9340 @scripts/mobile-audit/gate-fixture.mjs`。
-**第九批（筛选条件编辑器）**：`MobileBitableViewConfigSheet` 筛选页签在编辑态可编辑——扁平规则增/删/改操作符/改值（文本/数字输入、布尔胶囊、单选/多选选项、日期模式 + 自定义日期），根连接 且/或；嵌套筛选分组只展示与删除、明确指路桌面；只读态只读。设备实测：值 "季度" 落盘、两条规则 + 或 连接回读正文含 `"filters"`。下一批：多维表 8 项工具条的其余能力（行高/填色/导入 CSV/分组·排序可写）需先定「视图配置写正文 vs 设备本机」语义（HANDOFF 待裁决③）。
+**第十批（多维表平板 9 项工具条 + 行高）**：`padBitable`（expanded）下工具栏改为桌面同序 9 项文字按钮（表格配置/视图/筛选/分组/排序/行高/填色/导入 CSV + 添加记录），筛选/分组/排序直达视图配置对应页签（`initialTab`），行高新增面板（低/中/高，`bitableRowHeightPx` 单一映射下沉 core，桌面同步改用），填色/导入 CSV 置灰并写明原因；查看态表格行高按视图配置生效（`--mbt-row-h`）。设备实测：9 按钮齐全、行高选「高」→ CSS 变量 64px 且正文 `"rowHeight":"high"` 落盘。另修：`useFormFactor` 在 node/SSR（无 window）下按 compact 渲染；移动端 jsdom 用例按文件钉 412 视口（不再全局改，避免影响桌面 jsdom 用例）。下一批：多维表 8 项工具条的其余能力（行高/填色/导入 CSV/分组·排序可写）需先定「视图配置写正文 vs 设备本机」语义（HANDOFF 待裁决③）。
 
 
 ### 261102 · 用户点单五条（多维表新建视图 + 字段自动编辑 / 手写板分页纸张 / 设置输入行 / 小记标签 / 浮层留白）· **本地提交（未 push）**

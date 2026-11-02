@@ -25,10 +25,10 @@ import {
   BITABLE_OPTION_COLORS, aiPromptFieldNames, applyViewToRecords, bitableDisplayValue, bitableFieldText, bitableFieldValue, bitableFillBackgroundTokens, bitableFilterRuleCount, bitableViewNeedsClock, buildBitableFillProjection, createRelationPair, defaultRecordValues, duplicateValues, optionColorHex, unpairRelationFields,
   createBitableField, createBitableRecord, createDefaultBitableTable,
   BITABLE_STAT_LABEL, groupRecords, isImplementedViewType,
-  BITABLE_PROGRESS_MAX, BITABLE_RATING_MAX, applySortMode, changeSortField, kanbanGroupField, sortModeLabel, sortModeOf, sortModesForField, statDisplayText, statForField, statsForField,
+  BITABLE_PROGRESS_MAX, BITABLE_RATING_MAX, BITABLE_ROW_HEIGHT_OPTIONS, applySortMode, bitableRowHeightPx, changeSortField, kanbanGroupField, sortModeLabel, sortModeOf, sortModesForField, statDisplayText, statForField, statsForField,
   isKnownFieldType, isRelationFieldType, newBitableId, orderedAllTableFields, orderedTableFields, parseBitableBody,
   type BitableAttachment, type BitableAiConfig, type BitableDoc, type BitableField, type BitableFieldType, type BitableFilterJoin, type BitableFilterNode, type BitableGroupRule, type BitableRecord,
-  type BitableRelation, type BitableRowHeight, type BitableSortMode, type BitableStatType, type BitableTable, type BitableView, type BitableViewType,
+  type BitableRelation, type BitableSortMode, type BitableStatType, type BitableTable, type BitableView, type BitableViewType,
 } from "../../core/bitableDoc.js";
 import { fillSurfaceColor } from "../../core/colorPalette.js";
 import { addBitableRecord, addBitableRecordWithValues, addBitableView, appendBitableAttachments, convertBitableFieldType, deleteBitableField, deleteBitableRecords, deleteBitableTable, deleteBitableView, fieldHasData, pruneBitableOptionValues, duplicateBitableField, duplicateBitableTable, duplicateBitableView, renameAiFieldToken, renameBitableTable, renameBitableView, setBitableCellValue, setBitableRecordValues, stripViewRefsForFieldType } from "../../core/bitableMutations.js";
@@ -69,20 +69,6 @@ const DEFAULT_COL_WIDTH = 180;
  * 配合 `.bt-grid` 的 `white-space: nowrap`：装不下就截断/省略，绝不换行撑高行高。
  */
 const columnWidth = (field: BitableField) => (field.width ?? DEFAULT_COL_WIDTH) + "px";
-
-const ROW_HEIGHT_OPTIONS: Array<{ value: BitableRowHeight; label: string }> = [
-  { value: "low", label: "低" },
-  { value: "medium", label: "中" },
-  { value: "high", label: "高" },
-];
-
-function rowHeightPx(value: BitableRowHeight | undefined): number {
-  if (typeof value === "number") return value;
-  if (value === "medium") return 44;
-  if (value === "high") return 64;
-  if (value === "xhigh") return 96;
-  return 36; // 云端「低」档 = 36px（--lt-size-grid-row-height）
-}
 
 /** 云端 lakex 的「展开行」图标（lt-icon-RowExpand）：四角向外箭头。 */
 function RowExpandIcon({ size = 15 }: { size?: number }) {
@@ -310,7 +296,7 @@ export function BitableEditor({ noteId, content, visible, readOnly: readOnlyProp
     return items;
   }, [shownRecords, activeTable, groupRule, collapsedGroups]);
   const rowItemKey = useCallback((item: (typeof rowItems)[number]) => item.kind === "record" ? "r:" + item.record.id : item.kind + ":" + item.key, []);
-  const estimateRow = useCallback((item: (typeof rowItems)[number]) => item.kind === "record" ? rowHeightPx(activeView.rowHeight) : item.kind === "gap" ? 20 : item.kind === "groupAdd" ? 32 : 36, [activeView.rowHeight]);
+  const estimateRow = useCallback((item: (typeof rowItems)[number]) => item.kind === "record" ? bitableRowHeightPx(activeView.rowHeight) : item.kind === "gap" ? 20 : item.kind === "groupAdd" ? 32 : 36, [activeView.rowHeight]);
   const itemIndexByRecordId = useMemo(() => {
     const index = new Map<string, number>();
     for (let i = 0; i < rowItems.length; i++) {
@@ -755,7 +741,7 @@ export function BitableEditor({ noteId, content, visible, readOnly: readOnlyProp
     if (next) setDrawerRecordId(next.id);
   };
 
-  const gridStyle = { "--bt-row-h": rowHeightPx(activeView.rowHeight) + "px" } as CSSProperties;
+  const gridStyle = { "--bt-row-h": bitableRowHeightPx(activeView.rowHeight) + "px" } as CSSProperties;
   // With no data cells, the original trailing column is only the 24px add button + padding/border.
   const gridTrailingWidth = shownRecords.length > 0 ? 40 : 33;
   const formDefaults = useMemo(() => defaultRecordValues(activeTable), [activeTable]);
@@ -1533,7 +1519,7 @@ export function BitableEditor({ noteId, content, visible, readOnly: readOnlyProp
       <Popover open={panel === "rowHeight"} anchor={menuAnchor} onClose={() => setPanel(null)} width={220}>
         <div className="bt-panel">
           <h4>行高</h4>
-          {ROW_HEIGHT_OPTIONS.map((option) => (
+          {BITABLE_ROW_HEIGHT_OPTIONS.map((option) => (
             <button key={String(option.value)} type="button" className={"bt-menu-item ln-menu__item" + (activeView.rowHeight === option.value ? " is-selected" : "")}
               onClick={() => { patchView(activeView.id, { rowHeight: option.value }); setPanel(null); }}>
               {option.value === "low" ? <Rows2 size={14} /> : option.value === "medium" ? <Rows3 size={14} /> : <Rows4 size={14} />}
