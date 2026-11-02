@@ -587,3 +587,13 @@ P0 体面单栏（1–2）→ P1 双栏（3–5）→ 工具栏 T0（5–7，§8
 - **设备实测**（lake_tab）：页签 = 筛选/排序/分组/布局；排序加「文本」后 `readNote` 回读正文含 `"sorts"`；分组选「文本」后回读含 `"groups"`。
 - **未做**：筛选条件编辑器（按字段类型的操作符/值 UI）——下一批；行高/填色/导入 CSV 也未做。
 
+
+### 10.11 第九批：筛选条件编辑器（移动端首个可写筛选）
+
+- **范围**：编辑态下可编辑**扁平筛选规则**（增/删/改操作符/改值），根连接 且/或；**嵌套分组**只展示 + 删除（条件树 UI 不在移动端复制，明确指路桌面）。
+- **单一来源**：全部走 core 的 `filterOperatorsFor / filterOperatorLabel / filterValueKindFor / defaultFilterValueFor / createBitableFilterRule / dateFilterModesFor / BITABLE_DATE_FILTER_MODE_LABEL / isBitableFilterGroup / bitableFilterRuleCount / isRelationFieldType`，不另造语义。
+- **值编辑器**：文本/数字（`.mb-input`）、布尔（胶囊）、单选（选项胶囊）、多选（选项多选胶囊；关联字段给「请在桌面编辑」）、日期（模式胶囊 + `type=date` 自定义输入）、附件（仅空/非空）。
+- **写入口**：`onUpdateView({ filters, filterOperator })` → `mutate` → 落盘（与排序/分组同一条路径）。
+- **实测**（lake_tab）：筛选页签点「+ 文本」加规则 → 改值「季度」→ 再加一条 → 切「或」→ `readNote` 回读正文含 `"filters"`（两条规则 + 值都在）。
+- **未做**：嵌套分组编辑、按关联记录选择筛选值、筛选对视图数据的即时预览刷新（写完后关闭面板即按新规则渲染）。
+
