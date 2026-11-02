@@ -14,7 +14,10 @@ describe("工作区正文懒挂载接线", () => {
     // MOB-12：恢复走 hook 的 restore()（一次 dispatch；顺序/上限/激活页都在 hook 里），
     // workspace 只按目录已知 id 过滤。
     expect(WS).toMatch(/restore\(\[initialNoteId, \.\.\.saved\.filter\(\(id\) => id !== initialNoteId\)\], initialNoteId, \{ enterEditor: initialMode === "editor" \}\);/);
-    expect(WS).toMatch(/restore\(saved, saved\[saved\.length - 1\]\);/);
+    // 261102：恢复的活动页 = 存档里的 companion active（hook 里校验仍在该批 id 中，否则回落最后一个）。
+    // 不再用 saved[saved.length - 1] 当活动页 —— 那会让「退出停在非末尾标签」的用户重进跳错文档。
+    expect(WS).toMatch(/restore\(saved, savedTabActiveId\);/);
+    expect(WS).not.toMatch(/restore\(saved, saved\[saved\.length - 1\]\)/);
     expect(WS).toContain("const saved = savedTabIds.filter");
     // restore 只建未加载的占位（不读正文）⇒ 只有活动页会被"未加载则补读"的 effect 读到
     expect(SESSION).toMatch(/const restore = useCallback/);

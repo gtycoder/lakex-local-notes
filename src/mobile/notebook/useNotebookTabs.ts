@@ -25,6 +25,15 @@ export function notebookTabsStorageKey(notebookId: string): string {
   return "lakex-local-notes-mobile.tabs." + notebookId;
 }
 
+/**
+ * 活动页 companion key（261102）：除 ids 数组外**单独**记「退出时停在哪个标签」。
+ * 旧版本只写 ids ⇒ 读不到 active 时回落「列表最后一个」（与旧行为逐字一致，向后兼容）。
+ * ⚠️ 必须挂在 tabs 前缀下：冷启动清理 clearPersistedNotebookTabs() 按前缀整棵删，两个 key 一起清。
+ */
+export function notebookTabsActiveStorageKey(notebookId: string): string {
+  return notebookTabsStorageKey(notebookId) + ".active";
+}
+
 /** 读上次保存的标签 id（**只读**；损坏/无存储 ⇒ []）。恢复顺序由 workspace 过滤后交给 restore()。 */
 function readSavedNotebookTabIds(notebookId: string): string[] {
   try {
@@ -33,6 +42,25 @@ function readSavedNotebookTabIds(notebookId: string): string[] {
     return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === "string" && id.length > 0) : [];
   } catch {
     return [];
+  }
+}
+
+/** 读上次保存的活动页 id（**只读**；缺失/空串/损坏 ⇒ null ⇒ 调用方回落列表最后一个）。 */
+function readSavedNotebookActiveId(notebookId: string): string | null {
+  try {
+    const raw = localStorage.getItem(notebookTabsActiveStorageKey(notebookId));
+    return raw ? raw : null;
+  } catch {
+    return null;
+  }
+}
+
+/** 清 localStorage key：存储被禁用/隐私模式只 warn，不影响交互（读路径拿不到等同不存在）。 */
+function removeLocalStorageKey(key: string): void {
+  try {
+    localStorage.removeItem(key);
+  } catch (error) {
+    console.warn(`[prefs] 删除 localStorage 失败：${key}`, error);
   }
 }
 
@@ -63,6 +91,7 @@ interface UseNotebookTabsOptions {
 /** NotebookWorkspace 的标签会话所有者：tabs / active / loaded / mounted / LRU / 关闭全部。 */
 export function useNotebookTabs(opts: UseNotebookTabsOptions) {
   const tabsKey = notebookTabsStorageKey(opts.notebookId);
+  const activeKey = notebookTabsActiveStorageKey(opts.notebookId);
   /**
    * 挂载时读一次存档，直接作为 tabs 的 **initial state**：
    * - 不再依赖「首次持久化 effect 跳过写」这种隐式约定（旧实现与 workspace 恢复 effect 有顺序耦合：
@@ -72,8 +101,18 @@ export function useNotebookTabs(opts: UseNotebookTabsOptions) {
   const savedIdsRef = useRef<string[] | null>(null);
   if (savedIdsRef.current === null) savedIdsRef.current = readSavedNotebookTabIds(opts.notebookId);
   const savedIds = savedIdsRef.current ?? [];
+  /** 存档里的 active（旧格式 ⇒ null）。与 ids 同一次挂载只读一次（不能用 null 当「未读」哨兵）。 */
+  const savedActiveRef = useRef<{ id: string | null } | null>(null);
+  if (savedActiveRef.current === null) savedActiveRef.current = { id: readSavedNotebookActiveId(opts.notebookId) };
+  const savedActiveId = savedActiveRef.current.id;
   const [tabs, setTabs] = useState<NotebookTab[]>(() => savedIds.map((id, i) => placeholderTab(id, opts.getTitle(id) ?? "", i)));
-  const [activeId, setActiveId] = useState<string | null>(opts.initialNoteId ?? (savedIds.length > 0 ? savedIds[savedIds.length - 1] : null));
+  // 261102 回归修复（用户报「退出时停在画板，重进却回到表格」）：优先恢复**上次退出时的活动页**；
+  // 旧存档没有 active / active 已不在 ids 里（损坏或文档被删）⇒ 回落「列表最后一个」（旧行为）。
+  const [activeId, setActiveId] = useState<string | null>(() => {
+    if (opts.initialNoteId) return opts.initialNoteId;
+    if (savedActiveId && savedIds.includes(savedActiveId)) return savedActiveId;
+    return savedIds.length > 0 ? savedIds[savedIds.length - 1] : null;
+  });
   const [mountedIds, setMountedIds] = useState<Set<string>>(() => new Set());
   const [freshId, setFreshId] = useState<string | null>(null);
   const [readTick, setReadTick] = useState(0);
@@ -219,9 +258,14 @@ export function useNotebookTabs(opts: UseNotebookTabsOptions) {
 
   // 标签保持：变化即落本地（仅本机，不参与同步）。首帧写回的 = initial state 里那份存档（幂等），
   // 因此不需要「首次跳过写」；关闭全部照常写 []（clearTabsOnExit 的语义仍由启动时清存档承担）。
+  // 261102：ids 与 active **一起**写（companion key）—— 只存 ids 时，重启只能拿「列表最后一个」当活动页，
+  // 而切换标签并不会把标签挪到数组末尾 ⇒ 用户停在非末尾那页时，重进就跳错文档（用户报的 bug）。
+  // active 为空（关闭全部）时移除 companion key，不要写空串。
   useEffect(() => {
     writeLocalStorage(tabsKey, JSON.stringify(tabs.map((tab) => tab.id)));
-  }, [tabs, tabsKey]);
+    if (activeId) writeLocalStorage(activeKey, activeId);
+    else removeLocalStorageKey(activeKey);
+  }, [tabs, activeId, activeKey, tabsKey]);
 
   // 活动页悬空自愈：没有标签且没有在途读取时收回 activeId；其余情况落到第一个标签。
   useEffect(() => {
@@ -265,6 +309,8 @@ export function useNotebookTabs(opts: UseNotebookTabsOptions) {
     tabs,
     tabsRef,
     savedTabIds: savedIds,
+    /** 存档里的活动页 id（旧格式/损坏 ⇒ null；workspace 原样交给 restore()，由它校验是否仍在该笔记本里）。 */
+    savedTabActiveId: savedActiveId,
     active,
     activeId,
     mountedIds,

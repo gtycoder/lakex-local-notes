@@ -13,7 +13,10 @@ type RemoveStorage = {
   removeItem(key: string): void;
 };
 
-/** 清掉所有 lakex-local-notes-mobile.tabs.*，返回清掉的条数（幂等）。 */
+/**
+ * 清掉所有 lakex-local-notes-mobile.tabs.*，返回清掉的条数（幂等）。
+ * 261102：活动页 companion key（`tabs.<notebookId>.active`）也在这个前缀下 ⇒ 同一个循环整棵清掉。
+ */
 export function clearPersistedNotebookTabs(storage: RemoveStorage = localStorage): number {
   const keys: string[] = [];
   for (let i = 0; i < storage.length; i += 1) {

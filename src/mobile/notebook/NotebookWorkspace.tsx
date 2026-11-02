@@ -102,6 +102,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     tabs,
     tabsRef: tabsStateRef,
     savedTabIds,
+    savedTabActiveId,
     active,
     activeId,
     mountedIds,
@@ -234,7 +235,8 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   // 初次进入（仅一次）：
   //  - 显式指定了要打开的文档（首页/搜索/新建）→ 它排第一并激活（修"从首页点文档直达不了"），
   //    其余上次已存的标签（不含它）按原顺序跟在后面，不覆盖它的激活态；
-  //  - 否则恢复上次打开的标签（本地持久化，最后一个是上次的活动页）；
+  //  - 否则恢复上次打开的标签（本地持久化 ids + companion active：优先回到**上次退出的活动页**，
+  //    旧存档没有 active 时回落「列表最后一个」—— 261102 用户回归「退出停在画板，重进却回到表格」）；
   //  - 否则开树中第一个。
   // 这里只做「按目录已知 id 过滤」，顺序/上限/激活页全部交给 hook 的 restore()（一次 dispatch，
   // 不再靠 openTab 的调用顺序 + effect 执行顺序这种隐式协议）。
@@ -249,7 +251,8 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     }
     if (saved.length > 0) {
       autoOpenedRef.current = true;
-      restore(saved, saved[saved.length - 1]);
+      // 活动页交给存档里的 active（restore 会校验它仍在这批 id 里，否则回落最后一个）。
+      restore(saved, savedTabActiveId);
       return;
     }
     if (firstNote) {
@@ -260,7 +263,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     // 目录里没有任何可用文档：把存档里已失效的占位清掉（hook 的 initial state 可能还带着它们）。
     if (savedTabIds.length > 0) restore([], null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tree, firstNote, savedTabIds, initialNoteId, initialMode, restore]);
+  }, [tree, firstNote, savedTabIds, savedTabActiveId, initialNoteId, initialMode, restore]);
 
   // 已进入工作区后又被指定文档（新建 / 首页 / 搜索）：组件 key 是 notebookId，
   // 同一笔记本内再指定文档不会重挂载，「初次进入」那段被 autoOpenedRef 挡住 ⇒ 必须在这里显式打开，
