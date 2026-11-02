@@ -655,3 +655,25 @@
 }
 .mbt-feditor__color.is-on { box-shadow: 0 0 0 2px var(--lake-accent); }
 
+
+/* 排序/分组可编辑列表（261102）：规则行 + 模式胶囊；取值全走令牌 */
+.mbt-vcfg-list { display: flex; flex-direction: column; gap: var(--lake-space-md); }
+.mbt-vcfg-rule {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--lake-space-sm);
+  padding: var(--lake-space-md) 0;
+  border-bottom: .5px solid var(--lake-border-1);
+}
+.mbt-vcfg-rule__name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--lake-font-size-body);
+  color: var(--lake-text-1);
+}
+.mbt-vcfg-rule__modes { display: flex; align-items: center; flex-wrap: wrap; gap: var(--lake-space-xs); }
+
