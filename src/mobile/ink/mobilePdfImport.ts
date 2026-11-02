@@ -12,6 +12,7 @@
 import { parseLocalAssetUrl } from "../../core/assetUrl";
 import { createInkDoc, inkToBody, parseInkBody, type InkDoc } from "../../core/inkDoc";
 import {
+  INK_PDF_MAX_PAGES,
   importPdfPages,
   planPdfPageInsert,
   type PdfImportOutcome,
@@ -140,7 +141,38 @@ export interface SharedPdfImportResult {
   noteId: string;
   notebookId: string;
   title: string;
+  /** PDF **真实页数**（未截断前；不是导入成功页数）。 */
   pageCount: number;
+  /** 成功导入的页数（部分页上传失败时会小于 pageCount）。 */
+  importedPageCount: number;
+  /** true = 超过 300 页上限，只导入了前 importedPageCount 页。 */
+  truncated: boolean;
+  /** 逐页失败原因（形如「第 3 页：…」；空 = 全部成功）。 */
+  errors: string[];
+}
+
+/** 失败原因去掉「第 N 页：」前缀并截断，供一句话 toast 使用。 */
+function firstFailureReason(errors: readonly string[]): string {
+  const raw = (errors[0] ?? "").replace(/^第\s*\d+\s*页[：:]\s*/, "").trim();
+  if (!raw) return "未知原因";
+  return raw.length > 80 ? raw.slice(0, 80) + "…" : raw;
+}
+
+/**
+ * 分享 PDF 导入结果 → **一句话**可见提示（三态可组合；纯函数便于单测）。
+ * · 基础：「已导入 N 页 PDF」；
+ * · 截断：「PDF 共 M 页，仅导入前 N 页（上限 300 页）」；
+ * · 部分失败：「N 页导入成功，K 页失败（第一页失败原因：…）」；
+ * · 截断 + 部分失败：两段用「；」连成一句，**只弹一个 toast**。
+ */
+export function sharedPdfImportToast(result: Pick<SharedPdfImportResult, "pageCount" | "importedPageCount" | "truncated" | "errors">): string {
+  const imported = Math.max(0, Math.floor(result.importedPageCount));
+  const total = Math.max(imported, Math.floor(result.pageCount));
+  const failed = Math.max(0, Math.floor(result.errors.length));
+  const truncatedText = "PDF 共 " + total + " 页，仅导入前 " + imported + " 页（上限 " + INK_PDF_MAX_PAGES + " 页）";
+  if (failed === 0) return result.truncated ? truncatedText : "已导入 " + imported + " 页 PDF";
+  const failedText = imported + " 页导入成功，" + failed + " 页失败（第一页失败原因：" + firstFailureReason(result.errors) + "）";
+  return result.truncated ? truncatedText + "；" + failedText : failedText;
 }
 
 function defaultDeps(): SharedPdfImportDeps {
@@ -180,7 +212,10 @@ export async function importSharedPdfAsInkNote(
       noteId: note.id,
       notebookId: note.parentId ?? notebookId ?? "",
       title,
-      pageCount: outcome.importedPageCount,
+      pageCount: outcome.pageCount,
+      importedPageCount: outcome.importedPageCount,
+      truncated: outcome.truncated,
+      errors: outcome.errors,
     };
   } catch (reason) {
     // 失败不留空文档：刚建的手写板直接移入回收站（trash 失败不掩盖原始错误）

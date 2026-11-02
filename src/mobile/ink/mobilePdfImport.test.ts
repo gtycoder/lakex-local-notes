@@ -11,6 +11,7 @@ import type { PdfImportOutcome } from "../../features/ink/pdfImport";
 import {
   importSharedPdfAsInkNote,
   pdfPageSizes,
+  sharedPdfImportToast,
   sharedPdfNotebookId,
   sharedPdfTitle,
   type SharedPdfImportDeps,
@@ -85,7 +86,15 @@ describe("importSharedPdfAsInkNote（分享 → 新建手写板并导入）", ()
     expect(resolveNotebookId).toHaveBeenCalledTimes(1);
     expect(createInk).toHaveBeenCalledWith("讲义", "nb-1");
     expect(importIntoNote).toHaveBeenCalledWith(expect.objectContaining({ noteId: "note-1", bytes, filename: "讲义.pdf" }));
-    expect(result).toEqual({ noteId: "note-1", notebookId: "nb-1", title: "讲义", pageCount: 2 });
+    expect(result).toEqual({
+      noteId: "note-1",
+      notebookId: "nb-1",
+      title: "讲义",
+      pageCount: 2,
+      importedPageCount: 2,
+      truncated: false,
+      errors: [],
+    });
     expect(trashNote).not.toHaveBeenCalled();
   });
 
@@ -114,5 +123,65 @@ describe("importSharedPdfAsInkNote（分享 → 新建手写板并导入）", ()
     const { deps } = makeDeps({ createInk: vi.fn(async () => ({ id: "note-2", parentId: null })) });
     const result = await importSharedPdfAsInkNote({ bytes: new Uint8Array([1]), filename: "a.pdf" }, deps);
     expect(result.notebookId).toBe("nb-1");
+  });
+
+  it("截断 / 部分页失败：结果带上 importedPageCount、pageCount、truncated、errors（不再只返回成功页数）", async () => {
+    const outcome = {
+      ...pageOutcome(3),
+      pageCount: 320,
+      importedPageCount: 3,
+      truncated: true,
+      errors: ["第 4 页：图片编码失败"],
+    };
+    const { deps } = makeDeps({ importIntoNote: vi.fn(async () => outcome) });
+    const result = await importSharedPdfAsInkNote({ bytes: new Uint8Array([1]), filename: "a.pdf" }, deps);
+    expect(result).toMatchObject({
+      pageCount: 320,
+      importedPageCount: 3,
+      truncated: true,
+      errors: ["第 4 页：图片编码失败"],
+    });
+  });
+});
+
+describe("sharedPdfImportToast（一句话说清 成功 / 截断 / 部分失败）", () => {
+  const base = { pageCount: 5, importedPageCount: 5, truncated: false, errors: [] as string[] };
+
+  it("全部成功：已导入 N 页 PDF", () => {
+    expect(sharedPdfImportToast(base)).toBe("已导入 5 页 PDF");
+  });
+
+  it("截断：PDF 共 M 页，仅导入前 N 页（上限 300 页）", () => {
+    expect(sharedPdfImportToast({ pageCount: 320, importedPageCount: 300, truncated: true, errors: [] }))
+      .toBe("PDF 共 320 页，仅导入前 300 页（上限 300 页）");
+  });
+
+  it("部分页失败：N 页导入成功，K 页失败（第一页失败原因：…）", () => {
+    expect(sharedPdfImportToast({
+      pageCount: 5,
+      importedPageCount: 3,
+      truncated: false,
+      errors: ["第 2 页：图片编码失败", "第 4 页：上传失败"],
+    })).toBe("3 页导入成功，2 页失败（第一页失败原因：图片编码失败）");
+  });
+
+  it("截断 + 部分失败：两段用「；」连成一句话（只弹一个 toast）", () => {
+    expect(sharedPdfImportToast({
+      pageCount: 320,
+      importedPageCount: 300,
+      truncated: true,
+      errors: ["第 2 页：上传失败"],
+    })).toBe("PDF 共 320 页，仅导入前 300 页（上限 300 页）；300 页导入成功，1 页失败（第一页失败原因：上传失败）");
+    // 一句话：不含换行 / 不弹多条
+    expect(sharedPdfImportToast({ pageCount: 320, importedPageCount: 300, truncated: true, errors: ["x"] })).not.toContain("\n");
+  });
+
+  it("失败原因为空/过长：兜底「未知原因」、超长截断加省略号", () => {
+    expect(sharedPdfImportToast({ pageCount: 2, importedPageCount: 1, truncated: false, errors: [""] }))
+      .toBe("1 页导入成功，1 页失败（第一页失败原因：未知原因）");
+    const long = "x".repeat(120);
+    const text = sharedPdfImportToast({ pageCount: 2, importedPageCount: 1, truncated: false, errors: [long] });
+    expect(text).toContain("…");
+    expect(text.length).toBeLessThan(160);
   });
 });

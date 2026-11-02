@@ -22,8 +22,12 @@ describe("分享 PDF → 自动导入路由（18b）", () => {
     // 成功路径不弹「暂未接入」提示：只有读取失败才给 PDF 可见提示
     expect(APP).toContain("if (!payload) {");
     expect(APP).toContain("正在导入 PDF…");
-    // 分享互斥（冷启动 + 热启动可能同时到达）
-    expect(APP).toContain("shareBusyRef");
+    // 261102 T2-E：分享处理改**串行队列**（不再 busy 标志直接忽略）；结果走一句话 toast
+    expect(APP).toContain("new ShareQueue<SharedContent>");
+    expect(APP).toContain("shareQueueRef.current?.enqueue(content)");
+    expect(APP).toContain("SHARE_QUEUE_FULL_HINT");
+    expect(APP).not.toContain("shareBusyRef");
+    expect(APP).toContain("sharedPdfImportToast(imported)");
   });
 
   it("file kind 保持可见提示；image 仍进小记 seed（不走 PDF 路由）", () => {
@@ -42,6 +46,11 @@ describe("分享 PDF → 自动导入路由（18b）", () => {
     expect(MODULE).toContain("deps.trashNote(note.id)");
     expect(MODULE).toContain("export function sharedPdfTitle");
     expect(MODULE).toContain("export function sharedPdfNotebookId");
+    // 261102 T2-E：导入结果补 importedPageCount/pageCount/truncated/errors + 一句话提示纯函数
+    expect(MODULE).toContain("export function sharedPdfImportToast");
+    expect(MODULE).toContain("importedPageCount: outcome.importedPageCount");
+    expect(MODULE).toContain("truncated: outcome.truncated");
+    expect(MODULE).toContain("errors: outcome.errors");
     // MobileInkPad 手动导入与分享共用同一适配器（不复制实现）
     expect(read("./MobileInkPad.tsx")).toContain("importPdfPagesToAssets");
     expect(read("./MobileInkPad.tsx")).not.toContain("renderPdfPages(");
