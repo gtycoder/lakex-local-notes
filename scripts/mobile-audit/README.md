@@ -57,6 +57,31 @@ node scripts/mobile-audit/check-mobile-snap.mjs --port 9336                     
 ⚠️ **261016 实测到的确切成因**：`home-doc` 的指纹 row key 里带**文档节点 id**（形如 `ne-p$<uuid>-body#0`）⇒ 每次 `pm clear` + 重灌夹具都会生成**新 id**，
 即使元素数完全相同，指纹也会变（本次实测 `1880 → 1880` 但指纹不同，逐行对拍只差这一条）⇒ **重灌夹具后必须重烤**；只盯元素数会误判成"没变"。
 
+## 平板专项快照（261102 起，动 pad 外壳 / 平板工具栏时跑）
+
+平板（`html[data-form-factor="expanded"]`）与手机是**两套外壳**，手机 6 态覆盖不到平板的双栏/页签/常驻大纲，
+所以单独一套装置（同一份 `snap-gate.mjs` / `mobile-snap.mjs`，只换视口与基线）：
+
+- **视口钉死 1280×800**（CDP `Emulation.setDeviceMetricsOverride`，dpr 2）⇒ 与 `lake_tab` 的状态栏/导航栏实际高度解耦；
+  在 `lake_tab`（pixel_tablet）或手机上都能复现同一套布局。
+- **基线独立**：`scripts/mobile-audit/baseline/mobile-snap-tablet.json`（手机基线 `mobile-snap.json` 不动）。
+- **home-doc 走平板路径**：左栏常驻（`.pad-tree`）⇒ 直接点左栏行，不再依赖底部胶囊「文档树」。
+
+```bash
+# 前置：专用实例 + 固定夹具（与 6 态同一份 gate-fixture）
+export ANDROID_SERIAL=emulator-5580
+adb shell pm clear com.lakexlocalnotes.android && adb shell am start -n com.lakexlocalnotes.android/.MainActivity && sleep 10
+bash scripts/emu-cdp.sh 9340
+node scripts/cdp-eval.mjs 9340 @scripts/mobile-audit/gate-fixture.mjs
+# 重烤（只在换夹具 / 大改外壳构成时）
+npm run check:tabletsnap -- --port 9340 --write-baseline
+# 日常
+npm run check:tabletsnap -- --port 9340
+```
+
+实测（261102）：6 态 = home-library 1822 / home-quicknotes 1822 / home-library-list 1827 / home-doc 2012 / settings 1912 / settings-appearance 1849，
+连跑两轮 **0 差异**。⚠️ 与手机基线同理：**基线绑定"专用实例 + 夹具"**，换数据/换设备必红，那是预期。
+
 ## 多维表专项快照（261030 起，动移动端多维表时跑）
 
 6 态整页快照与 23 屏走查都**不含** bitable 屏；把多维表塞进共享夹具会影响 `home-doc`（最近文档顺序）与走查行序号，

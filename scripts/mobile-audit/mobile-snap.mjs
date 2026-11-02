@@ -41,11 +41,16 @@ export const STATES = [
       opened = await page.evaluate("Boolean(document.querySelector('.mobile-workspace'))");
     }
     await expectOn(page, "!!document.querySelector('.mobile-workspace')", "第二层工作区");
-    const rowsOpen = "!!document.querySelector('.side-panel--left.on .mb-row')";
-    if (!(await page.evaluate(rowsOpen))) {
-      if (!(await tapByLabel(page, ".mobile-bottom-bar__item", "文档树", 1200))) throw new Error("home-doc: 底栏找不到「文档树」入口");
+    // 平板（html[data-form-factor=expanded]）：左栏常驻、没有底栏胶囊 ⇒ 直接点 .pad-tree 的文档行。
+    if (await page.evaluate("!!document.querySelector('.pad-tree .mb-row')")) {
+      if (!(await tapSel(page, ".pad-tree .mb-row", 2400))) throw new Error("home-doc: 平板左栏没有可点的文档行");
+    } else {
+      const rowsOpen = "!!document.querySelector('.side-panel--left.on .mb-row')";
+      if (!(await page.evaluate(rowsOpen))) {
+        if (!(await tapByLabel(page, ".mobile-bottom-bar__item", "文档树", 1200))) throw new Error("home-doc: 底栏找不到「文档树」入口");
+      }
+      if (!(await tapSel(page, ".side-panel--left.on .mb-row", 2400))) throw new Error("home-doc: 目录抽屉里没有可点的文档行");
     }
-    if (!(await tapSel(page, ".side-panel--left.on .mb-row", 2400))) throw new Error("home-doc: 目录抽屉里没有可点的文档行");
     // 261013：断言必须落在**活动** pane 上 —— 只查 '.mobile-doc-body' 会被 keep-alive 的隐藏 pane 蒙混过关
     // （App 会恢复 8 个隐藏标签页，它们照样在 DOM 里）。同时要求活动 pane 真的渲染出内核视图/编辑引擎。
     await expectOn(
@@ -62,6 +67,14 @@ export default async ({ page, args }) => {
   const tag = args[0] || "run";
   const only = args[1] ? args[1].split(",") : null;
   const out = { tag, states: {} };
+  // 平板态取样：钉住 CSS 视口（由 check-mobile-tablet-snap 通过 --viewport 传入）。
+  // 这样同一套 6 态在 lake_tab 上是确定的 1280x800，不受状态栏/导航栏实际高度影响。
+  const viewportArg = process.env.LAKE_SNAP_VIEWPORT;
+  const viewport = viewportArg && /^(\d+)x(\d+)$/.exec(viewportArg);
+  if (viewport) {
+    await page.send("Emulation.setDeviceMetricsOverride", { width: Number(viewport[1]), height: Number(viewport[2]), deviceScaleFactor: 2, mobile: false });
+    await page.sleep(600);
+  }
   // 预热：刚连上 CDP 后的第一次 reload 常拿到"半渲染"首页（实测首态 210 els vs 完整 238）⇒ 先空跑一次 reload。
   await reload(page, "shelf");
   for (const st of STATES) {
@@ -73,6 +86,7 @@ export default async ({ page, args }) => {
     out.states[st.name] = snap;
     console.log("  [msnap] " + st.name + ": " + snap.n + " els");
   }
+  if (viewport) await page.send("Emulation.clearDeviceMetricsOverride").catch(() => {});
   fs.mkdirSync(data("snap"), { recursive: true });
   fs.writeFileSync(data("snap/" + tag + ".json"), JSON.stringify(out));
   return { tag, states: Object.keys(out.states).length, file: data("snap/" + tag + ".json") };

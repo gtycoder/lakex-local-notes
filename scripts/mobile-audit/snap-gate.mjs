@@ -76,11 +76,18 @@ export async function runSnapGate({ snapScript, baselineName, portDefault, tagDe
   const STATES = passStates ? argOf("--states", null) : null;
   const FROM = argOf("--from", null);
   const WRITE = process.argv.includes("--write-baseline");
+  // 可选：把 WebView 视口钉到指定 CSS 尺寸（如 1280x800）再取样 —— 平板态在手机 AVD 上也能复现。
+  // 由快照脚本读 LAKE_SNAP_VIEWPORT 自己 setDeviceMetricsOverride / 结束时清掉。
+  const VIEWPORT = argOf("--viewport", null);
 
   const snapshot = (tag) => {
     const driveArgs = [DRIVE, String(PORT), SNAP, tag];
     if (STATES) driveArgs.push(STATES);
-    const r = spawnSync(process.execPath, driveArgs, { stdio: "inherit", cwd: ROOT });
+    const r = spawnSync(process.execPath, driveArgs, {
+      stdio: "inherit",
+      cwd: ROOT,
+      env: VIEWPORT ? { ...process.env, LAKE_SNAP_VIEWPORT: VIEWPORT } : process.env,
+    });
     if (r.status !== 0) process.exit(r.status === null ? 1 : r.status);
     return compact(JSON.parse(fs.readFileSync(path.join(ROOT, ".css-audit", "snap", tag + ".json"), "utf8")));
   };
