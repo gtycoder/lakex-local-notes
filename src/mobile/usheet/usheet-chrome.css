@@ -633,3 +633,15 @@
   padding: 0 4px;
   margin-bottom: 4px;
 }
+
+/* 平板只读：dock 进流常驻（不再 fixed 悬浮在网格上），避免遮住公式栏/网格底行；
+ * 编辑态仍保持 fixed（它要跟键盘/面板走），所以这条只挂在 .is-readonly 上。 */
+html[data-form-factor="expanded"] .mobile-usheet.is-readonly .mb-usheet-dock {
+  position: static;
+  flex: none;
+}
+
+/* dock 既然进流自己占位，spacer 在只读平板就归零（否则会多出 ~96px 空白）。 */
+html[data-form-factor="expanded"] .mobile-usheet.is-readonly .mb-usheet-chrome-spacer {
+  height: 0;
+}

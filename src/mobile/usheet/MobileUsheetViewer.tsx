@@ -45,6 +45,7 @@ import { SheetTopBar } from "./SheetTopBar";
 import { SheetDock } from "./SheetDock";
 import { SheetDockPanel } from "./SheetDockPanel";
 import { useKeyboard } from "../hooks/useKeyboard";
+import { useFormFactor } from "../pad/useFormFactor";
 import { dockKbOffset } from "../editor/editSurfaceModel";
 import { useEditSurface } from "../editor/useEditSurface";
 import { showToast } from "../ui/toastBus";
@@ -173,6 +174,8 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
    * 输入法抑制限定在本宿主且不回焦（回焦会触发内核公式栏 onFocus 反把面板关掉）、不装"点正文收面板"守卫
    * （表格输入面是 canvas/原生公式栏）、不接管外壳高（表格自己的可视区由 --mb-usheet-kb-offset 承担）。
    */
+  // 平板（expanded）：表格 chrome 常驻（dock 只读也显示），手机保持原状。
+  const padSheet = useFormFactor() === "expanded";
   const surface = useEditSurface<SheetDockId>({
     editing: editable,
     dockRef: hostRef,
@@ -791,8 +794,22 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
         />
       )}
       {ready ? <div id={containerId} className="mobile-usheet-root" /> : <div className="mb-empty">正在加载表格…</div>}
-      {editable && ready && <div className="mb-usheet-chrome-spacer" aria-hidden="true" />}
+      {ready && (editable || padSheet) && <div className="mb-usheet-chrome-spacer" aria-hidden="true" />}
       {editable && <span ref={caretRef} className="mb-usheet-caret" aria-hidden="true" />}
+      {/* 平板（expanded）：dock 常驻（只读时整条禁用、隐藏键盘键），避免进出编辑时整块网格上下跳。 */}
+      {ready && (editable || padSheet) && (
+        <SheetDock
+          open={dockPanel}
+          keyboardOpen={keyboardOpen}
+          canUndo={undoDepth > 0}
+          canRedo={redoDepth > 0}
+          onToggle={toggleDockPanel}
+          onUndo={handleUndo}
+          onRedo={handleRedo}
+          onKeyboard={onDockKeyboard}
+          readOnly={!editable}
+        />
+      )}
       {editable && ready && (
         <>
           {!nativeEditing && !nativeExpanded && !dockPanel && (
@@ -801,16 +818,6 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
               <span className="mb-usheet-fbar__value">{cellFmt.value}</span>
             </button>
           )}
-          <SheetDock
-            open={dockPanel}
-            keyboardOpen={keyboardOpen}
-            canUndo={undoDepth > 0}
-            canRedo={redoDepth > 0}
-            onToggle={toggleDockPanel}
-            onUndo={handleUndo}
-            onRedo={handleRedo}
-            onKeyboard={onDockKeyboard}
-          />
           {/* 只在这两种状态挂载：开着 / 收起过渡中（内容要留到键盘盖住）；关完就卸载，不留常驻的隐藏面板。 */}
           {renderedPanel && (dockPanel !== null || panelClosing) && (
             <div

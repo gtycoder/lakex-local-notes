@@ -12,6 +12,9 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from "vitest";
 
+// 本文件验的是**手机**（compact）语义：jsdom 默认 1024 宽会命中平板 expanded 分支（dock 只读常驻），
+// 与这些断言无关，这里把视口钉到 412。
+Object.defineProperty(window, "innerWidth", { configurable: true, writable: true, value: 412 });
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 import { createElement } from "react";
 import { createRoot } from "react-dom/client";

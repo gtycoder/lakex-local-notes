@@ -26,9 +26,11 @@ export interface SheetDockProps {
   onUndo: () => void;
   onRedo: () => void;
   onKeyboard: () => void;
+  /** 平板常驻形态：只读时整条渲染但工具全禁用（对齐桌面「只读仍显示工具栏」），并隐藏键盘键。 */
+  readOnly?: boolean;
 }
 
-export function SheetDock({ open, keyboardOpen, canUndo, canRedo, onToggle, onUndo, onRedo, onKeyboard }: SheetDockProps) {
+export function SheetDock({ open, keyboardOpen, canUndo, canRedo, onToggle, onUndo, onRedo, onKeyboard, readOnly = false }: SheetDockProps) {
   const kbLabel = open ? "收起面板" : keyboardOpen ? "收起键盘" : "展开键盘";
   return (
     <div className="mb-usheet-dock" data-prevent-swipe role="toolbar" aria-label="表格工具">
@@ -44,22 +46,25 @@ export function SheetDock({ open, keyboardOpen, canUndo, canRedo, onToggle, onUn
               aria-label={active ? "关闭" + item.label : item.label}
               title={item.label}
               aria-pressed={active}
+              disabled={readOnly}
               onClick={() => onToggle(item.id)}
             >
               {active ? <X size={20} /> : item.id === "format" ? <span className="mb-usheet-dock__glyph">T</span> : <Icon size={20} />}
             </button>
           );
         })}
-        <button type="button" className="mb-usheet-dock__btn" aria-label="撤销" title="撤销" disabled={!canUndo} onClick={onUndo}>
+        <button type="button" className="mb-usheet-dock__btn" aria-label="撤销" title="撤销" disabled={readOnly || !canUndo} onClick={onUndo}>
           <Undo2 size={19} />
         </button>
-        <button type="button" className="mb-usheet-dock__btn" aria-label="重做" title="重做" disabled={!canRedo} onClick={onRedo}>
+        <button type="button" className="mb-usheet-dock__btn" aria-label="重做" title="重做" disabled={readOnly || !canRedo} onClick={onRedo}>
           <Redo2 size={19} />
         </button>
       </div>
-      <button type="button" className="mb-usheet-dock__btn mb-usheet-dock__kb" aria-label={kbLabel} title={kbLabel} onClick={onKeyboard}>
-        {keyboardOpen && !open ? <KeyboardOff size={20} /> : <Keyboard size={20} />}
-      </button>
+      {!readOnly && (
+        <button type="button" className="mb-usheet-dock__btn mb-usheet-dock__kb" aria-label={kbLabel} title={kbLabel} onClick={onKeyboard}>
+          {keyboardOpen && !open ? <KeyboardOff size={20} /> : <Keyboard size={20} />}
+        </button>
+      )}
     </div>
   );
 }
