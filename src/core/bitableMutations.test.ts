@@ -4,7 +4,7 @@ import {
   type BitableDoc, type BitableField, type BitableRecord, type BitableTable, type BitableView,
 } from "./bitableDoc";
 import {
-  addBitableRecord, addBitableRecordWithValues, appendBitableAttachments, deleteBitableField,
+  addBitableRecord, addBitableRecordWithValues, addBitableView, appendBitableAttachments, deleteBitableField,
   duplicateBitableField, renameAiFieldToken, setBitableCellValue, setBitableRecordValues, stripFieldFromView, stripViewRefsForFieldType,
 } from "./bitableMutations";
 
@@ -239,5 +239,60 @@ describe("多维表业务写入纯函数（AR02）", () => {
     const next = deleteBitableField(doc([t1]), "t1", "a");
     expect(next.tables[0].fields.map((f) => f.id)).toEqual(["ai"]);
     expect(next.tables[0].fields[0].ai?.prompt).toBe("把 {{备注}} 和 {{补充}} 合成一句");
+  });
+});
+
+
+describe("addBitableView：新建视图的单一来源（桌面 / 移动端共用）", () => {
+  /** 一张具备「看板/画册/日历」默认配置来源字段的表。 */
+  function sourceDoc(): BitableDoc {
+    const t = table("t1", [
+      field("f-text", "text"),
+      field("f-select", "select"),
+      field("f-attach", "attachment"),
+      field("f-date", "date"),
+    ], [], [view("v1")]);
+    return doc([t, table("t2", [field("f", "text")], [], [view("v2")])]);
+  }
+
+  it("5 种类型：追加一个视图、默认配置与桌面旧行为一致、导航（当前表/当前视图）不变", () => {
+    const base = sourceDoc();
+    const created: Record<string, BitableView> = {};
+    for (const type of ["grid", "form", "kanban", "gallery", "calendar"] as const) {
+      const result = addBitableView(base, "t1", type);
+      expect(result.doc).not.toBe(base);
+      expect(result.viewId).toBeTruthy();
+      const nextTable = result.doc.tables[0];
+      // 只追加，不改其它表、不删旧视图
+      expect(nextTable.views.length).toBe(2);
+      expect(nextTable.views[0].id).toBe("v1");
+      expect(result.doc.tables[1]).toBe(base.tables[1]);
+      const view = nextTable.views[1];
+      expect(view.id).toBe(result.viewId);
+      expect(view.type).toBe(type);
+      // 导航是设备本地状态：core 不碰（调用方自己切）
+      expect(result.doc.activeTableId).toBe(base.activeTableId);
+      expect(nextTable.activeViewId).toBe("v1");
+      created[type] = view;
+    }
+    // 默认配置：看板第一个单选 / 画册第一个附件 / 日历第一个日期；表单不预选题目
+    expect(created.kanban.kanbanGroupFieldId).toBe("f-select");
+    expect(created.gallery.galleryCoverFieldId).toBe("f-attach");
+    expect(created.calendar.calendarStartFieldId).toBe("f-date");
+    expect(created.form.formFieldIds).toBeUndefined();
+    expect(created.grid.rowHeight).toBe("low");
+  });
+
+  it("没有可选配置字段时照样建视图（不臆造配置）；表不存在返回原 doc + 空 viewId", () => {
+    const plain = doc([table("t1", [field("f", "text")], [], [view("v1")])]);
+    const kanban = addBitableView(plain, "t1", "kanban");
+    expect(kanban.doc.tables[0].views.length).toBe(2);
+    expect(kanban.doc.tables[0].views[1].kanbanGroupFieldId).toBeUndefined();
+    expect(addBitableView(plain, "t1", "gallery").doc.tables[0].views[1].galleryCoverFieldId).toBeUndefined();
+    expect(addBitableView(plain, "t1", "calendar").doc.tables[0].views[1].calendarStartFieldId).toBeUndefined();
+
+    const missing = addBitableView(plain, "nope", "grid");
+    expect(missing.doc).toBe(plain);
+    expect(missing.viewId).toBe("");
   });
 });

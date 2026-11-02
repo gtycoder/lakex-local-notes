@@ -67,10 +67,14 @@ export function setMobileCell(doc: BitableDoc, tableId: string, recordId: string
   return setBitableCellValue(doc, tableId, recordId, fieldId, value);
 }
 
-/** 新增字段（名称缺省用类型名；追加到末尾）。 */
-export function addMobileField(doc: BitableDoc, tableId: string, type: BitableFieldType, name?: string): BitableDoc {
+/**
+ * 新增字段（名称缺省用类型名；追加到末尾），返回新字段 id：
+ * 移动端「添加」之后要立刻打开「修改字段」面板编辑这个新字段，所以必须拿得到 id。
+ */
+export function addMobileField(doc: BitableDoc, tableId: string, type: BitableFieldType, name?: string): { doc: BitableDoc; fieldId: string } {
   const label = name?.trim() || BITABLE_FIELD_TYPE_LABEL[type] || "字段";
-  return addBitableField(doc, tableId, createBitableField(type, label));
+  const field = createBitableField(type, label);
+  return { doc: addBitableField(doc, tableId, field), fieldId: field.id };
 }
 
 export function renameMobileField(doc: BitableDoc, tableId: string, fieldId: string, name: string): BitableDoc {

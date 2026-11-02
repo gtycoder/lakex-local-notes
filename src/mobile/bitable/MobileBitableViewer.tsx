@@ -21,6 +21,7 @@ import { fillSurfaceColor } from "../../core/colorPalette.js";
 import {
   applyViewToRecords,
   bitableFillBackgroundTokens,
+  BITABLE_VIEW_TYPE_LABEL,
   buildBitableFillProjection,
   createDefaultBitableTable,
   groupRecords,
@@ -30,8 +31,10 @@ import {
   type BitableDisplayContext,
   type BitableDoc,
   type BitableField,
+  type BitableFieldType,
   type BitableRecord,
   type BitableView,
+  type BitableViewType,
 } from "../../core/bitableDoc.js";
 import {
   resolveRecordLayout,
@@ -42,7 +45,7 @@ import { applyBitableNav, readBitableNav, writeBitableNav } from "../../features
 import { showToast } from "../ui/toastBus";
 import { pushBackHandler } from "../ui/backStack";
 import { formatGroupLabel } from "./mobileBitableFormat";
-import { convertBitableFieldType, deleteBitableTable, duplicateBitableTable, fieldHasData, renameBitableTable, updateBitableField } from "../../core/bitableMutations";
+import { addBitableView, convertBitableFieldType, deleteBitableTable, duplicateBitableTable, fieldHasData, renameBitableTable, updateBitableField } from "../../core/bitableMutations";
 import { confirmMobile } from "../ui/ConfirmDialog";
 import { MobileBitableRecordSheet } from "./MobileBitableRecordSheet";
 import { MobileBitableFieldSheet } from "./MobileBitableFieldSheet";
@@ -294,6 +297,30 @@ export function MobileBitableViewer({ noteId, content, editing = false, onChange
     writeBitableNav(noteId, { ...nav, viewIds: { ...(nav.viewIds ?? {}), [table.id]: nextViewId } });
   };
 
+  /** 新建视图（261030 用户点单）：正文写入走 core 单一来源，建完自动切过去（导航写设备本地）。 */
+  const addView = (type: BitableViewType) => {
+    const current = docRef.current;
+    if (!current || !editable) return;
+    const result = addBitableView(current, table.id, type);
+    if (!commit(result.doc)) return;
+    switchView(result.viewId);
+    setViewListOpen(false);
+    showToast("已新建「" + BITABLE_VIEW_TYPE_LABEL[type] + "」");
+  };
+
+  /**
+   * 新增字段（261030 用户点单）：创建后**立刻打开「修改字段」**编辑这个新字段。
+   * 字段面板保持打开（与行内铅笔同一层序）：取消修改 = 回到字段面板且新字段已在列表里，
+   * 不会出现「取消了但字段不见了」的错觉；MobileSheet 的返回栈/滚动锁按嵌套层数工作。
+   */
+  const addField = (type: BitableFieldType, name: string) => {
+    const current = docRef.current;
+    if (!current || !editable) return;
+    const result = addMobileField(current, table.id, type, name);
+    if (!commit(result.doc)) return;
+    setEditingFieldId(result.fieldId);
+  };
+
   const patchPrefs = (patch: Partial<BitableRecordLayoutPrefs>) => {
     const next = withRecordLayoutPrefs(prefs, patch);
     setPrefs(next);
@@ -426,7 +453,8 @@ export function MobileBitableViewer({ noteId, content, editing = false, onChange
 
   return (
     <div className={"mobile-bitable" + (editable ? " is-editing" : "") + (isFormView ? " mbt-is-form" : "")} data-mobile-bitable data-prevent-swipe>
-      {viewTabs.length > 1 && (
+      {/* 视图页签：多个视图在只读态也要能切；单视图只在**编辑态**出现 —— 新建视图的入口在这一行（261030）。 */}
+      {(viewTabs.length > 1 || editable) && (
         <div className="mbt-views" role="tablist" aria-label="视图">
           {viewTabs.map((tab) => (
             <button key={tab.view.id} type="button" role="tab" aria-selected={tab.view.id === view.id}
@@ -586,7 +614,7 @@ export function MobileBitableViewer({ noteId, content, editing = false, onChange
           fields={table.fields}
           onEdit={(field) => setEditingFieldId(field.id)}
           onDelete={(fieldId) => mutate((current) => deleteMobileField(current, table.id, fieldId))}
-          onAdd={(type, name) => mutate((current) => addMobileField(current, table.id, type, name))}
+          onAdd={addField}
           onClose={() => setFieldSheetOpen(false)}
         />
       )}
@@ -675,7 +703,9 @@ export function MobileBitableViewer({ noteId, content, editing = false, onChange
         open={viewListOpen}
         table={table}
         activeViewId={view.id}
+        editable={editable}
         onSelect={(nextViewId) => { switchView(nextViewId); setViewListOpen(false); }}
+        onAddView={addView}
         onClose={() => setViewListOpen(false)}
       />
     </div>

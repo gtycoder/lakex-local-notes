@@ -157,7 +157,9 @@
   content: ""; position: absolute; top: 6px; left: calc(50% - 16px); width: 32px; height: 4px;
   border-radius: var(--lake-radius-hairline); background: var(--lake-text-3); opacity: .45;
 }
-.mb-menusheet__items { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 8px 0; scrollbar-width: none; }
+/* 261030 贴底修复：根层与子菜单共用这个列表容器 ⇒ 底部让开安全区（手势条/圆角色带），
+ * 否则最后一项压在系统手势条下面（此前 8px 0 没有 safe-area）。 */
+.mb-menusheet__items { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 8px 0 calc(8px + var(--mobile-bottom-safe-area)); scrollbar-width: none; }
 .mb-menusheet__items::-webkit-scrollbar { display: none; }
 .mb-menusheet__item {
   position: relative; display: flex; align-items: center; gap: var(--lake-space-lg); width: 100%;

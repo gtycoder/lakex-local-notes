@@ -13,6 +13,8 @@ export interface InkPageStripProps {
   onConfirmDelete: () => void;
   onCancelDelete: () => void;
   onClose: () => void;
+  /** 阅读态：页面增删/排序是正文数据，禁用并保持可见（避免"点了没反应"）；切页是纯视图，仍可用。 */
+  readOnly?: boolean;
 }
 
 function PageThumb({ page }: { page: InkPage }) {
@@ -46,6 +48,7 @@ export function InkPageStrip({
   onConfirmDelete,
   onCancelDelete,
   onClose,
+  readOnly = false,
 }: InkPageStripProps) {
   const pendingIndex = pendingDeleteId ? pages.findIndex((page) => page.id === pendingDeleteId) : -1;
 
@@ -65,13 +68,13 @@ export function InkPageStrip({
               <span className="ink-page-thumb__index">{index + 1}</span>
             </button>
             <div className="ink-page-thumb__actions">
-              <button onClick={() => onMove(page.id, -1)} disabled={index === 0} aria-label={`第 ${index + 1} 页前移`} title="前移"><ArrowLeft size={14} /></button>
-              <button onClick={() => onMove(page.id, 1)} disabled={index === pages.length - 1} aria-label={`第 ${index + 1} 页后移`} title="后移"><ArrowRight size={14} /></button>
-              <button onClick={() => onRequestDelete(page.id)} disabled={pages.length <= 1} aria-label={`删除第 ${index + 1} 页`} title="删除页"><Trash2 size={14} /></button>
+              <button onClick={() => onMove(page.id, -1)} disabled={readOnly || index === 0} aria-label={`第 ${index + 1} 页前移`} title={readOnly ? "阅读态不能调整页序，点编辑后可改" : "前移"}><ArrowLeft size={14} /></button>
+              <button onClick={() => onMove(page.id, 1)} disabled={readOnly || index === pages.length - 1} aria-label={`第 ${index + 1} 页后移`} title={readOnly ? "阅读态不能调整页序，点编辑后可改" : "后移"}><ArrowRight size={14} /></button>
+              <button onClick={() => onRequestDelete(page.id)} disabled={readOnly || pages.length <= 1} aria-label={`删除第 ${index + 1} 页`} title={readOnly ? "阅读态不能删除页面，点编辑后可改" : "删除页"}><Trash2 size={14} /></button>
             </div>
           </div>
         ))}
-        <button className="ink-page-strip__add" onClick={onAdd} aria-label="新建页" title="新建页"><Plus size={18} /></button>
+        <button className="ink-page-strip__add" onClick={onAdd} disabled={readOnly} aria-label="新建页" title={readOnly ? "阅读态不能新建页，点编辑后可改" : "新建页"}><Plus size={18} /></button>
       </div>
       {pendingDeleteId && pendingIndex >= 0 ? (
         <div className="ink-page-strip__confirm" role="alertdialog" aria-label={`确认删除第 ${pendingIndex + 1} 页`}>

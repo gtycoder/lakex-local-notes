@@ -104,7 +104,11 @@ export function OutlineSheet({ open, editor, onClose, side }: OutlineSheetProps)
             <div className="toolbar__scroll"><span className="toolbar__text">大纲</span></div>
             <span className="toolbar__icon" role="button" tabIndex={0} onClick={onClose} aria-label="收起"><ChevronLeft /></span>
           </div>
-          <div className="mb-sheet__body side-panel-body mb-list">{list}</div>
+          {/* 261030：侧栏变体**不挂 .mb-sheet__body**（那是底部 Sheet 的正文原语，floating.css 后加载会把
+              底部安全区从 .side-panel-body 的 24 覆盖成 16）。这里唯一来源 = .side-panel-body：
+              .mb-list 也去掉 —— 它在 kit.css 里排在 .side-panel-body 之后，会再压成 4px（且本元素没有
+              .mb-list-item 子项，mb-list 只是容器语义，不需要）。 */}
+          <div className="side-panel-body">{list}</div>
         </div>
       </div>
     );

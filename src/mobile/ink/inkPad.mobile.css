@@ -1,13 +1,42 @@
 .ink-pad--mobile .ink-toolbar { padding: 5px 8px; }
 .ink-pad--mobile .ink-color { width: 32px; height: 32px; flex-basis: 32px; }
 .ink-pad--mobile .ink-tool,
-.ink-pad--mobile .ink-width,
+.ink-pad--mobile .ink-width { min-width: 36px; height: 36px; padding: 0 7px; }
+/* 触达 ≥44（--mb-tap-min）：分页 / 纸张 / 页面管理是 footer 的主操作，36×36 在手机上点不准。 */
 .ink-pad--mobile .ink-pages button,
-.ink-pad--mobile .ink-backgrounds button { min-width: 36px; height: 36px; padding: 0 7px; }
+.ink-pad--mobile .ink-backgrounds button,
+.ink-pad--mobile .ink-zoom button { min-width: var(--mb-tap-min); height: var(--mb-tap-min); padding: 0 7px; }
 .ink-pad--mobile .ink-toolbar__sep { height: 20px; margin: 0 2px; }
 .ink-pad--mobile .ink-page-stage { padding: 8px; overflow: auto; align-items: safe center; justify-content: safe center; }
 .ink-pad--mobile .ink-page-frame { width: min(100%, calc((100dvh - 202px) * 0.707)); max-height: 100%; aspect-ratio: 794 / 1123; }
-.ink-pad--mobile .ink-footer { flex-wrap: wrap; padding: 4px 8px; }
+/* footer 自己接系统安全区（编辑态胶囊已隐藏，内容不能贴到手势条上）；阅读态把胶囊让位交给下面的 padding。 */
+.ink-pad--mobile .ink-footer { flex-wrap: wrap; padding: 4px 8px calc(4px + var(--mobile-bottom-safe-area)); }
 .ink-pad--mobile .ink-footer__right { flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 .ink-pad--mobile .ink-pages span { font-size: var(--lake-font-size-micro); }
 .ink-pad--mobile .ink-backgrounds button { font-size: var(--lake-font-size-micro); }
+/* 页面管理（InkPageStrip）在手机上把 18×18 的操作钮放大到 --mb-tap-min：
+   缩略图卡片整体加宽（缩略图 + 一行 44 高操作），整条仍横向滚动；桌面保持 64 / 18 不变。 */
+.ink-pad--mobile .ink-page-thumb { width: calc(var(--mb-tap-min) * 3 + var(--lake-space-md)); }
+.ink-pad--mobile .ink-page-thumb__actions button { width: var(--mb-tap-min); height: var(--mb-tap-min); }
+.ink-pad--mobile .ink-page-strip__add,
+.ink-pad--mobile .ink-page-strip__close { width: var(--mb-tap-min); height: var(--mb-tap-min); }
+.ink-pad--mobile .ink-page-strip__confirm button { height: var(--mb-tap-min); padding: 0 12px; }
+.ink-pad--mobile .ink-page-strip { padding-right: calc(var(--mb-tap-min) + var(--lake-space-lg)); }
+/* 阅读态说明行：占 footer 一整行（footer 在手机上本来就会换行），不必再包一层容器。
+   纸张/页面是正文数据，阅读态一律不写；切页只改本地视图，仍然可用。 */
+.ink-pad--mobile .ink-footer .ink-readonly-hint {
+  position: static; right: auto; top: auto; flex: 1 0 100%;
+  padding: 0; background: transparent;
+  color: var(--lake-text-3);
+  font-size: var(--lake-font-size-micro);
+  line-height: var(--lake-line-height-snug);
+  text-align: center;
+}
+/* 阅读态让位底部胶囊：胶囊是 fixed（高 56 + 离底 32 = 状态栏 24 + 间隔 8 + 安全区），
+   ink footer 是文档 pane 的最后一格 ⇒ 分页/纸张按钮整排落在胶囊底下点不到（261030 设备实测：
+   胶囊 top=754.29 / 文档 pane bottom=842.29）。胶囊只在阅读态可见（编辑态整条下滑淡出），
+   所以只给阅读态让位，编辑态不白留一条。表达式与 .mobile-bottom-bar 的 bottom 同源；
+   安全区那一段已由 footer 自己的 padding-bottom 承担，这里不能重复加。 */
+.ink-pad--mobile[data-readonly="true"] {
+  padding-bottom: calc(var(--mobile-status-height) + var(--mobile-bar-gap) + var(--mobile-bottom-bar-height) + var(--lake-space-sm));
+}

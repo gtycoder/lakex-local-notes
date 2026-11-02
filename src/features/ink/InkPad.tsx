@@ -131,6 +131,15 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
   onDirtyRef.current = onDirty;
   const onEditorCaptureRef = useRef(onEditorCapture);
   onEditorCaptureRef.current = onEditorCapture;
+  /** 阅读态：翻页/缩放只改本地视图，capture 绝不可交出可写正文（桌面锁定文档的保存管线会按需 capture）。 */
+  const readOnlyRef = useRef(readOnly);
+  readOnlyRef.current = readOnly;
+  /**
+   * 父层最新的正文（= 阅读态下盘上正文）。阅读态 capture 交它，而不是挂载时的 diskBodyRef：
+   * 编辑过一轮再点「完成」后 diskBodyRef 还是**打开时**的旧原文，交出去会把刚保存的正文覆盖回旧版。
+   */
+  const latestContentRef = useRef(content);
+  latestContentRef.current = content;
 
   /** 打开时的磁盘原文（CORE-03 基线）：保存/捕获在「与磁盘等价」时原样返回它，不写盘。 */
   const diskBodyRef = useRef(content);
@@ -275,6 +284,10 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
 
   useEffect(() => {
     onEditorCaptureRef.current?.(() => {
+      // 阅读态一律交父层最新正文（阅读态下 = 盘上正文）：只读翻页/页面管理切换后 activePageId
+      // 变的是本地视图，不是正文改动。（桌面锁定/已删除文档同样会被保存管线 capture，这条判据
+      // 保证不会因此写盘；也不能交挂载时的 diskBodyRef —— 那是「打开时」的旧原文，会覆盖刚保存的正文。）
+      if (readOnlyRef.current) return latestContentRef.current;
       const current = docRef.current;
       if (!current) return null;
       try {
@@ -570,6 +583,7 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
           onConfirmDelete={confirmDeletePage}
           onCancelDelete={() => setPendingDeletePageId(null)}
           onClose={() => { setPagesOpen(false); setPendingDeletePageId(null); }}
+          readOnly={readOnly}
         />
       )}
 
@@ -605,10 +619,15 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
       </div>
 
       <div className="ink-footer">
+        {/* 阅读态解释（移动端没有 hover）：纸张与页面是正文数据，阅读态一律不写；切页只改本地视图，仍然可用。
+            桌面端沿用右上角「只读」徽标，不重复这一行。 */}
+        {readOnly && variant === "mobile" && (
+          <div className="ink-readonly-hint" role="note">阅读态：点右上角「编辑」后可修改纸张与页面</div>
+        )}
         <div className="ink-pages">
-          <button onClick={() => switchPage(-1)} disabled={readOnly || pageIndex <= 0} aria-label="上一页"><ChevronLeft size={16} /></button>
+          <button onClick={() => switchPage(-1)} disabled={pageIndex <= 0} aria-label="上一页"><ChevronLeft size={16} /></button>
           <span>第 {pageIndex + 1} / {doc.pages.length} 页</span>
-          <button onClick={() => switchPage(1)} disabled={readOnly || pageIndex >= doc.pages.length - 1} aria-label="下一页"><ChevronRight size={16} /></button>
+          <button onClick={() => switchPage(1)} disabled={pageIndex >= doc.pages.length - 1} aria-label="下一页"><ChevronRight size={16} /></button>
           <button onClick={addPage} disabled={readOnly} aria-label="新建页"><Plus size={16} /></button>
           <button onClick={() => { setPagesOpen((open) => !open); setPendingDeletePageId(null); }} aria-label="页面管理" title="页面管理"><LayoutGrid size={16} /></button>
         </div>
@@ -627,7 +646,7 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
           )}
         </div>
       </div>
-      {readOnly && <div className="ink-readonly-hint">只读</div>}
+      {readOnly && variant === "desktop" && <div className="ink-readonly-hint">只读</div>}
     </div>
   );
 }

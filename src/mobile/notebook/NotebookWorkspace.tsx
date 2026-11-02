@@ -289,7 +289,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     await bridge.saveNote(id, title, content, null, plain);
   }, { onError: reportAutoSaveError });
 
-  /** 现取 usheet/board 最新正文并等待保存完成；成功前不释放实例 capture，也不关闭界面。 */
+  /** 现取 usheet/board/ink 最新正文并等待保存完成；成功前不释放实例 capture，也不关闭界面。 */
   const captureAndSaveTab = useCallback(async (tab: NotebookTab): Promise<void> => {
     const captured = liveBodyCapturesRef.current.get(tab.id)?.();
     if (captured && captured !== tab.content) {
@@ -441,8 +441,9 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
 
   const toggleEdit = useCallback(async () => {
     if (!active?.loaded) return;
-    // usheet / board 的正文在实例里；完成时同步 capture，不能只读父级 state（可能还在防抖窗口内）。
-    const captured = active.kind === "usheet" || active.kind === "board"
+    // usheet / board / ink 的正文在实例里；完成时同步 capture，不能只读父级 state
+    // （可能还在 500ms/1s 防抖窗口内 —— 手写板「切完纸张立刻点完成」就会丢最后一笔纸张改动）。
+    const captured = active.kind === "usheet" || active.kind === "board" || active.kind === "ink"
       ? liveBodyCapturesRef.current.get(active.id)?.() ?? null
       : null;
     const nextContent = captured ?? active.content;
@@ -739,6 +740,11 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
                   active={t.id === activeId}
                   readOnly={!t.editing}
                   onChange={(c) => { updateTab(t.id, { content: c }); if (t.editing) scheduleAutoSave(t.id, t.title, c); }}
+                  // 与 board/usheet 同一条写边界：完成编辑/退出前现取实例正文（绕过 500ms 防抖）。
+                  onEditorCapture={(capture) => {
+                    if (capture) liveBodyCapturesRef.current.set(t.id, capture);
+                    else liveBodyCapturesRef.current.delete(t.id);
+                  }}
                 />
               </Suspense>
             ) : t.kind === "bitable" ? (

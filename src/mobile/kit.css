@@ -202,6 +202,12 @@
 .mb-set-section > .mb-set-item:first-child, .mb-set-section__title + .mb-set-item { border-top: 0; }
 .mb-set-item--field { align-items: flex-start; }
 .mb-set-item--field .mb-set-item__ctl { flex: 1 1 100%; }
+/* 内容输入行（Field）的控件列：直接子控件必须吃满整行（261102 侦察：同页出现「某个输入框比别的短」）。
+ * .mb-input 自带 width:100%，但作为 flex 子项默认 min-width:auto + 无 flex 伸展 ⇒ 窄屏/多控件组合下会被
+ * 固有宽顶住；这里补 flex:1 1 auto + min-width:0，右缘才一致。只约束直接子控件，不改 --field 既有语义
+ * （多维表 6 个面板的 Field 骨架子控件是 .mbt-form-input，不受影响）。 */
+.mb-set-item--field .mb-set-item__ctl > .mb-input,
+.mb-set-item--field .mb-set-item__ctl > .mb-select--trigger { flex: 1 1 auto; width: 100%; min-width: 0; }
 .mb-set-item__main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .mb-set-name { color: var(--lake-text-1); font-size: var(--lake-font-size-body); line-height: var(--lake-line-height-snug); }
 .mb-set-item__desc { color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); line-height: var(--lake-line-height-normal); }
@@ -307,7 +313,8 @@
 .mb-select__value { flex: 1 1 auto; min-width: 0; text-align: right; }
 .mb-list-item__check { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; width: 24px; color: var(--lake-accent-text); }
 .mb-list-item.is-selected { color: var(--lake-fg-selected); font-weight: var(--lake-font-weight-medium); }
-.mb-sheet--picker .mb-sheet__body { padding-bottom: calc(8px + var(--mobile-bottom-safe-area)); }
+/* 选择器 Sheet 的底距 = 页内距 + 安全区（原先 8 + safe，比默认 body 的 16 + safe 紧 ⇒ 弹窗底部贴得太近）。 */
+.mb-sheet--picker .mb-sheet__body { padding-bottom: calc(var(--mb-page-pad) + var(--mobile-bottom-safe-area)); }
 .mb-sheet--picker .mb-list-item + .mb-list-item { border-top: .5px solid var(--lake-border-2); }
 
 /* ── 表情面板 = **微信样式**（用户 261013 定稿；见 mobile/ui/EmojiPanel.tsx）──────────────────

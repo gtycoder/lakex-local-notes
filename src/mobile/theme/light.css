@@ -21,6 +21,10 @@
   --lake-bg-subtle: #fafbfc;
   --lake-bg-hover: #f0f1f3;
   --lake-bg-press: #e9ebee;
+  /* 小记标签实底（261030 用户点单：对齐语雀 App —— 浅灰绿实底、无边框、文字深灰）。
+   * 移动端独有语义：文字走 --lake-text-1（vs 本底 13.8:1），计数走 --lake-text-3（4.9:1）。
+   * 不使用 --lake-status-ok-soft 之类的状态色 —— 标签不是状态，语义不得借用。 */
+  --lake-quick-tag-bg: #e8f2ec;
   /* 文字 */
   --lake-text-1: #1f2329;
   --lake-text-2: #4e5969;

@@ -68,7 +68,8 @@ describe("移动端返回键先关浮层（MOB-01 / MOB-02）", () => {
     }
     // 表面类名沿用既有 mb-sheet 系列（视觉 / 快照不变）
     expect(INFO).toContain('titleClassName="mb-ellipsis"');
-    expect(TAG).toContain('bodyClassName="qn-tag-sheet__body"');
+    // 261030：面板正文走 261030 契约的 --form 页内距（原来只有裸 body ⇒ 输入框贴屏幕边）
+    expect(TAG).toContain('bodyClassName="qn-tag-sheet__body mb-sheet__body--form"');
   });
 
   it("MOB-11 续：新建知识库 / 搜索 Sheet 也走 MobileSheet（类名/DOM 不变，返回键只关面板）", () => {

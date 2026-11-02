@@ -130,7 +130,12 @@ describe("OutlineSheet 底部形态迁到 MobileSheet（MOB-11）", () => {
     expect(host.querySelector(".side-panel--right")).not.toBeNull();
     expect(host.querySelector(".mb-scrim")).toBeNull();
     expect(host.querySelector(".mb-sheet")).toBeNull();
-    expect(host.querySelector(".mb-sheet__body.side-panel-body.mb-list")).not.toBeNull();
+    // 261030：侧栏变体不得借用底部 Sheet 的正文原语（.mb-sheet__body 后加载会把底部安全区 24 覆盖成 16）；
+    // .mb-list 也不留（在 kit.css 里排在 .side-panel-body 之后 ⇒ 会把底部内距压成 4px、丢安全区）。
+    const sideBody = host.querySelector(".side-panel--right .side-panel-body") as HTMLElement | null;
+    expect(sideBody).not.toBeNull();
+    expect(sideBody!.className).toBe("side-panel-body");
+    expect(host.querySelector(".mb-sheet__body")).toBeNull();
     let consumed = true;
     act(() => { consumed = consumeBack(); });
     expect(consumed).toBe(false);

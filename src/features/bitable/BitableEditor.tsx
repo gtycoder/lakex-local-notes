@@ -23,15 +23,15 @@ import {
   BITABLE_DOC_KIND, BITABLE_DOC_VERSION, BITABLE_FIELD_TYPE_LABEL,
   BITABLE_DATE_FORMAT_OPTIONS, BITABLE_NUMBER_FORMAT_OPTIONS,
   BITABLE_OPTION_COLORS, aiPromptFieldNames, applyViewToRecords, bitableDisplayValue, bitableFieldText, bitableFieldValue, bitableFillBackgroundTokens, bitableFilterRuleCount, bitableViewNeedsClock, buildBitableFillProjection, createRelationPair, defaultRecordValues, duplicateValues, optionColorHex, unpairRelationFields,
-  createBitableField, createBitableRecord, createBitableView, createDefaultBitableTable,
-  BITABLE_STAT_LABEL, groupRecords, isAttachmentLikeField, isImplementedViewType,
+  createBitableField, createBitableRecord, createDefaultBitableTable,
+  BITABLE_STAT_LABEL, groupRecords, isImplementedViewType,
   BITABLE_PROGRESS_MAX, BITABLE_RATING_MAX, applySortMode, changeSortField, kanbanGroupField, sortModeLabel, sortModeOf, sortModesForField, statDisplayText, statForField, statsForField,
   isKnownFieldType, isRelationFieldType, newBitableId, orderedAllTableFields, orderedTableFields, parseBitableBody,
   type BitableAttachment, type BitableAiConfig, type BitableDoc, type BitableField, type BitableFieldType, type BitableFilterJoin, type BitableFilterNode, type BitableGroupRule, type BitableRecord,
   type BitableRelation, type BitableRowHeight, type BitableSortMode, type BitableStatType, type BitableTable, type BitableView, type BitableViewType,
 } from "../../core/bitableDoc.js";
 import { fillSurfaceColor } from "../../core/colorPalette.js";
-import { addBitableRecord, addBitableRecordWithValues, appendBitableAttachments, convertBitableFieldType, deleteBitableField, deleteBitableRecords, deleteBitableTable, fieldHasData, pruneBitableOptionValues, duplicateBitableField, duplicateBitableTable, renameAiFieldToken, renameBitableTable, setBitableCellValue, setBitableRecordValues, stripViewRefsForFieldType } from "../../core/bitableMutations.js";
+import { addBitableRecord, addBitableRecordWithValues, addBitableView, appendBitableAttachments, convertBitableFieldType, deleteBitableField, deleteBitableRecords, deleteBitableTable, fieldHasData, pruneBitableOptionValues, duplicateBitableField, duplicateBitableTable, renameAiFieldToken, renameBitableTable, setBitableCellValue, setBitableRecordValues, stripViewRefsForFieldType } from "../../core/bitableMutations.js";
 import { applyBitableNav, readBitableNav, writeBitableNav } from "./bitableNavStore.js";
 import { parseCsv, defaultCsvMapping, importCsvRows, type CsvColumnMapping, type CsvImportResult } from "../../core/bitableCsv.js";
 import { StatCell } from "./bitableCells";
@@ -462,25 +462,18 @@ export function BitableEditor({ noteId, content, visible, readOnly: readOnlyProp
 
   // ---- 视图 ----
   const addView = useCallback((type: BitableViewType) => {
-    patchActiveTable((table) => {
-      const view = createBitableView(type);
-      // 视图只存投影配置、不复制记录：看板默认取第一个单选字段分栏；
-      // 表单**不预选字段** —— formFieldIds 为空 = 未配置，表单视图据此默认进「编辑表单」（用户 260928）。
-      if (type === "kanban") {
-        const select = table.fields.find((f) => f.type === "select");
-        if (select) view.kanbanGroupFieldId = select.id;
-      }
-      if (type === "gallery") {
-        const attachment = table.fields.find((f) => isAttachmentLikeField(f.type));
-        if (attachment) view.galleryCoverFieldId = attachment.id;
-      }
-      if (type === "calendar") {
-        const date = table.fields.find((f) => f.type === "date");
-        if (date) view.calendarStartFieldId = date.id;
-      }
-      return { ...table, views: [...table.views, view], activeViewId: view.id };
+    // 视图只存投影配置、不复制记录；默认配置（看板第一个单选 / 画册第一个附件 / 日历第一个日期 /
+    // 表单不预选字段）收口在 core 的 addBitableView，移动端共用同一份（261030 单一来源）。
+    updateDoc((prev) => {
+      const result = addBitableView(prev, prev.activeTableId, type);
+      if (result.doc === prev) return prev;
+      // 新建后切到新视图（设备本地导航：正文序列化恒写第一个视图，不因导航变化标脏）
+      return {
+        ...result.doc,
+        tables: result.doc.tables.map((table) => (table.id === prev.activeTableId ? { ...table, activeViewId: result.viewId } : table)),
+      };
     });
-  }, [patchActiveTable]);
+  }, [updateDoc]);
   const deleteView = useCallback((viewId: string) => {
     patchActiveTable((table) => {
       if (table.views.length <= 1) return table;
@@ -506,8 +499,15 @@ export function BitableEditor({ noteId, content, visible, readOnly: readOnlyProp
   const addField = useCallback((rawType: string) => {
     // 菜单只给已知类型；未知类型（编辑弹窗里保留的）回落到文本，不做静默清空
     const type = (isKnownFieldType(rawType) ? rawType : "text") as BitableFieldType;
-    patchActiveTable((table) => ({ ...table, fields: [...table.fields, createBitableField(type)] }));
+    const field = createBitableField(type);
+    let added = false;
+    patchActiveTable((table) => {
+      added = true;
+      return { ...table, fields: [...table.fields, field] };
+    });
     setAddFieldAnchor(null);
+    // 新建即进入编辑（261030 用户点单）：直接打开「编辑字段」弹窗改这个新字段，不用再去列菜单里找。
+    if (added) setFieldEditor({ fieldId: field.id });
   }, [patchActiveTable]);
   /** 打开「新增字段」弹窗（记录详情抽屉 / 字段面板共用）。 */
   const openAddField = useCallback(() => setFieldEditor({ fieldId: null }), []);
@@ -542,15 +542,19 @@ export function BitableEditor({ noteId, content, visible, readOnly: readOnlyProp
     setColumnMenu(null);
   }, [updateDoc]);
   const insertField = useCallback((fieldId: string, side: "before" | "after") => {
+    const field = createBitableField("text");
+    let inserted = false;
     patchActiveTable((table) => {
       const index = table.fields.findIndex((f) => f.id === fieldId);
       if (index < 0) return table;
-      const field = createBitableField("text");
+      inserted = true;
       const fields = [...table.fields];
       fields.splice(side === "before" ? index : index + 1, 0, field);
       return { ...table, fields };
     });
     setColumnMenu(null);
+    // 插入列同样「建完即编辑」：打开该新字段的「编辑字段」弹窗（261030 用户点单）。
+    if (inserted) setFieldEditor({ fieldId: field.id });
   }, [patchActiveTable]);
   /** 列顺序是**视图级配置**（对齐云端）：拖拽只改当前视图的 fieldOrder，不动全局字段顺序。 */
   const reorderVisibleFields = useCallback((fromId: string, toId: string) => {

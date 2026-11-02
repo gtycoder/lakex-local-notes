@@ -48,6 +48,14 @@ describe("小记标签面板返回键（MOB-01）", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it("正文走 261030 的 --form 页内距（贴边修复）：body 追加 mb-sheet__body--form", () => {
+    renderSheet(true);
+    // 裸 body 的横向内距是 0 ⇒ 输入框 / 标签行会贴屏幕边；--form = --mb-page-pad(16) + 底部安全区。
+    const body = host!.querySelector(".mb-sheet__body") as HTMLElement;
+    expect(body.className).toBe("mb-sheet__body qn-tag-sheet__body mb-sheet__body--form");
+    expect(body.querySelector(".qn-tag-sheet__input-row")).not.toBeNull();
+  });
+
   it("关闭后注销处理器：返回栈不在关面板后残留", () => {
     const { rerender } = renderSheet(true);
     rerender(false);

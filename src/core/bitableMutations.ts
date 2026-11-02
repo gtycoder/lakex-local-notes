@@ -15,6 +15,7 @@ import {
   bitableAttachments,
   createBitableField,
   createBitableRecord,
+  createBitableView,
   isKnownFieldType,
   defaultRecordValues,
   isAttachmentLikeField,
@@ -33,6 +34,7 @@ import {
   type BitableRecord,
   type BitableTable,
   type BitableView,
+  type BitableViewType,
 } from "./bitableDoc.js";
 
 const nowIso = (): string => new Date().toISOString();
@@ -363,6 +365,38 @@ export function duplicateBitableTable(doc: BitableDoc, tableId: string): { doc: 
     activeViewId: viewIds.get(table.activeViewId) ?? views[0]?.id ?? "",
   };
   return { doc: { ...doc, tables: [...doc.tables, copy] }, tableId: copy.id };
+}
+
+/**
+ * 新建视图（**桌面与移动端共用的单一来源**，261030 移动端点单）：
+ * 追加视图到当前表末尾并返回新视图 id；默认配置与桌面旧 `addView` **逐字一致**——
+ * 看板取第一个单选字段分组、画册取第一个附件类字段做封面、日历取第一个日期字段做开始日、
+ * 表单**不预选字段**（`formFieldIds` 缺省 = 未配置 ⇒ 两端表单默认展示全部可填字段，建完即可填）。
+ *
+ * 导航不在这里改：`activeTableId` / `activeViewId` 是**设备本地**状态（见 AGENTS §4「多维表导航」），
+ * 桌面调用方在同一笔写入里把 activeViewId 指到新视图，移动端调用方写设备本地导航。
+ * 表不存在 → 返回原 doc + 空 viewId（不产生空写入）。
+ */
+export function addBitableView(doc: BitableDoc, tableId: string, type: BitableViewType): { doc: BitableDoc; viewId: string } {
+  const table = doc.tables.find((t) => t.id === tableId);
+  if (!table) return { doc, viewId: "" };
+  const view = createBitableView(type);
+  if (type === "kanban") {
+    const select = table.fields.find((f) => f.type === "select");
+    if (select) view.kanbanGroupFieldId = select.id;
+  }
+  if (type === "gallery") {
+    const attachment = table.fields.find((f) => isAttachmentLikeField(f.type));
+    if (attachment) view.galleryCoverFieldId = attachment.id;
+  }
+  if (type === "calendar") {
+    const date = table.fields.find((f) => f.type === "date");
+    if (date) view.calendarStartFieldId = date.id;
+  }
+  return {
+    doc: { ...doc, tables: doc.tables.map((t) => (t.id !== tableId ? t : { ...t, views: [...t.views, view] })) },
+    viewId: view.id,
+  };
 }
 
 /** 字段是否已有数据（任一记录该字段「非空」即算）——类型互转的前置判据。 */

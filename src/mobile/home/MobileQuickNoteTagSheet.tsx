@@ -73,7 +73,9 @@ export function MobileQuickNoteTagSheet({ open, options, selected, onAdd, onCrea
       title="添加标签"
       onClose={onClose}
       className="qn-tag-sheet"
-      bodyClassName="qn-tag-sheet__body"
+      // 261030：输入框 + 列表是本原语里最典型的「内容面板」⇒ 走 --form 页内距（16 + 底部安全区）。
+      // 此前只有裸 body（横向 0）⇒ 输入框与标签行直接贴屏幕边（用户截图红框处）。
+      bodyClassName="qn-tag-sheet__body mb-sheet__body--form"
     >
       <div className="qn-tag-sheet__input-row">
         <span className="mb-input qn-tag-sheet__input">

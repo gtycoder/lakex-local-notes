@@ -337,20 +337,21 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
 
           {view === "ai" && (
             <Group title="AI 助手" icon={<Sparkles size={16} />}>
-              {/* 带说明的表单行用 Field：ctl 占整行（flex 1 1 100%）⇒ 换行后的输入框与
-                  模型 / API Key / 温度 的输入框同一右缘（261029 实测 Item 换行后 ctl 取固有宽：右缘 278.9 vs 379.4）。 */}
+              {/* 261102 用户点单 3b：内容输入类设置行一律 Field（标签+说明在上、控件占满下一行）。
+                  输入框挤在标签右侧时，窄屏只剩一百多像素，URL / Key 这种长值看不全；与 S3 连接信息同一形态。
+                  选择器 / 开关 / 分段控件这类本来适合同行的行仍用 Item / Switch / Seg。 */}
               <Field itemId="ai-base-url" name="接口地址" desc="OpenAI 兼容端点（默认 DeepSeek）。">
                 <TextField label="接口地址" value={aiForm.baseUrl} placeholder="https://api.deepseek.com/v1" onSave={(v) => setAiForm((form) => ({ ...form, baseUrl: v }))} />
               </Field>
-              <Item itemId="ai-model" name="模型">
+              <Field itemId="ai-model" name="模型">
                 <TextField label="模型" value={aiForm.model} placeholder="deepseek-chat" onSave={(v) => setAiForm((form) => ({ ...form, model: v }))} />
-              </Item>
-              <Item itemId="ai-api-key" name="API Key" desc="只保存在本机安全存储，页面里看不到明文；这里只显示尾号。">
+              </Field>
+              <Field itemId="ai-api-key" name="API Key" desc="只保存在本机安全存储，页面里看不到明文；这里只显示尾号。">
                 <TextField label="API Key" type="password" value={aiForm.apiKey} placeholder={aiMeta?.hasKey ? aiMeta.keyTail + "（留空＝不改）" : "sk-…"} onSave={(v) => setAiForm((form) => ({ ...form, apiKey: v }))} />
-              </Item>
-              <Item itemId="ai-temperature" name="温度">
+              </Field>
+              <Field itemId="ai-temperature" name="温度">
                 <TextField label="温度" value={aiForm.temperature} placeholder="0.7" onSave={(v) => setAiForm((form) => ({ ...form, temperature: v }))} />
-              </Item>
+              </Field>
               <Block itemId="ai-actions" name="保存与连通性">
                 <div className="ai-settings__actions">
                   <button type="button" className="mb-btn mb-btn--primary" onClick={() => void saveAiSettingsForm()}>保存</button>
@@ -455,30 +456,28 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
               <div className="mb-set-group">
                 <div className="mb-set-title"><Cloud size={16} />同步设置（七牛 S3）</div>
                 <div className="mb-set-items">
-                  <div className="mb-set-item">
-                    <div className="mb-set-item__main"><div className="mb-set-name">Endpoint</div></div>
-                    <div className="mb-set-item__ctl"><input className="mb-input" value={s3Form.endpoint} onChange={(e) => updateS3Form({ endpoint: e.target.value })} /></div>
-                  </div>
-                  <div className="mb-set-item">
-                    <div className="mb-set-item__main"><div className="mb-set-name">Region</div></div>
-                    <div className="mb-set-item__ctl"><input className="mb-input" value={s3Form.region} onChange={(e) => updateS3Form({ region: e.target.value })} /></div>
-                  </div>
-                  <div className="mb-set-item">
-                    <div className="mb-set-item__main"><div className="mb-set-name">Bucket</div></div>
-                    <div className="mb-set-item__ctl"><input className="mb-input" value={s3Form.bucket} onChange={(e) => updateS3Form({ bucket: e.target.value })} /></div>
-                  </div>
-                  <div className="mb-set-item">
-                    <div className="mb-set-item__main"><div className="mb-set-name">Object prefix</div></div>
-                    <div className="mb-set-item__ctl"><input className="mb-input" value={s3Form.prefix} onChange={(e) => updateS3Form({ prefix: e.target.value })} /></div>
-                  </div>
-                  <div className="mb-set-item">
-                    <div className="mb-set-item__main"><div className="mb-set-name">Access Key</div></div>
-                    <div className="mb-set-item__ctl"><input className="mb-input" value={s3Form.accessKeyId} onChange={(e) => updateS3Form({ accessKeyId: e.target.value })} /></div>
-                  </div>
-                  <div className="mb-set-item">
-                    <div className="mb-set-item__main"><div className="mb-set-name">Secret Key</div></div>
-                    <div className="mb-set-item__ctl"><input className="mb-input" type="password" value={s3Form.secretAccessKey} onChange={(e) => updateS3Form({ secretAccessKey: e.target.value })} /></div>
-                  </div>
+                  {/* 261102 用户点单 3b：S3 连接信息是内容输入类 ⇒ 一律 Field（标签在上、输入框占满下一行），
+                      与桌面设置页同一形态；此前是裸 .mb-set-item + <input class="mb-input">（第二套输入外观，
+                      且窄屏上输入框被标签挤到只剩几十像素，Endpoint/AK/SK 长值看不全）。
+                      data-set-id 与桌面 settingsSearch 的 SETTING_ITEMS 对齐（s3-endpoint…s3-secret-key）。 */}
+                  <Field itemId="s3-endpoint" name="Endpoint">
+                    <TextField label="Endpoint" value={s3Form.endpoint} onSave={(v) => updateS3Form({ endpoint: v })} />
+                  </Field>
+                  <Field itemId="s3-region" name="Region">
+                    <TextField label="Region" value={s3Form.region} onSave={(v) => updateS3Form({ region: v })} />
+                  </Field>
+                  <Field itemId="s3-bucket" name="Bucket">
+                    <TextField label="Bucket" value={s3Form.bucket} onSave={(v) => updateS3Form({ bucket: v })} />
+                  </Field>
+                  <Field itemId="s3-prefix" name="Object prefix">
+                    <TextField label="Object prefix" value={s3Form.prefix} onSave={(v) => updateS3Form({ prefix: v })} />
+                  </Field>
+                  <Field itemId="s3-access-key" name="Access Key">
+                    <TextField label="Access Key" value={s3Form.accessKeyId} onSave={(v) => updateS3Form({ accessKeyId: v })} />
+                  </Field>
+                  <Field itemId="s3-secret-key" name="Secret Key">
+                    <TextField label="Secret Key" type="password" value={s3Form.secretAccessKey} onSave={(v) => updateS3Form({ secretAccessKey: v })} />
+                  </Field>
                   <Block itemId="s3-transfer" name="配置迁移" desc="在桌面端「设置 → 云端与同步 → S3 对象存储 → 配置迁移 → 导出到文件…」生成 .json 文件，发到手机后在这里导入；也可以粘贴另一台设备的迁移码（LLN1. 开头）。迁移码含 S3 密钥（已加密封装），请只在自己的设备间传递。">
                     <div className="mb-set-block__actions">
                       <button className="mb-btn mb-btn--secondary" onClick={() => void importS3ConfigFromFile()}>从文件导入</button>

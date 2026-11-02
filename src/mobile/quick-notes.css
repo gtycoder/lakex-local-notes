@@ -77,18 +77,27 @@
 
 .quick-note-preview-unsupported { align-self: flex-start; padding: 4px 8px; border: .5px dashed var(--lake-border-2); border-radius: var(--mb-radius-sm); color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); }
 
-/* 小记标签（261020）：候选标签从有效小记派生；本层只画移动端形态。 */
+/* 小记标签（261020）：候选标签从有效小记派生；本层只画移动端形态。
+ * 261030 用户点单「标签要有点着重」⇒ 对齐语雀 App：**浅灰绿实底 / 无边框 / 圆角 8 / 左右内距较宽 / 文字深灰**。
+ * 实底取 --lake-quick-tag-bg（移动端独有语义令牌，浅深两套见 theme/light.css · theme/dark.css），
+ * 不再用白底 + 0.5px 边（那是 .mb-tag 一类的徽标语义，不是小记标签）。 */
 .qn-tag-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 12px 0; }
-.qn-tag { display: inline-flex; align-items: center; gap: 4px; max-width: 180px; min-height: 28px; padding: 0 9px; border: .5px solid var(--lake-border-2); border-radius: var(--lake-radius-sm); color: var(--lake-text-2); background: var(--lake-bg-panel); font-size: var(--lake-font-size-small); }
-.qn-tag.is-selected { border-color: var(--lake-accent); color: var(--lake-fg-selected); background: var(--lake-bg-selected); }
+/* border: 0 必须显式写：.qn-tag 同时用在 <button>（卡片标签/筛选条）与 <span> 上，移动端没有全局 button reset，
+ * 删掉原来的 0.5px 边后 UA 默认边框会回来（侦察 C2.1 标出的翻车点）。左右内距走 --lake-space-lg(12)。 */
+.qn-tag { display: inline-flex; align-items: center; gap: 4px; max-width: 180px; min-height: 28px; padding: 0 var(--lake-space-lg); border: 0; border-radius: var(--lake-radius-sm); color: var(--lake-text-1); background: var(--lake-quick-tag-bg); font-size: var(--lake-font-size-small); }
+/* 选中态**有意保留 accent**（--lake-bg-selected + --lake-fg-selected），不改灰绿：筛选条的选中项必须一眼可辨，
+ * 实底灰绿只表达「这是一条标签」，不承担选中语义。 */
+.qn-tag.is-selected { color: var(--lake-fg-selected); background: var(--lake-bg-selected); }
 .qn-tag.is-editable { padding-right: 4px; }
 .qn-tag__remove { display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: var(--lake-radius-xs); color: var(--lake-text-3); background: transparent; }
 .qn-tag__count { color: var(--lake-text-3); font-variant-numeric: tabular-nums; }
 .qn-tag-add { display: inline-flex; align-items: center; gap: 4px; min-height: 28px; padding: 0 9px; border: .5px dashed var(--lake-ctl-border); border-radius: var(--lake-radius-sm); color: var(--lake-text-3); background: transparent; font-size: var(--lake-font-size-small); }
 .qn-card__tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-.qn-tag-filter-bar { display: flex; gap: 6px; padding: 8px 12px 4px; overflow-x: auto; scrollbar-width: none; }
+.qn-tag-filter-bar { display: flex; gap: 6px; padding: 8px var(--mb-page-pad) 4px; overflow-x: auto; scrollbar-width: none; }
 .qn-tag-filter-bar::-webkit-scrollbar { display: none; }
 .qn-tag-filter-bar .qn-tag { flex: 0 0 auto; }
+/* 261030 贴边修复：正文列走 .mb-sheet__body--form（页内距 16 + 底部安全区），
+ * 这里只补列布局；行内距归 body 提供 ⇒ 行自己不再左右加 8（否则文字比标题多缩 8）。 */
 .qn-tag-sheet { max-height: min(76vh, 680px); }
 .qn-tag-sheet__body { display: flex; flex-direction: column; gap: 10px; min-height: 0; overflow-y: auto; }
 .qn-tag-sheet__input-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
@@ -96,7 +105,7 @@
 .qn-tag-sheet__input-row > button { min-width: 60px; min-height: var(--mb-tap-min); padding: 0 12px; border: 0; border-radius: var(--lake-radius-sm); color: var(--lake-accent-text); background: transparent; font-size: var(--lake-font-size-body); font-weight: 600; }
 .qn-tag-sheet__input-row > button:disabled { color: var(--lake-text-4); }
 .qn-tag-sheet__error { color: var(--lake-status-error); font-size: var(--lake-font-size-small); }
-.qn-tag-sheet__create, .qn-tag-sheet__item { display: flex; align-items: center; gap: 8px; width: 100%; min-height: var(--mb-tap-min); padding: 0 8px; border: 0; border-radius: var(--lake-radius-sm); color: var(--lake-text-1); background: transparent; font-size: var(--lake-font-size-body); text-align: left; }
+.qn-tag-sheet__create, .qn-tag-sheet__item { display: flex; align-items: center; gap: 8px; width: 100%; min-height: var(--mb-tap-min); padding: 0; border: 0; border-radius: var(--lake-radius-sm); color: var(--lake-text-1); background: transparent; font-size: var(--lake-font-size-body); text-align: left; }
 .qn-tag-sheet__create { color: var(--lake-accent-text); }
 .qn-tag-sheet__item:disabled { color: var(--lake-text-4); }
 .qn-tag-sheet__item > span:first-child { flex: 1 1 auto; }

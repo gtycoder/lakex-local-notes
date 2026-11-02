@@ -15,6 +15,9 @@
   --lake-bg-subtle: #232528;
   --lake-bg-hover: rgba(255,255,255,.055);
   --lake-bg-press: rgba(255,255,255,.09);
+  /* 小记标签实底（深色重绘；浅色原值见 themes/light.css）：比 panel 亮一档的灰绿实底，
+   * 文字 --lake-text-1 11.1:1、计数 --lake-text-3 4.7:1。 */
+  --lake-quick-tag-bg: #263029;
   /* 内核品牌绿在深色下使用 Lake dark schema，提升暗底对比度。 */
   --lake-kernel-brand-green: #2ed790;
   /* 「文档引用」卡插入面板图标的**深色重绘**（几何不动，只换调色板；浅色原值见 themes/base.css）。

@@ -8,6 +8,8 @@
  *   · 只共享「设置项语义/搜索索引」这类逻辑，不共享样式与组件（用户 261012 定稿）。
  * 结构：Group > (title + Section > 行…)；行 = Item / Field / Block / Switch / Shortcut；
  *       控件 = TextField / NumField（.mb-input 内嵌 input）；Seg（.mb-segment）。
+ * 行语义（261102 用户点单 3b 定稿）：Item = 左标签右控件（选择器/动作/短数字）；Field = **内容输入类**
+ *       （标签+说明在上、控件占满下一行，全宽 —— S3 连接信息 / AI 接入等长值输入）；Block = 标题 + 全宽内容。
  */
 import { Children, isValidElement, useEffect, useState, type ReactNode } from "react";
 
@@ -47,7 +49,8 @@ export function Item({ itemId, name, desc, pathDesc, children }: { itemId?: stri
   );
 }
 
-/** 表单行：标题+说明在左、控件在右；error 折整行。 */
+/** 内容输入行：标题+说明在上、控件占满下一行（kit.css 的 --field 让 __ctl flex 1 1 100%）；
+ *  error 折整行。选择器/开关/分段控件这类本来适合同行的行用 Item / Switch / Seg，不要套 Field。 */
 export function Field({ itemId, name, desc, pathDesc, error, children }: { itemId?: string; name: ReactNode; desc?: ReactNode; pathDesc?: boolean; error?: ReactNode; children?: ReactNode }) {
   return (
     <div className={"mb-set-item mb-set-item--field" + (pathDesc ? " mb-set-item--path" : "")} data-set-id={itemId}>

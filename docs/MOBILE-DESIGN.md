@@ -241,6 +241,14 @@ Toast        .mb-toast-host > .mb-toast[--error] > (.mb-toast__text, .mb-toast__
 底部动作栏用 `mb-sheet__foot`（左右页内距 + 底部安全区 + 发丝线；不要再在业务里写 footer padding）。
 多维表「修改字段 / 编辑记录 / 视图配置 / 视图列表 / 选择日期 / 数据表操作」六个面板已统一到同一骨架。
 
+**设置行语义（261102 定稿）**：`Item` = 左标题右控件（选择器/开关/短数字/动作，一行放得下）；`Field` = 内容输入类（标签与说明在上、控件独占下一行且吃满行宽；`.mb-set-item--field .mb-set-item__ctl > .mb-input/.mb-select--trigger` 补了 flex/width/min-width 硬约束）；`Block` = 标题 + 全宽内容。**「一行放不下、换行丑」的输入项一律用 Field，不要给 input 另写一套行。**
+
+**Sheet body 三类（261102 补全）**：① 内容面板 = `mb-sheet__body--form`（左右 `--mb-page-pad`、底 20 + 安全区）；② 行内列表 = 裸 body，行自带左右内距；③ 菜单/动作 Sheet（`.mb-menusheet__items` / `.mb-actionsheet`）= 8 + 安全区，**这是明确例外**。侧栏（大纲 / 文档列表）不是 Sheet body：只挂 `.side-panel-body`（8 / 24 + 安全区），不要再叠 `.mb-sheet__body` 或 `.mb-list`（后加载会覆盖底部安全区）。
+
+**小记标签（261102）**：`.qn-tag` = 浅灰绿实底 `--lake-quick-tag-bg`（浅/深两套）+ `border:0` + 内距 `--lake-space-lg` + `--lake-text-1`；选中态保留 accent（筛选选中要一眼可辨）。颜色只落 `theme/light.css` / `theme/dark.css`。
+
+**手写板（261102）**：页面 / 纸张 / 笔迹都是正文数据 —— **纸张只能编辑态改**（阅读态按钮禁用 + footer 可见说明）；翻页 / 页面管理是视图操作，阅读态可用且不写盘；移动端阅读态 footer 必须让开底部胶囊（tokens 表达式），footer 按钮 ≥ `--mb-tap-min`。
+
 页内交互（② 层）已定：设置页 = 抽屉九页 + 移动端自有版式原语（`src/mobile/ui/settingsPrimitives.tsx`，
 `data-set-id` 契约与桌面 `settingsSearch.ts` 对齐，**只共享语义不共享组件**）；小记 = 时间线 + 写作卡九项工具条。
 

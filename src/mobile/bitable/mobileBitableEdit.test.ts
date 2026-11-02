@@ -62,13 +62,15 @@ describe("移动端多维表 · 单元格与字段写入", () => {
     const table = tableWithText();
     const doc = docOf([table]);
     const withNumber = addMobileField(doc, table.id, "number");
-    expect(withNumber.tables[0].fields.map((field) => field.type)).toEqual(["text", "number"]);
-    expect(withNumber.tables[0].fields[1].name).toBe("数字");
-    const named = addMobileField(withNumber, table.id, "date", "  截止日  ");
-    expect(named.tables[0].fields[2].name).toBe("截止日");
+    expect(withNumber.doc.tables[0].fields.map((field) => field.type)).toEqual(["text", "number"]);
+    expect(withNumber.doc.tables[0].fields[1].name).toBe("数字");
+    // 返回新字段 id：移动端「添加」之后要立刻打开「修改字段」编辑它
+    expect(withNumber.doc.tables[0].fields[1].id).toBe(withNumber.fieldId);
+    const named = addMobileField(withNumber.doc, table.id, "date", "  截止日  ");
+    expect(named.doc.tables[0].fields[2].name).toBe("截止日");
 
-    const fieldId = named.tables[0].fields[0].id;
-    const renamed = renameMobileField(named, table.id, fieldId, "标题");
+    const fieldId = named.doc.tables[0].fields[0].id;
+    const renamed = renameMobileField(named.doc, table.id, fieldId, "标题");
     expect(renamed.tables[0].fields[0].name).toBe("标题");
     expect(renameMobileField(renamed, table.id, fieldId, "   ")).toBe(renamed);
     expect(renameMobileField(renamed, table.id, fieldId, "标题")).toBe(renamed);

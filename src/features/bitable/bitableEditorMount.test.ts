@@ -1214,3 +1214,50 @@ describe("AI 字段多模态护栏（261006 · 图片 / PDF）", () => {
     expect(EDITOR).toContain("把引用的图片 / PDF 一起发送给 AI");
   });
 });
+
+/**
+ * 261030 用户点单：移动端新建视图（优先表单）+ 两端「新增字段即进入编辑」。
+ * 桌面侧按本文既有套路做源码级断言（vitest 是 node 环境，起不了真实 DOM 网格）。
+ */
+describe("261030 · 新建视图下沉 core + 新增字段自动进编辑", () => {
+  const MOBILE_EDIT = readFileSync(new URL("../../mobile/bitable/mobileBitableEdit.ts", import.meta.url), "utf8");
+  const MOBILE_VIEW_LIST = readFileSync(new URL("../../mobile/bitable/MobileBitableViewListSheet.tsx", import.meta.url), "utf8");
+
+  it("新建视图下沉 core 单一来源：两端共用 addBitableView，桌面不再自己拼默认配置", () => {
+    // core：一个函数承载 5 种类型 + 与桌面旧行为逐字一致的默认配置
+    expect(MUTATIONS).toContain("export function addBitableView(doc: BitableDoc, tableId: string, type: BitableViewType)");
+    expect(MUTATIONS).toMatch(/if \(type === "kanban"\)[\s\S]{0,200}?kanbanGroupFieldId = select\.id/);
+    expect(MUTATIONS).toMatch(/if \(type === "gallery"\)[\s\S]{0,200}?galleryCoverFieldId = attachment\.id/);
+    expect(MUTATIONS).toMatch(/if \(type === "calendar"\)[\s\S]{0,200}?calendarStartFieldId = date\.id/);
+    // 表单不预选题目：formFieldIds 保持 undefined ⇒ 两端默认展示全部可填字段（建完即可填）
+    expect(MUTATIONS).not.toMatch(/formFieldIds\s*=/);
+    // 桌面只调用 core，不再在组件里复制一份默认配置 / 自己 createBitableView
+    expect(EDITOR).toMatch(/addBitableView\(prev, prev\.activeTableId, type\)/);
+    expect(EDITOR).not.toMatch(/view\.kanbanGroupFieldId = select\.id/);
+    expect(EDITOR).not.toMatch(/view\.galleryCoverFieldId = attachment\.id/);
+    expect(EDITOR).not.toMatch(/view\.calendarStartFieldId = date\.id/);
+    expect(EDITOR).not.toContain("createBitableView(");
+    expect(MOBILE).toMatch(/addBitableView\(current, table\.id, type\)/);
+  });
+
+  it("移动端视图面板：编辑态入口 / 表单排第一且为主按钮 / 只读禁用并写明原因 / 建完自动切换", () => {
+    expect(MOBILE_VIEW_LIST).toMatch(/onAddView: \(type: BitableViewType\) => void/);
+    expect(MOBILE_VIEW_LIST).toContain("只读状态不能新建视图");
+    expect(MOBILE_VIEW_LIST).toMatch(/mb-btn--primary mb-btn--block" onClick=\{\(\) => pick\("form"\)\}/);
+    expect(MOBILE_VIEW_LIST).toMatch(/\["grid", "kanban", "gallery", "calendar"\]/);
+    // 入口条件：多视图或编辑态（只读单视图保持原样，设备 3 态快照不受影响）
+    expect(MOBILE).toContain("(viewTabs.length > 1 || editable)");
+    expect(MOBILE).toMatch(/switchView\(result\.viewId\)/);
+    expect(MOBILE).toMatch(/<MobileBitableViewListSheet[\s\S]{0,400}?onAddView=\{addView\}/);
+  });
+
+  it("新增字段 = 先落字段再打开编辑（桌面 addField + insertField；移动端拿 fieldId 开「修改字段」）", () => {
+    // 桌面两个入口（表头/工具栏快捷网格 + 列菜单插入列）都要打开 FieldEditorModal
+    expect((EDITOR.match(/if \((?:added|inserted)\) setFieldEditor\(\{ fieldId: field\.id \}\)/g) ?? []).length).toBe(2);
+    expect(EDITOR).toMatch(/const addField[\s\S]{0,900}?setFieldEditor\(\{ fieldId: field\.id \}\)/);
+    expect(EDITOR).toMatch(/const insertField[\s\S]{0,1200}?setFieldEditor\(\{ fieldId: field\.id \}\)/);
+    // 移动端：addMobileField 返回 {doc, fieldId}，提交后打开「修改字段」
+    expect(MOBILE_EDIT).toMatch(/export function addMobileField\([\s\S]{0,400}?return \{ doc: addBitableField\(doc, tableId, field\), fieldId: field\.id \}/);
+    expect(MOBILE).toMatch(/setEditingFieldId\(result\.fieldId\)/);
+  });
+});
