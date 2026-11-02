@@ -608,3 +608,18 @@ P0 体面单栏（1–2）→ P1 双栏（3–5）→ 工具栏 T0（5–7，§8
 - **实测**（lake_tab）：9 按钮 = 表格配置/视图列表/筛选/分组/排序/行高/新增记录可用，填色/导入 CSV disabled；行高选「高」→ `--mbt-row-h: 64px` 且 `readNote` 回读正文含 `"rowHeight":"high"`。
 - **测试基建修正**：`useFormFactor` 在无 `window`（node/SSR 静态渲染）时按 compact 返回；移动端 jsdom 用例需要手机语义的按**文件**钉 412 视口（全局改会污染桌面 jsdom 用例——实测 Markdown 面板宽度 480→476）。
 
+
+### 10.13 第十一批：平板外接键盘快捷键（最小集）
+
+- **落点**：`src/mobile/pad/usePadShortcuts.ts`（纯判据 `matchPadShortcut` + 输入态守卫 `isTypingTarget` + hook），**仅 `expanded` 挂载**；手机不挂（软键盘没有这套语义）。
+- **键位**：
+  | 快捷键 | 行为 | 落点 |
+  | --- | --- | --- |
+  | ⌘/Ctrl + K | 全局搜索 | `MobileApp`（打开 SearchSheet） |
+  | ⌘/Ctrl + F | 文档内查找（仅 Lake 文档） | `NotebookWorkspace`（`toggleOverlay("find")`） |
+  | N | 新建文档（**裸 N 只在非输入态**） | `NotebookWorkspace`（`createChildDocument("doc", notebookId)`） |
+  | Esc | 关闭当前浮层 | 两处各自处理（首页级 sheet / 工作区 overlay） |
+- **输入态守卫**：焦点在 `input/textarea/select/contenteditable/.ne-engine/.ne-editor/.lake-editor-mount/.mobile-usheet-root` 时，裸 N 不抢键（编辑正文照常输入字母）；带修饰键的 K/F/N 仍生效。
+- **实测**（lake_tab，CDP `Input.dispatchKeyEvent`，modifiers=2 表示 Ctrl）：Ctrl+K → 搜索面板出现、Esc 关闭；Ctrl+F → `.mb-find` 出现、Esc 关闭；N → 页签数 2 → 3（真新建一篇文档）。
+- **未做**：按键映射自定义、更多快捷键（保存/关标签/大纲切换）——按需再加，不在最小集内。
+
