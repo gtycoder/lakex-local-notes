@@ -4,12 +4,36 @@
  * 口径（用户 261030）：
  * - **布局是设备本地偏好**（只读文档也能切，不写正文、不同步）：记录展示方式 表格/卡片、
  *   卡片列数 1/2、封面开关、主/副标题、展示字段；
- * - 筛选 / 排序在只读态**只展示、不可改**（改了会写正文 ⇒ 违反「打开 = 只读」）；
- *   编辑态也只是只读展示 + 明确指路桌面（移动端 P0 不做筛选/排序编辑）。
+ * - 筛选 / 排序 / 分组在**只读态只展示**（改了会写正文 ⇒ 违反「打开 = 只读」）；
+ *   编辑态可写视图配置（261102 起：筛选/排序/分组都接上；嵌套筛选分组仍只在桌面编辑）。
  */
 import { X } from "lucide-react";
 import { MobileSheet } from "../ui/MobileSheet";
-import { applySortMode, BITABLE_SORT_MODE_LABEL, sortModeLabel, sortModeOf, sortModesForField, type BitableField, type BitableTable, type BitableView } from "../../core/bitableDoc.js";
+import {
+  applySortMode,
+  BITABLE_DATE_FILTER_MODE_LABEL,
+  BITABLE_SORT_MODE_LABEL,
+  bitableFilterRuleCount,
+  createBitableFilterRule,
+  dateFilterModesFor,
+  defaultFilterValueFor,
+  filterOperatorLabel,
+  filterOperatorsFor,
+  filterValueKindFor,
+  isBitableFilterGroup,
+  isRelationFieldType,
+  sortModeLabel,
+  sortModeOf,
+  sortModesForField,
+  type BitableDateFilterMode,
+  type BitableField,
+  type BitableFilterJoin,
+  type BitableFilterNode,
+  type BitableFilterOperator,
+  type BitableFilterRule,
+  type BitableTable,
+  type BitableView,
+} from "../../core/bitableDoc.js";
 import type { BitableRecordLayoutPrefs } from "../../core/bitableRecordLayout";
 import type { BitableResolvedRecordLayout } from "../../core/bitableRecordLayout";
 import { useEffect, useState } from "react";
@@ -52,6 +76,31 @@ export function MobileBitableViewConfigSheet({ open, table, view, layout, prefs,
   const subtitleId = layout.subtitleField?.id ?? "";
   const titleId = layout.titleField?.id ?? "";
 
+  /** 根筛选（扁平规则可编辑；嵌套分组只展示/删除——移动端不造第二套条件树 UI）。 */
+  const filters: BitableFilterNode[] = view.filters ?? [];
+  const writeFilters = (next: BitableFilterNode[], join: BitableFilterJoin = view.filterOperator ?? "and"): void => {
+    onUpdateView?.({ filters: next, filterOperator: join });
+  };
+  const patchFilterAt = (index: number, next: BitableFilterNode): void => {
+    writeFilters(filters.map((node, i) => (i === index ? next : node)));
+  };
+  const removeFilterAt = (index: number): void => {
+    writeFilters(filters.filter((_, i) => i !== index));
+  };
+  const addFilterRule = (field: BitableField): void => {
+    writeFilters([...filters, createBitableFilterRule(field)]);
+  };
+  const changeFilterOperator = (index: number, field: BitableField, operator: BitableFilterOperator): void => {
+    const node = filters[index];
+    if (!node || isBitableFilterGroup(node)) return;
+    const valueKind = filterValueKindFor(field, operator);
+    const next: BitableFilterRule = { id: node.id, fieldId: field.id, operator };
+    const value = defaultFilterValueFor(field, operator);
+    if (value !== undefined) next.value = value;
+    if (valueKind === "date") next.valueMode = "custom" as BitableDateFilterMode;
+    patchFilterAt(index, next);
+  };
+
   return (
     <MobileSheet open={open} title="视图配置" onClose={onClose} bodyClassName="mbt-vcfg mb-sheet__body--form">
       <div className="mbt-vcfg-tabs" role="tablist" aria-label="视图配置">
@@ -62,11 +111,131 @@ export function MobileBitableViewConfigSheet({ open, table, view, layout, prefs,
       </div>
 
       {tab === "filter" && (
-        <div className="mbt-vcfg-empty">
-          <p>{filterSummary(view)}</p>
-          <p className="mbt-vcfg-hint">{editable ? "移动端暂不支持编辑筛选；需要筛选请到桌面编辑视图。" : "只读状态下不能修改筛选；需要筛选请到桌面编辑视图。"}</p>
-          <button type="button" className="mb-btn mb-btn--secondary mb-btn--block" disabled>+ 筛选条件</button>
-        </div>
+        editable && onUpdateView ? (
+          <div className="mbt-vcfg-list">
+            {filters.length >= 2 && (
+              <div className="mbt-chips-row" role="group" aria-label="条件连接">
+                {(["and", "or"] as BitableFilterJoin[]).map((join) => (
+                  <button key={join} type="button" className={"mb-chip" + ((view.filterOperator ?? "and") === join ? " is-on" : "")}
+                    onClick={() => writeFilters(filters, join)}>{join === "and" ? "且（全部满足）" : "或（任一满足）"}</button>
+                ))}
+              </div>
+            )}
+            {filters.length === 0 && <p className="mbt-vcfg-hint">暂无筛选条件：点下方字段添加一条。</p>}
+            {filters.map((node, index) => {
+              if (isBitableFilterGroup(node)) {
+                return (
+                  <div className="mbt-filter-rule" key={node.id ?? "group-" + index}>
+                    <div className="mbt-filter-rule__head">
+                      <span className="mbt-filter-rule__field">分组（{bitableFilterRuleCount(node.filters)} 条规则）</span>
+                      <button type="button" className="mb-iconbtn mb-iconbtn--compact" aria-label="删除筛选分组"
+                        onClick={() => removeFilterAt(index)}><X size={14} /></button>
+                    </div>
+                    <p className="mbt-vcfg-hint">嵌套分组请在桌面编辑；这里可以删除整组。</p>
+                  </div>
+                );
+              }
+              const field = table.fields.find((item) => item.id === node.fieldId);
+              if (!field) {
+                return <p className="mbt-vcfg-hint" key={node.id ?? "rule-" + index}>规则字段已不存在（{node.fieldId}）；可删除后重建。</p>;
+              }
+              const kind = filterValueKindFor(field, node.operator);
+              const options = field.options ?? [];
+              return (
+                <div className="mbt-filter-rule" key={node.id ?? "rule-" + index}>
+                  <div className="mbt-filter-rule__head">
+                    <span className="mbt-filter-rule__field">{field.name}</span>
+                    <button type="button" className="mb-iconbtn mb-iconbtn--compact" aria-label="删除筛选规则"
+                      onClick={() => removeFilterAt(index)}><X size={14} /></button>
+                  </div>
+                  <div className="mbt-chips-row" role="group" aria-label="筛选操作符">
+                    {filterOperatorsFor(field).map((operator) => (
+                      <button key={operator} type="button" className={"mb-chip" + (node.operator === operator ? " is-on" : "")}
+                        onClick={() => changeFilterOperator(index, field, operator)}>{filterOperatorLabel(field, operator)}</button>
+                    ))}
+                  </div>
+                  {kind !== "none" && (
+                    <div className="mbt-filter-value">
+                      {kind === "text" || kind === "number" ? (
+                        <div className="mb-input">
+                          <input value={typeof node.value === "string" ? node.value : ""} inputMode={kind === "number" ? "decimal" : "text"}
+                            placeholder="请输入" aria-label="筛选值" onChange={(event) => patchFilterAt(index, { ...node, value: event.target.value })} />
+                        </div>
+                      ) : kind === "boolean" ? (
+                        <div className="mbt-chips-row" role="group" aria-label="布尔筛选值">
+                          {[{ value: true, label: "已勾选" }, { value: false, label: "未勾选" }].map((option) => (
+                            <button key={option.label} type="button" className={"mb-chip" + (node.value === option.value ? " is-on" : "")}
+                              onClick={() => patchFilterAt(index, { ...node, value: option.value })}>{option.label}</button>
+                          ))}
+                        </div>
+                      ) : kind === "date" ? (
+                        <>
+                          <div className="mbt-chips-row" role="group" aria-label="日期范围">
+                            {dateFilterModesFor(node.operator).map((mode) => (
+                              <button key={mode} type="button" className={"mb-chip" + ((node.valueMode ?? "custom") === mode ? " is-on" : "")}
+                                onClick={() => patchFilterAt(index, { ...node, valueMode: mode, value: mode === "custom" ? "" : mode })}>
+                                {BITABLE_DATE_FILTER_MODE_LABEL[mode]}
+                              </button>
+                            ))}
+                          </div>
+                          {(node.valueMode ?? "custom") === "custom" && (
+                            <div className="mb-input">
+                              <input type="date" aria-label="筛选日期" value={typeof node.value === "string" ? node.value : ""}
+                                onChange={(event) => patchFilterAt(index, { ...node, valueMode: "custom", value: event.target.value })} />
+                            </div>
+                          )}
+                        </>
+                      ) : kind === "select" ? (
+                        options.length > 0 ? (
+                          <div className="mbt-chips-row" role="group" aria-label="选项筛选值">
+                            {options.map((option) => (
+                              <button key={option.id} type="button" className={"mb-chip" + (node.value === option.id ? " is-on" : "")}
+                                onClick={() => patchFilterAt(index, { ...node, value: option.id })}>{option.name}</button>
+                            ))}
+                          </div>
+                        ) : <p className="mbt-vcfg-hint">该字段暂无可选值。</p>
+                      ) : kind === "multiSelect" ? (
+                        isRelationFieldType(field.type) ? (
+                          <p className="mbt-vcfg-hint">关联字段的筛选值请在桌面编辑。</p>
+                        ) : options.length > 0 ? (
+                          <div className="mbt-chips-row" role="group" aria-label="多选筛选值">
+                            {options.map((option) => {
+                              const current = Array.isArray(node.value) ? node.value : [];
+                              const on = current.includes(option.id);
+                              return (
+                                <button key={option.id} type="button" className={"mb-chip" + (on ? " is-on" : "")}
+                                  onClick={() => patchFilterAt(index, { ...node, value: on ? current.filter((item) => item !== option.id) : [...current, option.id] })}>
+                                  {option.name}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        ) : <p className="mbt-vcfg-hint">该字段暂无可选值。</p>
+                      ) : kind === "file" ? (
+                        <p className="mbt-vcfg-hint">附件字段只支持「为空 / 非空」。</p>
+                      ) : null}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+            <div className="mbt-vcfg-pick">
+              <span className="mbt-vcfg-pick__k">筛选</span>
+              <div className="mbt-chips-row">
+                {table.fields.filter((field) => filterOperatorsFor(field).length > 0).map((field) => (
+                  <button key={field.id} type="button" className="mb-chip" onClick={() => addFilterRule(field)}>+ {field.name}</button>
+                ))}
+              </div>
+            </div>
+            <p className="mbt-vcfg-hint">筛选写视图配置（随正文同步）；嵌套筛选分组请在桌面编辑。</p>
+          </div>
+        ) : (
+          <div className="mbt-vcfg-empty">
+            <p>{filterSummary(view)}</p>
+            <p className="mbt-vcfg-hint">只读状态下不能修改筛选；请点右上角「编辑」或到桌面修改。</p>
+            <button type="button" className="mb-btn mb-btn--secondary mb-btn--block" disabled>+ 筛选条件</button>
+          </div>
+        )
       )}
 
       {tab === "sort" && (
