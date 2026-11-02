@@ -31,8 +31,8 @@ export interface SharedContent {
   imageError?: string;
 }
 
-/** PDF 导入 UI 尚未接通（T2-B）：分享 PDF 先给可见提示，不要静默丢。 */
-export const SHARED_PDF_IMPORT_HINT = "PDF 分享暂未接入导入，请从手写板内「导入 PDF」";
+/** PDF 分享读取失败（损坏/权限/旧 APK）时的可见提示：文件保留可重试，不静默丢。 */
+export const SHARED_PDF_IMPORT_HINT = "PDF 文件读取失败，已保留可重试；也可从手写板「插入」里导入 PDF";
 export const SHARED_FILE_UNSUPPORTED_HINT = "暂不支持该分享类型";
 
 interface SharedContentPluginApi {
@@ -75,16 +75,52 @@ export function sharedContentUnsupportedHint(content: SharedContent): string | n
   return null;
 }
 
-/** 分享内容 → 轻量框 seed（**只有 image 才读字节**；pdf/file 不创建小记，先清理临时文件并返回 null）。 */
+/**
+ * 读取 pdf/file 分享的字节（261102 分享→自动导入的读取口；图形分支不走这里）。
+ *
+ * API：`readSharedContentBytes(content): Promise<{ bytes: Uint8Array; filename: string } | null>`
+ * · 仅 kind=pdf / kind=file 且带 filename 时才读；image / 纯文本 / 无文件名 ⇒ null（不碰文件）；
+ * · **读取成功后才删除** shared-inbox 临时文件（消费语义：读到即接管，删掉防堆积）；
+ * · 读失败 / 空文件 ⇒ 返回 null 且**保留**文件（便于排查与重试；不要为了"清理"把失败样本删掉）；
+ * · 删除失败不影响返回（字节已经读到，最坏是 shared-inbox 多留一个文件）。
+ *
+ * 调用方（分享→自动导入路由）拿到 bytes 后自己落资产/导入；本函数只负责「读 + 消费」。
+ */
+export async function readSharedContentBytes(content: SharedContent): Promise<{ bytes: Uint8Array; filename: string } | null> {
+  const kind = sharedContentKind(content);
+  if (kind !== "pdf" && kind !== "file") return null;
+  const filename = content?.filename ?? content?.imageFilename ?? "";
+  if (!filename) return null;
+  const path = "shared-inbox/" + filename;
+  let base64: string;
+  try {
+    const file = await Filesystem.readFile({ path, directory: Directory.Data });
+    base64 = typeof file.data === "string" ? file.data : "";
+  } catch {
+    // 读失败：保留文件（不删），返回 null 让调用方给可见提示/重试
+    return null;
+  }
+  const bytes = base64 ? base64ToBytes(base64) : new Uint8Array();
+  if (bytes.length === 0) return null; // 空文件：同样保留
+  // 读取成功 ⇒ 消费掉临时文件（失败只忽略，字节已到手）
+  // 删除失败不影响导入：字节已到手，最坏 shared-inbox 多留一个文件（下次启动可再清）。
+  try { await Filesystem.deleteFile({ path, directory: Directory.Data }); } catch { /* 删除临时文件失败不影响本次读取结果 */ }
+  return { bytes, filename };
+}
+
+/** 分享内容 → 轻量框 seed（**只有 image 才读字节**；pdf 交给 readSharedContentBytes，file 无消费方则清理）。 */
 export async function sharedContentToSeed(content: SharedContent): Promise<QuickNoteSeed | null> {
   const text = typeof content?.text === "string" ? content.text : "";
   const filename = content?.filename ?? content?.imageFilename ?? "";
   const kind = sharedContentKind(content);
   const path = filename ? "shared-inbox/" + filename : "";
-  if (path && kind !== "image") {
-    // 261102 T2-C：PDF/文件分享还没有消费方（PDF 导入 UI 未接通）⇒ 不读、不进小记、不静默当图片；
-    // 顺手删掉原生复制的临时文件，避免 shared-inbox 堆积（提示由调用方 sharedContentUnsupportedHint 给）。
-    void Filesystem.deleteFile({ path, directory: Directory.Data }).catch(() => undefined);
+  if (kind !== "image") {
+    // 261102 T2-C：pdf/file 不创建小记、不静默当图片。
+    // · pdf：**不删文件** —— 交给 readSharedContentBytes 读成功后再消费（分享→自动导入路由）；
+    // · file：仍无消费方，删掉临时文件避免 shared-inbox 堆积。
+    if (kind === "file" && path) {
+      void Filesystem.deleteFile({ path, directory: Directory.Data }).catch(() => undefined);
+    }
     return null;
   }
   const images: QuickNoteSeed["images"] = [];

@@ -20,6 +20,7 @@ const MOBILE_INK_PAD = read("../../mobile/ink/MobileInkPad.tsx");
 const INK_DOC = read("../../core/inkDoc.ts");
 const PDF_IMPORT = read("./pdfImport.ts");
 const PDF_RASTER = read("./pdfRasterDesktop.ts");
+const MOBILE_PDF_IMPORT = read("../../mobile/ink/mobilePdfImport.ts");
 const MOBILE_PDF_RENDER = read("../../mobile/native/pdfRender.ts");
 
 describe("手写板正式端到端接线", () => {
@@ -135,24 +136,28 @@ describe("手写板正式端到端接线", () => {
     expect(INK_PAD).toContain("onClick={() => setBackground(item.value)}");
   });
 
-  it("工具行收在一屏：无插入时 7 键适配 360；有插入时 8 键在 412 全见（360 轻微横滑）", () => {
-    // 无插入：7×44 + 3×5（分隔）+ 内距 4 = 327 ≤ 360−16−2 = 342
-    const baseRow = 7 * 44 + 3 * 5 + 4;
-    expect(baseRow).toBe(327);
+  it("工具行加密：＋在第一位；8×44 + 4 分隔 + 内距 4 = 360 ⇒ 412 不横滑（360 允许轻微横滑）", () => {
+    // 无插入：7×44 + 3×1（分隔，margin 0）+ 内距 4 = 315 ≤ 360−16−2 = 342
+    const baseRow = 7 * 44 + 3 * 1 + 4;
+    expect(baseRow).toBe(315);
     expect(baseRow).toBeLessThanOrEqual(360 - 16 - 2);
-    // 有插入（图片/PDF 入口注入时）：8×44 + 4×5 + 4 = 376 ≤ 412−16−2 = 394
-    const withInsertRow = 8 * 44 + 4 * 5 + 4;
-    expect(withInsertRow).toBe(376);
+    // 有插入（图片/PDF 入口注入时）：8×44 + 4×1 + 4 = 360 ≤ 412−16−2 = 394
+    const withInsertRow = 8 * 44 + 4 * 1 + 4;
+    expect(withInsertRow).toBe(360);
     expect(withInsertRow).toBeLessThanOrEqual(412 - 16 - 2);
-    // 结构侧：工具行不内联颜色/笔宽列表（7 色/4 档在面板里），插入只占一个 44 按钮
+    // 结构侧：工具行不内联颜色/笔宽列表；**＋（插入）必须排在第一位**，其后才是笔工具
     const toolRow = mobileToolRow();
     expect(toolRow).not.toContain("COLORS.map");
     expect(toolRow).not.toContain("WIDTHS.map");
+    expect(toolRow.indexOf('aria-label="插入"')).toBeGreaterThan(-1);
+    expect(toolRow.indexOf('aria-label="插入"')).toBeLessThan(toolRow.indexOf('aria-label="画笔"'));
     expect(toolRow).toContain('aria-label="撤销"');
     expect(toolRow).toContain('aria-label="重做"');
-    expect(toolRow).toContain('aria-label="插入"');
     expect(toolRow).toContain("setInsertOpen((open) => !open)");
-    expect(MOBILE_INK_CSS).toContain('.ink-pad--mobile > [data-overlay="dock"] .ink-toolbar');
+    // 加密：工具行 gap 0 / 内距 2 / 分隔 margin 0（按钮盒仍 44）
+    expect(MOBILE_INK_CSS).toMatch(/\.ink-pad--mobile > \[data-overlay="dock"\] \.ink-toolbar \{[^}]*gap: 0;/);
+    expect(MOBILE_INK_CSS).toContain('.ink-pad--mobile > [data-overlay="dock"] .ink-toolbar__sep { margin: 0; }');
+    expect(MOBILE_INK_CSS).toContain("min-width: var(--mb-tap-min); height: var(--mb-tap-min);");
   });
 
   it("插入菜单：坞上方 8 的悬浮卡（两项 44 高），复用 importImages/importPdf；阅读态无入口", () => {
@@ -321,8 +326,10 @@ describe("手写板正式端到端接线", () => {
     expect(PDF_IMPORT).toContain("MAX_ATTACHMENT_BYTES");
     // 宿主只做注入：桌面 unpdf / 移动原生 PdfRender
     expect(DESKTOP_INK).toContain("renderPdfPagesDesktop(input.bytes, options)");
-    expect(MOBILE_INK_PAD).toContain("renderPdfPages(");
-    expect(MOBILE_INK_PAD).toContain("cancelPdfRender");
+    // 261102 18b：移动端适配器抽到 mobilePdfImport（手动导入与分享导入共用），MobileInkPad 只委托
+    expect(MOBILE_PDF_IMPORT).toContain("renderPdfPages(");
+    expect(MOBILE_PDF_IMPORT).toContain("cancelPdfRender");
+    expect(MOBILE_INK_PAD).toContain("importPdfPagesToAssets");
     expect(MOBILE_PDF_RENDER).toContain("Capacitor.convertFileSrc(file)");
     expect(MOBILE_PDF_RENDER).toContain("readRenderedPdfFileBytes");
   });

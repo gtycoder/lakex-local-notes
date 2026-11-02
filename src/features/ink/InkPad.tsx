@@ -877,6 +877,20 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
         // 下排纸张。编辑态工作区胶囊已由工作区隐藏，工具坞贴底并自己接系统安全区。
         <div className="ink-footer" role="toolbar" aria-label="手写工具" data-overlay="dock">
           <div className="ink-toolbar" role="group" aria-label="画笔工具">
+            {/* 插入（＋）放第一位：图片/PDF 入口在坞内悬浮菜单里 */}
+            {(onImportImages || onImportPdf) && (
+              <>
+                <button
+                  className={["ink-tool", insertOpen ? "is-active" : ""].join(" ")}
+                  data-popover-trigger="insert"
+                  onClick={() => { setInsertOpen((open) => !open); setPaletteOpen(false); setWidthsOpen(false); }}
+                  aria-label="插入"
+                  title="插入"
+                  aria-expanded={insertOpen}
+                ><SquarePlus size={18} /></button>
+                <span className="ink-toolbar__sep" />
+              </>
+            )}
             <button className={["ink-tool", mode === "pen" ? "is-active" : ""].join(" ")} onClick={() => setMode("pen")} aria-label="画笔" title="画笔"><Pen size={18} /></button>
             <button className={["ink-tool", mode === "highlighter" ? "is-active" : ""].join(" ")} onClick={() => setMode("highlighter")} aria-label="高亮笔" title="高亮笔"><Highlighter size={18} /></button>
             <button className={["ink-tool", mode === "eraser" ? "is-active" : ""].join(" ")} onClick={() => setMode("eraser")} aria-label="整笔橡皮" title="整笔橡皮"><Eraser size={18} /></button>
@@ -903,20 +917,6 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
             <span className="ink-toolbar__sep" />
             <button className="ink-tool" onClick={undo} aria-label="撤销" title="撤销" disabled={!canUndo}><Undo2 size={18} /></button>
             <button className="ink-tool" onClick={redo} aria-label="重做" title="重做" disabled={!canRedo}><Redo2 size={18} /></button>
-            {(onImportImages || onImportPdf) && (
-              <>
-                <span className="ink-toolbar__sep" />
-                {/* 图片/PDF 插入收进坞内悬浮菜单（可发现性：不再藏在全局预览面板里） */}
-                <button
-                  className={["ink-tool", insertOpen ? "is-active" : ""].join(" ")}
-                  data-popover-trigger="insert"
-                  onClick={() => { setInsertOpen((open) => !open); setPaletteOpen(false); setWidthsOpen(false); }}
-                  aria-label="插入"
-                  title="插入"
-                  aria-expanded={insertOpen}
-                ><SquarePlus size={18} /></button>
-              </>
-            )}
           </div>
           <div className="ink-backgrounds" role="group" aria-label="纸张">
             {BACKGROUNDS.map((item) => (

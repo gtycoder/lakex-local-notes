@@ -37,9 +37,12 @@
   border-radius: var(--lake-radius-card);
 }
 .ink-pad--mobile > [data-overlay="dock"] .ink-toolbar {
-  height: calc(var(--mb-tap-min) + var(--lake-space-xs)); padding: 0 var(--lake-space-xxs);
+  height: calc(var(--mb-tap-min) + var(--lake-space-xs)); padding: 0 var(--lake-space-xxs); gap: 0;
   border-bottom: 0; background: transparent;
 }
+/* 工具行加密（用户 261102 截图：太稀 + ＋被裁）：分隔不再留左右 margin，8×44 + 4 分隔 = 356 + 内距 4
+   = 360 ≤ 412−16−2 = 394 ⇒ 412 不横滑；360 宽允许轻微横滑（8 个 44 盒物理放不下）。 */
+.ink-pad--mobile > [data-overlay="dock"] .ink-toolbar__sep { margin: 0; }
 .ink-pad--mobile > [data-overlay="dock"] .ink-backgrounds {
   height: calc(var(--mb-tap-min) - var(--lake-space-xs)); padding: 0 var(--lake-space-sm);
   border-top: .5px solid var(--lake-border-1); background: transparent;

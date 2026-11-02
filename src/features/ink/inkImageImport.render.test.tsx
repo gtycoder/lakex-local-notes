@@ -122,8 +122,9 @@ describe("导入图片入口", () => {
     const onImportImages = vi.fn(async () => ({ pages: [imported], errors: [] }));
     const view = await mount({ content: inkToBody(createInkDoc("p1")), variant: "mobile", readOnly: false, onImportImages });
 
-    // 工具坞里有「插入」；预览面板里不再有导入入口
-    expect(byLabel(view.container, "插入")).not.toBeUndefined();
+    // 工具坞里有「插入」且排在第一位；预览面板里不再有导入入口
+    const toolRow = view.container.querySelector('[data-overlay="dock"] .ink-toolbar[aria-label="画笔工具"]')!;
+    expect(toolRow.querySelector("button")!.getAttribute("aria-label")).toBe("插入");
     await act(async () => { byLabel(view.container, "全局预览")!.click(); });
     expect(byLabel(view.container, "导入图片")).toBeUndefined();
     expect(view.container.querySelector("[data-ink-import]")).toBeNull();

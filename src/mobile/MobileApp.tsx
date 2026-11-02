@@ -12,7 +12,8 @@ import { isGoneNote } from "../core/syncDecisions";
 import { setNoteRefHost } from "../features/editor/noteRef";
 import type { TreeNode } from "../lib/types";
 import { HomePage, type MobileQuickNote } from "./home/HomePage";
-import { consumeSharedContent, sharedContentToSeed, sharedContentUnsupportedHint, subscribeSharedContent, type QuickNoteSeed } from "./native/sharedContent";
+import { consumeSharedContent, readSharedContentBytes, sharedContentKind, sharedContentToSeed, sharedContentUnsupportedHint, subscribeSharedContent, type QuickNoteSeed, type SharedContent } from "./native/sharedContent";
+import { importSharedPdfAsInkNote } from "./ink/mobilePdfImport";
 import { sha256Sync } from "../core/sha256Sync.js";
 import { scheduleComposerPrewarm, scheduleKernelPrewarm } from "./native/kernelPrewarm";
 import { QuickNoteComposerLazy } from "./home/quickNoteComposerLazy";
@@ -313,31 +314,60 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
     setCaptureOpen(true);
   }, { skipColdRead: initialCapture }), [initialCapture]);
 
-  // 系统分享（ACTION_SEND）→ 打开「小记」框并预填：冷启动读一次性内容，热启动订阅 "shared"。
+  /** 分享处理互斥：冷启动 consume 与热启动 shared 事件可能同时到达，一次只处理一个（其余忽略）。 */
+  const shareBusyRef = useRef(false);
+
+  /**
+   * 系统分享统一入口（冷启动 consume / 热启动 subscribe 共用）：
+   * · pdf：读 shared-inbox 字节 → 新建手写板（默认笔记本）→ 共享 PDF 导入适配器 → 打开新文档；
+   *   失败把刚建的空文档移入回收站并给可见 toast（importSharedPdfAsInkNote 内部回滚）。
+   * · image：保持原行为（落小记草稿 + 打开 capture）。
+   * · file：保持「暂不支持该分享类型」可见提示。
+   */
+  const handleSharedContent = useCallback(async (content: SharedContent) => {
+    if (shareBusyRef.current) return; // 一次只处理一个分享
+    shareBusyRef.current = true;
+    try {
+      if (content.imageError) showToast(content.imageError, { type: "error" });
+      if (sharedContentKind(content) === "pdf") {
+        const payload = await readSharedContentBytes(content);
+        if (!payload) {
+          // 读不到（文件损坏/权限/旧 APK）：保留提示，文件仍在 shared-inbox 可重试；不进小记
+          showToast(sharedContentUnsupportedHint(content) ?? "PDF 读取失败，文件已保留可重试", { type: "error" });
+          return;
+        }
+        showToast("正在导入 PDF…");
+        try {
+          const imported = await importSharedPdfAsInkNote(payload);
+          setRoute({ kind: "notebook", notebookId: imported.notebookId, initialNoteId: imported.noteId });
+          showToast("已导入 " + imported.pageCount + " 页 PDF");
+        } catch (reason) {
+          showToast("PDF 导入失败：" + getNativeErrorMessage(reason), { type: "error" });
+          warnFeedback();
+        }
+        return;
+      }
+      // 261102 T2-C：文件分享保持可见提示，不静默当图片；只有 image 才进小记 seed。
+      const unsupported = sharedContentUnsupportedHint(content);
+      if (unsupported) showToast(unsupported, { type: "error" });
+      const seed = await sharedContentToSeed(content);
+      if (seed) { setCaptureSeed(seed); setCaptureNonce((n) => n + 1); setCaptureOpen(true); }
+    } finally {
+      shareBusyRef.current = false;
+    }
+  }, []);
+
+  // 系统分享（ACTION_SEND）：冷启动读一次性内容 + 热启动订阅 shared 事件，两条都收敛到 handleSharedContent。
   useEffect(() => {
     let alive = true;
     void (async () => {
       const content = await consumeSharedContent();
       if (!alive || !content) return;
-      if (content.imageError) showToast(content.imageError, { type: "error" });
-      // 261102 T2-C：PDF/文件分享先给可见提示（PDF 导入 UI 未接通），**不静默当图片**；只有 image 才进小记 seed。
-      const unsupported = sharedContentUnsupportedHint(content);
-      if (unsupported) showToast(unsupported, { type: "error" });
-      const seed = await sharedContentToSeed(content);
-      if (alive && seed) { setCaptureSeed(seed); setCaptureNonce((n) => n + 1); setCaptureOpen(true); }
+      await handleSharedContent(content);
     })();
     return () => { alive = false; };
-  }, []);
-  useEffect(() => subscribeSharedContent((content) => {
-    void (async () => {
-      if (content.imageError) showToast(content.imageError, { type: "error" });
-      // 261102 T2-C：PDF/文件分享先给可见提示（PDF 导入 UI 未接通），**不静默当图片**；只有 image 才进小记 seed。
-      const unsupported = sharedContentUnsupportedHint(content);
-      if (unsupported) showToast(unsupported, { type: "error" });
-      const seed = await sharedContentToSeed(content);
-      if (seed) { setCaptureSeed(seed); setCaptureNonce((n) => n + 1); setCaptureOpen(true); }
-    })();
-  }), []);
+  }, [handleSharedContent]);
+  useEffect(() => subscribeSharedContent((content) => { void handleSharedContent(content); }), [handleSharedContent]);
 
   /**
    * 系统分享带入：先把 seed 落成一份**草稿**（图片落盘 + 正文由无内核写入通道合成），
