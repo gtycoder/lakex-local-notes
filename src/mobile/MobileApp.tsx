@@ -23,6 +23,8 @@ import { localAssetHttpUrl } from "../core/assetUrl.js";
 import { buildQuickNoteTagIndex, buildQuickNoteTagOptions, type QuickNoteTag } from "../core/quickNoteTags.js";
 import { installMissingAssetPlaceholders } from "./editor/missingAssetPlaceholder";
 import { subscribeHistorySettings } from "./lib/historySettingsSync";
+import { useFormFactor } from "./pad/useFormFactor";
+import { usePadShortcuts } from "./pad/usePadShortcuts";
 
 /**
  * 小记写作区（懒加载）：261010 起 **深链/长按那条 capture 路径与工作台共用同一个内核卡片**
@@ -109,6 +111,17 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [createNbOpen, setCreateNbOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  // 平板外接键盘：⌘/Ctrl+K = 全局搜索（手机不挂；判据见 pad/usePadShortcuts）。
+  const padShell = useFormFactor() === "expanded";
+  usePadShortcuts(padShell, {
+    search: () => setSearchOpen(true),
+    escape: () => {
+      if (searchOpen) { setSearchOpen(false); return; }
+      if (aiOpen) { setAiOpen(false); return; }
+      if (drawerOpen) { setDrawerOpen(false); return; }
+      if (createNbOpen) { setCreateNbOpen(false); }
+    },
+  });
   const [aiOpen, setAiOpen] = useState(false);
   /** 全局搜索命中「小记」后待首页打开的 id（首页常驻，交给 HomePage 的 effect 接力）。 */
   const [pendingQuickNoteId, setPendingQuickNoteId] = useState<string | null>(null);

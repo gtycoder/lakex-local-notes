@@ -34,6 +34,7 @@ import { useNotebookTreeActions } from "./useNotebookTreeActions";
 import { SELF_REGISTERED_OVERLAY_KINDS, useWorkspaceOverlays } from "./useWorkspaceOverlays";
 import { NotebookTreeList } from "./NotebookTreeList";
 import { useFormFactor } from "../pad/useFormFactor";
+import { usePadShortcuts } from "../pad/usePadShortcuts";
 export type { NotebookTreeItem } from "./useNotebookTreeData";
 /** 表格 / 多维表视图按需加载：只有真的打开这类文档才进分包（首屏不含它们）。 */
 const MobileBitableViewer = lazy(() => import("../bitable/MobileBitableViewer").then((m) => ({ default: m.MobileBitableViewer })));
@@ -704,6 +705,13 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
       onOpenCreate={(item) => openOverlay({ kind: "create", parentId: item.id })}
     />
   );
+
+  // 平板外接键盘：⌘/Ctrl+F 查找、N 新建文档、Esc 关浮层（手机不挂）。
+  usePadShortcuts(padTwoPane, {
+    find: () => { if (active && (active.kind ?? "doc") === "doc") toggleOverlay("find"); },
+    newNote: () => { void createChildDocument("doc", notebookId); },
+    escape: () => { if (overlayKind) closeOverlay(); },
+  });
 
   return (
     <div className="mobile-workspace">
