@@ -75,8 +75,10 @@
   gap: var(--lake-space-xxs); padding: var(--lake-space-md);
   border: .5px solid var(--lake-border-1); border-radius: var(--lake-radius-card);
   background: var(--lake-bg-panel); box-shadow: var(--lake-shadow-popover);
+  /* 极窄屏（<340）色板 6 色一排放不下时兜底横滑，不撑破面板。 */
+  overflow-x: auto;
 }
-.ink-pad--mobile > [data-overlay="dock"] [data-overlay="widths"] { gap: var(--lake-space-sm); }
+.ink-pad--mobile > [data-overlay="dock"] [data-overlay="widths"] { gap: var(--lake-space-sm); overflow-x: visible; }
 /* 全局预览：移动端改成**悬浮覆盖**（顶部导航条下方，不推画布；桌面仍是流内面板），内部滚动。 */
 .ink-pad--mobile > [data-overlay="preview"] {
   position: absolute; z-index: 1;

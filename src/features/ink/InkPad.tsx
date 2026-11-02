@@ -221,6 +221,18 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
   useEffect(() => {
     if (readOnly) closeSwatches();
   }, [closeSwatches, readOnly]);
+  /** 移动端全局预览是悬浮覆盖：点「预览面板本体 / 触发按钮」之外的任意处关闭（桌面流内面板不变）。 */
+  useEffect(() => {
+    if (variant !== "mobile" || !pagesOpen) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Element | null;
+      if (target?.closest?.('[data-overlay="preview"], [data-popover-trigger="preview"]')) return;
+      setPagesOpen(false);
+      setPendingDeletePageId(null);
+    };
+    document.addEventListener("pointerdown", onPointerDown, true);
+    return () => document.removeEventListener("pointerdown", onPointerDown, true);
+  }, [pagesOpen, variant]);
 
   const serializeDoc = useCallback((value: InkDoc): string | null => {
     try {
@@ -615,7 +627,8 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
           <span className="ink-toolbar__sep" />
           <button
             className="ink-tool"
-            onClick={() => { setPagesOpen((open) => !open); setPendingDeletePageId(null); }}
+            data-popover-trigger="preview"
+            onClick={() => { setPagesOpen((open) => !open); setPendingDeletePageId(null); closeSwatches(); }}
             aria-label="全局预览"
             title="全局预览"
             aria-expanded={pagesOpen}

@@ -173,6 +173,22 @@ describe("MobileInkPad 阅读态（默认打开态）", () => {
 
     await view.unmount();
   });
+
+  it("预览悬浮层：点面板外部关闭；点面板内部不关闭（移动端；桌面仍是流内面板）", async () => {
+    const view = await mount({ content: twoPageBody(), readOnly: true });
+    const previewSel = '[data-overlay="preview"]';
+    await act(async () => { byLabel(view.container, "全局预览")!.click(); });
+    const preview = view.container.querySelector(previewSel);
+    expect(preview).not.toBeNull();
+    // 点面板内部（缩略图条）不关闭
+    await act(async () => { preview!.dispatchEvent(new Event("pointerdown", { bubbles: true })); });
+    expect(view.container.querySelector(previewSel)).not.toBeNull();
+    // 点画布（面板外部）关闭
+    const stage = view.container.querySelector(".ink-page-stage") as HTMLElement;
+    await act(async () => { stage.dispatchEvent(new Event("pointerdown", { bubbles: true })); });
+    expect(view.container.querySelector(previewSel)).toBeNull();
+    await view.unmount();
+  });
 });
 
 describe("MobileInkPad 阅读态 capture", () => {
