@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import type { EditorCaptureHandler } from "../../core/editorCapture";
-import { ChevronLeft, ChevronRight, Eraser, FileText, Highlighter, ImagePlus, LayoutGrid, Minus, Pen, Plus, Redo2, Undo2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Eraser, FileText, Highlighter, ImagePlus, LayoutGrid, Minus, Pen, Plus, Redo2, SquarePlus, Undo2 } from "lucide-react";
 import { COLOR_BOARD_GROUPS, QUICK_TEXT_COLORS } from "../../core/colorPalette.js";
 import {
   createInkPage,
@@ -133,9 +133,10 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
   const [highlighterWidth, setHighlighterWidth] = useState<number>(18);
   const [zoom, setZoom] = useState(1);
   const [pagesOpen, setPagesOpen] = useState(false);
-  // 移动端编辑工具坞的两个悬浮面板（当前色板 / 当前笔宽）；桌面不渲染它们。
+  // 移动端编辑工具坞的悬浮面板（当前色板 / 当前笔宽 / 插入菜单）；桌面不渲染它们。
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [widthsOpen, setWidthsOpen] = useState(false);
+  const [insertOpen, setInsertOpen] = useState(false);
   const [pendingDeletePageId, setPendingDeletePageId] = useState<string | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
   const [fitSize, setFitSize] = useState<{ width: number; height: number } | null>(null);
@@ -237,18 +238,19 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
   const closeSwatches = useCallback(() => {
     setPaletteOpen(false);
     setWidthsOpen(false);
+    setInsertOpen(false);
   }, []);
-  /** 色板/笔宽面板：点「面板本体 / 触发按钮」之外的任意处关闭（捕获 pointerdown，不误吞画布手势）。 */
+  /** 坞上面板（色板/笔宽/插入）：点「面板本体 / 触发按钮」之外的任意处关闭（捕获 pointerdown，不误吞画布手势）。 */
   useEffect(() => {
-    if (!paletteOpen && !widthsOpen) return;
+    if (!paletteOpen && !widthsOpen && !insertOpen) return;
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target as Element | null;
-      if (target?.closest?.('[data-overlay="palette"], [data-overlay="widths"], [data-popover-trigger]')) return;
+      if (target?.closest?.('[data-overlay="palette"], [data-overlay="widths"], [data-overlay="insert"], [data-popover-trigger]')) return;
       closeSwatches();
     };
     document.addEventListener("pointerdown", onPointerDown, true);
     return () => document.removeEventListener("pointerdown", onPointerDown, true);
-  }, [closeSwatches, paletteOpen, widthsOpen]);
+  }, [closeSwatches, insertOpen, paletteOpen, widthsOpen]);
   // 退回阅读态时工具坞整体卸载：把面板状态一起收掉，下次进编辑态不会凭空弹开。
   useEffect(() => {
     if (readOnly) closeSwatches();
@@ -805,20 +807,6 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
             onClose={() => { setPagesOpen(false); setPendingDeletePageId(null); }}
             readOnly={readOnly}
           />
-          {!readOnly && (onImportImages || onImportPdf) && (
-            <div data-ink-import>
-              {onImportImages && (
-                <button className="ink-tool" onClick={() => void importImages()} aria-label="导入图片" title="导入图片" disabled={importing || pdfImporting}>
-                  <ImagePlus size={18} /><span>导入图片</span>
-                </button>
-              )}
-              {onImportPdf && (
-                <button className="ink-tool" onClick={() => void importPdf()} aria-label="导入 PDF" title="导入 PDF" disabled={importing || pdfImporting}>
-                  <FileText size={18} /><span>导入 PDF</span>
-                </button>
-              )}
-            </div>
-          )}
         </div>
       ))}
 
@@ -897,7 +885,7 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
             <button
               className={["ink-color", paletteOpen ? "is-active" : ""].join(" ")}
               data-popover-trigger="color"
-              onClick={() => { setPaletteOpen((open) => !open); setWidthsOpen(false); }}
+              onClick={() => { setPaletteOpen((open) => !open); setWidthsOpen(false); setInsertOpen(false); }}
               aria-label="选择颜色"
               title="选择颜色"
               aria-expanded={paletteOpen}
@@ -907,7 +895,7 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
             <button
               className={["ink-width", widthsOpen ? "is-active" : ""].join(" ")}
               data-popover-trigger="width"
-              onClick={() => { setWidthsOpen((open) => !open); setPaletteOpen(false); }}
+              onClick={() => { setWidthsOpen((open) => !open); setPaletteOpen(false); setInsertOpen(false); }}
               aria-label="选择笔宽"
               title="选择笔宽"
               aria-expanded={widthsOpen}
@@ -915,6 +903,20 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
             <span className="ink-toolbar__sep" />
             <button className="ink-tool" onClick={undo} aria-label="撤销" title="撤销" disabled={!canUndo}><Undo2 size={18} /></button>
             <button className="ink-tool" onClick={redo} aria-label="重做" title="重做" disabled={!canRedo}><Redo2 size={18} /></button>
+            {(onImportImages || onImportPdf) && (
+              <>
+                <span className="ink-toolbar__sep" />
+                {/* 图片/PDF 插入收进坞内悬浮菜单（可发现性：不再藏在全局预览面板里） */}
+                <button
+                  className={["ink-tool", insertOpen ? "is-active" : ""].join(" ")}
+                  data-popover-trigger="insert"
+                  onClick={() => { setInsertOpen((open) => !open); setPaletteOpen(false); setWidthsOpen(false); }}
+                  aria-label="插入"
+                  title="插入"
+                  aria-expanded={insertOpen}
+                ><SquarePlus size={18} /></button>
+              </>
+            )}
           </div>
           <div className="ink-backgrounds" role="group" aria-label="纸张">
             {BACKGROUNDS.map((item) => (
@@ -945,6 +947,28 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
                   title={`笔宽 ${value}`}
                 ><span style={{ width: widthDotSize(value), height: widthDotSize(value) }} /></button>
               ))}
+            </div>
+          )}
+          {insertOpen && (
+            <div role="group" aria-label="插入" data-overlay="insert">
+              {onImportImages && (
+                <button
+                  className="ink-tool"
+                  onClick={() => { setInsertOpen(false); void importImages(); }}
+                  aria-label="导入图片"
+                  title="导入图片"
+                  disabled={importing || pdfImporting}
+                ><ImagePlus size={18} /><span>导入图片</span></button>
+              )}
+              {onImportPdf && (
+                <button
+                  className="ink-tool"
+                  onClick={() => { setInsertOpen(false); void importPdf(); }}
+                  aria-label="导入 PDF"
+                  title="导入 PDF"
+                  disabled={importing || pdfImporting}
+                ><FileText size={18} /><span>导入 PDF</span></button>
+              )}
             </div>
           )}
         </div>

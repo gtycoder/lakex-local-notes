@@ -135,18 +135,42 @@ describe("手写板正式端到端接线", () => {
     expect(INK_PAD).toContain("onClick={() => setBackground(item.value)}");
   });
 
-  it("工具行一屏放得下：7 个 44 按钮 + 3 个分隔，360 宽也不用横滑", () => {
-    // 7×44 + 3×(1px + 2×2px margin) + 工具坞内距 4 = 327 ≤ 360 − 16（坞左右 8）− 2（0.5 边×2）= 342
-    const rowWidth = 7 * 44 + 3 * 5 + 4; // = 327
-    expect(rowWidth).toBe(327);
-    expect(rowWidth).toBeLessThanOrEqual(360 - 16 - 2); // 360 宽下可用 342
-    // 结构侧：工具行不再内联颜色/笔宽列表（7 色/4 档在面板里），只剩 3 工具 + 2 当前值 + 撤销/重做
+  it("工具行收在一屏：无插入时 7 键适配 360；有插入时 8 键在 412 全见（360 轻微横滑）", () => {
+    // 无插入：7×44 + 3×5（分隔）+ 内距 4 = 327 ≤ 360−16−2 = 342
+    const baseRow = 7 * 44 + 3 * 5 + 4;
+    expect(baseRow).toBe(327);
+    expect(baseRow).toBeLessThanOrEqual(360 - 16 - 2);
+    // 有插入（图片/PDF 入口注入时）：8×44 + 4×5 + 4 = 376 ≤ 412−16−2 = 394
+    const withInsertRow = 8 * 44 + 4 * 5 + 4;
+    expect(withInsertRow).toBe(376);
+    expect(withInsertRow).toBeLessThanOrEqual(412 - 16 - 2);
+    // 结构侧：工具行不内联颜色/笔宽列表（7 色/4 档在面板里），插入只占一个 44 按钮
     const toolRow = mobileToolRow();
     expect(toolRow).not.toContain("COLORS.map");
     expect(toolRow).not.toContain("WIDTHS.map");
     expect(toolRow).toContain('aria-label="撤销"');
     expect(toolRow).toContain('aria-label="重做"');
+    expect(toolRow).toContain('aria-label="插入"');
+    expect(toolRow).toContain("setInsertOpen((open) => !open)");
     expect(MOBILE_INK_CSS).toContain('.ink-pad--mobile > [data-overlay="dock"] .ink-toolbar');
+  });
+
+  it("插入菜单：坞上方 8 的悬浮卡（两项 44 高），复用 importImages/importPdf；阅读态无入口", () => {
+    expect(INK_PAD).toContain('data-overlay="insert"');
+    expect(INK_PAD).toContain('aria-label="插入"');
+    expect(INK_PAD).toContain("data-popover-trigger=\"insert\"");
+    // 菜单两项复用既有流程（不复制实现）
+    expect(INK_PAD).toContain("setInsertOpen(false); void importImages();");
+    expect(INK_PAD).toContain("setInsertOpen(false); void importPdf();");
+    // 插入按钮只在编辑态工具坞里（阅读态无）
+    expect(INK_PAD).toContain(") : !readOnly ? (");
+    // 全局预览面板里的旧导入行已移除（两个入口不并存）
+    expect(INK_PAD).not.toContain("data-ink-import");
+    expect(MOBILE_INK_CSS).not.toContain("[data-ink-import]");
+    // 面板样式：与色板/笔宽同套卡面，纵向两项
+    expect(MOBILE_INK_CSS).toContain('.ink-pad--mobile > [data-overlay="dock"] [data-overlay="insert"]');
+    expect(MOBILE_INK_CSS).toContain("flex-direction: column; align-items: stretch; justify-content: flex-start;");
+    expect(MOBILE_INK_CSS).toContain("bottom: calc(100% + var(--lake-space-md));");
   });
 
   it("色板/笔宽面板：悬浮在工具坞上方 8、同套卡面；选值关闭、点外部也关闭", () => {
@@ -163,8 +187,8 @@ describe("手写板正式端到端接线", () => {
     // 选值关闭
     expect(INK_PAD).toContain("setPaletteOpen(false)");
     expect(INK_PAD).toContain("setWidthsOpen(false)");
-    // 点「面板/触发按钮」之外关闭（pointerdown 捕获）
-    expect(INK_PAD).toContain('[data-overlay="palette"], [data-overlay="widths"], [data-popover-trigger]');
+    // 点「面板/触发按钮」之外关闭（pointerdown 捕获；插入菜单同一条规则）
+    expect(INK_PAD).toContain('[data-overlay="palette"], [data-overlay="widths"], [data-overlay="insert"], [data-popover-trigger]');
   });
 
   it("移动端阅读态让开底部胶囊：胶囊 stack（状态栏+间隔+安全区+胶囊）+ 8", () => {
@@ -264,10 +288,11 @@ describe("手写板正式端到端接线", () => {
     expect(PAGE_STRIP).toContain('pointerEvents="none"');
   });
 
-  it("导入入口：移动端在编辑态的全局预览里、桌面在编辑态工具条；正文只在编辑态写", () => {
-    // 移动端预览面板里的导入行（!readOnly && (图片|PDF) 才渲染）
-    expect(INK_PAD).toContain("data-ink-import");
-    expect(INK_PAD).toContain("{!readOnly && (onImportImages || onImportPdf) && (");
+  it("导入入口：移动端在编辑态工具坞「插入」菜单、桌面在编辑态工具条；正文只在编辑态写", () => {
+    // 移动端：坞内「插入」一个 44 按钮 + 坞上方悬浮菜单（不再藏在全局预览里）
+    expect(INK_PAD).toContain('aria-label="插入"');
+    expect(INK_PAD).toContain('data-overlay="insert"');
+    expect(INK_PAD).not.toContain("data-ink-import");
     // 两端入口同一份 importImages / importPdf（图片与 PDF 共用 busy 守卫，仅编辑态可写）
     expect(INK_PAD).toMatch(/const importImages = useCallback\(async \(\) => \{\s*const importer = onImportImagesRef\.current;\s*if \(!importer \|\| readOnly \|\| importingRef\.current \|\| pdfImportingRef\.current\) return;/);
     expect(INK_PAD).toMatch(/const importPdf = useCallback\(async \(\) => \{\s*const importer = onImportPdfRef\.current;\s*if \(!importer \|\| readOnly \|\| importingRef\.current \|\| pdfImportingRef\.current\) return;/);
@@ -279,8 +304,9 @@ describe("手写板正式端到端接线", () => {
     expect(MOBILE_INK_PAD).toContain("bridge.uploadResource(input, noteId)");
     expect(MOBILE_INK_PAD).toContain("onImportPdf={noteId ? onImportPdf : undefined}");
     expect(MOBILE).toContain("noteId={t.id}");
-    // 移动端导入 CSS（预览面板里一行）
-    expect(MOBILE_INK_CSS).toContain('[data-ink-import]');
+    // 移动端导入 CSS：坞上方「插入」菜单（预览面板里的旧导入行已删除）
+    expect(MOBILE_INK_CSS).toContain('[data-overlay="insert"]');
+    expect(MOBILE_INK_CSS).not.toContain("[data-ink-import]");
   });
 
   it("PDF 导入编排：300 页上限、pdf-page 背景图、sourcePdf、替换空白首页、进度/取消", () => {

@@ -80,9 +80,10 @@
 .ink-pad--mobile .ink-page-frame { width: min(100%, calc((100dvh - 202px) * 0.707)); max-height: 100%; aspect-ratio: 794 / 1123; }
 /* 保存失败横幅也被悬浮导航条压着 ⇒ 下移一条导航的高度（只在移动端）。 */
 .ink-pad--mobile > .ink-invalid-banner { margin-top: calc(var(--mb-tap-min) + var(--lake-space-xl)); }
-/* 色板/笔宽小面板：悬浮在工具坞上方 8（不占布局），与工具坞同套卡面；一行铺开。 */
+/* 色板/笔宽/插入小面板：悬浮在工具坞上方 8（不占布局），与工具坞同套卡面；一行铺开。 */
 .ink-pad--mobile > [data-overlay="dock"] [data-overlay="palette"],
-.ink-pad--mobile > [data-overlay="dock"] [data-overlay="widths"] {
+.ink-pad--mobile > [data-overlay="dock"] [data-overlay="widths"],
+.ink-pad--mobile > [data-overlay="dock"] [data-overlay="insert"] {
   position: absolute; left: 0; right: 0; bottom: calc(100% + var(--lake-space-md));
   display: flex; align-items: center; justify-content: center;
   gap: var(--lake-space-xxs); padding: var(--lake-space-md);
@@ -92,6 +93,16 @@
   overflow-x: auto;
 }
 .ink-pad--mobile > [data-overlay="dock"] [data-overlay="widths"] { gap: var(--lake-space-sm); overflow-x: visible; }
+/* 「插入」菜单：纵向两项（导入图片 / 导入 PDF），行高 44、图标+文字左对齐。 */
+.ink-pad--mobile > [data-overlay="dock"] [data-overlay="insert"] {
+  flex-direction: column; align-items: stretch; justify-content: flex-start;
+  gap: var(--lake-space-xxs); padding: var(--lake-space-xs); overflow-x: visible;
+}
+.ink-pad--mobile > [data-overlay="dock"] [data-overlay="insert"] .ink-tool {
+  justify-content: flex-start; gap: var(--lake-space-sm);
+  min-width: auto; padding: 0 var(--lake-space-md);
+  color: var(--lake-text-2); font-size: var(--lake-font-size-tiny);
+}
 /* 全局预览：移动端改成**悬浮覆盖**（顶部导航条下方，不推画布；桌面仍是流内面板），内部滚动。 */
 .ink-pad--mobile > [data-overlay="preview"] {
   position: absolute; z-index: 1;
@@ -115,18 +126,6 @@
    少算安全区 = 真机（手势条/刘海）上仍会被盖住。 */
 .ink-pad--mobile[data-readonly="true"] {
   padding-bottom: calc(var(--mobile-status-height) + var(--mobile-bar-gap) + var(--mobile-bottom-safe-area) + var(--mobile-bottom-bar-height) + var(--lake-space-md));
-}
-/* 全局预览里的「导入图片」（仅编辑态；v2 图片页）：一行居中，按钮盒仍 44、文字走 tiny 档。 */
-.ink-pad--mobile > [data-overlay="preview"] [data-ink-import] {
-  display: flex; flex-wrap: wrap; justify-content: center;
-  gap: var(--lake-space-md);
-  padding: 0 var(--lake-space-md) var(--lake-space-md);
-}
-.ink-pad--mobile > [data-overlay="preview"] [data-ink-import] .ink-tool {
-  gap: var(--lake-space-xs); min-width: auto;
-  padding: 0 var(--lake-space-lg);
-  color: var(--lake-accent-text);
-  font-size: var(--lake-font-size-tiny);
 }
 /* PDF 导入进度（编辑态横幅）：文案 + 取消按钮一行排开；按钮沿用 .ink-tool（44 盒）。 */
 .ink-pad--mobile > [data-ink-pdf-progress] {
