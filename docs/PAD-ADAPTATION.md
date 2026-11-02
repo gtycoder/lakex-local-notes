@@ -525,3 +525,12 @@ P0 体面单栏（1–2）→ P1 双栏（3–5）→ 工具栏 T0（5–7，§8
 - **手机门控复核**（CDP 视口压到 412×842）：formFactor=compact、无 pad-tabs/pad-tree/pad-outline、标题输入框回来、工作区胶囊回来；恢复 1280 后全部回到平板形态。
 - **门禁**：tsc 0 / vitest run src/mobile 836 例 / check:mobileui（含 ui-metrics，颜色字面量 0）/ git diff --check；全量 vitest 542/543 文件通过（electron/s3v3/perf.integration.test.ts 在满载（模拟器 + 并行 worker）下曾抖红一次，单独与复跑均通过，非本批引起）。
 - 截图：.css-audit/pad-impl/tablet-tabs-outline.png、tablet-edit-outline.png。
+
+### 10.5 第三批：平板快照装置进门禁
+
+- **装置**：`snap-gate.mjs` 新增 `--viewport WxH`（透传 `LAKE_SNAP_VIEWPORT`）；`mobile-snap.mjs` 启动时 `Emulation.setDeviceMetricsOverride`（dpr 2）、结束时 clear；`home-doc` 在 `.pad-tree` 存在时点左栏行（手机仍走底栏「文档树」→ 抽屉）。
+- **入口**：`scripts/mobile-audit/check-mobile-snap-tablet.mjs` + `npm run check:tabletsnap`（默认端口 9340）；基线 **独立** `scripts/mobile-audit/baseline/mobile-snap-tablet.json`，手机基线 `mobile-snap.json` 不动。
+- **为什么钉视口**：平板态与设备状态栏/导航栏实际高度解耦（1280×800、dpr 2）⇒ 换一台 `lake_tab` 也能复现；但仍绑定「该夹具 + 该视口」。
+- **基线（干净实例 + gate-fixture）**：home-library 1822 / home-quicknotes 1822 / home-library-list 1827 / home-doc 2012 / settings 1912 / settings-appearance 1849；**连跑两轮 0 差异**。
+- **文档**：`scripts/mobile-audit/README.md` 新增「平板专项快照」节，`docs/MOBILE-OPS.md` §5.5 装置表登记。
+
