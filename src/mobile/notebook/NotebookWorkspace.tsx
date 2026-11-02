@@ -136,6 +136,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   const formFactor = useFormFactor();
   const padTwoPane = formFactor === "expanded";
   const [padTreeOpen, setPadTreeOpen] = useState(true);
+  const [padOutlineOpen, setPadOutlineOpen] = useState(false);
   const outlineOpen = overlayKind === "outline";
   const findOpen = overlayKind === "find";
   const tabsOpen = overlayKind === "tabs";
@@ -190,7 +191,8 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   const bodyRef = useRef<HTMLElement | null>(null);
   const activeMetaRef = useRef({ kind: "doc" as string, editing: false });
   activeMetaRef.current = { kind: active?.kind ?? "doc", editing: !!active?.editing };
-  const chromeHiddenNow = subpageFullscreen || (chrome.hidden && !active?.editing && (active?.kind ?? "doc") === "doc");
+  // 平板双栏不自动收顶栏：顶栏里有文档页签，滚动时闪掉会晃眼（手机保持思源式自动收起）。
+  const chromeHiddenNow = subpageFullscreen || (!padTwoPane && chrome.hidden && !active?.editing && (active?.kind ?? "doc") === "doc");
   const showChrome = useCallback(() => {
     if (chromeRef.current.hidden || chromeRef.current.acc) setChrome({ hidden: false, acc: 0 });
   }, []);
@@ -238,6 +240,8 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
 
   // 切到没有大纲的文档类型（表格 / 多维表 / 画板）时收掉已展开的大纲抽屉，别停在空面板上
   useEffect(() => { if (!outlineAvailable) closeOverlay("outline"); }, [outlineAvailable, closeOverlay]);
+  // 平板常驻大纲栏同理：切到没有大纲的文档类型时自动收起。
+  useEffect(() => { if (!outlineAvailable) setPadOutlineOpen(false); }, [outlineAvailable]);
 
   // 初次进入（仅一次）：
   //  - 显式指定了要打开的文档（首页/搜索/新建）→ 它排第一并激活（修"从首页点文档直达不了"），
@@ -705,9 +709,52 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     <div className="mobile-workspace">
       {/* 顶部栏（思源 #mobileTopBar：.toolbar--border + .toolbar__title 左对齐 + 右侧同步状态） */}
       <header
-        className={"toolbar toolbar--border mobile-topbar" + (chromeHiddenNow ? " mobile-topbar--auto-hidden" : "")}
-        aria-hidden={chromeHiddenNow ? "true" : "false"}
+        className={"toolbar toolbar--border mobile-topbar" + (!padTwoPane && chromeHiddenNow ? " mobile-topbar--auto-hidden" : "")}
+        aria-hidden={!padTwoPane && chromeHiddenNow ? "true" : "false"}
       >
+        {padTwoPane ? (
+          <>
+            <button className="toolbar__button" onClick={handleBack} aria-label="返回知识库" title="返回知识库"><ArrowLeft /></button>
+            {/* 平板：左 = 笔记本切换（树常驻，不再需要"打开目录"入口；文档重命名走树行 ⋮） */}
+            <button className="pad-nb" onClick={() => openOverlay({ kind: "notebookSwitch" })} aria-label="切换笔记本" title="切换笔记本">
+              {nbIcon ? <MobileNodeIconGlyph value={nbIcon} /> : <Book size={16} />}
+              <span className="pad-nb__name">{title}</span>
+            </button>
+            {/* 平板：中 = 桌面式文档页签（关闭/新增就地完成，替代手机的全屏标签列表） */}
+            <div className="pad-tabs" data-prevent-swipe>
+              {tabs.map((t) => (
+                <div key={t.id} className={"pad-tab" + (t.id === activeId ? " on" : "")}>
+                  <button className="pad-tab__main" onClick={() => { void openTab(t.id); }} title={t.title || "无标题"}>{t.title || "无标题"}</button>
+                  <button className="pad-tab__x" onClick={(e) => { e.stopPropagation(); void closeTab(t.id); }} aria-label="关闭标签页" title="关闭"><X size={14} /></button>
+                </div>
+              ))}
+              <button className="pad-tab-add" onClick={() => setPadTreeOpen(true)} aria-label="打开文档" title="打开文档"><Plus size={16} /></button>
+            </div>
+            <div className="pad-topbar-actions">
+              <button className={"toolbar__button" + (padTreeOpen ? " toolbar__icon--active" : "")} onClick={() => setPadTreeOpen((v) => !v)} aria-label="文档树" title="文档树"><Files /></button>
+              <button className={"toolbar__button" + (padOutlineOpen ? " toolbar__icon--active" : "")} onClick={() => setPadOutlineOpen((v) => !v)} disabled={!outlineAvailable} aria-label="大纲" title={outlineAvailable ? "大纲" : "该文档类型没有大纲"}><List /></button>
+              {/* 文档内查找：内核查找面板只随工具栏 search 挂载，手机没有；平板用同一套 MobileFindBar。 */}
+              <button
+                className={"toolbar__button" + (findOpen ? " toolbar__icon--active" : "")}
+                onClick={() => toggleOverlay("find")}
+                disabled={!active?.loaded || (active.kind ?? "doc") !== "doc"}
+                aria-label="在文档中查找"
+                title={(active?.kind ?? "doc") !== "doc" ? "该文档类型不支持查找" : "在文档中查找"}
+              ><Search /></button>
+              <button
+                className={"toolbar__button" + (active?.editing ? " toolbar__icon--active" : "")}
+                onClick={toggleEdit}
+                disabled={!active?.loaded || ((active.kind ?? "doc") !== "doc" && active.kind !== "usheet" && active.kind !== "bitable" && active.kind !== "board" && active.kind !== "ink")}
+                aria-label={active?.editing ? "完成" : "编辑"}
+                title={!active || ((active.kind ?? "doc") !== "doc" && active.kind !== "usheet" && active.kind !== "bitable" && active.kind !== "board" && active.kind !== "ink")
+                  ? "该文档类型在移动端只读"
+                  : active.editing ? "完成" : "编辑"}
+              >{active?.editing ? <Check /> : <Pencil />}</button>
+              <button className="toolbar__button" onClick={() => void runSync()} aria-label="立即同步" title="立即同步"><CloudUpload /></button>
+            </div>
+          </>
+        ) : (
+          <>
         <button className="toolbar__button" onClick={handleBack} aria-label="返回"><ArrowLeft /></button>
         <input
           className={"toolbar__title" + (active?.editing && active.loaded ? "" : " toolbar__title--readonly")}
@@ -743,6 +790,8 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
           title={(active?.kind ?? "doc") !== "doc" ? "该文档类型不支持查找" : "在文档中查找"}
         ><Search /></button>
         <button className="toolbar__button" onClick={() => void runSync()} aria-label="立即同步" title="立即同步"><CloudUpload /></button>
+          </>
+        )}
       </header>
 
       <div className="mobile-workspace-main">
@@ -883,11 +932,22 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
           )
         ) : null}
         </section>
+
+        {/* 平板双栏：右侧大纲常驻栏（手机仍是 .side-panel--right 抽屉；rail 只在 expanded 渲染） */}
+        {padTwoPane && padOutlineOpen && (
+          <OutlineSheet
+            rail
+            open
+            editor={activeId ? (editorsRef.current.get(activeId) ?? null) : null}
+            onClose={() => setPadOutlineOpen(false)}
+          />
+        )}
       </div>
 
       {/* 底部胶囊栏（思源 #mobileBottomBar：纯图标）——只放阅读相关（文档树/标签/大纲/更多）；
-          编辑与同步在顶栏右侧，避免打字时误触（用户 260909）。编辑态整条下滑淡出而不是卸载。 */}
-      <nav
+          编辑与同步在顶栏右侧，避免打字时误触（用户 260909）。编辑态整条下滑淡出而不是卸载。
+          平板双栏不挂胶囊：树/页签/大纲/切换笔记本都已在顶栏与常驻栏里（手机保持原样）。 */}
+      {!padTwoPane && (<nav
         className={"mobile-bottom-bar"
           + ((active?.editing || chromeHiddenNow) ? " mobile-bottom-bar--hidden" : "")
           // 表格（usheet）页底部有自己的 Univer 工具条（工作表标签/缩放/求和）⇒ 胶囊上移让位（261019）
@@ -900,7 +960,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
         <button className={"mobile-bottom-bar__item" + (outlineOpen ? " active" : "")} onClick={() => openOutline(!outlineOpen)} disabled={!outlineAvailable} aria-label="大纲" title={outlineAvailable ? "大纲" : "该文档类型没有大纲"}><List /></button>
         {/* 261014 用户点单：最后一格「更多」已无意义（编辑在顶栏、新建在抽屉/行内）⇒ 直接把「切换笔记本」做成这一格 */}
         <button className="mobile-bottom-bar__item" onClick={() => openOverlay({ kind: "notebookSwitch" })} aria-label="切换笔记本" title={"切换笔记本（当前：" + title + "）"}><ArrowLeftRight /></button>
-      </nav>
+      </nav>)}
 
       {/* 目录抽屉「新建」（261014 用户点单）：**清单与桌面 Sidebar 的 CREATE_CHILD_ITEMS 同款同序**
           （文档 / 表格 / 多维表 / 画板 / 分组）。261020 起四类文档都有移动端编辑器（可直接新建并进入编辑），

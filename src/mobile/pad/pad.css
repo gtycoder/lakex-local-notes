@@ -82,3 +82,144 @@ html[data-form-factor="expanded"] .ne-ui-toolbar .ne-ui-toolbar-clear-format {
   height: 40px;
 }
 
+
+/* ── 平板顶栏（expanded）：笔记本切换 + 文档页签 + 动作组 ───────────────── */
+.pad-nb {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  max-width: 190px;
+  height: 32px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--lake-radius-sm);
+  background: transparent;
+  color: var(--lake-text-2);
+}
+
+.pad-nb__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--lake-font-size-tiny);
+  color: var(--lake-text-1);
+}
+
+.pad-tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.pad-tabs::-webkit-scrollbar { display: none; }
+
+.pad-tab {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  max-width: 220px;
+  height: 30px;
+  padding: 0 4px 0 10px;
+  border-radius: var(--lake-radius-sm);
+  color: var(--lake-text-2);
+}
+
+.pad-tab.on {
+  background: var(--lake-bg-panel);
+  color: var(--lake-text-1);
+  box-shadow: 0 0 0 .5px var(--lake-border-1), 0 1px 2px rgba(16, 24, 40, .04);
+}
+
+.pad-tab__main {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--lake-font-size-tiny);
+}
+
+.pad-tab__x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--lake-radius-2xs);
+  color: var(--lake-text-4);
+}
+
+.pad-tab__x:hover { background: var(--lake-bg-hover); color: var(--lake-text-2); }
+
+.pad-tab-add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--lake-radius-sm);
+  color: var(--lake-text-3);
+}
+
+.pad-tab-add:hover { background: var(--lake-bg-hover); color: var(--lake-text-1); }
+
+.pad-topbar-actions {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+}
+
+/* ── 平板右栏大纲（常驻）───────────────────────────────────────────── */
+.pad-outline {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 220px;
+  width: 220px;
+  min-height: 0;
+  background: var(--lake-bg-panel);
+  border-left: .5px solid var(--hairline);
+}
+
+.pad-outline__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex: 0 0 auto;
+  min-height: 44px;
+  padding: 0 4px 0 14px;
+  border-bottom: .5px solid var(--hairline);
+  font-size: var(--lake-font-size-tiny);
+  color: var(--lake-text-3);
+}
+
+.pad-outline > .side-panel-body {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* 顶栏里的笔记本切换（不用 .toolbar__button：那是 48×48 纯图标按钮，会把名称裁掉） */
+.pad-nb:hover { background: var(--lake-bg-hover); }
+
+.pad-nb > svg { width: 16px; height: 16px; flex: none; }
+
+
+/* 顶栏页签/动作是 <button>，UA 默认会画出 2px outset 边框（其他移动端按钮都由各自原语重置）⇒ 这里统一重置 */
+.pad-tab__main,
+.pad-tab__x,
+.pad-tab-add {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+

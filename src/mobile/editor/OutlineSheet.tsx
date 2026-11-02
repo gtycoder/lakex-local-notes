@@ -27,9 +27,11 @@ export interface OutlineSheetProps {
   onClose: () => void;
   /** 渲染为右侧抽屉(.side-panel--right)而非底部 sheet。缺省为底部 sheet。 */
   side?: boolean;
+  /** 平板双栏：渲染为**常驻右栏**（不是抽屉、不带遮罩）；由工作区在 expanded 下挂载。 */
+  rail?: boolean;
 }
 
-export function OutlineSheet({ open, editor, onClose, side }: OutlineSheetProps) {
+export function OutlineSheet({ open, editor, onClose, side, rail }: OutlineSheetProps) {
   const [entries, setEntries] = useState<TocEntry[]>([]);
 
   useEffect(() => {
@@ -93,6 +95,19 @@ export function OutlineSheet({ open, editor, onClose, side }: OutlineSheetProps)
       </button>
     ))
   );
+
+  // 平板常驻右栏：无遮罩/无滑动，作为 .mobile-workspace-main 的第三列。
+  if (rail) {
+    return (
+      <aside className="pad-outline" aria-label="大纲">
+        <div className="pad-outline__head">
+          <span>大纲</span>
+          <button className="mb-iconbtn" onClick={onClose} aria-label="收起大纲" title="收起大纲"><ChevronLeft size={16} /></button>
+        </div>
+        <div className="side-panel-body">{list}</div>
+      </aside>
+    );
+  }
 
   // side 变体始终渲染（靠 .on 滑入/滑出，动画可达）；底部 sheet 仍按 open 条件渲染。
   if (side) {
