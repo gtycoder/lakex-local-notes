@@ -68,32 +68,61 @@ describe("手写板正式端到端接线", () => {
     expect(INK_PAPER).toContain("width={width}");
   });
 
-  it("移动端阅读态让开底部胶囊（分页/纸张入口不再被 fixed 胶囊压住）", () => {
-    // 261030 设备实测：胶囊 top=754.29、文档 pane bottom=842.29 ⇒ pane 底部 88px 被胶囊盖住，
-    // ink footer 正是 pane 的最后一格；胶囊只在阅读态可见，所以只给阅读态让位。
+  /** 桌面分支的 JSX 片段（顶部工具条 + 底部 footer）：用来钉「桌面结构零变化」。 */
+  const desktopBranch = (): string => {
+    const toolbarStart = INK_PAD.indexOf('{variant === "desktop" ? (');
+    const toolbarEnd = INK_PAD.indexOf(') : (', toolbarStart);
+    const footerStart = INK_PAD.indexOf('{variant === "desktop" ? (', toolbarEnd);
+    const footerEnd = INK_PAD.indexOf(') : !readOnly ? (', footerStart);
+    return INK_PAD.slice(toolbarStart, toolbarEnd) + INK_PAD.slice(footerStart, footerEnd);
+  };
+
+  it("移动端顶部固定条：翻页 / 缩放 / 全局预览（阅读态与编辑态同一条）", () => {
+    expect(INK_PAD).toContain('aria-label="手写板导航"');
+    expect(INK_PAD).toContain('aria-label="全局预览"');
+    expect(INK_PAD).toContain("aria-expanded={pagesOpen}");
+    // 顶部条在 variant 分支的 else 里（不在 !readOnly 下面）⇒ 阅读态也在（渲染行为见 MobileInkPad.render.test）
+    expect(INK_PAD).toContain('aria-label="手写板导航"');
+    expect(MOBILE_INK_CSS).toContain("var(--mb-tap-min)");
+  });
+
+  it("移动端底部工具坞只在编辑态出现；纸张/说明行已从阅读态移除（正文数据）", () => {
+    expect(INK_PAD).toContain(") : !readOnly ? (");
+    expect(INK_PAD).toContain('role="toolbar" aria-label="手写工具"');
+    expect(INK_PAD).toContain('aria-label="纸张"');
+    // 阅读态整行说明删除（不再有「阅读态：点右上角…」）
+    expect(INK_PAD).not.toContain("阅读态：点右上角");
+    expect(MOBILE_INK_CSS).not.toContain(".ink-footer .ink-readonly-hint");
+    // 纸张只在编辑态工具坞里可点（阅读态没有 background 按钮渲染路径）
+    expect(INK_PAD).toContain("onClick={() => setBackground(item.value)}");
+  });
+
+  it("移动端阅读态让开底部胶囊：胶囊 stack（状态栏+间隔+安全区+胶囊）+ 8", () => {
+    // 阅读态没有 footer，让位必须一次算全（含安全区）；编辑态胶囊由工作区隐藏 ⇒ 不预留。
     expect(MOBILE_INK_CSS).toContain('.ink-pad--mobile[data-readonly="true"]');
-    expect(MOBILE_INK_CSS).toContain("--mobile-bottom-bar-height");
-    expect(MOBILE_INK_CSS).toContain("--mobile-bar-gap");
-    expect(MOBILE_INK_CSS).toContain("--mobile-bottom-safe-area");
-    expect(MOBILE_INK_CSS).toContain("--mobile-status-height");
+    for (const token of [
+      "var(--mobile-status-height)",
+      "var(--mobile-bar-gap)",
+      "var(--mobile-bottom-safe-area)",
+      "var(--mobile-bottom-bar-height)",
+      "var(--lake-space-md)",
+    ]) expect(MOBILE_INK_CSS).toContain(token);
+    // 编辑态（胶囊隐藏）不再给 pad 预留；安全区只由底部工具坞的纸张行接一次
+    expect(MOBILE_INK_CSS).toContain(".ink-pad--mobile .ink-footer .ink-backgrounds");
+    expect(MOBILE_INK_CSS).toContain("calc(4px + var(--mobile-bottom-safe-area))");
   });
 
-  it("阅读态给出可见解释；纸张/新建页仍禁用（正文数据不得在阅读态写）", () => {
-    expect(INK_PAD).toContain("阅读态：点右上角「编辑」后可修改纸张与页面");
-    expect(INK_PAD).toContain('readOnly && variant === "mobile"');
-    expect(INK_PAD).toContain('<button onClick={addPage} disabled={readOnly} aria-label="新建页">');
-    expect(INK_PAD).toContain('onClick={() => setBackground(item.value)} disabled={readOnly}');
-  });
-
-  it("切页是纯视图：阅读态也可上一页/下一页，且不触发保存", () => {
-    expect(INK_PAD).toContain('disabled={pageIndex <= 0} aria-label="上一页"');
-    expect(INK_PAD).toContain('disabled={pageIndex >= doc.pages.length - 1} aria-label="下一页"');
+  it("切页与缩放是纯视图：阅读态也可用，且不触发保存", () => {
+    // 顶部条里两组都在（翻页 + 缩放），且不受 readOnly 门控
+    expect(INK_PAD).toContain('aria-label="上一页"');
+    expect(INK_PAD).toContain('aria-label="下一页"');
+    expect(INK_PAD).toContain('className="ink-zoom__value"');
     // 切页只在编辑态写正文（阅读态只改本地视图）
     expect(INK_PAD).toContain("const updated = { ...current, activePageId: id };");
     expect(INK_PAD).toMatch(/if \(!readOnly\) \{\n\s+const body = serializeDoc\(updated\);/);
   });
 
-  it("页面管理的编辑项（新建/前移/后移/删除）在阅读态禁用，缩略图切页仍可用", () => {
+  it("全局预览的编辑项（新建/前移/后移/删除）在阅读态禁用，缩略图选页仍可用", () => {
     expect(INK_PAD).toContain("readOnly={readOnly}");
     expect(PAGE_STRIP).toContain("readOnly?: boolean");
     expect(PAGE_STRIP).toContain("disabled={readOnly || index === 0}");
@@ -102,6 +131,27 @@ describe("手写板正式端到端接线", () => {
     expect(PAGE_STRIP).toContain('className="ink-page-strip__add" onClick={onAdd} disabled={readOnly}');
     // 缩略图按钮不接 readOnly ⇒ 阅读态仍能切页查看
     expect(PAGE_STRIP).toContain("onClick={() => onSelect(page.id)}");
+  });
+
+  it("桌面结构零变化：顶部工具条 + 底部页码/纸张/缩放原样，且不含移动端新入口", () => {
+    const branch = desktopBranch();
+    expect(branch).toContain('role="toolbar" aria-label="手写工具"');
+    expect(branch).toContain('aria-label="画笔"');
+    expect(branch).toContain('aria-label="高亮笔"');
+    expect(branch).toContain('aria-label="整笔橡皮"');
+    expect(branch).toContain("aria-label={`颜色 ${value}`}");
+    expect(branch).toContain("aria-label={`笔宽 ${value}`}");
+    expect(branch).toContain('aria-label="撤销"');
+    expect(branch).toContain('aria-label="重做"');
+    // 桌面：缩放留在顶部工具条，底部是页码 + 新建页 + 页面管理 + 纸张
+    expect(branch).toContain('aria-label="缩放"');
+    expect(branch).toContain('aria-label="恢复为适应页面"');
+    expect(branch).toContain('aria-label="新建页"');
+    expect(branch).toContain('aria-label="页面管理"');
+    expect(branch).toContain('className="ink-footer__right"');
+    // 移动端新增入口不得混进桌面分支
+    expect(branch).not.toContain("手写板导航");
+    expect(branch).not.toContain("全局预览");
   });
 
   it("只读态 capture 交父层最新正文（桌面锁定文档不会被只读翻页写盘）", () => {
@@ -113,10 +163,13 @@ describe("手写板正式端到端接线", () => {
     expect(MOBILE).toMatch(/active\.kind === "usheet" \|\| active\.kind === "board" \|\| active\.kind === "ink"/);
   });
 
-  it("移动端 footer 与页面管理操作钮达到 --mb-tap-min（44）", () => {
+  it("移动端顶部条与底部工具坞的可点项达到 --mb-tap-min（44）", () => {
     expect(MOBILE_INK_CSS).toContain(".ink-pad--mobile .ink-pages button");
     expect(MOBILE_INK_CSS).toContain(".ink-pad--mobile .ink-backgrounds button");
+    expect(MOBILE_INK_CSS).toContain(".ink-pad--mobile .ink-tool");
+    expect(MOBILE_INK_CSS).toContain(".ink-pad--mobile .ink-zoom button");
     expect(MOBILE_INK_CSS).toContain("min-width: var(--mb-tap-min); height: var(--mb-tap-min);");
+    expect(MOBILE_INK_CSS).toContain(".ink-pad--mobile .ink-color { width: var(--mb-tap-min); height: var(--mb-tap-min);");
     expect(MOBILE_INK_CSS).toContain(".ink-pad--mobile .ink-page-thumb__actions button");
     expect(MOBILE_INK_CSS).toContain(".ink-pad--mobile .ink-page-strip__add");
   });

@@ -107,10 +107,10 @@ describe("MobileBitableViewer（视图操作接线）", () => {
     const onChange = vi.fn();
     act(() => root.render(createElement(MobileBitableViewer, { noteId: "n-view-actions", content: bodyOf(table), editing: true, onChange })));
 
-    // ⋯ → 操作面板（视图列表面板在下层）
+    // ⋯ → 操作面板（261102：打开操作面板时视图列表先关闭，避免两个 sheet 叠着）
     act(() => host.querySelector<HTMLButtonElement>('button[aria-label="视图列表"]')!.click());
     act(() => host.querySelector<HTMLButtonElement>('button[aria-label="视图操作 备用视图"]')!.click());
-    expect(sheetTitles()).toEqual(["视图", "备用视图"]);
+    expect(sheetTitles()).toEqual(["备用视图"]);
 
     // 复制 = 新视图 + 名称「 副本」+ 自动切过去
     act(() => row("复制视图").click());
@@ -134,7 +134,7 @@ describe("MobileBitableViewer（视图操作接线）", () => {
     expect(sheetTitles()).toEqual([]);
   });
 
-  it("重命名写回正文（视图名是文档数据），操作面板关闭、列表仍在", () => {
+  it("重命名写回正文（视图名是文档数据），操作面板关闭、重开列表能看到新名字", () => {
     const table = twoViewTable();
     const onChange = vi.fn();
     act(() => root.render(createElement(MobileBitableViewer, { noteId: "n-view-rename", content: bodyOf(table), editing: true, onChange })));
@@ -146,8 +146,9 @@ describe("MobileBitableViewer（视图操作接线）", () => {
 
     const views = viewsOf(onChange.mock.calls.at(-1)?.[0] ?? "{}");
     expect(views[0].name).toBe("内容视图");
-    // 只关操作面板；视图列表留在原地展示新名字
-    expect(sheetTitles()).toEqual(["视图"]);
+    // 只关操作面板（打开操作面板时列表已关闭）；重开列表能看到新名字
+    expect(sheetTitles()).toEqual([]);
+    act(() => host.querySelector<HTMLButtonElement>('button[aria-label="视图列表"]')!.click());
     expect(host.querySelector(".mbt-viewlist-rows")?.textContent).toContain("内容视图");
   });
 });

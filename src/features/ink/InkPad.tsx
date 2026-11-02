@@ -527,47 +527,73 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
       data-pane-visible={paneVisible ? "true" : undefined}
       data-pane={pane ?? undefined}
     >
-      <div className="ink-toolbar" role="toolbar" aria-label="手写工具">
-        <button className={["ink-tool", mode === "pen" ? "is-active" : ""].join(" ")} onClick={() => setMode("pen")} aria-label="画笔" title="画笔" disabled={readOnly}><Pen size={16} /></button>
-        <button className={["ink-tool", mode === "highlighter" ? "is-active" : ""].join(" ")} onClick={() => setMode("highlighter")} aria-label="高亮笔" title="高亮笔" disabled={readOnly}><Highlighter size={16} /></button>
-        <button className={["ink-tool", mode === "eraser" ? "is-active" : ""].join(" ")} onClick={() => setMode("eraser")} aria-label="整笔橡皮" title="整笔橡皮" disabled={readOnly}><Eraser size={16} /></button>
-        <span className="ink-toolbar__sep" />
-        {COLORS.map((value) => (
+      {variant === "desktop" ? (
+        <div className="ink-toolbar" role="toolbar" aria-label="手写工具">
+          <button className={["ink-tool", mode === "pen" ? "is-active" : ""].join(" ")} onClick={() => setMode("pen")} aria-label="画笔" title="画笔" disabled={readOnly}><Pen size={16} /></button>
+          <button className={["ink-tool", mode === "highlighter" ? "is-active" : ""].join(" ")} onClick={() => setMode("highlighter")} aria-label="高亮笔" title="高亮笔" disabled={readOnly}><Highlighter size={16} /></button>
+          <button className={["ink-tool", mode === "eraser" ? "is-active" : ""].join(" ")} onClick={() => setMode("eraser")} aria-label="整笔橡皮" title="整笔橡皮" disabled={readOnly}><Eraser size={16} /></button>
+          <span className="ink-toolbar__sep" />
+          {COLORS.map((value) => (
+            <button
+              key={value}
+              className={["ink-color", color === value ? "is-active" : ""].join(" ")}
+              style={{ backgroundColor: value }}
+              onClick={() => { setColor(value); if (mode === "eraser") setMode("pen"); }}
+              aria-label={`颜色 ${value}`}
+              title={`颜色 ${value}`}
+              disabled={readOnly}
+            />
+          ))}
+          <span className="ink-toolbar__sep" />
+          {WIDTHS.map((value) => (
+            <button
+              key={value}
+              className={["ink-width", (mode === "highlighter" ? highlighterWidth : penWidth) === value ? "is-active" : ""].join(" ")}
+              onClick={() => mode === "highlighter" ? setHighlighterWidth(value) : setPenWidth(value)}
+              aria-label={`笔宽 ${value}`}
+              title={`笔宽 ${value}`}
+              disabled={readOnly}
+            ><span style={{ width: Math.max(4, value * 2), height: Math.max(4, value * 2) }} /></button>
+          ))}
+          <span className="ink-toolbar__sep" />
+          <button className="ink-tool" onClick={undo} aria-label="撤销" title="撤销" disabled={readOnly || !canUndo}><Undo2 size={16} /></button>
+          <button className="ink-tool" onClick={redo} aria-label="重做" title="重做" disabled={readOnly || !canRedo}><Redo2 size={16} /></button>
+          {variant === "desktop" && (
+            <>
+              <span className="ink-toolbar__sep" />
+              <div className="ink-zoom" role="group" aria-label="缩放">
+                <button onClick={zoomOut} disabled={zoom <= ZOOM_MIN} aria-label="缩小"><Minus size={16} /></button>
+                <button className="ink-zoom__value" onClick={() => setZoom(1)} title="恢复为适应页面" aria-label="恢复为适应页面">{Math.round(zoom * 100)}%</button>
+                <button onClick={zoomIn} disabled={zoom >= ZOOM_MAX} aria-label="放大"><Plus size={16} /></button>
+              </div>
+            </>
+          )}
+        </div>
+      ) : (
+        // 移动端顶部固定条（阅读态 + 编辑态同一条）：翻页 | 缩放 | 全局预览。
+        // 三者都是纯视图操作，阅读态也可用；纸张是正文数据，只出现在编辑态底部工具坞。
+        <div className="ink-toolbar" role="toolbar" aria-label="手写板导航">
+          <div className="ink-pages">
+            <button onClick={() => switchPage(-1)} disabled={pageIndex <= 0} aria-label="上一页"><ChevronLeft size={16} /></button>
+            <span>第 {pageIndex + 1} / {doc.pages.length} 页</span>
+            <button onClick={() => switchPage(1)} disabled={pageIndex >= doc.pages.length - 1} aria-label="下一页"><ChevronRight size={16} /></button>
+          </div>
+          <span className="ink-toolbar__sep" />
+          <div className="ink-zoom" role="group" aria-label="缩放">
+            <button onClick={zoomOut} disabled={zoom <= ZOOM_MIN} aria-label="缩小"><Minus size={16} /></button>
+            <button className="ink-zoom__value" onClick={() => setZoom(1)} title="恢复为适应页面" aria-label="恢复为适应页面">{Math.round(zoom * 100)}%</button>
+            <button onClick={zoomIn} disabled={zoom >= ZOOM_MAX} aria-label="放大"><Plus size={16} /></button>
+          </div>
+          <span className="ink-toolbar__sep" />
           <button
-            key={value}
-            className={["ink-color", color === value ? "is-active" : ""].join(" ")}
-            style={{ backgroundColor: value }}
-            onClick={() => { setColor(value); if (mode === "eraser") setMode("pen"); }}
-            aria-label={`颜色 ${value}`}
-            title={`颜色 ${value}`}
-            disabled={readOnly}
-          />
-        ))}
-        <span className="ink-toolbar__sep" />
-        {WIDTHS.map((value) => (
-          <button
-            key={value}
-            className={["ink-width", (mode === "highlighter" ? highlighterWidth : penWidth) === value ? "is-active" : ""].join(" ")}
-            onClick={() => mode === "highlighter" ? setHighlighterWidth(value) : setPenWidth(value)}
-            aria-label={`笔宽 ${value}`}
-            title={`笔宽 ${value}`}
-            disabled={readOnly}
-          ><span style={{ width: Math.max(4, value * 2), height: Math.max(4, value * 2) }} /></button>
-        ))}
-        <span className="ink-toolbar__sep" />
-        <button className="ink-tool" onClick={undo} aria-label="撤销" title="撤销" disabled={readOnly || !canUndo}><Undo2 size={16} /></button>
-        <button className="ink-tool" onClick={redo} aria-label="重做" title="重做" disabled={readOnly || !canRedo}><Redo2 size={16} /></button>
-        {variant === "desktop" && (
-          <>
-            <span className="ink-toolbar__sep" />
-            <div className="ink-zoom" role="group" aria-label="缩放">
-              <button onClick={zoomOut} disabled={zoom <= ZOOM_MIN} aria-label="缩小"><Minus size={16} /></button>
-              <button className="ink-zoom__value" onClick={() => setZoom(1)} title="恢复为适应页面" aria-label="恢复为适应页面">{Math.round(zoom * 100)}%</button>
-              <button onClick={zoomIn} disabled={zoom >= ZOOM_MAX} aria-label="放大"><Plus size={16} /></button>
-            </div>
-          </>
-        )}
-      </div>
+            className="ink-tool"
+            onClick={() => { setPagesOpen((open) => !open); setPendingDeletePageId(null); }}
+            aria-label="全局预览"
+            title="全局预览"
+            aria-expanded={pagesOpen}
+          ><LayoutGrid size={16} /></button>
+        </div>
+      )}
 
       {saveError && <div className="ink-invalid-banner" role="alert">{saveError}；本次修改未写入。</div>}
 
@@ -618,34 +644,64 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
         </div>
       </div>
 
-      <div className="ink-footer">
-        {/* 阅读态解释（移动端没有 hover）：纸张与页面是正文数据，阅读态一律不写；切页只改本地视图，仍然可用。
-            桌面端沿用右上角「只读」徽标，不重复这一行。 */}
-        {readOnly && variant === "mobile" && (
-          <div className="ink-readonly-hint" role="note">阅读态：点右上角「编辑」后可修改纸张与页面</div>
-        )}
-        <div className="ink-pages">
-          <button onClick={() => switchPage(-1)} disabled={pageIndex <= 0} aria-label="上一页"><ChevronLeft size={16} /></button>
-          <span>第 {pageIndex + 1} / {doc.pages.length} 页</span>
-          <button onClick={() => switchPage(1)} disabled={pageIndex >= doc.pages.length - 1} aria-label="下一页"><ChevronRight size={16} /></button>
-          <button onClick={addPage} disabled={readOnly} aria-label="新建页"><Plus size={16} /></button>
-          <button onClick={() => { setPagesOpen((open) => !open); setPendingDeletePageId(null); }} aria-label="页面管理" title="页面管理"><LayoutGrid size={16} /></button>
+      {variant === "desktop" ? (
+        <div className="ink-footer">
+          <div className="ink-pages">
+            <button onClick={() => switchPage(-1)} disabled={pageIndex <= 0} aria-label="上一页"><ChevronLeft size={16} /></button>
+            <span>第 {pageIndex + 1} / {doc.pages.length} 页</span>
+            <button onClick={() => switchPage(1)} disabled={pageIndex >= doc.pages.length - 1} aria-label="下一页"><ChevronRight size={16} /></button>
+            <button onClick={addPage} disabled={readOnly} aria-label="新建页"><Plus size={16} /></button>
+            <button onClick={() => { setPagesOpen((open) => !open); setPendingDeletePageId(null); }} aria-label="页面管理" title="页面管理"><LayoutGrid size={16} /></button>
+          </div>
+          <div className="ink-footer__right">
+            <div className="ink-backgrounds">
+              {BACKGROUNDS.map((item) => (
+                <button key={item.value} className={page.background === item.value ? "is-active" : ""} onClick={() => setBackground(item.value)} disabled={readOnly}>{item.label}</button>
+              ))}
+            </div>
+          </div>
         </div>
-        <div className="ink-footer__right">
-          <div className="ink-backgrounds">
+      ) : !readOnly ? (
+        // 移动端底部工具坞（仅编辑态）：上排画笔工具（横向滚动，含颜色/笔宽/撤销重做），
+        // 下排纸张。编辑态工作区胶囊已由工作区隐藏，工具坞贴底并自己接系统安全区。
+        <div className="ink-footer" role="toolbar" aria-label="手写工具">
+          <div className="ink-toolbar" role="group" aria-label="画笔工具">
+            <button className={["ink-tool", mode === "pen" ? "is-active" : ""].join(" ")} onClick={() => setMode("pen")} aria-label="画笔" title="画笔"><Pen size={16} /></button>
+            <button className={["ink-tool", mode === "highlighter" ? "is-active" : ""].join(" ")} onClick={() => setMode("highlighter")} aria-label="高亮笔" title="高亮笔"><Highlighter size={16} /></button>
+            <button className={["ink-tool", mode === "eraser" ? "is-active" : ""].join(" ")} onClick={() => setMode("eraser")} aria-label="整笔橡皮" title="整笔橡皮"><Eraser size={16} /></button>
+            <span className="ink-toolbar__sep" />
+            {COLORS.map((value) => (
+              <button
+                key={value}
+                className={["ink-color", color === value ? "is-active" : ""].join(" ")}
+                style={{ backgroundColor: value }}
+                onClick={() => { setColor(value); if (mode === "eraser") setMode("pen"); }}
+                aria-label={`颜色 ${value}`}
+                title={`颜色 ${value}`}
+              />
+            ))}
+            <span className="ink-toolbar__sep" />
+            {WIDTHS.map((value) => (
+              <button
+                key={value}
+                className={["ink-width", (mode === "highlighter" ? highlighterWidth : penWidth) === value ? "is-active" : ""].join(" ")}
+                onClick={() => mode === "highlighter" ? setHighlighterWidth(value) : setPenWidth(value)}
+                aria-label={`笔宽 ${value}`}
+                title={`笔宽 ${value}`}
+              ><span style={{ width: Math.max(4, value * 2), height: Math.max(4, value * 2) }} /></button>
+            ))}
+            <span className="ink-toolbar__sep" />
+            <button className="ink-tool" onClick={undo} aria-label="撤销" title="撤销" disabled={!canUndo}><Undo2 size={16} /></button>
+            <button className="ink-tool" onClick={redo} aria-label="重做" title="重做" disabled={!canRedo}><Redo2 size={16} /></button>
+          </div>
+          <div className="ink-backgrounds" role="group" aria-label="纸张">
             {BACKGROUNDS.map((item) => (
-              <button key={item.value} className={page.background === item.value ? "is-active" : ""} onClick={() => setBackground(item.value)} disabled={readOnly}>{item.label}</button>
+              <button key={item.value} className={page.background === item.value ? "is-active" : ""} onClick={() => setBackground(item.value)}>{item.label}</button>
             ))}
           </div>
-          {variant === "mobile" && (
-            <div className="ink-zoom" role="group" aria-label="缩放">
-              <button onClick={zoomOut} disabled={zoom <= ZOOM_MIN} aria-label="缩小"><Minus size={16} /></button>
-              <button className="ink-zoom__value" onClick={() => setZoom(1)} title="恢复为适应页面" aria-label="恢复为适应页面">{Math.round(zoom * 100)}%</button>
-              <button onClick={zoomIn} disabled={zoom >= ZOOM_MAX} aria-label="放大"><Plus size={16} /></button>
-            </div>
-          )}
         </div>
-      </div>
+      ) : null}
+
       {readOnly && variant === "desktop" && <div className="ink-readonly-hint">只读</div>}
     </div>
   );

@@ -67,12 +67,12 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "mobile/brand-launch.css": { decls: 20, dupGroups: 2 },   // 261020 新文件：启动覆盖层/标记/动画/静态兜底；2 个重复组 = prefers-reduced-motion 对 anim/poster 的 display 切换
   "mobile/editor-dark.css": { decls: 13, dupGroups: 0 }, // P1：取值迁 theme/dark.css（54 → 13，只留组件级边界修）
   "mobile/editor/editor-dock.css": { decls: 258, dupGroups: 0 }, // 261019(八)：+1 = 收起过渡期面板内容保持可见时不再接受点击（.med-panel[data-closing="1"]）。 // 261017 撤销后端：`.med-btn:disabled` 置灰 +2（255 → 257）。261015：「＋」= 方块网格（两组 8+10 × 4 列、组间 16、方块 52、浅灰底）；「Aa」面板压缩上下间距（行距 8→6、卡内距 3→2、条目 44→40 走注册表补足、色板 37→34、内距 12/14→6/6）+ 图标 17→20、文字/图标色 text-2→text-1。261017（B6）：一级面板统一灰底（selector 加 data-kind=font，声明数不变）；「更多」改行式白卡 + 每项文字说明 + 工具栏中间横滑/键盘固定尾键（删 `.med-ins-glyph` -9、补 `.med-f-btn:disabled` +2 / 行内文字与行标签/不换行 +21 / 工具栏横滑区 + `.med-btn--kb` +5）⇒ 237 → 255
-  // 261030（用户点单「移动端手写板分页与纸张无法切换」）23 → 45，全部是**新增交互形态/修复**，不是覆盖叠层：
-  //   ① 只读态底部让位底部胶囊 1 条（.ink-pad--mobile[data-readonly="true"] 的 padding-bottom，走 tokens 表达式）；
-  //   ② 阅读态说明行 10 条（复用 .ink-readonly-hint 类名、只改移动端落位，不新增类名 ⇒ crossEndClassCoverage 不受影响）；
-  //   ③ 触达 ≥44：footer 的分页/纸张/缩放按钮从 36 抬到 --mb-tap-min（原一条合并规则拆成「工具栏 36 / footer 44」两条 +3）；
-  //   ④ 页面管理缩略图操作钮 18×18 → --mb-tap-min（缩略图卡片加宽、关闭/新建/确认钮同步 44，共 +10）。
-  "mobile/ink/inkPad.mobile.css": { decls: 45, dupGroups: 0 },
+  // 261102（用户点单：翻页/缩放/全局预览移到顶部、工具坞收到编辑态底部）45 → 38（只降；261030 那轮是 23 → 45）：
+  //   ① 删掉旧的阅读态说明行 10 条与 footer 让位/换行规则（说明行整行删除，footer 只剩桌面分支）；
+  //   ② 新增顶部固定条/底部工具坞的落位规则（.ink-footer 纵向两排 + 工具坞横向滚动 + 纸张行接安全区）；
+  //   ③ 触达统一 ≥44：顶部/底部可点项（含颜色 32→44）+ 全局预览缩略图操作钮，均走 --mb-tap-min；
+  //   ④ 阅读态 pad 让位合成为一条（状态栏 + 间隔 + 安全区 + 胶囊 + 8，走 tokens 表达式）。
+  "mobile/ink/inkPad.mobile.css": { decls: 38, dupGroups: 0 },
   "mobile/ink/inkPad.shared.css": { decls: 188, dupGroups: 0 }, // 手写板：移动端只覆盖工具栏尺寸、页面适配和 footer 换行；通用结构与桌面共用 inkPad.shared.css。
   "mobile/editor/mobile-find.css": { decls: 15, dupGroups: 0 }, // 261016：新文件 = 查找条容器（6）+ 计数（6）+ ::highlight 命中/当前命中（3）
   // 261020 P1 新文件（表格 chrome）；基线按实测回填（只许降）

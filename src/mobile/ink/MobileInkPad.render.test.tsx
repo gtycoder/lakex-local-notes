@@ -1,16 +1,18 @@
 // @vitest-environment jsdom
 /**
- * 移动端手写板行为护栏（261030 用户点单：分页与纸张无法切换）。
+ * 移动端手写板行为护栏（261030 分页/纸张修复 + 261102 布局重构）。
  *
- * 根因两条，单测各钉一条：
- *   ① 布局：工作区底部胶囊是 fixed（高 56、离底 32），文档 pane 一直铺到屏幕底 ⇒ footer（分页/纸张）
- *      整排落在胶囊底下点不到。修复 = 只读态给 .ink-pad--mobile 底部让位（纯 CSS，用设备快照/几何断言兜不住，
- *      这里只钉「组件确实带 data-readonly + class 名与 CSS 挂钩」）。
- *   ② 语义：手写板默认进阅读态 ⇒ 纸张/新建页原本就 disabled（正文数据），但页面管理里的前移/后移/删除
- *      是「点了没反应」的静默 no-op。修复 = 只读态禁用并给可见解释；切页是纯视图（不写正文），阅读态仍可用。
+ * 261102 用户定稿的移动端结构（**只对 variant=mobile**，桌面 InkPad 结构不变）：
+ *   · 顶部固定条（阅读/编辑两态同一条）：翻页 | 缩放 | 全局预览 —— 三者都是纯视图操作，阅读态可用；
+ *   · 底部工具坞（**仅编辑态**）：笔/高亮/橡皮/颜色/笔宽/撤销重做 + 纸张（正文数据，阅读态没有入口）；
+ *   · 阅读态没有底部工具坞、没有只读说明行；底部只剩工作区胶囊（让位见 inkPad.mobile.css）。
  *
- * 第三条是保存竞态：切完纸张立刻点「完成」时，500ms 防抖里的正文必须能被 capture 现取到
- * （NotebookWorkspace 已按 board/usheet 同一条写边界注册 onEditorCapture）。
+ * 另钉三条行为：
+ *   ① 缩放/翻页在阅读态真的生效且不写正文（onChange 不被调用）；
+ *   ② 全局预览复用 InkPageStrip：阅读态编辑项禁用、选页（纯视图）可用；
+ *   ③ 保存竞态：切完纸张立刻点「完成」时，500ms 防抖里的正文必须能被 capture 现取到
+ *      （NotebookWorkspace 已按 board/usheet 同一条写边界注册 onEditorCapture）；
+ *      阅读态 capture 交父层最新正文（不是挂载时旧原文，否则退出会覆盖刚保存的正文）。
  *
  * 为什么手写 createRoot + act：仓内没有 @testing-library/react（沿用 multiTabHost.render.test.tsx 的先例）。
  */
@@ -19,8 +21,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { createInkDoc, createInkPage, inkToBody, type InkDoc } from "../../core/inkDoc";
 import { MobileInkPad } from "./MobileInkPad";
-
-const READONLY_HINT = "阅读态：点右上角「编辑」后可修改纸张与页面";
 
 function twoPageBody(): string {
   const base = createInkDoc("page-1");
@@ -80,6 +80,10 @@ function pageLabel(container: HTMLElement): string {
   return (container.querySelector(".ink-pages span")?.textContent ?? "").trim();
 }
 
+function zoomLabel(container: HTMLElement): string {
+  return (container.querySelector(".ink-zoom__value")?.textContent ?? "").trim();
+}
+
 beforeAll(() => {
   // React 18 的 act 环境标记（没有 testing-library 时需手动打开，否则 act 不 flush effect）。
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -93,7 +97,7 @@ beforeAll(() => {
 });
 
 describe("MobileInkPad 阅读态（默认打开态）", () => {
-  it("给可见解释；纸张与新建页禁用；上一页/下一页可用且不写正文", async () => {
+  it("顶部固定条常在：翻页/缩放/全局预览可用；无底部工具坞、无纸张入口、无说明行", async () => {
     const content = twoPageBody();
     const onChange = vi.fn();
     const onDirty = vi.fn();
@@ -106,31 +110,49 @@ describe("MobileInkPad 阅读态（默认打开态）", () => {
       onEditorCapture: (capture) => { if (capture) captures.push(capture); },
     });
 
-    expect(view.container.textContent).toContain(READONLY_HINT);
-    expect(byLabel(view.container, "新建页")!.disabled).toBe(true);
-    expect(byText(view.container, "横线")!.disabled).toBe(true);
+    const nav = view.container.querySelector('[aria-label="手写板导航"]');
+    expect(nav).not.toBeNull();
+    expect(nav!.querySelector('[aria-label="全局预览"]')).not.toBeNull();
+    // 阅读态：没有底部工具坞 / 没有纸张（正文数据）/ 没有旧的只读说明行
+    expect(view.container.querySelector(".ink-footer")).toBeNull();
+    expect(byText(view.container, "横线")).toBeUndefined();
+    expect(view.container.textContent).not.toContain("阅读态：点右上角");
+
+    // 翻页：纯视图，不写正文
     expect(byLabel(view.container, "上一页")!.disabled).toBe(true); // 已在第 1 页
     const next = byLabel(view.container, "下一页")!;
     expect(next.disabled).toBe(false);
-
     await act(async () => { next.click(); });
     expect(pageLabel(view.container)).toContain("第 2 / 2 页");
     expect(onChange).not.toHaveBeenCalled();
     expect(onDirty).not.toHaveBeenCalled();
 
-    // capture 在阅读态一律交磁盘原文：桌面锁定/已删除文档的保存管线也不会因翻页写盘。
+    // capture 在阅读态交父层正文：桌面锁定/已删除文档的保存管线也不会因翻页写盘。
     expect(captures.length).toBeGreaterThan(0);
     expect(captures[captures.length - 1]()).toBe(content);
 
     await view.unmount();
   });
 
-  it("页面管理：前移/后移/删除/新建页禁用，选页（纯视图）仍可用", async () => {
-    const content = twoPageBody();
+  it("顶部缩放在阅读态真的生效：放大到 125%，点百分比复位 100%", async () => {
     const onChange = vi.fn();
-    const view = await mount({ content, readOnly: true, onChange });
+    const view = await mount({ content: twoPageBody(), readOnly: true, onChange });
 
-    await act(async () => { byLabel(view.container, "页面管理")!.click(); });
+    expect(zoomLabel(view.container)).toBe("100%");
+    await act(async () => { byLabel(view.container, "放大")!.click(); });
+    expect(zoomLabel(view.container)).toBe("125%");
+    await act(async () => { byLabel(view.container, "恢复为适应页面")!.click(); });
+    expect(zoomLabel(view.container)).toBe("100%");
+    expect(onChange).not.toHaveBeenCalled();
+
+    await view.unmount();
+  });
+
+  it("全局预览打开 InkPageStrip：阅读态编辑项禁用，缩略图选页仍可用，关闭可收起", async () => {
+    const onChange = vi.fn();
+    const view = await mount({ content: twoPageBody(), readOnly: true, onChange });
+
+    await act(async () => { byLabel(view.container, "全局预览")!.click(); });
     const strip = view.container.querySelector(".ink-page-strip");
     expect(strip).not.toBeNull();
     expect((strip!.querySelector(".ink-page-strip__add") as HTMLButtonElement).disabled).toBe(true);
@@ -142,6 +164,9 @@ describe("MobileInkPad 阅读态（默认打开态）", () => {
     await act(async () => { (papers[1] as HTMLButtonElement).click(); });
     expect(pageLabel(view.container)).toContain("第 2 / 2 页");
     expect(onChange).not.toHaveBeenCalled();
+
+    await act(async () => { byLabel(view.container, "关闭页面管理")!.click(); });
+    expect(view.container.querySelector(".ink-page-strip")).toBeNull();
 
     await view.unmount();
   });
@@ -174,16 +199,22 @@ describe("MobileInkPad 阅读态 capture", () => {
 });
 
 describe("MobileInkPad 编辑态", () => {
-  it("没有阅读态说明；点纸张立即标脏，500ms 防抖后写正文", async () => {
+  it("顶部条仍在 + 底部工具坞出现（笔/颜色/笔宽/撤销重做/纸张）；点纸张标脏、防抖写正文", async () => {
     const content = twoPageBody();
     const onChange = vi.fn();
     const onDirty = vi.fn();
     const view = await mount({ content, readOnly: false, onChange, onDirty });
 
-    expect(view.container.textContent).not.toContain(READONLY_HINT);
+    expect(view.container.querySelector('[aria-label="手写板导航"]')).not.toBeNull();
+    const dock = view.container.querySelector('[aria-label="手写工具"]');
+    expect(dock).not.toBeNull();
+    expect(dock!.querySelector('[aria-label="画笔"]')).not.toBeNull();
+    expect(dock!.querySelector('[aria-label="高亮笔"]')).not.toBeNull();
+    expect(dock!.querySelector('[aria-label="整笔橡皮"]')).not.toBeNull();
+    expect(dock!.querySelector('[aria-label="撤销"]')).not.toBeNull();
+
     const lined = byText(view.container, "横线")!;
     expect(lined.disabled).toBe(false);
-
     await act(async () => { lined.click(); });
     expect(onDirty).toHaveBeenCalledTimes(1);
     expect(onChange).not.toHaveBeenCalled(); // 还在防抖窗口内
@@ -191,6 +222,13 @@ describe("MobileInkPad 编辑态", () => {
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 620)); });
     expect(onChange).toHaveBeenCalledTimes(1);
     expect(JSON.parse(onChange.mock.calls[0][0]).pages[0].background).toBe("lined");
+
+    // 编辑态的全局预览：新建页 / 前移 / 后移 / 删除都可用（阅读态才禁用）
+    await act(async () => { byLabel(view.container, "全局预览")!.click(); });
+    const strip = view.container.querySelector(".ink-page-strip")!;
+    expect((strip.querySelector(".ink-page-strip__add") as HTMLButtonElement).disabled).toBe(false);
+    const actions = Array.from(strip.querySelectorAll(".ink-page-thumb__actions button")) as HTMLButtonElement[];
+    expect(actions.filter((button) => !button.disabled).length).toBeGreaterThan(0);
 
     await view.unmount();
   });
