@@ -1,22 +1,74 @@
-.ink-pad--mobile .ink-toolbar { padding: 5px 8px; }
-/* 触达 ≥44（--mb-tap-min）：顶部固定条与底部工具坞的可点项统一 44。 */
+/* 移动端手写板 v2（261102 用户反馈）：导航条与编辑工具坞都做成**悬浮 overlay**，不占布局；
+   只读态画布吃满高度；悬浮面全部走 --lake-* 令牌（panel/边/阴影/圆角），不做毛玻璃。 */
+
+/* 触达 ≥44：所有可点按钮盒统一 --mb-tap-min（视觉更小由内圆/图标/纸张行高度收）。 */
 .ink-pad--mobile .ink-tool,
 .ink-pad--mobile .ink-width,
 .ink-pad--mobile .ink-pages button,
 .ink-pad--mobile .ink-backgrounds button,
 .ink-pad--mobile .ink-zoom button { min-width: var(--mb-tap-min); height: var(--mb-tap-min); padding: 0 7px; }
-.ink-pad--mobile .ink-color { width: var(--mb-tap-min); height: var(--mb-tap-min); flex-basis: var(--mb-tap-min); }
 .ink-pad--mobile .ink-toolbar__sep { height: 20px; margin: 0 2px; }
 .ink-pad--mobile .ink-pages span { font-size: var(--lake-font-size-micro); }
 .ink-pad--mobile .ink-backgrounds button { font-size: var(--lake-font-size-micro); }
+
+/* 悬浮面共用：绝对定位（不占布局）+ 面板底 + 0.5px 边 + popover 阴影。 */
+.ink-pad--mobile > [data-overlay="nav"],
+.ink-pad--mobile > [data-overlay="dock"] {
+  position: absolute; z-index: 2; left: var(--lake-space-md); right: var(--lake-space-md);
+  border: .5px solid var(--lake-border-1);
+  background: var(--lake-bg-panel); box-shadow: var(--lake-shadow-popover);
+}
+/* 顶部导航（阅读/编辑同一条）：落在纸面上方的留白里；放大后可被它盖住，属预期。 */
+.ink-pad--mobile > [data-overlay="nav"] {
+  top: var(--lake-space-md);
+  padding: 0 var(--lake-space-xs); gap: 0;
+  border-radius: var(--lake-radius-pill);
+}
+/* 底部工具坞（仅编辑态）：贴底 + 安全区，两行整体缩小（工具行 48 / 纸张行 40）。 */
+.ink-pad--mobile > [data-overlay="dock"] {
+  bottom: calc(var(--lake-space-md) + var(--mobile-bottom-safe-area));
+  flex-direction: column; align-items: stretch; gap: 0; padding: 0;
+  border-radius: var(--lake-radius-card);
+}
+.ink-pad--mobile > [data-overlay="dock"] .ink-toolbar {
+  height: calc(var(--mb-tap-min) + var(--lake-space-xs)); padding: 0 var(--lake-space-xxs);
+  border-bottom: 0; background: transparent;
+}
+.ink-pad--mobile > [data-overlay="dock"] .ink-backgrounds {
+  height: calc(var(--mb-tap-min) - var(--lake-space-xs)); padding: 0 var(--lake-space-sm);
+  border-top: .5px solid var(--lake-border-1); background: transparent;
+  justify-content: center; gap: var(--lake-space-xs);
+}
+/* 纸张文字按钮：视觉 36 文本行，命中区靠 ::after 上下各补 4 ⇒ 44（不牺牲触达）。 */
+.ink-pad--mobile > [data-overlay="dock"] .ink-backgrounds button {
+  height: calc(var(--mb-tap-min) - var(--lake-space-md)); padding: 0 var(--lake-space-sm);
+  position: relative;
+}
+.ink-pad--mobile > [data-overlay="dock"] .ink-backgrounds button::after {
+  content: ""; position: absolute; left: 0; right: 0;
+  top: calc(var(--lake-space-xs) * -1); bottom: calc(var(--lake-space-xs) * -1);
+}
+/* 颜色：44 盒保触达，视觉内圆 28（= 44 - 16）；active 环画在圆点外 2px，不放大盒子。 */
+.ink-pad--mobile .ink-color {
+  width: var(--mb-tap-min); height: var(--mb-tap-min); flex-basis: var(--mb-tap-min);
+  padding: 0; border: 0; border-radius: var(--lake-radius-pill); background: transparent; box-shadow: none;
+}
+.ink-pad--mobile .ink-color > span {
+  width: calc(var(--mb-tap-min) - var(--lake-space-xl));
+  height: calc(var(--mb-tap-min) - var(--lake-space-xl));
+  border-radius: var(--lake-radius-pill);
+  border: .5px solid var(--lake-border-1);
+}
+.ink-pad--mobile .ink-color.is-active { border: 0; box-shadow: none; }
+.ink-pad--mobile .ink-color.is-active > span { box-shadow: 0 0 0 var(--lake-focus-ring-width) var(--lake-accent); }
+
 .ink-pad--mobile .ink-page-stage { padding: 8px; overflow: auto; align-items: safe center; justify-content: safe center; }
 .ink-pad--mobile .ink-page-frame { width: min(100%, calc((100dvh - 202px) * 0.707)); max-height: 100%; aspect-ratio: 794 / 1123; }
-/* 底部工具坞（仅编辑态）：上排画笔工具（横向滚动：笔/高亮/橡皮/颜色/笔宽/撤销重做）+ 下排纸张。
-   编辑态工作区胶囊已由工作区隐藏 ⇒ 工具坞直接贴底，系统安全区由纸张行自己接（只接一次）。 */
-.ink-pad--mobile .ink-footer { flex-direction: column; align-items: stretch; gap: 0; padding: 0; }
-.ink-pad--mobile .ink-footer .ink-toolbar { padding: 4px 8px; border-bottom: 0; background: transparent; }
-.ink-pad--mobile .ink-footer .ink-backgrounds { justify-content: center; padding: 4px 8px calc(4px + var(--mobile-bottom-safe-area)); border-top: .5px solid var(--lake-border-1); overflow-x: auto; }
-/* 全局预览（InkPageStrip）在手机上把 18×18 的操作钮放大到 --mb-tap-min：
+/* 保存失败横幅也被悬浮导航条压着 ⇒ 下移一条导航的高度（只在移动端）。 */
+.ink-pad--mobile > .ink-invalid-banner { margin-top: calc(var(--mb-tap-min) + var(--lake-space-xl)); }
+/* 全局预览（InkPageStrip）仍是布局内面板（本轮不改浮层）⇒ 让到悬浮导航条下面。 */
+.ink-pad--mobile > .ink-page-strip { margin-top: calc(var(--mb-tap-min) + var(--lake-space-xl)); }
+/* 全局预览在手机上把 18×18 的操作钮放大到 --mb-tap-min：
    缩略图卡片整体加宽（缩略图 + 一行 44 高操作），整条仍横向滚动；桌面保持 64 / 18 不变。 */
 .ink-pad--mobile .ink-page-thumb { width: calc(var(--mb-tap-min) * 3 + var(--lake-space-md)); }
 .ink-pad--mobile .ink-page-thumb__actions button { width: var(--mb-tap-min); height: var(--mb-tap-min); }
@@ -24,7 +76,7 @@
 .ink-pad--mobile .ink-page-strip__close { width: var(--mb-tap-min); height: var(--mb-tap-min); }
 .ink-pad--mobile .ink-page-strip__confirm button { height: var(--mb-tap-min); padding: 0 12px; }
 .ink-pad--mobile .ink-page-strip { padding-right: calc(var(--mb-tap-min) + var(--lake-space-lg)); }
-/* 阅读态没有底部工具坞，底部只剩工作区胶囊 ⇒ pad 让出「状态栏 + 间隔 + 安全区 + 胶囊 + 8」。
+/* 只读态没有底部工具坞，底部只剩工作区胶囊 ⇒ pad 让出「状态栏 + 间隔 + 安全区 + 胶囊 + 8」。
    胶囊是 fixed（bottom = 状态栏 24 + 间隔 8 + 安全区，高 56），所以让位必须与它同源；
    少算安全区 = 真机（手势条/刘海）上仍会被盖住。 */
 .ink-pad--mobile[data-readonly="true"] {

@@ -19,6 +19,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { beforeAll, describe, expect, it, vi } from "vitest";
+import { QUICK_TEXT_COLORS } from "../../core/colorPalette";
 import { createInkDoc, createInkPage, inkToBody, type InkDoc } from "../../core/inkDoc";
 import { MobileInkPad } from "./MobileInkPad";
 
@@ -112,8 +113,10 @@ describe("MobileInkPad 阅读态（默认打开态）", () => {
 
     const nav = view.container.querySelector('[aria-label="手写板导航"]');
     expect(nav).not.toBeNull();
+    expect(nav!.getAttribute("data-overlay")).toBe("nav"); // 悬浮标记（不占布局，见 CSS 断言）
     expect(nav!.querySelector('[aria-label="全局预览"]')).not.toBeNull();
-    // 阅读态：没有底部工具坞 / 没有纸张（正文数据）/ 没有旧的只读说明行
+    // 阅读态：没有底部工具坞（overlay dock）/ 没有纸张（正文数据）/ 没有旧的只读说明行
+    expect(view.container.querySelector('[data-overlay="dock"]')).toBeNull();
     expect(view.container.querySelector(".ink-footer")).toBeNull();
     expect(byText(view.container, "横线")).toBeUndefined();
     expect(view.container.textContent).not.toContain("阅读态：点右上角");
@@ -205,13 +208,25 @@ describe("MobileInkPad 编辑态", () => {
     const onDirty = vi.fn();
     const view = await mount({ content, readOnly: false, onChange, onDirty });
 
+    // 顶部导航两态都在；底部工具坞只在编辑态且是悬浮面
     expect(view.container.querySelector('[aria-label="手写板导航"]')).not.toBeNull();
     const dock = view.container.querySelector('[aria-label="手写工具"]');
     expect(dock).not.toBeNull();
+    expect(dock!.getAttribute("data-overlay")).toBe("dock");
     expect(dock!.querySelector('[aria-label="画笔"]')).not.toBeNull();
     expect(dock!.querySelector('[aria-label="高亮笔"]')).not.toBeNull();
     expect(dock!.querySelector('[aria-label="整笔橡皮"]')).not.toBeNull();
     expect(dock!.querySelector('[aria-label="撤销"]')).not.toBeNull();
+    // 工具图标 18（按钮盒仍 44，见 CSS 断言）
+    expect(dock!.querySelector('[aria-label="画笔"] svg')!.getAttribute("width")).toBe("18");
+    // 颜色：44 按钮盒里的 <span> 内圆（CSS 定 28），内联的是圆点颜色
+    const colors = Array.from(dock!.querySelectorAll(".ink-color")) as HTMLButtonElement[];
+    expect(colors.length).toBe(1 + QUICK_TEXT_COLORS.length); // 与 InkPad 的 COLORS 同源（主色盘第 1 色 + 快捷色）
+    for (const color of colors) {
+      const dot = color.querySelector("span");
+      expect(dot).not.toBeNull();
+      expect((dot as HTMLElement).style.backgroundColor).not.toBe("");
+    }
 
     const lined = byText(view.container, "横线")!;
     expect(lined.disabled).toBe(false);

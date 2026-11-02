@@ -572,7 +572,7 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
       ) : (
         // 移动端顶部固定条（阅读态 + 编辑态同一条）：翻页 | 缩放 | 全局预览。
         // 三者都是纯视图操作，阅读态也可用；纸张是正文数据，只出现在编辑态底部工具坞。
-        <div className="ink-toolbar" role="toolbar" aria-label="手写板导航">
+        <div className="ink-toolbar" role="toolbar" aria-label="手写板导航" data-overlay="nav">
           <div className="ink-pages">
             <button onClick={() => switchPage(-1)} disabled={pageIndex <= 0} aria-label="上一页"><ChevronLeft size={16} /></button>
             <span>第 {pageIndex + 1} / {doc.pages.length} 页</span>
@@ -664,21 +664,21 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
       ) : !readOnly ? (
         // 移动端底部工具坞（仅编辑态）：上排画笔工具（横向滚动，含颜色/笔宽/撤销重做），
         // 下排纸张。编辑态工作区胶囊已由工作区隐藏，工具坞贴底并自己接系统安全区。
-        <div className="ink-footer" role="toolbar" aria-label="手写工具">
+        <div className="ink-footer" role="toolbar" aria-label="手写工具" data-overlay="dock">
           <div className="ink-toolbar" role="group" aria-label="画笔工具">
-            <button className={["ink-tool", mode === "pen" ? "is-active" : ""].join(" ")} onClick={() => setMode("pen")} aria-label="画笔" title="画笔"><Pen size={16} /></button>
-            <button className={["ink-tool", mode === "highlighter" ? "is-active" : ""].join(" ")} onClick={() => setMode("highlighter")} aria-label="高亮笔" title="高亮笔"><Highlighter size={16} /></button>
-            <button className={["ink-tool", mode === "eraser" ? "is-active" : ""].join(" ")} onClick={() => setMode("eraser")} aria-label="整笔橡皮" title="整笔橡皮"><Eraser size={16} /></button>
+            <button className={["ink-tool", mode === "pen" ? "is-active" : ""].join(" ")} onClick={() => setMode("pen")} aria-label="画笔" title="画笔"><Pen size={18} /></button>
+            <button className={["ink-tool", mode === "highlighter" ? "is-active" : ""].join(" ")} onClick={() => setMode("highlighter")} aria-label="高亮笔" title="高亮笔"><Highlighter size={18} /></button>
+            <button className={["ink-tool", mode === "eraser" ? "is-active" : ""].join(" ")} onClick={() => setMode("eraser")} aria-label="整笔橡皮" title="整笔橡皮"><Eraser size={18} /></button>
             <span className="ink-toolbar__sep" />
             {COLORS.map((value) => (
+              // 触达 44 盒 + 视觉内圆 28（内圆由 CSS 收口，见 inkPad.mobile.css）
               <button
                 key={value}
                 className={["ink-color", color === value ? "is-active" : ""].join(" ")}
-                style={{ backgroundColor: value }}
                 onClick={() => { setColor(value); if (mode === "eraser") setMode("pen"); }}
                 aria-label={`颜色 ${value}`}
                 title={`颜色 ${value}`}
-              />
+              ><span style={{ backgroundColor: value }} /></button>
             ))}
             <span className="ink-toolbar__sep" />
             {WIDTHS.map((value) => (
@@ -691,8 +691,8 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
               ><span style={{ width: Math.max(4, value * 2), height: Math.max(4, value * 2) }} /></button>
             ))}
             <span className="ink-toolbar__sep" />
-            <button className="ink-tool" onClick={undo} aria-label="撤销" title="撤销" disabled={!canUndo}><Undo2 size={16} /></button>
-            <button className="ink-tool" onClick={redo} aria-label="重做" title="重做" disabled={!canRedo}><Redo2 size={16} /></button>
+            <button className="ink-tool" onClick={undo} aria-label="撤销" title="撤销" disabled={!canUndo}><Undo2 size={18} /></button>
+            <button className="ink-tool" onClick={redo} aria-label="重做" title="重做" disabled={!canRedo}><Redo2 size={18} /></button>
           </div>
           <div className="ink-backgrounds" role="group" aria-label="纸张">
             {BACKGROUNDS.map((item) => (

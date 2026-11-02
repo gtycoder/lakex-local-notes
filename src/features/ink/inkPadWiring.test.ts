@@ -77,22 +77,32 @@ describe("手写板正式端到端接线", () => {
     return INK_PAD.slice(toolbarStart, toolbarEnd) + INK_PAD.slice(footerStart, footerEnd);
   };
 
-  it("移动端顶部固定条：翻页 / 缩放 / 全局预览（阅读态与编辑态同一条）", () => {
+  it("移动端顶部导航是悬浮面（overlay 不占布局）：翻页 / 缩放 / 全局预览，两态同一条", () => {
     expect(INK_PAD).toContain('aria-label="手写板导航"');
     expect(INK_PAD).toContain('aria-label="全局预览"');
+    expect(INK_PAD).toContain('data-overlay="nav"');
     expect(INK_PAD).toContain("aria-expanded={pagesOpen}");
-    // 顶部条在 variant 分支的 else 里（不在 !readOnly 下面）⇒ 阅读态也在（渲染行为见 MobileInkPad.render.test）
-    expect(INK_PAD).toContain('aria-label="手写板导航"');
-    expect(MOBILE_INK_CSS).toContain("var(--mb-tap-min)");
+    // 悬浮：absolute + 面板底 + 0.5px 边 + popover 阴影；不在布局流里 ⇒ 画布拿到这段高度
+    expect(MOBILE_INK_CSS).toContain('.ink-pad--mobile > [data-overlay="nav"]');
+    expect(MOBILE_INK_CSS).toMatch(/\[data-overlay="nav"\],[\s\S]{0,200}?position: absolute;/);
+    expect(MOBILE_INK_CSS).toContain("border-radius: var(--lake-radius-pill)");
+    expect(MOBILE_INK_CSS).toContain("background: var(--lake-bg-panel); box-shadow: var(--lake-shadow-popover);");
+    // 禁止毛玻璃
+    expect(MOBILE_INK_CSS).not.toContain("backdrop-filter");
   });
 
-  it("移动端底部工具坞只在编辑态出现；纸张/说明行已从阅读态移除（正文数据）", () => {
+  it("移动端底部工具坞是悬浮面且只在编辑态出现；纸张/说明行已从阅读态移除", () => {
     expect(INK_PAD).toContain(") : !readOnly ? (");
     expect(INK_PAD).toContain('role="toolbar" aria-label="手写工具"');
+    expect(INK_PAD).toContain('data-overlay="dock"');
     expect(INK_PAD).toContain('aria-label="纸张"');
     // 阅读态整行说明删除（不再有「阅读态：点右上角…」）
     expect(INK_PAD).not.toContain("阅读态：点右上角");
     expect(MOBILE_INK_CSS).not.toContain(".ink-footer .ink-readonly-hint");
+    // 悬浮在画布上：absolute 贴底 + 安全区，不占布局高度
+    expect(MOBILE_INK_CSS).toContain('.ink-pad--mobile > [data-overlay="dock"]');
+    expect(MOBILE_INK_CSS).toMatch(/bottom: calc\(var\(--lake-space-md\) \+ var\(--mobile-bottom-safe-area\)\);/);
+    expect(MOBILE_INK_CSS).toContain("border-radius: var(--lake-radius-card)");
     // 纸张只在编辑态工具坞里可点（阅读态没有 background 按钮渲染路径）
     expect(INK_PAD).toContain("onClick={() => setBackground(item.value)}");
   });
@@ -107,9 +117,10 @@ describe("手写板正式端到端接线", () => {
       "var(--mobile-bottom-bar-height)",
       "var(--lake-space-md)",
     ]) expect(MOBILE_INK_CSS).toContain(token);
-    // 编辑态（胶囊隐藏）不再给 pad 预留；安全区只由底部工具坞的纸张行接一次
-    expect(MOBILE_INK_CSS).toContain(".ink-pad--mobile .ink-footer .ink-backgrounds");
-    expect(MOBILE_INK_CSS).toContain("calc(4px + var(--mobile-bottom-safe-area))");
+    // 悬浮导航条不占布局 ⇒ 阅读态的画布比 v1 多出导航那 44px，不需要额外的 padding-top
+    expect(MOBILE_INK_CSS).not.toMatch(/\[data-overlay="nav"\][^{]*\{[^}]*margin-top/);
+    // 编辑态（胶囊隐藏）不给 pad 预留；安全区由悬浮工具坞自己接
+    expect(MOBILE_INK_CSS).toContain("bottom: calc(var(--lake-space-md) + var(--mobile-bottom-safe-area));");
   });
 
   it("切页与缩放是纯视图：阅读态也可用，且不触发保存", () => {
@@ -163,13 +174,20 @@ describe("手写板正式端到端接线", () => {
     expect(MOBILE).toMatch(/active\.kind === "usheet" \|\| active\.kind === "board" \|\| active\.kind === "ink"/);
   });
 
-  it("移动端顶部条与底部工具坞的可点项达到 --mb-tap-min（44）", () => {
+  it("触达 ≥44：按钮盒走 --mb-tap-min；颜色是 44 盒 + 28 内圆；纸张视觉 36 + ::after 补 44", () => {
     expect(MOBILE_INK_CSS).toContain(".ink-pad--mobile .ink-pages button");
     expect(MOBILE_INK_CSS).toContain(".ink-pad--mobile .ink-backgrounds button");
     expect(MOBILE_INK_CSS).toContain(".ink-pad--mobile .ink-tool");
     expect(MOBILE_INK_CSS).toContain(".ink-pad--mobile .ink-zoom button");
     expect(MOBILE_INK_CSS).toContain("min-width: var(--mb-tap-min); height: var(--mb-tap-min);");
-    expect(MOBILE_INK_CSS).toContain(".ink-pad--mobile .ink-color { width: var(--mb-tap-min); height: var(--mb-tap-min);");
+    // 颜色：按钮盒 44，内圆 = 44 - 16 = 28（内圆在 JSX 里是 <span style={{backgroundColor}}/>）
+    expect(INK_PAD).toContain("<span style={{ backgroundColor: value }} />");
+    expect(MOBILE_INK_CSS).toContain(".ink-pad--mobile .ink-color > span");
+    expect(MOBILE_INK_CSS).toContain("width: calc(var(--mb-tap-min) - var(--lake-space-xl));");
+    expect(MOBILE_INK_CSS).toContain(".ink-pad--mobile .ink-color.is-active > span");
+    // 纸张：视觉 36（44 - 8），命中区靠 ::after 上下各补 4
+    expect(MOBILE_INK_CSS).toContain("height: calc(var(--mb-tap-min) - var(--lake-space-md));");
+    expect(MOBILE_INK_CSS).toContain(".ink-pad--mobile > [data-overlay=\"dock\"] .ink-backgrounds button::after");
     expect(MOBILE_INK_CSS).toContain(".ink-pad--mobile .ink-page-thumb__actions button");
     expect(MOBILE_INK_CSS).toContain(".ink-pad--mobile .ink-page-strip__add");
   });
