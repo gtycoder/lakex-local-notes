@@ -223,3 +223,12 @@ html[data-form-factor="expanded"] .ne-ui-toolbar .ne-ui-toolbar-clear-format {
   cursor: pointer;
 }
 
+
+/* 平板首页：内容可以横向分页（scroll-snap），但**不允许手指横滑翻页** —— 平板上那是一个整屏大的手势，
+ * 与"页签在顶栏"的桌面语义冲突。顶部页签点击仍走 useTabPager 的程序化 scrollTo（overflow:hidden 不影响它）。 */
+html[data-form-factor="expanded"] .mobile-tab-stage {
+  overflow-x: hidden;
+  touch-action: pan-y;
+  scroll-snap-type: none;
+}
+
