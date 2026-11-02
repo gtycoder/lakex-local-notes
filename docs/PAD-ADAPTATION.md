@@ -554,3 +554,12 @@ P0 体面单栏（1–2）→ P1 双栏（3–5）→ 工具栏 T0（5–7，§8
 - **顺带修**：`useFormFactor` 在 `matchMedia` 缺失时不再崩（jsdom / 老 WebView 只靠 resize）；`mobileUsheetViewer.test.ts` 把 innerWidth 钉到 412（这组用例验的是手机 compact 语义，jsdom 默认 1024 会命中平板分支）。
 - **门禁**：tsc 0 / 全量 vitest **543 文件 3360 例** / `check:mobileui` / `git diff --check` / **平板快照 6 态 0 差异**（本批未动平板外壳）。
 
+
+### 10.8 第六批：多窗口外壳高修复 + 多维表工具栏主操作
+
+- **分屏 / 自由窗口下「键盘永远开着」**（§1.3#3 的 P1）：根因 = `shellHeight` 单调取历史最大值、只在 `orientationchange` 重置；窗口被拖窄后 `shell - innerHeight > 8` 永真。
+  - 修法：`viewportShell` 新增纯函数 `widthChanged(prev, next)`（≥24 CSS px 才算），`useKeyboard` 每次 update 先判宽度变化 → `resetShellHeight()` 再 `noteViewport` 重学基准。**IME 不改宽度**，所以不会误伤键盘判定；纯高度拖拽仍是已知盲区（无法与 IME 区分，先不猜）。
+  - 单测 +2（宽度抖动/分屏/折叠/横竖屏）。
+- **多维表工具栏「添加记录」**：在现有 `.mbt-toolbar` 右侧加主按钮（复用已有 `addRecord`：先落盘再改界面、窗口覆盖新记录、自动打开记录面板），位置对齐桌面「添加记录」。设备实测：点击后 `4 → 5 条记录`，新记录面板自动打开。
+- **平板基线纠错**：上一批在**脏实例**（中途创建的「无标题表格」会多一行树行）上重烤过 `home-doc`（2029）⇒ 本批在 `pm clear` + 干净夹具上重烤回 **2012**，连跑两轮 **0 差异**。教训已写进 `scripts/mobile-audit/README.md`：平板基线只认"干净实例 + 固定夹具"。
+
