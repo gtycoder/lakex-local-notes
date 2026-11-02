@@ -46,6 +46,8 @@ class MainActivity : BridgeActivity() {
         registerPlugin(SecureStorePlugin::class.java)
         // 主动弹软键盘：WebView 程序化 focus 不弹键盘（深链冷启动没有用户手势），见 ShowKeyboardPlugin 头注释
         registerPlugin(ShowKeyboardPlugin::class.java)
+        // PDF 逐页栅格化（261102 T2 spike）：系统 PdfRenderer，PDF 导入 → 图片页的前置能力
+        registerPlugin(PdfRenderPlugin::class.java)
         // AI 原生通道（261023 P0）：Key 只在原生，流式 SSE
         registerPlugin(AiChatPlugin::class.java)
         super.onCreate(savedInstanceState)
