@@ -368,6 +368,54 @@ export function duplicateBitableTable(doc: BitableDoc, tableId: string): { doc: 
 }
 
 /**
+ * 重命名视图（桌面「重命名视图」对话框与移动端「视图操作」共用；261102 收口）：
+ * trim 后写入；**空名回落「视图」**（与桌面对话框现行为逐字一致）；不存在 / 同名 → 原引用（不产生空写入）。
+ */
+export function renameBitableView(doc: BitableDoc, tableId: string, viewId: string, name: string): BitableDoc {
+  const table = doc.tables.find((t) => t.id === tableId);
+  const before = table?.views.find((v) => v.id === viewId);
+  if (!table || !before) return doc;
+  const nextName = name.trim() || "视图";
+  if (nextName === before.name) return doc;
+  return {
+    ...doc,
+    tables: doc.tables.map((t) => (t.id !== tableId ? t : { ...t, views: t.views.map((v) => (v.id === viewId ? { ...v, name: nextName } : v)) })),
+  };
+}
+
+/**
+ * 复制视图（桌面「复制视图」与移动端「视图操作」共用；261102 收口）：
+ * **浅拷贝 + 新 id + 名称「 副本」**（与桌面逐字一致，不过滤重名），并把表的 activeViewId 指到副本。
+ * 表 / 视图不存在 → 原 doc + 空 viewId。
+ */
+export function duplicateBitableView(doc: BitableDoc, tableId: string, viewId: string): { doc: BitableDoc; viewId: string } {
+  const table = doc.tables.find((t) => t.id === tableId);
+  const source = table?.views.find((v) => v.id === viewId);
+  if (!table || !source) return { doc, viewId: "" };
+  const view = { ...source, id: newBitableId("vew"), name: source.name + " 副本" };
+  return {
+    doc: {
+      ...doc,
+      tables: doc.tables.map((t) => (t.id !== tableId ? t : { ...t, views: [...t.views, view], activeViewId: view.id })),
+    },
+    viewId: view.id,
+  };
+}
+
+/**
+ * 删除视图（桌面「删除视图」与移动端「视图操作」共用；261102 收口）：
+ * **至少保留一个视图**；删的是活动视图 → 回落到第一个（与桌面逐字一致）。
+ * 表 / 视图不存在 & 无变化 → 原引用。注意：这里只删视图配置，记录不受影响。
+ */
+export function deleteBitableView(doc: BitableDoc, tableId: string, viewId: string): BitableDoc {
+  const table = doc.tables.find((t) => t.id === tableId);
+  if (!table || table.views.length <= 1 || !table.views.some((v) => v.id === viewId)) return doc;
+  const views = table.views.filter((v) => v.id !== viewId);
+  const activeViewId = table.activeViewId === viewId ? views[0].id : table.activeViewId;
+  return { ...doc, tables: doc.tables.map((t) => (t.id !== tableId ? t : { ...t, views, activeViewId })) };
+}
+
+/**
  * 新建视图（**桌面与移动端共用的单一来源**，261030 移动端点单）：
  * 追加视图到当前表末尾并返回新视图 id；默认配置与桌面旧 `addView` **逐字一致**——
  * 看板取第一个单选字段分组、画册取第一个附件类字段做封面、日历取第一个日期字段做开始日、

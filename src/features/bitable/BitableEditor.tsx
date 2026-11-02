@@ -31,7 +31,7 @@ import {
   type BitableRelation, type BitableRowHeight, type BitableSortMode, type BitableStatType, type BitableTable, type BitableView, type BitableViewType,
 } from "../../core/bitableDoc.js";
 import { fillSurfaceColor } from "../../core/colorPalette.js";
-import { addBitableRecord, addBitableRecordWithValues, addBitableView, appendBitableAttachments, convertBitableFieldType, deleteBitableField, deleteBitableRecords, deleteBitableTable, fieldHasData, pruneBitableOptionValues, duplicateBitableField, duplicateBitableTable, renameAiFieldToken, renameBitableTable, setBitableCellValue, setBitableRecordValues, stripViewRefsForFieldType } from "../../core/bitableMutations.js";
+import { addBitableRecord, addBitableRecordWithValues, addBitableView, appendBitableAttachments, convertBitableFieldType, deleteBitableField, deleteBitableRecords, deleteBitableTable, deleteBitableView, fieldHasData, pruneBitableOptionValues, duplicateBitableField, duplicateBitableTable, duplicateBitableView, renameAiFieldToken, renameBitableTable, renameBitableView, setBitableCellValue, setBitableRecordValues, stripViewRefsForFieldType } from "../../core/bitableMutations.js";
 import { applyBitableNav, readBitableNav, writeBitableNav } from "./bitableNavStore.js";
 import { parseCsv, defaultCsvMapping, importCsvRows, type CsvColumnMapping, type CsvImportResult } from "../../core/bitableCsv.js";
 import { StatCell } from "./bitableCells";
@@ -474,23 +474,23 @@ export function BitableEditor({ noteId, content, visible, readOnly: readOnlyProp
       };
     });
   }, [updateDoc]);
+  // 视图 mutation 收口 core（261102）：桌面 / 移动端同一份语义。
   const deleteView = useCallback((viewId: string) => {
-    patchActiveTable((table) => {
-      if (table.views.length <= 1) return table;
-      const views = table.views.filter((v) => v.id !== viewId);
-      return { ...table, views, activeViewId: table.activeViewId === viewId ? views[0].id : table.activeViewId };
-    });
+    const tableId = docRef.current.activeTableId;
+    updateDoc((prev) => deleteBitableView(prev, tableId, viewId));
     setViewMenu(null);
-  }, [patchActiveTable]);
+  }, [updateDoc]);
   const copyView = useCallback((viewId: string) => {
-    patchActiveTable((table) => {
-      const source = table.views.find((v) => v.id === viewId);
-      if (!source) return table;
-      const view = { ...source, id: newBitableId("vew"), name: source.name + " 副本" };
-      return { ...table, views: [...table.views, view], activeViewId: view.id };
-    });
+    const tableId = docRef.current.activeTableId;
+    updateDoc((prev) => duplicateBitableView(prev, tableId, viewId).doc);
     setViewMenu(null);
-  }, [patchActiveTable]);
+  }, [updateDoc]);
+  /** 重命名视图：空名兜底「视图」与旧对话框行为逐字一致（见 core renameBitableView）。 */
+  const renameView = useCallback((viewId: string, name: string) => {
+    const tableId = docRef.current.activeTableId;
+    updateDoc((prev) => renameBitableView(prev, tableId, viewId, name));
+    setViewEditor(null);
+  }, [updateDoc]);
   const setActiveView = useCallback((viewId: string) => {
     navigateDoc((prev) => ({ ...prev, tables: prev.tables.map((table) => table.id === prev.activeTableId ? { ...table, activeViewId: viewId } : table) }));
   }, [navigateDoc]);
@@ -1734,14 +1734,13 @@ export function BitableEditor({ noteId, content, visible, readOnly: readOnlyProp
           <div className="ln-dialog__body">
             <input ref={viewNameRef} autoFocus className="bt-input" readOnly={readOnly} defaultValue={activeTable.views.find((v) => v.id === viewEditor)?.name ?? ""}
               onKeyDown={(event) => {
-                if (event.key === "Enter" && !readOnly) { patchView(viewEditor, { name: (event.target as HTMLInputElement).value.trim() || "视图" }); setViewEditor(null); }
+                if (event.key === "Enter" && !readOnly) renameView(viewEditor, (event.target as HTMLInputElement).value);
               }} />
           </div>
           <div className="ln-dialog__actions">
             <button type="button" className="bt-secondary" onClick={() => setViewEditor(null)}>取消</button>
             <button type="button" className="bt-primary" disabled={readOnly} onClick={() => {
-              patchView(viewEditor, { name: viewNameRef.current?.value.trim() || "视图" });
-              setViewEditor(null);
+              renameView(viewEditor, viewNameRef.current?.value ?? "");
             }}>确定</button>
           </div>
         </Dialog>

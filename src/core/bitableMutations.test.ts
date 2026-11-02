@@ -4,8 +4,8 @@ import {
   type BitableDoc, type BitableField, type BitableRecord, type BitableTable, type BitableView,
 } from "./bitableDoc";
 import {
-  addBitableRecord, addBitableRecordWithValues, addBitableView, appendBitableAttachments, deleteBitableField,
-  duplicateBitableField, renameAiFieldToken, setBitableCellValue, setBitableRecordValues, stripFieldFromView, stripViewRefsForFieldType,
+  addBitableRecord, addBitableRecordWithValues, addBitableView, appendBitableAttachments, deleteBitableField, deleteBitableView,
+  duplicateBitableField, duplicateBitableView, renameAiFieldToken, renameBitableView, setBitableCellValue, setBitableRecordValues, stripFieldFromView, stripViewRefsForFieldType,
 } from "./bitableMutations";
 
 const T = "2026-09-01T00:00:00.000Z";
@@ -294,5 +294,78 @@ describe("addBitableView：新建视图的单一来源（桌面 / 移动端共�
     const missing = addBitableView(plain, "nope", "grid");
     expect(missing.doc).toBe(plain);
     expect(missing.viewId).toBe("");
+  });
+});
+
+
+describe("视图 mutation：rename / duplicate / delete（桌面 / 移动端共用，261102）", () => {
+  /** 两张视图、activeViewId 指第二张（用来验证删活动视图的回落）。 */
+  function docWithTwoViews(): BitableDoc {
+    const t = table("t1", [field("f", "text")], [], [view("v1"), view("v2")]);
+    return doc([{ ...t, activeViewId: "v2" }, table("t2", [field("f2", "text")], [], [view("v-other")])]);
+  }
+
+  it("renameBitableView：trim 后写入；空名回落「视图」（桌面现行为）；同名/视图不存在返回原引用", () => {
+    const base = docWithTwoViews();
+    const renamed = renameBitableView(base, "t1", "v2", "  新名字  ");
+    expect(renamed).not.toBe(base);
+    expect(renamed.tables[0].views.map((v) => v.name)).toEqual(["v1", "新名字"]);
+    // 其它表 / 其它视图不重造
+    expect(renamed.tables[1]).toBe(base.tables[1]);
+    expect(renamed.tables[0].views[0]).toBe(base.tables[0].views[0]);
+    // 导航字段不因重命名改变
+    expect(renamed.activeTableId).toBe(base.activeTableId);
+    expect(renamed.tables[0].activeViewId).toBe("v2");
+    // 空名 = 桌面「重命名视图」对话框的兜底「视图」
+    expect(renameBitableView(base, "t1", "v2", "   ").tables[0].views[1].name).toBe("视图");
+    // 同名 / 不存在 → 原引用（不产生空写入）
+    expect(renameBitableView(base, "t1", "v1", " v1 ")).toBe(base);
+    expect(renameBitableView(base, "t1", "nope", "x")).toBe(base);
+    expect(renameBitableView(base, "nope", "v1", "x")).toBe(base);
+    // 已是「视图」再传空名 → 仍是无变化
+    const already = renameBitableView(base, "t1", "v1", "视图");
+    expect(renameBitableView(already, "t1", "v1", "")).toBe(already);
+  });
+
+  it("duplicateBitableView：浅拷贝 + 新 id + 「 副本」，activeViewId 指副本；表/视图不存在返回原 doc + 空 id", () => {
+    const base = docWithTwoViews();
+    const source = base.tables[0].views[1];
+    const result = duplicateBitableView(base, "t1", "v2");
+    expect(result.doc).not.toBe(base);
+    expect(result.viewId).toBeTruthy();
+    const views = result.doc.tables[0].views;
+    expect(views).toHaveLength(3);
+    const copy = views[2];
+    expect(copy.id).toBe(result.viewId);
+    expect(copy.id).not.toBe(source.id);
+    expect(copy.name).toBe("v2 副本");
+    // 浅拷贝：配置原样带过去（不含记录，记录属于表）
+    expect(copy.type).toBe(source.type);
+    expect(result.doc.tables[0].activeViewId).toBe(copy.id);
+    expect(result.doc.tables[1]).toBe(base.tables[1]);
+
+    const missing = duplicateBitableView(base, "t1", "nope");
+    expect(missing.doc).toBe(base);
+    expect(missing.viewId).toBe("");
+    expect(duplicateBitableView(base, "nope", "v1").doc).toBe(base);
+  });
+
+  it("deleteBitableView：至少保留 1 个；删活动视图回落第一个；删非活动视图不动导航；无变化返回原引用", () => {
+    const base = docWithTwoViews();
+    // 删活动视图 v2 → 回落到 v1
+    const dropActive = deleteBitableView(base, "t1", "v2");
+    expect(dropActive).not.toBe(base);
+    expect(dropActive.tables[0].views.map((v) => v.id)).toEqual(["v1"]);
+    expect(dropActive.tables[0].activeViewId).toBe("v1");
+    expect(dropActive.tables[1]).toBe(base.tables[1]);
+    // 删非活动视图 v1 → activeViewId 仍是 v2
+    const dropOther = deleteBitableView(base, "t1", "v1");
+    expect(dropOther.tables[0].views.map((v) => v.id)).toEqual(["v2"]);
+    expect(dropOther.tables[0].activeViewId).toBe("v2");
+    // 只剩一个视图 → 拒绝（原引用）；不存在 / 表不存在 → 原引用
+    const one = doc([table("t1", [field("f", "text")], [], [view("v1")])]);
+    expect(deleteBitableView(one, "t1", "v1")).toBe(one);
+    expect(deleteBitableView(base, "t1", "nope")).toBe(base);
+    expect(deleteBitableView(base, "nope", "v1")).toBe(base);
   });
 });

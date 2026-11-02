@@ -5,7 +5,8 @@
  * 这里钉的是**交互行为**（真实挂载）：
  * - 视图面板：编辑态有「新建视图」入口，表单排第一且做成主按钮；只读态禁用并写明原因；
  * - 新建表单视图可用：建完自动切过去，且 formFieldIds 未配置时默认展示全部可填字段（可直接填写/提交）；
- * - 新增字段：创建后自动打开「修改字段」面板编辑新字段（字段面板保持打开，同铅笔路径层序）。
+ * - 新增字段：创建后自动打开「修改字段」面板编辑新字段（字段面板保持打开，同铅笔路径层序）；
+ * - 视图行 ⋯（261102）：打开「视图操作」面板（不触发切换）。
  */
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -38,7 +39,7 @@ describe("MobileBitableViewListSheet（视图面板 + 新建视图）", () => {
   const renderSheet = (props: Partial<Parameters<typeof MobileBitableViewListSheet>[0]> = {}) => act(() => {
     root.render(createElement(MobileBitableViewListSheet, {
       open: true, table, activeViewId: table.activeViewId, editable: true,
-      onSelect: () => undefined, onAddView: () => undefined, onClose: () => undefined, ...props,
+      onSelect: () => undefined, onAddView: () => undefined, onViewActions: () => undefined, onClose: () => undefined, ...props,
     }));
   });
 
@@ -63,6 +64,17 @@ describe("MobileBitableViewListSheet（视图面板 + 新建视图）", () => {
     act(() => btn("新建视图")!.click());
     act(() => btn("看板视图")!.click());
     expect(onAddView).toHaveBeenLastCalledWith("kanban");
+  });
+
+  it("行内 ⋯ 打开「视图操作」（不触发切换）；选择按钮切视图", () => {
+    const onViewActions = vi.fn();
+    const onSelect = vi.fn();
+    renderSheet({ onViewActions, onSelect });
+    act(() => host.querySelector<HTMLButtonElement>('button[aria-label="视图操作 表格视图"]')!.click());
+    expect(onViewActions).toHaveBeenCalledWith(table.activeViewId);
+    expect(onSelect).not.toHaveBeenCalled();
+    act(() => host.querySelector<HTMLButtonElement>('button[aria-label="选择视图 表格视图"]')!.click());
+    expect(onSelect).toHaveBeenCalledWith(table.activeViewId);
   });
 });
 

@@ -45,7 +45,7 @@ import { applyBitableNav, readBitableNav, writeBitableNav } from "../../features
 import { showToast } from "../ui/toastBus";
 import { pushBackHandler } from "../ui/backStack";
 import { formatGroupLabel } from "./mobileBitableFormat";
-import { addBitableView, convertBitableFieldType, deleteBitableTable, duplicateBitableTable, fieldHasData, renameBitableTable, updateBitableField } from "../../core/bitableMutations";
+import { addBitableView, convertBitableFieldType, deleteBitableTable, deleteBitableView, duplicateBitableTable, duplicateBitableView, fieldHasData, renameBitableTable, renameBitableView, updateBitableField } from "../../core/bitableMutations";
 import { confirmMobile } from "../ui/ConfirmDialog";
 import { MobileBitableRecordSheet } from "./MobileBitableRecordSheet";
 import { MobileBitableFieldSheet } from "./MobileBitableFieldSheet";
@@ -60,6 +60,7 @@ import { MobileBitableGalleryView } from "./MobileBitableGalleryView";
 import { MobileBitableCalendarView } from "./MobileBitableCalendarView";
 import { MobileBitableViewConfigSheet } from "./MobileBitableViewConfigSheet";
 import { MobileBitableViewListSheet } from "./MobileBitableViewListSheet";
+import { MobileBitableViewActions } from "./MobileBitableViewActions";
 import { FieldValue } from "./MobileBitableValue";
 import { mobileViewTabs, resolveMobileDefaultViewId } from "./mobileBitableViewTabs";
 import { readBitableRecordLayout, writeBitableRecordLayout } from "./mobileBitableViewPrefs";
@@ -124,6 +125,8 @@ export function MobileBitableViewer({ noteId, content, editing = false, onChange
   /** 数据表操作面板：独立于抽屉（抽屉关闭后再弹，避免两个层抢 z-index）。 */
   const [actionsTableId, setActionsTableId] = useState<string | null>(null);
   const [viewListOpen, setViewListOpen] = useState(false);
+  /** 正在操作的视图 id（「视图操作」面板：重命名 / 复制 / 删除；261102）。 */
+  const [actionsViewId, setActionsViewId] = useState<string | null>(null);
 
   // 外部正文变化（例如同步/重开）才采纳；本组件自己 onChange 出去的正文不回灌（否则会打断输入）。
   useEffect(() => {
@@ -162,6 +165,7 @@ export function MobileBitableViewer({ noteId, content, editing = false, onChange
     setRecordId(null);
     setFieldSheetOpen(false);
     setEditingFieldId(null);
+    setActionsViewId(null);
   }, [editable]);
 
   // 记录详情 = 子页全屏：请求父级隐藏工作区 chrome；返回键先关详情（不是退工作区）。
@@ -180,6 +184,8 @@ export function MobileBitableViewer({ noteId, content, editing = false, onChange
   const resolvedViewId = viewId && table?.views.some((item) => item.id === viewId) ? viewId : defaultViewId;
   const view = table?.views.find((item) => item.id === resolvedViewId) ?? table?.views[0] ?? null;
   const viewTabs = useMemo(() => (table ? mobileViewTabs(table) : []), [table]);
+  /** 「视图操作」面板的目标视图：被删 / 切表后自动失效（面板随之关闭）。 */
+  const actionsView = actionsViewId && table ? table.views.find((item) => item.id === actionsViewId) ?? null : null;
 
   // 设备本地布局偏好：随「表 + 视图」切换重新载入
   useEffect(() => {
@@ -306,6 +312,43 @@ export function MobileBitableViewer({ noteId, content, editing = false, onChange
     switchView(result.viewId);
     setViewListOpen(false);
     showToast("已新建「" + BITABLE_VIEW_TYPE_LABEL[type] + "」");
+  };
+
+  /** 视图操作（261102）：重命名 / 复制 / 删除。写操作全走 core 单一来源（与桌面视图 ⋮ 同一语义）。 */
+  const renameView = (viewIdToRename: string, name: string) => {
+    const current = docRef.current;
+    if (!current || !editable) return;
+    const changed = commit(renameBitableView(current, table.id, viewIdToRename, name));
+    setActionsViewId(null);
+    if (changed) showToast("已重命名视图");
+  };
+
+  const duplicateView = (viewIdToCopy: string) => {
+    const current = docRef.current;
+    if (!current || !editable) return;
+    const result = duplicateBitableView(current, table.id, viewIdToCopy);
+    if (!commit(result.doc)) return;
+    // 复制完切到副本（core 已把 activeViewId 指到副本；设备本地导航这里写）
+    switchView(result.viewId);
+    setActionsViewId(null);
+    setViewListOpen(false);
+    showToast("已复制视图");
+  };
+
+  const deleteView = (viewIdToDelete: string) => {
+    const current = docRef.current;
+    if (!current || !editable) return;
+    const target = current.tables.find((item) => item.id === table.id);
+    if (!target || target.views.length <= 1) return;
+    const wasCurrent = view.id === viewIdToDelete;
+    const next = deleteBitableView(current, table.id, viewIdToDelete);
+    if (!commit(next)) return;
+    // 删的是当前视图 ⇒ 切到回落视图（core 与桌面同口径 = 剩余的第一个视图）
+    const fallback = next.tables.find((item) => item.id === table.id)?.views[0]?.id ?? "";
+    if (wasCurrent && fallback) switchView(fallback);
+    setActionsViewId(null);
+    setViewListOpen(false);
+    showToast("已删除视图");
   };
 
   /**
@@ -706,8 +749,21 @@ export function MobileBitableViewer({ noteId, content, editing = false, onChange
         editable={editable}
         onSelect={(nextViewId) => { switchView(nextViewId); setViewListOpen(false); }}
         onAddView={addView}
+        onViewActions={(nextViewId) => { setViewListOpen(false); setActionsViewId(nextViewId); }}
         onClose={() => setViewListOpen(false)}
       />
+      {actionsView && (
+        <MobileBitableViewActions
+          open
+          viewName={actionsView.name}
+          editable={editable}
+          canDelete={table.views.length > 1}
+          onRename={(name) => renameView(actionsView.id, name)}
+          onDuplicate={() => duplicateView(actionsView.id)}
+          onDelete={() => deleteView(actionsView.id)}
+          onClose={() => setActionsViewId(null)}
+        />
+      )}
     </div>
   );
 }

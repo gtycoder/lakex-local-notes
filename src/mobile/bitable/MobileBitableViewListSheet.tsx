@@ -5,9 +5,11 @@
  * 新建（261030 用户点单第二轮）：编辑态给「新建视图」入口 —— 表单排第一且做成主按钮，其余四种
  * （表格/看板/画册/日历）用 `.mb-chip` 胶囊；只读态禁用并**写明原因**（触屏没有 hover，不能静默不可点）。
  * 新建本身走 core `addBitableView`（默认配置与桌面同一来源），是否切换、怎么切换由父级决定。
+ * 视图操作（261102）：每行 ⋯ 交给父级打开「视图操作」面板（重命名 / 复制 / 删除）。
+ * 行结构 = wrapper div + 选择按钮 + ⋯ 图标按钮（按钮不能嵌套），行外观/选中态留在 wrapper 上。
  */
 import { useEffect, useState } from "react";
-import { Check, Plus } from "lucide-react";
+import { Check, MoreHorizontal, Plus } from "lucide-react";
 import { MobileSheet } from "../ui/MobileSheet";
 import { BITABLE_VIEW_TYPE_LABEL, type BitableTable, type BitableView, type BitableViewType } from "../../core/bitableDoc.js";
 import { mobileViewTabLabel } from "./mobileBitableViewTabs";
@@ -24,10 +26,12 @@ export interface MobileBitableViewListSheetProps {
   onSelect: (viewId: string) => void;
   /** 新建视图：类型由这里选，创建 + 切到新视图由父级完成。 */
   onAddView: (type: BitableViewType) => void;
+  /** 行内 ⋯：打开该视图的操作面板（父级负责面板与写操作）。 */
+  onViewActions: (viewId: string) => void;
   onClose: () => void;
 }
 
-export function MobileBitableViewListSheet({ open, table, activeViewId, editable, onSelect, onAddView, onClose }: MobileBitableViewListSheetProps) {
+export function MobileBitableViewListSheet({ open, table, activeViewId, editable, onSelect, onAddView, onViewActions, onClose }: MobileBitableViewListSheetProps) {
   /** 是否展开类型选择（默认只显示「新建视图」一个入口，避免面板一打开就铺开五项）。 */
   const [choosing, setChoosing] = useState(false);
   // 面板关闭后复位：下次打开仍从「列表 + 新建视图」这一层开始。
@@ -44,11 +48,16 @@ export function MobileBitableViewListSheet({ open, table, activeViewId, editable
         {table.views.map((view: BitableView) => {
           const on = view.id === activeViewId;
           return (
-            <button key={view.id} type="button" className={"mbt-viewrow" + (on ? " is-on" : "")} onClick={() => onSelect(view.id)}>
-              <span className="mbt-viewrow__name">{view.name}</span>
-              <span className="mbt-viewrow__type">{mobileViewTabLabel(view)}</span>
-              {on && <Check size={16} className="mbt-viewrow__check" />}
-            </button>
+            <div key={view.id} className={"mbt-viewrow" + (on ? " is-on" : "")}>
+              <button type="button" className="mbt-viewrow__main" aria-label={"选择视图 " + view.name} onClick={() => onSelect(view.id)}>
+                <span className="mbt-viewrow__name">{view.name}</span>
+                <span className="mbt-viewrow__type">{mobileViewTabLabel(view)}</span>
+                {on && <Check size={16} className="mbt-viewrow__check" />}
+              </button>
+              <button type="button" className="mb-iconbtn" aria-label={"视图操作 " + view.name} onClick={() => onViewActions(view.id)}>
+                <MoreHorizontal size={18} />
+              </button>
+            </div>
           );
         })}
       </div>

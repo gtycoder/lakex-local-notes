@@ -354,6 +354,9 @@
 .mbt-viewrow.is-on .mbt-viewrow__name { color: var(--lake-fg-selected); }
 .mbt-viewrow__type { color: var(--lake-text-4); font-size: var(--lake-font-size-tiny); }
 .mbt-viewrow__check { color: var(--lake-accent-text); }
+/* 261102：视图行拆成「选择按钮 + ⋯」两个并列按钮（button 不能嵌套）——
+   行外观 / 选中态留在 wrapper（.mbt-viewrow，div）上，选择按钮只做 UA 样式重置 + 撑满。 */
+.mbt-viewrow__main { flex: 1; display: flex; align-items: center; gap: var(--lake-space-md); min-width: 0; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; }
 
 /* ── 看板 / 画册 / 日历（261030 P2）────────────────────────────── */
 .mbt-view-empty {

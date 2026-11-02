@@ -1260,4 +1260,24 @@ describe("261030 · 新建视图下沉 core + 新增字段自动进编辑", () =
     expect(MOBILE_EDIT).toMatch(/export function addMobileField\([\s\S]{0,400}?return \{ doc: addBitableField\(doc, tableId, field\), fieldId: field\.id \}/);
     expect(MOBILE).toMatch(/setEditingFieldId\(result\.fieldId\)/);
   });
+
+  it("视图重命名 / 复制 / 删除收口 core（261102）：桌面不再内联拼视图配置，移动端共用同一份", () => {
+    // core 三个函数是唯一写入口
+    expect(MUTATIONS).toMatch(/export function renameBitableView\(doc: BitableDoc, tableId: string, viewId: string, name: string\)/);
+    expect(MUTATIONS).toMatch(/export function duplicateBitableView\(doc: BitableDoc, tableId: string, viewId: string\): \{ doc: BitableDoc; viewId: string \}/);
+    expect(MUTATIONS).toMatch(/export function deleteBitableView\(doc: BitableDoc, tableId: string, viewId: string\): BitableDoc/);
+    // 桌面只调用 core：不再自己 newBitableId("vew") / 拼「 副本」/ trim 兜底
+    expect(EDITOR).toMatch(/deleteBitableView\(prev, tableId, viewId\)/);
+    expect(EDITOR).toMatch(/duplicateBitableView\(prev, tableId, viewId\)\.doc/);
+    expect(EDITOR).toMatch(/renameBitableView\(prev, tableId, viewId, name\)/);
+    expect(EDITOR).not.toContain('source.name + " 副本"');
+    expect(EDITOR).not.toMatch(/newBitableId\("vew"\)/);
+    expect(EDITOR).not.toMatch(/value\.trim\(\) \|\| "视图"/);
+    // 移动端「视图操作」面板三项 + 只读理由 + 删除确认
+    const MOBILE_VIEW_ACTIONS = readFileSync(new URL("../../mobile/bitable/MobileBitableViewActions.tsx", import.meta.url), "utf8");
+    expect(MOBILE_VIEW_ACTIONS).toContain("只读状态不能修改视图");
+    expect(MOBILE_VIEW_ACTIONS).toContain("至少保留一个视图");
+    expect(MOBILE_VIEW_ACTIONS).toMatch(/confirmMobile\(\{[\s\S]{0,300}?title: "删除视图？"/);
+    expect(MOBILE).toMatch(/<MobileBitableViewActions[\s\S]{0,400}?onDuplicate=\{\(\) => duplicateView\(actionsView\.id\)\}/);
+  });
 });
