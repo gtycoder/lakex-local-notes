@@ -739,6 +739,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
             ) : t.kind === "ink" ? (
               <Suspense fallback={<div className="mb-empty">正在加载手写板…</div>}>
                 <MobileInkPad
+                  noteId={t.id}
                   content={t.content}
                   active={t.id === activeId}
                   readOnly={!t.editing}

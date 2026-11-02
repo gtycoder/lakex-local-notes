@@ -11,6 +11,7 @@ import { createSafeStorageSecretCipher } from "./secretCipher.js";
 import { noteBodyRelativePath } from "../src/core/noteBodyPaths.js";
 import { extractAssetRefs } from "../src/core/storeUtils.js";
 import { buildS3v3DiagnosticReport } from "../src/core/s3v3Report.js";
+import { INK_DOC_VERSION } from "../src/core/inkDoc.js";
 
 // ===== electron mock（Store 模块加载即需要；DB 用例只用 safeStorage 的 S3 密钥加解密） =====
 const electronMock = vi.hoisted(() => {
@@ -438,7 +439,8 @@ describe("目录树操作", () => {
     expect(ink.kind).toBe("ink");
     const bodyPath = (store as any).notePath(ink.id);
     expect(bodyPath).toContain(path.join("inks", ink.id + ".ink.json"));
-    expect(JSON.parse(fs.readFileSync(bodyPath, "utf8"))).toMatchObject({ kind: "ink", version: 1 });
+    // v2（261102 T1）：新建正文写当前版本；v1 仍可读，见 inkDoc.test.ts
+    expect(JSON.parse(fs.readFileSync(bodyPath, "utf8"))).toMatchObject({ kind: "ink", version: INK_DOC_VERSION });
     expect(store.readNote(ink.id).kind).toBe("ink");
   });
 

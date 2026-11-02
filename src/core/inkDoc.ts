@@ -1,11 +1,19 @@
 /**
  * 手写板文档（kind="ink"）正文模型。
  *
- * 只存**矢量笔迹**：页面、背景模板、笔迹点和笔刷参数。PNG 仅用于缩略图/导出，永不作为正文。
+ * 只存**矢量笔迹**：页面、背景模板、背景图片引用、笔迹点和笔刷参数。PNG 仅用于缩略图/导出，永不作为正文。
  * 页面坐标统一为 A4 96dpi 逻辑尺寸（794 × 1123），桌面与移动端按容器缩放显示。
+ *
+ * v2（261102 T1）：每页可选一张「背景图片」（图片页 + 手写批注），图片以 **canonical 本地资产 URL**
+ * 引用（末段是磁盘文件名 ⇒ extractAssetRefs / 资产声明 / 同步 / GC 全链路复用现成能力）。
+ * v1 正文仍可读（读入后按 v2 规范写回；不写迁移脚本）。
  */
+import { parseLocalAssetUrl } from "./assetUrl.js";
+
 export const INK_DOC_KIND = "ink" as const;
-export const INK_DOC_VERSION = 1 as const;
+export const INK_DOC_VERSION = 2 as const;
+/** 可读的正文版本：v1（纯矢量页）/ v2（可选背景图片页）。 */
+export const INK_DOC_READ_VERSIONS: readonly number[] = [1, 2];
 export const INK_PAGE_WIDTH = 794;
 export const INK_PAGE_HEIGHT = 1123;
 export const MAX_INK_BODY_CHARS = 16 * 1024 * 1024;
@@ -15,6 +23,41 @@ export type InkBackground = (typeof INK_BACKGROUNDS)[number];
 
 export const INK_TOOLS = ["pen", "highlighter"] as const;
 export type InkTool = (typeof INK_TOOLS)[number];
+
+/** 背景图片的铺放方式（渲染侧直接映射到 SVG preserveAspectRatio）。 */
+export const INK_BACKGROUND_IMAGE_FITS = ["contain", "cover", "stretch"] as const;
+export type InkBackgroundImageFit = (typeof INK_BACKGROUND_IMAGE_FITS)[number];
+
+/** 图片页来源：普通图片 / PDF 转换出的页（pdf 记录转换参数，便于将来重渲染）。 */
+export const INK_BACKGROUND_IMAGE_SOURCES = ["image", "pdf-page"] as const;
+export type InkBackgroundImageSource = (typeof INK_BACKGROUND_IMAGE_SOURCES)[number];
+
+/** PDF 页来源信息（仅 source === "pdf-page" 时出现；page 从 1 开始）。 */
+export interface InkBackgroundImagePdfRef {
+  url: string;
+  page: number;
+  pageCount: number;
+}
+
+/** 页面背景图片引用。url 必须是本笔记空间的 canonical 本地资产 URL（磁盘名在末段）。 */
+export interface InkBackgroundImage {
+  url: string;
+  /** 缺省 contain（整图可见，留白处可批注）。 */
+  fit?: InkBackgroundImageFit;
+  /** 0..1；缺省 1。 */
+  opacity?: number;
+  /** 原图像素尺寸（正整数，成对出现；用于将来重排/导出与「大图」判定）。 */
+  pixelWidth?: number;
+  pixelHeight?: number;
+  source?: InkBackgroundImageSource;
+  pdf?: InkBackgroundImagePdfRef;
+}
+
+/** 整篇的 PDF 来源（多页 PDF 各成一页时记录同一份来源）。 */
+export interface InkSourcePdf {
+  url: string;
+  pageCount: number;
+}
 
 export interface InkPoint {
   x: number;
@@ -39,6 +82,8 @@ export interface InkPage {
   width: number;
   height: number;
   background: InkBackground;
+  /** v2：可选背景图片（图片页）。缺省 = 纯矢量页。 */
+  backgroundImage?: InkBackgroundImage;
   strokes: InkStroke[];
 }
 
@@ -47,6 +92,8 @@ export interface InkDoc {
   version: typeof INK_DOC_VERSION;
   pages: InkPage[];
   activePageId?: string;
+  /** v2：整篇的 PDF 来源（可选）。 */
+  sourcePdf?: InkSourcePdf;
 }
 
 const MAX_PAGE_WIDTH = 4096;
@@ -76,6 +123,86 @@ function isBackground(value: unknown): value is InkBackground {
 
 function isTool(value: unknown): value is InkTool {
   return (INK_TOOLS as readonly unknown[]).includes(value);
+}
+
+function isBackgroundImageFit(value: unknown): value is InkBackgroundImageFit {
+  return (INK_BACKGROUND_IMAGE_FITS as readonly unknown[]).includes(value);
+}
+
+function isBackgroundImageSource(value: unknown): value is InkBackgroundImageSource {
+  return (INK_BACKGROUND_IMAGE_SOURCES as readonly unknown[]).includes(value);
+}
+
+/**
+ * 背景图片必须是**本笔记空间**的 canonical 本地资产 URL（磁盘名在末段 ⇒ extractAssetRefs 可提取、
+ * 资产声明/同步/GC 全链路复用）。外部 http / data URL / 小记空间一律拒绝：图片页只引用本地资产。
+ */
+function isNoteAssetUrl(value: unknown): value is string {
+  if (typeof value !== "string" || !value) return false;
+  const ref = parseLocalAssetUrl(value);
+  return ref !== null && ref.space === "note" && !ref.staging;
+}
+
+/** 正整数（用于像素尺寸 / PDF 页号）。 */
+function positiveInt(value: unknown): number | null {
+  const n = finiteNumber(value);
+  if (n === null || !Number.isInteger(n) || n <= 0) return null;
+  return n;
+}
+
+function normalizeBackgroundImagePdfRef(raw: unknown): InkBackgroundImagePdfRef | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const record = raw as Record<string, unknown>;
+  if (!isNoteAssetUrl(record.url)) return null;
+  const page = positiveInt(record.page);
+  const pageCount = positiveInt(record.pageCount);
+  if (page === null || pageCount === null || page > pageCount) return null;
+  return { url: record.url, page, pageCount };
+}
+
+function normalizeBackgroundImage(raw: unknown): InkBackgroundImage | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const record = raw as Record<string, unknown>;
+  if (!isNoteAssetUrl(record.url)) return null;
+  const image: InkBackgroundImage = { url: record.url, fit: "contain" };
+  if (record.fit !== undefined) {
+    if (!isBackgroundImageFit(record.fit)) return null;
+    image.fit = record.fit;
+  }
+  if (record.opacity !== undefined) {
+    const opacity = finiteNumber(record.opacity);
+    if (opacity === null || opacity < 0 || opacity > 1) return null;
+    image.opacity = opacity;
+  }
+  const hasWidth = record.pixelWidth !== undefined;
+  const hasHeight = record.pixelHeight !== undefined;
+  if (hasWidth !== hasHeight) return null;
+  if (hasWidth && hasHeight) {
+    const pixelWidth = positiveInt(record.pixelWidth);
+    const pixelHeight = positiveInt(record.pixelHeight);
+    if (pixelWidth === null || pixelHeight === null) return null;
+    image.pixelWidth = pixelWidth;
+    image.pixelHeight = pixelHeight;
+  }
+  if (record.source !== undefined) {
+    if (!isBackgroundImageSource(record.source)) return null;
+    image.source = record.source;
+  }
+  if (record.pdf !== undefined) {
+    const pdf = normalizeBackgroundImagePdfRef(record.pdf);
+    if (!pdf) return null;
+    image.pdf = pdf;
+  }
+  return image;
+}
+
+function normalizeSourcePdf(raw: unknown): InkSourcePdf | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const record = raw as Record<string, unknown>;
+  if (!isNoteAssetUrl(record.url)) return null;
+  const pageCount = positiveInt(record.pageCount);
+  if (pageCount === null) return null;
+  return { url: record.url, pageCount };
 }
 
 function normalizePoint(raw: unknown, pageWidth: number, pageHeight: number): InkPoint | null {
@@ -126,7 +253,13 @@ function normalizePage(raw: unknown): InkPage | null {
     if (!stroke) return null;
     strokes.push(stroke);
   }
-  return { id: record.id, width, height, background: record.background, strokes };
+  const page: InkPage = { id: record.id, width, height, background: record.background, strokes };
+  if (record.backgroundImage !== undefined) {
+    const backgroundImage = normalizeBackgroundImage(record.backgroundImage);
+    if (!backgroundImage) return null;
+    page.backgroundImage = backgroundImage;
+  }
+  return page;
 }
 
 /** 创建空白 A4 手写板。pageId 必须由调用方保证在文档内唯一。 */
@@ -160,7 +293,7 @@ export function parseInkBody(content: string | null | undefined): InkDoc | null 
   }
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
   const record = raw as Record<string, unknown>;
-  if (record.kind !== INK_DOC_KIND || record.version !== INK_DOC_VERSION) return null;
+  if (record.kind !== INK_DOC_KIND || !INK_DOC_READ_VERSIONS.includes(record.version as number)) return null;
   if (!Array.isArray(record.pages) || record.pages.length === 0 || record.pages.length > MAX_PAGES) return null;
   const pages: InkPage[] = [];
   const ids = new Set<string>();
@@ -183,41 +316,65 @@ export function parseInkBody(content: string | null | undefined): InkDoc | null 
   const activePageId = typeof record.activePageId === "string" && ids.has(record.activePageId)
     ? record.activePageId
     : pages[0].id;
-  return { kind: INK_DOC_KIND, version: INK_DOC_VERSION, pages, activePageId };
+  const doc: InkDoc = { kind: INK_DOC_KIND, version: INK_DOC_VERSION, pages, activePageId };
+  if (record.sourcePdf !== undefined) {
+    const sourcePdf = normalizeSourcePdf(record.sourcePdf);
+    if (!sourcePdf) return null;
+    doc.sourcePdf = sourcePdf;
+  }
+  return doc;
 }
 
-/** 稳定字段顺序，便于 hash / diff / S3 对象复用。 */
+/** 稳定字段顺序，便于 hash / diff / S3 对象复用。v2 字段只在存在时出现，缺省值（fit=contain）显式写出。 */
+function serializeBackgroundImagePdfRef(pdf: InkBackgroundImagePdfRef): InkBackgroundImagePdfRef {
+  return { url: pdf.url, page: pdf.page, pageCount: pdf.pageCount };
+}
+
+function serializeBackgroundImage(image: InkBackgroundImage): Record<string, unknown> {
+  const out: Record<string, unknown> = { url: image.url, fit: image.fit ?? "contain" };
+  if (image.opacity !== undefined) out.opacity = image.opacity;
+  if (image.pixelWidth !== undefined && image.pixelHeight !== undefined) {
+    out.pixelWidth = image.pixelWidth;
+    out.pixelHeight = image.pixelHeight;
+  }
+  if (image.source !== undefined) out.source = image.source;
+  if (image.pdf !== undefined) out.pdf = serializeBackgroundImagePdfRef(image.pdf);
+  return out;
+}
+
 export function inkToBody(doc: InkDoc): string {
   if (doc.pages.length === 0 || doc.pages.length > MAX_PAGES) throw new Error("手写板页数超出上限");
   let totalStrokes = 0;
   let totalPoints = 0;
   const pages = doc.pages.map((page) => {
     if (page.strokes.length > MAX_STROKES_PER_PAGE) throw new Error("单页笔迹数量超出上限");
-    return {
+    const out: Record<string, unknown> = {
       id: page.id,
       width: page.width,
       height: page.height,
       background: page.background,
-      strokes: page.strokes.map((stroke) => {
-        if (stroke.points.length > MAX_POINTS_PER_STROKE) throw new Error("单条笔迹采样点超出上限");
-        return {
-          id: stroke.id,
-          tool: stroke.tool,
-          color: stroke.color,
-          width: stroke.width,
-          points: stroke.points.map((point) => {
-            const out: Record<string, number> = { x: point.x, y: point.y, pressure: point.pressure };
-            if (point.t !== undefined) out.t = point.t;
-            return out;
-          }),
-        };
-      }),
     };
+    if (page.backgroundImage) out.backgroundImage = serializeBackgroundImage(page.backgroundImage);
+    out.strokes = page.strokes.map((stroke) => {
+      if (stroke.points.length > MAX_POINTS_PER_STROKE) throw new Error("单条笔迹采样点超出上限");
+      return {
+        id: stroke.id,
+        tool: stroke.tool,
+        color: stroke.color,
+        width: stroke.width,
+        points: stroke.points.map((point) => {
+          const pointOut: Record<string, number> = { x: point.x, y: point.y, pressure: point.pressure };
+          if (point.t !== undefined) pointOut.t = point.t;
+          return pointOut;
+        }),
+      };
+    });
+    return out;
   });
   const activePageId = doc.activePageId && pages.some((page) => page.id === doc.activePageId)
     ? doc.activePageId
     : pages[0]?.id;
-  for (const page of pages) {
+  for (const page of doc.pages) {
     totalStrokes += page.strokes.length;
     totalPoints += page.strokes.reduce((sum, stroke) => sum + stroke.points.length, 0);
   }
@@ -229,6 +386,7 @@ export function inkToBody(doc: InkDoc): string {
     version: INK_DOC_VERSION,
     pages,
     ...(activePageId ? { activePageId } : {}),
+    ...(doc.sourcePdf ? { sourcePdf: { url: doc.sourcePdf.url, pageCount: doc.sourcePdf.pageCount } } : {}),
   });
   if (body.length > MAX_INK_BODY_CHARS) throw new Error("手写板正文超过 16 MiB 上限");
   return body;

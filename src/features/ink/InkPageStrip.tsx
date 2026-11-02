@@ -1,5 +1,6 @@
 import { ArrowLeft, ArrowRight, Plus, Trash2, X } from "lucide-react";
-import type { InkPage } from "../../core/inkDoc.js";
+import type { InkBackgroundImage, InkPage } from "../../core/inkDoc.js";
+import { inkThumbUrl } from "./inkImageImport.js";
 import { InkPaper } from "./InkPaper.js";
 
 export interface InkPageStripProps {
@@ -17,10 +18,29 @@ export interface InkPageStripProps {
   readOnly?: boolean;
 }
 
+function thumbAspect(image: InkBackgroundImage): string {
+  if (image.fit === "cover") return "xMidYMid slice";
+  if (image.fit === "stretch") return "none";
+  return "xMidYMid meet";
+}
+
 function PageThumb({ page }: { page: InkPage }) {
   return (
     <svg viewBox={`0 0 ${page.width} ${page.height}`} preserveAspectRatio="xMidYMid meet" aria-hidden="true">
-      <InkPaper width={page.width} height={page.height} background={page.background} />
+      {page.backgroundImage ? (
+        // 缩略图不直接解码原图（N 张页 × 大图会卡预览）：资产服务 `?w=256` 档，够缩略图清晰度。
+        <image
+          href={inkThumbUrl(page.backgroundImage.url)}
+          x={0}
+          y={0}
+          width={page.width}
+          height={page.height}
+          preserveAspectRatio={thumbAspect(page.backgroundImage)}
+          pointerEvents="none"
+        />
+      ) : (
+        <InkPaper width={page.width} height={page.height} background={page.background} />
+      )}
       {page.strokes.map((stroke) => (
         <polyline
           key={stroke.id}

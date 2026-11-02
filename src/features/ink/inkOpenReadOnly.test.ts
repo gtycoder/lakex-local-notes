@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { localAssetHttpUrl } from "../../core/assetUrl.js";
 import { canonicalDocBody } from "../../core/docBaseline.js";
 import { createInkDoc, inkToBody } from "../../core/inkDoc.js";
 
@@ -53,3 +54,29 @@ describe("手写板打开只读（CORE-03）", () => {
     expect(canonicalDocBody("ink", "")).toBe(inkToBody(createInkDoc()));
   });
 });
+
+  it("v2 图片页：带背景图片打开同样「等价 ⇒ 不写盘」（canonical 含新字段）", () => {
+    const imageUrl = localAssetHttpUrl("note-1", "1700000000000_abcdef12.png");
+    const doc = createInkDoc("page-1");
+    doc.pages[0] = {
+      ...doc.pages[0],
+      backgroundImage: { url: imageUrl, fit: "contain", pixelWidth: 1200, pixelHeight: 1600 },
+    };
+    const disk = inkToBody(doc);
+    expect(canonicalDocBody("ink", disk)).toBe(disk); // 新字段进 canonical ⇒ 打开不会被误判为「有改动」
+    // 背景图必须在渲染层出现（否则图片页打开是空白，用户会去动正文）
+    expect(INK_PAD).toContain("page.backgroundImage ?");
+    expect(INK_PAD).toContain('pointerEvents="none"');
+  });
+
+  it("v1 正文可读：规范形态 = 读入后写回的 v2 形态（不写迁移脚本，但仍不写盘）", () => {
+    const v1Body = JSON.stringify({
+      kind: "ink",
+      version: 1,
+      pages: [{ id: "p1", width: 794, height: 1123, background: "blank", strokes: [] }],
+      activePageId: "p1",
+    });
+    const canonical = canonicalDocBody("ink", v1Body);
+    expect(canonical).not.toBeNull();
+    expect(canonicalDocBody("ink", canonical!)).toBe(canonical);
+  });

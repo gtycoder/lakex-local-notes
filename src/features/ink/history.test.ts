@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  INK_DOC_VERSION,
   createInkDoc,
   createInkPage,
   inkToBody,
@@ -34,7 +35,7 @@ function pageWithStroke(id: string, stroke: InkStroke): InkPage {
 }
 
 function withPages(pages: InkPage[], activePageId = pages[0].id): InkDoc {
-  return { kind: "ink", version: 1, pages, activePageId };
+  return { kind: "ink", version: INK_DOC_VERSION, pages, activePageId };
 }
 
 function structuralPatch(beforePages: InkPage[], afterPages: InkPage[], page: InkPage | null, before: InkPage | null): InkPatch {

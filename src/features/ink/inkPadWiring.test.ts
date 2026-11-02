@@ -16,6 +16,8 @@ const DESKTOP_INK_CSS = read("./inkPad.desktop.css");
 const PAGE_STRIP = read("./InkPageStrip.tsx");
 const TABS_CSS = read("../../styles/app/tabs.css");
 const MOBILE_INK_CSS = read("../../mobile/ink/inkPad.mobile.css");
+const MOBILE_INK_PAD = read("../../mobile/ink/MobileInkPad.tsx");
+const INK_DOC = read("../../core/inkDoc.ts");
 
 describe("手写板正式端到端接线", () => {
   it("kind=ink 已进入 NoteKind / 正文路径", () => {
@@ -208,8 +210,12 @@ describe("手写板正式端到端接线", () => {
     expect(PAGE_STRIP).toContain("onClick={() => onSelect(page.id)}");
   });
 
-  it("桌面结构零变化：顶部工具条 + 底部页码/纸张/缩放原样，且不含移动端新入口", () => {
+  it("桌面结构：本任务只新增「导入图片」入口，顶部工具条 + 底部页码/纸张/缩放逐字不变", () => {
     const branch = desktopBranch();
+    // v2 图片页入口（桌面唯一新增）：工具条里、编辑态可用
+    expect(branch).toContain('aria-label="导入图片"');
+    expect(branch).toContain("disabled={readOnly || importing}");
+    expect(branch).toContain("onClick={() => void importImages()}");
     expect(branch).toContain('role="toolbar" aria-label="手写工具"');
     expect(branch).toContain('aria-label="画笔"');
     expect(branch).toContain('aria-label="高亮笔"');
@@ -233,6 +239,40 @@ describe("手写板正式端到端接线", () => {
     expect(branch).not.toContain("data-overlay");
     // 桌面预览面板保持「流内、直接渲染 InkPageStrip」——不套悬浮包装
     expect(INK_PAD).toMatch(/\{pagesOpen && \(variant === "desktop" \? \(\s*<InkPageStrip/);
+  });
+
+  it("v2 正文模型：版本 2、每页可选 backgroundImage（严格校验，canonical 含新字段）", () => {
+    expect(INK_DOC).toContain("INK_DOC_VERSION = 2 as const");
+    expect(INK_DOC).toContain("INK_DOC_READ_VERSIONS");
+    expect(INK_DOC).toContain("interface InkBackgroundImage");
+    expect(INK_DOC).toContain("backgroundImage?: InkBackgroundImage");
+    expect(INK_DOC).toContain("isNoteAssetUrl(record.url)");
+    expect(INK_DOC).toContain("positiveInt(record.pixelWidth)");
+    expect(INK_DOC).toContain("out.backgroundImage = serializeBackgroundImage(page.backgroundImage)");
+  });
+
+  it("图片页渲染：image 层在笔迹下、pointer-events:none、无图不渲染；缩略图走 ?w=256 低清档", () => {
+    expect(INK_PAD).toContain("page.backgroundImage ?");
+    expect(INK_PAD).toContain('pointerEvents="none"');
+    expect(INK_PAD).toContain("backgroundImageAspect(page.backgroundImage)");
+    expect(PAGE_STRIP).toContain("inkThumbUrl(page.backgroundImage.url)");
+    expect(PAGE_STRIP).toContain('pointerEvents="none"');
+  });
+
+  it("导入入口：移动端在编辑态的全局预览里、桌面在编辑态工具条；正文只在编辑态写", () => {
+    // 移动端预览面板里的导入行（!readOnly && onImportImages 才渲染）
+    expect(INK_PAD).toContain("data-ink-import");
+    expect(INK_PAD).toContain("{!readOnly && onImportImages && (");
+    // 两端入口同一份 importImages（仅编辑态可写）
+    expect(INK_PAD).toMatch(/const importImages = useCallback\(async \(\) => \{\s*const importer = onImportImagesRef\.current;\s*if \(!importer \|\| readOnly \|\| importingRef\.current\) return;/);
+    expect(INK_PAD).toContain("inkPageDelta(null, page)");
+    // host 注入：桌面走 native.uploadResource + noteId；移动端走 bridge.uploadResource + noteId
+    expect(DESKTOP_INK).toContain("native.uploadResource(input, noteId)");
+    expect(DESKTOP_INK).toContain("onImportImages={onImportImages}");
+    expect(MOBILE_INK_PAD).toContain("bridge.uploadResource(input, noteId)");
+    expect(MOBILE).toContain("noteId={t.id}");
+    // 移动端导入 CSS（预览面板里一行）
+    expect(MOBILE_INK_CSS).toContain('[data-ink-import]');
   });
 
   it("只读态 capture 交父层最新正文（桌面锁定文档不会被只读翻页写盘）", () => {

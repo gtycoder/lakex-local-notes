@@ -1,12 +1,13 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import type { EditorCaptureHandler } from "../../core/editorCapture";
-import { ChevronLeft, ChevronRight, Eraser, Highlighter, LayoutGrid, Minus, Pen, Plus, Redo2, Undo2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Eraser, Highlighter, ImagePlus, LayoutGrid, Minus, Pen, Plus, Redo2, Undo2 } from "lucide-react";
 import { COLOR_BOARD_GROUPS, QUICK_TEXT_COLORS } from "../../core/colorPalette.js";
 import {
   createInkPage,
   inkToBody,
   parseInkBody,
   type InkBackground,
+  type InkBackgroundImage,
   type InkDoc,
   type InkPage,
   type InkPoint,
@@ -18,6 +19,7 @@ import { hitTestStroke, strokeToSvgPath } from "./inkGeometry.js";
 import {
   applyInkPatch,
   inkOrderDelta,
+  inkPageDelta,
   inkPagePatch,
   pushBoundedHistory,
   type InkHistoryEntry,
@@ -25,6 +27,8 @@ import {
 } from "./history.js";
 import { InkPaper } from "./InkPaper.js";
 import InkPageStrip from "./InkPageStrip.js";
+import { newInkId } from "./ids.js";
+import type { InkImageImportOutcome } from "./inkImageImport.js";
 
 export type InkPadMode = InkTool | "eraser";
 
@@ -38,6 +42,11 @@ export interface InkPadProps {
   onChange?: (content: string) => void;
   onDirty?: () => void;
   onEditorCapture?: EditorCaptureHandler;
+  /**
+   * v2 图片页导入（两端各自注入：选图 + 上传资产）。
+   * 返回 null = 用户取消；pages 会被追加成新页并切到第一张新页（只能在编辑态调用）。
+   */
+  onImportImages?: () => Promise<InkImageImportOutcome | null>;
 }
 
 const SAVE_DEBOUNCE_MS = 500;
@@ -58,9 +67,11 @@ function widthDotSize(width: number): number {
   return Math.min(20, Math.max(4, Math.round(width * 2)));
 }
 
-function newId(prefix: string): string {
-  const uuid = globalThis.crypto?.randomUUID?.();
-  return uuid ? `${prefix}-${uuid}` : `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+/** 背景图片 → SVG preserveAspectRatio（contain 整图可见 / cover 裁切铺满 / stretch 拉伸）。 */
+function backgroundImageAspect(image: InkBackgroundImage): string {
+  if (image.fit === "cover") return "xMidYMid slice";
+  if (image.fit === "stretch") return "none";
+  return "xMidYMid meet";
 }
 
 function pointFromClient(clientX: number, clientY: number, pointerType: string, pressure: number, rect: DOMRect, page: InkPage): InkPoint {
@@ -102,7 +113,7 @@ const StaticStrokeLayer = memo(function StaticStrokeLayer({ strokes }: { strokes
   );
 });
 
-export function InkPad({ content, readOnly = false, variant, active, paneVisible, pane, onChange, onDirty, onEditorCapture }: InkPadProps) {
+export function InkPad({ content, readOnly = false, variant, active, paneVisible, pane, onChange, onDirty, onEditorCapture, onImportImages }: InkPadProps) {
   // 正文只在挂载时解析；父层保存会更新 content，但编辑器不应因此反复解析整份大 JSON。
   // 外部真正需要换正文时由宿主 bump reloadKey 重挂载。
   const [doc, setDoc] = useState<InkDoc | null>(() => parseInkBody(content));
@@ -122,6 +133,10 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
   const [activeStroke, setActiveStroke] = useState<InkStroke | null>(null);
   const [historyVersion, setHistoryVersion] = useState(0);
   const [saveError, setSaveError] = useState<string | null>(null);
+  // v2 图片页导入：进行中标记 + 可见错误（失败/超限要能看见）
+  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  const importingRef = useRef(false);
   // 撤销/重做只存页级补丁；整篇正文序列化只用于保存。
   const undoRef = useRef<InkHistoryEntry[]>([]);
   const redoRef = useRef<InkHistoryEntry[]>([]);
@@ -139,6 +154,8 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
   onDirtyRef.current = onDirty;
   const onEditorCaptureRef = useRef(onEditorCapture);
   onEditorCaptureRef.current = onEditorCapture;
+  const onImportImagesRef = useRef(onImportImages);
+  onImportImagesRef.current = onImportImages;
   /** 阅读态：翻页/缩放只改本地视图，capture 绝不可交出可写正文（桌面锁定文档的保存管线会按需 capture）。 */
   const readOnlyRef = useRef(readOnly);
   readOnlyRef.current = readOnly;
@@ -354,12 +371,45 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
   const addPage = useCallback(() => {
     const current = docRef.current;
     if (!current || readOnly) return;
-    const nextPage = createInkPage(newId("page"), "blank");
+    const nextPage = createInkPage(newInkId("page"), "blank");
     const next = { ...current, pages: [...current.pages, nextPage], activePageId: nextPage.id };
     const patch: InkPatch = inkPagePatch(null, nextPage);
     const order = inkOrderDelta(current.pages, next.pages);
     if (order) patch.order = order;
     commit(next, patch);
+  }, [commit, readOnly]);
+
+  /**
+   * v2：导入图片页（编辑态）。宿主负责选图/上传（桌面 IPC、移动端 bridge），
+   * 这里只负责「追加成页 + 切到第一张新页 + 一次可撤销提交」；失败给可见错误。
+   */
+  const importImages = useCallback(async () => {
+    const importer = onImportImagesRef.current;
+    if (!importer || readOnly || importingRef.current) return;
+    importingRef.current = true;
+    setImporting(true);
+    setImportError(null);
+    try {
+      const outcome = await importer();
+      if (!outcome) return; // 用户取消
+      if (outcome.errors.length > 0) setImportError(outcome.errors.join("；"));
+      const current = docRef.current;
+      if (!current || outcome.pages.length === 0) return;
+      const added = outcome.pages;
+      const next: InkDoc = { ...current, pages: [...current.pages, ...added], activePageId: added[0].id };
+      const patch: InkPatch = { pages: added.map((page) => inkPageDelta(null, page)) };
+      const order = inkOrderDelta(current.pages, next.pages);
+      if (order) patch.order = order;
+      commit(next, patch);
+      // 导入后直接落在第一张新图上继续批注
+      setPagesOpen(false);
+      setPendingDeletePageId(null);
+    } catch (reason) {
+      setImportError(reason instanceof Error ? reason.message : "导入图片失败");
+    } finally {
+      importingRef.current = false;
+      setImporting(false);
+    }
   }, [commit, readOnly]);
 
   const selectPage = useCallback((id: string) => {
@@ -473,7 +523,7 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
       return;
     }
     const stroke: InkStroke = {
-      id: newId("stroke"),
+      id: newInkId("stroke"),
       tool: mode,
       color,
       width: mode === "highlighter" ? highlighterWidth : penWidth,
@@ -598,6 +648,12 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
           <span className="ink-toolbar__sep" />
           <button className="ink-tool" onClick={undo} aria-label="撤销" title="撤销" disabled={readOnly || !canUndo}><Undo2 size={16} /></button>
           <button className="ink-tool" onClick={redo} aria-label="重做" title="重做" disabled={readOnly || !canRedo}><Redo2 size={16} /></button>
+          {onImportImages && (
+            <>
+              <span className="ink-toolbar__sep" />
+              <button className="ink-tool" onClick={() => void importImages()} aria-label="导入图片" title="导入图片" disabled={readOnly || importing}><ImagePlus size={16} /></button>
+            </>
+          )}
           {variant === "desktop" && (
             <>
               <span className="ink-toolbar__sep" />
@@ -637,6 +693,7 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
       )}
 
       {saveError && <div className="ink-invalid-banner" role="alert">{saveError}；本次修改未写入。</div>}
+      {importError && <div className="ink-invalid-banner" role="alert">导入图片失败：{importError}</div>}
 
       {pagesOpen && (variant === "desktop" ? (
         <InkPageStrip
@@ -668,6 +725,13 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
             onClose={() => { setPagesOpen(false); setPendingDeletePageId(null); }}
             readOnly={readOnly}
           />
+          {!readOnly && onImportImages && (
+            <div data-ink-import>
+              <button className="ink-tool" onClick={() => void importImages()} aria-label="导入图片" title="导入图片" disabled={importing}>
+                <ImagePlus size={18} /><span>导入图片</span>
+              </button>
+            </div>
+          )}
         </div>
       ))}
 
@@ -688,7 +752,21 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
             onLostPointerCapture={cancelPointer}
             aria-label={`手写板第 ${pageIndex + 1} 页`}
           >
-            <InkPaper width={page.width} height={page.height} background={page.background} />
+            {/* v2 图片页：背景图按页面逻辑坐标铺在笔迹层下面；有图时不再叠纸张底纹（图本身就是纸面） */}
+            {page.backgroundImage ? (
+              <image
+                href={page.backgroundImage.url}
+                x={0}
+                y={0}
+                width={page.width}
+                height={page.height}
+                preserveAspectRatio={backgroundImageAspect(page.backgroundImage)}
+                opacity={page.backgroundImage.opacity ?? 1}
+                pointerEvents="none"
+              />
+            ) : (
+              <InkPaper width={page.width} height={page.height} background={page.background} />
+            )}
             <StaticStrokeLayer strokes={renderedStrokes} />
             {activeStroke && activePath && (
               <path

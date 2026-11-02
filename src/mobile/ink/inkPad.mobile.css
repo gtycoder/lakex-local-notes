@@ -116,3 +116,14 @@
 .ink-pad--mobile[data-readonly="true"] {
   padding-bottom: calc(var(--mobile-status-height) + var(--mobile-bar-gap) + var(--mobile-bottom-safe-area) + var(--mobile-bottom-bar-height) + var(--lake-space-md));
 }
+/* 全局预览里的「导入图片」（仅编辑态；v2 图片页）：一行居中，按钮盒仍 44、文字走 tiny 档。 */
+.ink-pad--mobile > [data-overlay="preview"] [data-ink-import] {
+  display: flex; justify-content: center;
+  padding: 0 var(--lake-space-md) var(--lake-space-md);
+}
+.ink-pad--mobile > [data-overlay="preview"] [data-ink-import] .ink-tool {
+  gap: var(--lake-space-xs); min-width: auto;
+  padding: 0 var(--lake-space-lg);
+  color: var(--lake-accent-text);
+  font-size: var(--lake-font-size-tiny);
+}
