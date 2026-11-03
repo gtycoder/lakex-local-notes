@@ -35,7 +35,7 @@ html[data-form-factor="expanded"] {
 /* 有面板被固定（停靠）时，主列改成横向：左树 280 ｜ 正文 ｜ 右大纲 320 —— 与桌面三栏同构。 */
 html[data-form-factor="expanded"] .pad-main--docked { flex-direction: row; }
 
-/* 悬浮左目录：默认不渲染（display:none 兜底，JS 也只在 expanded 且开合为真时挂载） */
+/* 悬浮左目录：手机不渲染；expanded 下**常驻 DOM**（关闭态用 transform+visibility 隐藏，见下方规则） */
 .pad-tree { display: none; }
 
 /* 平板：树/大纲默认是**悬浮覆盖层**（不占布局、不挤压正文）；正文吃满可视编辑空间。
@@ -56,13 +56,24 @@ html[data-form-factor="expanded"] .pad-tree {
   border-radius: 0 var(--lake-radius-card) var(--lake-radius-card) 0;
   box-shadow: var(--lake-shadow-popover);
   overflow: hidden;
+  /* P1：常驻 DOM，关闭态靠 transform + visibility 隐藏（可过渡；手势跟手也靠改 inline transform）。 */
+  transform: translateX(-100%);
+  visibility: hidden;
+  transition: transform var(--mobile-duration-panel) var(--mobile-ease-panel), visibility var(--mobile-duration-panel);
 }
+
+html[data-form-factor="expanded"] .pad-tree.is-open { transform: none; visibility: visible; }
+
+/* 手势拖动中：即使还在关闭态也要可见（否则拖出来的是透明面板）。 */
+html[data-form-factor="expanded"] .pad-tree.side-panel--swiping { visibility: visible; transition: none; }
 
 /* 固定（停靠）：回到布局流，成为主列的第一栏；圆角/阴影退场，只留一条发丝线分隔。 */
 html[data-form-factor="expanded"] .pad-tree--pinned {
   position: static;
   flex: 0 0 var(--pad-tree-width);
   width: var(--pad-tree-width);
+  transform: none;
+  visibility: visible;
   z-index: auto;
   border-radius: 0;
   border-right: .5px solid var(--lake-border-1);
@@ -221,13 +232,22 @@ html[data-form-factor="expanded"] .nb-shelf {
   border-radius: var(--lake-radius-card) 0 0 var(--lake-radius-card);
   box-shadow: var(--lake-shadow-popover);
   overflow: hidden;
+  transform: translateX(100%);
+  visibility: hidden;
+  transition: transform var(--mobile-duration-panel) var(--mobile-ease-panel), visibility var(--mobile-duration-panel);
 }
+
+html[data-form-factor="expanded"] .pad-outline.is-open { transform: none; visibility: visible; }
+
+html[data-form-factor="expanded"] .pad-outline.side-panel--swiping { visibility: visible; transition: none; }
 
 /* 固定（停靠）：回到布局流、成为主列第三栏。 */
 html[data-form-factor="expanded"] .pad-outline--pinned {
   position: static;
   flex: 0 0 var(--pad-outline-width);
   width: var(--pad-outline-width);
+  transform: none;
+  visibility: visible;
   z-index: auto;
   border-radius: 0;
   border-left: .5px solid var(--lake-border-1);
@@ -249,19 +269,6 @@ html[data-form-factor="expanded"] .pad-outline--pinned {
 .pad-outline > .side-panel-body {
   flex: 1 1 auto;
   min-height: 0;
-}
-
-/* 悬浮面板入场（胶囊与横向手势走同一条；只动 opacity/transform，250ms ease-out；停靠态不播）。
- * 手势在关闭态没有 DOM 可跟手 ⇒ 松手后面板以这条入场动画出现，观感与手机抽屉一致。 */
-@keyframes pad-panel-in-left { from { opacity: 0; transform: translateX(-12px); } }
-@keyframes pad-panel-in-right { from { opacity: 0; transform: translateX(12px); } }
-
-html[data-form-factor="expanded"] .pad-tree:not(.pad-tree--pinned) {
-  animation: pad-panel-in-left var(--mobile-duration-panel) var(--mobile-ease-panel);
-}
-
-html[data-form-factor="expanded"] .pad-outline:not(.pad-outline--pinned) {
-  animation: pad-panel-in-right var(--mobile-duration-panel) var(--mobile-ease-panel);
 }
 
 /* 左树/右大纲头里的「固定」按钮：选中态走 kit 图标钮的 active 口径。 */

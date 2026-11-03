@@ -849,8 +849,14 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
 
       <div className={"mobile-workspace-main" + (padDocked ? " pad-main--docked" : "")}>
         {/* 平板（expanded）：悬浮左目录（覆盖层，不占布局）；手机不渲染这段（padTwoPane=false） */}
-        {padTwoPane && padTreeOpen && (
-          <aside className={"pad-tree" + (padTreePinned ? " pad-tree--pinned" : "")} aria-label="目录">
+        {/* 261103 P1：面板**常驻 DOM**（与手机抽屉同构）——开合只切 class，
+            滚动/展开/重命名状态不再因收起而丢、手势也不再「关闭态没有 DOM」。 */}
+        {padTwoPane && (
+          <aside
+            className={"pad-tree" + (padTreeOpen ? " is-open" : "") + (padTreeOpen && padTreePinned ? " pad-tree--pinned" : "")}
+            aria-label="目录"
+            aria-hidden={padTreeOpen ? undefined : "true"}
+          >
             <div className="pad-tree__head">
               <span className="mb-tree-icon" aria-hidden="true">{nbIcon ? <MobileNodeIconGlyph value={nbIcon} /> : <Book size={16} />}</span>
               <span className="pad-tree__title">{title}</span>
@@ -1006,11 +1012,11 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
         </section>
 
         {/* 平板：右侧大纲悬浮覆盖层（手机仍是 .side-panel--right 抽屉；rail 只在 expanded 渲染） */}
-        {padTwoPane && padOutlineOpen && (
+        {padTwoPane && (
           <OutlineSheet
             rail
-            open
-            pinned={padOutlinePinned}
+            open={padOutlineOpen}
+            pinned={padOutlineOpen && padOutlinePinned}
             onTogglePin={() => setPadOutlinePinned((v) => !v)}
             editor={activeId ? (editorsRef.current.get(activeId) ?? null) : null}
             onClose={() => setPadOutlineOpen(false)}

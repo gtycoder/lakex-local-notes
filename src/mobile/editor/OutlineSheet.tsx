@@ -102,7 +102,11 @@ export function OutlineSheet({ open, editor, onClose, side, rail, pinned = false
   // 平板右栏：无遮罩/无滑动的**悬浮覆盖层**（position:fixed，不挤压正文；开合由 NotebookWorkspace 顶栏管）。
   if (rail) {
     return (
-      <aside className={"pad-outline" + (pinned ? " pad-outline--pinned" : "")} aria-label="大纲">
+      <aside
+        className={"pad-outline" + (open ? " is-open" : "") + (open && pinned ? " pad-outline--pinned" : "")}
+        aria-label="大纲"
+        aria-hidden={open ? undefined : "true"}
+      >
         <div className="pad-outline__head">
           <span>大纲</span>
           {onTogglePin && (
