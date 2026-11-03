@@ -16,6 +16,8 @@ const read = (rel: string): string => readFileSync(new URL(rel, import.meta.url)
 const WORKSPACE = read("./notebook/NotebookWorkspace.tsx");
 /** 261103 P9-5b：浮层（图标/历史版本等 MobileSheet）拆到 WorkspaceOverlayHost.tsx。 */
 const WORKSPACE_OVERLAYS = read("./notebook/WorkspaceOverlayHost.tsx");
+/** 261103 P11-②：浮层返回栈登记拆到 useWorkspaceSync.ts。 */
+const WORKSPACE_SYNC = read("./notebook/useWorkspaceSync.ts");
 const OVERLAYS = read("./notebook/useWorkspaceOverlays.ts");
 const SHEET = read("./ui/MobileSheet.tsx");
 const INFO = read("./ui/NoteInfoSheet.tsx");
@@ -41,8 +43,8 @@ describe("移动端返回键先关浮层（MOB-01 / MOB-02）", () => {
   it("工作区：唯一 owner 单一判据（overlay.kind），任一浮层打开就登记、只关最上层", () => {
     // 互斥与状态都在 owner 里 ⇒ 工作区只剩一条按 kind 的返回处理器
     expect(WORKSPACE).toContain("useWorkspaceOverlays()");
-    expect(WORKSPACE).toContain("if (!overlayKind || SELF_REGISTERED_OVERLAY_KINDS.has(overlayKind)) return;");
-    expect(WORKSPACE).toContain("pushBackHandler(() => { closeOverlay(overlayKind); return true; })");
+    expect(WORKSPACE_SYNC).toContain("if (!overlayKind || SELF_REGISTERED_OVERLAY_KINDS.has(overlayKind)) return;");
+    expect(WORKSPACE_SYNC).toContain("pushBackHandler(() => { closeOverlay(overlayKind); return true; })");
     // 旧的 10 个独立 useState / 手写互斥不许回来（互斥只在 owner 的 open 里）
     expect(WORKSPACE).not.toContain("const [sidebarOpen, setSidebarOpen]");
     expect(WORKSPACE).not.toContain("const [tabsOpen, setTabsOpen]");

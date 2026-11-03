@@ -18,7 +18,8 @@ function installEnv(): void {
 const read = (rel: string) => readFileSync(new URL(rel, import.meta.url), "utf8");
 const strip = (s: string) => s.replace(/\/\*\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
 const HOME = strip(read("../home/HomePage.tsx"));
-const WS = strip(read("../notebook/NotebookWorkspace.tsx"));
+/** 261103 P11-②：目录行菜单/回调组装拆到 useWorkspaceActions.ts（工作区本身已不再持这些字符串）。 */
+const ACTIONS = strip(read("../notebook/useWorkspaceActions.ts"));
 
 describe("移动端「常用」文档（261019，仅设备本地）", () => {
   beforeEach(() => installEnv());
@@ -67,9 +68,9 @@ describe("移动端「常用」文档（261019，仅设备本地）", () => {
   });
 
   it("目录菜单：文档行有「设为常用 / 取消常用」，走本地 toggle + toast", () => {
-    expect(WS).toMatch(/label: isFavorite\(node\.id\) \? "\u53d6\u6d88\u5e38\u7528" : "\u8bbe\u4e3a\u5e38\u7528"/);
-    expect(WS).toMatch(/root === "favorite".*toggleFavorite\(node\.id\)/);
-    expect(WS).toContain("\u5df2\u8bbe\u4e3a\u5e38\u7528");
+    expect(ACTIONS).toMatch(/label: isFavorite\(node\.id\) \? "\u53d6\u6d88\u5e38\u7528" : "\u8bbe\u4e3a\u5e38\u7528"/);
+    expect(ACTIONS).toMatch(/root === "favorite".*toggleFavorite\(node\.id\)/);
+    expect(ACTIONS).toContain("\u5df2\u8bbe\u4e3a\u5e38\u7528");
   });
 
   it("只走 localStorage：不 import bridge / S3 / 同步模块（桌面零改动、不触发同步）", () => {

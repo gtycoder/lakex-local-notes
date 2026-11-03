@@ -18,6 +18,8 @@ const TOPBAR = read("./WorkspaceTopBar.tsx");
 const OVERLAY = read("./WorkspaceOverlayHost.tsx");
 /** 261103 P9-5b：手机侧抽屉（笔记本行 + 工具栏「新建」+ 树）拆到 WorkspaceDrawers.tsx。 */
 const DRAWERS = read("./WorkspaceDrawers.tsx");
+/** 261103 P11-②：行菜单/新建通道/父子回调组装拆到 useWorkspaceActions.ts。 */
+const ACTIONS = read("./useWorkspaceActions.ts");
 /** 抽屉树行已抽到 NotebookTreeList（261027 虚拟窗口化）：行内 ⋮/＋ 的断言看这份。 */
 const TREE_LIST = read("./NotebookTreeList.tsx");
 const APP = read("../MobileApp.tsx");
@@ -52,25 +54,26 @@ describe("工作区「更多」菜单（261014）", () => {
     expect(items).toEqual(["新建文档", "新建表格", "新建多维表", "新建画板", "新建手写板", "新建分组"]);
     // 261020 移动端批后：六类创建项全部可点（usheet/bitable/board 都有移动编辑器；ink 由 remote ink 批解禁）
     for (const kind of ["note", "usheet", "bitable", "board", "ink", "group"]) {
-      expect(WORKSPACE).not.toMatch(new RegExp('id: "' + kind + '"[^}]*disabled'));
+      expect(OVERLAY).not.toMatch(new RegExp('id: "' + kind + '"[^}]*disabled'));
     }
     // 单一创建通道：建库（按 kind 分派）→ 刷新目录 → 收抽屉 → 打开标签；清单 id → kind 只有一份映射
-    expect(WORKSPACE).toContain("const CREATE_MENU_KINDS");
+    // （P11-②：创建通道随行菜单/回调组装拆到 useWorkspaceActions.ts）
+    expect(ACTIONS).toContain("const CREATE_MENU_KINDS");
     for (const [id, kind] of [["note", "doc"], ["usheet", "usheet"], ["bitable", "bitable"], ["board", "board"], ["ink", "ink"]]) {
-      expect(WORKSPACE).toMatch(new RegExp(id + ': "' + kind + '"'));
+      expect(ACTIONS).toMatch(new RegExp(id + ': "' + kind + '"'));
     }
-    expect(WORKSPACE).toMatch(/const pid = parentId \|\| notebookId;/);
-    expect(WORKSPACE).toContain('bridge.createNote("无标题文档", pid)');
-    expect(WORKSPACE).toContain('bridge.createUsheet("无标题表格", pid)');
-    expect(WORKSPACE).toContain('bridge.createBitable("无标题多维表", pid)');
-    expect(WORKSPACE).toContain('bridge.createBoard("无标题画板", pid)');
-    expect(WORKSPACE).toContain('bridge.createInk("无标题手写板", pid)');
+    expect(ACTIONS).toMatch(/const pid = parentId \|\| notebookId;/);
+    expect(ACTIONS).toContain('bridge.createNote("无标题文档", pid)');
+    expect(ACTIONS).toContain('bridge.createUsheet("无标题表格", pid)');
+    expect(ACTIONS).toContain('bridge.createBitable("无标题多维表", pid)');
+    expect(ACTIONS).toContain('bridge.createBoard("无标题画板", pid)');
+    expect(ACTIONS).toContain('bridge.createInk("无标题手写板", pid)');
     // 新建后关掉目录抽屉：否则编辑器在抽屉后面打开（设备实测）
-    expect(WORKSPACE).toMatch(/createBoard\("无标题画板", pid\)[\s\S]{0,200}await loadTree\(\);[\s\S]{0,80}closeOverlay\("sidebar"\);/);
+    expect(ACTIONS).toMatch(/createBoard\("无标题画板", pid\)[\s\S]{0,200}await loadTree\(\);[\s\S]{0,80}closeOverlay\("sidebar"\);/);
     // 表格/数据表/画板建完直接进编辑态（文档与手写板停在阅读态）
-    expect(WORKSPACE).toMatch(/await openTab\(n\.id, \{ enterEditor: kind === "usheet" \|\| kind === "bitable" \|\| kind === "board" \}\);/);
+    expect(ACTIONS).toMatch(/await openTab\(n\.id, \{ enterEditor: kind === "usheet" \|\| kind === "bitable" \|\| kind === "board" \}\);/);
     // 菜单只把文档类交给创建通道，group 走分组创建
-    expect(WORKSPACE).toMatch(/const kind = CREATE_MENU_KINDS\[it\.id\];/);
+    expect(ACTIONS).toMatch(/const kind = CREATE_MENU_KINDS\[it\.id\];/);
   });
 
   it("笔记本编辑入口 = 首页「知识库」长按卡片（261014 用户最终定稿）", () => {
@@ -93,7 +96,8 @@ describe("工作区「更多」菜单（261014）", () => {
   });
 
   it("目录行 ⋮ 菜单不再放「新建文档 / 新建分组」（261019 用户点单：新建统一走 ＋）", () => {
-    const block = WORKSPACE.slice(WORKSPACE.indexOf("const treeMenuItems"), WORKSPACE.indexOf("const onTreeMenuSelect"));
+    // P11-②：行菜单 items 组装随 useWorkspaceActions 搬出工作区
+    const block = ACTIONS.slice(ACTIONS.indexOf("const treeMenuItems"), ACTIONS.indexOf("const onTreeMenuSelect"));
     expect(block).not.toContain('id: "new-note"');
     expect(block).not.toContain('id: "new-group"');
     // 新建能力没丢：行内 ＋（新建子项）与抽屉工具栏「新建」都还在，且共用同一份 6 项清单

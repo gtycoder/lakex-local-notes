@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { usePanelDrag, type PanelSide } from "../hooks/usePanelDrag";
 import { chromeAfterScroll, type ChromeScrollState } from "./scrollChrome";
 import type { NotebookTab } from "./useNotebookTabs";
+import type { WorkspaceOverlay } from "./useWorkspaceOverlays";
 
 /**
  * 工作区「壳层 chrome」逻辑（261103 P10-①，原 NotebookWorkspace 内联代码逐字搬移，未改行为）：
@@ -20,12 +21,12 @@ export interface UseWorkspaceChromeOptions {
   outlineOpen: boolean;
   tabsOpen: boolean;
   notebookSwitchOpen: boolean;
-  openSidebar: (open: boolean) => void;
-  openOutline: (open: boolean) => void;
+  openOverlay: (overlay: WorkspaceOverlay) => void;
+  openPadTree: (open: boolean) => void;
   openPadOutline: (open: boolean) => void;
   closePadOutline: () => void;
   closePadFloating: () => void;
-  closeOverlay: (kind: "outline") => void;
+  closeOverlay: (kind: "outline" | "sidebar") => void;
 }
 
 export function useWorkspaceChrome(options: UseWorkspaceChromeOptions) {
@@ -41,13 +42,26 @@ export function useWorkspaceChrome(options: UseWorkspaceChromeOptions) {
     outlineOpen,
     tabsOpen,
     notebookSwitchOpen,
-    openSidebar,
-    openOutline,
+    openOverlay,
+    openPadTree,
     openPadOutline,
     closePadOutline,
     closePadFloating,
     closeOverlay,
   } = options;
+
+  // 抽屉开合（名字保留：调用点遍布拖拽/胶囊/遮罩）。互斥由 overlay owner 保证：打开时先收掉其它浮层。
+  // 261103 P11-②：从工作区搬入本 hook（与 usePanelDrag 接线同一职责），行为逐字不变。
+  const openSidebar = useCallback((v: boolean) => {
+    // 平板里「目录」= 悬浮左栏的开合，不再拉抽屉（避免两份树实例 / 全屏遮罩）。
+    if (padTwoPane) { openPadTree(v); return; }
+    if (v) openOverlay({ kind: "sidebar" }); else closeOverlay("sidebar");
+  }, [closeOverlay, openOverlay, openPadTree, padTwoPane]);
+  const openOutline = useCallback((v: boolean) => {
+    // 平板里「大纲」= 悬浮右栏（与胶囊同一个组件）；手机才拉右侧抽屉。
+    if (padTwoPane) { openPadOutline(v); return; }
+    if (v) openOverlay({ kind: "outline" }); else closeOverlay("outline");
+  }, [closeOverlay, openOverlay, openPadOutline, padTwoPane]);
 
   /** 大纲只属于 Lake 文档：表格 / 多维表 / 画板没有大纲（与顶栏「编辑」按钮同一口径）。 */
   const outlineAvailable = !!active && (active.kind ?? "doc") === "doc";
@@ -155,5 +169,7 @@ export function useWorkspaceChrome(options: UseWorkspaceChromeOptions) {
     capsuleHidden,
     setSubpageFullscreen,
     bodyClickClosesFloating,
+    openSidebar,
+    openOutline,
   };
 }

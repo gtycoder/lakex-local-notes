@@ -5,19 +5,16 @@
  * 多 tab 的「顶部 tab 条」是桌面版；移动端是底部胶囊栏 #toolbarTabs 弹全屏列表（子代理已核对源码）。
  */
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
-import { Pencil, FolderOpen, Trash, SmilePlus, Move, History, Info, Book, Star } from "lucide-react";
-import { pushBackHandler } from "../ui/backStack";
+import { Book } from "lucide-react";
 import { MobileNodeIconGlyph } from "../ui/NodeIconGlyph";
 import { bridge } from "../bridge";
 import type { LakeEditorInstance } from "../../features/editor/lakeRuntime";
-import type { MobileSheetItem } from "../ui/MobileSheetMenu";
 import { showToast } from "../ui/toastBus";
 import { getNativeErrorMessage } from "../../lib/nativeErrors";
-import { isFavorite, toggleFavorite } from "../data/favorites";
 import { useNotebookTabs } from "./useNotebookTabs";
-import { useNotebookTreeData, type NotebookTreeItem } from "./useNotebookTreeData";
+import { useNotebookTreeData } from "./useNotebookTreeData";
 import { useNotebookTreeActions } from "./useNotebookTreeActions";
-import { SELF_REGISTERED_OVERLAY_KINDS, useWorkspaceOverlays } from "./useWorkspaceOverlays";
+import { useWorkspaceOverlays } from "./useWorkspaceOverlays";
 import { NotebookTreeList } from "./NotebookTreeList";
 import { useFormFactor } from "../pad/useFormFactor";
 import { WorkspaceCapsule } from "./WorkspaceCapsule";
@@ -40,18 +37,12 @@ import { usePadShortcuts } from "../pad/usePadShortcuts";
 import { useTreeDrag } from "./useTreeDrag";
 import { useWorkspaceChrome } from "./useWorkspaceChrome";
 import { useWorkspaceSession } from "./useWorkspaceSession";
+import { useWorkspaceAssemble } from "./useWorkspaceAssemble";
+import { useWorkspaceSync } from "./useWorkspaceSync";
+import { useWorkspaceActions } from "./useWorkspaceActions";
 export type { NotebookTreeItem } from "./useNotebookTreeData";
 export type { PadPanelMode } from "./shellModel";
 import type { TreeNode } from "../../lib/types";
-
-/** 「新建」清单 id → 文档 kind（清单与创建通道的唯一对应表；group 不走这里）。 */
-const CREATE_MENU_KINDS: Record<string, "doc" | "usheet" | "bitable" | "board" | "ink"> = {
-  note: "doc",
-  usheet: "usheet",
-  bitable: "bitable",
-  board: "board",
-  ink: "ink",
-};
 
 export interface NotebookWorkspaceProps {
   notebookId: string;
@@ -173,18 +164,6 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   /** 文档内查找条：只对 Lake 文档（doc）开放；切文档时自动收起（查找条绑定当前正文）。 */
   useEffect(() => { closeOverlay("find"); }, [activeId, closeOverlay]);
 
-  // 抽屉开合（名字保留：调用点遍布拖拽/胶囊/遮罩）。互斥由 overlay owner 保证：打开时先收掉其它浮层。
-  const openSidebar = useCallback((v: boolean) => {
-    // 平板里「目录」= 悬浮左栏的开合，不再拉抽屉（避免两份树实例 / 全屏遮罩）。
-    if (padTwoPane) { openPadTree(v); return; }
-    if (v) openOverlay({ kind: "sidebar" }); else closeOverlay("sidebar");
-  }, [closeOverlay, openOverlay, openPadTree, padTwoPane]);
-  const openOutline = useCallback((v: boolean) => {
-    // 平板里「大纲」= 悬浮右栏（与胶囊同一个组件）；手机才拉右侧抽屉。
-    if (padTwoPane) { openPadOutline(v); return; }
-    if (v) openOverlay({ kind: "outline" }); else closeOverlay("outline");
-  }, [closeOverlay, openOverlay, openPadOutline, padTwoPane]);
-  const autoOpenedRef = useRef(false);
 
 
   const {
@@ -195,6 +174,8 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     capsuleHidden,
     setSubpageFullscreen,
     bodyClickClosesFloating,
+    openSidebar,
+    openOutline,
   } = useWorkspaceChrome({
     active,
     activeId,
@@ -207,65 +188,27 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     outlineOpen,
     tabsOpen,
     notebookSwitchOpen,
-    openSidebar,
-    openOutline,
+    openPadTree,
+    openOverlay,
     openPadOutline,
     closePadOutline,
     closePadFloating,
     closeOverlay,
   });
 
-  // 初次进入（仅一次）：
-  //  - 显式指定了要打开的文档（首页/搜索/新建）→ 它排第一并激活（修"从首页点文档直达不了"），
-  //    其余上次已存的标签（不含它）按原顺序跟在后面，不覆盖它的激活态；
-  //  - 否则恢复上次打开的标签（本地持久化 ids + companion active：优先回到**上次退出的活动页**，
-  //    旧存档没有 active 时回落「列表最后一个」—— 261102 用户回归「退出停在画板，重进却回到表格」）；
-  //  - 否则开树中第一个。
-  // 这里只做「按目录已知 id 过滤」，顺序/上限/激活页全部交给 hook 的 restore()（一次 dispatch，
-  // 不再靠 openTab 的调用顺序 + effect 执行顺序这种隐式协议）。
-  useEffect(() => {
-    if (autoOpenedRef.current) return;
-    const knownNoteIds = new Set(tree.filter((item) => item.kind === "note").map((item) => item.id));
-    const saved = savedTabIds.filter((id) => knownNoteIds.has(id) || id === initialNoteId);
-    if (initialNoteId) {
-      autoOpenedRef.current = true;
-      restore([initialNoteId, ...saved.filter((id) => id !== initialNoteId)], initialNoteId, { enterEditor: initialMode === "editor" });
-      return;
-    }
-    if (saved.length > 0) {
-      autoOpenedRef.current = true;
-      // 活动页交给存档里的 active（restore 会校验它仍在这批 id 里，否则回落最后一个）。
-      restore(saved, savedTabActiveId);
-      return;
-    }
-    if (firstNote) {
-      autoOpenedRef.current = true;
-      restore([firstNote.id], firstNote.id);
-      return;
-    }
-    // 目录里没有任何可用文档：把存档里已失效的占位清掉（hook 的 initial state 可能还带着它们）。
-    if (savedTabIds.length > 0) restore([], null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tree, firstNote, savedTabIds, savedTabActiveId, initialNoteId, initialMode, restore]);
-
-  // 已进入工作区后又被指定文档（新建 / 首页 / 搜索）：组件 key 是 notebookId，
-  // 同一笔记本内再指定文档不会重挂载，「初次进入」那段被 autoOpenedRef 挡住 ⇒ 必须在这里显式打开，
-  // 否则会"文档建好了但界面不跳转"。
-  const handledInitialRef = useRef<string | null>(initialNoteId ?? null);
-  useEffect(() => {
-    if (!initialNoteId || handledInitialRef.current === initialNoteId) return;
-    handledInitialRef.current = initialNoteId;
-    void openTab(initialNoteId, { enterEditor: initialMode === "editor" });
-  }, [initialNoteId, initialMode, openTab]);
-
-  /** 活动占位页统一在这里补读正文；openTab / 自愈 / 恢复都共用同一条懒加载路径。
-   *  恢复决策（autoOpenedRef）落定前不读：initial state 还带着未按目录过滤的存档 id，
-   *  抢先读可能读到已删文档并误弹「不存在」。 */
-  useEffect(() => {
-    if (!autoOpenedRef.current) return;
-    if (!active || active.loaded) return;
-    void loadTabBody(active.id);
-  }, [active?.id, active?.loaded, loadTabBody]);
+  // 261103 P11-②：初次进入/再次指定文档/活动页懒读 → useWorkspaceAssemble（三个 effect 顺序与依赖逐字保留）。
+  useWorkspaceAssemble({
+    tree,
+    firstNote,
+    savedTabIds,
+    savedTabActiveId,
+    initialNoteId,
+    initialMode,
+    restore,
+    openTab,
+    active,
+    loadTabBody,
+  });
 
   const {
     scheduleAutoSave,
@@ -309,125 +252,58 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     deleteHistory,
   } = useNotebookTreeActions({ tree, loadTree, discardTab });
 
-  /** 历史版本面板 =「开面板」（overlay owner）+「读快照」（actions）两步；节点由调用方传，不在 hook 里存。 */
-  const openHistorySheet = useCallback((node: NotebookTreeItem) => {
-    openOverlay({ kind: "history", node });
-    void loadHistory(node);
-  }, [loadHistory, openOverlay]);
+  // 261103 P11-②：行菜单 / 历史版本 / 新建 / 标签与图标回调 → useWorkspaceActions（无 effect，纯回调）。
+  const {
+    applyRestoreHistory,
+    createChildDocument,
+    treeMenuItems,
+    onTreeMenuSelect,
+    tabIconOf,
+    selectCreateItem,
+    handleOpenTabFromList,
+    handleSwitchNotebookItem,
+    handlePickIcon,
+    openHistoryFromInfo,
+  } = useWorkspaceActions({
+    tree,
+    title,
+    notebookId,
+    padTwoPane,
+    createParent,
+    menuFor,
+    itemById,
+    openOverlay,
+    closeOverlay,
+    setRenamingId,
+    setRenameValue,
+    applyMove,
+    applyDelete,
+    applyIcon,
+    loadHistory,
+    restoreHistoryVersion,
+    openTab,
+    loadTree,
+    switchNotebook,
+    expandGroup,
+  });
 
-  /** 恢复历史版本：真的成功才收面板（失败保留面板让用户重试）。 */
-  const applyRestoreHistory = useCallback(async (historyId: number) => {
-    if (await restoreHistoryVersion(historyId)) closeOverlay("history");
-  }, [closeOverlay, restoreHistoryVersion]);
-
-  /**
-   * 返回键（MOB-01）：工作区浮层必须自己消费返回，否则会落回父层「退出工作区」
-   * （整轮 flushAllTabs + 出场转场回首页），用户以为只是关抽屉。
-   * 浮层现在只有一个（MOB-02 的 overlay）⇒ 一次只可能关这一层。
-   * 自带返回栈的种类（菜单 Sheet / 底部 Sheet 原语，见 SELF_REGISTERED_OVERLAY_KINDS）
-   * 不在这里重复登记 —— 否则返回键会跳过子菜单下钻直接关面板。
-   * 无浮层时不登记 ⇒ 返回键走原有「退工作区（含保存屏障）」。
-   */
-  useEffect(() => {
-    // 单一 owner（MOB-02）之后只剩一条判据：overlay.kind。任一浮层打开就登记 ⇒ 返回键只关它。
-    if (!overlayKind || SELF_REGISTERED_OVERLAY_KINDS.has(overlayKind)) return;
-    return pushBackHandler(() => { closeOverlay(overlayKind); return true; });
-  }, [overlayKind, closeOverlay]);
+  // 261103 P11-②：浮层返回栈 / 手动同步 / 活动文档上报 → useWorkspaceSync（effect 顺序逐字保留）。
+  const { runSync } = useWorkspaceSync({
+    overlayKind,
+    closeOverlay,
+    loadTree,
+    tabsRef: tabsStateRef,
+    activeId,
+    loadTabBody,
+    openTab,
+    onActiveNoteChange,
+  });
 
 
-  // 立即同步（思源顶栏右侧的云图标就是同步状态/触发器）
-  const runSync = useCallback(async () => {
-    try {
-      const r = await bridge.syncNow();
-      // 同步可能改了远端标题/正文：刷新目录，并在阅读态强制重读当前文档（编辑态不打断）。
-      await loadTree();
-      const activeTab = tabsStateRef.current.find((t) => t.id === activeId);
-      if (activeTab && !activeTab.editing) await loadTabBody(activeTab.id, true);
-      const w = r.warnings?.length ?? 0;
-      showToast((r.message || "已同步") + (w > 0 ? `，${w} 项被跳过` : ""));
-    } catch (e) { showToast("同步失败：" + (e as Error).message, { type: "error" }); }
-  }, [loadTree, openTab, activeId]);
-
-  // 活动文档上报（MobileApp 的定时自动快照按当前文档留档）
-  useEffect(() => { onActiveNoteChange?.(activeId); }, [activeId, onActiveNoteChange]);
-
-
-  /**
-   * 行内 ＋ / 抽屉「新建」→ 建子节点（同一条创建管线：建库 → 刷新目录 → 收抽屉 → 打开标签）。
-   * 文档/手写板建完停在阅读态；表格/数据表/画板建完直接进编辑态。
-   * createParent 理论上总是当前节点；空串兜底回当前笔记本，避免建出 parent_id="" 的孤儿。
-   */
-  const createChildDocument = useCallback(async (kind: "doc" | "usheet" | "bitable" | "board" | "ink", parentId: string) => {
-    try {
-      const pid = parentId || notebookId;
-      const n = kind === "doc" ? await bridge.createNote("无标题文档", pid)
-        : kind === "usheet" ? await bridge.createUsheet("无标题表格", pid)
-          : kind === "bitable" ? await bridge.createBitable("无标题多维表", pid)
-            : kind === "board" ? await bridge.createBoard("无标题画板", pid)
-              : await bridge.createInk("无标题手写板", pid);
-      await loadTree();
-      closeOverlay("sidebar");
-      // 手写板沿用 remote ink 批的行为：建完停在阅读态（与文档一致），需要时再点顶栏「编辑」
-      await openTab(n.id, { enterEditor: kind === "usheet" || kind === "bitable" || kind === "board" });
-    } catch { showToast("新建失败", { type: "error" }); }
-  }, [closeOverlay, loadTree, openTab, notebookId]);
-
-  /** 行内 ＋ → 新建分组：在该节点下建子分组并展开父节点。 */
-  const createChildGroup = useCallback(async (parentId: string) => {
-    try {
-      await bridge.createGroup(parentId || notebookId, "新建分组");
-      await loadTree();
-      expandGroup(parentId || notebookId);
-    } catch { showToast("新建失败", { type: "error" }); }
-  }, [loadTree, notebookId]);
 
   // ---- 目录树长按拖拽（计时/阈值/反馈/落点/FLIP 全在 useLongPress + useTreeDrag）----
   const { drag, longPress, setPressedNode } = useTreeDrag({ tree, setTree, expandGroup, loadTree });
 
-  /** 目录树长按菜单（思源 .b3-menu--sheet 口径）：移动到… 用子层下钻，删除走危险项 + 确认框 */
-  const treeMenuItems = (node: NotebookTreeItem): MobileSheetItem[] => {
-    const groups = tree.filter((x) => x.kind === "group" && x.id !== node.id);
-    return [
-      // 261019 用户点单：**菜单里不再放「新建文档 / 新建分组」** —— 行内 ＋（新建子项）与抽屉工具栏「新建」
-      // 已经提供同一份创建清单，菜单只保留「对这一行本身的动作」，不再重复创建入口。
-      ...(node.kind === "note" ? [
-        { id: "rename", label: "重命名", icon: Pencil },
-      ] : [{ id: "rename", label: "重命名", icon: Pencil }]),
-      { id: "icon", label: "设置图标", icon: SmilePlus },
-      // 「常用」：只对文档开放（分组/笔记本没有卡片入口）；仅本机，不同步（用户 261019 点单）
-      ...(node.kind === "note" ? [
-        { id: "favorite", label: isFavorite(node.id) ? "取消常用" : "设为常用", icon: Star },
-      ] : []),
-      {
-        id: "move", label: "移动到…", icon: Move,
-        children: [
-          { id: "__root", label: title, icon: FolderOpen, note: "笔记本根目录" },
-          ...groups.map((g) => ({ id: g.id, label: g.title, icon: FolderOpen })),
-        ],
-      },
-      ...(node.kind === "note" ? [
-        { id: "history", label: "历史版本", icon: History },
-        { id: "info", label: "属性", icon: Info },
-      ] : []),
-      { id: "delete", label: node.kind === "note" ? "移入回收站" : "删除分组", icon: Trash, danger: true },
-    ];
-  };
-  // 菜单是针对 menuFor 这个节点打开的（sheet 传进来的 item 就是它的根项），所以直接读 menuFor
-  const onTreeMenuSelect = (_item: MobileSheetItem, path: MobileSheetItem[]) => {
-    const node = menuFor;
-    closeOverlay("menu");
-    if (!node) return;
-    const root = path[0]?.id;
-    if (root === "move") { void applyMove(node, path[1]?.id === "__root" ? notebookId : String(path[1]?.id)); return; }
-    // 互斥（MOB-02）：开行菜单时目录抽屉已经被收掉；重命名是**行内编辑**，必须把抽屉重新拉出来，
-    // 否则输入框在关着的抽屉里（看不见的输入框 + autoFocus 抢焦点）。
-    if (root === "rename") { if (!padTwoPane) openOverlay({ kind: "sidebar" }); setRenamingId(node.id); setRenameValue(node.title); return; }
-    if (root === "icon") { openOverlay({ kind: "icon", node }); return; }
-    if (root === "favorite") { const on = toggleFavorite(node.id); showToast(on ? "已设为常用" : "已取消常用"); return; }
-    if (root === "history") { openHistorySheet(node); return; }
-    if (root === "info") { openOverlay({ kind: "info", node }); return; }
-    if (root === "delete") { void applyDelete(node); }
-  };
 
   /**
    * 目录树 = 抽屉与平板悬浮左栏**共用同一份**（同一套 props / 虚拟化 / 拖拽 / 长按）。
@@ -476,32 +352,6 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     },
   });
 
-  const tabIconOf = useCallback((id: string) => itemById(id)?.icon ?? null, [itemById]);
-  const selectCreateItem = useCallback((it: MobileSheetItem) => {
-    closeOverlay("create");
-    // 复用目录树的同一份创建通道（行内 ＋ / 抽屉「新建」同源），不新造第二条；作用域 = 本次打开它的那个节点
-    const kind = CREATE_MENU_KINDS[it.id];
-    if (kind) void createChildDocument(kind, createParent);
-    else if (it.id === "group") void createChildGroup(createParent);
-  }, [closeOverlay, createChildDocument, createChildGroup, createParent]);
-  const handleOpenTabFromList = useCallback((id: string) => {
-    void openTab(id);
-    closeOverlay("tabs");
-  }, [closeOverlay, openTab]);
-  const handleSwitchNotebookItem = useCallback((it: MobileSheetItem) => {
-    closeOverlay("notebookSwitch");
-    if (it.id !== notebookId) void switchNotebook(it.id);
-  }, [closeOverlay, notebookId, switchNotebook]);
-  const handlePickIcon = useCallback((target: NotebookTreeItem, icon: string | null) => {
-    void applyIcon(target, icon).then((next) => {
-      // 面板开着时把选中的图标同步回 overlay 的载荷（否则 picker 仍显示旧值）
-      if (next !== null) openOverlay({ kind: "icon", node: { ...target, icon: next } });
-    });
-  }, [applyIcon, openOverlay]);
-  const openHistoryFromInfo = useCallback((node: NotebookTreeItem) => {
-    closeOverlay("info");
-    openHistorySheet(node);
-  }, [closeOverlay, openHistorySheet]);
 
   return (
     <div className={"mobile-workspace" + (capsuleInEdit ? " mobile-workspace--capsule-edit" : "")}>
