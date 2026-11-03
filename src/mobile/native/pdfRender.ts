@@ -58,6 +58,8 @@ export interface PdfRenderOptions {
 interface PdfRenderPlugin {
   renderPdf(options: PdfRenderOptions): Promise<PdfRenderResult>;
   cancel(): Promise<{ cancelled: boolean }>;
+  /** 删除 cacheDir/pdf-render/*（渲染产物是纯缓存；导入结束后/启动时清扫）。 */
+  cleanupCache(): Promise<{ removedDirs: number; freedBytes: number }>;
   addListener(event: "progress", listener: (progress: PdfRenderProgress) => void): Promise<{ remove: () => Promise<void> }>;
 }
 
@@ -86,6 +88,21 @@ export async function renderPdfPages(options: PdfRenderOptions, onProgress?: (pr
     return await PdfRender.renderPdf(options);
   } finally {
     try { await handle?.remove(); } catch { /* 面板已卸载/桥已断：忽略 */ }
+  }
+}
+
+/**
+ * 清扫原生 PDF 渲染缓存（cacheDir/pdf-render/*）。P7：
+ *  · 每次导入结束后调用（页图已读成字节 / 已上传）；
+ *  · App 启动时（bridge.init）扫一次陈旧目录（上次被杀留下的）。
+ * 非原生/旧 APK/渲染中失败都静默 —— 目录是纯缓存，系统也会回收，清不掉不影响功能。
+ */
+export async function cleanupPdfRenderCache(): Promise<void> {
+  if (!pdfRenderAvailable()) return;
+  try {
+    await PdfRender.cleanupCache();
+  } catch {
+    // 渲染中（插件 busy）或桥不可用：等下一次导入/启动再清
   }
 }
 

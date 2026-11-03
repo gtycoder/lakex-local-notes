@@ -49,8 +49,8 @@ export const WRITE_OPS = [
   "saveNote", "createInk",
   // 历史快照
   "deleteHistory", "saveHistorySettings", "snapshotNote", "cleanupHistory",
-  // 孤儿资产
-  "deleteOrphanAsset", "cleanOrphanAssets",
+  // 孤儿资产（P7：PDF 导入失败/取消按 filename 定向清理本轮已上传页图）
+  "deleteOrphanAsset", "cleanOrphanAssets", "cleanNoteOrphans",
   // S3 GC 账本（本地表）
   "addS3GcPending", "removeS3GcPending", "recordS3GcLog",
   // 回收站（软删 / 恢复 / 彻底删除）

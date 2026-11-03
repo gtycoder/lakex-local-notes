@@ -181,7 +181,7 @@ describe("手写板撤销栈边界", () => {
     expect(stack).toEqual([]);
   });
 
-  it("10 MiB 正文（100 页 × 3000 点）下仍可保留 ≥30 步", () => {
+  it("大正文（100 页 × 3000 点，v3 扁平编码 ≈5.5 MiB）下仍可保留 ≥30 步", () => {
     const pages: InkPage[] = [];
     for (let pageIndex = 0; pageIndex < 100; pageIndex += 1) {
       const points: InkPoint[] = Array.from({ length: 3000 }, (_, index) => ({
@@ -193,7 +193,8 @@ describe("手写板撤销栈边界", () => {
       pages.push({ ...createInkPage(`p${pageIndex}`), strokes: [{ ...makeStroke(`s${pageIndex}`, 0), points }] });
     }
     const doc = withPages(pages, "p0");
-    expect(inkToBody(doc).length).toBeGreaterThan(10 * 1024 * 1024);
+    // v3（261103 P6）：点编码扁平 + 定点 0.01 ⇒ 同内容从 ~10.6 MiB 降到 ~5.5 MiB。
+    expect(inkToBody(doc).length).toBeGreaterThan(5 * 1024 * 1024);
 
     const stack: InkHistoryEntry[] = [];
     for (let step = 0; step < INK_UNDO_LIMIT; step += 1) {

@@ -21,6 +21,7 @@ import {
 import { bridge } from "../bridge";
 import {
   cancelPdfRender,
+  cleanupPdfRenderCache,
   pdfRenderAvailable,
   readRenderedPdfFileBytes,
   renderPdfPages,
@@ -31,7 +32,8 @@ export interface MobilePdfImportInput {
   noteId: string;
   bytes: Uint8Array;
   filename: string;
-  onProgress?: (done: number, total: number) => void;
+  /** P7：phase = raster（渲染第 n/N 页）/ upload（写资产第 n 页）。 */
+  onProgress?: (done: number, total: number, phase?: "raster" | "upload") => void;
   signal?: AbortSignal;
 }
 
@@ -52,53 +54,82 @@ export function pdfPageSizes(page: Pick<PdfRenderPage, "width" | "height" | "pix
 
 /**
  * PDF 字节 → 逐页资产上传（不写正文）。旧 APK / 浏览器无 PdfRender 插件时返回可见错误 outcome。
- * 300 页产品上限的「页边界 cancel」也在这一层（原生 progress 到 maxPages 时请求 cancel）。
+ *
+ * P7 管线：
+ *  · 原生渲染**边出页边交付**（progress 事件带该页 cacheDir 路径）⇒ 编排层页图上传与后续页渲染重叠；
+ *  · 300 页产品上限的「页边界 cancel」仍在这一层（progress 到 maxPages 时请求原生 cancel）；
+ *  · 结束（成功/失败/取消）后删**暂存 PDF**（v3 正文不含它的 url）并清原生渲染缓存目录。
  */
 export async function importPdfPagesToAssets(input: MobilePdfImportInput): Promise<PdfImportOutcome> {
   if (!pdfRenderAvailable()) {
     return { pages: [], pageCount: 0, importedPageCount: 0, truncated: false, cancelled: false, errors: ["当前版本不支持 PDF 导入（需要更新 App）"] };
   }
-  return importPdfPages(
-    input.bytes,
-    {
-      savePdf: (payload) => bridge.uploadResource(payload, input.noteId),
-      uploadPage: (payload) => bridge.uploadResource(payload, input.noteId),
-      rasterize: async (rasterInput, options) => {
-        if (input.signal?.aborted) return { pageCount: 0, pages: [], cancelled: true };
-        const ref = parseLocalAssetUrl(rasterInput.pdfUrl);
-        if (!ref || ref.space !== "note") throw new Error("PDF 资产地址无效");
-        let userAborted = false;
-        const onAbort = () => {
-          userAborted = true;
-          void cancelPdfRender();
-        };
-        input.signal?.addEventListener("abort", onAbort, { once: true });
-        let limitStop = false;
-        try {
-          const result = await renderPdfPages(
-            { noteId: ref.noteId, filename: ref.filename, maxWidth: 1600 },
-            (progress) => {
-              options.onProgress?.(progress.page, progress.pageCount);
-              if (!userAborted && progress.page >= options.maxPages) {
-                limitStop = true;
-                void cancelPdfRender(); // 300 页上限：页边界停下，后面的页不再渲染
-              }
-            },
-          );
-          const rendered = limitStop ? result.pages.slice(0, options.maxPages) : result.pages;
-          const pages: PdfImportRasterPage[] = [];
-          for (const page of rendered) {
-            const pageBytes = await readRenderedPdfFileBytes(page.file);
-            pages.push({ page: page.page, ...pdfPageSizes(page), bytes: pageBytes });
+  /** 原生 PdfRenderer 只能从磁盘读：把 PDF 暂存进本笔记资产目录（v3 正文不再引用它，导入结束即删）。 */
+  const emptyOutcome = (errors: string[]): PdfImportOutcome => ({ pages: [], pageCount: 0, importedPageCount: 0, truncated: false, cancelled: false, errors });
+  let ref: ReturnType<typeof parseLocalAssetUrl> = null;
+  try {
+    const staged = await bridge.uploadResource({ bytes: input.bytes, filename: input.filename }, input.noteId);
+    ref = parseLocalAssetUrl(staged.url);
+  } catch (reason) {
+    return emptyOutcome(["PDF 暂存失败：" + (reason instanceof Error ? reason.message : String(reason))]);
+  }
+  if (!ref || ref.space !== "note") return emptyOutcome(["PDF 暂存失败：上传结果不是本地资产地址"]);
+  const stagedRef = ref;
+  const filenamesOf = (urls: string[]): string[] => urls.flatMap((url) => {
+    const parsed = parseLocalAssetUrl(url);
+    return parsed && parsed.space === "note" && parsed.noteId === input.noteId ? [parsed.filename] : [];
+  });
+  try {
+    return await importPdfPages(
+      input.bytes,
+      {
+        uploadPage: (payload) => bridge.uploadResource(payload, input.noteId),
+        // P7：失败/取消删本轮已上传页图（mobile bridge 只删未被正文引用的文件）
+        deleteAssets: async (urls) => {
+          const filenames = filenamesOf(urls);
+          if (filenames.length > 0) await bridge.cleanNoteOrphans(input.noteId, filenames);
+        },
+        rasterize: async (_rasterInput, options) => {
+          if (input.signal?.aborted) return { pageCount: 0, cancelled: true };
+          let userAborted = false;
+          const onAbort = () => {
+            userAborted = true;
+            void cancelPdfRender();
+          };
+          input.signal?.addEventListener("abort", onAbort, { once: true });
+          let limitStop = false;
+          try {
+            const result = await renderPdfPages(
+              { noteId: stagedRef.noteId, filename: stagedRef.filename, maxWidth: 1600 },
+              (progress) => {
+                options.onProgress?.(progress.page, progress.pageCount);
+                if (!userAborted && progress.page >= options.maxPages) {
+                  limitStop = true;
+                  void cancelPdfRender(); // 300 页上限：页边界停下，后面的页不再渲染
+                }
+                // 边渲染边交付：字节惰性读 cacheDir（真正读取发生在编排层的上传池里）
+                options.onPage?.({
+                  page: progress.page,
+                  ...pdfPageSizes(progress),
+                  loadBytes: () => readRenderedPdfFileBytes(progress.file),
+                });
+              },
+            );
+            return { pageCount: result.pageCount, cancelled: userAborted || (result.cancelled && !limitStop) };
+          } finally {
+            input.signal?.removeEventListener("abort", onAbort);
           }
-          return { pageCount: result.pageCount, pages, cancelled: userAborted };
-        } finally {
-          input.signal?.removeEventListener("abort", onAbort);
-        }
+        },
       },
-    },
-    { fileName: input.filename, onProgress: input.onProgress, signal: input.signal },
-  );
+      { fileName: input.filename, onProgress: input.onProgress, signal: input.signal },
+    );
+  } finally {
+    // 所有页图已读/上传完（importPdfPages 返回前排空池）⇒ 删暂存 PDF + 清原生渲染缓存
+    try {
+      await bridge.cleanNoteOrphans(input.noteId, [stagedRef.filename]);
+    } catch { /* 清理失败不掩盖导入结果：孤儿扫描兜底 */ }
+    void cleanupPdfRenderCache();
+  }
 }
 
 /**

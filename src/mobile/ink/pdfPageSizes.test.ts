@@ -48,7 +48,8 @@ describe("PDF 页尺寸映射：逻辑尺寸 vs 位图像素", () => {
     expect(ts).toMatch(/pixelWidth\?: number/);
     expect(ts).toMatch(/pixelHeight\?: number/);
     const src = read("./mobilePdfImport.ts");
-    expect(src).toContain("pdfPageSizes(page)");
+    // P7：改成流式交付，映射对象从 progress 事件来（同一份 pdfPageSizes，不另写尺寸映射）
+    expect(src).toContain("pdfPageSizes(progress)");
     expect(src).not.toContain("pixelWidth: page.width");
     expect(src).not.toContain("pixelHeight: page.height");
     // MobileInkPad 不再持有 PDF 适配器（改调共享模块，同一实现）

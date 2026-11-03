@@ -81,13 +81,18 @@ describe("core/docBaseline（CORE-03）", () => {
     expect(sameDocAsDisk("board", boardDisk, JSON.stringify({ ...parsed.doc, elements: [{ id: "b" }] }))).toBe(false);
   });
 
-  it("ink：重排/冗余字段归一后等价；改 activePageId 算真实改动", () => {
+  it("ink：重排/冗余字段归一后等价；activePageId 不落盘（v3）⇒ 改它不算正文改动", () => {
     const canonical = canonicalDocBody("ink", inkDisk);
     expect(canonical).not.toBeNull();
     expect(sameDocAsDisk("ink", inkDisk, canonical)).toBe(true);
-    const changed = JSON.parse(inkDisk) as { activePageId: string };
+    // v3：当前页是设备本地视图（core/inkNav），不进正文 ⇒ 只改 activePageId 不得产生写盘/同步
+    const changed = JSON.parse(inkDisk) as { activePageId?: string };
     changed.activePageId = "p2";
-    expect(sameDocAsDisk("ink", inkDisk, JSON.stringify(changed))).toBe(false);
+    expect(sameDocAsDisk("ink", inkDisk, JSON.stringify(changed))).toBe(true);
+    // 真实改动：加一条合法笔迹仍必须判为不等价
+    const edited = JSON.parse(inkDisk) as { pages: Array<{ strokes: unknown[] }> };
+    edited.pages[0].strokes = [{ id: "s2", tool: "pen", color: "#000", width: 2, points: [[1, 2, 0.5]] }];
+    expect(sameDocAsDisk("ink", inkDisk, JSON.stringify(edited))).toBe(false);
   });
 
   it("坏正文绝不参与等价（不能借等价路径把坏正文写回）", () => {

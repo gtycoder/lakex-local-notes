@@ -36,7 +36,7 @@ export function MobileInkPad({ noteId, active = false, readOnly = false, ...prop
    * InkPad 把返回的 pages 走可撤销提交；编辑态这里不直接 saveNote。
    */
   const onImportPdf = useCallback(async ({ onProgress, signal }: {
-    onProgress: (done: number, total: number) => void;
+    onProgress: (done: number, total: number, phase?: "raster" | "upload") => void;
     signal: AbortSignal;
   }) => {
     if (!noteId) return null;
@@ -49,6 +49,7 @@ export function MobileInkPad({ noteId, active = false, readOnly = false, ...prop
   return (
     <InkPad
       {...props}
+      noteId={noteId}
       active={active}
       readOnly={readOnly}
       variant="mobile"

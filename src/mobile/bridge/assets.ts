@@ -6,8 +6,11 @@
 import { Filesystem, Directory } from "@capacitor/filesystem";
 import { registerPlugin } from "@capacitor/core";
 import { loadAssetBytesFs, removeAssetBytesFs, saveAssetBytesFs, bytesToBase64 } from "../native/assetFs";
-import { buildAssetFilename, isSafeShellOpenFilename, mimeTypeForFilename } from "../../core/assetNaming.js";
+import { buildAssetFilename, extractAssetRefs, isSafeShellOpenFilename, mimeTypeForFilename } from "../../core/assetNaming.js";
+import { isSafePathSegment } from "../../core/storeUtils.js";
 import { localAssetHttpUrl } from "../../core/assetUrl.js";
+import { normalizeNoteKind } from "../../core/noteKind.js";
+import { readNoteBody } from "../data/noteBodies";
 import { assets, assertResourceBytes, ensureDb, runWrite } from "./context";
 import * as orphanAssetRepository from "../data/orphanAssetRepository";
 
@@ -92,5 +95,36 @@ export const assetsDomain = {
     // filename 字段 = 原始文件名（Lake file 卡片展示名；磁盘名/同步用 URL 里的生成名，与桌面一致）
     const displayName = input.filename.replace(/[\\/:*?"<>|\u0000-\u001f]/g, "_").trim() || "附件";
     return { url, resourceRef: url, filename: displayName, mimeType, size: bytes.length };
+  },
+
+  /**
+   * 按 filename 删除本笔记里**当前正文未引用**的资产（P7：PDF 导入失败/取消清已上传页图 + 删暂存 PDF）。
+   * 桌面版 = cleanNoteOrphans（当前正文 ∪ 历史 ∪ 草稿保护，按 DB 登记 + 文件系统对账）；
+   * 移动端这里只做「定向 + 当前正文保护」——调用方只会传**本轮新上传**的 filename（从未进过历史/草稿），
+   * 所以不需要移动端再去扫历史 refs。未列 filenames = 不删（不做全局扫）。
+   */
+  async cleanNoteOrphans(noteId: string, filenames?: string[]): Promise<{ count: number }> {
+    if (!isSafePathSegment(noteId) || !filenames || filenames.length === 0) return { count: 0 };
+    return runWrite("cleanNoteOrphans", async () => {
+      const d = await ensureDb();
+      const protectedRefs = new Set<string>();
+      const row = await d.prepare("SELECT doc_kind FROM notes WHERE id=?").get(noteId) as { doc_kind?: string | null } | undefined;
+      if (row) {
+        const body = await readNoteBody(normalizeNoteKind(row.doc_kind), noteId);
+        if (body) for (const name of extractAssetRefs(body)) protectedRefs.add(name);
+      }
+      let count = 0;
+      for (const filename of filenames) {
+        if (!isSafePathSegment(filename) || protectedRefs.has(filename)) continue;
+        const key = noteId + "/" + filename;
+        try {
+          await removeAssetBytesFs(key);
+          assets.delete(key);
+          await d.prepare("DELETE FROM orphan_assets WHERE note_id=? AND filename=?").run(noteId, filename);
+          count += 1;
+        } catch { /* 删不掉保留登记，下次再清 */ }
+      }
+      return { count };
+    });
   },
 };

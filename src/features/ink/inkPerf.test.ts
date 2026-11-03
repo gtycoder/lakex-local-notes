@@ -32,7 +32,7 @@ function makePage(id: string, strokeCount: number, points = 30): InkPage {
 function makeDoc(pageCount: number, strokesPerPage: number): InkDoc {
   const pages: InkPage[] = [];
   for (let index = 0; index < pageCount; index += 1) pages.push(makePage("page-" + index, strokesPerPage));
-  return { kind: "ink", version: 2, pages, activePageId: "page-0" } as InkDoc;
+  return { kind: "ink", version: 3, pages, activePageId: "page-0" };
 }
 
 /** 取 3 次里的最小值（最接近真实热路径成本；并行测试的偶发抢占会被最小值过滤掉）。 */

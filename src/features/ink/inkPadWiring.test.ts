@@ -293,14 +293,26 @@ describe("手写板正式端到端接线", () => {
     expect(INK_PAD).toMatch(/\{pagesOpen && \(variant === "desktop" \? \(\s*<InkPageStrip/);
   });
 
-  it("v2 正文模型：版本 2、每页可选 backgroundImage（严格校验，canonical 含新字段）", () => {
-    expect(INK_DOC).toContain("INK_DOC_VERSION = 2 as const");
-    expect(INK_DOC).toContain("INK_DOC_READ_VERSIONS");
+  it("v3 正文模型：版本 3、扁平点编码、activePageId 不落盘、坏页可丢", () => {
+    expect(INK_DOC).toContain("INK_DOC_VERSION = 3 as const");
+    expect(INK_DOC).toContain("INK_DOC_READ_VERSIONS: readonly number[] = [1, 2, 3]");
     expect(INK_DOC).toContain("interface InkBackgroundImage");
     expect(INK_DOC).toContain("backgroundImage?: InkBackgroundImage");
     expect(INK_DOC).toContain("isNoteAssetUrl(record.url)");
     expect(INK_DOC).toContain("positiveInt(record.pixelWidth)");
-    expect(INK_DOC).toContain("out.backgroundImage = serializeBackgroundImage(page.backgroundImage)");
+    expect(INK_DOC).toContain("points: stroke.points.map(serializePoint)");
+    expect(INK_DOC).toContain("quantize(point.x)");
+    // v3：当前页是设备本地视图，序列化里没有 activePageId；坏页丢并计数
+    expect(INK_DOC).not.toContain("...(activePageId ? { activePageId } : {})");
+    expect(INK_DOC).toContain("droppedPages");
+  });
+
+  it("v3 当前页 = 设备本地导航（core/inkNav），翻页不写正文；坏页给可见告警", () => {
+    expect(INK_PAD).toContain("readInkNavPage(noteId)");
+    expect(INK_PAD).toContain("writeInkNavPage(noteId, doc.activePageId)");
+    expect(INK_PAD).toContain("有 {doc.droppedPages} 页数据无法解析");
+    expect(DESKTOP_INK).toContain("noteId={noteId}");
+    expect(MOBILE_INK_PAD).toContain("noteId={noteId}");
   });
 
   it("图片页渲染：image 层在笔迹下、pointer-events:none、无图不渲染；缩略图走 ?w=256 低清档", () => {
@@ -335,15 +347,27 @@ describe("手写板正式端到端接线", () => {
   it("PDF 导入编排：300 页上限、pdf-page 背景图、sourcePdf、替换空白首页、进度/取消", () => {
     expect(PDF_IMPORT).toContain("export const INK_PDF_MAX_PAGES = 300");
     expect(PDF_IMPORT).toContain("source: \"pdf-page\"");
-    expect(PDF_IMPORT).toContain("pdf: { url: pdfUrl, page: item.page, pageCount }");
-    expect(PDF_IMPORT).toContain("sourcePdf: { url: pdfUrl, pageCount }");
-    expect(PDF_IMPORT).toContain("raster.pages.slice(0, maxPages)");
+    expect(PDF_IMPORT).toContain("pdf: { page: item.page }");
+    expect(PDF_IMPORT).toContain("sourcePdf: { ...(options.fileName ? { name: options.fileName } : {}), pageCount }");
+    // v3：不再先落原 PDF（原文件不进正文/不进 S3）
+    expect(PDF_IMPORT).not.toContain("savePdf");
     expect(PDF_IMPORT).toContain("shouldReplaceEmptyFirstPage");
     expect(PDF_IMPORT).toContain("planPdfPageInsert");
     expect(PDF_IMPORT).toContain("signal?.aborted");
     expect(PDF_IMPORT).toContain("MAX_ATTACHMENT_BYTES");
     // 宿主只做注入：桌面 unpdf / 移动原生 PdfRender
     expect(DESKTOP_INK).toContain("renderPdfPagesDesktop(input.bytes, options)");
+    // P7：边栅格化边上传（池宽 3）、失败/取消定向清已上传资产
+    expect(PDF_IMPORT).toContain("PDF_IMPORT_UPLOAD_CONCURRENCY = 3");
+    expect(PDF_IMPORT).toContain("onPage: enqueue");
+    expect(PDF_IMPORT).toContain("cleanupUploaded");
+    expect(PDF_IMPORT).toContain("deleteAssets");
+    expect(DESKTOP_INK).toContain("native.cleanNoteOrphans(noteId, filenames)");
+    expect(MOBILE_PDF_IMPORT).toContain("cleanupPdfRenderCache");
+    expect(MOBILE_PDF_IMPORT).toContain("bridge.cleanNoteOrphans(input.noteId, [stagedRef.filename])");
+    // 上传阶段 UI 文案与 phase
+    expect(INK_PAD).toContain("正在写入页面：第");
+    expect(INK_PAD).toContain("phase === \"upload\"");
     // 261102 18b：移动端适配器抽到 mobilePdfImport（手动导入与分享导入共用），MobileInkPad 只委托
     expect(MOBILE_PDF_IMPORT).toContain("renderPdfPages(");
     expect(MOBILE_PDF_IMPORT).toContain("cancelPdfRender");

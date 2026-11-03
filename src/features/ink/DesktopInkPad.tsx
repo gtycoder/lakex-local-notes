@@ -1,4 +1,5 @@
 import { useCallback } from "react";
+import { parseLocalAssetUrl } from "../../core/assetUrl.js";
 import { native } from "../../lib/native";
 import InkPad from "./InkPad";
 import type { EditorHostProps } from "../editor/editorHost";
@@ -38,9 +39,16 @@ export function DesktopInkPad({ visible, focused, pane, onCapture, noteId, ...pr
     return importPdfPages(
       bytes,
       {
-        savePdf: upload,
         uploadPage: upload,
         rasterize: (input, options) => renderPdfPagesDesktop(input.bytes, options),
+        // P7：失败/取消时删掉本轮已上传的页图（cleanNoteOrphans 只删未被正文/历史引用的文件）
+        deleteAssets: async (urls) => {
+          const filenames = urls.flatMap((url) => {
+            const ref = parseLocalAssetUrl(url);
+            return ref && ref.space === "note" && ref.noteId === noteId ? [ref.filename] : [];
+          });
+          if (filenames.length > 0) await native.cleanNoteOrphans(noteId, filenames);
+        },
       },
       { fileName: file.name, onProgress, signal },
     );
@@ -49,6 +57,7 @@ export function DesktopInkPad({ visible, focused, pane, onCapture, noteId, ...pr
   return (
     <InkPad
       {...props}
+      noteId={noteId}
       variant="desktop"
       active={focused ?? visible}
       paneVisible={visible}

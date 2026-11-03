@@ -1,11 +1,14 @@
 /**
- * 手写板 v2「PDF 页」导入编排（纯逻辑，两端复用；宿主注入落盘/栅格化能力）。
+ * 手写板「PDF 页」导入编排（纯逻辑，两端复用；宿主注入栅格化/上传能力）。
  *
- * 流程：PDF 字节 → 先落原 PDF（body 里要出现它的磁盘名 ⇒ 防孤儿清理）→ 逐页栅格化
- * （桌面 unpdf / 移动原生 PdfRender）→ 每页图片走同一资产通道 → 生成 InkPage[]（背景图页，
- * source=pdf-page + pdf 引用）+ InkDoc.sourcePdf。打开=只读、资产声明/S3/GC 全部复用 T1 管线。
+ * 流程：PDF 字节 → 逐页栅格化（桌面 unpdf / 移动原生 PdfRender）→ 每页图片走同一资产通道
+ * → 生成 InkPage[]（背景图页，source=pdf-page + pdf:{page}）+ InkDoc.sourcePdf{name,pageCount}。
+ * 打开=只读、资产声明/S3/GC 全部复用图片页管线。
  *
- * 边界：本文件不 import unpdf / 任一端的 IPC/bridge —— rasterize/savePdf/uploadPage 由宿主注入，
+ * v3（261103 P6）：**不再先落原 PDF**（sourcePdf 只留 name/pageCount，原 PDF 不进正文、不进 S3）；
+ * 需要磁盘 PDF 的端（移动原生插件）在自己的适配器里暂存与清理，编排层只收 bytes。
+ *
+ * 边界：本文件不 import unpdf / 任一端的 IPC/bridge —— rasterize/uploadPage 由宿主注入，
  * 因此可在 node 环境用假实现做纯逻辑测试（页映射/截断/替换空首页/取消/错误）。
  */
 import { parseLocalAssetUrl } from "../../core/assetUrl.js";
@@ -23,6 +26,11 @@ import { newInkId } from "./ids.js";
 
 /** 产品上限：一份 PDF 最多导入 300 页（core 的 1000 页硬上限不变）。 */
 export const INK_PDF_MAX_PAGES = 300;
+/** 上传池宽度（P7）：栅格化每产出一页就入队上传，与后续页的栅格化重叠；3 路在手机上也不会打爆桥/内存。 */
+export const PDF_IMPORT_UPLOAD_CONCURRENCY = 3;
+
+/** 导入阶段：栅格化 / 写资产（UI 的进度文案按阶段区分）。 */
+export type PdfImportPhase = "raster" | "upload";
 
 export interface PdfImportRasterPage {
   /** 1-based 页码（PDF 里的真实页号）。 */
@@ -33,36 +41,48 @@ export interface PdfImportRasterPage {
   /** 图片像素尺寸（可选；写进 backgroundImage.pixelWidth/Height）。 */
   pixelWidth?: number;
   pixelHeight?: number;
-  /** 该页图片字节（桌面 WebP / 移动插件产物）。 */
-  bytes: Uint8Array;
+  /** 该页图片字节（桌面 WebP 直接给）。 */
+  bytes?: Uint8Array;
+  /** 惰性读字节：移动原生把页图落在 cacheDir，按需读（读取与上传都在池内，不阻塞后续页渲染）。 */
+  loadBytes?: () => Promise<Uint8Array>;
 }
 
 export interface PdfImportRasterResult {
   pageCount: number;
-  pages: PdfImportRasterPage[];
   cancelled: boolean;
 }
 
 export interface PdfImportRasterizeOptions {
   maxPages: number;
+  /** 栅格化进度（第 done / total 页）。 */
   onProgress?: (done: number, total: number) => void;
   signal?: AbortSignal;
+  /** 每渲染好一页立刻回调（编排层据此排队上传，实现「边栅格化边上传」）。 */
+  onPage?: (page: PdfImportRasterPage) => void;
 }
 
 export interface PdfImportDeps {
-  /** 落原 PDF 到本笔记资产目录（正文里存它的 canonical URL，防孤儿清理）。 */
-  savePdf: (input: { bytes: Uint8Array; filename: string }) => Promise<{ url: string }>;
-  /** 逐页栅格化（桌面 unpdf / 移动原生插件）。 */
-  rasterize: (input: { bytes: Uint8Array; pdfUrl: string }, options: PdfImportRasterizeOptions) => Promise<PdfImportRasterResult>;
+  /**
+   * 逐页栅格化（桌面 unpdf / 移动原生 PdfRender 插件）。
+   * v3 起**不再先落原 PDF**（sourcePdf 只留 {name,pageCount}，原 PDF 不进正文/不进 S3）；
+   * 需要磁盘 PDF 的端（移动原生插件）在自己的适配器里暂存，编排层不关心。
+   */
+  rasterize: (input: { bytes: Uint8Array }, options: PdfImportRasterizeOptions) => Promise<PdfImportRasterResult>;
   /** 上传单页图片字节。 */
   uploadPage: (input: { bytes: Uint8Array; filename: string }) => Promise<{ url: string }>;
+  /**
+   * 失败/取消时删除本轮**已上传**的资产（按已知 URL；实现方只删本笔记、且未被正文/历史引用的文件）。
+   * 没有它就只能等孤儿扫描兜底（设置页手动清理），会留下几 MB 的无主页图。
+   */
+  deleteAssets?: (urls: string[]) => Promise<void>;
 }
 
 export interface PdfImportOptions {
   fileName?: string;
   /** 产品截断上限（默认 300，硬夹到 1..300）。 */
   maxPages?: number;
-  onProgress?: (done: number, total: number) => void;
+  /** 进度：phase = raster（第 n/N 页渲染）/ upload（第 n 页写入资产）。 */
+  onProgress?: (done: number, total: number, phase: PdfImportPhase) => void;
   signal?: AbortSignal;
 }
 
@@ -100,7 +120,10 @@ function emptyOutcome(errors: string[] = []): PdfImportOutcome {
 
 /**
  * PDF → 图片页（不写正文；调用方拿 pages/sourcePdf 自己提交，见 planPdfPageInsert）。
- * 逐页容错：某页上传失败只记 errors，其余页照常；取消 = 不产出任何页（已上传资产由 GC 回收）。
+ *
+ * P7 管线：栅格化每产出一页就入队上传（池宽 3 ⇒ 与后续页渲染重叠）；页图按页号归位，
+ * 返回前等池排空。失败/取消（栅格化异常、signal abort、一页都没成）时**删掉本轮已上传的资产**，
+ * 不让无主页图留在 note-assets 里等人工清孤儿。
  */
 export async function importPdfPages(
   bytes: Uint8Array,
@@ -111,67 +134,152 @@ export async function importPdfPages(
   if (bytes.length > MAX_ATTACHMENT_BYTES) return emptyOutcome(["PDF 超过 100 MiB 上限"]);
   const maxPages = Math.min(INK_PDF_MAX_PAGES, Math.max(1, Math.floor(options.maxPages ?? INK_PDF_MAX_PAGES)));
 
-  let pdfUrl = "";
-  try {
-    const saved = await deps.savePdf({ bytes, filename: options.fileName || "import.pdf" });
-    if (!isNoteAssetUrl(saved.url)) return emptyOutcome(["PDF 上传结果不是本地资产地址"]);
-    pdfUrl = saved.url;
-  } catch (reason) {
-    return emptyOutcome(["PDF 上传失败：" + errorText(reason)]);
-  }
-
-  let raster: PdfImportRasterResult;
-  try {
-    raster = await deps.rasterize({ bytes, pdfUrl }, { maxPages, onProgress: options.onProgress, signal: options.signal });
-  } catch (reason) {
-    return emptyOutcome([pdfRasterErrorMessage(reason)]);
-  }
-
-  const pageCount = Math.max(raster.pageCount || 0, raster.pages.length);
-  if (raster.cancelled) {
-    return { ...emptyOutcome(), pageCount, cancelled: true };
-  }
-  const rasterPages = raster.pages.slice(0, maxPages);
-  const truncated = pageCount > rasterPages.length;
-  const pages: InkPage[] = [];
   const errors: string[] = [];
-  for (const item of rasterPages) {
-    if (options.signal?.aborted) {
-      return { pages: [], pageCount, importedPageCount: 0, truncated, cancelled: true, errors };
+  /** 按页号归位（1-based）；并发上传完成顺序不定，最后按页号排序。 */
+  const slots: Array<InkPage | null> = [];
+  const seenPages = new Set<number>();
+  const uploadedUrls: string[] = [];
+  let enqueued = 0;
+  let uploaded = 0;
+  let maxPageSeen = 0;
+  let aborted = false;
+
+  const ensureSlot = (page: number): void => {
+    while (slots.length < page) slots.push(null);
+  };
+
+  // ---- 上传池：与栅格化重叠（池内 n≤3），页字节可能是惰性读取（移动端 cacheDir） ----
+  const queue: PdfImportRasterPage[] = [];
+  let active = 0;
+  let drained: (() => void) | null = null;
+  const drainPool = (): Promise<void> => new Promise((resolve) => {
+    if (active === 0 && queue.length === 0) resolve();
+    else drained = resolve;
+  });
+  const maybeDrain = (): void => {
+    if (active === 0 && queue.length === 0 && drained) {
+      const done = drained;
+      drained = null;
+      done();
     }
+  };
+
+  const uploadOne = async (item: PdfImportRasterPage): Promise<void> => {
     try {
-      const uploaded = await deps.uploadPage({ bytes: item.bytes, filename: `pdf-page-${item.page}.webp` });
-      if (!isNoteAssetUrl(uploaded.url)) {
-        errors.push(`第 ${item.page} 页：上传结果不是本地资产地址`);
-        continue;
+      const pageBytes = item.bytes ?? (item.loadBytes ? await item.loadBytes() : null);
+      if (!pageBytes) {
+        errors.push(`第 ${item.page} 页：页图字节缺失`);
+        return;
       }
+      const result = await deps.uploadPage({ bytes: pageBytes, filename: `pdf-page-${item.page}.webp` });
+      if (!isNoteAssetUrl(result.url)) {
+        errors.push(`第 ${item.page} 页：上传结果不是本地资产地址`);
+        return;
+      }
+      uploadedUrls.push(result.url);
+      uploaded += 1;
+      ensureSlot(item.page);
       const image: InkBackgroundImage = {
-        url: uploaded.url,
+        url: result.url,
         fit: "contain",
         source: "pdf-page",
-        pdf: { url: pdfUrl, page: item.page, pageCount },
+        pdf: { page: item.page },
       };
       if (item.pixelWidth && item.pixelHeight) {
         image.pixelWidth = Math.round(item.pixelWidth);
         image.pixelHeight = Math.round(item.pixelHeight);
       }
-      const base = createInkPage(newInkId("page"), "blank");
-      pages.push({
-        ...base,
+      slots[item.page - 1] = {
+        ...createInkPage(newInkId("page"), "blank"),
         width: item.width,
         height: item.height,
         backgroundImage: image,
-      });
+      };
+      // 取消后仍在途的上传要跑完（拿到 URL 才能在取消路径删掉它们）
+      options.onProgress?.(uploaded, Math.max(enqueued, uploaded), "upload");
     } catch (reason) {
       errors.push(`第 ${item.page} 页：${errorText(reason)}`);
     }
+  };
+
+  const pump = (): void => {
+    if (!aborted) {
+      while (active < PDF_IMPORT_UPLOAD_CONCURRENCY && queue.length > 0) {
+        const item = queue.shift()!;
+        active += 1;
+        void uploadOne(item).finally(() => {
+          active -= 1;
+          pump();
+          maybeDrain();
+        });
+      }
+    }
+    maybeDrain();
+  };
+
+  const enqueue = (page: PdfImportRasterPage): void => {
+    if (aborted) return;
+    if (!Number.isInteger(page.page) || page.page <= 0 || page.page > maxPages) return;
+    if (seenPages.has(page.page)) return;
+    seenPages.add(page.page);
+    maxPageSeen = Math.max(maxPageSeen, page.page);
+    ensureSlot(page.page);
+    enqueued += 1;
+    queue.push(page);
+    pump();
+  };
+
+  const cleanupUploaded = async (): Promise<void> => {
+    if (uploadedUrls.length === 0) return;
+    if (!deps.deleteAssets) return;
+    const urls = uploadedUrls.splice(0, uploadedUrls.length);
+    try {
+      await deps.deleteAssets(urls);
+    } catch { /* 清理失败不掩盖导入结果：孤儿扫描/设置页兜底 */ }
+  };
+
+  const onAbort = (): void => {
+    aborted = true;
+    queue.length = 0;
+  };
+  options.signal?.addEventListener("abort", onAbort, { once: true });
+
+  let raster: PdfImportRasterResult;
+  try {
+    raster = await deps.rasterize(
+      { bytes },
+      {
+        maxPages,
+        onProgress: (done, total) => options.onProgress?.(done, total, "raster"),
+        signal: options.signal,
+        onPage: enqueue,
+      },
+    );
+  } catch (reason) {
+    options.signal?.removeEventListener("abort", onAbort);
+    aborted = true;
+    queue.length = 0;
+    await drainPool();
+    await cleanupUploaded();
+    return emptyOutcome([pdfRasterErrorMessage(reason)]);
   }
-  if (pages.length === 0) {
-    return { pages, pageCount, importedPageCount: 0, truncated, cancelled: false, errors };
+  options.signal?.removeEventListener("abort", onAbort);
+
+  const cancelled = raster.cancelled || aborted || Boolean(options.signal?.aborted);
+  if (cancelled) aborted = true;
+  await drainPool();
+
+  const pageCount = Math.max(raster.pageCount || 0, maxPageSeen);
+  const pages = slots.filter((page): page is InkPage => page !== null).slice(0, maxPages);
+  const truncated = pageCount > maxPages;
+  if (cancelled || pages.length === 0) {
+    await cleanupUploaded();
+    return { pages: [], pageCount, importedPageCount: 0, truncated, cancelled, errors };
   }
   return {
     pages,
-    sourcePdf: { url: pdfUrl, pageCount },
+    // v3：只留文件名与页数（原 PDF 不强制入库；不写 url 就不会被资产声明/同步带上，也不拦 GC）。
+    sourcePdf: { ...(options.fileName ? { name: options.fileName } : {}), pageCount },
     pageCount,
     importedPageCount: pages.length,
     truncated,

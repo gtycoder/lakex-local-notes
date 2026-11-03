@@ -19,6 +19,7 @@ import { treeDomain } from "./bridge/tree";
 import { homeDomain } from "./bridge/home";
 import { aiDomain } from "./bridge/ai";
 import { backfillQuickNoteListMetadata } from "./data/quickNotesRepository";
+import { cleanupPdfRenderCache } from "./native/pdfRender";
 
 export type { HistoryMobileSettings } from "./data/historyRepository.js";
 
@@ -34,6 +35,8 @@ export const bridge = {
     const d = await ensureDb();
     // 一次性把旧小记的首图元数据回填到 SQLite；失败不阻断 App，下次启动重试。
     await backfillQuickNoteListMetadata(d).catch((error) => console.warn("[quick-notes] list metadata backfill failed", error));
+    // P7：启动时扫掉上次被杀/失败留下的 PDF 渲染缓存目录（纯缓存，清不掉不影响功能）。
+    void cleanupPdfRenderCache();
     // 资源显示走 AssetServer（Filesystem 文件直读，无需预加载/迁移）。
   },
 };

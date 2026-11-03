@@ -21,7 +21,7 @@ function pageOutcome(pages = 1): PdfImportOutcome {
   const page = createInkDoc("p").pages[0];
   return {
     pages: Array.from({ length: pages }, (_, index) => ({ ...page, id: "imp-" + index })),
-    sourcePdf: { url: "http://127.0.0.1:19876/n/1700000000000_abcdef12.pdf", pageCount: pages },
+    sourcePdf: { name: "讲义.pdf", pageCount: pages },
     pageCount: pages,
     importedPageCount: pages,
     truncated: false,

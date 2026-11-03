@@ -44,6 +44,8 @@ export interface PdfRasterOptions {
   maxPages?: number;
   onProgress?: (done: number, total: number) => void;
   signal?: AbortSignal;
+  /** 每渲染好一页立刻回调（P7：编排层据此边栅格化边上传；给了它就不再在本地累积 pages）。 */
+  onPage?: (page: PdfRasterPage) => void;
 }
 
 function pdfError(reason: unknown): Error {
@@ -97,15 +99,18 @@ export async function renderPdfPagesDesktop(bytes: Uint8Array, options: PdfRaste
       const viewport = pageProxy.getViewport({ scale: 1 });
       const png = await renderPageAsImage(pdf, page, { width: maxWidth });
       const webp = await pngToWebp(new Uint8Array(png));
-      pages.push({
+      const rendered: PdfRasterPage = {
         page,
         width: viewport.width * CSS_PX_PER_PT,
         height: viewport.height * CSS_PX_PER_PT,
         pixelWidth: webp.width,
         pixelHeight: webp.height,
         bytes: webp.bytes,
-      });
-      options.onProgress?.(pages.length, total);
+      };
+      // P7：给了 onPage 就流式交付（不在本地攒 300 张页图的字节）；没给则按老行为返回 pages。
+      if (options.onPage) options.onPage(rendered);
+      else pages.push(rendered);
+      options.onProgress?.(page, total);
     }
     return { pageCount, pages, cancelled: false };
   } finally {

@@ -15,6 +15,7 @@ import {
   type InkTool,
 } from "../../core/inkDoc.js";
 import { canonicalDocBody } from "../../core/docBaseline.js";
+import { readInkNavPage, writeInkNavPage } from "./inkNav.js";
 import { hitTestStroke, strokeToSvgPath } from "./inkGeometry.js";
 import { createStrokePathCache, renderedStrokesForPage, type RenderedStrokePath } from "./inkRenderCache.js";
 import {
@@ -30,7 +31,7 @@ import { InkPaper } from "./InkPaper.js";
 import InkPageStrip from "./InkPageStrip.js";
 import { newInkId } from "./ids.js";
 import type { InkImageImportOutcome } from "./inkImageImport.js";
-import { INK_PDF_MAX_PAGES, planPdfPageInsert, type PdfImportOutcome } from "./pdfImport.js";
+import { INK_PDF_MAX_PAGES, planPdfPageInsert, type PdfImportOutcome, type PdfImportPhase } from "./pdfImport.js";
 
 export type InkPadMode = InkTool | "eraser";
 
@@ -38,6 +39,11 @@ export interface InkPadProps {
   content: string;
   readOnly?: boolean;
   variant: "desktop" | "mobile";
+  /**
+   * 当前文档 id：v3 只用它做**设备本地导航键**（lakex-local-notes-v3.ink-nav.<noteId>，见 features/ink/inkNav.ts）。
+   * 不传也能用（导航退化为内存态），但翻页记忆不会持久化。
+   */
+  noteId?: string;
   active?: boolean;
   paneVisible?: boolean;
   pane?: "left" | "right" | null;
@@ -54,7 +60,8 @@ export interface InkPadProps {
    * onProgress 用于「第 n/N 页」；signal 用于「取消」（abort 后实现方应尽快停止）。
    */
   onImportPdf?: (options: {
-    onProgress: (done: number, total: number) => void;
+    /** P7：phase = raster（渲染第 n/N 页）/ upload（写资产第 n 页）。 */
+    onProgress: (done: number, total: number, phase?: PdfImportPhase) => void;
     signal: AbortSignal;
   }) => Promise<PdfImportOutcome | null>;
 }
@@ -116,10 +123,19 @@ const StaticStrokeLayer = memo(function StaticStrokeLayer({ strokes }: { strokes
   );
 });
 
-export function InkPad({ content, readOnly = false, variant, active, paneVisible, pane, onChange, onDirty, onEditorCapture, onImportImages, onImportPdf }: InkPadProps) {
+export function InkPad({ content, readOnly = false, variant, noteId, active, paneVisible, pane, onChange, onDirty, onEditorCapture, onImportImages, onImportPdf }: InkPadProps) {
   // 正文只在挂载时解析；父层保存会更新 content，但编辑器不应因此反复解析整份大 JSON。
   // 外部真正需要换正文时由宿主 bump reloadKey 重挂载。
-  const [doc, setDoc] = useState<InkDoc | null>(() => parseInkBody(content));
+  // v3：当前页是设备本地视图（core/inkNav.ts），优先用它；没有记录才回退 v1/v2 正文里的旧 activePageId。
+  const [doc, setDoc] = useState<InkDoc | null>(() => {
+    const parsed = parseInkBody(content);
+    if (!parsed) return null;
+    const savedPageId = readInkNavPage(noteId);
+    if (savedPageId && parsed.pages.some((page) => page.id === savedPageId)) {
+      return { ...parsed, activePageId: savedPageId };
+    }
+    return parsed;
+  });
   const docRef = useRef<InkDoc | null>(doc);
   const [mode, setMode] = useState<InkPadMode>("pen");
   const [color, setColor] = useState(COLORS[0]);
@@ -140,7 +156,7 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
   // v2 图片页导入：进行中标记 + 可见错误（失败/超限要能看见）
   const [importing, setImporting] = useState(false);
   const [pdfImporting, setPdfImporting] = useState(false);
-  const [pdfProgress, setPdfProgress] = useState<{ done: number; total: number } | null>(null);
+  const [pdfProgress, setPdfProgress] = useState<{ done: number; total: number; phase: PdfImportPhase } | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
   const importingRef = useRef(false);
   const pdfImportingRef = useRef(false);
@@ -198,6 +214,11 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
     if (!doc) return null;
     return doc.pages.find((item) => item.id === doc.activePageId) ?? doc.pages[0] ?? null;
   }, [doc]);
+  // 翻页/建页/删页/导入都会改内存 activePageId：同步到设备本地导航（不写正文、不标脏、不进 S3）。
+  useEffect(() => {
+    if (!noteId || !doc?.activePageId) return;
+    writeInkNavPage(noteId, doc.activePageId);
+  }, [doc?.activePageId, noteId]);
   const pageIndex = doc && page ? doc.pages.findIndex((item) => item.id === page.id) : -1;
   const pageWidth = page?.width ?? 0;
   const pageHeight = page?.height ?? 0;
@@ -428,13 +449,13 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
     if (!importer || readOnly || importingRef.current || pdfImportingRef.current) return;
     pdfImportingRef.current = true;
     setPdfImporting(true);
-    setPdfProgress({ done: 0, total: 0 });
+    setPdfProgress({ done: 0, total: 0, phase: "raster" });
     setImportError(null);
     const controller = new AbortController();
     pdfAbortRef.current = controller;
     try {
       const outcome = await importer({
-        onProgress: (done, total) => setPdfProgress({ done, total }),
+        onProgress: (done, total, phase) => setPdfProgress({ done, total, phase: phase ?? "raster" }),
         signal: controller.signal,
       });
       if (!outcome) return; // 用户取消选文件
@@ -758,12 +779,19 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
       )}
 
       {saveError && <div className="ink-invalid-banner" role="alert">{saveError}；本次修改未写入。</div>}
+      {doc.droppedPages ? (
+        <div className="ink-invalid-banner" role="alert">
+          有 {doc.droppedPages} 页数据无法解析，已跳过；继续编辑并保存会丢弃这些页（原文件在首次保存前不改动）。
+        </div>
+      ) : null}
       {importError && <div className="ink-invalid-banner" role="alert">{importError}</div>}
       {pdfImporting && (
         <div className="ink-invalid-banner" role="status" data-ink-pdf-progress>
           <span>
             {pdfProgress && pdfProgress.total > 0
-              ? `正在导入 PDF：第 ${pdfProgress.done} / ${pdfProgress.total} 页`
+              ? pdfProgress.phase === "upload"
+                ? `正在写入页面：第 ${pdfProgress.done} / ${pdfProgress.total} 页`
+                : `正在导入 PDF：第 ${pdfProgress.done} / ${pdfProgress.total} 页`
               : "正在导入 PDF：准备中…"}
           </span>
           <button className="ink-tool" onClick={cancelPdfImport} aria-label="取消 PDF 导入" title="取消 PDF 导入">取消</button>

@@ -114,6 +114,33 @@ class PdfRenderPlugin : Plugin() {
     }
 
     /**
+     * 清扫 cacheDir 下的 pdf-render 目录（P7）。渲染产物是纯缓存：导入结束后 JS 调一次；App 启动时也调一次，
+     * 清掉上次被杀/失败留下的陈旧目录。渲染中拒绝（busy），避免把正在读的页图删掉。
+     */
+    @PluginMethod
+    fun cleanupCache(call: PluginCall) {
+        if (busy.get()) {
+            call.reject("正在渲染 PDF，暂不清理缓存")
+            return
+        }
+        var removedDirs = 0
+        var freedBytes = 0L
+        try {
+            val base = File(context.cacheDir, OUT_DIR)
+            base.listFiles()?.forEach { entry ->
+                try {
+                    if (entry.isDirectory) freedBytes += entry.walkBottomUp().filter { it.isFile }.sumOf { it.length() }
+                    if (entry.deleteRecursively()) removedDirs += 1
+                } catch (e: Exception) { /* 单项失败继续清其余的 */ }
+            }
+        } catch (e: Exception) { /* 目录不存在/不可读 ⇒ 视为已清理 */ }
+        val out = JSObject()
+        out.put("removedDirs", removedDirs)
+        out.put("freedBytes", freedBytes)
+        call.resolve(out)
+    }
+
+    /**
      * 渲染整份 PDF 的每一页。
      * options: { path? , noteId?+filename? , maxWidth?=1600, quality?=80 }
      * result:  { pageCount, pages:[{page,width,height,pixelWidth,pixelHeight,file,bytes}], cancelled, elapsedMs }
@@ -144,6 +171,8 @@ class PdfRenderPlugin : Plugin() {
             var pfd: ParcelFileDescriptor? = null
             var renderer: PdfRenderer? = null
             try {
+                // P7：渲染前清掉上次失败/被杀的陈旧目录（busy 已置位 ⇒ 此刻没有别的渲染在读它们）。
+                runCatching { File(context.cacheDir, OUT_DIR).listFiles()?.forEach { it.deleteRecursively() } }
                 val outDir = newOutputDir()
                 pfd = ParcelFileDescriptor.open(source, ParcelFileDescriptor.MODE_READ_ONLY)
                 renderer = PdfRenderer(pfd)

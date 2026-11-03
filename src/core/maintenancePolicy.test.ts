@@ -22,7 +22,8 @@ describe("互斥域判据（F16 红线化）", () => {
     // 与 cssLayers 的基线同理：只允许"显式改基线"来变更，防无声漂移。
     // 261024 方案 B：+setQuickNoteTags（小记 ↔ 标签关联表整组替换，独立于保存正文）
     // 261028 +restoreFromCloud（从云端恢复：清本机 v3 同步账本；整轮网络由 syncNow 维护域跑）
-    expect(WRITE_OPS.length).toBe(37);
+    // 261103 P7 +cleanNoteOrphans（PDF 导入失败/取消按 filename 定向删本轮已上传页图；只删未被正文引用的文件）
+    expect(WRITE_OPS.length).toBe(38);
     // 261026 +ensureSearchIndex（派生索引后台补建；按需资产补拉复用 ensureTrashNoteAssets）。
     expect(MAINTENANCE_OPS.length).toBe(4);
     // 261013：syncQuickNote（小记单条推送）；261027：+ensureNoteAssets / +ensureQuickNoteAssets（占位图点击补拉）。
@@ -33,7 +34,7 @@ describe("互斥域判据（F16 红线化）", () => {
     // 261028 +getSyncDiagnostics（只读最近 3 轮同步诊断，device_state/localStorage）。
     // 261029 Del-6：-markTombstonesPublished（移动 bridge 该记账方法随 published_at 一并删除；发布判据改 waterline）
     expect(NONE_OPS.length).toBe(42);
-    expect(ALL.length).toBe(86); // 37 写 + 4 维护 + 3 高优 + 42 none
+    expect(ALL.length).toBe(87); // 38 写（+cleanNoteOrphans，261103 P7） + 4 维护 + 3 高优 + 42 none
   });
 
   it("I1（F16）：写域与维护域必须是不同互斥域", () => {

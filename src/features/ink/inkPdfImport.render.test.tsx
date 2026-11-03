@@ -13,10 +13,9 @@ import { createInkDoc, inkToBody, type InkPage } from "../../core/inkDoc";
 import { InkPad, type InkPadProps } from "./InkPad";
 import type { PdfImportOutcome } from "./pdfImport";
 
-const PDF_URL = localAssetHttpUrl("note-1", "1700000000000_abcdef12.pdf");
 const pageUrl = (page: number): string => localAssetHttpUrl("note-1", `${1700000000010 + page}_abcdef1${page}.webp`);
 
-function pdfPage(page: number, pageCount: number): InkPage {
+function pdfPage(page: number): InkPage {
   const base = createInkDoc("p").pages[0];
   return {
     ...base,
@@ -25,7 +24,7 @@ function pdfPage(page: number, pageCount: number): InkPage {
       url: pageUrl(page),
       fit: "contain",
       source: "pdf-page",
-      pdf: { url: PDF_URL, page, pageCount },
+      pdf: { page },
     },
   };
 }
@@ -33,7 +32,7 @@ function pdfPage(page: number, pageCount: number): InkPage {
 function outcome(pages: InkPage[], extra: Partial<PdfImportOutcome> = {}): PdfImportOutcome {
   return {
     pages,
-    sourcePdf: { url: PDF_URL, pageCount: extra.pageCount ?? pages.length },
+    sourcePdf: { name: "论文.pdf", pageCount: extra.pageCount ?? pages.length },
     pageCount: pages.length,
     importedPageCount: pages.length,
     truncated: false,
@@ -84,7 +83,7 @@ beforeAll(() => {
 
 describe("PDF 导入入口", () => {
   it("移动端：编辑态工具坞「插入」菜单里有「导入 PDF」；阅读态没有（正文写操作只在编辑态）", async () => {
-    const onImportPdf = vi.fn(async () => outcome([pdfPage(1, 1)]));
+    const onImportPdf = vi.fn(async () => outcome([pdfPage(1)]));
     const edit = await mount({ content: inkToBody(createInkDoc("p1")), variant: "mobile", readOnly: false, onImportPdf });
     expect(byLabel(edit.container, "插入")).not.toBeUndefined();
     await act(async () => { byLabel(edit.container, "插入")!.click(); });
@@ -102,17 +101,17 @@ describe("PDF 导入入口", () => {
 
   it("桌面：工具条「导入 PDF」在编辑态可用、阅读态禁用；导入成功替换空白首页并切到第一页", async () => {
     const onChange = vi.fn();
-    const onImportPdf = vi.fn(async () => outcome([pdfPage(1, 3), pdfPage(2, 3)], { pageCount: 3 }));
+    const onImportPdf = vi.fn(async () => outcome([pdfPage(1), pdfPage(2)], { pageCount: 3 }));
     const view = await mount({ content: inkToBody(createInkDoc("p1")), variant: "desktop", readOnly: false, onImportPdf, onChange });
     const button = byLabel(view.container, "导入 PDF");
     expect(button).not.toBeUndefined();
     await act(async () => { button!.click(); });
     expect(onImportPdf).toHaveBeenCalledTimes(1);
     expect(view.container.querySelector(".ink-pages span")!.textContent).toContain("第 1 / 2 页");
-    // 500ms 防抖后落正文：sourcePdf + pdf-page 背景图进 body（不新增 kind）
+    // 500ms 防抖后落正文：sourcePdf（v3 只留 name/pageCount）+ pdf-page 背景图（只留页号）
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 620)); });
     const body = JSON.parse(onChange.mock.calls[onChange.mock.calls.length - 1][0]);
-    expect(body.sourcePdf).toEqual({ url: PDF_URL, pageCount: 3 });
+    expect(body.sourcePdf).toEqual({ name: "论文.pdf", pageCount: 3 });
     expect(body.pages).toHaveLength(2);
     expect(body.pages[0].backgroundImage.source).toBe("pdf-page");
     expect(body.pages[0].backgroundImage.pdf.page).toBe(1);
@@ -131,7 +130,7 @@ describe("插入菜单（图片 + PDF 两项在同一入口）", () => {
     const onImportImages = vi.fn(async () => ({ pages: [], errors: [] }));
     const onImportPdf = vi.fn(async () => {
       await pending;
-      return outcome([pdfPage(1, 1)]);
+      return outcome([pdfPage(1)]);
     });
     const view = await mount({
       content: inkToBody(createInkDoc("p1")),
@@ -183,8 +182,23 @@ describe("PDF 导入进度 / 取消 / 错误", () => {
     await view.unmount();
   });
 
+  it("P7 上传阶段进度：文案切到「正在写入页面」（与栅格化阶段区分）", async () => {
+    const onImportPdf = vi.fn(({ onProgress }: {
+      onProgress: (done: number, total: number, phase?: "raster" | "upload") => void;
+      signal: AbortSignal;
+    }) => new Promise<PdfImportOutcome>((resolve) => {
+      onProgress(1, 2, "upload");
+      setTimeout(() => resolve(outcome([pdfPage(1)], { pageCount: 2 })), 40);
+    }));
+    const view = await mount({ content: inkToBody(createInkDoc("p1")), variant: "mobile", readOnly: false, onImportPdf });
+    await importPdfFromInsert(view.container);
+    expect(view.container.querySelector('[data-ink-pdf-progress]')!.textContent).toContain("正在写入页面：第 1 / 2 页");
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 60)); });
+    await view.unmount();
+  });
+
   it("超过 300 页：给截断提示（导入前 300 页）", async () => {
-    const onImportPdf = vi.fn(async () => outcome([pdfPage(1, 500)], { pageCount: 500, importedPageCount: 1, truncated: true }));
+    const onImportPdf = vi.fn(async () => outcome([pdfPage(1)], { pageCount: 500, importedPageCount: 1, truncated: true }));
     const view = await mount({ content: inkToBody(createInkDoc("p1")), variant: "mobile", readOnly: false, onImportPdf });
     await importPdfFromInsert(view.container);
     const alert = view.container.querySelector('[role="alert"]');
