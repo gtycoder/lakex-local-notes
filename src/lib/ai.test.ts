@@ -23,7 +23,9 @@ describe("桌面 AI 总开关：关闭时任何路径不出网", () => {
     expect(mocks.aiChat).not.toHaveBeenCalled();
   });
 
-  it("开启时正常走主进程", async () => {
+  it("显式开启后正常走主进程", async () => {
+    // 261103 起默认关 ⇒ 这个用例必须显式打开偏好，否则会被总开关拦下。
+    window.localStorage.setItem("lakex-local-notes-v3.ai.enabled", "1");
     await expect(runAiChat("r2", [])).resolves.toMatchObject({ ok: true });
     expect(mocks.aiChat).toHaveBeenCalledOnce();
   });

@@ -7,6 +7,12 @@
 
 ## 0. 最新交接（261027）
 
+### 261103 · 七批：AI 助手默认关闭（桌面与移动端同口径）· **本地提交**
+- **口径**：AI 助手**默认关**。桌面 `src/lib/aiEnabled.ts` 由「默认开」翻成「默认关」——判定改为 `=== "1"`，localStorage 不可用时也回落 **false**（fail-closed，不替用户打开）；移动端 `src/mobile/ai/aiSettings.ts` 本来就是默认关（`=== "1"`），本轮不做改动，仅对齐文档。
+- **行为不变的部分**：关闭只拦网络（`lib/ai.ts` 的 `runAiChat` 直接拒绝、`aiNetworkHint` 文案不变），**配置与 API Key 保留**；入口仍可见（移动端首页 AI 键仍可进页，进页显示「AI 助手已关闭」+ 去开启；桌面点入口报同一句引导），否则用户找不到开关。
+- **测试**：`lib/aiEnabled.test.ts` 默认关 + 存储异常 fail-closed；`lib/ai.test.ts` 的「正常走主进程」用例改为**显式置 `1`**（此前依赖默认开）。
+- **文档**：261029 历史条目加「261103 起改为默认关」标注；MOBILE-AI.md 既有「AI 助手（默认关）」不变；AGENTS §4 增加一行长期口径。
+- **门禁**：tsc 0 / 全量 vitest 全过 / check:mobileui / `git diff --check` 0。
 ### 261103 · 六批（A 组工程收尾 + B1/B2 多维表收尾 + A3 设备门禁补齐）· **本地改动（未提交）**
 - **A1 横屏左右安全区**：新增令牌 `--mobile-left/right-safe-area`（`env()` 与原生 `WindowInsets` 注入值取 max）；原生 `lakeInsets` 增加 `getLeft/getRight` 并把 `__lakeSetNativeInsets(top,bottom,left,right)`（老包只传 2 个参数 ⇒ 缺省 0，保持兼容）。接入点：手机抽屉（`.side-panel` 左右）、平板树/大纲（`.pad-tree`/`.pad-outline`）、编辑 dock 工具条与面板内容、手写板悬浮条、画板 >720px 竖向轨、列表/正文/多维表页级 padding。**竖屏 inset=0 ⇒ 观感零变化**，手机 6 态快照 0 差异已证。
 - **A2 死 CSS 清理**：删 `mobile.css` 里头部收口后 0 引用的 `.mbt-meta*`（5 条）与 `.mbt-toolbar`（1 条）；`mobileLayers` 手机壳基线 **1522 → 1486（−36）**、dupGroups 7 → 6（收紧，不是回涨）。
@@ -209,7 +215,7 @@
 - **首启欢迎页（用户点单）**：桌面欢迎文档与 Android 默认「欢迎」小记使用同一份内容（`src/core/lakeDocForm.ts` 的 `WELCOME_TITLE`/`WELCOME_INTRO`/`WELCOME_GUIDE_LINKS`；桌面 `welcomeLakeBody()` 带可点击链接，小记 body 同源 + `welcomeQuickNoteText()` 纯文本镜像）。内容含 **Gitee / GitHub 使用说明** 两个入口（`…/blob/master/guide/README.md`）。
   - Android 仅在**全新库**创建一次（固定 id `welcome-quick-note`，标记 `welcome_quick_note_initialized`；用户删除后不复活；有数据的旧库只补标记不插入；失败只 warn 不阻断启动）。新增 `src/mobile/data/welcomeQuickNote.ts` + 判据单测。
   - 门禁夹具（`scripts/mobile-audit/gate-fixture.mjs`）会物理删除这条欢迎小记，保持「4 条小记」的确定性夹具（否则每次新装快照都会多一条）。
-- **桌面 AI 总开关（用户点单）**：设置 → AI → **连通性** 分组新增 `ai-enabled` Switch（设备本地 `localStorage`，默认开，保持旧行为）；关闭后 `lib/ai.ts` 的 `runAiChat` 直接拒绝、**任何路径不出网**，配置与 Key 保留；未配置 API Key 时尝试开启会给行内提示（同「启用云同步」口径）。`settingsSearch` 已登记 `ai-enabled`。
+- **桌面 AI 总开关（用户点单）**：设置 → AI → **连通性** 分组新增 `ai-enabled` Switch（设备本地 `localStorage`，~~默认开，保持旧行为~~ ⛔ **261103 起改为默认关**，与移动端同口径）；关闭后 `lib/ai.ts` 的 `runAiChat` 直接拒绝、**任何路径不出网**，配置与 Key 保留；未配置 API Key 时尝试开启会给行内提示（同「启用云同步」口径）。`settingsSearch` 已登记 `ai-enabled`。
 - **AI 页观感**：`.settings-panel .config-section__title` 去掉灰底色（`--lake-bg-subtle` → transparent），分组边界只由卡片 0.5px 边承担（用户反馈"灰色衔接条很丑"）；手册 `desktop-settings-ai.png` 已重拍。
 - **手册**：01/10/12 章补首启欢迎小记、桌面 AI 开关位置与语义。
 - **基线**：新装夹具后 `home-doc` 指纹变化（文档 id 变化，元素数不变）⇒ 6 态重烤；之后门禁连跑 **0 差异**。
