@@ -7,9 +7,10 @@ const PATHS = read("../../core/noteBodyPaths.ts");
 const STORE = read("../../../electron/store.ts");
 const IPC = read("../../../electron/ipc/registerNotes.ts");
 const DESKTOP = read("../editor/MultiTabEditor.tsx");
-const MOBILE = read("../../mobile/notebook/NotebookWorkspace.tsx");
 /** 261103 P9-5b：文档层 pane 列表（kind=ink 分支/capture 接线）拆到 NotePaneHost。 */
 const MOBILE_PANES = read("../../mobile/notebook/NotePaneHost.tsx");
+/** 261103 P10：编辑态写边界（capture/flush）搬到 useWorkspaceSession。 */
+const MOBILE_SESSION = read("../../mobile/notebook/useWorkspaceSession.ts");
 const MOBILE_BRIDGE = read("../../mobile/bridge/notes.ts");
 const INK_PAD = read("./InkPad.tsx");
 const DESKTOP_INK = read("./DesktopInkPad.tsx");
@@ -395,7 +396,7 @@ describe("手写板正式端到端接线", () => {
 
   it("移动端完成编辑前现取手写板正文（与 board/usheet 同一条写边界，绕过 500ms 防抖）", () => {
     expect(MOBILE_PANES).toContain("onEditorCapture={(capture) => {");
-    expect(MOBILE).toMatch(/active\.kind === "usheet" \|\| active\.kind === "board" \|\| active\.kind === "ink"/);
+    expect(MOBILE_SESSION).toMatch(/active\.kind === "usheet" \|\| active\.kind === "board" \|\| active\.kind === "ink"/);
   });
 
   it("触达 ≥44：按钮盒走 --mb-tap-min；当前色/色板 44 盒 + 28 内圆；纸张视觉 36 + ::after 补 44", () => {

@@ -9,6 +9,8 @@ import { describe, expect, it } from "vitest";
  */
 const read = (rel: string) => readFileSync(new URL(rel, import.meta.url), "utf8");
 const WORKSPACE = read("./NotebookWorkspace.tsx");
+/** 261103 P10-①：拖拽/长按逻辑拆到 useTreeDrag.ts。 */
+const DRAG = read("./useTreeDrag.ts");
 const LIST = read("./NotebookTreeList.tsx");
 const HOOK = read("./useNotebookTreeData.ts");
 const INDEX = read("./notebookTreeIndex.ts");
@@ -47,7 +49,7 @@ describe("抽屉树窗口化", () => {
   });
 
   it("拖拽命中用 closest('[data-node-id]') 解析（窗口化后 elementFromPoint 可能命中 wrapper div）", () => {
-    expect(WORKSPACE).toContain('.closest("[data-node-id]")');
+    expect(DRAG).toContain('.closest("[data-node-id]")');
     // 行 id 只挂在 <button> 上，wrapper 只带 data-index ⇒ closest 才能穿透包装层拿到行。
     expect(LIST.match(/data-node-id=\{/g)?.length).toBe(1);
     expect(LIST).toContain("data-index={entry.index}");

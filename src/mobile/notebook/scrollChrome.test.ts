@@ -4,6 +4,8 @@ import { CHROME_HIDE_DELTA, CHROME_SHOW_DELTA, CHROME_TOP_PX, chromeAfterScroll 
 
 const read = (rel: string) => readFileSync(new URL(rel, import.meta.url), "utf8");
 const WS = read("./NotebookWorkspace.tsx");
+/** 261103 P10-①：chrome/滚动/手势逻辑拆到 useWorkspaceChrome.ts。 */
+const CHROME = read("./useWorkspaceChrome.ts");
 /** 261103 P9-5b：文档层 pane 列表 + 骨架拆到 NotePaneHost.tsx。 */
 const PANE = read("./NotePaneHost.tsx");
 /** 261103 P4：胶囊拆成 WorkspaceCapsule.tsx ⇒ 相关静态断言改读组件源码。 */
@@ -32,19 +34,19 @@ describe("阅读时顶栏/底栏自动收起（261019，对齐思源）", () => 
   });
 
   it("工作区接线：只认 mobile-doc-body、编辑态不参与、开浮层复位、顶栏/胶囊同一判据", () => {
-    expect(WS).toContain('chromeAfterScroll(cur, top, dy)');
-    expect(WS).toContain('classList?.contains("mobile-doc-body")');
-    expect(WS).toMatch(/meta\.kind !== "doc" \|\| meta\.editing/);
+    expect(CHROME).toContain('chromeAfterScroll(cur, top, dy)');
+    expect(CHROME).toContain('classList?.contains("mobile-doc-body")');
+    expect(CHROME).toMatch(/meta\.kind !== "doc" \|\| meta\.editing/);
     expect(TOPBAR).toContain("mobile-topbar--auto-hidden");
     expect(WS).toContain("chromeHidden={chromeHiddenNow}");
     // 261103：胶囊显隐判据统一到 capsuleHidden —— 文档（Lake）编辑态**保留胶囊**（抬到 dock 上方），
     // 表格/多维表/画板/手写板编辑态仍隐藏；顶栏自动收起判据不变。
-    expect(WS).toContain('const capsuleInEdit = !!active?.editing && (active?.kind ?? "doc") === "doc";');
-    expect(WS).toContain("const capsuleHidden = chromeHiddenNow || (!!active?.editing && !capsuleInEdit);");
+    expect(CHROME).toContain('const capsuleInEdit = !!active?.editing && (active?.kind ?? "doc") === "doc";');
+    expect(CHROME).toContain("const capsuleHidden = chromeHiddenNow || (!!active?.editing && !capsuleInEdit);");
     expect(WS).toContain("aboveDock={capsuleInEdit}");
     expect(CAPSULE).toContain("mobile-bottom-bar--above-dock");
     // 打开任意浮层 → 导航必须回来
-    expect(WS).toMatch(/sidebarOpen \|\| outlineOpen \|\| tabsOpen \|\| notebookSwitchOpen\) showChrome\(\)/);
+    expect(CHROME).toMatch(/sidebarOpen \|\| outlineOpen \|\| tabsOpen \|\| notebookSwitchOpen\) showChrome\(\)/);
   });
 
   it("CSS：顶栏高度过渡收起 + reduced-motion 关闭", () => {

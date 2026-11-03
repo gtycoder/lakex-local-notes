@@ -66,7 +66,8 @@ const CLASS_TOKEN_BASELINE: Record<string, number> = {
  * treeDrag = 拖拽逻辑与 DOM 混合件（§9.2 列为待拆）；P6 组件变体化时一并处置。
  */
 const ALLOWED_DESKTOP_COMPONENT_IMPORTS: Record<string, string[]> = {
-  "mobile/notebook/NotebookWorkspace.tsx": ["../../components/model/treeDrag"],
+  // 261103 P10-①：拖拽逻辑随 useTreeDrag 搬出工作区（依赖未变，只是换了文件；基线仍只许降）。
+  "mobile/notebook/useTreeDrag.ts": ["../../components/model/treeDrag"],
 };
 
 /** 桌面侧反向耦合基线（mobile-app 在 src/styles/** 的出现次数，只许降）。 */
