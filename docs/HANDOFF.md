@@ -7,6 +7,13 @@
 
 ## 0. 最新交接（261027）
 
+### 261103 · P10 收尾（工作区逻辑搬 hook / 设置抽屉按需 / import 规则扩展）· **本地提交（分支 feat/pad-touch-ui）**
+- **P10-①（P9-5c）**：新增 `useTreeDrag`(168 行) / `useWorkspaceChrome`(159) / `useWorkspaceSession`(206)，**纯搬移不改行为**（旧逻辑行 478 条逐字命中 475，余 3 条等价改写）⇒ NotebookWorkspace **984 → 660 行（−32.9%）**；静态契约测试改读 hook。
+- **P10-②**：`SettingsDrawer` 改 `lazy()`（打开设置才加载）⇒ mobile entry JS **79,032 → 53,496B gz（−25.5KB）**、首屏 **366,792 → 340,783B gz（−26KB）**；预算收紧 entry 80→60KB、首屏 390→**360KB**；设备冒烟设置/云同步子页正常。
+- **P10-③**：`SIDEBAR_*_WIDTH` 下沉 `core/layoutConstants`（desktopTypes re-export、Sidebar 改核心）；check-arch 增加 `components-no-desktop` 规则并纳入扫描 ⇒ 违规 **0**。
+- **P10-④ 结论（不改）**：28 条 preload 只有小 chunk，usheet/plantuml/lakeRuntime/Drawnix 都不在首屏图，仅按需加载。
+- **累计**：移动首屏 392,977→340,783B gz（−13.3%）、entry −32.3%；桌面首屏 −407.4KB；NotebookWorkspace 1212→660 行。
+- **门禁**：tsc 0 / vitest 566 文件 3463 例 / core 136/0 / mobileui / 双 build / bundle / arch / 手机+平板 6 态 0 差异 / windowsweep。
 ### 261103 · P9 收尾（首屏 / import 方向 / isolate 结论 / 工作区拆件）· **本地提交（分支 feat/pad-touch-ui）**
 - **P9-1 bridge/sync 按需**：`src/mobile/bridge/sync.ts` 8 个 v3 重依赖（s3v3Remote/mobileDeviceStore/sync 编排/s3v3Engine/Transfer/AssetBackfill/protocol）改函数内 dynamic import（离线/未配置在 import 前返回）⇒ mobile 首屏 **392,977 → 366,792B gz（−26.2KB / −6.7%）**，bridge chunk 97,164 → 31,671B gz；首屏预算收紧 **420→390KB**。
 - **P9-2 CodeMirror defer**：`index.html` 经典脚本加 defer ⇒ desktop 首屏 **2,785,488 → 2,378,113B gz（−407KB）**；`check-arch` 区分阻塞/defer 两套预算（desktop 首屏 2.5MB + defer 450KB）；dev Electron 冒烟通过。

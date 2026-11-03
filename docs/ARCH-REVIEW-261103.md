@@ -218,3 +218,18 @@
 **门禁**：tsc 0 / 全量 vitest **566 文件 3463 例** 30.21s / check:core 136/0 / check:mobileui / 双 build / check:bundle / check:arch（mobile 366.8KB/390KB、desktop 2.38MB/2.5MB、defer 407.4KB/450KB、import 违规 0）/ 手机 + 平板 6 态 **0 差异** / `check:windowsweep` pass。
 
 **剩余（P10 候选）**：① P9-5c —— 把树拖拽/会话屏障/chrome 滚动逻辑逐字搬 hook（≈−250 行，行为不变）；② `bridge` 里仍静态的 `s3v3Report`（12KB，受 syncDiagnosticsStore 值导入约束）；③ 把 import 方向规则扩到 `components→desktop`（Sidebar 常量同法下沉）；④ `plantuml`/`MobileUsheetViewer` 等 6~7MB raw 懒 chunk 的按需化评估。
+
+## 10. P10 实施记录（261103 同日，分支 `feat/pad-touch-ui`）
+
+| 项 | 结果 | 关键数字 |
+|---|---|---|
+| P10-① 工作区逻辑搬 hook（P9-5c） | ✅ | 新增 `useTreeDrag`(168) / `useWorkspaceChrome`(159) / `useWorkspaceSession`(206)；NotebookWorkspace **984 → 660 行（−324 / −32.9%）**；行为行逐字命中 475/478（余 3 条等价改写） |
+| P10-② 设置抽屉按需 | ✅ | `SettingsDrawer` 改 `lazy()` ⇒ mobile entry JS **79,032 → 53,496B gz（−25.5KB）**，首屏资源图 **366,792 → 340,783B gz（−26KB）**；预算 entry 80KB→60KB、首屏 390KB→**360KB**；设备冒烟（打开设置/云同步子页）正常 |
+| P10-③ import 规则扩到 components | ✅ | `SIDEBAR_*_WIDTH` 下沉 `core/layoutConstants`（desktopTypes re-export，Sidebar 改核心）；check-arch 新增 `components-no-desktop` 并纳入扫描 ⇒ 违规 **0 / 清单 0** |
+| P10-④ 大懒 chunk 评估 | ✅ 结论=不改 | 28 条 preload 只有 usheetDoc 等小 chunk；`MobileUsheetViewer`(6.9MB raw)/`plantuml`(6.4MB)/`lakeRuntime`(6.3MB)/`DrawnixBoardCore` 均不在首屏图，只在打开对应文档时加载 ⇒ 保持现状 |
+
+**累计首屏收益（P9+P10）**：移动 **392,977 → 340,783B gz（−52.2KB / −13.3%）**、entry **79,032 → 53,496B gz（−32.3%）**；桌面 **2,785,488 → 2,378,113B gz（−407.4KB）**；import 违规 0；NotebookWorkspace 1212 → 660 行（−45.5%）。
+
+**门禁**：tsc 0 / vitest **566 文件 3463 例** 30.2s / check:core 136/0 / check:mobileui / 双 build / check:bundle（entry 53,496/61,440、css 137,795/141,312、preload 28/30）/ check:arch（mobile 340.8KB/360KB、desktop 2.38MB/2.5MB、defer 407.4KB/450KB、import 违规 0）/ 手机+平板 6 态 0 差异 / windowsweep pass。
+
+**仍可继续（P11 候选）**：① `bridge` 里 `s3v3Report` 静态 12KB（设置页已懒加载，剩余取决于 sync 诊断读路径）；② `useWorkspaceAssemble`（restore/初始打开/runSync/treeMenuItems 等剩余效果）可再压行数；③ `plantuml`/usheet 大 chunk 内部再拆（收益未取证，需实测）；④ 桌面内核三入口 lazy（P8 W2，仍“先量后做”）。
