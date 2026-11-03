@@ -16,7 +16,7 @@ import { computeDropPosition, createDragGhost, isValidTreeDrop, moveDragGhost, r
 import { Database, PenTool, Table } from "lucide-react";
 import { getCreateMenuPosition, type CreateMenuPosition } from "../model/createMenuPosition";
 import { ExportSubmenuItem, type ExportFormat } from "../ui/ExportSubmenuItem";
-import { SIDEBAR_DEFAULT_WIDTH } from "../../desktop/desktopTypes";
+import { SIDEBAR_DEFAULT_WIDTH } from "../../core/layoutConstants";
 import { Dialog, Menu, Popover, Submenu } from "../ui/Overlay";
 import { rubberBandWidth, SplitHandle } from "../ui/SplitHandle";
 import { usePopoverPosition } from "../../hooks/usePopoverPosition";

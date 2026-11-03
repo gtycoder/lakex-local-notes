@@ -34,7 +34,6 @@ import { usePadShortcuts } from "./pad/usePadShortcuts";
  */
 // 小记编辑器 = 按需加载壳（预取过则同步渲染；未预取先骨架）——见 home/quickNoteComposerLazy.tsx
 import { CreateNotebookSheet } from "./settings/CreateNotebookSheet";
-import { SettingsDrawer } from "./settings/SettingsDrawer";
 import { useBackHandler } from "./hooks/useBackHandler";
 import { useRouteTransition } from "./hooks/useRouteTransition";
 import { useAutoSync } from "./hooks/useAutoSync";
@@ -62,6 +61,9 @@ const MobileAiPage = lazy(() => import("./ai/MobileAiPage").then((m) => ({ defau
 /** 搜索 Sheet 按需加载（MOB-15 首屏预算）：只在点「搜索」时打开，静态引入会把它的依赖链
  *  （reportMobileActionError → toastBus/nativeErrors）拆成入口预加载 chunk（261028 实测 +3）。 */
 const SearchSheet = lazy(() => import("./settings/SearchSheet").then((m) => ({ default: m.SearchSheet })));
+/** 设置抽屉按需加载（261103 P10）：它是入口图里最后一块大依赖（含 core/s3v3Report 诊断格式化、S3 表单等），
+ *  打开设置才需要；懒加载后首屏不用付这份解析成本。Suspense 由渲染处兜底（短暂空抽屉）。 */
+const SettingsDrawer = lazy(() => import("./settings/SettingsDrawer").then((m) => ({ default: m.SettingsDrawer })));
 
 /**
  * 退出 App（Android：结束任务）。
@@ -585,12 +587,14 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
 
   return (
     <div className="mobile-app">
-      <SettingsDrawer
-        open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
-        onRefresh={refreshAll}
-        onOpenNote={(id) => void openNote(id, "viewer")}
-      />
+      <Suspense fallback={null}>
+        <SettingsDrawer
+          open={drawerOpen}
+          onClose={() => setDrawerOpen(false)}
+          onRefresh={refreshAll}
+          onOpenNote={(id) => void openNote(id, "viewer")}
+        />
+      </Suspense>
       {/* 路由层（261019）：首页常驻 + 工作区按需挂载；push/pop 只动 transform（见 mobile.css） */}
       <div className={"mobile-route-stage" + (wsOpen ? " is-open" : "") + (routeAnimating ? " is-animating" : "")} aria-label="页面">
       <div className="mobile-route-layer mobile-route-layer--home" ref={routeHomeRef}>

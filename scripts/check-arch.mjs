@@ -35,8 +35,8 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 /** 首屏资源图 gzip 字节预算（十进制 B；261103 P9 实测：mobile 366,792 / desktop 2,378,113 + defer 407,375）。 */
 export const FIRST_PAINT_BUDGETS = Object.freeze({
-  // 261103 P9-1：bridge/sync 的 v3 重依赖改按需后实测 366,792B ⇒ 从 420,000 收紧到 390,000（+6.3% 余量）。
-  mobile: 390_000,
+  // 261103 P9-1 + P10：bridge/sync 与设置抽屉改按需后实测 340,783B ⇒ 从 420,000 逐次收紧到 360,000。
+  mobile: 360_000,
   // 261103 P9：CodeMirror 改为 defer（不阻塞解析/首屏绘制）后，桌面首屏只剩模块图 ≈2.38MB；
   // 预算从 3.0MB 收紧到 2.5MB，把「再塞一个 400KB 阻塞脚本」直接挡在门外。
   desktop: 2_500_000,
@@ -73,6 +73,12 @@ export const IMPORT_DIRECTION_RULES = Object.freeze([
     id: "features-no-desktop",
     from: "src/features/",
     description: "features 不得 import src/desktop/**（共享层不许反向依赖桌面壳）",
+    forbidPrefixes: ["src/desktop/"],
+  },
+  {
+    id: "components-no-desktop",
+    from: "src/components/",
+    description: "components 不得 import src/desktop/**（261103 P10：布局常量已下沉 core；组件层不反向依赖桌面壳）",
     forbidPrefixes: ["src/desktop/"],
   },
 ]);
@@ -178,7 +184,7 @@ export function collectFirstPaint(htmlPath) {
 /** 扫描 import 方向违规。返回 [{file,line,spec,resolved,rule}]。 */
 export function scanImportDirections() {
   const violations = [];
-  for (const target of ["src/core", "src/mobile", "src/features"]) {
+  for (const target of ["src/core", "src/mobile", "src/features", "src/components"]) {
     const absDir = path.join(ROOT, target);
     if (!fs.existsSync(absDir)) continue;
     for (const abs of walkSources(absDir)) {

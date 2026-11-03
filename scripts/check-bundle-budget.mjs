@@ -52,7 +52,8 @@ for (const budget of budgets) {
 // 条数只防「又有一坨静态依赖回到入口」，字节由 check-arch 守；不要因这个数回退 P9-1 的懒加载。
 // 只做护栏，不改构建；dist-mobile 不存在（没跑移动构建）时跳过并提示。
 const MOBILE_ENTRY_PRELOAD_BUDGET = 30;
-const MOBILE_ENTRY_JS_GZIP_BUDGET = 80 * 1024;
+// 261103 P10：设置抽屉改按需后入口 79,032 → 53,496B gz ⇒ 预算从 80KB 收紧到 60KB（+6,000B 余量）。
+const MOBILE_ENTRY_JS_GZIP_BUDGET = 60 * 1024;
 const MOBILE_ENTRY_CSS_GZIP_BUDGET = 138 * 1024;
 
 const mobileHtml = path.resolve("dist-mobile/index.html");
