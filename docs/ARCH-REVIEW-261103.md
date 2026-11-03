@@ -246,3 +246,30 @@
 **门禁（P11）**：tsc 0 / vitest **566 文件 3463 例**（`electron/s3v3/perf` 在满载并行下曾抖红一次、单跑通过，属既有已知）/ check:core 136/0 / check:mobileui / 双 build / check:bundle（entry 53,496/61,440、css 137,795/141,312、preload 28/30）/ check:arch（mobile **340,783B/360KB**、desktop 2,378,003B/2.5MB、defer 407,375B/450KB、import 违规 0）/ 手机+平板 6 态 0 差异 / windowsweep pass。
 
 **P12 候选（按收益/风险排序）**：① 桌面内核 lazy（5 边界 + idle 预取 + entry 静态断言；预计 cold 出界面 −0.5s，需回归打开=只读/capture/focus/多 tab）；② `bridge` 内 `s3v3Report` 若未来设置页再变化可重测（当前收益不足）；③ 大 chunk 内部再拆（未取证）；④ 工作区继续压行（510 → ~450，收益仅可维护性）。
+
+## 12. P12 实施记录（261103 同日，分支 `feat/pad-touch-ui`）
+
+**P12-① 桌面内核 lazy（5 个边界 + idle 预取）· ✅**
+
+- 边界：`MultiTabEditor→EditorTab`（复用既有「正在加载编辑器…」Suspense 占位）、`App→TrashPanel(embed)/NoteInfoDialog`、
+  `DesktopOverlays→TrashPanel/HistoryPanel`（仅打开时挂载）、`QuickNotesWorkspace→QuickNoteEditor`。
+  **偏离**：没有整体 lazy `QuickNotesWorkspace`（App 切到小记后立刻 `quickNotesRef.revealNote`，整体 lazy 会在内核 chunk
+  解析前 ref=null 丢调用）——改为 lazy 其内核子件，内核仍完全移出入口静态图（import 图验证 lakeRuntime=0）。
+- 预取：`src/features/editor/kernelPrefetch.ts` —— 就绪 3s 后 `requestIdleCallback` 里 `import("./EditorTab")`（与 lazy 同 chunk、
+  幂等/失败静默/window 守卫）；把 1.61MB gz 内核 chunk 的下载解析挪出冷启动。
+- 护栏：`desktopKernelLazy.test.ts`（5 边界静态契约 + 预取目标/静默）、`kernelPrefetch.test.ts`（幂等/SSR no-op）；
+  `check-arch` desktop 首屏预算 2.5MB → **600KB**；`check-bundle` desktop app-js 2.9MB → **300KB**。
+- **实测**：desktop 首屏 **2,378,113 → 541,234B gz（−1,836,879 / −77.2%）**（entry-js 149,873 / preload ×11 88,308 / css 303,053）；
+  桌面 dev 冒烟（Electron + CDP 9222，临时 profile）：启动 → 新建文档 → 点树行 → 编辑器挂载（kernel chunk 已加载）、无异常。
+
+**P12 门禁**：tsc 0 / 全量 vitest **568 文件 3470 例** / check:core 136/0 / check:mobileui / 双 build /
+check:bundle（app-js 149,873/307,200、mobile entry 53,496/61,440、preload 28/30）/ check:arch（desktop **541.2KB/600KB**、
+defer 407.4KB/450KB、mobile 340.8KB/360KB、import 违规 0）/ diff-check。
+
+**P12 遗留 / 取舍**：① 冷 cache「启动即恢复上次文档」仍会等内核 chunk（3s idle 预取来不及），属 P11 量化取舍——若要消除需
+把预取提前到 window load 后（会与首屏争 CPU，待实测）；② TrashPanel/HistoryPanel 关闭即卸载 ⇒ 面板内部选中/滚动状态下次打开重置
+（列表本来每次 open 重读，判为可接受）；③ 桌面 dev 冒烟未覆盖设置面板（菜单打开）、小记工作区与历史面板的交互路径——单元/静态
+契约已覆盖懒加载接线，建议下次桌面设备走查补一次。
+
+**累计首屏（P9→P12）**：移动 392,977 → **340,783B gz（−13.3%）**；桌面 2,785,488 → **541,234B gz（−80.6%）**；
+import 违规 0；NotebookWorkspace 1212 → 510 行（−57.9%）。

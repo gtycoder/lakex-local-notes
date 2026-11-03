@@ -7,6 +7,14 @@
 
 ## 0. 最新交接（261027）
 
+### 261103 · P12 桌面内核 lazy（5 边界 + idle 预取）· **本地提交（分支 feat/pad-touch-ui）**
+- **落地**：`EditorTab` / `TrashPanel(embed)` / `NoteInfoDialog` / `HistoryPanel` / `QuickNoteEditor` 全部 React.lazy + Suspense；
+  `kernelPrefetch`（就绪 3s idle 预取 kernel chunk）；`QuickNotesWorkspace` 保持常驻（ref.revealNote 时序），只 lazy 其内核子件。
+- **护栏**：`desktopKernelLazy.test` + `kernelPrefetch.test`；check-arch desktop 首屏预算 2.5MB→**600KB**、check-bundle app-js 2.9MB→**300KB**。
+- **实测**：desktop 首屏 **2,378,113 → 541,234B gz（−77.2%）**；dev 冒烟：启动→新建→点树行→编辑器挂载正常。
+- **门禁**：tsc 0 / vitest 568 文件 3470 例 / core / mobileui / 双 build / bundle / arch / diff-check。
+- **遗留**：冷 cache「启动即恢复文档」仍等 kernel chunk（P11 取舍）；Trash/History 关闭即卸载（内部状态重置，判可接受）；桌面设置面板/小记/历史的交互冒烟未覆盖（静态契约已覆盖接线）。
+- **累计首屏（P9→P12）**：移动 392,977 → 340,783B gz（−13.3%）；桌面 2,785,488 → **541,234B gz（−80.6%）**；NotebookWorkspace 1212 → 510 行。
 ### 261103 · P11（诊断按需实测否决 / 工作区 510 行 / 大 chunk 取证 / 桌面内核 lazy A/B）· **本地提交（分支 feat/pad-touch-ui）**
 - **① `s3v3Report` 按需**：实测首屏仅 −1,224B gz（340,783→339,559）⇒ **不做，已回退**（动态 import + 兜底的复杂度大于收益）。
 - **② 剩余组装搬 hook**：新增 `useWorkspaceAssemble`(79) / `useWorkspaceSync`(61) / `useWorkspaceActions`(200)，openSidebar/openOutline 并入 chrome hook ⇒ NotebookWorkspace **660 → 510 行（−22.7%）**；旧 256 条逻辑行逐字命中 256/256，JSX 字节相同。
