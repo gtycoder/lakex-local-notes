@@ -16,11 +16,15 @@ export default defineConfig({
     },
   },
   test: {
-    // P8（261103）尝试过 isolate:false（省 ~13s：34.9s → 21.5s），但**不可用**：共享模块图会让
-    // `vi.mock` 无法替换已被前序文件实例化的模块 ⇒ src/mobile/v3/deviceConformance.mobile.test.ts
-    // 两轮分别红 7/3 例（readAsset 读到 gzip 正文、deferAssets 断言失效；根因是 assetFs mock 失效）。
-    // 该文件全是 vi.mock + 跨端契约，属结构性依赖隔离；重新开启的前置条件 = 把它拆成独立 worker/project。
-    // 证据与完整日志：P8 报告（未入库）。
+    // P9-4（261103）**再次尝试并回退** isolate:false（P8 试过一次）：
+    //   · 收益确认：全量 35.7s → 19.3~21.5s（约 -40%）。
+    //   · 用 vitest projects 把 src/mobile/v3/deviceConformance.mobile.test.ts 单列 isolate:true 后，
+    //     仍两轮红不同文件：src/mobile/bridge/home.test.ts（jeep-sqlite：partial vi.mock 失效）、
+    //     electron/assetServer.test.ts（模块加载期 process.env.LAKE_ASSET_PORT，被共享 worker 固定）、
+    //     src/mobile/bridgeStartup.test.ts（同类模块状态）。
+    //   ⇒ 本套件大量依赖「模块加载期 env / vi.mock / 全局单例」= 结构上需要文件级隔离，不是单文件例外。
+    //   重新开启的前置条件：先让这些文件去全局化（显式注入 env/依赖，而非模块加载期读取），再逐批启用。
+    //   不要用改断言的方式绕过。
     // 默认仍只收 node 环境的 .test.ts；额外两条例外各自最小：
     // - src/**/*.render.test.tsx：DT-04 桌面行为护栏试点（文件头用 @vitest-environment jsdom 逐文件切换环境，
     //   不改变全局 node 默认；扩展方式 = 复制该命名 + 只在文件内 render，不要引入 testing-library）；

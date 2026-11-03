@@ -44,8 +44,14 @@ for (const budget of budgets) {
 // 首屏 toast/错误文案，均在入口图里）和 core/textStats（bridge 读正文统计）后来进入入口预加载。
 // 本批已把 SearchSheet 改按需加载（-1 条 report 依赖链），净额仍到 23 ⇒ 预算随实测更新为 23；
 // 这是「把过期护栏对齐现状」，不是放宽目标：目标仍是 ≤12，首屏瘦身时再收紧。
+//
+// 261103 P9-1：bridge/sync 的 v3 重依赖改按需后，rolldown 把 entry 与懒 chunk **共享**的模块
+// （historyRepository 33.3KB gz / s3Store / syncUtils / storeUtils / assetUrl / nativeAssetSync /
+// colorPalette / syncDecisions）提升成共享入口 chunk ⇒ preload 条数 20 → 28，但**字节反而降了**
+// （首屏 392,977 → 366,792B gz，-26.2KB；真正的字节预算在 check-arch）。故条数预算随实测更新为 30：
+// 条数只防「又有一坨静态依赖回到入口」，字节由 check-arch 守；不要因这个数回退 P9-1 的懒加载。
 // 只做护栏，不改构建；dist-mobile 不存在（没跑移动构建）时跳过并提示。
-const MOBILE_ENTRY_PRELOAD_BUDGET = 23;
+const MOBILE_ENTRY_PRELOAD_BUDGET = 30;
 const MOBILE_ENTRY_JS_GZIP_BUDGET = 80 * 1024;
 const MOBILE_ENTRY_CSS_GZIP_BUDGET = 138 * 1024;
 

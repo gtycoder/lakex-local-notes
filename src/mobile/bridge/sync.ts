@@ -1,7 +1,6 @@
 import { writeLocalStorage } from "../../lib/localStorageSafe";
 import { listAssetKeysFs, loadAssetBytesFs, saveAssetBytesFs, listNoteAssetKeysFs, listQuickNoteAssetKeysFs } from "../native/assetFs";
-import { backfillV3Assets, type AssetBackfillPort } from "../../core/s3v3AssetBackfill.js";
-import { createMobileS3v3Remote } from "../v3/s3v3Remote.js";
+import type { AssetBackfillPort } from "../../core/s3v3AssetBackfill.js";
 import { normalizeEndpoint, validateS3Settings } from "../../core/syncUtils.js";
 import type { QuickNotesSyncResult } from "../../core/quickNoteSyncTypes.js";
 import { canTouchNetwork, cloudStateHint, cloudStateOf, type CloudState } from "../../core/cloudState.js";
@@ -16,16 +15,11 @@ import { resolveDeferAssets } from "../sync/deferAssetsDefault";
 import { reconcileIndex } from "../data/searchIndex.js";
 import { backfillTextCache } from "../data/textCacheBackfill.js";
 import { clearV3State, loadV3State } from "../data/v3StateRepository.js";
-import { MobileDeviceStore } from "../v3/mobileDeviceStore.js";
-import { declarationKey, assetKey, quickNoteAssetKey } from "../../core/s3v3/protocol/s3v3Keys.js";
-import { validateAssetDeclaration, type AssetDeclaration } from "../../core/s3v3/protocol/s3v3Index.js";
-import { runTransferPipeline } from "../../core/s3v3Transfer.js";
-import { runMobileV3DeepCleanup, runMobileV3PushQuickNote, runMobileV3Sync } from "../v3/sync.js";
+import type { AssetDeclaration } from "../../core/s3v3/protocol/s3v3Index.js";
 import { beginSyncProgress, endSyncProgress, pushSyncProgress } from "../sync/syncProgressStore";
 import { clearSyncInterrupted, markSyncInterrupted } from "../sync/syncResumeMarker";
 import { appendSyncDiagnostic, readSyncDiagnostics } from "../sync/syncDiagnosticsStore";
 import { buildS3v3DiagnosticReport, createS3v3PhaseCollector, type S3v3DiagnosticReport } from "../../core/s3v3Report";
-import { classifyS3v3Error } from "../../core/s3v3Engine.js";
 
 export interface MobileSyncResult {
   message: string;
@@ -67,6 +61,11 @@ export async function downloadDeclaredAssetsFor(
     if (!canTouchNetwork(state)) { console.info(`[asset] 跳过补拉（${state}）`); return totals; }
     const cfg = await syncDomain.getS3Settings();
     if (!cfg) return totals;
+    // P9：v3 补拉的远端/核心纯逻辑按需加载（首屏不静态挂；离线/未配置路径不会触发这次 import）。
+    const [{ createMobileS3v3Remote }, { backfillV3Assets }] = await Promise.all([
+      import("../v3/s3v3Remote.js"),
+      import("../../core/s3v3AssetBackfill.js"),
+    ]);
     const remote = createMobileS3v3Remote(cfg);
     // 261027：同一份补拉逻辑同时服务文档与小记（小记资源键前缀 quick-notes/{id}/，物理在 quick-notes/assets/）。
     const prefixOf = (id: string): string => assetLocalKey(space, id, "").slice(0, -1) + "/";
@@ -113,6 +112,14 @@ export async function ensureAssetsNative(
   const ids = noteIds.filter((id) => side.assetsHash[id]);
   const skipped = noteIds.length - ids.length;
   if (ids.length === 0) return { downloaded: 0, failed: 0, skipped };
+  // P9：v3 设备存储/传输管线/协议常量按需加载（本函数只在真正补拉时走）。
+  const [{ createMobileS3v3Remote }, { MobileDeviceStore }, { runTransferPipeline }, { declarationKey, assetKey, quickNoteAssetKey }, { validateAssetDeclaration }] = await Promise.all([
+    import("../v3/s3v3Remote.js"),
+    import("../v3/mobileDeviceStore.js"),
+    import("../../core/s3v3Transfer.js"),
+    import("../../core/s3v3/protocol/s3v3Keys.js"),
+    import("../../core/s3v3/protocol/s3v3Index.js"),
+  ]);
   const remote = createMobileS3v3Remote(cfg);
   const store = new MobileDeviceStore(d);
   await store.init();
@@ -188,6 +195,8 @@ export async function pushSingleQuickNote(id: string): Promise<QuickNotePushOutc
   if (!cfg) throw new Error("未配置 S3");
   try { assertS3Credentials(cfg); } catch (e) { throw new Error((e as Error).message); }
   const d = await ensureDb();
+  // P9：v3 引擎/编排按需加载（首次「保存并同步」才拉 chunk，属预期）。
+  const { runMobileV3PushQuickNote, runMobileV3Sync } = await import("../v3/sync.js");
   const result = await runMobileV3PushQuickNote(d, cfg, id);
   if (result.status === "not-found") return { status: "not-found" };
   if (result.status === "full-sync") {
@@ -361,6 +370,7 @@ export const syncDomain = {
       if (!cfg) return { candidateCount: 0, deletedCount: 0, keys: [] };
       assertS3Credentials(cfg);
       const d = await ensureDb();
+      const { runMobileV3DeepCleanup } = await import("../v3/sync.js");
       // v3 原生清理（261026）：pointer→索引/声明→keep 集→deepCleanup（保留窗口 + 历史引用保护）。
       // 旧实现读 manifests/latest.json，而 v3 永不写该清单 ⇒ 原逻辑恒返回 0（清理按钮点了没效果）。
       const result = await runMobileV3DeepCleanup(d, {
@@ -415,6 +425,8 @@ export const syncDomain = {
           console.info("[sync] 新设备默认开启「按需下载附件」：首拉只同步正文/清单，媒体打开时补拉");
         }
         const deferAssets = resolved.deferAssets;
+        // P9：v3 引擎/编排按需加载（本路径只在真正要跑一轮同步时走；首屏不静态挂）。
+        const { runMobileV3Sync } = await import("../v3/sync.js");
         const v3 = await runMobileV3Sync(d, { endpoint: cfg.endpoint, region: cfg.region, bucket: cfg.bucket, accessKeyId: cfg.accessKeyId, secretAccessKey: cfg.secretAccessKey, prefix: cfg.prefix }, {
           onPhase: (phase, ms) => { progress.push({ phase, ms }); diag.phase(phase, ms); },
           onProgress: (p) => { diag.progress(p); pushSyncProgress(p); },
@@ -484,12 +496,18 @@ export const syncDomain = {
       writeSyncStatus({ at: new Date().toISOString(), ok: false, message, durationMs: Date.now() - startedAt });
       try {
         const db = await ensureDb();
+        // P9：错误分类器在 v3 引擎 chunk 内，按需加载；加载失败也不能盖掉原始同步错误。
+        let errorClass = "unknown";
+        try {
+          const { classifyS3v3Error } = await import("../../core/s3v3Engine.js");
+          errorClass = classifyS3v3Error(error);
+        } catch { /* 引擎 chunk 加载失败：诊断标 unknown，原始错误照旧抛出 */ }
         await appendSyncDiagnostic(db, buildS3v3DiagnosticReport({
           at: new Date().toISOString(), ok: false, durationMs: Date.now() - startedAt,
           phases: diag.snapshot(),
           error: {
             code: code ?? "unknown",
-            errorClass: classifyS3v3Error(error),
+            errorClass,
             message: baseMessage,
           },
         }));

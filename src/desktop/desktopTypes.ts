@@ -10,6 +10,7 @@ import { cleanLakeMarkdown } from "../core/markdownClean";
 import { stripAssetAccessToken } from "../lib/assetPort";
 import type { NoteDocument, NoteSummary, TreeNode } from "../lib/types";
 import type { SidebarMode } from "../components/app/Sidebar";
+import { OUTLINE_SIDEBAR_DEFAULT_WIDTH, OUTLINE_SIDEBAR_MAX_WIDTH, OUTLINE_SIDEBAR_MIN_WIDTH } from "../core/layoutConstants";
 
 export const SIDEBAR_HOVER_HIDE_DELAY_MS = 220;
 
@@ -24,9 +25,9 @@ export type DesktopWorkspace = "library" | "quick-notes" | "trash" | "resources"
 export const SIDEBAR_DEFAULT_WIDTH = 224;
 export const SIDEBAR_MIN_WIDTH = 160;
 export const SIDEBAR_MAX_WIDTH = 420;
-export const OUTLINE_SIDEBAR_DEFAULT_WIDTH = 280;
-export const OUTLINE_SIDEBAR_MIN_WIDTH = 200;
-export const OUTLINE_SIDEBAR_MAX_WIDTH = 420;
+
+/** 大纲宽度常量已下沉 src/core/layoutConstants（P9-3，features→desktop 违规清零）；这里 re-export 保持既有 import 路径。 */
+export { OUTLINE_SIDEBAR_DEFAULT_WIDTH, OUTLINE_SIDEBAR_MIN_WIDTH, OUTLINE_SIDEBAR_MAX_WIDTH };
 
 export interface OpenTab {
   noteId: string;

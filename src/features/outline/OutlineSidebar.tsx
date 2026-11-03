@@ -7,7 +7,7 @@ import { OutlineList } from "./OutlineList";
 import { OutlineMinimap } from "./OutlineMinimap";
 import { getOutlineTab, getOutlineTabsVersion, subscribeOutlineTabs } from "./registry";
 import { OUTLINE_HOVER_HIDE_DELAY_MS } from "./outlineInteraction";
-import { OUTLINE_SIDEBAR_DEFAULT_WIDTH } from "../../desktop/desktopTypes";
+import { OUTLINE_SIDEBAR_DEFAULT_WIDTH } from "../../core/layoutConstants";
 // 「展开到级别」菜单的 open/锚点/aria/测量式定位统一走锚定菜单原语（DT-12，内部仍是 usePopoverPosition）
 import { useAnchoredMenu } from "../../hooks/useAnchoredMenu";
 import { rubberBandWidth, SplitHandle } from "../../components/ui/SplitHandle";

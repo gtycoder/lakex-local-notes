@@ -33,9 +33,10 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
-/** 首屏资源图 gzip 字节预算（十进制 KB；实测 261103：mobile 391,983 / desktop 2,785,293）。 */
+/** 首屏资源图 gzip 字节预算（十进制 B；261103 P9 实测：mobile 366,792 / desktop 2,378,113 + defer 407,375）。 */
 export const FIRST_PAINT_BUDGETS = Object.freeze({
-  mobile: 420_000, // ≈420KB；实测 392,977（≈94%）
+  // 261103 P9-1：bridge/sync 的 v3 重依赖改按需后实测 366,792B ⇒ 从 420,000 收紧到 390,000（+6.3% 余量）。
+  mobile: 390_000,
   // 261103 P9：CodeMirror 改为 defer（不阻塞解析/首屏绘制）后，桌面首屏只剩模块图 ≈2.38MB；
   // 预算从 3.0MB 收紧到 2.5MB，把「再塞一个 400KB 阻塞脚本」直接挡在门外。
   desktop: 2_500_000,
