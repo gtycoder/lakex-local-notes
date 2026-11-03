@@ -8,6 +8,12 @@
 
 ## 0. 最新交接（261027）
 
+### 261103 · 十二批：图片页背景导入下采样（防 48MP 图当背景时解码 OOM）· **本地改动**
+- **触发**：用户问「PDF/大量图片当背景标注是否影响性能」。实测 20 页整页图背景：正文仅 **4,466 B**、只解码当前页 1 张、翻页 ≈33.5ms、缩略图全走 `?w=256` ⇒ 运行时开销可控；**真正风险 = 图片页背景导入不限尺寸**（48MP ≈ 190MB 解码/页，移动端可能被杀）。
+- **修法**：`inkImageImport` 新增 `INK_BACKGROUND_MAX_EDGE=2400` 与纯函数 `inkBackgroundDownscaleTarget`；导入前超过最长边就走 `inkImageDownscale.downscaleInkImageFile`（canvas 等比缩放，webp 0.9 → jpeg 兜底）再上传，并把目标像素尺寸记进正文；小图不缩；下采样失败按原图导入（不阻断）。
+- **收益**：最坏单页解码 ~190MB → **~23MB**；PDF 路径不变（raster maxWidth 1600/上限 2400）。
+- **测试**：`inkImageImport.test` 新增 3 例（大图缩放并上传缩放字节/小图不缩/失败回退 + 目标尺寸纯函数），共 10 例全过。
+- **门禁**：tsc / 全量 vitest / check:mobileui / diff-check 全绿。
 ### 261103 · 十一批：手写板性能观测 + v4 演进提案（先量化再决定）· **本地改动**
 - **背景**：用户问「手写板要不要重新设计 / 有没有增量保存与虚拟加载」。结论：**不重写**（core/几何/历史纯函数分层、只渲染当前页、缩略图视口虚拟化、页级 undo patch、防抖+未变不写都已就位），真正缺口在**存储/加载粒度**。
 - **已落地（默认零行为改变）**：`src/features/ink/inkPerfStats.ts` —— 在 `parseInkBody`（打开）与 `inkToBody`（保存）两处记录 `{kind, ms, bytes, pages, strokes?, points?}`（环形 40 条）；`window.__inkPerfStats()` 取数、`__inkPerfReset()` 清空；开日志 `localStorage["lakex-local-notes-v3.ink-perf-debug"]="1"`。阈值常量：正文 >4MiB / 页数 >50 / 序列化 >50ms / 解析 >300ms（命中打 warn，作为 v4 立项判据）。

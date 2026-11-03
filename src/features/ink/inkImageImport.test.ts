@@ -12,9 +12,11 @@ import { extractAssetRefs } from "../../core/assetNaming.js";
 import { localAssetHttpUrl, parseLocalAssetUrl } from "../../core/assetUrl.js";
 import { INK_PAGE_HEIGHT, INK_PAGE_WIDTH, createInkDoc, inkToBody, type InkDoc } from "../../core/inkDoc.js";
 import {
+  INK_BACKGROUND_MAX_EDGE,
   INK_IMAGE_MAX_BYTES,
   INK_IMAGE_MAX_PIXELS,
   importInkImagePages,
+  inkBackgroundDownscaleTarget,
   inkBackgroundImageFromUpload,
   inkImageImportError,
   inkImagePage,
@@ -108,6 +110,47 @@ describe("importInkImagePages", () => {
     expect(outcome.errors[0]).toContain("big.png");
     expect(outcome.errors[0]).toContain("25 MiB");
     expect(outcome.errors[1]).toContain("bad.png");
+  });
+
+  it("超大图先下采样：上传的是缩放后的字节、记录的目标像素尺寸（261103 十二批）", async () => {
+    const upload = vi.fn(async (_input: { bytes: Uint8Array; filename: string }) => ({ url: ASSET_URL }));
+    const downscale = vi.fn(async () => ({ bytes: new Uint8Array([7, 7]), filename: "photo.webp" }));
+    const outcome = await importInkImagePages([fakeFile("photo.png", 2048)], {
+      upload,
+      downscale,
+      probe: async () => ({ pixelWidth: 8000, pixelHeight: 6000 }),
+    });
+    expect(outcome.errors).toEqual([]);
+    expect(downscale).toHaveBeenCalledWith(expect.anything(), { width: 2400, height: 1800 });
+    expect(upload).toHaveBeenCalledWith({ bytes: new Uint8Array([7, 7]), filename: "photo.webp" });
+    expect(outcome.pages[0].backgroundImage).toMatchObject({ pixelWidth: 2400, pixelHeight: 1800 });
+  });
+
+  it("小图不触发下采样；下采样失败按原图导入（不阻断）", async () => {
+    const upload = vi.fn(async (_input: { bytes: Uint8Array; filename: string }) => ({ url: ASSET_URL }));
+    const downscale = vi.fn(async () => null);
+    const small = await importInkImagePages([fakeFile("small.png", 1024)], {
+      upload, downscale, probe: async () => ({ pixelWidth: 1200, pixelHeight: 1600 }),
+    });
+    expect(downscale).not.toHaveBeenCalled();
+    expect(small.pages[0].backgroundImage).toMatchObject({ pixelWidth: 1200, pixelHeight: 1600 });
+
+    const big = await importInkImagePages([fakeFile("huge.png", 4096)], {
+      upload, downscale, probe: async () => ({ pixelWidth: 6000, pixelHeight: 4000 }),
+    });
+    expect(downscale).toHaveBeenCalledTimes(1);
+    // 下采样返回 null ⇒ 按原图上传（filename 仍是原名、像素尺寸仍是原尺寸）
+    expect(upload.mock.calls[1][0].filename).toBe("huge.png");
+    expect(big.pages[0].backgroundImage).toMatchObject({ pixelWidth: 6000, pixelHeight: 4000 });
+  });
+
+  it("inkBackgroundDownscaleTarget：最长边 > 2400 才缩，等比且取整", () => {
+    expect(INK_BACKGROUND_MAX_EDGE).toBe(2400);
+    expect(inkBackgroundDownscaleTarget({ pixelWidth: 1200, pixelHeight: 1600 })).toBeNull();
+    expect(inkBackgroundDownscaleTarget({ pixelWidth: 2400, pixelHeight: 2400 })).toBeNull();
+    expect(inkBackgroundDownscaleTarget({ pixelWidth: 8000, pixelHeight: 6000 })).toEqual({ width: 2400, height: 1800 });
+    expect(inkBackgroundDownscaleTarget({ pixelWidth: 6000, pixelHeight: 8000 })).toEqual({ width: 1800, height: 2400 });
+    expect(inkBackgroundDownscaleTarget(null)).toBeNull();
   });
 
   it("上传抛错不打断其它文件（逐文件容错）", async () => {

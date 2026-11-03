@@ -10,6 +10,7 @@
  * 边界：本文件不 import 桌面/移动任一端的 IPC/bridge —— 上传能力由宿主注入，便于单测。
  */
 import { parseLocalAssetUrl, withAssetWidth } from "../../core/assetUrl.js";
+import { downscaleInkImageFile } from "./inkImageDownscale.js";
 import { MAX_IMAGE_BYTES, MAX_IMAGE_PIXELS } from "../../core/storeLimits.js";
 import { INK_PAGE_HEIGHT, INK_PAGE_WIDTH, createInkPage, type InkBackgroundImage, type InkPage } from "../../core/inkDoc.js";
 import { newInkId } from "./ids.js";
@@ -31,6 +32,31 @@ export interface InkImageImportDeps {
   upload: (input: { bytes: Uint8Array; filename: string }) => Promise<{ url: string }>;
   /** 读图片像素尺寸（默认用浏览器解码；单测注入假值）。 */
   probe?: (file: File) => Promise<InkImageProbe | null>;
+  /** 超大图下采样（默认用浏览器 canvas；单测注入假值）。返回 null = 放弃下采样、按原图导入。 */
+  downscale?: (file: File, target: { width: number; height: number }) => Promise<{ bytes: Uint8Array<ArrayBuffer>; filename: string } | null>;
+}
+
+/**
+ * 背景图最长边上限（261103 十二批）。超过则导入前下采样，避免「整页背景」在渲染时解码成
+ * 巨幅位图：解码内存约为像素数 × 4B，一张 48MP 照片当整页背景时约 190MB（移动端会被 OOM 杀掉）。
+ * 2400 覆盖 A4 2x 清晰度（A4 @200dpi ≈ 1654×2339），同时把最坏解码压到 ≈ 23MB。
+ */
+export const INK_BACKGROUND_MAX_EDGE = 2400;
+
+/** 下采样目标尺寸（纯函数）：最长边 ≤ maxEdge ⇒ null（不缩）；否则等比缩到最长边 = maxEdge。 */
+export function inkBackgroundDownscaleTarget(
+  probe: InkImageProbe | null,
+  maxEdge: number = INK_BACKGROUND_MAX_EDGE,
+): { width: number; height: number } | null {
+  if (!probe || !Number.isFinite(probe.pixelWidth) || !Number.isFinite(probe.pixelHeight)) return null;
+  if (probe.pixelWidth <= 0 || probe.pixelHeight <= 0) return null;
+  const longest = Math.max(probe.pixelWidth, probe.pixelHeight);
+  if (longest <= maxEdge) return null;
+  const scale = maxEdge / longest;
+  return {
+    width: Math.max(1, Math.round(probe.pixelWidth * scale)),
+    height: Math.max(1, Math.round(probe.pixelHeight * scale)),
+  };
 }
 
 export interface InkImageImportOutcome {
@@ -108,6 +134,8 @@ export async function probeInkImageFile(file: File): Promise<InkImageProbe | nul
  */
 export async function importInkImagePages(files: File[], deps: InkImageImportDeps): Promise<InkImageImportOutcome> {
   const probeOf = deps.probe ?? probeInkImageFile;
+  /** 默认下采样器只在浏览器环境可用（node 单测没有 canvas ⇒ 不注入 = 保持原图）。 */
+  const downscaleOf = deps.downscale ?? (typeof document === "undefined" ? undefined : downscaleInkImageFile);
   const pages: InkPage[] = [];
   const errors: string[] = [];
   for (const file of files) {
@@ -119,9 +147,25 @@ export async function importInkImagePages(files: File[], deps: InkImageImportDep
         errors.push(`${label}：${error}`);
         continue;
       }
-      const bytes = new Uint8Array(await file.arrayBuffer());
-      const uploaded = await deps.upload({ bytes, filename: file.name });
-      const image = inkBackgroundImageFromUpload(uploaded, probe);
+      // 261103 十二批：超大图先下采样（保护渲染解码内存），失败则按原图导入（不阻断导入）。
+      let bytes = new Uint8Array(await file.arrayBuffer());
+      let filename = file.name;
+      let effectiveProbe = probe;
+      const target = inkBackgroundDownscaleTarget(probe);
+      if (target && downscaleOf) {
+        try {
+          const scaled = await downscaleOf(file, target);
+          if (scaled) {
+            bytes = scaled.bytes;
+            filename = scaled.filename;
+            effectiveProbe = { pixelWidth: target.width, pixelHeight: target.height };
+          }
+        } catch (reason) {
+          console.warn("[ink] 背景图下采样失败，按原图导入", reason);
+        }
+      }
+      const uploaded = await deps.upload({ bytes, filename });
+      const image = inkBackgroundImageFromUpload(uploaded, effectiveProbe);
       if (!image) {
         errors.push(`${label}：上传结果不是本地资产地址`);
         continue;
