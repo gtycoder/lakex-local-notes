@@ -171,6 +171,8 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
   /** P5：正文是否还有未落盘的改动（序列化已移出热路径，保存时才现算）。 */
   const dirtyRef = useRef(false);
   const activePointerRef = useRef<{ id: number; type: string } | null>(null);
+  /** 中断收口函数的前向引用（onPointerDown 定义在其前面，避免声明顺序依赖）。 */
+  const finalizeInterruptedRef = useRef<(reason: string) => void>(() => {});
   const penDownRef = useRef(false);
   const activeStrokeRef = useRef<InkStroke | null>(null);
   const eraseBeforeRef = useRef<InkPage | null>(null);
@@ -599,7 +601,9 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
     } else if (penDownRef.current) {
       return; // 掌托/手指在笔落下期间不参与书写
     }
-    if (activePointerRef.current) return;
+    // 上一次 pointerup 丢失（或丢了 pointercancel/lostcapture）时，activePointer 会残留 ⇒ 以前整块画布
+    // 从此画不上（用户报的「偶发不生效」）。这里先把残留那笔收口（能提交就提交），再开始新的一笔。
+    if (activePointerRef.current) finalizeInterruptedRef.current("missing-pointerup");
     activePointerRef.current = { id: event.pointerId, type: event.pointerType };
     event.currentTarget.setPointerCapture(event.pointerId);
     const point = pointFromClient(event.clientX, event.clientY, event.pointerType, event.pressure, event.currentTarget.getBoundingClientRect(), page);
@@ -661,6 +665,41 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
     if (appended) setActiveStroke(activeStrokeRef.current);
   }, [appendPoint, eraseAt, mode, page]);
 
+  /**
+   * 261103 十批：落笔被**异常中断**（pointercancel / lostpointercapture / 丢失 up）时的收口。
+   * 以前一律丢弃 ⇒ 已经画出来的笔迹会「偶发消失」（快速滑动时更容易撞上，用户 261103 实机报）。
+   * 现在的口径：
+   *   · 画笔/高亮笔：已经积累 ≥2 个点 ⇒ **按已完成部分提交**（宁可留一笔，不可静默丢）；
+   *   · 橡皮：保留原有语义（回滚到本笔开始前 + 不进历史栈）。
+   * 返回 true 表示已处理（调用方不要再重复 finalize）。
+   */
+  const finalizeInterrupted = useCallback((reason: string): void => {
+    if (!activePointerRef.current) return;
+    activePointerRef.current = null;
+    if (mode === "eraser") {
+      const eraseBase = eraseBeforeRef.current;
+      const current = docRef.current;
+      eraseBeforeRef.current = null;
+      erasedIdsRef.current = new Set();
+      if (eraseBase && current && current.pages.some((item) => item.id === eraseBase.id)) {
+        const restored = replacePage(current, eraseBase);
+        docRef.current = restored;
+        setDoc(restored);
+      }
+      return;
+    }
+    const stroke = activeStrokeRef.current;
+    if (stroke && stroke.points.length >= 2) {
+      // 丢 up 的那一笔照样落盘（同时保留历史栈里的一次增量）。
+      console.warn("[ink] 落笔被中断（" + reason + "），已按已完成部分提交", { points: stroke.points.length });
+      finishStroke();
+      return;
+    }
+    activeStrokeRef.current = null;
+    setActiveStroke(null);
+  }, [finishStroke, mode]);
+  finalizeInterruptedRef.current = finalizeInterrupted;
+
   const finishPointer = useCallback((event: ReactPointerEvent<SVGSVGElement>) => {
     if (activePointerRef.current?.id !== event.pointerId) return;
     activePointerRef.current = null;
@@ -682,22 +721,9 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
 
   const cancelPointer = useCallback((event: ReactPointerEvent<SVGSVGElement>) => {
     if (activePointerRef.current?.id !== event.pointerId) return;
-    activePointerRef.current = null;
     if (event.pointerType === "pen") penDownRef.current = false;
-    activeStrokeRef.current = null;
-    setActiveStroke(null);
-    // 擦除被系统打断（来电/通知/子手势）时，本 pointer 已删掉的笔迹必须回滚：
-    // 这条路径不进历史栈 ⇒ 不回滚就是「笔迹没了还不能撤销」。
-    const eraseBase = eraseBeforeRef.current;
-    const current = docRef.current;
-    eraseBeforeRef.current = null;
-    erasedIdsRef.current = new Set();
-    if (eraseBase && current && current.pages.some((item) => item.id === eraseBase.id)) {
-      const restored = replacePage(current, eraseBase);
-      docRef.current = restored;
-      setDoc(restored);
-    }
-  }, []);
+    finalizeInterrupted(event.type === "pointercancel" ? "pointercancel" : "lostpointercapture");
+  }, [finalizeInterrupted]);
 
   const activePath = useMemo(() => activeStroke ? strokeToSvgPath(activeStroke, false) : null, [activeStroke]);
   /** 笔迹 id → SVG 轮廓缓存（P5）：落一笔/擦一条只算新笔迹，不再整页重算 perfect-freehand。 */

@@ -438,6 +438,20 @@ describe("手写板正式端到端接线", () => {
     expect(MOBILE_INK_CSS).toContain(".ink-pad--mobile .ink-page-strip__add");
   });
 
+  it("落笔被异常中断时按已完成部分提交（不再静默丢笔，261103 十批）", () => {
+    // 画布上「pointercancel / lostpointercapture ⇒ 直接丢弃当前笔迹」，快速滑行时偶发命中 ⇒ 用户看到笔迹消失。
+    // 现在：≥2 点 ⇒ 提交；橡皮仍回滚。旧写法（cancelPointer 里直接 activeStrokeRef=null）不得回潮。
+    expect(INK_PAD).toContain("finalizeInterrupted");
+    expect(INK_PAD).toContain("已按已完成部分提交");
+    expect(INK_PAD).toContain("stroke.points.length >= 2");
+    expect(INK_PAD).toContain("onLostPointerCapture={cancelPointer}");
+    // 上一次 up 丢失时 activePointer 会残留：下一次 pointerdown 先收口残留那笔，不让整块画布从此画不上。
+    expect(INK_PAD).toContain('finalizeInterruptedRef.current("missing-pointerup")');
+    // 按批渲染：一次 pointermove 只 setActiveStroke 一次 / 一批擦除只 setDoc 一次（防 N 次重渲染把快画压垮）。
+    expect(INK_PAD).toMatch(/if \(appended\) setActiveStroke\(activeStrokeRef\.current\);/);
+    expect(INK_PAD).toMatch(/if \(erased && docRef\.current\) setDoc\(docRef\.current\);/);
+  });
+
   it("纸面在「悬浮导航—悬浮工具坞」之间的可视区居中（stage 上下补出悬浮条高度）", () => {
     // 261102 用户报「100% 时上下空白不均」：页面按整屏居中时，底部工具坞悬浮在留白里 ⇒ 顶部空白被视觉放大。
     // 修法 = 画布上下补出与悬浮条等高的内距（尺寸用 --ink-mobile-* 变量，与悬浮条规则同源）。

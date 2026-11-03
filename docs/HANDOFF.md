@@ -8,6 +8,18 @@
 
 ## 0. 最新交接（261027）
 
+### 261103 · 十批：手写板「笔迹偶发消失」根因修复（中断即丢弃 ⇒ 提交已完成部分）· **本地改动**
+- **用户复测反馈**：九批按批渲染后**仍然偶发消失**，同一操作在画板里完全正常 ⇒ 说明不是通用渲染压力，是 ink 自己的收口路径。
+- **根因**：`InkPad` 的 `cancelPointer` 绑在 `onPointerCancel` **和 `onLostPointerCapture`** 上，且第一行就把 `activeStrokeRef` 置空 ⇒ 只要一次落笔**没收到配对的 pointerup**（快速滑动时浏览器可能先发 `lostpointercapture`、或捕获被释放/重定向，up 打到别的元素上），已经画出来的笔迹就被**静默丢弃**；更糟的是 `activePointerRef` 残留会让后续 pointerdown 直接 `return`（画不上，要重开文档）。画板（Drawnix）没有这条路径，所以同操作正常。
+- **修法（`src/features/ink/InkPad.tsx`）**：
+  · 新增 `finalizeInterrupted(reason)`：画笔/高亮笔在中断时**若已 ≥2 点就按已完成部分提交**（并写一次历史增量 + 打 `[ink] 落笔被中断…` 警告）；橡皮保留原语义（回滚到本笔开始 + 不进历史栈）；<2 点视为误触丢弃。
+  · `onPointerCancel` / `onLostPointerCapture` 都走它（不再直接丢笔）。
+  · `onPointerDown` 发现 `activePointerRef` 残留（上一次 up 丢失）时，先对残留那笔执行同一收口，再开始新笔 ⇒ 不会再「整块画布从此画不上」。
+- **设备实测（桌面 dev / CDP 9222，隔离数据目录）**：
+  · 落笔中途派发 `pointercancel` → 正文笔迹 **22 → 23**（以前是丢弃，不计入）；
+  · 只按下+移动、**不发 pointerup**，紧接着再按下继续画 → **23 → 25**（残留那笔先落盘 + 新笔照常）。
+- **单测**：`inkPadWiring.test.ts` 增 1 例（中断收口/残留 pointer/按批渲染三组静态契约，30 例全过）。
+- **待办**：请用户复测「快画/快擦」；若仍复现，用九批的 ink 诊断（`__lakeInkInputStats()`）回传，重点看是否有 `cancels>0` 或 `ups=0` 的笔。
 ### 261103 · 九批：手写板落笔批处理 + 指针诊断扩到 ink（用户澄清：是**手写板**不是画板）· **本地改动**
 - **澄清**：八批按「画板（Drawnix）」查了；用户指出实际是**手写板（ink）**。八批的画板诊断保留（默认关、无害），本轮把诊断与热路径修到 ink。
 - **机制层根因方向**：`InkPad` 的 `onPointerMove` 每个 coalesced 点都 `setActiveStroke`、每个擦除点都 `setDoc` ⇒ 一次 pointermove 触发 N 次 React 重渲染 + perfect-freehand 轮廓重算。快速落笔/快速擦除事件率最高，渲染被压垮（「画快了不生效」最可能的成因）。
