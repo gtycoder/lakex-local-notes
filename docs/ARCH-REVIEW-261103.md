@@ -233,3 +233,16 @@
 **门禁**：tsc 0 / vitest **566 文件 3463 例** 30.2s / check:core 136/0 / check:mobileui / 双 build / check:bundle（entry 53,496/61,440、css 137,795/141,312、preload 28/30）/ check:arch（mobile 340.8KB/360KB、desktop 2.38MB/2.5MB、defer 407.4KB/450KB、import 违规 0）/ 手机+平板 6 态 0 差异 / windowsweep pass。
 
 **仍可继续（P11 候选）**：① `bridge` 里 `s3v3Report` 静态 12KB（设置页已懒加载，剩余取决于 sync 诊断读路径）；② `useWorkspaceAssemble`（restore/初始打开/runSync/treeMenuItems 等剩余效果）可再压行数；③ `plantuml`/usheet 大 chunk 内部再拆（收益未取证，需实测）；④ 桌面内核三入口 lazy（P8 W2，仍“先量后做”）。
+
+## 11. P11 实施记录（261103 同日，分支 `feat/pad-touch-ui`）
+
+| 项 | 结果 | 关键数据 / 结论 |
+|---|---|---|
+| P11-① `s3v3Report` 按需 | ⚠️ **实测收益 1.2KB gz ⇒ 不做，已回退** | mobile 首屏 340,783 → 339,559B gz（−1,224B / −0.36%）；动态 import + 失败兜底带来的复杂度大于收益（§3#17） |
+| P11-② 剩余组装逻辑搬 hook | ✅ | NotebookWorkspace **660 → 510 行（−150 / −22.7%）**；新增 `useWorkspaceAssemble`(79) / `useWorkspaceSync`(61) / `useWorkspaceActions`(200)，openSidebar/openOutline 并入 `useWorkspaceChrome`；旧 256 条逻辑行逐字命中 256/256，JSX 字节相同 |
+| P11-③ 大 chunk 取证 | ✅ 结论=不改 | `plantuml`(6.4MB raw) 只被 `lakeRuntime`（懒 chunk）引用；28 条 preload 全是小 chunk（最大 activeEditor 17.6KB gz）⇒ 首屏图无大 chunk |
+| P11-④ 桌面内核 lazy A/B | ✅ 结论=**有条件值得，本轮不做** | 静态：只改点名的 3 处首屏仅 −0.3%（内核挪进 preload，仍在首屏）；**5 个组件边界全 lazy** 才把首屏 2,074,572 → 215,856B gz（−89.6%）。动态（Electron 44.9 + CDP 9222，warm 5 次 / cold-cache 4 次）：warm `spawn→#root` 815→669ms、cold 1,360→**865ms（−36%）**；但 cold 下「点开首篇文档→引擎」约 **+538ms**。⇒ 必须 5 边界 + **启动 idle 预取 kernel chunk** 打包做才是净收益；单拆 3 处等于白做。证据 `/tmp/p11/results/`（driver.mjs / build 日志 / runtime-summary-*.json） |
+
+**门禁（P11）**：tsc 0 / vitest **566 文件 3463 例**（`electron/s3v3/perf` 在满载并行下曾抖红一次、单跑通过，属既有已知）/ check:core 136/0 / check:mobileui / 双 build / check:bundle（entry 53,496/61,440、css 137,795/141,312、preload 28/30）/ check:arch（mobile **340,783B/360KB**、desktop 2,378,003B/2.5MB、defer 407,375B/450KB、import 违规 0）/ 手机+平板 6 态 0 差异 / windowsweep pass。
+
+**P12 候选（按收益/风险排序）**：① 桌面内核 lazy（5 边界 + idle 预取 + entry 静态断言；预计 cold 出界面 −0.5s，需回归打开=只读/capture/focus/多 tab）；② `bridge` 内 `s3v3Report` 若未来设置页再变化可重测（当前收益不足）；③ 大 chunk 内部再拆（未取证）；④ 工作区继续压行（510 → ~450，收益仅可维护性）。

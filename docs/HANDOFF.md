@@ -7,6 +7,12 @@
 
 ## 0. 最新交接（261027）
 
+### 261103 · P11（诊断按需实测否决 / 工作区 510 行 / 大 chunk 取证 / 桌面内核 lazy A/B）· **本地提交（分支 feat/pad-touch-ui）**
+- **① `s3v3Report` 按需**：实测首屏仅 −1,224B gz（340,783→339,559）⇒ **不做，已回退**（动态 import + 兜底的复杂度大于收益）。
+- **② 剩余组装搬 hook**：新增 `useWorkspaceAssemble`(79) / `useWorkspaceSync`(61) / `useWorkspaceActions`(200)，openSidebar/openOutline 并入 chrome hook ⇒ NotebookWorkspace **660 → 510 行（−22.7%）**；旧 256 条逻辑行逐字命中 256/256，JSX 字节相同。
+- **③ 大 chunk 取证**：`plantuml` 6.4MB raw 只被 `lakeRuntime`（懒 chunk）引用；28 条 preload 均为小 chunk ⇒ 首屏无大 chunk，不改。
+- **④ 桌面内核 lazy A/B（只读+临时副本实测）**：只改 3 处首屏 −0.3%（内核挪进 preload 仍在首屏）；5 个边界全 lazy 首屏 2.07MB→0.22MB gz（−89.6%）；cold `spawn→#root` 1,360→865ms（−36%），但 cold 点开首篇文档 +538ms ⇒ **必须 5 边界 + idle 预取打包做**，本轮不做；证据 `/tmp/p11`。
+- **门禁**：tsc 0 / vitest 566 文件 3463 例 / core 136/0 / mobileui / 双 build / bundle / arch（mobile 340.8KB/360KB、desktop 2.38MB/2.5MB、import 0）/ 手机+平板 6 态 0 差异 / windowsweep。
 ### 261103 · P10 收尾（工作区逻辑搬 hook / 设置抽屉按需 / import 规则扩展）· **本地提交（分支 feat/pad-touch-ui）**
 - **P10-①（P9-5c）**：新增 `useTreeDrag`(168 行) / `useWorkspaceChrome`(159) / `useWorkspaceSession`(206)，**纯搬移不改行为**（旧逻辑行 478 条逐字命中 475，余 3 条等价改写）⇒ NotebookWorkspace **984 → 660 行（−32.9%）**；静态契约测试改读 hook。
 - **P10-②**：`SettingsDrawer` 改 `lazy()`（打开设置才加载）⇒ mobile entry JS **79,032 → 53,496B gz（−25.5KB）**、首屏 **366,792 → 340,783B gz（−26KB）**；预算收紧 entry 80→60KB、首屏 390→**360KB**；设备冒烟设置/云同步子页正常。
