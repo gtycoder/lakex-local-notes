@@ -151,8 +151,11 @@ async function openSettings() {
   await tapExpr(centerByText(".toolbar__button", "设置", 0), "设置按钮", 1300);
 }
 async function settingsPage(label) {
-  const back = await pageRef.evaluate('Boolean(document.querySelector(".mobile-settings-close"))');
-  if (back) { await tapExpr(center(".mobile-settings-close"), "settings back", 900); }
+  // 261103 六批 A3 修装置：菜单页的「关闭设置」和子页的「返回」都用 .mobile-settings-close，
+  // 旧写法在菜单页会误点「关闭设置」把设置整个关掉 ⇒ 之后的 settings 屏全部 not found。
+  // 只认 aria-label=返回 的那一枚（子页才有）。
+  const back = await pageRef.evaluate('Boolean(document.querySelector(".mobile-settings-close[aria-label=\\"返回\\"]"))');
+  if (back) { await tapExpr(center('.mobile-settings-close[aria-label="返回"]'), "settings back", 900); }
   await tapExpr(centerByText('.mobile-settings-list button, .mobile-settings-list .mb-list-item, .mobile-settings-list .ln-row, .mobile-settings-list .mb-row, .mobile-settings-row', label, 0), "settings row: " + label, 1300);
 }
 

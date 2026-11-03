@@ -107,13 +107,17 @@ export const STATES = [
   } },
   { name: "bitable-table", nav: async (page) => {
     await openFixture(page);
-    if (!(await tapByText(page, ".mbt-viewtab", "内容", 1200))) throw new Error("bitable-table: 没有「内容」视图页签");
+    // 261103 六批：表格视图的页签文案由「内容」改为「表格」（类型短名）。
+    if (!(await tapByText(page, ".mbt-viewtab", "表格", 1200))) throw new Error("bitable-table: 没有「表格」视图页签");
     await expectOn(page, "!!document.querySelector('.mbt-grid')", "多维表 · 内容（表格布局）");
   } },
   { name: "bitable-card", nav: async (page) => {
     await openFixture(page);
-    if (!(await tapByText(page, ".mbt-viewtab", "内容", 1200))) throw new Error("bitable-card: 没有「内容」视图页签");
-    if (!(await tapByLabel(page, "button", "视图配置", 900))) throw new Error("bitable-card: 工具行没有「视图配置」");
+    if (!(await tapByText(page, ".mbt-viewtab", "表格", 1200))) throw new Error("bitable-card: 没有「表格」视图页签");
+    // 261103 三批：头部收口后只读态**没有**「字段/筛选」入口（用户点单删除）；只读改布局走头部
+    // 「视图状态」chip（夹具视图有分组 ⇒ chip 文案「已分组 1」）→ 面板「布局」页签 → 卡片磁贴。
+    if (!(await tapByText(page, ".mbt-viewstate-chip", "已分组", 900))) throw new Error("bitable-card: 头部没有「视图状态」chip");
+    if (!(await tapByText(page, ".mbt-vcfg-tab", "布局", 900))) throw new Error("bitable-card: 面板没有「布局」页签");
     if (!(await tapByText(page, ".mbt-tile", "卡片", 900))) throw new Error("bitable-card: 面板里没有「卡片」磁贴");
     if (!(await tapByLabel(page, "button", "关闭", 900))) throw new Error("bitable-card: 面板没有关闭按钮");
     await expectOn(page, "!!document.querySelector('.mbt-card')", "多维表 · 内容（卡片布局）");
