@@ -6,6 +6,8 @@ const read = (rel: string) => readFileSync(new URL(rel, import.meta.url), "utf8"
 const WS = read("./NotebookWorkspace.tsx");
 /** 261103 P4：胶囊拆成 WorkspaceCapsule.tsx ⇒ 相关静态断言改读组件源码。 */
 const CAPSULE = read("./WorkspaceCapsule.tsx");
+/** 261103 P9：顶栏拆成 WorkspaceTopBar.tsx。 */
+const TOPBAR = read("./WorkspaceTopBar.tsx");
 const APP = read("../MobileApp.tsx");
 const CSS = read("../mobile.css");
 
@@ -31,7 +33,8 @@ describe("阅读时顶栏/底栏自动收起（261019，对齐思源）", () => 
     expect(WS).toContain('chromeAfterScroll(cur, top, dy)');
     expect(WS).toContain('classList?.contains("mobile-doc-body")');
     expect(WS).toMatch(/meta\.kind !== "doc" \|\| meta\.editing/);
-    expect(WS).toContain("mobile-topbar--auto-hidden");
+    expect(TOPBAR).toContain("mobile-topbar--auto-hidden");
+    expect(WS).toContain("chromeHidden={chromeHiddenNow}");
     // 261103：胶囊显隐判据统一到 capsuleHidden —— 文档（Lake）编辑态**保留胶囊**（抬到 dock 上方），
     // 表格/多维表/画板/手写板编辑态仍隐藏；顶栏自动收起判据不变。
     expect(WS).toContain('const capsuleInEdit = !!active?.editing && (active?.kind ?? "doc") === "doc";');

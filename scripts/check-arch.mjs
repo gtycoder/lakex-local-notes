@@ -7,9 +7,9 @@
  *      + 全部 modulepreload + 入口 CSS」，逐文件 gzip(level 9) 求和。**为什么不沿用 check-bundle-budget
  *      的口径**：那边只量入口 chunk 的字节 + preload 的**条数**，实测移动端入口 78KB 而首屏真实 ≈392KB
  *      （20 条 preload 另有 176KB），预算量错对象 ⇒ 这里量「首屏真正要下载/解析的资源图」。
- *      ⚠️ 桌面 index.html 还有一条**非 module、parser-blocking** 的经典脚本
- *      vendor/cdn/.../lake-codemirror/7.1.3/CodeMirror.js（407KB gzip），评审时的 2.37MB 没算它；
- *      真实桌面首屏 = 2,785,293B，故桌面预算取 3.0MB（把它改 defer/按需后可回收 407KB 并收紧到 2.5MB）。
+ *      ⚠️ 桌面 index.html 的经典脚本 vendor/cdn/.../lake-codemirror/7.1.3/CodeMirror.js（407KB gzip）
+ *      261103 P9 起改为 **defer**（不阻塞解析/首屏绘制）⇒ 单列「defer/async 脚本」预算，不计入首屏总量；
+ *      桌面首屏预算随之从 3.0MB 收紧到 2.5MB（CodeMirror 单独 ≤450KB）。
  *   ② import 方向规则（只扫非测试源码；相对路径按文件真实位置解析）：
  *      · src/core/**  只能 import src/core 内部（core 纯度，与 check-core-boundaries 同义、这里再兜一层）
  *      · src/mobile/** 不得 import electron/** 或 src/desktop/**（移动端不碰主进程/桌面壳）
@@ -35,8 +35,16 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 /** 首屏资源图 gzip 字节预算（十进制 KB；实测 261103：mobile 391,983 / desktop 2,785,293）。 */
 export const FIRST_PAINT_BUDGETS = Object.freeze({
-  mobile: 420_000, // ≈420KB；实测 391,983（≈93%）
-  desktop: 3_000_000, // ≈3.0MB；实测 2,785,293（≈93%，含经典 CodeMirror 脚本 407KB；见文件头）
+  mobile: 420_000, // ≈420KB；实测 392,977（≈94%）
+  // 261103 P9：CodeMirror 改为 defer（不阻塞解析/首屏绘制）后，桌面首屏只剩模块图 ≈2.38MB；
+  // 预算从 3.0MB 收紧到 2.5MB，把「再塞一个 400KB 阻塞脚本」直接挡在门外。
+  desktop: 2_500_000,
+});
+
+/** defer/async 脚本预算（不计入首屏总量，但字节仍要管；超了同样失败）。 */
+export const FIRST_PAINT_DEFERRED_BUDGETS = Object.freeze({
+  mobile: 0,
+  desktop: 450_000, // CodeMirror ≈407KB gz
 });
 
 /** import 方向规则（from → 禁止 import 的路径前缀）。 */
@@ -73,13 +81,12 @@ export const IMPORT_DIRECTION_RULES = Object.freeze([
  * 现状（261103）：features/outline/OutlineSidebar 取桌面壳的布局常量 —— 应把常量下沉到
  * src/desktop/shellTypes 或 core 布局模块后清掉；在清掉之前不允许新增第二条。
  */
-export const KNOWN_IMPORT_VIOLATIONS = Object.freeze({
-  "src/features/outline/OutlineSidebar.tsx": 1,
-});
+export const KNOWN_IMPORT_VIOLATIONS = Object.freeze({});
 
 /** 聚合契约（供其它脚本/测试直接 import，避免数字抄两份）。 */
 export const ARCH_CONTRACT = Object.freeze({
   firstPaintBudgets: FIRST_PAINT_BUDGETS,
+  deferredFirstPaintBudgets: FIRST_PAINT_DEFERRED_BUDGETS,
   importDirectionRules: IMPORT_DIRECTION_RULES,
   knownImportViolations: KNOWN_IMPORT_VIOLATIONS,
 });
@@ -112,10 +119,14 @@ function resourcesFromHtml(htmlPath) {
     const clean = href.replace(/^(\.\/|\/)/, "");
     return path.join(distDir, clean);
   };
+  // 261103 P9：区分 **阻塞/延迟** 脚本 —— defer/async 不阻塞解析与首屏绘制，单列一项预算。
   const scripts = [...html.matchAll(/<script\b([^>]*)>/g)]
     .map((m) => m[1])
     .filter((attrs) => /\bsrc=/.test(attrs))
-    .map((attrs) => pick(attrs.match(/\bsrc="([^"]+)"/)[1]));
+    .map((attrs) => ({
+      path: pick(attrs.match(/\bsrc="([^"]+)"/)[1]),
+      blocking: !/\b(?:defer|async)\b/.test(attrs),
+    }));
   const links = [...html.matchAll(/<link\b([^>]*)>/g)].map((m) => m[1]);
   const preloads = links
     .filter((attrs) => /\brel="modulepreload"/.test(attrs) && /\bhref=/.test(attrs))
@@ -129,10 +140,13 @@ function resourcesFromHtml(htmlPath) {
 /** 首屏资源图：去重后逐文件求 gzip 字节。 */
 export function collectFirstPaint(htmlPath) {
   const { scripts, preloads, stylesheets } = resourcesFromHtml(htmlPath);
+  const blockingScripts = scripts.filter((s) => s.blocking).map((s) => s.path);
+  const deferredScripts = scripts.filter((s) => !s.blocking).map((s) => s.path);
   const groups = [
-    ["entry-js", scripts],
+    ["entry-js", blockingScripts],
     ["preload", preloads],
     ["entry-css", stylesheets],
+    ["defer-js", deferredScripts],
   ];
   const seen = new Set();
   const files = [];
@@ -146,13 +160,17 @@ export function collectFirstPaint(htmlPath) {
     }
   }
   const byKind = (k) => files.filter((f) => f.kind === k).reduce((s, f) => s + f.gzip, 0);
+  // 首屏总量 = 阻塞脚本 + modulepreload + 入口 CSS（defer/async 不阻塞绘制，单列 deferredGzip）。
+  const blockingFiles = files.filter((f) => f.kind !== "defer-js");
   return {
     html: rel(htmlPath),
     files,
-    counts: { entryJs: scripts.length, preload: preloads.length, entryCss: stylesheets.length },
+    counts: { entryJs: blockingScripts.length, preload: preloads.length, entryCss: stylesheets.length, deferredJs: deferredScripts.length },
     gzip: { entryJs: byKind("entry-js"), preload: byKind("preload"), entryCss: byKind("entry-css") },
-    totalGzip: files.reduce((s, f) => s + f.gzip, 0),
-    totalRaw: files.reduce((s, f) => s + f.raw, 0),
+    deferredGzip: byKind("defer-js"),
+    deferredFiles: files.filter((f) => f.kind === "defer-js"),
+    totalGzip: blockingFiles.reduce((s, f) => s + f.gzip, 0),
+    totalRaw: blockingFiles.reduce((s, f) => s + f.raw, 0),
   };
 }
 
@@ -212,9 +230,11 @@ function main() {
     }
     const data = collectFirstPaint(html);
     const budget = FIRST_PAINT_BUDGETS[target];
-    const pass = data.totalGzip <= budget;
-    report.firstPaint[target] = { ...data, budget, pass, headroom: budget - data.totalGzip };
-    if (!pass) failures.push(`${target} 首屏资源图 ${formatBytes(data.totalGzip)} > 预算 ${formatBytes(budget)}`);
+    const deferredBudget = FIRST_PAINT_DEFERRED_BUDGETS[target] ?? 0;
+    const pass = data.totalGzip <= budget && data.deferredGzip <= deferredBudget;
+    report.firstPaint[target] = { ...data, budget, deferredBudget, pass, headroom: budget - data.totalGzip };
+    if (data.totalGzip > budget) failures.push(`${target} 首屏资源图 ${formatBytes(data.totalGzip)} > 预算 ${formatBytes(budget)}`);
+    if (data.deferredGzip > deferredBudget) failures.push(`${target} defer/async 脚本 ${formatBytes(data.deferredGzip)} > 预算 ${formatBytes(deferredBudget)}`);
   }
 
   const violations = scanImportDirections();
@@ -242,7 +262,10 @@ function main() {
       }
       console.log(
         `[${target}] 首屏资源图 gzip=${formatBytes(d.totalGzip)} / 预算 ${formatBytes(d.budget)} ` +
-          `=> ${d.pass ? "PASS" : "FAIL"}（余量 ${formatBytes(d.headroom)}；entry-js ${formatBytes(d.gzip.entryJs)} / preload ×${d.counts.preload} ${formatBytes(d.gzip.preload)} / css ${formatBytes(d.gzip.entryCss)}）`,
+          `=> ${d.totalGzip <= d.budget ? "PASS" : "FAIL"}（余量 ${formatBytes(d.headroom)}；entry-js ${formatBytes(d.gzip.entryJs)} / preload ×${d.counts.preload} ${formatBytes(d.gzip.preload)} / css ${formatBytes(d.gzip.entryCss)}）`,
+      );
+      console.log(
+        `         defer/async ×${d.counts.deferredJs ?? 0} gzip=${formatBytes(d.deferredGzip)} / 预算 ${formatBytes(d.deferredBudget)} => ${d.deferredGzip <= d.deferredBudget ? "PASS" : "FAIL"}`,
       );
       if (verbose) for (const f of d.files) console.log(`   - [${f.kind}] ${f.gzip.toLocaleString("en-US")}B gz  ${f.file}`);
     }

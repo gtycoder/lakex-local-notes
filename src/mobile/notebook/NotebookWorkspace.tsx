@@ -5,7 +5,7 @@
  * 多 tab 的「顶部 tab 条」是桌面版；移动端是底部胶囊栏 #toolbarTabs 弹全屏列表（子代理已核对源码）。
  */
 import { Suspense, lazy, useCallback, useEffect, useReducer, useRef, useState } from "react";
-import { ArrowLeft, Pencil, X, ChevronRight, FolderOpen, FolderPlus, Plus, Check, Trash, SmilePlus, Move, History, CloudUpload, FilePlus, Info, Table, Database, PenTool, PenLine, Book, Search, Star } from "lucide-react";
+import { Pencil, X, ChevronRight, FolderOpen, FolderPlus, Plus, Trash, SmilePlus, Move, History, FilePlus, Info, Table, Database, PenTool, PenLine, Book, Star } from "lucide-react";
 import { useLongPress } from "../ui/useLongPress";
 import { pushBackHandler } from "../ui/backStack";
 import { NoteInfoSheet } from "../ui/NoteInfoSheet";
@@ -35,6 +35,7 @@ import { SELF_REGISTERED_OVERLAY_KINDS, useWorkspaceOverlays } from "./useWorksp
 import { NotebookTreeList } from "./NotebookTreeList";
 import { useFormFactor } from "../pad/useFormFactor";
 import { WorkspaceCapsule } from "./WorkspaceCapsule";
+import { WorkspaceTopBar } from "./WorkspaceTopBar";
 import { WorkspaceOutlinePanel, WorkspaceTreePanel } from "./WorkspacePanels";
 import {
   createPadShellState,
@@ -789,85 +790,26 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
 
   return (
     <div className={"mobile-workspace" + (capsuleInEdit ? " mobile-workspace--capsule-edit" : "")}>
-      {/* 顶部栏（思源 #mobileTopBar：.toolbar--border + .toolbar__title 左对齐 + 右侧同步状态） */}
-      <header
-        className={"toolbar toolbar--border mobile-topbar" + (!padTwoPane && chromeHiddenNow ? " mobile-topbar--auto-hidden" : "")}
-        aria-hidden={!padTwoPane && chromeHiddenNow ? "true" : "false"}
-      >
-        {padTwoPane ? (
-          <>
-            <button className="toolbar__button" onClick={handleBack} aria-label="返回知识库" title="返回知识库"><ArrowLeft /></button>
-            {/* 平板：中 = 桌面式文档页签（关闭/新增就地完成，替代手机的全屏标签列表） */}
-            <div className="pad-tabs" data-prevent-swipe>
-              {tabs.map((t) => (
-                <div key={t.id} className={"pad-tab" + (t.id === activeId ? " on" : "")}>
-                  <button className="pad-tab__main" onClick={() => { void openTab(t.id); }} title={t.title || "无标题"}>{t.title || "无标题"}</button>
-                  <button className="pad-tab__x" onClick={(e) => { e.stopPropagation(); void closeTab(t.id); }} aria-label="关闭标签页" title="关闭"><X size={14} /></button>
-                </div>
-              ))}
-              <button className="pad-tab-add" onClick={() => openPadTree(true)} aria-label="打开文档" title="打开文档"><Plus size={16} /></button>
-            </div>
-            <div className="pad-topbar-actions">
-              {/* 文档内查找：内核查找面板只随工具栏 search 挂载，手机没有；平板用同一套 MobileFindBar。 */}
-              <button
-                className={"toolbar__button" + (findOpen ? " toolbar__icon--active" : "")}
-                onClick={() => toggleOverlay("find")}
-                disabled={!active?.loaded || (active.kind ?? "doc") !== "doc"}
-                aria-label="在文档中查找"
-                title={(active?.kind ?? "doc") !== "doc" ? "该文档类型不支持查找" : "在文档中查找"}
-              ><Search /></button>
-              <button
-                className={"toolbar__button" + (active?.editing ? " toolbar__icon--active" : "")}
-                onClick={toggleEdit}
-                disabled={!active?.loaded || ((active.kind ?? "doc") !== "doc" && active.kind !== "usheet" && active.kind !== "bitable" && active.kind !== "board" && active.kind !== "ink")}
-                aria-label={active?.editing ? "完成" : "编辑"}
-                title={!active || ((active.kind ?? "doc") !== "doc" && active.kind !== "usheet" && active.kind !== "bitable" && active.kind !== "board" && active.kind !== "ink")
-                  ? "该文档类型在移动端只读"
-                  : active.editing ? "完成" : "编辑"}
-              >{active?.editing ? <Check /> : <Pencil />}</button>
-              <button className="toolbar__button" onClick={() => void runSync()} aria-label="立即同步" title="立即同步"><CloudUpload /></button>
-            </div>
-          </>
-        ) : (
-          <>
-        <button className="toolbar__button" onClick={handleBack} aria-label="返回"><ArrowLeft /></button>
-        <input
-          className={"toolbar__title" + (active?.editing && active.loaded ? "" : " toolbar__title--readonly")}
-          value={active?.title ?? title}
-          readOnly={!active?.editing || !active.loaded}
-          placeholder={active ? "" : title}
-          aria-label="文档标题"
-          onChange={(e) => {
-            const t = e.target.value;
-            const id = activeId;
-            if (!id || !active?.loaded) return;
-            updateTab(id, { title: t });
-            scheduleAutoSave(id, t, tabs.find((x) => x.id === id)?.content ?? "");
-          }}
-        />
-        {/* doc / 表格 / 数据表 / 画板 / 手写板都可编辑（261020 起数据表不再只读；各自一个专用 viewer/editor）。 */}
-        <button
-          className={"toolbar__button" + (active?.editing ? " toolbar__icon--active" : "")}
-          onClick={toggleEdit}
-          disabled={!active?.loaded || ((active.kind ?? "doc") !== "doc" && active.kind !== "usheet" && active.kind !== "bitable" && active.kind !== "board" && active.kind !== "ink")}
-          aria-label={active?.editing ? "完成" : "编辑"}
-          title={!active || ((active.kind ?? "doc") !== "doc" && active.kind !== "usheet" && active.kind !== "bitable" && active.kind !== "board" && active.kind !== "ink")
-            ? "该文档类型在移动端只读"
-            : active.editing ? "完成" : "编辑"}
-        >{active?.editing ? <Check /> : <Pencil />}</button>
-        {/* 文档内查找（移动端）：内核查找面板在移动端不存在（工具栏插件被关），
-            故入口收在这里、由 MobileFindBar 做 DOM 内查找；工作区胶囊是定稿四格、不放搜索。 */}
-        <button
-          className={"toolbar__button" + (findOpen ? " toolbar__icon--active" : "")}
-          onClick={() => toggleOverlay("find")}
-          disabled={!active?.loaded || (active.kind ?? "doc") !== "doc"}
-          aria-label="在文档中查找"
-          title={(active?.kind ?? "doc") !== "doc" ? "该文档类型不支持查找" : "在文档中查找"}
-        ><Search /></button>
-        <button className="toolbar__button" onClick={() => void runSync()} aria-label="立即同步" title="立即同步"><CloudUpload /></button>
-          </>
-        )}
-      </header>
+      <WorkspaceTopBar
+        padTwoPane={padTwoPane}
+        chromeHidden={chromeHiddenNow}
+        title={title}
+        active={active ?? null}
+        activeId={activeId}
+        tabs={tabs}
+        findOpen={findOpen}
+        onBack={handleBack}
+        onOpenTab={(id) => { void openTab(id); }}
+        onCloseTab={(id) => { void closeTab(id); }}
+        onOpenTree={openPadTree}
+        onToggleFind={() => toggleOverlay("find")}
+        onToggleEdit={toggleEdit}
+        onSync={() => void runSync()}
+        onRename={(id, nextTitle) => {
+          updateTab(id, { title: nextTitle });
+          scheduleAutoSave(id, nextTitle, tabs.find((x) => x.id === id)?.content ?? "");
+        }}
+      />
 
       <div className={"mobile-workspace-main" + (padDocked ? " pad-main--docked" : "")}>
         {/* 平板（expanded）：悬浮左目录（覆盖层，不占布局）；手机不渲染这段（padTwoPane=false） */}

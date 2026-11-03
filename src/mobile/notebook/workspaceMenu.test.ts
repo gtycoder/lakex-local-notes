@@ -12,6 +12,8 @@ const read = (rel: string) => readFileSync(new URL(rel, import.meta.url), "utf8"
 const WORKSPACE = read("./NotebookWorkspace.tsx");
 /** 261103 P4：底部胶囊已拆到 WorkspaceCapsule.tsx。 */
 const CAPSULE = read("./WorkspaceCapsule.tsx");
+/** 261103 P9：顶栏拆成 WorkspaceTopBar.tsx（编辑/查找/同步入口都在这里）。 */
+const TOPBAR = read("./WorkspaceTopBar.tsx");
 /** 抽屉树行已抽到 NotebookTreeList（261027 虚拟窗口化）：行内 ⋮/＋ 的断言看这份。 */
 const TREE_LIST = read("./NotebookTreeList.tsx");
 const APP = read("../MobileApp.tsx");
@@ -107,8 +109,9 @@ describe("工作区「更多」菜单（261014）", () => {
     expect(WORKSPACE).not.toContain("moreOpen");
     expect(WORKSPACE).not.toContain("onCreateNote");
     expect(APP).not.toMatch(/<NotebookWorkspace[\s\S]{0,700}onCreateNote/);
-    // 编辑入口仍在顶栏（功能没丢）
-    expect(WORKSPACE).toContain('aria-label={active?.editing ? "完成" : "编辑"}');
+    // 编辑入口仍在顶栏（功能没丢；P9 后顶栏拆到 WorkspaceTopBar）
+    expect(TOPBAR).toContain('aria-label={active?.editing ? "完成" : "编辑"}');
+    expect(WORKSPACE).toContain("onToggleEdit={toggleEdit}");
     // 切换笔记本面板仍在
     expect(WORKSPACE).toContain("open={notebookSwitchOpen}");
   });

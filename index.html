@@ -10,7 +10,8 @@
   </head>
   <body>
     <div id="root"></div>
-    <script src="./vendor/cdn/as/g/larkgroup/lake-codemirror/7.1.3/CodeMirror.js"></script>
+    <!-- 261103 P9：defer —— 不阻塞解析与首屏绘制；defer 脚本仍先于 module 脚本执行，内核按需读 window.CodeMirror。 -->
+    <script defer src="./vendor/cdn/as/g/larkgroup/lake-codemirror/7.1.3/CodeMirror.js"></script>
     <script>window.KITCHEN_URL = "./vendor/lakex-doc/kitchen-iconfont.js";</script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
