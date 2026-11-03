@@ -13,6 +13,7 @@
 - **手势**：`usePanelDrag` 新增 `allowFrom`（起手点命中 EXCLUDE 时可豁免）—— Lake 文档正文是 contenteditable，编辑态也能从正文起手拉侧栏；`canOpen` 收窄为**只认文档类型**（表格/多维表/画板/手写板自身有横滑语义 ⇒ 横滑 no-op，胶囊入口照常可用）。手机与平板同一套判据。
 - **设备实测**：pad 编辑态胶囊 top 624 / bottom 680（dock top 688，gap 8）、读态 bottom 20；编辑态右滑 → `.pad-tree`、左滑 → `.pad-outline`；phone 编辑态胶囊同样在 dock 上方，右滑 → `.side-panel--left.on`、左滑 → `.side-panel--right.on`；usheet 读态两个方向横滑都 no-op；退出编辑胶囊回到 bottom 20。
 - **大纲加宽（同日追加）**：平板右大纲 **240 → 320**（新增令牌 `--pad-outline-width`，悬浮/停靠同宽）；1280 下停靠后正文 960、悬浮时大纲 x=960。左树仍 280。
+- **修「小记特别窄」（同日用户报）**：平板块给 `.mobile-scroll` 加了 `max-width:760; margin:auto`，而它是 `.mobile-tab-pane`（column flex）的 **flex item** —— 交叉轴 auto margin 让 stretch 失效 ⇒ 宽度退化成 fit-content（实测小记时间线 **146px**、卡片 114px）。修法：平板块显式 `.mobile-scroll { width: 100% }`，max-width 与 auto margin 正常居中（实测小记 scroll/cards **760**、卡片 728；知识库 `.mobile-library` **1080**）。手机不受影响（平板块选择器只匹配 medium/expanded）。
 - **基线**：**手机 + 平板 6 态都重烤**（胶囊下移 12px 改了所有态的几何指纹）；手机 home-doc 1997、平板 home-doc **1897**（干净夹具，上一版 1912 是带着一篇测试表的脏实例），两边连跑两轮 **0 差异**（大纲不在 6 态里，加宽后再跑平板门禁仍 0 差异）。
 - **文档**：AGENTS §4 增加「文档编辑态保留胶囊 + 横滑只对文档开放」契约；MOBILE-DESIGN 补胶囊显隐/底距令牌与 pad 手势判据。
 ### 261102 · 平板第十四批：工具条全部回移动端 + 胶囊回归 + 树/大纲可固定（分支 `feat/pad-touch-ui`）· **待验收**

@@ -1250,3 +1250,8 @@ html[data-form-factor="expanded"] .nb-list,
 html[data-form-factor="expanded"] .mobile-scroll,
 html[data-form-factor="expanded"] .mobile-home-tabs,
 html[data-form-factor="expanded"] .mobile-doc-body .lake-editor-mount { max-width: 760px; margin-left: auto; margin-right: auto; }
+/* ⚠️ 上一条给 .mobile-scroll 加了 auto 外边距，而它是 .mobile-tab-pane（column flex）的 **flex item**：
+ * 交叉轴上的 auto margin 会让 stretch 失效 ⇒ 宽度退化成 fit-content（261103 实测小记时间线只剩 146px，
+ * 用户报「小记特别窄」）。显式 width:100% 让 max-width 生效、auto margin 正常居中。 */
+html[data-form-factor="medium"] .mobile-scroll,
+html[data-form-factor="expanded"] .mobile-scroll { width: 100%; }

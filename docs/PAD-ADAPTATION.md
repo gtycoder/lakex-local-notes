@@ -678,4 +678,5 @@ P0 体面单栏（1–2）→ P1 双栏（3–5）→ 工具栏 T0（5–7，§8
 - **手势**：`usePanelDrag.allowFrom` 允许从 Lake 正文（contenteditable）起手；`canOpen` 只认文档类型 —— 其余编辑器横滑 no-op（胶囊仍可用）。手机与平板同一条判据。
 - **设备（261103）**：pad 读态胶囊 bottom 20；pad 编辑态胶囊 bottom 680（dock 688，gap 8）、右滑开 `.pad-tree`、左滑开 `.pad-outline`；phone 编辑态等价（`.side-panel`）；usheet 横滑 no-op。
 - **大纲加宽（同日）**：`.pad-outline` **240 → 320**（令牌 `--pad-outline-width`；悬浮/停靠同宽）。实测 1280：悬浮 x=960 w=320；停靠后正文 960、main row。左树仍 280。
+- **小记变窄修复（同日）**：平板块 `.mobile-scroll { max-width:760; margin:auto }` 与「它是 column flex 的 flex item」冲突 —— 交叉轴 auto margin 让 stretch 失效 ⇒ width 退化为 fit-content（实测 146px）。补 `html[data-form-factor="medium|expanded"] .mobile-scroll { width: 100% }`（实测 760；知识库 1080）。**改这块宽度时记住：flex item 上 max-width + auto margin 必须配 width:100%。**
 - **基线**：手机 6 态（home-doc 1997）+ 平板 6 态（home-doc 1897，干净夹具）都重烤，连跑两轮 0 差异（大纲不在 6 态里，加宽后平板门禁仍 0 差异）。
