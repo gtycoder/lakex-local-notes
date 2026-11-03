@@ -8,6 +8,13 @@
 
 ## 0. 最新交接（261027）
 
+### 261103 · 十一批：手写板性能观测 + v4 演进提案（先量化再决定）· **本地改动**
+- **背景**：用户问「手写板要不要重新设计 / 有没有增量保存与虚拟加载」。结论：**不重写**（core/几何/历史纯函数分层、只渲染当前页、缩略图视口虚拟化、页级 undo patch、防抖+未变不写都已就位），真正缺口在**存储/加载粒度**。
+- **已落地（默认零行为改变）**：`src/features/ink/inkPerfStats.ts` —— 在 `parseInkBody`（打开）与 `inkToBody`（保存）两处记录 `{kind, ms, bytes, pages, strokes?, points?}`（环形 40 条）；`window.__inkPerfStats()` 取数、`__inkPerfReset()` 清空；开日志 `localStorage["lakex-local-notes-v3.ink-perf-debug"]="1"`。阈值常量：正文 >4MiB / 页数 >50 / 序列化 >50ms / 解析 >300ms（命中打 warn，作为 v4 立项判据）。
+- **设备实测（桌面 dev / CDP 9222）**：打开 1 页 45 笔样本 → load 0.1–0.5ms / 14.8KB；落一笔保存 → save 0.4ms / 15.1KB / 46 笔 / 515 点。
+- **提案写入** `docs/INK-PAD.md` 新增「手写板 v4 演进提案（未立项，先观测）」：页粒度 `manifest.json + pages/p-<id>.json`、脏页增量写、manifest+当前页±预取加载、页对象内容寻址同步、沿用「新端写 v4 / 旧端只读」兼容先例；列出立项阈值、改动面与风险、明确不做（journal 半吊子 / 页内笔迹裁剪）。
+- **单测**：`inkPerfStats.test.ts` 3 例（阈值判据独立 / 环形 40 条 / debug 开关）。
+- **门禁**：tsc / 全量 vitest / check:mobileui / diff-check 全绿。
 ### 261103 · 十批：手写板「笔迹偶发消失」根因修复（中断即丢弃 ⇒ 提交已完成部分）· **本地改动**
 - **用户复测反馈**：九批按批渲染后**仍然偶发消失**，同一操作在画板里完全正常 ⇒ 说明不是通用渲染压力，是 ink 自己的收口路径。
 - **根因**：`InkPad` 的 `cancelPointer` 绑在 `onPointerCancel` **和 `onLostPointerCapture`** 上，且第一行就把 `activeStrokeRef` 置空 ⇒ 只要一次落笔**没收到配对的 pointerup**（快速滑动时浏览器可能先发 `lostpointercapture`、或捕获被释放/重定向，up 打到别的元素上），已经画出来的笔迹就被**静默丢弃**；更糟的是 `activePointerRef` 残留会让后续 pointerdown 直接 `return`（画不上，要重开文档）。画板（Drawnix）没有这条路径，所以同操作正常。

@@ -112,3 +112,39 @@ v1 不包含：OCR/手写转文字、套索、局部像素橡皮、导出 PNG/PD
 - **导入 IO**：`pdfImport` 流式（`onPage` 逐页 + 上传池 3 路与栅格化重叠）；进度分 raster/upload（UI「导入 PDF」→「正在写入页面」）；失败/取消按 URL 定向清理本轮已上传页图（桌面 `cleanNoteOrphans`，移动新增 `bridge.cleanNoteOrphans` 写域登记）；移动导入结束删暂存 PDF + 清原生渲染缓存；启动扫陈旧 cacheDir。
 - **护栏**：`inkPerf.test`（500 笔新增 <5ms、300 页 serialize <35ms）、`InkPageStrip.test`（pageWindow）、`inkPadWiring`（v3 模型/导航/告警/池宽/清理静态契约）、`inkOpenReadOnly`（打开=只读不变）、`inkDoc.test`（v3 往返/坏页/旧版只读）。
 - **设备待办**：Kotlin 侧（webp 缩略图、cleanupCache）只过 `compileDebugKotlin`，未真机；发版前需看一次 300 页导入进度与全局预览首开。
+## 手写板 v4 演进提案（页粒度存储 / 增量保存 / 虚拟加载）—— **未立项，先观测**
+
+> 261103 十一批结论：**不需要重写 UI/几何/历史层**（core/inkDoc 纯数据 + 纯函数、渲染只画当前页、
+> 缩略图视口虚拟化、页级 undo patch、500ms 防抖 + 未变不写盘都已就位）；真正的缺口在**存储/加载粒度**。
+
+**缺口（事实）**
+- 保存 = `inkToBody(整篇)` 全量 JSON 序列化；实测 300 页 × 10 笔（≈10.9 MiB）一次 **26.7ms**，大文档里每画几笔就付一次；字符串峰值内存 ≈ 2×。
+- 打开 = `JSON.parse` 整个 body；**所有页笔迹常驻内存**（渲染省了，内存没省）。
+- 同步 = body 变了就整篇上传（内容寻址只省「没变」的轮次，不省「改一笔 ≈ 传整篇」的字节）。
+- 现有硬上限把最坏值锁住：1000 页 / 单页 2 万笔 / 总 10 万笔 / 30 万点 / 正文 **16 MiB**。
+
+**v4 形态（页是天然边界：页内笔迹提交后不可变）**
+```
+manifest.json          # 版本 / 页序 / 页元信息 / 每页内容 hash（几十字节~几 KB）
+pages/p-<pageId>.json  # 单页笔迹（不可变、内容寻址）
+```
+- **保存**：只序列化脏页 + 重写 manifest（O(当前页) 而不是 O(整篇)）。
+- **加载**：manifest + 当前页 ± 预取相邻页，其余页 LRU 卸载（内存 ≈ 常数 × 单页）。
+- **同步**：页对象内容寻址天然去重，改一笔只传那一页 + manifest；复用现有「资产声明差集」思路。
+- **兼容**：沿用 v1→v2→v3 先例 —— **新端写 v4、旧端读到 v4 进只读保护**；不写迁移（按「能否删了重建」原则）。
+
+**立项阈值（任一命中再做）**
+1. 单篇正文 > **4 MiB**；2. 页数 > **50** 且仍在增长；3. `inkToBody` 单次 > **50ms**；4. 打开解析 > **300ms**；5. 真机观察到落笔掉帧或同步慢。
+
+**观测入口（已落地，默认零行为改变）**
+- `window.__inkPerfStats()` → `{ enabled, samples, thresholds }`：每次 load/save 记录 `{kind, ms, bytes, pages, strokes?, points?}`，环形 40 条；`__inkPerfReset()` 清空。
+- 开日志：`localStorage["lakex-local-notes-v3.ink-perf-debug"]="1"`（或 `window.__inkPerfDebug = true`）→ 每样本一行 `[ink-perf] save 26.7ms 10.9MiB pages=300`，超阈值打 warn。
+
+**改动面与风险（立项后的估算）**
+- 移动端 `BodyStorePlugin`/`bridge` 的「正文 = 单文件」假设、历史快照、回收站/purge、S3 v3 同步（body 单对象 → 多对象或 manifest 引用）、快照门禁与测试。
+- 属**中等规模架构演进（1–2 天量级 + 真机验收）**，不是改几行；未达阈值前收益不抵复杂度（AGENTS §3#17）。
+
+**明确不做**
+- 半吊子「本地 journal 增量落盘、同步仍整篇」：本地省 CPU 但同步语义没对齐，复杂度不值。
+- 页内笔迹级视口裁剪：一页 A4 整页可见，收益 ≈ 0。
+

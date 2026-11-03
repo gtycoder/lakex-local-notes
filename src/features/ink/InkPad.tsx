@@ -17,6 +17,7 @@ import {
 import { canonicalDocBody } from "../../core/docBaseline.js";
 import { readInkNavPage, writeInkNavPage } from "./inkNav.js";
 import { hitTestStroke, strokeToSvgPath } from "./inkGeometry.js";
+import { inkPerfDebugEnabled, installInkPerfHooks, recordInkPerf } from "./inkPerfStats";
 import { installInkInputDiagnostics, installPointerInputDebugHooks } from "../board/boardInputDiagnostics";
 import { createStrokePathCache, renderedStrokesForPage, type RenderedStrokePath } from "./inkRenderCache.js";
 import {
@@ -129,8 +130,21 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
   // 外部真正需要换正文时由宿主 bump reloadKey 重挂载。
   // v3：当前页是设备本地视图（core/inkNav.ts），优先用它；没有记录才回退 v1/v2 正文里的旧 activePageId。
   const [doc, setDoc] = useState<InkDoc | null>(() => {
+    // 261103 十一批：量一下「打开大文档」的解析成本（默认只记数，debug 才打日志）。
+    const parseStartedAt = typeof performance !== "undefined" ? performance.now() : 0;
     const parsed = parseInkBody(content);
     if (!parsed) return null;
+    if (typeof performance !== "undefined") {
+      recordInkPerf({
+        kind: "load",
+        ms: performance.now() - parseStartedAt,
+        bytes: typeof content === "string" ? content.length : 0,
+        pages: parsed.pages.length,
+        ...(inkPerfDebugEnabled()
+          ? { strokes: parsed.pages.reduce((n, p) => n + p.strokes.length, 0), points: 0 }
+          : {}),
+      });
+    }
     const savedPageId = readInkNavPage(noteId);
     if (savedPageId && parsed.pages.some((page) => page.id === savedPageId)) {
       return { ...parsed, activePageId: savedPageId };
@@ -224,6 +238,10 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
     if (!noteId || !doc?.activePageId) return;
     writeInkNavPage(noteId, doc.activePageId);
   }, [doc?.activePageId, noteId]);
+  /** 261103 十一批：性能观测取数钩子（默认只记录，不打日志；见 inkPerfStats.ts）。 */
+  useEffect(() => {
+    installInkPerfHooks();
+  }, []);
   /** 261103 九批：手写板落笔诊断（默认关；开启方式见 boardInputDiagnostics.ts 头注释的 ink key）。 */
   useEffect(() => {
     installPointerInputDebugHooks();
@@ -303,7 +321,23 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
     const current = docRef.current;
     if (!current) return null;
     try {
+      // 261103 十一批：保存路径耗时/字节观测（判断是否该做页粒度增量保存）。
+      const startedAt = typeof performance !== "undefined" ? performance.now() : 0;
       const body = inkToBody(current);
+      if (typeof performance !== "undefined") {
+        recordInkPerf({
+          kind: "save",
+          ms: performance.now() - startedAt,
+          bytes: body.length,
+          pages: current.pages.length,
+          ...(inkPerfDebugEnabled()
+            ? {
+                strokes: current.pages.reduce((n, p) => n + p.strokes.length, 0),
+                points: current.pages.reduce((n, p) => n + p.strokes.reduce((m, s) => m + s.points.length, 0), 0),
+              }
+            : {}),
+        });
+      }
       setSaveError(null);
       return body;
     } catch (error) {
