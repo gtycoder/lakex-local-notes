@@ -127,7 +127,7 @@ body 16 与行标题 16 不动（触屏正文档已达标）。**编辑器正文
 **首页顶栏右上角（261014 用户定稿）**：固定挂**两枚**图标 = 排序（小记）/ 视图（知识库）+ **云同步**（恒在最右、不随 tab 变）；
 左上补一格等宽空槽 `.mobile-topbar-gap` ⇒ tab 仍居中（冷启动骨架同构：左 2 槽 / tab / 右 2 槽）。
 **底部胶囊 = 搜索 · ＋ · AI**（排序/视图与云同步都**不在**胶囊里）。
-**胶囊显隐（261103 定稿）**：文档（Lake）**编辑态也常显**，并抬到底部 dock 上方（`.mobile-bottom-bar--above-dock` = dock 56 + gap 8；`.mobile-workspace--capsule-edit` 给正文补底距）；表格/多维表/画板/手写板编辑态仍隐藏（各有底部工具条）。**底距 = status + gap + safe − `--mobile-capsule-drop`（12）**（261103 整体下移一档；只改这一个令牌）。
+**胶囊显隐（261103 二轮）**：**文档编辑态常显**胶囊并抬到 dock 上方（`.mobile-bottom-bar--above-dock`；编辑态也可能没光标，需要能切目录/大纲/标签/笔记本）；**允许被覆盖** —— 键盘弹起时隐藏（`capsuleHidden` 里的 `keyboardOpen`），dock 二级工具栏展开时靠层序盖住（胶囊 z=2 < dock 容器 z=4）。表格/多维表/画板/手写板编辑态仍隐藏。表格**阅读态**抬到 Univer 工具条之上（`.mobile-bottom-bar--above-sheet`）。**底距 = status + gap + safe − `--mobile-capsule-drop`（12）**（261103 整体下移一档；只改这一个令牌）。
 **工作区胶囊 = 文档树 · 标签页 · 大纲 · 切换笔记本**（261014：原「更多」已删 —— 编辑走顶栏「编辑 / 完成」、新建走抽屉 ＋ 与行内 ＋；
 工作区菜单里也不再放搜索 / 设置）。**笔记本的编辑入口 = 首页「知识库」长按卡片**（重命名 / 设置图标 / 删除笔记本；
 **不含**新建文档·新建分组）；抽屉里的笔记本行只展示「图标 + ＋」，不放 ⋮。长按唯一实现 = `src/mobile/ui/useLongPress.ts`。
@@ -250,6 +250,8 @@ Toast        .mb-toast-host > .mb-toast[--error] > (.mb-toast__text, .mb-toast__
 
 **手写板（261102，布局 v3：悬浮 overlay + 精简工具）**：页面 / 纸张 / 笔迹都是正文数据 —— **纸张只能编辑态改**；翻页 / 缩放 / 全局预览是视图操作，两端（阅读/编辑）都可用且不写盘。移动端 = **顶部悬浮 pill**（翻页 ｜ 缩放 ｜ 全局预览，阅读/编辑同一条，absolute 不占布局）+ **底部悬浮工具坞仅编辑态**（absolute、bottom 8 + 安全区）：工具行收成一屏 7 键（笔/高亮/橡皮 + 当前色 + 当前笔宽 + 撤销/重做，44 盒；颜色 28 视觉内圆、点开悬浮色板；笔宽点开 4 档小面板），纸张行 40（视觉 36 + `::after` 命中 44）；**全局预览为悬浮覆盖**（导航下方、45dvh 内滚动、不推画布）；阅读态无工具坞/说明行，底部只剩工作区胶囊（pad 让位走「状态栏 + 间隔 + 安全区 + 胶囊 + 8」tokens 表达式）。悬浮面用 `--lake-bg-panel` + 0.5px 边 + `--lake-shadow-popover`，**不做毛玻璃/backdrop-filter**。纸面在「悬浮导航—悬浮工具坞」之间的可视区居中（stage 上下补出 `--ink-mobile-nav-h` / `--ink-mobile-dock-h`；只读态只补顶部），不再按整屏居中。
 
+**手写板笔迹色板（261103 批4）**：唯一来源 `src/features/ink/inkPalette.ts` 的 `INK_STROKE_COLORS` —— **14 色 = 2 行 × 7**（深灰 + 中灰 + 红/橙/琥珀/绿/蓝/紫 + 6 个淡色，淡色行给高亮/浅标注用），桌面工具条与手机/平板悬浮色板共用这一份；颜色只是正文值（`InkStroke.color: string`），**inkDoc 版本与点编码不变**，加色不需要动格式。移动端色板容器 = 网格 `repeat(7, var(--mb-tap-min))`，命中盒仍 44×44。
+
 页内交互（② 层）已定：设置页 = 抽屉九页 + 移动端自有版式原语（`src/mobile/ui/settingsPrimitives.tsx`，
 `data-set-id` 契约与桌面 `settingsSearch.ts` 对齐，**只共享语义不共享组件**）；小记 = 时间线 + 写作卡九项工具条。
 
@@ -262,6 +264,7 @@ Toast        .mb-toast-host > .mb-toast[--error] > (.mb-toast__text, .mb-toast__
 - **横向手势只对文档开放**（与手机同一条判据）：`usePanelDrag` 的 `allowFrom` 允许从 Lake 正文（contenteditable）起手，`canOpen` 收窄为**只认文档类型**；表格/多维表/画板/手写板自身有横滑语义 ⇒ 手势 no-op（胶囊入口照常可用）。
 - **expanded 只多两件事**：① 更宽 —— 正文满宽 + `--mb-reader-pad: 32px`（手机 20）；首页内容宽 = **同一条** `--pad-content-width: min(92%,1200px)`（小记时间线与知识库同宽、随窗口自适应；书架列按 `repeat(auto-fill, minmax(96px,1fr))`）；② 树 / 大纲默认**悬浮覆盖**（`.pad-tree` = `--pad-tree-width: clamp(240px,22vw,360px)` / `.pad-outline` = `--pad-outline-width: clamp(240px,25vw,420px)`，top = `--pad-float-top`；层序 `--mobile-z-drawer`(45)，**不要用桌面 `--lake-z-sidebar`(250)**），收起路径 = 胶囊 / 点正文 / Esc；面板头有**固定按钮**，固定 = `position:static` 停靠进布局（`.pad-main--docked` 三栏、可编辑空间收窄），再次点击回到悬浮。固定状态**持久化**（设备本地 `lakex-local-notes-mobile.pad-panels`，只存 pinned；不进正文/同步；门禁每态前清掉以保证基线稳定）。
 - **正文画布吃满可视编辑空间**：`.mobile-doc-body > .lake-editor` 与 `.lake-editor-mount` 在 expanded 下 `height:100%`（内核原本按内容撑成 ~85px ⇒ 下方一大块空白点不到）。
+- **261103 六批 A1/A4**：横屏刘海让位 —— `.pad-tree`（padding-left）/ `.pad-outline`（padding-right）接 `--mobile-left/right-safe-area`；**页签关闭已满足 44 Rule** —— 页签内小 × 删除，关闭动作改为顶栏右侧 `.toolbar__button`（44×44，关闭当前页签，无活动页签禁用）；「＋ 打开文档」仍在页签条内 30×30（唯一残留的小目标）。
 - 细节规格以 `docs/PAD-ADAPTATION.md` §10 最新一批为准（该文件是长期 pad 规格）。
 
 ## Motion

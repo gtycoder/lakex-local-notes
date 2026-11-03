@@ -1409,7 +1409,7 @@ PY
   （默认 **1000×20**），随后 `executeCommand("sheet.command.insert-sheet", { sheet: { rowCount, columnCount } })`。
   `@univerjs/core` 里那两个 `DEFAULT_WORKSHEET_ROW_COUNT(_KEY)` **不参与**这条路径（只有常量，没读配置服务）。
   ⚠️ 传 `footer` 时要**给全** `sheetBar/statisticBar/menus/zoomSlider` 四个开关，否则会把它们顶掉。
-  （本项目取 50×16，与 `core/usheetDoc.ts` 的空表是同一组常量 ⇒ 单一来源。）
+  （本项目取 35×16（261103 由 50 改），与 `core/usheetDoc.ts` 的空表是同一组常量 ⇒ 单一来源。）
 - **单元格图片是"整格覆盖"语义**：`insertCellImageByUrl(url, location)` 每次都 `createDocumentModelWithStyle("")`
   新建空文档，`BuildTextUtils.drawing.add` 后 `syncExecuteCommand(SetRangeValuesCommand, { p: 新文档, t: 1 })`
   ⇒ ① **一格只能放一张**，第二张替换第一张；② 格内原有文字 `v` 仍留在数据里，但 `t:1` 让单元格渲染富文本
@@ -1992,3 +1992,20 @@ DOM 文本节点扫描（移动端文档 `disableVirtualRendering:true`，整篇
 
 **④ 判据（以后碰这个功能先看）**：内核`lockedtext` 常量 ≠ 能力；面板项必须有 `registerCardSelect` + `customCard.cards` 两处才算"插得进、存得住、读得回"；"加密"必须逐项证明**没有明文路径**（正文/历史/快照/搜索缓存/导出/剪贴板），只用 UI 遮挡一律判为假加密。
 **另一个常被漏掉的口子 = 生命周期**：卡片自己 dedupe 的防抖窗口里，文档 tab 还是"干净"的 ⇒ 关标签/锁文档/退出必须先把卡内未落盘内容补写（见 ③ 的 flush 注册表）。
+
+### 5.44 画板（Drawnix）移动端：工具条几何按「视口宽 720」分叉、手型工具按 UA 摘除（261103 实测）
+
+**现象**：平板（1280×800）画板编辑态左侧竖向工具条顶部被裁（`rect=[18,-131,61,406]`），素材库 / AI / 选择 / 思维导图几项在视口外；用户报「无法使用手型工具移动画布」。
+
+**① 几何分叉点 = 视口宽 `720px`，不是 UA、也不是形态档**：
+- draNX 产物 CSS 只在 `@media (width<=720px)` 把 `.draw-toolbar` 改成顶部横轨；**>720px 一律回桌面几何**（`top:50%; left:18px; transform:translateY(-50%)`）。
+- 上游 Drawnix 的 `.drawnix--mobile .draw-toolbar{top:20px}` 特异性高于桌面那条 —— 它改掉了 `top`，**但 `translateY(-50%)` 留了下来** ⇒ 竖向轨以「y=20」为中线排布，上半截必然顶出视口。
+- 所以「手机竖屏工具条被裁」**不成立**（412×843 命中 ≤720，是正常顶部横轨）；裁剪只会出现在**移动壳视口 >720px**：平板 / 折叠屏展开 / 手机横屏 / 分屏。
+- 我们的收口 = `src/mobile/board/board.css`（`@media (min-width:721px)`：取消遗留 translateY、`top:12px`、`max-height:calc(100% - 24px)`、`overflow-y:auto`）。**不要再按形态档（`data-form-factor`）判据**：分叉条件是视口宽。
+
+**② 手型（hand）工具原本被 vendor 按 UA 摘除 —— 已用依赖补丁恢复（261103 定稿）**：
+- 工具条构建处原本是 `isMobile && pointer === hand ⇒ null`，`isMobile` 来自 `mobileDetect(navigator.userAgent)`；移动 UA 下 `.drawnix` 含 `drawnix--mobile`、`[title*="手形"]` 计数 = 0。
+- **定稿 = 打依赖补丁**：`patches/lakex-drawnix+0.1.0.patch` 删掉 `index.mjs`（ESM）与 `index.js`（CJS）两处 UA 过滤 ⇒ 移动端工具条 = **桌面同款**（项序 素材库/AI/手形/选择/思维导图/文本/画笔/箭头/形状/图片/导出）；排布仍由 vendor 媒体查询决定（**手机顶部横轨可横滑**、**>720px 左侧竖排**，配合 `src/mobile/board/board.css` 的 max-height + overflow-y 可纵滚）。**升级 lakex-drawnix 后必须复核**：两处过滤 grep 计数 = 0，且设备上工具条出现「手形工具 — H」、选中后单指拖动改 `.viewport-container` 的 scroll。
+- **反面案例（已撤回）**：261103 一轮曾不改 vendor、由宿主自制「平移画布」开关（44×44 悬浮按钮 + 透明手势层）——用户判定"不伦不类"并否决，且该层会盖住工具条。**不要再自制第二套画板平移工具**。
+- **③ 竖向轨图标「左右错位」的根因 = 隐藏 radio input 参与 flex 布局（261103 用户图1）**：每个工具项是 `<label class="tool-icon">` 里放一个 `input.tool-icon_type_radio`（15px，视觉上是隐藏选项）+ `.tool-icon__icon`（36px）。label 是 `display:flex; justify-content:center`，但 **input 仍占 15px 宽度** ⇒ 图标被挤到右侧 15px、label 宽度也被撑成 51px（实测按钮中心 48.5 / 图标中心 56，白卡 61 宽且图标偏心）。修法 = 把该 input 改成视觉隐藏（`position:absolute; 1px; opacity:0`，label 加 `position:relative`），列宽回 36px、卡片回 46px、图标左右余量 9/9；**不要**用 margin/translate 硬掰图标位置。
+- **判据**：凡涉及 drawnix 工具栏「某项不见了」，先查 UA 过滤与 `@media (width<=720px)` 两条，不要先怀疑样式层叠；「某一项偏了」则先看项内是否有不可见但占位的表单控件。

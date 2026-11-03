@@ -654,7 +654,8 @@ P0 体面单栏（1–2）→ P1 双栏（3–5）→ 工具栏 T0（5–7，§8
 - **收起键盘浮钮**：平板没有 dock ⇒ `useKeyboard().keyboardOpen` 时顶栏内渲染 `.pad-kb-dismiss`（fixed 右下、`.mb-btn` 44 触达）；顶栏 `onPointerDown` 一律 blur 收 IME。
 - **门禁与基线**：平板 6 态**重烤**（home-doc 2012 → 1913：树不再常驻挂载 + 正文几何变；其余 1822/1822/1827/1912/1849 不变），连跑两轮 0 差异；手机 6 态元素数全不变（1997/1822/1822/1827/1912/1849），`pm clear` 重灌夹具后只有 home-doc 指纹变（行 key 带文档 id，装置既有约定）⇒ 按 README 重烤 `mobile-snap.json` 后 0 差异。`mobileLayers.test.ts` 的 `pad.css` 基线 **152 → 151**。
 - **设备实测（lake_tab / emulator-5582，1280×800）**：默认 tree/outline 不渲染；开树 280 / z=45；点树行开文档 → 树收起；点正文 → 收起；Esc → 收起；大纲 320 同理（261103 加宽）；键盘模拟（视口压到 400）→ 「收起键盘」浮钮 85×44 出现在右下，点顶栏后 activeElement=BODY、恢复视口后浮钮消失。
-- **已知没做（有意）**：无遮罩；跨档 32px 滞后（§3.2#5）；横屏左右 `safe-area-inset-left/right`；顶栏小按钮（页签关闭 26 / ＋ 28）低于 44 Rule —— 例外登记在 `docs/MOBILE-DESIGN.md` 的「Pad shell」一节。
+- **已知没做（有意）**：无遮罩；跨档 32px 滞后（§3.2#5）。**页签关闭已满足 44 Rule（261103 六批 A4）**：页签内小 ×（26/28）删除，关闭动作收到顶栏右侧一枚 `.toolbar__button`（**44×44**，关闭当前页签，无活动页签时禁用）——原因是 `.pad-tabs` 是 `overflow-x:auto`，伪元素扩命中盒会被裁、抬高条高会改十四批外壳几何。「＋ 打开文档」仍在页签条内（30×30，唯一残留的小目标）。
+- **261103 六批 A1：横屏左右安全区已接**（此前「已知没做」）：`.pad-tree` padding-left / `.pad-outline` padding-right 用 `--mobile-left/right-safe-area`（= env() 与原生 WindowInsets 注入值取 max；竖屏为 0 ⇒ 无观感变化）。
 
 ### 10.16 第十四批：**口径反转** —— 工具条全部回移动端 + 胶囊回归 + 树/大纲可固定（分支 `feat/pad-touch-ui`）
 
@@ -674,7 +675,8 @@ P0 体面单栏（1–2）→ P1 双栏（3–5）→ 工具栏 T0（5–7，§8
 
 ### 10.17 胶囊常显（文档编辑态）+ 底距下移 + 编辑态手势（261103）
 
-- **胶囊**：底距 = status + gap + safe − `--mobile-capsule-drop`(12)（32 → 20px；手机/平板同一处）。文档编辑态**常显**并抬到 dock 上方（`.mobile-bottom-bar--above-dock` = dock 56 + gap 8）；`.mobile-workspace--capsule-edit .mobile-doc-body` 补正文底距。表格/多维表/画板/手写板编辑态仍隐藏。
+- **胶囊**：底距 = status + gap + safe − `--mobile-capsule-drop`(12)（32 → 20px；手机/平板同一处）。**文档编辑态常显并抬到 dock 上方**（261103 二轮定稿；期间曾按一轮验收整体隐藏，已恢复）；允许被覆盖：键盘弹起隐藏、dock 二级面板靠层序（胶囊 z=2 < dock z=4）盖住。
+- **首页横滑（261103 验收修正）**：~~平板不响应手指横滑（整屏手势与顶栏页签冲突）~~ ⛔ **已回退**：pad 与手机同一套原生横向分页（手指横滑 + scroll-snap），`pad.css` 里 `html[data-form-factor="expanded"] .mobile-tab-stage` 的 `overflow-x:hidden/touch-action:pan-y/scroll-snap-type:none` 特例已删除。
 - **手势**：`usePanelDrag.allowFrom` 允许从 Lake 正文（contenteditable）起手；`canOpen` 只认文档类型 —— 其余编辑器横滑 no-op（胶囊仍可用）。手机与平板同一条判据。
 - **设备（261103）**：pad 读态胶囊 bottom 20；pad 编辑态胶囊 bottom 680（dock 688，gap 8）、右滑开 `.pad-tree`、左滑开 `.pad-outline`；phone 编辑态等价（`.side-panel`）；usheet 横滑 no-op。
 - **大纲加宽（同日）**：`.pad-outline` **240 → 320**（令牌 `--pad-outline-width`；悬浮/停靠同宽）。实测 1280：悬浮 x=960 w=320；停靠后正文 960、main row。左树仍 280。

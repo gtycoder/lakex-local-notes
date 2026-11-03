@@ -30,7 +30,7 @@ web
 
 它存在，是为了像思源笔记那样「自持数据」：完全离线可用、复制到微信等第三方时图片正常显示、不依赖任何云端服务就能写作与检索。
 
-成功 = ① 数据永不丢失（由本地机制保证）；② 多设备可轮换并把编辑传播出去；③ 在大库下依然可用（长期压测基线 10 万文档 / 100 万附件；日常设计基线 5000 文档 / 2 万附件，全库含附件约 20GB）。
+成功 = ① 数据永不丢失（由本地机制保证）；② 多设备可轮换并把编辑传播出去；③ 在大库下依然可用（口径已按 v3 定稿对齐 AGENTS §1：**目标量级 2 万文档 / 20 万附件**；索引硬上限 10 万文档 / 2 万小记。历史写的「10 万文档 / 100 万附件」是早期压测设想，已不参与决策）。
 
 ## Positioning
 
@@ -43,7 +43,7 @@ web
 - 桌面端 = Electron 44 桌面应用（macOS arm64 优先）；移动端 = Vite + Capacitor Android（正式端之一）。
 - 数据后端：桌面 better-sqlite3 + 文件系统；移动 sql.js / Capacitor SQLite。
 - 资源：图片/附件按笔记分目录 `note-assets/{noteId}/`，本地 HTTP 资源服务（:19876）供编辑器与「复制到微信」使用（webp→png）；Lake 编辑器约 35 个 CDN 资源全量本地镜像，保证离线。
-- S3：七牛 Kodo（S3 兼容 API），同步并发上限 8；协议、GC 与保留链见 `docs/SYNC-PROTOCOL.md`（§13/§14），存储分层见 `docs/STORAGE-LAYERS.md`。
+- S3：七牛 Kodo（S3 兼容 API），同步并发上限 **12**（261026 用户批准 8→12，见 AGENTS §3#13）；协议、GC 与保留链见 `docs/SYNC-PROTOCOL.md`（§13/§14），存储分层见 `docs/STORAGE-LAYERS.md`。
 - 文档分工：`README.md` 概览 / `HANDOFF.md` 唯一交接（当前状态/待办/坑）/ `AGENTS.md` 长期红线；`docs/` 按主题存契约（`LAKEX-CONTRACT.md` 等）。文档与界面均为简体中文。
 - 开发环境：Node 24（必须）、Gitee 远程 `origin`、主分支 `master`、macOS。
 
