@@ -1,24 +1,28 @@
 /**
- * 画板输入诊断（261103 八批）：为「快速落笔 / 快速擦除不生效」提供**可复现的证据**。
+ * 指针落笔诊断（261103 八/九批）：为「快速落笔 / 快速擦除不生效」提供可复现的证据。
+ * 目前两处接入：**画板（Drawnix）** 与 **手写板（ink）** —— 两者都是自绘指针管线。
  *
- * 只读观测，默认关（生产零开销）：在宿主根节点上以 capture 阶段挂 pointerdown/move/up/cancel/
- * lostpointercapture，按「一次落笔」聚合后：
- *   · 写环形缓冲（最近 60 笔）+ console.info 一行摘要；
- *   · 通过 window.__lakeBoardInputStats() 取结构化数据（含 mouseAfterPen 标记）；
- *   · 通过 window.__lakeBoardInputReset() 清空。
+ * 只读观测，默认关（生产零开销）：capture 阶段挂 pointerdown/move/up/cancel/lostpointercapture，
+ * 只统计落在指定画布选择器内的落笔，按「一次落笔」聚合：
+ *   · 环形缓冲（最近 60 笔）+ 一行 console.info 摘要；
+ *   · window.__lakeBoardInputStats() / __lakeInkInputStats() 取结构化数据；
+ *   · __lakeBoardInputReset() / __lakeInkInputReset() 清空。
  *
- * 开启方式（桌面 devtools / 移动端 CDP 均可）：
- *   localStorage.setItem("lakex-local-notes-v3.board-input-debug", "1")  → 重开画板标签生效
- *   或 window.__lakeBoardInputDebug = true 后重开画板标签
- * 关闭：删掉该 key（或置 0）后重开画板标签。
+ * 开启方式（桌面 devtools / 移动端 CDP）：
+ *   localStorage.setItem("lakex-local-notes-v3.board-input-debug", "1")   // 画板
+ *   localStorage.setItem("lakex-local-notes-v3.ink-input-debug", "1")     // 手写板
+ *   （或 window.__lakePointerInputDebug = true 一开全开；旧的 __lakeBoardInputDebug 仍有效）
+ * 改完**重开对应文档标签**生效；删 key 关闭。
  *
  * 判读口径：
  *   · moves 很少（<2）且 ups=1：事件压根没进来（宿主/浏览器层面被吃掉）；
- *   · moves 很多但画面无笔迹：事件进来了、plait 没消费（输入状态机问题）；
- *   · cancels > 0：被 pointercancel 打断（滚动/手势竞争或系统手势）；
- *   · mouseAfterPen=true 且随后鼠标笔画 moves>0 但无效果：笔→鼠标输入类型切换卡住（已知可疑点）。
+ *   · moves 很多但画面无笔迹：事件进来了、引擎没消费（输入状态机问题）；
+ *   · cancels > 0：被 pointercancel 打断（滚动/手势竞争、系统手势）；
+ *   · mouseAfterPen=true 且随后鼠标笔画 moves>0 但无效果：笔→鼠标输入类型切换卡住。
  */
-export interface BoardStrokeDiag {
+export interface PointerStrokeDiag {
+  /** 来源：board（画板）/ ink（手写板）。 */
+  label: string;
   pointerType: string;
   downs: number;
   moves: number;
@@ -30,17 +34,36 @@ export interface BoardStrokeDiag {
   startedAt: number;
   endedAt: number;
   ms: number;
-  /** 本笔是否属于「已经出现过 pen 笔画之后的鼠标笔画」（识别笔→鼠标切换卡住）。 */
+  /** 本笔是否属于「已经出现过 pen 笔画之后的鼠标笔画」。 */
   mouseAfterPen: boolean;
 }
 
-const MAX_STROKES = 60;
-const STORAGE_KEY = "lakex-local-notes-v3.board-input-debug";
+/** 兼容旧名（画板侧读的是同一个结构）。 */
+export type BoardStrokeDiag = PointerStrokeDiag;
 
-let strokes: BoardStrokeDiag[] = [];
-let sawPenStroke = false;
-const installedRoots = new WeakSet<Element>();
-let windowHooksInstalled = false;
+const MAX_STROKES = 60;
+const BOARD_KEY = "lakex-local-notes-v3.board-input-debug";
+const INK_KEY = "lakex-local-notes-v3.ink-input-debug";
+
+export type PointerDiagLabel = "board" | "ink";
+
+interface DiagConfig {
+  label: PointerDiagLabel;
+  storageKey: string;
+  /** 只统计命中该选择器的落笔（null = 根节点本身也算）。 */
+  selector: string;
+}
+
+const CONFIGS: Record<PointerDiagLabel, DiagConfig> = {
+  board: { label: "board", storageKey: BOARD_KEY, selector: ".plait-board-container" },
+  ink: { label: "ink", storageKey: INK_KEY, selector: ".ink-page-svg" },
+};
+
+interface DiagBucket {
+  strokes: PointerStrokeDiag[];
+  sawPenStroke: boolean;
+  pending: PendingStroke | null;
+}
 
 interface PendingStroke {
   pointerType: string;
@@ -53,24 +76,39 @@ interface PendingStroke {
   startedAt: number;
 }
 
-let pending: PendingStroke | null = null;
+const buckets: Record<PointerDiagLabel, DiagBucket> = {
+  board: { strokes: [], sawPenStroke: false, pending: null },
+  ink: { strokes: [], sawPenStroke: false, pending: null },
+};
+const installedRoots = new WeakSet<Element>();
+let windowHooksInstalled = false;
 
-export function boardInputDiagEnabled(): boolean {
+function enabled(config: DiagConfig): boolean {
   if (typeof window === "undefined") return false;
-  if ((window as { __lakeBoardInputDebug?: boolean }).__lakeBoardInputDebug === true) return true;
+  const w = window as { __lakePointerInputDebug?: boolean; __lakeBoardInputDebug?: boolean };
+  if (w.__lakePointerInputDebug === true || w.__lakeBoardInputDebug === true) return true;
   try {
-    return window.localStorage.getItem(STORAGE_KEY) === "1";
+    return window.localStorage.getItem(config.storageKey) === "1";
   } catch {
     return false;
   }
 }
 
-function pushStroke(stroke: BoardStrokeDiag): void {
-  strokes.push(stroke);
-  if (strokes.length > MAX_STROKES) strokes = strokes.slice(-MAX_STROKES);
-  if (stroke.pointerType === "pen") sawPenStroke = true;
+export function boardInputDiagEnabled(): boolean {
+  return enabled(CONFIGS.board);
+}
+
+export function inkInputDiagEnabled(): boolean {
+  return enabled(CONFIGS.ink);
+}
+
+function pushStroke(config: DiagConfig, stroke: PointerStrokeDiag): void {
+  const bucket = buckets[config.label];
+  bucket.strokes.push(stroke);
+  if (bucket.strokes.length > MAX_STROKES) bucket.strokes = bucket.strokes.slice(-MAX_STROKES);
+  if (stroke.pointerType === "pen") bucket.sawPenStroke = true;
   console.info(
-    "[board-input] " + stroke.pointerType
+    "[pointer-input:" + config.label + "] " + stroke.pointerType
       + " downs=" + stroke.downs + " moves=" + stroke.moves + " ups=" + stroke.ups
       + " cancel=" + stroke.cancels + " lost=" + stroke.lostCaptures
       + " coalesced=" + stroke.coalesced + " " + stroke.ms + "ms"
@@ -78,10 +116,14 @@ function pushStroke(stroke: BoardStrokeDiag): void {
   );
 }
 
-function finalize(): void {
+function finalize(config: DiagConfig): void {
+  const bucket = buckets[config.label];
+  const pending = bucket.pending;
   if (!pending) return;
   const endedAt = Date.now();
-  const stroke: BoardStrokeDiag = {
+  bucket.pending = null;
+  pushStroke(config, {
+    label: config.label,
     pointerType: pending.pointerType,
     downs: pending.downs,
     moves: pending.moves,
@@ -92,22 +134,19 @@ function finalize(): void {
     startedAt: pending.startedAt,
     endedAt,
     ms: endedAt - pending.startedAt,
-    mouseAfterPen: pending.pointerType === "mouse" && sawPenStroke,
-  };
-  pending = null;
-  pushStroke(stroke);
+    mouseAfterPen: pending.pointerType === "mouse" && bucket.sawPenStroke,
+  });
 }
 
-/** 挂诊断（幂等；同一根节点只挂一次）。未开启时直接返回 noop。 */
-export function installBoardInputDiagnostics(root: HTMLElement | null): () => void {
-  if (!root || !boardInputDiagEnabled() || installedRoots.has(root)) return () => {};
+function install(root: HTMLElement | null, config: DiagConfig): () => void {
+  if (!root || !enabled(config) || installedRoots.has(root)) return () => {};
   installedRoots.add(root);
-  /** 只统计画布上的落笔：宿主根节点里还有工具栏/浮层，它们的点击会污染统计（根为 canvas 时不设限）。 */
-  const isCanvasEvent = (event: Event): boolean => {
+  const bucket = buckets[config.label];
+  const isTarget = (event: Event): boolean => {
     const target = event.target as Element | null;
     if (!target) return false;
     if (target === root) return true;
-    return !!target.closest?.(".plait-board-container");
+    return !!target.closest?.(config.selector);
   };
   const coalescedCount = (event: PointerEvent): number => {
     try {
@@ -117,9 +156,9 @@ export function installBoardInputDiagnostics(root: HTMLElement | null): () => vo
     }
   };
   const onDown = (event: PointerEvent): void => {
-    if (!isCanvasEvent(event)) return;
-    finalize(); // 上一笔没有正常抬手时先结掉，避免计数串台
-    pending = {
+    if (!isTarget(event)) return;
+    finalize(config); // 上一笔没有正常抬手时先结掉，避免计数串台
+    bucket.pending = {
       pointerType: event.pointerType || "unknown",
       downs: 1,
       moves: 0,
@@ -131,22 +170,22 @@ export function installBoardInputDiagnostics(root: HTMLElement | null): () => vo
     };
   };
   const onMove = (event: PointerEvent): void => {
-    if (!pending || !isCanvasEvent(event)) return;
-    pending.moves += 1;
-    pending.coalesced += coalescedCount(event);
+    if (!bucket.pending || !isTarget(event)) return;
+    bucket.pending.moves += 1;
+    bucket.pending.coalesced += coalescedCount(event);
   };
   const onUp = (event: PointerEvent): void => {
-    if (!pending || !isCanvasEvent(event)) return;
-    pending.ups += 1;
-    finalize();
+    if (!bucket.pending || !isTarget(event)) return;
+    bucket.pending.ups += 1;
+    finalize(config);
   };
   const onCancel = (event: PointerEvent): void => {
-    if (!pending || !isCanvasEvent(event)) return;
-    pending.cancels += 1;
-    finalize();
+    if (!bucket.pending || !isTarget(event)) return;
+    bucket.pending.cancels += 1;
+    finalize(config);
   };
-  const onLost = (): void => {
-    if (pending) pending.lostCaptures += 1;
+  const onLost = (event: PointerEvent): void => {
+    if (bucket.pending && isTarget(event)) bucket.pending.lostCaptures += 1;
     // 不立即 finalize：Chrome 里丢失捕获后仍可能来 pointerup，由 onUp/onDown 收口。
   };
   root.addEventListener("pointerdown", onDown, true);
@@ -161,28 +200,56 @@ export function installBoardInputDiagnostics(root: HTMLElement | null): () => vo
     root.removeEventListener("pointercancel", onCancel, true);
     root.removeEventListener("lostpointercapture", onLost, true);
     installedRoots.delete(root);
-    finalize();
+    finalize(config);
   };
 }
 
-export function boardInputStats(): { enabled: boolean; strokes: BoardStrokeDiag[] } {
-  return { enabled: boardInputDiagEnabled(), strokes: strokes.slice() };
+/** 画板诊断（根节点 = board-editor / mobile-board-viewer）。 */
+export function installBoardInputDiagnostics(root: HTMLElement | null): () => void {
+  return install(root, CONFIGS.board);
+}
+
+/** 手写板诊断（根节点 = .ink-pad）。 */
+export function installInkInputDiagnostics(root: HTMLElement | null): () => void {
+  return install(root, CONFIGS.ink);
+}
+
+function statsFor(label: PointerDiagLabel): { enabled: boolean; strokes: PointerStrokeDiag[] } {
+  return { enabled: enabled(CONFIGS[label]), strokes: buckets[label].strokes.slice() };
+}
+
+function resetFor(label: PointerDiagLabel): void {
+  buckets[label] = { strokes: [], sawPenStroke: false, pending: null };
+}
+
+export function boardInputStats(): { enabled: boolean; strokes: PointerStrokeDiag[] } {
+  return statsFor("board");
+}
+
+export function inkInputStats(): { enabled: boolean; strokes: PointerStrokeDiag[] } {
+  return statsFor("ink");
 }
 
 export function boardInputReset(): void {
-  strokes = [];
-  sawPenStroke = false;
-  pending = null;
+  resetFor("board");
+  resetFor("ink");
 }
 
-/** 装 window 取数钩子（幂等；生产环境也只是挂两个函数，不产生监听）。 */
+/** 装 window 取数钩子（幂等；生产环境也只是挂几个函数，不产生监听）。 */
 export function installBoardInputDebugHooks(): void {
   if (typeof window === "undefined" || windowHooksInstalled) return;
   windowHooksInstalled = true;
   const w = window as {
     __lakeBoardInputStats?: () => unknown;
     __lakeBoardInputReset?: () => void;
+    __lakeInkInputStats?: () => unknown;
+    __lakeInkInputReset?: () => void;
   };
-  w.__lakeBoardInputStats = () => boardInputStats();
-  w.__lakeBoardInputReset = () => boardInputReset();
+  w.__lakeBoardInputStats = () => statsFor("board");
+  w.__lakeInkInputStats = () => statsFor("ink");
+  w.__lakeBoardInputReset = () => resetFor("board");
+  w.__lakeInkInputReset = () => resetFor("ink");
 }
+
+/** 手写板侧只需要 window 钩子时用（与画板同一个实现）。 */
+export const installPointerInputDebugHooks = installBoardInputDebugHooks;

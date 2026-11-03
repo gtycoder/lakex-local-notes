@@ -8,6 +8,13 @@
 
 ## 0. 最新交接（261027）
 
+### 261103 · 九批：手写板落笔批处理 + 指针诊断扩到 ink（用户澄清：是**手写板**不是画板）· **本地改动**
+- **澄清**：八批按「画板（Drawnix）」查了；用户指出实际是**手写板（ink）**。八批的画板诊断保留（默认关、无害），本轮把诊断与热路径修到 ink。
+- **机制层根因方向**：`InkPad` 的 `onPointerMove` 每个 coalesced 点都 `setActiveStroke`、每个擦除点都 `setDoc` ⇒ 一次 pointermove 触发 N 次 React 重渲染 + perfect-freehand 轮廓重算。快速落笔/快速擦除事件率最高，渲染被压垮（「画快了不生效」最可能的成因）。
+- **修法（`src/features/ink/InkPad.tsx`）**：`appendPoint` 只改 ref（`activeStrokeRef`/`lastPointRef`）并返回是否追加，不再逐个 setState；`onPointerMove` 整批 coalesced 点追加完**统一 setActiveStroke 一次**。`eraseAt` 只改 `docRef`+`erasedIdsRef` 并返回是否擦到，一批擦完**统一 setDoc 一次**。落笔数据始终在 ref ⇒ 渲染节流不影响保存/capture。
+- **诊断扩到 ink**：`src/features/board/boardInputDiagnostics.ts` 泛化（`label=board|ink` 分桶、只统计指定画布 `.plait-board-container` / `.ink-page-svg`，同一套 pointerType/moves/ups/cancels/lost/coalesced/时长/mouseAfterPen 聚合）。开启：`localStorage["lakex-local-notes-v3.ink-input-debug"]="1"` 后重开手写板标签；`__lakeInkInputStats()` 取数（画板仍 `__lakeBoardInputStats()`；`window.__lakePointerInputDebug=true` 全开）。
+- **校验（桌面 dev / CDP 9222，隔离数据目录）**：手写板快速落笔 240 点 → 正文笔迹 2→3；整笔橡皮快速横扫 120 点 → 3→2；诊断记录 2 笔（label=ink，moves=240/120，cancels=0）。单测 +1（ink 分桶/画布过滤），`boardInputDiagnostics` 共 5 例 + `boardValueCoalescer` 3 例。
+- **待办**：请用户在**手写板**上按 ink key 复现快画/快擦，把 `__lakeInkInputStats()` 发回；若仍丢，按统计判断是事件没进来 / 引擎没消费 / 被 cancel，再定后续（eraser 必要时加线段相交命中）。
 ### 261103 · 八批：画板输入诊断 + 回灌合并（定位「快画/快擦丢笔」）· **本地改动**
 - **背景**：用户报桌面端画板快速落笔/快速擦除不生效（三端可能都有）。
 - **复现结论（桌面 dev / CDP 9222，隔离数据目录）**：用合成鼠标事件**无法复现**「快画丢笔」——1 点 / 2 点 / 15 点 / 120 点 / 500 点笔画全部落笔并写入正文（回读 `readNote` 核对元素数）。但发现一个**确定性异常**：发生过一次 `pointerType=pen`（数位笔）笔画后，**后续鼠标笔画全部不生效**（pen 仍能画，刷新页面恢复）——疑似 plait 的输入类型切换卡住，也可能只是 CDP 合成残留，**待真机确认**。

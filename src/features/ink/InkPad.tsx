@@ -17,6 +17,7 @@ import {
 import { canonicalDocBody } from "../../core/docBaseline.js";
 import { readInkNavPage, writeInkNavPage } from "./inkNav.js";
 import { hitTestStroke, strokeToSvgPath } from "./inkGeometry.js";
+import { installInkInputDiagnostics, installPointerInputDebugHooks } from "../board/boardInputDiagnostics";
 import { createStrokePathCache, renderedStrokesForPage, type RenderedStrokePath } from "./inkRenderCache.js";
 import {
   applyInkPatch,
@@ -149,6 +150,8 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
   const [insertOpen, setInsertOpen] = useState(false);
   const [pendingDeletePageId, setPendingDeletePageId] = useState<string | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
+  /** 261103 九批：手写板落笔诊断的宿主根节点（默认关，见 boardInputDiagnostics.ts 头注释）。 */
+  const inkRootRef = useRef<HTMLDivElement | null>(null);
   const [fitSize, setFitSize] = useState<{ width: number; height: number } | null>(null);
   const [activeStroke, setActiveStroke] = useState<InkStroke | null>(null);
   const [historyVersion, setHistoryVersion] = useState(0);
@@ -219,6 +222,11 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
     if (!noteId || !doc?.activePageId) return;
     writeInkNavPage(noteId, doc.activePageId);
   }, [doc?.activePageId, noteId]);
+  /** 261103 九批：手写板落笔诊断（默认关；开启方式见 boardInputDiagnostics.ts 头注释的 ink key）。 */
+  useEffect(() => {
+    installPointerInputDebugHooks();
+    return installInkInputDiagnostics(inkRootRef.current);
+  }, []);
   const pageIndex = doc && page ? doc.pages.findIndex((item) => item.id === page.id) : -1;
   const pageWidth = page?.width ?? 0;
   const pageHeight = page?.height ?? 0;
@@ -566,16 +574,21 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
     commit(replacePage(current, nextPage), inkPagePatch(before, nextPage));
   }, [commit, page]);
 
-  const eraseAt = useCallback((point: InkPoint) => {
+  /**
+   * 擦到某点：只更新 docRef + erasedIdsRef，**不 setState**（261103 九批）。
+   * 一次 pointermove 的多个 coalesced 点、以及快速擦除，都会在批末统一 setDoc 一次；
+   * 中间结果用 erasedIdsRef 累积，来源页面仍是本批开始时的 page（已擦 id 都在 set 里，结果一致）。
+   * @returns 是否真的擦掉了东西
+   */
+  const eraseAt = useCallback((point: InkPoint): boolean => {
     const current = docRef.current;
-    if (!current || !page) return;
+    if (!current || !page) return false;
     const hits = page.strokes.filter((stroke) => !erasedIdsRef.current.has(stroke.id) && hitTestStroke(stroke, point));
-    if (hits.length === 0) return;
+    if (hits.length === 0) return false;
     for (const stroke of hits) erasedIdsRef.current.add(stroke.id);
     const nextPage = { ...page, strokes: page.strokes.filter((stroke) => !erasedIdsRef.current.has(stroke.id)) };
-    const next = replacePage(current, nextPage);
-    docRef.current = next;
-    setDoc(next);
+    docRef.current = replacePage(current, nextPage);
+    return true;
   }, [page]);
 
   const onPointerDown = useCallback((event: ReactPointerEvent<SVGSVGElement>) => {
@@ -594,7 +607,7 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
     if (mode === "eraser") {
       eraseBeforeRef.current = page;
       erasedIdsRef.current = new Set();
-      eraseAt(point);
+      if (eraseAt(point) && docRef.current) setDoc(docRef.current);
       return;
     }
     const stroke: InkStroke = {
@@ -608,15 +621,22 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
     setActiveStroke(stroke);
   }, [color, eraseAt, highlighterWidth, mode, page, penWidth, readOnly]);
 
-  const appendPoint = useCallback((point: InkPoint) => {
+  /**
+   * 往当前笔迹追加一个点。**只改 ref、不 setState**（261103 九批）：
+   * 一次 pointermove 可能带多个 coalesced 事件，以前每个点都 setState ⇒ 每个事件 N 次重渲染，
+   * 快速落笔时 React 渲染 / perfect-freehand 重算帧率被压垮（用户报「画快了不生效」）。
+   * 现在由 onPointerMove 在**一批点追加完**后统一 setState 一次；落笔数据始终在 ref 里，不受渲染节流影响。
+   * @returns 是否真的追加了点（调用方据此决定要不要重渲染）
+   */
+  const appendPoint = useCallback((point: InkPoint): boolean => {
     const current = activeStrokeRef.current;
-    if (!current) return;
+    if (!current) return false;
     const previous = lastPointRef.current;
-    if (previous && Math.hypot(point.x - previous.x, point.y - previous.y) < 0.35) return;
+    if (previous && Math.hypot(point.x - previous.x, point.y - previous.y) < 0.35) return false;
     lastPointRef.current = point;
-    const next = { ...current, points: [...current.points, point] };
+    const next: InkStroke = { ...current, points: [...current.points, point] };
     activeStrokeRef.current = next;
-    setActiveStroke(next);
+    return true;
   }, []);
 
   const onPointerMove = useCallback((event: ReactPointerEvent<SVGSVGElement>) => {
@@ -625,14 +645,20 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
     const source = events.length > 0 ? events : [event.nativeEvent];
     const rect = event.currentTarget.getBoundingClientRect();
     if (mode === "eraser") {
+      let erased = false;
       for (const sourceEvent of source) {
-        eraseAt(pointFromClient(sourceEvent.clientX, sourceEvent.clientY, event.pointerType, sourceEvent.pressure, rect, page));
+        if (eraseAt(pointFromClient(sourceEvent.clientX, sourceEvent.clientY, event.pointerType, sourceEvent.pressure, rect, page))) erased = true;
       }
+      // 一批擦除点只重渲染一次（快速擦除是主要热路径）。
+      if (erased && docRef.current) setDoc(docRef.current);
       return;
     }
+    let appended = false;
     for (const sourceEvent of source) {
-      appendPoint(pointFromClient(sourceEvent.clientX, sourceEvent.clientY, event.pointerType, sourceEvent.pressure, rect, page));
+      if (appendPoint(pointFromClient(sourceEvent.clientX, sourceEvent.clientY, event.pointerType, sourceEvent.pressure, rect, page))) appended = true;
     }
+    // 一批合并点只重渲染一次（快速落笔时这里是主要热路径）。
+    if (appended) setActiveStroke(activeStrokeRef.current);
   }, [appendPoint, eraseAt, mode, page]);
 
   const finishPointer = useCallback((event: ReactPointerEvent<SVGSVGElement>) => {
@@ -691,6 +717,7 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
 
   return (
     <div
+      ref={inkRootRef}
       className={"ink-pad ink-pad--" + variant}
       data-readonly={readOnly ? "true" : undefined}
       data-prevent-swipe
