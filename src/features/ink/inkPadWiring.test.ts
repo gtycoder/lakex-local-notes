@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { INK_COLOR_COLUMNS, INK_STROKE_COLORS } from "./inkPalette";
 
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
 const KIND = read("../../core/noteKind.ts");
@@ -25,6 +26,7 @@ const PDF_IMPORT = read("./pdfImport.ts");
 const PDF_RASTER = read("./pdfRasterDesktop.ts");
 const MOBILE_PDF_IMPORT = read("../../mobile/ink/mobilePdfImport.ts");
 const MOBILE_PDF_RENDER = read("../../mobile/native/pdfRender.ts");
+const PALETTE = read("./inkPalette.ts");
 
 describe("手写板正式端到端接线", () => {
   it("kind=ink 已进入 NoteKind / 正文路径", () => {
@@ -201,6 +203,25 @@ describe("手写板正式端到端接线", () => {
     expect(INK_PAD).toContain("setWidthsOpen(false)");
     // 点「面板/触发按钮」之外关闭（pointerdown 捕获；插入菜单同一条规则）
     expect(INK_PAD).toContain('[data-overlay="palette"], [data-overlay="widths"], [data-overlay="insert"], [data-popover-trigger]');
+  });
+
+  it("色板扩到 14 色 = 2 行 × 7（261103 三批）：单一来源数组 + 网格排布，写格式不变", () => {
+    // 单一来源：inkPalette.ts 是唯一数组，取值全来自 core 色阶（不新造字面量）；InkPad 只引用它
+    expect(INK_STROKE_COLORS.length).toBe(14);
+    expect(INK_STROKE_COLORS.length % INK_COLOR_COLUMNS).toBe(0);
+    expect(new Set(INK_STROKE_COLORS).size).toBe(INK_STROKE_COLORS.length); // 不重复
+    expect(PALETTE).toContain("COLOR_BOARD_GROUPS");
+    expect(PALETTE).toContain("MOBILE_BOARD_SOLID");
+    expect(PALETTE).toContain("MOBILE_BOARD_LIGHT");
+    expect(INK_PAD).toContain("INK_STROKE_COLORS.map");
+    expect(INK_PAD).not.toContain("const COLORS =");
+    expect(INK_PAD).toContain("useState(INK_DEFAULT_COLOR)");
+    // 排布语言：移动端色板容器改 2 行 × 7 网格（.ink-color 44 盒不变，触达不降）
+    expect(MOBILE_INK_CSS).toContain("grid-template-columns: repeat(" + INK_COLOR_COLUMNS + ", var(--mb-tap-min));");
+    expect(MOBILE_INK_CSS).toContain(".ink-pad--mobile .ink-color {");
+    // 写格式不变：color 是 InkStroke 的自由字符串（值不是结构），inkDoc 版本号不参与
+    expect(INK_DOC).toContain("color: string;");
+    expect(INK_DOC).not.toContain("INK_STROKE_COLORS");
   });
 
   it("移动端阅读态让开底部胶囊：胶囊 stack（状态栏+间隔+安全区+胶囊）+ 8", () => {

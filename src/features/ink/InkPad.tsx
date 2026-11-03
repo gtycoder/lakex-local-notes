@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import type { EditorCaptureHandler } from "../../core/editorCapture";
 import { ChevronLeft, ChevronRight, Eraser, FileText, Highlighter, ImagePlus, LayoutGrid, Minus, Pen, Plus, Redo2, SquarePlus, Undo2 } from "lucide-react";
-import { COLOR_BOARD_GROUPS, QUICK_TEXT_COLORS } from "../../core/colorPalette.js";
+import { INK_DEFAULT_COLOR, INK_STROKE_COLORS } from "./inkPalette.js";
 import {
   createInkPage,
   inkToBody,
@@ -70,7 +70,7 @@ const SAVE_DEBOUNCE_MS = 500;
 const ZOOM_STEP = 0.25;
 const ZOOM_MIN = 0.5;
 const ZOOM_MAX = 3;
-const COLORS = [COLOR_BOARD_GROUPS[0][1], ...QUICK_TEXT_COLORS] as const;
+// 色板单一来源 = inkPalette.ts（261103 三批：6 → 14 色，手机/平板/桌面同一份）
 const WIDTHS = [1.5, 2.5, 4, 6] as const;
 const BACKGROUNDS: ReadonlyArray<{ value: InkBackground; label: string }> = [
   { value: "blank", label: "空白" },
@@ -138,7 +138,7 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
   });
   const docRef = useRef<InkDoc | null>(doc);
   const [mode, setMode] = useState<InkPadMode>("pen");
-  const [color, setColor] = useState(COLORS[0]);
+  const [color, setColor] = useState(INK_DEFAULT_COLOR);
   const [penWidth, setPenWidth] = useState<number>(WIDTHS[1]);
   const [highlighterWidth, setHighlighterWidth] = useState<number>(18);
   const [zoom, setZoom] = useState(1);
@@ -704,7 +704,7 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
           <button className={["ink-tool", mode === "highlighter" ? "is-active" : ""].join(" ")} onClick={() => setMode("highlighter")} aria-label="高亮笔" title="高亮笔" disabled={readOnly}><Highlighter size={16} /></button>
           <button className={["ink-tool", mode === "eraser" ? "is-active" : ""].join(" ")} onClick={() => setMode("eraser")} aria-label="整笔橡皮" title="整笔橡皮" disabled={readOnly}><Eraser size={16} /></button>
           <span className="ink-toolbar__sep" />
-          {COLORS.map((value) => (
+          {INK_STROKE_COLORS.map((value) => (
             <button
               key={value}
               className={["ink-color", color === value ? "is-active" : ""].join(" ")}
@@ -945,7 +945,7 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
           </div>
           {paletteOpen && (
             <div role="group" aria-label="选择颜色" data-overlay="palette">
-              {COLORS.map((value) => (
+              {INK_STROKE_COLORS.map((value) => (
                 <button
                   key={value}
                   className={["ink-color", color === value ? "is-active" : ""].join(" ")}

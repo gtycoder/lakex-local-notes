@@ -20,7 +20,10 @@
 .ink-pad--mobile > [data-overlay="nav"],
 .ink-pad--mobile > [data-overlay="dock"],
 .ink-pad--mobile > [data-overlay="preview"] {
-  position: absolute; z-index: 2; left: var(--lake-space-md); right: var(--lake-space-md);
+  /* 261103 六批 A1：悬浮条避开横屏刘海（竖屏 inset=0 ⇒ 与原来完全一致）。 */
+  position: absolute; z-index: 2;
+  left: max(var(--lake-space-md), var(--mobile-left-safe-area));
+  right: max(var(--lake-space-md), var(--mobile-right-safe-area));
   border: .5px solid var(--lake-border-1);
   background: var(--lake-bg-panel); box-shadow: var(--lake-shadow-popover);
 }
@@ -92,7 +95,15 @@
   gap: var(--lake-space-xxs); padding: var(--lake-space-md);
   border: .5px solid var(--lake-border-1); border-radius: var(--lake-radius-card);
   background: var(--lake-bg-panel); box-shadow: var(--lake-shadow-popover);
-  /* 极窄屏（<340）色板 6 色一排放不下时兜底横滑，不撑破面板。 */
+  /* 极窄屏兜底横滑，不撑破面板（色板本体已改 2 行网格，见下一条）。 */
+  overflow-x: auto;
+}
+/* 色板 = 2 行 × 7（261103 三批：6 → 14 色，用户报「颜色太少」）：复用同一批 .ink-color（44 盒不降触达），
+   只把容器从「一行 flex」改成网格；面板浮在工具坞上方，变高只向上长，不挤画布、不新增浮层。
+   窄屏（7 格 + 内距放不下）仍按原方式横滑。 */
+.ink-pad--mobile > [data-overlay="dock"] [data-overlay="palette"] {
+  display: grid; grid-template-columns: repeat(7, var(--mb-tap-min));
+  justify-content: center; gap: var(--lake-space-xxs);
   overflow-x: auto;
 }
 .ink-pad--mobile > [data-overlay="dock"] [data-overlay="widths"] { gap: var(--lake-space-sm); overflow-x: visible; }

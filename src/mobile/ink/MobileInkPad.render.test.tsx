@@ -3,7 +3,7 @@
  * 移动端手写板行为护栏（261030 分页/纸张 → 261102 v1/v2 布局 → v3 悬浮/收口）。
  *
  * v3（本文件）在 v2 基础上再钉四件事：
- *   · 工具行收成一屏：笔/高亮/橡皮 + **当前色** + **当前笔宽** + 撤销/重做（7 个 44 按钮，不再内联 7 色/4 档）；
+ *   · 工具行收成一屏：笔/高亮/橡皮 + **当前色** + **当前笔宽** + 撤销/重做（7 个 44 按钮；色板/笔宽收进坞内悬浮面板，色板 14 色 = 2 行 × 7）；
  *   · 颜色/笔宽都是「当前值按钮 → 点开悬浮面板」（面板绝对定位在工具坞上方 8，不占布局），选值写回并关闭，
  *     点面板/触发按钮之外（pointerdown）也关闭；
  *   · 全局预览在移动端是**悬浮覆盖**（data-overlay="preview" 包装，不再把画布往下推；桌面仍是流内面板）；
@@ -15,7 +15,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import { QUICK_TEXT_COLORS } from "../../core/colorPalette";
+import { INK_COLOR_COLUMNS, INK_STROKE_COLORS } from "../../features/ink/inkPalette";
 import { createInkDoc, createInkPage, inkToBody, type InkDoc } from "../../core/inkDoc";
 import { MobileInkPad } from "./MobileInkPad";
 
@@ -245,7 +245,7 @@ describe("MobileInkPad 编辑态 · 悬浮工具坞", () => {
     await view.unmount();
   });
 
-  it("颜色：当前色按钮打开色板（7 色），选色写回并关闭；点外部（pointerdown）也关闭", async () => {
+  it("颜色：当前色按钮打开色板（14 色 = 2 行 × 7），选色写回并关闭；点外部（pointerdown）也关闭", async () => {
     const view = await mount({ content: twoPageBody(), readOnly: false });
     const trigger = byLabel(view.container, "选择颜色")!;
     const dot = () => (trigger.querySelector("span") as HTMLElement).style.backgroundColor;
@@ -255,7 +255,9 @@ describe("MobileInkPad 编辑态 · 悬浮工具坞", () => {
     const palette = view.container.querySelector('[data-overlay="palette"]');
     expect(palette).not.toBeNull();
     const options = Array.from(palette!.querySelectorAll(".ink-color")) as HTMLButtonElement[];
-    expect(options.length).toBe(1 + QUICK_TEXT_COLORS.length);
+    expect(options.length).toBe(INK_STROKE_COLORS.length); // 14（261103 三批：6 → 14）
+    expect(options.length % INK_COLOR_COLUMNS).toBe(0); // 2 行 × 7（换行由 inkPad.mobile.css 的网格负责）
+    expect(new Set(options.map((option) => option.title)).size).toBe(INK_STROKE_COLORS.length); // 颜色不重复
 
     await act(async () => { options[1].click(); });
     expect(view.container.querySelector('[data-overlay="palette"]')).toBeNull(); // 选完关闭
