@@ -1,4 +1,4 @@
-import { CapacitorSQLite } from "@capacitor-community/sqlite";
+import { loadCapacitorSqlite, type CapacitorSqlitePlugin } from "./sqlitePlugin";
 
 export interface NativeSqliteSpikeResult {
   databaseName: string;
@@ -15,7 +15,7 @@ function firstValue(rows: unknown[], key: string): string {
   return row ? String(row[key]) : "";
 }
 
-async function query(database: string, statement: string): Promise<unknown[]> {
+async function query(CapacitorSQLite: CapacitorSqlitePlugin, database: string, statement: string): Promise<unknown[]> {
   const result = await CapacitorSQLite.query({ database, statement, values: [], readonly: false });
   return result.values ?? [];
 }
@@ -25,6 +25,7 @@ export async function runNativeSqliteSpike(
   database = "lakex-local-notes-mobile-spike",
   reset = true,
 ): Promise<NativeSqliteSpikeResult> {
+  const { plugin: CapacitorSQLite } = await loadCapacitorSqlite();
   await CapacitorSQLite.createConnection({
     database,
     encrypted: false,
@@ -36,7 +37,7 @@ export async function runNativeSqliteSpike(
 
   try {
     // Android 原生层把 PRAGMA 视为查询；用 query 才能同时设置并读取 journal_mode。
-    const journalRows = await query(database, "PRAGMA journal_mode=WAL");
+    const journalRows = await query(CapacitorSQLite, database, "PRAGMA journal_mode=WAL");
     if (reset) {
       await CapacitorSQLite.execute({
         database,
@@ -76,12 +77,12 @@ export async function runNativeSqliteSpike(
     });
     await CapacitorSQLite.rollbackTransaction({ database });
 
-    const pageCount = Number(firstValue(await query(database, "PRAGMA page_count"), "page_count"));
-    const pageSize = Number(firstValue(await query(database, "PRAGMA page_size"), "page_size"));
-    const rowCount = Number(firstValue(await query(database, "SELECT COUNT(*) AS count FROM spike_rows"), "count"));
+    const pageCount = Number(firstValue(await query(CapacitorSQLite, database, "PRAGMA page_count"), "page_count"));
+    const pageSize = Number(firstValue(await query(CapacitorSQLite, database, "PRAGMA page_size"), "page_size"));
+    const rowCount = Number(firstValue(await query(CapacitorSQLite, database, "SELECT COUNT(*) AS count FROM spike_rows"), "count"));
     const rolledBackRowCount = Number(
       firstValue(
-        await query(database, "SELECT COUNT(*) AS count FROM spike_rows WHERE text_value='rolled-back'"),
+        await query(CapacitorSQLite, database, "SELECT COUNT(*) AS count FROM spike_rows WHERE text_value='rolled-back'"),
         "count",
       ),
     );
@@ -90,7 +91,7 @@ export async function runNativeSqliteSpike(
     await CapacitorSQLite.close({ database });
     await CapacitorSQLite.open({ database });
     const reopenedRowCount = Number(
-      firstValue(await query(database, "SELECT COUNT(*) AS count FROM spike_rows"), "count"),
+      firstValue(await query(CapacitorSQLite, database, "SELECT COUNT(*) AS count FROM spike_rows"), "count"),
     );
     const databaseListResult = await CapacitorSQLite.getDatabaseList();
     const databaseList = (databaseListResult.values ?? []).map((name) => String(name));

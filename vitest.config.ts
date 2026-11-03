@@ -16,6 +16,11 @@ export default defineConfig({
     },
   },
   test: {
+    // P8（261103）尝试过 isolate:false（省 ~13s：34.9s → 21.5s），但**不可用**：共享模块图会让
+    // `vi.mock` 无法替换已被前序文件实例化的模块 ⇒ src/mobile/v3/deviceConformance.mobile.test.ts
+    // 两轮分别红 7/3 例（readAsset 读到 gzip 正文、deferAssets 断言失效；根因是 assetFs mock 失效）。
+    // 该文件全是 vi.mock + 跨端契约，属结构性依赖隔离；重新开启的前置条件 = 把它拆成独立 worker/project。
+    // 证据与完整日志：P8 报告（未入库）。
     // 默认仍只收 node 环境的 .test.ts；额外两条例外各自最小：
     // - src/**/*.render.test.tsx：DT-04 桌面行为护栏试点（文件头用 @vitest-environment jsdom 逐文件切换环境，
     //   不改变全局 node 默认；扩展方式 = 复制该命名 + 只在文件内 render，不要引入 testing-library）；

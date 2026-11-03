@@ -1,5 +1,5 @@
-import { CapacitorSQLite } from "@capacitor-community/sqlite";
 import type { MobileDb, MobileDbStatement } from "../data/sqliteDb.js";
+import { loadCapacitorSqlite } from "./sqlitePlugin";
 
 type MobileRow = Record<string, unknown>;
 
@@ -44,6 +44,7 @@ export class NativeSqliteDb implements MobileDb {
   }
 
   static async open(database = "lakex-local-notes-mobile"): Promise<NativeSqliteDb> {
+    const { plugin: CapacitorSQLite } = await loadCapacitorSqlite();
     const connection = {
       database,
       encrypted: false,
@@ -71,6 +72,7 @@ export class NativeSqliteDb implements MobileDb {
 
   private async query(statement: string, values: unknown[] = []): Promise<MobileRow[]> {
     return await this.locked(async () => {
+      const { plugin: CapacitorSQLite } = await loadCapacitorSqlite();
       const result = await CapacitorSQLite.query({
         database: this.database,
         statement,
@@ -89,6 +91,7 @@ export class NativeSqliteDb implements MobileDb {
       },
       all: async (...params: unknown[]) => this.query(sql, params),
       run: async (...params: unknown[]) => await this.locked(async () => {
+        const { plugin: CapacitorSQLite } = await loadCapacitorSqlite();
         const result = await CapacitorSQLite.run({
           database: this.database,
           statement: sql,
@@ -110,6 +113,7 @@ export class NativeSqliteDb implements MobileDb {
     // 嵌套事务：外层已持锁且有事务，直接执行（由最外层统一 commit/rollback）。
     if (this.txDepth > 0) return (await fn()) as Awaited<ReturnType<T>>;
     return await this.withLock(async () => {
+      const { plugin: CapacitorSQLite } = await loadCapacitorSqlite();
       await CapacitorSQLite.beginTransaction({ database: this.database, readonly: false });
       this.txDepth += 1;
       try {
@@ -135,6 +139,7 @@ export class NativeSqliteDb implements MobileDb {
       return;
     }
     await this.locked(async () => {
+      const { plugin: CapacitorSQLite } = await loadCapacitorSqlite();
       await CapacitorSQLite.execute({
         database: this.database,
         statements: sql,
@@ -149,6 +154,7 @@ export class NativeSqliteDb implements MobileDb {
     // 一次桥往返执行整批；默认由插件开单事务，**已在事务内**时调用方传 transaction:false。
     // 整批必须在锁内执行：否则别的任务可能在批内插入语句/事务（真机 CommitTransaction 报错的根因）。
     await this.locked(async () => {
+      const { plugin: CapacitorSQLite } = await loadCapacitorSqlite();
       await CapacitorSQLite.executeSet({
         database: this.database,
         set: set.map((s) => ({ statement: s.statement, values: s.values })),
@@ -166,6 +172,7 @@ export class NativeSqliteDb implements MobileDb {
 
   async close(): Promise<void> {
     await this.withLock(async () => {
+      const { plugin: CapacitorSQLite } = await loadCapacitorSqlite();
       await CapacitorSQLite.close({ database: this.database, readonly: false });
       await CapacitorSQLite.closeConnection({ database: this.database, readonly: false });
     });

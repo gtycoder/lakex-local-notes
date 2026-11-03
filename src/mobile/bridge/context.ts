@@ -64,8 +64,9 @@ export function readSyncSettings(): SyncSettings {
 
 export let db: NativeSqliteDb | null = null;
 let dbInitialization: Promise<NativeSqliteDb> | null = null;
-/** 运行期资源缓存（新上传/同步中使用）；持久化资源不在启动时全量载入。key = "{noteId}/{filename}" */
-export const assets = new Map<string, Uint8Array>();
+/** 运行期资源缓存（LRU ≤32MiB，P8）：实现与单测在 ./assetCache；未命中回落文件读取。
+ *  持久化资源不在启动时全量载入。key = "{noteId}/{filename}" */
+export { assets, ASSET_CACHE_MAX_BYTES, BoundedAssetCache } from "./assetCache";
 
 /** 附件实际上限 = 设置里的「附件大小上限」（与设置页同键），并夹到协议上限。
  *  图片仍走 MAX_IMAGE_BYTES（图片档位与附件档位是两件事，不合并）。 */

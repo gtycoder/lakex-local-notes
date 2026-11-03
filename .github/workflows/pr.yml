@@ -1,0 +1,51 @@
+name: PR gate（静态检查 + 双端构建 + 预算）
+
+# P8（261103）新增：PR/手动触发的「不依赖设备」门禁。
+# 设计口径：
+#   · 普通 push 仍不跑（与 packaged-smoke.yml 一致，省 macOS 10× 计费）；只在 PR 与手动时跑。
+#   · 不跑任何设备/视觉快照门禁（需要 AVD/GPU，留在发版前人工按 AGENTS §3#21 跑）。
+#   · 不引用任何 secrets（纯只读）。
+#   · 两个 build 必须先于 check:bundle（预算脚本读 dist / dist-mobile 产物）。
+#   · vitest 的 isolate:false 由 vitest.config.ts 统一开启（P8-4），这里不重复传参，
+#     避免「配置改回隔离、CI 仍强制 false」的双源。
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    name: tsc + vitest + build + budget
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      # action 钉到不可变 commit SHA（与 release.yml / packaged-smoke.yml 同版本，见 AGENTS SEC-12）
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Typecheck
+        run: npx tsc --noEmit
+      - name: Unit tests
+        run: npx vitest run
+      - name: Build desktop
+        run: npx vite build
+      - name: Build mobile
+        run: npx vite build -c vite.mobile.config.ts
+      - name: Core boundary
+        run: npm run check:core
+      - name: UI hard metrics
+        run: node scripts/ui-metrics.mjs
+      - name: Bundle & vendor CSS audit（含脚本自检）
+        run: npm run check:bundle
+      - name: Arch gate（首屏资源图预算 + import 方向；check:bundle 已含，单独一步让日志可见）
+        run: npm run check:arch
