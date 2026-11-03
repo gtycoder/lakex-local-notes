@@ -7,6 +7,12 @@
 
 ## 0. 最新交接（261027）
 
+### 261103 · 架构评审（pad 外壳 / ink·PDF / 全局）+ 两个回归修复 · **本地提交（分支 feat/pad-touch-ui）**
+- **产出** [docs/ARCH-REVIEW-261103.md](docs/ARCH-REVIEW-261103.md)：3 路只读评审（pad / ink / 全局）+ 量化；TL;DR、按域问题清单、目标架构、8 段实施计划（P0–P8）、预算矩阵、明确不做清单、5 条待用户裁决。核心结论：**不整体重写**；先修 4 条主线（pad 判据/外壳状态机、ink 线性恶化、首屏预算量错对象、CI 零覆盖）。
+- **修复 C1（评审发现的真回归，261103 引入）**：平板弹键盘（adjustResize 把 innerHeight 压到 <560）会把整个外壳打回 medium（页签/树/大纲被卸载）。修法 = `formFactor` 用 `effectiveWindowHeight(innerHeight, shellHeight())`（稳定外壳高），并在窗口**宽**变化时 `resetShellHeight()`。实测 lake_tab：744→460 仍 `expanded`；真换成 1600×460（宽也变）回落 `medium`。
+- **修复 W2**：`NotebookWorkspace` 的 `escape` 改为「有动作 `return true` / 无动作 `return false`」——此前各分支 `return undefined` ⇒ hook 恒 `preventDefault`，上一层（MobileApp）永远收不到 Esc。
+- **新增 L1 装置** `scripts/mobile-audit/window-sweep.mjs` + `npm run check:windowsweep`：7 个窗口（412×842 / 600×800 / 700×700 / 800×1280 / 1280×800 / 915×412 / 1280×500）断言形态档 + `body.lake-tablet` 同源，再验 800×1280→1280×800→915×412 的 tabs/活动页/滚动保持；实测全过。
+- **文档**：`docs/ARCHITECTURE.md` 顶部加「Manifest V2 已过期，现为 S3 v3」横幅；`docs/MOBILE-OPS.md` / `scripts/mobile-audit/README.md` 登记窗口矩阵装置。
 ### 261103 · 胶囊与编辑态手势补丁（第十四批续，分支 `feat/pad-touch-ui`）· **待验收**
 > 用户点单：① 文档编辑时**保留悬浮胶囊**，且文档编辑时**大纲也要能滑出来**（其他类型禁用横滑）；② 悬浮胶囊**适当向下移一点**（手机/平板都要）。前一轮已定稿：多 Tab = 顶栏横向平铺条、树/大纲默认悬浮点 Pin 才固定、不做改名。
 - **胶囊**：新增令牌 `--mobile-capsule-drop: 12px` —— 胶囊底距由 32 → **20px**（手机/平板共用，只改这一个数就能整体调高低）。文档（Lake）**编辑态不再隐藏**：加 `.mobile-bottom-bar--above-dock`（= dock 高 56 + gap 8）浮在底部 dock 上方；`.mobile-workspace--capsule-edit .mobile-doc-body` 把正文底距补到「dock + 胶囊」，最后一行不被压。表格/多维表/画板/手写板编辑态仍隐藏（各有自己的底部工具条）。

@@ -23,6 +23,7 @@
     "check:stylesnap": "node scripts/css-audit/check-stylesnap.mjs",
     "check:mobilesnap": "node scripts/mobile-audit/check-mobile-snap.mjs",
     "check:tabletsnap": "node scripts/mobile-audit/check-mobile-snap-tablet.mjs",
+    "check:windowsweep": "node scripts/css-audit/drive.mjs 9340 scripts/mobile-audit/window-sweep.mjs",
     "test:packaged": "node scripts/e2e-packaged-smoke.mjs",
     "test:drawnix": "node scripts/e2e-drawnix-smoke.mjs",
     "benchmark:workspace": "LAKE_RUN_BENCHMARK=1 vitest run electron/workspace.benchmark.test.ts --reporter=verbose",

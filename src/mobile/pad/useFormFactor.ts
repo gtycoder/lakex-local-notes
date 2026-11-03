@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { FORM_FACTOR_BREAKPOINTS, formFactorOf, type FormFactor } from "./formFactor";
+import { FORM_FACTOR_BREAKPOINTS, currentWindowSize, formFactorOf, type FormFactor } from "./formFactor";
 
 /**
  * React 侧读形态档：首帧同步读窗口宽（不闪），之后跟随 600 / 800 两个断点与 resize。
@@ -8,11 +8,18 @@ import { FORM_FACTOR_BREAKPOINTS, formFactorOf, type FormFactor } from "./formFa
  */
 export function useFormFactor(): FormFactor {
   // SSR / node 测试（renderToStaticMarkup）没有 window：按手机（compact）渲染，效果与生产首帧一致。
-  const [formFactor, setFormFactor] = useState<FormFactor>(() => (typeof window === "undefined" ? "compact" : formFactorOf(window.innerWidth, window.innerHeight)));
+  const [formFactor, setFormFactor] = useState<FormFactor>(() => {
+    if (typeof window === "undefined") return "compact";
+    const size = currentWindowSize();
+    return formFactorOf(size.width, size.height);
+  });
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const update = (): void => setFormFactor(formFactorOf(window.innerWidth, window.innerHeight));
+    const update = (): void => {
+      const size = currentWindowSize();
+      setFormFactor(formFactorOf(size.width, size.height));
+    };
     const media = (minWidth: number): MediaQueryList | null =>
       typeof window.matchMedia === "function" ? window.matchMedia(`(min-width: ${minWidth}px)`) : null;
     const wide = media(FORM_FACTOR_BREAKPOINTS.medium);

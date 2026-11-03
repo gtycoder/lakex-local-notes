@@ -754,11 +754,14 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     find: () => { if (active && (active.kind ?? "doc") === "doc") toggleOverlay("find"); },
     newNote: () => { void createChildDocument("doc", notebookId); },
     // Esc 逐层收：先收浮层，再收悬浮树/大纲（它们不是 overlay owner 的值，要单独处理）。
+    // 逐层收；**没东西可关时必须 return false**，否则 hook 会 preventDefault，
+    // 上一层（MobileApp 的 Esc）永远收不到（261103 评审 W2）。
     escape: () => {
-      if (overlayKind) { closeOverlay(); return; }
+      if (overlayKind) { closeOverlay(); return true; }
       // 固定（停靠）的面板不吃 Esc —— 它不再是"临时浮层"；再按一次胶囊/按钮才收。
-      if (padTreeOpen && !padTreePinned) { setPadTreeOpen(false); return; }
-      if (padOutlineOpen && !padOutlinePinned) setPadOutlineOpen(false);
+      if (padTreeOpen && !padTreePinned) { setPadTreeOpen(false); return true; }
+      if (padOutlineOpen && !padOutlinePinned) { setPadOutlineOpen(false); return true; }
+      return false;
     },
   });
 

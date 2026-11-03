@@ -57,6 +57,13 @@ node scripts/mobile-audit/check-mobile-snap.mjs --port 9336                     
 ⚠️ **261016 实测到的确切成因**：`home-doc` 的指纹 row key 里带**文档节点 id**（形如 `ne-p$<uuid>-body#0`）⇒ 每次 `pm clear` + 重灌夹具都会生成**新 id**，
 即使元素数完全相同，指纹也会变（本次实测 `1880 → 1880` 但指纹不同，逐行对拍只差这一条）⇒ **重灌夹具后必须重烤**；只盯元素数会误判成"没变"。
 
+## 窗口矩阵（261103 L1，动形态判据/外壳时跑）
+
+折叠屏、分屏、自由窗口会让同一个 App 在 412~1600 宽之间来回切。`npm run check:windowsweep`（CDP 9340）用
+`Emulation.setDeviceMetricsOverride` 跑 7 个窗口（412×842 / 600×800 / 700×700 / 800×1280 / 1280×800 / 915×412 / 1280×500），
+断言 `data-form-factor` 与 `body.lake-tablet` 同源，再验 800×1280→1280×800→915×412 的 tabs/活动页/滚动保持。
+断点与 `src/mobile/pad/formFactor.ts` 同源（改那边必须同步脚本常量）。
+
 ## 平板专项快照（261102 起，动 pad 外壳 / 平板工具栏时跑）
 
 平板（`html[data-form-factor="expanded"]`）与手机是**两套外壳**，手机 6 态覆盖不到平板的页签/悬浮目录与大纲，

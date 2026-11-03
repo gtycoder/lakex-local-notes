@@ -1,5 +1,7 @@
 # 架构总览
 
+> ⚠️ **261103 注**：本文 §一/§二 的同步部分写于 **Manifest V2 时代**（现为 **S3 v3**：`meta/pointer.json` + 内容寻址索引 + 每文档资产声明，见 `docs/SYNC-PROTOCOL.md` 与 AGENTS §4）；文件索引也需按需核对。架构评审与目标架构见 [`ARCH-REVIEW-261103.md`](ARCH-REVIEW-261103.md)。
+
 ## 多维表渲染边界
 
 桌面主Grid与关联选择器共用有界行窗口，完整记录保留在原业务模型；不改正文v1/core/历史/附件/S3。窗口、屏外交互、只读与内存释放契约见 [`BITABLE-VIEWPORT.md`](BITABLE-VIEWPORT.md)。
