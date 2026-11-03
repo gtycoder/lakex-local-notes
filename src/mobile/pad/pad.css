@@ -13,8 +13,15 @@
 /* 悬浮层从顶栏下沿开始（顶栏高 44 + margin-top 8 + 安全区多出的部分）。 */
 html[data-form-factor="expanded"] {
   --pad-float-top: calc(var(--mobile-topbar-height) + 8px + max(0px, calc(var(--mobile-top-safe-area) - 8px)));
-  /* 右大纲宽度（261103 用户：240 太窄，标题截得厉害）。左树保持 280；调宽度只改这一个数。 */
-  --pad-outline-width: 320px;
+  /* 侧栏宽度按**窗口比例**（261103 用户：固定值大平板/小平板都不好看）。钳制区间防止太窄/吃掉正文。 */
+  --pad-tree-width: clamp(240px, 22vw, 360px);
+  --pad-outline-width: clamp(240px, 25vw, 420px);
+}
+
+/* 首页内容宽（小记时间线 / 知识库**同一条**，自适应；261103 用户要求两处同宽且随窗口变化）。 */
+html[data-form-factor="medium"],
+html[data-form-factor="expanded"] {
+  --pad-content-width: min(92%, 1200px);
 }
 
 /* 工作区主体：手机仍纵向单栏（与旧 DOM 等价：header 下方直接是 workspace-body） */
@@ -43,7 +50,7 @@ html[data-form-factor="expanded"] .pad-tree {
   left: 0;
   top: var(--pad-float-top);
   bottom: 0;
-  width: 280px;
+  width: var(--pad-tree-width);
   z-index: var(--mobile-z-drawer);
   background: var(--lake-bg-panel);
   border-radius: 0 var(--lake-radius-card) var(--lake-radius-card) 0;
@@ -54,8 +61,8 @@ html[data-form-factor="expanded"] .pad-tree {
 /* 固定（停靠）：回到布局流，成为主列的第一栏；圆角/阴影退场，只留一条发丝线分隔。 */
 html[data-form-factor="expanded"] .pad-tree--pinned {
   position: static;
-  flex: 0 0 280px;
-  width: 280px;
+  flex: 0 0 var(--pad-tree-width);
+  width: var(--pad-tree-width);
   z-index: auto;
   border-radius: 0;
   border-right: .5px solid var(--lake-border-1);
@@ -113,13 +120,17 @@ html[data-form-factor="expanded"] .mobile-doc-body > .lake-editor { height: 100%
 
 html[data-form-factor="expanded"] .mobile-doc-body .lake-editor-mount { height: 100%; }
 
-/* 知识库页（书架/列表）在平板上加宽；小记时间线仍走 mobile.css 的 760（长文更好读）。
- * 书架列数按可用宽度自适应（手机 3 列 → 平板 1080 下约 10 列），不做"大号卡片"。 */
-html[data-form-factor="expanded"] .mobile-library { max-width: 1080px; }
-
+/* 知识库（书架/列表）与小记时间线 = **同一条自适应内容宽**（--pad-content-width）。
+ * .mobile-scroll 是 column flex 的 flex item：mobile.css 平板块已补 width:100%，max-width 才生效；
+ * 书架列数随之自适应（手机 3 列 → 1280 约 10 列），不做"大号卡片"。 */
+html[data-form-factor="medium"] .mobile-scroll,
+html[data-form-factor="expanded"] .mobile-scroll,
+html[data-form-factor="medium"] .nb-shelf,
 html[data-form-factor="expanded"] .nb-shelf,
-html[data-form-factor="expanded"] .nb-list { max-width: 1080px; margin-left: auto; margin-right: auto; }
+html[data-form-factor="medium"] .nb-list,
+html[data-form-factor="expanded"] .nb-list { max-width: var(--pad-content-width); }
 
+html[data-form-factor="medium"] .nb-shelf,
 html[data-form-factor="expanded"] .nb-shelf {
   grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
 }
@@ -283,4 +294,5 @@ html[data-form-factor="expanded"] .mobile-tab-stage {
 /* 首页顶部 tab 与加宽后的知识库对齐（否则 1080 内容挂在 760 的 tab 下会左偏）。
  * 注意：mobile.css 的平板块把 .mobile-home-tabs / .mobile-scroll 限到 760，本文件在其后加载
  * （main.tsx 的 import 顺序），同特异性覆盖成 1080；时间线（.mobile-scroll 非 .mobile-library）仍是 760。 */
-html[data-form-factor="expanded"] .mobile-home-tabs { max-width: 1080px; }
+html[data-form-factor="medium"] .mobile-home-tabs,
+html[data-form-factor="expanded"] .mobile-home-tabs { max-width: var(--pad-content-width); }

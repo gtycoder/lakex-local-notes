@@ -17,12 +17,20 @@
 export type FormFactor = "compact" | "medium" | "expanded";
 
 /** 断点（CSS px）。改这里必须同步 src/mobile/pad/pad.css 里注释的同一组值。 */
-export const FORM_FACTOR_BREAKPOINTS = { medium: 600, expanded: 800 } as const;
+export const FORM_FACTOR_BREAKPOINTS = { medium: 600, expanded: 800, expandedMinHeight: 560 } as const;
 
-/** 纯函数：给定窗口宽返回形态档（便于单测；不读 DOM）。 */
-export function formFactorOf(widthPx: number): FormFactor {
+/**
+ * 纯函数：给定窗口**宽 + 高**返回形态档（便于单测；不读 DOM）。
+ *
+ * expanded 是「宽 + 有高度」的形态：手机横屏（如 842×390）宽度虽然够，但没有高度放双侧栏，
+ * 判成 expanded 会让内容被侧栏挤扁 ⇒ 这类窗口**回落到 medium 单栏**（手机仍用同一套 UI）。
+ * heightPx 缺省视为不限高（只按宽判，供纯宽度调用/旧测试用）。
+ */
+export function formFactorOf(widthPx: number, heightPx: number = Number.POSITIVE_INFINITY): FormFactor {
   if (!Number.isFinite(widthPx) || widthPx < FORM_FACTOR_BREAKPOINTS.medium) return "compact";
   if (widthPx < FORM_FACTOR_BREAKPOINTS.expanded) return "medium";
+  // heightPx 缺省 = Infinity（不限制）；只有**拿到了真实高度且太矮**才回落（手机横屏 / 扁窗）。
+  if (Number.isFinite(heightPx) && heightPx < FORM_FACTOR_BREAKPOINTS.expandedMinHeight) return "medium";
   return "expanded";
 }
 
@@ -51,7 +59,7 @@ export function applyFormFactor(formFactor: FormFactor): void {
  * 返回卸载函数（测试/热重载用）。
  */
 export function installFormFactor(): () => void {
-  const read = (): FormFactor => formFactorOf(window.innerWidth);
+  const read = (): FormFactor => formFactorOf(window.innerWidth, window.innerHeight);
   applyFormFactor(read());
   const onChange = (): void => applyFormFactor(read());
   window.addEventListener("resize", onChange);

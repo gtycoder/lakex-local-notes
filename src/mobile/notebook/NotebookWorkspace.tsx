@@ -255,8 +255,15 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
       ? document.querySelector<HTMLElement>(side === "left" ? ".pad-tree" : ".pad-outline")
       : document.querySelector<HTMLElement>(side === "left" ? ".side-panel--left" : ".side-panel--right"),
     getMask: (side: PanelSide) => (padTwoPane ? null : document.querySelector<HTMLElement>('[data-panel-mask="' + side + '"]')),
-    isOpen: (side: PanelSide) => (padTwoPane ? (side === "left" ? padTreeOpen : padOutlineOpen) : (side === "left" ? sidebarOpen : outlineOpen)),
-    commit: (side: PanelSide, open: boolean) => { if (side === "left") openSidebar(open); else openOutline(open); },
+    // 261103：**固定（停靠）的面板不吃手势** —— isOpen 不把固定态算成"已展开"，手势就不会把它判成"关闭方向"。
+    // （否则：大纲固定着，右划想开目录栏 → 被判成"关闭右栏" → 把固定的大纲滑没了。）
+    isOpen: (side: PanelSide) => (padTwoPane
+      ? (side === "left" ? padTreeOpen && !padTreePinned : padOutlineOpen && !padOutlinePinned)
+      : (side === "left" ? sidebarOpen : outlineOpen)),
+    commit: (side: PanelSide, open: boolean) => {
+      if (padTwoPane && !open && (side === "left" ? padTreePinned : padOutlinePinned)) return; // 固定态拒绝手势关闭
+      if (side === "left") openSidebar(open); else openOutline(open);
+    },
     // 261103 用户口径：**只有文档**允许横向手势拉出侧栏（表格/多维表/画板/手写板自身有横滑语义 ⇒ 禁用）；
     // 没有大纲时左滑不再拉出空面板（右滑开目录不受影响）；已展开的大纲仍可滑走关闭。
     canOpen: (side: PanelSide) => activeMetaRef.current.kind === "doc" && (side === "left" || outlineAvailable),
