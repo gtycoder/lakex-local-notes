@@ -8,6 +8,8 @@ const STORE = read("../../../electron/store.ts");
 const IPC = read("../../../electron/ipc/registerNotes.ts");
 const DESKTOP = read("../editor/MultiTabEditor.tsx");
 const MOBILE = read("../../mobile/notebook/NotebookWorkspace.tsx");
+/** 261103 P9-5b：文档层 pane 列表（kind=ink 分支/capture 接线）拆到 NotePaneHost。 */
+const MOBILE_PANES = read("../../mobile/notebook/NotePaneHost.tsx");
 const MOBILE_BRIDGE = read("../../mobile/bridge/notes.ts");
 const INK_PAD = read("./InkPad.tsx");
 const DESKTOP_INK = read("./DesktopInkPad.tsx");
@@ -338,7 +340,7 @@ describe("手写板正式端到端接线", () => {
     expect(DESKTOP_INK).toContain("onImportPdf={onImportPdf}");
     expect(MOBILE_INK_PAD).toContain("bridge.uploadResource(input, noteId)");
     expect(MOBILE_INK_PAD).toContain("onImportPdf={noteId ? onImportPdf : undefined}");
-    expect(MOBILE).toContain("noteId={t.id}");
+    expect(MOBILE_PANES).toContain("noteId={t.id}");
     // 移动端导入 CSS：坞上方「插入」菜单（预览面板里的旧导入行已删除）
     expect(MOBILE_INK_CSS).toContain('[data-overlay="insert"]');
     expect(MOBILE_INK_CSS).not.toContain("[data-ink-import]");
@@ -392,7 +394,7 @@ describe("手写板正式端到端接线", () => {
   });
 
   it("移动端完成编辑前现取手写板正文（与 board/usheet 同一条写边界，绕过 500ms 防抖）", () => {
-    expect(MOBILE).toContain("onEditorCapture={(capture) => {");
+    expect(MOBILE_PANES).toContain("onEditorCapture={(capture) => {");
     expect(MOBILE).toMatch(/active\.kind === "usheet" \|\| active\.kind === "board" \|\| active\.kind === "ink"/);
   });
 
@@ -429,7 +431,7 @@ describe("手写板正式端到端接线", () => {
     expect(DESKTOP).toContain('tab.kind === "ink"');
     expect(DESKTOP).toContain("DesktopInkPad");
     expect(MOBILE_BRIDGE).toContain("async createInk(");
-    expect(MOBILE).toContain('t.kind === "ink"');
-    expect(MOBILE).toContain("MobileInkPad");
+    expect(MOBILE_PANES).toContain('t.kind === "ink"');
+    expect(MOBILE_PANES).toContain("MobileInkPad");
   });
 });

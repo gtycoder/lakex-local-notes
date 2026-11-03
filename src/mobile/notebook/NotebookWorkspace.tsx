@@ -4,30 +4,23 @@
  * 骨架 .mobile-topbar/.mobile-bottom-bar/.side-panel(.side-panel--right)/.side-mask/.model。
  * 多 tab 的「顶部 tab 条」是桌面版；移动端是底部胶囊栏 #toolbarTabs 弹全屏列表（子代理已核对源码）。
  */
-import { Suspense, lazy, useCallback, useEffect, useReducer, useRef, useState } from "react";
-import { Pencil, X, ChevronRight, FolderOpen, FolderPlus, Plus, Trash, SmilePlus, Move, History, FilePlus, Info, Table, Database, PenTool, PenLine, Book, Star } from "lucide-react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+import { Pencil, FolderOpen, Trash, SmilePlus, Move, History, Info, Book, Star } from "lucide-react";
 import { useLongPress } from "../ui/useLongPress";
 import { pushBackHandler } from "../ui/backStack";
-import { NoteInfoSheet } from "../ui/NoteInfoSheet";
-import { MobileNodeIconPicker } from "../ui/NodeIconPicker";
 import { MobileNodeIconGlyph } from "../ui/NodeIconGlyph";
 import { bridge } from "../bridge";
-import { DocumentEditor } from "../editor/DocumentEditor";
-import { OutlineSheet } from "../editor/OutlineSheet";
 import type { LakeEditorInstance } from "../../features/editor/lakeRuntime";
 import { usePanelDrag, type PanelSide } from "../hooks/usePanelDrag";
 import { computeDropPosition, createDragGhost, moveDragGhost, removeDragGhost, type DragGhost } from "../../components/model/treeDrag";
-import { MobileSheetMenu, type MobileSheetItem } from "../ui/MobileSheetMenu";
-import { MobileSheet } from "../ui/MobileSheet";
+import type { MobileSheetItem } from "../ui/MobileSheetMenu";
 import { showToast } from "../ui/toastBus";
 import { reportMobileActionError } from "../lib/reportMobileActionError";
 import { getNativeErrorMessage } from "../../lib/nativeErrors";
 import { successFeedback, warnFeedback } from "../ui/haptics";
 import { useAutoSave } from "../hooks/useAutoSave";
-import type { LocalNote } from "../data/noteRepository";
 import { chromeAfterScroll, type ChromeScrollState } from "./scrollChrome";
 import { isFavorite, toggleFavorite } from "../data/favorites";
-import { MobileBoardViewer } from "../board/MobileBoardViewer";
 import { useNotebookTabs, type NotebookTab } from "./useNotebookTabs";
 import { useNotebookTreeData, type NotebookTreeItem } from "./useNotebookTreeData";
 import { useNotebookTreeActions } from "./useNotebookTreeActions";
@@ -37,6 +30,9 @@ import { useFormFactor } from "../pad/useFormFactor";
 import { WorkspaceCapsule } from "./WorkspaceCapsule";
 import { WorkspaceTopBar } from "./WorkspaceTopBar";
 import { WorkspaceOutlinePanel, WorkspaceTreePanel } from "./WorkspacePanels";
+import { NotePaneHost } from "./NotePaneHost";
+import { WorkspaceOverlayHost } from "./WorkspaceOverlayHost";
+import { WorkspaceDrawers } from "./WorkspaceDrawers";
 import {
   createPadShellState,
   isPadDocked,
@@ -50,12 +46,6 @@ import { readPadPanelPrefs, writePadPanelPrefs } from "../pad/padPanelPrefs";
 import { usePadShortcuts } from "../pad/usePadShortcuts";
 export type { NotebookTreeItem } from "./useNotebookTreeData";
 export type { PadPanelMode } from "./shellModel";
-/** 表格 / 多维表视图按需加载：只有真的打开这类文档才进分包（首屏不含它们）。 */
-const MobileBitableViewer = lazy(() => import("../bitable/MobileBitableViewer").then((m) => ({ default: m.MobileBitableViewer })));
-/** 表格（usheet）：与桌面同一套 Univer 内核的查看/编辑器（261020 起可编辑；运行时按需加载）。 */
-const MobileUsheetViewer = lazy(() => import("../usheet/MobileUsheetViewer").then((m) => ({ default: m.MobileUsheetViewer })));
-/** 手写板：共享 InkPad + perfect-freehand，按需分包。 */
-const MobileInkPad = lazy(() => import("../ink/MobileInkPad").then((m) => ({ default: m.MobileInkPad })));
 import type { TreeNode } from "../../lib/types";
 
 /** 「新建」清单 id → 文档 kind（清单与创建通道的唯一对应表；group 不走这里）。 */
@@ -788,6 +778,51 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     },
   });
 
+  // ---- P9-5b：抽出的三块 JSX（NotePaneHost / WorkspaceOverlayHost / WorkspaceDrawers）的接线 ----
+  // 全部是「同一行为的回调化」：写入边界、关闭/下钻顺序、自动保存时机与原内联实现逐字一致。
+  const handlePaneBodyChange = useCallback((tab: NotebookTab, content: string, plain?: string) => {
+    updateTab(tab.id, { content });
+    if (tab.editing) scheduleAutoSave(tab.id, tab.title, content, plain);
+  }, [scheduleAutoSave, updateTab]);
+  const persistBitableNow = useCallback(async (tab: NotebookTab, content: string) => {
+    updateTab(tab.id, { content });
+    await bridge.saveNote(tab.id, tab.title, content);
+  }, [updateTab]);
+  const handlePaneCapture = useCallback((id: string, capture: (() => string | null) | null) => {
+    if (capture) liveBodyCapturesRef.current.set(id, capture);
+    else liveBodyCapturesRef.current.delete(id);
+  }, []);
+  const handleEditorInstance = useCallback((id: string, editor: LakeEditorInstance | null) => {
+    if (editor) editorsRef.current.set(id, editor);
+    else editorsRef.current.delete(id);
+  }, []);
+  const tabIconOf = useCallback((id: string) => itemById(id)?.icon ?? null, [itemById]);
+  const selectCreateItem = useCallback((it: MobileSheetItem) => {
+    closeOverlay("create");
+    // 复用目录树的同一份创建通道（行内 ＋ / 抽屉「新建」同源），不新造第二条；作用域 = 本次打开它的那个节点
+    const kind = CREATE_MENU_KINDS[it.id];
+    if (kind) void createChildDocument(kind, createParent);
+    else if (it.id === "group") void createChildGroup(createParent);
+  }, [closeOverlay, createChildDocument, createChildGroup, createParent]);
+  const handleOpenTabFromList = useCallback((id: string) => {
+    void openTab(id);
+    closeOverlay("tabs");
+  }, [closeOverlay, openTab]);
+  const handleSwitchNotebookItem = useCallback((it: MobileSheetItem) => {
+    closeOverlay("notebookSwitch");
+    if (it.id !== notebookId) void switchNotebook(it.id);
+  }, [closeOverlay, notebookId, switchNotebook]);
+  const handlePickIcon = useCallback((target: NotebookTreeItem, icon: string | null) => {
+    void applyIcon(target, icon).then((next) => {
+      // 面板开着时把选中的图标同步回 overlay 的载荷（否则 picker 仍显示旧值）
+      if (next !== null) openOverlay({ kind: "icon", node: { ...target, icon: next } });
+    });
+  }, [applyIcon, openOverlay]);
+  const openHistoryFromInfo = useCallback((node: NotebookTreeItem) => {
+    closeOverlay("info");
+    openHistorySheet(node);
+  }, [closeOverlay, openHistorySheet]);
+
   return (
     <div className={"mobile-workspace" + (capsuleInEdit ? " mobile-workspace--capsule-edit" : "")}>
       <WorkspaceTopBar
@@ -841,127 +876,20 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
               }
             : undefined}
         >
-        {/* ⚠️ 已挂载的 keep-alive 页**必须一直留在 DOM 里**（只允许非活动页 display:none）：
-            旧实现是「活动页没挂载 ⇒ 用骨架替换整份 pane 列表」，于是打开一篇本会话还没挂载的文档时，
-            别的标签的 pane 被一起卸载、scrollTop 归零（R2：切走再切回 752→0）。
-            现在骨架只是**并列的占位层**，已挂载的 pane 照常渲染（非活动页隐藏但保留滚动位置）。 */}
-        {tabs.map((t) => (!mountedIds.has(t.id) ? null : (
-          <div key={t.id} className={"doc-pane" + (t.id === activeId ? " active" : "") + (t.id === freshId ? " doc-pane--fresh" : "")}>
-            <>
-            {/* 标题只在顶栏（思源 #toolbarName 口径）；正文区不再重复一个标题输入框 */}
-            {t.kind === "board" ? (
-              // 画板：移动端查看/编辑（同一套 Drawnix 引擎；正文只进画板实例，绝不喂 Lake 编辑器）
-              <MobileBoardViewer
-                noteId={t.id}
-                content={t.content}
-                active={t.id === activeId}
-                editing={t.editing}
-                onChange={(c) => {
-                  updateTab(t.id, { content: c });
-                  if (t.editing) scheduleAutoSave(t.id, t.title, c);
-                }}
-                onCapture={(capture) => {
-                  if (capture) liveBodyCapturesRef.current.set(t.id, capture);
-                  else liveBodyCapturesRef.current.delete(t.id);
-                }}
-              />
-            ) : t.kind === "ink" ? (
-              <Suspense fallback={<div className="mb-empty">正在加载手写板…</div>}>
-                <MobileInkPad
-                  noteId={t.id}
-                  content={t.content}
-                  active={t.id === activeId}
-                  readOnly={!t.editing}
-                  onChange={(c) => { updateTab(t.id, { content: c }); if (t.editing) scheduleAutoSave(t.id, t.title, c); }}
-                  // 与 board/usheet 同一条写边界：完成编辑/退出前现取实例正文（绕过 500ms 防抖）。
-                  onEditorCapture={(capture) => {
-                    if (capture) liveBodyCapturesRef.current.set(t.id, capture);
-                    else liveBodyCapturesRef.current.delete(t.id);
-                  }}
-                />
-              </Suspense>
-            ) : t.kind === "bitable" ? (
-              // 多维表：移动端查看/编辑（同一份 core 数据模型与写入纯函数；正文 JSON 绝不给 Lake 编辑器）。
-              // 只有当前活动页可编辑：切走后自动收起记录/字段面板，回来再恢复编辑态。
-              <Suspense fallback={<div className="mb-empty">正在加载多维表…</div>}>
-                <MobileBitableViewer
-                  noteId={t.id}
-                  content={t.content}
-                  editing={t.editing && t.id === activeId}
-                  onChange={(c) => {
-                    updateTab(t.id, { content: c });
-                    if (t.editing) scheduleAutoSave(t.id, t.title, c);
-                  }}
-                  // 只读文档里提交表单必须真正落盘（不走「编辑态才自动保存」的防抖路径）：
-                  // 与「完成编辑」同一条写边界（bridge.saveNote），失败抛出由 viewer 提示。
-                  onPersistNow={async (c) => {
-                    updateTab(t.id, { content: c });
-                    await bridge.saveNote(t.id, t.title, c);
-                  }}
-                  // 记录详情 = 子页全屏：请求隐藏工作区顶栏/底部胶囊（单一入口，child 只声明状态）。
-                  onFullscreenChange={setSubpageFullscreen}
-                />
-              </Suspense>
-            ) : t.kind === "usheet" ? (
-              // 表格：移动端查看/编辑（同一套 Univer 内核；正文 JSON 绝不喂 Lake 编辑器）
-              <Suspense fallback={<div className="mb-empty">正在加载表格…</div>}>
-                <MobileUsheetViewer
-                  noteId={t.id}
-                  content={t.content}
-                  active={t.id === activeId}
-                  editing={t.editing}
-                  onChange={(c) => {
-                    updateTab(t.id, { content: c });
-                    if (t.editing) scheduleAutoSave(t.id, t.title, c);
-                  }}
-                  onCapture={(capture) => {
-                    if (capture) liveBodyCapturesRef.current.set(t.id, capture);
-                    else liveBodyCapturesRef.current.delete(t.id);
-                  }}
-                />
-              </Suspense>
-            ) : t.kind !== "doc" ? (
-              // 兜底防腐坏（AGENTS §3）：未知类型的正文不是 Lake HTML，**绝不允许** Lake 编辑器打开/保存。
-              <div className="mb-empty">
-                {t.title || "此文档"}：该类型暂不支持在移动端查看，请在桌面端打开。
-              </div>
-            ) : (
-            <DocumentEditor
-              note={{ id: t.id, title: t.title, content: t.content } as LocalNote}
-              content={t.content}
-              editing={t.editing}
-              onContentChange={(c, plain) => { updateTab(t.id, { content: c }); if (t.editing) scheduleAutoSave(t.id, t.title, c, plain); }}
-              documents={[]}
-              hidePanels
-              findOpen={findOpen && t.id === activeId}
-              onCloseFind={() => closeOverlay("find")}
-              onEditorInstance={(ed) => {
-                // DS 复核 A2：卸载时 onEditorReady(noteId, null) —— 必须 delete，不能 set(null)
-                // （否则 closeTab 里 delete 后又会被 set 写回键）。get(activeId) ?? null 已兼容 undefined。
-                if (ed) editorsRef.current.set(t.id, ed);
-                else editorsRef.current.delete(t.id);
-              }}
-            />
-            )}
-            </>
-          </div>
-        )))}
-        {/* 正在异步读回（刚点开、还没进 tabs）时先画骨架：避免转场落位后先闪一块空白再蹦出正文。
-            只有「活动页自己还没挂载」才画；其余已挂载的 pane 在上一段里照常保留。 */}
-        {!active || !mountedIds.has(active.id) ? (
-          activeId ? (
-            <div className="mb-doc-skeleton" aria-busy="true" aria-label="正在打开文档">
-              <span className="mb-skel mb-doc-skeleton__title" />
-              <span className="mb-skel mb-doc-skeleton__line" />
-              <span className="mb-skel mb-doc-skeleton__line" />
-              <span className="mb-skel mb-doc-skeleton__line" />
-              <span className="mb-skel mb-doc-skeleton__line" />
-              <span className="mb-skel mb-doc-skeleton__line mb-doc-skeleton__line--short" />
-            </div>
-          ) : (
-            <div className="mb-empty">暂无打开的文档，点底部「文档树」打开</div>
-          )
-        ) : null}
+        <NotePaneHost
+          tabs={tabs}
+          active={active}
+          activeId={activeId}
+          freshId={freshId}
+          mountedIds={mountedIds}
+          findOpen={findOpen}
+          onBodyChange={handlePaneBodyChange}
+          onPersistBitableNow={persistBitableNow}
+          onCapture={handlePaneCapture}
+          onEditorInstance={handleEditorInstance}
+          onFullscreenChange={setSubpageFullscreen}
+          onCloseFind={() => closeOverlay("find")}
+        />
         </section>
 
         {/* 平板：右侧大纲悬浮覆盖层（手机仍是 .side-panel--right 抽屉；rail 只在 expanded 渲染） */}
@@ -996,149 +924,61 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
         onSwitchNotebook={() => openOverlay({ kind: "notebookSwitch" })}
       />
 
-      {/* 目录抽屉「新建」（261014 用户点单）：**清单与桌面 Sidebar 的 CREATE_CHILD_ITEMS 同款同序**
-          （文档 / 表格 / 多维表 / 画板 / 分组）。261020 起四类文档都有移动端编辑器（可直接新建并进入编辑），
-          分组走目录树创建。不要在移动端建出"打不开的文档"。 */}
-      <MobileSheetMenu
-        open={createOpen}
-        items={[
-          { id: "note", label: "新建文档", icon: FilePlus },
-          { id: "usheet", label: "新建表格", icon: Table },
-          { id: "bitable", label: "新建多维表", icon: Database },
-          { id: "board", label: "新建画板", icon: PenTool },
-          { id: "ink", label: "新建手写板", icon: PenLine },
-          { id: "group", label: "新建分组", icon: FolderPlus },
-        ]}
-        onClose={() => closeOverlay("create")}
-        onSelect={(it) => {
-          closeOverlay("create");
-          // 复用目录树的同一份创建通道（行内 ＋ / 抽屉「新建」同源），不新造第二条；作用域 = 本次打开它的那个节点
-          const kind = CREATE_MENU_KINDS[it.id];
-          if (kind) void createChildDocument(kind, createParent);
-          else if (it.id === "group") void createChildGroup(createParent);
-        }}
+      {/* P9-5b：浮层宿主（新建/标签列表/切换笔记本/行菜单/属性/图标/历史）。互斥仍由 useWorkspaceOverlays 保证 ⇒ 同一时刻只渲染一个。 */}
+      <WorkspaceOverlayHost
+        createOpen={createOpen}
+        onCreateSelect={selectCreateItem}
+        onCloseCreate={() => closeOverlay("create")}
+        tabsOpen={tabsOpen}
+        tabs={tabs}
+        activeId={activeId}
+        tabIconOf={tabIconOf}
+        onOpenTab={handleOpenTabFromList}
+        onCloseTab={(id) => { void closeTab(id); }}
+        onCloseAllTabs={() => void closeAllTabs()}
+        onCloseTabs={() => closeOverlay("tabs")}
+        onOpenDocPicker={() => openSidebar(true)}
+        notebookSwitchOpen={notebookSwitchOpen}
+        notebooks={notebooks}
+        notebookId={notebookId}
+        onSwitchNotebook={handleSwitchNotebookItem}
+        onCloseNotebookSwitch={() => closeOverlay("notebookSwitch")}
+        menuFor={menuFor}
+        treeMenuItemsFor={treeMenuItems}
+        onTreeMenuSelect={onTreeMenuSelect}
+        onCloseMenu={() => closeOverlay("menu")}
+        infoFor={infoFor}
+        onCloseInfo={() => closeOverlay("info")}
+        onOpenHistoryFromInfo={openHistoryFromInfo}
+        iconFor={iconFor}
+        onPickIcon={handlePickIcon}
+        onCloseIcon={() => closeOverlay("icon")}
+        historyFor={historyFor}
+        historyList={historyList}
+        onRestoreHistory={(id) => void applyRestoreHistory(id)}
+        onDeleteHistory={(id) => void deleteHistory(id)}
+        onCloseHistory={() => closeOverlay("history")}
       />
 
-      {/* 左目录抽屉 (.side-panel)：**只在手机渲染**。平板用 .pad-tree（悬浮/可固定），
-          且不再渲染这层空抽屉 —— 否则手势会去动画一个空 .side-panel 并把遮罩带出来（261103 用户报「手势一出来目录栏就固定了」）。 */}
-      {!padTwoPane && (<>
-      <div className={"side-mask" + (sidebarOpen ? " on" : "")} data-panel-mask="left" onClick={() => openSidebar(false)} />
-      <aside className={"side-panel side-panel--left" + (sidebarOpen ? " on" : "")} aria-label="目录">
-        <div className="toolbar toolbar--border toolbar--dark" data-prevent-swipe>
-          <div className="toolbar__scroll">
-            {/* 笔记本自己也是一行（用户 261014）：**图标 + 标题**；图标可点 = 设置图标（桌面 .tree-row-icon 同款手势） */}
-            <span className="mb-tree-icon" aria-hidden="true">{nbIcon ? <MobileNodeIconGlyph value={nbIcon} /> : <Book size={16} />}</span>
-            {renamingId === notebookId ? (
-              <input
-                className="mb-input"
-                autoFocus
-                value={renameValue}
-                onChange={(e) => setRenameValue(e.target.value)}
-                onClick={(e) => e.stopPropagation()}
-                onBlur={() => void applyRename()}
-                onKeyDown={(e) => { if (e.key === "Enter") void applyRename(); if (e.key === "Escape") setRenamingId(null); }}
-              />
-            ) : (
-              <span className="toolbar__text">{title}</span>
-            )}
-          </div>
-          {/* 笔记本这一层**不放** ⋮（用户 261014：抽屉里的编辑入口去掉，改到首页「知识库」长按卡片） */}
-          {/* 261014 用户点单：目录栏加「新建」（桌面同款清单） */}
-          <span className="toolbar__icon" role="button" tabIndex={0} onClick={() => openOverlay({ kind: "create", parentId: notebookId })} aria-label="新建" title="新建"><Plus /></span>
-          <span className="toolbar__icon" role="button" tabIndex={0} onClick={() => openSidebar(false)} aria-label="收起"><ChevronRight /></span>
-        </div>
-        {/* 树行 = 可见行扁平数组 + 视口窗口化（2000 节点时不一次挂 2000 个按钮，见 NotebookTreeList）。
-            虚拟滚动下拖拽/长按仍靠行上的 data-node-id 与 .side-panel-body 命中（手指下的行必在窗口内）。
-            平板时树挂在悬浮左栏（.pad-tree），抽屉不渲染第二份实例。 */}
-        {treeList}
-      </aside>
-      </>)}
-
-      {/* 右大纲抽屉 (.side-panel--right)：同样只在手机渲染；平板用 .pad-outline（悬浮/可固定）。 */}
-      {!padTwoPane && <OutlineSheet side open={outlineOpen} editor={activeId ? (editorsRef.current.get(activeId) ?? null) : null} onClose={() => closeOverlay("outline")} />}
-
-      {/* 全屏 tab 列表 (.model，思源 #toolbarTabs → #model) */}
-      {tabsOpen && (
-        <div className="mobile-model-mask" onClick={() => closeOverlay("tabs")}>
-          <div className="mobile-model" onClick={(e) => e.stopPropagation()}>
-            <div className="toolbar toolbar--border mobile-model-head">
-              <span className="toolbar__text">标签页</span>
-              {tabs.length > 0 && (
-                <button className="mobile-model-closeall" onClick={closeAllTabs} aria-label="关闭全部标签页">关闭全部</button>
-              )}
-              <span className="toolbar__icon" role="button" tabIndex={0} onClick={() => closeOverlay("tabs")} aria-label="关闭"><X /></span>
-            </div>
-            <div className="mobile-model-body">
-              {tabs.length === 0 && <div className="mb-empty">暂无打开的文档</div>}
-              {tabs.map((t) => (
-                <div key={t.id} className={"mb-row" + (t.id === activeId ? " is-selected" : "")} onClick={() => { void openTab(t.id); closeOverlay("tabs"); }}>
-                  {itemById(t.id)?.icon && <span className="mb-tree-icon"><MobileNodeIconGlyph value={itemById(t.id)?.icon} /></span>}
-                  <span className="mb-row__title">{t.title || "无标题"}</span>
-                  <button className="mb-iconbtn mb-row__action" onClick={(e) => { e.stopPropagation(); void closeTab(t.id); }} aria-label="关闭"><X size={16} /></button>
-                </div>
-              ))}
-              <button className="mb-btn mb-btn--secondary model-add" onClick={() => openSidebar(true)}><Plus size={16} />打开文档</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 笔记本切换（思源 sheet 菜单：贴底、56dvh、下钻即整屏平移） */}
-      <MobileSheetMenu
-        open={notebookSwitchOpen}
-        items={notebooks.map((nb) => ({ id: nb.id, label: nb.title, icon: FolderOpen, note: nb.id === notebookId ? "当前" : undefined }))}
-        onClose={() => closeOverlay("notebookSwitch")}
-        onSelect={(it) => { closeOverlay("notebookSwitch"); if (it.id !== notebookId) void switchNotebook(it.id); }}
-      />
-
-      {/* 目录树长按菜单 */}
-      <MobileSheetMenu
-        open={!!menuFor}
-        items={menuFor ? treeMenuItems(menuFor) : []}
-        onClose={() => closeOverlay("menu")}
-        onSelect={onTreeMenuSelect}
-      />
-
-
-      {/* 文档属性（长按 → 属性） */}
-      {infoFor && (
-        <NoteInfoSheet
-          noteFileId={infoFor.id}
-          title={infoFor.title}
-          onClose={() => closeOverlay("info")}
-          onOpenHistory={() => { const n = infoFor; closeOverlay("info"); openHistorySheet(n); }}
+      {!padTwoPane && (
+        <WorkspaceDrawers
+          sidebarOpen={sidebarOpen}
+          outlineOpen={outlineOpen}
+          title={title}
+          nbIcon={nbIcon}
+          renamingId={renamingId}
+          notebookId={notebookId}
+          renameValue={renameValue}
+          onRenameChange={setRenameValue}
+          onRenameCommit={() => void applyRename()}
+          onRenameCancel={() => setRenamingId(null)}
+          treeList={treeList}
+          onOpenSidebar={openSidebar}
+          onOpenCreate={() => openOverlay({ kind: "create", parentId: notebookId })}
+          editor={activeId ? (editorsRef.current.get(activeId) ?? null) : null}
+          onCloseOutline={() => closeOverlay("outline")}
         />
       )}
-
-      {/* 图标选择器（MOB-11：scrim / 右滑 / 返回栈 / 焦点 / 滚动锁交给 MobileSheet，类名与 DOM 不变） */}
-      {iconFor && (
-        <MobileSheet open title="设置图标" onClose={() => closeOverlay("icon")}>
-          <MobileNodeIconPicker key={iconFor.id} nodeType={iconFor.kind} value={iconFor.icon}
-            onPick={(icon) => {
-              const target = iconFor;
-              if (!target) return;
-              void applyIcon(target, icon).then((next) => {
-                // 面板开着时把选中的图标同步回 overlay 的载荷（否则 picker 仍显示旧值）
-                if (next !== null) openOverlay({ kind: "icon", node: { ...target, icon: next } });
-              });
-            }} />
-        </MobileSheet>
-      )}
-
-      {/* 历史版本 sheet（MOB-11：骨架交给 MobileSheet；正文类名 mb-list 逐字保留） */}
-      {historyFor && (
-        <MobileSheet open title="历史版本" bodyClassName="mb-list" onClose={() => closeOverlay("history")}>
-          {historyList.length === 0 && <p className="mb-empty mb-empty--inset">暂无历史版本</p>}
-          {historyList.map((h) => (
-            <div key={h.id} className="mb-row" onClick={() => void applyRestoreHistory(h.id)}>
-              <span className="mb-row__title">{h.title || "无标题"}</span>
-              <span className="mb-row__meta">{new Date(h.createdAt).toLocaleString("zh-CN")}</span>
-              <button className="mb-iconbtn mb-row__action" onClick={(e) => { e.stopPropagation(); void deleteHistory(h.id); }} aria-label="删除"><X size={16} /></button>
-            </div>
-          ))}
-        </MobileSheet>
-      )}
-
     </div>
   );
 }

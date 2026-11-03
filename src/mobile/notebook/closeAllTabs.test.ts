@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 
 /** 261019：标签页抽屉加「关闭全部」。 */
 const WS = readFileSync(new URL("./NotebookWorkspace.tsx", import.meta.url), "utf8");
+/** 261103 P9-5b：全屏标签列表（.model）拆到 WorkspaceOverlayHost.tsx。 */
+const OVERLAY = readFileSync(new URL("./WorkspaceOverlayHost.tsx", import.meta.url), "utf8");
 const SESSION = readFileSync(new URL("./useNotebookTabs.ts", import.meta.url), "utf8");
 const APP = readFileSync(new URL("../MobileApp.tsx", import.meta.url), "utf8");
 const CSS = readFileSync(new URL("../mobile.css", import.meta.url), "utf8");
@@ -21,7 +23,7 @@ describe("标签页「关闭全部」（261019）", () => {
   });
 
   it("表头渲染「关闭全部」按钮（有标签时）", () => {
-    expect(WS).toMatch(/tabs\.length > 0 && \(\s*\n\s*<button className="mobile-model-closeall"/);
+    expect(OVERLAY).toMatch(/tabs\.length > 0 && \(\s*\n\s*<button className="mobile-model-closeall"/);
     expect(CSS).toMatch(/\.mobile-model-closeall\s*\{[^}]*margin-left:\s*auto/);
   });
 

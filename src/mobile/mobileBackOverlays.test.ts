@@ -14,6 +14,8 @@ import { describe, expect, it } from "vitest";
  */
 const read = (rel: string): string => readFileSync(new URL(rel, import.meta.url), "utf8");
 const WORKSPACE = read("./notebook/NotebookWorkspace.tsx");
+/** 261103 P9-5b：浮层（图标/历史版本等 MobileSheet）拆到 WorkspaceOverlayHost.tsx。 */
+const WORKSPACE_OVERLAYS = read("./notebook/WorkspaceOverlayHost.tsx");
 const OVERLAYS = read("./notebook/useWorkspaceOverlays.ts");
 const SHEET = read("./ui/MobileSheet.tsx");
 const INFO = read("./ui/NoteInfoSheet.tsx");
@@ -86,7 +88,7 @@ describe("移动端返回键先关浮层（MOB-01 / MOB-02）", () => {
 
   it("MOB-11 收尾：工作区图标/历史、文档列表/大纲、多维表两个面板、首页图标都走 MobileSheet", () => {
     for (const [name, src] of [
-      ["NotebookWorkspace.icon/history", WORKSPACE],
+      ["NotebookWorkspace.icon/history", WORKSPACE_OVERLAYS],
       ["DocListSheet", DOC_LIST],
       ["OutlineSheet", OUTLINE],
       ["MobileBitableFieldSheet", FIELD_SHEET],
@@ -100,7 +102,7 @@ describe("移动端返回键先关浮层（MOB-01 / MOB-02）", () => {
     // 工作区：图标/历史由原语自己登记返回栈 ⇒ owner 不得重复登记（否则返回键跳过子层）
     expect(OVERLAYS).toContain('"icon", "history"');
     // 表面类名逐字保留（迁移不新造第二套弹层）
-    expect(WORKSPACE).toContain('bodyClassName="mb-list"');
+    expect(WORKSPACE_OVERLAYS).toContain('bodyClassName="mb-list"');
     expect(FIELD_SHEET).toContain('titleClassName="mb-ellipsis"');
     expect(RECORD_SHEET).toContain('bodyClassName="mb-sheet__body--form"');
     expect(OUTLINE).toContain('className="med-outline-sheet"');

@@ -17,7 +17,8 @@ const DOC = readFileSync(new URL("../../core/boardDoc.ts", import.meta.url), "ut
 const STORE = readFileSync(new URL("../../../electron/store.ts", import.meta.url), "utf8");
 const KINDS = readFileSync(new URL("../../core/noteKind.ts", import.meta.url), "utf8");
 const MOBILE_VIEWER = readFileSync(new URL("../../mobile/board/MobileBoardViewer.tsx", import.meta.url), "utf8");
-const MOBILE_WORKSPACE = readFileSync(new URL("../../mobile/notebook/NotebookWorkspace.tsx", import.meta.url), "utf8");
+/** 261103 P9-5b：文档层 pane 列表拆到 NotePaneHost（kind 分支/接线在那里）。 */
+const MOBILE_PANES = readFileSync(new URL("../../mobile/notebook/NotePaneHost.tsx", import.meta.url), "utf8");
 const IMAGE_ASSETS = readFileSync(new URL("./boardImageAssets.ts", import.meta.url), "utf8");
 
 describe("画板编辑器护栏", () => {
@@ -134,10 +135,10 @@ describe("画板编辑器护栏", () => {
 
   it("移动端：kind=board 走画板查看/编辑器（阅读只读、编辑可写；绝不挂 Lake 编辑器）", () => {
     // 路由：board 分支必须在「非 doc 占位」之前，否则画板会被挡成占位
-    expect(MOBILE_WORKSPACE).toMatch(/t\.kind === "board" \? \(/);
+    expect(MOBILE_PANES).toMatch(/t\.kind === "board" \? \(/);
     // 261020 P1：视口记忆按笔记 id 索引 ⇒ 宿主必须把 noteId 传给查看器（参数顺序不钉死）
-    expect(MOBILE_WORKSPACE).toMatch(/<MobileBoardViewer[\s\S]{0,240}noteId=\{t\.id\}/);
-    expect(MOBILE_WORKSPACE).toMatch(/<MobileBoardViewer[\s\S]{0,240}editing=\{t\.editing\}/);
+    expect(MOBILE_PANES).toMatch(/<MobileBoardViewer[\s\S]{0,240}noteId=\{t\.id\}/);
+    expect(MOBILE_PANES).toMatch(/<MobileBoardViewer[\s\S]{0,240}editing=\{t\.editing\}/);
     // 查看器：editing（且正文可读）才可写 + 无记忆才自适应 + 懒加载同一份引擎分包；正文永远不交给 Lake 编辑器
     // CORE-02：坏正文时 canEdit=false ⇒ readOnly=true（下方 boardCorruptBody.test.ts 锁这条）。
     expect(MOBILE_VIEWER).toMatch(/readOnly=\{!canEdit\}/);

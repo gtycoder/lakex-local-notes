@@ -4,6 +4,8 @@ import { CHROME_HIDE_DELTA, CHROME_SHOW_DELTA, CHROME_TOP_PX, chromeAfterScroll 
 
 const read = (rel: string) => readFileSync(new URL(rel, import.meta.url), "utf8");
 const WS = read("./NotebookWorkspace.tsx");
+/** 261103 P9-5b：文档层 pane 列表 + 骨架拆到 NotePaneHost.tsx。 */
+const PANE = read("./NotePaneHost.tsx");
 /** 261103 P4：胶囊拆成 WorkspaceCapsule.tsx ⇒ 相关静态断言改读组件源码。 */
 const CAPSULE = read("./WorkspaceCapsule.tsx");
 /** 261103 P9：顶栏拆成 WorkspaceTopBar.tsx。 */
@@ -54,8 +56,8 @@ describe("阅读时顶栏/底栏自动收起（261019，对齐思源）", () => 
   it("转场骨架 + 正文淡入：工作区首次挂载与异步读回都先画骨架", () => {
     expect(APP).toContain("mobile-route-skeleton");
     expect(APP).not.toContain("加载中…");
-    expect(WS).toContain("mb-doc-skeleton");
-    expect(WS).toContain("doc-pane--fresh");
+    expect(PANE).toContain("mb-doc-skeleton");
+    expect(PANE).toContain("doc-pane--fresh");
     expect(CSS).toMatch(/\.doc-pane--fresh \.mobile-doc-body\s*\{\s*animation:\s*mb-doc-fade/);
     expect(CSS).toMatch(/prefers-reduced-motion[\s\S]{0,1200}\.doc-pane--fresh \.mobile-doc-body\s*\{\s*animation:\s*none/);
   });

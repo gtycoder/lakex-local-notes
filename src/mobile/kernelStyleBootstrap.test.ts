@@ -6,9 +6,11 @@
  * 261010 复查同类路径时又发现一处：**`TrashPreviewPage`（设置 → 回收站 → 预览，懒加载）挂了 `LakeEditor` 但没有内核样式**——
  * 冷启动直接走这条路径同样是"第一个内核消费者"。本测试把这条规则固化。
  *
- * 规则：对每个 `lazy(() => import("m"))` 入口模块 m，若 {m 自身 + m 的直接相对 import} 里出现内核挂载点
- * （`LakeEditor` / `lakeRuntime` / `createOpenEditor` / `createLakeDocument`），则该集合里必须出现内核样式
- * （`@dlient/lakex-doc-react/style.css`）。**直接 import 一层即可**（懒入口的子树由打包器一并加载）。
+ * 规则：对每个 `lazy(() => import("m"))` 入口模块 m，取 m 的**相对 import 闭包**（打包器会把静态子树一并并进
+ * 该懒 chunk），若闭包里出现内核挂载点（`LakeEditor` / `lakeRuntime` / `createOpenEditor` / `createLakeDocument`），
+ * 则闭包里必须出现内核样式（`@dlient/lakex-doc-react/style.css`）。
+ * 261103 P9-5b：原实现只查「入口 + 直接 import 一层」——拆件后 `NotebookWorkspace → NotePaneHost → DocumentEditor`
+ * 的样式挂载点掉到第二层，一层启发式误报；改成闭包后判据与文件层级无关（语义不变：懒 chunk 里必须有样式）。
  */
 import { readFileSync, existsSync } from "node:fs";
 import path from "node:path";
@@ -47,6 +49,21 @@ function relativeImports(file: string): string[] {
   return specs.map((s) => resolveImport(file, s)).filter((x): x is string => x !== null);
 }
 
+/** 相对 import 闭包（含入口自身；带 visited 防环）。静态子树会被打包器并进同一个懒 chunk。 */
+function importClosure(entry: string): string[] {
+  const seen = new Set<string>([entry]);
+  const stack = [entry];
+  while (stack.length > 0) {
+    const cur = stack.pop() as string;
+    for (const next of relativeImports(cur)) {
+      if (seen.has(next)) continue;
+      seen.add(next);
+      stack.push(next);
+    }
+  }
+  return [...seen];
+}
+
 const MOUNT_MARKERS = ["LakeEditor", "lakeRuntime", "createOpenEditor", "createLakeDocument"];
 const CSS_MARKER = "@dlient/lakex-doc-react/style.css";
 const mentions = (file: string, markers: string[]): boolean => {
@@ -77,7 +94,7 @@ describe("移动端内核样式：懒加载入口自带（261009/261010 缺陷�
   it("会挂内核的懒入口必须带内核样式（自身或直接 import 层）", () => {
     const offenders: string[] = [];
     for (const entry of entries) {
-      const subtree = [entry, ...relativeImports(entry)];
+      const subtree = importClosure(entry);
       const mountsKernel = subtree.some((f) => mentions(f, MOUNT_MARKERS));
       if (!mountsKernel) continue;
       const hasCss = subtree.some((f) => read(f).includes(CSS_MARKER));

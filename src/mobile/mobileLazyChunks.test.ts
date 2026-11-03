@@ -47,13 +47,17 @@ describe("移动端入口不静态引入 Lake 内核", () => {
   });
 
   it("移动端不借桌面「文档属性」弹窗（否则会连带把桌面编辑器打进移动端包）", () => {
+    // P9-5b：浮层拆到 WorkspaceOverlayHost.tsx（NoteInfoSheet 的 import 落点跟着搬）。
     const nw = read("./notebook/NotebookWorkspace.tsx");
+    const overlay = read("./notebook/WorkspaceOverlayHost.tsx");
     expect(nw).not.toMatch(/components\/NoteInfoDialog/);
-    expect(nw).toMatch(/from "\.\.\/ui\/NoteInfoSheet"/);
+    expect(overlay).not.toMatch(/components\/NoteInfoDialog/);
+    expect(overlay).toMatch(/from "\.\.\/ui\/NoteInfoSheet"/);
   });
 
   it("移动端表格查看器（Univer 内核）也走 lazy，不进入口 chunk", () => {
-    expect(read("./notebook/NotebookWorkspace.tsx")).toMatch(/lazy\(\(\) => import\("\.\.\/usheet\/MobileUsheetViewer"\)/);
+    // P9-5b：懒加载声明随 pane 列表拆到 NotePaneHost.tsx
+    expect(read("./notebook/NotePaneHost.tsx")).toMatch(/lazy\(\(\) => import\("\.\.\/usheet\/MobileUsheetViewer"\)/);
   });
 
   it("vite.mobile.config.ts 不给 @dlient/lakex-doc-react 加 codeSplitting 分组", () => {
