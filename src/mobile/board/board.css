@@ -1,0 +1,45 @@
+/**
+ * 移动端画板（Drawnix）编辑态专属几何 —— 261103 task-4。
+ *
+ * 为什么单开这个文件：vendor 的 `.draw-toolbar` 只在 `@media (width<=720px)` 里切成
+ * 「画布顶部横向可滚动轨」；视口一旦 >720px（平板 / 折叠屏展开 / 手机横屏 / 分屏），
+ * 就退回桌面几何 `top:50%; left:18px; transform:translateY(-50%)`。
+ * 可上游 Drawnix 的 `.drawnix--mobile.drawnix .draw-toolbar{top:20px}` 特异性更高，
+ * 把 top 改成了 20px，而 **translateY(-50%) 留了下来** ⇒ 整条竖向轨以 y=20 为中线，
+ * 上半截被顶到可视区外（实测 900×620：rect=[18,-131,61,406]，素材库 / AI 助手 / 选择
+ * 全部落在视口上方；轨最上方的手形工具因此永远点不到）。
+ *
+ * 修法：只对移动端画板宿主取消这个遗留的 translateY，让竖向轨从画布顶部开始排；
+ * 可视高度不够时内部纵向滚动，保证每一项都可达。作用域 = `.mobile-board-viewer`
+ * （桌面 `features/board/BoardEditor.tsx` 走自己的 chrome，不命中本文件）。
+ * ≤720px 的手机竖屏保持 vendor 的横轨（实测量过：可横滑露出最右的「导出」）。
+ */
+@media (min-width: 721px) {
+  .mobile-board-viewer.is-editing .lakex-drawnix-core .draw-toolbar {
+    top: 12px;
+    /* 261103 六批 A1：横屏刘海下竖向轨整体右移（竖屏 0 ⇒ 仍是 vendor 的 18px 观感）。 */
+    left: calc(18px + var(--mobile-left-safe-area));
+    bottom: auto;
+    transform: none;
+    max-height: calc(100% - 24px);
+    overflow-y: auto;
+  }
+  /* 261103 task-9（用户图1「左右有点错位」）：每个工具项是 label + 隐藏 radio input + 图标内容，
+     **input 仍参与 flex 布局**（15px）⇒ 图标被挤到右侧 15px、列宽也被撑到 51px（实测按钮中心 48.5 /
+     图标中心 56，卡片 61 宽）。把 radio 改成视觉隐藏（绝对定位 1px + 透明）后列宽回到 36px，
+     图标与卡片同心（实测 svg 左右余量 9/9、卡片 61 → 46）。 */
+  .mobile-board-viewer.is-editing .lakex-drawnix-core .draw-toolbar .tool-icon {
+    position: relative;
+  }
+  .mobile-board-viewer.is-editing .lakex-drawnix-core .draw-toolbar .tool-icon > input {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 1px;
+    height: 1px;
+    margin: 0;
+    padding: 0;
+    opacity: 0;
+    pointer-events: none;
+  }
+}

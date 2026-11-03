@@ -16,6 +16,7 @@
  *   移动端只注入「读回」与「上传」两个能力（桌面同一口径，不另写一套）。
  */
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
+import "./board.css"; // 移动端画板专属几何（工具条夹进视口；桌面画板不命中）
 import type { EditorCaptureHandler } from "../../core/editorCapture";
 import { loadDrawnixBoardCore } from "@dlient/lakex-doc-react";
 import type { DrawnixBoardCoreProps } from "@dlient/lakex-doc-react";
