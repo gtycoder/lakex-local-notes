@@ -224,7 +224,7 @@ export const notesDomain = {
   },
 
 
-  /** 新建表格（kind=usheet）：正文 = 空表快照（50×16）+ **移动端网格**（24/120/40/24，单一来源 mobileSheetGrid），
+  /** 新建表格（kind=usheet）：正文 = 空表快照（35×16）+ **移动端网格**（24/120/40/24，单一来源 mobileSheetGrid），
    *  随后进入移动表格编辑器。桌面新建表仍走 core 的 88 口径（用户 261020 定：桌面保持原样）。 */
   async createUsheet(title: string, parentId: string | null = null): Promise<LocalNote> {
     const id = crypto.randomUUID();

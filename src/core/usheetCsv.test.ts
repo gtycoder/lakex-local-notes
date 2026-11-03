@@ -36,7 +36,7 @@ describe("usheet CSV 导出", () => {
     expect(csv).not.toContain("=SUM");
   });
 
-  it("只导出有效区域（配置的 50 行空网格不铺出来）", () => {
+  it("只导出有效区域（配置的 35 行空网格不铺出来）", () => {
     const wb = workbook();
     wb.sheets!.s1.cellData = { "0": { "0": { v: "a" } }, "1": { "0": { v: "b" } } };
     const { csv, rowCount, columnCount } = usheetSheetCsv(wb);

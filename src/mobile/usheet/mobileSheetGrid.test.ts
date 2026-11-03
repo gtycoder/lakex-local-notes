@@ -18,12 +18,12 @@ describe("移动端表格网格默认", () => {
     expect(emptyUsheetBody()).toContain('"defaultColumnWidth":88');
   });
 
-  it("移动端新建正文：列宽 120 / 行高 24 / 行头 40 / 列头 24，且仍是 50×16 空表", () => {
+  it("移动端新建正文：列宽 120 / 行高 24 / 行头 40 / 列头 24，且仍是 35×16 空表", () => {
     const body = JSON.parse(emptyMobileUsheetBody()) as { kind: string; version: number; workbook: { sheets: Record<string, Record<string, unknown>> } };
     expect(body.kind).toBe("usheet");
     expect(body.version).toBe(1);
     const sheet = body.workbook.sheets.s1;
-    expect(sheet).toMatchObject({ rowCount: 50, columnCount: 16, defaultColumnWidth: 120, defaultRowHeight: 24 });
+    expect(sheet).toMatchObject({ rowCount: 35, columnCount: 16, defaultColumnWidth: 120, defaultRowHeight: 24 });
     expect(sheet.rowHeader).toMatchObject({ width: 40 });
     expect(sheet.columnHeader).toMatchObject({ height: 24 });
     expect(sheet.cellData).toEqual({});

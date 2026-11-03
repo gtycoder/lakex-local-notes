@@ -20,6 +20,7 @@ import {
   numfmtLabelOf,
   sheetColorEquals,
   sheetPanelNeedsFade,
+  sheetSelectionCoversWholeAxis,
 } from "./usheetChromeModel";
 
 describe("移动端表格编辑态 dock 模型（261023 v5：对齐文档 dock）", () => {
@@ -96,5 +97,21 @@ describe("移动端表格编辑态 dock 模型（261023 v5：对齐文档 dock�
     expect(sheetPanelNeedsFade({ scrollTop: 41, clientHeight: 312, scrollHeight: 354 })).toBe(false);
     // 还差 3px 到底：仍然提示
     expect(sheetPanelNeedsFade({ scrollTop: 39, clientHeight: 312, scrollHeight: 354 })).toBe(true);
+  });
+
+  it("整行/整列选中判据：只有横跨整轴才跳过自动滚动（261103 「点列头视口跳到第 30 行」）", () => {
+    const bounds = { maxRows: 35, maxColumns: 16 };
+    // 点列头：整列 A（0..34 行）
+    expect(sheetSelectionCoversWholeAxis({ startRow: 0, endRow: 34, startColumn: 0, endColumn: 0 }, bounds)).toBe(true);
+    // 点行头：整行 3（0..15 列）
+    expect(sheetSelectionCoversWholeAxis({ startRow: 2, endRow: 2, startColumn: 0, endColumn: 15 }, bounds)).toBe(true);
+    // 全选
+    expect(sheetSelectionCoversWholeAxis({ startRow: 0, endRow: 34, startColumn: 0, endColumn: 15 }, bounds)).toBe(true);
+    // 普通单元格 / 普通区域：仍走自动滚动
+    expect(sheetSelectionCoversWholeAxis({ startRow: 2, endRow: 2, startColumn: 0, endColumn: 0 }, bounds)).toBe(false);
+    expect(sheetSelectionCoversWholeAxis({ startRow: 1, endRow: 10, startColumn: 1, endColumn: 3 }, bounds)).toBe(false);
+    // 只到最后一列/最后一行、但没从 0 开始（拖选到边界）不算整轴
+    expect(sheetSelectionCoversWholeAxis({ startRow: 2, endRow: 2, startColumn: 2, endColumn: 15 }, bounds)).toBe(false);
+    expect(sheetSelectionCoversWholeAxis({ startRow: 5, endRow: 34, startColumn: 1, endColumn: 1 }, bounds)).toBe(false);
   });
 });

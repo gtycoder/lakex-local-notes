@@ -316,21 +316,6 @@
   color: var(--lake-text-2);
   font-size: var(--lake-font-size-small);
 }
-/* 原生 canvas 不画 caret：viewer 按文本末尾像素位置放 2px 闪烁条 */
-.mb-usheet-caret {
-  position: fixed;
-  left: 0;
-  top: 0;
-  width: 2px;
-  display: none;
-  border-radius: var(--lake-radius-hairline);
-  background: var(--lake-text-1);
-  pointer-events: none;
-  z-index: 22;
-  animation: mb-usheet-caret-blink 1s steps(1, end) infinite;
-}
-@keyframes mb-usheet-caret-blink { 50% { opacity: 0; } }
-
 /* ---------- dock（与文档编辑器底部 dock 同款） ---------- */
 .mb-usheet-dock {
   position: fixed;

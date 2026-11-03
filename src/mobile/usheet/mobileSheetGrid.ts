@@ -25,7 +25,7 @@ export function withMobileUsheetGrid(workbook: UsheetWorkbook): UsheetWorkbook {
   return workbook;
 }
 
-/** 移动端新建表格的正文（50×16 + 移动端网格）。 */
+/** 移动端新建表格的正文（35×16 + 移动端网格）。 */
 export function emptyMobileUsheetBody(): string {
   return usheetToBody(withMobileUsheetGrid(emptyUsheetWorkbook()));
 }

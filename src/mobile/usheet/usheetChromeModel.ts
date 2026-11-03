@@ -263,3 +263,20 @@ export function sheetPanelNeedsFade(
 ): boolean {
   return metrics.scrollHeight - metrics.clientHeight - metrics.scrollTop > tolerance;
 }
+
+/**
+ * 选区是否横跨**整行/整列**（点行头/列头的整选）。
+ *
+ * 为什么单列一条判据：这种选区本身装不进视口，"把选区滚进可视区"没有意义；而内核
+ * `sheet.command.scroll-to-cell` 收到一个整列 range 时会滚到 range 的**另一端**（整列 → 最后一行、
+ * 整行 → 最后一列）⇒ 用户点列头后视口被拽到第 30 行附近（261103 用户实机报）。
+ * ⇒ 整行/整列选中时**不自动滚动**，保持用户当前位置（选区本身仍然正确）。
+ */
+export function sheetSelectionCoversWholeAxis(
+  range: { startRow: number; endRow: number; startColumn: number; endColumn: number },
+  bounds: { maxRows: number; maxColumns: number },
+): boolean {
+  const wholeColumn = range.startRow <= 0 && range.endRow >= bounds.maxRows - 1;
+  const wholeRow = range.startColumn <= 0 && range.endColumn >= bounds.maxColumns - 1;
+  return wholeColumn || wholeRow;
+}

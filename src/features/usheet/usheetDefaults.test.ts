@@ -7,10 +7,10 @@ const EDITOR = readFileSync(new URL("./UniverSheetEditor.tsx", import.meta.url),
 const FACTORY = readFileSync(new URL("./usheetUniverFactory.ts", import.meta.url), "utf8");
 const CONTRACT = readFileSync(new URL("./usheetKernelContract.ts", import.meta.url), "utf8");
 
-describe("新建表格 / 工作表的默认尺寸（用户 261010：默认 50 行 × 16 列）", () => {
-  it("新建「表格」文档：50 行 × 16 列", () => {
+describe("新建表格 / 工作表的默认尺寸（用户 261103：默认 35 行 × 16 列；261010 起曾为 50）", () => {
+  it("新建「表格」文档：35 行 × 16 列", () => {
     const sheet = emptyUsheetWorkbook().sheets?.s1 as { rowCount?: number; columnCount?: number } | undefined;
-    expect(sheet?.rowCount).toBe(50);
+    expect(sheet?.rowCount).toBe(35);
     expect(sheet?.columnCount).toBe(16);
   });
 

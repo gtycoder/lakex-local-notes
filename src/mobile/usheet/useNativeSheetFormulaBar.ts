@@ -1,10 +1,13 @@
 /**
- * 内核原生公式栏（261025 定稿）：本 hook 只做三件事——
+ * 内核原生公式栏（261025 定稿）：本 hook 只做两件事——
  * 1. 打开/关闭内核单元格编辑（原生移动公式栏由 UniverSheetsMobileUIPlugin 渲染）；
- * 2. 把选区地址注入原生栏（CSS ::before 显示 A11）并清掉内核 inline 定位，交给我们的 chrome CSS；
- * 3. 给原生 canvas 输入区画一个 2px 闪烁光标（内核 canvas 自己不画 caret）。
+ * 2. 把选区地址注入原生栏（CSS ::before 显示 A11）并清掉内核 inline 定位，交给我们的 chrome CSS。
  *
  * 自绘输入条已删除（261025 回滚）：编辑输入面唯一来源 = 内核原生栏。
+ * ⚠️ 光标也只归内核：原生 canvas 由 docs 渲染层画 caret（261103 设备实测：读像素抓到文本末尾
+ * 1×(18~19)px 的闪烁竖条）。261025 曾误判"canvas 不画 caret"而叠了一个自绘 2px 闪烁条，
+ * 结果打字时出现**两个插入点**（用户 gif）。已整条删除，别再补回来 —— 若发现"没有光标"，
+ * 先查原生编辑器是否拿到焦点（隐藏 contenteditable "__editor___INTERNAL_EDITOR__DOCS_FORMULA_BAR"）。
  */
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import type { FUniver } from "@univerjs/presets";
@@ -20,7 +23,6 @@ interface UseNativeSheetFormulaBarOptions {
 export function useNativeSheetFormulaBar({ editing, hostRef, address, getUniverAPI }: UseNativeSheetFormulaBarOptions) {
   const [nativeEditing, setNativeEditing] = useState(false);
   const [nativeExpanded, setNativeExpanded] = useState(false);
-  const caretRef = useRef<HTMLSpanElement | null>(null);
   const addressRef = useRef(address);
   addressRef.current = address;
 
@@ -69,44 +71,5 @@ export function useNativeSheetFormulaBar({ editing, hostRef, address, getUniverA
     return () => observer.disconnect();
   }, [editing, hostRef]);
 
-  // 原生 canvas 不画 caret：读 formula-editor canvas 最右暗像素 = 文本末尾，贴一个 2px 闪烁条。
-  useEffect(() => {
-    if (!editing) return;
-    const host = hostRef.current;
-    if (!host) return;
-    const update = () => {
-      const el = caretRef.current;
-      if (!el) return;
-      const nativeBar = host.querySelector<HTMLElement>('[data-u-comp="mobile-formula-bar"]');
-      const canvas = nativeBar?.querySelector<HTMLCanvasElement>('[data-u-comp="formula-editor"] canvas') ?? null;
-      if (!canvas || nativeBar?.getAttribute("data-expanded") === "true") { el.style.display = "none"; return; }
-      const rect = canvas.getBoundingClientRect();
-      if (rect.width <= 0 || rect.height <= 0) { el.style.display = "none"; return; }
-      let right = -1;
-      try {
-        const ctx = canvas.getContext("2d");
-        if (ctx && canvas.width > 0 && canvas.height > 0) {
-          const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-          for (let y = 0; y < canvas.height; y += 1) {
-            for (let x = canvas.width - 1; x >= 0; x -= 1) {
-              const i = (y * canvas.width + x) * 4;
-              if (data[i + 3] > 20 && data[i] < 200) { if (x > right) right = x; break; }
-            }
-          }
-        }
-      } catch { /* canvas 被清空/跨域污染导致读像素失败：按「无文字宽度」兜底（只影响公式栏左内边距） */ }
-      const ratio = canvas.width > 0 ? rect.width / canvas.width : 1;
-      const left = rect.x + (right >= 0 ? (right + 2) * ratio : 2);
-      const height = Math.max(14, Math.min(22, rect.height));
-      const top = rect.y + (rect.height - height) / 2;
-      el.style.display = "block";
-      el.style.transform = "translate(" + Math.round(left) + "px, " + Math.round(top) + "px)";
-      el.style.height = Math.round(height) + "px";
-    };
-    update();
-    const timer = window.setInterval(update, 300);
-    return () => window.clearInterval(timer);
-  }, [editing, hostRef]);
-
-  return { nativeEditing, nativeExpanded, caretRef, openNativeEditor, closeNativeEditor };
+  return { nativeEditing, nativeExpanded, openNativeEditor, closeNativeEditor };
 }

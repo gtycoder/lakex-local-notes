@@ -48,7 +48,7 @@ import { useKeyboard } from "../hooks/useKeyboard";
 import { dockKbOffset } from "../editor/editSurfaceModel";
 import { useEditSurface } from "../editor/useEditSurface";
 import { showToast } from "../ui/toastBus";
-import { SHEET_PANEL_MIN_HEIGHT, SHEET_ZOOM_LEVELS, sheetPanelNeedsFade, type SheetDockId, type SheetMoreId } from "./usheetChromeModel";
+import { SHEET_PANEL_MIN_HEIGHT, SHEET_ZOOM_LEVELS, sheetPanelNeedsFade, sheetSelectionCoversWholeAxis, type SheetDockId, type SheetMoreId } from "./usheetChromeModel";
 import { createMobileSheetsCorePreset, createMobileSheetsDrawingPreset, createMobileSheetsHyperLinkPreset } from "./mobileUniverPreset";
 import { UniverSheetsCrosshairHighlightMobileUIPlugin } from "@univerjs/sheets-crosshair-highlight";
 import { setUsheetCrosshair } from "../../features/usheet/usheetCrosshair";
@@ -161,7 +161,7 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
     selectSheet,
     zoomBy,
   } = useSheetChromeState(getUniverAPI);
-  const { nativeEditing, nativeExpanded, caretRef, openNativeEditor, closeNativeEditor } = useNativeSheetFormulaBar({
+  const { nativeEditing, nativeExpanded, openNativeEditor, closeNativeEditor } = useNativeSheetFormulaBar({
     editing: editable,
     hostRef,
     address: cellFmt.address,
@@ -706,6 +706,9 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
    * 选中区域被键盘/展开的工具栏盖住时才滚动，且只滚到"刚好露出来"：
    * 用内核的 scroll-to-cell（目标已在视口内 = no-op；在视口外才最小滚动）。
    * 不用 facade 的 scrollToCell —— 它把目标钉到视口左上角（用户反馈"不是固定在左上角"）。
+   *
+   * ⚠️ 整行/整列选中**不滚**（261103）：地址会变成选区首格（A1/A3），但整选本身装不进视口，
+   * 内核收到整列 range 会滚到另一端（整列 → 最后一行 ≈ 第 30 行；整行 → 最后一列）⇒ 视口被拽走。
    */
   const ensureActiveCellVisible = useCallback(() => {
     const api = getUniverAPI();
@@ -713,6 +716,13 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
     const sheet = workbook?.getActiveSheet();
     const range = workbook?.getActiveRange();
     if (!api || !workbook || !sheet || !range) return;
+    const selection = {
+      startRow: range.getRow(),
+      endRow: range.getLastRow(),
+      startColumn: range.getColumn(),
+      endColumn: range.getLastColumn(),
+    };
+    if (sheetSelectionCoversWholeAxis(selection, { maxRows: sheet.getMaxRows(), maxColumns: sheet.getMaxColumns() })) return;
     try {
       void api.executeCommand("sheet.command.scroll-to-cell", {
         unitId: workbook.getId(),
@@ -792,7 +802,6 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
       )}
       {ready ? <div id={containerId} className="mobile-usheet-root" /> : <div className="mb-empty">正在加载表格…</div>}
       {ready && editable && <div className="mb-usheet-chrome-spacer" aria-hidden="true" />}
-      {editable && <span ref={caretRef} className="mb-usheet-caret" aria-hidden="true" />}
       {ready && editable && (
         <SheetDock
           open={dockPanel}

@@ -71,7 +71,7 @@ describe("mobile 目录树（文档套文档）", () => {
     expect(nodes.find((n) => n.id === nb.id)?.icon).toBe("📁");      // notebook 图标
   });
 
-  it("createUsheet 落 kind=usheet 且正文是共享的 50×16 空表快照", async () => {
+  it("createUsheet 落 kind=usheet 且正文是共享的 35×16 空表快照", async () => {
     const nb = await bridge.createNotebook({ title: "新建表格本", icon: null });
     const sheet = await bridge.createUsheet("无标题表格", nb.id);
     expect(sheet.kind).toBe("usheet");
@@ -83,7 +83,7 @@ describe("mobile 目录树（文档套文档）", () => {
     const body = JSON.parse(read?.content ?? "{}") as { kind?: string; version?: number; workbook?: { sheets?: Record<string, { rowCount?: number; columnCount?: number }> } };
     expect(body.kind).toBe("usheet");
     expect(body.version).toBe(1);
-    expect(body.workbook?.sheets?.s1).toMatchObject({ rowCount: 50, columnCount: 16 });
+    expect(body.workbook?.sheets?.s1).toMatchObject({ rowCount: 35, columnCount: 16 });
 
     const tree = await (await bridge.getWorkspaceSnapshot(nb.id)).tree;
     expect(tree.find((t) => t.id === sheet.id)?.title).toBe("无标题表格");
