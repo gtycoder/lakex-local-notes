@@ -30,7 +30,11 @@ describe("阅读时顶栏/底栏自动收起（261019，对齐思源）", () => 
     expect(WS).toContain('classList?.contains("mobile-doc-body")');
     expect(WS).toMatch(/meta\.kind !== "doc" \|\| meta\.editing/);
     expect(WS).toContain("mobile-topbar--auto-hidden");
-    expect(WS).toMatch(/active\?\.editing \|\| chromeHiddenNow/);
+    // 261103：胶囊显隐判据统一到 capsuleHidden —— 文档（Lake）编辑态**保留胶囊**（抬到 dock 上方），
+    // 表格/多维表/画板/手写板编辑态仍隐藏；顶栏自动收起判据不变。
+    expect(WS).toContain('const capsuleInEdit = !!active?.editing && (active?.kind ?? "doc") === "doc";');
+    expect(WS).toContain("const capsuleHidden = chromeHiddenNow || (!!active?.editing && !capsuleInEdit);");
+    expect(WS).toContain("mobile-bottom-bar--above-dock");
     // 打开任意浮层 → 导航必须回来
     expect(WS).toMatch(/sidebarOpen \|\| outlineOpen \|\| tabsOpen \|\| notebookSwitchOpen\) showChrome\(\)/);
   });

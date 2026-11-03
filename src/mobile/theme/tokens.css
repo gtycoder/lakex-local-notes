@@ -261,6 +261,9 @@
   --mobile-bottom-bar-slot: 48px;
   --mobile-status-height: 24px;
   --mobile-bar-gap: 8px;
+  /* 胶囊的「向下微调」量（261103 用户：悬浮胶囊适当往下一点，手机/平板共用）。
+   * 胶囊底距 = status + gap + safe − drop；只改这一个数就能整体调低/调高。 */
+  --mobile-capsule-drop: 12px;
   /* 安全区：env() 与原生 WindowInsets 注入值取 max。
    * 261027：部分 ROM/edge-to-edge（targetSdk 36 / Android 15+ 强制）下 WebView 的
    * env(safe-area-inset-top) 返回 0，而内容已经在状态栏/刘海下面 ⇒ 必须用原生 inset 兜底。 */

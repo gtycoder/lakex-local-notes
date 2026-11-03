@@ -208,6 +208,10 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   activeMetaRef.current = { kind: active?.kind ?? "doc", editing: !!active?.editing };
   // 平板不自动收顶栏：顶栏里有文档页签，滚动时闪掉会晃眼（手机保持思源式自动收起）。
   const chromeHiddenNow = subpageFullscreen || (!padTwoPane && chrome.hidden && !active?.editing && (active?.kind ?? "doc") === "doc");
+  // 261103 用户口径：**文档（Lake）编辑态也保留胶囊**（抬到底部 dock 上方）；表格/多维表/画板/手写板
+  // 各自有底部工具条（sheet dock / bitable 工具条 / ink 工具坞）⇒ 编辑态仍隐藏胶囊。
+  const capsuleInEdit = !!active?.editing && (active?.kind ?? "doc") === "doc";
+  const capsuleHidden = chromeHiddenNow || (!!active?.editing && !capsuleInEdit);
   const showChrome = useCallback(() => {
     if (chromeRef.current.hidden || chromeRef.current.acc) setChrome({ hidden: false, acc: 0 });
   }, []);
@@ -253,8 +257,12 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     getMask: (side: PanelSide) => (padTwoPane ? null : document.querySelector<HTMLElement>('[data-panel-mask="' + side + '"]')),
     isOpen: (side: PanelSide) => (padTwoPane ? (side === "left" ? padTreeOpen : padOutlineOpen) : (side === "left" ? sidebarOpen : outlineOpen)),
     commit: (side: PanelSide, open: boolean) => { if (side === "left") openSidebar(open); else openOutline(open); },
-    // 没有大纲时左滑不再拉出空面板（右滑开目录不受影响）；已展开的大纲仍可滑走关闭
-    canOpen: (side: PanelSide) => side === "left" || outlineAvailable,
+    // 261103 用户口径：**只有文档**允许横向手势拉出侧栏（表格/多维表/画板/手写板自身有横滑语义 ⇒ 禁用）；
+    // 没有大纲时左滑不再拉出空面板（右滑开目录不受影响）；已展开的大纲仍可滑走关闭。
+    canOpen: (side: PanelSide) => activeMetaRef.current.kind === "doc" && (side === "left" || outlineAvailable),
+    // 文档编辑态也允许从正文起手拉侧栏（Lake 文档不涉及左右横滑）；其他编辑器的正文区仍排除。
+    allowFrom: (target: Element | null) =>
+      activeMetaRef.current.kind === "doc" && !!target?.closest?.(".doc-pane.active"),
   });
 
   // 切到没有大纲的文档类型（表格 / 多维表 / 画板）时收掉已展开的大纲抽屉，别停在空面板上
@@ -748,7 +756,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   });
 
   return (
-    <div className="mobile-workspace">
+    <div className={"mobile-workspace" + (capsuleInEdit ? " mobile-workspace--capsule-edit" : "")}>
       {/* 顶部栏（思源 #mobileTopBar：.toolbar--border + .toolbar__title 左对齐 + 右侧同步状态） */}
       <header
         className={"toolbar toolbar--border mobile-topbar" + (!padTwoPane && chromeHiddenNow ? " mobile-topbar--auto-hidden" : "")}
@@ -1006,11 +1014,13 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
           平板顶栏只保留「返回 + 文档页签 + 查找/编辑/同步」。 */}
       <nav
         className={"mobile-bottom-bar"
-          + ((active?.editing || chromeHiddenNow) ? " mobile-bottom-bar--hidden" : "")
+          + (capsuleHidden ? " mobile-bottom-bar--hidden" : "")
+          // 文档编辑态：胶囊留在 dock 上方（261103）
+          + (capsuleInEdit ? " mobile-bottom-bar--above-dock" : "")
           // 表格（usheet）页底部有自己的 Univer 工具条（工作表标签/缩放/求和）⇒ 胶囊上移让位（261019）
           + (active?.kind === "usheet" ? " mobile-bottom-bar--above-sheet" : "")}
         data-prevent-swipe
-        aria-hidden={(active?.editing || chromeHiddenNow) ? "true" : "false"}
+        aria-hidden={capsuleHidden ? "true" : "false"}
       >
         <button className={"mobile-bottom-bar__item" + ((padTwoPane ? padTreeOpen : sidebarOpen) ? " active" : "")} onClick={() => (padTwoPane ? togglePadTree() : openSidebar(!sidebarOpen))} aria-label="文档树" title="文档树"><Files /></button>
         <button className={"mobile-bottom-bar__item" + (tabsOpen ? " active" : "")} onClick={() => openOverlay({ kind: "tabs" })} aria-label="标签页" title="标签页"><File />{tabs.length > 0 && <span className="bottom-bar-count">{tabs.length}</span>}</button>

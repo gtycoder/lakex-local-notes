@@ -671,3 +671,10 @@ P0 体面单栏（1–2）→ P1 双栏（3–5）→ 工具栏 T0（5–7，§8
 - **门禁**：tsc 0 / vitest 548 文件 3408 例 / check:core 135 / check:mobileui / 双 build / check:bundle / diff-check；`mobileLayers` 基线收紧（pad.css 144、usheet-chrome 542、bitable 896）。
 - **手势 = 胶囊**：`usePanelDrag` 在 expanded 下把 `getPanel/getMask/isOpen/commit` 指向**悬浮左/右栏**（手机抽屉在平板不渲染）⇒ 横向手势与胶囊打开的是同一个面板；关闭态没有 DOM 可跟手，松手后以 250ms 入场动画出现（reduced-motion 已登记），打开态仍可跟手滑走。**不要**再让平板走 `.side-panel` 抽屉（会带出遮罩/空抽屉，且没有 Pin）。点正文收起用 `onClick` 不是 `onPointerDown`（手势从正文起手，pointerdown 会把面板提前收掉再被同一手势判成拉开另一侧）。
 - **设备**：见 HANDOFF §0 第十四批（lake_tab，胶囊 4 项 / 固定前后 position 与正文宽度 / 编辑态 dock 与内核工具栏 0 / 知识库 976·9 列 / 画布 612）；手势实测两向开合都落在 `.pad-tree`/`.pad-outline`（phone drawer / mask = 0）。平板 6 态重烤后两轮 0 差异（home-doc 1913→1912），手机 6 态 0 差异。
+
+### 10.17 胶囊常显（文档编辑态）+ 底距下移 + 编辑态手势（261103）
+
+- **胶囊**：底距 = status + gap + safe − `--mobile-capsule-drop`(12)（32 → 20px；手机/平板同一处）。文档编辑态**常显**并抬到 dock 上方（`.mobile-bottom-bar--above-dock` = dock 56 + gap 8）；`.mobile-workspace--capsule-edit .mobile-doc-body` 补正文底距。表格/多维表/画板/手写板编辑态仍隐藏。
+- **手势**：`usePanelDrag.allowFrom` 允许从 Lake 正文（contenteditable）起手；`canOpen` 只认文档类型 —— 其余编辑器横滑 no-op（胶囊仍可用）。手机与平板同一条判据。
+- **设备（261103）**：pad 读态胶囊 bottom 20；pad 编辑态胶囊 bottom 680（dock 688，gap 8）、右滑开 `.pad-tree`、左滑开 `.pad-outline`；phone 编辑态等价（`.side-panel`）；usheet 横滑 no-op。
+- **基线**：手机 6 态（home-doc 1997）+ 平板 6 态（home-doc 1897，干净夹具）都重烤，连跑两轮 0 差异。

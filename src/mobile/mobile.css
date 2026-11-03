@@ -490,7 +490,8 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
 
 /* 底部胶囊栏（思源 .mobile-bottom-bar：fixed 居中，圆角胶囊，宽度自适应） */
 .mobile-bottom-bar {
-  position: fixed; left: 0; right: 0; bottom: calc(var(--mobile-status-height) + var(--mobile-bar-gap) + var(--mobile-bottom-safe-area));
+  position: fixed; left: 0; right: 0;
+  bottom: calc(var(--mobile-status-height) + var(--mobile-bar-gap) + var(--mobile-bottom-safe-area) - var(--mobile-capsule-drop));
   z-index: 3; margin: 0 auto;
   display: flex; align-items: center; gap: 0; padding: 0;
   width: min(calc(100% - 32px), calc(var(--mobile-bottom-bar-slot) * 6));
@@ -510,7 +511,12 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
 .mobile-bottom-bar--hidden { opacity: 0; pointer-events: none; transform: translate3d(0, 100%, 0); visibility: hidden; }
 /* 表格页：Univer 自带底部工具条（工作表标签 / 缩放 / 求和，实测 36px）贴着屏幕底 ⇒ 胶囊整体上移让位，
    否则胶囊会盖住工作表标签（261019 用户截图）。高度走令牌，不写魔法数字。 */
-.mobile-bottom-bar--above-sheet { bottom: calc(var(--mobile-status-height) + var(--mobile-bar-gap) + var(--mobile-bottom-safe-area) + var(--mobile-sheet-bar-h)); }
+.mobile-bottom-bar--above-sheet { bottom: calc(var(--mobile-status-height) + var(--mobile-bar-gap) + var(--mobile-bottom-safe-area) - var(--mobile-capsule-drop) + var(--mobile-sheet-bar-h)); }
+/* 文档编辑态：胶囊**保留**并抬到底部 dock 上方（261103 用户：编辑时也要有胶囊）。
+ * dock 高 = 胶囊高（--mobile-bottom-bar-height），再留一个 bar-gap。 */
+.mobile-bottom-bar--above-dock { bottom: calc(var(--mobile-bottom-bar-height) + var(--mobile-bar-gap)); }
+/* 编辑态胶囊出现后，正文底部要让出「dock + 胶囊」两级，否则最后一行被胶囊压住。 */
+.mobile-workspace--capsule-edit .mobile-doc-body { padding-bottom: calc(80px + var(--mobile-bottom-bar-height) + var(--mobile-bar-gap)); }
 
 .bottom-bar-btn > svg, .mobile-bottom-bar__item > svg { width: 20px; height: 20px; flex-shrink: 0; }
 .bottom-bar-btn:active { color: var(--lake-text-2); background: var(--lake-bg-hover); transform: scale(.92); }

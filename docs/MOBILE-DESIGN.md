@@ -127,6 +127,7 @@ body 16 与行标题 16 不动（触屏正文档已达标）。**编辑器正文
 **首页顶栏右上角（261014 用户定稿）**：固定挂**两枚**图标 = 排序（小记）/ 视图（知识库）+ **云同步**（恒在最右、不随 tab 变）；
 左上补一格等宽空槽 `.mobile-topbar-gap` ⇒ tab 仍居中（冷启动骨架同构：左 2 槽 / tab / 右 2 槽）。
 **底部胶囊 = 搜索 · ＋ · AI**（排序/视图与云同步都**不在**胶囊里）。
+**胶囊显隐（261103 定稿）**：文档（Lake）**编辑态也常显**，并抬到底部 dock 上方（`.mobile-bottom-bar--above-dock` = dock 56 + gap 8；`.mobile-workspace--capsule-edit` 给正文补底距）；表格/多维表/画板/手写板编辑态仍隐藏（各有底部工具条）。**底距 = status + gap + safe − `--mobile-capsule-drop`（12）**（261103 整体下移一档；只改这一个令牌）。
 **工作区胶囊 = 文档树 · 标签页 · 大纲 · 切换笔记本**（261014：原「更多」已删 —— 编辑走顶栏「编辑 / 完成」、新建走抽屉 ＋ 与行内 ＋；
 工作区菜单里也不再放搜索 / 设置）。**笔记本的编辑入口 = 首页「知识库」长按卡片**（重命名 / 设置图标 / 删除笔记本；
 **不含**新建文档·新建分组）；抽屉里的笔记本行只展示「图标 + ＋」，不放 ⋮。长按唯一实现 = `src/mobile/ui/useLongPress.ts`。
@@ -258,6 +259,7 @@ Toast        .mb-toast-host > .mb-toast[--error] > (.mb-toast__text, .mb-toast__
 
 **261102 十四批定稿（用户）：平板 = 更宽的移动端外壳，不是桌面板。** 桌面那套工具栏/密度不适合触屏，已整体回退：
 - **胶囊 / 底部 dock / 各编辑器工具条与手机完全一致**（Lake 编辑态走 `EditorDockHost`、多维表紧凑工具条、表格手机 dock、手写板 v3 悬浮色板）。**不要再给平板开第二套工具条**（内核固定工具栏/9 项文字条/内联色板/常驻只读 dock 都已试过并回退）。
+- **横向手势只对文档开放**（与手机同一条判据）：`usePanelDrag` 的 `allowFrom` 允许从 Lake 正文（contenteditable）起手，`canOpen` 收窄为**只认文档类型**；表格/多维表/画板/手写板自身有横滑语义 ⇒ 手势 no-op（胶囊入口照常可用）。
 - **expanded 只多两件事**：① 更宽 —— 正文满宽 + `--mb-reader-pad: 32px`（手机 20），知识库 `.nb-shelf/.nb-list` 1080（书架列按 `repeat(auto-fill, minmax(96px,1fr))` 自适应），小记时间线仍 760；② 树 / 大纲默认**悬浮覆盖**（`.pad-tree` 280 / `.pad-outline` 240，top = `--pad-float-top`；层序 `--mobile-z-drawer`(45)，**不要用桌面 `--lake-z-sidebar`(250)**），收起路径 = 胶囊 / 点正文 / Esc；面板头有**固定按钮**，固定 = `position:static` 停靠进布局（`.pad-main--docked` 三栏、可编辑空间收窄），再次点击回到悬浮。固定状态**持久化**（设备本地 `lakex-local-notes-mobile.pad-panels`，只存 pinned；不进正文/同步；门禁每态前清掉以保证基线稳定）。
 - **正文画布吃满可视编辑空间**：`.mobile-doc-body > .lake-editor` 与 `.lake-editor-mount` 在 expanded 下 `height:100%`（内核原本按内容撑成 ~85px ⇒ 下方一大块空白点不到）。
 - 细节规格以 `docs/PAD-ADAPTATION.md` §10 最新一批为准（该文件是长期 pad 规格）。

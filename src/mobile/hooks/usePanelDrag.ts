@@ -20,6 +20,9 @@ export interface PanelDragHandlers {
   commit: (side: PanelSide, open: boolean) => void;
   /** 该侧是否允许被手势「拉开」（缺省全部允许）。只约束打开；已展开的面板仍可滑走关闭。 */
   canOpen?: (side: PanelSide) => boolean;
+  /** 起手点命中 EXCLUDE（输入框/正文 contenteditable…）时，返回 true 可**豁免**排除。
+   *  261103：Lake 文档不涉及左右横滑 ⇒ 文档编辑态允许从正文起手拉侧栏。 */
+  allowFrom?: (target: Element | null) => boolean;
 }
 
 const SETTLE_MS = 200;         // 归位动画时长上限（CSS 是 150ms）
@@ -71,7 +74,7 @@ export function usePanelDrag(handlers: PanelDragHandlers): void {
       const t = e.touches[0];
       if (!t) return;
       const target = targetOf(e);
-      if (target?.closest?.(EXCLUDE)) { stop(); cancelled = true; return; }
+      if (target?.closest?.(EXCLUDE) && !(ref.current.allowFrom?.(target) ?? false)) { stop(); cancelled = true; return; }
       // 存在文本选区时不滑出抽屉（对齐思源：选中内容优先）
       if (window.getSelection()?.toString()) { stop(); cancelled = true; return; }
       // 系统手势边缘（左右 8px）不接管：Android 手势导航的返回手势从边缘起手，让给系统（261027）。
