@@ -21,7 +21,8 @@ const entry = (re, label) => {
 };
 
 const budgets = [
-  { name: "app-js", file: entry(/assets\/(index-[\w.-]+\.js)/, "app-js"), gzip: 2_900_000 },
+  // 261103 P12：桌面内核 lazy 后入口 app-js 从 1.91MB → ~150KB gz ⇒ 预算从 2.9MB 收紧到 300KB。
+  { name: "app-js", file: entry(/assets\/(index-[\w.-]+\.js)/, "app-js"), gzip: 300 * 1024 },
   // 260923 起画板不再是手工 "drawnix" chunk（手拆会破坏 @plait vendor 绑定，见 vite.config.ts 注释），
   // 改由 BoardEditor/DrawnixBoardCore 动态 import 懒加载 ⇒ 目标分块名 = DrawnixBoardCore-<hash>.js。
   { name: "drawnix-js", file: pick(/^DrawnixBoardCore-.*\.js$/), gzip: 1_400_000 },

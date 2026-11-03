@@ -37,9 +37,9 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 export const FIRST_PAINT_BUDGETS = Object.freeze({
   // 261103 P9-1 + P10：bridge/sync 与设置抽屉改按需后实测 340,783B ⇒ 从 420,000 逐次收紧到 360,000。
   mobile: 360_000,
-  // 261103 P9：CodeMirror 改为 defer（不阻塞解析/首屏绘制）后，桌面首屏只剩模块图 ≈2.38MB；
-  // 预算从 3.0MB 收紧到 2.5MB，把「再塞一个 400KB 阻塞脚本」直接挡在门外。
-  desktop: 2_500_000,
+  // 261103 P9：CodeMirror 改 defer 后桌面首屏 2.38MB → 预算 2.5MB。
+  // 261103 P12：桌面内核（5 个边界）改 lazy + idle 预取后首屏 **541,234B gz（−77.2%）** ⇒ 预算收紧到 600KB。
+  desktop: 600_000,
 });
 
 /** defer/async 脚本预算（不计入首屏总量，但字节仍要管；超了同样失败）。 */

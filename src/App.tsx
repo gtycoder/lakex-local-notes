@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { isCloudActive } from "./core/cloudState";
 import { PanelLeft } from "lucide-react";
 import { Sidebar } from "./components/app/Sidebar";
@@ -8,6 +8,7 @@ import { useTopMenus } from "./hooks/useTopMenus";
 import { DesktopStatusBar } from "./components/app/DesktopStatusBar";
 import { getDocumentStatus } from "./components/model/documentStatusModel";
 import { clearScrollMemory } from "./features/editor/editorViewport";
+import { prefetchEditorKernel } from "./features/editor/kernelPrefetch";
 import { setNoteRefHost } from "./features/editor/noteRef";
 import { TablePasteGuardDialog } from "./features/editor/TablePasteGuardDialog";
 import { OutlineSidebar } from "./features/outline/OutlineSidebar";
@@ -36,7 +37,9 @@ import { NativeTitleTips } from "./components/ui/NativeTitleTips";
 import { native } from "./lib/native";
 import { getNativeErrorMessage } from "./lib/nativeErrors";
 import type { TreeNode } from "./lib/types";
-import { NoteInfoDialog } from "./components/app/NoteInfoDialog";
+/** P12：回收站/单据属性弹窗都挂 Lake 内核（HistorySnapshotPreview → useHistorySnapshotViewer），
+ *  只在真正打开时才需要 ⇒ 懒加载，避免内核重新进入首屏静态图。 */
+const NoteInfoDialog = lazy(() => import("./components/app/NoteInfoDialog").then((m) => ({ default: m.NoteInfoDialog })));
 import { saveSettings } from "./lib/settings";
 import { clearTabSession, writeTabSession } from "./desktop/tabSession";
 import { type OpenTab, EDGE_HANDLE_DWELL_MS, OUTLINE_SIDEBAR_MAX_WIDTH, OUTLINE_SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH, treeNodePath } from "./desktop/desktopTypes";
@@ -48,7 +51,7 @@ import { useDesktopShell } from "./desktop/useDesktopShell";
 import { DesktopSplitButton, DesktopTopBarLeading, DesktopTopBarSearch } from "./desktop/DesktopTopBar";
 import { DesktopWorkspaceSlotProvider } from "./desktop/desktopWorkspaceSlot";
 import { BrandLaunchMark } from "./components/app/BrandLaunchMark";
-import { TrashPanel } from "./components/app/TrashPanel";
+const TrashPanel = lazy(() => import("./components/app/TrashPanel").then((m) => ({ default: m.TrashPanel })));
 import { AssetsBrowser } from "./components/app/AssetsBrowser";
 
 export function App() {
@@ -297,6 +300,8 @@ export function App() {
   // 启动时 useBootstrap 会先同步读走会话再恢复，晚到的 [] 写入不会覆盖它。
   useEffect(() => {
     if (!workspace) return;
+    // P12：启动就绪后（首个 workspace 到达）安排一次内核 chunk 的空闲预取；幂等，后续标签变化再调无副作用。
+    prefetchEditorKernel();
     if (settings.clearTabsOnExit) { clearTabSession(); return; }
     writeTabSession({ ids: openTabs.map((tab) => tab.noteId), activeId: activeNoteId });
   }, [workspace, openTabs, activeNoteId, settings.clearTabsOnExit]);
@@ -721,13 +726,19 @@ export function App() {
             <div className="tab-items" />
             <div className="tabbar-trailing">{topBarSearch}</div>
           </header>
-          <TrashPanel
-            open={desktopWorkspace === "trash"}
-            embed
-            onClose={() => void switchDesktopWorkspace("library")}
-            onChanged={() => void refreshDraftEntries()}
-            onRestored={handleTrashRestored}
-          />
+          {/* P12：TrashPanel 挂内核（HistorySnapshotPreview / useHistorySnapshotViewer）⇒ 仅在回收站空间激活时懒挂载；
+              离开发空间即卸载（原先常驻隐藏；回收站列表/选中态本来每次 open 都会重读）。 */}
+          {desktopWorkspace === "trash" && (
+            <Suspense fallback={null}>
+              <TrashPanel
+                open
+                embed
+                onClose={() => void switchDesktopWorkspace("library")}
+                onChanged={() => void refreshDraftEntries()}
+                onRestored={handleTrashRestored}
+              />
+            </Suspense>
+          )}
         </div>
         {/* 资源空间：与回收站同构（顶栏 + 整页 pane）；左 2/3 列表、右 1/3 纯预览。261006 */}
         <div className={"workspace-view" + (desktopWorkspace === "resources" ? "" : " workspace-view--hidden")}>
@@ -764,6 +775,7 @@ export function App() {
         />
       </main>
       {infoNote && (
+        <Suspense fallback={null}>
         <NoteInfoDialog
           note={{ noteFileId: infoNote.noteFileId, title: infoNote.title }}
           onClose={() => setInfoNote(null)}
@@ -772,6 +784,7 @@ export function App() {
           onOpenHistory={() => { void sidebarOpenHistory(infoNote); setInfoNote(null); }}
           onJumpToNode={(id) => { setInfoNote(null); setRevealNodeId(id); }}
         />
+        </Suspense>
       )}
       <DesktopOverlays
         confirmDelete={confirmDelete}

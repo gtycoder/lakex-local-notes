@@ -4,14 +4,15 @@
  * 所有状态与回调由 App（或后续 useDesktopShell）注入，本组件不持有业务状态。
  */
 import { Menu } from "../components/ui/Overlay";
-import { useMemo, type MutableRefObject, type RefObject } from "react";
+import { lazy, Suspense, useMemo, type MutableRefObject, type RefObject } from "react";
 import { Focus, Lock, LockOpen, Sparkles } from "lucide-react";
 import { ConfirmDelete } from "../components/app/Sidebar";
 import { ExportSubmenuItem, type ExportFormat } from "../components/ui/ExportSubmenuItem";
 import { DraftRecoveryDialog } from "../components/app/DraftRecoveryDialog";
 import { SearchPanel } from "../components/app/SearchPanel";
-import { TrashPanel } from "../components/app/TrashPanel";
-import { HistoryPanel } from "../components/app/HistoryPanel";
+/** P12：回收站/历史面板都挂 Lake 内核（历史快照预览）⇒ 打开时才加载；未打开不挂载（避免启动即拉内核 chunk）。 */
+const TrashPanel = lazy(() => import("../components/app/TrashPanel").then((m) => ({ default: m.TrashPanel })));
+const HistoryPanel = lazy(() => import("../components/app/HistoryPanel").then((m) => ({ default: m.HistoryPanel })));
 import { SyncToast, type SyncToastData } from "../components/app/SyncToast";
 import { SettingsPanel, type SettingsCategory } from "../components/app/SettingsPanel";
 import { DesktopWorkspaceMenuItems } from "./DesktopTopBar";
@@ -180,10 +181,16 @@ export function DesktopOverlays(props: DesktopOverlaysProps) {
       <DraftRecoveryDialog entries={draftEntries} onRestore={onRestoreDraft} onDiscard={onDiscardDraft} onClose={onCloseDrafts} />
       <SearchPanel open={searchPanelOpen} initialQuery={searchPanelQuery} onOpenNote={onOpenNoteFromSearch} onOpenQuickNote={onOpenQuickNoteFromSearch} onClose={onCloseSearch} />
       {/* 弹窗形态：仅当非 embed 空间仍需浮层时；空间成页在 App 工作区渲染 */}
-      {!trashEmbed && (
-        <TrashPanel open={trashOpen} onClose={onCloseTrash} onChanged={onTrashChanged} onRestored={onTrashRestored} />
+      {!trashEmbed && trashOpen && (
+        <Suspense fallback={null}>
+          <TrashPanel open onClose={onCloseTrash} onChanged={onTrashChanged} onRestored={onTrashRestored} />
+        </Suspense>
       )}
-      <HistoryPanel open={historyOpen} noteId={historyNoteId} onClose={onCloseHistory} onRestored={onHistoryRestored} />
+      {historyOpen && (
+        <Suspense fallback={null}>
+          <HistoryPanel open noteId={historyNoteId} onClose={onCloseHistory} onRestored={onHistoryRestored} />
+        </Suspense>
+      )}
       {syncToast && <SyncToast data={syncToast} onClose={onCloseSyncToast} anchorRect={syncAnchorRect} />}
       <SettingsPanel open={settingsOpen} openCategory={settingsCategory} settings={settings}
         onClose={onCloseSettings} onChange={onSettingsChange}

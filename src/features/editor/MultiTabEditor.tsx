@@ -9,7 +9,10 @@ import { usePopoverPosition } from "../../hooks/usePopoverPosition";
 import { SplitHandle } from "../../components/ui/SplitHandle";
 import { SPLIT_WIDTH_LIMITS, clampSplitLeft } from "./splitGeometry";
 import { expandTabSlots, moveSlot } from "./tabOrder";
-import { EditorTab } from "./EditorTab";
+/** Lake 文档编辑器（闭源内核，入口里占 ≈1.78MB gz）：**按需加载**。
+ *  P12（261103）：与 Univer/Bitable/Board/Ink 同一模式；已有的 Suspense（下方「正在加载编辑器…」）
+ *  顺带承担首 tab / 自动恢复会话的占位；不要改回静态 import（会让 6.1MB 内核回到入口）。 */
+const EditorTab = lazy(() => import("./EditorTab").then((m) => ({ default: m.EditorTab })));
 import "./splitView.css";
 
 /** 表格编辑器（Univer，按需加载）：只在真的打开表格文档时才进首屏之外的分包。 */

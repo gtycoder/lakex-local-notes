@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
+import { forwardRef, lazy, Suspense, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { ArrowUpDown, Check, ChevronDown, FilePlus, Feather, Filter, LayoutList, LoaderCircle, MoreHorizontal, Pencil, Plus, RotateCcw, Search, StickyNote, Tag, Tags, Trash, X } from "lucide-react";
 import { native } from "../../lib/native";
 import { writeLocalStorage } from "../../lib/localStorageSafe";
@@ -13,7 +13,14 @@ import { readQuickNoteSort, writeQuickNoteSort } from "../../lib/quickNoteSortPr
 import type { NoteDocument, QuickNoteDocument, QuickNoteImage, QuickNoteListSummary, QuickNoteTag, ResourceUploadOutput, TreeNode } from "../../lib/types";
 import { getNativeErrorMessage, reportNativeActionError } from "../../lib/nativeErrors";
 import { uploadLakeResource } from "../../features/editor/resourceUpload";
-import { QuickNoteEditor, type QuickNoteEditorApi } from "../../features/quickNotes/QuickNoteEditor";
+import type { QuickNoteEditorApi } from "../../features/quickNotes/QuickNoteEditor";
+/**
+ * P12（261103）：小记写作区 = Lake 内核实例（≈1.61MB gz chunk）。只把**编辑器**懒加载，
+ * QuickNotesWorkspace 本身保持常驻（keep-alive + App 会在切到小记后立刻调 quickNotesRef.revealNote，
+ * 若整个 workspace lazy，ref 在 chunk 解析前为 null，会丢这次定位调用）。
+ * 首次打开/新建小记时才挂 QuickNoteEditor ⇒ 内核 chunk 此时才加载（App 另有 idle 预取兜底）。
+ */
+const QuickNoteEditor = lazy(() => import("../../features/quickNotes/QuickNoteEditor").then((m) => ({ default: m.QuickNoteEditor })));
 import { QuickNotePreview } from "../../features/quickNotes/QuickNotePreview";
 import { toggleTaskInBody } from "../../features/quickNotes/quickNotePreviewParser";
 import { QuickNoteTagPicker } from "../../features/quickNotes/QuickNoteTagPicker";
@@ -1409,7 +1416,9 @@ function QuickNoteComposer({ draft, saving, syncing, cloudReady, variant, ui = "
   const cancel = <button className="ln-btn ln-btn--ghost quick-note-discard" disabled={busy} onClick={onCancel}>取消</button>;
   return <>
     <div className="quick-note-composer" onKeyDownCapture={publishOnShortcut}>
-      {/* 写作区 = 一个 Lake 内核实例（编辑时挂、离开即销毁）；图片直接拖入或粘贴 */}
+      {/* 写作区 = 一个 Lake 内核实例（编辑时挂、离开即销毁）；图片直接拖入或粘贴。
+          P12：编辑器已 React.lazy ⇒ 首次打开时才加载内核 chunk，Suspense 给一个最小占位。 */}
+      <Suspense fallback={<div className="empty-workspace-hint">正在加载编辑器…</div>}>
       <QuickNoteEditor
         ownerId={draft.id}
         initialBody={draft.body}
@@ -1419,6 +1428,7 @@ function QuickNoteComposer({ draft, saving, syncing, cloudReady, variant, ui = "
         onTextChange={onTextChange}
         onReady={onEditorReady}
       />
+      </Suspense>
     </div>
     <div className="quick-note-tags">
       <button
