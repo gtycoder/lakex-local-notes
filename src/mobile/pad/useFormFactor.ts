@@ -1,41 +1,11 @@
-import { useEffect, useState } from "react";
-import { FORM_FACTOR_BREAKPOINTS, currentWindowSize, formFactorOf, type FormFactor } from "./formFactor";
+import { useSyncExternalStore } from "react";
+import { currentFormFactor, subscribeFormFactor, type FormFactor } from "./formFactor";
 
 /**
- * React 侧读形态档：首帧同步读窗口宽（不闪），之后跟随 600 / 800 两个断点与 resize。
- * 与 installFormFactor 共用同一组断点（formFactorOf / FORM_FACTOR_BREAKPOINTS），不重复定义数值。
- * jsdom / 老 WebView 没有 matchMedia 时只靠 resize（不要因此崩掉组件树）。
+ * React 侧读形态档：直接订阅 formFactor store（**唯一 listener 在 installFormFactor**），
+ * 不再每个组件各挂 resize/matchMedia（261103 P3；评审 W1「formFactor 三份表示」）。
+ * SSR/无 window 时返回 compact（与生产首帧一致）。
  */
 export function useFormFactor(): FormFactor {
-  // SSR / node 测试（renderToStaticMarkup）没有 window：按手机（compact）渲染，效果与生产首帧一致。
-  const [formFactor, setFormFactor] = useState<FormFactor>(() => {
-    if (typeof window === "undefined") return "compact";
-    const size = currentWindowSize();
-    return formFactorOf(size.width, size.height);
-  });
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const update = (): void => {
-      const size = currentWindowSize();
-      setFormFactor(formFactorOf(size.width, size.height));
-    };
-    const media = (minWidth: number): MediaQueryList | null =>
-      typeof window.matchMedia === "function" ? window.matchMedia(`(min-width: ${minWidth}px)`) : null;
-    const wide = media(FORM_FACTOR_BREAKPOINTS.medium);
-    const widest = media(FORM_FACTOR_BREAKPOINTS.expanded);
-    wide?.addEventListener("change", update);
-    widest?.addEventListener("change", update);
-    window.addEventListener("resize", update);
-    window.addEventListener("orientationchange", update);
-    update();
-    return () => {
-      wide?.removeEventListener("change", update);
-      widest?.removeEventListener("change", update);
-      window.removeEventListener("resize", update);
-      window.removeEventListener("orientationchange", update);
-    };
-  }, []);
-
-  return formFactor;
+  return useSyncExternalStore(subscribeFormFactor, currentFormFactor, () => "compact" as FormFactor);
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { FORM_FACTOR_BREAKPOINTS, effectiveWindowHeight, formFactorOf, isPadLayout } from "./formFactor";
+import { FORM_FACTOR_BREAKPOINTS, effectiveWindowHeight, formFactorOf } from "./formFactor";
 
 describe("平板形态判据（按窗口宽）", () => {
   it("三档边界：<600 compact / 600–799 medium / ≥800 expanded", () => {
@@ -45,9 +45,11 @@ describe("平板形态判据（按窗口宽）", () => {
     expect(formFactorOf(Number.POSITIVE_INFINITY)).toBe("compact");
   });
 
-  it("只有 medium / expanded 算平板布局", () => {
-    expect(isPadLayout("compact")).toBe(false);
-    expect(isPadLayout("medium")).toBe(true);
-    expect(isPadLayout("expanded")).toBe(true);
+  it("判据断点与 window-sweep 装置同源（防止第二份副本漂移）", () => {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const raw = require("node:fs").readFileSync(require("node:path").join(__dirname, "../../../scripts/mobile-audit/window-sweep.mjs"), "utf8");
+    expect(raw).toContain("medium: 600");
+    expect(raw).toContain("expanded: 800");
+    expect(raw).toContain("expandedMinHeight: 560");
   });
 });

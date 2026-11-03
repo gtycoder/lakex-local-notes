@@ -1,6 +1,5 @@
 package com.lakexlocalnotes.android
 
-import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -105,8 +104,6 @@ class MainActivity : BridgeActivity() {
                 @Suppress("DEPRECATION")
                 webView.settings.forceDark = WebSettings.FORCE_DARK_OFF
             }
-            // 设备形态（平板 / 折叠屏展开）：交给 Web 切布局（body.lake-tablet）。
-            webView.addJavascriptInterface(DeviceInterface(this), "lakeDevice")
             // 首屏看门狗：JS 启动后调 lakeBoot.ready()；超时未报到则 reload 一次。
             webView.addJavascriptInterface(BootInterface(this), "lakeBoot")
             bootWatchdog.postDelayed({
@@ -124,22 +121,6 @@ class MainActivity : BridgeActivity() {
                 return true
             }
         })
-    }
-
-    /** 平板/折叠屏展开：smallestScreenWidthDp >= 600（与思源同口径）。 */
-    private fun isTabletLayout(): Boolean = resources.configuration.smallestScreenWidthDp >= 600
-
-    /** 把设备形态推给 Web（启动后的配置变化：折叠展开/旋转）。 */
-    private fun pushDeviceProfile() {
-        val tablet = isTabletLayout()
-        getBridge()?.webView?.post {
-            getBridge()?.webView?.evaluateJavascript("window.__lakeSetTablet&&window.__lakeSetTablet($tablet)", null)
-        }
-    }
-
-    override fun onConfigurationChanged(newConfig: Configuration) {
-        super.onConfigurationChanged(newConfig)
-        pushDeviceProfile()
     }
 
     /**
@@ -185,12 +166,6 @@ class MainActivity : BridgeActivity() {
             activity.bootReady = true
             activity.bootWatchdog.removeCallbacksAndMessages(null)
         }
-    }
-
-    /** 仅暴露给本应用 WebView：设备形态（平板/折叠屏展开）。 */
-    private class DeviceInterface(private val activity: MainActivity) {
-        @JavascriptInterface
-        fun isTablet(): Boolean = activity.isTabletLayout()
     }
 
     /** 仅暴露给本应用 WebView：系统栏/刘海安全区（CSS px；-1 表示尚未测量）。 */

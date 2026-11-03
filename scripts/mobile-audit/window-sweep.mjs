@@ -39,9 +39,8 @@ export default async ({ page }) => {
     await reload(page, "shelf");
     const got = await ff();
     const want = expectFormFactor(c.width, c.height);
-    // 判据与 body.lake-tablet（历史兼容类）必须同源：只有 compact 不加该类。
-    const tabletClass = await page.evaluate("document.body.classList.contains('lake-tablet')");
-    const row = { name: c.name, size: c.width + "x" + c.height, want, got, pass: got === want && tabletClass === (want !== "compact"), tabletClass };
+    // 261103：判据只剩 html[data-form-factor]（body.lake-tablet 已随死代码清理删除）。
+    const row = { name: c.name, size: c.width + "x" + c.height, want, got, pass: got === want };
     if (!row.pass) out.failures.push(row);
     out.cases.push(row);
   }
