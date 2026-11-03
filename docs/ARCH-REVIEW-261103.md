@@ -204,3 +204,17 @@
 **实测（本批）**：tsc 0；全量 vitest **553 文件 3442 例**（12 skipped）；`check:core` 135/0；`check:mobileui`（!important 19/19、字号 48/49、跨文件重复 105/105）；双 build；`check:bundle`（mobile entry 78.6KB/81.9KB、CSS 137.8KB/141.3KB）；`check:arch`（mobile 393.1KB/420KB、desktop 2.79MB/3.0MB）；手机 + 平板 6 态 **0 差异**；`check:windowsweep` pass；`compileDebugKotlin` 通过。
 
 **剩余（列 P9，需另开）：** ① bridge/sync 域（s3v3 引擎/核心纯逻辑）从首屏静态图改按需（bridge chunk ~97KB gz 的大头，需实测）；② 桌面 CodeMirror 经典脚本改 defer/按需（可回收 407KB gz，届时桌面首屏预算收紧回 2.5MB）；③ `features/outline → desktop` 唯一冻结 import 违规清零；④ `deviceConformance.mobile.test.ts` 拆独立 worker 后可重开 vitest `isolate:false`；⑤ NotebookWorkspace 进一步拆 TopBar/OverlayHost/NotePaneHost（本轮已拆胶囊与两侧栏）。
+
+## 9. P9 实施记录（261103 同日，分支 `feat/pad-touch-ui`）
+
+| 项 | 结果 | 关键数字 |
+|---|---|---|
+| P9-1 bridge/sync 按需 | ✅ | mobile 首屏 **392,977 → 366,792B gz（−26,185B / −6.7%）**；bridge chunk **97,164 → 31,671B gz**；preload 20→28 条（rolldown 共享 chunk，字节降）⇒ 条数预算 23→30（注释写明「字节由 check-arch 守」），首屏预算 420→**390KB** |
+| P9-2 CodeMirror defer | ✅ | desktop 首屏 **2,785,488 → 2,378,113B gz（−407,375B）**；defer 预算 450KB；桌面首屏预算 3.0MB→**2.5MB**；dev Electron 冒烟（#root 渲染、`window.CodeMirror`=object） |
+| P9-3 import 违规清零 | ✅ | 新增 `core/layoutConstants.ts`（大纲宽 280/200/420）+ desktopTypes re-export；check-arch 违规 **0** / 冻结清单 **0** |
+| P9-4 isolate:false | ⚠️ 二次尝试后回退 | projects（unit isolate:false + conformance isolate:true）实测 **30.21 → 19.25~21.51s（−32~36%）**，但两轮红点不同（`bridge/home.test` jeep-sqlite、`electron/assetServer.test` 模块加载期 env、`bridgeStartup` 模块状态）⇒ 结构性依赖文件级隔离；结论与重开前置（去全局化、显式注入）写进 `vitest.config.ts`，未改断言 |
+| P9-5 工作区拆件 | ✅（纯 JSX 已抽尽） | 除 P4 的 Capsule/Panels 外，新增 `WorkspaceTopBar` / `WorkspaceOverlayHost` / `NotePaneHost` / `WorkspaceDrawers`；NotebookWorkspace **1212 → 984 行**；`kernelStyleBootstrap` 判据改「相对 import 闭包」 |
+
+**门禁**：tsc 0 / 全量 vitest **566 文件 3463 例** 30.21s / check:core 136/0 / check:mobileui / 双 build / check:bundle / check:arch（mobile 366.8KB/390KB、desktop 2.38MB/2.5MB、defer 407.4KB/450KB、import 违规 0）/ 手机 + 平板 6 态 **0 差异** / `check:windowsweep` pass。
+
+**剩余（P10 候选）**：① P9-5c —— 把树拖拽/会话屏障/chrome 滚动逻辑逐字搬 hook（≈−250 行，行为不变）；② `bridge` 里仍静态的 `s3v3Report`（12KB，受 syncDiagnosticsStore 值导入约束）；③ 把 import 方向规则扩到 `components→desktop`（Sidebar 常量同法下沉）；④ `plantuml`/`MobileUsheetViewer` 等 6~7MB raw 懒 chunk 的按需化评估。

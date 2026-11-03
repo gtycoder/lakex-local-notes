@@ -7,6 +7,14 @@
 
 ## 0. 最新交接（261027）
 
+### 261103 · P9 收尾（首屏 / import 方向 / isolate 结论 / 工作区拆件）· **本地提交（分支 feat/pad-touch-ui）**
+- **P9-1 bridge/sync 按需**：`src/mobile/bridge/sync.ts` 8 个 v3 重依赖（s3v3Remote/mobileDeviceStore/sync 编排/s3v3Engine/Transfer/AssetBackfill/protocol）改函数内 dynamic import（离线/未配置在 import 前返回）⇒ mobile 首屏 **392,977 → 366,792B gz（−26.2KB / −6.7%）**，bridge chunk 97,164 → 31,671B gz；首屏预算收紧 **420→390KB**。
+- **P9-2 CodeMirror defer**：`index.html` 经典脚本加 defer ⇒ desktop 首屏 **2,785,488 → 2,378,113B gz（−407KB）**；`check-arch` 区分阻塞/defer 两套预算（desktop 首屏 2.5MB + defer 450KB）；dev Electron 冒烟通过。
+- **P9-3 import 方向清零**：新增 `core/layoutConstants.ts`，`desktopTypes` re-export，`features/outline` 改依赖 core ⇒ check-arch 违规 **0 条**。
+- **P9-4 isolate:false 二次结论**：projects 方案实测 **30.21→19.25~21.51s（−32~36%）**，但两轮红点不同（bridge/home.test、assetServer 模块期 env、bridgeStartup）⇒ **结构性依赖文件级隔离，保持 isolate:true**；重开前置（去全局化/显式注入）写进配置注释，不改断言。
+- **P9-5 工作区拆件**：WorkspaceTopBar / WorkspaceOverlayHost / NotePaneHost / WorkspaceDrawers（+ P4 的 Capsule/Panels）⇒ NotebookWorkspace **1212→984 行**；`kernelStyleBootstrap` 判据改相对 import 闭包。
+- **门禁**：tsc 0 / vitest **566 文件 3463 例** 30.21s / check:core 136/0 / check:mobileui / 双 build / check:bundle / check:arch / 手机+平板 6 态 0 差异 / windowsweep pass。
+- **剩余（P10）**：P9-5c 逻辑搬 hook（≈−250 行）、bridge 里 `s3v3Report` 静态 12KB、`components→desktop` 规则扩展、plantuml/usheet 大 chunk 按需评估。
 ### 261103 · 架构 8 段落地（P1–P8）+ 清「平板模仿桌面工具栏」冗余 · **本地提交（分支 feat/pad-touch-ui）**
 - **依据** [docs/ARCH-REVIEW-261103.md](docs/ARCH-REVIEW-261103.md) §8 实施记录（含每段验证与 P9 剩余）。用户裁决：8 段全做、彻底清冗余、自主推进。
 - **pad 外壳**：P1 面板常驻 DOM（开合切 class，手势跟手/状态保持）；P2 每侧一个 PanelMode + Esc 单一 owner + 平板通用几何整体迁入 pad.css（`padCssOwnership.test` 钉「data-form-factor 只在 pad.css」）；P3 判据收敛单一 store（useSyncExternalStore）+ **删死代码**（isPadLayout / nativeDeviceHint / body.lake-tablet / `__lakeSetTablet` / Kotlin lakeDevice+isTabletLayout+pushDeviceProfile+onConfigurationChanged）；P4 shellModel 纯 reducer（+7 例）+ 拆出 WorkspaceCapsule / WorkspaceTreePanel / WorkspaceOutlinePanel。
