@@ -243,9 +243,20 @@ export function viewTypeLabel(type: string): string {
   return isKnownViewType(type) ? BITABLE_VIEW_TYPE_LABEL[type] : type;
 }
 
-/** 新建视图的默认名（与新建菜单文案同源）。 */
+/**
+ * 新建视图的**默认名** = 短名（261103 四批）：表格 / 表单 / 看板 / 画册 / 日历；未知类型叫「视图」。
+ * 长名（表格视图…，BITABLE_VIEW_TYPE_LABEL）仍用于新建菜单与回退提示——两套文案各有用途，
+ * 别把 BITABLE_VIEW_TYPE_LABEL 改短（那会让菜单变成「表格」这种缺宾语的文案）。
+ */
 export function defaultViewName(type: string): string {
-  return isKnownViewType(type) ? BITABLE_VIEW_TYPE_LABEL[type] : "视图";
+  switch (type) {
+    case "grid": return "表格";
+    case "form": return "表单";
+    case "kanban": return "看板";
+    case "gallery": return "画册";
+    case "calendar": return "日历";
+    default: return "视图";
+  }
 }
 
 /** 筛选条件连接符；一个条件组内统一使用同一个连接符（对齐远端 lake packet）。 */
@@ -587,7 +598,7 @@ export function createBitableRecord(id = newBitableId("rec")): BitableRecord {
  */
 export function createDefaultBitableTable(name = "数据表 1", id = newBitableId("tbl")): BitableTable {
   const primary = createBitableField("text", "文本");
-  const grid = createBitableView("grid", "表格视图");
+  const grid = createBitableView("grid", defaultViewName("grid"));
   const records = [createBitableRecord(), createBitableRecord(), createBitableRecord()];
   return { id, name, fields: [primary], records, views: [grid], activeViewId: grid.id };
 }
@@ -806,7 +817,7 @@ function normalizeTable(raw: unknown): BitableTable | null {
   if (fields.length === 0) return null;
   const records = Array.isArray(table.records) ? table.records.map(normalizeRecord).filter((r): r is BitableRecord => !!r) : [];
   const views = Array.isArray(table.views) ? table.views.map(normalizeView).filter((v): v is BitableView => !!v) : [];
-  if (views.length === 0) views.push(createBitableView("grid", "表格视图"));
+  if (views.length === 0) views.push(createBitableView("grid", defaultViewName("grid")));
   const activeViewId = typeof table.activeViewId === "string" && views.some((v) => v.id === table.activeViewId) ? table.activeViewId : views[0].id;
   return {
     ...(raw as BitableTable),

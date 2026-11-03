@@ -7,6 +7,7 @@ import {
   BITABLE_FILL_MAX_RULES,
   BITABLE_FILL_NO_COLOR,
   BITABLE_IMPLEMENTED_VIEW_TYPES,
+  BITABLE_VIEW_TYPE_LABEL,
   BITABLE_VIEW_TYPES,
   applyViewToRecords,
   bitableAttachments,
@@ -145,6 +146,8 @@ describe("bitableDoc 数据模型", () => {
     expect(table.records.every((r) => Object.keys(r.values).length === 0)).toBe(true);
     expect(table.views).toHaveLength(1);
     expect(table.views[0].type).toBe("grid");
+    // 261103 四批：默认视图名用短名「表格」（不再是「表格视图」）
+    expect(table.views[0].name).toBe("表格");
     expect(table.activeViewId).toBe(table.views[0].id);
   });
 
@@ -581,13 +584,22 @@ describe("bitableDoc 数据模型", () => {
     expect(parseBitableBody(JSON.stringify(dirty))!.tables[0].views[0].type).toBe("grid");
   });
 
-  it("视图类型元数据：五种类型可新建、默认名/标签同源、board 不算视图类型", () => {
+  it("视图类型元数据：五种类型可新建、默认名是短名、长名标签仍给菜单/回退用、board 不算视图类型", () => {
     expect(BITABLE_VIEW_TYPES).toEqual(["grid", "form", "kanban", "gallery", "calendar"]);
-    expect(createBitableView("kanban").name).toBe("看板视图");
-    expect(createBitableView("gallery").name).toBe("画册视图");
-    expect(createBitableView("calendar").name).toBe("日历视图");
-    expect(createBitableView("form").name).toBe("表单视图");
+    // 261103 四批：新建视图的**默认名** = 短名（表格/表单/看板/画册/日历）
+    expect(createBitableView("grid").name).toBe("表格");
+    expect(createBitableView("form").name).toBe("表单");
+    expect(createBitableView("kanban").name).toBe("看板");
+    expect(createBitableView("gallery").name).toBe("画册");
+    expect(createBitableView("calendar").name).toBe("日历");
+    expect(defaultViewName("grid")).toBe("表格");
+    expect(defaultViewName("form")).toBe("表单");
+    expect(defaultViewName("kanban")).toBe("看板");
+    expect(defaultViewName("gallery")).toBe("画册");
+    expect(defaultViewName("calendar")).toBe("日历");
     expect(defaultViewName("chart")).toBe("视图");
+    // 长名（…视图）仍用于新建菜单 / 未知类型回退提示，不跟着改短
+    expect(BITABLE_VIEW_TYPE_LABEL.grid).toBe("表格视图");
     expect(viewTypeLabel("kanban")).toBe("看板视图");
     expect(viewTypeLabel("chart")).toBe("chart");
     expect(isKnownViewType("calendar")).toBe(true);

@@ -70,10 +70,10 @@ describe("MobileBitableViewListSheet（视图面板 + 新建视图）", () => {
     const onViewActions = vi.fn();
     const onSelect = vi.fn();
     renderSheet({ onViewActions, onSelect });
-    act(() => host.querySelector<HTMLButtonElement>('button[aria-label="视图操作 表格视图"]')!.click());
+    act(() => host.querySelector<HTMLButtonElement>('button[aria-label="视图操作 表格"]')!.click());
     expect(onViewActions).toHaveBeenCalledWith(table.activeViewId);
     expect(onSelect).not.toHaveBeenCalled();
-    act(() => host.querySelector<HTMLButtonElement>('button[aria-label="选择视图 表格视图"]')!.click());
+    act(() => host.querySelector<HTMLButtonElement>('button[aria-label="选择视图 表格"]')!.click());
     expect(onSelect).toHaveBeenCalledWith(table.activeViewId);
   });
 });

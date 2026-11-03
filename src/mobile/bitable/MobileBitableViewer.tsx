@@ -16,7 +16,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import "./mobileBitable.css";
-import { Columns3, ListFilter, Menu, Plus, SlidersHorizontal } from "lucide-react";
+import { LayoutList, ListFilter, Menu, Plus, TableProperties } from "lucide-react";
 import { fillSurfaceColor } from "../../core/colorPalette.js";
 import {
   applyViewToRecords,
@@ -59,11 +59,13 @@ import { MobileBitableTableActions } from "./MobileBitableTableActions";
 import { MobileBitableKanbanView } from "./MobileBitableKanbanView";
 import { MobileBitableGalleryView } from "./MobileBitableGalleryView";
 import { MobileBitableCalendarView } from "./MobileBitableCalendarView";
-import { MobileBitableViewConfigSheet } from "./MobileBitableViewConfigSheet";
+import { MobileBitableViewConfigSheet, type ConfigTab } from "./MobileBitableViewConfigSheet";
 import { MobileBitableViewListSheet } from "./MobileBitableViewListSheet";
 import { MobileBitableViewActions } from "./MobileBitableViewActions";
 import { FieldValue } from "./MobileBitableValue";
 import { mobileViewTabs, resolveMobileDefaultViewId } from "./mobileBitableViewTabs";
+import { mobileBitableHeaderModel } from "./mobileBitableHeader";
+import { bitableViewStateSummary, bitableViewStateTab } from "./mobileBitableViewState";
 import { readBitableRecordLayout, writeBitableRecordLayout } from "./mobileBitableViewPrefs";
 import { submitMobileForm } from "./mobileBitableForm";
 import {
@@ -122,6 +124,8 @@ export function MobileBitableViewer({ noteId, content, editing = false, onChange
   /** 正在编辑配置的字段 id（「修改字段」面板）。 */
   const [editingFieldId, setEditingFieldId] = useState<string | null>(null);
   const [configOpen, setConfigOpen] = useState(false);
+  /** 视图配置面板打开时落到哪个页签（只读 chip 会带 filter/sort/group；筛选按钮保持原来的 layout）。 */
+  const [configInitialTab, setConfigInitialTab] = useState<ConfigTab>("layout");
   const [tableDrawerOpen, setTableDrawerOpen] = useState(false);
   /** 数据表操作面板：独立于抽屉（抽屉关闭后再弹，避免两个层抢 z-index）。 */
   const [actionsTableId, setActionsTableId] = useState<string | null>(null);
@@ -217,6 +221,10 @@ export function MobileBitableViewer({ noteId, content, editing = false, onChange
   const isFormView = view.type === "form";
   const isGridLike = view.type === "grid";
   const showCardLayout = layout.mode === "card" && isGridLike;
+  /** 只读态「视图状态」摘要（261103 六批 B1）：筛选/排序/分组都为空时是空串（不渲染空 chip）。 */
+  const viewStateSummary = bitableViewStateSummary(view);
+  /** 头部 = 两行（261103 三/四/六批）：哪些部件出现只由这个纯函数回答，且**不依赖 records**。 */
+  const header = mobileBitableHeaderModel({ editable, isFormView, viewCount: viewTabs.length, hasViewState: viewStateSummary.length > 0 });
 
   /** 表单编辑态（261030 P2）：只改**视图配置**（标题/描述/题目勾选），仅在文档编辑态可用。 */
   const updateView = (patch: Partial<BitableView>) => {
@@ -497,57 +505,69 @@ export function MobileBitableViewer({ noteId, content, editing = false, onChange
 
   return (
     <div className={"mobile-bitable" + (editable ? " is-editing" : "") + (isFormView ? " mbt-is-form" : "")} data-mobile-bitable data-prevent-swipe>
-      {/* 视图页签：多个视图在只读态也要能切；单视图只在**编辑态**出现 —— 新建视图的入口在这一行（261030）。 */}
-      {(viewTabs.length > 1 || editable) && (
-        <div className="mbt-views" role="tablist" aria-label="视图">
-          {viewTabs.map((tab) => (
-            <button key={tab.view.id} type="button" role="tab" aria-selected={tab.view.id === view.id}
-              className={"mbt-viewtab" + (tab.view.id === view.id ? " is-active" : "")}
-              onClick={() => switchView(tab.view.id)}>{tab.label}</button>
-          ))}
-          <button type="button" className="mbt-viewmore" aria-label="视图列表" onClick={() => setViewListOpen(true)}>
-            <Columns3 size={16} />
+      {/* 头部 = 两行（261103 四批）：
+          第 1 行 [☰ 表名 …… 字段 / 筛选 / ＋]；第 2 行 [视图页签横滚] [视图列表]（仅 header.showViews）。
+          哪些部件出现只由 mobileBitableHeaderModel 回答（纯函数、不依赖 records）；
+          「编辑中/只读」徽标与记录数不进头部（记录数在网格末尾统计行）。 */}
+      <header className="mbt-header" role="toolbar" aria-label="多维表头部">
+        <div className="mbt-header__row1">
+          <button type="button" className="mb-iconbtn mb-iconbtn--compact mbt-header__tables" aria-label="数据表"
+            onClick={() => setTableDrawerOpen(true)}>
+            <Menu size={16} />
           </button>
+          <span className="mbt-header__name" title={table.name}>{table.name}</span>
+          <span className="mbt-header__spacer" />
+          {header.showFieldButton && (
+            <button type="button" className="mb-iconbtn mbt-header__btn" aria-label="字段管理" onClick={() => setFieldSheetOpen(true)}>
+              <TableProperties size={16} />
+            </button>
+          )}
+          {header.showFilterButton && (
+            <button type="button" className="mb-iconbtn mbt-header__btn" aria-label="筛选"
+              onClick={() => { setConfigInitialTab("layout"); setConfigOpen(true); }}>
+              <ListFilter size={16} />
+            </button>
+          )}
+          {header.showAddRecord && (
+            <button type="button" className="mb-iconbtn mbt-header__btn" aria-label="新增记录" onClick={addRecord}>
+              <Plus size={16} />
+            </button>
+          )}
         </div>
-      )}
-
-      <div className="mbt-meta">
-        <button type="button" className="mb-iconbtn mb-iconbtn--compact mbt-meta__tables" aria-label="数据表"
-          onClick={() => setTableDrawerOpen(true)}>
-          <Menu size={16} />
-        </button>
-        <span className="mbt-meta__table" title={table.name}>{table.name}</span>
-        <span className="mbt-meta__count">{records.length} 条记录</span>
-        {view?.name && viewTabs.length <= 1 && <span className="mbt-meta__view" title={view.name}>{view.name}</span>}
-        {editable
-          ? <span className="mbt-readonly" title="改动自动保存">编辑中</span>
-          : <span className="mbt-readonly">只读</span>}
-      </div>
+        {(header.showViews || header.showViewStateChip) && (
+          <div className="mbt-header__row2">
+            {header.showViews && (
+              <div className="mbt-header__tabs" role="tablist" aria-label="视图">
+                {viewTabs.map((tab) => (
+                  <button key={tab.view.id} type="button" role="tab" aria-selected={tab.view.id === view.id}
+                    className={"mbt-viewtab" + (tab.view.id === view.id ? " is-active" : "")}
+                    onClick={() => switchView(tab.view.id)}>{tab.label}</button>
+                ))}
+              </div>
+            )}
+            {/* 261103 五批（用户图）：视图列表入口钉在**最右侧**，不跟着页签跑（页签再多也只在左边横滑）。 */}
+            <span className="mbt-header__spacer" />
+            {header.showViewStateChip && (
+              <button type="button" className="mbt-viewstate-chip" aria-label={"视图状态：" + viewStateSummary}
+                title={viewStateSummary}
+                onClick={() => { setConfigInitialTab(bitableViewStateTab(view) ?? "layout"); setConfigOpen(true); }}>
+                {viewStateSummary}
+              </button>
+            )}
+            {header.showViews && (
+              <button type="button" className="mbt-viewmore" aria-label="视图列表" onClick={() => setViewListOpen(true)}>
+                <LayoutList size={16} />
+              </button>
+            )}
+          </div>
+        )}
+      </header>
 
       {isFormView ? (
         <MobileBitableFormView noteId={noteId} table={table} view={view} ctx={displayCtx} onSubmit={submitForm}
           editable={editable} onUpdateView={editable ? updateView : undefined} />
       ) : (
         <>
-          <div className="mbt-toolbar" data-prevent-swipe role="toolbar" aria-label="多维表工具">
-            {/* 字段是**文档结构**、与当前视图无关：任何内容视图的编辑态都要能进字段管理（钉钉同）。 */}
-            {editable && (
-              <button type="button" className="mb-btn mb-btn--secondary mb-btn--sm" aria-label="字段管理" onClick={() => setFieldSheetOpen(true)}>
-                <Columns3 size={15} />字段
-              </button>
-            )}
-            <span className="mbt-toolbar__spacer" />
-            <button type="button" className="mb-iconbtn" aria-label="筛选" onClick={() => setConfigOpen(true)}><ListFilter size={16} /></button>
-            {isGridLike && (
-              <button type="button" className="mb-iconbtn" aria-label="视图配置" onClick={() => setConfigOpen(true)}><SlidersHorizontal size={16} /></button>
-            )}
-            {/* 桌面工具栏的「添加记录」在右侧主操作位；手机上网格末尾也有同一个入口，这里给常驻位。 */}
-            {editable && (
-              <button type="button" className="mb-btn mb-btn--primary mb-btn--sm" aria-label="新增记录" onClick={addRecord}>
-                <Plus size={15} />添加记录
-              </button>
-            )}
-          </div>
 
           {!isKnownViewType(view.type) && (
             <div className="mbt-view-notice" role="status">
@@ -640,6 +660,8 @@ export function MobileBitableViewer({ noteId, content, editing = false, onChange
                   </tbody>
                 )}
               </table>
+              {/* 记录数从头部移到这里（261103 三批）：统计行不参与头部布局，也不让头部依赖 records。 */}
+              <div className="mbt-grid-foot">{records.length} 条记录</div>
             </div>
           )}
         </>
@@ -725,6 +747,7 @@ export function MobileBitableViewer({ noteId, content, editing = false, onChange
         prefs={prefs}
         cardFields={table.fields}
         editable={editable}
+        initialTab={configInitialTab}
         onPatchPrefs={patchPrefs}
         onUpdateView={editable ? updateView : undefined}
         onClose={() => setConfigOpen(false)}

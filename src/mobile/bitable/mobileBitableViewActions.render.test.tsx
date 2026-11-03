@@ -118,7 +118,8 @@ describe("MobileBitableViewer（视图操作接线）", () => {
     expect(views).toHaveLength(3);
     expect(views[2].name).toBe("备用视图 副本");
     expect(host.querySelectorAll(".mbt-viewtab")).toHaveLength(3);
-    expect(activeTab()).toBe("备用视图 副本");
+    // 261103 六批 B2：页签按类型序编号（三个 grid ⇒ 表格 / 表格 2 / 表格 3），存储名仍是「备用视图 副本」
+    expect(activeTab()).toBe("表格 3");
     expect(sheetTitles()).toEqual([]);
 
     // 删除刚复制的当前视图 ⇒ 回落到第一个视图
@@ -128,9 +129,9 @@ describe("MobileBitableViewer（视图操作接线）", () => {
     expect(mocks.confirmMobile).toHaveBeenCalledTimes(1);
     views = viewsOf(onChange.mock.calls.at(-1)?.[0] ?? "{}");
     expect(views).toHaveLength(2);
-    expect(views.map((view) => view.name)).toEqual(["表格视图", "备用视图"]);
+    expect(views.map((view) => view.name)).toEqual(["表格", "备用视图"]);
     expect(host.querySelectorAll(".mbt-viewtab")).toHaveLength(2);
-    expect(activeTab()).toBe("表格视图");
+    expect(activeTab()).toBe("表格");
     expect(sheetTitles()).toEqual([]);
   });
 
@@ -139,7 +140,7 @@ describe("MobileBitableViewer（视图操作接线）", () => {
     const onChange = vi.fn();
     act(() => root.render(createElement(MobileBitableViewer, { noteId: "n-view-rename", content: bodyOf(table), editing: true, onChange })));
     act(() => host.querySelector<HTMLButtonElement>('button[aria-label="视图列表"]')!.click());
-    act(() => host.querySelector<HTMLButtonElement>('button[aria-label="视图操作 表格视图"]')!.click());
+    act(() => host.querySelector<HTMLButtonElement>('button[aria-label="视图操作 表格"]')!.click());
     act(() => row("重命名").click());
     setInput(host.querySelector<HTMLInputElement>('input[aria-label="视图名称"]')!, "内容视图");
     act(() => btn("确定")!.click());

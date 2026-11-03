@@ -38,7 +38,7 @@ import type { BitableRecordLayoutPrefs } from "../../core/bitableRecordLayout";
 import type { BitableResolvedRecordLayout } from "../../core/bitableRecordLayout";
 import { useEffect, useState } from "react";
 
-type ConfigTab = "filter" | "sort" | "group" | "layout";
+export type ConfigTab = "filter" | "sort" | "group" | "layout";
 
 export interface MobileBitableViewConfigSheetProps {
   open: boolean;
@@ -52,6 +52,8 @@ export interface MobileBitableViewConfigSheetProps {
   onPatchPrefs: (patch: Partial<BitableRecordLayoutPrefs>) => void;
   /** 编辑态写视图配置（排序/分组写正文；只读态不传 ⇒ 面板保持只读说明）。 */
   onUpdateView?: (patch: Partial<BitableView>) => void;
+  /** 打开时落到哪个页签（缺省 layout）；只读态「视图状态」chip 会带 filter/sort/group 进来。 */
+  initialTab?: ConfigTab;
   onClose: () => void;
 }
 
@@ -67,9 +69,9 @@ function sortSummary(view: BitableView): string {
   return "已有 " + count + " 条排序规则";
 }
 
-export function MobileBitableViewConfigSheet({ open, table, view, layout, prefs, cardFields, editable, onPatchPrefs, onUpdateView, onClose }: MobileBitableViewConfigSheetProps) {
-  const [tab, setTab] = useState<ConfigTab>("layout");
-  useEffect(() => { if (open) setTab("layout"); }, [open]);
+export function MobileBitableViewConfigSheet({ open, table, view, layout, prefs, cardFields, editable, onPatchPrefs, onUpdateView, initialTab, onClose }: MobileBitableViewConfigSheetProps) {
+  const [tab, setTab] = useState<ConfigTab>(initialTab ?? "layout");
+  useEffect(() => { if (open) setTab(initialTab ?? "layout"); }, [open, initialTab]);
 
   const cardMode = layout.mode === "card";
   const shownIds = new Set(layout.fields.map((field) => field.id));

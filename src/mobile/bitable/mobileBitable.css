@@ -4,16 +4,79 @@
  * 单一来源：移动端自有样式层（不引桌面样式）；颜色/字号/间距/圆角**只用令牌**（ui-metrics 硬指标）。
  * 结构类名沿用 `mbt-` 前缀；表单/详情/配置是新增交互形态，不是对旧规则的覆盖。
  */
-.mobile-bitable { position: relative; }
+.mobile-bitable {
+  position: relative;
+  /* 261103 六批 A1：横屏刘海下整块多维表让出左右安全区（竖屏 0；内部 --mb-page-pad 仍生效）。 */
+  padding-left: var(--mobile-left-safe-area);
+  padding-right: var(--mobile-right-safe-area);
+}
 
-/* ── 视图页签（表单 / 内容 / …）──────────────────────────────── */
-.mbt-views {
+/* ── 头部 = 两行（261103 四批：页签单独一行，放在表名行下面）──
+ * 第 1 行：[☰ 数据表名] …… [字段] [筛选] [＋]
+ * 第 2 行：[视图页签横滚] [视图列表]（仅 header.showViews；只读单视图不渲染 ⇒ 头部只有第 1 行）
+ * 高度：row1 48（--mb-ctl-h-lg）+ 行距 2（--lake-space-xxs）+ row2 40 = 90px（≤92 验收线）。
+ * 哪些部件出现由 mobileBitableHeaderModel（纯函数）决定；「编辑中/只读」徽标已删，记录数移到网格末尾统计行。 */
+.mbt-header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lake-space-xxs);
+  margin-bottom: var(--lake-space-sm);
+}
+.mbt-header__row1 {
+  display: flex;
+  align-items: center;
+  gap: var(--lake-space-xs);
+  min-height: var(--mb-ctl-h-lg);
+}
+.mbt-header__row2 {
+  display: flex;
+  align-items: center;
+  gap: var(--lake-space-xs);
+  min-height: 40px;
+}
+/* 只读态「视图状态」chip（261103 六批 B1）：第 2 行右侧、视图列表按钮左边。
+ * 只读摘要入口（点开是只读视图配置面板），不承载任何编辑动作；无筛选/排序/分组时不渲染。 */
+.mbt-viewstate-chip {
+  flex: 0 0 auto;
+  max-width: 62%;
+  padding: 3px var(--lake-space-md);
+  border: .5px solid var(--lake-border-1);
+  border-radius: var(--lake-radius-pill);
+  background: var(--lake-bg-block);
+  color: var(--lake-text-2);
+  font-size: var(--lake-font-size-tiny);
+  line-height: 16px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mbt-viewstate-chip:active { background: var(--lake-bg-press); }
+.mbt-header__name {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 32%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--lake-text-1);
+  font-size: var(--lake-font-size-small);
+  font-weight: var(--lake-font-weight-semibold);
+}
+/* 视图页签横向滚动：多视图/长视图名不换行、不挤压右侧动作。 */
+.mbt-header__tabs {
   display: flex;
   align-items: center;
   gap: var(--lake-space-sm);
-  padding: 0 0 var(--lake-space-md);
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
 }
+.mbt-header__tabs::-webkit-scrollbar { display: none; }
+.mbt-header__spacer { flex: 1 1 auto; }
+.mbt-header .mb-iconbtn { width: var(--mb-ctl-h-sm); height: var(--mb-ctl-h-sm); }
 .mbt-viewtab {
+  flex: 0 0 auto;
   min-height: 34px;
   padding: 0 var(--lake-space-xl);
   border: .5px solid transparent;
@@ -21,6 +84,7 @@
   background: transparent;
   color: var(--lake-text-2);
   font-size: var(--lake-font-size-small);
+  white-space: nowrap;
 }
 .mbt-viewtab.is-active {
   border-color: var(--lake-border-1);
@@ -29,7 +93,7 @@
   font-weight: var(--lake-font-weight-medium);
 }
 .mbt-viewmore {
-  margin-left: auto;
+  flex: 0 0 auto;
   width: var(--mb-ctl-h-sm);
   height: var(--mb-ctl-h-sm);
   display: inline-flex;
@@ -42,9 +106,14 @@
 }
 .mbt-viewmore:active { background: var(--lake-bg-press); }
 
-/* ── 工具行 ─────────────────────────────────────────────────── */
-.mbt-toolbar__spacer { flex: 1; }
-.mbt-toolbar .mb-iconbtn { width: 36px; height: 36px; }
+/* 网格末尾统计行（记录数从头部移来；不参与头部布局，头部也就不依赖 records）。 */
+.mbt-grid-foot {
+  display: flex;
+  justify-content: flex-end;
+  padding: var(--lake-space-sm) 0 var(--lake-space-md);
+  color: var(--lake-text-3);
+  font-size: var(--lake-font-size-tiny);
+}
 
 /* ── 表格布局：序号列 + 分组行 + 只读行可点 ───────────────────── */
 .mbt-grid__idx {
@@ -137,6 +206,8 @@
 
 /* ── 表单（填写态）──────────────────────────────────────────── */
 .mobile-bitable.mbt-is-form { padding: 0; }
+/* 表单页容器 padding:0（表单自己接管内距）⇒ 头部要单独补页面内距，否则贴边。 */
+.mobile-bitable.mbt-is-form .mbt-header { padding: 0 var(--mb-page-pad); }
 .mbt-form { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 .mbt-form-scroll { flex: 1; min-height: 0; overflow: auto; background: var(--lake-bg-window); }
 .mbt-form-fields { display: flex; flex-direction: column; gap: var(--lake-space-md); padding: var(--lake-space-lg) var(--mb-page-pad) var(--lake-space-giant); }
@@ -517,7 +588,6 @@
 .mbt-date-title { color: var(--lake-text-1); font-size: var(--lake-font-size-bodyMd); font-weight: var(--lake-font-weight-semibold); }
 
 /* 数据表抽屉（261030 用户点单：对齐钉钉多数据表切换） */
-.mbt-meta__tables { margin-right: 2px; }
 .mbt-drawer-scrim {
   position: absolute;
   inset: 0;

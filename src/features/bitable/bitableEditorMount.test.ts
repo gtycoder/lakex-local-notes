@@ -49,6 +49,8 @@ const FORM = readFileSync(new URL("./BitableFormView.tsx", import.meta.url), "ut
 /** 261030：表单语义（题目顺序/必填/提交值）上收 core，两端共用。 */
 const CORE_FORM = readFileSync(new URL("../../core/bitableForm.ts", import.meta.url), "utf8");
 const MOBILE = readFileSync(new URL("../../mobile/bitable/MobileBitableViewer.tsx", import.meta.url), "utf8");
+/** 261103 三批：移动端头部 3 行 → 1 行，「哪些部件出现」收口到纯函数 header model（不依赖 records）。 */
+const MOBILE_HEADER = readFileSync(new URL("../../mobile/bitable/mobileBitableHeader.ts", import.meta.url), "utf8");
 /** 261030：字段值渲染（附件/选项/评分/进度/关联）抽到独立单一来源，附件判定改在这里查。 */
 const MOBILE_VALUE = readFileSync(new URL("../../mobile/bitable/MobileBitableValue.tsx", import.meta.url), "utf8");
 const PREVIEW = readFileSync(new URL("../editor/imagePreview.ts", import.meta.url), "utf8");
@@ -1245,8 +1247,12 @@ describe("261030 · 新建视图下沉 core + 新增字段自动进编辑", () =
     expect(MOBILE_VIEW_LIST).toContain("只读状态不能新建视图");
     expect(MOBILE_VIEW_LIST).toMatch(/mb-btn--primary mb-btn--block" onClick=\{\(\) => pick\("form"\)\}/);
     expect(MOBILE_VIEW_LIST).toMatch(/\["grid", "kanban", "gallery", "calendar"\]/);
-    // 入口条件：多视图或编辑态（只读单视图保持原样，设备 3 态快照不受影响）
-    expect(MOBILE).toContain("(viewTabs.length > 1 || editable)");
+    // 入口条件：多视图或编辑态（只读单视图保持原样，设备 3 态快照不受影响）。
+    // 261103 三批：条件收口到 header model 纯函数（单一来源），查看器只消费 header.showViews。
+    expect(MOBILE).toContain("mobileBitableHeaderModel({");
+    expect(MOBILE).toContain("viewCount: viewTabs.length");
+    expect(MOBILE).toContain("{header.showViews && (");
+    expect(MOBILE_HEADER).toMatch(/showViews: input\.viewCount > 1 \|\| input\.editable/);
     expect(MOBILE).toMatch(/switchView\(result\.viewId\)/);
     expect(MOBILE).toMatch(/<MobileBitableViewListSheet[\s\S]{0,400}?onAddView=\{addView\}/);
   });

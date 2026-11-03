@@ -158,14 +158,30 @@ describe("MobileBitableViewer 只读单元", () => {
     expect((html.match(/class="mbt-attachment"/g) ?? []).length).toBe(1);
   });
 
-  it("编辑态：网格可点、有「字段」入口与「新增记录」，且不再标只读", () => {
+  it("编辑态：两行头部（row1 = 表名/字段/筛选/＋，row2 = 视图页签）+ 网格可点，不再有编辑中徽标", () => {
     const html = renderToStaticMarkup(createElement(MobileBitableViewer, { noteId: "n1", content: body, editing: true, onChange: () => {} }));
     expect(html).toContain("mobile-bitable is-editing");
-    expect(html).toContain("mbt-toolbar");
-    expect(html).toContain('aria-label="字段管理"');
+    expect(html).toContain('class="mbt-header"');
     expect(html).toContain("mbt-cell-btn");
-    expect(html).toContain('aria-label="新增记录"');
-    expect(html).toContain("编辑中");
+    // 第 1 行：表名 + 三个动作；页签不再混在第 1 行
+    expect(html).toContain('class="mbt-header__row1"');
+    const row1 = html.slice(html.indexOf("mbt-header__row1"), html.indexOf("mbt-header__row2"));
+    expect(row1).toContain('aria-label="数据表"');
+    expect(row1).toContain('aria-label="字段管理"');
+    expect(row1).toContain('aria-label="筛选"');
+    expect(row1).toContain('aria-label="新增记录"');
+    expect(row1).not.toContain('aria-label="视图"');
+    // 第 2 行：视图页签 + 视图列表
+    expect(html).toContain('class="mbt-header__row2"');
+    const row2 = html.slice(html.indexOf("mbt-header__row2"));
+    expect(row2).toContain('aria-label="视图"');
+    expect(row2).toContain('aria-label="视图列表"');
+    // 261103 五批：视图列表入口钉在最右 —— 页签容器与按钮之间必须有 spacer（否则按钮跟着页签跑）。
+    expect(row2.indexOf("mbt-header__spacer")).toBeGreaterThan(row2.indexOf('aria-label="视图"'));
+    expect(row2.indexOf("mbt-header__spacer")).toBeLessThan(row2.indexOf('aria-label="视图列表"'));
+    expect(row2).not.toContain('aria-label="筛选"');
+    // 261103 三批：头部不再有「编辑中 / 只读」徽标
+    expect(html).not.toContain("编辑中");
     expect(html).not.toContain(">只读<");
   });
 
@@ -174,7 +190,57 @@ describe("MobileBitableViewer 只读单元", () => {
     expect(html).not.toContain("is-editing");
     expect(html).not.toContain("mbt-cell-btn");
     expect(html).not.toContain('aria-label="新增记录"');
-    expect(html).toContain(">只读<");
+    expect(html).not.toContain('aria-label="字段管理"');
+    expect(html).not.toContain('aria-label="筛选"');
+    // 只读单视图：第 2 行整段不渲染（头部只剩第 1 行的 ☰ + 表名）；也没有只读徽标
+    expect(html).toContain('class="mbt-header__row1"');
+    expect(html).not.toContain('class="mbt-header__row2"');
+    expect(html).not.toContain('aria-label="视图列表"');
+    expect(html).not.toContain(">只读<");
+  });
+
+  it("头部收口（261103 三/四批）：一个 header 两行、旧三行/徽标已删、三个入口图标互不相同", () => {
+    const html = renderToStaticMarkup(createElement(MobileBitableViewer, { noteId: "n1", content: body, editing: true, onChange: () => {} }));
+    // 一个 <header>，内部两行（row1 在 row2 之前）；旧的 视图页签行 / 元信息行 / 工具行 都不再存在
+    expect((html.match(/class="mbt-header"/g) ?? []).length).toBe(1);
+    expect(html.indexOf("mbt-header__row1")).toBeLessThan(html.indexOf("mbt-header__row2"));
+    expect(html).not.toContain("mbt-views");
+    expect(html).not.toContain("mbt-meta");
+    expect(html).not.toContain("mbt-toolbar");
+    expect(html).not.toContain("mbt-readonly");
+    // 三个入口图标互不相同：视图列表 = LayoutList / 字段 = TableProperties / 筛选 = ListFilter
+    expect(html).toContain("lucide-layout-list");
+    expect(html).toContain("lucide-table-properties");
+    expect(html).toContain("lucide-list-filter");
+    // 同一功能只有一个入口：筛选一处；与它重复的「视图配置」已删
+    expect((html.match(/aria-label="筛选"/g) ?? []).length).toBe(1);
+    expect(html).not.toContain('aria-label="视图配置"');
+    // 记录数移出头部（网格末尾统计行），头部在统计行之前
+    expect(html).toContain("mbt-grid-foot");
+    expect(html.indexOf("mbt-header")).toBeLessThan(html.indexOf("mbt-grid-foot"));
+  });
+
+  it("只读多视图：保留视图页签与视图列表（能切视图），仍无字段/筛选/＋", () => {
+    const twoViews = JSON.stringify({
+      kind: "bitable", version: 1, activeTableId: "t1",
+      tables: [{
+        id: "t1", name: "表", activeViewId: "v1",
+        views: [
+          { id: "v1", name: "表格一", type: "grid", rowHeight: "low" },
+          { id: "v2", name: "表格二", type: "grid", rowHeight: "low" },
+        ],
+        fields: [{ id: "f", name: "文本", type: "text" }],
+        records: [{ id: "r", createdAt: ts, updatedAt: ts, values: { f: "x" } }],
+      }],
+    });
+    const html = render(twoViews);
+    // 只读多视图：第 2 行仍在（页签能切），第 1 行只有表名
+    expect(html).toContain('class="mbt-header__row2"');
+    expect(html).toContain('aria-label="视图"');
+    expect(html).toContain('aria-label="视图列表"');
+    expect(html).not.toContain('aria-label="字段管理"');
+    expect(html).not.toContain('aria-label="筛选"');
+    expect(html).not.toContain('aria-label="新增记录"');
   });
 
   it("记录超过一页时给「加载更多」（完整模型不裁剪，只限制挂载行）", () => {
@@ -249,12 +315,13 @@ const docWithForm = JSON.stringify({
 });
 
 describe("MobileBitableViewer 表单优先（261030）", () => {
-  it("有表单视图时默认落在表单（填写态）：页签、必填标记、提交按钮、只读徽标", () => {
+  it("有表单视图时默认落在表单（填写态）：页签、必填标记、提交按钮", () => {
     const html = render(docWithForm);
     // 视图页签：表单 / 内容
     expect(html).toContain('aria-label="视图"');
     expect(html).toContain(">表单<");
-    expect(html).toContain(">内容<");
+    // 261103 四批：表格视图页签从「内容」改「表格」
+    expect(html).toContain(">表格<");
     // 表单结构（填写态）：261030 用户点单去掉封面/重复标题/说明，只剩字段 + 提交
     expect(html).toContain("mbt-form-fields");
     expect(html).not.toContain("mbt-form-cover");
@@ -262,8 +329,8 @@ describe("MobileBitableViewer 表单优先（261030）", () => {
     expect(html).toContain('aria-label="必填"');
     expect(html).toContain(">提交<");
     expect(html).toContain("mbt-form-meta");
-    // 只读徽标仍在
-    expect(html).toContain(">只读<");
+    // 261103 三批：头部不再有只读徽标（表单分支同样走精简头部）
+    expect(html).not.toContain(">只读<");
     // 多数据表入口（261030 用户点单：对齐钉钉的抽屉切换）始终可见
     expect(html).toContain('aria-label="数据表"');
     // 表单视图下没有表格
