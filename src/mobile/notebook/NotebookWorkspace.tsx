@@ -4,7 +4,7 @@
  * 骨架 .mobile-topbar/.mobile-bottom-bar/.side-panel(.side-panel--right)/.side-mask/.model。
  * 多 tab 的「顶部 tab 条」是桌面版；移动端是底部胶囊栏 #toolbarTabs 弹全屏列表（子代理已核对源码）。
  */
-import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { ArrowLeft, List, Files, Pencil, X, ChevronRight, ChevronLeft, FolderOpen, FolderPlus, File, Plus, Check, ArrowLeftRight, Trash, SmilePlus, Move, History, CloudUpload, FilePlus, Info, Table, Database, PenTool, PenLine, Book, Search, Star, Pin, PinOff } from "lucide-react";
 import { useLongPress } from "../ui/useLongPress";
 import { pushBackHandler } from "../ui/backStack";
@@ -34,12 +34,19 @@ import { useNotebookTreeActions } from "./useNotebookTreeActions";
 import { SELF_REGISTERED_OVERLAY_KINDS, useWorkspaceOverlays } from "./useWorkspaceOverlays";
 import { NotebookTreeList } from "./NotebookTreeList";
 import { useFormFactor } from "../pad/useFormFactor";
+import {
+  createPadShellState,
+  isPadDocked,
+  isPadPanelOpen,
+  isPadPanelPinned,
+  padEscapeTarget,
+  padPinnedPrefs,
+  padShellReducer,
+} from "./shellModel";
 import { readPadPanelPrefs, writePadPanelPrefs } from "../pad/padPanelPrefs";
 import { usePadShortcuts } from "../pad/usePadShortcuts";
 export type { NotebookTreeItem } from "./useNotebookTreeData";
-
-/** 平板侧栏（树/大纲）三态：收起 / 悬浮 / 固定停靠。 */
-export type PadPanelMode = "closed" | "floating" | "pinned";
+export type { PadPanelMode } from "./shellModel";
 /** 表格 / 多维表视图按需加载：只有真的打开这类文档才进分包（首屏不含它们）。 */
 const MobileBitableViewer = lazy(() => import("../bitable/MobileBitableViewer").then((m) => ({ default: m.MobileBitableViewer })));
 /** 表格（usheet）：与桌面同一套 Univer 内核的查看/编辑器（261020 起可编辑；运行时按需加载）。 */
@@ -143,29 +150,26 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   const padTwoPane = formFactor === "expanded";
   // 树/大纲默认收起、默认**悬浮**（不占布局）；固定 = 停靠进布局、可编辑区随之收窄。
   // 固定偏好**持久化**（设备本地 localStorage，不进正文/不进 S3）；冷启时曾固定的面板按固定态打开。
-  // P2：4 个布尔收敛成「每侧一个 PanelMode」——closed / floating / pinned 三态互斥，
-  // 不再出现「open && pinned 四个变量 15 个写点」那种不一致温床。派生布尔只为渲染/手势读。
+  // P4：状态收敛到纯 reducer（notebook/shellModel.ts）——closed/floating/pinned × 两侧，
+  // 所有开合/固定/收起/手势/Esc 都只派发 action；组件只读 selector。行为由 shellModel.test 表驱动锁死。
   const [padPanelPrefs] = useState(readPadPanelPrefs);
-  const [padTreeMode, setPadTreeMode] = useState<PadPanelMode>(() => (padPanelPrefs.tree ? "pinned" : "closed"));
-  const [padOutlineMode, setPadOutlineMode] = useState<PadPanelMode>(() => (padPanelPrefs.outline ? "pinned" : "closed"));
-  const padTreeOpen = padTreeMode !== "closed";
-  const padOutlineOpen = padOutlineMode !== "closed";
-  const padTreePinned = padTreeMode === "pinned";
-  const padOutlinePinned = padOutlineMode === "pinned";
-  // 只记 pinned（开合不记：冷启按 pinned 决定是否直接停靠展开）。
-  useEffect(() => {
-    writePadPanelPrefs({ tree: padTreeMode === "pinned", outline: padOutlineMode === "pinned" });
-  }, [padTreeMode, padOutlineMode]);
-  const padDocked = padTwoPane && (padTreeMode === "pinned" || padOutlineMode === "pinned");
-  // 统一操作：open/close/toggle/pin 全部只改 mode；函数式更新避免闭包旧值。
-  const openPadTree = useCallback((open: boolean) => setPadTreeMode((m) => (open ? (m === "closed" ? "floating" : m) : "closed")), []);
-  const openPadOutline = useCallback((open: boolean) => setPadOutlineMode((m) => (open ? (m === "closed" ? "floating" : m) : "closed")), []);
-  const togglePadTree = useCallback(() => setPadTreeMode((m) => (m === "closed" ? "floating" : "closed")), []);
-  const togglePadOutline = useCallback(() => setPadOutlineMode((m) => (m === "closed" ? "floating" : "closed")), []);
-  const closePadTree = useCallback(() => setPadTreeMode("closed"), []);
-  const closePadOutline = useCallback(() => setPadOutlineMode("closed"), []);
-  const togglePadTreePin = useCallback(() => setPadTreeMode((m) => (m === "pinned" ? "floating" : "pinned")), []);
-  const togglePadOutlinePin = useCallback(() => setPadOutlineMode((m) => (m === "pinned" ? "floating" : "pinned")), []);
+  const [padShell, dispatchPadShell] = useReducer(padShellReducer, padPanelPrefs, createPadShellState);
+  const padTreeOpen = isPadPanelOpen(padShell, "left");
+  const padOutlineOpen = isPadPanelOpen(padShell, "right");
+  const padTreePinned = isPadPanelPinned(padShell, "left");
+  const padOutlinePinned = isPadPanelPinned(padShell, "right");
+  const padDocked = padTwoPane && isPadDocked(padShell);
+  // 只记 pinned（开合不记：冷启按 pinned 直接停靠展开）。
+  useEffect(() => { writePadPanelPrefs(padPinnedPrefs(padShell)); }, [padShell]);
+  const openPadTree = useCallback((open: boolean) => dispatchPadShell({ type: "setOpen", side: "left", open }), []);
+  const openPadOutline = useCallback((open: boolean) => dispatchPadShell({ type: "setOpen", side: "right", open }), []);
+  const togglePadTree = useCallback(() => dispatchPadShell({ type: "toggle", side: "left" }), []);
+  const togglePadOutline = useCallback(() => dispatchPadShell({ type: "toggle", side: "right" }), []);
+  const closePadTree = useCallback(() => dispatchPadShell({ type: "setOpen", side: "left", open: false }), []);
+  const closePadOutline = useCallback(() => dispatchPadShell({ type: "setOpen", side: "right", open: false }), []);
+  const togglePadTreePin = useCallback(() => dispatchPadShell({ type: "togglePin", side: "left" }), []);
+  const togglePadOutlinePin = useCallback(() => dispatchPadShell({ type: "togglePin", side: "right" }), []);
+  const closePadFloating = useCallback(() => dispatchPadShell({ type: "closeFloating" }), []);
   const outlineOpen = overlayKind === "outline";
   const findOpen = overlayKind === "find";
   const tabsOpen = overlayKind === "tabs";
@@ -771,12 +775,12 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     newNote: () => { void createChildDocument("doc", notebookId); },
     // Esc 逐层收：先收浮层，再收悬浮树/大纲（它们不是 overlay owner 的值，要单独处理）。
     // 逐层收；**没东西可关时必须 return false**，否则 hook 会 preventDefault，
-    // 上一层（MobileApp 的 Esc）永远收不到（261103 评审 W2）。
+    // 上一层（MobileApp 的 Esc）永远收不到（261103 评审 W2）。顺序单一来源 = padEscapeTarget。
     escape: () => {
-      if (overlayKind) { closeOverlay(); return true; }
-      // 固定（停靠）的面板不吃 Esc —— 它不再是"临时浮层"；再按一次胶囊/按钮才收。
-      if (padTreeOpen && !padTreePinned) { closePadTree(); return true; }
-      if (padOutlineOpen && !padOutlinePinned) { closePadOutline(); return true; }
+      const target = padEscapeTarget(padShell, !!overlayKind);
+      if (target === "overlay") { closeOverlay(); return true; }
+      if (target === "left") { closePadTree(); return true; }
+      if (target === "right") { closePadOutline(); return true; }
       return false;
     },
   });
@@ -899,8 +903,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
           // 随后同一手势又被判成"拉开另一侧"（261103 实测：滑走左栏 → 右大纲自己弹出来）。
           onClick={padTwoPane && ((padTreeOpen && !padTreePinned) || (padOutlineOpen && !padOutlinePinned))
             ? () => {
-                if (!padTreePinned) closePadTree();
-                if (!padOutlinePinned) closePadOutline();
+                closePadFloating();
               }
             : undefined}
         >
