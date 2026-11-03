@@ -3,6 +3,7 @@
 > 写给完全没有上下文的新会话。接手顺序：**README（根）→ 本文件 → AGENTS.md（根，长期红线/机制）**。
 > 本文件只保留【最新几个批次 + 当前基线 + 真正的待办 + 长期坑】；历史 dated handoff 已删除，只在 git 历史可查（`git log -p --follow docs/HANDOFF.md`）。
 > **⚠️ 261022 历史已重写两次（品牌/邮箱标准化 → 闭源内核移出公开仓库）**：旧 commit hash 全部失效，文中旧 hash 只作历史记录，`git show` 不可达。
+> **当前状态以文末 §1（基线）/ §2（风险）/ §3（待办）为准**：§0 是批次记录、保留当时的「未提交 / 未 push / 待验收」口径；261102 及更早条目的提交状态见 §1，**不要据此判断当前是否已推送**。
 > **移动端（Android）的构建 / 安装 / AVD / CDP / 门禁 / 点按口径 = `docs/MOBILE-OPS.md`**（原 §8「移动端速查」已删，同批内容重建进该文件）；桌面会话不要改它，移动端会话不要改桌面文件。
 
 ## 0. 最新交接（261027）
@@ -14,13 +15,13 @@
 - **新增 `src/features/board/boardValueCoalescer.ts`**：把「onChange → 回灌 React state」合并到下一帧（16ms 定时器，**不用 rAF**——隐藏窗口不触发）；保存/capture 用的 `cardValueRef`/`valueRef` 仍同步更新。桌面 `BoardEditor` 与移动 `MobileBoardViewer` 都接入，避免快速落笔时「React 渲染 + 引擎按新 value 重算」叠在同一帧。
 - **校验**：桌面 dev 慢笔 12 点 / 快笔 120 点均落笔并落盘（元素 17→19、19→21）；诊断只记录画布上的 2 笔（工具栏点击已排除）；单测 `boardValueCoalescer` 3 例 + `boardInputDiagnostics` 3 例。
 - **待办**：请用户按上面开关复现一次（桌面鼠标/数位笔各一次），把 `__lakeBoardInputStats()` 输出发回；确认是「事件没进来」「plait 没消费」还是「笔→鼠标卡住」后再定修法（若确认 pen→mouse 卡住，按现有 patch 机制做最小依赖补丁或在宿主侧重置输入类型）。
-### 261103 · 七批：AI 助手默认关闭（桌面与移动端同口径）· **本地提交**
+### 261103 · 七批：AI 助手默认关闭（桌面与移动端同口径）· **已提交并双推 `fdf9c455`**
 - **口径**：AI 助手**默认关**。桌面 `src/lib/aiEnabled.ts` 由「默认开」翻成「默认关」——判定改为 `=== "1"`，localStorage 不可用时也回落 **false**（fail-closed，不替用户打开）；移动端 `src/mobile/ai/aiSettings.ts` 本来就是默认关（`=== "1"`），本轮不做改动，仅对齐文档。
 - **行为不变的部分**：关闭只拦网络（`lib/ai.ts` 的 `runAiChat` 直接拒绝、`aiNetworkHint` 文案不变），**配置与 API Key 保留**；入口仍可见（移动端首页 AI 键仍可进页，进页显示「AI 助手已关闭」+ 去开启；桌面点入口报同一句引导），否则用户找不到开关。
 - **测试**：`lib/aiEnabled.test.ts` 默认关 + 存储异常 fail-closed；`lib/ai.test.ts` 的「正常走主进程」用例改为**显式置 `1`**（此前依赖默认开）。
 - **文档**：261029 历史条目加「261103 起改为默认关」标注；MOBILE-AI.md 既有「AI 助手（默认关）」不变；AGENTS §4 增加一行长期口径。
 - **门禁**：tsc 0 / 全量 vitest 全过 / check:mobileui / `git diff --check` 0。
-### 261103 · 六批（A 组工程收尾 + B1/B2 多维表收尾 + A3 设备门禁补齐）· **本地改动（未提交）**
+### 261103 · 六批（A 组工程收尾 + B1/B2 多维表收尾 + A3 设备门禁补齐）· **已提交并双推（`ae14ffd1` / `1f164f2b`）**
 - **A1 横屏左右安全区**：新增令牌 `--mobile-left/right-safe-area`（`env()` 与原生 `WindowInsets` 注入值取 max）；原生 `lakeInsets` 增加 `getLeft/getRight` 并把 `__lakeSetNativeInsets(top,bottom,left,right)`（老包只传 2 个参数 ⇒ 缺省 0，保持兼容）。接入点：手机抽屉（`.side-panel` 左右）、平板树/大纲（`.pad-tree`/`.pad-outline`）、编辑 dock 工具条与面板内容、手写板悬浮条、画板 >720px 竖向轨、列表/正文/多维表页级 padding。**竖屏 inset=0 ⇒ 观感零变化**，手机 6 态快照 0 差异已证。
 - **A2 死 CSS 清理**：删 `mobile.css` 里头部收口后 0 引用的 `.mbt-meta*`（5 条）与 `.mbt-toolbar`（1 条）；`mobileLayers` 手机壳基线 **1522 → 1486（−36）**、dupGroups 7 → 6（收紧，不是回涨）。
 - **A4 pad 顶栏触摸目标（用户选方案 1）**：**删掉页签内小 ×**（26/28，位于 `overflow-x:auto` 的 30px 横滚条里 ⇒ 扩命中盒会被裁、抬高条高又改外壳几何），关闭动作改到**顶栏右侧一枚 `.toolbar__button`（44×44，关闭当前页签，无活动页签禁用）**。设备实测（lake_tab）：`.pad-tab__x` 计数 **0**、关闭钮 **44×44** 且可点、两页签点一次变一个；`pad.css` 声明 168 → **158**（−10，基线同步收紧）。「＋ 打开文档」仍在页签条内（30×30，唯一残留小目标，按需再处理）。
@@ -32,27 +33,27 @@
 - **门禁**：tsc 0 / 全量 vitest **571 文件 3477 例（12 skipped）** / check:core 136 文件 0 / check:mobileui / 双 build / check:bundle / check:arch / `git diff --check` 0；clean APK **37,968,660 B**。
 - **A3 剩余两项已补完**：④ 平板 6 态 `check:tabletsnap`（lake_tab，1280×800，CDP 9340）—— 元素数全一致（1822/1822/1827/2012/1912/1849），但**指纹 6/6 全变**：平板基线是 12:28（十三批）烤的，之后十四批回退了工具条/胶囊、261103 改了胶囊底距与大纲宽度，加上本轮 A1/A4 ⇒ 按 §3#21③ **重烤**（baseline `mobile-snap-tablet.json` 6 行 hash 变）后 **0 差异**。⑤ 走查装置修掉长期潜伏 bug（见上），23 屏全 ok。
 - **A4 结论（不改外壳就别指望 44）**：`.pad-tabs` 是 `overflow-x:auto`，伪元素扩命中盒会被裁；页签条只有 30 高，抬高就改十四批外壳几何 ⇒ 本轮取几何上限 30×30 并把例外继续写进 MOBILE-DESIGN/PAD-ADAPTATION。要真 44 需另开「顶栏 44 → 52」需求。
-### 261103 · 四批（视图页签单独一行 + 视图默认短名）· **本地改动（未提交）**
+### 261103 · 四批（视图页签单独一行 + 视图默认短名）· **已提交并双推（`733ab4aa`）**
 - **两行 header**（同一 `<header class="mbt-header">`）：row1 = [☰ 数据表名] [spacer] [字段] [筛选] [＋]；row2 = [视图页签横滚] [视图列表]（仅 `header.showViews`）。只读 row1 只剩 ☰+表名；单视图不渲染 row2（header 48）；表单分支 row1 也只有 ☰+表名。设备实测（412×843）：`header=[16,60,380,90]` = 48 + 2 + 40（原三行 132 / 三批单行 48）。
 - **五批（同日追加）**：视图列表入口**钉在第 2 行最右**（页签容器与按钮之间加 `.mbt-header__spacer`；页签再多也只在左边横滑）——设备实测 pad `row2=[16,110,1248,40]`、按钮贴右缘。
 - **默认短名**：`mobileViewTabLabel` 的 grid「内容」→「表格」；`core/bitableDoc.defaultViewName` 改短名 表格/表单/看板/画册/日历（未知类型仍「视图」，默认表 seed 与 normalize 回退同步）；`BITABLE_VIEW_TYPE_LABEL`（表格视图/表单视图…）保留给新建菜单与回退提示。设备实建五种视图读正文：`表格/表单/看板/画册/日历` 全部符合。
 - **门禁**：tsc 0 / 全量 vitest **569 文件 3468 例（12 skipped）** / check:mobileui / 双 build / `git diff --check` 0；clean APK **37,967,940 B**。mobileLayers 基线 mobileBitable.css 921 → 928。
 - **已知**：旧文档已存视图名不变（只有新默认名变短）；两个 grid 视图并存时页签会显示两个「表格」（既有重名回落规则，未改）；桌面 BitableViewBar 显示存储名 ⇒ 新建视图同样短名（布局未动）。
-### 261103 · 三批验收（画板轨图标错位 / 多维表头部 3 行→1 行 / 手写板 14 色）· **本地改动（未提交）**
+### 261103 · 三批验收（画板轨图标错位 / 多维表头部 3 行→1 行 / 手写板 14 色）· **已提交并双推（`733ab4aa` / `75c46902`）**
 - **① 画板竖向轨「左右错位」**：根因 = 每个工具项 `<label class="tool-icon">` 里的隐藏 radio `input`（15px）**仍参与 flex 布局** ⇒ 图标被挤右 15px、label 被撑到 51px、白卡 61px（实测按钮中心 48.5 / 图标中心 56）。修法（`src/mobile/board/board.css`，>720px）= 把该 input 改视觉隐藏（绝对定位 1px + 透明）、label 加 `position:relative` ⇒ 列宽 36、卡片 46、图标左右余量 **9/9**。设备实测 pad：`tb=[18,64,46,446]`、`svg=[32,158,18,18]`、leftGap=rightGap=9。
 - **② 移动端多维表头部 3 行 → 1 行**：新增 `src/mobile/bitable/mobileBitableHeader.ts`（纯函数 model，**不依赖 records**）+ 6 例单测；头部 = [☰ 表名] [视图页签横滚] [视图列表] …… [字段] [筛选] [＋]，删「编辑中/只读」徽标、元信息行（记录数/视图名）、与筛选重复的「视图配置」按钮；记录数移到网格末尾统计行；图标改 LayoutList / TableProperties / ListFilter 三者互异；只读态只剩表名（单视图不渲染页签区），表单视图同走精简头部。设备实测（412×843）：before 3×44=132px → after 1×48px，点筛选后可见 .mb-sheet **恰好 1 个**，三图标 svg class 互不相同；`src/features/bitable/bitableEditorMount.test.ts` 的旧断言（`(viewTabs.length > 1 || editable)`）已改指向 header model。
 - **③ 手写板色板 6 → 14 色（2 行 × 7）**：单一来源 `src/features/ink/inkPalette.ts` 的 `INK_STROKE_COLORS`（取值全部来 `core/colorPalette.ts`，不新造颜色字面量），桌面工具条与手机/平板悬浮色板共用；颜色是正文**值**（`InkStroke.color: string`）⇒ inkDoc 版本 / 点编码零改动；移动端色板容器改网格 `repeat(7, var(--mb-tap-min))`，命中盒仍 44×44。设备实测：14 个 `.ink-color`、行分布 7+7、逐色落笔颜色序列与面板一致、reload 后重开 14 色全部重绘。
 - **重构尺度（回答用户「是否需要大规模重构」）**：**不做整体重写**，只做头部收口（header model + 单行渲染）。移动多维表是 表格/看板/画册/日历/表单 × 只读/编辑 的多分支，全量重写风险 > 收益；本轮收口已消掉「一个功能两个入口 / 三行占位 / 状态徽标」三个真实痛点。
 - **门禁**：tsc 0 / 全量 vitest **569 文件 3468 例（12 skipped）** / check:core 136 文件 0 / check:mobileui / 双 build / check:bundle / check:arch（移动 340,756B / 360KB；桌面 541,235B / 600KB；import 0）/ `git diff --check` 0。clean 重建 APK **37,967,916 B**。
 - **遗留（有意不动）**：`mobile.css` 里旧的 `.mbt-views/.mbt-meta*/.mbt-toolbar*` 已成死 CSS（跨作用域，另立清理；`.mbt-readonly` 仍被记录详情页使用，勿一起删）；手写板第 2 行淡色是给高亮/浅标注的（当画笔偏淡，有意）；桌面手写板工具条同步 14 个 20px 圆点（共享定义，桌面未实机复验）。
-### 261103 · 二轮验收（胶囊编辑态常显 / 画板工具条改回桌面同款 + 依赖补丁）· **本地改动（未提交）**
+### 261103 · 二轮验收（胶囊编辑态常显 / 画板工具条改回桌面同款 + 依赖补丁）· **已提交并双推（`2b29d9e8` / `ae14ffd1`）**
 - **用户二轮定稿两条（覆盖同日一轮的做法）**：
   1. **胶囊**：文档编辑态**常显**（抬到 dock 上方）—— 编辑态也可能没有光标、键盘与二级面板都没展开，此时要能切目录/看大纲/换标签/切笔记本。pad 实测：编辑态胶囊 `[496,624,288,56]` 可点，点「文档树」拉起 `.pad-tree.is-open`。**允许被覆盖**：键盘弹起 ⇒ `capsuleHidden` 隐藏（`--hidden`，visibility hidden/opacity 0）；dock 二级面板展开 ⇒ 层序盖住（胶囊 `--above-dock` **z=2** < dock 容器 **z=4**；实测面板 `[0,408,1280,336]` 打开后胶囊 `hit=false`、命中元素 = 面板控件）。表格/多维表/画板/手写板编辑态仍隐藏。
   2. **画板工具条 = 桌面同款（含 hand）**：新增依赖补丁 `patches/lakex-drawnix+0.1.0.patch` —— 删掉 `index.mjs` / `index.js` 两处 `isMobile && pointer === hand ⇒ null` 过滤（`git apply --check` 通过；还原原文→应用→sha256 与产物一致）。手机 = 顶部横轨可横滑（scrollWidth 519 > clientWidth 383，横滑后「导出」完整可见）；pad = 左侧竖排 `[18,64,61,446]` 全在视口内、含「手形工具 — H」；高度不够时 `board.css` 的 `max-height + overflow-y` 可纵滚（临时压矮后 scrollTop 0→104 自证）。选中 hand 后单指拖动 `.viewport-container` 782,339 → 902,419 且 DOM 不变（只平移、不绘制）。**一轮自制的「平移画布」开关整体删除**（`boardPan.ts`/测试、viewer 的 panMode/按钮/手势层、`board.css` 的 `.mobile-board-pan*`）——用户明确「不伦不类」。
 - **门禁**：tsc 0 / 全量 vitest **568 文件全绿** / check:core 136 文件 0 / check:mobileui / 双 build / check:bundle / check:arch（移动 340,759B / 360KB；桌面 541,239B / 600KB；import 违规 0）/ `git diff --check` 0。
 - **补丁登记**：AGENTS §2 补丁面 **3 处 → 4 处**（新增 lakex-drawnix，写明升级后复核口径：两处过滤 grep = 0 + 设备上工具条出现「手形工具 — H」）。
 - **未跑**：`check:mobilesnap` 6 态 + 走查（本轮改动落在编辑态胶囊与画板工具条，6 态是阅读态；发版前全量再跑）。
-### 261103 · 实机验收修复批（pad 横滑 / 胶囊固定底部 / 表格三连 / 画板工具条+平移开关）· **本地改动（未提交，待验收；其中胶囊与平移开关两条已被上一节二轮覆盖）**
+### 261103 · 实机验收修复批（pad 横滑 / 胶囊固定底部 / 表格三连 / 画板工具条+平移开关）· **已提交并双推（`ce442482` / `ae14ffd1`；胶囊与平移开关两条已被二轮覆盖）**
 - **用户 6 条验收问题（261103 实机）**：
   1. **pad 首页横滑恢复**：删掉 `pad.css` 里 `html[data-form-factor="expanded"] .mobile-tab-stage` 的 `overflow-x:hidden / touch-action:pan-y / scroll-snap-type:none` 特例（261103 曾以「整屏手势与顶栏页签冲突」为由禁掉，用户要求恢复）。设备实测：scrollLeft 0 ↔ 1280，tab 跟随（小记 ↔ 知识库）。
   2. **胶囊固定底部**：任何编辑器编辑态一律**隐藏**胶囊（`useWorkspaceChrome` 的 `capsuleHidden = chromeHiddenNow || !!active?.editing`；261103 同日的「编辑态抬到 dock 上方」整体撤回），删 `.mobile-bottom-bar--above-dock` 与 `.mobile-workspace--capsule-edit` 正文让位。pad 实测：读态胶囊 bottom 20；编辑态 `--hidden`（visibility hidden / opacity 0）；键盘弹起 innerH 744→408 时胶囊仍隐藏、不再随键盘上浮。
@@ -65,7 +66,7 @@
 - **设备复核（261103 终版，屏上量值）**：pad(5554/1280×800) 首页横滑 scrollLeft 0↔1280✓；读态胶囊 `[496,668,288,56]`（bottom 20）、编辑态 `--hidden`（vis hidden/op 0）✓；画板编辑态竖向轨 `[300,64,61,406]` 全部在视口内（修复前 `[18,-131,…]`）✓、平移开关 `[294,688,44,44]` 可点、单指拖动 viewport scroll 787→907✓；phone(5556/412×842) 整行选中不再横跳（视口保持 A–C）✓、DOM 无 `.mb-usheet-caret`（双光标那条已删）✓。
 - **未跑/残留**：`check:mobilesnap` 6 态 + 走查（本轮改动只影响**编辑态**胶囊与 pad 首页手势，6 态都是阅读态、DOM 未变；发版前全量再跑）；桌面 usheet ③ 未实机（静态推断内核 `_scrollToSelection` 用 selection.primary、不取 range 末端；如需实测另起桌面任务）。
 - **风险/待裁决**：① 平移开关开启时透明手势层把工具条一起盖住（= 「期间不误绘制」的代价），若要平移时仍能点工具条需按工具栏 rect 动态留白；② ④ 依赖内核 canvas 自绘 caret，若某态原生编辑器不聚焦会表现为「没有光标」；③ 两台开发实例（5554/5556）已有验证数据（无标题表格 ×2 等），跑快照门禁前需 pm clear + 重灌夹具。
-### 261103 · P12 桌面内核 lazy（5 边界 + idle 预取）· **本地提交（分支 feat/pad-touch-ui）**
+### 261103 · P12 桌面内核 lazy（5 边界 + idle 预取）· **已提交并双推（分支 feat/pad-touch-ui）**
 - **落地**：`EditorTab` / `TrashPanel(embed)` / `NoteInfoDialog` / `HistoryPanel` / `QuickNoteEditor` 全部 React.lazy + Suspense；
   `kernelPrefetch`（就绪 3s idle 预取 kernel chunk）；`QuickNotesWorkspace` 保持常驻（ref.revealNote 时序），只 lazy 其内核子件。
 - **护栏**：`desktopKernelLazy.test` + `kernelPrefetch.test`；check-arch desktop 首屏预算 2.5MB→**600KB**、check-bundle app-js 2.9MB→**300KB**。
@@ -73,20 +74,20 @@
 - **门禁**：tsc 0 / vitest 568 文件 3470 例 / core / mobileui / 双 build / bundle / arch / diff-check。
 - **遗留**：冷 cache「启动即恢复文档」仍等 kernel chunk（P11 取舍）；Trash/History 关闭即卸载（内部状态重置，判可接受）；桌面设置面板/小记/历史的交互冒烟未覆盖（静态契约已覆盖接线）。
 - **累计首屏（P9→P12）**：移动 392,977 → 340,783B gz（−13.3%）；桌面 2,785,488 → **541,234B gz（−80.6%）**；NotebookWorkspace 1212 → 510 行。
-### 261103 · P11（诊断按需实测否决 / 工作区 510 行 / 大 chunk 取证 / 桌面内核 lazy A/B）· **本地提交（分支 feat/pad-touch-ui）**
+### 261103 · P11（诊断按需实测否决 / 工作区 510 行 / 大 chunk 取证 / 桌面内核 lazy A/B）· **已提交并双推（分支 feat/pad-touch-ui）**
 - **① `s3v3Report` 按需**：实测首屏仅 −1,224B gz（340,783→339,559）⇒ **不做，已回退**（动态 import + 兜底的复杂度大于收益）。
 - **② 剩余组装搬 hook**：新增 `useWorkspaceAssemble`(79) / `useWorkspaceSync`(61) / `useWorkspaceActions`(200)，openSidebar/openOutline 并入 chrome hook ⇒ NotebookWorkspace **660 → 510 行（−22.7%）**；旧 256 条逻辑行逐字命中 256/256，JSX 字节相同。
 - **③ 大 chunk 取证**：`plantuml` 6.4MB raw 只被 `lakeRuntime`（懒 chunk）引用；28 条 preload 均为小 chunk ⇒ 首屏无大 chunk，不改。
 - **④ 桌面内核 lazy A/B（只读+临时副本实测）**：只改 3 处首屏 −0.3%（内核挪进 preload 仍在首屏）；5 个边界全 lazy 首屏 2.07MB→0.22MB gz（−89.6%）；cold `spawn→#root` 1,360→865ms（−36%），但 cold 点开首篇文档 +538ms ⇒ **必须 5 边界 + idle 预取打包做**，本轮不做；证据 `/tmp/p11`。
 - **门禁**：tsc 0 / vitest 566 文件 3463 例 / core 136/0 / mobileui / 双 build / bundle / arch（mobile 340.8KB/360KB、desktop 2.38MB/2.5MB、import 0）/ 手机+平板 6 态 0 差异 / windowsweep。
-### 261103 · P10 收尾（工作区逻辑搬 hook / 设置抽屉按需 / import 规则扩展）· **本地提交（分支 feat/pad-touch-ui）**
+### 261103 · P10 收尾（工作区逻辑搬 hook / 设置抽屉按需 / import 规则扩展）· **已提交并双推（分支 feat/pad-touch-ui）**
 - **P10-①（P9-5c）**：新增 `useTreeDrag`(168 行) / `useWorkspaceChrome`(159) / `useWorkspaceSession`(206)，**纯搬移不改行为**（旧逻辑行 478 条逐字命中 475，余 3 条等价改写）⇒ NotebookWorkspace **984 → 660 行（−32.9%）**；静态契约测试改读 hook。
 - **P10-②**：`SettingsDrawer` 改 `lazy()`（打开设置才加载）⇒ mobile entry JS **79,032 → 53,496B gz（−25.5KB）**、首屏 **366,792 → 340,783B gz（−26KB）**；预算收紧 entry 80→60KB、首屏 390→**360KB**；设备冒烟设置/云同步子页正常。
 - **P10-③**：`SIDEBAR_*_WIDTH` 下沉 `core/layoutConstants`（desktopTypes re-export、Sidebar 改核心）；check-arch 增加 `components-no-desktop` 规则并纳入扫描 ⇒ 违规 **0**。
 - **P10-④ 结论（不改）**：28 条 preload 只有小 chunk，usheet/plantuml/lakeRuntime/Drawnix 都不在首屏图，仅按需加载。
 - **累计**：移动首屏 392,977→340,783B gz（−13.3%）、entry −32.3%；桌面首屏 −407.4KB；NotebookWorkspace 1212→660 行。
 - **门禁**：tsc 0 / vitest 566 文件 3463 例 / core 136/0 / mobileui / 双 build / bundle / arch / 手机+平板 6 态 0 差异 / windowsweep。
-### 261103 · P9 收尾（首屏 / import 方向 / isolate 结论 / 工作区拆件）· **本地提交（分支 feat/pad-touch-ui）**
+### 261103 · P9 收尾（首屏 / import 方向 / isolate 结论 / 工作区拆件）· **已提交并双推（分支 feat/pad-touch-ui）**
 - **P9-1 bridge/sync 按需**：`src/mobile/bridge/sync.ts` 8 个 v3 重依赖（s3v3Remote/mobileDeviceStore/sync 编排/s3v3Engine/Transfer/AssetBackfill/protocol）改函数内 dynamic import（离线/未配置在 import 前返回）⇒ mobile 首屏 **392,977 → 366,792B gz（−26.2KB / −6.7%）**，bridge chunk 97,164 → 31,671B gz；首屏预算收紧 **420→390KB**。
 - **P9-2 CodeMirror defer**：`index.html` 经典脚本加 defer ⇒ desktop 首屏 **2,785,488 → 2,378,113B gz（−407KB）**；`check-arch` 区分阻塞/defer 两套预算（desktop 首屏 2.5MB + defer 450KB）；dev Electron 冒烟通过。
 - **P9-3 import 方向清零**：新增 `core/layoutConstants.ts`，`desktopTypes` re-export，`features/outline` 改依赖 core ⇒ check-arch 违规 **0 条**。
@@ -94,20 +95,20 @@
 - **P9-5 工作区拆件**：WorkspaceTopBar / WorkspaceOverlayHost / NotePaneHost / WorkspaceDrawers（+ P4 的 Capsule/Panels）⇒ NotebookWorkspace **1212→984 行**；`kernelStyleBootstrap` 判据改相对 import 闭包。
 - **门禁**：tsc 0 / vitest **566 文件 3463 例** 30.21s / check:core 136/0 / check:mobileui / 双 build / check:bundle / check:arch / 手机+平板 6 态 0 差异 / windowsweep pass。
 - **剩余（P10）**：P9-5c 逻辑搬 hook（≈−250 行）、bridge 里 `s3v3Report` 静态 12KB、`components→desktop` 规则扩展、plantuml/usheet 大 chunk 按需评估。
-### 261103 · 架构 8 段落地（P1–P8）+ 清「平板模仿桌面工具栏」冗余 · **本地提交（分支 feat/pad-touch-ui）**
+### 261103 · 架构 8 段落地（P1–P8）+ 清「平板模仿桌面工具栏」冗余 · **已提交并双推（分支 feat/pad-touch-ui）**
 - **依据** [docs/ARCH-REVIEW-261103.md](docs/ARCH-REVIEW-261103.md) §8 实施记录（含每段验证与 P9 剩余）。用户裁决：8 段全做、彻底清冗余、自主推进。
 - **pad 外壳**：P1 面板常驻 DOM（开合切 class，手势跟手/状态保持）；P2 每侧一个 PanelMode + Esc 单一 owner + 平板通用几何整体迁入 pad.css（`padCssOwnership.test` 钉「data-form-factor 只在 pad.css」）；P3 判据收敛单一 store（useSyncExternalStore）+ **删死代码**（isPadLayout / nativeDeviceHint / body.lake-tablet / `__lakeSetTablet` / Kotlin lakeDevice+isTabletLayout+pushDeviceProfile+onConfigurationChanged）；P4 shellModel 纯 reducer（+7 例）+ 拆出 WorkspaceCapsule / WorkspaceTreePanel / WorkspaceOutlinePanel。
 - **ink**：P5 热路径（序列化移出落笔/翻页、id→path 缓存、pointercancel 回滚、页条虚拟化、Android webp 缩略图）；P6 **inkDoc v3**（点编码定点 −52%~−67%、activePageId 出正文进 localStorage `lakex-local-notes-v3.ink-nav.<noteId>`、sourcePdf 只留 name/pageCount、坏页可丢；**旧端读 v3 进只读保护**，同 v1→v2 先例）；P7 导入流式（onPage + 上传池 3 + raster/upload 两阶段进度 + 失败取消定向清理 + 暂存 PDF 与原生 cacheDir 清理）。
 - **全局**：P8 `check-arch.mjs`（首屏资源图 gzip 预算 393KB/420KB、import 方向、契约导出；接 check:bundle）+ `.github/workflows/pr.yml`（tsc/vitest/双 build/core/ui-metrics/bundle/arch）+ SQLite 懒加载（**修 thenable 启动卡死**：Capacitor 插件代理自带抛异常的 then，必须 `{plugin}` 盒子 resolve）+ assets LRU 32MiB；vitest isolate:false 实测 −40% 但 deviceConformance 依赖模块隔离 ⇒ 回退留结论。
 - **门禁**：tsc 0 / 全量 vitest **553 文件 3442 例** / check:core 0 / check:mobileui / 双 build / check:bundle / check:arch / 手机+平板 6 态 0 差异 / windowsweep pass / compileDebugKotlin 通过。
 - **未做（P9，另开）**：bridge/sync 域按需加载（首屏大头，需实测）、桌面 CodeMirror defer（407KB gz）、features→desktop 冻结违规清零、deviceConformance 拆 worker 后重开 isolate:false、NotebookWorkspace 再拆 TopBar/OverlayHost/NotePaneHost。
-### 261103 · 架构评审（pad 外壳 / ink·PDF / 全局）+ 两个回归修复 · **本地提交（分支 feat/pad-touch-ui）**
+### 261103 · 架构评审（pad 外壳 / ink·PDF / 全局）+ 两个回归修复 · **已提交并双推（分支 feat/pad-touch-ui）**
 - **产出** [docs/ARCH-REVIEW-261103.md](docs/ARCH-REVIEW-261103.md)：3 路只读评审（pad / ink / 全局）+ 量化；TL;DR、按域问题清单、目标架构、8 段实施计划（P0–P8）、预算矩阵、明确不做清单、5 条待用户裁决。核心结论：**不整体重写**；先修 4 条主线（pad 判据/外壳状态机、ink 线性恶化、首屏预算量错对象、CI 零覆盖）。
 - **修复 C1（评审发现的真回归，261103 引入）**：平板弹键盘（adjustResize 把 innerHeight 压到 <560）会把整个外壳打回 medium（页签/树/大纲被卸载）。修法 = `formFactor` 用 `effectiveWindowHeight(innerHeight, shellHeight())`（稳定外壳高），并在窗口**宽**变化时 `resetShellHeight()`。实测 lake_tab：744→460 仍 `expanded`；真换成 1600×460（宽也变）回落 `medium`。
 - **修复 W2**：`NotebookWorkspace` 的 `escape` 改为「有动作 `return true` / 无动作 `return false`」——此前各分支 `return undefined` ⇒ hook 恒 `preventDefault`，上一层（MobileApp）永远收不到 Esc。
 - **新增 L1 装置** `scripts/mobile-audit/window-sweep.mjs` + `npm run check:windowsweep`：7 个窗口（412×842 / 600×800 / 700×700 / 800×1280 / 1280×800 / 915×412 / 1280×500）断言形态档 + `body.lake-tablet` 同源，再验 800×1280→1280×800→915×412 的 tabs/活动页/滚动保持；实测全过。
 - **文档**：`docs/ARCHITECTURE.md` 顶部加「Manifest V2 已过期，现为 S3 v3」横幅；`docs/MOBILE-OPS.md` / `scripts/mobile-audit/README.md` 登记窗口矩阵装置。
-### 261103 · 胶囊与编辑态手势补丁（第十四批续，分支 `feat/pad-touch-ui`）· **待验收**
+### 261103 · 胶囊与编辑态手势补丁（第十四批续，分支 `feat/pad-touch-ui`）· **已提交并双推；待用户点收**
 > 用户点单：① 文档编辑时**保留悬浮胶囊**，且文档编辑时**大纲也要能滑出来**（其他类型禁用横滑）；② 悬浮胶囊**适当向下移一点**（手机/平板都要）。前一轮已定稿：多 Tab = 顶栏横向平铺条、树/大纲默认悬浮点 Pin 才固定、不做改名。
 - **胶囊**：新增令牌 `--mobile-capsule-drop: 12px` —— 胶囊底距由 32 → **20px**（手机/平板共用，只改这一个数就能整体调高低）。文档（Lake）**编辑态不再隐藏**：加 `.mobile-bottom-bar--above-dock`（= dock 高 56 + gap 8）浮在底部 dock 上方；`.mobile-workspace--capsule-edit .mobile-doc-body` 把正文底距补到「dock + 胶囊」，最后一行不被压。表格/多维表/画板/手写板编辑态仍隐藏（各有自己的底部工具条）。
 - **手势**：`usePanelDrag` 新增 `allowFrom`（起手点命中 EXCLUDE 时可豁免）—— Lake 文档正文是 contenteditable，编辑态也能从正文起手拉侧栏；`canOpen` 收窄为**只认文档类型**（表格/多维表/画板/手写板自身有横滑语义 ⇒ 横滑 no-op，胶囊入口照常可用）。手机与平板同一套判据。
@@ -119,7 +120,7 @@
 - **修「小记特别窄」（同日用户报）**：平板块给 `.mobile-scroll` 加了 `max-width:760; margin:auto`，而它是 `.mobile-tab-pane`（column flex）的 **flex item** —— 交叉轴 auto margin 让 stretch 失效 ⇒ 宽度退化成 fit-content（实测小记时间线 **146px**、卡片 114px）。修法：平板块显式 `.mobile-scroll { width: 100% }`，max-width 与 auto margin 正常居中（实测小记 scroll/cards **760**、卡片 728；知识库 `.mobile-library` **1080**）。手机不受影响（平板块选择器只匹配 medium/expanded）。
 - **基线**：**手机 + 平板 6 态都重烤**（胶囊下移 12px 改了所有态的几何指纹）；手机 home-doc 1997、平板 home-doc **1897**（干净夹具，上一版 1912 是带着一篇测试表的脏实例），两边连跑两轮 **0 差异**（大纲不在 6 态里，加宽后再跑平板门禁仍 0 差异）。
 - **文档**：AGENTS §4 增加「文档编辑态保留胶囊 + 横滑只对文档开放」契约；MOBILE-DESIGN 补胶囊显隐/底距令牌与 pad 手势判据。
-### 261102 · 平板第十四批：工具条全部回移动端 + 胶囊回归 + 树/大纲可固定（分支 `feat/pad-touch-ui`）· **待验收**
+### 261102 · 平板第十四批：工具条全部回移动端 + 胶囊回归 + 树/大纲可固定（分支 `feat/pad-touch-ui`）· **已双推；待用户点收**
 > 用户口径原话：「即使使用 pad，桌面端那套逻辑并不适合触屏」「各种工具栏先恢复成使用移动端的样子」「树/大纲默认悬浮，加一个固定按钮，逻辑和桌面端一致，注意可编辑空间的收窄」「知识库也做宽一点」「胶囊/切换笔记本/多 Tab 就和移动端一模一样」。
 - **工具条全部回退到手机**：① Lake 文档编辑态恢复 **`EditorDockHost`（底部 dock）**，不再开内核固定工具栏（`showToolbar` 回到 `!editing`）；② 多维表删掉平板 **9 项文字工具条**与行高入口（回到手机紧凑图标条；筛选/排序/分组改从「视图配置」页签进）；③ 手写板删掉**内联色板/笔宽**（回到 v3 悬浮面板；`InkPad` 的 `inlineTools` prop 整体删除）；④ 表格删掉**只读常驻 dock**（回到手机语义：只读不渲染 dock、编辑态 fixed + 96px spacer）。⇒ AGENTS 里「平板走内核工具栏 / 平板不挂胶囊」两条例外**已撤回**。
 - **工作区胶囊回归**（文档树 / 标签页 / 大纲 / 切换笔记本，与手机同一套）；平板顶栏只留「返回 + 文档页签条（多 Tab 保留）+ 查找/编辑/同步」；胶囊编辑态照手机隐藏。
@@ -157,7 +158,7 @@
 **第十二批（多窗口/断点实测 + 收尾）**：用 `adb shell wm size` 现场改窗口宽验证判据与外壳：600×800 → `medium`（左栏消失、主列 column）、800×800 → `expanded`（左栏回来）、恢复 1280 → expanded；说明分屏/自由窗口下布局会按**窗口宽**实时切换（`shellHeight` 的宽度重置是纯函数单测覆盖——平板上没有 dock，键盘态没有可观察 UI）。**手机 6 态 0 差异、平板 6 态（干净夹具重烤后）连跑两轮 0 差异**；tsc / 全量 vitest 548 文件 3408 例 / check:mobileui / diff-check 全绿。**本目标（Android 平板可点收）完成**：双栏外壳、桌面式顶栏页签、常驻大纲、内核工具栏、表格只读 dock、多维表 9 项工具条 + 排序/分组/筛选/行高、手写板内联色板、外接键盘快捷键、两套快照门禁。**遗留（不在本目标）**：**iPad/iPhone 没有端**（仓库无 ios/ 工程，`com.lakexlocalnotes.ios` 只是预留 id；先建 iOS 壳工程 = Capacitor iOS + BodyStore/AssetServer/SecureStore/SQLite 端口 + 签名，属独立立项，不是布局适配）、填色规则编辑器、导入 CSV 列映射、真机手写笔验收、纯高度拖拽盲区。下一批（若继续）：iOS 壳工程立项评审（先确认要不要做 iPad/iPhone 端，再谈布局）；Android 真机手写笔/多窗口人工验收；条件填色与 CSV 导入仍留桌面。
 
 
-### 261102 · 用户点单五条（多维表新建视图 + 字段自动编辑 / 手写板分页纸张 / 设置输入行 / 小记标签 / 浮层留白）· **本地提交（未 push）**
+### 261102 · 用户点单五条（多维表新建视图 + 字段自动编辑 / 手写板分页纸张 / 设置输入行 / 小记标签 / 浮层留白）· **已双推**
 - **① 多维表新建视图（移动端优先表单）**：core 新增 `addBitableView(doc, tableId, type)`（`src/core/bitableMutations.ts`：kanban 第一个 select / gallery 第一个附件 / calendar 第一个 date / form 不写 formFieldIds；导航不改），桌面 `BitableEditor.addView` 改调 core（同一笔写入把 activeViewId 指到新视图，行为逐字不变）。移动端 `MobileBitableViewListSheet` 编辑态给「新建视图」：**「新建表单视图」主按钮排第一** + 表格/看板/画册/日历 `.mb-chip`；只读态禁用并明写「只读状态不能新建视图，点右上角「编辑」后可新建」；入口 = 视图页签行条件 `(viewTabs.length > 1 || editable)`（只读单视图不变 ⇒ 快照不受影响，编辑态单视图也能进列表）；建完自动 `switchView`（设备本地导航）。
 - **② 新增字段即进入编辑（两端）**：`addMobileField` 返回 `{doc, fieldId}`；移动端「字段面板 → 添加」后自动打开「修改字段」面板（字段面板保持打开、同铅笔路径层序）；桌面 `addField`（表头/面板类型网格）与 `insertField`（插入列）落字段后自动弹 `FieldEditorModal` 编辑它。**语义 = 先落字段再编辑，取消后字段保留**（有意）。
 - **③ 移动端手写板分页/纸张**：根因 = ink footer 落在固定底部胶囊下方点不到 + 打开即阅读态（纸张/新建页本来就禁用）。修：阅读态允许翻页/页面管理/缩略图选页（纯视图、不写盘；capture 交父层最新正文而非挂载时旧原文）；`InkPageStrip` 增 `readOnly`（增删排序禁用 + title 说明，选页可用）；阅读态 footer 让位胶囊（`padding-bottom: calc(--mobile-status-height + --mobile-bar-gap + --mobile-bottom-bar-height + --lake-space-sm)`）、footer 接安全区、分页/纸张/缩放/页面条按钮 36/18 → `--mb-tap-min`(44)；纸张仍**仅编辑态**（正文数据，阅读态给可见说明）；顺手修 P1：ink 注册 `onEditorCapture` + `toggleEdit` 完成分支纳入 ink（「切完纸张立刻点完成」不再丢最后 500ms）。
@@ -194,7 +195,7 @@
 > **真机/真 S3 验收（261028）**：桌面（隔离副本 + 真 dev 桶 `lakex-notes-dev3`）与 `lake_gate` 模拟器（现场构建 debug APK）均通过；首轮 1 文档上传/移动 1 文档下载、增量零变更轮不发布、浮窗两行细分与移动新细分行渲染正确、无 console error。**验收中修掉 P1**：`last_synced_at` 在 v3 路径无写入点 ⇒「上次同步」永远旧时间/为空（补 `store.markSyncComplete` + `electron/syncStatusWiring.test.ts` 静态锁）。待用户裁决 3 条观感项（浮窗「上次同步」重复出现 / 保存后需重测才能开开关 / Path-style 对七牛须关）。详见 08 §32、截图 `.css-audit/accept-261028/`。
 
 
-> **当前基线**：`master` @ **`0b6b5b98`（v0.0.2 发版记录）+ 261102 批次（本地提交，未 push）**（v0.0.2 = 261030 移动端多维表批次 + UI 整改；tag 已发 GitHub Release，master/tag 均已双推）（上一基线 `314dad10`；更早 261029 各批见 git log）；项目/身份 = **lakex-local-notes**（productName `LakexLocalNotes`；appId `com.lakexlocalnotes.desktop` / `com.lakexlocalnotes.android`；数据目录 `lakex-local-notes-dev` / `lakex-local-notes`；私有协议 `lakexlocalnotes://app`；S3 迁移码 `LLN1.`）。文档：根 `README.md` / `AGENTS.md`，其余在 `docs/`。门禁：以 `docs/audit-261027/08-ab-execution.md` 最新记录为准（**261102 最新：tsc 0 / vitest 534 文件 3274 例；设备 6 态 + 多维表 3 态已按本批重烤基线，连跑 0 差异**）；**S3 v3 已完成并转正合并**（旧协议备份分支 `backup/master-pre-s3v3-261027`）。
+> **当前基线（已迁移）**：见文末 **§1**（`master` `408d6126` + `feat/pad-touch-ui` 36 提交未合；门禁 571 文件 3477 例）。**下方「待用户验收 / 待用户裁决 / 下一会话焦点」为 261030 口径的历史归档，未逐条销账；当前待办一律看 §3。**
 > **待用户验收**：表格 P4/P5 桌面侧、小记搜索/标签（桌面+Android）、CSS 层修复、长按 capture 启动、移动端表格「链接/十字高亮」设备点按、多维表重命名单边框 + 创建项「新建多维表」、默认标题/筛选单边框/云同步默认关、AI 面板全文开关只给无选区入口、macOS 全屏顶栏去掉红绿灯让位、表格第三方输入框单边框（vendor 焦点归属）、全屏附件预览/顶栏不加红绿灯让位、**移动端多维表复刻（表单优先 / 内容·表格·卡片 / 数据表操作 / 字段格式与互转 / 看板·画册·日历 / 登记专项门禁）—— 设备验收已过，等用户点收**、**移动端 UI 整改（原语收敛 / 面板与文档留白 / 字号小档整体抬一档）—— 设备实测已过，等用户点收**、**261102 五条点单（多维表新建视图 + 字段自动编辑 / 手写板分页纸张 / 设置输入行上下布局 / 小记标签强调 / 浮层边界留白）—— 设备验收已过，等用户点收**。
 > **待用户裁决**：① 移动端表格 ⋯ 面板逐项去留（29 项：22 可点 + 7 置灰占位；已给出逐项功能与建议，等用户点单后再裁）；② **缺正文 / 缺小记的移动端入口**（要不要做"移动资源页"；桌面判据 `missingBodyRecovery` / `missingQuickNoteRecovery` 可直接复用，但手机端有没有这个场景/放哪层入口属产品决定）；③ **表格「单元格保护 / 阅读态筛选·排序·冻结」的语义**（写正文 vs 设备本机视图——决定 P4-4 与 P5 剩余怎么收口；桌面/移动同一套判据）。
 > **下一会话焦点**：① 表格 P4/P5 剩余（移动阅读态/保护语义）——**先等待用户裁决③**；② 移动端文本格式缺口（H5/H6、缩进、行高、清除格式、格式刷）；③ 画图插入项解禁；④ 逐页走查；⑤ GitHub Releases 与签名/公证；⑥ **移动端缺正文 / 缺小记的恢复入口** —— **先等待用户裁决②**（判据已在 `src/core/missingBody.ts`，桌面资源页是现成样板）。
@@ -475,3 +476,63 @@
 
 - **① 更名（用户点单）**：`isLocked` 有歧义 ⇒ 全仓代码标识符改为 **`isEditLocked`（是否锁编辑）**，并成对改 `lockedAt→editLockedAt`、`setNoteLocked→setNoteEditLocked`、`applyRemoteLock→applyRemoteEditLock`、`mergeLockState→mergeEditLockState`（40 既有文件 + 1 新护栏，约 300 处）。
   **对外标识一律冻结**：S3 清单 JSON 键仍是 `isLocked/lockedAt`（解析 `syncUtils.ts` 的 `manifestFromWire`、写出 `syncEngine.ts` 的 `manifestToWire` 两处映射；护栏 `manifestLockWire.test.ts` 5 例）；SQLite 列 `is_locked/locked_at` 与 schema 不动（三处行映射补注释）；IPC 通道 `set_note_locked`、preload 导出名、`scripts/*.mjs`、用户文案「已锁定」全部未动。口径由用户定：**线上键冻结、代码内改名**，避免与旧 APK 互操作裂缝。
+
+
+## 1. 当前基线（唯一状态来源，261103 收盘）
+
+> 本节 2026-11-03 20:35 按 **git 实测 + 设备实测记录**重建；§0 的批次抬头保留当时口径（261102 及更早的「未提交 / 未 push」多已失效），**任何状态判断以本节为准**。
+
+**仓库与 worktree（`git worktree list` 实测）**
+
+| worktree | 分支 | HEAD | 状态 |
+| --- | --- | --- | --- |
+| `lakex-local-notes`（主仓库） | `feat/pad-touch-ui` | `fdf9c455` + 本批文档对账（本地提交，见 `git log` 首条，**未 push**） | 与 Gitee/GitHub 同名分支 **0/0**（截至 `fdf9c455`）；= master + **36 提交，未合 master**；文档对账提交**未 push** |
+| `lakex-pad` | `feat/pad-adaptation` | `17f44dbd` | **历史残留**：平板第一批早已合入 master，本分支落后 master 15 提交、领先 0。其 README/AGENTS/HANDOFF 是旧口径（「平板走内核工具栏」「补丁 3 处」），**不要当依据**；确认不再用可 `git worktree remove lakex-pad`（需用户点头） |
+
+- `master` = `408d6126` = origin/master；**github/master 落后 1 个提交**（`027853cd`），下次推 master 时补推。
+- 发版：只有 v0.0.1 / v0.0.2（`4b2a2467`），`package.json` = 0.0.2；**v0.0.2..HEAD 共 92 提交未发版**。
+- 261103 各批已全部提交并双推（20:08–20:21）：`ce442482`（usheet 35 行/双光标/整行整列）、`733ab4aa`（多维表头部+短名）、`2b29d9e8`（画板工具条+第 4 处补丁）、`75c46902`（ink 14 色）、`ae14ffd1`（胶囊/横滑/安全区/页签 44/useKeyboard）、`1f164f2b`（门禁装置+三份基线重烤）、`1e74c3f8`（文档）、`fdf9c455`（AI 默认关）。
+
+**门禁基线**（261103 20:44 实测）：tsc 0 / 全量 vitest **573 文件 3496 例（562 文件通过 + 11 skipped；3484 例通过 + 12 skipped）** / `check:core` 136 文件 0 / `check:mobileui` / 双 build / `check:bundle` / `check:arch`（移动首屏 ≈340.8KB / 预算 360KB；桌面 ≈541.2KB / 预算 600KB；import 违规 0）/ `git diff --check` 0。设备：手机 6 态 + 平板 6 态 + 多维表 3 态已按六批新壳**重烤**、连跑 0 差异；23 屏走查 ok；`check:windowsweep` pass。clean debug APK ≈37.95–37.97MB（量体积必须 clean 后 `stat`，增量构建会虚增到 ~42MB）。
+
+**环境（本机实测 261103）**：Node **v24.18.0**（`$HOME/.nvm/versions/node/v24.18.0/bin`）；JDK **21** `/Library/Java/JavaVirtualMachines/jdk-21.jdk`（系统默认 java 是 1.8，手跑 gradlew 必须指 21）；Android SDK `/opt/homebrew/share/android-commandlinetools`；AVD **7 个**：lake_mobile / lake_gate / lake_tab / lake_body / lake_lock / lake_meas / lake_sheet；CDP **9335 开发 / 9336 门禁 / 9340 平板与窗口矩阵**。Android 唯一运行手册 = `docs/MOBILE-OPS.md`（serial 号段以 `adb devices` 现场为准，文档里的 5556/5562 已不一致）。
+
+## 2. 风险与已知不稳定（跨批次，别再踩）
+
+- **快照门禁依赖设备数据**：只在专用 AVD + 固定夹具上跑；改外壳几何/构成、重灌夹具、`pm clear`、装新构建、跑过造数据探针（long-doc-dom）后**必须先重烤基线**（`--from <warm>.json --write-baseline`），否则下次全量必红。5554/5556 实例有验证数据（无标题表格等），误跑必假红。23 屏走查装置刚修掉「菜单页误点关闭」的潜伏 bug ⇒ **历史绿灯不完全可信**。
+- **验收状态**：261102 十四批、261103 各批都只有设备实测记录，**没有用户逐条点收**；「已双推」≠「已验收」。
+- **平板回退史**：十三批（内核固定工具栏）已被十四批整体回退。残留旧路径（内核工具栏、`body.lake-tablet`、`__lakeSetTablet`、`nativeDeviceHint`）若被重新引入 = 第三套口径。
+- **inkDoc v3**：旧端读到 v3 进只读保护 ⇒ 跨端混用必须在发布说明里写清；改格式只能「新端写新版、旧端只读」，并同步 `docs/INK-PAD.md`。
+- **P12 取舍**：冷 cache「启动即恢复上次文档」仍要等 kernel chunk；Trash/History 关闭即卸载（内部状态重置，判可接受）。
+- **依赖补丁 4 处**（univer ui / plait draw / xiangfa mindmap / lakex-drawnix）：升级后必须 `grep` 过滤句计数 = 0 且设备上出现「手形工具 — H」；**patch 打上但未命中不会报错**，必须逐条确认语义生效。
+- **设备装置不进 CI**（无 AVD/GPU）：pr.yml 只覆盖 tsc/vitest/双 build/core/ui-metrics/bundle/arch。
+- §0 历史区（261030 及更早）的「未提交 / 未 push」是当时口径，**不要据此判断**。
+
+## 3. 待办（唯一待办清单）
+
+> 规则：只有「真问题 / 不做有代价 / 收益大于复杂度」才进本节（AGENTS §3#17）；完成后**直接删行**，历史留 git。
+> ⚠️ 旧文档/代码注释里的「`HANDOFF` §3#N」指 261022 重写前的旧待办编号（已随历史删除，`git log -p` 可查），**不对应本节编号**；本节 261103 重建后不再用编号引用。
+
+**P0（不做就卡住主线）**
+
+1. **合 master → 发 v0.0.3**：36 提交已双推、CI 齐；发版前跑全量门禁（手机/平板 6 态 + 多维表 3 态 + 23 屏走查 + `check:windowsweep` + 桌面 42 态；桌面 42 态本机无合成夹具缓存，需有夹具的机器补）。顺带补推 github/master（落后 1）。发版流程见 `docs/RELEASE.md`，tag 规则见 AGENTS §4（版本号单一来源 = `package.json`）。
+2. **每批收尾的固定动作**：更新 §1 基线/门禁计数 + §3 待办 + 批次抬头状态（本批 261103 已完成对账；**以后不要让 §0 的「未提交」标记再漂移**——提交后立刻回写）。
+
+**P1（该做但可排期）**
+
+3. **桌面 3 项实机复核**：usheet 整行/整列选中不跳滚动、桌面手写板 14 色、设置/小记/历史 lazy 路径的交互冒烟（P12 遗留）。
+4. **依赖补丁 4 处升级复核口径**（仅当升级对应依赖时）：见 §2。
+5. **等用户裁决（阻塞中）**：① **表格「单元格保护 / 阅读态筛选·排序·冻结」语义**（写正文 vs 设备本机视图，决定 P4-4 / P5 剩余怎么收口）；② **移动端「缺正文 / 缺小记」恢复入口**要不要做（判据 `src/core/missingBody.ts` 现成，桌面资源页是样板）；③ **移动端表格 ⋯ 面板 29 项去留**（22 可点 + 7 置灰）。
+
+**P2（体验缺口 / 长期）**
+
+6. 移动端文本格式缺口（H5/H6、缩进、行高、清除格式、格式刷）；画图插入项解禁；移动视图拖拽排序；PdfRender `cacheDir` 中间产物未主动清理；页面级 6 处裸 `env(safe-area-inset-bottom)`。
+7. 墓碑 payload 老化（261025 定「后续优化」）；大库阈值探测（>2 万文档 / 索引 3–5MB）；**真实 Android 物理机验收从未做过**；PARITY 残余（移动 qnotes 缺正文恢复未接 v3、移动云清理无 UI 入口、目录恢复后 `deleted_notes` 残留）。
+8. 顶栏真 44 需另开「44 → 52」需求（六批 A4 结论）；平板内容画布「点空白落光标」（待用户裁决）。
+
+**已闭合，别重复**
+
+- 二轮/实机修复批「未跑 6 态」→ 六批 A3 已重烤、0 差异。
+- 「胶囊固定底部」与「平移画布开关」已被二轮覆盖（前者撤回、后者整体删除）。
+- P9–P12 候选：`s3v3Report` 按需（−1.2KB，否决）、`isolate:false`（回退留结论）。
+- 平板「走内核工具栏 / 不挂胶囊」两条例外已撤回（AGENTS 已同步）。

@@ -8,7 +8,7 @@
 
 LakexLocalNotes = **本地优先**笔记应用：Electron 44.3 + React 18.3 + better-sqlite3 13 + 语雀 Lake 内核 + S3 同步（七牛 Kodo，S3 兼容）。**本地是真相，S3 只是镜像。**
 
-- 目录 `/Users/admin/file/local-lake/lakex-local-notes`（目录名 lakex-local-notes；数据目录：开发 lakex-local-notes-dev / 正式 lakex-local-notes，见 §5）；主分支 `master`（唯一持续演进的业务分支，历史分支已合入并删除）
+- 目录 `/Users/admin/file/local-lake/lakex-local-notes`（目录名 lakex-local-notes；数据目录：开发 lakex-local-notes-dev / 正式 lakex-local-notes，见 §5）；主分支 `master`（在途分支 / 提交 / 推送状态**只看 `docs/HANDOFF.md` §1**，不写进本文）
 - **身份已标准化为 `lakex-local-notes`（261029 全量改名：旧词序 `local-`+`lakex-notes`、旧驼峰与无分隔写法均已全仓清零，grep 三串 = 0）**：productName `LakexLocalNotes`；npm `lakex-local-notes`；**包名按平台区分**：桌面 `com.lakexlocalnotes.desktop`、Android `com.lakexlocalnotes.android`（`capacitor.config.ts appId` + `android/app/build.gradle namespace/applicationId` + Kotlin 包 `com.lakexlocalnotes.android`）、**iOS 预留 `com.lakexlocalnotes.ios`（尚无 ios 工程，建工程时用这个 bundle identifier，不要复用 Android id）**；数据目录 `lakex-local-notes-dev` / `lakex-local-notes`；localStorage `lakex-local-notes-v3.*` / `lakex-local-notes-mobile.*`；S3 迁移码 `LLN1.`（缩写仍是 Lakex Local Notes）；私有协议 `lakexlocalnotes://app`；深链 `lakexlocalnotes://quick-note`；日志 `lakex-local-notes.log`。**保留不动**：`LAKE_*` 开发环境变量、`--lake-*` 设计令牌、`lakex` 内核名与 `.lake` 格式。
 - Node **必须 24**（`$HOME/.nvm/versions/node/v24.18.0/bin`）
 - **目标量级 = 2 万文档 / 20 万附件（v3 定稿，261026）**：性能与同步决策按此验证，**别用"小库正常"下结论**。索引硬上限 = 10 万文档（`S3V3_MAX_LAKE_NOTES`）/ 2 万小记；超过 2 万文档后的下一步是 v3.1 按篇增量索引（当前变更轮整份拉索引约 3MB gzip），**不分片**。
@@ -66,7 +66,7 @@ LakexLocalNotes = **本地优先**笔记应用：Electron 44.3 + React 18.3 + be
 19. **多维表条件求值单一来源**：视图筛选 / 关联选择器临时筛选 / 条件填色统一用 `BitableFilterRule/Node`、`filterOperatorsFor()`、`evaluateFilterNode()` 与共享编辑器；字段取值走 `bitableFieldValue()`；**禁止**为某个视图另造操作符/空值语义/条件 UI；填色的 `cell/row/column` alpha 混色与 `rowSide` 语义不得改。
 20. **云同步只有一套状态判据（`src/core/cloudState.ts`，两端共用）**：`cloudStateOf()` → `unconfigured|offline|manual|auto`；`canTouchNetwork()` 是「能不能出网」的**唯一**判据，`isCloudActive()` 是 UI（状态灯/禁用态）判据。**关闭云同步 = 完全没配置**（任何路径不出网）；离线文案统一 `cloudStateHint()`。恢复**不等网络**（立刻生效 + 后台补拉 + 明确提示）。**「启用云同步」的默认值 = 是否已配置 S3（261022 用户定稿）**：没配置时默认关（全新安装不再显示为开）、已配置的旧库默认开、显式存过的值优先——桌面 `settingsRepository.getSyncSettings()`（`hasS3Settings()`，只判行存在）与移动 `bridge/context.readSyncSettings()`（`S3_STORAGE_KEY` 是否存过）同口径；判据仍只有 `cloudState` 一套。护栏：`electron/settingsRepository.test.ts`、`electron/syncDualAB.test.ts`、`src/mobile/bridgeCloudState.test.ts`。
 21. **门禁分层（通用规则，两端各自对应）**：
-    ① **每次改动都跑**（**实测 ≈31–36s**：553 文件 3442 例，isolate:true；isolate:false 可 −40% 但 deviceConformance 依赖模块隔离，暂不可开）：`npx tsc --noEmit` + 相关 `vitest` + `git diff --check`；改样式再加 `ui-metrics` 与对应侧层围栏。
+    ① **每次改动都跑**（**实测 ≈31–36s**：573 文件 3496 例，261103 口径、最新计数见 `docs/HANDOFF.md` §1；isolate:true；isolate:false 可 −40% 但 deviceConformance 依赖模块隔离，暂不可开）：`npx tsc --noEmit` + 相关 `vitest` + `git diff --check`；改样式再加 `ui-metrics` 与对应侧层围栏。
     ② **只有动了视觉/设备那一层才跑样式/设备装置，且只跑受影响的 1~2 个态/屏**：桌面 `check-stylesnap.mjs --states "…"`；移动 `check-mobile-snap.mjs --states home-quicknotes` + 走查传屏名；**多维表专项** `npm run check:bitablesnap`（表单/内容·表格/内容·卡片 3 态，夹具自建自删）。**全量**（桌面 42 态 / 移动 6 态 + 23 屏）只在换夹具、改装置、发版前跑。
     ③ **动了外壳几何/构成，或重灌夹具 ⇒ 必须先重烤一次基线**（`--from <warm>.json --write-baseline`），否则下次全量必红；这是一次性成本。
     顺序恒定：**先本地 → 再定点 → 最后全量**。
