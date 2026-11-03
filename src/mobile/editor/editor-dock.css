@@ -7,8 +7,9 @@
   left: 0;
   right: 0;
   bottom: 0;
-  /* 思源 .keyboard 是 z-index:1：全屏抽屉/遮罩（z6/z7）必须盖住编辑工具栏 */
-  z-index: 1;
+  /* 261103 二轮：抬到 4 ⇒ 必须**高于工作区胶囊**（mobile.css 的 --above-dock 是 2）：二级面板展开时
+     从上面盖住胶囊（用户图2 的"胶囊浮在色板上"就是这里反了）。仍低于全屏抽屉/遮罩（z6/z7）与浮层。 */
+  z-index: 4;
   pointer-events: none;
 }
 
@@ -28,6 +29,9 @@
   display: flex;
   align-items: center;
   overflow: hidden;
+  /* 261103 六批 A1：横屏刘海让出左右安全区（竖屏 0 ⇒ 无变化）。 */
+  padding-left: var(--mobile-left-safe-area);
+  padding-right: var(--mobile-right-safe-area);
 }
 /* 工具栏中间按钮的**横滑区**（261017 用户点单：B 放回后 9 个按钮放不下，按钮尺寸/间距保持原样）。
    键盘键不在这里 —— 它是固定尾键（.med-btn--kb），永远可见。 */
@@ -105,6 +109,9 @@
   height: 100%;
   box-sizing: border-box;
   padding: 12px 12px 14px;
+  /* 261103 六批 A1：面板内容也避让横屏刘海（竖屏 0）。 */
+  padding-left: max(12px, var(--mobile-left-safe-area));
+  padding-right: max(12px, var(--mobile-right-safe-area));
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: none;

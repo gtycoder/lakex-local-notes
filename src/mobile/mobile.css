@@ -129,6 +129,8 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
    否则首层横向分页的"手指左滑 → 翻到下一页"会被内层竖滚容器吃掉（261019 实测：
    contain 时负向手势完全不翻页；改成 -y 后正常，纵向回弹语义不变）。 */
 .mobile-scroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior-y: contain; padding-bottom: calc(96px + var(--mobile-bottom-safe-area)); scrollbar-width: none; }
+/* 261103 六批 A1：列表/首页内容在横屏刘海下不再压边（竖屏 inset=0，与原来完全一致；页子元素自己的 --mb-page-pad 仍生效）。 */
+.mobile-scroll { padding-left: var(--mobile-left-safe-area); padding-right: var(--mobile-right-safe-area); }
 /* 小记写作（261013 重做）：写作时**底部挂的是文档编辑那条 dock**（EditorDockHost），不是首页胶囊栏，
  *  所以底距改按 dock 的占位算（与 .mobile-doc-body 同一口径），否则动作行会被 dock 压住。 */
 .mobile-scroll--with-dock { padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px)); }
@@ -284,6 +286,8 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
 /* 底部让位：阅读态底部胶囊栏顶边距视口底 80px（栏高 48 + 离底 32）。实测滚到底时最后一行
    bottom=802 而栏 top=762 —— 40px 让位会让末 1~2 行被栏压住（栏上滑时又复现），改为 80px。 */
 .mobile-doc-body { flex: 1; overflow-y: auto; background: var(--lake-bg-window); padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px)); }
+/* 261103 六批 A1：正文在横屏刘海下让出左右安全区（竖屏 0）。 */
+.mobile-doc-body { padding-left: var(--mobile-left-safe-area); padding-right: var(--mobile-right-safe-area); }
 /* 音频/视频卡展示优化：
    1) audio 卡播放器就绪（兜底异步设置）前的 error 状态（"音频文件不能播放"/版权链接）先隐藏，
       避免进入文档/切编辑态时闪现不可用文案——兜底成功后播放器自然替换；
@@ -512,9 +516,16 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
 /* 表格页：Univer 自带底部工具条（工作表标签 / 缩放 / 求和，实测 36px）贴着屏幕底 ⇒ 胶囊整体上移让位，
    否则胶囊会盖住工作表标签（261019 用户截图）。高度走令牌，不写魔法数字。 */
 .mobile-bottom-bar--above-sheet { bottom: calc(var(--mobile-status-height) + var(--mobile-bar-gap) + var(--mobile-bottom-safe-area) - var(--mobile-capsule-drop) + var(--mobile-sheet-bar-h)); }
-/* 文档编辑态：胶囊**保留**并抬到底部 dock 上方（261103 用户：编辑时也要有胶囊）。
- * dock 高 = 胶囊高（--mobile-bottom-bar-height），再留一个 bar-gap。 */
-.mobile-bottom-bar--above-dock { bottom: calc(var(--mobile-bottom-bar-height) + var(--mobile-bar-gap)); }
+/* 文档编辑态：胶囊**常显**并抬到底部 dock 上方（261103 二轮用户定稿 —— 编辑态也可能没有光标、
+ * 键盘与二级面板都没展开，此时要能切目录 / 看大纲 / 换标签 / 切笔记本）。
+ * 但**允许被覆盖**，两条路径各归各管：
+ *   ① 键盘弹起 ⇒ 由 useWorkspaceChrome 的 capsuleHidden 直接隐藏（fixed 元素会跟视口上浮，露着只会挡输入区）；
+ *   ② dock 二级工具栏展开 ⇒ 靠层序：dock 容器 z-index 抬到 4（见 editor-dock.css），本规则压到 3 以下，
+ *      面板从上面盖过来。**不要再把胶囊 z 抬到 dock 之上**（那就是 261103 图2 的「胶囊浮在色板上」）。 */
+.mobile-bottom-bar--above-dock {
+  bottom: calc(var(--mobile-bottom-bar-height) + var(--mobile-bar-gap));
+  z-index: 2;
+}
 /* 编辑态胶囊出现后，正文底部要让出「dock + 胶囊」两级，否则最后一行被胶囊压住。 */
 .mobile-workspace--capsule-edit .mobile-doc-body { padding-bottom: calc(80px + var(--mobile-bottom-bar-height) + var(--mobile-bar-gap)); }
 
@@ -567,6 +578,8 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
 .side-mask.on { opacity: 1; visibility: visible; }
 .side-panel {
   position: fixed; top: 0; bottom: 0; left: 0; width: min(86%, 360px); z-index: var(--mobile-z-dock);
+  /* 261103 六批 A1：横屏刘海不压抽屉内容（竖屏 inset=0，规则无副作用）。 */
+  padding-left: var(--mobile-left-safe-area);
   display: flex; flex-direction: column; overflow: hidden;
   background: var(--lake-bg-panel);
   color: var(--lake-text-2);
@@ -580,7 +593,7 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
 .side-panel--swiping { transition: none; }
 .side-panel::-webkit-scrollbar, .side-panel-body::-webkit-scrollbar { display: none; }
 .side-panel.on { transform: translateX(0); }
-.side-panel--right { left: auto; right: 0; transform: translateX(100%); background: var(--lake-bg-panel); border-radius: var(--lake-radius-xl) 0 0 var(--lake-radius-xl); }
+.side-panel--right { left: auto; right: 0; transform: translateX(100%); background: var(--lake-bg-panel); border-radius: var(--lake-radius-xl) 0 0 var(--lake-radius-xl); padding-left: 0; padding-right: var(--mobile-right-safe-area); }
 .side-panel--right.on { transform: translateX(0); }
 
 .side-panel-body { flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: 8px 0 calc(24px + var(--mobile-bottom-safe-area)); scrollbar-width: none; }
@@ -792,26 +805,9 @@ body.nb-drag-active .side-panel-body { overscroll-behavior: none; }
   border-color: var(--lake-accent);
   color: var(--lake-fg-selected);
 }
-/* 261029 FIX-M2：元信息行 = 表名 + 记录数 + 视图名（不再重复拼「视图」）；三段等距铺满，
- * 长表名/视图名各自截断，右侧只读/编辑中徽标恒在最右。 */
-.mbt-meta {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding-bottom: 8px;
-  color: var(--lake-text-3);
-  font-size: 12px;
-}
-.mbt-meta__table {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--lake-text-2);
-}
-.mbt-meta__count,
-.mbt-meta__view { flex: 0 0 auto; }
-.mbt-meta__view { color: var(--lake-text-3); max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 261103 六批 A2：旧的元信息行（.mbt-meta*）与编辑态工具行（.mbt-toolbar）已随「3 行 → 1 行/2 行」头部收口删除，
+ * 仓内 0 引用（只剩测试断言它们不存在）。**不要加回来**；头部唯一来源 = mobile/bitable/mobileBitable.css 的 .mbt-header。
+ * 注意 .mbt-readonly 仍被记录详情页使用，必须留。 */
 .mbt-readonly {
   margin-left: auto;
   padding: 1px 8px;
@@ -974,12 +970,6 @@ body.nb-drag-active .side-panel-body { overscroll-behavior: none; }
  * 只加「编辑时才出现」的部件；只读呈现的既有规则一条不动（同一套类名，编辑态多挂按钮/面板）。
  * 单元格 = 撑满格子的透明按钮（不改表格几何，触屏热区靠 td 内距 + min-height）；
  * 记录/字段面板复用 .mb-sheet / .mb-set-item / .mb-input / .mb-btn 原语，这里只补它们没有的排版。 */
-.mbt-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding-bottom: 8px;
-}
 .mbt-cell-btn {
   display: block;
   width: 100%;

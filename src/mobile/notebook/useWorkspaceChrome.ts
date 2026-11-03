@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useKeyboard } from "../hooks/useKeyboard";
 import { usePanelDrag, type PanelSide } from "../hooks/usePanelDrag";
 import { chromeAfterScroll, type ChromeScrollState } from "./scrollChrome";
 import type { NotebookTab } from "./useNotebookTabs";
@@ -80,10 +81,14 @@ export function useWorkspaceChrome(options: UseWorkspaceChromeOptions) {
   activeMetaRef.current = { kind: active?.kind ?? "doc", editing: !!active?.editing };
   // 平板不自动收顶栏：顶栏里有文档页签，滚动时闪掉会晃眼（手机保持思源式自动收起）。
   const chromeHiddenNow = subpageFullscreen || (!padTwoPane && chrome.hidden && !active?.editing && (active?.kind ?? "doc") === "doc");
-  // 261103 用户口径：**文档（Lake）编辑态也保留胶囊**（抬到底部 dock 上方）；表格/多维表/画板/手写板
-  // 各自有底部工具条（sheet dock / bitable 工具条 / ink 工具坞）⇒ 编辑态仍隐藏胶囊。
+  // 261103 二轮定稿（用户）：**文档编辑态也要常显胶囊**（编辑态也可能没光标、键盘/二级面板都没展开，
+  // 此时要能切目录 / 看大纲 / 换标签 / 切笔记本）；但允许被覆盖 ——
+  //   ① 键盘弹起：直接隐藏（fixed 元素会跟着视口上浮，露在上面只会挡输入区）；
+  //   ② dock 二级工具栏展开：胶囊层级低于 dock（mobile.css 的 --above-dock 与 editor-dock 的 z-index），面板从上面盖过来。
+  // 表格/多维表/画板/手写板编辑态仍隐藏（各自底部工具条占位，没有"无光标但仍要导航"的同款场景）。
+  const { keyboardOpen } = useKeyboard();
   const capsuleInEdit = !!active?.editing && (active?.kind ?? "doc") === "doc";
-  const capsuleHidden = chromeHiddenNow || (!!active?.editing && !capsuleInEdit);
+  const capsuleHidden = chromeHiddenNow || (!!active?.editing && (!capsuleInEdit || keyboardOpen));
   const showChrome = useCallback(() => {
     if (chromeRef.current.hidden || chromeRef.current.acc) setChrome({ hidden: false, acc: 0 });
   }, []);

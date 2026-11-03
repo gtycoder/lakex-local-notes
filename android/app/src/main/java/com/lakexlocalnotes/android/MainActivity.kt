@@ -34,6 +34,9 @@ class MainActivity : BridgeActivity() {
     /** 系统栏/刘海的安全区（CSS px），由 WebView 的 WindowInsets 换算后交给渲染层。 */
     private var insetTopCss = 0f
     private var insetBottomCss = 0f
+    /** 261103 六批 A1：横屏/刘海左右安全区（左右同样要在横屏让出挖孔区）。 */
+    private var insetLeftCss = 0f
+    private var insetRightCss = 0f
 
     override fun onCreate(savedInstanceState: Bundle?) {
         registerPlugin(OpenFilePlugin::class.java)
@@ -84,9 +87,11 @@ class MainActivity : BridgeActivity() {
                 val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
                 insetTopCss = bars.top / density
                 insetBottomCss = bars.bottom / density
+                insetLeftCss = bars.left / density
+                insetRightCss = bars.right / density
                 view.post {
                     webView.evaluateJavascript(
-                        "window.__lakeSetNativeInsets&&window.__lakeSetNativeInsets($insetTopCss,$insetBottomCss)",
+                        "window.__lakeSetNativeInsets&&window.__lakeSetNativeInsets($insetTopCss,$insetBottomCss,$insetLeftCss,$insetRightCss)",
                         null,
                     )
                 }
@@ -175,6 +180,12 @@ class MainActivity : BridgeActivity() {
 
         @JavascriptInterface
         fun getBottom(): Float = activity.insetBottomCss
+
+        @JavascriptInterface
+        fun getLeft(): Float = activity.insetLeftCss
+
+        @JavascriptInterface
+        fun getRight(): Float = activity.insetRightCss
     }
 
     /** 仅暴露给本应用 WebView：让状态栏/导航栏跟随 App 主题（Capacitor 默认不接管系统栏）。 */

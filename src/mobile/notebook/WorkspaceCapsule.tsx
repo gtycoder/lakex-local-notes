@@ -6,7 +6,7 @@ import { ArrowLeftRight, File, Files, List } from "lucide-react";
  */
 export interface WorkspaceCapsuleProps {
   hidden: boolean;
-  /** 文档编辑态：抬到底部 dock 上方（261103）。 */
+  /** 文档编辑态：抬到底部 dock 上方（261103 二轮：编辑态常显；被键盘/二级面板覆盖由调用方与层序负责）。 */
   aboveDock: boolean;
   /** 表格阅读态：让位 Univer 自带工具条。 */
   aboveSheet: boolean;

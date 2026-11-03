@@ -269,6 +269,11 @@
    * env(safe-area-inset-top) 返回 0，而内容已经在状态栏/刘海下面 ⇒ 必须用原生 inset 兜底。 */
   --mobile-top-safe-area: max(env(safe-area-inset-top, 0px), var(--mobile-native-top-safe, 0px));
   --mobile-bottom-safe-area: max(env(safe-area-inset-bottom, 0px), var(--mobile-native-bottom-safe, 0px));
+  /* 261103 六批 A1：**横屏左右安全区**（刘海/挖孔在横屏会切掉左右边）。
+   * 竖屏下两者都是 0（刘海在顶部），所以引用它们的规则在竖屏完全不变。
+   * 同样是 env() 与原生 WindowInsets 注入值取 max（部分 ROM/edge-to-edge 下 env 返回 0）。 */
+  --mobile-left-safe-area: max(env(safe-area-inset-left, 0px), var(--mobile-native-left-safe, 0px));
+  --mobile-right-safe-area: max(env(safe-area-inset-right, 0px), var(--mobile-native-right-safe, 0px));
   /* 移动端动效（261029 收敛）：浮层入场/退场统一 250ms ease-out；按压改为即时反馈（不再做颜色/背景过渡）。 */
   --mobile-ease-panel: cubic-bezier(.22, 1, .36, 1);
   /* 进入/退出统一用「强 ease-out」：抽屉原先进场用 ease-out、退场用思源 Material 曲线（起步慢），

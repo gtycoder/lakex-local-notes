@@ -69,6 +69,8 @@ html[data-form-factor="expanded"] .pad-tree {
   flex-direction: column;
   position: fixed;
   left: 0;
+  /* 261103 六批 A1：平板横屏刘海不压左树/右大纲内容（竖屏 inset=0）。 */
+  padding-left: var(--mobile-left-safe-area);
   top: var(--pad-float-top);
   bottom: 0;
   width: var(--pad-tree-width);
@@ -188,7 +190,8 @@ html[data-form-factor="expanded"] .nb-shelf {
   flex: 0 0 auto;
   max-width: 220px;
   height: 30px;
-  padding: 0 4px 0 10px;
+  /* 261103 六批 A4：页签内不再有小 ×，左右内距对称（10）。 */
+  padding: 0 10px;
   border-radius: var(--lake-radius-sm);
   color: var(--lake-text-2);
 }
@@ -207,26 +210,17 @@ html[data-form-factor="expanded"] .nb-shelf {
   font-size: var(--lake-font-size-tiny);
 }
 
-.pad-tab__x {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: none;
-  width: 26px;
-  height: 26px;
-  border-radius: var(--lake-radius-2xs);
-  color: var(--lake-text-4);
-}
-
-.pad-tab__x:hover { background: var(--lake-bg-hover); color: var(--lake-text-2); }
+/* 261103 六批 A4：页签内小 × 已删除 —— 26/28 低于 44 Rule，而 .pad-tabs 是 overflow-x:auto
+ * （另一轴自动变 auto ⇒ 溢出裁剪），伪元素扩命中盒无效、抬高条高又会改十四批外壳几何。
+ * 关闭动作统一收在顶栏右侧那枚 toolbar__button（44×44，关闭当前页签）。不要加回页签内 ×。 */
 
 .pad-tab-add {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex: none;
-  width: 28px;
-  height: 28px;
+  width: 30px;
+  height: 30px;
   border-radius: var(--lake-radius-sm);
   color: var(--lake-text-3);
 }
@@ -245,6 +239,7 @@ html[data-form-factor="expanded"] .nb-shelf {
   flex-direction: column;
   position: fixed;
   right: 0;
+  padding-right: var(--mobile-right-safe-area);
   top: var(--pad-float-top);
   bottom: 0;
   width: var(--pad-outline-width);
@@ -310,13 +305,10 @@ html[data-form-factor="expanded"] .pad-outline--pinned {
 }
 
 
-/* 平板首页：内容可以横向分页（scroll-snap），但**不允许手指横滑翻页** —— 平板上那是一个整屏大的手势，
- * 与"页签在顶栏"的桌面语义冲突。顶部页签点击仍走 useTabPager 的程序化 scrollTo（overflow:hidden 不影响它）。 */
-html[data-form-factor="expanded"] .mobile-tab-stage {
-  overflow-x: hidden;
-  touch-action: pan-y;
-  scroll-snap-type: none;
-}
+/* 平板首页：与手机**同一套**原生横向分页（手指横滑 + scroll-snap）。
+ * 261103 曾以「平板上整屏手势与顶栏页签语义冲突」为由禁掉手指横滑（overflow-x:hidden / touch-action:pan-y /
+ * scroll-snap-type:none）；用户实机验收要求恢复 ⇒ 不再写形态特例，expanded 直接吃 mobile.css 的分页规则。
+ * 顶部页签点击仍走 useTabPager 的程序化 scrollTo；写作卡锁定态（.mobile-tab-stage--locked）照旧锁横滑。 */
 
 
 /* 首页顶部 tab 与加宽后的知识库对齐（否则 1080 内容挂在 760 的 tab 下会左偏）。

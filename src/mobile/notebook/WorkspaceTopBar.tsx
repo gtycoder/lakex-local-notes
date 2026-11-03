@@ -44,8 +44,9 @@ export function WorkspaceTopBar(props: WorkspaceTopBarProps) {
           <div className="pad-tabs" data-prevent-swipe>
             {tabs.map((t) => (
               <div key={t.id} className={"pad-tab" + (t.id === activeId ? " on" : "")}>
+                {/* 261103 六批 A4：页签内小 ×（26/28）低于 44 Rule，而页签条是横滚容器、溢出会被裁，
+                    扩命中盒做不到 ⇒ 关闭动作统一收到顶栏右侧那枚 44×44 按钮（关闭**当前**页签）。 */}
                 <button className="pad-tab__main" onClick={() => props.onOpenTab(t.id)} title={t.title || "无标题"}>{t.title || "无标题"}</button>
-                <button className="pad-tab__x" onClick={(e) => { e.stopPropagation(); props.onCloseTab(t.id); }} aria-label="关闭标签页" title="关闭"><X size={14} /></button>
               </div>
             ))}
             <button className="pad-tab-add" onClick={() => props.onOpenTree(true)} aria-label="打开文档" title="打开文档"><Plus size={16} /></button>
@@ -67,6 +68,14 @@ export function WorkspaceTopBar(props: WorkspaceTopBarProps) {
               title={!canEdit ? "该文档类型在移动端只读" : active?.editing ? "完成" : "编辑"}
             >{active?.editing ? <Check /> : <Pencil />}</button>
             <button className="toolbar__button" onClick={props.onSync} aria-label="立即同步" title="立即同步"><CloudUpload /></button>
+            {/* 261103 六批 A4：关闭当前页签 —— toolbar__button 天生 44×44，满足 44 Rule；没有活动页签时禁用。 */}
+            <button
+              className="toolbar__button"
+              onClick={() => { if (activeId) props.onCloseTab(activeId); }}
+              disabled={!activeId}
+              aria-label="关闭当前页签"
+              title={activeId ? "关闭当前页签" : "没有打开的文档"}
+            ><X size={18} strokeWidth={1.75} /></button>
           </div>
         </>
       ) : (

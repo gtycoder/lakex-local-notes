@@ -10,22 +10,35 @@
  * tokens.css 里 --mobile-*-safe-area = max(env(...), var(--mobile-native-*-safe))。
  * 非 Android（桌面 / 浏览器预览）没有桥，静默不动，env 仍然生效。
  */
-type InsetsBridge = { getTop?: () => number; getBottom?: () => number };
+type InsetsBridge = {
+  getTop?: () => number;
+  getBottom?: () => number;
+  /** 261103 六批 A1：横屏/刘海左右安全区（老包没有这两个方法 ⇒ 缺省按 0）。 */
+  getLeft?: () => number;
+  getRight?: () => number;
+};
 const TOP_VAR = "--mobile-native-top-safe";
 const BOTTOM_VAR = "--mobile-native-bottom-safe";
+const LEFT_VAR = "--mobile-native-left-safe";
+const RIGHT_VAR = "--mobile-native-right-safe";
 
 export function installSafeAreaInsets(): void {
   const root = document.documentElement;
-  const apply = (top: number, bottom: number): void => {
+  /** left/right 是 261103 六批追加的第 3/4 参数：老原生包只传两个 ⇒ 缺省 0（保持旧行为）。 */
+  const apply = (top: number, bottom: number, left = 0, right = 0): void => {
     const t = Number.isFinite(top) ? Math.max(0, top) : 0;
     const b = Number.isFinite(bottom) ? Math.max(0, bottom) : 0;
+    const l = Number.isFinite(left) ? Math.max(0, left) : 0;
+    const r = Number.isFinite(right) ? Math.max(0, right) : 0;
     root.style.setProperty(TOP_VAR, t + "px");
     root.style.setProperty(BOTTOM_VAR, b + "px");
+    root.style.setProperty(LEFT_VAR, l + "px");
+    root.style.setProperty(RIGHT_VAR, r + "px");
   };
-  (window as { __lakeSetNativeInsets?: (top: number, bottom: number) => void }).__lakeSetNativeInsets = apply;
+  (window as { __lakeSetNativeInsets?: (top: number, bottom: number, left?: number, right?: number) => void }).__lakeSetNativeInsets = apply;
   const bridge = (window as { lakeInsets?: InsetsBridge }).lakeInsets;
   if (!bridge) return;
   try {
-    apply(bridge.getTop?.() ?? 0, bridge.getBottom?.() ?? 0);
+    apply(bridge.getTop?.() ?? 0, bridge.getBottom?.() ?? 0, bridge.getLeft?.() ?? 0, bridge.getRight?.() ?? 0);
   } catch { /* 桥不可用时保持 env 兜底 */ }
 }

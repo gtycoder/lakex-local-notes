@@ -14,6 +14,8 @@ const CAPSULE = read("./WorkspaceCapsule.tsx");
 const TOPBAR = read("./WorkspaceTopBar.tsx");
 const APP = read("../MobileApp.tsx");
 const CSS = read("../mobile.css");
+/** 261103 二轮：编辑态胶囊的层序对手 = 底部 dock（z-index 在 editor-dock.css）。 */
+const DOCK = read("../editor/editor-dock.css");
 
 describe("阅读时顶栏/底栏自动收起（261019，对齐思源）", () => {
   it("判据：顶部展开、向下累计到阈值收起、向上更灵敏、反向清零", () => {
@@ -39,12 +41,16 @@ describe("阅读时顶栏/底栏自动收起（261019，对齐思源）", () => 
     expect(CHROME).toMatch(/meta\.kind !== "doc" \|\| meta\.editing/);
     expect(TOPBAR).toContain("mobile-topbar--auto-hidden");
     expect(WS).toContain("chromeHidden={chromeHiddenNow}");
-    // 261103：胶囊显隐判据统一到 capsuleHidden —— 文档（Lake）编辑态**保留胶囊**（抬到 dock 上方），
-    // 表格/多维表/画板/手写板编辑态仍隐藏；顶栏自动收起判据不变。
+    // 261103 二轮：文档编辑态**常显**胶囊（抬到 dock 上方），但键盘弹起时隐藏、二级面板展开时被 dock 层级盖住；
+    // 表格/多维表/画板/手写板编辑态仍隐藏。顶栏自动收起判据不变。
     expect(CHROME).toContain('const capsuleInEdit = !!active?.editing && (active?.kind ?? "doc") === "doc";');
-    expect(CHROME).toContain("const capsuleHidden = chromeHiddenNow || (!!active?.editing && !capsuleInEdit);");
+    expect(CHROME).toContain("const capsuleHidden = chromeHiddenNow || (!!active?.editing && (!capsuleInEdit || keyboardOpen));");
+    expect(CHROME).toContain("const { keyboardOpen } = useKeyboard();");
     expect(WS).toContain("aboveDock={capsuleInEdit}");
     expect(CAPSULE).toContain("mobile-bottom-bar--above-dock");
+    // 层序：胶囊 above-dock = 2，dock 容器 = 4 ⇒ 二级面板展开时盖住胶囊（反向就是"胶囊浮在色板上"）。
+    expect(CSS).toMatch(/\.mobile-bottom-bar--above-dock\s*\{[^}]*z-index:\s*2/);
+    expect(DOCK).toMatch(/\.mobile-editor-dock\s*\{[^}]*z-index:\s*4/);
     // 打开任意浮层 → 导航必须回来
     expect(CHROME).toMatch(/sidebarOpen \|\| outlineOpen \|\| tabsOpen \|\| notebookSwitchOpen\) showChrome\(\)/);
   });

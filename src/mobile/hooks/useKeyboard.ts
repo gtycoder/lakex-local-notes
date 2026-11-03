@@ -10,59 +10,105 @@
  *   offset       —— 需把 dock/toolbar 的 bottom 上移的量（adjustResize=0；edge-to-edge=键盘高度）
  *   height       —— 键盘实际高度（两种模式统一：adjustResize 用基准回落、edge-to-edge 用 vv 差）
  *   keyboardOpen —— 键盘是否弹出（height>8）
+ *
+ * 261103 六批 A6：**改成进程内单例 store**（useSyncExternalStore）。
+ * 此前每个调用点各挂一份 window/visualViewport resize 监听（工作区 chrome 一份、每个编辑面一份），
+ * 同一帧里同一套计算跑多遍；现在只有一份监听 + 一份状态，所有订阅者共享。
  */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import { noteViewport, resetShellHeight, shellHeight, widthChanged } from "./viewportShell";
 
-export function useKeyboard() {
-  // ⚠️ 初值直接取当前视口高，**不要给 0**：`base` 被 EditorDock 用来写 `--mb-app-h`（外壳高度），
-  //    而那个写操作在 useLayoutEffect（绘制前）里、比本 hook 的测量 effect（passive，绘制后）更早跑
-  //    ⇒ 初值 0 会让挂载首帧的外壳高度变成 0px（闪一下）。261014 查漏补缺时发现。
-  const [base, setBase] = useState(() => (typeof window === "undefined" ? 0 : window.innerHeight));
-  const [innerHeight, setInnerHeight] = useState(0);
-  const [offset, setOffset] = useState(0);
-  const [height, setHeight] = useState(0);
-  const [keyboardOpen, setKeyboardOpen] = useState(false);
-  /** 上一次的窗口宽：宽度显著变化 = 分屏/自由窗口/折叠展开 ⇒ 稳定外壳高必须重学（261102）。 */
-  const lastWidthRef = useRef(typeof window === "undefined" ? 0 : window.innerWidth);
+export interface KeyboardState {
+  base: number;
+  innerHeight: number;
+  offset: number;
+  height: number;
+  keyboardOpen: boolean;
+}
 
-  useEffect(() => {
-    const update = () => {
-      const iw = window.innerWidth;
-      // 261102：先按宽度变化重置基准（IME 不会改宽度；否则拖窄窗口后 keyboardOpen 永久为真）。
-      if (widthChanged(lastWidthRef.current, iw)) {
-        lastWidthRef.current = iw;
-        resetShellHeight();
-      }
-      const ih = window.innerHeight;
-      const vv = window.visualViewport;
-      const vvH = Math.round(vv ? vv.height : ih);
-      const vvTop = vv ? Math.max(0, vv.offsetTop) : 0;
-      // base = **跨实例共享**的稳定外壳高（单调取历史最大值 = 键盘收起时的高）——
-      // 见 viewportShell.ts：只有输入法会让视口变矮，面板不会，所以这个值才是稳定基准。
-      // 基准只在「两通道一致」时抬高（261015：IME 过渡里 innerHeight 会单独失真 ⇒ 别让它污染稳定外壳高）
-      setBase(noteViewport(ih, vvH));
-      setInnerHeight(ih);
-      const off = Math.max(0, Math.round(ih - vvH - vvTop));            // edge-to-edge 上移量
-      const shrunk = Math.max(0, Math.round(shellHeight() - ih));       // adjustResize 回落（基准 = 稳定外壳高）
-      const h = Math.max(off, shrunk);                                  // 键盘实际高度（两模式统一）
-      setOffset(off);
-      setHeight(h);
-      setKeyboardOpen(h > 8);
-    };
-    const onOrient = () => { resetShellHeight(); update(); };
-    update();
-    window.addEventListener("orientationchange", onOrient);
-    window.visualViewport?.addEventListener("resize", update);
-    window.visualViewport?.addEventListener("scroll", update);
-    window.addEventListener("resize", update);
-    return () => {
-      window.removeEventListener("orientationchange", onOrient);
-      window.visualViewport?.removeEventListener("resize", update);
-      window.visualViewport?.removeEventListener("scroll", update);
-      window.removeEventListener("resize", update);
-    };
-  }, []);
+function emptyState(): KeyboardState {
+  return { base: 0, innerHeight: 0, offset: 0, height: 0, keyboardOpen: false };
+}
 
-  return { base, innerHeight, offset, height, keyboardOpen };
+/** ⚠️ base 初值直接取当前视口高，**不要给 0**：`base` 被 EditorDock 用来写 `--mb-app-h`（外壳高度），
+ *  而那个写操作在 useLayoutEffect（绘制前）里、比本 store 的首次测量更早 ⇒ 初值 0 会让首帧外壳高度变成 0px（闪一下）。
+ *  innerHeight 仍保持 0（= 「还没测量」，与旧实现的 useState 语义一致）。 */
+let current: KeyboardState = {
+  base: typeof window === "undefined" ? 0 : window.innerHeight,
+  innerHeight: 0,
+  offset: 0,
+  height: 0,
+  keyboardOpen: false,
+};
+const listeners = new Set<() => void>();
+let stopWatching: (() => void) | null = null;
+let lastWidth = 0;
+
+function measure(): KeyboardState {
+  if (typeof window === "undefined") return emptyState();
+  const iw = window.innerWidth;
+  // 261102：先按宽度变化重置基准（IME 不会改宽度；否则拖窄窗口后 keyboardOpen 永久为真）。
+  if (widthChanged(lastWidth, iw)) lastWidth = iw, resetShellHeight();
+  const ih = window.innerHeight;
+  const vv = window.visualViewport;
+  const vvH = Math.round(vv ? vv.height : ih);
+  const vvTop = vv ? Math.max(0, vv.offsetTop) : 0;
+  const base = noteViewport(ih, vvH);
+  const off = Math.max(0, Math.round(ih - vvH - vvTop));
+  const shrunk = Math.max(0, Math.round(shellHeight() - ih));
+  const height = Math.max(off, shrunk);
+  return { base, innerHeight: ih, offset: off, height, keyboardOpen: height > 8 };
+}
+
+function emit(): void {
+  const next = measure();
+  const prev = current;
+  if (prev.innerHeight === next.innerHeight && prev.offset === next.offset && prev.height === next.height
+    && prev.base === next.base && prev.keyboardOpen === next.keyboardOpen) return;
+  current = next;
+  for (const listener of listeners) listener();
+}
+
+function startWatching(): void {
+  if (stopWatching || typeof window === "undefined") return;
+  lastWidth = window.innerWidth;
+  const update = (): void => emit();
+  const onOrient = (): void => { resetShellHeight(); emit(); };
+  window.addEventListener("orientationchange", onOrient);
+  window.visualViewport?.addEventListener("resize", update);
+  window.visualViewport?.addEventListener("scroll", update);
+  window.addEventListener("resize", update);
+  stopWatching = () => {
+    window.removeEventListener("orientationchange", onOrient);
+    window.visualViewport?.removeEventListener("resize", update);
+    window.visualViewport?.removeEventListener("scroll", update);
+    window.removeEventListener("resize", update);
+    stopWatching = null;
+  };
+  emit();
+}
+
+function subscribe(listener: () => void): () => void {
+  listeners.add(listener);
+  startWatching();
+  if (current.innerHeight === 0) emit(); // 首个订阅者：把 innerHeight 从 0 补成真实值（保持旧的"挂载后一帧才有"语义）
+  return () => {
+    listeners.delete(listener);
+    if (listeners.size === 0 && stopWatching) stopWatching();
+  };
+}
+
+function getSnapshot(): KeyboardState {
+  return current;
+}
+
+function getServerSnapshot(): KeyboardState {
+  return emptyState();
+}
+
+export function useKeyboard(): KeyboardState {
+  const state = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  // 保持与旧实现一致的挂载期初始化：确保监听在挂载后已经挂上（subscribe 里已做，这里兜底一次）。
+  useEffect(() => { startWatching(); }, []);
+  return state;
 }
