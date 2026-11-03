@@ -144,6 +144,19 @@ describe("importInkImagePages", () => {
     expect(big.pages[0].backgroundImage).toMatchObject({ pixelWidth: 6000, pixelHeight: 4000 });
   });
 
+  it("累计上传字节（提示首次同步要传的量）；upload 不报 size 时记 0", async () => {
+    const outcome = await importInkImagePages([fakeFile("a.png", 1024), fakeFile("b.png", 1024)], {
+      upload: async (input) => ({ url: ASSET_URL, size: input.filename === "a.png" ? 700 : 300 }),
+      probe: async () => ({ pixelWidth: 100, pixelHeight: 100 }),
+    });
+    expect(outcome.uploadedBytes).toBe(1000);
+    const unknown = await importInkImagePages([fakeFile("c.png", 1024)], {
+      upload: async () => ({ url: ASSET_URL }),
+      probe: async () => ({ pixelWidth: 100, pixelHeight: 100 }),
+    });
+    expect(unknown.uploadedBytes).toBe(0);
+  });
+
   it("inkBackgroundDownscaleTarget：最长边 > 2400 才缩，等比且取整", () => {
     expect(INK_BACKGROUND_MAX_EDGE).toBe(2400);
     expect(inkBackgroundDownscaleTarget({ pixelWidth: 1200, pixelHeight: 1600 })).toBeNull();

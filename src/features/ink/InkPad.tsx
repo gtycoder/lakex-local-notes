@@ -18,6 +18,7 @@ import { canonicalDocBody } from "../../core/docBaseline.js";
 import { readInkNavPage, writeInkNavPage } from "./inkNav.js";
 import { hitTestStroke, strokeToSvgPath } from "./inkGeometry.js";
 import { inkPerfDebugEnabled, installInkPerfHooks, recordInkPerf } from "./inkPerfStats";
+import { inkImageImportNotice, inkPdfImportNotice } from "./inkImportNotice";
 import { installInkInputDiagnostics, installPointerInputDebugHooks } from "../board/boardInputDiagnostics";
 import { createStrokePathCache, renderedStrokesForPage, type RenderedStrokePath } from "./inkRenderCache.js";
 import {
@@ -175,6 +176,9 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
   const [pdfImporting, setPdfImporting] = useState(false);
   const [pdfProgress, setPdfProgress] = useState<{ done: number; total: number; phase: PdfImportPhase } | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
+  /** 261103 十三批：导入完成提示（页数 + 资产体积，说明首次同步要传多少），6s 自动消失。 */
+  const [importNotice, setImportNotice] = useState<string | null>(null);
+  const importNoticeTimerRef = useRef<number | null>(null);
   const importingRef = useRef(false);
   const pdfImportingRef = useRef(false);
   const pdfAbortRef = useRef<AbortController | null>(null);
@@ -229,10 +233,25 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
     return diskCanonicalRef.current !== null && diskCanonicalRef.current === body;
   }, []);
 
+  /** 261103 十三批 P2：导入完成提示（6s 后自动消失；不打断编辑）。 */
+  const showImportNotice = useCallback((text: string) => {
+    if (!text) return;
+    setImportNotice(text);
+    if (importNoticeTimerRef.current !== null) window.clearTimeout(importNoticeTimerRef.current);
+    importNoticeTimerRef.current = window.setTimeout(() => {
+      importNoticeTimerRef.current = null;
+      setImportNotice(null);
+    }, 6000);
+  }, []);
+  useEffect(() => () => {
+    if (importNoticeTimerRef.current !== null) window.clearTimeout(importNoticeTimerRef.current);
+  }, []);
   const page = useMemo(() => {
     if (!doc) return null;
     return doc.pages.find((item) => item.id === doc.activePageId) ?? doc.pages[0] ?? null;
   }, [doc]);
+  // 261103 十三批：相邻页背景图「预解码」已实测否决（A/B：未预取 30.4ms vs 预取后 32.0ms 翻页，
+  // 说明 30ms 级成本在 SVG/React 重渲染而不是图片 decode）⇒ 不留这段代码，避免无收益的复杂度。
   // 翻页/建页/删页/导入都会改内存 activePageId：同步到设备本地导航（不写正文、不标脏、不进 S3）。
   useEffect(() => {
     if (!noteId || !doc?.activePageId) return;
@@ -473,6 +492,8 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
       const order = inkOrderDelta(current.pages, next.pages);
       if (order) patch.order = order;
       commit(next, patch);
+      // 261103 十三批 P2：告诉用户这次导入产生多少资产（首次同步要传的量）。
+      showImportNotice(inkImageImportNotice(added.length, outcome.uploadedBytes ?? 0));
       // 导入后直接落在第一张新图上继续批注
       setPagesOpen(false);
       setPendingDeletePageId(null);
@@ -482,7 +503,7 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
       importingRef.current = false;
       setImporting(false);
     }
-  }, [commit, readOnly]);
+  }, [commit, readOnly, showImportNotice]);
 
   /**
    * v2：导入 PDF（编辑态）。宿主负责选 PDF / 落原文件 / 逐页栅格化 / 上传；
@@ -517,6 +538,7 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
       const plan = planPdfPageInsert(current, outcome.pages, outcome.sourcePdf);
       if (!plan) return;
       commit(plan.next, plan.patch);
+      showImportNotice(inkPdfImportNotice(outcome.importedPageCount, outcome.pageCount, outcome.uploadedBytes ?? 0, outcome.truncated));
       // 导入后落在第一张 PDF 页上继续批注
       setPagesOpen(false);
       setPendingDeletePageId(null);
@@ -528,7 +550,7 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
       setPdfImporting(false);
       setPdfProgress(null);
     }
-  }, [commit, readOnly]);
+  }, [commit, readOnly, showImportNotice]);
 
   const cancelPdfImport = useCallback(() => {
     pdfAbortRef.current?.abort();
@@ -872,6 +894,7 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
         </div>
       ) : null}
       {importError && <div className="ink-invalid-banner" role="alert">{importError}</div>}
+      {importNotice && <div className="ink-invalid-banner" role="status" data-ink-notice>{importNotice}</div>}
       {pdfImporting && (
         <div className="ink-invalid-banner" role="status" data-ink-pdf-progress>
           <span>

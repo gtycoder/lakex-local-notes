@@ -8,6 +8,12 @@
 
 ## 0. 最新交接（261027）
 
+### 261103 · 十三批：手写板导入体积提示（P2 落地）+ 翻页预解码（P1 实测否决）· **本地改动**
+- **P2（已落地）**：图片页 / PDF 导入完成后给一条 6s 自动消失的状态提示，说明页数与**本次上传的资产字节**（= 首次同步要传的量）：`已导入 3 页，图片约 1.5 MB（首次同步会一起上传）`、PDF 截断时 `已导入 12 页（共 20 页）…`。
+  · 实现：`inkImportNotice.ts`（纯格式化/文案）+ `importInkImagePages`/`importPdfPages` 累计 `uploadedBytes`（upload 结果带 size 时累计；缺省 0）；`InkPad` 用现有中性 banner（`data-ink-import-notice`）展示、定时清除。
+  · 单测：`inkImportNotice.test` 3 例 + `inkImageImport` 上传字节累计 1 例；不新增依赖/样式。
+- **P1（预解码相邻页背景图）实测否决**：20 页整页图文档 A/B 翻页耗时 —— **未预取 30.4ms / 预取后 32.0ms**（均 10 次两帧到稳定）⇒ 30ms 级成本在 SVG/React 重渲染而不是图片 decode；按「无收益不保留」删掉整段预取实现（代码处留一行结论注释），避免无收益复杂度。
+- **门禁**：tsc / 全量 vitest / check:mobileui / diff-check 全绿。
 ### 261103 · 十二批：图片页背景导入下采样（防 48MP 图当背景时解码 OOM）· **本地改动**
 - **触发**：用户问「PDF/大量图片当背景标注是否影响性能」。实测 20 页整页图背景：正文仅 **4,466 B**、只解码当前页 1 张、翻页 ≈33.5ms、缩略图全走 `?w=256` ⇒ 运行时开销可控；**真正风险 = 图片页背景导入不限尺寸**（48MP ≈ 190MB 解码/页，移动端可能被杀）。
 - **修法**：`inkImageImport` 新增 `INK_BACKGROUND_MAX_EDGE=2400` 与纯函数 `inkBackgroundDownscaleTarget`；导入前超过最长边就走 `inkImageDownscale.downscaleInkImageFile`（canvas 等比缩放，webp 0.9 → jpeg 兜底）再上传，并把目标像素尺寸记进正文；小图不缩；下采样失败按原图导入（不阻断）。

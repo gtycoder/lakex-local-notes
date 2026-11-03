@@ -29,7 +29,7 @@ export interface InkImageProbe {
 
 export interface InkImageImportDeps {
   /** 上传像素字节（宿主注入：桌面走 IPC、移动端走 bridge）；返回的 url 必须是本地资产 URL。 */
-  upload: (input: { bytes: Uint8Array; filename: string }) => Promise<{ url: string }>;
+  upload: (input: { bytes: Uint8Array; filename: string }) => Promise<{ url: string; size?: number }>;
   /** 读图片像素尺寸（默认用浏览器解码；单测注入假值）。 */
   probe?: (file: File) => Promise<InkImageProbe | null>;
   /** 超大图下采样（默认用浏览器 canvas；单测注入假值）。返回 null = 放弃下采样、按原图导入。 */
@@ -63,6 +63,8 @@ export interface InkImageImportOutcome {
   pages: InkPage[];
   /** 逐文件错误（可见提示用）；成功的文件仍会成页。 */
   errors: string[];
+  /** 本次实际上传的图片字节总数（= 首次同步要传的资产量；缺省/0 = 未知或没上传）。 */
+  uploadedBytes?: number;
 }
 
 /** 缩略图 URL：本地资产走 `?w=256` 低清档；非本地/无档位原样返回。 */
@@ -138,6 +140,7 @@ export async function importInkImagePages(files: File[], deps: InkImageImportDep
   const downscaleOf = deps.downscale ?? (typeof document === "undefined" ? undefined : downscaleInkImageFile);
   const pages: InkPage[] = [];
   const errors: string[] = [];
+  let uploadedBytes = 0;
   for (const file of files) {
     const label = file.name || "图片";
     try {
@@ -165,6 +168,7 @@ export async function importInkImagePages(files: File[], deps: InkImageImportDep
         }
       }
       const uploaded = await deps.upload({ bytes, filename });
+      if (uploaded.size && uploaded.size > 0) uploadedBytes += uploaded.size;
       const image = inkBackgroundImageFromUpload(uploaded, effectiveProbe);
       if (!image) {
         errors.push(`${label}：上传结果不是本地资产地址`);
@@ -175,7 +179,7 @@ export async function importInkImagePages(files: File[], deps: InkImageImportDep
       errors.push(`${label}：${reason instanceof Error ? reason.message : "导入失败"}`);
     }
   }
-  return { pages, errors };
+  return { pages, errors, uploadedBytes };
 }
 
 /** 选图（一次多选；取消返回空数组，不会悬挂）。桌面/移动共用（两端都是 Chromium 的 input[type=file]）。 */

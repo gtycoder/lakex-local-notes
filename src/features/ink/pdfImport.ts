@@ -69,7 +69,7 @@ export interface PdfImportDeps {
    */
   rasterize: (input: { bytes: Uint8Array }, options: PdfImportRasterizeOptions) => Promise<PdfImportRasterResult>;
   /** 上传单页图片字节。 */
-  uploadPage: (input: { bytes: Uint8Array; filename: string }) => Promise<{ url: string }>;
+  uploadPage: (input: { bytes: Uint8Array; filename: string }) => Promise<{ url: string; size?: number }>;
   /**
    * 失败/取消时删除本轮**已上传**的资产（按已知 URL；实现方只删本笔记、且未被正文/历史引用的文件）。
    * 没有它就只能等孤儿扫描兜底（设置页手动清理），会留下几 MB 的无主页图。
@@ -96,6 +96,8 @@ export interface PdfImportOutcome {
   truncated: boolean;
   cancelled: boolean;
   errors: string[];
+  /** 本次实际上传的页图字节总数（= 首次同步要传的资产量；缺省/0 = 未知或没上传）。 */
+  uploadedBytes?: number;
 }
 
 function isNoteAssetUrl(value: string): boolean {
@@ -115,7 +117,7 @@ export function pdfRasterErrorMessage(reason: unknown): string {
 }
 
 function emptyOutcome(errors: string[] = []): PdfImportOutcome {
-  return { pages: [], pageCount: 0, importedPageCount: 0, truncated: false, cancelled: false, errors };
+  return { pages: [], pageCount: 0, importedPageCount: 0, truncated: false, cancelled: false, errors, uploadedBytes: 0 };
 }
 
 /**
@@ -141,6 +143,8 @@ export async function importPdfPages(
   const uploadedUrls: string[] = [];
   let enqueued = 0;
   let uploaded = 0;
+  /** 本次实际上传的页图字节总数（提示「首次同步要传多少」）。 */
+  let uploadedBytes = 0;
   let maxPageSeen = 0;
   let aborted = false;
 
@@ -178,6 +182,7 @@ export async function importPdfPages(
       }
       uploadedUrls.push(result.url);
       uploaded += 1;
+      if (result.size && result.size > 0) uploadedBytes += result.size;
       ensureSlot(item.page);
       const image: InkBackgroundImage = {
         url: result.url,
@@ -274,7 +279,7 @@ export async function importPdfPages(
   const truncated = pageCount > maxPages;
   if (cancelled || pages.length === 0) {
     await cleanupUploaded();
-    return { pages: [], pageCount, importedPageCount: 0, truncated, cancelled, errors };
+    return { pages: [], pageCount, importedPageCount: 0, truncated, cancelled, errors, uploadedBytes };
   }
   return {
     pages,
@@ -285,6 +290,7 @@ export async function importPdfPages(
     truncated,
     cancelled: false,
     errors,
+    uploadedBytes,
   };
 }
 
