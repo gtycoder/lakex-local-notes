@@ -37,6 +37,9 @@ import { useFormFactor } from "../pad/useFormFactor";
 import { readPadPanelPrefs, writePadPanelPrefs } from "../pad/padPanelPrefs";
 import { usePadShortcuts } from "../pad/usePadShortcuts";
 export type { NotebookTreeItem } from "./useNotebookTreeData";
+
+/** 平板侧栏（树/大纲）三态：收起 / 悬浮 / 固定停靠。 */
+export type PadPanelMode = "closed" | "floating" | "pinned";
 /** 表格 / 多维表视图按需加载：只有真的打开这类文档才进分包（首屏不含它们）。 */
 const MobileBitableViewer = lazy(() => import("../bitable/MobileBitableViewer").then((m) => ({ default: m.MobileBitableViewer })));
 /** 表格（usheet）：与桌面同一套 Univer 内核的查看/编辑器（261020 起可编辑；运行时按需加载）。 */
@@ -140,16 +143,29 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   const padTwoPane = formFactor === "expanded";
   // 树/大纲默认收起、默认**悬浮**（不占布局）；固定 = 停靠进布局、可编辑区随之收窄。
   // 固定偏好**持久化**（设备本地 localStorage，不进正文/不进 S3）；冷启时曾固定的面板按固定态打开。
+  // P2：4 个布尔收敛成「每侧一个 PanelMode」——closed / floating / pinned 三态互斥，
+  // 不再出现「open && pinned 四个变量 15 个写点」那种不一致温床。派生布尔只为渲染/手势读。
   const [padPanelPrefs] = useState(readPadPanelPrefs);
-  const [padTreeOpen, setPadTreeOpen] = useState(padPanelPrefs.tree);
-  const [padOutlineOpen, setPadOutlineOpen] = useState(padPanelPrefs.outline);
-  const [padTreePinned, setPadTreePinned] = useState(padPanelPrefs.tree);
-  const [padOutlinePinned, setPadOutlinePinned] = useState(padPanelPrefs.outline);
+  const [padTreeMode, setPadTreeMode] = useState<PadPanelMode>(() => (padPanelPrefs.tree ? "pinned" : "closed"));
+  const [padOutlineMode, setPadOutlineMode] = useState<PadPanelMode>(() => (padPanelPrefs.outline ? "pinned" : "closed"));
+  const padTreeOpen = padTreeMode !== "closed";
+  const padOutlineOpen = padOutlineMode !== "closed";
+  const padTreePinned = padTreeMode === "pinned";
+  const padOutlinePinned = padOutlineMode === "pinned";
   // 只记 pinned（开合不记：冷启按 pinned 决定是否直接停靠展开）。
-  useEffect(() => { writePadPanelPrefs({ tree: padTreePinned, outline: padOutlinePinned }); }, [padTreePinned, padOutlinePinned]);
-  const padDocked = padTwoPane && ((padTreeOpen && padTreePinned) || (padOutlineOpen && padOutlinePinned));
-  const togglePadTree = useCallback(() => setPadTreeOpen((v) => !v), []);
-  const closePadTree = useCallback(() => setPadTreeOpen(false), []);
+  useEffect(() => {
+    writePadPanelPrefs({ tree: padTreeMode === "pinned", outline: padOutlineMode === "pinned" });
+  }, [padTreeMode, padOutlineMode]);
+  const padDocked = padTwoPane && (padTreeMode === "pinned" || padOutlineMode === "pinned");
+  // 统一操作：open/close/toggle/pin 全部只改 mode；函数式更新避免闭包旧值。
+  const openPadTree = useCallback((open: boolean) => setPadTreeMode((m) => (open ? (m === "closed" ? "floating" : m) : "closed")), []);
+  const openPadOutline = useCallback((open: boolean) => setPadOutlineMode((m) => (open ? (m === "closed" ? "floating" : m) : "closed")), []);
+  const togglePadTree = useCallback(() => setPadTreeMode((m) => (m === "closed" ? "floating" : "closed")), []);
+  const togglePadOutline = useCallback(() => setPadOutlineMode((m) => (m === "closed" ? "floating" : "closed")), []);
+  const closePadTree = useCallback(() => setPadTreeMode("closed"), []);
+  const closePadOutline = useCallback(() => setPadOutlineMode("closed"), []);
+  const togglePadTreePin = useCallback(() => setPadTreeMode((m) => (m === "pinned" ? "floating" : "pinned")), []);
+  const togglePadOutlinePin = useCallback(() => setPadOutlineMode((m) => (m === "pinned" ? "floating" : "pinned")), []);
   const outlineOpen = overlayKind === "outline";
   const findOpen = overlayKind === "find";
   const tabsOpen = overlayKind === "tabs";
@@ -167,14 +183,14 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   // 抽屉开合（名字保留：调用点遍布拖拽/胶囊/遮罩）。互斥由 overlay owner 保证：打开时先收掉其它浮层。
   const openSidebar = useCallback((v: boolean) => {
     // 平板里「目录」= 悬浮左栏的开合，不再拉抽屉（避免两份树实例 / 全屏遮罩）。
-    if (padTwoPane) { setPadTreeOpen(v); return; }
+    if (padTwoPane) { openPadTree(v); return; }
     if (v) openOverlay({ kind: "sidebar" }); else closeOverlay("sidebar");
-  }, [closeOverlay, openOverlay, padTwoPane]);
+  }, [closeOverlay, openOverlay, openPadTree, padTwoPane]);
   const openOutline = useCallback((v: boolean) => {
     // 平板里「大纲」= 悬浮右栏（与胶囊同一个组件）；手机才拉右侧抽屉。
-    if (padTwoPane) { setPadOutlineOpen(v); return; }
+    if (padTwoPane) { openPadOutline(v); return; }
     if (v) openOverlay({ kind: "outline" }); else closeOverlay("outline");
-  }, [closeOverlay, openOverlay, padTwoPane]);
+  }, [closeOverlay, openOverlay, openPadOutline, padTwoPane]);
   const autoOpenedRef = useRef(false);
   const closingRef = useRef(false);
 
@@ -275,14 +291,14 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   // 切到没有大纲的文档类型（表格 / 多维表 / 画板）时收掉已展开的大纲抽屉，别停在空面板上
   useEffect(() => { if (!outlineAvailable) closeOverlay("outline"); }, [outlineAvailable, closeOverlay]);
   // 平板悬浮大纲栏同理：切到没有大纲的文档类型时自动收起。
-  useEffect(() => { if (!outlineAvailable) setPadOutlineOpen(false); }, [outlineAvailable]);
+  useEffect(() => { if (!outlineAvailable) closePadOutline(); }, [outlineAvailable, closePadOutline]);
   // 「固定」偏好持久化后，冷启进工作区时往往**还没有活动文档**（大纲被上面的 auto-close 收掉）⇒
   // 切到一篇文章时把固定的大纲重新出现。用户在本次会话里手动收起的不会被立刻强开（只在换文档时补开）。
   const padOutlineOpenRef = useRef(padOutlineOpen);
   padOutlineOpenRef.current = padOutlineOpen;
   useEffect(() => {
-    if (padTwoPane && padOutlinePinned && outlineAvailable && !padOutlineOpenRef.current) setPadOutlineOpen(true);
-  }, [activeId, padTwoPane, padOutlinePinned, outlineAvailable]);
+    if (padTwoPane && padOutlinePinned && outlineAvailable && !padOutlineOpenRef.current) openPadOutline(true);
+  }, [activeId, openPadOutline, padTwoPane, padOutlinePinned, outlineAvailable]);
 
   // 初次进入（仅一次）：
   //  - 显式指定了要打开的文档（首页/搜索/新建）→ 它排第一并激活（修"从首页点文档直达不了"），
@@ -740,7 +756,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
         // 与原实现同序：有子节点先展开/折叠；没有子的文档才打开。
         if (childrenOf(item.id).length > 0) { toggleGroup(item.id); return; }
         if (item.kind === "note") {
-          if (padTwoPane) setPadTreeOpen(false); else openSidebar(false);
+          if (padTwoPane) closePadTree(); else openSidebar(false);
           void openTab(item.id);
         }
       }}
@@ -759,8 +775,8 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     escape: () => {
       if (overlayKind) { closeOverlay(); return true; }
       // 固定（停靠）的面板不吃 Esc —— 它不再是"临时浮层"；再按一次胶囊/按钮才收。
-      if (padTreeOpen && !padTreePinned) { setPadTreeOpen(false); return true; }
-      if (padOutlineOpen && !padOutlinePinned) { setPadOutlineOpen(false); return true; }
+      if (padTreeOpen && !padTreePinned) { closePadTree(); return true; }
+      if (padOutlineOpen && !padOutlinePinned) { closePadOutline(); return true; }
       return false;
     },
   });
@@ -783,7 +799,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
                   <button className="pad-tab__x" onClick={(e) => { e.stopPropagation(); void closeTab(t.id); }} aria-label="关闭标签页" title="关闭"><X size={14} /></button>
                 </div>
               ))}
-              <button className="pad-tab-add" onClick={() => setPadTreeOpen(true)} aria-label="打开文档" title="打开文档"><Plus size={16} /></button>
+              <button className="pad-tab-add" onClick={() => openPadTree(true)} aria-label="打开文档" title="打开文档"><Plus size={16} /></button>
             </div>
             <div className="pad-topbar-actions">
               {/* 文档内查找：内核查找面板只随工具栏 search 挂载，手机没有；平板用同一套 MobileFindBar。 */}
@@ -864,7 +880,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
               {/* 十四批：固定 = 停靠进布局（可编辑空间随之收窄）；不固定 = 悬浮覆盖。 */}
               <button
                 className={"mb-iconbtn" + (padTreePinned ? " is-on" : "")}
-                onClick={() => setPadTreePinned((v) => !v)}
+                onClick={togglePadTreePin}
                 aria-label={padTreePinned ? "取消固定" : "固定目录"}
                 title={padTreePinned ? "取消固定（改回悬浮）" : "固定（停靠，占布局）"}
               >{padTreePinned ? <PinOff size={16} /> : <Pin size={16} />}</button>
@@ -883,8 +899,8 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
           // 随后同一手势又被判成"拉开另一侧"（261103 实测：滑走左栏 → 右大纲自己弹出来）。
           onClick={padTwoPane && ((padTreeOpen && !padTreePinned) || (padOutlineOpen && !padOutlinePinned))
             ? () => {
-                if (!padTreePinned) setPadTreeOpen(false);
-                if (!padOutlinePinned) setPadOutlineOpen(false);
+                if (!padTreePinned) closePadTree();
+                if (!padOutlinePinned) closePadOutline();
               }
             : undefined}
         >
@@ -1017,9 +1033,9 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
             rail
             open={padOutlineOpen}
             pinned={padOutlineOpen && padOutlinePinned}
-            onTogglePin={() => setPadOutlinePinned((v) => !v)}
+            onTogglePin={togglePadOutlinePin}
             editor={activeId ? (editorsRef.current.get(activeId) ?? null) : null}
-            onClose={() => setPadOutlineOpen(false)}
+            onClose={closePadOutline}
           />
         )}
       </div>
@@ -1040,7 +1056,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
       >
         <button className={"mobile-bottom-bar__item" + ((padTwoPane ? padTreeOpen : sidebarOpen) ? " active" : "")} onClick={() => (padTwoPane ? togglePadTree() : openSidebar(!sidebarOpen))} aria-label="文档树" title="文档树"><Files /></button>
         <button className={"mobile-bottom-bar__item" + (tabsOpen ? " active" : "")} onClick={() => openOverlay({ kind: "tabs" })} aria-label="标签页" title="标签页"><File />{tabs.length > 0 && <span className="bottom-bar-count">{tabs.length}</span>}</button>
-        <button className={"mobile-bottom-bar__item" + ((padTwoPane ? padOutlineOpen : outlineOpen) ? " active" : "")} onClick={() => (padTwoPane ? setPadOutlineOpen((v) => !v) : openOutline(!outlineOpen))} disabled={!outlineAvailable} aria-label="大纲" title={outlineAvailable ? "大纲" : "该文档类型没有大纲"}><List /></button>
+        <button className={"mobile-bottom-bar__item" + ((padTwoPane ? padOutlineOpen : outlineOpen) ? " active" : "")} onClick={() => (padTwoPane ? togglePadOutline() : openOutline(!outlineOpen))} disabled={!outlineAvailable} aria-label="大纲" title={outlineAvailable ? "大纲" : "该文档类型没有大纲"}><List /></button>
         {/* 261014 用户点单：最后一格「更多」已无意义（编辑在顶栏、新建在抽屉/行内）⇒ 直接把「切换笔记本」做成这一格 */}
         <button className="mobile-bottom-bar__item" onClick={() => openOverlay({ kind: "notebookSwitch" })} aria-label="切换笔记本" title={"切换笔记本（当前：" + title + "）"}><ArrowLeftRight /></button>
       </nav>

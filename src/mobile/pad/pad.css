@@ -24,6 +24,27 @@ html[data-form-factor="expanded"] {
   --pad-content-width: min(92%, 1200px);
 }
 
+/* ==== 平板 / 折叠屏的通用几何（261103 A4：从 mobile.css 整体搬来，这里是唯一归属）====
+ * 判据唯一 = html[data-form-factor]（来源 src/mobile/pad/formFactor.ts）。
+ * 口径：medium（600–799）与 expanded（≥800）内容限宽/居中、设置页加宽；compact（手机）规则不在这里。 */
+html[data-form-factor="medium"] .mobile-settings-page,
+html[data-form-factor="expanded"] .mobile-settings-page { width: min(92%, 440px); }
+html[data-form-factor="medium"] .nb-shelf,
+html[data-form-factor="medium"] .nb-list,
+html[data-form-factor="medium"] .mobile-scroll,
+html[data-form-factor="medium"] .mobile-home-tabs,
+html[data-form-factor="medium"] .mobile-doc-body .lake-editor-mount,
+html[data-form-factor="expanded"] .nb-shelf,
+html[data-form-factor="expanded"] .nb-list,
+html[data-form-factor="expanded"] .mobile-scroll,
+html[data-form-factor="expanded"] .mobile-home-tabs,
+html[data-form-factor="expanded"] .mobile-doc-body .lake-editor-mount { max-width: 760px; margin-left: auto; margin-right: auto; }
+/* ⚠️ 上一条给 .mobile-scroll 加了 auto 外边距，而它是 .mobile-tab-pane（column flex）的 **flex item**：
+ * 交叉轴上的 auto margin 会让 stretch 失效 ⇒ 宽度退化成 fit-content（261103 实测小记时间线只剩 146px）。
+ * 显式 width:100% 让 max-width 生效、auto margin 正常居中。 */
+html[data-form-factor="medium"] .mobile-scroll,
+html[data-form-factor="expanded"] .mobile-scroll { width: 100%; }
+
 /* 工作区主体：手机仍纵向单栏（与旧 DOM 等价：header 下方直接是 workspace-body） */
 .mobile-workspace-main {
   display: flex;

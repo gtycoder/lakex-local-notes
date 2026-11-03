@@ -54,12 +54,14 @@ export function OutlineSheet({ open, editor, onClose, side, rail, pinned = false
     return () => { if (timer !== undefined) window.clearTimeout(timer); };
   }, [open, editor]);
 
+  // Esc 单一 owner：手机抽屉/Sheet 自己收；**平板 rail 交给工作区**（usePadShortcuts 逐层收），
+  // 不再两处监听同一键（261103 评审 W1/W2）。
   useEffect(() => {
-    if (!open) return;
+    if (!open || rail) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+  }, [open, onClose, rail]);
 
   const jump = (id: string) => {
     try {

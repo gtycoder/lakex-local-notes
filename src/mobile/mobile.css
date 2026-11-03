@@ -1235,23 +1235,4 @@ body.lake-mobile .ne-ui-boundary-popover:has(.ne-ui-search-card-menu) { top: 120
   cursor: pointer;
 }
 
-/* ===== 平板 / 折叠屏（261102：判据改为 html[data-form-factor]，来源 src/mobile/pad/formFactor.ts）=====
- * medium（600–799）与 expanded（≥800）都算平板；内容限宽居中 / 设置页加宽；信息架构与页面层级不变。
- * 平板外壳（expanded 的悬浮目录/大纲、正文满宽、内核工具栏命中）在 src/mobile/pad/pad.css，不在这里。 */
-html[data-form-factor="medium"] .mobile-settings-page,
-html[data-form-factor="expanded"] .mobile-settings-page { width: min(92%, 440px); }
-html[data-form-factor="medium"] .nb-shelf,
-html[data-form-factor="medium"] .nb-list,
-html[data-form-factor="medium"] .mobile-scroll,
-html[data-form-factor="medium"] .mobile-home-tabs,
-html[data-form-factor="medium"] .mobile-doc-body .lake-editor-mount,
-html[data-form-factor="expanded"] .nb-shelf,
-html[data-form-factor="expanded"] .nb-list,
-html[data-form-factor="expanded"] .mobile-scroll,
-html[data-form-factor="expanded"] .mobile-home-tabs,
-html[data-form-factor="expanded"] .mobile-doc-body .lake-editor-mount { max-width: 760px; margin-left: auto; margin-right: auto; }
-/* ⚠️ 上一条给 .mobile-scroll 加了 auto 外边距，而它是 .mobile-tab-pane（column flex）的 **flex item**：
- * 交叉轴上的 auto margin 会让 stretch 失效 ⇒ 宽度退化成 fit-content（261103 实测小记时间线只剩 146px，
- * 用户报「小记特别窄」）。显式 width:100% 让 max-width 生效、auto margin 正常居中。 */
-html[data-form-factor="medium"] .mobile-scroll,
-html[data-form-factor="expanded"] .mobile-scroll { width: 100%; }
+/* 平板 / 折叠屏的通用几何已整体迁入 src/mobile/pad/pad.css（261103 A4：data-form-factor 只许出现在那里）。 */

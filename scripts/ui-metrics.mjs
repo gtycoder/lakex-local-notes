@@ -181,7 +181,10 @@ const BASELINE = {
   mobileImportant: 19,         // 移动端 !important 棘轮（主要是 edit-surface-kernel.css 压内核未分层样式）
   mobileColorLiterals: 0,      // 261016 B2 已清零：28 处收编进 src/mobile/theme/tokens.css（取值不变）⇒ 与桌面同为硬 0
   accentTextMisuse: 0,         // 261016 B2 已清零（原 36）：文字色一律 --lake-accent-text
-  crossFileDupGroups: 13,      // **同一端内**同一 (选择器,属性) 出现在 ≥2 个文件（真正的"层层套"）；跨端重复不计（设计允许 + C4-5 要求两端都写）
+  // 261103：统计口径修正（逗号选择器按**单个选择器**拆分后比较，见 splitSelectorList）——
+  // 旧口径下「a, b { x }」与「a { x }」不算重复，pad.css ↔ mobile.css 的 9 组双归属全部漏检。
+  // 修正后实测 116 组；同日把平板通用几何整体迁进 pad.css（A4 单一归属）后 **105**；此后只许降。
+  crossFileDupGroups: 105,     // **同一端内**同一 (选择器,属性) 出现在 ≥2 个文件（真正的"层层套"）；跨端重复不计（设计允许 + C4-5 要求两端都写）
 };
 
 // ── !important 允许清单（Q2，261016；用户定："确实有必要用 !important 可以保留，不是一点不能用"）──
@@ -252,6 +255,26 @@ for (const p of cssAll) {
 }
 accentTextTop.sort((a, b) => b[1] - a[1]);
 
+/** 把逗号选择器列表拆成单选择器（尊重 () [] 与引号内的逗号）。
+ *  261103 评审 W3：原先用整段 selectorText 做 key ⇒「a, b { x }」与「a { x }」不算重复，
+ *  双归属规则因此全漏检（pad.css 与 mobile.css 的 9 组同属性规则从未被看见）。 */
+function splitSelectorList(sel) {
+  const out = [];
+  let buf = '';
+  let depth = 0;
+  let quote = null;
+  for (const ch of sel) {
+    if (quote) { buf += ch; if (ch === quote) quote = null; continue; }
+    if (ch === '"' || ch === "'") { quote = ch; buf += ch; continue; }
+    if (ch === '(' || ch === '[') depth++;
+    if (ch === ')' || ch === ']') depth = Math.max(0, depth - 1);
+    if (ch === ',' && depth === 0) { out.push(buf.trim()); buf = ''; continue; }
+    buf += ch;
+  }
+  if (buf.trim()) out.push(buf.trim());
+  return out.filter(Boolean);
+}
+
 // ④ 跨文件重复 (选择器, 属性) —— 「一层层套 CSS」唯一还没有围栏的形态
 //    注意：现有 cssLayers/mobileLayers 的 dupGroups 是**按文件内**统计的，跨文件覆盖看不到。
 // ⚠️ 口径（261016 修正）：只统计**同一端内**的跨文件重复 —— 那才是「一层层套 CSS」。
@@ -263,10 +286,12 @@ const dupOwners = new Map();
 for (const p of cssAll) {
   const rel = relative(ROOT, p);
   const isMobileFile = p.includes('/src/mobile/');
-  for (const [sel, prop] of declarationsOf(p)) {
-    const key = sel + ' || ' + prop;
-    if (!dupOwners.has(key)) dupOwners.set(key, { desktop: new Set(), mobile: new Set() });
-    (isMobileFile ? dupOwners.get(key).mobile : dupOwners.get(key).desktop).add(rel);
+  for (const [selList, prop] of declarationsOf(p)) {
+    for (const sel of splitSelectorList(selList)) {
+      const key = sel + ' || ' + prop;
+      if (!dupOwners.has(key)) dupOwners.set(key, { desktop: new Set(), mobile: new Set() });
+      (isMobileFile ? dupOwners.get(key).mobile : dupOwners.get(key).desktop).add(rel);
+    }
   }
 }
 const sameEndDups = [...dupOwners.entries()].filter(([, e]) => e.desktop.size > 1 || e.mobile.size > 1);
