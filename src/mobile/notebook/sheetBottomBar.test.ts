@@ -8,12 +8,15 @@ import { describe, expect, it } from "vitest";
  */
 const read = (rel: string) => readFileSync(new URL(rel, import.meta.url), "utf8");
 const WS = read("./NotebookWorkspace.tsx");
+/** 261103 P4：胶囊拆成 WorkspaceCapsule.tsx ⇒ 类相关断言改读组件源码。 */
+const CAPSULE = read("./WorkspaceCapsule.tsx");
 const CSS = read("../mobile.css");
 const TOKENS = read("../theme/tokens.css");
 
 describe("表格页底部让位（261019）", () => {
   it("工作区胶囊按 active.kind=usheet 加上移类", () => {
-    expect(WS).toMatch(/active\?\.kind === "usheet" \? " mobile-bottom-bar--above-sheet"/);
+    expect(WS).toContain('aboveSheet={active?.kind === "usheet"}');
+    expect(CAPSULE).toContain("mobile-bottom-bar--above-sheet");
   });
 
   it("CSS 用令牌抬升（不写魔法数字），令牌 = 实测 36px", () => {

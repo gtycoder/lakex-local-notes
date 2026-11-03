@@ -4,6 +4,8 @@ import { CHROME_HIDE_DELTA, CHROME_SHOW_DELTA, CHROME_TOP_PX, chromeAfterScroll 
 
 const read = (rel: string) => readFileSync(new URL(rel, import.meta.url), "utf8");
 const WS = read("./NotebookWorkspace.tsx");
+/** 261103 P4：胶囊拆成 WorkspaceCapsule.tsx ⇒ 相关静态断言改读组件源码。 */
+const CAPSULE = read("./WorkspaceCapsule.tsx");
 const APP = read("../MobileApp.tsx");
 const CSS = read("../mobile.css");
 
@@ -34,7 +36,8 @@ describe("阅读时顶栏/底栏自动收起（261019，对齐思源）", () => 
     // 表格/多维表/画板/手写板编辑态仍隐藏；顶栏自动收起判据不变。
     expect(WS).toContain('const capsuleInEdit = !!active?.editing && (active?.kind ?? "doc") === "doc";');
     expect(WS).toContain("const capsuleHidden = chromeHiddenNow || (!!active?.editing && !capsuleInEdit);");
-    expect(WS).toContain("mobile-bottom-bar--above-dock");
+    expect(WS).toContain("aboveDock={capsuleInEdit}");
+    expect(CAPSULE).toContain("mobile-bottom-bar--above-dock");
     // 打开任意浮层 → 导航必须回来
     expect(WS).toMatch(/sidebarOpen \|\| outlineOpen \|\| tabsOpen \|\| notebookSwitchOpen\) showChrome\(\)/);
   });

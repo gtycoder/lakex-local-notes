@@ -5,7 +5,7 @@
  * 多 tab 的「顶部 tab 条」是桌面版；移动端是底部胶囊栏 #toolbarTabs 弹全屏列表（子代理已核对源码）。
  */
 import { Suspense, lazy, useCallback, useEffect, useReducer, useRef, useState } from "react";
-import { ArrowLeft, List, Files, Pencil, X, ChevronRight, ChevronLeft, FolderOpen, FolderPlus, File, Plus, Check, ArrowLeftRight, Trash, SmilePlus, Move, History, CloudUpload, FilePlus, Info, Table, Database, PenTool, PenLine, Book, Search, Star, Pin, PinOff } from "lucide-react";
+import { ArrowLeft, Pencil, X, ChevronRight, FolderOpen, FolderPlus, Plus, Check, Trash, SmilePlus, Move, History, CloudUpload, FilePlus, Info, Table, Database, PenTool, PenLine, Book, Search, Star } from "lucide-react";
 import { useLongPress } from "../ui/useLongPress";
 import { pushBackHandler } from "../ui/backStack";
 import { NoteInfoSheet } from "../ui/NoteInfoSheet";
@@ -34,6 +34,8 @@ import { useNotebookTreeActions } from "./useNotebookTreeActions";
 import { SELF_REGISTERED_OVERLAY_KINDS, useWorkspaceOverlays } from "./useWorkspaceOverlays";
 import { NotebookTreeList } from "./NotebookTreeList";
 import { useFormFactor } from "../pad/useFormFactor";
+import { WorkspaceCapsule } from "./WorkspaceCapsule";
+import { WorkspaceOutlinePanel, WorkspaceTreePanel } from "./WorkspacePanels";
 import {
   createPadShellState,
   isPadDocked,
@@ -872,26 +874,16 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
         {/* 261103 P1：面板**常驻 DOM**（与手机抽屉同构）——开合只切 class，
             滚动/展开/重命名状态不再因收起而丢、手势也不再「关闭态没有 DOM」。 */}
         {padTwoPane && (
-          <aside
-            className={"pad-tree" + (padTreeOpen ? " is-open" : "") + (padTreeOpen && padTreePinned ? " pad-tree--pinned" : "")}
-            aria-label="目录"
-            aria-hidden={padTreeOpen ? undefined : "true"}
-          >
-            <div className="pad-tree__head">
-              <span className="mb-tree-icon" aria-hidden="true">{nbIcon ? <MobileNodeIconGlyph value={nbIcon} /> : <Book size={16} />}</span>
-              <span className="pad-tree__title">{title}</span>
-              <button className="mb-iconbtn" onClick={() => openOverlay({ kind: "create", parentId: notebookId })} aria-label="新建" title="新建"><Plus size={18} /></button>
-              {/* 十四批：固定 = 停靠进布局（可编辑空间随之收窄）；不固定 = 悬浮覆盖。 */}
-              <button
-                className={"mb-iconbtn" + (padTreePinned ? " is-on" : "")}
-                onClick={togglePadTreePin}
-                aria-label={padTreePinned ? "取消固定" : "固定目录"}
-                title={padTreePinned ? "取消固定（改回悬浮）" : "固定（停靠，占布局）"}
-              >{padTreePinned ? <PinOff size={16} /> : <Pin size={16} />}</button>
-              <button className="mb-iconbtn" onClick={closePadTree} aria-label="收起目录" title="收起目录"><ChevronLeft size={18} /></button>
-            </div>
-            {treeList}
-          </aside>
+          <WorkspaceTreePanel
+            open={padTreeOpen}
+            pinned={padTreePinned}
+            title={title}
+            nbIcon={nbIcon ? <MobileNodeIconGlyph value={nbIcon} /> : <Book size={16} />}
+            list={treeList}
+            onNew={() => openOverlay({ kind: "create", parentId: notebookId })}
+            onTogglePin={togglePadTreePin}
+            onClose={closePadTree}
+          />
         )}
 
         {/* 文档层（正文） */}
@@ -1032,10 +1024,9 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
 
         {/* 平板：右侧大纲悬浮覆盖层（手机仍是 .side-panel--right 抽屉；rail 只在 expanded 渲染） */}
         {padTwoPane && (
-          <OutlineSheet
-            rail
+          <WorkspaceOutlinePanel
             open={padOutlineOpen}
-            pinned={padOutlineOpen && padOutlinePinned}
+            pinned={padOutlinePinned}
             onTogglePin={togglePadOutlinePin}
             editor={activeId ? (editorsRef.current.get(activeId) ?? null) : null}
             onClose={closePadOutline}
@@ -1047,22 +1038,21 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
           编辑与同步在顶栏右侧，避免打字时误触（用户 260909）。编辑态整条下滑淡出而不是卸载。
           十四批（用户点单）：平板**也挂同一套胶囊**（文档树/标签页/大纲/切换笔记本），和手机一模一样；
           平板顶栏只保留「返回 + 文档页签 + 查找/编辑/同步」。 */}
-      <nav
-        className={"mobile-bottom-bar"
-          + (capsuleHidden ? " mobile-bottom-bar--hidden" : "")
-          // 文档编辑态：胶囊留在 dock 上方（261103）
-          + (capsuleInEdit ? " mobile-bottom-bar--above-dock" : "")
-          // 表格（usheet）页底部有自己的 Univer 工具条（工作表标签/缩放/求和）⇒ 胶囊上移让位（261019）
-          + (active?.kind === "usheet" ? " mobile-bottom-bar--above-sheet" : "")}
-        data-prevent-swipe
-        aria-hidden={capsuleHidden ? "true" : "false"}
-      >
-        <button className={"mobile-bottom-bar__item" + ((padTwoPane ? padTreeOpen : sidebarOpen) ? " active" : "")} onClick={() => (padTwoPane ? togglePadTree() : openSidebar(!sidebarOpen))} aria-label="文档树" title="文档树"><Files /></button>
-        <button className={"mobile-bottom-bar__item" + (tabsOpen ? " active" : "")} onClick={() => openOverlay({ kind: "tabs" })} aria-label="标签页" title="标签页"><File />{tabs.length > 0 && <span className="bottom-bar-count">{tabs.length}</span>}</button>
-        <button className={"mobile-bottom-bar__item" + ((padTwoPane ? padOutlineOpen : outlineOpen) ? " active" : "")} onClick={() => (padTwoPane ? togglePadOutline() : openOutline(!outlineOpen))} disabled={!outlineAvailable} aria-label="大纲" title={outlineAvailable ? "大纲" : "该文档类型没有大纲"}><List /></button>
-        {/* 261014 用户点单：最后一格「更多」已无意义（编辑在顶栏、新建在抽屉/行内）⇒ 直接把「切换笔记本」做成这一格 */}
-        <button className="mobile-bottom-bar__item" onClick={() => openOverlay({ kind: "notebookSwitch" })} aria-label="切换笔记本" title={"切换笔记本（当前：" + title + "）"}><ArrowLeftRight /></button>
-      </nav>
+      <WorkspaceCapsule
+        hidden={capsuleHidden}
+        aboveDock={capsuleInEdit}
+        aboveSheet={active?.kind === "usheet"}
+        treeActive={!!(padTwoPane ? padTreeOpen : sidebarOpen)}
+        tabsActive={tabsOpen}
+        outlineActive={!!(padTwoPane ? padOutlineOpen : outlineOpen)}
+        outlineAvailable={outlineAvailable}
+        tabCount={tabs.length}
+        title={title}
+        onTree={() => (padTwoPane ? togglePadTree() : openSidebar(!sidebarOpen))}
+        onTabs={() => openOverlay({ kind: "tabs" })}
+        onOutline={() => (padTwoPane ? togglePadOutline() : openOutline(!outlineOpen))}
+        onSwitchNotebook={() => openOverlay({ kind: "notebookSwitch" })}
+      />
 
       {/* 目录抽屉「新建」（261014 用户点单）：**清单与桌面 Sidebar 的 CREATE_CHILD_ITEMS 同款同序**
           （文档 / 表格 / 多维表 / 画板 / 分组）。261020 起四类文档都有移动端编辑器（可直接新建并进入编辑），

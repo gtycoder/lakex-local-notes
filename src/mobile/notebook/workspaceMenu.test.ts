@@ -10,6 +10,8 @@ import { describe, expect, it } from "vitest";
 
 const read = (rel: string) => readFileSync(new URL(rel, import.meta.url), "utf8");
 const WORKSPACE = read("./NotebookWorkspace.tsx");
+/** 261103 P4：底部胶囊已拆到 WorkspaceCapsule.tsx。 */
+const CAPSULE = read("./WorkspaceCapsule.tsx");
 /** 抽屉树行已抽到 NotebookTreeList（261027 虚拟窗口化）：行内 ⋮/＋ 的断言看这份。 */
 const TREE_LIST = read("./NotebookTreeList.tsx");
 const APP = read("../MobileApp.tsx");
@@ -97,7 +99,8 @@ describe("工作区「更多」菜单（261014）", () => {
   });
 
   it("工作区胶囊最后一格 = 切换笔记本（261014：原「更多」已无意义）", () => {
-    expect(WORKSPACE).toContain('aria-label="切换笔记本"');
+    expect(CAPSULE).toContain('aria-label="切换笔记本"');
+    expect(WORKSPACE).toContain("onSwitchNotebook");
     // 胶囊那格「更多」与它的死 prop 都不许回来（编辑在顶栏、新建在抽屉/行内）；
     // 注意：目录**行**的 ⋯ 仍叫「更多」（那是行菜单），别把断言写宽成整份源码不含"更多"
     expect(WORKSPACE).not.toContain('aria-label="更多" title="更多"');
