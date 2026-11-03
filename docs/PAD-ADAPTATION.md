@@ -683,3 +683,11 @@ P0 体面单栏（1–2）→ P1 双栏（3–5）→ 工具栏 T0（5–7，§8
 - **expanded 的高度门槛（同日）**：`FORM_FACTOR_BREAKPOINTS.expandedMinHeight = 560` —— 手机横屏（842×390/915×412）判 **medium**（单栏、无固定侧栏），平板竖横屏才是 expanded。实测手机横/竖切换 ff=medium/compact。
 - **小记变窄修复（同日）**：平板块 `.mobile-scroll { max-width:760; margin:auto }` 与「它是 column flex 的 flex item」冲突 —— 交叉轴 auto margin 让 stretch 失效 ⇒ width 退化为 fit-content（实测 146px）。补 `html[data-form-factor="medium|expanded"] .mobile-scroll { width: 100% }`（实测 760；知识库 1080）。**改这块宽度时记住：flex item 上 max-width + auto margin 必须配 width:100%。**
 - **基线**：手机 6 态（home-doc 1997）+ 平板 6 态（home-doc 1897，干净夹具）都重烤，连跑两轮 0 差异（大纲不在 6 态里，加宽后平板门禁仍 0 差异）。
+
+### 10.18 第十四批之架构收敛（261103 P1–P4）
+
+- **P1 面板常驻**：`.pad-tree` / `.pad-outline` 在 expanded 下**常驻 DOM**，开合只切 `is-open`；关闭态 `transform ±100% + visibility:hidden`，手势拖动时 `.side-panel--swiping` 强制可见 ⇒ 手势跟手、树滚动/展开/重命名状态保持、入场动画删除（不再挂载/卸载）。
+- **P2 状态与归属**：每侧一个 `PanelMode`（closed/floating/pinned）取代 4 个布尔；Esc 单一 owner（OutlineSheet rail 不再自己监听）；平板通用几何从 `mobile.css` **整体迁入** `pad.css`，`padCssOwnership.test.ts` 钉「`data-form-factor` 规则只许在 pad.css」；ui-metrics 跨文件重复口径修正（逗号选择器按单选择器拆分；迁移后 105 组，只许降）。
+- **P3 判据 store**：`formFactor.ts` = 单一 store（`currentFormFactor` / `subscribeFormFactor` / 幂等 `installFormFactor`），`useFormFactor` 改 `useSyncExternalStore`；删除 `isPadLayout` / `nativeDeviceHint` / `body.lake-tablet` / `window.__lakeSetTablet`，Kotlin 侧删除 `lakeDevice` 桥、`isTabletLayout`、`pushDeviceProfile`、`onConfigurationChanged` 覆盖（**原生不再参与布局判据**）。
+- **P4 外壳状态机 + 拆件**：`notebook/shellModel.ts` 纯 reducer（`setOpen/toggle/togglePin/closeFloating/closeAll`、`padEscapeTarget` 浮层→左→右、`padPinnedPrefs` 只存 pinned，+7 例表驱动）；拆出 `WorkspaceCapsule.tsx`、`WorkspaceTreePanel` / `WorkspaceOutlinePanel`（`WorkspacePanels.tsx`），NotebookWorkspace 只留装配/会话/浮层/拖拽。
+- **验证**：全量 vitest 553 文件 3442 例；手机 + 平板 6 态 0 差异；`check:windowsweep` pass；设备实测侧栏/固定/Esc/胶囊行为与 P2 一致。

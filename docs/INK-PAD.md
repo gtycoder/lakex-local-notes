@@ -101,3 +101,14 @@ v1 不包含：OCR/手写转文字、套索、局部像素橡皮、导出 PNG/PD
 - OCR、手写转文字、套索选择、局部像素橡皮、PNG/PDF 导出未实现。
 - iPad 仅保留纯 Web 兼容性，未创建 iOS 工程，也未接 PencilKit；如果将来要追求硬件级低延迟，再单独评估原生后端与数据桥接，不提前增加抽象。
 - 手写板不是主打编辑能力；除非有明确产品价值，不因平台原生 Ink API 的吸引力而拆散当前共享实现。
+
+## 手写板 v3（261103，P5–P7）
+
+- **格式**：`inkDoc` 读 1|2|3、写 3。点编码扁平 `[x,y,p,(t)]` + 坐标/压力定点 0.01（真实样本 −52%；300 页批注 10.9MiB → 3.6MiB，−67%，16MiB 下每页批注量 ~15 → ~50 笔）。**旧端读到 v3 进只读保护**（与 v1→v2 同一先例）；v2 文件在新端照常打开、不编辑不写盘。
+- **本机视图出正文**：`activePageId` 不再落盘到正文，改设备本地 `lakex-local-notes-v3.ink-nav.<noteId>`（同 bitable-nav）；翻页不再触发整篇保存/同步。
+- **原 PDF 不再强制入库**：`sourcePdf` 只留 `{name,pageCount}`、页级 `pdf` 只留 `{page}`；移动端导入用 cacheDir 临时文件并在结束后删除（防孤儿靠既有扫描）。
+- **坏页策略**：结构字段严格；单页坏/重复 id/超容量 ⇒ 丢该页 + `droppedPages` 计数 + 可见告警（不再整篇只读）；保存会永久丢弃坏页，告警文案已写明。
+- **热路径**：`commit`/`undo`/`redo` 只换内存 doc + 标脏，序列化移到 500ms 防抖/保存时；`inkRenderCache`（id→轮廓，按页隔离）让新笔画只算一条；`pointercancel` 回滚擦除；`InkPageStrip` 视口虚拟化（±10 页）；Android `?w=` 支持 webp + 缩略图磁盘缓存（cacheDir/asset-thumbs，1024 条上限，键含 mtime+size）。
+- **导入 IO**：`pdfImport` 流式（`onPage` 逐页 + 上传池 3 路与栅格化重叠）；进度分 raster/upload（UI「导入 PDF」→「正在写入页面」）；失败/取消按 URL 定向清理本轮已上传页图（桌面 `cleanNoteOrphans`，移动新增 `bridge.cleanNoteOrphans` 写域登记）；移动导入结束删暂存 PDF + 清原生渲染缓存；启动扫陈旧 cacheDir。
+- **护栏**：`inkPerf.test`（500 笔新增 <5ms、300 页 serialize <35ms）、`InkPageStrip.test`（pageWindow）、`inkPadWiring`（v3 模型/导航/告警/池宽/清理静态契约）、`inkOpenReadOnly`（打开=只读不变）、`inkDoc.test`（v3 往返/坏页/旧版只读）。
+- **设备待办**：Kotlin 侧（webp 缩略图、cleanupCache）只过 `compileDebugKotlin`，未真机；发版前需看一次 300 页导入进度与全局预览首开。

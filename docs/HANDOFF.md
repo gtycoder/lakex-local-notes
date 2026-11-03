@@ -7,6 +7,13 @@
 
 ## 0. 最新交接（261027）
 
+### 261103 · 架构 8 段落地（P1–P8）+ 清「平板模仿桌面工具栏」冗余 · **本地提交（分支 feat/pad-touch-ui）**
+- **依据** [docs/ARCH-REVIEW-261103.md](docs/ARCH-REVIEW-261103.md) §8 实施记录（含每段验证与 P9 剩余）。用户裁决：8 段全做、彻底清冗余、自主推进。
+- **pad 外壳**：P1 面板常驻 DOM（开合切 class，手势跟手/状态保持）；P2 每侧一个 PanelMode + Esc 单一 owner + 平板通用几何整体迁入 pad.css（`padCssOwnership.test` 钉「data-form-factor 只在 pad.css」）；P3 判据收敛单一 store（useSyncExternalStore）+ **删死代码**（isPadLayout / nativeDeviceHint / body.lake-tablet / `__lakeSetTablet` / Kotlin lakeDevice+isTabletLayout+pushDeviceProfile+onConfigurationChanged）；P4 shellModel 纯 reducer（+7 例）+ 拆出 WorkspaceCapsule / WorkspaceTreePanel / WorkspaceOutlinePanel。
+- **ink**：P5 热路径（序列化移出落笔/翻页、id→path 缓存、pointercancel 回滚、页条虚拟化、Android webp 缩略图）；P6 **inkDoc v3**（点编码定点 −52%~−67%、activePageId 出正文进 localStorage `lakex-local-notes-v3.ink-nav.<noteId>`、sourcePdf 只留 name/pageCount、坏页可丢；**旧端读 v3 进只读保护**，同 v1→v2 先例）；P7 导入流式（onPage + 上传池 3 + raster/upload 两阶段进度 + 失败取消定向清理 + 暂存 PDF 与原生 cacheDir 清理）。
+- **全局**：P8 `check-arch.mjs`（首屏资源图 gzip 预算 393KB/420KB、import 方向、契约导出；接 check:bundle）+ `.github/workflows/pr.yml`（tsc/vitest/双 build/core/ui-metrics/bundle/arch）+ SQLite 懒加载（**修 thenable 启动卡死**：Capacitor 插件代理自带抛异常的 then，必须 `{plugin}` 盒子 resolve）+ assets LRU 32MiB；vitest isolate:false 实测 −40% 但 deviceConformance 依赖模块隔离 ⇒ 回退留结论。
+- **门禁**：tsc 0 / 全量 vitest **553 文件 3442 例** / check:core 0 / check:mobileui / 双 build / check:bundle / check:arch / 手机+平板 6 态 0 差异 / windowsweep pass / compileDebugKotlin 通过。
+- **未做（P9，另开）**：bridge/sync 域按需加载（首屏大头，需实测）、桌面 CodeMirror defer（407KB gz）、features→desktop 冻结违规清零、deviceConformance 拆 worker 后重开 isolate:false、NotebookWorkspace 再拆 TopBar/OverlayHost/NotePaneHost。
 ### 261103 · 架构评审（pad 外壳 / ink·PDF / 全局）+ 两个回归修复 · **本地提交（分支 feat/pad-touch-ui）**
 - **产出** [docs/ARCH-REVIEW-261103.md](docs/ARCH-REVIEW-261103.md)：3 路只读评审（pad / ink / 全局）+ 量化；TL;DR、按域问题清单、目标架构、8 段实施计划（P0–P8）、预算矩阵、明确不做清单、5 条待用户裁决。核心结论：**不整体重写**；先修 4 条主线（pad 判据/外壳状态机、ink 线性恶化、首屏预算量错对象、CI 零覆盖）。
 - **修复 C1（评审发现的真回归，261103 引入）**：平板弹键盘（adjustResize 把 innerHeight 压到 <560）会把整个外壳打回 medium（页签/树/大纲被卸载）。修法 = `formFactor` 用 `effectiveWindowHeight(innerHeight, shellHeight())`（稳定外壳高），并在窗口**宽**变化时 `resetShellHeight()`。实测 lake_tab：744→460 仍 `expanded`；真换成 1600×460（宽也变）回落 `medium`。

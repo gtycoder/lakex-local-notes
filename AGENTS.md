@@ -66,7 +66,7 @@ LakexLocalNotes = **本地优先**笔记应用：Electron 44.3 + React 18.3 + be
 19. **多维表条件求值单一来源**：视图筛选 / 关联选择器临时筛选 / 条件填色统一用 `BitableFilterRule/Node`、`filterOperatorsFor()`、`evaluateFilterNode()` 与共享编辑器；字段取值走 `bitableFieldValue()`；**禁止**为某个视图另造操作符/空值语义/条件 UI；填色的 `cell/row/column` alpha 混色与 `rowSide` 语义不得改。
 20. **云同步只有一套状态判据（`src/core/cloudState.ts`，两端共用）**：`cloudStateOf()` → `unconfigured|offline|manual|auto`；`canTouchNetwork()` 是「能不能出网」的**唯一**判据，`isCloudActive()` 是 UI（状态灯/禁用态）判据。**关闭云同步 = 完全没配置**（任何路径不出网）；离线文案统一 `cloudStateHint()`。恢复**不等网络**（立刻生效 + 后台补拉 + 明确提示）。**「启用云同步」的默认值 = 是否已配置 S3（261022 用户定稿）**：没配置时默认关（全新安装不再显示为开）、已配置的旧库默认开、显式存过的值优先——桌面 `settingsRepository.getSyncSettings()`（`hasS3Settings()`，只判行存在）与移动 `bridge/context.readSyncSettings()`（`S3_STORAGE_KEY` 是否存过）同口径；判据仍只有 `cloudState` 一套。护栏：`electron/settingsRepository.test.ts`、`electron/syncDualAB.test.ts`、`src/mobile/bridgeCloudState.test.ts`。
 21. **门禁分层（通用规则，两端各自对应）**：
-    ① **每次改动都跑**（≈24s，**这就是"门禁"的正式含义**）：`npx tsc --noEmit` + 相关 `vitest`（全库 ≈24s，含 perf 门禁）+ `git diff --check`；改样式再加 `ui-metrics` 与对应侧层围栏。
+    ① **每次改动都跑**（**实测 ≈31–36s**：553 文件 3442 例，isolate:true；isolate:false 可 −40% 但 deviceConformance 依赖模块隔离，暂不可开）：`npx tsc --noEmit` + 相关 `vitest` + `git diff --check`；改样式再加 `ui-metrics` 与对应侧层围栏。
     ② **只有动了视觉/设备那一层才跑样式/设备装置，且只跑受影响的 1~2 个态/屏**：桌面 `check-stylesnap.mjs --states "…"`；移动 `check-mobile-snap.mjs --states home-quicknotes` + 走查传屏名；**多维表专项** `npm run check:bitablesnap`（表单/内容·表格/内容·卡片 3 态，夹具自建自删）。**全量**（桌面 42 态 / 移动 6 态 + 23 屏）只在换夹具、改装置、发版前跑。
     ③ **动了外壳几何/构成，或重灌夹具 ⇒ 必须先重烤一次基线**（`--from <warm>.json --write-baseline`），否则下次全量必红；这是一次性成本。
     顺序恒定：**先本地 → 再定点 → 最后全量**。
@@ -110,6 +110,8 @@ LakexLocalNotes = **本地优先**笔记应用：Electron 44.3 + React 18.3 + be
 - **移动端正文 = 文件（261019 与桌面同构）**：正文/小记/历史/草稿落 App 私有 Data（相对路径单一来源 `src/core/noteBodyPaths.ts`，原生 `BodyStorePlugin` 原子写 + gzip 快照）；**SQLite 只存元数据/hash/同步账本/派生 text_cache+FTS**。旧库 `notes.content` 升级时**整库重置一次**（§3#7），**不要**为 content 列写兼容读取；浏览器预览的正文是内存（刷新即丢），真机/模拟器才是文件。
 - **移动端 SQLite schema = 版本门 + 批量 DDL**（261021，冷启动 DDL 2.4s → 185ms）：`applyMobileSchema` 先读 `PRAGMA user_version`（`MOBILE_SCHEMA_VERSION`，`src/mobile/data/schema.ts`），版本已到就整段跳过；首次把 DDL 拆两批走 `executeSet`（底表一批 / 条件语句一批）。**改表/索引必须 +1 版本号**；新增 DDL 只加到 `baseSchemaStatements`（不依赖读状态）或 `collectSchemaStatements`（依赖读状态），**不要再回到逐条 `db.exec`**（原生端一条 = 一次桥往返，实测 ~68ms）。
 - **移动端有自己的设计与样式层**（`src/mobile/**`，`mb-*` + 移动端 theme）：**不引桌面样式层**，两端 UI 不共享。
+- **平板外壳 = 判据 store + 外壳 reducer（261103 定稿）**：`pad/formFactor.ts` 是**单一 store**（`useSyncExternalStore`；`installFormFactor` 唯一 listener、幂等；写 `html[data-form-factor]`，**不要再加 body 类名/原生形态桥/第二份 resize 监听**）；判据 = 窗口宽 + 高（`expandedMinHeight=560`；有效高度取稳定外壳高，键盘不翻形态）。侧栏状态 = `notebook/shellModel.ts` 纯 reducer（每侧 closed/floating/pinned；`padEscapeTarget` 定 Esc 顺序；`padPinnedPrefs` 只记 pinned）——**开合/固定/收起/手势/Esc 一律 dispatch，不要在组件里再写布尔组合**。两侧栏**常驻 DOM**（开合切 class，手势才能跟手、状态才不丢）；平板通用几何**只在 `pad/pad.css`**（`padCssOwnership.test` 钉死），别再写回 `mobile.css`。
+- **手写板正文格式 = inkDoc v3（261103）**：读 1|2|3 写 3（点编码扁平 + 定点 0.01）；`activePageId` 是**设备本地视图**（`lakex-local-notes-v3.ink-nav.<noteId>`）**不许写回正文**；`sourcePdf` 只留 `{name,pageCount}`、页级 `pdf` 只留 `{page}`（原 PDF 不入库）；坏页可丢但必须计数+告警。**旧端读到 v3 进只读保护**（v1→v2 同先例）；改格式必须走同款「新端写新版、旧端只读」并同步 `docs/INK-PAD.md`。落笔/翻页**不得**做整篇序列化（走 500ms 防抖 + capture 现算）。
 - **目录/知识库节点图标与文内表情输入解耦**：两端各自实现节点选择器与图形；只共享`src/lib/nodeIcons.ts`的目录/编解码与表情数据/最近记录逻辑。移动端节点选择器不得import输入态`EmojiPanel`或使用其`mb-emoji-*`类。**默认资源页**唯一判据`nodeIconPickerMode(nodeType)`：笔记本/分组→图标，所有文档类型→表情；当前保存的资源种类不覆盖这条默认规则。目录图标值仍为≤16字符短串，不改同步字段。
 - **移动端「文档内查找」= 自研一套**（261016 实测定稿）：内核查找面板只随工具栏 `search` descriptor 挂载，而移动端**关掉了工具栏插件** ⇒ 移动端既无面板也无热键。实现 = `src/mobile/editor/MobileFindBar.tsx`（DOM 文本节点扫描 + CSS Custom Highlight API 双高亮 + `n/m`；正文变化自动重扫），**入口 = 工作区顶栏右上角**（工作区胶囊是定稿四格、且不许放搜索）。**桌面不加入口**：内核自带 ⌘F 面板已够用，别再包一层（曾加过、已按用户要求整体回滚）。语义与实测见 `docs/LAKEX-CONTRACT.md` §5.39/§5.40/§5.41。
 - **移动端入口分工（261014 用户逐条定稿，都是"别再搬回去"型契约）**：
@@ -142,9 +144,12 @@ export PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH"
 cd /Users/admin/file/local-lake/lakex-local-notes
 npm run setup:remotes                                           # 首次/新 clone：配 Gitee+GitHub 双推（remote 不入库）
 npm run setup:lakex                                             # 首次/新 clone：从私有归档恢复闭源内核（缺归档会报错并给指引）
-npx tsc --noEmit && npx vitest run && git diff --check          # 日常门禁（≈24s）
+npx tsc --noEmit && npx vitest run && git diff --check          # 日常门禁（实测 31–36s）
 npx vite build && npx vite build -c vite.mobile.config.ts       # 两条构建
 node scripts/ui-metrics.mjs && npm run check:core && npm run check:mobileui && npm run check:bundle
+# 平板/折叠屏：窗口矩阵（形态判据 + resize 状态保持）——动形态/外壳/胶囊/侧栏时跑
+npm run check:windowsweep
+# check:arch（首屏资源图字节预算 + import 方向）已链进 check:bundle（需 dist 产物）
 # 设备/视觉门禁只在动了那一层时跑，且优先只跑受影响态/屏（口径见 §3#21）
 # 起 Electron：env -u ELECTRON_RUN_AS_NODE ./node_modules/.bin/electron --disable-gpu --remote-debugging-port=9222 .
 # 多端：LAKE_USER_DATA="$TMPDIR/lake-device-b" LAKE_ASSET_PORT=19877 …（启动前临时给 vite.config.ts 的 electron 入口加 onstart: () => {}，结束必须还原）

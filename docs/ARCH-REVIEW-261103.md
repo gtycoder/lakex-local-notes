@@ -185,3 +185,22 @@
 - 3 路只读评审（arch-pad / arch-ink / arch-global，均为独立会话、未改仓库）+ Lead 复核；关键量化：`check-bundle-budget.mjs` 实际统计对象、首屏 392KB gz（入口 78 + preload 176 + CSS 138）、ink 序列化 26.7ms/10.9MiB、undo 步数（200/500/1000 笔 = 11/4/2）、pad.css 148 声明中 74 条无门禁、2275 条 toContain / 133 文件 readFileSync、测试 3413 例 34.9s。
 - 设备侧：`check:windowsweep`（7 个窗口 × 形态判据 + resize 状态保持）已入库；键盘回归在 lake_tab 实测（视口 744→460 仍 expanded；真短宽窗 1600×460 回落 medium）。
 - 本文只写长期结论；易过期事实（当前分支/提交/计数）在 HANDOFF §0。
+## 8. 实施记录（261103 当日，分支 `feat/pad-touch-ui`）
+
+用户裁决：**8 段全做**；同时**彻底清除「平板模仿桌面工具栏」遗留冗余代码**；自主推进。以下为落地状态（commit 见 git log）：
+
+| 段 | 状态 | 落地要点 / 验证 |
+|---|---|---|
+| P0 | ✅ | 键盘形态回归修复（effectiveWindowHeight）、Esc 逐层修复、`check:windowsweep`（7 窗口矩阵 + resize 状态保持）、ARCHITECTURE 过期横幅 |
+| P1 | ✅ | 树/大纲**常驻 DOM**（开合只切 class；手势跟手、滚动/展开状态保持）；去挂载入场动画 |
+| P2 | ✅ | 4 bool → 每侧一个 `PanelMode`；Esc 单一 owner；平板通用几何整体迁入 `pad.css` + `padCssOwnership.test`；ui-metrics 逗号选择器口径修正（13→105 收紧为棘轮） |
+| P3 | ✅ | `formFactor` 收敛成单一 store（`useSyncExternalStore`，installFormFactor 唯一 listener）；删 `isPadLayout` / `nativeDeviceHint` / `currentFormFactor` 旧语义 / `body.lake-tablet` / `window.__lakeSetTablet`；Kotlin 侧同步删除 `lakeDevice` / `isTabletLayout` / `pushDeviceProfile` / `onConfigurationChanged` 覆盖 |
+| P4 | ✅ | `shellModel.ts` 纯 reducer（closed/floating/pinned × 两侧 + `padEscapeTarget` + `padPinnedPrefs`，+7 例表驱动）；拆出 `WorkspaceCapsule` / `WorkspaceTreePanel` / `WorkspaceOutlinePanel`（NotebookWorkspace 1212→~1140 行） |
+| P5 | ✅ | ink 热路径：序列化移出 commit/翻页（500ms 防抖 + capture 现算）、id→path 缓存（500 笔页新增 0.4ms）、pointercancel 回滚擦除、`InkPageStrip` 虚拟化、Android `?w=` 支持 webp + 磁盘缓存；+inkPerf 护栏 |
+| P6 | ✅ | `inkDoc` v3：扁平点编码 + 定点 0.01（真实样本 **−52%**，300 页批注 10.9→3.6MiB **−67%**）；`activePageId` 移出正文 → `lakex-local-notes-v3.ink-nav.<noteId>`；`sourcePdf{name,pageCount}`、页级 `pdf:{page}`；坏页可丢 + 计数 + 告警（旧端读 v3 进只读保护，同 v1→v2 先例） |
+| P7 | ✅ | PDF 导入改**流式**：`onPage` 逐页 + 上传池 3 路与栅格化重叠；进度分 raster/upload；失败/取消按 URL 定向清理已上传页图；移动端 `bridge.cleanNoteOrphans`（写域登记）+ 删暂存 PDF + 清原生 cacheDir；启动扫陈旧目录 |
+| P8 | ✅ | `check-arch.mjs`（首屏资源图 gzip 预算 + import 方向 + 契约导出，接进 check:bundle）；`.github/workflows/pr.yml`；SQLite 懒加载（+修 **thenable 启动卡死**：Capacitor 代理自带会抛的 `then`，必须用 `{plugin}` 盒子 resolve）；assets LRU（32MiB）；vitest `isolate:false` 实测 −40% 但设备一致性测试依赖模块隔离 ⇒ 回退并留结论 |
+
+**实测（本批）**：tsc 0；全量 vitest **553 文件 3442 例**（12 skipped）；`check:core` 135/0；`check:mobileui`（!important 19/19、字号 48/49、跨文件重复 105/105）；双 build；`check:bundle`（mobile entry 78.6KB/81.9KB、CSS 137.8KB/141.3KB）；`check:arch`（mobile 393.1KB/420KB、desktop 2.79MB/3.0MB）；手机 + 平板 6 态 **0 差异**；`check:windowsweep` pass；`compileDebugKotlin` 通过。
+
+**剩余（列 P9，需另开）：** ① bridge/sync 域（s3v3 引擎/核心纯逻辑）从首屏静态图改按需（bridge chunk ~97KB gz 的大头，需实测）；② 桌面 CodeMirror 经典脚本改 defer/按需（可回收 407KB gz，届时桌面首屏预算收紧回 2.5MB）；③ `features/outline → desktop` 唯一冻结 import 违规清零；④ `deviceConformance.mobile.test.ts` 拆独立 worker 后可重开 vitest `isolate:false`；⑤ NotebookWorkspace 进一步拆 TopBar/OverlayHost/NotePaneHost（本轮已拆胶囊与两侧栏）。
