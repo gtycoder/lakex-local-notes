@@ -61,6 +61,8 @@ object AssetServer {
 
     /** JPEG 缩略图质量（PNG 忽略该参数）。 */
     private const val THUMB_JPEG_QUALITY = 85
+    /** 缩略图磁盘缓存条目上限（超出后删最旧一半）。 */
+    private const val THUMB_CACHE_MAX_FILES = 1024
 
     @Volatile
     private var sServerSocket: ServerSocket? = null
@@ -190,9 +192,11 @@ object AssetServer {
                 // 缩略图不参与 Range（没有 seek 需求），直接整段返回。
                 val thumbWidth = uri?.let { thumbWidthFor(it) }
                 if (thumbWidth != null && isThumbResizable(file.name)) {
-                    val thumb = thumbBytes(file, thumbWidth)
+                    val thumb = thumbBytes(file, thumbWidth, appContext)
                     if (thumb != null) {
-                        writeBody(out, thumb, mime, isHead)
+                        // 缩略图一律重编码成 JPEG/PNG ⇒ Content-Type 必须跟着产物走，
+                        // 不能沿用原图 mime（webp 原图 + JPEG 字节 = 浏览器解码失败）。
+                        writeBody(out, thumb, thumbMime(file.name), isHead)
                         return
                     }
                 }
@@ -301,21 +305,35 @@ object AssetServer {
      * 只对可安全重编码的位图生效。刻意排除：
      * - GIF：多帧动画 resize 后只剩首帧（宁可不缩，也不能把动图弄坏）；
      * - SVG：矢量，本就没有解码内存问题。
-     * 其余（webp/avif/bmp/tiff 等）Android 侧编解码支持不一，一律不碰 ⇒ 落回原图。
+     * - avif/bmp/tiff：Android 侧编解码支持不一（不是「一律不碰」——见下条）。
+     *
+     * **webp 必须收**（261103 P5）：PDF 导入的页图就是 WebP（桌面/原生栅格化产物），
+     * 而手写板全局预览的缩略图走 `?w=256`。此前 webp 被排除 ⇒ 该档位对页图**完全空转**，
+     * 手机端全局预览为 300 页各拉一张原图。BitmapFactory 从 API 14/18 起就能解 WebP（minSdk 24 安全）。
      */
     fun isThumbResizable(name: String): Boolean {
         val dot = name.lastIndexOf('.')
         if (dot < 0) return false
         val ext = name.substring(dot + 1).lowercase(Locale.ROOT)
-        return "png" == ext || "jpg" == ext || "jpeg" == ext
+        return "png" == ext || "jpg" == ext || "jpeg" == ext || "webp" == ext
     }
+
+    /** 缩略图产物的真实 mime（thumbBytes 输出 PNG/JPEG 两种）。 */
+    fun thumbMime(name: String): String =
+        if (name.lowercase(Locale.ROOT).endsWith(".png")) "image/png" else "image/jpeg"
 
     /**
      * 按需缩略图。先用 `inJustDecodeBounds` 只读尺寸、再按 `inSampleSize` 只解 1/N —— 这是关键：
      * 直接 `decodeFile` 一张 4000×3000 就是 48MB 位图进内存，正是我们要省掉的那笔开销。
      * 任何失败都返回 null，调用方落回原图：缩略图是纯优化，绝不能因为它把图弄没。
      */
-    private fun thumbBytes(file: File, targetWidth: Int): ByteArray? {
+    private fun thumbBytes(file: File, targetWidth: Int, appContext: Context): ByteArray? {
+        // 磁盘缓存（cacheDir/asset-thumbs）：全局预览反复开关不再为每页重解码。
+        // 键含 mtime+size ⇒ 文件被替换即失效；目录满 1024 条时删最旧的一批（缩略图纯派生、可重建）。
+        val cacheFile = thumbCacheFile(appContext, file, targetWidth)
+        try {
+            if (cacheFile.isFile) return cacheFile.readBytes()
+        } catch (t: Throwable) { /* 缓存读失败就走重建 */ }
         return try {
             val path = file.absolutePath
             val probe = BitmapFactory.Options()
@@ -338,7 +356,13 @@ object AssetServer {
                 val format = if (name.endsWith(".png")) Bitmap.CompressFormat.PNG else Bitmap.CompressFormat.JPEG
                 val out = ByteArrayOutputStream()
                 scaled.compress(format, THUMB_JPEG_QUALITY, out)
-                out.toByteArray()
+                val bytes = out.toByteArray()
+                try {
+                    cacheFile.parentFile?.mkdirs()
+                    cacheFile.writeBytes(bytes)
+                    pruneThumbCache(cacheFile.parentFile)
+                } catch (t: Throwable) { /* 缓存写失败不影响响应 */ }
+                bytes
             } finally {
                 if (scaled !== decoded) scaled.recycle()
                 decoded.recycle()
@@ -347,6 +371,21 @@ object AssetServer {
             Log.w(TAG, "thumbnail failed, fallback to original: " + file.name, t)
             null
         }
+    }
+
+    /** 缩略图缓存文件（cacheDir/asset-thumbs/<原名>-w<档位>-<mtime>-<size>.<png|jpg>）。 */
+    private fun thumbCacheFile(appContext: Context, file: File, targetWidth: Int): File {
+        val dir = File(appContext.cacheDir, "asset-thumbs")
+        val ext = if (file.name.lowercase(Locale.ROOT).endsWith(".png")) ".png" else ".jpg"
+        return File(dir, file.name + "-w" + targetWidth + "-" + file.lastModified() + "-" + file.length() + ext)
+    }
+
+    /** 缓存目录条目上限：超了删最旧的一半（持续累积会让 cacheDir 无限长，系统回收不可预期）。 */
+    private fun pruneThumbCache(dir: File?) {
+        if (dir == null) return
+        val files = dir.listFiles() ?: return
+        if (files.size <= THUMB_CACHE_MAX_FILES) return
+        files.sortedBy { it.lastModified() }.take(files.size / 2).forEach { it.delete() }
     }
 
     /** inSampleSize 只能取 2 的幂：取「解出来仍不小于目标宽」的最大值（少解、但绝不小于目标）。 */

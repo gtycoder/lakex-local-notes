@@ -20,11 +20,12 @@ import { createInkDoc, inkToBody } from "../../core/inkDoc.js";
 const INK_PAD = readFileSync(new URL("./InkPad.tsx", import.meta.url), "utf8");
 
 describe("手写板打开只读（CORE-03）", () => {
-  it("保存前判等价：等价则不标脏、不排保存；flush 落盘前再判一次", () => {
+  it("保存前判等价：等价则不标脏、不排保存；flush 落盘前再判一次（P5：序列化只在保存时）", () => {
     expect(INK_PAD).toContain('canonicalDocBody("ink"');
-    expect(INK_PAD).toMatch(/if \(sameAsDisk\(body\)\) \{\n\s*pendingSaveBodyRef\.current = null;/);
+    // P5：标脏走 scheduleSave（500ms 防抖），落盘时才 serializeDoc 并判等价
     expect(INK_PAD).toContain("onDirtyRef.current?.();");
-    expect(INK_PAD).toMatch(/if \(hadPending && pending !== null && !sameAsDisk\(pending\)\) onChangeRef\.current\?\.\(pending\);/);
+    expect(INK_PAD).toMatch(/const body = serializeDoc\(\);\n\s*if \(body === null\) return;\n\s*dirtyRef\.current = false;\n\s*if \(sameAsDisk\(body\)\) return;/);
+    expect(INK_PAD).toMatch(/const flushSave = useCallback\(\(\) => \{[\s\S]*?savePending\(\);\n\s*\}, \[savePending\]\);/);
   });
 
   it("capture：等价返回磁盘原文（不为格式差异写盘），不等价返回当前正文（笔迹不丢）", () => {

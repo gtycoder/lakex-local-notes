@@ -16,6 +16,7 @@ import {
 } from "../../core/inkDoc.js";
 import { canonicalDocBody } from "../../core/docBaseline.js";
 import { hitTestStroke, strokeToSvgPath } from "./inkGeometry.js";
+import { createStrokePathCache, renderedStrokesForPage, type RenderedStrokePath } from "./inkRenderCache.js";
 import {
   applyInkPatch,
   inkOrderDelta,
@@ -98,13 +99,6 @@ function replacePage(doc: InkDoc, page: InkPage): InkDoc {
   return { ...doc, pages: doc.pages.map((item) => (item.id === page.id ? page : item)) };
 }
 
-interface RenderedStrokePath {
-  id: string;
-  d: string;
-  color: string;
-  highlighter: boolean;
-}
-
 /** 静态笔迹层：只在页面内容变化时重渲染；正在书写时不会 reconcile 全部历史路径。 */
 const StaticStrokeLayer = memo(function StaticStrokeLayer({ strokes }: { strokes: RenderedStrokePath[] }) {
   return (
@@ -155,7 +149,8 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
   const undoRef = useRef<InkHistoryEntry[]>([]);
   const redoRef = useRef<InkHistoryEntry[]>([]);
   const saveTimerRef = useRef<number | null>(null);
-  const pendingSaveBodyRef = useRef<string | null>(null);
+  /** P5：正文是否还有未落盘的改动（序列化已移出热路径，保存时才现算）。 */
+  const dirtyRef = useRef(false);
   const activePointerRef = useRef<{ id: number; type: string } | null>(null);
   const penDownRef = useRef(false);
   const activeStrokeRef = useRef<InkStroke | null>(null);
@@ -268,9 +263,16 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
     return () => document.removeEventListener("pointerdown", onPointerDown, true);
   }, [pagesOpen, variant]);
 
-  const serializeDoc = useCallback((value: InkDoc): string | null => {
+  /**
+   * 现算整篇正文：**只在保存 / capture 时调用**。
+   * 热路径（落笔、擦除、翻页、撤销）不再序列化整篇 —— 实测 300 页批注文档一次 inkToBody 26.7ms，
+   * 每落一笔都会撞一帧预算（P5）。序列化失败（容量上限）时保留内存正文，只给可见横幅。
+   */
+  const serializeDoc = useCallback((): string | null => {
+    const current = docRef.current;
+    if (!current) return null;
     try {
-      const body = inkToBody(value);
+      const body = inkToBody(current);
       setSaveError(null);
       return body;
     } catch (error) {
@@ -279,45 +281,40 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
     }
   }, []);
 
-  const scheduleSaveBody = useCallback((body: string) => {
-    // CORE-03：与磁盘原文等价（打开后未动 / 撤销回原样）⇒ 不标脏、不排保存
-    // （只丢弃这次待写的规范化差异；绝不丢笔迹 —— 等价 = 正文与磁盘逐字节同内容）。
-    if (sameAsDisk(body)) {
-      pendingSaveBodyRef.current = null;
-      if (saveTimerRef.current !== null) {
-        window.clearTimeout(saveTimerRef.current);
-        saveTimerRef.current = null;
-      }
-      return;
+  /** 真正落一次保存：与磁盘等价 ⇒ 不写；序列化失败保留 dirty（下次编辑/退出再试，正文不丢）。 */
+  const savePending = useCallback(() => {
+    if (!dirtyRef.current) return;
+    const body = serializeDoc();
+    if (body === null) return;
+    dirtyRef.current = false;
+    if (sameAsDisk(body)) return;
+    onChangeRef.current?.(body);
+  }, [sameAsDisk, serializeDoc]);
+
+  /** 标脏 + 500ms 防抖保存（所有正文改动都走这里；序列化只在保存时发生）。 */
+  const scheduleSave = useCallback(() => {
+    if (!dirtyRef.current) {
+      dirtyRef.current = true;
+      onDirtyRef.current?.();
     }
-    onDirtyRef.current?.();
-    pendingSaveBodyRef.current = body;
     if (saveTimerRef.current !== null) window.clearTimeout(saveTimerRef.current);
     saveTimerRef.current = window.setTimeout(() => {
       saveTimerRef.current = null;
-      const pending = pendingSaveBodyRef.current;
-      pendingSaveBodyRef.current = null;
-      if (pending !== null) onChangeRef.current?.(pending);
+      savePending();
     }, SAVE_DEBOUNCE_MS);
-  }, [sameAsDisk]);
+  }, [savePending]);
 
   const flushSave = useCallback(() => {
-    const hadPending = saveTimerRef.current !== null;
     if (saveTimerRef.current !== null) {
       window.clearTimeout(saveTimerRef.current);
       saveTimerRef.current = null;
     }
-    const pending = pendingSaveBodyRef.current;
-    pendingSaveBodyRef.current = null;
-    // CORE-03：落盘前再判一次等价（撤销回原样 / 打开后没动）⇒ 不写盘。
-    if (hadPending && pending !== null && !sameAsDisk(pending)) onChangeRef.current?.(pending);
-  }, [sameAsDisk]);
+    savePending();
+  }, [savePending]);
 
   /** patch=null 表示这次改动不进入撤销栈（没有历史语义）。 */
   const commit = useCallback((next: InkDoc, patch: InkPatch | null) => {
     if (readOnly || !docRef.current) return;
-    const nextBody = serializeDoc(next);
-    if (nextBody === null) return;
     if (patch) {
       pushBoundedHistory(undoRef.current, patch);
       redoRef.current = [];
@@ -325,36 +322,32 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
     docRef.current = next;
     setDoc(next);
     setHistoryVersion((value) => value + 1);
-    scheduleSaveBody(nextBody);
-  }, [readOnly, scheduleSaveBody, serializeDoc]);
+    scheduleSave();
+  }, [readOnly, scheduleSave]);
 
   const undo = useCallback(() => {
     const entry = undoRef.current[undoRef.current.length - 1];
     if (!entry || !docRef.current) return;
     const next = applyInkPatch(docRef.current, entry.patch, "undo");
-    const nextBody = serializeDoc(next);
-    if (nextBody === null) return;
     undoRef.current.pop();
     pushBoundedHistory(redoRef.current, entry.patch);
     docRef.current = next;
     setDoc(next);
     setHistoryVersion((value) => value + 1);
-    scheduleSaveBody(nextBody);
-  }, [scheduleSaveBody, serializeDoc]);
+    scheduleSave();
+  }, [scheduleSave]);
 
   const redo = useCallback(() => {
     const entry = redoRef.current[redoRef.current.length - 1];
     if (!entry || !docRef.current) return;
     const next = applyInkPatch(docRef.current, entry.patch, "redo");
-    const nextBody = serializeDoc(next);
-    if (nextBody === null) return;
     redoRef.current.pop();
     pushBoundedHistory(undoRef.current, entry.patch);
     docRef.current = next;
     setDoc(next);
     setHistoryVersion((value) => value + 1);
-    scheduleSaveBody(nextBody);
-  }, [scheduleSaveBody, serializeDoc]);
+    scheduleSave();
+  }, [scheduleSave]);
 
   useEffect(() => {
     onEditorCaptureRef.current?.(() => {
@@ -362,19 +355,16 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
       // 变的是本地视图，不是正文改动。（桌面锁定/已删除文档同样会被保存管线 capture，这条判据
       // 保证不会因此写盘；也不能交挂载时的 diskBodyRef —— 那是「打开时」的旧原文，会覆盖刚保存的正文。）
       if (readOnlyRef.current) return latestContentRef.current;
-      const current = docRef.current;
-      if (!current) return null;
-      try {
-        const body = inkToBody(current);
-        // CORE-03：与磁盘原文等价 ⇒ 返回磁盘原文（打开后没动 / 改过又改回原样都不产生写盘）。
-        return sameAsDisk(body) ? diskBodyRef.current : body;
-      } catch { return null; }
+      const body = serializeDoc();
+      if (body === null) return null;
+      // CORE-03：与磁盘原文等价 ⇒ 返回磁盘原文（打开后没动 / 改过又改回原样都不产生写盘）。
+      return sameAsDisk(body) ? diskBodyRef.current : body;
     });
     return () => {
       onEditorCaptureRef.current?.(null);
       flushSave();
     };
-  }, [flushSave, sameAsDisk]);
+  }, [flushSave, sameAsDisk, serializeDoc]);
 
   useEffect(() => {
     if (!doc || !page) return;
@@ -482,15 +472,12 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
   const selectPage = useCallback((id: string) => {
     const current = docRef.current;
     if (!current || !current.pages.some((item) => item.id === id)) return;
-    // activePageId 是纯视图字段，不进 patch；切页不产生撤销步骤。
+    // 切页是纯视图（P5）：只更新内存 activePageId，不序列化、不标脏、不排保存。
+    // 后续真实编辑保存时 activePageId 随正文一起写回；v3 起该字段移出正文（设备本地导航）。
     const updated = { ...current, activePageId: id };
     docRef.current = updated;
     setDoc(updated);
-    if (!readOnly) {
-      const body = serializeDoc(updated);
-      if (body !== null) scheduleSaveBody(body);
-    }
-  }, [readOnly, scheduleSaveBody, serializeDoc]);
+  }, []);
 
   const movePage = useCallback((id: string, delta: -1 | 1) => {
     const current = docRef.current;
@@ -652,19 +639,25 @@ export function InkPad({ content, readOnly = false, variant, active, paneVisible
     if (event.pointerType === "pen") penDownRef.current = false;
     activeStrokeRef.current = null;
     setActiveStroke(null);
+    // 擦除被系统打断（来电/通知/子手势）时，本 pointer 已删掉的笔迹必须回滚：
+    // 这条路径不进历史栈 ⇒ 不回滚就是「笔迹没了还不能撤销」。
+    const eraseBase = eraseBeforeRef.current;
+    const current = docRef.current;
     eraseBeforeRef.current = null;
     erasedIdsRef.current = new Set();
+    if (eraseBase && current && current.pages.some((item) => item.id === eraseBase.id)) {
+      const restored = replacePage(current, eraseBase);
+      docRef.current = restored;
+      setDoc(restored);
+    }
   }, []);
 
   const activePath = useMemo(() => activeStroke ? strokeToSvgPath(activeStroke, false) : null, [activeStroke]);
+  /** 笔迹 id → SVG 轮廓缓存（P5）：落一笔/擦一条只算新笔迹，不再整页重算 perfect-freehand。 */
+  const strokePathCacheRef = useRef(createStrokePathCache());
   const renderedStrokes = useMemo<RenderedStrokePath[]>(() => {
     if (!page) return [];
-    return page.strokes.map((stroke) => ({
-      id: stroke.id,
-      d: strokeToSvgPath(stroke, true),
-      color: stroke.color,
-      highlighter: stroke.tool === "highlighter",
-    }));
+    return renderedStrokesForPage(page, strokePathCacheRef.current);
   }, [page]);
 
   if (!doc || !page) {

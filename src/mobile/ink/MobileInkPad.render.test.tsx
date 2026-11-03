@@ -91,6 +91,9 @@ beforeAll(() => {
     disconnect() { /* no-op */ }
   }
   (globalThis as { ResizeObserver?: unknown }).ResizeObserver = ResizeObserverStub;
+  // jsdom 没有 Pointer Capture API（InkPad 落笔时会调用）；补空壳，让 pointer 事件能跑到业务逻辑。
+  (Element.prototype as unknown as { setPointerCapture?: () => void }).setPointerCapture = () => undefined;
+  (Element.prototype as unknown as { releasePointerCapture?: () => void }).releasePointerCapture = () => undefined;
 });
 
 describe("MobileInkPad 阅读态（默认打开态）", () => {
@@ -329,6 +332,58 @@ describe("MobileInkPad 编辑态 · 悬浮工具坞", () => {
     const actions = Array.from(strip!.querySelectorAll(".ink-page-thumb__actions button")) as HTMLButtonElement[];
     expect(actions.filter((button) => !button.disabled).length).toBeGreaterThan(0);
 
+    await view.unmount();
+  });
+
+  it("P5 编辑态切页是纯视图：翻页不标脏、不排保存（不再整篇写盘）", async () => {
+    const onChange = vi.fn();
+    const onDirty = vi.fn();
+    const view = await mount({ content: twoPageBody(), readOnly: false, onChange, onDirty });
+    expect(pageLabel(view.container)).toBe("第 1 / 2 页");
+    await act(async () => { byLabel(view.container, "下一页")!.click(); });
+    expect(pageLabel(view.container)).toBe("第 2 / 2 页");
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 620)); });
+    expect(onDirty).not.toHaveBeenCalled();
+    expect(onChange).not.toHaveBeenCalled();
+    await view.unmount();
+  });
+
+  it("P5 擦除被 pointercancel 打断：回滚该页（笔迹不丢、不进撤销栈）", async () => {
+    const base = createInkDoc("page-1");
+    const stroke = (id: string) => ({
+      id,
+      tool: "pen" as const,
+      color: "#262626",
+      width: 2.5,
+      points: [{ x: 0, y: 0, pressure: 0.5 }, { x: 10, y: 10, pressure: 0.5 }],
+    });
+    const body = inkToBody({
+      ...base,
+      pages: [{ ...base.pages[0], strokes: [stroke("s1"), stroke("s2")] }],
+      activePageId: "page-1",
+    } as InkDoc);
+    const captures: Array<() => string | null> = [];
+    const view = await mount({
+      content: body,
+      readOnly: false,
+      onEditorCapture: (capture) => { if (capture) captures.push(capture); },
+    });
+    const capture = () => captures[captures.length - 1]();
+    expect(JSON.parse(capture()!).pages[0].strokes.length).toBe(2);
+
+    await act(async () => { byLabel(view.container, "整笔橡皮")!.click(); });
+    const svg = view.container.querySelector(".ink-page-svg")!;
+    // 手指/鼠标按下：jsdom 里 DOMRect 全 0 ⇒ 坐标落在 (0,0)，正好命中这笔迹
+    await act(async () => {
+      svg.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0, clientX: 0, clientY: 0 }));
+    });
+    expect(JSON.parse(capture()!).pages[0].strokes.length).toBe(0);
+
+    // 系统打断（来电/通知/子手势）：必须把刚擦掉的笔迹放回去
+    await act(async () => {
+      svg.dispatchEvent(new MouseEvent("pointercancel", { bubbles: true }));
+    });
+    expect(JSON.parse(capture()!).pages[0].strokes.length).toBe(2);
     await view.unmount();
   });
 });

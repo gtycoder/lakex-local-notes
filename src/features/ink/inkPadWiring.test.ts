@@ -216,14 +216,28 @@ describe("手写板正式端到端接线", () => {
     expect(MOBILE_INK_CSS).toContain("bottom: calc(var(--lake-space-md) + var(--mobile-bottom-safe-area));");
   });
 
-  it("切页与缩放是纯视图：阅读态也可用，且不触发保存", () => {
+  it("切页与缩放是纯视图：阅读态/编辑态都不触发保存（P5）", () => {
     // 顶部条里两组都在（翻页 + 缩放），且不受 readOnly 门控
     expect(INK_PAD).toContain('aria-label="上一页"');
     expect(INK_PAD).toContain('aria-label="下一页"');
     expect(INK_PAD).toContain('className="ink-zoom__value"');
-    // 切页只在编辑态写正文（阅读态只改本地视图）
-    expect(INK_PAD).toContain("const updated = { ...current, activePageId: id };");
-    expect(INK_PAD).toMatch(/if \(!readOnly\) \{\n\s+const body = serializeDoc\(updated\);/);
+    // P5：切页只改内存视图 —— 不序列化、不标脏、不排保存。
+    // （旧实现编辑态切页会整篇 inkToBody + 写盘 ⇒ 300 页文档翻 20 页 = 20 次整篇写盘 + 一次 S3 上传。）
+    expect(INK_PAD).toMatch(/const selectPage = useCallback\(\(id: string\) => \{[\s\S]*?docRef\.current = updated;\n\s*setDoc\(updated\);\n\s*\}, \[\]\);/);
+    expect(INK_PAD).not.toContain("scheduleSaveBody");
+    expect(INK_PAD).not.toContain("pendingSaveBodyRef");
+  });
+
+  it("P5 热路径不序列化整篇：commit/undo/redo 只标脏，落盘时才现算", () => {
+    // 序列化函数只在 savePending / capture 里被调用一次
+    expect(INK_PAD).toMatch(/const serializeDoc = useCallback\(\(\): string \| null => \{/);
+    expect(INK_PAD).not.toContain("const nextBody = serializeDoc(next);");
+    expect(INK_PAD).toContain("const savePending = useCallback(() => {");
+    expect(INK_PAD).toContain("dirtyRef.current = true;");
+    // 笔迹轮廓缓存：新笔画只算一条
+    expect(INK_PAD).toContain("renderedStrokesForPage(page, strokePathCacheRef.current)");
+    // 擦除被 pointercancel 打断 ⇒ 回滚该页（不回滚就是「笔迹没了还不能撤销」）
+    expect(INK_PAD).toMatch(/const eraseBase = eraseBeforeRef\.current;[\s\S]*?const restored = replacePage\(current, eraseBase\);/);
   });
 
   it("全局预览：移动端悬浮覆盖（不推画布），桌面仍是流内面板；阅读态编辑项禁用、选页可用", () => {
