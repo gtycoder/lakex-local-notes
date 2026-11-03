@@ -7,6 +7,13 @@
 
 ## 0. 最新交接（261027）
 
+### 261103 · 八批：画板输入诊断 + 回灌合并（定位「快画/快擦丢笔」）· **本地改动**
+- **背景**：用户报桌面端画板快速落笔/快速擦除不生效（三端可能都有）。
+- **复现结论（桌面 dev / CDP 9222，隔离数据目录）**：用合成鼠标事件**无法复现**「快画丢笔」——1 点 / 2 点 / 15 点 / 120 点 / 500 点笔画全部落笔并写入正文（回读 `readNote` 核对元素数）。但发现一个**确定性异常**：发生过一次 `pointerType=pen`（数位笔）笔画后，**后续鼠标笔画全部不生效**（pen 仍能画，刷新页面恢复）——疑似 plait 的输入类型切换卡住，也可能只是 CDP 合成残留，**待真机确认**。
+- **新增 `src/features/board/boardInputDiagnostics.ts`（默认关，生产零开销）**：开启 = `localStorage.setItem("lakex-local-notes-v3.board-input-debug","1")`（或运行时 `window.__lakeBoardInputDebug=true`）后重开画板标签；只观测画布 `.plait-board-container` 上的 pointerdown/move/up/cancel/lostpointercapture，按「一次落笔」聚合 `pointerType / moves / ups / cancels / lost / coalesced / 时长` 并打 `[board-input]` 单行日志；`window.__lakeBoardInputStats()` 取结构化数据（含 `mouseAfterPen`）、`__lakeBoardInputReset()` 清空。判读口径写在文件头。
+- **新增 `src/features/board/boardValueCoalescer.ts`**：把「onChange → 回灌 React state」合并到下一帧（16ms 定时器，**不用 rAF**——隐藏窗口不触发）；保存/capture 用的 `cardValueRef`/`valueRef` 仍同步更新。桌面 `BoardEditor` 与移动 `MobileBoardViewer` 都接入，避免快速落笔时「React 渲染 + 引擎按新 value 重算」叠在同一帧。
+- **校验**：桌面 dev 慢笔 12 点 / 快笔 120 点均落笔并落盘（元素 17→19、19→21）；诊断只记录画布上的 2 笔（工具栏点击已排除）；单测 `boardValueCoalescer` 3 例 + `boardInputDiagnostics` 3 例。
+- **待办**：请用户按上面开关复现一次（桌面鼠标/数位笔各一次），把 `__lakeBoardInputStats()` 输出发回；确认是「事件没进来」「plait 没消费」还是「笔→鼠标卡住」后再定修法（若确认 pen→mouse 卡住，按现有 patch 机制做最小依赖补丁或在宿主侧重置输入类型）。
 ### 261103 · 七批：AI 助手默认关闭（桌面与移动端同口径）· **本地提交**
 - **口径**：AI 助手**默认关**。桌面 `src/lib/aiEnabled.ts` 由「默认开」翻成「默认关」——判定改为 `=== "1"`，localStorage 不可用时也回落 **false**（fail-closed，不替用户打开）；移动端 `src/mobile/ai/aiSettings.ts` 本来就是默认关（`=== "1"`），本轮不做改动，仅对齐文档。
 - **行为不变的部分**：关闭只拦网络（`lib/ai.ts` 的 `runAiChat` 直接拒绝、`aiNetworkHint` 文案不变），**配置与 API Key 保留**；入口仍可见（移动端首页 AI 键仍可进页，进页显示「AI 助手已关闭」+ 去开启；桌面点入口报同一句引导），否则用户找不到开关。

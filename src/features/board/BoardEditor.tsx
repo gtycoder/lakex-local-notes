@@ -26,6 +26,8 @@ import { docBaselineSettled } from "../../core/docBaseline.js";
 import { collectBoardAssetUrls, collectInlineImageUrls, replaceInlineImageUrls } from "./boardImageAssets.js";
 import { readBoardView, writeBoardView } from "./boardViewStore.js";
 import { registerBoardExport, triggerBoardExport } from "./boardExport";
+import { createBoardValueCoalescer } from "./boardValueCoalescer";
+import { installBoardInputDebugHooks, installBoardInputDiagnostics } from "./boardInputDiagnostics";
 
 /** 自动保存防抖：画布每次操作都会回调，必须合并（与 sheet/bitable 同口径）。 */
 const AUTOSAVE_DEBOUNCE_MS = 800;
@@ -106,6 +108,14 @@ export function BoardEditor({ noteId, content, visible, readOnly: readOnlyProp, 
   const initialDoc = initial.doc;
   const [cardValue, setCardValue] = useState<BoardCardValue>(() => cardValueOf(initialDoc, initial.viewport));
   const cardValueRef = useRef(cardValue);
+  /**
+   * 261103 八批：快速落笔时每次 pointermove 都会 onChange；把**回灌给 React 的这一步**合并到下一帧
+   * （保存/capture 用的 cardValueRef 仍同步更新），避免「渲染 + 引擎重算」叠在同一帧把快笔拖慢/打断。
+   */
+  const cardValueCoalescerRef = useRef<ReturnType<typeof createBoardValueCoalescer<BoardCardValue>> | null>(null);
+  if (cardValueCoalescerRef.current === null) {
+    cardValueCoalescerRef.current = createBoardValueCoalescer<BoardCardValue>((next) => setCardValue(next));
+  }
   const viewportRef = useRef<BoardViewport | null>(initial.viewport);
   /** 宿主根节点：用来找画布内核的滚动容器（平移位置就在它的 scrollLeft/Top 上）。 */
   const hostRef = useRef<HTMLDivElement | null>(null);
@@ -114,6 +124,13 @@ export function BoardEditor({ noteId, content, visible, readOnly: readOnlyProp, 
    * 只登记已挂载的画板；从目录树导出未打开的画板时注册表里没有 ⇒ 菜单给"先打开画板"的提示。
    */
   useEffect(() => registerBoardExport(noteId, (format) => triggerBoardExport(hostRef.current, format)), [noteId]);
+  /** 261103 八批：画板输入诊断（默认关，行为零开销；开关见 boardInputDiagnostics.ts 头注释）。 */
+  useEffect(() => {
+    installBoardInputDebugHooks();
+    return installBoardInputDiagnostics(hostRef.current);
+  }, []);
+  /** 卸载时丢弃还没回灌的值（保存走 cardValueRef，不依赖这步）。 */
+  useEffect(() => () => { cardValueCoalescerRef.current?.cancel(); }, []);
   /**
    * 记下了滚动位置时必须"贴好位置再显示"——否则会先按默认视口画一帧再跳到记下的位置
    * （用户 260926 报「切换会有跳动」）。没有记过位置（首次打开）就不需要这一层。
@@ -155,6 +172,8 @@ export function BoardEditor({ noteId, content, visible, readOnly: readOnlyProp, 
     if (!visible) return;
     const remembered = viewportRef.current;
     if (!remembered) return;
+    // 外部要对齐视口：先丢掉待回灌的旧值，避免它稍后把这次对齐盖回去。
+    cardValueCoalescerRef.current?.cancel();
     setCardValue((prev) => {
       if (prev.plaitViewport === remembered) return prev;
       const nextValue: BoardCardValue = { ...prev, plaitViewport: remembered };
@@ -449,19 +468,17 @@ export function BoardEditor({ noteId, content, visible, readOnly: readOnlyProp, 
       // 只读（锁定/回收站/被他端删除）：防御性兜底，绝不接收内容变更。
       // 正常路径由 plait 的 board.options.readonly 拦住；这里挡住"内核漏放"的写入。
       if (readOnlyRef.current) return;
-      setCardValue((prev) => {
-        // previewImage（整幅 PNG）与 cardHeight 是卡片专用字段：独立文档不持久化，收下即丢。
-        const next: BoardCardValue = {
-          ...prev,
-          version: 2,
-          engine: "drawnix",
-          ...(partial.preset ? { preset: partial.preset } : {}),
-          ...(partial.presetInitialized ? { presetInitialized: true } : {}),
-          ...(Array.isArray(partial.plaitValue) ? { plaitValue: partial.plaitValue } : {}),
-        };
-        cardValueRef.current = next;
-        return next;
-      });
+      // previewImage（整幅 PNG）与 cardHeight 是卡片专用字段：独立文档不持久化，收下即丢。
+      const next: BoardCardValue = {
+        ...cardValueRef.current,
+        version: 2,
+        engine: "drawnix",
+        ...(partial.preset ? { preset: partial.preset } : {}),
+        ...(partial.presetInitialized ? { presetInitialized: true } : {}),
+        ...(Array.isArray(partial.plaitValue) ? { plaitValue: partial.plaitValue } : {}),
+      };
+      cardValueRef.current = next;
+      cardValueCoalescerRef.current?.push(next);
       // 只有内容变化才排保存；previewImage/尺寸这类派生回调不算改动。
       if (Array.isArray(partial.plaitValue) || partial.presetInitialized) scheduleSave();
       // 有内联图片就立刻提升（不等 800ms 防抖，尽量在第一次保存前完成）

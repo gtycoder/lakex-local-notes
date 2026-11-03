@@ -32,6 +32,8 @@ import {
 } from "../../features/board/boardImageAssets";
 import { native } from "../../lib/native";
 import { bridge } from "../bridge";
+import { createBoardValueCoalescer } from "../../features/board/boardValueCoalescer";
+import { installBoardInputDebugHooks, installBoardInputDiagnostics } from "../../features/board/boardInputDiagnostics";
 
 const DrawnixBoardCore = lazy(() => loadDrawnixBoardCore().then((m) => ({ default: m.default })));
 
@@ -92,6 +94,11 @@ export function MobileBoardViewer({ noteId, content, active, editing = false, on
   const [doc] = useState(() => initial.doc);
   const [cardValue, setCardValue] = useState<BoardCardValue>(() => initialCardValue(initial.doc, initial.viewport));
   const valueRef = useRef(cardValue);
+  /** 261103 八批：把「回灌给 React」合并到下一帧（valueRef/保存仍同步）；快笔不再每 move 重渲染。 */
+  const cardValueCoalescerRef = useRef<ReturnType<typeof createBoardValueCoalescer<BoardCardValue>> | null>(null);
+  if (cardValueCoalescerRef.current === null) {
+    cardValueCoalescerRef.current = createBoardValueCoalescer<BoardCardValue>((next) => setCardValue(next));
+  }
   const hostRef = useRef<HTMLDivElement | null>(null);
   /** 资产管线：data URL → 磁盘资产 URL（保存时按它换写盘口径）。 */
   const promotedRef = useRef<Map<string, string>>(new Map());
@@ -123,6 +130,14 @@ export function MobileBoardViewer({ noteId, content, active, editing = false, on
   useEffect(() => {
     if (active) setEverActive(true);
   }, [active]);
+
+  /** 261103 八批：画板输入诊断（默认关，生产零开销；开关见 boardInputDiagnostics.ts 头注释）。 */
+  useEffect(() => {
+    installBoardInputDebugHooks();
+    return installBoardInputDiagnostics(hostRef.current);
+  }, []);
+  /** 卸载时丢弃还没回灌的值（保存走 valueRef，不依赖这一步）。 */
+  useEffect(() => () => { cardValueCoalescerRef.current?.cancel(); }, []);
 
   useEffect(() => {
     const observer = new MutationObserver(() =>
@@ -229,18 +244,16 @@ export function MobileBoardViewer({ noteId, content, active, editing = false, on
 
   const handleCoreChange = useCallback<NonNullable<DrawnixBoardCoreProps["onChange"]>>((partial) => {
     if (!editingRef.current || bodyUnreadableRef.current) return;
-    setCardValue((prev) => {
-      const next: BoardCardValue = {
-        ...prev,
-        version: 2,
-        engine: "drawnix",
-        ...(partial.preset ? { preset: partial.preset } : {}),
-        ...(partial.presetInitialized ? { presetInitialized: true } : {}),
-        ...(Array.isArray(partial.plaitValue) ? { plaitValue: partial.plaitValue } : {}),
-      };
-      valueRef.current = next;
-      return next;
-    });
+    const next: BoardCardValue = {
+      ...valueRef.current,
+      version: 2,
+      engine: "drawnix",
+      ...(partial.preset ? { preset: partial.preset } : {}),
+      ...(partial.presetInitialized ? { presetInitialized: true } : {}),
+      ...(Array.isArray(partial.plaitValue) ? { plaitValue: partial.plaitValue } : {}),
+    };
+    valueRef.current = next;
+    cardValueCoalescerRef.current?.push(next);
     if (Array.isArray(partial.plaitValue) || partial.presetInitialized) {
       dirtyRef.current = true;
       scheduleSave();
@@ -285,6 +298,7 @@ export function MobileBoardViewer({ noteId, content, active, editing = false, on
             plaitValue: replaceInlineImageUrls(valueRef.current.plaitValue, mapping) as unknown[],
           };
           valueRef.current = next;
+          cardValueCoalescerRef.current?.cancel();
           setCardValue(next);
         }
       } catch (error) {
