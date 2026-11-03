@@ -669,4 +669,5 @@ P0 体面单栏（1–2）→ P1 双栏（3–5）→ 工具栏 T0（5–7，§8
 - **画布高度**：`.mobile-doc-body > .lake-editor` 与 `.lake-editor-mount` 在 expanded 下 `height:100%`（内核按内容撑成 ~85px，挂载实高 85→612）。**已知**：点画布空白处不会落光标（内核只认引擎内点击，与手机一致）——如需"点空白即定位文末"要另加 JS。
 - **键盘**：dock 的 `.med-btn--kb` 就是收起/展开键盘（手机同一条）；十三批的 `.pad-kb-dismiss` 浮钮与顶栏 `onPointerDown` 已删。
 - **门禁**：tsc 0 / vitest 548 文件 3408 例 / check:core 135 / check:mobileui / 双 build / check:bundle / diff-check；`mobileLayers` 基线收紧（pad.css 144、usheet-chrome 542、bitable 896）。
-- **设备**：见 HANDOFF §0 第十四批（lake_tab，胶囊 4 项 / 固定前后 position 与正文宽度 / 编辑态 dock 与内核工具栏 0 / 知识库 976·9 列 / 画布 612）。平板 6 态重烤后两轮 0 差异（home-doc 1913→1922），手机 6 态 0 差异。
+- **手势 = 胶囊**：`usePanelDrag` 在 expanded 下把 `getPanel/getMask/isOpen/commit` 指向**悬浮左/右栏**（手机抽屉在平板不渲染）⇒ 横向手势与胶囊打开的是同一个面板；关闭态没有 DOM 可跟手，松手后以 250ms 入场动画出现（reduced-motion 已登记），打开态仍可跟手滑走。**不要**再让平板走 `.side-panel` 抽屉（会带出遮罩/空抽屉，且没有 Pin）。点正文收起用 `onClick` 不是 `onPointerDown`（手势从正文起手，pointerdown 会把面板提前收掉再被同一手势判成拉开另一侧）。
+- **设备**：见 HANDOFF §0 第十四批（lake_tab，胶囊 4 项 / 固定前后 position 与正文宽度 / 编辑态 dock 与内核工具栏 0 / 知识库 976·9 列 / 画布 612）；手势实测两向开合都落在 `.pad-tree`/`.pad-outline`（phone drawer / mask = 0）。平板 6 态重烤后两轮 0 差异（home-doc 1913→1912），手机 6 态 0 差异。

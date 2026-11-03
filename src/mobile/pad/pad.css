@@ -238,6 +238,19 @@ html[data-form-factor="expanded"] .pad-outline--pinned {
   min-height: 0;
 }
 
+/* 悬浮面板入场（胶囊与横向手势走同一条；只动 opacity/transform，250ms ease-out；停靠态不播）。
+ * 手势在关闭态没有 DOM 可跟手 ⇒ 松手后面板以这条入场动画出现，观感与手机抽屉一致。 */
+@keyframes pad-panel-in-left { from { opacity: 0; transform: translateX(-12px); } }
+@keyframes pad-panel-in-right { from { opacity: 0; transform: translateX(12px); } }
+
+html[data-form-factor="expanded"] .pad-tree:not(.pad-tree--pinned) {
+  animation: pad-panel-in-left var(--mobile-duration-panel) var(--mobile-ease-panel);
+}
+
+html[data-form-factor="expanded"] .pad-outline:not(.pad-outline--pinned) {
+  animation: pad-panel-in-right var(--mobile-duration-panel) var(--mobile-ease-panel);
+}
+
 /* 左树/右大纲头里的「固定」按钮：选中态走 kit 图标钮的 active 口径。 */
 .pad-tree__head .mb-iconbtn.is-on,
 .pad-outline__head .mb-iconbtn.is-on { color: var(--lake-accent-text); background: var(--lake-bg-selected); }

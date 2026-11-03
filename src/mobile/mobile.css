@@ -378,7 +378,8 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
 .mobile-icon-btn:active { transform: scale(.9); }
 @media (prefers-reduced-motion: reduce) {
   .mobile-drawer-mask, .mobile-drawer,
-  .mobile-model, .mobile-model-mask, .mobile-dropdown, .side-panel, .side-mask, .mobile-settings-page, .mobile-settings-mask { animation: none; }
+  .mobile-model, .mobile-model-mask, .mobile-dropdown, .side-panel, .side-mask, .mobile-settings-page, .mobile-settings-mask,
+  .pad-tree, .pad-outline { animation: none; }
   .mobile-htab, .mobile-fab, .mobile-icon-btn, .mobile-drawer-item, .mobile-doc-row, .mobile-qcard,
   .bottom-bar-btn, .mobile-bottom-bar, .med-btn, .med-ins-item, .med-f-btn { transition: none; }
   .mobile-fab:active, .bottom-bar-btn:active { transform: none; }

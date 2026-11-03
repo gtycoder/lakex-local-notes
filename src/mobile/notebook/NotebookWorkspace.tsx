@@ -171,8 +171,10 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     if (v) openOverlay({ kind: "sidebar" }); else closeOverlay("sidebar");
   }, [closeOverlay, openOverlay, padTwoPane]);
   const openOutline = useCallback((v: boolean) => {
+    // 平板里「大纲」= 悬浮右栏（与胶囊同一个组件）；手机才拉右侧抽屉。
+    if (padTwoPane) { setPadOutlineOpen(v); return; }
     if (v) openOverlay({ kind: "outline" }); else closeOverlay("outline");
-  }, [closeOverlay, openOverlay]);
+  }, [closeOverlay, openOverlay, padTwoPane]);
   const autoOpenedRef = useRef(false);
   const closingRef = useRef(false);
 
@@ -243,9 +245,13 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
 
   // 跟手开合抽屉（思源 touch.ts 口径：内容区任意横滑、面板跟手、释放按 1/3 屏宽提交）
   usePanelDrag({
-    getPanel: (side: PanelSide) => document.querySelector<HTMLElement>(side === "left" ? ".side-panel--left" : ".side-panel--right"),
-    getMask: (side: PanelSide) => document.querySelector<HTMLElement>('[data-panel-mask="' + side + '"]'),
-    isOpen: (side: PanelSide) => (side === "left" ? sidebarOpen : outlineOpen),
+    // 平板没有手机抽屉：手势直接开合**悬浮左栏/右栏**（与胶囊同一个组件）——
+    // 关闭态没有 DOM ⇒ 拖动时没有跟手预览（可接受），松手后面板以入场动画出现；打开态仍可跟手滑走。
+    getPanel: (side: PanelSide) => padTwoPane
+      ? document.querySelector<HTMLElement>(side === "left" ? ".pad-tree" : ".pad-outline")
+      : document.querySelector<HTMLElement>(side === "left" ? ".side-panel--left" : ".side-panel--right"),
+    getMask: (side: PanelSide) => (padTwoPane ? null : document.querySelector<HTMLElement>('[data-panel-mask="' + side + '"]')),
+    isOpen: (side: PanelSide) => (padTwoPane ? (side === "left" ? padTreeOpen : padOutlineOpen) : (side === "left" ? sidebarOpen : outlineOpen)),
     commit: (side: PanelSide, open: boolean) => { if (side === "left") openSidebar(open); else openOutline(open); },
     // 没有大纲时左滑不再拉出空面板（右滑开目录不受影响）；已展开的大纲仍可滑走关闭
     canOpen: (side: PanelSide) => side === "left" || outlineAvailable,
@@ -848,8 +854,10 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
         <section
           className="mobile-workspace-body"
           ref={bodyRef}
-          // 十三批：悬浮树/大纲没有遮罩 ⇒ 点正文就收起（否则 280/240 宽会一直盖在正文上）。
-          onPointerDown={padTwoPane && ((padTreeOpen && !padTreePinned) || (padOutlineOpen && !padOutlinePinned))
+          // 悬浮树/大纲没有遮罩 ⇒ 点正文就收起（否则 280/240 宽会一直盖在正文上）。
+          // ⚠️ 必须用 onClick 而不是 onPointerDown：横向手势也是从正文起手的，pointerdown 会先把面板收掉，
+          // 随后同一手势又被判成"拉开另一侧"（261103 实测：滑走左栏 → 右大纲自己弹出来）。
+          onClick={padTwoPane && ((padTreeOpen && !padTreePinned) || (padOutlineOpen && !padOutlinePinned))
             ? () => {
                 if (!padTreePinned) setPadTreeOpen(false);
                 if (!padOutlinePinned) setPadOutlineOpen(false);
@@ -1034,7 +1042,9 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
         }}
       />
 
-      {/* 左目录抽屉 (.side-panel) */}
+      {/* 左目录抽屉 (.side-panel)：**只在手机渲染**。平板用 .pad-tree（悬浮/可固定），
+          且不再渲染这层空抽屉 —— 否则手势会去动画一个空 .side-panel 并把遮罩带出来（261103 用户报「手势一出来目录栏就固定了」）。 */}
+      {!padTwoPane && (<>
       <div className={"side-mask" + (sidebarOpen ? " on" : "")} data-panel-mask="left" onClick={() => openSidebar(false)} />
       <aside className={"side-panel side-panel--left" + (sidebarOpen ? " on" : "")} aria-label="目录">
         <div className="toolbar toolbar--border toolbar--dark" data-prevent-swipe>
@@ -1063,11 +1073,12 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
         {/* 树行 = 可见行扁平数组 + 视口窗口化（2000 节点时不一次挂 2000 个按钮，见 NotebookTreeList）。
             虚拟滚动下拖拽/长按仍靠行上的 data-node-id 与 .side-panel-body 命中（手指下的行必在窗口内）。
             平板时树挂在悬浮左栏（.pad-tree），抽屉不渲染第二份实例。 */}
-        {!padTwoPane && treeList}
+        {treeList}
       </aside>
+      </>)}
 
-      {/* 右大纲抽屉 (.side-panel--right) */}
-      <OutlineSheet side open={outlineOpen} editor={activeId ? (editorsRef.current.get(activeId) ?? null) : null} onClose={() => closeOverlay("outline")} />
+      {/* 右大纲抽屉 (.side-panel--right)：同样只在手机渲染；平板用 .pad-outline（悬浮/可固定）。 */}
+      {!padTwoPane && <OutlineSheet side open={outlineOpen} editor={activeId ? (editorsRef.current.get(activeId) ?? null) : null} onClose={() => closeOverlay("outline")} />}
 
       {/* 全屏 tab 列表 (.model，思源 #toolbarTabs → #model) */}
       {tabsOpen && (
