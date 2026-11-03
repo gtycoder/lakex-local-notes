@@ -36,6 +36,8 @@ export function useSettingsSectionData(sections: {
   const [cacheSummary, setCacheSummary] = useState<CacheSummary | null>(null);
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
   const [diagnostics, setDiagnostics] = useState<Diagnostics | null>(null);
+  /** 261103 十四批：本地资源占用（note-assets + quick-notes/assets；原生统计，Web 预览为 null）。 */
+  const [assetUsage, setAssetUsage] = useState<{ files: number; bytes: number } | null>(null);
 
   const updateHistory = useCallback((patch: Partial<HistoryMobileSettings>) => {
     setHistory((current) => {
@@ -68,6 +70,10 @@ export function useSettingsSectionData(sections: {
     void bridge.listOrphanAssets().then(setOrphans).catch((error) => {
       reportNativeActionError("读取孤儿资源", error);
       setOrphans([]);
+    });
+    void bridge.getAssetUsage().then(setAssetUsage).catch((error) => {
+      reportNativeActionError("读取资源占用", error);
+      setAssetUsage(null);
     });
   }, [resourcesOpen]);
 
@@ -143,5 +149,6 @@ export function useSettingsSectionData(sections: {
     clearCache,
     appInfo,
     diagnostics,
+    assetUsage,
   };
 }

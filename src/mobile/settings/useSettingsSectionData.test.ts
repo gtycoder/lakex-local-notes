@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   deleteOrphanAsset: vi.fn(),
   gcDeepCleanup: vi.fn(),
   getDiagnostics: vi.fn(),
+  getAssetUsage: vi.fn(),
   getAppInfo: vi.fn(),
   getCacheSummary: vi.fn(),
   clearDerivedCaches: vi.fn(),
@@ -27,6 +28,7 @@ vi.mock("../bridge", () => ({
     deleteOrphanAsset: mocks.deleteOrphanAsset,
     gcDeepCleanup: mocks.gcDeepCleanup,
     getDiagnostics: mocks.getDiagnostics,
+    getAssetUsage: mocks.getAssetUsage,
   },
 }));
 vi.mock("../native/appInfoPort", () => ({ mobileAppInfoPort: { getAppInfo: mocks.getAppInfo } }));
@@ -85,6 +87,7 @@ beforeEach(() => {
   mocks.deleteOrphanAsset.mockResolvedValue(undefined);
   mocks.gcDeepCleanup.mockResolvedValue({ deletedCount: 2, candidateCount: 4, keys: ["a", "b"] });
   mocks.getDiagnostics.mockResolvedValue(diagnostics);
+  mocks.getAssetUsage.mockResolvedValue({ files: 12, bytes: 2048 });
   mocks.getAppInfo.mockResolvedValue({ name: "LakexLocalNotes", version: "1", build: "1", protocolVersion: 1, platform: "android" });
   mocks.getCacheSummary.mockResolvedValue(cache);
   mocks.clearDerivedCaches.mockResolvedValue({ cleared: { runtimeBlobBytes: 3 } });
@@ -107,6 +110,8 @@ describe("useSettingsSectionData", () => {
     expect(data.cacheSummary).toEqual(cache);
     expect(data.appInfo?.name).toBe("LakexLocalNotes");
     expect(data.diagnostics).toEqual(diagnostics);
+    // 261103 十四批：资源页同时读「本地资源占用」（原生统计；Web 预览返回 null ⇒ UI 显示统计中）
+    expect(data.assetUsage).toEqual({ files: 12, bytes: 2048 });
   });
 
   it("历史设置乐观更新；保存失败时回读真实值并提示", async () => {

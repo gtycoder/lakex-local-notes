@@ -50,6 +50,8 @@ class MainActivity : BridgeActivity() {
         registerPlugin(ShowKeyboardPlugin::class.java)
         // PDF 逐页栅格化（261102 T2 spike）：系统 PdfRenderer，PDF 导入 → 图片页的前置能力
         registerPlugin(PdfRenderPlugin::class.java)
+        // 本地资产占用统计（261103 十四批）：资源页「本地资源占用」只读遍历 note-assets / quick-notes/assets
+        registerPlugin(AssetUsagePlugin::class.java)
         // AI 原生通道（261023 P0）：Key 只在原生，流式 SSE
         registerPlugin(AiChatPlugin::class.java)
         super.onCreate(savedInstanceState)

@@ -8,6 +8,12 @@
 
 ## 0. 最新交接（261027）
 
+### 261103 · 十四批：移动端资源页「本地资源占用」（原生只读统计）· **本地改动**
+- **缺口**：桌面「关于 → 数据与存储 → 内容统计」已有「资源 N 个，X MB」，移动端只有资源**数量**（`diag.resourceCount`）、没有字节数；JS 侧逐文件 stat 每次 ≈68ms 桥往返，几万文件不可用。
+- **做法**：新增只读原生插件 `AssetUsagePlugin`（`@CapacitorPlugin(name="AssetUsage")`，后台线程递归 walk `filesDir/note-assets` + `quick-notes/assets`，返回 `{files, bytes}`，不删不改）；`MainActivity` 注册；TS `src/mobile/native/assetUsage.ts`（仅原生端，Web 预览/测试返回 null）；bridge 暴露 `getAssetUsage()` 并登记进 `lakeNative` 调试契约（62 → 63）；资源页新增一行「本地资源占用」显示 `N 个文件，X MB`。
+- **设备实测（emulator-5554 / 1080×2400，新 APK）**：先经 bridge 上传一张探针 PNG（202B）→ `lakeNative.getAssetUsage()` = `{files:1, bytes:202}`；打开 设置 → 资源管理，页面显示「本地资源占用 … 1 个文件，202 B」（与原生统计一致）。
+- **测试**：`useSettingsSectionData.test` 增加 getAssetUsage 断言（resourcesOpen 时读取）；`lakeNativeContract.test` 计数 62→63（显式改）；Kotlin 侧仅过 `compileDebugKotlin`（构建通过），真机手写笔场景不涉及本插件。
+- **门禁**：tsc / 全量 vitest / check:mobileui / diff-check 全绿；APK 构建成功。
 ### 261103 · 十三批：手写板导入体积提示（P2 落地）+ 翻页预解码（P1 实测否决）· **本地改动**
 - **P2（已落地）**：图片页 / PDF 导入完成后给一条 6s 自动消失的状态提示，说明页数与**本次上传的资产字节**（= 首次同步要传的量）：`已导入 3 页，图片约 1.5 MB（首次同步会一起上传）`、PDF 截断时 `已导入 12 页（共 20 页）…`。
   · 实现：`inkImportNotice.ts`（纯格式化/文案）+ `importInkImagePages`/`importPdfPages` 累计 `uploadedBytes`（upload 结果带 size 时累计；缺省 0）；`InkPad` 用现有中性 banner（`data-ink-import-notice`）展示、定时清除。

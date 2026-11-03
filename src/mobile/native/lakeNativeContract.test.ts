@@ -71,9 +71,9 @@ describe("lakeNative 调试契约", () => {
 
   it("清单无重复，且计数固定（改契约必须显式改这里）", () => {
     expect(new Set(LAKE_NATIVE_METHODS).size).toBe(LAKE_NATIVE_METHODS.length);
-    expect(LAKE_NATIVE_BRIDGE_METHODS.length).toBe(62); // 261027 +ensureNoteAssets / +ensureQuickNoteAssets；261028 +restoreFromCloud
+    expect(LAKE_NATIVE_BRIDGE_METHODS.length).toBe(63); // 261103 十四批 +getAssetUsage（本地资源占用）
     expect(LAKE_NATIVE_EXTRA_METHODS.length).toBe(1);
-    expect(LAKE_NATIVE_METHODS.length).toBe(63);
+    expect(LAKE_NATIVE_METHODS.length).toBe(64);
   });
 
   it("派生结果 = 声明清单，且缺失即抛（不静默少一个方法）", () => {

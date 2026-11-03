@@ -13,6 +13,7 @@ import { normalizeNoteKind } from "../../core/noteKind.js";
 import { readNoteBody } from "../data/noteBodies";
 import { assets, assertResourceBytes, ensureDb, runWrite } from "./context";
 import * as orphanAssetRepository from "../data/orphanAssetRepository";
+import { readAssetUsage } from "../native/assetUsage";
 
 /** 系统默认应用打开本地文件（与 DocumentEditor 同插件）。 */
 const OpenFile = registerPlugin<{
@@ -48,6 +49,14 @@ export const assetsDomain = {
     const uri = await Filesystem.getUri({ path: `note-assets/${noteId}/${filename}`, directory: Directory.Data });
     await OpenFile.saveAs({ path: uri.uri.replace(/^file:\/\//, ""), name: name || filename });
     return { ok: true };
+  },
+
+  /**
+   * 本地资源占用（261103 十四批）：note-assets + quick-notes/assets 的文件数与字节数。
+   * 原生一次性递归统计；Web 预览 / 测试环境返回 null（UI 隐藏该行）。
+   */
+  async getAssetUsage(): Promise<{ files: number; bytes: number } | null> {
+    return await readAssetUsage();
   },
 
   /** 全局孤儿资源列表（对齐桌面 listOrphanAssets）。 */

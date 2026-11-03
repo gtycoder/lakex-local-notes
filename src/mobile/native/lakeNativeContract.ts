@@ -20,6 +20,7 @@ export const LAKE_NATIVE_BRIDGE_METHODS = [
   "listNoteHistory", "getNoteInfo", "readAssetPreview", "previewHistorySnapshot",
   "openAttachment", "saveAssetAs", "restoreHistory", "cleanupHistory",
   "getHistorySettings", "saveHistorySettings", "snapshotNote", "getDiagnostics",
+  "getAssetUsage", // 261103 十四批：本地资源占用（note-assets + quick-notes/assets 的文件数/字节数）
   "createQuickNote", "deleteQuickNote", "saveQuickNote", "saveQuickNoteWithImages",
   "getQuickNoteImage", "listQuickNoteTrash", "restoreQuickNote", "purgeQuickNote", "syncQuickNote",
   "getCloudState", "getSyncSettings", "saveSyncSettings",

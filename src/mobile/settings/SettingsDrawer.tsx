@@ -100,6 +100,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
     clearCache,
     appInfo,
     diagnostics: diag,
+    assetUsage,
   } = useSettingsSectionData({
     historyOpen: open && view === "history",
     resourcesOpen: open && view === "resources",
@@ -426,6 +427,11 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
 
           {view === "resources" && (
             <Group title="资源管理" icon={<Images size={16} />}>
+              <Block itemId="resources-usage" name="本地资源占用" desc="正文引用的图片与附件实际占用（含手写板 / PDF 页图与表格图片；不含历史快照与数据库）。">
+                <span className="mb-row__meta">
+                  {assetUsage ? assetUsage.files + " 个文件，" + formatBytes(assetUsage.bytes) : "统计中…"}
+                </span>
+              </Block>
               <Block itemId="resources-clean" name="未引用的本地文件" desc="删除正文图片后残留的本地文件（不会被上传，可安全清理）。">
                 <button className="mb-btn mb-btn--primary" disabled={orphans.length === 0 || orphanBusy} onClick={() => void cleanOrphans()}>清理全部（{orphans.length}）</button>
               </Block>

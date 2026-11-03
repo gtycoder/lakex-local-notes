@@ -33,8 +33,9 @@ describe("互斥域判据（F16 红线化）", () => {
     // 新 getHomeSnapshot/getWorkspaceSnapshot/getQuickNotePage 均为只读 none。
     // 261028 +getSyncDiagnostics（只读最近 3 轮同步诊断，device_state/localStorage）。
     // 261029 Del-6：-markTombstonesPublished（移动 bridge 该记账方法随 published_at 一并删除；发布判据改 waterline）
-    expect(NONE_OPS.length).toBe(42);
-    expect(ALL.length).toBe(87); // 38 写（+cleanNoteOrphans，261103 P7） + 4 维护 + 3 高优 + 42 none
+    // 261103 十四批 +getAssetUsage（本地资源占用统计：只读遍历文件系统，不写库、不出网）。
+    expect(NONE_OPS.length).toBe(43);
+    expect(ALL.length).toBe(88); // 38 写（+cleanNoteOrphans，261103 P7） + 4 维护 + 3 高优 + 43 none
   });
 
   it("I1（F16）：写域与维护域必须是不同互斥域", () => {

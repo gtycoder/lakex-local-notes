@@ -107,7 +107,7 @@ export const NONE_OPS = [
   "init", "getHomeSnapshot", "getWorkspaceSnapshot", "getQuickNotePage", "readNote", "noteGoneState", "searchNotes",
   "readQuickNote", "getQuickNoteDraft", "getQuickNoteImage", "listQuickNoteTrash", "listQuickNoteTags",
   "listNoteHistory", "getNoteInfo", "readAssetPreview", "previewHistorySnapshot",
-  "listOrphanAssets", "listS3GcPending", "getHistorySettings",
+  "listOrphanAssets", "getAssetUsage", "listS3GcPending", "getHistorySettings",
   "listTrashed", "listTrashTree", "listDeletedNotesForSync", "readDeletedContent",
   "getSyncSettings", "getS3Settings", "getDiagnostics", "isFolderPurged",
   // SD-13（261028）：只读最近 3 轮同步诊断（device_state / localStorage），不写库、不出网
