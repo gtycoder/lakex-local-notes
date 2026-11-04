@@ -8,6 +8,13 @@
 
 ## 0. 最新交接（261027）
 
+### 261104 · 字号/行高合并成一行步进器 + 两端对齐 + 首行缩进文案收口 · **本地改动**
+- **字号 + 行高合并一行**（用户点单）：两行各一枚「− 当前 +」步进器，共用 `src/mobile/ui/ValueStepper.tsx`（`FontSizeStepper` / `LineHeightStepper` 都是薄包装；几何/无障碍一套）。「更多」面板 5 行 → **4 行**（公式行 / 缩进行 / 字号+行高 / 画图族）。
+- **行高可回显、可回默认**：设备实测 `queryCommandValue("lineHeight")` 默认返回 **null**、设置后返回数值；「默认」档 = **不传参**调用 `execCommand("lineHeight")`（传 `"default"` 会抛 `lakex_editor_assert_error`）。档位顺序照内核下拉 `[1, 1.15, 1.5, 默认, 2, 2.5, 3]`。
+- **两端对齐（justify）接通**：内核 `alignment` 接受 `justify`（实测 `ne-alignment=justify`），Aa 对齐从 3 档补到 **4 档**（属补入口，不是缺口）。
+- **首行缩进文案收口**：内核 `firstIndent` 是**整篇**把 root 下所有 `p` 设 `text-indent`、只 set 不 remove（outdent 也不清）⇒ 改名「**全文首行缩进**」，不再当"当前段开关"。`clearFormat` 只清行内 mark（与 Word/语雀一致）——这两条从 P2 缺口表**关闭**。
+- **设备复验（lake_mobile，重建 APK）**：更多面板 4 行、合并行两张卡、字号 16→19、行高 2→2.5→2；Aa 面板 clientHeight = scrollHeight = 312；点「两端对齐」后 `ne-alignment=justify`。
+- **门禁**：tsc 0 / 全量 vitest **585 文件 3570 例（3558 通过 + 12 skipped）** / mobileLayers editor-dock 基线 265→280 / `git diff --check` 0。
 ### 261104 · 十八批：手写板大纲 / 书签（设备本地）+ inkDoc 随机健壮性护栏 + 真机验收清单 · **本地改动**
 - **书签 = 设备本地视图**（`features/ink/inkBookmarks.ts`）：key `…v3.ink-bookmarks.<noteId>`，不进正文/不标脏/不进 S3；单篇上限 200；坏值静默回退；删页顺手清理。
 - **大纲 = 纯派生**（`features/ink/inkOutline.ts`）：`annotated`（默认：有笔迹 / 有页图 / 有书签）与 `all`；`inkOutlineSummary`、`bookmarkPageIds` 两个小纯函数。
@@ -597,7 +604,7 @@
 - 261103 各批已全部提交并双推（20:08–20:21）：`ce442482`（usheet 35 行/双光标/整行整列）、`733ab4aa`（多维表头部+短名）、`2b29d9e8`（画板工具条+第 4 处补丁）、`75c46902`（ink 14 色）、`ae14ffd1`（胶囊/横滑/安全区/页签 44/useKeyboard）、`1f164f2b`（门禁装置+三份基线重烤）、`1e74c3f8`（文档）、`fdf9c455`（AI 默认关）。
 - 261103 之后（261104 凌晨，均已双推）：ink 三修（`912143da` 落笔/擦除按批渲染、`8f32a5ca` 中断不丢笔）+ 性能观测 `af169f96` + 图片页背景下采样 `8dc83a87` + 导入体积提示 `388232db` + 资源页本地占用 `1adcde27`。
 
-**门禁基线**（261104 11:28 实测；工作树含其他会话在途改动）：tsc 0 / 全量 vitest **581 文件 3552 例（570 文件通过 + 11 skipped；3540 例通过 + 12 skipped）** / `check:core` 136 文件 0 / `check:mobileui` / 双 build / `check:bundle` / `check:arch`（移动首屏 ≈340.8KB / 预算 360KB；桌面 ≈541.2KB / 预算 600KB；import 违规 0）/ `git diff --check` 0。设备：手机 6 态 + 平板 6 态 + 多维表 3 态已按六批新壳**重烤**、连跑 0 差异；23 屏走查 ok；`check:windowsweep` pass。clean debug APK ≈37.95–37.97MB（量体积必须 clean 后 `stat`，增量构建会虚增到 ~42MB）。
+**门禁基线**（261104 11:53 实测；工作树含其他会话在途改动）：tsc 0 / 全量 vitest **585 文件 3570 例（574 文件通过 + 11 skipped；3558 例通过 + 12 skipped）** / `check:core` 136 文件 0 / `check:mobileui` / 双 build / `check:bundle` / `check:arch`（移动首屏 ≈340.8KB / 预算 360KB；桌面 ≈541.2KB / 预算 600KB；import 违规 0）/ `git diff --check` 0。设备：手机 6 态 + 平板 6 态 + 多维表 3 态已按六批新壳**重烤**、连跑 0 差异；23 屏走查 ok；`check:windowsweep` pass。clean debug APK ≈37.95–37.97MB（量体积必须 clean 后 `stat`，增量构建会虚增到 ~42MB）。
 
 **环境（本机实测 261103）**：Node **v24.18.0**（`$HOME/.nvm/versions/node/v24.18.0/bin`）；JDK **21** `/Library/Java/JavaVirtualMachines/jdk-21.jdk`（系统默认 java 是 1.8，手跑 gradlew 必须指 21）；Android SDK `/opt/homebrew/share/android-commandlinetools`；AVD **7 个**：lake_mobile / lake_gate / lake_tab / lake_body / lake_lock / lake_meas / lake_sheet；CDP **9335 开发 / 9336 门禁 / 9340 平板与窗口矩阵**。Android 唯一运行手册 = `docs/MOBILE-OPS.md`（serial 号段以 `adb devices` 现场为准，文档里的 5556/5562 已不一致）。
 
@@ -630,7 +637,7 @@
 
 **P2（体验缺口 / 长期）**
 
-6. **移动端文本格式（261104 设备实测已收口，别再按旧文档当缺口）**：H1–H6 / 字号 / 颜色 / 对齐 / 列表 / 缩进 / 行高 / 上下标 / 清除格式**全部生效**；余下两件事：① 首行缩进是**全文级且不可取消**（换选区级实现或去掉入口）；② clearFormat 只清行内、不清块级（语义待定）。（Aa 面板溢出已在 261104 修：字号搬进「更多」+ 面板下限 312 ⇒ 实测 312/312 无裁切。）未接入口：justify / unlink（两端皆无）/ replace（移动只查不换）/ style→code·quote / 表格块级命令族 / 分栏 3·4 / alert 类型。另有：画图插入项解禁（文本绘图仍置灰）；移动视图拖拽排序；PdfRender `cacheDir` 清理；页面级 6 处裸 `env(safe-area-inset-bottom)`。
+6. **移动端文本格式（261104 设备实测已收口，别再按旧文档当缺口）**：H1–H6 / 字号 / 颜色 / 对齐 / 列表 / 缩进 / 行高 / 上下标 / 清除格式**全部生效**；**字号+行高已合并成一行步进器**（更多面板 4 行），对齐已是 4 档（含两端对齐）。已关闭、别再立项：首行缩进（内核只做整篇 set、无 undo ⇒ 文案改「全文首行缩进」）；clearFormat（只清行内 mark，与 Word/语雀一致）；Aa 面板溢出（字号搬进「更多」+ 面板下限 312 ⇒ 312/312 无裁切）。未接入口：unlink（两端皆无）/ replace（移动只查不换）/ style→code·quote / 表格块级命令族 / 分栏 3·4 / alert 类型。另有：画图插入项解禁（文本绘图仍置灰）；移动视图拖拽排序；PdfRender `cacheDir` 清理；页面级 6 处裸 `env(safe-area-inset-bottom)`。
 7. 墓碑 payload 老化（261025 定「后续优化」）；大库阈值探测（>2 万文档 / 索引 3–5MB）；**真实 Android 物理机验收从未做过**；PARITY 残余（移动 qnotes 缺正文恢复未接 v3、移动云清理无 UI 入口、目录恢复后 `deleted_notes` 残留）。
 8. 顶栏真 44 需另开「44 → 52」需求（六批 A4 结论）；平板内容画布「点空白落光标」（待用户裁决）。
 

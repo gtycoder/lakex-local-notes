@@ -9,7 +9,7 @@
  *
  * 档位算术全在下面的纯函数里（单测 fontSizeStepper.test.ts），组件只负责渲染。
  */
-import { Minus, Plus } from "lucide-react";
+import { ValueStepper, nearestIndex } from "./ValueStepper";
 
 /** 无值时的默认字号（= 内核默认正文字号）。 */
 export const FONT_SIZE_FALLBACK = 16;
@@ -88,18 +88,18 @@ export interface FontSizeStepperProps {
   onPick: (px: number) => void;
 }
 
-/** − 当前 + 步进器（几何/交互与表格 T 面板同款；样式在 editor-dock.css 的 .med-fsize*）。 */
+/** − 当前 + 步进器（几何/交互与表格 T 面板同款；样式在 editor-dock.css 的 .med-f-step*）。
+ *  261104 二次收口：与行高共用通用件 ValueStepper（同一交互语义一套几何），这里只绑定字号档位与格式。 */
 export function FontSizeStepper({ value, sizes, onPick }: FontSizeStepperProps) {
-  const state = fontStepState(value, sizes);
   return (
-    <div className="med-f-card med-fsize" role="group" aria-label="字号">
-      <button type="button" className="med-f-btn" aria-label="减小字号" title="减小字号" disabled={state.atMin} onClick={() => onPick(state.prev)}>
-        <Minus size={18} />
-      </button>
-      <span className="med-fsize__value" aria-label="当前字号">{state.current}</span>
-      <button type="button" className="med-f-btn" aria-label="增大字号" title="增大字号" disabled={state.atMax} onClick={() => onPick(state.next)}>
-        <Plus size={18} />
-      </button>
-    </div>
+    <ValueStepper
+      label="字号"
+      ariaLabel="字号"
+      value={value}
+      values={sizes}
+      fallbackIndex={nearestIndex(sizes, FONT_SIZE_FALLBACK)}
+      display={(raw) => String(currentFontSize(typeof raw === "number" ? raw : null, sizes))}
+      onPick={(next) => { if (typeof next === "number") onPick(next); }}
+    />
   );
 }

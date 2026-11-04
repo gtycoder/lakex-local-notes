@@ -282,21 +282,27 @@
 .med-f-card.med-f-link { display: block; background: transparent; padding: 0; }
 .med-f-card.med-f-link .ne-link-editor { width: 100%; max-width: 100%; }
 
-/* 字号步进「− 当前 +」（261104）：261012 原为「Aa」面板最底部一行 8 钮，但面板内容 354px > 可视 312px，
-   被裁掉的正好是那行（点按落空）⇒ 用户批准改成步进器、搬进「更多」面板与行高同组。
-   几何抄表格 T 面板（−/+ 18 图标、高 40 走 .med-f-btn、宽 132、当前值 tabular-nums、首尾档置灰）；
+/* 步进器「− 当前 +」（261104）：字号与行高共用同一件（.med-f-step，见 ui/ValueStepper.tsx）。
+   字号原为「Aa」面板最底部一行 8 钮，但面板内容 354px > 可视 312px，被裁掉的正好是那行（点按落空）；
+   用户批准改成步进器、搬进「更多」，并把行高也做成步进器 ⇒ **两枚并排一行**。
+   几何抄表格 T 面板（−/+ 18 图标、高 40 走 .med-f-btn、当前值 tabular-nums、首尾档置灰）；
    ⚠️ 只对齐几何，不引用 usheet 的 .mb-usheet-* 样式（两套 UI 层互不依赖）。
-   档位不写在这里：见 EditorDock 的 MOBILE_FONT_SIZES（内核 12 档去掉最小 12/13 与最大 40/48）。 */
-.med-fsize { flex: 0 0 132px; }
-.med-fsize__value {
+   档位不写在这里：字号见 EditorDock 的 MOBILE_FONT_SIZES、行高见 ui/LineHeightStepper.tsx。 */
+.med-f-step { flex: 1 1 0; min-width: 0; display: flex; align-items: center; gap: 2px; padding: 0 4px; }
+.med-f-step .med-f-btn { flex: 0 0 32px; min-width: 32px; }
+.med-f-step__label { flex: 0 0 auto; padding-left: 4px; font-size: 12px; line-height: 1; color: var(--lake-text-3); }
+.med-f-step__value {
   flex: 1 1 0;
+  min-width: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
   font-size: var(--lake-font-size-body);
   font-weight: 600;
   color: var(--lake-text-1);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .med-outline-item { display: block; width: 100%; border: none; background: transparent; padding: 0 20px; min-height: var(--mb-ctl-h); line-height: var(--mb-ctl-h); font-size: 16px; text-align: left; cursor: pointer; color: var(--lake-text-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; -webkit-tap-highlight-color: transparent; }

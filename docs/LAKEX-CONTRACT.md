@@ -2037,3 +2037,14 @@ DOM 文本节点扫描（移动端文档 `disableVirtualRendering:true`，整篇
 - 实现：新增 `src/mobile/editor/formatPainter.ts` —— `formatPaintService(editor)` 按内核 hub 的 service token 取 `IFormatRenderService`（`editor.renderer.getService({ value: "IFormatRenderService" })`，hub 实际用 `token.value` 做键）；`beginFormatPainter` = 已在刷形态 → `clearPaintFormat()`（"cancelled"），否则 `recordPaintFormat(true)`（"recorded"），服务缺失 → "unavailable"。dock 的「格式刷」改走它，**不再无参 execCommand('paintFormat')**。
 - **时序坑（本修复的关键，不写下来会重犯）**：记录后**不能**紧接着收面板/还焦点。内核 formatPainter 订阅 `afterExecCommand`：收到 `commandName === 'selection'` 且 `_mouseDown` 为假时，会**立刻**把已记录格式应用到当前选区，并在 `_once` 时 `clearPaintFormat()`。收面板（hide 档）产生的 selection 命令会把刚记录的刷子当场消费掉——首版实现正是这样：toast 已提示「已开启」，但 `.ne-paint-formatting` 立刻消失、点目标无效。⇒ 记录用 `setTimeout(..., 160)` 排在面板收起之后；已在刷形态的「取消」不必等待（0ms）。
 - 设备复验（同一 AVD，重建 APK 后）：点「格式刷」→ 250ms 后 `.ne-paint-formatting` 在、`_activeFormat` = `{"blockNodeName":"p","textAttrs":{"bold":true}}`；点目标段 → 目标 `ne-bold="true"`、刷形态自动退出；再次点「格式刷」→ 取消并提示「已退出格式刷」。护栏：`src/mobile/editor/formatPainter.test.ts`（7 例：token/服务缺失/抛错/记录/取消/不可用）。
+
+### 5.46 lineHeight 可查询/可重置、alignment 接受 justify、firstIndent 只作用于全文（261104 设备实测 + 读码）
+
+**口径**：lake_mobile（emulator-5554）+ debug APK，CDP 驱动；editor 实例取自 dock 的 React fiber（`memoizedProps.editor`），命令走 `editor.execCommand` / `queryCommandValue`。
+
+- **lineHeight 可查询**：`queryCommandValue("lineHeight")` 在默认（未设置）时返回 **null**，设置后返回数值（如 `2`）。这给了移动端步进器回显的判据，不用解析 DOM。
+- **lineHeight 的重置 = 不传参**：`execCommand("lineHeight")` / 传 `undefined` / `null` / `0` 都能清掉 `ne-line-height`（回到默认）；**传 `"default"` 会抛** `lakex_editor_assert_error setAttribute lineHeight failed: lineHeight is not a valid attribute for p`（kernel helper node.ts:304）。内核工具栏下拉里的「default」槽只是 UI 值，落到命令必须转成无参调用。
+- **档位值域 = `[1, 1.15, 1.5, 2, 2.5, 3]`**（bundle `Ik.values`）；内核下拉把 `default` 插在 1.5 与 2 之间（`emQ = [1,1.15,1.5,default,2,2.5,3]`）。
+- **alignment 接受 `justify`**：`execCommand("alignment","justify")` 生效（DOM `ne-alignment=justify`、computed `text-align: justify`）——官方 08 只列 left/center/right，实测四档（移动端 Aa 对齐已补第 4 档）。
+- **firstIndent 是整篇操作**：命令实现（bundle）为 `document.rootNode.children.filter(nodeName==="p").forEach(node => job.setAttribute(node, "textIndent", true))` —— 对**所有** `p` 生效、**只 set 不 remove**；实测 `outdent` 前后 `ne-text-indent` 计数不变（2 → 2），没有撤销路径 ⇒ UI 文案必须写「全文首行缩进」，不能当"当前段开关"。
+- **clearFormat 只清行内 mark**：实测清除加粗后 `ne-bold` 移除，但 `ne-alignment` / `ne-indent` / `ne-line-height` / 段落样式保留（与 Word/语雀的"清除字符格式"一致，不算 bug）。

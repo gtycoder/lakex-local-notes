@@ -12,7 +12,7 @@
  *   编辑面的滚动容器只留工具栏的固定留白（80px）⇒ 面板⇄输入法切换时内容盒高度不变（不跳）。
  */
 import { useEffect, useRef, useState, useCallback, type ReactNode } from "react";
-import { Plus, Bold, Italic, Underline, Strikethrough, List, ListOrdered, ListTodo, Keyboard, KeyboardOff, X, Image as ImageIcon, Camera, Paperclip, Table2, Quote, Minus, Code, SquareCode, Music, Video, Highlighter, Tag, Undo, Redo, Pilcrow, Type, MoreHorizontal, Columns2, FoldVertical, Calendar, CalendarDays, Smile, FileSymlink, Lock, Sigma, AlignLeft, AlignCenter, AlignRight, Link2, Superscript, Subscript, IndentIncrease, IndentDecrease, Paintbrush, Eraser, ArrowRightFromLine } from "lucide-react";
+import { Plus, Bold, Italic, Underline, Strikethrough, List, ListOrdered, ListTodo, Keyboard, KeyboardOff, X, Image as ImageIcon, Camera, Paperclip, Table2, Quote, Minus, Code, SquareCode, Music, Video, Highlighter, Tag, Undo, Redo, Pilcrow, Type, MoreHorizontal, Columns2, FoldVertical, Calendar, CalendarDays, Smile, FileSymlink, Lock, Sigma, AlignLeft, AlignCenter, AlignRight, AlignJustify, Link2, Superscript, Subscript, IndentIncrease, IndentDecrease, Paintbrush, Eraser, ArrowRightFromLine } from "lucide-react";
 import type { LakeEditorInstance } from "../../features/editor/lakeRuntime";
 import { editorCommandFailureMessage, execEditorCommandResult } from "./execCommand";
 import { beginFormatPainter, formatPaintService } from "./formatPainter";
@@ -38,6 +38,7 @@ import { useEditorCommandDispatcher } from "./useEditorCommandDispatcher";
 import { EmojiPanel } from "../ui/EmojiPanel";
 // 字号步进器（261104）：移动端共用控件，几何/交互与表格 T 面板同款；档位算术在它自己的纯函数里（有单测）。
 import { FontSizeStepper } from "../ui/FontSizeStepper";
+import { LineHeightStepper, type LineHeightValue } from "../ui/LineHeightStepper";
 // 原生弹键盘兜底（261015）：WebView 里程序化 focus 不保证弹软键盘，点「⌨ 展开键盘」时用它补一次。
 import { showNativeKeyboard } from "../native/nativeKeyboard";
 
@@ -49,8 +50,13 @@ type DockAction = (anchor?: HTMLElement | null) => void;
  *  `glyph` = 用数字/字形代替图标（B6：行高 6 档没有专属图标，直接显示 1 / 1.15 / …） */
 type DockItem = { label: string; Icon?: typeof ImageIcon; glyph?: string; run?: DockAction; disabled?: boolean };
 
-/** 行高档位：**直接取内核 lineHeight 命令的取值域**（bundle `Ik.values = [1, 1.15, 1.5, 2, 2.5, 3]`）。 */
-const LINE_HEIGHT_VALUES = [1, 1.15, 1.5, 2, 2.5, 3] as const;
+/** 行高回显值（activeValues.lineHeight 是字符串）→ 步进器取值：空串 = 内核默认（未设置）。 */
+function lineHeightValue(raw: string): LineHeightValue | null {
+  if (!raw) return null;
+  if (raw === "default") return "default";
+  const value = Number(raw);
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
 
 // 输入法抑制（setbackIme）与焦点守卫已迁到 useEditSurface.ts —— 261014 P2 收口：
 // 「外壳高度 / 输入法抑制 / 焦点守卫」三件事只有那一处实现，本组件只负责面板状态与渲染。
@@ -72,10 +78,12 @@ const COMMAND_ICONS: Record<string, typeof Bold> = {
 const MOBILE_FONT_SIZES: readonly number[] = FONT_SIZE_OPTIONS.slice(2, -2);
 
 /** 对齐（内核 `alignment`：left/center/right；语雀移动端也只给这三档）。 */
-const ALIGN_ITEMS: ReadonlyArray<{ value: "left" | "center" | "right"; label: string; Icon: typeof Bold }> = [
+const ALIGN_ITEMS: ReadonlyArray<{ value: "left" | "center" | "right" | "justify"; label: string; Icon: typeof Bold }> = [
   { value: "left", label: "左对齐", Icon: AlignLeft },
   { value: "center", label: "居中", Icon: AlignCenter },
   { value: "right", label: "右对齐", Icon: AlignRight },
+  // 261104：内核 alignment 接受 justify（设备实测 ne-alignment=justify / text-align:justify），补第 4 档。
+  { value: "justify", label: "两端对齐", Icon: AlignJustify },
 ];
 
 /** 需要监测实时状态（生效高亮）的命令 */
@@ -141,10 +149,10 @@ function isCommandActive(editor: LakeEditorInstance | null, name: string): boole
 }
 
 /** 选区处的「取值型」命令状态（字号/对齐/字色/背景色）—— 面板高亮与色板回显的唯一来源。 */
-interface SelectionValues { fontSize: number | null; alignment: string; color: string; bgColor: string }
-const EMPTY_VALUES: SelectionValues = { fontSize: null, alignment: "", color: "", bgColor: "" };
+interface SelectionValues { fontSize: number | null; lineHeight: string; alignment: string; color: string; bgColor: string }
+const EMPTY_VALUES: SelectionValues = { fontSize: null, lineHeight: "", alignment: "", color: "", bgColor: "" };
 function sameValues(a: SelectionValues, b: SelectionValues): boolean {
-  return a.fontSize === b.fontSize && a.alignment === b.alignment && a.color === b.color && a.bgColor === b.bgColor;
+  return a.fontSize === b.fontSize && a.lineHeight === b.lineHeight && a.alignment === b.alignment && a.color === b.color && a.bgColor === b.bgColor;
 }
 /** 读内核查询值（解数组、异常归 undefined；调用方自行把 undefined/null 当"无值"，不误点亮）。 */
 function readCommandValue(editor: LakeEditorInstance, name: string, arg?: unknown): unknown {
@@ -175,6 +183,8 @@ function useActiveCommandStates(editor: LakeEditorInstance | null) {
     // ⚠️ 内核把字号序列化成 lake-fontsize-N（N = px × 0.75，不是 px）⇒ **不许解析 class**，只能读 queryCommandValue。
     const nextValues: SelectionValues = {
       fontSize: toFontSize(readCommandValue(ed, "fontsize", false)),
+      // 261104：行高也进回显（默认返回 null → valueText = ""），供「− 当前 +」步进器显示。
+      lineHeight: valueText(ed, "lineHeight"),
       alignment: valueText(ed, "alignment"),
       color: valueText(ed, "color"),
       bgColor: valueText(ed, "bgColor"),
@@ -487,9 +497,10 @@ export function EditorDock({ editor, editing, undoBackend = "kernel", undoLimits
     }, alreadyActive ? 0 : 160);
   };
 
-  // 「更多」面板：**按行分组**（261017 二改用户点单）——公式/上下标/格式刷一行、缩进三项一行、字号一行、行高一行、画图占位一行。
-  // 文本增强命令全部走内核 `renderer.execCommand`；行高档位 = 内核 `lineHeight` 的取值域（[1, 1.15, 1.5, 2, 2.5, 3]）。
-  // 行条目两种形态：`items` = 图标/文字/数值按钮行；`custom` = 整块自定义控件（字号步进器），共用同一 .med-f-row 几何。
+  // 「更多」面板：**按行分组**（261017 二改用户点单；261104 二次收口）——公式/上下标/格式刷一行、缩进三项一行、
+  // **字号 + 行高同一行**（两枚「− 当前 +」步进器）、画图占位一行。
+  // 文本增强命令全部走内核 `renderer.execCommand`。
+  // 行条目两种形态：`items` = 图标/文字/数值按钮行；`custom` = 整块自定义控件（步进器），共用同一 .med-f-row 几何。
   // ⚠️ 撤销/重做已移到**主工具栏**（261017：工具栏最右、更多之后、键盘之前），不再在本面板。
   const moreRows: ReadonlyArray<{ key: string; label?: string; items?: ReadonlyArray<DockItem>; custom?: () => ReactNode }> = [
     { key: "inline", items: [
@@ -500,18 +511,21 @@ export function EditorDock({ editor, editing, undoBackend = "kernel", undoLimits
       { label: "格式刷", Icon: Paintbrush, run: onFormatPainter },
     ] },
     { key: "indent", items: [
-      { label: "首行缩进", Icon: ArrowRightFromLine, run: () => runPanel("firstIndent") },
+      // 261104 澄清文案：内核 firstIndent 是**整篇**把 root 下所有 p 设 text-indent（只 set 不 remove，无法撤销）
+      // ⇒ 名字改成「全文首行缩进」，避免被当成"当前段"的开关。
+      { label: "全文首行缩进", Icon: ArrowRightFromLine, run: () => runPanel("firstIndent") },
       { label: "减少缩进", Icon: IndentDecrease, run: () => runPanel("outdent") },
       { label: "增加缩进", Icon: IndentIncrease, run: () => runPanel("indent") },
     ] },
-    // 字号（261104 用户批准：从「Aa」面板搬进「更多」面板、与行高同组 —— 261012 原放 Aa 最底部，
-    // 但 Aa 面板内容 354px > 可视 312px，被裁掉的正好是那行字号 ⇒ 点按落空。改成「− 当前 +」步进器）。
-    // 命令仍走既有 `fontsize`（px 入参），回显读 activeValues.fontSize（内核查询已是 px，别再解析 class）。
-    { key: "font-size", custom: () => (
-      <FontSizeStepper value={activeValues.fontSize} sizes={MOBILE_FONT_SIZES} onPick={(px) => runPanel("fontsize", px)} />
+    // 字号 + 行高（261104 二次收口，用户点单）：两行合并成**一行**，各自「− 当前 +」步进器。
+    // 字号 = 内核 8 档（MOBILE_FONT_SIZES，px 入参）；行高 = 内核 lineHeight 取值域 + 「默认」档。
+    // 行高命令：数值直接传；「默认」= **不传参**调用（设备实测 execCommand("lineHeight") 可清 ne-line-height，传 "default" 会抛错）。
+    { key: "size-line", custom: () => (
+      <>
+        <div className="med-f-card med-f-step"><FontSizeStepper value={activeValues.fontSize} sizes={MOBILE_FONT_SIZES} onPick={(px) => runPanel("fontsize", px)} /></div>
+        <div className="med-f-card med-f-step"><LineHeightStepper value={lineHeightValue(activeValues.lineHeight)} onPick={(v) => (v === "default" ? runPanel("lineHeight") : runPanel("lineHeight", v))} /></div>
+      </>
     ) },
-    // 行高：行首给「行高」标签（用户 261017：第三行需要知道是行高），6 个档位只显示数值。
-    { key: "line-height", label: "行高", items: LINE_HEIGHT_VALUES.map((v) => ({ label: "行高", glyph: String(v), run: () => runPanel("lineHeight", v) })) },
     // 画图族：纯文字（用户 261017）；Drawnix 四类共用同一画板内核，261019 P0 解禁。
     // 文本绘图仍单独评估（不是同一套 Drawnix 场景），先保持置灰，不在本批偷偷放出一个未验收入口。
     { key: "drawing", items: [
