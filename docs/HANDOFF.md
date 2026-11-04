@@ -8,6 +8,13 @@
 
 ## 0. 最新交接（261027）
 
+### 261104 · 二十一批：页内贴图交互（插入/选中/拖动/删除）+ 备注与文字块进全文搜索 · **本地改动**
+- **贴图插入**（桌面底部「插入贴图」）：宿主选图 + 上传资产 → `placeInkPageImage` 按**页宽 40%、保持原图比例、居中**落到当前页（用户定稿）。纯函数集 `inkPageImages.ts`（place/hit/move/resize/remove，5 例单测）。
+- **选中 / 拖动 / 删除**：点图 = 选中（SVG 虚线框 + HTML 浮层 ×）；拖动只改内存（docRef+setDoc），**松手才 commit 一次**；`pointercancel`/丢捕获还原；拖出页面钳到「至少 40px 在页内」；Delete/Backspace 删除。缩放函数已就绪，手柄 UI 下一批。
+- **两个零件独立成组**：`InkImageSelection.tsx`（虚线框 + 删除按钮）—— 跨端样式护栏只检查 SHARED 名单（InkPad 在内），独立组件就不逼移动端补样式。
+- **搜索**：`inkToSearchText` 从「恒空串」改为提取 **页备注 + 页内文字块**（笔迹仍不可搜）；快速路径先查 `\"note\"`/`\"texts\"` 标记，绝大多数保存路径零额外开销。
+- **测试**：`inkPageImages.test`（5）+ `inkPageImages.render.test`（插入落点/自动选中/删除落盘/未注入无入口）；`inkDoc.test` 搜索用例改为「备注/文字块进、笔迹不进、坏正文不抛、超长截断」。
+- **门禁**：tsc / vitest（578 文件 3574 例）/ cssLayers（shared 191→205）/ crossEnd / mobileui / diff-check 全绿。
 ### 261104 · 修「收/放键盘 + 点工具导致光标漂移」（嵌套 contenteditable 焦点误迁移）· **本地修复**
 - **现象**（用户实机报，严重）：收起/展开键盘、点工具（面板开合/行内命令）后光标跑到别处或消失、正文滚动跳变。
 - **根因（不是本轮 dock/字号/胶囊改动引入；键盘与光标代码本轮未动）**：`useEditSurface.applyImeSuppression` 的全局分支遍历**所有可见 contenteditable** 逐个 blur/focus。正文里一旦有嵌套编辑宿主（分栏卡 `NE-COLUMNS-CONTENT`、表格/卡片宿主），循环最后 focus 的是**最后一个嵌套宿主** ⇒ 焦点/选区被搬过去，浏览器再把正文滚到底（实测修复前：收键盘后 selection 丢失、`body.scrollTop 0→507`、caret rect 归零）。

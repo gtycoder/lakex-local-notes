@@ -21,6 +21,8 @@ import { inkStrokeStyle } from "./inkStrokeStyle.js";
 import { InkExportMenu, type InkPageExportFormat } from "./InkExportMenu.js";
 import { InkOutlinePanel } from "./InkOutlinePanel.js";
 import { notedPageIds } from "./inkOutline.js";
+import { movePageImage, placeInkPageImage, removePageImage } from "./inkPageImages.js";
+import { InkImageRemoveButton, InkImageSelectionRect } from "./InkImageSelection.js";
 import { inkPerfDebugEnabled, installInkPerfHooks, recordInkPerf } from "./inkPerfStats";
 import { inkImageImportNotice, inkPdfImportNotice } from "./inkImportNotice";
 import { installInkInputDiagnostics, installPointerInputDebugHooks } from "../board/boardInputDiagnostics";
@@ -79,6 +81,11 @@ export interface InkPadProps {
    * 返回 null = 用户取消（选目录时点了取消）。
    */
   onExportPage?: (input: { pageIds: string[]; format: InkPageExportFormat }) => Promise<{ exportPath: string } | null>;
+  /**
+   * 插入页内贴图（桌面注入；移动端暂不提供）：宿主负责选图 + 上传资产，返回 URL 与原图尺寸。
+   * 返回 null = 用户取消。落点由 InkPad 决定（页宽 40%、居中，用户 261104 定稿）。
+   */
+  onInsertPageImage?: () => Promise<{ url: string; naturalWidth?: number; naturalHeight?: number } | null>;
 }
 
 const SAVE_DEBOUNCE_MS = 500;
@@ -176,7 +183,7 @@ const StaticStrokeLayer = memo(function StaticStrokeLayer({ strokes }: { strokes
   );
 });
 
-export function InkPad({ content, readOnly = false, variant, noteId, active, paneVisible, pane, onChange, onDirty, onEditorCapture, onImportImages, onImportPdf, onExportPage }: InkPadProps) {
+export function InkPad({ content, readOnly = false, variant, noteId, active, paneVisible, pane, onChange, onDirty, onEditorCapture, onImportImages, onImportPdf, onExportPage, onInsertPageImage }: InkPadProps) {
   // 正文只在挂载时解析；父层保存会更新 content，但编辑器不应因此反复解析整份大 JSON。
   // 外部真正需要换正文时由宿主 bump reloadKey 重挂载。
   // v3：当前页是设备本地视图（core/inkNav.ts），优先用它；没有记录才回退 v1/v2 正文里的旧 activePageId。
@@ -217,6 +224,9 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
   const [exportOpen, setExportOpen] = useState(false);
   /** 大纲面板开合（页备注本身是正文数据，不需要额外状态）。 */
   const [outlineOpen, setOutlineOpen] = useState(false);
+  /** v4 页内贴图：当前选中的图 + 拖动临时态（拖动只改内存，松手才 commit）。 */
+  const [selectedImageId, setSelectedImageId] = useState<string | null>(null);
+  const imageDragRef = useRef<{ id: string; startX: number; startY: number; before: InkPage["images"] } | null>(null);
   const [pendingDeletePageId, setPendingDeletePageId] = useState<string | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
   /** 261103 九批：手写板落笔诊断的宿主根节点（默认关，见 boardInputDiagnostics.ts 头注释）。 */
@@ -687,6 +697,54 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
     commit({ ...current, pages }, order ? { pages: [], order } : null);
   }, [commit, readOnly]);
 
+  /** 插入页内贴图：宿主选图上传 → 按「页宽 40%、居中」落到当前页（一次可撤销提交）。 */
+  const insertPageImage = useCallback(async () => {
+    if (!onInsertPageImage || readOnly) return;
+    const current = docRef.current;
+    if (!current || !page) return;
+    try {
+      const picked = await onInsertPageImage();
+      if (!picked) return;
+      const before = current.pages.find((item) => item.id === page.id);
+      if (!before) return;
+      const image = placeInkPageImage(before, { id: newInkId("img"), url: picked.url, naturalWidth: picked.naturalWidth, naturalHeight: picked.naturalHeight });
+      const nextPage = { ...before, images: [...(before.images ?? []), image] };
+      commit(replacePage(current, nextPage), inkPagePatch(before, nextPage));
+      setSelectedImageId(image.id);
+    } catch (reason) {
+      setImportError("插入图片失败：" + (reason instanceof Error ? reason.message : String(reason)));
+    }
+  }, [commit, onInsertPageImage, page, readOnly]);
+
+  /** 删除选中的贴图（一次可撤销提交）。 */
+  const deleteSelectedImage = useCallback(() => {
+    const current = docRef.current;
+    const id = selectedImageId;
+    if (!current || !id || !page || readOnly) return;
+    const before = current.pages.find((item) => item.id === page.id);
+    if (!before || !before.images?.some((image) => image.id === id)) return;
+    const remaining = removePageImage(before, id);
+    const nextPage = { ...before };
+    if (remaining.length > 0) nextPage.images = remaining;
+    else delete nextPage.images;
+    setSelectedImageId(null);
+    commit(replacePage(current, nextPage), inkPagePatch(before, nextPage));
+  }, [commit, page, readOnly, selectedImageId]);
+
+  // Delete/Backspace 删除选中贴图（只在真有选中时挂监听，避免影响编辑器的其它按键）
+  useEffect(() => {
+    if (!selectedImageId || readOnly) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Delete" && event.key !== "Backspace") return;
+      const target = event.target as HTMLElement | null;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
+      event.preventDefault();
+      deleteSelectedImage();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [deleteSelectedImage, readOnly, selectedImageId]);
+
   /** 保存当前页备注（v4 正文数据：进撤销栈、标脏、随同步走；空串 = 删除备注）。 */
   const savePageNote = useCallback((text: string) => {
     const current = docRef.current;
@@ -781,11 +839,25 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
     } else if (penDownRef.current) {
       return; // 掌托/手指在笔落下期间不参与书写
     }
+    // v4 页内贴图：命中图就是「选中 + 拖动」，不要再画线（笔与手指都支持）
+    const imageTarget = (event.target as Element | null)?.closest?.("[data-page-image]");
+    const imageId = imageTarget?.getAttribute("data-page-image") ?? null;
+    if (imageId) {
+      const rect0 = event.currentTarget.getBoundingClientRect();
+      const startPoint = pointFromClient(event.clientX, event.clientY, event.pointerType, event.pressure, rect0, page);
+      setSelectedImageId(imageId);
+      imageDragRef.current = { id: imageId, startX: startPoint.x, startY: startPoint.y, before: page.images };
+      activePointerRef.current = { id: event.pointerId, type: event.pointerType };
+      event.currentTarget.setPointerCapture?.(event.pointerId);
+      return;
+    }
+    // 画线前清掉贴图选中（点空白 = 取消选中）
+    if (selectedImageId) setSelectedImageId(null);
     // 上一次 pointerup 丢失（或丢了 pointercancel/lostcapture）时，activePointer 会残留 ⇒ 以前整块画布
     // 从此画不上（用户报的「偶发不生效」）。这里先把残留那笔收口（能提交就提交），再开始新的一笔。
     if (activePointerRef.current) finalizeInterruptedRef.current("missing-pointerup");
     activePointerRef.current = { id: event.pointerId, type: event.pointerType };
-    event.currentTarget.setPointerCapture(event.pointerId);
+    event.currentTarget.setPointerCapture?.(event.pointerId);
     const point = pointFromClient(event.clientX, event.clientY, event.pointerType, event.pressure, event.currentTarget.getBoundingClientRect(), page);
     lastPointRef.current = point;
     if (mode === "eraser") {
@@ -803,7 +875,7 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
     };
     activeStrokeRef.current = stroke;
     setActiveStroke(stroke);
-  }, [color, eraseAt, highlighterWidth, mode, page, penWidth, readOnly]);
+  }, [color, eraseAt, highlighterWidth, mode, page, penWidth, readOnly, selectedImageId]);
 
   /**
    * 往当前笔迹追加一个点。**只改 ref、不 setState**（261103 九批）：
@@ -824,6 +896,24 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
   }, []);
 
   const onPointerMove = useCallback((event: ReactPointerEvent<SVGSVGElement>) => {
+    const drag = imageDragRef.current;
+    if (drag && page && activePointerRef.current?.id === event.pointerId) {
+      const rectDrag = event.currentTarget.getBoundingClientRect();
+      const point = pointFromClient(event.clientX, event.clientY, event.pointerType, event.pressure, rectDrag, page);
+      const current = docRef.current;
+      const pageNow = current?.pages.find((item) => item.id === page.id);
+      if (current && pageNow) {
+        const images = movePageImage({ ...pageNow, images: drag.before ?? pageNow.images }, drag.id, point.x - drag.startX, point.y - drag.startY);
+        if (images) {
+          const nextPage = { ...pageNow, images };
+          if (images.length === 0) delete (nextPage as { images?: unknown }).images;
+          const nextDoc = replacePage(current, nextPage);
+          docRef.current = nextDoc;
+          setDoc(nextDoc);
+        }
+      }
+      return;
+    }
     if (!page || activePointerRef.current?.id !== event.pointerId) return;
     const events = event.nativeEvent.getCoalescedEvents?.() ?? [];
     const source = events.length > 0 ? events : [event.nativeEvent];
@@ -881,6 +971,28 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
   finalizeInterruptedRef.current = finalizeInterrupted;
 
   const finishPointer = useCallback((event: ReactPointerEvent<SVGSVGElement>) => {
+    const drag = imageDragRef.current;
+    if (drag && activePointerRef.current?.id === event.pointerId) {
+      imageDragRef.current = null;
+      activePointerRef.current = null;
+      if (event.pointerType === "pen") penDownRef.current = false;
+      const current = docRef.current;
+      const pageNow = current?.pages.find((item) => item.id === page?.id);
+      if (current && pageNow) {
+        const beforePage = { ...pageNow };
+        if (drag.before) beforePage.images = drag.before;
+        else delete beforePage.images;
+        const moved = JSON.stringify(pageNow.images ?? []) !== JSON.stringify(drag.before ?? []);
+        if (moved) {
+          commit(replacePage(current, pageNow), inkPagePatch(beforePage, pageNow));
+        } else {
+          const restored = replacePage(current, beforePage);
+          docRef.current = restored;
+          setDoc(restored);
+        }
+      }
+      return;
+    }
     if (activePointerRef.current?.id !== event.pointerId) return;
     activePointerRef.current = null;
     if (mode === "eraser") {
@@ -897,13 +1009,30 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
       finishStroke();
     }
     if (event.pointerType === "pen") penDownRef.current = false;
-  }, [commit, finishStroke, mode]);
+  }, [commit, finishStroke, mode, page]);
 
   const cancelPointer = useCallback((event: ReactPointerEvent<SVGSVGElement>) => {
+    const drag = imageDragRef.current;
+    if (drag && activePointerRef.current?.id === event.pointerId) {
+      imageDragRef.current = null;
+      activePointerRef.current = null;
+      const current = docRef.current;
+      const pageNow = current?.pages.find((item) => item.id === page?.id);
+      if (current && pageNow) {
+        const nextPage = { ...pageNow };
+        if (drag.before) nextPage.images = drag.before;
+        else delete nextPage.images;
+        const restored = replacePage(current, nextPage);
+        docRef.current = restored;
+        setDoc(restored);
+      }
+      if (event.pointerType === "pen") penDownRef.current = false;
+      return;
+    }
     if (activePointerRef.current?.id !== event.pointerId) return;
     if (event.pointerType === "pen") penDownRef.current = false;
     finalizeInterrupted(event.type === "pointercancel" ? "pointercancel" : "lostpointercapture");
-  }, [finalizeInterrupted]);
+  }, [finalizeInterrupted, page]);
 
   const activePath = useMemo(() => activeStroke ? strokeToSvgPath(activeStroke, false) : null, [activeStroke]);
   /** 笔迹 id → SVG 轮廓缓存（P5）：落一笔/擦一条只算新笔迹，不再整页重算 perfect-freehand。 */
@@ -1098,6 +1227,7 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
             {(page.images ?? []).map((image) => (
               <image
                 key={image.id}
+                data-page-image={image.id}
                 href={image.url}
                 x={image.x}
                 y={image.y}
@@ -1109,6 +1239,10 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
                 pointerEvents="none"
               />
             ))}
+            {/* 选中贴图：虚线框（pointer-events:none，不挡画线；点图本身负责选中） */}
+            {selectedImageId && (page.images ?? []).some((image) => image.id === selectedImageId) ? (
+              <InkImageSelectionRect image={(page.images ?? []).find((image) => image.id === selectedImageId)!} />
+            ) : null}
             <StaticStrokeLayer strokes={renderedStrokes} />
             {activeStroke && activePath && (
               <path
@@ -1119,6 +1253,14 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
               />
             )}
           </svg>
+          {/* 选中贴图的删除按钮：HTML 浮层（在 SVG 之上，只有按钮接事件），避免抢画布 pointerdown */}
+          {!readOnly && selectedImageId && (page.images ?? []).some((image) => image.id === selectedImageId) ? (
+            <InkImageRemoveButton
+              image={(page.images ?? []).find((image) => image.id === selectedImageId)!}
+              page={page}
+              onRemove={deleteSelectedImage}
+            />
+          ) : null}
         </div>
       </div>
 
@@ -1132,7 +1274,16 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
             <button onClick={() => { setPagesOpen((open) => !open); setPendingDeletePageId(null); }} aria-label="页面管理" title="页面管理"><LayoutGrid size={16} /></button>
           </div>
           <div className="ink-footer__right">
-            {/* 大纲 / 书签（桌面专用控件；移动端本轮没有入口） */}
+            {onInsertPageImage && (
+              <button
+                className="ink-tool"
+                onClick={() => void insertPageImage()}
+                disabled={readOnly}
+                aria-label="插入贴图"
+                title="插入贴图（页宽 40%、居中，可拖动）"
+              ><ImagePlus size={16} /></button>
+            )}
+            {/* 大纲 / 页备注（桌面专用控件；移动端本轮没有入口） */}
             <InkOutlinePanel
               open={outlineOpen}
               onToggle={() => { setOutlineOpen((open) => !open); closeSwatches(); }}

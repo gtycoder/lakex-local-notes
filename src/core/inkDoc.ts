@@ -606,9 +606,33 @@ export function emptyInkBody(): string {
   return inkToBody(createInkDoc());
 }
 
-/** 手写正文当前不参与全文搜索（OCR 尚未接入）；标题仍由 notes.title 命中。 */
-export function inkToSearchText(_content: string | null | undefined, _maxChars = 20000): string {
-  return "";
+/**
+ * 手写正文 → 可搜索文本（261104 二十一批）。
+ *
+ * 手写笔迹**不可搜**（无 OCR）；但 v4 的**页备注**（page.note）与**页内文字块**（page.texts）是文本，
+ * 让它们进全文搜索：搜「第三章重点」能定位到那一页所在的文档。
+ *
+ * 快速路径：正文里既没有 note 也没有 texts 标记 ⇒ 直接返回空串（绝大多数手写板没写过备注，
+ * 保存路径上零解析开销）；有标记才做一次完整解析（坏页按 parseInkBody 的规则丢，搜索只看到活下来的页）。
+ */
+export function inkToSearchText(content: string | null | undefined, maxChars = 20000): string {
+  if (!content || content.length > MAX_INK_BODY_CHARS) return "";
+  if (!content.includes('"note"') && !content.includes('"texts"')) return "";
+  const doc = parseInkBody(content);
+  if (!doc) return "";
+  const parts: string[] = [];
+  let length = 0;
+  for (const page of doc.pages) {
+    const chunks = [page.note, ...(page.texts ?? []).map((item) => item.text)];
+    for (const chunk of chunks) {
+      const text = (chunk ?? "").trim();
+      if (!text) continue;
+      parts.push(text);
+      length += text.length + 1;
+      if (length >= maxChars) return parts.join("\n").slice(0, maxChars);
+    }
+  }
+  return parts.join("\n").slice(0, maxChars);
 }
 
 export function inkStrokePointCount(doc: InkDoc): number {

@@ -71,6 +71,25 @@ export function DesktopInkPad({ visible, focused, pane, onCapture, noteId, ...pr
     return native.saveInkPagePng(dir, page.title, bytes);
   }, [noteId]);
 
+  /** 插入页内贴图（v4）：选一张图 → 上传资产 → 返回 URL 与原图尺寸（落点由 InkPad 决定）。 */
+  const onInsertPageImage = useCallback(async () => {
+    const files = await pickInkImageFiles();
+    const file = files[0];
+    if (!file) return null; // 用户取消
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const uploaded = await upload({ bytes, filename: file.name });
+    const url = typeof uploaded === "string" ? uploaded : uploaded.url;
+    let naturalWidth: number | undefined;
+    let naturalHeight: number | undefined;
+    try {
+      const bitmap = await createImageBitmap(file);
+      naturalWidth = bitmap.width;
+      naturalHeight = bitmap.height;
+      bitmap.close?.();
+    } catch { /* 读不到尺寸就按 4:3 估（placeInkPageImage 内部兜底） */ }
+    return { url, naturalWidth, naturalHeight };
+  }, [upload]);
+
   return (
     <InkPad
       {...props}
@@ -83,6 +102,7 @@ export function DesktopInkPad({ visible, focused, pane, onCapture, noteId, ...pr
       onImportImages={onImportImages}
       onImportPdf={onImportPdf}
       onExportPage={onExportPage}
+      onInsertPageImage={onInsertPageImage}
     />
   );
 }

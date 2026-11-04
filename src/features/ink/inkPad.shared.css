@@ -323,3 +323,21 @@
   top: 8px;
   right: 8px;
 }
+
+/* v4 页内贴图：选中后的删除按钮（浮在贴图右上角；由 InkPad 用 left/top 百分比定位） */
+.ink-image-remove {
+  position: absolute;
+  z-index: 3;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--lake-border-1);
+  border-radius: var(--lake-radius-pill);
+  background: var(--lake-bg-panel);
+  color: var(--lake-text-2);
+  font-size: var(--lake-font-size-small);
+  line-height: 20px;
+  text-align: center;
+  transform: translate(-50%, -50%);
+  cursor: pointer;
+}

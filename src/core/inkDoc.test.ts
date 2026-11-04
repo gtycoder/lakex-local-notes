@@ -5,6 +5,7 @@ import {
   INK_DOC_VERSION,
   INK_PAGE_HEIGHT,
   INK_PAGE_WIDTH,
+  MAX_PAGE_NOTE_CHARS,
   createInkDoc,
   createInkPage,
   emptyInkBody,
@@ -107,8 +108,22 @@ describe("手写板正文（kind=ink v3）", () => {
     expect(dupParsed.droppedPages).toBe(1);
   });
 
-  it("手写正文当前不进入全文搜索", () => {
+  it("手写笔迹不进入全文搜索，但页备注/文字块进（v4）", () => {
+    // 没有 note/texts 的手写板：零解析开销，返回空串（笔迹本身不可搜，无 OCR）
     expect(inkToSearchText(emptyInkBody())).toBe("");
+    const doc = createInkDoc("p1");
+    doc.pages[0].strokes.push({ id: "s1", tool: "pen", color: "#000", width: 2, points: [{ x: 1, y: 1, pressure: 0.5 }] });
+    expect(inkToSearchText(inkToBody(doc))).toBe("");
+    // 页备注 + 文字块按页序拼成可搜索文本
+    doc.pages[0].note = "第三章重点";
+    doc.pages[0].texts = [{ id: "t1", x: 0, y: 0, width: 200, text: "这里是批注文字", fontSize: 16, color: "#000" }];
+    expect(inkToSearchText(inkToBody(doc))).toBe("第三章重点\n这里是批注文字");
+    // 坏正文不抛错
+    expect(inkToSearchText('{"kind":"ink","version":4,"pages":[{"note":"x"')).toBe("");
+    // 超长截断
+    const long = createInkDoc("p1");
+    long.pages[0].note = "x".repeat(MAX_PAGE_NOTE_CHARS);
+    expect(inkToSearchText(inkToBody(long), 20).length).toBe(20);
   });
 });
 
