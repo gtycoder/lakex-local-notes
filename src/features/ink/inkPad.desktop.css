@@ -56,3 +56,77 @@
   cursor: pointer;
 }
 .ink-pad--desktop .ink-export__menu button:hover { background: var(--lake-bg-hover); }
+
+/* 大纲 / 书签面板：底部「大纲」按钮点开，向上弹出（与导出菜单同一种浮层）。 */
+.ink-pad--desktop .ink-outline { position: relative; display: inline-flex; align-items: center; }
+.ink-pad--desktop .ink-outline__panel {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  width: 236px;
+  max-height: 320px;
+  border: 1px solid var(--lake-border-1);
+  border-radius: var(--lake-radius-md);
+  background: var(--lake-bg-panel);
+  box-shadow: var(--lake-shadow-card);
+}
+.ink-pad--desktop .ink-outline__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--lake-border-1);
+  color: var(--lake-text-3);
+  font-size: var(--lake-font-size-small);
+}
+.ink-pad--desktop .ink-outline__mode,
+.ink-pad--desktop .ink-outline__bookmark {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 0;
+  background: transparent;
+  color: var(--lake-accent-text);
+  font-size: var(--lake-font-size-small);
+  cursor: pointer;
+}
+.ink-pad--desktop .ink-outline__current {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px;
+  color: var(--lake-text-2);
+  font-size: var(--lake-font-size-small);
+}
+.ink-pad--desktop .ink-outline__bookmark.is-active { color: var(--lake-accent-text); }
+.ink-pad--desktop .ink-outline__list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px;
+}
+.ink-pad--desktop .ink-outline__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  height: 30px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: var(--lake-radius-sm);
+  background: transparent;
+  color: var(--lake-text-1);
+  font-size: var(--lake-font-size-small);
+  text-align: left;
+  cursor: pointer;
+}
+.ink-pad--desktop .ink-outline__row:hover { background: var(--lake-bg-hover); }
+.ink-pad--desktop .ink-outline__row.is-current { background: var(--lake-bg-selected); }
+.ink-pad--desktop .ink-outline__page { flex: 0 0 62px; font-variant-numeric: tabular-nums; }
+.ink-pad--desktop .ink-outline__meta { display: inline-flex; align-items: center; gap: 3px; color: var(--lake-text-3); }
+.ink-pad--desktop .ink-outline__label { margin-left: auto; color: var(--lake-text-3); }
+.ink-pad--desktop .ink-outline__empty { margin: 8px; color: var(--lake-text-3); font-size: var(--lake-font-size-small); }

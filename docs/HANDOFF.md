@@ -8,6 +8,15 @@
 
 ## 0. 最新交接（261027）
 
+### 261104 · 十八批：手写板大纲 / 书签（设备本地）+ inkDoc 随机健壮性护栏 + 真机验收清单 · **本地改动**
+- **书签 = 设备本地视图**（`features/ink/inkBookmarks.ts`）：key `…v3.ink-bookmarks.<noteId>`，不进正文/不标脏/不进 S3；单篇上限 200；坏值静默回退；删页顺手清理。
+- **大纲 = 纯派生**（`features/ink/inkOutline.ts`）：`annotated`（默认：有笔迹 / 有页图 / 有书签）与 `all`；`inkOutlineSummary`、`bookmarkPageIds` 两个小纯函数。
+- **入口**：桌面底部「大纲」按钮 → 弹出面板（摘要 + 当前页书签开合 + 页列表点跳）；缩略图条给书签页打小点（`InkPageStrip` 新增 `bookmarkedPageIds?`）。移动端本轮无入口（底部坞 7 键定稿）。
+  · 控件独立成 `InkOutlinePanel.tsx`（桌面专用）—— 与 `InkExportMenu` 同因：跨端样式护栏要求共享组件类名两端都有样式。
+  · 坑：`InkOutline.tsx` 与 `inkOutline.ts` 只差大小写 ⇒ macOS 大小写不敏感 + tsc TS1149 ⇒ 组件改名 `InkOutlinePanel.tsx`。**新增文件别只靠大小写区分**。
+- **inkDoc 随机健壮性护栏**（`core/inkDoc.fuzz.test.ts`，确定性 mulberry32）：① 120 轮随机合法文档往返（页/笔/点计数一致、可再序列化）；② 400 轮畸形输入（截断/改字节/错版本/深嵌套/错类型）断言 `parseInkBody` **永不抛错**、非 null 结果可再序列化；③ null/空串/16MiB 边界。理由：保存会永久丢弃坏页 ⇒ 解析健壮性 = 数据安全。
+- **真机验收清单**（`docs/INK-DEVICE-CHECK.md`）：延迟/压感/掌托四场景/大文档五指标 + `__lakeInkInputStats()` / `__inkPerfStats()` 取数法 + 「什么结果改哪个文件」。真机数据回来前**不动**压力映射与掌托策略。
+- **门禁**：tsc / vitest / cssLayers 基线（shared 188→191、desktop 52→120）/ diff-check。
 ### 261104 · 字号步进器（Aa → 更多）+ 二级面板开合「胶囊闪入闪出」修复 · **本地改动**
 - **字号步进器（用户批准方案）**：字号从「Aa」面板底部 8 钮改成 `− 当前 +` 步进器，搬进「更多」面板、与行高/缩进同组（261012 原定「放最底部」作废）。档位仍是内核 12 档掐头去尾的 8 档（14…32）；命令仍 `fontsize`（px 入参），回显读 `queryCommandValue("fontsize", false)`。共用控件 `src/mobile/ui/FontSizeStepper.tsx`（几何照表格 T 面板：40 高 / 132 宽 / 18px 图标 / 首尾置灰）。**Aa 面板内容 354 → 300px**。
 - **面板高度下限 280 → 312**（`useEditSurface({ minPanelHeight: 312 })`）：Aa 300px 在 280 下限下仍会裁 20px；且「打开前键盘开着」捕获 312、「键盘关着」落到 280 ⇒ 同一面板两种高度。312 ≈ 常见键盘高，面板尺寸稳定。

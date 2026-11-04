@@ -19,6 +19,9 @@ import { readInkNavPage, writeInkNavPage } from "./inkNav.js";
 import { hitTestStroke, strokeToSvgPath } from "./inkGeometry.js";
 import { inkStrokeStyle } from "./inkStrokeStyle.js";
 import { InkExportMenu, type InkPageExportFormat } from "./InkExportMenu.js";
+import { InkOutlinePanel } from "./InkOutlinePanel.js";
+import { bookmarkPageIds } from "./inkOutline.js";
+import { readInkBookmarks, removeInkBookmark, toggleInkBookmark, type InkBookmark } from "./inkBookmarks.js";
 import { inkPerfDebugEnabled, installInkPerfHooks, recordInkPerf } from "./inkPerfStats";
 import { inkImageImportNotice, inkPdfImportNotice } from "./inkImportNotice";
 import { installInkInputDiagnostics, installPointerInputDebugHooks } from "../board/boardInputDiagnostics";
@@ -213,6 +216,9 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
   const [insertOpen, setInsertOpen] = useState(false);
   /** 桌面底部「导出」按钮的悬浮菜单（只有一个按钮：点开再选格式，不铺三个按钮）。 */
   const [exportOpen, setExportOpen] = useState(false);
+  /** 大纲面板开合 + 设备本地书签（书签不进正文、不同步）。 */
+  const [outlineOpen, setOutlineOpen] = useState(false);
+  const [bookmarks, setBookmarks] = useState<InkBookmark[]>(() => readInkBookmarks(noteId));
   const [pendingDeletePageId, setPendingDeletePageId] = useState<string | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
   /** 261103 九批：手写板落笔诊断的宿主根节点（默认关，见 boardInputDiagnostics.ts 头注释）。 */
@@ -356,21 +362,23 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
   }, []);
   /** 坞上面板（色板/笔宽/插入）：点「面板本体 / 触发按钮」之外的任意处关闭（捕获 pointerdown，不误吞画布手势）。 */
   useEffect(() => {
-    if (!paletteOpen && !widthsOpen && !insertOpen && !exportOpen) return;
+    if (!paletteOpen && !widthsOpen && !insertOpen && !exportOpen && !outlineOpen) return;
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target as Element | null;
-      if (target?.closest?.('[data-overlay="palette"], [data-overlay="widths"], [data-overlay="insert"], [data-popover-trigger], [data-ink-export]')) return;
+      if (target?.closest?.('[data-overlay="palette"], [data-overlay="widths"], [data-overlay="insert"], [data-popover-trigger], [data-ink-export], [data-ink-outline]')) return;
       closeSwatches();
       setExportOpen(false);
+      setOutlineOpen(false);
     };
     document.addEventListener("pointerdown", onPointerDown, true);
     return () => document.removeEventListener("pointerdown", onPointerDown, true);
-  }, [closeSwatches, exportOpen, insertOpen, paletteOpen, widthsOpen]);
+  }, [closeSwatches, exportOpen, insertOpen, outlineOpen, paletteOpen, widthsOpen]);
   // 退回阅读态时工具坞整体卸载：把面板状态一起收掉，下次进编辑态不会凭空弹开。
   useEffect(() => {
     if (readOnly) {
       closeSwatches();
       setExportOpen(false);
+      setOutlineOpen(false);
     }
   }, [closeSwatches, readOnly]);
   /** 移动端全局预览是悬浮覆盖：点「预览面板本体 / 触发按钮」之外的任意处关闭（桌面流内面板不变）。 */
@@ -681,6 +689,18 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
     commit({ ...current, pages }, order ? { pages: [], order } : null);
   }, [commit, readOnly]);
 
+  // 书签按 noteId 隔离：换文档要重读，否则会把上一篇的标记画到这篇上。
+  useEffect(() => {
+    setBookmarks(readInkBookmarks(noteId));
+  }, [noteId]);
+
+  /** 书签开合（设备本地视图：不标脏、不进正文、不触发同步）。 */
+  const toggleBookmark = useCallback(() => {
+    const current = docRef.current;
+    if (!current) return;
+    setBookmarks(toggleInkBookmark(noteId, current.activePageId));
+  }, [noteId]);
+
   const requestDeletePage = useCallback((id: string) => {
     if (readOnly) return;
     setPendingDeletePageId(id);
@@ -702,7 +722,9 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
     const order = inkOrderDelta(current.pages, pages);
     if (order) patch.order = order;
     commit({ ...current, pages, activePageId }, patch);
-  }, [commit, pendingDeletePageId, readOnly]);
+    // 页删了，书签就没有意义（设备本地数据，顺手清掉，避免留垃圾）
+    setBookmarks(removeInkBookmark(noteId, id));
+  }, [commit, noteId, pendingDeletePageId, readOnly]);
 
   const switchPage = useCallback((delta: number) => {
     const current = docRef.current;
@@ -1016,6 +1038,7 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
           onAdd={addPage}
           onRequestDelete={requestDeletePage}
           onConfirmDelete={confirmDeletePage}
+          bookmarkedPageIds={bookmarkPageIds(bookmarks, doc.pages)}
           onCancelDelete={() => setPendingDeletePageId(null)}
           onClose={() => { setPagesOpen(false); setPendingDeletePageId(null); }}
           readOnly={readOnly}
@@ -1032,6 +1055,7 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
             onAdd={addPage}
             onRequestDelete={requestDeletePage}
             onConfirmDelete={confirmDeletePage}
+            bookmarkedPageIds={bookmarkPageIds(bookmarks, doc.pages)}
             onCancelDelete={() => setPendingDeletePageId(null)}
             onClose={() => { setPagesOpen(false); setPendingDeletePageId(null); }}
             readOnly={readOnly}
@@ -1095,6 +1119,16 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
             <button onClick={() => { setPagesOpen((open) => !open); setPendingDeletePageId(null); }} aria-label="页面管理" title="页面管理"><LayoutGrid size={16} /></button>
           </div>
           <div className="ink-footer__right">
+            {/* 大纲 / 书签（桌面专用控件；移动端本轮没有入口） */}
+            <InkOutlinePanel
+              open={outlineOpen}
+              onToggle={() => { setOutlineOpen((open) => !open); closeSwatches(); }}
+              pages={doc.pages}
+              currentPageId={doc.activePageId}
+              bookmarks={bookmarks}
+              onJump={selectPage}
+              onToggleBookmark={toggleBookmark}
+            />
             {/* 只放一个按钮：点开再选格式（用户定稿：不要三个按钮占满工具条）；菜单本体在 InkExportMenu（桌面专用） */}
             {onExportPage && (
               <InkExportMenu

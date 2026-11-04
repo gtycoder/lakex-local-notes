@@ -236,6 +236,17 @@
   text-align: center;
 }
 
+/* 有书签的页（设备本地数据）在缩略图左上角打一个小点：不抢 index 的位置。 */
+.ink-page-thumb__bookmark {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 7px;
+  height: 7px;
+  border-radius: var(--lake-radius-pill);
+  background: var(--lake-accent);
+}
+
 .ink-page-thumb__actions {
   display: flex;
   justify-content: space-between;
