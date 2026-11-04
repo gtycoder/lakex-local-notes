@@ -17,6 +17,7 @@ import { collectMarkdownImageSources, markdownToDocx, type DocxImage } from "../
 import { parseLocalAssetUrl } from "../src/core/assetUrl.js";
 import { parseInkBody, type InkBackgroundImageFit, type InkDoc } from "../src/core/inkDoc.js";
 import { strokeToSvgPath } from "../src/features/ink/inkGeometry.js";
+import { inkStrokeStyle } from "../src/features/ink/inkStrokeStyle.js";
 import { ZipWriter } from "../src/core/zipArchive.js";
 
 /** 同名附件归档时的去重后缀：a.pdf → a (2).pdf。 */
@@ -100,8 +101,11 @@ export function buildInkPdfBody(doc: InkDoc, deps: InkPdfBodyDeps): InkPdfBodyRe
     const paths = page.strokes.map((stroke) => {
       const d = strokeToSvgPath(stroke, true);
       if (!d) return "";
-      const highlighter = stroke.tool === "highlighter";
-      const style = highlighter ? ' opacity="0.3" style="mix-blend-mode:multiply"' : "";
+      // 与画布同一来源：导出的 HTML/PDF 不能和高亮规则分家。
+      const inkStyle = inkStrokeStyle(stroke.tool);
+      const style = inkStyle.blend
+        ? ' opacity="' + inkStyle.opacity + '" style="mix-blend-mode:' + inkStyle.blend + '"'
+        : "";
       return `<path d="${d}" fill="${escapeHtmlAttr(stroke.color)}"${style} />`;
     }).join("");
     return `<div class="ink-page" data-page="${index + 1}">${background}`

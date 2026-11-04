@@ -1,5 +1,6 @@
 import { useCallback } from "react";
 import { parseLocalAssetUrl } from "../../core/assetUrl.js";
+import type { InkPage } from "../../core/inkDoc.js";
 import { native } from "../../lib/native";
 import InkPad from "./InkPad";
 import type { EditorHostProps } from "../editor/editorHost";
@@ -29,8 +30,9 @@ export function DesktopInkPad({ visible, focused, pane, onCapture, noteId, ...pr
     return importInkImagePages(files, { upload });
   }, [upload]);
 
-  const onImportPdf = useCallback(async ({ onProgress, signal }: {
+  const onImportPdf = useCallback(async ({ onProgress, onPagesReady, signal }: {
     onProgress: (done: number, total: number) => void;
+    onPagesReady?: (pages: InkPage[]) => void;
     signal: AbortSignal;
   }) => {
     const file = await pickPdfFile();
@@ -50,7 +52,7 @@ export function DesktopInkPad({ visible, focused, pane, onCapture, noteId, ...pr
           if (filenames.length > 0) await native.cleanNoteOrphans(noteId, filenames);
         },
       },
-      { fileName: file.name, onProgress, signal },
+      { fileName: file.name, onProgress, onPagesReady, signal },
     );
   }, [upload]);
 

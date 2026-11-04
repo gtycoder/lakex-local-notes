@@ -114,6 +114,57 @@ describe("importPdfPages", () => {
     expect((deleteAssets.mock.calls[0][0] as string[]).length).toBe(2);
   });
 
+  it("边导边用：攒够一批就把页交出去，已交付的页不再出现在 outcome.pages 里", async () => {
+    const { deps } = makeDeps({ pageCount: 7 });
+    const batches: Array<{ count: number; pages: number[] }> = [];
+    const outcome = await importPdfPages(new Uint8Array([1]), deps, {
+      commitBatch: 3,
+      onPagesReady: (pages) => batches.push({ count: pages.length, pages: pages.map((page) => page.backgroundImage?.pdf?.page ?? 0) }),
+    });
+    // 7 页 / 每批 3 页 ⇒ 3 + 3 + 1；顺序必须是 PDF 顺序（页号 1..7）
+    expect(batches.map((batch) => batch.count)).toEqual([3, 3, 1]);
+    expect(batches.flatMap((batch) => batch.pages)).toEqual([1, 2, 3, 4, 5, 6, 7]);
+    // 已交付的不再返回（否则宿主会重复插入）
+    expect(outcome.pages).toEqual([]);
+    expect(outcome.importedPageCount).toBe(7);
+  });
+
+  it("边导边用 + 取消：已交付的页留下，未交付的页连同资产一起清掉", async () => {
+    let aborted = false;
+    const committedUrls: string[] = [];
+    const deps: PdfImportDeps = {
+      rasterize: async (_input, rasterOptions) => {
+        for (let page = 1; page <= 6; page += 1) {
+          if (aborted) break;
+          rasterOptions.onPage?.({ page, width: 794, height: 1123, pixelWidth: 1600, pixelHeight: 2264, bytes: new Uint8Array([page]) });
+        }
+        return { pageCount: 6, cancelled: aborted };
+      },
+      uploadPage: async (input) => {
+        const page = Number(input.filename.slice("pdf-page-".length).replace(".webp", ""));
+        return { url: pageUrl(page) };
+      },
+      deleteAssets: async (urls) => { committedUrls.push(...urls); },
+    };
+    const controller = new AbortController();
+    const outcome = await importPdfPages(new Uint8Array([1]), deps, {
+      commitBatch: 2,
+      signal: controller.signal,
+      onPagesReady: (pages) => {
+        if (pages.length === 0) return;
+        // 第一批到手就让用户取消（模拟「已经能标注了，不想等」）
+        aborted = true;
+        controller.abort();
+      },
+    });
+    expect(outcome.cancelled).toBe(true);
+    expect(outcome.importedPageCount).toBeGreaterThan(0);
+    // 清掉的资产里不能出现已交付页的 URL（否则正文里全是被删图的坏页）
+    const delivered = outcome.pages.length === 0 ? outcome.importedPageCount : 0;
+    expect(delivered).toBeGreaterThan(0);
+    expect(committedUrls).not.toContain(pageUrl(1));
+    expect(committedUrls).not.toContain(pageUrl(2));
+  });
   it("上传阶段进度：phase=raster 与 phase=upload 都能报（UI 分文案）", async () => {
     const phases: string[] = [];
     const { deps } = makeDeps();

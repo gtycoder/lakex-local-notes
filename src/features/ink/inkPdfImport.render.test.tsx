@@ -182,6 +182,61 @@ describe("PDF 导入进度 / 取消 / 错误", () => {
     await view.unmount();
   });
 
+  it("边导边用：第一批页到手就能标注（导入还在跑，正文已经有页）", async () => {
+    let emit: ((pages: InkPage[]) => void) | null = null;
+    let finish: ((value: PdfImportOutcome) => void) | null = null;
+    const onImportPdf = vi.fn((options: {
+      onProgress: (done: number, total: number, phase?: "raster" | "upload") => void;
+      onPagesReady?: (pages: InkPage[]) => void;
+      signal: AbortSignal;
+    }) => new Promise<PdfImportOutcome>((resolve) => {
+      finish = resolve;
+      emit = options.onPagesReady ?? null;
+      options.onProgress(1, 5, "raster");
+      emit?.([pdfPage(1)]);
+    }));
+    const onChange = vi.fn();
+    const view = await mount({ content: inkToBody(createInkDoc("p1")), variant: "mobile", readOnly: false, onImportPdf, onChange });
+    await importPdfFromInsert(view.container);
+
+    // 导入还没结束（进度横幅在），但第 1 页已经可标注
+    expect(view.container.querySelector("[data-ink-pdf-progress]")).not.toBeNull();
+    expect(view.container.querySelector(".ink-pages span")!.textContent).toContain("第 1 / 1 页");
+
+    // 第二批到达：追加成第 2 页，且不抢走当前页（第一批已经切到第 1 页）
+    await act(async () => { emit?.([pdfPage(2)]); });
+    expect(view.container.querySelector(".ink-pages span")!.textContent).toContain("第 1 / 2 页");
+
+    // 收尾：outcome 里只有 sourcePdf（页已全部交付），不应重复插入
+    await act(async () => {
+      finish?.({ ...outcome([], { pageCount: 2, importedPageCount: 2 }) });
+      await Promise.resolve();
+    });
+    expect(view.container.querySelectorAll(".ink-page-svg").length).toBe(1);
+    expect(view.container.querySelector(".ink-pages span")!.textContent).toContain("第 1 / 2 页");
+    await view.unmount();
+  });
+
+  it("边导边用 + 取消：已导入的页留下并说明「可以继续标注」", async () => {
+    const onImportPdf = vi.fn((options: {
+      onProgress: (done: number, total: number, phase?: "raster" | "upload") => void;
+      onPagesReady?: (pages: InkPage[]) => void;
+      signal: AbortSignal;
+    }) => new Promise<PdfImportOutcome>((resolve) => {
+      options.onProgress(1, 9, "upload");
+      options.onPagesReady?.([pdfPage(1)]);
+      options.signal.addEventListener("abort", () => resolve({
+        ...outcome([], { pageCount: 9, importedPageCount: 1, cancelled: true }),
+      }));
+    }));
+    const view = await mount({ content: inkToBody(createInkDoc("p1")), variant: "mobile", readOnly: false, onImportPdf });
+    await importPdfFromInsert(view.container);
+    await act(async () => { byLabel(view.container, "取消 PDF 导入")!.click(); });
+    expect(view.container.querySelector(".ink-pages span")!.textContent).toContain("第 1 / 1 页");
+    const alert = view.container.querySelector("[role=alert]");
+    expect(alert!.textContent).toContain("已导入 1 页");
+    await view.unmount();
+  });
   it("P7 上传阶段进度：栅格化结束后文案切到「正在写入页面」，分母始终是真实总页数", async () => {
     const onImportPdf = vi.fn(({ onProgress }: {
       onProgress: (done: number, total: number, phase?: "raster" | "upload") => void;

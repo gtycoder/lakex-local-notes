@@ -10,7 +10,7 @@
  * 不复制 `features/ink/pdfImport` 的编排（300 页截断/sourcePdf/逐页容错都在那边），这里只做移动端 I/O 适配。
  */
 import { parseLocalAssetUrl } from "../../core/assetUrl";
-import { createInkDoc, inkToBody, parseInkBody, type InkDoc } from "../../core/inkDoc";
+import { createInkDoc, inkToBody, parseInkBody, type InkDoc, type InkPage } from "../../core/inkDoc";
 import {
   INK_PDF_MAX_PAGES,
   importPdfPages,
@@ -34,6 +34,8 @@ export interface MobilePdfImportInput {
   filename: string;
   /** P7：phase = raster（渲染第 n/N 页）/ upload（写资产第 n 页）。 */
   onProgress?: (done: number, total: number, phase?: "raster" | "upload") => void;
+  /** 边导边用：每批已完成页交付一次（InkPad 立刻合并进正文，用户能马上标注）。 */
+  onPagesReady?: (pages: InkPage[]) => void;
   signal?: AbortSignal;
 }
 
@@ -121,7 +123,7 @@ export async function importPdfPagesToAssets(input: MobilePdfImportInput): Promi
           }
         },
       },
-      { fileName: input.filename, onProgress: input.onProgress, signal: input.signal },
+      { fileName: input.filename, onProgress: input.onProgress, onPagesReady: input.onPagesReady, signal: input.signal },
     );
   } finally {
     // 所有页图已读/上传完（importPdfPages 返回前排空池）⇒ 删暂存 PDF + 清原生渲染缓存

@@ -28,6 +28,11 @@ import { newInkId } from "./ids.js";
 export const INK_PDF_MAX_PAGES = 500;
 /** 上传池宽度（P7）：栅格化每产出一页就入队上传，与后续页的栅格化重叠；3 路在手机上也不会打爆桥/内存。 */
 export const PDF_IMPORT_UPLOAD_CONCURRENCY = 3;
+/**
+ * 边导边用的交付批次（页）。192ms/页 ⇒ 10 页 ≈ 2s 一批；第一批不等满批（首屏 300ms 就能标注）。
+ * 太小 = 频繁保存（每批一次 500ms 防抖落盘）；太大 = 用户等得久。
+ */
+export const IMPORT_COMMIT_BATCH = 10;
 
 /** 导入阶段：栅格化 / 写资产（UI 的进度文案按阶段区分）。 */
 export type PdfImportPhase = "raster" | "upload";
@@ -83,6 +88,14 @@ export interface PdfImportOptions {
   maxPages?: number;
   /** 进度：phase = raster（第 n/N 页渲染）/ upload（第 n 页写入资产）。 */
   onProgress?: (done: number, total: number, phase: PdfImportPhase) => void;
+  /**
+   * **边完成边交付**：每当「从第 1 页起的连续已完成页」攒够一批，就把这批 InkPage 交出去，
+   * 宿主立刻合并进文档 ⇒ 用户不用等整本导完就能开始标注，其余页在后台继续。
+   * 已交付的页**不会**再出现在 outcome.pages 里（调用方别重复插入）；它仍计入 importedPageCount。
+   */
+  onPagesReady?: (pages: InkPage[]) => void;
+  /** 交付批次大小（默认 IMPORT_COMMIT_BATCH）；主要供测试把批次压小。 */
+  commitBatch?: number;
   signal?: AbortSignal;
 }
 
@@ -149,6 +162,34 @@ export async function importPdfPages(
   let aborted = false;
   /** 栅格化报上来的总页数（含被上限截断的部分）⇒ 上传阶段的分母必须是它，不能是「已入队数」。 */
   let expectedTotal = 0;
+  // ---- 边导边用（261104 十六批）：resolved = 已完成（成功或失败）的页号，flushedThrough = 已交付到第几页 ----
+  const resolved = new Set<number>();
+  /** 已交付给宿主的页号（不能再出现在 outcome.pages 里，也不能被失败清理删掉资产）。 */
+  const deliveredPages = new Set<number>();
+  const committedUrls = new Set<string>();
+  const pending: InkPage[] = [];
+  let flushedThrough = 0;
+  const commitBatch = Math.max(1, Math.floor(options.commitBatch ?? IMPORT_COMMIT_BATCH));
+
+  /** 把「从 flushedThrough+1 起连续已完成」的页收进 pending，攒够一批就交给宿主（force = 收尾/落成）。 */
+  const flushPages = (force = false): void => {
+    const emit = options.onPagesReady;
+    while (resolved.has(flushedThrough + 1)) {
+      const page = slots[flushedThrough];
+      if (page) pending.push(page);
+      flushedThrough += 1;
+    }
+    if (!emit || pending.length === 0) return;
+    if (!force && pending.length < commitBatch) return;
+    const batch = pending.splice(0, pending.length);
+    for (const page of batch) {
+      const image = page.backgroundImage;
+      if (image) committedUrls.add(image.url);
+      const pageNumber = image?.pdf?.page;
+      if (typeof pageNumber === "number") deliveredPages.add(pageNumber);
+    }
+    emit(batch);
+  };
 
   const ensureSlot = (page: number): void => {
     while (slots.length < page) slots.push(null);
@@ -208,6 +249,10 @@ export async function importPdfPages(
       options.onProgress?.(uploaded, Math.max(total, uploaded), "upload");
     } catch (reason) {
       errors.push(`第 ${item.page} 页：${errorText(reason)}`);
+    } finally {
+      // 失败页也算「已完成」：否则一个坏页会把后续所有页的交付卡死（用户就永远等不到第二批）。
+      resolved.add(item.page);
+      flushPages();
     }
   };
 
@@ -239,9 +284,11 @@ export async function importPdfPages(
   };
 
   const cleanupUploaded = async (): Promise<void> => {
-    if (uploadedUrls.length === 0) return;
     if (!deps.deleteAssets) return;
-    const urls = uploadedUrls.splice(0, uploadedUrls.length);
+    // **只删没交付的**：已交付的页已经在正文里（边导边用），把它们删掉就是一堆坏页。
+    const urls = uploadedUrls.filter((url) => !committedUrls.has(url));
+    uploadedUrls.length = 0;
+    if (urls.length === 0) return;
     try {
       await deps.deleteAssets(urls);
     } catch { /* 清理失败不掩盖导入结果：孤儿扫描/设置页兜底 */ }
@@ -283,18 +330,37 @@ export async function importPdfPages(
   await drainPool();
 
   const pageCount = Math.max(raster.pageCount || 0, maxPageSeen);
-  const pages = slots.filter((page): page is InkPage => page !== null).slice(0, maxPages);
   const truncated = pageCount > maxPages;
-  if (cancelled || pages.length === 0) {
+  if (cancelled) {
+    // 取消：已交付的页留在正文里（用户已经能用），没交付的页连资产一起清掉。
     await cleanupUploaded();
-    return { pages: [], pageCount, importedPageCount: 0, truncated, cancelled, errors, uploadedBytes };
+    return {
+      pages: [],
+      pageCount,
+      importedPageCount: deliveredPages.size,
+      truncated,
+      cancelled,
+      errors,
+      uploadedBytes,
+    };
+  }
+  // 收尾：把最后不足一批的页也交出去，之后 outcome.pages 只留「没能交付的尾巴」（正常是空）。
+  flushPages(true);
+  const pages = slots
+    .map((page, index) => ({ page, number: index + 1 }))
+    .filter((item): item is { page: InkPage; number: number } => item.page !== null && !deliveredPages.has(item.number))
+    .map((item) => item.page)
+    .slice(0, maxPages);
+  if (pages.length === 0 && deliveredPages.size === 0) {
+    await cleanupUploaded();
+    return { pages: [], pageCount, importedPageCount: 0, truncated, cancelled: false, errors, uploadedBytes };
   }
   return {
     pages,
     // v3：只留文件名与页数（原 PDF 不强制入库；不写 url 就不会被资产声明/同步带上，也不拦 GC）。
     sourcePdf: { ...(options.fileName ? { name: options.fileName } : {}), pageCount },
     pageCount,
-    importedPageCount: pages.length,
+    importedPageCount: deliveredPages.size + pages.length,
     truncated,
     cancelled: false,
     errors,
@@ -319,8 +385,16 @@ export interface PdfInsertPlan {
 /**
  * 把导入页合进当前文档（一次可撤销提交）：空白单页文档用第一张导入页替换它，否则追加；
  * 切到第一张新页；sourcePdf 只挂在文档上（不进页补丁）。
+ *
+ * 边导边用时**第一批之后必须 keepActivePage**：用户可能已经翻到某一页开始标注，
+ * 后台又交付一批就把当前页抢走是明显的体验事故。
  */
-export function planPdfPageInsert(doc: InkDoc, importedPages: InkPage[], sourcePdf?: InkSourcePdf): PdfInsertPlan | null {
+export function planPdfPageInsert(
+  doc: InkDoc,
+  importedPages: InkPage[],
+  sourcePdf?: InkSourcePdf,
+  options: { keepActivePage?: boolean } = {},
+): PdfInsertPlan | null {
   if (importedPages.length === 0) return null;
   const replace = shouldReplaceEmptyFirstPage(doc);
   const previousFirst = doc.pages[0];
@@ -336,7 +410,7 @@ export function planPdfPageInsert(doc: InkDoc, importedPages: InkPage[], sourceP
   const next: InkDoc = {
     ...doc,
     pages: nextPages,
-    activePageId: importedPages[0].id,
+    activePageId: options.keepActivePage ? doc.activePageId : importedPages[0].id,
     ...(sourcePdf ? { sourcePdf } : {}),
   };
   return { next, patch, replacedEmptyPageId: replace ? previousFirst.id : null };

@@ -17,6 +17,7 @@ import {
 import { canonicalDocBody } from "../../core/docBaseline.js";
 import { readInkNavPage, writeInkNavPage } from "./inkNav.js";
 import { hitTestStroke, strokeToSvgPath } from "./inkGeometry.js";
+import { inkStrokeStyle } from "./inkStrokeStyle.js";
 import { inkPerfDebugEnabled, installInkPerfHooks, recordInkPerf } from "./inkPerfStats";
 import { inkImageImportNotice, inkPdfImportNotice } from "./inkImportNotice";
 import { installInkInputDiagnostics, installPointerInputDebugHooks } from "../board/boardInputDiagnostics";
@@ -65,6 +66,8 @@ export interface InkPadProps {
   onImportPdf?: (options: {
     /** P7：phase = raster（渲染第 n/N 页）/ upload（写资产第 n 页）。 */
     onProgress: (done: number, total: number, phase?: PdfImportPhase) => void;
+    /** 边导边用：每批已完成页交付一次（宿主立刻合并进正文，用户能马上开始标注）。 */
+    onPagesReady?: (pages: InkPage[]) => void;
     signal: AbortSignal;
   }) => Promise<PdfImportOutcome | null>;
 }
@@ -148,15 +151,18 @@ function replacePage(doc: InkDoc, page: InkPage): InkDoc {
 const StaticStrokeLayer = memo(function StaticStrokeLayer({ strokes }: { strokes: RenderedStrokePath[] }) {
   return (
     <>
-      {strokes.map((stroke) => (
-        <path
-          key={stroke.id}
-          d={stroke.d}
-          fill={stroke.color}
-          opacity={stroke.highlighter ? 0.3 : 1}
-          style={stroke.highlighter ? { mixBlendMode: "multiply" } : undefined}
-        />
-      ))}
+      {strokes.map((stroke) => {
+        const style = inkStrokeStyle(stroke.highlighter ? "highlighter" : "pen");
+        return (
+          <path
+            key={stroke.id}
+            d={stroke.d}
+            fill={stroke.color}
+            opacity={style.opacity}
+            style={style.blend ? { mixBlendMode: style.blend } : undefined}
+          />
+        );
+      })}
     </>
   );
 });
@@ -554,8 +560,20 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
     setImportError(null);
     const controller = new AbortController();
     pdfAbortRef.current = controller;
+    /** 已交付进正文的页数（边导边用）：决定「还要不要抢当前页」以及取消时的文案。 */
+    let delivered = 0;
     try {
       const outcome = await importer({
+        // 边导边用（261104 十六批）：不再等整本导完。第一批立刻替换空白首页并切到第 1 页，
+        // 用户可以在后台继续栅格化/上传的同时开始标注；之后每批只追加，绝不抢当前页。
+        onPagesReady: (pages) => {
+          const current = docRef.current;
+          if (!current || pages.length === 0) return;
+          const plan = planPdfPageInsert(current, pages, undefined, { keepActivePage: delivered > 0 });
+          if (!plan) return;
+          commit(plan.next, plan.patch);
+          delivered += pages.length;
+        },
         onProgress: (done, total, phase) => setPdfProgress((previous) => {
           const base = previous ?? { raster: 0, uploaded: 0, total: 0 };
           // 分母只认宿主报的总页数（移动端是 PDF 真实页数，桌面已按上限夹过），此处再夹一次上限；
@@ -569,7 +587,10 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
       });
       if (!outcome) return; // 用户取消选文件
       if (outcome.cancelled) {
-        setImportError("已取消 PDF 导入");
+        // 已交付的页留在正文里（能继续标注），没交付的页连资产一起清掉。
+        setImportError(delivered > 0
+          ? `已取消 PDF 导入：已导入 ${delivered} 页，可以继续标注`
+          : "已取消 PDF 导入");
         return;
       }
       if (outcome.errors.length > 0) setImportError(outcome.errors.join("；"));
@@ -577,15 +598,27 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
         const truncatedHint = `PDF 共 ${outcome.pageCount} 页，本次只导入前 ${outcome.importedPageCount} 页（上限 ${INK_PDF_MAX_PAGES} 页）`;
         setImportError((previous) => (previous ? previous + "；" + truncatedHint : truncatedHint));
       }
+      // 收尾：outcome.pages 是「没能边交付的尾巴」（正常为空）；sourcePdf 是整篇元信息，最后补一次。
       const current = docRef.current;
-      if (!current || outcome.pages.length === 0) return;
-      const plan = planPdfPageInsert(current, outcome.pages, outcome.sourcePdf);
-      if (!plan) return;
-      commit(plan.next, plan.patch);
-      showImportNotice(inkPdfImportNotice(outcome.importedPageCount, outcome.pageCount, outcome.uploadedBytes ?? 0, outcome.truncated));
-      // 导入后落在第一张 PDF 页上继续批注
-      setPagesOpen(false);
-      setPendingDeletePageId(null);
+      if (!current) return;
+      let next: InkDoc = current;
+      let trailingPatch: InkPatch | null = null;
+      if (outcome.pages.length > 0) {
+        const plan = planPdfPageInsert(current, outcome.pages, undefined, { keepActivePage: delivered > 0 });
+        if (plan) {
+          next = plan.next;
+          trailingPatch = plan.patch;
+          delivered += outcome.pages.length;
+        }
+      }
+      if (outcome.sourcePdf && !next.sourcePdf) next = { ...next, sourcePdf: outcome.sourcePdf };
+      if (next !== current) commit(next, trailingPatch);
+      if (delivered > 0) {
+        showImportNotice(inkPdfImportNotice(outcome.importedPageCount, outcome.pageCount, outcome.uploadedBytes ?? 0, outcome.truncated));
+        // 第一张 PDF 页已经在第一批切过去了；这里只收拾面板状态。
+        setPagesOpen(false);
+        setPendingDeletePageId(null);
+      }
     } catch (reason) {
       setImportError(reason instanceof Error ? reason.message : "导入 PDF 失败");
     } finally {
@@ -1019,8 +1052,8 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
               <path
                 d={activePath}
                 fill={activeStroke.color}
-                opacity={activeStroke.tool === "highlighter" ? 0.3 : 1}
-                style={activeStroke.tool === "highlighter" ? { mixBlendMode: "multiply" } : undefined}
+                opacity={inkStrokeStyle(activeStroke.tool).opacity}
+                style={inkStrokeStyle(activeStroke.tool).blend ? { mixBlendMode: inkStrokeStyle(activeStroke.tool).blend } : undefined}
               />
             )}
           </svg>

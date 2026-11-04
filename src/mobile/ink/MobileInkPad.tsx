@@ -2,6 +2,7 @@ import { useCallback, useEffect } from "react";
 import InkPad, { type InkPadProps } from "../../features/ink/InkPad";
 import { importInkImagePages, pickInkImageFiles } from "../../features/ink/inkImageImport";
 import { pickPdfFile } from "../../features/ink/pdfImport";
+import type { InkPage } from "../../core/inkDoc";
 import { bridge } from "../bridge";
 import { setStylusHandwritingEnabled } from "../native/stylusInput";
 import { importPdfPagesToAssets } from "./mobilePdfImport";
@@ -35,15 +36,16 @@ export function MobileInkPad({ noteId, active = false, readOnly = false, ...prop
    * 适配器与「系统分享 PDF → 自动导入」共用 src/mobile/ink/mobilePdfImport.ts（同一实现，不复制）。
    * InkPad 把返回的 pages 走可撤销提交；编辑态这里不直接 saveNote。
    */
-  const onImportPdf = useCallback(async ({ onProgress, signal }: {
+  const onImportPdf = useCallback(async ({ onProgress, onPagesReady, signal }: {
     onProgress: (done: number, total: number, phase?: "raster" | "upload") => void;
+    onPagesReady?: (pages: InkPage[]) => void;
     signal: AbortSignal;
   }) => {
     if (!noteId) return null;
     const file = await pickPdfFile();
     if (!file) return null; // 用户取消选文件
     const bytes = new Uint8Array(await file.arrayBuffer());
-    return importPdfPagesToAssets({ noteId, bytes, filename: file.name, onProgress, signal });
+    return importPdfPagesToAssets({ noteId, bytes, filename: file.name, onProgress, onPagesReady, signal });
   }, [noteId]);
 
   return (

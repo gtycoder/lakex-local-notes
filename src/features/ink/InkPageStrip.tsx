@@ -3,6 +3,7 @@ import { ArrowLeft, ArrowRight, Plus, Trash2, X } from "lucide-react";
 import type { InkBackgroundImage, InkPage } from "../../core/inkDoc.js";
 import { inkThumbUrl } from "./inkImageImport.js";
 import { InkPaper } from "./InkPaper.js";
+import { inkStrokeStyle } from "./inkStrokeStyle.js";
 
 export interface InkPageStripProps {
   pages: InkPage[];
@@ -87,7 +88,7 @@ function PageThumb({ page }: { page: InkPage }) {
           strokeWidth={Math.max(1.5, stroke.width)}
           strokeLinecap="round"
           strokeLinejoin="round"
-          opacity={stroke.tool === "highlighter" ? 0.35 : 1}
+          opacity={inkStrokeStyle(stroke.tool).opacity}
         />
       ))}
     </svg>
