@@ -5,9 +5,10 @@
  * 插入 = 上排 4 连块（插入行列）+ 4 列白块（公式在「更多」里）。
  * T   = 261024 样式对齐钉钉：12px 分组标题（字体 / 字体颜色 / 背景填充）+ 浅灰圆角 chip；
  *       字号改「− 当前 +」步进；色板改 40×40 圆角 4 方块，当前色 = 浅蓝底。
- * 数据 = 升序 / 降序 / 筛选开关 / 查找替换 + 占位（数据验证、分列），行首 20px 线性图标。
- * 视图 = 冻结行列 / 表单视图（占位）/ 图表视图（占位）+ 视图比例。
- * 更多 = 数字格式 / 边框 / 公式（面板内下钻）+ 合并 / 格式刷 / 清除格式 + 条件格式（占位）。
+ * 数据 = 升序 / 降序 / 筛选开关 / 查找替换，行首 20px 线性图标。
+ * 视图 = 冻结行列 / 表单视图（只读覆盖层）+ 视图比例。
+ * 更多 = 数字格式 / 边框 / 公式（面板内下钻）+ 合并 / 格式刷 / 清除格式。
+ *（261104：所有无能力占位已删，留下的条目全部有真实动作。）
  *
  * 纯展示：所有动作经 props 抛给 MobileUsheetViewer（命令分派仍在 useSheetCommandActions）。
  */
@@ -25,9 +26,7 @@ import {
   ArrowUpAZ,
   ArrowUpToLine,
   Calendar,
-  ChartColumn,
   ChevronLeft,
-  Columns2,
   Eraser,
   FileText,
   Filter,
@@ -35,16 +34,12 @@ import {
   Hash,
   Image,
   Link2,
-  ListChecks,
   Merge,
-  MessageSquare,
   Minus,
   Paintbrush,
-  Paperclip,
   PenLine,
   Plus,
   Search,
-  SlidersHorizontal,
   Snowflake,
   SquareDashed,
 } from "lucide-react";
@@ -82,9 +77,6 @@ const TILE_ICONS = {
   sign: PenLine,
   link: Link2,
   date: Calendar,
-  attachment: Paperclip,
-  chart: ChartColumn,
-  comment: MessageSquare,
 } as const;
 
 /** 面板列表行的行首图标（模型里只存 id，组件映射在这里，单一来源）。 */
@@ -93,18 +85,14 @@ const ROW_ICONS: Record<string, typeof Search> = {
   sortDesc: ArrowDownAZ,
   filter: Filter,
   find: Search,
-  validation: ListChecks,
-  split: Columns2,
   freeze: Snowflake,
   form: FileText,
-  chart: ChartColumn,
   number: Hash,
   border: SquareDashed,
   formula: FunctionSquare,
   merge: Merge,
   painter: Paintbrush,
   clear: Eraser,
-  conditional: SlidersHorizontal,
 };
 
 export interface SheetDockPanelProps {
@@ -164,10 +152,8 @@ function InsertPanel({ onInsert }: SheetDockPanelProps) {
             <button
               key={tile.id}
               type="button"
-              className={"mb-usheet-tile" + (tile.disabled ? " is-disabled" : "")}
+              className="mb-usheet-tile"
               aria-label={tile.label}
-              aria-disabled={tile.disabled ? "true" : undefined}
-              disabled={tile.disabled}
               onClick={() => onInsert(tile.id)}
             >
               <Icon size={22} />
@@ -410,14 +396,12 @@ function MorePanel({ onMore }: SheetDockPanelProps) {
         <button
           key={row.id}
           type="button"
-          className={"mb-usheet-row" + (row.disabled ? " is-disabled" : "") + (["numfmt", "border", "formula"].includes(row.id) ? " has-child" : "")}
+          className={"mb-usheet-row" + (["numfmt", "border", "formula"].includes(row.id) ? " has-child" : "")}
           aria-label={row.label}
-          disabled={row.disabled}
           onClick={() => onMore(row.id)}
         >
           <RowIcon icon={row.icon} />
           <span className="mb-usheet-row__label">{row.label}</span>
-          {row.disabled ? <span className="mb-usheet-row__note">暂不支持</span> : null}
         </button>
       ))}
     </div>

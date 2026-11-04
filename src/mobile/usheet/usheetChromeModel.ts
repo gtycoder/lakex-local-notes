@@ -43,17 +43,17 @@ export const SHEET_INSERTER_ACTIONS: ReadonlyArray<{ id: SheetInserterId; label:
   { id: "col-right", label: "在右侧插入列" },
 ];
 
-/** 白块（4 列）：与文档插入面板同款（图标在上、文字在下）。公式按用户要求放「更多」。 */
-export type SheetInsertTileId = "image" | "sign" | "link" | "date" | "attachment" | "chart" | "comment";
+/**
+ * 白块（4 列）：与文档插入面板同款（图标在上、文字在下）。公式按用户要求放「更多」。
+ * 261104：删掉无能力的假入口（附件/图表/批注），保留并接线「单元格图片」「手写签名」。
+ */
+export type SheetInsertTileId = "image" | "sign" | "link" | "date";
 
-export const SHEET_INSERT_TILES: ReadonlyArray<{ id: SheetInsertTileId; label: string; icon: string; disabled?: boolean }> = [
-  { id: "image", label: "单元格图片", icon: "image", disabled: true },
-  { id: "sign", label: "手写签名", icon: "sign", disabled: true },
+export const SHEET_INSERT_TILES: ReadonlyArray<{ id: SheetInsertTileId; label: string; icon: string }> = [
+  { id: "image", label: "单元格图片", icon: "image" },
+  { id: "sign", label: "手写签名", icon: "sign" },
   { id: "link", label: "链接", icon: "link" },
   { id: "date", label: "日期", icon: "date" },
-  { id: "attachment", label: "附件", icon: "attachment", disabled: true },
-  { id: "chart", label: "图表", icon: "chart", disabled: true },
-  { id: "comment", label: "批注", icon: "comment", disabled: true },
 ];
 
 /* ---------------- T 面板（文字格式） ---------------- */
@@ -171,14 +171,12 @@ export const SHEET_DATA_ROWS: ReadonlyArray<SheetPanelRow> = [
   { id: "sort-desc", label: "按当前列降序", icon: "sortDesc" },
   { id: "filter", label: "筛选", icon: "filter", switch: true },
   { id: "find", label: "查找替换", icon: "find" },
-  { id: "validation", label: "数据验证（下拉列表）", icon: "validation", note: "占位", disabled: true },
-  { id: "split", label: "分列", icon: "split", note: "占位", disabled: true },
 ];
 
+/** 视图：冻结行列 + 只读「表单视图」（261104 接线）；图表视图无内核能力，已删。 */
 export const SHEET_VIEW_ROWS: ReadonlyArray<SheetPanelRow> = [
   { id: "freeze", label: "冻结行列", icon: "freeze" },
-  { id: "formview", label: "表单视图", icon: "form", note: "占位", disabled: true },
-  { id: "chartview", label: "图表视图", icon: "chart", note: "占位", disabled: true },
+  { id: "formview", label: "表单视图", icon: "form" },
 ];
 
 export const SHEET_ZOOM_LEVELS: ReadonlyArray<{ id: "zoom-default" | "zoom-fit" | "zoom-focus"; label: string; value: number }> = [
@@ -189,23 +187,23 @@ export const SHEET_ZOOM_LEVELS: ReadonlyArray<{ id: "zoom-default" | "zoom-fit" 
 
 /**
  * 面板下限高度（拿不到键盘高时）：必须放得下最高的**常驻**面板 ——
- * 「更多」7 行 = 7×40 + 6 分隔 + 14 内距 = 294；T 面板 = 300。
+ * 「更多」6 行 = 6×40 + 14 内距 = 254；T 面板 = 300（T 仍是最高的常驻面板）。
  * 阅读态点「编辑」直接开面板（没弹过键盘）时用它，避免底行被切。
  */
 export const SHEET_PANEL_MIN_HEIGHT = 300;
 
 /* ---------------- 更多面板 ---------------- */
 
-export type SheetMoreId = "numfmt" | "border" | "formula" | "merge" | "painter" | "clear" | "conditional";
+export type SheetMoreId = "numfmt" | "border" | "formula" | "merge" | "painter" | "clear";
 
-export const SHEET_MORE_ROWS: ReadonlyArray<{ id: SheetMoreId; label: string; icon: string; disabled?: boolean }> = [
+/** 更多：条件格式（占位）已于 261104 删除；其余全部接内核命令。 */
+export const SHEET_MORE_ROWS: ReadonlyArray<{ id: SheetMoreId; label: string; icon: string }> = [
   { id: "numfmt", label: "数字格式", icon: "number" },
   { id: "border", label: "边框", icon: "border" },
   { id: "formula", label: "公式", icon: "formula" },
   { id: "merge", label: "合并单元格", icon: "merge" },
   { id: "painter", label: "格式刷", icon: "painter" },
   { id: "clear", label: "清除格式", icon: "clear" },
-  { id: "conditional", label: "条件格式", icon: "conditional", disabled: true },
 ];
 
 /** 更多面板的下钻列表（数字格式 / 边框 / 公式）。 */

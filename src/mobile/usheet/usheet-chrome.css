@@ -618,3 +618,82 @@
   padding: 0 4px;
   margin-bottom: 4px;
 }
+
+/* ==========================================================================
+ * 261104：手写签名 / 只读表单视图（移动端表格专用浮层；表面复用 .mb-sheet 原语）
+ * 只写 mb-usheet-* 作用域，不加全局层、不引桌面类名；边框 0.5px，动效只复用 Sheet 入场。
+ * ========================================================================== */
+/* 浮层打开时抬高整个表格宿主的层序：.mobile-usheet 自带 isolation + z0，内部 fixed 浮层的 z 无法越过
+ * 工作区顶栏（z3）；抬到「页面级」层后 scrim/sheet 才真正覆盖 chrome（关闭即回 z0，不常驻）。 */
+.mobile-usheet[data-overlay="1"] { z-index: var(--mobile-z-page); }
+.mb-sheet.mb-usheet-sign-sheet { height: min(84dvh, 760px); }
+.mb-sheet__body.mb-usheet-sign {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 4px var(--mb-page-pad) 10px;
+}
+.mb-usheet-sign__stage {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 200px;
+  border: .5px solid var(--lake-border-1);
+  border-radius: var(--mb-radius-sm);
+  background: var(--lake-bg-window);
+  overflow: hidden;
+}
+.mb-usheet-sign__canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  color: var(--lake-text-1);
+}
+.mb-usheet-sign__hint {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  text-align: center;
+  pointer-events: none;
+  color: var(--lake-text-4);
+  font-size: var(--lake-font-size-small);
+}
+.mb-usheet-sign__tools { display: flex; align-items: center; gap: 8px; }
+.mb-usheet-sign__foot .mb-btn { flex: 1 1 0; }
+
+.mb-sheet__body.mb-usheet-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 4px var(--mb-page-pad) 10px;
+}
+.mb-usheet-form__meta { color: var(--lake-text-3); font-size: var(--lake-font-size-micro); }
+.mb-usheet-form__row {
+  display: flex;
+  flex-direction: column;
+  padding: 0 12px;
+  border-radius: var(--mb-radius-card);
+  background: var(--lake-bg-block);
+}
+.mb-usheet-form__field { display: flex; align-items: flex-start; gap: 12px; padding: 10px 0; }
+.mb-usheet-form__field + .mb-usheet-form__field { border-top: .5px solid var(--lake-border-1); }
+.mb-usheet-form__label {
+  flex: 0 0 38%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--lake-text-3);
+  font-size: var(--lake-font-size-small);
+}
+.mb-usheet-form__value {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--lake-text-1);
+  font-size: var(--lake-font-size-body);
+}
+.mb-usheet-form__foot .mb-btn { flex: 1 1 0; }

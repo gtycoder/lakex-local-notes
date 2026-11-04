@@ -29,14 +29,16 @@ describe("移动端表格编辑态 dock 模型（261023 v5：对齐文档 dock�
     expect(SHEET_DOCK_ITEMS.map((item) => item.label)).toEqual(["插入", "文字格式", "数据", "视图", "更多"]);
   });
 
-  it("插入：4 个插入行列动作 + 7 个白块（公式按用户要求移到更多）", () => {
+  it("插入：4 个插入行列动作 + 4 个白块（图片/签名/链接/日期；公式在更多）", () => {
     expect(SHEET_INSERTER_ACTIONS.map((item) => item.id)).toEqual(["row-above", "row-below", "col-left", "col-right"]);
-    expect(SHEET_INSERT_TILES.map((item) => item.id)).toEqual(["image", "sign", "link", "date", "attachment", "chart", "comment"]);
+    expect(SHEET_INSERT_TILES.map((item) => item.id)).toEqual(["image", "sign", "link", "date"]);
+    expect(SHEET_INSERT_TILES.map((item) => item.label)).toEqual(["单元格图片", "手写签名", "链接", "日期"]);
     expect(SHEET_INSERT_TILES.some((item) => item.label.includes("公式"))).toBe(false);
-    // 暂未支持的项置灰（不出现「点了没反应」的死按钮）；链接/日期可用。
-    expect(SHEET_INSERT_TILES.filter((item) => item.disabled).map((item) => item.id)).toEqual(["image", "sign", "attachment", "chart", "comment"]);
-    expect(SHEET_INSERT_TILES.find((item) => item.id === "link")?.disabled).toBeUndefined();
-    expect(SHEET_INSERT_TILES.find((item) => item.id === "date")?.disabled).toBeUndefined();
+    // 261104：无能力占位（附件/图表/批注）已删；留下的每一项都有真实动作，不再出现置灰的死按钮。
+    expect(SHEET_INSERT_TILES.some((item) => "disabled" in item && item.disabled)).toBe(false);
+    for (const removed of ["attachment", "chart", "comment"]) {
+      expect(SHEET_INSERT_TILES.some((item) => item.id === removed)).toBe(false);
+    }
   });
 
   it("T 面板：B/I/S/U、水平/垂直对齐、字色 8、填充两行、字号 8 档", () => {
@@ -52,17 +54,19 @@ describe("移动端表格编辑态 dock 模型（261023 v5：对齐文档 dock�
     expect(SHEET_FONT_SIZES).toEqual([14, 15, 16, 19, 22, 24, 29, 32]);
   });
 
-  it("数据 / 视图面板：先保留这些（含占位），视图比例三档", () => {
-    expect(SHEET_DATA_ROWS.map((row) => row.id)).toEqual(["sort-asc", "sort-desc", "filter", "find", "validation", "split"]);
-    expect(SHEET_DATA_ROWS.filter((row) => row.disabled).map((row) => row.id)).toEqual(["validation", "split"]);
-    expect(SHEET_VIEW_ROWS.map((row) => row.id)).toEqual(["freeze", "formview", "chartview"]);
-    expect(SHEET_VIEW_ROWS.filter((row) => row.disabled).map((row) => row.id)).toEqual(["formview", "chartview"]);
+  it("数据 / 视图面板：无占位（数据验证/分列/图表视图已删），视图比例三档", () => {
+    expect(SHEET_DATA_ROWS.map((row) => row.id)).toEqual(["sort-asc", "sort-desc", "filter", "find"]);
+    expect(SHEET_DATA_ROWS.some((row) => row.disabled)).toBe(false);
+    // 视图只留「冻结行列」与本批接线的只读「表单视图」。
+    expect(SHEET_VIEW_ROWS.map((row) => row.id)).toEqual(["freeze", "formview"]);
+    expect(SHEET_VIEW_ROWS.some((row) => row.disabled)).toBe(false);
     expect(SHEET_ZOOM_LEVELS.map((level) => level.value)).toEqual([1, 0.85, 1.15]);
   });
 
-  it("更多：数字格式 / 边框 / 公式可下钻；条件格式置灰", () => {
-    expect(SHEET_MORE_ROWS.map((row) => row.id)).toEqual(["numfmt", "border", "formula", "merge", "painter", "clear", "conditional"]);
-    expect(SHEET_MORE_ROWS.find((row) => row.id === "conditional")?.disabled).toBe(true);
+  it("更多：数字格式 / 边框 / 公式可下钻；条件格式占位已删", () => {
+    expect(SHEET_MORE_ROWS.map((row) => row.id)).toEqual(["numfmt", "border", "formula", "merge", "painter", "clear"]);
+    expect(SHEET_MORE_ROWS.map((row) => String(row.id))).not.toContain("conditional");
+    expect(SHEET_MORE_ROWS.some((row) => "disabled" in row && row.disabled)).toBe(false);
     expect(buildMoreSubMenu("numfmt", "#,##0.00").find((item) => item.id === "numfmt-number")?.note).toBe("当前");
     expect(buildMoreSubMenu("border").length).toBe(8);
     expect(buildMoreSubMenu("formula").length).toBe(5);
@@ -79,10 +83,10 @@ describe("移动端表格编辑态 dock 模型（261023 v5：对齐文档 dock�
     expect(sheetColorEquals("#e5484d", "")).toBe(false);
   });
 
-  it("面板下限高度放得下最高的常驻面板（更多 7 行 = 294；T = 300）", () => {
-    // 行高 40（border-box 含 1px 分隔）+ 内距 6+8 —— 与 usheet-chrome.css 的 .mb-usheet-row / .mb-usheet-panel__inner 对齐。
+  it("面板下限高度放得下最高的常驻面板（更多 6 行 = 254；T = 300 仍是最高）", () => {
+    // 行高 40（border-box 含 1px 分隔）+ 内距 14 —— 与 usheet-chrome.css 的 .mb-usheet-row / .mb-usheet-panel__inner 对齐。
     const moreContent = SHEET_MORE_ROWS.length * 40 + 14;
-    expect(moreContent).toBe(294);
+    expect(moreContent).toBe(254);
     expect(SHEET_PANEL_MIN_HEIGHT).toBe(300);
     expect(SHEET_PANEL_MIN_HEIGHT).toBeGreaterThanOrEqual(moreContent);
   });
