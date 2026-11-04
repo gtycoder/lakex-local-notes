@@ -865,10 +865,9 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
     commit(replacePage(current, nextPage), inkPagePatch(before, nextPage));
   }, [commit, page, textEditing]);
 
-  const deleteSelectedText = useCallback(() => {
+  const removeText = useCallback((id: string) => {
     const current = docRef.current;
-    const id = selectedTextId;
-    if (!current || !id || !page || readOnly) return;
+    if (!current || !page || readOnly) return;
     const before = current.pages.find((item) => item.id === page.id);
     if (!before || !(before.texts ?? []).some((item) => item.id === id)) return;
     const remaining = removePageText(before, id);
@@ -880,8 +879,7 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
   }, [commit, page, readOnly, selectedTextId]);
 
   /** 文字块右下角拖宽：拖动只改内存，松手 commit 一次（换行随之重排）。 */
-  const startTextResize = useCallback((event: ReactPointerEvent<HTMLElement>) => {
-    const id = selectedTextId;
+  const startTextResize = useCallback((event: ReactPointerEvent<HTMLElement>, id: string) => {
     const current = docRef.current;
     if (!id || !current || !page || readOnly) return;
     const item = (page.texts ?? []).find((entry) => entry.id === id);
@@ -934,20 +932,23 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
     window.addEventListener("pointercancel", onCancel);
-  }, [commit, page, readOnly, selectedTextId]);
+  }, [commit, page, readOnly]);
 
   /** 字号 ±：一次可撤销提交。 */
-  const bumpSelectedTextFontSize = useCallback((delta: number) => {
+  const bumpTextFontSize = useCallback((id: string, delta: number) => {
     const current = docRef.current;
-    const id = selectedTextId;
-    if (!current || !id || !page || readOnly) return;
+    if (!current || !page || readOnly) return;
     const before = current.pages.find((entry) => entry.id === page.id);
     if (!before) return;
     const texts = bumpPageTextFontSize(before, id, delta);
     if (!texts || texts === before.texts) return;
     const nextPage = { ...before, texts };
     commit(replacePage(current, nextPage), inkPagePatch(before, nextPage));
-  }, [commit, page, readOnly, selectedTextId]);
+  }, [commit, page, readOnly]);
+
+  const deleteSelectedText = useCallback(() => {
+    if (selectedTextId) removeText(selectedTextId);
+  }, [removeText, selectedTextId]);
 
   // Delete/Backspace 删除选中元素（贴图或文字块；只在真有选中时挂监听，避免影响编辑器其它按键）
   useEffect(() => {
@@ -1562,11 +1563,13 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
                 </text>
               );
             })}
-            {/* 选中文字块：虚线框 */}
-            {selectedTextId && (page.texts ?? []).some((item) => item.id === selectedTextId) ? (() => {
-              const item = (page.texts ?? []).find((entry) => entry.id === selectedTextId)!;
-              return <InkSelectionRect image={{ x: item.x, y: item.y, width: item.width, height: Math.max(item.fontSize * INK_TEXT_LINE_HEIGHT, inkTextHeight(item)) }} />;
-            })() : null}
+            {/* 文字块：编辑态**常驻**虚线框（用户定稿：这是文字框，随时能改大小） */}
+            {!readOnly ? (page.texts ?? []).map((item) => (
+              <InkSelectionRect
+                key={"frame-" + item.id}
+                image={{ x: item.x, y: item.y, width: item.width, height: Math.max(item.fontSize * INK_TEXT_LINE_HEIGHT, inkTextHeight(item)) }}
+              />
+            )) : null}
             {/* 选中贴图：虚线框（pointer-events:none，不挡画线；点图本身负责选中） */}
             {selectedImageId && (page.images ?? []).some((image) => image.id === selectedImageId) ? (
               <InkSelectionRect image={(page.images ?? []).find((image) => image.id === selectedImageId)!} />
@@ -1598,15 +1601,19 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
               />
             );
           })() : null}
-          {!readOnly && !textEditing && selectedTextId && (page.texts ?? []).some((item) => item.id === selectedTextId) ? (
-            <InkTextSelectionControls
-              text={(page.texts ?? []).find((item) => item.id === selectedTextId)!}
-              page={page}
-              onResizeStart={startTextResize}
-              onBumpFontSize={bumpSelectedTextFontSize}
-              onRemove={deleteSelectedText}
-            />
-          ) : null}
+          {!readOnly && !textEditing
+            ? (page.texts ?? []).map((item) => (
+              <InkTextSelectionControls
+                key={"controls-" + item.id}
+                text={item}
+                page={page}
+                selected={item.id === selectedTextId}
+                onResizeStart={(event) => startTextResize(event, item.id)}
+                onBumpFontSize={(delta) => bumpTextFontSize(item.id, delta)}
+                onRemove={() => removeText(item.id)}
+              />
+            ))
+            : null}
           {!readOnly && selectedImageId && (page.images ?? []).some((image) => image.id === selectedImageId) ? (
             <>
               <InkImageRemoveButton

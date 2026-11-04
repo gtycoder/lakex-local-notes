@@ -412,3 +412,7 @@
   cursor: ew-resize;
   touch-action: none;
 }
+
+/* 文字块控制条常驻：未选中的降低存在感，选中的用主色描边 */
+.ink-text-controls:not(.is-selected) { opacity: 0.7; }
+.ink-text-controls.is-selected { border-color: var(--lake-accent); }

@@ -69,14 +69,22 @@ describe("手写板页内文字块", () => {
     const rect = () => ({ left: 0, top: 0, width: 794, height: 1123, right: 794, bottom: 1123, x: 0, y: 0, toJSON: () => ({}) }) as DOMRect;
     frame.getBoundingClientRect = rect;
     svg.getBoundingClientRect = rect;
+    // 未选中时控制条与边框就已经常驻（用户定稿：这是文字框，随时能改大小）；× 只在选中后出现
+    expect(view.container.querySelector(".ink-text-controls")).not.toBeNull();
+    expect(view.container.querySelector(".ink-text-resize")).not.toBeNull();
+    expect(view.container.querySelector('button[aria-label="删除这段文字"]')).toBeNull();
+    // 未选中也能直接点 A+
+    await act(async () => { (view.container.querySelector('button[aria-label="字号变大"]') as HTMLButtonElement).click(); });
+    expect(Number((view.container.querySelector("text[data-page-text]") as SVGTextElement).getAttribute("font-size"))).toBe(18);
+    await act(async () => { (view.container.querySelector('button[aria-label="字号变小"]') as HTMLButtonElement).click(); });
+    // 点选后 × 才出现
     await act(async () => {
       const down = new MouseEvent("pointerdown", { bubbles: true, clientX: 110, clientY: 160 });
       Object.defineProperty(down, "pointerId", { value: 5 });
       svg.dispatchEvent(down);
       svg.dispatchEvent(new MouseEvent("pointerup", { bubbles: true, clientX: 110, clientY: 160 }));
     });
-    expect(view.container.querySelector(".ink-text-controls")).not.toBeNull();
-    expect(view.container.querySelector(".ink-text-resize")).not.toBeNull();
+    expect(view.container.querySelector('button[aria-label="删除这段文字"]')).not.toBeNull();
     await act(async () => { (view.container.querySelector('button[aria-label="字号变大"]') as HTMLButtonElement).click(); });
     expect(Number((view.container.querySelector("text[data-page-text]") as SVGTextElement).getAttribute("font-size"))).toBe(18);
     // 拖宽：从 300 拖到 500
