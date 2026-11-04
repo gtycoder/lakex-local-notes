@@ -11,11 +11,12 @@
  * - 底部被占高度（面板/键盘）由**外壳高度**承担（`--mb-app-h` = 稳定外壳高 − 占用，见 viewportShell.ts），
  *   编辑面的滚动容器只留工具栏的固定留白（80px）⇒ 面板⇄输入法切换时内容盒高度不变（不跳）。
  */
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, type ReactNode } from "react";
 import { Plus, Bold, Italic, Underline, Strikethrough, List, ListOrdered, ListTodo, Keyboard, KeyboardOff, X, Image as ImageIcon, Camera, Paperclip, Table2, Quote, Minus, Code, SquareCode, Music, Video, Highlighter, Tag, Undo, Redo, Pilcrow, Type, MoreHorizontal, Columns2, FoldVertical, Calendar, CalendarDays, Smile, FileSymlink, Lock, Sigma, AlignLeft, AlignCenter, AlignRight, Link2, Superscript, Subscript, IndentIncrease, IndentDecrease, Paintbrush, Eraser, ArrowRightFromLine } from "lucide-react";
 import type { LakeEditorInstance } from "../../features/editor/lakeRuntime";
 import { editorCommandFailureMessage, execEditorCommandResult } from "./execCommand";
 import { beginFormatPainter, formatPaintService } from "./formatPainter";
+import { setDockPanelPhase } from "./dockPanelPhase";
 import { showToast } from "../ui/toastBus";
 import { reportMobileActionError } from "../lib/reportMobileActionError";
 import { useSnapshotUndo } from "./useSnapshotUndo";
@@ -35,6 +36,8 @@ import { useEditSurface } from "./useEditSurface";
 import { useEditorCommandDispatcher } from "./useEditorCommandDispatcher";
 // 表情选择器与小记写作卡**共用同一套**（AGENTS §3#14：同一交互语义只有一套）；这里只复用它的实现。
 import { EmojiPanel } from "../ui/EmojiPanel";
+// 字号步进器（261104）：移动端共用控件，几何/交互与表格 T 面板同款；档位算术在它自己的纯函数里（有单测）。
+import { FontSizeStepper } from "../ui/FontSizeStepper";
 // 原生弹键盘兜底（261015）：WebView 里程序化 focus 不保证弹软键盘，点「⌨ 展开键盘」时用它补一次。
 import { showNativeKeyboard } from "../native/nativeKeyboard";
 
@@ -62,9 +65,10 @@ const COMMAND_ICONS: Record<string, typeof Bold> = {
   clearFormat: Eraser,
 };
 
-/** 移动端「Aa」面板的字号档（用户 261012：**做成一行、只留常用、掐头去尾**）。
- *  从内核 12 档 `FONT_SIZE_OPTIONS` 里掐掉最小的 12/13 与最大的 40/48 ⇒ 中间 8 档，一行放得下（实测每格 ≈48px）。
- *  取值仍全部来自内核档位，不新增字号。要再少/再多只改这一处。 */
+/** 移动端字号档（261104 用户批准：改「− 当前 +」步进器、搬进「更多」面板与行高同组；
+ *  261012 原为「Aa」面板最底部一行 8 钮 —— 面板内容 354px > 可视 312px，正好把这一行裁掉）。
+ *  仍从内核 12 档 `FONT_SIZE_OPTIONS` 里掐掉最小的 12/13 与最大的 40/48 ⇒ 中间 8 档（14…32）。
+ *  取值全部来自内核档位，不新增字号。要再少/再多只改这一处。 */
 const MOBILE_FONT_SIZES: readonly number[] = FONT_SIZE_OPTIONS.slice(2, -2);
 
 /** 对齐（内核 `alignment`：left/center/right；语雀移动端也只给这三档）。 */
@@ -241,8 +245,15 @@ export function EditorDock({ editor, editing, undoBackend = "kernel", undoLimits
    * restoreFocus 走 ref —— focusEditor 定义在早退之后，而 hook 调用必须在早退之前。
    */
   const focusEditorRef = useRef<() => void>(() => {});
-  const surface = useEditSurface({ editing, dockRef, restoreFocus: () => focusEditorRef.current() });
+  // minPanelHeight 261104：Aa 面板内容（字号搬走后）实测 ≈300px，原下限 280 会裁掉末行 20px；
+  // 且「打开前键盘开着」捕获 312、「键盘关着」落到 280 ⇒ 同一个面板两种高度（观感不稳）。统一 312（≈常见键盘高）。
+  const surface = useEditSurface({ editing, dockRef, restoreFocus: () => focusEditorRef.current(), minPanelHeight: 312 });
   const { panelMode, renderedPanel, closing, closingHold, openPanel, closePanel } = surface;
+  // 261104：把「二级面板开合阶段」暴露成单一来源（工作区胶囊判据会读它）。
+  // 面板开合本身会改变 IME/视口状态 ⇒ 旧的「键盘弹起就隐藏胶囊」会在过渡期抖一下，表现为胶囊闪入闪出；
+  // 定稿口径是面板阶段内胶囊**不隐藏**、由层序盖住（见 dockPanelPhase.ts / capsuleVisibility.ts）。
+  useEffect(() => { setDockPanelPhase(panelMode ? "open" : closing ? "closing" : "closed"); }, [panelMode, closing]);
+  useEffect(() => () => setDockPanelPhase("closed"), []);
   const usable = surface.kbOffset;
   const keyboardOpen = surface.keyboardOpen;
   const exec = useEditorExec(editor);
@@ -476,10 +487,11 @@ export function EditorDock({ editor, editing, undoBackend = "kernel", undoLimits
     }, alreadyActive ? 0 : 160);
   };
 
-  // 「更多」面板：**按行分组**（261017 二改用户点单）——公式/上下标/格式刷一行、缩进三项一行、行高一行、画图占位一行。
+  // 「更多」面板：**按行分组**（261017 二改用户点单）——公式/上下标/格式刷一行、缩进三项一行、字号一行、行高一行、画图占位一行。
   // 文本增强命令全部走内核 `renderer.execCommand`；行高档位 = 内核 `lineHeight` 的取值域（[1, 1.15, 1.5, 2, 2.5, 3]）。
+  // 行条目两种形态：`items` = 图标/文字/数值按钮行；`custom` = 整块自定义控件（字号步进器），共用同一 .med-f-row 几何。
   // ⚠️ 撤销/重做已移到**主工具栏**（261017：工具栏最右、更多之后、键盘之前），不再在本面板。
-  const moreRows: ReadonlyArray<{ key: string; label?: string; items: ReadonlyArray<DockItem> }> = [
+  const moreRows: ReadonlyArray<{ key: string; label?: string; items?: ReadonlyArray<DockItem>; custom?: () => ReactNode }> = [
     { key: "inline", items: [
       { label: "公式", Icon: Sigma, run: () => runPanel("insertCard", "math", null, true) },
       { label: "上标", Icon: Superscript, run: () => runPanel("sup") },
@@ -492,6 +504,12 @@ export function EditorDock({ editor, editing, undoBackend = "kernel", undoLimits
       { label: "减少缩进", Icon: IndentDecrease, run: () => runPanel("outdent") },
       { label: "增加缩进", Icon: IndentIncrease, run: () => runPanel("indent") },
     ] },
+    // 字号（261104 用户批准：从「Aa」面板搬进「更多」面板、与行高同组 —— 261012 原放 Aa 最底部，
+    // 但 Aa 面板内容 354px > 可视 312px，被裁掉的正好是那行字号 ⇒ 点按落空。改成「− 当前 +」步进器）。
+    // 命令仍走既有 `fontsize`（px 入参），回显读 activeValues.fontSize（内核查询已是 px，别再解析 class）。
+    { key: "font-size", custom: () => (
+      <FontSizeStepper value={activeValues.fontSize} sizes={MOBILE_FONT_SIZES} onPick={(px) => runPanel("fontsize", px)} />
+    ) },
     // 行高：行首给「行高」标签（用户 261017：第三行需要知道是行高），6 个档位只显示数值。
     { key: "line-height", label: "行高", items: LINE_HEIGHT_VALUES.map((v) => ({ label: "行高", glyph: String(v), run: () => runPanel("lineHeight", v) })) },
     // 画图族：纯文字（用户 261017）；Drawnix 四类共用同一画板内核，261019 P0 解禁。
@@ -639,7 +657,8 @@ export function EditorDock({ editor, editing, undoBackend = "kernel", undoLimits
           ) : renderedPanel === "insert" || renderedPanel === "more" ? (
             <>
               {/* 「＋」= **方块网格**（261015 用户点单：照图1 的方块样式；两组 8+10、3 列）。
-                  「更多」= **分行白卡**（261017 二改用户点单：公式/上下标/格式刷一行、缩进三项一行、行高一行、画图占位一行）。 */}
+                  「更多」= **分行白卡**（261017 二改用户点单：公式/上下标/格式刷一行、缩进三项一行、行高一行、画图占位一行；
+                  261104 在缩进与行高之间加「字号」步进器行 —— 用户批准把字号从「Aa」面板搬过来与行高同组）。 */}
               {renderedPanel === "insert" ? (
                 <div className="med-ins-groups">
                   {INSERT_GROUPS.map((g) => (
@@ -650,10 +669,12 @@ export function EditorDock({ editor, editing, undoBackend = "kernel", undoLimits
                 <div className="med-font-panel">
                   {moreRows.map((row) => (
                     <div className="med-f-row" key={row.key}>
-                      <div className="med-f-card" data-count={row.items.length}>
-                        {row.label ? <span className="med-f-rowlabel">{row.label}</span> : null}
-                        {row.items.map(rowBtn)}
-                      </div>
+                      {row.custom ? row.custom() : (
+                        <div className="med-f-card" data-count={row.items?.length ?? 0}>
+                          {row.label ? <span className="med-f-rowlabel">{row.label}</span> : null}
+                          {row.items?.map(rowBtn)}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -735,14 +756,6 @@ export function EditorDock({ editor, editing, undoBackend = "kernel", undoLimits
                 </div>
               </div>
 
-              {/* 字号：**放最底部**（用户 261012 定：用得不多） */}
-              <div className="med-f-row">
-                <div className="med-f-card med-f-sizes" data-count={MOBILE_FONT_SIZES.length}>
-                  {MOBILE_FONT_SIZES.map((v) => (
-                    <button key={v} className={"med-f-btn" + (activeValues.fontSize === v ? " med-f-on" : "")} onClick={() => runPanel("fontsize", v)} aria-label={v + "px"} title={v + "px"}>{v}</button>
-                  ))}
-                </div>
-              </div>
             </div>
           )}
         </div>

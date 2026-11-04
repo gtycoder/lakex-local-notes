@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useKeyboard } from "../hooks/useKeyboard";
 import { usePanelDrag, type PanelSide } from "../hooks/usePanelDrag";
 import { chromeAfterScroll, type ChromeScrollState } from "./scrollChrome";
+import { useDockPanelPhase } from "../editor/dockPanelPhase";
+import { baseCapsuleHidden, capsuleHiddenFor } from "./capsuleVisibility";
 import type { NotebookTab } from "./useNotebookTabs";
 import type { WorkspaceOverlay } from "./useWorkspaceOverlays";
 
@@ -87,8 +89,32 @@ export function useWorkspaceChrome(options: UseWorkspaceChromeOptions) {
   //   ② dock 二级工具栏展开：胶囊层级低于 dock（mobile.css 的 --above-dock 与 editor-dock 的 z-index），面板从上面盖过来。
   // 表格/多维表/画板/手写板编辑态仍隐藏（各自底部工具条占位，没有"无光标但仍要导航"的同款场景）。
   const { keyboardOpen } = useKeyboard();
+  const dockPanelPhase = useDockPanelPhase();
   const capsuleInEdit = !!active?.editing && (active?.kind ?? "doc") === "doc";
-  const capsuleHidden = chromeHiddenNow || (!!active?.editing && (!capsuleInEdit || keyboardOpen));
+  // 判据唯一来源见 ./capsuleVisibility。261104：面板开合会顺带切 IME（开：收；关：放回），
+  // 键盘判据在过渡里抖一次 ⇒ 胶囊闪入闪出。做法 = **面板阶段冻结可见性**：打开前是什么就保持什么，
+  // 面板关完再按键盘判据；编辑态胶囊的 CSS 过渡也已改成 none（mobile.css）。
+  const baseHidden = baseCapsuleHidden({
+    chromeHidden: chromeHiddenNow,
+    editing: !!active?.editing,
+    capsuleInEdit,
+    keyboardOpen,
+  });
+  const frozenHiddenRef = useRef(baseHidden);
+  const prevDockPhaseRef = useRef(dockPanelPhase);
+  if (prevDockPhaseRef.current !== dockPanelPhase) {
+    // 只在「面板打开」与「面板关完」两个边界取值；open↔closing 之间保持冻结（否则过渡里又会被键盘判据改写）。
+    if (dockPanelPhase !== "closing") frozenHiddenRef.current = baseHidden;
+    prevDockPhaseRef.current = dockPanelPhase;
+  }
+  const capsuleHidden = capsuleHiddenFor({
+    chromeHidden: chromeHiddenNow,
+    editing: !!active?.editing,
+    capsuleInEdit,
+    keyboardOpen,
+    dockPanelPhase,
+    frozenHidden: frozenHiddenRef.current,
+  });
   const showChrome = useCallback(() => {
     if (chromeRef.current.hidden || chromeRef.current.acc) setChrome({ hidden: false, acc: 0 });
   }, []);

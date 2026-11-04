@@ -44,8 +44,14 @@ describe("阅读时顶栏/底栏自动收起（261019，对齐思源）", () => 
     // 261103 二轮：文档编辑态**常显**胶囊（抬到 dock 上方），但键盘弹起时隐藏、二级面板展开时被 dock 层级盖住；
     // 表格/多维表/画板/手写板编辑态仍隐藏。顶栏自动收起判据不变。
     expect(CHROME).toContain('const capsuleInEdit = !!active?.editing && (active?.kind ?? "doc") === "doc";');
-    expect(CHROME).toContain("const capsuleHidden = chromeHiddenNow || (!!active?.editing && (!capsuleInEdit || keyboardOpen));");
     expect(CHROME).toContain("const { keyboardOpen } = useKeyboard();");
+    // 261104：判据抽到 capsuleVisibility 纯函数 + 面板阶段**冻结**可见性（面板开合会顺带切 IME，旧判据会在过渡里抖一次 → 胶囊滑入/滑出闪）。
+    expect(CHROME).toContain("const baseHidden = baseCapsuleHidden({");
+    expect(CHROME).toContain("frozenHiddenRef.current = baseHidden");
+    expect(CHROME).toContain("const capsuleHidden = capsuleHiddenFor({");
+    expect(CHROME).toContain("frozenHidden: frozenHiddenRef.current");
+    // 编辑态胶囊显隐瞬时（无过渡）：否则残余键盘路径仍会滑入/滑出。
+    expect(CSS).toMatch(/\.mobile-bottom-bar--above-dock\s*\{[^}]*transition:\s*none/);
     expect(WS).toContain("aboveDock={capsuleInEdit}");
     expect(CAPSULE).toContain("mobile-bottom-bar--above-dock");
     // 层序：胶囊 above-dock = 2，dock 容器 = 4 ⇒ 二级面板展开时盖住胶囊（反向就是"胶囊浮在色板上"）。

@@ -8,6 +8,14 @@
 
 ## 0. 最新交接（261027）
 
+### 261104 · 字号步进器（Aa → 更多）+ 二级面板开合「胶囊闪入闪出」修复 · **本地改动**
+- **字号步进器（用户批准方案）**：字号从「Aa」面板底部 8 钮改成 `− 当前 +` 步进器，搬进「更多」面板、与行高/缩进同组（261012 原定「放最底部」作废）。档位仍是内核 12 档掐头去尾的 8 档（14…32）；命令仍 `fontsize`（px 入参），回显读 `queryCommandValue("fontsize", false)`。共用控件 `src/mobile/ui/FontSizeStepper.tsx`（几何照表格 T 面板：40 高 / 132 宽 / 18px 图标 / 首尾置灰）。**Aa 面板内容 354 → 300px**。
+- **面板高度下限 280 → 312**（`useEditSurface({ minPanelHeight: 312 })`）：Aa 300px 在 280 下限下仍会裁 20px；且「打开前键盘开着」捕获 312、「键盘关着」落到 280 ⇒ 同一面板两种高度。312 ≈ 常见键盘高，面板尺寸稳定。
+- **胶囊闪入闪出（用户报）**：根因 = 面板开合会顺带切 IME（开：收；关：放回）⇒ `keyboardOpen` 在过渡里抖一次，`capsuleHidden` 跟着变，再配上 250ms transform/opacity 过渡 = 胶囊在面板边上滑入/滑出。
+  · 修法 ①：判据抽到 `src/mobile/notebook/capsuleVisibility.ts` 纯函数；**面板 open/closing 阶段冻结可见性**（打开前是什么就保持什么，关完再按键盘判据）。`dockPanelPhase` 单一来源 = `src/mobile/editor/dockPanelPhase.ts`（EditorDock 写、useWorkspaceChrome 读）。
+  · 修法 ②：编辑态胶囊 `.mobile-bottom-bar--above-dock { transition: none }` ⇒ 残余键盘路径也瞬时，不再滑动。
+- **设备复验（lake_mobile，重建 APK）**：键盘关着开面板 → 胶囊全程可见、零 class 翻转（被 dock z=4 盖住）；键盘开着开面板 → 胶囊全程保持隐藏，不再「弹出来又缩回去」；关面板 → 无 opacity/transform 中间帧，键盘回填后瞬时隐藏；⌨ 收键盘 → 瞬时恢复；Aa 面板 clientHeight = scrollHeight = **312**（不再溢出）。
+- **门禁**：tsc 0 / 全量 vitest **581 文件 3552 例（3540 通过 + 12 skipped）** / mobileLayers 基线 mobile.css 1486→1487、editor-dock.css 259→265 / `git diff --check` 0。
 ### 261104 · 十七批：手写板导出（整本 PDF 压缩 + 单页 PDF/PNG/SVG + 底纹随页）· **本地改动**
 - **整本 → PDF（既有能力，本轮修体积）**：页图内嵌前用 sharp 转 JPEG q80（Chromium 打印会把 WebP 按无损重写）。335 页实测 **382 MB / 30.0 s → 74.9 MB / 13.5 s**（页数仍 335）。链路：`exportInkPdfHtml`（改异步）→ `printToPDF`。
 - **底纹与画布一致（用户定稿）**：`buildInkPdfBody` 逐页输出 `ink-page__paper`（pattern + rect），几何抽到 `src/core/inkPaperGeometry.ts`（画布 `InkPaper.tsx` 与导出共用，不再各写 32/16/1.4/31.5）；`blank` 页仍是白纸。
@@ -580,7 +588,7 @@
 - 261103 各批已全部提交并双推（20:08–20:21）：`ce442482`（usheet 35 行/双光标/整行整列）、`733ab4aa`（多维表头部+短名）、`2b29d9e8`（画板工具条+第 4 处补丁）、`75c46902`（ink 14 色）、`ae14ffd1`（胶囊/横滑/安全区/页签 44/useKeyboard）、`1f164f2b`（门禁装置+三份基线重烤）、`1e74c3f8`（文档）、`fdf9c455`（AI 默认关）。
 - 261103 之后（261104 凌晨，均已双推）：ink 三修（`912143da` 落笔/擦除按批渲染、`8f32a5ca` 中断不丢笔）+ 性能观测 `af169f96` + 图片页背景下采样 `8dc83a87` + 导入体积提示 `388232db` + 资源页本地占用 `1adcde27`。
 
-**门禁基线**（261104 10:26 实测；工作树含其他会话在途改动）：tsc 0 / 全量 vitest **577 文件 3523 例（566 文件通过 + 11 skipped；3511 例通过 + 12 skipped）** / `check:core` 136 文件 0 / `check:mobileui` / 双 build / `check:bundle` / `check:arch`（移动首屏 ≈340.8KB / 预算 360KB；桌面 ≈541.2KB / 预算 600KB；import 违规 0）/ `git diff --check` 0。设备：手机 6 态 + 平板 6 态 + 多维表 3 态已按六批新壳**重烤**、连跑 0 差异；23 屏走查 ok；`check:windowsweep` pass。clean debug APK ≈37.95–37.97MB（量体积必须 clean 后 `stat`，增量构建会虚增到 ~42MB）。
+**门禁基线**（261104 11:28 实测；工作树含其他会话在途改动）：tsc 0 / 全量 vitest **581 文件 3552 例（570 文件通过 + 11 skipped；3540 例通过 + 12 skipped）** / `check:core` 136 文件 0 / `check:mobileui` / 双 build / `check:bundle` / `check:arch`（移动首屏 ≈340.8KB / 预算 360KB；桌面 ≈541.2KB / 预算 600KB；import 违规 0）/ `git diff --check` 0。设备：手机 6 态 + 平板 6 态 + 多维表 3 态已按六批新壳**重烤**、连跑 0 差异；23 屏走查 ok；`check:windowsweep` pass。clean debug APK ≈37.95–37.97MB（量体积必须 clean 后 `stat`，增量构建会虚增到 ~42MB）。
 
 **环境（本机实测 261103）**：Node **v24.18.0**（`$HOME/.nvm/versions/node/v24.18.0/bin`）；JDK **21** `/Library/Java/JavaVirtualMachines/jdk-21.jdk`（系统默认 java 是 1.8，手跑 gradlew 必须指 21）；Android SDK `/opt/homebrew/share/android-commandlinetools`；AVD **7 个**：lake_mobile / lake_gate / lake_tab / lake_body / lake_lock / lake_meas / lake_sheet；CDP **9335 开发 / 9336 门禁 / 9340 平板与窗口矩阵**。Android 唯一运行手册 = `docs/MOBILE-OPS.md`（serial 号段以 `adb devices` 现场为准，文档里的 5556/5562 已不一致）。
 
@@ -613,7 +621,7 @@
 
 **P2（体验缺口 / 长期）**
 
-6. **移动端文本格式（261104 设备实测已收口，别再按旧文档当缺口）**：H1–H6 / 字号 / 颜色 / 对齐 / 列表 / 缩进 / 行高 / 上下标 / 清除格式**全部生效**；余下三件事：① Aa 面板内容 354px > 可视 312px，**字号行默认在屏外**（点按会落空，易被误判成 no-op）——优先修可达性；② 首行缩进是**全文级且不可取消**（换选区级实现或去掉入口）；③ clearFormat 只清行内、不清块级（语义待定）。未接入口：justify / unlink（两端皆无）/ replace（移动只查不换）/ style→code·quote / 表格块级命令族 / 分栏 3·4 / alert 类型。另有：画图插入项解禁（文本绘图仍置灰）；移动视图拖拽排序；PdfRender `cacheDir` 清理；页面级 6 处裸 `env(safe-area-inset-bottom)`。
+6. **移动端文本格式（261104 设备实测已收口，别再按旧文档当缺口）**：H1–H6 / 字号 / 颜色 / 对齐 / 列表 / 缩进 / 行高 / 上下标 / 清除格式**全部生效**；余下两件事：① 首行缩进是**全文级且不可取消**（换选区级实现或去掉入口）；② clearFormat 只清行内、不清块级（语义待定）。（Aa 面板溢出已在 261104 修：字号搬进「更多」+ 面板下限 312 ⇒ 实测 312/312 无裁切。）未接入口：justify / unlink（两端皆无）/ replace（移动只查不换）/ style→code·quote / 表格块级命令族 / 分栏 3·4 / alert 类型。另有：画图插入项解禁（文本绘图仍置灰）；移动视图拖拽排序；PdfRender `cacheDir` 清理；页面级 6 处裸 `env(safe-area-inset-bottom)`。
 7. 墓碑 payload 老化（261025 定「后续优化」）；大库阈值探测（>2 万文档 / 索引 3–5MB）；**真实 Android 物理机验收从未做过**；PARITY 残余（移动 qnotes 缺正文恢复未接 v3、移动云清理无 UI 入口、目录恢复后 `deleted_notes` 残留）。
 8. 顶栏真 44 需另开「44 → 52」需求（六批 A4 结论）；平板内容画布「点空白落光标」（待用户裁决）。
 

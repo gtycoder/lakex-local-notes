@@ -525,6 +525,10 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
 .mobile-bottom-bar--above-dock {
   bottom: calc(var(--mobile-bottom-bar-height) + var(--mobile-bar-gap));
   z-index: 2;
+  /* 261104：编辑态胶囊的显隐必须**瞬时**（无过渡）。面板开合会顺带切换 IME（开：收；关：放回），
+     capsuleHidden 因此会在过渡里变一次；带 250ms 过渡就表现为「胶囊滑入/滑出」的闪。
+     面板阶段内胶囊本就不隐藏（靠层序覆盖，见 capsuleVisibility.ts），这里再把残余的键盘路径做成瞬时。 */
+  transition: none;
 }
 /* 编辑态胶囊出现后，正文底部要让出「dock + 胶囊」两级，否则最后一行被胶囊压住。 */
 .mobile-workspace--capsule-edit .mobile-doc-body { padding-bottom: calc(80px + var(--mobile-bottom-bar-height) + var(--mobile-bar-gap)); }
