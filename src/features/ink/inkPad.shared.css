@@ -341,3 +341,17 @@
   transform: translate(-50%, -50%);
   cursor: pointer;
 }
+
+/* v4 页内贴图：选中后的右下角缩放手柄（拖动时保持宽高比） */
+.ink-image-resize {
+  position: absolute;
+  z-index: 3;
+  width: 12px;
+  height: 12px;
+  border: 1px solid var(--lake-accent);
+  border-radius: var(--lake-radius-hairline);
+  background: var(--lake-bg-panel);
+  transform: translate(-50%, -50%);
+  cursor: nwse-resize;
+  touch-action: none;
+}

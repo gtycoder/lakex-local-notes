@@ -8,6 +8,11 @@
 
 ## 0. 最新交接（261027）
 
+### 261104 · 二十一批续：贴图缩放手柄（下一批：文字块）· **本地改动**
+- **缩放手柄**：选中贴图右下角出现手柄（`InkImageResizeHandle`，HTML 浮层 `cursor:nwse-resize`），拖动 = 保持宽高比、锚点左上角、最小边 24（复用 `resizePageImage`）；拖动期间只改内存，**松手才 commit 一次**；`pointercancel` 还原。
+- **为什么用 window 监听而不是 setPointerCapture**：捕获会把事件重定向到句柄、连带改变后续 click 语义（AGENTS §7.20），且句柄是 HTML 浮层不需要捕获。
+- 测试：`inkPageImages.render.test` 新增「拖到 x=500 ⇒ 宽 200→400、松手一次落盘」；形状函数另有 5 例纯函数单测。
+- **门禁**：tsc / vitest（578 文件 3575 例）/ cssLayers（shared 205→215）/ mobileui / diff-check 全绿。
 ### 261104 · 二十一批：页内贴图交互（插入/选中/拖动/删除）+ 备注与文字块进全文搜索 · **本地改动**
 - **贴图插入**（桌面底部「插入贴图」）：宿主选图 + 上传资产 → `placeInkPageImage` 按**页宽 40%、保持原图比例、居中**落到当前页（用户定稿）。纯函数集 `inkPageImages.ts`（place/hit/move/resize/remove，5 例单测）。
 - **选中 / 拖动 / 删除**：点图 = 选中（SVG 虚线框 + HTML 浮层 ×）；拖动只改内存（docRef+setDoc），**松手才 commit 一次**；`pointercancel`/丢捕获还原；拖出页面钳到「至少 40px 在页内」；Delete/Backspace 删除。缩放函数已就绪，手柄 UI 下一批。

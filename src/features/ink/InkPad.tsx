@@ -21,8 +21,8 @@ import { inkStrokeStyle } from "./inkStrokeStyle.js";
 import { InkExportMenu, type InkPageExportFormat } from "./InkExportMenu.js";
 import { InkOutlinePanel } from "./InkOutlinePanel.js";
 import { notedPageIds } from "./inkOutline.js";
-import { movePageImage, placeInkPageImage, removePageImage } from "./inkPageImages.js";
-import { InkImageRemoveButton, InkImageSelectionRect } from "./InkImageSelection.js";
+import { INK_IMAGE_MIN_EDGE, movePageImage, placeInkPageImage, removePageImage, resizePageImage } from "./inkPageImages.js";
+import { InkImageRemoveButton, InkImageResizeHandle, InkImageSelectionRect } from "./InkImageSelection.js";
 import { inkPerfDebugEnabled, installInkPerfHooks, recordInkPerf } from "./inkPerfStats";
 import { inkImageImportNotice, inkPdfImportNotice } from "./inkImportNotice";
 import { installInkInputDiagnostics, installPointerInputDebugHooks } from "../board/boardInputDiagnostics";
@@ -227,6 +227,8 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
   /** v4 页内贴图：当前选中的图 + 拖动临时态（拖动只改内存，松手才 commit）。 */
   const [selectedImageId, setSelectedImageId] = useState<string | null>(null);
   const imageDragRef = useRef<{ id: string; startX: number; startY: number; before: InkPage["images"] } | null>(null);
+  /** 贴图缩放手柄拖动中（锚点 = 左上角，保持宽高比；松手才 commit）。 */
+  const imageResizeRef = useRef<{ id: string; before: InkPage["images"]; startWidth: number; originX: number } | null>(null);
   const [pendingDeletePageId, setPendingDeletePageId] = useState<string | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
   /** 261103 九批：手写板落笔诊断的宿主根节点（默认关，见 boardInputDiagnostics.ts 头注释）。 */
@@ -729,6 +731,80 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
     else delete nextPage.images;
     setSelectedImageId(null);
     commit(replacePage(current, nextPage), inkPagePatch(before, nextPage));
+  }, [commit, page, readOnly, selectedImageId]);
+
+  /**
+   * 贴图缩放手柄：拖动期间只改内存（docRef + setDoc），松手才 commit 一次；
+   * 保持宽高比、锚点左上角、最小边 24（与 resizePageImage 的口径一致）。
+   * 用 window 监听而不是 setPointerCapture：捕获会把事件重定向到句柄，后续 click 语义也跟着变（AGENTS §7.20）。
+   */
+  const startImageResize = useCallback((event: ReactPointerEvent<HTMLElement>) => {
+    const id = selectedImageId;
+    const current = docRef.current;
+    if (!id || !current || !page || readOnly) return;
+    const image = (page.images ?? []).find((item) => item.id === id);
+    const frame = (event.currentTarget as HTMLElement).closest(".ink-page-frame") as HTMLElement | null;
+    const rect = frame?.getBoundingClientRect();
+    if (!image || !rect || rect.width <= 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    imageResizeRef.current = { id, before: page.images, startWidth: image.width, originX: image.x };
+    const pageWidth = page.width;
+    const restore = (): void => {
+      const doc = docRef.current;
+      const pageNow = doc?.pages.find((item) => item.id === page.id);
+      if (!doc || !pageNow) return;
+      const restoredPage = { ...pageNow };
+      if (imageResizeRef.current?.before) restoredPage.images = imageResizeRef.current.before;
+      else if (!imageResizeRef.current) return;
+      const restored = replacePage(doc, restoredPage);
+      docRef.current = restored;
+      setDoc(restored);
+    };
+    const onMove = (moveEvent: PointerEvent): void => {
+      const resizing = imageResizeRef.current;
+      const doc = docRef.current;
+      const pageNow = doc?.pages.find((item) => item.id === page.id);
+      if (!resizing || !doc || !pageNow) return;
+      const x = ((moveEvent.clientX - rect.left) / rect.width) * pageWidth;
+      const scale = Math.max(INK_IMAGE_MIN_EDGE / resizing.startWidth, (x - resizing.originX) / resizing.startWidth);
+      const images = resizePageImage({ ...pageNow, images: resizing.before }, resizing.id, scale);
+      if (!images) return;
+      const nextDoc = replacePage(doc, { ...pageNow, images });
+      docRef.current = nextDoc;
+      setDoc(nextDoc);
+    };
+    const cleanup = (): void => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onCancel);
+    };
+    const onUp = (): void => {
+      const resizing = imageResizeRef.current;
+      cleanup();
+      imageResizeRef.current = null;
+      const doc = docRef.current;
+      const pageNow = doc?.pages.find((item) => item.id === page.id);
+      if (!resizing || !doc || !pageNow) return;
+      const beforePage = { ...pageNow };
+      if (resizing.before) beforePage.images = resizing.before;
+      else delete beforePage.images;
+      const changed = JSON.stringify(pageNow.images ?? []) !== JSON.stringify(resizing.before ?? []);
+      if (changed) commit(replacePage(doc, pageNow), inkPagePatch(beforePage, pageNow));
+      else {
+        const restored = replacePage(doc, beforePage);
+        docRef.current = restored;
+        setDoc(restored);
+      }
+    };
+    const onCancel = (): void => {
+      cleanup();
+      restore();
+      imageResizeRef.current = null;
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onCancel);
   }, [commit, page, readOnly, selectedImageId]);
 
   // Delete/Backspace 删除选中贴图（只在真有选中时挂监听，避免影响编辑器的其它按键）
@@ -1255,11 +1331,18 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
           </svg>
           {/* 选中贴图的删除按钮：HTML 浮层（在 SVG 之上，只有按钮接事件），避免抢画布 pointerdown */}
           {!readOnly && selectedImageId && (page.images ?? []).some((image) => image.id === selectedImageId) ? (
-            <InkImageRemoveButton
-              image={(page.images ?? []).find((image) => image.id === selectedImageId)!}
-              page={page}
-              onRemove={deleteSelectedImage}
-            />
+            <>
+              <InkImageRemoveButton
+                image={(page.images ?? []).find((image) => image.id === selectedImageId)!}
+                page={page}
+                onRemove={deleteSelectedImage}
+              />
+              <InkImageResizeHandle
+                image={(page.images ?? []).find((image) => image.id === selectedImageId)!}
+                page={page}
+                onStart={startImageResize}
+              />
+            </>
           ) : null}
         </div>
       </div>

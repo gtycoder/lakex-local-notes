@@ -48,9 +48,10 @@ describe("手写板页内贴图", () => {
     expect(width).toBeCloseTo(INK_PAGE_WIDTH * 0.4, 1);
     expect(height).toBeCloseTo(width / 2, 1);          // 800x400 ⇒ 2:1
     expect(x).toBeCloseTo((INK_PAGE_WIDTH - width) / 2, 1);
-    // 自动选中：虚线框 + 删除按钮都在
+    // 自动选中：虚线框 + 删除按钮 + 缩放手柄都在
     expect(view.container.querySelector(".ink-image-select")).not.toBeNull();
     expect(view.container.querySelector('button[aria-label="删除这张图"]')).not.toBeNull();
+    expect(view.container.querySelector(".ink-image-resize")).not.toBeNull();
     await view.unmount();
   });
 
@@ -75,6 +76,41 @@ describe("手写板页内贴图", () => {
     expect(onChange).toHaveBeenCalled();
     const body = JSON.parse(onChange.mock.calls[onChange.mock.calls.length - 1][0]) as InkDoc;
     expect(body.pages[0].images).toBeUndefined();
+    await view.unmount();
+  });
+
+  it("缩放手柄：拖动后图变大、松手一次 commit；拖动中不标脏（防抖落盘只发生一次）", async () => {
+    const doc: InkDoc = createInkDoc("p1");
+    doc.pages[0].images = [{ id: "i1", url: IMAGE_URL, x: 100, y: 100, width: 200, height: 100 }];
+    const onChange = vi.fn();
+    const onDirty = vi.fn();
+    const view = await mount({ content: inkToBody(doc), variant: "desktop", readOnly: false, onChange, onDirty });
+    const image = view.container.querySelector("image[data-page-image]") as SVGImageElement;
+    await act(async () => {
+      const down = new MouseEvent("pointerdown", { bubbles: true, clientX: 10, clientY: 10 });
+      Object.defineProperty(down, "pointerId", { value: 1 });
+      image.dispatchEvent(down);
+    });
+    const handle = view.container.querySelector(".ink-image-resize") as HTMLElement;
+    expect(handle).not.toBeNull();
+    const frame = view.container.querySelector(".ink-page-frame") as HTMLElement;
+    frame.getBoundingClientRect = () => ({ left: 0, top: 0, width: 794, height: 1123, right: 794, bottom: 1123, x: 0, y: 0, toJSON: () => ({}) }) as DOMRect;
+    await act(async () => {
+      const down = new MouseEvent("pointerdown", { bubbles: true, clientX: 300, clientY: 200 });
+      Object.defineProperty(down, "pointerId", { value: 2 });
+      handle.dispatchEvent(down);
+    });
+    // 拖到 x=500：新宽度 = 500 - 100 = 400（原 200 ⇒ 放大一倍）
+    await act(async () => {
+      window.dispatchEvent(new MouseEvent("pointermove", { clientX: 500, clientY: 200 }) as PointerEvent);
+    });
+    await act(async () => { window.dispatchEvent(new MouseEvent("pointerup", {}) as PointerEvent); });
+    const resized = view.container.querySelector("image[data-page-image]") as SVGImageElement;
+    expect(Number(resized.getAttribute("width"))).toBeCloseTo(400, 0);
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 620)); });
+    expect(onChange).toHaveBeenCalled();
+    const body = JSON.parse(onChange.mock.calls[onChange.mock.calls.length - 1][0]) as InkDoc;
+    expect(body.pages[0].images![0].width).toBeCloseTo(400, 0);
     await view.unmount();
   });
 

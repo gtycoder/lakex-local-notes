@@ -233,7 +233,7 @@ pages/p-<pageId>.json  # 单页笔迹（不可变、内容寻址）
   纯函数在 `inkPageImages.ts`（`placeInkPageImage` / `hitTestPageImage` / `movePageImage` / `resizePageImage` / `removePageImage`）。
 - **选中/拖动**：点图进入选中（虚线框 + 右上角 ×）；拖动只改内存（`docRef` + `setDoc`），**松手才 commit 一次**（不进撤销栈的中间态）；
   拖出页面会被钳到「至少 40px 留在页内」；`pointercancel`/丢捕获会还原原位。Delete/Backspace 删除选中图。
-- **缩放**：函数已就绪（`resizePageImage`，最小边 24），手柄 UI 下一批接。
+- **缩放**：选中后右下角手柄拖动 ⇒ 保持宽高比、锚点左上角、最小边 24；拖动只改内存，松手 commit 一次；取消（pointercancel）还原。
 - **可搜索**：`inkToSearchText` 以前恒返回空串 ⇒ 手写板内容全库搜不到；现在**页备注 + 页内文字块**会拼成可搜索文本（笔迹仍不可搜，无 OCR）。
   快速路径：正文里没有 `"note"`/`"texts"` 标记就直接返回空串（绝大多数手写板保存路径零额外开销）。
 - **HTML 浮层与 SVG 分层**：选中虚线框画在 SVG 里（笔迹层下面），删除按钮是 HTML 浮层（在 SVG 之上）——避免和画布的 pointerdown 抢事件。

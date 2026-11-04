@@ -141,7 +141,7 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "features/bitable/bitableCalendarView.css": { decls: 75, dupGroups: 0 },
   // 260920：独立画板文档（kind=board）容器（铺满 tab 格 + 去掉卡片态边框/圆角 + 内核分包加载占位）
   "features/board/boardEditor.css": { decls: 17, dupGroups: 0 },
-  "features/ink/inkPad.shared.css": { decls: 205, dupGroups: 0 },   // 261104 十八批：+3 = 缩略图书签小点（position/top/left 之外还有尺寸与圆角，净 +3 宣告）；新增交互形态非覆盖
+  "features/ink/inkPad.shared.css": { decls: 215, dupGroups: 0 },   // 261104 十八批：+3 = 缩略图书签小点（position/top/left 之外还有尺寸与圆角，净 +3 宣告）；新增交互形态非覆盖
   "features/ink/inkPad.desktop.css": { decls: 120, dupGroups: 0 },   // 261104 十八批：+68 = 大纲/书签面板（外壳 3 + 头部 9 + 当前页行 3 + 书签态 1 + 列表 5 + 行 15 + 页号 1 + 元信息 1 + 标签 1 + 空态 1 等）；新增交互形态非覆盖   // 261104 十七批：+25 = 单页导出（一个按钮 + 悬浮格式菜单），新增交互形态非覆盖   // 261102 T2-B：+4 = PDF 导入进度横幅（display/align-items/justify-content/gap；新增交互形态非覆盖）   // 260926：+1 = 内核「主题选择」岛抬到文档状态栏上方（bottom 按状态栏几何派生）；+2 = .board-editor--{restoring,hidden} 共用 content-visibility:hidden + pointer-events:none（display:none 会钳掉滚动位置、visibility:hidden 会被内核工具条的 visible 顶掉；均合法新增非覆盖回涨）；261006：+5 = 左侧创建栏三类工具项图标中轴对齐（隐藏 radio 移出流 3 条 + label 定位 1 条 + 注入触发器居中 1 条）
   "components/app/historySnapshotPreview.css": { decls: 77, dupGroups: 0 },
   "components/ui/markdown/markdown.css": { decls: 57, dupGroups: 0 },   // 261005：Markdown 轻量子集渲染的共用排版（从 bitableMarkdown.css 提出 43 条）.md-preview，bitable 与 AI 面板共用
