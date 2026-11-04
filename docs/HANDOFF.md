@@ -695,15 +695,17 @@
 
 | worktree | 分支 | HEAD | 状态 |
 | --- | --- | --- | --- |
-| `lakex-local-notes`（主仓库） | `feat/pad-touch-ui` | `3af116c5` + 本批（ink 二十五/二十六批）**已提交并双推（hash 见 git log / §1 下方）** | 与 Gitee/GitHub 同名分支 **0/0**（截至 `29e01d56`）；**已合入 master（与 master 同一 commit）**；工作树多会话并行，状态**以 `git status` 为准** |
+| `lakex-local-notes`（主仓库） | `feat/pad-touch-ui` | 见 `git log -1`（**不写死 hash**；本批 = ink 二十五/二十六批，261104） | 与 Gitee/GitHub 同名分支 **0/0**（261104 推送后 `ls-remote` 实测同 hash）；**已合入 master（与 master 同一 commit）**；工作树多会话并行，状态**以 `git status` 为准** |
 | `lakex-pad` | `feat/pad-adaptation` | `17f44dbd` | **历史残留**：平板第一批早已合入 master，本分支落后 master 15 提交、领先 0。其 README/AGENTS/HANDOFF 是旧口径（「平板走内核工具栏」「补丁 3 处」），**不要当依据**；确认不再用可 `git worktree remove lakex-pad`（需用户点头） |
 
-- `master` = `feat/pad-touch-ui` 的同一 commit（261104 合 master + 双推，两个远端 `ls-remote` 实测同 hash；本行写于 `29e01d56` 之后的本地提交）。master 自 `408d6126` 前进 **69 提交**（本会话手写板线 + 移动端/编辑面线）。
+- `master` = `feat/pad-touch-ui` 的同一 commit **`6fe8a589`**（261104 合 master + 双推，两个远端 `ls-remote` 实测同 hash）。master 自 `408d6126` 前进 **70 提交**（本会话手写板线 + 移动端/编辑面线）。
 - 发版：只有 v0.0.1 / v0.0.2（`4b2a2467`），`package.json` = 0.0.2；**v0.0.2..HEAD 共 125 提交未发版**（下一版 v0.0.3 的发布说明必须写 inkDoc v4：旧端只读、手机/平板需重装）。
 - 261103 各批已全部提交并双推（20:08–20:21）：`ce442482`（usheet 35 行/双光标/整行整列）、`733ab4aa`（多维表头部+短名）、`2b29d9e8`（画板工具条+第 4 处补丁）、`75c46902`（ink 14 色）、`ae14ffd1`（胶囊/横滑/安全区/页签 44/useKeyboard）、`1f164f2b`（门禁装置+三份基线重烤）、`1e74c3f8`（文档）、`fdf9c455`（AI 默认关）。
 - 261103 之后（261104 凌晨，均已双推）：ink 三修（`912143da` 落笔/擦除按批渲染、`8f32a5ca` 中断不丢笔）+ 性能观测 `af169f96` + 图片页背景下采样 `8dc83a87` + 导入体积提示 `388232db` + 资源页本地占用 `1adcde27`。
 
-**门禁基线**（261104 18:57 主工作树实测，含二十五/二十六批 ink）：tsc 0 / 全量 vitest **594 文件 3620 例（3608 通过 + 12 skipped）**（+1 文件 = `mobile/ink/inkSharedCssParity.test.ts`） / ui-metrics pass / `check:mobileui` / `check:core` 136 文件 0 / `check:mobileui` / 双 build / `check:bundle` / `check:arch`（移动首屏 ≈340.8KB / 预算 360KB；桌面 ≈541.2KB / 预算 600KB；import 违规 0）/ `git diff --check` 0。工作树**本批提交后 clean**（另一会话后续改动以 `git status` 为准）；APK 已按合并后代码重装（debug，增量 42.2MB）。设备：手机 6 态 + 平板 6 态 + 多维表 3 态已按六批新壳**重烤**、连跑 0 差异；23 屏走查 ok；`check:windowsweep` pass。clean debug APK ≈37.95–37.97MB（量体积必须 clean 后 `stat`，增量构建会虚增到 ~42MB）。
+**门禁基线**（261104 18:57 主工作树实测，含二十五/二十六批 ink）：tsc 0 / 全量 vitest **594 文件 3620 例（3608 通过 + 12 skipped）**（较会话起点净 +3 文件：新增 `inkSharedCssParity` / `inkPagesPanel.render` / `inkPageTabButton.render` / `MobilePageTab.render`，删 `inkOutlinePanel.render`；例数 +22） / ui-metrics pass / `check:mobileui` / `check:core` 136 文件 0 / `check:mobileui` / 双 build / `check:bundle` / `check:arch`（移动首屏 ≈340.8KB / 预算 360KB；桌面 ≈541.2KB / 预算 600KB；import 违规 0）/ `git diff --check` 0。工作树**本批提交后 clean**（另一会话后续改动以 `git status` 为准）；APK 已按合并后代码重装（debug，增量 42.2MB）。设备：手机 6 态 + 平板 6 态 + 多维表 3 态已按六批新壳**重烤**、连跑 0 差异；23 屏走查 ok；`check:windowsweep` pass。clean debug APK ≈37.95–37.97MB（量体积必须 clean 后 `stat`，增量构建会虚增到 ~42MB）。
+
+**环境（本机实测 261104 追加）**：**GitHub 推送走 HTTPS**（本机 `~/.ssh/id_ed25519_personal` 未在 GitHub 侧生效，SSH 报 `Permission denied (publickey)`；keychain 里有 `gtycoder` 凭据）⇒ `git push https://github.com/gtycoder/lakex-local-notes.git <branch>` 可用；Gitee 仍 `origin` SSH 正常。
 
 **环境（本机实测 261103）**：Node **v24.18.0**（`$HOME/.nvm/versions/node/v24.18.0/bin`）；JDK **21** `/Library/Java/JavaVirtualMachines/jdk-21.jdk`（系统默认 java 是 1.8，手跑 gradlew 必须指 21）；Android SDK `/opt/homebrew/share/android-commandlinetools`；AVD **7 个**：lake_mobile / lake_gate / lake_tab / lake_body / lake_lock / lake_meas / lake_sheet；CDP **9335 开发 / 9336 门禁 / 9340 平板与窗口矩阵**。Android 唯一运行手册 = `docs/MOBILE-OPS.md`（serial 号段以 `adb devices` 现场为准，文档里的 5556/5562 已不一致）。
 
