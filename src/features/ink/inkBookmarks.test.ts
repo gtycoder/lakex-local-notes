@@ -14,7 +14,7 @@ import {
   removeInkBookmark,
   toggleInkBookmark,
 } from "./inkBookmarks";
-import { bookmarkPageIds, buildInkOutline, inkOutlineSummary, type InkOutlinePage } from "./inkOutline";
+import { INK_OUTLINE_MODE_LABELS, bookmarkPageIds, buildInkOutline, inkOutlineSummary, nextInkOutlineMode, type InkOutlinePage } from "./inkOutline";
 
 beforeEach(() => {
   localStorage.clear();
@@ -79,6 +79,18 @@ describe("大纲派生", () => {
     const entries = buildInkOutline(pages, bookmarks, "all");
     expect(entries.map((item) => item.pageNumber)).toEqual([1, 2, 3, 4]);
     expect(entries.some((item) => item.pageId === "gone")).toBe(false);
+  });
+
+  it("bookmarks 模式：只列有书签的页（空白页也列）；切换顺序 annotated → all → bookmarks", () => {
+    const bookmarks = [{ pageId: "p2", at: "2026-01-01T00:00:00.000Z" }];
+    const entries = buildInkOutline(pages, bookmarks, "bookmarks");
+    expect(entries.map((item) => [item.pageNumber, item.bookmarked])).toEqual([[2, true]]);
+    // 没有书签 ⇒ 空列表（面板会显示空态文案）
+    expect(buildInkOutline(pages, [], "bookmarks")).toEqual([]);
+    expect(nextInkOutlineMode("annotated")).toBe("all");
+    expect(nextInkOutlineMode("all")).toBe("bookmarks");
+    expect(nextInkOutlineMode("bookmarks")).toBe("annotated");
+    expect(INK_OUTLINE_MODE_LABELS).toEqual({ annotated: "只看批注", all: "全部页", bookmarks: "只看书签" });
   });
 
   it("摘要与缩略图标位", () => {

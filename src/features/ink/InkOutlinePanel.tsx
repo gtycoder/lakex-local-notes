@@ -11,7 +11,7 @@ import { useState } from "react";
 import { Bookmark, ListTree } from "lucide-react";
 import type { InkPage } from "../../core/inkDoc.js";
 import type { InkBookmark } from "./inkBookmarks.js";
-import { buildInkOutline, inkOutlineSummary, type InkOutlineMode } from "./inkOutline.js";
+import { INK_OUTLINE_MODE_LABELS, buildInkOutline, inkOutlineSummary, nextInkOutlineMode, type InkOutlineMode } from "./inkOutline.js";
 
 export interface InkOutlineProps {
   open: boolean;
@@ -49,8 +49,10 @@ export function InkOutlinePanel({ open, onToggle, pages, currentPageId, bookmark
             <span>{inkOutlineSummary(entries)}</span>
             <button
               className="ink-outline__mode"
-              onClick={() => setMode(mode === "annotated" ? "all" : "annotated")}
-            >{mode === "annotated" ? "显示全部页" : "只看批注"}</button>
+              onClick={() => setMode(nextInkOutlineMode(mode))}
+              aria-label="切换显示范围"
+              title="切换显示范围：只看批注 / 全部页 / 只看书签"
+            >{INK_OUTLINE_MODE_LABELS[mode]}</button>
           </div>
           <div className="ink-outline__current">
             <span>第 {currentIndex >= 0 ? currentIndex + 1 : 1} 页</span>
@@ -61,7 +63,13 @@ export function InkOutlinePanel({ open, onToggle, pages, currentPageId, bookmark
             ><Bookmark size={14} />{currentBookmarked ? "取消书签" : "加书签"}</button>
           </div>
           <div className="ink-outline__list" role="list">
-            {entries.length === 0 && <p className="ink-outline__empty">还没有批注或书签，翻页画几笔就会出现</p>}
+            {entries.length === 0 && (
+              <p className="ink-outline__empty">
+                {mode === "bookmarks"
+                  ? "还没有书签：在上面点「加书签」，这一页就会出现在这里"
+                  : "还没有批注或书签，翻页画几笔就会出现"}
+              </p>
+            )}
             {entries.map((entry) => (
               <button
                 key={entry.pageId}

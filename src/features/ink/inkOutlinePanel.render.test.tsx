@@ -77,6 +77,26 @@ describe("手写板大纲 / 书签", () => {
     await view.unmount();
   });
 
+  it("显示范围循环：只看批注 → 全部页 → 只看书签（空态给出加书签提示）", async () => {
+    const view = await mount({ content: threePageBody(), variant: "desktop", readOnly: false, noteId: "note-1" });
+    await act(async () => { (view.container.querySelector('button[aria-label="大纲"]') as HTMLButtonElement).click(); });
+    const mode = () => view.container.querySelector(".ink-outline__mode") as HTMLButtonElement;
+    expect(mode().textContent).toBe("只看批注");
+    await act(async () => { mode().click(); });
+    expect(mode().textContent).toBe("全部页");
+    expect(view.container.querySelectorAll(".ink-outline__row").length).toBe(3);
+    await act(async () => { mode().click(); });
+    expect(mode().textContent).toBe("只看书签");
+    expect(view.container.querySelectorAll(".ink-outline__row").length).toBe(0);
+    expect(view.container.querySelector(".ink-outline__empty")!.textContent).toContain("还没有书签");
+    // 加一个书签后，只看书签模式下就能看到那一页
+    await act(async () => { (view.container.querySelector(".ink-outline__bookmark") as HTMLButtonElement).click(); });
+    const rows = Array.from(view.container.querySelectorAll(".ink-outline__row"));
+    expect(rows.length).toBe(1);
+    expect(rows[0].textContent).toContain("第 1 页");
+    await view.unmount();
+  });
+
   it("没有 noteId 时不写设备本地（纯视图不炸）", async () => {
     const view = await mount({ content: threePageBody(), variant: "desktop", readOnly: false });
     await act(async () => { (view.container.querySelector('button[aria-label="大纲"]') as HTMLButtonElement).click(); });

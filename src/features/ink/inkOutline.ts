@@ -28,7 +28,22 @@ export interface InkOutlineEntry {
   label?: string;
 }
 
-export type InkOutlineMode = "all" | "annotated";
+/** 大纲显示范围：只看批注（默认）/ 全部页 / 只看书签。 */
+export type InkOutlineMode = "all" | "annotated" | "bookmarks";
+
+/** 三种范围的中文名（面板按钮直接显示当前范围，避免"点了不知道在切什么"）。 */
+export const INK_OUTLINE_MODE_LABELS: Record<InkOutlineMode, string> = {
+  annotated: "只看批注",
+  all: "全部页",
+  bookmarks: "只看书签",
+};
+
+/** 循环切换顺序（annotated → all → bookmarks → annotated）。 */
+export function nextInkOutlineMode(mode: InkOutlineMode): InkOutlineMode {
+  if (mode === "annotated") return "all";
+  if (mode === "all") return "bookmarks";
+  return "annotated";
+}
 
 /** 页元信息 → 大纲条目（顺序 = 正文页序；已删除页对应的书签自然不出现）。 */
 export function buildInkOutline(
@@ -41,6 +56,8 @@ export function buildInkOutline(
   pages.forEach((page, index) => {
     const bookmark = byPage.get(page.id);
     const annotated = page.strokeCount > 0 || page.hasBackgroundImage;
+    // 「只看书签」：有书签的页一律列（哪怕空白页）；其余两种模式按上面规则过滤。
+    if (mode === "bookmarks" && !bookmark) return;
     if (mode === "annotated" && !annotated && !bookmark) return;
     entries.push({
       pageId: page.id,
