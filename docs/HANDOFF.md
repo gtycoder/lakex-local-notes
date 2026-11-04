@@ -8,6 +8,19 @@
 
 ## 0. 最新交接（261027）
 
+### 261104 · 十七批：手写板导出（整本 PDF 压缩 + 单页 PDF/PNG/SVG + 底纹随页）· **本地改动**
+- **整本 → PDF（既有能力，本轮修体积）**：页图内嵌前用 sharp 转 JPEG q80（Chromium 打印会把 WebP 按无损重写）。335 页实测 **382 MB / 30.0 s → 74.9 MB / 13.5 s**（页数仍 335）。链路：`exportInkPdfHtml`（改异步）→ `printToPDF`。
+- **底纹与画布一致（用户定稿）**：`buildInkPdfBody` 逐页输出 `ink-page__paper`（pattern + rect），几何抽到 `src/core/inkPaperGeometry.ts`（画布 `InkPaper.tsx` 与导出共用，不再各写 32/16/1.4/31.5）；`blank` 页仍是白纸。
+- **单页导出（新增）**：手写板底部**一个**「导出」按钮 → 悬浮菜单「当前页 PDF / PNG / SVG」（用户明确不要三个按钮）；移动端不注入 ⇒ 无入口。
+  · PDF：`export_note` 新增第 4 参数 `{ pageIds }` → 同一管线只导指定页（1 页 134 KB / 213 ms）。
+  · SVG：新 IPC `read_ink_page_svg`（纯读，返回自包含 SVG 文本）+ `export_ink_page_svg`（落盘；170 KB / 20 ms）。
+  · PNG：渲染层 `inkSvgRasterize.ts` 把 SVG 以 2× 画到 canvas → 新 IPC `save_ink_page_png` 落盘（2667×4176 / 1.79 MB / 309 ms）。
+  · 坑：`createImageBitmap(new Blob([svg], {type:'image/svg+xml'}))` 对带 data URI 图片的 SVG **解码失败**（InvalidStateError）⇒ 必须走 `img.src = data:image/svg+xml,…`。
+  · 目录：新增 IPC 允许省略目录（= 默认 `~/Desktop/lakex-local-notes-导出`）；传了就必须来自 `pick_export_dir` 白名单。
+- **明确不做**：移动端导出（Android 缺 SAF/分享落盘，要原生插件 + 设备验收）；整本导出为图片（只做单页，整本只出 PDF）。
+- **测试**：`noteExport.inkPdf.test.ts`（底纹 / pageIds 过滤 / JPEG 内嵌 / 单页 SVG / 静态契约）、`inkExportPage.render.test.tsx`（一个按钮 + 三格式菜单 + 回调当前页 + 失败横幅）、`inkPadWiring` 桌面分支契约更新。
+- **实测产出**（`~/Desktop/lakex-local-notes-导出/`）：`pdf-335实测-6.pdf`（74.9 MB）、`pdf-335实测.png`、`pdf-335实测-4.svg`、`dot-bg-dot.png`（底纹与笔迹都在）。
+- **门禁**：tsc / 全量 vitest / check:mobileui / diff-check（见提交说明）。
 ### 261104 · 十六批：PDF 导入「边导边用」+ 笔迹样式收敛成单一来源 · **本地改动**
 - **边导边用（用户点单：解析慢没关系，解析一部分就一部分能用）**：`importPdfPages` 新增 `onPagesReady`（每攒够 `IMPORT_COMMIT_BATCH=10` 页交付一批，**第一批不等满批**）；`InkPad` 立刻 `commit` 进正文，用户可在后台继续栅格化/上传时就开始标注。
   · 不抢当前页：`planPdfPageInsert(..., { keepActivePage })` —— 第一批替换空白首页并切到第 1 页，之后每批只追加。

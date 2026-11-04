@@ -96,7 +96,13 @@ export interface LakeNative {
   /** 只改附件展示名（不动存储文件/路径） */
   renameAssetDisplay(noteId: string, filename: string, newName: string): Promise<{ ok: boolean; changed: number }>;
   pickExportDir(): Promise<string | null>;
-  exportNote(id: string, format: "markdown" | "html" | "pdf" | "docx", baseDir?: string): Promise<{ format: string; exportPath: string; imageCount: number; skipped: number; size: number }>;
+  exportNote(id: string, format: "markdown" | "html" | "pdf" | "docx", baseDir?: string, options?: { pageIds?: string[] }): Promise<{ format: string; exportPath: string; imageCount: number; skipped: number; size: number }>;
+  /** 手写板单页：自包含 SVG 文本（渲染层栅格化成 PNG；不落盘）。 */
+  readInkPageSvg(id: string, pageIds: string[]): Promise<{ svg: string; width: number; height: number; title: string; imageCount: number; skipped: number }>;
+  /** 手写板单页 → SVG 文件。 */
+  exportInkPageSvg(id: string, pageIds: string[], baseDir?: string): Promise<{ exportPath: string; format: "svg" | "png"; size: number; imageCount: number; skipped: number }>;
+  /** 手写板单页 → PNG 文件（字节由渲染层栅格化后回传）。 */
+  saveInkPagePng(baseDir: string | undefined, title: string, bytes: Uint8Array): Promise<{ exportPath: string; format: "svg" | "png"; size: number; imageCount: number; skipped: number }>;
   /** 多维表：导出活动数据表为 CSV（UTF-8 BOM + CRLF，Excel 通用） */
   exportBitableCsv(id: string, baseDir?: string): Promise<{ exportPath: string; rowCount: number; size: number }>;
   /** 多维表：导出活动数据表为 ZIP（CSV + 附件/图片文件） */
@@ -305,7 +311,10 @@ export const native = {
   getNoteInfo: (id: string) => api().getNoteInfo(id),
   renameAssetDisplay: (noteId: string, filename: string, newName: string) => api().renameAssetDisplay(noteId, filename, newName),
   pickExportDir: () => api().pickExportDir(),
-  exportNote: (id: string, format: "markdown" | "html" | "pdf" | "docx", baseDir?: string) => api().exportNote(id, format, baseDir),
+  exportNote: (id: string, format: "markdown" | "html" | "pdf" | "docx", baseDir?: string, options?: { pageIds?: string[] }) => api().exportNote(id, format, baseDir, options),
+  readInkPageSvg: (id: string, pageIds: string[]) => api().readInkPageSvg(id, pageIds),
+  exportInkPageSvg: (id: string, pageIds: string[], baseDir?: string) => api().exportInkPageSvg(id, pageIds, baseDir),
+  saveInkPagePng: (baseDir: string | undefined, title: string, bytes: Uint8Array) => api().saveInkPagePng(baseDir, title, bytes),
   exportBitableCsv: (id: string, baseDir?: string) => api().exportBitableCsv(id, baseDir),
   exportBitableZip: (id: string, baseDir?: string) => api().exportBitableZip(id, baseDir),
   exportTableCsv: (id: string, baseDir?: string, sheetId?: string) => api().exportTableCsv(id, baseDir, sheetId),

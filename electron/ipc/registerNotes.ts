@@ -7,7 +7,7 @@ import { Store } from "../store.js";
 import type { QuickNotesStore } from "../quickNotes.js";
 import { MAX_ATTACHMENT_BYTES } from "../../src/core/storeLimits.js";
 import { isSafePathSegment, isSafeShellOpenFilename, sanitizeFileName } from "../../src/core/storeUtils.js";
-import { exportBitableCsv, exportBitableZip, exportNote, type ExportFormat } from "../export.js";
+import { exportBitableCsv, exportBitableZip, exportInkPageSvg, exportNote, saveInkPagePng, type ExportFormat } from "../export.js";
 import {
   IpcInputError,
   assertContentBytes,
@@ -95,12 +95,36 @@ export function registerNotesIpc(
     lastPickedExportDir = result.canceled ? null : (result.filePaths[0] ?? null);
     return lastPickedExportDir;
   });
-  ipc.handle("export_note", (id: string, format: ExportFormat, baseDir?: string) => {
-    // 防渲染层任意路径写入：导出目录必须来自本进程的系统选择框。
+  // 防渲染层任意路径写入：导出目录必须来自本进程的系统选择框。
+  /** 目录可省略（= 主进程默认导出目录）；给了就必须是本进程系统选择框的返回值（防任意路径写入）。 */
+  const optionalExportDir = (baseDir: unknown): string | undefined => {
+    if (baseDir === undefined || baseDir === null || baseDir === "") return undefined;
+    if (typeof baseDir !== "string" || baseDir !== lastPickedExportDir) {
+      throw new IpcInputError("导出目录无效：请先通过系统选择框选择目录");
+    }
+    return baseDir;
+  };
+  const inkPageIds = (pageIds: unknown): string[] =>
+    Array.isArray(pageIds) ? pageIds.filter((item): item is string => typeof item === "string" && item.length > 0) : [];
+
+  ipc.handle("export_note", (id: string, format: ExportFormat, baseDir?: string, options?: { pageIds?: string[] }) => {
     if (baseDir !== undefined && baseDir !== null && baseDir !== lastPickedExportDir) {
       throw new IpcInputError("导出目录无效：请先通过系统选择框选择目录");
     }
-    return exportNote(store, id, format, baseDir ?? undefined);
+    return exportNote(store, id, format, baseDir ?? undefined, { pageIds: inkPageIds(options?.pageIds) });
+  });
+  /** 单页手写板 → 自包含 SVG 文本（渲染层拿它栅格化成 PNG；不落盘）。 */
+  ipc.handle("read_ink_page_svg", (id: string, pageIds: unknown) => store.readInkPageSvg(id, inkPageIds(pageIds)));
+  /** 单页手写板 → SVG 文件。 */
+  ipc.handle("export_ink_page_svg", (id: string, pageIds: unknown, baseDir: unknown) =>
+    exportInkPageSvg(store, id, inkPageIds(pageIds), optionalExportDir(baseDir)));
+  /** 单页手写板 → PNG 文件（字节由渲染层从 SVG 栅格化后回传）。 */
+  ipc.handle("save_ink_page_png", (baseDir: unknown, title: unknown, bytes: unknown) => {
+    const dir = optionalExportDir(baseDir);
+    const data = bytes instanceof Uint8Array ? bytes : Array.isArray(bytes) ? Uint8Array.from(bytes as number[]) : null;
+    if (!data || data.length === 0) throw new IpcInputError("PNG 字节无效");
+    if (data.length > MAX_ATTACHMENT_BYTES) throw new IpcInputError("PNG 体积超出上限");
+    return saveInkPagePng(dir, sanitizeFileName(String(title ?? "手写板")), data);
   });
   ipc.handle("export_bitable_csv", (id: string, baseDir?: string) => {
     if (baseDir !== undefined && baseDir !== null && baseDir !== lastPickedExportDir) {

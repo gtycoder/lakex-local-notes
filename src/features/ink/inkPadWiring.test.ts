@@ -202,7 +202,7 @@ describe("手写板正式端到端接线", () => {
     expect(INK_PAD).toContain("setPaletteOpen(false)");
     expect(INK_PAD).toContain("setWidthsOpen(false)");
     // 点「面板/触发按钮」之外关闭（pointerdown 捕获；插入菜单同一条规则）
-    expect(INK_PAD).toContain('[data-overlay="palette"], [data-overlay="widths"], [data-overlay="insert"], [data-popover-trigger]');
+    expect(INK_PAD).toContain('[data-overlay="palette"], [data-overlay="widths"], [data-overlay="insert"], [data-popover-trigger], [data-ink-export]');
   });
 
   it("色板扩到 14 色 = 2 行 × 7（261103 三批）：单一来源数组 + 网格排布，写格式不变", () => {
@@ -306,6 +306,13 @@ describe("手写板正式端到端接线", () => {
     expect(branch).toContain('aria-label="新建页"');
     expect(branch).toContain('aria-label="页面管理"');
     expect(branch).toContain('className="ink-footer__right"');
+    // 261104 十七批：单页导出入口 = **一个**按钮 + 悬浮格式菜单（用户明确不要三个按钮）。
+    // 菜单本体在桌面专用组件 InkExportMenu（跨端样式护栏要求共享组件类名两端都有样式 ⇒ 桌面专属控件不进 InkPad）。
+    expect(branch).toContain("<InkExportMenu");
+    expect(INK_PAD).toContain("onExportPage &&");
+    const menuSrc = read("./InkExportMenu.tsx");
+    expect(menuSrc).toContain("EXPORT_FORMATS.map");
+    expect(menuSrc.match(/aria-label="导出"/g)?.length).toBe(1);
     // 移动端新增入口不得混进桌面分支
     expect(branch).not.toContain("手写板导航");
     expect(branch).not.toContain("全局预览");

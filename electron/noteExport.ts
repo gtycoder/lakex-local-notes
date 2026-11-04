@@ -15,7 +15,16 @@ import { usheetSheetCsv } from "../src/core/usheetCsv.js";
 import { buildUsheetXlsx } from "./usheetXlsxExport.js";
 import { collectMarkdownImageSources, markdownToDocx, type DocxImage } from "../src/core/docx.js";
 import { parseLocalAssetUrl } from "../src/core/assetUrl.js";
-import { parseInkBody, type InkBackgroundImageFit, type InkDoc } from "../src/core/inkDoc.js";
+import { parseInkBody, type InkBackgroundImageFit, type InkDoc, type InkPage } from "../src/core/inkDoc.js";
+import {
+  INK_PAPER_DOT_PITCH,
+  INK_PAPER_DOT_RADIUS,
+  INK_PAPER_EXPORT_COLORS,
+  INK_PAPER_PITCH,
+  INK_PAPER_STROKE_OFFSET,
+  INK_PAPER_STROKE_WIDTH,
+  isPaperBackground,
+} from "../src/core/inkPaperGeometry.js";
 import { strokeToSvgPath } from "../src/features/ink/inkGeometry.js";
 import { inkStrokeStyle } from "../src/features/ink/inkStrokeStyle.js";
 import { ZipWriter } from "../src/core/zipArchive.js";
@@ -49,6 +58,7 @@ export const INK_PDF_PRINT_CSS = [
   ".ink-pdf { margin: 0; padding: 0; background: #fff; }",
   ".ink-page { position: relative; width: 210mm; max-width: 100%; aspect-ratio: 210 / 297; overflow: hidden; page-break-after: always; break-after: page; background: #fff; }",
   ".ink-page:last-child { page-break-after: auto; break-after: auto; }",
+  ".ink-page__paper { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }",
   ".ink-page__bg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }",
   ".ink-page__ink { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }",
   "</style>",
@@ -65,6 +75,72 @@ function escapeHtmlAttr(value: string): string {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
+/** 导出的页图统一转 JPEG 的质量（Chromium 打印会把 WebP 按无损重写：335 页实测 382 MB）。 */
+const INK_EXPORT_JPEG_QUALITY = 80;
+
+/** 单页笔迹 → SVG path 串（逐页 HTML 与独立 SVG 共用，保证两条路线的笔迹一模一样）。 */
+function inkStrokePathsMarkup(page: InkPage): string {
+  return page.strokes.map((stroke) => {
+    const d = strokeToSvgPath(stroke, true);
+    if (!d) return "";
+    // 与画布同一来源：导出的 HTML/PDF 不能和高亮规则分家。
+    const inkStyle = inkStrokeStyle(stroke.tool);
+    const style = inkStyle.blend
+      ? ' opacity="' + inkStyle.opacity + '" style="mix-blend-mode:' + inkStyle.blend + '"'
+      : "";
+    return `<path d="${d}" fill="${escapeHtmlAttr(stroke.color)}"${style} />`;
+  }).join("");
+}
+
+/** 纸张底纹 pattern（几何来自 core/inkPaperGeometry；打印文档没有主题变量 ⇒ 用固定浅色）。 */
+function inkPaperDefs(page: InkPage, patternId: string): string {
+  const { line, dot } = INK_PAPER_EXPORT_COLORS;
+  if (page.background === "lined") {
+    return `<pattern id="${patternId}" width="${page.width}" height="${INK_PAPER_PITCH}" patternUnits="userSpaceOnUse">`
+      + `<line x1="0" y1="${INK_PAPER_STROKE_OFFSET}" x2="${page.width}" y2="${INK_PAPER_STROKE_OFFSET}" stroke="${line}" stroke-width="${INK_PAPER_STROKE_WIDTH}" /></pattern>`;
+  }
+  if (page.background === "grid") {
+    return `<pattern id="${patternId}" width="${INK_PAPER_PITCH}" height="${INK_PAPER_PITCH}" patternUnits="userSpaceOnUse">`
+      + `<path d="M 0 ${INK_PAPER_STROKE_OFFSET} H ${INK_PAPER_PITCH} M ${INK_PAPER_STROKE_OFFSET} 0 V ${INK_PAPER_PITCH}" fill="none" stroke="${line}" stroke-width="${INK_PAPER_STROKE_WIDTH}" /></pattern>`;
+  }
+  return `<pattern id="${patternId}" width="${INK_PAPER_DOT_PITCH}" height="${INK_PAPER_DOT_PITCH}" patternUnits="userSpaceOnUse">`
+    + `<circle cx="${INK_PAPER_DOT_PITCH / 2}" cy="${INK_PAPER_DOT_PITCH / 2}" r="${INK_PAPER_DOT_RADIUS}" fill="${dot}" /></pattern>`;
+}
+
+/** HTML 版：底纹单独一层 SVG，铺在背景图与笔迹下面；无底纹 = 白纸（不输出）。 */
+function inkPaperMarkup(page: InkPage, patternId: string): string {
+  if (!isPaperBackground(page.background)) return "";
+  return `<svg class="ink-page__paper" viewBox="0 0 ${page.width} ${page.height}" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">`
+    + `<defs>${inkPaperDefs(page, patternId)}</defs>`
+    + `<rect x="0" y="0" width="${page.width}" height="${page.height}" fill="url(#${patternId})" />`
+    + "</svg>";
+}
+
+/** 背景图 → preserveAspectRatio（与屏内 SVG 一致）。 */
+function inkBackgroundAspect(fit: InkBackgroundImageFit | undefined): string {
+  if (fit === "cover") return "xMidYMid slice";
+  if (fit === "stretch") return "none";
+  return "xMidYMid meet";
+}
+
+/**
+ * 单页 → **独立 SVG 文档**（自包含：底纹 + 背景图 data URI + 矢量笔迹）。
+ * 用途：「单页导出 SVG」直接落盘；「单页导出 PNG」由渲染层把这份 SVG 栅格化（data URI 不污染 canvas）。
+ */
+export function buildInkPageSvg(page: InkPage, index: number, deps: InkPdfBodyDeps): string {
+  const patternId = "ink-paper-p" + index;
+  const paper = isPaperBackground(page.background)
+    ? `<defs>${inkPaperDefs(page, patternId)}</defs><rect x="0" y="0" width="${page.width}" height="${page.height}" fill="url(#${patternId})" />`
+    : "";
+  const uri = page.backgroundImage ? deps.imageDataUri(page.backgroundImage.url) : null;
+  const image = page.backgroundImage && uri
+    ? `<image href="${escapeHtmlAttr(uri)}" x="0" y="0" width="${page.width}" height="${page.height}" preserveAspectRatio="${inkBackgroundAspect(page.backgroundImage.fit)}" opacity="${page.backgroundImage.opacity ?? 1}" />`
+    : "";
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${page.width}" height="${page.height}" viewBox="0 0 ${page.width} ${page.height}">`
+    + `<rect x="0" y="0" width="${page.width}" height="${page.height}" fill="#ffffff" />` + paper + image
+    + inkStrokePathsMarkup(page) + "</svg>";
+}
+/** 背景图 URL：**已转好的 data URI**（调用方做路径校验/读盘/转码；读不到返回 null）。 */
 export interface InkPdfBodyDeps {
   /** 背景图 URL → data URI（调用方做路径校验/读盘；读不到返回 null）。 */
   imageDataUri: (url: string) => string | null;
@@ -78,13 +154,18 @@ export interface InkPdfBodyResult {
 
 /**
  * 手写板 → 逐页压平 HTML（纯函数、无 fs/electron 依赖，便于单测）。
- * 每页：可选背景图（data URI，object-fit 按 fit）+ 矢量笔迹 SVG（viewBox=页面逻辑尺寸、contain 映射整页）；
- * 没有背景图的页 = 白底（导出是「压平当前内容」，不画纸张底纹）。高亮笔 = opacity .3 + mix-blend-mode:multiply。
+ * 每页：纸张底纹（有底纹才画，与画布同源）+ 可选背景图（data URI，object-fit 按 fit）+ 矢量笔迹 SVG。
+ * 高亮笔 = 与画布同一份 inkStrokeStyle（opacity + mix-blend-mode）。
+ * `pageIds` 给了就只导出这些页（按原文顺序）—— 单页导出复用同一条管线。
  */
-export function buildInkPdfBody(doc: InkDoc, deps: InkPdfBodyDeps): InkPdfBodyResult {
+export function buildInkPdfBody(doc: InkDoc, deps: InkPdfBodyDeps, options: { pageIds?: string[] } = {}): InkPdfBodyResult {
   let imageCount = 0;
   let skipped = 0;
-  const pages = doc.pages.map((page, index) => {
+  const wanted = options.pageIds && options.pageIds.length > 0 ? new Set(options.pageIds) : null;
+  const selected = doc.pages
+    .map((page, index) => ({ page, index }))
+    .filter((item) => !wanted || wanted.has(item.page.id));
+  const pages = selected.map(({ page, index }, position) => {
     let background = "";
     if (page.backgroundImage) {
       const uri = deps.imageDataUri(page.backgroundImage.url);
@@ -98,17 +179,8 @@ export function buildInkPdfBody(doc: InkDoc, deps: InkPdfBodyDeps): InkPdfBodyRe
         skipped++; // 缺图：占位白底（页仍在，笔迹照常输出）
       }
     }
-    const paths = page.strokes.map((stroke) => {
-      const d = strokeToSvgPath(stroke, true);
-      if (!d) return "";
-      // 与画布同一来源：导出的 HTML/PDF 不能和高亮规则分家。
-      const inkStyle = inkStrokeStyle(stroke.tool);
-      const style = inkStyle.blend
-        ? ' opacity="' + inkStyle.opacity + '" style="mix-blend-mode:' + inkStyle.blend + '"'
-        : "";
-      return `<path d="${d}" fill="${escapeHtmlAttr(stroke.color)}"${style} />`;
-    }).join("");
-    return `<div class="ink-page" data-page="${index + 1}">${background}`
+    const paths = inkStrokePathsMarkup(page);
+    return `<div class="ink-page" data-page="${index + 1}">${inkPaperMarkup(page, "ink-paper-p" + position)}${background}`
       + `<svg class="ink-page__ink" viewBox="0 0 ${page.width} ${page.height}" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">${paths}</svg>`
       + "</div>";
   }).join("");
@@ -406,12 +478,66 @@ export class NoteExport {
     return p;
   }
 
+  /** 单张页图 → JPEG data URI（读不到/转码失败返回 null，调用方计 skipped）。 */
+  private async inkImageDataUri(url: string): Promise<string | null> {
+    const ref = parseLocalAssetUrl(url);
+    if (!ref || ref.space !== "note" || ref.staging) return null;
+    if (!isSafePathSegment(ref.noteId) || !isSafePathSegment(ref.filename)) return null;
+    const file = path.join(this.ctx.noteAssetsDir, ref.noteId, ref.filename);
+    if (!fs.existsSync(file)) return null;
+    try {
+      const jpeg = await sharp(file).jpeg({ quality: INK_EXPORT_JPEG_QUALITY }).toBuffer();
+      return `data:image/jpeg;base64,${jpeg.toString("base64")}`;
+    } catch {
+      // 转码失败：退回原始字节（宁可 PDF 大一点，也不要丢页图）。
+      try {
+        return `data:${mimeTypeForFilename(ref.filename)};base64,${fs.readFileSync(file).toString("base64")}`;
+      } catch {
+        return null;
+      }
+    }
+  }
+
   /**
-   * 手写板（kind=ink）导出 PDF 的内容准备：读 ink 正文 → 每页压平 HTML（背景图 data URI + 矢量笔迹 SVG）
-   * → 自包含临时 HTML + 唯一 pdf 目标路径。渲染仍由 electron/export.ts 的隐藏窗口 printToPDF 完成。
-   * 只导出「当前内容」：不管阅读/编辑态、不管视口；没有背景图的页是白底（不画纸张底纹）。
+   * 单页（或多页）→ 自包含 SVG 文本：供「单页导出 SVG」落盘、以及渲染层栅格化成 PNG。
+   * 不写文件（落盘交给调用方），页面尺寸与画布逻辑尺寸一致（794×1123）。
    */
-  exportInkPdfHtml(id: string, baseDir?: string): { htmlPath: string; tempDir: string; pdfPath: string; imageCount: number; skipped: number } {
+  async readInkPageSvg(
+    id: string,
+    pageIds: string[],
+  ): Promise<{ svg: string; width: number; height: number; title: string; imageCount: number; skipped: number }> {
+    if (!isSafePathSegment(id)) throw new AppError("InvalidInput", `无效的笔记 ID: ${id}`);
+    const row = this.ctx.db.prepare("SELECT title, kind FROM notes WHERE id=?").get(id) as { title?: string; kind?: string | null } | undefined;
+    if (!row) throw new AppError("NotFound", `笔记不存在: ${id}`);
+    if ((row.kind ?? "doc") !== "ink") throw new AppError("InvalidInput", "该文档不是手写板，无法导出图片");
+    const bodyPath = this.ctx.notePathFor(id);
+    if (!fs.existsSync(bodyPath)) throw new AppError("NotFound", `笔记不存在: ${id}`);
+    const doc = parseInkBody(fs.readFileSync(bodyPath, "utf8"));
+    if (!doc) throw new AppError("InvalidInput", "手写板正文无法解析，无法导出图片");
+    const index = pageIds.length > 0 ? doc.pages.findIndex((item) => item.id === pageIds[0]) : 0;
+    const page = doc.pages[index];
+    if (!page) throw new AppError("InvalidInput", "该页不存在（可能已被删除）");
+    let imageCount = 0;
+    let skipped = 0;
+    const uri = page.backgroundImage ? await this.inkImageDataUri(page.backgroundImage.url) : null;
+    if (page.backgroundImage) {
+      if (uri) imageCount++;
+      else skipped++;
+    }
+    const svg = buildInkPageSvg(page, index, { imageDataUri: () => uri });
+    return { svg, width: page.width, height: page.height, title: sanitizeFileName(row.title ?? "未命名"), imageCount, skipped };
+  }
+  /**
+   * 手写板（kind=ink）导出 PDF 的内容准备：读 ink 正文 → 每页压平 HTML（底纹 + 背景图 data URI + 矢量笔迹）
+   * → 自包含临时 HTML + 唯一 pdf 目标路径。渲染仍由 electron/export.ts 的隐藏窗口 printToPDF 完成。
+   * 只导出「当前内容」：不管阅读/编辑态、不管视口。**纸张底纹与画布一致**（有底纹就印，blank 就是白纸）。
+   * `pageIds` 给了就只导这些页（单页导出复用同一条管线）。
+   */
+  async exportInkPdfHtml(
+    id: string,
+    baseDir?: string,
+    options: { pageIds?: string[] } = {},
+  ): Promise<{ htmlPath: string; tempDir: string; pdfPath: string; imageCount: number; skipped: number }> {
     if (!isSafePathSegment(id)) throw new AppError("InvalidInput", `无效的笔记 ID: ${id}`);
     const row = this.ctx.db.prepare("SELECT title, kind FROM notes WHERE id=?").get(id) as { title?: string; kind?: string | null } | undefined;
     if (!row) throw new AppError("NotFound", `笔记不存在: ${id}`);
@@ -424,21 +550,18 @@ export class NoteExport {
     const base = baseDir ?? this.defaultExportBase();
     fs.mkdirSync(base, { recursive: true });
     const pdfPath = this.uniqueExportFile(base, title, "pdf");
-    const uriCache = new Map<string, string | null>();
-    const imageDataUri = (url: string): string | null => {
-      if (uriCache.has(url)) return uriCache.get(url)!;
-      let uri: string | null = null;
-      const ref = parseLocalAssetUrl(url);
-      if (ref && ref.space === "note" && !ref.staging && isSafePathSegment(ref.noteId) && isSafePathSegment(ref.filename)) {
-        const file = path.join(this.ctx.noteAssetsDir, ref.noteId, ref.filename);
-        try {
-          if (fs.existsSync(file)) uri = `data:${mimeTypeForFilename(ref.filename)};base64,${fs.readFileSync(file).toString("base64")}`;
-        } catch { /* 读失败算跳过（页仍输出笔迹） */ }
-      }
-      uriCache.set(url, uri);
-      return uri;
-    };
-    const { bodyHtml, imageCount, skipped } = buildInkPdfBody(doc, { imageDataUri });
+    // 页图统一转 JPEG 再内嵌：Chromium 打印会把 WebP 按无损重写（335 页实测 382 MB）；
+    // JPEG q80 实测 ≈200 KB/页 ⇒ 全书降到 ~1/6（代价 ~33ms/页 转码）。
+    const wanted = options.pageIds && options.pageIds.length > 0 ? new Set(options.pageIds) : null;
+    const selected = wanted ? doc.pages.filter((item) => wanted.has(item.id)) : doc.pages;
+    const uris = new Map<string, string | null>();
+    for (const item of selected) {
+      const image = item.backgroundImage;
+      if (!image || uris.has(image.url)) continue;
+      uris.set(image.url, await this.inkImageDataUri(image.url));
+    }
+    const imageDataUri = (url: string): string | null => uris.get(url) ?? null;
+    const { bodyHtml, imageCount, skipped } = buildInkPdfBody(doc, { imageDataUri }, { pageIds: options.pageIds });
     const page = wrapHtmlPage(title, bodyHtml).replace("</head>", `${INK_PDF_PRINT_CSS}</head>`);
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "lake-export-ink-pdf-"));
     const htmlPath = path.join(tempDir, "index.html");
@@ -452,11 +575,15 @@ export class NoteExport {
    * 自包含临时 HTML + 唯一 pdf 目标路径。渲染（隐藏窗口 printToPDF）由 electron/export.ts
    * 完成（思源同款 printToPDF 路线），临时目录由调用方用完即删。
    */
-  exportPdfHtml(id: string, baseDir?: string): { htmlPath: string; tempDir: string; pdfPath: string; imageCount: number; skipped: number } {
+  async exportPdfHtml(
+    id: string,
+    baseDir?: string,
+    options: { pageIds?: string[] } = {},
+  ): Promise<{ htmlPath: string; tempDir: string; pdfPath: string; imageCount: number; skipped: number }> {
     if (!isSafePathSegment(id)) throw new AppError("InvalidInput", `无效的笔记 ID: ${id}`);
-    // PDF 按 kind 分流：ink = 逐页压平（背景图 + 矢量笔迹）；doc = Markdown→HTML；其余显式拒绝。
+    // PDF 按 kind 分流：ink = 逐页压平（底纹 + 背景图 + 矢量笔迹）；doc = Markdown→HTML；其余显式拒绝。
     const kindRow = this.ctx.db.prepare("SELECT kind FROM notes WHERE id=?").get(id) as { kind?: string | null } | undefined;
-    if ((kindRow?.kind ?? "doc") === "ink") return this.exportInkPdfHtml(id, baseDir);
+    if ((kindRow?.kind ?? "doc") === "ink") return this.exportInkPdfHtml(id, baseDir, options);
     this.assertDocKind(id);
     const caches = this.ctx.readNoteCaches(id);
     const markdown = caches.markdown ?? "";

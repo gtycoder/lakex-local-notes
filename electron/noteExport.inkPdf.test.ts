@@ -11,10 +11,10 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { localAssetHttpUrl } from "../src/core/assetUrl.js";
-import { createInkDoc, createInkPage, inkToBody, type InkDoc } from "../src/core/inkDoc.js";
+import { createInkDoc, createInkPage, inkToBody, parseInkBody, type InkDoc } from "../src/core/inkDoc.js";
 import { Store } from "./store.js";
 import { createSafeStorageSecretCipher } from "./secretCipher.js";
-import { INK_PDF_PRINT_CSS, buildInkPdfBody, inkBackgroundFitCss } from "./noteExport.js";
+import { INK_PDF_PRINT_CSS, buildInkPageSvg, buildInkPdfBody, inkBackgroundFitCss } from "./noteExport.js";
 
 const electronMock = vi.hoisted(() => {
   const secrets = new Map<string, string>();
@@ -134,9 +134,9 @@ describe("NoteExport 的 ink PDF 内容准备 + kind 守卫", () => {
     return { id: note.id };
   }
 
-  it("ink 的 PDF 内容准备成功：两页 HTML + 背景图 data URI 内嵌，产出唯一 pdf 路径", () => {
+  it("ink 的 PDF 内容准备成功：两页 HTML + 背景图 data URI 内嵌，产出唯一 pdf 路径", async () => {
     const { id } = makeInkNote();
-    const prep = store.exportPdfHtml(id, outDir);
+    const prep = await store.exportPdfHtml(id, outDir);
     const html = fs.readFileSync(prep.htmlPath, "utf8");
     expect(html).toContain('class="ink-pdf"');
     expect((html.match(/class="ink-page"/g) ?? []).length).toBe(2);
@@ -158,24 +158,82 @@ describe("NoteExport 的 ink PDF 内容准备 + kind 守卫", () => {
     expect(() => store.exportHtmlNote(id)).toThrow(/手写板/);
     await expect(store.exportDocxNote(id)).rejects.toThrow(/手写板/);
     // PDF 内容准备本身成功（唯一对 ink 放开的格式）
-    const prep = store.exportPdfHtml(id);
+    const prep = await store.exportPdfHtml(id);
     expect(fs.existsSync(prep.htmlPath)).toBe(true);
     fs.rmSync(prep.tempDir, { recursive: true, force: true });
   });
+
+  it("页图内嵌前转 JPEG（sharp）：HTML 里是 data:image/jpeg", async () => {
+    const note = store.createInkIn(null, "JPEG 手写");
+    const paths = store.getNotePaths(note.id);
+    const filename = "1700000000200_deadbeef.png";
+    fs.mkdirSync(paths.assetsDir, { recursive: true });
+    // 真实可解码的 1×1 PNG（假的 4 字节头会让 sharp 转码失败、退回原始 mime）
+    fs.writeFileSync(path.join(paths.assetsDir, filename), Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=", "base64"));
+    const doc = twoPageDoc();
+    doc.pages[0] = { ...doc.pages[0], backgroundImage: { url: localAssetHttpUrl(note.id, filename), fit: "contain" } };
+    fs.mkdirSync(path.dirname(paths.lakePath), { recursive: true });
+    fs.writeFileSync(paths.lakePath, inkToBody(doc), "utf8");
+    const prep = await store.exportPdfHtml(note.id, outDir);
+    const html = fs.readFileSync(prep.htmlPath, "utf8");
+    expect(html).toContain("data:image/jpeg;base64,");
+    fs.rmSync(prep.tempDir, { recursive: true, force: true });
+  });
+
+  it("单页 SVG 读取：只产出请求的那一页（标题可直接当文件名）", async () => {
+    const { id } = makeInkNote();
+    const doc = parseInkBody(store.readNote(id).content as string);
+    expect(doc).not.toBeNull();
+    const page = await store.readInkPageSvg(id, [doc!.pages[1].id]);
+    expect(page.svg).toContain("<svg");
+    expect(page.width).toBeGreaterThan(0);
+    expect(page.title).toContain("手写测试");
+  });
+});
+
+
+describe("261104 十七批：底纹 / 单页过滤 / 页图 JPEG / 独立 SVG", () => {
+  it("有底纹的页印底纹（pattern + rect），blank 页不印", () => {
+    const doc = twoPageDoc();
+    doc.pages[0] = { ...doc.pages[0], background: "grid" };
+    const { bodyHtml } = buildInkPdfBody(doc, { imageDataUri: () => null });
+    expect(bodyHtml).toContain("ink-page__paper");
+    expect(bodyHtml).toContain("<pattern");
+    expect((bodyHtml.match(/ink-page__paper/g) ?? []).length).toBe(1);
+  });
+
+  it("pageIds 只导出指定页（按原文顺序）", () => {
+    const doc = twoPageDoc();
+    const second = doc.pages[1].id;
+    const { bodyHtml } = buildInkPdfBody(doc, { imageDataUri: () => null }, { pageIds: [second] });
+    expect((bodyHtml.match(/class="ink-page"/g) ?? []).length).toBe(1);
+    expect(bodyHtml).toContain('data-page="2"');
+  });
+
+  it("单页独立 SVG：自包含（页图 data URI + 笔迹 + 尺寸 = 页面逻辑尺寸）", () => {
+    const page = twoPageDoc().pages[0];
+    const svg = buildInkPageSvg(page, 0, { imageDataUri: () => "data:image/jpeg;base64,AAAA" });
+    expect(svg.startsWith("<svg")).toBe(true);
+    expect(svg).toContain("viewBox=");
+    expect(svg).toContain("data:image/jpeg;base64,AAAA");
+    expect(svg).toContain("<path");
+    expect(svg).not.toContain("http://127.0.0.1");
+  });
+
 });
 
 describe("静态契约：export.ts 分流 + UI 只对 ink 放开 PDF", () => {
   it("export.ts 的 pdf 分支注明按 kind 分流并走 NoteExport.exportPdfHtml", () => {
     const src = read("./export.ts");
     expect(src).toContain("内容准备按 kind 分流");
-    expect(src).toContain("store.exportPdfHtml(id, baseDir)");
+    expect(src).toContain("store.exportPdfHtml(id, baseDir, options)");
     expect(src).toContain("ink = 逐页压平");
   });
 
   it("NoteExport 里 ink 走 exportInkPdfHtml，非 ink 才 assertDocKind", () => {
     const src = read("./noteExport.ts");
     expect(src).toContain("exportInkPdfHtml(");
-    expect(src).toContain('if ((kindRow?.kind ?? "doc") === "ink") return this.exportInkPdfHtml(id, baseDir);');
+    expect(src).toContain('if ((kindRow?.kind ?? "doc") === "ink") return this.exportInkPdfHtml(id, baseDir, options);');
     expect(src).toContain("strokeToSvgPath");
     // perfect-freehand 必须在 dependencies（main 的 external 从 dependencies 派生）
     const pkg = JSON.parse(read("../package.json")) as { dependencies?: Record<string, string> };

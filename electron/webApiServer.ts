@@ -56,6 +56,9 @@ export const WEB_METHODS: Record<string, string> = {
   renameAssetDisplay: "rename_asset_display",
   pickExportDir: "pick_export_dir",
   exportNote: "export_note",
+  readInkPageSvg: "read_ink_page_svg",
+  exportInkPageSvg: "export_ink_page_svg",
+  saveInkPagePng: "save_ink_page_png",
   exportBitableCsv: "export_bitable_csv",
   exportBitableZip: "export_bitable_zip",
   exportTableCsv: "export_table_csv",
@@ -528,6 +531,8 @@ const DOWNLOAD_MAX_ENTRIES = 64;
 /** 导出类 IPC 通道：handler 返回的 exportPath 登记进下载白名单（浏览器端不弹系统对话框）。 */
 const EXPORT_DOWNLOAD_CHANNELS = new Set([
   "export_note",
+  "export_ink_page_svg",
+  "save_ink_page_png",
   "export_bitable_csv",
   "export_bitable_zip",
   "export_table_csv",

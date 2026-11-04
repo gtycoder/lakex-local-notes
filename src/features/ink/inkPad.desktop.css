@@ -27,3 +27,32 @@
   display: flex; align-items: center; justify-content: space-between;
   gap: 12px;
 }
+
+/* 单页导出：底部只有一个按钮，点开是「当前页 PDF / PNG / SVG」的悬浮菜单（与纸张按钮同一行）。 */
+.ink-pad--desktop .ink-export { position: relative; display: inline-flex; align-items: center; }
+.ink-pad--desktop .ink-export__menu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  min-width: 132px;
+  padding: 4px;
+  border: 1px solid var(--lake-border-1);
+  border-radius: var(--lake-radius-md);
+  background: var(--lake-bg-panel);
+  box-shadow: var(--lake-shadow-card);
+}
+.ink-pad--desktop .ink-export__menu button {
+  height: 30px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--lake-radius-sm);
+  background: transparent;
+  color: var(--lake-text-1);
+  font-size: var(--lake-font-size-small);
+  text-align: left;
+  cursor: pointer;
+}
+.ink-pad--desktop .ink-export__menu button:hover { background: var(--lake-bg-hover); }

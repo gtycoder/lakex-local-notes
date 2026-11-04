@@ -186,3 +186,24 @@ pages/p-<pageId>.json  # 单页笔迹（不可变、内容寻址）
 
 - 20 页整页图背景文档的翻页耗时（点下一页 → 两帧到稳定，各 10 次）：**未预取 30.4ms / 预取相邻页后 32.0ms**。
 - 结论：30ms 级成本来自 SVG / React 重渲染，不是图片 decode ⇒ **不做相邻页预解码**（已撤回实现，代码处留结论注释）。若以后翻页体感变差，先量化「渲染 vs decode」再决定，不要凭直觉加预取。
+
+## 导出（PDF / PNG / SVG，261104 十七批）
+
+### 整本 → PDF（桌面与 Web）
+- 入口：目录树右键「导出 → 导出为 PDF（手写压平）」，文档右上角 ⋯ 是同一条。
+- 管线：noteExport.exportInkPdfHtml 逐页压平成 HTML（底纹 + 页图 data URI + 矢量笔迹）→ 隐藏窗口 printToPDF（A4、每页一块、页脚页码）。
+- 页图内嵌前统一转 JPEG q80（sharp）：Chromium 打印会把 WebP 按无损重写 —— 335 页实测 382 MB / 30.0 s → 74.9 MB / 13.5 s（页数不变，仍 335）。
+- 纸张底纹与画布一致（用户定稿）：有底纹的页印网格/点阵/横线，blank 页就是白纸；图片页/PDF 页的底纹在页图下层，只在留白处透出。
+- 缺图不丢页：skipped 计数，笔迹照常输出。
+
+### 单页 → PDF / PNG / SVG（桌面）
+- 入口：手写板底部一个「导出」按钮 → 悬浮菜单「当前页 PDF / PNG / SVG」（用户定稿：不铺三个按钮）。
+- PDF：复用整本管线 + pageIds 过滤（实测 1 页 134 KB / 213 ms）。
+- SVG：主进程直接产自包含 SVG（read_ink_page_svg：底纹 + 页图 data URI + 笔迹；实测 170 KB / 20 ms）。
+- PNG：主进程给 SVG → 渲染层 img 指向 data:image/svg+xml + canvas 2× 栅格化 → save_ink_page_png 落盘（实测 2667×4176 / 1.79 MB / 309 ms）。
+- 坑：createImageBitmap 对这种带 data URI 图片的 SVG 解码失败（InvalidStateError），必须走 img 路径。
+- 导出目录：沿用系统选择框（pick_export_dir）白名单；省略目录 = 默认 ~/Desktop/lakex-local-notes-导出。
+
+### 明确不做
+- 移动端导出：本轮不做（Android 缺 SAF/分享落盘通道，要新增原生插件 + 设备验收）。
+- 整本导出为图片：不做（只做单页图片，整本只出 PDF，避免长图/批量 zip 的体量与交互成本）。

@@ -387,11 +387,11 @@ describe("目录树操作", () => {
     fs.rmSync(assetsDir, { recursive: true, force: true });
   });
 
-  it("非 doc（表格）导出被 kind 守卫拦截（HTML/PDF/资料包）", () => {
+  it("非 doc（表格）导出被 kind 守卫拦截（HTML/PDF/资料包）", async () => {
     const usheet = store.createUsheetIn(null, "表格导出守卫");
     const base = fs.mkdtempSync(path.join(os.tmpdir(), "lake-kind-"));
     expect(() => store.exportHtmlNote(usheet.id, base)).toThrow(/表格文档暂不支持导出/);
-    expect(() => store.exportPdfHtml(usheet.id, base)).toThrow(/表格文档暂不支持导出/);
+    await expect(store.exportPdfHtml(usheet.id, base)).rejects.toThrow(/表格文档暂不支持导出/);
     expect(() => store.exportNotePackage(usheet.id, base)).toThrow(/表格文档暂不支持导出/);
     fs.rmSync(base, { recursive: true, force: true });
   });

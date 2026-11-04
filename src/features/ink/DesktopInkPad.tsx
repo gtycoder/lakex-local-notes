@@ -6,6 +6,7 @@ import InkPad from "./InkPad";
 import type { EditorHostProps } from "../editor/editorHost";
 import { importInkImagePages, pickInkImageFiles } from "./inkImageImport";
 import { importPdfPages, pickPdfFile } from "./pdfImport";
+import { rasterizeInkSvgToPng } from "./inkSvgRasterize";
 import { renderPdfPagesDesktop } from "./pdfRasterDesktop";
 import "./inkPad.shared.css";
 import "./inkPad.desktop.css";
@@ -56,6 +57,20 @@ export function DesktopInkPad({ visible, focused, pane, onCapture, noteId, ...pr
     );
   }, [upload]);
 
+  /**
+   * 单页导出（工具栏一个按钮 → 选格式）：PDF / SVG 由主进程直接产文件，PNG 由渲染层把主进程给的
+   * 自包含 SVG 栅格化后再回传落盘（主进程没有 SVG 栅格化能力，也不为此引依赖）。
+   */
+  const onExportPage = useCallback(async (input: { pageIds: string[]; format: "pdf" | "png" | "svg" }) => {
+    const dir = await native.pickExportDir();
+    if (!dir) return null; // 用户取消
+    if (input.format === "pdf") return native.exportNote(noteId, "pdf", dir, { pageIds: input.pageIds });
+    if (input.format === "svg") return native.exportInkPageSvg(noteId, input.pageIds, dir);
+    const page = await native.readInkPageSvg(noteId, input.pageIds);
+    const bytes = await rasterizeInkSvgToPng(page.svg, page.width, page.height);
+    return native.saveInkPagePng(dir, page.title, bytes);
+  }, [noteId]);
+
   return (
     <InkPad
       {...props}
@@ -67,6 +82,7 @@ export function DesktopInkPad({ visible, focused, pane, onCapture, noteId, ...pr
       onEditorCapture={onCapture}
       onImportImages={onImportImages}
       onImportPdf={onImportPdf}
+      onExportPage={onExportPage}
     />
   );
 }

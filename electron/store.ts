@@ -887,9 +887,19 @@ export class Store {
     return this.noteExport.exportNotePackage(id, baseDir);
   }
 
-  /** M3：PDF 导出内容准备（图片内嵌的自包含临时 HTML + 唯一 pdf 目标路径；渲染在 export.ts）。 */
-  exportPdfHtml(id: string, baseDir?: string): { htmlPath: string; tempDir: string; pdfPath: string; imageCount: number; skipped: number } {
-    return this.noteExport.exportPdfHtml(id, baseDir);
+  /** M3：PDF 导出内容准备（图片内嵌的自包含临时 HTML + 唯一 pdf 目标路径；渲染在 export.ts）。
+   *  ink 走逐页压平（底纹 + 页图 JPEG 内嵌 + 矢量笔迹）；`pageIds` 用于单页导出。 */
+  exportPdfHtml(
+    id: string,
+    baseDir?: string,
+    options: { pageIds?: string[] } = {},
+  ): Promise<{ htmlPath: string; tempDir: string; pdfPath: string; imageCount: number; skipped: number }> {
+    return this.noteExport.exportPdfHtml(id, baseDir, options);
+  }
+
+  /** 单页 → 自包含 SVG（单页导出 SVG / 渲染层栅格化成 PNG 用）。 */
+  readInkPageSvg(id: string, pageIds: string[]): Promise<{ svg: string; width: number; height: number; title: string; imageCount: number; skipped: number }> {
+    return this.noteExport.readInkPageSvg(id, pageIds);
   }
 
   // ===== 文档历史（快照，纯本地不参与同步） =====

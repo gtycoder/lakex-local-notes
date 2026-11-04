@@ -6,7 +6,7 @@ import { hostCapabilities } from "../../lib/hostCapabilities";
 export type DocExportFormat = "markdown" | "html" | "pdf" | "docx";
 /**
  * 导出动作格式全集：doc 用 markdown/html/pdf/docx；
- * bitable 用 csv / zip；usheet 用 csv / xlsx；board 用 png / svg（已实现）；ink 的导出尚未实现。
+ * bitable 用 csv / zip；usheet 用 csv / xlsx；board 用 png / svg；ink 用 pdf（整本压平；单页三格式在编辑器工具栏）。
  */
 export type ExportFormat = DocExportFormat | "csv" | "zip" | "xlsx" | "png" | "svg";
 

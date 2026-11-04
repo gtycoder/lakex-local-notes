@@ -89,8 +89,9 @@ describe("IPC 通道三方一致性（C2-2）", () => {
     // → 137（261024 方案 B：小记 ↔ 标签关联 set_quick_note_tags）；261026 删除旧 GC 诊断/对账 = 135。
     // → 136（261028 DT-05：read_quick_note —— 列表只回 summary，单条正文按需读）。
     // → 135（261028 删 manifest v2 死代码：list_s3_gc_pending / s3_gc_pending 链路）。
-    expect(registrarChannels().size, "通道数变了 ⇒ 请确认是有意的并在 commit 里说明").toBe(135);
-    expect(preloadChannels().size).toBe(135);
-    expect(Object.keys(WEB_METHODS).length).toBe(135);
+    // → 138（261104 手写板单页导出：read_ink_page_svg / export_ink_page_svg / save_ink_page_png）。
+    expect(registrarChannels().size, "通道数变了 ⇒ 请确认是有意的并在 commit 里说明").toBe(138);
+    expect(preloadChannels().size).toBe(138);
+    expect(Object.keys(WEB_METHODS).length).toBe(138);
   });
 });

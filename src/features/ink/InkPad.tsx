@@ -18,6 +18,7 @@ import { canonicalDocBody } from "../../core/docBaseline.js";
 import { readInkNavPage, writeInkNavPage } from "./inkNav.js";
 import { hitTestStroke, strokeToSvgPath } from "./inkGeometry.js";
 import { inkStrokeStyle } from "./inkStrokeStyle.js";
+import { InkExportMenu, type InkPageExportFormat } from "./InkExportMenu.js";
 import { inkPerfDebugEnabled, installInkPerfHooks, recordInkPerf } from "./inkPerfStats";
 import { inkImageImportNotice, inkPdfImportNotice } from "./inkImportNotice";
 import { installInkInputDiagnostics, installPointerInputDebugHooks } from "../board/boardInputDiagnostics";
@@ -70,6 +71,12 @@ export interface InkPadProps {
     onPagesReady?: (pages: InkPage[]) => void;
     signal: AbortSignal;
   }) => Promise<PdfImportOutcome | null>;
+  /**
+   * 单页导出（桌面注入；移动端不传 ⇒ 不出现导出入口）：宿主负责选目录与落盘。
+   * format：pdf（A4 一页）/ png（2× 栅格）/ svg（自包含矢量）。
+   * 返回 null = 用户取消（选目录时点了取消）。
+   */
+  onExportPage?: (input: { pageIds: string[]; format: InkPageExportFormat }) => Promise<{ exportPath: string } | null>;
 }
 
 const SAVE_DEBOUNCE_MS = 500;
@@ -167,7 +174,7 @@ const StaticStrokeLayer = memo(function StaticStrokeLayer({ strokes }: { strokes
   );
 });
 
-export function InkPad({ content, readOnly = false, variant, noteId, active, paneVisible, pane, onChange, onDirty, onEditorCapture, onImportImages, onImportPdf }: InkPadProps) {
+export function InkPad({ content, readOnly = false, variant, noteId, active, paneVisible, pane, onChange, onDirty, onEditorCapture, onImportImages, onImportPdf, onExportPage }: InkPadProps) {
   // 正文只在挂载时解析；父层保存会更新 content，但编辑器不应因此反复解析整份大 JSON。
   // 外部真正需要换正文时由宿主 bump reloadKey 重挂载。
   // v3：当前页是设备本地视图（core/inkNav.ts），优先用它；没有记录才回退 v1/v2 正文里的旧 activePageId。
@@ -204,6 +211,8 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [widthsOpen, setWidthsOpen] = useState(false);
   const [insertOpen, setInsertOpen] = useState(false);
+  /** 桌面底部「导出」按钮的悬浮菜单（只有一个按钮：点开再选格式，不铺三个按钮）。 */
+  const [exportOpen, setExportOpen] = useState(false);
   const [pendingDeletePageId, setPendingDeletePageId] = useState<string | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
   /** 261103 九批：手写板落笔诊断的宿主根节点（默认关，见 boardInputDiagnostics.ts 头注释）。 */
@@ -347,18 +356,22 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
   }, []);
   /** 坞上面板（色板/笔宽/插入）：点「面板本体 / 触发按钮」之外的任意处关闭（捕获 pointerdown，不误吞画布手势）。 */
   useEffect(() => {
-    if (!paletteOpen && !widthsOpen && !insertOpen) return;
+    if (!paletteOpen && !widthsOpen && !insertOpen && !exportOpen) return;
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target as Element | null;
-      if (target?.closest?.('[data-overlay="palette"], [data-overlay="widths"], [data-overlay="insert"], [data-popover-trigger]')) return;
+      if (target?.closest?.('[data-overlay="palette"], [data-overlay="widths"], [data-overlay="insert"], [data-popover-trigger], [data-ink-export]')) return;
       closeSwatches();
+      setExportOpen(false);
     };
     document.addEventListener("pointerdown", onPointerDown, true);
     return () => document.removeEventListener("pointerdown", onPointerDown, true);
-  }, [closeSwatches, insertOpen, paletteOpen, widthsOpen]);
+  }, [closeSwatches, exportOpen, insertOpen, paletteOpen, widthsOpen]);
   // 退回阅读态时工具坞整体卸载：把面板状态一起收掉，下次进编辑态不会凭空弹开。
   useEffect(() => {
-    if (readOnly) closeSwatches();
+    if (readOnly) {
+      closeSwatches();
+      setExportOpen(false);
+    }
   }, [closeSwatches, readOnly]);
   /** 移动端全局预览是悬浮覆盖：点「预览面板本体 / 触发按钮」之外的任意处关闭（桌面流内面板不变）。 */
   useEffect(() => {
@@ -628,6 +641,18 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
       setPdfProgress(null);
     }
   }, [commit, readOnly, showImportNotice]);
+
+  /** 单页导出（宿主注入；移动端不传 ⇒ 没有入口）。 */
+  const runExportPage = useCallback(async (format: InkPageExportFormat) => {
+    if (!onExportPage || !page) return;
+    setExportOpen(false);
+    try {
+      const result = await onExportPage({ pageIds: [page.id], format });
+      if (result?.exportPath) showImportNotice(`已导出第 ${pageIndex + 1} 页：${result.exportPath}`);
+    } catch (reason) {
+      setImportError("导出失败：" + (reason instanceof Error ? reason.message : String(reason)));
+    }
+  }, [onExportPage, page, pageIndex, showImportNotice]);
 
   const cancelPdfImport = useCallback(() => {
     pdfAbortRef.current?.abort();
@@ -1070,6 +1095,14 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
             <button onClick={() => { setPagesOpen((open) => !open); setPendingDeletePageId(null); }} aria-label="页面管理" title="页面管理"><LayoutGrid size={16} /></button>
           </div>
           <div className="ink-footer__right">
+            {/* 只放一个按钮：点开再选格式（用户定稿：不要三个按钮占满工具条）；菜单本体在 InkExportMenu（桌面专用） */}
+            {onExportPage && (
+              <InkExportMenu
+                open={exportOpen}
+                onToggle={() => { setExportOpen((open) => !open); closeSwatches(); }}
+                onPick={(format) => void runExportPage(format)}
+              />
+            )}
             <div className="ink-backgrounds">
               {BACKGROUNDS.map((item) => (
                 <button key={item.value} className={page.background === item.value ? "is-active" : ""} onClick={() => setBackground(item.value)} disabled={readOnly || isPdfPageBackground(page)} title={isPdfPageBackground(page) ? "PDF 页已铺满整页，纸张不可见" : undefined}>{item.label}</button>
