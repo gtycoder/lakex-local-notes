@@ -120,7 +120,7 @@
  * margin 已收单到 styles/app/shell.css 的 .sidebar.sidebar-docked —— 这里再写一份会因 legacy 层内
  * 本文件加载更晚而压掉那边的值（261017 修侧栏溢出时就这么踩到：bottom 仍是 4px）。 */
 .sidebar.sidebar-docked {
-  background: var(--lake-bg-panel);
+  background: var(--lake-bg-navigation);
   border: 0;
   box-shadow: none;
   border-radius: var(--lake-radius-md);
@@ -131,13 +131,13 @@
   right: auto;
   width: var(--sidebar-width);
   max-width: none;
-  background: var(--lake-bg-panel);
+  background: var(--lake-bg-navigation);
   border-radius: 0 var(--lake-radius-md) var(--lake-radius-md) 0;
 }
 [data-theme="dark"] .sidebar.sidebar-docked,
 [data-theme="dark"] .sidebar.sidebar-floating,
 [data-theme="dark"] .outline-sidebar__content {
-  background: var(--lake-bg-panel);
+  background: var(--lake-bg-navigation);
   border-color: var(--lake-border-2);
 }
 .app-shell.quick-notes-active .workspace,

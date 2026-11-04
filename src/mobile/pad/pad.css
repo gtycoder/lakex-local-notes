@@ -75,7 +75,7 @@ html[data-form-factor="expanded"] .pad-tree {
   bottom: 0;
   width: var(--pad-tree-width);
   z-index: var(--mobile-z-drawer);
-  background: var(--lake-bg-panel);
+  background: var(--lake-bg-navigation);
   border-radius: 0 var(--lake-radius-card) var(--lake-radius-card) 0;
   box-shadow: var(--lake-shadow-popover);
   overflow: hidden;
@@ -197,9 +197,9 @@ html[data-form-factor="expanded"] .nb-shelf {
 }
 
 .pad-tab.on {
-  background: var(--lake-bg-panel);
-  color: var(--lake-text-1);
-  box-shadow: 0 0 0 .5px var(--lake-border-1), var(--lake-shadow-card);
+  background: var(--lake-bg-selected);
+  color: var(--lake-fg-selected);
+  box-shadow: none;
 }
 
 .pad-tab__main {
@@ -244,7 +244,7 @@ html[data-form-factor="expanded"] .nb-shelf {
   bottom: 0;
   width: var(--pad-outline-width);
   z-index: var(--mobile-z-drawer); /* 同 .pad-tree：移动端外壳层，低于 Sheet */
-  background: var(--lake-bg-panel);
+  background: var(--lake-bg-navigation);
   border-radius: var(--lake-radius-card) 0 0 var(--lake-radius-card);
   box-shadow: var(--lake-shadow-popover);
   overflow: hidden;

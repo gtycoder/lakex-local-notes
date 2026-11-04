@@ -6,6 +6,7 @@
   /* 表面（260926：panel 与 canvas 取同值——浅色里两者都是 #ffffff，
    * 深色若不同会出现"顶栏/面包屑/大纲/正文四种黑"的明显色阶。结构不随主题变，只换变量。） */
   --lake-bg-window: #191a1d;
+  --lake-bg-navigation: #25282e;
   --lake-bg-panel: #1e1f23;
   --lake-bg-canvas: #1e1f23;
   --lake-bg-block: #292b30;
@@ -38,22 +39,21 @@
   --lake-locked-text-icon-ink: #d7dae0;
   /* 文字 */
   --lake-text-1: #e7e8ea;
-  --lake-text-2: #a9abb1;
-  --lake-text-3: #9398a1;   /* 提一档（261012）：panel 5.68 / block 4.89 / 最严 hover 4.86
-                             * —— 旧值 #868a92 只按 panel #1e1f23 标定（4.75），在 block/hover 掉到 4.07–4.44。 */
+  --lake-text-2: #bec5d0;
+  --lake-text-3: #aab4c4;   /* 261104：导航面与选中底上保留 AA 辅助文字对比。 */
   --lake-text-4: #6f7278;   /* vs #1e1f23 3.5:1（旧 #5c5d62 更低） */
   --lake-text-on-accent: #ffffff;
   /* 边框 */
-  --lake-border-1: #2d2f34;
+  --lake-border-1: #3b414b;
   --lake-border-2: #232528;
-  --lake-border-strong: #3b3e45;
+  --lake-border-strong: #535e70;
   /* 主色（261006：中性蓝，按暗底抬高明度）。
    * 对比度实测：accent vs panel 7.13:1；ink 上的白字 4.89:1。 */
   --lake-accent: #9aabce;
   --lake-accent-ink: #5970a6;
   --lake-accent-ink-hover: #5d73a7;
   --lake-accent-ink-press: #4f6392;
-  --lake-accent-tint: rgba(154,171,206,.15);
+  --lake-accent-tint: rgba(154,171,206,.20);
   --lake-accent-text: #b9c6e2;
   /* 状态色 */
   --lake-status-sync: #6fc0cc;

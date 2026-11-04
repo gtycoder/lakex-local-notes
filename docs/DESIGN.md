@@ -4,17 +4,18 @@ description: 本地优先的 Lake 编辑器笔记应用（桌面端）——克�
 colors:
   accent: "#3f5fa0"
   accent-ink: "#33497f"
-  accent-tint: "#eef2fa"
-  surface-window: "#f3f4f6"
+  accent-tint: "#e1eafa"
+  surface-window: "#e9edf3"
+  surface-navigation: "#f3f5f8"
   surface-panel: "#ffffff"
-  surface-block: "#f4f6f8"
+  surface-block: "#f0f3f7"
   surface-sunken: "#eceef1"
   ink-1: "#1f2329"
-  ink-2: "#4e5969"
+  ink-2: "#455166"
   ink-3: "#6f7784"
   ink-4: "#8b93a1"
-  hairline: "#e6e8ec"
-  control-border: "#d3d7de"
+  hairline: "#d6dde7"
+  control-border: "#bcc7d6"
   status-sync: "#2a6b80"
   status-pending: "#8f5f0e"
   status-ok: "#2b7350"
@@ -161,16 +162,23 @@ components:
 
 ## Colors
 
+**261104 三端质感优化**：内容纸面保持白色，窗底 `--lake-bg-window` 与导航面
+`--lake-bg-navigation` 分开；桌面浅色分别为 `#e9edf3` / `#f3f5f8`，深色导航面
+`#25282e`，暖色导航面 `#f4f1eb`。选中底增强到 `#e1eafa`（暖色 `#ffeadb`），
+边界与辅助文字同步调整。颜色用于区分区域与当前项，几何与排版不变。
+本批只改静态主题取值与表面归属，不新增滤镜、纹理、动效、阴影或运行时监听。
+
 调色板的性格是**印刷式的克制**：近白纸面、近黑墨、一枚墨蓝主色，颜色承担语义而不是气氛。
 
 ### Primary
 - **Ink Blue**（`#3f5fa0`，实心钮/链接用更深的 `#33497f`）：焦点环、选中态、主操作、链接。它在屏幕上**很少**出现——这是它有效的原因。
-- **Ink Blue Tint**（`#eef2fa`）：选中行/选中项的底衬；与 `Ink Blue` 成对使用，永远不单独出现。
+- **Ink Blue Tint**（`#e1eafa`）：选中行/选中项的底衬；与 `Ink Blue` 成对使用，永远不单独出现。
 
 ### Neutral
 - **Paper**（`#ffffff`）：面板与文档画布，正文所在的最亮面。
-- **Window**（`#f3f4f6`）：窗底，面板与面板之间的通道。
-- **Block**（`#f4f6f8`）：块面（代码块、表格斑马、内嵌卡片的底）。
+- **Window**（`#e9edf3`）：窗底，面板与面板之间的通道。
+- **Navigation**（`#f3f5f8`）：目录背景，与内容纸面分离。
+- **Block**（`#f0f3f7`）：块面（代码块、表格斑马、内嵌卡片的底）。
 - **Sunken**（`#eceef1`）：下沉面（禁用字段、内嵌槽）。
 - **Ink 1–4**（`#1f2329` / `#4e5969` / `#6f7784` / `#8b93a1`）：正文、次级、辅助、元信息；**每一级都有可测的对比度**（4.5:1 / 4.5:1 / 3:1 递增的克制）。
   - **文字档位按「最差表面也达标」取档（261012）**：`ink-3` 的 canonical `#6f7784` 是按**白底**标定的（4.52:1），
@@ -178,7 +186,7 @@ components:
     ⇒ 文字档位改用 ramp 深一档 **`#5f6874`**（暖色同值；深色对应提一档 **`#9398a1`**，最严表面 4.86–4.95）。
     **色板 canonical 不变**（`#6f7784` 仍是 ink-3 的色板值，见 `../.impeccable/design.json` 的 `tonalRamp`；`#5f6874` 本就是该 ramp 的既有档位）。
   - `--lake-text-4`（`#8b93a1`，深色 `#6f7278`）是**有意的 3:1 档**（元信息/占位）—— 不追 AA 4.5；要提升就得整档提亮并与 text-3 合并成一层。
-- **Hairline**（`#e6e8ec`）与 **Control Border**（`#d3d7de`）：前者分隔区域，后者是**控件静息边**。两者不能互换。
+- **Hairline**（`#d6dde7`）与 **Control Border**（`#bcc7d6`）：前者分隔区域，后者是**控件静息边**。两者不能互换。
 
 ### Named Rules
 

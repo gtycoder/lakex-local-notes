@@ -5,7 +5,8 @@
 [data-theme="warm"] {
   color-scheme: light;
   /* 表面（三级，暖灰） */
-  --lake-bg-window: #f5f4f2;
+  --lake-bg-window: #ece9e3;
+  --lake-bg-navigation: #f4f1eb;
   --lake-bg-panel: #ffffff;
   --lake-bg-canvas: #ffffff;
   --lake-bg-block: #f4f3f0;
@@ -22,15 +23,15 @@
   --lake-text-4: #8b93a1;   /* vs #fff 3.1:1 */
   --lake-text-on-accent: #ffffff;
   /* 边框 */
-  --lake-border-1: #e7e5e1;
-  --lake-border-2: #f0efec;
-  --lake-border-strong: #d6d3cd;
+  --lake-border-1: #dcd5ca;
+  --lake-border-2: #eae5dd;
+  --lake-border-strong: #c7bcac;
   /* 主色（橙：与浅/深同一组值；暖色只靠暖中性面区分） */
   --lake-accent: #d45500;
   --lake-accent-ink: #b34900;
   --lake-accent-ink-hover: #c24e00;
   --lake-accent-ink-press: #993d00;
-  --lake-accent-tint: #fff2e8;
+  --lake-accent-tint: #ffeadb;
   --lake-accent-text: #a8440a;
   /* 状态色 */
   --lake-status-sync: #2a6b80;

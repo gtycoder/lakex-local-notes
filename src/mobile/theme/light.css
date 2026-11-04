@@ -6,43 +6,41 @@
 :root,
 [data-theme="light"] {
   color-scheme: light;
-  /* 表面（261013 用户定稿：**浅色下窗底 = 白**，对齐语雀 App —— 原来的 #f3f4f6 铺在
-   * body / 顶栏 / 小记卡 / 文档区 / 设置页上，整屏发灰（用户原话「灰蒙蒙」）。
-   * 层级不再靠"灰底 vs 白卡"的明度差，改由**细线 + 阴影**承担；成对规则见 kit.css 的 .mb-set-section
-   * 与 mobile.css 的顶栏/胶囊底栏分隔线。深色主题不动（仍是 #191a1d 的近黑窗底）。 */
-  --lake-bg-window: #ffffff;
+  /* 261104 三端质感优化：外围浅灰蓝，卡片与正文保持白色；
+   * 不能把窗底铺进正文/小记卡，否则会退回整屏发灰。 */
+  --lake-bg-window: #f3f5f8;
+  --lake-bg-navigation: #eef2f7;
   --lake-bg-panel: #ffffff;
   --lake-bg-canvas: #ffffff;
-  --lake-bg-block: #f4f6f8;
+  --lake-bg-block: #f0f3f7;
   --lake-bg-raised: #ffffff;
   --lake-bg-sunken: #eceef1;
   /* 分组底衬 / 极浅灰通道（260929 多维表复刻云端）：比 panel 深一档、比 block 浅一档，
    * 用来把「分组之间的通道」和白底卡片分开，不用于常规块面。 */
   --lake-bg-subtle: #fafbfc;
-  --lake-bg-hover: #f0f1f3;
-  --lake-bg-press: #e9ebee;
+  --lake-bg-hover: #e8edf4;
+  --lake-bg-press: #dfe6ef;
   /* 小记标签实底（261030 用户点单：对齐语雀 App —— 浅灰绿实底、无边框、文字深灰）。
    * 移动端独有语义：文字走 --lake-text-1（vs 本底 13.8:1），计数走 --lake-text-3（4.9:1）。
    * 不使用 --lake-status-ok-soft 之类的状态色 —— 标签不是状态，语义不得借用。 */
   --lake-quick-tag-bg: #e8f2ec;
   /* 文字 */
   --lake-text-1: #1f2329;
-  --lake-text-2: #4e5969;
-  --lake-text-3: #5f6874;   /* ink-3 ramp 深一档（261012）：白 5.65 / 中性块面 5.21 / 最严 hover #f0f1f3 5.00
-                             * —— 旧值 #6f7784 只按白底标定（4.52），铺到灰底/淡色底掉到 4.00–4.36 不达 AA。 */
+  --lake-text-2: #455166;
+  --lake-text-3: #566273;   /* 261104：在导航、选中与按压面上按 AA 4.5 校验。 */
   --lake-text-4: #8b93a1;   /* vs #fff 3.1:1 —— 元信息/占位（比旧值 #9aa1aa 的 2.6:1 更好） */
   --lake-text-on-accent: #ffffff;
   /* 边框 */
-  --lake-border-1: #e6e8ec;
-  --lake-border-2: #eff1f4;
-  --lake-border-strong: #d3d7de;
+  --lake-border-1: #d6dde7;
+  --lake-border-2: #e6ebf2;
+  --lake-border-strong: #bcc7d6;
   /* 主色（261006 canon）：同一色相（222°）的墨蓝，从"雾状"收成明确锚点。
    * 橙是**暖色主题专属**的身份色（见 themes/warm.css），亮/暗保持中性蓝。 */
   --lake-accent: #3f5fa0;
   --lake-accent-ink: #33497f;
   --lake-accent-ink-hover: #3d558f;
   --lake-accent-ink-press: #293c69;
-  --lake-accent-tint: #eef2fa;
+  --lake-accent-tint: #e1eafa;
   --lake-accent-text: #33497f;
   /* 状态色 */
   --lake-status-sync: #2a6b80;

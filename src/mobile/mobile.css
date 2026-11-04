@@ -146,7 +146,7 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
    ⇒ **光标一路跑出屏幕**（用户报的"光标必须始终在工具栏上方"在小记上就是这么坏的），
    而且面板一开卡片还会长高（352→664）。现在：卡片 = 滚动区内容盒的高度（外壳已被 --mb-app-h 钉住 ⇒ 两种状态同高），
    正文（.quick-note-editor）自己滚、底部动作行固定在卡片底部。 */
-.mobile-qn-composer { position: relative; display: flex; flex-direction: column; box-sizing: border-box; height: 100%; overflow: hidden; background: var(--lake-bg-window); border: .5px solid var(--lake-border-1); border-radius: var(--lake-radius-md); padding: 12px; }
+.mobile-qn-composer { position: relative; display: flex; flex-direction: column; box-sizing: border-box; height: 100%; overflow: hidden; background: var(--lake-bg-canvas); border: .5px solid var(--lake-border-1); border-radius: var(--lake-radius-md); padding: 12px; }
 .mobile-qn-composer .quick-note-editor { flex: 1 1 auto; min-height: 0; overflow: hidden; }
 .mobile-qn-composer .mobile-qn-actions { flex: 0 0 auto; }
 /* 261022：capture 写作卡挂载时 120ms 淡入（只动 opacity，不挡输入、不延迟首帧）。 */
@@ -154,7 +154,7 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
 .mobile-qn-composer[data-capture="1"] { animation: mb-composer-in var(--mobile-duration-panel) var(--mobile-ease-out); }
 @media (prefers-reduced-motion: reduce) { .mobile-qn-composer[data-capture="1"] { animation: none; } }
 /* 261022：内核就绪前用同构骨架盖住卡片空白（纯进度占位，就绪即揭）。 */
-.mb-composer-skel-cover { position: absolute; inset: 0; z-index: 1; background: var(--lake-bg-window); border-radius: inherit; }
+.mb-composer-skel-cover { position: absolute; inset: 0; z-index: 1; background: var(--lake-bg-canvas); border-radius: inherit; }
 .mb-composer-skeleton--bare { height: 100%; }
 /* ⚠️ **不要再给这里加第二个滚动容器**（261014 实测踩到）：内核 note 版式内部已经有自己的滚动口
    `.ne-editor-wrap-content { overflow-y: auto }`（实测 st=442 / sh=729 / ch=260）。我先前把 `.quick-note-editor`
@@ -182,10 +182,10 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
 /* ===== 首页卡片语言（小记卡片 + 最近文档 + 笔记本书架/列表 + 带标签底部栏） ===== */
 /* —— 小记卡片（整张白卡：图片完整展示 + 摘要 + 日期 + 「...」，仿语雀） —— */
 .mobile-quick-cards { display: flex; flex-direction: column; gap: 12px; padding: 12px var(--mb-page-pad); }
-.qn-card { display: flex; flex-direction: column; background: var(--lake-bg-window); border: .5px solid var(--lake-border-1); border-radius: var(--mb-radius-card); overflow: hidden; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.qn-card { display: flex; flex-direction: column; background: var(--lake-bg-panel); border: .5px solid var(--lake-border-1); border-radius: var(--mb-radius-card); overflow: hidden; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .qn-card:active { transform: scale(.99); }
 .qn-card.is-revealed { border-color: var(--lake-accent); }
-.qn-card__cover { position: relative; width: 100%; padding: 12px 12px 2px; display: flex; align-items: center; justify-content: center; background: var(--lake-bg-window); }
+.qn-card__cover { position: relative; width: 100%; padding: 12px 12px 2px; display: flex; align-items: center; justify-content: center; background: var(--lake-bg-panel); }
 .qn-card__img { max-width: 100%; max-height: 210px; width: auto; height: auto; object-fit: contain; border-radius: var(--mb-radius); display: block; }
 .qn-card__count { position: absolute; top: 10px; right: 10px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: var(--lake-radius-pill); background: var(--lake-scrim); color: var(--mb-on-scrim); font-size: 11px; line-height: 18px; text-align: center; }
 .qn-card__body { padding: 10px 16px 12px; }
@@ -211,7 +211,7 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
 .home-card-row { display: flex; gap: 12px; overflow-x: auto; padding: 10px 16px 14px; scrollbar-width: none; }
 .home-card-row::-webkit-scrollbar { display: none; }
 .doc-card { flex: 0 0 72px; width: 72px; display: flex; flex-direction: column; gap: 6px; padding: 0; border: none; background: transparent; text-align: left; cursor: pointer; -webkit-tap-highlight-color: transparent; }
-.doc-card__paper { position: relative; aspect-ratio: 3 / 3.9; border-radius: var(--mb-radius-sm); background: var(--lake-bg-window); border: .5px solid var(--lake-border-1); overflow: hidden; }
+.doc-card__paper { position: relative; aspect-ratio: 3 / 3.9; border-radius: var(--mb-radius-sm); background: var(--lake-bg-canvas); border: .5px solid var(--lake-border-1); overflow: hidden; }
 .doc-card:active .doc-card__paper { transform: scale(.96); }
 .doc-card__lines { position: absolute; left: 9px; right: 9px; top: 12px; bottom: 10px; background-image: repeating-linear-gradient(to bottom, var(--lake-bg-block) 0 1.5px, transparent 1.5px 7px); border-radius: var(--lake-radius-hairline); }
 .doc-card__name { font-size: 12.5px; line-height: 1.35; color: var(--lake-text-2); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: break-word; }
@@ -285,7 +285,7 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
 .mobile-done-btn { border: none; background: var(--lake-accent); color: var(--lake-text-on-accent); border-radius: var(--lake-radius-sm); padding: 6px 14px; font-size: 14px; cursor: pointer; }
 /* 底部让位：阅读态底部胶囊栏顶边距视口底 80px（栏高 48 + 离底 32）。实测滚到底时最后一行
    bottom=802 而栏 top=762 —— 40px 让位会让末 1~2 行被栏压住（栏上滑时又复现），改为 80px。 */
-.mobile-doc-body { flex: 1; overflow-y: auto; background: var(--lake-bg-window); padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px)); }
+.mobile-doc-body { flex: 1; overflow-y: auto; background: var(--lake-bg-canvas); padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px)); }
 /* 261103 六批 A1：正文在横屏刘海下让出左右安全区（竖屏 0）。 */
 .mobile-doc-body { padding-left: var(--mobile-left-safe-area); padding-right: var(--mobile-right-safe-area); }
 /* 音频/视频卡展示优化：
@@ -503,7 +503,7 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
   /* 整块手势必需：否则上滑被当页面滚动、中途 pointercancel；长按也不该选到字/弹系统菜单。 */
   touch-action: none; -webkit-touch-callout: none; user-select: none;
   border-radius: calc(var(--mobile-bottom-bar-height) / 2);
-  background: var(--lake-bg-window);
+  background: var(--lake-bg-raised);
   box-shadow: var(--lake-shadow-card);
   transition: opacity var(--mobile-duration-panel) var(--mobile-ease-panel), transform var(--mobile-duration-panel) var(--mobile-ease-panel), visibility var(--mobile-duration-panel);
 }
@@ -585,7 +585,7 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
   /* 261103 六批 A1：横屏刘海不压抽屉内容（竖屏 inset=0，规则无副作用）。 */
   padding-left: var(--mobile-left-safe-area);
   display: flex; flex-direction: column; overflow: hidden;
-  background: var(--lake-bg-panel);
+  background: var(--lake-bg-navigation);
   color: var(--lake-text-2);
   border-radius: 0 var(--lake-radius-xl) var(--lake-radius-xl) 0;
   box-shadow: 0 12px 40px -12px var(--lake-scrim);
@@ -693,7 +693,7 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
   border: none; background: transparent; font-size: var(--lake-font-size-body); color: var(--lake-text-3);
   cursor: pointer; font-weight: 400; -webkit-tap-highlight-color: transparent;
 }
-.mobile-htab.active { color: var(--lake-text-1); font-weight: 600; }
+.mobile-htab.active { color: var(--lake-accent-text); font-weight: 600; }
 
 /* 目录树行内动作（移动端常显——无 hover，对齐思源移动端不带 --hide-action）。
    ⋯ = 长按菜单；视觉仍是 28×28，命中区由 .mb-tap 补到 44（261013 —— 28×28 正是走查探针的盲区，见 AGENTS §7.25/26）。
