@@ -15,6 +15,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { Plus, Bold, Italic, Underline, Strikethrough, List, ListOrdered, ListTodo, Keyboard, KeyboardOff, X, Image as ImageIcon, Camera, Paperclip, Table2, Quote, Minus, Code, SquareCode, Music, Video, Highlighter, Tag, Undo, Redo, Pilcrow, Type, MoreHorizontal, Columns2, FoldVertical, Calendar, CalendarDays, Smile, FileSymlink, Lock, Sigma, AlignLeft, AlignCenter, AlignRight, Link2, Superscript, Subscript, IndentIncrease, IndentDecrease, Paintbrush, Eraser, ArrowRightFromLine } from "lucide-react";
 import type { LakeEditorInstance } from "../../features/editor/lakeRuntime";
 import { editorCommandFailureMessage, execEditorCommandResult } from "./execCommand";
+import { beginFormatPainter, formatPaintService } from "./formatPainter";
 import { showToast } from "../ui/toastBus";
 import { reportMobileActionError } from "../lib/reportMobileActionError";
 import { useSnapshotUndo } from "./useSnapshotUndo";
@@ -254,7 +255,6 @@ export function EditorDock({ editor, editing, undoBackend = "kernel", undoLimits
     restoreSelection,
     runInline,
     runPanel,
-    runPanelAndClose,
   } = useEditorCommandDispatcher({
     exec,
     refreshActive,
@@ -447,6 +447,35 @@ export function EditorDock({ editor, editing, undoBackend = "kernel", undoLimits
     }
   };
 
+  /**
+   * 「格式刷」= **内核服务调用，不是命令**（261104 设备实测 + bundle 实据，见 formatPainter.ts 头注释）：
+   * 先还选区 → 让内核按当前光标记录格式（已在刷形态则取消）→ **hide 档收面板**（不放回键盘，否则键盘盖住目标）。
+   * 记录之后由内核自管「点目标即应用、应用后退出」，dock 不再做第二步，也**不要再无参 execCommand('paintFormat')**。
+   */
+  const onFormatPainter = () => {
+    restoreSelection();
+    // 已在刷形态 ⇒ 本次点击 = 取消（与桌面点同一颗按钮一致），不用等收面板。
+    const alreadyActive = !!formatPaintService(editor)?.hasPaintFormat?.();
+    snapshotSelection();
+    refreshActive();
+    closePanel("hide");
+    // ⚠️ 记录必须**晚于面板收起后的焦点/选区事件**：内核 formatPainter 在 afterExecCommand('selection')
+    // 且未处于鼠标按下时，会把「已记录格式」立刻应用到当前选区并（once=true）退出刷形态
+    // ⇒ 收面板/还焦点产生的 selection 命令会把刚记录的刷子当场消费掉，表现为点了没反应。
+    window.setTimeout(() => {
+      const result = beginFormatPainter(editor);
+      if (result === "unavailable") {
+        // 兜底：内核换代丢了服务时保持旧行为并明说（v1.99.0 不会走到这里）。
+        exec("paintFormat");
+        showToast("当前编辑器不支持格式刷", { type: "error" });
+      } else if (result === "cancelled") {
+        showToast("已退出格式刷");
+      } else {
+        showToast("格式刷已开启，点选目标文字");
+      }
+    }, alreadyActive ? 0 : 160);
+  };
+
   // 「更多」面板：**按行分组**（261017 二改用户点单）——公式/上下标/格式刷一行、缩进三项一行、行高一行、画图占位一行。
   // 文本增强命令全部走内核 `renderer.execCommand`；行高档位 = 内核 `lineHeight` 的取值域（[1, 1.15, 1.5, 2, 2.5, 3]）。
   // ⚠️ 撤销/重做已移到**主工具栏**（261017：工具栏最右、更多之后、键盘之前），不再在本面板。
@@ -456,7 +485,7 @@ export function EditorDock({ editor, editing, undoBackend = "kernel", undoLimits
       { label: "上标", Icon: Superscript, run: () => runPanel("sup") },
       { label: "下标", Icon: Subscript, run: () => runPanel("sub") },
       // 格式刷是「取格式 → 点目标」的两步模式：**激活后必须收面板、放回输入法**，否则用户无法点目标
-      { label: "格式刷", Icon: Paintbrush, run: () => runPanelAndClose("paintFormat") },
+      { label: "格式刷", Icon: Paintbrush, run: onFormatPainter },
     ] },
     { key: "indent", items: [
       { label: "首行缩进", Icon: ArrowRightFromLine, run: () => runPanel("firstIndent") },

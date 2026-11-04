@@ -2032,3 +2032,8 @@ DOM 文本节点扫描（移动端文档 `disableVirtualRendering:true`，整篇
 **⑥ 未接入口（对照桌面/内核）**：justify（`ALIGN_ITEMS` 只 3 档）、unlink（两端皆无）、replaceAll/replaceText（移动 MobileFindBar 只查不换）、style→code/quote 段型、表格块级命令族、分栏 3/4、alert 类型选择、插入面板表格行列可选；`firstIndent` 则为**移动领先桌面**（桌面无入口）。
 
 **复跑方法**：`bash scripts/emu-up.sh`（AVD lake_mobile）→ `adb install -r android/app/build/outputs/apk/debug/app-debug.apk` → `bash scripts/emu-cdp.sh 9335` → 首页 ＋ 新建文档；逐项点 dock 后读 `document.querySelector('.ne-engine')` 的 outerHTML/计算样式。
+
+**⑦ 修复（261104 已落地，设备复验通过）**
+- 实现：新增 `src/mobile/editor/formatPainter.ts` —— `formatPaintService(editor)` 按内核 hub 的 service token 取 `IFormatRenderService`（`editor.renderer.getService({ value: "IFormatRenderService" })`，hub 实际用 `token.value` 做键）；`beginFormatPainter` = 已在刷形态 → `clearPaintFormat()`（"cancelled"），否则 `recordPaintFormat(true)`（"recorded"），服务缺失 → "unavailable"。dock 的「格式刷」改走它，**不再无参 execCommand('paintFormat')**。
+- **时序坑（本修复的关键，不写下来会重犯）**：记录后**不能**紧接着收面板/还焦点。内核 formatPainter 订阅 `afterExecCommand`：收到 `commandName === 'selection'` 且 `_mouseDown` 为假时，会**立刻**把已记录格式应用到当前选区，并在 `_once` 时 `clearPaintFormat()`。收面板（hide 档）产生的 selection 命令会把刚记录的刷子当场消费掉——首版实现正是这样：toast 已提示「已开启」，但 `.ne-paint-formatting` 立刻消失、点目标无效。⇒ 记录用 `setTimeout(..., 160)` 排在面板收起之后；已在刷形态的「取消」不必等待（0ms）。
+- 设备复验（同一 AVD，重建 APK 后）：点「格式刷」→ 250ms 后 `.ne-paint-formatting` 在、`_activeFormat` = `{"blockNodeName":"p","textAttrs":{"bold":true}}`；点目标段 → 目标 `ne-bold="true"`、刷形态自动退出；再次点「格式刷」→ 取消并提示「已退出格式刷」。护栏：`src/mobile/editor/formatPainter.test.ts`（7 例：token/服务缺失/抛错/记录/取消/不可用）。
