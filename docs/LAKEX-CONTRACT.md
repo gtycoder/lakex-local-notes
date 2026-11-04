@@ -2052,3 +2052,11 @@ DOM 文本节点扫描（移动端文档 `disableVirtualRendering:true`，整篇
 - **alert 类型表**：bundle `Cf = ["info","warning","danger","success","tips","color1".."color5"]`（命令默认 info）；落盘是 `ne-alert ne-alert-type="<type>"`（**不是 class**，别按 class 判类型）。移动端先用 5 个语义档（info/tips/success/warning/danger）。
 - **unlink 在本项目 host 侧不可用**：`queryCommandEnabled("unlink")` 返回 true，但 `execCommand("unlink")` 在折叠光标 / 双击选词 / 三击选段等选区内都返回 **false**、DOM 链接保留 ⇒ 只有内核自带的链接面板/工具栏那条路能删链接；**不要在 host 再包装 unlink**。
 - **replaceAll 走 ranges 而非文本**：`execCommand("replaceAll", "旧", "新")` 抛 `t.forEach is not a function`（实现期待 ranges 数组 / 搜索服务结果）。移动端查找面板是宿主自研（DOM 扫描），拿不到内核范围 ⇒ 不做替换（不绕过内核模型改正文）。
+### 5.47 移动端表格阅读条与「本机视图 vs 文档数据」语义（261104 用户裁决 + 261021 实测）
+
+**裁决（261104，长期）**：表格的 **排序、冻结、单元格/行列保护 = 文档数据**（进正文、随 S3 同步）；**阅读态只读**——排序/冻结一律回编辑态做，**不提供移动端保护入口**；阅读态**筛选是唯一例外**，只对本机生效、绝不写正文（261021 定稿，机制见下）。**不要**再为「本机化排序/冻结」或「移动端保护行列入口」立项。
+
+- **阅读条 5 项**（`src/mobile/usheet/MobileSheetReadingBar.tsx`）：视图（走工作区胶囊）/ 筛选 / 排序 / 冻结 / 查找。只有「筛选」可用（且文档本身已存筛选时置灰并给理由）；排序/冻结置灰理由 = 会改文档数据，回编辑态。
+- **读态筛选的实现口径**（`src/mobile/usheet/usheetReadFilter.ts` + `useSheetReadFilter`）：筛选条件只存在于 Univer 运行时 `SHEET_FILTER_PLUGIN` 的 plugin resource；任何落盘路径前（capture / 切回编辑态 / 卸载）先 **同步** `remove-sheet-filter` 还原 ⇒ `book.save()` 与打开时逐字节一致，不标脏、不进 S3。恢复必须走 `syncExecuteCommand`，否则 capture 先跑会把筛选写进正文。
+- **为什么排序/冻结不能本机化**：Univer 的排序是**改单元格值与顺序**（不是视图层排序），冻结是 worksheet 快照字段；要「本机视图」化只能在落盘前逆向还原，语义假（切走/换端就丢）且与 AGENTS §4「冻结属文档数据」冲突。保护同理（workbook/worksheet resource，跨端应一致）。
+- **桌面侧**：Univer 内建右键菜单已提供「保护行列」；本项目不额外包一层，也不在移动端复制入口。
