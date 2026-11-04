@@ -371,3 +371,44 @@
   outline: none;
   overflow: hidden;
 }
+
+/* 选中文字的浮层控制条（字号 ± / 删除）与右下角拖宽手柄 */
+.ink-text-controls {
+  position: absolute;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--lake-border-1);
+  border-radius: var(--lake-radius-sm);
+  background: var(--lake-bg-panel);
+  box-shadow: var(--lake-shadow-card);
+  transform: translateY(-100%);
+}
+.ink-text-size,
+.ink-text-remove {
+  min-width: 22px;
+  height: 20px;
+  padding: 0 4px;
+  border: 0;
+  border-radius: var(--lake-radius-xs);
+  background: transparent;
+  color: var(--lake-text-2);
+  font-size: var(--lake-font-size-nano);
+  cursor: pointer;
+}
+.ink-text-size:hover,
+.ink-text-remove:hover { background: var(--lake-bg-hover); }
+.ink-text-resize {
+  position: absolute;
+  z-index: 3;
+  width: 12px;
+  height: 12px;
+  border: 1px solid var(--lake-accent);
+  border-radius: var(--lake-radius-hairline);
+  background: var(--lake-bg-panel);
+  transform: translate(-50%, -50%);
+  cursor: ew-resize;
+  touch-action: none;
+}

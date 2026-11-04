@@ -24,7 +24,8 @@ import { notedPageIds } from "./inkOutline.js";
 import { INK_IMAGE_MIN_EDGE, movePageImage, placeInkPageImage, removePageImage, resizePageImage } from "./inkPageImages.js";
 import { InkImageRemoveButton, InkImageResizeHandle, InkSelectionRect } from "./InkImageSelection.js";
 import { InkPageTextEditor } from "./InkPageTextEditor.js";
-import { INK_TEXT_DEFAULT_FONT_SIZE, INK_TEXT_LINE_HEIGHT, hitTestPageText, inkTextHeight, movePageText, placeInkPageText, removePageText, updatePageText, wrapInkTextLines } from "./inkPageTexts.js";
+import { InkTextSelectionControls } from "./InkTextSelectionControls.js";
+import { INK_TEXT_DEFAULT_FONT_SIZE, INK_TEXT_LINE_HEIGHT, bumpPageTextFontSize, hitTestPageText, inkTextHeight, movePageText, placeInkPageText, removePageText, resizePageText, updatePageText, wrapInkTextLines } from "./inkPageTexts.js";
 import { InkBackgroundSourceButtons } from "./InkBackgroundSourceButtons.js";
 import { inkPerfDebugEnabled, installInkPerfHooks, recordInkPerf } from "./inkPerfStats";
 import { inkImageImportNotice, inkPdfImportNotice } from "./inkImportNotice";
@@ -878,6 +879,76 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
     commit(replacePage(current, nextPage), inkPagePatch(before, nextPage));
   }, [commit, page, readOnly, selectedTextId]);
 
+  /** 文字块右下角拖宽：拖动只改内存，松手 commit 一次（换行随之重排）。 */
+  const startTextResize = useCallback((event: ReactPointerEvent<HTMLElement>) => {
+    const id = selectedTextId;
+    const current = docRef.current;
+    if (!id || !current || !page || readOnly) return;
+    const item = (page.texts ?? []).find((entry) => entry.id === id);
+    const frame = (event.currentTarget as HTMLElement).closest(".ink-page-frame") as HTMLElement | null;
+    const rect = frame?.getBoundingClientRect();
+    if (!item || !rect || rect.width <= 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const before = page.texts;
+    const pageWidth = page.width;
+    const originX = item.x;
+    const onMove = (moveEvent: PointerEvent): void => {
+      const doc = docRef.current;
+      const pageNow = doc?.pages.find((entry) => entry.id === page.id);
+      if (!doc || !pageNow) return;
+      const x = ((moveEvent.clientX - rect.left) / rect.width) * pageWidth;
+      const texts = resizePageText({ ...pageNow, texts: before ?? pageNow.texts }, id, x - originX);
+      if (!texts) return;
+      const nextDoc = replacePage(doc, { ...pageNow, texts });
+      docRef.current = nextDoc;
+      setDoc(nextDoc);
+    };
+    const cleanup = (): void => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onCancel);
+    };
+    const restore = (): void => {
+      const doc = docRef.current;
+      const pageNow = doc?.pages.find((entry) => entry.id === page.id);
+      if (!doc || !pageNow || !before) return;
+      const nextDoc = replacePage(doc, { ...pageNow, texts: before });
+      docRef.current = nextDoc;
+      setDoc(nextDoc);
+    };
+    const onUp = (): void => {
+      cleanup();
+      const doc = docRef.current;
+      const pageNow = doc?.pages.find((entry) => entry.id === page.id);
+      if (!doc || !pageNow || !before) return;
+      const beforePage = { ...pageNow, texts: before };
+      const changed = JSON.stringify(pageNow.texts ?? []) !== JSON.stringify(before ?? []);
+      if (changed) commit(replacePage(doc, pageNow), inkPagePatch(beforePage, pageNow));
+      else restore();
+    };
+    const onCancel = (): void => {
+      cleanup();
+      restore();
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onCancel);
+  }, [commit, page, readOnly, selectedTextId]);
+
+  /** 字号 ±：一次可撤销提交。 */
+  const bumpSelectedTextFontSize = useCallback((delta: number) => {
+    const current = docRef.current;
+    const id = selectedTextId;
+    if (!current || !id || !page || readOnly) return;
+    const before = current.pages.find((entry) => entry.id === page.id);
+    if (!before) return;
+    const texts = bumpPageTextFontSize(before, id, delta);
+    if (!texts || texts === before.texts) return;
+    const nextPage = { ...before, texts };
+    commit(replacePage(current, nextPage), inkPagePatch(before, nextPage));
+  }, [commit, page, readOnly, selectedTextId]);
+
   // Delete/Backspace 删除选中元素（贴图或文字块；只在真有选中时挂监听，避免影响编辑器其它按键）
   useEffect(() => {
     if ((!selectedImageId && !selectedTextId) || readOnly) return;
@@ -1527,6 +1598,15 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
               />
             );
           })() : null}
+          {!readOnly && !textEditing && selectedTextId && (page.texts ?? []).some((item) => item.id === selectedTextId) ? (
+            <InkTextSelectionControls
+              text={(page.texts ?? []).find((item) => item.id === selectedTextId)!}
+              page={page}
+              onResizeStart={startTextResize}
+              onBumpFontSize={bumpSelectedTextFontSize}
+              onRemove={deleteSelectedText}
+            />
+          ) : null}
           {!readOnly && selectedImageId && (page.images ?? []).some((image) => image.id === selectedImageId) ? (
             <>
               <InkImageRemoveButton
@@ -1589,7 +1669,7 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
         // 下排纸张。编辑态工作区胶囊已由工作区隐藏，工具坞贴底并自己接系统安全区。
         <div className="ink-footer" role="toolbar" aria-label="手写工具" data-overlay="dock">
           <div className="ink-toolbar" role="group" aria-label="画笔工具">
-            {/* 插入（＋）放第一位：图片/PDF 入口在坞内悬浮菜单里 */}
+            {/* 插入（＋）放第一位：文字块/贴图/背景图/背景 PDF 都收在坞内悬浮菜单里（宿主没接任何入口时不显示，保持 7 键一屏） */}
             {(onImportImages || onImportPdf) && (
               <>
                 <button
@@ -1662,6 +1742,20 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
           )}
           {insertOpen && (
             <div role="group" aria-label="插入" data-overlay="insert">
+              <button
+                className="ink-tool"
+                onClick={() => { setInsertOpen(false); insertPageText(); }}
+                aria-label="插入文字"
+                title="插入文字块（双击编辑）"
+              ><Type size={18} /><span>文字</span></button>
+              {onInsertPageImage && (
+                <button
+                  className="ink-tool"
+                  onClick={() => { setInsertOpen(false); void insertPageImage(); }}
+                  aria-label="插入贴图"
+                  title="插入贴图（贴在当前页，可拖动/缩放）"
+                ><Sticker size={18} /><span>贴图</span></button>
+              )}
               {onImportImages && (
                 <button
                   className="ink-tool"

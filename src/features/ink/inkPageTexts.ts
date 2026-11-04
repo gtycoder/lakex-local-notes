@@ -115,3 +115,26 @@ export function updatePageText(page: InkPage, id: string, text: string): InkPage
 export function removePageText(page: InkPage, id: string): InkPageText[] {
   return (page.texts ?? []).filter((item) => item.id !== id);
 }
+
+/** 改宽度（右下角手柄拖动用）：至少 INK_TEXT_MIN_WIDTH，右边不越出页面。 */
+export function resizePageText(page: InkPage, id: string, width: number): InkPageText[] | null {
+  const texts = page.texts ?? [];
+  const target = texts.find((item) => item.id === id);
+  if (!target) return null;
+  const maxWidth = Math.max(INK_TEXT_MIN_WIDTH, page.width - target.x - 8);
+  const next = Math.min(Math.max(width, INK_TEXT_MIN_WIDTH), maxWidth);
+  const rounded = Math.round(next * 100) / 100;
+  return texts.map((item) => (item.id === id ? { ...item, width: rounded } : item));
+}
+
+/** 字号 ±（A- / A+）：夹在 6..96（与 inkDoc 校验同口径）。 */
+export const INK_TEXT_FONT_SIZE_MIN = 6;
+export const INK_TEXT_FONT_SIZE_MAX = 96;
+export function bumpPageTextFontSize(page: InkPage, id: string, delta: number): InkPageText[] | null {
+  const texts = page.texts ?? [];
+  const target = texts.find((item) => item.id === id);
+  if (!target) return null;
+  const fontSize = Math.min(INK_TEXT_FONT_SIZE_MAX, Math.max(INK_TEXT_FONT_SIZE_MIN, Math.round(target.fontSize + delta)));
+  if (fontSize === target.fontSize) return texts;
+  return texts.map((item) => (item.id === id ? { ...item, fontSize } : item));
+}

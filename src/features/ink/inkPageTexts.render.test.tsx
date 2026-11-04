@@ -59,6 +59,65 @@ describe("手写板页内文字块", () => {
     await view.unmount();
   });
 
+  it("选中文字出现控制条：A+ 放大字号、拖手柄改宽度、× 删除", async () => {
+    const doc: InkDoc = createInkDoc("p1");
+    doc.pages[0].texts = [{ id: "t1", x: 100, y: 150, width: 300, text: "文字", fontSize: 16, color: "#262626" }];
+    const onChange = vi.fn();
+    const view = await mount({ content: inkToBody(doc), variant: "desktop", readOnly: false, onChange });
+    const svg = view.container.querySelector(".ink-page-svg") as SVGSVGElement;
+    const frame = view.container.querySelector(".ink-page-frame") as HTMLElement;
+    const rect = () => ({ left: 0, top: 0, width: 794, height: 1123, right: 794, bottom: 1123, x: 0, y: 0, toJSON: () => ({}) }) as DOMRect;
+    frame.getBoundingClientRect = rect;
+    svg.getBoundingClientRect = rect;
+    await act(async () => {
+      const down = new MouseEvent("pointerdown", { bubbles: true, clientX: 110, clientY: 160 });
+      Object.defineProperty(down, "pointerId", { value: 5 });
+      svg.dispatchEvent(down);
+      svg.dispatchEvent(new MouseEvent("pointerup", { bubbles: true, clientX: 110, clientY: 160 }));
+    });
+    expect(view.container.querySelector(".ink-text-controls")).not.toBeNull();
+    expect(view.container.querySelector(".ink-text-resize")).not.toBeNull();
+    await act(async () => { (view.container.querySelector('button[aria-label="字号变大"]') as HTMLButtonElement).click(); });
+    expect(Number((view.container.querySelector("text[data-page-text]") as SVGTextElement).getAttribute("font-size"))).toBe(18);
+    // 拖宽：从 300 拖到 500
+    const handle = view.container.querySelector(".ink-text-resize") as HTMLElement;
+    await act(async () => {
+      const down = new MouseEvent("pointerdown", { bubbles: true, clientX: 400, clientY: 200 });
+      Object.defineProperty(down, "pointerId", { value: 6 });
+      handle.dispatchEvent(down);
+    });
+    await act(async () => { window.dispatchEvent(new MouseEvent("pointermove", { clientX: 600, clientY: 200 }) as PointerEvent); });
+    await act(async () => { window.dispatchEvent(new MouseEvent("pointerup", {}) as PointerEvent); });
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 620)); });
+    const body = JSON.parse(onChange.mock.calls[onChange.mock.calls.length - 1][0]) as InkDoc;
+    expect(body.pages[0].texts![0].width).toBeCloseTo(500, 0);
+    expect(body.pages[0].texts![0].fontSize).toBe(18);
+    // × 删除
+    await act(async () => { (view.container.querySelector('button[aria-label="删除这段文字"]') as HTMLButtonElement).click(); });
+    expect(view.container.querySelector("text[data-page-text]")).toBeNull();
+    await view.unmount();
+  });
+
+  it("移动端 ＋ 菜单里有「文字」入口（贴图入口取决于宿主是否注入）；宿主没接入口时不出现 ＋，保持 7 键", async () => {
+    // 宿主接了背景导入（真实移动端都会接）⇒ ＋ 出现，菜单里有文字；没接贴图就不显示贴图
+    const view = await mount({
+      content: inkToBody(createInkDoc("p1")),
+      variant: "mobile",
+      readOnly: false,
+      onImportImages: async () => null,
+    });
+    const trigger = view.container.querySelector('button[aria-label="插入"]') as HTMLButtonElement;
+    expect(trigger).not.toBeNull();
+    await act(async () => { trigger.click(); });
+    const menu = view.container.querySelector('[data-overlay="insert"]')!;
+    expect(menu.querySelector('button[aria-label="插入文字"]')).not.toBeNull();
+    expect(menu.querySelector('button[aria-label="插入贴图"]')).toBeNull();
+    await view.unmount();
+    const bare = await mount({ content: inkToBody(createInkDoc("p1")), variant: "mobile", readOnly: false });
+    expect(bare.container.querySelector('button[aria-label="插入"]')).toBeNull();
+    await bare.unmount();
+  });
+
   it("空文本提交 ⇒ 不留下空文字块（正文里没有 texts）", async () => {
     const view = await mount({ content: inkToBody(createInkDoc("p1")), variant: "desktop", readOnly: false });
     await act(async () => { (view.container.querySelector('button[aria-label="插入文字"]') as HTMLButtonElement).click(); });

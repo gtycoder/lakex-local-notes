@@ -7,6 +7,8 @@ import {
   INK_TEXT_DEFAULT_WIDTH_RATIO,
   INK_TEXT_LINE_HEIGHT,
   INK_TEXT_MIN_WIDTH,
+  bumpPageTextFontSize,
+  resizePageText,
   estimateInkCharWidth,
   hitTestPageText,
   inkTextHeight,
@@ -58,6 +60,17 @@ describe("页内文字块", () => {
     const far = movePageText(page1, "t1", -99999, -99999)![0];
     expect(far.x).toBeGreaterThan(-99999);
     expect(far.y).toBeGreaterThan(-99999);
+  });
+
+  it("拖宽与字号 ±：宽度夹在最小宽度与页面右边界之间；字号夹 6..96", () => {
+    const page1 = { ...page(), texts: [{ id: "t1", x: 800, y: 100, width: 200, fontSize: 16, color: "#000", text: "x" }] };
+    // 右边只剩 200 ⇒ 最大也就 1000-800-8=192
+    expect(resizePageText(page1, "t1", 500)![0].width).toBe(192);
+    expect(resizePageText(page1, "t1", 1)![0].width).toBe(INK_TEXT_MIN_WIDTH);
+    expect(resizePageText(page1, "missing", 100)).toBeNull();
+    expect(bumpPageTextFontSize(page1, "t1", 2)![0].fontSize).toBe(18);
+    expect(bumpPageTextFontSize({ ...page1, texts: [{ ...page1.texts![0], fontSize: 96 }] }, "t1", 2)![0].fontSize).toBe(96);
+    expect(bumpPageTextFontSize({ ...page1, texts: [{ ...page1.texts![0], fontSize: 6 }] }, "t1", -2)![0].fontSize).toBe(6);
   });
 
   it("改文与删除", () => {

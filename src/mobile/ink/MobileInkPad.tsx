@@ -48,6 +48,25 @@ export function MobileInkPad({ noteId, active = false, readOnly = false, ...prop
     return importPdfPagesToAssets({ noteId, bytes, filename: file.name, onProgress, onPagesReady, signal });
   }, [noteId]);
 
+  /** v4 页内贴图（移动端）：从相册/文件选一张图 → 上传资产 → 返回 URL 与原图尺寸（落点由 InkPad 决定）。 */
+  const onInsertPageImage = useCallback(async () => {
+    if (!noteId) return null;
+    const files = await pickInkImageFiles();
+    const file = files[0];
+    if (!file) return null; // 用户取消
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const uploaded = await bridge.uploadResource({ bytes, filename: file.name }, noteId);
+    let naturalWidth: number | undefined;
+    let naturalHeight: number | undefined;
+    try {
+      const bitmap = await createImageBitmap(file);
+      naturalWidth = bitmap.width;
+      naturalHeight = bitmap.height;
+      bitmap.close?.();
+    } catch { /* 读不到尺寸就按 4:3 估（placeInkPageImage 内部兜底） */ }
+    return { url: uploaded.url, naturalWidth, naturalHeight };
+  }, [noteId]);
+
   return (
     <InkPad
       {...props}
@@ -57,6 +76,7 @@ export function MobileInkPad({ noteId, active = false, readOnly = false, ...prop
       variant="mobile"
       onImportImages={noteId ? onImportImages : undefined}
       onImportPdf={noteId ? onImportPdf : undefined}
+      onInsertPageImage={noteId ? onInsertPageImage : undefined}
     />
   );
 }

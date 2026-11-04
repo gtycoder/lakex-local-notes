@@ -8,6 +8,11 @@
 
 ## 0. 最新交接（261027）
 
+### 261104 · 二十三批续：移动端插入入口（文字/贴图）+ 文字块控制条（A-/A+/拖宽/删除）· **本地改动**
+- **移动端 ＋ 菜单**：新增「文字」（始终有）与「贴图」（宿主注入 `onInsertPageImage` 时）；`MobileInkPad` 实现 `onInsertPageImage`（相册选图 → `bridge.uploadResource` → 原图尺寸）。宿主没接任何入口时 ＋ 不出现，保持定稿 7 键一屏（护栏 `MobileInkPad.render.test` 仍然过）。
+- **文字块控制条**（`InkTextSelectionControls.tsx`，独立文件避免跨端样式护栏）：`A-` / `A+`（字号 6..96）、`×` 删除、右下角**拖宽手柄**（宽度 60..页宽，影响折行，拖动只改内存、松手 commit）。
+- **纯函数**：`resizePageText` / `bumpPageTextFontSize`（+ 2 例单测）；渲染测试覆盖 A+ 改字号、拖宽 300→500 落盘、× 删除。
+- **门禁**：tsc / vitest（578 文件 3583 例；剩 2 条 `dockPanelFocusGuard` 红来自另一会话在途移动端改动）/ cssLayers（shared 227→258）/ mobileui / diff-check。
 ### 261104 · 二十三批：页内文字块（插入 / 双击编辑 / 拖动 / 删除 / 导出）· **本地改动**
 - **插入**：顶部工具条「插入文字」（`Type`）→ 空块落在「水平居中、页面 15% 高度」并立刻进入编辑；空文本提交自动移除该块。
 - **编辑**：双击进入编辑；用 HTML `<textarea>`（中文 IME 必需）；`Ctrl/Cmd+Enter`/失焦提交，`Esc` 取消。输入框位置/字号按页面百分比与当前缩放换算。
