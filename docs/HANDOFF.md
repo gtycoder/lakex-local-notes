@@ -8,6 +8,14 @@
 
 ## 0. 最新交接（261027）
 
+### 261104 · UI 验收修正（`feat/ui-surface-polish`）
+- **用户四条反馈**：三端目录染色撤回；手机/Pad 编辑页顶部与空隙去掉灰蓝底；移动大纲恢复面板底；桌面悬停提示重做。
+- **目录/大纲**：恢复 `compat.css` 与桌面 dark 原规则；手机 `.side-panel`、Pad `.pad-tree/.pad-outline` 改回 `--lake-bg-panel`，删除新增的 `--lake-bg-navigation` 全部取值。
+- **编辑页**：`.mobile-workspace` 与其 `.mobile-topbar` 使用 `--lake-bg-canvas`，覆盖首页外围浅底的继承，手机与 Pad 共用。只改背景，不改高度、排布、键盘或手势。
+- **图3 提示**：切换标签原来是单独 `data-tooltip::after`，chrome 还把其左右 padding 覆成 0。删除重复气泡，改 `title` 接既有 `NativeTitleTips/.ln-tip`；桌面提示令牌采用中性深底浅字、紧凑 6px 圆角，不加蓝边。原来的键盘 focus 提示由同一组件接 `focusin/focusout` 保留。
+- **复验完成**：tsc 0；全量 vitest 3608 passed / 12 skipped；ui-metrics / mobileui / 双端构建 / bundle+arch / diff-check 通过。独立只读 `lake_sheet` 副本（5592/CDP9364）上手机正文态、Pad 正文态、多维表 3 态按新背景更新基线后复采 5/5 零差异，其余基线条目未改。桌面实测目录白底、提示 12px / padding 3px 8px / 圆角 6px / 无边框，鼠标与键盘提示均可用。
+- **预览已更新**：桌面 CDP9242、手机 5588/CDP9362、Pad 5590/CDP9363 均已加载修正构建并保持打开；手机与 Pad 实测工作区/顶部/目录/大纲均为白底。截图 `corrected-*` 与记录在 `.css-audit/ui-surface-polish/`。本条覆盖上一批目录染色方案，设计文档已按用户反馈重写。
+
 ### 261104 · 三端 UI 质感优化（独立分支 `feat/ui-surface-polish`）
 - **隔离**：worktree `/Users/admin/file/local-lake/lakex-ui-surface-polish`，基于 `834b5772`；主仓库并行会话的三份未提交文档未带入、未改写。此批尚未合入业务分支。
 - **范围**：桌面浅/深/暖主题、Android 手机与 Pad 浅/深主题。新增 `--lake-bg-navigation` 区分外围与内容：桌面目录、手机抽屉与 Pad 两侧栏采用导航面；正文/小记卡/胶囊保持内容面。浅色选中底更明确，边界与辅助文字同步增强；Pad 活动页签复用选中令牌并去掉原来的边框型阴影。

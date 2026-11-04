@@ -484,7 +484,8 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
 }
 
 /* ===== 第二层工作区（精仿思源移动端：胶囊栏 + 左/右抽屉 + 全屏tab列表） ===== */
-.mobile-workspace { display: flex; flex-direction: column; height: 100%; position: relative; }
+.mobile-workspace { display: flex; flex-direction: column; height: 100%; position: relative; background: var(--lake-bg-canvas); }
+.mobile-workspace .mobile-topbar { background: var(--lake-bg-canvas); }
 .doc-pane { display: none; flex: 1; min-height: 0; }
 .doc-pane.active { display: block; }
 
@@ -585,7 +586,7 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
   /* 261103 六批 A1：横屏刘海不压抽屉内容（竖屏 inset=0，规则无副作用）。 */
   padding-left: var(--mobile-left-safe-area);
   display: flex; flex-direction: column; overflow: hidden;
-  background: var(--lake-bg-navigation);
+  background: var(--lake-bg-panel);
   color: var(--lake-text-2);
   border-radius: 0 var(--lake-radius-xl) var(--lake-radius-xl) 0;
   box-shadow: 0 12px 40px -12px var(--lake-scrim);

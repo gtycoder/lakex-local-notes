@@ -6,7 +6,6 @@
   color-scheme: light;
   /* 表面（三级：窗底 < 面板 < 抬升） */
   --lake-bg-window: #e9edf3;
-  --lake-bg-navigation: #f3f5f8;
   --lake-bg-panel: #ffffff;
   --lake-bg-canvas: #ffffff;
   --lake-bg-block: #f0f3f7;

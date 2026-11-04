@@ -174,28 +174,6 @@
 
 .tab-switcher:focus-visible { outline: var(--lake-focus-ring-width) solid var(--lake-accent-tint); outline-offset: 2px; }
 
-.tab-switcher[data-tooltip]::after {
-  content: attr(data-tooltip);
-  position: absolute;
-  top: calc(100% + 9px);
-  right: 0;
-  z-index: 20;
-  width: max-content;
-  max-width: 260px;
-  padding: 6px 9px;
-  border: 0.5px solid var(--lake-border-strong);
-  font-size: var(--lake-font-size-micro);
-  font-weight: 500;
-  line-height: 1.25;
-  white-space: nowrap;
-  pointer-events: none;
-  opacity: 0;
-  transform: translateY(-3px);
-}
-
-.tab-switcher[data-tooltip]:hover::after,
-.tab-switcher[data-tooltip]:focus-visible::after { opacity: 1; transform: translateY(0); }
-
 .tab-switcher-menu {
   /* portal 渲染到 document.body，脱离 .tab-bar（sticky+z-index:200）层叠上下文；
      fixed + z-index:500 保证弹窗始终在大纲 rail（z-index:250）之上。 */

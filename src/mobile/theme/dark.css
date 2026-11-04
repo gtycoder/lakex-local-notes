@@ -6,7 +6,6 @@
   /* 表面（260926：panel 与 canvas 取同值——浅色里两者都是 #ffffff，
    * 深色若不同会出现"顶栏/面包屑/大纲/正文四种黑"的明显色阶。结构不随主题变，只换变量。） */
   --lake-bg-window: #191a1d;
-  --lake-bg-navigation: #25282e;
   --lake-bg-panel: #1e1f23;
   --lake-bg-canvas: #1e1f23;
   --lake-bg-block: #292b30;

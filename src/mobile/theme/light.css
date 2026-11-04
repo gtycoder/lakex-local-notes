@@ -9,7 +9,6 @@
   /* 261104 三端质感优化：外围浅灰蓝，卡片与正文保持白色；
    * 不能把窗底铺进正文/小记卡，否则会退回整屏发灰。 */
   --lake-bg-window: #f3f5f8;
-  --lake-bg-navigation: #eef2f7;
   --lake-bg-panel: #ffffff;
   --lake-bg-canvas: #ffffff;
   --lake-bg-block: #f0f3f7;

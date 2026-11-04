@@ -179,10 +179,9 @@
   --lake-bg-selected: var(--lake-accent-tint);
   --lake-fg-selected: var(--lake-accent-text);
   --lake-bg-selected-hover: color-mix(in srgb, var(--lake-accent-tint) 88%, var(--lake-accent));
-  /* hover 气泡（名称/说明）：用户 261006 要求「都改用选中色」。气泡盖在内容上需不透明，
-   * 取上面的合成实色 #d8dde8 + 深字（原为主题无关的深蓝 #3f4868 / 近白字）。 */
-  --lake-tooltip-bg: #d8dde8;
-  --lake-tooltip-fg: #1f2329;
+  /* 261104 用户验收：悬停说明用紧凑中性深底浅字，不借选中色、不画蓝色描边。 */
+  --lake-tooltip-bg: #303641;
+  --lake-tooltip-fg: #f5f6f8;
   /* 附件「文档类型」图标配色（260930 用户：附件直接展示类型图标）。
    * 内容/品牌色（不随主题语义变），与 --lake-board-canvas-* 同处「主题无关令牌」区；
    * 深浅底都可辨，故不按主题分叉。用法见 features/bitable/bitableFileIcon.css。 */

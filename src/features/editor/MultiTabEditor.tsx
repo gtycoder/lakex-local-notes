@@ -607,7 +607,7 @@ export function MultiTabEditor({
               aria-label={`切换标签，共 ${tabs.length} 个`}
               aria-haspopup="menu"
               aria-expanded={tabMenuOpen}
-              data-tooltip={`切换标签（${tabs.length}）`}
+              title={`切换标签（${tabs.length}）`}
             >
               <ChevronDown size={15} />
               {tabMenuAnchor}

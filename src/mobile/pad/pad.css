@@ -75,7 +75,7 @@ html[data-form-factor="expanded"] .pad-tree {
   bottom: 0;
   width: var(--pad-tree-width);
   z-index: var(--mobile-z-drawer);
-  background: var(--lake-bg-navigation);
+  background: var(--lake-bg-panel);
   border-radius: 0 var(--lake-radius-card) var(--lake-radius-card) 0;
   box-shadow: var(--lake-shadow-popover);
   overflow: hidden;
@@ -244,7 +244,7 @@ html[data-form-factor="expanded"] .nb-shelf {
   bottom: 0;
   width: var(--pad-outline-width);
   z-index: var(--mobile-z-drawer); /* 同 .pad-tree：移动端外壳层，低于 Sheet */
-  background: var(--lake-bg-navigation);
+  background: var(--lake-bg-panel);
   border-radius: var(--lake-radius-card) 0 0 var(--lake-radius-card);
   box-shadow: var(--lake-shadow-popover);
   overflow: hidden;

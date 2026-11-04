@@ -508,6 +508,8 @@
 .app-shell.focus-mode .document-pane { border-radius: 0; }
 
 /* B3 dark selectors use higher specificity; these aliases intentionally win only for the shell surfaces. */
+html[data-theme="dark"] .sidebar.sidebar-docked,
+html[data-theme="dark"] .sidebar.sidebar-floating,
 html[data-theme="dark"] .document-pane,
 html[data-theme="dark"] .floating-dialog,
 html[data-theme="dark"] .settings-panel,

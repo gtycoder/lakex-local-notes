@@ -690,9 +690,7 @@
 .sync-toast-sub { margin-top: 4px; color: var(--lake-text-3); font-size: var(--lake-font-size-micro); }
 .sync-toast-action { margin-top: 4px; align-self: flex-start; }
 
-/* 4) 提示气泡圆角 + 二级菜单表面（同样属 P7-b 漏搬：原在 b3/components.css；
- *    色/底已在 app/misc.css 与 overlay 层，仅圆角/内边距缺失 ⇒ 气泡曾是直角）。 */
-.tab-switcher[data-tooltip]::after,
+/* 二级菜单表面；提示统一交给 NativeTitleTips + kit 的 .ln-tip。 */
 .context-menu-submenu {
   padding: var(--lake-space-sm) 0;
   border-radius: var(--lake-radius-md);

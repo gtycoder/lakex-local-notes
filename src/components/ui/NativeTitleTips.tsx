@@ -88,6 +88,8 @@ export function NativeTitleTips() {
 
     document.addEventListener("pointerover", onOver, true);
     document.addEventListener("pointerout", onLeave, true);
+    document.addEventListener("focusin", onOver, true);
+    document.addEventListener("focusout", onLeave, true);
     document.addEventListener("pointerdown", hide, true);
     document.addEventListener("keydown", hide, true);
     window.addEventListener("scroll", hide, true);
@@ -96,6 +98,8 @@ export function NativeTitleTips() {
     return () => {
       document.removeEventListener("pointerover", onOver, true);
       document.removeEventListener("pointerout", onLeave, true);
+      document.removeEventListener("focusin", onOver, true);
+      document.removeEventListener("focusout", onLeave, true);
       document.removeEventListener("pointerdown", hide, true);
       document.removeEventListener("keydown", hide, true);
       window.removeEventListener("scroll", hide, true);
