@@ -657,7 +657,7 @@ export function EditorDock({ editor, editing, undoBackend = "kernel", undoLimits
   return (
     <div ref={dockRef} className="mobile-editor-dock" data-panel={panelMode ?? "none"} style={{ ["--kb-offset" as string]: `${Math.round(usable)}px` } as import("react").CSSProperties}>
       {/* 主工具栏（悬浮输入法上方）；对齐 Lake 官方：类别(+/Aa)展开即变 ×，命令按钮实时高亮 */}
-      <div className="med-toolbar" data-prevent-swipe onMouseDown={(e) => e.preventDefault()}>
+      <div className="med-toolbar" data-prevent-swipe onMouseDown={(e) => { e.preventDefault(); snapshotSelection(); }}>
         {/* 中间按钮可左右滑动；键盘键**固定在最右**（261017 用户点单 B 方案） */}
         <div className="med-toolbar-scroll">
           <button className={plusCls} onClick={() => togglePanel("insert")} aria-label="插入">

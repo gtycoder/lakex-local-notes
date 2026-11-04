@@ -69,7 +69,23 @@ export function useEditorCommandDispatcher(opts: {
       }, 60);
       return;
     }
+    // 261104：点 dock 按钮时浏览器会把 DOM 选区打散（按钮不是 contenteditable；命令重渲染 inline mark 时更明显），
+    // 表现 = 命令生效了但光标消失/漂移。这里用**按下时快照的 range**（见 EditorDock 的 toolbar onMouseDown），
+    // 在命令后（同步 + 下一帧各纠一次）只在选区失效时还回去；块级命令若自己移动了光标（有效 rect）不动。
     exec(command, ...args);
+    const repairSelection = () => {
+      const range = savedRangeRef.current;
+      if (!range || !range.startContainer.isConnected) return;
+      const selection = document.getSelection();
+      const current = selection && selection.rangeCount ? selection.getRangeAt(0) : null;
+      const rect = current ? current.getBoundingClientRect() : null;
+      const lost = !current || (rect !== null && rect.width === 0 && rect.height === 0);
+      if (!lost || !selection) return;
+      selection.removeAllRanges();
+      selection.addRange(range);
+    };
+    repairSelection();
+    window.requestAnimationFrame(repairSelection);
     snapshotSelection();
     refreshActive();
   }, [exec, refreshActive, snapshotSelection]);

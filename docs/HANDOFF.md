@@ -8,6 +8,13 @@
 
 ## 0. 最新交接（261027）
 
+### 261104 · 修「收/放键盘 + 点工具导致光标漂移」（嵌套 contenteditable 焦点误迁移）· **本地修复**
+- **现象**（用户实机报，严重）：收起/展开键盘、点工具（面板开合/行内命令）后光标跑到别处或消失、正文滚动跳变。
+- **根因（不是本轮 dock/字号/胶囊改动引入；键盘与光标代码本轮未动）**：`useEditSurface.applyImeSuppression` 的全局分支遍历**所有可见 contenteditable** 逐个 blur/focus。正文里一旦有嵌套编辑宿主（分栏卡 `NE-COLUMNS-CONTENT`、表格/卡片宿主），循环最后 focus 的是**最后一个嵌套宿主** ⇒ 焦点/选区被搬过去，浏览器再把正文滚到底（实测修复前：收键盘后 selection 丢失、`body.scrollTop 0→507`、caret rect 归零）。
+- **修法**：① 只对**当前聚焦宿主** blur/focus（放回输入法时取**顶层**宿主），`inputmode` 仍写全部；② blur/focus 前后保存/恢复 DOM range 与滚动容器的 `scrollTop`；③ dock 工具栏 `onMouseDown` 先 `snapshotSelection()`；④ inline 命令后选区失效时 `repairSelection` 同步 + 下一帧各修一次。
+- **设备复验（lake_mobile）**：收键盘 / 展键盘 / 开合「更多」/ 点「加粗」四组操作，caret rect（top=111,h=21）与 `body.scrollTop` **全程不变**；加粗重渲染后 anchor 文本节点被拆分（同位置，offset 2→0）。
+- **触发条件说明**：这次是探针在测试文档里插了**分栏卡**（= 嵌套 contenteditable）才稳定复现；真实文档含分栏/表格/卡片时同样会踩。测试文档里的链接/分栏/高亮块是探针产物，可删。
+- **门禁**：mobile 区（src/mobile/editor|notebook|ui）**42 文件 226 例全绿**；全仓 tsc/vitest 当前被另一会话在途 ink 改动挡住（`DesktopInkPad` 的 `onInsertPageImage` 等），非本次修复引入。护栏 `editSurfaceImeGuard.test.ts`（4 例静态契约）。
 ### 261104 · 二十批：inkDoc v4（页备注 / 页内贴图 / 页内文字块）+ 书签改页备注 · **本地改动**
 - **为什么升 v4**：把「页级内容」一次装齐，避免反复升版把旧端反复踢进只读；**S3 协议不动**（正文按字节内容寻址、资产声明是全文字符串扫描）。
 - **格式**：写 4、读 1|2|3|4。新增 `page.note`（≤200 字，截断而非丢页）、`page.images`（30/页）、`page.texts`（200/页，编辑 UI 后续批次）。集合字段不是数组 ⇒ 该页坏；数组里单个坏元素只丢自己。
@@ -617,7 +624,7 @@
 - 261103 各批已全部提交并双推（20:08–20:21）：`ce442482`（usheet 35 行/双光标/整行整列）、`733ab4aa`（多维表头部+短名）、`2b29d9e8`（画板工具条+第 4 处补丁）、`75c46902`（ink 14 色）、`ae14ffd1`（胶囊/横滑/安全区/页签 44/useKeyboard）、`1f164f2b`（门禁装置+三份基线重烤）、`1e74c3f8`（文档）、`fdf9c455`（AI 默认关）。
 - 261103 之后（261104 凌晨，均已双推）：ink 三修（`912143da` 落笔/擦除按批渲染、`8f32a5ca` 中断不丢笔）+ 性能观测 `af169f96` + 图片页背景下采样 `8dc83a87` + 导入体积提示 `388232db` + 资源页本地占用 `1adcde27`。
 
-**门禁基线**（261104 12:08 实测；工作树含其他会话在途改动）：tsc 0 / 全量 vitest **586 文件 3575 例（575 文件通过 + 11 skipped；3563 例通过 + 12 skipped）** / `check:core` 136 文件 0 / `check:mobileui` / 双 build / `check:bundle` / `check:arch`（移动首屏 ≈340.8KB / 预算 360KB；桌面 ≈541.2KB / 预算 600KB；import 违规 0）/ `git diff --check` 0。设备：手机 6 态 + 平板 6 态 + 多维表 3 态已按六批新壳**重烤**、连跑 0 差异；23 屏走查 ok；`check:windowsweep` pass。clean debug APK ≈37.95–37.97MB（量体积必须 clean 后 `stat`，增量构建会虚增到 ~42MB）。
+**门禁基线**（261104 12:08 实测；工作树含其他会话在途改动）：tsc 0 / 全量 vitest **586 文件 3575 例（575 文件通过 + 11 skipped；3563 例通过 + 12 skipped）**（⚠️ 14:12 全仓 tsc/vitest 被另一会话在途 ink 改动挡住：`DesktopInkPad` 的 `onInsertPageImage` 等；mobile 区 42 文件 226 例全绿） / `check:core` 136 文件 0 / `check:mobileui` / 双 build / `check:bundle` / `check:arch`（移动首屏 ≈340.8KB / 预算 360KB；桌面 ≈541.2KB / 预算 600KB；import 违规 0）/ `git diff --check` 0。设备：手机 6 态 + 平板 6 态 + 多维表 3 态已按六批新壳**重烤**、连跑 0 差异；23 屏走查 ok；`check:windowsweep` pass。clean debug APK ≈37.95–37.97MB（量体积必须 clean 后 `stat`，增量构建会虚增到 ~42MB）。
 
 **环境（本机实测 261103）**：Node **v24.18.0**（`$HOME/.nvm/versions/node/v24.18.0/bin`）；JDK **21** `/Library/Java/JavaVirtualMachines/jdk-21.jdk`（系统默认 java 是 1.8，手跑 gradlew 必须指 21）；Android SDK `/opt/homebrew/share/android-commandlinetools`；AVD **7 个**：lake_mobile / lake_gate / lake_tab / lake_body / lake_lock / lake_meas / lake_sheet；CDP **9335 开发 / 9336 门禁 / 9340 平板与窗口矩阵**。Android 唯一运行手册 = `docs/MOBILE-OPS.md`（serial 号段以 `adb devices` 现场为准，文档里的 5556/5562 已不一致）。
 

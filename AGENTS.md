@@ -198,6 +198,7 @@ node scripts/s3-ls.mjs --count | --note <id> | --prefix <prefix>   # 云端对�
 ### 装置 / 探针
 21. **写进"引号字符串"的正则，反斜杠会被 JS 吃掉 ⇒ 探针静默失效**（曾静默 3 个月）：一律写**双反斜杠**（`\\(`），改完**必须用一条已知会命中的样本自证**（不能只看"跑通了、结果是 0"）。
 22. **探针"看不见"比"报错"危险**：只扫组件族选择器 + 只读元素自身 opacity 会漏 ⇒ 要扫**全仓自有文字** + **祖先连乘的有效透明度**，并排除 1×1 sr-only / 内核 `.ne-*` / 第三方（univer/drawnix）。
+23. **收/放输入法不许遍历所有 contenteditable 逐个 blur/focus**（261104，用户报「光标漂移」）：正文里有嵌套编辑宿主（分栏卡 `NE-COLUMNS-CONTENT`、表格/卡片），旧实现循环 blur/focus 会把焦点搬到**最后一个嵌套宿主**、选区丢失、正文滚到底。只处理**当前聚焦宿主**（放回时取顶层宿主），`inputmode` 仍写全部；blur/focus 前后保存/恢复 DOM range 与滚动容器 `scrollTop`（`useEditSurface.applyImeSuppression`）。dock 按钮 `onMouseDown` 先 `snapshotSelection()`；inline 命令后选区失效用 `repairSelection`（同步 + rAF）补一次。
 
 ## 8. 会话启动指引
 

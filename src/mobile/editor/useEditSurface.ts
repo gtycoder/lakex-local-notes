@@ -36,24 +36,73 @@ function visibleEditables(scope: HTMLElement | null): HTMLElement[] {
  * scope（表格宿主）：只处理容器内当前焦点元素、**不回焦**（表格的公式栏 onFocus 会把刚打开的面板反向关掉）；
  * 恢复时摘掉容器内所有 inputmode="none"（含内核自己写进去的）。
  */
+/** 记下「当前编辑宿主」里的 DOM 选区（收/放输入法的 blur/focus 会把它打回文档开头或搬到别的宿主）。 */
+function captureEditSelection(host: HTMLElement | null): Range | null {
+  const sel = document.getSelection();
+  if (!sel || sel.rangeCount === 0) return null;
+  const range = sel.getRangeAt(0);
+  if (host && !host.contains(range.commonAncestorContainer)) return null;
+  return range.cloneRange();
+}
+
+function restoreEditSelection(range: Range | null): void {
+  if (!range || !range.startContainer.isConnected) return;
+  const sel = document.getSelection();
+  if (!sel) return;
+  sel.removeAllRanges();
+  sel.addRange(range);
+}
+
+/** 最近的纵向滚动祖先（正文的滚动容器 = .mobile-doc-body；表格宿主另算）。 */
+function scrollParentOf(el: HTMLElement): HTMLElement | null {
+  let parent = el.parentElement;
+  while (parent) {
+    const style = getComputedStyle(parent);
+    if ((style.overflowY === "auto" || style.overflowY === "scroll") && parent.scrollHeight > parent.clientHeight + 2) return parent;
+    parent = parent.parentElement;
+  }
+  return null;
+}
+
 function applyImeSuppression(on: boolean, scope: HTMLElement | null, refocus: boolean): void {
   if (scope) {
     if (on) {
       const active = document.activeElement as HTMLElement | null;
       if (!active || !scope.contains(active)) return;
+      const range = captureEditSelection(active);
+      const scroller = scrollParentOf(active);
+      const top = scroller?.scrollTop ?? null;
       active.setAttribute("inputmode", "none");
       // blur/focus 是尽力而为的 DOM 操作；失败时 inputmode 抑制已生效，不影响键盘收放。
       try { active.blur(); if (refocus) active.focus(); } catch { /* 元素已卸载/不可聚焦：无副作用 */ }
+      restoreEditSelection(range);
+      if (scroller && top !== null) scroller.scrollTop = top;
       return;
     }
     scope.querySelectorAll<HTMLElement>('[inputmode="none"]').forEach((el) => el.removeAttribute("inputmode"));
     return;
   }
-  for (const el of visibleEditables(null)) {
+  // ⚠️ 261104：只对**当前聚焦的编辑宿主** blur/focus。正文里可能有嵌套 contenteditable（分栏卡 NE-COLUMNS-CONTENT、
+  //  表格/卡片内部宿主）——旧实现遍历所有可见 contenteditable 逐个 blur/focus，最终焦点落在**最后一个**宿主上
+  //  ⇒ 收键盘后光标跑进分栏卡、正文滚到底（用户报「光标漂移」）。inputmode 仍写全部（抑制键盘用），但焦点/选区只碰一个。
+  const editables = visibleEditables(null);
+  for (const el of editables) {
     if (on) el.setAttribute("inputmode", "none");
     else el.removeAttribute("inputmode");
-    try { el.blur(); if (refocus) el.focus(); } catch { /* 同上：inputmode 已写好，失焦失败不影响抑制 */ }
   }
+  const active = document.activeElement as HTMLElement | null;
+  const activeEditable = active
+    ? (active.isContentEditable ? active : (active.closest?.('[contenteditable="true"]') as HTMLElement | null))
+    : null;
+  // 放回输入法时的目标 = 顶层编辑宿主（不是它的嵌套 contenteditable）；收键盘时 = 当前聚焦的那个。
+  const target = on ? activeEditable : (editables.find((el) => !el.parentElement?.closest?.('[contenteditable="true"]')) ?? activeEditable);
+  if (!target) return;
+  const range = captureEditSelection(target);
+  const scroller = scrollParentOf(target);
+  const top = scroller?.scrollTop ?? null;
+  try { target.blur(); if (refocus) target.focus(); } catch { /* 同上 */ }
+  restoreEditSelection(range);
+  if (scroller && top !== null) scroller.scrollTop = top;
 }
 
 export interface EditSurfaceApi<M extends string = Exclude<PanelMode, null>> {
