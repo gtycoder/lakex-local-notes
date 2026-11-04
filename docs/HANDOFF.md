@@ -662,7 +662,7 @@
 | `lakex-local-notes`（主仓库） | `feat/pad-touch-ui` | `df461cac` | 与 Gitee/GitHub 同名分支 **0/0**；**已合入 master（`408d6126..df461cac`，与 master 同一 commit）**；工作树多会话并行（当前有另一会话未提交的移动端改动），状态**以 `git status` 为准** |
 | `lakex-pad` | `feat/pad-adaptation` | `17f44dbd` | **历史残留**：平板第一批早已合入 master，本分支落后 master 15 提交、领先 0。其 README/AGENTS/HANDOFF 是旧口径（「平板走内核工具栏」「补丁 3 处」），**不要当依据**；确认不再用可 `git worktree remove lakex-pad`（需用户点头） |
 
-- `master` = `df461cac` = origin/master = github/master（261104 双推已对齐，两个远端 ls-remote 实测同 hash）。master 自 `408d6126` 前进 **67 提交**（本会话手写板线 + 另一会话移动端/编辑面线）。
+- `master` = `feat/pad-touch-ui` 的同一 commit（261104 双推对齐，两个远端 `ls-remote` 实测同 hash；本行写于 `a990aedf`，其后只可能有纯文档提交）。master 自 `408d6126` 前进 **67 提交**（本会话手写板线 + 另一会话移动端/编辑面线）。
 - 发版：只有 v0.0.1 / v0.0.2（`4b2a2467`），`package.json` = 0.0.2；**v0.0.2..HEAD 共 123 提交未发版**（下一版 v0.0.3 的发布说明必须写 inkDoc v4：旧端只读、手机/平板需重装）。
 - 261103 各批已全部提交并双推（20:08–20:21）：`ce442482`（usheet 35 行/双光标/整行整列）、`733ab4aa`（多维表头部+短名）、`2b29d9e8`（画板工具条+第 4 处补丁）、`75c46902`（ink 14 色）、`ae14ffd1`（胶囊/横滑/安全区/页签 44/useKeyboard）、`1f164f2b`（门禁装置+三份基线重烤）、`1e74c3f8`（文档）、`fdf9c455`（AI 默认关）。
 - 261103 之后（261104 凌晨，均已双推）：ink 三修（`912143da` 落笔/擦除按批渲染、`8f32a5ca` 中断不丢笔）+ 性能观测 `af169f96` + 图片页背景下采样 `8dc83a87` + 导入体积提示 `388232db` + 资源页本地占用 `1adcde27`。
