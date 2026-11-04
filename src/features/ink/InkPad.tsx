@@ -1563,13 +1563,11 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
                 </text>
               );
             })}
-            {/* 文字块：编辑态**常驻**虚线框（用户定稿：这是文字框，随时能改大小） */}
-            {!readOnly ? (page.texts ?? []).map((item) => (
-              <InkSelectionRect
-                key={"frame-" + item.id}
-                image={{ x: item.x, y: item.y, width: item.width, height: Math.max(item.fontSize * INK_TEXT_LINE_HEIGHT, inkTextHeight(item)) }}
-              />
-            )) : null}
+            {/* 选中的文字块才画虚线框（用户澄清：选中时出现，失去焦点就消失） */}
+            {!readOnly && selectedTextId && (page.texts ?? []).some((item) => item.id === selectedTextId) ? (() => {
+              const item = (page.texts ?? []).find((entry) => entry.id === selectedTextId)!;
+              return <InkSelectionRect image={{ x: item.x, y: item.y, width: item.width, height: Math.max(item.fontSize * INK_TEXT_LINE_HEIGHT, inkTextHeight(item)) }} />;
+            })() : null}
             {/* 选中贴图：虚线框（pointer-events:none，不挡画线；点图本身负责选中） */}
             {selectedImageId && (page.images ?? []).some((image) => image.id === selectedImageId) ? (
               <InkSelectionRect image={(page.images ?? []).find((image) => image.id === selectedImageId)!} />
@@ -1601,19 +1599,18 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
               />
             );
           })() : null}
-          {!readOnly && !textEditing
-            ? (page.texts ?? []).map((item) => (
+          {!readOnly && selectedTextId && (page.texts ?? []).some((item) => item.id === selectedTextId) ? (() => {
+            const item = (page.texts ?? []).find((entry) => entry.id === selectedTextId)!;
+            return (
               <InkTextSelectionControls
-                key={"controls-" + item.id}
                 text={item}
                 page={page}
-                selected={item.id === selectedTextId}
                 onResizeStart={(event) => startTextResize(event, item.id)}
                 onBumpFontSize={(delta) => bumpTextFontSize(item.id, delta)}
                 onRemove={() => removeText(item.id)}
               />
-            ))
-            : null}
+            );
+          })() : null}
           {!readOnly && selectedImageId && (page.images ?? []).some((image) => image.id === selectedImageId) ? (
             <>
               <InkImageRemoveButton

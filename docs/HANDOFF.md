@@ -8,11 +8,12 @@
 
 ## 0. 最新交接（261027）
 
-### 261104 · 二十四批：文字框常驻（边框 + A-/A+ + 拖宽手柄不必先选中）· **本地改动**
-- 用户定稿「这是文字框，应该随时能改大小」⇒ 编辑态下**每段文字都常驻**虚线边框、`A-`/`A+`、右下角拖宽手柄；`×` 仍只在选中后出现（防误删），未选中控制条 `opacity: 0.7` 降存在感。
-- 实现：`InkTextSelectionControls` 加 `selected` 入参；InkPad 对 `page.texts` 逐段渲染（边框用 `InkSelectionRect`，控制条按 id 回调）；处理器改为 `startTextResize(event, id)` / `bumpTextFontSize(id, delta)` / `removeText(id)`。
-- 测试：未选中即可 A+ 改字号、控制条与手柄已存在、`×` 选中后才出现；cssLayers shared 258→260。
-- **门禁**：tsc / vitest（578 文件 3583 例；2 条 `dockPanelFocusGuard` 红来自另一会话在途移动端改动）/ mobileui / diff-check。
+### 261104 · 二十四批：文字块「选中时固定出现」控制条（含 24 批首版理解纠偏）· **本地改动**
+- 用户澄清：**选中时固定出现、失去焦点就消失**（首版按「每段文字常驻」实现是误读，已回退）：选中某段文字后，虚线边框 + `A-`/`A+` + 右下角拖宽手柄 + `×` 删除一直都在；点别处取消选中即一起消失。
+- **编辑中也保留**：控制条按钮 `onPointerDown` 阻止默认行为（不抢 textarea 焦点 ⇒ 不会先失焦提交），所以输入过程中也能调字号。
+- 实现：`InkTextSelectionControls` 去掉 `selected` 入参（只渲染选中的那一段）；InkPad 只对 `selectedTextId` 渲染边框与控制条，处理器 `startTextResize(event, id)` / `bumpTextFontSize(id, delta)` / `removeText(id)` 按 id 调用。
+- 测试：未选中无控制条 → 点选出控制条/手柄/删除 → 点空白消失 → 再选中删除；cssLayers shared 258→259。
+- **门禁**：tsc / vitest（2 条 `dockPanelFocusGuard` 红仍来自另一会话在途移动端改动）/ mobileui / diff-check。
 ### 261104 · 二十三批续：移动端插入入口（文字/贴图）+ 文字块控制条（A-/A+/拖宽/删除）· **本地改动**
 - **移动端 ＋ 菜单**：新增「文字」（始终有）与「贴图」（宿主注入 `onInsertPageImage` 时）；`MobileInkPad` 实现 `onInsertPageImage`（相册选图 → `bridge.uploadResource` → 原图尺寸）。宿主没接任何入口时 ＋ 不出现，保持定稿 7 键一屏（护栏 `MobileInkPad.render.test` 仍然过）。
 - **文字块控制条**（`InkTextSelectionControls.tsx`，独立文件避免跨端样式护栏）：`A-` / `A+`（字号 6..96）、`×` 删除、右下角**拖宽手柄**（宽度 60..页宽，影响折行，拖动只改内存、松手 commit）。

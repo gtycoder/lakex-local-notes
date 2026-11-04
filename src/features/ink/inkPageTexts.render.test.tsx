@@ -69,21 +69,18 @@ describe("手写板页内文字块", () => {
     const rect = () => ({ left: 0, top: 0, width: 794, height: 1123, right: 794, bottom: 1123, x: 0, y: 0, toJSON: () => ({}) }) as DOMRect;
     frame.getBoundingClientRect = rect;
     svg.getBoundingClientRect = rect;
-    // 未选中时控制条与边框就已经常驻（用户定稿：这是文字框，随时能改大小）；× 只在选中后出现
-    expect(view.container.querySelector(".ink-text-controls")).not.toBeNull();
-    expect(view.container.querySelector(".ink-text-resize")).not.toBeNull();
-    expect(view.container.querySelector('button[aria-label="删除这段文字"]')).toBeNull();
-    // 未选中也能直接点 A+
-    await act(async () => { (view.container.querySelector('button[aria-label="字号变大"]') as HTMLButtonElement).click(); });
-    expect(Number((view.container.querySelector("text[data-page-text]") as SVGTextElement).getAttribute("font-size"))).toBe(18);
-    await act(async () => { (view.container.querySelector('button[aria-label="字号变小"]') as HTMLButtonElement).click(); });
-    // 点选后 × 才出现
+    // 没选中：控制条与边框都不出现（用户澄清：选中时才固定出现，失去焦点要消失）
+    expect(view.container.querySelector(".ink-text-controls")).toBeNull();
+    expect(view.container.querySelector(".ink-text-resize")).toBeNull();
+    // 点选：控制条 + 拖宽手柄 + 删除键都在
     await act(async () => {
       const down = new MouseEvent("pointerdown", { bubbles: true, clientX: 110, clientY: 160 });
       Object.defineProperty(down, "pointerId", { value: 5 });
       svg.dispatchEvent(down);
       svg.dispatchEvent(new MouseEvent("pointerup", { bubbles: true, clientX: 110, clientY: 160 }));
     });
+    expect(view.container.querySelector(".ink-text-controls")).not.toBeNull();
+    expect(view.container.querySelector(".ink-text-resize")).not.toBeNull();
     expect(view.container.querySelector('button[aria-label="删除这段文字"]')).not.toBeNull();
     await act(async () => { (view.container.querySelector('button[aria-label="字号变大"]') as HTMLButtonElement).click(); });
     expect(Number((view.container.querySelector("text[data-page-text]") as SVGTextElement).getAttribute("font-size"))).toBe(18);
@@ -100,7 +97,21 @@ describe("手写板页内文字块", () => {
     const body = JSON.parse(onChange.mock.calls[onChange.mock.calls.length - 1][0]) as InkDoc;
     expect(body.pages[0].texts![0].width).toBeCloseTo(500, 0);
     expect(body.pages[0].texts![0].fontSize).toBe(18);
-    // × 删除
+    // 点空白（失去焦点）⇒ 控制条与边框一起消失
+    await act(async () => {
+      const down = new MouseEvent("pointerdown", { bubbles: true, clientX: 600, clientY: 900 });
+      Object.defineProperty(down, "pointerId", { value: 7 });
+      svg.dispatchEvent(down);
+      svg.dispatchEvent(new MouseEvent("pointerup", { bubbles: true, clientX: 600, clientY: 900 }));
+    });
+    expect(view.container.querySelector(".ink-text-controls")).toBeNull();
+    // 再点回来后 × 删除
+    await act(async () => {
+      const down = new MouseEvent("pointerdown", { bubbles: true, clientX: 110, clientY: 160 });
+      Object.defineProperty(down, "pointerId", { value: 8 });
+      svg.dispatchEvent(down);
+      svg.dispatchEvent(new MouseEvent("pointerup", { bubbles: true, clientX: 110, clientY: 160 }));
+    });
     await act(async () => { (view.container.querySelector('button[aria-label="删除这段文字"]') as HTMLButtonElement).click(); });
     expect(view.container.querySelector("text[data-page-text]")).toBeNull();
     await view.unmount();
