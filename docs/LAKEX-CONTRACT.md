@@ -2009,3 +2009,26 @@ DOM 文本节点扫描（移动端文档 `disableVirtualRendering:true`，整篇
 - **反面案例（已撤回）**：261103 一轮曾不改 vendor、由宿主自制「平移画布」开关（44×44 悬浮按钮 + 透明手势层）——用户判定"不伦不类"并否决，且该层会盖住工具条。**不要再自制第二套画板平移工具**。
 - **③ 竖向轨图标「左右错位」的根因 = 隐藏 radio input 参与 flex 布局（261103 用户图1）**：每个工具项是 `<label class="tool-icon">` 里放一个 `input.tool-icon_type_radio`（15px，视觉上是隐藏选项）+ `.tool-icon__icon`（36px）。label 是 `display:flex; justify-content:center`，但 **input 仍占 15px 宽度** ⇒ 图标被挤到右侧 15px、label 宽度也被撑成 51px（实测按钮中心 48.5 / 图标中心 56，白卡 61 宽且图标偏心）。修法 = 把该 input 改成视觉隐藏（`position:absolute; 1px; opacity:0`，label 加 `position:relative`），列宽回 36px、卡片回 46px、图标左右余量 9/9；**不要**用 margin/translate 硬掰图标位置。
 - **判据**：凡涉及 drawnix 工具栏「某项不见了」，先查 UA 过滤与 `@media (width<=720px)` 两条，不要先怀疑样式层叠；「某一项偏了」则先看项内是否有不可见但占位的表单控件。
+
+### 5.45 移动端 dock 文本格式实测：格式刷（paintFormat）无参 = no-op、首行缩进全文级、clearFormat 只清行内（261104 设备实测）
+
+**口径**：lake_mobile（Pixel6/API36，emulator-5554）+ 现成 debug APK 0.0.2（11-03 21:31 构建，与 HEAD 1adcde27 同批）`adb install -r`；点按走 CDP `Input.dispatchMouseEvent`、输入 `Input.insertText`、坐标取 `getBoundingClientRect()`、截图 `adb exec-out screencap -p`。判据 = 引擎内 `ne-*` 属性/类 + `getComputedStyle`，**不是按钮是否高亮**。证据截图（临时）：`/tmp/probe/{08-paras,10-aapanel,12-fontsize,13-supsub,14-paint}.png`。
+
+**① 已确认生效（以后别再列为缺口）**：bold/italic/underline/strikethrough/行内代码（`ne-bold` 等，fw 500→700）、段落样式 p/h1/h2/h3/h6（`ne-p`16px → `ne-h1`28px / `ne-h2`24px / `ne-h6`15px）、alignment left/center/right（`ne-alignment`）、无序/有序/待办（`ne-tli`/`ne-oli`/`ne-checkbox`）、color（inline rgb）、bgColor（`ne-bg-color`）、fontsize 22（`ne-fontsize="22"` → 22px）、lineHeight 2（`ne-line-height="2"` → 32px）、indent/outdent（`ne-indent` 1→2，padding-left 32→64px）、**sup/sub**（`ne-sup`/`ne-sub`，12px + `vertical-align: super/sub`）、clearFormat（清行内 mark）。
+
+**② 格式刷 = 唯一 no-op（本次实测最重要的一条）**
+- 复现：选中已加粗段 → 更多 → 格式刷 → 再选/点另一段 ⇒ 目标仍 `font-weight:500`、无 `ne-bold`；点「格式刷」后引擎根节点全程没有 `.ne-paint-formatting`（MutationObserver 0 次）、无 toast、不抛错。
+- 根因（bundle 实据）：formatPainter 插件注册为 `kO({ pluginName: 'formatPainter', command: { paintFormat: 'paintFormat' }, toolbar: 'formatPainter' })`；**「记录格式」入口是 toolbar descriptor 的 `onEvent('click')` → `service.recordPaintFormat()`**（记录后给引擎根节点加 `.ne-paint-formatting`，进入刷形态）；命令 `paintFormat` **只在带 `_activeFormat` 参数时用于「应用」**。移动端 dock 直接无参 `execCommand('paintFormat')` ⇒ 既不记录也不应用，静默无反应。
+- 修复方向：dock 改走内核 toolbar item 的 click 语义（`recordPaintFormat`），或自行 `queryCommandValue('paintFormat')` 后带参调用；**不要继续无参 exec**。验收：选中已加粗文字 → 格式刷 → 点另一段，目标变加粗并退出刷形态。
+
+**③ 首行缩进（firstIndent）= 全文级且不可取消**
+- bundle 实现是对文档 root 下**所有 `p`** `setAttribute('text-indent', true)`（标题/列表不受影响），设备实测确认全文正文段一起缩进 32px；命令只 set 不 remove ⇒ **二次点击不能取消**。
+- 移动端把它放在「更多」面板，与「当前段」直觉不符 ⇒ 要么改选区级实现、要么去掉入口（产品语义待定）。
+
+**④ clearFormat 只清行内，不清块级**：加粗后清除 → `ne-bold` 移除、fw 回 500，但 `ne-alignment` / `ne-indent` / `ne-line-height` / 段落样式（`ne-h1`…）全部保留。若产品期望「一键回正文」，需另做或扩展。
+
+**⑤ Aa 面板可达性**：面板可视高 312px、内容 354px ⇒ **字号行默认被裁在屏外**；不滚动直接按坐标点会落在面板外（表现为「点了没反应」——首测曾因此误判 no-op，滚动 42px 后点 22px 立即生效）。改面板高度/滚动时别再把这行挤出去。
+
+**⑥ 未接入口（对照桌面/内核）**：justify（`ALIGN_ITEMS` 只 3 档）、unlink（两端皆无）、replaceAll/replaceText（移动 MobileFindBar 只查不换）、style→code/quote 段型、表格块级命令族、分栏 3/4、alert 类型选择、插入面板表格行列可选；`firstIndent` 则为**移动领先桌面**（桌面无入口）。
+
+**复跑方法**：`bash scripts/emu-up.sh`（AVD lake_mobile）→ `adb install -r android/app/build/outputs/apk/debug/app-debug.apk` → `bash scripts/emu-cdp.sh 9335` → 首页 ＋ 新建文档；逐项点 dock 后读 `document.querySelector('.ne-engine')` 的 outerHTML/计算样式。

@@ -8,6 +8,13 @@
 
 ## 0. 最新交接（261027）
 
+### 261104 · P2 移动端文本格式能力实测（只读探测 + 设备实测，未改代码）· 结论落 §3
+- **方法**：lake_mobile（emulator-5554）+ 已装 debug APK（0.0.2，11-03 21:31），CDP `Input.dispatchMouseEvent` 点按 / `Input.insertText` 输入，`adb exec-out screencap -p` 截图；在真文档里逐项验证 `ne-*` 属性与计算样式（判据不是按钮高亮）。
+- **结论：旧文档列的「H5/H6、缩进、行高、清除格式、格式刷」大多早已存在且生效**——H1–H6（28/24/20/15px）、字号（22→22px）、颜色/背景、对齐、三种列表、缩进（32/64px）、行高（2→32px）、上标/下标（12px + vertical-align）、清除格式（清行内 mark）全部 ✅。
+- **唯一 no-op = 格式刷**：无参 `execCommand('paintFormat')` 不记录格式（根节点无 `.ne-paint-formatting`），选目标无效、无 toast；根因与修复方向见 `LAKEX-CONTRACT.md` §5.45。
+- **新发现**：① 首行缩进是**全文级且不可取消**（内核遍历 root 下所有 p，只 set 不 remove）；② clearFormat 只清行内、不清块级（对齐/缩进/行高/段落样式保留）；③ Aa 面板内容 354px > 可视 312px，**字号行默认在屏外**（按坐标点会落空，首测被误判成 no-op）；④ 未接入口 = justify / unlink（两端皆无）/ replace（移动只查不换）等。
+- **环境遗留**：dev 实例留下一篇「无标题文档」测试页（可删）。回填：`LAKEX-CONTRACT.md` §5.45 + 本节 §3 已按实测重写。
+
 ### 261103 · 十四批：移动端资源页「本地资源占用」（原生只读统计）· **本地改动**
 - **缺口**：桌面「关于 → 数据与存储 → 内容统计」已有「资源 N 个，X MB」，移动端只有资源**数量**（`diag.resourceCount`）、没有字节数；JS 侧逐文件 stat 每次 ≈68ms 桥往返，几万文件不可用。
 - **做法**：新增只读原生插件 `AssetUsagePlugin`（`@CapacitorPlugin(name="AssetUsage")`，后台线程递归 walk `filesDir/note-assets` + `quick-notes/assets`，返回 `{files, bytes}`，不删不改）；`MainActivity` 注册；TS `src/mobile/native/assetUsage.ts`（仅原生端，Web 预览/测试返回 null）；bridge 暴露 `getAssetUsage()` 并登记进 `lakeNative` 调试契约（62 → 63）；资源页新增一行「本地资源占用」显示 `N 个文件，X MB`。
@@ -530,14 +537,15 @@
 
 | worktree | 分支 | HEAD | 状态 |
 | --- | --- | --- | --- |
-| `lakex-local-notes`（主仓库） | `feat/pad-touch-ui` | `fdf9c455` + 本批文档对账（本地提交，见 `git log` 首条，**未 push**） | 与 Gitee/GitHub 同名分支 **0/0**（截至 `fdf9c455`）；= master + **36 提交，未合 master**；文档对账提交**未 push** |
+| `lakex-local-notes`（主仓库） | `feat/pad-touch-ui` | `1adcde27` + 本批文档/契约提交（本地，**未 push**） | 与 Gitee/GitHub 同名分支 **0/0**（截至 `1adcde27`）；= master + **44 提交，未合 master**；工作树可能带其他会话在途改动，**以 `git status` 为准** |
 | `lakex-pad` | `feat/pad-adaptation` | `17f44dbd` | **历史残留**：平板第一批早已合入 master，本分支落后 master 15 提交、领先 0。其 README/AGENTS/HANDOFF 是旧口径（「平板走内核工具栏」「补丁 3 处」），**不要当依据**；确认不再用可 `git worktree remove lakex-pad`（需用户点头） |
 
 - `master` = `408d6126` = origin/master；**github/master 落后 1 个提交**（`027853cd`），下次推 master 时补推。
 - 发版：只有 v0.0.1 / v0.0.2（`4b2a2467`），`package.json` = 0.0.2；**v0.0.2..HEAD 共 92 提交未发版**。
 - 261103 各批已全部提交并双推（20:08–20:21）：`ce442482`（usheet 35 行/双光标/整行整列）、`733ab4aa`（多维表头部+短名）、`2b29d9e8`（画板工具条+第 4 处补丁）、`75c46902`（ink 14 色）、`ae14ffd1`（胶囊/横滑/安全区/页签 44/useKeyboard）、`1f164f2b`（门禁装置+三份基线重烤）、`1e74c3f8`（文档）、`fdf9c455`（AI 默认关）。
+- 261103 之后（261104 凌晨，均已双推）：ink 三修（`912143da` 落笔/擦除按批渲染、`8f32a5ca` 中断不丢笔）+ 性能观测 `af169f96` + 图片页背景下采样 `8dc83a87` + 导入体积提示 `388232db` + 资源页本地占用 `1adcde27`。
 
-**门禁基线**（261103 20:44 实测）：tsc 0 / 全量 vitest **573 文件 3496 例（562 文件通过 + 11 skipped；3484 例通过 + 12 skipped）** / `check:core` 136 文件 0 / `check:mobileui` / 双 build / `check:bundle` / `check:arch`（移动首屏 ≈340.8KB / 预算 360KB；桌面 ≈541.2KB / 预算 600KB；import 违规 0）/ `git diff --check` 0。设备：手机 6 态 + 平板 6 态 + 多维表 3 态已按六批新壳**重烤**、连跑 0 差异；23 屏走查 ok；`check:windowsweep` pass。clean debug APK ≈37.95–37.97MB（量体积必须 clean 后 `stat`，增量构建会虚增到 ~42MB）。
+**门禁基线**（261104 09:45 实测；工作树含其他会话在途改动）：tsc 0 / 全量 vitest **575 文件 3510 例（564 文件通过 + 11 skipped；3498 例通过 + 12 skipped）** / `check:core` 136 文件 0 / `check:mobileui` / 双 build / `check:bundle` / `check:arch`（移动首屏 ≈340.8KB / 预算 360KB；桌面 ≈541.2KB / 预算 600KB；import 违规 0）/ `git diff --check` 0。设备：手机 6 态 + 平板 6 态 + 多维表 3 态已按六批新壳**重烤**、连跑 0 差异；23 屏走查 ok；`check:windowsweep` pass。clean debug APK ≈37.95–37.97MB（量体积必须 clean 后 `stat`，增量构建会虚增到 ~42MB）。
 
 **环境（本机实测 261103）**：Node **v24.18.0**（`$HOME/.nvm/versions/node/v24.18.0/bin`）；JDK **21** `/Library/Java/JavaVirtualMachines/jdk-21.jdk`（系统默认 java 是 1.8，手跑 gradlew 必须指 21）；Android SDK `/opt/homebrew/share/android-commandlinetools`；AVD **7 个**：lake_mobile / lake_gate / lake_tab / lake_body / lake_lock / lake_meas / lake_sheet；CDP **9335 开发 / 9336 门禁 / 9340 平板与窗口矩阵**。Android 唯一运行手册 = `docs/MOBILE-OPS.md`（serial 号段以 `adb devices` 现场为准，文档里的 5556/5562 已不一致）。
 
@@ -566,13 +574,14 @@
 
 3. **桌面 3 项实机复核**：usheet 整行/整列选中不跳滚动、桌面手写板 14 色、设置/小记/历史 lazy 路径的交互冒烟（P12 遗留）。
 4. **依赖补丁 4 处升级复核口径**（仅当升级对应依赖时）：见 §2。
-5. **等用户裁决（阻塞中）**：① **表格「单元格保护 / 阅读态筛选·排序·冻结」语义**（写正文 vs 设备本机视图，决定 P4-4 / P5 剩余怎么收口）；② **移动端「缺正文 / 缺小记」恢复入口**要不要做（判据 `src/core/missingBody.ts` 现成，桌面资源页是样板）；③ **移动端表格 ⋯ 面板 29 项去留**（22 可点 + 7 置灰）。
+5. **移动端「格式刷」no-op 修复（261104 设备实测确认，唯一 no-op）**：dock 直接无参 `execCommand('paintFormat')`，而内核「记录格式」入口是 formatPainter toolbar descriptor 的 `onEvent('click') → service.recordPaintFormat()`（命令只在带 `_activeFormat` 时用于应用）⇒ 永远不进入刷形态。修复方向：dock 走 toolbar item 的 click 语义，或先 `queryCommandValue` 再带参应用；**不要继续无参 exec**。验收：选中已加粗文字 → 格式刷 → 点另一段，目标变加粗并退出刷形态（证据见 `LAKEX-CONTRACT.md` §5.45）。
+6. **等用户裁决（阻塞中）**：① **表格「单元格保护 / 阅读态筛选·排序·冻结」语义**（写正文 vs 设备本机视图，决定 P4-4 / P5 剩余怎么收口）；② **移动端「缺正文 / 缺小记」恢复入口**要不要做（判据 `src/core/missingBody.ts` 现成，桌面资源页是样板）；③ **移动端表格 ⋯ 面板 29 项去留**（22 可点 + 7 置灰）。
 
 **P2（体验缺口 / 长期）**
 
-6. 移动端文本格式缺口（H5/H6、缩进、行高、清除格式、格式刷）；画图插入项解禁；移动视图拖拽排序；PdfRender `cacheDir` 中间产物未主动清理；页面级 6 处裸 `env(safe-area-inset-bottom)`。
-7. 墓碑 payload 老化（261025 定「后续优化」）；大库阈值探测（>2 万文档 / 索引 3–5MB）；**真实 Android 物理机验收从未做过**；PARITY 残余（移动 qnotes 缺正文恢复未接 v3、移动云清理无 UI 入口、目录恢复后 `deleted_notes` 残留）。
-8. 顶栏真 44 需另开「44 → 52」需求（六批 A4 结论）；平板内容画布「点空白落光标」（待用户裁决）。
+7. **移动端文本格式（261104 设备实测已收口，别再按旧文档当缺口）**：H1–H6 / 字号 / 颜色 / 对齐 / 列表 / 缩进 / 行高 / 上下标 / 清除格式**全部生效**；余下三件事：① Aa 面板内容 354px > 可视 312px，**字号行默认在屏外**（点按会落空，易被误判成 no-op）——优先修可达性；② 首行缩进是**全文级且不可取消**（换选区级实现或去掉入口）；③ clearFormat 只清行内、不清块级（语义待定）。未接入口：justify / unlink（两端皆无）/ replace（移动只查不换）/ style→code·quote / 表格块级命令族 / 分栏 3·4 / alert 类型。另有：画图插入项解禁（文本绘图仍置灰）；移动视图拖拽排序；PdfRender `cacheDir` 清理；页面级 6 处裸 `env(safe-area-inset-bottom)`。
+8. 墓碑 payload 老化（261025 定「后续优化」）；大库阈值探测（>2 万文档 / 索引 3–5MB）；**真实 Android 物理机验收从未做过**；PARITY 残余（移动 qnotes 缺正文恢复未接 v3、移动云清理无 UI 入口、目录恢复后 `deleted_notes` 残留）。
+9. 顶栏真 44 需另开「44 → 52」需求（六批 A4 结论）；平板内容画布「点空白落光标」（待用户裁决）。
 
 **已闭合，别重复**
 
