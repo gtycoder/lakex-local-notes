@@ -1,12 +1,13 @@
 /**
- * 手写板「大纲 / 页目录」= 纯派生（261104 十八批）。
+ * 手写板「大纲 / 页目录」= 纯派生（261104 十八批；十九批换成页备注）。
  *
- * 为什么需要：一本 300 页的书靠底部缩略图横条翻页太慢；大纲只列「有批注的页 + 书签」，
- * 一屏能看到十几页、点一下直跳。它是**视图**，不落盘、不进正文（书签才是设备本地数据）。
+ * 为什么需要：一本 300 页的书靠底部缩略图横条翻页太慢；大纲只列「有批注 / 有备注」的页，
+ * 一屏十几行、点一下直跳。它是**视图**，不落盘。
  *
- * 纯函数、无 DOM：方便单测，也方便将来在移动端复用同一份筛选逻辑。
+ * 261104 二十批：设备本地「书签」升级成**正文里的页备注**（`page.note`，随 v4 同步）——
+ * 这样换设备也能看到「这一页写了什么」，且不再有两套标记语义（书签 vs 备注）。
  */
-import type { InkBookmark } from "./inkBookmarks.js";
+import type { InkPage } from "../../core/inkDoc.js";
 
 /** 大纲只关心页面这几个字段（避免把整个 InkPage 类型拖进来）。 */
 export interface InkOutlinePage {
@@ -15,6 +16,8 @@ export interface InkOutlinePage {
   strokeCount: number;
   /** 图片页 / PDF 页（有背景图）。 */
   hasBackgroundImage: boolean;
+  /** v4 页备注（有备注的页在「只看备注」下也列）。 */
+  note?: string;
 }
 
 export interface InkOutlineEntry {
@@ -23,63 +26,58 @@ export interface InkOutlineEntry {
   pageNumber: number;
   strokeCount: number;
   hasBackgroundImage: boolean;
-  bookmarked: boolean;
-  /** 书签备注（没写就是 undefined，UI 显示页码）。 */
-  label?: string;
+  /** 页备注（v4 正文数据）。 */
+  note?: string;
 }
 
-/** 大纲显示范围：只看批注（默认）/ 全部页 / 只看书签。 */
-export type InkOutlineMode = "all" | "annotated" | "bookmarks";
+/** 大纲显示范围：只看批注（默认）/ 全部页 / 只看有备注。 */
+export type InkOutlineMode = "all" | "annotated" | "noted";
 
 /** 三种范围的中文名（面板按钮直接显示当前范围，避免"点了不知道在切什么"）。 */
 export const INK_OUTLINE_MODE_LABELS: Record<InkOutlineMode, string> = {
   annotated: "只看批注",
   all: "全部页",
-  bookmarks: "只看书签",
+  noted: "只看有备注",
 };
 
-/** 循环切换顺序（annotated → all → bookmarks → annotated）。 */
+/** 循环切换顺序（annotated → all → noted → annotated）。 */
 export function nextInkOutlineMode(mode: InkOutlineMode): InkOutlineMode {
   if (mode === "annotated") return "all";
-  if (mode === "all") return "bookmarks";
+  if (mode === "all") return "noted";
   return "annotated";
 }
 
-/** 页元信息 → 大纲条目（顺序 = 正文页序；已删除页对应的书签自然不出现）。 */
+/** 页元信息 → 大纲条目（顺序 = 正文页序）。 */
 export function buildInkOutline(
   pages: readonly InkOutlinePage[],
-  bookmarks: readonly InkBookmark[],
   mode: InkOutlineMode = "annotated",
 ): InkOutlineEntry[] {
-  const byPage = new Map(bookmarks.map((item) => [item.pageId, item]));
   const entries: InkOutlineEntry[] = [];
   pages.forEach((page, index) => {
-    const bookmark = byPage.get(page.id);
+    const note = page.note?.trim() ? page.note.trim() : undefined;
     const annotated = page.strokeCount > 0 || page.hasBackgroundImage;
-    // 「只看书签」：有书签的页一律列（哪怕空白页）；其余两种模式按上面规则过滤。
-    if (mode === "bookmarks" && !bookmark) return;
-    if (mode === "annotated" && !annotated && !bookmark) return;
+    // 「只看有备注」只列写过备注的页；其余两种模式按「有内容」过滤，但有备注的页一定列出。
+    if (mode === "noted" && !note) return;
+    if (mode === "annotated" && !annotated && !note) return;
     entries.push({
       pageId: page.id,
       pageNumber: index + 1,
       strokeCount: page.strokeCount,
       hasBackgroundImage: page.hasBackgroundImage,
-      bookmarked: Boolean(bookmark),
-      ...(bookmark?.label ? { label: bookmark.label } : {}),
+      ...(note ? { note } : {}),
     });
   });
   return entries;
 }
 
-/** 大纲标题里的一句摘要（书签数 / 有批注页数）。 */
+/** 大纲标题里的一句摘要（有批注页数 / 有备注页数）。 */
 export function inkOutlineSummary(entries: readonly InkOutlineEntry[]): string {
-  const bookmarked = entries.filter((item) => item.bookmarked).length;
+  const noted = entries.filter((item) => item.note).length;
   const annotated = entries.filter((item) => item.strokeCount > 0).length;
-  return `${annotated} 页有批注 · ${bookmarked} 个书签`;
+  return `${annotated} 页有批注 · ${noted} 页有备注`;
 }
 
-/** 书签在页序里的位置（给缩略图条打标用；只返回存在的页）。 */
-export function bookmarkPageIds(bookmarks: readonly InkBookmark[], pages: readonly { id: string }[]): Set<string> {
-  const known = new Set(pages.map((page) => page.id));
-  return new Set(bookmarks.filter((item) => known.has(item.pageId)).map((item) => item.pageId));
+/** 有备注的页 id（缩略图条打点用；只返回存在的页）。 */
+export function notedPageIds(pages: readonly Pick<InkPage, "id" | "note">[]): Set<string> {
+  return new Set(pages.filter((page) => (page.note ?? "").trim().length > 0).map((page) => page.id));
 }

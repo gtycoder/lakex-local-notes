@@ -60,6 +60,7 @@ export const INK_PDF_PRINT_CSS = [
   ".ink-page:last-child { page-break-after: auto; break-after: auto; }",
   ".ink-page__paper { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }",
   ".ink-page__bg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }",
+  ".ink-page__img { position: absolute; display: block; }",
   ".ink-page__ink { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }",
   "</style>",
 ].join("");
@@ -116,6 +117,44 @@ function inkPaperMarkup(page: InkPage, patternId: string): string {
     + "</svg>";
 }
 
+/**
+ * v4 页内贴图 → 逐张 <img>（按页面百分比定位，rotation 绕自身中心）。
+ * 读不到图的行计入 skipped（页与笔迹照常输出）。
+ */
+function inkInlineImagesMarkup(
+  page: InkPage,
+  imageDataUri: (url: string) => string | null,
+): { markup: string; imageCount: number; skipped: number } {
+  let imageCount = 0;
+  let skipped = 0;
+  const markup = (page.images ?? []).map((image) => {
+    const uri = imageDataUri(image.url);
+    if (!uri) {
+      skipped += 1;
+      return "";
+    }
+    imageCount += 1;
+    const left = (image.x / page.width) * 100;
+    const top = (image.y / page.height) * 100;
+    const width = (image.width / page.width) * 100;
+    const height = (image.height / page.height) * 100;
+    const rotation = image.rotation ? ` transform:rotate(${image.rotation}deg);` : "";
+    return `<img class="ink-page__img" alt="" src="${escapeHtmlAttr(uri)}" style="left:${left}%;top:${top}%;width:${width}%;height:${height};${rotation}" />`;
+  }).join("");
+  return { markup, imageCount, skipped };
+}
+
+/** v4 页内贴图 → 独立 SVG 里的 <image>（单页 SVG/PNG 导出用）。 */
+function inkInlineImagesSvgMarkup(page: InkPage, imageDataUri: (url: string) => string | null): string {
+  return (page.images ?? []).map((image) => {
+    const uri = imageDataUri(image.url);
+    if (!uri) return "";
+    const center = `${image.x + image.width / 2} ${image.y + image.height / 2}`;
+    const rotation = image.rotation ? ` transform="rotate(${image.rotation} ${center})"` : "";
+    return `<image href="${escapeHtmlAttr(uri)}" x="${image.x}" y="${image.y}" width="${image.width}" height="${image.height}"${rotation} />`;
+  }).join("");
+}
+
 /** 背景图 → preserveAspectRatio（与屏内 SVG 一致）。 */
 function inkBackgroundAspect(fit: InkBackgroundImageFit | undefined): string {
   if (fit === "cover") return "xMidYMid slice";
@@ -138,6 +177,7 @@ export function buildInkPageSvg(page: InkPage, index: number, deps: InkPdfBodyDe
     : "";
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${page.width}" height="${page.height}" viewBox="0 0 ${page.width} ${page.height}">`
     + `<rect x="0" y="0" width="${page.width}" height="${page.height}" fill="#ffffff" />` + paper + image
+    + inkInlineImagesSvgMarkup(page, deps.imageDataUri)
     + inkStrokePathsMarkup(page) + "</svg>";
 }
 /** 背景图 URL：**已转好的 data URI**（调用方做路径校验/读盘/转码；读不到返回 null）。 */
@@ -179,8 +219,11 @@ export function buildInkPdfBody(doc: InkDoc, deps: InkPdfBodyDeps, options: { pa
         skipped++; // 缺图：占位白底（页仍在，笔迹照常输出）
       }
     }
+    const inline = inkInlineImagesMarkup(page, deps.imageDataUri);
+    imageCount += inline.imageCount;
+    skipped += inline.skipped;
     const paths = inkStrokePathsMarkup(page);
-    return `<div class="ink-page" data-page="${index + 1}">${inkPaperMarkup(page, "ink-paper-p" + position)}${background}`
+    return `<div class="ink-page" data-page="${index + 1}">${inkPaperMarkup(page, "ink-paper-p" + position)}${background}${inline.markup}`
       + `<svg class="ink-page__ink" viewBox="0 0 ${page.width} ${page.height}" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">${paths}</svg>`
       + "</div>";
   }).join("");
@@ -517,14 +560,22 @@ export class NoteExport {
     const index = pageIds.length > 0 ? doc.pages.findIndex((item) => item.id === pageIds[0]) : 0;
     const page = doc.pages[index];
     if (!page) throw new AppError("InvalidInput", "该页不存在（可能已被删除）");
+    // 背景图与页内贴图都要各自的 data URI（不能共用一个 getter：那会把背景图当成所有贴图）
+    const uris = new Map<string, string | null>();
+    const urls = new Set<string>([
+      ...(page.backgroundImage ? [page.backgroundImage.url] : []),
+      ...(page.images ?? []).map((image) => image.url),
+    ]);
+    for (const url of urls) uris.set(url, await this.inkImageDataUri(url));
     let imageCount = 0;
     let skipped = 0;
-    const uri = page.backgroundImage ? await this.inkImageDataUri(page.backgroundImage.url) : null;
-    if (page.backgroundImage) {
-      if (uri) imageCount++;
-      else skipped++;
-    }
-    const svg = buildInkPageSvg(page, index, { imageDataUri: () => uri });
+    const countImage = (url: string): void => {
+      if (uris.get(url)) imageCount += 1;
+      else skipped += 1;
+    };
+    if (page.backgroundImage) countImage(page.backgroundImage.url);
+    for (const image of page.images ?? []) countImage(image.url);
+    const svg = buildInkPageSvg(page, index, { imageDataUri: (url: string) => uris.get(url) ?? null });
     return { svg, width: page.width, height: page.height, title: sanitizeFileName(row.title ?? "未命名"), imageCount, skipped };
   }
   /**

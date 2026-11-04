@@ -17,13 +17,23 @@
  *    「防孤儿清理」引用、运行时从不读；移动端要用磁盘 PDF 只作为原生栅格化的一次性输入）。
  *  - **坏页可丢**：结构字段（kind/version/pages 数组/页尺寸）仍严格；单页元数据坏只丢该页并计数
  *    （`InkDoc.droppedPages`，内存态，不落盘），不再让一页坏数据把整篇打成只读。
+ *
+ * v4（261104 二十批，一次升版装齐三件**页级**内容，避免反复升版把旧端反复踢进只读）：
+ *  - `page.note`：页备注（一句话说明，≤200 字，跨端同步）；
+ *  - `page.images`：页内贴图（不铺满整页的小图，引用本笔记空间资产 URL ⇒ 声明/同步/GC 自动覆盖）；
+ *  - `page.texts`：页内文字块（数据与渲染先落，编辑 UI 后续批次接入）。
+ *  集合字段**不是数组 ⇒ 该页坏**；数组里的单个坏元素只丢自己（不连累整页）。
+ *  旧端读到 v4 仍进只读保护（v1→v2→v3 同一先例），**S3 协议不需要动**（正文按字节内容寻址）。
  */
 import { parseLocalAssetUrl } from "./assetUrl.js";
 
 export const INK_DOC_KIND = "ink" as const;
-export const INK_DOC_VERSION = 3 as const;
-/** 可读的正文版本：v1（纯矢量页）/ v2（可选背景图片页）/ v3（扁平点编码 + 视图字段出正文）。 */
-export const INK_DOC_READ_VERSIONS: readonly number[] = [1, 2, 3];
+export const INK_DOC_VERSION = 4 as const;
+/**
+ * 可读的正文版本：v1（纯矢量页）/ v2（可选背景图片页）/ v3（扁平点编码 + 视图字段出正文）/
+ * v4（页备注 + 页内贴图 + 页内文字块，261104 二十批）。
+ */
+export const INK_DOC_READ_VERSIONS: readonly number[] = [1, 2, 3, 4];
 export const INK_PAGE_WIDTH = 794;
 export const INK_PAGE_HEIGHT = 1123;
 export const MAX_INK_BODY_CHARS = 16 * 1024 * 1024;
@@ -85,6 +95,32 @@ export interface InkStroke {
   points: InkPoint[];
 }
 
+/** v4：页内贴图（**不铺满整页**的小图，相对页逻辑坐标；整页图仍走 backgroundImage）。 */
+export interface InkPageImage {
+  id: string;
+  /** 本笔记空间 canonical 本地资产 URL（末段磁盘名参与资产声明/同步/GC）。 */
+  url: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  /** 旋转角度（度，-180..180）；缺省 0。 */
+  rotation?: number;
+}
+
+/** v4：页内文字块（批注文字）。渲染与编辑在后续批次接入；数据先随 v4 落盘，避免二次升版。 */
+export interface InkPageText {
+  id: string;
+  x: number;
+  y: number;
+  /** 排版宽度（页逻辑 px）。 */
+  width: number;
+  text: string;
+  fontSize: number;
+  color: string;
+  align?: "left" | "center" | "right";
+}
+
 export interface InkPage {
   id: string;
   width: number;
@@ -93,6 +129,12 @@ export interface InkPage {
   /** v2：可选背景图片（图片页）。缺省 = 纯矢量页。 */
   backgroundImage?: InkBackgroundImage;
   strokes: InkStroke[];
+  /** v4：页备注（给人看的一句话说明；≤200 字，跨端同步，属正文数据）。 */
+  note?: string;
+  /** v4：页内贴图。 */
+  images?: InkPageImage[];
+  /** v4：页内文字块。 */
+  texts?: InkPageText[];
 }
 
 export interface InkDoc {
@@ -114,6 +156,13 @@ const MAX_POINTS_PER_STROKE = 50000;
 const MAX_PAGES = 1000;
 const MAX_TOTAL_STROKES = 100000;
 const MAX_TOTAL_POINTS = 300000;
+/** v4 每页上限：贴图 / 文字块 / 备注长度（坏元素**只丢自己**，不连累整页）。 */
+export const MAX_PAGE_IMAGES = 30;
+export const MAX_PAGE_TEXTS = 200;
+export const MAX_PAGE_NOTE_CHARS = 200;
+export const MAX_TEXT_CHARS = 2000;
+/** 贴图坐标范围（允许略微出界，渲染时由 SVG 裁掉）。 */
+const MAX_PAGE_ELEMENT_COORD = 100000;
 
 /** v3 点坐标/压力定点小数位：0.01 逻辑 px / 1% 压力（视觉无差别，体积 −71% 的一半来源在这里）。 */
 const POINT_DECIMALS = 2;
@@ -217,6 +266,57 @@ function normalizeBackgroundImage(raw: unknown): InkBackgroundImage | null {
   return image;
 }
 
+/** v4 页备注：去空白 + 截断（备注是元数据，宁可截断也不让整页坏）。 */
+function normalizePageNote(raw: unknown): string | undefined {
+  if (typeof raw !== "string") return undefined;
+  const text = raw.trim();
+  if (!text) return undefined;
+  return text.length > MAX_PAGE_NOTE_CHARS ? text.slice(0, MAX_PAGE_NOTE_CHARS) : text;
+}
+
+/** v4 页内贴图：结构严格；单张坏只丢自己（不连累整页，更不连累整篇）。 */
+function normalizePageImage(raw: unknown): InkPageImage | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const record = raw as Record<string, unknown>;
+  if (typeof record.id !== "string" || !record.id) return null;
+  if (!isNoteAssetUrl(record.url)) return null;
+  const x = finiteNumber(record.x);
+  const y = finiteNumber(record.y);
+  const width = finiteNumber(record.width);
+  const height = finiteNumber(record.height);
+  if (x === null || y === null || width === null || height === null) return null;
+  if (width <= 0 || height <= 0) return null;
+  if (Math.abs(x) > MAX_PAGE_ELEMENT_COORD || Math.abs(y) > MAX_PAGE_ELEMENT_COORD) return null;
+  if (width > MAX_PAGE_ELEMENT_COORD || height > MAX_PAGE_ELEMENT_COORD) return null;
+  const image: InkPageImage = { id: record.id, url: record.url, x, y, width, height };
+  if (record.rotation !== undefined) {
+    const rotation = finiteNumber(record.rotation);
+    if (rotation === null || rotation < -180 || rotation > 180) return null;
+    image.rotation = rotation;
+  }
+  return image;
+}
+
+/** v4 页内文字块：结构严格；单个坏只丢自己。 */
+function normalizePageText(raw: unknown): InkPageText | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const record = raw as Record<string, unknown>;
+  if (typeof record.id !== "string" || !record.id) return null;
+  if (typeof record.text !== "string" || !record.text.trim()) return null;
+  if (typeof record.color !== "string" || !record.color) return null;
+  const x = finiteNumber(record.x);
+  const y = finiteNumber(record.y);
+  const width = finiteNumber(record.width);
+  const fontSize = finiteNumber(record.fontSize);
+  if (x === null || y === null || width === null || fontSize === null) return null;
+  if (width <= 0 || width > MAX_PAGE_ELEMENT_COORD) return null;
+  if (fontSize < 6 || fontSize > 96) return null;
+  if (Math.abs(x) > MAX_PAGE_ELEMENT_COORD || Math.abs(y) > MAX_PAGE_ELEMENT_COORD) return null;
+  const text = record.text.length > MAX_TEXT_CHARS ? record.text.slice(0, MAX_TEXT_CHARS) : record.text;
+  const item: InkPageText = { id: record.id, x, y, width, text, fontSize, color: record.color };
+  if (record.align === "left" || record.align === "center" || record.align === "right") item.align = record.align;
+  return item;
+}
 /** 整篇 PDF 来源：v3 = {name?, pageCount}；v2 的 url 丢弃（原 PDF 不再强制入库）。 */
 function normalizeSourcePdf(raw: unknown): InkSourcePdf | null {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
@@ -295,6 +395,33 @@ function normalizePage(raw: unknown): InkPage | null {
     strokes.push(stroke);
   }
   const page: InkPage = { id: record.id, width, height, background: record.background, strokes };
+  const note = normalizePageNote(record.note);
+  if (note) page.note = note;
+  // v4 集合字段：不是数组 ⇒ 结构不合法（整页坏）；数组里的单个坏元素只丢自己并计数。
+  if (record.images !== undefined) {
+    if (!Array.isArray(record.images)) return null;
+    const ids = new Set<string>();
+    const images: InkPageImage[] = [];
+    for (const raw of record.images.slice(0, MAX_PAGE_IMAGES)) {
+      const image = normalizePageImage(raw);
+      if (!image || ids.has(image.id)) continue;
+      ids.add(image.id);
+      images.push(image);
+    }
+    if (images.length > 0) page.images = images;
+  }
+  if (record.texts !== undefined) {
+    if (!Array.isArray(record.texts)) return null;
+    const ids = new Set<string>();
+    const texts: InkPageText[] = [];
+    for (const raw of record.texts.slice(0, MAX_PAGE_TEXTS)) {
+      const item = normalizePageText(raw);
+      if (!item || ids.has(item.id)) continue;
+      ids.add(item.id);
+      texts.push(item);
+    }
+    if (texts.length > 0) page.texts = texts;
+  }
   if (record.backgroundImage !== undefined) {
     const backgroundImage = normalizeBackgroundImage(record.backgroundImage);
     if (!backgroundImage) return null;
@@ -421,6 +548,31 @@ export function inkToBody(doc: InkDoc): string {
       background: page.background,
     };
     if (page.backgroundImage) out.backgroundImage = serializeBackgroundImage(page.backgroundImage);
+    const note = page.note?.trim();
+    if (note) out.note = note;
+    if (page.images && page.images.length > 0) {
+      out.images = page.images.slice(0, MAX_PAGE_IMAGES).map((image) => ({
+        id: image.id,
+        url: image.url,
+        x: quantize(image.x),
+        y: quantize(image.y),
+        width: quantize(image.width),
+        height: quantize(image.height),
+        ...(image.rotation !== undefined ? { rotation: quantize(image.rotation) } : {}),
+      }));
+    }
+    if (page.texts && page.texts.length > 0) {
+      out.texts = page.texts.slice(0, MAX_PAGE_TEXTS).map((item) => ({
+        id: item.id,
+        x: quantize(item.x),
+        y: quantize(item.y),
+        width: quantize(item.width),
+        text: item.text,
+        fontSize: quantize(item.fontSize),
+        color: item.color,
+        ...(item.align ? { align: item.align } : {}),
+      }));
+    }
     out.strokes = page.strokes.map((stroke) => {
       if (stroke.points.length > MAX_POINTS_PER_STROKE) throw new Error("单条笔迹采样点超出上限");
       totalPoints += stroke.points.length;

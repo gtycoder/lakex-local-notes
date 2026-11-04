@@ -202,6 +202,22 @@ describe("261104 十七批：底纹 / 单页过滤 / 页图 JPEG / 独立 SVG", 
     expect((bodyHtml.match(/ink-page__paper/g) ?? []).length).toBe(1);
   });
 
+  it("v4 页内贴图：HTML 里逐张 <img class=ink-page__img>（百分比定位 + 旋转），缺图计 skipped", () => {
+    const doc = twoPageDoc();
+    doc.pages[0] = {
+      ...doc.pages[0],
+      images: [{ id: "i1", url: localAssetHttpUrl("n1", "1700000000100_abcdef13.png"), x: 100, y: 200, width: 397, height: 200, rotation: 15 }],
+    };
+    const withUri = buildInkPdfBody(doc, { imageDataUri: () => "data:image/jpeg;base64,AAAA" });
+    expect(withUri.bodyHtml).toContain('class="ink-page__img"');
+    expect(withUri.bodyHtml).toContain("rotate(15deg)");
+    expect(withUri.bodyHtml).toContain("left:12.594458438287154%");
+    expect(withUri.imageCount).toBe(2); // 背景图 1 + 贴图 1
+    const without = buildInkPdfBody(doc, { imageDataUri: () => null });
+    expect(without.skipped).toBe(2);
+    expect(without.bodyHtml).not.toContain("ink-page__img");
+  });
+
   it("pageIds 只导出指定页（按原文顺序）", () => {
     const doc = twoPageDoc();
     const second = doc.pages[1].id;

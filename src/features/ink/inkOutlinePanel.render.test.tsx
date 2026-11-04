@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
 /**
- * 大纲 / 书签面板（261104 十八批）：入口、只列有批注或书签的页、点击跳页、加/取消书签（设备本地）。
+ * 大纲 / 页备注面板（261104 十八批；二十批：设备本地书签 → 正文页备注）。
+ * 覆盖：入口、只列有批注/备注的页、点击跳页、三种范围循环、页备注保存进正文（进撤销栈、标脏）、只看有备注。
  */
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import { createInkDoc, createInkPage, inkToBody, type InkDoc } from "../../core/inkDoc";
-import { readInkBookmarks } from "./inkBookmarks";
 import { InkPad, type InkPadProps } from "./InkPad";
 
 function threePageBody(): string {
@@ -42,43 +42,45 @@ beforeAll(() => {
   (globalThis as { ResizeObserver?: unknown }).ResizeObserver = ResizeObserverStub;
 });
 
-beforeEach(() => { localStorage.clear(); });
-
-describe("手写板大纲 / 书签", () => {
+describe("手写板大纲 / 页备注", () => {
   it("桌面有「大纲」入口；默认只列有批注的页；点击跳页", async () => {
     const view = await mount({ content: threePageBody(), variant: "desktop", readOnly: false });
     const trigger = view.container.querySelector('button[aria-label="大纲"]') as HTMLButtonElement;
     expect(trigger).not.toBeNull();
     await act(async () => { trigger.click(); });
-    const panel = view.container.querySelector('[aria-label="大纲"] [role="dialog"], [data-ink-outline-panel]');
-    expect(panel).not.toBeNull();
+    expect(view.container.querySelector("[data-ink-outline-panel]")).not.toBeNull();
     const rows = Array.from(view.container.querySelectorAll(".ink-outline__row")) as HTMLButtonElement[];
-    // 第 2 页有网格底纹但没笔迹：annotated 模式下不列（只有第 3 页有笔迹）
     expect(rows.map((row) => row.textContent)).toEqual(["第 3 页1 笔"]);
     await act(async () => { rows[0].click(); });
     expect(view.container.querySelector(".ink-pages span")!.textContent).toContain("第 3 / 3 页");
     await view.unmount();
   });
 
-  it("加书签：写设备本地、面板摘要 +1、再点取消；书签页在 annotated 模式下也出现", async () => {
-    const view = await mount({ content: threePageBody(), variant: "desktop", readOnly: false, noteId: "note-1" });
+  it("页备注：输入后保存 ⇒ 写进正文（onChange 会带上 note）、进撤销栈、面板行显示备注", async () => {
+    const onChange = vi.fn();
+    const view = await mount({ content: threePageBody(), variant: "desktop", readOnly: false, onChange });
     await act(async () => { (view.container.querySelector('button[aria-label="大纲"]') as HTMLButtonElement).click(); });
-    const bookmark = view.container.querySelector(".ink-outline__bookmark") as HTMLButtonElement;
-    expect(bookmark.getAttribute("aria-pressed")).toBe("false");
-    await act(async () => { bookmark.click(); });
-    // 设备本地：当前页（p1，空白页）被加进书签
-    expect(readInkBookmarks("note-1").map((item) => item.pageId)).toEqual(["p1"]);
-    expect(view.container.querySelector(".ink-outline__head")!.textContent).toContain("1 个书签");
-    // 书签页即使没有笔迹也出现在列表里
-    const rows = Array.from(view.container.querySelectorAll(".ink-outline__row")) as HTMLButtonElement[];
-    expect(rows.some((row) => row.textContent?.startsWith("第 1 页"))).toBe(true);
-    await act(async () => { (view.container.querySelector(".ink-outline__bookmark") as HTMLButtonElement).click(); });
-    expect(readInkBookmarks("note-1")).toEqual([]);
+    const input = view.container.querySelector("#ink-outline-note") as HTMLInputElement;
+    const save = view.container.querySelector(".ink-outline__note-save") as HTMLButtonElement;
+    expect(save.disabled).toBe(true); // 没改动不可点
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+      setter.call(input, "重点：第三章");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => { save.click(); });
+    // 防抖后正文落盘：当前页 p1 带上 note
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 620)); });
+    expect(onChange).toHaveBeenCalled();
+    const body = JSON.parse(onChange.mock.calls[onChange.mock.calls.length - 1][0]) as InkDoc;
+    expect(body.pages[0].note).toBe("重点：第三章");
+    // 备注页也在大纲里出现
+    expect(Array.from(view.container.querySelectorAll(".ink-outline__row")).some((row) => row.textContent?.includes("重点：第三章"))).toBe(true);
     await view.unmount();
   });
 
-  it("显示范围循环：只看批注 → 全部页 → 只看书签（空态给出加书签提示）", async () => {
-    const view = await mount({ content: threePageBody(), variant: "desktop", readOnly: false, noteId: "note-1" });
+  it("显示范围循环：只看批注 → 全部页 → 只看有备注（空态给出提示）", async () => {
+    const view = await mount({ content: threePageBody(), variant: "desktop", readOnly: false });
     await act(async () => { (view.container.querySelector('button[aria-label="大纲"]') as HTMLButtonElement).click(); });
     const mode = () => view.container.querySelector(".ink-outline__mode") as HTMLButtonElement;
     expect(mode().textContent).toBe("只看批注");
@@ -86,29 +88,9 @@ describe("手写板大纲 / 书签", () => {
     expect(mode().textContent).toBe("全部页");
     expect(view.container.querySelectorAll(".ink-outline__row").length).toBe(3);
     await act(async () => { mode().click(); });
-    expect(mode().textContent).toBe("只看书签");
+    expect(mode().textContent).toBe("只看有备注");
     expect(view.container.querySelectorAll(".ink-outline__row").length).toBe(0);
-    expect(view.container.querySelector(".ink-outline__empty")!.textContent).toContain("还没有书签");
-    // 加一个书签后，只看书签模式下就能看到那一页
-    await act(async () => { (view.container.querySelector(".ink-outline__bookmark") as HTMLButtonElement).click(); });
-    const rows = Array.from(view.container.querySelectorAll(".ink-outline__row"));
-    expect(rows.length).toBe(1);
-    expect(rows[0].textContent).toContain("第 1 页");
-    await view.unmount();
-  });
-
-  it("没有 noteId 时不写设备本地（纯视图不炸）", async () => {
-    const view = await mount({ content: threePageBody(), variant: "desktop", readOnly: false });
-    await act(async () => { (view.container.querySelector('button[aria-label="大纲"]') as HTMLButtonElement).click(); });
-    await act(async () => { (view.container.querySelector(".ink-outline__bookmark") as HTMLButtonElement).click(); });
-    expect(readInkBookmarks(null)).toEqual([]);
-    await view.unmount();
-  });
-
-  it("没有 noteId 的只读场景：面板仍可用（纯视图，不写任何东西）", async () => {
-    const view = await mount({ content: threePageBody(), variant: "desktop", readOnly: true });
-    await act(async () => { (view.container.querySelector('button[aria-label="大纲"]') as HTMLButtonElement).click(); });
-    expect(view.container.querySelector(".ink-outline__list")).not.toBeNull();
+    expect(view.container.querySelector(".ink-outline__empty")!.textContent).toContain("还没有备注");
     await view.unmount();
   });
 });

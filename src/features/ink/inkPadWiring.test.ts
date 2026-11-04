@@ -324,9 +324,9 @@ describe("手写板正式端到端接线", () => {
     expect(INK_PAD).toMatch(/\{pagesOpen && \(variant === "desktop" \? \(\s*<InkPageStrip/);
   });
 
-  it("v3 正文模型：版本 3、扁平点编码、activePageId 不落盘、坏页可丢", () => {
-    expect(INK_DOC).toContain("INK_DOC_VERSION = 3 as const");
-    expect(INK_DOC).toContain("INK_DOC_READ_VERSIONS: readonly number[] = [1, 2, 3]");
+  it("v4 正文模型：版本 4、扁平点编码、activePageId 不落盘、坏页可丢", () => {
+    expect(INK_DOC).toContain("INK_DOC_VERSION = 4 as const");
+    expect(INK_DOC).toContain("INK_DOC_READ_VERSIONS: readonly number[] = [1, 2, 3, 4]");
     expect(INK_DOC).toContain("interface InkBackgroundImage");
     expect(INK_DOC).toContain("backgroundImage?: InkBackgroundImage");
     expect(INK_DOC).toContain("isNoteAssetUrl(record.url)");

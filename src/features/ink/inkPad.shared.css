@@ -236,8 +236,8 @@
   text-align: center;
 }
 
-/* 有书签的页（设备本地数据）在缩略图左上角打一个小点：不抢 index 的位置。 */
-.ink-page-thumb__bookmark {
+/* 有页备注的页在缩略图左上角打一个小点：不抢 index 的位置。 */
+.ink-page-thumb__note {
   position: absolute;
   top: 4px;
   left: 4px;

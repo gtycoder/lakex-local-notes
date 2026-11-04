@@ -20,8 +20,7 @@ import { hitTestStroke, strokeToSvgPath } from "./inkGeometry.js";
 import { inkStrokeStyle } from "./inkStrokeStyle.js";
 import { InkExportMenu, type InkPageExportFormat } from "./InkExportMenu.js";
 import { InkOutlinePanel } from "./InkOutlinePanel.js";
-import { bookmarkPageIds } from "./inkOutline.js";
-import { readInkBookmarks, removeInkBookmark, toggleInkBookmark, type InkBookmark } from "./inkBookmarks.js";
+import { notedPageIds } from "./inkOutline.js";
 import { inkPerfDebugEnabled, installInkPerfHooks, recordInkPerf } from "./inkPerfStats";
 import { inkImageImportNotice, inkPdfImportNotice } from "./inkImportNotice";
 import { installInkInputDiagnostics, installPointerInputDebugHooks } from "../board/boardInputDiagnostics";
@@ -216,9 +215,8 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
   const [insertOpen, setInsertOpen] = useState(false);
   /** 桌面底部「导出」按钮的悬浮菜单（只有一个按钮：点开再选格式，不铺三个按钮）。 */
   const [exportOpen, setExportOpen] = useState(false);
-  /** 大纲面板开合 + 设备本地书签（书签不进正文、不同步）。 */
+  /** 大纲面板开合（页备注本身是正文数据，不需要额外状态）。 */
   const [outlineOpen, setOutlineOpen] = useState(false);
-  const [bookmarks, setBookmarks] = useState<InkBookmark[]>(() => readInkBookmarks(noteId));
   const [pendingDeletePageId, setPendingDeletePageId] = useState<string | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
   /** 261103 九批：手写板落笔诊断的宿主根节点（默认关，见 boardInputDiagnostics.ts 头注释）。 */
@@ -689,17 +687,19 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
     commit({ ...current, pages }, order ? { pages: [], order } : null);
   }, [commit, readOnly]);
 
-  // 书签按 noteId 隔离：换文档要重读，否则会把上一篇的标记画到这篇上。
-  useEffect(() => {
-    setBookmarks(readInkBookmarks(noteId));
-  }, [noteId]);
-
-  /** 书签开合（设备本地视图：不标脏、不进正文、不触发同步）。 */
-  const toggleBookmark = useCallback(() => {
+  /** 保存当前页备注（v4 正文数据：进撤销栈、标脏、随同步走；空串 = 删除备注）。 */
+  const savePageNote = useCallback((text: string) => {
     const current = docRef.current;
-    if (!current) return;
-    setBookmarks(toggleInkBookmark(noteId, current.activePageId));
-  }, [noteId]);
+    if (!current || readOnly) return;
+    const before = current.pages.find((item) => item.id === current.activePageId);
+    if (!before) return;
+    const trimmed = text.trim();
+    if ((before.note ?? "") === trimmed) return;
+    const nextPage = { ...before };
+    if (trimmed) nextPage.note = trimmed;
+    else delete nextPage.note;
+    commit(replacePage(current, nextPage), inkPagePatch(before, nextPage));
+  }, [commit, readOnly]);
 
   const requestDeletePage = useCallback((id: string) => {
     if (readOnly) return;
@@ -722,9 +722,7 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
     const order = inkOrderDelta(current.pages, pages);
     if (order) patch.order = order;
     commit({ ...current, pages, activePageId }, patch);
-    // 页删了，书签就没有意义（设备本地数据，顺手清掉，避免留垃圾）
-    setBookmarks(removeInkBookmark(noteId, id));
-  }, [commit, noteId, pendingDeletePageId, readOnly]);
+  }, [commit, pendingDeletePageId, readOnly]);
 
   const switchPage = useCallback((delta: number) => {
     const current = docRef.current;
@@ -1038,7 +1036,7 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
           onAdd={addPage}
           onRequestDelete={requestDeletePage}
           onConfirmDelete={confirmDeletePage}
-          bookmarkedPageIds={bookmarkPageIds(bookmarks, doc.pages)}
+          notedPageIds={notedPageIds(doc.pages)}
           onCancelDelete={() => setPendingDeletePageId(null)}
           onClose={() => { setPagesOpen(false); setPendingDeletePageId(null); }}
           readOnly={readOnly}
@@ -1055,7 +1053,7 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
             onAdd={addPage}
             onRequestDelete={requestDeletePage}
             onConfirmDelete={confirmDeletePage}
-            bookmarkedPageIds={bookmarkPageIds(bookmarks, doc.pages)}
+            notedPageIds={notedPageIds(doc.pages)}
             onCancelDelete={() => setPendingDeletePageId(null)}
             onClose={() => { setPagesOpen(false); setPendingDeletePageId(null); }}
             readOnly={readOnly}
@@ -1096,6 +1094,21 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
                 pointerEvents="none"
               />
             ) : null}
+            {/* v4 页内贴图：按页逻辑坐标画（rotation 绕自身中心）；笔迹永远在最上层 */}
+            {(page.images ?? []).map((image) => (
+              <image
+                key={image.id}
+                href={image.url}
+                x={image.x}
+                y={image.y}
+                width={image.width}
+                height={image.height}
+                transform={image.rotation
+                  ? `rotate(${image.rotation} ${image.x + image.width / 2} ${image.y + image.height / 2})`
+                  : undefined}
+                pointerEvents="none"
+              />
+            ))}
             <StaticStrokeLayer strokes={renderedStrokes} />
             {activeStroke && activePath && (
               <path
@@ -1125,9 +1138,8 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
               onToggle={() => { setOutlineOpen((open) => !open); closeSwatches(); }}
               pages={doc.pages}
               currentPageId={doc.activePageId}
-              bookmarks={bookmarks}
               onJump={selectPage}
-              onToggleBookmark={toggleBookmark}
+              onSaveNote={savePageNote}
             />
             {/* 只放一个按钮：点开再选格式（用户定稿：不要三个按钮占满工具条）；菜单本体在 InkExportMenu（桌面专用） */}
             {onExportPage && (

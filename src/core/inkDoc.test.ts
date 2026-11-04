@@ -51,7 +51,7 @@ describe("手写板正文（kind=ink v3）", () => {
     });
     const body = inkToBody(doc);
     const raw = JSON.parse(body) as { version: number; pages: Array<{ strokes: Array<{ points: unknown[] }> }> };
-    expect(raw.version).toBe(3);
+    expect(raw.version).toBe(INK_DOC_VERSION);
     expect(raw.pages[0].strokes[0].points).toEqual([[10.12, 20.99, 0.46, 4.44], [30, 40, 0.8]]);
     const parsed = parseInkBody(body)!;
     expect(parsed.pages[0].strokes[0].points[0]).toEqual({ x: 10.12, y: 20.99, pressure: 0.46, t: 4.44 });
@@ -82,7 +82,7 @@ describe("手写板正文（kind=ink v3）", () => {
     expect(parseInkBody("{}")).toBeNull();
     expect(parseInkBody(JSON.stringify({ kind: "ink", version: 2, pages: [] }))).toBeNull();
     expect(parseInkBody(JSON.stringify({ kind: "ink", version: 1, pages: [] }))).toBeNull();
-    expect(parseInkBody(JSON.stringify({ kind: "ink", version: 4, pages: [{ id: "p1", width: INK_PAGE_WIDTH, height: INK_PAGE_HEIGHT, background: "blank", strokes: [] }] }))).toBeNull();
+    expect(parseInkBody(JSON.stringify({ kind: "ink", version: 5, pages: [{ id: "p1", width: INK_PAGE_WIDTH, height: INK_PAGE_HEIGHT, background: "blank", strokes: [] }] }))).toBeNull();
     const doc = createInkDoc();
     doc.pages[0].strokes.push({ id: "bad", tool: "pen", color: "#000", width: 2, points: [{ x: Number.NaN, y: 1, pressure: 0.5 }] });
     expect(parseInkBody(inkToBody(doc))).toBeNull();
@@ -127,7 +127,7 @@ describe("手写板正文 v3（图片页 / PDF 来源）", () => {
     expect(canonicalDocBody("ink", v1Body)).toBe(inkToBody(parsed));
     // v2 仍可读；未知版本拒绝
     expect(parseInkBody(inkToBody(docWithImagePage()))).not.toBeNull();
-    expect(parseInkBody(JSON.stringify({ kind: "ink", version: 4, pages: [] }))).toBeNull();
+    expect(parseInkBody(JSON.stringify({ kind: "ink", version: 5, pages: [] }))).toBeNull();
   });
 
   it("背景图片字段往返保持；fit 缺省 contain；字段序稳定（backgroundImage 在 strokes 之前）", () => {
