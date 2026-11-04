@@ -355,3 +355,19 @@
   cursor: nwse-resize;
   touch-action: none;
 }
+
+/* v4 页内文字块编辑框（位置/字号由 InkPageTextEditor 按页面百分比与缩放内联给出） */
+.ink-text-editor {
+  position: absolute;
+  z-index: 3;
+  margin: 0;
+  padding: 2px 4px;
+  border: 1px dashed var(--lake-accent);
+  border-radius: var(--lake-radius-xs);
+  background: var(--lake-bg-panel);
+  color: var(--lake-text-1);
+  font-family: inherit;
+  resize: none;
+  outline: none;
+  overflow: hidden;
+}

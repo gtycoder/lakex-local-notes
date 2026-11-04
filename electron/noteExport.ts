@@ -27,6 +27,7 @@ import {
 } from "../src/core/inkPaperGeometry.js";
 import { strokeToSvgPath } from "../src/features/ink/inkGeometry.js";
 import { inkStrokeStyle } from "../src/features/ink/inkStrokeStyle.js";
+import { INK_TEXT_LINE_HEIGHT, wrapInkTextLines } from "../src/features/ink/inkPageTexts.js";
 import { ZipWriter } from "../src/core/zipArchive.js";
 
 /** 同名附件归档时的去重后缀：a.pdf → a (2).pdf。 */
@@ -70,6 +71,10 @@ export function inkBackgroundFitCss(fit: InkBackgroundImageFit | undefined): str
   if (fit === "cover") return "cover";
   if (fit === "stretch") return "fill";
   return "contain";
+}
+
+function escapeHtmlText(value: string): string {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 function escapeHtmlAttr(value: string): string {
@@ -155,6 +160,22 @@ function inkInlineImagesSvgMarkup(page: InkPage, imageDataUri: (url: string) => 
   }).join("");
 }
 
+/**
+ * v4 页内文字块 → SVG <text>（逐行 tspan）。换行与行高来自 core/features 的同一份估算
+ * （`wrapInkTextLines` / `INK_TEXT_LINE_HEIGHT`）：屏幕与导出的断行必须一致。
+ */
+function inkTextsMarkup(page: InkPage): string {
+  return (page.texts ?? []).map((item) => {
+    const lines = wrapInkTextLines(item.text, item.width, item.fontSize);
+    if (lines.length === 0) return "";
+    const lineHeight = item.fontSize * INK_TEXT_LINE_HEIGHT;
+    const anchor = item.align === "center" ? "middle" : item.align === "right" ? "end" : "start";
+    const x = item.align === "center" ? item.x + item.width / 2 : item.align === "right" ? item.x + item.width : item.x;
+    const baseline = item.y + item.fontSize * 0.9;
+    const tspans = lines.map((line, index) => `<tspan x="${x}"${index === 0 ? "" : ` dy="${lineHeight}"`}>${escapeHtmlText(line || " ")}</tspan>`).join("");
+    return `<text x="${x}" y="${baseline}" fill="${escapeHtmlAttr(item.color)}" font-size="${item.fontSize}" font-family="system-ui, -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif" text-anchor="${anchor}" xml:space="preserve">${tspans}</text>`;
+  }).join("");
+}
 /** 背景图 → preserveAspectRatio（与屏内 SVG 一致）。 */
 function inkBackgroundAspect(fit: InkBackgroundImageFit | undefined): string {
   if (fit === "cover") return "xMidYMid slice";
@@ -178,6 +199,7 @@ export function buildInkPageSvg(page: InkPage, index: number, deps: InkPdfBodyDe
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${page.width}" height="${page.height}" viewBox="0 0 ${page.width} ${page.height}">`
     + `<rect x="0" y="0" width="${page.width}" height="${page.height}" fill="#ffffff" />` + paper + image
     + inkInlineImagesSvgMarkup(page, deps.imageDataUri)
+    + inkTextsMarkup(page)
     + inkStrokePathsMarkup(page) + "</svg>";
 }
 /** 背景图 URL：**已转好的 data URI**（调用方做路径校验/读盘/转码；读不到返回 null）。 */
@@ -224,7 +246,7 @@ export function buildInkPdfBody(doc: InkDoc, deps: InkPdfBodyDeps, options: { pa
     skipped += inline.skipped;
     const paths = inkStrokePathsMarkup(page);
     return `<div class="ink-page" data-page="${index + 1}">${inkPaperMarkup(page, "ink-paper-p" + position)}${background}${inline.markup}`
-      + `<svg class="ink-page__ink" viewBox="0 0 ${page.width} ${page.height}" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">${paths}</svg>`
+      + `<svg class="ink-page__ink" viewBox="0 0 ${page.width} ${page.height}" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">${inkTextsMarkup(page)}${paths}</svg>`
       + "</div>";
   }).join("");
   return { bodyHtml: `<div class="ink-pdf">${pages}</div>`, imageCount, skipped };

@@ -218,6 +218,25 @@ describe("261104 十七批：底纹 / 单页过滤 / 页图 JPEG / 独立 SVG", 
     expect(without.bodyHtml).not.toContain("ink-page__img");
   });
 
+  it("v4 页内文字块：HTML 与独立 SVG 里都渲染成 <text>/<tspan>（换行与屏幕同一份估算）", () => {
+    const doc = twoPageDoc();
+    doc.pages[0] = {
+      ...doc.pages[0],
+      texts: [{ id: "t1", x: 100, y: 150, width: 200, fontSize: 20, color: "#262626", text: "第一行重点" }],
+    };
+    const html = buildInkPdfBody(doc, { imageDataUri: () => null }).bodyHtml;
+    expect(html).toContain("<text ");
+    expect(html).toContain("第一行重点");
+    expect(html).toContain("<tspan");
+    const svg = buildInkPageSvg(doc.pages[0], 0, { imageDataUri: () => null });
+    expect(svg).toContain("<text ");
+    expect(svg).toContain("第一行重点");
+    // 文本转义：& < > 不能破坏 SVG
+    doc.pages[0].texts = [{ id: "t2", x: 0, y: 0, width: 300, fontSize: 16, color: "#000", text: "a & b <c>" }];
+    const escaped = buildInkPageSvg(doc.pages[0], 0, { imageDataUri: () => null });
+    expect(escaped).toContain("a &amp; b &lt;c&gt;");
+  });
+
   it("pageIds 只导出指定页（按原文顺序）", () => {
     const doc = twoPageDoc();
     const second = doc.pages[1].id;

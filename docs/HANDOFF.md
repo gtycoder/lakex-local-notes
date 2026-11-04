@@ -8,6 +8,13 @@
 
 ## 0. 最新交接（261027）
 
+### 261104 · 二十三批：页内文字块（插入 / 双击编辑 / 拖动 / 删除 / 导出）· **本地改动**
+- **插入**：顶部工具条「插入文字」（`Type`）→ 空块落在「水平居中、页面 15% 高度」并立刻进入编辑；空文本提交自动移除该块。
+- **编辑**：双击进入编辑；用 HTML `<textarea>`（中文 IME 必需）；`Ctrl/Cmd+Enter`/失焦提交，`Esc` 取消。输入框位置/字号按页面百分比与当前缩放换算。
+- **换行单一来源**：`inkPageTexts.wrapInkTextLines`（CJK 1em / 其它 0.55em）被渲染、导出、高度计算三处共用 —— 主进程量不了文字，精确测量会导致导出与屏幕不一致。
+- **选中/拖动/删除**：点文字选中（虚线框）；拖动只改内存、松手 commit；Delete 删除；与贴图共用 `InkSelectionRect`（组件已从 `InkImageSelectionRect` 改名）。
+- **导出**：PDF/HTML 与独立 SVG 都渲染 `<text>`+`<tspan>`，文本节点转义；测试含「转义」与「换行来自同一估算」。
+- **门禁**：tsc / vitest（579 文件 3581 例；另有 2 条 `dockPanelFocusGuard` 红来自另一会话在途移动端改动）/ cssLayers（shared 215→227）/ mobileui / diff-check。
 ### 261104 · 二十二批：工具条重排（贴图上移 / 背景导入下沉）+ 修「贴图插入后点不中、不能再次编辑」· **本地改动**
 - **排布（用户定稿）**：顶部工具条 = 画笔类 + 颜色/笔宽 + 撤销重做 + **贴图**（`Sticker` 图标，aria-label 仍是「插入贴图」）+ 缩放；底栏 = 页码/新建页/页面管理 + 大纲 + 导出 + 纸张 + **背景来源**（「背景图」「背景 PDF」文字按钮，排在纸张之后）。独立组件 `InkBackgroundSourceButtons.tsx`（跨端样式护栏只扫 SHARED 名单）。
 - **真 bug**：内联 `<image>` 带着从背景图抄来的 `pointer-events:none` ⇒ 插入后一旦取消选中就再也点不到，用户报「贴图之后就不能移动、确定之后无法编辑」。已去掉该属性；实测 `document.elementFromPoint` 在贴图中心返回 `<image data-page-image>`，合成 pointerdown 能选中并出现手柄。

@@ -10,8 +10,8 @@
 import type { PointerEvent as ReactPointerEvent } from "react";
 import type { InkPageImage } from "../../core/inkDoc.js";
 
-/** 选中贴图的虚线框（SVG 元素，pointer-events:none）。 */
-export function InkImageSelectionRect({ image }: { image: InkPageImage }) {
+/** 选中元素的虚线框（SVG 元素，pointer-events:none）：贴图与文字块共用。 */
+export function InkSelectionRect({ image }: { image: { x: number; y: number; width: number; height: number } }) {
   return (
     <rect
       className="ink-image-select"
