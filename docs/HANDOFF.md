@@ -667,7 +667,7 @@
 - 261103 各批已全部提交并双推（20:08–20:21）：`ce442482`（usheet 35 行/双光标/整行整列）、`733ab4aa`（多维表头部+短名）、`2b29d9e8`（画板工具条+第 4 处补丁）、`75c46902`（ink 14 色）、`ae14ffd1`（胶囊/横滑/安全区/页签 44/useKeyboard）、`1f164f2b`（门禁装置+三份基线重烤）、`1e74c3f8`（文档）、`fdf9c455`（AI 默认关）。
 - 261103 之后（261104 凌晨，均已双推）：ink 三修（`912143da` 落笔/擦除按批渲染、`8f32a5ca` 中断不丢笔）+ 性能观测 `af169f96` + 图片页背景下采样 `8dc83a87` + 导入体积提示 `388232db` + 资源页本地占用 `1adcde27`。
 
-**门禁基线**（261104 12:08 实测；工作树含其他会话在途改动）：tsc 0 / 全量 vitest **586 文件 3575 例（575 文件通过 + 11 skipped；3563 例通过 + 12 skipped）**（⚠️ 14:12 全仓 tsc/vitest 被另一会话在途 ink 改动挡住：`DesktopInkPad` 的 `onInsertPageImage` 等；mobile 区 42 文件 226 例全绿） / `check:core` 136 文件 0 / `check:mobileui` / 双 build / `check:bundle` / `check:arch`（移动首屏 ≈340.8KB / 预算 360KB；桌面 ≈541.2KB / 预算 600KB；import 违规 0）/ `git diff --check` 0。设备：手机 6 态 + 平板 6 态 + 多维表 3 态已按六批新壳**重烤**、连跑 0 差异；23 屏走查 ok；`check:windowsweep` pass。clean debug APK ≈37.95–37.97MB（量体积必须 clean 后 `stat`，增量构建会虚增到 ~42MB）。
+**门禁基线**（261104 15:00 在**干净 HEAD worktree**（`git worktree add … HEAD` + symlink node_modules）实测，排除多会话在途改动）：tsc 0 / 全量 vitest **580 文件 3587 例通过（+ 11 文件 / 12 例 skipped）** / `check:mobileui` / `git diff --check` 0。主工作树当前含另一会话在途移动端改动（`EditorDock` / `editor-dock.css` 等）⇒ 主树里 `mobileLayers`、`dockPanelFocusGuard` 会红，属**别人未提交**，不是 HEAD 状态 / `check:core` 136 文件 0 / `check:mobileui` / 双 build / `check:bundle` / `check:arch`（移动首屏 ≈340.8KB / 预算 360KB；桌面 ≈541.2KB / 预算 600KB；import 违规 0）/ `git diff --check` 0。设备：手机 6 态 + 平板 6 态 + 多维表 3 态已按六批新壳**重烤**、连跑 0 差异；23 屏走查 ok；`check:windowsweep` pass。clean debug APK ≈37.95–37.97MB（量体积必须 clean 后 `stat`，增量构建会虚增到 ~42MB）。
 
 **环境（本机实测 261103）**：Node **v24.18.0**（`$HOME/.nvm/versions/node/v24.18.0/bin`）；JDK **21** `/Library/Java/JavaVirtualMachines/jdk-21.jdk`（系统默认 java 是 1.8，手跑 gradlew 必须指 21）；Android SDK `/opt/homebrew/share/android-commandlinetools`；AVD **7 个**：lake_mobile / lake_gate / lake_tab / lake_body / lake_lock / lake_meas / lake_sheet；CDP **9335 开发 / 9336 门禁 / 9340 平板与窗口矩阵**。Android 唯一运行手册 = `docs/MOBILE-OPS.md`（serial 号段以 `adb devices` 现场为准，文档里的 5556/5562 已不一致）。
 
@@ -676,7 +676,7 @@
 - **快照门禁依赖设备数据**：只在专用 AVD + 固定夹具上跑；改外壳几何/构成、重灌夹具、`pm clear`、装新构建、跑过造数据探针（long-doc-dom）后**必须先重烤基线**（`--from <warm>.json --write-baseline`），否则下次全量必红。5554/5556 实例有验证数据（无标题表格等），误跑必假红。23 屏走查装置刚修掉「菜单页误点关闭」的潜伏 bug ⇒ **历史绿灯不完全可信**。
 - **验收状态**：261102 十四批、261103 各批都只有设备实测记录，**没有用户逐条点收**；「已双推」≠「已验收」。
 - **平板回退史**：十三批（内核固定工具栏）已被十四批整体回退。残留旧路径（内核工具栏、`body.lake-tablet`、`__lakeSetTablet`、`nativeDeviceHint`）若被重新引入 = 第三套口径。
-- **inkDoc v3**：旧端读到 v3 进只读保护 ⇒ 跨端混用必须在发布说明里写清；改格式只能「新端写新版、旧端只读」，并同步 `docs/INK-PAD.md`。
+- **inkDoc v4（v3 读兼容）**：写 4、读 1|2|3|4；**旧端读到 v4 进只读保护** ⇒ 跨端混用必须在发布说明里写清（含「手机/平板需重装新包」）；改格式只能「新端写新版、旧端只读」，并同步 `docs/INK-PAD.md`。v4 = 页备注 + 页内贴图 + 页内文字块（S3 协议未动）。
 - **P12 取舍**：冷 cache「启动即恢复上次文档」仍要等 kernel chunk；Trash/History 关闭即卸载（内部状态重置，判可接受）。
 - **依赖补丁 4 处**（univer ui / plait draw / xiangfa mindmap / lakex-drawnix）：升级后必须 `grep` 过滤句计数 = 0 且设备上出现「手形工具 — H」；**patch 打上但未命中不会报错**，必须逐条确认语义生效。
 - **设备装置不进 CI**（无 AVD/GPU）：pr.yml 只覆盖 tsc/vitest/双 build/core/ui-metrics/bundle/arch。
@@ -689,7 +689,7 @@
 
 **P0（不做就卡住主线）**
 
-1. **合 master → 发 v0.0.3**：47 提交已双推、CI 齐；发版前跑全量门禁（手机/平板 6 态 + 多维表 3 态 + 23 屏走查 + `check:windowsweep` + 桌面 42 态；桌面 42 态本机无合成夹具缓存，需有夹具的机器补）。顺带补推 github/master（落后 1）。发版流程见 `docs/RELEASE.md`，tag 规则见 AGENTS §4（版本号单一来源 = `package.json`）。
+1. **发 v0.0.3**（**合 master 已于 261104 完成**，master 与 feat/pad-touch-ui 同一 HEAD）：发版前跑全量门禁（手机/平板 6 态 + 多维表 3 态 + 23 屏走查 + `check:windowsweep` + 桌面 42 态；桌面 42 态本机无合成夹具缓存，需有夹具的机器补）。发版流程见 `docs/RELEASE.md`，tag 规则见 AGENTS §4（版本号单一来源 = `package.json`）。**发布说明必须写清 inkDoc v4：旧端打开 v4 文档只读，手机/平板需重装新包**。
 2. **每批收尾的固定动作**：更新 §1 基线/门禁计数 + §3 待办 + 批次抬头状态（本批 261103 已完成对账；**以后不要让 §0 的「未提交」标记再漂移**——提交后立刻回写）。
 
 **P1（该做但可排期）**
