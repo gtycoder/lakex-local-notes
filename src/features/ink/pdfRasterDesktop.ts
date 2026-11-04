@@ -10,6 +10,7 @@
  *  · 中文非嵌入字体 PDF 在有 cmaps 时能正常解析（无 cmaps 时文字提取为空）。
  * 浏览器里 canvas 由 DOMCanvasFactory 提供（unpdf 自动选择），无需 @napi-rs/canvas。
  */
+import { INK_PDF_MAX_PAGES } from "./pdfImport.js";
 
 /** 每页逻辑尺寸 = PDF pt × 96/72（A4 595pt → 794）。 */
 const CSS_PX_PER_PT = 4 / 3;
@@ -40,7 +41,7 @@ export interface PdfRasterResult {
 export interface PdfRasterOptions {
   /** 目标像素宽（默认 1600；A4@2x ≈ 1190，1600 兼顾大字与体积）。 */
   maxWidth?: number;
-  /** 最多渲染多少页（产品截断 300；默认 300）。 */
+  /** 最多渲染多少页（产品截断上限，单一来源 = pdfImport 的 INK_PDF_MAX_PAGES）。 */
   maxPages?: number;
   onProgress?: (done: number, total: number) => void;
   signal?: AbortSignal;
@@ -91,7 +92,7 @@ export async function renderPdfPagesDesktop(bytes: Uint8Array, options: PdfRaste
   }
   try {
     const pageCount = pdf.numPages;
-    const total = Math.min(pageCount, Math.max(1, Math.floor(options.maxPages ?? 300)));
+    const total = Math.min(pageCount, Math.max(1, Math.floor(options.maxPages ?? INK_PDF_MAX_PAGES)));
     const pages: PdfRasterPage[] = [];
     for (let page = 1; page <= total; page += 1) {
       if (options.signal?.aborted) return { pageCount, pages, cancelled: true };

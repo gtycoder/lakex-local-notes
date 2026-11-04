@@ -20,14 +20,15 @@ describe("手写板性能观测（261103 十一批）", () => {
     resetInkPerf();
   });
 
-  it("阈值判据：字节/页数/序列化耗时/解析耗时各自独立触发", () => {
+  it("阈值判据：字节/序列化耗时/解析耗时各自独立触发", () => {
     expect(inkPerfThresholdHits({ kind: "save", ms: 5, bytes: 1024, pages: 3 })).toEqual([]);
-    expect(inkPerfThresholdHits({ kind: "save", ms: 5, bytes: INK_PERF_WARN_BYTES + 1, pages: 3 })).toEqual(["bytes>4MiB"]);
-    expect(inkPerfThresholdHits({ kind: "save", ms: 5, bytes: 1024, pages: 51 })).toEqual(["pages>50"]);
-    expect(inkPerfThresholdHits({ kind: "save", ms: INK_PERF_WARN_SERIALIZE_MS + 1, bytes: 1024, pages: 3 })).toEqual(["serialize>50ms"]);
-    expect(inkPerfThresholdHits({ kind: "load", ms: INK_PERF_WARN_PARSE_MS + 1, bytes: 1024, pages: 3 })).toEqual(["parse>300ms"]);
+    expect(inkPerfThresholdHits({ kind: "save", ms: 5, bytes: INK_PERF_WARN_BYTES + 1, pages: 3 })).toEqual(["bytes>2MiB"]);
+    expect(inkPerfThresholdHits({ kind: "save", ms: INK_PERF_WARN_SERIALIZE_MS + 1, bytes: 1024, pages: 3 })).toEqual(["serialize>16ms"]);
+    expect(inkPerfThresholdHits({ kind: "load", ms: INK_PERF_WARN_PARSE_MS + 1, bytes: 1024, pages: 3 })).toEqual(["parse>100ms"]);
     // 解析阈值不会误伤保存样本（反之亦然）
-    expect(inkPerfThresholdHits({ kind: "save", ms: INK_PERF_WARN_PARSE_MS + 1, bytes: 1024, pages: 3 })).toEqual(["serialize>50ms"]);
+    expect(inkPerfThresholdHits({ kind: "save", ms: INK_PERF_WARN_PARSE_MS + 1, bytes: 1024, pages: 3 })).toEqual(["serialize>16ms"]);
+    // 261103 十五批：页数不再单独触发（真实 335 页书正文仅 111 KiB、打开 0.6ms ⇒ 旧「>50 页」是假警报）
+    expect(inkPerfThresholdHits({ kind: "load", ms: 1, bytes: 114051, pages: 335 })).toEqual([]);
   });
 
   it("默认只记数不打日志：样本可被 __inkPerfStats 风格读取，且超过 40 条只留最近", () => {

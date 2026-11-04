@@ -20,6 +20,7 @@ v1 不包含：OCR/手写转文字、套索、局部像素橡皮、导出 PNG/PD
 
 - 墨迹轮廓：`perfect-freehand@1.2.3`（MIT）。输入是矢量采样点，输出闭合轮廓路径。
 - 渲染：SVG。静态笔迹层 memo 化，书写中的活动笔迹单独更新，不重复 reconcile 全部历史路径；纸张线条/网格/点阵也在 SVG 逻辑坐标中绘制，缩放时与笔迹同步缩放。
+- **笔宽档位按工具分开（261103 十五批）**：笔 1.5/2.5/4/6，高亮 **10/18/26/34**。此前两种工具共用一组档位 ⇒ 在高亮态点任意档位会把 18 改写成 1.5~6，宽度面板的选中态也永远不亮（用户实测「高亮笔太细」的根因）。高亮同时改用 perfect-freehand `thinning:0`（宽面马克笔等宽，不再随压力/速度收锋）。
 - 输入：Pointer Events。触控笔有压力时使用 `event.pressure`；鼠标/手指使用 0.5 的模拟压力。
 - 页面：A4 固定逻辑尺寸 **794 × 1123**，等比适配容器；缩放范围 50%–300%，步进 25%。
 - 正文：UTF-8 矢量点 JSON，不把 PNG 当正文，也不依赖画布位图作为唯一数据源。
@@ -73,9 +74,9 @@ v1 不包含：OCR/手写转文字、套索、局部像素橡皮、导出 PNG/PD
 - 单份正文上限 **16MiB**；全文档最多 **10 万条笔迹 / 30 万个采样点**。序列化与读取共用同一组上限；超限修改不会写入，编辑区会给出错误提示。
 - 手写正文暂不进入全文搜索（无 OCR）；标题仍按 `notes.title` 搜索。
 - 历史快照按页面/笔迹/采样点数量生成结构化预览，不尝试识别文字，也不把 ink JSON 误挂到画板预览器。
-- **v2（261102 T1：图片页）**：`version=2`（读 1|2、写 2）；每页可选 `backgroundImage`（必须是本笔记空间 canonical 本地资产 URL，末段磁盘名参与资产声明 / GC；`fit` contain|cover|stretch、`opacity`、`pixelWidth/Height`、`source` image|pdf-page、`pdf` {url,page,pageCount}），整篇可选 `sourcePdf` {url,pageCount}。图片页不再画纸张底纹；渲染 = 在 InkPaper 之前加 SVG `<image>`（页面逻辑坐标、`pointer-events:none`）；缩略图取资产 `?w=256` 低清档。v1 文档打开不写盘，首次真实编辑写回 v2（无迁移脚本）。
+- **v2（261102 T1：图片页）**：`version=2`（读 1|2、写 2）；每页可选 `backgroundImage`（必须是本笔记空间 canonical 本地资产 URL，末段磁盘名参与资产声明 / GC；`fit` contain|cover|stretch、`opacity`、`pixelWidth/Height`、`source` image|pdf-page、`pdf` {url,page,pageCount}），整篇可选 `sourcePdf` {url,pageCount}。**纸张底纹始终画在最底层，图片叠在其上**（261103 十五批改正：此前「有图就不画底纹」⇒ 图片页切网格/点阵毫无反应，只能永远白纸）；渲染 = InkPaper + SVG `<image>`（页面逻辑坐标、`pointer-events:none`）；缩略图取资产 `?w=256` 低清档。v1 文档打开不写盘，首次真实编辑写回 v2（无迁移脚本）。
 - **图片导入入口（v2）**：移动端编辑态「全局预览」面板「导入图片」、桌面编辑态工具条「导入图片」；可多选，每张图各成一页（A4 794×1123 + fit contain），上限复用 `MAX_IMAGE_BYTES`(25MiB) / `MAX_IMAGE_PIXELS`(5000 万)；逐文件容错、错误走 `role=alert` 横幅。
-- **PDF 导入（261102 T2）**：编辑态「导入 PDF」（移动端在全局预览面板、桌面在工具条）。原 PDF 先落 note-assets（正文 `sourcePdf` 引用、防孤儿清理）→ 逐页栅格化（桌面用仓内 unpdf 自带 pdf.js，动态懒加载 + `public/vendor/pdfjs/cmaps`；移动端用系统 `PdfRenderer` 原生插件）→ 每页 WebP 走资产通道 → 每页建 `backgroundImage`（`source:'pdf-page'`、`pdf:{url,page,pageCount}`、fit contain）+ `InkPage.width/height` = pt×4/3（A4 793×1123，与桌面同口径；页图 `pixelWidth/Height` 为栅格像素，宽=maxWidth 1600）。产品上限 300 页（超出明示截断、原 PDF 保留），core 1000 页硬上限不变；进度/取消可见，加密/损坏/超 100MiB 给可读错误；当前文档只有 1 页空白 A4 时第一页替换而非追加。
+- **PDF 导入（261102 T2）**：编辑态「导入 PDF」（移动端在全局预览面板、桌面在工具条）。原 PDF 先落 note-assets（正文 `sourcePdf` 引用、防孤儿清理）→ 逐页栅格化（桌面用仓内 unpdf 自带 pdf.js，动态懒加载 + `public/vendor/pdfjs/cmaps`；移动端用系统 `PdfRenderer` 原生插件）→ 每页 WebP 走资产通道 → 每页建 `backgroundImage`（`source:'pdf-page'`、`pdf:{url,page,pageCount}`、fit contain）+ `InkPage.width/height` = pt×4/3（A4 793×1123，与桌面同口径；页图 `pixelWidth/Height` 为栅格像素，宽=maxWidth 1600）。产品上限 **500 页**（261103 十五批由 300 上调：一本 300+ 页的书是常态；超出明示截断、原 PDF 保留），core 1000 页硬上限不变；进度/取消可见，加密/损坏/超 100MiB 给可读错误；当前文档只有 1 页空白 A4 时第一页替换而非追加。
 
 ## 5. 存储与同步
 
@@ -133,8 +134,26 @@ pages/p-<pageId>.json  # 单页笔迹（不可变、内容寻址）
 - **同步**：页对象内容寻址天然去重，改一笔只传那一页 + manifest；复用现有「资产声明差集」思路。
 - **兼容**：沿用 v1→v2→v3 先例 —— **新端写 v4、旧端读到 v4 进只读保护**；不写迁移（按「能否删了重建」原则）。
 
-**立项阈值（任一命中再做）**
-1. 单篇正文 > **4 MiB**；2. 页数 > **50** 且仍在增长；3. `inkToBody` 单次 > **50ms**；4. 打开解析 > **300ms**；5. 真机观察到落笔掉帧或同步慢。
+**实测（261103 十五批：真实 335 页 PDF 书，Chromium 渲染进程，非合成夹具）**
+
+| 指标 | 实测 |
+|---|---|
+| 原 PDF 87.5 MiB / 335 页，全量导入（栅格化 + 上传 43.05 MB WebP，池宽 3 重叠） | **64.5 s**（≈192 ms/页；首事件 295 ms） |
+| 同一篇的开/存（335 页 PDF 页，无批注） | 正文 **114,051 B**，打开解析 **0.6 ms**，序列化 **0.2 ms** |
+| 每页 10 笔 × 30 点（3350 笔 / 10.05 万点） | 正文 **1.67 MiB**，序列化 **7.4 ms**，解析 **7.0 ms** |
+
+⇒ **一本 335 页的书 + 中等密度批注 = 1.67 MiB / 7 ms**。换算口径 ≈ **23 B/点、≈690 B/笔（30 点/笔）**；
+4 MiB ≈ 6,100 笔，而 `MAX_TOTAL_POINTS = 30 万` ⇒ 真实正文上限 ≈ **6.6 MiB**（16 MiB 上限碰不到）。
+页数**不是**成本变量：335 页纯 PDF 页文档正文只有 111 KiB。
+
+**立项阈值（任一命中再做；261103 十五批按实测改口径）**
+1. 单篇正文 > **2 MiB**（≈ 2000 笔）——「每次保存/每次同步要搬多少字节」开始与感知一致；
+2. `inkToBody` 单次 > **16 ms**（一帧）；
+3. 打开解析 > **100 ms**；
+4. 真机观察到落笔掉帧，或同步侧证据（同一篇一天内累计上传正文 > 200 MiB）。
+
+**已删掉的旧阈值「页数 > 50」**：成本 ∝ 字节不 ∝ 页数，真实 300 页文档（正文 111 KiB、打开 0.6 ms）也会触发它 ——
+日志里实测到假警报（`[ink-perf] load 1ms 0.1MiB pages=300 ⚠ pages>50`），已删除。
 
 **观测入口（已落地，默认零行为改变）**
 - `window.__inkPerfStats()` → `{ enabled, samples, thresholds }`：每次 load/save 记录 `{kind, ms, bytes, pages, strokes?, points?}`，环形 40 条；`__inkPerfReset()` 清空。

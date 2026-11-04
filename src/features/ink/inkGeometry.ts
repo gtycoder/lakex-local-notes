@@ -20,12 +20,15 @@ function usesRealPressure(stroke: InkStroke): boolean {
 export function strokeToSvgPath(stroke: InkStroke, last: boolean): string {
   if (stroke.points.length === 0) return "";
   const input = stroke.points.map((point) => [point.x, point.y, point.pressure] as [number, number, number]);
+  // 高亮笔是**宽面马克笔**：等宽、不随压力/速度收锋（thinning 0）；
+  // 普通笔跟着压感变粗细（thinning .55）。两种工具共用一条渲染路径，只在这里分参数。
+  const highlighter = stroke.tool === "highlighter";
   const outline = getStroke(input, {
     size: stroke.width,
-    thinning: 0.55,
+    thinning: highlighter ? 0 : 0.55,
     smoothing: 0.55,
     streamline: 0.5,
-    simulatePressure: !usesRealPressure(stroke),
+    simulatePressure: highlighter ? false : !usesRealPressure(stroke),
     last,
   });
   return outlineToSvgPath(outline);

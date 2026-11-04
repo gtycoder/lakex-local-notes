@@ -34,12 +34,13 @@ describe("桌面 PDF 栅格化（pdfRasterDesktop）静态契约", () => {
     expect(RASTER).toContain("useSystemFonts: true");
   });
 
-  it("PNG → WebP(0.8) 且默认渲染宽 1600、最多 300 页", () => {
+  it("PNG → WebP(0.8) 且默认渲染宽 1600、最多 500 页（上限取 pdfImport 的单一来源）", () => {
     expect(RASTER).toContain("WEBP_QUALITY = 0.8");
     expect(RASTER).toContain('canvas.toBlob(resolve, "image/webp", WEBP_QUALITY)');
     expect(RASTER).toContain("DEFAULT_MAX_WIDTH = 1600");
     expect(RASTER).toContain("width: maxWidth");
-    expect(RASTER).toContain("Math.min(pageCount, Math.max(1, Math.floor(options.maxPages ?? 300)))");
+    expect(RASTER).toContain("Math.min(pageCount, Math.max(1, Math.floor(options.maxPages ?? INK_PDF_MAX_PAGES)))");
+    expect(RASTER).toContain('import { INK_PDF_MAX_PAGES } from "./pdfImport.js"');
     // 页逻辑尺寸 = pt × 4/3
     expect(RASTER).toContain("CSS_PX_PER_PT = 4 / 3");
     expect(RASTER).toContain("viewport.width * CSS_PX_PER_PT");

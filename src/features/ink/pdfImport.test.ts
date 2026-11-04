@@ -35,7 +35,7 @@ interface DepsOptions {
 
 function makeDeps(options: DepsOptions = {}) {
   const pageCount = options.pageCount ?? 2;
-  const pages = options.pages ?? Array.from({ length: Math.min(pageCount, 300) }, (_, index) => rasterPage(index + 1));
+  const pages = options.pages ?? Array.from({ length: Math.min(pageCount, INK_PDF_MAX_PAGES) }, (_, index) => rasterPage(index + 1));
   // P7：栅格化按页交付（onPage），编排层边收边上传 —— 与真实适配器同一口径
   const rasterize = vi.fn(async (_input: { bytes: Uint8Array }, rasterOptions: { maxPages: number; onProgress?: (done: number, total: number) => void; onPage?: (page: PdfImportRasterPage) => void }) => {
     if (options.rasterizeError) throw options.rasterizeError;
@@ -82,15 +82,27 @@ describe("importPdfPages", () => {
     expect(deps.uploadPage).toHaveBeenCalledWith(expect.objectContaining({ filename: "pdf-page-1.webp" }));
   });
 
-  it("300 页产品上限：pageCount>300 时只导入前 300 页并标记 truncated", async () => {
-    const { deps, rasterize } = makeDeps({ pageCount: 500, pages: Array.from({ length: 500 }, (_, index) => rasterPage(index + 1)) });
+  it("产品上限（500 页）：pageCount 超上限时只导入前 500 页并标记 truncated", async () => {
+    const total = INK_PDF_MAX_PAGES + 120;
+    const { deps, rasterize } = makeDeps({ pageCount: total, pages: Array.from({ length: total }, (_, index) => rasterPage(index + 1)) });
     const outcome = await importPdfPages(new Uint8Array([1]), deps);
     expect(rasterize).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ maxPages: INK_PDF_MAX_PAGES }));
-    expect(outcome.pageCount).toBe(500);
-    expect(outcome.pages).toHaveLength(300);
-    expect(outcome.importedPageCount).toBe(300);
+    expect(outcome.pageCount).toBe(total);
+    expect(outcome.pages).toHaveLength(INK_PDF_MAX_PAGES);
+    expect(outcome.importedPageCount).toBe(INK_PDF_MAX_PAGES);
     expect(outcome.truncated).toBe(true);
-    expect(outcome.sourcePdf?.pageCount).toBe(500);
+    expect(outcome.sourcePdf?.pageCount).toBe(total);
+  });
+
+  it("进度分母 = 真实总页数（旧实现拿「已入队数」当分母 ⇒ UI 上两个数一起涨，298/298）", async () => {
+    const { deps } = makeDeps({ pageCount: 5 });
+    const progress: Array<{ done: number; total: number; phase?: string }> = [];
+    await importPdfPages(new Uint8Array([1]), deps, { onProgress: (done, total, phase) => progress.push({ done, total, phase }) });
+    const upload = progress.filter((item) => item.phase === "upload");
+    expect(upload.length).toBeGreaterThan(0);
+    // 五页文档：上传阶段每条事件的分母都必须是 5（不是 1、2、3 这些「已入队」值）
+    for (const item of upload) expect(item.total).toBe(5);
+    expect(upload[upload.length - 1].done).toBe(5);
   });
 
   it("取消：不产出任何页；本轮已上传的页图被清理（不留无主页图）", async () => {

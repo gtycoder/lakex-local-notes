@@ -74,7 +74,13 @@ const ZOOM_STEP = 0.25;
 const ZOOM_MIN = 0.5;
 const ZOOM_MAX = 3;
 // 色板单一来源 = inkPalette.ts（261103 三批：6 → 14 色，手机/平板/桌面同一份）
-const WIDTHS = [1.5, 2.5, 4, 6] as const;
+/** 笔宽档位（逻辑 px）。两种工具**不能共用一组**：高亮是宽面马克笔，套 1.5~6 就是一条细线。 */
+const PEN_WIDTHS = [1.5, 2.5, 4, 6] as const;
+const HIGHLIGHTER_WIDTHS = [10, 18, 26, 34] as const;
+
+function widthPresets(mode: InkPadMode): readonly number[] {
+  return mode === "highlighter" ? HIGHLIGHTER_WIDTHS : PEN_WIDTHS;
+}
 const BACKGROUNDS: ReadonlyArray<{ value: InkBackground; label: string }> = [
   { value: "blank", label: "空白" },
   { value: "lined", label: "横线" },
@@ -82,9 +88,38 @@ const BACKGROUNDS: ReadonlyArray<{ value: InkBackground; label: string }> = [
   { value: "dot", label: "点阵" },
 ];
 
-/** 当前笔宽按钮里的视觉点尺寸：上限 20（高亮笔初始宽 18 → ×2 = 36 会撑满 44 盒）。 */
-function widthDotSize(width: number): number {
-  return Math.min(20, Math.max(4, Math.round(width * 2)));
+/**
+ * 笔宽档位里的视觉点直径（44 盒内）。两种工具的量纲差一个数量级，缩放系数也不同：
+ * 笔 ×2（1.5→3 … 6→12），高亮 ×0.8 且封顶 26（10→8 … 34→26）；
+ * 两边都夹在 4~26 内，保证不撑破 44 盒。
+ */
+function widthDotSize(width: number, mode: InkPadMode = "pen"): number {
+  const scale = mode === "highlighter" ? 0.8 : 2;
+  return Math.min(mode === "highlighter" ? 26 : 20, Math.max(4, Math.round(width * scale)));
+}
+
+/**
+ * PDF 导入页：页图铺满整页 ⇒ 纸张底纹永远看不见。
+ * 用户实测：PDF 页上切「横线/网格」画面毫无变化，却把文档标脏并触发保存（tab 上多一个未保存点）——
+ * 无效操作 + 假脏，直接禁掉（不改数据，不写盘）。
+ */
+function isPdfPageBackground(page: InkPage): boolean {
+  const image = page.backgroundImage;
+  if (!image) return false;
+  return image.source === "pdf-page" || image.pdf !== undefined;
+}
+
+/**
+ * 导入进度文案。分母 = 真实要导入的页数（min(总页数, 上限)）；旧实现拿「已入队数」当分母 ⇒ UI 上两个数一起涨（298/298）。
+ * 分子：栅格化阶段看「已渲染页数」，栅格化完成后剩下的就是写入，改看「已写入页数」。
+ * 两阶段跟随的对象不同，切换瞬间最多回退「上传池宽」（3 页）；换来的是尾段读数真实（不会是 300/300 卡住不动）。
+ */
+function pdfProgressText(progress: { raster: number; uploaded: number; total: number } | null): string | null {
+  if (!progress || progress.total <= 0) return null;
+  const { raster, uploaded, total } = progress;
+  const writing = raster >= total;
+  const done = Math.min(total, writing ? uploaded : raster);
+  return (writing ? "正在写入页面：第 " : "正在导入 PDF：第 ") + done + " / " + total + " 页";
 }
 
 /** 背景图片 → SVG preserveAspectRatio（contain 整图可见 / cover 裁切铺满 / stretch 拉伸）。 */
@@ -155,7 +190,7 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
   const docRef = useRef<InkDoc | null>(doc);
   const [mode, setMode] = useState<InkPadMode>("pen");
   const [color, setColor] = useState(INK_DEFAULT_COLOR);
-  const [penWidth, setPenWidth] = useState<number>(WIDTHS[1]);
+  const [penWidth, setPenWidth] = useState<number>(PEN_WIDTHS[1]);
   const [highlighterWidth, setHighlighterWidth] = useState<number>(18);
   const [zoom, setZoom] = useState(1);
   const [pagesOpen, setPagesOpen] = useState(false);
@@ -174,7 +209,8 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
   // v2 图片页导入：进行中标记 + 可见错误（失败/超限要能看见）
   const [importing, setImporting] = useState(false);
   const [pdfImporting, setPdfImporting] = useState(false);
-  const [pdfProgress, setPdfProgress] = useState<{ done: number; total: number; phase: PdfImportPhase } | null>(null);
+  // 导入进度：栅格化与上传重叠跑 ⇒ 两个计数都留着，显示时取较大值 + 真实总页数当分母（见 pdfProgressText）。
+  const [pdfProgress, setPdfProgress] = useState<{ raster: number; uploaded: number; total: number } | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
   /** 261103 十三批：导入完成提示（页数 + 资产体积，说明首次同步要传多少），6s 自动消失。 */
   const [importNotice, setImportNotice] = useState<string | null>(null);
@@ -514,13 +550,21 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
     if (!importer || readOnly || importingRef.current || pdfImportingRef.current) return;
     pdfImportingRef.current = true;
     setPdfImporting(true);
-    setPdfProgress({ done: 0, total: 0, phase: "raster" });
+    setPdfProgress({ raster: 0, uploaded: 0, total: 0 });
     setImportError(null);
     const controller = new AbortController();
     pdfAbortRef.current = controller;
     try {
       const outcome = await importer({
-        onProgress: (done, total, phase) => setPdfProgress({ done, total, phase: phase ?? "raster" }),
+        onProgress: (done, total, phase) => setPdfProgress((previous) => {
+          const base = previous ?? { raster: 0, uploaded: 0, total: 0 };
+          // 分母只认宿主报的总页数（移动端是 PDF 真实页数，桌面已按上限夹过），此处再夹一次上限；
+          // 早到的 0 不会把已拿到的总数冲掉。
+          const nextTotal = total > 0 ? Math.min(total, INK_PDF_MAX_PAGES) : base.total;
+          return phase === "upload"
+            ? { ...base, uploaded: done, total: nextTotal }
+            : { ...base, raster: done, total: nextTotal };
+        }),
         signal: controller.signal,
       });
       if (!outcome) return; // 用户取消选文件
@@ -616,6 +660,8 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
     if (!current || !page || readOnly) return;
     const before = current.pages.find((item) => item.id === page.id);
     if (!before) return;
+    // PDF 页：底纹看不见 ⇒ 切换是无效操作，禁止标脏/写盘（按钮同时置灰）。
+    if (isPdfPageBackground(before)) return;
     const nextPage = { ...before, background };
     commit(replacePage(current, nextPage), inkPagePatch(before, nextPage));
   }, [commit, page, readOnly]);
@@ -825,15 +871,15 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
             />
           ))}
           <span className="ink-toolbar__sep" />
-          {WIDTHS.map((value) => (
+          {widthPresets(mode).map((value) => (
             <button
               key={value}
-              className={["ink-width", (mode === "highlighter" ? highlighterWidth : penWidth) === value ? "is-active" : ""].join(" ")}
+              className={["ink-width", activeWidth === value ? "is-active" : ""].join(" ")}
               onClick={() => mode === "highlighter" ? setHighlighterWidth(value) : setPenWidth(value)}
               aria-label={`笔宽 ${value}`}
               title={`笔宽 ${value}`}
               disabled={readOnly}
-            ><span style={{ width: Math.max(4, value * 2), height: Math.max(4, value * 2) }} /></button>
+            ><span style={{ width: widthDotSize(value, mode), height: widthDotSize(value, mode) }} /></button>
           ))}
           <span className="ink-toolbar__sep" />
           <button className="ink-tool" onClick={undo} aria-label="撤销" title="撤销" disabled={readOnly || !canUndo}><Undo2 size={16} /></button>
@@ -897,13 +943,7 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
       {importNotice && <div className="ink-invalid-banner" role="status" data-ink-notice>{importNotice}</div>}
       {pdfImporting && (
         <div className="ink-invalid-banner" role="status" data-ink-pdf-progress>
-          <span>
-            {pdfProgress && pdfProgress.total > 0
-              ? pdfProgress.phase === "upload"
-                ? `正在写入页面：第 ${pdfProgress.done} / ${pdfProgress.total} 页`
-                : `正在导入 PDF：第 ${pdfProgress.done} / ${pdfProgress.total} 页`
-              : "正在导入 PDF：准备中…"}
-          </span>
+          <span>{pdfProgressText(pdfProgress) ?? "正在导入 PDF：准备中…"}</span>
           <button className="ink-tool" onClick={cancelPdfImport} aria-label="取消 PDF 导入" title="取消 PDF 导入">取消</button>
         </div>
       )}
@@ -958,7 +998,10 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
             onLostPointerCapture={cancelPointer}
             aria-label={`手写板第 ${pageIndex + 1} 页`}
           >
-            {/* v2 图片页：背景图按页面逻辑坐标铺在笔迹层下面；有图时不再叠纸张底纹（图本身就是纸面） */}
+            {/* 纸张底纹永远在最底层：纯矢量页直接可见；图片页在图片未铺满整页时从留白处透出
+                （261103 十五批：此前「有图就不画底纹」⇒ 用户切网格/点阵毫无反应，图片页只能永远是白纸）。 */}
+            <InkPaper width={page.width} height={page.height} background={page.background} />
+            {/* v2 图片页：背景图按页面逻辑坐标铺在笔迹层下面 */}
             {page.backgroundImage ? (
               <image
                 href={page.backgroundImage.url}
@@ -970,9 +1013,7 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
                 opacity={page.backgroundImage.opacity ?? 1}
                 pointerEvents="none"
               />
-            ) : (
-              <InkPaper width={page.width} height={page.height} background={page.background} />
-            )}
+            ) : null}
             <StaticStrokeLayer strokes={renderedStrokes} />
             {activeStroke && activePath && (
               <path
@@ -998,7 +1039,7 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
           <div className="ink-footer__right">
             <div className="ink-backgrounds">
               {BACKGROUNDS.map((item) => (
-                <button key={item.value} className={page.background === item.value ? "is-active" : ""} onClick={() => setBackground(item.value)} disabled={readOnly}>{item.label}</button>
+                <button key={item.value} className={page.background === item.value ? "is-active" : ""} onClick={() => setBackground(item.value)} disabled={readOnly || isPdfPageBackground(page)} title={isPdfPageBackground(page) ? "PDF 页已铺满整页，纸张不可见" : undefined}>{item.label}</button>
               ))}
             </div>
           </div>
@@ -1043,14 +1084,14 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
               aria-label="选择笔宽"
               title="选择笔宽"
               aria-expanded={widthsOpen}
-            ><span style={{ width: widthDotSize(activeWidth), height: widthDotSize(activeWidth) }} /></button>
+            ><span style={{ width: widthDotSize(activeWidth, mode), height: widthDotSize(activeWidth, mode) }} /></button>
             <span className="ink-toolbar__sep" />
             <button className="ink-tool" onClick={undo} aria-label="撤销" title="撤销" disabled={!canUndo}><Undo2 size={18} /></button>
             <button className="ink-tool" onClick={redo} aria-label="重做" title="重做" disabled={!canRedo}><Redo2 size={18} /></button>
           </div>
           <div className="ink-backgrounds" role="group" aria-label="纸张">
             {BACKGROUNDS.map((item) => (
-              <button key={item.value} className={page.background === item.value ? "is-active" : ""} onClick={() => setBackground(item.value)}>{item.label}</button>
+              <button key={item.value} className={page.background === item.value ? "is-active" : ""} onClick={() => setBackground(item.value)} disabled={isPdfPageBackground(page)}>{item.label}</button>
             ))}
           </div>
           {paletteOpen && (
@@ -1068,14 +1109,14 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
           )}
           {widthsOpen && (
             <div role="group" aria-label="选择笔宽" data-overlay="widths">
-              {WIDTHS.map((value) => (
+              {widthPresets(mode).map((value) => (
                 <button
                   key={value}
                   className={["ink-width", activeWidth === value ? "is-active" : ""].join(" ")}
                   onClick={() => { if (mode === "highlighter") setHighlighterWidth(value); else setPenWidth(value); setWidthsOpen(false); }}
                   aria-label={`笔宽 ${value}`}
                   title={`笔宽 ${value}`}
-                ><span style={{ width: widthDotSize(value), height: widthDotSize(value) }} /></button>
+                ><span style={{ width: widthDotSize(value, mode), height: widthDotSize(value, mode) }} /></button>
               ))}
             </div>
           )}

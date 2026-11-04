@@ -369,7 +369,7 @@ describe("手写板正式端到端接线", () => {
   });
 
   it("PDF 导入编排：300 页上限、pdf-page 背景图、sourcePdf、替换空白首页、进度/取消", () => {
-    expect(PDF_IMPORT).toContain("export const INK_PDF_MAX_PAGES = 300");
+    expect(PDF_IMPORT).toContain("export const INK_PDF_MAX_PAGES = 500");
     expect(PDF_IMPORT).toContain("source: \"pdf-page\"");
     expect(PDF_IMPORT).toContain("pdf: { page: item.page }");
     expect(PDF_IMPORT).toContain("sourcePdf: { ...(options.fileName ? { name: options.fileName } : {}), pageCount }");

@@ -151,9 +151,9 @@ describe("sharedPdfImportToast（一句话说清 成功 / 截断 / 部分失败�
     expect(sharedPdfImportToast(base)).toBe("已导入 5 页 PDF");
   });
 
-  it("截断：PDF 共 M 页，仅导入前 N 页（上限 300 页）", () => {
-    expect(sharedPdfImportToast({ pageCount: 320, importedPageCount: 300, truncated: true, errors: [] }))
-      .toBe("PDF 共 320 页，仅导入前 300 页（上限 300 页）");
+  it("截断：PDF 共 M 页，仅导入前 N 页（上限 500 页）", () => {
+    expect(sharedPdfImportToast({ pageCount: 620, importedPageCount: 500, truncated: true, errors: [] }))
+      .toBe("PDF 共 620 页，仅导入前 500 页（上限 500 页）");
   });
 
   it("部分页失败：N 页导入成功，K 页失败（第一页失败原因：…）", () => {
@@ -171,7 +171,7 @@ describe("sharedPdfImportToast（一句话说清 成功 / 截断 / 部分失败�
       importedPageCount: 300,
       truncated: true,
       errors: ["第 2 页：上传失败"],
-    })).toBe("PDF 共 320 页，仅导入前 300 页（上限 300 页）；300 页导入成功，1 页失败（第一页失败原因：上传失败）");
+    })).toBe("PDF 共 320 页，仅导入前 300 页（上限 500 页）；300 页导入成功，1 页失败（第一页失败原因：上传失败）");
     // 一句话：不含换行 / 不弹多条
     expect(sharedPdfImportToast({ pageCount: 320, importedPageCount: 300, truncated: true, errors: ["x"] })).not.toContain("\n");
   });

@@ -12,7 +12,10 @@
  *   → 每样本一行 [ink-perf] save 26.7ms 11.4MiB pages=300，超过阈值打 warn。
  *
  * 阈值（判断 v4 是否值得立项，见 docs/INK-PAD.md 的 v4 提案）：
- *   · 正文字节 > 4 MiB，或页数 > 50，或单次序列化 > 50ms，或单次解析 > 300ms。
+ *   · 正文 > 2 MiB，或单次序列化 > 16ms（一帧），或单次解析 > 100ms。
+ *
+ * 261103 十五批改口径（真实 335 页 PDF 书实测后）：**删掉「页数 > 50」**——成本 ∝ 字节，不 ∝ 页数；
+ * 该条在真实 300 页、正文仅 111 KiB、打开 0.6ms 的文档上照样打 warn（假警报）。
  */
 export interface InkPerfSample {
   kind: "load" | "save";
@@ -26,10 +29,11 @@ export interface InkPerfSample {
   at: number;
 }
 
-export const INK_PERF_WARN_BYTES = 4 * 1024 * 1024;
-export const INK_PERF_WARN_PAGES = 50;
-export const INK_PERF_WARN_SERIALIZE_MS = 50;
-export const INK_PERF_WARN_PARSE_MS = 300;
+/** 2 MiB ≈ 6 万点 ≈ 2000 笔；真实 335 页书 + 每页 10 笔批注只有 1.67 MiB（7ms），留出 20% 余量。 */
+export const INK_PERF_WARN_BYTES = 2 * 1024 * 1024;
+/** 一帧（16ms）：超过它就意味着保存会掉帧，而不是「可以慢慢付」。 */
+export const INK_PERF_WARN_SERIALIZE_MS = 16;
+export const INK_PERF_WARN_PARSE_MS = 100;
 
 const STORAGE_KEY = "lakex-local-notes-v3.ink-perf-debug";
 const MAX_SAMPLES = 40;
@@ -54,10 +58,9 @@ function formatMiB(bytes: number): string {
 /** 阈值判据（纯函数，便于单测）：返回触发的阈值名列表。 */
 export function inkPerfThresholdHits(sample: Pick<InkPerfSample, "kind" | "ms" | "bytes" | "pages">): string[] {
   const hits: string[] = [];
-  if (sample.bytes > INK_PERF_WARN_BYTES) hits.push("bytes>4MiB");
-  if (sample.pages > INK_PERF_WARN_PAGES) hits.push("pages>50");
-  if (sample.kind === "save" && sample.ms > INK_PERF_WARN_SERIALIZE_MS) hits.push("serialize>50ms");
-  if (sample.kind === "load" && sample.ms > INK_PERF_WARN_PARSE_MS) hits.push("parse>300ms");
+  if (sample.bytes > INK_PERF_WARN_BYTES) hits.push("bytes>2MiB");
+  if (sample.kind === "save" && sample.ms > INK_PERF_WARN_SERIALIZE_MS) hits.push("serialize>16ms");
+  if (sample.kind === "load" && sample.ms > INK_PERF_WARN_PARSE_MS) hits.push("parse>100ms");
   return hits;
 }
 
@@ -81,7 +84,6 @@ export function inkPerfStats(): { enabled: boolean; samples: InkPerfSample[]; th
     samples: samples.slice(),
     thresholds: {
       bytes: INK_PERF_WARN_BYTES,
-      pages: INK_PERF_WARN_PAGES,
       serializeMs: INK_PERF_WARN_SERIALIZE_MS,
       parseMs: INK_PERF_WARN_PARSE_MS,
     },

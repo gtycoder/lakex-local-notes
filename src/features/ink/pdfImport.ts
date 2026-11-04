@@ -24,8 +24,8 @@ import type { InkPatch } from "./history.js";
 import { inkOrderDelta, inkPageDelta } from "./history.js";
 import { newInkId } from "./ids.js";
 
-/** 产品上限：一份 PDF 最多导入 300 页（core 的 1000 页硬上限不变）。 */
-export const INK_PDF_MAX_PAGES = 300;
+/** 产品上限：一份 PDF 最多导入 500 页（core 的 1000 页硬上限不变；一本 300+ 页的书是常态）。 */
+export const INK_PDF_MAX_PAGES = 500;
 /** 上传池宽度（P7）：栅格化每产出一页就入队上传，与后续页的栅格化重叠；3 路在手机上也不会打爆桥/内存。 */
 export const PDF_IMPORT_UPLOAD_CONCURRENCY = 3;
 
@@ -79,7 +79,7 @@ export interface PdfImportDeps {
 
 export interface PdfImportOptions {
   fileName?: string;
-  /** 产品截断上限（默认 300，硬夹到 1..300）。 */
+  /** 产品截断上限（默认 500，硬夹到 1..500）。 */
   maxPages?: number;
   /** 进度：phase = raster（第 n/N 页渲染）/ upload（第 n 页写入资产）。 */
   onProgress?: (done: number, total: number, phase: PdfImportPhase) => void;
@@ -147,6 +147,8 @@ export async function importPdfPages(
   let uploadedBytes = 0;
   let maxPageSeen = 0;
   let aborted = false;
+  /** 栅格化报上来的总页数（含被上限截断的部分）⇒ 上传阶段的分母必须是它，不能是「已入队数」。 */
+  let expectedTotal = 0;
 
   const ensureSlot = (page: number): void => {
     while (slots.length < page) slots.push(null);
@@ -201,7 +203,9 @@ export async function importPdfPages(
         backgroundImage: image,
       };
       // 取消后仍在途的上传要跑完（拿到 URL 才能在取消路径删掉它们）
-      options.onProgress?.(uploaded, Math.max(enqueued, uploaded), "upload");
+      // 分母必须是「真实要导入的页数」（min(总页数, 上限)）；旧实现拿「已入队数」当分母 ⇒ UI 上两个数一起涨（298/298）。
+      const total = expectedTotal > 0 ? Math.min(expectedTotal, maxPages) : Math.max(enqueued, uploaded);
+      options.onProgress?.(uploaded, Math.max(total, uploaded), "upload");
     } catch (reason) {
       errors.push(`第 ${item.page} 页：${errorText(reason)}`);
     }
@@ -255,7 +259,11 @@ export async function importPdfPages(
       { bytes },
       {
         maxPages,
-        onProgress: (done, total) => options.onProgress?.(done, total, "raster"),
+        onProgress: (done, total) => {
+          // 记下总页数供上传阶段当分母；移动端原生报的是 PDF 真实页数（可能大于上限），这里统一夹到上限。
+          if (total > 0) expectedTotal = Math.max(expectedTotal, Math.floor(total));
+          options.onProgress?.(done, total > 0 ? Math.min(total, maxPages) : total, "raster");
+        },
         signal: options.signal,
         onPage: enqueue,
       },

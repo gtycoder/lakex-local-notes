@@ -182,12 +182,13 @@ describe("PDF 导入进度 / 取消 / 错误", () => {
     await view.unmount();
   });
 
-  it("P7 上传阶段进度：文案切到「正在写入页面」（与栅格化阶段区分）", async () => {
+  it("P7 上传阶段进度：栅格化结束后文案切到「正在写入页面」，分母始终是真实总页数", async () => {
     const onImportPdf = vi.fn(({ onProgress }: {
       onProgress: (done: number, total: number, phase?: "raster" | "upload") => void;
       signal: AbortSignal;
     }) => new Promise<PdfImportOutcome>((resolve) => {
-      onProgress(1, 2, "upload");
+      onProgress(2, 2, "raster"); // 栅格化完成 ...
+      onProgress(1, 2, "upload"); // ... 但只写入了 1 页
       setTimeout(() => resolve(outcome([pdfPage(1)], { pageCount: 2 })), 40);
     }));
     const view = await mount({ content: inkToBody(createInkDoc("p1")), variant: "mobile", readOnly: false, onImportPdf });
@@ -202,7 +203,7 @@ describe("PDF 导入进度 / 取消 / 错误", () => {
     const view = await mount({ content: inkToBody(createInkDoc("p1")), variant: "mobile", readOnly: false, onImportPdf });
     await importPdfFromInsert(view.container);
     const alert = view.container.querySelector('[role="alert"]');
-    expect(alert!.textContent).toContain("上限 300 页");
+    expect(alert!.textContent).toContain("上限 500 页");
     await view.unmount();
   });
 

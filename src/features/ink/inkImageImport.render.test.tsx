@@ -21,11 +21,11 @@ import { inkImagePage } from "./inkImageImport";
 
 const IMAGE_URL = localAssetHttpUrl("note-1", "1700000000000_abcdef12.png");
 
-function imageBody(fit: InkBackgroundImage["fit"] = "contain"): string {
+function imageBody(fit: InkBackgroundImage["fit"] = "contain", source?: InkBackgroundImage["source"]): string {
   const doc = createInkDoc("p1");
   doc.pages[0] = {
     ...doc.pages[0],
-    backgroundImage: { url: IMAGE_URL, fit, pixelWidth: 1200, pixelHeight: 1600 },
+    backgroundImage: { url: IMAGE_URL, fit, pixelWidth: 1200, pixelHeight: 1600, ...(source ? { source } : {}) },
   };
   return inkToBody(doc);
 }
@@ -74,8 +74,8 @@ beforeAll(() => {
 });
 
 describe("图片页渲染", () => {
-  it("有背景图：SVG 内渲染 <image>（pointer-events:none、contain=meet），且不叠纸张底纹", async () => {
-    const view = await mount({ content: imageBody("contain"), variant: "mobile", readOnly: true });
+  it("有背景图：SVG 内渲染 <image>（pointer-events:none、contain=meet），纸张底纹在图片下面", async () => {
+    const view = await mount({ content: imageBody("contain", "image"), variant: "mobile", readOnly: true });
     const svg = view.container.querySelector(".ink-page-svg")!;
     const image = svg.querySelector("image");
     expect(image).not.toBeNull();
@@ -84,9 +84,24 @@ describe("图片页渲染", () => {
     expect(image!.getAttribute("preserveAspectRatio")).toBe("xMidYMid meet");
     expect(image!.getAttribute("width")).toBe("794");
     expect(image!.getAttribute("height")).toBe("1123");
-    // 图片即纸面：不再画 InkPaper（无 rect / pattern）
-    expect(svg.querySelector("rect")).toBeNull();
-    expect(svg.querySelector("pattern")).toBeNull();
+    // 261103 十五批：纸张底纹**始终**画，且必须在图片**之前**（图片未铺满时留白处要能看到网格/点阵；
+    // 此前「有图就不画底纹」⇒ 用户切网格/点阵完全没反应，图片页永远白纸）
+    const rect = svg.querySelector("rect");
+    expect(rect).not.toBeNull();
+    expect(rect!.compareDocumentPosition(image!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await view.unmount();
+  });
+
+  it("PDF 导入页（source=pdf-page）：纸张切换禁用，点了也不标脏（页图铺满整页，切了看不见）", async () => {
+    const onDirty = vi.fn();
+    const onChange = vi.fn();
+    const view = await mount({ content: imageBody("contain", "pdf-page"), variant: "mobile", readOnly: false, onDirty, onChange });
+    const papers = Array.from(view.container.querySelectorAll(".ink-backgrounds button")) as HTMLButtonElement[];
+    expect(papers.length).toBeGreaterThan(0);
+    for (const button of papers) expect(button.disabled).toBe(true);
+    await act(async () => { papers[2].click(); });
+    expect(onDirty).not.toHaveBeenCalled();
+    expect(onChange).not.toHaveBeenCalled();
     await view.unmount();
   });
 
