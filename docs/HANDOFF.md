@@ -8,6 +8,12 @@
 
 ## 0. 最新交接（261027）
 
+### 261104 · 二十二批：工具条重排（贴图上移 / 背景导入下沉）+ 修「贴图插入后点不中、不能再次编辑」· **本地改动**
+- **排布（用户定稿）**：顶部工具条 = 画笔类 + 颜色/笔宽 + 撤销重做 + **贴图**（`Sticker` 图标，aria-label 仍是「插入贴图」）+ 缩放；底栏 = 页码/新建页/页面管理 + 大纲 + 导出 + 纸张 + **背景来源**（「背景图」「背景 PDF」文字按钮，排在纸张之后）。独立组件 `InkBackgroundSourceButtons.tsx`（跨端样式护栏只扫 SHARED 名单）。
+- **真 bug**：内联 `<image>` 带着从背景图抄来的 `pointer-events:none` ⇒ 插入后一旦取消选中就再也点不到，用户报「贴图之后就不能移动、确定之后无法编辑」。已去掉该属性；实测 `document.elementFromPoint` 在贴图中心返回 `<image data-page-image>`，合成 pointerdown 能选中并出现手柄。
+  · 顺手把两处 `setPointerCapture` 包 try/catch：合成事件里没有活动指针会抛 NotFoundError（虽然不影响选中，但控制台会响）。
+  · 注：本机 CDP 的 `Input.dispatchMouseEvent` 目前打不进 Electron 窗口（连空白处画线都不产生 path）⇒ 真实鼠标/触摸验收由用户手测，自动化只用合成事件 + elementFromPoint 断言。
+- **门禁**：tsc / vitest / cssLayers（desktop 120→138）/ mobileui / diff-check。
 ### 261104 · 二十一批续：贴图缩放手柄（下一批：文字块）· **本地改动**
 - **缩放手柄**：选中贴图右下角出现手柄（`InkImageResizeHandle`，HTML 浮层 `cursor:nwse-resize`），拖动 = 保持宽高比、锚点左上角、最小边 24（复用 `resizePageImage`）；拖动期间只改内存，**松手才 commit 一次**；`pointercancel` 还原。
 - **为什么用 window 监听而不是 setPointerCapture**：捕获会把事件重定向到句柄、连带改变后续 click 语义（AGENTS §7.20），且句柄是 HTML 浮层不需要捕获。

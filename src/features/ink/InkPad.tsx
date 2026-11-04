@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import type { EditorCaptureHandler } from "../../core/editorCapture";
-import { ChevronLeft, ChevronRight, Eraser, FileText, Highlighter, ImagePlus, LayoutGrid, Minus, Pen, Plus, Redo2, SquarePlus, Undo2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Eraser, FileText, Highlighter, ImagePlus, LayoutGrid, Minus, Pen, Plus, Redo2, SquarePlus, Sticker, Undo2 } from "lucide-react";
 import { INK_DEFAULT_COLOR, INK_STROKE_COLORS } from "./inkPalette.js";
 import {
   createInkPage,
@@ -23,6 +23,7 @@ import { InkOutlinePanel } from "./InkOutlinePanel.js";
 import { notedPageIds } from "./inkOutline.js";
 import { INK_IMAGE_MIN_EDGE, movePageImage, placeInkPageImage, removePageImage, resizePageImage } from "./inkPageImages.js";
 import { InkImageRemoveButton, InkImageResizeHandle, InkImageSelectionRect } from "./InkImageSelection.js";
+import { InkBackgroundSourceButtons } from "./InkBackgroundSourceButtons.js";
 import { inkPerfDebugEnabled, installInkPerfHooks, recordInkPerf } from "./inkPerfStats";
 import { inkImageImportNotice, inkPdfImportNotice } from "./inkImportNotice";
 import { installInkInputDiagnostics, installPointerInputDebugHooks } from "../board/boardInputDiagnostics";
@@ -924,7 +925,7 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
       setSelectedImageId(imageId);
       imageDragRef.current = { id: imageId, startX: startPoint.x, startY: startPoint.y, before: page.images };
       activePointerRef.current = { id: event.pointerId, type: event.pointerType };
-      event.currentTarget.setPointerCapture?.(event.pointerId);
+      try { event.currentTarget.setPointerCapture?.(event.pointerId); } catch { /* 合成事件/无活动指针：捕获失败不影响选中与拖动 */ }
       return;
     }
     // 画线前清掉贴图选中（点空白 = 取消选中）
@@ -933,7 +934,7 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
     // 从此画不上（用户报的「偶发不生效」）。这里先把残留那笔收口（能提交就提交），再开始新的一笔。
     if (activePointerRef.current) finalizeInterruptedRef.current("missing-pointerup");
     activePointerRef.current = { id: event.pointerId, type: event.pointerType };
-    event.currentTarget.setPointerCapture?.(event.pointerId);
+    try { event.currentTarget.setPointerCapture?.(event.pointerId); } catch { /* 合成事件/无活动指针：退化为不捕获 */ }
     const point = pointFromClient(event.clientX, event.clientY, event.pointerType, event.pressure, event.currentTarget.getBoundingClientRect(), page);
     lastPointRef.current = point;
     if (mode === "eraser") {
@@ -1167,15 +1168,16 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
           <span className="ink-toolbar__sep" />
           <button className="ink-tool" onClick={undo} aria-label="撤销" title="撤销" disabled={readOnly || !canUndo}><Undo2 size={16} /></button>
           <button className="ink-tool" onClick={redo} aria-label="重做" title="重做" disabled={readOnly || !canRedo}><Redo2 size={16} /></button>
-          {(onImportImages || onImportPdf) && (
+          {onInsertPageImage && (
             <>
               <span className="ink-toolbar__sep" />
-              {onImportImages && (
-                <button className="ink-tool" onClick={() => void importImages()} aria-label="导入图片" title="导入图片" disabled={readOnly || importing || pdfImporting}><ImagePlus size={16} /></button>
-              )}
-              {onImportPdf && (
-                <button className="ink-tool" onClick={() => void importPdf()} aria-label="导入 PDF" title="导入 PDF" disabled={readOnly || importing || pdfImporting}><FileText size={16} /></button>
-              )}
+              <button
+                className="ink-tool"
+                onClick={() => void insertPageImage()}
+                disabled={readOnly}
+                aria-label="插入贴图"
+                title="插入贴图（贴在当前页上，可拖动/缩放）"
+              ><Sticker size={16} /></button>
             </>
           )}
           {variant === "desktop" && (
@@ -1312,7 +1314,6 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
                 transform={image.rotation
                   ? `rotate(${image.rotation} ${image.x + image.width / 2} ${image.y + image.height / 2})`
                   : undefined}
-                pointerEvents="none"
               />
             ))}
             {/* 选中贴图：虚线框（pointer-events:none，不挡画线；点图本身负责选中） */}
@@ -1357,15 +1358,6 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
             <button onClick={() => { setPagesOpen((open) => !open); setPendingDeletePageId(null); }} aria-label="页面管理" title="页面管理"><LayoutGrid size={16} /></button>
           </div>
           <div className="ink-footer__right">
-            {onInsertPageImage && (
-              <button
-                className="ink-tool"
-                onClick={() => void insertPageImage()}
-                disabled={readOnly}
-                aria-label="插入贴图"
-                title="插入贴图（页宽 40%、居中，可拖动）"
-              ><ImagePlus size={16} /></button>
-            )}
             {/* 大纲 / 页备注（桌面专用控件；移动端本轮没有入口） */}
             <InkOutlinePanel
               open={outlineOpen}
@@ -1388,6 +1380,12 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
                 <button key={item.value} className={page.background === item.value ? "is-active" : ""} onClick={() => setBackground(item.value)} disabled={readOnly || isPdfPageBackground(page)} title={isPdfPageBackground(page) ? "PDF 页已铺满整页，纸张不可见" : undefined}>{item.label}</button>
               ))}
             </div>
+            {/* 背景来源：导入图片/PDF 都是「给本页加背景」，排在纸张后面（用户 261104 定稿） */}
+            <InkBackgroundSourceButtons
+              disabled={readOnly || importing || pdfImporting}
+              onImportImages={onImportImages ? () => void importImages() : undefined}
+              onImportPdf={onImportPdf ? () => void importPdf() : undefined}
+            />
           </div>
         </div>
       ) : !readOnly ? (

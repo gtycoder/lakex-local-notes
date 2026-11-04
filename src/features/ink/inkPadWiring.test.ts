@@ -284,14 +284,15 @@ describe("手写板正式端到端接线", () => {
     expect(PAGE_STRIP).toContain("onClick={() => onSelect(page.id)}");
   });
 
-  it("桌面结构：只新增「导入图片 / 导入 PDF」入口，顶部工具条 + 底部页码/纸张/缩放逐字不变", () => {
+  it("桌面结构：贴图在顶部工具条，背景导入在底栏纸张之后；页码/纸张/缩放逐字不变", () => {
     const branch = desktopBranch();
-    // v2 图片/PDF 页入口（桌面新增）：工具条里、编辑态可用
-    expect(branch).toContain('aria-label="导入图片"');
-    expect(branch).toContain('aria-label="导入 PDF"');
-    expect(branch).toContain("disabled={readOnly || importing || pdfImporting}");
-    expect(branch).toContain("onClick={() => void importImages()}");
-    expect(branch).toContain("onClick={() => void importPdf()}");
+    // 261104 二十二批（用户定稿）：导入图片/PDF = 「加背景」⇒ 底栏纸张之后，用文字说明
+    expect(branch).toContain("<InkBackgroundSourceButtons");
+    expect(branch).toContain("onImportImages={onImportImages ? () => void importImages() : undefined}");
+    expect(branch).toContain("onImportPdf={onImportPdf ? () => void importPdf() : undefined}");
+    // 贴图在顶部工具条（和画笔一起），按钮文案/图标与背景导入区分开
+    expect(branch).toContain('aria-label="插入贴图"');
+    expect(branch).toContain("<Sticker");
     expect(branch).toContain('role="toolbar" aria-label="手写工具"');
     expect(branch).toContain('aria-label="画笔"');
     expect(branch).toContain('aria-label="高亮笔"');
@@ -306,6 +307,8 @@ describe("手写板正式端到端接线", () => {
     expect(branch).toContain('aria-label="新建页"');
     expect(branch).toContain('aria-label="页面管理"');
     expect(branch).toContain('className="ink-footer__right"');
+    // 背景来源排在纸张按钮之后（顺序即语义：先选纸张，再用图片/PDF 当背景）
+    expect(branch.indexOf("ink-backgrounds") < branch.indexOf("<InkBackgroundSourceButtons")).toBe(true);
     // 261104 十七批：单页导出入口 = **一个**按钮 + 悬浮格式菜单（用户明确不要三个按钮）。
     // 菜单本体在桌面专用组件 InkExportMenu（跨端样式护栏要求共享组件类名两端都有样式 ⇒ 桌面专属控件不进 InkPad）。
     expect(branch).toContain("<InkExportMenu");

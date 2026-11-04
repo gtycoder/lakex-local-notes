@@ -130,3 +130,19 @@
 .ink-pad--desktop .ink-outline__meta { display: inline-flex; align-items: center; gap: 3px; color: var(--lake-text-3); }
 .ink-pad--desktop .ink-outline__label { margin-left: auto; color: var(--lake-text-3); }
 .ink-pad--desktop .ink-outline__empty { margin: 8px; color: var(--lake-text-3); font-size: var(--lake-font-size-small); }
+
+/* 底栏「背景来源」：导入图片 / 导入 PDF 都是给本页加背景，排在纸张后面，用文字说明是背景 */
+.ink-pad--desktop .ink-bg-source { display: inline-flex; align-items: center; gap: 2px; margin-left: 4px; padding-left: 8px; border-left: 1px solid var(--lake-border-1); }
+.ink-pad--desktop .ink-bg-source button {
+  min-width: 46px;
+  height: 27px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: var(--lake-radius-sm);
+  background: transparent;
+  color: var(--lake-text-2);
+  font-size: var(--lake-font-size-small);
+  cursor: pointer;
+}
+.ink-pad--desktop .ink-bg-source button:hover:not(:disabled) { background: var(--lake-bg-hover); }
+.ink-pad--desktop .ink-bg-source button:disabled { opacity: 0.5; cursor: default; }
