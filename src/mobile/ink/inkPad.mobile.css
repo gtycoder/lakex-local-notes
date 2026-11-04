@@ -13,7 +13,8 @@
 .ink-pad--mobile .ink-backgrounds button,
 .ink-pad--mobile .ink-zoom button { min-width: var(--mb-tap-min); height: var(--mb-tap-min); padding: 0 7px; }
 .ink-pad--mobile .ink-toolbar__sep { height: 20px; margin: 0 2px; }
-.ink-pad--mobile .ink-pages span { font-size: var(--lake-font-size-micro); }
+/* 移动端页码改用紧凑写法（n / N），并把共享的 72px 最小宽归零：给「页签」入口腾位置，否则胶囊塞不下第四组 */
+.ink-pad--mobile .ink-pages span { font-size: var(--lake-font-size-micro); min-width: 0; }
 .ink-pad--mobile .ink-backgrounds button { font-size: var(--lake-font-size-micro); }
 
 /* 悬浮面共用：绝对定位（不占布局）+ 面板底 + 0.5px 边 + popover 阴影。 */
@@ -74,6 +75,11 @@
 .ink-pad--mobile .ink-color.is-active { border: 0; box-shadow: none; }
 .ink-pad--mobile .ink-color.is-active > span { box-shadow: 0 0 0 var(--lake-focus-ring-width) var(--lake-accent); }
 
+/* 页面尺寸只由 InkPad 的 fitSize 决定（宽高同比例）。**不要给 .ink-page-frame 写 max-height**：
+   键盘弹起时把高度夹小 ⇒ SVG preserveAspectRatio 变成 letterbox ⇒ 页面内容缩到 ~55%，
+   而文字编辑框/控制条按 frame 宽定位 ⇒ 两者错位（261104 二十五批实测）。编辑期间 width 已冻结，
+   超出可视区由 .ink-page-stage 自己滚动。 */
+
 /* 纸面在「悬浮导航—悬浮工具坞」之间的**可视区**居中：画布上下补出与悬浮条等高的内距，
    否则页面按整屏居中、空白全被顶部吃掉（用户 261102 报的上下空白不均）。 */
 .ink-pad--mobile .ink-page-stage {
@@ -83,7 +89,7 @@
 .ink-pad--mobile:not([data-readonly="true"]) .ink-page-stage {
   padding-bottom: calc(var(--lake-space-md) * 2 + var(--ink-mobile-dock-h));
 }
-.ink-pad--mobile .ink-page-frame { width: min(100%, calc((100dvh - 202px) * 0.707)); max-height: 100%; aspect-ratio: 794 / 1123; }
+.ink-pad--mobile .ink-page-frame { width: min(100%, calc((100dvh - 202px) * 0.707)); aspect-ratio: 794 / 1123; }
 /* 保存失败横幅也被悬浮导航条压着 ⇒ 下移一条导航的高度（只在移动端）。 */
 .ink-pad--mobile > .ink-invalid-banner { margin-top: calc(var(--mb-tap-min) + var(--lake-space-xl)); }
 /* 色板/笔宽/插入小面板：悬浮在工具坞上方 8（不占布局），与工具坞同套卡面；一行铺开。 */
@@ -107,7 +113,7 @@
   overflow-x: auto;
 }
 .ink-pad--mobile > [data-overlay="dock"] [data-overlay="widths"] { gap: var(--lake-space-sm); overflow-x: visible; }
-/* 「插入」菜单：纵向两项（导入图片 / 导入 PDF），行高 44、图标+文字左对齐。 */
+/* 「插入」菜单：纵向两项（文字 / 贴图），行高 44、图标+文字左对齐。 */
 .ink-pad--mobile > [data-overlay="dock"] [data-overlay="insert"] {
   flex-direction: column; align-items: stretch; justify-content: flex-start;
   gap: var(--lake-space-xxs); padding: var(--lake-space-xs); overflow-x: visible;
@@ -149,3 +155,63 @@
 .ink-pad--mobile > [data-ink-pdf-progress] .ink-tool {
   min-width: auto; padding: 0 var(--lake-space-lg);
 }
+
+/* ---- 261104 二十五批 ----
+   背景来源（背景图片 / 背景 PDF）与纸张同一行：视觉 36 的文字按钮，命中区靠 ::after 补到 44。 */
+.ink-pad--mobile > [data-overlay="dock"] .ink-backgrounds .ink-bg-source {
+  display: inline-flex; align-items: center; gap: var(--lake-space-xxs);
+  margin-left: var(--lake-space-xxs); padding-left: var(--lake-space-sm);
+  border-left: 0.5px solid var(--lake-border-1);
+}
+.ink-pad--mobile > [data-overlay="dock"] .ink-backgrounds .ink-bg-source button {
+  height: calc(var(--mb-tap-min) - var(--lake-space-md));
+  padding: 0 var(--lake-space-sm);
+  position: relative;
+  border: 0; background: transparent;
+  color: var(--lake-text-2); font-size: var(--lake-font-size-micro);
+}
+.ink-pad--mobile > [data-overlay="dock"] .ink-backgrounds .ink-bg-source button::after {
+  content: ""; position: absolute; left: 0; right: 0;
+  top: calc(var(--lake-space-xs) * -1); bottom: calc(var(--lake-space-xs) * -1);
+}
+.ink-pad--mobile > [data-overlay="dock"] .ink-backgrounds .ink-bg-source button:active { background: var(--lake-bg-hover); }
+
+/* v4 文字块/贴图的浮层控件：结构与颜色共享，移动端只抬命中盒（视觉不放大）。 */
+.ink-pad--mobile .ink-text-size,
+.ink-pad--mobile .ink-text-remove { min-width: var(--mb-tap-min); height: var(--mb-tap-min); font-size: var(--lake-font-size-tiny); }
+.ink-pad--mobile .ink-image-remove {
+  width: var(--mb-tap-min); height: var(--mb-tap-min);
+  line-height: calc(var(--mb-tap-min) - 2px);
+  font-size: var(--lake-font-size-small);
+}
+.ink-pad--mobile .ink-text-resize,
+.ink-pad--mobile .ink-image-resize { width: 24px; height: 24px; }
+
+/* 页签（261104 二十六批四轮）：入口在顶部导航（按 .ink-tool 44 命中）；编辑在底部 Sheet 里，
+   表单复用 features/ink/InkPageTabForm 的类名，这里只给移动端尺寸与排版（两端同一份逻辑）。 */
+.ink-pad--mobile .ink-tool.has-tab { color: var(--lake-accent-text); }
+.mb-sheet .ink-page-tab__form { display: flex; flex-direction: column; gap: var(--lake-space-md); }
+.mb-sheet .ink-page-tab__label { color: var(--lake-text-3); font-size: var(--lake-font-size-micro); }
+.mb-sheet .ink-page-tab__input {
+  width: 100%;
+  height: var(--mb-tap-min);
+  padding: 0 var(--lake-space-md);
+  border: 0.5px solid var(--lake-border-strong);
+  border-radius: var(--lake-radius-sm);
+  background: var(--lake-bg-panel);
+  color: var(--lake-text-1);
+  font-size: var(--lake-font-size-body);
+}
+.mb-sheet .ink-page-tab__actions { display: flex; justify-content: flex-end; gap: var(--lake-space-sm); }
+.mb-sheet .ink-page-tab__save,
+.mb-sheet .ink-page-tab__clear {
+  min-width: var(--mb-tap-min);
+  height: var(--mb-tap-min);
+  padding: 0 var(--lake-space-md);
+  border: 0;
+  border-radius: var(--lake-radius-sm);
+  background: transparent;
+  color: var(--lake-accent-text);
+  font-size: var(--lake-font-size-small);
+}
+.mb-sheet .ink-page-tab__clear { color: var(--lake-text-3); }

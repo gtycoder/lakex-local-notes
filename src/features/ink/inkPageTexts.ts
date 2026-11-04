@@ -12,6 +12,29 @@ export const INK_TEXT_DEFAULT_WIDTH_RATIO = 0.5;
 export const INK_TEXT_DEFAULT_FONT_SIZE = 16;
 /** 行高倍数（与渲染/导出共用）。 */
 export const INK_TEXT_LINE_HEIGHT = 1.5;
+/**
+ * 展示态首行基线（相对文字块顶部，× fontSize）。屏幕 SVG 与 PDF/SVG 导出共用这一条，
+ * 编辑框也按它反算 —— 三处必须是同一个常量，否则「编辑中看到的字」与「提交后画出来的字」会错位。
+ */
+export const INK_TEXT_BASELINE_RATIO = 0.9;
+/**
+ * 编辑态 textarea 首行基线（相对行盒顶部，× fontSize）。
+ *
+ * CSS 行盒的基线 = (lineHeight − (ascent + descent)) / 2 + ascent；MiSans 在两端 Chromium 实测
+ * fontBoundingBoxAscent 1.03em / Descent 0.29em，lineHeight 1.5em ⇒ (1.5 − 1.32) / 2 + 1.03 = 1.12。
+ * 展示基线（0.9）与它的差 = 编辑框相对文字块顶部要**上移**的量（−0.22em）。
+ */
+export const INK_TEXT_EDITOR_BASELINE_RATIO = 1.12;
+/** 编辑框顶部相对文字块顶部的位移比（× fontSize，负数 = 向上）。 */
+export const INK_TEXT_EDITOR_TOP_SHIFT_RATIO = INK_TEXT_BASELINE_RATIO - INK_TEXT_EDITOR_BASELINE_RATIO;
+/** 展示态首行基线（页面逻辑 px）：屏幕渲染与导出共用。 */
+export function inkTextBaselineOffset(fontSize: number): number {
+  return fontSize * INK_TEXT_BASELINE_RATIO;
+}
+/** 编辑框顶部相对文字块顶部的位移（页面逻辑 px，负数 = 向上）：让输入框里的字落在展示态同一位置。 */
+export function inkTextEditorTopOffset(fontSize: number): number {
+  return fontSize * INK_TEXT_EDITOR_TOP_SHIFT_RATIO;
+}
 /** 最小可点中的宽/高。 */
 export const INK_TEXT_MIN_WIDTH = 60;
 const MAX_TEXT_LINES = 400;

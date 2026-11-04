@@ -12,6 +12,29 @@ export const INK_IMAGE_DEFAULT_WIDTH_RATIO = 0.4;
 export const INK_IMAGE_MIN_EDGE = 24;
 /** 拖动时至少留这么多在页内，避免「拖出去找不回来」。 */
 const INK_IMAGE_KEEP_VISIBLE = 40;
+/**
+ * 源图最小边（物理像素）。贴图按页面逻辑坐标缩放显示，源图只有 1×1 时（占位图/损坏图/极端缩略图）
+ * 插进来就是一条什么都看不见的框 —— 261104 用户报「贴图无法展示，仅有边框」的真因之一。
+ * 低于此值直接拒绝并说明，不要静默插入。
+ */
+export const INK_PAGE_IMAGE_MIN_SOURCE_EDGE = 8;
+
+export interface InkPageImageSourceProbe {
+  pixelWidth: number;
+  pixelHeight: number;
+}
+
+/** 贴图源图校验：返回要展示给用户的错误文案；可用返回 null。 */
+export function inkPageImageSourceError(probe: InkPageImageSourceProbe | null): string | null {
+  const unusable = "无法识别这张图片（可能已损坏，或格式不受支持）";
+  if (!probe) return unusable;
+  const { pixelWidth, pixelHeight } = probe;
+  if (!Number.isFinite(pixelWidth) || !Number.isFinite(pixelHeight) || pixelWidth <= 0 || pixelHeight <= 0) return unusable;
+  if (Math.min(pixelWidth, pixelHeight) < INK_PAGE_IMAGE_MIN_SOURCE_EDGE) {
+    return `图片太小（${Math.round(pixelWidth)}×${Math.round(pixelHeight)}），无法作为贴图`;
+  }
+  return null;
+}
 
 export interface InkImagePlacementInput {
   id: string;

@@ -65,10 +65,9 @@ function byLabel(container: HTMLElement, label: string): HTMLButtonElement | und
   return Array.from(container.querySelectorAll("button")).find((b) => b.getAttribute("aria-label") === label) as HTMLButtonElement | undefined;
 }
 
-/** 编辑态工具坞「插入」→ 悬浮菜单里点「导入 PDF」。 */
-async function importPdfFromInsert(container: HTMLElement): Promise<void> {
-  await act(async () => { byLabel(container, "插入")!.click(); });
-  await act(async () => { byLabel(container, "导入 PDF")!.click(); });
+/** 编辑态纸张行点「背景 PDF」（261104 二十五批：背景导入与纸张同排，不再进 ＋ 菜单）。 */
+async function importPdfFromBackgroundRow(container: HTMLElement): Promise<void> {
+  await act(async () => { byLabel(container, "背景 PDF")!.click(); });
 }
 
 beforeAll(() => {
@@ -82,32 +81,32 @@ beforeAll(() => {
 });
 
 describe("PDF 导入入口", () => {
-  it("移动端：编辑态工具坞「插入」菜单里有「导入 PDF」；阅读态没有（正文写操作只在编辑态）", async () => {
+  it("移动端：编辑态纸张行有「背景 PDF」；阅读态没有（正文写操作只在编辑态）", async () => {
     const onImportPdf = vi.fn(async () => outcome([pdfPage(1)]));
     const edit = await mount({ content: inkToBody(createInkDoc("p1")), variant: "mobile", readOnly: false, onImportPdf });
-    expect(byLabel(edit.container, "插入")).not.toBeUndefined();
+    // 与纸张同一排（用户 261104 定稿），不在 ＋ 菜单里
+    const paperRow = edit.container.querySelector('[data-overlay="dock"] [aria-label="纸张"]')!;
+    expect(paperRow.querySelector('button[aria-label="背景 PDF"]')).not.toBeNull();
     await act(async () => { byLabel(edit.container, "插入")!.click(); });
-    expect(byLabel(edit.container, "导入 PDF")).not.toBeUndefined();
-    // 菜单位于坞上方（data-overlay="insert"），入口已从全局预览面板移走
-    expect(edit.container.querySelector('[data-overlay="insert"]')).not.toBeNull();
+    expect(edit.container.querySelector('[data-overlay="insert"] [aria-label="背景 PDF"]')).toBeNull();
     await edit.unmount();
 
     const read = await mount({ content: inkToBody(createInkDoc("p1")), variant: "mobile", readOnly: true, onImportPdf });
     expect(byLabel(read.container, "插入")).toBeUndefined();
     await act(async () => { byLabel(read.container, "全局预览")!.click(); });
-    expect(byLabel(read.container, "导入 PDF")).toBeUndefined();
+    expect(byLabel(read.container, "背景 PDF")).toBeUndefined();
     await read.unmount();
   });
 
-  it("桌面：工具条「导入 PDF」在编辑态可用、阅读态禁用；导入成功替换空白首页并切到第一页", async () => {
+  it("桌面：底栏「背景 PDF」在编辑态可用、阅读态禁用；导入成功替换空白首页并切到第一页", async () => {
     const onChange = vi.fn();
     const onImportPdf = vi.fn(async () => outcome([pdfPage(1), pdfPage(2)], { pageCount: 3 }));
     const view = await mount({ content: inkToBody(createInkDoc("p1")), variant: "desktop", readOnly: false, onImportPdf, onChange });
-    const button = byLabel(view.container, "导入 PDF");
+    const button = byLabel(view.container, "背景 PDF");
     expect(button).not.toBeUndefined();
     await act(async () => { button!.click(); });
     expect(onImportPdf).toHaveBeenCalledTimes(1);
-    expect(view.container.querySelector(".ink-pages span")!.textContent).toContain("第 1 / 2 页");
+    expect(view.container.querySelector(".ink-pages span")!.textContent).toBe("第 1 / 2 页");
     // 500ms 防抖后落正文：sourcePdf（v3 只留 name/pageCount）+ pdf-page 背景图（只留页号）
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 620)); });
     const body = JSON.parse(onChange.mock.calls[onChange.mock.calls.length - 1][0]);
@@ -118,13 +117,13 @@ describe("PDF 导入入口", () => {
     await view.unmount();
 
     const readonly = await mount({ content: inkToBody(createInkDoc("p1")), variant: "desktop", readOnly: true, onImportPdf });
-    expect(byLabel(readonly.container, "导入 PDF")!.disabled).toBe(true);
+    expect(byLabel(readonly.container, "背景 PDF")!.disabled).toBe(true);
     await readonly.unmount();
   });
 });
 
-describe("插入菜单（图片 + PDF 两项在同一入口）", () => {
-  it("两项都在坞上方菜单里；导入进行中两项 disabled（防重复触发）", async () => {
+describe("背景来源两项（与纸张同一排）", () => {
+  it("两项都在纸张行；导入进行中两项 disabled（防重复触发）", async () => {
     let release: (() => void) | null = null;
     const pending = new Promise<void>((resolve) => { release = resolve; });
     const onImportImages = vi.fn(async () => ({ pages: [], errors: [] }));
@@ -140,16 +139,13 @@ describe("插入菜单（图片 + PDF 两项在同一入口）", () => {
       onImportPdf,
     });
 
-    await act(async () => { byLabel(view.container, "插入")!.click(); });
-    expect(view.container.querySelector('[data-overlay="insert"]')).not.toBeNull();
-    expect(byLabel(view.container, "导入图片")).not.toBeUndefined();
-    expect(byLabel(view.container, "导入 PDF")).not.toBeUndefined();
+    expect(byLabel(view.container, "背景图片")).not.toBeUndefined();
+    expect(byLabel(view.container, "背景 PDF")).not.toBeUndefined();
 
-    // 发起 PDF 导入（挂起）后，再开菜单：两项都 disabled
-    await act(async () => { byLabel(view.container, "导入 PDF")!.click(); });
-    await act(async () => { byLabel(view.container, "插入")!.click(); });
-    expect(byLabel(view.container, "导入图片")!.disabled).toBe(true);
-    expect(byLabel(view.container, "导入 PDF")!.disabled).toBe(true);
+    // 发起 PDF 导入（挂起）后：两项都 disabled
+    await act(async () => { byLabel(view.container, "背景 PDF")!.click(); });
+    expect(byLabel(view.container, "背景图片")!.disabled).toBe(true);
+    expect(byLabel(view.container, "背景 PDF")!.disabled).toBe(true);
 
     await act(async () => { release!(); await pending; });
     await view.unmount();
@@ -167,7 +163,7 @@ describe("PDF 导入进度 / 取消 / 错误", () => {
     }));
     const onChange = vi.fn();
     const view = await mount({ content: inkToBody(createInkDoc("p1")), variant: "mobile", readOnly: false, onImportPdf, onChange });
-    await importPdfFromInsert(view.container);
+    await importPdfFromBackgroundRow(view.container);
 
     const progress = view.container.querySelector('[data-ink-pdf-progress]');
     expect(progress).not.toBeNull();
@@ -178,7 +174,7 @@ describe("PDF 导入进度 / 取消 / 错误", () => {
     await act(async () => { cancel!.click(); });
     expect(view.container.querySelector('[data-ink-pdf-progress]')).toBeNull();
     expect(view.container.querySelector('[role="alert"]')!.textContent).toContain("已取消");
-    expect(view.container.querySelector(".ink-pages span")!.textContent).toContain("第 1 / 1 页");
+    expect(view.container.querySelector(".ink-pages span")!.textContent).toBe("1 / 1");
     await view.unmount();
   });
 
@@ -197,15 +193,15 @@ describe("PDF 导入进度 / 取消 / 错误", () => {
     }));
     const onChange = vi.fn();
     const view = await mount({ content: inkToBody(createInkDoc("p1")), variant: "mobile", readOnly: false, onImportPdf, onChange });
-    await importPdfFromInsert(view.container);
+    await importPdfFromBackgroundRow(view.container);
 
     // 导入还没结束（进度横幅在），但第 1 页已经可标注
     expect(view.container.querySelector("[data-ink-pdf-progress]")).not.toBeNull();
-    expect(view.container.querySelector(".ink-pages span")!.textContent).toContain("第 1 / 1 页");
+    expect(view.container.querySelector(".ink-pages span")!.textContent).toBe("1 / 1");
 
     // 第二批到达：追加成第 2 页，且不抢走当前页（第一批已经切到第 1 页）
     await act(async () => { emit?.([pdfPage(2)]); });
-    expect(view.container.querySelector(".ink-pages span")!.textContent).toContain("第 1 / 2 页");
+    expect(view.container.querySelector(".ink-pages span")!.textContent).toBe("1 / 2");
 
     // 收尾：outcome 里只有 sourcePdf（页已全部交付），不应重复插入
     await act(async () => {
@@ -213,7 +209,7 @@ describe("PDF 导入进度 / 取消 / 错误", () => {
       await Promise.resolve();
     });
     expect(view.container.querySelectorAll(".ink-page-svg").length).toBe(1);
-    expect(view.container.querySelector(".ink-pages span")!.textContent).toContain("第 1 / 2 页");
+    expect(view.container.querySelector(".ink-pages span")!.textContent).toBe("1 / 2");
     await view.unmount();
   });
 
@@ -230,9 +226,9 @@ describe("PDF 导入进度 / 取消 / 错误", () => {
       }));
     }));
     const view = await mount({ content: inkToBody(createInkDoc("p1")), variant: "mobile", readOnly: false, onImportPdf });
-    await importPdfFromInsert(view.container);
+    await importPdfFromBackgroundRow(view.container);
     await act(async () => { byLabel(view.container, "取消 PDF 导入")!.click(); });
-    expect(view.container.querySelector(".ink-pages span")!.textContent).toContain("第 1 / 1 页");
+    expect(view.container.querySelector(".ink-pages span")!.textContent).toBe("1 / 1");
     const alert = view.container.querySelector("[role=alert]");
     expect(alert!.textContent).toContain("已导入 1 页");
     await view.unmount();
@@ -247,7 +243,7 @@ describe("PDF 导入进度 / 取消 / 错误", () => {
       setTimeout(() => resolve(outcome([pdfPage(1)], { pageCount: 2 })), 40);
     }));
     const view = await mount({ content: inkToBody(createInkDoc("p1")), variant: "mobile", readOnly: false, onImportPdf });
-    await importPdfFromInsert(view.container);
+    await importPdfFromBackgroundRow(view.container);
     expect(view.container.querySelector('[data-ink-pdf-progress]')!.textContent).toContain("正在写入页面：第 1 / 2 页");
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 60)); });
     await view.unmount();
@@ -256,7 +252,7 @@ describe("PDF 导入进度 / 取消 / 错误", () => {
   it("超过 300 页：给截断提示（导入前 300 页）", async () => {
     const onImportPdf = vi.fn(async () => outcome([pdfPage(1)], { pageCount: 500, importedPageCount: 1, truncated: true }));
     const view = await mount({ content: inkToBody(createInkDoc("p1")), variant: "mobile", readOnly: false, onImportPdf });
-    await importPdfFromInsert(view.container);
+    await importPdfFromBackgroundRow(view.container);
     const alert = view.container.querySelector('[role="alert"]');
     expect(alert!.textContent).toContain("上限 500 页");
     await view.unmount();
@@ -265,9 +261,9 @@ describe("PDF 导入进度 / 取消 / 错误", () => {
   it("错误（加密/上传失败）以 role=alert 可见提示", async () => {
     const onImportPdf = vi.fn(async () => outcome([], { errors: ["第 2 页：磁盘写入失败"] }));
     const view = await mount({ content: inkToBody(createInkDoc("p1")), variant: "mobile", readOnly: false, onImportPdf });
-    await importPdfFromInsert(view.container);
+    await importPdfFromBackgroundRow(view.container);
     expect(view.container.querySelector('[role="alert"]')!.textContent).toContain("磁盘写入失败");
-    expect(view.container.querySelector(".ink-pages span")!.textContent).toContain("第 1 / 1 页");
+    expect(view.container.querySelector(".ink-pages span")!.textContent).toBe("1 / 1");
     await view.unmount();
   });
 });

@@ -57,9 +57,8 @@ function byLabel(container: HTMLElement, label: string): HTMLButtonElement | und
   return Array.from(container.querySelectorAll("button")).find((b) => b.getAttribute("aria-label") === label) as HTMLButtonElement | undefined;
 }
 
-/** 编辑态工具坞「插入」→ 悬浮菜单里点一项（图片/PDF 两个入口都收在这里）。 */
-async function importFromInsertMenu(container: HTMLElement, label: string): Promise<void> {
-  await act(async () => { byLabel(container, "插入")!.click(); });
+/** 编辑态纸张行点一项（背景图片 / 背景 PDF 与纸张同一排；261104 二十五批从 ＋ 菜单移出）。 */
+async function importFromBackgroundRow(container: HTMLElement, label: string): Promise<void> {
   await act(async () => { byLabel(container, label)!.click(); });
 }
 
@@ -132,7 +131,7 @@ describe("图片页渲染", () => {
 });
 
 describe("导入图片入口", () => {
-  it("移动端：入口在编辑态工具坞的「插入」菜单；导入后追加成页、切到新页并关菜单", async () => {
+  it("移动端：入口在编辑态纸张行（背景图片）；导入后追加成页、切到新页", async () => {
     const imported: InkPage = inkImagePage({ url: localAssetHttpUrl("note-1", "1700000000001_abcdef13.png"), fit: "contain" }, "imported-1");
     const onImportImages = vi.fn(async () => ({ pages: [imported], errors: [] }));
     const view = await mount({ content: inkToBody(createInkDoc("p1")), variant: "mobile", readOnly: false, onImportImages });
@@ -141,47 +140,73 @@ describe("导入图片入口", () => {
     const toolRow = view.container.querySelector('[data-overlay="dock"] .ink-toolbar[aria-label="画笔工具"]')!;
     expect(toolRow.querySelector("button")!.getAttribute("aria-label")).toBe("插入");
     await act(async () => { byLabel(view.container, "全局预览")!.click(); });
-    expect(byLabel(view.container, "导入图片")).toBeUndefined();
+    expect(view.container.querySelector('[data-overlay="preview"] button[aria-label="背景图片"]')).toBeNull();
     expect(view.container.querySelector("[data-ink-import]")).toBeNull();
     await act(async () => { byLabel(view.container, "全局预览")!.click(); });
+    // 背景来源与纸张同一排（不是 ＋ 菜单里）
+    const paperRow = view.container.querySelector('[data-overlay="dock"] [aria-label="纸张"]')!;
+    expect(paperRow.querySelector('button[aria-label="背景图片"]')).not.toBeNull();
 
-    await importFromInsertMenu(view.container, "导入图片");
+    await importFromBackgroundRow(view.container, "背景图片");
     const menu = view.container.querySelector('[data-overlay="insert"]');
     expect(menu).toBeNull(); // 选完即关
     expect(onImportImages).toHaveBeenCalledTimes(1);
-    expect(view.container.querySelector(".ink-pages span")!.textContent).toContain("第 2 / 2 页");
+    expect(view.container.querySelector(".ink-pages span")!.textContent).toBe("2 / 2");
     expect(view.container.querySelector(".ink-page-svg image")!.getAttribute("href")).toBe(imported.backgroundImage!.url);
     await view.unmount();
   });
 
-  it("移动端阅读态：没有「插入」、预览里也没有导入入口（正文写操作只在编辑态）", async () => {
+  it("移动端阅读态：没有「插入」、没有背景图片入口（正文写操作只在编辑态）", async () => {
     const view = await mount({ content: inkToBody(createInkDoc("p1")), variant: "mobile", readOnly: true, onImportImages: async () => null });
     expect(byLabel(view.container, "插入")).toBeUndefined();
+    expect(byLabel(view.container, "背景图片")).toBeUndefined();
     await act(async () => { byLabel(view.container, "全局预览")!.click(); });
-    expect(byLabel(view.container, "导入图片")).toBeUndefined();
+    expect(byLabel(view.container, "背景图片")).toBeUndefined();
     await view.unmount();
   });
 
-  it("桌面：导入入口在工具条（编辑态），导入后同样成页", async () => {
+  it("桌面：背景图片入口在底栏纸张之后（编辑态），导入后同样成页", async () => {
     const imported: InkPage = inkImagePage({ url: localAssetHttpUrl("note-1", "1700000000002_abcdef14.png"), fit: "contain" }, "imported-2");
     const onImportImages = vi.fn(async () => ({ pages: [imported], errors: [] }));
     const view = await mount({ content: inkToBody(createInkDoc("p1")), variant: "desktop", readOnly: false, onImportImages });
-    const button = byLabel(view.container, "导入图片");
+    const button = byLabel(view.container, "背景图片");
     expect(button).not.toBeNull();
     await act(async () => { button!.click(); });
     expect(onImportImages).toHaveBeenCalledTimes(1);
-    expect(view.container.querySelector(".ink-pages span")!.textContent).toContain("第 2 / 2 页");
+    expect(view.container.querySelector(".ink-pages span")!.textContent).toBe("第 2 / 2 页");
     await view.unmount();
+  });
+
+  it("移动端注入 onTransientMessage ⇒ 瞬时失败走气泡通道（板内不占位）", async () => {
+    const onTransientMessage = vi.fn();
+    const onImportImages = vi.fn(async () => ({ pages: [], errors: ["big.png：超过 25 MiB 上限"] }));
+    const view = await mount({ content: inkToBody(createInkDoc("p1")), variant: "mobile", readOnly: false, onImportImages, onTransientMessage });
+    await importFromBackgroundRow(view.container, "背景图片");
+    expect(onTransientMessage).toHaveBeenCalledWith("导入图片失败：big.png：超过 25 MiB 上限", "error");
+    expect(view.container.querySelector('[role="alert"]')).toBeNull();
+    expect(view.container.querySelector(".ink-invalid-banner")).toBeNull();
+    await view.unmount();
+
+    // 插入贴图失败（1×1）：同样只走气泡
+    const onInsertPageImage = vi.fn(async (): Promise<{ url: string } | null> => { throw new Error("图片太小（1×1），无法作为贴图"); });
+    const toast = vi.fn();
+    const view2 = await mount({ content: inkToBody(createInkDoc("p1")), variant: "mobile", readOnly: false, onInsertPageImage, onTransientMessage: toast });
+    await act(async () => { (view2.container.querySelector('button[aria-label="插入"]') as HTMLButtonElement).click(); });
+    await act(async () => { (view2.container.querySelector('[data-overlay="insert"] button[aria-label="插入贴图"]') as HTMLButtonElement).click(); });
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+    expect(toast).toHaveBeenCalledWith("插入图片失败：图片太小（1×1），无法作为贴图", "error");
+    expect(view2.container.querySelector('[role="alert"]')).toBeNull();
+    await view2.unmount();
   });
 
   it("导入失败：给可见错误横幅（role=alert），不成页", async () => {
     const onImportImages = vi.fn(async () => ({ pages: [], errors: ["big.png：超过 25 MiB 上限"] }));
     const view = await mount({ content: inkToBody(createInkDoc("p1")), variant: "mobile", readOnly: false, onImportImages });
-    await importFromInsertMenu(view.container, "导入图片");
+    await importFromBackgroundRow(view.container, "背景图片");
     const alert = view.container.querySelector('[role="alert"]');
     expect(alert).not.toBeNull();
     expect(alert!.textContent).toContain("超过 25 MiB 上限");
-    expect(view.container.querySelector(".ink-pages span")!.textContent).toContain("第 1 / 1 页");
+    expect(view.container.querySelector(".ink-pages span")!.textContent).toBe("1 / 1");
     await view.unmount();
   });
 });

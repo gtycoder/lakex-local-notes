@@ -127,7 +127,7 @@ describe("MobileInkPad 阅读态（默认打开态）", () => {
     const next = byLabel(view.container, "下一页")!;
     expect(next.disabled).toBe(false);
     await act(async () => { next.click(); });
-    expect(pageLabel(view.container)).toContain("第 2 / 2 页");
+    expect(pageLabel(view.container)).toContain("2 / 2");
     expect(onChange).not.toHaveBeenCalled();
     expect(onDirty).not.toHaveBeenCalled();
 
@@ -168,7 +168,7 @@ describe("MobileInkPad 阅读态（默认打开态）", () => {
 
     const papers = strip!.querySelectorAll(".ink-page-thumb__paper");
     await act(async () => { (papers[1] as HTMLButtonElement).click(); });
-    expect(pageLabel(view.container)).toContain("第 2 / 2 页");
+    expect(pageLabel(view.container)).toContain("2 / 2");
     expect(onChange).not.toHaveBeenCalled();
 
     await act(async () => { byLabel(view.container, "关闭页面管理")!.click(); });
@@ -341,9 +341,9 @@ describe("MobileInkPad 编辑态 · 悬浮工具坞", () => {
     const onChange = vi.fn();
     const onDirty = vi.fn();
     const view = await mount({ content: twoPageBody(), readOnly: false, onChange, onDirty });
-    expect(pageLabel(view.container)).toBe("第 1 / 2 页");
+    expect(pageLabel(view.container)).toBe("1 / 2");
     await act(async () => { byLabel(view.container, "下一页")!.click(); });
-    expect(pageLabel(view.container)).toBe("第 2 / 2 页");
+    expect(pageLabel(view.container)).toBe("2 / 2");
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 620)); });
     expect(onDirty).not.toHaveBeenCalled();
     expect(onChange).not.toHaveBeenCalled();

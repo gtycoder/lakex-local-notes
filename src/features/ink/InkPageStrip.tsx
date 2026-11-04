@@ -18,8 +18,8 @@ export interface InkPageStripProps {
   onClose: () => void;
   /** 阅读态：页面增删/排序是正文数据，禁用并保持可见（避免"点了没反应"）；切页是纯视图，仍可用。 */
   readOnly?: boolean;
-  /** 有页备注的页（v4 正文数据）：缩略图上打一个小标。 */
-  notedPageIds?: ReadonlySet<string>;
+  /** 有页签的页（v4 正文数据，空串=纯标记）：缩略图上打一个小标。 */
+  tabPageIds?: ReadonlySet<string>;
 }
 
 /** 虚拟化窗口：当前滚动位置前后各留 10 页（P5：300 页 PDF 不再一次挂 300 份缩略图 DOM）。 */
@@ -64,7 +64,7 @@ function thumbAspect(image: InkBackgroundImage): string {
   return "xMidYMid meet";
 }
 
-function PageThumb({ page }: { page: InkPage }) {
+export function PageThumb({ page }: { page: InkPage }) {
   return (
     <svg viewBox={`0 0 ${page.width} ${page.height}`} preserveAspectRatio="xMidYMid meet" aria-hidden="true">
       {page.backgroundImage ? (
@@ -109,7 +109,7 @@ export function InkPageStrip({
   onCancelDelete,
   onClose,
   readOnly = false,
-  notedPageIds,
+  tabPageIds,
 }: InkPageStripProps) {
   const pendingIndex = pendingDeleteId ? pages.findIndex((page) => page.id === pendingDeleteId) : -1;
   const activeIndex = pages.findIndex((page) => page.id === activePageId);
@@ -182,7 +182,7 @@ export function InkPageStrip({
               >
                 <PageThumb page={page} />
                 <span className="ink-page-thumb__index">{index + 1}</span>
-                {notedPageIds?.has(page.id) ? <span className="ink-page-thumb__note" aria-label="有页备注" /> : null}
+                {tabPageIds?.has(page.id) ? <span className="ink-page-thumb__note" aria-label="有页签" /> : null}
               </button>
               <div className="ink-page-thumb__actions">
                 <button onClick={() => onMove(page.id, -1)} disabled={readOnly || index === 0} aria-label={`第 ${index + 1} 页前移`} title={readOnly ? "阅读态不能调整页序，点编辑后可改" : "前移"}><ArrowLeft size={14} /></button>

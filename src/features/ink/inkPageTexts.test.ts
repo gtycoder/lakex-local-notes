@@ -5,12 +5,16 @@ import { describe, expect, it } from "vitest";
 import { createInkPage } from "../../core/inkDoc";
 import {
   INK_TEXT_DEFAULT_WIDTH_RATIO,
+  INK_TEXT_EDITOR_BASELINE_RATIO,
+  INK_TEXT_EDITOR_TOP_SHIFT_RATIO,
   INK_TEXT_LINE_HEIGHT,
   INK_TEXT_MIN_WIDTH,
   bumpPageTextFontSize,
   resizePageText,
   estimateInkCharWidth,
   hitTestPageText,
+  inkTextBaselineOffset,
+  inkTextEditorTopOffset,
   inkTextHeight,
   movePageText,
   placeInkPageText,
@@ -71,6 +75,15 @@ describe("页内文字块", () => {
     expect(bumpPageTextFontSize(page1, "t1", 2)![0].fontSize).toBe(18);
     expect(bumpPageTextFontSize({ ...page1, texts: [{ ...page1.texts![0], fontSize: 96 }] }, "t1", 2)![0].fontSize).toBe(96);
     expect(bumpPageTextFontSize({ ...page1, texts: [{ ...page1.texts![0], fontSize: 6 }] }, "t1", -2)![0].fontSize).toBe(6);
+  });
+
+  it("编辑态与展示态共用一条基线口径：展示 0.9em、编辑器相对块顶上移 0.22em", () => {
+    expect(inkTextBaselineOffset(16)).toBeCloseTo(14.4, 5);
+    expect(inkTextEditorTopOffset(16)).toBeCloseTo(-3.52, 5);
+    expect(inkTextEditorTopOffset(48)).toBeCloseTo(-10.56, 5);
+    // 不变量：展示基线 = 编辑器顶部 + 编辑器首行基线（CSS 行盒公式）⇒ 两态同一位置
+    expect(inkTextEditorTopOffset(16) + 16 * INK_TEXT_EDITOR_BASELINE_RATIO).toBeCloseTo(inkTextBaselineOffset(16), 5);
+    expect(INK_TEXT_EDITOR_TOP_SHIFT_RATIO).toBeLessThan(0);
   });
 
   it("改文与删除", () => {

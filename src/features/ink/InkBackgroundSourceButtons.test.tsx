@@ -21,7 +21,7 @@ describe("背景来源按钮", () => {
     const group = view.container.querySelector('[aria-label="背景来源"]')!;
     expect(group).not.toBeNull();
     const buttons = Array.from(group.querySelectorAll("button"));
-    expect(buttons.map((button) => button.textContent)).toEqual(["背景图", "背景 PDF"]);
+    expect(buttons.map((button) => button.textContent)).toEqual(["背景图片", "背景 PDF"]);
     expect(buttons[0].getAttribute("title")).toContain("背景页");
     await act(async () => { buttons[0].click(); });
     await act(async () => { buttons[1].click(); });
@@ -32,7 +32,7 @@ describe("背景来源按钮", () => {
 
   it("导入中禁用；没接任何导入能力时整组不渲染", async () => {
     const view = await render({ disabled: true, onImportImages: () => undefined });
-    const button = view.container.querySelector('button[aria-label="导入图片"]') as HTMLButtonElement;
+    const button = view.container.querySelector('button[aria-label="背景图片"]') as HTMLButtonElement;
     expect(button.disabled).toBe(true);
     await view.close();
     const empty = await render({ disabled: false });

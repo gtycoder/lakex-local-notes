@@ -1,11 +1,17 @@
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import InkPad, { type InkPadProps } from "../../features/ink/InkPad";
-import { importInkImagePages, pickInkImageFiles } from "../../features/ink/inkImageImport";
+import { importInkImagePages, pickInkImageFiles, probeInkImageFile } from "../../features/ink/inkImageImport";
 import { pickPdfFile } from "../../features/ink/pdfImport";
+import { inkPageImageSourceError } from "../../features/ink/inkPageImages";
 import type { InkPage } from "../../core/inkDoc";
 import { bridge } from "../bridge";
+import { showToast } from "../ui/toastBus";
+import { MobilePageTabButton, MobilePageTabSheet, type MobilePageTabState } from "./MobilePageTab";
 import { setStylusHandwritingEnabled } from "../native/stylusInput";
 import { importPdfPagesToAssets } from "./mobilePdfImport";
+// 移动端自有样式层（不引桌面样式，见 mobileIndependence 门禁）。inkPad.shared.css 是**两端同构的副本**：
+// 261104 二十五批补上 v4 文字块/贴图规则（此前漏同步 ⇒ 移动端文字框是无定位的默认 textarea），
+// 并加 inkSharedCssParity.test 把「两份类名集合必须一致」钉死，防止再次漂移。
 import "./inkPad.shared.css";
 import "./inkPad.mobile.css";
 
@@ -48,36 +54,50 @@ export function MobileInkPad({ noteId, active = false, readOnly = false, ...prop
     return importPdfPagesToAssets({ noteId, bytes, filename: file.name, onProgress, onPagesReady, signal });
   }, [noteId]);
 
-  /** v4 页内贴图（移动端）：从相册/文件选一张图 → 上传资产 → 返回 URL 与原图尺寸（落点由 InkPad 决定）。 */
+  /**
+   * v4 页内贴图（移动端）：从相册/文件选一张图 → **先验源图**（像素尺寸）→ 上传资产 → 返回 URL 与原图尺寸。
+   * 只有 1×1 的占位图/损坏图会拒绝并说明（否则插进来是一条看不见的框，用户报「贴图无法展示，仅有边框」）。
+   */
   const onInsertPageImage = useCallback(async () => {
     if (!noteId) return null;
     const files = await pickInkImageFiles();
     const file = files[0];
     if (!file) return null; // 用户取消
+    const probe = await probeInkImageFile(file);
+    const sourceError = inkPageImageSourceError(probe);
+    if (sourceError) throw new Error(sourceError);
     const bytes = new Uint8Array(await file.arrayBuffer());
     const uploaded = await bridge.uploadResource({ bytes, filename: file.name }, noteId);
-    let naturalWidth: number | undefined;
-    let naturalHeight: number | undefined;
-    try {
-      const bitmap = await createImageBitmap(file);
-      naturalWidth = bitmap.width;
-      naturalHeight = bitmap.height;
-      bitmap.close?.();
-    } catch { /* 读不到尺寸就按 4:3 估（placeInkPageImage 内部兜底） */ }
-    return { url: uploaded.url, naturalWidth, naturalHeight };
+    return { url: uploaded.url, naturalWidth: probe!.pixelWidth, naturalHeight: probe!.pixelHeight };
   }, [noteId]);
 
+  const notifyTransient = useCallback((text: string, kind: "info" | "error") => {
+    showToast(text, { type: kind });
+  }, []);
+
+  // 页签 Sheet 的宿主状态：入口在顶部导航里，Sheet 渲染在 InkPad 之外（胶囊是横向滚动容器，
+  // 弹层留在里面会撑大 scrollWidth 且可能被裁）。
+  const [pageTab, setPageTab] = useState<MobilePageTabState | null>(null);
+
   return (
-    <InkPad
-      {...props}
-      noteId={noteId}
-      active={active}
-      readOnly={readOnly}
-      variant="mobile"
-      onImportImages={noteId ? onImportImages : undefined}
-      onImportPdf={noteId ? onImportPdf : undefined}
-      onInsertPageImage={noteId ? onInsertPageImage : undefined}
-    />
+    <>
+      <InkPad
+        {...props}
+        noteId={noteId}
+        active={active}
+        readOnly={readOnly}
+        variant="mobile"
+        onImportImages={noteId ? onImportImages : undefined}
+        onImportPdf={noteId ? onImportPdf : undefined}
+        onInsertPageImage={noteId ? onInsertPageImage : undefined}
+        // 瞬时失败/完成走移动端 toast 气泡（与「已移入回收站」同一条原语）：不占编辑空间、不挤动页面尺寸；
+        // 用户 261104 反馈：这条报错以前是板内横幅，会占掉一块画布。
+        onTransientMessage={notifyTransient}
+        renderPageTab={(state) => <MobilePageTabButton state={state} onOpen={setPageTab} />}
+      />
+      {/* 页签 Sheet 必须是 InkPad 的**兄弟节点**：入口在顶部横向滚动的胶囊里，弹层留在里面会撑大 scrollWidth */}
+      <MobilePageTabSheet state={pageTab} open={pageTab !== null} onClose={() => setPageTab(null)} />
+    </>
   );
 }
 

@@ -51,6 +51,9 @@
   height: 22px;
   min-height: 22px;
 }
+/* 手写板：底部是 38px 通栏工具条 ⇒ 状态栏胶囊垂直居中于那条底栏（26 + 6 + 6 = 38），
+   不再用默认 bottom:8 顶着底栏上沿、看起来偏上（用户 261104 报）。 */
+.document-statusbar[data-doc-kind="ink"] { bottom: 6px; }
 .document-statusbar-stats { gap: var(--lake-space-lg); color: var(--lake-text-3); }
 .document-statusbar-state {
   gap: 5px;

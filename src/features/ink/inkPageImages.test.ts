@@ -6,7 +6,9 @@ import { createInkPage } from "../../core/inkDoc";
 import {
   INK_IMAGE_DEFAULT_WIDTH_RATIO,
   INK_IMAGE_MIN_EDGE,
+  INK_PAGE_IMAGE_MIN_SOURCE_EDGE,
   hitTestPageImage,
+  inkPageImageSourceError,
   movePageImage,
   placeInkPageImage,
   removePageImage,
@@ -67,5 +69,15 @@ describe("页内贴图", () => {
     expect(removed).toEqual([]);
     // 删除不存在的 id 不炸
     expect(removePageImage(page1, "missing").length).toBe(1);
+  });
+
+  it("源图校验：1×1 占位图 / 探测失败都拒绝并说明（用户报「贴图仅有边框」的根因之一）", () => {
+    expect(inkPageImageSourceError({ pixelWidth: 1, pixelHeight: 1 })).toContain("图片太小（1×1）");
+    expect(inkPageImageSourceError(null)).toContain("无法识别");
+    expect(inkPageImageSourceError({ pixelWidth: 0, pixelHeight: 100 })).toContain("无法识别");
+    expect(inkPageImageSourceError({ pixelWidth: Number.NaN, pixelHeight: 10 })).toContain("无法识别");
+    expect(inkPageImageSourceError({ pixelWidth: 8, pixelHeight: 8 })).toBeNull();
+    expect(inkPageImageSourceError({ pixelWidth: 600, pixelHeight: 400 })).toBeNull();
+    expect(INK_PAGE_IMAGE_MIN_SOURCE_EDGE).toBe(8);
   });
 });

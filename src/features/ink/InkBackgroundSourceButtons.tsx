@@ -20,15 +20,15 @@ export function InkBackgroundSourceButtons({ disabled, onImportImages, onImportP
         <button
           onClick={onImportImages}
           disabled={disabled}
-          aria-label="导入图片"
-          title="导入图片作为背景页"
-        >背景图</button>
+          aria-label="背景图片"
+          title="导入图片作为背景页（每张图一页）"
+        >背景图片</button>
       )}
       {onImportPdf && (
         <button
           onClick={onImportPdf}
           disabled={disabled}
-          aria-label="导入 PDF"
+          aria-label="背景 PDF"
           title="导入 PDF 作为背景页（每页一页）"
         >背景 PDF</button>
       )}

@@ -312,3 +312,111 @@
   top: 8px;
   right: 8px;
 }
+
+/* ---- 以下 9 组与 features/ink/inkPad.shared.css 同构（261104 二十五批按桌面补齐）----
+   移动端不引桌面样式（mobileIndependence 门禁），所以这里是**副本**；
+   两份的类名集合由 src/mobile/ink/inkSharedCssParity.test.ts 钉死，漏同步即红。
+   差异只有触发方式：桌面 :hover → 移动端 :active（触屏没有 hover）。 */
+
+/* 有页备注的页在缩略图左上角打一个小点：不抢 index 的位置。 */
+.ink-page-thumb__note {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 7px;
+  height: 7px;
+  border-radius: var(--lake-radius-pill);
+  background: var(--lake-accent);
+}
+
+/* v4 页内贴图：选中后的删除按钮（浮在贴图右上角；由 InkPad 用 left/top 百分比定位） */
+.ink-image-remove {
+  position: absolute;
+  z-index: 3;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0.5px solid var(--lake-border-1);
+  border-radius: var(--lake-radius-pill);
+  background: var(--lake-bg-panel);
+  color: var(--lake-text-2);
+  font-size: var(--lake-font-size-small);
+  line-height: 20px;
+  text-align: center;
+  transform: translate(-50%, -50%);
+  cursor: pointer;
+}
+
+/* v4 页内贴图：选中后的右下角缩放手柄（拖动时保持宽高比） */
+.ink-image-resize {
+  position: absolute;
+  z-index: 3;
+  width: 12px;
+  height: 12px;
+  border: 0.5px solid var(--lake-accent);
+  border-radius: var(--lake-radius-hairline);
+  background: var(--lake-bg-panel);
+  transform: translate(-50%, -50%);
+  cursor: nwse-resize;
+  touch-action: none;
+}
+
+/* v4 页内文字块编辑框：隐形输入区（编辑中的字由 InkPad 用同一套 <text> 渲染，同一几何/同一断行） */
+.ink-text-editor {
+  position: absolute;
+  z-index: 3;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  resize: none;
+  outline: none;
+  overflow: hidden;
+}
+
+/* 选中文字的浮层控制条（字号 ± / 删除）与右下角拖宽手柄 */
+.ink-text-controls {
+  position: absolute;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border: 0.5px solid var(--lake-border-1);
+  border-radius: var(--lake-radius-sm);
+  background: var(--lake-bg-panel);
+  box-shadow: var(--lake-shadow-card);
+  transform: translateY(-100%);
+}
+.ink-text-size,
+.ink-text-remove {
+  min-width: 22px;
+  height: 20px;
+  padding: 0 4px;
+  border: 0;
+  border-radius: var(--lake-radius-xs);
+  background: transparent;
+  color: var(--lake-text-2);
+  font-size: var(--lake-font-size-nano);
+  cursor: pointer;
+}
+.ink-text-size:active,
+.ink-text-remove:active { background: var(--lake-bg-hover); }
+.ink-text-resize {
+  position: absolute;
+  z-index: 3;
+  width: 12px;
+  height: 12px;
+  border: 0.5px solid var(--lake-accent);
+  border-radius: var(--lake-radius-hairline);
+  background: var(--lake-bg-panel);
+  transform: translate(-50%, -50%);
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+/* 文字块控制条：只在选中/编辑态出现，用主色描边 */
+.ink-text-controls.is-selected { border-color: var(--lake-accent); }

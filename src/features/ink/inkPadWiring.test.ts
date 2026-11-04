@@ -18,6 +18,9 @@ const DESKTOP_INK = read("./DesktopInkPad.tsx");
 const INK_PAPER = read("./InkPaper.tsx");
 const DESKTOP_INK_CSS = read("./inkPad.desktop.css");
 const PAGE_STRIP = read("./InkPageStrip.tsx");
+const PAGES_PANEL = read("./InkPagesPanel.tsx");
+const PAGE_TAB_BUTTON = read("./InkPageTabButton.tsx");
+const PAGE_TAB_FORM = read("./InkPageTabForm.tsx");
 const TABS_CSS = read("../../styles/app/tabs.css");
 const MOBILE_INK_CSS = read("../../mobile/ink/inkPad.mobile.css");
 const MOBILE_INK_PAD = read("../../mobile/ink/MobileInkPad.tsx");
@@ -83,8 +86,10 @@ describe("手写板正式端到端接线", () => {
   const desktopBranch = (): string => {
     const toolbarStart = INK_PAD.indexOf('{variant === "desktop" ? (');
     const toolbarEnd = INK_PAD.indexOf(') : (', toolbarStart);
-    const footerStart = INK_PAD.indexOf('{variant === "desktop" ? (', toolbarEnd);
-    const footerEnd = INK_PAD.indexOf(') : !readOnly ? (', footerStart);
+    // footer 用 className 定位再回溯三元开头：「页面」面板挂载也是 variant==="desktop" 三元，不能按字符串先后猜
+    const footerDiv = INK_PAD.indexOf('<div className="ink-footer">');
+    const footerStart = INK_PAD.lastIndexOf('{variant === "desktop" ? (', footerDiv);
+    const footerEnd = INK_PAD.indexOf(') : !readOnly ? (', footerDiv);
     return INK_PAD.slice(toolbarStart, toolbarEnd) + INK_PAD.slice(footerStart, footerEnd);
   };
 
@@ -144,6 +149,12 @@ describe("手写板正式端到端接线", () => {
     expect(INK_PAD).toContain("onClick={() => setBackground(item.value)}");
   });
 
+  it("移动端页面尺寸不被 CSS 夹高：夹高 ⇒ SVG letterbox ⇒ 内容缩到 ~55%、文字编辑框/控制条按 frame 宽定位就错位", () => {
+    expect(MOBILE_INK_CSS).not.toMatch(/\.ink-page-frame[^{]*\{[^}]*max-height/);
+    // 编辑期间宽度冻结的唯一实现 = InkPad 的 fitSize 守卫（移动端「宽不变、只变矮」判为 IME，不跟缩）
+    expect(INK_PAD).toContain('variant === "mobile" && textEditingRef.current && previousRect');
+  });
+
   it("工具行加密：＋在第一位；8×44 + 4 分隔 + 内距 4 = 360 ⇒ 412 不横滑（360 允许轻微横滑）", () => {
     // 无插入：7×44 + 3×1（分隔，margin 0）+ 内距 4 = 315 ≤ 360−16−2 = 342
     const baseRow = 7 * 44 + 3 * 1 + 4;
@@ -169,13 +180,15 @@ describe("手写板正式端到端接线", () => {
     expect(MOBILE_INK_CSS).toContain("min-width: var(--mb-tap-min); height: var(--mb-tap-min);");
   });
 
-  it("插入菜单：坞上方 8 的悬浮卡（两项 44 高），复用 importImages/importPdf；阅读态无入口", () => {
+  it("插入菜单：坞上方 8 的悬浮卡（文字 / 贴图两项 44 高）；背景导入已下沉纸张行", () => {
     expect(INK_PAD).toContain('data-overlay="insert"');
     expect(INK_PAD).toContain('aria-label="插入"');
     expect(INK_PAD).toContain("data-popover-trigger=\"insert\"");
-    // 菜单两项复用既有流程（不复制实现）
-    expect(INK_PAD).toContain("setInsertOpen(false); void importImages();");
-    expect(INK_PAD).toContain("setInsertOpen(false); void importPdf();");
+    // 菜单只剩「文字 / 贴图」：背景导入不在菜单里（261104 用户定稿：放到和背景一栏）
+    expect(INK_PAD).toContain("setInsertOpen(false); insertPageText();");
+    expect(INK_PAD).toContain("setInsertOpen(false); void insertPageImage();");
+    expect(INK_PAD).not.toContain("setInsertOpen(false); void importImages();");
+    expect(INK_PAD).not.toContain("setInsertOpen(false); void importPdf();");
     // 插入按钮只在编辑态工具坞里（阅读态无）
     expect(INK_PAD).toContain(") : !readOnly ? (");
     // 全局预览面板里的旧导入行已移除（两个入口不并存）
@@ -264,10 +277,50 @@ describe("手写板正式端到端接线", () => {
     expect(INK_PAD).toMatch(/const eraseBase = eraseBeforeRef\.current;[\s\S]*?const restored = replacePage\(current, eraseBase\);/);
   });
 
-  it("全局预览：移动端悬浮覆盖（不推画布），桌面仍是流内面板；阅读态编辑项禁用、选页可用", () => {
-    // 移动端 = 包装在 data-overlay="preview" 里；桌面 = 三元分支的 else 之外、直接流内节点
+  it("页面面板：桌面 = 左侧悬浮覆盖「页面」（缩略图/大纲两视图、可拖宽）；移动端全局预览仍是悬浮覆盖", () => {
+    // 桌面：单一入口 + 新面板；旧的底部横条 / 大纲浮层不再挂载
+    expect(INK_PAD).toContain("<InkPagesPanel");
+    expect(INK_PAD).not.toContain("InkOutlinePanel");
+    expect(INK_PAD).not.toContain("data-pages-panel");
+    // 左侧悬浮**覆盖**：不移动画布（没有 stage 内距规则），面板贴 left
+    expect(DESKTOP_INK_CSS).toContain(".ink-pad--desktop .ink-pages-panel {");
+    expect(DESKTOP_INK_CSS).toMatch(/\.ink-pad--desktop \.ink-pages-panel \{[^}]*left: 8px;/);
+    expect(DESKTOP_INK_CSS).not.toContain('[data-pages-panel="open"]');
+    expect(DESKTOP_INK_CSS).not.toContain("ink-outline");
+    // 可拖宽：右缘手柄 + 宽度纯函数（夹取/记忆）
+    expect(DESKTOP_INK_CSS).toContain(".ink-pages-panel__resize");
+    expect(PAGES_PANEL).toContain("export function clampPagesPanelWidth(");
+    expect(PAGES_PANEL).toContain('role="separator"');
+    expect(PAGES_PANEL).toContain("style={{ width: width + \"px\" }}");
+    // 缩略图 = 纯预览 + 页编辑（只留删除；前移/后移已删；筛选/摘要只在 list 分支）
+    expect(PAGES_PANEL).not.toContain("页前移");
+    // 长按拖拽排序：面板算落点、InkPad 提交（movePageTo）
+    expect(PAGES_PANEL).toContain("export function dropTargetIndex(");
+    expect(PAGES_PANEL).toContain("onCellPointerDown");
+    expect(INK_PAD).toContain("onReorder={movePageTo}");
+    // 移动端页签：InkPad 只留宿主注入点（不发 mb-* 类名），UI 在 mobile/ink 层
+    expect(INK_PAD).toContain("renderPageTab?: (state: {");
+    expect(INK_PAD).toContain("renderPageTab({");
+    expect(MOBILE_INK_PAD).toContain("<MobilePageTabButton");
+    expect(MOBILE_INK_PAD).toContain("<MobilePageTabSheet");
+    expect(MOBILE_INK_PAD).not.toContain("createPortal");
+    expect(MOBILE_INK_CSS).toContain(".mb-sheet .ink-page-tab__input");
+    expect(INK_PAD).toContain("const movePageTo = useCallback((id: string, toIndex: number) => {");
+    expect(PAGES_PANEL).not.toContain("页后移");
+    expect(PAGES_PANEL).toContain('aria-label={"删除第 " + (index + 1) + " 页"}');
+    expect(PAGES_PANEL).toContain('{view === "list" && (');
+    expect(PAGES_PANEL).toContain("ink-pages-panel__chips");
+    // 跳页在头部（与视图 tab 同一行）
+    expect(PAGES_PANEL).toMatch(/ink-pages-panel__head-right[\s\S]*?PageJump/);
+    // 页签编辑 = 底栏独立入口（不在面板里）
+    expect(PAGES_PANEL).not.toContain("onSaveNote");
+    expect(INK_PAD).toContain("<InkPageTabButton");
+    expect(PAGE_TAB_BUTTON).toContain('aria-label="页签"');
+    expect(PAGE_TAB_FORM).toContain('title={canSave ? (draftText ? "保存页签（Enter）" : "保存为纯标记（Enter）")');
+    expect(PAGE_TAB_BUTTON).toContain('hasTab ? "这一页有页签" : "给这一页加页签"');
+    // 移动端 = 包装在 data-overlay="preview" 里（桌面分支走面板，不再挂横条）
     expect(INK_PAD).toContain('<div data-overlay="preview">');
-    expect(INK_PAD).toMatch(/\{pagesOpen && \(variant === "desktop" \? \(\s*<InkPageStrip/);
+    expect(INK_PAD).toContain(") : pagesOpen ? (");
     expect(MOBILE_INK_CSS).toContain('.ink-pad--mobile > [data-overlay="preview"]');
     expect(MOBILE_INK_CSS).toContain("top: calc(var(--mb-tap-min) + var(--lake-space-xl));");
     expect(MOBILE_INK_CSS).toContain("max-height: 45dvh; overflow-y: auto;");
@@ -301,11 +354,12 @@ describe("手写板正式端到端接线", () => {
     expect(branch).toContain("aria-label={`笔宽 ${value}`}");
     expect(branch).toContain('aria-label="撤销"');
     expect(branch).toContain('aria-label="重做"');
-    // 桌面：缩放留在顶部工具条，底部是页码 + 新建页 + 页面管理 + 纸张
+    // 桌面：缩放留在顶部工具条，底部是页码 + 新建页 + **页面**（面板入口）+ 纸张
     expect(branch).toContain('aria-label="缩放"');
     expect(branch).toContain('aria-label="恢复为适应页面"');
     expect(branch).toContain('aria-label="新建页"');
-    expect(branch).toContain('aria-label="页面管理"');
+    expect(branch).toContain('aria-label="页面"');
+    expect(branch).not.toContain('aria-label="页面管理"');
     expect(branch).toContain('className="ink-footer__right"');
     // 背景来源排在纸张按钮之后（顺序即语义：先选纸张，再用图片/PDF 当背景）
     expect(branch.indexOf("ink-backgrounds") < branch.indexOf("<InkBackgroundSourceButtons")).toBe(true);
@@ -323,8 +377,9 @@ describe("手写板正式端到端接线", () => {
     expect(branch).not.toContain("选择笔宽");
     expect(branch).not.toContain("data-popover-trigger");
     expect(branch).not.toContain("data-overlay");
-    // 桌面预览面板保持「流内、直接渲染 InkPageStrip」——不套悬浮包装
-    expect(INK_PAD).toMatch(/\{pagesOpen && \(variant === "desktop" \? \(\s*<InkPageStrip/);
+    // 桌面不再挂底部缩略图横条：页面管理并进右侧「页面」面板（移动端仍用 InkPageStrip 做全局预览）
+    expect(INK_PAD).toContain("<InkPagesPanel");
+    expect(INK_PAD).not.toMatch(/\{pagesOpen && \(variant === "desktop" \? \(/);
   });
 
   it("v4 正文模型：版本 4、扁平点编码、activePageId 不落盘、坏页可丢", () => {
@@ -357,7 +412,7 @@ describe("手写板正式端到端接线", () => {
     expect(PAGE_STRIP).toContain('pointerEvents="none"');
   });
 
-  it("导入入口：移动端在编辑态工具坞「插入」菜单、桌面在编辑态工具条；正文只在编辑态写", () => {
+  it("背景导入入口：两端都在纸张同一行（背景图片 / 背景 PDF）；正文只在编辑态写", () => {
     // 移动端：坞内「插入」一个 44 按钮 + 坞上方悬浮菜单（不再藏在全局预览里）
     expect(INK_PAD).toContain('aria-label="插入"');
     expect(INK_PAD).toContain('data-overlay="insert"');
@@ -373,8 +428,16 @@ describe("手写板正式端到端接线", () => {
     expect(MOBILE_INK_PAD).toContain("bridge.uploadResource(input, noteId)");
     expect(MOBILE_INK_PAD).toContain("onImportPdf={noteId ? onImportPdf : undefined}");
     expect(MOBILE_PANES).toContain("noteId={t.id}");
-    // 移动端导入 CSS：坞上方「插入」菜单（预览面板里的旧导入行已删除）
-    expect(MOBILE_INK_CSS).toContain('[data-overlay="insert"]');
+    // 瞬时结果（导入失败/完成）走宿主注入的提示通道：移动端 = toast（不占编辑空间），桌面退回板内横幅
+    expect(INK_PAD).toContain('onTransientMessage?: (text: string, kind: "info" | "error") => void;');
+    expect(INK_PAD).toContain("const transientMessageRef = useRef(onTransientMessage);");
+    expect(INK_PAD).toContain("if (toast) { toast(text, \"error\"); return; }");
+    expect(INK_PAD).toContain("if (toast) { toast(text, \"info\"); return; }");
+    expect(MOBILE_INK_PAD).toContain("onTransientMessage={notifyTransient}");
+    expect(MOBILE_INK_PAD).toContain("showToast(text, { type: kind })");
+    // 移动端：背景来源按钮在纸张行内（.ink-backgrounds .ink-bg-source），不在 ＋ 菜单
+    expect(INK_PAD).toContain("<InkBackgroundSourceButtons");
+    expect(MOBILE_INK_CSS).toContain('.ink-pad--mobile > [data-overlay="dock"] .ink-backgrounds .ink-bg-source');
     expect(MOBILE_INK_CSS).not.toContain("[data-ink-import]");
   });
 

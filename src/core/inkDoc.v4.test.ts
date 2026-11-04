@@ -35,7 +35,7 @@ describe("inkDoc v4", () => {
     expect(parseInkBody(JSON.stringify({ kind: "ink", version: 5, pages: [] }))).toBeNull();
   });
 
-  it("页备注往返：写入 → 读回一致；空/纯空白 = 不落盘", () => {
+  it("页签往返：文字页签读回一致；**空串/纯空白 = 纯标记也要落盘**（字段存在即页签）", () => {
     const doc: InkDoc = createInkDoc("p1");
     doc.pages[0].note = "重点：第三章";
     const body = inkToBody(doc);
@@ -43,9 +43,20 @@ describe("inkDoc v4", () => {
     expect(body).toContain('"note":"重点：第三章"');
     expect(parseInkBody(body)!.pages[0].note).toBe("重点：第三章");
 
+    // 纯标记：note 存在但为空 ⇒ 必须写出来；读回仍是 ""（≠ undefined）
+    const marker: InkDoc = createInkDoc("p1");
+    marker.pages[0].note = "";
+    const markerBody = inkToBody(marker);
+    expect(markerBody).toContain('"note":""');
+    expect(parseInkBody(markerBody)!.pages[0].note).toBe("");
+
+    // 纯空白同样归一成纯标记
     const blank: InkDoc = createInkDoc("p1");
     blank.pages[0].note = "   ";
-    expect(inkToBody(blank)).not.toContain("note");
+    expect(inkToBody(blank)).toContain('"note":""');
+
+    // 没有 note 字段 = 没有页签
+    expect(inkToBody(createInkDoc("p1"))).not.toContain("note");
   });
 
   it("页备注超长：截断到上限（元数据宁截断也不让整页坏）", () => {

@@ -1,6 +1,6 @@
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import type { EditorCaptureHandler } from "../../core/editorCapture";
-import { ChevronLeft, ChevronRight, Eraser, FileText, Highlighter, ImagePlus, LayoutGrid, Minus, Pen, Plus, Redo2, SquarePlus, Sticker, Type, Undo2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Eraser, Highlighter, LayoutGrid, Minus, Pen, Plus, Redo2, SquarePlus, Sticker, Type, Undo2 } from "lucide-react";
 import { INK_DEFAULT_COLOR, INK_STROKE_COLORS } from "./inkPalette.js";
 import {
   createInkPage,
@@ -19,13 +19,14 @@ import { readInkNavPage, writeInkNavPage } from "./inkNav.js";
 import { hitTestStroke, strokeToSvgPath } from "./inkGeometry.js";
 import { inkStrokeStyle } from "./inkStrokeStyle.js";
 import { InkExportMenu, type InkPageExportFormat } from "./InkExportMenu.js";
-import { InkOutlinePanel } from "./InkOutlinePanel.js";
-import { notedPageIds } from "./inkOutline.js";
-import { INK_IMAGE_MIN_EDGE, movePageImage, placeInkPageImage, removePageImage, resizePageImage } from "./inkPageImages.js";
+import { InkPagesPanel, type InkPagesView } from "./InkPagesPanel.js";
+import { InkPageTabButton } from "./InkPageTabButton.js";
+import { tabPageIds } from "./inkOutline.js";
+import { INK_IMAGE_MIN_EDGE, hitTestPageImage, movePageImage, placeInkPageImage, removePageImage, resizePageImage } from "./inkPageImages.js";
 import { InkImageRemoveButton, InkImageResizeHandle, InkSelectionRect } from "./InkImageSelection.js";
 import { InkPageTextEditor } from "./InkPageTextEditor.js";
 import { InkTextSelectionControls } from "./InkTextSelectionControls.js";
-import { INK_TEXT_DEFAULT_FONT_SIZE, INK_TEXT_LINE_HEIGHT, bumpPageTextFontSize, hitTestPageText, inkTextHeight, movePageText, placeInkPageText, removePageText, resizePageText, updatePageText, wrapInkTextLines } from "./inkPageTexts.js";
+import { INK_TEXT_DEFAULT_FONT_SIZE, INK_TEXT_LINE_HEIGHT, bumpPageTextFontSize, hitTestPageText, inkTextBaselineOffset, inkTextHeight, movePageText, placeInkPageText, removePageText, resizePageText, updatePageText, wrapInkTextLines } from "./inkPageTexts.js";
 import { InkBackgroundSourceButtons } from "./InkBackgroundSourceButtons.js";
 import { inkPerfDebugEnabled, installInkPerfHooks, recordInkPerf } from "./inkPerfStats";
 import { inkImageImportNotice, inkPdfImportNotice } from "./inkImportNotice";
@@ -90,6 +91,24 @@ export interface InkPadProps {
    * 返回 null = 用户取消。落点由 InkPad 决定（页宽 40%、居中，用户 261104 定稿）。
    */
   onInsertPageImage?: () => Promise<{ url: string; naturalWidth?: number; naturalHeight?: number } | null>;
+  /**
+   * 瞬时提示通道（导入失败 / 导入完成 / 单页导出完成）。
+   * 移动端注入 = toast 气泡（不占编辑空间，用户 261104 反馈「报错不要占用编辑空间」）；
+   * 不注入 = 板内横幅 role=alert（桌面口径：空间足够、可回看）。
+   * 只有「瞬时动作结果」走这里；保存失败 / 正文坏这类需要常驻的状态仍用板内横幅。
+   */
+  onTransientMessage?: (text: string, kind: "info" | "error") => void;
+  /**
+   * 移动端「页签」入口（宿主注入）：InkPad 只给当前页数据与两个动作，UI（按钮 + 底部 Sheet）由移动层决定
+   * —— 共享层不发 `mb-*` 类名（跨端样式护栏要求共享组件类名两端都有样式）。
+   */
+  renderPageTab?: (state: {
+    pageNumber: number;
+    readOnly: boolean;
+    note: string | undefined;
+    onSave: (text: string) => void;
+    onClear: () => void;
+  }) => ReactNode;
 }
 
 const SAVE_DEBOUNCE_MS = 500;
@@ -187,7 +206,7 @@ const StaticStrokeLayer = memo(function StaticStrokeLayer({ strokes }: { strokes
   );
 });
 
-export function InkPad({ content, readOnly = false, variant, noteId, active, paneVisible, pane, onChange, onDirty, onEditorCapture, onImportImages, onImportPdf, onExportPage, onInsertPageImage }: InkPadProps) {
+export function InkPad({ content, readOnly = false, variant, noteId, active, paneVisible, pane, onChange, onDirty, onEditorCapture, onImportImages, onImportPdf, onExportPage, onInsertPageImage, onTransientMessage, renderPageTab }: InkPadProps) {
   // 正文只在挂载时解析；父层保存会更新 content，但编辑器不应因此反复解析整份大 JSON。
   // 外部真正需要换正文时由宿主 bump reloadKey 重挂载。
   // v3：当前页是设备本地视图（core/inkNav.ts），优先用它；没有记录才回退 v1/v2 正文里的旧 activePageId。
@@ -220,6 +239,8 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
   const [highlighterWidth, setHighlighterWidth] = useState<number>(18);
   const [zoom, setZoom] = useState(1);
   const [pagesOpen, setPagesOpen] = useState(false);
+  /** 「页面」面板的视图（缩略图 / 大纲）：设备本地视图状态，不写正文。 */
+  const [pagesView, setPagesView] = useState<InkPagesView>("thumbs");
   // 移动端编辑工具坞的悬浮面板（当前色板 / 当前笔宽 / 插入菜单）；桌面不渲染它们。
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [widthsOpen, setWidthsOpen] = useState(false);
@@ -227,7 +248,6 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
   /** 桌面底部「导出」按钮的悬浮菜单（只有一个按钮：点开再选格式，不铺三个按钮）。 */
   const [exportOpen, setExportOpen] = useState(false);
   /** 大纲面板开合（页备注本身是正文数据，不需要额外状态）。 */
-  const [outlineOpen, setOutlineOpen] = useState(false);
   /** v4 页内贴图：当前选中的图 + 拖动临时态（拖动只改内存，松手才 commit）。 */
   const [selectedImageId, setSelectedImageId] = useState<string | null>(null);
   const imageDragRef = useRef<{ id: string; startX: number; startY: number; before: InkPage["images"] } | null>(null);
@@ -308,9 +328,24 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
     return diskCanonicalRef.current !== null && diskCanonicalRef.current === body;
   }, []);
 
-  /** 261103 十三批 P2：导入完成提示（6s 后自动消失；不打断编辑）。 */
+  /** 宿主注入的瞬时提示通道（移动端 = toast）；用 ref 保证回调身份变化不牵动下面一堆 useCallback 依赖。 */
+  const transientMessageRef = useRef(onTransientMessage);
+  transientMessageRef.current = onTransientMessage;
+  /**
+   * 瞬时失败（导入失败 / 导出失败 / 插入贴图失败）：
+   * 注入 toast 就只弹气泡（绝不占版面 ⇒ 不会挤动页面尺寸）；否则退回板内横幅，可累加多条。
+   */
+  const notifyError = useCallback((text: string, options: { append?: boolean } = {}) => {
+    if (!text) return;
+    const toast = transientMessageRef.current;
+    if (toast) { toast(text, "error"); return; }
+    setImportError((previous) => (options.append && previous ? previous + "；" + text : text));
+  }, []);
+  /** 261103 十三批 P2：导入完成提示（6s 后自动消失；不打断编辑）。注入 toast 时交给 toast（同样 6s）。 */
   const showImportNotice = useCallback((text: string) => {
     if (!text) return;
+    const toast = transientMessageRef.current;
+    if (toast) { toast(text, "info"); return; }
     setImportNotice(text);
     if (importNoticeTimerRef.current !== null) window.clearTimeout(importNoticeTimerRef.current);
     importNoticeTimerRef.current = window.setTimeout(() => {
@@ -345,6 +380,10 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
   const pageWidth = page?.width ?? 0;
   const pageHeight = page?.height ?? 0;
 
+  const fitStageRef = useRef<{ width: number; height: number } | null>(null);
+  /** 编辑文字期间（IME 会压矮可视区）：页面尺寸冻结，不跟着键盘缩 —— 否则「点开编辑器整页缩一半，提交又长回去」。 */
+  const textEditingRef = useRef(false);
+  textEditingRef.current = textEditing !== null;
   useLayoutEffect(() => {
     if (pageWidth <= 0 || pageHeight <= 0) return;
     const stage = stageRef.current;
@@ -355,6 +394,10 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
       const padY = (Number.parseFloat(style.paddingTop) || 0) + (Number.parseFloat(style.paddingBottom) || 0);
       const availWidth = Math.max(1, stage.clientWidth - padX);
       const availHeight = Math.max(1, stage.clientHeight - padY);
+      const previousRect = fitStageRef.current;
+      fitStageRef.current = { width: availWidth, height: availHeight };
+      // 移动端文字编辑态：宽度不变、只变矮 ⇒ 判为 IME 弹起，保持页面尺寸（stage 自己滚动）。
+      if (variant === "mobile" && textEditingRef.current && previousRect && Math.abs(availWidth - previousRect.width) <= 2 && availHeight < previousRect.height - 20) return;
       const ratio = pageWidth / pageHeight;
       const height = Math.min(availHeight, availWidth / ratio);
       setFitSize((previous) => {
@@ -367,7 +410,7 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
     const observer = new ResizeObserver(update);
     observer.observe(stage);
     return () => observer.disconnect();
-  }, [pageHeight, pageWidth]);
+  }, [pageHeight, pageWidth, variant]);
   const canUndo = historyVersion >= 0 && undoRef.current.length > 0;
   const canRedo = historyVersion >= 0 && redoRef.current.length > 0;
   const activeWidth = mode === "highlighter" ? highlighterWidth : penWidth;
@@ -380,23 +423,22 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
   }, []);
   /** 坞上面板（色板/笔宽/插入）：点「面板本体 / 触发按钮」之外的任意处关闭（捕获 pointerdown，不误吞画布手势）。 */
   useEffect(() => {
-    if (!paletteOpen && !widthsOpen && !insertOpen && !exportOpen && !outlineOpen) return;
+    if (!paletteOpen && !widthsOpen && !insertOpen && !exportOpen) return;
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target as Element | null;
-      if (target?.closest?.('[data-overlay="palette"], [data-overlay="widths"], [data-overlay="insert"], [data-popover-trigger], [data-ink-export], [data-ink-outline]')) return;
+      if (target?.closest?.('[data-overlay="palette"], [data-overlay="widths"], [data-overlay="insert"], [data-popover-trigger], [data-ink-export], [data-ink-pages-panel]')) return;
       closeSwatches();
       setExportOpen(false);
-      setOutlineOpen(false);
     };
     document.addEventListener("pointerdown", onPointerDown, true);
     return () => document.removeEventListener("pointerdown", onPointerDown, true);
-  }, [closeSwatches, exportOpen, insertOpen, outlineOpen, paletteOpen, widthsOpen]);
+  }, [closeSwatches, exportOpen, insertOpen, paletteOpen, widthsOpen]);
   // 退回阅读态时工具坞整体卸载：把面板状态一起收掉，下次进编辑态不会凭空弹开。
   useEffect(() => {
     if (readOnly) {
       closeSwatches();
       setExportOpen(false);
-      setOutlineOpen(false);
+      setPagesOpen(false);
     }
   }, [closeSwatches, readOnly]);
   /** 移动端全局预览是悬浮覆盖：点「预览面板本体 / 触发按钮」之外的任意处关闭（桌面流内面板不变）。 */
@@ -564,7 +606,7 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
     try {
       const outcome = await importer();
       if (!outcome) return; // 用户取消
-      if (outcome.errors.length > 0) setImportError("导入图片失败：" + outcome.errors.join("；"));
+      if (outcome.errors.length > 0) notifyError("导入图片失败：" + outcome.errors.join("；"));
       const current = docRef.current;
       if (!current || outcome.pages.length === 0) return;
       const added = outcome.pages;
@@ -579,12 +621,12 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
       setPagesOpen(false);
       setPendingDeletePageId(null);
     } catch (reason) {
-      setImportError("导入图片失败：" + (reason instanceof Error ? reason.message : String(reason)));
+      notifyError("导入图片失败：" + (reason instanceof Error ? reason.message : String(reason)));
     } finally {
       importingRef.current = false;
       setImporting(false);
     }
-  }, [commit, readOnly, showImportNotice]);
+  }, [commit, notifyError, readOnly, showImportNotice]);
 
   /**
    * v2：导入 PDF（编辑态）。宿主负责选 PDF / 落原文件 / 逐页栅格化 / 上传；
@@ -627,15 +669,15 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
       if (!outcome) return; // 用户取消选文件
       if (outcome.cancelled) {
         // 已交付的页留在正文里（能继续标注），没交付的页连资产一起清掉。
-        setImportError(delivered > 0
+        notifyError(delivered > 0
           ? `已取消 PDF 导入：已导入 ${delivered} 页，可以继续标注`
           : "已取消 PDF 导入");
         return;
       }
-      if (outcome.errors.length > 0) setImportError(outcome.errors.join("；"));
+      if (outcome.errors.length > 0) notifyError(outcome.errors.join("；"));
       if (outcome.truncated) {
         const truncatedHint = `PDF 共 ${outcome.pageCount} 页，本次只导入前 ${outcome.importedPageCount} 页（上限 ${INK_PDF_MAX_PAGES} 页）`;
-        setImportError((previous) => (previous ? previous + "；" + truncatedHint : truncatedHint));
+        notifyError(truncatedHint, { append: true });
       }
       // 收尾：outcome.pages 是「没能边交付的尾巴」（正常为空）；sourcePdf 是整篇元信息，最后补一次。
       const current = docRef.current;
@@ -659,14 +701,14 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
         setPendingDeletePageId(null);
       }
     } catch (reason) {
-      setImportError(reason instanceof Error ? reason.message : "导入 PDF 失败");
+      notifyError(reason instanceof Error ? reason.message : "导入 PDF 失败");
     } finally {
       pdfImportingRef.current = false;
       pdfAbortRef.current = null;
       setPdfImporting(false);
       setPdfProgress(null);
     }
-  }, [commit, readOnly, showImportNotice]);
+  }, [commit, notifyError, readOnly, showImportNotice]);
 
   /** 单页导出（宿主注入；移动端不传 ⇒ 没有入口）。 */
   const runExportPage = useCallback(async (format: InkPageExportFormat) => {
@@ -676,9 +718,9 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
       const result = await onExportPage({ pageIds: [page.id], format });
       if (result?.exportPath) showImportNotice(`已导出第 ${pageIndex + 1} 页：${result.exportPath}`);
     } catch (reason) {
-      setImportError("导出失败：" + (reason instanceof Error ? reason.message : String(reason)));
+      notifyError("导出失败：" + (reason instanceof Error ? reason.message : String(reason)));
     }
-  }, [onExportPage, page, pageIndex, showImportNotice]);
+  }, [notifyError, onExportPage, page, pageIndex, showImportNotice]);
 
   const cancelPdfImport = useCallback(() => {
     pdfAbortRef.current?.abort();
@@ -707,6 +749,21 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
     commit({ ...current, pages }, order ? { pages: [], order } : null);
   }, [commit, readOnly]);
 
+  /** 页面排序（缩略图长按拖拽）：把某页移到 toIndex（= 移除它之后的目标下标），一次可撤销提交。 */
+  const movePageTo = useCallback((id: string, toIndex: number) => {
+    const current = docRef.current;
+    if (!current || readOnly) return;
+    const index = current.pages.findIndex((item) => item.id === id);
+    if (index < 0) return;
+    const target = Math.max(0, Math.min(current.pages.length - 1, toIndex));
+    if (target === index) return;
+    const pages = [...current.pages];
+    const [moved] = pages.splice(index, 1);
+    pages.splice(target, 0, moved);
+    const order = inkOrderDelta(current.pages, pages);
+    commit({ ...current, pages }, order ? { pages: [], order } : null);
+  }, [commit, readOnly]);
+
   /** 插入页内贴图：宿主选图上传 → 按「页宽 40%、居中」落到当前页（一次可撤销提交）。 */
   const insertPageImage = useCallback(async () => {
     if (!onInsertPageImage || readOnly) return;
@@ -722,9 +779,9 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
       commit(replacePage(current, nextPage), inkPagePatch(before, nextPage));
       setSelectedImageId(image.id);
     } catch (reason) {
-      setImportError("插入图片失败：" + (reason instanceof Error ? reason.message : String(reason)));
+      notifyError("插入图片失败：" + (reason instanceof Error ? reason.message : String(reason)));
     }
-  }, [commit, onInsertPageImage, page, readOnly]);
+  }, [commit, notifyError, onInsertPageImage, page, readOnly]);
 
   /** 删除选中的贴图（一次可撤销提交）。 */
   const deleteSelectedImage = useCallback(() => {
@@ -966,16 +1023,26 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
   }, [deleteSelectedImage, deleteSelectedText, readOnly, selectedImageId, selectedTextId]);
 
   /** 保存当前页备注（v4 正文数据：进撤销栈、标脏、随同步走；空串 = 删除备注）。 */
+  /** 写页签：text 已 trim；**空串 = 纯标记**（字段存在、值为空），与「清除页签」是两件事。 */
   const savePageNote = useCallback((text: string) => {
     const current = docRef.current;
     if (!current || readOnly) return;
     const before = current.pages.find((item) => item.id === current.activePageId);
     if (!before) return;
-    const trimmed = text.trim();
-    if ((before.note ?? "") === trimmed) return;
+    const nextText = text.trim();
+    if (before.note === nextText) return;
+    const nextPage = { ...before, note: nextText };
+    commit(replacePage(current, nextPage), inkPagePatch(before, nextPage));
+  }, [commit, readOnly]);
+
+  /** 清除页签（删掉 note 字段 ⇒ 这一页又没有页签了）。 */
+  const clearPageNote = useCallback(() => {
+    const current = docRef.current;
+    if (!current || readOnly) return;
+    const before = current.pages.find((item) => item.id === current.activePageId);
+    if (!before || before.note === undefined) return;
     const nextPage = { ...before };
-    if (trimmed) nextPage.note = trimmed;
-    else delete nextPage.note;
+    delete nextPage.note;
     commit(replacePage(current, nextPage), inkPagePatch(before, nextPage));
   }, [commit, readOnly]);
 
@@ -1059,12 +1126,15 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
     } else if (penDownRef.current) {
       return; // 掌托/手指在笔落下期间不参与书写
     }
-    // v4 页内贴图：命中图就是「选中 + 拖动」，不要再画线（笔与手指都支持）
-    const imageTarget = (event.target as Element | null)?.closest?.("[data-page-image]");
-    const imageId = imageTarget?.getAttribute("data-page-image") ?? null;
+    // v4 页内贴图：命中图就是「选中 + 拖动」，不要再画线（笔与手指都支持）。
+    // 命中判据用**坐标**（hitTestPageImage），不能只看 event.target：笔迹永远画在贴图上层的 <path> 里，
+    // 「视觉层序」不等于「命中层序」—— 只看 target 会让被笔迹盖住的贴图永远选不中、删不掉（261104 用户现场）。
+    const rect0 = event.currentTarget.getBoundingClientRect();
+    const startPoint = pointFromClient(event.clientX, event.clientY, event.pointerType, event.pressure, rect0, page);
+    const imageId = hitTestPageImage(page, startPoint)
+      ?? (event.target as Element | null)?.closest?.("[data-page-image]")?.getAttribute("data-page-image")
+      ?? null;
     if (imageId) {
-      const rect0 = event.currentTarget.getBoundingClientRect();
-      const startPoint = pointFromClient(event.clientX, event.clientY, event.pointerType, event.pressure, rect0, page);
       setSelectedImageId(imageId);
       imageDragRef.current = { id: imageId, startX: startPoint.x, startY: startPoint.y, before: page.images };
       activePointerRef.current = { id: event.pointerId, type: event.pointerType };
@@ -1413,7 +1483,8 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
         <div className="ink-toolbar" role="toolbar" aria-label="手写板导航" data-overlay="nav">
           <div className="ink-pages">
             <button onClick={() => switchPage(-1)} disabled={pageIndex <= 0} aria-label="上一页"><ChevronLeft size={16} /></button>
-            <span>第 {pageIndex + 1} / {doc.pages.length} 页</span>
+            {/* 移动端页码紧凑（「第 n / N 页」→「n / N」）：顶部胶囊要塞下 翻页+缩放+全局预览+页签 四组 */}
+            <span>{pageIndex + 1} / {doc.pages.length}</span>
             <button onClick={() => switchPage(1)} disabled={pageIndex >= doc.pages.length - 1} aria-label="下一页"><ChevronRight size={16} /></button>
           </div>
           <span className="ink-toolbar__sep" />
@@ -1431,6 +1502,18 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
             title="全局预览"
             aria-expanded={pagesOpen}
           ><LayoutGrid size={16} /></button>
+          {renderPageTab ? (
+            <>
+              <span className="ink-toolbar__sep" />
+              {renderPageTab({
+                pageNumber: pageIndex + 1,
+                readOnly,
+                note: page?.note,
+                onSave: savePageNote,
+                onClear: clearPageNote,
+              })}
+            </>
+          ) : null}
         </div>
       )}
 
@@ -1449,22 +1532,25 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
         </div>
       )}
 
-      {pagesOpen && (variant === "desktop" ? (
-        <InkPageStrip
+      {variant === "desktop" ? (
+        // 桌面：「页面」悬浮面板（缩略图 / 大纲两个视图；单一入口、不可固定）
+        <InkPagesPanel
+          open={pagesOpen}
+          view={pagesView}
+          onViewChange={setPagesView}
           pages={doc.pages}
-          activePageId={doc.activePageId}
+          currentPageId={doc.activePageId}
+          readOnly={readOnly}
           pendingDeleteId={pendingDeletePageId}
-          onSelect={selectPage}
-          onMove={movePage}
+          onJump={selectPage}
           onAdd={addPage}
+          onReorder={movePageTo}
           onRequestDelete={requestDeletePage}
           onConfirmDelete={confirmDeletePage}
-          notedPageIds={notedPageIds(doc.pages)}
           onCancelDelete={() => setPendingDeletePageId(null)}
           onClose={() => { setPagesOpen(false); setPendingDeletePageId(null); }}
-          readOnly={readOnly}
         />
-      ) : (
+      ) : pagesOpen ? (
         // 移动端：全局预览 = 悬浮覆盖（不再把画布往下推；桌面仍是流内面板，结构不变）
         <div data-overlay="preview">
           <InkPageStrip
@@ -1476,13 +1562,13 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
             onAdd={addPage}
             onRequestDelete={requestDeletePage}
             onConfirmDelete={confirmDeletePage}
-            notedPageIds={notedPageIds(doc.pages)}
+            tabPageIds={tabPageIds(doc.pages)}
             onCancelDelete={() => setPendingDeletePageId(null)}
             onClose={() => { setPagesOpen(false); setPendingDeletePageId(null); }}
             readOnly={readOnly}
           />
         </div>
-      ))}
+      ) : null}
 
       <div className="ink-page-stage" ref={stageRef}>
         <div
@@ -1541,6 +1627,8 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
             ))}
             {/* v4 页内文字块：逐行 <tspan>（换行用 inkPageTexts 的同一份估算，导出与屏幕一致） */}
             {(page.texts ?? []).map((item) => {
+              // 正在编辑的这一块由输入框接管（同一几何 = 不叠字、提交瞬间不跳）
+              if (textEditing?.id === item.id) return null;
               const lines = wrapInkTextLines(item.text, item.width, item.fontSize);
               if (lines.length === 0) return null;
               const lineHeight = item.fontSize * INK_TEXT_LINE_HEIGHT;
@@ -1551,7 +1639,7 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
                   key={item.id}
                   data-page-text={item.id}
                   x={x}
-                  y={item.y + item.fontSize * 0.9}
+                  y={item.y + inkTextBaselineOffset(item.fontSize)}
                   fill={item.color}
                   fontSize={item.fontSize}
                   textAnchor={anchor}
@@ -1563,9 +1651,9 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
                 </text>
               );
             })}
-            {/* 选中的文字块才画虚线框（用户澄清：选中时出现，失去焦点就消失） */}
-            {!readOnly && selectedTextId && (page.texts ?? []).some((item) => item.id === selectedTextId) ? (() => {
-              const item = (page.texts ?? []).find((entry) => entry.id === selectedTextId)!;
+            {/* 选中的文字块才画虚线框（用户澄清：选中时出现，失去焦点就消失）；编辑中同一条框 = 输入区边界 */}
+            {!readOnly && (selectedTextId || textEditing) && (page.texts ?? []).some((item) => item.id === (selectedTextId ?? textEditing?.id)) ? (() => {
+              const item = (page.texts ?? []).find((entry) => entry.id === (selectedTextId ?? textEditing?.id))!;
               return <InkSelectionRect image={{ x: item.x, y: item.y, width: item.width, height: Math.max(item.fontSize * INK_TEXT_LINE_HEIGHT, inkTextHeight(item)) }} />;
             })() : null}
             {/* 选中贴图：虚线框（pointer-events:none，不挡画线；点图本身负责选中） */}
@@ -1590,7 +1678,6 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
             return (
               <InkPageTextEditor
                 text={item}
-                page={page}
                 scale={frameWidth / page.width}
                 value={textEditing.draft}
                 onChange={(value) => setTextEditing((current) => (current ? { ...current, draft: value } : current))}
@@ -1635,18 +1722,24 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
             <span>第 {pageIndex + 1} / {doc.pages.length} 页</span>
             <button onClick={() => switchPage(1)} disabled={pageIndex >= doc.pages.length - 1} aria-label="下一页"><ChevronRight size={16} /></button>
             <button onClick={addPage} disabled={readOnly} aria-label="新建页"><Plus size={16} /></button>
-            <button onClick={() => { setPagesOpen((open) => !open); setPendingDeletePageId(null); }} aria-label="页面管理" title="页面管理"><LayoutGrid size={16} /></button>
+            {/* 单一入口（261104 定稿）：「大纲」与「页面管理」合并成这一枚，打开右侧悬浮面板（缩略图 / 大纲） */}
+            <button
+              className={["ink-tool", pagesOpen ? "is-active" : ""].join(" ")}
+              onClick={() => { setPagesOpen((open) => !open); setPendingDeletePageId(null); closeSwatches(); }}
+              aria-label="页面"
+              title="页面：缩略图 / 大纲"
+              aria-expanded={pagesOpen}
+            ><LayoutGrid size={16} /></button>
+            {/* 页签 = 底栏独立入口（打标记 / 一句话说明 / 清除），不塞进页面面板（用户 261104 定稿） */}
+            <InkPageTabButton
+              page={page}
+              pageNumber={pageIndex + 1}
+              readOnly={readOnly}
+              onSave={savePageNote}
+              onClear={clearPageNote}
+            />
           </div>
           <div className="ink-footer__right">
-            {/* 大纲 / 页备注（桌面专用控件；移动端本轮没有入口） */}
-            <InkOutlinePanel
-              open={outlineOpen}
-              onToggle={() => { setOutlineOpen((open) => !open); closeSwatches(); }}
-              pages={doc.pages}
-              currentPageId={doc.activePageId}
-              onJump={selectPage}
-              onSaveNote={savePageNote}
-            />
             {/* 只放一个按钮：点开再选格式（用户定稿：不要三个按钮占满工具条）；菜单本体在 InkExportMenu（桌面专用） */}
             {onExportPage && (
               <InkExportMenu
@@ -1670,11 +1763,11 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
         </div>
       ) : !readOnly ? (
         // 移动端底部工具坞（仅编辑态）：上排画笔工具（横向滚动，含颜色/笔宽/撤销重做），
-        // 下排纸张。编辑态工作区胶囊已由工作区隐藏，工具坞贴底并自己接系统安全区。
+        // 下排纸张 + 背景来源（背景图片 / 背景 PDF）。编辑态工作区胶囊已由工作区隐藏，工具坞贴底并自己接系统安全区。
         <div className="ink-footer" role="toolbar" aria-label="手写工具" data-overlay="dock">
           <div className="ink-toolbar" role="group" aria-label="画笔工具">
-            {/* 插入（＋）放第一位：文字块/贴图/背景图/背景 PDF 都收在坞内悬浮菜单里（宿主没接任何入口时不显示，保持 7 键一屏） */}
-            {(onImportImages || onImportPdf) && (
+            {/* 插入（＋）放第一位：坞内悬浮菜单只放「文字 / 贴图」（背景图片 / 背景 PDF 已下沉到纸张行，261104 二十五批） */}
+            {(onInsertPageImage || onImportImages || onImportPdf) && (
               <>
                 <button
                   className={["ink-tool", insertOpen ? "is-active" : ""].join(" ")}
@@ -1717,6 +1810,12 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
             {BACKGROUNDS.map((item) => (
               <button key={item.value} className={page.background === item.value ? "is-active" : ""} onClick={() => setBackground(item.value)} disabled={isPdfPageBackground(page)}>{item.label}</button>
             ))}
+            {/* 背景来源与纸张同一行：导入图片 / 导入 PDF 都是「给本页加背景」（261104 用户定稿：不要塞进 ＋ 菜单） */}
+            <InkBackgroundSourceButtons
+              disabled={importing || pdfImporting}
+              onImportImages={onImportImages ? () => void importImages() : undefined}
+              onImportPdf={onImportPdf ? () => void importPdf() : undefined}
+            />
           </div>
           {paletteOpen && (
             <div role="group" aria-label="选择颜色" data-overlay="palette">
@@ -1759,24 +1858,6 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
                   aria-label="插入贴图"
                   title="插入贴图（贴在当前页，可拖动/缩放）"
                 ><Sticker size={18} /><span>贴图</span></button>
-              )}
-              {onImportImages && (
-                <button
-                  className="ink-tool"
-                  onClick={() => { setInsertOpen(false); void importImages(); }}
-                  aria-label="导入图片"
-                  title="导入图片"
-                  disabled={importing || pdfImporting}
-                ><ImagePlus size={18} /><span>导入图片</span></button>
-              )}
-              {onImportPdf && (
-                <button
-                  className="ink-tool"
-                  onClick={() => { setInsertOpen(false); void importPdf(); }}
-                  aria-label="导入 PDF"
-                  title="导入 PDF"
-                  disabled={importing || pdfImporting}
-                ><FileText size={18} /><span>导入 PDF</span></button>
               )}
             </div>
           )}

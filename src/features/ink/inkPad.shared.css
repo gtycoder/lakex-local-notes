@@ -19,7 +19,7 @@
   flex: 0 0 auto;
   overflow-x: auto;
   scrollbar-width: none;
-  border-bottom: 1px solid var(--lake-border-1);
+  border-bottom: 0.5px solid var(--lake-border-1);
   background: var(--lake-bg-panel);
 }
 
@@ -36,7 +36,7 @@
   align-items: center;
   justify-content: center;
   padding: 0 6px;
-  border: 1px solid transparent;
+  border: 0.5px solid transparent;
   border-radius: var(--lake-radius-sm);
   background: transparent;
   color: var(--lake-text-2);
@@ -103,7 +103,7 @@
   position: relative;
   flex: 0 0 auto;
   overflow: hidden;
-  border: 1px solid var(--lake-border-1);
+  border: 0.5px solid var(--lake-border-1);
   border-radius: var(--lake-radius-sm);
   background-color: var(--lake-bg-panel);
 }
@@ -123,7 +123,7 @@
   justify-content: space-between;
   gap: 8px;
   flex: 0 0 auto;
-  border-top: 1px solid var(--lake-border-1);
+  border-top: 0.5px solid var(--lake-border-1);
   background: var(--lake-bg-panel);
   color: var(--lake-text-3);
 }
@@ -164,7 +164,7 @@
 .ink-invalid-banner {
   margin: 16px;
   padding: 12px 14px;
-  border: 1px solid var(--lake-border-1);
+  border: 0.5px solid var(--lake-border-1);
   border-radius: var(--lake-radius-sm);
   background: var(--lake-bg-panel);
   color: var(--lake-text-2);
@@ -177,7 +177,7 @@
   gap: 6px;
   flex: 0 0 auto;
   padding: 8px 38px 8px 8px;
-  border-bottom: 1px solid var(--lake-border-1);
+  border-bottom: 0.5px solid var(--lake-border-1);
   background: var(--lake-bg-panel);
 }
 
@@ -193,7 +193,7 @@
   flex: 0 0 auto;
   width: 64px;
   padding: 3px;
-  border: 1px solid var(--lake-border-1);
+  border: 0.5px solid var(--lake-border-1);
   border-radius: var(--lake-radius-sm);
   background: var(--lake-bg-window);
 }
@@ -262,7 +262,7 @@
   align-items: center;
   justify-content: center;
   padding: 0;
-  border: 1px solid transparent;
+  border: 0.5px solid transparent;
   border-radius: var(--lake-radius-xs);
   background: transparent;
   color: var(--lake-text-2);
@@ -331,7 +331,7 @@
   width: 22px;
   height: 22px;
   padding: 0;
-  border: 1px solid var(--lake-border-1);
+  border: 0.5px solid var(--lake-border-1);
   border-radius: var(--lake-radius-pill);
   background: var(--lake-bg-panel);
   color: var(--lake-text-2);
@@ -348,7 +348,7 @@
   z-index: 3;
   width: 12px;
   height: 12px;
-  border: 1px solid var(--lake-accent);
+  border: 0.5px solid var(--lake-accent);
   border-radius: var(--lake-radius-hairline);
   background: var(--lake-bg-panel);
   transform: translate(-50%, -50%);
@@ -356,22 +356,23 @@
   touch-action: none;
 }
 
-/* v4 页内文字块编辑框（位置/字号由 InkPageTextEditor 按页面百分比与缩放内联给出） */
+/* v4 页内文字块编辑框：**隐形输入区**（位置/字号由 InkPageTextEditor 按 px 内联给出）。
+   编辑中的那段字由 InkPad 用同一套 <text> 渲染（同一几何、同一断行），这里只提供光标/选区/IME
+   —— 用户 261104 报「编辑样式和完成样式完全不同」，根因就是这里画了白底 + 虚线框 + 内距。 */
 .ink-text-editor {
   position: absolute;
   z-index: 3;
   margin: 0;
-  padding: 2px 4px;
-  border: 1px dashed var(--lake-accent);
-  border-radius: var(--lake-radius-xs);
-  background: var(--lake-bg-panel);
-  color: var(--lake-text-1);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
   font-family: inherit;
   resize: none;
   outline: none;
   overflow: hidden;
 }
-
 /* 选中文字的浮层控制条（字号 ± / 删除）与右下角拖宽手柄 */
 .ink-text-controls {
   position: absolute;
@@ -380,7 +381,7 @@
   align-items: center;
   gap: 2px;
   padding: 2px;
-  border: 1px solid var(--lake-border-1);
+  border: 0.5px solid var(--lake-border-1);
   border-radius: var(--lake-radius-sm);
   background: var(--lake-bg-panel);
   box-shadow: var(--lake-shadow-card);
@@ -405,7 +406,7 @@
   z-index: 3;
   width: 12px;
   height: 12px;
-  border: 1px solid var(--lake-accent);
+  border: 0.5px solid var(--lake-accent);
   border-radius: var(--lake-radius-hairline);
   background: var(--lake-bg-panel);
   transform: translate(-50%, -50%);

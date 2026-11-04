@@ -79,6 +79,26 @@ describe("手写板页内贴图", () => {
     await view.unmount();
   });
 
+  it("被笔迹盖住也能选中：命中判据用坐标（target 是上层笔迹 <path> 时同样选中）", async () => {
+    const doc: InkDoc = createInkDoc("p1");
+    doc.pages[0].images = [{ id: "i1", url: IMAGE_URL, x: 100, y: 100, width: 200, height: 100 }];
+    const view = await mount({ content: inkToBody(doc), variant: "desktop", readOnly: false });
+    const frame = view.container.querySelector(".ink-page-frame") as HTMLElement;
+    frame.getBoundingClientRect = () => ({ left: 0, top: 0, width: 794, height: 1123, right: 794, bottom: 1123, x: 0, y: 0, toJSON: () => ({}) }) as DOMRect;
+    const svg = view.container.querySelector(".ink-page-svg") as SVGSVGElement;
+    // 坐标命中按 event.currentTarget（svg）的 rect 换算，jsdom 里也要给它量出页面尺寸
+    svg.getBoundingClientRect = () => ({ left: 0, top: 0, width: 794, height: 1123, right: 794, bottom: 1123, x: 0, y: 0, toJSON: () => ({}) }) as DOMRect;
+    // 故意把事件派给 svg（等价于点在压在上层的笔迹路径上，target 不是 <image>）
+    await act(async () => {
+      const down = new MouseEvent("pointerdown", { bubbles: true, clientX: 150, clientY: 150 });
+      Object.defineProperty(down, "pointerId", { value: 9 });
+      svg.dispatchEvent(down);
+    });
+    expect(view.container.querySelector(".ink-image-select")).not.toBeNull();
+    expect(view.container.querySelector('button[aria-label="删除这张图"]')).not.toBeNull();
+    await view.unmount();
+  });
+
   it("缩放手柄：拖动后图变大、松手一次 commit；拖动中不标脏（防抖落盘只发生一次）", async () => {
     const doc: InkDoc = createInkDoc("p1");
     doc.pages[0].images = [{ id: "i1", url: IMAGE_URL, x: 100, y: 100, width: 200, height: 100 }];

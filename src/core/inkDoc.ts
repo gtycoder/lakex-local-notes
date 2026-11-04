@@ -19,9 +19,9 @@
  *    （`InkDoc.droppedPages`，内存态，不落盘），不再让一页坏数据把整篇打成只读。
  *
  * v4（261104 二十批，一次升版装齐三件**页级**内容，避免反复升版把旧端反复踢进只读）：
- *  - `page.note`：页备注（一句话说明，≤200 字，跨端同步）；
+ *  - `page.note`：页签（字段名沿用 note；有值 = 有页签，**空串 = 纯标记**，可选一句话说明 ≤200 字，跨端同步）；
  *  - `page.images`：页内贴图（不铺满整页的小图，引用本笔记空间资产 URL ⇒ 声明/同步/GC 自动覆盖）；
- *  - `page.texts`：页内文字块（数据与渲染先落，编辑 UI 后续批次接入）。
+ *  - `page.texts`：页内文字块（屏幕/导出渲染 + 双击编辑，261104 二十三/二十五批）；
  *  集合字段**不是数组 ⇒ 该页坏**；数组里的单个坏元素只丢自己（不连累整页）。
  *  旧端读到 v4 仍进只读保护（v1→v2→v3 同一先例），**S3 协议不需要动**（正文按字节内容寻址）。
  */
@@ -266,11 +266,13 @@ function normalizeBackgroundImage(raw: unknown): InkBackgroundImage | null {
   return image;
 }
 
-/** v4 页备注：去空白 + 截断（备注是元数据，宁可截断也不让整页坏）。 */
+/**
+ * v4 页签（字段名仍叫 note，避免二次升版）：**字段存在 = 这一页有页签**，值可以是空串 =「纯标记」。
+ * 去空白 + 截断（元数据，宁可截断也不让整页坏；纯空白 = 纯标记）。
+ */
 function normalizePageNote(raw: unknown): string | undefined {
   if (typeof raw !== "string") return undefined;
   const text = raw.trim();
-  if (!text) return undefined;
   return text.length > MAX_PAGE_NOTE_CHARS ? text.slice(0, MAX_PAGE_NOTE_CHARS) : text;
 }
 
@@ -396,7 +398,7 @@ function normalizePage(raw: unknown): InkPage | null {
   }
   const page: InkPage = { id: record.id, width, height, background: record.background, strokes };
   const note = normalizePageNote(record.note);
-  if (note) page.note = note;
+  if (note !== undefined) page.note = note;
   // v4 集合字段：不是数组 ⇒ 结构不合法（整页坏）；数组里的单个坏元素只丢自己并计数。
   if (record.images !== undefined) {
     if (!Array.isArray(record.images)) return null;
@@ -548,8 +550,8 @@ export function inkToBody(doc: InkDoc): string {
       background: page.background,
     };
     if (page.backgroundImage) out.backgroundImage = serializeBackgroundImage(page.backgroundImage);
-    const note = page.note?.trim();
-    if (note) out.note = note;
+    // 页签：空串 = 纯标记，必须写出来（不能用 if (note) 丢掉）
+    if (page.note !== undefined) out.note = page.note.trim();
     if (page.images && page.images.length > 0) {
       out.images = page.images.slice(0, MAX_PAGE_IMAGES).map((image) => ({
         id: image.id,

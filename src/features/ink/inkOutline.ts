@@ -1,11 +1,10 @@
 /**
- * 手写板「大纲 / 页目录」= 纯派生（261104 十八批；十九批换成页备注）。
+ * 手写板「页面大纲」= 纯派生（261104 十八批；二十六批改为「页签」语义）。
  *
- * 为什么需要：一本 300 页的书靠底部缩略图横条翻页太慢；大纲只列「有批注 / 有备注」的页，
- * 一屏十几行、点一下直跳。它是**视图**，不落盘。
+ * 为什么需要：一本 300 页的书靠横向缩略图翻页太慢；大纲只列「有批注 / 有页签」的页，点一下直跳。
+ * 它是**视图**，不落盘。
  *
- * 261104 二十批：设备本地「书签」升级成**正文里的页备注**（`page.note`，随 v4 同步）——
- * 这样换设备也能看到「这一页写了什么」，且不再有两套标记语义（书签 vs 备注）。
+ * 页签 = `page.note` 字段存在（**空串也是页签 = 纯标记**，非空 = 标记 + 一句话说明），随 v4 正文同步。
  */
 import type { InkPage } from "../../core/inkDoc.js";
 
@@ -16,7 +15,7 @@ export interface InkOutlinePage {
   strokeCount: number;
   /** 图片页 / PDF 页（有背景图）。 */
   hasBackgroundImage: boolean;
-  /** v4 页备注（有备注的页在「只看备注」下也列）。 */
+  /** v4 页签（字段存在即为有页签；空串 = 纯标记）。 */
   note?: string;
 }
 
@@ -26,26 +25,24 @@ export interface InkOutlineEntry {
   pageNumber: number;
   strokeCount: number;
   hasBackgroundImage: boolean;
-  /** 页备注（v4 正文数据）。 */
+  /** 有页签（无论有没有文字）。 */
+  hasTab: boolean;
+  /** 页签文字（纯标记时没有这个字段）。 */
   note?: string;
 }
 
-/** 大纲显示范围：只看批注（默认）/ 全部页 / 只看有备注。 */
-export type InkOutlineMode = "all" | "annotated" | "noted";
+/** 筛选：全部页 / 只看批注 / 只看页签。 */
+export type InkOutlineMode = "all" | "annotated" | "tabbed";
 
-/** 三种范围的中文名（面板按钮直接显示当前范围，避免"点了不知道在切什么"）。 */
+/** 筛选 chip 文案（面板上直接显示）。 */
 export const INK_OUTLINE_MODE_LABELS: Record<InkOutlineMode, string> = {
-  annotated: "只看批注",
-  all: "全部页",
-  noted: "只看有备注",
+  all: "全部",
+  annotated: "批注",
+  tabbed: "页签",
 };
 
-/** 循环切换顺序（annotated → all → noted → annotated）。 */
-export function nextInkOutlineMode(mode: InkOutlineMode): InkOutlineMode {
-  if (mode === "annotated") return "all";
-  if (mode === "all") return "noted";
-  return "annotated";
-}
+/** 三档的固定顺序（chips 排布）。 */
+export const INK_OUTLINE_MODES: readonly InkOutlineMode[] = ["all", "annotated", "tabbed"];
 
 /** 页元信息 → 大纲条目（顺序 = 正文页序）。 */
 export function buildInkOutline(
@@ -54,30 +51,49 @@ export function buildInkOutline(
 ): InkOutlineEntry[] {
   const entries: InkOutlineEntry[] = [];
   pages.forEach((page, index) => {
-    const note = page.note?.trim() ? page.note.trim() : undefined;
+    const hasTab = page.note !== undefined;
+    const note = hasTab && page.note ? page.note.trim() : "";
     const annotated = page.strokeCount > 0 || page.hasBackgroundImage;
-    // 「只看有备注」只列写过备注的页；其余两种模式按「有内容」过滤，但有备注的页一定列出。
-    if (mode === "noted" && !note) return;
-    if (mode === "annotated" && !annotated && !note) return;
+    if (mode === "tabbed" && !hasTab) return;
+    if (mode === "annotated" && !annotated) return;
     entries.push({
       pageId: page.id,
       pageNumber: index + 1,
       strokeCount: page.strokeCount,
       hasBackgroundImage: page.hasBackgroundImage,
+      hasTab,
       ...(note ? { note } : {}),
     });
   });
   return entries;
 }
 
-/** 大纲标题里的一句摘要（有批注页数 / 有备注页数）。 */
-export function inkOutlineSummary(entries: readonly InkOutlineEntry[]): string {
-  const noted = entries.filter((item) => item.note).length;
-  const annotated = entries.filter((item) => item.strokeCount > 0).length;
-  return `${annotated} 页有批注 · ${noted} 页有备注`;
+/** 摘要：有批注页数 / 页签数（按全文统计，不受筛选影响）。 */
+export function inkOutlineSummary(pages: readonly InkOutlinePage[]): string {
+  let annotated = 0;
+  let tabs = 0;
+  for (const page of pages) {
+    if (page.strokeCount > 0 || page.hasBackgroundImage) annotated += 1;
+    if (page.note !== undefined) tabs += 1;
+  }
+  return `${annotated} 页有批注，${tabs} 个页签`;
 }
 
-/** 有备注的页 id（缩略图条打点用；只返回存在的页）。 */
-export function notedPageIds(pages: readonly Pick<InkPage, "id" | "note">[]): Set<string> {
-  return new Set(pages.filter((page) => (page.note ?? "").trim().length > 0).map((page) => page.id));
+/**
+ * 大纲里的「查找」：**只能搜页签文字与页码**（笔迹没有 OCR，不可文本检索）。
+ * 空查询返回原数组引用（面板据此跳过重算）。
+ */
+export function filterInkOutline(entries: readonly InkOutlineEntry[], query: string): readonly InkOutlineEntry[] {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return entries;
+  return entries.filter((entry) => (
+    String(entry.pageNumber) === needle
+    || String(entry.pageNumber).includes(needle)
+    || (entry.note ?? "").toLowerCase().includes(needle)
+  ));
+}
+
+/** 有页签的页 id（缩略图打点用；只返回存在的页）。 */
+export function tabPageIds(pages: readonly Pick<InkPage, "id" | "note">[]): Set<string> {
+  return new Set(pages.filter((page) => page.note !== undefined).map((page) => page.id));
 }

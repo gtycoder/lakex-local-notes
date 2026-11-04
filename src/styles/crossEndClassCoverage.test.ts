@@ -45,6 +45,7 @@ const SHARED = [
   "features/quickNotes/QuickNoteEditor.tsx",     // 小记写作区宿主：.quick-note-editor
   "features/quickNotes/QuickNotePreview.tsx",    // 小记只读预览：mobile/quick-notes.css
   "features/ink/InkPad.tsx",                    // 手写板共享控制器：外观分别由 inkPad.desktop.css / mobile/ink 提供
+  "features/ink/InkPageTabForm.tsx",             // 页签编辑表单（桌面弹层 / 移动 Sheet 共用）：两端各自补 ink-page-tab__* 外观
 ];
 
 /** 已知缺口（只许减）：登记后只报警告；补上对应端的样式后请删掉该条。 */

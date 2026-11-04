@@ -7,6 +7,8 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { createInkDoc, inkToBody, type InkDoc } from "../../core/inkDoc";
+import { INK_DEFAULT_COLOR } from "./inkPalette";
+import { INK_TEXT_DEFAULT_FONT_SIZE, INK_TEXT_LINE_HEIGHT, inkTextBaselineOffset, inkTextEditorTopOffset, placeInkPageText } from "./inkPageTexts";
 import { InkPad, type InkPadProps } from "./InkPad";
 
 interface Mounted { container: HTMLElement; unmount: () => Promise<void> }
@@ -56,6 +58,38 @@ describe("手写板页内文字块", () => {
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 620)); });
     const body = JSON.parse(onChange.mock.calls[onChange.mock.calls.length - 1][0]) as InkDoc;
     expect(body.pages[0].texts?.[0]?.text).toBe("重点段落");
+    await view.unmount();
+  });
+
+  it("编辑态与展示态同几何：编辑中不画同 id 的 <text>，输入框按 px 对齐、无框无内距", async () => {
+    const view = await mount({ content: inkToBody(createInkDoc("p1")), variant: "desktop", readOnly: false });
+    await act(async () => { (view.container.querySelector('button[aria-label="插入文字"]') as HTMLButtonElement).click(); });
+    const editor = view.container.querySelector(".ink-text-editor") as HTMLTextAreaElement;
+    expect(editor).not.toBeNull();
+    // 编辑中：这一块不画在 SVG 里（否则与输入框的字叠在一起）——提交后才回到 <text>
+    expect(view.container.querySelector("text[data-page-text]")).toBeNull();
+
+    // 几何口径与 placeInkPageText + baseline 常量一致（jsdom 里 fitSize 未知 ⇒ scale=1）
+    const placed = placeInkPageText(createInkDoc("p1").pages[0], { id: "x", width: 0, fontSize: INK_TEXT_DEFAULT_FONT_SIZE, color: INK_DEFAULT_COLOR });
+    // jsdom 里 stage 尺寸为 0 ⇒ fitSize 很小；几何只断言「按同一 scale 换算」（像素对齐由设备验收）
+    const scale = Number.parseFloat(editor.style.width) / placed.width;
+    expect(scale).toBeGreaterThan(0);
+    expect(Number.parseFloat(editor.style.left)).toBeCloseTo(placed.x * scale, 1);
+    expect(Number.parseFloat(editor.style.top)).toBeCloseTo((placed.y + inkTextEditorTopOffset(placed.fontSize)) * scale, 1);
+    expect(Number.parseFloat(editor.style.height)).toBeCloseTo(placed.fontSize * INK_TEXT_LINE_HEIGHT * scale, 1);
+    expect(Number.parseFloat(editor.style.fontSize)).toBeCloseTo(placed.fontSize * scale, 1);
+    expect(Number.parseFloat(editor.style.fontSize)).toBeGreaterThan(0);
+    // 框饰一律不内联（隐形输入区：位置/字号才内联）
+    expect(editor.style.background).toBe("");
+    expect(editor.style.border).toBe("");
+    expect(editor.style.padding).toBe("");
+
+    // 提交后：<text> 出现，首行基线与展示口径一致（0.9em）
+    await act(async () => { setTextareaValue(editor, "基线"); });
+    await act(async () => { editor.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", ctrlKey: true, bubbles: true })); });
+    const textNode = view.container.querySelector("text[data-page-text]") as SVGTextElement;
+    expect(textNode).not.toBeNull();
+    expect(Number(textNode.getAttribute("y"))).toBeCloseTo(placed.y + inkTextBaselineOffset(placed.fontSize), 2);
     await view.unmount();
   });
 
