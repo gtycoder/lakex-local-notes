@@ -83,7 +83,8 @@ interface UseNotebookTabsOptions {
   getTitle: (id: string) => string | undefined;
   readBody: (id: string) => Promise<LocalNote | null>;
   onReadError: (reason: unknown) => void;
-  onMissing: () => void;
+  /** 读不到正文（行不存在 / 正文文件缺失）：带上 noteId，宿主据此"每篇每会话只提示一次"。 */
+  onMissing: (id: string) => void;
   /** 编辑器实例、capture 等 tab 外部资源；关闭或 LRU 淘汰时同步释放。 */
   onDrop?: (id: string) => void;
 }
@@ -152,7 +153,7 @@ export function useNotebookTabs(opts: UseNotebookTabsOptions) {
           activeIdRef.current = null;
           setActiveId(null);
         }
-        onMissingRef.current();
+        onMissingRef.current(id);
         return;
       }
       setFreshId(id);

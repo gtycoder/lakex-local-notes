@@ -40,6 +40,7 @@ import { readFavoriteIds, readFavoritesOpen, subscribeFavorites, writeFavoritesO
 import { QuickNoteComposerLazy } from "./quickNoteComposerLazy";
 import { MobileQuickNoteTagSheet } from "./MobileQuickNoteTagSheet";
 import { useQuickNoteDetailCache } from "./useQuickNoteDetailCache";
+import { notifyMissingQuickNoteOnce } from "./missingQuickNoteNotice";
 import { useQuickNoteListModel } from "./useQuickNoteListModel";
 import { addQuickNoteTagId, buildQuickNoteTagOptions, type QuickNoteTag } from "../../core/quickNoteTags";
 
@@ -261,7 +262,8 @@ export function HomePage(props: HomePageProps) {
   const openEdit = async (id: string): Promise<void> => {
     try {
       const full = await bridge.readQuickNote(id);
-      if (!full) return;
+      // 正文文件缺失（元数据还在）：**不能静默 return** —— 给与「缺正文文档」同源的提示，每篇每会话一次。
+      if (!full) { notifyMissingQuickNoteOnce(id, showToast); return; }
       setEditNote({ id, text: full.content.text, body: full.content.body, images: full.content.images, tagIds: full.tagIds });
       setComposer({ mode: "edit", id });
     } catch (error) { reportMobileActionError("打开小记", error); }

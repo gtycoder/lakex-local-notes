@@ -40,9 +40,13 @@ import { useWorkspaceSession } from "./useWorkspaceSession";
 import { useWorkspaceAssemble } from "./useWorkspaceAssemble";
 import { useWorkspaceSync } from "./useWorkspaceSync";
 import { useWorkspaceActions } from "./useWorkspaceActions";
+import { claimMissingBodyNotice, MISSING_DOC_OPEN_HINT } from "../data/missingBodyMessages";
 export type { NotebookTreeItem } from "./useNotebookTreeData";
 export type { PadPanelMode } from "./shellModel";
 import type { TreeNode } from "../../lib/types";
+
+/** 缺正文提示去重（模块级 = 整个 App 会话；每篇只提示一次，连点不刷屏）。 */
+const missingBodyNotifiedThisSession = new Set<string>();
 
 export interface NotebookWorkspaceProps {
   notebookId: string;
@@ -83,8 +87,10 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   const reportReadError = useCallback((reason: unknown) => {
     showToast("打开文档失败：" + getNativeErrorMessage(reason), { type: "error" });
   }, []);
-  const reportReadMissing = useCallback(() => {
-    showToast("文档不存在或正文文件缺失", { type: "error" });
+  const reportReadMissing = useCallback((id: string) => {
+    // 每篇每会话只提示一次（连点同一篇不刷屏）；文案与资源管理入口共用单一来源。
+    if (!claimMissingBodyNotice(missingBodyNotifiedThisSession, id)) return;
+    showToast(MISSING_DOC_OPEN_HINT, { type: "error" });
   }, []);
   const dropTabResources = useCallback((id: string) => {
     editorsRef.current.delete(id);
