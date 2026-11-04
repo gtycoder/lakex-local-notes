@@ -330,7 +330,7 @@
   /* dock 根是 pointer-events:none（只有 toolbar/panel 子项 auto）⇒ 气泡必须自己打开命中，否则点了会穿透到面板。 */
   pointer-events: auto;
   display: flex;
-  gap: 2px;
+  gap: 0;
   width: 236px;
   box-sizing: border-box;
   padding: 4px;
@@ -339,6 +339,8 @@
   box-shadow: var(--lake-shadow-popover);
 }
 .med-chooser-pop .med-f-btn { flex: 1 1 0; min-width: 0; height: 40px; }
+/* 261104 用户口径：三个选项之间要一眼看出是 3 个块 ⇒ 等分 + 0.5px 竖分隔（同一语义只此一处）。 */
+.med-chooser-pop .med-f-btn + .med-f-btn { border-left: .5px solid var(--lake-border-1); }
 
 /* 降低动效偏好：dock 全部关动画（与 mobile.css 的 reduced-motion 兜底同口径） */
 @media (prefers-reduced-motion: reduce) {

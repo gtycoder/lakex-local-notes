@@ -25,6 +25,8 @@ describe("＋ 面板：分栏气泡 / 高亮块直插（261104 用户口径）",
     expect(CSS).toMatch(/\.med-chooser-pop\s*\{[^}]*z-index:\s*6/);
     // dock 根是 pointer-events:none ⇒ 气泡必须自己打开命中，否则点按穿透到面板（261104 实测）。
     expect(CSS).toMatch(/\.med-chooser-pop\s*\{[^}]*pointer-events:\s*auto/);
+    // 三个选项之间要有 0.5px 分隔（用户：一眼看出是 3 个块）。
+    expect(CSS).toMatch(/\.med-chooser-pop \.med-f-btn \+ \.med-f-btn\s*\{[^}]*border-left:\s*\.5px solid/);
     // 点外部关闭用透明背板（dock 不许自挂 window pointerdown，见 dockPanelFocusGuard）。
     expect(DOCK).toContain("med-chooser-backdrop");
     expect(CSS).toMatch(/\.med-chooser-backdrop\s*\{[^}]*position:\s*fixed/);

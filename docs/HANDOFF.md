@@ -13,7 +13,8 @@
 - **分栏**（用户口径：像对话框一样在原位置出气泡）：从「+ 面板底部内联行」改成**贴着「分栏」条目**的 fixed 气泡（优先条目上方 8px、放不下翻到下方、左右按视口夹住；透明背板点外部关闭）。**不要**在 dock 里挂 `window.addEventListener("pointerdown")` 关气泡——`dockPanelFocusGuard.test` 明确禁止 dock 自挂全局监听。
 - **两个坑（都实测踩到）**：① dock 根是 `pointer-events:none`（只有 toolbar/panel 子项是 auto）⇒ 气泡必须自己 `pointer-events:auto`，否则 CDP/手指点按会**穿透到面板**（现象 = 点了「三栏」没反应、气泡还关了，误以为命令失效）；② 气泡用 fixed 时必须渲染在 dock 根、不能放进 `.med-panel-inner`（那里 overflow 滚动容器会裁）。
 - **设备复验（lake_mobile）**：气泡 rect `[39,665,236,48]` 贴在「分栏」条目 `[111,721,93,52]` 上方（gap 8）；CDP 点「三栏」→ `ne-columns data-cols="3"`；点外部 → 气泡关闭；点「高亮块」→ `ne-alert` 计数 0→1、无任何选择层。
-- **门禁**：tsc 0 / mobile 区 + guard 测试 **19 文件 99 例全绿** / mobileLayers editor-dock 基线 280→297（气泡容器+背板）/ `git diff --check` 0。
+- **门禁**：tsc 0 / 全量 vitest **591 文件 3598 例（3586 通过 + 12 skipped）** / mobileLayers editor-dock 基线 280→298（气泡容器+背板+三分隔）/ ui-metrics pass / `git diff --check` 0。
+- **追加（同日·用户口径）**：气泡里三个选项之间加 **0.5px 竖分隔**——「一眼能看出是 3 个块」（`border-left: .5px solid var(--lake-border-1)`，等分 76px×3）。
 - **复盘**：本轮「分栏/高亮块」返工两次（内联行 → 气泡；类型选择 → 不弹）——首版按「补能力」做过头，属过度设计；已按用户反馈收敛，HANDOFF/AGENTS 只保留最终口径。
 ### 261104 · 二十四批：文字块「选中时固定出现」控制条（含 24 批首版理解纠偏）· **本地改动**
 - 用户澄清：**选中时固定出现、失去焦点就消失**（首版按「每段文字常驻」实现是误读，已回退）：选中某段文字后，虚线边框 + `A-`/`A+` + 右下角拖宽手柄 + `×` 删除一直都在；点别处取消选中即一起消失。
@@ -68,7 +69,7 @@
 ### 261104 · ＋面板：分栏 2/3/4 栏 + 高亮块类型选择（设备实测）· **本地改动**
 - **分栏**：「分栏」入口点开内联行（两栏/三栏/四栏），选中走内核 `columns` 命令（接数量）。设备实测：`ne-columns data-cols="3"`。
 - **高亮块**：「高亮块」入口点开内联行 5 个语义类型（提示 info / 技巧 tips / 成功 success / 注意 warning / 危险 danger），选中走 `alert` 命令。设备实测落盘 `ne-alert ne-alert-type="danger"`（alert 计数 8→9）。
-- **行内选择行自动滚入可视**：+ 面板内容已满 312px，新增选择行会落在可视区外（点了入口却看不到选项 / 按坐标点空）⇒ 展开时对面板最后一行 `scrollIntoView({ block: "nearest" })`（分栏/高亮块/链接共用）。这是本轮踩到的真坑（首测点「危险」点在面板外）。
+- **行内选择行自动滚入可视**：+ 面板内容已满 312px，新增选择行会落在可视区外（点了入口却看不到选项 / 按坐标点空）⇒ 展开时对面板最后一行 `scrollIntoView({ block: "nearest" })`（分栏/高亮块/链接共用）。这是本轮踩到的真坑（首测点「危险」点在面板外）。（**261104 反馈后修订**：分栏改锚定气泡、高亮块不再弹选择 ⇒ 这条现在**只剩链接编辑行**仍适用。）
 - **内核边界（已回填契约 §5.46，避免以后重复试）**：`unlink` 命令在本项目的链接上返回 false（host 的选择模型拿不到"纯链接选区"，只有内核链接面板那条路）；`replaceAll` 需要 ranges 数组，传文本会抛 `t.forEach is not a function` ⇒ 移动端「查找替换」本轮不做（不绕过内核模型改正文）。
 - **门禁**：tsc 0 / 全量 vitest **586 文件 3575 例（3563 通过 + 12 skipped）** / `git diff --check` 0。设备：三栏 `data-cols=3`；危险高亮块 `ne-alert-type=danger`；Aa 面板 312/312 不变。
 ### 261104 · 字号/行高合并成一行步进器 + 两端对齐 + 首行缩进文案收口 · **本地改动**
@@ -659,15 +660,15 @@
 
 | worktree | 分支 | HEAD | 状态 |
 | --- | --- | --- | --- |
-| `lakex-local-notes`（主仓库） | `feat/pad-touch-ui` | `df461cac` | 与 Gitee/GitHub 同名分支 **0/0**；**已合入 master（`408d6126..df461cac`，与 master 同一 commit）**；工作树多会话并行（当前有另一会话未提交的移动端改动），状态**以 `git status` 为准** |
+| `lakex-local-notes`（主仓库） | `feat/pad-touch-ui` | `29e01d56` + 本批（气泡分隔，本地提交） | 与 Gitee/GitHub 同名分支 **0/0**（截至 `29e01d56`）；**已合入 master（与 master 同一 commit）**；工作树多会话并行，状态**以 `git status` 为准** |
 | `lakex-pad` | `feat/pad-adaptation` | `17f44dbd` | **历史残留**：平板第一批早已合入 master，本分支落后 master 15 提交、领先 0。其 README/AGENTS/HANDOFF 是旧口径（「平板走内核工具栏」「补丁 3 处」），**不要当依据**；确认不再用可 `git worktree remove lakex-pad`（需用户点头） |
 
-- `master` = `feat/pad-touch-ui` 的同一 commit（261104 双推对齐，两个远端 `ls-remote` 实测同 hash；本行写于 `a990aedf`，其后只可能有纯文档提交）。master 自 `408d6126` 前进 **67 提交**（本会话手写板线 + 另一会话移动端/编辑面线）。
-- 发版：只有 v0.0.1 / v0.0.2（`4b2a2467`），`package.json` = 0.0.2；**v0.0.2..HEAD 共 123 提交未发版**（下一版 v0.0.3 的发布说明必须写 inkDoc v4：旧端只读、手机/平板需重装）。
+- `master` = `feat/pad-touch-ui` 的同一 commit（261104 合 master + 双推，两个远端 `ls-remote` 实测同 hash；本行写于 `29e01d56` 之后的本地提交）。master 自 `408d6126` 前进 **69 提交**（本会话手写板线 + 移动端/编辑面线）。
+- 发版：只有 v0.0.1 / v0.0.2（`4b2a2467`），`package.json` = 0.0.2；**v0.0.2..HEAD 共 125 提交未发版**（下一版 v0.0.3 的发布说明必须写 inkDoc v4：旧端只读、手机/平板需重装）。
 - 261103 各批已全部提交并双推（20:08–20:21）：`ce442482`（usheet 35 行/双光标/整行整列）、`733ab4aa`（多维表头部+短名）、`2b29d9e8`（画板工具条+第 4 处补丁）、`75c46902`（ink 14 色）、`ae14ffd1`（胶囊/横滑/安全区/页签 44/useKeyboard）、`1f164f2b`（门禁装置+三份基线重烤）、`1e74c3f8`（文档）、`fdf9c455`（AI 默认关）。
 - 261103 之后（261104 凌晨，均已双推）：ink 三修（`912143da` 落笔/擦除按批渲染、`8f32a5ca` 中断不丢笔）+ 性能观测 `af169f96` + 图片页背景下采样 `8dc83a87` + 导入体积提示 `388232db` + 资源页本地占用 `1adcde27`。
 
-**门禁基线**（261104 15:00 在**干净 HEAD worktree**（`git worktree add … HEAD` + symlink node_modules）实测，排除多会话在途改动）：tsc 0 / 全量 vitest **580 文件 3587 例通过（+ 11 文件 / 12 例 skipped）** / `check:mobileui` / `git diff --check` 0。主工作树当前含另一会话在途移动端改动（`EditorDock` / `editor-dock.css` 等）⇒ 主树里 `mobileLayers`、`dockPanelFocusGuard` 会红，属**别人未提交**，不是 HEAD 状态 / `check:core` 136 文件 0 / `check:mobileui` / 双 build / `check:bundle` / `check:arch`（移动首屏 ≈340.8KB / 预算 360KB；桌面 ≈541.2KB / 预算 600KB；import 违规 0）/ `git diff --check` 0。设备：手机 6 态 + 平板 6 态 + 多维表 3 态已按六批新壳**重烤**、连跑 0 差异；23 屏走查 ok；`check:windowsweep` pass。clean debug APK ≈37.95–37.97MB（量体积必须 clean 后 `stat`，增量构建会虚增到 ~42MB）。
+**门禁基线**（261104 15:12 主工作树实测，含合并后两会话的全部改动）：tsc 0 / 全量 vitest **591 文件 3598 例（3586 通过 + 12 skipped）** / ui-metrics pass / `check:mobileui` / `check:core` 136 文件 0 / `check:mobileui` / 双 build / `check:bundle` / `check:arch`（移动首屏 ≈340.8KB / 预算 360KB；桌面 ≈541.2KB / 预算 600KB；import 违规 0）/ `git diff --check` 0。工作树**本批提交后 clean**（另一会话后续改动以 `git status` 为准）；APK 已按合并后代码重装（debug，增量 42.2MB）。设备：手机 6 态 + 平板 6 态 + 多维表 3 态已按六批新壳**重烤**、连跑 0 差异；23 屏走查 ok；`check:windowsweep` pass。clean debug APK ≈37.95–37.97MB（量体积必须 clean 后 `stat`，增量构建会虚增到 ~42MB）。
 
 **环境（本机实测 261103）**：Node **v24.18.0**（`$HOME/.nvm/versions/node/v24.18.0/bin`）；JDK **21** `/Library/Java/JavaVirtualMachines/jdk-21.jdk`（系统默认 java 是 1.8，手跑 gradlew 必须指 21）；Android SDK `/opt/homebrew/share/android-commandlinetools`；AVD **7 个**：lake_mobile / lake_gate / lake_tab / lake_body / lake_lock / lake_meas / lake_sheet；CDP **9335 开发 / 9336 门禁 / 9340 平板与窗口矩阵**。Android 唯一运行手册 = `docs/MOBILE-OPS.md`（serial 号段以 `adb devices` 现场为准，文档里的 5556/5562 已不一致）。
 

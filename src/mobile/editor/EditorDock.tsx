@@ -83,6 +83,9 @@ const COLUMN_CHOICES: ReadonlyArray<{ value: number; label: string }> = [
   { value: 3, label: "三栏" },
   { value: 4, label: "四栏" },
 ];
+/** 分栏气泡的估算尺寸（与 editor-dock.css 的 .med-chooser-pop 一致；只用于定位，不参与布局）。 */
+const COLUMN_POPOVER_WIDTH = 236;
+const COLUMN_POPOVER_HEIGHT = 48;
 
 /** 对齐（内核 `alignment`：left/center/right/justify；移动端 261104 补齐 justify）。 */
 const ALIGN_ITEMS: ReadonlyArray<{ value: "left" | "center" | "right" | "justify"; label: string; Icon: typeof Bold }> = [
@@ -397,8 +400,6 @@ export function EditorDock({ editor, editing, undoBackend = "kernel", undoLimits
    * 位置：优先排在条目上方（气泡高 48），上方放不下再放下方；左右按视口夹住。
    * 注意锚点必须是**被点条目**（insBtn 把 currentTarget 传进来），不是胶囊/面板。
    */
-  const COLUMN_POPOVER_WIDTH = 236;
-  const COLUMN_POPOVER_HEIGHT = 48;
   const openColumnsChooser = (anchor?: HTMLElement | null) => {
     const rect = anchor?.getBoundingClientRect();
     const vw = window.innerWidth;
