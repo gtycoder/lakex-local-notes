@@ -77,7 +77,22 @@ const COMMAND_ICONS: Record<string, typeof Bold> = {
  *  取值全部来自内核档位，不新增字号。要再少/再多只改这一处。 */
 const MOBILE_FONT_SIZES: readonly number[] = FONT_SIZE_OPTIONS.slice(2, -2);
 
-/** 对齐（内核 `alignment`：left/center/right；语雀移动端也只给这三档）。 */
+/** 高亮块类型（内核 alert 命令的类型表：info/warning/danger/success/tips/color1..5；移动端先给 5 个语义档）。 */
+const ALERT_TYPES: ReadonlyArray<{ value: string; label: string }> = [
+  { value: "info", label: "提示" },
+  { value: "tips", label: "技巧" },
+  { value: "success", label: "成功" },
+  { value: "warning", label: "注意" },
+  { value: "danger", label: "危险" },
+];
+/** 分栏数量（261104：内核 columns 命令接数量，设备实测 3 栏生效）。 */
+const COLUMN_CHOICES: ReadonlyArray<{ value: number; label: string }> = [
+  { value: 2, label: "两栏" },
+  { value: 3, label: "三栏" },
+  { value: 4, label: "四栏" },
+];
+
+/** 对齐（内核 `alignment`：left/center/right/justify；移动端 261104 补齐 justify）。 */
 const ALIGN_ITEMS: ReadonlyArray<{ value: "left" | "center" | "right" | "justify"; label: string; Icon: typeof Bold }> = [
   { value: "left", label: "左对齐", Icon: AlignLeft },
   { value: "center", label: "居中", Icon: AlignCenter },
@@ -246,6 +261,9 @@ export function EditorDock({ editor, editing, undoBackend = "kernel", undoLimits
   const [linkOpen, setLinkOpen] = useState(false);
   const [linkText, setLinkText] = useState("");
   const [linkSrc, setLinkSrc] = useState("");
+  /** 261104：+ 面板内的两个「选择型插入」内联行（同 linkOpen 口径：都在面板内展开，不弹二级面板）。 */
+  const [columnsOpen, setColumnsOpen] = useState(false);
+  const [alertOpen, setAlertOpen] = useState(false);
   const linkTargetRef = useRef<LinkEditorTarget>({ range: null, selected: "" });
 
   const dockRef = useRef<HTMLDivElement>(null);
@@ -287,8 +305,16 @@ export function EditorDock({ editor, editing, undoBackend = "kernel", undoLimits
 
   // 收起面板（切换/关闭）时复位两个内联件：色板回到文字色、链接编辑器收起并清空草稿。
   useEffect(() => {
-    if (!panelMode) { setLinkOpen(false); setLinkText(""); setLinkSrc(""); }
+    if (!panelMode) { setLinkOpen(false); setLinkText(""); setLinkSrc(""); setColumnsOpen(false); setAlertOpen(false); }
   }, [panelMode]);
+  // 261104：行内选择行（分栏/高亮块/链接）展开后可能在面板可视区之外（+ 面板内容已满 312px）
+  // ⇒ 展开时把它滚进可视区，避免"点了入口却看不到选项、点空"。
+  useEffect(() => {
+    if (!linkOpen && !columnsOpen && !alertOpen) return;
+    const inner = dockRef.current?.querySelector<HTMLElement>(".med-panel-inner");
+    const row = inner?.lastElementChild as HTMLElement | null;
+    row?.scrollIntoView({ block: "nearest" });
+  }, [linkOpen, columnsOpen, alertOpen]);
 
   // 注：原先的「面板⇄输入法硬互斥兜底」已删除——那条规则是"面板占键盘区"时代的补丁
   // （键盘被顶回来会把面板压成细条）。新口径下面板挂在工具栏上沿、键盘本就常驻，
@@ -372,7 +398,16 @@ export function EditorDock({ editor, editing, undoBackend = "kernel", undoLimits
       : { range: savedRangeRef.current, selected: savedRangeRef.current ? savedRangeRef.current.toString().trim() : "" };
     setLinkText(linkTargetRef.current.selected);
     setLinkSrc("");
+    setColumnsOpen(false);
+    setAlertOpen(false);
     setLinkOpen(true);
+  };
+  /** 分栏 / 高亮块：点入口先展开一行选项（2/3/4 栏、类型），选中再执行；同一时刻只展开一个行内件。 */
+  const toggleColumnsChooser = () => {
+    setColumnsOpen((open) => { const next = !open; if (next) { setAlertOpen(false); setLinkOpen(false); } return next; });
+  };
+  const toggleAlertChooser = () => {
+    setAlertOpen((open) => { const next = !open; if (next) { setColumnsOpen(false); setLinkOpen(false); } return next; });
   };
 
   /**
@@ -430,10 +465,12 @@ export function EditorDock({ editor, editing, undoBackend = "kernel", undoLimits
       { label: "引用", Icon: Quote, run: () => runPanel("quote") },
       { label: "分割线", Icon: Minus, run: () => runPanel("hr") },
       { label: "代码块", Icon: SquareCode, run: () => runPanel("insertCard", "codeblock") },
-      // 高亮块：内核里是 `execCommand("alert", type)`（不是 insertCard），落盘为 <blockquote class="lake-alert lake-alert-tips">
-      { label: "高亮块", Icon: Highlighter, run: () => runPanel("alert", "tips") },
-      // 标签用「分栏」而不是「分栏卡片」：窄格下 4 个字会被省略号截断（桌面端仍叫分栏卡片）
-      { label: "分栏", Icon: Columns2, run: () => runPanel("columns", 2) },
+      // 高亮块：内核里是 `execCommand("alert", type)`（不是 insertCard），落盘为 <blockquote class="lake-alert lake-alert-<type>">。
+      // 261104：补类型选择（info/tips/success/warning/danger；内核类型表还有 color1-5，先不放进移动端）。
+      { label: "高亮块", Icon: Highlighter, run: () => toggleAlertChooser() },
+      // 标签用「分栏」而不是「分栏卡片」：窄格下 4 个字会被省略号截断（桌面端仍叫分栏卡片）。
+      // 261104：补 2/3/4 栏选择（内核 columns 命令接数量；设备实测 data-cols=3 生效）。
+      { label: "分栏", Icon: Columns2, run: () => toggleColumnsChooser() },
       { label: "折叠块", Icon: FoldVertical, run: () => runPanel("collapse") },
       // 链接从「Aa」面板移到这里（用户 261012：链接融合到 + 号里）；点它在本面板内联展开链接编辑行
       { label: "链接", Icon: Link2, run: () => toggleLinkEditor() },
@@ -695,6 +732,37 @@ export function EditorDock({ editor, editing, undoBackend = "kernel", undoLimits
               )}
               {/* 链接编辑：**在本面板内联展开**（用户 261012：链接融合到 + 号里）。
                   复用内核 .ne-link-editor 的 UI + 共享判定 linkEditor.ts（与桌面浮栏同一份）。 */}
+              {/* 分栏 / 高亮块：入口点开先展开一行选项，选中再执行（261104；都在本面板内联，不弹二级层）。 */}
+              {columnsOpen && (
+                <div className="med-f-row">
+                  <div className="med-f-card" data-count={COLUMN_CHOICES.length}>
+                    {COLUMN_CHOICES.map((choice) => (
+                      <button
+                        key={choice.value}
+                        className="med-f-btn"
+                        onClick={() => { setColumnsOpen(false); runPanel("columns", choice.value); }}
+                        aria-label={choice.label + "分栏"}
+                        title={choice.label}
+                      >{choice.label}</button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {alertOpen && (
+                <div className="med-f-row">
+                  <div className="med-f-card" data-count={ALERT_TYPES.length}>
+                    {ALERT_TYPES.map((type) => (
+                      <button
+                        key={type.value}
+                        className="med-f-btn"
+                        onClick={() => { setAlertOpen(false); runPanel("alert", type.value); }}
+                        aria-label={type.label + "高亮块"}
+                        title={type.label}
+                      >{type.label}</button>
+                    ))}
+                  </div>
+                </div>
+              )}
               {linkOpen && (
                 <div className="med-f-row">
                   <div className="med-f-card med-f-link">

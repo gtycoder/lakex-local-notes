@@ -2048,3 +2048,7 @@ DOM 文本节点扫描（移动端文档 `disableVirtualRendering:true`，整篇
 - **alignment 接受 `justify`**：`execCommand("alignment","justify")` 生效（DOM `ne-alignment=justify`、computed `text-align: justify`）——官方 08 只列 left/center/right，实测四档（移动端 Aa 对齐已补第 4 档）。
 - **firstIndent 是整篇操作**：命令实现（bundle）为 `document.rootNode.children.filter(nodeName==="p").forEach(node => job.setAttribute(node, "textIndent", true))` —— 对**所有** `p` 生效、**只 set 不 remove**；实测 `outdent` 前后 `ne-text-indent` 计数不变（2 → 2），没有撤销路径 ⇒ UI 文案必须写「全文首行缩进」，不能当"当前段开关"。
 - **clearFormat 只清行内 mark**：实测清除加粗后 `ne-bold` 移除，但 `ne-alignment` / `ne-indent` / `ne-line-height` / 段落样式保留（与 Word/语雀的"清除字符格式"一致，不算 bug）。
+- **columns 命令接数量**：`execCommand("columns", 3)` 生效（落盘 `ne-columns data-cols="3"`，下挂 3 个 `ne-column`）。2/3/4 都可用（移动端已接内联「两栏/三栏/四栏」选择行）。
+- **alert 类型表**：bundle `Cf = ["info","warning","danger","success","tips","color1".."color5"]`（命令默认 info）；落盘是 `ne-alert ne-alert-type="<type>"`（**不是 class**，别按 class 判类型）。移动端先用 5 个语义档（info/tips/success/warning/danger）。
+- **unlink 在本项目 host 侧不可用**：`queryCommandEnabled("unlink")` 返回 true，但 `execCommand("unlink")` 在折叠光标 / 双击选词 / 三击选段等选区内都返回 **false**、DOM 链接保留 ⇒ 只有内核自带的链接面板/工具栏那条路能删链接；**不要在 host 再包装 unlink**。
+- **replaceAll 走 ranges 而非文本**：`execCommand("replaceAll", "旧", "新")` 抛 `t.forEach is not a function`（实现期待 ranges 数组 / 搜索服务结果）。移动端查找面板是宿主自研（DOM 扫描），拿不到内核范围 ⇒ 不做替换（不绕过内核模型改正文）。
