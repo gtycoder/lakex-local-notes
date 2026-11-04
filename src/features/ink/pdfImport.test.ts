@@ -121,12 +121,25 @@ describe("importPdfPages", () => {
       commitBatch: 3,
       onPagesReady: (pages) => batches.push({ count: pages.length, pages: pages.map((page) => page.backgroundImage?.pdf?.page ?? 0) }),
     });
-    // 7 页 / 每批 3 页 ⇒ 3 + 3 + 1；顺序必须是 PDF 顺序（页号 1..7）
-    expect(batches.map((batch) => batch.count)).toEqual([3, 3, 1]);
+    // 7 页 / 每批 3 页 ⇒ 首屏立刻给 1 页，之后 3 + 3；顺序必须是 PDF 顺序（页号 1..7）
+    expect(batches.map((batch) => batch.count)).toEqual([1, 3, 3]);
     expect(batches.flatMap((batch) => batch.pages)).toEqual([1, 2, 3, 4, 5, 6, 7]);
     // 已交付的不再返回（否则宿主会重复插入）
     expect(outcome.pages).toEqual([]);
     expect(outcome.importedPageCount).toBe(7);
+  });
+
+  it("边导边用：第一批不等满批（第 1 页完成就能标注），之后按批次攒", async () => {
+    const { deps } = makeDeps({ pageCount: 5 });
+    const batches: number[][] = [];
+    const outcome = await importPdfPages(new Uint8Array([1]), deps, {
+      commitBatch: 10,
+      onPagesReady: (pages) => batches.push(pages.map((page) => page.backgroundImage?.pdf?.page ?? 0)),
+    });
+    // 第 1 页立刻交付；剩下 4 页在收尾时一起交付
+    expect(batches).toEqual([[1], [2, 3, 4, 5]]);
+    expect(outcome.pages).toEqual([]);
+    expect(outcome.importedPageCount).toBe(5);
   });
 
   it("边导边用 + 取消：已交付的页留下，未交付的页连同资产一起清掉", async () => {

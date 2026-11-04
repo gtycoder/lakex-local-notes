@@ -180,7 +180,8 @@ export async function importPdfPages(
       flushedThrough += 1;
     }
     if (!emit || pending.length === 0) return;
-    if (!force && pending.length < commitBatch) return;
+    // 第一批**不等满批**：第 1 页完成（≈300ms）就让用户能标注；之后才按批次攒。
+    if (!force && pending.length < commitBatch && deliveredPages.size > 0) return;
     const batch = pending.splice(0, pending.length);
     for (const page of batch) {
       const image = page.backgroundImage;
