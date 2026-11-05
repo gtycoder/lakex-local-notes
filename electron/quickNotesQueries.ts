@@ -140,10 +140,11 @@ export class QuickNotesQueries {
 
   /** 待同步墓碑：可发布（ready_to_sync=1）且晚于「上次成功同步水线」（Del-6：deleted_at > waterline）。
    *  逐行 published_at 已删；发布成功后水线推进 ⇒ 更早的墓碑自然不再计入。 */
-  listDeletedForSync(): QuickNoteDeleted[] {
+  listDeletedForSync(waterline: string = "0"): QuickNoteDeleted[] {
+    // 水线由调用方传入（quickNotes.getTombstonesWaterline，P1-3：归一化读取，未来值当 0）。
     return this.mapDeletedRows(this.deps.db.prepare(
-      "SELECT * FROM quick_note_deleted WHERE ready_to_sync=1 AND deleted_at > COALESCE((SELECT value FROM device_state WHERE key='quick_tombstones_published_at'),'0') ORDER BY deleted_at"
-    ).all() as QuickNoteDeletedRow[]);
+      "SELECT * FROM quick_note_deleted WHERE ready_to_sync=1 AND deleted_at > ? ORDER BY deleted_at"
+    ).all(waterline) as QuickNoteDeletedRow[]);
   }
 
   /** 全部墓碑记录（含已发布）：下载方向 LWW 判定用（记录保留，发布只推进水线）。 */

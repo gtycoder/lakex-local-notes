@@ -42,6 +42,7 @@ import { QuickNoteTagService } from "./quickNoteTagService.js";
 import type { QuickNoteDeleted, QuickNoteDocument, QuickNoteImage, QuickNoteImageInput, SaveQuickNoteInput } from "./quickNoteTypes.js";
 import type { QuickNoteListSummary } from "../src/lib/types.js";
 import { missingQuickNoteRecovery, type MissingQuickNoteDoc } from "../src/core/missingBody.js";
+import { advanceWaterline, normalizeWaterline } from "../src/core/syncWaterline.js";
 import { QuickNotesQueries, type QuickNoteConversionRow, type QuickNoteDeletedRow, type QuickNoteRow } from "./quickNotesQueries.js";
 import { buildMatchExpression, buildSnippet, segmentToIndexText } from "../src/core/search/index.js";
 import type { SearchResult } from "../src/core/searchTypes.js";
@@ -126,6 +127,8 @@ export class QuickNotesStore {
     this.migrate();
     this.tags = new QuickNoteTagsStore(this.db);
     this.links = new QuickNoteTagLinksStore(this.db);
+    // P1-3 启动自检：历史库可能已写入未来水线（时钟前跳）⇒ 归一后回写一次。
+    try { this.repairTombstonesWaterline(); } catch { /* 自检失败不阻断启动 */ }
     this.tagService = new QuickNoteTagService(this.db, this.tags, this.links, (tagIds, noteIds) => {
       if (tagIds.length > 0) this.reindexSearchTagsForTags(tagIds);
       // 关联已被删掉（删除标签/合并源标签）的场景：按小记 id 重刷，否则 FTS 里会残留旧标签词。
@@ -1101,17 +1104,28 @@ export class QuickNotesStore {
   getPendingSyncSummary(): { items: number; resources: number } {
     const row = this.db.prepare("SELECT COUNT(*) AS items, COALESCE(SUM(image_count), 0) AS resources FROM quick_notes WHERE is_dirty=1").get() as { items: number; resources: number };
     // 墓碑计数只算「可发布且晚于成功同步水线」的（Del-6：deleted_at > waterline，替代逐行 published_at）
-    const deleted = this.db.prepare("SELECT COUNT(*) AS items FROM quick_note_deleted WHERE ready_to_sync=1 AND deleted_at > COALESCE((SELECT value FROM device_state WHERE key='quick_tombstones_published_at'),'0')").get() as { items: number };
+    const deleted = this.db.prepare("SELECT COUNT(*) AS items FROM quick_note_deleted WHERE ready_to_sync=1 AND deleted_at > ?").get(this.getTombstonesWaterline()) as { items: number };
     return { items: row.items + deleted.items, resources: row.resources };
   }
 
   /** Del-6：小记墓碑发布水线（成功同步后由 desktopSync 写入；替代逐行 published_at 记账）。 */
+  /** 成功同步后推进小记墓碑水线（P1-3：单调 + 夹到 now，永不写未来值）。 */
   markTombstonesWaterline(at: string = nowIso()): void {
-    this.db.prepare("INSERT INTO device_state(key,value) VALUES('quick_tombstones_published_at',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(at);
+    const next = advanceWaterline(this.getTombstonesWaterline(), at);
+    this.db.prepare("INSERT INTO device_state(key,value) VALUES('quick_tombstones_published_at',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(next);
   }
+  /** 小记墓碑水线读取（P1-3：非法/未来值回退 "0"，避免删除永不传播）。 */
   getTombstonesWaterline(): string {
     const row = this.db.prepare("SELECT value FROM device_state WHERE key='quick_tombstones_published_at'").get() as { value: string } | undefined;
-    return row?.value ?? "0";
+    return normalizeWaterline(row?.value ?? "0");
+  }
+
+  /** 启动自检（P1-3）：历史库若已写入未来水线，归一后回写一次（幂等）。 */
+  repairTombstonesWaterline(): void {
+    const row = this.db.prepare("SELECT value FROM device_state WHERE key='quick_tombstones_published_at'").get() as { value: string } | undefined;
+    const normalized = normalizeWaterline(row?.value ?? "0");
+    if (!row || row.value === normalized) return;
+    this.db.prepare("UPDATE device_state SET value=? WHERE key='quick_tombstones_published_at'").run(normalized);
   }
   listQuickNotesForSync(): QuickNoteDocument[] { return this.queries.listForSync(); }
   /** 正文文件缺失的行 id（同步侧自愈用）。 */
@@ -1162,7 +1176,7 @@ export class QuickNotesStore {
   }
   markLocal(id: string): void { this.db.prepare("UPDATE quick_notes SET is_dirty=1 WHERE id=?").run(id); }
   listDeletedForSync(): QuickNoteDeleted[] {
-    return this.queries.listDeletedForSync();
+    return this.queries.listDeletedForSync(this.getTombstonesWaterline());
   }
 
   /** 全部墓碑记录（含已发布）：下载方向 LWW 判定用。 */

@@ -19,6 +19,7 @@ import {
   validateAssetDeclaration,
   type AssetDeclaration,
   type LakeIndex,
+  type LakeNoteEntry,
   type QuickNoteEntry,
   type QuickNotesIndex } from "./s3v3/protocol/s3v3Index.js";
 import type { S3v3Pointer } from "./s3v3/protocol/s3v3Types.js";
@@ -28,6 +29,7 @@ import { initialRound } from "./s3v3/commit/initialRound.js";
 import { pullRound, readRemoteIndexes } from "./s3v3/commit/pullRound.js";
 import { finalizeRemotePurged, mergeRoundIntoState, planStateOf, planWorldOf } from "./s3v3/commit/engineBridge.js";
 import { createRoundPorts } from "./s3v3/commit/roundPorts.js";
+import { isSuspiciousBodyChange, isUnexplainedBodyChange } from "./s3v3/state/bodyChangeGuard.js";
 import type { DeviceBaseline, DeviceState, S3v3DeviceStore } from "./s3v3DeviceStore.js";
 import type { SyncWarning } from "./sharedTypes.js";
 import type { S3v3Remote } from "./s3v3Ports.js";
@@ -874,19 +876,62 @@ export class S3v3SyncEngine {
         || b.parentId !== n.parentId
         || b.sortOrder !== n.sortOrder;
     }).map((n) => n.id);
+    // P1-4 正文突变保护：找出「hash 变了但行没动 + 内容像坏了」的篇（正常编辑 updatedAt 前进 ⇒ 永不在候选里）。
+    // 成本：正常轮候选为空 = 零 IO；只有可疑候选才读正文判内容。
+    const suspiciousBodyIds = await this.detectSuspiciousBodyChanges(state, baseById);
     return runSyncRound({
       local: planWorldOf(state),
       base: { lake: baseline.lake, quickNotes: baseline.quickNotes, folders: baseline.lake.folders },
       remote: { lake: remoteLake, quickNotes: remoteQuick, folders: remoteLake.folders },
       basePointer: pointer,
       deviceId: this.deviceId,
-      state: { ...planStateOf(state), fieldChangedIds, ...(forcePublish ? { forcePublish: true } : {}) },
+      state: {
+        ...planStateOf(state),
+        fieldChangedIds,
+        ...(suspiciousBodyIds.length > 0 ? { suspiciousBodyIds } : {}),
+        ...(forcePublish ? { forcePublish: true } : {}),
+      },
       progress: (p: { phase: string; done: number; total: number; bytesDone: number }) => {
         const phase = p.phase === "reads" || p.phase === "asset-get" ? "bodies" : p.phase === "uploads" || p.phase === "asset-put" ? "uploads" : "apply";
         this.emitProgress({ phase, done: p.done, total: p.total, bytesDone: p.bytesDone });
       },
       deferAssets: opts.deferAssets === true,
       commitOptions: { lockWaitMs: this.publishLockWaitMs } }, ports);
+  }
+
+  /**
+   * P1-4：检测「正文疑似被外部损坏/替换」的文档 id（纯判据在 core 的 bodyChangeGuard）。
+   * 候选 = 基线有 hash、实算 hash 变了、但 DB 行 updatedAt 没有前进（App 内保存必定 bump）。
+   * 只对候选读正文判「空 / 非 UTF-8 / 含 NUL」：正常轮候选为空 = 零 IO。
+   */
+  private async detectSuspiciousBodyChanges(state: DeviceState, baseById: Map<string, LakeNoteEntry>): Promise<string[]> {
+    const candidates = state.lake.notes.filter((n) => isUnexplainedBodyChange({
+      baselineHash: baseById.get(n.id)?.contentHash,
+      baselineUpdatedAt: baseById.get(n.id)?.updatedAt,
+      localUpdatedAt: n.updatedAt,
+      localHash: n.contentHash,
+    }));
+    if (candidates.length === 0) return [];
+    const ids = candidates.map((n) => n.id);
+    let bodies: Array<Uint8Array | null> | null = null;
+    if (this.device.readBodies) {
+      try { bodies = await this.device.readBodies(ids); } catch { bodies = null; }
+    }
+    const out: string[] = [];
+    for (let i = 0; i < candidates.length; i += 1) {
+      const candidate = candidates[i];
+      let bytes: Uint8Array | null;
+      if (bodies) bytes = bodies[i] ?? null;
+      else bytes = await this.device.readBody(candidate.id);
+      if (isSuspiciousBodyChange({
+        baselineHash: baseById.get(candidate.id)?.contentHash,
+        baselineUpdatedAt: baseById.get(candidate.id)?.updatedAt,
+        localUpdatedAt: candidate.updatedAt,
+        localHash: candidate.contentHash,
+        bytes,
+      })) out.push(candidate.id);
+    }
+    return out;
   }
 
   private async lockOwner(): Promise<string | null> {

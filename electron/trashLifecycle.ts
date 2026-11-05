@@ -48,13 +48,18 @@ export class TrashLifecycle {
 
   /** 包含已删除节点的后代（用于彻底删除回收站子树） */
   private descendantIdsIncludingDeleted(id: string): string[] {
+    // P1-6 父环防护：tree_nodes 成环时旧实现会无限 push（彻底删除/清空回收站卡死）；
+    // visited 去重后有限返回（环上的节点各出现一次）。
     const result: string[] = [];
+    const visited = new Set<string>();
     const stack = [id];
     while (stack.length) {
       const cur = stack.pop()!;
+      if (visited.has(cur)) continue;
+      visited.add(cur);
       result.push(cur);
       const children = this.ctx.db.prepare("SELECT id FROM tree_nodes WHERE parent_id=?").all(cur) as { id: string }[];
-      for (const c of children) stack.push(c.id);
+      for (const c of children) if (!visited.has(c.id)) stack.push(c.id);
     }
     return result;
   }

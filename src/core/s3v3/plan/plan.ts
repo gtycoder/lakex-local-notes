@@ -42,6 +42,9 @@ export interface PlanState {
   fieldChangedIds?: string[];
   /** 本地正文文件缺失的条目（适配层一次目录列举得出）：强制走上传判定，触发缺正文自愈。 */
   bodyMissingIds?: string[];
+  /** P1-4：正文疑似被外部损坏/替换的条目（引擎按 core 判据得出）：本轮**不上传正文、不覆盖本地文件**，
+   *  只留档历史 + 发 warning；发布索引继续用远端版本（远端没有该篇则不发布它，绝不用可疑内容覆盖云端）。 */
+  suspiciousBodyIds?: string[];
   /** 强制发布本轮索引（墓碑裁剪/首次收到他端墓碑等「只有 quick 索引变化」的场景）。 */
   forcePublish?: boolean;
 }
@@ -81,6 +84,8 @@ export function planSync(input: PlanInput): SyncPlan {
     purgeIntents,
     folderPurgeIntents,
   });
+  // P1-6：父环防护产出的结构化告警必须透出（否则只剩静默改写父关系）。
+  warnings.push(...(lakePlan.warnings ?? []));
   const quickPlan = planQuickNotesMerge(
     base?.quickNotes ?? null,
     local.quickNotes,
@@ -99,17 +104,34 @@ export function planSync(input: PlanInput): SyncPlan {
   if (purgedIds.join("\u0000") !== basePurged.join("\u0000")) indexChanged = true;
   // 本地要发布的条目（uploadLocal）：metadata-only 轮次没有 body PUT，必须单独记录。
   const publishes: SyncPlan["publishes"] = { lake: [], quickNotes: [] };
+  /** P1-4：引擎按 core 判据算出的「疑似外部损坏」条目——本轮不碰它们的正文与索引。 */
+  const suspiciousBodyIds = new Set(input.state.suspiciousBodyIds ?? []);
 
   for (const p of lakePlan.notes) {
     const l = p.local;
     const r = p.remote;
+    // P1-4 正文突变保护：可疑篇**不上传、不发布本地内容**，先留档历史 + warning。
+    // 注意：仍允许「远端更新」路径把云端版本写回（那是修复本地损坏，不是上传）；
+    // 发布索引里可疑篇只用远端版本（远端没有 ⇒ 整条不发布 = 不拿可疑内容覆盖云端）。
+    const suspiciousBody = !!l && suspiciousBodyIds.has(p.id);
+    if (suspiciousBody) {
+      writes.push({ kind: "archive-local", space: "lake", id: p.id, reason: "suspicious" });
+      warnings.push({
+        code: "body_suspicious_external_change",
+        space: "lake",
+        id: p.id,
+        title: l!.title,
+        detail: "本地正文与基线不一致但行未改动，疑似外部损坏/替换：已跳过上传并留档历史，请从历史或云端恢复",
+      });
+    }
     const needBody = p.applyRemote && !!r && (!l || l.contentHash !== r.contentHash || p.kind === "download" || p.kind === "remote-wins-history");
     // 声明只在「要应用远端条目」或「要上传本地条目」时才读：零变更/纯无关条目**不产生声明 GET**。
     const willApply = !!(p.applyRemote && r);
     const willUpload = !!(l && (p.uploadLocal || fieldChanged.has(p.id)));
     const lakeDecl = r?.assetsHash && (willApply || willUpload) ? r.assetsHash : undefined;
     addRead(reads, "lake", p.id, lakeDecl, needBody, r?.contentHash ?? null);
-    if ((p.uploadLocal || fieldChanged.has(p.id)) && l) {
+    // P1-4：可疑篇不上传（远端更新仍走下面的 apply-remote 修复本地）。
+    if (!suspiciousBody && (p.uploadLocal || fieldChanged.has(p.id)) && l) {
       const bodyChanged = !r || r.contentHash !== l.contentHash;
       if (bodyChanged) {
         transfers.push({ op: "put", space: "lake", id: p.id, key: lakeBodyKey(p.id, l.contentHash), hash: l.contentHash, size: 0, kind: "body" });
@@ -118,7 +140,8 @@ export function planSync(input: PlanInput): SyncPlan {
       indexChanged = true;
       publishes.lake.push(p.id);
     }
-    if (p.archiveLocal) writes.push({ kind: "archive-local", space: "lake", id: p.id, reason: p.kind === "remote-purged-trash" ? "cloud-absent" : "remote-wins" });
+    // 可疑篇的归档已按 suspicious 理由生成，避免同内容两份历史快照。
+    if (p.archiveLocal && !suspiciousBody) writes.push({ kind: "archive-local", space: "lake", id: p.id, reason: p.kind === "remote-purged-trash" ? "cloud-absent" : "remote-wins" });
     if (p.applyRemote && r) {
       writes.push({ kind: "apply-remote", space: "lake", id: p.id, meta: { ...r }, bodyHash: r.contentHash });
       if (p.kind === "remote-wins-history") warnings.push({ code: "conflict_kept_history", space: "lake", id: p.id, title: r.title });
@@ -233,7 +256,8 @@ export function planSync(input: PlanInput): SyncPlan {
   if (indexChanged) {
     const lakeNotes = lakePlan.notes
       .filter((p) => p.kind !== "local-purge" && p.kind !== "remote-purged-trash")
-      .map((p) => (p.applyRemote && p.remote ? p.remote : p.local ?? p.remote))
+      // P1-4：可疑篇只允许用**远端版本**进索引（远端没有就整条不进，绝不用可疑本地内容覆盖云端）。
+      .map((p) => (suspiciousBodyIds.has(p.id) ? p.remote : (p.applyRemote && p.remote ? p.remote : p.local ?? p.remote)))
       .filter((n): n is NonNullable<typeof n> => !!n);
     const quickItems = quickPlan.items
       .filter((p) => p.kind !== "local-purge" && p.kind !== "local-delete")

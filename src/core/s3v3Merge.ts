@@ -1,5 +1,6 @@
 import { decideItem } from "./s3v3Decision.js";
 import type { LakeFolderEntry, LakeIndex, LakeNoteEntry, QuickNoteEntry, QuickNotesIndex } from "./s3v3/protocol/s3v3Index.js";
+import type { PlanWarning } from "./s3v3/plan/types.js";
 
 /** 三方合并计划（纯逻辑）：输入基线×本地×远端，输出每条的下载/上传/删除/归档意图。 */
 
@@ -61,6 +62,53 @@ export interface LakeFolderPlan {
 export interface LakeMergePlan {
   notes: LakeNotePlan[];
   folders: LakeFolderPlan[];
+  /** P1-6：远端父级成环时「拒绝该父关系」的结构化告警（由 planSync 汇总到 SyncPlan.warnings）。 */
+  warnings?: PlanWarning[];
+}
+
+/**
+ * P1-6 父环防护（远端指数可注入父环）：
+ * 合并后世界的 id → 父 id（远端优先，其次本地，最后基线）。note 与 folder 同一命名空间
+ *（tree_nodes 里文档既是 note 也可能是父节点），因此必须合在一张表里判环。
+ */
+function mergedParentMapOf(base: LakeIndex | null, local: LakeIndex, remote: LakeIndex): Map<string, string | null> {
+  const parentOf = new Map<string, string | null>();
+  for (const [id, entry] of byId(base?.notes)) parentOf.set(id, entry.parentId);
+  for (const [id, entry] of byId(base?.folders)) parentOf.set(id, entry.parentId);
+  for (const [id, entry] of byId(local.notes)) parentOf.set(id, entry.parentId);
+  for (const [id, entry] of byId(local.folders)) parentOf.set(id, entry.parentId);
+  for (const [id, entry] of byId(remote.notes)) parentOf.set(id, entry.parentId);
+  for (const [id, entry] of byId(remote.folders)) parentOf.set(id, entry.parentId);
+  return parentOf;
+}
+
+/**
+ * 祖先链上「含环」的全部 id（visited + 路径复用，O(n) 线性；防御超长链）。
+ * 环上节点与「喂养进环的子孙」都会命中——它们的祖先链都无限，读取侧必须拒绝对应父关系。
+ */
+export function idsWithCyclicAncestors(parentOf: ReadonlyMap<string, string | null>): Set<string> {
+  const result = new Map<string, boolean>();
+  const limit = parentOf.size + 1;
+  for (const start of parentOf.keys()) {
+    if (result.has(start)) continue;
+    const path: string[] = [];
+    const onPath = new Set<string>();
+    let cur: string | null = start;
+    let cyclic = false;
+    while (cur !== null) {
+      if (onPath.has(cur)) { cyclic = true; break; }        // 当前路径成环
+      const known = result.get(cur);
+      if (known !== undefined) { cyclic = known; break; }   // 复用已算结果
+      onPath.add(cur);
+      path.push(cur);
+      if (path.length > limit) { cyclic = true; break; }    // 防御：不可能但也不许无限
+      cur = parentOf.get(cur) ?? null;
+    }
+    for (const id of path) result.set(id, cyclic);
+  }
+  const out = new Set<string>();
+  for (const [id, cyclic] of result) if (cyclic) out.add(id);
+  return out;
 }
 
 const byId = <T extends { id: string }>(list: T[] | undefined): Map<string, T> => new Map((list ?? []).map((x) => [x.id, x]));
@@ -69,16 +117,40 @@ export function planLakeMerge(base: LakeIndex | null, local: LakeIndex, remote: 
   const baseNotes = byId(base?.notes);
   const localNotes = byId(local.notes);
   const remoteNotes = byId(remote.notes);
-  const remoteNoteParents = new Map<string, string | null>();
-  for (const n of remoteNotes.values()) remoteNoteParents.set(n.id, n.parentId);
+  const baseFolders = byId(base?.folders);
+  const localFolders = byId(local.folders);
   const remoteFolderParents = new Map<string, string | null>();
   for (const f of (remote.folders ?? [])) remoteFolderParents.set(f.id, f.parentId);
+  // P1-6：远端索引可注入父环。合并后一旦成环，下游「落库 → 树查询/删除/移动」会无限展开
+  //（descendantIds / 递归 CTE 即使有 visited 也会把整个环当子树）。这里在决策前先算出
+  //「祖先链含环」的 id，并**拒绝该父关系**：有本地/基线父则保持原父，否则落 null（由落库侧兜底，
+  // 至少不把环写进本地树）；同时产出结构化 warning，绝不静默。
+  const parentOf = mergedParentMapOf(base, local, remote);
+  const cyclicIds = idsWithCyclicAncestors(parentOf);
+  const cycleWarnings: PlanWarning[] = [];
+  const parentFix = new Map<string, string | null>();
+  for (const [id] of remoteNotes) {
+    if (!cyclicIds.has(id)) continue;
+    parentFix.set(id, localNotes.get(id)?.parentId ?? baseNotes.get(id)?.parentId ?? null);
+    cycleWarnings.push({ code: "remote_incomplete", space: "lake", id, detail: "cycle-parent: 远端父级形成环，已拒绝该父关系" });
+  }
+  for (const [id] of byId(remote.folders)) {
+    if (!cyclicIds.has(id)) continue;
+    parentFix.set(id, localFolders.get(id)?.parentId ?? baseFolders.get(id)?.parentId ?? null);
+    cycleWarnings.push({ code: "remote_incomplete", space: "lake", id, detail: "cycle-parent: 远端父级形成环，已拒绝该父关系" });
+  }
+  const safeRemote = <T extends { id: string; parentId: string | null }>(entry: T | null): T | null => {
+    if (!entry || !parentFix.has(entry.id)) return entry;
+    return { ...entry, parentId: parentFix.get(entry.id)! };
+  };
+  const remoteNoteParents = new Map<string, string | null>();
+  for (const n of remoteNotes.values()) remoteNoteParents.set(n.id, safeRemote(n)!.parentId);
   const ids = new Set<string>([...localNotes.keys(), ...remoteNotes.keys(), ...baseNotes.keys()]);
   const notes: LakeNotePlan[] = [];
   for (const id of [...ids].sort()) {
     const b = baseNotes.get(id) ?? null;
     const l = localNotes.get(id) ?? null;
-    const r = remoteNotes.get(id) ?? null;
+    const r = safeRemote(remoteNotes.get(id) ?? null);
     const action = decideItem({
       basePresent: !!b,
       baseHash: b?.contentHash ?? null,
@@ -137,15 +209,13 @@ export function planLakeMerge(base: LakeIndex | null, local: LakeIndex, remote: 
     }
   }
 
-  const baseFolders = byId(base?.folders);
-  const localFolders = byId(local.folders);
   const remoteFolders = byId(remote.folders);
   const fids = new Set<string>([...localFolders.keys(), ...remoteFolders.keys(), ...baseFolders.keys()]);
   const folders: LakeFolderPlan[] = [];
   for (const id of [...fids].sort()) {
     const b = baseFolders.get(id) ?? null;
     const l = localFolders.get(id) ?? null;
-    const r = remoteFolders.get(id) ?? null;
+    const r = safeRemote(remoteFolders.get(id) ?? null);
     const purge = ctx.folderPurgeIntents.has(id);
     if (purge && !l && r) {
       folders.push({ id, kind: "local-purge", applyRemote: false, uploadLocal: false, local: undefined, remote: r });
@@ -181,6 +251,7 @@ export function planLakeMerge(base: LakeIndex | null, local: LakeIndex, remote: 
       else folders.push({ id, kind: "download", applyRemote: true, uploadLocal: false, local: l, remote: r });
     } else folders.push({ id, kind: "none", applyRemote: false, uploadLocal: false, local: l, remote: r });
   }
+  if (cycleWarnings.length > 0) return { notes, folders, warnings: cycleWarnings };
   return { notes, folders };
 }
 

@@ -40,7 +40,7 @@ export class TrashRepository {
     const rows = this.db.prepare(
       `WITH RECURSIVE trash_tree(id) AS (
          SELECT t.id FROM tree_nodes t WHERE t.parent_id=? AND t.deleted_at IS NULL
-         UNION ALL
+         UNION
          SELECT c.id FROM tree_nodes c JOIN trash_tree tt ON c.parent_id=tt.id AND c.deleted_at IS NULL
        )
        SELECT t.id,t.title,t.node_type,t.note_file_id,t.parent_id,t.trashed_at,t.updated_at,t.is_purged,t.cloud_deleted

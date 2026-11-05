@@ -29,8 +29,20 @@ export function assertSafeS3Key(key: string): void {
 }
 
 /**
- * S3 key 段校验（**抛错形态**的薄包装，CORE-09）：基线判据 = core/storeUtils.isSafePathSegment
+ * S3 key 段校验的**判据本体**（CORE-09）：基线判据 = core/storeUtils.isSafePathSegment
  * （与 quickNoteModel 远端内容校验同源），这里只叠加 v3 key 自己的字符集白名单。
+ *
+ * 同时提供非抛错形态：资产文件名这类「来自本机目录/远端声明、必须跳过并告警」的调用点
+ * 不能靠 try/catch 判错（P1-7：非法文件名曾只进 assets.errors，UI 完全看不见）。
+ */
+export function isValidSafeSegment(seg: string): boolean {
+  return isSafePathSegment(seg) && SAFE_SEGMENT_CHARS_RE.test(seg);
+}
+
+/**
+ * S3 key 段校验（**抛错形态**的薄包装）：非法即抛，用于「必须构造 key」的路径。
+ * 条件与 `isValidSafeSegment` 必须同源（结构护栏 storeUtils.test.ts 锁这里必须直接用
+ * `isSafePathSegment(seg)`，防止有人在这层另写一套遍历/字符判据）。
  */
 export function assertSafeSegment(seg: string): void {
   if (!isSafePathSegment(seg) || !SAFE_SEGMENT_CHARS_RE.test(seg)) {

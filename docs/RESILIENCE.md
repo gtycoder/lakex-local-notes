@@ -34,17 +34,20 @@
 4. **清缓存不再是 no-op**：真清派生搜索缓存（单事务清空 + 后台重建）与 PDF 临时目录；明确不清正文/附件/历史/回收站；坏库时如实抛错。
 5. **坏正文四族统一**：DocBodyKind 增加 bitable，桌面/移动共用 checkDocBody；空白正文 = 可编辑空表，坏正文 = 只读 + 横幅（不再显示「还没有数据表」）。
 
-## 4. 已知缺口（Batch 2/3 backlog）
+## 4. 已知缺口（Batch 3 backlog；P1 四条已在 261105 Batch 2 修复）
 
-1. **水线单调化**（P1）：时钟前跳会让 deleted_at > 水线 恒 false ⇒ 删除永不传播；水线取 max(now, 已有墓碑时间) 并拒绝未来值。
-2. **正文突变保护**（P1）：正文被外部损坏/替换时会被当本地编辑上传并清理旧对象；上传前做突变确认（大小/可解码性/上次 hash + 历史留档）。
-3. **父环防护**（P1）：远端索引可注入目录环；descendantIds/递归 CTE 需 visited，导入侧校验环。
-4. **资产坏文件名**（P1）：assets.errors 未上升为可见 warning ⇒ 附件静默不同步。
-5. **quick-notes 独立库损坏**仍卡 boot splash（桌面恢复页只覆盖主库）。
-6. **恢复页通道**用同文档 hash（未加 preload）；需一次真机/打包冒烟。
-7. **Kotlin 侧未编译验证**（CrashLogPlugin / MainActivity）——需 CI 或真机。
-8. 导出非原子写（electron/export.ts）、桌面 atomicWrite 无 fsync、canonicalJson 深嵌套 RangeError。
-9. 崩溃标记 → **安全模式**（不自动同步/不恢复 tab）；整库备份**导入恢复**入口；文件↔元数据对账（节流）；定时兜底历史快照。
+**已修（261105 Batch 2）**
+1. 水线单调化：`core/syncWaterline.ts` 归一化读取（未来值当 0）+ 写入只增不减/夹到 now + 启动自检回写；所有 pending 查询改用归一化水线。
+2. 正文突变保护：`core/s3v3/state/bodyChangeGuard.ts` 三条件判据（基线 hash 变 + 行 updatedAt 未前进 + 内容像坏）⇒ 不 PUT、不认领 publish、`archive-local(suspicious)` + `body_suspicious_external_change` warning；发布索引只用远端版本。
+3. 父环防护：`s3v3Merge` 用 note+folder 合并父表 + visited 检测，环上条目远端父改写为安全父并 warning；descendantIds/回收站 CTE/import 全部 visited + 环拒绝。
+4. 资产坏文件名：`asset_invalid_name` 结构化 warning（先判后跳、不落 errors/pending），两端可见（移动端修正 kind 判定）。
+
+**仍待做（按优先级）**
+5. quick-notes 独立库损坏仍卡 boot splash（桌面恢复页只覆盖主库）。
+6. 恢复页通道用同文档 hash（未加 preload）；需真机/打包冒烟；Kotlin 改动需 CI/真机编译验证。
+7. 正文突变保护的已知限制：大小骤降分支未接线（避免动 deviceStore）、合法 UTF-8 截断不拦、可疑篇每轮重复 warning/归档（建议按 (id,hash) 去重）。
+8. 导出非原子写、桌面 atomicWrite 无 fsync、canonicalJson 深嵌套 RangeError。
+9. 崩溃标记 → **安全模式**；整库备份**导入恢复**入口；文件↔元数据对账（节流）；定时兜底历史快照。
 
 ## 5. 新增失败面时的检查清单
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { sha256Hex } from "../../syncUtils.js";
-import { indexHashOf, indexKey, lakeBodyKey, serializeLakeIndex, serializeQuickNotesIndex, type LakeFolderEntry, type LakeNoteEntry, type S3v3Pointer } from "../protocol/index.js";
+import { declarationKey, indexHashOf, indexKey, lakeBodyKey, serializeLakeIndex, serializeQuickNotesIndex, type LakeFolderEntry, type LakeNoteEntry, type S3v3Pointer } from "../protocol/index.js";
 import type { AssetDeclEntry } from "../protocol/index.js";
 import type { PendingDelete } from "../../s3v3Gate.js";
 import { emptyIntentLog, type IntentLogState } from "./intentLog.js";
@@ -66,6 +66,30 @@ describe("E2-3 runSyncRound（四相编排）", () => {
     expect(out.intents.intents).toEqual([]);
     expect(out.remainingPending).toEqual([]);
     expect(out.deleted).toBe(0);
+  });
+
+  it("P1-7 本机含非法资产文件名 ⇒ 轮次照常发布；warning 透出、声明不引用该文件、无 errors", async () => {
+    const base = world([doc("a", "v1")]);
+    const { ports, pointer } = await seeded(base);
+    ports.local.set("lake:a", enc("v2"));
+    ports.assetsLocal.set("lake:a", [
+      { filename: "ok.png", size: 3, hash: H("AAA") },
+      { filename: "有 空格.png", size: 3, hash: H("BBB") },
+    ]);
+    ports.local.set("lake:a/ok.png", enc("AAA"));
+    const local = world([doc("a", "v2", { updatedAt: "2026-10-28T01:00:00.000Z" })]);
+    const out = await runSyncRound({ local, base, remote: base, basePointer: pointer, deviceId: "me" }, ports);
+    // 跳过单个坏名文件不等于整轮失败：照常发布，其它资产/正文不受影响。
+    expect(out.commit.status).toBe("published");
+    expect(out.assets.errors).toEqual([]);
+    const invalid = out.warnings.filter((w) => w.code === "asset_invalid_name");
+    expect(invalid).toHaveLength(1);
+    expect(invalid[0]).toMatchObject({ space: "lake", id: "a", filename: "有 空格.png" });
+    // 新声明只引用合法文件（旧实现会把非法名写进声明，引用一个永远传不上去的对象）。
+    const assetsHash = out.assets.assetsHashes.find((h) => h.space === "lake" && h.id === "a")?.assetsHash;
+    expect(assetsHash).toBeTruthy();
+    const decl = JSON.parse(dec(ports.remote.get(declarationKey("lake", "a", assetsHash!))!)) as { assets: Array<{ filename: string }> };
+    expect(decl.assets.map((a) => a.filename)).toEqual(["ok.png"]);
   });
 
   it("本地彻底删除（带意图）⇒ 发布已删索引 + 对象被清理，意图被钉到新代", async () => {

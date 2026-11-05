@@ -1557,6 +1557,29 @@ describe("同步状态 / 导入", () => {
     expect(store.pendingSignature().split(":")[2]).toBe("0");
   });
 
+  it("P1-3：库里已有未来水线（时钟前跳）⇒ 读取归一为 0、墓碑重新待同步、可一次修复", () => {
+    const base = store.getSyncPendingSummary().documents;
+    const nb = store.createNotebook("时钟前跳");
+    const note = store.createNoteIn(nb.id, "子笔记");
+    store.saveNote(note.id, "子笔记", "<p>x</p>");
+    store.deleteTreeNode(nb.id);
+    store.purgeTrashItem(nb.id); // note 墓碑（folder 墓碑不计数）
+    const db = (store as unknown as { db: { prepare: (sql: string) => { run: (...args: unknown[]) => unknown } } }).db;
+    db.prepare("UPDATE device_state SET value=? WHERE key='tombstones_published_at'").run("2099-01-01T00:00:00.000Z");
+    // 旧行为：deleted_at > 2099 恒 false ⇒ 删除永不传播。归一后必须重新待同步。
+    expect(store.getTombstonesWaterline()).toBe("0");
+    expect(store.getSyncPendingSummary().documents).toBe(base + 1);
+    store.repairTombstonesWaterline();
+    expect(store.getTombstonesWaterline()).toBe("0");
+    // 单调：已推进过的水线不会被更早的时间倒退
+    store.markTombstonesWaterline("2026-11-05T07:00:00.000Z");
+    store.markTombstonesWaterline("2026-11-05T06:00:00.000Z");
+    expect(store.getTombstonesWaterline()).toBe("2026-11-05T07:00:00.000Z");
+    // 写未来值 ⇒ 夹到现在，绝不落未来
+    store.markTombstonesWaterline("2099-01-01T00:00:00.000Z");
+    expect(store.getTombstonesWaterline() <= new Date(Date.now() + 1000).toISOString()).toBe(true);
+  });
+
   it("Del-6 迁移：旧库 deleted_notes.published_at 回填水线后删列（未发布旧行仍计待同步）", () => {
     const legacyRoot = fs.mkdtempSync(path.join(os.tmpdir(), "lake-del6-migrate-"));
     const raw = new Database(path.join(legacyRoot, "metadata.sqlite3"));

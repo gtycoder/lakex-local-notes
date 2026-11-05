@@ -25,7 +25,7 @@ export interface ApplyPorts {
   deleteRemotePrefix(prefix: string): Promise<number>;
   readLocalBody(space: Space, id: string): Promise<Uint8Array | null>;
   writeLocalBody(space: Space, id: string, bytes: Uint8Array): Promise<void>;
-  archiveLocal(space: Space, id: string, reason: "remote-wins" | "cloud-absent"): Promise<void>;
+  archiveLocal(space: Space, id: string, reason: "remote-wins" | "cloud-absent" | "suspicious"): Promise<void>;
   deleteLocalBody(space: Space, id: string): Promise<void>;
 }
 

@@ -14,7 +14,11 @@ interface SubtreeIds {
   allIds: Set<string>;
 }
 
-/** 收集 folder + note 子树（含自身）：note 也可作为父节点，供删除/恢复/purge 复用。 */
+/** P1-6 父环防护：坏库/注入数据下 visited 已保证收敛，这里再加硬上限防算法外异常（内存/耗时兜底）。 */
+const MAX_SUBTREE_NODES = 200_000;
+
+/** 收集 folder + note 子树（含自身）：note 也可作为父节点，供删除/恢复/purge 复用。
+ *  visited = subtree.allIds：tree_nodes 成环时也不会无限展开（环上节点各纳入一次）。 */
 function collectSubtree(folders: ParentedNode[], notes: ParentedNode[], rootId: string): SubtreeIds {
   const children = new Map<string, Array<{ id: string; kind: "folder" | "note" }>>();
   const addChild = (parentId: string, id: string, kind: "folder" | "note") => {
@@ -44,6 +48,10 @@ function collectSubtree(folders: ParentedNode[], notes: ParentedNode[], rootId: 
   visit(rootNode.id, folders.some((node) => node.id === rootId) ? "folder" : "note");
 
   while (queue.length > 0) {
+    if (subtree.allIds.size >= MAX_SUBTREE_NODES) {
+      console.warn("[trash] 子树节点数超过防御上限，已截断收集:", rootId, subtree.allIds.size);
+      break;
+    }
     const parent = queue.shift()!;
     for (const child of children.get(parent.id) ?? []) visit(child.id, child.kind);
   }

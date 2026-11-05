@@ -2,6 +2,7 @@ import fs from "node:fs";
 import crypto from "node:crypto";
 import type { DbLike } from "./dbLike.js";
 import { sqlParameterBatches } from "../src/core/sqlParameterBatch.js";
+import { advanceWaterline, normalizeWaterline } from "../src/core/syncWaterline.js";
 import { parseS3v3DiagnosticReports, pushS3v3DiagnosticReport, type S3v3DiagnosticReport } from "../src/core/s3v3Report.js";
 import type { SyncNote } from "./noteQueries.js";
 import type { HistoryCleanupResult } from "./storeTypes.js";
@@ -269,16 +270,28 @@ export class SyncReconciliation {
   // ===== 墓碑发布水线（Del-6：替代逐行 published_at） =====
 
   /** 上次成功同步完成时间（device_state.tombstones_published_at；缺省 "0" = 全部墓碑都算待同步）。
-   * 待同步判据统一为 deleted_at > 水线（三种 pending 查询共用）。 */
+   * 待同步判据统一为 deleted_at > 水线（三种 pending 查询共用）。
+   * **读取归一**（P1-3）：非法/未来值视为损坏回退 "0"，避免时钟前跳后「删除永不传播」。 */
   getTombstonesWaterline(): string {
     const row = this.ctx.db.prepare("SELECT value FROM device_state WHERE key='tombstones_published_at'").get() as { value: string } | undefined;
-    return row?.value ?? "0";
+    return normalizeWaterline(row?.value ?? "0");
   }
 
   /** 成功同步后推进水线（desktopSync 调用，替代旧 markTombstonesPublished 的逐行 UPDATE）。
-   * 墓碑本体永久保留（防删除标记因他端移除而丢失 → 离线设备复活，审计 #2）。 */
+   * 墓碑本体永久保留（防删除标记因他端移除而丢失 → 离线设备复活，审计 #2）。
+   * **写入单调 + 夹到 now**（P1-3）：只增不减、永不写未来值。 */
   markTombstonesWaterline(at: string = nowIso()): void {
-    this.ctx.db.prepare("INSERT INTO device_state(key,value) VALUES('tombstones_published_at',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(at);
+    const next = advanceWaterline(this.getTombstonesWaterline(), at);
+    this.ctx.db.prepare("INSERT INTO device_state(key,value) VALUES('tombstones_published_at',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(next);
+  }
+
+  /** 启动自检（P1-3）：历史库可能已写入未来水线 ⇒ 归一后回写一次（幂等）。 */
+  repairTombstonesWaterline(): void {
+    const row = this.ctx.db.prepare("SELECT value FROM device_state WHERE key='tombstones_published_at'").get() as { value: string } | undefined;
+    const normalized = normalizeWaterline(row?.value ?? "0");
+    if (row && row.value === normalized) return;
+    if (!row) return;
+    this.ctx.db.prepare("UPDATE device_state SET value=? WHERE key='tombstones_published_at'").run(normalized);
   }
 
   /** 已写入同步清单的删除标记可安全剪除，避免 deleted_notes 无限累积 */
@@ -339,7 +352,8 @@ export class SyncReconciliation {
   /** 廉价 pending 指纹（三个索引级 COUNT，微秒级）：IPC 层每次调用后 diff，变化才广播完整摘要。 */
   pendingSignature(): string {
     const docs = this.ctx.db.prepare("SELECT COUNT(*) AS c FROM notes WHERE is_dirty=1 AND deleted_at IS NULL").get() as { c: number };
-    const tombs = this.ctx.db.prepare("SELECT COUNT(*) AS c FROM deleted_notes WHERE (node_type IS NULL OR node_type != 'folder') AND deleted_at > COALESCE((SELECT value FROM device_state WHERE key='tombstones_published_at'),'0')").get() as { c: number };
+    // 水线走归一化读取（P1-3）：未来值会被当 0，保证时钟前跳后墓碑重新待同步。
+    const tombs = this.ctx.db.prepare("SELECT COUNT(*) AS c FROM deleted_notes WHERE (node_type IS NULL OR node_type != 'folder') AND deleted_at > ?").get(this.getTombstonesWaterline()) as { c: number };
     const folders = this.ctx.db.prepare("SELECT COUNT(*) AS c FROM tree_nodes WHERE note_file_id IS NULL AND deleted_at IS NULL AND is_dirty=1 AND id != ?").get(this.ctx.trashNotebookId) as { c: number };
     return `${docs.c}:${folders.c}:${tombs.c}`;
   }
@@ -358,8 +372,8 @@ export class SyncReconciliation {
     // Del-6：不再有逐行 published_at；成功同步后水线推进 ⇒ 本轮之前发布的墓碑自然清零。
     // 资源不在本地维护上传 ledger，不能把正文引用数冒充为待上传数；真实资源 diff 在同步阶段完成。
     const tombstones = (this.ctx.db.prepare(
-      "SELECT COUNT(*) AS count FROM deleted_notes WHERE (node_type IS NULL OR node_type != 'folder') AND deleted_at > COALESCE((SELECT value FROM device_state WHERE key='tombstones_published_at'),'0')"
-    ).get() as { count: number }).count;
+      "SELECT COUNT(*) AS count FROM deleted_notes WHERE (node_type IS NULL OR node_type != 'folder') AND deleted_at > ?"
+    ).get(this.getTombstonesWaterline()) as { count: number }).count;
     return { documents: pendingDocs + tombstones, folders: pendingFolders, resources: 0, generatedAt: nowIso() };
   }
 
@@ -378,7 +392,7 @@ export class SyncReconciliation {
     // 晚于成功同步水线的 purge 墓碑 = 待上传事实：墓碑环节要把它发布/对齐记账（desktopSync 成功后推进水线）。
     // 若不计入 → purge 与他端发布撞车（远端已带墓碑 → 收敛减枝无需发布）时早退吞掉整轮，
     // 墓碑永不上传/记账 → pending documents 永久挂起（260910 实测：B 端 122891ab/efbc6884）。
-    const tombRow = this.ctx.db.prepare("SELECT 1 FROM deleted_notes WHERE deleted_at > COALESCE((SELECT value FROM device_state WHERE key='tombstones_published_at'),'0') LIMIT 1").get();
+    const tombRow = this.ctx.db.prepare("SELECT 1 FROM deleted_notes WHERE deleted_at > ? LIMIT 1").get(this.getTombstonesWaterline());
     return !!tombRow;
   }
 

@@ -8,6 +8,13 @@
 
 ## 0. 最新交接（261027）
 
+### 261105 · 容错批 2（P1 四条）：水线单调 / 正文突变保护 / 父环 / 资产坏名 · **本地改动（待提交）**
+- **P1-3 水线单调化**：新增 `src/core/syncWaterline.ts`（未来/非法值当 0；写入只增不减 + 夹到 now）；`syncReconciliation`/`quickNotes` 读归一 + 启动自检回写 + 所有 pending 查询改传归一化水线（不再用裸 SQL 子查询）⇒ 时钟前跳不再让「删除永不传播」。测试：core 2 + store 集成 1。
+- **P1-4 正文突变保护**：新增 `src/core/s3v3/state/bodyChangeGuard.ts`（三条件：基线 hash 变 / 行 updatedAt 未前进 / 内容像坏）；引擎按 `state×baseline` 选候选（正常轮零候选零 IO）⇒ plan 对可疑篇不 PUT、不认领 publish，`archive-local(reason=suspicious)` + `body_suspicious_external_change` warning，索引只用远端版本（远端缺席则不发布）。未改 `deviceStore.ts`。测试 16 例（含真 Store + 假 S3 端到端）。
+- **P1-6 父环防护**：`s3v3Merge` 合成 note+folder 父表 + visited 检测 ⇒ 环上条目远端父改写安全父（本地父→基线父→null）并 `cycle-parent` warning（plan 透出）；两端 descendantIds/回收站子树/import 加 visited/环拒绝；两处递归 CTE `UNION ALL→UNION`。测试 12 例（环下 move/delete/回收站列表 <2s）。
+- **P1-7 资产坏文件名**：`applyAssets` 先判后跳（`isValidSafeSegment` + ≤255B），统一 `asset_invalid_name` warning，覆盖上传三条清单路径与下载侧旧声明（不落 pendingAssets、不产生 errors）；桌面复用 warnings 通道，移动端修正 kind 判定（不再误报成「正文缺失」）。测试 4 例。
+- **门禁**：tsc 0；全量 vitest **624 文件 / 3864 passed / 12 skipped**；core 138 文件 0 违规；`git diff --check` 干净。`docs/RESILIENCE.md` §4 已按完成状态回写。
+
 ### 261105 · 容错批（Batch 1）：同步窗口守卫 + 启动/坏库兜底 + 坏正文四族统一 · **本地改动（未提交/未推送）**
 - **触发**：用户要求「真实使用中的异常操作/异常数据不能动不动崩、要兜底与自愈」。先做四路只读调研（桌面现状、移动 parity、思源兜底机制、故障注入实验），结论与新契约落在 `docs/RESILIENCE.md`（六原则 + 能力表 + 本轮落地 + Batch 2/3 backlog + 新增失败面检查清单）。
 - **P1 三条一次修掉**（`core/s3v3/state/deviceStore.ts` 同步窗口守卫）：轮内软删小记不重建/**不清墓碑**；轮内 purge 文档不重建；轮内移入/移出回收站不回滚生命周期（`cur.updatedAt > n.updatedAt`）。例外保留：显式恢复（`restorePending`）与远端复活（远端 `updatedAt` 晚于本地 purge 时间）。新增 4 例护栏；`deviceConformance` 场景 6 与 `mobileCloudDeleted` 两个既有用例抓出了首版过严的守卫。

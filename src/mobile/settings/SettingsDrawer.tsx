@@ -527,10 +527,12 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                   {syncWarnings.length > 0 && (
                     <div className="mb-set-block">
                       <div className="mb-set-block__name">同步有 {syncWarnings.length} 项被跳过</div>
-                      <div className="mb-set-item__desc">远端缺少对象/资源，已跳过受影响条目；本地内容未改动，下次同步会重试。</div>
+                      <div className="mb-set-item__desc">远端缺少对象/资源或文件名不合法的条目已跳过；本地内容未改动。可重试类会在下次同步重试，文件名不合法需改名后再同步。</div>
                       <div className="mb-list" role="list">
                         {syncWarnings.map((w, i) => {
-                          const missingBody = w.kind !== "asset_missing";
+                          // 只有「正文缺失」类警告才给「去恢复」入口；资源类（asset_missing / asset_kept_remote /
+                          // asset_invalid_name 等）一律按附件行展示，别把文件名问题误报成正文缺失。
+                          const missingBody = w.kind === "local_body_missing" || w.kind === "local_body_restored";
                           const title = w.title || w.noteId || "未命名文档";
                           // 缺正文行给「去恢复」入口：正文文件不在，点开文档只会被拦，直接跳资源管理的清单。
                           if (missingBody) {
@@ -551,7 +553,9 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                               onClick={() => { if (w.noteId) onOpenNote?.(w.noteId); }}
                             >
                               <span className="mb-list-item__text mb-ellipsis">{title}</span>
-                              <span className="mb-list-item__meta">{w.filename ?? "资源缺失"}</span>
+                              <span className="mb-list-item__meta">
+                                {w.kind === "asset_invalid_name" ? `${w.filename ?? "附件"}（文件名不支持同步）` : w.filename ?? "资源缺失"}
+                              </span>
                             </button>
                           );
                         })}

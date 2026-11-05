@@ -27,6 +27,18 @@ class FakeAssets implements AssetPorts {
   }
 }
 
+/** 移动端原生统计清单路径（listLocalAssetStats 优先于 names/read）。 */
+class StatsAssets extends FakeAssets {
+  stats = new Map<string, AssetDeclEntry[]>();
+  async listLocalAssetStats(space: string, id: string) { return this.stats.get(space + ":" + id) ?? []; }
+}
+
+/** 桌面快路径（只列文件名，不读字节）。 */
+class NamesAssets extends FakeAssets {
+  names = new Map<string, string[]>();
+  async listLocalAssetNames(space: string, id: string) { return this.names.get(space + ":" + id) ?? []; }
+}
+
 const plan = (over: Partial<SyncPlan> = {}): SyncPlan => ({
   version: 4, reads: [], writes: [], transfers: [], deletes: [], publishes: { lake: [], quickNotes: [] },
   publish: null, intentChanges: [], warnings: [], total: { ops: 0, bytes: 0 }, ...over,
@@ -94,6 +106,43 @@ describe("E2-1b 资产段：上传差集与声明", () => {
     expect(r.assetsHashes).toHaveLength(1);
   });
 
+  it("P1-7 非法文件名（空格/中文/超长）：跳过并给 asset_invalid_name，声明不引用、其它照常上传、无 errors", async () => {
+    const ports = new StatsAssets();
+    const ok = asset("ok.png", "AAA");
+    ports.stats.set("lake:a", [
+      ok,
+      asset("有 空格.png", "BBB"),
+      asset("中文.png", "CCC"),
+      asset("x".repeat(300) + ".png", "DDD"),
+    ]);
+    ports.bytes.set("lake:a/ok.png", enc("AAA"));
+    const r = await applyAssets(plan({ publishes: { lake: ["a"], quickNotes: [] } }), { declarations: [] }, ports);
+    // 不再进 errors（引擎不消费 errors ⇒ UI 静默）；本轮继续，其它资产照常上传。
+    expect(r.errors).toEqual([]);
+    expect(r.uploaded.files).toBe(1);
+    expect(ports.puts.filter((k) => k.startsWith("assets/"))).toEqual([assetKey("a", "ok.png")]);
+    // 声明**只引用真实可上传的对象**：非法名不进声明（否则索引会引用一个永远传不上去的对象）。
+    const expected = buildAssetDeclaration([ok]);
+    expect(ports.puts).toContain(declarationKey("lake", "a", expected.declHash));
+    expect(r.assetsHashes).toEqual([{ space: "lake", id: "a", assetsHash: expected.declHash }]);
+    const invalid = r.warnings.filter((w) => w.code === "asset_invalid_name");
+    expect(invalid.map((w) => w.filename).sort()).toEqual(["x".repeat(300) + ".png", "中文.png", "有 空格.png"].sort());
+    expect(invalid.every((w) => w.space === "lake" && w.id === "a" && !!w.detail)).toBe(true);
+    expect(r.warnings.some((w) => w.code === "asset_missing")).toBe(false);
+  });
+
+  it("P1-7 桌面 names 快路径：非法名先判后跳，不读字节也不进声明", async () => {
+    const ports = new NamesAssets();
+    ports.names.set("lake:a", ["ok.png", "有 空格.png"]);
+    ports.bytes.set("lake:a/ok.png", enc("AAA"));
+    const r = await applyAssets(plan({ publishes: { lake: ["a"], quickNotes: [] } }), { declarations: [] }, ports);
+    expect(r.errors).toEqual([]);
+    expect(r.uploaded.files).toBe(1);
+    expect(r.warnings.map((w) => w.code)).toEqual(["asset_invalid_name"]);
+    expect(r.warnings[0].filename).toBe("有 空格.png");
+    expect(r.assetsHashes[0].assetsHash).toBe(buildAssetDeclaration([asset("ok.png", "AAA")]).declHash);
+  });
+
   it("本地资产字节 hash 与清单不符 ⇒ 不上传（内容地址不得错配）", async () => {
     const ports = new FakeAssets();
     ports.setLocal("lake", "a", [{ filename: "p.png", body: "PPP" }]);
@@ -145,6 +194,24 @@ describe("E2-1b 资产段：下载差集", () => {
     );
     expect(ports.written).toEqual([]);
     expect(r.warnings.map((w) => w.code)).toEqual(["hash_mismatch"]);
+  });
+
+  it("P1-7 远端声明含非法文件名：跳过并告警（不落 pending/errors），其它照常下载", async () => {
+    const ports = new FakeAssets();
+    ports.remote.set(assetKey("a", "p.png"), enc("PPP"));
+    const decl = buildAssetDeclaration([asset("p.png", "PPP")]);
+    // 旧版本（或对端）曾把非法名写进声明：远端声明里带着它。
+    const assets: AssetDeclEntry[] = [...decl.declaration.assets, { filename: "坏 名.png", size: 3, hash: H("PPP") }];
+    const r = await applyAssets(
+      plan({ writes: [{ kind: "apply-remote", space: "lake", id: "a", meta: { id: "a", assetsHash: decl.declHash }, bodyHash: H("x") }] }),
+      { declarations: [{ space: "lake", id: "a", declHash: decl.declHash, assets }] },
+      ports,
+    );
+    expect(ports.written).toEqual(["p.png"]);          // 合法附件照常下载
+    expect(r.failedDownloads).toEqual([]);             // 非法名不落 pending（永远传不成，重试只会刷告警）
+    expect(r.errors).toEqual([]);
+    expect(r.warnings.map((w) => w.code)).toEqual(["asset_invalid_name"]);
+    expect(r.warnings[0]).toMatchObject({ space: "lake", id: "a", filename: "坏 名.png" });
   });
 
   it("幂等：同一 plan 应用两次，第二次不再上传已一致的资产", async () => {

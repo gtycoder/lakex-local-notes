@@ -46,7 +46,8 @@ export type ReadOp =
 /** 本地写入（applyRemote / 历史快照 / 归档 / 生命周期）。 */
 export type WriteOp =
   | { kind: "apply-remote"; space: Space; id: string; meta: EntryMeta; bodyHash: string | null }
-  | { kind: "archive-local"; space: Space; id: string; reason: "remote-wins" | "cloud-absent" }
+  /** reason：remote-wins = 冲突留档；cloud-absent = 云端已删留档；suspicious = 疑似外部损坏/替换留档（P1-4）。 */
+  | { kind: "archive-local"; space: Space; id: string; reason: "remote-wins" | "cloud-absent" | "suspicious" }
   | { kind: "set-lifecycle"; space: Space; id: string; lifecycle: "active" | "trashed" | "cloud-deleted" | "purged" }
   /** 目录元数据以远端为准（下载/回收站传播）；目录没有正文。 */
   | { kind: "apply-remote-folder"; space: "lake"; id: string; meta: EntryMeta }
@@ -85,7 +86,9 @@ export type Intent =
   | { kind: "restore"; space: Space; id: string; at: string };
 
 export interface PlanWarning {
-  code: "remote_incomplete" | "local_body_missing" | "asset_missing" | "conflict_kept_history" | "cleanup_failed" | "hash_mismatch";
+  code: "remote_incomplete" | "local_body_missing" | "asset_missing" | "asset_invalid_name" | "conflict_kept_history" | "cleanup_failed" | "hash_mismatch"
+    /** P1-4：本地正文与基线不一致但行未改动，且内容像损坏（空/二进制）⇒ 跳过上传并留档（不覆盖云端）。 */
+    | "body_suspicious_external_change";
   space: Space;
   id?: string;
   title?: string;

@@ -292,6 +292,8 @@ export class Store {
       removeSearch: (noteIds) => this.searchRepository.remove(noteIds),
       listNotesForSync: () => this.noteQueries.listNotesForSync(),
     });
+    // P1-3 启动自检：历史库可能已写入未来水线（时钟前跳）⇒ 归一后回写一次，避免「删除永不传播」。
+    try { this.syncReconciliation.repairTombstonesWaterline(); } catch { /* 自检失败不阻断启动 */ }
     this.noteExport = new NoteExport({
       db: this.db,
       notePathFor: (noteId) => this.notePath(noteId),
@@ -982,13 +984,18 @@ export class Store {
   }
 
   private descendantIds(id: string): string[] {
+    // P1-6 父环防护：tree_nodes 可能因远端索引注入 / 数据库外部损坏而成环。
+    // 旧实现无 visited ⇒ 环上会无限 push（移动/删除守卫卡死）。visited 同时去重，保证有限返回。
     const result: string[] = [];
+    const visited = new Set<string>();
     const stack = [id];
     while (stack.length) {
       const cur = stack.pop()!;
+      if (visited.has(cur)) continue;
+      visited.add(cur);
       result.push(cur);
       const children = this.db.prepare("SELECT id FROM tree_nodes WHERE parent_id=? AND deleted_at IS NULL").all(cur) as { id: string }[];
-      for (const c of children) stack.push(c.id);
+      for (const c of children) if (!visited.has(c.id)) stack.push(c.id);
     }
     return result;
   }
@@ -1537,6 +1544,11 @@ export class Store {
   }
   getTombstonesWaterline(): string {
     return this.syncReconciliation.getTombstonesWaterline();
+  }
+
+  /** P1-3 启动自检：历史库若已写入未来水线（时钟前跳），归一后回写一次（幂等）。 */
+  repairTombstonesWaterline(): void {
+    this.syncReconciliation.repairTombstonesWaterline();
   }
 
   /** 零变更早退：本设备上次成功读/写的 manifest commitId（device_state）。 */

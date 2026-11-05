@@ -191,24 +191,49 @@ export class NoteMetadataRepository {
       .run(locked ? 1 : 0, editLockedAt, id);
   }
 
+  /**
+   * P1-6 父环防护（落库侧最后一道闸）：把 nodeId 的父改成 candidateParentId 是否成环。
+   * core 合并层已拒绝远端环；这里防"本地树本身已损坏/并发写入"造成的环，命中时保持原父。
+   */
+  private wouldCreateParentCycle(nodeId: string, candidateParentId: string | null): boolean {
+    if (!candidateParentId) return false;
+    if (candidateParentId === nodeId) return true;
+    const seen = new Set<string>();
+    let cur: string | null = candidateParentId;
+    while (cur !== null) {
+      if (cur === nodeId) return true;
+      if (seen.has(cur)) return false; // 已存在的环（不含本节点）不归这里管，读侧有 visited 兜底
+      seen.add(cur);
+      if (seen.size > 100_000) return true; // 防御：异常超长链一律按成环处理
+      const row = this.db.prepare("SELECT parent_id FROM tree_nodes WHERE id=?").get(cur) as { parent_id: string | null } | undefined;
+      cur = row?.parent_id ?? null;
+    }
+    return false;
+  }
+
   importRemoteFolder(folder: SyncFolder): void {
     if (folder.id === this.trashNotebookId) return;
     const existing = this.db.prepare("SELECT title,parent_id,sort_order,node_type,icon,updated_at FROM tree_nodes WHERE id=?").get(folder.id) as ExistingFolderRow | undefined;
     if (!existing) {
+      // 新行不可能与已落库树成环（自身尚未入表），只有自指需要挡；其余交给读侧 visited。
+      const parentId = this.wouldCreateParentCycle(folder.id, folder.parentId) ? null : folder.parentId;
+      if (parentId !== folder.parentId) console.warn("[sync] 拒绝成环的远端父关系（importRemoteFolder）:", folder.id, folder.parentId);
       this.db.prepare(
         `INSERT INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,deleted_at,is_dirty,is_conflict,icon,trashed_at,deleted_from_parent_id)
          VALUES(?,?,?,?,?,NULL,?,?,?,NULL,0,0,?,?,?)`
-      ).run(folder.id, this.workspaceId, folder.parentId, folder.nodeType, folder.title, folder.sortOrder, folder.updatedAt, folder.updatedAt, folder.icon ?? null,
-        folder.parentId === this.trashNotebookId ? (folder.trashedAt ?? null) : null,
-        folder.parentId === this.trashNotebookId ? (folder.deletedFromParentId ?? null) : null);
+      ).run(folder.id, this.workspaceId, parentId, folder.nodeType, folder.title, folder.sortOrder, folder.updatedAt, folder.updatedAt, folder.icon ?? null,
+        parentId === this.trashNotebookId ? (folder.trashedAt ?? null) : null,
+        parentId === this.trashNotebookId ? (folder.deletedFromParentId ?? null) : null);
       return;
     }
     if (folder.updatedAt > existing.updated_at) {
+      const parentId = this.wouldCreateParentCycle(folder.id, folder.parentId) ? existing.parent_id : folder.parentId;
+      if (parentId !== folder.parentId) console.warn("[sync] 拒绝成环的远端父关系（importRemoteFolder 更新）:", folder.id, folder.parentId);
       this.db.prepare(
         "UPDATE tree_nodes SET parent_id=?, title=?, sort_order=?, updated_at=?, icon=?, is_dirty=0, node_type=?, trashed_at=?, deleted_from_parent_id=? WHERE id=?"
-      ).run(folder.parentId, folder.title, folder.sortOrder, folder.updatedAt, folder.icon ?? null, folder.nodeType,
-        folder.parentId === this.trashNotebookId ? (folder.trashedAt ?? null) : null,
-        folder.parentId === this.trashNotebookId ? (folder.deletedFromParentId ?? null) : null,
+      ).run(parentId, folder.title, folder.sortOrder, folder.updatedAt, folder.icon ?? null, folder.nodeType,
+        parentId === this.trashNotebookId ? (folder.trashedAt ?? null) : null,
+        parentId === this.trashNotebookId ? (folder.deletedFromParentId ?? null) : null,
         folder.id);
     }
   }
@@ -223,14 +248,17 @@ export class NoteMetadataRepository {
     if (folder.id === this.trashNotebookId) return;
     const trashedAt = folder.parentId === this.trashNotebookId ? (folder.trashedAt ?? null) : null;
     const deletedFrom = folder.parentId === this.trashNotebookId ? (folder.deletedFromParentId ?? null) : null;
-    const existing = this.db.prepare("SELECT id FROM tree_nodes WHERE id=?").get(folder.id);
+    const existing = this.db.prepare("SELECT id, parent_id FROM tree_nodes WHERE id=?").get(folder.id) as { id: string; parent_id: string | null } | undefined;
     if (!existing) {
       this.importRemoteFolder(folder);
       return;
     }
+    // P1-6：合并层已拒绝远端环；这里再兜一次并发/坏库场景，命中则**保持原父**并告警。
+    const parentId = this.wouldCreateParentCycle(folder.id, folder.parentId) ? existing.parent_id : folder.parentId;
+    if (parentId !== folder.parentId) console.warn("[sync] 拒绝成环的远端父关系（applyRemoteFolderMeta）:", folder.id, folder.parentId);
     this.db.prepare(
       "UPDATE tree_nodes SET title=?, parent_id=?, sort_order=?, node_type=?, icon=?, updated_at=?, is_dirty=0, trashed_at=?, deleted_from_parent_id=? WHERE id=?"
-    ).run(folder.title, folder.parentId, folder.sortOrder, folder.nodeType, folder.icon ?? null, folder.updatedAt, trashedAt, deletedFrom, folder.id);
+    ).run(folder.title, parentId, folder.sortOrder, folder.nodeType, folder.icon ?? null, folder.updatedAt, trashedAt, deletedFrom, folder.id);
   }
 
   hasTreeNode(id: string): boolean {
@@ -247,7 +275,8 @@ export class NoteMetadataRepository {
     const params: unknown[] = [this.deps.trashNotebookId, this.deps.trashNotebookId, this.workspaceId];
     if (parentId !== null) params.push(parentId);
     const rows = this.db.prepare(
-      "WITH RECURSIVE trash_ids(id) AS (SELECT ? FROM tree_nodes WHERE id=? UNION ALL SELECT t.id FROM tree_nodes t JOIN trash_ids ti ON t.parent_id=ti.id) SELECT id FROM (" + base + ") WHERE id NOT IN (SELECT id FROM trash_ids)"
+      // P1-6：UNION（去重）而不是 UNION ALL —— 树里出现环时递归会无限展开；去重后自然收敛。
+      "WITH RECURSIVE trash_ids(id) AS (SELECT ? FROM tree_nodes WHERE id=? UNION SELECT t.id FROM tree_nodes t JOIN trash_ids ti ON t.parent_id=ti.id) SELECT id FROM (" + base + ") WHERE id NOT IN (SELECT id FROM trash_ids)"
     ).all(...params) as Array<{ id: string }>;
     return rows.map((row) => row.id);
   }
