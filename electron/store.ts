@@ -737,6 +737,11 @@ export class Store {
     return { ok: integrity === "ok" && foreignKeyErrors === 0, integrity, foreignKeyErrors };
   }
 
+  /** 关闭底层连接（启动恢复「备份后重试打开」的探针用；正常进程不主动关，退出交给进程）。 */
+  close(): void {
+    try { this.db.close(); } catch { /* 已关闭 */ }
+  }
+
   rebuildSearchIndex(): void {
     this.searchRepository.rebuild();
   }

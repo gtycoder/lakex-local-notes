@@ -5,6 +5,8 @@ import type { HistoryMobileSettings } from "../bridge";
 import type { useSettingsSectionData } from "./useSettingsSectionData";
 import { S3V3_POINTER_VERSION } from "../../core/s3v3/protocol/s3v3Types";
 import { formatBytes } from "../../lib/formatBytes";
+import { formatCrashEntries, readCrashLog } from "../lib/crashLog";
+import { showToast } from "../ui/toastBus";
 const LAKEX_KERNEL_VERSION = "1.99.0";
 
 export function AppearanceSettingsSection({ settings, update }: { settings: AppSettings; update(patch: Partial<AppSettings>): void }) {
@@ -65,6 +67,29 @@ export function AboutSettingsSection({ appInfo, diag }: { appInfo: ReturnType<ty
                       <span><strong>待回收</strong> {diag.gcPendingCount}</span>
                       <span><strong>快照</strong> {diag.snapshotCount}</span>
                       <span><strong>库大小</strong> {formatBytes(diag.dbBytes)}</span>
+                    </div>
+                    {/* 261105：设置页也能导出诊断（含最近崩溃记录；dev 控制台另有 __lakeCrashLog()）。 */}
+                    <div className="mb-set-block__actions">
+                      <button
+                        type="button"
+                        className="mb-btn mb-btn--secondary"
+                        onClick={() => {
+                          const lines = [
+                            "时间：" + new Date().toISOString(),
+                            "应用：" + (appInfo?.name ?? "LakexLocalNotes") + " " + (appInfo?.version ?? "?") + "（构建 " + (appInfo?.build ?? "?") + "）",
+                            "平台：" + (appInfo?.platform ?? "unknown"),
+                            "环境：" + (typeof navigator === "undefined" ? "unknown" : navigator.userAgent),
+                            "数据：文档 " + diag.noteCount + " / 分组 " + diag.folderCount + " / 小记 " + diag.quickNoteCount
+                              + " / 资源 " + diag.resourceCount + " / 孤儿 " + diag.orphanCount + " / 快照 " + diag.snapshotCount
+                              + " / 库 " + diag.dbBytes + " B",
+                          ];
+                          const crashes = formatCrashEntries(readCrashLog(10));
+                          lines.push("", "最近崩溃记录：", ...(crashes.length > 0 ? crashes : ["（无）"]));
+                          void navigator.clipboard.writeText(lines.join("\n"))
+                            .then(() => showToast("诊断信息已复制"))
+                            .catch(() => showToast("复制失败，请记录屏幕上的错误信息", { type: "error" }));
+                        }}
+                      >复制诊断信息</button>
                     </div>
                   </div>
                 )}

@@ -8,6 +8,15 @@
 
 ## 0. 最新交接（261027）
 
+### 261105 · 容错批（Batch 1）：同步窗口守卫 + 启动/坏库兜底 + 坏正文四族统一 · **本地改动（未提交/未推送）**
+- **触发**：用户要求「真实使用中的异常操作/异常数据不能动不动崩、要兜底与自愈」。先做四路只读调研（桌面现状、移动 parity、思源兜底机制、故障注入实验），结论与新契约落在 `docs/RESILIENCE.md`（六原则 + 能力表 + 本轮落地 + Batch 2/3 backlog + 新增失败面检查清单）。
+- **P1 三条一次修掉**（`core/s3v3/state/deviceStore.ts` 同步窗口守卫）：轮内软删小记不重建/**不清墓碑**；轮内 purge 文档不重建；轮内移入/移出回收站不回滚生命周期（`cur.updatedAt > n.updatedAt`）。例外保留：显式恢复（`restorePending`）与远端复活（远端 `updatedAt` 晚于本地 purge 时间）。新增 4 例护栏；`deviceConformance` 场景 6 与 `mobileCloudDeleted` 两个既有用例抓出了首版过严的守卫。
+- **桌面启动硬失败**：新增 `electron/startupRecovery.ts`（启动前 `quick_check`+外键预检、纯函数决策、`VACUUM INTO` 备份降级文件拷贝、内联恢复页、`crash-marker.json`）与 `startupRecoveryWindow.ts`（独立窗口，四个动作）；`main.ts` 改为「预检 → 构造 Store（try/catch）→ 决策」，不再卡 boot splash；`uncaughtException` 写持久标记、正常启动消费告警。
+- **移动崩溃隔离**：`MobileErrorBoundary`（根 + 五域分层）、全局 `error/unhandledrejection` → `crashLog` 环形缓冲、Kotlin `UncaughtExceptionHandler`+`onRenderProcessGone` 落盘、**坏库页**（延后 `quick_check`；从云端恢复/重试/清缓存重试/复制诊断）优先于启动失败页；`cachePort` 从 no-op 改为真清（派生搜索缓存单事务清空 + 后台重建、PDF 临时目录）。
+- **坏正文四族统一**：`DocBodyKind` 增 `bitable`，桌面/移动共用 `checkDocBody`；空正文 = 可编辑空表、坏正文 = 只读 + 横幅。
+- **门禁**：tsc 0；全量 vitest **617 文件 / 3829 passed / 12 skipped**；core 136 文件 0 违规；`git diff --check` 干净。
+- **未验证/风险**：恢复页动作通道用同文档 hash（未加 preload，需真机/打包冒烟）；Kotlin 改动未编译（需 CI/真机）；quick-notes 独立库损坏仍会卡 splash（Batch 2 补）；Batch 2 剩余 = 水线单调（P1-3）、正文突变保护（P1-4）、父环（P1-6）、资产坏名（P1-7）。
+
 ### 261105 · 工作空间清理（一次性）· **已提交 `86bc26d1` 并双推（Gitee + GitHub 同 hash）**
 - **背景**：工作目录长期堆积（工作区 5.9G + 本机运行时数据 30G+），其中大部分是「可重建的构建/审计/测试产物」与失效 worktree。用户要求：清理每个项目的半成品、遗留分支、开发/测试数据，并保证后续干净。
 - **git / 分支 / 远程**：移除两个已完全合并的历史 worktree（`lakex-pad`、`lakex-ui-surface-polish`，各 409M/610M）并删除对应本地分支；**两远端（Gitee + GitHub）的 `feat/pad-adaptation`、`feat/pad-touch-ui` 也已删除**，现在两端各只剩 `master`；`git fetch --prune` 清掉过期 remote-tracking ref。删除前实测：三条分支 `master..<branch> = 0`（全是 master 祖先，无独有提交）。

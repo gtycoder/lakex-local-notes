@@ -43,7 +43,11 @@ import { AttachmentPreview } from "../features/attachment/AttachmentPreview";
 import { ImageLightbox } from "../features/editor/ImageLightbox";
 import { MobileBrandLaunchMark } from "./ui/BrandLaunchMark";
 import { subscribeQuickNoteShortcut } from "./native/quickNoteShortcut";
-import { ConfirmHost } from "./ui/ConfirmDialog";
+import { ConfirmHost, confirmMobile } from "./ui/ConfirmDialog";
+import { MobileErrorBoundary } from "./ui/MobileErrorBoundary";
+import { formatCrashEntries, readCrashLog } from "./lib/crashLog";
+import { checkMobileDbHealth, classifyDbOpenError, describeDbHealth } from "./data/dbHealth";
+import { ensureDb } from "./bridge/context";
 import { showToast } from "./ui/toastBus";
 import { getNativeErrorMessage, reportNativeActionError } from "../lib/nativeErrors";
 import { successFeedback, warnFeedback } from "./ui/haptics";
@@ -190,6 +194,8 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
    * 之前 catch 里只 setError 不退出 booting ⇒ 失败后永远停在骨架 + 启动遮罩，用户没有任何出路。
    */
   const bootErrorRef = useRef<unknown>(null);
+  /** 坏库（261105）：打开即报损坏消息，或启动后的 quick_check 不通过 ⇒ 渲染「坏库页」而不是普通启动错误页。 */
+  const [dbUnhealthy, setDbUnhealthy] = useState<{ reason: string } | null>(null);
   const boot = useCallback(async () => {
     // 启动速度优先：不加人为最短展示；native splash + WebView overlay 只覆盖真实加载时间。
     setError(null);
@@ -211,6 +217,8 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
     } catch (e) {
       bootErrorRef.current = e;
       setError(getNativeErrorMessage(e));
+      // 坏库与普通启动失败分开：坏库要立刻给「从云端恢复」出口，光重试没有意义。
+      if (classifyDbOpenError(e) === "corrupt") setDbUnhealthy({ reason: getNativeErrorMessage(e) });
     }
   }, [refreshAll]);
   useEffect(() => { void boot(); }, [boot]);
@@ -234,6 +242,9 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
     } catch {
       lines.push("诊断：数据库未打开，读取失败");
     }
+    // 261105：带上最近崩溃/异常记录（全局 handler + 错误边界 + 上一条原生崩溃都在同一份环形缓冲里）。
+    const crashes = formatCrashEntries(readCrashLog(10));
+    if (crashes.length > 0) lines.push("", "最近崩溃记录：", ...crashes);
     try {
       await navigator.clipboard.writeText(lines.join("\n"));
       showToast("诊断信息已复制");
@@ -252,6 +263,47 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
     }
     await boot();
   }, [boot]);
+
+  /** 坏库页「从云端恢复（换机/坏库）」：复用 bridge.restoreFromCloud（清本机同步账本 → 只拉不打）。 */
+  const restoreAfterDbProblem = useCallback(async (): Promise<void> => {
+    const confirmed = await confirmMobile({
+      title: "从云端恢复？",
+      body: "会清空本机同步记录，然后以云端为准全部重新下载（只下载，不上传本机内容）。云端没有的本机文档会移入回收站（可恢复），本机附件不会被删除。",
+      confirmText: "从云端恢复",
+      danger: true,
+    });
+    if (!confirmed) return;
+    try {
+      const result = await bridge.restoreFromCloud();
+      if (!result.ok) { showToast(result.message, { type: "error" }); return; }
+      showToast(result.message);
+      setDbUnhealthy(null);
+      setError(null);
+      await boot();
+    } catch (reason) {
+      showToast("从云端恢复失败：" + getNativeErrorMessage(reason), { type: "error" });
+    }
+  }, [boot]);
+
+  /**
+   * 坏库自检（261105）：启动成功后**延后**跑一次 PRAGMA quick_check（不挡首屏；大库也只是毫秒级读）。
+   * 打开阶段就抛错的路径由 boot 的 catch 归类；这里兜「打得开但结构损坏」的静默情况。
+   */
+  useEffect(() => {
+    if (phase !== "ready" || dbUnhealthy) return;
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const health = await checkMobileDbHealth(await ensureDb());
+          if (!cancelled && !health.ok) setDbUnhealthy({ reason: describeDbHealth(health) });
+        } catch (error) {
+          if (!cancelled && classifyDbOpenError(error) === "corrupt") setDbUnhealthy({ reason: getNativeErrorMessage(error) });
+        }
+      })();
+    }, 2500);
+    return () => { cancelled = true; window.clearTimeout(timer); };
+  }, [phase, dbUnhealthy]);
 
   // 自动同步（261012）：autoMode=interval 起定时器；onOpenClose 在冷启动就绪 + 回到前台时补一次。
   useAutoSync(phase === "ready");
@@ -578,6 +630,16 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
     );
   }
 
+  // 坏库优先于普通启动失败（261105）：只重试没有意义，必须先给「从云端恢复」出口。
+  if (dbUnhealthy) return (
+    <MobileDatabaseProblemPage
+      reason={dbUnhealthy.reason}
+      onRetry={() => void boot()}
+      onClearCacheAndRetry={() => void clearCacheAndRetry()}
+      onRestoreFromCloud={() => void restoreAfterDbProblem()}
+      onCopyDiagnostics={() => void copyBootDiagnostics()}
+    />
+  );
   // 启动失败优先于骨架：否则 catch 后 phase 仍停在 booting，用户只能看着永久骨架（MOB-08）。
   if (error) return (
     <MobileBootErrorPage
@@ -592,16 +654,20 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
   return (
     <div className="mobile-app">
       <DeferredPanel open={drawerOpen} fallback={<PanelLoading kind="settings" title="设置" onClose={() => setDrawerOpen(false)} />}>
-        <SettingsDrawer
-          open={drawerOpen}
-          onClose={() => setDrawerOpen(false)}
-          onRefresh={refreshAll}
-          onOpenNote={(id) => void openNote(id, "viewer")}
-        />
+        {/* 大面板各自一层隔离（261105）：设置崩了不连累首页/工作区。 */}
+        <MobileErrorBoundary scope="settings" title="设置面板加载失败">
+          <SettingsDrawer
+            open={drawerOpen}
+            onClose={() => setDrawerOpen(false)}
+            onRefresh={refreshAll}
+            onOpenNote={(id) => void openNote(id, "viewer")}
+          />
+        </MobileErrorBoundary>
       </DeferredPanel>
       {/* 路由层（261019）：首页常驻 + 工作区按需挂载；push/pop 只动 transform（见 mobile.css） */}
       <div className={"mobile-route-stage" + (wsOpen ? " is-open" : "") + (routeAnimating ? " is-animating" : "")} aria-label="页面">
       <div className="mobile-route-layer mobile-route-layer--home" ref={routeHomeRef}>
+        <MobileErrorBoundary scope="home" title="首页加载失败">
         <HomePage
           tab={homeTab}
           notebooks={notebooks}
@@ -623,6 +689,7 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
           onQuickNotesChanged={refreshAll}
           onQuickNoteTagsChanged={refreshQuickNoteTags}
         />
+        </MobileErrorBoundary>
       </div>
       {route.kind === "notebook" && wsMounted && (
         <div className={"mobile-route-layer mobile-route-layer--workspace" + (wsSettled ? " is-settled" : "")} ref={routeWsRef}>
@@ -634,6 +701,7 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
             <span className="mb-skel mb-route-skeleton__line" />
           </div>
         }>
+        <MobileErrorBoundary scope="workspace" key={route.notebookId} title="这个工作区加载失败">
         <NotebookWorkspace
           key={route.notebookId}
           notebookId={route.notebookId}
@@ -645,6 +713,7 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
           onActiveNoteChange={(id) => { activeIdRef.current = id; }}
           onRegisterBackHandler={registerWorkspaceBack}
         />
+        </MobileErrorBoundary>
         </Suspense>
         </div>
       )}
@@ -662,16 +731,20 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
         }}
       />
       <DeferredPanel open={searchOpen} fallback={<PanelLoading kind="search" title="搜索" onClose={() => setSearchOpen(false)} />}>
-        <SearchSheet
-          open={searchOpen}
-          onClose={() => setSearchOpen(false)}
-          onOpenNote={(id) => void openNote(id, "viewer")}
-          onOpenQuickNote={openQuickNoteFromSearch}
-        />
+        <MobileErrorBoundary scope="search" title="搜索面板加载失败">
+          <SearchSheet
+            open={searchOpen}
+            onClose={() => setSearchOpen(false)}
+            onOpenNote={(id) => void openNote(id, "viewer")}
+            onOpenQuickNote={openQuickNoteFromSearch}
+          />
+        </MobileErrorBoundary>
       </DeferredPanel>
       {aiOpen && (
         <Suspense fallback={<PanelLoading kind="page" title="AI 助手" onClose={() => setAiOpen(false)} />}>
-          <MobileAiPage open onClose={() => setAiOpen(false)} onChanged={() => void refreshAll()} />
+          <MobileErrorBoundary scope="ai" title="AI 页面加载失败">
+            <MobileAiPage open onClose={() => setAiOpen(false)} onChanged={() => void refreshAll()} />
+          </MobileErrorBoundary>
         </Suspense>
       )}
       <Toasts />
@@ -710,6 +783,7 @@ function MobileBootErrorPage(props: {
               <div className="mb-card__body">
                 <p className="mb-form__desc">{props.message}</p>
                 <p className="mb-form__desc">数据仍在本机：重试不会改动正文、附件或未同步的修改。</p>
+                <p className="mb-form__desc">最近崩溃记录：{readCrashLog(10).length} 条（「复制诊断信息」可导出，含上一条原生崩溃）。</p>
               </div>
             </div>
             <div className="mb-set-items">
@@ -717,7 +791,54 @@ function MobileBootErrorPage(props: {
               <button type="button" className="mb-btn mb-btn--block" onClick={props.onClearCacheAndRetry}>清理缓存后重试</button>
               <button type="button" className="mb-btn mb-btn--ghost mb-btn--block" onClick={props.onCopyDiagnostics}>复制诊断信息</button>
             </div>
-            <p className="mb-form__desc">「清理缓存」只清可重建的派生数据，不删除正文、历史快照和已下载资源。</p>
+            <p className="mb-form__desc">「清理缓存」只清可重建的派生数据（搜索索引/FTS 账本 + 渲染临时文件），不删除正文、历史快照和已下载资源。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * 坏库页（261105）：本地数据库打开报「损坏」或 `PRAGMA quick_check` 未通过时的出口。
+ *
+ * 与普通启动失败页的区别：只重试没有意义，必须先给「从云端恢复」。语义与设置页同名入口同源
+ * （bridge/sync.ts:533 restoreFromCloud：清本机同步账本 → 只拉不打；云端没有的本机文档进回收站，可恢复）。
+ * 本机库文件不做导出（移动端没有桌面那种文件选择器；先把能力限制在「诊断可复制 + 恢复可执行」）。
+ */
+function MobileDatabaseProblemPage(props: {
+  reason: string;
+  onRetry: () => void;
+  onClearCacheAndRetry: () => void;
+  onRestoreFromCloud: () => void;
+  onCopyDiagnostics: () => void;
+}) {
+  return (
+    <div className="mobile-app">
+      <div className="mobile-home">
+        <header className="toolbar toolbar--border mobile-topbar">
+          <span className="mobile-topbar-gap" aria-hidden="true" />
+          <span className="mobile-topbar-title">本地数据库需要处理</span>
+          <span className="mobile-topbar-gap" aria-hidden="true" />
+        </header>
+        <div className="mobile-settings-content">
+          <div className="mb-set-group">
+            <div className="mb-set-title">本地库检查未通过</div>
+            <div className="mb-card">
+              <div className="mb-card__head">原因</div>
+              <div className="mb-card__body">
+                <p className="mb-form__desc">{props.reason}</p>
+                <p className="mb-form__desc">正文、附件与历史快照都在本机文件里，不会被这一步删除。</p>
+                <p className="mb-form__desc">最近崩溃记录：{readCrashLog(10).length} 条。本机数据库文件暂不支持导出，请先「复制诊断信息」留存。</p>
+              </div>
+            </div>
+            <div className="mb-set-items">
+              <button type="button" className="mb-btn mb-btn--primary mb-btn--block" onClick={props.onRestoreFromCloud}>从云端恢复（换机/坏库）</button>
+              <button type="button" className="mb-btn mb-btn--block" onClick={props.onRetry}>重试</button>
+              <button type="button" className="mb-btn mb-btn--block" onClick={props.onClearCacheAndRetry}>清理缓存后重试</button>
+              <button type="button" className="mb-btn mb-btn--ghost mb-btn--block" onClick={props.onCopyDiagnostics}>复制诊断信息</button>
+            </div>
+            <p className="mb-form__desc">「从云端恢复」会清空本机同步记录并以云端为准重新下载：云端没有的本机文档会移入回收站（可恢复），不会上传本机内容，也不会删除本机附件。</p>
           </div>
         </div>
       </div>

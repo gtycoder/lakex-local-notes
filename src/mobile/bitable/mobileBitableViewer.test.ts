@@ -342,3 +342,25 @@ describe("MobileBitableViewer 表单优先（261030）", () => {
     expect(html).not.toContain("必填项未填写");
   });
 });
+
+describe("MobileBitableViewer 坏正文（CORE-02）", () => {
+  it("坏 JSON = 只读 + 横幅，不再是「这张多维表还没有数据表」", () => {
+    const html = render("{ 不是 json");
+    expect(html).toContain("data-bitable-parse-error");
+    expect(html).toContain("已锁定为只读");
+    expect(html).not.toContain("还没有数据表");
+  });
+
+  it("结构不对 / 异 kind 一律按坏正文（不落成空表）", () => {
+    expect(render(JSON.stringify({ kind: "bitable", version: 9, tables: [] }))).toContain("data-bitable-parse-error");
+    expect(render(JSON.stringify({ kind: "usheet", version: 1, workbook: {} }))).toContain("data-bitable-parse-error");
+    expect(render("<p>这是一篇 Lake 文档</p>")).toContain("data-bitable-parse-error");
+  });
+
+  it("空正文 = 可编辑的默认数据表（不是坏正文、也不是「还没有数据表」）", () => {
+    const html = render("");
+    expect(html).not.toContain("data-bitable-parse-error");
+    expect(html).not.toContain("还没有数据表");
+    expect(html).toContain("mbt-grid");
+  });
+});

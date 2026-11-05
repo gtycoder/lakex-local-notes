@@ -26,10 +26,11 @@ import {
   createBitableField, createBitableRecord, createDefaultBitableTable,
   BITABLE_STAT_LABEL, groupRecords, isImplementedViewType,
   BITABLE_PROGRESS_MAX, BITABLE_RATING_MAX, BITABLE_ROW_HEIGHT_OPTIONS, applySortMode, bitableRowHeightPx, changeSortField, kanbanGroupField, sortModeLabel, sortModeOf, sortModesForField, statDisplayText, statForField, statsForField,
-  isKnownFieldType, isRelationFieldType, newBitableId, orderedAllTableFields, orderedTableFields, parseBitableBody,
+  isKnownFieldType, isRelationFieldType, newBitableId, orderedAllTableFields, orderedTableFields,
   type BitableAttachment, type BitableAiConfig, type BitableDoc, type BitableField, type BitableFieldType, type BitableFilterJoin, type BitableFilterNode, type BitableGroupRule, type BitableRecord,
   type BitableRelation, type BitableSortMode, type BitableStatType, type BitableTable, type BitableView, type BitableViewType,
 } from "../../core/bitableDoc.js";
+import { checkDocBody } from "../../core/docBodySafety.js";
 import { fillSurfaceColor } from "../../core/colorPalette.js";
 import { addBitableRecord, addBitableRecordWithValues, addBitableView, appendBitableAttachments, convertBitableFieldType, deleteBitableField, deleteBitableRecords, deleteBitableTable, deleteBitableView, fieldHasData, pruneBitableOptionValues, duplicateBitableField, duplicateBitableTable, duplicateBitableView, renameAiFieldToken, renameBitableTable, renameBitableView, setBitableCellValue, setBitableRecordValues, stripViewRefsForFieldType } from "../../core/bitableMutations.js";
 import { applyBitableNav, readBitableNav, writeBitableNav } from "./bitableNavStore.js";
@@ -83,14 +84,10 @@ function RowExpandIcon({ size = 15 }: { size?: number }) {
  * 设备本地导航（用户 261006 选 C）：切数据表 / 切视图只写 localStorage（按 noteId），**不进正文、不同步**。
  * 单一来源 = `bitableNavStore.ts`（桌面与移动端共用）；正文侧由 `useBitableSession` 恒写默认导航。
  */
-function initialDoc(content: string, navNoteId: string | null): BitableDoc {
-  const parsed = parseBitableBody(content);
-  if (!parsed) {
-    const table = createDefaultBitableTable();
-    return { kind: BITABLE_DOC_KIND, version: BITABLE_DOC_VERSION, tables: [table], activeTableId: table.id };
-  }
-  // 只对「真实编辑器」应用设备本地导航；历史快照预览（chrome=false）保持快照本身。
-  return navNoteId ? applyBitableNav(parsed, readBitableNav(navNoteId)) : parsed;
+/** 空/坏正文时的兜底文档（1 张默认数据表）；「这是不是一个可读正文」不在这里判断，由 core 判据回答。 */
+function defaultBitableDoc(): BitableDoc {
+  const table = createDefaultBitableTable();
+  return { kind: BITABLE_DOC_KIND, version: BITABLE_DOC_VERSION, tables: [table], activeTableId: table.id };
 }
 
 function moveItem<T>(items: T[], fromId: string, toId: string, getId: (item: T) => string): T[] {
@@ -135,14 +132,21 @@ export interface BitableEditorProps extends EditorHostProps {
 
 export function BitableEditor({ noteId, content, visible, readOnly: readOnlyProp, locked = false, focused, pane, onChange, onPreserveDraft, onDirty, onCapture: onEditorCapture, onToggleLock, onExportCsv, chrome = true }: BitableEditorProps) {
   /**
-   * 正文无法解析（文件损坏 / 版本不兼容）⇒ **只读兜底 + 横幅**，绝不把它当成"空表"让人继续写。
-   * 261019 review：旧行为 parse 失败会静默换默认表，用户一编辑就覆盖原文（历史/S3 之外没有副本）。
+   * CORE-02：判据收口在 core（usheet / board / ink / bitable 同一套 `checkDocBody`）。
+   * 空正文 = ok + 默认空表（新建/清空，仍可编辑）；非空但解析失败 / 结构不对 ⇒ **只读兜底 + 横幅**，
+   * 绝不把它当成"空表"让人继续写（261019 review：旧行为 parse 失败静默换默认表，用户一编辑就覆盖原文）。
    * 只在挂载时判定一次：只读态下正文不会被本组件改写，重载走 reloadKey 重新挂载。
    */
-  const [bodyUnreadable] = useState(() => parseBitableBody(content) === null);
+  const [bodyCheck] = useState(() => checkDocBody("bitable", content));
+  const bodyUnreadable = bodyCheck.status === "unreadable";
   const readOnly = readOnlyProp || bodyUnreadable;
+  /** 打开时的文档 = core 判据给出的 doc（空正文即默认表）；只对「真实编辑器」应用设备本地导航。 */
+  const [initial] = useState(() => {
+    const base = bodyCheck.status === "ok" ? bodyCheck.doc : defaultBitableDoc();
+    return chrome ? applyBitableNav(base, readBitableNav(noteId)) : base;
+  });
   const { doc, docRef, updateDoc, navigateDoc, beginGesture, endGesture, undoEdit, redoEdit } = useBitableSession(
-    () => initialDoc(content, chrome ? noteId : null), { readOnly, onChange, onPreserveDraft, onDirty, onEditorCapture },
+    () => initial, { readOnly, onChange, onPreserveDraft, onDirty, onEditorCapture },
   );
   // C（261006）：导航变化只落 localStorage（不进正文）。`navSig` 只在切表/切视图时变，正文编辑不会触发。
   const navSig = doc.activeTableId + "|" + doc.tables.map((table) => `${table.id}:${table.activeViewId}`).join(",");

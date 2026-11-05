@@ -1,8 +1,9 @@
 /**
- * 坏正文安全判定（CORE-02）：usheet / board / ink 三族共用**单一判据**。
+ * 坏正文安全判定（CORE-02）：usheet / board / ink / bitable 四族共用**单一判据**。
  *
  * 背景（docs/audit-261027/09-core-data-models.md §CORE-02）：同一句「正文损坏」在四族里曾有四种行为——
- * ink / bitable 只读 + 横幅；usheet 解析失败被当成空表（可编辑）⇒ 用户改一格就把原文覆盖；
+ * ink 只读 + 横幅；bitable 宿主各写一套（桌面 parse===null、移动 null 落成「还没有数据表」）；
+ * usheet 解析失败被当成空表（可编辑）⇒ 用户改一格就把原文覆盖；
  * board 的解析器没有失败态 ⇒ 坏正文静默变成空白画板，画一笔就落盘「空白 + 新元素」。
  *
  * 本文件只回答一个问题：**这段正文能不能安全地交给编辑器？**
@@ -16,6 +17,13 @@
  * 边界：纯函数，不读写 DOM / localStorage / 文件，渲染层与主进程都能用。
  */
 import { createBoardDoc, parseBoardBodyChecked, type BoardDoc } from "./boardDoc.js";
+import {
+  BITABLE_DOC_KIND,
+  BITABLE_DOC_VERSION,
+  createDefaultBitableTable,
+  parseBitableBody,
+  type BitableDoc,
+} from "./bitableDoc.js";
 import { createInkDoc, parseInkBody, type InkDoc } from "./inkDoc.js";
 import {
   USHEET_DOC_KIND,
@@ -25,7 +33,7 @@ import {
   type UsheetDoc,
 } from "./usheetDoc.js";
 
-export type DocBodyKind = "usheet" | "board" | "ink";
+export type DocBodyKind = "usheet" | "board" | "ink" | "bitable";
 
 /** 失败原因：只用于日志 / 测试诊断；宿主 UI 只认 `status`，不要按 reason 分叉行为。 */
 export type DocBodyUnreadableReason = "invalid-json" | "wrong-shape";
@@ -48,7 +56,11 @@ export type InkBodyCheck =
   | { status: "ok"; kind: "ink"; empty: boolean; doc: InkDoc }
   | DocBodyUnreadable;
 
-export type DocBodyCheck = UsheetBodyCheck | BoardBodyCheck | InkBodyCheck;
+export type BitableBodyCheck =
+  | { status: "ok"; kind: "bitable"; empty: boolean; doc: BitableDoc }
+  | DocBodyUnreadable;
+
+export type DocBodyCheck = UsheetBodyCheck | BoardBodyCheck | InkBodyCheck | BitableBodyCheck;
 
 /** 正文为空：null/undefined（缺正文走另外的 bodyMissing 通道）与纯空白都算。 */
 function isBlank(raw: string | null | undefined): boolean {
@@ -69,15 +81,23 @@ function emptyUsheetDoc(): UsheetDoc {
   return { kind: USHEET_DOC_KIND, version: USHEET_DOC_VERSION, workbook: emptyUsheetWorkbook() };
 }
 
+/** 空正文 = 1 张默认数据表（新建 / 清空后的正常形态，仍可编辑）。 */
+function defaultBitableDoc(): BitableDoc {
+  const table = createDefaultBitableTable();
+  return { kind: BITABLE_DOC_KIND, version: BITABLE_DOC_VERSION, tables: [table], activeTableId: table.id };
+}
+
 export function checkDocBody(kind: "usheet", raw: string | null | undefined): UsheetBodyCheck;
 export function checkDocBody(kind: "board", raw: string | null | undefined): BoardBodyCheck;
 export function checkDocBody(kind: "ink", raw: string | null | undefined): InkBodyCheck;
+export function checkDocBody(kind: "bitable", raw: string | null | undefined): BitableBodyCheck;
 /** 泛型入口（kind 是变量时用；返回联合类型）。 */
 export function checkDocBody(kind: DocBodyKind, raw: string | null | undefined): DocBodyCheck;
 export function checkDocBody(kind: DocBodyKind, raw: string | null | undefined): DocBodyCheck {
   if (isBlank(raw)) {
     if (kind === "usheet") return { status: "ok", kind, empty: true, doc: emptyUsheetDoc() };
     if (kind === "board") return { status: "ok", kind, empty: true, doc: createBoardDoc() };
+    if (kind === "bitable") return { status: "ok", kind, empty: true, doc: defaultBitableDoc() };
     return { status: "ok", kind, empty: true, doc: createInkDoc() };
   }
   // isBlank 已排除 null/undefined ⇒ 这里一定是 string（下面三个 parse* 都只收 string）。
@@ -92,6 +112,13 @@ export function checkDocBody(kind: DocBodyKind, raw: string | null | undefined):
     const parsed = parseBoardBodyChecked(text);
     return parsed.readable
       ? { status: "ok", kind, empty: false, doc: parsed.doc }
+      : { status: "unreadable", kind, reason: reasonOf(text) };
+  }
+  if (kind === "bitable") {
+    // parseBitableBody 对「kind/版本不符、tables 非数组、一张表都没有」一律 null ⇒ 结构不对。
+    const doc = parseBitableBody(text);
+    return doc
+      ? { status: "ok", kind, empty: false, doc }
       : { status: "unreadable", kind, reason: reasonOf(text) };
   }
   const doc = parseInkBody(text);

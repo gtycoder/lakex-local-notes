@@ -90,7 +90,8 @@ beforeEach(() => {
   mocks.getAssetUsage.mockResolvedValue({ files: 12, bytes: 2048 });
   mocks.getAppInfo.mockResolvedValue({ name: "LakexLocalNotes", version: "1", build: "1", protocolVersion: 1, platform: "android" });
   mocks.getCacheSummary.mockResolvedValue(cache);
-  mocks.clearDerivedCaches.mockResolvedValue({ cleared: { runtimeBlobBytes: 3 } });
+  // 261105：清缓存返回「真正清掉的派生数据条数」（tempFileBytes = FTS/账本行数），不再有 blob 计数。
+  mocks.clearDerivedCaches.mockResolvedValue({ cleared: { tempFileBytes: 7 } });
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
@@ -163,7 +164,7 @@ describe("useSettingsSectionData", () => {
     expect(data.orphanBusy).toBe(false);
 
     await act(async () => { await data.clearCache(); });
-    expect(data.cacheMsg).toContain("blob 3 项");
+    expect(data.cacheMsg).toContain("已清理派生搜索缓存 7 条");
     expect(mocks.getCacheSummary).toHaveBeenCalled();
   });
 });

@@ -573,10 +573,9 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
               <div className="mb-set-title"><HardDrive size={16} />清理缓存</div>
               <div className="mb-set-items">
                 <div className="mb-set-block">
-                  <div className="mb-set-item__desc">只清理可重建的缓存，不会删除正文、未同步的修改或已下载的资源。</div>
+                  <div className="mb-set-item__desc">清理派生搜索索引（FTS + 账本，清完在后台自动重建）与 PDF 渲染临时文件。不会删除正文、附件、历史快照、回收站内容或未同步的修改。</div>
                   {cacheSummary && (
                     <div className="mb-set-stats">
-                      <span><strong>运行时缓存</strong>：{cacheSummary.runtimeBlobBytes} 项</span>
                       <span>已下载资源（保留）：{cacheSummary.downloadableAssetBytes} 项</span>
                       <span>待上传（保留）：{cacheSummary.pendingUploadBytes} 项</span>
                     </div>

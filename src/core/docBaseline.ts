@@ -16,6 +16,7 @@
  * 边界：纯函数，不读写 DOM / localStorage / 文件；禁止 import @univerjs/*（同 core 约束）。
  */
 import { boardToBody, parseBoardBodyChecked } from "./boardDoc.js";
+import { bitablesToBody, emptyBitableBody, parseBitableBody } from "./bitableDoc.js";
 import { createInkDoc, inkToBody, parseInkBody } from "./inkDoc.js";
 import {
   emptyUsheetWorkbook,
@@ -47,6 +48,11 @@ export function canonicalDocBody(kind: DocBodyKind, raw: string | null | undefin
     // 宽容解析已把空正文当成空画板；readable=false（坏 JSON / 非画板）不能参与等价判断。
     const parsed = parseBoardBodyChecked(raw);
     return parsed.readable ? boardToBody(parsed.doc) : null;
+  }
+  if (kind === "bitable") {
+    // 写盘形式两端都是 `bitablesToBody(tables)`（导航恒写第一张表/第一个视图）⇒ 空正文补默认表。
+    const doc = parseBitableBody(isBlank(raw) ? emptyBitableBody() : raw);
+    return doc ? bitablesToBody(doc.tables) : null;
   }
   // ink 的 parseInkBody 对空正文也返回 null（严格校验），空正文按空文档补上。
   const doc = isBlank(raw) ? createInkDoc() : parseInkBody(raw);

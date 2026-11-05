@@ -1,4 +1,4 @@
-import { app, BrowserWindow, crashReporter, dialog, ipcMain, Menu, nativeTheme, screen, session, shell, type IpcMainEvent, type WebFrameMain } from "electron";
+import { app, BrowserWindow, crashReporter, ipcMain, Menu, nativeTheme, screen, session, shell, type IpcMainEvent, type WebFrameMain } from "electron";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -22,7 +22,16 @@ import { setQuickNotesStoreForV3 } from "./s3v3/quickNotesRegistry.js";
 import { readSyncErrorInfo } from "./s3v3/syncErrorInfo.js";
 import { readDevS3Settings } from "./devConfig.js";
 import { installNativeSha256 } from "./sha256Native.js";
-import { readAndRemoveS3RestoreSeed } from "./workspaceBackup.js";
+import { prepareCloudRestore, readAndRemoveS3RestoreSeed } from "./workspaceBackup.js";
+import {
+  backupDatabaseForRecovery,
+  decideStartupRecovery,
+  inspectDatabaseForStartup,
+  readCrashMarker,
+  removeCrashMarker,
+  writeCrashMarker,
+} from "./startupRecovery.js";
+import { showRecoveryWindow } from "./startupRecoveryWindow.js";
 import { createIpcRegistrar } from "./ipc/registrar.js";
 import { registerNotesIpc } from "./ipc/registerNotes.js";
 import { DraftJournal, draftJournalDir } from "./draftJournal.js";
@@ -316,13 +325,18 @@ function createBootWindow() {
 const BOOT_STARTED_AT = Date.now();
 
 /**
- * 崩溃 / 未捕获错误留档（261023）。
+ * 崩溃 / 未捕获错误留档（261023；261105 P1-5 补持久标记）。
  * 决策：**只记日志、不退出** —— 本地数据由原子写 + 历史快照保证；主进程直接退出会把用户当前编辑打断。
  * 频次与形态由日志统计（grep '[crash]'）；若某类异常持续出现，再按证据收敛到具体调用点。
+ *
+ * P1-5：uncaughtException 后进程状态不可信，额外落一条**持久** crash 标记
+ * （crash-marker.json：time/reason/stack 摘要/累计次数），下次启动在恢复页或启动日志提示。
+ * 标记写入自身绝不抛错（崩溃处理里再抛会把现场冲掉），也不做安全模式（下一批）。
  */
-function installCrashLogging(): void {
+function installCrashLogging(userDataDir: string): void {
   process.on("uncaughtException", (error) => {
     log.app.error("[crash] uncaughtException" + formatLogFields(errorFields(error)));
+    if (!writeCrashMarker(userDataDir, error)) log.app.warn("[crash] 写启动崩溃标记失败（crash-marker.json）");
   });
   process.on("unhandledRejection", (reason) => {
     log.app.error("[crash] unhandledRejection" + formatLogFields(errorFields(reason)));
@@ -622,26 +636,88 @@ if (!app.requestSingleInstanceLock()) {
       })));
     }
     initLogger({ isPackaged: app.isPackaged });
-    installCrashLogging();
+    const userDataDir = app.getPath("userData");
+    // 崩溃标记必须在任何启动动作之前读：上次运行留下未捕获异常时，本次启动（含恢复页）要能提示。
+    installCrashLogging(userDataDir);
     createBootWindow();
     logStartupInfo();
     log.app.info("app ready: initLogger done" + formatLogFields({ bootMs: Date.now() - BOOT_STARTED_AT }));
-    store = new Store(workspaceRoot(), createSafeStorageSecretCipher(), log);
-    const integrity = store.checkIntegrity();
-    if (!integrity.ok) {
-      const detail = `integrity_check=${integrity.integrity}，foreign_key_errors=${integrity.foreignKeyErrors}`;
-      log.app.error(`[store] database integrity check failed: ${detail}`);
-      const choice = dialog.showMessageBoxSync({
-        type: "error",
-        title: "本地数据需要检查",
-        message: "本地数据库完整性检查未通过。",
-        detail: `${detail}\n\n继续打开可能导致后续写入风险；建议先备份用户数据。`,
-        buttons: ["退出", "继续打开"],
-        defaultId: 0,
-        cancelId: 0,
-      });
-      if (choice === 0) { app.quit(); return; }
+    // P1-5：**先做完整性预检，再建 Store**。坏库/打不开时不再继续普通启动
+    //（旧实现先构造 Store 再弹阻塞式 dialog，Store 构造抛错时会直接卡死在 boot splash）。
+    const crashMarker = readCrashMarker(userDataDir);
+    if (crashMarker) {
+      log.app.warn("[crash] 上次运行捕获到未捕获异常" + formatLogFields({ time: crashMarker.time, occurrences: crashMarker.occurrences, reason: crashMarker.reason }));
     }
+    // 预检 = PRAGMA quick_check + foreign_key_check（只读，不建表不迁移）；文件不存在 = 全新安装。
+    const startupIntegrity = inspectDatabaseForStartup(path.join(workspaceRoot(), "metadata.sqlite3"));
+    let startupOpenError: unknown = null;
+    let openedStore: Store | null = null;
+    if (startupIntegrity.ok) {
+      try {
+        openedStore = new Store(workspaceRoot(), createSafeStorageSecretCipher(), log);
+      } catch (error) {
+        startupOpenError = error;
+        log.app.error("[store] 打开本地数据库失败" + formatLogFields(errorFields(error)));
+      }
+    } else {
+      log.app.error("[store] 启动完整性预检未通过" + formatLogFields({ detail: startupIntegrity.detail }));
+    }
+    const startupDecision = decideStartupRecovery({ integrity: startupIntegrity, openError: startupOpenError, crashMarker });
+    if (startupDecision.mode === "recovery" || !openedStore) {
+      // 恢复模式：销毁 splash，换成一个可操作的最小恢复页（备份后重试 / 云端恢复 / 打开目录 / 退出）。
+      log.app.error("[store] 进入启动恢复模式" + formatLogFields({ cause: startupDecision.cause, detail: startupDecision.detail }));
+      if (bootWindow && !bootWindow.isDestroyed()) bootWindow.destroy();
+      bootWindow = null;
+      showRecoveryWindow({
+        reason: startupDecision.reason || "无法打开本地数据库",
+        detail: startupDecision.detail,
+        dataDir: userDataDir,
+        workspacePath: workspaceRoot(),
+        logPath: path.join(userDataDir, "logs", "lakex-local-notes.log"),
+        backupDir: path.join(userDataDir, "backup"),
+        crashMarker: startupDecision.crashMarker,
+      }, {
+        async backupAndRetry() {
+          const backup = backupDatabaseForRecovery({ dbPath: path.join(workspaceRoot(), "metadata.sqlite3"), userDataDir });
+          if (!backup.ok) return { ok: false, message: backup.message };
+          // 备份成功后**重试打开**（完整走一次 Store 构造/迁移）；成功后重启走正常启动路径。
+          try {
+            const probe = new Store(workspaceRoot(), createSafeStorageSecretCipher(), log);
+            probe.close();
+          } catch (error) {
+            log.app.error("[recovery] 备份后重试打开仍失败" + formatLogFields(errorFields(error)));
+            return { ok: false, message: backup.message + "；但重试打开仍失败：" + (error instanceof Error ? error.message : String(error)) };
+          }
+          return { ok: true, message: backup.message + "；重试打开通过，正在重启…", restart: true };
+        },
+        async cloudRestore() {
+          try {
+            // 复用 A2：把当前 workspace 改名隔离保留 → 空库重启。坏库读不到 S3 凭据，重启后需重新配置。
+            const { quarantinePath } = prepareCloudRestore(workspaceRoot());
+            log.app.info("[recovery] 云端恢复：原数据已隔离到 " + quarantinePath);
+            return {
+              ok: true,
+              message: "原数据已隔离保留在 " + quarantinePath + "，将以全新空库重启；重启后需在设置里重新配置云同步，再从云端拉回。正在重启…",
+              restart: true,
+            };
+          } catch (error) {
+            log.app.error("[recovery] 云端恢复准备失败" + formatLogFields(errorFields(error)));
+            return { ok: false, message: "云端恢复准备失败：" + (error instanceof Error ? error.message : String(error)) };
+          }
+        },
+        async openDataFolder() {
+          const openError = await shell.openPath(userDataDir);
+          return openError
+            ? { ok: false, message: "打开数据目录失败：" + openError }
+            : { ok: true, message: "已打开数据目录：" + userDataDir };
+        },
+        restart() { app.relaunch(); app.exit(0); },
+        quit() { app.quit(); },
+      });
+      return;
+    }
+    // 正常启动判定完成；崩溃标记等**启动真正跑通**（建主窗口前）再消费，避免半途失败时丢掉线索。
+    store = openedStore;
     // A2 云端恢复（换机/坏库）：重启后若存在恢复 seed（prepareCloudRestore 写入的 settings 密文行），
     // 原样写回新库再删除——secretAccessKey 保持 enc:v1: 密文（绝不明文落盘），同机 safeStorage 可解。
     try {
@@ -678,6 +754,8 @@ if (!app.requestSingleInstanceLock()) {
       port: WEB_API_PORT,
       log: { info: (m) => log.app.info(m), warn: (m) => log.app.warn(m) },
     });
+    // 正常启动已跑通 ⇒ 消费崩溃标记（它已在启动日志里提示过；恢复模式不会走到这里，保留给恢复页）。
+    if (startupDecision.crashMarker) removeCrashMarker(userDataDir);
     createWindow();
     logHeapPeak("startup");
 

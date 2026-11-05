@@ -390,6 +390,14 @@ export function createDeviceStoreMeta(deps: DeviceStoreMetaDeps): DeviceStoreMet
 
   async function saveQuickNotes(state: DeviceState): Promise<void> {
     const current = new Map((await p.listQuickNotesForSync()).map((q: QuickNoteSyncRow) => [q.id, q] as const));
+    // 同步窗口守卫（261105 容错批，P1-1）：本轮 plan 快照之后用户又删掉/彻底删掉的小记，
+    // 不能因为 state 里还留着就被重新导入——`importRemoteQuickNote` 会清墓碑，等于把删除永久丢掉。
+    // 判据：行不在 fresh current（已被删）但 id 出现在墓碑表里 ⇒ 本地新删除优先，下一轮再发布缺席。
+    const quickDeletedNow = new Set((await p.listQuickDeleted()).map((d) => d.id));
+    // purge 墓碑带时间：用于区分「轮内 purge」与「他端恢复后重新发布」（后者要正常导入）。
+    const quickPurgedNow = new Map((await p.listQuickPurges()).map((d) => [d.id, d.purgedAt ?? ""] as const));
+    // 显式恢复（restorePending）与远端复活都是例外：恢复动作本身就要把条目重新拉起，不受墓碑守卫压制。
+    const restoring = new Set(state.restorePending ?? []);
     // 「曾经同步过」判据下沉 core（C-3 第 4 处漂移）：baseline.quickNotes 是云端侧已发布的集合。
     const baseline = await deps.baseline.load();
     const baselineQuickIds = new Set((baseline?.quickNotes.items ?? []).map((q) => q.id));
@@ -404,6 +412,11 @@ export function createDeviceStoreMeta(deps: DeviceStoreMetaDeps): DeviceStoreMet
     const wanted = new Map(state.quickNotes.items.map((q) => [q.id, q] as const));
     for (const item of wanted.values()) {
       const cur = current.get(item.id);
+      // 轮内被删（软删或 purge）：以本地新动作为准，本轮不重建、不清墓碑（显式恢复 / 远端复活除外）。
+      const purgedAtQuick = quickPurgedNow.get(item.id);
+      const purgedDuringRound = purgedAtQuick !== undefined && !restoring.has(item.id) && (item.updatedAt ?? "") <= purgedAtQuick;
+      const softDeletedDuringRound = quickDeletedNow.has(item.id) && purgedAtQuick === undefined && !restoring.has(item.id);
+      if (!cur && (purgedDuringRound || softDeletedDuringRound)) continue;
       try {
         if (!cur || cur.contentHash !== item.contentHash) {
           const body = await files.read(p.quickNoteBodyPath(item.id));
@@ -474,6 +487,12 @@ export function createDeviceStoreMeta(deps: DeviceStoreMetaDeps): DeviceStoreMet
     // 批量写窗口（移动 executeSet）：只包「文档行写入」这一段；目录/小记保持逐条（与旧移动实现同序）。
     await p.beginWriteBatch?.();
     const current = new Map((await p.listNotesSyncMeta()).map((n: SyncNoteMetaRow) => [n.id, n] as const));
+    // 同步窗口守卫（P1-8）：本轮快照之后被 purge 的文档，不得因为 state 里还在就被 importRemoteNote 重建
+    //（重建行 + 正文后，墓碑仍在 ⇒ 下一轮再删，表现为「删了又出现」的闪回与重复 PUT）。
+    // purgedAt 用于区分「轮内被 purge、快照里还是旧条目」与「他端已恢复并重新发布」：
+    // 只有快照条目的 updatedAt 不晚于本地 purge 时间，才算轮内删除；更晚 ⇒ 远端复活，正常导入。
+    const purgedNow = new Map((await p.listPurgedTombstones()).map((t) => [t.id, t.purgedAt ?? ""] as const));
+    const restoringNow = new Set(state.restorePending ?? []);
     const wanted = new Map(state.lake.notes.map((n) => [n.id, n]));
     const stagedMoves: Array<{ id: string; kind: NoteKind }> = [];
     for (const n of wanted.values()) {
@@ -486,6 +505,9 @@ export function createDeviceStoreMeta(deps: DeviceStoreMetaDeps): DeviceStoreMet
       const resolvedParentId = n.trashedAt ? TRASH_NOTEBOOK_ID : await resolveRemoteParent(n.parentId);
       try {
         if (!cur) {
+          // 轮内被 purge：以本地新动作为准（墓碑优先，不重建）；显式恢复/远端复活是例外。
+          const purgedAt = purgedNow.get(n.id);
+          if (purgedAt !== undefined && !restoringNow.has(n.id) && (n.updatedAt ?? "") <= purgedAt) continue;
           // P0-2 分块应用：正文还没下到的条目先不建行（否则会先落一个空正文），等它的分块/下一轮。
           // 移动端 staged 正文在文件里（content=null，staged=true）⇒ 允许建行，正文由钩子搬。
           if (!staged) continue;
@@ -515,7 +537,13 @@ export function createDeviceStoreMeta(deps: DeviceStoreMetaDeps): DeviceStoreMet
               await p.importRemoteNote(toNoteWrite(n, resolvedParentId), new TextEncoder().encode(content!));
             }
           }
-          if (n.trashedAt && !cur.trashedAt) {
+          // 同步窗口守卫（P1-2）：本地行比本轮快照更新且生命周期相反 ⇒ 用户在图同步期间移入/移出回收站，
+          // 本轮不得覆写生命周期（否则删除/恢复被静默回滚），留到下一轮按新状态合并（I2「未变才应用」）。
+          const lifecycleRace = (!!n.trashedAt !== !!cur.trashedAt)
+            && !!cur.updatedAt && !!n.updatedAt && cur.updatedAt > n.updatedAt;
+          if (lifecycleRace) {
+            // 只跳过生命周期/元数据覆写；正文/图标/锁等独立字段仍按正常路径处理。
+          } else if (n.trashedAt && !cur.trashedAt) {
             // 远端墓碑 → 回收站：必须走 deleteNote（不能 moveTreeNode 到回收站隐藏笔记本）
             await p.deleteNote(n.id);
           } else if (!n.trashedAt && cur.trashedAt) {
@@ -532,7 +560,7 @@ export function createDeviceStoreMeta(deps: DeviceStoreMetaDeps): DeviceStoreMet
             || (n.trashedAt ?? null) !== (cur.trashedAt ?? null)
             || (n.deletedFromParentId ?? null) !== (cur.deletedFromParentId ?? null)
             || (n.icon !== undefined && (cur.icon ?? null) !== (n.icon ?? null));
-          if (metaDiffers) await p.applyRemoteNoteMeta(toNoteWrite(n, resolvedParentId));
+          if (metaDiffers && !lifecycleRace) await p.applyRemoteNoteMeta(toNoteWrite(n, resolvedParentId));
           if (!!cur.isEditLocked !== !!n.isLocked || (cur.editLockedAt ?? null) !== (n.lockedAt ?? null)) {
             await p.applyRemoteEditLock(n.id, !!n.isLocked, n.lockedAt ?? null);
           }

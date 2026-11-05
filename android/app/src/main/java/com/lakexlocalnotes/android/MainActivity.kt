@@ -54,6 +54,11 @@ class MainActivity : BridgeActivity() {
         registerPlugin(AssetUsagePlugin::class.java)
         // AI 原生通道（261023 P0）：Key 只在原生，流式 SSE
         registerPlugin(AiChatPlugin::class.java)
+        // 原生崩溃记录（261105）：读上次崩溃 / 清空。崩溃本身的落盘在 installCrashHandler() 里。
+        registerPlugin(CrashLogPlugin::class.java)
+        // 261105：原生未捕获异常落盘（崩溃前写 crash/last-crash.txt），下次启动由渲染层读出并入崩溃记录。
+        // 越早装越好：super.onCreate 里 Capacitor 会做不少初始化，那一段崩了也要有堆栈。
+        installCrashHandler()
         super.onCreate(savedInstanceState)
         // 261027：无论 Activity 最终落到哪个 theme（启动页 → NoActionBar），都保证内容可延伸到刘海区域；
         // 具体安全区由上面的 WindowInsets 注入交给 CSS，不依赖 theme 属性是否随启动页主题切换而丢失。
@@ -124,10 +129,36 @@ class MainActivity : BridgeActivity() {
         // 走 recreate() 重建 Activity/Bridge，Web 侧按持久化状态恢复标签。
         bridge?.addWebViewListener(object : WebViewListener() {
             override fun onRenderProcessGone(webView: WebView, detail: RenderProcessGoneDetail): Boolean {
+                // 261105：渲染进程被 OS 回收/崩溃也要留证据（否则下次只剩"App 自己重启了"）。
+                CrashLogPlugin.record(
+                    applicationContext,
+                    RuntimeException("WebView 渲染进程中断（系统回收或崩溃），已 recreate() 重建"),
+                )
                 runOnUiThread { recreate() }
                 return true
             }
         })
+    }
+
+    /**
+     * 原生未捕获异常落盘（261105）：写最近一条 stack 到应用私有目录，然后交回系统原 handler（保留默认行为）。
+     * 只记不拦：进程该崩还是崩（Android 不允许靠这个续命），我们的目的是**下次启动可诊断**。
+     */
+    private fun installCrashHandler() {
+        val previous = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            try {
+                CrashLogPlugin.record(applicationContext, throwable)
+            } catch (_: Throwable) {
+                // 记录失败不影响原始崩溃处理。
+            }
+            if (previous != null) {
+                previous.uncaughtException(thread, throwable)
+            } else {
+                android.os.Process.killProcess(android.os.Process.myPid())
+                kotlin.system.exitProcess(10)
+            }
+        }
     }
 
     /**

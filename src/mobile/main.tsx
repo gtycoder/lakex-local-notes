@@ -9,6 +9,10 @@ import { installFormFactor } from "./pad/formFactor";
 import { applySystemBarTheme } from "./native/systemBars";
 import { isQuickNoteShortcutUrl, readLaunchUrlHint } from "./native/quickNoteShortcut";
 import { installPasteInterceptor } from "../features/editor/clipboardHtml"; // 与桌面 src/main.tsx 一致：粘贴前先装 getData 升级拦截器
+import { installGlobalErrorHandlers } from "./lib/globalErrorHandlers";
+import { clearCrashLog, readCrashLog } from "./lib/crashLog";
+import { consumeNativeCrashLog } from "./native/crashLog";
+import { MobileErrorBoundary } from "./ui/MobileErrorBoundary";
 // ── W2：安卓 UI 全量重做 —— 颜色统一走**自有设计系统**（--lake-*），不再用思源调色板。
 // 思源样式层（src/b3/**）已整体删除；移动端自 P5 起连 compat.css 也不再引（P0–P7 独立性批次）——
 // 移动端 DOM 里没有任何 .b3-* / fn__* 类名（护栏恒为 0），样式全部来自 src/mobile/**。
@@ -57,13 +61,28 @@ if (loadSettings().clearTabsOnExit) clearPersistedNotebookTabs();
 // 与桌面一致：必须在编辑器创建前安装粘贴拦截器（原生 paste 的 clipboardData 只读，getData 需包一层升级）
 installPasteInterceptor();
 
+// 261105 全局异常兜底（与桌面 src/main.tsx:18-23 同口径，移动端此前缺失）：
+// 未捕获异常 / 未处理 Promise 拒绝 → crashLog 环形缓冲（localStorage）+ error 日志，不再只进 Logcat。
+installGlobalErrorHandlers();
+// 上一条原生未捕获异常（MainActivity 的 UncaughtExceptionHandler 落盘）→ 并入崩溃记录并清掉文件；
+// 纯诊断动作，任何失败都静默（web 预览/无该插件时正常跳过）。
+void consumeNativeCrashLog();
+// dev 调试：console 里 __lakeCrashLog() 取最近崩溃记录、__lakeCrashLogClear() 清空。
+if (import.meta.env.DEV) {
+  (window as unknown as Record<string, unknown>).__lakeCrashLog = () => readCrashLog();
+  (window as unknown as Record<string, unknown>).__lakeCrashLogClear = () => clearCrashLog();
+}
+
 // 261022：冷启动首帧路由 —— 原生同步 hint 在 React 首帧前给出 launch URL，
 // 是「长按图标新建小记」就直接进 capture 分支，不再先画首页骨架再整树切换（零等待）。
 const initialCapture = isQuickNoteShortcutUrl(readLaunchUrlHint());
 
+// 根隔离层（261105）：任何组件渲染异常都不再卸载整棵树（移动端此前 0 个 ErrorBoundary）。
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <MobileApp initialCapture={initialCapture} />
+    <MobileErrorBoundary scope="app">
+      <MobileApp initialCapture={initialCapture} />
+    </MobileErrorBoundary>
   </React.StrictMode>
 );
 

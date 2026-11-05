@@ -1,14 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { checkDocBody, type DocBodyKind } from "./docBodySafety.js";
 import { emptyBoardBody, parseBoardBodyChecked } from "./boardDoc.js";
+import { emptyBitableBody } from "./bitableDoc.js";
 import { emptyInkBody } from "./inkDoc.js";
 import { emptyUsheetBody } from "./usheetDoc.js";
 
-/** 合法「空文档」正文：三族各一份。 */
+/** 合法「空文档」正文：四族各一份。 */
 const EMPTY_BODIES: Record<DocBodyKind, string> = {
   usheet: emptyUsheetBody(),
   board: emptyBoardBody(),
   ink: emptyInkBody(),
+  bitable: emptyBitableBody(),
 };
 
 /**
@@ -20,6 +22,8 @@ const WRONG_SHAPES: Record<DocBodyKind, string> = {
   usheet: JSON.stringify({ kind: "usheet", version: 1, workbook: null }),
   board: JSON.stringify({ kind: "board", version: 1, preset: "drawing" }),
   ink: JSON.stringify({ kind: "ink", version: 1, pages: [] }),
+  // 多维表：JSON 合法、kind/版本也对，但一张数据表都没有 ⇒ 结构不对（parseBitableBody 判 null）。
+  bitable: JSON.stringify({ kind: "bitable", version: 1, tables: [] }),
 };
 
 /** 异 kind 正文（把别的文档塞进本编辑器）。 */
@@ -27,6 +31,7 @@ const WRONG_KINDS: Record<DocBodyKind, string> = {
   usheet: JSON.stringify({ kind: "bitable", version: 1, tables: [] }),
   board: JSON.stringify({ kind: "usheet", version: 1, workbook: {} }),
   ink: JSON.stringify({ kind: "board", version: 1, elements: [] }),
+  bitable: JSON.stringify({ kind: "ink", version: 1, pages: [{}] }),
 };
 
 describe("坏正文单一判据（CORE-02）", () => {
@@ -42,6 +47,11 @@ describe("坏正文单一判据（CORE-02）", () => {
         if (check.kind === "usheet") expect(Object.keys(check.doc.workbook.sheets ?? {})).toEqual(["s1"]);
         if (check.kind === "board") expect(check.doc.elements).toEqual([]);
         if (check.kind === "ink") expect(check.doc.pages).toHaveLength(1);
+        // 多维表的空正文 = 1 张可直接编辑的默认数据表（不能落成「还没有数据表」）。
+        if (check.kind === "bitable") {
+          expect(check.doc.tables).toHaveLength(1);
+          expect(check.doc.tables[0].views.length).toBeGreaterThan(0);
+        }
       }
     }
   });
@@ -114,6 +124,28 @@ describe("坏正文单一判据（CORE-02）", () => {
     expect(usheet.status).toBe("ok");
     if (usheet.status === "ok" && usheet.kind === "usheet") {
       expect(usheet.doc.workbook.sheets?.s1.cellData).toEqual({ 0: { 0: { v: "1" } } });
+    }
+  });
+
+  it("bitable：空正文给默认表，坏正文不给任何可写文档（宿主只认 status）", () => {
+    const blank = checkDocBody("bitable", "  \n");
+    expect(blank.status).toBe("ok");
+    if (blank.status === "ok" && blank.kind === "bitable") {
+      expect(blank.empty).toBe(true);
+      expect(blank.doc.tables).toHaveLength(1);
+    }
+    const good = checkDocBody("bitable", JSON.stringify({
+      kind: "bitable", version: 1, activeTableId: "t1", tables: [{
+        id: "t1", name: "表一", activeViewId: "v1",
+        views: [{ id: "v1", name: "表格视图", type: "grid" }],
+        fields: [{ id: "f1", name: "文本", type: "text" }],
+        records: [{ id: "r1", createdAt: "T0", updatedAt: "T0", values: { f1: "值" } }],
+      }],
+    }));
+    expect(good.status).toBe("ok");
+    if (good.status === "ok" && good.kind === "bitable") {
+      expect(good.empty).toBe(false);
+      expect(good.doc.tables[0].records[0].values.f1).toBe("值");
     }
   });
 });

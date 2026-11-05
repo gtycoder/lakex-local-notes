@@ -17,6 +17,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import "./mobileBitable.css";
 import { LayoutList, ListFilter, Menu, Plus, TableProperties } from "lucide-react";
+import { checkDocBody } from "../../core/docBodySafety.js";
 import { fillSurfaceColor } from "../../core/colorPalette.js";
 import {
   applyViewToRecords,
@@ -28,7 +29,6 @@ import {
   groupRecords,
   isKnownViewType,
   orderedTableFields,
-  parseBitableBody,
   type BitableDisplayContext,
   type BitableDoc,
   type BitableField,
@@ -96,9 +96,16 @@ export interface MobileBitableViewerProps {
 }
 
 export function MobileBitableViewer({ noteId, content, editing = false, onChange, onPersistNow, onFullscreenChange }: MobileBitableViewerProps) {
+  /**
+   * CORE-02：判据收口在 core（usheet / board / ink / bitable 同一套 `checkDocBody`）。
+   * 空正文 = ok + 默认表（新建/清空，仍可编辑）；非空但解析失败 / 结构不对 ⇒ **只读 + 横幅**，
+   * 绝不落成「这张多维表还没有数据表」让人以为本来就空（旧行为 = 空表提示，用户看不到坏正文）。
+   */
+  const [bodyCheck] = useState(() => checkDocBody("bitable", content));
+  const [bodyUnreadable, setBodyUnreadable] = useState(() => bodyCheck.status === "unreadable");
   const [doc, setDoc] = useState<BitableDoc | null>(() => {
-    const parsed = parseBitableBody(content);
-    return parsed ? applyBitableNav(parsed, readBitableNav(noteId)) : null;
+    if (bodyCheck.status !== "ok") return null;
+    return applyBitableNav(bodyCheck.doc, readBitableNav(noteId));
   });
   const docRef = useRef<BitableDoc | null>(doc);
   /** 最近一次由本组件写出去（或收到）的正文：判断 content 是不是外部变化，避免自己覆盖自己。 */
@@ -109,7 +116,9 @@ export function MobileBitableViewer({ noteId, content, editing = false, onChange
   onPersistRef.current = onPersistNow;
   const onFullscreenRef = useRef(onFullscreenChange);
   onFullscreenRef.current = onFullscreenChange;
-  const editable = editing && !!onChange;
+  const editable = editing && !!onChange && !bodyUnreadable;
+  const bodyUnreadableRef = useRef(bodyUnreadable);
+  bodyUnreadableRef.current = bodyUnreadable;
 
   const [tableId, setTableId] = useState<string | null>(doc?.activeTableId ?? null);
   /** 当前视图（设备本地导航；空 = 用默认规则：有表单视图就落表单）。 */
@@ -136,10 +145,12 @@ export function MobileBitableViewer({ noteId, content, editing = false, onChange
   // 外部正文变化（例如同步/重开）才采纳；本组件自己 onChange 出去的正文不回灌（否则会打断输入）。
   useEffect(() => {
     if (lastBodyRef.current === content) return;
-    const parsed = parseBitableBody(content);
-    if (!parsed) return;
+    // 外部换入坏正文（同步/重开）同样只读 + 横幅；换回可读正文则恢复。
+    const check = checkDocBody("bitable", content);
+    if (check.status !== "ok") { setBodyUnreadable(true); return; }
+    setBodyUnreadable(false);
     lastBodyRef.current = content;
-    const next = applyBitableNav(parsed, readBitableNav(noteId));
+    const next = applyBitableNav(check.doc, readBitableNav(noteId));
     docRef.current = next;
     setDoc(next);
   }, [content, noteId]);
@@ -214,6 +225,15 @@ export function MobileBitableViewer({ noteId, content, editing = false, onChange
     return map;
   }, [records]);
 
+  if (bodyUnreadable) {
+    return (
+      <div className="mobile-bitable" data-mobile-bitable data-prevent-swipe>
+        <div className="mb-empty" role="status" data-bitable-parse-error>
+          多维表正文无法解析（文件损坏或版本不兼容）：已锁定为只读，不会覆盖原文。请从「历史版本」恢复。
+        </div>
+      </div>
+    );
+  }
   if (!doc || !table || !view || !layout) {
     return <div className="mb-empty">这张多维表还没有数据表。</div>;
   }
@@ -382,7 +402,8 @@ export function MobileBitableViewer({ noteId, content, editing = false, onChange
   /** 表单提交：写 doc → 立即落盘（只读态的唯一写路径）。 */
   const submitForm = async (draft: Record<string, unknown>): Promise<boolean> => {
     const current = docRef.current;
-    if (!current) return false;
+    // 坏正文 = 只读：表单是只读态唯一的写入面，这里必须挡（否则一次提交就覆盖原文）。
+    if (!current || bodyUnreadableRef.current) return false;
     const result = submitMobileForm(current, table.id, draft);
     if (!result.recordId || result.doc === current) return false;
     const body = serializeBitableBody(result.doc.tables);

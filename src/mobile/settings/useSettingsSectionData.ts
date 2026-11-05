@@ -129,7 +129,11 @@ export function useSettingsSectionData(sections: {
     setCacheMsg("清理中…");
     try {
       const result = await mobileCachePort.clearDerivedCaches();
-      setCacheMsg("已清理：blob " + (result.cleared.runtimeBlobBytes ?? 0) + " 项");
+      // 261105：清缓存的真实内容是「派生搜索缓存（FTS/账本）+ 渲染临时文件」，索引在后台重建。
+      const clearedEntries = result.cleared.tempFileBytes ?? 0;
+      setCacheMsg(clearedEntries > 0
+        ? "已清理派生搜索缓存 " + clearedEntries + " 条与渲染临时文件（索引在后台重建）"
+        : "已清理派生缓存与渲染临时文件（索引在后台重建）");
     } catch (error) {
       setCacheMsg("清理失败：" + (error as Error).message);
     }
