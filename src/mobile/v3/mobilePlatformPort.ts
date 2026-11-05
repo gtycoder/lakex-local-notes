@@ -12,6 +12,8 @@ import {
   writeNoteBodiesBatch, writeNoteBody, writeQuickNoteBody,
 } from "../data/noteBodies.js";
 import { loadV3State } from "../data/v3StateRepository.js";
+import { MAX_QUICK_NOTE_TAGS } from "../../core/quickNoteTags.js";
+import { mergeRemoteQuickNoteTags } from "../data/quickNoteTagsRepository.js";
 import { listQuickNoteAssetKeysFs, removeAssetBytesFs } from "../native/assetFs.js";
 
 /**
@@ -176,10 +178,12 @@ export function createMobilePlatformPort(db: MobileDb, ctxIn?: Partial<MobilePla
       }));
     },
     async listQuickTags(): Promise<QuickTagRow[]> {
-      const rows = await db.prepare("SELECT id,name,sort_order,created_at,updated_at FROM tags WHERE deleted_at IS NULL ORDER BY sort_order,id").all() as Array<Record<string, unknown>>;
+      // 目录是同步事实：**必须带墓碑与 pinned**（漏掉 ⇒ 删除不发布 / 置顶被清零，见 ./ 同步语义）。
+      const rows = await db.prepare("SELECT id,name,sort_order,pinned,created_at,updated_at,deleted_at FROM tags ORDER BY sort_order,id").all() as Array<Record<string, unknown>>;
       return rows.map((r) => ({
-        id: String(r.id), name: String(r.name), sortOrder: Number(r.sort_order), pinned: false,
+        id: String(r.id), name: String(r.name), sortOrder: Number(r.sort_order), pinned: !!Number(r.pinned ?? 0),
         createdAt: String(r.created_at), updatedAt: String(r.updated_at),
+        ...(r.deleted_at ? { deletedAt: String(r.deleted_at) } : {}),
       }));
     },
     /** 移动旧口径：quickDeletes 只收「可恢复」行（软删行 + purged_at 为空的墓碑），purged 行走 listQuickPurges。 */
@@ -453,29 +457,41 @@ export function createMobilePlatformPort(db: MobileDb, ctxIn?: Partial<MobilePla
       await db.prepare("UPDATE quick_notes SET is_dirty=0, restore_pending_at=NULL WHERE id=? AND content_hash=?").run(quickNoteId, expectedContentHash);
     },
     async applyQuickNoteTagLinks(quickNoteId: string, tagIds: string[], tagsUpdatedAt: string): Promise<void> {
+      // 与桌面同一套关系 LWW：远端更新才覆盖；过滤墓碑标签（删除的关系不复活）、去重、超上限截断。
+      // **不按 ID 形态过滤**：旧版本/旧索引里可能已有非 `t_` 形态的标签 ID，按正则过滤会静默丢关联（迁移风险）。
       const version = tagsUpdatedAt || ((await db.prepare("SELECT updated_at FROM quick_notes WHERE id=?").get(quickNoteId) as { updated_at?: string } | undefined)?.updated_at ?? nowIso());
+      const currentVersion = (await db.prepare("SELECT links_updated_at FROM tag_link_versions WHERE target_kind='quickNote' AND target_id=?").get(quickNoteId) as { links_updated_at?: string } | undefined)?.links_updated_at ?? "";
+      if (!version || version <= currentVersion) return;
+      const deletedRows = await db.prepare("SELECT id FROM tags WHERE deleted_at IS NOT NULL").all() as Array<{ id: string }>;
+      const deleted = new Set(deletedRows.map((row) => String(row.id)));
+      const seen = new Set<string>();
+      const next: string[] = [];
+      for (const id of tagIds) {
+        if (typeof id !== "string" || !id.trim() || deleted.has(id) || seen.has(id)) continue;
+        seen.add(id);
+        next.push(id);
+        if (next.length >= MAX_QUICK_NOTE_TAGS) break;
+      }
       await db.transaction(async () => {
         await db.prepare("DELETE FROM tag_links WHERE target_kind='quickNote' AND target_id=?").run(quickNoteId);
-        for (let i = 0; i < tagIds.length; i++) {
-          await db.prepare(
-            "INSERT INTO tag_links (target_kind,target_id,tag_id,position) VALUES ('quickNote',?,?,?) ON CONFLICT(target_kind,target_id,tag_id) DO UPDATE SET position=excluded.position"
-          ).run(quickNoteId, tagIds[i], i);
+        for (let index = 0; index < next.length; index += 1) {
+          await db.prepare("INSERT OR IGNORE INTO tag_links (target_kind,target_id,tag_id,position) VALUES ('quickNote',?,?,?)").run(quickNoteId, next[index], index);
         }
-        if (tagsUpdatedAt || tagIds.length > 0) {
-          await db.prepare(
-            "INSERT INTO tag_link_versions(target_kind,target_id,links_updated_at) VALUES ('quickNote',?,?) ON CONFLICT(target_kind,target_id) DO UPDATE SET links_updated_at=excluded.links_updated_at"
-          ).run(quickNoteId, version);
-        }
+        await db.prepare("INSERT INTO tag_link_versions(target_kind,target_id,links_updated_at) VALUES ('quickNote',?,?) ON CONFLICT(target_kind,target_id) DO UPDATE SET links_updated_at=excluded.links_updated_at").run(quickNoteId, version);
       });
     },
     async mergeQuickTags(tags: QuickTagRow[]): Promise<void> {
-      await db.transaction(async () => {
-        for (const tag of tags) {
-          await db.prepare(
-            "INSERT INTO tags (id,name,sort_order,pinned,created_at,updated_at,deleted_at) VALUES (?,?,?,0,?,?,NULL) ON CONFLICT(id) DO UPDATE SET name=excluded.name, sort_order=excluded.sort_order, updated_at=excluded.updated_at, deleted_at=NULL"
-          ).run(tag.id, tag.name, Number(tag.sortOrder ?? 0), tag.createdAt, tag.updatedAt);
-        }
-      });
+      // 目录 LWW（与桌面 mergeRemote 同口径）：保留 pinned / 墓碑，按 updatedAt（含确定性 tie-break）取赢家。
+      // 旧实现固定 pinned=0 且 `deleted_at=NULL` ⇒ 每次同步都把置顶清零、把远端墓碑复活。
+      await mergeRemoteQuickNoteTags(db, tags.map((tag) => ({
+        id: tag.id,
+        name: tag.name,
+        sortOrder: Number(tag.sortOrder ?? 0),
+        pinned: !!tag.pinned,
+        createdAt: tag.createdAt,
+        updatedAt: tag.updatedAt,
+        deletedAt: tag.deletedAt ?? null,
+      })));
     },
     /**
      * 移动端旧语义（端口各自表达平台差异，core 不 if(platform)）：

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { LakeFolderEntry, LakeIndex, LakeNoteEntry, QuickNoteEntry, QuickNotesIndex } from "../protocol/index.js";
+import type { LakeFolderEntry, LakeIndex, LakeNoteEntry, QuickNoteEntry, QuickNoteTagEntry, QuickNotesIndex } from "../protocol/index.js";
 import { planSync, type PlanWorld } from "./plan.js";
 
 /** E1-2 决策层单测：不碰 IO，只锁「同一份三世界快照 → 操作集」的形态。 */
@@ -14,9 +14,9 @@ const quick = (id: string, contentHash: string, over: Partial<QuickNoteEntry> = 
   id, createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z", contentHash, ...over,
 });
 
-function world(notes: LakeNoteEntry[] = [], folders: LakeFolderEntry[] = [], items: QuickNoteEntry[] = []): PlanWorld {
+function world(notes: LakeNoteEntry[] = [], folders: LakeFolderEntry[] = [], items: QuickNoteEntry[] = [], tags: QuickNoteTagEntry[] = []): PlanWorld {
   const lake: LakeIndex = { v: 3, space: "lake", notes, folders };
-  const quickNotes: QuickNotesIndex = { v: 3, space: "quickNotes", items, tags: [] };
+  const quickNotes: QuickNotesIndex = { v: 3, space: "quickNotes", items, tags };
   return { lake, quickNotes, folders };
 }
 
@@ -133,4 +133,42 @@ describe("planSync（v4 E1-2 决策层）", () => {
     expect(plan.publishes.quickNotes).toEqual(["q"]);
     expect(plan.publishes.lake).toEqual([]);
     expect(plan.transfers.some((t) => t.op === "put" && t.space === "quickNotes" && t.id === "q")).toBe(true);
+  });
+  describe("标签目录同步（261105 审计修复）", () => {
+    const tid = "t_0123456789abcdef";
+    const tag = (name: string, over: Partial<QuickNoteTagEntry> = {}): QuickNoteTagEntry => ({
+      id: tid, name, sortOrder: 0, pinned: false,
+      createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z", ...over,
+    });
+
+    it("本地改名/置顶（没有小记变更）也必须发布，并带上合并后的目录", () => {
+      const old = tag("旧名");
+      const renamed = { ...old, name: "新名", updatedAt: "2026-02-01T00:00:00.000Z" };
+      const plan = planSync({
+        local: world([], [], [], [renamed]), base: world([], [], [], [old]), remote: world([], [], [], [old]), state: state(),
+      });
+      expect(plan.publish).not.toBeNull();
+      expect(plan.publish!.quickNotes.tags?.map((entry) => entry.name)).toEqual(["新名"]);
+    });
+
+    it("纯远端目录更新：不重复发布，但 plan.quickTags 采用远端版本（供状态回写）", () => {
+      const old = tag("旧名");
+      const renamed = { ...old, name: "新名", updatedAt: "2026-02-01T00:00:00.000Z" };
+      const plan = planSync({
+        local: world([], [], [], [old]), base: world([], [], [], [old]), remote: world([], [], [], [renamed]), state: state(),
+      });
+      expect(plan.publish).toBeNull();
+      expect(plan.quickTags?.map((entry) => entry.name)).toEqual(["新名"]);
+    });
+
+    it("聚合发布不丢远端标签：本端小记变更时发布的 tags 是 LWW 合并结果", () => {
+      const source = tag("来源");
+      const remoteNewer = { ...source, name: "远端改名", updatedAt: "2026-02-01T00:00:00.000Z" };
+      const base = world([], [], [quick("q", "h1")], [source]);
+      const local = world([], [], [quick("q", "h2")], [source]);
+      const remote = world([], [], [quick("q", "h1")], [remoteNewer]);
+      const plan = planSync({ local, base, remote, state: state() });
+      expect(plan.publish).not.toBeNull();
+      expect(plan.publish!.quickNotes.tags?.map((entry) => entry.name)).toEqual(["远端改名"]);
+    });
   });

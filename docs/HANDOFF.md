@@ -8,6 +8,12 @@
 
 ## 0. 最新交接（261027）
 
+### 261105 · 小记标签系统审计 + 双端同步语义修复 · **本地提交，未推送**
+- **审计结论**：保留「目录（`tags`）+ 关系（`tag_links` + `tag_link_versions`）+ 正文不带标签」模型（改名/合并/置顶/排序只有目录模型付得起；正文携带标签要批量重写且小记无历史快照，属退步）。问题集中在**同步端口的实现与语义**，不在模型。
+- **修掉的 5 类不一致**：① 移动 `listQuickTags` 过滤墓碑 + `pinned` 恒 false ⇒ 删除不发布/置顶被清零；② 移动 `mergeQuickTags` 固定 `pinned=0` + `deleted_at=NULL` ⇒ **墓碑复活**、置顶被覆盖；③ `mergeQuickTagsIntoState` 只补新 id ⇒ 远端改名/排序/墓碑**永不落到状态**；④ plan 的目录变更不进 `indexChanged`，且发布 tags 用本地目录 ⇒ 改名/置顶不同步、聚合发布会丢远端标签；⑤ 移动 `applyQuickNoteTagLinks` 不过滤墓碑/不限条数/无 LWW。
+- **核心改动**：`core/quickNoteTags` 新增 `compareQuickNoteTagVersion`（同一 `updatedAt` 用**确定性 tie-break**，避免两端各留本地永不收敛）+ 合并泛型；`plan` 用 LWW 合并目录、`localTagChanged` 触发发布、publish tags = 合并目录；`engineBridge` 按 LWW 写回 state；移动端口 `listQuickTags` 带 `pinned/deletedAt`、`mergeQuickTags` 走 `mergeRemoteQuickNoteTags`、关系写入走 LWW（过滤墓碑/空/重复/超 20；**不按 ID 正则过滤**，兼容旧 ID）。
+- **测试**：新增 `mobileTagSync.test.ts`（3 例：pinned+墓碑可读、merge LWW 不复活、关系过滤/截断/版本门）+ plan 3 例 + engineBridge 1 例 + core tie-break 1 例。门禁：tsc 0 / 全量 vitest **602 文件 3687 例（3675 通过 + 12 skipped）** / ui-metrics / check:core / check:mobileui / 双 build / check:bundle+arch / `git diff --check`。`perf.integration` 并行跑偶发 ratio flake（单独跑绿，既有已知项）。
+- **仍未做（产品待裁决）**：移动端标签管理入口（改名/删除/合并/置顶/排序仍只在桌面）；**文档标签不参与同步**（桌面主库 `target_kind=note`，与小记库两套目录）；小记→文档转换不带标签；标签改名/删除仍 `reindexAll` 全量重建（2 万小记量级需评估）。
 ### 261105 · 资源管理：删除入口不外露 + 未引用资源可点击预览 · **本地提交，未推送**
 - **用户点单**：资源管理页不要再在外部暴露删除，必须点了「查看」之后才能删。
 - **改动**：首页「未引用的本地文件」从「清理全部（n）」改为「查看（n）」；「云端未引用文件」从「清理云端」改为「查看」；两者进入新 `ResourceCleanupSheet`（mode=orphans / cloudGc）后才出现删除/清理按钮（云端清理仍保留二次确认）。缺正文/缺小记本来就是「查看」后处置，口径统一。
@@ -719,7 +725,7 @@
 - 261103 各批已全部提交并双推（20:08–20:21）：`ce442482`（usheet 35 行/双光标/整行整列）、`733ab4aa`（多维表头部+短名）、`2b29d9e8`（画板工具条+第 4 处补丁）、`75c46902`（ink 14 色）、`ae14ffd1`（胶囊/横滑/安全区/页签 44/useKeyboard）、`1f164f2b`（门禁装置+三份基线重烤）、`1e74c3f8`（文档）、`fdf9c455`（AI 默认关）。
 - 261103 之后（261104 凌晨，均已双推）：ink 三修（`912143da` 落笔/擦除按批渲染、`8f32a5ca` 中断不丢笔）+ 性能观测 `af169f96` + 图片页背景下采样 `8dc83a87` + 导入体积提示 `388232db` + 资源页本地占用 `1adcde27`。
 
-**门禁基线**（261105 09:48 主工作树实测，含本批 ①②③ + 资源管理 UI 收口/预览）：tsc 0 / 全量 vitest **601 文件 3679 例（3667 通过 + 12 skipped；另有 11 个 integration 文件 skipped）** / ui-metrics 0 违规 / `check:core` 137 文件 0 / `check:mobileui` / 双 build / `check:bundle`（mobile-entry-preload 24/30、mobile-js 54,481/61,440、mobile-css 137,925/141,312）/ `check:arch`（移动首屏 343.9KB/360KB；桌面 541.3KB/600KB；import 违规 0）/ `git diff --check` 0。**移动 6 态快照 0 差异**（lake_gate，重烤后 `mobile-snap.json` 与提交版 0 改动）。**APK 已重装**（lake_mobile emulator-5554，debug，40,164,026B）。设备：本批面板/签名/单元格图片/表单视图/缺正文场景已逐条实测（见 §0）；23 屏走查与平板本次未跑（改动不涉及外壳几何，`check:windowsweep` 未跑）。
+**门禁基线**（261105 10:22 主工作树实测，含本批 ①②③ + 资源管理 UI + 小记标签同步修复）：tsc 0 / 全量 vitest **602 文件 3687 例（3675 通过 + 12 skipped；另有 11 个 integration 文件 skipped）** / ui-metrics 0 违规 / `check:core` 137 文件 0 / `check:mobileui` / 双 build / `check:bundle`（mobile-entry-preload 24/30、mobile-js 54,481/61,440、mobile-css 137,925/141,312）/ `check:arch`（移动首屏 343.9KB/360KB；桌面 541.3KB/600KB；import 违规 0）/ `git diff --check` 0。**移动 6 态快照 0 差异**（lake_gate，重烤后 `mobile-snap.json` 与提交版 0 改动）。**APK 已重装**（lake_mobile emulator-5554，debug，40,164,026B）。设备：本批面板/签名/单元格图片/表单视图/缺正文场景已逐条实测（见 §0）；23 屏走查与平板本次未跑（改动不涉及外壳几何，`check:windowsweep` 未跑）。
 
 **环境（本机实测 261104 追加）**：**GitHub 推送走 HTTPS**（本机 `~/.ssh/id_ed25519_personal` 未在 GitHub 侧生效，SSH 报 `Permission denied (publickey)`；keychain 里有 `gtycoder` 凭据）⇒ `git push https://github.com/gtycoder/lakex-local-notes.git <branch>` 可用；Gitee 仍 `origin` SSH 正常。**本机已把 `origin` 的第二 pushurl 改为该 HTTPS 地址**（`git config --add remote.origin.pushurl …`）⇒ `git push origin <branch>` 一次推两边且 exit 0；`npm run setup:remotes` 会把 GitHub 写回 SSH，若再报 publickey 按上法改回 HTTPS。
 
@@ -754,11 +760,13 @@
 4. **依赖补丁 4 处升级复核口径**（仅当升级对应依赖时）：见 §2。
 5. **已裁决、已落地（261104，别再问）**：① 表格语义 = 读态只读 + 排序/冻结/保护属文档数据（不补移动端保护入口）；② 移动端缺正文/缺小记 = B-lite（文档+小记，已落地）；③ 表格面板 = 删无能力占位、接线单元格图片/手写签名/表单视图（已落地）。残余验证：**缺正文云端拉回需在配了 S3 的实例上真机走一遍**（目前仅单测 mock）；**表单视图大表行数帽**（一次性 `getValues`，默认 35 行，超大表若卡再加）；**261105 资源管理两处 UI 改动未重跑 6 态快照 + 23 屏走查**（只在设置子页，预期 0 差异，下一批或发版前一并跑）；**资源「附件」系统打开未设备专项验**（需真实附件 + 系统应用；图片 Lightbox 已验）。
 
+6. **小记标签（261105 审计后剩余，先等产品裁决）**：移动端标签管理入口要不要补（改名/删除/合并/置顶/排序目前只在桌面）；**文档标签要不要参与同步**（桌面主库独立目录 `target_kind=note`，不参与 S3；移动端没有文档标签）；小记→文档转换是否携带标签；标签改名/删除仍 `reindexAll` 全量重建（2 万小记量级需评估）。
+
 **P2（体验缺口 / 长期）**
 
-6. **移动端文本格式（261104 设备实测已收口，别再按旧文档当缺口）**：H1–H6 / 字号 / 颜色 / 对齐 / 列表 / 缩进 / 行高 / 上下标 / 清除格式**全部生效**；**字号+行高已合并成一行步进器**（更多面板 4 行），对齐已是 4 档（含两端对齐）。已关闭、别再立项：首行缩进（内核只做整篇 set、无 undo ⇒ 文案改「全文首行缩进」）；clearFormat（只清行内 mark，与 Word/语雀一致）；Aa 面板溢出（字号搬进「更多」+ 面板下限 312 ⇒ 312/312 无裁切）。**分栏 3·4 已补**（贴着「分栏」条目弹锚定气泡）；**alert 类型不补**（块被选中后内核自带色板可改，用户口径）。未接入口：unlink（kernel 命令对 host 选区返回 false，只有内核链接面板那条路）/ replace（kernel 只收 ranges、移动端查找面板是宿主自研 ⇒ 本轮不做）/ style→code·quote / 表格块级命令族（lakex 表格卡上下文工具条）。另有：画图插入项解禁（文本绘图仍置灰）；移动视图拖拽排序；PdfRender `cacheDir` 清理；页面级 6 处裸 `env(safe-area-inset-bottom)`。
-7. 墓碑 payload 老化（261025 定「后续优化」）；大库阈值探测（>2 万文档 / 索引 3–5MB）；**真实 Android 物理机验收从未做过**；PARITY 残余（移动云清理无 UI 入口、目录恢复后 `deleted_notes` 残留）。移动缺正文的「云端拉回 / 历史恢复 / 重建纯文本」三条只在单测 mock 覆盖，需真机 + 配 S3 验证。
-8. 顶栏真 44 需另开「44 → 52」需求（六批 A4 结论）；平板内容画布「点空白落光标」（待用户裁决）。
+7. **移动端文本格式（261104 设备实测已收口，别再按旧文档当缺口）**：H1–H6 / 字号 / 颜色 / 对齐 / 列表 / 缩进 / 行高 / 上下标 / 清除格式**全部生效**；**字号+行高已合并成一行步进器**（更多面板 4 行），对齐已是 4 档（含两端对齐）。已关闭、别再立项：首行缩进（内核只做整篇 set、无 undo ⇒ 文案改「全文首行缩进」）；clearFormat（只清行内 mark，与 Word/语雀一致）；Aa 面板溢出（字号搬进「更多」+ 面板下限 312 ⇒ 312/312 无裁切）。**分栏 3·4 已补**（贴着「分栏」条目弹锚定气泡）；**alert 类型不补**（块被选中后内核自带色板可改，用户口径）。未接入口：unlink（kernel 命令对 host 选区返回 false，只有内核链接面板那条路）/ replace（kernel 只收 ranges、移动端查找面板是宿主自研 ⇒ 本轮不做）/ style→code·quote / 表格块级命令族（lakex 表格卡上下文工具条）。另有：画图插入项解禁（文本绘图仍置灰）；移动视图拖拽排序；PdfRender `cacheDir` 清理；页面级 6 处裸 `env(safe-area-inset-bottom)`。
+8. 墓碑 payload 老化（261025 定「后续优化」）；大库阈值探测（>2 万文档 / 索引 3–5MB）；**真实 Android 物理机验收从未做过**；PARITY 残余（移动云清理无 UI 入口、目录恢复后 `deleted_notes` 残留）。移动缺正文的「云端拉回 / 历史恢复 / 重建纯文本」三条只在单测 mock 覆盖，需真机 + 配 S3 验证。
+9. 顶栏真 44 需另开「44 → 52」需求（六批 A4 结论）；平板内容画布「点空白落光标」（待用户裁决）。
 
 **已闭合，别重复**
 
