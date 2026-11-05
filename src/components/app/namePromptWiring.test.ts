@@ -59,8 +59,10 @@ describe("统一新建弹窗（NamePromptDialog）", () => {
       expect(SIDEBAR, defaultName).toContain('defaultName: "' + defaultName + '"');
     }
     expect(SIDEBAR).toContain("initialValue={preset.defaultName}");
-    expect(SIDEBAR).toContain("const id = await Promise.resolve(props.onCreate(createDialog.kind, createDialog.parentId, title));");
-    expect(SIDEBAR).toContain("props.onSelect(id)");
+    expect(SIDEBAR).toContain("const id = await Promise.resolve(props.onCreate(kind, parentId, title));");
+    // 261105 回归：只有文档类 onSelect 打开；笔记本/分组是树节点 id，不能当 note 打开（否则「笔记不存在」）。
+    expect(SIDEBAR).toContain('if (kind !== "notebook" && kind !== "group") props.onSelect(id);');
+    expect(SIDEBAR).toContain("window.requestAnimationFrame(() => revealNodeRef.current(id));");
     expect(SIDEBAR).toContain("revealNodeRef.current(id)");
   });
 
