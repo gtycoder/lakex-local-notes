@@ -29,6 +29,8 @@ import { useSyncSettingsForm } from "./useSyncSettingsForm";
 import { useMissingBodies } from "./useMissingBodies";
 import { MissingBodiesSheet, type MissingBodiesMode } from "./MissingBodiesSheet";
 import { ResourceCleanupSheet, type ResourceCleanupMode } from "./ResourceCleanupSheet";
+import type { OrphanAsset } from "./useSettingsSectionData";
+import { showToast } from "../ui/toastBus";
 import { formatS3v3Diagnostics } from "../../core/s3v3Report";
 
 /** Lake 内核版本（AGENTS §2 已 pin v1.99.0，勿随意升级；升级内核时同步改这里与关于页）。 */
@@ -129,6 +131,27 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
   const [missingSheet, setMissingSheet] = useState<MissingBodiesMode | null>(null);
   /** 资源管理里的清理明细（261105）：删除入口只在这里出现，首页不暴露。 */
   const [cleanupSheet, setCleanupSheet] = useState<ResourceCleanupMode | null>(null);
+  /** 点击「未引用」行预览内容：图片走共享 Lightbox，其它附件交系统应用；文件缺失则明确提示、不预览。 */
+  const previewOrphan = (item: OrphanAsset): void => {
+    void (async () => {
+      try {
+        const preview = await bridge.readAssetPreview(item.noteId, item.filename);
+        if (preview.supported && preview.dataUrl) {
+          // 共享 Lightbox 控制器按需加载：静态 import 会把「features/editor」拉进设置页懒 chunk，
+          // 触发 kernelStyleBootstrap 的内核样式启发式（该模块只做 pub/sub，不是内核）；点开时才需要它。
+          const { openImagePreview } = await import("../../features/editor/imagePreview");
+          openImagePreview([{ src: preview.dataUrl }], 0);
+          return;
+        }
+      } catch { /* 读不到图片内容 ⇒ 回落到系统应用打开（可能是大图/损坏/已删除） */ }
+      try {
+        const opened = await bridge.openAttachment(item.noteId, item.filename);
+        if (!opened.ok) showToast("无法打开这个文件", { type: "error" });
+      } catch (error) {
+        showToast(error instanceof Error && error.message ? error.message : "文件已不存在或无法打开", { type: "error" });
+      }
+    })();
+  };
   /** 云端清理保留二次确认（删的是云端对象，不可撤销）。 */
   const requestCleanCloud = () => {
     void confirmMobile({
@@ -797,6 +820,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
         cloudHint={cloudBlockReason ?? undefined}
         gcMessage={gcMsg}
         onClose={() => setCleanupSheet(null)}
+        onPreviewOrphan={previewOrphan}
         onDeleteOrphan={(id) => void deleteOrphan(id)}
         onCleanOrphans={() => void cleanOrphans()}
         onCleanCloud={requestCleanCloud}

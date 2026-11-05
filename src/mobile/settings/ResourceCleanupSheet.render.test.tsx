@@ -46,17 +46,38 @@ describe("ResourceCleanupSheet", () => {
   it("未引用文件：标题带数量、逐条可删、底部可清理全部", async () => {
     const onDeleteOrphan = vi.fn();
     const onCleanOrphans = vi.fn();
-    const m = await mount({ onDeleteOrphan, onCleanOrphans });
+    const onPreviewOrphan = vi.fn();
+    const m = await mount({ onDeleteOrphan, onCleanOrphans, onPreviewOrphan });
     try {
       expect(m.container.textContent).toContain("未引用的本地文件（2）");
       expect(m.container.textContent).toContain("a.png");
       const del = m.container.querySelector('[aria-label="删除 a.png"]') as HTMLButtonElement;
       await act(async () => del.click());
       expect(onDeleteOrphan).toHaveBeenCalledWith(1);
+      // 删除按钮不冒泡成「预览」
+      expect(onPreviewOrphan).not.toHaveBeenCalled();
       const bulk = buttonByText(m.container, "清理全部（2）");
       expect(bulk).toBeTruthy();
       await act(async () => bulk!.click());
       expect(onCleanOrphans).toHaveBeenCalledTimes(1);
+    } finally { await m.unmount(); }
+  });
+
+  it("未引用文件：点击行预览内容（图片/附件由宿主决定）", async () => {
+    const onPreviewOrphan = vi.fn();
+    const m = await mount({ onPreviewOrphan });
+    try {
+      const row = m.container.querySelector('[aria-label="预览 a.png"]') as HTMLElement;
+      expect(row).toBeTruthy();
+      await act(async () => row.click());
+      expect(onPreviewOrphan).toHaveBeenCalledWith(expect.objectContaining({ id: 1, filename: "a.png" }));
+    } finally { await m.unmount(); }
+  });
+
+  it("未引用文件：不提供预览回调时行不是可点按钮", async () => {
+    const m = await mount();
+    try {
+      expect(m.container.querySelector('[aria-label="预览 a.png"]')).toBeNull();
     } finally { await m.unmount(); }
   });
 

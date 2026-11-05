@@ -8,6 +8,7 @@
  * 版式复用 mb-sheet / mb-row / mb-btn / mb-set-* 原语，**不新增 CSS**；删除动作仍然直接调用宿主
  * 传入的回调（云清理的二次确认由宿主负责，和 MissingBodiesSheet 同口径）。
  */
+import type { KeyboardEvent } from "react";
 import { Trash } from "lucide-react";
 import { MobileSheet } from "../ui/MobileSheet";
 import { formatBytes } from "../../lib/formatBytes";
@@ -29,6 +30,8 @@ export interface ResourceCleanupSheetProps {
   /** 上次云清理结果（成功/失败都留在面板里）。 */
   gcMessage?: string;
   onClose: () => void;
+  /** 点击行预览内容（图片走应用内 Lightbox；其它附件交系统应用打开；文件缺失则不预览）。 */
+  onPreviewOrphan?: (item: OrphanAsset) => void;
   onDeleteOrphan: (id: number) => void;
   onCleanOrphans: () => void;
   onCleanCloud: () => void;
@@ -58,14 +61,30 @@ export function ResourceCleanupSheet(props: ResourceCleanupSheetProps) {
         <div className="mb-set-items">
           {props.orphans.length === 0 && <div className="mb-empty mb-empty--inset">没有未引用的本地文件</div>}
           {props.orphans.map((item) => (
-            <div key={item.id} className="mb-row">
+            <div
+              key={item.id}
+              className="mb-row"
+              {...(props.onPreviewOrphan
+                ? {
+                    role: "button",
+                    tabIndex: 0,
+                    "aria-label": "预览 " + item.filename,
+                    onClick: () => props.onPreviewOrphan?.(item),
+                    onKeyDown: (event: KeyboardEvent<HTMLDivElement>) => {
+                      if (event.key !== "Enter" && event.key !== " ") return;
+                      event.preventDefault();
+                      props.onPreviewOrphan?.(item);
+                    },
+                  }
+                : {})}
+            >
               <span className="mb-row__title mb-ellipsis">{item.filename}</span>
               <span className="mb-row__meta">{formatBytes(item.size)}</span>
               <button
                 type="button"
                 className="mb-iconbtn mb-row__action"
                 disabled={props.busy}
-                onClick={() => props.onDeleteOrphan(item.id)}
+                onClick={(event) => { event.stopPropagation(); props.onDeleteOrphan(item.id); }}
                 aria-label={"删除 " + item.filename}
               >
                 <Trash size={16} />

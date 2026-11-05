@@ -8,12 +8,13 @@
 
 ## 0. 最新交接（261027）
 
-### 261105 · 资源管理 UI 收口：删除入口不外露，必须先「查看」· **本地提交，未推送**
+### 261105 · 资源管理：删除入口不外露 + 未引用资源可点击预览 · **本地提交，未推送**
 - **用户点单**：资源管理页不要再在外部暴露删除，必须点了「查看」之后才能删。
 - **改动**：首页「未引用的本地文件」从「清理全部（n）」改为「查看（n）」；「云端未引用文件」从「清理云端」改为「查看」；两者进入新 `ResourceCleanupSheet`（mode=orphans / cloudGc）后才出现删除/清理按钮（云端清理仍保留二次确认）。缺正文/缺小记本来就是「查看」后处置，口径统一。
 - **新增/改动**：`src/mobile/settings/ResourceCleanupSheet.tsx`（0 新增 CSS：复用 `mb-sheet` / `mb-row` / `mb-btn` 原语）+ 渲染测试 5 例；`useSettingsSectionData` 导出 `OrphanAsset` 类型；`SettingsDrawer` 接线。
 - **门禁**：tsc 0 / 全量 vitest **601 文件 3677 例（3665 通过 + 12 skipped）** / ui-metrics 0 违规 / check:mobileui。
-- **设备（lake_mobile / emulator-5584，重装 APK）**：资源管理首页删除类按钮 **0 个**；「未引用」查看（1）→ Sheet 标题「未引用的本地文件（1）」+「删除 <文件名>」+「清理全部（1）」；测试孤儿由**产品路径**造（临时文档上传资源 → 改标题保存触发 detectOrphans），保留供用户点验，验收后清（临时文档 + 孤儿 + 缺正文/缺小记测试数据）。
+- **点击预览（同日追加，用户点单「无论图片还是附件」）**：「未引用」行点击 = 预览。图片：`readAssetPreview`（≤32MB）→ 共享 `ImageLightbox`（**按需动态 import**，避免静态把 features/editor 拉进设置页懒 chunk 触发 kernelStyleBootstrap 误判）；非图片附件：`bridge.openAttachment` 交系统应用；图片读不到/文件缺失：回落到系统打开，仍失败则 toast 提示、不预览（缺失资源直接跳过）。行内删除按钮 `stopPropagation`，点删除不会误触预览；无预览回调时行不加 `role=button`。
+- **设备（lake_mobile / emulator-5584，重装 APK）**：资源管理首页删除类按钮 **0 个**；「未引用」查看（2）→ 点 320×200 PNG 行走 Lightbox（`naturalWidth/Height = 320/200`、`data:image/png`、工具栏 1/1 + 缩放/关闭）；1×1 测试图属正常「看不见」；附件路径复用既有 `openAttachment`（属性面板/多维表同款），**未设备专项验**。测试数据由**产品路径**造（临时文档上传资源 → 改标题保存触发 detectOrphans），保留供用户点验，验收后清（临时文档 + 2 个孤儿 + 缺正文/缺小记测试数据）。
 
 ### 261104 · 三项裁决定稿 + 落地（**本地提交，未推送**）
 - **① 表格语义（用户裁决 = A，长期）**：排序/冻结/单元格·行列保护 = **文档数据**；阅读态只读，排序/冻结回编辑态；**不补移动端保护行列入口**；读态筛选保持「只对本机生效、绝不写正文」的唯一例外。已回填 `AGENTS.md` §4 与 `LAKEX-CONTRACT.md` §5.47，**无代码改动**。
@@ -718,7 +719,7 @@
 - 261103 各批已全部提交并双推（20:08–20:21）：`ce442482`（usheet 35 行/双光标/整行整列）、`733ab4aa`（多维表头部+短名）、`2b29d9e8`（画板工具条+第 4 处补丁）、`75c46902`（ink 14 色）、`ae14ffd1`（胶囊/横滑/安全区/页签 44/useKeyboard）、`1f164f2b`（门禁装置+三份基线重烤）、`1e74c3f8`（文档）、`fdf9c455`（AI 默认关）。
 - 261103 之后（261104 凌晨，均已双推）：ink 三修（`912143da` 落笔/擦除按批渲染、`8f32a5ca` 中断不丢笔）+ 性能观测 `af169f96` + 图片页背景下采样 `8dc83a87` + 导入体积提示 `388232db` + 资源页本地占用 `1adcde27`。
 
-**门禁基线**（261105 09:38 主工作树实测，含本批 ①②③ + 资源管理 UI 收口）：tsc 0 / 全量 vitest **601 文件 3677 例（3665 通过 + 12 skipped；另有 11 个 integration 文件 skipped）** / ui-metrics 0 违规 / `check:core` 137 文件 0 / `check:mobileui` / 双 build / `check:bundle`（mobile-entry-preload 24/30、mobile-js 54,481/61,440、mobile-css 137,925/141,312）/ `check:arch`（移动首屏 343.9KB/360KB；桌面 541.3KB/600KB；import 违规 0）/ `git diff --check` 0。**移动 6 态快照 0 差异**（lake_gate，重烤后 `mobile-snap.json` 与提交版 0 改动）。**APK 已重装**（lake_mobile emulator-5554，debug，40,164,026B）。设备：本批面板/签名/单元格图片/表单视图/缺正文场景已逐条实测（见 §0）；23 屏走查与平板本次未跑（改动不涉及外壳几何，`check:windowsweep` 未跑）。
+**门禁基线**（261105 09:48 主工作树实测，含本批 ①②③ + 资源管理 UI 收口/预览）：tsc 0 / 全量 vitest **601 文件 3679 例（3667 通过 + 12 skipped；另有 11 个 integration 文件 skipped）** / ui-metrics 0 违规 / `check:core` 137 文件 0 / `check:mobileui` / 双 build / `check:bundle`（mobile-entry-preload 24/30、mobile-js 54,481/61,440、mobile-css 137,925/141,312）/ `check:arch`（移动首屏 343.9KB/360KB；桌面 541.3KB/600KB；import 违规 0）/ `git diff --check` 0。**移动 6 态快照 0 差异**（lake_gate，重烤后 `mobile-snap.json` 与提交版 0 改动）。**APK 已重装**（lake_mobile emulator-5554，debug，40,164,026B）。设备：本批面板/签名/单元格图片/表单视图/缺正文场景已逐条实测（见 §0）；23 屏走查与平板本次未跑（改动不涉及外壳几何，`check:windowsweep` 未跑）。
 
 **环境（本机实测 261104 追加）**：**GitHub 推送走 HTTPS**（本机 `~/.ssh/id_ed25519_personal` 未在 GitHub 侧生效，SSH 报 `Permission denied (publickey)`；keychain 里有 `gtycoder` 凭据）⇒ `git push https://github.com/gtycoder/lakex-local-notes.git <branch>` 可用；Gitee 仍 `origin` SSH 正常。**本机已把 `origin` 的第二 pushurl 改为该 HTTPS 地址**（`git config --add remote.origin.pushurl …`）⇒ `git push origin <branch>` 一次推两边且 exit 0；`npm run setup:remotes` 会把 GitHub 写回 SSH，若再报 publickey 按上法改回 HTTPS。
 
