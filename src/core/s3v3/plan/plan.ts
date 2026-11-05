@@ -223,7 +223,12 @@ export function planSync(input: PlanInput): SyncPlan {
     publish = {
       lake: { v: 3, space: "lake", notes: lakeNotes, folders },
       quickNotes: {
-        v: 3, space: "quickNotes", items: quickItems, tags: quickTags,
+        // 发布只带已知字段：旧索引可能残留 pinned/sortOrder（已废弃），不能借发布继续传播。
+        v: 3, space: "quickNotes", items: quickItems,
+        tags: quickTags.map((tag) => ({
+          id: tag.id, name: tag.name, createdAt: tag.createdAt, updatedAt: tag.updatedAt,
+          ...(tag.deletedAt ? { deletedAt: tag.deletedAt } : {}),
+        })),
         // 墓碑随索引传播（不可恢复删除；超过保留窗口的由引擎在入 plan 前裁掉）。
         ...((input.state.purgedQuickIds ?? []).length > 0 ? { purged: [...(input.state.purgedQuickIds ?? [])].sort() } : {}),
       },
