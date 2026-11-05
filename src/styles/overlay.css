@@ -78,7 +78,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--lake-text-1);
-  font-size: var(--lake-font-size-bodyLg);
+  font-size: var(--lake-dialog-title-size, var(--lake-font-size-bodyLg));
   font-weight: var(--lake-font-weight-semibold);
 }
 .ln-dialog__body {
@@ -87,9 +87,15 @@
   overflow: auto;
   padding: var(--lake-space-lg) var(--lake-space-xl) var(--lake-space-xl);
   color: var(--lake-text-2);
-  font-size: var(--lake-font-size-small);
+  font-size: var(--lake-dialog-body-size, var(--lake-font-size-small));
 }
-.ln-dialog__actions { display: flex; justify-content: flex-end; gap: var(--lake-space-md); padding: 0 16px 12px; }
+.ln-dialog__actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--lake-space-md); padding: 0 16px 12px; }
+/* 管理型弹窗采用标题/正文档；编辑型弹窗继续沿用自己的紧凑规格。 */
+:is(.note-info-dialog, .confirm-dialog, .rename-dialog, .s3-transfer-dialog) {
+  --lake-dialog-title-size: var(--lake-font-size-title);
+  --lake-dialog-body-size: var(--lake-font-size-body);
+}
+.confirm-dialog .ln-dialog__title { white-space: normal; overflow-wrap: anywhere; }
 .ln-dialog__resize { color: var(--lake-text-4); }
 .ln-dialog__resize:hover { color: var(--lake-text-2); }
 

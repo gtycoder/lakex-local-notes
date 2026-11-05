@@ -6,28 +6,28 @@
 /* 表面/定位/层序由标准原语提供（.ln-overlay-surface + .ln-popover）；这里只保留内容尺寸。 */
 .sync-status-popover { width: min(320px, calc(100vw - 16px)); padding: 12px; }
 .sync-status-popover-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; padding: 2px 0 10px; border-bottom: 0.5px solid var(--lake-border-1); }
-.sync-status-popover-header div { display: grid; gap: 2px; }
-.sync-status-popover-header strong { font-size: var(--lake-font-size-body); }
-.sync-status-popover-header span { color: var(--lake-text-3); font-size: var(--lake-font-size-micro); }
+.sync-status-popover-header div { display: grid; gap: var(--lake-space-xs); }
+.sync-status-popover-header strong { font-size: var(--lake-font-size-body); font-weight: var(--lake-font-weight-semibold); }
+.sync-status-popover-header span { color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); }
 .sync-status-dot { width: 8px; height: 8px; margin-top: 5px; border-radius: 50%; background: var(--lake-text-3); }
 .sync-status-dot.pending { background: var(--lake-status-pending); }
 .sync-status-dot.syncing { background: var(--lake-accent); animation: lake-status-pulse 1.2s ease-in-out infinite; }
 .sync-status-dot.error { background: var(--lake-status-error); }
 .sync-status-section { padding: 11px 0 0; }
 .sync-status-section h3 { margin: 0 0 6px; color: var(--lake-text-2); font-size: var(--lake-font-size-micro); font-weight: var(--lake-font-weight-semibold); }
-.sync-status-section dl { display: grid; gap: 5px; margin: 0; }
-.sync-status-section dl > div { display: flex; justify-content: space-between; gap: 12px; font-size: var(--lake-font-size-tiny); }
+.sync-status-section dl { display: grid; gap: var(--lake-space-sm); margin: 0; }
+.sync-status-section dl > div { display: grid; grid-template-columns: 4em minmax(0, 1fr); gap: var(--lake-space-lg); font-size: var(--lake-font-size-small); }
 .sync-status-section dt { color: var(--lake-text-2); }
-.sync-status-section dd { margin: 0; color: var(--lake-text-1); font-variant-numeric: tabular-nums; text-align: right; }
-.sync-status-local-note { margin: 0; color: var(--lake-text-2); font-size: var(--lake-font-size-tiny); line-height: 1.5; }
-.sync-status-history-note { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 8px; margin-top: 10px; padding: 9px; border-radius: var(--lake-radius-sm); color: var(--lake-status-pending); background: var(--lake-status-pending-soft); font-size: var(--lake-font-size-micro); }
-.sync-status-history-note div { display: grid; gap: 2px; }
-.sync-status-history-note strong { font-size: var(--lake-font-size-micro); }
+.sync-status-section dd { margin: 0; min-width: 0; color: var(--lake-text-1); font-variant-numeric: tabular-nums; text-align: right; overflow-wrap: anywhere; }
+.sync-status-local-note { margin: 0; color: var(--lake-text-2); font-size: var(--lake-font-size-small); line-height: var(--lake-line-height-snug); }
+.sync-status-history-note { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 8px; margin-top: 10px; padding: 9px; border-radius: var(--lake-radius-sm); color: var(--lake-status-pending); background: var(--lake-status-pending-soft); font-size: var(--lake-font-size-tiny); }
+.sync-status-history-note div { display: grid; gap: var(--lake-space-xs); }
+.sync-status-history-note strong { font-size: var(--lake-font-size-tiny); font-weight: var(--lake-font-weight-semibold); }
 .sync-status-history-note span { color: var(--lake-text-3); line-height: 1.4; }
 /* 261028：浮窗收敛后的「查看历史」行内动作（不新造间距档，复用 4px）。 */
 .sync-status-history-note .sync-status-inline-action { justify-self: start; margin-top: 4px; }
 .sync-status-history-list { display: grid; gap: 1px; margin: 4px -9px -4px; padding: 2px 0; max-height: 132px; overflow-y: auto; }
-.sync-status-actions { display: flex; align-items: center; gap: 8px; margin-top: 12px; padding-top: 10px; border-top: 0.5px solid var(--lake-border-1); }
+.sync-status-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--lake-space-md); margin-top: var(--lake-space-lg); padding-top: var(--lake-space-lg); border-top: 0.5px solid var(--lake-border-1); }
 /* 261013：动作行的按钮是**固定区，不可被压缩** —— 同步中 footer 文案会变长（「· 未同步 N 项」），
  * 按钮作为可收缩的 flex 子项会被挤窄 ⇒ 标签折两行、行盒错乱（设备复现：121px/1 行 → 109px/2 行 → 修后回 1 行）。
  * 只保留本处专属的 min-height，其余三条与 kit 层 .b3-button 基座同值（kit 层高于本文件的 legacy 层，本来就赢），

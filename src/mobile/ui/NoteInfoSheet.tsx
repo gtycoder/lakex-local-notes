@@ -78,7 +78,7 @@ export function NoteInfoSheet({ noteFileId, title, onClose, onOpenHistory }: Not
 
           <div className="minfo-section">
             <div className="minfo-title"><Copy size={14} /><span>文档 ID</span>
-              <button className="minfo-action" onClick={copyId}>复制</button>
+              <button className="mb-btn mb-btn--secondary mb-btn--sm minfo-action" onClick={copyId}>复制</button>
             </div>
             <div className="minfo-path">{info.id}</div>
           </div>
@@ -107,7 +107,7 @@ export function NoteInfoSheet({ noteFileId, title, onClose, onOpenHistory }: Not
 
           <div className="minfo-section">
             <div className="minfo-title"><History size={14} /><span>历史版本 {info.history.length} 个</span>
-              <button className="minfo-action" onClick={onOpenHistory}>打开历史版本</button>
+              <button className="mb-btn mb-btn--secondary mb-btn--sm minfo-action" onClick={onOpenHistory}>打开历史版本</button>
             </div>
             {info.history.length === 0 ? <p className="minfo-empty">暂无历史快照</p> : (
               <ul className="minfo-list">

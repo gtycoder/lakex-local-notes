@@ -30,8 +30,14 @@ pre {
  *      已随 W2 整体删除 src/b3/** 一并消失，不再是阻塞项。
  *   ② 【.seg__item】4 处 !important 仍保留（styles/components.css）：双端共享 + @layer 的 !important
  *      反转层序 ⇒ 桌面 kit 无法在不影响移动端的前提下取代；正解是段控件改用 kit 的 ln-segment（后续）。*/
-/* 261105：设置使用管理表单档；范围只在面板内，编辑工具与正文密度不变。 */
-.settings-panel {
+/* 261105：设置与管理型弹窗的操作区使用32/27表单档；属性内的附件/历史编辑预览不继承。 */
+.settings-panel,
+.confirm-dialog,
+.rename-dialog,
+.s3-transfer-dialog,
+.note-info-actions,
+.note-info-section-title > .ln-btn,
+.sync-status-actions {
   --lake-ctl-h: var(--lake-ctl-h-settings);
   --lake-ctl-h-sm: var(--lake-ctl-h-settings-sm);
 }

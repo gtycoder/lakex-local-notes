@@ -1135,16 +1135,16 @@ body.lake-mobile button[aria-label="打开表格工具"] { display: none; }
 .minfo-rows { margin: 0; }
 .minfo-rows > div { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; min-height: 34px; padding: 5px 0; font-size: var(--lake-font-size-small); }
 .minfo-rows dt { flex: none; color: var(--lake-text-3); }
-.minfo-rows dd { margin: 0; min-width: 0; color: var(--lake-text-1); text-align: right; overflow-wrap: anywhere; }
+.minfo-rows dd { margin: 0; min-width: 0; color: var(--lake-text-1); text-align: right; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .minfo-section { padding: 12px 0; border-top: .5px solid var(--lake-border-1); }
-.minfo-title { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; color: var(--lake-text-2); font-size: var(--lake-font-size-small); }
+.minfo-title { display: flex; align-items: center; flex-wrap: wrap; gap: var(--lake-space-md); margin-bottom: var(--lake-space-sm); color: var(--lake-text-2); font-size: var(--lake-font-size-small); font-weight: var(--lake-font-weight-semibold); }
 .minfo-path { color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); overflow-wrap: anywhere; }
 .minfo-list { list-style: none; margin: 0; padding: 0; max-height: 180px; overflow: auto; }
 .minfo-list > li + li { border-top: .5px solid var(--lake-border-1); }
 .minfo-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; min-height: 40px; padding: 8px 0; border: 0; background: transparent; color: var(--lake-text-1); font-size: var(--lake-font-size-small); text-align: left; }
 .minfo-row em { flex: none; color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); font-style: normal; }
 .minfo-empty { margin: 2px 0 0; color: var(--lake-text-3); font-size: var(--lake-font-size-small); }
-.minfo-action { margin-left: auto; padding: 5px 10px; border: .5px solid var(--lake-border-1); border-radius: var(--lake-radius-2xs); background: transparent; color: var(--lake-text-1); font-size: var(--lake-font-size-tiny); }
+.minfo-action { margin-left: auto; flex: 0 0 auto; }
 body.lake-mobile .ne-ui-search-card-menu { max-height: calc(100vh - 200px); }
 body.lake-mobile .ne-ui-card-menu-content { max-height: calc(100vh - 200px); overflow-y: auto; }
 body.lake-mobile .ne-ui-boundary-popover:has(.ne-ui-search-card-menu) { top: 120px !important; bottom: auto !important; }

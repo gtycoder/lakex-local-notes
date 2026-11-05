@@ -11,16 +11,16 @@
    右下角手动拖过之后由内联 width/height 接管（NoteInfoDialog 的 size state）。 */
 .note-info-dialog { width: 720px; height: auto; min-width: 420px; min-height: 320px; max-width: 94vw; max-height: min(80vh, 640px); }
 /* 第一部分：两列并排，省纵向空间；位置独占一行 */
-.note-info-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px 20px; margin: 12px 0 4px; padding: 0; }
+.note-info-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--lake-space-md) var(--lake-space-xxl); margin: var(--lake-space-xs) 0; padding: 0; }
 .note-info-cell { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
 .note-info-cell--wide { grid-column: 1 / -1; }
-.note-info-cell dt { flex: 0 0 auto; color: var(--lake-text-2); font-size: var(--lake-font-size-tiny); }
-.note-info-cell dd { flex: 1 1 auto; min-width: 0; margin: 0; color: var(--lake-text-1); font-size: var(--lake-font-size-tiny); word-break: break-all; }
-.note-info-section { margin-top: 14px; padding-top: 12px; border-top: 0.5px solid var(--lake-border-2); }
-.note-info-section-title { display: flex; align-items: center; gap: 6px; font-size: var(--lake-font-size-tiny); font-weight: 600; color: var(--lake-text-1); }
+.note-info-cell dt { flex: 0 0 auto; color: var(--lake-text-2); font-size: var(--lake-font-size-small); }
+.note-info-cell dd { flex: 1 1 auto; min-width: 0; margin: 0; color: var(--lake-text-1); font-size: var(--lake-font-size-small); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.note-info-section { margin-top: var(--lake-space-xl); padding-top: var(--lake-space-lg); border-top: 0.5px solid var(--lake-border-2); }
+.note-info-section-title { display: flex; align-items: center; flex-wrap: wrap; gap: var(--lake-space-md); font-size: var(--lake-font-size-small); font-weight: var(--lake-font-weight-semibold); color: var(--lake-text-1); }
 .note-info-section-title span { flex: 1 1 auto; }
 /* 长路径必然要断行：balance 让两行长度接近，避免第二行只剩 "ke" 这种孤儿尾巴 */
-.note-info-path { margin-top: 6px; font-size: var(--lake-font-size-micro); color: var(--lake-text-3); word-break: break-all; text-wrap: balance; }
+.note-info-path { margin-top: var(--lake-space-sm); font-size: var(--lake-font-size-tiny); color: var(--lake-text-3); overflow-wrap: anywhere; text-wrap: balance; }
 .note-info-assets { display: grid; grid-template-columns: repeat(auto-fill, 56px); gap: 6px; margin-top: 8px; max-height: 190px; overflow: auto; align-content: start; }
 .note-info-asset { width: 56px; height: 56px; padding: 0; border: 0.5px solid var(--lake-border-2); border-radius: var(--lake-radius-xs); background: var(--lake-bg-block); overflow: hidden; cursor: pointer; display: grid; place-items: center; }
 .note-info-asset-glyph { color: var(--lake-text-3); }
@@ -70,14 +70,13 @@
 @media (max-width: 600px) {
   .note-info-dialog { width: calc(100vw - 24px); max-width: calc(100vw - 24px); height: auto; max-height: 78vh; min-width: 0; min-height: 200px; }
   .note-info-grid { grid-template-columns: 1fr; gap: 6px; }
-  .note-info-section-title { flex-wrap: wrap; }
   
 }
 
 /* S3 配置迁移码弹窗（261017）：只定尺寸与多行输入外观；表面/头/体/按钮都复用 .ln-dialog 与 .ln-btn 原语。 */
 .s3-transfer-dialog { width: min(560px, calc(100vw - 32px)); height: auto; max-height: min(78vh, 640px); }
 .s3-transfer-dialog__hint { margin: 0 0 10px; color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); line-height: var(--lake-line-height-normal); }
-.s3-transfer-dialog__code { width: 100%; min-height: 116px; max-height: 38vh; resize: vertical; padding: 8px 10px; border: 0.5px solid var(--lake-ctl-border); border-radius: var(--lake-ctl-rad); background: var(--lake-bg-canvas); color: var(--lake-text-1); font-family: var(--lake-font-family-mono); font-size: var(--lake-font-size-micro); line-height: var(--lake-line-height-normal); overflow-wrap: anywhere; }
+.s3-transfer-dialog__code { width: 100%; min-height: 116px; max-height: 38vh; resize: vertical; padding: 8px 10px; border: 0.5px solid var(--lake-ctl-border); border-radius: var(--lake-ctl-rad); background: var(--lake-bg-canvas); color: var(--lake-text-1); font-family: var(--lake-font-family-mono); font-size: var(--lake-font-size-tiny); line-height: var(--lake-line-height-normal); overflow-wrap: anywhere; }
 .s3-transfer-dialog__code:focus-visible { outline: none; border-color: var(--lake-accent); box-shadow: 0 0 0 2px var(--lake-focus-halo); }
 .s3-transfer-dialog__msg { color: var(--lake-text-3); font-size: var(--lake-font-size-micro); }
 .s3-transfer-dialog__error { margin-top: 8px; color: var(--lake-status-error); font-size: var(--lake-font-size-micro); }
