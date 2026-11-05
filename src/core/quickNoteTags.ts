@@ -1,10 +1,13 @@
 /**
  * 小记标签：**标签目录与关联表是唯一事实**，小记正文只存内容（text/body/images）。
- * - 标签目录 `quick_note_tags` 独占名称/排序/置顶；关系在 `quick_note_tag_links(note_id, tag_id, position)`；
- *   两者只在协调层（桌面/移动端各自的 `quickNoteTagService`）里组合。
+ * - 目录 `tags` 独占名称/墓碑/时间；关联 `tag_links(target_kind,target_id,tag_id,position)` +
+ *   `tag_link_versions`（每目标关系 LWW）；两者只在协调层（两端各自的 `quickNoteTagService`）组合。
  * - 标签 ID 由首次创建时的名称派生（`t_` + sha256 前 16 位）⇒ 同一名称在任何一端会得到同一个 ID；
  *   重命名只改目录，不重写 `.qnote`。
- * - 标签目录随小记 Manifest 同步（可选字段 `tags`），每条小记的关系随 `tagIds/tagsUpdatedAt` 同步。
+ * - **顺序不属于模型（置顶已删除，261105 用户定稿）**：目录展示顺序、单条小记上的标签顺序都是**设备本地视图**，
+ *   不参与同步（`sort_order` / `position` 只在本机有效）。
+ * - 同步：目录随 quick-notes 索引的可选字段 `tags`；每条小记的集合关系随 `tagIds`（排序后的集合）+
+ *   `tagsUpdatedAt`（LWW）同步。
  */
 
 import { sha256Sync } from "./sha256Sync.js";
@@ -207,7 +210,7 @@ export interface QuickNoteTagLike {
  *
  * `updatedAt` 相同时用**确定性 tie-break**（归一化字段串）——两端对同一对记录必须选出同一个赢家，
  * 否则「各留本地」会让改名/删除在两端永远不收敛（`>` 比较下双方都判自己赢）。
- * 顺序/置顶是设备本地视图，**不参与**比较。
+ * 顺序是设备本地视图，**不参与**比较。
  */
 export function compareQuickNoteTagVersion(a: QuickNoteTagLike, b: QuickNoteTagLike): number {
   if (a.updatedAt !== b.updatedAt) return a.updatedAt > b.updatedAt ? 1 : -1;

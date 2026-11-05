@@ -15,6 +15,7 @@ import { loadV3State } from "../data/v3StateRepository.js";
 import { MAX_QUICK_NOTE_TAGS } from "../../core/quickNoteTags.js";
 import { mergeRemoteQuickNoteTags } from "../data/quickNoteTagsRepository.js";
 import { reindexQuickNotesForTags } from "../data/quickNoteTagService.js";
+import { listQuickNoteIdsForTags, removeQuickNoteTagLinksInTransaction } from "../data/quickNoteTagLinksRepository.js";
 import { listQuickNoteAssetKeysFs, removeAssetBytesFs } from "../native/assetFs.js";
 
 /**
@@ -491,8 +492,8 @@ export function createMobilePlatformPort(db: MobileDb, ctxIn?: Partial<MobilePla
       });
     },
     async mergeQuickTags(tags: QuickTagRow[]): Promise<void> {
-      // 目录 LWW（与桌面 mergeRemote 同口径）：保留 pinned / 墓碑，按 updatedAt（含确定性 tie-break）取赢家。
-      // 旧实现固定 pinned=0 且 `deleted_at=NULL` ⇒ 每次同步都把置顶清零、把远端墓碑复活。
+      // 目录 LWW（与桌面 mergeRemote 同口径）：只合并名称/墓碑/时间，按 updatedAt（含确定性 tie-break）取赢家；
+      // 顺序/置顶是设备本地视图，不在这里覆盖（旧实现固定 deleted_at=NULL ⇒ 会复活墓碑）。
       const readDirectory = async (): Promise<Map<string, { name: string; deletedAt: string | null }>> => {
         const rows = await db.prepare("SELECT id,name,deleted_at FROM tags").all() as Array<{ id: string; name: string; deleted_at: string | null }>;
         return new Map(rows.map((row) => [String(row.id), { name: String(row.name), deletedAt: row.deleted_at ? String(row.deleted_at) : null }] as const));
@@ -507,11 +508,20 @@ export function createMobilePlatformPort(db: MobileDb, ctxIn?: Partial<MobilePla
       })));
       // 远端改名/墓碑会改变搜索索引里缓存的标签名 ⇒ 只重刷「关联到这些标签的小记」（不全量重建）。
       const changed: string[] = [];
+      const tombstoned: string[] = [];
       for (const [id, next] of await readDirectory()) {
         const previous = before.get(id);
         if (!previous || previous.name !== next.name || previous.deletedAt !== next.deletedAt) changed.push(id);
+        if (next.deletedAt && (!previous || !previous.deletedAt)) tombstoned.push(id);
       }
       if (changed.length > 0) await reindexQuickNotesForTags(db, changed);
+      // 远端墓碑 = 删除：清掉本机关联（否则标签复活时关系会诈尸），并推进关系版本（LWW 可传播）。
+      const now = new Date().toISOString();
+      for (const id of tombstoned) {
+        const noteIds = await listQuickNoteIdsForTags(db, [id]);
+        if (noteIds.length === 0) continue;
+        await db.transaction(async () => { await removeQuickNoteTagLinksInTransaction(db, id, now); });
+      }
     },
     /**
      * 移动端旧语义（端口各自表达平台差异，core 不 if(platform)）：

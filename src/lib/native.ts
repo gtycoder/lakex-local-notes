@@ -208,7 +208,7 @@ export interface LakeNative {
   /** 标签关系（独立 API）：整组替换，返回更新后的小记。 */
   setQuickNoteTags(id: string, tagIds: string[]): Promise<QuickNoteDocument>;
   deleteQuickNote(id: string): Promise<void>;
-  /** 标签目录（唯一来源；随小记 Manifest 同步）。 */
+  /** 标签目录（唯一来源；随 quick-notes 索引发同步；顺序/置顶是设备本地视图）。 */
   listQuickNoteTags(): Promise<QuickNoteTag[]>;
   createQuickNoteTag(name: string): Promise<QuickNoteTag>;
   updateQuickNoteTag(id: string, patch: { name?: string }): Promise<QuickNoteTag>;

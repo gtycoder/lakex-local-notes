@@ -82,7 +82,7 @@ function dropPurgedQuick(state: DeviceState): DeviceState {
   return { ...state, quickNotes: { ...state.quickNotes, items: state.quickNotes.items.filter((q) => !purged.has(q.id)) } };
 }
 
-/** 把合并后的标签目录并进设备状态：**按 ID + 确定性 LWW**（远端改名/置顶/排序/墓碑必须能落到本端）。 */
+/** 把合并后的标签目录并进设备状态：**按 ID + 确定性 LWW**（远端改名/墓碑必须能落到本端；顺序是本机视图）。 */
 function mergeQuickTagsIntoState(state: DeviceState, tags: DeviceState["quickNotes"]["tags"] | undefined): DeviceState {
   if (!tags || tags.length === 0) return state;
   const local = state.quickNotes.tags ?? [];

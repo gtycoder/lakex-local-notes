@@ -65,7 +65,6 @@ export interface LakeIndex {
 export interface QuickNoteTagEntry {
   id: string;
   name: string;
-  color?: string | null;
   createdAt: string;
   updatedAt: string;
   /** 非空 = 墓碑（标签删除/合并），同步必须传播。 */

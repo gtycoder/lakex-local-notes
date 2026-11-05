@@ -284,7 +284,7 @@ export function createDeviceStoreMeta(deps: DeviceStoreMetaDeps): DeviceStoreMet
         ...(q.tagsUpdatedAt ? { tagsUpdatedAt: q.tagsUpdatedAt } : {}),
       });
     }
-    // 标签目录：只同步名称/墓碑/时间（顺序与置顶是设备本地视图，不进索引）。
+    // 标签目录：只同步名称/墓碑/时间（顺序是设备本地视图，不进索引）。
     const quickTags: QuickNoteTagEntry[] = (await p.listQuickTags()).map((t: QuickTagRow) => ({
       id: t.id, name: t.name,
       createdAt: t.createdAt, updatedAt: t.updatedAt,

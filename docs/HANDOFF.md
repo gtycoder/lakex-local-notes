@@ -16,7 +16,9 @@
 - **搜索索引「全量重建」收口（用户问 4）**：根因**不是标签模型**——标签名在搜索索引里是派生列（`quick_notes_search_index.tags` + FTS `tags`），改名/删除/合并只影响「关联到该标签的小记」。旧实现 `reindexAll` 保守全量。现改为按标签找受影响小记重刷：移动 `quickNoteTagService` + 同步端口目录 diff；桌面 `QuickNoteTagService` 回调 + `QuickNotesStore.reindexSearchTagsForTags` + 端口 diff；`reindexAllSearchTags` 仅保留启动/迁移。
 - **文案口径（用户问 5）**：桌面/移动标签管理底注统一为「标签顺序只在本机生效（不同步）；删除标签不会删除小记。」——「排序」指标签目录顺序，不是小记列表排序（小记排序同样是设备本地偏好）。
 - **清理**：删除死代码 `src/core/tags.ts` + 其测试（无任何引用）；`lib/types.ts` 的 `QuickNoteTag` 改为 re-export core（去掉重复的 sortOrder/pinned 定义）。
-- **测试/门禁**：新增 `mobileTagSync`（4）+ `quickNoteTagReindex`（4）+ `quickNoteTagLocalOrder`（2）+ `MobileQuickNoteTagManager.render`（4）+ plan 4 + engineBridge 1 + core tie-break/move 2 + 桌面 store 顺序 1。tsc 0 / 全量 vitest **604 文件 3697 例（3685 通过 + 12 skipped）** / ui-metrics / check:core 136 文件 0 / check:mobileui / 双 build / check:bundle+arch / `git diff --check`。`perf.integration` 并行偶发 ratio flake（单独跑绿，已知项）。
+- **review 补漏（本轮）**：① 远端墓碑现在会**清掉本机关联并推进关系版本**（两端端口；否则标签复活时关系诈尸）；② 移除废弃 wire `color` 字段；③ 重写 `docs/TAG-SYSTEM-DESIGN.md` 为现状契约（旧提案「独立 tags pointer / 置顶 / 文档标签同步」已失实）；④ 清理 guide / HANDOFF / 引擎注释里的旧「置顶」表述。
+- **测试数据清理（本轮）**：lake_mobile 已恢复到**文档 9 / 小记 4**；无标签、无孤儿、无缺正文/缺小记；`device_state.quick_tags_manual_order` 已清（不留测试痕迹）。
+- **测试/门禁**：新增 `mobileTagSync`（4）+ `quickNoteTagReindex`（4）+ `quickNoteTagLocalOrder`（2）+ `MobileQuickNoteTagManager.render`（4）+ plan 4 + engineBridge 1 + core tie-break/move 2 + 桌面 store 顺序 1。tsc 0 / 全量 vitest **604 文件 3698 例（3686 通过 + 12 skipped）** / ui-metrics / check:core 136 文件 0 / check:mobileui / 双 build / check:bundle+arch / `git diff --check`。`perf.integration` 并行偶发 ratio flake（单独跑绿，已知项）。
 - **仍未做（产品待裁决）**：**文档标签**（桌面主库 `target_kind=note`，未立项，方案见下）；小记→文档转换不带标签（用户口径：当前丢就丢，等文档标签立项后一起做）。
   **文档标签同步技术方案（只设计、未实现）**：扩 **lake 索引**——`LakeIndex.tags?` + `LakeNoteEntry.tagIds?/tagsUpdatedAt?`，复用同一套 LWW/`localTagChanged`；端口泛化 lake 版；**移动端即使无 UI 也必须搬运这三个字段**（否则移动端发布 lake 索引会清空文档标签）；旧端丢弃未知字段 ⇒ 新端下一轮自愈重发。UI 与转换随后一批。
 ### 261105 · 资源管理：删除入口不外露 + 未引用资源可点击预览 · **本地提交，未推送**
@@ -699,7 +701,7 @@
 - **无历史迁移（用户原话：\"不用管历史。也不用管迁移。\"）**：删除 v2→v3 迁移与移动端 `migrateQuickNotesV3`；`MOBILE_SCHEMA_VERSION` **6**（删 `tags_json/tag_ids_json`，加 `tags_updated_at` + links 表/索引）。
 - **协议**：`.qnote` v3 = 纯内容；小记 Manifest（version 仍 `1`）保留可选 `tags` 目录，并给每条 item 新增可选 `tagIds` + `tagsUpdatedAt`。下载时**正文未变也按 `tagsUpdatedAt` 合并关系**；上传/单条推送都带本地关系（unchanged 判定含关系签名）。
 - **标签目录/管理**：ID = `t_` + `sha256(归一名称)` 前 16 位；改名只改目录 + 重索引标签词；合并 = 改关联 + 墓碑；删除 = 墓碑 + 清关联（小记保留）；创建幂等（同名 active 返回、同名墓碑复活）。
-- **桌面 UI**：`QuickNoteTagManager`（搜索/重命名/合并/删除/置顶/排序）、`QuickNoteFilterDialog`（时间六档 + 自定起止 + 类型 + 标签包含/排除）、`QuickNoteTagPicker` 按 ID；保存正文后再按需 `native.setQuickNoteTags`。
+- **桌面 UI**：`QuickNoteTagManager`（搜索/重命名/合并/删除/**拖拽排序**；顺序本机）、`QuickNoteFilterDialog`（时间六档 + 自定起止 + 类型 + 标签包含/排除）、`QuickNoteTagPicker` 按 ID；保存正文后再按需 `native.setQuickNoteTags`。
 - **移动端**：HomePage/Composer/TagSheet 改按 ID；`applyQuickNoteTags` 只调 `bridge.setQuickNoteTags`；建标签只刷新标签目录（`onQuickNoteTagsChanged`），不重读小记列表；详情缓存从 `readQuickNote` 顶层 `tagIds` 取。
 - **缺陷修复**：① 保存正文不携带标签 ⇒ 预览勾选待办不再清空标签；② 搜索账本 `tags` 存 JSON 数组（含空格标签恢复不拆坏）；③ 类型/标签筛选互斥，点卡片标签会清掉类型筛选。
 - **护栏**：`quickNoteTags.test.ts`、`quickNoteFilters.test.ts`、`quickNoteModel.test.ts`（正文不含标签字段）、`quickNotes.test.ts`（关系独立 / 墓碑清关联）、`quickNotesDbPort` / `quickNotesSearch` / `quickNotesListProjection` / `useQuickNoteDetailCache` 等；IPC 通道 **137**（+`set_quick_note_tags`）、WRITE_OPS **36** / ALL **82**（同步基线并写明理由）。
@@ -730,7 +732,7 @@
 - 261103 各批已全部提交并双推（20:08–20:21）：`ce442482`（usheet 35 行/双光标/整行整列）、`733ab4aa`（多维表头部+短名）、`2b29d9e8`（画板工具条+第 4 处补丁）、`75c46902`（ink 14 色）、`ae14ffd1`（胶囊/横滑/安全区/页签 44/useKeyboard）、`1f164f2b`（门禁装置+三份基线重烤）、`1e74c3f8`（文档）、`fdf9c455`（AI 默认关）。
 - 261103 之后（261104 凌晨，均已双推）：ink 三修（`912143da` 落笔/擦除按批渲染、`8f32a5ca` 中断不丢笔）+ 性能观测 `af169f96` + 图片页背景下采样 `8dc83a87` + 导入体积提示 `388232db` + 资源页本地占用 `1adcde27`。
 
-**门禁基线**（261105 11:36 主工作树实测，含本批 ①②③ + 资源管理 UI + 小记标签（同步修复/顺序本地/移动端拖拽管理））：tsc 0 / 全量 vitest **604 文件 3697 例（3685 通过 + 12 skipped；另有 11 个 integration 文件 skipped）** / ui-metrics 0 违规 / `check:core` 136 文件 0 / `check:mobileui` / 双 build / `check:bundle`（mobile-entry-preload 24/30、mobile-js 54,481/61,440、mobile-css 137,925/141,312）/ `check:arch`（移动首屏 343.9KB/360KB；桌面 541.3KB/600KB；import 违规 0）/ `git diff --check` 0。**移动 6 态快照 0 差异**（lake_gate，重烤后 `mobile-snap.json` 与提交版 0 改动）。**APK 已重装**（lake_mobile emulator-5554，debug，40,164,026B）。设备：本批面板/签名/单元格图片/表单视图/缺正文场景已逐条实测（见 §0）；23 屏走查与平板本次未跑（改动不涉及外壳几何，`check:windowsweep` 未跑）。
+**门禁基线**（261105 11:50 主工作树实测，含本批 ①②③ + 资源管理 UI + 小记标签（同步修复/顺序本地/移动端拖拽管理 + review 补漏））：tsc 0 / 全量 vitest **604 文件 3698 例（3686 通过 + 12 skipped；另有 11 个 integration 文件 skipped）** / ui-metrics 0 违规 / `check:core` 136 文件 0 / `check:mobileui` / 双 build / `check:bundle`（mobile-entry-preload 24/30、mobile-js 54,481/61,440、mobile-css 137,925/141,312）/ `check:arch`（移动首屏 343.9KB/360KB；桌面 541.3KB/600KB；import 违规 0）/ `git diff --check` 0。**移动 6 态快照 0 差异**（lake_gate，重烤后 `mobile-snap.json` 与提交版 0 改动）。**APK 已重装**（lake_mobile emulator-5554，debug，40,164,026B）。设备：本批面板/签名/单元格图片/表单视图/缺正文场景已逐条实测（见 §0）；23 屏走查与平板本次未跑（改动不涉及外壳几何，`check:windowsweep` 未跑）。
 
 **环境（本机实测 261104 追加）**：**GitHub 推送走 HTTPS**（本机 `~/.ssh/id_ed25519_personal` 未在 GitHub 侧生效，SSH 报 `Permission denied (publickey)`；keychain 里有 `gtycoder` 凭据）⇒ `git push https://github.com/gtycoder/lakex-local-notes.git <branch>` 可用；Gitee 仍 `origin` SSH 正常。**本机已把 `origin` 的第二 pushurl 改为该 HTTPS 地址**（`git config --add remote.origin.pushurl …`）⇒ `git push origin <branch>` 一次推两边且 exit 0；`npm run setup:remotes` 会把 GitHub 写回 SSH，若再报 publickey 按上法改回 HTTPS。
 

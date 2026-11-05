@@ -165,6 +165,8 @@ describe("QuickNotesStore", () => {
     // 默认顺序 = 新的在前（project 的 createdAt 最晚）
     expect(quickNotes.tagService.list().map((tag) => tag.name)).toEqual(["项目", "灵感库"]);
     expect(quickNotes.readQuickNote(note.id).content.tags).toEqual(["灵感库"]);
+    // 远端墓碑 = 删除：本机关联要清掉（否则标签复活时关系诈尸）
+    expect(quickNotes.links.listFor(note.id)).toEqual([inspiration.id]);
     expect(quickNotes.search("待办")).toEqual([]);
   });
 

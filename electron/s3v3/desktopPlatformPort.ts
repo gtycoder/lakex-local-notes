@@ -142,16 +142,29 @@ export function createDesktopPlatformPort(store: Store, quickNotes?: QuickNotesS
     },
     async mergeQuickTags(tags: QuickTagRow[]): Promise<void> {
       if (!qn) return;
-      const before = new Map(qn.tags.list({ includeDeleted: true }).map((t) => [t.id, t.name + "\u0000" + (t.deletedAt ?? "")] as const));
+      const before = new Map(qn.tags.list({ includeDeleted: true }).map((t) => [t.id, t] as const));
       qn.tags.mergeRemote(tags.map((t) => ({
         id: t.id, name: t.name,
         createdAt: t.createdAt, updatedAt: t.updatedAt, deletedAt: t.deletedAt ?? null,
       })));
       // 远端改名/墓碑会改变搜索索引缓存的标签名 ⇒ 只重刷关联到这些标签的小记（不全量重建）。
-      const changed = qn.tags.list({ includeDeleted: true })
-        .filter((t) => before.get(t.id) !== t.name + "\u0000" + (t.deletedAt ?? ""))
+      const after = qn.tags.list({ includeDeleted: true });
+      const changed = after
+        .filter((t) => {
+          const previous = before.get(t.id);
+          return !previous || previous.name !== t.name || (previous.deletedAt ?? null) !== (t.deletedAt ?? null);
+        })
         .map((t) => t.id);
       if (changed.length > 0) qn.reindexSearchTagsForTags(changed);
+      // 远端墓碑 = 删除：清掉本机关联（否则标签复活时关系会诈尸），并推进关系版本。
+      const tombstoned = after.filter((t) => {
+        const previous = before.get(t.id);
+        return !!t.deletedAt && (!previous || !previous.deletedAt);
+      });
+      for (const tag of tombstoned) {
+        qn.reindexSearchTagsForTags([tag.id]); // 先刷（墓碑名字已不在 active 名称表里）
+        qn.links.removeTag(tag.id);
+      }
     },
     async purgeQuickNote(quickNoteId: string): Promise<void> {
       requireQuick().purgeQuickNote(quickNoteId);

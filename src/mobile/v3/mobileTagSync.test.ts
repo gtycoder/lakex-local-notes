@@ -76,6 +76,22 @@ describe("移动端标签同步端口（261105 审计修复）", () => {
     } finally { await db.close(); }
   });
 
+  it("远端标签墓碑：清掉本机关联（标签复活时关系不诈尸）", async () => {
+    const { db, port } = await freshPort();
+    try {
+      await db.prepare("INSERT INTO quick_notes (id,created_at,updated_at,preview_text,image_count,content_hash,is_dirty,is_conflict) VALUES (?,?,?,'',0,?,0,0)")
+        .run("q3", T1, T1, "hash-q3");
+      const delId = "t_0000000000000009";
+      await insertTag(db, delId, "D", T1);
+      await db.prepare("INSERT INTO tag_links (target_kind,target_id,tag_id,position) VALUES ('quickNote','q3',?,0)").run(delId);
+      await port.mergeQuickTags([{ id: delId, name: "D", createdAt: T1, updatedAt: T2, deletedAt: T2 }]);
+      const links = await db.prepare("SELECT tag_id FROM tag_links WHERE target_kind='quickNote' AND target_id='q3'").all() as Array<{ tag_id: string }>;
+      expect(links).toEqual([]);
+      const version = await db.prepare("SELECT links_updated_at FROM tag_link_versions WHERE target_kind='quickNote' AND target_id='q3'").get() as { links_updated_at?: string } | undefined;
+      expect(version?.links_updated_at).toBeTruthy();
+    } finally { await db.close(); }
+  });
+
   it("applyQuickNoteTagLinks：关系顺序本机保留，远端新增插到最前", async () => {
     const { db, port } = await freshPort();
     try {

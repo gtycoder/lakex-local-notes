@@ -191,7 +191,7 @@ export function planSync(input: PlanInput): SyncPlan {
     }
   }
 
-  // 标签目录：按 ID + 确定性 LWW 合并（本地新增/改名/置顶/排序/墓碑都可能需要发布）。
+  // 标签目录：按 ID + 确定性 LWW 合并（本地新增/改名/墓碑都可能需要发布；顺序不参与）。
   const localTags = local.quickNotes.tags ?? [];
   const remoteTags = remote.quickNotes.tags ?? [];
   const remoteTagById = new Map(remoteTags.map((tag) => [tag.id, tag] as const));
