@@ -8,7 +8,7 @@
 
 ## 0. 最新交接（261027）
 
-### 261105 · 工作空间清理（一次性）· **已执行；脚本+文档本地改动待提交**
+### 261105 · 工作空间清理（一次性）· **已提交 `86bc26d1` 并双推（Gitee + GitHub 同 hash）**
 - **背景**：工作目录长期堆积（工作区 5.9G + 本机运行时数据 30G+），其中大部分是「可重建的构建/审计/测试产物」与失效 worktree。用户要求：清理每个项目的半成品、遗留分支、开发/测试数据，并保证后续干净。
 - **git / 分支 / 远程**：移除两个已完全合并的历史 worktree（`lakex-pad`、`lakex-ui-surface-polish`，各 409M/610M）并删除对应本地分支；**两远端（Gitee + GitHub）的 `feat/pad-adaptation`、`feat/pad-touch-ui` 也已删除**，现在两端各只剩 `master`；`git fetch --prune` 清掉过期 remote-tracking ref。删除前实测：三条分支 `master..<branch> = 0`（全是 master 祖先，无独有提交）。
 - **失效 worktree**：`lake-notes-electron-worktrees/mobile-sheet-dock`（1.4G，`.git` 指向已删除的 `private/lake-notes-electron-obsolete-261027/.git`，父仓不存在、git 无法读取、无密钥/无进程占用）已整目录删除；其功能（移动端 dock）已由 master 的现实现接替。
@@ -19,7 +19,7 @@
 - **回收**：工作区 5.9G → ~2.7G；磁盘可用 60G → 93G。
 - **后续保证干净**：新增 `scripts/clean-dev-artifacts.sh`（**默认 dry-run**，列体积；`--apply` 才删）：清 dist*/release/android 构建产物、`.css-audit`、dev Electron 缓存、`$TMPDIR/lake-*`、`.DS_Store`；**不碰**正式数据、dev workspace、node_modules/.git/vendor、AVD。建议每批收尾或发版前跑一次。
 
-### 261105 · 标签「删除 = 缺席」（S3 列表红线）+ 移动端回收站 90 天定时清空 + 两个回归修复 · **本地改动（未提交/未推送）**
+### 261105 · 标签「删除 = 缺席」（S3 列表红线）+ 移动端回收站 90 天定时清空 + 两个回归修复 · **已提交 `e83a6960` 并双推（Gitee + GitHub 同 hash）**
 - **问题**：标签目录是**唯一**还会在云端永久留条目的地方——删除只写 `deleted_at` 墓碑、行永不物理删，墓碑随 quick-notes 索引 `tags[]` 永久发布（无裁剪、无上限）。用户红线：「S3 的列表表绝对不能出现永久存在的东西」，且本地删除后同名重建会撞主键（`9867a347` 把旧版 upsert 换成裸 INSERT 的回归）。
 - **定稿（用户 261105）**：标签**删除 = 缺席**（与文档/小记同口径）+ **删除压编辑**；移动端回收站补 90 天定时清空（与桌面同口径）。
 - **协议/模型**：`QuickNoteTagEntry` 去 `deletedAt`；`tags[]` 只发布 active（字段白名单，旧索引墓碑读取时按缺席丢弃）；新增 `S3V3_MAX_TAGS=5000`；`QuickNoteTag`/`QuickTagRow` 同步去墓碑。
@@ -821,7 +821,7 @@
 
 - **分支策略（261105 起）**：只保留 `master`（本地 + Gitee + GitHub 各一条）；特性分支做完即合、合完即删，不留长期 worktree。
 - 两远端 master 的交付核验见 `.css-audit/final-review/merge-verify.txt`（该目录在 261105 清理中已删除，历史证据见 git 提交记录）。
-- **261105 标签缺席改造（本轮）**：本地改动，**未提交/未推送**，改动面 = core 同步语义 + 两端标签库/端口 + 移动端回收站定时清空 + 文档。门禁实测：tsc 0；全量 vitest **608 文件（597 passed / 11 integration skip）、3763 passed / 12 skipped**；core 136 文件 0 违规；check:mobileui/ui-metrics 通过；`git diff --check` 干净。
+- **261105 标签缺席改造（本轮）**：已提交 `e83a6960` 并双推，改动面 = core 同步语义 + 两端标签库/端口 + 移动端回收站定时清空 + 文档。门禁实测：tsc 0；全量 vitest **608 文件（597 passed / 11 integration skip）、3763 passed / 12 skipped**；core 136 文件 0 违规；check:mobileui/ui-metrics 通过；`git diff --check` 干净。
 - **261105 实测偏差修正**：`master..feat/pad-touch-ui = 0`（`d2f76b3b` 已是 master 祖先）⇒ §3 P0 原文「落后 6 个提交、发版前先合」已过期，本轮就地改掉。
 - 发版仍只有v0.0.1/v0.0.2，package.json=0.0.2；未发版提交数用`git rev-list --count v0.0.2..master`查询，别沿用125这个旧计数。下一版发布说明须写inkDoc v4：旧端只读、手机/平板需重装。
 - 261103 各批已全部提交并双推（20:08–20:21）：`ce442482`（usheet 35 行/双光标/整行整列）、`733ab4aa`（多维表头部+短名）、`2b29d9e8`（画板工具条+第 4 处补丁）、`75c46902`（ink 14 色）、`ae14ffd1`（胶囊/横滑/安全区/页签 44/useKeyboard）、`1f164f2b`（门禁装置+三份基线重烤）、`1e74c3f8`（文档）、`fdf9c455`（AI 默认关）。
