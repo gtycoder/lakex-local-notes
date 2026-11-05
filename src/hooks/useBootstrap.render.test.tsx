@@ -19,6 +19,7 @@ const nativeMock = vi.hoisted(() => ({
   listDraftJournals: vi.fn(),
   listTreeNodes: vi.fn(),
   noteBodyMissing: vi.fn(),
+  getSafeModeState: vi.fn(),
 }));
 
 vi.mock("../lib/native", () => ({ native: nativeMock }));
@@ -76,6 +77,7 @@ beforeEach(() => {
   nativeMock.listDraftJournals.mockResolvedValue([]);
   nativeMock.listTreeNodes.mockResolvedValue([]);
   nativeMock.noteBodyMissing.mockResolvedValue(false);
+  nativeMock.getSafeModeState.mockResolvedValue({ active: false, logPath: "", dataDir: "" });
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
@@ -128,6 +130,17 @@ describe("useBootstrap 标签会话恢复（DT-15）", () => {
 
     expect(restoreTabs).toHaveBeenCalledTimes(1);
     expect(openNote).toHaveBeenCalledWith("n5");
+  });
+
+  it("安全模式：不恢复上次标签页（restoreTabs 不被调用，直接落冷启动落点）", async () => {
+    nativeMock.getSafeModeState.mockResolvedValue({ active: true, reason: "上次运行累计捕获 2 次未捕获异常", logPath: "", dataDir: "" });
+    const restoreTabs = vi.fn(async (_ids: string[], _activeId: string | null) => 3);
+    const openNote = vi.fn(async (_id: string) => true);
+    await render({ restoreTabs, openNote });
+    await flush();
+    await waitFor(() => openNote.mock.calls.length > 0, "冷启动落点打开文档");
+    expect(restoreTabs).not.toHaveBeenCalled();
+    expect(openNote.mock.calls.map((call) => call[0])).not.toContain("n8");
   });
 
   it("未注入 restoreTabs 时保持旧行为：按截断后的顺序逐篇 openNote，再激活活动标签", async () => {

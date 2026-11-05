@@ -146,6 +146,26 @@ function uuid(): string {
   return crypto.randomUUID();
 }
 
+/**
+ * rename 之后对**目录项**做一次 fsync（尽力而为）：文件内容 fsync 只保证数据落盘，
+ * 「新文件名可见」这件事由父目录的目录项决定。Windows 不支持 open 目录 ⇒ 静默跳过；
+ * 其它平台/文件系统不支持时同样只跳过，绝不因为 fsync 目录失败而让保存失败。
+ */
+function fsyncDirectoryBestEffort(dir: string): void {
+  if (process.platform === "win32") return;
+  let fd: number | null = null;
+  try {
+    fd = fs.openSync(dir, "r");
+    fs.fsyncSync(fd);
+  } catch {
+    /* 平台或文件系统不支持目录 fsync：best effort */
+  } finally {
+    if (fd !== null) {
+      try { fs.closeSync(fd); } catch { /* 已关闭/无效 fd */ }
+    }
+  }
+}
+
 /** W-3：资产 URL 正则工厂（端口跟随 ASSET_PORT）——实现已搬到 noteExport.ts，此处 re-export 保兼容 */
 export { localAssetLakeSrcRe, localAssetHtmlImgRe, localAssetMdImgRe } from "./noteExport.js";
 
@@ -384,11 +404,33 @@ export class Store {
     return searchTextForKind(kind ?? "doc", content);
   }
 
+  /**
+   * 原子写落盘（261105 Batch3-C：补 fsync）：写 tmp → fsync(fd) → rename → fsync(dir，尽力而为)。
+   * 移动端 BodyStore 一直是 tmp+fsync+rename，桌面此前只做 tmp+rename ⇒ 断电/内核 panic 时
+   * 可能出现「rename 已可见、内容还在页缓存」。任一步失败都清 tmp，不留半成品。
+   */
   private atomicWrite(filePath: string, data: string) {
-    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    const dir = path.dirname(filePath);
+    fs.mkdirSync(dir, { recursive: true });
     const tmp = `${filePath}.tmp-${process.pid}`;
-    fs.writeFileSync(tmp, data, "utf8");
-    fs.renameSync(tmp, filePath);
+    let fd: number | null = null;
+    try {
+      fd = fs.openSync(tmp, "w");
+      fs.writeFileSync(fd, data, "utf8");
+      fs.fsyncSync(fd);
+    } catch (error) {
+      if (fd !== null) { try { fs.closeSync(fd); } catch { /* 已关闭/无效 fd */ } }
+      try { fs.rmSync(tmp, { force: true }); } catch { /* best effort */ }
+      throw error;
+    }
+    fs.closeSync(fd);
+    try {
+      fs.renameSync(tmp, filePath);
+    } catch (error) {
+      try { fs.rmSync(tmp, { force: true }); } catch { /* best effort */ }
+      throw error;
+    }
+    fsyncDirectoryBestEffort(dir);
   }
 
   private nextSortOrder(parentId: string | null): number {
@@ -1272,13 +1314,9 @@ export class Store {
     this.db.prepare("DELETE FROM device_state WHERE key='body_recovery_pending'").run();
   }
 
-  /** 从云端恢复正文时落盘（原子写；调用方负责校验 hash 与记账）。 */
+  /** 从云端恢复正文时落盘（原子写 + fsync；调用方负责校验 hash 与记账）。 */
   writeRestoredBody(noteId: string, content: string): void {
-    const target = this.notePath(noteId);
-    fs.mkdirSync(path.dirname(target), { recursive: true });
-    const tmp = `${target}.tmp-${process.pid}-${crypto.randomBytes(4).toString("hex")}`;
-    fs.writeFileSync(tmp, content, "utf8");
-    fs.renameSync(tmp, target);
+    this.atomicWrite(this.notePath(noteId), content);
   }
 
   /**

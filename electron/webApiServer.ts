@@ -170,6 +170,10 @@ export const WEB_METHODS: Record<string, string> = {
   revealDataFolder: "reveal_data_folder",
   runS3DeepCleanup: "run_s3_deep_cleanup",
   getTrashReminder: "get_trash_reminder",
+  // Batch3-B 安全模式（桌面诊断态；Web 客户端同一批 handler）
+  getSafeModeState: "get_safe_mode_state",
+  exitSafeMode: "exit_safe_mode",
+  copySafeModeDiagnostics: "copy_safe_mode_diagnostics",
 };
 
 const MAX_BODY_BYTES = 256 * 1024 * 1024; // uploadResource 以 JSON number[] 传字节，留足余量

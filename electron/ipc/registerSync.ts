@@ -1,6 +1,7 @@
 import { app, BrowserWindow, dialog, type IpcMainInvokeEvent } from "electron";
 import path from "node:path";
 import type { QuickNotesStore } from "../quickNotes.js";
+import { buildQuickNotesUnavailableReport, type QuickNotesAvailability } from "../quickNotesAvailability.js";
 import type { Store } from "../store.js";
 import { restoreMissingBodyFromCloud } from "../syncEngineController.js";
 import { testConnection } from "../s3Store.js";
@@ -69,6 +70,8 @@ function clampNum(value: unknown, fallback: number, min: number, max: number): n
 interface SyncIpcDeps {
   store: Store;
   quickNotes: QuickNotesStore;
+  /** 小记库可用性（Batch3-A）：降级时在「同步诊断」里插一条可读告警；缺省 = 正常。 */
+  quickNotesAvailability?(): QuickNotesAvailability;
   runFullSync(onProgress?: (progress: SyncProgress) => void): Promise<unknown>;
   enqueueMaintenance<T>(task: () => Promise<T>): Promise<T>;
   broadcastSyncProgress(progress: SyncProgress): void;
@@ -214,7 +217,16 @@ export function registerSyncIpc(ipc: IpcRegistrar, deps: SyncIpcDeps): void {
     return runFullSync(send);
   });
   // SD-13：同一个通道带出最近 3 轮 v3 同步诊断（不再新增 IPC 通道；渲染层按可选字段消费）。
-  ipc.handle("get_sync_status", () => ({ ...store.getSyncStatus(), v3Reports: store.listV3SyncReports() }));
+  ipc.handle("get_sync_status", () => {
+    const reports = store.listV3SyncReports();
+    // Batch3-A：小记库降级时在最前面插一条「不可用 + 恢复出口」的合并告警。复用既有
+    // S3v3DiagnosticReport 通道 ⇒ 设置→同步诊断可见且可一键复制，渲染层零改动。
+    const availability = deps.quickNotesAvailability?.() ?? { mode: "ok" as const };
+    const v3Reports = availability.mode === "degraded"
+      ? [buildQuickNotesUnavailableReport(availability), ...reports]
+      : reports;
+    return { ...store.getSyncStatus(), v3Reports };
+  });
   ipc.handle("get_sync_pending_summary", () => {
     const lake = store.getSyncPendingSummary();
     const quick = quickNotes.getPendingSyncSummary();

@@ -6,6 +6,7 @@ import { SIDEBAR_CORRIDOR_SELECTORS, isInSidebarCorridor, reduceHover, type Hove
 import { useWindowShortcuts } from "./hooks/useWindowShortcuts";
 import { useTopMenus } from "./hooks/useTopMenus";
 import { DesktopStatusBar } from "./components/app/DesktopStatusBar";
+import { SafeModeBanner } from "./components/app/SafeModeBanner";
 import { getDocumentStatus } from "./components/model/documentStatusModel";
 import { clearScrollMemory } from "./features/editor/editorViewport";
 import { prefetchEditorKernel } from "./features/editor/kernelPrefetch";
@@ -296,12 +297,21 @@ export function App() {
     setConflictSnapshotNotice, setPendingSummary, setDraftEntries, setTreeNodes, setError, openNote, restoreTabs, showNotice,
   });
 
+  /** Batch3-B：内核预取只按启动时的安全模式判定一次（避免每次标签变化都打 IPC）。 */
+  const safeModeCheckedRef = useRef(false);
+
   // 桌面标签会话（device-local）：标签/活动页变化即落盘；开启「退出时关闭全部标签」时清掉、不恢复。
   // 启动时 useBootstrap 会先同步读走会话再恢复，晚到的 [] 写入不会覆盖它。
   useEffect(() => {
     if (!workspace) return;
     // P12：启动就绪后（首个 workspace 到达）安排一次内核 chunk 的空闲预取；幂等，后续标签变化再调无副作用。
-    prefetchEditorKernel();
+    // Batch3-B：安全模式**不预热内核 chunk**（崩溃排查时少一个后台重活）⇒ 就绪后问一次主进程，结果只问一次。
+    if (!safeModeCheckedRef.current) {
+      safeModeCheckedRef.current = true;
+      void native.getSafeModeState()
+        .then((state) => { if (!state.active) prefetchEditorKernel(); })
+        .catch(() => prefetchEditorKernel());
+    }
     if (settings.clearTabsOnExit) { clearTabSession(); return; }
     writeTabSession({ ids: openTabs.map((tab) => tab.noteId), activeId: activeNoteId });
   }, [workspace, openTabs, activeNoteId, settings.clearTabsOnExit]);
@@ -653,6 +663,8 @@ export function App() {
         const shouldCollapse = sidebarMode === "floating" || (narrowOverlay && sidebarMode === "docked");
         if (clickedDocument && shouldCollapse) setSidebarMode("collapsed");
       }}>
+        {/* Batch3-B：安全模式常驻提示条（非安全模式时渲染 null） */}
+        <SafeModeBanner />
         {error && <div className="error-banner"><span>{error}</span><button onClick={() => setError(null)}>关闭</button></div>}
         <div className={"workspace-view" + (desktopWorkspace === "library" ? "" : " workspace-view--hidden")}>
           <DesktopLibrary

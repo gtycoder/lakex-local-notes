@@ -8,6 +8,13 @@
 
 ## 0. 最新交接（261027）
 
+### 261105 · 容错批 3（Batch 3）：quick-notes 降级 / 安全模式 / 写入卫生 · **本地改动（待提交）**
+- **quick-notes 库损坏不再卡 splash**：新增 `electron/quickNotesAvailability.ts`（ok|degraded 纯判定 + 可读告警 + 同步前置断言 + 诊断报告）；`QuickNotesStore` 构造 try/catch，失败用 **Proxy 降级替身**（读安全空值、写/单条读抛 `AppError`、await 不挂起）；降级分支不注册 v3、不跑 recoverConversions；自动/退出同步早退，手动同步与「保存并同步」当场给可读错误 + 「先备份→设置→从云端恢复」指引。15 例测试。
+- **崩溃标记 → 安全模式**：`electron/safeMode.ts`（occurrences≥2 或 30 分钟内 2 次；`safe-mode.json` 设备本地，损坏不二次失败；进入不清 marker，显式退出才清）；三处跳过自动同步、渲染层跳过内核预取与标签恢复；`SafeModeBanner` 顶部提示 + 复制诊断 + 退出安全模式。19 例测试。
+- **写入卫生**：导出 SVG/PNG/PDF 改 tmp+rename；桌面 `atomicWrite` 加 fd+目录 fsync（win32 跳过），`writeRestoredBody` 复用；`canonicalJson` 改显式栈迭代 + 深度 256/节点 200 万上限（输出逐字节一致，修 20 万层 RangeError）。14 例测试。
+- **门禁**：tsc 0；全量 vitest **631 文件 / 3913 passed / 12 skipped**；core 138 文件 0 违规；ui-metrics 通过（跨文件重复 103 ≤ 基线 105）；`git diff --check` 干净。
+- **待裁决/风险**：安全模式会话可能被空标签覆盖（要保留需给会话写 effect 加门）；安全模式与恢复页视觉未实机走查；降级时整轮同步暂停（要拆「仅停小记域」需 core 加域开关）。
+
 ### 261105 · 容错批 2（P1 四条）：水线单调 / 正文突变保护 / 父环 / 资产坏名 · **本地改动（待提交）**
 - **P1-3 水线单调化**：新增 `src/core/syncWaterline.ts`（未来/非法值当 0；写入只增不减 + 夹到 now）；`syncReconciliation`/`quickNotes` 读归一 + 启动自检回写 + 所有 pending 查询改传归一化水线（不再用裸 SQL 子查询）⇒ 时钟前跳不再让「删除永不传播」。测试：core 2 + store 集成 1。
 - **P1-4 正文突变保护**：新增 `src/core/s3v3/state/bodyChangeGuard.ts`（三条件：基线 hash 变 / 行 updatedAt 未前进 / 内容像坏）；引擎按 `state×baseline` 选候选（正常轮零候选零 IO）⇒ plan 对可疑篇不 PUT、不认领 publish，`archive-local(reason=suspicious)` + `body_suspicious_external_change` warning，索引只用远端版本（远端缺席则不发布）。未改 `deviceStore.ts`。测试 16 例（含真 Store + 假 S3 端到端）。

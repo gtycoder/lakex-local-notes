@@ -137,6 +137,11 @@ export interface CrashMarker {
   stack: string;
   /** 连续累计次数（下次启动提示「上次运行捕获 N 次未捕获异常」）。 */
   occurrences: number;
+  /**
+   * 最近几次崩溃时间（升序，最多 5 条；Batch3-B 安全模式用「30 分钟内连续 2 次」判据）。
+   * 旧标记没有该字段 ⇒ 读侧回落成 [time]（不写兼容迁移，见 AGENTS §3#7）。
+   */
+  recentTimes?: string[];
 }
 
 export function crashMarkerPath(userDataDir: string): string {
@@ -158,6 +163,9 @@ export function readCrashMarker(userDataDir: string): CrashMarker | null {
       reason: parsed.reason,
       stack: typeof parsed.stack === "string" ? parsed.stack : "",
       occurrences: typeof parsed.occurrences === "number" && Number.isFinite(parsed.occurrences) ? parsed.occurrences : 1,
+      ...(Array.isArray(parsed.recentTimes)
+        ? { recentTimes: parsed.recentTimes.filter((value): value is string => typeof value === "string" && Number.isFinite(Date.parse(value))) }
+        : {}),
     };
   } catch {
     return null;
@@ -172,11 +180,15 @@ export function writeCrashMarker(userDataDir: string, error: unknown, now: Date 
   try {
     const previous = readCrashMarker(userDataDir);
     const stack = error instanceof Error && error.stack ? error.stack : "";
+    const at = now.toISOString();
+    // 保留最近 5 次崩溃时间：安全模式的「30 分钟内连续 2 次」判据要用（occurrences 只给次数）。
+    const previousTimes = previous?.recentTimes ?? (previous ? [previous.time] : []);
     const marker: CrashMarker = {
-      time: now.toISOString(),
+      time: at,
       reason: truncate(describeError(error), 500),
       stack: truncate(stack, 2000),
       occurrences: (previous?.occurrences ?? 0) + 1,
+      recentTimes: [...previousTimes, at].slice(-5),
     };
     fs.mkdirSync(userDataDir, { recursive: true });
     fs.writeFileSync(crashMarkerPath(userDataDir), JSON.stringify(marker, null, 2), "utf8");

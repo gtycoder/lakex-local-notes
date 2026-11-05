@@ -63,8 +63,10 @@ export function useBootstrap({
       // 恢复上次打开的标签（261027）：先过滤已删除/已 purge 的文档，再按 maxOpenTabs 截断（DT-15：
       // 会话按打开顺序存，只恢复最近 N 个——先全开再逐次淘汰会静默丢标签且线性拉长首屏）；
       // clearTabsOnExit=true 时上面已清空会话，走原有冷启动落点。
+      // Batch3-B：安全模式**不恢复上次标签页**（会话保留但本次不打开；崩溃排查从干净标签开始）。
+      const safeMode = await native.getSafeModeState().catch(() => null);
       const liveIds = new Set(snapshot.notes.map((note) => note.id));
-      const restored = savedSession ? sanitizeTabSession(savedSession, liveIds) : null;
+      const restored = savedSession && !safeMode?.active ? sanitizeTabSession(savedSession, liveIds) : null;
       const planned = restored ? restoreTabSessionForLimit(restored, settings.maxOpenTabs) : null;
       if (planned) {
         if (restoreTabs) {

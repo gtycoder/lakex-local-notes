@@ -209,6 +209,18 @@
 }
 .tab-gone-banner button:hover { background: var(--lake-accent-tint); }
 
+/* 安全模式横幅（Batch3-B）：崩溃反复出现时的常驻诊断提示条。
+   贴在**可见顶栏下缘**（顶栏 34 + 4px 拼接缝，与 chrome.css 同口径）横跨整宽；
+   层序 = 顶栏(400) 之下、侧栏/大纲(250/260) 与正文之上 ⇒ 不挡窗口拖拽/红绿灯，也不会被侧栏压住；
+   position:fixed 不进外壳网格 ⇒ 不改动任何几何。 */
+.safe-mode-banner {
+  position: fixed;
+  top: calc(var(--topbar-height) + 4px);
+  left: 0;
+  right: 0;
+  z-index: var(--lake-z-activity-rail);
+}
+
 /* 空态（搜索 / 历史 / 回收站 / 设置通用） */
 .ln-empty {  display: grid;
   justify-items: center;

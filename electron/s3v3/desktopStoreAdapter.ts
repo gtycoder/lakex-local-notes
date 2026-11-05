@@ -96,10 +96,34 @@ export class DesktopStoreDevice implements S3v3DeviceStore {
   private async readJson<T>(file: string): Promise<T | null> {
     try { return JSON.parse(await fs.readFile(file, "utf8")) as T; } catch { return null; }
   }
+  /** 原子写 + fsync（261105 Batch3-C）：tmp → fsync → rename → 目录 fsync（尽力而为）。 */
   private async writeAtomic(file: string, data: string | Uint8Array): Promise<void> {
+    const dir = path.dirname(file);
     const tmp = file + ".tmp-" + process.pid + "-" + Date.now();
-    await fs.writeFile(tmp, data);
-    await fs.rename(tmp, file);
+    let handle: Awaited<ReturnType<typeof fs.open>> | null = null;
+    try {
+      handle = await fs.open(tmp, "w");
+      await handle.writeFile(data);
+      await handle.sync();
+    } catch (error) {
+      if (handle) { try { await handle.close(); } catch { /* 已关闭 */ } }
+      try { await fs.rm(tmp, { force: true }); } catch { /* best effort */ }
+      throw error;
+    }
+    await handle.close();
+    try {
+      await fs.rename(tmp, file);
+    } catch (error) {
+      try { await fs.rm(tmp, { force: true }); } catch { /* best effort */ }
+      throw error;
+    }
+    if (process.platform !== "win32") {
+      try {
+        const dirHandle = await fs.open(dir, "r");
+        await dirHandle.sync();
+        await dirHandle.close();
+      } catch { /* 平台/文件系统不支持目录 fsync：best effort */ }
+    }
   }
 
   // ===== E2-4：世界状态编排 = core 单一实现 =====

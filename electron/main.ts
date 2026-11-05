@@ -7,7 +7,13 @@ import { Store } from "./store.js";
 import { canTouchNetwork, cloudStateOf } from "../src/core/cloudState.js";
 import { autoSyncIntervalMs, shouldSyncOnOpenClose } from "../src/core/syncModes.js";
 import { createSafeStorageSecretCipher } from "./secretCipher.js";
-import { QuickNotesStore } from "./quickNotes.js";
+import { createUnavailableQuickNotesStore, QuickNotesStore } from "./quickNotes.js";
+import {
+  decideQuickNotesAvailability,
+  getQuickNotesAvailability,
+  quickNotesDegradedMessage,
+  setQuickNotesAvailability,
+} from "./quickNotesAvailability.js";
 import { startAssetServer, ASSET_PORT } from "./assetServer.js";
 import { createWebServerController, type WebServerController, WEB_API_PORT } from "./webApiServer.js";
 import { resolveMirroredCdnRedirect, scanMirroredCdnFiles } from "./cdnRedirect.js";
@@ -32,6 +38,8 @@ import {
   writeCrashMarker,
 } from "./startupRecovery.js";
 import { showRecoveryWindow } from "./startupRecoveryWindow.js";
+import { decideSafeMode, readSafeModeState, removeSafeModeState, writeSafeModeState, type SafeModeState } from "./safeMode.js";
+import { registerSafeModeIpc } from "./ipc/registerSafeMode.js";
 import { createIpcRegistrar } from "./ipc/registrar.js";
 import { registerNotesIpc } from "./ipc/registerNotes.js";
 import { DraftJournal, draftJournalDir } from "./draftJournal.js";
@@ -113,6 +121,10 @@ let store: Store;
 let quickNotes: QuickNotesStore;
 /** 浏览器端服务控制器（内存态；启动时默认不监听）。 */
 let webServerController: WebServerController | null = null;
+/** Batch3-B：本次进程是否处于安全模式（启动判定一次；用户显式退出后置 false）。 */
+let safeModeActive = false;
+/** 安全模式状态快照（提示条/诊断 IPC 用）；未进入 = null。 */
+let safeModeState: SafeModeState | null = null;
 let drafts: DraftJournal;
 /** 历史定时器重启函数（配置变更时调用，见 save_history_settings IPC） */
 let restartHistoryTimers: (() => void) | null = null;
@@ -578,6 +590,8 @@ function registerIpc(): ReadonlyMap<string, (args: unknown[]) => Promise<unknown
   registerSyncIpc(ipc, {
     store,
     quickNotes,
+    // 小记库降级时在「设置→同步诊断」顶部给一条可读告警（复用既有 S3v3DiagnosticReport 通道）。
+    quickNotesAvailability: () => getQuickNotesAvailability(),
     runFullSync,
     enqueueMaintenance,
     broadcastSyncProgress,
@@ -587,6 +601,15 @@ function registerIpc(): ReadonlyMap<string, (args: unknown[]) => Promise<unknown
   registerQuickNotesIpc(ipc, quickNotes, store, enqueueMaintenance);
   registerLogIpc(ipc);
   registerSystemInfoIpc(ipc, { store, quickNotes, workspaceRoot });
+  // Batch3-B：安全模式三件事（读状态 / 复制诊断 / 显式退出）。通道登记见 electron/ipc/ipcChannelParity.test.ts。
+  registerSafeModeIpc(ipc, {
+    userDataDir: app.getPath("userData"),
+    logPath: path.join(app.getPath("userData"), "logs", "lakex-local-notes.log"),
+    appVersion: app.getVersion(),
+    platform: process.platform,
+    state: () => safeModeState,
+    onExit: () => { safeModeActive = false; safeModeState = null; },
+  });
   return ipc.registry;
 }
 
@@ -647,6 +670,16 @@ if (!app.requestSingleInstanceLock()) {
     const crashMarker = readCrashMarker(userDataDir);
     if (crashMarker) {
       log.app.warn("[crash] 上次运行捕获到未捕获异常" + formatLogFields({ time: crashMarker.time, occurrences: crashMarker.occurrences, reason: crashMarker.reason }));
+    }
+    // Batch3-B：崩溃反复出现（occurrences>=2 或 30 分钟内连续 2 次）⇒ 本次进安全模式：
+    // 不自动同步 / 不恢复上次标签页 / 不预热内核；主界面照常可用可编辑（语义见 electron/safeMode.ts）。
+    const safeModeDecision = decideSafeMode({ previous: readSafeModeState(userDataDir), crashMarker, now: new Date() });
+    safeModeActive = safeModeDecision.active;
+    safeModeState = safeModeDecision.active ? safeModeDecision.state : null;
+    if (safeModeDecision.active) {
+      writeSafeModeState(userDataDir, safeModeDecision.state);
+      log.app.warn("[safe-mode] 本次启动进入安全模式（不自动同步/不恢复标签页/不预热内核）"
+        + formatLogFields({ reason: safeModeDecision.reason, occurrences: crashMarker?.occurrences ?? 0 }));
     }
     // 预检 = PRAGMA quick_check + foreign_key_check（只读，不建表不迁移）；文件不存在 = 全新安装。
     const startupIntegrity = inspectDatabaseForStartup(path.join(workspaceRoot(), "metadata.sqlite3"));
@@ -734,10 +767,29 @@ if (!app.requestSingleInstanceLock()) {
       if (devS3Settings) store.saveS3Settings(devS3Settings);
       else log.app.info("dev S3 seed skipped: credentials are not configured");
     }
-    quickNotes = new QuickNotesStore(workspaceRoot(), log);
-    setQuickNotesStoreForV3(quickNotes);
+    // Batch3-A（261105）：小记**独立库**损坏不得卡住整个应用。QuickNotesStore 单独 try/catch：
+    // 失败 ⇒ 降级「无小记」模式（主库/文档/表格照常启动），小记相关 IPC 返回可读错误、v3 同步暂停；
+    // 绝不把整库判为坏库（启动恢复页只管主库，语义见 startupRecovery）。
+    let quickNotesOpenError: unknown = null;
+    try {
+      quickNotes = new QuickNotesStore(workspaceRoot(), log);
+    } catch (error) {
+      quickNotesOpenError = error;
+    }
+    const quickNotesAvailability = decideQuickNotesAvailability({ openError: quickNotesOpenError });
+    setQuickNotesAvailability(quickNotesAvailability);
+    if (quickNotesAvailability.mode === "degraded") {
+      const degradedMessage = quickNotesDegradedMessage(quickNotesAvailability);
+      quickNotes = createUnavailableQuickNotesStore(degradedMessage);
+      log.app.error("[quick-notes] 小记库不可用，进入降级模式（文档/表格不受影响）"
+        + formatLogFields({ reason: quickNotesAvailability.reason, detail: quickNotesAvailability.detail }));
+      log.sync.warn("[sync] 小记库降级中：v3 同步已暂停（避免空小记世界被误判为删除）；出口见 设置→同步诊断");
+    } else {
+      // 只有正常打开时才注册给 v3：降级替身的空世界会被同步判成删除/下载（desktopSync 另有前置断言）。
+      setQuickNotesStoreForV3(quickNotes);
+      quickNotes.recoverConversions((noteId) => store.hasNote(noteId), (noteId) => store.removeUntrackedNoteArtifacts(noteId));
+    }
     drafts = new DraftJournal(draftJournalDir(workspaceRoot()));
-    quickNotes.recoverConversions((noteId) => store.hasNote(noteId), (noteId) => store.removeUntrackedNoteArtifacts(noteId));
     registerCdnRedirect();
     registerAssetTokenRedirect();
     startAssetServer(path.join(workspaceRoot(), "note-assets"), vendorCdnDir(), path.join(workspaceRoot(), "quick-notes"), assetToken);
@@ -755,7 +807,10 @@ if (!app.requestSingleInstanceLock()) {
       log: { info: (m) => log.app.info(m), warn: (m) => log.app.warn(m) },
     });
     // 正常启动已跑通 ⇒ 消费崩溃标记（它已在启动日志里提示过；恢复模式不会走到这里，保留给恢复页）。
-    if (startupDecision.crashMarker) removeCrashMarker(userDataDir);
+    // 正常启动已跑通 ⇒ 消费崩溃标记（旧语义）；安全模式**不清**标记（诊断线索保留到用户显式退出）。
+    if (startupDecision.crashMarker && !safeModeActive) removeCrashMarker(userDataDir);
+    // 正常启动顺手清掉遗留状态文件：别让下一次启动误读上一次的 active:true。
+    if (!safeModeActive) removeSafeModeState(userDataDir);
     createWindow();
     logHeapPeak("startup");
 
@@ -795,9 +850,15 @@ if (!app.requestSingleInstanceLock()) {
     restartHistoryTimers = startHistoryTimers;
 
     // 自动同步（interval）定时器：仅在云同步开启且模式为 interval 时运行。
+    /** 小记库降级 ⇒ 不做自动同步：整轮同步已被 desktopSync 前置断言拦住，定时器只会反复刷失败；
+     *  手动同步仍会当场给出可读错误（用户知道为什么 + 去哪恢复）。 */
+    const autoSyncAllowed = getQuickNotesAvailability().mode === "ok";
     let syncTimer: NodeJS.Timeout | null = null;
     const startSyncTimers = () => {
       if (syncTimer) { clearInterval(syncTimer); syncTimer = null; }
+      // Batch3-B：安全模式不自动同步（手动 syncNow 仍可用；用户显式退出后本进程也不重启定时器）。
+      if (safeModeActive) return;
+      if (!autoSyncAllowed) return;
       const cfg = store.getSyncSettings();
       // CORE-14：interval 判据单一来源 = core/syncModes.autoSyncIntervalMs（与设置归一/移动端同口径）。
       const intervalMs = autoSyncIntervalMs(cfg);
@@ -822,7 +883,8 @@ if (!app.requestSingleInstanceLock()) {
     const interruptedAt = store.getSyncInterruptedAt();
     // 两条判据都走单一来源：能不能出网 = core/cloudState（没配置 或 关闭云同步 ⇒ 不出网）；
     // 该不该在开/关时补一次 = core/syncModes 的 shouldSyncOnOpenClose（enabled 且 autoMode ≠ "manual"）。
-    if (canTouchNetwork(cloudStateOf(!!store.getS3Settings(), syncCfgOpen)) && (interruptedAt !== null || shouldSyncOnOpenClose(syncCfgOpen))) {
+    // Batch3-B：安全模式不自动同步，也不续传上次未完成的同步（那是网络动作；手动同步仍可用）。
+    if (!safeModeActive && autoSyncAllowed && canTouchNetwork(cloudStateOf(!!store.getS3Settings(), syncCfgOpen)) && (interruptedAt !== null || shouldSyncOnOpenClose(syncCfgOpen))) {
       if (interruptedAt !== null) log.app.info("[sync] 上次同步未完成（" + interruptedAt + "），启动自动续传" + formatLogFields({ backend: "v3" }));
       void runFullSync().catch((error) => {
         const msg = error instanceof Error ? error.message : String(error);
@@ -862,6 +924,10 @@ let quittingForSync = false;
 app.on("before-quit", (event) => {
   log.app.info("[quit] before-quit" + formatLogFields({ upMs: Date.now() - BOOT_STARTED_AT }));
   if (forceQuit || quittingForSync || !store || !quickNotes) return;
+  // 小记库降级 ⇒ 同步会被前置断言拦住；退出路径不再补一次（否则每次退出都记一条失败）。
+  if (getQuickNotesAvailability().mode === "degraded") return;
+  // Batch3-B：安全模式 = 不自动同步（含退出前这一次）；用户手动同步过才由用户自己决定下次动作。
+  if (safeModeActive) return;
   const cfg = store.getSyncSettings();
   if (!cfg.enabled) return;
   if (syncInFlight) {

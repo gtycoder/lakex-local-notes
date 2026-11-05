@@ -42,12 +42,16 @@
 3. 父环防护：`s3v3Merge` 用 note+folder 合并父表 + visited 检测，环上条目远端父改写为安全父并 warning；descendantIds/回收站 CTE/import 全部 visited + 环拒绝。
 4. 资产坏文件名：`asset_invalid_name` 结构化 warning（先判后跳、不落 errors/pending），两端可见（移动端修正 kind 判定）。
 
+**已修（261105 Batch 3）**
+5. quick-notes 独立库损坏：降级「无小记」模式（Proxy 替身：读安全空值/写抛可读错误），不阻断启动、不注册 v3、不跑 recoverConversions；整轮同步暂停并可读报错 + 恢复指引；降级报告进设置→同步诊断。
+6. 崩溃标记 → **安全模式**：`crash-marker.occurrences>=2` 或 30 分钟内连续 2 次 ⇒ 本次跳过自动同步/不恢复 tab/不预热内核，顶部 `SafeModeBanner` 提示 + 复制诊断 + 退出；`safe-mode.json` 设备本地，损坏不二次失败。
+7. 写入卫生：导出 tmp+rename；桌面 `atomicWrite` 补 fsync（fd+目录，win32 跳过）；`canonicalJson` 迭代化 + 深度 256/节点 200 万上限（输出逐字节一致）。
+
 **仍待做（按优先级）**
-5. quick-notes 独立库损坏仍卡 boot splash（桌面恢复页只覆盖主库）。
-6. 恢复页通道用同文档 hash（未加 preload）；需真机/打包冒烟；Kotlin 改动需 CI/真机编译验证。
-7. 正文突变保护的已知限制：大小骤降分支未接线（避免动 deviceStore）、合法 UTF-8 截断不拦、可疑篇每轮重复 warning/归档（建议按 (id,hash) 去重）。
-8. 导出非原子写、桌面 atomicWrite 无 fsync、canonicalJson 深嵌套 RangeError。
-9. 崩溃标记 → **安全模式**；整库备份**导入恢复**入口；文件↔元数据对账（节流）；定时兜底历史快照。
+8. 整库备份**导入恢复**入口（当前只能导出）；文件↔元数据**对账**（思源式节流：同步后/空闲/dirty/冷却）；定时兜底历史快照。
+9. 恢复页 hash 通道需真机/打包冒烟；Kotlin 改动需 CI/真机编译验证。
+10. 正文突变保护限制：大小骤降分支未接线、合法 UTF-8 截断不拦、可疑篇每轮重复 warning/归档（建议按 (id,hash) 去重）。
+11. 安全模式副作用：会话文件可能被「空标签」覆盖（本次不恢复 tab）——需要保留须给会话写 effect 加门；视觉未实机走查。
 
 ## 5. 新增失败面时的检查清单
 

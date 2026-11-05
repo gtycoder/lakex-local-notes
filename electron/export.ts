@@ -20,6 +20,21 @@ function uniqueExportPath(base: string, title: string, ext: string): string {
   return target;
 }
 
+/**
+ * 导出落盘（261105 Batch3-C）：同目录 tmp → rename，中断（进程被杀/磁盘满/写失败）不会在
+ * 目标路径留下半成品文件；失败时清 tmp 并把错误抛给调用方（UI 有失败提示）。
+ */
+function writeFileAtomic(target: string, data: string | Uint8Array): void {
+  const tmp = `${target}.tmp-${process.pid}-${Date.now()}`;
+  try {
+    fs.writeFileSync(tmp, data);
+    fs.renameSync(tmp, target);
+  } catch (error) {
+    try { fs.rmSync(tmp, { force: true }); } catch { /* best effort */ }
+    throw error;
+  }
+}
+
 export interface InkImageExportResult {
   exportPath: string;
   format: "svg" | "png";
@@ -34,7 +49,7 @@ export async function exportInkPageSvg(store: Store, id: string, pageIds: string
   const base = baseDir ?? defaultExportBase();
   fs.mkdirSync(base, { recursive: true });
   const exportPath = uniqueExportPath(base, page.title, "svg");
-  fs.writeFileSync(exportPath, page.svg, "utf8");
+  writeFileAtomic(exportPath, page.svg);
   return { exportPath, format: "svg", size: fs.statSync(exportPath).size, imageCount: page.imageCount, skipped: page.skipped };
 }
 
@@ -43,7 +58,7 @@ export function saveInkPagePng(baseDir: string | undefined, title: string, bytes
   const base = baseDir ?? defaultExportBase();
   fs.mkdirSync(base, { recursive: true });
   const exportPath = uniqueExportPath(base, title, "png");
-  fs.writeFileSync(exportPath, Buffer.from(bytes));
+  writeFileAtomic(exportPath, Buffer.from(bytes));
   return { exportPath, format: "png", size: fs.statSync(exportPath).size, imageCount: 0, skipped: 0 };
 }
 export interface BitableCsvExportResult {
@@ -119,7 +134,7 @@ export async function exportNote(
       const prep = await store.exportPdfHtml(id, baseDir, options);
       try {
         const buffer = await renderPdfToBuffer(prep.htmlPath);
-        fs.writeFileSync(prep.pdfPath, buffer);
+        writeFileAtomic(prep.pdfPath, buffer);
         return { format, exportPath: prep.pdfPath, imageCount: prep.imageCount, skipped: prep.skipped, size: buffer.byteLength };
       } finally {
         fs.rmSync(prep.tempDir, { recursive: true, force: true });

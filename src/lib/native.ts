@@ -29,6 +29,23 @@ export interface NoteHistoryEntry {
   kind: "doc" | "usheet" | "bitable" | "board" | "ink";
 }
 
+/** 安全模式状态快照（IPC get_safe_mode_state；主进程 electron/safeMode.ts 的同名快照）。 */
+export interface SafeModeStateSnapshot {
+  active: boolean;
+  since?: string;
+  reason?: string;
+  crashTime?: string;
+  occurrences?: number;
+  logPath: string;
+  dataDir: string;
+}
+
+/** 退出安全模式：写 active:false + 清崩溃标记（下次启动正常）。 */
+export interface SafeModeExitResult { ok: true; state: { active: boolean; exitedAt?: string } }
+
+/** 复制诊断：主进程直接把崩溃现场 + 环境写进剪贴板。 */
+export interface SafeModeDiagnosticsResult { ok: boolean; text: string }
+
 /** 缺正文文档从云端拉回的结果（失败以 reason 回报）。 */
 export type RestoreMissingBodyResult =
   | { ok: true; title: string }
@@ -238,6 +255,12 @@ export interface LakeNative {
   revealDataFolder(kind: import("./types").DataFolderKind): Promise<{ ok: boolean; path: string }>;
   runS3DeepCleanup(dryRun: boolean, ignoreRetention?: boolean): Promise<DeepCleanupResult>;
   getTrashReminder(): Promise<Array<{ id: string; title: string; deletedAt: string }>>;
+  /** 安全模式（Batch3-B）：本次启动是否处于安全模式 + 崩溃摘要。 */
+  getSafeModeState(): Promise<SafeModeStateSnapshot>;
+  /** 退出安全模式（下次启动正常）：写 active:false 并清崩溃标记。 */
+  exitSafeMode(): Promise<SafeModeExitResult>;
+  /** 复制诊断（崩溃现场/环境/日志路径）到系统剪贴板。 */
+  copySafeModeDiagnostics(): Promise<SafeModeDiagnosticsResult>;
   /** 浏览器端服务（桌面附属窗口；仅本机、不落盘、每次启动默认关闭）。 */
   getWebStatus(): Promise<{ enabled: boolean; port: number; url: string }>;
   setWebEnabled(enabled: boolean): Promise<{ enabled: boolean; port: number; url: string }>;
@@ -420,6 +443,9 @@ export const native = {
   revealDataFolder: (kind: import("./types").DataFolderKind) => api().revealDataFolder(kind),
   runS3DeepCleanup: (dryRun: boolean, ignoreRetention = false) => api().runS3DeepCleanup(dryRun, ignoreRetention),
   getTrashReminder: () => api().getTrashReminder(),
+  getSafeModeState: () => api().getSafeModeState(),
+  exitSafeMode: () => api().exitSafeMode(),
+  copySafeModeDiagnostics: () => api().copySafeModeDiagnostics(),
   getWebStatus: () => api().getWebStatus(),
   setWebEnabled: (enabled: boolean) => api().setWebEnabled(enabled),
   openWebClient: () => api().openWebClient(),

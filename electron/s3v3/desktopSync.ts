@@ -7,6 +7,7 @@ import { S3v3SyncEngine, S3v3SyncError, classifyS3v3Error } from "./syncEngine.j
 import { annotateSyncError } from "./syncErrorInfo.js";
 import type { S3v3Remote } from "./ports.js";
 import { getQuickNotesStoreForV3 } from "./quickNotesRegistry.js";
+import { assertQuickNotesSyncAvailable } from "../quickNotesAvailability.js";
 import type { QuickNotePushOutcome } from "../../src/core/quickNoteSyncTypes.js";
 import { buildS3v3DiagnosticReport, createS3v3PhaseCollector, type S3v3DiagnosticReport } from "../../src/core/s3v3Report.js";
 
@@ -82,6 +83,9 @@ export async function syncWithV3(
   });
   // 转正默认：v3 文档通道下小记也默认走 v3（旧 quick-notes 通道只在 legacy 或显式 0 时使用）。
   const quickV3 = process.env.LAKE_SYNC_PROTOCOL !== "legacy" && process.env.LAKE_S3V3_QUICK_NOTES !== "0";
+  // Batch3-A：小记库降级时**整轮不跑**。没有小记存储时 local 小记世界为空，plan 会把远端小记判成
+  // 待下载（远端有/本地缺失），落盘又因 quickNotes 未注入失败——半轮状态比明确失败更危险。
+  assertQuickNotesSyncAvailable(quickV3);
   const quickNotes = quickV3 ? getQuickNotesStoreForV3() : null;
   const device = new DesktopStoreDevice(store, store.rootPath, { skipQuickNotesGuard: true, ...(quickNotes ? { quickNotes } : {}) });
   await device.init();
@@ -226,6 +230,8 @@ export async function pushQuickNoteWithV3(
 ): Promise<QuickNotePushOutcome> {
   const settings = store.getS3Settings();
   if (!settings && !deps.remote) throw new Error("请先保存 S3 配置");
+  // Batch3-A：降级时先给「小记库不可用 + 出口」的可读错误，避免落到下面泛化的「未就绪」。
+  assertQuickNotesSyncAvailable(true);
   const quickNotes = getQuickNotesStoreForV3();
   if (!quickNotes) throw new Error("小记库未就绪（v3 小记通道关闭？）");
   const remote = deps.remote ?? new S3v3S3Remote({

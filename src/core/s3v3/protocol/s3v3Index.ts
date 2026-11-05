@@ -95,13 +95,83 @@ export interface QuickNotesIndex {
   purged?: string[];
 }
 
-/** 递归 canonical JSON：对象 key 排序、数组保持顺序（调用方先排序）。 */
+/**
+ * canonicalJson 的防御性上限（261105 Batch3-C）。
+ *
+ * 旧实现是**递归**：深嵌套结构（实验 20 万层）会 RangeError 栈溢出 ⇒ 同步/导入路径遇到
+ * 损坏或恶意数据时连错误信息都拿不到。现改为**迭代 + 显式栈**，输出与旧实现逐字节一致
+ * （既有序列化/索引 hash 回归由对拍用例锁住），并用这两条上限把病态结构变成可读错误：
+ * - 量级依据：lake 索引在硬上限 10 万文档下约 1.1M 个节点（每篇 ~11 个字段值），2M 留 ~1.8x 余量；
+ * - 真实索引深度只有 4（{v,space,notes[],folders[]}），256 层远超任何真实文档。
+ */
+export const CANONICAL_JSON_MAX_DEPTH = 256;
+export const CANONICAL_JSON_MAX_NODES = 2_000_000;
+
+/** canonical JSON：对象 key 排序、数组保持顺序（调用方先排序）。
+ *  迭代实现（显式栈），因此不受 JS 调用栈深度限制；超限抛可读错误而不是 RangeError。 */
 export function canonicalJson(value: unknown): string {
+  // 根是原始值：与旧实现完全一致（JSON.stringify 的返回值原样返回，undefined/function 同理）。
   if (value === null || typeof value !== "object") return JSON.stringify(value);
-  if (Array.isArray(value)) return "[" + value.map((v) => canonicalJson(v)).join(",") + "]";
-  const obj = value as Record<string, unknown>;
-  const keys = Object.keys(obj).filter((k) => obj[k] !== undefined).sort();
-  return "{" + keys.map((k) => JSON.stringify(k) + ":" + canonicalJson(obj[k])).join(",") + "}";
+  const out: string[] = [];
+  type ArrayFrame = { kind: "array"; value: unknown[]; index: number; depth: number };
+  type ObjectFrame = { kind: "object"; value: Record<string, unknown>; keys: string[]; index: number; depth: number };
+  const stack: Array<ArrayFrame | ObjectFrame> = [];
+  let nodes = 0;
+  let pending: { value: unknown; depth: number } | null = { value, depth: 0 };
+  while (true) {
+    if (pending) {
+      const current = pending;
+      pending = null;
+      nodes += 1;
+      if (nodes > CANONICAL_JSON_MAX_NODES) {
+        throw new Error(`canonicalJson：节点数超过上限 ${CANONICAL_JSON_MAX_NODES}（结构过大，疑似损坏数据）`);
+      }
+      const v = current.value;
+      if (v === null || typeof v !== "object") {
+        const primitive = JSON.stringify(v);
+        // 与旧实现一致：undefined / function / symbol 在数组里退化成空串（join 的既有行为）。
+        out.push(primitive === undefined ? "" : primitive);
+      } else {
+        if (current.depth >= CANONICAL_JSON_MAX_DEPTH) {
+          throw new Error(`canonicalJson：嵌套超过 ${CANONICAL_JSON_MAX_DEPTH} 层（疑似损坏数据）`);
+        }
+        if (Array.isArray(v)) {
+          out.push("[");
+          stack.push({ kind: "array", value: v, index: 0, depth: current.depth });
+        } else {
+          const obj = v as Record<string, unknown>;
+          const keys = Object.keys(obj).filter((k) => obj[k] !== undefined).sort();
+          out.push("{");
+          stack.push({ kind: "object", value: obj, keys, index: 0, depth: current.depth });
+        }
+      }
+      if (stack.length === 0) break;
+      continue;
+    }
+    if (stack.length === 0) break;
+    const top = stack[stack.length - 1];
+    if (top.kind === "array") {
+      if (top.index >= top.value.length) {
+        out.push("]");
+        stack.pop();
+        continue;
+      }
+      if (top.index > 0) out.push(",");
+      pending = { value: top.value[top.index], depth: top.depth + 1 };
+      top.index += 1;
+    } else {
+      if (top.index >= top.keys.length) {
+        out.push("}");
+        stack.pop();
+        continue;
+      }
+      if (top.index > 0) out.push(",");
+      out.push(JSON.stringify(top.keys[top.index]) + ":");
+      pending = { value: top.value[top.keys[top.index]], depth: top.depth + 1 };
+      top.index += 1;
+    }
+  }
+  return out.join("");
 }
 
 export function sha256Text(text: string): string {

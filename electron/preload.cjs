@@ -161,6 +161,10 @@ contextBridge.exposeInMainWorld("lakeNative", {
   revealDataFolder: (kind) => invoke("reveal_data_folder", kind),
   runS3DeepCleanup: (dryRun, ignoreRetention = false) => invoke("run_s3_deep_cleanup", dryRun, ignoreRetention),
   getTrashReminder: () => invoke("get_trash_reminder"),
+  // Batch3-B 安全模式：读状态 / 复制诊断 / 显式退出（下次启动正常）
+  getSafeModeState: () => invoke("get_safe_mode_state"),
+  exitSafeMode: () => invoke("exit_safe_mode"),
+  copySafeModeDiagnostics: () => invoke("copy_safe_mode_diagnostics"),
   getWebStatus: () => invoke("get_web_status"),
   setWebEnabled: (enabled) => invoke("set_web_enabled", enabled),
   openWebClient: () => invoke("open_web_client"),
