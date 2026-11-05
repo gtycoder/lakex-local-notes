@@ -91,7 +91,7 @@
 }
 .ln-dialog__actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--lake-space-md); padding: 0 16px 12px; }
 /* 管理型弹窗采用标题/正文档；编辑型弹窗继续沿用自己的紧凑规格。 */
-:is(.note-info-dialog, .confirm-dialog, .rename-dialog, .s3-transfer-dialog) {
+:is(.note-info-dialog, .confirm-dialog, .rename-dialog, .name-prompt-dialog, .s3-transfer-dialog) {
   --lake-dialog-title-size: var(--lake-font-size-title);
   --lake-dialog-body-size: var(--lake-font-size-body);
 }

@@ -7,6 +7,7 @@ import { useWindowShortcuts } from "./hooks/useWindowShortcuts";
 import { useTopMenus } from "./hooks/useTopMenus";
 import { DesktopStatusBar } from "./components/app/DesktopStatusBar";
 import { SafeModeBanner } from "./components/app/SafeModeBanner";
+import { NamePromptDialog } from "./components/app/NamePromptDialog";
 import { getDocumentStatus } from "./components/model/documentStatusModel";
 import { clearScrollMemory } from "./features/editor/editorViewport";
 import { prefetchEditorKernel } from "./features/editor/kernelPrefetch";
@@ -285,7 +286,7 @@ export function App() {
     return () => setNoteRefHost(null);
   }, [notes, openNote, treeNodes]);
 
-  const { handleContentChange, createNoteIn, createNote, createUsheetIn, createBitableIn, createBoardIn, createInkIn, deleteTreeNode } = useNoteLifecycle({
+  const { handleContentChange, createNoteIn, createUsheetIn, createBitableIn, createBoardIn, createInkIn, deleteTreeNode } = useNoteLifecycle({
     bumpRevision,
     resetRevision,
     clearNote,
@@ -305,7 +306,6 @@ export function App() {
     setOpenTabs,
     setActiveNoteId,
     setPinnedNoteIds,
-    setPendingRenameId,
     setDraftEntries,
   });
   const shellPlatformClass = /Mac|iPhone|iPad/.test(navigator.platform) ? "platform-mac" : "platform-native-titlebar";
@@ -506,6 +506,25 @@ export function App() {
     setHistoryNoteId, setHistoryOpen, setSearchPanelQuery, setSearchPanelOpen,
     setPendingRenameId, setError,
   });
+
+  /** 资料库空态「新建文档」= 统一新建弹窗（261105 用户验收：所有需要写名字的新建都弹窗）。 */
+  const [newNoteOpen, setNewNoteOpen] = useState(false);
+  const [newNoteBusy, setNewNoteBusy] = useState(false);
+  const [newNoteError, setNewNoteError] = useState<string | null>(null);
+  const submitNewNote = useCallback(async (title: string) => {
+    const notebookId = treeNodes.find((node) => node.nodeType === "notebook")?.id ?? null;
+    setNewNoteBusy(true);
+    setNewNoteError(null);
+    try {
+      const id = await createNoteIn(notebookId, title);
+      setNewNoteOpen(false);
+      if (id) setRevealNodeId(id);
+    } catch (reason) {
+      setNewNoteError(getNativeErrorMessage(reason));
+    } finally {
+      setNewNoteBusy(false);
+    }
+  }, [treeNodes, createNoteIn]);
 
   /** 保存冲突三选项（Batch4-D）。每个分支都先记审计日志（渲染层 console 由主进程统一落盘）。 */
   const resolveSaveConflict = useCallback(async (choice: "copy" | "overwrite" | "discard") => {
@@ -827,7 +846,7 @@ export function App() {
             onReloadNote={reloadNoteTab}
             onOpenHistory={(noteId) => { setHistoryNoteId(noteId); setHistoryOpen(true); }}
             onRetryBody={(noteId) => { void retryMissingBody(noteId); }}
-            onCreateNote={() => void createNote()}
+            onCreateNote={() => { setNewNoteError(null); setNewNoteOpen(true); }}
             outlineSlot={outlineVisible ? (
               <OutlineSidebar
                 mode={effectiveOutlineMode}
@@ -1029,6 +1048,18 @@ export function App() {
       />
       {/* 大表格粘贴护栏（A+B，261008）：超阈值不粘进文档，改为明确提示 + 一键「存为表格文档」 */}
       <TablePasteGuardDialog parentId={notes.find((n) => n.id === activeNoteId)?.parentId ?? null} />
+      {/* 资料库空态「新建文档」：与目录栏新建同一套弹窗（预填默认名，可改或直接确认） */}
+      <NamePromptDialog
+        open={newNoteOpen}
+        title="新建文档"
+        inputLabel="文档名称"
+        placeholder="输入文档名称"
+        initialValue="无标题文档"
+        busy={newNoteBusy}
+        error={newNoteError}
+        onSubmit={submitNewNote}
+        onClose={() => { if (!newNoteBusy) setNewNoteOpen(false); }}
+      />
       {/* Batch4-D 保存版本守卫：磁盘正文被外部/他端改过时三选项确认（自动保存已暂停） */}
       <SaveConflictDialog
         open={saveConflict !== null}

@@ -6,15 +6,16 @@ import type { NoteSummary, TreeNode } from "../lib/types";
 import { patchNoteById, patchTabById, replaceTreeNode, type OpenTab } from "../desktop/desktopTypes";
 
 export interface UseTreeActionsOptions {
-  createNoteIn: (parentId: string | null) => Promise<void>;
+  /** 六个新建 kind 都收用户输入的名字，并回传新节点 id（统一弹窗 → 选中/滚动）。 */
+  createNoteIn: (parentId: string | null, title?: string) => Promise<string>;
   /** 新建表格文档（kind=usheet）。 */
-  createUsheetIn: (parentId: string | null) => Promise<void>;
+  createUsheetIn: (parentId: string | null, title?: string) => Promise<string>;
   /** v6：新建多维表文档（kind=bitable）。 */
-  createBitableIn: (parentId: string | null) => Promise<void>;
+  createBitableIn: (parentId: string | null, title?: string) => Promise<string>;
   /** v7：新建画板文档（kind=board）。 */
-  createBoardIn: (parentId: string | null) => Promise<void>;
+  createBoardIn: (parentId: string | null, title?: string) => Promise<string>;
   /** 新建手写板文档（kind=ink）。 */
-  createInkIn: (parentId: string | null) => Promise<void>;
+  createInkIn: (parentId: string | null, title?: string) => Promise<string>;
   openNote: (id: string) => void;
   setNodeIcon: (node: TreeNode, icon: string | null) => void;
   treeNodes: TreeNode[];
@@ -40,26 +41,30 @@ export function useTreeActions({
   /** 返回新节点 id（新建笔记本弹窗据此选中/滚动）；笔记类仍沿用各自「打开即选中」的行为。 */
   const createTreeItem = useCallback(async (kind: "notebook" | "group" | "note" | "usheet" | "bitable" | "board" | "ink", parentId: string | null, title?: string): Promise<string | undefined> => {
     try {
-      if (kind === "note") { await createNoteIn(parentId); return; }
-      if (kind === "usheet") { await createUsheetIn(parentId); return; }
-      if (kind === "bitable") { await createBitableIn(parentId); return; }
-      if (kind === "board") { await createBoardIn(parentId); return; }
-      if (kind === "ink") { await createInkIn(parentId); return; }
+      // 所有「需要写名字」的新建都从统一弹窗来 ⇒ 用用户给的名字创建，并回传新节点 id（选中/滚动用）。
       const resolvedTitle = title?.trim();
       if (!resolvedTitle) return;
+      if (kind === "note") return await createNoteIn(parentId, resolvedTitle);
+      if (kind === "usheet") return await createUsheetIn(parentId, resolvedTitle);
+      if (kind === "bitable") return await createBitableIn(parentId, resolvedTitle);
+      if (kind === "board") return await createBoardIn(parentId, resolvedTitle);
+      if (kind === "ink") return await createInkIn(parentId, resolvedTitle);
       if (kind === "notebook") {
         const node = await native.createNotebook(resolvedTitle);
         setTreeNodes(await native.listTreeNodes());
         return node.id;
       }
-      if (parentId) await native.createGroup(parentId, resolvedTitle);
-      setTreeNodes(await native.listTreeNodes());
+      if (parentId) {
+        const node = await native.createGroup(parentId, resolvedTitle);
+        setTreeNodes(await native.listTreeNodes());
+        return node.id;
+      }
     } catch (reason) {
       setError(getNativeErrorMessage(reason));
-      // 笔记本弹窗要就地显示错误且不关闭 ⇒ 只有 notebook 抛出（其它新建路径保持原「全局提示」行为）。
-      if (kind === "notebook") throw reason;
+      // 新建弹窗要就地显示错误且不关闭 ⇒ 一律抛出（唯一的调用方是目录栏新建弹窗）。
+      throw reason;
     }
-  }, []);
+  }, [createNoteIn, createUsheetIn, createBitableIn, createBoardIn, createInkIn]);
 
   const renameTreeNode = useCallback(async (id: string, title: string) => {
     try {

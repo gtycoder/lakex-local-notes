@@ -30,7 +30,7 @@ export interface UseNoteLifecycleOptions {
   setOpenTabs: Dispatch<SetStateAction<OpenTab[]>>;
   setActiveNoteId: Dispatch<SetStateAction<string | null>>;
   setPinnedNoteIds: Dispatch<SetStateAction<Set<string>>>;
-  setPendingRenameId: Dispatch<SetStateAction<string | null>>;
+
   setDraftEntries: Dispatch<SetStateAction<DraftJournalEntry[]>>;
 }
 
@@ -39,7 +39,7 @@ export function useNoteLifecycle({
   bumpRevision, resetRevision, clearNote, scheduleDraftJournal, scheduleSave,
   evictTabsForLimit, showNotice, setError, treeNodes, notes, openTabsRef,
   settingsMaxOpenTabs, pinnedNoteIds, activeNoteId,
-  setNotes, setTreeNodes, setOpenTabs, setActiveNoteId, setPinnedNoteIds, setPendingRenameId, setDraftEntries,
+  setNotes, setTreeNodes, setOpenTabs, setActiveNoteId, setPinnedNoteIds, setDraftEntries,
 }: UseNoteLifecycleOptions) {
   const handleContentChange = useCallback((noteId: string, content?: string) => {
     // 审计 §6.1/§7.4：每键只涨 revision + 重置防抖；正文不在这里序列化，也不每键全量 setState。
@@ -83,37 +83,46 @@ export function useNoteLifecycle({
       showNotice(`已自动关闭最旧的标签（上限 ${settingsMaxOpenTabs}）`);
     }
     setActiveNoteId(note.id);
-    setPendingRenameId(note.id);
+    // 261105 用户验收：新建改弹窗后不再「创建即打开重命名弹窗」（普通重命名入口不受影响）。
   }
 
-  async function createNoteIn(parentId: string | null) {
-    const note = parentId === null ? await native.createNote("无标题文档") : await native.createNoteIn(parentId, "无标题文档");
+  async function createNoteIn(parentId: string | null, title = "无标题文档"): Promise<string> {
+    const note = parentId === null ? await native.createNote(title) : await native.createNoteIn(parentId, title);
     await openCreatedNote(note, "doc");
+    return note.id;
   }
 
-  async function createNote() {
+  async function createNote(title = "无标题文档"): Promise<string> {
     const notebookId = treeNodes.find((node) => node.nodeType === "notebook")?.id ?? null;
-    await createNoteIn(notebookId);
+    return createNoteIn(notebookId, title);
   }
 
   /** 新建表格文档（kind=usheet）：正文是 Univer IWorkbookData 快照 JSON；与文档同流程（进树、开 tab、可重命名）。 */
-  async function createUsheetIn(parentId: string | null) {
-    await openCreatedNote(await native.createUsheetIn(parentId, "无标题表格"), "usheet");
+  async function createUsheetIn(parentId: string | null, title = "无标题表格"): Promise<string> {
+    const note = await native.createUsheetIn(parentId, title);
+    await openCreatedNote(note, "usheet");
+    return note.id;
   }
 
   /** 新建多维表文档（kind=bitable）：正文是自研 record-based JSON；与文档同流程（进树、开 tab、可重命名）。 */
-  async function createBitableIn(parentId: string | null) {
-    await openCreatedNote(await native.createBitableIn(parentId, "无标题多维表"), "bitable");
+  async function createBitableIn(parentId: string | null, title = "无标题多维表"): Promise<string> {
+    const note = await native.createBitableIn(parentId, title);
+    await openCreatedNote(note, "bitable");
+    return note.id;
   }
 
   /** 新建画板文档（kind=board）：正文是 Drawnix/Plait 场景 JSON；与文档同流程（进树、开 tab、可重命名）。 */
-  async function createBoardIn(parentId: string | null) {
-    await openCreatedNote(await native.createBoardIn(parentId, "无标题画板"), "board");
+  async function createBoardIn(parentId: string | null, title = "无标题画板"): Promise<string> {
+    const note = await native.createBoardIn(parentId, title);
+    await openCreatedNote(note, "board");
+    return note.id;
   }
 
   /** 新建手写板文档（kind=ink）：正文是矢量墨迹 JSON；与文档同流程（进树、开 tab、可重命名）。 */
-  async function createInkIn(parentId: string | null) {
-    await openCreatedNote(await native.createInkIn(parentId, "无标题手写板"), "ink");
+  async function createInkIn(parentId: string | null, title = "无标题手写板"): Promise<string> {
+    const note = await native.createInkIn(parentId, title);
+    await openCreatedNote(note, "ink");
+    return note.id;
   }
 
   async function deleteTreeNode(id: string) {

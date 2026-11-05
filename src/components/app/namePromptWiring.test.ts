@@ -2,57 +2,109 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 /**
- * 261105 用户验收接线护栏：新建笔记本 / 新建标签都走同一个 NamePromptDialog
- * （标题 + 输入框 + Enter/Esc + 空名禁用 + 错误就地显示），不再用内联输入行新建。
- * 行内重命名保留 InlineRenameInput（编辑 ≠ 新建）。
+ * 261105 用户验收接线护栏：**所有「需要写名字」的新建都走同一个 NamePromptDialog**
+ * （notebook/group/note/usheet/bitable/board/ink），不再有内联创建行，也不再「创建后自动重命名」。
  */
 const read = (rel: string) => readFileSync(new URL(rel, import.meta.url), "utf8");
 const SIDEBAR = read("./Sidebar.tsx");
 const TAGS = read("../../features/tags/TagsWorkspace.tsx");
 const TREE_ACTIONS = read("../../hooks/useTreeActions.ts");
+const NOTE_LIFECYCLE = read("../../hooks/useNoteLifecycle.ts");
+const APP = read("../../App.tsx");
 const DIALOG = read("./NamePromptDialog.tsx");
 
-describe("新建笔记本 / 新建标签 = 弹窗（NamePromptDialog）", () => {
+describe("统一新建弹窗（NamePromptDialog）", () => {
   it("共用弹窗原语：ln-dialog + autofocus 输入 + Enter 提交 / Esc 取消 + 空名禁用 + 错误就地", () => {
     expect(DIALOG).toContain("Dialog");
     expect(DIALOG).toContain("InlineRenameInput");
-    expect(DIALOG).toContain("emptyPolicy=\"fallback\"");
+    expect(DIALOG).toContain("initialValue");
     expect(DIALOG).toContain("disabled={busy || !trimmed}");
-    expect(DIALOG).toContain("role=\"alert\"");
+    expect(DIALOG).toContain('role="alert"');
     expect(DIALOG).toContain("onCancel={onClose}");
+    // 用户复验：结构与「重命名」弹窗一致 —— head 与 body 同级、actions 是 body 的兄弟、尺寸复用 rename 那套
+    expect(DIALOG).toContain('className="name-prompt-dialog"');
+    expect(DIALOG).toContain("initialFocus={inputRef}");
+    const headIdx = DIALOG.indexOf('className="ln-dialog__head"');
+    const bodyIdx = DIALOG.indexOf('className="ln-dialog__body"');
+    const actionsIdx = DIALOG.indexOf('className="ln-dialog__actions"');
+    expect(headIdx).toBeGreaterThan(0);
+    expect(headIdx).toBeLessThan(bodyIdx);
+    expect(bodyIdx).toBeLessThan(actionsIdx);
+    // 按钮层级与 rename 一致：主 primary「创建」/ 次 ghost「取消」；错误行不再用 ln-empty
+    expect(DIALOG).toContain('className="ln-btn ln-btn--primary"');
+    expect(DIALOG).toContain('className="ln-btn ln-btn--ghost"');
+    expect(DIALOG).toContain('className="name-prompt-dialog__error"');
+    expect(DIALOG).not.toContain("ln-empty");
+    // 样式复用（不另写一套尺寸/内距）：与 rename 并排；标题/正文档与控件高度组也包含它
+    const CSS = read("../../styles/dialog.css");
+    expect(CSS).toContain(".rename-dialog,\n.name-prompt-dialog { width: min(460px, 92vw); }");
+    expect(CSS).toContain(".name-prompt-dialog__error {");
+    expect(read("../../styles/overlay.css")).toContain(".rename-dialog, .name-prompt-dialog, .s3-transfer-dialog");
+    expect(read("../../styles/feature.css")).toContain(".rename-dialog,\n.name-prompt-dialog,");
   });
 
-  it("Sidebar：+ → 新建笔记本打开弹窗；提交 await onCreate → 关闭 → 选中/滚动；内联行已移除", () => {
+  it("Sidebar：七个 kind 的弹窗预设（六个 kind 预填默认名）+ 统一提交/选中/滚动", () => {
     expect(SIDEBAR).toContain("<NamePromptDialog");
-    expect(SIDEBAR).toContain('title="新建笔记本"');
-    expect(SIDEBAR).toContain('inputLabel="笔记本名称"');
-    expect(SIDEBAR).toContain('const id = await Promise.resolve(props.onCreate("notebook", null, title));');
+    expect(SIDEBAR).toContain("CREATE_DIALOG_PRESETS");
+    for (const [title, inputLabel, defaultName] of [
+      ["新建分组", "分组名称", "新建分组"],
+      ["新建文档", "文档名称", "无标题文档"],
+      ["新建表格", "表格名称", "无标题表格"],
+      ["新建多维表", "多维表名称", "无标题多维表"],
+      ["新建画板", "画板名称", "无标题画板"],
+      ["新建手写板", "手写板名称", "无标题手写板"],
+    ] as const) {
+      expect(SIDEBAR, title).toContain('title: "' + title + '"');
+      expect(SIDEBAR, inputLabel).toContain('inputLabel: "' + inputLabel + '"');
+      expect(SIDEBAR, defaultName).toContain('defaultName: "' + defaultName + '"');
+    }
+    expect(SIDEBAR).toContain("initialValue={preset.defaultName}");
+    expect(SIDEBAR).toContain("const id = await Promise.resolve(props.onCreate(createDialog.kind, createDialog.parentId, title));");
     expect(SIDEBAR).toContain("props.onSelect(id)");
     expect(SIDEBAR).toContain("revealNodeRef.current(id)");
-    // 内联笔记本创建行已删；分组内联行保留（文档/分组新建行为不变）
-    expect(SIDEBAR).not.toContain('pendingCreate?.kind === "notebook" && createField(0)');
-    expect(SIDEBAR).toContain('setNewTitle("新建分组")');
-    // create() 不再为 notebook 走 pendingCreate
-    expect(SIDEBAR).toContain("if (kind === \"notebook\") {");
   });
 
-  it("数据层：创建笔记本返回新节点 id；失败对弹窗抛出（就地显示）", () => {
-    expect(TREE_ACTIONS).toContain("const node = await native.createNotebook(resolvedTitle);");
-    expect(TREE_ACTIONS).toContain("return node.id;");
-    expect(TREE_ACTIONS).toContain('if (kind === "notebook") throw reason;');
-    expect(TREE_ACTIONS).toContain("return createTreeItem(kind, parentId, title);");
+  it("内联创建与「创建后自动重命名」已移除（普通重命名入口保留）", () => {
+    expect(SIDEBAR).not.toContain("pendingCreate");
+    expect(SIDEBAR).not.toContain("createField");
+    expect(SIDEBAR).not.toContain("inline-create");
+    expect(NOTE_LIFECYCLE).not.toContain("setPendingRenameId(note.id)");
+    expect(SIDEBAR).toContain("const beginRename = useCallback");
+    expect(TAGS).toContain('ariaLabel={"重命名标签 " + entry.name}');
   });
 
-  it("TagsWorkspace：＋新建标签/空态 CTA 打开同一弹窗；创建后 reload + 选中；行内重命名仍在", () => {
+  it("所有入口都走同一弹窗：目录右键/行内「＋」、资料库空态「新建文档」", () => {
+    // 目录：create() 与 createChild() 都只打开弹窗（不再直接 onCreate / 内联行）
+    const openCount = (SIDEBAR.match(/openCreateDialog\(/g) ?? []).length;
+    expect(openCount).toBeGreaterThanOrEqual(2); // create + createChild（定义在 useCallback 里，不计入）
+    expect(SIDEBAR).not.toContain("props.onCreate(kind, parentId);");
+    // 资料库空态「新建文档」= App 级同一弹窗（预填默认名）
+    expect(APP).toContain("<NamePromptDialog");
+    expect(APP).toContain('title="新建文档"');
+    expect(APP).toContain('initialValue="无标题文档"');
+    expect(APP).toContain("onCreateNote={() => { setNewNoteError(null); setNewNoteOpen(true); }}");
+    expect(APP).not.toContain("void createNote()");
+  });
+
+  it("数据层：六 kind 收标题并回传 id；失败一律对弹窗抛出（就地显示）", () => {
+    expect(TREE_ACTIONS).toContain("return await createNoteIn(parentId, resolvedTitle);");
+    expect(TREE_ACTIONS).toContain("return await createUsheetIn(parentId, resolvedTitle);");
+    expect(TREE_ACTIONS).toContain("return await createBitableIn(parentId, resolvedTitle);");
+    expect(TREE_ACTIONS).toContain("return await createBoardIn(parentId, resolvedTitle);");
+    expect(TREE_ACTIONS).toContain("return await createInkIn(parentId, resolvedTitle);");
+    expect(TREE_ACTIONS).toContain("const node = await native.createGroup(parentId, resolvedTitle);");
+    expect(TREE_ACTIONS).toContain("throw reason;");
+    // 笔记类创建器收标题 + 回传 id（useNoteLifecycle）
+    expect(NOTE_LIFECYCLE).toContain("async function createNoteIn(parentId: string | null, title = ");
+    expect(NOTE_LIFECYCLE).toContain("): Promise<string> {");
+    expect(NOTE_LIFECYCLE).toContain("return note.id;");
+  });
+
+  it("标签空间：＋新建/空态 CTA 同一弹窗；创建后 reload + 选中", () => {
     expect(TAGS).toContain("<NamePromptDialog");
     expect(TAGS).toContain('title="新建标签"');
-    expect(TAGS).toContain('inputLabel="新标签名称"');
     expect(TAGS).toContain("onSubmit={createTag}");
-    expect(TAGS).toContain("await onReload();");
     expect(TAGS).toContain("setSelectedTagId(id)");
-    // 内联新建输入行已移除
     expect(TAGS).not.toContain("tags-dir__create");
-    // 重命名仍是行内输入
-    expect(TAGS).toContain('ariaLabel={"重命名标签 " + entry.name}');
   });
 });

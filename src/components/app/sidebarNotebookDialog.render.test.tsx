@@ -127,3 +127,51 @@ describe("Sidebar 新建笔记本（弹窗）", () => {
     expect(dialogInput()).toBeTruthy();
   });
 });
+
+// 261105 用户验收：group/note/usheet/bitable/board/ink 六个 kind 全部走同一个新建弹窗（预填默认名，可改或直接确认）。
+const SIX_KINDS = [
+  { label: "新建分组", kind: "group", title: "新建分组", inputLabel: "分组名称", defaultName: "新建分组" },
+  { label: "新建文档", kind: "note", title: "新建文档", inputLabel: "文档名称", defaultName: "无标题文档" },
+  { label: "新建表格", kind: "usheet", title: "新建表格", inputLabel: "表格名称", defaultName: "无标题表格" },
+  { label: "新建多维表", kind: "bitable", title: "新建多维表", inputLabel: "多维表名称", defaultName: "无标题多维表" },
+  { label: "新建画板", kind: "board", title: "新建画板", inputLabel: "画板名称", defaultName: "无标题画板" },
+  { label: "新建手写板", kind: "ink", title: "新建手写板", inputLabel: "手写板名称", defaultName: "无标题手写板" },
+] as const;
+
+describe("Sidebar 六个 kind 统一新建弹窗", () => {
+  it.each(SIX_KINDS)("$label：弹窗标题/预填默认名 → Enter 用默认名创建（带父级）", async ({ label, kind, title, inputLabel, defaultName }) => {
+    props.onCreate = vi.fn(async () => "new-node");
+    render();
+    // 目录行「＋」快捷新建（与右键「新建」子菜单同一份动作）
+    act(() => byAria("新建子项").click());
+    act(() => byText(label).click());
+    expect(document.body.querySelector('[role="dialog"]')).not.toBeNull();
+    expect(document.body.textContent).toContain(title);
+    const input = document.body.querySelector<HTMLInputElement>('input[aria-label="' + inputLabel + '"]')!;
+    expect(input.value).toBe(defaultName);
+    await act(async () => {
+      input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+      await Promise.resolve();
+    });
+    expect(props.onCreate).toHaveBeenCalledWith(kind, "book", defaultName);
+    expect(props.onSelect).toHaveBeenCalledWith("new-node");
+    expect(document.body.querySelector('[role="dialog"]')).toBeNull();
+  });
+
+  it.each(SIX_KINDS)("$label：取消不创建", ({ label }) => {
+    render();
+    act(() => byAria("新建子项").click());
+    act(() => byText(label).click());
+    act(() => byText("取消").click());
+    expect(props.onCreate).not.toHaveBeenCalled();
+    expect(document.body.querySelector('[role="dialog"]')).toBeNull();
+  });
+
+  it("右键「新建」子菜单同样走统一弹窗（表格）：预填「无标题表格」", () => {
+    render();
+    const row = document.body.querySelector<HTMLElement>('[data-tree-node-id="book"]')!;
+    act(() => { row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true })); });
+    act(() => byText("新建表格").click());
+    expect(document.body.querySelector<HTMLInputElement>('input[aria-label="表格名称"]')!.value).toBe("无标题表格");
+  });
+});

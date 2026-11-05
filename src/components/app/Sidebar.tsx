@@ -97,12 +97,13 @@ interface SidebarProps {
 export const Sidebar = memo(function Sidebar(props: SidebarProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [contextId, setContextId] = useState<string | null>(null);
-  const [pendingCreate, setPendingCreate] = useState<{ kind: CreateKind; parentId: string | null } | null>(null);
-  /** 新建笔记本 = 弹窗（261105 用户验收；内联行只保留「新建分组」）。 */
-  const [newNotebookOpen, setNewNotebookOpen] = useState(false);
-  const [newNotebookBusy, setNewNotebookBusy] = useState(false);
-  const [newNotebookError, setNewNotebookError] = useState<string | null>(null);
-  const [newTitle, setNewTitle] = useState("");
+  /**
+   * 新建（全部 kind）= 同一个弹窗（261105 用户验收：所有「需要写名字」的新建统一体验）。
+   * 内联创建行与「创建后自动打开重命名」都已移除，避免二次弹窗。
+   */
+  const [createDialog, setCreateDialog] = useState<{ kind: CreateKind; parentId: string | null } | null>(null);
+  const [createBusy, setCreateBusy] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState("");
   const [expanded, setExpanded] = useState<Set<string>>(() => autoExpanded(props.nodes));
@@ -385,50 +386,37 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
   const groupParent = context?.id ?? defaultNotebookId;
   const noteParent = context?.id ?? defaultNotebookId;
 
+  const openCreateDialog = useCallback((kind: CreateKind, parentId: string | null) => {
+    setCreateError(null);
+    setCreateDialog({ kind, parentId });
+  }, []);
+
   const create = (kind: CreateKind) => {
     setMenuOpen(false);
-    if (kind === "notebook") {
-      // 用户验收：新建笔记本改弹窗（不再插入内联输入行）。
-      setNewNotebookError(null);
-      setNewNotebookOpen(true);
-      return;
-    }
-    const parentId = kind === "group" ? groupParent : noteParent;
-    if (kind === "note" || kind === "bitable" || kind === "board") {
-      props.onCreate(kind, parentId);
-      if (parentId) setExpanded((current) => expandAncestors(current, props.nodes, parentId));
-    } else {
-      setPendingCreate({ kind, parentId });
-      setNewTitle("新建分组");
-      if (parentId) setExpanded((current) => expandAncestors(current, props.nodes, parentId));
-    }
+    const parentId = kind === "notebook" ? null : kind === "group" ? groupParent : noteParent;
+    if (parentId) setExpanded((current) => expandAncestors(current, props.nodes, parentId));
+    openCreateDialog(kind, parentId);
   };
-  const submitCreate = useCallback(() => {
-    const title = newTitle.trim();
-    if (!pendingCreate || !title) return;
-    props.onCreate(pendingCreate.kind, pendingCreate.parentId, title);
-    setPendingCreate(null);
-    setNewTitle("");
-  }, [newTitle, pendingCreate, props.onCreate]);
 
-  /** 弹窗提交：创建笔记本 → 关闭 → 选中并滚动到新节点；失败在弹窗内显示且不关闭。 */
-  const submitNewNotebook = useCallback(async (title: string) => {
-    setNewNotebookBusy(true);
-    setNewNotebookError(null);
+  /** 统一弹窗提交：创建 → 关闭 → 选中并滚动到新节点；失败在弹窗内显示且不关闭。 */
+  const submitCreate = useCallback(async (title: string) => {
+    if (!createDialog) return;
+    setCreateBusy(true);
+    setCreateError(null);
     try {
-      const id = await Promise.resolve(props.onCreate("notebook", null, title));
-      setNewNotebookOpen(false);
+      const id = await Promise.resolve(props.onCreate(createDialog.kind, createDialog.parentId, title));
+      setCreateDialog(null);
       if (typeof id === "string" && id) {
         props.onSelect(id);
         // 树刷新是异步 setState：等一帧再 reveal（目录栏自己的滚动容器，不用 scrollIntoView）。
         window.requestAnimationFrame(() => revealNodeRef.current(id));
       }
     } catch (reason) {
-      setNewNotebookError(getNativeErrorMessage(reason));
+      setCreateError(getNativeErrorMessage(reason));
     } finally {
-      setNewNotebookBusy(false);
+      setCreateBusy(false);
     }
-  }, [props.onCreate, props.onSelect]);
+  }, [createDialog, props.onCreate, props.onSelect]);
 
   const submitRename = useCallback((title: string) => {
     const next = title.trim();
@@ -544,17 +532,12 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
   /** 在 node 下创建子项（单一来源：右键菜单「新建」子菜单 + 目录行「＋」快捷菜单共用）。 */
   const createChild = (node: TreeNode | null, kind: "group" | "note" | "usheet" | "bitable" | "board" | "ink") => {
     if (!node) return;
-    // 支持多层嵌套：在目标节点下直接创建（文档也可包含分组/文档/表格）。
+    // 支持多层嵌套：在目标节点下直接创建（文档也可包含分组/文档/表格）；统一走同一个新建弹窗。
     const parentId = node.id;
-    if (kind === "group") {
-      setPendingCreate({ kind, parentId });
-      setNewTitle("新建分组");
-    } else {
-      props.onCreate(kind, parentId);
-    }
     setExpanded((current) => expandAncestors(current, props.nodes, parentId));
     setContextMenu(null);
     setCreateMenu(null);
+    openCreateDialog(kind, parentId);
   };
   const menuNewChild = (kind: "group" | "note" | "usheet" | "bitable" | "board" | "ink") => createChild(contextNode, kind);
 
@@ -570,13 +553,6 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
     props.onRequestDelete(contextNode);
     setContextMenu(null);
   };
-
-  // depth 不再用于定位：缩进由 .tree-children margin-left + border-left 实现
-  const createField = useCallback((_depth: number) => pendingCreate && <div className="inline-create">
-    {pendingCreate.kind === "notebook" ? <Book size={14} /> : <FolderPlus size={14} />}
-    <input autoFocus aria-label={pendingCreate.kind === "notebook" ? "笔记本名称" : "分组名称"} value={newTitle} onChange={(event) => setNewTitle(event.target.value)} onFocus={(event) => event.currentTarget.select()} onKeyDown={(event) => { if (event.key === "Enter") submitCreate(); if (event.key === "Escape") setPendingCreate(null); }} />
-    <button onClick={submitCreate}>创建</button>
-  </div>, [newTitle, pendingCreate, submitCreate]);
 
   const beginTreeDrag = useCallback((event: React.PointerEvent, id: string) => {
     if (event.button !== 0 || (event.target as HTMLElement).closest("input")) return;
@@ -668,9 +644,8 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
     dropParentId,
     draggedParentId,
     releasingId: releaseState?.id ?? null,
-    pendingCreate,
+
     editingId,
-    createField,
     onBeginRename: beginRename,
     onPointerDown: beginTreeDrag,
     consumeSuppressedClick,
@@ -681,7 +656,7 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
     onSelect: props.onSelect,
     onIconClick: setTreeIcon,
     lockedNoteIds: props.lockedNoteIds,
-  }), [displayIndex, query, props.activeId, context?.id ?? null, expanded, draggingId, dropTarget, dropParentId, draggedParentId, releaseState, pendingCreate, editingId, createField, beginRename, beginTreeDrag, setContextNode, openContext, openCreateMenu, toggleNode, props.onSelect, setTreeIcon, props.lockedNoteIds]);
+  }), [displayIndex, query, props.activeId, context?.id ?? null, expanded, draggingId, dropTarget, dropParentId, draggedParentId, releaseState, editingId, beginRename, beginTreeDrag, setContextNode, openContext, openCreateMenu, toggleNode, props.onSelect, setTreeIcon, props.lockedNoteIds]);
 
   return (
     <aside
@@ -746,16 +721,22 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
       {contextMenu && contextNode && <ContextMenu node={contextNode} x={contextMenu.x} y={contextMenu.y} onNewChild={menuNewChild} onRename={menuRename} onDelete={menuDelete} onCopyMarkdown={() => props.onCopyMarkdown(contextNode)} onExportAs={(format) => props.onExportAs(contextNode, format)} onCopyPaths={() => props.onCopyPaths(contextNode)} onShowInfo={() => props.onShowInfo(contextNode)} onOpenHistory={() => props.onOpenHistory(contextNode)} locked={contextNode.noteFileId ? props.lockedNoteIds.has(contextNode.noteFileId) : false} onToggleLock={() => props.onToggleLockNote(contextNode)} onAddTags={() => setTagEditor({ noteId: contextNode.noteFileId ?? contextNode.id, title: contextNode.title })} onClose={() => setContextMenu(null)} />}
       {createMenu && <CreateMenu anchor={createMenu.anchor} onNewChild={(kind) => createChild(createMenu.node, kind)} onClose={() => setCreateMenu(null)} />}
       {editingId && <TreeRenameDialog key={editingId} initial={editingTitle} onCancel={cancelRename} onConfirm={submitRename} />}
-      <NamePromptDialog
-        open={newNotebookOpen}
-        title="新建笔记本"
-        inputLabel="笔记本名称"
-        placeholder="输入笔记本名称"
-        busy={newNotebookBusy}
-        error={newNotebookError}
-        onSubmit={submitNewNotebook}
-        onClose={() => { if (!newNotebookBusy) setNewNotebookOpen(false); }}
-      />
+      {createDialog && (() => {
+        const preset = CREATE_DIALOG_PRESETS[createDialog.kind];
+        return (
+          <NamePromptDialog
+            open
+            title={preset.title}
+            inputLabel={preset.inputLabel}
+            placeholder={"输入" + preset.inputLabel}
+            initialValue={preset.defaultName}
+            busy={createBusy}
+            error={createError}
+            onSubmit={submitCreate}
+            onClose={() => { if (!createBusy) setCreateDialog(null); }}
+          />
+        );
+      })()}
       {tagEditor && (
         <NoteTagDialog open noteId={tagEditor.noteId} title={tagEditor.title}
           onClose={() => setTagEditor(null)}
@@ -796,9 +777,7 @@ interface TreeRowProps {
   draggedParentId: string | null;
   releasingId: string | null;
   dropTarget: { id: string; position: DropPosition } | null;
-  pendingCreate: { kind: CreateKind; parentId: string | null } | null;
   editingId: string | null;
-  createField: (depth: number) => React.ReactNode;
   onBeginRename: (node: TreeNode) => void;
   onPointerDown: (event: React.PointerEvent, id: string) => void;
   consumeSuppressedClick: () => boolean;
@@ -839,7 +818,6 @@ const TreeRow = memo(function TreeRow(props: TreeRowProps) {
       consumeSuppressedClick={props.consumeSuppressedClick}
     />
     {open && <div className="tree-children">
-      {props.pendingCreate?.parentId === props.node.id && props.createField(props.depth + 1)}
       {children.map((child) => <TreeRow key={child.id} {...props} node={child} depth={props.depth + 1} />)}
     </div>}
   </div>;
@@ -1032,6 +1010,20 @@ function TreeRenameDialog({ initial, onCancel, onConfirm }: { initial: string; o
 }
 
 type CreateChildKind = Exclude<CreateKind, "notebook">;
+
+/**
+ * 「需要写名字」的新建 kind → 弹窗预设（标题 / 输入框 aria / 预填默认名）。
+ * notebook 不预填（用户自己起名）；其余六个 kind 预填默认名，可改或直接确认。
+ */
+const CREATE_DIALOG_PRESETS: Record<CreateKind, { title: string; inputLabel: string; defaultName: string }> = {
+  notebook: { title: "新建笔记本", inputLabel: "笔记本名称", defaultName: "" },
+  group: { title: "新建分组", inputLabel: "分组名称", defaultName: "新建分组" },
+  note: { title: "新建文档", inputLabel: "文档名称", defaultName: "无标题文档" },
+  usheet: { title: "新建表格", inputLabel: "表格名称", defaultName: "无标题表格" },
+  bitable: { title: "新建多维表", inputLabel: "多维表名称", defaultName: "无标题多维表" },
+  board: { title: "新建画板", inputLabel: "画板名称", defaultName: "无标题画板" },
+  ink: { title: "新建手写板", inputLabel: "手写板名称", defaultName: "无标题手写板" },
+};
 
 /** 「新建子项」五个动作（单一来源：右键菜单「新建」子菜单 + 目录行「＋」快捷菜单共用）。 */
 const CREATE_CHILD_ITEMS: ReadonlyArray<{ kind: CreateChildKind; label: string; icon: React.ReactNode }> = [

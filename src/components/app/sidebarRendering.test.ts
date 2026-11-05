@@ -232,7 +232,7 @@ describe("目录行缓存：公共 Sidebar 的更新与交互", () => {
         ?.getAttribute("data-tree-node-id"),
     ).toBe("group");
   });
-  it("行内新建菜单作用于当前行，不吞掉事件", () => {
+  it("行内新建菜单作用于当前行：打开统一新建弹窗并预填默认名，不吞掉事件", () => {
     render();
     click(
       row("n3").querySelector<HTMLButtonElement>('[aria-label="新建子项"]')!,
@@ -242,7 +242,12 @@ describe("目录行缓存：公共 Sidebar 的更新与交互", () => {
     );
     expect(newDoc).toBeTruthy();
     click(newDoc!);
-    expect(props.onCreate).toHaveBeenCalledWith("note", "n3");
+    // 261105 用户验收：新建文档也改弹窗（预填「无标题文档」，提交才创建）
+    const input = document.body.querySelector<HTMLInputElement>('input[aria-label="文档名称"]');
+    expect(input).toBeTruthy();
+    expect(input!.value).toBe("无标题文档");
+    act(() => { input!.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })); });
+    expect(props.onCreate).toHaveBeenCalledWith("note", "n3", "无标题文档");
   });
   it("稳定保存失败回调源头，避免 onSelect 引用链再次失效", () => {
     const app = readFileSync(path.resolve("src/App.tsx"), "utf8");

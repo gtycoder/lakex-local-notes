@@ -25,11 +25,7 @@
 .create-menu small { margin-top: 1px; overflow: hidden; color: var(--lake-text-4); font-size: var(--lake-font-size-nano); text-overflow: ellipsis; white-space: nowrap; }
 
 /* 261006：左侧外边距并入本处（原 Sidebar 另给 inline marginLeft:8）——值收单一来源。 */
-.inline-create { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; align-items: center; gap: 5px; margin: 2px 7px 3px 8px; padding: 3px 5px; border: 0.5px solid var(--lake-accent-tint); border-radius: var(--lake-radius-sm); color: var(--lake-accent-text); background: var(--lake-bg-panel); }
 
-.inline-create input { min-width: 0; height: 22px; padding: 0; border: 0; outline: 0; color: var(--lake-text-1); background: transparent; font-size: var(--lake-font-size-tiny); }
-
-.inline-create button { height: 22px; padding: 0 6px; border: 0; border-radius: var(--lake-radius-xs); color: var(--lake-text-on-accent); background: var(--lake-accent); font-size: var(--lake-font-size-nano); }
 
 .note-list {flex: 1; min-height: 0;}
 
