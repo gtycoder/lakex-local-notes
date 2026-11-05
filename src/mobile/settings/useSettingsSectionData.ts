@@ -8,7 +8,8 @@ import { mobileCachePort } from "../native/cachePort";
 import { showToast } from "../ui/toastBus";
 import { notifyHistorySettingsChanged } from "../lib/historySettingsSync";
 
-type OrphanAsset = { id: number; noteId: string; filename: string; size: number; mimeType: string };
+/** 未引用的本地文件（资源管理「查看」明细面板与清理动作共用）。 */
+export type OrphanAsset = { id: number; noteId: string; filename: string; size: number; mimeType: string };
 type Diagnostics = {
   noteCount: number;
   folderCount: number;

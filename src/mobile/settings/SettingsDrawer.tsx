@@ -28,6 +28,7 @@ import { useSettingsSectionData } from "./useSettingsSectionData";
 import { useSyncSettingsForm } from "./useSyncSettingsForm";
 import { useMissingBodies } from "./useMissingBodies";
 import { MissingBodiesSheet, type MissingBodiesMode } from "./MissingBodiesSheet";
+import { ResourceCleanupSheet, type ResourceCleanupMode } from "./ResourceCleanupSheet";
 import { formatS3v3Diagnostics } from "../../core/s3v3Report";
 
 /** Lake 内核版本（AGENTS §2 已 pin v1.99.0，勿随意升级；升级内核时同步改这里与关于页）。 */
@@ -126,6 +127,17 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
   // 缺正文/缺小记（261104 B-lite）：进「资源管理」时扫一次，恢复动作后 reload 刷新计数。
   const missingBodies = useMissingBodies(open && view === "resources");
   const [missingSheet, setMissingSheet] = useState<MissingBodiesMode | null>(null);
+  /** 资源管理里的清理明细（261105）：删除入口只在这里出现，首页不暴露。 */
+  const [cleanupSheet, setCleanupSheet] = useState<ResourceCleanupMode | null>(null);
+  /** 云端清理保留二次确认（删的是云端对象，不可撤销）。 */
+  const requestCleanCloud = () => {
+    void confirmMobile({
+      title: "清理云端未引用文件？",
+      body: "将删除云端 7 天以上、没有任何文档或历史版本引用的文件，删除后无法撤销。本机笔记与附件不受影响。",
+      confirmText: "清理云端",
+      danger: true,
+    }).then((ok) => { if (ok) void cleanCloud(); });
+  };
   // SD-13：同步诊断文本（最近 3 轮；只存本机，复制给维护者排障）。
   const syncDiagText = formatS3v3Diagnostics(syncReports);
   const [syncDiagMsg, setSyncDiagMsg] = useState("");
@@ -437,18 +449,12 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                   {assetUsage ? assetUsage.files + " 个文件，" + formatBytes(assetUsage.bytes) : "统计中…"}
                 </span>
               </Block>
+              {/* 261105 用户点单：删除入口不再外露在资源管理首页，必须先点「查看」进入明细面板。 */}
               <Block itemId="resources-clean" name="未引用的本地文件" desc="删除正文图片后残留的本地文件（不会被上传，可安全清理）。">
-                <button className="mb-btn mb-btn--primary" disabled={orphans.length === 0 || orphanBusy} onClick={() => void cleanOrphans()}>清理全部（{orphans.length}）</button>
+                <button className="mb-btn mb-btn--primary" disabled={orphans.length === 0 || orphanBusy} onClick={() => setCleanupSheet("orphans")}>查看（{orphans.length}）</button>
               </Block>
               <Block itemId="resources-gc" name="云端未引用文件" desc="删除云端 7 天以上、没有被任何文档或历史版本引用的文件。">
-                <button className="mb-btn mb-btn--primary" disabled={orphanBusy || !canTouchNetwork(cloudState)} onClick={() => {
-                  void confirmMobile({
-                    title: "清理云端未引用文件？",
-                    body: "将删除云端 7 天以上、没有任何文档或历史版本引用的文件，删除后无法撤销。本机笔记与附件不受影响。",
-                    confirmText: "清理云端",
-                    danger: true,
-                  }).then((ok) => { if (ok) void cleanCloud(); });
-                }}>清理云端</button>
+                <button className="mb-btn mb-btn--primary" disabled={orphanBusy || !canTouchNetwork(cloudState)} onClick={() => setCleanupSheet("cloudGc")}>查看</button>
                 {(gcMsg || cloudBlockReason) && <div className="mb-form__desc">{gcMsg || cloudBlockReason}</div>}
               </Block>
               {missingBodies.docs.length > 0 && (
@@ -464,13 +470,6 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
               {orphans.length === 0 && missingBodies.docs.length === 0 && missingBodies.quickNotes.length === 0 && (
                 <div className="mb-empty mb-empty--inset">暂无冗余资源</div>
               )}
-              {orphans.map((o) => (
-                <div key={o.id} className="mb-row">
-                  <span className="mb-row__title">{o.filename}</span>
-                  <span className="mb-row__meta">{formatBytes(o.size)}</span>
-                  <button className="mb-iconbtn mb-row__action" onClick={() => void deleteOrphan(o.id)} aria-label="删除"><Trash size={16} /></button>
-                </div>
-              ))}
             </Group>
           )}
 
@@ -788,6 +787,19 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
         quickNotes={missingBodies.quickNotes}
         onClose={() => setMissingSheet(null)}
         onChanged={missingBodies.reload}
+      />
+      <ResourceCleanupSheet
+        open={cleanupSheet !== null}
+        mode={cleanupSheet ?? "orphans"}
+        orphans={orphans}
+        busy={orphanBusy}
+        cloudReady={canTouchNetwork(cloudState)}
+        cloudHint={cloudBlockReason ?? undefined}
+        gcMessage={gcMsg}
+        onClose={() => setCleanupSheet(null)}
+        onDeleteOrphan={(id) => void deleteOrphan(id)}
+        onCleanOrphans={() => void cleanOrphans()}
+        onCleanCloud={requestCleanCloud}
       />
 
       {previewNoteId && (
