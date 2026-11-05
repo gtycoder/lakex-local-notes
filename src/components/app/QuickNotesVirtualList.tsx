@@ -87,7 +87,7 @@ export function QuickNotesVirtualList<T extends { id: string }>({ items, mode, c
     if (event.target instanceof HTMLElement) setFocusedId(event.target.closest<HTMLElement>('[data-quick-note-id]')?.dataset.quickNoteId ?? null);
   };
   return <div ref={setRoot} className={className + (windowed ? " is-virtual" : "")} role="list" aria-label="小记列表"
-    onKeyDownCapture={navigate} onFocusCapture={heldFocus} onBlurCapture={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setFocusedId(null); }}>
+    onKeyDownCapture={navigate} onFocusCapture={heldFocus} onBlurCapture={(event) => { if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) setFocusedId(null); }}>
     {items.length === 0 ? empty : <div className="quick-notes-virtual-space" style={windowed ? { height: visible ? liveSize : lastVisible.current.size } : undefined}>
       {rows.map(row => <div key={row.id} ref={windowed ? virtualizer.measureElement : undefined} data-index={windowed ? row.index : undefined}
         className={windowed ? "quick-notes-virtual-item" : undefined} role="listitem" aria-posinset={row.index + 1} aria-setsize={items.length}

@@ -22,6 +22,19 @@ const render = async (keepIds: string[] = [], revealId: string | null = null) =>
 });
 const key = (element: Element, value: string) => act(() => { element.dispatchEvent(new KeyboardEvent("keydown", { key: value, bubbles: true, cancelable: true })); });
 describe("桌面小记窗口化", () => {
+  it("焦点离开窗口时允许Window目标，不把它当DOM节点传给contains", async () => {
+    await render(); const errors: string[] = [];
+    const onError = (event: ErrorEvent) => { errors.push(event.message); event.preventDefault(); };
+    window.addEventListener("error", onError);
+    try {
+      const button = host.querySelector<HTMLButtonElement>("button")!; act(() => button.focus());
+      // JSDOM的构造器不接受Window品牌，显式模拟窗口边界事件的目标。
+      const event = new FocusEvent("focusout", { bubbles: true });
+      Object.defineProperty(event, "relatedTarget", { value: window });
+      act(() => button.dispatchEvent(event));
+      expect(errors).toEqual([]);
+    } finally { window.removeEventListener("error", onError); }
+  });
   it("2万条只挂载视口附近条目，编辑和菜单锚点可在屏外保留", async () => {
     await render(["q15000", "q19000"]);
     const mounted = host.querySelectorAll("[data-quick-note-id]"); expect(mounted.length).toBeGreaterThan(0); expect(mounted.length).toBeLessThan(80);

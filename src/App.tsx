@@ -621,8 +621,9 @@ export function App() {
           onPointerMove={(e) => dispatchEdge({ type: "move" }, e.clientY)}
           onPointerLeave={(e) => {
             // 把手先收（不带条件）：只要指针离开热区/把手就退场——否则移到正文后把手会赖着不走。
-            const to = e.relatedTarget as Node | null;
-            const staysInShell = Boolean(to && e.currentTarget.closest(".app-shell")?.contains(to));
+            // React在指针离开窗口时可能给Window；contains只能接收DOM节点。
+            const to = e.relatedTarget;
+            const staysInShell = to instanceof Node && Boolean(e.currentTarget.closest(".app-shell")?.contains(to));
             dispatchEdge({ type: "leave", staysInShell }, e.clientY);
           }}
           onClick={() => dispatchEdge({ type: "click" }, 0)}
