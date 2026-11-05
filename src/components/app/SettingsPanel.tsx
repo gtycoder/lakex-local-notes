@@ -683,7 +683,7 @@ let verifiedS3Fingerprint: string | null = null;
                 <Item itemId="appearance-theme" name="主题">
                   <Seg ariaLabel="主题">
                     {LAKE_THEMES.map((t) => (
-                      <button key={t.id} className={`ln-btn ln-btn--secondary seg__item ${settings.theme === t.id ? "is-active" : ""}`} onClick={() => onChange({ theme: t.id })}>
+                      <button key={t.id} className={`ln-segment__item ${settings.theme === t.id ? "is-active" : ""}`} aria-pressed={settings.theme === t.id} onClick={() => onChange({ theme: t.id })}>
                         {t.id === "dark" ? <Moon size={14} /> : t.id === "warm" ? <Coffee size={14} /> : <Sun size={14} />} {t.label}
                       </button>
                     ))}

@@ -21,29 +21,32 @@ pre {
 }
 
 /* ── 设置面板版式（P5-d）─────────────────────────────────────────────
- * 类名是共享原语（src/components/ui/settingsPrimitives.tsx，移动端 SettingsDrawer 也用），
- * 所以**不改类名、也不动共享文件**：规格写在桌面专属的 feature 层并限定 .settings-panel 作用域
- * ⇒ 移动端不加载本层（它只 import styles/components.css 等），天然不受影响。
- * 规格来源：设计 COMPONENTS.md 15 表单行（卡 = --lake-bg-block / radius 10；行 ≥44px；
- * 标签 12/600 --lake-text-1；说明 10.5 --lake-text-3；控件右对齐固定列 200px）。
+ * 桌面原语为 src/components/ui/settingsPrimitives.tsx；手机/Pad 使用自己的 mb-set-* 与 kit.css。
+ * 本层只约束 .settings-panel，编辑器及其工具不继承管理表单档。
+ * 261105：行内距12、控件32、组间24；文字层级与输入右缘由本层统一，规格见 DESIGN.md。
  *
  * ⚠️ 共享层 !important 的两端约束（260923 W2/W4 收尾）：
  *   ① 【.config-items .ln-label__text】原在 b3/siyuan/business/_config.scss 的 font-size !important——
  *      已随 W2 整体删除 src/b3/** 一并消失，不再是阻塞项。
  *   ② 【.seg__item】4 处 !important 仍保留（styles/components.css）：双端共享 + @layer 的 !important
  *      反转层序 ⇒ 桌面 kit 无法在不影响移动端的前提下取代；正解是段控件改用 kit 的 ln-segment（后续）。*/
-.settings-panel .config-group { margin: 0 0 var(--lake-space-xl); }
+/* 261105：设置使用管理表单档；范围只在面板内，编辑工具与正文密度不变。 */
+.settings-panel {
+  --lake-ctl-h: var(--lake-ctl-h-settings);
+  --lake-ctl-h-sm: var(--lake-ctl-h-settings-sm);
+}
+.settings-panel .config-group { margin: 0 0 var(--lake-space-xxxl); }
 .settings-panel .config-group:last-child { margin-bottom: 0; }
 .settings-panel .config-title {
   margin: 0 0 var(--lake-space-md);
   color: var(--lake-text-2);
-  font-size: var(--lake-font-size-small);
+  font-size: var(--lake-font-size-body);
   font-weight: var(--lake-font-weight-semibold);
 }
 /* 260930 重做（用户：整页按 AI 页新风格统一）：分组内容由「灰底块」改成「一叠白卡」。
    卡 = 1px 边框 + 圆角；多段分组（AI 的 服务/凭据/模型与参数）各占一张卡，单段分组由
    Group 自动包一张匿名 Section —— 只有一个表面实现，不再靠 CSS 覆盖叠出来。 */
-.settings-panel .config-items { display: flex; flex-direction: column; gap: var(--lake-space-xl); }
+.settings-panel .config-items { display: flex; flex-direction: column; gap: var(--lake-space-lg); }
 .settings-panel .config-section {
   border: 0.5px solid var(--lake-border-1);
   border-radius: var(--lake-radius-md);
@@ -53,19 +56,19 @@ pre {
 /* 261029 用户点单：去掉分组标题的灰底色（此前 --lake-bg-subtle 在 AI 页被当成"灰色衔接条"，很丑）。
    标题只做文字层级 + 一条细线；分组边界由卡片自身的 0.5px 边承担。 */
 .settings-panel .config-section__title {
-  padding: 10px 16px;
+  padding: var(--lake-space-lg) var(--lake-space-xl);
   border-bottom: 0.5px solid var(--lake-border-2);
   background: transparent;
   color: var(--lake-text-3);
-  font-size: var(--lake-font-size-tiny);
+  font-size: var(--lake-font-size-small);
   font-weight: var(--lake-font-weight-semibold);
 }
 .settings-panel .config-item,
 .settings-panel .config-block {
-  padding: 14px 16px;
+  padding: var(--lake-space-lg) var(--lake-space-xl);
   border-bottom: 0.5px solid var(--lake-border-2);
 }
-.settings-panel .config-item { min-height: 52px; }
+.settings-panel .config-item { min-height: calc(var(--lake-ctl-h) + var(--lake-space-xxxl)); }
 .settings-panel .config-item:last-child,
 .settings-panel .config-block:last-child { border-bottom: 0; }
 .settings-panel .config-item:hover { background: var(--lake-bg-hover); }
@@ -78,6 +81,8 @@ pre {
 }
 /* 名称行可带状态徽章（如 API Key 的「已保存」）：行内对齐，不要让图标/徽章把标题顶歪 */
 .settings-panel .config-name { display: flex; align-items: center; gap: var(--lake-space-sm); flex-wrap: wrap; }
+/* 说明紧跟名称，稍大一档便于阅读；增加组间距而非整行留白。 */
+.settings-panel .ln-label__text { margin-top: var(--lake-space-xs); font-size: var(--lake-font-size-tiny); line-height: var(--lake-line-height-snug); }
 .settings-panel .config-block__text { color: var(--lake-text-3); font-size: var(--lake-font-size-small); }
 .settings-panel .config-item__ctl { flex: 0 0 auto; min-width: 200px; justify-content: flex-end; }
 /* 表单行（Field）：标题/说明在左、控件在右的单行版式（用户 261007：短配置不再堆叠）。
@@ -95,7 +100,7 @@ pre {
 .settings-panel .config-note {
   margin-top: var(--lake-space-sm);
   color: var(--lake-text-3);
-  font-size: var(--lake-font-size-micro);
+  font-size: var(--lake-font-size-tiny);
   line-height: var(--lake-line-height-snug);
 }
 .settings-panel .config-item__error { color: var(--lake-status-error); }

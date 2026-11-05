@@ -136,6 +136,8 @@
    * 不再各写一份高度/圆角/禁用透明度。**高度沿用产品现状，不改变行布局节奏。** */
   --lake-ctl-h: 27px;            /* 标准控件高：按钮 / 图标按钮 / 输入 / 下拉 / 列表行 / 菜单项 */
   --lake-ctl-h-sm: 22px;         /* 紧凑控件高：图标按钮 --compact / 分段内段 / 页签右侧动作 */
+  --lake-ctl-h-settings: 32px;   /* 管理表单档：只在设置面板内启用，编辑区继续使用 27/22。 */
+  --lake-ctl-h-settings-sm: 27px; /* 32px 轨道减去 1px 边界与两侧 2px 内距，保持同心圆角。 */
   --lake-ctl-rad: var(--lake-radius-sm);   /* 控件圆角（8） */
   --lake-ctl-rad-sm: var(--lake-radius-xs); /* 紧凑控件圆角（6） */
   --lake-ctl-border: var(--lake-border-strong); /* 控件静息边：比分隔线更明确，输入类控件才「看得见」 */

@@ -111,7 +111,7 @@ export function Shortcut({ itemId, name, keys }: { itemId?: string; name: string
 
 /** 互斥选项组（字号、主题）。 */
 export function Seg({ ariaLabel, children }: { ariaLabel: string; children: ReactNode }) {
-  return <div className="seg" role="group" aria-label={ariaLabel}>{children}</div>;
+  return <div className="ln-segment" role="group" aria-label={ariaLabel}>{children}</div>;
 }
 
 /** 数字设置项：保留原有"空值回退默认 + 下限钳制"语义。 */

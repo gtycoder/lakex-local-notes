@@ -27,8 +27,8 @@ html[data-form-factor="expanded"] {
 /* ==== 平板 / 折叠屏的通用几何（261103 A4：从 mobile.css 整体搬来，这里是唯一归属）====
  * 判据唯一 = html[data-form-factor]（来源 src/mobile/pad/formFactor.ts）。
  * 口径：medium（600–799）与 expanded（≥800）内容限宽/居中、设置页加宽；compact（手机）规则不在这里。 */
-html[data-form-factor="medium"] .mobile-settings-page,
-html[data-form-factor="expanded"] .mobile-settings-page { width: min(92%, 440px); }
+html[data-form-factor="medium"] .mobile-settings-page:not(.mobile-settings-page--full),
+html[data-form-factor="expanded"] .mobile-settings-page:not(.mobile-settings-page--full) { width: min(92%, 440px); }
 html[data-form-factor="medium"] .nb-shelf,
 html[data-form-factor="medium"] .nb-list,
 html[data-form-factor="medium"] .mobile-scroll,

@@ -446,7 +446,14 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
  * 放在页中线上；右槽曾用 18px 的小变体 ⇒ 标题比页中线偏右 11px（261029 实测 217 vs 206）。 */
 .mobile-settings-spacer { flex: 0 0 auto; width: 40px; }
 
-.mobile-settings-content { flex: 1; overflow-y: auto; background: var(--lake-bg-window); padding: 8px 16px calc(16px + env(safe-area-inset-bottom, 0px)); }
+.mobile-settings-content {
+  flex: 1; overflow-y: auto; background: var(--lake-bg-window);
+  padding: var(--lake-space-lg) var(--mb-page-pad) calc(var(--mb-page-pad) + var(--mobile-bottom-safe-area));
+  width: 100%; max-width: 960px; align-self: center;
+  --mb-set-main-basis: 0;
+  --mb-set-main-gap: var(--lake-space-xs);
+  --mb-set-name-weight: var(--lake-font-weight-medium);
+}
 
 /* 设置子页现在整屏走 mb-set-* 原语（settingsPrimitives.tsx）；原先那几条 config 与 b3 类兜底规则
    在 P4 重写后已永不命中 ⇒ 261013 删除（移动端 TSX 的这两类类名 token 由护栏卡成 0）。 */

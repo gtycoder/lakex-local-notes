@@ -44,7 +44,7 @@ export function Item({ itemId, name, desc, pathDesc, children }: { itemId?: stri
         <div className="mb-set-name">{name}</div>
         {desc && <div className="mb-set-item__desc">{desc}</div>}
       </div>
-      {children && (<><span className="mb-spacer" /><div className="mb-set-item__ctl">{children}</div></>)}
+      {children && <div className="mb-set-item__ctl">{children}</div>}
     </div>
   );
 }
@@ -84,7 +84,6 @@ export function Switch({ itemId, name, desc, note, checked, disabled, onChange }
         {desc && <div className="mb-set-item__desc">{desc}</div>}
         {note && <div className="mb-set-item__note">{note}</div>}
       </div>
-      <span className="mb-spacer" />
       <button
         type="button"
         role="switch"
@@ -105,7 +104,6 @@ export function Shortcut({ itemId, name, keys }: { itemId?: string; name: string
   return (
     <div className="mb-set-item" data-set-id={itemId}>
       <div className="mb-set-item__main"><div className="mb-set-name">{name}</div></div>
-      <span className="mb-spacer" />
       <div className="mb-set-item__ctl"><kbd className="mb-kbd">{keys}</kbd></div>
     </div>
   );
