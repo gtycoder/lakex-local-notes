@@ -68,16 +68,57 @@ const byAria = (label: string): HTMLButtonElement => {
 };
 
 describe("TagsWorkspace（标签空间）", () => {
-  it("目录：名称 + 文档/小记数 + 更新时间；先给出选择提示", () => {
+  it("左栏只展示名称（无条数/更新时间）；头部有 ＋新建/刷新 两个按钮；⋯ 菜单固定可见", () => {
     render();
     expect(document.body.textContent).toContain("灵感");
     expect(document.body.textContent).toContain("项目");
-    expect(document.body.textContent).toContain("2 个标签");
-    // 灵感：文档 2 篇（n1/n2）、小记 1 条（q1）；行操作入口 = 固定可见的 ⋯ 菜单
-    expect(byAria("标签操作 灵感")).toBeTruthy();
+    // 用户验收：条数（文2 记0）与更新时间都只在选中后于中栏摘要展示 ⇒ 左行文本里不出现
+    const rowText = [...document.body.querySelectorAll(".tags-dir__row")].map((row) => row.textContent ?? "").join("|");
+    expect(rowText).not.toMatch(/文\s*\d|记\s*\d/);
+    expect(document.body.textContent).not.toMatch(/\d{4}-\d{2}-\d{2}/);
+    // 头部两个 icon 按钮（顺序：＋ 在前、刷新在后）
+    const headButtons = [...document.body.querySelectorAll(".tags-dir__head button")].map((btn) => btn.getAttribute("aria-label"));
+    expect(headButtons).toContain("新建标签");
+    expect(headButtons).toContain("刷新标签");
+    expect(headButtons.indexOf("新建标签")).toBeLessThan(headButtons.indexOf("刷新标签"));
+    // 行操作入口 = 固定可见的 ⋯ 菜单
     expect(byAria("标签操作 灵感").getAttribute("aria-haspopup")).toBe("menu");
     expect(byAria("标签操作 灵感").getAttribute("aria-expanded")).toBe("false");
     expect(document.body.textContent).toContain("从左侧选择一个标签");
+  });
+
+  it("三栏可拖：两条 SplitHandle（目录/预览）+ 默认宽度 aria-valuenow", () => {
+    render();
+    const handles = [...document.body.querySelectorAll<HTMLElement>('[role="separator"]')];
+    const labels = handles.map((el) => el.getAttribute("aria-label"));
+    expect(labels).toEqual(expect.arrayContaining(["调整标签目录宽度", "调整标签预览宽度"]));
+    const dirHandle = document.body.querySelector<HTMLElement>('[role="separator"][aria-label="调整标签目录宽度"]')!;
+    const previewHandle = document.body.querySelector<HTMLElement>('[role="separator"][aria-label="调整标签预览宽度"]')!;
+    expect(dirHandle).toBeTruthy();
+    expect(previewHandle).toBeTruthy();
+    expect(dirHandle.getAttribute("aria-valuenow")).toBe("260");
+    expect(previewHandle.getAttribute("aria-valuenow")).toBe("380");
+    expect(dirHandle.getAttribute("tabindex")).toBe("0");
+    // 键盘微调：← 收窄左栏 16px（接线到 onPreview/onCommit）
+    act(() => { dirHandle.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true })); });
+    expect(document.body.querySelector<HTMLElement>('[role="separator"][aria-label="调整标签目录宽度"]')!.getAttribute("aria-valuenow")).toBe("244");
+  });
+
+  it("头部刷新按钮触发 onReload；新建按钮展开内联输入", () => {
+    const merged = render();
+    act(() => byAria("刷新标签").click());
+    expect(merged.onReload).toHaveBeenCalledTimes(1);
+    act(() => byAria("新建标签").click());
+    expect(document.body.querySelector('input[aria-label="新标签名称"]')).not.toBeNull();
+  });
+
+  it("选中标签后中栏摘要含条数与「更新于 …」", () => {
+    render();
+    act(() => byText("灵感")!.closest("button")!.click());
+    const hint = document.querySelector(".tags-aggregate__hint")!.textContent ?? "";
+    expect(hint).toContain("2 篇文档");
+    expect(hint).toContain("1 条小记");
+    expect(hint).toContain("更新于");
   });
 
   it("选中标签 ⇒ 文档分组 + 小记分组，各自按更新时间倒序", () => {

@@ -3,7 +3,7 @@
  * DT-09 行为护栏：桌面顶栏左侧 4 份 → **1 个渲染点**。
  *
  * 锁四件事：
- *  ① 五个空间（资料库/小记/标签/回收站/资源，261105 P1 +「标签」）复用**同一个**顶栏元素（App 里只构造一份）；
+ *  ① 五个空间（文档/小记/标签/回收站/资源，261105 P1 +「标签」）复用**同一个**顶栏元素（App 里只构造一份）；
  *     DOM 仍是 5 份、外壳构成与内容不变
  *     （keep-alive 下 3 份是隐藏副本），因此几何/外观不会因为合并而变化；
  *  ② 只有「活动空间那一份」接管 App 的共享 ref（`wsMenuWrapRef` / `syncBtnRef` ——
@@ -28,10 +28,10 @@ const nativeMock = vi.hoisted(() => ({
 }));
 vi.mock("../lib/native", () => ({ native: nativeMock }));
 
-// P1：+「标签」一级入口（与 资料库/小记 并列）
+// P1：+「标签」一级入口（与 文档/小记 并列）；261105 用户验收：空间名「资料库」改为「文档」
 const SLOTS: DesktopWorkspace[] = ["library", "quick-notes", "tags", "trash", "resources"];
 const SPACE_LABEL: Record<DesktopWorkspace, string> = {
-  library: "资料库",
+  library: "文档",
   "quick-notes": "小记",
   tags: "标签",
   trash: "回收站",

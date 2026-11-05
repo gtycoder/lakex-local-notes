@@ -1,8 +1,26 @@
-import { Suspense, lazy, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Check, FileText, GripVertical, MoreVertical, Merge, Pencil, Plus, RefreshCw, StickyNote, Tag as TagIcon, Trash, X } from "lucide-react";
 import { Dialog, Menu } from "../../components/ui/Overlay";
 import { InlineRenameInput } from "../../components/ui/InlineRenameInput";
 import { usePopoverPosition } from "../../hooks/usePopoverPosition";
+import { SplitHandle } from "../../components/ui/SplitHandle";
+import { writeLocalStorage } from "../../lib/localStorageSafe";
+import {
+  TAG_DIR_DEFAULT,
+  TAG_DIR_MAX,
+  TAG_DIR_MIN,
+  TAG_LAYOUT_DEFAULTS,
+  TAG_LAYOUT_STORAGE_KEY,
+  TAG_PREVIEW_DEFAULT,
+  TAG_PREVIEW_MAX,
+  TAG_PREVIEW_MIN,
+  clampTagDirWidth,
+  clampTagPreviewWidth,
+  parseStoredTagLayout,
+  resolveTagColumns,
+  serializeTagLayout,
+  type TagSpaceWidths,
+} from "./tagsLayout";
 import { useConfirm } from "../../hooks/useConfirm";
 import { getNativeErrorMessage } from "../../lib/nativeErrors";
 import type { NoteSummary, QuickNoteListSummary, QuickNoteTag } from "../../lib/types";
@@ -83,6 +101,18 @@ export function TagsWorkspace(props: TagsWorkspaceProps) {
   const [newTagName, setNewTagName] = useState("");
   /** 行操作 ⋯ 菜单（固定可见入口；重命名 / 合并到… / 删除）。 */
   const [rowMenu, setRowMenu] = useState<{ id: string; anchor: HTMLElement } | null>(null);
+  /** 三栏可拖：宽度设备本地持久化（左 200–480 / 右 240–720，中栏自适应最小 360）。 */
+  const colsRef = useRef<HTMLDivElement>(null);
+  const [widths, setWidths] = useState<TagSpaceWidths>(() => {
+    try {
+      const stored = parseStoredTagLayout(typeof window === "undefined" ? null : window.localStorage.getItem(TAG_LAYOUT_STORAGE_KEY));
+      return stored ?? TAG_LAYOUT_DEFAULTS;
+    } catch {
+      return TAG_LAYOUT_DEFAULTS;
+    }
+  });
+  // 容器宽度：首帧用窗口宽兜底（未测量前也能渲染 split；jsdom/无 RO 环境同样有值）。
+  const [containerWidth, setContainerWidth] = useState<number>(() => (typeof window === "undefined" ? 1200 : window.innerWidth));
   const [busy, setBusy] = useState(false);
   const [reloading, setReloading] = useState(false);
   const [previewItem, setPreviewItem] = useState<TagAggregateItem | null>(null);
@@ -100,6 +130,28 @@ export function TagsWorkspace(props: TagsWorkspaceProps) {
   /** 行操作 ⋯ 菜单的目标行 + 锚点定位（测量式，不自夹）。 */
   const rowMenuEntry = rowMenu ? directory.find((entry) => entry.id === rowMenu.id) ?? null : null;
   const rowMenuPos = usePopoverPosition({ open: rowMenuEntry !== null, anchor: rowMenu?.anchor, gap: 4, margin: 6 });
+
+  /** 三栏栅格：够宽 = 左右固定 px + 中栏 minmax(360px,1fr)；过窄 = CSS 固定比例（handle 隐藏）。 */
+  const columns = resolveTagColumns(containerWidth, widths);
+  const commitWidths = useCallback((next: TagSpaceWidths) => {
+    setWidths(next);
+    writeLocalStorage(TAG_LAYOUT_STORAGE_KEY, serializeTagLayout(next));
+  }, []);
+  useEffect(() => {
+    const element = colsRef.current;
+    if (!element || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => {
+      const width = element.getBoundingClientRect().width;
+      setContainerWidth(width > 0 ? width : window.innerWidth);
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+  /** 选中标签后的中栏摘要：「N 篇文档、M 条小记 + 更新于 …」（左栏行不再展示条数/时间）。 */
+  const latestUpdatedAt = useMemo(() => {
+    const times = [...aggregate.docs, ...aggregate.quickNotes].map((item) => item.updatedAt).filter((value) => !!value).sort();
+    return times.length > 0 ? times[times.length - 1] : (selected?.updatedAt ?? "");
+  }, [aggregate, selected]);
 
   // 目录变化后（删除/合并/远端同步）选中项失效 ⇒ 回到"未选中"而不是显示空标签。
   useEffect(() => {
@@ -256,17 +308,20 @@ export function TagsWorkspace(props: TagsWorkspaceProps) {
 
   return (
     <section className="tags-space" aria-label="标签" data-tags-space={active ? "active" : "idle"}>
-      <header className="tags-space__head">
-        <h1 className="tags-space__title"><TagIcon size={16} aria-hidden="true" />标签</h1>
-        <span className="tags-space__count">{directory.length} 个标签</span>
-        {available && (
-          <button type="button" className="ln-btn ln-btn--secondary tags-space__new" aria-label="新建标签" disabled={busy}
-            onClick={startCreating}><Plus size={13} aria-hidden="true" />新建标签</button>
-        )}
-        <button type="button" className="ln-iconbtn ln-iconbtn--compact" aria-label="刷新标签" title="刷新" disabled={reloading}
-          onClick={() => void reload()}><RefreshCw size={14} className={reloading ? "spin" : undefined} /></button>
-      </header>
-      <div className="tags-space__cols">
+      <div className={"tags-space__cols" + (columns.mode === "fallback" ? " is-fallback" : "")} ref={colsRef}
+        style={columns.templateColumns ? { gridTemplateColumns: columns.templateColumns } : undefined}>
+        {/* 左栏 = 像文档目录栏：头部标题 + 计数 +「＋新建标签」「刷新」两个 icon 按钮 */}
+        <div className="tags-dir-pane">
+        <header className="tags-dir__head">
+          <h1 className="tags-space__title"><TagIcon size={15} aria-hidden="true" />标签</h1>
+          <span className="tags-space__count">{directory.length}</span>
+          {available && (
+            <button type="button" className="ln-iconbtn ln-iconbtn--compact" aria-label="新建标签" title="新建标签" disabled={busy}
+              onClick={startCreating}><Plus size={14} /></button>
+          )}
+          <button type="button" className="ln-iconbtn ln-iconbtn--compact" aria-label="刷新标签" title="刷新标签" disabled={reloading}
+            onClick={() => void reload()}><RefreshCw size={14} className={reloading ? "spin" : undefined} /></button>
+        </header>
         <div className="tags-dir" role="listbox" aria-label="标签目录">
           {creating && (
             <div className="tags-dir__create">
@@ -302,13 +357,9 @@ export function TagsWorkspace(props: TagsWorkspaceProps) {
                     ariaLabel={"重命名标签 " + entry.name} emptyPolicy="reject"
                     onChange={setEditName} onCommit={() => void saveRename(entry)} onCancel={() => setEditingId(null)} />
                 ) : (
+                  // 用户验收：左行只留名称（条数与更新时间只在选中后于中栏摘要展示）
                   <button type="button" className="tags-dir__select" onClick={() => setSelectedTagId(entry.id)} title={entry.name}>
                     <span className="ln-ellipsis tags-dir__name">{entry.name}</span>
-                    <span className="tags-dir__counts">
-                      <span title={"文档 " + entry.docCount + " 篇"}>文 {entry.docCount}</span>
-                      <span title={"小记 " + entry.quickNoteCount + " 条"}>记 {entry.quickNoteCount}</span>
-                    </span>
-                    <time className="tags-dir__time" dateTime={entry.updatedAt}>{formatUpdated(entry.updatedAt)}</time>
                   </button>
                 )}
                 {editingId === entry.id ? (
@@ -326,6 +377,18 @@ export function TagsWorkspace(props: TagsWorkspaceProps) {
               </div>
             ))}
         </div>
+        </div>
+        <SplitHandle
+          ariaLabel="调整标签目录宽度"
+          className="tags-split tags-split--dir"
+          containerRef={colsRef}
+          width={columns.dir}
+          minWidth={TAG_DIR_MIN}
+          maxWidth={TAG_DIR_MAX}
+          softClamp={(next) => clampTagDirWidth(next, containerWidth, widths.preview)}
+          onPreview={(next) => setWidths((current) => ({ ...current, dir: clampTagDirWidth(next, containerWidth, current.preview) }))}
+          onCommit={(next) => commitWidths({ ...widths, dir: next ?? TAG_DIR_DEFAULT })}
+        />
         <div className="tags-aggregate" aria-label="标签内容">
           <div className="ln-tabs tags-aggregate__tabs" role="tablist" aria-label="内容类型">
             {KIND_TABS.map((tab) => (
@@ -334,9 +397,26 @@ export function TagsWorkspace(props: TagsWorkspaceProps) {
                 onClick={() => setKindFilter(tab.id)}>{tab.label}</button>
             ))}
           </div>
-          {selected && <p className="tags-aggregate__hint">「{selected.name}」：{aggregate.docs.length} 篇文档、{aggregate.quickNotes.length} 条小记（按更新时间倒序）</p>}
+          {selected && (
+            <p className="tags-aggregate__hint">
+              「{selected.name}」：{aggregate.docs.length} 篇文档、{aggregate.quickNotes.length} 条小记（按更新时间倒序）
+              {latestUpdatedAt ? "；更新于 " + formatUpdated(latestUpdatedAt) : ""}
+            </p>
+          )}
           {aggregateBody}
         </div>
+        <SplitHandle
+          ariaLabel="调整标签预览宽度"
+          className="tags-split tags-split--preview"
+          containerRef={colsRef}
+          width={columns.preview}
+          minWidth={TAG_PREVIEW_MIN}
+          maxWidth={TAG_PREVIEW_MAX}
+          invert
+          softClamp={(next) => clampTagPreviewWidth(next, containerWidth, widths.dir)}
+          onPreview={(next) => setWidths((current) => ({ ...current, preview: clampTagPreviewWidth(next, containerWidth, current.dir) }))}
+          onCommit={(next) => commitWidths({ ...widths, preview: next ?? TAG_PREVIEW_DEFAULT })}
+        />
         <div className="tags-preview" aria-label="只读预览">
           {!previewItem ? (
             <p className="tags-empty tags-empty--inset" role="status">选择一条内容查看只读预览。</p>

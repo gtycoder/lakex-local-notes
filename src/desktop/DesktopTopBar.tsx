@@ -27,7 +27,7 @@ export interface DesktopTopBarLeadingProps {
 }
 
 const SPACE_META: Record<DesktopWorkspace, { label: string; Icon: typeof Files }> = {
-  library: { label: "资料库", Icon: Files },
+  library: { label: "文档", Icon: Files },
   "quick-notes": { label: "小记", Icon: Feather },
   tags: { label: "标签", Icon: Tag },
   trash: { label: "回收站", Icon: Trash },
@@ -87,10 +87,10 @@ export interface DesktopWorkspaceMenuProps {
 
 /** 合一菜单条目（空间 ⊕ 工作空间）；由 DesktopOverlays 的 top-menu 渲染。 */
 export function DesktopWorkspaceMenuItems({ desktopWorkspace, onSwitchWorkspace, onOpenSettings }: DesktopWorkspaceMenuProps) {
-  // 用户 261006：上半「空间」只剩资料库/小记（带 ⌘1/⌘2）；回收站与资源下沉到「工作空间」，
+  // 用户 261006：上半「空间」只剩文档/小记（带 ⌘1/⌘2）；回收站与资源下沉到「工作空间」，
   // 与偏好设置并列、且**都不再给快捷键**（⌘3 的绑定与提示一并去掉）。
   const spaces: Array<{ id: DesktopWorkspace; label: string; Icon: typeof Files; hint?: string }> = [
-    { id: "library", label: "资料库", Icon: Files, hint: "⌘1" },
+    { id: "library", label: "文档", Icon: Files, hint: "⌘1" },
     { id: "quick-notes", label: "小记", Icon: Feather, hint: "⌘2" },
     // P1 一级入口：标签空间 = 只读聚合视图 + 就地元数据管理（不是新数据空间）。
     { id: "tags", label: "标签", Icon: Tag },

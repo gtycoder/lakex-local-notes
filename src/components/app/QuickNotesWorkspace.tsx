@@ -1269,7 +1269,7 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
           <p>选择一个笔记本。{convertItems.length > 1 ? `${convertItems.length} 篇小记将依次插入该笔记本的最顶部；` : "新文档将插入其中的最顶部；"}转化完成后，小记将从时间线移除。</p>
           <div className="quick-note-notebook-list ln-list-panel ln-list-panel--background">
             {notebooks.map((notebook) => <button key={notebook.id} className="ln-list-item" disabled={saving} onClick={() => void convert(notebook.id)}><span className="ln-list-item__graphic"><FilePlus size={14} /></span><span className="ln-list-item__text ln-ellipsis">{notebook.title}</span></button>)}
-            {notebooks.length === 0 && <span className="ln-empty">请先在资料库中新建一个笔记本。</span>}
+            {notebooks.length === 0 && <span className="ln-empty">请先在文档中新建一个笔记本。</span>}
           </div>
           <footer><button className="ln-btn ln-btn--ghost" disabled={saving} onClick={() => setConvertItems(null)}>取消</button></footer>
         </div>

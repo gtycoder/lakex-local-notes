@@ -22,7 +22,7 @@ const NOTE_TAG_DIALOG = read("./NoteTagDialog.tsx");
 const TAGS_WORKSPACE = read("../../features/tags/TagsWorkspace.tsx");
 
 describe("标签空间接线（P1）", () => {
-  it("一级入口：空间类型 + 顶栏空间菜单 + App 视图（与 资料库/小记 并列）", () => {
+  it("一级入口：空间类型 + 顶栏空间菜单 + App 视图（与 文档/小记 并列）", () => {
     expect(TYPES).toContain('"tags"');
     expect(TOPBAR).toContain('tags: { label: "标签", Icon: Tag }');
     expect(TOPBAR).toContain('{ id: "tags", label: "标签", Icon: Tag }');
@@ -85,6 +85,29 @@ describe("标签空间接线（P1）", () => {
     expect(SIDEBAR).toContain("onChanged={() => props.onTagsChanged?.()}");
     expect(APP).toContain("onTagsChanged={() => { void tagSpace.reload(); }}");
     expect(NOTE_TAG_DIALOG).toContain("<NoteTagRow noteId={noteId} onChanged={onChanged}");
+  });
+
+  it("261105 验收：空间名「资料库」→「文档」；三栏可拖（SplitHandle + tagsLayout）；头部按钮移到左栏", () => {
+    const TOPBAR_SRC = read("../../desktop/DesktopTopBar.tsx");
+    expect(TOPBAR_SRC).toContain('library: { label: "文档", Icon: Files },');
+    expect(TOPBAR_SRC).toContain('{ id: "library", label: "文档", Icon: Files, hint: "⌘1" },');
+    // 三栏：两条 SplitHandle（目录/预览）+ 纯逻辑在 tagsLayout
+    expect(TAGS_WORKSPACE).toContain("<SplitHandle");
+    expect(TAGS_WORKSPACE).toContain('ariaLabel="调整标签目录宽度"');
+    expect(TAGS_WORKSPACE).toContain('ariaLabel="调整标签预览宽度"');
+    expect(TAGS_WORKSPACE).toContain("resolveTagColumns(containerWidth, widths)");
+    expect(TAGS_WORKSPACE).toContain("TAG_LAYOUT_STORAGE_KEY");
+    expect(TAGS_WORKSPACE).toContain("writeLocalStorage(TAG_LAYOUT_STORAGE_KEY");
+    // 头部：左栏头部两个 icon 按钮（＋在前、刷新在后），页面级刷新已移除
+    expect(TAGS_WORKSPACE).toContain('<header className="tags-dir__head">');
+    expect(TAGS_WORKSPACE).not.toContain("tags-space__head");
+    expect(TAGS_WORKSPACE.split('aria-label="刷新标签"').length - 1).toBe(1);
+    const headBlock = TAGS_WORKSPACE.slice(TAGS_WORKSPACE.indexOf('<header className="tags-dir__head">'), TAGS_WORKSPACE.indexOf("</header>"));
+    expect(headBlock.indexOf("新建标签")).toBeLessThan(headBlock.indexOf("刷新标签"));
+    // 左栏行：只剩名称（条数/时间只在选中后的中栏摘要）
+    const selectBlock = TAGS_WORKSPACE.slice(TAGS_WORKSPACE.indexOf('className="tags-dir__select"'), TAGS_WORKSPACE.indexOf("</button>", TAGS_WORKSPACE.indexOf('className="tags-dir__select"')));
+    expect(selectBlock).not.toContain("tags-dir__counts");
+    expect(selectBlock).not.toContain("tags-dir__time");
   });
 
   it("属性面板：标签编辑行（标签目录 + 文档关系读写）", () => {

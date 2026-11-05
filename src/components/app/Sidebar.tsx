@@ -727,7 +727,7 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
       }} onClose={() => setIconPicker(null)} />}
       <SplitHandle
         className="sidebar-resize-handle desktop-only"
-        ariaLabel="调整资料库宽度"
+        ariaLabel="调整文档目录宽度"
         minWidth={props.minWidth}
         maxWidth={props.maxWidth}
         width={props.width}

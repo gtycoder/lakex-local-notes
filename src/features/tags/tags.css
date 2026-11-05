@@ -14,17 +14,19 @@
   background: var(--lake-bg-panel);
 }
 
-.tags-space__head {
+/* 左目录栏头部（像文档目录栏）：标题 + 总数 +「＋新建标签」「刷新」两个 icon 按钮 */
+.tags-dir__head {
   display: flex;
   flex: none;
   align-items: center;
-  gap: var(--lake-space-sm);
-  padding: var(--lake-space-sm) var(--lake-space-md);
+  gap: 6px;
+  padding: var(--lake-space-xs) var(--lake-space-sm);
   border-bottom: 0.5px solid var(--lake-border-1);
 }
 
 .tags-space__title {
   display: flex;
+  flex: none;
   align-items: center;
   gap: var(--lake-space-xs);
   margin: 0;
@@ -40,14 +42,18 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* 默认 = 窄窗兜底：固定比例、三条栅格（不渲染分隔条列） */
 .tags-space__cols {
   display: grid;
   flex: 1 1 auto;
-  grid-template-columns: minmax(200px, 260px) minmax(0, 1.1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(200px, 0.85fr) minmax(360px, 1.35fr) minmax(240px, 1fr);
   min-height: 0;
 }
 
-.tags-dir,
+/* 窗口够宽时由内联 style 换成「左px 5px 中1fr 5px 右px」五列可拖栅格 */
+.tags-space__cols.is-fallback .tags-split { display: none; }
+
+.tags-dir-pane,
 .tags-aggregate,
 .tags-preview {
   display: flex;
@@ -57,14 +63,23 @@
   overflow: hidden;
 }
 
-.tags-dir,
+.tags-dir-pane,
 .tags-aggregate {
   border-right: 0.5px solid var(--lake-border-1);
 }
 
 .tags-dir {
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
   padding: var(--lake-space-xs);
+}
+
+/* 两条可拖分隔条（SplitHandle）：定位类只给宽与拉伸，视觉基线留在 kit 的 .ln-split-handle */
+.tags-split {
+  position: relative;
+  width: 5px;
+  align-self: stretch;
 }
 
 .tags-dir__row {
@@ -109,19 +124,10 @@
   font-variant-numeric: tabular-nums;
 }
 
-.tags-dir__time {
-  flex: none;
-  color: var(--lake-text-4);
-  font-size: var(--lake-font-size-tiny);
-  font-variant-numeric: tabular-nums;
-}
-
 .tags-dir__rename { flex: 1 1 auto; min-width: 0; }
 .tags-dir__danger { color: var(--lake-status-error); }
 
-/* 新建标签入口（目录头部 + 空目录 CTA）与内联输入行 */
-.tags-space__new { flex: none; }
-
+/* 空目录 CTA 与内联新建输入行 */
 .tags-dir__empty {
   display: flex;
   flex-direction: column;
