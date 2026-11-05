@@ -8,7 +8,8 @@
 import { NativeSqliteDb } from "../native/nativeSqliteDb";
 
 import { applyMobileSchema } from "../data/schema";
-import { migrateTagAbsence } from "../data/quickNoteTagsRepository";
+import { listQuickNoteTags, migrateTagAbsence } from "../data/quickNoteTagsRepository";
+import { cleanupOrphanNoteTagLinks } from "../data/noteTagLinksRepository";
 import { seedWelcomeQuickNote } from "../data/welcomeQuickNote";
 import { ensureV3StateTable } from "../data/v3StateRepository";
 import { reconcileIndex } from "../data/searchIndex";
@@ -101,6 +102,12 @@ export async function initializeDb(): Promise<NativeSqliteDb> {
   // **必须在第一次同步前跑**（同步端口进来时旧墓碑不能还在表里，否则会被当成 active 上传）。
   // 失败不置标记且事务回滚 ⇒ 下次开库重试；启动不因此中断（旧墓碑仍被 list 过滤掉，不会误发布）。
   try { await migrateTagAbsence(openedDb); } catch (error) { console.warn("[tags] 标签墓碑迁移失败（下次开库重试）：", error); }
+  // 261105 P1：启动自检清理「文档关系指向不存在标签」的孤儿行（目录唯一来源 = tags 表）。
+  try {
+    const tags = await listQuickNoteTags(openedDb);
+    const cleaned = await cleanupOrphanNoteTagLinks(openedDb, new Set(tags.map((tag) => tag.id)));
+    if (cleaned > 0) console.warn("[tags] 启动清理孤儿文档标签关系 " + cleaned + " 行");
+  } catch (error) { console.warn("[tags] 孤儿文档标签关系清理失败：", error); }
   db = openedDb;
   // 首启默认小记（261029 用户点单）：全新库写入与桌面欢迎文档同一份欢迎页（含 Gitee/GitHub 使用说明链接）。
   // 必须在 reconcileIndex 之前写，索引重建才能把它一起收进去；内部失败只 warn，不阻断启动。

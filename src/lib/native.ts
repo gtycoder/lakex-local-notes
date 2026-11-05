@@ -1,4 +1,4 @@
-import type { CleanOrphanResult, DataHealthReport, DeepCleanupResult, DraftJournalEntry, LastHistoryCleanup, NoteDigest, NoteDocument, NoteInfo, OrphanAsset, QuickNoteDocument, QuickNoteImage, QuickNoteListSummary, QuickNoteTag, QuickNoteTrashItem, ResourceUploadInput, ResourceUploadOutput, S3GcLogItem, S3GcSettings, S3Settings, SaveNoteResult, SaveQuickNoteInput, SyncProgress, SyncResult, SyncSettings, SyncStatusInfo, TreeNode, WorkspaceSnapshot } from "./types";
+import type { CleanOrphanResult, DataHealthReport, DeepCleanupResult, DocumentTagLinks, DraftJournalEntry, LastHistoryCleanup, NoteDigest, NoteDocument, NoteInfo, OrphanAsset, QuickNoteDocument, QuickNoteImage, QuickNoteListSummary, QuickNoteTag, QuickNoteTrashItem, ResourceUploadInput, ResourceUploadOutput, S3GcLogItem, S3GcSettings, S3Settings, RestoreSyncConflictResult, SaveNoteResult, SaveQuickNoteInput, SyncConflictsSnapshot, SyncProgress, SyncResult, SyncSettings, SyncStatusInfo, TreeNode, WorkspaceSnapshot } from "./types";
 import type { TrashItem } from "../core/trashPolicy";
 import type { MissingBodyDoc, MissingQuickNoteDoc } from "../core/missingBody";
 import type { AiChatMessage, AiChatResult, AiListModelsResult, AiProviderPatch, AiSettingsPatch, AiSettingsView, AiStreamEvent, AiTestResult } from "../core/aiProviders";
@@ -277,6 +277,16 @@ export interface LakeNative {
   runS3DeepCleanup(dryRun: boolean, ignoreRetention?: boolean): Promise<DeepCleanupResult>;
   getTrashReminder(): Promise<Array<{ id: string; title: string; deletedAt: string }>>;
   /** 安全模式（Batch3-B）：本次启动是否处于安全模式 + 崩溃摘要。 */
+  /** 同步记录（P1）：本机账本（按时间倒序 + 未读数）。 */
+  listSyncConflicts(): Promise<SyncConflictsSnapshot>;
+  /** 标记已读（可指定 ids；不传 = 全部）→ 返回最新未读数。 */
+  ackSyncConflicts(ids?: string[]): Promise<{ acked: number; unacked: number }>;
+  /** 恢复「本地被覆盖版」：用历史快照恢复并按 local-wins 重传（失败给可读原因）。 */
+  restoreSyncConflict(id: string): Promise<RestoreSyncConflictResult>;
+  /** 文档标签（P1）：整表关系（noteId → tagIds，本机 position 顺序）；主库 tag_links(kind='note')。 */
+  listNoteTagLinks(): Promise<DocumentTagLinks>;
+  /** 文档标签（P1）：整组替换某文档的标签关系（不创建标签；返回落库顺序）。 */
+  setNoteTags(noteId: string, tagIds: string[]): Promise<string[]>;
   getSafeModeState(): Promise<SafeModeStateSnapshot>;
   /** 退出安全模式（下次启动正常）：写 active:false 并清崩溃标记。 */
   exitSafeMode(): Promise<SafeModeExitResult>;
@@ -473,6 +483,11 @@ export const native = {
   revealDataFolder: (kind: import("./types").DataFolderKind) => api().revealDataFolder(kind),
   runS3DeepCleanup: (dryRun: boolean, ignoreRetention = false) => api().runS3DeepCleanup(dryRun, ignoreRetention),
   getTrashReminder: () => api().getTrashReminder(),
+  listSyncConflicts: () => api().listSyncConflicts(),
+  ackSyncConflicts: (ids?: string[]) => api().ackSyncConflicts(ids),
+  restoreSyncConflict: (id: string) => api().restoreSyncConflict(id),
+  listNoteTagLinks: () => api().listNoteTagLinks(),
+  setNoteTags: (noteId: string, tagIds: string[]) => api().setNoteTags(noteId, tagIds),
   getSafeModeState: () => api().getSafeModeState(),
   exitSafeMode: () => api().exitSafeMode(),
   copySafeModeDiagnostics: () => api().copySafeModeDiagnostics(),

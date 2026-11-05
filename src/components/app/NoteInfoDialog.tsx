@@ -7,12 +7,13 @@
  */
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { Dialog } from "../ui/Overlay";
-import { Box, ChevronRight, Clock, File, FolderOpen, History, Image as ImageIcon, Paperclip, X } from "lucide-react";
+import { Box, ChevronRight, Clock, File, FolderOpen, History, Image as ImageIcon, Paperclip, Tag as TagIcon, X } from "lucide-react";
 import { native } from "../../lib/native";
 import { getNativeErrorMessage } from "../../lib/nativeErrors";
 import type { NoteInfo } from "../../lib/types";
 import { isMobileEnvironment } from "../../features/editor/clipboardHtml";
 import { HistorySnapshotPreview } from "./HistorySnapshotPreview";
+import { NoteTagRow } from "./NoteTagRow";
 import { useHistorySnapshotViewer } from "../hooks/useHistorySnapshotViewer";
 import type { NoteKind } from "../../core/noteKind";
 import { formatNoteInfoSize, formatNoteInfoTime, noteInfoRows } from "../../core/noteInfo.js";
@@ -22,7 +23,7 @@ const ITEM_LIMIT = 200;
 const THUMB_LIMIT = 24;
 
 /** 桌面传 TreeNode 子集；移动端传 { noteFileId: id, title }，与平台解耦。 */
-export function NoteInfoDialog({ note, onClose, onRevealNoteFile, onOpenAssetsDir, onOpenHistory, onJumpToNode }: {
+export function NoteInfoDialog({ note, onClose, onRevealNoteFile, onOpenAssetsDir, onOpenHistory, onJumpToNode, onTagsChanged }: {
   note: { noteFileId: string | null; title: string };
   onClose: () => void;
   /** 桌面：在文件管理器中显示 .lake；移动端不传则不渲染 */
@@ -32,6 +33,8 @@ export function NoteInfoDialog({ note, onClose, onRevealNoteFile, onOpenAssetsDi
   onOpenHistory: () => void;
   /** 父级路径点击跳转；不传则路径只读展示 */
   onJumpToNode?: (id: string) => void;
+  /** 文档标签关系变化（标签空间/侧栏筛选据此重读）；移动端不传则不通知。 */
+  onTagsChanged?: () => void;
 }) {
   const [info, setInfo] = useState<NoteInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -170,6 +173,14 @@ export function NoteInfoDialog({ note, onClose, onRevealNoteFile, onOpenAssetsDi
                 <div key={k} className="note-info-cell"><dt>{k}</dt><dd>{v}</dd></div>
               ))}
             </dl>
+
+            {/* P1：文档标签（chips + 添加/移除/新建；顺序 = 本机 position）。移动端属性面板不提供该行。 */}
+            {!isMobileEnvironment() && note.noteFileId && (
+              <div className="note-info-section" data-note-tags>
+                <div className="note-info-section-title"><TagIcon size={14} /><span>标签</span></div>
+                <NoteTagRow noteId={note.noteFileId} onError={setError} onChanged={onTagsChanged} />
+              </div>
+            )}
 
             {info.cardStats.length > 0 && (
               <div className="note-info-section">

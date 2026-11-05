@@ -13,6 +13,8 @@ export const S3V3_MAX_QUICK_NOTES = 20_000;
 export const S3V3_QUICK_PURGE_RETENTION_DAYS = 90;
 /** 标签目录硬上限（261105）：tags[] 不允许无界增长（异常端/旧实现都可能把它撑大）。 */
 export const S3V3_MAX_TAGS = 5_000;
+/** 每条文档/小记的标签关系上限（与小记 MAX_QUICK_NOTE_TAGS=20 同口径）。 */
+export const S3V3_MAX_TAGS_PER_NOTE = 20;
 
 export interface AssetDeclEntry {
   filename: string;
@@ -43,6 +45,13 @@ export interface LakeNoteEntry {
   deletedFromParentId?: string | null;
   /** 资产声明版本 hash；缺省 = 无资产。 */
   assetsHash?: string;
+  /**
+   * 文档标签关系（261105 P1）：**排序后的集合**（顺序是设备本地视图，不参与同步）。
+   * 目录本身沿用 quick-notes 索引的 tags[]（已同步）；这里只带关系集合。
+   */
+  tagIds?: string[];
+  /** 文档标签关系版本（LWW）：正文 hash 不变也必须能传播关系变更。 */
+  tagsUpdatedAt?: string;
 }
 
 export interface LakeFolderEntry {
@@ -274,6 +283,22 @@ export function validateLakeIndex(raw: unknown): LakeIndex {
     if (n.parentId !== null && typeof n.parentId !== "string") throw new Error("索引条目 parentId 非法");
     if (typeof n.sortOrder !== "number") throw new Error("索引条目 sortOrder 非法");
     if (n.assetsHash !== undefined && !isHash(n.assetsHash)) throw new Error("索引条目 assetsHash 非法: " + n.id);
+    // 文档标签关系（261105 P1）：只接受字符串数组；旧索引没有该字段 = 未知（不清空本地关系）。
+    if (n.tagIds !== undefined) {
+      if (!Array.isArray(n.tagIds) || n.tagIds.some((t) => typeof t !== "string")) {
+        throw new Error("索引条目 tagIds 非法: " + n.id);
+      }
+      // Review-A P2-3：去重 + 每篇上限（与小记同一口径），防坏条目撑大索引/破坏集合比较。
+      if (new Set(n.tagIds).size !== n.tagIds.length) throw new Error("索引条目 tagIds 重复: " + n.id);
+      if (n.tagIds.length > S3V3_MAX_TAGS_PER_NOTE) throw new Error("索引条目 tagIds 过多: " + n.id);
+    }
+    if (n.tagsUpdatedAt !== undefined) {
+      // 坏时间串会按字典序永久压制 LWW ⇒ 必须可解析（空串 = 无版本，允许）。
+      if (typeof n.tagsUpdatedAt !== "string") throw new Error("索引条目 tagsUpdatedAt 非法: " + n.id);
+      if (n.tagsUpdatedAt !== "" && !Number.isFinite(Date.parse(n.tagsUpdatedAt))) {
+        throw new Error("索引条目 tagsUpdatedAt 非时间: " + n.id);
+      }
+    }
   }
   for (const f of idx.folders) {
     if (!isSafeId(f.id) || ids.has(f.id)) throw new Error("目录 id 非法/重复: " + String(f.id));

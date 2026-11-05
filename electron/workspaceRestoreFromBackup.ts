@@ -162,7 +162,11 @@ export function restoreMainDatabaseFromBackup(options: RestoreFromBackupOptions)
     // 2) 复制备份到位：先临时名再 rename，避免半截文件；随后再校验一次落位结果。
     const tempPath = currentDbPath + ".restore-tmp";
     ops.copyFileSync(backupPath, tempPath);
+    // Review-B P1：copy 模式备份带 -wal/-shm 边车；漏拷会「恢复成功但静默丢最近事务」。
+    const sidecars = ["-wal", "-shm"].filter((suffix) => ops.existsSync(backupPath + suffix));
+    for (const suffix of sidecars) ops.copyFileSync(backupPath + suffix, tempPath + suffix);
     ops.renameSync(tempPath, currentDbPath);
+    for (const suffix of sidecars) ops.renameSync(tempPath + suffix, currentDbPath + suffix);
     const verify = inspectBackupDatabase(currentDbPath);
     if (!verify.ok) throw new Error("替换后校验失败：" + (verify.reason ?? "unknown"));
     return {
@@ -172,7 +176,9 @@ export function restoreMainDatabaseFromBackup(options: RestoreFromBackupOptions)
     };
   } catch (error) {
     // 3) 回滚：删掉可能写入的新库，把隔离的原库按相反顺序移回。
-    try { ops.rmSync(currentDbPath, { force: true }); } catch { /* 尽力 */ }
+    for (const suffix of ["", "-wal", "-shm"]) {
+      try { ops.rmSync(currentDbPath + suffix, { force: true }); } catch { /* 尽力 */ }
+    }
     let rolledBack = true;
     for (const item of [...moved].reverse()) {
       try { ops.renameSync(item.to, item.from); } catch { rolledBack = false; }

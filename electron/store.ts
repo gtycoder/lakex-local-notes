@@ -51,6 +51,8 @@ import { RemoteImportRepository } from "./remoteImportRepository.js";
 import type { ResourceUploadOutput, HistorySettings, HistoryCleanupResult, S3Settings, SyncSettings, S3GcSettings, FileScanSettings, AutoBackupSettings, AutoBackupState } from "./storeTypes.js";
 import { fileKindOf, renameFileCardDisplay, scanAssetCards } from "../src/core/fileCard.js";
 import { TRASH_NOTEBOOK_ID } from "../src/core/syncDecisions.js";
+import { saveExternalChangedEvent, type SyncConflictEvent } from "../src/core/syncConflictLog.js";
+import { SyncConflictsRepository, type SyncConflictRow } from "./syncConflictsRepository.js";
 import { RECOVERED_NOTEBOOK_ID, RECOVERED_NOTEBOOK_TITLE, type RecoveredNoteInsert } from "./recoveredNotes.js";
 
 export { ASSET_NAME_RE, extractAssetRefs, isoWeekKey, selectHistoryDrops, sanitizeFileName } from "../src/core/storeUtils.js";
@@ -207,6 +209,8 @@ export class Store {
   readonly logScopes: LoggerScopes;
   /** 文档标签（目录 + tag_links(target_kind='note')）。 */
   readonly documentTags: DocumentTagsService;
+  /** 261105 P1 第 4 项：同步记录账本（设备本地，不进 S3/git）。 */
+  readonly syncConflicts: SyncConflictsRepository;
 
   /** 数据根目录（v3 适配器/诊断用；只读）。 */
   get rootPath(): string { return this.root; }
@@ -236,6 +240,7 @@ export class Store {
     });
     this.schemaInit.migrate();
     this.documentTags = new DocumentTagsService(this.db);
+    this.syncConflicts = new SyncConflictsRepository(this.db);
     this.settingsRepository = new SettingsRepository(this.db, secretCipher);
     this.historyRepository = new HistoryRepository(this.db, this.root);
     this.trashRepository = new TrashRepository(this.db, TRASH_NOTEBOOK_ID);
@@ -707,6 +712,11 @@ export class Store {
       let sortOrder = this.nextSortOrder(RECOVERED_NOTEBOOK_ID);
       for (const row of rows) {
         if (!isSafePathSegment(row.id)) { outcomes.push({ id: row.id, status: "skipped" }); continue; }
+        // 防御性双检：已彻底删除的 id（deleted_notes 墓碑）绝不重建（否则复活并上传）。
+        if (this.db.prepare("SELECT 1 FROM deleted_notes WHERE id=?").get(row.id)) {
+          outcomes.push({ id: row.id, status: "skipped" });
+          continue;
+        }
         if (this.db.prepare("SELECT 1 FROM notes WHERE id=?").get(row.id)) {
           outcomes.push({ id: row.id, status: "skipped" });
           continue;
@@ -728,6 +738,11 @@ export class Store {
       try { this.ensureNoteCaches(row.id, row.content); } catch { /* 派生索引失败不阻断重建（可全量重建修复） */ }
     }
     return outcomes;
+  }
+
+  /** 是否在「彻底删除」墓碑（deleted_notes）里：手动重建数据时拒绝复活这类 id。 */
+  isPurgedNoteId(id: string): boolean {
+    return !!this.db.prepare("SELECT 1 FROM deleted_notes WHERE id=?").get(id);
   }
 
   createGroup(parentId: string, title: string): TreeNode {
@@ -758,6 +773,16 @@ export class Store {
     if (conflict) {
       // 不写盘、不动 updated_at/is_dirty：磁盘版本原样保留，等用户在三选项里决定。
       this.logScopes.store.warn("[save] 外部改动拦截" + formatLogFields({ id, diskHash: conflict.diskHash.slice(0, 12) }));
+      // 261105 P1 第 4 项：保存守卫的磁盘冲突也进同步记录账本（审计；不影响同步行为）。
+      try {
+        const titleRow = this.db.prepare("SELECT title FROM notes WHERE id=?").get(id) as { title?: string } | undefined;
+        this.recordSyncConflictEvents([saveExternalChangedEvent({
+          noteId: id, at: new Date().toISOString(),
+          ...(titleRow?.title ? { title: titleRow.title } : {}),
+          ...(baseHash ? { localHash: baseHash } : {}),
+          remoteHash: conflict.diskHash,
+        })]);
+      } catch { /* 账本落库失败不影响保存拦截 */ }
       const guard: SaveNoteConflict = { ok: false, code: SAVE_CONFLICT_CODE, noteId: id, diskHash: conflict.diskHash };
       return guard;
     }
@@ -813,6 +838,67 @@ export class Store {
     this.db.prepare("UPDATE notes SET md_cache=?, text_cache=? WHERE id=?").run(markdown, plain, id);
     const titleRow = this.db.prepare("SELECT title FROM notes WHERE id=?").get(id) as { title: string } | undefined;
     this.searchRepository.upsert(id, titleRow?.title ?? "", plain ?? "");
+  }
+
+  // ===== 261105 P1 第 4 项：同步记录账本（设备本地） =====
+
+  /**
+   * 账本落库（平台端口调用）：判据已由 core `selectConflictEvents` 选出，这里只补历史快照引用并写库。
+   * - remote_wins：本机被远端覆盖，archive-local 刚生成了历史快照 ⇒ 取该篇最新快照 id 作为恢复引用；
+   * - 落库失败只记日志，**绝不阻断同步**。
+   */
+  recordSyncConflictEvents(events: readonly SyncConflictEvent[]): void {
+    if (events.length === 0) return;
+    const enriched = events.map((event) => {
+      if (event.kind !== "remote_wins" || event.historyRef) return event;
+      const newest = this.listNoteHistory(event.noteId)[0];
+      return newest ? { ...event, historyRef: String(newest.id) } : event;
+    });
+    try {
+      const inserted = this.syncConflicts.insert(enriched);
+      if (inserted > 0) this.logScopes.sync.info("[sync-conflicts] 新增同步记录 " + inserted + " 条");
+    } catch (error) {
+      this.logScopes.sync.warn("[sync-conflicts] 同步记录落库失败（不阻断）: " + (error instanceof Error ? error.message : String(error)));
+    }
+  }
+
+  listSyncConflicts(limit = 200): { items: SyncConflictRow[]; unacked: number } {
+    const { rows, unacked } = this.syncConflicts.list(limit);
+    return { items: rows, unacked };
+  }
+
+  getSyncConflict(id: string): SyncConflictRow | null {
+    return this.syncConflicts.get(id);
+  }
+
+  ackSyncConflicts(ids: readonly string[]): number {
+    return this.syncConflicts.ack(ids);
+  }
+
+  /**
+   * 恢复动作（可挽回）：用历史快照/回收站副本恢复该篇 → 标 resolved='restored'（同时算 ack）。
+   * restoreHistory 已把行标 is_dirty=1 + updated_at（下次同步 local-wins 重新上传，与「恢复是唯一显式例外」一致）。
+   * 历史快照已过期/缺失 ⇒ 明确报错，不静默。
+   */
+  restoreSyncConflict(id: string): SyncConflictRow {
+    const row = this.syncConflicts.get(id);
+    if (!row) throw new AppError("NotFound", "同步记录不存在");
+    if (row.resolvedAt) return row;
+    if (row.space !== "lake") throw new AppError("InvalidInput", "小记没有历史快照，暂不支持从同步记录恢复");
+    if (row.kind === "remote_wins") {
+      const historyId = row.historyRef ? Number(row.historyRef) : NaN;
+      if (!Number.isFinite(historyId)) throw new AppError("NotFound", "该同步记录没有可用的历史快照，无法恢复本地版本");
+      this.restoreHistory(historyId); // 快照过期/缺失 ⇒ 内部抛 NotFound
+      this.syncConflicts.markResolved(id, "restored");
+      return this.syncConflicts.get(id)!;
+    }
+    if (row.kind === "remote_purged") {
+      try { this.restoreTrashItem(row.noteId); }
+      catch (error) { throw new AppError("NotFound", "本地副本已不在回收站，无法恢复：" + (error instanceof Error ? error.message : String(error))); }
+      this.syncConflicts.markResolved(id, "restored");
+      return this.syncConflicts.get(id)!;
+    }
+    throw new AppError("InvalidInput", "该同步记录不支持恢复");
   }
 
   /** 从磁盘 .lake 派生纯文本并写缓存列（不触发索引）；全量重建兜底用。 */

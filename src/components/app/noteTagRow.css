@@ -1,0 +1,56 @@
+/*
+ * 文档属性面板的「标签」编辑行（P1）。chips 视觉复用桌面标签 chip 语言（0.5px 发丝边 + 令牌色），
+ * 只定义本行排版；颜色/间距/字号一律 --lake-* 令牌。
+ */
+.note-info-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--lake-space-xs);
+  align-items: center;
+}
+
+.note-info-tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--lake-space-xs);
+  max-width: 220px;
+  padding: 2px var(--lake-space-xs);
+  border: 0.5px solid var(--lake-border-1);
+  border-radius: var(--lake-radius-sm);
+  color: var(--lake-text-2);
+  background: var(--lake-bg-subtle);
+  font-size: var(--lake-font-size-tiny);
+}
+
+.note-info-tag-remove {
+  display: inline-flex;
+  align-items: center;
+  border: 0;
+  border-radius: var(--lake-radius-sm);
+  color: var(--lake-text-4);
+  background: transparent;
+  cursor: pointer;
+}
+
+.note-info-tag-remove:hover { color: var(--lake-accent-text); background: var(--lake-accent-tint); }
+
+.note-info-tag-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px var(--lake-space-xs);
+  border: 0.5px dashed var(--lake-border-2);
+  border-radius: var(--lake-radius-sm);
+  color: var(--lake-text-3);
+  background: transparent;
+  font-size: var(--lake-font-size-tiny);
+  cursor: pointer;
+}
+
+.note-info-tag-add:hover { color: var(--lake-accent-text); border-color: var(--lake-accent); }
+
+.note-info-tags-empty {
+  margin: 0;
+  color: var(--lake-text-4);
+  font-size: var(--lake-font-size-tiny);
+}

@@ -25,6 +25,7 @@ import {
   replaceQuickNoteTagLinksInTransaction,
   setQuickNoteTags as setQuickNoteTagLinks,
 } from "./quickNoteTagLinksRepository.js";
+import { mergeNoteTagLinksInTransaction, removeNoteTagLinksInTransaction } from "./noteTagLinksRepository.js";
 import { indexQuickNote } from "./quickNotesSearch.js";
 
 /** 按小记 id 重刷搜索索引（标签名 / 关系变化的派生列）。 */
@@ -56,6 +57,8 @@ export const mobileQuickNoteTags = {
     // 事务内只能调用 *InTransaction 版本：SQLite 不支持嵌套 BEGIN。
     await d.transaction(async () => {
       updated = await removeQuickNoteTagLinksInTransaction(d, id);
+      // 261105 P1：文档关系与目录同库 ⇒ 同一事务内一并清（跨端由同步索引传播）。
+      await removeNoteTagLinksInTransaction(d, id);
       await deleteQuickNoteTag(d, id);
       await addPendingTagDeletes(d, [id]);
     });
@@ -71,6 +74,8 @@ export const mobileQuickNoteTags = {
     let updated = 0;
     await d.transaction(async () => {
       updated = await replaceQuickNoteTagLinksInTransaction(d, sourceId, targetId);
+      // 261105 P1：文档关系改指目标（去重、保留位置）+ bump 版本。
+      await mergeNoteTagLinksInTransaction(d, sourceId, targetId);
       await deleteQuickNoteTag(d, sourceId);
       await addPendingTagDeletes(d, [sourceId]);
     });

@@ -8,13 +8,22 @@
 
 ## 0. 最新交接（261027）
 
-### 261105 · 自动备份 + 保存版本守卫（1+2）· **本地改动（待提交）**
+### 261105 · P1：文档标签（两端同步 + 标签空间）+ 同步记录账本（桌面/移动）+ 代码 review 收口 · **已提交并双推（Gitee + GitHub）**
+- **文档标签数据层**：`LakeNoteEntry.tagIds`（排序集合）+ `tagsUpdatedAt`（关系 LWW），lake 索引只加这两个字段；**目录仍只在小记标签库**（不新增目录协议），文档关系留主库 `tag_links(kind=note)`；删除/改名跨库协调 + 启动清理孤儿关系（桌面 `main.ts`、移动 `context.ts`）；移动端 `listNotesSyncMeta` 必须搬运字段（否则发布 lake 索引会清空标签）；小记→文档转换继承标签。
+- **桌面标签空间**（一级入口「标签」）：三栏只读聚合（目录 / 文档+小记分组 / 只读预览 + 跳转编辑），就地改名/合并/删除/排序；文档属性面板标签编辑行；侧栏按标签筛选（包含/排除，只收窄显示不改树）。
+- **移动端文档标签**：属性面板只读 chips + 工作区文档列表按标签筛选（目录不可用降级提示，不写正文）。
+- **同步记录账本**（第 4 项）：`core/syncConflictLog.ts` 纯判据（只记三类：远端覆盖本地 / 他端删除含 quick-purge / 保存时磁盘被改），桌面主库 + 移动主库 `sync_conflicts` 表（设备本地、不进 S3），500 条 / 90 天轮转；`list/ack/restore_sync_conflict`（parity 155），恢复走历史快照 → 标 local-wins 重传；桌面角标 + 浮层页、移动设置入口 + 列表。
+- **review 修复（4 路只读 review）**：P0「删光标签发布成字段缺失 ⇒ 两端永久互刷」改为「有版本就显式发布 `tagIds: []`」+ 消费端以 `tagsUpdatedAt` 为字段权威；发布条目标签字段按 LWW 独立合成（不被内容判定覆盖）+ 同版本集合确定性 tie-break + `publishes.lake` 去 Set；账本补 `quick-purge`；索引校验 tagIds 去重/上限 20 + tagsUpdatedAt 必须可解析；移动清理加空目录保护 + 批量 INSERT + restore 失败不抛；备份指纹含 `-wal` + 新备份先 quick_check（坏备份丢弃不占轮转）+ 从备份恢复拷 `-wal/-shm`；重建数据拒绝 `deleted_notes` 墓碑（不复活已删文档）；保存冲突「另存副本」后原标签页真的载入磁盘版。
+- **门禁**：tsc 0；全量 vitest **684 文件（673 passed / 11 skipped）、4165 例（4153 passed / 12 skipped）**；core 140 文件 0 违规；ui-metrics / check:mobileui / `git diff --check` 通过。
+- **文档**：`RESILIENCE.md` §3.2 + §4 回填；AGENTS 标签/账本长期规则；TAG-SYSTEM-DESIGN 更新；README「数据安全/标签/同步记录」。
+
+### 261105 · 自动备份 + 保存版本守卫（1+2）· **已提交 `7719da1d` 并双推（Gitee + GitHub 同 hash）**
 - **自动备份**（`electron/autoBackup.ts`）：默认开启、**每天**（1/7 天可选）、保留 7 份 + 总量 300MB 上限；`VACUUM INTO` 主库 + 小记库（成组同时间戳），失败降级文件拷贝并明说「可能不完整」；策略纯函数（单飞/关闭/未到期/内容未变跳过），主机每 6h tick、**启动不立即跑**、失败只 warn；轮转最旧优先、至少留一份。设置页「数据与存储」：开关/间隔/保留份数/立即备份/打开备份目录/上次结果；`reveal_data_folder` 增 `backups` kind；IPC 三项 parity 147→150；状态存 settings（本机、不上传）。与既有「从备份恢复」闭环（恢复只覆盖主库，小记库备份同目录保留）。
 - **保存版本守卫**（`electron/noteBodyHash.ts` + `saveNoteVersioned`）：保存通道加可选 `baseHash`；内容确有变化才比对磁盘 hash，不符 ⇒ **不写盘、不动 updated_at/is_dirty**，返回结构化 `external_changed`；旧签名 `saveNote` 保留供内部/同步路径（行为不变）。渲染层 `useSavePipeline` 冲突时置 error、**暂停自动保存**，弹 `SaveConflictDialog` 三选项（另存为副本默认 / 覆盖磁盘 / 放弃并载入磁盘版）；`baseHash` 在打开/保存成功/同步重载/历史恢复/回收站恢复处全部刷新；阻塞式弹窗（关闭/淘汰被 `flushDirtyBeforeLifecycle` 拦下，不静默丢编辑）。
 - **门禁**：tsc 0；全量 vitest **649 文件 / 4029 passed / 12 skipped**；core 139 文件 0 违规；`git diff --check` 干净。新增测试 30+ 例（备份 16 + 保存守卫 17 + 接线/维护域护栏）。
 - **风险**：备份只在应用运行时触发（无系统自启，错过的周期下一次 tick 补跑）；「从备份恢复」只恢复主库；保存冲突是阻塞式交互，自动保存会暂停到用户处理。
 
-### 261105 · 手动「重建数据」+ 低频只报告扫描（文件↔元数据）· **本地改动（待提交）**
+### 261105 · 手动「重建数据」+ 低频只报告扫描（文件↔元数据）· **已提交 `916a4fe0` 并双推**
 - **设计定稿（用户 261105）**：思源把「文件系统反向订正索引」做成自动（cron 每分钟 → 空闲 7min + dirty + 冷却 120min + TryLock），因为其同步以 `.sy` 文件为真相且文件自描述；我们的 S3 v3 是内容寻址 + 云端正文副本 + 缺正文恢复链路，正文文件名只有 id（标题/父级在库里）⇒ **降级为「低频只报告扫描 + 手动确认重建」**，不照搬自动化程度。
 - **扫描（只报告）**：默认 **每 24h 一次**（设置页可改，0=关，上限 720h；`LAKE_FILE_RECONCILE=0` 强制关）；门控 = 同步成功打点 + 空闲≥5min + dirty + 冷却(=interval) + TryLock，**stat-only、绝不写库/文件**；报告含 `intervalHours` 并显示在「设置→数据体检→一致性检查」。
 - **重建（手动）**：设置页「重建数据」→ 扫描 → 候选列表（标题/kind/size/mtime/路径；坏正文禁用勾选+原因）→ 勾选 → 「重建所选」danger 二次确认 → 结果逐条（已重建/跳过/拒绝/失败）。**只接受本次进程内最近一次扫描的候选 id**。
@@ -23,7 +32,7 @@
 - **门禁**：tsc 0；全量 vitest **644 文件 / 3992 passed / 12 skipped**；core 139 文件 0 违规；`git diff --check` 干净。新增 15 例（recoveredNotes 11 + RebuildDataBlock 4 + 接线回归）。
 - **风险**：后台扫描依赖「同步成功打点」（没有同步不会跑，手动扫描不受影响）；重建只补主库元数据行，不涉及小记/附件/历史；重建立即 dirty ⇒ 会推云端（用户需知情）。
 
-### 261105 · 容错批 4（Batch 4）：备份导入恢复 / 文件↔元数据对账 / 兜底历史 / 安全模式会话门 · **本地改动（待提交）**
+### 261105 · 容错批 4（Batch 4）：备份导入恢复 / 文件↔元数据对账 / 兜底历史 / 安全模式会话门 · **已提交 `1eb9a60d` 并双推**
 - **从备份恢复**：新增 `electron/workspaceRestoreFromBackup.ts`（路径白名单 + 选择框登记制 + `quick_check`/关键表/外键校验 → 原库隔离到 `corrupt/restore-<ts>/` → tmp+rename 落位 → 落位后再校验；任一阶段失败回滚原库）；恢复页第 5 个动作 + 设置页「数据与存储→备份与恢复」入口；IPC 三方同步（通道数 141→143）、settingsSearch 登记。9 例测试（含复制失败回滚、路径穿越拒绝）。
 - **文件↔元数据对账（只报告版）**：新增 `electron/fileMetadataReconcile.ts`（默认关闭，`LAKE_FILE_RECONCILE=1`）：节流 = enabled→TryLock→同步完成打点→dirty→空闲≥5min→冷却≥30min→进队列后二次判空闲；只 readdir+stat、不读正文/不写库；报告经 `runDataHealthCheck().fileReconcile` 暴露，**Lead 补了 `src/lib/types.ts` 类型与设置页「一致性检查」展示行**。25 例测试（含 2 万行/300 候选 <5s、与维护队列串行）。
 - **定时兜底历史快照**：原定时器只覆盖内存脏集合（重启即丢）⇒ 改 `history_fallback_state` 持久账本 + 正文 mtime 判据（`core/historyFallbackPolicy.ts`），复用 24h 去重/引用保护/保留期；单飞、启动不立即跑、0=关闭，默认 15→10 分钟。18 例测试。
@@ -31,21 +40,21 @@
 - **门禁**：tsc 0；全量 vitest **642 文件 / 3977 passed / 12 skipped**；core 139 文件 0 违规；ui-metrics 通过；`git diff --check` 干净。`docs/RESILIENCE.md` 新增 §6 故障矩阵 / §7 思源借鉴清单 / §8 验证债。
 - **遗留**：对账报告已在体检返回里但 UI 展示由 Lead 补；移动端对账/兜底历史未做（两端默认值待统一）；对账 dirty 目前只由同步完成置位（保存/导入打点可补）；验证债见 RESILIENCE §8。
 
-### 261105 · 容错批 3（Batch 3）：quick-notes 降级 / 安全模式 / 写入卫生 · **本地改动（待提交）**
+### 261105 · 容错批 3（Batch 3）：quick-notes 降级 / 安全模式 / 写入卫生 · **已提交 `2ad56c3d` 并双推**
 - **quick-notes 库损坏不再卡 splash**：新增 `electron/quickNotesAvailability.ts`（ok|degraded 纯判定 + 可读告警 + 同步前置断言 + 诊断报告）；`QuickNotesStore` 构造 try/catch，失败用 **Proxy 降级替身**（读安全空值、写/单条读抛 `AppError`、await 不挂起）；降级分支不注册 v3、不跑 recoverConversions；自动/退出同步早退，手动同步与「保存并同步」当场给可读错误 + 「先备份→设置→从云端恢复」指引。15 例测试。
 - **崩溃标记 → 安全模式**：`electron/safeMode.ts`（occurrences≥2 或 30 分钟内 2 次；`safe-mode.json` 设备本地，损坏不二次失败；进入不清 marker，显式退出才清）；三处跳过自动同步、渲染层跳过内核预取与标签恢复；`SafeModeBanner` 顶部提示 + 复制诊断 + 退出安全模式。19 例测试。
 - **写入卫生**：导出 SVG/PNG/PDF 改 tmp+rename；桌面 `atomicWrite` 加 fd+目录 fsync（win32 跳过），`writeRestoredBody` 复用；`canonicalJson` 改显式栈迭代 + 深度 256/节点 200 万上限（输出逐字节一致，修 20 万层 RangeError）。14 例测试。
 - **门禁**：tsc 0；全量 vitest **631 文件 / 3913 passed / 12 skipped**；core 138 文件 0 违规；ui-metrics 通过（跨文件重复 103 ≤ 基线 105）；`git diff --check` 干净。
 - **待裁决/风险**：安全模式会话可能被空标签覆盖（要保留需给会话写 effect 加门）；安全模式与恢复页视觉未实机走查；降级时整轮同步暂停（要拆「仅停小记域」需 core 加域开关）。
 
-### 261105 · 容错批 2（P1 四条）：水线单调 / 正文突变保护 / 父环 / 资产坏名 · **本地改动（待提交）**
+### 261105 · 容错批 2（P1 四条）：水线单调 / 正文突变保护 / 父环 / 资产坏名 · **已提交 `721d579a` 并双推**
 - **P1-3 水线单调化**：新增 `src/core/syncWaterline.ts`（未来/非法值当 0；写入只增不减 + 夹到 now）；`syncReconciliation`/`quickNotes` 读归一 + 启动自检回写 + 所有 pending 查询改传归一化水线（不再用裸 SQL 子查询）⇒ 时钟前跳不再让「删除永不传播」。测试：core 2 + store 集成 1。
 - **P1-4 正文突变保护**：新增 `src/core/s3v3/state/bodyChangeGuard.ts`（三条件：基线 hash 变 / 行 updatedAt 未前进 / 内容像坏）；引擎按 `state×baseline` 选候选（正常轮零候选零 IO）⇒ plan 对可疑篇不 PUT、不认领 publish，`archive-local(reason=suspicious)` + `body_suspicious_external_change` warning，索引只用远端版本（远端缺席则不发布）。未改 `deviceStore.ts`。测试 16 例（含真 Store + 假 S3 端到端）。
 - **P1-6 父环防护**：`s3v3Merge` 合成 note+folder 父表 + visited 检测 ⇒ 环上条目远端父改写安全父（本地父→基线父→null）并 `cycle-parent` warning（plan 透出）；两端 descendantIds/回收站子树/import 加 visited/环拒绝；两处递归 CTE `UNION ALL→UNION`。测试 12 例（环下 move/delete/回收站列表 <2s）。
 - **P1-7 资产坏文件名**：`applyAssets` 先判后跳（`isValidSafeSegment` + ≤255B），统一 `asset_invalid_name` warning，覆盖上传三条清单路径与下载侧旧声明（不落 pendingAssets、不产生 errors）；桌面复用 warnings 通道，移动端修正 kind 判定（不再误报成「正文缺失」）。测试 4 例。
 - **门禁**：tsc 0；全量 vitest **624 文件 / 3864 passed / 12 skipped**；core 138 文件 0 违规；`git diff --check` 干净。`docs/RESILIENCE.md` §4 已按完成状态回写。
 
-### 261105 · 容错批（Batch 1）：同步窗口守卫 + 启动/坏库兜底 + 坏正文四族统一 · **本地改动（未提交/未推送）**
+### 261105 · 容错批（Batch 1）：同步窗口守卫 + 启动/坏库兜底 + 坏正文四族统一 · **已提交 `bb300324` 并双推**
 - **触发**：用户要求「真实使用中的异常操作/异常数据不能动不动崩、要兜底与自愈」。先做四路只读调研（桌面现状、移动 parity、思源兜底机制、故障注入实验），结论与新契约落在 `docs/RESILIENCE.md`（六原则 + 能力表 + 本轮落地 + Batch 2/3 backlog + 新增失败面检查清单）。
 - **P1 三条一次修掉**（`core/s3v3/state/deviceStore.ts` 同步窗口守卫）：轮内软删小记不重建/**不清墓碑**；轮内 purge 文档不重建；轮内移入/移出回收站不回滚生命周期（`cur.updatedAt > n.updatedAt`）。例外保留：显式恢复（`restorePending`）与远端复活（远端 `updatedAt` 晚于本地 purge 时间）。新增 4 例护栏；`deviceConformance` 场景 6 与 `mobileCloudDeleted` 两个既有用例抓出了首版过严的守卫。
 - **桌面启动硬失败**：新增 `electron/startupRecovery.ts`（启动前 `quick_check`+外键预检、纯函数决策、`VACUUM INTO` 备份降级文件拷贝、内联恢复页、`crash-marker.json`）与 `startupRecoveryWindow.ts`（独立窗口，四个动作）；`main.ts` 改为「预检 → 构造 Store（try/catch）→ 决策」，不再卡 boot splash；`uncaughtException` 写持久标记、正常启动消费告警。
@@ -873,7 +882,7 @@
 - 261103 各批已全部提交并双推（20:08–20:21）：`ce442482`（usheet 35 行/双光标/整行整列）、`733ab4aa`（多维表头部+短名）、`2b29d9e8`（画板工具条+第 4 处补丁）、`75c46902`（ink 14 色）、`ae14ffd1`（胶囊/横滑/安全区/页签 44/useKeyboard）、`1f164f2b`（门禁装置+三份基线重烤）、`1e74c3f8`（文档）、`fdf9c455`（AI 默认关）。
 - 261103 之后（261104 凌晨，均已双推）：ink 三修（`912143da` 落笔/擦除按批渲染、`8f32a5ca` 中断不丢笔）+ 性能观测 `af169f96` + 图片页背景下采样 `8dc83a87` + 导入体积提示 `388232db` + 资源页本地占用 `1adcde27`。
 
-**门禁基线**（261105 UI复审集成后）：tsc0；全量614文件（603 passed/11 integration skipped），3722 passed/12 skipped；core136文件0违规、mobileui/ui-metrics、双构建、bundle/arch、diff-check通过。首屏桌面552175B/600000B、移动348137B/360000B；APK42197356B。窗口边界收尾追加tsc/4文件22例与Electron同事件0异常。手机/Pad各6态独立复采0差异；桌面/移动/Pad交互验证见§0最新批和`.css-audit/final-review/REVIEW.md`。当前预览9242/5588/5590；并行5584本轮未操作。
+**门禁基线**（261105 P1 收口后）：tsc 0；全量 **684 文件（673 passed / 11 skipped）、4165 例（4153 passed / 12 skipped）**；core **140 文件 0 违规**；ui-metrics / check:mobileui / diff-check 通过；IPC 通道 **155**（parity 钉死）；移动 schema **v11**（sync_conflicts）。首屏桌面552175B/600000B、移动348137B/360000B；APK42197356B。窗口边界收尾追加tsc/4文件22例与Electron同事件0异常。手机/Pad各6态独立复采0差异；桌面/移动/Pad交互验证见§0最新批和`.css-audit/final-review/REVIEW.md`。当前预览9242/5588/5590；并行5584本轮未操作。
 
 **环境（本机实测 261104 追加，261105 更新）**：**GitHub 推送走 HTTPS**（SSH key 未在 GitHub 侧生效；keychain 里有 `gtycoder` 凭据）⇒ `git push https://github.com/gtycoder/lakex-local-notes.git <branch>` 可用；Gitee 仍 `origin` SSH 正常。**本机已把 `origin` 的第二 pushurl 改为该 HTTPS 地址** ⇒ `git push origin <branch>` 一次推两边。**261105 实测：本机到 GitHub 会偶发 HTTP2 framing / 443 连接超时**（Gitee 正常）；遇到时先 `git -c http.version=HTTP/1.1 push <url> <branch>` 重试，仍失败就只推 Gitee、恢复后补推。
 

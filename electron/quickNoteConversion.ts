@@ -46,10 +46,13 @@ export function convertQuickNoteToLake(quickNotes: QuickNotesStore, notes: Store
     if (!fs.existsSync(sourcePath)) throw new Error(`小记图片不存在: ${image.filename}`);
     return { filename: image.filename, sourcePath };
   });
+  // 261105 P1 追加：转换成功后**继承小记标签**（id 稳定，直接写主库 note 关系 + bump 关系版本）。
+  const inheritedTagIds = quickNotes.links.listFor(source.id);
   try {
     const target = notes.createNoteInAtTopWithContent(notebookId, titleForQuickNote(source), quickNoteToLakeContent(targetNoteId, source), assets, targetNoteId);
     // 真实读取文件与元数据，确认目标并非仅“函数未抛错”。
     notes.readNote(target.id);
+    if (inheritedTagIds.length > 0) notes.documentTags.setNoteTags(target.id, inheritedTagIds);
     quickNotes.markConversionTargetCreated(source.id);
     quickNotes.finalizeConversion(source.id);
     return target;

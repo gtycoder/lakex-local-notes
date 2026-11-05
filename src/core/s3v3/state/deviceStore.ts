@@ -268,6 +268,9 @@ export function createDeviceStoreMeta(deps: DeviceStoreMetaDeps): DeviceStoreMet
         ...(n.trashedAt ? { trashedAt: n.trashedAt } : {}),
         ...(n.deletedFromParentId !== null && n.deletedFromParentId !== undefined ? { deletedFromParentId: n.deletedFromParentId } : {}),
         ...(assetsLake[n.id] ?? n.assetsHash ? { assetsHash: assetsLake[n.id] ?? n.assetsHash } : {}),
+        // 文档标签关系（261105 P1）：本机顺序原样带入 state；发布时由 plan 排序成集合。
+        ...((n.tagIds?.length ?? 0) > 0 ? { tagIds: [...n.tagIds!] } : {}),
+        ...(n.tagsUpdatedAt ? { tagsUpdatedAt: n.tagsUpdatedAt } : {}),
       });
     }
 
@@ -565,6 +568,12 @@ export function createDeviceStoreMeta(deps: DeviceStoreMetaDeps): DeviceStoreMet
             await p.applyRemoteEditLock(n.id, !!n.isLocked, n.lockedAt ?? null);
           }
         }
+        // 文档标签关系（261105 P1）：关系版本 LWW；平台侧负责「保留本机顺序 + 远端新增插最前」。
+        // Review-A P2-1：只在「有标签字段或版本」时调用（远端清空会带 tagsUpdatedAt ⇒ 仍会清）；
+        // 否则 20k 篇零标签时每轮白白 2 万次版本点查。
+        if (p.applyNoteTagLinks && (n.tagsUpdatedAt || (n.tagIds?.length ?? 0) > 0)) {
+          await p.applyNoteTagLinks(n.id, n.tagIds ?? [], n.tagsUpdatedAt ?? "");
+        }
         await deps.flushAssetDirDeletion?.(n.id);
         if (staged) stagedMoves.push({ id: n.id, kind: normalizeNoteKind(n.kind) });
         if (content !== null) {
@@ -591,6 +600,10 @@ export function createDeviceStoreMeta(deps: DeviceStoreMetaDeps): DeviceStoreMet
     }
 
     await saveQuickNotes(state);
+    // 261105 P1：目录合并之后收敛文档关系（清掉指向不存在标签的孤儿；同轮新到的目录已可用）。
+    if (p.pruneNoteTagLinks) {
+      await p.pruneNoteTagLinks((state.quickNotes.tags ?? []).map((tag) => tag.id));
+    }
     await saveFolders(state.folders, true);
 
     // 引擎持久化的 remotePurged → 本地展示位 cloud_deleted；只保留「本地仍有行」的 id

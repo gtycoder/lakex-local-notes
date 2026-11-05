@@ -6,6 +6,8 @@ import { S3v3S3Remote } from "../s3v3/s3Remote.js";
 import { fetchQuickNoteFromV3 } from "../s3v3/quickNotesRecovery.js";
 import type { QuickNotePushOutcome } from "../../src/core/quickNoteSyncTypes.js";
 import { canTouchNetwork, cloudStateOf, cloudStateHint } from "../../src/core/cloudState.js";
+import { getQuickNotesAvailability } from "../quickNotesAvailability.js";
+import { IpcInputError } from "../ipcLimits.js";
 import type { Store } from "../store.js";
 import type { IpcRegistrar } from "./registrar.js";
 import { toUint8Array } from "./bytes.js";
@@ -40,8 +42,38 @@ export function registerQuickNotesIpc(
   ipc.handle("create_quick_note_tag", (name: string) => quickNotes.tagService.create(name));
   ipc.handle("update_quick_note_tag", (id: string, patch: { name?: string }) => quickNotes.tagService.update(id, patch));
   ipc.handle("reorder_quick_note_tags", (ids: string[]) => quickNotes.tagService.reorder(ids));
-  ipc.handle("merge_quick_note_tags", (sourceId: string, targetId: string) => quickNotes.tagService.merge(sourceId, targetId));
-  ipc.handle("delete_quick_note_tag", (id: string) => quickNotes.tagService.delete(id));
+  // 261105 P1：目录唯一来源 = 小记库 tags；文档关系在**主库**，删除/合并由主进程跨库协调。
+  ipc.handle("merge_quick_note_tags", (sourceId: string, targetId: string) => {
+    const result = quickNotes.tagService.merge(sourceId, targetId);
+    try { store.documentTags.mergeTag(sourceId, targetId); } catch { /* 主库关系清理失败不阻断目录合并（下轮/启动自检会收敛） */ }
+    return result;
+  });
+  ipc.handle("delete_quick_note_tag", (id: string) => {
+    const result = quickNotes.tagService.delete(id);
+    try { store.documentTags.removeTag(id); } catch { /* 同上：目录删除优先，关系由启动自检收敛 */ }
+    return result;
+  });
+  // ---- 文档标签关系（261105 P1）：目录沿用 list_quick_note_tags；这里只读写主库关系 ----
+  ipc.handle("list_note_tag_links", () => {
+    // 只返回目录里 active 的 tag id（目录不可用/降级 = 空目录 ⇒ 返回空映射，读类不抛）。
+    const allowed = new Set(quickNotes.tagService.list().map((tag) => tag.id));
+    const out: Record<string, string[]> = {};
+    for (const [noteId, tagIds] of store.documentTags.listAll()) {
+      const filtered = tagIds.filter((tagId) => allowed.has(tagId));
+      if (filtered.length > 0) out[noteId] = filtered;
+    }
+    return out;
+  });
+  ipc.handle("set_note_tags", (noteId: string, rawTagIds: string[]) => {
+    if (getQuickNotesAvailability().mode === "degraded") throw new IpcInputError("标签目录暂不可用（小记库降级）：无法设置文档标签");
+    if (typeof noteId !== "string" || !noteId) throw new IpcInputError("文档 id 无效");
+    if (!Array.isArray(rawTagIds)) throw new IpcInputError("标签列表无效");
+    // 存在性/归一校验在协调层（目录唯一来源 = 小记库 tags）。
+    const existing = new Set(quickNotes.tagService.list().map((tag) => tag.id));
+    const unknown = rawTagIds.filter((tagId) => typeof tagId !== "string" || !existing.has(tagId));
+    if (unknown.length > 0) throw new IpcInputError("标签不存在或已删除：" + unknown.map(String).join("、"));
+    return store.documentTags.setNoteTags(noteId, rawTagIds);
+  });
   ipc.handle("set_quick_note_tags", (id: string, tagIds: string[]) => {
     quickNotes.setQuickNoteTags(id, tagIds);
     return quickNotes.readQuickNote(id);

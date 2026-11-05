@@ -1,0 +1,41 @@
+/*
+ * 侧栏「按标签筛选」条（P1）。chips 复用 .quick-note-tag 既有语汇（同语义只有一套视觉），
+ * 这里只放条本身的行布局；颜色/间距/字号全部 --lake-* 令牌。
+ */
+.sidebar-tag-filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-bottom: 0.5px solid var(--lake-border-1);
+}
+
+.sidebar-tag-filter__chip { max-width: 140px; }
+
+.sidebar-tag-filter__remove {
+  display: inline-flex;
+  align-items: center;
+  border: 0;
+  border-radius: var(--lake-radius-sm);
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+}
+
+.sidebar-tag-filter__clear {
+  border: 0;
+  border-radius: var(--lake-radius-sm);
+  color: var(--lake-accent-text);
+  background: transparent;
+  font-size: var(--lake-font-size-tiny);
+  cursor: pointer;
+}
+
+.sidebar-tag-filter__panel { display: flex; flex-direction: column; gap: var(--lake-space-xs); padding: var(--lake-space-sm); }
+
+.sidebar-tag-filter__label { color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); }
+
+.sidebar-tag-filter__chips { display: flex; flex-wrap: wrap; gap: 4px; }
+
+.sidebar-tag-filter__empty { margin: 0; color: var(--lake-text-4); font-size: var(--lake-font-size-tiny); }

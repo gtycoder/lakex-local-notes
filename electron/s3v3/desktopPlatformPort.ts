@@ -21,7 +21,19 @@ export function createDesktopPlatformPort(store: Store, quickNotes?: QuickNotesS
       return store.listFoldersForSync();
     },
     async listNotesSyncMeta(): Promise<SyncNoteMetaRow[]> {
-      return store.listNotesSyncMeta();
+      // 文档标签关系（261105 P1）留在**主库** tag_links/versions；这里拼进同步清单。
+      const links = store.documentTags.listAll();
+      const versions = store.documentTags.allTagsUpdatedAt();
+      return store.listNotesSyncMeta().map((note) => {
+        const tagIds = links.get(note.id);
+        const tagsUpdatedAt = versions.get(note.id) ?? "";
+        // P0：有版本时必须显式带 tagIds（空集合也带），否则对端分不清「删光」与「旧索引没字段」。
+        return {
+          ...note,
+          ...(tagsUpdatedAt || (tagIds && tagIds.length > 0) ? { tagIds: [...(tagIds ?? [])] } : {}),
+          ...(tagsUpdatedAt ? { tagsUpdatedAt } : {}),
+        };
+      });
     },
     async listQuickNotesForSync(): Promise<QuickNoteSyncRow[]> {
       if (!qn) return [];
@@ -140,6 +152,13 @@ export function createDesktopPlatformPort(store: Store, quickNotes?: QuickNotesS
     async applyQuickNoteTagLinks(quickNoteId: string, tagIds: string[], tagsUpdatedAt: string): Promise<void> {
       if (!qn) return;
       qn.applyRemoteQuickNoteTagLinks(quickNoteId, tagIds, tagsUpdatedAt);
+    },
+    async applyNoteTagLinks(noteId: string, tagIds: string[], tagsUpdatedAt: string): Promise<void> {
+      // 先按远端 id 落关系（目录可能同一轮才到达），目录收敛在 saveState 末尾统一做（pruneNoteTagLinks）。
+      store.documentTags.applyRemote(noteId, tagIds, tagsUpdatedAt);
+    },
+    async pruneNoteTagLinks(validTagIds: readonly string[]): Promise<void> {
+      store.documentTags.cleanupOrphans(new Set(validTagIds));
     },
     async mergeQuickTags(tags: QuickTagRow[], removedIds: readonly string[] = []): Promise<void> {
       if (!qn) return;

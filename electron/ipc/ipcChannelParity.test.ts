@@ -94,8 +94,10 @@ describe("IPC 通道三方一致性（C2-2）", () => {
     // → 143（261105 Batch4-A 从备份恢复：pick_backup_database / restore_workspace_from_backup）。
     // → 147（261105 Batch4-D 低频扫描 + 手动重建：get/save_file_scan_settings / scan_rebuild_candidates / rebuild_orphan_notes）。
     // → 150（261105 Batch4-E 自动备份：get/save_backup_settings / run_backup_now）。
-    expect(registrarChannels().size, "通道数变了 ⇒ 请确认是有意的并在 commit 里说明").toBe(150);
-    expect(preloadChannels().size).toBe(150);
-    expect(Object.keys(WEB_METHODS).length).toBe(150);
+    // → 152（261105 P1 文档标签：list_note_tag_links / set_note_tags）。
+    // → 155（261105 P1 第 4 项同步记录账本：list/ack/restore_sync_conflict*）。
+    expect(registrarChannels().size, "通道数变了 ⇒ 请确认是有意的并在 commit 里说明").toBe(155);
+    expect(preloadChannels().size).toBe(155);
+    expect(Object.keys(WEB_METHODS).length).toBe(155);
   });
 });

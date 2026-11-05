@@ -33,6 +33,7 @@ import { isSuspiciousBodyChange, isUnexplainedBodyChange } from "./s3v3/state/bo
 import type { DeviceBaseline, DeviceState, S3v3DeviceStore } from "./s3v3DeviceStore.js";
 import type { SyncWarning } from "./sharedTypes.js";
 import type { S3v3Remote } from "./s3v3Ports.js";
+import { selectConflictEvents, type SyncConflictEvent } from "./syncConflictLog.js";
 import { runPoolSettled } from "./s3v3Pool.js";
 import { runTransferPipeline } from "./s3v3Transfer.js";
 
@@ -681,6 +682,9 @@ export class S3v3SyncEngine {
       nextState = { ...nextState, remotePurged: (nextState.remotePurged ?? []).filter((id) => localIds.has(id)) };
     }
     await this.device.saveState(nextState);
+    // 261105 P1 第 4 项：同步记录账本（远端覆盖/他端删除）。落库在 saveState 之后（archive-local 历史已就绪），
+    // 失败只记 warning，不阻断同步。
+    await this.recordSyncConflicts(round, state);
     if (round.commit.status === "published" && round.publish) {
       await this.device.saveBaseline({
         epoch: round.nextPointer.epoch,
@@ -897,6 +901,29 @@ export class S3v3SyncEngine {
       },
       deferAssets: opts.deferAssets === true,
       commitOptions: { lockWaitMs: this.publishLockWaitMs } }, ports);
+  }
+
+  /**
+   * 261105 P1 第 4 项：把本轮 plan 里的「远端覆盖 / 他端删除」事件落进设备本地账本。
+   * 判据全部来自 core `selectConflictEvents`（这里只提供标题快照；historyRef 由平台在落库时补全）。
+   */
+  private async recordSyncConflicts(round: { plan: { writes: Parameters<typeof selectConflictEvents>[0]["writes"] } }, state: DeviceState): Promise<void> {
+    if (!this.device.recordSyncConflicts) return;
+    try {
+      // 先选事件；零事件（绝大多数轮次）不建全库标题表。
+      const events: SyncConflictEvent[] = selectConflictEvents(round.plan, { at: this.iso() });
+      if (events.length === 0) return;
+      const titles = new Map<string, string>();
+      for (const note of state.lake.notes) titles.set(note.id, note.title);
+      for (const event of events) {
+        if (event.space !== "lake") continue;
+        const title = titles.get(event.noteId);
+        if (title) event.title = title;
+      }
+      await this.device.recordSyncConflicts(events);
+    } catch (error) {
+      this.warn("同步记录账本落库失败（不阻断同步）: " + (error instanceof Error ? error.message : String(error)), { kind: "remote_incomplete" });
+    }
   }
 
   /**

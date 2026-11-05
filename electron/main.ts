@@ -44,6 +44,7 @@ import { rememberRestoreCandidate, restoreMainDatabaseFromBackup } from "./works
 import { decideSafeMode, readSafeModeState, removeSafeModeState, writeSafeModeState, type SafeModeState } from "./safeMode.js";
 import { registerSafeModeIpc } from "./ipc/registerSafeMode.js";
 import { registerDataRecoveryIpc } from "./ipc/registerDataRecovery.js";
+import { registerSyncConflictIpc } from "./ipc/registerSyncConflictIpc.js";
 import { registerBackupIpc, type BackupIpcRunner } from "./ipc/registerBackupIpc.js";
 import { AUTO_BACKUP_TICK_MS, decideAutoBackup, readDatabaseFingerprint, runBackupCycle } from "./autoBackup.js";
 import { createIpcRegistrar } from "./ipc/registrar.js";
@@ -641,6 +642,8 @@ function registerIpc(): ReadonlyMap<string, (args: unknown[]) => Promise<unknown
       runNow: () => autoBackupRunner?.runNow() ?? Promise.resolve({ state: store.getAutoBackupState(), message: "备份服务未就绪" }),
     },
   });
+  // 261105 P1 第 4 项：同步记录账本（设备本地；列表/标已读/恢复动作）。
+  registerSyncConflictIpc(ipc, { store, quickNotes });
   return ipc.registry;
 }
 
@@ -870,6 +873,11 @@ if (!app.requestSingleInstanceLock()) {
       // 只有正常打开时才注册给 v3：降级替身的空世界会被同步判成删除/下载（desktopSync 另有前置断言）。
       setQuickNotesStoreForV3(quickNotes);
       quickNotes.recoverConversions((noteId) => store.hasNote(noteId), (noteId) => store.removeUntrackedNoteArtifacts(noteId));
+      // 261105 P1：启动自检清理「文档关系指向不存在标签」的孤儿行（目录唯一来源 = 小记库 tags）。
+      try {
+        const cleanup = store.documentTags.cleanupOrphans(new Set(quickNotes.tags.list().map((tag) => tag.id)));
+        if (cleanup.links > 0) log.app.warn("[tags] 启动清理孤儿文档标签关系 " + cleanup.links + " 行（" + cleanup.tags + " 个标签）");
+      } catch (error) { log.app.warn("[tags] 孤儿文档标签关系清理失败：" + (error as Error).message); }
     }
     drafts = new DraftJournal(draftJournalDir(workspaceRoot()));
     // 261105 Batch4-E：自动备份（主库 + 小记库）。就绪后**每 6h tick，启动不立即跑**；单飞 + 维护域串行，

@@ -1,6 +1,6 @@
 /** 桌面顶栏（§20 Phase C 收尾：topBarLeading 与右侧搜索钮从 App.tsx 移出）。
  *  260922 S1+A：工作空间钮内嵌「当前空间」图标（18px 软底），点开合一菜单（空间 + 工作空间）。 */
-import { Check, ChevronDown, Columns2, Feather, Files, Paperclip, Search, Settings, Trash } from "lucide-react";
+import { Check, ChevronDown, Columns2, Feather, Files, Paperclip, Search, Settings, Tag, Trash } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type Ref, type RefObject } from "react";
 import { Menu } from "../components/ui/Overlay";
 import { usePopoverPosition } from "../hooks/usePopoverPosition";
@@ -29,6 +29,7 @@ export interface DesktopTopBarLeadingProps {
 const SPACE_META: Record<DesktopWorkspace, { label: string; Icon: typeof Files }> = {
   library: { label: "资料库", Icon: Files },
   "quick-notes": { label: "小记", Icon: Feather },
+  tags: { label: "标签", Icon: Tag },
   trash: { label: "回收站", Icon: Trash },
   resources: { label: "资源", Icon: Paperclip },
 };
@@ -91,6 +92,8 @@ export function DesktopWorkspaceMenuItems({ desktopWorkspace, onSwitchWorkspace,
   const spaces: Array<{ id: DesktopWorkspace; label: string; Icon: typeof Files; hint?: string }> = [
     { id: "library", label: "资料库", Icon: Files, hint: "⌘1" },
     { id: "quick-notes", label: "小记", Icon: Feather, hint: "⌘2" },
+    // P1 一级入口：标签空间 = 只读聚合视图 + 就地元数据管理（不是新数据空间）。
+    { id: "tags", label: "标签", Icon: Tag },
   ];
   const tools: Array<{ id: DesktopWorkspace; label: string; Icon: typeof Files }> = [
     { id: "trash", label: "回收站", Icon: Trash },

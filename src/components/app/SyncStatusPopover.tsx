@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
-import { Cloud, CloudOff, HardDrive, History, LoaderCircle, Settings2, TriangleAlert, CloudUpload } from "lucide-react";
+import { Clock, Cloud, CloudOff, HardDrive, History, LoaderCircle, Settings2, TriangleAlert, CloudUpload } from "lucide-react";
 import { isCloudActive } from "../../core/cloudState";
 import type { SyncStatus, SyncStatusInfo } from "../../lib/types";
 import { buildSyncStatusModel } from "./syncStatusModel";
@@ -10,6 +10,9 @@ import { reportNativeActionError } from "../../lib/nativeErrors";
 import { chooseVisibleAnchor } from "../../hooks/topMenuPosition";
 import { usePopoverPosition } from "../../hooks/usePopoverPosition";
 import { HoverPopover } from "../ui/Overlay";
+import { SyncConflictBadge } from "./SyncConflictBadge";
+import { SyncConflictsPanel } from "./SyncConflictsPanel";
+import { useSyncConflicts } from "./useSyncConflicts";
 
 export interface SyncStatusPopoverProps {
   buttonRef?: RefObject<HTMLButtonElement>;
@@ -67,6 +70,7 @@ export function SyncStatusPopover({
   onSync,
   onOpenSettings,
   onOpenHistory,
+  onOpenNote,
 }: SyncStatusPopoverProps) {
   const [open, setOpen] = useState(false);
   /** 当前可见的顶栏同步按钮（keep-alive 下同一个 ref 可能指向隐藏副本）。 */
@@ -76,6 +80,11 @@ export function SyncStatusPopover({
   const resolvedButtonRef = buttonRef ?? localButtonRef;
   const controlRef = useRef<HTMLDivElement | null>(null);
   const model = buildSyncStatusModel({ sync, pendingDocuments, pendingFolders, pendingQuickNotes, cloudEnabled, conflictSnapshotCount: conflictSnapshots.length });
+  /**
+   * 同步记录（P1 第 4 项）：账本读数**跟这个组件走**（角标要常显，所以不必等面板打开）。
+   * 4 份 keep-alive 顶栏只有可见那份拉取（visible=false 直接跳过），避免重复 IPC。
+   */
+  const conflicts = useSyncConflicts({ enabled: visible, syncToken: sync.lastSyncedAt });
   // 云同步未启用 / 未配置 = 本地空间：同一个浮层，换成「仅本地」内容 + 去设置入口。
   // 顶栏图标 = 云同步状态灯：关了开关 或 没配置 S3 ⇒ 磁盘（判据与后端同源，见 core/cloudState）。
   const localOnly = !isCloudActive(cloudConfigured, cloudEnabled);
@@ -146,7 +155,9 @@ export function SyncStatusPopover({
         aria-expanded={open}
       >
         <span className="sync-status-icon" aria-hidden="true">{icon}</span>
+        <SyncConflictBadge count={conflicts.unacked} />
         <span className="sync-status-visually-hidden">{localOnly ? "当前仅本地" : model.statusLabel}</span>
+        {conflicts.unacked > 0 && <span className="sync-status-visually-hidden">，有 {conflicts.unacked} 条未读同步记录</span>}
       </button>
       <HoverPopover
         open={open}
@@ -210,6 +221,20 @@ export function SyncStatusPopover({
               </div>
             </section>
           )}
+          {conflicts.unacked > 0 && (
+            <section className="sync-status-history-note" role="status" data-sync-conflicts-entry>
+              <Clock size={14} aria-hidden="true" />
+              <div>
+                <strong>最近同步有 {conflicts.unacked} 处覆盖/删除</strong>
+                <span>可在这里查看记录并恢复本地被覆盖版（不会自动弹窗）。</span>
+                <button
+                  type="button"
+                  className="ln-btn ln-btn--secondary sync-status-inline-action"
+                  onClick={() => { setOpen(false); conflicts.openPanel(); }}
+                >查看同步记录</button>
+              </div>
+            </section>
+          )}
           {stats?.warnings && stats.warnings.length > 0 && (
             <section className="sync-status-history-note" role="status">
               <TriangleAlert size={14} aria-hidden="true" />
@@ -226,6 +251,24 @@ export function SyncStatusPopover({
             </>
           )}
       </HoverPopover>
+      <SyncConflictsPanel
+        open={conflicts.panelOpen}
+        items={conflicts.items}
+        error={conflicts.error}
+        busyId={conflicts.busyId}
+        statusText={conflicts.statusText}
+        onClose={conflicts.closePanel}
+        onAckAll={conflicts.ackAll}
+        onRestore={conflicts.restore}
+        onOpenNote={(row) => {
+          conflicts.closePanel();
+          if (row.space === "lake") onOpenNote?.(row.noteId);
+        }}
+        onViewHistory={(row) => {
+          conflicts.closePanel();
+          onOpenHistory?.(row.noteId);
+        }}
+      />
     </div>
   );
 }

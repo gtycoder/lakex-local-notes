@@ -17,7 +17,7 @@ tag_link_versions(target_kind, target_id, links_updated_at)  PK(kind,target)
 
 - **正文不存标签名**；目录与关联是唯一事实，搜索索引里的标签名只是派生缓存（可重建）。
 - 标签 ID = `t_` + sha256(归一化名称) 前 16 hex；名称 NFC/trim/空白压缩，≤32 字符；每条 ≤20 个标签；同名 active 唯一（应用层校验）。
-- 小记用 `target_kind="quickNote"`；桌面文档标签用主库 `target_kind="note"`（**文档标签未立项、不参与同步**）。
+- 小记用 `target_kind="quickNote"`；文档用 `target_kind="note"`（关系在主库；**目录只在小记标签库**，文档只同步关系 `tagIds/tagsUpdatedAt`，261105 P1 已实现）。
 - 桌面小记标签库在 `quick-notes/metadata.sqlite3`；移动端在主库；**顺序字段只是本机视图**。
 
 ## 2. 顺序（261105 用户定稿：设备本地，不参与同步）
@@ -49,6 +49,6 @@ tag_link_versions(target_kind, target_id, links_updated_at)  PK(kind,target)
 
 ## 6. 未做 / 待立项
 
-- **文档标签**：主库已有目录/关联/UI 预留，但**不参与同步**；方案（扩 lake 索引 + 移动端字段搬运）见 HANDOFF §0。
-- 小记→文档转换是否携带标签：等文档标签一起做。
+- **文档标签（261105 P1 已实现）**：关系随 lake 索引 `tagIds`（排序集合）+ `tagsUpdatedAt`（版本 LWW）同步；目录只在小记标签库；删除/改名跨库协调 + 启动清孤儿；发布时**有版本必须显式写 `tagIds`**（空集合也写 `[]`）。UI = 桌面标签空间（只读聚合 + 就地元数据管理）+ 属性面板编辑 + 侧栏筛选；移动端只读展示 + 筛选。
+- 小记→文档转换**继承标签**（261105 P1 已实现）。
 - 不做：置顶、跨端顺序一致、标签颜色/层级（用户 261105 定稿）。

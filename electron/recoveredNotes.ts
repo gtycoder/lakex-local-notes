@@ -128,6 +128,8 @@ export interface RecoveredNoteInsert {
 export interface RecoveredNotesStorePort {
   listKnownNoteIds(): Iterable<string>;
   hasNote(id: string): boolean;
+  /** 是否在「彻底删除」墓碑里（deleted_notes）：这类 id 重建会复活已删文档并上传，必须拒绝。 */
+  isPurgedNoteId(id: string): boolean;
   rebuildRecoveredNotes(rows: readonly RecoveredNoteInsert[]): Array<{ id: string; status: "created" | "skipped" }>;
 }
 
@@ -152,7 +154,14 @@ export class RecoveredNotesService {
   /** 手动扫描（只读）：只 stat + 读正文派生标题；结果同时成为「允许重建」的候选白名单。 */
   scan(): RebuildScanResultShape {
     const report = scanOrphanBodyFiles({ root: this.deps.root, knownNoteIds: new Set(this.deps.store.listKnownNoteIds()) });
-    const candidates = report.candidates.map((candidate) => inspectRecoveredCandidate(this.deps.root, candidate));
+    const candidates = report.candidates.map((candidate) => {
+      const inspected = inspectRecoveredCandidate(this.deps.root, candidate);
+      // Review-B P1-4：已彻底删除（deleted_notes 墓碑永久保留）的文档不能被「重建」复活后上传。
+      if (this.deps.store.isPurgedNoteId(candidate.noteId)) {
+        return { ...inspected, rebuildable: false, reason: "该 id 在彻底删除墓碑中（不可恢复删除），重建会复活已删文档" };
+      }
+      return inspected;
+    });
     this.lastScan = new Map(candidates.map((candidate) => [candidate.noteId, candidate]));
     this.deps.log?.("[rebuild] scan " + JSON.stringify({ scannedFiles: report.scannedFiles, candidates: candidates.length, rebuildable: candidates.filter((c) => c.rebuildable).length }));
     return { generatedAt: report.generatedAt, scannedFiles: report.scannedFiles, truncated: report.truncated, candidates };
@@ -175,6 +184,14 @@ export class RecoveredNotesService {
     const results = new Map<string, RebuildNoteResultShape>();
     for (const id of unique) {
       const candidate = lastScan.get(id)!;
+      if (!candidate.rebuildable) {
+        results.set(id, { noteId: id, status: "rejected", title: candidate.title, reason: candidate.reason ?? "该候选不可重建" });
+        continue;
+      }
+      if (this.deps.store.isPurgedNoteId(id)) {
+        results.set(id, { noteId: id, status: "rejected", title: candidate.title, reason: "该 id 在彻底删除墓碑中（不可恢复删除），拒绝重建" });
+        continue;
+      }
       const kind = normalizeNoteKind(candidate.kind);
       const absPath = path.join(this.deps.root, noteBodyRelativePath(kind, id));
       // 重建时**重新读一遍**：扫描到重建之间文件可能被改动/删除（不信任旧结果）。

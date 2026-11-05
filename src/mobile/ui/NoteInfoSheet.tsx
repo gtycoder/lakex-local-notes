@@ -8,13 +8,16 @@
  * 数据与动作复用 `native.*`（移动端 bridge 已实现 getNoteInfo / openAttachment）。
  */
 import { useEffect, useState } from "react";
-import { Copy, History, Paperclip } from "lucide-react";
+import { Copy, History, Paperclip, Tag } from "lucide-react";
 import { native } from "../../lib/native";
 import { getNativeErrorMessage } from "../../lib/nativeErrors";
 import type { NoteInfo } from "../../lib/types";
 import { showToast } from "./toastBus";
 import { MobileSheet } from "./MobileSheet";
 import { formatNoteInfoSize, formatNoteInfoTime, noteInfoRows } from "../../core/noteInfo.js";
+import { bridge } from "../bridge";
+import { loadNoteTagIdsForNotes } from "../bridge/noteTagReads";
+import { resolveDocTagChips, type DocTagChipView } from "./docTagChips";
 
 /** 附件/历史条目的渲染上限。**比桌面更小**（桌面 200）：移动端一次渲染过多节点更伤滚动；
  *  不是"与桌面同口径"——原注释这么写是错的，261016 顺手改正。 */
@@ -31,6 +34,26 @@ export interface NoteInfoSheetProps {
 export function NoteInfoSheet({ noteFileId, title, onClose, onOpenHistory }: NoteInfoSheetProps) {
   const [info, setInfo] = useState<NoteInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /**
+   * 文档标签（261105 P1，**只读**）：关系从 noteTagReads.loadNoteTagIdsForNotes 读，名称由标签目录解析。
+   * 目录里没有的 id 不展示（只给一句降级提示）；标签读取失败不影响属性其余部分，也不提供编辑入口。
+   */
+  const [tagView, setTagView] = useState<DocTagChipView | null>(null);
+  const [tagError, setTagError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    if (!noteFileId) { setTagView(null); setTagError(null); return () => { alive = false; }; }
+    setTagView(null);
+    setTagError(null);
+    void Promise.all([loadNoteTagIdsForNotes([noteFileId]), bridge.listQuickNoteTags()])
+      .then(([tagIdsByNote, directory]) => {
+        if (!alive) return;
+        setTagView(resolveDocTagChips(tagIdsByNote[noteFileId] ?? [], directory));
+      })
+      .catch((reason) => { if (alive) setTagError(getNativeErrorMessage(reason)); });
+    return () => { alive = false; };
+  }, [noteFileId]);
 
   useEffect(() => {
     let alive = true;
@@ -75,6 +98,22 @@ export function NoteInfoSheet({ noteFileId, title, onClose, onOpenHistory }: Not
           <dl className="minfo-rows">
             {rows.map(([k, v]) => (<div key={k}><dt>{k}</dt><dd>{v}</dd></div>))}
           </dl>
+
+          {/* 文档标签（261105 P1）：只读 chips；无标签不显示本区块；编辑入口不做（标签编辑回桌面版）。 */}
+          {(tagError !== null || (tagView !== null && tagView.chips.length > 0)) && (
+            <div className="minfo-section">
+              <div className="minfo-title"><Tag size={14} /><span>标签{tagView && tagView.chips.length > 0 ? " " + tagView.chips.length : ""}</span></div>
+              {tagView && tagView.chips.length > 0 && (
+                <div role="list" aria-label="文档标签（只读）">
+                  {tagView.chips.map((tag) => (<span className="mb-tag" key={tag.id} role="listitem">{tag.name}</span>))}
+                </div>
+              )}
+              {tagView && tagView.unresolved > 0 && (
+                <p className="minfo-empty">另有 {tagView.unresolved} 个标签不在本机目录中（可能已在他端删除或尚未同步），已隐藏。</p>
+              )}
+              {tagError && <p className="minfo-empty">标签信息暂不可用：{tagError}</p>}
+            </div>
+          )}
 
           <div className="minfo-section">
             <div className="minfo-title"><Copy size={14} /><span>文档 ID</span>

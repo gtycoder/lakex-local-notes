@@ -22,6 +22,9 @@ import { rubberBandWidth, SplitHandle } from "../ui/SplitHandle";
 import { usePopoverPosition } from "../../hooks/usePopoverPosition";
 // 行内重命名的 Enter/Esc/空名口径统一走共用原语（DT-12；目录这里保留「弹窗 + 空名不提交」的现状）
 import { InlineRenameInput } from "../ui/InlineRenameInput";
+import { SidebarTagFilter } from "./SidebarTagFilter";
+import { isTagSelectionActive, type TagSelection } from "../../features/tags/tagsModel";
+import type { QuickNoteTagSummary } from "../../core/quickNoteTags";
 
 type CreateKind = "notebook" | "group" | "note" | "usheet" | "bitable" | "board" | "ink";
 type DropPosition = "before" | "inside" | "after";
@@ -73,6 +76,16 @@ interface SidebarProps {
   onWidthCommit: (width: number) => void;
   /** 重命名弹窗打开期间临时钉住目录栏展开（用户 261006：悬浮态下也不能收起） */
   onSidebarHold?: (active: boolean) => void;
+  /**
+   * P1 按标签筛选（可选）：selection/目录 chips 由 App 持有；
+   * visibleIds = 命中文档 + 祖先链（只过滤**显示**，拖拽排序仍用完整兄弟集合）。
+   */
+  tagFilter?: {
+    tags: readonly QuickNoteTagSummary[];
+    selection: TagSelection;
+    visibleIds: ReadonlySet<string>;
+    onChange(next: TagSelection): void;
+  };
 }
 
 export const Sidebar = memo(function Sidebar(props: SidebarProps) {
@@ -114,7 +127,14 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
   // 目录筛选：图标按需展开输入框（交互与大纲筛选共用 dockFilterModel 状态机）
   const filter = useDockFilter(props.search, props.onSearch);
   const treeIndex = useMemo(() => buildTreeIndex(props.nodes, query), [props.nodes, query]);
-  const roots = (treeIndex.childrenByParent.get(null) ?? []).filter((node) => treeIndex.visibleIds.has(node.id));
+  /** 显示用索引：标签筛选只收窄 visibleIds（childrenByParent 保持完整 ⇒ 拖拽排序的兄弟集合不受影响）。 */
+  const displayIndex = useMemo<TreeIndex>(() => {
+    const tagFilter = props.tagFilter;
+    if (!tagFilter || !isTagSelectionActive(tagFilter.selection)) return treeIndex;
+    const visibleIds = new Set([...treeIndex.visibleIds].filter((id) => tagFilter.visibleIds.has(id)));
+    return { childrenByParent: treeIndex.childrenByParent, visibleIds };
+  }, [treeIndex, props.tagFilter]);
+  const roots = (displayIndex.childrenByParent.get(null) ?? []).filter((node) => displayIndex.visibleIds.has(node.id));
 
   /** 目录刷新（右上角刷新按钮）：重读整棵树，进行中把图标转起来并禁用，避免连点。 */
   const refreshTree = useCallback(async () => {
@@ -601,7 +621,7 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
 
   // W-2-B：聚合对象 useMemo 化——props 稳定后 TreeRow memo 才能在按键路径命中
   const treeRowProps = useMemo(() => ({
-    treeIndex,
+    treeIndex: displayIndex,
     query,
     activeId: props.activeId,
     contextId: context?.id ?? null,
@@ -624,7 +644,7 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
     onSelect: props.onSelect,
     onIconClick: setTreeIcon,
     lockedNoteIds: props.lockedNoteIds,
-  }), [treeIndex, query, props.activeId, context?.id ?? null, expanded, draggingId, dropTarget, dropParentId, draggedParentId, releaseState, pendingCreate, editingId, createField, beginRename, beginTreeDrag, setContextNode, openContext, openCreateMenu, toggleNode, props.onSelect, setTreeIcon, props.lockedNoteIds]);
+  }), [displayIndex, query, props.activeId, context?.id ?? null, expanded, draggingId, dropTarget, dropParentId, draggedParentId, releaseState, pendingCreate, editingId, createField, beginRename, beginTreeDrag, setContextNode, openContext, openCreateMenu, toggleNode, props.onSelect, setTreeIcon, props.lockedNoteIds]);
 
   return (
     <aside
@@ -672,10 +692,19 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
       </div>
       </div>
       <DockFilterRow filter={filter} placeholder="筛选目录" className="desktop-only" />
+      {props.tagFilter && (
+        <SidebarTagFilter tags={props.tagFilter.tags} selection={props.tagFilter.selection} onChange={props.tagFilter.onChange} />
+      )}
       <nav className="note-list tree-list" ref={treeRef}>
         {pendingCreate?.kind === "notebook" && createField(0)}
         {roots.map((node) => <TreeRow key={node.id} node={node} depth={0} {...treeRowProps} />)}
-        {roots.length === 0 && <div className="empty-list">{query ? "没有匹配的目录项，Esc 或再点筛选图标可清空" : "点击 + 新建第一个笔记本"}</div>}
+        {roots.length === 0 && <div className="empty-list">{
+          query
+            ? "没有匹配的目录项，Esc 或再点筛选图标可清空"
+            : props.tagFilter && isTagSelectionActive(props.tagFilter.selection)
+              ? "没有符合标签筛选的文档，点标签上的 × 清除筛选"
+              : "点击 + 新建第一个笔记本"
+        }</div>}
       </nav>
       {contextMenu && contextNode && <ContextMenu node={contextNode} x={contextMenu.x} y={contextMenu.y} onNewChild={menuNewChild} onRename={menuRename} onDelete={menuDelete} onCopyMarkdown={() => props.onCopyMarkdown(contextNode)} onExportAs={(format) => props.onExportAs(contextNode, format)} onCopyPaths={() => props.onCopyPaths(contextNode)} onShowInfo={() => props.onShowInfo(contextNode)} onOpenHistory={() => props.onOpenHistory(contextNode)} locked={contextNode.noteFileId ? props.lockedNoteIds.has(contextNode.noteFileId) : false} onToggleLock={() => props.onToggleLockNote(contextNode)} onClose={() => setContextMenu(null)} />}
       {createMenu && <CreateMenu anchor={createMenu.anchor} onNewChild={(kind) => createChild(createMenu.node, kind)} onClose={() => setCreateMenu(null)} />}

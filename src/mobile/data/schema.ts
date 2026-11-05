@@ -39,7 +39,7 @@ import {
  *
  * ⚠️ 只用于"建表/加列/建索引"这类幂等 DDL；**数据迁移仍然每次都按判据检查**（如旧库识别）。
  */
-export const MOBILE_SCHEMA_VERSION = 10; // 261029 Del-6：deleted_notes 去掉 published_at（墓碑发布改 waterline 判据）
+export const MOBILE_SCHEMA_VERSION = 11; // 261105 P1 第 4 项：新增同步记录账本 sync_conflicts（设备本地）
 
 /**
  * 读当前库的 schema 版本（PRAGMA user_version；空库 = 0）。
@@ -156,6 +156,22 @@ export function baseSchemaStatements(): SchemaStatement[] {
   )`);
   push("CREATE INDEX IF NOT EXISTS idx_tag_links_tag ON tag_links(tag_id)");
   push("CREATE INDEX IF NOT EXISTS idx_tag_links_target ON tag_links(target_kind, target_id)");
+  // 261105 P1 第 4 项：同步记录账本（设备本地；不进 S3/git）。判据/轮转复用 core/syncConflictLog。
+  push(`CREATE TABLE IF NOT EXISTS sync_conflicts (
+    id TEXT PRIMARY KEY,
+    note_id TEXT NOT NULL,
+    space TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    at TEXT NOT NULL,
+    title TEXT,
+    local_hash TEXT,
+    remote_hash TEXT,
+    history_ref TEXT,
+    acked_at TEXT,
+    resolved_at TEXT,
+    resolution TEXT
+  )`);
+  push("CREATE INDEX IF NOT EXISTS idx_sync_conflicts_at ON sync_conflicts(at DESC)");
   // Del-6（261029）：v2 的两张死账本不再建表——sync_base（v3 基线在 sync_v3_state 的 baseline，
   // 移动端自 021 删除旧同步引擎后无人写）与 declared_assets（v3 声明是每篇一份的云端对象，从不写本地）。
   // 旧库残留空表无害，不为旧数据写迁移/清理（AGENTS §3#7）；不带 DROP（保留用户数据目录只读）。

@@ -12,7 +12,7 @@ import { RecoveredNotesService } from "../recoveredNotes.js";
 import type { Store } from "../store.js";
 
 export interface DataRecoveryIpcDeps {
-  store: Pick<Store, "getFileScanSettings" | "saveFileScanSettings" | "listNotesSyncMeta" | "hasNote" | "rebuildRecoveredNotes"> & {
+  store: Pick<Store, "getFileScanSettings" | "saveFileScanSettings" | "listNotesSyncMeta" | "hasNote" | "isPurgedNoteId" | "rebuildRecoveredNotes"> & {
     logScopes: { store: { info(message: string): void } };
   };
   workspaceRoot: string;
@@ -26,6 +26,7 @@ export function registerDataRecoveryIpc(ipc: IpcRegistrar, deps: DataRecoveryIpc
     store: {
       listKnownNoteIds: () => deps.store.listNotesSyncMeta().map((note) => note.id),
       hasNote: (id) => deps.store.hasNote(id),
+      isPurgedNoteId: (id) => deps.store.isPurgedNoteId(id),
       rebuildRecoveredNotes: (rows) => deps.store.rebuildRecoveredNotes(rows),
     },
     log: (message) => deps.store.logScopes.store.info(message),

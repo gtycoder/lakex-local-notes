@@ -20,6 +20,7 @@ import {
   settlePendingTagDeletes as removePendingTagDeletes,
 } from "../data/quickNoteTagsRepository.js";
 import { reindexQuickNotesByIds, reindexQuickNotesForTags } from "../data/quickNoteTagService.js";
+import { applyRemoteNoteTags, cleanupOrphanNoteTagLinks, listAllNoteTagIds, listAllNoteTagsUpdatedAt } from "../data/noteTagLinksRepository.js";
 import { listQuickNoteAssetKeysFs, removeAssetBytesFs } from "../native/assetFs.js";
 
 /**
@@ -135,6 +136,9 @@ export function createMobilePlatformPort(db: MobileDb, ctxIn?: Partial<MobilePla
     },
     async listNotesSyncMeta(): Promise<SyncNoteMetaRow[]> {
       const assets = await assetsHashOf();
+      // 261105 P1（关键，防清空）：文档标签关系必须随同步清单搬运；否则移动端发布 lake 索引会清空文档标签。
+      const noteTagLinks = await listAllNoteTagIds(db);
+      const noteTagVersions = await listAllNoteTagsUpdatedAt(db);
       const rows = await db.prepare(
         "SELECT id,title,parent_id,sort_order,updated_at,content_hash,is_conflict,is_locked,locked_at,icon,doc_kind,trashed_at,deleted_from_parent_id,cloud_deleted FROM notes ORDER BY id"
       ).all() as Array<Record<string, unknown>>;
@@ -158,6 +162,13 @@ export function createMobilePlatformPort(db: MobileDb, ctxIn?: Partial<MobilePla
           deletedFromParentId: r.deleted_from_parent_id ? String(r.deleted_from_parent_id) : null,
           ...(Number(r.cloud_deleted) === 1 ? { cloudDeleted: true } : {}),
           ...(assets.has(String(r.id)) ? { assetsHash: assets.get(String(r.id))! } : {}),
+          // 文档标签关系（本机顺序；发布时由 plan 排序成集合）。
+          // P0：有版本时必须显式带 tagIds（空集合也带），否则对端分不清「删光」与「旧索引没字段」。
+          ...(() => {
+            const links = noteTagLinks.get(String(r.id)) ?? [];
+            const version = noteTagVersions.get(String(r.id));
+            return version || links.length > 0 ? { tagIds: [...links], ...(version ? { tagsUpdatedAt: version } : {}) } : {};
+          })(),
         };
       });
     },
@@ -473,6 +484,13 @@ export function createMobilePlatformPort(db: MobileDb, ctxIn?: Partial<MobilePla
     },
     async markQuickNoteSyncedIfUnchanged(quickNoteId: string, expectedContentHash: string): Promise<void> {
       await db.prepare("UPDATE quick_notes SET is_dirty=0, restore_pending_at=NULL WHERE id=? AND content_hash=?").run(quickNoteId, expectedContentHash);
+    },
+    async applyNoteTagLinks(noteId: string, tagIds: string[], tagsUpdatedAt: string): Promise<void> {
+      // 261105 P1：文档关系 LWW；先按远端 id 落关系（目录可能同一轮才到达），目录收敛统一在 pruneNoteTagLinks。
+      await applyRemoteNoteTags(db, noteId, tagIds, tagsUpdatedAt);
+    },
+    async pruneNoteTagLinks(validTagIds: readonly string[]): Promise<void> {
+      await cleanupOrphanNoteTagLinks(db, new Set(validTagIds));
     },
     async applyQuickNoteTagLinks(quickNoteId: string, tagIds: string[], tagsUpdatedAt: string): Promise<void> {
       // 与桌面同一套关系 LWW：远端更新才覆盖；过滤墓碑标签（删除的关系不复活）、去重、超上限截断。

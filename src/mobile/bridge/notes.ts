@@ -24,6 +24,7 @@ import type { LocalNote } from "../data/noteRepository.js";
 import * as trashRepository from "../data/trashRepository.js";
 import * as historyRepository from "../data/historyRepository.js";
 import type { HistoryMobileSettings } from "../data/historyRepository.js";
+import * as syncConflictRepository from "../data/syncConflictRepository.js";
 import { downloadDeclaredAssetsFor, ensureAssetsNative, mobileCloudState, syncDomain } from "./sync";
 
 
@@ -96,6 +97,7 @@ export const notesDomain = {
     const d = await ensureDb();
     return await historyRepository.listNoteHistory(d, noteId);
   },
+
 
   async getNoteInfo(id: string) {
     const d = await ensureDb();
@@ -203,6 +205,48 @@ export const notesDomain = {
       const mobileDb = d;
       return await historyRepository.cleanupHistory(mobileDb, await historyRepository.getHistorySettings(mobileDb));
     });
+  },
+
+  // ---- 261105 P1 第 4 项：同步记录账本（设备本地；UI 另任务） ----
+  async listSyncConflicts(): Promise<{ items: syncConflictRepository.MobileSyncConflictRow[]; unacked: number }> {
+    const d = await ensureDb();
+    return await syncConflictRepository.listSyncConflicts(d);
+  },
+
+  async ackSyncConflicts(ids?: string[]): Promise<{ acked: number; unacked: number }> {
+    return runWrite("ackSyncConflicts", async () => {
+      const d = await ensureDb();
+      return await syncConflictRepository.ackSyncConflicts(d, ids);
+    });
+  },
+
+  /**
+   * 恢复动作（可挽回）：remote_wins 用历史快照恢复本地版（bump dirty ⇒ 下次同步 local-wins）；
+   * 失败**不抛**：返回 { ok:false, reason, message } 供 UI 给明确文案。
+   */
+  async restoreSyncConflict(id: string): Promise<{ ok: true; noteId: string; restoredFromHistory: boolean } | { ok: false; reason: string; message: string }> {
+    const d = await ensureDb();
+    const row = await syncConflictRepository.getSyncConflict(d, id);
+    if (!row) return { ok: false, reason: "not-found", message: "同步记录不存在" };
+    if (row.resolvedAt) return { ok: true, noteId: row.noteId, restoredFromHistory: row.kind === "remote_wins" };
+    if (row.kind === "save_external_changed") return { ok: false, reason: "unsupported", message: "外部改动是审计记录，没有可恢复的目标版本" };
+    if (row.kind !== "remote_wins" || row.space !== "lake") {
+      return { ok: false, reason: "unsupported", message: "该记录不支持在移动端恢复（请在对应回收站/历史入口处理）" };
+    }
+    if (!row.historyRef) return { ok: false, reason: "history-missing", message: "该记录没有可用的历史快照" };
+    const historyId = Number(row.historyRef);
+    if (!Number.isFinite(historyId)) return { ok: false, reason: "history-missing", message: "历史快照引用无效" };
+    // 契约要求「失败不抛」：读历史/备份/写回/标记任一步都可能抛（回收站、已删、IO），统一收成结构化失败。
+    try {
+      const snapshot = await historyRepository.readHistory(d, historyId);
+      if (!snapshot) return { ok: false, reason: "history-expired", message: "历史快照已过期或被清理，无法恢复" };
+      await historyRepository.backupCurrentNote(d, snapshot.noteId);
+      await notesDomain.saveNote(snapshot.noteId, snapshot.title, snapshot.content);
+      await syncConflictRepository.markSyncConflictResolved(d, id, "restored");
+      return { ok: true, noteId: row.noteId, restoredFromHistory: true };
+    } catch (error) {
+      return { ok: false, reason: "internal", message: "恢复失败：" + (error instanceof Error ? error.message : String(error)) };
+    }
   },
 
   async createNote(title: string, parentId: string | null = null): Promise<LocalNote> {

@@ -11,6 +11,7 @@
 import { normalizeQuickNoteTag, quickNoteTagId, type QuickNoteTag } from "../../core/quickNoteTags.js";
 import type { MobileDb } from "./sqliteDb.js";
 import { listQuickNoteIdsForTags, removeQuickNoteTagLinksInTransaction } from "./quickNoteTagLinksRepository.js";
+import { removeNoteTagLinksInTransaction } from "./noteTagLinksRepository.js";
 
 type QuickNoteTagRow = {
   id: string;
@@ -218,6 +219,8 @@ export async function applyQuickTagDirectory(
       for (const noteId of await listQuickNoteIdsForTags(d, [id])) removedNoteIds.add(noteId);
       // 先清关联/版本（*InTransaction：调用方已持事务，不会重复 BEGIN），再删目录行。
       await removeQuickNoteTagLinksInTransaction(d, id);
+      // 261105 P1：文档关系（target_kind='note'）同库一并清。
+      await removeNoteTagLinksInTransaction(d, id);
       await d.prepare("DELETE FROM tags WHERE id=?").run(id);
     }
   });

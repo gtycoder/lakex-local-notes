@@ -212,6 +212,9 @@ export function mergeRoundIntoState(state: DeviceState, round: RoundResult, opts
         ...(meta.trashedAt !== undefined ? { trashedAt: meta.trashedAt } : {}),
         ...(meta.deletedFromParentId !== undefined ? { deletedFromParentId: meta.deletedFromParentId } : {}),
         ...(meta.assetsHash !== undefined ? { assetsHash: meta.assetsHash } : {}),
+        // 文档标签关系随远端条目写回（漏掉 = 跨端文档标签丢失）；旧索引无字段时保持本地关系。
+        ...(meta.tagIds !== undefined ? { tagIds: meta.tagIds } : {}),
+        ...(meta.tagsUpdatedAt !== undefined ? { tagsUpdatedAt: meta.tagsUpdatedAt } : {}),
       });
     } else {
       const prev = quickById.get(w.id);

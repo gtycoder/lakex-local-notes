@@ -11,6 +11,7 @@ import {
 } from "../../src/core/s3v3/state/deviceStore.js";
 import { createDesktopPlatformPort } from "./desktopPlatformPort.js";
 import { createNodeFileDriver } from "./nodeFileDriver.js";
+import type { SyncConflictEvent } from "../../src/core/syncConflictLog.js";
 
 /**
  * 桌面现有 Store → S3v3DeviceStore 适配器（E2-4：**薄壳**）。
@@ -207,5 +208,10 @@ export class DesktopStoreDevice implements S3v3DeviceStore {
   async archiveQuickNote(id: string): Promise<void> {
     if (!this.quickNotes) return;
     this.quickNotes.archiveLocalToTrash(id);
+  }
+
+  /** 261105 P1 第 4 项：同步记录账本落库（标题快照已由引擎给；historyRef 由 Store 按最新历史快照补全）。 */
+  async recordSyncConflicts(events: readonly SyncConflictEvent[]): Promise<void> {
+    this.store.recordSyncConflictEvents(events);
   }
 }

@@ -10,6 +10,7 @@
 |---|---|---|
 | Del-6 sync_base | ✅ 已删 | 桌面+移动 schema/读写/测试全清；「可云恢复」判据 = remoteNoteIds（v3 事实）；诊断改读 v3 baseline；拉回正文不再 setBaseHash |
 | Del-6 declared_assets | ✅ 已删 | 桌面已删（261029 早批）+ 移动死 DDL 删除 |
+| 移动 schema v11（261105 P1） | ✅ 已升 | 新增 `sync_conflicts`（同步记录账本，设备本地、不进 S3）+ 文档标签关系表；`MOBILE_SCHEMA_VERSION=11`，全部 DDL 成功后写 user_version（失败不 bump、下次幂等重放） |
 | Del-6 published_at | ✅ 已删（261029，task-22） | 逐行 published_at → **单一水线**（device_state）：`tombstones_published_at`（Lake 库）/ `quick_tombstones_published_at`（小记库新建同形 device_state 表）；pending 判据 = `deleted_at > 水线`；首次升级水线 = `COALESCE(MAX(published_at),'0')` 后 DROP COLUMN；desktopSync 成功后写水线（替代 markTombstonesPublished）；**移动 schema v10 也已删列**（deleted_notes.published_at + markTombstonesPublished/桥方法/契约面同步移除，MOBILE_SCHEMA_VERSION=10 含 DROP COLUMN 迁移） |
 | E3-1 phase1 | ✅ 完成 | src/core/s3v3/state/intentLogState.ts（v2 信封 + 单向迁移）；桌面/移动适配器 save 只写信封、load 摊回；引擎读写未改；11 个新用例 |
 | E3-1 phase2a | ✅ 完成（261029） | **持久化收敛到 1 本类型化 IntentLog（v3 records）**：toPersistedState 摊平 9 字段 → records、fromPersistedState 投影回 DeviceState（引擎 0 改动）；v1/v2 单向迁移、未知 kind 丢弃+warning、断代门只读 v3；baseline 不信封化；桌面/移动适配器接线；13 例迁移/round-trip 测试 |

@@ -104,6 +104,8 @@ export function planSync(input: PlanInput): SyncPlan {
   if (purgedIds.join("\u0000") !== basePurged.join("\u0000")) indexChanged = true;
   // 本地要发布的条目（uploadLocal）：metadata-only 轮次没有 body PUT，必须单独记录。
   const publishes: SyncPlan["publishes"] = { lake: [], quickNotes: [] };
+  // Review-A P1-4：publishes.lake 用 Set 去重（旧实现 includes 是 O(n)，20k 文档 + 旧索引场景会放大到秒级）。
+  const publishedLakeIds = new Set<string>();
   /** P1-4：引擎按 core 判据算出的「疑似外部损坏」条目——本轮不碰它们的正文与索引。 */
   const suspiciousBodyIds = new Set(input.state.suspiciousBodyIds ?? []);
 
@@ -138,7 +140,7 @@ export function planSync(input: PlanInput): SyncPlan {
       }
       // 只有「本地要发布」才改索引：纯拉取轮（applyRemote）不重发索引（与 v3 一致）。
       indexChanged = true;
-      publishes.lake.push(p.id);
+      publishedLakeIds.add(p.id);
     }
     // 可疑篇的归档已按 suspicious 理由生成，避免同内容两份历史快照。
     if (p.archiveLocal && !suspiciousBody) writes.push({ kind: "archive-local", space: "lake", id: p.id, reason: p.kind === "remote-purged-trash" ? "cloud-absent" : "remote-wins" });
@@ -153,8 +155,34 @@ export function planSync(input: PlanInput): SyncPlan {
       deletes.push({ space: "lake", id: p.id, reason: "user-purge", prefixes: [`objects/${p.id}-`, `assets/${p.id}/`, `meta/assets/${p.id}/`] });
       indexChanged = true;
     }
+    // ---- 文档标签关系（261105 P1）：集合 + 关系版本 LWW（复用小记 tagIds 的既有判据）----
+    // 正文 hash 不变也要传播；旧索引无 tagIds 字段 = 未知 ⇒ **绝不清空本地关系**，但本地有关系须发布一次。
+    // 字段存在判据 = tagIds 或 tagsUpdatedAt（P0：发布侧现在会显式带 `tagIds: []`，
+    // 所以「远端空集合」必须能与「旧索引没有字段」区分开，否则删光标签永远发不出去）。
+    const remoteHasTagField = !!r && (r.tagIds !== undefined || r.tagsUpdatedAt !== undefined);
+    if (!suspiciousBody && r && remoteHasTagField) {
+      const lt = l?.tagsUpdatedAt ?? "";
+      const rt = r.tagsUpdatedAt ?? "";
+      const localSet = [...(l?.tagIds ?? [])].sort().join("\u0000");
+      const remoteSet = [...(r.tagIds ?? [])].sort().join("\u0000");
+      if (localSet !== remoteSet || lt !== rt) {
+        if (rt > lt) {
+          // 远端关系更新 ⇒ 应用远端（保留本机顺序由落库侧实现）；正文 hash 可能没变，不重复 PUT 正文。
+          writes.push({ kind: "apply-remote", space: "lake", id: p.id, meta: { ...r }, bodyHash: r.contentHash });
+        } else if (lt > rt || (lt === rt && localSet !== remoteSet)) {
+          indexChanged = true;
+          publishedLakeIds.add(p.id);
+        }
+      }
+    } else if (!suspiciousBody && l && (l.tagIds?.length ?? 0) > 0) {
+      // 远端（旧索引）没有标签字段：本地有关系 ⇒ 发布一次把字段带出去（绝不反向清空）。
+      indexChanged = true;
+      publishedLakeIds.add(p.id);
+    }
     // E1-2 暂不生成资产 transfer（需要本地资产实扫/远端声明差集；由 E1-2b 接 E2 transfer 层）。
   }
+
+  publishes.lake = [...publishedLakeIds];
 
   // 目录：只有本地要发布（uploadLocal）才改索引；纯下载/应用远端不重发。
   for (const f of lakePlan.folders) {
@@ -257,7 +285,41 @@ export function planSync(input: PlanInput): SyncPlan {
     const lakeNotes = lakePlan.notes
       .filter((p) => p.kind !== "local-purge" && p.kind !== "remote-purged-trash")
       // P1-4：可疑篇只允许用**远端版本**进索引（远端没有就整条不进，绝不用可疑本地内容覆盖云端）。
-      .map((p) => (suspiciousBodyIds.has(p.id) ? p.remote : (p.applyRemote && p.remote ? p.remote : p.local ?? p.remote)))
+      .map((p) => {
+        const picked = suspiciousBodyIds.has(p.id) ? p.remote : (p.applyRemote && p.remote ? p.remote : p.local ?? p.remote);
+        if (!picked) return picked;
+        // 261105 P1 复核（Review-A P1-1/P1-2）：标签字段按**关系 LWW 胜者单独合成**，与内容判定解耦。
+        // 否则「远端标签更新 + 本地内容要发布」这一轮会用本地旧标签覆盖远端（published 分支还会丢弃 plan.writes）。
+        const localTags = p.local?.tagIds;
+        const remoteTags = p.remote?.tagIds;
+        const lt = p.local?.tagsUpdatedAt ?? "";
+        const rt = p.remote?.tagsUpdatedAt ?? "";
+        const hasLocalTagField = !!p.local && (localTags !== undefined || lt !== "");
+        const hasRemoteTagField = !!p.remote && (remoteTags !== undefined || rt !== "");
+        let tagIds: string[] | undefined;
+        let tagsUpdatedAt: string | undefined;
+        if (hasLocalTagField || hasRemoteTagField) {
+          const localSet = [...(localTags ?? [])].sort().join("\u0000");
+          const remoteSet = [...(remoteTags ?? [])].sort().join("\u0000");
+          if (rt > lt) {
+            tagsUpdatedAt = rt;
+            tagIds = remoteTags ?? [];
+          } else if (lt > rt) {
+            tagsUpdatedAt = lt;
+            tagIds = localTags ?? [];
+          } else {
+            // 同版本：确定性 tie-break（排序后集合串的字典序比较，两端选出同一赢家；与小记标签同口径）。
+            tagIds = localSet >= remoteSet ? (localTags ?? []) : (remoteTags ?? []);
+            tagsUpdatedAt = lt || rt;
+          }
+        }
+        return {
+          ...picked,
+          // P0：有标签字段/版本时必须显式发布 tagIds（空集合也写 `[]`），否则「删光标签」在 wire 上不可见。
+          ...(tagIds !== undefined ? { tagIds: [...tagIds].sort() } : {}),
+          ...(tagsUpdatedAt ? { tagsUpdatedAt } : {}),
+        };
+      })
       .filter((n): n is NonNullable<typeof n> => !!n);
     const quickItems = quickPlan.items
       .filter((p) => p.kind !== "local-purge" && p.kind !== "local-delete")

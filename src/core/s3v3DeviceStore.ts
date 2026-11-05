@@ -1,4 +1,5 @@
 import type { LakeIndex, QuickNotesIndex } from "./s3v3/protocol/s3v3Index.js";
+import type { SyncConflictEvent } from "./syncConflictLog.js";
 import type { DeletionIntent } from "./s3v3Intent.js";
 import type { PendingDelete } from "./s3v3Gate.js";
 
@@ -151,4 +152,9 @@ export interface S3v3DeviceStore {
    *  【缺失退化】引擎退化为 writeHistory("quick-"+id)；两端 v3 的 writeHistory 对小记都是 no-op
    *  ⇒ 实际效果 = 不留副本（移动端产品定稿：小记无历史快照）。两端现已都实现本端口。 */
   archiveQuickNote?(id: string): Promise<void>;
+
+  /** 261105 P1 第 4 项：同步记录账本落库（设备本地表，不进 S3/git）。
+   *  事件由 core `selectConflictEvents` 判据选出，平台只落库 + 轮转。
+   *  【缺失退化】引擎跳过记账（同步语义不变，只是没有「同步记录」可看）。 */
+  recordSyncConflicts?(events: readonly SyncConflictEvent[]): Promise<void>;
 }

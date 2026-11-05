@@ -24,7 +24,8 @@ describe("互斥域判据（F16 红线化）", () => {
     // 261028 +restoreFromCloud（从云端恢复：清本机 v3 同步账本；整轮网络由 syncNow 维护域跑）
     // 261103 P7 +cleanNoteOrphans（PDF 导入失败/取消按 filename 定向删本轮已上传页图；只删未被正文引用的文件）
     // 261104 B-lite：+recoverMissingQuickNoteFromText（缺小记：搜索缓存重建纯文本）。
-    expect(WRITE_OPS.length).toBe(39);
+    // 261105 P1 第 4 项：+ackSyncConflicts（同步记录账本：标已读；恢复动作委托 saveNote 的写域不另取锁）。
+    expect(WRITE_OPS.length).toBe(40);
     // 261026 +ensureSearchIndex（派生索引后台补建；按需资产补拉复用 ensureTrashNoteAssets）。
     expect(MAINTENANCE_OPS.length).toBe(4);
     // 261013：syncQuickNote（小记单条推送）；261027：+ensureNoteAssets / +ensureQuickNoteAssets（占位图点击补拉）。
@@ -36,8 +37,9 @@ describe("互斥域判据（F16 红线化）", () => {
     // 261028 +getSyncDiagnostics（只读最近 3 轮同步诊断，device_state/localStorage）。
     // 261029 Del-6：-markTombstonesPublished（移动 bridge 该记账方法随 published_at 一并删除；发布判据改 waterline）
     // 261103 十四批 +getAssetUsage（本地资源占用统计：只读遍历文件系统，不写库、不出网）。
-    expect(NONE_OPS.length).toBe(44);
-    expect(ALL.length).toBe(92); // 39 写 + 4 维护 + 5 高优 + 44 none（261104 B-lite：+4）
+    // 261105 P1 第 4 项：+listSyncConflicts（只读列表）+restoreSyncConflict（委托型写：内部走 notesDomain.saveNote 取锁）。
+    expect(NONE_OPS.length).toBe(46);
+    expect(ALL.length).toBe(95); // 40 写 + 4 维护 + 5 高优 + 46 none（261105 P1 第 4 项：+3）
   });
 
   it("I1（F16）：写域与维护域必须是不同互斥域", () => {

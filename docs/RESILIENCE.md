@@ -11,7 +11,7 @@
 3. **坏数据不静默吞、不覆盖**：非空但解析失败 ⇒ **只读 + 横幅 + 禁止保存**；绝不把坏内容当空文档再写回。
 4. **失败就地隔离、留证不删除**：单条/单篇失败只影响自己；可疑字节宁可改名隔离（corrupted/<ts>/）也不静默丢弃。
 5. **单点 panic 不扩散**：后台任务/渲染组件各自兜底，一次异常不得拖垮进程、队列或整棵组件树。
-6. **越靠近本地写入越严格**：正文 tmp+rename（桌面待补 fsync）、多表写事务、I2「未变才标 / 未变才应用」。
+6. **越靠近本地写入越严格**：正文 tmp+rename + fsync（桌面 fd+目录，win32 跳过；移动 BodyStore tmp+fsync+rename）、多表写事务、I2「未变才标 / 未变才应用」。
 
 ## 2. 已落地能力（261105 前）
 
@@ -21,7 +21,7 @@
 | 组件级隔离 | per-tab EditorErrorBoundary（5 处） | 261105 补齐（见 §3） |
 | 坏正文 | core/docBodySafety：usheet/board/ink（261105 起含 bitable）⇒ 只读 + 横幅 | 同判据（261105 起四族齐） |
 | 缺正文 | ENOENT → bodyMissing + 资源页队列（云端/历史/仅本地） | B-lite 现扫 + 三条恢复 |
-| 写入 | 正文 tmp+rename；多表写 70 处事务；VACUUM INTO 一致性导出 | BodyStore tmp+fsync+rename；WAL + 串行锁；迁移失败回滚 |
+| 写入 | 正文 tmp+fsync+rename；多表写 72 处事务；VACUUM INTO 一致性导出 | BodyStore tmp+fsync+rename；WAL + 串行锁；迁移失败**不 bump user_version**、下次幂等重放 |
 | 会话保护 | 草稿 journal（原子写）、切页/关闭前 flush | 小记草稿 journal（300ms 防抖） |
 | 同步失败 | classifyS3v3Error（retryable/action-required/fatal）、发布锁重试、读回确认 | 触发点重试 + 断点续传标记；状态常驻设置页 |
 | 诊断 | 日志分作用域（[crash]/[ipc]）；设置页同步诊断 | 复制诊断 + emptyCatchGuard AST 护栏（80 处带理由空 catch） |
@@ -39,7 +39,13 @@
 6. **自动备份（1）**：`electron/autoBackup.ts` — 默认每天、保留 7 份/300MB，`VACUUM INTO` + quick_check + 轮转；与「从备份恢复」闭环；应用未运行时不会后台备份。
 7. **保存版本守卫（2）**：保存带 `baseHash`，磁盘被外部/他端改过 ⇒ 不写盘、返回 `external_changed`，三选项（另存副本/覆盖/载入磁盘版）+ 自动保存暂停；同步 apply 路径不受影响。
 
-## 4. 已知缺口（Batch 3 backlog；P1 四条已在 261105 Batch 2 修复）
+## 3.2 261105 P1 批（标签 + 同步记录 + review 收口）
+1. **文档标签同步**：lake 索引 `tagIds/tagsUpdatedAt`（集合 + 版本 LWW）；目录只在小记标签库，文档关系留主库，跨库删除/改名协调 + 启动孤儿清理；移动端必须搬运字段。
+2. **标签空间**：一级入口、只读聚合（文档/小记分组 + 只读预览 + 跳转），就地标签元数据管理；属性面板标签编辑 + 侧栏筛选。
+3. **同步记录账本**：只记「远端覆盖本地 / 他端删除（含 quick-purge）/ 保存时磁盘被改」；本机表 500 条/90 天；角标 + 列表 + 一键恢复（历史快照 → local-wins 重传）。
+4. **review 修复的失败面**：删光标签必须显式发布空集合（否则两端互刷）；发布条目标签按 LWW 合成；同版本集合 tie-break；`quick-purge` 记账；索引 `tagIds` 去重/上限 + `tagsUpdatedAt` 必须可解析；移动清理空目录保护；备份指纹含 `-wal`、新备份先 quick_check、恢复拷贝边车；重建拒绝 `deleted_notes` 墓碑；另存副本后原页载入磁盘版。
+
+## 4. 已知缺口（261105 收口后的真待办）
 
 **已修（261105 Batch 2）**
 1. 水线单调化：`core/syncWaterline.ts` 归一化读取（未来值当 0）+ 写入只增不减/夹到 now + 启动自检回写；所有 pending 查询改用归一化水线。
@@ -52,11 +58,14 @@
 6. 崩溃标记 → **安全模式**：`crash-marker.occurrences>=2` 或 30 分钟内连续 2 次 ⇒ 本次跳过自动同步/不恢复 tab/不预热内核，顶部 `SafeModeBanner` 提示 + 复制诊断 + 退出；`safe-mode.json` 设备本地，损坏不二次失败。
 7. 写入卫生：导出 tmp+rename；桌面 `atomicWrite` 补 fsync（fd+目录，win32 跳过）；`canonicalJson` 迭代化 + 深度 256/节点 200 万上限（输出逐字节一致）。
 
+**已补（261105 Batch 4 / P1）**
+8. 整库备份**导入恢复**入口（从备份恢复）；文件↔元数据**对账**（低频只报告 + 手动重建）；定时兜底历史快照；安全模式会话写入门（`useTabSessionPersistence`）。
+
 **仍待做（按优先级）**
-8. 整库备份**导入恢复**入口（当前只能导出）；文件↔元数据**对账**（思源式节流：同步后/空闲/dirty/冷却）；定时兜底历史快照。
 9. 恢复页 hash 通道需真机/打包冒烟；Kotlin 改动需 CI/真机编译验证。
 10. 正文突变保护限制：大小骤降分支未接线、合法 UTF-8 截断不拦、可疑篇每轮重复 warning/归档（建议按 (id,hash) 去重）。
-11. 安全模式副作用：会话文件可能被「空标签」覆盖（本次不恢复 tab）——需要保留须给会话写 effect 加门；视觉未实机走查。
+11. 安全模式副作用：`useSafeModeStatus` 的 IPC 失败按 inactive（fail-open）、`useBootstrap` 未知期仍可能先 clear 会话；视觉未实机走查。
+12. review 遗留（P2）：历史兜底仍在主线程同步跑（200 篇读+gzip 写）、移动 `loadNoteTagIdsForNotes` 静默截断 2000 篇、对账 `lastRunAt` 不持久、启动每次全库 `quick_check`、`saveState` 逐篇版本点查可批量。
 
 ## 5. 新增失败面时的检查清单
 

@@ -29,6 +29,8 @@ import { useTreeActions } from "./hooks/useTreeActions";
 import { useTabLifecycle } from "./hooks/useTabLifecycle";
 import { useNoteLifecycle } from "./hooks/useNoteLifecycle";
 import { useSavePipeline } from "./hooks/useSavePipeline";
+import { useTagSpaceData } from "./hooks/useTagSpaceData";
+import { EMPTY_TAG_SELECTION, computeTagVisibleIds, type TagAggregateItem, type TagSelection } from "./features/tags/tagsModel";
 import { createConflictCopy } from "./hooks/saveConflictCopy";
 import { useSyncShell } from "./hooks/useSyncShell";
 import { useSyncController } from "./hooks/useSyncController";
@@ -56,6 +58,8 @@ import { DesktopSplitButton, DesktopTopBarLeading, DesktopTopBarSearch } from ".
 import { DesktopWorkspaceSlotProvider } from "./desktop/desktopWorkspaceSlot";
 import { BrandLaunchMark } from "./components/app/BrandLaunchMark";
 const TrashPanel = lazy(() => import("./components/app/TrashPanel").then((m) => ({ default: m.TrashPanel })));
+/** P1 标签空间（一级入口「标签」）：只读聚合 + 就地元数据管理；预览正文由组件内部再懒加载（内核边界）。 */
+const TagsWorkspace = lazy(() => import("./features/tags/TagsWorkspace").then((m) => ({ default: m.TagsWorkspace })));
 import { AssetsBrowser } from "./components/app/AssetsBrowser";
 
 export function App() {
@@ -86,6 +90,31 @@ export function App() {
   const [aiAssistantOpen, setAiAssistantOpen] = useState(false);
   const { syncToast, setSyncToast, showSyncToast } = useSyncShell();
   const shell = useDesktopShell({ quickNotesRef });
+
+  // ===== P1 标签空间（一级入口「标签」）=====
+  // 标签目录（quick-notes 库，已同步）+ 文档关系（主库）一份数据；侧栏「按标签筛选」与标签页共用。
+  const tagSpace = useTagSpaceData();
+  const [tagSelection, setTagSelection] = useState<TagSelection>(EMPTY_TAG_SELECTION);
+  const tagVisibleIds = useMemo(
+    () => computeTagVisibleIds(treeNodes, tagSpace.links, tagSelection),
+    [treeNodes, tagSpace.links, tagSelection],
+  );
+  /** 标签目录元数据管理：目录仍走既有 quick-notes 标签通道（主进程负责跨库协调文档关系）。 */
+  const tagSpaceActions = useMemo(() => ({
+    rename: async (id: string, name: string) => { await native.updateQuickNoteTag(id, { name }); },
+    merge: async (sourceId: string, targetId: string) => { await native.mergeQuickNoteTags(sourceId, targetId); },
+    remove: async (id: string) => { await native.deleteQuickNoteTag(id); },
+    reorder: async (ids: string[]) => { await native.reorderQuickNoteTags(ids); },
+  }), []);
+  /** 标签页只读预览取正文（文档 = readNote；小记 = readQuickNote 的 lake body）。 */
+  const loadTagPreview = useCallback(async (item: TagAggregateItem): Promise<string | null> => {
+    if (item.kind === "doc") {
+      const note = await native.readNote(item.id);
+      return note.content ?? "";
+    }
+    const quick = await native.readQuickNote(item.id);
+    return quick.content?.body || quick.content?.text || "";
+  }, []);
   const {
     // sidebar
     sidebarMode, sidebarRenderMode, narrowOverlay, setSidebarMode, sidebarWidth, sidebarResizing, sidebarResizingRef,
@@ -106,6 +135,10 @@ export function App() {
     settingsOpen, setSettingsOpen, settingsCategory, setSettingsCategory,
     confirmDelete, setConfirmDelete,
   } = shell;
+  /** 进入标签空间时重读一次（目录/关系可能在别处改过：属性面板、小记页、同步）。 */
+  useEffect(() => {
+    if (desktopWorkspace === "tags") void tagSpace.reload();
+  }, [desktopWorkspace, tagSpace.reload]);
   // 快捷键注册放在 shell 之后：⌘] 需要 toggleSidebarDock —— 目录栏此前只有鼠标入口（260923）。
   useWindowShortcuts({
     onOpenSearch: () => { setSearchPanelQuery(""); setSearchPanelOpen(true); closeMenus(); },
@@ -512,6 +545,17 @@ export function App() {
         clearSaveConflict(conflict.noteId);
         await refreshTree();
         setNotes(await native.listNoteSummaries());
+        // Review-B P1-6：提示说「原文档将载入磁盘上的版本」就必须真的载入；
+        // 否则原标签页仍是旧内容+旧 baseHash，下次保存再次判冲突、反复生成副本。
+        const fresh = await native.readNote(conflict.noteId);
+        setOpenTabs(patchTabById(conflict.noteId, {
+          title: fresh.title,
+          content: fresh.content,
+          dirty: false,
+          reloadKey: (tab?.reloadKey ?? 0) + 1,
+          ...(fresh.contentHash ? { baseHash: fresh.contentHash } : {}),
+        }));
+        bumpRevision(conflict.noteId);
         showNotice("本次修改已另存为《" + created.title + "》，原文档将载入磁盘上的版本。");
       }
       if (choice === "discard") {
@@ -734,7 +778,8 @@ export function App() {
       )}
       {/* 空间切换已并入顶栏工作空间菜单（S1+A）；活动栏不再渲染（壳层导航，功能见菜单 ⌘1–3） */}
       {/* keep-alive：Sidebar 常驻，小记/回收站空间由 shell class 隐藏（避免切回时重建目录树） */}
-      <Sidebar nodes={treeNodes} activeId={activeNoteId} search={search} mode={sidebarRenderMode} width={sidebarWidth} minWidth={SIDEBAR_MIN_WIDTH} maxWidth={SIDEBAR_MAX_WIDTH} onSearch={setSearch} onRefreshTree={refreshTree} onSelect={sidebarSelect} onCreate={sidebarCreate} onRename={sidebarRename} onMoveNode={sidebarMove} onRequestDelete={sidebarRequestDelete} onCopyMarkdown={copyMarkdownFromCache} onExportAs={exportAs} onCopyPaths={copyNotePaths} onSetIcon={sidebarSetIcon} onShowInfo={(node) => setInfoNote(node)} onOpenHistory={sidebarOpenHistory} lockedNoteIds={lockedNoteIds} onToggleLockNote={(node) => { if (node.noteFileId) void toggleNoteLock(node.noteFileId); }} revealNodeId={revealNodeId} onRevealConsumed={() => setRevealNodeId(null)} pendingRenameId={pendingRenameId} onPendingRenameConsumed={sidebarPendingRenameConsumed} onPreviewEnter={showSidebarPreview} onPreviewLeave={hideSidebarPreview} onResizeActiveChange={handleSidebarResizeActiveChange} onWidthChange={updateSidebarWidth} onWidthCommit={commitSidebarWidth} onToggleDock={toggleSidebarDock} docked={sidebarMode === "docked"} onSidebarHold={holdSidebarExpanded} />
+      <Sidebar nodes={treeNodes} activeId={activeNoteId} search={search} mode={sidebarRenderMode} width={sidebarWidth} minWidth={SIDEBAR_MIN_WIDTH} maxWidth={SIDEBAR_MAX_WIDTH} onSearch={setSearch} onRefreshTree={refreshTree} onSelect={sidebarSelect} onCreate={sidebarCreate} onRename={sidebarRename} onMoveNode={sidebarMove} onRequestDelete={sidebarRequestDelete} onCopyMarkdown={copyMarkdownFromCache} onExportAs={exportAs} onCopyPaths={copyNotePaths} onSetIcon={sidebarSetIcon} onShowInfo={(node) => setInfoNote(node)} onOpenHistory={sidebarOpenHistory} lockedNoteIds={lockedNoteIds} onToggleLockNote={(node) => { if (node.noteFileId) void toggleNoteLock(node.noteFileId); }} revealNodeId={revealNodeId} onRevealConsumed={() => setRevealNodeId(null)} pendingRenameId={pendingRenameId} onPendingRenameConsumed={sidebarPendingRenameConsumed} onPreviewEnter={showSidebarPreview} onPreviewLeave={hideSidebarPreview} onResizeActiveChange={handleSidebarResizeActiveChange} onWidthChange={updateSidebarWidth} onWidthCommit={commitSidebarWidth} onToggleDock={toggleSidebarDock} docked={sidebarMode === "docked"} onSidebarHold={holdSidebarExpanded}
+        tagFilter={{ tags: tagSpace.tagOptions, selection: tagSelection, visibleIds: tagVisibleIds, onChange: setTagSelection }} />
       <main className="workspace" onPointerDownCapture={(event) => {
         const clickedDocument = (event.target as HTMLElement).closest(".document-pane, .empty-workspace");
         // 点正文收起目录栏：宽窗沿用原语义（只有"悬停预览"那种临时浮动态会收）；
@@ -844,6 +889,38 @@ export function App() {
           </header>
           <AssetsBrowser active={desktopWorkspace === "resources"} onDataChanged={() => { void refreshTree(); }} />
         </div>
+        {/* P1 标签空间：只读聚合视图 + 就地标签元数据管理（不是第三个同步空间） */}
+        <div className={"workspace-view" + (desktopWorkspace === "tags" ? "" : " workspace-view--hidden")}>
+          <header className="tab-bar desktop-only" aria-label="顶栏">
+            <div className="tabbar-leading">
+              <DesktopWorkspaceSlotProvider workspace="tags">{topBarLeading}</DesktopWorkspaceSlotProvider>
+            </div>
+            <div className="tab-items" />
+            <div className="tabbar-trailing">{topBarSearch}</div>
+          </header>
+          {desktopWorkspace === "tags" && (
+            <Suspense fallback={null}>
+              <TagsWorkspace
+                active
+                tags={tagSpace.tags}
+                documentLinks={tagSpace.links}
+                notes={notes}
+                quickNotes={tagSpace.quickNotes}
+                available={tagSpace.available}
+                dataError={tagSpace.error}
+                onReload={tagSpace.reload}
+                onRenameTag={tagSpaceActions.rename}
+                onMergeTag={tagSpaceActions.merge}
+                onDeleteTag={tagSpaceActions.remove}
+                onReorderTags={tagSpaceActions.reorder}
+                onOpenDocument={(id) => { void switchDesktopWorkspace("library"); void openNote(id); }}
+                onOpenQuickNote={(id) => void openQuickNoteFromSearch(id)}
+                onLoadPreview={loadTagPreview}
+                onError={setError}
+              />
+            </Suspense>
+          )}
+        </div>
         <DesktopStatusBar
           showDocumentStats={desktopWorkspace === "library"}
           docKind={activeKind}
@@ -876,6 +953,7 @@ export function App() {
           onOpenAssetsDir={() => { if (infoNote.noteFileId) void native.openNoteAssets(infoNote.noteFileId).catch((reason) => setError(getNativeErrorMessage(reason))); }}
           onOpenHistory={() => { void sidebarOpenHistory(infoNote); setInfoNote(null); }}
           onJumpToNode={(id) => { setInfoNote(null); setRevealNodeId(id); }}
+          onTagsChanged={() => { void tagSpace.reload(); }}
         />
         </Suspense>
       )}

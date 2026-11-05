@@ -1,0 +1,79 @@
+/*
+ * 「同步记录」浮层 + 角标（P1 第 4 项）。列表行是"事件流"不是表格：时间/标题/类型/动作四段。
+ * 颜色/间距/字号全部 --lake-* 令牌；表面与按钮复用 Overlay 的 .ln-dialog / kit 的 .ln-btn。
+ */
+.sync-conflict-badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  min-width: 12px;
+  height: 12px;
+  padding: 0 3px;
+  border-radius: 6px;
+  color: var(--lake-text-on-accent);
+  background: var(--lake-accent);
+  font-size: var(--lake-font-size-nano);
+  line-height: 12px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+.sync-conflicts__head {
+  display: flex;
+  align-items: center;
+  gap: var(--lake-space-sm);
+  padding-bottom: var(--lake-space-sm);
+  border-bottom: 0.5px solid var(--lake-border-1);
+}
+
+.sync-conflicts__head h3 {
+  display: flex;
+  align-items: center;
+  gap: var(--lake-space-xs);
+  margin: 0;
+  color: var(--lake-text-1);
+  font-size: var(--lake-font-size-body);
+}
+
+.sync-conflicts__count { margin-right: auto; color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); font-variant-numeric: tabular-nums; }
+
+.sync-conflicts__error { margin: var(--lake-space-sm) 0; color: var(--lake-status-error); font-size: var(--lake-font-size-tiny); }
+.sync-conflicts__status { margin: var(--lake-space-sm) 0; color: var(--lake-status-pending); font-size: var(--lake-font-size-tiny); }
+.sync-conflicts__empty { margin: var(--lake-space-md) 0; color: var(--lake-text-3); font-size: var(--lake-font-size-small); }
+
+.sync-conflicts__list { display: flex; flex-direction: column; gap: var(--lake-space-xs); margin: 0; padding: 0; list-style: none; max-height: min(60vh, 560px); overflow-y: auto; }
+
+.sync-conflicts__row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--lake-space-sm);
+  border: 0.5px solid var(--lake-border-1);
+  border-radius: var(--lake-radius-md);
+  background: var(--lake-bg-subtle);
+}
+
+.sync-conflicts__row.is-unread { border-color: var(--lake-accent); }
+.sync-conflicts__row.is-resolved { opacity: 0.7; }
+
+.sync-conflicts__row-main { display: flex; align-items: center; gap: var(--lake-space-xs); }
+
+.sync-conflicts__kind {
+  flex: none;
+  padding: 0 var(--lake-space-xs);
+  border-radius: var(--lake-radius-sm);
+  color: var(--lake-status-pending);
+  background: var(--lake-status-pending-soft);
+  font-size: var(--lake-font-size-tiny);
+}
+
+.sync-conflicts__kind[data-kind="remote_purged"] { color: var(--lake-status-error); background: var(--lake-status-error-soft); }
+
+.sync-conflicts__time { flex: none; color: var(--lake-text-4); font-size: var(--lake-font-size-tiny); font-variant-numeric: tabular-nums; }
+.sync-conflicts__unread { width: 6px; height: 6px; border-radius: 3px; background: var(--lake-accent); }
+.sync-conflicts__resolved { display: inline-flex; align-items: center; gap: 2px; color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); }
+
+.sync-conflicts__title { color: var(--lake-text-1); font-weight: var(--lake-font-weight-semibold); }
+.sync-conflicts__hint { color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); }
+.sync-conflicts__actions { display: flex; flex-wrap: wrap; gap: var(--lake-space-xs); margin-top: var(--lake-space-xs); }

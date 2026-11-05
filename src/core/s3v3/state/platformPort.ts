@@ -49,6 +49,10 @@ export interface SyncNoteMetaRow {
   /** 移动端 DB 投影（见 SyncFolderRow）与 baseline 资产 hash 兜底；桌面不填。 */
   cloudDeleted?: boolean;
   assetsHash?: string;
+  /** 文档标签关系（261105 P1）：本机顺序（展示用）；缺省/空 = 无标签。 */
+  tagIds?: string[];
+  /** 文档标签关系版本（LWW；缺省 = ""）。 */
+  tagsUpdatedAt?: string;
 }
 
 /** 小记同步行（标签关系一并带出，避免 core 逐条回查）。 */
@@ -160,6 +164,18 @@ export interface PlatformDataPort {
   saveNote(noteId: string, title: string, content: string, caches: NoteSearchCaches | null): Promise<void>;
   applyRemoteNoteMeta(note: SyncNoteWrite): Promise<void>;
   applyRemoteEditLock(noteId: string, locked: boolean, editLockedAt: string | null): Promise<void>;
+  /**
+   * 文档标签关系 LWW（261105 P1）：远端关系更新时落库。
+   * 语义 = 关系版本 LWW + **保留本机顺序、远端新增插最前**；只接受目录里存在的 tag id（未知 id 过滤，展示层兜底）。
+   * 不实现 = 该端未接入文档标签（发布侧仍会保留索引里的字段，不主动清空）。
+   */
+  applyNoteTagLinks?(noteId: string, tagIds: string[], tagsUpdatedAt: string): Promise<void>;
+  /**
+   * 目录收敛（每轮 saveState 末尾、目录合并之后调用）：清掉指向**目录不存在标签**的文档关系。
+   * 与 applyNoteTagLinks 分两步：同一轮里目录可能刚随 quick-notes 索引到达（先按远端 id 落关系，
+   * 再按最终目录过滤），避免首轮同步因本机目录尚未合并而丢掉全部文档标签。
+   */
+  pruneNoteTagLinks?(validTagIds: readonly string[]): Promise<void>;
   setNodeIcon(noteId: string, icon: string): Promise<void>;
   /** 软删（进回收站），不得物理删除。用于「远端墓碑 → 本地进回收站」。 */
   deleteNote(noteId: string): Promise<void>;

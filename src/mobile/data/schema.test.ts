@@ -29,7 +29,7 @@ describe("mobile schema", () => {
       expect(Number(column!.notnull)).toBe(1);
       expect(String(column!.dflt_value)).toBe("0");
     }
-    expect(MOBILE_SCHEMA_VERSION).toBe(10);
+    expect(MOBILE_SCHEMA_VERSION).toBe(11);
   });
 
   it("261021：版本已到 ⇒ 第二次应用整体跳过（冷启动省 ~2.4s 的建表往返）", async () => {

@@ -18,22 +18,31 @@ export function useSyncSettingsForm(open: boolean, onRefresh: () => Promise<void
   const [syncProgress, setSyncProgress] = useState<SyncProgressSnapshot | null>(() => readSyncProgress());
   // SD-13：最近 3 轮同步诊断（bridge 在每轮同步结束写入 device_state）。
   const [syncReports, setSyncReports] = useState<S3v3DiagnosticReport[]>([]);
+  /** 同步记录账本（261105 P1 第 4 项）：未读条数 = 设置页「上次同步」下方入口的角标。 */
+  const [conflictUnacked, setConflictUnacked] = useState(0);
 
   const reloadSyncReports = useCallback(async () => {
     try { setSyncReports(await bridge.getSyncDiagnostics()); } catch { setSyncReports([]); }
   }, []);
 
+  /** 只读未读数（账本在主库，设备本地；查询失败不打扰用户，入口不显示即可）。 */
+  const reloadConflicts = useCallback(async () => {
+    try { setConflictUnacked((await bridge.listSyncConflicts()).unacked); } catch { setConflictUnacked(0); }
+  }, []);
+
   useEffect(() => {
     if (!open) return;
     void reloadSyncReports();
-  }, [open, reloadSyncReports]);
+    void reloadConflicts();
+  }, [open, reloadSyncReports, reloadConflicts]);
 
   useEffect(() => {
     if (!open) return;
     setSyncSettings(bridge.getSyncSettings());
   }, [open]);
 
-  useEffect(() => subscribeSyncStatus(() => setLastSync(readSyncStatus())), []);
+  // 自动同步也会产生记录 ⇒ 每轮结束（状态写入）后刷新未读数（一次小查询，不阻塞界面）。
+  useEffect(() => subscribeSyncStatus(() => { setLastSync(readSyncStatus()); void reloadConflicts(); }), [reloadConflicts]);
   useEffect(() => subscribeSyncProgress(() => setSyncProgress(readSyncProgress())), []);
 
   const updateSyncSettings = useCallback((patch: Partial<SyncSettings>) => {
@@ -58,7 +67,8 @@ export function useSyncSettingsForm(open: boolean, onRefresh: () => Promise<void
     }
     // 成功/失败都读一次：诊断由 bridge.syncNow 写在本轮结束时。
     await reloadSyncReports();
-  }, [onRefresh, reloadSyncReports]);
+    await reloadConflicts();
+  }, [onRefresh, reloadSyncReports, reloadConflicts]);
 
   return {
     syncSettings,
@@ -72,6 +82,8 @@ export function useSyncSettingsForm(open: boolean, onRefresh: () => Promise<void
     lastSyncBreakdown: lastSync ? describeSyncBreakdown(lastSync) : null,
     syncReports,
     reloadSyncReports,
+    conflictUnacked,
+    reloadConflicts,
     runSync,
   };
 }

@@ -27,6 +27,7 @@ import { useSyncSettingsForm } from "./useSyncSettingsForm";
 import { useMissingBodies } from "./useMissingBodies";
 import { MissingBodiesSheet, type MissingBodiesMode } from "./MissingBodiesSheet";
 import { ResourceCleanupSheet, type ResourceCleanupMode } from "./ResourceCleanupSheet";
+import { SyncConflictsEntry, SyncConflictsSheet } from "./SyncConflictsSheet";
 import type { OrphanAsset } from "./useSettingsSectionData";
 import { showToast } from "../ui/toastBus";
 import { formatS3v3Diagnostics } from "../../core/s3v3Report";
@@ -119,8 +120,12 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
     lastSyncText,
     syncReports,
     reloadSyncReports,
+    conflictUnacked,
+    reloadConflicts,
     runSync,
   } = useSyncSettingsForm(open, onRefresh);
+  /** 「同步记录」列表页（261105 P1 第 4 项）：入口在「上次同步」下方。 */
+  const [conflictsOpen, setConflictsOpen] = useState(false);
   // 缺正文/缺小记（261104 B-lite）：进「资源管理」时扫一次，恢复动作后 reload 刷新计数。
   const missingBodies = useMissingBodies(open && view === "resources");
   const [missingSheet, setMissingSheet] = useState<MissingBodiesMode | null>(null);
@@ -441,6 +446,8 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                       {syncCfg?.enabled === false ? "（云同步当前已关闭，不会联网）" : ""}
                     </div>
                     {lastSyncBreakdown && <div className="mb-set-item__desc">{lastSyncBreakdown}</div>}
+                    {/* 261105 P1 第 4 项：有未读同步记录（覆盖/删除）时给列表入口；没有就不占位。 */}
+                    <SyncConflictsEntry count={conflictUnacked} onOpen={() => setConflictsOpen(true)} />
                   </div>
                   {syncCfg?.enabled !== false && (
                     <>
@@ -614,6 +621,12 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
         </div>
       )}
 
+      <SyncConflictsSheet
+        open={conflictsOpen}
+        onClose={() => setConflictsOpen(false)}
+        onOpenNote={onOpenNote}
+        onChanged={() => void reloadConflicts()}
+      />
       <MissingBodiesSheet
         open={missingSheet !== null}
         mode={missingSheet ?? "docs"}

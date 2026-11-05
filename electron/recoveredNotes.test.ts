@@ -49,6 +49,7 @@ function makeHarness() {
     store: {
       listKnownNoteIds: () => store.listNotesSyncMeta().map((note) => note.id),
       hasNote: (id) => store.hasNote(id),
+      isPurgedNoteId: (id) => store.isPurgedNoteId(id),
       rebuildRecoveredNotes: (rows) => store.rebuildRecoveredNotes(rows),
     },
     log: (message) => logs.push(message),
@@ -64,6 +65,27 @@ function writeBody(root: string, kindDir: string, filename: string, content: str
   fs.writeFileSync(file, content);
   return file;
 }
+
+describe("彻底删除墓碑保护（Review-B P1-4：重建不得复活已 purge 文档）", () => {
+  it("候选命中 deleted_notes 墓碑 ⇒ 不可重建 + 明确原因；rebuild 拒绝且不落库", async () => {
+    const { root, store, service } = makeHarness();
+    const body = writeBody(root, "notes", "orphan-purged.lake", "<h1>旧文档</h1><p>x</p>");
+    expect(fs.existsSync(body)).toBe(true);
+    // 墓碑永久保留（彻底删除后行仍在）。
+    (store as any).db.prepare(
+      "INSERT INTO deleted_notes(id,title,parent_id,sort_order,updated_at,deleted_at,node_type,purged_at) VALUES (?,?,?,?,?,?,?,?)",
+    ).run("orphan-purged", "旧文档", null, 0, "2026-01-01T00:00:00.000Z", "2026-01-02T00:00:00.000Z", "note", "2026-01-02T00:00:00.000Z");
+    const scan = service.scan();
+    const candidate = scan.candidates.find((c) => c.noteId === "orphan-purged");
+    expect(candidate).toBeTruthy();
+    expect(candidate!.rebuildable).toBe(false);
+    expect(candidate!.reason).toContain("彻底删除");
+    const results = (await service.rebuild(["orphan-purged"])).results;
+    expect(results[0]).toMatchObject({ status: "rejected" });
+    expect(store.hasNote("orphan-purged")).toBe(false); // 没有复活
+    expect(fs.readFileSync(body, "utf8")).toContain("旧文档"); // 正文也没动
+  });
+});
 
 describe("标题派生（正文优先，解析不到退化）", () => {
   it("doc（Lake HTML）：首个 H1~H6 文本作为标题", () => {

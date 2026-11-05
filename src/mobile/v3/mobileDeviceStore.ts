@@ -13,6 +13,8 @@ import { createMobilePlatformPort, createMobileBodyFileDriver, type MobilePlatfo
 import { listQuickNoteAssetKeysFs, loadAssetBytesFs, removeAssetBytesFs, saveAssetBytesFs } from "../native/assetFs.js";
 import { NativeAssetSync, nativeAssetSyncSupported } from "../native/nativeAssetSync.js";
 import * as historyRepository from "../data/historyRepository.js";
+import { insertSyncConflicts } from "../data/syncConflictRepository.js";
+import type { SyncConflictEvent } from "../../core/syncConflictLog.js";
 
 /**
  * 移动端 S3v3DeviceStore（E2-4 phase C）：**只做端口装配与正文 staging**，
@@ -365,6 +367,11 @@ export class MobileDeviceStore implements S3v3DeviceStore {
    * 正文与图片按新 id 复制、标签关系一并复制（恢复后是一条带标签的新小记）。
    * 归档后删除旧 id 的图片目录：随后引擎会用远端正文/资源覆盖原条目，留着旧图会被下一轮误声明上传。
    */
+  /** 261105 P1 第 4 项：同步记录账本落库（设备本地；判据由 core selectConflictEvents 给出）。 */
+  async recordSyncConflicts(events: readonly SyncConflictEvent[]): Promise<void> {
+    await insertSyncConflicts(this.db, events);
+  }
+
   async archiveQuickNote(id: string): Promise<void> {
     const row = await this.db.prepare("SELECT created_at,updated_at,preview_text,image_count,content_hash FROM quick_notes WHERE id=?").get(id) as
       { created_at: string; updated_at: string; preview_text: string; image_count: number; content_hash: string } | undefined;

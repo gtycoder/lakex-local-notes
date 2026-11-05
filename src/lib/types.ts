@@ -53,6 +53,50 @@ export interface NoteDocument extends NoteSummary {
   contentHash?: string;
 }
 
+// ===== 同步记录账本（P1 第 4 项：只记「远端覆盖本地 / 他端删除 / 保存时磁盘被改」） =====
+
+/** 事件类型（与 src/core/syncConflictLog.ts 的 SyncConflictKind 同口径）。 */
+export type SyncConflictKind = "remote_wins" | "remote_purged" | "save_external_changed";
+/** 记录所属空间（Lake 文档 / 小记）。 */
+export type SyncConflictSpace = "lake" | "quickNotes";
+
+/** 一条同步记录（设备本机账本行；**不进 S3、不进 git**）。 */
+export interface SyncConflictRow {
+  id: string;
+  noteId: string;
+  space: SyncConflictSpace;
+  kind: SyncConflictKind;
+  /** ISO 时间（本轮同步时间 / 保存拦截时间）。 */
+  at: string;
+  /** 记账时的标题快照。 */
+  title?: string | null;
+  /** 被覆盖的本地版本 hash 与远端版本 hash（审计/对账用，可为空）。 */
+  localHash?: string | null;
+  remoteHash?: string | null;
+  /** 被覆盖版本对应的历史快照引用（「恢复本地被覆盖版」用；无快照为空）。 */
+  historyRef?: string | null;
+  /** 已读时间（ack 只影响角标，不删数据）。 */
+  ackedAt?: string | null;
+  /** 已处理时间（恢复成功等）。 */
+  resolvedAt?: string | null;
+  /** 处理方式（如 restored）。 */
+  resolution?: string | null;
+}
+
+/** list_sync_conflicts 的返回：按时间倒序 + 未读数（角标）。 */
+export interface SyncConflictsSnapshot {
+  items: SyncConflictRow[];
+  unacked: number;
+}
+
+/** restore_sync_conflict 的结果（失败给可读原因，绝不静默）。 */
+export type RestoreSyncConflictResult =
+  | { ok: true; noteId: string; restoredFromHistory: boolean }
+  | { ok: false; reason: "history-missing" | "history-expired" | "not-found" | string; message?: string };
+
+/** 文档 ↔ 标签关系（主库 tag_links(target_kind='note')）：noteId → tagIds（本机 position 顺序）。 */
+export type DocumentTagLinks = Record<string, string[]>;
+
 // ===== 保存版本守卫（Batch4-D）：外部/他端改过正文时不静默覆盖 =====
 
 /** 唯一冲突码（IPC 与 UI 文案的单一来源）。 */

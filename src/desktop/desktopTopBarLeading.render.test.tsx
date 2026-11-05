@@ -3,12 +3,13 @@
  * DT-09 行为护栏：桌面顶栏左侧 4 份 → **1 个渲染点**。
  *
  * 锁四件事：
- *  ① 四个空间复用**同一个**顶栏元素（App 里只构造一份）；DOM 仍是 4 份、外壳构成与内容不变
+ *  ① 五个空间（资料库/小记/标签/回收站/资源，261105 P1 +「标签」）复用**同一个**顶栏元素（App 里只构造一份）；
+ *     DOM 仍是 5 份、外壳构成与内容不变
  *     （keep-alive 下 3 份是隐藏副本），因此几何/外观不会因为合并而变化；
  *  ② 只有「活动空间那一份」接管 App 的共享 ref（`wsMenuWrapRef` / `syncBtnRef` ——
  *     工作空间菜单定位、外点判定、同步 toast 锚点全靠它；挂到隐藏副本会量到 0 尺寸）；
  *  ③ 只有活动副本可见：切空间即收起旧副本的同步浮窗（等价于旧代码的 `visible={desktopWorkspace === x}`）；
- *  ④ 棘轮：App.tsx 里不许再出现第 2 个 `<DesktopTopBarLeading>`，四个空间各声明一个槽位。
+ *  ④ 棘轮：App.tsx 里不许再出现第 2 个 `<DesktopTopBarLeading>`，每个空间各声明一个槽位（现为 5 个）。
  *
  * 边界：只验证「谁可见 / 谁的 ref / 渲染了哪份内容」这些合并点；四态真机几何（1315/1060/760）
  * 由 Lead 跑 `check-stylesnap` 并重烤基线，不在本用例范围（也不为此引入快照依赖）。
@@ -27,10 +28,12 @@ const nativeMock = vi.hoisted(() => ({
 }));
 vi.mock("../lib/native", () => ({ native: nativeMock }));
 
-const SLOTS: DesktopWorkspace[] = ["library", "quick-notes", "trash", "resources"];
+// P1：+「标签」一级入口（与 资料库/小记 并列）
+const SLOTS: DesktopWorkspace[] = ["library", "quick-notes", "tags", "trash", "resources"];
 const SPACE_LABEL: Record<DesktopWorkspace, string> = {
   library: "资料库",
   "quick-notes": "小记",
+  tags: "标签",
   trash: "回收站",
   resources: "资源",
 };
@@ -142,16 +145,16 @@ describe("桌面顶栏左侧 4→1（DT-09）", () => {
     }
   });
 
-  it("单一渲染点复用四项：DOM 仍是四份顶栏，四份内容都跟活动空间走（外观等价）", async () => {
+  it("单一渲染点复用：DOM 仍是每个空间一份顶栏，内容都跟活动空间走（外观等价）", async () => {
     const host = await mountShell();
     try {
       for (const active of SLOTS) {
         await host.render(active);
         const label = SPACE_LABEL[active];
-        expect(host.container.querySelectorAll(".toolbar__menu-wrap").length, "四份顶栏：" + active).toBe(4);
-        expect(host.container.querySelectorAll("[data-sync-status-button]").length, "四份同步按钮：" + active).toBe(4);
-        // 四份顺序 = 四个空间视图顺序（共用同一元素不会串位/缺份），内容都等于活动空间。
-        expect(SLOTS.map((slot) => slotOf(host.container, slot)?.querySelector(".toolbar__text")?.textContent)).toEqual([label, label, label, label]);
+        expect(host.container.querySelectorAll(".toolbar__menu-wrap").length, "顶栏份数：" + active).toBe(SLOTS.length);
+        expect(host.container.querySelectorAll("[data-sync-status-button]").length, "同步按钮份数：" + active).toBe(SLOTS.length);
+        // 份顺序 = 空间视图顺序（共用同一元素不会串位/缺份），内容都等于活动空间。
+        expect(SLOTS.map((slot) => slotOf(host.container, slot)?.querySelector(".toolbar__text")?.textContent)).toEqual(SLOTS.map(() => label));
         // 图标/标题/aria 与改造前一致（不做视觉改版）。
         const titles = [...host.container.querySelectorAll(".toolbar__workspace")].map((el) => el.getAttribute("title"));
         expect(new Set(titles)).toEqual(new Set(["空间：" + label]));
@@ -193,20 +196,20 @@ describe("桌面顶栏左侧 4→1（DT-09）", () => {
       expect(document.body.textContent).toContain("数据仅保存在本机");
       await host.render("trash");
       expect(document.body.textContent).not.toContain("数据仅保存在本机");
-      expect(host.container.querySelectorAll(".toolbar__menu-wrap").length).toBe(4);
+      expect(host.container.querySelectorAll(".toolbar__menu-wrap").length).toBe(SLOTS.length);
     } finally {
       await host.unmount();
     }
   });
 
-  it("棘轮：App.tsx 只剩一个 DesktopTopBarLeading 渲染点，四个空间各声明一个槽位", () => {
+  it("棘轮：App.tsx 只剩一个 DesktopTopBarLeading 渲染点，每个空间各声明一个槽位", () => {
     const read = (path: string): string => readFileSync(new URL(path, import.meta.url), "utf8");
     const app = read("../App.tsx");
     expect(app.match(/<DesktopTopBarLeading\b/g)?.length ?? 0).toBe(1);
     const declarations = [app, read("./DesktopLibrary.tsx"), read("./DesktopQuickNotes.tsx")]
       .map((src) => src.match(/<DesktopWorkspaceSlotProvider\b/g)?.length ?? 0)
       .reduce((total, count) => total + count, 0);
-    expect(declarations, "四个空间各一个槽位声明").toBe(4);
+    expect(declarations, "每个空间各一个槽位声明").toBe(SLOTS.length);
     // 槽位与空间必须一一对应（错了会让「可见的那份」和「接管 ref 的那份」分家）。
     expect(app.match(/<DesktopWorkspaceSlotProvider workspace="trash"/g)?.length ?? 0).toBe(1);
     expect(app.match(/<DesktopWorkspaceSlotProvider workspace="resources"/g)?.length ?? 0).toBe(1);

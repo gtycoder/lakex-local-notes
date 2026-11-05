@@ -118,14 +118,22 @@ export function decideAutoBackup(input: BackupPolicyInput): { run: boolean; reas
   return { run: true, reason: "ok" };
 }
 
-/** 主库指纹（size+mtime）；读不到 = null（仍允许备份，由备份阶段给出真实失败原因）。 */
+/**
+ * 主库指纹（size+mtime，**含 -wal**）；读不到 = null（仍允许备份，由备份阶段给出真实失败原因）。
+ * Review-B P1：WAL 模式下低写入期主库文件可能长期不变（提交只追加 -wal），只看主库会误判 unchanged。
+ */
 export function readDatabaseFingerprint(dbPath: string): BackupFingerprint | null {
-  try {
-    const stat = fs.statSync(dbPath);
-    return { size: stat.size, mtimeMs: Math.round(stat.mtimeMs) };
-  } catch {
-    return null;
+  let size = 0;
+  let mtimeMs = 0;
+  for (const file of [dbPath, dbPath + "-wal"]) {
+    try {
+      const stat = fs.statSync(file);
+      size += stat.size;
+      mtimeMs = Math.max(mtimeMs, Math.round(stat.mtimeMs));
+    } catch { /* 缺少 -wal 是常态（无未 checkpoint 事务） */ }
   }
+  if (size === 0 && mtimeMs === 0) return null;
+  return { size, mtimeMs };
 }
 
 export function backupsDir(userDataDir: string): string {
@@ -286,17 +294,35 @@ export function runBackupCycle(opts: {
     if (main.ok) mainFile = main.path ?? names.main;
     else errors.push(main.message);
     if (main.mode === "copy") errors.push("主库 VACUUM 失败，已文件级拷贝（可能不完整）");
+    // Review-B P1：新备份必须先校验；校验失败的坏备份要丢弃，不能参与轮转挤掉旧的好备份。
+    if (main.ok) {
+      const verify = verifySqliteBackup(path.join(dir, names.main));
+      if (!verify.ok) {
+        errors.push("主库备份校验失败（已丢弃）：" + (verify.reason ?? "unknown"));
+        for (const suffix of ["", "-wal", "-shm"]) { try { fs.rmSync(path.join(dir, names.main + suffix), { force: true }); } catch { /* 尽力 */ } }
+        mainFile = null;
+      }
+    }
     if (!opts.quickNotesDbPath) errors.push("小记库不可用：本次未备份小记库");
     else {
       const quick = backupDatabaseFile({ dbPath: opts.quickNotesDbPath, targetPath: path.join(dir, names.quickNotes) });
       if (quick.ok) quickNotesFile = quick.path ?? names.quickNotes;
       else errors.push("小记库：" + quick.message);
       if (quick.mode === "copy") errors.push("小记库 VACUUM 失败，已文件级拷贝（可能不完整）");
+      if (quick.ok) {
+        const verify = verifySqliteBackup(path.join(dir, names.quickNotes));
+        if (!verify.ok) {
+          errors.push("小记库备份校验失败（已丢弃）：" + (verify.reason ?? "unknown"));
+          for (const suffix of ["", "-wal", "-shm"]) { try { fs.rmSync(path.join(dir, names.quickNotes + suffix), { force: true }); } catch { /* 尽力 */ } }
+          quickNotesFile = null;
+        }
+      }
     }
     const rotation = rotateBackups({ dir, keepCount: opts.settings.keepCount, maxTotalBytes: opts.settings.maxTotalBytes, log: opts.log });
     errors.push(...rotation.warnings);
     const fingerprint = readDatabaseFingerprint(opts.mainDbPath);
-    const result: AutoBackupState["result"] = !main.ok ? "failed" : errors.length > 0 ? "partial" : "ok";
+    // 主库校验失败被丢弃时也按 failed 报（不能对用户显示「成功」）。
+    const result: AutoBackupState["result"] = !main.ok || !mainFile ? "failed" : errors.length > 0 ? "partial" : "ok";
     const message = (mainFile ? "已备份主库：" + mainFile : "主库备份失败") + (quickNotesFile ? "；小记库：" + quickNotesFile : "") + (errors.length > 0 ? "；注意：" + errors.join("；") : "");
     opts.log?.("[backup] " + JSON.stringify({ result, at, main: names.main, quickNotes: opts.quickNotesDbPath ? names.quickNotes : null, deleted: rotation.deleted.length, kept: rotation.kept, bytes: rotation.totalBytes }));
     return { ran: true, reason: "ok", state: { lastBackupAt: at, result, message, fingerprint, mainFile, quickNotesFile }, message };
