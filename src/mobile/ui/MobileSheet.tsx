@@ -45,7 +45,7 @@ export function useSheetModalFocus(open: boolean, surfaceRef: import("react").Re
     };
   }, [open]);
 
- }
+}
 
 export interface MobileSheetProps {
   open: boolean;

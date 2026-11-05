@@ -503,4 +503,6 @@
 /* 大列表只定位可见条目，正常小列表保持原间距；尺寸/位移由窗口器实时提供。 */
 .quick-notes-timeline.is-virtual { display: block; }
 .quick-notes-virtual-space { position: relative; flex: 0 0 auto; width: 100%; }
+.quick-notes-timeline:not(.is-virtual) > .quick-notes-virtual-space,
+.quick-notes-index:not(.is-virtual) > .quick-notes-virtual-space { display: contents; }
 .quick-notes-virtual-item { position: absolute; top: 0; left: 0; width: 100%; }

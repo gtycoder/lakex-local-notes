@@ -88,9 +88,12 @@ export function Overlay({ open = true, kind, onDismiss, label, className, style,
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
+      if (e.key !== "Escape" || e.defaultPrevented || e.isComposing) return;
+      // 草稿控件先撤回本次输入；第二次Esc才交给浮层。
+      if (e.target instanceof Element && e.target.closest('[data-escape-reset]')) return;
       if (openOverlayStack.at(-1)?.id !== overlayId) return;
-      e.stopPropagation();
+      e.preventDefault();
+      e.stopImmediatePropagation();
       onDismiss();
     };
     document.addEventListener("keydown", onKey, true);

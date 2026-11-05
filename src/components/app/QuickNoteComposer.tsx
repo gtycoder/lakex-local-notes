@@ -33,7 +33,7 @@ interface ComposerProps {
   onEditorReady(api: QuickNoteEditorApi | null): void;
   /** 只保存到本机（原有语义）。 */
   onSave(): void;
-  /** 保存到本机 **并且** 只把这一条推送到 S3（用户 261013 点单；主按钮）。 */
+  /** 保存到本机，再按高优先级发起整轮 v3 同步。 */
   onSaveAndSync(): void;
   onCancel(): void;
 }

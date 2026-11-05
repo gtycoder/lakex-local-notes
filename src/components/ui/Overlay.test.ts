@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
+import { flushSync } from "react-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Dialog, Menu, Popover } from "./Overlay";
 
@@ -88,5 +89,15 @@ describe("模态焦点与嵌套滚动锁", () => {
     act(() => root.render(null)); expect(document.body.style.overflow).toBe("auto");
     render(true); key(document.activeElement!, "Escape"); expect(childDismiss).toHaveBeenCalledTimes(2); expect(parentDismiss).not.toHaveBeenCalled();
     act(() => root.render(null)); document.body.style.overflow = "";
+  });
+  it("子层同步卸载时，同一次Esc不继续关闭父层", () => {
+    const parentDismiss = vi.fn();
+    const draw = (child: boolean) => root.render(createElement(Dialog, { label: "父层", onDismiss: parentDismiss, children: [
+      createElement("button", { key: "anchor" }, "父层按钮"),
+      child ? createElement(Dialog, { key: "child", label: "子层", onDismiss: () => flushSync(() => draw(false)), children: createElement("button", null, "子层按钮") }) : null,
+    ] }));
+    act(() => draw(true)); key(document.activeElement!, "Escape");
+    expect(document.querySelector('[aria-label="子层"]')).toBeNull(); expect(parentDismiss).not.toHaveBeenCalled();
+    key(document.activeElement!, "Escape"); expect(parentDismiss).toHaveBeenCalledTimes(1);
   });
 });

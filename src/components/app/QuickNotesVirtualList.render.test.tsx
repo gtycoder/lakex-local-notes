@@ -34,4 +34,32 @@ describe("桌面小记窗口化", () => {
     key(document.activeElement!, "ArrowUp"); expect(document.activeElement?.textContent).toBe("q19998"); key(document.activeElement!, "Home"); expect(document.activeElement?.textContent).toBe("q0");
     expect(host.querySelectorAll("[data-quick-note-id]").length).toBeLessThan(80);
   });
+  it("隐藏再显示、跨越24条阈值都保留编辑组件及未提交内容", async () => {
+    const draw = (visible: boolean, count: number, id: string) => act(async () => {
+      root.render(createElement(QuickNotesVirtualList, {
+        items: items.slice(0, count), mode: "timeline", className: "quick-notes-timeline", visible, keepIds: [id], revealId: null, onRevealed: () => {},
+        renderItem: item => createElement("article", { "data-quick-note-id": item.id }, createElement("input", { defaultValue: item.id })),
+      }));
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
+    await draw(true, 20000, "q15000");
+    const editing = host.querySelector<HTMLInputElement>('[data-quick-note-id="q15000"] input')!; editing.value = "未保存的正文";
+    await draw(false, 20000, "q15000"); expect(editing.isConnected).toBe(true);
+    await draw(true, 20000, "q15000"); expect(host.querySelector('[data-quick-note-id="q15000"] input')).toBe(editing); expect(editing.value).toBe("未保存的正文");
+    await draw(true, 25, "q0"); const first = host.querySelector<HTMLInputElement>('[data-quick-note-id="q0"] input')!; first.value = "阈值草稿";
+    await draw(true, 24, "q0"); expect(host.querySelector('[data-quick-note-id="q0"] input')).toBe(first);
+    await draw(true, 25, "q0"); expect(host.querySelector('[data-quick-note-id="q0"] input')).toBe(first); expect(first.value).toBe("阈值草稿");
+  });
+  it("媒体和内嵌控件保留自己的方向键、Home和End", async () => {
+    await act(async () => {
+      root.render(createElement(QuickNotesVirtualList, { items, mode: "timeline", className: "quick-notes-timeline", visible: true, keepIds: [], revealId: null, onRevealed: () => {},
+        renderItem: item => createElement("article", { "data-quick-note-id": item.id }, createElement("button", null, item.id), createElement("video", { controls: true, tabIndex: 0 }), createElement("div", { role: "slider", tabIndex: 0 })),
+      }));
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
+    for (const control of host.querySelectorAll<HTMLElement>('video,[role="slider"]')) {
+      act(() => control.focus()); key(control, "End"); expect(document.activeElement).toBe(control);
+      key(control, "ArrowDown"); expect(document.activeElement).toBe(control);
+    }
+  });
 });

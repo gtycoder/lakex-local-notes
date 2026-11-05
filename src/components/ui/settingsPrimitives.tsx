@@ -154,11 +154,13 @@ export function NumField({ label, value, min, max, floor, fallback, onSave, step
         min={min}
         max={max}
         value={draft}
+        data-escape-reset={draft !== String(value) ? "" : undefined}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={commit}
         onKeyDown={(e) => {
+          if (e.nativeEvent.isComposing) return;
           if (e.key === "Enter") e.currentTarget.blur();
-          if (e.key === "Escape") { e.preventDefault(); setDraft(String(value)); }
+          if (e.key === "Escape" && draft !== String(value)) { e.preventDefault(); e.stopPropagation(); setDraft(String(value)); }
         }}
       />
   );

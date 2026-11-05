@@ -7,13 +7,13 @@ colors:
   accent-text: "#33497f"
   surface-panel: "#ffffff"
   surface-window: "#f3f5f8"   # 261104：外围浅灰蓝，正文/卡片保持白
-  surface-block: "#f4f6f8"
+  surface-block: "#f0f3f7"
   ink-1: "#1f2329"
-  ink-2: "#4e5969"
-  ink-3: "#5f6874"
+  ink-2: "#455166"
+  ink-3: "#566273"
   ink-4: "#8b93a1"
-  hairline: "#e6e8ec"
-  control-border: "#d3d7de"
+  hairline: "#d6dde7"
+  control-border: "#bcc7d6"
   kernel-green: "#00b96b"
 typography:
   fontFamily: "MiSans, -apple-system, 'PingFang SC', 'Noto Sans CJK SC', sans-serif"
@@ -331,9 +331,9 @@ node scripts/css-audit/drive.mjs 9335 scripts/css-audit/mobile-walkthrough.mjs  
 
 ## UI 交互机制收口（261105）
 
-- 数字字段失焦/Enter提交，0合法；名称、说明和错误与输入/选择器/开关关联。
+- 数字字段失焦/Enter提交，0合法；草稿变化时用data-escape-reset让Pad Esc先撤回，再关闭浮层，组字时不触发快捷键。名称、说明和错误与输入/选择器/开关关联。
 - 设置/搜索由DeferredPanel首次打开才加载，关闭时隐藏加载壳，访问后保留表单状态；AI页保持按打开条件挂载。
 - PickerSheet保留原来只有标题的头部；与MobileSheet共用焦点/页面锁控制器，补方向键和焦点归还，不增加Tab陷阱。
 - 图片/附件预览、普通移动Sheet和桌面Dialog共用lib/pageScrollLock的计数控制。预览优先关闭；Pad Esc先消费返回栈，再处理页面。
 - 页面安全区只引用mobile-*-safe-area，env与原生WindowInsets的组合只在theme/tokens.css定义。
-- AI表单状态/动作归useAiSettingsForm，AI与基础设置视图归分类组件，SettingsDrawer保留导航与既有数据所有者。
+- AI表单状态/动作归useAiSettingsForm，分类关闭使读取失效，重开刷新已保存元信息并保留未保存草稿；原生测试异常给出失败/重试提示并撤销验证。AI与基础设置视图归分类组件，SettingsDrawer保留导航与既有数据所有者。

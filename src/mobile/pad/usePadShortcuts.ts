@@ -55,8 +55,9 @@ export function usePadShortcuts(enabled: boolean, handlers: PadShortcutHandlers)
   useEffect(() => {
     if (!enabled) return;
     const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.defaultPrevented) return;
+      if (event.defaultPrevented || event.isComposing) return;
       if (event.key === "Escape" && dismissImmersivePreview()) { event.preventDefault(); event.stopImmediatePropagation(); return; }
+      if (event.key === "Escape" && event.target instanceof Element && event.target.closest('[data-escape-reset]')) return;
       const action = matchPadShortcut({
         key: event.key,
         metaKey: event.metaKey,

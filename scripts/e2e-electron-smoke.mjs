@@ -80,7 +80,7 @@ for (let attempt = 0; attempt < 12; attempt += 1) {
   if (await evaluate(`document.activeElement?.matches('.settings-nav-search input')`)) break;
   await wait(80);
 }
-const settings = await evaluate(`JSON.stringify({ open: Boolean(document.querySelector('.settings-overlay')), title: document.querySelector('.settings-header span')?.innerText || '', role: document.querySelector('.settings-panel')?.getAttribute('role') || '', labelledBy: document.querySelector('.settings-panel')?.getAttribute('aria-labelledby') || '', focused: document.activeElement?.matches('.settings-nav-search input') })`);
+const settings = await evaluate(`JSON.stringify({ open: Boolean(document.querySelector('.settings-panel')), title: document.querySelector('.settings-header span')?.innerText || '', role: document.querySelector('.settings-panel')?.getAttribute('role') || '', dialogLabel: document.querySelector('.settings-panel')?.getAttribute('aria-label') || '', focused: document.activeElement?.matches('.settings-nav-search input') })`);
 const appearance = await evaluate(`(()=>{ const item=[...document.querySelectorAll('.settings-nav-item')].find(x=>x.innerText.trim()==='外观'); item?.click(); return JSON.stringify({customUi:document.body.innerText.includes('自定义 UI'), codeSnippet:document.body.innerText.includes('代码片段'), themeButtons:document.querySelectorAll('.settings-choice').length}); })()`);
 await evaluate(`(()=>{document.querySelector('.settings-close, .settings-panel [aria-label="关闭"]')?.click(); return true})()`);
 
@@ -93,11 +93,8 @@ if (result.baseline.drawnixJs.length !== 0) throw new Error("普通文本启动�
 if (!result.baseline.status.includes("字数") || !result.baseline.status.includes("图片")) throw new Error("底部文档状态条缺少统计");
 if (!result.settings.open || result.settings.title !== "偏好设置") throw new Error("设置面板未能打开");
 if (result.search.dialogLabel !== "搜索标题和正文" || !result.search.inputDescription) throw new Error("搜索浮层无完整无障碍标记");
-// 260923：删掉 `focused` 子断言 —— SettingsPanel 的 navSearchRef 只声明、全文件没有任何 .focus() 调用，
-// 打开设置不会把焦点移入 ⇒ 该期望在当前实现下**永不成立**（开 CDP 焦点模拟实测：document.hasFocus()=true 但 activeElement 仍不是它）。
-// role / aria-labelledby / aria-modal 三项实测正确，保留为契约。
-// ⚠️ 这是**真实的无障碍缺口**（对话框打开应设初始焦点）——但属功能改动，未在本批修，见 HANDOFF §3 待办。
-if (result.settings.role !== "dialog" || result.settings.labelledBy !== "settings-panel-title") throw new Error("设置面板无完整 dialog 标记");
+// 设置现已接Overlay：实际名称与首焦点都必须通过，不再保留旧浮层缺口。
+if (result.settings.role !== "dialog" || result.settings.dialogLabel !== "偏好设置" || !result.settings.focused) throw new Error("设置面板无完整 dialog 标记");
 if (result.appearance.customUi || result.appearance.codeSnippet) throw new Error("外观设置仍暴露自定义 UI 代码片段");
 await fs.writeFile(`${outputDir}/result.json`, JSON.stringify(result, null, 2));
 console.log(JSON.stringify(result, null, 2));
