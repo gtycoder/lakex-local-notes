@@ -26,6 +26,13 @@ import { isRememberedRestoreCandidate, rememberRestoreCandidate, restoreMainData
 /** 多维表 CSV 导入文件大小上限（本地优先、量级有限，防一次性读入超大文件）。 */
 const MAX_CSV_IMPORT_BYTES = 20 * 1024 * 1024;
 
+/** 保存版本守卫的 baseHash：sha256 十六进制（64 位）；缺省/null/空串 = 不启用守卫（旧行为）。 */
+function assertBaseHash(value: unknown): string | undefined {
+  if (value === undefined || value === null || value === "") return undefined;
+  if (typeof value !== "string" || !/^[a-f0-9]{64}$/i.test(value)) throw new IpcInputError("baseHash 参数无效");
+  return value.toLowerCase();
+}
+
 interface ResourceUploadInput {
   bytes: Uint8Array;
   filename: string;
@@ -60,8 +67,10 @@ export function registerNotesIpc(
   ipc.handle("purge_missing_body", (id: string) => store.purgeMissingBodyNote(id));
   ipc.handle("get_note_digest", (id: string) => store.getNoteDigest(id));
   ipc.handle("create_note", (title: unknown) => store.createNote(assertTitle(title)));
-  ipc.handle("save_note", (id: string, title: unknown, content: unknown, caches?: { markdown?: string | null; plain?: string | null }) =>
-    store.saveNote(id, assertTitle(title), assertContentBytes(content), caches));
+  // Batch4-D 保存版本守卫：可选第 5 参 baseHash（打开/上次保存时的正文 sha256）。
+  // 不传 = 旧行为（逐字节一致）；传了且磁盘已变 ⇒ 返回 { ok:false, code:"external_changed", diskHash }，不写盘。
+  ipc.handle("save_note", (id: string, title: unknown, content: unknown, caches?: { markdown?: string | null; plain?: string | null }, baseHash?: unknown) =>
+    store.saveNoteVersioned(id, assertTitle(title), assertContentBytes(content), caches, assertBaseHash(baseHash)));
   ipc.handle("update_note_caches", (id: string, markdown: unknown, plain: unknown) => {
     // W-4：缓存文本同样可能达正文量级，统一走 32MiB 上限
     store.updateNoteCaches(id, assertOptionalContentBytes(markdown), assertOptionalContentBytes(plain));

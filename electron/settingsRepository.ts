@@ -2,6 +2,13 @@ import type { DbLike } from "./dbLike.js";
 import type { SecretCipher } from "../src/core/secretCipher.js";
 import type { S3Settings, SyncSettings, S3GcSettings, HistorySettings, FileScanSettings } from "./storeTypes.js";
 import { FILE_RECONCILE_DEFAULTS, normalizeFileScanIntervalHours } from "./fileMetadataReconcile.js";
+import {
+  AUTO_BACKUP_DEFAULTS,
+  normalizeAutoBackupSettings,
+  normalizeAutoBackupState,
+  type AutoBackupSettings,
+  type AutoBackupState,
+} from "./autoBackup.js";
 import { defaultAiSettings, normalizeAiSettings, type AiSettings } from "../src/core/aiProviders.js";
 import { normalizeSyncSettings } from "../src/core/syncSettings.js";
 
@@ -135,6 +142,38 @@ export class SettingsRepository {
     if (normalized === null) throw new Error("扫描间隔无效");
     this.db.prepare("INSERT INTO settings(key,value) VALUES('file_scan_settings',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
       .run(JSON.stringify({ intervalHours: normalized }));
+  }
+
+  /** 自动备份设置（261105；settings key = auto_backup_settings；非法/缺省 = 默认值）。 */
+  getAutoBackupSettings(): AutoBackupSettings {
+    const row = this.db.prepare("SELECT value FROM settings WHERE key='auto_backup_settings'").get() as { value: string } | undefined;
+    if (!row) return { ...AUTO_BACKUP_DEFAULTS };
+    try {
+      return normalizeAutoBackupSettings(JSON.parse(row.value)) ?? { ...AUTO_BACKUP_DEFAULTS };
+    } catch {
+      return { ...AUTO_BACKUP_DEFAULTS };
+    }
+  }
+
+  saveAutoBackupSettings(settings: AutoBackupSettings): void {
+    const normalized = normalizeAutoBackupSettings(settings);
+    if (!normalized) throw new Error("自动备份配置无效");
+    this.db.prepare("INSERT INTO settings(key,value) VALUES('auto_backup_settings',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
+      .run(JSON.stringify(normalized));
+  }
+
+  /** 上次备份状态（261105；settings key = auto_backup_state；未备份过 = null）。 */
+  getAutoBackupState(): AutoBackupState | null {
+    const row = this.db.prepare("SELECT value FROM settings WHERE key='auto_backup_state'").get() as { value: string } | undefined;
+    if (!row) return null;
+    try { return normalizeAutoBackupState(JSON.parse(row.value)); } catch { return null; }
+  }
+
+  saveAutoBackupState(state: AutoBackupState): void {
+    const normalized = normalizeAutoBackupState(state);
+    if (!normalized) throw new Error("备份状态无效");
+    this.db.prepare("INSERT INTO settings(key,value) VALUES('auto_backup_state',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
+      .run(JSON.stringify(normalized));
   }
 
   getS3GcSettings(): S3GcSettings {

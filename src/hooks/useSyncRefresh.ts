@@ -72,7 +72,7 @@ export function useSyncRefresh({
           const gone = isGoneNote(note);
           rlog.debug("sync-tab", "trash-restore reload", { noteId: tab.noteId, restoredId: restoredId ?? null, gone, readMs: Math.round(performance.now() - readT0) });
           setOpenTabs((tabs) => tabs.map((t) => t.noteId === tab.noteId
-            ? { ...t, title: note.title, content: note.content, dirty: false, deleted: gone, reloadKey: (t.reloadKey ?? 0) + 1, lastDigest: { title: note.title, updatedAt: note.updatedAt } }
+            ? { ...t, title: note.title, content: note.content, dirty: false, deleted: gone, reloadKey: (t.reloadKey ?? 0) + 1, lastDigest: { title: note.title, updatedAt: note.updatedAt }, ...(note.contentHash ? { baseHash: note.contentHash } : {}) }
             : t));
         } catch { /* 该文档未恢复或仍不存在，保持标记 */ }
       }
@@ -92,7 +92,7 @@ export function useSyncRefresh({
         if (!noteReloadGuardRef.current.isCurrent(token)) return;
         rlog.debug("sync-tab", "history-restore reload", { noteId: restoredId, readMs: Math.round(performance.now() - t0) });
         setOpenTabs((tabs) => tabs.map((tab) => tab.noteId === restoredId
-          ? { ...tab, title: updated.title, content: updated.content, dirty: false, reloadKey: (tab.reloadKey ?? 0) + 1 }
+          ? { ...tab, title: updated.title, content: updated.content, dirty: false, reloadKey: (tab.reloadKey ?? 0) + 1, ...(updated.contentHash ? { baseHash: updated.contentHash } : {}) }
           : tab));
         bumpRevision(restoredId);
       } catch { /* 文档未打开或读取失败则跳过 */ }
@@ -107,7 +107,7 @@ export function useSyncRefresh({
         const updated = await native.readNote(noteId);
         if (!noteReloadGuardRef.current.isCurrent(token)) return;
         setOpenTabs((tabs) => tabs.map((tab) => tab.noteId === noteId
-          ? { ...tab, title: updated.title, content: updated.content, dirty: false, reloadKey: (tab.reloadKey ?? 0) + 1 }
+          ? { ...tab, title: updated.title, content: updated.content, dirty: false, reloadKey: (tab.reloadKey ?? 0) + 1, ...(updated.contentHash ? { baseHash: updated.contentHash } : {}) }
           : tab));
         bumpRevision(noteId);
       } catch { /* 文档未打开则跳过 */ }

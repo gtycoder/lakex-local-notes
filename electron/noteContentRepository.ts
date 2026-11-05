@@ -2,6 +2,7 @@ import type { DbLike } from "./dbLike.js";
 import fs from "node:fs";
 import { AppError } from "../src/core/storeErrors.js";
 import { hasNoteSaveChanges } from "../src/core/noteSaveDecision.js";
+import { noteBodyHash } from "./noteBodyHash.js";
 
 export interface NoteCacheInput {
   markdown?: string | null;
@@ -28,7 +29,12 @@ interface NoteContentRepositoryDeps {
 export class NoteContentRepository {
   constructor(private readonly deps: NoteContentRepositoryDeps) {}
 
-  save(noteId: string, title: string, content: string, caches?: NoteCacheInput): void {
+  /**
+   * 落盘正文（唯一写入口）。
+   * `baseHash`（Batch4-D 保存版本守卫）：编辑器打开/上次保存时的正文 hash；磁盘当前正文 hash 不一致
+   * ⇒ **不写盘**，返回 `{ diskHash }` 由调用方（Store）包装成结构化冲突。缺省 = 旧行为（无条件写）。
+   */
+  save(noteId: string, title: string, content: string, caches?: NoteCacheInput, baseHash?: string): { diskHash: string } | null {
     const notePath = this.deps.notePathFor(noteId);
     if (!fs.existsSync(notePath)) throw new AppError("NotFound", `笔记不存在: ${noteId}`);
 
@@ -50,7 +56,15 @@ export class NoteContentRepository {
         });
         transaction();
       }
-      return;
+      return null;
+    }
+
+    // Batch4-D 版本守卫：放在「无变化早退」**之后**——内容与磁盘一致时根本不会写正文，
+    // 此时 baseHash 陈旧（例如同步刚把同一内容写盘）不该弹冲突；真要写正文才比 hash。
+    // 只在调用方给了 baseHash 时才计算（不给 = 旧行为，逐字节一致）。
+    if (baseHash !== undefined) {
+      const diskHash = noteBodyHash(currentContent);
+      if (diskHash !== baseHash) return { diskHash };
     }
 
     const updatedAt = new Date().toISOString();
@@ -77,5 +91,6 @@ export class NoteContentRepository {
     try { this.deps.detectOrphans(noteId, content); }
     catch (error) { console.warn("[store] 孤儿资源检测失败（不影响保存）:", error); }
     this.deps.markHistoryDirty(noteId);
+    return null;
   }
 }

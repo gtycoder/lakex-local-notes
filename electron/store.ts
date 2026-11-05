@@ -6,7 +6,9 @@ import { ASSET_PORT } from "./assetServer.js";
 import { DocumentTagsService } from "./documentTags.js";
 import { createSilentLoggerScopes, type LoggerScopes } from "../src/core/logger.js";
 import { AppError } from "../src/core/storeErrors.js";
-import { perfMessage } from "../src/core/logFormat.js";
+import { formatLogFields, perfMessage } from "../src/core/logFormat.js";
+import { SAVE_CONFLICT_CODE, type SaveNoteConflict, type SaveNoteResult } from "../src/lib/types.js";
+import { noteBodyHash } from "./noteBodyHash.js";
 import { extractAssetRefs, isSafePathSegment } from "../src/core/storeUtils.js";
 import { readNoteDigest, type NoteDigest } from "./storeQueries.js";
 import { emptyLakeBody } from "../src/core/lakeDocForm.js";
@@ -46,7 +48,7 @@ import type { DbLike } from "./dbLike.js";
 import { ResourceRepository } from "./resourceRepository.js";
 import { draftJournalDir, readDraftEntry } from "./draftJournal.js";
 import { RemoteImportRepository } from "./remoteImportRepository.js";
-import type { ResourceUploadOutput, HistorySettings, HistoryCleanupResult, S3Settings, SyncSettings, S3GcSettings, FileScanSettings } from "./storeTypes.js";
+import type { ResourceUploadOutput, HistorySettings, HistoryCleanupResult, S3Settings, SyncSettings, S3GcSettings, FileScanSettings, AutoBackupSettings, AutoBackupState } from "./storeTypes.js";
 import { fileKindOf, renameFileCardDisplay, scanAssetCards } from "../src/core/fileCard.js";
 import { TRASH_NOTEBOOK_ID } from "../src/core/syncDecisions.js";
 import { RECOVERED_NOTEBOOK_ID, RECOVERED_NOTEBOOK_TITLE, type RecoveredNoteInsert } from "./recoveredNotes.js";
@@ -67,6 +69,8 @@ interface NoteDocument extends NoteSummary {
   content: string;
   /** 正文文件缺失（被手动删除等）：content 为空串；渲染层据此只读打开，同步不会上传空正文。 */
   bodyMissing?: boolean;
+  /** 正文 sha256（Batch4-D 保存版本守卫）：打开/保存时回传，渲染层当 baseHash；缺正文不给。 */
+  contentHash?: string;
 }
 
 /** 设置/账本类型单一来源：storeTypes.ts（S3/Sync/S3GC/History） */
@@ -531,7 +535,12 @@ export class Store {
       bodyMissing = true;
     }
     this.db.prepare("INSERT INTO device_state(key,value) VALUES('last_opened_note_id',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(id);
-    return { ...this.noteQueries.mapSummary(row as SummaryRow), content, ...(bodyMissing ? { bodyMissing: true } : {}) };
+    // Batch4-D：正文 hash 随打开回传（渲染层当 baseHash；缺正文不给，保持只读/旧行为）。
+    return {
+      ...this.noteQueries.mapSummary(row as SummaryRow),
+      content,
+      ...(bodyMissing ? { bodyMissing: true } : { contentHash: noteBodyHash(content) }),
+    };
   }
 
   /** 轻量状态摘要：只读 DB 行（不读正文文件），供渲染进程在同步后判断打开 tab 是否需重载。
@@ -729,13 +738,29 @@ export class Store {
     return this.noteMetadata.renameTreeNode(id, title);
   }
 
+  /** 旧签名（无版本守卫）：内部/同步路径用；永远返回 `NoteDocument`（不传 baseHash 不会产生冲突）。 */
   saveNote(id: string, title: string, content: string, caches?: NoteCacheInput): NoteDocument {
+    return this.saveNoteVersioned(id, title, content, caches) as NoteDocument;
+  }
+
+  /**
+   * 保存正文（Batch4-D 保存版本守卫）。`baseHash` = 打开/上次保存时的正文 sha256：
+   * 磁盘当前正文 hash 不一致 ⇒ **不写盘**，返回 `{ ok:false, code:"external_changed", diskHash }`，
+   * 由渲染层弹三选项确认。缺省 = 旧行为（逐字节一致回归）。
+   */
+  saveNoteVersioned(id: string, title: string, content: string, caches?: NoteCacheInput, baseHash?: string): SaveNoteResult {
     const startedAt = Date.now();
     // 非文档类型的正文不是 Lake HTML：缓存**只能**由主进程按类型派生；doc 仍沿用渲染层从内核带来的缓存（不改旧行为）。
     // 261019 review 实测：渲染层在没有 Lake 实例时也会传 { markdown:null, plain:null }（而非 undefined），
     // 若直接采用会把 text_cache / FTS 正文清空 ⇒ 多维表/表格/画板保存后正文搜不到。故非 doc 一律忽略入参。
     const kind = this.kindOf(id);
-    this.noteContent.save(id, title, content, kind === "doc" ? caches : this.searchTextFor(id, content));
+    const conflict = this.noteContent.save(id, title, content, kind === "doc" ? caches : this.searchTextFor(id, content), baseHash);
+    if (conflict) {
+      // 不写盘、不动 updated_at/is_dirty：磁盘版本原样保留，等用户在三选项里决定。
+      this.logScopes.store.warn("[save] 外部改动拦截" + formatLogFields({ id, diskHash: conflict.diskHash.slice(0, 12) }));
+      const guard: SaveNoteConflict = { ok: false, code: SAVE_CONFLICT_CODE, noteId: id, diskHash: conflict.diskHash };
+      return guard;
+    }
     // P1-2a：免回读——正文即入参 content（刚写入的同一字符串），不再 readFileSync 全文重读 +
     // IPC 全文回传；轻量 SELECT 只取元数据（无文件 IO）。副作用修正：保存不再误写
     // last_opened_note_id（那是「打开」语义，保存非活动文档不应改「最后打开」记录）。
@@ -749,7 +774,8 @@ export class Store {
     const saveFields = { id, chars: savedChars };
     if (savedMs >= 200 || savedChars >= 1024 * 1024) this.logScopes.store.info(perfMessage("note.save", savedMs, saveFields));
     else this.logScopes.store.debug(perfMessage("note.save", savedMs, saveFields));
-    return { ...this.noteQueries.mapSummary(row as SummaryRow), content };
+    // Batch4-D：回传新正文 hash（渲染层更新 baseHash；不必再读盘）。
+    return { ...this.noteQueries.mapSummary(row as SummaryRow), content, contentHash: noteBodyHash(content) };
   }
 
   /** 15 分钟自动快照：标记文档为"本周期内保存过"（saveNote 落盘时调用） */
@@ -1316,6 +1342,24 @@ export class Store {
 
   saveFileScanSettings(settings: FileScanSettings): void {
     this.settingsRepository.saveFileScanSettings(settings);
+  }
+
+  /** 自动备份设置（261105；settings 表，本机、不进 git/同步）。 */
+  getAutoBackupSettings(): AutoBackupSettings {
+    return this.settingsRepository.getAutoBackupSettings();
+  }
+
+  saveAutoBackupSettings(settings: AutoBackupSettings): void {
+    this.settingsRepository.saveAutoBackupSettings(settings);
+  }
+
+  /** 上次自动/手动备份状态（时间/结果/指纹；未备份过 = null）。 */
+  getAutoBackupState(): AutoBackupState | null {
+    return this.settingsRepository.getAutoBackupState();
+  }
+
+  saveAutoBackupState(state: AutoBackupState): void {
+    this.settingsRepository.saveAutoBackupState(state);
   }
 
   /** AI 设置（P0）：密钥加密落盘、独立 key，不参与 S3/同步/导出。 */

@@ -93,8 +93,9 @@ describe("IPC 通道三方一致性（C2-2）", () => {
     // → 141（261105 Batch3-B 安全模式：get_safe_mode_state / exit_safe_mode / copy_safe_mode_diagnostics）。
     // → 143（261105 Batch4-A 从备份恢复：pick_backup_database / restore_workspace_from_backup）。
     // → 147（261105 Batch4-D 低频扫描 + 手动重建：get/save_file_scan_settings / scan_rebuild_candidates / rebuild_orphan_notes）。
-    expect(registrarChannels().size, "通道数变了 ⇒ 请确认是有意的并在 commit 里说明").toBe(147);
-    expect(preloadChannels().size).toBe(147);
-    expect(Object.keys(WEB_METHODS).length).toBe(147);
+    // → 150（261105 Batch4-E 自动备份：get/save_backup_settings / run_backup_now）。
+    expect(registrarChannels().size, "通道数变了 ⇒ 请确认是有意的并在 commit 里说明").toBe(150);
+    expect(preloadChannels().size).toBe(150);
+    expect(Object.keys(WEB_METHODS).length).toBe(150);
   });
 });

@@ -45,7 +45,42 @@ export interface NoteDocument extends NoteSummary {
   content: string;
   /** 正文文件缺失（被手动删除等）：content 为空串；打开时按只读处理，同步不会上传空正文。 */
   bodyMissing?: boolean;
+  /**
+   * 正文的 sha256（Batch4-D 保存版本守卫）：打开/保存时由主进程计算并回传，
+   * 渲染层存进标签页当 baseHash；下次保存带上它，磁盘内容若已变（外部/他端写）就**不写盘**并返回冲突。
+   * 缺省（旧调用 / 正文缺失）⇒ 不参与守卫，保持旧行为。
+   */
+  contentHash?: string;
 }
+
+// ===== 保存版本守卫（Batch4-D）：外部/他端改过正文时不静默覆盖 =====
+
+/** 唯一冲突码（IPC 与 UI 文案的单一来源）。 */
+export const SAVE_CONFLICT_CODE = "external_changed" as const;
+export type SaveConflictCode = typeof SAVE_CONFLICT_CODE;
+
+/** 保存被磁盘版本拦下（未写盘）：渲染层据此弹三选项确认。 */
+export interface SaveNoteConflict {
+  ok: false;
+  code: SaveConflictCode;
+  noteId: string;
+  /** 磁盘当前正文的 sha256：用于审计与「覆盖磁盘」时的显式 baseHash 重试。 */
+  diskHash: string;
+}
+
+/** save_note 的返回：正常保存回 NoteDocument；被磁盘版本拦下回 SaveNoteConflict。 */
+export type SaveNoteResult = NoteDocument | SaveNoteConflict;
+
+/** save_note 类型判别（主进程与渲染层共用，不要各自写 `"code" in x`）。 */
+export function isSaveConflict(value: unknown): value is SaveNoteConflict {
+  if (!value || typeof value !== "object") return false;
+  const v = value as { ok?: unknown; code?: unknown; diskHash?: unknown; noteId?: unknown };
+  return v.ok === false && v.code === SAVE_CONFLICT_CODE && typeof v.diskHash === "string" && typeof v.noteId === "string";
+}
+
+/** 冲突确认弹窗文案（单一来源）。 */
+export const SAVE_CONFLICT_MESSAGE =
+  "磁盘上的正文已经和打开时不一样（可能是另一个窗口、同步或外部工具写入）。为避免覆盖对方的改动，本次没有写入。";
 
 /** 笔记的轻量状态摘要（同步后刷新打开 tab 用）。
  * 只读 DB 行，不读正文文件；updatedAt/title 变化或 deleted 即表示需要全量拉取。 */
@@ -155,6 +190,24 @@ export interface SyncResult {
   supersededNotes: Array<{ id: string; title: string }>;
   /** V5 §5.5：远端对象/资源缺失（B 方案——跳过受影响条目、不覆盖本地、其余继续；manifest 损坏仍中止）。 */
   warnings?: SyncWarning[];
+}
+
+/** 261105 Batch4-E：自动备份设置（本机 settings；不进 git/同步）。 */
+export interface BackupSettingsShape {
+  enabled: boolean;
+  /** 1 = 每天，7 = 每周。 */
+  intervalDays: number;
+  keepCount: number;
+  maxTotalBytes: number;
+}
+
+/** 上次备份状态（时间/结果/文案；未备份过 = null）。 */
+export interface BackupStateShape {
+  lastBackupAt: string;
+  result: "ok" | "partial" | "failed";
+  message: string;
+  mainFile: string | null;
+  quickNotesFile: string | null;
 }
 
 /** A3 数据体检（只读诊断）报告：检查本地数据自洽性，不自动修复。 */
@@ -363,4 +416,4 @@ export interface SystemInfo {
   packaged: boolean;
 }
 
-export type DataFolderKind = "data" | "workspace" | "logs" | "assets" | "history" | "quickNotes";
+export type DataFolderKind = "data" | "workspace" | "logs" | "assets" | "history" | "quickNotes" | "backups";

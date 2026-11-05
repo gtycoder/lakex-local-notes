@@ -82,6 +82,8 @@ export function useTabLifecycle({
       deleted: isGoneNote(note),
       bodyMissing,
       kind: note.kind ?? "doc",
+      // Batch4-D：打开时记住正文 hash，保存时用它判断磁盘是否被外部改过。
+      ...(note.contentHash ? { baseHash: note.contentHash } : {}),
     };
   }, [resetRevision, showNotice]);
 
@@ -107,7 +109,7 @@ export function useTabLifecycle({
           const gone = isGoneNote(note);
           if (openTabsRef.current.some((t) => t.noteId === id)) {
             setOpenTabs((tabs) => tabs.map((tab) => tab.noteId === id
-              ? { ...tab, title: note.title, content: note.content, dirty: false, deleted: gone, bodyMissing: note.bodyMissing === true, reloadKey: (tab.reloadKey ?? 0) + 1, lastDigest: { title: note.title, updatedAt: note.updatedAt } }
+              ? { ...tab, title: note.title, content: note.content, dirty: false, deleted: gone, bodyMissing: note.bodyMissing === true, reloadKey: (tab.reloadKey ?? 0) + 1, lastDigest: { title: note.title, updatedAt: note.updatedAt }, ...(note.contentHash ? { baseHash: note.contentHash } : {}) }
               : tab));
           }
         } catch { /* 尚未恢复，保持标记 */ }

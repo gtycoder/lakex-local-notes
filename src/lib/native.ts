@@ -1,4 +1,4 @@
-import type { CleanOrphanResult, DataHealthReport, DeepCleanupResult, DraftJournalEntry, LastHistoryCleanup, NoteDigest, NoteDocument, NoteInfo, OrphanAsset, QuickNoteDocument, QuickNoteImage, QuickNoteListSummary, QuickNoteTag, QuickNoteTrashItem, ResourceUploadInput, ResourceUploadOutput, S3GcLogItem, S3GcSettings, S3Settings, SaveQuickNoteInput, SyncProgress, SyncResult, SyncSettings, SyncStatusInfo, TreeNode, WorkspaceSnapshot } from "./types";
+import type { CleanOrphanResult, DataHealthReport, DeepCleanupResult, DraftJournalEntry, LastHistoryCleanup, NoteDigest, NoteDocument, NoteInfo, OrphanAsset, QuickNoteDocument, QuickNoteImage, QuickNoteListSummary, QuickNoteTag, QuickNoteTrashItem, ResourceUploadInput, ResourceUploadOutput, S3GcLogItem, S3GcSettings, S3Settings, SaveNoteResult, SaveQuickNoteInput, SyncProgress, SyncResult, SyncSettings, SyncStatusInfo, TreeNode, WorkspaceSnapshot } from "./types";
 import type { TrashItem } from "../core/trashPolicy";
 import type { MissingBodyDoc, MissingQuickNoteDoc } from "../core/missingBody";
 import type { AiChatMessage, AiChatResult, AiListModelsResult, AiProviderPatch, AiSettingsPatch, AiSettingsView, AiStreamEvent, AiTestResult } from "../core/aiProviders";
@@ -100,7 +100,12 @@ export interface LakeNative {
   aiCancel(requestId: string): Promise<void>;
   onAiStream(callback: (chunk: AiStreamEvent) => void): () => void;
   createNote(title: string): Promise<NoteDocument>;
-  saveNote(id: string, title: string, content: string, caches?: { markdown?: string | null; plain?: string | null }): Promise<NoteDocument>;
+  /**
+   * 保存正文。`baseHash`（可选，Batch4-D 保存版本守卫）= 打开/上次保存时的正文 sha256：
+   * 磁盘已变 ⇒ 不写盘，返回 `SaveNoteConflict`（`ok:false` / `code:"external_changed"` / `diskHash`）。
+   * 不传 = 旧行为（无条件写）。
+   */
+  saveNote(id: string, title: string, content: string, caches?: { markdown?: string | null; plain?: string | null }, baseHash?: string): Promise<SaveNoteResult>;
   updateNoteCaches(id: string, markdown: string | null, plain: string | null): Promise<void>;
   readNoteCaches(id: string): Promise<{ markdown: string | null; plain: string | null }>;
   listDraftJournals(): Promise<DraftJournalEntry[]>;
@@ -145,6 +150,11 @@ export interface LakeNative {
   scanRebuildCandidates(): Promise<import("./types").RebuildScanResultShape>;
   /** 261105：手动重建所选候选（只允许本次扫描 id；正文坏/非候选会被拒绝）。 */
   rebuildOrphanNotes(ids: string[]): Promise<import("./types").RebuildResultShape>;
+  /** 261105：自动备份配置 + 上次备份状态（本机 settings）。 */
+  getBackupSettings(): Promise<{ settings: import("./types").BackupSettingsShape; state: import("./types").BackupStateShape | null }>;
+  saveBackupSettings(settings: import("./types").BackupSettingsShape): Promise<{ settings: import("./types").BackupSettingsShape }>;
+  /** 261105：立即备份（main 单飞；失败返回可读 message，不抛）。 */
+  runBackupNow(): Promise<{ state: import("./types").BackupStateShape | null; message: string }>;
   setNodeIcon(id: string, icon: string | null): Promise<TreeNode>;
   searchNotes(query: string, limit?: number): Promise<NoteSearchHit[]>;
   rebuildSearchIndex(): Promise<boolean>;
@@ -334,7 +344,7 @@ export const native = {
   aiCancel: (requestId: string) => api().aiCancel(requestId),
   onAiStream: (callback: (chunk: AiStreamEvent) => void) => api().onAiStream(callback),
   createNote: (title: string) => api().createNote(title),
-  saveNote: (id: string, title: string, content: string, caches?: { markdown?: string | null; plain?: string | null }) => api().saveNote(id, title, content, caches),
+  saveNote: (id: string, title: string, content: string, caches?: { markdown?: string | null; plain?: string | null }, baseHash?: string) => api().saveNote(id, title, content, caches, baseHash),
   updateNoteCaches: (id: string, markdown: string | null, plain: string | null) => api().updateNoteCaches(id, markdown, plain),
   readNoteCaches: (id: string) => api().readNoteCaches(id),
   listDraftJournals: () => api().listDraftJournals(),
@@ -362,6 +372,9 @@ export const native = {
   restoreWorkspaceFromBackup: (filePath: string) => api().restoreWorkspaceFromBackup(filePath),
   getFileScanSettings: () => api().getFileScanSettings(),
   saveFileScanSettings: (settings: { intervalHours: number }) => api().saveFileScanSettings(settings),
+  getBackupSettings: () => api().getBackupSettings(),
+  saveBackupSettings: (settings: import("./types").BackupSettingsShape) => api().saveBackupSettings(settings),
+  runBackupNow: () => api().runBackupNow(),
   scanRebuildCandidates: () => api().scanRebuildCandidates(),
   rebuildOrphanNotes: (ids: string[]) => api().rebuildOrphanNotes(ids),
   setNodeIcon: (id: string, icon: string | null) => api().setNodeIcon(id, icon),

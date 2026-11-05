@@ -32,7 +32,8 @@ export function useSavePipelineGlue({
     }));
   }, [setNotes, setTreeNodes, setSync]);
   const handleOpenTabsApplied = useCallback((saved: NoteDocument) => {
-    setOpenTabs(patchTabById(saved.id, { title: saved.title, content: saved.content, dirty: false, lastDigest: { title: saved.title, updatedAt: saved.updatedAt } }));
+    // Batch4-D：保存成功即刷新 baseHash（否则下一次保存会把自己这次的写入判成"外部改动"）。
+    setOpenTabs(patchTabById(saved.id, { title: saved.title, content: saved.content, dirty: false, lastDigest: { title: saved.title, updatedAt: saved.updatedAt }, ...(saved.contentHash ? { baseHash: saved.contentHash } : {}) }));
   }, [setOpenTabs]);
   const handleDraftCleared = useCallback((noteId: string) => {
     void native.deleteDraftJournal(noteId).catch((error) => reportNativeActionError("保存后清草稿", error));

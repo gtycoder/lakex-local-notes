@@ -29,6 +29,7 @@ import { useTreeActions } from "./hooks/useTreeActions";
 import { useTabLifecycle } from "./hooks/useTabLifecycle";
 import { useNoteLifecycle } from "./hooks/useNoteLifecycle";
 import { useSavePipeline } from "./hooks/useSavePipeline";
+import { createConflictCopy } from "./hooks/saveConflictCopy";
 import { useSyncShell } from "./hooks/useSyncShell";
 import { useSyncController } from "./hooks/useSyncController";
 import { useDocumentTabs } from "./hooks/useDocumentTabs";
@@ -44,7 +45,8 @@ const NoteInfoDialog = lazy(() => import("./components/app/NoteInfoDialog").then
 import { saveSettings } from "./lib/settings";
 import { useSafeModeStatus } from "./hooks/useSafeModeStatus";
 import { useTabSessionPersistence } from "./hooks/useTabSessionPersistence";
-import { type OpenTab, EDGE_HANDLE_DWELL_MS, OUTLINE_SIDEBAR_MAX_WIDTH, OUTLINE_SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH, treeNodePath } from "./desktop/desktopTypes";
+import { type OpenTab, EDGE_HANDLE_DWELL_MS, OUTLINE_SIDEBAR_MAX_WIDTH, OUTLINE_SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH, patchTabById, treeNodePath } from "./desktop/desktopTypes";
+import { SaveConflictDialog } from "./components/app/SaveConflictDialog";
 import { DesktopOverlays } from "./desktop/DesktopOverlays";
 import { AiAssistantDialog } from "./features/ai/AiAssistantDialog";
 import { DesktopLibrary } from "./desktop/DesktopLibrary";
@@ -177,6 +179,7 @@ export function App() {
     persistTab, scheduleSave, scheduleDraftJournal,
     bumpRevision, resetRevision, clearNote, flushTimers,
     saveTimers, draftTimers,
+    saveConflicts, clearSaveConflict,
   } = useSavePipeline({
     onNoteSaved: handleNoteSaved,
     onOpenTabsApplied: handleOpenTabsApplied,
@@ -188,6 +191,13 @@ export function App() {
     getEditorCaches: handleGetEditorCaches,
     captureContent: handleCaptureContent,
   });
+
+  /**
+   * Batch4-D 保存版本守卫：磁盘正文被外部/他端改过时管线返回 external_changed 并**挂起该文档的自动保存**，
+   * 这里弹三选项确认（另存副本 / 覆盖磁盘 / 放弃并载入磁盘版），处理完才恢复自动保存。
+   */
+  const [saveConflictBusy, setSaveConflictBusy] = useState(false);
+  const saveConflict = useMemo(() => Object.values(saveConflicts)[0] ?? null, [saveConflicts]);
 
   const preserveBitableDraft = useCallback((noteId: string, content: string) => {
     const saveTimer = saveTimers.current.get(noteId);
@@ -463,6 +473,66 @@ export function App() {
     setHistoryNoteId, setHistoryOpen, setSearchPanelQuery, setSearchPanelOpen,
     setPendingRenameId, setError,
   });
+
+  /** 保存冲突三选项（Batch4-D）。每个分支都先记审计日志（渲染层 console 由主进程统一落盘）。 */
+  const resolveSaveConflict = useCallback(async (choice: "copy" | "overwrite" | "discard") => {
+    if (!saveConflict || saveConflictBusy) return;
+    const conflict = saveConflict;
+    const tab = openTabsRef.current.find((item) => item.noteId === conflict.noteId);
+    const title = tab?.title || "无标题";
+    const parentId = notes.find((item) => item.id === conflict.noteId)?.parentId ?? null;
+    console.info(
+      "[save-conflict] 用户选择 " + choice + " noteId=" + conflict.noteId + " diskHash=" + conflict.diskHash.slice(0, 12),
+    );
+    setSaveConflictBusy(true);
+    try {
+      if (choice === "overwrite") {
+        clearSaveConflict(conflict.noteId);
+        // 用冲突时看到的 diskHash 作为显式 baseHash 重试：期间磁盘若再次变化会被再拦一次（不静默覆盖）。
+        await persistTab(conflict.noteId, undefined, undefined, { baseHash: conflict.diskHash });
+        return;
+      }
+      if (choice === "copy") {
+        // 本地改动另存为一篇新文档（kind/父级跟着原文档走；原文档随后载入磁盘版本）。
+        const content = handleCaptureContent(conflict.noteId) ?? tab?.content ?? "";
+        const created = await createConflictCopy({
+          ports: {
+            createNote: (copyParent, copyTitle) => native.createNoteIn(copyParent, copyTitle),
+            createUsheet: (copyParent, copyTitle) => native.createUsheetIn(copyParent, copyTitle),
+            createBitable: (copyParent, copyTitle) => native.createBitableIn(copyParent, copyTitle),
+            createBoard: (copyParent, copyTitle) => native.createBoardIn(copyParent, copyTitle),
+            createInk: (copyParent, copyTitle) => native.createInkIn(copyParent, copyTitle),
+            saveNote: (copyId, copyTitle, body) => native.saveNote(copyId, copyTitle, body),
+          },
+          kind: tab?.kind ?? "doc",
+          parentId,
+          title,
+          content,
+        });
+        clearSaveConflict(conflict.noteId);
+        await refreshTree();
+        setNotes(await native.listNoteSummaries());
+        showNotice("本次修改已另存为《" + created.title + "》，原文档将载入磁盘上的版本。");
+      }
+      if (choice === "discard") {
+        clearSaveConflict(conflict.noteId);
+        const fresh = await native.readNote(conflict.noteId);
+        setOpenTabs(patchTabById(conflict.noteId, {
+          title: fresh.title,
+          content: fresh.content,
+          dirty: false,
+          reloadKey: (tab?.reloadKey ?? 0) + 1,
+          ...(fresh.contentHash ? { baseHash: fresh.contentHash } : {}),
+        }));
+        bumpRevision(conflict.noteId);
+        showNotice("已放弃本地未保存的修改，载入磁盘上的版本。");
+      }
+    } catch (error) {
+      setError(getNativeErrorMessage(error));
+    } finally {
+      setSaveConflictBusy(false);
+    }
+  }, [saveConflict, saveConflictBusy, openTabsRef, notes, clearSaveConflict, persistTab, handleCaptureContent, refreshTree, setNotes, showNotice, setOpenTabs, bumpRevision, setError]);
 
   useEffect(() => {
     if (sidebarMode !== "floating") return;
@@ -875,6 +945,15 @@ export function App() {
       />
       {/* 大表格粘贴护栏（A+B，261008）：超阈值不粘进文档，改为明确提示 + 一键「存为表格文档」 */}
       <TablePasteGuardDialog parentId={notes.find((n) => n.id === activeNoteId)?.parentId ?? null} />
+      {/* Batch4-D 保存版本守卫：磁盘正文被外部/他端改过时三选项确认（自动保存已暂停） */}
+      <SaveConflictDialog
+        open={saveConflict !== null}
+        fileName={saveConflict ? (openTabs.find((tab) => tab.noteId === saveConflict.noteId)?.title ?? "") : ""}
+        busy={saveConflictBusy}
+        onSaveAsCopy={() => void resolveSaveConflict("copy")}
+        onOverwrite={() => void resolveSaveConflict("overwrite")}
+        onDiscardAndReload={() => void resolveSaveConflict("discard")}
+      />
 
     </div>
   );

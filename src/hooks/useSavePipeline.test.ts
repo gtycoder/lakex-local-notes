@@ -27,13 +27,13 @@ const events: string[] = [];
 let cacheIdx = 0;
 type Api = ReturnType<typeof useSavePipeline>;
 let api: Api | null = null;
-function Harness({ caches }: { caches: Array<{ markdown: string | null; plain: string | null }> }) {
+function Harness({ caches, openTab }: { caches: Array<{ markdown: string | null; plain: string | null }>; openTab?: { title: string; content: string; baseHash?: string } }) {
   api = useSavePipeline({
     onNoteSaved: (saved) => { events.push(`saved:${saved.id}`); },
     onOpenTabsApplied: (saved) => { events.push(`tabs:${saved.id}:${saved.content}`); },
     onDraftCleared: (id) => { events.push(`draft:${id}`); },
     onError: (message) => { events.push(`error:${message}`); },
-    getOpenTab: () => ({ title: "T", content: "live" }),
+    getOpenTab: () => openTab ?? { title: "T", content: "live" },
     getEditorCaches: () => caches[Math.min(cacheIdx++, caches.length - 1)],
     captureContent: () => undefined,
   });
@@ -50,9 +50,80 @@ beforeEach(() => {
 afterEach(() => { act(() => root.unmount()); host.remove(); vi.unstubAllGlobals(); api = null; });
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 
-function render(caches: Array<{ markdown: string | null; plain: string | null }>) {
-  act(() => root.render(createElement(Harness, { caches })));
+function render(caches: Array<{ markdown: string | null; plain: string | null }>, openTab?: { title: string; content: string; baseHash?: string }) {
+  act(() => root.render(createElement(Harness, { caches, openTab })));
 }
+
+const HASH_A = "a".repeat(64);
+const HASH_B = "b".repeat(64);
+
+describe("useSavePipeline 保存版本守卫（Batch4-D）", () => {
+  it("磁盘正文被外部改过：persistTab 回 external_changed、不 apply 成功态、自动保存挂起", async () => {
+    render([{ markdown: "m", plain: "p" }], { title: "T", content: "live", baseHash: HASH_A });
+    let outcome: PersistOutcome | undefined;
+    let p!: Promise<PersistOutcome>;
+    act(() => { p = api!.persistTab("n1", "T", "v1"); });
+    await act(async () => { await tick(); });
+    // 第 5 参把标签页里的 baseHash 带到主进程
+    expect(h.saveNote.mock.calls[0]![4]).toBe(HASH_A);
+    await act(async () => {
+      h.pending[0]!.resolve({ ok: false, code: "external_changed", noteId: "n1", diskHash: HASH_B });
+      outcome = await p;
+      await tick();
+    });
+    expect(outcome).toEqual({ ok: false, externalChanged: { diskHash: HASH_B } });
+    // 不写成功态：不回写标签、不清草稿；保存状态转 error 供状态栏提示
+    expect(events.some((e) => e.startsWith("tabs:"))).toBe(false);
+    expect(events.some((e) => e.startsWith("draft:"))).toBe(false);
+    expect(api!.saveStates["n1"]).toBe("error");
+    // 冲突挂起（UI 据此弹三选项）
+    expect(api!.saveConflicts["n1"]).toMatchObject({ noteId: "n1", diskHash: HASH_B });
+  });
+
+  it("冲突未处理时自动保存暂停；clearSaveConflict 之后恢复", async () => {
+    vi.useFakeTimers();
+    try {
+      render([{ markdown: "m", plain: "p" }], { title: "T", content: "live", baseHash: HASH_A });
+      let p!: Promise<PersistOutcome>;
+      act(() => { p = api!.persistTab("n1", "T", "v1"); });
+      await act(async () => { await Promise.resolve(); });
+      await act(async () => {
+        h.pending[0]!.resolve({ ok: false, code: "external_changed", noteId: "n1", diskHash: HASH_B });
+        await p;
+      });
+      expect(h.saveNote).toHaveBeenCalledTimes(1);
+      // 挂起后：继续打字触发 scheduleSave 不会真的去保存（否则反复弹窗/反复被拦）
+      act(() => { api!.scheduleSave("n1", "v2"); });
+      await act(async () => { vi.advanceTimersByTime(5000); await Promise.resolve(); });
+      expect(h.saveNote).toHaveBeenCalledTimes(1);
+      // 用户处理完 ⇒ 下一次编辑恢复自动保存
+      act(() => { api!.clearSaveConflict("n1"); api!.scheduleSave("n1", "v3"); });
+      await act(async () => { vi.advanceTimersByTime(5000); await Promise.resolve(); });
+      expect(h.saveNote).toHaveBeenCalledTimes(2);
+      expect(h.saveNote.mock.calls[1]![2]).toBe("v3");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("「覆盖磁盘」：显式 baseHash 覆盖后按新 baseHash 重试", async () => {
+    render([{ markdown: "m", plain: "p" }], { title: "T", content: "live", baseHash: HASH_A });
+    let p!: Promise<PersistOutcome>;
+    act(() => { p = api!.persistTab("n1", "T", "v1", { baseHash: HASH_B }); });
+    await act(async () => { await tick(); });
+    expect(h.saveNote.mock.calls[0]![4]).toBe(HASH_B);
+    await act(async () => { h.pending[0]!.resolve(savedNote("n1", "v1")); await p; });
+  });
+
+  it("不传 baseHash（旧调用方）= 旧行为：第五参 undefined", async () => {
+    render([{ markdown: "m", plain: "p" }]);
+    let p!: Promise<PersistOutcome>;
+    act(() => { p = api!.persistTab("n1", "T", "v1"); });
+    await act(async () => { await tick(); });
+    expect(h.saveNote.mock.calls[0]![4]).toBeUndefined();
+    await act(async () => { h.pending[0]!.resolve(savedNote("n1", "v1")); await p; });
+  });
+});
 
 describe("useSavePipeline 保存契约（审计 F01/F02）", () => {
   it("F01：saveNote 拒绝 → persistTab 返回 ok:false、报真实错误，且不 apply 成功态", async () => {

@@ -31,7 +31,7 @@ function depVersion(deps: Record<string, string> | undefined, name: string): str
 import { LAKE_THEMES } from "../../lib/themes";
 import { native } from "../../lib/native";
 import { hostCapabilities } from "../../lib/hostCapabilities";
-import type { DataHealthReport, S3Settings, SyncSettings } from "../../lib/types";
+import type { BackupSettingsShape, BackupStateShape, DataHealthReport, S3Settings, SyncSettings } from "../../lib/types";
 import { SYNC_AUTO_MODE_OPTIONS, SYNC_OPEN_CLOSE_NOTE } from "../../core/syncModes";
 import { Dialog } from "../ui/Overlay";
 import { useFloatingDialog } from "../hooks/useFloatingDialog";
@@ -249,6 +249,9 @@ let verifiedS3Fingerprint: string | null = null;
   const [syncDiagMsg, setSyncDiagMsg] = useState<string | null>(null);
   // 261105：文件↔元数据后台扫描间隔（小时，0 = 关闭；手动「重建数据 → 扫描」不受影响）。
   const [scanIntervalHours, setScanIntervalHours] = useState<number | null>(null);
+  // 261105 Batch4-E：自动备份配置 + 上次备份状态（本机 settings；不进云端）。
+  const [backupCfg, setBackupCfg] = useState<BackupSettingsShape | null>(null);
+  const [backupSnapshot, setBackupSnapshot] = useState<BackupStateShape | null>(null);
 
   // DT-13（261028）：十组手写 busy/msg（历史清理 / 数据体检 / 搜索索引 / 备份恢复 / 深度清理 / 同步策略 /
   // 日志读取 / 浏览器端 / AI 测试 / AI 拉模型）改走 useAsyncAction —— 成功/失败文案仍由调用方给，UI 结构与文案不变。
@@ -352,6 +355,26 @@ let verifiedS3Fingerprint: string | null = null;
     });
   };
 
+  /** 261105 Batch4-E：保存自动备份配置（乐观更新；失败回读并提示）。 */
+  const saveBackupCfg = (patch: Partial<BackupSettingsShape>) => {
+    if (!backupCfg) return;
+    const next = { ...backupCfg, ...patch };
+    setBackupCfg(next);
+    void native.saveBackupSettings(next).catch((reason) => {
+      backup.setMessage("自动备份设置保存失败：" + getNativeErrorMessage(reason));
+      void native.getBackupSettings().then((info) => setBackupCfg(info.settings)).catch(() => undefined);
+    });
+  };
+
+  /** 261105 Batch4-E：立即备份（主进程单飞；失败也会返回可读 message，不抛）。 */
+  const runBackupNow = async () => {
+    await backup.run(async () => {
+      const result = await native.runBackupNow();
+      setBackupSnapshot(result.state);
+      return result.message;
+    }, { success: (text) => text });
+  };
+
   /** A3 数据体检：只读三查（notes↔文件/hash、history↔文件、orphan 登记↔文件）。 */
   const runHealth = async () => {
     await healthCheck.run(async () => {
@@ -377,6 +400,7 @@ let verifiedS3Fingerprint: string | null = null;
     void native.getWebStatus().then(setWebStatus).catch((error) => reportNativeActionError("设置页读取", error));
     void native.listS3GcLog().then(setGcLog).catch((error) => reportNativeActionError("设置页读取", error));
     void native.getFileScanSettings().then((v) => setScanIntervalHours(v.intervalHours)).catch((error) => reportNativeActionError("设置页读取", error));
+    void native.getBackupSettings().then((info) => { setBackupCfg(info.settings); setBackupSnapshot(info.state); }).catch((error) => reportNativeActionError("设置页读取", error));
   }, [open, openCategory]);
 
   // 关于页：只读概览（版本/环境/存储）。每次进入分类都刷新，保证计数与磁盘一致。
@@ -905,6 +929,34 @@ let verifiedS3Fingerprint: string | null = null;
                     <div className="config-block__actions">
                       <button className="ln-btn ln-btn--secondary" onClick={() => void runRestoreFromBackup()} disabled={backup.busy}>从备份恢复…</button>
                     </div>
+                  </Block>
+                  <Block itemId="auto-backup" name="自动备份" desc="每天/每周把主库与小记库 VACUUM INTO 快照到 userData/backups，保留最近 N 份并限制总大小（本机保存、不进云端）。恢复入口是上面的「从备份恢复」（本轮只恢复主库；小记库备份文件同目录保留）。">
+                    {backupCfg ? (
+                      <>
+                        <Switch itemId="auto-backup-enabled" name="启用自动备份" desc="应用就绪后每 6 小时检查一次（启动不会立刻跑）；内容未变则跳过。关闭后仍可用「立即备份」。" checked={backupCfg.enabled} onChange={(checked) => saveBackupCfg({ enabled: checked })} />
+                        <Item itemId="auto-backup-interval" name="备份间隔" desc="每天或每周（按上次成功备份时间计算；错过的会在下一次 6h 检查时补跑）。">
+                          <div className="config-block__actions">
+                            <button className="ln-btn ln-btn--secondary" onClick={() => saveBackupCfg({ intervalDays: 1 })} disabled={backupCfg.intervalDays === 1} aria-pressed={backupCfg.intervalDays === 1}>每天</button>
+                            <button className="ln-btn ln-btn--secondary" onClick={() => saveBackupCfg({ intervalDays: 7 })} disabled={backupCfg.intervalDays === 7} aria-pressed={backupCfg.intervalDays === 7}>每周</button>
+                          </div>
+                        </Item>
+                        <Item itemId="auto-backup-keep" name="保留份数" desc="保留最近 N 份（超出按最旧优先删除；备份目录总大小上限 300MB，删除失败只记日志）。"><NumField label="保留份数" min={1} max={50} value={backupCfg.keepCount} onSave={(value) => saveBackupCfg({ keepCount: value })} floor={1} fallback={7} /></Item>
+                        <div className="config-block__actions">
+                          <button className="ln-btn ln-btn--secondary" onClick={() => void runBackupNow()} disabled={backup.busy}>{backup.busy ? "备份中…" : "立即备份"}</button>
+                          <button className="ln-btn ln-btn--secondary" onClick={() => void revealFolder("backups")}>打开备份目录</button>
+                          {backupSnapshot && (
+                            <span className="config-stats"><span>上次备份：{formatDateTime(new Date(backupSnapshot.lastBackupAt))}（{backupSnapshot.result === "ok" ? "成功" : backupSnapshot.result === "partial" ? "部分成功" : "失败"}）</span></span>
+                          )}
+                        </div>
+                        {backupSnapshot && (
+                          <div className="checks">
+                            <div className={"checks__row " + (backupSnapshot.result === "ok" ? "checks__row--ok" : backupSnapshot.result === "partial" ? "checks__row--warn" : "checks__row--error")}>{backupSnapshot.message}</div>
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <div className="config-stats"><span>读取自动备份配置…</span></div>
+                    )}
                   </Block>
                   {backupText && <Block name={backupText} />}
                 </Group>

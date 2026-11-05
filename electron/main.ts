@@ -44,6 +44,8 @@ import { rememberRestoreCandidate, restoreMainDatabaseFromBackup } from "./works
 import { decideSafeMode, readSafeModeState, removeSafeModeState, writeSafeModeState, type SafeModeState } from "./safeMode.js";
 import { registerSafeModeIpc } from "./ipc/registerSafeMode.js";
 import { registerDataRecoveryIpc } from "./ipc/registerDataRecovery.js";
+import { registerBackupIpc, type BackupIpcRunner } from "./ipc/registerBackupIpc.js";
+import { AUTO_BACKUP_TICK_MS, decideAutoBackup, readDatabaseFingerprint, runBackupCycle } from "./autoBackup.js";
 import { createIpcRegistrar } from "./ipc/registrar.js";
 import { registerNotesIpc } from "./ipc/registerNotes.js";
 import { DraftJournal, draftJournalDir } from "./draftJournal.js";
@@ -134,6 +136,8 @@ let drafts: DraftJournal;
 let fileReconciler: FileMetadataReconciler | null = null;
 /** 扫描间隔设置变更后重建对账器（save_file_scan_settings IPC 调用）。 */
 let restartFileScanReconciler: (() => void) | null = null;
+/** 自动备份 runner（261105；registerIpc 在 whenReady 里注册，runner 先于此装配）。 */
+let autoBackupRunner: BackupIpcRunner | null = null;
 /** 历史定时器重启函数（配置变更时调用，见 save_history_settings IPC） */
 let restartHistoryTimers: (() => void) | null = null;
 /** S3 GC 定时器重启函数（配置变更时调用，见 save_s3_gc_settings IPC） */
@@ -626,6 +630,17 @@ function registerIpc(): ReadonlyMap<string, (args: unknown[]) => Promise<unknown
     workspaceRoot: workspaceRoot(),
     onFileScanSettingsChanged: () => restartFileScanReconciler?.(),
   });
+  // 261105 Batch4-E：自动备份（配置/状态读取 + 保存 + 立即备份）；备份实现见 whenReady 里的调度器。
+  registerBackupIpc(ipc, {
+    runner: {
+      getSettings: () => autoBackupRunner?.getSettings() ?? store.getAutoBackupSettings(),
+      getState: () => autoBackupRunner?.getState() ?? store.getAutoBackupState(),
+      saveSettings: (settings) => (autoBackupRunner ?? {
+        saveSettings: (value: typeof settings) => store.saveAutoBackupSettings(value),
+      }).saveSettings(settings),
+      runNow: () => autoBackupRunner?.runNow() ?? Promise.resolve({ state: store.getAutoBackupState(), message: "备份服务未就绪" }),
+    },
+  });
   return ipc.registry;
 }
 
@@ -857,6 +872,63 @@ if (!app.requestSingleInstanceLock()) {
       quickNotes.recoverConversions((noteId) => store.hasNote(noteId), (noteId) => store.removeUntrackedNoteArtifacts(noteId));
     }
     drafts = new DraftJournal(draftJournalDir(workspaceRoot()));
+    // 261105 Batch4-E：自动备份（主库 + 小记库）。就绪后**每 6h tick，启动不立即跑**；单飞 + 维护域串行，
+    // 内容未变（size+mtime）跳过；轮转保留 N 份/总大小上限。失败只记日志，绝不阻断主流程。
+    {
+      let autoBackupBusy = false;
+      const runBackup = async (manual: boolean): Promise<{ state: ReturnType<typeof store.getAutoBackupState>; message: string }> => {
+        if (autoBackupBusy) return { state: store.getAutoBackupState(), message: "已有备份正在进行中" };
+        autoBackupBusy = true;
+        try {
+          // 维护域串行（与同步/GC 互斥）：runBackupCycle 做 VACUUM INTO + 轮转，不在写域、不阻塞本地保存。
+          return await enqueueMaintenance(async () => {
+            const settings = store.getAutoBackupSettings();
+            const state = store.getAutoBackupState();
+            const mainDbPath = path.join(workspaceRoot(), "metadata.sqlite3");
+            const decision = decideAutoBackup({
+              enabled: settings.enabled,
+              busy: false,
+              nowMs: Date.now(),
+              lastBackupAtMs: state ? Date.parse(state.lastBackupAt) || null : null,
+              intervalDays: settings.intervalDays,
+              fingerprint: readDatabaseFingerprint(mainDbPath),
+              lastFingerprint: state?.fingerprint ?? null,
+              manual,
+            });
+            if (!decision.run) {
+              log.app.info("[backup] 本轮跳过（" + decision.reason + "）");
+              return { state, message: "未备份（" + (manual ? "内容未变" : decision.reason) + "）" };
+            }
+            const result = runBackupCycle({
+              userDataDir: app.getPath("userData"),
+              mainDbPath,
+              // 小记库降级（损坏）时不带路径 ⇒ 不备份小记库，结果明说「小记库不可用」。
+              quickNotesDbPath: getQuickNotesAvailability().mode === "ok" ? path.join(workspaceRoot(), "quick-notes", "metadata.sqlite3") : null,
+              settings,
+              log: (message) => log.app.info(message),
+            });
+            if (result.state) {
+              try { store.saveAutoBackupState(result.state); } catch (error) { log.app.warn("[backup] 状态落盘失败：" + (error as Error).message); }
+            }
+            return { state: result.state, message: result.message };
+          });
+        } catch (error) {
+          log.app.warn("[backup] 备份失败（不阻断主流程）：" + (error as Error).message);
+          return { state: store.getAutoBackupState(), message: "备份失败：" + (error as Error).message };
+        } finally {
+          autoBackupBusy = false;
+        }
+      };
+      autoBackupRunner = {
+        getSettings: () => store.getAutoBackupSettings(),
+        getState: () => store.getAutoBackupState(),
+        saveSettings: (settings) => store.saveAutoBackupSettings(settings),
+        runNow: () => runBackup(true),
+      };
+      // 每 6h tick；首 tick 在 6h 后（启动不立即跑，避免抢首屏/首同步 IO）。
+      const timer = setInterval(() => { void runBackup(false); }, AUTO_BACKUP_TICK_MS);
+      timer.unref?.();
+    }
     registerCdnRedirect();
     registerAssetTokenRedirect();
     startAssetServer(path.join(workspaceRoot(), "note-assets"), vendorCdnDir(), path.join(workspaceRoot(), "quick-notes"), assetToken);

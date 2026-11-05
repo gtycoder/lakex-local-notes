@@ -42,6 +42,7 @@ export function resolveDataFolder(userData: string, workspaceRoot: string, kind:
     case "logs": return { dir: path.join(userData, "logs"), revealTarget: path.join(userData, "logs", "lakex-local-notes.log") };
     case "assets": return { dir: path.join(workspaceRoot, "note-assets"), revealTarget: path.join(workspaceRoot, "note-assets") };
     case "history": return { dir: path.join(workspaceRoot, "history"), revealTarget: path.join(workspaceRoot, "history") };
+    case "backups": return { dir: path.join(userData, "backups"), revealTarget: path.join(userData, "backups") };
     case "quickNotes": return { dir: path.join(workspaceRoot, "quick-notes"), revealTarget: path.join(workspaceRoot, "quick-notes") };
     default: throw new IpcInputError(`未知的目录类型: ${kind}`);
   }

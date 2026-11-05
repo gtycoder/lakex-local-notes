@@ -25,6 +25,9 @@ export type { S3Settings } from "../src/core/syncUtils.js";
  *  渲染层/移动端用同一份；主进程只 re-export，不再维护第二份字段表（避免一侧加字段另一侧漏）。 */
 export type { SyncSettings } from "../src/lib/types.js";
 
+/** 自动备份设置/状态（261105 Batch4-E）：单一来源 = electron/autoBackup.ts（settings 表持久化）。 */
+export type { AutoBackupSettings, AutoBackupState } from "./autoBackup.js";
+
 /** 文件↔元数据后台扫描配置（261105：低频只报告，默认每 24h 一次；0 = 关闭）。 */
 export interface FileScanSettings {
   /** 扫描间隔（小时，默认 24；0 = 关闭后台扫描；手动扫描不受此限制）。 */

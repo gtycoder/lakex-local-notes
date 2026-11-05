@@ -44,6 +44,11 @@ export interface OpenTab {
   lastDigest?: { title: string; updatedAt: string } | null;
   /** 文档类型（doc | usheet | bitable | board | ink；缺省 doc）：宿主据此选择编辑器。 */
   kind?: "doc" | "usheet" | "bitable" | "board" | "ink";
+  /**
+   * 打开/上次保存时的正文 sha256（Batch4-D 保存版本守卫）：保存时带给主进程，
+   * 磁盘已变（外部/他端写）⇒ 不写盘并弹冲突确认。缺省 = 不启用守卫（草稿恢复等场景）。
+   */
+  baseHash?: string;
 }
 
 /** 状态栏提示：可选"点击动作"（查看历史/回收站）。 */
