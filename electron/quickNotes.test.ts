@@ -153,8 +153,6 @@ describe("QuickNotesStore", () => {
     const project = {
       id: quickNoteTagId("项目"),
       name: "项目",
-      sortOrder: 2,
-      pinned: false,
       createdAt: at,
       updatedAt: at,
       deletedAt: null,
@@ -164,9 +162,31 @@ describe("QuickNotesStore", () => {
       { ...todo, updatedAt: at, deletedAt: at },
       project,
     ]);
-    expect(quickNotes.tagService.list().map((tag) => tag.name)).toEqual(["灵感库", "项目"]);
+    // 默认顺序 = 新的在前（project 的 createdAt 最晚）
+    expect(quickNotes.tagService.list().map((tag) => tag.name)).toEqual(["项目", "灵感库"]);
     expect(quickNotes.readQuickNote(note.id).content.tags).toEqual(["灵感库"]);
+    // 远端墓碑 = 删除：本机关联要清掉（否则标签复活时关系诈尸）
+    expect(quickNotes.links.listFor(note.id)).toEqual([inspiration.id]);
     expect(quickNotes.search("待办")).toEqual([]);
+  });
+
+  it("标签顺序 = 设备本地：默认新的在前；手动排序后按本机顺序；新增追加末尾；远端合并不搬家", () => {
+    const at1 = "2026-01-01T00:00:00.000Z";
+    const at2 = "2026-02-01T00:00:00.000Z";
+    const at3 = "2026-03-01T00:00:00.000Z";
+    const oldId = quickNoteTagId("旧");
+    const newId = quickNoteTagId("新");
+    quickNotes.tagService.applyRemote([
+      { id: oldId, name: "旧", createdAt: at1, updatedAt: at1, deletedAt: null },
+      { id: newId, name: "新", createdAt: at2, updatedAt: at2, deletedAt: null },
+    ]);
+    expect(quickNotes.tagService.list().map((tag) => tag.name)).toEqual(["新", "旧"]);
+    quickNotes.tagService.reorder([oldId, newId]);
+    expect(quickNotes.tagService.list().map((tag) => tag.name)).toEqual(["旧", "新"]);
+    quickNotes.tagService.create("更晚");
+    expect(quickNotes.tagService.list().map((tag) => tag.name)).toEqual(["旧", "新", "更晚"]);
+    quickNotes.tagService.applyRemote([{ id: newId, name: "新2", createdAt: at2, updatedAt: at3, deletedAt: null }]);
+    expect(quickNotes.tagService.list().map((tag) => tag.name)).toEqual(["旧", "新2", "更晚"]);
   });
 
   it("冲突归档复制标签关系：恢复副本后标签不丢、关系版本可同步", () => {

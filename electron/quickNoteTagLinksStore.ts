@@ -124,12 +124,19 @@ export class QuickNoteTagLinksStore {
     return noteIds.length;
   }
 
-  /** 远端关系 LWW：远端版本更新才覆盖；deletedTagIds 由协调层传入。返回是否采纳。 */
+  /**
+   * 远端关系 LWW：远端版本更新才覆盖；deletedTagIds 由协调层传入。返回是否采纳。
+   * **顺序是设备本地视图**：保留本机已有标签顺序，远端新增标签插到最前（与本地新加一致）。
+   */
   applyRemote(noteId: string, rawTagIds: readonly string[], remoteUpdatedAt: string, deletedTagIds: ReadonlySet<string>): boolean {
     if (!remoteUpdatedAt || remoteUpdatedAt <= this.tagsUpdatedAt(noteId)) return false;
     const tagIds = this.normalize(rawTagIds).filter((tagId) => !deletedTagIds.has(tagId));
+    const local = this.listFor(noteId);
+    const remoteSet = new Set(tagIds);
+    const added = tagIds.filter((tagId) => !local.includes(tagId));
+    const next = [...added, ...local.filter((tagId) => remoteSet.has(tagId))];
     this.db.transaction(() => {
-      this.writeLinks(noteId, tagIds);
+      this.writeLinks(noteId, next);
       // 允许远端引用尚未到达的标签 ID：目录随同一份清单同步，下一轮即可解析名称。
       this.upsertVersion(noteId, remoteUpdatedAt);
     })();

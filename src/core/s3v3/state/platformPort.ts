@@ -67,11 +67,10 @@ export interface QuickNoteSyncRow {
   deletedAt?: string | null;
 }
 
+/** 标签目录同步行：**不含顺序**（设备本地视图，不参与同步）。 */
 export interface QuickTagRow {
   id: string;
   name: string;
-  sortOrder: number;
-  pinned: boolean;
   createdAt: string;
   updatedAt: string;
   deletedAt?: string | null;

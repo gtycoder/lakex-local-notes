@@ -15,6 +15,7 @@ import { loadV3State } from "../data/v3StateRepository.js";
 import { MAX_QUICK_NOTE_TAGS } from "../../core/quickNoteTags.js";
 import { mergeRemoteQuickNoteTags } from "../data/quickNoteTagsRepository.js";
 import { reindexQuickNotesForTags } from "../data/quickNoteTagService.js";
+import { listQuickNoteIdsForTags, removeQuickNoteTagLinksInTransaction } from "../data/quickNoteTagLinksRepository.js";
 import { listQuickNoteAssetKeysFs, removeAssetBytesFs } from "../native/assetFs.js";
 
 /**
@@ -171,7 +172,8 @@ export function createMobilePlatformPort(db: MobileDb, ctxIn?: Partial<MobilePla
       return rows.map((r) => ({
         id: String(r.id), createdAt: String(r.created_at), updatedAt: String(r.updated_at), contentHash: String(r.content_hash),
         isConflict: Number(r.is_conflict) === 1,
-        tagIds: links.get(String(r.id)) ?? [],
+        // 关系按集合同步：排序后的 ID 列表（顺序是设备本地视图，不传播）。
+        tagIds: [...(links.get(String(r.id)) ?? [])].sort(),
         tagsUpdatedAt: r.tags_updated_at ? String(r.tags_updated_at) : null,
         ...(Number(r.cloud_deleted) === 1 ? { cloudDeleted: true } : {}),
         ...(r.deleted_at ? { deletedAt: String(r.deleted_at) } : {}),
@@ -179,10 +181,10 @@ export function createMobilePlatformPort(db: MobileDb, ctxIn?: Partial<MobilePla
       }));
     },
     async listQuickTags(): Promise<QuickTagRow[]> {
-      // 目录是同步事实：**必须带墓碑与 pinned**（漏掉 ⇒ 删除不发布 / 置顶被清零，见 ./ 同步语义）。
-      const rows = await db.prepare("SELECT id,name,sort_order,pinned,created_at,updated_at,deleted_at FROM tags ORDER BY sort_order,id").all() as Array<Record<string, unknown>>;
+      // 只同步名称/墓碑/时间：**顺序与置顶是设备本地视图**，不进索引。
+      const rows = await db.prepare("SELECT id,name,created_at,updated_at,deleted_at FROM tags ORDER BY id").all() as Array<Record<string, unknown>>;
       return rows.map((r) => ({
-        id: String(r.id), name: String(r.name), sortOrder: Number(r.sort_order), pinned: !!Number(r.pinned ?? 0),
+        id: String(r.id), name: String(r.name),
         createdAt: String(r.created_at), updatedAt: String(r.updated_at),
         ...(r.deleted_at ? { deletedAt: String(r.deleted_at) } : {}),
       }));
@@ -466,13 +468,21 @@ export function createMobilePlatformPort(db: MobileDb, ctxIn?: Partial<MobilePla
       const deletedRows = await db.prepare("SELECT id FROM tags WHERE deleted_at IS NOT NULL").all() as Array<{ id: string }>;
       const deleted = new Set(deletedRows.map((row) => String(row.id)));
       const seen = new Set<string>();
-      const next: string[] = [];
+      const remoteIds: string[] = [];
       for (const id of tagIds) {
         if (typeof id !== "string" || !id.trim() || deleted.has(id) || seen.has(id)) continue;
         seen.add(id);
-        next.push(id);
-        if (next.length >= MAX_QUICK_NOTE_TAGS) break;
+        remoteIds.push(id);
+        if (remoteIds.length >= MAX_QUICK_NOTE_TAGS) break;
       }
+      // 顺序是设备本地视图：保留本机已有标签的顺序，远端新增标签插到最前（与本地新加一致）。
+      const localRows = await db.prepare("SELECT tag_id FROM tag_links WHERE target_kind='quickNote' AND target_id=? ORDER BY position, tag_id").all(quickNoteId) as Array<{ tag_id: string }>;
+      const localIds = localRows.map((row) => String(row.tag_id));
+      const remoteSet = new Set(remoteIds);
+      const localKept = localIds.filter((id) => remoteSet.has(id));
+      const localSet = new Set(localIds);
+      const added = remoteIds.filter((id) => !localSet.has(id));
+      const next = [...added, ...localKept].slice(0, MAX_QUICK_NOTE_TAGS);
       await db.transaction(async () => {
         await db.prepare("DELETE FROM tag_links WHERE target_kind='quickNote' AND target_id=?").run(quickNoteId);
         for (let index = 0; index < next.length; index += 1) {
@@ -482,8 +492,8 @@ export function createMobilePlatformPort(db: MobileDb, ctxIn?: Partial<MobilePla
       });
     },
     async mergeQuickTags(tags: QuickTagRow[]): Promise<void> {
-      // 目录 LWW（与桌面 mergeRemote 同口径）：保留 pinned / 墓碑，按 updatedAt（含确定性 tie-break）取赢家。
-      // 旧实现固定 pinned=0 且 `deleted_at=NULL` ⇒ 每次同步都把置顶清零、把远端墓碑复活。
+      // 目录 LWW（与桌面 mergeRemote 同口径）：只合并名称/墓碑/时间，按 updatedAt（含确定性 tie-break）取赢家；
+      // 顺序/置顶是设备本地视图，不在这里覆盖（旧实现固定 deleted_at=NULL ⇒ 会复活墓碑）。
       const readDirectory = async (): Promise<Map<string, { name: string; deletedAt: string | null }>> => {
         const rows = await db.prepare("SELECT id,name,deleted_at FROM tags").all() as Array<{ id: string; name: string; deleted_at: string | null }>;
         return new Map(rows.map((row) => [String(row.id), { name: String(row.name), deletedAt: row.deleted_at ? String(row.deleted_at) : null }] as const));
@@ -492,19 +502,26 @@ export function createMobilePlatformPort(db: MobileDb, ctxIn?: Partial<MobilePla
       await mergeRemoteQuickNoteTags(db, tags.map((tag) => ({
         id: tag.id,
         name: tag.name,
-        sortOrder: Number(tag.sortOrder ?? 0),
-        pinned: !!tag.pinned,
         createdAt: tag.createdAt,
         updatedAt: tag.updatedAt,
         deletedAt: tag.deletedAt ?? null,
       })));
       // 远端改名/墓碑会改变搜索索引里缓存的标签名 ⇒ 只重刷「关联到这些标签的小记」（不全量重建）。
       const changed: string[] = [];
+      const tombstoned: string[] = [];
       for (const [id, next] of await readDirectory()) {
         const previous = before.get(id);
         if (!previous || previous.name !== next.name || previous.deletedAt !== next.deletedAt) changed.push(id);
+        if (next.deletedAt && (!previous || !previous.deletedAt)) tombstoned.push(id);
       }
       if (changed.length > 0) await reindexQuickNotesForTags(db, changed);
+      // 远端墓碑 = 删除：清掉本机关联（否则标签复活时关系会诈尸），并推进关系版本（LWW 可传播）。
+      const now = new Date().toISOString();
+      for (const id of tombstoned) {
+        const noteIds = await listQuickNoteIdsForTags(db, [id]);
+        if (noteIds.length === 0) continue;
+        await db.transaction(async () => { await removeQuickNoteTagLinksInTransaction(db, id, now); });
+      }
     },
     /**
      * 移动端旧语义（端口各自表达平台差异，core 不 if(platform)）：

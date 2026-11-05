@@ -123,7 +123,7 @@ describe("MobileDeviceStore ↔ core v3 引擎（双移动端，假 S3）", () =
     await a.db.prepare("INSERT INTO quick_notes (id,created_at,updated_at,preview_text,image_count,content_hash,is_dirty,is_conflict) VALUES ('q1','2026-10-25T00:00:00.000Z','2026-10-25T00:00:00.000Z','',0,?,1,0)").run(hash);
     await a.db.prepare("INSERT INTO tag_link_versions(target_kind,target_id,links_updated_at) VALUES ('quickNote','q1','2026-10-25T00:00:01.000Z')").run();
     await writeQuickNoteBody("q1", body);
-    await a.db.prepare("INSERT INTO tags (id,name,sort_order,pinned,created_at,updated_at) VALUES ('t1','Tag',0,0,'2026-10-25T00:00:00.000Z','2026-10-25T00:00:00.000Z')").run();
+    await a.db.prepare("INSERT INTO tags (id,name,sort_order,created_at,updated_at) VALUES ('t1','Tag',0,'2026-10-25T00:00:00.000Z','2026-10-25T00:00:00.000Z')").run();
     await a.db.prepare("INSERT INTO tag_links (target_kind,target_id,tag_id,position) VALUES ('quickNote','q1','t1',0)").run();
     assetStore.set("quick-notes/q1/pic.png", new TextEncoder().encode("Q-IMG"));
     const engineA = new S3v3SyncEngine({ remote, device: a.store, deviceId: "A" });

@@ -1,26 +1,30 @@
 /**
- * 移动端标签管理（261105）：重命名 / 删除 / 合并 / 置顶 / 排序。
+ * 移动端标签管理（261105）：重命名 / 删除 / 合并 / 拖拽排序。
  *
- * 与桌面 `QuickNoteTagManager` 同能力（桌面拖拽排序 → 移动端「上移/下移」，触屏点按更稳）。
- * 标签目录是唯一来源；删除只移除关联、不删除小记（用户口径）。版式复用 qn-tag-sheet 面板骨架 + mb-* 原语。
+ * 用户定稿：**标签顺序是设备本地视图**（不参与 S3 同步，不同端可以不同）；置顶功能已整体删除。
+ * 拖拽交互与移动端目录栏同口径：长按 350ms 进入拖拽、跟手找落点（行前/行后）、松手提交一次 reorder。
+ * 未手动排序时由仓库层给默认顺序（新的在前 → 名称）；首次拖拽后本机记「已手动排序」，新标签追加末尾。
  */
-import { useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, Merge, MoreHorizontal, Pencil, Pin, PinOff, Trash } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { GripVertical, Merge, MoreHorizontal, Pencil, Trash } from "lucide-react";
 import { bridge } from "../bridge";
-import { normalizeQuickNoteTag, type QuickNoteTagSummary } from "../../core/quickNoteTags";
+import { moveQuickNoteTagOrder, normalizeQuickNoteTag, type QuickNoteTagSummary } from "../../core/quickNoteTags";
 import { getNativeErrorMessage } from "../../lib/nativeErrors";
 import { confirmMobile } from "../ui/ConfirmDialog";
 import { MobileSheet } from "../ui/MobileSheet";
+import { useLongPress } from "../ui/useLongPress";
 import { showToast } from "../ui/toastBus";
 
 export interface MobileQuickNoteTagManagerProps {
   open: boolean;
-  /** 完整目录（含 0 条小记的标签）+ 计数；顺序 = 目录展示顺序（置顶 → sortOrder → 名称）。 */
+  /** 完整目录（含 0 条小记的标签）+ 计数；顺序 = 本机展示顺序。 */
   tags: readonly QuickNoteTagSummary[];
   onClose(): void;
   /** 任一写操作完成后刷新目录与小记列表（关系可能变了）。 */
   onChanged(): Promise<void>;
 }
+
+interface DragState { id: string; overId: string | null; after: boolean }
 
 export function MobileQuickNoteTagManager({ open, tags, onClose, onChanged }: MobileQuickNoteTagManagerProps) {
   const [busy, setBusy] = useState(false);
@@ -29,12 +33,16 @@ export function MobileQuickNoteTagManager({ open, tags, onClose, onChanged }: Mo
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [mergeSourceId, setMergeSourceId] = useState<string | null>(null);
+  const [drag, setDrag] = useState<DragState | null>(null);
+  const dragRef = useRef<DragState | null>(null);
+  dragRef.current = drag;
+  const pressedId = useRef<string | null>(null);
 
+  const order = useMemo(() => tags.map((tag) => tag.id), [tags]);
   const mergeSource = useMemo(() => tags.find((tag) => tag.id === mergeSourceId) ?? null, [tags, mergeSourceId]);
   const mergeTargets = useMemo(() => tags.filter((tag) => tag.id !== mergeSourceId), [tags, mergeSourceId]);
-  const order = useMemo(() => tags.map((tag) => tag.id), [tags]);
 
-  const run = async (task: () => Promise<void>): Promise<void> => {
+  const run = useCallback(async (task: () => Promise<void>): Promise<void> => {
     if (busy) return;
     setBusy(true);
     setError(null);
@@ -48,11 +56,7 @@ export function MobileQuickNoteTagManager({ open, tags, onClose, onChanged }: Mo
     } finally {
       setBusy(false);
     }
-  };
-
-  const togglePin = (tag: QuickNoteTagSummary): Promise<void> => run(async () => {
-    await bridge.updateQuickNoteTag(tag.id, { pinned: !tag.pinned });
-  });
+  }, [busy, onChanged]);
 
   const startRename = (tag: QuickNoteTagSummary): void => {
     setExpandedId(null);
@@ -92,15 +96,58 @@ export function MobileQuickNoteTagManager({ open, tags, onClose, onChanged }: Mo
     setMergeSourceId(null);
   });
 
-  const move = (tag: QuickNoteTagSummary, delta: -1 | 1): Promise<void> => {
-    const from = order.indexOf(tag.id);
-    const to = from + delta;
-    if (from < 0 || to < 0 || to >= order.length) return Promise.resolve();
-    const next = [...order];
-    const [moved] = next.splice(from, 1);
-    next.splice(to, 0, moved);
-    return run(async () => { await bridge.reorderQuickNoteTags(next); });
-  };
+  const startPoint = useRef<{ clientX: number; clientY: number } | null>(null);
+
+  /** 长按进入拖拽（与目录栏同一手势语义）；按钮上的触摸不参与拖拽。 */
+  const longPress = useLongPress((touch) => {
+    const id = pressedId.current;
+    if (!id) return;
+    setDrag({ id, overId: null, after: false });
+    setExpandedId(null);
+    setEditingId(null);
+    // 记录起手点，供落点计算（touch 事件里现算，不依赖 React 状态）
+    startPoint.current = touch;
+  }, { moveCancelPx: 0 });
+
+  // 拖拽期间：跟手找落点（行前/行后），松手提交一次 reorder。
+  useEffect(() => {
+    if (!drag) return;
+    const compute = (clientY: number): { overId: string | null; after: boolean } => {
+      const hit = document.elementFromPoint(startPoint.current?.clientX ?? 0, clientY) as HTMLElement | null;
+      const row = hit?.closest("[data-tag-id]") as HTMLElement | null;
+      const overId = row?.getAttribute("data-tag-id") ?? null;
+      if (!overId || overId === dragRef.current?.id) return { overId: null, after: false };
+      const rect = row!.getBoundingClientRect();
+      return { overId, after: clientY > rect.top + rect.height / 2 };
+    };
+    const onMove = (event: TouchEvent) => {
+      const touch = event.touches[0];
+      if (!touch) return;
+      event.preventDefault();
+      const next = compute(touch.clientY);
+      const current = dragRef.current;
+      if (!current) return;
+      if (current.overId === next.overId && current.after === next.after) return;
+      setDrag({ ...current, ...next });
+    };
+    const finish = () => {
+      const current = dragRef.current;
+      setDrag(null);
+      startPoint.current = null;
+      if (!current?.overId) return;
+      const nextOrder = moveQuickNoteTagOrder(order, current.id, current.overId, current.after ? "after" : "before");
+      if (nextOrder.join("\u0000") === order.join("\u0000")) return;
+      void run(async () => { await bridge.reorderQuickNoteTags(nextOrder); });
+    };
+    document.addEventListener("touchmove", onMove, { passive: false });
+    document.addEventListener("touchend", finish);
+    document.addEventListener("touchcancel", finish);
+    return () => {
+      document.removeEventListener("touchmove", onMove);
+      document.removeEventListener("touchend", finish);
+      document.removeEventListener("touchcancel", finish);
+    };
+  }, [drag !== null, order, run]);
 
   const footer = (
     <div className="mb-sheet__foot">
@@ -140,7 +187,8 @@ export function MobileQuickNoteTagManager({ open, tags, onClose, onChanged }: Mo
       ) : (
         <div className="qn-tag-sheet__list">
           {tags.length === 0 && <div className="qn-tag-sheet__empty">还没有标签。在写作卡或小记卡片上添加标签后会出现在这里</div>}
-          {tags.map((tag, index) => (
+          {tags.length > 0 && <div className="qn-tag-manager__hint">长按拖动可排序（只在本机生效）</div>}
+          {tags.map((tag) => (
             <div key={tag.id} className="qn-tag-manager__block">
               {editingId === tag.id ? (
                 <div className="qn-tag-sheet__input-row">
@@ -159,16 +207,22 @@ export function MobileQuickNoteTagManager({ open, tags, onClose, onChanged }: Mo
                   <button type="button" disabled={busy} onClick={() => void saveRename(tag)}>保存</button>
                 </div>
               ) : (
-                <div className="qn-tag-manager__row">
-                  <button
-                    type="button"
-                    className="mb-iconbtn"
-                    disabled={busy}
-                    aria-label={(tag.pinned ? "取消置顶 " : "置顶 ") + tag.name}
-                    onClick={() => void togglePin(tag)}
-                  >
-                    {tag.pinned ? <Pin size={16} /> : <PinOff size={16} />}
-                  </button>
+                <div
+                  className={"qn-tag-manager__row"
+                    + (drag?.id === tag.id ? " is-dragging" : "")
+                    + (drag?.overId === tag.id && !drag.after ? " is-drop-before" : "")
+                    + (drag?.overId === tag.id && drag.after ? " is-drop-after" : "")}
+                  data-tag-id={tag.id}
+                  onTouchStart={(event) => {
+                    if ((event.target as HTMLElement).closest("button")) return;
+                    pressedId.current = tag.id;
+                    longPress.onTouchStart(event);
+                  }}
+                  onTouchMove={longPress.onTouchMove}
+                  onTouchEnd={longPress.onTouchEnd}
+                  onTouchCancel={longPress.onTouchCancel}
+                >
+                  <span className="qn-tag-manager__handle" aria-hidden="true"><GripVertical size={14} /></span>
                   <span className="qn-tag-manager__name">{tag.name}</span>
                   <span className="qn-tag-sheet__count">{tag.count}</span>
                   <button
@@ -187,12 +241,6 @@ export function MobileQuickNoteTagManager({ open, tags, onClose, onChanged }: Mo
                 <div className="qn-tag-manager__actions">
                   <button type="button" className="mb-btn mb-btn--secondary" disabled={busy} onClick={() => startRename(tag)}>
                     <Pencil size={14} />重命名
-                  </button>
-                  <button type="button" className="mb-btn mb-btn--secondary" disabled={busy || index === 0} onClick={() => void move(tag, -1)}>
-                    <ArrowUp size={14} />上移
-                  </button>
-                  <button type="button" className="mb-btn mb-btn--secondary" disabled={busy || index === tags.length - 1} onClick={() => void move(tag, 1)}>
-                    <ArrowDown size={14} />下移
                   </button>
                   <button type="button" className="mb-btn mb-btn--secondary" disabled={busy || tags.length < 2} onClick={() => setMergeSourceId(tag.id)}>
                     <Merge size={14} />合并到…

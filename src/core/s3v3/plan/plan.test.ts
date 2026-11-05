@@ -137,7 +137,7 @@ describe("planSync（v4 E1-2 决策层）", () => {
   describe("标签目录同步（261105 审计修复）", () => {
     const tid = "t_0123456789abcdef";
     const tag = (name: string, over: Partial<QuickNoteTagEntry> = {}): QuickNoteTagEntry => ({
-      id: tid, name, sortOrder: 0, pinned: false,
+      id: tid, name,
       createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z", ...over,
     });
 
@@ -159,6 +159,14 @@ describe("planSync（v4 E1-2 决策层）", () => {
       });
       expect(plan.publish).toBeNull();
       expect(plan.quickTags?.map((entry) => entry.name)).toEqual(["新名"]);
+    });
+
+    it("标签关系只改本机顺序（集合相同）⇒ 不发布：顺序是设备本地视图", () => {
+      const base = world([], [], [quick("q", "h1", { tagIds: ["a", "b"], tagsUpdatedAt: "2026-01-01T00:00:00.000Z" })]);
+      const local = world([], [], [quick("q", "h1", { tagIds: ["b", "a"], tagsUpdatedAt: "2026-01-01T00:00:00.000Z" })]);
+      const plan = planSync({ local, base, remote: base, state: state() });
+      expect(plan.publish).toBeNull();
+      expect(plan.publishes.quickNotes).toEqual([]);
     });
 
     it("聚合发布不丢远端标签：本端小记变更时发布的 tags 是 LWW 合并结果", () => {

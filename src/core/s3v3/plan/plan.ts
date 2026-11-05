@@ -160,8 +160,9 @@ export function planSync(input: PlanInput): SyncPlan {
     if (l && r) {
       const lt = l.tagsUpdatedAt ?? "";
       const rt = r.tagsUpdatedAt ?? "";
-      const ltags = (l.tagIds ?? []).join("\u0000");
-      const rtags = (r.tagIds ?? []).join("\u0000");
+      // 关系按**集合**比较：顺序是设备本地视图，不参与同步。
+      const ltags = [...(l.tagIds ?? [])].sort().join("\u0000");
+      const rtags = [...(r.tagIds ?? [])].sort().join("\u0000");
       if (ltags !== rtags || lt !== rt) {
         if (rt > lt) writes.push({ kind: "apply-remote", space: "quickNotes", id: p.id, meta: { ...r }, bodyHash: r.contentHash });
         else if (lt > rt || (lt === rt && ltags !== rtags)) { indexChanged = true; publishes.quickNotes.push(p.id); }
@@ -190,7 +191,7 @@ export function planSync(input: PlanInput): SyncPlan {
     }
   }
 
-  // 标签目录：按 ID + 确定性 LWW 合并（本地新增/改名/置顶/排序/墓碑都可能需要发布）。
+  // 标签目录：按 ID + 确定性 LWW 合并（本地新增/改名/墓碑都可能需要发布；顺序不参与）。
   const localTags = local.quickNotes.tags ?? [];
   const remoteTags = remote.quickNotes.tags ?? [];
   const remoteTagById = new Map(remoteTags.map((tag) => [tag.id, tag] as const));
@@ -212,7 +213,9 @@ export function planSync(input: PlanInput): SyncPlan {
     const quickItems = quickPlan.items
       .filter((p) => p.kind !== "local-purge" && p.kind !== "local-delete")
       .map((p) => (p.applyRemote && p.remote ? p.remote : p.local ?? p.remote))
-      .filter((q): q is NonNullable<typeof q> => !!q);
+      .filter((q): q is NonNullable<typeof q> => !!q)
+      // 发布时标签关系一律排序成集合（顺序不跨端传播）。
+      .map((q) => (q.tagIds?.length ? { ...q, tagIds: [...q.tagIds].sort() } : q));
     const folders = lakePlan.folders
       .filter((f) => f.kind !== "local-purge" && f.kind !== "local-delete")
       .map((f) => (f.applyRemote && f.remote ? f.remote : f.local ?? f.remote))
@@ -220,7 +223,12 @@ export function planSync(input: PlanInput): SyncPlan {
     publish = {
       lake: { v: 3, space: "lake", notes: lakeNotes, folders },
       quickNotes: {
-        v: 3, space: "quickNotes", items: quickItems, tags: quickTags,
+        // 发布只带已知字段：旧索引可能残留 pinned/sortOrder（已废弃），不能借发布继续传播。
+        v: 3, space: "quickNotes", items: quickItems,
+        tags: quickTags.map((tag) => ({
+          id: tag.id, name: tag.name, createdAt: tag.createdAt, updatedAt: tag.updatedAt,
+          ...(tag.deletedAt ? { deletedAt: tag.deletedAt } : {}),
+        })),
         // 墓碑随索引传播（不可恢复删除；超过保留窗口的由引擎在入 plan 前裁掉）。
         ...((input.state.purgedQuickIds ?? []).length > 0 ? { purged: [...(input.state.purgedQuickIds ?? [])].sort() } : {}),
       },

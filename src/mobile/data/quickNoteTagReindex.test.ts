@@ -37,7 +37,7 @@ async function freshDb() {
       .run(id, T1, T1, "hash-" + id);
   }
   for (const [id, name] of [[TA, "A"], [TB, "B"]] as const) {
-    await db.prepare("INSERT INTO tags (id,name,sort_order,pinned,created_at,updated_at,deleted_at) VALUES (?,?,0,0,?,?,NULL)").run(id, name, T1, T1);
+    await db.prepare("INSERT INTO tags (id,name,sort_order,created_at,updated_at,deleted_at) VALUES (?,?,0,?,?,NULL)").run(id, name, T1, T1);
   }
   const link = db.prepare("INSERT INTO tag_links (target_kind,target_id,tag_id,position) VALUES ('quickNote',?,?,0)");
   await link.run("n1", TA);
@@ -80,11 +80,11 @@ describe("标签目录变化只重刷受影响小记的搜索索引", () => {
     try {
       const port = createMobilePlatformPort(db);
       indexSpy.mockClear();
-      await port.mergeQuickTags([{ id: TA, name: "A3", sortOrder: 0, pinned: false, createdAt: T1, updatedAt: T2 }]);
+      await port.mergeQuickTags([{ id: TA, name: "A3", createdAt: T1, updatedAt: T2 }]);
       expect(indexSpy.mock.calls.map((call) => call[1])).toContain("n1");
       expect(indexSpy.mock.calls.map((call) => call[1])).not.toContain("n2");
       indexSpy.mockClear();
-      await port.mergeQuickTags([{ id: TB, name: "B", sortOrder: 0, pinned: false, createdAt: T1, updatedAt: T2, deletedAt: T2 }]);
+      await port.mergeQuickTags([{ id: TB, name: "B", createdAt: T1, updatedAt: T2, deletedAt: T2 }]);
       expect(indexSpy.mock.calls.map((call) => call[1])).toEqual(["n2"]);
     } finally { await db.close(); }
   });
