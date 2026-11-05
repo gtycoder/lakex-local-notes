@@ -61,6 +61,22 @@ export const SELF_REGISTERED_OVERLAY_KINDS: ReadonlySet<WorkspaceOverlayKind> = 
   "create", "menu", "notebookSwitch", "info", "icon", "history", "noteTags",
 ]);
 
+/**
+ * 目录树/抽屉在哪些浮层打开期间仍应**可见**（单一派生，手机抽屉与平板两栏共用）。
+ *
+ * 261105 晚用户验收（修正 task-54）：**点目录行 ⋯ 菜单时目录抽屉保持出现**；
+ * 「新建 / 重命名」恢复 task-54 之前的行为（create 不再撑开抽屉，rename 走原有 openOverlay(sidebar)）。
+ * 其余从菜单进入的子浮层（info/icon/history/noteTags）保持原样（不在此扩）。
+ */
+export function isTreeVisibleForOverlay(
+  overlayKind: WorkspaceOverlayKind | null,
+  options: { padTwoPane: boolean; padTreeOpen: boolean },
+): boolean {
+  // 行操作菜单（⋯）盖在抽屉/树之上，关闭后回到原状态：两种形态都必须让树保持可见。
+  if (overlayKind === "menu") return true;
+  return options.padTwoPane ? options.padTreeOpen : overlayKind === "sidebar";
+}
+
 export interface WorkspaceOverlays {
   overlay: WorkspaceOverlay | null;
   /** 打开浮层（先收掉当前浮层 ⇒ 互斥）；同一带载荷种类再打开 = 覆盖载荷。 */

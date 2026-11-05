@@ -14,7 +14,7 @@ import { getNativeErrorMessage } from "../../lib/nativeErrors";
 import { useNotebookTabs } from "./useNotebookTabs";
 import { useNotebookTreeData } from "./useNotebookTreeData";
 import { useNotebookTreeActions } from "./useNotebookTreeActions";
-import { useWorkspaceOverlays } from "./useWorkspaceOverlays";
+import { isTreeVisibleForOverlay, useWorkspaceOverlays } from "./useWorkspaceOverlays";
 import { NotebookTreeList } from "./NotebookTreeList";
 import { useFormFactor } from "../pad/useFormFactor";
 import { WorkspaceCapsule } from "./WorkspaceCapsule";
@@ -129,10 +129,6 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
    */
   const { overlay, open: openOverlay, close: closeOverlay, toggle: toggleOverlay } = useWorkspaceOverlays();
   const overlayKind = overlay?.kind ?? null;
-  // 261105 晚（用户验收）：新建目录/分组时必须**目录抽屉保持弹出**（否则输入框在关着的抽屉里、
-  // 建完看到的是关掉的抽屉）。抽屉打开态仍由同一个 overlay 判据派生，不另造状态：
-  // create 浮层打开期间左抽屉继续渲染（sheet 覆盖在抽屉之上）；rename/tags 走 sidebar / noteTags 本身。
-  const sidebarOpen = overlayKind === "sidebar" || overlayKind === "create";
   // 261102 pad：expanded = **更宽的移动端外壳**（胶囊/工具栏与手机完全一致），只有「树/大纲」是
   // 悬浮覆盖 + 可固定（十四批用户口径：桌面式工具栏不适合触屏）。
   const formFactor = useFormFactor();
@@ -148,6 +144,14 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   const padTreePinned = isPadPanelPinned(padShell, "left");
   const padOutlinePinned = isPadPanelPinned(padShell, "right");
   const padDocked = padTwoPane && isPadDocked(padShell);
+  /**
+   * 目录抽屉/树是否可见（单一派生 = isTreeVisibleForOverlay）：
+   * - 手机：sidebar 打开；**行操作菜单（⋯，kind="menu"）打开期间也保持**（用户 261105 验收修正）；
+   * - 平板：树面板自身的悬浮/固定态；行菜单打开期间同样保持。
+   * 「新建 / 重命名」已按用户要求恢复原样（不再借用 create 撑开抽屉），见 useWorkspaceActions。
+   */
+  const treeVisible = isTreeVisibleForOverlay(overlayKind, { padTwoPane, padTreeOpen });
+  const sidebarOpen = !padTwoPane && treeVisible;
   // 只记 pinned（开合不记：冷启按 pinned 直接停靠展开）。
   useEffect(() => { writePadPanelPrefs(padPinnedPrefs(padShell)); }, [padShell]);
   const openPadTree = useCallback((open: boolean) => dispatchPadShell({ type: "setOpen", side: "left", open }), []);
@@ -263,10 +267,10 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   } = useNotebookTreeActions({ tree, loadTree, discardTab });
 
   /**
-   * 让目录树可见（新建/重命名这类行内编辑的前置）：手机 = 打开左侧抽屉；平板 = 打开悬浮树面板。
-   * 复用既有开合判据（openOverlay sidebar / dispatchPadShell），不新增第二份"抽屉应开"状态。
+   * 「关闭行菜单后抽屉仍在」（用户 261105 验收）：菜单是抽屉之上的临时层，dismiss 后回到目录树本身。
+   * 手机 = 重新打开左抽屉；平板 = 确保悬浮树打开。只服务「关掉菜单」这一处，不参与新建/重命名。
    */
-  const ensureTreeVisible = useCallback(() => {
+  const closeMenuToTree = useCallback(() => {
     if (padTwoPane) openPadTree(true);
     else openOverlay({ kind: "sidebar" });
   }, [padTwoPane, openPadTree, openOverlay]);
@@ -304,7 +308,6 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     loadTree,
     switchNotebook,
     expandGroup,
-    ensureTreeVisible,
   });
 
   // 261103 P11-②：浮层返回栈 / 手动同步 / 活动文档上报 → useWorkspaceSync（effect 顺序逐字保留）。
@@ -402,7 +405,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
             滚动/展开/重命名状态不再因收起而丢、手势也不再「关闭态没有 DOM」。 */}
         {padTwoPane && (
           <WorkspaceTreePanel
-            open={padTreeOpen}
+            open={treeVisible}
             pinned={padTreePinned}
             title={title}
             nbIcon={nbIcon ? <MobileNodeIconGlyph value={nbIcon} /> : <Book size={16} />}
@@ -492,7 +495,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
         menuFor={menuFor}
         treeMenuItemsFor={treeMenuItems}
         onTreeMenuSelect={onTreeMenuSelect}
-        onCloseMenu={() => closeOverlay("menu")}
+        onCloseMenu={closeMenuToTree}
         infoFor={infoFor}
         onCloseInfo={() => closeOverlay("info")}
         onOpenHistoryFromInfo={openHistoryFromInfo}

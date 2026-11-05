@@ -3,7 +3,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { NotebookTreeItem } from "../data/notebookTreeRepository";
-import { SELF_REGISTERED_OVERLAY_KINDS, useWorkspaceOverlays, type WorkspaceOverlays } from "./useWorkspaceOverlays";
+import { SELF_REGISTERED_OVERLAY_KINDS, isTreeVisibleForOverlay, useWorkspaceOverlays, type WorkspaceOverlays } from "./useWorkspaceOverlays";
 
 /**
  * MOB-02（261027 审计）：工作区浮层从 10 个独立 useState 收成一个 owner（overlay）。
@@ -86,6 +86,24 @@ describe("工作区浮层唯一 owner（MOB-02）", () => {
     expect(api.overlay).toEqual({ kind: "outline" });
     act(() => api.toggle("find"));
     expect(api.overlay).toEqual({ kind: "find" });
+  });
+
+  it("目录树/抽屉可见态：行菜单(⋯)打开期间保持（手机与平板两栏都覆盖）", () => {
+    const phone = { padTwoPane: false, padTreeOpen: false };
+    const pad = { padTwoPane: true, padTreeOpen: false };
+    // 行操作菜单打开 ⇒ 树保持可见（用户 261105 验收：截图里菜单弹出时背后树不见了）
+    expect(isTreeVisibleForOverlay("menu", phone)).toBe(true);
+    expect(isTreeVisibleForOverlay("menu", pad)).toBe(true);
+    // 关闭菜单后（回到 sidebar / 树原开态）仍可见
+    expect(isTreeVisibleForOverlay("sidebar", phone)).toBe(true);
+    expect(isTreeVisibleForOverlay(null, { padTwoPane: true, padTreeOpen: true })).toBe(true);
+    // 新建/重命名已恢复原样：create 不再撑开抽屉
+    expect(isTreeVisibleForOverlay("create", phone)).toBe(false);
+    expect(isTreeVisibleForOverlay("create", pad)).toBe(false);
+    // 其它从菜单进入的子浮层维持现状（不额外扩）
+    expect(isTreeVisibleForOverlay("noteTags", phone)).toBe(false);
+    expect(isTreeVisibleForOverlay("info", phone)).toBe(false);
+    expect(isTreeVisibleForOverlay(null, phone)).toBe(false);
   });
 
   it("自带返回栈的种类 = 菜单类 + MobileSheet（工作区不得重复登记）", () => {
