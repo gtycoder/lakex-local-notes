@@ -57,6 +57,14 @@ export class QuickNoteTagLinksStore {
     return byNote;
   }
 
+  /** 某批标签关联到的小记 id（标签改名/删除/合并后只需重刷这些，不要全量 reindex）。 */
+  listNoteIdsForTags(tagIds: readonly string[]): string[] {
+    const unique = [...new Set(tagIds)];
+    if (unique.length === 0) return [];
+    const rows = this.db.prepare("SELECT DISTINCT target_id FROM tag_links WHERE target_kind=? AND tag_id IN (" + unique.map(() => "?").join(",") + ")").all(KIND, ...unique) as Array<{ target_id: string }>;
+    return rows.map((row) => row.target_id);
+  }
+
   /** 恢复/复制后把关系版本推进到指定时间（无行时也保留版本）。 */
   setVersion(noteId: string, at: string): void { this.upsertVersion(noteId, at); }
 

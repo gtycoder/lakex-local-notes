@@ -113,3 +113,9 @@
 .qn-tag-sheet__section { display: flex; align-items: center; gap: 6px; color: var(--lake-text-3); font-size: var(--lake-font-size-small); }
 .qn-tag-sheet__list { display: flex; flex-direction: column; }
 .qn-tag-sheet__empty { padding: 16px 8px; color: var(--lake-text-3); font-size: var(--lake-font-size-small); text-align: center; }
+
+/* 261105 标签管理（移动端）：行内 [置顶][名称][计数][更多] + 展开动作行；复用 qn-tag-sheet 面板骨架，不新建浮层。 */
+.qn-tag-manager__row { display: flex; align-items: center; gap: 6px; min-height: var(--mb-tap-min); }
+.qn-tag-manager__name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.qn-tag-manager__actions { display: flex; flex-wrap: wrap; gap: 8px; padding: 2px 0 10px var(--mb-page-pad); }
+.qn-tag-manager__actions .mb-btn { min-height: var(--mb-tap-min); }

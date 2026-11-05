@@ -178,7 +178,7 @@ export function QuickNoteTagManager({ open, tags, onClose, onChanged, onError }:
               )}
             </div>
             <footer className="quick-note-tag-manager__footer">
-              <span className="quick-note-tag-manager__hint">排序与置顶随小记清单同步；删除标签不会删除小记。</span>
+              <span className="quick-note-tag-manager__hint">标签的排序与置顶随小记数据一起同步；删除标签不会删除小记。</span>
               <button type="button" className="ln-btn ln-btn--secondary" onClick={onClose}>完成</button>
             </footer>
           </>

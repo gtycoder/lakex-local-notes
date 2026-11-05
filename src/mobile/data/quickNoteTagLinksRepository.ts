@@ -14,6 +14,14 @@ export async function listQuickNoteTagIds(d: MobileDb, noteId: string): Promise<
   return rows.map((row) => String(row.tag_id));
 }
 
+/** 某批标签关联到的小记 id（标签改名/删除/合并后只需重刷这些，不要全量 reindex）。 */
+export async function listQuickNoteIdsForTags(d: MobileDb, tagIds: readonly string[]): Promise<string[]> {
+  const unique = [...new Set(tagIds)];
+  if (unique.length === 0) return [];
+  const rows = await q(d, "SELECT DISTINCT target_id FROM tag_links WHERE target_kind=? AND tag_id IN (" + unique.map(() => "?").join(",") + ")").all(KIND, ...unique) as Array<{ target_id: string }>;
+  return rows.map((row) => String(row.target_id));
+}
+
 export async function listAllQuickNoteTagIds(d: MobileDb): Promise<Map<string, string[]>> {
   const rows = await q(d, "SELECT target_id, tag_id FROM tag_links WHERE target_kind=? ORDER BY target_id, position, tag_id").all(KIND) as Array<{ target_id: string; tag_id: string }>;
   const byNote = new Map<string, string[]>();

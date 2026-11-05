@@ -1,21 +1,23 @@
 /**
  * 移动端标签 ↔ 小记的唯一协调层：只有这里同时接触标签目录与关联表。
  * 删除/合并/同步在此编排；其它模块互不认识对方的表。
+ *
+ * 261105：标签名/关系变化后**只重刷受影响小记的搜索索引**（`quick_notes_search_index.tags` 是派生列）；
+ * 旧实现 `reindexAll` 每次改名/删除/合并都把全部小记逐条重建（目标量级 2 万），属过度重建。
  */
-import { normalizeQuickNoteTagIds, sameQuickNoteTagDirectory, type QuickNoteTag } from "../../core/quickNoteTags.js";
+import { normalizeQuickNoteTagIds } from "../../core/quickNoteTags.js";
 import type { MobileDb } from "./sqliteDb.js";
 import {
   assertQuickNoteTagsExist,
   createQuickNoteTag,
   listQuickNoteTags,
-  mergeRemoteQuickNoteTags,
   reorderQuickNoteTags,
   tombstoneQuickNoteTag,
   updateQuickNoteTag,
 } from "./quickNoteTagsRepository.js";
 import {
-  applyRemoteQuickNoteTagLinks,
   listAllQuickNoteTagIds,
+  listQuickNoteIdsForTags,
   listQuickNoteTagIds,
   quickNoteTagsUpdatedAt,
   removeQuickNoteTagLinksInTransaction,
@@ -24,9 +26,14 @@ import {
 } from "./quickNoteTagLinksRepository.js";
 import { indexQuickNote } from "./quickNotesSearch.js";
 
-async function reindexAll(d: MobileDb): Promise<void> {
-  const rows = await d.prepare("SELECT id FROM quick_notes WHERE deleted_at IS NULL").all() as Array<{ id: string }>;
-  for (const row of rows) await indexQuickNote(d, String(row.id), true);
+/** 按小记 id 重刷搜索索引（标签名 / 关系变化的派生列）。 */
+export async function reindexQuickNotesByIds(d: MobileDb, noteIds: readonly string[]): Promise<void> {
+  for (const noteId of noteIds) await indexQuickNote(d, noteId, true);
+}
+
+/** 标签目录变化后：只重刷「关联到这些标签的小记」。新标签/无关联标签 ⇒ 零工作。 */
+export async function reindexQuickNotesForTags(d: MobileDb, tagIds: readonly string[]): Promise<void> {
+  await reindexQuickNotesByIds(d, await listQuickNoteIdsForTags(d, tagIds));
 }
 
 export const mobileQuickNoteTags = {
@@ -34,47 +41,35 @@ export const mobileQuickNoteTags = {
   create: (d: MobileDb, name: string) => createQuickNoteTag(d, name),
   update: async (d: MobileDb, id: string, patch: { name?: string; pinned?: boolean; sortOrder?: number }) => {
     const before = (await listQuickNoteTags(d)).find((tag) => tag.id === id)?.name;
+    const affected = await listQuickNoteIdsForTags(d, [id]);
     const tag = await updateQuickNoteTag(d, id, patch);
-    if (before !== undefined && before !== tag.name) await reindexAll(d);
+    if (before !== undefined && before !== tag.name) await reindexQuickNotesByIds(d, affected);
     return tag;
   },
   reorder: (d: MobileDb, ids: readonly string[]) => reorderQuickNoteTags(d, ids),
   delete: async (d: MobileDb, id: string) => {
+    const affected = await listQuickNoteIdsForTags(d, [id]);
     let updated = 0;
     // 事务内只能调用 *InTransaction 版本：SQLite 不支持嵌套 BEGIN。
     await d.transaction(async () => {
       await tombstoneQuickNoteTag(d, id);
       updated = await removeQuickNoteTagLinksInTransaction(d, id);
     });
-    await reindexAll(d);
+    await reindexQuickNotesByIds(d, affected);
     return { updated, failed: 0 };
   },
   merge: async (d: MobileDb, sourceId: string, targetId: string) => {
     if (sourceId === targetId) return { updated: 0, failed: 0 };
     // 目标必须存在且未被删除（源标签在 tombstone 时会自行校验）。
     await assertQuickNoteTagsExist(d, [targetId]);
+    const affected = await listQuickNoteIdsForTags(d, [sourceId]);
     let updated = 0;
     await d.transaction(async () => {
       updated = await replaceQuickNoteTagLinksInTransaction(d, sourceId, targetId);
       await tombstoneQuickNoteTag(d, sourceId);
     });
-    await reindexAll(d);
+    await reindexQuickNotesByIds(d, affected);
     return { updated, failed: 0 };
-  },
-  applyRemote: async (d: MobileDb, remote: readonly QuickNoteTag[]) => {
-    const before = await listQuickNoteTags(d, { includeDeleted: true });
-    // 远端没有目录：只返回本端权威目录（不做全量重建；否则每轮同步都会重刷所有小记索引）。
-    if (remote.length === 0) return before;
-    let merged: QuickNoteTag[] = [];
-    let linksRemoved = 0;
-    await d.transaction(async () => {
-      merged = await mergeRemoteQuickNoteTags(d, remote);
-      for (const tag of merged) {
-        if (tag.deletedAt) linksRemoved += await removeQuickNoteTagLinksInTransaction(d, tag.id);
-      }
-    });
-    if (linksRemoved > 0 || !sameQuickNoteTagDirectory(before, merged)) await reindexAll(d);
-    return merged;
   },
   tagIds: (d: MobileDb, noteId: string) => listQuickNoteTagIds(d, noteId),
   allTagIds: (d: MobileDb) => listAllQuickNoteTagIds(d),
@@ -87,12 +82,5 @@ export const mobileQuickNoteTags = {
     // 关系独立于正文：标签变了要单独强刷这条小记的搜索索引（否则按新标签搜不到）。
     await indexQuickNote(d, noteId, true);
     return next;
-  },
-  applyRemoteLinks: async (d: MobileDb, noteId: string, tagIds: readonly string[], updatedAt: string) => {
-    // 删除标签 = 关系不应复活；墓碑集合由目录侧（协调层）提供，关系仓储仍不认识目录表。
-    const deleted = new Set((await listQuickNoteTags(d, { includeDeleted: true })).filter((tag) => tag.deletedAt).map((tag) => tag.id));
-    const changed = await applyRemoteQuickNoteTagLinks(d, noteId, tagIds, updatedAt, deleted);
-    if (changed) await indexQuickNote(d, noteId, true);
-    return changed;
   },
 };

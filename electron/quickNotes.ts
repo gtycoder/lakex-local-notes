@@ -125,7 +125,7 @@ export class QuickNotesStore {
     this.migrate();
     this.tags = new QuickNoteTagsStore(this.db);
     this.links = new QuickNoteTagLinksStore(this.db);
-    this.tagService = new QuickNoteTagService(this.db, this.tags, this.links, () => this.reindexAllSearchTags());
+    this.tagService = new QuickNoteTagService(this.db, this.tags, this.links, (tagIds) => this.reindexSearchTagsForTags(tagIds));
     this.queries = new QuickNotesQueries({
       db: this.db,
       itemPath: (id) => this.itemPath(id),
@@ -565,7 +565,12 @@ export class QuickNotesStore {
     }
   }
 
-  /** 标签改名/合并/删除/远端目录变化后，刷新所有小记索引里的标签词。 */
+  /** 标签改名/合并/删除/远端目录变化后，只刷新**关联到这些标签**的小记索引（不全量重建）。 */
+  reindexSearchTagsForTags(tagIds: readonly string[]): void {
+    for (const noteId of this.links.listNoteIdsForTags(tagIds)) this.reindexSearchTags(noteId);
+  }
+
+  /** 迁移/首次升级用：全量刷新所有小记索引里的标签词（非标签目录变化的常规路径）。 */
   reindexAllSearchTags(): void {
     const rows = this.db.prepare("SELECT id FROM quick_notes").all() as Array<{ id: string }>;
     for (const row of rows) this.reindexSearchTags(row.id);
