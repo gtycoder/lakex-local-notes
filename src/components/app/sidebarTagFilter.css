@@ -1,29 +1,28 @@
 /*
- * 侧栏「按标签筛选」条（P1）。chips 复用 .quick-note-tag 既有语汇（同语义只有一套视觉），
- * 这里只放条本身的行布局；颜色/间距/字号全部 --lake-* 令牌。
+ * 侧栏目录筛选浮层里的「标签」段（261105 P1 三修：并入原 Filter，不再有独立标签图标）。
+ * chips 复用 .quick-note-tag 既有语汇（同语义只有一套视觉）；颜色/间距/字号全部 --lake-* 令牌。
  */
 .sidebar-tag-filter {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
+  flex-direction: column;
   gap: 4px;
-  padding: 4px 8px;
-  border-bottom: 0.5px solid var(--lake-border-1);
+  padding: 6px 8px 8px;
+  border-top: 0.5px solid var(--lake-border-1);
 }
 
-.sidebar-tag-filter__chip { max-width: 140px; }
+.sidebar-tag-filter__head { display: flex; align-items: center; gap: 6px; }
+.sidebar-tag-filter__label { color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); }
+.sidebar-tag-filter__sublabel { flex: none; color: var(--lake-text-4); font-size: var(--lake-font-size-tiny); }
 
-.sidebar-tag-filter__remove {
-  display: inline-flex;
-  align-items: center;
-  border: 0;
-  border-radius: var(--lake-radius-sm);
-  color: inherit;
-  background: transparent;
-  cursor: pointer;
-}
+.sidebar-tag-filter__row { display: flex; align-items: flex-start; gap: 6px; }
+.sidebar-tag-filter__chips { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
+.sidebar-tag-filter__chips .quick-note-tag { max-width: 132px; }
 
 .sidebar-tag-filter__clear {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
   border: 0;
   border-radius: var(--lake-radius-sm);
   color: var(--lake-accent-text);
@@ -32,10 +31,13 @@
   cursor: pointer;
 }
 
-.sidebar-tag-filter__panel { display: flex; flex-direction: column; gap: var(--lake-space-xs); padding: var(--lake-space-sm); }
-
-.sidebar-tag-filter__label { color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); }
-
-.sidebar-tag-filter__chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.sidebar-tag-filter__hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--lake-text-3);
+  font-size: var(--lake-font-size-tiny);
+}
 
 .sidebar-tag-filter__empty { margin: 0; color: var(--lake-text-4); font-size: var(--lake-font-size-tiny); }

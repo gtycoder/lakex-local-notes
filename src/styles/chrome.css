@@ -192,6 +192,26 @@
   background: var(--lake-bg-panel);
   border-radius: var(--lake-radius-md) var(--lake-radius-md) 0 0;
 }
+/* 壳：标签空间（261105 P1）—— 与回收站/资源**同口径**：藏目录栏与状态栏，正文铺满整窗。
+ * 标签空间是三栏只读聚合页，左侧目录栏没有意义（用户验收截图：左栏目录 + 三栏并排太挤）。 */
+.app-shell.tags-space-active .sidebar { display: none; }
+.app-shell.tags-space-active {
+  grid-template-columns: var(--activity-rail-width) 0 minmax(0, 1fr);
+}
+.app-shell.tags-space-active .workspace {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+  grid-template-rows: minmax(0, 1fr);
+}
+.app-shell.tags-space-active .statusbar { display: none; }
+/* .workspace-view 是 display:contents ⇒ .tags-space 是 .workspace 的直接栅格项，占满唯一一行 */
+.app-shell.tags-space-active .tags-space {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  min-height: 0;
+}
 .app-shell.trash-space-active .trash-space-pane {
   grid-column: 1 / -1;
   grid-row: 1;

@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Book, ChevronRight, ChevronsDownUp, EyeOff, FilePlus, File, Filter, Focus, Folder, FolderOpen, FolderPlus, History, Info, Lock, LockOpen, MoreVertical, Pencil, PenLine, Pin, Plus, RefreshCw, Trash } from "lucide-react";
+import { Book, ChevronRight, ChevronsDownUp, EyeOff, FilePlus, File, Filter, Focus, Folder, FolderOpen, FolderPlus, History, Info, Lock, LockOpen, MoreVertical, Pencil, PenLine, Pin, Plus, RefreshCw, Tag as TagIcon, Trash } from "lucide-react";
 import { DockFilterRow, useDockFilter } from "../ui/DockFilterBar";
 import { LAKE_EMOJIS } from "../../lib/lakeEmojis";
 import { escapeId } from "../../lib/cssEscape";
@@ -23,6 +23,7 @@ import { usePopoverPosition } from "../../hooks/usePopoverPosition";
 // 行内重命名的 Enter/Esc/空名口径统一走共用原语（DT-12；目录这里保留「弹窗 + 空名不提交」的现状）
 import { InlineRenameInput } from "../ui/InlineRenameInput";
 import { SidebarTagFilter } from "./SidebarTagFilter";
+import { NoteTagDialog } from "./NoteTagDialog";
 import { isTagSelectionActive, type TagSelection } from "../../features/tags/tagsModel";
 import type { QuickNoteTagSummary } from "../../core/quickNoteTags";
 
@@ -86,6 +87,8 @@ interface SidebarProps {
     visibleIds: ReadonlySet<string>;
     onChange(next: TagSelection): void;
   };
+  /** 右键「打标签…」保存后通知宿主（刷新标签空间/筛选数据；与属性面板同一条通路）。 */
+  onTagsChanged?: () => void;
 }
 
 export const Sidebar = memo(function Sidebar(props: SidebarProps) {
@@ -106,6 +109,8 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
     positions: Record<string, number>;
   } | null>(null);
   const [contextMenu, setContextMenu] = useState<{ id: string; x: number; y: number } | null>(null);
+  /** 右键「打标签…」：记录目标文档（id + 标题），用 NoteTagDialog 复用属性面板的标签编辑行。 */
+  const [tagEditor, setTagEditor] = useState<{ noteId: string; title: string } | null>(null);
   /** 目录行「＋」的快捷「新建」菜单（锚在该行按钮上） */
   const [createMenu, setCreateMenu] = useState<{ node: TreeNode; anchor: HTMLElement } | null>(null);
   const [iconPicker, setIconPicker] = useState<{ node: TreeNode; anchor: HTMLElement } | null>(null);
@@ -691,8 +696,9 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
         </div>
       </div>
       </div>
+      {/* 目录筛选：只有一个 Filter 按钮/一个浮层——上段名称筛选 + 下段标签含/排除（P1 三修合并） */}
       <DockFilterRow filter={filter} placeholder="筛选目录" className="desktop-only" />
-      {props.tagFilter && (
+      {filter.open && props.tagFilter && (
         <SidebarTagFilter tags={props.tagFilter.tags} selection={props.tagFilter.selection} onChange={props.tagFilter.onChange} />
       )}
       <nav className="note-list tree-list" ref={treeRef}>
@@ -706,9 +712,14 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
               : "点击 + 新建第一个笔记本"
         }</div>}
       </nav>
-      {contextMenu && contextNode && <ContextMenu node={contextNode} x={contextMenu.x} y={contextMenu.y} onNewChild={menuNewChild} onRename={menuRename} onDelete={menuDelete} onCopyMarkdown={() => props.onCopyMarkdown(contextNode)} onExportAs={(format) => props.onExportAs(contextNode, format)} onCopyPaths={() => props.onCopyPaths(contextNode)} onShowInfo={() => props.onShowInfo(contextNode)} onOpenHistory={() => props.onOpenHistory(contextNode)} locked={contextNode.noteFileId ? props.lockedNoteIds.has(contextNode.noteFileId) : false} onToggleLock={() => props.onToggleLockNote(contextNode)} onClose={() => setContextMenu(null)} />}
+      {contextMenu && contextNode && <ContextMenu node={contextNode} x={contextMenu.x} y={contextMenu.y} onNewChild={menuNewChild} onRename={menuRename} onDelete={menuDelete} onCopyMarkdown={() => props.onCopyMarkdown(contextNode)} onExportAs={(format) => props.onExportAs(contextNode, format)} onCopyPaths={() => props.onCopyPaths(contextNode)} onShowInfo={() => props.onShowInfo(contextNode)} onOpenHistory={() => props.onOpenHistory(contextNode)} locked={contextNode.noteFileId ? props.lockedNoteIds.has(contextNode.noteFileId) : false} onToggleLock={() => props.onToggleLockNote(contextNode)} onAddTags={() => setTagEditor({ noteId: contextNode.noteFileId ?? contextNode.id, title: contextNode.title })} onClose={() => setContextMenu(null)} />}
       {createMenu && <CreateMenu anchor={createMenu.anchor} onNewChild={(kind) => createChild(createMenu.node, kind)} onClose={() => setCreateMenu(null)} />}
       {editingId && <TreeRenameDialog key={editingId} initial={editingTitle} onCancel={cancelRename} onConfirm={submitRename} />}
+      {tagEditor && (
+        <NoteTagDialog open noteId={tagEditor.noteId} title={tagEditor.title}
+          onClose={() => setTagEditor(null)}
+          onChanged={() => props.onTagsChanged?.()} />
+      )}
       {iconPicker && <EmojiIconPicker key={iconPicker.node.id} anchor={iconPicker.anchor} nodeType={iconPicker.node.nodeType} value={iconPicker.node.icon ?? null} onPick={(icon) => {
         props.onSetIcon(iconPicker.node, icon);
         // 保持面板与当前分类/颜色，立即更新选中格，方便连续试选。
@@ -938,6 +949,8 @@ interface ContextMenuProps {
   /** 该文档当前是否已锁定（只读） */
   locked: boolean;
   onToggleLock: () => void;
+  /** 只对 note 行出现：「打标签…」打开复用属性面板标签行的弹层（P1 三修）。 */
+  onAddTags: () => void;
   onClose: () => void;
 }
 
@@ -1011,7 +1024,7 @@ function CreateMenu({ anchor, onNewChild, onClose }: { anchor: HTMLElement; onNe
   );
 }
 
-const ContextMenu = ({ node, x, y, onNewChild, onRename, onDelete, onCopyMarkdown, onExportAs, onCopyPaths, onShowInfo, onOpenHistory, locked, onToggleLock, onClose }: ContextMenuProps) => {
+const ContextMenu = ({ node, x, y, onNewChild, onRename, onDelete, onCopyMarkdown, onExportAs, onCopyPaths, onShowInfo, onOpenHistory, locked, onToggleLock, onAddTags, onClose }: ContextMenuProps) => {
   const menuRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
   // 视口边缘翻转：按光标先挂载，量出菜单真实尺寸后再定位——下方放不下就向上展开，保证整张菜单可点。
@@ -1045,6 +1058,7 @@ const ContextMenu = ({ node, x, y, onNewChild, onRename, onDelete, onCopyMarkdow
         <>
           <button role="menuitem" onClick={() => { onRename(); onClose(); }}><Pencil size={15} /><span>重命名</span></button>
           <button role="menuitem" onClick={() => { onOpenHistory(); onClose(); }}><History size={15} /><span>历史版本</span></button>
+          <button role="menuitem" onClick={() => { onAddTags(); onClose(); }}><TagIcon size={15} /><span>打标签…</span></button>
           <button role="menuitem" onClick={() => { onShowInfo(); onClose(); }}><Info size={15} /><span>属性</span></button>
           <button role="menuitem" onClick={() => { onToggleLock(); onClose(); }}>
             {locked ? <LockOpen size={15} /> : <Lock size={15} />}<span>{locked ? "解锁" : "锁定（只读）"}</span>

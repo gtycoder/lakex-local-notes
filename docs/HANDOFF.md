@@ -8,6 +8,12 @@
 
 ## 0. 最新交接（261027）
 
+### 261105 · 标签空间 UI 三修（用户验收反馈）· **已提交并双推**
+- ① 标签空间**隐藏左侧目录栏**：App 给 shell 加 `tags-space-active`，chrome.css 照抄回收站/资源同口径（隐 sidebar/statusbar、workspace 铺满、三栏吃满整窗）；实测 CDP：`.app-shell` 含类、`.sidebar` display=none、`.tags-space` 存在。
+- ② **标签筛选并入原目录 Filter**：移除独立标签图标，`filter.open` 时在同一浮层渲染「名称筛选 + 标签（包含/排除）」；全侧栏只剩一个 Filter 按钮。
+- ③ **目录右键 note 行加「打标签…」**：新 `NoteTagDialog` 复用 `NoteTagRow`（增/删/新建），保存后经 `onTagsChanged` 刷新标签空间，与属性面板同通路；分组/笔记本无此项。
+- 门禁：tsc 0；定向 vitest 34 文件/175 例；ui-metrics；diff-check（全量回归随下一批统一跑）。
+
 ### 261105 · P2 优化批（5 路并行）：历史兜底分片 / 启动预检条件深检 / 安全模式 fail-closed / saveState 标签批量读 / 移动端 P2 · **已提交并双推**
 - **P2-A 历史兜底**：`runHistoryFallback` 改 async，stat 与快照两段每 12 篇 `setImmediate` 让出、单 tick 20s 预算（用尽记 deferred 下轮续）；失败按 10min×2^(n-1) 指数退避（封顶 24h、不推进 mtime、成功清零）；首轮按 `device_state.history_fallback_cursor` 每 tick 扫一页（200 篇）走完切回 mtime 选择；每轮清理已删文档账本行。24h 去重/引用保护/保留期不变。
 - **P2-B 启动与对账**：启动预检改**只读打开** + **条件深检**（`startup-health.json`：崩溃/上次非 clean ⇒ deep quick_check+FK，否则 light 只查关键表；正常退出才写 clean）；对账 `lastRunAt` 持久化（`file_reconcile_state`，跨重启 24h 生效）；对账唤醒按到期 sleep（不再每 60s 空转，1s–24h 夹取）；恢复页备份目录统一到 `backups/`；重建扫描 >32MiB 候选拒绝且不整篇读。
