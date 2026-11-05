@@ -8,7 +8,7 @@
 
 ## 0. 最新交接（261027）
 
-### 261105 · 小记标签：审计 + 同步语义修复 + 顺序改设备本地 + 移动端标签管理（拖拽） · **本地提交，未推送**
+### 261105 · 小记标签：审计 + 同步语义修复 + 顺序改设备本地 + 移动端标签管理（拖拽） · **已合 master 并双推（两远端同 hash）**
 - **审计结论**：保留「目录（`tags`）+ 关系（`tag_links` + `tag_link_versions`）+ 正文不带标签」模型；问题集中在**同步端口的实现与语义**，不在模型。
 - **修掉的 5 类同步不一致**：① 移动 `listQuickTags` 过滤墓碑/丢字段 ⇒ 删除不发布；② 移动 `mergeQuickTags` 写死 `deleted_at=NULL` ⇒ **墓碑复活**；③ `mergeRoundIntoState` 只补新 id ⇒ 远端改名/墓碑**永不落到状态**；④ plan 的目录变更不进 `indexChanged`，且发布 tags 用本地目录 ⇒ 改名不传播、聚合发布会丢远端标签；⑤ 移动 `applyQuickNoteTagLinks` 不过滤墓碑/不限条数/无 LWW。修复：core 加 `compareQuickNoteTagVersion`（同 `updatedAt` 确定性 tie-break）+ 合并泛型；plan 用 LWW 合并目录 / `localTagChanged` 触发发布 / publish tags=合并目录；engineBridge 按 LWW 写回；两端端口按 LWW 合并、关系写入过滤墓碑/空/重复/超 20（**不按 ID 正则**，兼容旧 ID）。
 - **用户 261105 最终定稿（推翻「置顶」与「顺序同步」）**：① **标签置顶功能整体删除**（模型 / wire / 端口 / DB 读写 / 两端 UI / 测试全部移除；旧库多余 `pinned` 列不迁移、代码不再读写）；② **标签目录顺序 = 设备本地视图，不参与 S3 同步**：默认「新的在前（createdAt DESC）→ 名称」，**手动拖拽后**本机 `device_state.quick_tags_manual_order=1` 并按本机 `sort_order`，之后新增标签**追加末尾**；同步合并只更新名称/墓碑/时间、**不覆盖本机顺序**（远端新标签按 createdAt 进默认序列 / 手动排序下游标末尾）；③ **单条小记的标签顺序 = 设备本地**：wire 上 `tagIds` 规范化为**排序集合**，plan 按集合比较（顺序不影响发布），对端应用时**保留本机已有顺序**、只把远端新增插到最前。
@@ -21,7 +21,7 @@
 - **测试/门禁**：新增 `mobileTagSync`（4）+ `quickNoteTagReindex`（4）+ `quickNoteTagLocalOrder`（2）+ `MobileQuickNoteTagManager.render`（4）+ plan 4 + engineBridge 1 + core tie-break/move 2 + 桌面 store 顺序 1。tsc 0 / 全量 vitest **604 文件 3698 例（3686 通过 + 12 skipped）** / ui-metrics / check:core 136 文件 0 / check:mobileui / 双 build / check:bundle+arch / `git diff --check`。`perf.integration` 并行偶发 ratio flake（单独跑绿，已知项）。
 - **仍未做（产品待裁决）**：**文档标签**（桌面主库 `target_kind=note`，未立项，方案见下）；小记→文档转换不带标签（用户口径：当前丢就丢，等文档标签立项后一起做）。
   **文档标签同步技术方案（只设计、未实现）**：扩 **lake 索引**——`LakeIndex.tags?` + `LakeNoteEntry.tagIds?/tagsUpdatedAt?`，复用同一套 LWW/`localTagChanged`；端口泛化 lake 版；**移动端即使无 UI 也必须搬运这三个字段**（否则移动端发布 lake 索引会清空文档标签）；旧端丢弃未知字段 ⇒ 新端下一轮自愈重发。UI 与转换随后一批。
-### 261105 · 资源管理：删除入口不外露 + 未引用资源可点击预览 · **本地提交，未推送**
+### 261105 · 资源管理：删除入口不外露 + 未引用资源可点击预览 · **已合 master 并双推（两远端同 hash）**
 - **用户点单**：资源管理页不要再在外部暴露删除，必须点了「查看」之后才能删。
 - **改动**：首页「未引用的本地文件」从「清理全部（n）」改为「查看（n）」；「云端未引用文件」从「清理云端」改为「查看」；两者进入新 `ResourceCleanupSheet`（mode=orphans / cloudGc）后才出现删除/清理按钮（云端清理仍保留二次确认）。缺正文/缺小记本来就是「查看」后处置，口径统一。
 - **新增/改动**：`src/mobile/settings/ResourceCleanupSheet.tsx`（0 新增 CSS：复用 `mb-sheet` / `mb-row` / `mb-btn` 原语）+ 渲染测试 5 例；`useSettingsSectionData` 导出 `OrphanAsset` 类型；`SettingsDrawer` 接线。
@@ -29,7 +29,7 @@
 - **点击预览（同日追加，用户点单「无论图片还是附件」）**：「未引用」行点击 = 预览。图片：`readAssetPreview`（≤32MB）→ 共享 `ImageLightbox`（**按需动态 import**，避免静态把 features/editor 拉进设置页懒 chunk 触发 kernelStyleBootstrap 误判）；非图片附件：`bridge.openAttachment` 交系统应用；图片读不到/文件缺失：回落到系统打开，仍失败则 toast 提示、不预览（缺失资源直接跳过）。行内删除按钮 `stopPropagation`，点删除不会误触预览；无预览回调时行不加 `role=button`。
 - **设备（lake_mobile / emulator-5584，重装 APK）**：资源管理首页删除类按钮 **0 个**；「未引用」查看（2）→ 点 320×200 PNG 行走 Lightbox（`naturalWidth/Height = 320/200`、`data:image/png`、工具栏 1/1 + 缩放/关闭）；1×1 测试图属正常「看不见」；附件路径复用既有 `openAttachment`（属性面板/多维表同款），**未设备专项验**。测试数据由**产品路径**造（临时文档上传资源 → 改标题保存触发 detectOrphans），保留供用户点验，验收后清（临时文档 + 2 个孤儿 + 缺正文/缺小记测试数据）。
 
-### 261104 · 三项裁决定稿 + 落地（**本地提交，未推送**）
+### 261104 · 三项裁决定稿 + 落地（**已合 master 并双推（两远端同 hash）**）
 - **① 表格语义（用户裁决 = A，长期）**：排序/冻结/单元格·行列保护 = **文档数据**；阅读态只读，排序/冻结回编辑态；**不补移动端保护行列入口**；读态筛选保持「只对本机生效、绝不写正文」的唯一例外。已回填 `AGENTS.md` §4 与 `LAKEX-CONTRACT.md` §5.47，**无代码改动**。
 - **② 移动端缺正文/缺小记（B-lite，文档 + 小记；已落地）**：探针（lake_mobile）结论：文档缺正文**原本就不打开**（已比只读更严，toast 提示），小记**原本完全静默**（已修）。实现：`src/mobile/data/missingBodies.ts`（只 stat、分批 200、判据复用 `core/missingBody`、hasSyncBase 读 v3 baseline）+ bridge 单篇云端拉回（pointer→索引→lakeBodyKey→**sha256 校验**→写正文，**不调整库 restoreFromCloud**）/ 历史恢复（复用 restoreHistory）/ 搜索缓存重建纯文本（标 local）/ 彻底删除；设置→资源管理「缺正文」「缺小记」两行（非空才显示）+ Sheet（常驻结果行、`confirmMobile` 二次确认）；同步警告「正文缺失」行改「去恢复」；打开提示统一文案、每篇每会话一次。**0 新增 CSS**。
 - **③ 移动端表格面板（已落地）**：删 4 处不可达 toast 死分支 + 7 个无能力占位（附件 / 图表 / 批注 / 数据验证 / 分列 / 图表视图 / 条件格式）；接线「单元格图片」「手写签名（透明 PNG、按笔迹 bbox 裁剪、仅移动端）」「只读逐行表单视图」。**附件结论 = Univer 1.0.3 无任何单元格附件能力（依赖里无 attachment 包）、桌面也没有；自研属立项级 ⇒ 不做、删占位**。附带修隐性 bug：移动端编辑含图表格会把资产 URL（带 token）写回正文 ⇒ capture/基线新增 URL→filename 映射（`usheetDiskSrc`，与桌面 diskSource 同口径）。
@@ -724,15 +724,15 @@
 
 | worktree | 分支 | HEAD | 状态 |
 | --- | --- | --- | --- |
-| `lakex-local-notes`（主仓库） | `feat/pad-touch-ui` | 见 `git log -1`（**不写死 hash**；本批 = 261104 三项裁决落地，3 个本地提交） | **本地提交、未推送**：本分支领先 origin **3**、领先 GitHub **6**（本机用 HTTPS 补推，见环境注记）；`master` 仍在 `834b5772`，**本批未合 master**（验收后再合）；工作树 clean，多会话并行状态以 `git status` 为准 |
+| `lakex-local-notes`（主仓库） | `master`（工作树当前；`feat/pad-touch-ui` 同一 commit） | 见 `git log -1`（**不写死 hash**；本批 = 261104 三项裁决 + 261105 资源/标签两批） | **已合 master 并双推**：Gitee/GitHub 两远端 `ls-remote` 实测同 hash、与本地一致（0/0）；工作树 clean，多会话并行状态以 `git status` 为准 |
 | `lakex-pad` | `feat/pad-adaptation` | `17f44dbd` | **历史残留**：平板第一批早已合入 master，本分支落后 master 15 提交、领先 0。其 README/AGENTS/HANDOFF 是旧口径（「平板走内核工具栏」「补丁 3 处」），**不要当依据**；确认不再用可 `git worktree remove lakex-pad`（需用户点头） |
 
-- `master` = `834b5772`（与 `origin/master` 同 commit）；`feat/pad-touch-ui` **领先 master 3 个提交**（本批 261104 三项裁决落地，65f1d49f / b3801444 / fef2d683），**尚未合 master**。master 自 `408d6126` 前进 **70+ 提交**（手写板线 + 移动端/编辑面线）。
+- `master` = `feat/pad-touch-ui` **同一 commit**（本轮 ff 合并 + 双推；两远端 `ls-remote` 实测同 hash）。master 自 `408d6126` 前进 **80+ 提交**（手写板线 + 移动端/编辑面线 + 261104/261105 本批）。
 - 发版：只有 v0.0.1 / v0.0.2（`4b2a2467`），`package.json` = 0.0.2；**v0.0.2..HEAD 共 125 提交未发版**（下一版 v0.0.3 的发布说明必须写 inkDoc v4：旧端只读、手机/平板需重装）。
 - 261103 各批已全部提交并双推（20:08–20:21）：`ce442482`（usheet 35 行/双光标/整行整列）、`733ab4aa`（多维表头部+短名）、`2b29d9e8`（画板工具条+第 4 处补丁）、`75c46902`（ink 14 色）、`ae14ffd1`（胶囊/横滑/安全区/页签 44/useKeyboard）、`1f164f2b`（门禁装置+三份基线重烤）、`1e74c3f8`（文档）、`fdf9c455`（AI 默认关）。
 - 261103 之后（261104 凌晨，均已双推）：ink 三修（`912143da` 落笔/擦除按批渲染、`8f32a5ca` 中断不丢笔）+ 性能观测 `af169f96` + 图片页背景下采样 `8dc83a87` + 导入体积提示 `388232db` + 资源页本地占用 `1adcde27`。
 
-**门禁基线**（261105 11:50 主工作树实测，含本批 ①②③ + 资源管理 UI + 小记标签（同步修复/顺序本地/移动端拖拽管理 + review 补漏））：tsc 0 / 全量 vitest **604 文件 3698 例（3686 通过 + 12 skipped；另有 11 个 integration 文件 skipped）** / ui-metrics 0 违规 / `check:core` 136 文件 0 / `check:mobileui` / 双 build / `check:bundle`（mobile-entry-preload 24/30、mobile-js 54,481/61,440、mobile-css 137,925/141,312）/ `check:arch`（移动首屏 343.9KB/360KB；桌面 541.3KB/600KB；import 违规 0）/ `git diff --check` 0。**移动 6 态快照 0 差异**（lake_gate，重烤后 `mobile-snap.json` 与提交版 0 改动）。**APK 已重装**（lake_mobile emulator-5554，debug，40,164,026B）。设备：本批面板/签名/单元格图片/表单视图/缺正文场景已逐条实测（见 §0）；23 屏走查与平板本次未跑（改动不涉及外壳几何，`check:windowsweep` 未跑）。
+**门禁基线**（261105 11:50 主工作树实测，含本批 ①②③ + 资源管理 UI + 小记标签（同步修复/顺序本地/移动端拖拽管理 + review 补漏））：tsc 0 / 全量 vitest **604 文件 3698 例（3686 通过 + 12 skipped；另有 11 个 integration 文件 skipped）** / ui-metrics 0 违规 / `check:core` 136 文件 0 / `check:mobileui` / 双 build / `check:bundle`（mobile-entry-preload 27/30、mobile-js 55,767/61,440、mobile-css 138,061/141,312）/ `check:arch`（移动首屏 347.3KB/360KB；桌面 541.1KB/600KB；import 违规 0）/ `git diff --check` 0。**移动 6 态快照**本批未重跑（改动集中在设置子页/标签浮层，未动外壳几何；按 §3#21 发版前补跑）；23 屏走查与 `check:windowsweep` 未跑。**APK 已按合 master 后代码重装**（lake_mobile emulator-5584，debug，40,164,287B）；测试数据已清（文档 9 / 小记 4）。
 
 **环境（本机实测 261104 追加）**：**GitHub 推送走 HTTPS**（本机 `~/.ssh/id_ed25519_personal` 未在 GitHub 侧生效，SSH 报 `Permission denied (publickey)`；keychain 里有 `gtycoder` 凭据）⇒ `git push https://github.com/gtycoder/lakex-local-notes.git <branch>` 可用；Gitee 仍 `origin` SSH 正常。**本机已把 `origin` 的第二 pushurl 改为该 HTTPS 地址**（`git config --add remote.origin.pushurl …`）⇒ `git push origin <branch>` 一次推两边且 exit 0；`npm run setup:remotes` 会把 GitHub 写回 SSH，若再报 publickey 按上法改回 HTTPS。
 
