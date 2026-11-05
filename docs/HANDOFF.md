@@ -724,7 +724,7 @@
 
 | worktree | 分支 | HEAD | 状态 |
 | --- | --- | --- | --- |
-| `lakex-local-notes`（主仓库） | `master`（工作树当前；`feat/pad-touch-ui` 同一 commit） | 见 `git log -1`（**不写死 hash**；本批 = 261104 三项裁决 + 261105 资源/标签两批） | **已合 master 并双推**：Gitee `master`/`feat` 与本地同 hash；GitHub `master` 同 hash，**GitHub `feat/pad-touch-ui` 因本机到 GitHub 网络失败（HTTP2 framing / 443 超时）暂落后 1 个 docs 提交**，恢复后 `git push origin feat/pad-touch-ui` 补推即可；工作树 clean |
+| `lakex-local-notes`（主仓库） | `master`（工作树当前；`feat/pad-touch-ui` 同一 commit） | 见 `git log -1`（**不写死 hash**；本批 = 261104 三项裁决 + 261105 资源/标签两批） | **已合 master 并双推**：Gitee / GitHub 的 `master` 与 `feat/pad-touch-ui` **均与本地同 hash**（两远端 `ls-remote` 实测 0/0）；工作树 clean，多会话并行状态以 `git status` 为准 |
 | `lakex-pad` | `feat/pad-adaptation` | `17f44dbd` | **历史残留**：平板第一批早已合入 master，本分支落后 master 15 提交、领先 0。其 README/AGENTS/HANDOFF 是旧口径（「平板走内核工具栏」「补丁 3 处」），**不要当依据**；确认不再用可 `git worktree remove lakex-pad`（需用户点头） |
 
 - `master` = `feat/pad-touch-ui` **同一 commit**（本轮 ff 合并 + 双推；两远端 `ls-remote` 实测同 hash）。master 自 `408d6126` 前进 **80+ 提交**（手写板线 + 移动端/编辑面线 + 261104/261105 本批）。
