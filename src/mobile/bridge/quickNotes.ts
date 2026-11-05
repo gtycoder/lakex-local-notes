@@ -1,17 +1,19 @@
 /** C3-5 第③步：quickNotes 域（从 bridge.ts 抽取，行为保持）。 */
-import { assets, ensureDb, runPriority, runWrite } from "./context";
+import { assertS3Credentials, assets, ensureDb, runPriority, runWrite } from "./context";
 
 import { saveAssetBytesFs, loadAssetBytesFs, removeQuickNoteAssetsDirFs } from "../native/assetFs";
 import type { QuickNotePushOutcome } from "../../core/quickNoteSyncTypes.js";
 import { buildAssetFilename, mimeTypeForFilename } from "../../core/assetNaming.js";
 import { localAssetHttpUrl } from "../../core/assetUrl.js";
-import { cloudStateHint, type CloudState } from "../../core/cloudState.js";
-import type { StoredQuickNoteContent, StoredQuickNoteImage } from "../../core/quickNoteModel.js";
+import { canTouchNetwork, cloudStateHint, type CloudState } from "../../core/cloudState.js";
+import { validateQuickNoteContent, type StoredQuickNoteContent, type StoredQuickNoteImage } from "../../core/quickNoteModel.js";
+import { sha256Hex } from "../../core/syncUtils.js";
 import type { QuickNotePage, QuickNotePageOptions, QuickNoteTrashItem } from "../data/quickNotesRepository.js";
 
 import * as quickNotesRepository from "../data/quickNotesRepository.js";
 import { mobileQuickNoteTags } from "../data/quickNoteTagService.js";
-import { mobileCloudState, pushSingleQuickNote } from "./sync";
+import { ensureAssetsNative, mobileCloudState, pushSingleQuickNote, syncDomain } from "./sync";
+import { applyRestoredQuickNote, rebuildQuickNoteContentFromText } from "../data/missingBodies.js";
 
 
 export const quickNotesDomain = {
@@ -181,6 +183,82 @@ export const quickNotesDomain = {
       const d = await ensureDb();
       // MOB-06：彻底删除连图片目录一起清（quick-notes/assets/{id}/）；失败由仓储告警、不阻断墓碑。
       await quickNotesRepository.purgeQuickNote(d, id, removeQuickNoteAssetsDirFs);
+    });
+  },
+
+  // ---- 缺正文小记的恢复（261104 B-lite）----
+  // 小记**没有历史快照**（AGENTS §3#3 小记不备份）：只有两条路 —— 云端镜像，或搜索索引全文缓存（有损）。
+
+  /**
+   * 「从云端拉回」这一条小记（用户显式发起，高优先域）。
+   * 链路与桌面 electron/s3v3/quickNotesRecovery 同源：pointer → quick-notes 索引 → 内容寻址正文
+   * quick-notes/objects/{hash}.qnote → **校验 sha256** → 落盘并标 synced；图片走按需补拉 best-effort。
+   * 失败明确回报 reason（不静默、不写空正文）。
+   */
+  async restoreMissingQuickNoteFromCloud(
+    id: string,
+  ): Promise<{ ok: true } | { ok: false; reason: "cloud-off" | "no-cloud-config" | "not-found" | "not-in-cloud" | "object-missing" | "hash-mismatch" | "invalid-content" }> {
+    return runPriority("restoreMissingQuickNoteFromCloud", async () => {
+      if (!canTouchNetwork(await mobileCloudState())) return { ok: false as const, reason: "cloud-off" as const };
+      const cfg = await syncDomain.getS3Settings();
+      if (!cfg) return { ok: false as const, reason: "no-cloud-config" as const };
+      try { assertS3Credentials(cfg); } catch { return { ok: false as const, reason: "no-cloud-config" as const }; }
+      const d = await ensureDb();
+      const row = await d.prepare("SELECT 1 AS one FROM quick_notes WHERE id=?").get(id);
+      if (!row) return { ok: false as const, reason: "not-found" as const };
+      // P9：v3 远端/协议常量按需加载（缺正文恢复低频，不进首屏静态图）。
+      const [{ createMobileS3v3Remote }, keys, indexMod, types] = await Promise.all([
+        import("../v3/s3v3Remote.js"),
+        import("../../core/s3v3/protocol/s3v3Keys.js"),
+        import("../../core/s3v3/protocol/s3v3Index.js"),
+        import("../../core/s3v3/protocol/s3v3Types.js"),
+      ]);
+      const remote = createMobileS3v3Remote(cfg);
+      const pointerBytes = await remote.get(keys.S3V3_POINTER_KEY);
+      if (!pointerBytes) return { ok: false as const, reason: "not-in-cloud" as const };
+      let pointer: { quickNotes: { commit: string } };
+      try {
+        const parsed = types.validatePointer(JSON.parse(new TextDecoder().decode(pointerBytes)));
+        if (!parsed.ok) return { ok: false as const, reason: "not-in-cloud" as const };
+        pointer = parsed.pointer;
+      } catch { return { ok: false as const, reason: "not-in-cloud" as const }; }
+      const indexBytes = await remote.get(keys.indexKey("quickNotes", pointer.quickNotes.commit));
+      if (!indexBytes) return { ok: false as const, reason: "not-in-cloud" as const };
+      let entry: { contentHash: string; updatedAt: string } | undefined;
+      try { entry = indexMod.parseQuickNotesIndexBytes(indexBytes).index.items.find((item) => item.id === id); }
+      catch { return { ok: false as const, reason: "not-in-cloud" as const }; }
+      if (!entry) return { ok: false as const, reason: "not-in-cloud" as const };
+      const bytes = await remote.get(keys.quickNoteBodyKey(entry.contentHash));
+      if (!bytes) return { ok: false as const, reason: "object-missing" as const };
+      if (sha256Hex(bytes) !== entry.contentHash) return { ok: false as const, reason: "hash-mismatch" as const };
+      let content: StoredQuickNoteContent;
+      try { content = validateQuickNoteContent(JSON.parse(new TextDecoder().decode(bytes))); }
+      catch { return { ok: false as const, reason: "invalid-content" as const }; }
+      await applyRestoredQuickNote(d, id, content, { synced: true, updatedAt: entry.updatedAt });
+      try { await ensureAssetsNative([id], { space: "quickNotes" }); } catch (error) { console.warn("[missing-body] 小记正文已恢复，图片补拉失败（可点占位图重试）", error); }
+      return { ok: true as const };
+    });
+  },
+
+  /**
+   * 用搜索索引的全文缓存重建纯文本小记（有损：图片与富格式丢失 ⇒ 标 local 待上传）。
+   * 只读派生表 + 写正文文件/行，不出网。
+   */
+  async recoverMissingQuickNoteFromText(id: string): Promise<{ ok: true } | { ok: false; reason: "not-found" | "no-text" | "invalid" }> {
+    return runWrite("recoverMissingQuickNoteFromText", async () => {
+      const d = await ensureDb();
+      const row = await d.prepare("SELECT 1 AS one FROM quick_notes WHERE id=?").get(id);
+      if (!row) return { ok: false as const, reason: "not-found" as const };
+      const cached = await d.prepare("SELECT text_cache FROM quick_notes_search_index WHERE quick_note_id=?").get(id) as
+        | { text_cache?: string | null }
+        | undefined;
+      const text = typeof cached?.text_cache === "string" ? cached.text_cache : "";
+      if (!text.trim()) return { ok: false as const, reason: "no-text" as const };
+      let content: StoredQuickNoteContent;
+      try { content = rebuildQuickNoteContentFromText(text); }
+      catch { return { ok: false as const, reason: "invalid" as const }; }
+      await applyRestoredQuickNote(d, id, content, { synced: false });
+      return { ok: true as const };
     });
   },
 };

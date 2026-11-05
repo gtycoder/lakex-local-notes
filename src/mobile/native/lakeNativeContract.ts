@@ -26,6 +26,7 @@ export const LAKE_NATIVE_BRIDGE_METHODS = [
   "getCloudState", "getSyncSettings", "saveSyncSettings",
   "listTrashTree", "getS3Settings", "saveS3Settings",
   "createNote", "createBitable", "readNote", "saveNote", "trashNote", "restoreNote", "listTrashed",
+  "listMissingBodies", "restoreMissingNoteBody", "restoreMissingQuickNoteFromCloud", "recoverMissingQuickNoteFromText", // 261104 缺正文/缺小记恢复
   "restoreTreeItem", "purgeTreeItem",
   "createGroup", "renameTreeNode", "setNodeIcon", "reorderSiblings", "moveTreeNodeOrdered", "createNotebook",
   "searchNotes", "ensureSearchIndex",

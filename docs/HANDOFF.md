@@ -24,6 +24,14 @@
 - **门禁完成**：tsc 0；全量 vitest 594 文件，3608 passed / 12 skipped（限 2 workers，未放宽断言/超时；前一高负载轮 contractSurface 的 5s 超时已定向复验通过）；ui-metrics / core / mobileui / 桌面+移动 build / bundle+arch / diff-check 通过。独立只读 AVD 副本 `lake_gate`（emulator-5586 / CDP 9360）上的手机 6 态、Pad 6 态、多维表 3 态按本批配色重烤后复验均 0 差异；三份基线只在本 worktree 更新。独立桌面 CDP 9242 + 隔离 userData 已复验浅/深/暖，桌面 3 屏导航成功、对比度无告警（装置仍报告既有隐藏 1×1 节点与长标题裁切）。
 - **验证限制**：广域移动走查两轮累计 16/23 屏可达，剩余 7 屏因 goHome/入口导航与 CDP 重连不稳定未完成，未做产品归因；移动几何补充探针仅拿到 28 元素启动占位，已标 inconclusive，不作为验收证据。尚未测物理机帧率，不声称绝对零性能差异。执行记录及设备级截图在 `.css-audit/ui-surface-polish/`；临时 AVD 副本与桌面实例已退出，日常实例未操作。
 
+### 261104 · 三项裁决定稿 + 落地（**本地提交，未推送**）
+- **① 表格语义（用户裁决 = A，长期）**：排序/冻结/单元格·行列保护 = **文档数据**；阅读态只读，排序/冻结回编辑态；**不补移动端保护行列入口**；读态筛选保持「只对本机生效、绝不写正文」的唯一例外。已回填 `AGENTS.md` §4 与 `LAKEX-CONTRACT.md` §5.47，**无代码改动**。
+- **② 移动端缺正文/缺小记（B-lite，文档 + 小记；已落地）**：探针（lake_mobile）结论：文档缺正文**原本就不打开**（已比只读更严，toast 提示），小记**原本完全静默**（已修）。实现：`src/mobile/data/missingBodies.ts`（只 stat、分批 200、判据复用 `core/missingBody`、hasSyncBase 读 v3 baseline）+ bridge 单篇云端拉回（pointer→索引→lakeBodyKey→**sha256 校验**→写正文，**不调整库 restoreFromCloud**）/ 历史恢复（复用 restoreHistory）/ 搜索缓存重建纯文本（标 local）/ 彻底删除；设置→资源管理「缺正文」「缺小记」两行（非空才显示）+ Sheet（常驻结果行、`confirmMobile` 二次确认）；同步警告「正文缺失」行改「去恢复」；打开提示统一文案、每篇每会话一次。**0 新增 CSS**。
+- **③ 移动端表格面板（已落地）**：删 4 处不可达 toast 死分支 + 7 个无能力占位（附件 / 图表 / 批注 / 数据验证 / 分列 / 图表视图 / 条件格式）；接线「单元格图片」「手写签名（透明 PNG、按笔迹 bbox 裁剪、仅移动端）」「只读逐行表单视图」。**附件结论 = Univer 1.0.3 无任何单元格附件能力（依赖里无 attachment 包）、桌面也没有；自研属立项级 ⇒ 不做、删占位**。附带修隐性 bug：移动端编辑含图表格会把资产 URL（带 token）写回正文 ⇒ capture/基线新增 URL→filename 映射（`usheetDiskSrc`，与桌面 diskSource 同口径）。
+- **门禁**：tsc 0 / 全量 vitest **600 文件 3672 例（3660 通过 + 12 skipped；另有 11 个 integration 文件 skipped）** / ui-metrics 0 违规 / check:core 137 文件 0 / check:mobileui / 双 build / check:bundle + check:arch（移动首屏 343.9KB/360、桌面 541.3KB/600、import 违规 0）/ `git diff --check` 0；**移动 6 态快照 0 差异**（lake_gate，re-bake 后 `mobile-snap.json` 与提交版 0 改动）。
+- **设备验收（lake_mobile / emulator-5554，重装 debug APK 40,164,026B）**：四面板无置灰（插入 4 / 数据 4 / 视图 2 / 更多 6）；签名插入 ⇒ 正文含 `"source":"<filename>.png"` 且无 `127.0.0.1`；「单元格图片」（stub 选择器）同链路通过；表单视图 2 行/翻行/关闭且**正文逐字节不变**；缺正文文档与小记各弹一次同源 toast（连点不重复）；资源管理两行计数正确、彻底删除走二次确认并落到「已彻底删除」；测试数据已回滚（文档 9 / 小记 4，测试文档资产已清）。
+- **风险/遗留**：① 云端拉回只有单测 mock（lake_mobile 未配 S3，未真机验证）；② `hasSyncBase` 沿用桌面语义（账本被清过时可能只显示仅历史/无备份）；③ 小记重建纯文本会标 local、下次同步可能覆盖云端（二次确认已写明后果）；④ 表单视图一次性 `getValues`（默认 35 行；超大表若卡再行数帽）；⑤ 手写签名仅移动端（桌面未接，未立项）。
+
 ### 261104 · 二十六批：手写板「页面」面板（缩略图/大纲合并）+ 页签语义 · **已提交并双推（hash 见 §1）**
 - **用户口径**：参考 Edge PDF 的双视图；去掉底部缩略图横条；**滚动 + 页码跳转**（不做分页条）；面板右侧**悬浮、不可固定**，打开时画面左移让位；页签既能只打标记、也能带一句话说明。
 - **结构合并**：`InkOutlinePanel`（底栏向上的大纲浮层）+ 桌面 `InkPageStrip`（底部横条）⇒ 新的 `InkPagesPanel`（**右侧悬浮**、单一入口 `页面` ▦、两视图 `缩略图|大纲`、筛选 `全部|批注|页签`、查找、页码跳转、滚动虚拟化）。底部横条只在**移动端全局预览**里保留；桌面不再挂载。
@@ -711,15 +719,15 @@
 
 | worktree | 分支 | HEAD | 状态 |
 | --- | --- | --- | --- |
-| `lakex-local-notes`（主仓库） | `feat/pad-touch-ui` | 见 `git log -1`（**不写死 hash**；本批 = ink 二十五/二十六批，261104） | 与 Gitee/GitHub 同名分支 **0/0**（261104 推送后 `ls-remote` 实测同 hash）；**已合入 master（与 master 同一 commit）**；工作树多会话并行，状态**以 `git status` 为准** |
+| `lakex-local-notes`（主仓库） | `feat/pad-touch-ui` | 见 `git log -1`（**不写死 hash**；本批 = 261104 三项裁决落地，3 个本地提交） | **本地提交、未推送**：本分支领先 origin **3**、领先 GitHub **6**（本机用 HTTPS 补推，见环境注记）；`master` 仍在 `834b5772`，**本批未合 master**（验收后再合）；工作树 clean，多会话并行状态以 `git status` 为准 |
 | `lakex-pad` | `feat/pad-adaptation` | `17f44dbd` | **历史残留**：平板第一批早已合入 master，本分支落后 master 15 提交、领先 0。其 README/AGENTS/HANDOFF 是旧口径（「平板走内核工具栏」「补丁 3 处」），**不要当依据**；确认不再用可 `git worktree remove lakex-pad`（需用户点头） |
 
-- `master` = `feat/pad-touch-ui` 的同一 commit **`6fe8a589`**（261104 合 master + 双推，两个远端 `ls-remote` 实测同 hash）。master 自 `408d6126` 前进 **70 提交**（本会话手写板线 + 移动端/编辑面线）。
+- `master` = `834b5772`（与 `origin/master` 同 commit）；`feat/pad-touch-ui` **领先 master 3 个提交**（本批 261104 三项裁决落地，65f1d49f / b3801444 / fef2d683），**尚未合 master**。master 自 `408d6126` 前进 **70+ 提交**（手写板线 + 移动端/编辑面线）。
 - 发版：只有 v0.0.1 / v0.0.2（`4b2a2467`），`package.json` = 0.0.2；**v0.0.2..HEAD 共 125 提交未发版**（下一版 v0.0.3 的发布说明必须写 inkDoc v4：旧端只读、手机/平板需重装）。
 - 261103 各批已全部提交并双推（20:08–20:21）：`ce442482`（usheet 35 行/双光标/整行整列）、`733ab4aa`（多维表头部+短名）、`2b29d9e8`（画板工具条+第 4 处补丁）、`75c46902`（ink 14 色）、`ae14ffd1`（胶囊/横滑/安全区/页签 44/useKeyboard）、`1f164f2b`（门禁装置+三份基线重烤）、`1e74c3f8`（文档）、`fdf9c455`（AI 默认关）。
 - 261103 之后（261104 凌晨，均已双推）：ink 三修（`912143da` 落笔/擦除按批渲染、`8f32a5ca` 中断不丢笔）+ 性能观测 `af169f96` + 图片页背景下采样 `8dc83a87` + 导入体积提示 `388232db` + 资源页本地占用 `1adcde27`。
 
-**门禁基线**（261104 18:57 主工作树实测，含二十五/二十六批 ink）：tsc 0 / 全量 vitest **594 文件 3620 例（3608 通过 + 12 skipped）**（较会话起点净 +3 文件：新增 `inkSharedCssParity` / `inkPagesPanel.render` / `inkPageTabButton.render` / `MobilePageTab.render`，删 `inkOutlinePanel.render`；例数 +22） / ui-metrics pass / `check:mobileui` / `check:core` 136 文件 0 / `check:mobileui` / 双 build / `check:bundle` / `check:arch`（移动首屏 ≈340.8KB / 预算 360KB；桌面 ≈541.2KB / 预算 600KB；import 违规 0）/ `git diff --check` 0。工作树**本批提交后 clean**（另一会话后续改动以 `git status` 为准）；APK 已按合并后代码重装（debug，增量 42.2MB）。设备：手机 6 态 + 平板 6 态 + 多维表 3 态已按六批新壳**重烤**、连跑 0 差异；23 屏走查 ok；`check:windowsweep` pass。clean debug APK ≈37.95–37.97MB（量体积必须 clean 后 `stat`，增量构建会虚增到 ~42MB）。
+**门禁基线**（261104 20:57 主工作树实测，含本批 ①②③）：tsc 0 / 全量 vitest **600 文件 3672 例（3660 通过 + 12 skipped；另有 11 个 integration 文件 skipped）** / ui-metrics 0 违规 / `check:core` 137 文件 0 / `check:mobileui` / 双 build / `check:bundle`（mobile-entry-preload 24/30、mobile-js 54,481/61,440、mobile-css 137,925/141,312）/ `check:arch`（移动首屏 343.9KB/360KB；桌面 541.3KB/600KB；import 违规 0）/ `git diff --check` 0。**移动 6 态快照 0 差异**（lake_gate，重烤后 `mobile-snap.json` 与提交版 0 改动）。**APK 已重装**（lake_mobile emulator-5554，debug，40,164,026B）。设备：本批面板/签名/单元格图片/表单视图/缺正文场景已逐条实测（见 §0）；23 屏走查与平板本次未跑（改动不涉及外壳几何，`check:windowsweep` 未跑）。
 
 **环境（本机实测 261104 追加）**：**GitHub 推送走 HTTPS**（本机 `~/.ssh/id_ed25519_personal` 未在 GitHub 侧生效，SSH 报 `Permission denied (publickey)`；keychain 里有 `gtycoder` 凭据）⇒ `git push https://github.com/gtycoder/lakex-local-notes.git <branch>` 可用；Gitee 仍 `origin` SSH 正常。**本机已把 `origin` 的第二 pushurl 改为该 HTTPS 地址**（`git config --add remote.origin.pushurl …`）⇒ `git push origin <branch>` 一次推两边且 exit 0；`npm run setup:remotes` 会把 GitHub 写回 SSH，若再报 publickey 按上法改回 HTTPS。
 
@@ -752,12 +760,12 @@
 
    **平板（lake_tab）实机复验页签/页面面板**：代码无形态分支（`formFactor` 只改外壳宽度与侧栏），Android 手机已实测；平板 AVD 本轮未启动 ⇒ 需要时 `bash scripts/emu-up.sh lake_tab` 装同一份 APK 复核一次。
 4. **依赖补丁 4 处升级复核口径**（仅当升级对应依赖时）：见 §2。
-5. **等用户裁决（阻塞中）**：① **表格「单元格保护 / 阅读态筛选·排序·冻结」语义**（写正文 vs 设备本机视图，决定 P4-4 / P5 剩余怎么收口）；② **移动端「缺正文 / 缺小记」恢复入口**要不要做（判据 `src/core/missingBody.ts` 现成，桌面资源页是样板）；③ **移动端表格 ⋯ 面板 29 项去留**（22 可点 + 7 置灰）。
+5. **已裁决、已落地（261104，别再问）**：① 表格语义 = 读态只读 + 排序/冻结/保护属文档数据（不补移动端保护入口）；② 移动端缺正文/缺小记 = B-lite（文档+小记，已落地）；③ 表格面板 = 删无能力占位、接线单元格图片/手写签名/表单视图（已落地）。残余验证：**缺正文云端拉回需在配了 S3 的实例上真机走一遍**（目前仅单测 mock）；**表单视图大表行数帽**（一次性 `getValues`，默认 35 行，超大表若卡再加）。
 
 **P2（体验缺口 / 长期）**
 
 6. **移动端文本格式（261104 设备实测已收口，别再按旧文档当缺口）**：H1–H6 / 字号 / 颜色 / 对齐 / 列表 / 缩进 / 行高 / 上下标 / 清除格式**全部生效**；**字号+行高已合并成一行步进器**（更多面板 4 行），对齐已是 4 档（含两端对齐）。已关闭、别再立项：首行缩进（内核只做整篇 set、无 undo ⇒ 文案改「全文首行缩进」）；clearFormat（只清行内 mark，与 Word/语雀一致）；Aa 面板溢出（字号搬进「更多」+ 面板下限 312 ⇒ 312/312 无裁切）。**分栏 3·4 已补**（贴着「分栏」条目弹锚定气泡）；**alert 类型不补**（块被选中后内核自带色板可改，用户口径）。未接入口：unlink（kernel 命令对 host 选区返回 false，只有内核链接面板那条路）/ replace（kernel 只收 ranges、移动端查找面板是宿主自研 ⇒ 本轮不做）/ style→code·quote / 表格块级命令族（lakex 表格卡上下文工具条）。另有：画图插入项解禁（文本绘图仍置灰）；移动视图拖拽排序；PdfRender `cacheDir` 清理；页面级 6 处裸 `env(safe-area-inset-bottom)`。
-7. 墓碑 payload 老化（261025 定「后续优化」）；大库阈值探测（>2 万文档 / 索引 3–5MB）；**真实 Android 物理机验收从未做过**；PARITY 残余（移动 qnotes 缺正文恢复未接 v3、移动云清理无 UI 入口、目录恢复后 `deleted_notes` 残留）。
+7. 墓碑 payload 老化（261025 定「后续优化」）；大库阈值探测（>2 万文档 / 索引 3–5MB）；**真实 Android 物理机验收从未做过**；PARITY 残余（移动云清理无 UI 入口、目录恢复后 `deleted_notes` 残留）。移动缺正文的「云端拉回 / 历史恢复 / 重建纯文本」三条只在单测 mock 覆盖，需真机 + 配 S3 验证。
 8. 顶栏真 44 需另开「44 → 52」需求（六批 A4 结论）；平板内容画布「点空白落光标」（待用户裁决）。
 
 **已闭合，别重复**

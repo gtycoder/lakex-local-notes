@@ -26,6 +26,8 @@ import { S3ConfigImportSheet } from "./S3ConfigImportSheet";
 import { aiConnectionFingerprint, getVerifiedAiFingerprint, invalidateAiConnectionVerified, markAiConnectionVerified } from "./aiTestState";
 import { useSettingsSectionData } from "./useSettingsSectionData";
 import { useSyncSettingsForm } from "./useSyncSettingsForm";
+import { useMissingBodies } from "./useMissingBodies";
+import { MissingBodiesSheet, type MissingBodiesMode } from "./MissingBodiesSheet";
 import { formatS3v3Diagnostics } from "../../core/s3v3Report";
 
 /** Lake 内核版本（AGENTS §2 已 pin v1.99.0，勿随意升级；升级内核时同步改这里与关于页）。 */
@@ -121,6 +123,9 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
     reloadSyncReports,
     runSync,
   } = useSyncSettingsForm(open, onRefresh);
+  // 缺正文/缺小记（261104 B-lite）：进「资源管理」时扫一次，恢复动作后 reload 刷新计数。
+  const missingBodies = useMissingBodies(open && view === "resources");
+  const [missingSheet, setMissingSheet] = useState<MissingBodiesMode | null>(null);
   // SD-13：同步诊断文本（最近 3 轮；只存本机，复制给维护者排障）。
   const syncDiagText = formatS3v3Diagnostics(syncReports);
   const [syncDiagMsg, setSyncDiagMsg] = useState("");
@@ -446,7 +451,19 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                 }}>清理云端</button>
                 {(gcMsg || cloudBlockReason) && <div className="mb-form__desc">{gcMsg || cloudBlockReason}</div>}
               </Block>
-              {orphans.length === 0 && <div className="mb-empty mb-empty--inset">暂无冗余资源</div>}
+              {missingBodies.docs.length > 0 && (
+                <Block itemId="resources-missing-bodies" name="缺正文" desc="文档还在，但正文文件已经不在了。可以从云端拉回、恢复历史版本，或彻底删除。">
+                  <button className="mb-btn mb-btn--primary" onClick={() => setMissingSheet("docs")}>查看（{missingBodies.docs.length}）</button>
+                </Block>
+              )}
+              {missingBodies.quickNotes.length > 0 && (
+                <Block itemId="resources-missing-quicknotes" name="缺小记" desc="小记还在列表里，但正文文件已经不在了。可以从云端拉回，或用搜索缓存重建纯文本。">
+                  <button className="mb-btn mb-btn--primary" onClick={() => setMissingSheet("quickNotes")}>查看（{missingBodies.quickNotes.length}）</button>
+                </Block>
+              )}
+              {orphans.length === 0 && missingBodies.docs.length === 0 && missingBodies.quickNotes.length === 0 && (
+                <div className="mb-empty mb-empty--inset">暂无冗余资源</div>
+              )}
               {orphans.map((o) => (
                 <div key={o.id} className="mb-row">
                   <span className="mb-row__title">{o.filename}</span>
@@ -651,18 +668,32 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                       <div className="mb-set-block__name">同步有 {syncWarnings.length} 项被跳过</div>
                       <div className="mb-set-item__desc">远端缺少对象/资源，已跳过受影响条目；本地内容未改动，下次同步会重试。</div>
                       <div className="mb-list" role="list">
-                        {syncWarnings.map((w, i) => (
-                          <button
-                            key={`${w.kind}-${w.noteId ?? i}-${w.filename ?? ""}`}
-                            type="button"
-                            className="mb-list-item"
-                            disabled={!w.noteId || !onOpenNote}
-                            onClick={() => { if (w.noteId) onOpenNote?.(w.noteId); }}
-                          >
-                            <span className="mb-list-item__text mb-ellipsis">{w.title || w.noteId || "未命名文档"}</span>
-                            <span className="mb-list-item__meta">{w.kind === "asset_missing" ? (w.filename ?? "资源缺失") : "正文缺失"}</span>
-                          </button>
-                        ))}
+                        {syncWarnings.map((w, i) => {
+                          const missingBody = w.kind !== "asset_missing";
+                          const title = w.title || w.noteId || "未命名文档";
+                          // 缺正文行给「去恢复」入口：正文文件不在，点开文档只会被拦，直接跳资源管理的清单。
+                          if (missingBody) {
+                            return (
+                              <div key={`${w.kind}-${w.noteId ?? i}`} className="mb-row">
+                                <span className="mb-row__title mb-ellipsis">{title}</span>
+                                <span className="mb-row__meta">正文缺失</span>
+                                <button className="mb-btn mb-btn--secondary" onClick={() => { setView("resources"); void missingBodies.reload(); }}>去恢复</button>
+                              </div>
+                            );
+                          }
+                          return (
+                            <button
+                              key={`${w.kind}-${w.noteId ?? i}-${w.filename ?? ""}`}
+                              type="button"
+                              className="mb-list-item"
+                              disabled={!w.noteId || !onOpenNote}
+                              onClick={() => { if (w.noteId) onOpenNote?.(w.noteId); }}
+                            >
+                              <span className="mb-list-item__text mb-ellipsis">{title}</span>
+                              <span className="mb-list-item__meta">{w.filename ?? "资源缺失"}</span>
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
                   )}
@@ -748,6 +779,16 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
           })}
         </div>
       )}
+
+      <MissingBodiesSheet
+        open={missingSheet !== null}
+        mode={missingSheet ?? "docs"}
+        cloudConfigured={missingBodies.cloudConfigured}
+        docs={missingBodies.docs}
+        quickNotes={missingBodies.quickNotes}
+        onClose={() => setMissingSheet(null)}
+        onChanged={missingBodies.reload}
+      />
 
       {previewNoteId && (
         <div className="mobile-settings-preview">

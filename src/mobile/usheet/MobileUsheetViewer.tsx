@@ -37,8 +37,10 @@ import { buildMobileUniverTheme } from "./mobileUniverTheme";
 import { emptyUsheetWorkbook, mapUsheetImageSources, normalizeUsheetWorkbook, parseUsheetBody, usheetToBody, type UsheetWorkbook } from "../../core/usheetDoc.js";
 import { checkDocBody } from "../../core/docBodySafety.js";
 import { docBaselineSettled } from "../../core/docBaseline.js";
-import { localAssetHttpUrl } from "../../core/assetUrl.js";
+import { localAssetHttpUrl, parseLocalAssetUrl } from "../../core/assetUrl.js";
 import { withAssetAccessToken } from "../../lib/assetPort";
+import { bridge } from "../bridge";
+import { pickLocalFiles } from "../ui/pickFile";
 import { SheetPopCard } from "./SheetPopCard";
 import { MobileSheetReadingBar } from "./MobileSheetReadingBar";
 import { SheetTopBar } from "./SheetTopBar";
@@ -60,6 +62,8 @@ import { useSheetReadFilter, type SheetReadFilterTarget } from "./useSheetReadFi
 import { useSheetChromeState } from "./useSheetChromeState";
 import { useSheetCommandActions } from "./useSheetCommandActions";
 import { useNativeSheetFormulaBar } from "./useNativeSheetFormulaBar";
+import { MobileSignaturePad } from "./MobileSignaturePad";
+import { MobileSheetFormView, buildSheetFormRows, type SheetFormRow } from "./MobileSheetFormView";
 
 /** 是否带 URL scheme（data:/blob:/http(s): 原样；裸文件名才是我们的资产）。 */
 const HAS_SCHEME_RE = /^[a-z][a-z0-9+.-]*:/i;
@@ -75,6 +79,16 @@ type UniverBook = {
 export function usheetImageSrc(src: string, noteId: string): string {
   if (HAS_SCHEME_RE.test(src)) return src;
   return withAssetAccessToken(localAssetHttpUrl(noteId, src));
+}
+
+/**
+ * 落盘口径（与桌面 UniverSheetEditor 的 diskSource 同口径）：
+ * 本地资产 URL（可带 ?token / ?w=）→ 磁盘 filename；正文只存 filename，绝不把 URL/令牌写回正文。
+ * 非本地资产（data:/blob:/外部 http）原样保留。
+ */
+export function usheetDiskSrc(src: string): string {
+  const ref = parseLocalAssetUrl(src);
+  return ref && ref.space === "note" && !ref.staging ? ref.filename : src;
 }
 
 export interface MobileUsheetViewerProps {
@@ -150,6 +164,11 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
   const [redoDepth, setRedoDepth] = useState(0);
   /** 撤销/重做回放期间抑制「新编辑」计数（内核回放的是原命令 id，会把 undo 误当新编辑）。 */
   const historySuppressUntilRef = useRef(0);
+  /** 手写签名浮层（261104）：插入面板入口；确认后走与单元格图片同一条上传/写格链路。 */
+  const [signOpen, setSignOpen] = useState(false);
+  const [signBusy, setSignBusy] = useState(false);
+  /** 只读「表单视图」（261104）：打开时从当前工作表 facade 现读表头 + 数据区（不订阅、不写正文）。 */
+  const [formView, setFormView] = useState<{ sheetName: string; rows: SheetFormRow[] } | null>(null);
   const {
     cellFormat: cellFmt,
     sheets,
@@ -251,6 +270,9 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
       // 与桌面同一规范形式（CORE-04 / MOB-05）：先 normalize 再序列化，移动端写出的字节才与桌面一致。
       const snapshot = state.book.save() as unknown as UsheetWorkbook;
       normalizeUsheetWorkbook(snapshot);
+      // 图片落盘口径（261104）：单元格图片 / 浮动图在打开时被映射成资产 URL，写盘前必须换回 filename，
+      // 否则移动端插一张图就会把正文里所有图片 URL（含 token）写回文件（与桌面 diskSource 同一口径）。
+      mapUsheetImageSources(snapshot, usheetDiskSrc);
       const body = usheetToBody(snapshot);
       // CORE-03：内核 save() 不幂等。打开后的第一次 capture 只对齐基线（不写盘、不标脏），
       // 除非用户已经产生过内容输入（否则会把「打开」当成一次编辑）。
@@ -388,6 +410,85 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
     zoomBy((next - zoomPercent) / 100);
   }, [zoomPercent, zoomBy]);
 
+  /**
+   * 图片字节 → 上传成资产 → 写入活动单元格（「单元格图片」与「手写签名」共用这一条链路）。
+   * 失败必须有可见反馈（触屏没有 hover/内联提示）；成功走 scheduleFlush 进现有 onChange 自动保存。
+   */
+  const insertCellImageBytes = useCallback(async (bytes: Uint8Array, filename: string, failureLabel: string): Promise<boolean> => {
+    if (bytes.length === 0) {
+      showToast(failureLabel + "失败：图片内容为空", { type: "error" });
+      return false;
+    }
+    try {
+      const uploaded = await bridge.uploadResource({ bytes, filename }, noteId);
+      // 正文只存磁盘 filename（与打开时的 URL 映射互逆），不要把 URL 写进单元格。
+      const diskName = parseLocalAssetUrl(uploaded.url)?.filename || uploaded.filename || filename;
+      const workbook = getUniverAPI()?.getActiveWorkbook();
+      const sheet = workbook?.getActiveSheet();
+      const range = workbook?.getActiveRange() ?? sheet?.getRange("A1");
+      if (!range) {
+        showToast(failureLabel + "失败：请先选中一个单元格", { type: "error" });
+        return false;
+      }
+      const inserted = await range.insertCellImageAsync(usheetImageSrc(diskName, noteId));
+      if (!inserted) {
+        showToast(failureLabel + "失败", { type: "error" });
+        return false;
+      }
+      refreshCellFmt();
+      scheduleFlush();
+      return true;
+    } catch (error) {
+      console.warn("[mobile-usheet] " + failureLabel + "失败", error);
+      const detail = error instanceof Error && error.message ? "：" + error.message : "";
+      showToast(failureLabel + "失败" + detail, { type: "error" });
+      return false;
+    }
+  }, [noteId, getUniverAPI, refreshCellFmt, scheduleFlush]);
+
+  /** 系统选图（相册）→ 上传 → 写入活动单元格；用户取消选择器时静默返回。 */
+  const pickAndInsertCellImage = useCallback(async () => {
+    const picked = await pickLocalFiles("image/*");
+    if (picked.length === 0) return;
+    // 单元格图片一次只落一个格子：多选时只取第一张并明确说明（不静默丢用户的选择）。
+    if (picked.length > 1) showToast("一次只能插入一张图片，已使用第一张");
+    const file = picked[0];
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      await insertCellImageBytes(bytes, file.name || "image.png", "插入单元格图片");
+    } catch (error) {
+      console.warn("[mobile-usheet] 读取单元格图片失败", error);
+      showToast("插入单元格图片失败：读取图片出错", { type: "error" });
+    }
+  }, [insertCellImageBytes]);
+
+  /** 手写签名确认：透明 PNG → 同一条上传/写格链路；失败保持浮层可重试。 */
+  const handleSignatureConfirm = useCallback((png: Uint8Array) => {
+    setSignBusy(true);
+    void insertCellImageBytes(png, "signature.png", "插入手写签名").then((ok) => {
+      setSignBusy(false);
+      if (ok) setSignOpen(false);
+    });
+  }, [insertCellImageBytes]);
+
+  /** 只读表单视图：第一行 = 表头，其余 = 数据区（一次 getValues，纯读，不写正文）。 */
+  const openSheetForm = useCallback(() => {
+    const sheet = getUniverAPI()?.getActiveWorkbook()?.getActiveSheet();
+    if (!sheet) {
+      showToast("表单视图打开失败", { type: "error" });
+      return;
+    }
+    try {
+      const rowCount = Math.max(1, sheet.getMaxRows());
+      const columnCount = Math.max(1, sheet.getMaxColumns());
+      const values = sheet.getRange(0, 0, rowCount, columnCount).getValues();
+      setFormView({ sheetName: sheet.getSheetName(), rows: buildSheetFormRows(values) });
+    } catch (error) {
+      console.warn("[mobile-usheet] 读取表单数据失败", error);
+      showToast("表单视图打开失败", { type: "error" });
+    }
+  }, [getUniverAPI]);
+
   const handleInsert = useCallback((id: string) => {
     if (id === "row-above" || id === "row-below" || id === "col-left" || id === "col-right" || id === "link") {
       dispatchMenu(id);
@@ -405,18 +506,17 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
       } catch (error) { reportMobileActionError("插入日期", error); }
       return;
     }
-    const label = id === "image" ? "单元格图片" : id === "sign" ? "手写签名" : id === "attachment" ? "附件" : id === "chart" ? "图表" : "批注";
-    showToast("移动端暂未支持：" + label);
-  }, [dispatchMenu, getUniverAPI, refreshCellFmt, scheduleFlush]);
+    if (id === "image") { void pickAndInsertCellImage(); return; }
+    if (id === "sign") { setSignOpen(true); }
+  }, [dispatchMenu, getUniverAPI, pickAndInsertCellImage, refreshCellFmt, scheduleFlush]);
 
   const handleData = useCallback((id: string) => {
     if (id === "sort-asc" || id === "sort-desc" || id === "filter") { dispatchMenu(id); return; }
-    if (id === "find") { openFindDialog(); return; }
-    showToast("移动端暂未支持：" + (id === "validation" ? "数据验证" : "分列"));
+    if (id === "find") openFindDialog();
   }, [dispatchMenu, openFindDialog]);
 
   const handleView = useCallback((id: string) => {
-    if (id !== "freeze") { showToast("移动端暂未支持：" + (id === "formview" ? "表单视图" : "图表视图")); return; }
+    if (id === "formview") { openSheetForm(); return; }
     const next = freezeState === "none" ? "row" : freezeState === "row" ? "col" : "none";
     setFreezeState(next);
     const sheet = getUniverAPI()?.getActiveWorkbook()?.getActiveSheet();
@@ -427,7 +527,7 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
       target.setFrozenColumns?.(next === "col" ? 1 : 0);
       refreshSheetChrome();
     } catch (error) { reportMobileActionError("冻结行列", error); }
-  }, [freezeState, getUniverAPI, refreshSheetChrome]);
+  }, [freezeState, getUniverAPI, openSheetForm, refreshSheetChrome]);
 
   const handleZoomLevel = useCallback((value: number) => {
     const delta = value - zoomPercent / 100;
@@ -439,8 +539,7 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
     if (id === "numfmt" || id === "border" || id === "formula") { setDockSub(id); return; }
     if (id === "merge") { dispatchMenu("merge"); return; }
     if (id === "painter") { toggleFormatPainter(); return; }
-    if (id === "clear") { dispatchMenu("clear-style"); return; }
-    showToast("移动端暂未支持：条件格式");
+    if (id === "clear") dispatchMenu("clear-style");
   }, [dispatchMenu, toggleFormatPainter]);
 
   const handleMoreSub = useCallback((id: string) => {
@@ -473,10 +572,12 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
   }, [editable, openNativeEditor]);
 
   // 退出编辑态：面板状态机由 useEditSurface 自己复位（它持有 panelMode/closing/closingHold），
-  // 这里只清本组件的下钻态（避免面板挂在阅读态上）。
+  // 这里只清本组件的下钻态与两个覆盖层（避免浮层挂在阅读态上）。
   useEffect(() => {
     if (editing) return;
     setDockSub(null);
+    setSignOpen(false);
+    setFormView(null);
   }, [editing]);
 
   // 外部正文刷新（同一挂载内 content 变化）时更新磁盘基线；已产生真实改动则不动（与桌面同口径）。
@@ -548,6 +649,8 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
       // 首次基线同样先 normalize（与 capture 同口径），否则打开后第一次 capture 会被误判为改动。
       const baseline = book.save() as unknown as UsheetWorkbook;
       normalizeUsheetWorkbook(baseline);
+      // 基线同样取**磁盘形态**（URL → filename），否则第一次 capture 的差异会表现为"整篇重写"。
+      mapUsheetImageSources(baseline, usheetDiskSrc);
       const last = usheetToBody(baseline);
       created = { univer, univerAPI, book };
       instanceRef.current = { ...created, last };
@@ -772,6 +875,8 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
       className="mobile-usheet"
       ref={hostRef}
       data-prevent-swipe
+      // 两个浮层打开时把表格宿主抬到工作区 chrome 之上（宿主自带 isolation/z0，否则内部 fixed 浮层会被顶栏压住）。
+      data-overlay={signOpen || formView !== null ? "1" : undefined}
     >
       {bodyUnreadable && (
         <div className="mb-empty" role="status" data-usheet-parse-error>
@@ -873,6 +978,19 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
           onClose={() => setSheetListAnchor(null)}
         />
       )}
+      {/* 两个移动端浮层都是只读/写格入口，不占正文；关闭即卸载内容（MobileSheet 自己处理空态）。 */}
+      <MobileSignaturePad
+        open={signOpen}
+        busy={signBusy}
+        onCancel={() => setSignOpen(false)}
+        onConfirm={handleSignatureConfirm}
+      />
+      <MobileSheetFormView
+        open={formView !== null}
+        rows={formView?.rows ?? []}
+        sheetName={formView?.sheetName}
+        onClose={() => setFormView(null)}
+      />
     </div>
   );
 }

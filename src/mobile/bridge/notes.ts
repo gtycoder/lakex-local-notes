@@ -1,5 +1,5 @@
 /** C3-5 第③步：notes 域（从 bridge.ts 抽取，行为保持）。 */
-import { assets, dbPort, ensureDb, readSyncSettings, runMaintenance, runPriority, runWrite } from "./context";
+import { assertS3Credentials, assets, dbPort, ensureDb, readSyncSettings, runMaintenance, runPriority, runWrite } from "./context";
 import { reconcileIndex } from "../data/searchIndex.js";
 import { backfillTextCache } from "../data/textCacheBackfill.js";
 
@@ -12,16 +12,19 @@ import { emptyMobileUsheetBody } from "../usheet/mobileSheetGrid.js";
 import { emptyBoardBody } from "../../core/boardDoc.js";
 import { emptyBitableBody } from "../../core/bitableDoc.js";
 import { emptyInkBody } from "../../core/inkDoc.js";
-import type { NoteKind } from "../../core/noteKind.js";
+import { normalizeNoteKind, type NoteKind } from "../../core/noteKind.js";
+import { canTouchNetwork } from "../../core/cloudState.js";
+import { sha256Hex } from "../../core/syncUtils.js";
 import type { SearchResult } from "../../core/searchTypes.js";
 
 import * as noteRepository from "../data/noteRepository.js";
 import { noteBodyPath } from "../data/noteBodies.js";
+import { applyRestoredNoteBody, scanMissingBodies, type MissingBodiesSnapshot } from "../data/missingBodies.js";
 import type { LocalNote } from "../data/noteRepository.js";
 import * as trashRepository from "../data/trashRepository.js";
 import * as historyRepository from "../data/historyRepository.js";
 import type { HistoryMobileSettings } from "../data/historyRepository.js";
-import { downloadDeclaredAssetsFor, ensureAssetsNative } from "./sync";
+import { downloadDeclaredAssetsFor, ensureAssetsNative, mobileCloudState, syncDomain } from "./sync";
 
 
 export const notesDomain = {
@@ -327,6 +330,74 @@ export const notesDomain = {
       const d = await ensureDb();
       await trashRepository.purgeTreeItem(d, id, kind);
       await reconcileIndex(d);
+    });
+  },
+
+  // ---- 缺正文（元数据在、正文文件缺失）· 资源管理入口（261104 B-lite）----
+
+  /**
+   * 缺正文清单（文档 + 小记）。只 stat 正文文件，**不读正文、不出网、不写库**。
+   * 判据由 core/missingBody 的 missingBodyRecovery / missingQuickNoteRecovery 决定（两端同一套）。
+   * cloudConfigured = 允许出网（已配置 S3 且未关闭云同步）：关闭云同步时「从云端拉回」一律不可用，
+   * 不诱导用户点了才报错（AGENTS §3#20「关闭云同步 = 完全没配置」）。
+   */
+  async listMissingBodies(): Promise<MissingBodiesSnapshot> {
+    const d = await ensureDb();
+    return await scanMissingBodies(d, { cloudConfigured: canTouchNetwork(await mobileCloudState()) });
+  },
+
+  /**
+   * 「从云端拉回」这一篇正文（用户显式发起，高优先域 = 不等整轮同步）。
+   *
+   * 链路与桌面 restoreMissingBodyFromCloud 同源（v3）：pointer → lake 索引 → 该篇 contentHash →
+   * 内容寻址正文对象 objects/{id}-{hash}.lake → **校验 sha256** → 落盘并标 synced。
+   * 失败一律明确回报 reason（不静默、不写空正文）；资产（图片/附件）走按需补拉 best-effort。
+   *
+   * **不得**改成整库 restoreFromCloud：那会清本机同步基线并按云端重建整库，语义过重。
+   */
+  async restoreMissingNoteBody(
+    id: string,
+  ): Promise<{ ok: true; title: string } | { ok: false; reason: "cloud-off" | "no-cloud-config" | "not-found" | "not-in-cloud" | "object-missing" | "hash-mismatch" }> {
+    return runPriority("restoreMissingNoteBody", async () => {
+      if (!canTouchNetwork(await mobileCloudState())) return { ok: false as const, reason: "cloud-off" as const };
+      const cfg = await syncDomain.getS3Settings();
+      if (!cfg) return { ok: false as const, reason: "no-cloud-config" as const };
+      try { assertS3Credentials(cfg); } catch { return { ok: false as const, reason: "no-cloud-config" as const }; }
+      const d = await ensureDb();
+      const row = await d.prepare("SELECT title, doc_kind FROM notes WHERE id=? AND trashed_at IS NULL").get(id) as
+        | { title: string; doc_kind?: string | null }
+        | undefined;
+      if (!row) return { ok: false as const, reason: "not-found" as const };
+      const kind = normalizeNoteKind(row.doc_kind);
+      // P9：v3 远端/协议常量按需加载（缺正文恢复是低频动作，不进首屏静态图）。
+      const [{ createMobileS3v3Remote }, keys, indexMod, types] = await Promise.all([
+        import("../v3/s3v3Remote.js"),
+        import("../../core/s3v3/protocol/s3v3Keys.js"),
+        import("../../core/s3v3/protocol/s3v3Index.js"),
+        import("../../core/s3v3/protocol/s3v3Types.js"),
+      ]);
+      const remote = createMobileS3v3Remote(cfg);
+      const pointerBytes = await remote.get(keys.S3V3_POINTER_KEY);
+      if (!pointerBytes) return { ok: false as const, reason: "not-in-cloud" as const };
+      let pointer: { lake: { commit: string } };
+      try {
+        const parsed = types.validatePointer(JSON.parse(new TextDecoder().decode(pointerBytes)));
+        if (!parsed.ok) return { ok: false as const, reason: "not-in-cloud" as const };
+        pointer = parsed.pointer;
+      } catch { return { ok: false as const, reason: "not-in-cloud" as const }; }
+      const indexBytes = await remote.get(keys.indexKey("lake", pointer.lake.commit));
+      if (!indexBytes) return { ok: false as const, reason: "not-in-cloud" as const };
+      let entry: { title: string; contentHash: string } | undefined;
+      try { entry = indexMod.parseLakeIndexBytes(indexBytes).index.notes.find((note) => note.id === id); }
+      catch { return { ok: false as const, reason: "not-in-cloud" as const }; }
+      if (!entry) return { ok: false as const, reason: "not-in-cloud" as const };
+      const bytes = await remote.get(keys.lakeBodyKey(id, entry.contentHash));
+      if (!bytes) return { ok: false as const, reason: "object-missing" as const };
+      if (sha256Hex(bytes) !== entry.contentHash) return { ok: false as const, reason: "hash-mismatch" as const };
+      await applyRestoredNoteBody(d, id, kind, new TextDecoder().decode(bytes), { synced: true });
+      // 正文已回来；资产缺失由按需补拉兜底（失败不撤销正文恢复，打开文档时还会再补）。
+      try { await ensureAssetsNative([id]); } catch (error) { console.warn("[missing-body] 正文已恢复，资产补拉失败（打开文档时会再补）", error); }
+      return { ok: true as const, title: entry.title || row.title };
     });
   },
 };

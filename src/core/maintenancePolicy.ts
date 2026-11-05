@@ -41,6 +41,9 @@ export const WRITE_OPS = [
   // 小记写入
   "saveQuickNote", "saveQuickNoteWithImages", "saveQuickNoteContent", "createQuickNote",
   "deleteQuickNote", "restoreQuickNote", "purgeQuickNote",
+  // 261104 缺小记恢复：用搜索索引全文缓存重建纯文本（只写正文文件 + 行，图片/格式丢失 ⇒ 标 local 待上传）。
+  // 干不了"从云端拉回"（那是单条网络动作，见 PRIORITY_OPS）。
+  "recoverMissingQuickNoteFromText",
   "saveQuickNoteDraft", "clearQuickNoteDraft",
   // 小记标签目录（261024）+ 小记与标签的关系（独立关联表）
   "createQuickNoteTag", "updateQuickNoteTag", "reorderQuickNoteTags", "mergeQuickNoteTags", "deleteQuickNoteTag",
@@ -97,6 +100,11 @@ export const PRIORITY_OPS = [
   "syncQuickNote",
   "ensureNoteAssets",
   "ensureQuickNoteAssets",
+  // 261104 缺正文恢复（用户当场点「从云端拉回」）：单篇 pointer→索引→正文对象，读网络 + 写一篇正文。
+  // 不进维护域（否则要等整轮同步，弱网分钟级）；也不归 none（同一篇正文可能同时被整轮同步写，
+  // 「先校验 sha256 后落盘」需要串行化同一篇的两条写路径）。**只拉单篇，绝不调 restoreFromCloud。**
+  "restoreMissingNoteBody",
+  "restoreMissingQuickNoteFromCloud",
 ] as const;
 
 /**
@@ -109,6 +117,8 @@ export const NONE_OPS = [
   "listNoteHistory", "getNoteInfo", "readAssetPreview", "previewHistorySnapshot",
   "listOrphanAssets", "getAssetUsage", "listS3GcPending", "getHistorySettings",
   "listTrashed", "listTrashTree", "listDeletedNotesForSync", "readDeletedContent",
+  // 261104 缺正文清单（资源管理）：只 stat 正文文件 + 读元数据/派生缓存，不写库、不出网。
+  "listMissingBodies",
   "getSyncSettings", "getS3Settings", "getDiagnostics", "isFolderPurged",
   // SD-13（261028）：只读最近 3 轮同步诊断（device_state / localStorage），不写库、不出网
   "getSyncDiagnostics",

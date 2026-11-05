@@ -23,19 +23,21 @@ describe("互斥域判据（F16 红线化）", () => {
     // 261024 方案 B：+setQuickNoteTags（小记 ↔ 标签关联表整组替换，独立于保存正文）
     // 261028 +restoreFromCloud（从云端恢复：清本机 v3 同步账本；整轮网络由 syncNow 维护域跑）
     // 261103 P7 +cleanNoteOrphans（PDF 导入失败/取消按 filename 定向删本轮已上传页图；只删未被正文引用的文件）
-    expect(WRITE_OPS.length).toBe(38);
+    // 261104 B-lite：+recoverMissingQuickNoteFromText（缺小记：搜索缓存重建纯文本）。
+    expect(WRITE_OPS.length).toBe(39);
     // 261026 +ensureSearchIndex（派生索引后台补建；按需资产补拉复用 ensureTrashNoteAssets）。
     expect(MAINTENANCE_OPS.length).toBe(4);
     // 261013：syncQuickNote（小记单条推送）；261027：+ensureNoteAssets / +ensureQuickNoteAssets（占位图点击补拉）。
-    expect(PRIORITY_OPS.length).toBe(3);
+    // 261104 B-lite：+restoreMissingNoteBody / +restoreMissingQuickNoteFromCloud（单篇云端拉回，用户当场发起）。
+    expect(PRIORITY_OPS.length).toBe(5);
     // 261020 移动端批：+createUsheet / +createBoard / +createBitable（委托型写：内部调 saveNote 由写域取锁）
     // 261022 query API 收口：旧 listTreeNodes/listNotes/listQuickNotes/listNotebookTree 已删除；
     // 新 getHomeSnapshot/getWorkspaceSnapshot/getQuickNotePage 均为只读 none。
     // 261028 +getSyncDiagnostics（只读最近 3 轮同步诊断，device_state/localStorage）。
     // 261029 Del-6：-markTombstonesPublished（移动 bridge 该记账方法随 published_at 一并删除；发布判据改 waterline）
     // 261103 十四批 +getAssetUsage（本地资源占用统计：只读遍历文件系统，不写库、不出网）。
-    expect(NONE_OPS.length).toBe(43);
-    expect(ALL.length).toBe(88); // 38 写（+cleanNoteOrphans，261103 P7） + 4 维护 + 3 高优 + 43 none
+    expect(NONE_OPS.length).toBe(44);
+    expect(ALL.length).toBe(92); // 39 写 + 4 维护 + 5 高优 + 44 none（261104 B-lite：+4）
   });
 
   it("I1（F16）：写域与维护域必须是不同互斥域", () => {
@@ -90,7 +92,9 @@ describe("互斥域判据（F16 红线化）", () => {
   it("高优先域（261013）：用户当场发起的单条推送既不排在整轮同步后面，也不与彼此并发", () => {
     // 用户点单：长按小记 → 写完点「保存并同步」→ 桌面端要及时看到。若与 syncNow 同域，
     // 撞上冷启动/回前台触发的整轮同步就要排队等它跑完（弱网可到分钟级）⇒ 必须另立一域。
-    expect([...PRIORITY_OPS].sort()).toEqual(["ensureNoteAssets", "ensureQuickNoteAssets", "syncQuickNote"]);
+    expect([...PRIORITY_OPS].sort()).toEqual([
+      "ensureNoteAssets", "ensureQuickNoteAssets", "restoreMissingNoteBody", "restoreMissingQuickNoteFromCloud", "syncQuickNote",
+    ]);
     expect(isPriorityOp("syncQuickNote")).toBe(true);
     expect(lockDomainOf(classifyOp("syncQuickNote"))).toBe("priority");
     expect(lockDomainOf(classifyOp("syncQuickNote"))).not.toBe(lockDomainOf(classifyOp("syncNow")));
