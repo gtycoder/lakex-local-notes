@@ -68,10 +68,10 @@
   --lake-scrollbar-thumb-hover: #7d8695;
   --lake-focus-halo: rgba(230,235,242,.20);
   /* 阴影 */
-  /* 纵深（261006 canon）：与浅色同结构的三段式（深底用更重的黑）。 */
+  /* 261105：浮层仅保留近/远两层偏移阴影，去掉零偏移描边与大范围灰雾；卡片档不变。 */
   --lake-shadow-card: 0 1px 2px rgba(0,0,0,.34), 0 6px 16px -8px rgba(0,0,0,.42);
-  --lake-shadow-popover: 0 0 0 1px rgba(255,255,255,.06), 0 10px 28px -10px rgba(0,0,0,.55), 0 24px 56px -24px rgba(0,0,0,.50);
-  --lake-shadow-dialog: 0 0 0 1px rgba(255,255,255,.08), 0 16px 40px -12px rgba(0,0,0,.55), 0 40px 88px -32px rgba(0,0,0,.50);
+  --lake-shadow-popover: 0 4px 12px -4px rgba(0,0,0,.46), 0 12px 28px -12px rgba(0,0,0,.42);
+  --lake-shadow-dialog: 0 8px 20px -8px rgba(0,0,0,.50), 0 20px 48px -20px rgba(0,0,0,.46);
   --lake-shadow-knob: 0 1px 2px rgba(0,0,0,.45);
 
 

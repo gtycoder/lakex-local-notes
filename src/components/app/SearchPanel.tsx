@@ -2,6 +2,7 @@ import { Fragment, useEffect, useRef, useState } from "react";
 import { Dialog } from "../ui/Overlay";
 import { File, Search, StickyNote, X } from "lucide-react";
 import { native } from "../../lib/native";
+import { getNativeErrorMessage } from "../../lib/nativeErrors";
 import { createRequestVersion } from "../../core/requestVersion";
 import { initialSearchIndex, nextSearchIndex } from "../model/searchNavigation";
 
@@ -31,6 +32,8 @@ export function SearchPanel({ open, initialQuery, onOpenNote, onOpenQuickNote, o
   const [query, setQuery] = useState(initialQuery);
   const [results, setResults] = useState<SearchResult[]>([]);
   const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [retry, setRetry] = useState(0);
   const [activeIndex, setActiveIndex] = useState(-1);
   const inputRef = useRef<HTMLInputElement>(null);
   const timerRef = useRef<number | undefined>(undefined);
@@ -45,6 +48,7 @@ export function SearchPanel({ open, initialQuery, onOpenNote, onOpenQuickNote, o
 
   useEffect(() => {
     const version = requestVersionRef.current.next();
+    setSearchError(null);
     if (!open) {
       setSearching(false);
       return () => requestVersionRef.current.invalidate();
@@ -65,8 +69,11 @@ export function SearchPanel({ open, initialQuery, onOpenNote, onOpenQuickNote, o
           setResults(nextResults);
           setActiveIndex(initialSearchIndex(nextResults.length));
         }
-      } catch {
-        if (requestVersionRef.current.isCurrent(version)) { setResults([]); setActiveIndex(-1); }
+      } catch (error) {
+        if (requestVersionRef.current.isCurrent(version)) {
+          setResults([]); setActiveIndex(-1);
+          setSearchError(getNativeErrorMessage(error) || "无法完成搜索");
+        }
       } finally {
         if (requestVersionRef.current.isCurrent(version)) setSearching(false);
       }
@@ -75,7 +82,7 @@ export function SearchPanel({ open, initialQuery, onOpenNote, onOpenQuickNote, o
       if (timerRef.current !== undefined) { window.clearTimeout(timerRef.current); timerRef.current = undefined; }
       requestVersionRef.current.invalidate();
     };
-  }, [query, open]);
+  }, [query, open, retry]);
 
   if (!open) return null;
   const openResult = (result: SearchResult) => {
@@ -111,8 +118,12 @@ export function SearchPanel({ open, initialQuery, onOpenNote, onOpenQuickNote, o
           <button className="search-panel-close" onClick={onClose} title="关闭（Esc）" aria-label="关闭搜索"><X size={15} /></button>
         </div>
         <div id="search-panel-help" className="search-panel-help">文档标题优先，小记按更新时间；↑↓ 选择，Enter 打开</div>
-        <div className="search-panel-results ln-list-panel ln-list-panel--background" role="listbox" aria-label="搜索结果">
-          {results.length === 0 && query.trim() && !searching && (
+        {searchError && <div className="ln-empty" role="alert">
+          <strong>搜索失败</strong><span>{searchError}</span>
+          <button className="ln-btn ln-btn--secondary" onClick={() => setRetry((value) => value + 1)}>重试搜索</button>
+        </div>}
+        <div className="search-panel-results ln-list-panel ln-list-panel--background" role="listbox" aria-label="搜索结果" aria-busy={searching}>
+          {results.length === 0 && query.trim() && !searching && !searchError && (
             <div className="ln-empty"><strong>没有匹配结果</strong><span>试试文档标题、正文或小记关键词</span></div>
           )}
           {!query.trim() && (

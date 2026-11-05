@@ -68,6 +68,7 @@
 .document-statusbar-state.saving { color: var(--lake-status-sync); background: var(--lake-status-sync-soft); }
 .document-statusbar-state.conflict, .document-statusbar-state.save-error { color: var(--lake-status-error); background: var(--lake-status-error-soft); }
 .document-statusbar-state.local-only { color: var(--lake-text-3); background: var(--lake-bg-block); }
+.document-statusbar-state.cloud-deleted { color: var(--lake-status-pending); background: var(--lake-status-pending-soft); }
 .document-statusbar-lock { color: var(--lake-accent-text); }
 .document-statusbar-message { color: var(--lake-text-2); }
 .document-statusbar-state.synced-history { border: 0; font-weight: var(--lake-font-weight-semibold); }
@@ -724,3 +725,7 @@
 .top-menu > button span { min-width: 0; }
 .protyle-breadcrumb { flex-shrink: 0; }
 .protyle-breadcrumb__item:focus-visible { border-radius: var(--lake-radius-xs); }
+
+/* 小记壳层接 ln-segment：保留31px头部与26px按钮，层级高于kit。 */
+.quick-notes-view-switch { height: calc(var(--lake-ctl-h) + var(--lake-space-xs)); }
+.quick-notes-view-switch .ln-segment__item { min-width: 32px; height: calc(var(--lake-ctl-h) - 1px); padding: 0 var(--lake-space-md); justify-content: center; }

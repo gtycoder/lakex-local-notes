@@ -11,6 +11,12 @@
    无编辑 dock 时 --mb-app-h 未设置 ⇒ 退回 100%（今天的行为，设置页/首页不受影响）。 */
 html, body, #root { margin: 0; padding: 0; height: var(--mb-app-h, 100%); }
 body { font-family: var(--lake-font-family); background: var(--lake-bg-window); color: var(--lake-text-1); -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; text-rendering: optimizeLegibility; }
+/* 自有 Lucide 图标描边与桌面一致；不改变内核/第三方图标与触达尺寸。 */
+.toolbar__button > svg.lucide, .toolbar__icon > svg.lucide,
+.mobile-bottom-bar__item > svg.lucide, .mb-btn > svg.lucide,
+.mb-iconbtn > svg.lucide, .mb-row__icon > svg.lucide, .mb-tree-icon > svg.lucide,
+.mb-sheet__head > button > svg.lucide, .mobile-settings-close > svg.lucide,
+.minfo-title > svg.lucide { stroke-width: 1.75; }
 
 .poc-center { display: flex; align-items: center; justify-content: center; height: 100%; font-size: 15px; color: var(--lake-text-2); }
 

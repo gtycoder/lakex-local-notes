@@ -30,22 +30,23 @@
 .ln-btn:active:not(:disabled) { transform: translateY(.5px) scale(.98); }
 .ln-btn:focus-visible { outline: var(--lake-focus-ring-width) solid var(--lake-accent); outline-offset: var(--lake-focus-ring-offset); }
 .ln-btn:disabled { opacity: var(--lake-disabled-opacity); cursor: default; }
-.ln-btn:disabled:hover { background: transparent; }
 .ln-btn--primary { color: var(--lake-text-on-accent); background: var(--lake-accent-ink); }
-.ln-btn--primary:hover { background: var(--lake-accent-ink-hover); }
-.ln-btn--primary:active { background: var(--lake-accent-ink-press); }
+.ln-btn--primary:hover:not(:disabled) { background: var(--lake-accent-ink-hover); }
+.ln-btn--primary:active:not(:disabled) { background: var(--lake-accent-ink-press); }
 .ln-btn--secondary { border-color: var(--lake-border-1); }
-.ln-btn--secondary:hover { background: var(--lake-bg-hover); }
-.ln-btn--secondary:active { background: var(--lake-bg-press); }
+.ln-btn--secondary:hover:not(:disabled) { background: var(--lake-bg-hover); }
+.ln-btn--secondary:active:not(:disabled) { background: var(--lake-bg-press); }
 .ln-btn--secondary.is-selected { color: var(--lake-fg-selected); background: var(--lake-bg-selected); border-color: var(--lake-accent); font-weight: var(--lake-font-weight-semibold); }
-.ln-btn--secondary.is-selected:hover { background: var(--lake-bg-selected-hover); }
-.ln-btn--ghost:hover { background: var(--lake-bg-hover); }
-.ln-btn--ghost:active { background: var(--lake-bg-press); }
+.ln-btn--secondary.is-selected:hover:not(:disabled) { background: var(--lake-bg-selected-hover); }
+.ln-btn--ghost:hover:not(:disabled) { background: var(--lake-bg-hover); }
+.ln-btn--ghost:active:not(:disabled) { background: var(--lake-bg-press); }
 .ln-btn--danger { color: var(--lake-status-error); border-color: color-mix(in srgb, var(--lake-status-error) 40%, transparent); }
-.ln-btn--danger:hover { background: var(--lake-status-error-soft); }
+.ln-btn--danger:hover:not(:disabled) { background: var(--lake-status-error-soft); }
 /* 破坏性动作的「红字 + 中性描边」变体（原 .ft__error 组合）：只染文字，不改边框/底色。 */
 .ln-btn--danger-text { color: var(--lake-status-error); }
-.ln-btn--secondary.ln-btn--danger-text:hover { background: var(--lake-status-error-soft); }
+.ln-btn--secondary.ln-btn--danger-text:hover:not(:disabled) { background: var(--lake-status-error-soft); }
+/* 图标占位稳定、垂直居中；沿用调用方尺寸，不增加按钮或内容行高。 */
+.ln-btn > svg, .ln-iconbtn > svg, .ln-segment__item > svg { display: block; flex-shrink: 0; }
 
 /* ── 分隔条（左右分栏 / 资料库侧栏共用**唯一**实现）────────────────────────
  * 本层只定「外观与交互」，**定位由各站点自己给**（站点在各自层里写 position/inset，属性不重叠，

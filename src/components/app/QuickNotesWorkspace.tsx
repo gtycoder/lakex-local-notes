@@ -1054,14 +1054,14 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
     <div className="quick-notes-title">
       <h1>小记</h1>
       {/* 版式切换（对齐云端：标题右侧的分段控件；左侧=列表视图，右侧=小记卡视图） */}
-      <div className="seg quick-notes-view-switch" role="group" aria-label="小记版式">
+      <div className="ln-segment quick-notes-view-switch" role="group" aria-label="小记版式">
         <button
-          className={"ln-btn ln-btn--secondary seg__item" + (viewMode === "list" ? " is-active" : "")}
+          className={"ln-segment__item" + (viewMode === "list" ? " is-active" : "")}
           aria-pressed={viewMode === "list"} title="列表视图" aria-label="列表视图"
           onClick={() => switchView("list")}
         ><LayoutList size={14} /></button>
         <button
-          className={"ln-btn ln-btn--secondary seg__item" + (viewMode === "note" ? " is-active" : "")}
+          className={"ln-segment__item" + (viewMode === "note" ? " is-active" : "")}
           aria-pressed={viewMode === "note"} title="小记视图" aria-label="小记视图"
           onClick={() => switchView("note")}
         ><StickyNote size={14} /></button>

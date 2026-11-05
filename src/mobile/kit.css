@@ -39,6 +39,7 @@
 .mb-btn--lg { min-height: var(--mb-ctl-h-lg); font-size: var(--lake-font-size-bodyMd); }
 .mb-btn--sm { min-height: var(--mb-ctl-h-sm); padding: 0 12px; font-size: var(--lake-font-size-small); }
 .mb-btn--block { display: flex; width: 100%; }
+.mb-btn > svg, .mb-iconbtn > svg, .mb-segment__item > svg { display: block; flex-shrink: 0; }
 
 /* ── 图标按钮（.mb-iconbtn；44×44 触达，紧凑 36）──────────────────────── */
 .mb-iconbtn {

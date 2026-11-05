@@ -20,15 +20,14 @@
 .quick-notes-header h1 {margin: 0; letter-spacing: -.02em;}
 
 /* 标题 + 版式切换（对齐云端小记：分段控件紧挨标题右侧） */
-.quick-notes-title { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.quick-notes-view-switch .seg__item { min-width: 32px; padding: 0 8px; }
+.quick-notes-title { display: flex; align-items: center; gap: var(--lake-space-lg); min-width: 0; }
 
 .quick-notes-header-tools { display: flex; align-items: center; gap: 6px; min-width: 0; }
 
 /* 多选态占用同一行：信息在左、动作在右（靠 spacer 撑开），不额外占卡片区高度 */
 .quick-notes-select-info { color: var(--lake-text-1); font-size: var(--lake-font-size-small); white-space: nowrap; margin-left: 2px; }
 
-.quick-notes-tools-divider { width: 1px; height: 14px; background: color-mix(in srgb, var(--lake-text-1) 16%, transparent); }
+.quick-notes-tools-divider { width: .5px; height: 14px; margin: 0 var(--lake-space-xxs); background: var(--lake-border-strong); }
 
 .quick-notes-tools-spacer { flex: 1 1 auto; min-width: 12px; }
 

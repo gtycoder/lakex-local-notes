@@ -42,7 +42,7 @@ describe("选中态语义令牌（261017 Q3）", () => {
   it("选中 + hover 走专用档（行/菜单/图标钮/目录行）", () => {
     expect(KIT).toMatch(/\.ln-row\.is-selected:hover,[\s\S]{0,220}?background: var\(--lake-bg-selected-hover\)/);
     expect(KIT).toMatch(/\.ln-iconbtn\.is-selected:hover:not\(:disabled\) \{ background: var\(--lake-bg-selected-hover\); \}/);
-    expect(KIT).toMatch(/\.ln-btn--secondary\.is-selected:hover \{ background: var\(--lake-bg-selected-hover\); \}/);
+    expect(KIT).toMatch(/\.ln-btn--secondary\.is-selected:hover:not\(:disabled\) \{ background: var\(--lake-bg-selected-hover\); \}/);
     expect(CHROME).toMatch(/\.note-row\.active:hover \{ background: var\(--lake-bg-selected-hover\); \}/);
   });
 

@@ -5,6 +5,7 @@ import type { SearchResult } from "../../core/searchTypes";
 import { bridge } from "../bridge";
 import { MobileSheet } from "../ui/MobileSheet";
 import { reportMobileActionError } from "../lib/reportMobileActionError";
+import { getNativeErrorMessage } from "../../lib/nativeErrors";
 
 export interface SearchSheetProps {
   open: boolean;
@@ -18,12 +19,14 @@ export function SearchSheet(props: SearchSheetProps) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [retry, setRetry] = useState(0);
   // 请求版本守卫：快速输入时旧响应不得覆盖新结果（防竞态）
   const requestSeq = useRef(0);
 
   const run = useCallback(async (q: string) => {
     const trimmed = q.trim();
-    if (!trimmed) { setResults([]); return; }
+    if (!trimmed) { setResults([]); setSearching(false); return; }
     const seq = ++requestSeq.current;
     setSearching(true);
     try {
@@ -31,20 +34,25 @@ export function SearchSheet(props: SearchSheetProps) {
       if (seq !== requestSeq.current) return; // 已有更新请求，丢弃旧响应
       setResults(hits);
     } catch (error) {
-      // 「搜了没结果」与「搜索失败」在界面上都只是空列表：至少留一条可排障信号（MOB-14）。
       reportMobileActionError("搜索", error);
-      if (seq === requestSeq.current) setResults([]);
+      if (seq === requestSeq.current) {
+        setResults([]); setSearchError(getNativeErrorMessage(error) || "无法完成搜索");
+      }
     } finally {
       if (seq === requestSeq.current) setSearching(false);
     }
   }, []);
 
   useEffect(() => {
-    if (!open) { setQuery(""); setResults([]); return; }
+    ++requestSeq.current;
+    setSearchError(null);
+    if (!open) { setQuery(""); setResults([]); setSearching(false); return; }
+    if (!query.trim()) { setResults([]); setSearching(false); return; }
+    setSearching(true);
     const t = window.setTimeout(() => run(query), 200);
-    return () => window.clearTimeout(t);
+    return () => { window.clearTimeout(t); ++requestSeq.current; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, open]);
+  }, [query, open, retry]);
 
   if (!open) return null;
 
@@ -62,9 +70,13 @@ export function SearchSheet(props: SearchSheetProps) {
           onChange={(e) => setQuery(e.target.value)}
         />
       </div>
-      <div className="mobile-search-results">
-        {searching && <div className="mb-empty">搜索中…</div>}
-        {!searching && query.trim() && results.length === 0 && <div className="mb-empty">无匹配结果</div>}
+      <div className="mobile-search-results" aria-busy={searching}>
+        {searching && <div className="mb-empty" role="status">搜索中…</div>}
+        {searchError && <div className="mb-empty" role="alert">
+          <div>搜索失败：{searchError}</div>
+          <button className="mb-btn mb-btn--secondary" onClick={() => setRetry((value) => value + 1)}>重试搜索</button>
+        </div>}
+        {!searching && !searchError && query.trim() && results.length === 0 && <div className="mb-empty">无匹配结果</div>}
         {results.map((r) => (
           <div key={`${r.kind ?? "note"}:${r.id}`} className="mobile-doc-row" onClick={() => { if (r.kind === "quick-note") onOpenQuickNote(r.id); else onOpenNote(r.id); onClose(); }}>
             <span className="mobile-search-main">
