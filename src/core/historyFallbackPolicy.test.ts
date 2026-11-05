@@ -1,8 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
+  HISTORY_FALLBACK_BACKOFF_BASE_MS,
+  HISTORY_FALLBACK_BACKOFF_MAX_MS,
+  HISTORY_FALLBACK_CHUNK_SIZE,
   HISTORY_FALLBACK_DEFAULT_MINUTES,
   HISTORY_FALLBACK_MAX_NOTES,
+  HISTORY_FALLBACK_TIME_BUDGET_MS,
+  historyFallbackBackoffMs,
   historyFallbackMinutes,
+  isHistoryFallbackRetryDue,
   selectHistoryFallbackNotes,
   shouldRunHistoryFallback,
 } from "./historyFallbackPolicy.js";
@@ -51,6 +57,32 @@ describe("兜底快照选择（只挑有正文变化的文档）", () => {
   it("时钟回拨（mtime 变小）不入选：说明上次已处理过更新的版本", () => {
     const ledger = new Map([["a", 5000]]);
     expect(selectHistoryFallbackNotes({ notes: [note("a", 4000)], ledger })).toEqual([]);
+  });
+});
+
+describe("P2-A：失败退避 / 分片常量", () => {
+  it("指数退避：1x/2x/4x… 封顶 24h；成功（failCount=0）无退避", () => {
+    expect(historyFallbackBackoffMs(0)).toBe(0);
+    expect(historyFallbackBackoffMs(-1)).toBe(0);
+    expect(historyFallbackBackoffMs(1)).toBe(HISTORY_FALLBACK_BACKOFF_BASE_MS);
+    expect(historyFallbackBackoffMs(2)).toBe(HISTORY_FALLBACK_BACKOFF_BASE_MS * 2);
+    expect(historyFallbackBackoffMs(3)).toBe(HISTORY_FALLBACK_BACKOFF_BASE_MS * 4);
+    expect(historyFallbackBackoffMs(100)).toBe(HISTORY_FALLBACK_BACKOFF_MAX_MS); // 封顶
+    expect(HISTORY_FALLBACK_BACKOFF_MAX_MS).toBe(24 * 60 * 60 * 1000);
+  });
+
+  it("退避到期判据：缺失/非法 = 已到期；>= now 才未到期", () => {
+    expect(isHistoryFallbackRetryDue(undefined, 1000)).toBe(true);
+    expect(isHistoryFallbackRetryDue(Number.NaN, 1000)).toBe(true);
+    expect(isHistoryFallbackRetryDue(1000, 1000)).toBe(true);
+    expect(isHistoryFallbackRetryDue(1001, 1000)).toBe(false);
+  });
+
+  it("分片/预算常量在合理区间（10~20 篇让出；预算 ≤1 分钟）", () => {
+    expect(HISTORY_FALLBACK_CHUNK_SIZE).toBeGreaterThanOrEqual(10);
+    expect(HISTORY_FALLBACK_CHUNK_SIZE).toBeLessThanOrEqual(20);
+    expect(HISTORY_FALLBACK_TIME_BUDGET_MS).toBeGreaterThan(0);
+    expect(HISTORY_FALLBACK_TIME_BUDGET_MS).toBeLessThanOrEqual(60_000);
   });
 });
 

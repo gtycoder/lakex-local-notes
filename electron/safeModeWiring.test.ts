@@ -45,8 +45,14 @@ describe("主进程：安全模式判定 + 跳过自动动作（Batch3-B）", ()
 });
 
 describe("渲染层：不恢复标签页 / 不预热内核 / 顶部提示条", () => {
-  it("启动时安全模式跳过标签恢复", () => {
-    expect(BOOTSTRAP).toMatch(/savedSession && !safeMode\?\.active \? sanitizeTabSession/);
+  it("P2-C：启动时清/恢复共用 fail-closed 判据（unknown/active 都既不恢复也不清）", () => {
+    // 判据单一来源 = readSafeModeStatus（IPC 失败/形状不对 ⇒ unknown）
+    expect(BOOTSTRAP).toContain("await readSafeModeStatus()");
+    // 只有 inactive 才恢复标签
+    expect(BOOTSTRAP).toMatch(/savedSession && safeModeStatus === "inactive" \? sanitizeTabSession/);
+    // 只有 inactive 且 clearOnExit 才清档；不再有启动前的无条件 clearTabSession()
+    expect(BOOTSTRAP).toContain('if (safeModeStatus === "inactive" && clearOnExit) clearTabSession();');
+    expect(BOOTSTRAP).not.toMatch(/if \(clearOnExit\) clearTabSession\(\);/);
   });
 
   it("内核 chunk 预取按安全模式判定（异步问一次主进程）", () => {

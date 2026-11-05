@@ -199,6 +199,28 @@ export interface FileMetadataReconcilerDeps {
   now?: () => number;
   log?: (message: string) => void;
   onReport?: (report: FileReconcileReport) => void;
+  /** 上次成功扫描时间（ISO；设备本地持久化，跨重启生效）。缺失/损坏按未跑过处理。 */
+  loadLastRunAt?: () => string | null;
+  /** 成功扫描后持久化（settings/device_state；失败只记日志，不影响本轮）。 */
+  saveLastRunAt?: (at: string) => void;
+}
+
+/**
+ * 定时器唤醒延迟（纯函数）：按「下次到期」睡，而不是每 60s 醒一次。
+ * - 空闲未达标 ⇒ 等到空闲达标；
+ * - 冷却未到 ⇒ 等到冷却到期；
+ * - 取两者较大值（两者都满足才可能跑），下限 1s，上限 24h（Node 定时器安全范围；720h 间隔也不会溢）。
+ */
+export function computeReconcileWakeDelayMs(input: {
+  minIdleSeconds: number;
+  idleSeconds: number;
+  cooldownMs: number;
+  lastRunAtMs: number | null;
+  nowMs: number;
+}): number {
+  const waitIdle = Math.max(0, input.minIdleSeconds - input.idleSeconds) * 1000;
+  const waitCooldown = input.lastRunAtMs === null ? 0 : Math.max(0, input.cooldownMs - (input.nowMs - input.lastRunAtMs));
+  return Math.min(24 * 3600_000, Math.max(1_000, Math.ceil(Math.max(waitIdle, waitCooldown))));
 }
 
 export interface ReconcileRunOutcome {
@@ -233,6 +255,14 @@ export class FileMetadataReconciler {
     // 冷却与节奏合并：缺省用 intervalHours 推导（24h = 低频），显式 cooldownMs 优先（测试/特殊场景）。
     this.cooldownMs = deps.cooldownMs ?? Math.max(1, Math.round(this.intervalHours * 3600_000));
     this.now = deps.now ?? (() => Date.now());
+    // 跨重启的「上次成功扫描」：缺失/非法 = null（按未跑过，本轮到期即跑）；绝不因坏值阻断启动。
+    try {
+      const persisted = deps.loadLastRunAt?.() ?? null;
+      const parsed = persisted ? Date.parse(persisted) : NaN;
+      this.lastRunAtMs = Number.isFinite(parsed) ? parsed : null;
+    } catch {
+      this.lastRunAtMs = null;
+    }
   }
 
   /** 同步成功后打点：等进程空闲 + 冷却满足才实跑（不是立刻跑）。 */
@@ -278,6 +308,7 @@ export class FileMetadataReconciler {
         if (!post.run) return { ran: false, reason: post.reason };
         const report = this.scan(manual ? "manual-report" : "sync-idle");
         this.lastRunAtMs = this.now();
+        try { this.deps.saveLastRunAt?.(new Date(this.lastRunAtMs).toISOString()); } catch { /* 落盘失败不影响本轮 */ }
         this.dirty = false;
         this.afterSyncPending = false;
         this.lastReport = report;
@@ -297,7 +328,7 @@ export class FileMetadataReconciler {
     }
   }
 
-  /** 定时器到点：尝试一次；条件仍不满足则继续等（最多 60s 一步，避免空转）。 */
+  /** 定时器到点：尝试一次；条件仍不满足则按新的到期时间重排（低频任务不再每 60s 空转）。 */
   private schedule(): void {
     if (!this.deps.enabled) return;
     if (this.timer) return;
@@ -314,10 +345,23 @@ export class FileMetadataReconciler {
   }
 
   private nextWaitMs(): number {
-    const waitIdle = Math.max(0, this.minIdleSeconds - this.deps.getIdleSeconds()) * 1000;
-    const waitCooldown = this.lastRunAtMs === null ? 0 : Math.max(0, this.cooldownMs - (this.now() - this.lastRunAtMs));
-    return Math.min(60_000, Math.max(1_000, waitIdle, waitCooldown));
+    return computeReconcileWakeDelayMs({
+      minIdleSeconds: this.minIdleSeconds,
+      idleSeconds: this.deps.getIdleSeconds(),
+      cooldownMs: this.cooldownMs,
+      lastRunAtMs: this.lastRunAtMs,
+      nowMs: this.now(),
+    });
   }
+
+  /** 间隔/开关变化后重排定时器（不清 dirty/同步打点；条件满足时立刻重算下一次到期）。 */
+  rearm(): void {
+    this.dispose();
+    if (this.afterSyncPending || this.dirty) this.schedule();
+  }
+
+  /** 上次成功扫描时间（ms；未跑过/null = null）。诊断/测试用。 */
+  getLastRunAtMs(): number | null { return this.lastRunAtMs; }
 
   private decide(manual: boolean, ignoreOwnLock = false): ReconcileThrottleDecision {
     return decideFileReconcile({

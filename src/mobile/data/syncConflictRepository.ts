@@ -42,24 +42,64 @@ function mapRow(row: Record<string, unknown>): MobileSyncConflictRow {
   };
 }
 
-/** 落库（同一「未解决 note+space+kind」只留一条）+ core 轮转判据。 */
+/** 每批 INSERT 的行数：9 列/行 ⇒ 100 行 = 900 个变量（SQLite 变量上限 999，留余量）。 */
+const INSERT_ROWS_PER_STATEMENT = 100;
+
+/**
+ * 落库（同一「未解决 note+space+kind」只留一条）+ core 轮转判据。
+ *
+ * P2-D 性能：旧实现每个事件 2 条 SQL（SELECT 查重 + INSERT）且每次都全表 prune。
+ * 现在：① 一次查出全部「未解决」键做去重（O(1) 查表），② 单条多值 INSERT 批量写
+ * （事务内，每批 100 行），③ **每次落库（= 每轮同步）只 prune 一次**，不随事件数放大。
+ */
 export async function insertSyncConflicts(d: MobileDb, events: readonly SyncConflictEvent[], now = new Date()): Promise<number> {
   if (events.length === 0) return 0;
+  // 同一批内先按业务键去重（后到者丢弃，与「只留一条未解决」同语义）。
+  const unique = new Map<string, SyncConflictEvent>();
+  for (const event of events) {
+    const key = event.space + ":" + event.noteId + ":" + event.kind;
+    if (!unique.has(key)) unique.set(key, event);
+  }
   let inserted = 0;
-  await d.transaction(async () => {
-    for (const event of events) {
-      const exists = await d.prepare("SELECT 1 FROM sync_conflicts WHERE note_id=? AND space=? AND kind=? AND resolved_at IS NULL LIMIT 1")
-        .get(event.noteId, event.space, event.kind);
-      if (exists) continue;
-      const id = event.space + ":" + event.noteId + ":" + event.kind + ":" + event.at;
-      await d.prepare(
-        "INSERT OR IGNORE INTO sync_conflicts(id,note_id,space,kind,at,title,local_hash,remote_hash,history_ref) VALUES(?,?,?,?,?,?,?,?,?)",
-      ).run(id, event.noteId, event.space, event.kind, event.at, event.title ?? null,
-        event.localHash ?? null, event.remoteHash ?? null, event.historyRef ?? null);
-      inserted += 1;
-    }
-  });
-  await pruneSyncConflicts(d, now);
+  try {
+    await d.transaction(async () => {
+      const existing = await d.prepare(
+        "SELECT note_id, space, kind FROM sync_conflicts WHERE resolved_at IS NULL",
+      ).all() as Array<{ note_id: string; space: string; kind: string }>;
+      const taken = new Set(existing.map((row) => row.space + ":" + String(row.note_id) + ":" + row.kind));
+      const rows: SyncConflictEvent[] = [];
+      for (const [key, event] of unique) {
+        if (taken.has(key)) continue;
+        taken.add(key);
+        rows.push(event);
+      }
+      for (let i = 0; i < rows.length; i += INSERT_ROWS_PER_STATEMENT) {
+        const part = rows.slice(i, i + INSERT_ROWS_PER_STATEMENT);
+        const placeholders = part.map(() => "(?,?,?,?,?,?,?,?,?)").join(",");
+        const values: Array<string | null> = [];
+        for (const event of part) {
+          values.push(
+            event.space + ":" + event.noteId + ":" + event.kind + ":" + event.at,
+            event.noteId,
+            event.space,
+            event.kind,
+            event.at,
+            event.title ?? null,
+            event.localHash ?? null,
+            event.remoteHash ?? null,
+            event.historyRef ?? null,
+          );
+        }
+        const result = await d.prepare(
+          "INSERT OR IGNORE INTO sync_conflicts(id,note_id,space,kind,at,title,local_hash,remote_hash,history_ref) VALUES " + placeholders,
+        ).run(...values);
+        inserted += Number(result.changes ?? 0);
+      }
+    });
+  } finally {
+    // 轮转与落库解耦：即使插入失败也做一次（失败只增不减；成功轮每次都清）。
+    await pruneSyncConflicts(d, now);
+  }
   return inserted;
 }
 

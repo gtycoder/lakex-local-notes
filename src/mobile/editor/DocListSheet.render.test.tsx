@@ -50,7 +50,7 @@ const clickChip = async (name: string): Promise<void> => {
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   picked.length = 0;
-  tagReadsMock.loadNoteTagIdsForNotes.mockReset().mockResolvedValue(TAGS);
+  tagReadsMock.loadNoteTagIdsForNotes.mockReset().mockResolvedValue({ byNoteId: TAGS, truncated: false, requested: 3, loaded: 3 });
   bridgeMock.listQuickNoteTags.mockReset().mockResolvedValue(DIR);
 });
 afterEach(async () => {
@@ -82,10 +82,29 @@ describe("DocListSheet 按标签筛选", () => {
   });
 
   it("全部文档都没标签 ⇒ 不渲染筛选条（不占空间）", async () => {
-    tagReadsMock.loadNoteTagIdsForNotes.mockResolvedValue({});
+    tagReadsMock.loadNoteTagIdsForNotes.mockResolvedValue({ byNoteId: {}, truncated: false, requested: 3, loaded: 3 });
     await render();
     expect(host.querySelector(".qn-tag-filter-bar")).toBeNull();
     expect(docTitles()).toEqual(["周报", "随笔", "无标签"]);
+  });
+
+  it("P2-D 标签读取被截断 ⇒ 可见提示（不再静默丢标签）", async () => {
+    tagReadsMock.loadNoteTagIdsForNotes.mockResolvedValue({ byNoteId: TAGS, truncated: true, requested: 20001, loaded: 20000 });
+    await render();
+    expect(host.textContent).toContain("列表过长");
+    expect(host.textContent).toContain("20000");
+    expect(host.textContent).toContain("20001");
+  });
+
+  it("P2-D a11y：筛选 chips 带 aria-pressed（选中态对读屏可见）", async () => {
+    await render();
+    const chips = [...host.querySelectorAll(".qn-tag-filter-bar .qn-tag")] as HTMLButtonElement[];
+    const byText = (name: string) => chips.find((el) => (el.textContent ?? "").trim().startsWith(name))!;
+    expect(byText("全部").getAttribute("aria-pressed")).toBe("true");
+    expect(byText("工作").getAttribute("aria-pressed")).toBe("false");
+    await clickChip("工作");
+    expect(byText("全部").getAttribute("aria-pressed")).toBe("false");
+    expect(byText("工作").getAttribute("aria-pressed")).toBe("true");
   });
 
   it("目录不可用 ⇒ 降级提示 + 不启用筛选，列表仍可切换", async () => {

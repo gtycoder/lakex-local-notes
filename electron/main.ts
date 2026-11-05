@@ -33,9 +33,13 @@ import { installNativeSha256 } from "./sha256Native.js";
 import { prepareCloudRestore, readAndRemoveS3RestoreSeed } from "./workspaceBackup.js";
 import {
   backupDatabaseForRecovery,
+  decideStartupCheckDepth,
   decideStartupRecovery,
   inspectDatabaseForStartup,
+  markStartupClean,
+  markStartupInProgress,
   readCrashMarker,
+  readStartupRunHealth,
   removeCrashMarker,
   writeCrashMarker,
 } from "./startupRecovery.js";
@@ -139,6 +143,8 @@ let fileReconciler: FileMetadataReconciler | null = null;
 let restartFileScanReconciler: (() => void) | null = null;
 /** 自动备份 runner（261105；registerIpc 在 whenReady 里注册，runner 先于此装配）。 */
 let autoBackupRunner: BackupIpcRunner | null = null;
+/** 261105 P2-B：正常启动是否真正跑通（只有跑通后退出才写「上次 OK」；恢复模式退出保持 dirty ⇒ 下次深检）。 */
+let normalStartupCompleted = false;
 /** 历史定时器重启函数（配置变更时调用，见 save_history_settings IPC） */
 let restartHistoryTimers: (() => void) | null = null;
 /** S3 GC 定时器重启函数（配置变更时调用，见 save_s3_gc_settings IPC） */
@@ -715,8 +721,14 @@ if (!app.requestSingleInstanceLock()) {
       log.app.warn("[safe-mode] 本次启动进入安全模式（不自动同步/不恢复标签页/不预热内核）"
         + formatLogFields({ reason: safeModeDecision.reason, occurrences: crashMarker?.occurrences ?? 0 }));
     }
-    // 预检 = PRAGMA quick_check + foreign_key_check（只读，不建表不迁移）；文件不存在 = 全新安装。
-    const startupIntegrity = inspectDatabaseForStartup(path.join(workspaceRoot(), "metadata.sqlite3"));
+    // 261105 P2-B：条件深检（只读打开）。上次正常退出且无 crash-marker ⇒ 轻量检查（只读打开 + 关键表）；
+    // 上次脏退出/有崩溃标记 ⇒ 才跑全库 quick_check + foreign_key_check。
+    // 启动开始即标 dirty：进程在本次启动/运行中崩溃 ⇒ 下次自动深检；正常退出才写「上次 OK」。
+    const previousRun = readStartupRunHealth(userDataDir);
+    markStartupInProgress(userDataDir);
+    const startupCheckDepth = decideStartupCheckDepth({ crashMarker, previousRun });
+    log.app.info("[store] 启动预检深度=" + startupCheckDepth + formatLogFields({ previousRun: previousRun?.lastRun ?? "unknown", crashMarker: !!crashMarker }));
+    const startupIntegrity = inspectDatabaseForStartup(path.join(workspaceRoot(), "metadata.sqlite3"), { deep: startupCheckDepth === "deep" });
     let startupOpenError: unknown = null;
     let openedStore: Store | null = null;
     if (startupIntegrity.ok) {
@@ -741,7 +753,8 @@ if (!app.requestSingleInstanceLock()) {
         dataDir: userDataDir,
         workspacePath: workspaceRoot(),
         logPath: path.join(userDataDir, "logs", "lakex-local-notes.log"),
-        backupDir: path.join(userDataDir, "backup"),
+        // P2-B：与自动备份同一目录口径（<userData>/backups/），恢复页不再展示另一个目录。
+        backupDir: path.join(userDataDir, "backups"),
         crashMarker: startupDecision.crashMarker,
       }, {
         async backupAndRetry() {
@@ -829,6 +842,9 @@ if (!app.requestSingleInstanceLock()) {
         enabled,
         intervalHours,
         cooldownMs: intervalHours > 0 ? Math.max(1, intervalHours * 3600_000) : FILE_RECONCILE_DEFAULTS.cooldownMs,
+        // P2-B：上次成功扫描时间跨重启持久化（settings；缺失/损坏按未跑过）。
+        loadLastRunAt: () => store.getFileReconcileState().lastScanAt,
+        saveLastRunAt: (at) => store.saveFileReconcileState({ lastScanAt: at }),
         log: (message) => log.app.info(message),
       });
       store.setFileReconcileReportProvider(() => fileReconciler?.getLastReport() ?? null);
@@ -959,6 +975,8 @@ if (!app.requestSingleInstanceLock()) {
     // 正常启动顺手清掉遗留状态文件：别让下一次启动误读上一次的 active:true。
     if (!safeModeActive) removeSafeModeState(userDataDir);
     createWindow();
+    // P2-B：正常启动已跑通；「上次 OK」在正常退出（will-quit）时落盘，运行中崩溃保持 dirty ⇒ 下次深检。
+    normalStartupCompleted = true;
     logHeapPeak("startup");
 
     // U1/Batch4-C：定时兜底快照（默认 10 分钟，0 = 关闭）+ 启动兜底清理（P5 低频巡检）
@@ -985,17 +1003,20 @@ if (!app.requestSingleInstanceLock()) {
         snapshotTimer = setInterval(() => {
           if (historyFallbackRunning) return;
           historyFallbackRunning = true;
-          try {
-            const result = store.runHistoryFallback();
-            if (result.created > 0) {
-              log.history.info("[history] 兜底快照：" + result.created + " 份（正文变化 " + result.changed + " 篇）");
-            }
-          } catch (error) {
-            // 兜底本身绝不影响启动/保存：失败只记日志，等下一个间隔。
-            log.history.warn("[history] 兜底快照失败（不阻断）：" + (error instanceof Error ? error.message : String(error)));
-          } finally {
-            historyFallbackRunning = false;
-          }
+          // P2-A：分片 + 20s 预算的异步兜底（每 chunk 让出事件循环）。单飞标记覆盖整个异步窗口。
+          void store.runHistoryFallback()
+            .then((result) => {
+              if (result.created > 0 || result.failed > 0) {
+                log.history.info("[history] 兜底快照：" + result.created + " 份（正文变化 " + result.changed + " 篇"
+                  + (result.failed > 0 ? "，失败 " + result.failed + " 篇（已退避）" : "")
+                  + (result.bootstrap ? "，首轮游标 " + (result.cursor ?? "已完成") : "") + "）");
+              }
+            })
+            .catch((error) => {
+              // 兜底本身绝不影响启动/保存：失败只记日志，等下一个间隔。
+              log.history.warn("[history] 兜底快照失败（不阻断）：" + (error instanceof Error ? error.message : String(error)));
+            })
+            .finally(() => { historyFallbackRunning = false; });
         }, fallbackMinutes * 60 * 1000);
       }
       if (cfg.cleanupIntervalHours > 0) {
@@ -1111,6 +1132,10 @@ app.on("before-quit", (event) => {
 
 app.on("will-quit", () => {
   log.app.info("[quit] will-quit" + formatLogFields({ upMs: Date.now() - BOOT_STARTED_AT }));
+  // 261105 P2-B：正常退出 ⇒ 记「上次 OK」（下次启动走轻量检查）；恢复模式退出不写，保持 dirty ⇒ 下次深检。
+  if (normalStartupCompleted) {
+    try { markStartupClean(app.getPath("userData")); } catch { /* 写标记失败不影响退出 */ }
+  }
   // Best-effort checkpoint after any onOpenClose sync has settled. This keeps
   // the metadata DB/WAL bounded without making shutdown depend on it.
   try { store?.checkpointWal(); } catch { /* app is already exiting */ }

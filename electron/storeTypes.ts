@@ -34,6 +34,11 @@ export interface FileScanSettings {
   intervalHours: number;
 }
 
+/** 文件↔元数据后台扫描的**上次成功时间**（261105 P2-B：跨重启持久化；缺失/损坏按未跑过）。 */
+export interface FileReconcileState {
+  lastScanAt: string | null;
+}
+
 /** S3 GC 保留策略配置（v4，可配置；存 settings 表，纯本地） */
 export interface S3GcSettings {
   /** 待回收键保留窗口天数（默认 7） */

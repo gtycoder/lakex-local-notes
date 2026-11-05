@@ -42,11 +42,17 @@ export function registerSafeModeIpc(ipc: IpcRegistrar, options: SafeModeIpcOptio
   });
 
   ipc.handle("exit_safe_mode", () => {
-    const state = exitSafeModeState(options.userDataDir);
-    // 显式退出 = 明确「这次能正常跑」⇒ 清崩溃标记，下次启动不再提示/不再进入安全模式。
+    const result = exitSafeModeState(options.userDataDir);
+    if (!result.ok) {
+      // P2-C：失败**保留**进程内状态与 crash-marker（不 onExit）⇒ 提示条继续显示，
+      // UI 据 ok:false 明说「未生效，请重启再试」，不会出现"界面以为退了、下次启动仍在安全模式"。
+      return { ok: false as const, reason: result.reason ?? "退出安全模式失败", state: result.state };
+    }
+    // 成功才清崩溃标记：显式退出 = 明确「这次能正常跑」⇒ 下次启动不再提示/不再进入安全模式。
+    // 删标记是尽力而为（失败也无害：标记还在 ⇒ 下次启动按连崩判据重新评估，属 fail-safe）。
     removeCrashMarker(options.userDataDir);
     options.onExit();
-    return { ok: true as const, state };
+    return { ok: true as const, state: result.state };
   });
 
   ipc.handle("copy_safe_mode_diagnostics", () => {

@@ -29,8 +29,17 @@ function memoryFiles(initial: Record<string, Uint8Array> = {}): FileDriver & { f
   };
 }
 
+/** 文档标签端口注入（P2-E）：apply = 逐篇应用端口；batch = 批量版本读端口；versions = 批量表内容。 */
+interface TagPortOpts {
+  apply?: boolean;
+  batch?: boolean;
+  versions?: Array<[string, string]>;
+  /** 批量读抛错（验证「读取失败 ⇒ 退化逐篇」）。 */
+  listThrows?: boolean;
+}
+
 /** 内存 PlatformDataPort：记录写调用，读世界可注入。 */
-function memoryPlatform(world: Partial<{ folders: any[]; notes: any[]; quickNotes: any[]; quickTags: any[]; quickDeleted: any[]; purged: any[]; restoreNotes: string[]; restoreQuick: string[]; recovery: string[] }> = {}, withDiscard = false) {
+function memoryPlatform(world: Partial<{ folders: any[]; notes: any[]; quickNotes: any[]; quickTags: any[]; quickDeleted: any[]; purged: any[]; restoreNotes: string[]; restoreQuick: string[]; recovery: string[] }> = {}, withDiscard = false, tagOpts: TagPortOpts = {}) {
   const calls: string[] = [];
   const w = {
     folders: world.folders ?? [], notes: world.notes ?? [], quickNotes: world.quickNotes ?? [],
@@ -77,6 +86,19 @@ function memoryPlatform(world: Partial<{ folders: any[]; notes: any[]; quickNote
     async deleteQuickNote(id) { calls.push("deleteQuickNote:" + id); },
     async markQuickNotesCloudDeleted(ids) { calls.push("markQuickNotesCloudDeleted:" + ids.join(",")); },
     ...(withDiscard ? { async discardQuickNote(id: string) { calls.push("discardQuickNote:" + id); } } : {}),
+    ...(tagOpts.apply ? {
+      async applyNoteTagLinks(id: string, tagIds: string[], tagsUpdatedAt: string) {
+        calls.push("applyNoteTagLinks:" + id + "@" + tagsUpdatedAt + ":" + tagIds.join(","));
+      },
+      async pruneNoteTagLinks() { calls.push("pruneNoteTagLinks"); },
+    } : {}),
+    ...(tagOpts.batch ? {
+      async listNoteTagVersions(): Promise<Map<string, string>> {
+        calls.push("listNoteTagVersions");
+        if (tagOpts.listThrows) throw new Error("batch read failed");
+        return new Map(tagOpts.versions ?? []);
+      },
+    } : {}),
   };
   return { port, calls, world: w, importedNotes };
 }
@@ -367,5 +389,71 @@ describe("createDeviceStoreMeta.saveState：同步窗口守卫", () => {
     };
     await meta.saveState(state);
     expect(platform.calls).toContain("deleteNote:n1");
+  });
+});
+
+describe("createDeviceStoreMeta.saveState 文档标签关系（P2-E 批量版本读）", () => {
+  const noteRow = (id: string) => ({
+    id, title: id, parentId: null, sortOrder: 0, updatedAt: "T0", contentHash: H("a"), kind: "doc", icon: null,
+    isEditLocked: false, editLockedAt: null, isConflict: false, trashedAt: null, deletedFromParentId: null,
+  });
+  const stateWith = (note: Record<string, unknown>): DeviceState => ({
+    lake: { v: 3, space: "lake", notes: [{ id: "n1", title: "n1", parentId: null, sortOrder: 0, updatedAt: "T0", contentHash: H("a"), ...note } as never], folders: [] },
+    quickNotes: { v: 3, space: "quickNotes", items: [], tags: [] },
+    folders: [], intents: [], pending: [], remotePurged: [], restorePending: [],
+  });
+  function storeOf(platform: ReturnType<typeof memoryPlatform>, files = memoryFiles()) {
+    return createDeviceStoreMeta({
+      platform: platform.port,
+      files,
+      assets: createFileBackedAssetIo({ files, assetDirFor: (id) => "assets/" + id, quickAssetDirFor: (id) => "quick-assets/" + id }),
+      state: { read: async () => null, write: async () => {} },
+      baseline: { load: async () => null },
+      stagedBodies: new Map(),
+    });
+  }
+  const tagApplyCalls = (platform: ReturnType<typeof memoryPlatform>) => platform.calls.filter((c) => c.startsWith("applyNoteTagLinks:"));
+
+  it("批量命中（版本相同）⇒ 一轮只读一次版本表，且不逐篇应用（P2-E 主目标）", async () => {
+    const platform = memoryPlatform({ notes: [noteRow("n1")] }, false, { apply: true, batch: true, versions: [["n1", "T1"]] });
+    await storeOf(platform).saveState(stateWith({ tagIds: ["t1"], tagsUpdatedAt: "T1" }));
+    expect(platform.calls.filter((c) => c === "listNoteTagVersions")).toHaveLength(1);
+    expect(tagApplyCalls(platform)).toHaveLength(0);
+  });
+
+  it("版本不同 ⇒ 应用远端关系（带远端版本，语义不变）", async () => {
+    const platform = memoryPlatform({ notes: [noteRow("n1")] }, false, { apply: true, batch: true, versions: [["n1", "T1"]] });
+    await storeOf(platform).saveState(stateWith({ tagIds: ["t1"], tagsUpdatedAt: "T2" }));
+    expect(tagApplyCalls(platform)).toEqual(["applyNoteTagLinks:n1@T2:t1"]);
+  });
+
+  it("远端清空（空 tagIds + 新版本）⇒ 仍调用（否则清空不可见）", async () => {
+    const platform = memoryPlatform({ notes: [noteRow("n1")] }, false, { apply: true, batch: true, versions: [["n1", "T1"]] });
+    await storeOf(platform).saveState(stateWith({ tagsUpdatedAt: "T2" }));
+    expect(tagApplyCalls(platform)).toEqual(["applyNoteTagLinks:n1@T2:"]);
+  });
+
+  it("无版本旧数据（有 tagIds、批量表无该行）⇒ 仍应用一次（不因批量而丢）", async () => {
+    const platform = memoryPlatform({ notes: [noteRow("n1")] }, false, { apply: true, batch: true, versions: [] });
+    await storeOf(platform).saveState(stateWith({ tagIds: ["t1"] }));
+    expect(tagApplyCalls(platform)).toEqual(["applyNoteTagLinks:n1@:t1"]);
+  });
+
+  it("端口缺失（无 listNoteTagVersions）⇒ 退化逐篇（旧行为）", async () => {
+    const platform = memoryPlatform({ notes: [noteRow("n1")] }, false, { apply: true });
+    await storeOf(platform).saveState(stateWith({ tagIds: ["t1"], tagsUpdatedAt: "T1" }));
+    expect(tagApplyCalls(platform)).toEqual(["applyNoteTagLinks:n1@T1:t1"]);
+  });
+
+  it("批量读失败 ⇒ 退化逐篇（不阻断同步）", async () => {
+    const platform = memoryPlatform({ notes: [noteRow("n1")] }, false, { apply: true, batch: true, listThrows: true });
+    await storeOf(platform).saveState(stateWith({ tagIds: ["t1"], tagsUpdatedAt: "T1" }));
+    expect(tagApplyCalls(platform)).toEqual(["applyNoteTagLinks:n1@T1:t1"]);
+  });
+
+  it("批量可用且该篇零标签零版本 ⇒ 既不读逐篇也不应用", async () => {
+    const platform = memoryPlatform({ notes: [noteRow("n1")] }, false, { apply: true, batch: true, versions: [] });
+    await storeOf(platform).saveState(stateWith({}));
+    expect(tagApplyCalls(platform)).toHaveLength(0);
   });
 });

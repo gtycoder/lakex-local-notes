@@ -26,7 +26,9 @@ describe("兜底快照接线（桌面主进程）", () => {
     expect(MAIN).toContain("let historyFallbackRunning = false;");
     expect(MAIN).toMatch(/if \(historyFallbackRunning\) return;/);
     expect(MAIN).toContain("historyFallbackRunning = true;");
-    expect(MAIN).toMatch(/finally \{\n            historyFallbackRunning = false;\n          \}/);
+    // P2-A：兜底改为异步分片后，单飞标记必须在 promise finally 里释放（覆盖整个异步窗口）
+    expect(MAIN).toMatch(/\.finally\(\(\) => \{ historyFallbackRunning = false; \}\);/);
+    expect(MAIN).toContain("void store.runHistoryFallback()");
     // 首轮延迟 = 一个间隔：定时器体内才调用，注册之前不调用
     const beforeTimer = MAIN.slice(0, MAIN.indexOf("snapshotTimer = setInterval(() => {"));
     expect(beforeTimer.endsWith("if (shouldRunHistoryFallback(fallbackMinutes)) {\n        ")).toBe(true);

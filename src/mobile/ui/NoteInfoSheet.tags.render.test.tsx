@@ -58,7 +58,7 @@ beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   nativeMock.getNoteInfo.mockReset().mockResolvedValue(INFO);
   nativeMock.openAttachment.mockReset().mockResolvedValue({ ok: true });
-  tagReadsMock.loadNoteTagIdsForNotes.mockReset().mockResolvedValue({ n1: ["t_idea", "t_work"] });
+  tagReadsMock.loadNoteTagIdsForNotes.mockReset().mockResolvedValue({ byNoteId: { n1: ["t_idea", "t_work"] }, truncated: false, requested: 1, loaded: 1 });
   bridgeMock.listQuickNoteTags.mockReset().mockResolvedValue(DIR);
   toastMock.mockReset();
 });
@@ -82,14 +82,14 @@ describe("NoteInfoSheet 文档标签（只读）", () => {
   });
 
   it("无标签 ⇒ 整个标签区块不显示（空态不占位）", async () => {
-    tagReadsMock.loadNoteTagIdsForNotes.mockResolvedValue({});
+    tagReadsMock.loadNoteTagIdsForNotes.mockResolvedValue({ byNoteId: {}, truncated: false, requested: 1, loaded: 1 });
     await render();
     expect(host.textContent).not.toContain("标签");
     expect(tagChipTexts()).toEqual([]);
   });
 
   it("目录里没有的 id（他端已删/未同步）⇒ 不渲染 chip，只给一句降级提示（字段缺失不崩）", async () => {
-    tagReadsMock.loadNoteTagIdsForNotes.mockResolvedValue({ n1: ["t_work", "t_gone"] });
+    tagReadsMock.loadNoteTagIdsForNotes.mockResolvedValue({ byNoteId: { n1: ["t_work", "t_gone"] }, truncated: false, requested: 1, loaded: 1 });
     await render();
     expect(tagChipTexts()).toEqual(["工作"]);
     expect(host.textContent).toContain("另有 1 个标签不在本机目录中");
@@ -103,5 +103,20 @@ describe("NoteInfoSheet 文档标签（只读）", () => {
     expect(host.textContent).toContain("标签信息暂不可用");
     expect(host.textContent).toContain("目录库忙");
     expect(host.textContent).toContain("文档 ID");
+  });
+
+  it("P2-D 加载态：读取未返回时显示「读取中…」占位（chips 出现时整块下移更小）", async () => {
+    let resolveRead: ((value: unknown) => void) | null = null;
+    tagReadsMock.loadNoteTagIdsForNotes.mockReturnValue(new Promise((resolve) => { resolveRead = resolve; }));
+    await render();
+    // 读未返回：标签区块已占位（不是整块消失）
+    expect(host.textContent).toContain("标签");
+    expect(host.textContent).toContain("读取中…");
+    await act(async () => {
+      resolveRead!({ byNoteId: { n1: ["t_work"] }, truncated: false, requested: 1, loaded: 1 });
+      await Promise.resolve(); await Promise.resolve();
+    });
+    expect(host.textContent).not.toContain("读取中…");
+    expect(tagChipTexts()).toEqual(["工作"]);
   });
 });

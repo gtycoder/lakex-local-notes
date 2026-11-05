@@ -74,8 +74,24 @@ export function deriveRecoveredTitle(kind: NoteKind, raw: string, noteId: string
   return { title: fallbackRecoveredTitle(noteId), titleSource: "fallback" };
 }
 
-/** 读正文（严格 UTF-8 + 无 NUL）：损坏/读不出返回可读原因，不抛。 */
+/**
+ * 重建/扫描读取正文的**大小上限**（261105 P2-B）：>32MiB 的候选不整篇读进内存，
+ * 直接 rebuildable=false + 可读原因（扫描与重建都遵守，避免一次性读爆主进程内存）。
+ */
+export const MAX_RECOVERED_BODY_BYTES = 32 * 1024 * 1024;
+
+/** 读正文（严格 UTF-8 + 无 NUL + 大小上限）：损坏/读不出/过大返回可读原因，不抛。 */
 export function readRecoveredBodyText(absPath: string): { ok: true; text: string } | { ok: false; reason: string } {
+  let stat: fs.Stats;
+  try { stat = fs.statSync(absPath); } catch (error) {
+    return { ok: false, reason: "正文文件读取失败：" + (error instanceof Error ? error.message : String(error)) };
+  }
+  if (stat.size > MAX_RECOVERED_BODY_BYTES) {
+    return {
+      ok: false,
+      reason: "正文过大（" + (stat.size / 1024 / 1024).toFixed(1) + " MiB > 32 MiB 上限），已拒绝读取/重建",
+    };
+  }
   let bytes: Buffer;
   try { bytes = fs.readFileSync(absPath); } catch (error) {
     return { ok: false, reason: "正文文件读取失败：" + (error instanceof Error ? error.message : String(error)) };

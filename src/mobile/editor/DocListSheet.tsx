@@ -31,6 +31,8 @@ export function DocListSheet({ open, documents, activeId, onPick, onClose }: Doc
   /** 目录不可用/桥异常时的降级提示（列表照常显示，只是不启用标签筛选）。 */
   const [tagError, setTagError] = useState<string | null>(null);
   const [activeTagId, setActiveTagId] = useState<string | null>(null);
+  /** P2-D：读取被截断（超过全库量级上限）时给可见提示，不再静默丢标签。 */
+  const [truncated, setTruncated] = useState<{ requested: number; loaded: number } | null>(null);
 
   // 依赖用 id 拼接：父组件每次渲染都可能给新数组，直接依赖 documents 会重复拉取。
   const idsKey = documents.map((doc) => doc.id).join("\u0000");
@@ -39,6 +41,7 @@ export function DocListSheet({ open, documents, activeId, onPick, onClose }: Doc
     if (!open) return;
     let alive = true;
     setActiveTagId(null);
+    setTruncated(null);
     if (documents.length === 0) {
       setDocTagIds({});
       setFilterView(null);
@@ -46,13 +49,14 @@ export function DocListSheet({ open, documents, activeId, onPick, onClose }: Doc
       return () => { alive = false; };
     }
     void Promise.all([loadNoteTagIdsForNotes(documents.map((doc) => doc.id)), bridge.listQuickNoteTags()])
-      .then(([tagIds, directory]) => {
+      .then(([read, directory]) => {
         if (!alive) return;
-        setDocTagIds(tagIds);
+        setDocTagIds(read.byNoteId);
         setFilterView(collectDocTagFilterOptions(
-          documents.map((doc) => ({ id: doc.id, tagIds: tagIds[doc.id] ?? [] })),
+          documents.map((doc) => ({ id: doc.id, tagIds: read.byNoteId[doc.id] ?? [] })),
           directory,
         ));
+        setTruncated(read.truncated ? { requested: read.requested, loaded: read.loaded } : null);
         setTagError(null);
       })
       .catch((reason) => {
@@ -60,6 +64,7 @@ export function DocListSheet({ open, documents, activeId, onPick, onClose }: Doc
         // 降级：标签目录/桥不可用时仍能正常切换文档，只是没有标签筛选项。
         setDocTagIds({});
         setFilterView(null);
+        setTruncated(null);
         setTagError(getNativeErrorMessage(reason));
       });
     return () => { alive = false; };
@@ -83,6 +88,7 @@ export function DocListSheet({ open, documents, activeId, onPick, onClose }: Doc
           <button
             type="button"
             className={"qn-tag" + (activeTagId === null ? " is-selected" : "")}
+            aria-pressed={activeTagId === null}
             onClick={() => setActiveTagId(null)}
           >
             <span>全部</span><span className="qn-tag__count">{documents.length}</span>
@@ -92,6 +98,7 @@ export function DocListSheet({ open, documents, activeId, onPick, onClose }: Doc
               type="button"
               key={tag.id}
               className={"qn-tag" + (activeTagId === tag.id ? " is-selected" : "")}
+              aria-pressed={activeTagId === tag.id}
               onClick={() => setActiveTagId(activeTagId === tag.id ? null : tag.id)}
             >
               <span className="mb-ellipsis">{tag.name}</span><span className="qn-tag__count">{tag.count}</span>
@@ -100,6 +107,9 @@ export function DocListSheet({ open, documents, activeId, onPick, onClose }: Doc
         </div>
       )}
       {tagError && <p className="mb-form__desc">标签目录暂不可用，未启用按标签筛选（文档列表不受影响）。</p>}
+      {!tagError && truncated && (
+        <p className="mb-form__desc">列表过长：只读取了前 {truncated.loaded} / {truncated.requested} 篇的标签，按标签筛选只覆盖这些文档。</p>
+      )}
       {!tagError && filterView && filterView.unresolvedTags > 0 && (
         <p className="mb-form__desc">有 {filterView.unresolvedTags} 个标签不在本机目录中（可能已在他端删除），未参与筛选。</p>
       )}

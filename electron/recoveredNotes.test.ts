@@ -18,6 +18,7 @@ vi.mock("electron", () => ({
 
 import { Store } from "./store.js";
 import {
+  MAX_RECOVERED_BODY_BYTES,
   RECOVERED_NOTEBOOK_ID,
   RECOVERED_NOTEBOOK_TITLE,
   RecoveredNotesService,
@@ -201,5 +202,23 @@ describe("RecoveredNotesService：扫描只读 + 手动重建", () => {
     expect((await service.rebuild(["orphan-twice"])).results[0].status).toBe("created");
     expect((await service.rebuild(["orphan-twice"])).results[0].status).toBe("skipped");
     expect(store.listNoteSummaries().filter((note) => note.id === "orphan-twice")).toHaveLength(1);
+  });
+});
+
+describe("P2-B：重建读取大小上限（>32 MiB 拒绝，不整篇读）", () => {
+  it("扫描：超大候选 rebuildable=false + 原因；重建同样 rejected，不建行", async () => {
+    const { root, store, service } = makeHarness();
+    const file = path.join(root, "notes", "orphan-huge.lake");
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, "");
+    fs.truncateSync(file, MAX_RECOVERED_BODY_BYTES + 1); // 稀疏文件：只造大小，不写 33MiB 内容
+    const scanned = service.scan();
+    const candidate = scanned.candidates.find((item) => item.noteId === "orphan-huge");
+    expect(candidate?.rebuildable).toBe(false);
+    expect(candidate?.reason).toContain("32 MiB");
+    const rebuilt = await service.rebuild(["orphan-huge"]);
+    expect(rebuilt.results[0]).toMatchObject({ status: "rejected", reason: expect.stringContaining("32 MiB") });
+    expect(store.hasNote("orphan-huge")).toBe(false);
+    expect(fs.statSync(file).size).toBe(MAX_RECOVERED_BODY_BYTES + 1);
   });
 });

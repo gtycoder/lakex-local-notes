@@ -8,6 +8,7 @@ import type { DraftJournalEntry } from "../lib/types";
 import { chooseColdStartNoteId } from "../core/coldStartNote.js";
 import { loadSettings } from "../lib/settings";
 import { clearTabSession, readTabSession, restoreTabSessionForLimit, sanitizeTabSession } from "../desktop/tabSession";
+import { readSafeModeStatus } from "./useSafeModeStatus";
 
 export interface UseBootstrapOptions {
   setWorkspace: Dispatch<SetStateAction<WorkspaceSnapshot | null>>;
@@ -41,7 +42,8 @@ export function useBootstrap({
     const settings = loadSettings();
     const clearOnExit = settings.clearTabsOnExit === true;
     const savedSession = clearOnExit ? null : readTabSession();
-    if (clearOnExit) clearTabSession();
+    // 清会话与恢复标签**共用同一判据**（P2-C）：只有 inactive 才按原逻辑走；
+    // unknown（IPC 失败）与 active（安全模式）都既不恢复也不清（见下方 await readSafeModeStatus()）。
     // 启动速度优先：不加人为最短展示；桌面 boot 窗口负责遮住真实加载时间。
     void native.bootstrap().then(async (snapshot) => {
       setWorkspace(snapshot); setNotes(snapshot.notes); setSync(snapshot.sync);
@@ -61,12 +63,14 @@ export function useBootstrap({
       }).catch((error) => reportNativeActionError("启动读取", error));
       setTreeNodes(await native.listTreeNodes());
       // 恢复上次打开的标签（261027）：先过滤已删除/已 purge 的文档，再按 maxOpenTabs 截断（DT-15：
-      // 会话按打开顺序存，只恢复最近 N 个——先全开再逐次淘汰会静默丢标签且线性拉长首屏）；
-      // clearTabsOnExit=true 时上面已清空会话，走原有冷启动落点。
-      // Batch3-B：安全模式**不恢复上次标签页**（会话保留但本次不打开；崩溃排查从干净标签开始）。
-      const safeMode = await native.getSafeModeState().catch(() => null);
+      // 会话按打开顺序存，只恢复最近 N 个——先全开再逐次淘汰会静默丢标签且线性拉长首屏）。
+      // P2-C：判据收敛到 readSafeModeStatus（fail-closed）——
+      //   inactive ⇒ 原逻辑（clearTabsOnExit ? 清档 : 恢复标签）；
+      //   active / unknown ⇒ **既不恢复也不清**（会话保留，等下次正常启动；不清是防止把用户原会话抹掉）。
+      const safeModeStatus = await readSafeModeStatus();
+      if (safeModeStatus === "inactive" && clearOnExit) clearTabSession();
       const liveIds = new Set(snapshot.notes.map((note) => note.id));
-      const restored = savedSession && !safeMode?.active ? sanitizeTabSession(savedSession, liveIds) : null;
+      const restored = savedSession && safeModeStatus === "inactive" ? sanitizeTabSession(savedSession, liveIds) : null;
       const planned = restored ? restoreTabSessionForLimit(restored, settings.maxOpenTabs) : null;
       if (planned) {
         if (restoreTabs) {

@@ -12,6 +12,7 @@ import { readFileSync } from "node:fs";
 const main = readFileSync(new URL("./main.ts", import.meta.url), "utf8");
 const store = readFileSync(new URL("./store.ts", import.meta.url), "utf8");
 const diagnostics = readFileSync(new URL("./diagnostics.ts", import.meta.url), "utf8");
+const reconcile = readFileSync(new URL("./fileMetadataReconcile.ts", import.meta.url), "utf8");
 
 describe("file metadata reconcile wiring（主进程）", () => {
   it("261105：默认低频（每 24h，设置可改/0 关闭）；环境变量 LAKE_FILE_RECONCILE=0 仍可强制关闭", () => {
@@ -23,6 +24,16 @@ describe("file metadata reconcile wiring（主进程）", () => {
     // 设置变更后重建对账器（save_file_scan_settings → main 回调）。
     expect(main).toContain("restartFileScanReconciler");
     expect(main).toContain("registerDataRecoveryIpc(");
+  });
+
+  it("P2-B：lastRun 跨重启持久化 + 定时器按到期 sleep（不再每 60s 醒）", () => {
+    // 持久化：main 注入 settings 读写；实现侧构造时读取、成功后保存。
+    expect(main).toContain("loadLastRunAt: () => store.getFileReconcileState().lastScanAt");
+    expect(main).toContain("saveLastRunAt: (at) => store.saveFileReconcileState({ lastScanAt: at })");
+    expect(store).toContain("getFileReconcileState(): FileReconcileState");
+    expect(store).toContain("saveFileReconcileState(state: FileReconcileState)");
+    expect(reconcile).toContain("computeReconcileWakeDelayMs");
+    expect(reconcile).not.toContain("Math.min(60_000");
   });
 
   it("空闲判定 = powerMonitor.getSystemIdleTime；维护域 = enqueueMaintenance", () => {

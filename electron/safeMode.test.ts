@@ -96,15 +96,31 @@ describe("安全模式状态文件（userData/safe-mode.json）", () => {
     expect(readSafeModeState(dir)).toBeNull();
   });
 
-  it("显式退出写 active:false + exitedAt；删文件后回到未记录", () => {
+  it("显式退出写 active:false + exitedAt（ok:true）；删文件后回到未记录", () => {
     const dir = tempDir();
     writeSafeModeState(dir, { active: true });
     const exited = exitSafeModeState(dir, new Date("2026-11-05T02:00:00.000Z"));
-    expect(exited).toEqual({ active: false, exitedAt: "2026-11-05T02:00:00.000Z" });
+    expect(exited.ok).toBe(true);
+    expect(exited.state).toEqual({ active: false, exitedAt: "2026-11-05T02:00:00.000Z" });
     expect(readSafeModeState(dir)).toMatchObject({ active: false, exitedAt: "2026-11-05T02:00:00.000Z" });
     removeSafeModeState(dir);
     expect(readSafeModeState(dir)).toBeNull();
     expect(fs.existsSync(safeModePath(dir))).toBe(false);
+  });
+
+  it("退出写盘失败 ⇒ ok:false + 可读原因，且磁盘状态保持原样（P2-C：旧实现忽略失败仍报成功）", () => {
+    const dir = tempDir();
+    writeSafeModeState(dir, { active: true, reason: "连崩" });
+    // 让写盘必失败：把 safe-mode.json 换成同名**目录**（writeFileSync EISDIR，writeSafeModeState 捕获返回 false）。
+    removeSafeModeState(dir);
+    fs.mkdirSync(safeModePath(dir));
+    const exited = exitSafeModeState(dir, new Date("2026-11-05T02:00:00.000Z"));
+    expect(exited.ok).toBe(false);
+    expect(exited.reason).toContain("写入安全模式状态失败");
+    expect(exited.state.active).toBe(false);
+    // 磁盘上仍是目录（没被误删/误写），下一次启动读状态得到 null ⇒ 仍按 crash-marker 判定，不会误当已退出成功。
+    expect(fs.statSync(safeModePath(dir)).isDirectory()).toBe(true);
+    expect(readSafeModeState(dir)).toBeNull();
   });
 
   it("崩溃标记累积 recentTimes（最多 5 条；旧标记没有该字段也能读）", () => {

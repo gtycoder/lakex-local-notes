@@ -16,6 +16,7 @@ vi.mock("../native/assetFs", () => ({
   removeNoteAssetsDirFs: async () => {},
   removeQuickNoteAssetsDirFs: async () => {},
 }));
+import type { SyncConflictEvent } from "../../core/syncConflictLog.js";
 import { SqlJsAsyncDb, SqlJsDb } from "./sqliteDb.js";
 import { applyMobileSchema } from "./schema.js";
 import {
@@ -82,6 +83,49 @@ describe("移动端同步记录账本", () => {
       const rows = (await listSyncConflicts(db)).items;
       expect(rows.map((row) => row.noteId)).toEqual(["new"]);
       expect(await pruneSyncConflicts(db)).toBe(0);
+    } finally { await db.close(); }
+  });
+
+  it("P2-D 批量落库：单次调用多值 INSERT（读回一致），同批重复与已存在都跳过", async () => {
+    const db = await freshDb();
+    try {
+      const at = "2026-11-05T00:00:00.000Z";
+      const batch: SyncConflictEvent[] = Array.from({ length: 3 }, (_, index) => ({ noteId: "bulk" + index, space: "lake", kind: "remote_wins", at }));
+      expect(await insertSyncConflicts(db, [...batch, batch[0]])).toBe(3); // 同批重复只留一条
+      // 已有未解决键 + 新键混在一批：只插新的
+      expect(await insertSyncConflicts(db, [batch[0], { noteId: "bulk-new", space: "quickNotes", kind: "remote_purged", at }])).toBe(1);
+      const rows = (await listSyncConflicts(db)).items;
+      expect(rows).toHaveLength(4);
+      expect(rows.find((row) => row.noteId === "bulk1")).toMatchObject({ space: "lake", kind: "remote_wins", at, ackedAt: null });
+      expect(rows.find((row) => row.noteId === "bulk-new")).toMatchObject({ space: "quickNotes", kind: "remote_purged" });
+    } finally { await db.close(); }
+  });
+
+  it("P2-D 跨批写入（>100 行，多值 INSERT 分语句）读回完整", async () => {
+    const db = await freshDb();
+    try {
+      const events: SyncConflictEvent[] = Array.from({ length: 205 }, (_, index) => ({
+        noteId: "many" + index, space: "lake", kind: "remote_wins",
+        at: new Date(Date.now() - index * 1000).toISOString(),
+        title: "标题" + index,
+      }));
+      expect(await insertSyncConflicts(db, events)).toBe(205);
+      // listSyncConflicts 默认 limit=200（列表页窗口）⇒ 这里显式放宽验证全量落库。
+      expect((await listSyncConflicts(db, 1000)).items).toHaveLength(205);
+    } finally { await db.close(); }
+  });
+
+  it("P2-D 轮转每次落库只跑一次（空事件不触发 prune）", async () => {
+    const db = await freshDb();
+    try {
+      // 空事件直接返回，不打开事务也不 prune（不能因为"没东西"去扫全表）。
+      expect(await insertSyncConflicts(db, [])).toBe(0);
+      // 一次落库把过期行清掉（同一调用内只跑一次 prune）
+      await insertSyncConflicts(db, [
+        { noteId: "expired", space: "lake", kind: "remote_wins", at: "2020-01-01T00:00:00.000Z" },
+        { noteId: "fresh", space: "lake", kind: "remote_wins", at: new Date().toISOString() },
+      ]);
+      expect((await listSyncConflicts(db)).items.map((row) => row.noteId)).toEqual(["fresh"]);
     } finally { await db.close(); }
   });
 });

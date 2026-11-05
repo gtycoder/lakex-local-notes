@@ -9,7 +9,7 @@
  *  - 小记空间的记录仅可查看（移动端没有按 id 打开小记的入口；恢复请在桌面处理）。
  * 版式复用设置页既有骨架类（mb-set-* / mb-btn / mb-empty），**不新增 CSS**。
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { SyncConflictKind } from "../../lib/types";
 import type { MobileSyncConflictRow } from "../data/syncConflictRepository";
 import { formatDateTime } from "../../core/dateFormat";
@@ -83,42 +83,56 @@ export function SyncConflictsSheet({ open, onClose, onOpenNote, onChanged }: Syn
   const [error, setError] = useState<string | null>(null);
   /** 正在执行的记录 id / "all"（防连点；同一时刻只允许一个动作）。 */
   const [busyKey, setBusyKey] = useState<string | null>(null);
+  /** P2-D alive guard：面板关闭/卸载后不再 setState（等待中的读/写可能晚到）。 */
+  const aliveRef = useRef(false);
+  useEffect(() => () => { aliveRef.current = false; }, []);
 
-  const load = useCallback(async (): Promise<void> => {
+  /**
+   * 读列表（带 alive 守卫）：关闭/卸载后晚到的结果直接丢弃，不 setState。
+   * 返回是否已应用（供调用方决定要不要继续刷新父层角标）。
+   */
+  const load = useCallback(async (): Promise<boolean> => {
     try {
       const snapshot = await bridge.listSyncConflicts();
+      if (!aliveRef.current) return false;
       setItems(snapshot.items);
       setUnacked(snapshot.unacked);
       setError(null);
+      return true;
     } catch (reason) {
+      if (!aliveRef.current) return false;
       // 小记库/主库不可用时如实提示（不白屏、不假装空列表）。
       setItems(null);
       setUnacked(0);
       setError(getNativeErrorMessage(reason));
+      return false;
     }
   }, []);
 
   useEffect(() => {
     if (!open) return;
+    aliveRef.current = true;
     setItems(null);
     setError(null);
     void load();
+    return () => { aliveRef.current = false; };
   }, [open, load]);
 
   const afterChange = useCallback(async (): Promise<void> => {
-    await load();
-    onChanged?.();
+    const applied = await load();
+    if (applied) onChanged?.();
   }, [load, onChanged]);
 
   const ack = useCallback(async (ids?: string[]): Promise<void> => {
+    if (!aliveRef.current) return;
     setBusyKey(ids?.[0] ?? "all");
     try {
       await bridge.ackSyncConflicts(ids);
       await afterChange();
     } catch (reason) {
-      showToast("标记已读失败：" + getNativeErrorMessage(reason), { type: "error" });
+      if (aliveRef.current) showToast("标记已读失败：" + getNativeErrorMessage(reason), { type: "error" });
     } finally {
-      setBusyKey(null);
+      if (aliveRef.current) setBusyKey(null);
     }
   }, [afterChange]);
 
@@ -129,20 +143,27 @@ export function SyncConflictsSheet({ open, onClose, onOpenNote, onChanged }: Syn
       confirmText: "恢复本地版",
     });
     if (!ok) return;
+    if (!aliveRef.current) return;
     setBusyKey(row.id);
     try {
       const result = await bridge.restoreSyncConflict(row.id);
       if (!result.ok) {
-        // 失败必须明确（历史缺失/已过期/不支持），不能静默。
-        showToast(result.message || "恢复失败：该记录没有可用的历史快照", { type: "error" });
+        // P2-D：already-resolved 不是失败（记录已被处理过）⇒ 中性提示 + 刷新列表，不误导成"恢复失败"。
+        if (result.reason === "already-resolved") {
+          if (aliveRef.current) showToast(result.message || "这条同步记录已经处理过，无需重复恢复");
+          await afterChange();
+          return;
+        }
+        // 其余失败必须明确（历史缺失/已过期/不支持），不能静默。
+        if (aliveRef.current) showToast(result.message || "恢复失败：该记录没有可用的历史快照", { type: "error" });
         return;
       }
-      showToast("已恢复本地版本；下次同步会覆盖云端");
+      if (aliveRef.current) showToast("已恢复本地版本；下次同步会覆盖云端");
       await afterChange();
     } catch (reason) {
-      showToast("恢复失败：" + getNativeErrorMessage(reason), { type: "error" });
+      if (aliveRef.current) showToast("恢复失败：" + getNativeErrorMessage(reason), { type: "error" });
     } finally {
-      setBusyKey(null);
+      if (aliveRef.current) setBusyKey(null);
     }
   }, [afterChange]);
 

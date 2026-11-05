@@ -48,7 +48,7 @@ import type { DbLike } from "./dbLike.js";
 import { ResourceRepository } from "./resourceRepository.js";
 import { draftJournalDir, readDraftEntry } from "./draftJournal.js";
 import { RemoteImportRepository } from "./remoteImportRepository.js";
-import type { ResourceUploadOutput, HistorySettings, HistoryCleanupResult, S3Settings, SyncSettings, S3GcSettings, FileScanSettings, AutoBackupSettings, AutoBackupState } from "./storeTypes.js";
+import type { ResourceUploadOutput, HistorySettings, HistoryCleanupResult, S3Settings, SyncSettings, S3GcSettings, FileScanSettings, FileReconcileState, AutoBackupSettings, AutoBackupState } from "./storeTypes.js";
 import { fileKindOf, renameFileCardDisplay, scanAssetCards } from "../src/core/fileCard.js";
 import { TRASH_NOTEBOOK_ID } from "../src/core/syncDecisions.js";
 import { saveExternalChangedEvent, type SyncConflictEvent } from "../src/core/syncConflictLog.js";
@@ -829,7 +829,7 @@ export class Store {
    * history_fallback_state，重启不丢），24h 同 hash 去重/引用保护/保留期清理沿用既有实现。
    * 单轮失败不抛（由 historyLifecycle 逐篇吞并计数）。
    */
-  runHistoryFallback(options?: HistoryFallbackOptions): HistoryFallbackResult {
+  runHistoryFallback(options?: HistoryFallbackOptions): Promise<HistoryFallbackResult> {
     return this.historyLifecycle.runHistoryFallback(options);
   }
 
@@ -1428,6 +1428,15 @@ export class Store {
 
   saveFileScanSettings(settings: FileScanSettings): void {
     this.settingsRepository.saveFileScanSettings(settings);
+  }
+
+  /** 上次成功扫描时间（261105 P2-B：跨重启持久化；缺失/损坏按未跑过）。 */
+  getFileReconcileState(): FileReconcileState {
+    return this.settingsRepository.getFileReconcileState();
+  }
+
+  saveFileReconcileState(state: FileReconcileState): void {
+    this.settingsRepository.saveFileReconcileState(state);
   }
 
   /** 自动备份设置（261105；settings 表，本机、不进 git/同步）。 */

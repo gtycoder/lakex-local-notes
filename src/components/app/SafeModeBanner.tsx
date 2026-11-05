@@ -48,9 +48,14 @@ export function SafeModeBanner() {
     setBusy(true);
     setNote(null);
     try {
-      await native.exitSafeMode();
-      // 只在本进程内收起提示条；真正的「下次启动正常」由主进程写入的状态决定。
-      setState({ ...state, active: false });
+      const result = await native.exitSafeMode();
+      if (result.ok) {
+        // 只在本进程内收起提示条；真正的「下次启动正常」由主进程写入的状态决定。
+        setState({ ...state, active: false });
+      } else {
+        // P2-C：写盘/回读失败 = 未生效。保留提示条并明说（不要假装已退出）。
+        setNote("退出未生效：" + result.reason + "。请重启应用后再试（当前仍是安全模式）。");
+      }
     } catch (error) {
       setNote(getNativeErrorMessage(error));
     } finally {

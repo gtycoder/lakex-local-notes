@@ -5,7 +5,15 @@ import zlib from "node:zlib";
 import type { DbLike } from "./dbLike.js";
 import { AppError } from "../src/core/storeErrors.js";
 import { extractAssetRefs, isSafePathSegment, selectHistoryDrops } from "../src/core/storeUtils.js";
-import { selectHistoryFallbackNotes, type HistoryFallbackNote } from "../src/core/historyFallbackPolicy.js";
+import {
+  HISTORY_FALLBACK_CHUNK_SIZE,
+  HISTORY_FALLBACK_MAX_NOTES,
+  HISTORY_FALLBACK_TIME_BUDGET_MS,
+  historyFallbackBackoffMs,
+  isHistoryFallbackRetryDue,
+  selectHistoryFallbackNotes,
+  type HistoryFallbackNote,
+} from "../src/core/historyFallbackPolicy.js";
 import type { LoggerScopes } from "../src/core/logger.js";
 import type { HistoryCleanupResult, HistorySettings } from "./storeTypes.js";
 
@@ -36,23 +44,45 @@ const HISTORY_FALLBACK_FUTURE_SKEW_MS = 60_000;
 
 /** 兜底快照单轮结果（调用方只记日志/观测，失败不抛）。 */
 export interface HistoryFallbackResult {
-  /** 扫描到的活文档数（回收站与缺正文除外）。 */
+  /** 扫描到的活文档数（回收站与缺正文除外；首轮模式 = 本页扫描数）。 */
   scanned: number;
   /** 本轮判定「自上次兜底后有变化」的文档数（受单轮上限约束）。 */
   changed: number;
   /** 实际创建的快照数（24h 同 hash 去重会小于 changed）。 */
   created: number;
-  /** 单篇失败数（不影响其余文档）。 */
+  /** 单篇失败数（不影响其余文档；失败篇进入指数退避）。 */
   failed: number;
   /** 正文文件缺失而跳过的文档数。 */
   missingBody: number;
+  /** P2-A：因退避窗口未到而跳过的篇数（不计 failed）。 */
+  skippedBackoff: number;
+  /** P2-A：本次预算用尽、留到下一 tick 的篇数（不丢，只延后）。 */
+  deferred: number;
+  /** P2-A：清理掉的「已删文档」账本行数。 */
+  cleanedLedger: number;
+  /** P2-A：本轮是否在首轮游标模式（每 tick 只扫一页，走完自动切回全量选择）。 */
+  bootstrap: boolean;
+  /** 本轮结束后的游标（null = 已走完首轮/非首轮模式）。 */
+  cursor: string | null;
 }
 
 export interface HistoryFallbackOptions {
   now?: Date;
   /** 单轮上限（默认 core 的 HISTORY_FALLBACK_MAX_NOTES）。 */
   maxNotes?: number;
+  /** P2-A：单次 tick 时间预算（毫秒，默认 20s）；用尽即停，剩余留到下一 tick。 */
+  timeBudgetMs?: number;
+  /** P2-A：每多少篇让出一次事件循环（默认 12；测试可注入小值）。 */
+  chunkSize?: number;
+  /** P2-A：首轮游标分页大小（默认 = maxNotes；测试可调小）。 */
+  bootstrapPageSize?: number;
+  /** P2-A：让出事件循环（默认真实 setImmediate；测试注入计数）。 */
+  yieldToEventLoop?: () => Promise<void>;
 }
+
+/** 首轮游标 / 首轮完成标记（device_state，设备本地）。 */
+const FALLBACK_CURSOR_KEY = "history_fallback_cursor";
+const FALLBACK_BOOTSTRAP_DONE_KEY = "history_fallback_bootstrap_done";
 
 /**
  * 历史快照生命周期（创建/恢复/手动删除/惰性清理）。
@@ -92,61 +122,185 @@ export class HistoryLifecycle {
     return !!row;
   }
 
+  // ---- P2-A 首轮游标 / 首轮完成标记（device_state，设备本地；与账本同库） ----
+  private readFallbackDeviceState(key: string): string | null {
+    const row = this.ctx.db.prepare("SELECT value FROM device_state WHERE key=?").get(key) as { value?: string } | undefined;
+    return row?.value ?? null;
+  }
+
+  private writeFallbackDeviceState(key: string, value: string | null): void {
+    if (value === null) { this.ctx.db.prepare("DELETE FROM device_state WHERE key=?").run(key); return; }
+    this.ctx.db.prepare("INSERT INTO device_state(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(key, value);
+  }
+
   /**
-   * 定时兜底快照（Batch4-C）：只挑「自上次兜底后有正文变化」的文档（持久账本 + 正文 mtime），
-   * 复用 createHistorySnapshot 的 24h 同 hash 去重 / 引用保护 / 保留期清理。
-   * 单篇失败不阻断其余（失败计数由调用方记日志）；账本按 min(mtime, now) 收敛，时钟漂移不会压死后续轮次。
+   * 定时兜底快照（Batch4-C + P2-A）：只挑「自上次兜底后有正文变化」的文档（持久账本 + 正文 mtime），
+   * 复用 createHistorySnapshot 的 24h 同 hash 去重 / 引用保护 / 保留期清理（语义不变）。
+   *
+   * P2-A 三件事：
+   * - **分片**：stat 与快照每 chunk 篇 await setImmediate 让出事件循环，单 tick 有 20s 时间预算（用尽留到下轮）；
+   * - **首轮游标**：账本空时不再每 tick stat 全库——按 id 游标每轮只扫一页，走完自动切回全量 mtime 选择；
+   * - **失败退避 + 账本清理**：单篇失败写 fail_count/next_retry_at（指数退避封顶 24h，成功清零），
+   *   已删文档（notes 行不存在/deleted_at 非空）的账本行每轮清理。
    */
-  runHistoryFallback(options: HistoryFallbackOptions = {}): HistoryFallbackResult {
-    const t0 = Date.now();
+  async runHistoryFallback(options: HistoryFallbackOptions = {}): Promise<HistoryFallbackResult> {
+    const startedAt = Date.now();
     const now = options.now ?? new Date();
     const nowMs = now.getTime();
-    const result: HistoryFallbackResult = { scanned: 0, changed: 0, created: 0, failed: 0, missingBody: 0 };
-    const rows = this.ctx.db.prepare(
-      "SELECT id FROM notes WHERE deleted_at IS NULL AND trashed_at IS NULL AND parent_id != ?",
-    ).all(this.ctx.trashNotebookId) as Array<{ id: string }>;
+    const budgetMs = Number.isFinite(options.timeBudgetMs) && (options.timeBudgetMs as number) >= 0
+      ? (options.timeBudgetMs as number)
+      : HISTORY_FALLBACK_TIME_BUDGET_MS;
+    const chunkSize = Number.isFinite(options.chunkSize) && (options.chunkSize as number) > 0
+      ? Math.floor(options.chunkSize as number)
+      : HISTORY_FALLBACK_CHUNK_SIZE;
+    const yieldToEventLoop = options.yieldToEventLoop ?? (() => new Promise<void>((resolve) => setImmediate(resolve)));
+    const maxNotes = Number.isFinite(options.maxNotes) && (options.maxNotes as number) > 0
+      ? Math.floor(options.maxNotes as number)
+      : HISTORY_FALLBACK_MAX_NOTES;
+    const pageSize = Number.isFinite(options.bootstrapPageSize) && (options.bootstrapPageSize as number) > 0
+      ? Math.max(1, Math.floor(options.bootstrapPageSize as number))
+      : maxNotes;
+    const result: HistoryFallbackResult = {
+      scanned: 0, changed: 0, created: 0, failed: 0, missingBody: 0,
+      skippedBackoff: 0, deferred: 0, cleanedLedger: 0, bootstrap: false, cursor: null,
+    };
+    const budgetExceeded = () => Date.now() - startedAt >= budgetMs;
+
+    // 1) 账本清理：文档已删（行不存在 / 已软删）的账本行不再保留（避免账本无限累积）。
+    try {
+      const info = this.ctx.db.prepare(
+        "DELETE FROM history_fallback_state WHERE note_id NOT IN (SELECT id FROM notes WHERE deleted_at IS NULL)",
+      ).run();
+      result.cleanedLedger = Number((info as { changes?: number }).changes) || 0;
+    } catch { /* 清理失败不影响本轮回填 */ }
+
+    // 2) 账本 + 失败退避（fail_count / next_retry_at；旧行缺失列值按 0/null 处理）。
     const ledgerRows = this.ctx.db.prepare(
-      "SELECT note_id, last_body_mtime_ms FROM history_fallback_state",
-    ).all() as Array<{ note_id: string; last_body_mtime_ms: number }>;
-    const ledger = new Map(ledgerRows.map((row) => [row.note_id, Number(row.last_body_mtime_ms)] as const));
-    const notes: HistoryFallbackNote[] = [];
-    for (const { id } of rows) {
-      result.scanned += 1;
-      if (!isSafePathSegment(id)) continue;
-      try {
-        const stat = fs.statSync(this.ctx.notePathFor(id));
-        if (!stat.isFile()) continue;
-        notes.push({ id, bodyMtimeMs: stat.mtimeMs });
-      } catch {
-        // 缺正文 = 另一条通道（正文恢复），这里不制造空快照。
-        result.missingBody += 1;
-      }
+      "SELECT note_id, last_body_mtime_ms, fail_count, next_retry_at FROM history_fallback_state",
+    ).all() as Array<{ note_id: string; last_body_mtime_ms: number; fail_count?: number | null; next_retry_at?: string | null }>;
+    const ledger = new Map<string, number>();
+    const failCounts = new Map<string, number>();
+    const retryAtMs = new Map<string, number>();
+    for (const row of ledgerRows) {
+      ledger.set(row.note_id, Number(row.last_body_mtime_ms));
+      failCounts.set(row.note_id, Number(row.fail_count ?? 0) || 0);
+      const parsed = row.next_retry_at ? Date.parse(row.next_retry_at) : NaN;
+      retryAtMs.set(row.note_id, Number.isFinite(parsed) ? parsed : 0);
     }
-    const picked = selectHistoryFallbackNotes({ notes, ledger, maxNotes: options.maxNotes, nowMs });
+
+    // 3) 首轮游标页 vs 全量（首轮只 stat 一页，避免 2 万文档每 tick 全量 stat）。
+    result.bootstrap = this.readFallbackDeviceState(FALLBACK_BOOTSTRAP_DONE_KEY) !== "1";
+    const cursorBefore = result.bootstrap ? this.readFallbackDeviceState(FALLBACK_CURSOR_KEY) : null;
+    let ids: string[];
+    if (result.bootstrap) {
+      ids = (this.ctx.db.prepare(
+        "SELECT id FROM notes WHERE deleted_at IS NULL AND trashed_at IS NULL AND parent_id != ? AND id > ? ORDER BY id LIMIT ?",
+      ).all(this.ctx.trashNotebookId, cursorBefore ?? "", pageSize) as Array<{ id: string }>).map((row) => row.id);
+    } else {
+      ids = (this.ctx.db.prepare(
+        "SELECT id FROM notes WHERE deleted_at IS NULL AND trashed_at IS NULL AND parent_id != ? ORDER BY id",
+      ).all(this.ctx.trashNotebookId) as Array<{ id: string }>).map((row) => row.id);
+    }
+
+    // 4) stat（分片让出；预算命中即停，剩余留到下一 tick）。
+    const notes: HistoryFallbackNote[] = [];
+    let scannedPrefix = 0;
+    let budgetHitDuringScan = false;
+    for (let index = 0; index < ids.length; index += 1) {
+      if (budgetExceeded() && index > 0) { budgetHitDuringScan = true; result.deferred = ids.length - index; break; }
+      const id = ids[index];
+      scannedPrefix += 1;
+      result.scanned += 1;
+      if (isSafePathSegment(id)) {
+        try {
+          const stat = fs.statSync(this.ctx.notePathFor(id));
+          if (stat.isFile()) notes.push({ id, bodyMtimeMs: stat.mtimeMs });
+        } catch {
+          // 缺正文 = 另一条通道（正文恢复），这里不制造空快照。
+          result.missingBody += 1;
+        }
+      }
+      if (scannedPrefix % chunkSize === 0) await yieldToEventLoop();
+    }
+
+    // 5) 退避过滤 + 变化选择（24h 同 hash 去重仍由 createHistorySnapshot 负责）。
+    const eligible: HistoryFallbackNote[] = [];
+    for (const candidate of notes) {
+      if (!isHistoryFallbackRetryDue(retryAtMs.get(candidate.id), nowMs)) { result.skippedBackoff += 1; continue; }
+      eligible.push(candidate);
+    }
+    const picked = selectHistoryFallbackNotes({ notes: eligible, ledger, maxNotes, nowMs });
     result.changed = picked.length;
+    const overflow = eligible.length > maxNotes && picked.length >= maxNotes;
+
+    // 6) 快照（分片让出 + 时间预算；单篇失败写退避，成功清零）。
     const writeLedger = this.ctx.db.prepare(
-      "INSERT INTO history_fallback_state(note_id,last_body_mtime_ms,last_attempt_at) VALUES(?,?,?) "
-      + "ON CONFLICT(note_id) DO UPDATE SET last_body_mtime_ms=excluded.last_body_mtime_ms, last_attempt_at=excluded.last_attempt_at",
+      "INSERT INTO history_fallback_state(note_id,last_body_mtime_ms,last_attempt_at,fail_count,next_retry_at) VALUES(?,?,?,?,?) "
+      + "ON CONFLICT(note_id) DO UPDATE SET last_body_mtime_ms=excluded.last_body_mtime_ms, last_attempt_at=excluded.last_attempt_at, "
+      + "fail_count=excluded.fail_count, next_retry_at=excluded.next_retry_at",
     );
+    let processed = 0;
+    let budgetHitDuringProcess = false;
     for (const candidate of picked) {
+      if (processed > 0 && budgetExceeded()) { budgetHitDuringProcess = true; break; }
+      const previousMtime = ledger.get(candidate.id) ?? 0;
+      const previousFail = failCounts.get(candidate.id) ?? 0;
       try {
-        const id = this.createHistorySnapshot(candidate.id);
-        if (id !== null) result.created += 1;
+        const snapshotId = this.createHistorySnapshot(candidate.id);
+        if (snapshotId !== null) result.created += 1;
         // 即使 24h 同 hash 去重跳过（返回 null）也推进账本：否则下一轮还会重复 stat/读盘同一篇。
-        // 时钟明显跑快（mtime 比现在晚 60s 以上）才收敛到 now，避免未来时间戳把后续轮次永久压死；
-        // 正常保存（mtime≈now）按原样记，重启后"未再改动"必须判成没变。
+        // 时钟明显跑快（mtime 比现在晚 60s 以上）才收敛到 now，避免未来时间戳把后续轮次永久压死。
         const ledgerMs = candidate.bodyMtimeMs > nowMs + HISTORY_FALLBACK_FUTURE_SKEW_MS ? nowMs : candidate.bodyMtimeMs;
-        writeLedger.run(candidate.id, ledgerMs, now.toISOString());
+        writeLedger.run(candidate.id, ledgerMs, now.toISOString(), 0, null);
       } catch (error) {
         result.failed += 1;
+        const nextFail = previousFail + 1;
+        const retryIso = new Date(nowMs + historyFallbackBackoffMs(nextFail)).toISOString();
+        try { writeLedger.run(candidate.id, previousMtime, now.toISOString(), nextFail, retryIso); }
+        catch { /* 账本写失败只影响退避，不影响其余篇 */ }
         this.ctx.logScopes.history.warn(
-          "[history] 兜底快照失败 " + candidate.id + ": " + (error instanceof Error ? error.message : String(error)),
+          "[history] 兜底快照失败 " + candidate.id + "（第 " + nextFail + " 次，退避至 " + retryIso + "）："
+          + (error instanceof Error ? error.message : String(error)),
         );
       }
+      processed += 1;
+      if (processed % chunkSize === 0) await yieldToEventLoop();
     }
+    if (budgetHitDuringProcess) result.deferred = Math.max(result.deferred, picked.length - processed);
+
+    // 7) 首轮游标推进：仅当"整页已扫完且处理完"才前进；预算中断只推进已扫前缀，处理中断保持原游标。
+    if (result.bootstrap) {
+      const completedPage = !budgetHitDuringProcess && !overflow && scannedPrefix >= ids.length;
+      const pageExhausted = ids.length < pageSize;
+      if (budgetHitDuringProcess || overflow) {
+        result.cursor = cursorBefore;
+      } else if (completedPage && pageExhausted) {
+        this.writeFallbackDeviceState(FALLBACK_BOOTSTRAP_DONE_KEY, "1");
+        this.writeFallbackDeviceState(FALLBACK_CURSOR_KEY, null);
+        result.cursor = null;
+      } else if (budgetHitDuringScan) {
+        const lastScanned = scannedPrefix > 0 ? ids[scannedPrefix - 1] : null;
+        if (lastScanned && lastScanned !== cursorBefore) {
+          this.writeFallbackDeviceState(FALLBACK_CURSOR_KEY, lastScanned);
+          result.cursor = lastScanned;
+        } else {
+          result.cursor = cursorBefore;
+        }
+      } else {
+        const last = ids[ids.length - 1] ?? cursorBefore;
+        if (last) {
+          this.writeFallbackDeviceState(FALLBACK_CURSOR_KEY, last);
+          result.cursor = last;
+        }
+      }
+    }
+
     this.ctx.logScopes.history.info(
-      "[perf] history-fallback " + (Date.now() - t0) + "ms (scanned=" + result.scanned + ", changed=" + result.changed
-      + ", created=" + result.created + ", failed=" + result.failed + ")",
+      "[perf] history-fallback " + (Date.now() - startedAt) + "ms (scanned=" + result.scanned + ", changed=" + result.changed
+      + ", created=" + result.created + ", failed=" + result.failed + ", skippedBackoff=" + result.skippedBackoff
+      + (result.deferred > 0 ? ", deferred=" + result.deferred : "")
+      + (result.cleanedLedger > 0 ? ", cleanedLedger=" + result.cleanedLedger : "")
+      + (result.bootstrap ? ", bootstrap" : "") + ")",
     );
     return result;
   }

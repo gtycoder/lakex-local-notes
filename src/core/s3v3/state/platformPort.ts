@@ -171,6 +171,12 @@ export interface PlatformDataPort {
    */
   applyNoteTagLinks?(noteId: string, tagIds: string[], tagsUpdatedAt: string): Promise<void>;
   /**
+   * 文档标签关系版本批量读（261105 P2-E）：返回「文档 id → tag_link_versions.links_updated_at」。
+   * 供 saveState 每轮只查一次，避免 2 万文档逐篇 SELECT；**只报有版本的行**（无行 = 无版本旧数据）。
+   * 缺失 = 该端未接入批量读 ⇒ core 退化逐篇调用 applyNoteTagLinks（旧行为不变）。
+   */
+  listNoteTagVersions?(): Promise<Map<string, string>>;
+  /**
    * 目录收敛（每轮 saveState 末尾、目录合并之后调用）：清掉指向**目录不存在标签**的文档关系。
    * 与 applyNoteTagLinks 分两步：同一轮里目录可能刚随 quick-notes 索引到达（先按远端 id 落关系，
    * 再按最终目录过滤），避免首轮同步因本机目录尚未合并而丢掉全部文档标签。

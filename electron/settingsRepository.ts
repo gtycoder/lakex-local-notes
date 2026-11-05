@@ -1,6 +1,6 @@
 import type { DbLike } from "./dbLike.js";
 import type { SecretCipher } from "../src/core/secretCipher.js";
-import type { S3Settings, SyncSettings, S3GcSettings, HistorySettings, FileScanSettings } from "./storeTypes.js";
+import type { S3Settings, SyncSettings, S3GcSettings, HistorySettings, FileScanSettings, FileReconcileState } from "./storeTypes.js";
 import { FILE_RECONCILE_DEFAULTS, normalizeFileScanIntervalHours } from "./fileMetadataReconcile.js";
 import {
   AUTO_BACKUP_DEFAULTS,
@@ -142,6 +142,24 @@ export class SettingsRepository {
     if (normalized === null) throw new Error("扫描间隔无效");
     this.db.prepare("INSERT INTO settings(key,value) VALUES('file_scan_settings',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
       .run(JSON.stringify({ intervalHours: normalized }));
+  }
+
+  /** 上次成功扫描时间（261105 P2-B；settings key = file_reconcile_state；坏值按未跑过）。 */
+  getFileReconcileState(): FileReconcileState {
+    const row = this.db.prepare("SELECT value FROM settings WHERE key='file_reconcile_state'").get() as { value: string } | undefined;
+    if (!row) return { lastScanAt: null };
+    try {
+      const parsed = JSON.parse(row.value) as Partial<FileReconcileState>;
+      return { lastScanAt: typeof parsed.lastScanAt === "string" && parsed.lastScanAt ? parsed.lastScanAt : null };
+    } catch {
+      return { lastScanAt: null };
+    }
+  }
+
+  saveFileReconcileState(state: FileReconcileState): void {
+    const lastScanAt = typeof state.lastScanAt === "string" && state.lastScanAt ? state.lastScanAt : null;
+    this.db.prepare("INSERT INTO settings(key,value) VALUES('file_reconcile_state',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
+      .run(JSON.stringify({ lastScanAt }));
   }
 
   /** 自动备份设置（261105；settings key = auto_backup_settings；非法/缺省 = 默认值）。 */

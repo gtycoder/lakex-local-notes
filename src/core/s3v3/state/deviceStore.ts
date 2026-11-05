@@ -487,6 +487,14 @@ export function createDeviceStoreMeta(deps: DeviceStoreMetaDeps): DeviceStoreMet
     // 目录必须先于文档落库：他端新建的笔记本/分组 id 在本地还不存在，先建目录才能建子文档。
     await saveFolders(state.folders, false);
 
+    // Review-A P2-1 / P2-E：标签关系版本**每轮批量读一次**（平台端口可选），供下面按版本差异决定是否逐篇应用。
+    // - 端口缺失 = 该端未接入批量读 ⇒ null（退化逐篇调用，旧行为不变）；
+    // - 读取失败也不阻断同步（同样退化逐篇；端口内部版本比较是幂等 no-op）。
+    let tagVersions: Map<string, string> | null = null;
+    if (p.applyNoteTagLinks && p.listNoteTagVersions) {
+      try { tagVersions = await p.listNoteTagVersions(); } catch { tagVersions = null; }
+    }
+
     // 批量写窗口（移动 executeSet）：只包「文档行写入」这一段；目录/小记保持逐条（与旧移动实现同序）。
     await p.beginWriteBatch?.();
     const current = new Map((await p.listNotesSyncMeta()).map((n: SyncNoteMetaRow) => [n.id, n] as const));
@@ -569,10 +577,20 @@ export function createDeviceStoreMeta(deps: DeviceStoreMetaDeps): DeviceStoreMet
           }
         }
         // 文档标签关系（261105 P1）：关系版本 LWW；平台侧负责「保留本机顺序 + 远端新增插最前」。
-        // Review-A P2-1：只在「有标签字段或版本」时调用（远端清空会带 tagsUpdatedAt ⇒ 仍会清）；
-        // 否则 20k 篇零标签时每轮白白 2 万次版本点查。
-        if (p.applyNoteTagLinks && (n.tagsUpdatedAt || (n.tagIds?.length ?? 0) > 0)) {
-          await p.applyNoteTagLinks(n.id, n.tagIds ?? [], n.tagsUpdatedAt ?? "");
+        // P2-E：端口给了批量版本 ⇒ 只在本轮版本与已存版本不同、或「有标签但本地还没有版本行」（无版本旧数据）
+        // 时才调用；版本相同 = 端口内的 LWW 判据必为 no-op ⇒ 跳过这一次点查。
+        // 远端**清空**标签会带更新的 tagsUpdatedAt（版本不同）⇒ 仍会调用，语义不变。
+        // 端口缺失/批量读失败（tagVersions=null）⇒ 退化旧行为（有标签字段或版本就逐篇调用）。
+        {
+          const stateTagVersion = n.tagsUpdatedAt ?? "";
+          const hasTagData = !!stateTagVersion || (n.tagIds?.length ?? 0) > 0;
+          const storedTagVersion = tagVersions ? (tagVersions.get(n.id) ?? "") : null;
+          const needTagApply = tagVersions
+            ? (storedTagVersion !== stateTagVersion || (storedTagVersion === "" && hasTagData))
+            : hasTagData;
+          if (p.applyNoteTagLinks && needTagApply) {
+            await p.applyNoteTagLinks(n.id, n.tagIds ?? [], stateTagVersion);
+          }
         }
         await deps.flushAssetDirDeletion?.(n.id);
         if (staged) stagedMoves.push({ id: n.id, kind: normalizeNoteKind(n.kind) });

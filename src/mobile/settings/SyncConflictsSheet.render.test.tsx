@@ -162,6 +162,34 @@ describe("SyncConflictsSheet 恢复", () => {
     expect(mocks.showToast).toHaveBeenCalledWith("历史快照已过期或被清理，无法恢复", { type: "error" });
     expect(changed.length).toBe(0);
   });
+
+  it("P2-D already-resolved ⇒ 中性提示（不报错）+ 刷新列表，不谎称「已恢复」", async () => {
+    mocks.restoreSyncConflict.mockResolvedValue({ ok: false, reason: "already-resolved", message: "这条同步记录已经处理过（无需重复恢复）" });
+    await renderSheet();
+    await act(async () => { buttons("恢复本地被覆盖版")[0].click(); await Promise.resolve(); });
+    expect(mocks.showToast).toHaveBeenCalledWith("这条同步记录已经处理过（无需重复恢复）");
+    // 不是 error 类型（用户没有做错事）
+    expect(mocks.showToast).not.toHaveBeenCalledWith(expect.anything(), { type: "error" });
+    expect(changed.length).toBe(1);
+  });
+});
+
+describe("P2-D alive guard（关闭/卸载后不再 setState）", () => {
+  it("列表请求晚于卸载返回 ⇒ 不抛错、不写状态", async () => {
+    let resolveList: ((value: unknown) => void) | null = null;
+    mocks.listSyncConflicts.mockReturnValue(new Promise((resolve) => { resolveList = resolve; }));
+    const errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    await renderSheet();
+    await act(async () => { root?.unmount(); });
+    root = null;
+    await act(async () => {
+      resolveList!({ items: ROWS, unacked: 3 });
+      await Promise.resolve(); await Promise.resolve();
+    });
+    // React 18 对卸载后的 setState 不再告警，但「晚到结果被丢弃」仍应表现为没有任何错误输出。
+    expect(errors).not.toHaveBeenCalled();
+    errors.mockRestore();
+  });
 });
 
 describe("SyncConflictsSheet 空态/降级 + 入口角标", () => {

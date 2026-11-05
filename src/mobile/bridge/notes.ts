@@ -228,7 +228,11 @@ export const notesDomain = {
     const d = await ensureDb();
     const row = await syncConflictRepository.getSyncConflict(d, id);
     if (!row) return { ok: false, reason: "not-found", message: "同步记录不存在" };
-    if (row.resolvedAt) return { ok: true, noteId: row.noteId, restoredFromHistory: row.kind === "remote_wins" };
+    // P2-D：已处理过的记录**不再返回 ok:true**（否则 UI 会提示"已恢复"但实际什么都没做）。
+    // 语义显式化为 already-resolved：UI 给中性提示并刷新列表。
+    if (row.resolvedAt) {
+      return { ok: false, reason: "already-resolved", message: "这条同步记录已经处理过（无需重复恢复）" };
+    }
     if (row.kind === "save_external_changed") return { ok: false, reason: "unsupported", message: "外部改动是审计记录，没有可恢复的目标版本" };
     if (row.kind !== "remote_wins" || row.space !== "lake") {
       return { ok: false, reason: "unsupported", message: "该记录不支持在移动端恢复（请在对应回收站/历史入口处理）" };

@@ -492,6 +492,10 @@ export function createMobilePlatformPort(db: MobileDb, ctxIn?: Partial<MobilePla
     async pruneNoteTagLinks(validTagIds: readonly string[]): Promise<void> {
       await cleanupOrphanNoteTagLinks(db, new Set(validTagIds));
     },
+    // P2-E：文档标签关系版本批量读（主库 tag_link_versions 一次查询；只报有版本的行）。
+    async listNoteTagVersions(): Promise<Map<string, string>> {
+      return listAllNoteTagsUpdatedAt(db);
+    },
     async applyQuickNoteTagLinks(quickNoteId: string, tagIds: string[], tagsUpdatedAt: string): Promise<void> {
       // 与桌面同一套关系 LWW：远端更新才覆盖；过滤墓碑标签（删除的关系不复活）、去重、超上限截断。
       // **不按 ID 形态过滤**：旧版本/旧索引里可能已有非 `t_` 形态的标签 ID，按正则过滤会静默丢关联（迁移风险）。

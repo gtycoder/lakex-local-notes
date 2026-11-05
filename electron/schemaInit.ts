@@ -118,7 +118,10 @@ export class SchemaInit {
       CREATE TABLE IF NOT EXISTS history_fallback_state (
         note_id TEXT PRIMARY KEY,
         last_body_mtime_ms INTEGER NOT NULL,
-        last_attempt_at TEXT NOT NULL
+        last_attempt_at TEXT NOT NULL,
+        -- P2-A：连续失败次数 + 退避到期时间（指数退避，成功清零）。
+        fail_count INTEGER NOT NULL DEFAULT 0,
+        next_retry_at TEXT
       );
       -- S3 GC：删除审计日志（v3 深清理真实写入；manifest 时代的 s3_gc_pending 待回收表已删）
       CREATE TABLE IF NOT EXISTS s3_gc_log (
@@ -147,6 +150,12 @@ export class SchemaInit {
     );
     this.ctx.db.exec(searchLedgerRowidIndexDDL(NOTES_SEARCH_LEDGER_ROWID_INDEX, NOTES_SEARCH_LEDGER_TABLE));
 
+    // P2-A：旧库补 history_fallback_state 的退避两列（存在即跳过；无数据回填）。
+    {
+      const cols = this.ctx.db.prepare("PRAGMA table_info(history_fallback_state)").all() as Array<{ name: string }>;
+      if (!cols.some((c) => c.name === "fail_count")) this.ctx.db.exec("ALTER TABLE history_fallback_state ADD COLUMN fail_count INTEGER NOT NULL DEFAULT 0");
+      if (!cols.some((c) => c.name === "next_retry_at")) this.ctx.db.exec("ALTER TABLE history_fallback_state ADD COLUMN next_retry_at TEXT");
+    }
     // 轻量列迁移：不写历史数据兼容，只补新列默认值（旧值由调用方决定）。
     for (const [table, column, ddl] of [
       ["notes", "is_purged", "ALTER TABLE notes ADD COLUMN is_purged INTEGER NOT NULL DEFAULT 0"],

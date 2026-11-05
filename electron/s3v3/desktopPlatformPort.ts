@@ -160,6 +160,10 @@ export function createDesktopPlatformPort(store: Store, quickNotes?: QuickNotesS
     async pruneNoteTagLinks(validTagIds: readonly string[]): Promise<void> {
       store.documentTags.cleanupOrphans(new Set(validTagIds));
     },
+    // P2-E：文档标签关系版本批量读（主库 tag_link_versions 一次查询；只报有版本的行）。
+    async listNoteTagVersions(): Promise<Map<string, string>> {
+      return store.documentTags.allTagsUpdatedAt();
+    },
     async mergeQuickTags(tags: QuickTagRow[], removedIds: readonly string[] = []): Promise<void> {
       if (!qn) return;
       // 单事务 upsert active 行 + 物理删本轮删除的标签（含清关联/版本、刷搜索索引）全在 QuickNotesStore 里。

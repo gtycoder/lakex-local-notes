@@ -20,6 +20,36 @@ export const HISTORY_FALLBACK_DEFAULT_MINUTES = 10;
 /** 单轮最多处理的文档数（2 万文档量级下把一轮 stat+快照压在有界范围；其余下一轮）。 */
 export const HISTORY_FALLBACK_MAX_NOTES = 200;
 
+/** P2-A 分片：每处理多少篇让出一次事件循环（避免 200 篇同步 IO 一次性阻塞主进程）。 */
+export const HISTORY_FALLBACK_CHUNK_SIZE = 12;
+
+/** P2-A 单次 tick 的时间预算（毫秒）：用尽即停，剩余留到下一 tick（不丢，只延后）。 */
+export const HISTORY_FALLBACK_TIME_BUDGET_MS = 20_000;
+
+/** P2-A 失败退避：第 n 次连续失败等待 base×2^(n-1)，上限 24h；成功后清零。 */
+export const HISTORY_FALLBACK_BACKOFF_BASE_MS = HISTORY_FALLBACK_DEFAULT_MINUTES * 60_000;
+export const HISTORY_FALLBACK_BACKOFF_MAX_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * 单篇失败后的退避时长（纯函数）：1 次失败 = 1×base，之后 2×/4×… 封顶 24h。
+ * failCount<=0 返回 0（= 无退避，下一次即可重试）。
+ */
+export function historyFallbackBackoffMs(
+  failCount: number,
+  baseMs: number = HISTORY_FALLBACK_BACKOFF_BASE_MS,
+  maxMs: number = HISTORY_FALLBACK_BACKOFF_MAX_MS,
+): number {
+  if (!Number.isFinite(failCount) || failCount <= 0 || baseMs <= 0) return 0;
+  const exponent = Math.min(20, Math.floor(failCount) - 1);
+  const wait = Math.min(maxMs, baseMs * 2 ** exponent);
+  return Math.max(0, Math.min(maxMs, wait));
+}
+
+/** 退避是否已到期（nextRetryAt 缺失/非法 = 已到期）。 */
+export function isHistoryFallbackRetryDue(nextRetryAtMs: number | null | undefined, nowMs: number): boolean {
+  return !Number.isFinite(nextRetryAtMs) || (nextRetryAtMs as number) <= nowMs;
+}
+
 export interface HistoryFallbackNote {
   id: string;
   /** 正文文件 mtime（毫秒）。 */

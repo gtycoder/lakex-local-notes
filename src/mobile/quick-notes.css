@@ -96,6 +96,8 @@
 .qn-tag-filter-bar { display: flex; gap: 6px; padding: 8px var(--mb-page-pad) 4px; overflow-x: auto; scrollbar-width: none; }
 .qn-tag-filter-bar::-webkit-scrollbar { display: none; }
 .qn-tag-filter-bar .qn-tag { flex: 0 0 auto; }
+/* P2-D：筛选条 chip 是**可点按控件**，命中盒按触屏下限 --mb-tap-min(44) 给高度（卡内标签仍是展示型 28）。 */
+.qn-tag-filter-bar .qn-tag { min-height: var(--mb-tap-min); }
 /* 261030 贴边修复：正文列走 .mb-sheet__body--form（页内距 16 + 底部安全区），
  * 这里只补列布局；行内距归 body 提供 ⇒ 行自己不再左右加 8（否则文字比标题多缩 8）。 */
 .qn-tag-sheet { max-height: min(76vh, 680px); }

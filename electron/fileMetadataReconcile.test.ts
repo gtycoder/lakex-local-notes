@@ -5,8 +5,10 @@ import path from "node:path";
 import {
   FILE_RECONCILE_DEFAULTS,
   FileMetadataReconciler,
+  computeReconcileWakeDelayMs,
   decideFileReconcile,
   scanOrphanBodyFiles,
+  type FileMetadataReconcilerDeps,
   type ReconcileThrottleInput,
 } from "./fileMetadataReconcile.js";
 
@@ -284,5 +286,80 @@ describe("FileMetadataReconciler：TryLock + 维护域串行", () => {
     expect(out.ran).toBe(true);
     expect(out.report?.trigger).toBe("manual-report");
     expect(out.report?.enabled).toBe(false);
+  });
+});
+
+describe("P2-B：lastRun 持久化 + 到期 sleep（不再每 60s 空转）", () => {
+  it("computeReconcileWakeDelayMs：按空闲/冷却到期取较大值，下限 1s、上限 24h（不再 60s 封顶）", () => {
+    expect(computeReconcileWakeDelayMs({ minIdleSeconds: 300, idleSeconds: 0, cooldownMs: 0, lastRunAtMs: null, nowMs: 1_000 })).toBe(300_000);
+    expect(computeReconcileWakeDelayMs({ minIdleSeconds: 300, idleSeconds: 600, cooldownMs: 0, lastRunAtMs: null, nowMs: 1_000 })).toBe(1_000);
+    const day = 24 * 3600_000;
+    const justRan = computeReconcileWakeDelayMs({ minIdleSeconds: 300, idleSeconds: 600, cooldownMs: day, lastRunAtMs: 1_000, nowMs: 2_000 });
+    expect(justRan).toBe(day - 1_000); // 冷却剩余，远大于 60s
+    const huge = computeReconcileWakeDelayMs({ minIdleSeconds: 300, idleSeconds: 600, cooldownMs: 720 * 3600_000, lastRunAtMs: 0, nowMs: 0 });
+    expect(huge).toBe(day);
+  });
+
+  it("构造函数读取持久化 lastRunAt：跨重启冷却生效；非法值按未跑过", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "lake-reconcile-persist-"));
+    const queue = makeMaintenanceQueue();
+    const base: FileMetadataReconcilerDeps = {
+      root,
+      listKnownNoteIds: () => [],
+      getIdleSeconds: () => 600,
+      enqueueMaintenance: queue.enqueue,
+      enabled: true,
+      minIdleSeconds: 300,
+      cooldownMs: 24 * 3600_000,
+      loadLastRunAt: () => "2026-11-05T00:00:00.000Z",
+      saveLastRunAt: () => undefined,
+      log: () => undefined,
+    };
+    const reconciler = new FileMetadataReconciler(base);
+    try {
+      expect(reconciler.getLastRunAtMs()).toBe(Date.parse("2026-11-05T00:00:00.000Z"));
+      expect(decideFileReconcile({
+        enabled: true, running: false, afterSyncPending: true, dirty: true,
+        idleSeconds: 600, minIdleSeconds: 300,
+        nowMs: Date.parse("2026-11-05T01:00:00.000Z"), lastRunAtMs: reconciler.getLastRunAtMs()!, cooldownMs: 24 * 3600_000,
+      })).toMatchObject({ run: false, reason: "cooldown" });
+    } finally {
+      reconciler.dispose();
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+    const invalidRoot = fs.mkdtempSync(path.join(os.tmpdir(), "lake-reconcile-invalid-"));
+    const invalid = new FileMetadataReconciler({ ...base, root: invalidRoot, loadLastRunAt: () => "not-a-date" });
+    try { expect(invalid.getLastRunAtMs()).toBeNull(); } finally {
+      invalid.dispose();
+      fs.rmSync(invalidRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("成功扫描后把 lastScanAt 持久化（saveLastRunAt 收到 ISO）", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "lake-reconcile-save-"));
+    const queue = makeMaintenanceQueue();
+    const saveLastRunAt = vi.fn();
+    const reconciler = new FileMetadataReconciler({
+      root,
+      listKnownNoteIds: () => [],
+      getIdleSeconds: () => 600,
+      enqueueMaintenance: queue.enqueue,
+      enabled: true,
+      minIdleSeconds: 300,
+      cooldownMs: 1_000,
+      now: () => Date.parse("2026-11-05T03:04:05.000Z"),
+      loadLastRunAt: () => null,
+      saveLastRunAt,
+      log: () => undefined,
+    });
+    try {
+      reconciler.onSyncComplete();
+      reconciler.dispose();
+      expect((await reconciler.tryRun()).ran).toBe(true);
+      expect(saveLastRunAt).toHaveBeenCalledWith("2026-11-05T03:04:05.000Z");
+    } finally {
+      reconciler.dispose();
+      fs.rmSync(root, { recursive: true, force: true });
+    }
   });
 });

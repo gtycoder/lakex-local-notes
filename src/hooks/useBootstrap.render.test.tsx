@@ -146,6 +146,32 @@ describe("useBootstrap 标签会话恢复（DT-15）", () => {
     expect(localStorage.getItem(TAB_SESSION_KEY)).toBe(JSON.stringify({ ids: NOTES.map((note) => note.id), activeId: "n2" }));
   });
 
+  it("P2-C：安全模式状态未知（IPC 失败）⇒ 既不恢复也不清会话（fail-closed，不 fail-open）", async () => {
+    settingsMock.current = { clearTabsOnExit: true, maxOpenTabs: 3 };
+    localStorage.setItem(TAB_SESSION_KEY, JSON.stringify({ ids: NOTES.map((note) => note.id), activeId: "n2" }));
+    nativeMock.getSafeModeState.mockRejectedValue(new Error("ipc down"));
+    const restoreTabs = vi.fn(async (_ids: string[], _activeId: string | null) => 3);
+    const openNote = vi.fn(async (_id: string) => true);
+    await render({ restoreTabs, openNote });
+    await flush();
+    await waitFor(() => openNote.mock.calls.length > 0, "冷启动落点打开文档");
+    expect(restoreTabs).not.toHaveBeenCalled();
+    // 关键：unknown 时既不清（clearTabsOnExit=true 也不清）也不覆盖，用户原会话要留到下次正常启动
+    expect(localStorage.getItem(TAB_SESSION_KEY)).toBe(JSON.stringify({ ids: NOTES.map((note) => note.id), activeId: "n2" }));
+  });
+
+  it("P2-C：正常模式（inactive）+「退出时关闭全部标签」⇒ 原语义清档、不恢复", async () => {
+    settingsMock.current = { clearTabsOnExit: true, maxOpenTabs: 3 };
+    localStorage.setItem(TAB_SESSION_KEY, JSON.stringify({ ids: NOTES.map((note) => note.id), activeId: "n2" }));
+    const restoreTabs = vi.fn(async (_ids: string[], _activeId: string | null) => 3);
+    const openNote = vi.fn(async (_id: string) => true);
+    await render({ restoreTabs, openNote });
+    await flush();
+    await waitFor(() => openNote.mock.calls.length > 0, "冷启动落点打开文档");
+    expect(restoreTabs).not.toHaveBeenCalled();
+    expect(localStorage.getItem(TAB_SESSION_KEY)).toBeNull();
+  });
+
   it("未注入 restoreTabs 时保持旧行为：按截断后的顺序逐篇 openNote，再激活活动标签", async () => {
     const openNote = vi.fn(async (_id: string) => true);
     await render({ openNote });

@@ -8,6 +8,15 @@
 
 ## 0. 最新交接（261027）
 
+### 261105 · P2 优化批（5 路并行）：历史兜底分片 / 启动预检条件深检 / 安全模式 fail-closed / saveState 标签批量读 / 移动端 P2 · **已提交并双推**
+- **P2-A 历史兜底**：`runHistoryFallback` 改 async，stat 与快照两段每 12 篇 `setImmediate` 让出、单 tick 20s 预算（用尽记 deferred 下轮续）；失败按 10min×2^(n-1) 指数退避（封顶 24h、不推进 mtime、成功清零）；首轮按 `device_state.history_fallback_cursor` 每 tick 扫一页（200 篇）走完切回 mtime 选择；每轮清理已删文档账本行。24h 去重/引用保护/保留期不变。
+- **P2-B 启动与对账**：启动预检改**只读打开** + **条件深检**（`startup-health.json`：崩溃/上次非 clean ⇒ deep quick_check+FK，否则 light 只查关键表；正常退出才写 clean）；对账 `lastRunAt` 持久化（`file_reconcile_state`，跨重启 24h 生效）；对账唤醒按到期 sleep（不再每 60s 空转，1s–24h 夹取）；恢复页备份目录统一到 `backups/`；重建扫描 >32MiB 候选拒绝且不整篇读。
+- **P2-C 安全模式 fail-closed**：`useSafeModeStatus` 的 IPC 失败/异常形状保持 **unknown**（不再落 inactive）；`useBootstrap` 的 clear/restore 只在 inactive 执行（unknown/active 都不动会话、不恢复标签）；退出安全模式写盘/回读失败返回 `ok:false` 且不清 crash-marker，Banner 明说「退出未生效」。
+- **P2-D 移动端**：标签读取改「读全优先」（2000 篇/批，仅 >20000 截断且 UI 显示只读前 N/M）；同步记录账本单条多值 INSERT + 每轮只 prune 一次；`SyncConflictsSheet` 补 alive guard、`NoteInfoSheet` 加载占位；筛选 chips 补 `aria-pressed` + 44 命中盒；已处理记录返回 `already-resolved` 中性提示（不再谎称成功）。
+- **P2-E saveState**：新增可选 `listNoteTagVersions`（桌面/移动各一次全表读），按「存储版本 ≠ state 版本」才调 `applyNoteTagLinks`：2 万篇有标签文档从每轮 2 万次点查 → 1 次读 + 版本未变全部跳过；远端清空（空 tagIds+新版本）仍会清；端口缺失/读失败退化旧行为。
+- **门禁**：tsc 0；全量 vitest **687 文件（676 passed / 11 skipped）、4215 例（4203 passed / 12 skipped）**；core 140 文件 0 违规；ui-metrics / check:mobileui / `git diff --check` 通过。新增/更新用例 ~60 例。
+- **测试补充**：历史兜底分片/退避/游标/清理；条件深检（正常不跑 quick_check/异常才跑/只读不写）；对账跨重启冷却与到期 sleep；fail-closed 会话保持；移动端批量写、截断提示、a11y；批量版本命中不点查。
+
 ### 261105 · P1：文档标签（两端同步 + 标签空间）+ 同步记录账本（桌面/移动）+ 代码 review 收口 · **已提交并双推（Gitee + GitHub）**
 - **文档标签数据层**：`LakeNoteEntry.tagIds`（排序集合）+ `tagsUpdatedAt`（关系 LWW），lake 索引只加这两个字段；**目录仍只在小记标签库**（不新增目录协议），文档关系留主库 `tag_links(kind=note)`；删除/改名跨库协调 + 启动清理孤儿关系（桌面 `main.ts`、移动 `context.ts`）；移动端 `listNotesSyncMeta` 必须搬运字段（否则发布 lake 索引会清空标签）；小记→文档转换继承标签。
 - **桌面标签空间**（一级入口「标签」）：三栏只读聚合（目录 / 文档+小记分组 / 只读预览 + 跳转编辑），就地改名/合并/删除/排序；文档属性面板标签编辑行；侧栏按标签筛选（包含/排除，只收窄显示不改树）。
@@ -882,7 +891,7 @@
 - 261103 各批已全部提交并双推（20:08–20:21）：`ce442482`（usheet 35 行/双光标/整行整列）、`733ab4aa`（多维表头部+短名）、`2b29d9e8`（画板工具条+第 4 处补丁）、`75c46902`（ink 14 色）、`ae14ffd1`（胶囊/横滑/安全区/页签 44/useKeyboard）、`1f164f2b`（门禁装置+三份基线重烤）、`1e74c3f8`（文档）、`fdf9c455`（AI 默认关）。
 - 261103 之后（261104 凌晨，均已双推）：ink 三修（`912143da` 落笔/擦除按批渲染、`8f32a5ca` 中断不丢笔）+ 性能观测 `af169f96` + 图片页背景下采样 `8dc83a87` + 导入体积提示 `388232db` + 资源页本地占用 `1adcde27`。
 
-**门禁基线**（261105 P1 收口后）：tsc 0；全量 **684 文件（673 passed / 11 skipped）、4165 例（4153 passed / 12 skipped）**；core **140 文件 0 违规**；ui-metrics / check:mobileui / diff-check 通过；IPC 通道 **155**（parity 钉死）；移动 schema **v11**（sync_conflicts）。首屏桌面552175B/600000B、移动348137B/360000B；APK42197356B。窗口边界收尾追加tsc/4文件22例与Electron同事件0异常。手机/Pad各6态独立复采0差异；桌面/移动/Pad交互验证见§0最新批和`.css-audit/final-review/REVIEW.md`。当前预览9242/5588/5590；并行5584本轮未操作。
+**门禁基线**（261105 P1+P2 收口后）：tsc 0；全量 **687 文件（676 passed / 11 skipped）、4215 例（4203 passed / 12 skipped）**；core **140 文件 0 违规**；ui-metrics / check:mobileui / diff-check 通过；IPC 通道 **155**（parity 钉死）；移动 schema **v11**（sync_conflicts）。首屏桌面552175B/600000B、移动348137B/360000B；APK42197356B。窗口边界收尾追加tsc/4文件22例与Electron同事件0异常。手机/Pad各6态独立复采0差异；桌面/移动/Pad交互验证见§0最新批和`.css-audit/final-review/REVIEW.md`。当前预览9242/5588/5590；并行5584本轮未操作。
 
 **环境（本机实测 261104 追加，261105 更新）**：**GitHub 推送走 HTTPS**（SSH key 未在 GitHub 侧生效；keychain 里有 `gtycoder` 凭据）⇒ `git push https://github.com/gtycoder/lakex-local-notes.git <branch>` 可用；Gitee 仍 `origin` SSH 正常。**本机已把 `origin` 的第二 pushurl 改为该 HTTPS 地址** ⇒ `git push origin <branch>` 一次推两边。**261105 实测：本机到 GitHub 会偶发 HTTP2 framing / 443 连接超时**（Gitee 正常）；遇到时先 `git -c http.version=HTTP/1.1 push <url> <branch>` 重试，仍失败就只推 Gitee、恢复后补推。
 

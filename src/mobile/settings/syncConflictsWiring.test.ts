@@ -10,6 +10,7 @@ import { describe, expect, it } from "vitest";
 const read = (rel: string): string => readFileSync(path.join(process.cwd(), rel), "utf8");
 const DRAWER = read("src/mobile/settings/SettingsDrawer.tsx");
 const HOOK = read("src/mobile/settings/useSyncSettingsForm.ts");
+const BRIDGE = read("src/mobile/bridge/notes.ts");
 
 describe("设置页同步记录入口", () => {
   it("入口位于「上次同步」下方，并传未读数", () => {
@@ -36,5 +37,10 @@ describe("设置页同步记录入口", () => {
     expect(HOOK).toMatch(/await reloadSyncReports\(\);[\s\S]{0,120}await reloadConflicts\(\);/);
     // 自动同步（状态写入）也刷新
     expect(HOOK).toMatch(/subscribeSyncStatus\(\(\) => \{[\s\S]{0,120}reloadConflicts\(\)/);
+  });
+
+  it("P2-D：已处理记录不再返回 ok:true（语义显式化为 already-resolved）", () => {
+    expect(BRIDGE).toContain('reason: "already-resolved"');
+    expect(BRIDGE).not.toMatch(/if \(row\.resolvedAt\) return \{ ok: true/);
   });
 });

@@ -11,9 +11,14 @@ import {
   backupDatabaseForRecovery,
   buildRecoveryPageHtml,
   crashMarkerPath,
+  decideStartupCheckDepth,
   decideStartupRecovery,
   inspectDatabaseForStartup,
+  markStartupClean,
+  markStartupInProgress,
   parseRecoveryActionHash,
+  readStartupRunHealth,
+  startupHealthPath,
   readCrashMarker,
   removeCrashMarker,
   writeCrashMarker,
@@ -85,8 +90,8 @@ describe("启动前完整性预检（inspectDatabaseForStartup）", () => {
 });
 
 describe("启动决策（decideStartupRecovery）", () => {
-  const okIntegrity = { ok: true, detail: "完整性检查通过", quickCheck: "ok", foreignKeyErrors: 0 };
-  const badIntegrity = { ok: false, detail: "完整性检查未通过（quick_check=broken）", quickCheck: "broken", foreignKeyErrors: 2 };
+  const okIntegrity = { ok: true, detail: "完整性检查通过", quickCheck: "ok", foreignKeyErrors: 0, depth: "deep" as const };
+  const badIntegrity = { ok: false, detail: "完整性检查未通过（quick_check=broken）", quickCheck: "broken", foreignKeyErrors: 2, depth: "deep" as const };
   const marker = { time: "2026-11-05T00:00:00.000Z", reason: "Error: boom", stack: "at x", occurrences: 2 };
 
   it("未给输入/预检通过且无打开异常 ⇒ normal", () => {
@@ -121,7 +126,7 @@ describe("恢复页 HTML（buildRecoveryPageHtml）", () => {
     dataDir: "/tmp/userData",
     workspacePath: "/tmp/userData/workspace-default",
     logPath: "/tmp/userData/logs/lakex-local-notes.log",
-    backupDir: "/tmp/userData/backup",
+    backupDir: "/tmp/userData/backups",
     crashMarker: { time: "2026-11-05T00:00:00.000Z", reason: "Error: boom", stack: "at foo", occurrences: 3 },
   };
 
@@ -132,7 +137,7 @@ describe("恢复页 HTML（buildRecoveryPageHtml）", () => {
     expect(html).toContain("/tmp/userData");
     expect(html).toContain("/tmp/userData/logs/lakex-local-notes.log");
     expect(html).toContain("/tmp/userData/workspace-default");
-    expect(html).toContain("/tmp/userData/backup");
+    expect(html).toContain("/tmp/userData/backups");
     for (const action of ["backup", "cloud-restore", "restore-backup", "open-data", "quit"]) {
       expect(html).toContain(`data-action="${action}"`);
     }
@@ -197,7 +202,8 @@ describe("一次性备份（backupDatabaseForRecovery）", () => {
     const result = backupDatabaseForRecovery({ dbPath, userDataDir, now: new Date("2026-11-05T01:02:03.456Z") });
     expect(result.ok).toBe(true);
     expect(result.mode).toBe("vacuum");
-    expect(result.path).toBe(path.join(userDataDir, "backup", "metadata-2026-11-05T01-02-03-456Z.sqlite3"));
+    // P2-B：备份目录统一为 <userData>/backups/（与自动备份同口径）。
+    expect(result.path).toBe(path.join(userDataDir, "backups", "metadata-2026-11-05T01-02-03-456Z.sqlite3"));
     expect(fs.existsSync(result.path!)).toBe(true);
     const backupDb = new Database(result.path!);
     try { expect((backupDb.prepare("SELECT value FROM t WHERE id='a'").get() as { value: string }).value).toBe("hello"); }
@@ -264,5 +270,60 @@ describe("持久崩溃标记（crash-marker.json）", () => {
     const marker = writeCrashMarker(userDataDir, "plain string failure");
     expect(marker?.reason).toContain("plain string failure");
     expect(marker?.stack).toBe("");
+  });
+});
+
+describe("启动预检深度（P2-B：条件深检 / 只读打开）", () => {
+  const marker = { time: "2026-11-05T00:00:00.000Z", reason: "Error: boom", stack: "at x", occurrences: 1 };
+
+  it("decideStartupCheckDepth：上次 clean 且无崩溃标记 ⇒ light；脏退出/未知/有标记 ⇒ deep", () => {
+    expect(decideStartupCheckDepth({ previousRun: { lastRun: "clean", at: "t" } })).toBe("light");
+    expect(decideStartupCheckDepth({ previousRun: { lastRun: "dirty", at: "t" } })).toBe("deep");
+    expect(decideStartupCheckDepth({ previousRun: null })).toBe("deep");
+    expect(decideStartupCheckDepth({ previousRun: { lastRun: "clean", at: "t" }, crashMarker: marker })).toBe("deep");
+  });
+
+  it("轻量检查：只读打开 + 关键表存在，跳过全库 quick_check（depth=light）", () => {
+    const dir = tempDir();
+    const dbPath = path.join(dir, "metadata.sqlite3");
+    const db = new Database(dbPath);
+    try {
+      db.exec("CREATE TABLE notes(id TEXT PRIMARY KEY)");
+      db.exec("CREATE TABLE tree_nodes(id TEXT PRIMARY KEY)");
+      db.exec("CREATE TABLE settings(key TEXT PRIMARY KEY)");
+    } finally { db.close(); }
+    const before = fs.statSync(dbPath).mtimeMs;
+    const report = inspectDatabaseForStartup(dbPath, { deep: false });
+    expect(report).toMatchObject({ ok: true, depth: "light", quickCheck: "skipped", foreignKeyErrors: 0 });
+    expect(report.detail).toContain("关键表存在");
+    // 只读预检不得写文件（mtime 不变；没有新建 -wal）
+    expect(fs.statSync(dbPath).mtimeMs).toBe(before);
+    expect(fs.existsSync(dbPath + "-wal")).toBe(false);
+  });
+
+  it("轻量检查：关键表缺失 ⇒ 不通过（进恢复页）；深检默认行为保持不变", () => {
+    const dir = tempDir();
+    const dbPath = path.join(dir, "metadata.sqlite3");
+    const db = new Database(dbPath);
+    try { db.exec("CREATE TABLE unrelated(id TEXT PRIMARY KEY)"); } finally { db.close(); }
+    const light = inspectDatabaseForStartup(dbPath, { deep: false });
+    expect(light.ok).toBe(false);
+    expect(light.detail).toContain("关键表缺失");
+    const deep = inspectDatabaseForStartup(dbPath);
+    expect(deep.depth).toBe("deep");
+    expect(deep.quickCheck).toBe("ok"); // quick_check 本身通过（只是缺表由轻量判据抓）
+  });
+
+  it("运行状态标记：启动标 dirty、正常退出标 clean；缺失/损坏按未知（deep）", () => {
+    const userDataDir = tempDir();
+    expect(readStartupRunHealth(userDataDir)).toBeNull();
+    markStartupInProgress(userDataDir);
+    expect(readStartupRunHealth(userDataDir)).toMatchObject({ lastRun: "dirty" });
+    markStartupClean(userDataDir);
+    expect(readStartupRunHealth(userDataDir)).toMatchObject({ lastRun: "clean" });
+    expect(startupHealthPath(userDataDir)).toBe(path.join(userDataDir, "startup-health.json"));
+    // 损坏 = 未知
+    fs.writeFileSync(startupHealthPath(userDataDir), "{not json");
+    expect(readStartupRunHealth(userDataDir)).toBeNull();
   });
 });

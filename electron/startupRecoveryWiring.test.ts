@@ -50,6 +50,22 @@ describe("启动恢复接线（main.ts 静态锁）", () => {
     expect(main).toContain('message: "云端恢复准备失败："');
   });
 
+  it("P2-B：条件深检（启动标 dirty / 正常退出才写 clean）+ 备份目录统一 backups/", () => {
+    expect(main).toContain("decideStartupCheckDepth(");
+    expect(main).toContain("readStartupRunHealth(userDataDir)");
+    expect(main).toContain("markStartupInProgress(userDataDir)");
+    // 启动标脏必须先于预检（预检阶段崩溃 ⇒ 下次深检）
+    expect(main.indexOf("markStartupInProgress(userDataDir)")).toBeLessThan(main.indexOf("inspectDatabaseForStartup("));
+    expect(main).toContain('deep: startupCheckDepth === "deep"');
+    // 只有正常启动跑通后，退出时才写「上次 OK」
+    expect(main).toContain("markStartupClean(app.getPath(\"userData\"))");
+    const cleanAt = main.indexOf("markStartupClean(app.getPath(\"userData\"))");
+    expect(main.lastIndexOf("if (normalStartupCompleted)", cleanAt)).toBeGreaterThan(0);
+    // 恢复页展示目录与自动备份同一口径
+    expect(main).toContain('path.join(userDataDir, "backups")');
+    expect(main).not.toContain('path.join(userDataDir, "backup")');
+  });
+
   it("崩溃标记：uncaughtException 写、启动读并提示、正常启动后消费", () => {
     expect(main).toContain("writeCrashMarker(userDataDir, error)");
     expect(main).toContain("readCrashMarker(userDataDir)");

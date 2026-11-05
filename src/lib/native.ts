@@ -40,8 +40,13 @@ export interface SafeModeStateSnapshot {
   dataDir: string;
 }
 
-/** 退出安全模式：写 active:false + 清崩溃标记（下次启动正常）。 */
-export interface SafeModeExitResult { ok: true; state: { active: boolean; exitedAt?: string } }
+/**
+ * 退出安全模式：写 active:false + 清崩溃标记（下次启动正常）。
+ * **ok:false = 未生效**（写盘/回读失败）：状态仍保留，UI 必须明说并建议重启再试。
+ */
+export type SafeModeExitResult =
+  | { ok: true; state: { active: boolean; exitedAt?: string } }
+  | { ok: false; reason: string; state?: { active: boolean; exitedAt?: string } };
 
 /** 复制诊断：主进程直接把崩溃现场 + 环境写进剪贴板。 */
 export interface SafeModeDiagnosticsResult { ok: boolean; text: string }

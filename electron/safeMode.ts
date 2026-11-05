@@ -82,11 +82,30 @@ export function removeSafeModeState(userDataDir: string): void {
   try { fs.rmSync(safeModePath(userDataDir), { force: true }); } catch { /* 尽力删除 */ }
 }
 
-/** 用户显式退出安全模式：写 active:false + exitedAt（下次启动正常）。 */
-export function exitSafeModeState(userDataDir: string, now: Date = new Date()): SafeModeState {
+/** 退出安全模式的结果：失败必须能被 UI/调用方看见（P2-C：旧实现忽略写盘失败仍报成功）。 */
+export interface ExitSafeModeResult {
+  ok: boolean;
+  /** 本想写入/已写入的状态。**失败时不要据此认为已生效**（磁盘上还是旧状态）。 */
+  state: SafeModeState;
+  /** 失败原因（人类可读，供 UI 明说「未生效，请重启再试」）。 */
+  reason?: string;
+}
+
+/**
+ * 用户显式退出安全模式：写 active:false + exitedAt，并**回读校验**（下次启动才正常）。
+ * 写盘失败/回读不一致 ⇒ 返回 ok:false 且不改变其它任何东西（crash-marker 由调用方只在成功时清）。
+ */
+export function exitSafeModeState(userDataDir: string, now: Date = new Date()): ExitSafeModeResult {
   const next: SafeModeState = { active: false, exitedAt: now.toISOString() };
-  writeSafeModeState(userDataDir, next);
-  return next;
+  if (!writeSafeModeState(userDataDir, next)) {
+    return { ok: false, state: next, reason: "写入安全模式状态失败（磁盘只读/空间不足？）" };
+  }
+  // 回读确认：极端情况下（文件系统缓存/替换）写入"成功"但磁盘内容不对，不能报成功。
+  const readBack = readSafeModeState(userDataDir);
+  if (!readBack || readBack.active !== false) {
+    return { ok: false, state: next, reason: "安全模式状态回读校验失败" };
+  }
+  return { ok: true, state: next };
 }
 
 /** 标记里最近几次崩溃时间（兼容旧标记：没有 recentTimes 时只有 time 一条）。 */

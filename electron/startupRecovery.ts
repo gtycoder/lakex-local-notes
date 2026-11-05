@@ -31,23 +31,100 @@ export interface StartupIntegrity {
   ok: boolean;
   /** 用户/日志可读摘要（含 quick_check 结果与外键违反数）。 */
   detail: string;
-  /** quick_check 返回值（"ok" / 首个错误摘要 / "missing"）。 */
+  /** quick_check 返回值（"ok" / 首个错误摘要 / "missing" / "skipped"=轻量检查）。 */
   quickCheck: string;
   foreignKeyErrors: number;
+  /** 本次实际做了多深的检查：light = 只读打开 + 关键表存在；deep = quick_check + foreign_key_check。 */
+  depth: "light" | "deep";
+}
+
+const REQUIRED_STARTUP_TABLES = ["notes", "tree_nodes", "settings"] as const;
+
+/**
+ * 启动检查深度判定（纯函数）：
+ * - 有 crash-marker（上次进程崩过）或上次运行不是 clean（脏退出/未知）⇒ **deep**（全库 quick_check）；
+ * - 上次 clean 且无崩溃标记 ⇒ **light**（只读打开 + 关键表存在，跳过全库扫描）。
+ * 判据来源：上次运行状态落 `<userData>/startup-health.json`（正常退出/启动成功才写 clean）。
+ */
+export function decideStartupCheckDepth(input: {
+  crashMarker?: CrashMarker | null;
+  previousRun?: StartupRunHealth | null;
+}): "light" | "deep" {
+  if (input.crashMarker) return "deep";
+  return input.previousRun?.lastRun === "clean" ? "light" : "deep";
+}
+
+export interface StartupRunHealth {
+  /** clean = 上次启动成功且正常退出；dirty = 启动中/异常退出（下次深检）。 */
+  lastRun: "clean" | "dirty";
+  at: string;
+}
+
+export const STARTUP_HEALTH_FILE = "startup-health.json";
+
+export function startupHealthPath(userDataDir: string): string {
+  return path.join(userDataDir, STARTUP_HEALTH_FILE);
+}
+
+/** 读上次运行状态；缺失/损坏一律按未知（= 下次深检），绝不阻断启动。 */
+export function readStartupRunHealth(userDataDir: string): StartupRunHealth | null {
+  try {
+    const raw = JSON.parse(fs.readFileSync(startupHealthPath(userDataDir), "utf8")) as Partial<StartupRunHealth>;
+    if (raw?.lastRun !== "clean" && raw?.lastRun !== "dirty") return null;
+    return { lastRun: raw.lastRun, at: typeof raw.at === "string" ? raw.at : "" };
+  } catch {
+    return null;
+  }
+}
+
+function writeStartupRunHealth(userDataDir: string, lastRun: StartupRunHealth["lastRun"]): boolean {
+  try {
+    fs.mkdirSync(userDataDir, { recursive: true });
+    fs.writeFileSync(startupHealthPath(userDataDir), JSON.stringify({ lastRun, at: new Date().toISOString() }), "utf8");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** 启动开始即标脏：进程在启动/运行中崩溃 ⇒ 文件保持 dirty ⇒ 下次自动深检。 */
+export function markStartupInProgress(userDataDir: string): void {
+  writeStartupRunHealth(userDataDir, "dirty");
+}
+
+/** 启动成功（主窗口已建）或正常退出后标 clean：下次走轻量检查。 */
+export function markStartupClean(userDataDir: string): void {
+  writeStartupRunHealth(userDataDir, "clean");
 }
 
 /**
- * 启动前 DB 体检（**必须先于 Store 构造**）：只读 pragma，不建表不迁移。
+ * 启动前 DB 体检（**必须先于 Store 构造**）：**只读打开**，不建表不迁移、不写文件。
  * 文件不存在 = 全新安装（Store 会建库）⇒ 视为通过。
  * 打开/查询抛错一律视为不通过（恢复模式），绝不静默继续。
+ * `deep` 缺省 true（兼容旧调用/测试）；正常启动由 decideStartupCheckDepth 决定是否全库 quick_check。
  */
-export function inspectDatabaseForStartup(dbPath: string): StartupIntegrity {
+export function inspectDatabaseForStartup(dbPath: string, options: { deep?: boolean } = {}): StartupIntegrity {
+  const deep = options.deep !== false;
   if (!fs.existsSync(dbPath)) {
-    return { ok: true, detail: "数据库文件不存在（将按全新库创建）", quickCheck: "missing", foreignKeyErrors: 0 };
+    return { ok: true, detail: "数据库文件不存在（将按全新库创建）", quickCheck: "missing", foreignKeyErrors: 0, depth: deep ? "deep" : "light" };
   }
   let db: Database.Database | null = null;
   try {
-    db = new Database(dbPath);
+    // 只读打开：预检绝不能成为新的写入源（WAL 的 -shm 由 SQLite 只读打开时按需复用，不建表不迁移）。
+    db = new Database(dbPath, { readonly: true, fileMustExist: true });
+    if (!deep) {
+      const tables = new Set((db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as Array<{ name: string }>).map((row) => row.name));
+      const missing = REQUIRED_STARTUP_TABLES.filter((table) => !tables.has(table));
+      return {
+        ok: missing.length === 0,
+        quickCheck: "skipped",
+        foreignKeyErrors: 0,
+        depth: "light",
+        detail: missing.length === 0
+          ? "轻量检查通过（只读打开 + 关键表存在；上次正常退出，跳过全库 quick_check）"
+          : "轻量检查未通过（关键表缺失：" + missing.join("、") + "）",
+      };
+    }
     const rows = db.prepare("PRAGMA quick_check").all() as Array<{ quick_check?: string }>;
     const messages = rows.map((row) => row.quick_check ?? "").filter((message) => message.length > 0);
     const quickCheck = messages.length > 0 ? messages.join("; ") : "ok";
@@ -57,12 +134,13 @@ export function inspectDatabaseForStartup(dbPath: string): StartupIntegrity {
       ok,
       quickCheck,
       foreignKeyErrors,
+      depth: "deep",
       detail: ok
         ? "完整性检查通过（quick_check=ok，外键违反 0 处）"
         : `完整性检查未通过（quick_check=${quickCheck}，外键违反 ${foreignKeyErrors} 处）`,
     };
   } catch (error) {
-    return { ok: false, quickCheck: "error", foreignKeyErrors: 0, detail: "打开/校验数据库失败：" + describeError(error) };
+    return { ok: false, quickCheck: "error", foreignKeyErrors: 0, depth: deep ? "deep" : "light", detail: "打开/校验数据库失败：" + describeError(error) };
   } finally {
     try { db?.close(); } catch { /* 已关闭/从未打开 */ }
   }
@@ -219,7 +297,8 @@ export interface RecoveryBackupResult {
  * 原样拷贝——**两类结果都如实返回 message**，失败绝不静默。
  */
 export function backupDatabaseForRecovery(opts: { dbPath: string; userDataDir: string; now?: Date }): RecoveryBackupResult {
-  const backupDir = path.join(opts.userDataDir, "backup");
+  // 261105 P2-B：与自动备份同一目录口径（<userData>/backups/），恢复页展示的目录不再分叉。
+  const backupDir = path.join(opts.userDataDir, "backups");
   const stamp = (opts.now ?? new Date()).toISOString().replace(/[:.]/g, "-");
   const target = path.join(backupDir, `metadata-${stamp}.sqlite3`);
   if (!fs.existsSync(opts.dbPath)) {

@@ -47,9 +47,9 @@ export function NoteInfoSheet({ noteFileId, title, onClose, onOpenHistory }: Not
     setTagView(null);
     setTagError(null);
     void Promise.all([loadNoteTagIdsForNotes([noteFileId]), bridge.listQuickNoteTags()])
-      .then(([tagIdsByNote, directory]) => {
+      .then(([read, directory]) => {
         if (!alive) return;
-        setTagView(resolveDocTagChips(tagIdsByNote[noteFileId] ?? [], directory));
+        setTagView(resolveDocTagChips(read.byNoteId[noteFileId] ?? [], directory));
       })
       .catch((reason) => { if (alive) setTagError(getNativeErrorMessage(reason)); });
     return () => { alive = false; };
@@ -99,10 +99,12 @@ export function NoteInfoSheet({ noteFileId, title, onClose, onOpenHistory }: Not
             {rows.map(([k, v]) => (<div key={k}><dt>{k}</dt><dd>{v}</dd></div>))}
           </dl>
 
-          {/* 文档标签（261105 P1）：只读 chips；无标签不显示本区块；编辑入口不做（标签编辑回桌面版）。 */}
-          {(tagError !== null || (tagView !== null && tagView.chips.length > 0)) && (
-            <div className="minfo-section">
+          {/* 文档标签（261105 P1）：只读 chips；编辑入口不做（标签编辑回桌面版）。
+              P2-D：读取期间给加载态占位（否则 chips 出现时整块插入会把下方内容顶一下）。 */}
+          {noteFileId !== null && (tagError !== null || tagView === null || tagView.chips.length > 0) && (
+            <div className="minfo-section" aria-busy={tagView === null && tagError === null}>
               <div className="minfo-title"><Tag size={14} /><span>标签{tagView && tagView.chips.length > 0 ? " " + tagView.chips.length : ""}</span></div>
+              {tagView === null && tagError === null && <p className="minfo-empty">读取中…</p>}
               {tagView && tagView.chips.length > 0 && (
                 <div role="list" aria-label="文档标签（只读）">
                   {tagView.chips.map((tag) => (<span className="mb-tag" key={tag.id} role="listitem">{tag.name}</span>))}

@@ -45,6 +45,13 @@
 3. **同步记录账本**：只记「远端覆盖本地 / 他端删除（含 quick-purge）/ 保存时磁盘被改」；本机表 500 条/90 天；角标 + 列表 + 一键恢复（历史快照 → local-wins 重传）。
 4. **review 修复的失败面**：删光标签必须显式发布空集合（否则两端互刷）；发布条目标签按 LWW 合成；同版本集合 tie-break；`quick-purge` 记账；索引 `tagIds` 去重/上限 + `tagsUpdatedAt` 必须可解析；移动清理空目录保护；备份指纹含 `-wal`、新备份先 quick_check、恢复拷贝边车；重建拒绝 `deleted_notes` 墓碑；另存副本后原页载入磁盘版。
 
+## 3.3 261105 P2 批（性能与 fail-safe 收口）
+1. 历史兜底：async 分片（12 篇/让出、20s 预算、deferred 续跑）+ 失败指数退避（10min×2^n，封顶 24h，不推进 mtime）+ 首轮游标 + 清理已删文档账本行。
+2. 启动预检：只读打开 + `startup-health.json` 条件深检（崩溃/上次非 clean ⇒ quick_check+FK；正常退出写 clean）；对账 `lastRunAt` 持久化 + 按到期 sleep（1s–24h）；恢复页备份目录统一 `backups/`；重建 >32MiB 拒绝。
+3. 安全模式 fail-closed：IPC 失败/异常形状保持 unknown（不写会话、不恢复标签）；退出失败返回 ok:false 且不清 crash-marker。
+4. saveState 标签：批量版本读（一次全表）+ 版本未变跳过（2 万篇从 2 万次点查 → 1 次读）。
+5. 移动端：标签读全优先（>20000 才截断且 UI 提示）、同步记录账本批量 INSERT + 每轮 prune 一次、alive guard、加载占位、aria-pressed/44 命中盒、already-resolved 中性提示。
+
 ## 4. 已知缺口（261105 收口后的真待办）
 
 **已修（261105 Batch 2）**
@@ -64,8 +71,8 @@
 **仍待做（按优先级）**
 9. 恢复页 hash 通道需真机/打包冒烟；Kotlin 改动需 CI/真机编译验证。
 10. 正文突变保护限制：大小骤降分支未接线、合法 UTF-8 截断不拦、可疑篇每轮重复 warning/归档（建议按 (id,hash) 去重）。
-11. 安全模式副作用：`useSafeModeStatus` 的 IPC 失败按 inactive（fail-open）、`useBootstrap` 未知期仍可能先 clear 会话；视觉未实机走查。
-12. review 遗留（P2）：历史兜底仍在主线程同步跑（200 篇读+gzip 写）、移动 `loadNoteTagIdsForNotes` 静默截断 2000 篇、对账 `lastRunAt` 不持久、启动每次全库 `quick_check`、`saveState` 逐篇版本点查可批量。
+11. 安全模式视觉未实机走查（判据已 fail-closed，见 §3.3）。
+12. review 遗留（P2）——**261105 P2 批已全部修**：历史兜底分片 async + 失败指数退避 + 首轮游标 + 账本清理；启动预检只读 + 条件深检；对账 `lastRunAt` 持久化 + 按到期 sleep；恢复页备份目录统一 `backups/`；重建 >32MiB 拒绝；移动标签读全优先（截断可见）+ 账本批量写 + alive/a11y；`saveState` 批量版本读只对版本变化应用；安全模式 fail-closed（IPC 失败保持 unknown、退出失败不假装成功）。
 
 ## 5. 新增失败面时的检查清单
 
