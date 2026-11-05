@@ -35,6 +35,14 @@
 - **门禁完成**：tsc 0；全量 vitest 594 文件，3608 passed / 12 skipped（限 2 workers，未放宽断言/超时；前一高负载轮 contractSurface 的 5s 超时已定向复验通过）；ui-metrics / core / mobileui / 桌面+移动 build / bundle+arch / diff-check 通过。独立只读 AVD 副本 `lake_gate`（emulator-5586 / CDP 9360）上的手机 6 态、Pad 6 态、多维表 3 态按本批配色重烤后复验均 0 差异；三份基线只在本 worktree 更新。独立桌面 CDP 9242 + 隔离 userData 已复验浅/深/暖，桌面 3 屏导航成功、对比度无告警（装置仍报告既有隐藏 1×1 节点与长标题裁切）。
 - **验证限制**：广域移动走查两轮累计 16/23 屏可达，剩余 7 屏因 goHome/入口导航与 CDP 重连不稳定未完成，未做产品归因；移动几何补充探针仅拿到 28 元素启动占位，已标 inconclusive，不作为验收证据。尚未测物理机帧率，不声称绝对零性能差异。执行记录及设备级截图在 `.css-audit/ui-surface-polish/`；临时 AVD 副本与桌面实例已退出，日常实例未操作。
 
+### 261105 · 资源管理：删除入口不外露 + 未引用资源可点击预览 · **本地提交，未推送**
+- **用户点单**：资源管理页不要再在外部暴露删除，必须点了「查看」之后才能删。
+- **改动**：首页「未引用的本地文件」从「清理全部（n）」改为「查看（n）」；「云端未引用文件」从「清理云端」改为「查看」；两者进入新 `ResourceCleanupSheet`（mode=orphans / cloudGc）后才出现删除/清理按钮（云端清理仍保留二次确认）。缺正文/缺小记本来就是「查看」后处置，口径统一。
+- **新增/改动**：`src/mobile/settings/ResourceCleanupSheet.tsx`（0 新增 CSS：复用 `mb-sheet` / `mb-row` / `mb-btn` 原语）+ 渲染测试 5 例；`useSettingsSectionData` 导出 `OrphanAsset` 类型；`SettingsDrawer` 接线。
+- **门禁**：tsc 0 / 全量 vitest **601 文件 3677 例（3665 通过 + 12 skipped）** / ui-metrics 0 违规 / check:mobileui。
+- **点击预览（同日追加，用户点单「无论图片还是附件」）**：「未引用」行点击 = 预览。图片：`readAssetPreview`（≤32MB）→ 共享 `ImageLightbox`（**按需动态 import**，避免静态把 features/editor 拉进设置页懒 chunk 触发 kernelStyleBootstrap 误判）；非图片附件：`bridge.openAttachment` 交系统应用；图片读不到/文件缺失：回落到系统打开，仍失败则 toast 提示、不预览（缺失资源直接跳过）。行内删除按钮 `stopPropagation`，点删除不会误触预览；无预览回调时行不加 `role=button`。
+- **设备（lake_mobile / emulator-5584，重装 APK）**：资源管理首页删除类按钮 **0 个**；「未引用」查看（2）→ 点 320×200 PNG 行走 Lightbox（`naturalWidth/Height = 320/200`、`data:image/png`、工具栏 1/1 + 缩放/关闭）；1×1 测试图属正常「看不见」；附件路径复用既有 `openAttachment`（属性面板/多维表同款），**未设备专项验**。测试数据由**产品路径**造（临时文档上传资源 → 改标题保存触发 detectOrphans），保留供用户点验，验收后清（临时文档 + 2 个孤儿 + 缺正文/缺小记测试数据）。
+
 ### 261104 · 三项裁决定稿 + 落地（**本地提交，未推送**）
 - **① 表格语义（用户裁决 = A，长期）**：排序/冻结/单元格·行列保护 = **文档数据**；阅读态只读，排序/冻结回编辑态；**不补移动端保护行列入口**；读态筛选保持「只对本机生效、绝不写正文」的唯一例外。已回填 `AGENTS.md` §4 与 `LAKEX-CONTRACT.md` §5.47，**无代码改动**。
 - **② 移动端缺正文/缺小记（B-lite，文档 + 小记；已落地）**：探针（lake_mobile）结论：文档缺正文**原本就不打开**（已比只读更严，toast 提示），小记**原本完全静默**（已修）。实现：`src/mobile/data/missingBodies.ts`（只 stat、分批 200、判据复用 `core/missingBody`、hasSyncBase 读 v3 baseline）+ bridge 单篇云端拉回（pointer→索引→lakeBodyKey→**sha256 校验**→写正文，**不调整库 restoreFromCloud**）/ 历史恢复（复用 restoreHistory）/ 搜索缓存重建纯文本（标 local）/ 彻底删除；设置→资源管理「缺正文」「缺小记」两行（非空才显示）+ Sheet（常驻结果行、`confirmMobile` 二次确认）；同步警告「正文缺失」行改「去恢复」；打开提示统一文案、每篇每会话一次。**0 新增 CSS**。
@@ -738,7 +746,7 @@
 - 261103 各批已全部提交并双推（20:08–20:21）：`ce442482`（usheet 35 行/双光标/整行整列）、`733ab4aa`（多维表头部+短名）、`2b29d9e8`（画板工具条+第 4 处补丁）、`75c46902`（ink 14 色）、`ae14ffd1`（胶囊/横滑/安全区/页签 44/useKeyboard）、`1f164f2b`（门禁装置+三份基线重烤）、`1e74c3f8`（文档）、`fdf9c455`（AI 默认关）。
 - 261103 之后（261104 凌晨，均已双推）：ink 三修（`912143da` 落笔/擦除按批渲染、`8f32a5ca` 中断不丢笔）+ 性能观测 `af169f96` + 图片页背景下采样 `8dc83a87` + 导入体积提示 `388232db` + 资源页本地占用 `1adcde27`。
 
-**门禁基线**（261104 20:57 主工作树实测，含本批 ①②③）：tsc 0 / 全量 vitest **600 文件 3672 例（3660 通过 + 12 skipped；另有 11 个 integration 文件 skipped）** / ui-metrics 0 违规 / `check:core` 137 文件 0 / `check:mobileui` / 双 build / `check:bundle`（mobile-entry-preload 24/30、mobile-js 54,481/61,440、mobile-css 137,925/141,312）/ `check:arch`（移动首屏 343.9KB/360KB；桌面 541.3KB/600KB；import 违规 0）/ `git diff --check` 0。**移动 6 态快照 0 差异**（lake_gate，重烤后 `mobile-snap.json` 与提交版 0 改动）。**APK 已重装**（lake_mobile emulator-5554，debug，40,164,026B）。设备：本批面板/签名/单元格图片/表单视图/缺正文场景已逐条实测（见 §0）；23 屏走查与平板本次未跑（改动不涉及外壳几何，`check:windowsweep` 未跑）。
+**门禁基线**（261105 09:48 主工作树实测，含本批 ①②③ + 资源管理 UI 收口/预览）：tsc 0 / 全量 vitest **601 文件 3679 例（3667 通过 + 12 skipped；另有 11 个 integration 文件 skipped）** / ui-metrics 0 违规 / `check:core` 137 文件 0 / `check:mobileui` / 双 build / `check:bundle`（mobile-entry-preload 24/30、mobile-js 54,481/61,440、mobile-css 137,925/141,312）/ `check:arch`（移动首屏 343.9KB/360KB；桌面 541.3KB/600KB；import 违规 0）/ `git diff --check` 0。**移动 6 态快照 0 差异**（lake_gate，重烤后 `mobile-snap.json` 与提交版 0 改动）。**APK 已重装**（lake_mobile emulator-5554，debug，40,164,026B）。设备：本批面板/签名/单元格图片/表单视图/缺正文场景已逐条实测（见 §0）；23 屏走查与平板本次未跑（改动不涉及外壳几何，`check:windowsweep` 未跑）。
 
 **环境（本机实测 261104 追加）**：**GitHub 推送走 HTTPS**（本机 `~/.ssh/id_ed25519_personal` 未在 GitHub 侧生效，SSH 报 `Permission denied (publickey)`；keychain 里有 `gtycoder` 凭据）⇒ `git push https://github.com/gtycoder/lakex-local-notes.git <branch>` 可用；Gitee 仍 `origin` SSH 正常。**本机已把 `origin` 的第二 pushurl 改为该 HTTPS 地址**（`git config --add remote.origin.pushurl …`）⇒ `git push origin <branch>` 一次推两边且 exit 0；`npm run setup:remotes` 会把 GitHub 写回 SSH，若再报 publickey 按上法改回 HTTPS。
 
@@ -762,7 +770,7 @@
 
 **P0（不做就卡住主线）**
 
-1. **发 v0.0.3**（**合 master 已于 261104 完成**，master 与 feat/pad-touch-ui 同一 HEAD）：发版前跑全量门禁（手机/平板 6 态 + 多维表 3 态 + 23 屏走查 + `check:windowsweep` + 桌面 42 态；桌面 42 态本机无合成夹具缓存，需有夹具的机器补）。发版流程见 `docs/RELEASE.md`，tag 规则见 AGENTS §4（版本号单一来源 = `package.json`）。**发布说明必须写清 inkDoc v4：旧端打开 v4 文档只读，手机/平板需重装新包**。
+1. **发 v0.0.3**（**master 落后 `feat/pad-touch-ui` 6 个提交（261104/261105 本批），发版前先合 master**）：发版前跑全量门禁（手机/平板 6 态 + 多维表 3 态 + 23 屏走查 + `check:windowsweep` + 桌面 42 态；桌面 42 态本机无合成夹具缓存，需有夹具的机器补）。发版流程见 `docs/RELEASE.md`，tag 规则见 AGENTS §4（版本号单一来源 = `package.json`）。**发布说明必须写清 inkDoc v4：旧端打开 v4 文档只读，手机/平板需重装新包**。
 2. **每批收尾的固定动作**：更新 §1 基线/门禁计数 + §3 待办 + 批次抬头状态（本批 261103 已完成对账；**以后不要让 §0 的「未提交」标记再漂移**——提交后立刻回写）。
 
 **P1（该做但可排期）**
@@ -771,7 +779,7 @@
 
    **平板（lake_tab）实机复验页签/页面面板**：代码无形态分支（`formFactor` 只改外壳宽度与侧栏），Android 手机已实测；平板 AVD 本轮未启动 ⇒ 需要时 `bash scripts/emu-up.sh lake_tab` 装同一份 APK 复核一次。
 4. **依赖补丁 4 处升级复核口径**（仅当升级对应依赖时）：见 §2。
-5. **已裁决、已落地（261104，别再问）**：① 表格语义 = 读态只读 + 排序/冻结/保护属文档数据（不补移动端保护入口）；② 移动端缺正文/缺小记 = B-lite（文档+小记，已落地）；③ 表格面板 = 删无能力占位、接线单元格图片/手写签名/表单视图（已落地）。残余验证：**缺正文云端拉回需在配了 S3 的实例上真机走一遍**（目前仅单测 mock）；**表单视图大表行数帽**（一次性 `getValues`，默认 35 行，超大表若卡再加）。
+5. **已裁决、已落地（261104，别再问）**：① 表格语义 = 读态只读 + 排序/冻结/保护属文档数据（不补移动端保护入口）；② 移动端缺正文/缺小记 = B-lite（文档+小记，已落地）；③ 表格面板 = 删无能力占位、接线单元格图片/手写签名/表单视图（已落地）。残余验证：**缺正文云端拉回需在配了 S3 的实例上真机走一遍**（目前仅单测 mock）；**表单视图大表行数帽**（一次性 `getValues`，默认 35 行，超大表若卡再加）；**261105 资源管理两处 UI 改动未重跑 6 态快照 + 23 屏走查**（只在设置子页，预期 0 差异，下一批或发版前一并跑）；**资源「附件」系统打开未设备专项验**（需真实附件 + 系统应用；图片 Lightbox 已验）。
 
 **P2（体验缺口 / 长期）**
 
