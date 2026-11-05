@@ -141,6 +141,9 @@ describe("useBootstrap 标签会话恢复（DT-15）", () => {
     await waitFor(() => openNote.mock.calls.length > 0, "冷启动落点打开文档");
     expect(restoreTabs).not.toHaveBeenCalled();
     expect(openNote.mock.calls.map((call) => call[0])).not.toContain("n8");
+    // Batch4-D：安全模式「读」这一步也不得动会话文件——原会话要留到下次正常启动恢复
+    //（写入门在 useTabSessionPersistence；见 useTabSessionPersistence.render.test.tsx）。
+    expect(localStorage.getItem(TAB_SESSION_KEY)).toBe(JSON.stringify({ ids: NOTES.map((note) => note.id), activeId: "n2" }));
   });
 
   it("未注入 restoreTabs 时保持旧行为：按截断后的顺序逐篇 openNote，再激活活动标签", async () => {

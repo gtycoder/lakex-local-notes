@@ -91,8 +91,9 @@ describe("IPC 通道三方一致性（C2-2）", () => {
     // → 135（261028 删 manifest v2 死代码：list_s3_gc_pending / s3_gc_pending 链路）。
     // → 138（261104 手写板单页导出：read_ink_page_svg / export_ink_page_svg / save_ink_page_png）。
     // → 141（261105 Batch3-B 安全模式：get_safe_mode_state / exit_safe_mode / copy_safe_mode_diagnostics）。
-    expect(registrarChannels().size, "通道数变了 ⇒ 请确认是有意的并在 commit 里说明").toBe(141);
-    expect(preloadChannels().size).toBe(141);
-    expect(Object.keys(WEB_METHODS).length).toBe(141);
+    // → 143（261105 Batch4-A 从备份恢复：pick_backup_database / restore_workspace_from_backup）。
+    expect(registrarChannels().size, "通道数变了 ⇒ 请确认是有意的并在 commit 里说明").toBe(143);
+    expect(preloadChannels().size).toBe(143);
+    expect(Object.keys(WEB_METHODS).length).toBe(143);
   });
 });

@@ -19,6 +19,8 @@ export interface DiagnosticsContext {
   /** 某笔记的资产目录（note-assets/{noteId}）绝对路径 */
   noteAssetsDirFor: (noteId: string) => string;
   logScopes: LoggerScopes;
+  /** Batch4-B：最近一次「文件↔元数据对账」报告（只读缓存；后台节流任务产出）。 */
+  getFileReconcileReport?: () => unknown;
 }
 
 /**
@@ -119,6 +121,8 @@ export class Diagnostics {
     refsChecked: number;
     refsMissingResource: Array<{ noteId: string; filename: string }>;
     checkedAt: string;
+    /** Batch4-B：最近一次文件↔元数据对账报告（未跑过 = null；只报告，不含自动修复）。 */
+    fileReconcile: unknown;
   } {
     const checkedAt = new Date().toISOString();
     const notesMissingFile: Array<{ id: string; title: string }> = [];
@@ -206,6 +210,7 @@ export class Diagnostics {
       refsChecked: refsChecked.length,
       refsMissingResource,
       checkedAt,
+      fileReconcile: this.ctx.getFileReconcileReport?.() ?? null,
     };
   }
 

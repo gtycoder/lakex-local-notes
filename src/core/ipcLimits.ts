@@ -100,6 +100,7 @@ export function clampHistorySettings(settings: unknown): HistorySettingsInput | 
     maxSnapshots: clamp(s.maxSnapshots, 100, 1, MAX_HISTORY_SNAPSHOTS),
     retentionDays: clamp(s.retentionDays, 30, 1, MAX_HISTORY_RETENTION_DAYS),
     cleanupIntervalHours: clamp(s.cleanupIntervalHours, 24, 0, MAX_INTERVAL_HOURS),
-    snapshotIntervalMinutes: clamp(s.snapshotIntervalMinutes, 15, 0, MAX_INTERVAL_MINUTES),
+    // 默认 10 分钟 = HistorySettings 的兜底快照默认值（Batch4-C）；0 合法（关闭）。
+    snapshotIntervalMinutes: clamp(s.snapshotIntervalMinutes, 10, 0, MAX_INTERVAL_MINUTES),
   };
 }

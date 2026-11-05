@@ -1281,7 +1281,8 @@ describe("文档历史（快照，纯本地）", () => {
 
   it("P5：HistorySettings 读写 + cleanupHistory 用配置 + getHistoryStats", () => {
     // 默认值
-    expect(store.getHistorySettings()).toEqual({ maxSnapshots: 100, retentionDays: 30, cleanupIntervalHours: 24, snapshotIntervalMinutes: 15 });
+    // Batch4-C：兜底快照默认 10 分钟（原 15）。
+    expect(store.getHistorySettings()).toEqual({ maxSnapshots: 100, retentionDays: 30, cleanupIntervalHours: 24, snapshotIntervalMinutes: 10 });
     // 保存自定义
     store.saveHistorySettings({ maxSnapshots: 3, retentionDays: 365, cleanupIntervalHours: 0, snapshotIntervalMinutes: 30 });
     expect(store.getHistorySettings()).toEqual({ maxSnapshots: 3, retentionDays: 365, cleanupIntervalHours: 0, snapshotIntervalMinutes: 30 });

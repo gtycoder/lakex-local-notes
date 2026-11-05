@@ -1,5 +1,11 @@
 # 踩过的坑（按主题整理，修改前必读）
 
+## N. 容错与自愈（261105 起）
+
+崩溃/坏数据/坏库/异常操作的**判据、降级与取证**统一见 `docs/RESILIENCE.md`（六原则、能力表、故障模式矩阵、思源借鉴清单、验证债）。
+常见现象对照：开机卡在启动画面 → 启动预检进恢复页（备份后重试 / 从云端恢复 / 从备份恢复）；小记报「小记库不可用」→ 无小记降级模式；顶部「安全模式」提示 → 连续崩溃后自动关闭自动同步与标签恢复，点「退出安全模式」后下次正常启动。
+
+
 ## A. 打包与发布（electron-builder）
 
 1. **preload 必须纯 JS，绝不能混 TS 语法**：曾把 `: (progress: unknown) => void` 类型注解写进 `electron/preload.cjs` → 开发/打包全部 `SyntaxError: Unexpected token ':'`（以 sandbox_bundle 或 makeContextifyScript 两种面目出现，曾误判为沙箱/asar 冲突）。**preload.cjs 里禁止任何 TS 语法。**

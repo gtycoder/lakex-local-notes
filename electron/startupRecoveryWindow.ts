@@ -26,6 +26,8 @@ export interface RecoveryActions {
   backupAndRetry(): Promise<RecoveryActionResult>;
   /** 复用 A2 prepareCloudRestore：隔离旧 workspace → 空库重启（重启后需重新配置云同步）。 */
   cloudRestore(): Promise<RecoveryActionResult>;
+  /** Batch4-A：选择 metadata*.sqlite3 整库备份 → 校验 → 隔离当前库 → 替换 → 重启生效。 */
+  restoreFromBackup(): Promise<RecoveryActionResult>;
   /** 用系统文件管理器打开 userData。 */
   openDataFolder(): Promise<RecoveryActionResult>;
   /** relaunch + exit（窗口模块在展示结果后调用）。 */
@@ -75,7 +77,9 @@ export function showRecoveryWindow(info: RecoveryPageInfo, actions: RecoveryActi
         ? await actions.backupAndRetry()
         : action === "cloud-restore"
           ? await actions.cloudRestore()
-          : await actions.openDataFolder();
+          : action === "restore-backup"
+            ? await actions.restoreFromBackup()
+            : await actions.openDataFolder();
       postStatus({ ok: result.ok, message: result.message });
       if (result.ok && result.restart) {
         exiting = true;

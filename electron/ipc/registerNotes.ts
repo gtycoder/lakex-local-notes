@@ -21,6 +21,7 @@ import { toUint8Array } from "./bytes.js";
 import { ensureTrashNoteAssets } from "../syncEngineController.js";
 import { prepareAttachmentOpen } from "../attachmentOpen.js";
 import { exportWorkspaceBackup, prepareCloudRestore, relaunchApp, writeS3RestoreSeed } from "../workspaceBackup.js";
+import { isRememberedRestoreCandidate, rememberRestoreCandidate, restoreMainDatabaseFromBackup } from "../workspaceRestoreFromBackup.js";
 
 /** 多维表 CSV 导入文件大小上限（本地优先、量级有限，防一次性读入超大文件）。 */
 const MAX_CSV_IMPORT_BYTES = 20 * 1024 * 1024;
@@ -199,6 +200,38 @@ export function registerNotesIpc(
   ipc.handle("confirm_relaunch", () => {
     relaunchApp();
     return true;
+  });
+  // ---- Batch4-A 从备份导入恢复：选择框在主进程登记候选，IPC 只接受登记过的路径（防目录穿越/任意路径）----
+  ipc.handle("pick_backup_database", async () => {
+    const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
+    const result = await dialog.showOpenDialog(win, {
+      title: "选择整库备份（metadata*.sqlite3）",
+      buttonLabel: "选择备份",
+      properties: ["openFile"],
+      filters: [{ name: "SQLite 备份", extensions: ["sqlite3"] }],
+    });
+    if (result.canceled || !result.filePaths[0]) return null;
+    const filePath = result.filePaths[0];
+    if (!rememberRestoreCandidate(filePath)) {
+      throw new IpcInputError("备份文件无效：仅支持应用「整库备份/导出」产生的 metadata*.sqlite3 文件");
+    }
+    return { path: filePath, name: path.basename(filePath) };
+  });
+  ipc.handle("restore_workspace_from_backup", (backupPath: string) => {
+    if (!isRememberedRestoreCandidate(backupPath)) {
+      throw new IpcInputError("备份文件无效：请先通过系统选择框选择备份文件");
+    }
+    const result = restoreMainDatabaseFromBackup({
+      backupPath,
+      currentDbPath: path.join(workspaceRoot, "metadata.sqlite3"),
+      userDataDir: app.getPath("userData"),
+    });
+    if (!result.ok) {
+      store.logScopes.store.error("[restore-backup] 失败 " + (result.reason ?? "") + (result.rolledBack ? "（已回滚）" : ""));
+      throw new IpcInputError("从备份恢复失败：" + (result.message ?? result.reason ?? "未知原因"));
+    }
+    store.logScopes.store.info("[restore-backup] 成功，原库隔离到 " + result.quarantinePath);
+    return { ok: true as const, quarantinePath: result.quarantinePath, message: result.message, requiresRestart: true as const };
   });
   ipc.handle("set_node_icon", (id: string, icon: unknown) => store.setNodeIcon(id, assertIcon(icon)));
   ipc.handle("search_notes", (query: unknown, limit?: unknown) => {

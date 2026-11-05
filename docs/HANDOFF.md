@@ -8,6 +8,14 @@
 
 ## 0. 最新交接（261027）
 
+### 261105 · 容错批 4（Batch 4）：备份导入恢复 / 文件↔元数据对账 / 兜底历史 / 安全模式会话门 · **本地改动（待提交）**
+- **从备份恢复**：新增 `electron/workspaceRestoreFromBackup.ts`（路径白名单 + 选择框登记制 + `quick_check`/关键表/外键校验 → 原库隔离到 `corrupt/restore-<ts>/` → tmp+rename 落位 → 落位后再校验；任一阶段失败回滚原库）；恢复页第 5 个动作 + 设置页「数据与存储→备份与恢复」入口；IPC 三方同步（通道数 141→143）、settingsSearch 登记。9 例测试（含复制失败回滚、路径穿越拒绝）。
+- **文件↔元数据对账（只报告版）**：新增 `electron/fileMetadataReconcile.ts`（默认关闭，`LAKE_FILE_RECONCILE=1`）：节流 = enabled→TryLock→同步完成打点→dirty→空闲≥5min→冷却≥30min→进队列后二次判空闲；只 readdir+stat、不读正文/不写库；报告经 `runDataHealthCheck().fileReconcile` 暴露，**Lead 补了 `src/lib/types.ts` 类型与设置页「一致性检查」展示行**。25 例测试（含 2 万行/300 候选 <5s、与维护队列串行）。
+- **定时兜底历史快照**：原定时器只覆盖内存脏集合（重启即丢）⇒ 改 `history_fallback_state` 持久账本 + 正文 mtime 判据（`core/historyFallbackPolicy.ts`），复用 24h 去重/引用保护/保留期；单飞、启动不立即跑、0=关闭，默认 15→10 分钟。18 例测试。
+- **安全模式不覆盖会话**：新增 `src/hooks/useSafeModeStatus.ts`（unknown/active ⇒ skip，唯一判据）+ `useTabSessionPersistence.ts`（App 唯一会话写点）；App 删掉内联写逻辑。12 例测试（含「预置会话在安全模式下逐字节不变」回归）。
+- **门禁**：tsc 0；全量 vitest **642 文件 / 3977 passed / 12 skipped**；core 139 文件 0 违规；ui-metrics 通过；`git diff --check` 干净。`docs/RESILIENCE.md` 新增 §6 故障矩阵 / §7 思源借鉴清单 / §8 验证债。
+- **遗留**：对账报告已在体检返回里但 UI 展示由 Lead 补；移动端对账/兜底历史未做（两端默认值待统一）；对账 dirty 目前只由同步完成置位（保存/导入打点可补）；验证债见 RESILIENCE §8。
+
 ### 261105 · 容错批 3（Batch 3）：quick-notes 降级 / 安全模式 / 写入卫生 · **本地改动（待提交）**
 - **quick-notes 库损坏不再卡 splash**：新增 `electron/quickNotesAvailability.ts`（ok|degraded 纯判定 + 可读告警 + 同步前置断言 + 诊断报告）；`QuickNotesStore` 构造 try/catch，失败用 **Proxy 降级替身**（读安全空值、写/单条读抛 `AppError`、await 不挂起）；降级分支不注册 v3、不跑 recoverConversions；自动/退出同步早退，手动同步与「保存并同步」当场给可读错误 + 「先备份→设置→从云端恢复」指引。15 例测试。
 - **崩溃标记 → 安全模式**：`electron/safeMode.ts`（occurrences≥2 或 30 分钟内 2 次；`safe-mode.json` 设备本地，损坏不二次失败；进入不清 marker，显式退出才清）；三处跳过自动同步、渲染层跳过内核预取与标签恢复；`SafeModeBanner` 顶部提示 + 复制诊断 + 退出安全模式。19 例测试。

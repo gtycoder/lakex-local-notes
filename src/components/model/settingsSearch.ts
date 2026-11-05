@@ -61,6 +61,7 @@ export const SETTING_ITEMS: SettingItemEntry[] = [
   { id: "sync-defer-assets", category: "sync", label: "按需下载附件", keywords: "按需 附件 图片 下载 流量 首拉 懒加载 媒体" },
   { id: "backup-export", category: "sync", label: "整库备份", keywords: "备份 整库 导出 目录" },
   { id: "backup-restore", category: "sync", label: "从云端恢复", keywords: "恢复 换机 坏库 云端恢复 隔离" },
+  { id: "backup-import", category: "sync", label: "从备份恢复", keywords: "备份 导入 恢复 整库 隔离 metadata sqlite 快照 回滚" },
   { id: "s3-endpoint", category: "sync", label: "Endpoint", keywords: "endpoint 接入点 地址 七牛 qiniu" },
   { id: "s3-access-key", category: "sync", label: "Access Key", keywords: "access key ak 密钥" },
   { id: "s3-secret-key", category: "sync", label: "Secret Key", keywords: "secret key sk 密钥 加密" },

@@ -113,6 +113,13 @@ export class SchemaInit {
         protected_until TEXT
       );
       CREATE INDEX IF NOT EXISTS idx_note_history_note ON note_history(note_id, created_at DESC);
+      -- Batch4-C：定时兜底快照的**持久账本**（设备本地，不进 git/不同步）。
+      -- last_body_mtime_ms = 上次兜底时看到的正文 mtime ⇒ 下一轮只挑比它新的文档（重启不丢）。
+      CREATE TABLE IF NOT EXISTS history_fallback_state (
+        note_id TEXT PRIMARY KEY,
+        last_body_mtime_ms INTEGER NOT NULL,
+        last_attempt_at TEXT NOT NULL
+      );
       -- S3 GC：删除审计日志（v3 深清理真实写入；manifest 时代的 s3_gc_pending 待回收表已删）
       CREATE TABLE IF NOT EXISTS s3_gc_log (
         id INTEGER PRIMARY KEY AUTOINCREMENT,

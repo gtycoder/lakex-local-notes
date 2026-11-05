@@ -125,7 +125,7 @@ describe("恢复页 HTML（buildRecoveryPageHtml）", () => {
     crashMarker: { time: "2026-11-05T00:00:00.000Z", reason: "Error: boom", stack: "at foo", occurrences: 3 },
   };
 
-  it("展示原因/细节/数据目录/日志路径，并给出四个动作按钮", () => {
+  it("展示原因/细节/数据目录/日志路径，并给出五个动作按钮（含从备份恢复）", () => {
     const html = buildRecoveryPageHtml(info);
     expect(html).toContain("本地数据库完整性检查未通过");
     expect(html).toContain("quick_check=broken");
@@ -133,13 +133,17 @@ describe("恢复页 HTML（buildRecoveryPageHtml）", () => {
     expect(html).toContain("/tmp/userData/logs/lakex-local-notes.log");
     expect(html).toContain("/tmp/userData/workspace-default");
     expect(html).toContain("/tmp/userData/backup");
-    for (const action of ["backup", "cloud-restore", "open-data", "quit"]) {
+    for (const action of ["backup", "cloud-restore", "restore-backup", "open-data", "quit"]) {
       expect(html).toContain(`data-action="${action}"`);
     }
     expect(html).toContain("先备份后继续");
     expect(html).toContain("从云端恢复（换机/坏库）");
+    expect(html).toContain("从备份恢复…");
     expect(html).toContain("打开数据目录");
     expect(html).toContain("退出");
+    // 说明文案要讲清「先校验再隔离替换、原库不删除、重启生效」。
+    expect(html).toContain("metadata*.sqlite3");
+    expect(html).toContain("原库不删除");
   });
 
   it("有崩溃标记时展示 time/reason/occurrences；无标记时不出现崩溃区块", () => {
@@ -170,9 +174,10 @@ describe("恢复页 HTML（buildRecoveryPageHtml）", () => {
 });
 
 describe("恢复页动作解析（parseRecoveryActionHash）", () => {
-  it("解析四种动作，允许附加 nonce（重复点击）", () => {
+  it("解析五种动作，允许附加 nonce（重复点击）", () => {
     expect(parseRecoveryActionHash("#action=backup")).toBe("backup");
     expect(parseRecoveryActionHash("#action=cloud-restore&t=1720000000")).toBe("cloud-restore");
+    expect(parseRecoveryActionHash("#action=restore-backup&t=1720000001")).toBe("restore-backup");
     expect(parseRecoveryActionHash("#action=open-data&t=1")).toBe("open-data");
     expect(parseRecoveryActionHash("#action=quit")).toBe("quit");
   });

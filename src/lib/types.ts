@@ -158,7 +158,34 @@ export interface SyncResult {
 }
 
 /** A3 数据体检（只读诊断）报告：检查本地数据自洽性，不自动修复。 */
+/** Batch4-B：文件↔元数据对账候选（文件在、笔记行丢了；只报告，不自动重建）。 */
+export interface FileReconcileCandidateShape {
+  noteId: string;
+  kind: string;
+  relativePath: string;
+  sizeBytes: number;
+  mtimeMs: number;
+}
+
+/** Batch4-B：文件↔元数据对账报告（默认关闭，LAKE_FILE_RECONCILE=1 才跑）。 */
+export interface FileReconcileReportShape {
+  generatedAt: string;
+  durationMs: number;
+  enabled: boolean;
+  trigger: "sync-idle" | "manual-report";
+  knownRows: number;
+  scannedFiles: number;
+  ignoredFiles: number;
+  scanErrors: number;
+  candidates: FileReconcileCandidateShape[];
+  candidateCount: number;
+  truncated: boolean;
+  missingBodyDirs: string[];
+}
+
 export interface DataHealthReport {
+  /** 最近一次文件↔元数据对账（未跑过/未启用 = null；只报告）。 */
+  fileReconcile?: FileReconcileReportShape | null;
   notesChecked: number;
   notesMissingFile: Array<{ id: string; title: string }>;
   notesHashMismatch: Array<{ id: string; title: string }>;

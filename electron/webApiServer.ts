@@ -68,6 +68,8 @@ export const WEB_METHODS: Record<string, string> = {
   runWorkspaceBackup: "run_workspace_backup",
   prepareCloudRestore: "prepare_cloud_restore",
   confirmRelaunch: "confirm_relaunch",
+  pickBackupDatabase: "pick_backup_database",
+  restoreWorkspaceFromBackup: "restore_workspace_from_backup",
   setNodeIcon: "set_node_icon",
   searchNotes: "search_notes",
   rebuildSearchIndex: "rebuild_search_index",

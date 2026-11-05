@@ -29,15 +29,19 @@ describe("启动恢复接线（main.ts 静态锁）", () => {
     expect(main).not.toContain("继续打开可能导致后续写入风险");
   });
 
-  it("恢复模式动作齐全：备份后重试 / 云端恢复 / 打开数据目录 / 重开 / 退出", () => {
+  it("恢复模式动作齐全：备份后重试 / 云端恢复 / 从备份恢复 / 打开数据目录 / 重开 / 退出", () => {
     expect(main).toContain("backupDatabaseForRecovery(");
     expect(main).toContain("prepareCloudRestore(");
+    expect(main).toContain("restoreMainDatabaseFromBackup(");
+    expect(main).toContain("rememberRestoreCandidate(");
     expect(main).toContain("shell.openPath(userDataDir)");
-    for (const hook of ["backupAndRetry()", "cloudRestore()", "openDataFolder()", "restart()", "quit()"]) {
+    for (const hook of ["backupAndRetry()", "cloudRestore()", "restoreFromBackup()", "openDataFolder()", "restart()", "quit()"]) {
       expect(main).toContain(hook);
     }
     // 成功路径必须重启进正常启动（relaunch 而不是原地继续半初始化状态）。
     expect(main).toContain("app.relaunch();");
+    // 恢复页动作通道必须能解析新按钮（同文档 hash）。
+    expect(recoveryWindow).toContain("restore-backup");
   });
 
   it("备份/重试失败都会回传失败消息（不静默）", () => {

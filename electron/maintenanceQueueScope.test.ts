@@ -15,7 +15,7 @@ const SOURCE = readFileSync(path.join(process.cwd(), "electron/main.ts"), "utf8"
 const LINES = SOURCE.split("\n");
 
 /** 允许出现在维护队列包裹范围内的维护操作标记（轮次级）。 */
-const MAINTENANCE_MARKERS = ["syncNowViaEngine", "backupDatabaseTo", "runGcReconcile", "runFullSync"] as const;
+const MAINTENANCE_MARKERS = ["syncNowViaEngine", "backupDatabaseTo", "runGcReconcile", "runFullSync", "FileMetadataReconciler"] as const;
 
 /** 本地写标记：这些绝不能出现在维护队列的包裹范围内。 */
 const LOCAL_WRITE_MARKERS = ["saveNote", "createNoteIn", "renameTreeNode", "moveTreeNode", "trashNote", "restoreTrash"] as const;
@@ -31,11 +31,11 @@ function occurrenceLines(): number[] {
 }
 
 describe("桌面维护队列范围（F16 的反向护栏）", () => {
-  it("用法只有 4 处：整轮同步包装 + 3 个依赖注入（备份 / 同步装配 / 小记）", () => {
+  it("用法只有 5 处：整轮同步包装 + 4 个依赖注入（备份 / 同步装配 / 小记 / 文件↔元数据对账）", () => {
     // 261013 收紧正则后**暴露出** registerSyncIpc 的依赖注入此前没被数到（旧正则只认 `enqueueMaintenance(` 与 `, enqueueMaintenance)`）。
     // 第 5 处 = registerQuickNotesIpc 拿到 enqueueMaintenance，用来给 sync_quick_note 做**推送后回核**
     // （单条推送本身走高优先域，判据见 src/core/maintenancePolicy.ts 的 PRIORITY_OPS）。
-    expect(occurrenceLines()).toHaveLength(4);
+    expect(occurrenceLines()).toHaveLength(5);
   });
 
   it("每处用法都落在已知的维护操作上下文里", () => {

@@ -94,7 +94,8 @@ export class SettingsRepository {
   /** 历史保留策略配置（P5）：读取，缺省返回默认值 */
   getHistorySettings(): HistorySettings {
     const row = this.db.prepare("SELECT value FROM settings WHERE key='history_settings'").get() as { value: string } | undefined;
-    const def: HistorySettings = { maxSnapshots: 100, retentionDays: 30, cleanupIntervalHours: 24, snapshotIntervalMinutes: 15 };
+    // Batch4-C：snapshotIntervalMinutes = **定时兜底快照**间隔（默认 10 分钟；0 = 关闭）。
+    const def: HistorySettings = { maxSnapshots: 100, retentionDays: 30, cleanupIntervalHours: 24, snapshotIntervalMinutes: 10 };
     if (!row) return def;
     try {
       const parsed = JSON.parse(row.value) as Partial<HistorySettings>;

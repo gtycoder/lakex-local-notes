@@ -295,6 +295,29 @@ let verifiedS3Fingerprint: string | null = null;
     }, { errorPrefix: "云端恢复失败：" });
   };
 
+  /** Batch4-A 从备份恢复（整库导入）：选 metadata*.sqlite3 → 主进程校验/隔离/替换 → 重启生效。 */
+  const runRestoreFromBackup = async () => {
+    if (!hostCapabilities().localFileSystem) { backup.setMessage("浏览器端不支持从备份恢复（需重启本机应用，请在桌面端操作）"); return; }
+    // 先选文件（取消 ⇒ 什么都不做；选择框抛错由 backup.run 显示）。
+    const picked = await backup.run(async () => native.pickBackupDatabase());
+    if (!picked) return;
+    if (!(await confirm({
+      title: "从备份恢复？",
+      body: `将用备份「${picked.name}」替换当前主库：① 备份先校验（完整性/关键表）；② 当前库改名隔离到 corrupt/（不删除、可找回）；③ 备份复制到位后需要重启应用生效。小记库、正文与附件不受影响。`,
+      confirmText: "继续",
+      danger: true,
+    }))) return;
+    await backup.run(async () => {
+      const result = await native.restoreWorkspaceFromBackup(picked.path);
+      await notice({
+        title: "已从备份恢复主库",
+        body: <>原库已隔离保留在：<div className="note-info-path">{result.quarantinePath ?? "（见日志）"}</div>应用即将重启后生效。</>,
+      });
+      await native.confirmRelaunch();
+      return "已从备份恢复，正在重启…";
+    });
+  };
+
   /** F1 日志查看：尾部关键字过滤（GC/sync/trash 等），纯读。 */
   const runLogLoad = async (keyword: string) => {
     await logLoad.run(async () => {
@@ -726,7 +749,7 @@ let verifiedS3Fingerprint: string | null = null;
                       <Item itemId="history-max-snapshots" name="每文档上限" desc="单篇文档最多保留的快照份数。"><NumField label="每文档上限" min={20} max={1000} value={histCfg.maxSnapshots} onSave={(v) => saveHistCfg({ maxSnapshots: v })}  floor={1} fallback={100} /></Item>
                       <Item itemId="history-retention-days" name="保留天数" desc="超期的自动快照会被定期清理；手动快照与冲突留档另计。"><NumField label="保留天数" min={1} max={365} value={histCfg.retentionDays} onSave={(v) => saveHistCfg({ retentionDays: v })}  floor={1} fallback={30} /></Item>
                       <Item itemId="history-cleanup-interval" name="定期清理（小时）" desc="0 = 不自动清理。"><NumField label="定期清理（小时）" min={0} max={720} value={histCfg.cleanupIntervalHours} onSave={(v) => saveHistCfg({ cleanupIntervalHours: v })}  floor={0} fallback={24} /></Item>
-                      <Item itemId="history-snapshot-interval" name="自动快照（分钟）" desc="0 = 不自动快照。"><NumField label="自动快照（分钟）" min={0} max={1440} value={histCfg.snapshotIntervalMinutes} onSave={(v) => saveHistCfg({ snapshotIntervalMinutes: v })}  floor={0} fallback={15} /></Item>
+                      <Item itemId="history-snapshot-interval" name="自动快照（分钟）" desc="定时兜底：每 N 分钟给「自上次兜底后有正文改动」的文档留一份历史快照（同内容 24 小时内只留一份，仍受每文档上限与保留天数约束；0 = 关闭）。代价：磁盘占用增加，间隔越短增长越快。"><NumField label="自动快照（分钟）" min={0} max={1440} value={histCfg.snapshotIntervalMinutes} onSave={(v) => saveHistCfg({ snapshotIntervalMinutes: v })}  floor={0} fallback={10} /></Item>
                     </>
                   )}
                 </Group>
@@ -751,6 +774,11 @@ let verifiedS3Fingerprint: string | null = null;
                             {health.refsMissingResource.length > 0 && <div className="checks__row checks__row--error">✗ 正文引用的 {health.refsMissingResource.length} 个资源文件缺失（首 3：{health.refsMissingResource.slice(0, 3).map((r) => r.filename).join("、")}）</div>}
                           {health.treeDanglingParent.length > 0 && <div className="checks__row checks__row--error">✗ {health.treeDanglingParent.length} 个节点的父目录不存在（侧栏与回收站都看不到它）：{health.treeDanglingParent.slice(0, 3).map((t) => `${t.title}→${t.parentId}`).join("、")}</div>}
                           </>
+                        )}
+                        {health.fileReconcile && (
+                          <div className="checks__row checks__row--warn">
+                            文件↔元数据对账（{health.fileReconcile.enabled ? "已启用" : "未启用"}）：扫描 {health.fileReconcile.scannedFiles} 个正文文件、已知笔记 {health.fileReconcile.knownRows} 条，候选 {health.fileReconcile.candidateCount} 个{health.fileReconcile.candidateCount > 0 ? "（文件存在但找不到对应笔记，仅报告、不自动重建）" : ""}{health.fileReconcile.truncated ? "（已截断显示）" : ""}。
+                          </div>
                         )}
                         <div className="checks__row">生成于 {formatDateTime(new Date(health.checkedAt))}。</div>
                       </div>
@@ -850,6 +878,11 @@ let verifiedS3Fingerprint: string | null = null;
                   <Block itemId="backup-restore" name="从云端恢复" desc="当前数据先改名隔离保存，再从云端全量拉取重建（不会上传本机数据）。用于换机或本地库损坏。">
                     <div className="config-block__actions">
                       <button className="ln-btn ln-btn--secondary ln-btn--danger-text" onClick={() => void runCloudRestore()} disabled={backup.busy || cloudOffline} title={cloudOffline ? "云同步未启用：不会联网" : undefined}>从云端恢复（换机/坏库）…</button>
+                    </div>
+                  </Block>
+                  <Block itemId="backup-import" name="从备份恢复" desc="选择一个整库备份（metadata*.sqlite3）：先校验完整性/关键表，再把当前库改名隔离（不删除、可找回）并替换，重启应用后生效。">
+                    <div className="config-block__actions">
+                      <button className="ln-btn ln-btn--secondary" onClick={() => void runRestoreFromBackup()} disabled={backup.busy}>从备份恢复…</button>
                     </div>
                   </Block>
                   {backupText && <Block name={backupText} />}

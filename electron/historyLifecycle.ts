@@ -5,12 +5,15 @@ import zlib from "node:zlib";
 import type { DbLike } from "./dbLike.js";
 import { AppError } from "../src/core/storeErrors.js";
 import { extractAssetRefs, isSafePathSegment, selectHistoryDrops } from "../src/core/storeUtils.js";
+import { selectHistoryFallbackNotes, type HistoryFallbackNote } from "../src/core/historyFallbackPolicy.js";
 import type { LoggerScopes } from "../src/core/logger.js";
 import type { HistoryCleanupResult, HistorySettings } from "./storeTypes.js";
 
 /** 历史快照生命周期上下文：DB + 路径 + 跨域回调（由 Store 装配）。 */
 export interface HistoryLifecycleContext {
   db: DbLike;
+  /** 回收站笔记本 id：兜底快照跳过回收站文档（它们不会被编辑，快照只会白占磁盘）。 */
+  trashNotebookId: string;
   /** workspace root（history/ 相对于它） */
   root: string;
   logScopes: LoggerScopes;
@@ -26,6 +29,29 @@ export interface HistoryLifecycleContext {
   getHistorySettings: () => HistorySettings;
   /** 清理某文档"当前正文不引用 + 无历史快照引用"的资源（方案 A，cleanupHistory 逐文档调用） */
   cleanupUnreferencedAssetsForNote: (noteId: string) => void;
+}
+
+/** 账本对「未来 mtime」的容忍窗（时钟漂移）；超出才把账本收敛到 now，正常保存不受影响。 */
+const HISTORY_FALLBACK_FUTURE_SKEW_MS = 60_000;
+
+/** 兜底快照单轮结果（调用方只记日志/观测，失败不抛）。 */
+export interface HistoryFallbackResult {
+  /** 扫描到的活文档数（回收站与缺正文除外）。 */
+  scanned: number;
+  /** 本轮判定「自上次兜底后有变化」的文档数（受单轮上限约束）。 */
+  changed: number;
+  /** 实际创建的快照数（24h 同 hash 去重会小于 changed）。 */
+  created: number;
+  /** 单篇失败数（不影响其余文档）。 */
+  failed: number;
+  /** 正文文件缺失而跳过的文档数。 */
+  missingBody: number;
+}
+
+export interface HistoryFallbackOptions {
+  now?: Date;
+  /** 单轮上限（默认 core 的 HISTORY_FALLBACK_MAX_NOTES）。 */
+  maxNotes?: number;
 }
 
 /**
@@ -64,6 +90,65 @@ export class HistoryLifecycle {
       "SELECT 1 FROM note_history WHERE note_id=? AND content_hash=? AND created_at > ? LIMIT 1"
     ).get(noteId, hash, new Date(Date.now() - 24 * 3600 * 1000).toISOString());
     return !!row;
+  }
+
+  /**
+   * 定时兜底快照（Batch4-C）：只挑「自上次兜底后有正文变化」的文档（持久账本 + 正文 mtime），
+   * 复用 createHistorySnapshot 的 24h 同 hash 去重 / 引用保护 / 保留期清理。
+   * 单篇失败不阻断其余（失败计数由调用方记日志）；账本按 min(mtime, now) 收敛，时钟漂移不会压死后续轮次。
+   */
+  runHistoryFallback(options: HistoryFallbackOptions = {}): HistoryFallbackResult {
+    const t0 = Date.now();
+    const now = options.now ?? new Date();
+    const nowMs = now.getTime();
+    const result: HistoryFallbackResult = { scanned: 0, changed: 0, created: 0, failed: 0, missingBody: 0 };
+    const rows = this.ctx.db.prepare(
+      "SELECT id FROM notes WHERE deleted_at IS NULL AND trashed_at IS NULL AND parent_id != ?",
+    ).all(this.ctx.trashNotebookId) as Array<{ id: string }>;
+    const ledgerRows = this.ctx.db.prepare(
+      "SELECT note_id, last_body_mtime_ms FROM history_fallback_state",
+    ).all() as Array<{ note_id: string; last_body_mtime_ms: number }>;
+    const ledger = new Map(ledgerRows.map((row) => [row.note_id, Number(row.last_body_mtime_ms)] as const));
+    const notes: HistoryFallbackNote[] = [];
+    for (const { id } of rows) {
+      result.scanned += 1;
+      if (!isSafePathSegment(id)) continue;
+      try {
+        const stat = fs.statSync(this.ctx.notePathFor(id));
+        if (!stat.isFile()) continue;
+        notes.push({ id, bodyMtimeMs: stat.mtimeMs });
+      } catch {
+        // 缺正文 = 另一条通道（正文恢复），这里不制造空快照。
+        result.missingBody += 1;
+      }
+    }
+    const picked = selectHistoryFallbackNotes({ notes, ledger, maxNotes: options.maxNotes, nowMs });
+    result.changed = picked.length;
+    const writeLedger = this.ctx.db.prepare(
+      "INSERT INTO history_fallback_state(note_id,last_body_mtime_ms,last_attempt_at) VALUES(?,?,?) "
+      + "ON CONFLICT(note_id) DO UPDATE SET last_body_mtime_ms=excluded.last_body_mtime_ms, last_attempt_at=excluded.last_attempt_at",
+    );
+    for (const candidate of picked) {
+      try {
+        const id = this.createHistorySnapshot(candidate.id);
+        if (id !== null) result.created += 1;
+        // 即使 24h 同 hash 去重跳过（返回 null）也推进账本：否则下一轮还会重复 stat/读盘同一篇。
+        // 时钟明显跑快（mtime 比现在晚 60s 以上）才收敛到 now，避免未来时间戳把后续轮次永久压死；
+        // 正常保存（mtime≈now）按原样记，重启后"未再改动"必须判成没变。
+        const ledgerMs = candidate.bodyMtimeMs > nowMs + HISTORY_FALLBACK_FUTURE_SKEW_MS ? nowMs : candidate.bodyMtimeMs;
+        writeLedger.run(candidate.id, ledgerMs, now.toISOString());
+      } catch (error) {
+        result.failed += 1;
+        this.ctx.logScopes.history.warn(
+          "[history] 兜底快照失败 " + candidate.id + ": " + (error instanceof Error ? error.message : String(error)),
+        );
+      }
+    }
+    this.ctx.logScopes.history.info(
+      "[perf] history-fallback " + (Date.now() - t0) + "ms (scanned=" + result.scanned + ", changed=" + result.changed
+      + ", created=" + result.created + ", failed=" + result.failed + ")",
+    );
+    return result;
   }
 
   /** 创建历史快照。content 缺省时读磁盘 .lake；protectedDays>0 时写 protected_until（冲突归档保护，B3）。

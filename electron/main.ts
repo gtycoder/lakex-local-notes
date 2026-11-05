@@ -1,11 +1,13 @@
-import { app, BrowserWindow, crashReporter, ipcMain, Menu, nativeTheme, screen, session, shell, type IpcMainEvent, type WebFrameMain } from "electron";
+import { app, BrowserWindow, crashReporter, dialog, ipcMain, Menu, nativeTheme, powerMonitor, screen, session, shell, type IpcMainEvent, type WebFrameMain } from "electron";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Store } from "./store.js";
+import { FileMetadataReconciler } from "./fileMetadataReconcile.js";
 import { canTouchNetwork, cloudStateOf } from "../src/core/cloudState.js";
 import { autoSyncIntervalMs, shouldSyncOnOpenClose } from "../src/core/syncModes.js";
+import { historyFallbackMinutes, shouldRunHistoryFallback } from "../src/core/historyFallbackPolicy.js";
 import { createSafeStorageSecretCipher } from "./secretCipher.js";
 import { createUnavailableQuickNotesStore, QuickNotesStore } from "./quickNotes.js";
 import {
@@ -38,6 +40,7 @@ import {
   writeCrashMarker,
 } from "./startupRecovery.js";
 import { showRecoveryWindow } from "./startupRecoveryWindow.js";
+import { rememberRestoreCandidate, restoreMainDatabaseFromBackup } from "./workspaceRestoreFromBackup.js";
 import { decideSafeMode, readSafeModeState, removeSafeModeState, writeSafeModeState, type SafeModeState } from "./safeMode.js";
 import { registerSafeModeIpc } from "./ipc/registerSafeMode.js";
 import { createIpcRegistrar } from "./ipc/registrar.js";
@@ -126,6 +129,8 @@ let safeModeActive = false;
 /** 安全模式状态快照（提示条/诊断 IPC 用）；未进入 = null。 */
 let safeModeState: SafeModeState | null = null;
 let drafts: DraftJournal;
+/** Batch4-B：文件↔元数据对账（只报告；默认关闭，LAKE_FILE_RECONCILE=1 开启后台节流任务）。 */
+let fileReconciler: FileMetadataReconciler | null = null;
 /** 历史定时器重启函数（配置变更时调用，见 save_history_settings IPC） */
 let restartHistoryTimers: (() => void) | null = null;
 /** S3 GC 定时器重启函数（配置变更时调用，见 save_s3_gc_settings IPC） */
@@ -201,6 +206,8 @@ async function runFullSync(onProgress?: (p: SyncProgress) => void): Promise<Sync
       // 同步浮窗/状态栏的「上次同步」一直是旧值（新机器上则永远为空）。两条都写。
       try { store.markSyncComplete(result.completedAt ?? new Date().toISOString()); } catch { /* 状态表异常不阻断同步 */ }
       try { store.clearSyncInterrupted(); } catch { /* 同上 */ }
+      // Batch4-B：同步成功 = 对账的触发点（不立即跑；等进程空闲 + 冷却，只报告不写入）。
+      try { fileReconciler?.onSyncComplete(); } catch { /* 对账打点失败不阻断同步 */ }
       report({ phase: "done", message: "同步完成", supersededNotes: result.supersededNotes });
       log.sync.info(`[perf] runFullSync done ${Date.now() - fullSyncStart}ms (uploaded=${result.uploaded}, downloaded=${result.downloaded}, conflicts=${result.conflicts}, superseded=${result.supersededNotes.length}, quickNotes=${result.quickNotes?.error ? "error" : "ok"})`);
       logHeapPeak("sync");
@@ -738,6 +745,33 @@ if (!app.requestSingleInstanceLock()) {
             return { ok: false, message: "云端恢复准备失败：" + (error instanceof Error ? error.message : String(error)) };
           }
         },
+        async restoreFromBackup() {
+          // Batch4-A：从整库备份导入恢复。文件选择框在主进程（渲染层拿不到任意路径），
+          // 校验失败/回滚都明确回传；成功后窗口模块会先展示「原库隔离到哪」再重启。
+          const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
+          const picked = await dialog.showOpenDialog(win, {
+            title: "选择整库备份（metadata*.sqlite3）",
+            buttonLabel: "用此备份恢复",
+            properties: ["openFile"],
+            filters: [{ name: "SQLite 备份", extensions: ["sqlite3"] }],
+          });
+          const chosen = picked.canceled ? null : (picked.filePaths[0] ?? null);
+          if (!chosen) return { ok: false, message: "已取消选择备份文件" };
+          if (!rememberRestoreCandidate(chosen)) {
+            return { ok: false, message: "备份文件无效：请选择由本应用「整库备份/导出」产生的 metadata*.sqlite3 文件（其他文件名不支持）" };
+          }
+          const result = restoreMainDatabaseFromBackup({
+            backupPath: chosen,
+            currentDbPath: path.join(workspaceRoot(), "metadata.sqlite3"),
+            userDataDir,
+          });
+          if (!result.ok) {
+            log.app.error("[recovery] 从备份恢复失败" + formatLogFields({ reason: result.reason ?? "", rolledBack: result.rolledBack ?? false }));
+            return { ok: false, message: "从备份恢复失败：" + (result.message ?? result.reason ?? "未知原因") };
+          }
+          log.app.info("[recovery] 从备份恢复成功，原库隔离到 " + result.quarantinePath);
+          return { ok: true, message: result.message ?? "已从备份恢复，正在重启…", restart: true };
+        },
         async openDataFolder() {
           const openError = await shell.openPath(userDataDir);
           return openError
@@ -751,6 +785,21 @@ if (!app.requestSingleInstanceLock()) {
     }
     // 正常启动判定完成；崩溃标记等**启动真正跑通**（建主窗口前）再消费，避免半途失败时丢掉线索。
     store = openedStore;
+    // Batch4-B：文件↔元数据对账（只报告版）。默认关闭；开启后由同步成功打点 + 进程空闲/冷却节流，
+    // 与同步/GC 共用维护域串行队列（不与写域并发）。报告经 runDataHealthCheck 暴露。
+    {
+      const enabled = process.env.LAKE_FILE_RECONCILE === "1";
+      fileReconciler = new FileMetadataReconciler({
+        root: workspaceRoot(),
+        listKnownNoteIds: () => store.listNotesSyncMeta().map((n) => n.id),
+        getIdleSeconds: () => powerMonitor.getSystemIdleTime(),
+        enqueueMaintenance,
+        enabled,
+        log: (message) => log.app.info(message),
+      });
+      store.setFileReconcileReportProvider(() => fileReconciler?.getLastReport() ?? null);
+      if (enabled) log.app.info("[reconcile] 文件↔元数据对账已启用（只报告；空闲/冷却节流）");
+    }
     // A2 云端恢复（换机/坏库）：重启后若存在恢复 seed（prepareCloudRestore 写入的 settings 密文行），
     // 原样写回新库再删除——secretAccessKey 保持 enc:v1: 密文（绝不明文落盘），同机 safeStorage 可解。
     try {
@@ -814,7 +863,7 @@ if (!app.requestSingleInstanceLock()) {
     createWindow();
     logHeapPeak("startup");
 
-    // U1：自动快照（默认 15 分钟，间隔可配置）+ 启动兜底清理（P5 低频巡检）
+    // U1/Batch4-C：定时兜底快照（默认 10 分钟，0 = 关闭）+ 启动兜底清理（P5 低频巡检）
     // 启动兜底：清理一次过期快照（惰性清理在创建快照后也会触发，这里是兜底）
     try {
       const r = store.cleanupHistory();
@@ -824,17 +873,32 @@ if (!app.requestSingleInstanceLock()) {
     // 定时器管理：配置变更（设置面板保存）后重启定时器
     let snapshotTimer: NodeJS.Timeout | null = null;
     let cleanupTimer: NodeJS.Timeout | null = null;
+    /** Batch4-C：兜底快照单飞（上一轮还没跑完就跳过本轮；绝不会叠跑/重入）。 */
+    let historyFallbackRunning = false;
     const startHistoryTimers = () => {
       if (snapshotTimer) { clearInterval(snapshotTimer); snapshotTimer = null; }
       if (cleanupTimer) { clearInterval(cleanupTimer); cleanupTimer = null; }
       const cfg = store.getHistorySettings();
-      if (cfg.snapshotIntervalMinutes > 0) {
+      const fallbackMinutes = historyFallbackMinutes(cfg.snapshotIntervalMinutes);
+      // Batch4-C 定时兜底快照（默认 10 分钟，0 = 关闭）：只挑「自上次兜底后有正文变化」的文档
+      //（持久账本 history_fallback_state + 正文 mtime，重启不丢）；24h 同 hash 去重/引用保护/
+      // 保留期清理沿用既有实现。**启动不立即跑**：首轮 = 就绪后一个间隔，避免和启动抢磁盘。
+      if (shouldRunHistoryFallback(fallbackMinutes)) {
         snapshotTimer = setInterval(() => {
+          if (historyFallbackRunning) return;
+          historyFallbackRunning = true;
           try {
-            const n = store.flushHistorySnapshots();
-            if (n > 0) log.history.info(`[history] 自动快照：创建 ${n} 份`);
-          } catch (error) { console.warn("[history] 自动快照失败:", error); }
-        }, cfg.snapshotIntervalMinutes * 60 * 1000);
+            const result = store.runHistoryFallback();
+            if (result.created > 0) {
+              log.history.info("[history] 兜底快照：" + result.created + " 份（正文变化 " + result.changed + " 篇）");
+            }
+          } catch (error) {
+            // 兜底本身绝不影响启动/保存：失败只记日志，等下一个间隔。
+            log.history.warn("[history] 兜底快照失败（不阻断）：" + (error instanceof Error ? error.message : String(error)));
+          } finally {
+            historyFallbackRunning = false;
+          }
+        }, fallbackMinutes * 60 * 1000);
       }
       if (cfg.cleanupIntervalHours > 0) {
         cleanupTimer = setInterval(() => {

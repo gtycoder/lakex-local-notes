@@ -134,6 +134,10 @@ export interface LakeNative {
   runWorkspaceBackup(dir: string): Promise<{ backupPath: string; copiedDirs: string[] }>;
   prepareCloudRestore(): Promise<{ quarantinePath: string }>;
   confirmRelaunch(): Promise<boolean>;
+  /** Batch4-A：系统选择框选一个整库备份（metadata*.sqlite3）；取消返回 null。 */
+  pickBackupDatabase(): Promise<{ path: string; name: string } | null>;
+  /** Batch4-A：从备份恢复主库（校验→隔离原库→替换）；成功后需重启应用。失败抛错（含回滚说明）。 */
+  restoreWorkspaceFromBackup(filePath: string): Promise<{ ok: true; quarantinePath?: string; message?: string; requiresRestart: true }>;
   setNodeIcon(id: string, icon: string | null): Promise<TreeNode>;
   searchNotes(query: string, limit?: number): Promise<NoteSearchHit[]>;
   rebuildSearchIndex(): Promise<boolean>;
@@ -347,6 +351,8 @@ export const native = {
   runWorkspaceBackup: (dir: string) => api().runWorkspaceBackup(dir),
   prepareCloudRestore: () => api().prepareCloudRestore(),
   confirmRelaunch: () => api().confirmRelaunch(),
+  pickBackupDatabase: () => api().pickBackupDatabase(),
+  restoreWorkspaceFromBackup: (filePath: string) => api().restoreWorkspaceFromBackup(filePath),
   setNodeIcon: (id: string, icon: string | null) => api().setNodeIcon(id, icon),
   searchNotes: (query: string, limit?: number) => api().searchNotes(query, limit),
   rebuildSearchIndex: () => api().rebuildSearchIndex(),

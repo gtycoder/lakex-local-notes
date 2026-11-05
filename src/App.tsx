@@ -42,7 +42,8 @@ import type { TreeNode } from "./lib/types";
  *  只在真正打开时才需要 ⇒ 懒加载，避免内核重新进入首屏静态图。 */
 const NoteInfoDialog = lazy(() => import("./components/app/NoteInfoDialog").then((m) => ({ default: m.NoteInfoDialog })));
 import { saveSettings } from "./lib/settings";
-import { clearTabSession, writeTabSession } from "./desktop/tabSession";
+import { useSafeModeStatus } from "./hooks/useSafeModeStatus";
+import { useTabSessionPersistence } from "./hooks/useTabSessionPersistence";
 import { type OpenTab, EDGE_HANDLE_DWELL_MS, OUTLINE_SIDEBAR_MAX_WIDTH, OUTLINE_SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH, treeNodePath } from "./desktop/desktopTypes";
 import { DesktopOverlays } from "./desktop/DesktopOverlays";
 import { AiAssistantDialog } from "./features/ai/AiAssistantDialog";
@@ -297,24 +298,33 @@ export function App() {
     setConflictSnapshotNotice, setPendingSummary, setDraftEntries, setTreeNodes, setError, openNote, restoreTabs, showNotice,
   });
 
+  // 桌面标签会话（device-local）：标签/活动页变化即落盘；开启「退出时关闭全部标签」时清掉、不恢复。
+  // Batch4-D：安全模式（或判据还没到达）下**完全不碰**会话文件——安全模式不恢复标签，若照旧写回 []
+  // 会把用户的原会话覆盖掉（下次正常启动也恢复不回来）。
+  // 判据单一来源 = useSafeModeStatus 的会话写入门（组件里不再各写一套 if）。
+  const safeModeStatus = useSafeModeStatus();
+  useTabSessionPersistence({
+    ready: Boolean(workspace),
+    openTabs,
+    activeNoteId,
+    clearTabsOnExit: settings.clearTabsOnExit,
+    safeModeStatus,
+  });
+
   /** Batch3-B：内核预取只按启动时的安全模式判定一次（避免每次标签变化都打 IPC）。 */
   const safeModeCheckedRef = useRef(false);
 
-  // 桌面标签会话（device-local）：标签/活动页变化即落盘；开启「退出时关闭全部标签」时清掉、不恢复。
-  // 启动时 useBootstrap 会先同步读走会话再恢复，晚到的 [] 写入不会覆盖它。
+  // P12：启动就绪后（首个 workspace 到达）安排一次内核 chunk 的空闲预取；幂等，后续标签变化再调无副作用。
+  // Batch3-B：安全模式**不预热内核 chunk**（崩溃排查时少一个后台重活）⇒ 就绪后问一次主进程，结果只问一次。
+  // 注：这里保留自己的查询（与上面会话判据分开问）——预取是另一件事，Batch3-B 的既有契约（含其静态护栏）
+  // 不因会话门槛而改变；两处都是「启动时一次」，代价可忽略。
   useEffect(() => {
-    if (!workspace) return;
-    // P12：启动就绪后（首个 workspace 到达）安排一次内核 chunk 的空闲预取；幂等，后续标签变化再调无副作用。
-    // Batch3-B：安全模式**不预热内核 chunk**（崩溃排查时少一个后台重活）⇒ 就绪后问一次主进程，结果只问一次。
-    if (!safeModeCheckedRef.current) {
-      safeModeCheckedRef.current = true;
-      void native.getSafeModeState()
-        .then((state) => { if (!state.active) prefetchEditorKernel(); })
-        .catch(() => prefetchEditorKernel());
-    }
-    if (settings.clearTabsOnExit) { clearTabSession(); return; }
-    writeTabSession({ ids: openTabs.map((tab) => tab.noteId), activeId: activeNoteId });
-  }, [workspace, openTabs, activeNoteId, settings.clearTabsOnExit]);
+    if (!workspace || safeModeCheckedRef.current) return;
+    safeModeCheckedRef.current = true;
+    void native.getSafeModeState()
+      .then((state) => { if (!state.active) prefetchEditorKernel(); })
+      .catch(() => prefetchEditorKernel());
+  }, [workspace]);
 
   useSyncProgress({
     setSync, setCloudEnabled, setNotes, setTreeNodes, setOpenTabs,

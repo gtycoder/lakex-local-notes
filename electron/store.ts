@@ -27,7 +27,7 @@ import type { S3v3DiagnosticReport } from "../src/core/s3v3Report.js";
 import { HistoryRepository, type HistorySnapshotPreview, type HistorySnapshotSummary } from "./historyRepository.js";
 import { TrashRepository } from "./trashRepository.js";
 import { TrashLifecycle } from "./trashLifecycle.js";
-import { HistoryLifecycle } from "./historyLifecycle.js";
+import { HistoryLifecycle, type HistoryFallbackOptions, type HistoryFallbackResult } from "./historyLifecycle.js";
 import { OrphanLifecycle } from "./orphanLifecycle.js";
 import { Diagnostics } from "./diagnostics.js";
 import { SyncReconciliation } from "./syncReconciliation.js";
@@ -187,6 +187,8 @@ export class Store {
    *  「缺正文」面板的「可云恢复」判据读它（Del-6：v2 的 sync_base 账本已删，这里是唯一事实）；
    *  重启后由下一次同步回填（首轮同步前保持空 = 退回「仅历史」）。 */
   private remoteNoteIds = new Set<string>();
+  /** Batch4-B：文件↔元数据对账报告的只读提供者（由 main 注入后台对账器；未启用 = null）。 */
+  private fileReconcileReportProvider: (() => unknown) | null = null;
   private settingsRepository: SettingsRepository;
   private noteExport: NoteExport;
   private schemaInit: SchemaInit;
@@ -296,6 +298,7 @@ export class Store {
       notePathFor: (noteId) => this.notePath(noteId),
       noteAssetsDirFor: (noteId) => this.noteAssetsDirFor(noteId),
       logScopes: this.logScopes,
+      getFileReconcileReport: () => this.fileReconcileReportProvider?.() ?? null,
     });
     this.searchRepository = new SearchRepository({
       db: this.db,
@@ -322,6 +325,7 @@ export class Store {
     });
     this.historyLifecycle = new HistoryLifecycle({
       db: this.db,
+      trashNotebookId: TRASH_NOTEBOOK_ID,
       root: this.root,
       logScopes: this.logScopes,
       notePathFor: (noteId) => this.notePath(noteId),
@@ -720,6 +724,15 @@ export class Store {
     }
     this.logScopes.history.info(`[perf] flush-snapshots ${Date.now() - t0}ms (pending=${pending.length}, created=${created})`);
     return created;
+  }
+
+  /**
+   * 定时兜底历史快照（Batch4-C）：只挑「自上次兜底后有正文变化」的文档（持久账本在
+   * history_fallback_state，重启不丢），24h 同 hash 去重/引用保护/保留期清理沿用既有实现。
+   * 单轮失败不抛（由 historyLifecycle 逐篇吞并计数）。
+   */
+  runHistoryFallback(options?: HistoryFallbackOptions): HistoryFallbackResult {
+    return this.historyLifecycle.runHistoryFallback(options);
   }
 
   /** M1：单独更新文本缓存（打开文档时补缓存用，不重写 .lake 正文） */
@@ -1206,8 +1219,15 @@ export class Store {
     refsChecked: number;
     refsMissingResource: Array<{ noteId: string; filename: string }>;
     checkedAt: string;
+    /** Batch4-B：最近一次文件↔元数据对账报告（设置→同步诊断可见；未跑过 = null）。 */
+    fileReconcile: unknown;
   } {
     return this.diagnostics.runDataHealthCheck();
+  }
+
+  /** Batch4-B：注入「文件↔元数据对账」报告的只读提供者（main 装配后台对账器时调用）。 */
+  setFileReconcileReportProvider(provider: (() => unknown) | null): void {
+    this.fileReconcileReportProvider = provider;
   }
 
   /** A1 一致性 DB 快照：VACUUM INTO 单文件（无 WAL 依赖、可独立打开）。 */

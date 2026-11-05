@@ -274,11 +274,11 @@ export interface RecoveryPageInfo {
 }
 
 /** 恢复页动作（同文档 hash 触发；主进程拦截，不走 IPC/preload）。 */
-export type RecoveryAction = "backup" | "cloud-restore" | "open-data" | "quit";
+export type RecoveryAction = "backup" | "cloud-restore" | "restore-backup" | "open-data" | "quit";
 
 /** 解析 `#action=<name>`（允许附加 `&t=<nonce>` 以支持重复点击）。 */
 export function parseRecoveryActionHash(hash: string): RecoveryAction | null {
-  const match = /^#?action=(backup|cloud-restore|open-data|quit)(?:&|$)/.exec(hash);
+  const match = /^#?action=(backup|cloud-restore|restore-backup|open-data|quit)(?:&|$)/.exec(hash);
   return match ? (match[1] as RecoveryAction) : null;
 }
 
@@ -352,11 +352,12 @@ export function buildRecoveryPageHtml(info: RecoveryPageInfo): string {
   <div class="actions">
     <button class="primary" data-action="backup">先备份后继续</button>
     <button data-action="cloud-restore">从云端恢复（换机/坏库）</button>
+    <button data-action="restore-backup">从备份恢复…</button>
     <button data-action="open-data">打开数据目录</button>
     <button data-action="quit">退出</button>
   </div>
   <div class="status" id="status" role="status" aria-live="polite"></div>
-  <p class="hint">「先备份后继续」会先做一份数据库快照再重试打开；「从云端恢复」会把当前工作区改名隔离保留，然后用空库重启（需要重新配置云同步后从云端拉回）。</p>
+  <p class="hint">「先备份后继续」会先做一份数据库快照再重试打开；「从云端恢复」会把当前工作区改名隔离保留，然后用空库重启（需要重新配置云同步后从云端拉回）；「从备份恢复」选择一个整库备份/导出的 metadata*.sqlite3，先校验再隔离并替换主库（原库不删除），完成后自动重启生效。</p>
 <script>
   (() => {
     let busy = false;

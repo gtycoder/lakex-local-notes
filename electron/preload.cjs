@@ -64,6 +64,8 @@ contextBridge.exposeInMainWorld("lakeNative", {
   runWorkspaceBackup: (dir) => invoke("run_workspace_backup", dir),
   prepareCloudRestore: () => invoke("prepare_cloud_restore"),
   confirmRelaunch: () => invoke("confirm_relaunch"),
+  pickBackupDatabase: () => invoke("pick_backup_database"),
+  restoreWorkspaceFromBackup: (filePath) => invoke("restore_workspace_from_backup", filePath),
   setNodeIcon: (id, icon) => invoke("set_node_icon", id, icon),
   searchNotes: (query, limit) => invoke("search_notes", query, limit),
   rebuildSearchIndex: () => invoke("rebuild_search_index"),
