@@ -89,7 +89,8 @@ describe("Sidebar 新建笔记本（弹窗）", () => {
       await Promise.resolve();
     });
     expect(props.onCreate).toHaveBeenCalledWith("notebook", null, "我的笔记本");
-    expect(props.onSelect).toHaveBeenCalledWith("nb-new");
+    // 回归（用户 261105 验收）：笔记本返回的是树节点 id，不能当 note 打开（否则「笔记不存在」）。
+    expect(props.onSelect).not.toHaveBeenCalled();
     expect(document.body.querySelector('input[aria-label="笔记本名称"]')).toBeNull();
   });
 
@@ -154,7 +155,9 @@ describe("Sidebar 六个 kind 统一新建弹窗", () => {
       await Promise.resolve();
     });
     expect(props.onCreate).toHaveBeenCalledWith(kind, "book", defaultName);
-    expect(props.onSelect).toHaveBeenCalledWith("new-node");
+    // 文档类才 onSelect 打开；分组节点 id 不是 noteId（回归：「笔记不存在」）。
+    if (kind === "group") expect(props.onSelect).not.toHaveBeenCalled();
+    else expect(props.onSelect).toHaveBeenCalledWith("new-node");
     expect(document.body.querySelector('[role="dialog"]')).toBeNull();
   });
 

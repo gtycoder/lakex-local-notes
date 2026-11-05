@@ -404,10 +404,15 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
     setCreateBusy(true);
     setCreateError(null);
     try {
-      const id = await Promise.resolve(props.onCreate(createDialog.kind, createDialog.parentId, title));
+      const kind = createDialog.kind;
+      const parentId = createDialog.parentId;
+      const id = await Promise.resolve(props.onCreate(kind, parentId, title));
       setCreateDialog(null);
       if (typeof id === "string" && id) {
-        props.onSelect(id);
+        // 只有文档类新节点能以 noteId 打开；笔记本/分组返回的是树节点 id，
+        // 调 onSelect 会走 openNote → 读不存在的笔记（用户报「新建笔记本 → 笔记不存在」）。
+        if (kind !== "notebook" && kind !== "group") props.onSelect(id);
+        else if (parentId) setExpanded((current) => expandAncestors(current, props.nodes, parentId));
         // 树刷新是异步 setState：等一帧再 reveal（目录栏自己的滚动容器，不用 scrollIntoView）。
         window.requestAnimationFrame(() => revealNodeRef.current(id));
       }
