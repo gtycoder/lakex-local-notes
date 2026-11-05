@@ -33,6 +33,7 @@ import { native } from "../../lib/native";
 import { hostCapabilities } from "../../lib/hostCapabilities";
 import type { DataHealthReport, S3Settings, SyncSettings } from "../../lib/types";
 import { SYNC_AUTO_MODE_OPTIONS, SYNC_OPEN_CLOSE_NOTE } from "../../core/syncModes";
+import { Dialog } from "../ui/Overlay";
 import { useFloatingDialog } from "../hooks/useFloatingDialog";
 import { useConfirm } from "../../hooks/useConfirm";
 // DT-13：异步动作的 busy/提示统一走共用原语（不再逐组手写 setBusy/setMsg/try/catch/finally）
@@ -77,7 +78,7 @@ let verifiedS3Fingerprint: string | null = null;
 
   const [navQuery, setNavQuery] = useState("");
   const navSearchRef = useRef<HTMLInputElement>(null);
-  const floating = useFloatingDialog({ id: "settings", initialSize: { w: 840, h: 600 }, minSize: { w: 620, h: 420 } });
+  const floating = useFloatingDialog({ id: "settings", initialSize: { w: 1000, h: 660 }, minSize: { w: 620, h: 420 } });
   /** 确认/提示浮层（DT-02）：替代 window.confirm / window.alert（云端恢复这类不可逆动作走它）。 */
   const { confirm, notice, confirmElement } = useConfirm();
 
@@ -618,8 +619,9 @@ let verifiedS3Fingerprint: string | null = null;
   const webText = webRun.error ?? webRun.message;
 
   return (
-    <div className="settings-overlay" onMouseDown={(event) => { if (event.target === event.currentTarget && !floating.interactionRef.current) onClose(); }}>
-      <div ref={floating.panelRef} className="floating-dialog settings-panel settings-panel-large" style={floating.panelStyle} role="dialog" aria-modal="true" aria-labelledby="settings-panel-title" onClick={(e) => e.stopPropagation()}>
+    <Dialog open onDismiss={() => { if (!floating.interactionRef.current) onClose(); }} label="偏好设置"
+      surfaceRef={floating.panelRef} surfaceClassName="floating-dialog settings-panel settings-panel-large"
+      style={floating.panelStyle} initialFocus={navSearchRef}>
         <header id="settings-panel-title" className="settings-header floating-dialog-header" onPointerDown={floating.startDrag}>
           <Settings size={16} />
           <span>偏好设置</span>
@@ -1034,7 +1036,7 @@ let verifiedS3Fingerprint: string | null = null;
                     )}
                     {(!activeDef.supportsThinking || aiPending.thinking === "disabled") && (
                       <Item itemId="ai-temperature" name="温度" desc="0 更稳定、2 更发散。">
-                        <NumField label="温度" min={0} max={2} floor={0} fallback={0.7} value={aiPending.temperature} onSave={(n) => setAiDraft((d) => ({ ...d, temperature: n }))} />
+                        <NumField label="温度" step="any" min={0} max={2} floor={0} fallback={0.7} value={aiPending.temperature} onSave={(n) => setAiDraft((d) => ({ ...d, temperature: n }))} />
                       </Item>
                     )}
                   </Section>
@@ -1163,7 +1165,7 @@ let verifiedS3Fingerprint: string | null = null;
 
                     <Group title="第三方与许可" icon={<Info size={16} />}>
                       <Block itemId="about-siyuan-license" name="思源笔记 SiYuan" desc="界面版式与主题令牌移植自 SiYuan（AGPL-3.0，https://github.com/siyuan-note/siyuan）：相关规则已收编到 src/styles/compat.css 与 kit.css（保留署名）；本项目不构成分发思源代码。" />
-                      <Block itemId="about-lakex-license" name="语雀 Lake 内核" desc="Lake 内核为语雀闭源产物（随 @dlient/lakex-doc-react 的 MIT wrapper 源码一并 vendor、已 pin）；wrapper 与卡片层源码可改并保留署名，内核本体内核不修改、不再分发。" />
+                      <Block itemId="about-lakex-license" name="语雀 Lake 内核" desc="Lake 内核为语雀闭源第三方产物，已 pin，并以 vendored 形式随仓库及构建产物包含。MIT 包装层与闭源内核的许可范围不同；本项目与语雀/蚂蚁无关，未取得官方分发授权，详见仓库 NOTICE。" />
                       <Block itemId="about-third-party" name="开源依赖" desc="主要开源依赖：better-sqlite3（MIT）、sharp（Apache-2.0/MIT）、@aws-sdk/client-s3（Apache-2.0）、lucide-react（ISC）、react/react-dom（MIT）、electron-log（MIT）、TypeScript（Apache-2.0）、Vite（MIT）。完整清单以 package.json 与 lockfile 为准。" />
                     </Group>
                   </>
@@ -1181,7 +1183,6 @@ let verifiedS3Fingerprint: string | null = null;
           />
         )}
         {confirmElement}
-      </div>
-    </div>
+    </Dialog>
   );
 }

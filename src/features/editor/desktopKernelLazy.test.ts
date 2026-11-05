@@ -16,7 +16,7 @@ const MULTI_TAB = read("./MultiTabEditor.tsx");
 const PREFETCH = read("./kernelPrefetch.ts");
 const APP = read("../../App.tsx");
 const OVERLAYS = read("../../desktop/DesktopOverlays.tsx");
-const QUICK_NOTES = read("../../components/app/QuickNotesWorkspace.tsx");
+const QUICK_NOTES = read("../../components/app/QuickNoteComposer.tsx");
 
 describe("P12 桌面内核 lazy 边界（静态契约）", () => {
   it("MultiTabEditor：EditorTab 只能 lazy，不得静态 import", () => {

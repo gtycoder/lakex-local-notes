@@ -15,7 +15,7 @@ const code = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*
 describe("「保存并同步」可用性门禁（云同步关闭 ⇒ 置灰 + 理由）", () => {
   it("桌面：App 用 cloudState 的 UI 判据，工作区按钮按 cloudReady 置灰", () => {
     const app = code(read("../../App.tsx"));
-    const ws = code(read("./QuickNotesWorkspace.tsx"));
+    const ws = code(read("./QuickNoteComposer.tsx"));
     expect(app, "判据走 cloudState 的 UI 判据（没配置/关了开关都算本地）").toMatch(/isCloudActive\(cloudConfigured, cloudEnabled\)/);
     expect(app).toMatch(/cloudReady=\{/);
     expect(ws, "「保存并同步」在云同步不可用时置灰").toMatch(/disabled=\{busy \|\| !cloudReady\}/);

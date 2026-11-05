@@ -8,6 +8,7 @@
  */
 import { useEffect, useRef } from "react";
 import type { Route } from "../MobileApp";
+import { dismissImmersivePreview } from "../../lib/immersivePreview";
 import { consumeBack } from "../ui/backStack";
 
 export interface BackHandlerState {
@@ -40,7 +41,7 @@ export function useBackHandler(state: BackHandlerState) {
           const s = stateRef.current;
           // 0) 浮层返回栈（思源：#model / .b3-menu--fullscreen / side-panel 谁在上层谁先吃返回）。
           //    必须在小记之前：小记写作界面内打开的标签面板/浮层才是真正的「最上层」。
-          if (consumeBack()) return;
+          if (dismissImmersivePreview() || consumeBack()) return;
           // 1) 小记（全屏独立入口）：没有更上层浮层时再关它
           if (s.captureOpen) { s.onCloseCapture?.(); return; }
           // 2) 最上层 Sheet（新建知识库/搜索）

@@ -51,7 +51,7 @@ Local Lakex Notes 是一个自持数据的个人笔记应用：笔记、表格�
 
 - 桌面：Electron 44.9、React 18.3、TypeScript 5.9、Vite 8、better-sqlite3 13
 - 移动：Capacitor 8（Android）、Vite、原生 Kotlin 插件（文件 / 安全存储 / 快捷键 / 分享）
-- 编辑器：`@dlient/lakex-doc-react`（本地私有引入，内含语雀 Lakex 内核 v1.99.0；不随仓库分发）、`@univerjs/*` 1.0.3（精确锁）、Drawnix、perfect-freehand
+- 编辑器：`@dlient/lakex-doc-react`（本地私有引入，内含语雀 Lakex 内核 v1.99.0；以 vendored 形式随仓库及构建产物包含）、`@univerjs/*` 1.0.3（精确锁）、Drawnix、perfect-freehand
 - 同步：`@aws-sdk/client-s3`、七牛 Kodo（S3 兼容）
 - 其它：sharp（图片转换）、unpdf（PDF 文本）、write-excel-file（Excel 导出）
 
@@ -69,7 +69,7 @@ Local Lakex Notes 是一个自持数据的个人笔记应用：笔记、表格�
 │   ├── hooks/ · lib/ · styles/
 │   └── ...
 ├── android/                  # Capacitor Android 工程（Kotlin 插件）
-├── vendor/lakex-doc-react/   # 私有：Lakex 编辑器（不入库；npm run setup:lakex 恢复）
+├── vendor/lakex-doc-react/   # Lakex 编辑器及包装层（vendored；分发声明见 NOTICE）
 ├── scripts/                  # 构建、门禁、e2e、样式/移动端审计、同步工具
 ├── docs/                     # 交接与规格（见下方「文档」）
 └── build/ · public/          # 图标、启动资源、字体

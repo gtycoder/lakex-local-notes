@@ -78,7 +78,7 @@ export function SearchSheet(props: SearchSheetProps) {
         </div>}
         {!searching && !searchError && query.trim() && results.length === 0 && <div className="mb-empty">无匹配结果</div>}
         {results.map((r) => (
-          <div key={`${r.kind ?? "note"}:${r.id}`} className="mobile-doc-row" onClick={() => { if (r.kind === "quick-note") onOpenQuickNote(r.id); else onOpenNote(r.id); onClose(); }}>
+          <button type="button" key={`${r.kind ?? "note"}:${r.id}`} className="mobile-doc-row" onClick={() => { if (r.kind === "quick-note") onOpenQuickNote(r.id); else onOpenNote(r.id); onClose(); }}>
             <span className="mobile-search-main">
               <span className="mobile-search-title mb-ellipsis">{r.title || (r.kind === "quick-note" ? "小记" : "")}</span>
               {/* snippet 由 buildSnippet 全量转义、只含 <mark>（W-10；同桌面 SearchPanel） */}
@@ -86,7 +86,7 @@ export function SearchSheet(props: SearchSheetProps) {
             </span>
             {r.kind === "quick-note" && <span className="mobile-search-parent">小记</span>}
             {r.kind !== "quick-note" && r.parentTitle && <span className="mobile-search-parent">{r.parentTitle}</span>}
-          </div>
+          </button>
         ))}
       </div>
     </MobileSheet>

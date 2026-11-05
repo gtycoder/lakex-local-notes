@@ -11,7 +11,9 @@
  * 行语义（261102 用户点单 3b 定稿）：Item = 左标签右控件（选择器/动作/短数字）；Field = **内容输入类**
  *       （标签+说明在上、控件占满下一行，全宽 —— S3 连接信息 / AI 接入等长值输入）；Block = 标题 + 全宽内容。
  */
-import { Children, isValidElement, useEffect, useState, type ReactNode } from "react";
+import { Children, isValidElement, useId, useEffect, useState, type ReactNode } from "react";
+
+import { SettingFieldContext, useSettingField } from "./fieldAccessibility";
 
 export function Group({ title, icon, children }: { title: string; icon?: ReactNode; children: ReactNode }) {
   return (
@@ -38,29 +40,41 @@ export function Section({ title, children }: { title?: string; children: ReactNo
 
 /** 标准行：左标题(+说明)，右控件。 */
 export function Item({ itemId, name, desc, pathDesc, children }: { itemId?: string; name: ReactNode; desc?: ReactNode; pathDesc?: boolean; children?: ReactNode }) {
+  const id = useId();
+  const nameId = `${id}-name`, descId = `${id}-desc`;
+  const describedBy = desc ? descId : undefined;
+  const accessibility = { "aria-labelledby": nameId, "aria-describedby": describedBy, "aria-invalid": false };
   return (
-    <div className={"mb-set-item" + (pathDesc ? " mb-set-item--path" : "")} data-set-id={itemId}>
+    <SettingFieldContext.Provider value={accessibility}>
+    <div className={"mb-set-item" + (pathDesc ? " mb-set-item--path" : "")} data-set-id={itemId} role="group" {...accessibility}>
       <div className="mb-set-item__main">
-        <div className="mb-set-name">{name}</div>
-        {desc && <div className="mb-set-item__desc">{desc}</div>}
+        <div id={nameId} className="mb-set-name">{name}</div>
+        {desc && <div id={descId} className="mb-set-item__desc">{desc}</div>}
       </div>
       {children && <div className="mb-set-item__ctl">{children}</div>}
     </div>
+    </SettingFieldContext.Provider>
   );
 }
 
 /** 内容输入行：标题+说明在上、控件占满下一行（kit.css 的 --field 让 __ctl flex 1 1 100%）；
  *  error 折整行。选择器/开关/分段控件这类本来适合同行的行用 Item / Switch / Seg，不要套 Field。 */
 export function Field({ itemId, name, desc, pathDesc, error, children }: { itemId?: string; name: ReactNode; desc?: ReactNode; pathDesc?: boolean; error?: ReactNode; children?: ReactNode }) {
+  const id = useId();
+  const nameId = `${id}-name`, descId = `${id}-desc`, errorId = `${id}-error`;
+  const describedBy = [desc ? descId : null, error ? errorId : null].filter(Boolean).join(" ") || undefined;
+  const accessibility = { "aria-labelledby": nameId, "aria-describedby": describedBy, "aria-invalid": Boolean(error) };
   return (
-    <div className={"mb-set-item mb-set-item--field" + (pathDesc ? " mb-set-item--path" : "")} data-set-id={itemId}>
+    <SettingFieldContext.Provider value={accessibility}>
+    <div className={"mb-set-item mb-set-item--field" + (pathDesc ? " mb-set-item--path" : "")} data-set-id={itemId} role="group" {...accessibility}>
       <div className="mb-set-item__main">
-        <div className="mb-set-name">{name}</div>
-        {desc && <div className="mb-set-item__desc">{desc}</div>}
+        <div id={nameId} className="mb-set-name">{name}</div>
+        {desc && <div id={descId} className="mb-set-item__desc">{desc}</div>}
       </div>
       {children && <div className="mb-set-item__ctl">{children}</div>}
-      {error && <div className="mb-set-item__error">{error}</div>}
+      {error && <div id={errorId} className="mb-set-item__error">{error}</div>}
     </div>
+    </SettingFieldContext.Provider>
   );
 }
 
@@ -77,18 +91,21 @@ export function Block({ itemId, name, desc, children }: { itemId?: string; name?
 
 /** 开关行（触屏 44 命中区；开关本体 46×28）。 */
 export function Switch({ itemId, name, desc, note, checked, disabled, onChange }: { itemId?: string; name: string; desc?: string; note?: ReactNode; checked: boolean; disabled?: boolean; onChange: (checked: boolean) => void }) {
+  const id = useId();
+  const describedBy = [desc ? `${id}-desc` : null, note ? `${id}-note` : null].filter(Boolean).join(" ") || undefined;
   return (
     <div className="mb-set-item" data-set-id={itemId}>
       <div className="mb-set-item__main">
         <div className="mb-set-name">{name}</div>
-        {desc && <div className="mb-set-item__desc">{desc}</div>}
-        {note && <div className="mb-set-item__note">{note}</div>}
+        {desc && <div id={`${id}-desc`} className="mb-set-item__desc">{desc}</div>}
+        {note && <div id={`${id}-note`} className="mb-set-item__note">{note}</div>}
       </div>
       <button
         type="button"
         role="switch"
         aria-checked={checked}
         aria-label={name}
+        aria-describedby={describedBy}
         disabled={disabled}
         className="mb-switch"
         onClick={() => onChange(!checked)}
@@ -115,7 +132,7 @@ export function Seg({ ariaLabel, children }: { ariaLabel: string; children: Reac
 }
 
 /** 数字设置项：编辑期间只改 draft，失焦/Enter 才统一校验并提交；0 是合法值。 */
-export function NumField({ label, value, min, max, floor, fallback, onSave }: { label: string; value: number; min: number; max: number; floor: number; fallback: number; onSave: (n: number) => void }) {
+export function NumField({ label, value, min, max, floor, fallback, onSave, step = 1 }: { label: string; value: number; min: number; max: number; floor: number; fallback: number; onSave: (n: number) => void; step?: number | "any" }) {
   const [draft, setDraft] = useState(String(value));
   useEffect(() => { setDraft(String(value)); }, [value]);
 
@@ -127,10 +144,12 @@ export function NumField({ label, value, min, max, floor, fallback, onSave }: { 
     if (next !== value) onSave(next);
   };
 
+  const accessibility = useSettingField();
   return (
     <span className="mb-input mb-input--num">
-      <input
+      <input {...accessibility}
         type="number"
+        step={step}
         aria-label={label}
         min={min}
         max={max}
@@ -148,9 +167,10 @@ export function NumField({ label, value, min, max, floor, fallback, onSave }: { 
 
 /** 文本设置项（S3 配置等）：宽度由行的控件列给。 */
 export function TextField({ label, value, onSave, type = "text", placeholder }: { label: string; value: string; onSave: (v: string) => void; type?: "text" | "password"; placeholder?: string }) {
+  const accessibility = useSettingField();
   return (
     <span className="mb-input">
-      <input type={type} aria-label={label} value={value} placeholder={placeholder} onChange={(e) => onSave(e.target.value)} />
+      <input {...accessibility} type={type} aria-label={label} value={value} placeholder={placeholder} onChange={(e) => onSave(e.target.value)} />
     </span>
   );
 }

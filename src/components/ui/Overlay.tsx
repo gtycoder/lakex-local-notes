@@ -11,7 +11,8 @@
  *   <Menu open={open} onDismiss={close} style={{ left, top }}>…</Menu>
  *   <Popover open={open} onDismiss={close} style={{ left, top }}>…</Popover>
  */
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type MutableRefObject, type ReactNode, type Ref, type RefObject } from "react";
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type MutableRefObject, type ReactNode, type Ref, type RefObject } from "react";
+import { lockPageScroll } from "../../lib/pageScrollLock";
 import { createPortal } from "react-dom";
 import { ChevronRight } from "lucide-react";
 
@@ -22,7 +23,8 @@ const FOCUSABLE =
 
 let overlaySeq = 0;
 /** 当前打开的浮层栈（后开者在栈顶）。Esc 只关栈顶，避免「对话框内开着下拉时把对话框一起关掉」。 */
-const openOverlayStack: number[] = [];
+const openOverlayStack: { id: number; ancestors: readonly number[]; surface: HTMLElement | null }[] = [];
+const OverlayScope = createContext<{ ancestors: readonly number[]; modal: boolean }>({ ancestors: [], modal: false });
 
 interface OverlayProps {
   /** 缺省 true：条件渲染的调用方（menu/popover）可省略；dialog 一般显式传。 */
@@ -52,11 +54,14 @@ interface OverlayProps {
   closeOnNestedOverlay?: boolean;
   /** dialog 打开后的首焦点；缺省取首个可操作项 */
   initialFocus?: RefObject<HTMLElement | null>;
+  onKeyDown?: (event: React.KeyboardEvent<HTMLElement>) => void;
   children: ReactNode;
 }
 
-export function Overlay({ open = true, kind, onDismiss, label, className, style, surfaceClassName, scrimClassName, raised, surfaceRef, ignoreOutside, container, closeOnNestedOverlay = false, initialFocus, children }: OverlayProps) {
+export function Overlay({ open = true, kind, onDismiss, label, className, style, surfaceClassName, scrimClassName, raised, surfaceRef, ignoreOutside, container, closeOnNestedOverlay = false, initialFocus, onKeyDown: onSurfaceKeyDown, children }: OverlayProps) {
   const [overlayId] = useState(() => (overlaySeq += 1));
+  const parent = useContext(OverlayScope);
+  const scope = useMemo(() => ({ ancestors: [...parent.ancestors, overlayId], modal: parent.modal || kind === "dialog" }), [parent, overlayId, kind]);
   const innerRef = useRef<HTMLElement | null>(null);
   const restoreFocusRef = useRef<HTMLElement | null>(null);
   // 把外部 ref（可拖拽面板）与内部 ref 都挂到同一个表面元素上
@@ -66,22 +71,25 @@ export function Overlay({ open = true, kind, onDismiss, label, className, style,
     else if (surfaceRef) (surfaceRef as MutableRefObject<HTMLElement | null>).current = el;
   }, [surfaceRef]);
 
-  // 入栈/出栈：Esc 只会关掉栈顶那一层（对话框内的下拉开着时，先关下拉、不动对话框）
-  useEffect(() => {
+  // 嵌套portal保留React父层关系；首次同时挂载时，子层effect先运行也不会把父层放到栈顶。
+  useLayoutEffect(() => {
     if (!open) return;
-    openOverlayStack.push(overlayId);
+    restoreFocusRef.current = document.activeElement as HTMLElement | null;
+    const entry = { id: overlayId, ancestors: parent.ancestors, surface: innerRef.current };
+    const descendant = openOverlayStack.findIndex((item) => item.ancestors.includes(overlayId));
+    if (descendant < 0) openOverlayStack.push(entry); else openOverlayStack.splice(descendant, 0, entry);
     return () => {
-      const i = openOverlayStack.lastIndexOf(overlayId);
+      const i = openOverlayStack.findIndex((item) => item.id === overlayId);
       if (i >= 0) openOverlayStack.splice(i, 1);
     };
-  }, [open, overlayId]);
+  }, [open, overlayId, parent]);
 
   // Esc 关闭（三型通用，capture 阶段，避免被下层快捷键抢先）
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
-      if (openOverlayStack[openOverlayStack.length - 1] !== overlayId) return;
+      if (openOverlayStack.at(-1)?.id !== overlayId) return;
       e.stopPropagation();
       onDismiss();
     };
@@ -113,25 +121,36 @@ export function Overlay({ open = true, kind, onDismiss, label, className, style,
   // dialog：首焦点 + 滚动锁 + 关闭后恢复焦点
   useEffect(() => {
     if (!open || kind !== "dialog") return;
-    restoreFocusRef.current = document.activeElement as HTMLElement | null;
     const surface = innerRef.current;
-    if (surface) {
+    if (surface && openOverlayStack.at(-1)?.id === overlayId) {
       const first = initialFocus?.current ?? surface.querySelector<HTMLElement>(FOCUSABLE) ?? surface;
-      first.focus();
+      first.focus({ preventScroll: true });
     }
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    const unlock = lockPageScroll();
     return () => {
-      document.body.style.overflow = prevOverflow;
-      restoreFocusRef.current?.focus?.();
+      unlock();
+      const previous = restoreFocusRef.current;
+      const top = openOverlayStack.at(-1);
+      if (previous?.isConnected && (!top || top.surface?.contains(previous))) previous.focus({ preventScroll: true });
     };
-  }, [open, kind, initialFocus]);
+  }, [open, kind, initialFocus, overlayId]);
 
   if (!open) return null;
 
   // Tab 圈闭（dialog）
-  const onKeyDown = (e: React.KeyboardEvent) => {
-    if (kind !== "dialog" || e.key !== "Tab") return;
+  const onKeyDown = (e: React.KeyboardEvent<HTMLElement>) => {
+    onSurfaceKeyDown?.(e);
+    if (e.defaultPrevented) return;
+    if (kind === "menu" && ["ArrowDown", "ArrowUp", "Home", "End"].includes(e.key)) {
+      const surface = innerRef.current;
+      const items = Array.from(surface?.querySelectorAll<HTMLElement>('[role^="menuitem"]:not([disabled]):not([aria-disabled="true"])') ?? []).filter((item) => item.closest('[role="menu"]') === surface);
+      if (!items.length) return;
+      e.preventDefault(); e.stopPropagation();
+      const index = items.indexOf(document.activeElement as HTMLElement);
+      const next = e.key === "Home" ? 0 : e.key === "End" ? items.length - 1 : (index + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length;
+      items[next].focus(); return;
+    }
+    if (kind !== "dialog" || e.key !== "Tab" || openOverlayStack.at(-1)?.id !== overlayId) return;
     const surface = innerRef.current;
     if (!surface) return;
     const items = Array.from(surface.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(
@@ -155,7 +174,7 @@ export function Overlay({ open = true, kind, onDismiss, label, className, style,
 
   if (kind === "dialog" || kind === "drawer") {
     const isDialog = kind === "dialog";
-    return createPortal(
+    return <OverlayScope.Provider value={scope}>{createPortal(
       <div className={"ln-scrim" + (isDialog ? "" : " ln-scrim--drawer") + (scrimClassName ? " " + scrimClassName : "")} data-prevent-swipe onMouseDown={(e) => { if (isDialog && e.target === e.currentTarget) onDismiss(); }}>
         <section
           ref={setSurface}
@@ -172,23 +191,24 @@ export function Overlay({ open = true, kind, onDismiss, label, className, style,
         </section>
       </div>,
       container ?? document.body,
-    );
+    )}</OverlayScope.Provider>;
   }
 
   const surfaceClass = surfaceClassName ?? (kind === "menu" ? "ln-menu" : "ln-popover");
-  return createPortal(
+  return <OverlayScope.Provider value={scope}>{createPortal(
     <div
       ref={setSurface}
-      className={"ln-overlay-surface " + surfaceClass + (raised ? " ln-overlay-surface--raised" : "") + (className ? " " + className : "")}
+      className={"ln-overlay-surface " + surfaceClass + (raised || parent.modal ? " ln-overlay-surface--raised" : "") + (className ? " " + className : "")}
       data-context-menu
       role={kind === "menu" ? "menu" : "dialog"}
       aria-label={label}
       style={style}
+      onKeyDown={onKeyDown}
     >
       {children}
     </div>,
     container ?? document.body,
-  );
+  )}</OverlayScope.Provider>;
 }
 
 /** 对话框预设：遮罩 + 居中 + 焦点圈闭 + Esc/外点关闭 + 滚动锁。 */
@@ -321,8 +341,20 @@ export interface SubmenuProps {
 export function Submenu({ label, children, disabled = false, openDelayMs = 120, closeDelayMs = 150 }: SubmenuProps) {
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState<CSSProperties | null>(null);
-  const rowRef = useRef<HTMLDivElement | null>(null);
+  const rowRef = useRef<HTMLButtonElement | null>(null);
   const panelRef = useRef<HTMLElement | null>(null);
+  const keyboardOpenRef = useRef<"first" | "last" | null>(null);
+  const dismiss = useCallback(() => {
+    if (panelRef.current?.contains(document.activeElement)) rowRef.current?.focus();
+    setOpen(false);
+  }, []);
+  useEffect(() => {
+    if (!open || !keyboardOpenRef.current) return;
+    const items = [...(panelRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled),[role="menuitem"]:not([aria-disabled="true"])') ?? [])];
+    (keyboardOpenRef.current === "last" ? items.at(-1) : items[0])?.focus();
+    keyboardOpenRef.current = null;
+  }, [open]);
+
 
   useLayoutEffect(() => {
     if (!open) { setPosition(null); return; }
@@ -342,23 +374,29 @@ export function Submenu({ label, children, disabled = false, openDelayMs = 120, 
 
   return (
     <>
-      <div
+      <button type="button" role="menuitem" disabled={disabled}
         ref={rowRef}
         className={"context-menu-item has-submenu" + (disabled ? " is-disabled" : "")}
         aria-haspopup="menu"
         aria-expanded={open}
-        onClick={() => { if (!disabled) setOpen(true); }}
+        onClick={(event) => { if (event.detail === 0) keyboardOpenRef.current = "first"; setOpen(true); }}
+        onKeyDown={(event) => {
+          if (!["ArrowRight", "ArrowDown", "ArrowUp"].includes(event.key)) return;
+          event.preventDefault(); event.stopPropagation();
+          keyboardOpenRef.current = event.key === "ArrowUp" ? "last" : "first"; setOpen(true);
+        }}
       >
         <span className="context-menu-item-label">{label}</span>
         <ChevronRight size={14} />
-      </div>
+      </button>
       <HoverPopover
         kind="menu"
         open={disabled ? false : open}
         onOpenChange={setOpen}
         anchorRef={rowRef}
         panelRef={panelRef}
-        onDismiss={() => setOpen(false)}
+        onDismiss={dismiss}
+        onKeyDown={(event) => { if (event.key === "ArrowLeft" || event.key === "Tab") { event.preventDefault(); event.stopPropagation(); dismiss(); } }}
         ignoreOutside={(target) => rowRef.current?.contains(target) ?? false}
         className="context-menu-submenu"
         style={position ?? undefined}

@@ -60,7 +60,7 @@
   justify-content: center;
   cursor: pointer;
   color: var(--lake-text-2);
-  font-size: 16px;
+  font-size: var(--lake-font-size-body);
   -webkit-tap-highlight-color: transparent;
 }
 .med-btn > svg { width: 20px; height: 20px; }
@@ -83,7 +83,7 @@
   border-radius: calc(var(--mobile-bottom-bar-height) / 2 - 4px);
 }
 .med-btn.med-aa { font-weight: 700; font-size: var(--lake-font-size-title); }
-.med-btn.med-b { font-weight: 700; font-size: 18px; }
+.med-btn.med-b { font-weight: 700; font-size: var(--lake-font-size-title); }
 
 /* 收起过渡期（restore：键盘从面板上方滑上来）面板内容保持可见，但不再接受点击（见 EditorDock 注释）。 */
 .med-panel[data-closing="1"] { pointer-events: none; }
@@ -181,7 +181,7 @@
 .med-ins-item:disabled { opacity: var(--lake-disabled-opacity); cursor: default; }
 .med-ins-item svg { width: 22px; height: 22px; flex: 0 0 auto; color: var(--lake-text-2); }
 
-.med-ins-label { min-width: 0; font-size: 13px; line-height: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.med-ins-label { min-width: 0; font-size: var(--lake-font-size-micro); line-height: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* 「Aa」面板：语雀式的**分组卡片**排布（用户 261012 定稿）。
    口径：一卡一组、一行最多两卡；卡宽按条目数分配 ⇒ 同一行里各条目等宽（语雀那排 B I S U 比列表卡宽就是这个理）。
@@ -214,7 +214,7 @@
   background: transparent;
   border-radius: var(--mb-radius);
   height: 40px;
-  font-size: 15px;
+  font-size: var(--lake-font-size-small);
   font-weight: 500;
   display: inline-flex;
   align-items: center;
@@ -230,9 +230,9 @@
 /* 「更多」面板里的画图占位：与插入面板的置灰同一口径 */
 .med-f-btn:disabled { opacity: var(--lake-disabled-opacity); cursor: default; }
 /* 「更多」面板的行内文字（261017 用户点单：每项要有文字说明） */
-.med-f-label { min-width: 0; font-size: 13px; line-height: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.med-f-glyph { font-size: 15px; font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; }
-.med-f-rowlabel { display: inline-flex; align-items: center; flex: 0 0 auto; padding: 0 4px 0 10px; font-size: 13px; color: var(--lake-text-3); }
+.med-f-label { min-width: 0; font-size: var(--lake-font-size-micro); line-height: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.med-f-glyph { font-size: var(--lake-font-size-small); font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; }
+.med-f-rowlabel { display: inline-flex; align-items: center; flex: 0 0 auto; padding: 0 4px 0 10px; font-size: var(--lake-font-size-micro); color: var(--lake-text-3); }
 /* 面板内命令生效（加粗/斜体/列表/对齐/字号等）：主色 + 浅底 + 描边（用户 261012：样式先保持我们自己的） */
 .med-f-btn.med-f-on {
   color: var(--lake-accent-text);
@@ -242,7 +242,7 @@
 
 /* 字色行：一排 A（默认 + 常用色）—— **只属于文字色**（261014 解耦：末位那个"背景色入口"已删除，
    它当年用来切换色板变体，正是"两行串联"的根源；背景色改由下面那块色板独立负责）。 */
-.med-f-card.med-f-colors .med-f-btn { font-size: 17px; font-weight: 600; }
+.med-f-card.med-f-colors .med-f-btn { font-size: var(--lake-font-size-title); font-weight: 600; }
 
 /* 色板：**照抄语雀排布**（用户 261012 定稿）—— 2 行 × 7 格圆形色块。
    几何取自语雀 Android 1.2.2 设备实测（540px 宽 / density 210 ⇒ 1.3125 px per dp）：
@@ -290,7 +290,7 @@
    档位不写在这里：字号见 EditorDock 的 MOBILE_FONT_SIZES、行高见 ui/LineHeightStepper.tsx。 */
 .med-f-step { flex: 1 1 0; min-width: 0; display: flex; align-items: center; gap: 2px; padding: 0 4px; }
 .med-f-step .med-f-btn { flex: 0 0 32px; min-width: 32px; }
-.med-f-step__label { flex: 0 0 auto; padding-left: 4px; font-size: 12px; line-height: 1; color: var(--lake-text-3); }
+.med-f-step__label { flex: 0 0 auto; padding-left: 4px; font-size: var(--lake-font-size-nano); line-height: 1; color: var(--lake-text-3); }
 .med-f-step__value {
   flex: 1 1 0;
   min-width: 0;
@@ -305,12 +305,12 @@
   white-space: nowrap;
 }
 
-.med-outline-item { display: block; width: 100%; border: none; background: transparent; padding: 0 20px; min-height: var(--mb-ctl-h); line-height: var(--mb-ctl-h); font-size: 16px; text-align: left; cursor: pointer; color: var(--lake-text-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; -webkit-tap-highlight-color: transparent; }
+.med-outline-item { display: block; width: 100%; border: none; background: transparent; padding: 0 20px; min-height: var(--mb-ctl-h); line-height: var(--mb-ctl-h); font-size: var(--lake-font-size-body); text-align: left; cursor: pointer; color: var(--lake-text-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; -webkit-tap-highlight-color: transparent; }
 .med-outline-item:active { background: var(--lake-bg-hover); }
 .med-outline-item.lv1 { font-weight: 600; }
 .med-outline-item.lv2 { padding-left: 36px; }
 .med-outline-item.lv3 { padding-left: 52px; color: var(--lake-text-2); }
-.med-doc-item { display: flex; align-items: center; width: 100%; border: none; background: transparent; padding: 0 20px; min-height: var(--mb-ctl-h); font-size: 16px; cursor: pointer; color: var(--lake-text-1); -webkit-tap-highlight-color: transparent; }
+.med-doc-item { display: flex; align-items: center; width: 100%; border: none; background: transparent; padding: 0 20px; min-height: var(--mb-ctl-h); font-size: var(--lake-font-size-body); cursor: pointer; color: var(--lake-text-1); -webkit-tap-highlight-color: transparent; }
 .med-doc-item:active { background: var(--lake-bg-hover); }
 .med-doc-item.med-active { color: var(--lake-accent-text); font-weight: 600; }
 /* .med-doc-item-title：截断走 kit 的 .ln-ellipsis（JSX 已挂） */

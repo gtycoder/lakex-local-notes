@@ -6,6 +6,8 @@
  * - 工具栏：用系统应用打开 / 在文件夹中显示（桌面平台动作）/ 关闭
  */
 import { useEffect, useState } from "react";
+import { lockPageScroll } from "../../lib/pageScrollLock";
+import { dismissImmersivePreview } from "../../lib/immersivePreview";
 import { createPortal } from "react-dom";
 import { ExternalLink, FolderOpen, Paperclip, X } from "lucide-react";
 import { closeAttachmentPreview, subscribeAttachmentPreview, type AttachmentPreviewState } from "./attachmentPreviewController";
@@ -24,10 +26,12 @@ export function AttachmentPreview() {
 
   useEffect(() => {
     if (!state) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") closeAttachmentPreview(); };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape" && dismissImmersivePreview()) { e.preventDefault(); e.stopImmediatePropagation(); } };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
   }, [state]);
+
+  useEffect(() => { if (state) return lockPageScroll(); }, [state]);
 
   // 沉浸顶栏（移动端）：预览与图片 Lightbox 统一为**浅色背景**（260928 用户要求「都用图片的
   // 背景样式」）⇒ 状态栏用深色图标（SystemBarsStyle.Light）；关闭恢复默认。

@@ -61,13 +61,7 @@
  * 一律走 --lake-* 令牌，不写死颜色，深浅主题自动跟随。 */
 
 /* ---------- ① 设置弹窗骨架 ---------- */
-/* ⚠️ P7-e：这里的 !important 是**必需**的 —— 面板宽度由 JS 的 FloatingPanel 以 **inline style** 给出，
- * 只有 !important 能压过 inline（P7-e 批量去 !important 时曾误删，对拍立刻发现宽度 1000 → 840）。 */
-.settings-panel-large {
-  width: min(1000px, calc(100vw - 32px)) !important;
-  min-height: min(660px, calc(100vh - 32px));
-  background: var(--lake-bg-panel);
-}
+/* 设置初始尺寸与缩放边界由useFloatingDialog负责，表面由Overlay负责。 */
 .settings-panel-large .settings-layout { min-height: 0; }
 .settings-panel-large .settings-nav {
   display: flex;
@@ -365,12 +359,6 @@ button.ln-list-item__action:disabled { opacity: .45; cursor: default; }
 /* 长文本输入（S3 Endpoint 等）：思源默认 200px 放不下 URL */
 .logs__filter { flex: 1 1 auto; min-width: 120px; }
 
-/* #4 遮罩淡入：弹窗背景层不再瞬间出现，消除突兀/闪烁；与 .floating-dialog 的入场缩放协同 */
-@keyframes lake-overlay-fade-in { from { opacity: 0; } to { opacity: 1; } }
-.settings-overlay { animation: lake-overlay-fade-in var(--lake-motion-fast) var(--lake-ease-standard); }
-@media (prefers-reduced-motion: reduce) {
-  .settings-overlay { animation: none; }
-}
 /* 通用组件与浮层通用件（260916 第二档 S4：由 `overlays.css` 改名而来 —— 原名是"按响应/意图"命名，职责名才是 `components`）。
    内含：`.ln-*` 浮层通用件（`ln-tabs/ln-toolbar/ln-row2/badge/seg/checks/panel-title/ln-close/ln-empty`）、菜单、卡片、徽章等。
    **双端共享**（桌面 `src/main.tsx` 与移动 `src/mobile/main.tsx` 都加载）。新界面要补通用件时补在这里。 */

@@ -8,6 +8,20 @@
 
 ## 0. 最新交接（261027）
 
+### 261105 · 九项 UI 交互与结构改进（`feat/ui-surface-polish`）
+- **依据与基线**：用户认可六项视觉优化，批准继续按数字输入→浮层→键盘/字段语义→大列表→加载→样式→组件→安全区→文案的顺序完成。本批先合入业务已提交的`a08dcfa2`（合并`4ba77d66`），不带主工作树在途修改；业务后续提交留在其分支，集成时再处理。
+- **1 数字输入**：桌面与移动均保留草稿，失焦/Enter校验提交，Esc撤回，0合法，上下限夹取；整数step1，桌面AI温度step=any。跨端6例覆盖0、小数、空值、上下限、撤回与外部更新，Android真落库0并恢复原值。
+- **2 浮层**：桌面设置改用Overlay，保留拖动/缩放、默认1000×660；删除旧CSS强制宽度（原手柄不能改变宽度），实测1000→936。对话框父子栈按React关系排序，嵌套菜单自动抬层；滚动锁归lib/pageScrollLock（Dialog/MobileSheet/图片/附件共用、乱序与重复释放安全）。图片/附件优先消费Esc/Android返回，不关父层；Pad Esc先消费返回栈。
+- **3 操作语义**：子菜单原生按钮、方向键/Home/End、Tab/Esc归还焦点；选择器Tab回触发器；移动搜索结果为原生button；设置输入/选择器/开关关联可见名称、说明、错误；小记添加标签视觉28、命中补足44。Picker保留标题式头部（无×），只共享焦点/滚动机制，不加移动Tab陷阱。
+- **4 大列表**：桌面小记>24接既有@tanstack/react-virtual（无新依赖）；保留完整筛选/选择模型、屏外编辑/菜单/焦点/搜索目标。绝对top定位，不为正文fixed/全屏引入transform包含块。真实渲染器+Native内存投影的2万条UI样本：卡片19/索引21挂载、读取7条详情、写入0，搜索定位与Home/End到首尾通过；并非2万条实库的存储/同步基准。
+- **5 加载**：DeferredPanel首次打开才请求设置/搜索，等待时可关闭，访问后保留草稿；AI页按打开条件。真实首页资源请求无SettingsDrawer/SearchSheet；组件级真实lazy延迟用例验证关闭中不露加载壳、重开草稿保留。本机WebView的Fetch暂停未拦住本地资源，未伪称设备级延迟通过。
+- **6 样式归属**：浮动目录几何归shell，旧设置遮罩/强制尺寸删掉；47处移动字号字面量接现有8档，字号门禁归零。11/12.5/17分别向上取12/13/18，其余取值不变。CSS声明/重复棘轮收紧；桌面!important9、移动19，跨文件重复103，无新增颜色/动效/滤镜。
+- **7 组件**：QuickNotesWorkspace1542→1279，写作/预览/窗口列表/草稿判据分开；SettingsDrawer842→651，AI状态归useAiSettingsForm，AI/基础设置视图分开。保存/同步/标签判据原样承接；源码护栏改为追踪已接线文件，不删除断言。
+- **8/9**：页面裸env安全区改走mobile-*-safe-area；Android模拟原生bottom28/left32/right24时，设置底内距52、顶栏左右32/24，恢复原值。“关于”与README的内核分发事实按NOTICE修正，不增加许可判断。
+- **门禁与实测**：tsc0；全量613文件（602 passed/11 integration skipped），3711 passed/12 skipped；core137文件0违规、mobileui/ui-metrics、双构建、bundle/arch、diff-check通过。首屏gzip桌面552037B/600KB、移动347770B/360KB，APK42197279B。桌面正文59元素、手机48段正文阅读200/编辑88元素CSS几何A/B零差异；临时正文通过应用trash/purge接口清除。物理机帧率未测。
+- **快照与装置**：专用5594/CDP9366手机6态、Pad1280×800的6态、多维表3态均重烤后独立复采0差异；最终设置/外观两态、正文态再采0差异；23屏走查累计全部到达，escape/clipped/contrast/smallTap均0（工具补滚动定位与通用关闭入口后只补验未到达屏）。snap-gate修正--states只比较请求态、未知态明确失败，局部重烤保留其他基线（2例）；实际比对断言未放宽。
+- **检测/交付**：Impeccable一次8项，7项为既有尺寸transition/内容侧填色/小圆角；“broken-image”是图片解析正则的误报。只本UI分支本地提交、未push/合回业务。桌面9242、手机5588/CDP9362、Pad5590/CDP9363均覆盖安装/重启，数据保留，无文件选择桩。截图、日志、九项映射见`.css-audit/ui-hardening/REVIEW.md`。
+
 ### 261105 · 六项 UI 优化收口（`feat/ui-surface-polish`）
 - **顺序与范围**：承接已验收的设置/管理弹窗批次，按对齐间距→图标控件→字阶→浮层纵深→状态表达收口。主仓库有并行的小记标签管理未提交，本批只基于本UI分支`45c3f39d`，没有带入在途改动。
 - **间距/形体**：小记标题与版式切换间距12，原头部31/按钮26保留；切换接已有ln-segment，去掉legacy seg的弱选中外观。组间分隔细线0.5px；直属SVG块布局、不压缩，两端尺寸不变。
@@ -466,7 +480,7 @@
 - **打包版 cMap 验证（261102）**：`electron-builder --dir` 出 `release/mac-arm64/LakexLocalNotes.app`，以临时 `LAKE_USER_DATA` + CDP 9223 启动；`fetch(lakexlocalnotes://app/vendor/pdfjs/cmaps/UniGB-UCS2-H.bcmap)` → **200 / 43,366B**；导入「预定义 CMap + 非嵌入中文」PDF（无 cmaps 时空白）→ 页图正确显示中文（打包私有协议实测通过；首次探针因 dev 与打包同占 :19876 误判为 404，停 dev 后复测正常）。
 - **分享 PDF 优化（261102 续）**：① 分享处理从「忙时直接丢弃」改为 **串行队列**（`src/mobile/ink/shareQueue.ts` 纯类；等待位默认 5，满则 toast「分享处理队列已满，丢弃本次分享」；异常后继续下一个）；冷启动 consume / 热启动 shared 统一入队。② `SharedPdfImportResult` 补齐 `pageCount`（真实页数）/`importedPageCount`/`truncated`/`errors`，`sharedPdfImportToast` 一句话报「已导入 N 页 / PDF 共 M 页仅导入前 N 页（上限 300 页）/ N 页成功 K 页失败（第一页原因…）」；失败取消回滚与读取失败提示不变。测试：shareQueue 5 例 + mobilePdfImport 15 例（含 5 toast）+ 静态路由断言。
 - **手写板导出 PDF 300 页压测（261102 续）**：dev app + CDP 真实 `exportNote(id,'pdf')`：300 页无图 313ms/0.49MB、300 页 5 张循环图 603ms/1.45MB、300 页 20 张噪声图 1.23s/5.10MB、**300 页 100 张不同噪声图 4.7–4.8s/24.47MB**；最重例主进程 RSS 峰值 209MB、结束后回落，无 error/crash，60s 超时余量约 12 倍 ⇒ **未改代码、无需超时参数化**。视觉抽查（sips 转 PNG）：背景图/笔迹/高亮 multiply/页脚 `1 / 100` 正确；证据 `.css-audit/task22-ink-pdf-stress/`（gitignored）。**若未来允许 300 页全为 4K 照片级原图，再考虑超时参数化/降采样/进度。**
-- **待办（本批未做）**：PdfRender cacheDir 中间产物未主动清理（系统可回收）；导入上传阶段进度仍显示 n/N（栅格化完成后上传 300 页串行，观感可能像卡住）；只读单视图无视图入口（有意，避免改快照）；移动端视图**拖拽排序**未做（桌面有）；新建 form 会命中「第一个 form 优先」默认落地（既有规则）；页面级 6 处裸 `env(safe-area-inset-bottom)` 未统一（另立）；桌面新增字段取消后字段保留（有意）。
+- **待办（本批未做）**：PdfRender cacheDir 中间产物未主动清理（系统可回收）；导入上传阶段进度仍显示 n/N（栅格化完成后上传 300 页串行，观感可能像卡住）；只读单视图无视图入口（有意，避免改快照）；移动端视图**拖拽排序**未做（桌面有）；新建 form 会命中「第一个 form 优先」默认落地（既有规则）；页面安全区已归mobile-*-safe-area（UI分支261105完成） 未统一（另立）；桌面新增字段取消后字段保留（有意）。
 
 > **261030 移动端多维表批次（已本地提交 + 设备验收，见下条收尾）**：按钉钉实机复刻移动端多维表 —— 视图页签（表单/内容）+ **默认落表单填写**（只读文档里唯一写路径，提交=新增记录，走 `onPersistNow` 立即 `bridge.saveNote`）+ 内容视图**表格/卡片两套布局**（卡片 1/2 列、封面、主副标题、展示字段；**只做 1/2 列**）+ 分组 + 只读详情整页（1/N）+ 视图配置面板（布局可改、筛选排序只读）+ 视图列表。展示类配置**全部设备本地**（`lakex-local-notes-mobile.bitable-layout.<noteId>`，不写正文不同步，用户 261030 定）。实机实测与方案见 `docs/MOBILE-BITABLE-DINGTALK.md`（含 11 张钉钉截图 + 5 张样机图：`docs/mockups/mobile-bitable.html`）。门禁：tsc 0 / vitest **518 文件 3196 例** / check:core 135 文件 0 / check:mobileui / 桌面与移动 build / check:bundle（entry JS **73,621**/81,920、CSS 136,741/141,312、preload **21**/23 —— 本轮上收 core 后入口图净减 2 条）/ diff-check。**设备级验收已做（emulator-5562/lake_gate，重装本轮 APK）**：lakeNative 造「观点收集」夹具（grid+form 双视图/7 记录）→ 默认落表单、提交 7→8 且 readNote 回读 8 条（真落盘）、表格/卡片/视图配置/详情/编辑态全通过、布局偏好重启保留；修掉「提交按钮与列表末尾被底部胶囊压住」、空分组标签改「未填写」。**261030 二轮**：① 详情页改单 header（viewer `onFullscreenChange` → 工作区 `subpageFullscreen` 复用 `chromeHiddenNow` 隐藏顶栏/胶囊，切文档/进出编辑复位）+ 返回键先关详情（`pushBackHandler`，此前会直接退工作区）；② 分组头日期在移动端格式化成「6月9日」（`mobileBitableFormat.ts`，不动 core）；③ **表单语义上收 core**（`src/core/bitableForm.ts`：可填字段/题目顺序/必填/提交值，桌面 `BitableFormView` 与移动端共用，修掉两端旧分叉），守卫同步改指 core；④ **P1 表单附件/图片可上传**（系统选择器 → `bridge.uploadResource`，映射与桌面一致，`mobileBitableAttachments.ts` 纯映射 + 单测）；⑤ **记录面板附件也可编辑**（上传控件抽成 `MobileBitableAttachmentEditor`，表单 + 记录面板共用；`MOBILE_EDITABLE_FIELD_TYPES` 增补 attachment/image）；⑬ **字段显示格式 + 类型互转 + 自动保存修复（261030）**：① 显示格式（日期 4 档 / 数字 5 档，core 格式化，两端设置项）；② 类型互转仅限**无数据**字段（core `convertBitableFieldType`/`fieldHasData`，有数据禁用并说明）；③ **修掉移动端自动保存从未生效的严重 bug**（`useAutoSave` 防抖回调先删 pending 再 drain ⇒ 永远不写；已修 + 3 例回归测试，影响所有可编辑文档，设备复验改格式 ~1s 落盘）。⑫ **修改字段（移动端，用户点单）**：字段面板铅笔 → 修改字段面板（标题/类型展示/默认值/必填/选项），按类型动态出设置（日期三态含「添加记录当天」、单选选项增删改名、进度颜色…）；类型修改/关联/AI/附件属性仍只在桌面。core 新增 `updateBitableField` + 单测；「字段」入口在所有内容视图编辑态可见。设备复验默认值/选项/必填均可回读（真落盘）。⑪ **数据表操作（重命名/复制/删除，两端）**：core `renameBitableTable`/`deleteBitableTable`/`duplicateBitableTable`（复制换全量 id + 视图字段引用 + 关联清值去配对）+ 单测；移动端抽屉行 ⋮ → 操作面板（只读置灰、删除二次确认）；桌面左侧列表 ⋮ 改成三项菜单（替换原「⋮=重命名 + 独立垃圾桶」）。桌面未做实机截图验收。⑩ **多数据表切换（用户反馈）**：常驻 ☰ 入口 + 左侧「数据表」抽屉（搜索 / 列表 / 当前项高亮 / 新建数据表；只读置灰、编辑态可用），替换原来「>1 表才出现」的顶部横向页签；演示文档改为双表（观点收集 / 资料收集）。⑨ **反馈批**：表单去冗余（封面/重复标题/说明，用户点单）+ 收键盘单一来源 `ui/dismissKeyboard.ts`（点空白/提交/选日期时 blur）+ 自有日期选择 `MobileBitableDateField`（MobileSheet + core 月历，表单与记录面板共用，替换系统 date 弹窗）；单测 + 设备复验。⑧ **P2 三套视图 + 表单编辑态**：移动端 看板（core kanbanColumns）/ 画册（galleryCoverImage）/ 日历（calendarMonthDays）渲染 + 表单编辑态（仅文档编辑态，改视图配置；按钮「返回填写」）；
 ⑦ **提交后状态可见**（`submitStateText(cloudState)`，读 `bridge.getCloudState()`；不写「已同步」），提交条上移不再被胶囊压住；⑥ **多维表专项设备门禁** `npm run check:bitablesnap`（表单/内容·表格/内容·卡片 3 态，夹具自建自删、不污染 6 态与走查；取快照/比对逻辑抽 `snap-gate.mjs`、导航工具抽 `snap-lib.mjs` 与 6 态共用；连跑两轮 0 差异）。验收用的「观点收集」夹具**已从 lake_gate 删除**（它会插到最近文档、打乱 home-doc 态），删除后 6 态快照 0 差异（`check-mobile-snap --port 9336`）。**待办**：① 门禁装置把 bitable 并进 6 态快照与 23 屏走查（当前是独立 `check:bitablesnap` 装置）；② 卡片内联编辑、筛选/排序编辑（只读）、甘特视图留 P1/P2（看板/画册/日历与表单编辑态已随 ⑧ 落地）；③ 桌面端本批未做实机截图验收（42 态快照本机无夹具缓存）。
@@ -770,7 +784,7 @@
 
 | worktree | 分支 | HEAD | 状态 |
 | --- | --- | --- | --- |
-| `lakex-ui-surface-polish`（本会话） | `feat/ui-surface-polish` | 见 `git log -1` | 独立UI分支，已合入主仓库截至`2c90119f`的提交；261105六项UI优化已完成，仅本地提交，未推送、未回合业务分支。当前工作树以`git status`为准 |
+| `lakex-ui-surface-polish`（本会话） | `feat/ui-surface-polish` | 见 `git log -1` | 独立UI分支，已合入主仓库截至`2c90119f`的提交；261105九项UI交互/结构改进已完成，仅本地提交，未推送、未回合业务分支。当前工作树以`git status`为准 |
 | `lakex-local-notes`（主仓库） | `feat/pad-touch-ui` | 见 `git log -1`（**不写死 hash**；本批 = 261104 三项裁决落地，3 个本地提交） | **本地提交、未推送**：本分支领先 origin **3**、领先 GitHub **6**（本机用 HTTPS 补推，见环境注记）；`master` 仍在 `834b5772`，**本批未合 master**（验收后再合）；工作树 clean，多会话并行状态以 `git status` 为准 |
 | `lakex-pad` | `feat/pad-adaptation` | `17f44dbd` | **历史残留**：平板第一批早已合入 master，本分支落后 master 15 提交、领先 0。其 README/AGENTS/HANDOFF 是旧口径（「平板走内核工具栏」「补丁 3 处」），**不要当依据**；确认不再用可 `git worktree remove lakex-pad`（需用户点头） |
 
@@ -818,7 +832,7 @@
 
 **P2（体验缺口 / 长期）**
 
-7. **移动端文本格式（261104 设备实测已收口，别再按旧文档当缺口）**：H1–H6 / 字号 / 颜色 / 对齐 / 列表 / 缩进 / 行高 / 上下标 / 清除格式**全部生效**；**字号+行高已合并成一行步进器**（更多面板 4 行），对齐已是 4 档（含两端对齐）。已关闭、别再立项：首行缩进（内核只做整篇 set、无 undo ⇒ 文案改「全文首行缩进」）；clearFormat（只清行内 mark，与 Word/语雀一致）；Aa 面板溢出（字号搬进「更多」+ 面板下限 312 ⇒ 312/312 无裁切）。**分栏 3·4 已补**（贴着「分栏」条目弹锚定气泡）；**alert 类型不补**（块被选中后内核自带色板可改，用户口径）。未接入口：unlink（kernel 命令对 host 选区返回 false，只有内核链接面板那条路）/ replace（kernel 只收 ranges、移动端查找面板是宿主自研 ⇒ 本轮不做）/ style→code·quote / 表格块级命令族（lakex 表格卡上下文工具条）。另有：画图插入项解禁（文本绘图仍置灰）；移动视图拖拽排序；PdfRender `cacheDir` 清理；页面级 6 处裸 `env(safe-area-inset-bottom)`。
+7. **移动端文本格式（261104 设备实测已收口，别再按旧文档当缺口）**：H1–H6 / 字号 / 颜色 / 对齐 / 列表 / 缩进 / 行高 / 上下标 / 清除格式**全部生效**；**字号+行高已合并成一行步进器**（更多面板 4 行），对齐已是 4 档（含两端对齐）。已关闭、别再立项：首行缩进（内核只做整篇 set、无 undo ⇒ 文案改「全文首行缩进」）；clearFormat（只清行内 mark，与 Word/语雀一致）；Aa 面板溢出（字号搬进「更多」+ 面板下限 312 ⇒ 312/312 无裁切）。**分栏 3·4 已补**（贴着「分栏」条目弹锚定气泡）；**alert 类型不补**（块被选中后内核自带色板可改，用户口径）。未接入口：unlink（kernel 命令对 host 选区返回 false，只有内核链接面板那条路）/ replace（kernel 只收 ranges、移动端查找面板是宿主自研 ⇒ 本轮不做）/ style→code·quote / 表格块级命令族（lakex 表格卡上下文工具条）。另有：画图插入项解禁（文本绘图仍置灰）；移动视图拖拽排序；PdfRender `cacheDir` 清理；页面安全区已归mobile-*-safe-area（UI分支261105完成）。
 8. 墓碑 payload 老化（261025 定「后续优化」）；大库阈值探测（>2 万文档 / 索引 3–5MB）；**真实 Android 物理机验收从未做过**；PARITY 残余（移动云清理无 UI 入口、目录恢复后 `deleted_notes` 残留）。移动缺正文的「云端拉回 / 历史恢复 / 重建纯文本」三条只在单测 mock 覆盖，需真机 + 配 S3 验证。
 9. 顶栏真 44 需另开「44 → 52」需求（六批 A4 结论）；平板内容画布「点空白落光标」（待用户裁决）。
 

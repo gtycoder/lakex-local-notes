@@ -92,7 +92,7 @@ components:
 ## Typography
 
 **正文与界面同族：MiSans**（与桌面同一逻辑、同一份内置切片资源）；数字/代码用 JetBrains Mono。
-字号**只走令牌**（`--lake-font-size-*`，7 档 12/13/14/15/16/18/20/24 + 徽标 12），禁止字面量 px。
+字号**只走令牌**（`--lake-font-size-*`，8 档 12/13/14/15/16/18/20/24 + 徽标 12），禁止字面量 px。
 
 - **Body 16 / 1.5**：列表行、设置行、正文界面（触屏比桌面大一档：桌面 body 是 14）。
 - **Row title 16 / 1.45（500）**：两行列表行的标题。
@@ -307,11 +307,10 @@ node scripts/css-audit/drive.mjs 9335 scripts/css-audit/mobile-walkthrough.mjs  
 
 **基线只许降**的账本：桌面样式 import 白名单（现状 4 条：quick-notes + 2 feature CSS + 字体资源）·
 桌面类名 token（**0**，不允许回涨）· 反向耦合（**0**）· 各样式文件声明数/重复组（`mobileLayers.test.ts`）·
-`!important`（现状 **18**，新增须写明理由；都是压「内核行内样式 / 未分层内核 CSS」的必需项 ——
+`!important`（现状 **19**，新增须写明理由；都是压「内核行内样式 / 未分层内核 CSS」的必需项 ——
 未分层的普通声明会压过我们 @layer 里的普通声明，只有「分层里的 !important」才强于「未分层的 !important」，
 即 CSS Cascade 5 的 important 层序反转；261013 的 +2 来自压内核桌面引擎几何 `min-height:1024` 与 90px 底内距）·
-移动端 **字号字面量**（现状 **48** = mobile.css 37 + editor-dock.css 11，基线 49、只许降；由 `ui-metrics.mjs` 卡住，
-新增字面量直接 exit 1 —— 桌面是硬 0，移动端先做单调下降）·
+移动端 **字号字面量为0**（261105：47处迁入现有字号档，ui-metrics基线归零）；
 **移动端 CSS 不得再出现桌面类名选择器**（`ln-`/`b3-`/`fn__`/`config-`，`mobileLayers.test.ts` 恒为 0；
 261013 立：P5 之后还留着一批挂在 `.ln-row` 上的规则永不命中 —— 拖拽落点线就是这么静默丢的）。
 
@@ -329,3 +328,12 @@ node scripts/css-audit/drive.mjs 9335 scripts/css-audit/mobile-walkthrough.mjs  
 - **Don't** 让桌面样式为移动端开分支（`:is(.app-shell, .mobile-app)` 已清零，不许回涨）。
 - **Don't** 造第二个「居中对话框」「第二套 toast」「第二套 sheet」——浮层只有 `floating.css` 那四件。
 - **Don't** 写内联样式表达静态视觉；`!important` 只用于压内核（且要写理由）。
+
+## UI 交互机制收口（261105）
+
+- 数字字段失焦/Enter提交，0合法；名称、说明和错误与输入/选择器/开关关联。
+- 设置/搜索由DeferredPanel首次打开才加载，关闭时隐藏加载壳，访问后保留表单状态；AI页保持按打开条件挂载。
+- PickerSheet保留原来只有标题的头部；与MobileSheet共用焦点/页面锁控制器，补方向键和焦点归还，不增加Tab陷阱。
+- 图片/附件预览、普通移动Sheet和桌面Dialog共用lib/pageScrollLock的计数控制。预览优先关闭；Pad Esc先消费返回栈，再处理页面。
+- 页面安全区只引用mobile-*-safe-area，env与原生WindowInsets的组合只在theme/tokens.css定义。
+- AI表单状态/动作归useAiSettingsForm，AI与基础设置视图归分类组件，SettingsDrawer保留导航与既有数据所有者。

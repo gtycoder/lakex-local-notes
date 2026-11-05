@@ -13,7 +13,7 @@ import { describe, expect, it } from "vitest";
 
 const read = (rel: string) => readFileSync(new URL(rel, import.meta.url), "utf8");
 
-const WORKSPACE_SRC = read("../../components/app/QuickNotesWorkspace.tsx");
+const WORKSPACE_SRC = ["../../components/app/QuickNotesWorkspace.tsx", "../../components/app/QuickNoteComposer.tsx", "../../components/app/QuickNoteCard.tsx", "../../components/model/quickNoteDraft.ts"].map(read).join("\n");
 const EDITOR_SRC = read("./QuickNoteEditor.tsx");
 const RUNTIME_SRC = read("../editor/lakeRuntime.ts");
 const PREVIEW_SRC = read("./QuickNotePreview.tsx");
@@ -286,7 +286,7 @@ describe("小记搜索入口（261021）", () => {
   it("卡片视图也有小记内本地搜索；列表视图与卡片视图共用查询", () => {
     expect(WORKSPACE_SRC).toContain("quick-notes-list-search");
     expect(WORKSPACE_SRC).toContain("filterQuickNotesByQuery(visibleItems, searchQuery)");
-    expect(WORKSPACE_SRC).toContain("listItems.map");
+    expect(WORKSPACE_SRC.match(/<QuickNotesVirtualList items=\{loading \? \[\] : listItems\}/g)).toHaveLength(2);
     expect(WORKSPACE_SRC).toContain("toggleSearch");
   });
 

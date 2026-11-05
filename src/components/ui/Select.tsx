@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, ChevronDown } from "lucide-react";
+import { useSettingField } from "./fieldAccessibility";
 import { Menu } from "./Overlay";
 import { usePopoverPosition } from "../../hooks/usePopoverPosition";
 import { useScrollFade } from "../../hooks/useScrollFade";
@@ -34,6 +35,7 @@ export interface SelectProps {
 }
 
 export function Select({ value, options, onChange, label, className, disabled, matchWidth = true }: SelectProps) {
+  const accessibility = useSettingField();
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
@@ -48,6 +50,8 @@ export function Select({ value, options, onChange, label, className, disabled, m
     width: matchWidth && anchor ? anchor.offsetWidth : undefined,
     gap: 4,
   });
+
+  const dismiss = useCallback(() => { setOpen(false); triggerRef.current?.focus(); }, []);
 
   const commit = useCallback(
     (next: string) => {
@@ -78,7 +82,7 @@ export function Select({ value, options, onChange, label, className, disabled, m
 
   return (
     <>
-      <button
+      <button {...accessibility}
         type="button"
         ref={triggerRef}
         className={"ln-select" + (className ? " " + className : "")}
@@ -99,7 +103,7 @@ export function Select({ value, options, onChange, label, className, disabled, m
       </button>
       {open && (
         <Menu
-          onDismiss={() => setOpen(false)}
+          onDismiss={dismiss}
           surfaceRef={surfaceRef}
           style={style ?? { visibility: "hidden" }}
           label={label}
@@ -112,6 +116,7 @@ export function Select({ value, options, onChange, label, className, disabled, m
             onKeyDown={(e) => {
               if (e.key === "ArrowDown") { e.preventDefault(); move(1); }
               else if (e.key === "ArrowUp") { e.preventDefault(); move(-1); }
+              else if (e.key === "Tab") { e.preventDefault(); dismiss(); }
             }}
           >
             {options.map((o) => {

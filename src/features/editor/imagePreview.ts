@@ -7,6 +7,7 @@
  * 无需经过 React props 层层传递（桌面/移动端共用同一套）。
  */
 
+import { trackImmersivePreview } from "../../lib/immersivePreview";
 import { parseLocalAssetUrl } from "../../core/assetUrl.js";
 
 export interface PreviewImage {
@@ -41,11 +42,13 @@ export function openImagePreview(images: PreviewImage[], index: number): void {
   if (!Array.isArray(images) || images.length === 0) return;
   const i = Number.isFinite(index) ? Math.max(0, Math.min(images.length - 1, Math.floor(index))) : 0;
   current = { images, index: i };
+  trackImmersivePreview("image", closeImagePreview);
   emit();
 }
 
 export function closeImagePreview(): void {
   current = null;
+  trackImmersivePreview("image", null);
   emit();
 }
 

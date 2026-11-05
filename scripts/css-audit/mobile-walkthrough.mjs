@@ -94,6 +94,7 @@ async function goHome() {
       ' var center = function (e) { var r = e.getBoundingClientRect(); return [Math.round(r.x + r.width / 2), Math.round(r.y + r.height / 2)]; };' +
       ' var hit = function (e) { var r = e.getBoundingClientRect(); if (r.width <= 0 || r.height <= 0) return false; var x = Math.round(r.x + r.width / 2), y = Math.round(r.y + r.height / 2); if (x < 0 || y < 0 || x > innerWidth || y > innerHeight) return false; var h = document.elementFromPoint(x, y); return Boolean(h) && (h === e || e.contains(h) || h.contains(e)); };' +
       ' var findByAria = function (aria, scope) { var els = [].slice.call((scope || document).querySelectorAll("[aria-label]")); for (var i = 0; i < els.length; i++) { if (els[i].getAttribute("aria-label") === aria && hit(els[i])) return els[i]; } return null; };' +
+      ' var close = findByAria(String.fromCharCode(0x5173,0x95ed)); if(close)return {kind:"close-overlay",pt:center(close)};' +
       ' var collapse = findByAria(COLLAPSE, document.querySelector(".side-panel--left.on") || document);' +
       ' if (collapse) return { kind: "collapse-tree", pt: center(collapse) };' +
       // 261029：抽屉打开的另一种形态没有「收起」按钮（底部栏「文档树」是 toggle）⇒ 先点 toggle 关抽屉，
@@ -122,6 +123,8 @@ async function openNotebook() {
   // 改为等「可见入口」：不可见就点知识库 tab，再等它真正进视口。
   const visibleNb = async () => pageRef.evaluate('(function(){ var els=[].slice.call(document.querySelectorAll(".nb-row,.nb-shelf-card")); for (var i=0;i<els.length;i++){ var r=els[i].getBoundingClientRect(); if (r.width>0&&r.height>0&&r.top>=0&&r.bottom<=innerHeight&&r.left>=0&&r.right<=innerWidth) return true; } return false; })()');
   if (!(await visibleNb())) { await tapExpr(centerByText(".mobile-htab", "知识库"), "知识库 tab", 1300); }
+  // 首页滚动位置会保留；入口在折叠线以下时先滚到可见区，不能把它当成没有笔记本。
+  await pageRef.evaluate('(function(){var els=[].slice.call(document.querySelectorAll(".nb-row,.nb-shelf-card"));var e=els.find(function(e){var r=e.getBoundingClientRect();return r.width>0&&r.left>=0&&r.right<=innerWidth;});if(e)e.scrollIntoView({block:"center",inline:"nearest"});})()');
   for (var i = 0; i < 10 && !(await visibleNb()); i += 1) await sleep(200);
   const pt = await pageRef.evaluate('(function () { var els=[].slice.call(document.querySelectorAll(".nb-row,.nb-shelf-card")); for (var i=0;i<els.length;i++){ var r=els[i].getBoundingClientRect(); if (r.width>0&&r.height>0&&r.top>=0&&r.bottom<=innerHeight&&r.left>=0&&r.right<=innerWidth) return [Math.round(r.x+r.width/2),Math.round(r.y+r.height/2)]; } return null; })()');
   if (!pt) throw new Error("no notebook entry");

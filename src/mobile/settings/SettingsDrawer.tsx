@@ -6,24 +6,22 @@
 import { Suspense, lazy, useEffect, useRef, useState } from "react";
 import { ArrowLeft, ChevronRight, Cloud, HardDrive, History, Images, Info, List, Palette, Pencil, RefreshCw, Sparkles, Trash, TriangleAlert, X } from "lucide-react";
 import { loadSettings, saveSettings, fontSizeOptions, MAX_ATTACHMENT_MB_OPTIONS_SETTINGS, type AppSettings } from "../../lib/settings";
-import { Group, Item, Seg, Block, NumField, Switch, TextField, Field } from "../ui/settingsPrimitives";
+import { Group, Item, Block, Switch, TextField, Field } from "../ui/settingsPrimitives";
 import { bridge } from "../bridge";
-import { loadAiEnabled, saveAiEnabled } from "../ai/aiSettings";
-import { clearAllConversations } from "../ai/aiChatStore";
 import { confirmMobile } from "../ui/ConfirmDialog";
-import { aiErrorInfoFromCode } from "../../core/aiErrors";
 import { PickerSheet } from "../ui/PickerSheet";
 import { SYNC_AUTO_MODE_OPTIONS, SYNC_OPEN_CLOSE_NOTE, syncIntervalOptions } from "../../core/syncModes";
-import { S3V3_POINTER_VERSION } from "../../core/s3v3/protocol/s3v3Types";
 import { usePanelDrag } from "../hooks/usePanelDrag";
 import { pushBackHandler } from "../ui/backStack";
 import { TrashList } from "./TrashList";
 import { formatBytes } from "../../lib/formatBytes";
 import { probePinShortcut, requestPinQuickNoteShortcut } from "../native/quickNoteShortcut";
 import { CLOUD_PRIVACY_NOTICE, canTouchNetwork, cloudStateOf } from "../../core/cloudState";
+import { AppearanceSettingsSection, HistorySettingsSection, AboutSettingsSection } from "./BasicSettingsSections";
+import { useAiSettingsForm } from "./useAiSettingsForm";
+import { AiSettingsSection } from "./AiSettingsSection";
 import { useS3SettingsForm } from "./useS3SettingsForm";
 import { S3ConfigImportSheet } from "./S3ConfigImportSheet";
-import { aiConnectionFingerprint, getVerifiedAiFingerprint, invalidateAiConnectionVerified, markAiConnectionVerified } from "./aiTestState";
 import { useSettingsSectionData } from "./useSettingsSectionData";
 import { useSyncSettingsForm } from "./useSyncSettingsForm";
 import { useMissingBodies } from "./useMissingBodies";
@@ -32,9 +30,6 @@ import { ResourceCleanupSheet, type ResourceCleanupMode } from "./ResourceCleanu
 import type { OrphanAsset } from "./useSettingsSectionData";
 import { showToast } from "../ui/toastBus";
 import { formatS3v3Diagnostics } from "../../core/s3v3Report";
-
-/** Lake 内核版本（AGENTS §2 已 pin v1.99.0，勿随意升级；升级内核时同步改这里与关于页）。 */
-const LAKEX_KERNEL_VERSION = "1.99.0";
 
 /** 回收站只读预览（内含 Lake 内核编辑器）：**按需加载**——设置页/首屏都不需要内核。 */
 const TrashPreviewPage = lazy(() => import("../trash/TrashPreviewPage").then((m) => ({ default: m.TrashPreviewPage })));
@@ -213,68 +208,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
   const [settings, setSettings] = useState<AppSettings>(() => loadSettings());
   const update = (patch: Partial<AppSettings>) => setSettings(saveSettings(patch));
 
-  // ── AI 助手（261023 P1）：开关与接入配置；Key 只在原生（Android Keystore），这里只显示尾号 ──
-  const [aiEnabled, setAiEnabled] = useState(() => loadAiEnabled());
-  const [aiMeta, setAiMeta] = useState<{ baseUrl: string; model: string; hasKey: boolean; keyTail: string; temperature: number } | null>(null);
-  const [aiForm, setAiForm] = useState({ baseUrl: "", model: "", apiKey: "", temperature: "" });
-  const [aiMsg, setAiMsg] = useState("");
-  /** 防御开启（261029）：只有**当前已保存的 AI 连接配置**测试通过过，才允许把开关打开。 */
-  const [aiVerifiedFp, setAiVerifiedFp] = useState<string | null>(() => getVerifiedAiFingerprint());
-  const aiIdentity = {
-    baseUrl: aiMeta?.baseUrl ?? "",
-    model: aiMeta?.model ?? "",
-    hasKey: !!aiMeta?.hasKey,
-    keyTail: aiMeta?.keyTail ?? "",
-  };
-  const aiVerified = aiVerifiedFp !== null && aiMeta !== null && aiVerifiedFp === aiConnectionFingerprint(aiIdentity);
-  useEffect(() => {
-    if (!open || view !== "ai") return;
-    void bridge.aiGetSettings().then((settings) => {
-      setAiMeta(settings);
-      setAiForm({ baseUrl: settings.baseUrl, model: settings.model, apiKey: "", temperature: String(settings.temperature) });
-    }).catch((error) => setAiMsg("读取 AI 设置失败：" + (error as Error).message));
-  }, [open, view]);
-  const saveAiSettingsForm = async (): Promise<void> => {
-    try {
-      const temperature = Number(aiForm.temperature);
-      await bridge.aiSaveSettings({
-        baseUrl: aiForm.baseUrl.trim(),
-        model: aiForm.model.trim(),
-        ...(aiForm.apiKey.trim() ? { apiKey: aiForm.apiKey.trim() } : {}),
-        ...(Number.isFinite(temperature) ? { temperature } : {}),
-      });
-      const settings = await bridge.aiGetSettings();
-      setAiMeta(settings);
-      setAiForm({ baseUrl: settings.baseUrl, model: settings.model, apiKey: "", temperature: String(settings.temperature) });
-      setAiMsg("已保存");
-    } catch (error) {
-      setAiMsg("保存失败：" + (error as Error).message);
-    }
-  };
-  const testAiConnection = async (): Promise<void> => {
-    setAiMsg("正在测试…");
-    const result = await bridge.aiTestConnection();
-    if (!result.ok) {
-      // 失败即视为未验证（防止"以前测通过过"继续放行）。
-      invalidateAiConnectionVerified();
-      setAiVerifiedFp(null);
-      setAiMsg(aiErrorInfoFromCode({ code: result.code, status: result.status, detail: result.detail }).message);
-      return;
-    }
-    // 通过：按「当时实际的已保存配置」的指纹记账；之后只有改动连接字段/换 Key 才会失效。
-    const settings = await bridge.aiGetSettings().catch(() => null);
-    if (settings) setAiMeta(settings);
-    const fp = aiConnectionFingerprint({
-      baseUrl: settings?.baseUrl ?? aiIdentity.baseUrl,
-      model: settings?.model ?? aiIdentity.model,
-      hasKey: settings ? settings.hasKey : aiIdentity.hasKey,
-      keyTail: settings ? settings.keyTail : aiIdentity.keyTail,
-    });
-    markAiConnectionVerified(fp);
-    setAiVerifiedFp(fp);
-    setAiMsg("连通性正常");
-  };
-
+  const aiFormState = useAiSettingsForm(open && view === "ai");
 
   const pageRef = useRef<HTMLDivElement>(null);
   const maskRef = useRef<HTMLDivElement>(null);
@@ -364,106 +298,11 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
             </Group>
           )}
 
-          {view === "appearance" && (
-            <Group title="外观" icon={<Palette size={16} />}>
-              {/* 用户 261012：说明文案去掉，只留「浅色 / 深色」两个选项（名字即语义）。 */}
-              <Item itemId="appearance-theme" name="主题">
-                <Seg ariaLabel="主题">
-                  <button className={"mb-btn mb-btn--secondary mb-segment__item" + (settings.theme === "light" ? " is-active" : "")} onClick={() => update({ theme: "light" })}>浅色</button>
-                  <button className={"mb-btn mb-btn--secondary mb-segment__item" + (settings.theme === "dark" ? " is-active" : "")} onClick={() => update({ theme: "dark" })}>深色</button>
-                </Seg>
-              </Item>
-            </Group>
-          )}
+          {view === "appearance" && <AppearanceSettingsSection settings={settings} update={update} />}
 
-          {view === "ai" && (
-            <Group title="AI 助手" icon={<Sparkles size={16} />}>
-              {/* 261102 用户点单 3b：内容输入类设置行一律 Field（标签+说明在上、控件占满下一行）。
-                  输入框挤在标签右侧时，窄屏只剩一百多像素，URL / Key 这种长值看不全；与 S3 连接信息同一形态。
-                  选择器 / 开关 / 分段控件这类本来适合同行的行仍用 Item / Switch / Seg。 */}
-              <Field itemId="ai-base-url" name="接口地址" desc="OpenAI 兼容端点（默认 DeepSeek）。">
-                <TextField label="接口地址" value={aiForm.baseUrl} placeholder="https://api.deepseek.com/v1" onSave={(v) => setAiForm((form) => ({ ...form, baseUrl: v }))} />
-              </Field>
-              <Field itemId="ai-model" name="模型">
-                <TextField label="模型" value={aiForm.model} placeholder="deepseek-chat" onSave={(v) => setAiForm((form) => ({ ...form, model: v }))} />
-              </Field>
-              <Field itemId="ai-api-key" name="API Key" desc="只保存在本机安全存储，页面里看不到明文；这里只显示尾号。">
-                <TextField label="API Key" type="password" value={aiForm.apiKey} placeholder={aiMeta?.hasKey ? aiMeta.keyTail + "（留空＝不改）" : "sk-…"} onSave={(v) => setAiForm((form) => ({ ...form, apiKey: v }))} />
-              </Field>
-              <Field itemId="ai-temperature" name="温度">
-                <TextField label="温度" value={aiForm.temperature} placeholder="0.7" onSave={(v) => setAiForm((form) => ({ ...form, temperature: v }))} />
-              </Field>
-              <Block itemId="ai-actions" name="保存与连通性">
-                <div className="ai-settings__actions">
-                  <button type="button" className="mb-btn mb-btn--primary" onClick={() => void saveAiSettingsForm()}>保存</button>
-                  <button type="button" className="mb-btn mb-btn--secondary" onClick={() => void testAiConnection()}>测试连通性</button>
-                </div>
-                {aiMsg && <div className="mb-form__desc">{aiMsg}</div>}
-              </Block>
-              {/* 261029 用户点单：AI 必须先配置好接口/模型/Key 才能开启 ⇒ 开关放在配置区下方（原在 Group 最上面）。 */}
-              <Switch
-                itemId="ai-enabled"
-                name="AI 助手"
-                desc={aiVerified
-                  ? "开启后 AI 才会联网；请先在上面填好接口、模型与 API Key 并保存。与云同步无关，关掉同步也能用 AI。"
-                  : aiEnabled
-                    ? "当前配置还没通过测试；改动接口、模型或 Key 后需要重新测试。可随时关闭，但再次开启前必须测试通过。"
-                    : "先填好接口、模型与 API Key 并保存，点「测试连通性」通过后才能开启；未通过时点击开关只提示、不会打开。"}
-                checked={aiEnabled}
-                onChange={(checked) => {
-                  // 261029 FIX-M：不再禁灰；未验证时点击开启只给提示、保持关闭（实质仍是「测试通过才能开」）。
-                  if (checked && !aiVerified) {
-                    setAiMsg("先填好接口、模型与 API Key，点「测试连通性」通过后才能开启 AI。");
-                    return;
-                  }
-                  saveAiEnabled(checked);
-                  setAiEnabled(checked);
-                  setAiMsg("");
-                }}
-              />
-              <Block itemId="ai-history" name="已保存的对话" desc="最多保留 50 条、30 天；保存在本机，含资料快照，不含 API Key，也不参与云同步。">
-                <div className="ai-settings__actions">
-                  <button type="button" className="mb-btn mb-btn--secondary" onClick={() => {
-                    void confirmMobile({ title: "清空全部历史对话？", body: "只影响本机保存的 AI 对话，不影响笔记与同步。", confirmText: "清空", danger: true })
-                      .then((ok) => { if (!ok) return; void clearAllConversations().then(() => setAiMsg("已清空本机保存的 AI 历史对话")); });
-                  }}>清空全部对话</button>
-                </div>
-              </Block>
-              <Block itemId="ai-key-clear" name="API Key" desc={aiMeta?.hasKey ? "当前已配置（" + aiMeta.keyTail + "）；清除后需要重新填写才能使用。" : "尚未配置。"}>
-                <div className="ai-settings__actions">
-                  <button type="button" className="mb-btn mb-btn--secondary mb-btn--danger" disabled={!aiMeta?.hasKey} onClick={() => {
-                    void confirmMobile({ title: "清除 API Key？", body: "清除后 AI 将无法联网，直到重新填写。", confirmText: "清除", danger: true })
-                      .then(async (ok) => {
-                        if (!ok) return;
-                        try {
-                          await bridge.aiSaveSettings({ apiKey: "" });
-                          const settings = await bridge.aiGetSettings();
-                          setAiMeta(settings);
-                          setAiMsg("已清除 API Key");
-                        } catch (error) { setAiMsg("清除失败：" + (error as Error).message); }
-                      });
-                  }}>清除 API Key</button>
-                </div>
-              </Block>
-            </Group>
-          )}
+          {view === "ai" && <AiSettingsSection form={aiFormState} />}
 
-          {view === "history" && hist && (
-            <Group title="历史" icon={<History size={16} />}>
-              <Item itemId="history-max-snapshots" name="每文档快照上限" desc="超过后只保留最新 N 份。">
-                <NumField label="每文档快照上限" value={hist.maxSnapshots} min={1} max={500} floor={1} fallback={100} onSave={(n) => updateHist({ maxSnapshots: n })} />
-              </Item>
-              <Item itemId="history-retention-days" name="保留天数" desc="超过该天数的快照会被清理。">
-                <NumField label="保留天数" value={hist.retentionDays} min={1} max={365} floor={1} fallback={30} onSave={(n) => updateHist({ retentionDays: n })} />
-              </Item>
-              <Item itemId="history-snapshot-interval" name="自动快照间隔（分钟）" desc="0 = 关闭定时自动快照。">
-                <NumField label="自动快照间隔" value={hist.snapshotIntervalMinutes} min={0} max={1440} floor={0} fallback={15} onSave={(n) => updateHist({ snapshotIntervalMinutes: n })} />
-              </Item>
-              <Item itemId="history-cleanup-interval" name="定期清理间隔（小时）" desc="0 = 关闭定期巡检清理。">
-                <NumField label="定期清理间隔" value={hist.cleanupIntervalHours} min={0} max={168} floor={0} fallback={24} onSave={(n) => updateHist({ cleanupIntervalHours: n })} />
-              </Item>
-            </Group>
-          )}
+          {view === "history" && hist && <HistorySettingsSection hist={hist} updateHist={updateHist} />}
 
           {view === "resources" && (
             <Group title="资源管理" icon={<Images size={16} />}>
@@ -751,37 +590,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
             </div>
           )}
 
-          {view === "about" && (
-            <div className="mb-set-group">
-              <div className="mb-set-title"><Info size={16} />关于</div>
-              <div className="mb-set-items">
-                <div className="mb-set-block">
-                  <div className="mb-set-block__name">{appInfo?.name ?? "LakexLocalNotes"}</div>
-                  <div className="mb-set-item__desc">版本 {appInfo?.version ?? "…"}（构建 {appInfo?.build ?? "…"}）</div>
-                  <div className="mb-set-item__desc">平台：{appInfo?.platform === "web" ? "Web 预览（原生能力未就绪）" : "Android，Capacitor 8 + 原生 SQLite"}</div>
-                  <div className="mb-set-item__desc">编辑器：Lake 内核 v{LAKEX_KERNEL_VERSION}</div>
-                  <div className="mb-set-item__desc">同步：内核 v4，协议 v{String(S3V3_POINTER_VERSION)}（内容寻址）；本地是真相，S3 只做同步镜像</div>
-                  <div className="mb-set-item__desc">本地优先：正文、附件与索引都保存在本机。</div>
-                  <div className="mb-set-item__desc">字体：内置 MiSans（小米科技，依《MiSans 字体知识产权许可协议》免费商用并注明）+ JetBrains Mono（SIL OFL 1.1）</div>
-                </div>
-                {diag && (
-                  <div className="mb-set-block">
-                    <div className="mb-set-block__name">数据诊断</div>
-                    <div className="mb-set-stats">
-                      <span><strong>文档</strong> {diag.noteCount}</span>
-                      <span><strong>分组</strong> {diag.folderCount}</span>
-                      <span><strong>小记</strong> {diag.quickNoteCount}</span>
-                      <span><strong>资源</strong> {diag.resourceCount}</span>
-                      <span><strong>孤儿</strong> {diag.orphanCount}</span>
-                      <span><strong>待回收</strong> {diag.gcPendingCount}</span>
-                      <span><strong>快照</strong> {diag.snapshotCount}</span>
-                      <span><strong>库大小</strong> {formatBytes(diag.dbBytes)}</span>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
+          {view === "about" && <AboutSettingsSection appInfo={appInfo} diag={diag} />}
 
           {view === "trash" && (
             <TrashList key={listKey} title="回收站" onChanged={onRefresh} onPreview={(noteId) => setPreviewNoteId(noteId)} />

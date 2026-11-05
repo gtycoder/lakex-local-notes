@@ -49,7 +49,7 @@ const INPUT_ROW_IDS = [
 ];
 
 // jsdom 环境下 import.meta.url 是 http(s) 形式（vitest 的 jsdom url），读源码走 cwd 相对路径。
-const drawerSource = (): string => readFileSync(path.resolve(process.cwd(), "src/mobile/settings/SettingsDrawer.tsx"), "utf8");
+const drawerSource = () => ["src/mobile/settings/SettingsDrawer.tsx", "src/mobile/settings/AiSettingsSection.tsx", "src/mobile/settings/BasicSettingsSections.tsx"].map(file => readFileSync(path.resolve(process.cwd(), file), "utf8")).join("\n");
 
 describe("Field = 内容输入行的唯一行语义", () => {
   it("标签+说明在上、控件容器在后（占满下一行），保留 data-set-id", () => {

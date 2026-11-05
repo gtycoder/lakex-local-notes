@@ -245,6 +245,11 @@
 }
 .sidebar.sidebar-floating,
 .sidebar.sidebar-collapsed {
+  position: fixed;
+  right: auto;
+  width: var(--sidebar-width);
+  max-width: none;
+  background: var(--lake-bg-panel);
   /* ⚠️ 必须贴左缘（left: 0）：因为热区是窗口最左 0..8px。
      曾经写 left: 8px（离边留白）⇒ 面板浮出时指针还停在 0..8 的缝里、不在面板内，
      被 App 的「指针不在 .sidebar 里就收起」守卫立刻收掉；而指针没离开热区 ⇒ pointerenter 不再触发、

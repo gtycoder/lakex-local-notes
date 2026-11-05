@@ -6,6 +6,7 @@
  * - 移动端：分享面板 / 打开（后续接入）
  * overlay 组件订阅本控制器渲染；PDF/音视频内联预览、其他类型显示信息 + 操作按钮。
  */
+import { trackImmersivePreview } from "../../lib/immersivePreview";
 import { parseLocalAssetUrl, type LocalAssetRef } from "../../core/assetUrl.js";
 import { isAssetFilename } from "../../core/assetNaming.js";
 import { fileKindOf, type AttachmentKind } from "../../core/fileCard.js";
@@ -63,11 +64,13 @@ export function openAttachmentPreview(
   onShowInFolder: ((item: AttachmentPreviewItem) => void) | null,
 ): void {
   current = { item, onOpen, onShowInFolder };
+  trackImmersivePreview("attachment", closeAttachmentPreview);
   emit();
 }
 
 export function closeAttachmentPreview(): void {
   current = null;
+  trackImmersivePreview("attachment", null);
   emit();
 }
 

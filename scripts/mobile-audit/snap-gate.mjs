@@ -96,21 +96,29 @@ export async function runSnapGate({ snapScript, baselineName, portDefault, tagDe
   if (FROM) current = compact(JSON.parse(fs.readFileSync(path.resolve(ROOT, FROM), "utf8")));
   else { await aliveCheck(PORT, label); current = snapshot(TAG); }
 
+  // 定点验收只比较请求的态；未采集的其他基线不是缺失页面。
+  const requested = STATES ? new Set(STATES.split(",")) : null;
+  const select = (snap) => requested ? { states: Object.fromEntries(Object.entries(snap.states).filter(([name]) => requested.has(name))) } : snap;
+  if (requested) {
+    for (const name of requested) if (!current.states[name]) { console.error("[" + label + "] 未采集请求态：" + name); process.exit(2); }
+    current = select(current);
+  }
   if (WRITE) {
+    if (requested && fs.existsSync(BASELINE)) current = { states: { ...JSON.parse(fs.readFileSync(BASELINE, "utf8")).states, ...current.states } };
     fs.mkdirSync(path.dirname(BASELINE), { recursive: true });
     fs.writeFileSync(BASELINE, JSON.stringify(current, null, 1) + String.fromCharCode(10));
     console.log("[" + label + "] 基线已写入 " + path.relative(ROOT, BASELINE) + "（" + Object.keys(current.states).length + " 态）");
     process.exit(0);
   }
   if (!fs.existsSync(BASELINE)) { console.error("[" + label + "] 基线不存在：" + path.relative(ROOT, BASELINE) + "；先跑 --write-baseline。"); process.exit(2); }
-  const base = JSON.parse(fs.readFileSync(BASELINE, "utf8"));
+  const base = select(JSON.parse(fs.readFileSync(BASELINE, "utf8")));
   const unstableSet = new Set(unstable);
   let { names, diffs, skipped } = diffStates(base, current, unstableSet);
   let flaky = [];
   if (diffs.size && !FROM) {
     console.error("[" + label + "] 首次比对有差异（" + diffs.size + "/" + names.length + " 态），重跑一遍排除装置抖动：");
     for (const line of diffs.values()) console.error("  " + line);
-    current = snapshot(TAG + "2");
+    current = select(snapshot(TAG + "2"));
     const second = diffStates(base, current, unstableSet);
     flaky = [...diffs.keys()].filter((k) => !second.diffs.has(k));
     diffs = second.diffs;

@@ -21,7 +21,7 @@ DocListSheet · OutlineSheet（底部形态；右侧抽屉变体不套原语）�
 | 4 | `src/mobile/ai/MobileAiPage.tsx` | `.mb-actionsheet` | 「附件」菜单 = **ActionSheet 语义**（图标项组 + 取消按钮），不是底部 Sheet；属 `floating.css` 的 ActionSheet 原语 | 自带（本批补：打开时先关面板，不再直接退出 AI 页） |
 | 5 | `src/mobile/ui/ConfirmDialog.tsx` | `.mb-actionsheet` `role="alertdialog"` | **alert 语义**：确认 + 取消两组、破坏性操作走 `--danger`（用户 261012 定稿 C1：移动端没有居中对话框，破坏性确认走 ActionSheet） | 自带 |
 | 6 | `src/mobile/ui/CreateSheet.tsx` | `.mb-sheet--create` | **无头**底部面板：没有 `.mb-sheet__head` / `.mb-sheet__grab` / ×，`section` 直接挂在 `.mb-sheet` 下（没有 `.mb-sheet__body` 包裹），关闭只靠遮罩/右滑/返回 | 自带 |
-| 7 | `src/mobile/ui/PickerSheet.tsx` | `.mb-sheet--picker` | 头部**只有标题、没有 ×**；`.mb-sheet__body` 需要 `role="listbox"` + `role="option"/aria-selected`；触发器与面板同组件。套原语需给 `MobileSheet` 加「头部开关 + body role」两个视觉/结构旋钮（只为 1 个消费者，违反 §3#17） | 自带 |
+| 7 | `src/mobile/ui/PickerSheet.tsx` | `.mb-sheet--picker` | 头部**只有标题、没有 ×**；`.mb-sheet__body` 需要 `role="listbox"` + `role="option"/aria-selected`；触发器与面板同组件。261105只复用焦点与滚动控制器，保留标题式头部和自身返回/手势。套原语需给 `MobileSheet` 加「头部开关 + body role」两个视觉/结构旋钮（只为 1 个消费者，违反 §3#17） | 自带 |
 | 8 | `src/mobile/ui/MobileSheetMenu.tsx` | `.mb-menusheet` | **可下钻菜单**原语（子菜单整屏平移、返回先退子层）；`MobileSheet.tsx` 文件头已写明「可下钻菜单走 MobileSheetMenu，不要套本原语」 | 自带 |
 
 ## 备注

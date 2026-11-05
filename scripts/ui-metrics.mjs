@@ -127,7 +127,7 @@ for (const p of fontScope) {
 // ── 移动端字号护栏（261013）：与桌面**同一口径**（font-size 一律走令牌），但移动端先做「只许降」——
 //    存量 52 处（mobile.css 43 + editor-dock.css 9）是 P1–P7 迁移期的欠账；移动端还在做布局重做，
 //    一次性清零会把批次撑爆。这里把它变成**不许新增**的门禁：新增字面量直接 exit 1，清理后记得同步调小。
-const MOBILE_FONT_LITERAL_BASELINE = 49;
+const MOBILE_FONT_LITERAL_BASELINE = 0;
 let mobileFontLiterals = 0; const mobileFontTop = [];
 for (const p of mobileCss) {
   const s = readFileSync(p, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
@@ -144,7 +144,7 @@ const r = {
   mobileUntouched: { files: mobileCss.length, b3VarRefs: m.b3, important: m.imp },
   fontGuard: { fontSizeLiterals, fontSizeTop: fontSizeTop.sort((a, b) => b[1] - a[1]) },
   mobileFontGuard: { fontSizeLiterals: mobileFontLiterals, baseline: MOBILE_FONT_LITERAL_BASELINE, fontSizeTop: mobileFontTop.sort((a, b) => b[1] - a[1]) },
-  targets: { b3VarRefs: 0, colorLiterals: 0, fontSizeLiterals: 0, important: 10, b3ImportLines: 0, sameNamePairs: 0 },
+  targets: { b3VarRefs: 0, colorLiterals: 0, fontSizeLiterals: 0, important: 9, b3ImportLines: 0, sameNamePairs: 0 },
   b3TopTen: d.b3Top.slice(0, 10),
   colorTopTen: d.litTop.slice(0, 10),
   importantSiyuan: siyuanImportant,
@@ -177,7 +177,7 @@ r.tokensGuard = { forbiddenAliasRefs: aliasHits, undefinedLakeRefs: undefHits, a
 //   ③ 「文字一律用 --lake-accent-text」与「同一 (选择器,属性) 不得跨文件重复」都没有判据。
 // 基线 = 首次实测存量，**只许降**（清理时同步调小；清理批次见 CODE-REVIEW §7 的 B2）。
 const BASELINE = {
-  desktopImportant: 10,        // = IMPORTANT_ALLOWLIST.length（见下）；只许降，且不得出现清单外的 !important
+  desktopImportant: 9,        // = IMPORTANT_ALLOWLIST.length（见下）；只许降，且不得出现清单外的 !important
   mobileImportant: 19,         // 移动端 !important 棘轮（主要是 edit-surface-kernel.css 压内核未分层样式）
   mobileColorLiterals: 0,      // 261016 B2 已清零：28 处收编进 src/mobile/theme/tokens.css（取值不变）⇒ 与桌面同为硬 0
   accentTextMisuse: 0,         // 261016 B2 已清零（原 36）：文字色一律 --lake-accent-text
@@ -192,7 +192,6 @@ const BASELINE = {
 // 唯一允许的例外（AGENTS §3#14）：压内核/第三方写进 element 的 inline style，或压 legacy 层里的 !important。
 // 每条都必须写明"压的是谁"；删掉某条时应同时从本表移除（本脚本会把"清单里但已找不到"的条目列出来提醒）。
 const IMPORTANT_ALLOWLIST = [
-  { file: 'styles/components.css', sel: '.settings-panel-large', prop: 'width', why: '面板宽度由 JS 的 FloatingPanel 以 **inline style** 给出 ⇒ 只有 !important 压得过（P7-e 批量去 important 时误删过一次，宽度当场从 1000 掉到 840）' },
   { file: 'styles/components.css', sel: '.seg__item', prop: 'border', why: '共享层 .seg__item 与 legacy 的 .b3-button--outline 叠用；@layer 里 !important **反转层序** ⇒ legacy 的 !important 必压 kit 的普通声明（260923 W4 实测结论）' },
   { file: 'styles/components.css', sel: '.seg__item', prop: 'background', why: '同上（分段控件静息态透明）' },
   { file: 'styles/components.css', sel: '.seg__item', prop: 'color', why: '同上（静息态 text-2）' },

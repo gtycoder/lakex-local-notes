@@ -125,17 +125,8 @@
   box-shadow: none;
   border-radius: var(--lake-radius-md);
 }
-.sidebar.sidebar-floating {
-  position: fixed;
-  left: var(--activity-rail-width);
-  right: auto;
-  width: var(--sidebar-width);
-  max-width: none;
-  background: var(--lake-bg-panel);
-  border-radius: 0 var(--lake-radius-md) var(--lake-radius-md) 0;
-}
+
 [data-theme="dark"] .sidebar.sidebar-docked,
-[data-theme="dark"] .sidebar.sidebar-floating,
 [data-theme="dark"] .outline-sidebar__content {
   background: var(--lake-bg-panel);
   border-color: var(--lake-border-2);

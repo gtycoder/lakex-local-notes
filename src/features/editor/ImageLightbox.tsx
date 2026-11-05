@@ -6,6 +6,8 @@
  * - 图片用 <img src> 直接渲染（桌面/移动端统一 canonical URL）。
  */
 import { useCallback, useEffect, useRef, useState } from "react";
+import { lockPageScroll } from "../../lib/pageScrollLock";
+import { dismissImmersivePreview } from "../../lib/immersivePreview";
 import { createPortal } from "react-dom";
 import { ChevronLeft, ChevronRight, Maximize2, Minus, Plus, X } from "lucide-react";
 import { closeImagePreview, navigateImagePreview, subscribeImagePreview, type ImagePreviewState } from "./imagePreview";
@@ -32,20 +34,19 @@ export function ImageLightbox() {
   useEffect(() => {
     if (!state) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") closeImagePreview();
+      if (e.key === "Escape" && dismissImmersivePreview()) { e.preventDefault(); e.stopImmediatePropagation(); }
       else if (e.key === "ArrowLeft") navigateImagePreview(-1);
       else if (e.key === "ArrowRight") navigateImagePreview(1);
       else if (e.key === "=" || e.key === "+") setScale((s) => Math.min(MAX_SCALE, s * 1.25));
       else if (e.key === "-") setScale((s) => Math.max(MIN_SCALE, s / 1.25));
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
   }, [state]);
 
   useEffect(() => {
     if (!state) return;
-    document.body.style.overflow = "hidden";
-    return () => { document.body.style.overflow = ""; };
+    return lockPageScroll();
   }, [state]);
 
   if (!state) return null;

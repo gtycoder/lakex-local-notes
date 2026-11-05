@@ -18,33 +18,34 @@
  *    叠层时先关掉的那一个不会把锁提前放开。
  */
 import { useCallback, useEffect, useRef, type ReactNode } from "react";
+import { lockPageScroll } from "../../lib/pageScrollLock";
 import { X } from "lucide-react";
 import { pushBackHandler } from "./backStack";
 import { useSwipeToClose } from "./useSwipeToClose";
 
-/** 打开中的面板数：滚动锁的嵌套计数（0 → 1 时上锁，回到 0 时还原原值）。 */
-let openSheets = 0;
-let bodyOverflow = "";
-let rootOverflow = "";
+/** 模态移动浮层共用焦点收放与嵌套滚动锁；不规定头部/正文结构，不增加Tab陷阱。 */
+export function useSheetModalFocus(open: boolean, surfaceRef: import("react").RefObject<HTMLElement | null>): void {
+  const restoreFocusRef = useRef<HTMLElement | null>(null);
+  // 滚动锁：面板开着时页面不跟着滚。
+  useEffect(() => { if (!open) return; return lockPageScroll(); }, [open]);
 
-function lockPageScroll(): () => void {
-  if (openSheets === 0) {
-    bodyOverflow = document.body.style.overflow;
-    rootOverflow = document.documentElement.style.overflow;
-    document.body.style.overflow = "hidden";
-    document.documentElement.style.overflow = "hidden";
-  }
-  openSheets += 1;
-  let released = false;
-  return () => {
-    if (released) return;
-    released = true;
-    openSheets = Math.max(0, openSheets - 1);
-    if (openSheets > 0) return;
-    document.body.style.overflow = bodyOverflow;
-    document.documentElement.style.overflow = rootOverflow;
-  };
-}
+  // 焦点收进面板 / 关闭时归还。
+  useEffect(() => {
+    if (!open) return;
+    const active = document.activeElement;
+    restoreFocusRef.current = active instanceof HTMLElement ? active : null;
+    // 子内容自带 autoFocus（搜索框 / 知识库名称输入）时不要抢焦点：React 的 autoFocus
+    // 在本次 effect 之前已聚焦，再 focus 面板会把光标抢走、软键盘也跟着消失。
+    const sheet = surfaceRef.current;
+    if (sheet && !(active instanceof Node && sheet.contains(active))) sheet.focus({ preventScroll: true });
+    return () => {
+      const previous = restoreFocusRef.current;
+      restoreFocusRef.current = null;
+      if (previous?.isConnected) previous.focus({ preventScroll: true });
+    };
+  }, [open]);
+
+ }
 
 export interface MobileSheetProps {
   open: boolean;
@@ -80,8 +81,6 @@ export function MobileSheet({
   children,
 }: MobileSheetProps) {
   const sheetRef = useRef<HTMLDivElement>(null);
-  /** 打开前的焦点元素：关闭时还回去（面板是临时层，不能让焦点停在 body 上）。 */
-  const restoreFocusRef = useRef<HTMLElement | null>(null);
 
   const dismiss = useCallback(() => { if (dismissible) onClose(); }, [dismissible, onClose]);
 
@@ -94,24 +93,7 @@ export function MobileSheet({
   // 右滑关闭（阈值沿用浮层默认 64px；data-prevent-swipe 让底层抽屉手势不重复响应）。
   useSwipeToClose(sheetRef, dismiss, open && dismissible);
 
-  // 滚动锁：面板开着时页面不跟着滚。
-  useEffect(() => { if (!open) return; return lockPageScroll(); }, [open]);
-
-  // 焦点收进面板 / 关闭时归还。
-  useEffect(() => {
-    if (!open) return;
-    const active = document.activeElement;
-    restoreFocusRef.current = active instanceof HTMLElement ? active : null;
-    // 子内容自带 autoFocus（搜索框 / 知识库名称输入）时不要抢焦点：React 的 autoFocus
-    // 在本次 effect 之前已聚焦，再 focus 面板会把光标抢走、软键盘也跟着消失。
-    const sheet = sheetRef.current;
-    if (sheet && !(active instanceof Node && sheet.contains(active))) sheet.focus({ preventScroll: true });
-    return () => {
-      const previous = restoreFocusRef.current;
-      restoreFocusRef.current = null;
-      if (previous?.isConnected) previous.focus({ preventScroll: true });
-    };
-  }, [open]);
+  useSheetModalFocus(open, sheetRef);
 
   if (!open) return null;
 

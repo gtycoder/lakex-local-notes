@@ -499,3 +499,8 @@
 .quick-note-tag--exclude.is-selected { color: var(--lake-status-error); border-color: var(--lake-status-error); }
 .quick-note-filter-dialog__footer { display: flex; align-items: center; gap: 8px; padding-top: 10px; border-top: 0.5px solid var(--lake-border-2); }
 .quick-note-filter-dialog__hint { flex: 1 1 auto; color: var(--lake-text-3); font-size: var(--lake-font-size-micro); }
+
+/* 大列表只定位可见条目，正常小列表保持原间距；尺寸/位移由窗口器实时提供。 */
+.quick-notes-timeline.is-virtual { display: block; }
+.quick-notes-virtual-space { position: relative; flex: 0 0 auto; width: 100%; }
+.quick-notes-virtual-item { position: absolute; top: 0; left: 0; width: 100%; }

@@ -9,6 +9,8 @@
  * 口径：结构复用既有原语（.mb-sheet + .mb-list-item），不新造第二套浮层（AGENTS §3#14）。
  */
 import { useEffect, useRef, useState } from "react";
+import { useSheetModalFocus } from "./MobileSheet";
+import { useSettingField } from "./fieldAccessibility";
 import { Check, ChevronDown } from "lucide-react";
 import { pushBackHandler } from "./backStack";
 import { useSwipeToClose } from "./useSwipeToClose";
@@ -36,6 +38,10 @@ export function PickerSheet<T extends string | number>({
 }) {
   const [open, setOpen] = useState(false);
   const sheetRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const accessibility = useSettingField();
+  useSheetModalFocus(open, sheetRef);
+  useEffect(() => { if (open) sheetRef.current?.querySelector<HTMLElement>('[aria-selected="true"]')?.focus(); }, [open]);
   const current = options.find((o) => o.value === value);
 
   useSwipeToClose(sheetRef, () => setOpen(false), open);
@@ -46,7 +52,8 @@ export function PickerSheet<T extends string | number>({
 
   return (
     <>
-      <button
+      <button {...accessibility}
+        ref={triggerRef}
         type="button"
         className="mb-select mb-select--trigger"
         aria-label={label}
@@ -61,11 +68,19 @@ export function PickerSheet<T extends string | number>({
       {open && (
         <>
           <div className="mb-scrim" data-prevent-swipe onClick={() => setOpen(false)} />
-          <div ref={sheetRef} className="mb-sheet mb-sheet--picker" role="dialog" aria-modal="true" aria-label={label} data-prevent-swipe>
+          <div ref={sheetRef} className="mb-sheet mb-sheet--picker" role="dialog" aria-modal="true" aria-label={label} tabIndex={-1} data-prevent-swipe>
             <div className="mb-sheet__head">
               <span className="mb-sheet__title">{label}</span>
             </div>
-            <div className="mb-sheet__body" role="listbox" aria-label={label}>
+            <div className="mb-sheet__body" role="listbox" aria-label={label} onKeyDown={(event) => {
+              if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+              const items = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('button:not(:disabled)')];
+              if (!items.length) return;
+              event.preventDefault();
+              const index = items.indexOf(document.activeElement as HTMLButtonElement);
+              const next = event.key === "Home" ? 0 : event.key === "End" ? items.length - 1 : (index + (event.key === "ArrowDown" ? 1 : -1) + items.length) % items.length;
+              items[next].focus();
+            }}>
               {options.map((o) => {
                 const selected = o.value === value;
                 return (

@@ -1,3 +1,4 @@
+import { dismissImmersivePreview } from "../../lib/immersivePreview";
 import { useEffect } from "react";
 
 /**
@@ -55,6 +56,7 @@ export function usePadShortcuts(enabled: boolean, handlers: PadShortcutHandlers)
     if (!enabled) return;
     const onKeyDown = (event: KeyboardEvent): void => {
       if (event.defaultPrevented) return;
+      if (event.key === "Escape" && dismissImmersivePreview()) { event.preventDefault(); event.stopImmediatePropagation(); return; }
       const action = matchPadShortcut({
         key: event.key,
         metaKey: event.metaKey,

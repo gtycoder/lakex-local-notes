@@ -55,6 +55,9 @@ import "./brand-launch.css";
 
 /** 第二层工作区（内含 Lake 内核编辑器）：**按需加载**。
  * 冷启动不需要内核；静态引入会把整个内核打进入口 chunk（实测 6.7MB），拖慢所有启动路径。 */
+import { PanelLoading } from "./ui/PanelLoading";
+import { consumeBack } from "./ui/backStack";
+import { DeferredPanel } from "./ui/DeferredPanel";
 const NotebookWorkspace = lazy(() => import("./notebook/NotebookWorkspace").then((m) => ({ default: m.NotebookWorkspace })));
 /** AI 全屏页按需加载：不进首页首屏（与内核/表格一样不加重入口）。 */
 const MobileAiPage = lazy(() => import("./ai/MobileAiPage").then((m) => ({ default: m.MobileAiPage })));
@@ -119,6 +122,7 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
   usePadShortcuts(padShell, {
     search: () => setSearchOpen(true),
     escape: () => {
+      if (consumeBack()) return true;
       if (searchOpen) { setSearchOpen(false); return true; }
       if (aiOpen) { setAiOpen(false); return true; }
       if (drawerOpen) { setDrawerOpen(false); return true; }
@@ -587,14 +591,14 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
 
   return (
     <div className="mobile-app">
-      <Suspense fallback={null}>
+      <DeferredPanel open={drawerOpen} fallback={<PanelLoading kind="settings" title="设置" onClose={() => setDrawerOpen(false)} />}>
         <SettingsDrawer
           open={drawerOpen}
           onClose={() => setDrawerOpen(false)}
           onRefresh={refreshAll}
           onOpenNote={(id) => void openNote(id, "viewer")}
         />
-      </Suspense>
+      </DeferredPanel>
       {/* 路由层（261019）：首页常驻 + 工作区按需挂载；push/pop 只动 transform（见 mobile.css） */}
       <div className={"mobile-route-stage" + (wsOpen ? " is-open" : "") + (routeAnimating ? " is-animating" : "")} aria-label="页面">
       <div className="mobile-route-layer mobile-route-layer--home" ref={routeHomeRef}>
@@ -657,16 +661,16 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
           } catch { showToast("新建失败", { type: "error" }); warnFeedback(); }
         }}
       />
-      <Suspense fallback={null}>
+      <DeferredPanel open={searchOpen} fallback={<PanelLoading kind="search" title="搜索" onClose={() => setSearchOpen(false)} />}>
         <SearchSheet
           open={searchOpen}
           onClose={() => setSearchOpen(false)}
           onOpenNote={(id) => void openNote(id, "viewer")}
           onOpenQuickNote={openQuickNoteFromSearch}
         />
-      </Suspense>
+      </DeferredPanel>
       {aiOpen && (
-        <Suspense fallback={null}>
+        <Suspense fallback={<PanelLoading kind="page" title="AI 助手" onClose={() => setAiOpen(false)} />}>
           <MobileAiPage open onClose={() => setAiOpen(false)} onChanged={() => void refreshAll()} />
         </Suspense>
       )}
