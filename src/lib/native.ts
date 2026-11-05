@@ -138,6 +138,13 @@ export interface LakeNative {
   pickBackupDatabase(): Promise<{ path: string; name: string } | null>;
   /** Batch4-A：从备份恢复主库（校验→隔离原库→替换）；成功后需重启应用。失败抛错（含回滚说明）。 */
   restoreWorkspaceFromBackup(filePath: string): Promise<{ ok: true; quarantinePath?: string; message?: string; requiresRestart: true }>;
+  /** 261105：低频文件↔元数据扫描配置（小时，0 = 关闭后台扫描）。 */
+  getFileScanSettings(): Promise<{ intervalHours: number }>;
+  saveFileScanSettings(settings: { intervalHours: number }): Promise<{ intervalHours: number }>;
+  /** 261105：手动扫描「文件在、行丢」候选（只读；结果 = 重建白名单）。 */
+  scanRebuildCandidates(): Promise<import("./types").RebuildScanResultShape>;
+  /** 261105：手动重建所选候选（只允许本次扫描 id；正文坏/非候选会被拒绝）。 */
+  rebuildOrphanNotes(ids: string[]): Promise<import("./types").RebuildResultShape>;
   setNodeIcon(id: string, icon: string | null): Promise<TreeNode>;
   searchNotes(query: string, limit?: number): Promise<NoteSearchHit[]>;
   rebuildSearchIndex(): Promise<boolean>;
@@ -353,6 +360,10 @@ export const native = {
   confirmRelaunch: () => api().confirmRelaunch(),
   pickBackupDatabase: () => api().pickBackupDatabase(),
   restoreWorkspaceFromBackup: (filePath: string) => api().restoreWorkspaceFromBackup(filePath),
+  getFileScanSettings: () => api().getFileScanSettings(),
+  saveFileScanSettings: (settings: { intervalHours: number }) => api().saveFileScanSettings(settings),
+  scanRebuildCandidates: () => api().scanRebuildCandidates(),
+  rebuildOrphanNotes: (ids: string[]) => api().rebuildOrphanNotes(ids),
   setNodeIcon: (id: string, icon: string | null) => api().setNodeIcon(id, icon),
   searchNotes: (query: string, limit?: number) => api().searchNotes(query, limit),
   rebuildSearchIndex: () => api().rebuildSearchIndex(),

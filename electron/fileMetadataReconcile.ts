@@ -21,13 +21,25 @@ import { isSafePathSegment } from "../src/core/storeUtils.js";
 export const FILE_RECONCILE_DEFAULTS = {
   /** 进程空闲多少秒后才允许跑（powerMonitor.getSystemIdleTime 同口径）。 */
   minIdleSeconds: 5 * 60,
-  /** 两次实跑之间的冷却（防抖 / 节流）。 */
-  cooldownMs: 30 * 60 * 1000,
+  /**
+   * 默认节奏 = **每 24h 一次**（261105 定稿：功能从"默认关闭/30min 冷却"降级为低频只报告，
+   * 避免每分钟/每半小时扫一遍大库；0 小时 = 关闭，由设置页配置）。
+   */
+  intervalHours: 24,
+  /** 两次实跑之间的冷却：与 24h 节奏合并（interval 变更时由调用方覆盖 cooldownMs）。 */
+  cooldownMs: 24 * 60 * 60 * 1000,
   /** 单次报告最多列出的候选条数（防大库把报告撑爆）。 */
   maxCandidates: 500,
   /** 单次扫描的文件数硬上限（防御性；超了记 truncated）。 */
   maxScannedFiles: 200_000,
 } as const;
+
+/** 设置归一：扫描间隔（小时，0 = 关闭；上限 720h 防误配成天文数字）。 */
+export function normalizeFileScanIntervalHours(value: unknown): number | null {
+  const hours = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
+  if (!Number.isFinite(hours)) return null;
+  return Math.min(720, Math.max(0, Math.floor(hours * 100) / 100));
+}
 
 export type ReconcileBlockReason =
   | "ok"
@@ -89,6 +101,8 @@ export interface FileReconcileReport {
   durationMs: number;
   enabled: boolean;
   trigger: "sync-idle" | "manual-report";
+  /** 当前配置的扫描间隔（小时，0 = 关闭）。设置页显示「上次扫描时间/是否启用」用。 */
+  intervalHours: number;
   /** DB 里已知的正文行数（notes.deleted_at IS NULL；含回收站行——它们本来就有文件）。 */
   knownRows: number;
   scannedFiles: number;
@@ -111,7 +125,7 @@ export interface ScanOrphanBodyInput {
 }
 
 /** 只读扫描：stat-only，不读正文、不写盘、不触碰 DB。 */
-export function scanOrphanBodyFiles(input: ScanOrphanBodyInput): Omit<FileReconcileReport, "enabled" | "trigger"> {
+export function scanOrphanBodyFiles(input: ScanOrphanBodyInput): Omit<FileReconcileReport, "enabled" | "trigger" | "intervalHours"> {
   const startedAt = input.nowMs ?? Date.now();
   const maxCandidates = Math.max(1, input.maxCandidates ?? FILE_RECONCILE_DEFAULTS.maxCandidates);
   const maxScannedFiles = Math.max(1, input.maxScannedFiles ?? FILE_RECONCILE_DEFAULTS.maxScannedFiles);
@@ -177,6 +191,8 @@ export interface FileMetadataReconcilerDeps {
   /** 维护域串行队列（同步/GC/深度清理同一队列）。 */
   enqueueMaintenance: <T>(task: () => Promise<T>) => Promise<T>;
   enabled: boolean;
+  /** 扫描间隔（小时，0 = 关闭）；缺省 24h。cooldownMs 缺省 = intervalHours×3600e3。 */
+  intervalHours?: number;
   minIdleSeconds?: number;
   cooldownMs?: number;
   maxCandidates?: number;
@@ -200,6 +216,7 @@ export interface ReconcileRunOutcome {
 export class FileMetadataReconciler {
   private readonly deps: FileMetadataReconcilerDeps;
   private readonly minIdleSeconds: number;
+  private readonly intervalHours: number;
   private readonly cooldownMs: number;
   private readonly now: () => number;
   private dirty = false;
@@ -212,7 +229,9 @@ export class FileMetadataReconciler {
   constructor(deps: FileMetadataReconcilerDeps) {
     this.deps = deps;
     this.minIdleSeconds = deps.minIdleSeconds ?? FILE_RECONCILE_DEFAULTS.minIdleSeconds;
-    this.cooldownMs = deps.cooldownMs ?? FILE_RECONCILE_DEFAULTS.cooldownMs;
+    this.intervalHours = deps.intervalHours ?? FILE_RECONCILE_DEFAULTS.intervalHours;
+    // 冷却与节奏合并：缺省用 intervalHours 推导（24h = 低频），显式 cooldownMs 优先（测试/特殊场景）。
+    this.cooldownMs = deps.cooldownMs ?? Math.max(1, Math.round(this.intervalHours * 3600_000));
     this.now = deps.now ?? (() => Date.now());
   }
 
@@ -234,6 +253,9 @@ export class FileMetadataReconciler {
   }
 
   get enabled(): boolean { return this.deps.enabled; }
+
+  /** 当前配置的扫描间隔（小时，0 = 关闭）；设置页诊断展示用。 */
+  getIntervalHours(): number { return this.intervalHours; }
 
   dispose(): void {
     if (this.timer) { clearTimeout(this.timer); this.timer = null; }
@@ -324,6 +346,6 @@ export class FileMetadataReconciler {
       knownNoteIds: new Set(this.deps.listKnownNoteIds()),
       maxCandidates: this.deps.maxCandidates,
     });
-    return { ...base, enabled: this.deps.enabled, trigger };
+    return { ...base, enabled: this.deps.enabled, trigger, intervalHours: this.intervalHours };
   }
 }

@@ -167,12 +167,14 @@ export interface FileReconcileCandidateShape {
   mtimeMs: number;
 }
 
-/** Batch4-B：文件↔元数据对账报告（默认关闭，LAKE_FILE_RECONCILE=1 才跑）。 */
+/** Batch4-B：文件↔元数据对账报告（261105 起默认每 24h 低频只报告；0 = 关闭）。 */
 export interface FileReconcileReportShape {
   generatedAt: string;
   durationMs: number;
   enabled: boolean;
   trigger: "sync-idle" | "manual-report";
+  /** 当前配置的扫描间隔（小时，0 = 关闭）。 */
+  intervalHours?: number;
   knownRows: number;
   scannedFiles: number;
   ignoredFiles: number;
@@ -183,9 +185,49 @@ export interface FileReconcileReportShape {
   missingBodyDirs: string[];
 }
 
+/** 261105：手动「重建数据」——从正文文件重建丢了元数据行的笔记（仅限本次扫描候选）。 */
+export interface RebuildCandidateShape {
+  noteId: string;
+  kind: string;
+  relativePath: string;
+  sizeBytes: number;
+  mtimeMs: number;
+  /** 从正文派生的标题（派生不到 = 「恢复的笔记 <id 前 8 位>」）。 */
+  title: string;
+  titleSource: "body" | "fallback";
+  /** 正文不可解析/损坏 = false（不允许勾选重建）。 */
+  rebuildable: boolean;
+  /** 不可重建原因（可读）。 */
+  reason?: string;
+}
+
+export interface RebuildScanResultShape {
+  generatedAt: string;
+  scannedFiles: number;
+  truncated: boolean;
+  candidates: RebuildCandidateShape[];
+}
+
+export type RebuildNoteStatus = "created" | "skipped" | "rejected" | "failed";
+export interface RebuildNoteResultShape {
+  noteId: string;
+  status: RebuildNoteStatus;
+  title?: string;
+  /** skipped/rejected/failed 的可读原因。 */
+  reason?: string;
+}
+
+export interface RebuildResultShape {
+  generatedAt: string;
+  notebookId: string;
+  results: RebuildNoteResultShape[];
+}
+
 export interface DataHealthReport {
   /** 最近一次文件↔元数据对账（未跑过/未启用 = null；只报告）。 */
   fileReconcile?: FileReconcileReportShape | null;
+  /** 后台扫描间隔（小时，0 = 关闭）；未跑过报告时也能显示「是否启用」。 */
+  fileScanIntervalHours?: number;
   notesChecked: number;
   notesMissingFile: Array<{ id: string; title: string }>;
   notesHashMismatch: Array<{ id: string; title: string }>;

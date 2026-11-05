@@ -21,6 +21,8 @@ export interface DiagnosticsContext {
   logScopes: LoggerScopes;
   /** Batch4-B：最近一次「文件↔元数据对账」报告（只读缓存；后台节流任务产出）。 */
   getFileReconcileReport?: () => unknown;
+  /** 261105：文件↔元数据后台扫描间隔（小时，0 = 关闭）；未跑过报告时设置页也要显示「是否启用」。 */
+  getFileScanIntervalHours?: () => number;
 }
 
 /**
@@ -123,6 +125,8 @@ export class Diagnostics {
     checkedAt: string;
     /** Batch4-B：最近一次文件↔元数据对账报告（未跑过 = null；只报告，不含自动修复）。 */
     fileReconcile: unknown;
+    /** 261105：后台扫描间隔（小时，0 = 关闭）；设置页「上次扫描时间/是否启用/间隔」显示用。 */
+    fileScanIntervalHours: number;
   } {
     const checkedAt = new Date().toISOString();
     const notesMissingFile: Array<{ id: string; title: string }> = [];
@@ -211,6 +215,7 @@ export class Diagnostics {
       refsMissingResource,
       checkedAt,
       fileReconcile: this.ctx.getFileReconcileReport?.() ?? null,
+      fileScanIntervalHours: this.ctx.getFileScanIntervalHours?.() ?? 0,
     };
   }
 

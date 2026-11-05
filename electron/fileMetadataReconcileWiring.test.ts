@@ -14,9 +14,15 @@ const store = readFileSync(new URL("./store.ts", import.meta.url), "utf8");
 const diagnostics = readFileSync(new URL("./diagnostics.ts", import.meta.url), "utf8");
 
 describe("file metadata reconcile wiring（主进程）", () => {
-  it("默认关闭 + 显式环境变量开启", () => {
-    expect(main).toContain('process.env.LAKE_FILE_RECONCILE === "1"');
+  it("261105：默认低频（每 24h，设置可改/0 关闭）；环境变量 LAKE_FILE_RECONCILE=0 仍可强制关闭", () => {
+    // 默认间隔来自 settings（store.getFileScanSettings）；不再需要 LAKE_FILE_RECONCILE=1 才启用。
+    expect(main).toContain("store.getFileScanSettings().intervalHours");
+    expect(main).toContain('process.env.LAKE_FILE_RECONCILE !== "0"');
     expect(main).toContain("new FileMetadataReconciler(");
+    expect(main).toContain("intervalHours,");
+    // 设置变更后重建对账器（save_file_scan_settings → main 回调）。
+    expect(main).toContain("restartFileScanReconciler");
+    expect(main).toContain("registerDataRecoveryIpc(");
   });
 
   it("空闲判定 = powerMonitor.getSystemIdleTime；维护域 = enqueueMaintenance", () => {

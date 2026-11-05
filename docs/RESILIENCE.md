@@ -92,7 +92,7 @@
 | 坏 sidecar 改名隔离后降级（view_state.go corrupted 后缀） | **采用** | Batch 1 起坏正文判据；Batch 4 对账只报告；待补：baseline/state 坏文件改名隔离 |
 | 后台任务统一 recover（57 处 defer Recover） | **部分采用** | 后台定时器单飞 + 失败 warn；恢复页/降级保证不扩散（统一 recover 包装登记为 backlog） |
 | 崩溃标记 + 下次启动安全模式 | **采用** | Batch 3 safeMode.ts + SafeModeBanner |
-| 文件系统实扫反向订正索引（严格节流） | **采用（只报告版）** | Batch 4 fileMetadataReconcile.ts：同步后/dirty/空闲 5min/冷却 30min/TryLock，只 readdir+stat，不重建 |
+| 文件系统实扫反向订正索引（严格节流） | **采用（降级：低频只报告 + 手动重建）** 261105 定稿：扫描 24h/次 stat-only，重建必须用户在「设置→重建数据」确认（只允许本次扫描候选、坏正文拒绝、落「恢复的笔记」、不覆盖原文件） | Batch 4 fileMetadataReconcile.ts：同步后/dirty/空闲 5min/冷却 30min/TryLock，只 readdir+stat，不重建 |
 | 损坏文件搬 corrupted/<ts>/ 而不是删 | **部分采用** | 从备份恢复时原库隔离到 corrupt/restore-<ts>/；坏正文目前走只读通道，未建通用隔离目录（backlog） |
 | 事务 panic 必回滚 + 结构化错误码 | 未采用（已有事务 + IPC 错误 envelope，收益低） | 记录为「不抄」 |
 | 写前比对（未变则不写） | 部分采用 | usheet capture 规范化比对 + 同步 I2「未变才标/才应用」；通用写前比对未做（backlog） |

@@ -1,6 +1,7 @@
 import type { DbLike } from "./dbLike.js";
 import type { SecretCipher } from "../src/core/secretCipher.js";
-import type { S3Settings, SyncSettings, S3GcSettings, HistorySettings } from "./storeTypes.js";
+import type { S3Settings, SyncSettings, S3GcSettings, HistorySettings, FileScanSettings } from "./storeTypes.js";
+import { FILE_RECONCILE_DEFAULTS, normalizeFileScanIntervalHours } from "./fileMetadataReconcile.js";
 import { defaultAiSettings, normalizeAiSettings, type AiSettings } from "../src/core/aiProviders.js";
 import { normalizeSyncSettings } from "../src/core/syncSettings.js";
 
@@ -113,6 +114,27 @@ export class SettingsRepository {
   saveHistorySettings(settings: HistorySettings): void {
     this.db.prepare("INSERT INTO settings(key,value) VALUES('history_settings',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
       .run(JSON.stringify(settings));
+  }
+
+  /** 文件↔元数据后台扫描配置（261105）：默认每 24h 一次；0 = 关闭后台扫描（手动扫描仍可用）。 */
+  getFileScanSettings(): FileScanSettings {
+    const row = this.db.prepare("SELECT value FROM settings WHERE key='file_scan_settings'").get() as { value: string } | undefined;
+    const fallback: FileScanSettings = { intervalHours: FILE_RECONCILE_DEFAULTS.intervalHours };
+    if (!row) return fallback;
+    try {
+      const parsed = JSON.parse(row.value) as Partial<FileScanSettings>;
+      const normalized = normalizeFileScanIntervalHours(parsed.intervalHours);
+      return normalized === null ? fallback : { intervalHours: normalized };
+    } catch {
+      return fallback;
+    }
+  }
+
+  saveFileScanSettings(settings: FileScanSettings): void {
+    const normalized = normalizeFileScanIntervalHours(settings.intervalHours);
+    if (normalized === null) throw new Error("扫描间隔无效");
+    this.db.prepare("INSERT INTO settings(key,value) VALUES('file_scan_settings',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
+      .run(JSON.stringify({ intervalHours: normalized }));
   }
 
   getS3GcSettings(): S3GcSettings {

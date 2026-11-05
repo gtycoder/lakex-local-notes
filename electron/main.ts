@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Store } from "./store.js";
-import { FileMetadataReconciler } from "./fileMetadataReconcile.js";
+import { FILE_RECONCILE_DEFAULTS, FileMetadataReconciler } from "./fileMetadataReconcile.js";
 import { canTouchNetwork, cloudStateOf } from "../src/core/cloudState.js";
 import { autoSyncIntervalMs, shouldSyncOnOpenClose } from "../src/core/syncModes.js";
 import { historyFallbackMinutes, shouldRunHistoryFallback } from "../src/core/historyFallbackPolicy.js";
@@ -43,6 +43,7 @@ import { showRecoveryWindow } from "./startupRecoveryWindow.js";
 import { rememberRestoreCandidate, restoreMainDatabaseFromBackup } from "./workspaceRestoreFromBackup.js";
 import { decideSafeMode, readSafeModeState, removeSafeModeState, writeSafeModeState, type SafeModeState } from "./safeMode.js";
 import { registerSafeModeIpc } from "./ipc/registerSafeMode.js";
+import { registerDataRecoveryIpc } from "./ipc/registerDataRecovery.js";
 import { createIpcRegistrar } from "./ipc/registrar.js";
 import { registerNotesIpc } from "./ipc/registerNotes.js";
 import { DraftJournal, draftJournalDir } from "./draftJournal.js";
@@ -129,8 +130,10 @@ let safeModeActive = false;
 /** 安全模式状态快照（提示条/诊断 IPC 用）；未进入 = null。 */
 let safeModeState: SafeModeState | null = null;
 let drafts: DraftJournal;
-/** Batch4-B：文件↔元数据对账（只报告；默认关闭，LAKE_FILE_RECONCILE=1 开启后台节流任务）。 */
+/** Batch4-B：文件↔元数据对账（只报告；261105 起默认每 24h 低频扫描，设置里可改/0 关闭）。 */
 let fileReconciler: FileMetadataReconciler | null = null;
+/** 扫描间隔设置变更后重建对账器（save_file_scan_settings IPC 调用）。 */
+let restartFileScanReconciler: (() => void) | null = null;
 /** 历史定时器重启函数（配置变更时调用，见 save_history_settings IPC） */
 let restartHistoryTimers: (() => void) | null = null;
 /** S3 GC 定时器重启函数（配置变更时调用，见 save_s3_gc_settings IPC） */
@@ -617,6 +620,12 @@ function registerIpc(): ReadonlyMap<string, (args: unknown[]) => Promise<unknown
     state: () => safeModeState,
     onExit: () => { safeModeActive = false; safeModeState = null; },
   });
+  // 261105 Batch4-D：低频扫描设置（0=关闭）+ 手动「重建数据」候选/执行（只允许本次扫描候选）。
+  registerDataRecoveryIpc(ipc, {
+    store,
+    workspaceRoot: workspaceRoot(),
+    onFileScanSettingsChanged: () => restartFileScanReconciler?.(),
+  });
   return ipc.registry;
 }
 
@@ -785,21 +794,30 @@ if (!app.requestSingleInstanceLock()) {
     }
     // 正常启动判定完成；崩溃标记等**启动真正跑通**（建主窗口前）再消费，避免半途失败时丢掉线索。
     store = openedStore;
-    // Batch4-B：文件↔元数据对账（只报告版）。默认关闭；开启后由同步成功打点 + 进程空闲/冷却节流，
-    // 与同步/GC 共用维护域串行队列（不与写域并发）。报告经 runDataHealthCheck 暴露。
-    {
-      const enabled = process.env.LAKE_FILE_RECONCILE === "1";
+    // Batch4-B/D（261105）：文件↔元数据对账 = **低频只报告**（默认每 24h，设置里可改、0 = 关闭）。
+    // 仍由同步成功打点 + 进程空闲（≥5min）门控，与同步/GC 共用维护域串行队列；报告经 runDataHealthCheck 暴露。
+    // 旧环境变量保留：LAKE_FILE_RECONCILE=0 强制关闭（=1 是历史开关，语义等同使用设置里的间隔）。
+    const startFileReconciler = () => {
+      fileReconciler?.dispose();
+      const configured = store.getFileScanSettings().intervalHours;
+      const enabledByEnv = process.env.LAKE_FILE_RECONCILE !== "0";
+      const intervalHours = enabledByEnv ? configured : 0;
+      const enabled = intervalHours > 0;
       fileReconciler = new FileMetadataReconciler({
         root: workspaceRoot(),
         listKnownNoteIds: () => store.listNotesSyncMeta().map((n) => n.id),
         getIdleSeconds: () => powerMonitor.getSystemIdleTime(),
         enqueueMaintenance,
         enabled,
+        intervalHours,
+        cooldownMs: intervalHours > 0 ? Math.max(1, intervalHours * 3600_000) : FILE_RECONCILE_DEFAULTS.cooldownMs,
         log: (message) => log.app.info(message),
       });
       store.setFileReconcileReportProvider(() => fileReconciler?.getLastReport() ?? null);
-      if (enabled) log.app.info("[reconcile] 文件↔元数据对账已启用（只报告；空闲/冷却节流）");
-    }
+      log.app.info("[reconcile] 文件↔元数据对账" + (enabled ? "已启用（间隔 " + intervalHours + "h，只报告）" : "已关闭（0h / LAKE_FILE_RECONCILE=0）"));
+    };
+    startFileReconciler();
+    restartFileScanReconciler = startFileReconciler;
     // A2 云端恢复（换机/坏库）：重启后若存在恢复 seed（prepareCloudRestore 写入的 settings 密文行），
     // 原样写回新库再删除——secretAccessKey 保持 enc:v1: 密文（绝不明文落盘），同机 safeStorage 可解。
     try {

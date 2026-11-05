@@ -46,9 +46,10 @@ import type { DbLike } from "./dbLike.js";
 import { ResourceRepository } from "./resourceRepository.js";
 import { draftJournalDir, readDraftEntry } from "./draftJournal.js";
 import { RemoteImportRepository } from "./remoteImportRepository.js";
-import type { ResourceUploadOutput, HistorySettings, HistoryCleanupResult, S3Settings, SyncSettings, S3GcSettings } from "./storeTypes.js";
+import type { ResourceUploadOutput, HistorySettings, HistoryCleanupResult, S3Settings, SyncSettings, S3GcSettings, FileScanSettings } from "./storeTypes.js";
 import { fileKindOf, renameFileCardDisplay, scanAssetCards } from "../src/core/fileCard.js";
 import { TRASH_NOTEBOOK_ID } from "../src/core/syncDecisions.js";
+import { RECOVERED_NOTEBOOK_ID, RECOVERED_NOTEBOOK_TITLE, type RecoveredNoteInsert } from "./recoveredNotes.js";
 
 export { ASSET_NAME_RE, extractAssetRefs, isoWeekKey, selectHistoryDrops, sanitizeFileName } from "../src/core/storeUtils.js";
 
@@ -299,6 +300,7 @@ export class Store {
       noteAssetsDirFor: (noteId) => this.noteAssetsDirFor(noteId),
       logScopes: this.logScopes,
       getFileReconcileReport: () => this.fileReconcileReportProvider?.() ?? null,
+      getFileScanIntervalHours: () => this.settingsRepository.getFileScanSettings().intervalHours,
     });
     this.searchRepository = new SearchRepository({
       db: this.db,
@@ -672,6 +674,51 @@ export class Store {
 
   createNotebook(title: string): TreeNode {
     return this.noteMetadata.createNotebook(title);
+  }
+
+  /**
+   * 261105 手动「重建数据」：为「文件在、行丢」的候选补 notes + tree_nodes 行（**不写正文文件**）。
+   * 调用方 = RecoveredNotesService（只在用户确认、且 id 属于本次扫描候选时调用；正文已校验可读）。
+   * - 惰性创建专用笔记本「恢复的笔记」（固定 id，不复用兜底「未分类」）；
+   * - 新行 is_dirty=1（随下次同步上传）；行已存在 = skipped（幂等）；
+   * - 只写 DB，正文/附件/历史一个都不动。
+   */
+  rebuildRecoveredNotes(rows: readonly RecoveredNoteInsert[]): Array<{ id: string; status: "created" | "skipped" }> {
+    const outcomes: Array<{ id: string; status: "created" | "skipped" }> = [];
+    const created: RecoveredNoteInsert[] = [];
+    const updatedAt = nowIso();
+    const tx = this.db.transaction(() => {
+      const notebook = this.db.prepare("SELECT 1 FROM tree_nodes WHERE id=? AND deleted_at IS NULL").get(RECOVERED_NOTEBOOK_ID);
+      if (!notebook) {
+        const sortOrder = this.nextSortOrder(null);
+        this.db.prepare(
+          "INSERT INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,deleted_at,is_dirty,is_conflict) VALUES(?,?,NULL,'notebook',?,NULL,?,?,?,NULL,1,0)",
+        ).run(RECOVERED_NOTEBOOK_ID, DEFAULT_WORKSPACE_ID, RECOVERED_NOTEBOOK_TITLE, sortOrder, updatedAt, updatedAt);
+      }
+      let sortOrder = this.nextSortOrder(RECOVERED_NOTEBOOK_ID);
+      for (const row of rows) {
+        if (!isSafePathSegment(row.id)) { outcomes.push({ id: row.id, status: "skipped" }); continue; }
+        if (this.db.prepare("SELECT 1 FROM notes WHERE id=?").get(row.id)) {
+          outcomes.push({ id: row.id, status: "skipped" });
+          continue;
+        }
+        this.db.prepare(
+          "INSERT INTO notes(id,title,parent_id,sort_order,updated_at,is_dirty,is_conflict,deleted_at,is_locked,locked_at,trashed_at,deleted_from_parent_id,kind) VALUES(?,?,?,?,?,1,0,NULL,0,NULL,NULL,NULL,?)",
+        ).run(row.id, row.title, RECOVERED_NOTEBOOK_ID, sortOrder, updatedAt, row.kind);
+        this.db.prepare(
+          "INSERT INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,deleted_at,is_dirty,is_conflict) VALUES(?,?,?,'note',?,?,?,?,?,NULL,1,0)",
+        ).run(row.id, DEFAULT_WORKSPACE_ID, RECOVERED_NOTEBOOK_ID, row.title, row.id, sortOrder, updatedAt, updatedAt);
+        this.noteKindCache.set(row.id, row.kind);
+        sortOrder += 1;
+        outcomes.push({ id: row.id, status: "created" });
+        created.push(row);
+      }
+    });
+    tx();
+    for (const row of created) {
+      try { this.ensureNoteCaches(row.id, row.content); } catch { /* 派生索引失败不阻断重建（可全量重建修复） */ }
+    }
+    return outcomes;
   }
 
   createGroup(parentId: string, title: string): TreeNode {
@@ -1221,6 +1268,8 @@ export class Store {
     checkedAt: string;
     /** Batch4-B：最近一次文件↔元数据对账报告（设置→同步诊断可见；未跑过 = null）。 */
     fileReconcile: unknown;
+    /** 261105：文件↔元数据后台扫描间隔（小时，0 = 关闭）。 */
+    fileScanIntervalHours: number;
   } {
     return this.diagnostics.runDataHealthCheck();
   }
@@ -1258,6 +1307,15 @@ export class Store {
 
   saveHistorySettings(settings: HistorySettings): void {
     this.settingsRepository.saveHistorySettings(settings);
+  }
+
+  /** 文件↔元数据后台扫描配置（261105 低频只报告；0 = 关闭后台扫描）。 */
+  getFileScanSettings(): FileScanSettings {
+    return this.settingsRepository.getFileScanSettings();
+  }
+
+  saveFileScanSettings(settings: FileScanSettings): void {
+    this.settingsRepository.saveFileScanSettings(settings);
   }
 
   /** AI 设置（P0）：密钥加密落盘、独立 key，不参与 S3/同步/导出。 */

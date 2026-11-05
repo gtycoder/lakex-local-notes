@@ -8,6 +8,15 @@
 
 ## 0. 最新交接（261027）
 
+### 261105 · 手动「重建数据」+ 低频只报告扫描（文件↔元数据）· **本地改动（待提交）**
+- **设计定稿（用户 261105）**：思源把「文件系统反向订正索引」做成自动（cron 每分钟 → 空闲 7min + dirty + 冷却 120min + TryLock），因为其同步以 `.sy` 文件为真相且文件自描述；我们的 S3 v3 是内容寻址 + 云端正文副本 + 缺正文恢复链路，正文文件名只有 id（标题/父级在库里）⇒ **降级为「低频只报告扫描 + 手动确认重建」**，不照搬自动化程度。
+- **扫描（只报告）**：默认 **每 24h 一次**（设置页可改，0=关，上限 720h；`LAKE_FILE_RECONCILE=0` 强制关）；门控 = 同步成功打点 + 空闲≥5min + dirty + 冷却(=interval) + TryLock，**stat-only、绝不写库/文件**；报告含 `intervalHours` 并显示在「设置→数据体检→一致性检查」。
+- **重建（手动）**：设置页「重建数据」→ 扫描 → 候选列表（标题/kind/size/mtime/路径；坏正文禁用勾选+原因）→ 勾选 → 「重建所选」danger 二次确认 → 结果逐条（已重建/跳过/拒绝/失败）。**只接受本次进程内最近一次扫描的候选 id**。
+- **重建语义**：doc 标题取正文首个 H1~H6（已核实 `.lake` 是 Lake HTML、无 title 字段），取不到退化「恢复的笔记 <id 前 8 位>」；usheet/bitable/board/ink 走 `core/docBodySafety` 判据，坏正文拒绝且**绝不覆盖原文件**；落固定专用笔记本 `notebook-recovered`「恢复的笔记」，只写 DB（notes+tree_nodes，`is_dirty=1` 随下次同步上传，UI 已说明），正文/附件/历史不写不删；幂等 skipped + 逐条审计日志。
+- **IPC/UI**：`get/save_file_scan_settings`、`scan_rebuild_candidates`、`rebuild_orphan_notes`（parity 143→147，preload/webApi/native 三处同步）；`RebuildDataBlock` 组件 + settingsSearch 登记（data-scan-interval / data-rebuild）。
+- **门禁**：tsc 0；全量 vitest **644 文件 / 3992 passed / 12 skipped**；core 139 文件 0 违规；`git diff --check` 干净。新增 15 例（recoveredNotes 11 + RebuildDataBlock 4 + 接线回归）。
+- **风险**：后台扫描依赖「同步成功打点」（没有同步不会跑，手动扫描不受影响）；重建只补主库元数据行，不涉及小记/附件/历史；重建立即 dirty ⇒ 会推云端（用户需知情）。
+
 ### 261105 · 容错批 4（Batch 4）：备份导入恢复 / 文件↔元数据对账 / 兜底历史 / 安全模式会话门 · **本地改动（待提交）**
 - **从备份恢复**：新增 `electron/workspaceRestoreFromBackup.ts`（路径白名单 + 选择框登记制 + `quick_check`/关键表/外键校验 → 原库隔离到 `corrupt/restore-<ts>/` → tmp+rename 落位 → 落位后再校验；任一阶段失败回滚原库）；恢复页第 5 个动作 + 设置页「数据与存储→备份与恢复」入口；IPC 三方同步（通道数 141→143）、settingsSearch 登记。9 例测试（含复制失败回滚、路径穿越拒绝）。
 - **文件↔元数据对账（只报告版）**：新增 `electron/fileMetadataReconcile.ts`（默认关闭，`LAKE_FILE_RECONCILE=1`）：节流 = enabled→TryLock→同步完成打点→dirty→空闲≥5min→冷却≥30min→进队列后二次判空闲；只 readdir+stat、不读正文/不写库；报告经 `runDataHealthCheck().fileReconcile` 暴露，**Lead 补了 `src/lib/types.ts` 类型与设置页「一致性检查」展示行**。25 例测试（含 2 万行/300 候选 <5s、与维护队列串行）。

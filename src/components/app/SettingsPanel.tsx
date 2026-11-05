@@ -42,6 +42,7 @@ import { DialogResizeHandles } from "../ui/DialogResizeHandles";
 import { filterSettingsNav, searchSettingItems, type SettingItemEntry } from "../model/settingsSearch";
 import { getNativeErrorMessage, reportNativeActionError } from "../../lib/nativeErrors";
 import { S3ConfigImportDialog } from "./S3ConfigImportDialog";
+import { RebuildDataBlock } from "./RebuildDataBlock";
 import { formatBytes } from "../../lib/formatBytes";
 import { formatDateTime } from "../../core/dateFormat";
 import { formatS3v3Diagnostics, type S3v3DiagnosticReport } from "../../core/s3v3Report";
@@ -246,6 +247,8 @@ let verifiedS3Fingerprint: string | null = null;
   // SD-13：最近 3 轮 v3 同步诊断（device_state，经 get_sync_status 带出；不新增 IPC 通道）。
   const [syncReports, setSyncReports] = useState<S3v3DiagnosticReport[]>([]);
   const [syncDiagMsg, setSyncDiagMsg] = useState<string | null>(null);
+  // 261105：文件↔元数据后台扫描间隔（小时，0 = 关闭；手动「重建数据 → 扫描」不受影响）。
+  const [scanIntervalHours, setScanIntervalHours] = useState<number | null>(null);
 
   // DT-13（261028）：十组手写 busy/msg（历史清理 / 数据体检 / 搜索索引 / 备份恢复 / 深度清理 / 同步策略 /
   // 日志读取 / 浏览器端 / AI 测试 / AI 拉模型）改走 useAsyncAction —— 成功/失败文案仍由调用方给，UI 结构与文案不变。
@@ -318,6 +321,17 @@ let verifiedS3Fingerprint: string | null = null;
     });
   };
 
+  /** 261105：保存后台扫描间隔（小时，0 = 关闭）；成功后刷新体检数据（显示新间隔/启用状态）。 */
+  const saveScanInterval = (intervalHours: number) => {
+    setScanIntervalHours(intervalHours);
+    void native.saveFileScanSettings({ intervalHours })
+      .then(() => native.runDataHealthCheck().then(setHealth))
+      .catch((reason) => {
+        hist.setMessage("扫描间隔保存失败：" + getNativeErrorMessage(reason));
+        void native.getFileScanSettings().then((v) => setScanIntervalHours(v.intervalHours)).catch(() => undefined);
+      });
+  };
+
   /** F1 日志查看：尾部关键字过滤（GC/sync/trash 等），纯读。 */
   const runLogLoad = async (keyword: string) => {
     await logLoad.run(async () => {
@@ -362,6 +376,7 @@ let verifiedS3Fingerprint: string | null = null;
     void native.getSyncSettings().then(setSyncCfg).catch((error) => reportNativeActionError("设置页读取", error));
     void native.getWebStatus().then(setWebStatus).catch((error) => reportNativeActionError("设置页读取", error));
     void native.listS3GcLog().then(setGcLog).catch((error) => reportNativeActionError("设置页读取", error));
+    void native.getFileScanSettings().then((v) => setScanIntervalHours(v.intervalHours)).catch((error) => reportNativeActionError("设置页读取", error));
   }, [open, openCategory]);
 
   // 关于页：只读概览（版本/环境/存储）。每次进入分类都刷新，保证计数与磁盘一致。
@@ -775,14 +790,20 @@ let verifiedS3Fingerprint: string | null = null;
                           {health.treeDanglingParent.length > 0 && <div className="checks__row checks__row--error">✗ {health.treeDanglingParent.length} 个节点的父目录不存在（侧栏与回收站都看不到它）：{health.treeDanglingParent.slice(0, 3).map((t) => `${t.title}→${t.parentId}`).join("、")}</div>}
                           </>
                         )}
-                        {health.fileReconcile && (
-                          <div className="checks__row checks__row--warn">
-                            文件↔元数据对账（{health.fileReconcile.enabled ? "已启用" : "未启用"}）：扫描 {health.fileReconcile.scannedFiles} 个正文文件、已知笔记 {health.fileReconcile.knownRows} 条，候选 {health.fileReconcile.candidateCount} 个{health.fileReconcile.candidateCount > 0 ? "（文件存在但找不到对应笔记，仅报告、不自动重建）" : ""}{health.fileReconcile.truncated ? "（已截断显示）" : ""}。
-                          </div>
-                        )}
+                        <div className="checks__row">
+                          文件↔元数据后台扫描：{health.fileScanIntervalHours && health.fileScanIntervalHours > 0 ? `已启用（每 ${health.fileScanIntervalHours} 小时一次，只报告）` : "未启用（0 = 关闭；手动「重建数据 → 扫描」仍可用）"}
+                          {health.fileReconcile ? `；上次扫描 ${formatDateTime(new Date(health.fileReconcile.generatedAt))}：扫描 ${health.fileReconcile.scannedFiles} 个正文文件、已知笔记 ${health.fileReconcile.knownRows} 条，候选 ${health.fileReconcile.candidateCount} 个${health.fileReconcile.truncated ? "（已截断显示）" : ""}` : "；最近还没有扫描记录"}
+                          。
+                        </div>
                         <div className="checks__row">生成于 {formatDateTime(new Date(health.checkedAt))}。</div>
                       </div>
                     )}
+                    <Item itemId="data-scan-interval" name="后台扫描间隔（小时）" desc="低频文件↔元数据扫描：只报告、不写库/不重建；默认 24 小时。0 = 关闭后台扫描（手动「重建数据 → 扫描」仍可用）。"><NumField label="后台扫描间隔（小时）" min={0} max={720} value={scanIntervalHours ?? health?.fileScanIntervalHours ?? 24} onSave={(v) => saveScanInterval(v)} floor={0} fallback={24} /></Item>
+                  </Block>
+                </Group>
+                <Group title="数据恢复（手动）" icon={<Archive size={16} />}>
+                  <Block itemId="data-rebuild" name="重建数据" desc="当正文文件还在、笔记行丢失（文件↔元数据候选）时，从正文手动重建元数据行：只补笔记行并标为待同步，不改写、不删除任何正文文件；只允许重建本次扫描出的候选，正文不可解析的条目会被拒绝。">
+                    <RebuildDataBlock scan={() => native.scanRebuildCandidates()} rebuild={(ids) => native.rebuildOrphanNotes(ids)} confirm={confirm} />
                   </Block>
                 </Group>
               </>
