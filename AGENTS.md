@@ -156,6 +156,7 @@ npm run setup:lakex                                             # 首次/新 clo
 npx tsc --noEmit && npx vitest run && git diff --check          # 日常门禁（实测 31–36s）
 npx vite build && npx vite build -c vite.mobile.config.ts       # 两条构建
 node scripts/ui-metrics.mjs && npm run check:core && npm run check:mobileui && npm run check:bundle
+bash scripts/clean-dev-artifacts.sh                             # 清可重建垃圾（dist/release/android 产物/.css-audit/dev 缓存/$TMPDIR/lake-*）；默认 dry-run，--apply 才删
 # 平板/折叠屏：窗口矩阵（形态判据 + resize 状态保持）——动形态/外壳/胶囊/侧栏时跑
 npm run check:windowsweep
 # check:arch（首屏资源图字节预算 + import 方向）已链进 check:bundle（需 dist 产物）

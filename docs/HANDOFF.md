@@ -8,6 +8,17 @@
 
 ## 0. 最新交接（261027）
 
+### 261105 · 工作空间清理（一次性）· **已执行；脚本+文档本地改动待提交**
+- **背景**：工作目录长期堆积（工作区 5.9G + 本机运行时数据 30G+），其中大部分是「可重建的构建/审计/测试产物」与失效 worktree。用户要求：清理每个项目的半成品、遗留分支、开发/测试数据，并保证后续干净。
+- **git / 分支 / 远程**：移除两个已完全合并的历史 worktree（`lakex-pad`、`lakex-ui-surface-polish`，各 409M/610M）并删除对应本地分支；**两远端（Gitee + GitHub）的 `feat/pad-adaptation`、`feat/pad-touch-ui` 也已删除**，现在两端各只剩 `master`；`git fetch --prune` 清掉过期 remote-tracking ref。删除前实测：三条分支 `master..<branch> = 0`（全是 master 祖先，无独有提交）。
+- **失效 worktree**：`lake-notes-electron-worktrees/mobile-sheet-dock`（1.4G，`.git` 指向已删除的 `private/lake-notes-electron-obsolete-261027/.git`，父仓不存在、git 无法读取、无密钥/无进程占用）已整目录删除；其功能（移动端 dock）已由 master 的现实现接替。
+- **构建/审计产物（仓库内）**：删 `release/`（530M 半成品 .app，无 dmg）、`dist`/`dist-mobile`/`dist-electron`、`android/app/build`+`android/build`+`android/.gradle`（168M，含 4 个重复 APK）、`.css-audit`（112M；**门禁基线在 `scripts/mobile-audit|css-audit/baseline/`，不受影响**）。合计约 1.6G。
+- **工作区杂项**：删顶层孤儿 `node_modules`（只有 .vite/vitest 缓存）、顶层 `dist/index.html`（一次性页面）、`.trae/`、`.github/modernize`、13 个 `.DS_Store`、`/tmp` 遗留截图。**保留**：`lakex-local-notes`（node_modules 被删前是两 worktree 的软链共享；现在只剩主仓）、`yuque-re` / `siyuan-master` / `lake-main` / `lake-editor-main` / `yuque-developer-docs`（参考资料，AGENTS §2）、`ui-design-inputs`、顶层设计 PDF、`.apifox`。
+- **运行时/测试数据**：清 `$TMPDIR/lake-*`（40,819 项 / 22G，vitest 临时夹具）与 `.com.lakexlocalnotes.desktop.*`（42M）；清 dev Electron 可再生缓存（Cache 1.2G + Code Cache 298M + GPU/Graphite 缓存）与 dev logs；删改名遗留旧壳 `local-lakex-notes`(936K) / `local-lakex-notes-dev`(522M)。**保留** `lakex-local-notes-dev/workspace-default`（手测笔记）与 Local/Session Storage；正式数据目录 `lakex-local-notes` 本机**不存在**（若出现禁碰）。
+- **AVD**：7 台 26G → **3 台 15G**（保留 lake_mobile / lake_gate / lake_tab，删 lake_body / lake_lock / lake_meas / lake_sheet 一次性副本）。重建命令见 §1 环境。
+- **回收**：工作区 5.9G → ~2.7G；磁盘可用 60G → 93G。
+- **后续保证干净**：新增 `scripts/clean-dev-artifacts.sh`（**默认 dry-run**，列体积；`--apply` 才删）：清 dist*/release/android 构建产物、`.css-audit`、dev Electron 缓存、`$TMPDIR/lake-*`、`.DS_Store`；**不碰**正式数据、dev workspace、node_modules/.git/vendor、AVD。建议每批收尾或发版前跑一次。
+
 ### 261105 · 标签「删除 = 缺席」（S3 列表红线）+ 移动端回收站 90 天定时清空 + 两个回归修复 · **本地改动（未提交/未推送）**
 - **问题**：标签目录是**唯一**还会在云端永久留条目的地方——删除只写 `deleted_at` 墓碑、行永不物理删，墓碑随 quick-notes 索引 `tags[]` 永久发布（无裁剪、无上限）。用户红线：「S3 的列表表绝对不能出现永久存在的东西」，且本地删除后同名重建会撞主键（`9867a347` 把旧版 upsert 换成裸 INSERT 的回归）。
 - **定稿（用户 261105）**：标签**删除 = 缺席**（与文档/小记同口径）+ **删除压编辑**；移动端回收站补 90 天定时清空（与桌面同口径）。
@@ -806,11 +817,10 @@
 
 | worktree | 分支 | HEAD | 状态 |
 | --- | --- | --- | --- |
-| `lakex-ui-surface-polish`（本会话） | `feat/ui-surface-polish` | 见 `git log -1` | UI各批及全量复审补漏已集成master，分支保留本地；推送目标仅master。当前工作树以`git status`为准 |
-| `lakex-local-notes`（主仓库） | `master` | 见 `git log -1`（不写死hash） | 已快进集成UI和另一会话最新标签定稿；本轮master已双推Gitee/GitHub，两端`ls-remote`已核验与本地同hash；不更新`feat/pad-touch-ui`。并行状态以`git status`为准 |
-| `lakex-pad` | `feat/pad-adaptation` | `17f44dbd` | **历史残留**：平板第一批早已合入master，当前落后数量以git为准。旧README/AGENTS/HANDOFF不要当依据；此工作树本轮未操作 |
+| `lakex-local-notes`（唯一） | `master` | 见 `git log -1` | **261105 清理后只剩主仓库**：`lakex-pad` / `lakex-ui-surface-polish` 两个历史 worktree 已移除，其分支（feat/pad-adaptation / feat/pad-touch-ui / feat/ui-surface-polish）与两远端同名分支已删（全部是 master 祖先，无独有提交）；`lake-notes-electron-worktrees/`（父仓已删的失效 worktree，1.4G）已删 |
 
-- 本轮仅推进`master`（含UI复审），`feat/pad-touch-ui`保留另一会话已双推的`d2f76b3b`；不要再认为它与master恒同hash。两远端master的交付核验见`.css-audit/final-review/merge-verify.txt`。
+- **分支策略（261105 起）**：只保留 `master`（本地 + Gitee + GitHub 各一条）；特性分支做完即合、合完即删，不留长期 worktree。
+- 两远端 master 的交付核验见 `.css-audit/final-review/merge-verify.txt`（该目录在 261105 清理中已删除，历史证据见 git 提交记录）。
 - **261105 标签缺席改造（本轮）**：本地改动，**未提交/未推送**，改动面 = core 同步语义 + 两端标签库/端口 + 移动端回收站定时清空 + 文档。门禁实测：tsc 0；全量 vitest **608 文件（597 passed / 11 integration skip）、3763 passed / 12 skipped**；core 136 文件 0 违规；check:mobileui/ui-metrics 通过；`git diff --check` 干净。
 - **261105 实测偏差修正**：`master..feat/pad-touch-ui = 0`（`d2f76b3b` 已是 master 祖先）⇒ §3 P0 原文「落后 6 个提交、发版前先合」已过期，本轮就地改掉。
 - 发版仍只有v0.0.1/v0.0.2，package.json=0.0.2；未发版提交数用`git rev-list --count v0.0.2..master`查询，别沿用125这个旧计数。下一版发布说明须写inkDoc v4：旧端只读、手机/平板需重装。
@@ -823,7 +833,7 @@
 
 **261105 GitHub补推**：本机DNS将github.com解析到暂不可达的地址，单纯HTTP/1.1重试仍443超时。查询公共DNS后，仅该次git命令用`http.curloptResolve`覆盖解析，HTTPS推送成功；未改全局DNS/代理或TLS校验。地址可能变化，下次先查DNS与连通性，不固化IP。
 
-**环境（本机实测 261103）**：Node **v24.18.0**（`$HOME/.nvm/versions/node/v24.18.0/bin`）；JDK **21** `/Library/Java/JavaVirtualMachines/jdk-21.jdk`（系统默认 java 是 1.8，手跑 gradlew 必须指 21）；Android SDK `/opt/homebrew/share/android-commandlinetools`；AVD **7 个**：lake_mobile / lake_gate / lake_tab / lake_body / lake_lock / lake_meas / lake_sheet；CDP **9335 开发 / 9336 门禁 / 9340 平板与窗口矩阵**。Android 唯一运行手册 = `docs/MOBILE-OPS.md`（serial 号段以 `adb devices` 现场为准，文档里的 5556/5562 已不一致）。
+**环境（本机实测 261103）**：Node **v24.18.0**（`$HOME/.nvm/versions/node/v24.18.0/bin`）；JDK **21** `/Library/Java/JavaVirtualMachines/jdk-21.jdk`（系统默认 java 是 1.8，手跑 gradlew 必须指 21）；Android SDK `/opt/homebrew/share/android-commandlinetools`；AVD **3 个（261105 清理后）**：lake_mobile（开发默认）/ lake_gate（门禁固定夹具，勿改其数据）/ lake_tab（平板与窗口矩阵）；已删 lake_body / lake_lock / lake_meas / lake_sheet 四台一次性副本，需要时用 `avdmanager create avd -n <name> -k "system-images;android-36;google_apis;arm64-v8a" -d pixel_6` 重建（`scripts/emu-up.sh` 只自动建 lake_mobile）；CDP **9335 开发 / 9336 门禁 / 9340 平板与窗口矩阵**。Android 唯一运行手册 = `docs/MOBILE-OPS.md`（serial 号段以 `adb devices` 现场为准，文档里的 5556/5562 已不一致）。
 
 ## 2. 风险与已知不稳定（跨批次，别再踩）
 
