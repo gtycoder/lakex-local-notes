@@ -20,8 +20,6 @@ import { useQuickNoteListModel, type QuickNoteListSource } from "./useQuickNoteL
 const tagOf = (name: string, patch: Partial<QuickNoteTag> = {}): QuickNoteTag => ({
   id: quickNoteTagId(name),
   name,
-  sortOrder: 0,
-  pinned: false,
   createdAt: "2026-10-22T00:00:00.000Z",
   updatedAt: "2026-10-22T00:00:00.000Z",
   deletedAt: null,

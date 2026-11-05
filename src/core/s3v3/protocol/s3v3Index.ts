@@ -66,10 +66,6 @@ export interface QuickNoteTagEntry {
   id: string;
   name: string;
   color?: string | null;
-  /** 展示顺序（旧字段 order 兼容读取，但新写入用 sortOrder）。 */
-  sortOrder?: number;
-  order?: number;
-  pinned?: boolean;
   createdAt: string;
   updatedAt: string;
   /** 非空 = 墓碑（标签删除/合并），同步必须传播。 */

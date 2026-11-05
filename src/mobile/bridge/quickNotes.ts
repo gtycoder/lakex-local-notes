@@ -40,7 +40,7 @@ export const quickNotesDomain = {
     });
   },
 
-  async updateQuickNoteTag(id: string, patch: { name?: string; pinned?: boolean; sortOrder?: number }) {
+  async updateQuickNoteTag(id: string, patch: { name?: string }) {
     return runWrite("updateQuickNoteTag", async () => {
       const d = await ensureDb();
       return await mobileQuickNoteTags.update(d, id, patch);

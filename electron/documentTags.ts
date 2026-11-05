@@ -42,7 +42,7 @@ export class DocumentTagsService {
     return this.catalog.create(name);
   }
 
-  update(id: string, patch: { name?: string; pinned?: boolean; sortOrder?: number }): QuickNoteTag {
+  update(id: string, patch: { name?: string }): QuickNoteTag {
     return this.catalog.update(id, patch);
   }
 

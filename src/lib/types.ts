@@ -273,16 +273,8 @@ export interface SaveQuickNoteInput {
   retainedImageIds?: string[];
 }
 
-/** 小记标签目录实体（与 `core/quickNoteTags` 的 QuickNoteTag 对齐；IPC/manifest 共用）。 */
-export interface QuickNoteTag {
-  id: string;
-  name: string;
-  sortOrder: number;
-  pinned: boolean;
-  createdAt: string;
-  updatedAt: string;
-  deletedAt: string | null;
-}
+/** 小记标签目录实体：单一来源 = `core/quickNoteTags`（这里只做 re-export，避免又一份带顺序/置顶的重复类型）。 */
+export type { QuickNoteTag } from "../core/quickNoteTags";
 
 /** 关于页：主进程 get_system_info 的返回（只读概览）。 */
 export interface StorageOverview {

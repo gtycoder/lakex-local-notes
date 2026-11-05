@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /**
- * 移动端标签管理（261105）：重命名 / 删除 / 合并 / 置顶 / 上移下移。
- * 断言全部走 bridge 公开 API（标签表是唯一来源；删除只移除关联，不删小记）。
+ * 移动端标签管理（261105）：重命名 / 删除 / 合并 / 拖拽排序（无置顶、无上下移按钮）。
+ * 拖拽本身依赖真实 touch 与 elementFromPoint（设备验收），这里覆盖渲染与写操作接线。
  */
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -27,12 +27,12 @@ import { MobileQuickNoteTagManager } from "./MobileQuickNoteTagManager";
 
 const T1 = "2026-11-01T00:00:00.000Z";
 const tag = (id: string, name: string, over: Record<string, unknown> = {}) => ({
-  id, name, sortOrder: 0, pinned: false, createdAt: T1, updatedAt: T1, deletedAt: null, count: 1, ...over,
+  id, name, createdAt: T1, updatedAt: T1, deletedAt: null, count: 1, ...over,
 });
 
 interface Mounted { container: HTMLElement; unmount: () => Promise<void> }
 
-async function mount(tags = [tag("t_a", "工作"), tag("t_b", "灵感", { pinned: true })]): Promise<Mounted> {
+async function mount(tags = [tag("t_a", "工作"), tag("t_b", "灵感")]): Promise<Mounted> {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root: Root = createRoot(container);
@@ -40,10 +40,7 @@ async function mount(tags = [tag("t_a", "工作"), tag("t_b", "灵感", { pinned
   await act(async () => {
     root.render(<MobileQuickNoteTagManager open tags={tags} onClose={() => undefined} onChanged={onChanged} />);
   });
-  return {
-    container,
-    unmount: async () => { await act(async () => root.unmount()); container.remove(); },
-  };
+  return { container, unmount: async () => { await act(async () => root.unmount()); container.remove(); } };
 }
 
 const byAria = (root: ParentNode, label: string) => root.querySelector('[aria-label="' + label + '"]') as HTMLElement | null;
@@ -55,13 +52,14 @@ beforeAll(() => {
 });
 
 describe("MobileQuickNoteTagManager", () => {
-  it("置顶开关走 updateQuickNoteTag，并按当前 pin 状态给相反值", async () => {
+  it("渲染：长按拖拽提示在；没有置顶/上下移入口（261105 定稿）", async () => {
     const m = await mount();
     try {
-      await click(byAria(m.container, "置顶 工作"));
-      expect(mocks.updateQuickNoteTag).toHaveBeenCalledWith("t_a", { pinned: true });
-      await click(byAria(m.container, "取消置顶 灵感"));
-      expect(mocks.updateQuickNoteTag).toHaveBeenLastCalledWith("t_b", { pinned: false });
+      expect(m.container.textContent).toContain("长按拖动可排序");
+      expect(byAria(m.container, "置顶 工作")).toBeNull();
+      expect(byText(m.container, "上移")).toBeUndefined();
+      expect(byText(m.container, "下移")).toBeUndefined();
+      expect(m.container.querySelectorAll("[data-tag-id]").length).toBe(2);
     } finally { await m.unmount(); }
   });
 
@@ -101,15 +99,6 @@ describe("MobileQuickNoteTagManager", () => {
       const target = [...m.container.querySelectorAll(".qn-tag-sheet__item")].find((el) => (el.textContent || "").startsWith("灵感"));
       await click(target ?? null);
       expect(mocks.mergeQuickNoteTags).toHaveBeenCalledWith("t_a", "t_b");
-    } finally { await m.unmount(); }
-  });
-
-  it("排序：上移会按新顺序整表 reorder（置顶优先级由目录排序承担）", async () => {
-    const m = await mount();
-    try {
-      await click(byAria(m.container, "更多操作 灵感"));
-      await click(byText(m.container, "上移"));
-      expect(mocks.reorderQuickNoteTags).toHaveBeenCalledWith(["t_b", "t_a"]);
     } finally { await m.unmount(); }
   });
 });

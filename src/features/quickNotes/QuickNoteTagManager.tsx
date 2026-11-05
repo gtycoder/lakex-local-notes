@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Check, GripVertical, Merge, Pencil, Pin, PinOff, Search, Trash, X } from "lucide-react";
+import { Check, GripVertical, Merge, Pencil, Search, Trash, X } from "lucide-react";
 import { Dialog } from "../../components/ui/Overlay";
 // 行内重命名的 Enter/Esc/空名口径统一走共用原语（DT-12；标签这里保持「空名不提交」的现状）
 import { InlineRenameInput } from "../../components/ui/InlineRenameInput";
@@ -18,8 +18,9 @@ interface QuickNoteTagManagerProps {
 }
 
 /**
- * 标签管理（桌面）：重命名 / 合并 / 删除 / 置顶 / 拖拽排序。
+ * 标签管理（桌面）：重命名 / 合并 / 删除 / 拖拽排序。
  * 标签表是唯一来源；删除只从所有小记移除引用，不删除小记（用户 261024 定稿）。
+ * 261105：**顺序是设备本地视图**（不参与同步）；置顶功能已整体删除。
  */
 export function QuickNoteTagManager({ open, tags, onClose, onChanged, onError }: QuickNoteTagManagerProps) {
   const [query, setQuery] = useState("");
@@ -135,19 +136,13 @@ export function QuickNoteTagManager({ open, tags, onClose, onChanged, onError }:
               {visible.map((tag) => (
                 <div
                   key={tag.id}
-                  className={"quick-note-tag-manager__row" + (tag.pinned ? " is-pinned" : "")}
+                  className={"quick-note-tag-manager__row" + (dragId === tag.id ? " is-dragging" : "")}
                   draggable
                   onDragStart={() => setDragId(tag.id)}
                   onDragOver={(event) => event.preventDefault()}
                   onDrop={() => drop(tag.id)}
                 >
                   <span className="quick-note-tag-manager__grip" title="拖拽排序"><GripVertical size={14} /></span>
-                  <button
-                    type="button" className="ln-iconbtn ln-iconbtn--compact" disabled={busy}
-                    aria-label={tag.pinned ? `取消置顶 ${tag.name}` : `置顶 ${tag.name}`}
-                    title={tag.pinned ? "取消置顶" : "置顶"}
-                    onClick={() => void run(() => native.updateQuickNoteTag(tag.id, { pinned: !tag.pinned }))}
-                  >{tag.pinned ? <PinOff size={14} /> : <Pin size={14} />}</button>
                   {editingId === tag.id ? (
                     /* 空名策略 = reject：空名直接退出编辑、不改名（与 saveRename 的 `if (!name …)` 同口径）。 */
                     <InlineRenameInput
@@ -178,7 +173,7 @@ export function QuickNoteTagManager({ open, tags, onClose, onChanged, onError }:
               )}
             </div>
             <footer className="quick-note-tag-manager__footer">
-              <span className="quick-note-tag-manager__hint">标签的排序与置顶随小记数据一起同步；删除标签不会删除小记。</span>
+              <span className="quick-note-tag-manager__hint">标签顺序只在本机生效（不同步）；删除标签不会删除小记。</span>
               <button type="button" className="ln-btn ln-btn--secondary" onClick={onClose}>完成</button>
             </footer>
           </>

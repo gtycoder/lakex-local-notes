@@ -29,7 +29,7 @@ export class QuickNoteTagService {
     return this.tags.create(name);
   }
 
-  update(id: string, patch: { name?: string; pinned?: boolean; sortOrder?: number }): QuickNoteTag {
+  update(id: string, patch: { name?: string }): QuickNoteTag {
     const before = this.tags.list().find((tag) => tag.id === id)?.name;
     const tag = this.tags.update(id, patch);
     if (before !== undefined && before !== tag.name) this.onTagNamesChanged([id]);

@@ -279,13 +279,14 @@ export function createDeviceStoreMeta(deps: DeviceStoreMetaDeps): DeviceStoreMet
         id: q.id, createdAt: q.createdAt, updatedAt: q.updatedAt, contentHash: q.contentHash,
         ...(q.isConflict ? { isConflict: true } : {}),
         ...(assetsQuick[q.id] ?? q.assetsHash ? { assetsHash: assetsQuick[q.id] ?? q.assetsHash } : {}),
-        ...(q.tagIds.length ? { tagIds: q.tagIds } : {}),
+        // 标签关系按集合同步：**排序后的 ID 列表**（顺序是设备本地视图，不能传播）。
+        ...(q.tagIds.length ? { tagIds: [...q.tagIds].sort() } : {}),
         ...(q.tagsUpdatedAt ? { tagsUpdatedAt: q.tagsUpdatedAt } : {}),
       });
     }
+    // 标签目录：只同步名称/墓碑/时间（顺序与置顶是设备本地视图，不进索引）。
     const quickTags: QuickNoteTagEntry[] = (await p.listQuickTags()).map((t: QuickTagRow) => ({
-      // sortOrder = 新写入字段；order = 旧字段兼容（移动端旧 saveState 读 order，两端都带上避免丢排序）。
-      id: t.id, name: t.name, sortOrder: t.sortOrder, order: t.sortOrder, pinned: t.pinned,
+      id: t.id, name: t.name,
       createdAt: t.createdAt, updatedAt: t.updatedAt,
       ...(t.deletedAt ? { deletedAt: t.deletedAt } : {}),
     }));

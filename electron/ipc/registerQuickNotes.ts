@@ -38,7 +38,7 @@ export function registerQuickNotesIpc(
   // ---- 标签子系统（独立）：目录走 tagService；关系走独立 API，正文保存不携带标签 ----
   ipc.handle("list_quick_note_tags", () => quickNotes.tagService.list());
   ipc.handle("create_quick_note_tag", (name: string) => quickNotes.tagService.create(name));
-  ipc.handle("update_quick_note_tag", (id: string, patch: { name?: string; pinned?: boolean; sortOrder?: number }) => quickNotes.tagService.update(id, patch));
+  ipc.handle("update_quick_note_tag", (id: string, patch: { name?: string }) => quickNotes.tagService.update(id, patch));
   ipc.handle("reorder_quick_note_tags", (ids: string[]) => quickNotes.tagService.reorder(ids));
   ipc.handle("merge_quick_note_tags", (sourceId: string, targetId: string) => quickNotes.tagService.merge(sourceId, targetId));
   ipc.handle("delete_quick_note_tag", (id: string) => quickNotes.tagService.delete(id));

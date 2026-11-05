@@ -211,7 +211,7 @@ export interface LakeNative {
   /** 标签目录（唯一来源；随小记 Manifest 同步）。 */
   listQuickNoteTags(): Promise<QuickNoteTag[]>;
   createQuickNoteTag(name: string): Promise<QuickNoteTag>;
-  updateQuickNoteTag(id: string, patch: { name?: string; pinned?: boolean; sortOrder?: number }): Promise<QuickNoteTag>;
+  updateQuickNoteTag(id: string, patch: { name?: string }): Promise<QuickNoteTag>;
   reorderQuickNoteTags(ids: string[]): Promise<QuickNoteTag[]>;
   mergeQuickNoteTags(sourceId: string, targetId: string): Promise<{ updated: number; failed: number }>;
   deleteQuickNoteTag(id: string): Promise<{ updated: number; failed: number }>;
@@ -394,7 +394,7 @@ export const native = {
   deleteQuickNote: (id: string) => api().deleteQuickNote(id),
   listQuickNoteTags: () => api().listQuickNoteTags(),
   createQuickNoteTag: (name: string) => api().createQuickNoteTag(name),
-  updateQuickNoteTag: (id: string, patch: { name?: string; pinned?: boolean; sortOrder?: number }) => api().updateQuickNoteTag(id, patch),
+  updateQuickNoteTag: (id: string, patch: { name?: string }) => api().updateQuickNoteTag(id, patch),
   reorderQuickNoteTags: (ids: string[]) => api().reorderQuickNoteTags(ids),
   mergeQuickNoteTags: (sourceId: string, targetId: string) => api().mergeQuickNoteTags(sourceId, targetId),
   deleteQuickNoteTag: (id: string) => api().deleteQuickNoteTag(id),

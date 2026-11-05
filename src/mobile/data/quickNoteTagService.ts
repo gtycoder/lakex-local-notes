@@ -39,7 +39,7 @@ export async function reindexQuickNotesForTags(d: MobileDb, tagIds: readonly str
 export const mobileQuickNoteTags = {
   list: (d: MobileDb, options: { includeDeleted?: boolean } = {}) => listQuickNoteTags(d, options),
   create: (d: MobileDb, name: string) => createQuickNoteTag(d, name),
-  update: async (d: MobileDb, id: string, patch: { name?: string; pinned?: boolean; sortOrder?: number }) => {
+  update: async (d: MobileDb, id: string, patch: { name?: string }) => {
     const before = (await listQuickNoteTags(d)).find((tag) => tag.id === id)?.name;
     const affected = await listQuickNoteIdsForTags(d, [id]);
     const tag = await updateQuickNoteTag(d, id, patch);

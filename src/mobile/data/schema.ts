@@ -132,11 +132,11 @@ export function baseSchemaStatements(): SchemaStatement[] {
     cloud_deleted INTEGER NOT NULL DEFAULT 0
   )`);
   // 标签（261025 通用化）：目录 + 多态关联 + 每目标关系版本；正文不存标签名。
+  // 261105：目录顺序是设备本地视图（sort_order 不外发、不参与同步）；置顶功能已删除。
   push(`CREATE TABLE IF NOT EXISTS tags (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     sort_order INTEGER NOT NULL DEFAULT 0,
-    pinned INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     deleted_at TEXT
@@ -296,11 +296,11 @@ export async function collectSchemaStatements(db: MobileDb): Promise<SchemaState
   if (!quickCols.includes("tags_updated_at")) push("ALTER TABLE quick_notes ADD COLUMN tags_updated_at TEXT NOT NULL DEFAULT ''");
   if (!quickCols.includes("first_image")) push("ALTER TABLE quick_notes ADD COLUMN first_image TEXT");
   if (!quickCols.includes("list_metadata_version")) push("ALTER TABLE quick_notes ADD COLUMN list_metadata_version INTEGER NOT NULL DEFAULT 0");
+  // 261105：目录顺序是设备本地视图（sort_order 不外发、不参与同步）；置顶功能已删除。
   push(`CREATE TABLE IF NOT EXISTS tags (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     sort_order INTEGER NOT NULL DEFAULT 0,
-    pinned INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     deleted_at TEXT

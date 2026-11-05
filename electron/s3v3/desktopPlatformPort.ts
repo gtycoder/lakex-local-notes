@@ -28,14 +28,15 @@ export function createDesktopPlatformPort(store: Store, quickNotes?: QuickNotesS
       return qn.listQuickNotesForSync().map((q) => ({
         id: q.id, createdAt: q.createdAt, updatedAt: q.updatedAt, contentHash: q.contentHash,
         isConflict: !!q.isConflict,
-        tagIds: qn.listQuickNoteTagIds(q.id),
+        // 关系按集合同步：排序后的 ID 列表（顺序是设备本地视图，不传播）。
+        tagIds: [...qn.listQuickNoteTagIds(q.id)].sort(),
         tagsUpdatedAt: qn.links.tagsUpdatedAt(q.id),
       }));
     },
     async listQuickTags(): Promise<QuickTagRow[]> {
       if (!qn) return [];
       return qn.tags.list({ includeDeleted: true }).map((t) => ({
-        id: t.id, name: t.name, sortOrder: t.sortOrder, pinned: t.pinned,
+        id: t.id, name: t.name,
         createdAt: t.createdAt, updatedAt: t.updatedAt, ...(t.deletedAt ? { deletedAt: t.deletedAt } : {}),
       }));
     },
@@ -143,7 +144,7 @@ export function createDesktopPlatformPort(store: Store, quickNotes?: QuickNotesS
       if (!qn) return;
       const before = new Map(qn.tags.list({ includeDeleted: true }).map((t) => [t.id, t.name + "\u0000" + (t.deletedAt ?? "")] as const));
       qn.tags.mergeRemote(tags.map((t) => ({
-        id: t.id, name: t.name, sortOrder: t.sortOrder, pinned: !!t.pinned,
+        id: t.id, name: t.name,
         createdAt: t.createdAt, updatedAt: t.updatedAt, deletedAt: t.deletedAt ?? null,
       })));
       // 远端改名/墓碑会改变搜索索引缓存的标签名 ⇒ 只重刷关联到这些标签的小记（不全量重建）。

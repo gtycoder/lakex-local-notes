@@ -8,16 +8,17 @@
 
 ## 0. 最新交接（261027）
 
-### 261105 · 小记标签系统审计 + 双端同步语义修复 · **本地提交，未推送**
-- **审计结论**：保留「目录（`tags`）+ 关系（`tag_links` + `tag_link_versions`）+ 正文不带标签」模型（改名/合并/置顶/排序只有目录模型付得起；正文携带标签要批量重写且小记无历史快照，属退步）。问题集中在**同步端口的实现与语义**，不在模型。
-- **修掉的 5 类不一致**：① 移动 `listQuickTags` 过滤墓碑 + `pinned` 恒 false ⇒ 删除不发布/置顶被清零；② 移动 `mergeQuickTags` 固定 `pinned=0` + `deleted_at=NULL` ⇒ **墓碑复活**、置顶被覆盖；③ `mergeQuickTagsIntoState` 只补新 id ⇒ 远端改名/排序/墓碑**永不落到状态**；④ plan 的目录变更不进 `indexChanged`，且发布 tags 用本地目录 ⇒ 改名/置顶不同步、聚合发布会丢远端标签；⑤ 移动 `applyQuickNoteTagLinks` 不过滤墓碑/不限条数/无 LWW。
-- **核心改动**：`core/quickNoteTags` 新增 `compareQuickNoteTagVersion`（同一 `updatedAt` 用**确定性 tie-break**，避免两端各留本地永不收敛）+ 合并泛型；`plan` 用 LWW 合并目录、`localTagChanged` 触发发布、publish tags = 合并目录；`engineBridge` 按 LWW 写回 state；移动端口 `listQuickTags` 带 `pinned/deletedAt`、`mergeQuickTags` 走 `mergeRemoteQuickNoteTags`、关系写入走 LWW（过滤墓碑/空/重复/超 20；**不按 ID 正则过滤**，兼容旧 ID）。
-- **移动端标签管理（同日追加，用户点单）**：`MobileQuickNoteTagManager`（新）挂在「小记筛选条」的「管理」chip（目录非空即出现，含 0 条小记的新标签）；能力 = 重命名 / 删除（二次确认）/ 合并到… / 置顶 / 上移下移（桌面拖拽的顺序语义，触屏改点按；置顶优先级仍由目录排序承担）。复用 `qn-tag-sheet` 面板骨架与 `mb-*` 原语（新增 14 条声明，mobileLayers quick-notes 244→258，逐条登记）；入口 `aria-label="标签管理"`。设备实测（emulator-5584）：pin/改名/上移均落库（`pinned=1`、`sort_order` 交换、名称规范化）。
-- **搜索索引「全量重建」收口（用户问 4）**：根因**不是标签模型**——标签名在搜索索引里是派生列（`quick_notes_search_index.tags` + FTS `tags`），改名/删除/合并只影响「关联到该标签的小记」。旧实现 `reindexAll` 保守全量（移动逐条 indexQuickNote / 桌面逐行 reindexSearchTags）。现改为**按标签找受影响小记**重刷：移动 `quickNoteTagService`（update/delete/merge）+ 同步端口 `mergeQuickTags` 目录 diff；桌面 `QuickNoteTagService` 回调 + `QuickNotesStore.reindexSearchTagsForTags` + `desktopPlatformPort.mergeQuickTags` diff；`reindexAllSearchTags` 仅保留启动/首次迁移。测试 `quickNoteTagReindex.test.ts` 4 例（改名/删除/合并/远端目录只刷关联小记）。
-- **桌面文案口径（用户问 5）**：标签管理底注改为「标签的排序与置顶随小记数据一起同步；删除标签不会删除小记。」——置顶/排序指**标签**，不是小记（小记自身排序是设备本地偏好，不同步）。
-- **测试**：新增 `mobileTagSync.test.ts`（3 例）+ `quickNoteTagReindex.test.ts`（4 例）+ `MobileQuickNoteTagManager.render.test.tsx`（5 例）+ plan 3 例 + engineBridge 1 例 + core tie-break 1 例。门禁：tsc 0 / 全量 vitest **604 文件 3696 例（3684 通过 + 12 skipped）** / ui-metrics / check:core / check:mobileui / 双 build / check:bundle+arch / `git diff --check`。`perf.integration` 并行跑偶发 ratio flake（单独跑绿，既有已知项）。
-- **仍未做（产品待裁决）**：**文档标签**（桌面主库 `target_kind=note`，与小记库两套目录；未立项，技术方案见下）；小记→文档转换不带标签（用户 261105 口径：当前丢就丢，等文档标签立项后一起做）。
-  **文档标签同步技术方案（只设计、未实现）**：建议扩 **lake 索引**——`LakeIndex.tags?`（与 quick 索引同形）+ `LakeNoteEntry.tagIds?/tagsUpdatedAt?`，复用 `compareQuickNoteTagVersion` / LWW / `localTagChanged`；平台端口泛化出 lake 版 `listQuickTags/mergeQuickTags`；**移动端即使没有文档标签 UI 也必须搬运这三个字段**（否则移动端发布 lake 索引会清空文档标签）。旧版本客户端会丢弃未知字段 ⇒ 新端在下一轮检测到「本地有、远端无」时自愈重发（`localTagChanged` 已覆盖）；也可选独立 pointer 对象隔离旧端，但要多一套协议/GC。UI（文档属性/列表筛选）与转换带标签随后一批。
+### 261105 · 小记标签：审计 + 同步语义修复 + 顺序改设备本地 + 移动端标签管理（拖拽） · **本地提交，未推送**
+- **审计结论**：保留「目录（`tags`）+ 关系（`tag_links` + `tag_link_versions`）+ 正文不带标签」模型；问题集中在**同步端口的实现与语义**，不在模型。
+- **修掉的 5 类同步不一致**：① 移动 `listQuickTags` 过滤墓碑/丢字段 ⇒ 删除不发布；② 移动 `mergeQuickTags` 写死 `deleted_at=NULL` ⇒ **墓碑复活**；③ `mergeRoundIntoState` 只补新 id ⇒ 远端改名/墓碑**永不落到状态**；④ plan 的目录变更不进 `indexChanged`，且发布 tags 用本地目录 ⇒ 改名不传播、聚合发布会丢远端标签；⑤ 移动 `applyQuickNoteTagLinks` 不过滤墓碑/不限条数/无 LWW。修复：core 加 `compareQuickNoteTagVersion`（同 `updatedAt` 确定性 tie-break）+ 合并泛型；plan 用 LWW 合并目录 / `localTagChanged` 触发发布 / publish tags=合并目录；engineBridge 按 LWW 写回；两端端口按 LWW 合并、关系写入过滤墓碑/空/重复/超 20（**不按 ID 正则**，兼容旧 ID）。
+- **用户 261105 最终定稿（推翻「置顶」与「顺序同步」）**：① **标签置顶功能整体删除**（模型 / wire / 端口 / DB 读写 / 两端 UI / 测试全部移除；旧库多余 `pinned` 列不迁移、代码不再读写）；② **标签目录顺序 = 设备本地视图，不参与 S3 同步**：默认「新的在前（createdAt DESC）→ 名称」，**手动拖拽后**本机 `device_state.quick_tags_manual_order=1` 并按本机 `sort_order`，之后新增标签**追加末尾**；同步合并只更新名称/墓碑/时间、**不覆盖本机顺序**（远端新标签按 createdAt 进默认序列 / 手动排序下游标末尾）；③ **单条小记的标签顺序 = 设备本地**：wire 上 `tagIds` 规范化为**排序集合**，plan 按集合比较（顺序不影响发布），对端应用时**保留本机已有顺序**、只把远端新增插到最前。
+- **移动端标签管理（同日追加）**：`MobileQuickNoteTagManager` 挂在「小记筛选条」的「管理」chip（目录非空即出现，含 0 条小记的新标签）；能力 = 重命名 / 删除（二次确认）/ 合并到… / **长按拖拽排序**（与移动端目录栏同一手势语义；无置顶、无上下移按钮）。纯排序换算 `moveQuickNoteTagOrder`（core，4 例单测）；复用 `qn-tag-sheet` 面板骨架（mobileLayers quick-notes 244→267）。
+- **搜索索引「全量重建」收口（用户问 4）**：根因**不是标签模型**——标签名在搜索索引里是派生列（`quick_notes_search_index.tags` + FTS `tags`），改名/删除/合并只影响「关联到该标签的小记」。旧实现 `reindexAll` 保守全量。现改为按标签找受影响小记重刷：移动 `quickNoteTagService` + 同步端口目录 diff；桌面 `QuickNoteTagService` 回调 + `QuickNotesStore.reindexSearchTagsForTags` + 端口 diff；`reindexAllSearchTags` 仅保留启动/迁移。
+- **文案口径（用户问 5）**：桌面/移动标签管理底注统一为「标签顺序只在本机生效（不同步）；删除标签不会删除小记。」——「排序」指标签目录顺序，不是小记列表排序（小记排序同样是设备本地偏好）。
+- **清理**：删除死代码 `src/core/tags.ts` + 其测试（无任何引用）；`lib/types.ts` 的 `QuickNoteTag` 改为 re-export core（去掉重复的 sortOrder/pinned 定义）。
+- **测试/门禁**：新增 `mobileTagSync`（4）+ `quickNoteTagReindex`（4）+ `quickNoteTagLocalOrder`（2）+ `MobileQuickNoteTagManager.render`（4）+ plan 4 + engineBridge 1 + core tie-break/move 2 + 桌面 store 顺序 1。tsc 0 / 全量 vitest **604 文件 3697 例（3685 通过 + 12 skipped）** / ui-metrics / check:core 136 文件 0 / check:mobileui / 双 build / check:bundle+arch / `git diff --check`。`perf.integration` 并行偶发 ratio flake（单独跑绿，已知项）。
+- **仍未做（产品待裁决）**：**文档标签**（桌面主库 `target_kind=note`，未立项，方案见下）；小记→文档转换不带标签（用户口径：当前丢就丢，等文档标签立项后一起做）。
+  **文档标签同步技术方案（只设计、未实现）**：扩 **lake 索引**——`LakeIndex.tags?` + `LakeNoteEntry.tagIds?/tagsUpdatedAt?`，复用同一套 LWW/`localTagChanged`；端口泛化 lake 版；**移动端即使无 UI 也必须搬运这三个字段**（否则移动端发布 lake 索引会清空文档标签）；旧端丢弃未知字段 ⇒ 新端下一轮自愈重发。UI 与转换随后一批。
 ### 261105 · 资源管理：删除入口不外露 + 未引用资源可点击预览 · **本地提交，未推送**
 - **用户点单**：资源管理页不要再在外部暴露删除，必须点了「查看」之后才能删。
 - **改动**：首页「未引用的本地文件」从「清理全部（n）」改为「查看（n）」；「云端未引用文件」从「清理云端」改为「查看」；两者进入新 `ResourceCleanupSheet`（mode=orphans / cloudGc）后才出现删除/清理按钮（云端清理仍保留二次确认）。缺正文/缺小记本来就是「查看」后处置，口径统一。
@@ -729,7 +730,7 @@
 - 261103 各批已全部提交并双推（20:08–20:21）：`ce442482`（usheet 35 行/双光标/整行整列）、`733ab4aa`（多维表头部+短名）、`2b29d9e8`（画板工具条+第 4 处补丁）、`75c46902`（ink 14 色）、`ae14ffd1`（胶囊/横滑/安全区/页签 44/useKeyboard）、`1f164f2b`（门禁装置+三份基线重烤）、`1e74c3f8`（文档）、`fdf9c455`（AI 默认关）。
 - 261103 之后（261104 凌晨，均已双推）：ink 三修（`912143da` 落笔/擦除按批渲染、`8f32a5ca` 中断不丢笔）+ 性能观测 `af169f96` + 图片页背景下采样 `8dc83a87` + 导入体积提示 `388232db` + 资源页本地占用 `1adcde27`。
 
-**门禁基线**（261105 10:45 主工作树实测，含本批 ①②③ + 资源管理 UI + 小记标签同步/移动端标签管理）：tsc 0 / 全量 vitest **604 文件 3696 例（3684 通过 + 12 skipped；另有 11 个 integration 文件 skipped）** / ui-metrics 0 违规 / `check:core` 137 文件 0 / `check:mobileui` / 双 build / `check:bundle`（mobile-entry-preload 24/30、mobile-js 54,481/61,440、mobile-css 137,925/141,312）/ `check:arch`（移动首屏 343.9KB/360KB；桌面 541.3KB/600KB；import 违规 0）/ `git diff --check` 0。**移动 6 态快照 0 差异**（lake_gate，重烤后 `mobile-snap.json` 与提交版 0 改动）。**APK 已重装**（lake_mobile emulator-5554，debug，40,164,026B）。设备：本批面板/签名/单元格图片/表单视图/缺正文场景已逐条实测（见 §0）；23 屏走查与平板本次未跑（改动不涉及外壳几何，`check:windowsweep` 未跑）。
+**门禁基线**（261105 11:36 主工作树实测，含本批 ①②③ + 资源管理 UI + 小记标签（同步修复/顺序本地/移动端拖拽管理））：tsc 0 / 全量 vitest **604 文件 3697 例（3685 通过 + 12 skipped；另有 11 个 integration 文件 skipped）** / ui-metrics 0 违规 / `check:core` 136 文件 0 / `check:mobileui` / 双 build / `check:bundle`（mobile-entry-preload 24/30、mobile-js 54,481/61,440、mobile-css 137,925/141,312）/ `check:arch`（移动首屏 343.9KB/360KB；桌面 541.3KB/600KB；import 违规 0）/ `git diff --check` 0。**移动 6 态快照 0 差异**（lake_gate，重烤后 `mobile-snap.json` 与提交版 0 改动）。**APK 已重装**（lake_mobile emulator-5554，debug，40,164,026B）。设备：本批面板/签名/单元格图片/表单视图/缺正文场景已逐条实测（见 §0）；23 屏走查与平板本次未跑（改动不涉及外壳几何，`check:windowsweep` 未跑）。
 
 **环境（本机实测 261104 追加）**：**GitHub 推送走 HTTPS**（本机 `~/.ssh/id_ed25519_personal` 未在 GitHub 侧生效，SSH 报 `Permission denied (publickey)`；keychain 里有 `gtycoder` 凭据）⇒ `git push https://github.com/gtycoder/lakex-local-notes.git <branch>` 可用；Gitee 仍 `origin` SSH 正常。**本机已把 `origin` 的第二 pushurl 改为该 HTTPS 地址**（`git config --add remote.origin.pushurl …`）⇒ `git push origin <branch>` 一次推两边且 exit 0；`npm run setup:remotes` 会把 GitHub 写回 SSH，若再报 publickey 按上法改回 HTTPS。
 
@@ -764,7 +765,7 @@
 4. **依赖补丁 4 处升级复核口径**（仅当升级对应依赖时）：见 §2。
 5. **已裁决、已落地（261104，别再问）**：① 表格语义 = 读态只读 + 排序/冻结/保护属文档数据（不补移动端保护入口）；② 移动端缺正文/缺小记 = B-lite（文档+小记，已落地）；③ 表格面板 = 删无能力占位、接线单元格图片/手写签名/表单视图（已落地）。残余验证：**缺正文云端拉回需在配了 S3 的实例上真机走一遍**（目前仅单测 mock）；**表单视图大表行数帽**（一次性 `getValues`，默认 35 行，超大表若卡再加）；**261105 资源管理两处 UI 改动未重跑 6 态快照 + 23 屏走查**（只在设置子页，预期 0 差异，下一批或发版前一并跑）；**资源「附件」系统打开未设备专项验**（需真实附件 + 系统应用；图片 Lightbox 已验）。
 
-6. **小记标签（261105 审计后剩余，先等产品裁决）**：移动端标签管理入口要不要补（改名/删除/合并/置顶/排序目前只在桌面）；**文档标签要不要参与同步**（桌面主库独立目录 `target_kind=note`，不参与 S3；移动端没有文档标签）；小记→文档转换是否携带标签；标签改名/删除仍 `reindexAll` 全量重建（2 万小记量级需评估）。
+6. **小记标签（261105 收口后剩余）**：**文档标签要不要立项**（桌面主库独立目录 `target_kind=note`，不参与 S3；方案已写 §0）；小记→文档转换是否携带标签（等文档标签一起）。已收口、别再立项：置顶、标签顺序同步、单条小记标签顺序同步、移动端标签管理（拖拽/改名/删除/合并已做）、改名/删除全量重建。
 
 **P2（体验缺口 / 长期）**
 

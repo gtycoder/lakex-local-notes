@@ -60,7 +60,7 @@ describe("单条小记推送（parity E2：只 upsert 这一条）", () => {
     await addQuick(a, "q1", "one", { tagIds: ["t1"], tagsUpdatedAt: "2026-10-25T01:00:00.000Z" });
     await addQuick(a, "q2", "two");
     const st = (await a.loadState())!;
-    st.quickNotes.tags = [{ id: "t1", name: "Tag", sortOrder: 0, createdAt: "2026-10-25T00:00:00.000Z", updatedAt: "2026-10-25T00:00:00.000Z" }];
+    st.quickNotes.tags = [{ id: "t1", name: "Tag", createdAt: "2026-10-25T00:00:00.000Z", updatedAt: "2026-10-25T00:00:00.000Z" }];
     await a.saveState(st);
     await engine(remote, a).sync({ onEmptyCloud: "upload" });
 

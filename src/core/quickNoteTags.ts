@@ -40,13 +40,15 @@ export function quickNoteTagId(name: string): string {
   return `t_${sha256Sync(new TextEncoder().encode(normalized)).slice(0, 16)}`;
 }
 
-/** 标签目录实体（本地表 + Manifest 共用）。`deletedAt` 非空 = 墓碑。 */
+/**
+ * 标签目录实体（本地表 + 索引共用）。`deletedAt` 非空 = 墓碑。
+ *
+ * **顺序是设备本地视图**（261105 用户定稿）：目录的展示顺序不参与同步；
+ * 本实体也不再带 sortOrder/pinned（置顶功能已整体删除）。
+ */
 export interface QuickNoteTag {
   id: string;
   name: string;
-  /** 目录展示顺序（升序）；置顶优先于它。 */
-  sortOrder: number;
-  pinned: boolean;
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
@@ -63,13 +65,9 @@ export function normalizeQuickNoteTagEntity(raw: unknown): QuickNoteTag {
   const value = raw as Partial<QuickNoteTag>;
   if (typeof value.id !== "string" || !QUICK_NOTE_TAG_ID_RE.test(value.id)) throw new QuickNoteTagError("标签 ID 无效");
   const name = normalizeQuickNoteTag(value.name);
-  const sortOrder = value.sortOrder ?? 0;
-  if (!Number.isSafeInteger(sortOrder) || sortOrder < 0) throw new QuickNoteTagError("标签排序值无效");
   return {
     id: value.id,
     name,
-    sortOrder,
-    pinned: !!value.pinned,
     createdAt: requireIsoTime(value.createdAt, "标签创建时间"),
     updatedAt: requireIsoTime(value.updatedAt, "标签更新时间"),
     deletedAt: value.deletedAt == null ? null : requireIsoTime(value.deletedAt, "标签删除时间"),
@@ -103,13 +101,32 @@ export function removeQuickNoteTagId(ids: readonly string[], id: string): string
   return ids.filter((tagId) => tagId !== id);
 }
 
+/**
+ * 本机拖拽排序（纯函数）：把 `draggedId` 移到 `overId` 之前/之后，返回新顺序。
+ * 顺序是**设备本地视图**（不参与同步）；任一 id 不在列表里则原样返回。
+ */
+export function moveQuickNoteTagOrder(
+  ids: readonly string[],
+  draggedId: string,
+  overId: string,
+  position: "before" | "after",
+): string[] {
+  if (draggedId === overId) return [...ids];
+  const remaining = ids.filter((id) => id !== draggedId);
+  const overIndex = remaining.indexOf(overId);
+  if (!ids.includes(draggedId) || overIndex < 0) return [...ids];
+  const insertAt = position === "after" ? overIndex + 1 : overIndex;
+  remaining.splice(insertAt, 0, draggedId);
+  return remaining;
+}
+
 export interface QuickNoteTagSummary extends QuickNoteTag {
   /** 关联小记数（只统计 active 标签）。 */
   count: number;
 }
 
 export interface QuickNoteTagIndex {
-  /** 已排序：置顶优先 → sortOrder → 名称。 */
+  /** 按传入目录的**本地展示顺序**排列（不在这里另外排序）。 */
   tags: QuickNoteTagSummary[];
   untaggedCount: number;
 }
@@ -131,13 +148,10 @@ export function buildQuickNoteTagIndex<T>(
     if (unique.size === 0) untaggedCount += 1;
     for (const id of unique) counts.set(id, (counts.get(id) ?? 0) + 1);
   }
+  // 顺序 = 调用方传入的目录顺序（设备本地）；这里只做计数与过滤。
   const summaries = [...active.values()]
     .filter((tag) => (counts.get(tag.id) ?? 0) > 0)
     .map((tag) => ({ ...tag, count: counts.get(tag.id) ?? 0 }));
-  summaries.sort((a, b) =>
-    Number(b.pinned) - Number(a.pinned)
-    || a.sortOrder - b.sortOrder
-    || a.name.localeCompare(b.name, "zh-CN"));
   return { tags: summaries, untaggedCount };
 }
 
@@ -179,20 +193,13 @@ export function filterQuickNotesByTag<T>(
   return notes.filter((note) => matchesQuickNoteTagFilter(tagIdsOf(note), filter));
 }
 
-/** 标签版本的最小形状（本地表 `QuickNoteTag` 与云端索引条目共用；云端旧索引可能只有 `order`）。 */
+/** 标签版本的最小形状（本地表 `QuickNoteTag` 与云端索引条目共用）。 */
 export interface QuickNoteTagLike {
   id: string;
   name: string;
-  sortOrder?: number;
-  order?: number;
-  pinned?: boolean;
   createdAt: string;
   updatedAt: string;
   deletedAt?: string | null;
-}
-
-function tagOrderOf(tag: QuickNoteTagLike): number {
-  return tag.sortOrder ?? tag.order ?? 0;
 }
 
 /**
@@ -200,16 +207,11 @@ function tagOrderOf(tag: QuickNoteTagLike): number {
  *
  * `updatedAt` 相同时用**确定性 tie-break**（归一化字段串）——两端对同一对记录必须选出同一个赢家，
  * 否则「各留本地」会让改名/删除在两端永远不收敛（`>` 比较下双方都判自己赢）。
+ * 顺序/置顶是设备本地视图，**不参与**比较。
  */
 export function compareQuickNoteTagVersion(a: QuickNoteTagLike, b: QuickNoteTagLike): number {
   if (a.updatedAt !== b.updatedAt) return a.updatedAt > b.updatedAt ? 1 : -1;
-  const keyOf = (tag: QuickNoteTagLike): string => JSON.stringify([
-    tag.name,
-    tagOrderOf(tag),
-    tag.pinned ? 1 : 0,
-    tag.createdAt,
-    tag.deletedAt ?? null,
-  ]);
+  const keyOf = (tag: QuickNoteTagLike): string => JSON.stringify([tag.name, tag.createdAt, tag.deletedAt ?? null]);
   const ka = keyOf(a);
   const kb = keyOf(b);
   return ka === kb ? 0 : (ka > kb ? 1 : -1);
@@ -231,7 +233,7 @@ export function mergeQuickNoteTags<T extends QuickNoteTagLike>(
 
 /**
  * 目录是否等价（同步用）：字段级比较，避免远端目录无变化时也全量重建搜索索引。
- * 顺序不参与比较（展示顺序由调用方按 sortOrder/pinned 重新排序）。
+ * **顺序不参与比较**（设备本地视图，不参与同步）。
  */
 export function sameQuickNoteTagDirectory(a: readonly QuickNoteTagLike[], b: readonly QuickNoteTagLike[]): boolean {
   if (a.length !== b.length) return false;
@@ -240,8 +242,6 @@ export function sameQuickNoteTagDirectory(a: readonly QuickNoteTagLike[], b: rea
     const other = byId.get(tag.id);
     return !!other
       && tag.name === other.name
-      && tagOrderOf(tag) === tagOrderOf(other)
-      && (tag.pinned ?? false) === (other.pinned ?? false)
       && tag.createdAt === other.createdAt
       && tag.updatedAt === other.updatedAt
       && (tag.deletedAt ?? null) === (other.deletedAt ?? null);

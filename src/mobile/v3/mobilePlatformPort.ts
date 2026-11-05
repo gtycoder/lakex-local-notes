@@ -171,7 +171,8 @@ export function createMobilePlatformPort(db: MobileDb, ctxIn?: Partial<MobilePla
       return rows.map((r) => ({
         id: String(r.id), createdAt: String(r.created_at), updatedAt: String(r.updated_at), contentHash: String(r.content_hash),
         isConflict: Number(r.is_conflict) === 1,
-        tagIds: links.get(String(r.id)) ?? [],
+        // 关系按集合同步：排序后的 ID 列表（顺序是设备本地视图，不传播）。
+        tagIds: [...(links.get(String(r.id)) ?? [])].sort(),
         tagsUpdatedAt: r.tags_updated_at ? String(r.tags_updated_at) : null,
         ...(Number(r.cloud_deleted) === 1 ? { cloudDeleted: true } : {}),
         ...(r.deleted_at ? { deletedAt: String(r.deleted_at) } : {}),
@@ -179,10 +180,10 @@ export function createMobilePlatformPort(db: MobileDb, ctxIn?: Partial<MobilePla
       }));
     },
     async listQuickTags(): Promise<QuickTagRow[]> {
-      // 目录是同步事实：**必须带墓碑与 pinned**（漏掉 ⇒ 删除不发布 / 置顶被清零，见 ./ 同步语义）。
-      const rows = await db.prepare("SELECT id,name,sort_order,pinned,created_at,updated_at,deleted_at FROM tags ORDER BY sort_order,id").all() as Array<Record<string, unknown>>;
+      // 只同步名称/墓碑/时间：**顺序与置顶是设备本地视图**，不进索引。
+      const rows = await db.prepare("SELECT id,name,created_at,updated_at,deleted_at FROM tags ORDER BY id").all() as Array<Record<string, unknown>>;
       return rows.map((r) => ({
-        id: String(r.id), name: String(r.name), sortOrder: Number(r.sort_order), pinned: !!Number(r.pinned ?? 0),
+        id: String(r.id), name: String(r.name),
         createdAt: String(r.created_at), updatedAt: String(r.updated_at),
         ...(r.deleted_at ? { deletedAt: String(r.deleted_at) } : {}),
       }));
@@ -466,13 +467,21 @@ export function createMobilePlatformPort(db: MobileDb, ctxIn?: Partial<MobilePla
       const deletedRows = await db.prepare("SELECT id FROM tags WHERE deleted_at IS NOT NULL").all() as Array<{ id: string }>;
       const deleted = new Set(deletedRows.map((row) => String(row.id)));
       const seen = new Set<string>();
-      const next: string[] = [];
+      const remoteIds: string[] = [];
       for (const id of tagIds) {
         if (typeof id !== "string" || !id.trim() || deleted.has(id) || seen.has(id)) continue;
         seen.add(id);
-        next.push(id);
-        if (next.length >= MAX_QUICK_NOTE_TAGS) break;
+        remoteIds.push(id);
+        if (remoteIds.length >= MAX_QUICK_NOTE_TAGS) break;
       }
+      // 顺序是设备本地视图：保留本机已有标签的顺序，远端新增标签插到最前（与本地新加一致）。
+      const localRows = await db.prepare("SELECT tag_id FROM tag_links WHERE target_kind='quickNote' AND target_id=? ORDER BY position, tag_id").all(quickNoteId) as Array<{ tag_id: string }>;
+      const localIds = localRows.map((row) => String(row.tag_id));
+      const remoteSet = new Set(remoteIds);
+      const localKept = localIds.filter((id) => remoteSet.has(id));
+      const localSet = new Set(localIds);
+      const added = remoteIds.filter((id) => !localSet.has(id));
+      const next = [...added, ...localKept].slice(0, MAX_QUICK_NOTE_TAGS);
       await db.transaction(async () => {
         await db.prepare("DELETE FROM tag_links WHERE target_kind='quickNote' AND target_id=?").run(quickNoteId);
         for (let index = 0; index < next.length; index += 1) {
@@ -492,8 +501,6 @@ export function createMobilePlatformPort(db: MobileDb, ctxIn?: Partial<MobilePla
       await mergeRemoteQuickNoteTags(db, tags.map((tag) => ({
         id: tag.id,
         name: tag.name,
-        sortOrder: Number(tag.sortOrder ?? 0),
-        pinned: !!tag.pinned,
         createdAt: tag.createdAt,
         updatedAt: tag.updatedAt,
         deletedAt: tag.deletedAt ?? null,

@@ -119,3 +119,9 @@
 .qn-tag-manager__name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .qn-tag-manager__actions { display: flex; flex-wrap: wrap; gap: 8px; padding: 2px 0 10px var(--mb-page-pad); }
 .qn-tag-manager__actions .mb-btn { min-height: var(--mb-tap-min); }
+/* 261105：拖拽排序（长按跟手；行前/行后落点线；顺序只在本机生效） */
+.qn-tag-manager__hint { padding: 2px 0 6px; color: var(--lake-text-4); font-size: var(--lake-font-size-small); }
+.qn-tag-manager__handle { flex: 0 0 auto; display: inline-flex; color: var(--lake-text-4); }
+.qn-tag-manager__row.is-dragging { opacity: .55; }
+.qn-tag-manager__row.is-drop-before { box-shadow: inset 0 2px 0 var(--lake-accent); }
+.qn-tag-manager__row.is-drop-after { box-shadow: inset 0 -2px 0 var(--lake-accent); }

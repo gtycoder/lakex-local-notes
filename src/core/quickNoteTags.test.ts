@@ -12,6 +12,7 @@ import {
   normalizeQuickNoteTagEntity,
   normalizeQuickNoteTagIds,
   quickNoteTagId,
+  moveQuickNoteTagOrder,
   removeQuickNoteTagId,
   sameQuickNoteTagDirectory,
   type QuickNoteTag,
@@ -20,8 +21,6 @@ import {
 const tag = (name: string, patch: Partial<QuickNoteTag> = {}): QuickNoteTag => ({
   id: quickNoteTagId(name),
   name,
-  sortOrder: 0,
-  pinned: false,
   createdAt: "2026-10-24T00:00:00.000Z",
   updatedAt: "2026-10-24T00:00:00.000Z",
   deletedAt: null,
@@ -60,20 +59,22 @@ describe("quickNoteTags", () => {
     expect(removeQuickNoteTagId([b, a], b)).toEqual([a]);
   });
 
-  it("标签目录实体校验：墓碑/排序/置顶归一", () => {
-    const entity = normalizeQuickNoteTagEntity({ ...tag("灵感"), deletedAt: null, pinned: 1, sortOrder: 3 });
-    expect(entity).toMatchObject({ name: "灵感", pinned: true, sortOrder: 3, deletedAt: null });
+  it("标签目录实体校验：墓碑归一（顺序/置顶已不在模型内）", () => {
+    const entity = normalizeQuickNoteTagEntity({ ...tag("灵感"), deletedAt: null });
+    expect(entity).toMatchObject({ name: "灵感", deletedAt: null });
+    expect("pinned" in entity).toBe(false);
+    expect("sortOrder" in entity).toBe(false);
     expect(() => normalizeQuickNoteTagEntity({ ...tag("灵感"), id: "bad" })).toThrow("标签 ID");
   });
 
-  it("目录 + 小记引用 → 计数、置顶优先与无标签数量", () => {
-    const a = tag("待办", { sortOrder: 1 });
-    const b = tag("灵感", { pinned: true });
+  it("目录 + 小记引用 → 计数与无标签数量（顺序由调用方目录顺序决定，core 不再排序）", () => {
+    const a = tag("待办");
+    const b = tag("灵感");
     const index = buildQuickNoteTagIndex(
       [{ tagIds: [a.id, b.id] }, { tagIds: [a.id] }, { tagIds: [] }],
-      [a, b],
+      [b, a],
     );
-    expect(index.tags.map((entry) => [entry.name, entry.count, entry.pinned])).toEqual([["灵感", 1, true], ["待办", 2, false]]);
+    expect(index.tags.map((entry) => [entry.name, entry.count])).toEqual([["灵感", 1], ["待办", 2]]);
     expect(index.untaggedCount).toBe(1);
   });
 
@@ -119,12 +120,18 @@ describe("quickNoteTags", () => {
 
   it("目录等价比较：字段级、忽略顺序；任一字段变化即不等价（同步不做无谓重建）", () => {
     const a = tag("灵感");
-    const b = tag("待办", { sortOrder: 1 });
+    const b = tag("待办");
     expect(sameQuickNoteTagDirectory([a, b], [b, a])).toBe(true);
     expect(sameQuickNoteTagDirectory([a, b], [a])).toBe(false);
     expect(sameQuickNoteTagDirectory([a], [{ ...a, name: "灵感库" }])).toBe(false);
     expect(sameQuickNoteTagDirectory([a], [{ ...a, deletedAt: "2026-10-25T00:00:00.000Z" }])).toBe(false);
-    expect(sameQuickNoteTagDirectory([a], [{ ...a, pinned: true }])).toBe(false);
+  });
+
+  it("本机拖拽排序（纯函数）：前/后插入、未知 id 原样返回", () => {
+    expect(moveQuickNoteTagOrder(["a", "b", "c"], "c", "a", "before")).toEqual(["c", "a", "b"]);
+    expect(moveQuickNoteTagOrder(["a", "b", "c"], "a", "b", "after")).toEqual(["b", "a", "c"]);
+    expect(moveQuickNoteTagOrder(["a", "b", "c"], "x", "b", "after")).toEqual(["a", "b", "c"]);
+    expect(moveQuickNoteTagOrder(["a", "b"], "a", "a", "before")).toEqual(["a", "b"]);
   });
 
   it("同一 updatedAt 用确定性 tie-break：两端合并必须选出同一赢家（否则改名/删除永不收敛）", () => {
