@@ -724,7 +724,7 @@
 
 | worktree | 分支 | HEAD | 状态 |
 | --- | --- | --- | --- |
-| `lakex-local-notes`（主仓库） | `master`（工作树当前；`feat/pad-touch-ui` 同一 commit） | 见 `git log -1`（**不写死 hash**；本批 = 261104 三项裁决 + 261105 资源/标签两批） | **已合 master 并双推**：Gitee/GitHub 两远端 `ls-remote` 实测同 hash、与本地一致（0/0）；工作树 clean，多会话并行状态以 `git status` 为准 |
+| `lakex-local-notes`（主仓库） | `master`（工作树当前；`feat/pad-touch-ui` 同一 commit） | 见 `git log -1`（**不写死 hash**；本批 = 261104 三项裁决 + 261105 资源/标签两批） | **已合 master 并双推**：Gitee `master`/`feat` 与本地同 hash；GitHub `master` 同 hash，**GitHub `feat/pad-touch-ui` 因本机到 GitHub 网络失败（HTTP2 framing / 443 超时）暂落后 1 个 docs 提交**，恢复后 `git push origin feat/pad-touch-ui` 补推即可；工作树 clean |
 | `lakex-pad` | `feat/pad-adaptation` | `17f44dbd` | **历史残留**：平板第一批早已合入 master，本分支落后 master 15 提交、领先 0。其 README/AGENTS/HANDOFF 是旧口径（「平板走内核工具栏」「补丁 3 处」），**不要当依据**；确认不再用可 `git worktree remove lakex-pad`（需用户点头） |
 
 - `master` = `feat/pad-touch-ui` **同一 commit**（本轮 ff 合并 + 双推；两远端 `ls-remote` 实测同 hash）。master 自 `408d6126` 前进 **80+ 提交**（手写板线 + 移动端/编辑面线 + 261104/261105 本批）。
@@ -734,7 +734,7 @@
 
 **门禁基线**（261105 11:50 主工作树实测，含本批 ①②③ + 资源管理 UI + 小记标签（同步修复/顺序本地/移动端拖拽管理 + review 补漏））：tsc 0 / 全量 vitest **604 文件 3698 例（3686 通过 + 12 skipped；另有 11 个 integration 文件 skipped）** / ui-metrics 0 违规 / `check:core` 136 文件 0 / `check:mobileui` / 双 build / `check:bundle`（mobile-entry-preload 27/30、mobile-js 55,767/61,440、mobile-css 138,061/141,312）/ `check:arch`（移动首屏 347.3KB/360KB；桌面 541.1KB/600KB；import 违规 0）/ `git diff --check` 0。**移动 6 态快照**本批未重跑（改动集中在设置子页/标签浮层，未动外壳几何；按 §3#21 发版前补跑）；23 屏走查与 `check:windowsweep` 未跑。**APK 已按合 master 后代码重装**（lake_mobile emulator-5584，debug，40,164,287B）；测试数据已清（文档 9 / 小记 4）。
 
-**环境（本机实测 261104 追加）**：**GitHub 推送走 HTTPS**（本机 `~/.ssh/id_ed25519_personal` 未在 GitHub 侧生效，SSH 报 `Permission denied (publickey)`；keychain 里有 `gtycoder` 凭据）⇒ `git push https://github.com/gtycoder/lakex-local-notes.git <branch>` 可用；Gitee 仍 `origin` SSH 正常。**本机已把 `origin` 的第二 pushurl 改为该 HTTPS 地址**（`git config --add remote.origin.pushurl …`）⇒ `git push origin <branch>` 一次推两边且 exit 0；`npm run setup:remotes` 会把 GitHub 写回 SSH，若再报 publickey 按上法改回 HTTPS。
+**环境（本机实测 261104 追加，261105 更新）**：**GitHub 推送走 HTTPS**（SSH key 未在 GitHub 侧生效；keychain 里有 `gtycoder` 凭据）⇒ `git push https://github.com/gtycoder/lakex-local-notes.git <branch>` 可用；Gitee 仍 `origin` SSH 正常。**本机已把 `origin` 的第二 pushurl 改为该 HTTPS 地址** ⇒ `git push origin <branch>` 一次推两边。**261105 实测：本机到 GitHub 会偶发 HTTP2 framing / 443 连接超时**（Gitee 正常）；遇到时先 `git -c http.version=HTTP/1.1 push <url> <branch>` 重试，仍失败就只推 Gitee、恢复后补推。
 
 **环境（本机实测 261103）**：Node **v24.18.0**（`$HOME/.nvm/versions/node/v24.18.0/bin`）；JDK **21** `/Library/Java/JavaVirtualMachines/jdk-21.jdk`（系统默认 java 是 1.8，手跑 gradlew 必须指 21）；Android SDK `/opt/homebrew/share/android-commandlinetools`；AVD **7 个**：lake_mobile / lake_gate / lake_tab / lake_body / lake_lock / lake_meas / lake_sheet；CDP **9335 开发 / 9336 门禁 / 9340 平板与窗口矩阵**。Android 唯一运行手册 = `docs/MOBILE-OPS.md`（serial 号段以 `adb devices` 现场为准，文档里的 5556/5562 已不一致）。
 
