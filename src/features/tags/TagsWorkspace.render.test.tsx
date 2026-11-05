@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, createElement } from "react";
+import { act, createElement, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TagsWorkspace, type TagsWorkspaceProps } from "./TagsWorkspace";
@@ -20,6 +20,8 @@ let host: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  // 行 ⋯ 菜单用 usePopoverPosition 测量 → jsdom 需要 ResizeObserver
+  vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
@@ -35,6 +37,7 @@ function props(overrides: Partial<TagsWorkspaceProps> = {}): TagsWorkspaceProps 
     quickNotes: [quick("q1", "小记一", "2026-11-03T00:00:00.000Z", ["t1"])],
     available: true,
     onReload: vi.fn(async () => {}),
+    onCreateTag: vi.fn(async (name: string) => "t_new_" + name),
     onRenameTag: vi.fn(async () => {}),
     onMergeTag: vi.fn(async () => {}),
     onDeleteTag: vi.fn(async () => {}),
@@ -52,6 +55,12 @@ function render(overrides: Partial<TagsWorkspaceProps> = {}) {
   return merged;
 }
 const byText = (text: string): HTMLElement | undefined => [...document.body.querySelectorAll<HTMLElement>("button, h1, h3, p, span, strong")].find((el) => (el.textContent ?? "").includes(text));
+const openRowMenu = (name: string) => act(() => byAria("标签操作 " + name).click());
+const menuItem = (text: string): HTMLButtonElement => {
+  const found = [...document.body.querySelectorAll<HTMLButtonElement>(".context-menu button")].find((btn) => (btn.textContent ?? "").includes(text));
+  if (!found) throw new Error("菜单项不存在：" + text);
+  return found;
+};
 const byAria = (label: string): HTMLButtonElement => {
   const found = document.body.querySelector<HTMLButtonElement>('button[aria-label="' + label + '"]');
   if (!found) throw new Error("找不到按钮：" + label);
@@ -64,8 +73,10 @@ describe("TagsWorkspace（标签空间）", () => {
     expect(document.body.textContent).toContain("灵感");
     expect(document.body.textContent).toContain("项目");
     expect(document.body.textContent).toContain("2 个标签");
-    // 灵感：文档 2 篇（n1/n2）、小记 1 条（q1）
-    expect(byAria("重命名标签 灵感")).toBeTruthy();
+    // 灵感：文档 2 篇（n1/n2）、小记 1 条（q1）；行操作入口 = 固定可见的 ⋯ 菜单
+    expect(byAria("标签操作 灵感")).toBeTruthy();
+    expect(byAria("标签操作 灵感").getAttribute("aria-haspopup")).toBe("menu");
+    expect(byAria("标签操作 灵感").getAttribute("aria-expanded")).toBe("false");
     expect(document.body.textContent).toContain("从左侧选择一个标签");
   });
 
@@ -113,7 +124,9 @@ describe("TagsWorkspace（标签空间）", () => {
 
   it("删除标签：二次确认并说明会同时移除文档与小记上的该标签", async () => {
     const merged = render();
-    act(() => byAria("删除标签 灵感").click());
+    openRowMenu("灵感");
+    expect(byAria("标签操作 灵感").getAttribute("aria-expanded")).toBe("true");
+    act(() => menuItem("删除").click());
     expect(document.body.textContent).toContain("会同时移除文档与小记上的该标签");
     await act(async () => {
       const confirmBtn = [...document.body.querySelectorAll<HTMLButtonElement>("button")].find((btn) => (btn.textContent ?? "").includes("删除标签") && !btn.hasAttribute("aria-label"));
@@ -125,15 +138,19 @@ describe("TagsWorkspace（标签空间）", () => {
 
   it("合并：选目标后调 onMergeTag(source, target)；目录只剩一个标签时禁用合并", () => {
     const merged = render();
-    act(() => byAria("合并标签 灵感").click());
+    openRowMenu("灵感");
+    act(() => menuItem("合并到…").click());
     const dialog = document.querySelector(".tags-merge-dialog")!;
     expect(dialog.textContent).toContain("把「灵感」合并到");
     const targetButton = [...dialog.querySelectorAll<HTMLButtonElement>(".ln-row")].find((btn) => (btn.textContent ?? "").includes("项目"))!;
     act(() => targetButton.click());
     expect(merged.onMergeTag).toHaveBeenCalledWith("t1", "t2");
+  });
 
+  it("目录只剩一个标签时：⋯ 菜单里的「合并到…」禁用", () => {
     render({ tags: [tag("t1", "唯一")] });
-    expect(byAria("合并标签 唯一").disabled).toBe(true);
+    openRowMenu("唯一");
+    expect(menuItem("合并到…").disabled).toBe(true);
   });
 
   it("拖拽排序：把后一个拖到前一个之前 ⇒ onReorderTags", () => {
@@ -158,5 +175,74 @@ describe("TagsWorkspace（标签空间）", () => {
     expect(document.body.textContent).toContain("标签数据暂不可用");
     render({ dataError: "标签目录暂不可用：小记库降级" });
     expect(document.body.textContent).toContain("标签目录暂不可用");
+  });
+
+  it("新建标签：头部与空目录都有入口；点击出现内联输入", () => {
+    render({ tags: [], documentLinks: {} });
+    const buttons = [...document.body.querySelectorAll<HTMLButtonElement>('button[aria-label="新建标签"]')];
+    expect(buttons.length).toBeGreaterThanOrEqual(2); // 头部 + 空目录 CTA
+    expect(document.body.textContent).toContain("新建一个标签");
+    act(() => buttons[0]!.click());
+    expect(document.body.querySelector('input[aria-label="新标签名称"]')).not.toBeNull();
+  });
+
+  it("新建标签：Enter 调 onCreateTag → reload → 自动选中该标签", async () => {
+    // 有状态宿主：onReload 后把新标签放进 props（模拟 App 的 tagSpace.reload）
+    const created = tag("t_new", "新标签");
+    const onCreateTag = vi.fn(async (_name: string) => created.id);
+    const onReload = vi.fn(async () => {});
+    function Host() {
+      const [tags, setTags] = useState<QuickNoteTag[]>([tag("t1", "灵感")]);
+      return createElement(TagsWorkspace, {
+        ...props({ tags, onCreateTag, onReload }),
+        onReload: async () => { const next = [created, tag("t1", "灵感")]; setTags(next); await onReload(); },
+        onCreateTag: async (name: string) => { const id = await onCreateTag(name); return id; },
+      });
+    }
+    act(() => root.render(createElement(Host)));
+    act(() => document.body.querySelectorAll<HTMLButtonElement>('button[aria-label="新建标签"]')[0]!.click());
+    const input = document.body.querySelector<HTMLInputElement>('input[aria-label="新标签名称"]')!;
+    act(() => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+      setter.call(input, "新标签");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => { input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })); await Promise.resolve(); });
+    expect(onCreateTag).toHaveBeenCalledWith("新标签");
+    expect(onReload).toHaveBeenCalled();
+    expect(document.body.textContent).toContain("「新标签」");
+  });
+
+  it("新建标签：Esc 取消（不调 onCreateTag，输入消失）", () => {
+    const merged = render();
+    act(() => document.body.querySelectorAll<HTMLButtonElement>('button[aria-label="新建标签"]')[0]!.click());
+    const input = document.body.querySelector<HTMLInputElement>('input[aria-label="新标签名称"]')!;
+    act(() => { input.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); });
+    expect(merged.onCreateTag).not.toHaveBeenCalled();
+    expect(document.body.querySelector('input[aria-label="新标签名称"]')).toBeNull();
+  });
+
+  it("行 ⋯ 菜单：开合、aria-expanded 跟随；三个动作都在", () => {
+    render();
+    expect(byAria("标签操作 灵感").getAttribute("aria-expanded")).toBe("false");
+    openRowMenu("灵感");
+    expect(byAria("标签操作 灵感").getAttribute("aria-expanded")).toBe("true");
+    // 三个动作齐全（重命名 / 合并到… / 删除）
+    expect(menuItem("重命名")).toBeTruthy();
+    expect(menuItem("合并到…")).toBeTruthy();
+    expect(menuItem("删除")).toBeTruthy();
+    // 再点一次 ⋯ 收起
+    act(() => byAria("标签操作 灵感").click());
+    expect(document.querySelector(".context-menu")).toBeNull();
+    expect(byAria("标签操作 灵感").getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("行 ⋯ 菜单：重命名进入内联编辑", () => {
+    render();
+    openRowMenu("灵感");
+    act(() => menuItem("重命名").click());
+    expect(document.body.querySelector('input[aria-label="重命名标签 灵感"]')).not.toBeNull();
+    // 进入编辑态后 ⋯ 让位给「保存名称」
+    expect(byAria("保存名称")).toBeTruthy();
   });
 });

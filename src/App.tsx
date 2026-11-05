@@ -910,6 +910,11 @@ export function App() {
                 available={tagSpace.available}
                 dataError={tagSpace.error}
                 onReload={tagSpace.reload}
+                onCreateTag={async (name: string) => {
+                  // 目录唯一来源 = quick-notes 标签库（文档只存关系）；创建后由组件 reload 目录并选中新标签。
+                  const created = await native.createQuickNoteTag(name);
+                  return created.id;
+                }}
                 onRenameTag={tagSpaceActions.rename}
                 onMergeTag={tagSpaceActions.merge}
                 onDeleteTag={tagSpaceActions.remove}

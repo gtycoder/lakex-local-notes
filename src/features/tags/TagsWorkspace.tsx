@@ -1,7 +1,8 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { Check, FileText, GripVertical, Merge, Pencil, RefreshCw, StickyNote, Tag as TagIcon, Trash, X } from "lucide-react";
-import { Dialog } from "../../components/ui/Overlay";
+import { Check, FileText, GripVertical, MoreVertical, Merge, Pencil, Plus, RefreshCw, StickyNote, Tag as TagIcon, Trash, X } from "lucide-react";
+import { Dialog, Menu } from "../../components/ui/Overlay";
 import { InlineRenameInput } from "../../components/ui/InlineRenameInput";
+import { usePopoverPosition } from "../../hooks/usePopoverPosition";
 import { useConfirm } from "../../hooks/useConfirm";
 import { getNativeErrorMessage } from "../../lib/nativeErrors";
 import type { NoteSummary, QuickNoteListSummary, QuickNoteTag } from "../../lib/types";
@@ -33,6 +34,8 @@ export interface TagsWorkspaceProps {
   /** 目录读取失败的可读提示（小记库降级时）。 */
   dataError?: string | null;
   onReload(): void | Promise<void>;
+  /** 新建标签（目录唯一来源 = quick-notes 标签库；App → native.createQuickNoteTag），返回新标签 id。 */
+  onCreateTag(name: string): Promise<string>;
   onRenameTag(id: string, name: string): Promise<void>;
   onMergeTag(sourceId: string, targetId: string): Promise<void>;
   onDeleteTag(id: string): Promise<void>;
@@ -68,13 +71,18 @@ function formatUpdated(iso: string): string {
  * 组件只吃 props（数据/回调由 App 注入）⇒ 可单测、不直接摸 native。
  */
 export function TagsWorkspace(props: TagsWorkspaceProps) {
-  const { active, tags, documentLinks, notes, quickNotes, available, dataError = null, onReload, onRenameTag, onMergeTag, onDeleteTag, onReorderTags, onOpenDocument, onOpenQuickNote, onLoadPreview, onError } = props;
+  const { active, tags, documentLinks, notes, quickNotes, available, dataError = null, onReload, onCreateTag, onRenameTag, onMergeTag, onDeleteTag, onReorderTags, onOpenDocument, onOpenQuickNote, onLoadPreview, onError } = props;
   const [selectedTagId, setSelectedTagId] = useState<string | null>(null);
   const [kindFilter, setKindFilter] = useState<TagAggregateKindFilter>("all");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [mergeSource, setMergeSource] = useState<TagDirectoryEntry | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
+  /** 新建标签：目录顶部内联输入（Enter 创建 / Esc 取消）。 */
+  const [creating, setCreating] = useState(false);
+  const [newTagName, setNewTagName] = useState("");
+  /** 行操作 ⋯ 菜单（固定可见入口；重命名 / 合并到… / 删除）。 */
+  const [rowMenu, setRowMenu] = useState<{ id: string; anchor: HTMLElement } | null>(null);
   const [busy, setBusy] = useState(false);
   const [reloading, setReloading] = useState(false);
   const [previewItem, setPreviewItem] = useState<TagAggregateItem | null>(null);
@@ -89,6 +97,9 @@ export function TagsWorkspace(props: TagsWorkspaceProps) {
     () => buildTagAggregate({ tagId: selectedTagId, documentLinks, notes, quickNotes, filter: kindFilter }),
     [selectedTagId, documentLinks, notes, quickNotes, kindFilter],
   );
+  /** 行操作 ⋯ 菜单的目标行 + 锚点定位（测量式，不自夹）。 */
+  const rowMenuEntry = rowMenu ? directory.find((entry) => entry.id === rowMenu.id) ?? null : null;
+  const rowMenuPos = usePopoverPosition({ open: rowMenuEntry !== null, anchor: rowMenu?.anchor, gap: 4, margin: 6 });
 
   // 目录变化后（删除/合并/远端同步）选中项失效 ⇒ 回到"未选中"而不是显示空标签。
   useEffect(() => {
@@ -114,6 +125,30 @@ export function TagsWorkspace(props: TagsWorkspaceProps) {
     setReloading(true);
     try { await onReload(); } catch (error) { onError(getNativeErrorMessage(error)); } finally { setReloading(false); }
   }, [onReload, onError]);
+
+  /** 新建标签：创建（目录唯一来源）→ reload → 自动选中新标签并进入其聚合视图。 */
+  const createTag = useCallback(async (rawName?: string) => {
+    const name = (rawName ?? newTagName).trim();
+    if (!name) { setCreating(false); setNewTagName(""); return; }
+    setBusy(true);
+    try {
+      const id = await onCreateTag(name);
+      setCreating(false);
+      setNewTagName("");
+      await onReload();
+      if (id) setSelectedTagId(id);
+    } catch (error) {
+      onError(getNativeErrorMessage(error));
+    } finally {
+      setBusy(false);
+    }
+  }, [newTagName, onCreateTag, onReload, onError]);
+
+  const startCreating = useCallback(() => {
+    setRowMenu(null);
+    setCreating(true);
+    setNewTagName("");
+  }, []);
 
   const saveRename = useCallback(async (entry: TagDirectoryEntry) => {
     const name = editName.trim();
@@ -177,7 +212,7 @@ export function TagsWorkspace(props: TagsWorkspaceProps) {
   } else if (dataError) {
     aggregateBody = <p className="tags-empty" role="status">{dataError}</p>;
   } else if (directoryEmpty) {
-    aggregateBody = <p className="tags-empty" role="status">还没有标签。在文档属性或小记里添加标签后会出现在这里。</p>;
+    aggregateBody = <p className="tags-empty" role="status">还没有标签。新建一个标签，或在文档属性/右键里给内容打标签。</p>;
   } else if (!selected) {
     aggregateBody = <p className="tags-empty" role="status">从左侧选择一个标签，查看它下面的文档与小记。</p>;
   } else if (aggregate.total === 0) {
@@ -224,13 +259,36 @@ export function TagsWorkspace(props: TagsWorkspaceProps) {
       <header className="tags-space__head">
         <h1 className="tags-space__title"><TagIcon size={16} aria-hidden="true" />标签</h1>
         <span className="tags-space__count">{directory.length} 个标签</span>
+        {available && (
+          <button type="button" className="ln-btn ln-btn--secondary tags-space__new" aria-label="新建标签" disabled={busy}
+            onClick={startCreating}><Plus size={13} aria-hidden="true" />新建标签</button>
+        )}
         <button type="button" className="ln-iconbtn ln-iconbtn--compact" aria-label="刷新标签" title="刷新" disabled={reloading}
           onClick={() => void reload()}><RefreshCw size={14} className={reloading ? "spin" : undefined} /></button>
       </header>
       <div className="tags-space__cols">
         <div className="tags-dir" role="listbox" aria-label="标签目录">
+          {creating && (
+            <div className="tags-dir__create">
+              <InlineRenameInput className="ln-input__field tags-dir__rename" value={newTagName} autoFocus
+                ariaLabel="新标签名称" emptyPolicy="reject"
+                onChange={setNewTagName} onCommit={(value) => void createTag(value)} onCancel={() => { setCreating(false); setNewTagName(""); }} />
+              <button type="button" className="ln-iconbtn ln-iconbtn--compact" aria-label="创建标签" disabled={busy} onClick={() => void createTag()}><Check size={13} /></button>
+            </div>
+          )}
           {directoryEmpty
-            ? <p className="tags-empty tags-empty--inset" role="status">{available ? "还没有标签。" : "标签目录暂不可用。"}</p>
+            ? (creating ? null : (
+              <div className="tags-dir__empty">
+                <p className="tags-empty tags-empty--inset" role="status">
+                  {available ? "还没有标签。新建一个标签，或在文档属性/右键里给内容打标签。" : "标签目录暂不可用。"}
+                </p>
+                {available && (
+                  <button type="button" className="ln-btn ln-btn--secondary" aria-label="新建标签" disabled={busy} onClick={startCreating}>
+                    <Plus size={13} aria-hidden="true" />新建标签
+                  </button>
+                )}
+              </div>
+            ))
             : directory.map((entry) => (
               <div key={entry.id} role="option" aria-selected={selectedTagId === entry.id}
                 className={"ln-row tags-dir__row" + (selectedTagId === entry.id ? " is-selected" : "") + (dragId === entry.id ? " is-dragging" : "")}
@@ -256,14 +314,14 @@ export function TagsWorkspace(props: TagsWorkspaceProps) {
                 {editingId === entry.id ? (
                   <button type="button" className="ln-iconbtn ln-iconbtn--compact" aria-label="保存名称" onClick={() => void saveRename(entry)}><Check size={13} /></button>
                 ) : (
-                  <>
-                    <button type="button" className="ln-iconbtn ln-iconbtn--compact" aria-label={"重命名标签 " + entry.name} title="重命名" disabled={busy}
-                      onClick={() => { setEditingId(entry.id); setEditName(entry.name); }}><Pencil size={13} /></button>
-                    <button type="button" className="ln-iconbtn ln-iconbtn--compact" aria-label={"合并标签 " + entry.name} title="合并到…" disabled={busy || directory.length <= 1}
-                      onClick={() => setMergeSource(entry)}><Merge size={13} /></button>
-                    <button type="button" className="ln-iconbtn ln-iconbtn--compact tags-dir__danger" aria-label={"删除标签 " + entry.name} title="删除标签（保留内容）" disabled={busy}
-                      onClick={() => void removeTag(entry)}><Trash size={13} /></button>
-                  </>
+                  // 固定可见的行操作入口（不再只在 hover 出现；键盘可聚焦、aria-haspopup/expanded 齐全）
+                  <button type="button" className={"ln-iconbtn ln-iconbtn--compact tags-dir__more" + (rowMenu?.id === entry.id ? " is-active" : "")}
+                    aria-label={"标签操作 " + entry.name} title="标签操作" aria-haspopup="menu" aria-expanded={rowMenu?.id === entry.id}
+                    disabled={busy}
+                    onClick={(event) => {
+                      const anchor = event.currentTarget;
+                      setRowMenu((current) => current?.id === entry.id ? null : { id: entry.id, anchor });
+                    }}><MoreVertical size={14} /></button>
                 )}
               </div>
             ))}
@@ -306,6 +364,25 @@ export function TagsWorkspace(props: TagsWorkspaceProps) {
           )}
         </div>
       </div>
+      {rowMenuEntry && (
+        <Menu onDismiss={() => setRowMenu(null)} surfaceClassName="context-menu"
+          surfaceRef={rowMenuPos.surfaceRef} style={rowMenuPos.style ?? { visibility: "hidden" }}>
+          <button role="menuitem" className="ln-menu__item" onClick={() => {
+            setRowMenu(null);
+            setEditingId(rowMenuEntry.id);
+            setEditName(rowMenuEntry.name);
+          }}><Pencil size={14} aria-hidden="true" /><span>重命名</span></button>
+          <button role="menuitem" className="ln-menu__item" disabled={directory.length <= 1} onClick={() => {
+            setRowMenu(null);
+            setMergeSource(rowMenuEntry);
+          }}><Merge size={14} aria-hidden="true" /><span>合并到…</span></button>
+          <div className="context-menu-sep" role="separator" />
+          <button role="menuitem" className="ln-menu__item tags-dir__danger" onClick={() => {
+            setRowMenu(null);
+            void removeTag(rowMenuEntry);
+          }}><Trash size={14} aria-hidden="true" /><span>删除</span></button>
+        </Menu>
+      )}
       {mergeSource && (
         <Dialog open onDismiss={() => setMergeSource(null)} label="合并标签" className="tags-merge-dialog">
           <div className="ln-dialog__body">

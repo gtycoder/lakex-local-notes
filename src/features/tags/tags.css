@@ -119,6 +119,29 @@
 .tags-dir__rename { flex: 1 1 auto; min-width: 0; }
 .tags-dir__danger { color: var(--lake-status-error); }
 
+/* 新建标签入口（目录头部 + 空目录 CTA）与内联输入行 */
+.tags-space__new { flex: none; }
+
+.tags-dir__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--lake-space-sm);
+  padding: var(--lake-space-xs);
+}
+
+.tags-dir__create {
+  display: flex;
+  align-items: center;
+  gap: var(--lake-space-xs);
+  padding: 2px var(--lake-space-xs);
+}
+
+/* 行操作入口：**始终可见**（用户验收：hover 才出现等于没有入口）；hover/打开时只做底色高亮 */
+.tags-dir__more { flex: none; }
+.tags-dir__more:hover,
+.tags-dir__more.is-active { background: var(--lake-bg-hover); }
+
 .tags-aggregate { gap: var(--lake-space-xs); padding: var(--lake-space-sm); overflow-y: auto; }
 
 .tags-aggregate__tabs { align-self: flex-start; }

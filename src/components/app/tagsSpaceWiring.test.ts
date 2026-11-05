@@ -19,6 +19,7 @@ const PREVIEW = read("../../features/tags/TagPreviewBody.tsx");
 const NATIVE = read("../../lib/native.ts");
 const CHROME = read("../../styles/chrome.css");
 const NOTE_TAG_DIALOG = read("./NoteTagDialog.tsx");
+const TAGS_WORKSPACE = read("../../features/tags/TagsWorkspace.tsx");
 
 describe("标签空间接线（P1）", () => {
   it("一级入口：空间类型 + 顶栏空间菜单 + App 视图（与 资料库/小记 并列）", () => {
@@ -52,10 +53,26 @@ describe("标签空间接线（P1）", () => {
     expect(SIDEBAR).not.toContain('aria-label="按标签筛选"');
     // 状态仍由 App 的 tagSelection 持有（不新增第二份状态）
     expect(APP).toContain("const [tagSelection, setTagSelection] = useState<TagSelection>(EMPTY_TAG_SELECTION);");
+    // 三修② 之后：标签段在 filter.open 时才渲染（不是独立图标/弹层）
     expect(APP).toContain("tagFilter={{ tags: tagSpace.tagOptions, selection: tagSelection, visibleIds: tagVisibleIds, onChange: setTagSelection }}");
     // Sidebar 仍只收窄显示；拖拽兄弟集合来自完整 treeIndex
     expect(SIDEBAR).toContain("tagFilter.visibleIds.has(id)");
     expect(SIDEBAR).toContain("const siblings = (treeIndex.childrenByParent.get(parentId)");
+  });
+
+  it("新建标签：目录头部/空目录入口 → onCreateTag → native.createQuickNoteTag（目录唯一来源）", () => {
+    expect(TAGS_WORKSPACE).toContain('aria-label="新建标签"');
+    expect(TAGS_WORKSPACE).toContain("还没有标签。新建一个标签，或在文档属性/右键里给内容打标签。");
+    expect(TAGS_WORKSPACE).toContain("onCreateTag(name: string): Promise<string>;");
+    // App → native.createQuickNoteTag（不新建第二套目录）
+    expect(APP).toContain("const created = await native.createQuickNoteTag(name);");
+    expect(APP).toContain("<TagsWorkspace");
+    // 行操作 = 固定可见的 ⋯ 菜单（三个动作），不再依赖 hover 才出现的三个图标
+    expect(TAGS_WORKSPACE).toContain('aria-label={"标签操作 " + entry.name}');
+    expect(TAGS_WORKSPACE).toContain('aria-haspopup="menu"');
+    expect(TAGS_WORKSPACE).toContain("<span>重命名</span>");
+    expect(TAGS_WORKSPACE).toContain("<span>合并到…</span>");
+    expect(TAGS_WORKSPACE).toContain("<span>删除</span>");
   });
 
   it("三修③：目录右键 note 行「打标签…」→ 复用 NoteTagRow 的弹层，保存后通知宿主", () => {
