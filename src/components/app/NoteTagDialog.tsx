@@ -1,13 +1,15 @@
+import { useState } from "react";
 import { X } from "lucide-react";
 import { Dialog } from "../ui/Overlay";
 import { NoteTagRow } from "./NoteTagRow";
 
 /**
- * 目录右键「打标签…」弹层（261105 P1 三修）：内容**复用属性面板的标签编辑行**（NoteTagRow，
- * 内含 chips + 添加（QuickNoteTagPicker 语汇）/移除/新建）。
+ * 目录右键「打标签…」弹窗（261105 用户验收：与「重命名 / 新建」弹窗同一视觉口径）。
  *
- * 只由 Sidebar 的 note 行右键菜单打开（分组/笔记本没有标签）。保存后通过 onChanged 通知宿主
- * 刷新目录树/标签空间数据（与 NoteInfoDialog 的 onTagsChanged 同一条通路）。
+ * 结构：Dialog > `.ln-dialog__head`（标题 + 关闭，head 与 body 同级）→ `.ln-dialog__body`
+ * （文档标题弱化说明行 + 标签 chips 区）→ `.ln-dialog__actions`（右对齐主按钮「完成」）。
+ * 宽度与其它弹窗一致（styles/dialog.css 里与 .rename-dialog 并列复用 460 规则，不复制）。
+ * 标签编辑逻辑本身不变：内容仍是 NoteTagRow（属性面板同一行）。
  */
 export interface NoteTagDialogProps {
   open: boolean;
@@ -21,20 +23,29 @@ export interface NoteTagDialogProps {
 }
 
 export function NoteTagDialog({ open, noteId, title, onClose, onChanged }: NoteTagDialogProps) {
+  const [error, setError] = useState<string | null>(null);
   if (!open) return null;
   return (
     <Dialog open onDismiss={onClose} label={"给“" + (title || "无标题") + "”打标签"} className="note-tag-dialog">
-      <div className="ln-dialog__body">
-        <header className="ln-dialog__head">
-          <span className="ln-dialog__title">打标签</span>
-          <button type="button" className="ln-iconbtn ln-iconbtn--compact" aria-label="关闭打标签" onClick={onClose}><X size={14} /></button>
-        </header>
-        <p className="note-tag-dialog__doc ln-ellipsis">{title || "无标题"}</p>
-        <NoteTagRow noteId={noteId} onChanged={onChanged} />
+      <div className="ln-dialog__head">
+        <span className="ln-dialog__title">打标签</span>
+        <button type="button" className="ln-iconbtn ln-iconbtn--compact" aria-label="关闭打标签" onClick={onClose}><X size={14} /></button>
       </div>
-      <footer className="ln-dialog__actions">
-        <button type="button" className="ln-btn ln-btn--secondary" onClick={onClose}>完成</button>
-      </footer>
+      <div className="ln-dialog__body">
+        <p className="note-tag-dialog__doc ln-ellipsis" title={title || "无标题"}>{title || "无标题"}</p>
+        <section className="note-tag-dialog__chips" aria-label="当前标签">
+          <NoteTagRow
+            noteId={noteId}
+            onChanged={onChanged}
+            onError={(message) => setError(message)}
+            emptyHint="还没有标签，点「添加标签」创建一个。"
+          />
+        </section>
+        {error && <p className="note-tag-dialog__error" role="alert">{error}</p>}
+      </div>
+      <div className="ln-dialog__actions">
+        <button type="button" className="ln-btn ln-btn--primary" onClick={onClose}>完成</button>
+      </div>
     </Dialog>
   );
 }

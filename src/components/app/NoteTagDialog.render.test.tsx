@@ -48,7 +48,31 @@ async function flush(): Promise<void> {
 }
 const chipNames = () => [...document.body.querySelectorAll(".note-info-tag-chip")].map((el) => el.querySelector(".ln-ellipsis")?.textContent);
 
-describe("NoteTagDialog（目录右键打标签弹层）", () => {
+describe("NoteTagDialog（打标签弹窗，与重命名/新建同口径）", () => {
+  it("结构：head 与 body 同级、主按钮「完成」（primary）、说明行弱化", async () => {
+    act(() => root.render(createElement(NoteTagDialog, { open: true, noteId: "n1", title: "周报", onClose: () => {} })));
+    await flush();
+    const dialog = document.body.querySelector(".note-tag-dialog")!;
+    expect(dialog).toBeTruthy();
+    // head 与 body 同级（head 不是 body 的子节点）
+    const head = dialog.querySelector(".ln-dialog__head")!;
+    const body = dialog.querySelector(".ln-dialog__body")!;
+    expect(head.parentElement).toBe(body.parentElement);
+    // 底部 actions：右对齐主按钮「完成」
+    const done = [...dialog.querySelectorAll<HTMLButtonElement>(".ln-dialog__actions button")].find((btn) => (btn.textContent ?? "") === "完成")!;
+    expect(done.className).toContain("ln-btn--primary");
+    // 文档标题说明行 + chips 区
+    expect(dialog.querySelector(".note-tag-dialog__doc")?.textContent).toContain("周报");
+    expect(dialog.querySelector(".note-tag-dialog__chips")).toBeTruthy();
+  });
+
+  it("空态：还没有标签时给「点添加标签创建」提示", async () => {
+    h.listNoteTagLinks.mockResolvedValue({});
+    act(() => root.render(createElement(NoteTagDialog, { open: true, noteId: "n1", title: "周报", onClose: () => {} })));
+    await flush();
+    expect(document.body.textContent).toContain("还没有标签，点「添加标签」创建一个。");
+  });
+
   it("展示目标文档标题 + 复用标签行（现有 chips 按本机顺序）", async () => {
     act(() => root.render(createElement(NoteTagDialog, { open: true, noteId: "n1", title: "周报", onClose: () => {} })));
     await flush();

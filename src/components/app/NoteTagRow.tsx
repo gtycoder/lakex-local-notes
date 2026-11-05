@@ -21,9 +21,11 @@ export interface NoteTagRowProps {
   onError?: (message: string) => void;
   /** 关系变化后通知宿主（标签空间/侧栏筛选的数据要重读）。 */
   onChanged?: () => void;
+  /** 空态文案（属性面板/弹窗可各说一句；缺省「还没有标签。」）。 */
+  emptyHint?: string;
 }
 
-export function NoteTagRow({ noteId, onError, onChanged }: NoteTagRowProps) {
+export function NoteTagRow({ noteId, onError, onChanged, emptyHint = "还没有标签。" }: NoteTagRowProps) {
   const [catalog, setCatalog] = useState<QuickNoteTagSummary[]>([]);
   const [tagIds, setTagIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -93,7 +95,7 @@ export function NoteTagRow({ noteId, onError, onChanged }: NoteTagRowProps) {
   return (
     <div className="note-info-tags" role="group" aria-label="标签">
       {loading && <span className="note-info-tags-empty">读取标签…</span>}
-      {!loading && tagIds.length === 0 && <span className="note-info-tags-empty">还没有标签。</span>}
+      {!loading && tagIds.length === 0 && <span className="note-info-tags-empty">{emptyHint}</span>}
       {tagIds.map((tagId) => (
         <span key={tagId} className="note-info-tag-chip">
           <span className="ln-ellipsis">{nameOf.get(tagId) ?? tagId}</span>

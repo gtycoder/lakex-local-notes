@@ -5,6 +5,7 @@ import { MobileNodeIconPicker } from "../ui/NodeIconPicker";
 import { MobileSheet } from "../ui/MobileSheet";
 import { MobileSheetMenu, type MobileSheetItem } from "../ui/MobileSheetMenu";
 import { NoteInfoSheet } from "../ui/NoteInfoSheet";
+import { NoteTagsSheet } from "./NoteTagsSheet";
 import type { NotebookTab } from "./useNotebookTabs";
 import type { NotebookTreeItem } from "./useNotebookTreeData";
 
@@ -55,6 +56,10 @@ export interface WorkspaceOverlayHostProps {
   iconFor: NotebookTreeItem | null;
   onPickIcon: (node: NotebookTreeItem, icon: string | null) => void;
   onCloseIcon: () => void;
+
+  /** 文档标签选择（目录行「打标签…」；只给文档行）。 */
+  noteTagsFor: NotebookTreeItem | null;
+  onCloseNoteTags: () => void;
 
   /** 历史版本 sheet（正文类名 mb-list 逐字保留）。 */
   historyFor: NotebookTreeItem | null;
@@ -147,6 +152,11 @@ export function WorkspaceOverlayHost(props: WorkspaceOverlayHostProps) {
               props.onPickIcon(target, icon);
             }} />
         </MobileSheet>
+      )}
+
+      {/* 文档标签选择（多选/取消/新建；保存写 tag_links(kind='note')，不写正文） */}
+      {props.noteTagsFor && (
+        <NoteTagsSheet open note={props.noteTagsFor} onClose={props.onCloseNoteTags} />
       )}
 
       {/* 历史版本 sheet（MOB-11：骨架交给 MobileSheet；正文类名 mb-list 逐字保留） */}

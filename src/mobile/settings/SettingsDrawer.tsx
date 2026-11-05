@@ -4,7 +4,7 @@
  * （settingsSearch.ts 的 SETTING_ITEMS 继续生效）。
  * 注意：全部 App 设置为竖向（无横向 tab）；「回收站」并入总回收站（见 TrashList）。 */
 import { Suspense, lazy, useEffect, useRef, useState } from "react";
-import { ArrowLeft, ChevronRight, Cloud, HardDrive, History, Images, Info, List, Palette, Pencil, RefreshCw, Sparkles, Trash, TriangleAlert, X } from "lucide-react";
+import { Archive, ArrowLeft, ChevronRight, Cloud, HardDrive, History, Images, Info, List, Palette, Pencil, RefreshCw, Sparkles, Trash, TriangleAlert, X } from "lucide-react";
 import { loadSettings, saveSettings, fontSizeOptions, MAX_ATTACHMENT_MB_OPTIONS_SETTINGS, type AppSettings } from "../../lib/settings";
 import { Group, Item, Block, Switch, TextField, Field } from "../ui/settingsPrimitives";
 import { bridge } from "../bridge";
@@ -43,11 +43,16 @@ export interface SettingsDrawerProps {
   onOpenNote?: (noteId: string) => void;
 }
 
-type View = "menu" | "editor" | "appearance" | "history" | "resources" | "s3" | "ai" | "cache" | "trash" | "about";
+type View = "menu" | "editor" | "appearance" | "history" | "resources" | "s3" | "backup" | "ai" | "cache" | "trash" | "about";
 
+/**
+ * 设置分组（261105 晚，用户验收：对齐桌面）。
+ * 顺序 = 云端与同步 → 备份与恢复 → AI → 编辑器 → 外观 → 历史 → 资源管理 → 清理缓存 → 回收站 → 关于。
+ * 「云端与同步」只放联网配置与同步本身；「备份与恢复」只放恢复动作（移动端没有整库备份/导出）。
+ */
 const MENU: { key: Exclude<View, "menu">; label: string; icon: typeof Cloud }[] = [
-  // 261029 P6 重排：高频/跨设备项在前（同步、AI），个人偏好居中，本机数据维护，低频与元信息收尾。
-  { key: "s3", label: "同步设置", icon: Cloud },
+  { key: "s3", label: "云端与同步", icon: Cloud },
+  { key: "backup", label: "备份与恢复", icon: Archive },
   { key: "ai", label: "AI 助手", icon: Sparkles },
   { key: "editor", label: "编辑器", icon: List },
   { key: "appearance", label: "外观", icon: Palette },
@@ -481,26 +486,8 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                       )}
                     </>
                   )}
-                  {/* 261028（用户批准）：移动端补「从云端恢复（换机/坏库）」——
-                      清本机同步基线后整轮只拉不打；不照抄桌面的「整库改名隔离 + 重启」（移动端附件可能 1.6GB，隔离整库代价过高）。 */}
-                  <div className="mb-set-block">
-                    <div className="mb-set-block__name">从云端恢复（换机或数据损坏）</div>
-                    <div className="mb-set-item__desc">
-                      以云端为准重建本机：清空本机同步记录后全部重新下载（只下载，不上传本机内容）。
-                      云端没有的本机文档/小记会移入回收站并标「云端已删除（仅本地）」，正文与历史保留可恢复。
-                      用于换机、本机数据损坏，或提示「云端是另一套数据」时。
-                    </div>
-                    <div className="mb-set-block__actions">
-                      <button
-                        type="button"
-                        className="mb-btn mb-btn--secondary mb-btn--danger"
-                        disabled={syncCfg?.enabled === false || restoreBusy}
-                        title={syncCfg?.enabled === false ? "云同步已关闭：不会联网" : undefined}
-                        onClick={() => void restoreFromCloud()}
-                      >{restoreBusy ? "正在恢复…" : "从云端恢复…"}</button>
-                    </div>
-                    {restoreMsg && <div className="mb-set-item__desc" aria-live="polite">{restoreMsg}</div>}
-                  </div>
+                  {/* 261105 晚：恢复动作迁到独立的「备份与恢复」子页（与桌面分组对齐）；
+                      本页只保留联网配置与同步本身。 */}
                   {/* SD-13：同步诊断（最近 3 轮；阶段耗时/对象数/字节/失败对象），可一键复制 */}
                   <div className="mb-set-block">
                     <div className="mb-set-block__name">同步诊断</div>
@@ -577,6 +564,51 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                 onImport={importS3ConfigFromCode}
               />
             </>
+          )}
+
+          {view === "backup" && (
+            <div className="mb-set-group">
+              <div className="mb-set-title"><Archive size={16} />备份与恢复</div>
+              <div className="mb-set-items">
+                {/* 261028（用户批准）：从云端恢复（换机/坏库）——清本机同步基线后整轮只拉不打；
+                    不照抄桌面的「整库改名隔离 + 重启」（移动端附件可能 1.6GB，隔离整库代价过高）。 */}
+                <div className="mb-set-block">
+                  <div className="mb-set-block__name">从云端恢复（换机或数据损坏）</div>
+                  <div className="mb-set-item__desc">
+                    以云端为准重建本机：清空本机同步记录后全部重新下载（只下载，不上传本机内容）。
+                    云端没有的本机文档/小记会移入回收站并标「云端已删除（仅本地）」，正文与历史保留可恢复。
+                    用于换机、本机数据损坏，或提示「云端是另一套数据」时。需要先配置并开启云同步。
+                  </div>
+                  <div className="mb-set-block__actions">
+                    <button
+                      type="button"
+                      className="mb-btn mb-btn--secondary mb-btn--danger"
+                      disabled={syncCfg?.enabled === false || restoreBusy}
+                      title={syncCfg?.enabled === false ? "云同步已关闭：不会联网" : undefined}
+                      onClick={() => void restoreFromCloud()}
+                    >{restoreBusy ? "正在恢复…" : "从云端恢复…"}</button>
+                  </div>
+                  {restoreMsg && <div className="mb-set-item__desc" aria-live="polite">{restoreMsg}</div>}
+                </div>
+                {/* 缺正文/缺小记：只在资源管理里扫描/恢复；这里给引用入口（不重复扫描逻辑）。 */}
+                <div className="mb-set-block">
+                  <div className="mb-set-block__name">缺正文 / 缺小记</div>
+                  <div className="mb-set-item__desc">
+                    文档或小记还在，但正文文件已经不在了。可以从云端拉回、恢复历史版本，或用搜索缓存重建纯文本。
+                  </div>
+                  <div className="mb-set-block__actions">
+                    <button
+                      type="button"
+                      className="mb-btn mb-btn--secondary"
+                      onClick={() => { setView("resources"); void missingBodies.reload(); }}
+                    >去资源管理查看</button>
+                  </div>
+                </div>
+                <div className="mb-set-item__desc">
+                  移动端不提供整库自动备份 / 导出（桌面端有）；这里只有「从云端恢复」与缺正文、缺小记的恢复入口。
+                </div>
+              </div>
+            </div>
           )}
 
           {view === "cache" && (

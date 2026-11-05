@@ -129,7 +129,10 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
    */
   const { overlay, open: openOverlay, close: closeOverlay, toggle: toggleOverlay } = useWorkspaceOverlays();
   const overlayKind = overlay?.kind ?? null;
-  const sidebarOpen = overlayKind === "sidebar";
+  // 261105 晚（用户验收）：新建目录/分组时必须**目录抽屉保持弹出**（否则输入框在关着的抽屉里、
+  // 建完看到的是关掉的抽屉）。抽屉打开态仍由同一个 overlay 判据派生，不另造状态：
+  // create 浮层打开期间左抽屉继续渲染（sheet 覆盖在抽屉之上）；rename/tags 走 sidebar / noteTags 本身。
+  const sidebarOpen = overlayKind === "sidebar" || overlayKind === "create";
   // 261102 pad：expanded = **更宽的移动端外壳**（胶囊/工具栏与手机完全一致），只有「树/大纲」是
   // 悬浮覆盖 + 可固定（十四批用户口径：桌面式工具栏不适合触屏）。
   const formFactor = useFormFactor();
@@ -165,6 +168,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   const infoFor = overlay?.kind === "info" ? overlay.node : null;
   const iconFor = overlay?.kind === "icon" ? overlay.node : null;
   const historyFor = overlay?.kind === "history" ? overlay.node : null;
+  const noteTagsFor = overlay?.kind === "noteTags" ? overlay.node : null;
   /** 目录「新建」建到哪个节点下：抽屉工具栏 ＋ = 笔记本根，行内 ＋ = 该行节点（复用同一个面板）。 */
   const createParent = overlay?.kind === "create" ? overlay.parentId : notebookId;
   /** 文档内查找条：只对 Lake 文档（doc）开放；切文档时自动收起（查找条绑定当前正文）。 */
@@ -258,6 +262,15 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     deleteHistory,
   } = useNotebookTreeActions({ tree, loadTree, discardTab });
 
+  /**
+   * 让目录树可见（新建/重命名这类行内编辑的前置）：手机 = 打开左侧抽屉；平板 = 打开悬浮树面板。
+   * 复用既有开合判据（openOverlay sidebar / dispatchPadShell），不新增第二份"抽屉应开"状态。
+   */
+  const ensureTreeVisible = useCallback(() => {
+    if (padTwoPane) openPadTree(true);
+    else openOverlay({ kind: "sidebar" });
+  }, [padTwoPane, openPadTree, openOverlay]);
+
   // 261103 P11-②：行菜单 / 历史版本 / 新建 / 标签与图标回调 → useWorkspaceActions（无 effect，纯回调）。
   const {
     applyRestoreHistory,
@@ -291,6 +304,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     loadTree,
     switchNotebook,
     expandGroup,
+    ensureTreeVisible,
   });
 
   // 261103 P11-②：浮层返回栈 / 手动同步 / 活动文档上报 → useWorkspaceSync（effect 顺序逐字保留）。
@@ -485,6 +499,8 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
         iconFor={iconFor}
         onPickIcon={handlePickIcon}
         onCloseIcon={() => closeOverlay("icon")}
+        noteTagsFor={noteTagsFor}
+        onCloseNoteTags={() => closeOverlay("noteTags")}
         historyFor={historyFor}
         historyList={historyList}
         onRestoreHistory={(id) => void applyRestoreHistory(id)}

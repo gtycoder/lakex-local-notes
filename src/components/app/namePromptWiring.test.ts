@@ -37,7 +37,7 @@ describe("统一新建弹窗（NamePromptDialog）", () => {
     expect(DIALOG).not.toContain("ln-empty");
     // 样式复用（不另写一套尺寸/内距）：与 rename 并排；标题/正文档与控件高度组也包含它
     const CSS = read("../../styles/dialog.css");
-    expect(CSS).toContain(".rename-dialog,\n.name-prompt-dialog { width: min(460px, 92vw); }");
+    expect(CSS).toContain(".rename-dialog,\n.name-prompt-dialog,\n.note-tag-dialog { width: min(460px, 92vw); }");
     expect(CSS).toContain(".name-prompt-dialog__error {");
     expect(read("../../styles/overlay.css")).toContain(".rename-dialog, .name-prompt-dialog, .s3-transfer-dialog");
     expect(read("../../styles/feature.css")).toContain(".rename-dialog,\n.name-prompt-dialog,");

@@ -48,6 +48,9 @@ export const WRITE_OPS = [
   // 小记标签目录（261024）+ 小记与标签的关系（独立关联表）
   "createQuickNoteTag", "updateQuickNoteTag", "reorderQuickNoteTags", "mergeQuickNoteTags", "deleteQuickNoteTag",
   "setQuickNoteTags",
+  // 261105 文档标签关系（移动端单库写 tag_links(kind='note') + bump 关系版本；与桌面 set_note_tags 同语义）。
+  // 纯本地小写（不碰正文/不出网），归写域。
+  "setNoteTags",
   // 正文
   "saveNote", "createInk",
   // 历史快照
@@ -116,6 +119,8 @@ export const NONE_OPS = [
   // 启动 / 只读
   "init", "getHomeSnapshot", "getWorkspaceSnapshot", "getQuickNotePage", "readNote", "noteGoneState", "searchNotes",
   "readQuickNote", "getQuickNoteDraft", "getQuickNoteImage", "listQuickNoteTrash", "listQuickNoteTags",
+  // 261105 文档标签关系只读（目录行「打标签…」预选用；不写库、不出网）
+  "listNoteTagLinks",
   "listNoteHistory", "getNoteInfo", "readAssetPreview", "previewHistorySnapshot",
   "listOrphanAssets", "getAssetUsage", "listS3GcPending", "getHistorySettings",
   "listTrashed", "listTrashTree", "listDeletedNotesForSync", "readDeletedContent",

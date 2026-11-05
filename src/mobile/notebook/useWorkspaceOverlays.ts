@@ -36,7 +36,9 @@ export type WorkspaceOverlay =
   /** 节点图标选择器 */
   | { kind: "icon"; node: NotebookTreeItem }
   /** 历史版本 */
-  | { kind: "history"; node: NotebookTreeItem };
+  | { kind: "history"; node: NotebookTreeItem }
+  /** 文档标签选择（目录行「打标签…」；只给文档行） */
+  | { kind: "noteTags"; node: NotebookTreeItem };
 
 export type WorkspaceOverlayKind = WorkspaceOverlay["kind"];
 
@@ -56,7 +58,7 @@ export type ToggleableOverlayKind = keyof typeof SIMPLE_OVERLAYS;
  * 工作区**不得**再登记一遍，否则栈顶变成工作区的"直接关面板"。
  */
 export const SELF_REGISTERED_OVERLAY_KINDS: ReadonlySet<WorkspaceOverlayKind> = new Set([
-  "create", "menu", "notebookSwitch", "info", "icon", "history",
+  "create", "menu", "notebookSwitch", "info", "icon", "history", "noteTags",
 ]);
 
 export interface WorkspaceOverlays {

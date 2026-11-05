@@ -18,6 +18,8 @@ import { sha256Hex } from "../../core/syncUtils.js";
 import type { SearchResult } from "../../core/searchTypes.js";
 
 import * as noteRepository from "../data/noteRepository.js";
+import * as noteTagLinksRepository from "../data/noteTagLinksRepository.js";
+import { assertQuickNoteTagsExist } from "../data/quickNoteTagsRepository.js";
 import { noteBodyPath } from "../data/noteBodies.js";
 import { applyRestoredNoteBody, scanMissingBodies, type MissingBodiesSnapshot } from "../data/missingBodies.js";
 import type { LocalNote } from "../data/noteRepository.js";
@@ -204,6 +206,34 @@ export const notesDomain = {
       const d = await ensureDb();
       const mobileDb = d;
       return await historyRepository.cleanupHistory(mobileDb, await historyRepository.getHistorySettings(mobileDb));
+    });
+  },
+
+  // ---- 261105 文档标签（与桌面同名通道）：单库直接写 tag_links(kind='note') + bump 关系版本 ----
+  /**
+   * 全部文档 ↔ 标签关系（noteId → tagIds，本机 position 顺序）。
+   * 用途：目录行菜单「打标签…」时预选、以及移动端展示（只读）。
+   */
+  async listNoteTagLinks(): Promise<Record<string, string[]>> {
+    const d = await ensureDb();
+    const map = await noteTagLinksRepository.listAllNoteTagIds(d);
+    return Object.fromEntries(map);
+  },
+
+  /**
+   * 整组替换某篇文档的标签（桌面 set_note_tags 同语义）：
+   * 目录存在性校验 → 写 tag_links(kind='note') → bump tag_link_versions（关系 LWW 才能传播）。
+   * 移动端是单库写；**不写正文**（关系独立于正文 hash）。
+   */
+  async setNoteTags(noteId: string, tagIds: string[]): Promise<{ tagIds: string[] }> {
+    return runWrite("setNoteTags", async () => {
+      const d = await ensureDb();
+      const note = await d.prepare("SELECT 1 AS one FROM notes WHERE id=?").get(noteId) as unknown;
+      if (!note) throw new Error("笔记不存在");
+      // 目录是唯一来源：不存在/已删的标签一律拒绝（展示层也会过滤远端遗留 id）。
+      await assertQuickNoteTagsExist(d, tagIds);
+      const next = await noteTagLinksRepository.setNoteTags(d, noteId, tagIds);
+      return { tagIds: next };
     });
   },
 

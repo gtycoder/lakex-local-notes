@@ -1,5 +1,5 @@
 import { useCallback } from "react";
-import { FolderOpen, History, Info, Move, Pencil, SmilePlus, Star, Trash } from "lucide-react";
+import { FolderOpen, History, Info, Move, Pencil, SmilePlus, Star, Tag, Trash } from "lucide-react";
 import { bridge } from "../bridge";
 import { isFavorite, toggleFavorite } from "../data/favorites";
 import { showToast } from "../ui/toastBus";
@@ -35,6 +35,8 @@ export interface UseWorkspaceActionsOptions {
   loadTree: () => Promise<NotebookTreeItem[]>;
   switchNotebook: (id: string) => Promise<void>;
   expandGroup: (id: string) => void;
+  /** 让目录树可见（新建/重命名行内编辑的前置）：手机开左抽屉、平板开悬浮树。 */
+  ensureTreeVisible: () => void;
 }
 
 /** 「新建」清单 id → 文档 kind（清单与创建通道的唯一对应表；group 不走这里）。 */
@@ -51,7 +53,6 @@ export function useWorkspaceActions(options: UseWorkspaceActionsOptions) {
     tree,
     title,
     notebookId,
-    padTwoPane,
     createParent,
     menuFor,
     itemById,
@@ -68,6 +69,7 @@ export function useWorkspaceActions(options: UseWorkspaceActionsOptions) {
     loadTree,
     switchNotebook,
     expandGroup,
+    ensureTreeVisible,
   } = options;
 
   /** 历史版本面板 =「开面板」（overlay owner）+「读快照」（actions）两步；节点由调用方传，不在 hook 里存。 */
@@ -101,14 +103,21 @@ export function useWorkspaceActions(options: UseWorkspaceActionsOptions) {
     } catch { showToast("新建失败", { type: "error" }); }
   }, [closeOverlay, loadTree, openTab, notebookId]);
 
-  /** 行内 ＋ → 新建分组：在该节点下建子分组并展开父节点。 */
+  /**
+   * 行内 ＋ / 抽屉「新建」→ 新建分组：建完展开父节点，并**保持目录抽屉弹出**、就地进入重命名
+   * （261105 晚用户验收：此前新建后抽屉被收起，行内输入框在关着的抽屉里看不见）。
+   */
   const createChildGroup = useCallback(async (parentId: string) => {
     try {
-      await bridge.createGroup(parentId || notebookId, "新建分组");
+      const parent = parentId || notebookId;
+      const node = await bridge.createGroup(parent, "新建分组");
       await loadTree();
-      expandGroup(parentId || notebookId);
+      expandGroup(parent);
+      ensureTreeVisible();
+      setRenamingId(node.id);
+      setRenameValue(node.title);
     } catch { showToast("新建失败", { type: "error" }); }
-  }, [loadTree, notebookId]);
+  }, [loadTree, notebookId, expandGroup, ensureTreeVisible, setRenamingId, setRenameValue]);
 
   /** 目录树长按菜单（思源 .b3-menu--sheet 口径）：移动到… 用子层下钻，删除走危险项 + 确认框 */
   const treeMenuItems = (node: NotebookTreeItem): MobileSheetItem[] => {
@@ -132,6 +141,8 @@ export function useWorkspaceActions(options: UseWorkspaceActionsOptions) {
         ],
       },
       ...(node.kind === "note" ? [
+        // 261105 晚用户验收：目录行 ⋯ 菜单加「打标签…」（**只给文档行**；分组/笔记本没有标签）。
+        { id: "tags", label: "打标签…", icon: Tag },
         { id: "history", label: "历史版本", icon: History },
         { id: "info", label: "属性", icon: Info },
       ] : []),
@@ -145,9 +156,11 @@ export function useWorkspaceActions(options: UseWorkspaceActionsOptions) {
     if (!node) return;
     const root = path[0]?.id;
     if (root === "move") { void applyMove(node, path[1]?.id === "__root" ? notebookId : String(path[1]?.id)); return; }
-    // 互斥（MOB-02）：开行菜单时目录抽屉已经被收掉；重命名是**行内编辑**，必须把抽屉重新拉出来，
+    // 互斥（MOB-02）：开行菜单时目录抽屉已经被收掉；重命名是**行内编辑**，必须把抽屉（平板=悬浮树）重新拉出来，
     // 否则输入框在关着的抽屉里（看不见的输入框 + autoFocus 抢焦点）。
-    if (root === "rename") { if (!padTwoPane) openOverlay({ kind: "sidebar" }); setRenamingId(node.id); setRenameValue(node.title); return; }
+    if (root === "rename") { ensureTreeVisible(); setRenamingId(node.id); setRenameValue(node.title); return; }
+    // 「打标签…」只对文档行出现（菜单组装已限定）；打开标签选择弹层，保存写 tag_links(kind='note')。
+    if (root === "tags") { openOverlay({ kind: "noteTags", node }); return; }
     if (root === "icon") { openOverlay({ kind: "icon", node }); return; }
     if (root === "favorite") { const on = toggleFavorite(node.id); showToast(on ? "已设为常用" : "已取消常用"); return; }
     if (root === "history") { openHistorySheet(node); return; }

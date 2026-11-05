@@ -84,7 +84,10 @@ describe("标签空间接线（P1）", () => {
     expect(SIDEBAR).toContain("<NoteTagDialog open noteId={tagEditor.noteId}");
     expect(SIDEBAR).toContain("onChanged={() => props.onTagsChanged?.()}");
     expect(APP).toContain("onTagsChanged={() => { void tagSpace.reload(); }}");
-    expect(NOTE_TAG_DIALOG).toContain("<NoteTagRow noteId={noteId} onChanged={onChanged}");
+    expect(NOTE_TAG_DIALOG).toContain("<NoteTagRow");
+    expect(NOTE_TAG_DIALOG).toContain("noteId={noteId}");
+    expect(NOTE_TAG_DIALOG).toContain("onChanged={onChanged}");
+    expect(NOTE_TAG_DIALOG).toContain("onError={(message) => setError(message)}");
   });
 
   it("261105 验收：空间名「资料库」→「文档」；三栏可拖（SplitHandle + tagsLayout）；头部按钮移到左栏", () => {

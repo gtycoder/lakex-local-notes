@@ -61,8 +61,23 @@
    输入框随 .ln-input 撑满；超长名字仍靠输入框自身横向滚动。 */
 /* 新建（需写名字）弹窗与目录重命名同族：同一宽度/内距/控件高度（见 overlay.css 的并列选择器） */
 .rename-dialog,
-.name-prompt-dialog { width: min(460px, 92vw); }
+.name-prompt-dialog,
+.note-tag-dialog { width: min(460px, 92vw); }
 .name-prompt-dialog__error {
+  margin: 8px 0 0;
+  color: var(--lake-status-error);
+  font-size: var(--lake-font-size-tiny);
+}
+
+/* 「打标签」弹窗（与重命名/新建同族）：说明行弱化、chips 区留出呼吸、错误行同款 */
+.note-tag-dialog .ln-dialog__head { align-items: center; }
+.note-tag-dialog__doc {
+  margin: 0 0 var(--lake-space-sm);
+  color: var(--lake-text-3);
+  font-size: var(--lake-font-size-tiny);
+}
+.note-tag-dialog__chips { display: block; }
+.note-tag-dialog__error {
   margin: 8px 0 0;
   color: var(--lake-status-error);
   font-size: var(--lake-font-size-tiny);

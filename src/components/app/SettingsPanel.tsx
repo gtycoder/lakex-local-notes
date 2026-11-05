@@ -49,7 +49,12 @@ import { formatS3v3Diagnostics, type S3v3DiagnosticReport } from "../../core/s3v
 import { effectiveS3Settings, isQiniuEndpoint, s3ConfigFingerprint } from "../../lib/s3FormState";
 import { loadAiEnabled, saveAiEnabled } from "../../lib/aiEnabled";
 
-export type SettingsCategory = "editor" | "appearance" | "shortcuts" | "history" | "sync" | "ai" | "trash" | "browser" | "logs" | "about";
+/**
+ * 设置分类（261105 用户验收重组）：「常规（编辑器/标签页/附件）/ 外观 / 快捷键 / 云端与同步 / 备份与恢复 /
+ * 数据与历史 / 数据维护（数据体检、重建数据、回收站、全文搜索、浏览器端、应用日志）/ AI / 关于」。
+ * 备份与恢复是**独立分类**（从云端恢复也放这里：它同样是恢复动作，只是需要云端配置）。
+ */
+export type SettingsCategory = "editor" | "appearance" | "shortcuts" | "history" | "maintenance" | "sync" | "backup" | "ai" | "about";
 
 interface SettingsPanelProps {
   open: boolean;
@@ -483,16 +488,16 @@ let verifiedS3Fingerprint: string | null = null;
     } catch { setSyncDiagMsg("复制失败（剪贴板不可用）"); }
   };
 
+  // 分组顺序按使用频率：常规 → 外观 → 快捷键 → 云端与同步 → 备份与恢复 → 数据与历史 → 数据维护 → AI → 关于
   const nav = [
-    { id: "editor" as const, label: "编辑器", keywords: "字号 大纲 工具栏 标签页" , icon: <Type size={15} /> },
+    { id: "editor" as const, label: "常规", keywords: "编辑器 字号 大纲 工具栏 标签页 附件 上限", icon: <Type size={15} /> },
     { id: "appearance" as const, label: "外观", keywords: "浅色 深色 主题", icon: <Palette size={15} /> },
     { id: "shortcuts" as const, label: "快捷键", keywords: "快捷键 搜索 专注模式 键盘", icon: <Keyboard size={15} /> },
-    { id: "history" as const, label: "文档与历史", keywords: "快照 保留 清理", icon: <History size={15} /> },
-    { id: "trash" as const, label: "回收站", keywords: "删除 恢复 清空", icon: <Trash size={15} /> },
-    { id: "sync" as const, label: "云端与同步", keywords: "S3 上传 下载 资源 云端 回收", icon: <Cloud size={15} /> },
-    { id: "ai" as const, label: "AI", keywords: "AI 助手 供应商 模型 key api openai deepseek 密钥", icon: <Sparkles size={15} /> },
-    { id: "browser" as const, label: "浏览器端", keywords: "浏览器 网页 web 附属窗口 端口 局域网 伺服", icon: <Globe size={15} /> },
-    { id: "logs" as const, label: "日志", keywords: "日志 诊断 GC 同步 调试", icon: <Terminal size={15} /> },
+    { id: "sync" as const, label: "云端与同步", keywords: "S3 上传 下载 资源 云端 回收 同步策略 诊断", icon: <Cloud size={15} /> },
+    { id: "backup" as const, label: "备份与恢复", keywords: "备份 整库 恢复 云端恢复 自动备份 迁移", icon: <Archive size={15} /> },
+    { id: "history" as const, label: "数据与历史", keywords: "快照 保留 清理 文档历史", icon: <History size={15} /> },
+    { id: "maintenance" as const, label: "数据维护", keywords: "体检 一致性 重建 恢复 回收站 搜索 日志 浏览器 扫描", icon: <HardDrive size={15} /> },
+    { id: "ai" as const, label: "AI 助手", keywords: "AI 供应商 模型 key api openai deepseek 密钥", icon: <Sparkles size={15} /> },
     { id: "about" as const, label: "关于", keywords: "版本", icon: <Info size={15} /> },
   ];
   const filteredNav = filterSettingsNav(nav, navQuery);
@@ -792,44 +797,6 @@ let verifiedS3Fingerprint: string | null = null;
                     </>
                   )}
                 </Group>
-                <Group title="数据体检（只读诊断）" icon={<Info size={16} />}>
-                  <Block itemId="history-data-health" name="一致性检查" desc="只读检查正文文件、历史快照、未归属记录与引用资源，不会自动修复。发现问题请从备份或云端恢复。">
-                    <div className="config-block__actions">
-                      <button className="ln-btn ln-btn--secondary" onClick={() => void runHealth()} disabled={healthCheck.busy}><Search size={14} /> {healthCheck.busy ? "检查中…" : "运行检查"}</button>
-                      {health && !healthCheck.busy && (
-                        <span className="config-stats"><span>笔记 {health.notesChecked}，快照 {health.historyChecked}，未归属记录 {health.orphanRowsChecked}，树节点 {health.treeChecked}</span></span>
-                      )}
-                    </div>
-                    {health && (
-                      <div className="checks">
-                        {health.notesMissingFile.length === 0 && health.notesHashMismatch.length === 0 && health.historyMissingFile === 0 && health.orphanRowsFileMissing.length === 0 && health.refsMissingResource.length === 0 && health.treeDanglingParent.length === 0 ? (
-                          <div className="checks__row checks__row--ok">✓ 全部正常：正文文件、历史快照、未归属记录、引用资源与目录树均一致。</div>
-                        ) : (
-                          <>
-                            {health.notesMissingFile.length > 0 && <div className="checks__row checks__row--error">✗ {health.notesMissingFile.length} 篇笔记正文文件缺失（首 3：{health.notesMissingFile.slice(0, 3).map((n) => n.title).join("、")}）</div>}
-                            {health.notesHashMismatch.length > 0 && <div className="checks__row checks__row--error">✗ {health.notesHashMismatch.length} 篇正文与基线哈希不符（可能被外部改动）</div>}
-                            {health.historyMissingFile > 0 && <div className="checks__row checks__row--warn">✗ {health.historyMissingFile} 份历史快照文件缺失（恢复对应版本时会失败）</div>}
-                            {health.orphanRowsFileMissing.length > 0 && <div className="checks__row checks__row--warn">✗ {health.orphanRowsFileMissing.length} 条未归属记录的文件缺失（记录与文件不一致）</div>}
-                            {health.refsMissingResource.length > 0 && <div className="checks__row checks__row--error">✗ 正文引用的 {health.refsMissingResource.length} 个资源文件缺失（首 3：{health.refsMissingResource.slice(0, 3).map((r) => r.filename).join("、")}）</div>}
-                          {health.treeDanglingParent.length > 0 && <div className="checks__row checks__row--error">✗ {health.treeDanglingParent.length} 个节点的父目录不存在（侧栏与回收站都看不到它）：{health.treeDanglingParent.slice(0, 3).map((t) => `${t.title}→${t.parentId}`).join("、")}</div>}
-                          </>
-                        )}
-                        <div className="checks__row">
-                          文件↔元数据后台扫描：{health.fileScanIntervalHours && health.fileScanIntervalHours > 0 ? `已启用（每 ${health.fileScanIntervalHours} 小时一次，只报告）` : "未启用（0 = 关闭；手动「重建数据 → 扫描」仍可用）"}
-                          {health.fileReconcile ? `；上次扫描 ${formatDateTime(new Date(health.fileReconcile.generatedAt))}：扫描 ${health.fileReconcile.scannedFiles} 个正文文件、已知笔记 ${health.fileReconcile.knownRows} 条，候选 ${health.fileReconcile.candidateCount} 个${health.fileReconcile.truncated ? "（已截断显示）" : ""}` : "；最近还没有扫描记录"}
-                          。
-                        </div>
-                        <div className="checks__row">生成于 {formatDateTime(new Date(health.checkedAt))}。</div>
-                      </div>
-                    )}
-                    <Item itemId="data-scan-interval" name="后台扫描间隔（小时）" desc="低频文件↔元数据扫描：只报告、不写库/不重建；默认 24 小时。0 = 关闭后台扫描（手动「重建数据 → 扫描」仍可用）。"><NumField label="后台扫描间隔（小时）" min={0} max={720} value={scanIntervalHours ?? health?.fileScanIntervalHours ?? 24} onSave={(v) => saveScanInterval(v)} floor={0} fallback={24} /></Item>
-                  </Block>
-                </Group>
-                <Group title="数据恢复（手动）" icon={<Archive size={16} />}>
-                  <Block itemId="data-rebuild" name="重建数据" desc="当正文文件还在、笔记行丢失（文件↔元数据候选）时，从正文手动重建元数据行：只补笔记行并标为待同步，不改写、不删除任何正文文件；只允许重建本次扫描出的候选，正文不可解析的条目会被拒绝。">
-                    <RebuildDataBlock scan={() => native.scanRebuildCandidates()} rebuild={(ids) => native.rebuildOrphanNotes(ids)} confirm={confirm} />
-                  </Block>
-                </Group>
               </>
             )}
 
@@ -914,6 +881,53 @@ let verifiedS3Fingerprint: string | null = null;
                     </>
                   )}
                 </Group>
+                <Group title="云端回收" icon={<Trash size={16} />}>
+                  {cloudOffline && (
+                    <Block desc={cloudStateHint(cloudState) ?? "云同步未启用：按纯本地空间工作，云端相关操作一律不联网。"} />
+                  )}
+                  <Block itemId="gc-status" name="回收状态" desc="手动清理会立即删除云端已不再被文档或历史引用的对象；自动对账按回收窗口定期执行。清理数量偏少通常是被引用保护，不是漏删。">
+                    <div className="config-block__actions">
+                      <button className="ln-btn ln-btn--secondary" onClick={() => void runGcAction(true)} disabled={gcRun.busy || cloudOffline}>深度清理预览</button>
+                      <button className="ln-btn ln-btn--secondary ln-btn--danger-text" onClick={() => void runGcAction(false)} disabled={gcRun.busy || cloudOffline}>执行深度清理</button>
+                    </div>
+                  </Block>
+                  {gcCfg && (
+                    <>
+                      <Item itemId="gc-retention-days" name="回收窗口（天）" desc="对象被替换/移除后的保护期；0 = 立即到期。"><NumField label="回收窗口（天）" min={0} max={90} value={gcCfg.gcRetentionDays} onSave={(v) => saveGcCfg({ gcRetentionDays: v })}  floor={0} fallback={7} /></Item>
+                      <Item itemId="gc-interval-hours" name="自动对账周期（小时）" desc="自动清理频率；0 = 仅手动。"><NumField label="自动对账周期（小时）" min={0} max={720} value={gcCfg.gcIntervalHours} onSave={(v) => saveGcCfg({ gcIntervalHours: v })}  floor={0} fallback={24} /></Item>
+                    </>
+                  )}
+                  <Block itemId="gc-mirror" name="云端只是镜像" desc="删除云端冗余不影响本地正文/回收站/历史快照（“彻底删除/清空回收站”除外）。" />
+                  <Block itemId="gc-log" name={`删除记录（最近 ${gcLog.length > 0 ? Math.min(gcLog.length, 30) : 0} 条，只读）`}>
+                    {gcLog.length > 0 ? (
+                      <div className="config-readonly">
+                        {gcLog.slice(0, 30).map((l) => <div key={l.id}>{l.ts.slice(0, 19)}&nbsp;[{l.action}，{l.reason}] {l.key}</div>)}
+                      </div>
+                    ) : (
+                      <div className="block__text">暂无删除记录。</div>
+                    )}
+                  </Block>
+                </Group>
+                <Group title="同步诊断" icon={<Terminal size={16} />}>
+                  <Block itemId="sync-diagnostics" name="最近 3 轮同步" desc="每轮同步的耗时、对象数与失败项（只保存在本机，不上传）。反馈同步变慢或失败时，可复制后发给维护者。">
+                    {syncDiagText ? (
+                      <div className="config-readonly">
+                        {syncDiagText.split("\n").map((line, i) => <div key={i}>{line.trim() ? line : "\u00a0"}</div>)}
+                      </div>
+                    ) : (
+                      <div className="block__text">本机还没有同步记录。</div>
+                    )}
+                    <div className="config-block__actions">
+                      <button className="ln-btn ln-btn--secondary" onClick={() => void copySyncDiagnostics()} disabled={!syncDiagText}>复制同步诊断</button>
+                    </div>
+                    {syncDiagMsg && <div className="block__text">{syncDiagMsg}</div>}
+                  </Block>
+                </Group>
+              </>
+            )}
+
+            {category === "backup" && (
+              <>
                 <Group title="备份与恢复" icon={<Archive size={16} />}>
                   <Block itemId="backup-export" name="整库备份" desc="数据库 + 全部笔记/资源/历史快照 + 小记，导出到所选目录（不覆盖非空目录）。">
                     <div className="config-block__actions">
@@ -960,52 +974,49 @@ let verifiedS3Fingerprint: string | null = null;
                   </Block>
                   {backupText && <Block name={backupText} />}
                 </Group>
-                <Group title="云端回收" icon={<Trash size={16} />}>
-                  {cloudOffline && (
-                    <Block desc={cloudStateHint(cloudState) ?? "云同步未启用：按纯本地空间工作，云端相关操作一律不联网。"} />
-                  )}
-                  <Block itemId="gc-status" name="回收状态" desc="手动清理会立即删除云端已不再被文档或历史引用的对象；自动对账按回收窗口定期执行。清理数量偏少通常是被引用保护，不是漏删。">
-                    <div className="config-block__actions">
-                      <button className="ln-btn ln-btn--secondary" onClick={() => void runGcAction(true)} disabled={gcRun.busy || cloudOffline}>深度清理预览</button>
-                      <button className="ln-btn ln-btn--secondary ln-btn--danger-text" onClick={() => void runGcAction(false)} disabled={gcRun.busy || cloudOffline}>执行深度清理</button>
-                    </div>
-                  </Block>
-                  {gcCfg && (
-                    <>
-                      <Item itemId="gc-retention-days" name="回收窗口（天）" desc="对象被替换/移除后的保护期；0 = 立即到期。"><NumField label="回收窗口（天）" min={0} max={90} value={gcCfg.gcRetentionDays} onSave={(v) => saveGcCfg({ gcRetentionDays: v })}  floor={0} fallback={7} /></Item>
-                      <Item itemId="gc-interval-hours" name="自动对账周期（小时）" desc="自动清理频率；0 = 仅手动。"><NumField label="自动对账周期（小时）" min={0} max={720} value={gcCfg.gcIntervalHours} onSave={(v) => saveGcCfg({ gcIntervalHours: v })}  floor={0} fallback={24} /></Item>
-                    </>
-                  )}
-                  <Block itemId="gc-mirror" name="云端只是镜像" desc="删除云端冗余不影响本地正文/回收站/历史快照（“彻底删除/清空回收站”除外）。" />
-                  <Block itemId="gc-log" name={`删除记录（最近 ${gcLog.length > 0 ? Math.min(gcLog.length, 30) : 0} 条，只读）`}>
-                    {gcLog.length > 0 ? (
-                      <div className="config-readonly">
-                        {gcLog.slice(0, 30).map((l) => <div key={l.id}>{l.ts.slice(0, 19)}&nbsp;[{l.action}，{l.reason}] {l.key}</div>)}
-                      </div>
-                    ) : (
-                      <div className="block__text">暂无删除记录。</div>
-                    )}
-                  </Block>
-                </Group>
-                <Group title="同步诊断" icon={<Terminal size={16} />}>
-                  <Block itemId="sync-diagnostics" name="最近 3 轮同步" desc="每轮同步的耗时、对象数与失败项（只保存在本机，不上传）。反馈同步变慢或失败时，可复制后发给维护者。">
-                    {syncDiagText ? (
-                      <div className="config-readonly">
-                        {syncDiagText.split("\n").map((line, i) => <div key={i}>{line.trim() ? line : "\u00a0"}</div>)}
-                      </div>
-                    ) : (
-                      <div className="block__text">本机还没有同步记录。</div>
-                    )}
-                    <div className="config-block__actions">
-                      <button className="ln-btn ln-btn--secondary" onClick={() => void copySyncDiagnostics()} disabled={!syncDiagText}>复制同步诊断</button>
-                    </div>
-                    {syncDiagMsg && <div className="block__text">{syncDiagMsg}</div>}
-                  </Block>
-                </Group>
               </>
             )}
 
-            {category === "trash" && (
+            {category === "maintenance" && (
+              <>
+                <Group title="数据体检（只读诊断）" icon={<Info size={16} />}>
+                  <Block itemId="history-data-health" name="一致性检查" desc="只读检查正文文件、历史快照、未归属记录与引用资源，不会自动修复。发现问题请从备份或云端恢复。">
+                    <div className="config-block__actions">
+                      <button className="ln-btn ln-btn--secondary" onClick={() => void runHealth()} disabled={healthCheck.busy}><Search size={14} /> {healthCheck.busy ? "检查中…" : "运行检查"}</button>
+                      {health && !healthCheck.busy && (
+                        <span className="config-stats"><span>笔记 {health.notesChecked}，快照 {health.historyChecked}，未归属记录 {health.orphanRowsChecked}，树节点 {health.treeChecked}</span></span>
+                      )}
+                    </div>
+                    {health && (
+                      <div className="checks">
+                        {health.notesMissingFile.length === 0 && health.notesHashMismatch.length === 0 && health.historyMissingFile === 0 && health.orphanRowsFileMissing.length === 0 && health.refsMissingResource.length === 0 && health.treeDanglingParent.length === 0 ? (
+                          <div className="checks__row checks__row--ok">✓ 全部正常：正文文件、历史快照、未归属记录、引用资源与目录树均一致。</div>
+                        ) : (
+                          <>
+                            {health.notesMissingFile.length > 0 && <div className="checks__row checks__row--error">✗ {health.notesMissingFile.length} 篇笔记正文文件缺失（首 3：{health.notesMissingFile.slice(0, 3).map((n) => n.title).join("、")}）</div>}
+                            {health.notesHashMismatch.length > 0 && <div className="checks__row checks__row--error">✗ {health.notesHashMismatch.length} 篇正文与基线哈希不符（可能被外部改动）</div>}
+                            {health.historyMissingFile > 0 && <div className="checks__row checks__row--warn">✗ {health.historyMissingFile} 份历史快照文件缺失（恢复对应版本时会失败）</div>}
+                            {health.orphanRowsFileMissing.length > 0 && <div className="checks__row checks__row--warn">✗ {health.orphanRowsFileMissing.length} 条未归属记录的文件缺失（记录与文件不一致）</div>}
+                            {health.refsMissingResource.length > 0 && <div className="checks__row checks__row--error">✗ 正文引用的 {health.refsMissingResource.length} 个资源文件缺失（首 3：{health.refsMissingResource.slice(0, 3).map((r) => r.filename).join("、")}）</div>}
+                          {health.treeDanglingParent.length > 0 && <div className="checks__row checks__row--error">✗ {health.treeDanglingParent.length} 个节点的父目录不存在（侧栏与回收站都看不到它）：{health.treeDanglingParent.slice(0, 3).map((t) => `${t.title}→${t.parentId}`).join("、")}</div>}
+                          </>
+                        )}
+                        <div className="checks__row">
+                          文件↔元数据后台扫描：{health.fileScanIntervalHours && health.fileScanIntervalHours > 0 ? `已启用（每 ${health.fileScanIntervalHours} 小时一次，只报告）` : "未启用（0 = 关闭；手动「重建数据 → 扫描」仍可用）"}
+                          {health.fileReconcile ? `；上次扫描 ${formatDateTime(new Date(health.fileReconcile.generatedAt))}：扫描 ${health.fileReconcile.scannedFiles} 个正文文件、已知笔记 ${health.fileReconcile.knownRows} 条，候选 ${health.fileReconcile.candidateCount} 个${health.fileReconcile.truncated ? "（已截断显示）" : ""}` : "；最近还没有扫描记录"}
+                          。
+                        </div>
+                        <div className="checks__row">生成于 {formatDateTime(new Date(health.checkedAt))}。</div>
+                      </div>
+                    )}
+                    <Item itemId="data-scan-interval" name="后台扫描间隔（小时）" desc="低频文件↔元数据扫描：只报告、不写库/不重建；默认 24 小时。0 = 关闭后台扫描（手动「重建数据 → 扫描」仍可用）。"><NumField label="后台扫描间隔（小时）" min={0} max={720} value={scanIntervalHours ?? health?.fileScanIntervalHours ?? 24} onSave={(v) => saveScanInterval(v)} floor={0} fallback={24} /></Item>
+                  </Block>
+                </Group>
+                <Group title="数据恢复（手动）" icon={<Archive size={16} />}>
+                  <Block itemId="data-rebuild" name="重建数据" desc="当正文文件还在、笔记行丢失（文件↔元数据候选）时，从正文手动重建元数据行：只补笔记行并标为待同步，不改写、不删除任何正文文件；只允许重建本次扫描出的候选，正文不可解析的条目会被拒绝。">
+                    <RebuildDataBlock scan={() => native.scanRebuildCandidates()} rebuild={(ids) => native.rebuildOrphanNotes(ids)} confirm={confirm} />
+                  </Block>
+                </Group>
               <Group title="回收站" icon={<Trash size={16} />}>
                 {gcCfg && (
                   <Item itemId="trash-auto-purge-days" name="回收站自动过期（天）" desc="0 = 关闭。到期后自动彻底删除（含云端），不可撤销；需要保留请在到期前恢复。">
@@ -1014,9 +1025,12 @@ let verifiedS3Fingerprint: string | null = null;
                 )}
                 <Block desc="回收站内容随云同步到所有设备；彻底删除会同时删除云端数据且不可撤销。" />
               </Group>
-            )}
-
-            {category === "browser" && (
+              <Group title="全文搜索" icon={<Search size={16} />}>
+                <Item itemId="search-rebuild" name="重建全文搜索索引" desc="标题与正文的全文索引（FTS5，中文单字分词），平时自动维护；索引异常或更换分词器后可手动重建。">
+                  {searchText && <span className="ln-label__text">{searchText}</span>}
+                  <button className="ln-btn ln-btn--secondary" disabled={searchIndex.busy} onClick={() => void rebuildSearchIndex()}>{searchIndex.busy ? "重建中…" : "重建"}</button>
+                </Item>
+              </Group>
               <Group title="浏览器端" icon={<Globe size={16} />}>
                 <Switch itemId="browser-enabled" name="启用浏览器端" desc="在本机浏览器中打开 LakexLocalNotes（与桌面端同一份本地数据）。只监听 127.0.0.1，不向局域网开放；开关即时生效，应用重启后恢复为关闭。" checked={webStatus?.enabled ?? false} disabled={!webStatus || webRun.busy} onChange={(checked) => void setWeb(checked)} />
                 <Block name="这是什么" desc="浏览器端不向局域网开放：它把桌面端的同一份本地库通过本机地址 http://127.0.0.1:19880/ 交给浏览器，数据不经过网络。打开开关后，用浏览器访问该地址即可。" />
@@ -1027,17 +1041,6 @@ let verifiedS3Fingerprint: string | null = null;
                   </Item>
                 )}
                 {webText && <Block desc={webText} />}
-              </Group>
-            )}
-
-            {category === "logs" && (
-              <>
-              {/* 261006：索引重建从「资源」挪到「日志」（维护动作归一处，后续再整理） */}
-              <Group title="全文搜索" icon={<Search size={16} />}>
-                <Item itemId="search-rebuild" name="重建全文搜索索引" desc="标题与正文的全文索引（FTS5，中文单字分词），平时自动维护；索引异常或更换分词器后可手动重建。">
-                  {searchText && <span className="ln-label__text">{searchText}</span>}
-                  <button className="ln-btn ln-btn--secondary" disabled={searchIndex.busy} onClick={() => void rebuildSearchIndex()}>{searchIndex.busy ? "重建中…" : "重建"}</button>
-                </Item>
               </Group>
               <Group title="应用日志（只读）" icon={<Terminal size={16} />}>
                 <Block itemId="logs-main" name="主进程日志" desc="同步、回收站与历史清理过程写入 userData/logs/lakex-local-notes.log；按关键字过滤，每条命中附带上下文。">
