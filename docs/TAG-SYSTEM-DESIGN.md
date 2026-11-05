@@ -1,14 +1,19 @@
-# 标签子系统（现状契约，261025 起；261105 修订）
+# 标签子系统（现状契约，261025 起；261105 修订 / 261105 二次修订：删除=缺席）
 
 > 本文记录**当前实现**（不是提案）。历史提案（独立 tags pointer、文档标签同步、置顶）未落地或已撤销；待办见 HANDOFF §3。
 
 ## 1. 数据模型（两端共用 `src/core/quickNoteTags.ts`）
 
 ```
-tags(id PK, name, sort_order, created_at, updated_at, deleted_at)
+tags(id PK, name, sort_order, created_at, updated_at)   -- 无删除标记：删除 = 行不存在（deleted_at 列仅为旧库残留，代码不读不写）
 tag_links(target_kind, target_id, tag_id, position)  PK(kind,target,tag)
 tag_link_versions(target_kind, target_id, links_updated_at)  PK(kind,target)
 ```
+
+> **删除 = 缺席（261105 用户定稿）**：删除标签是**物理删除**目录行 + 清 `tag_links`/`tag_link_versions`（桌面还清
+> `target_kind=note` 的文档标签关联）。**云端 `tags[]` 只出现 active 标签**——不允许墓碑进 S3 列表
+> （「S3 列表表不得出现永久存在的条目」）。冲突按**删除压编辑**（与文档 purge 同口径）。
+> 旧库若残留 `deleted_at` 行，启动时一次性迁移：先把 id 写进本机待删，再物理删行，然后置 `device_state.tag_absent_migrated=1`。
 
 - **正文不存标签名**；目录与关联是唯一事实，搜索索引里的标签名只是派生缓存（可重建）。
 - 标签 ID = `t_` + sha256(归一化名称) 前 16 hex；名称 NFC/trim/空白压缩，≤32 字符；每条 ≤20 个标签；同名 active 唯一（应用层校验）。
@@ -24,11 +29,12 @@ tag_link_versions(target_kind, target_id, links_updated_at)  PK(kind,target)
 
 ## 3. 同步（v3 quick-notes 索引，无独立标签空间）
 
-- 目录随 quick-notes 索引的可选 `tags[]` 发布（只含 id/name/createdAt/updatedAt/deletedAt；旧索引的 `pinned/sortOrder` 发布时剔除）。
+- 目录随 quick-notes 索引的可选 `tags[]` 发布（**只含 active**：id/name/createdAt/updatedAt；旧索引残留的 `pinned/sortOrder/deletedAt` 一律不进发布，读取时按字段白名单丢弃 ⇒ 墓碑条目等价于缺席）。
 - 每条小记关系随条目 `tagIds`（排序集合）+ `tagsUpdatedAt`（LWW）传播；正文 hash 不变也传播。
-- **目录合并**：按 ID + `updatedAt` LWW；同一 `updatedAt` 用确定性 tie-break（name/createdAt/deletedAt），保证两端选出同一赢家。
-- **本机顺序不被合并覆盖**：目录合并只写名称/墓碑/时间；远端新标签在手动排序下游标末尾，未手动排序时按 createdAt 进默认序列。
-- **墓碑即删除**：合并到 `deletedAt` 的标签会清掉本机关联并推进关系版本；关联应用时过滤墓碑 ID。
+- **目录合并（三方判定）**：① 基线有 / 远端缺席 ⇒ **他端已删除**（删除压编辑）⇒ 删本地；② 本机待删（`device_state.tag_deleted`，离线删过、还没确认远端缺席）⇒ 一律按已删处理，远端重发也不复活；③ 其余按 ID + `updatedAt` LWW；同一 `updatedAt` 用确定性 tie-break（name/createdAt），保证两端选出同一赢家。
+- **本机顺序不被合并覆盖**：目录合并只写名称/时间；远端新标签在手动排序下追加末尾，未手动排序时按 createdAt 进默认序列。
+- **待删结算**：远端索引已不含该 id ⇒ 解除抑制（`quickTagSettled`），之后同名标签可重建。**待删集合只在本机**（不上传、不进 v3 状态信封）。
+- 索引侧硬上限 `S3V3_MAX_TAGS = 5000`（校验层拒绝超限目录）。
 
 ## 4. 搜索
 

@@ -197,7 +197,46 @@ export async function restoreTreeItem(
   });
 }
 
-export async function purgeTreeItem(d: MobileDb, id: string, kind: "folder" | "note"): Promise<void> {
+/** 自动过期守卫（回收站自动清理专用；手动「彻底删除」不传，行为不变）。 */
+export interface PurgeTreeItemOptions {
+  /**
+   * 只在该行**此刻仍位于回收站**、且删除时刻早于该 ISO 时刻时才执行（否则什么都不做，返回 false）。
+   *
+   * 为什么必须带守卫：自动过期的候选列表是**事务外**读的（bridge.listTrashTree），期间用户可能
+   * 刚点了「恢复」。purge 与 restore 同在写域串行 ⇒ 进事务后按最新 trashed_at 重判一次，
+   * 就能保证「用户恢复赢、绝不删刚恢复的条目」（后台动作不得越过用户的显式撤销）。
+   */
+  expiredBefore?: string;
+}
+
+/** 行的回收站删除时刻（folders 优先、notes 次之；行不存在 = null）。 */
+async function readTrashedAt(d: MobileDb, id: string): Promise<string | null> {
+  const folder = await d.prepare("SELECT trashed_at FROM folders WHERE id=?").get(id) as { trashed_at: string | null } | undefined;
+  if (folder) return folder.trashed_at ?? null;
+  const note = await d.prepare("SELECT trashed_at FROM notes WHERE id=?").get(id) as { trashed_at: string | null } | undefined;
+  return note?.trashed_at ?? null;
+}
+
+/** 到期判定：用 Date.parse 比较（容忍历史时间戳格式差异；任一侧非法 ⇒ 不删，宁可留着）。 */
+function isTrashedBefore(trashedAt: string | null, cutoff: string): boolean {
+  if (!trashedAt) return false;
+  const at = Date.parse(trashedAt);
+  const cut = Date.parse(cutoff);
+  return Number.isFinite(at) && Number.isFinite(cut) && at < cut;
+}
+
+/**
+ * 彻底删除回收站条目（含子树）。返回是否真的删了：
+ * - true = 本次写了墓碑并物理删行（文件清理在事务外，失败只告警）；
+ * - false = 传了 expiredBefore 且守卫不满足（已恢复 / 未到期 / 行已不存在）。
+ * 手动「彻底删除」不传 options ⇒ 与旧行为一致（用户点了就删，不看 trashed_at）。
+ */
+export async function purgeTreeItem(
+  d: MobileDb,
+  id: string,
+  kind: "folder" | "note",
+  options: PurgeTreeItemOptions = {},
+): Promise<boolean> {
   /** 事务外删除的正文/历史文件（事务内只删 DB 行；文件删除幂等、失败不阻断）。 */
   const purgedNoteIds: string[] = [];
   const historyFiles: string[] = [];
@@ -205,7 +244,9 @@ export async function purgeTreeItem(d: MobileDb, id: string, kind: "folder" | "n
     const rows = await d.prepare("SELECT file_path FROM note_history WHERE note_id=?").all(noteId) as Array<{ file_path: string }>;
     for (const row of rows) historyFiles.push(row.file_path);
   };
-  await d.transaction(async () => {
+  const purged = await d.transaction(async () => {
+    // 自动过期守卫：必须在**事务内**按最新 trashed_at 重判（候选列表是事务外读的，其间可能已被恢复）。
+    if (options.expiredBefore !== undefined && !isTrashedBefore(await readTrashedAt(d, id), options.expiredBefore)) return false;
     const now = new Date().toISOString();
     const statements: MobileBatchStatement[] = [];
     const tombstone = (id: string, title: string, parentId: string | null, sortOrder: number, updatedAt: string, nodeType: "note" | "folder"): void => {
@@ -222,12 +263,14 @@ export async function purgeTreeItem(d: MobileDb, id: string, kind: "folder" | "n
       statements.push({ statement: "DELETE FROM notes WHERE id=?", values: [id] });
       statements.push({ statement: "DELETE FROM note_history WHERE note_id=?", values: [id] });
       await executeBatchInTransaction(d, statements);
-      return;
+      return true;
     }
 
     const allFolders = await d.prepare("SELECT id, parent_id FROM folders").all() as Array<{ id: string; parent_id: string | null }>;
     const allNotes = await d.prepare("SELECT id, parent_id FROM notes").all() as Array<{ id: string; parent_id: string | null }>;
     const subtree = collectSubtree(allFolders, allNotes, id);
+    // 根已不存在 ⇒ 什么都没删（返回 false，供自动过期计数；手动删除不关心返回值）。
+    if (subtree.allIds.size === 0) return false;
     for (const fid of subtree.folderIds) {
       const f = await d.prepare("SELECT title, parent_id, sort_order, updated_at FROM folders WHERE id=?").get(fid) as { title: string; parent_id: string | null; sort_order: number; updated_at: string } | undefined;
       if (f) tombstone(fid, f.title, f.parent_id, f.sort_order, f.updated_at, "folder");
@@ -245,7 +288,10 @@ export async function purgeTreeItem(d: MobileDb, id: string, kind: "folder" | "n
       statements.push({ statement: "DELETE FROM note_history WHERE note_id=?", values: [n.id] });
     }
     await executeBatchInTransaction(d, statements);
+    return true;
   });
+  // 守卫不满足（已恢复/未到期）⇒ 一行未动，也**不删文件**（用户恢复的条目必须完整）。
+  if (!purged) return false;
   // 文件删除放在事务外：失败只留孤儿文件，不影响"已彻底删除"的 DB 判定。
   for (const noteId of purgedNoteIds) {
     await deleteNoteBodies(noteId).catch(() => undefined);
@@ -257,4 +303,5 @@ export async function purgeTreeItem(d: MobileDb, id: string, kind: "folder" | "n
     });
   }
   for (const filePath of historyFiles) await deleteHistorySnapshot(filePath).catch(() => undefined);
+  return true;
 }

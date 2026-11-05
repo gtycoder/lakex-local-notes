@@ -25,6 +25,7 @@ import { whenQuickNoteLaunchResolved } from "../native/quickNoteShortcut";
 import { reportNativeActionError } from "../../lib/nativeErrors";
 import { hasInterruptedSync } from "../sync/syncResumeMarker";
 import { runScheduledHistoryCleanup } from "../sync/historyCleanupScheduler";
+import { runScheduledTrashPurge, TRASH_AUTO_PURGE_DAYS } from "../sync/trashAutoPurge";
 import { ensureDb } from "../bridge/context";
 
 /**
@@ -93,6 +94,26 @@ export function useAutoSync(ready = true): void {
         .finally(() => { historyCleanupRunning = false; });
     };
 
+    /**
+     * 回收站自动过期（桌面同口径：启动即查一次 + 每天一次；移动端没有可靠常驻定时器 ⇒
+     * 「就绪」「回前台」各跑一次，不设 setInterval）。纯本地维护、不出网，**独立于同步档位与
+     * 续传判定**（放在续传提前返回之前），失败静默 + 日志，绝不打扰正在编辑的用户。
+     * 阈值固定 90 天（移动端无设置项，理由见 sync/trashAutoPurge.ts 文件头）。
+     * capture 会话（长按小记的「假单独模块」）同样不跑：那次会话不替用户做任何后台事，
+     * 下次正常启动/回前台会补上（回收站条目不会因此提前/延后到期，只是晚一次扫描）。
+     */
+    const runTrashPurgeOnce = () => {
+      void runScheduledTrashPurge({
+        listTrash: () => bridge.listTrashTree(),
+        purge: (root, expiredBefore) => bridge.purgeTreeItem(root.id, root.kind, { expiredBefore }),
+      })
+        .then((result) => {
+          if (result.purged > 0) console.info(`[trash] 自动过期 purge ${result.purged} 项（>${TRASH_AUTO_PURGE_DAYS} 天）`);
+          if (result.failed > 0) console.warn(`[trash] 自动过期有 ${result.failed} 项失败（下次回前台再试）`);
+        })
+        .catch((error) => console.warn("[trash] 自动过期失败（下次回前台再试）", error));
+    };
+
     // 开/关应用补同步（261013：interval 也补，manual 不补；与桌面「应用就绪 + 退出前」对应）。
     let foregroundHandler: (() => void) | null = null;
     let backgroundHandler: (() => void) | null = null;
@@ -100,6 +121,8 @@ export function useAutoSync(ready = true): void {
       foregroundHandler = () => {
         void (async () => {
           if (await isCaptureSession()) return; // 「假单独模块」：这次会话不主动同步
+          // 回收站自动过期（本地维护，不出网）：不跟同步档位、也不被续传提前返回跳过。
+          runTrashPurgeOnce();
           // 派生索引后台自愈（261026）：同步批量导入不再逐篇建 FTS，这里补齐；
           // 已完成时只是两次 COUNT，开销可忽略；后台补一半被杀，下次进来自动接着补。
           void bridge.ensureSearchIndex().catch(() => undefined);

@@ -801,7 +801,7 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
   // 草稿里引用的标签可能被删除（标签管理或同步墓碑）：删掉后从草稿与基线一起剔除，
   // 否则保存时 setQuickNoteTags 会因「标签不存在或已删除」直接失败、卡住整次保存。
   useEffect(() => {
-    const active = new Set(tagDirectory.filter((tag) => !tag.deletedAt).map((tag) => tag.id));
+    const active = new Set(tagDirectory.map((tag) => tag.id));
     const prune = (draft: DraftState | null): DraftState | null => {
       if (!draft) return null;
       const tagIds = draft.tagIds.filter((id) => active.has(id));

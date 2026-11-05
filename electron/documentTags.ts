@@ -34,8 +34,9 @@ export class DocumentTagsService {
     `);
   }
 
-  list(options: { includeDeleted?: boolean } = {}): QuickNoteTag[] {
-    return this.catalog.list(options);
+  /** 目录列表：删除 = 缺席（261105），表里只剩 active 行，没有「含墓碑」选项。 */
+  list(): QuickNoteTag[] {
+    return this.catalog.list();
   }
 
   create(name: string): QuickNoteTag {
@@ -50,24 +51,31 @@ export class DocumentTagsService {
     return this.catalog.reorder(orderedIds);
   }
 
-  /** 删除标签：目录写墓碑 + 清掉该标签在所有目标（文档/小记）上的关联。 */
-  delete(id: string, at = new Date().toISOString()): number {
-    this.catalog.tombstone(id, at);
+  /**
+   * 删除标签（261105 定稿：**删除 = 缺席**）：物理删目录行 + 清掉该标签在所有目标
+   * （文档/小记）上的关联，并按定稿**清掉受影响目标的关系版本**（不再写 deleted_at 墓碑）。
+   * 桌面文档标签**不参与同步** ⇒ 不记本机待删（pending 只服务小记标签目录的 S3 同步）。
+   */
+  delete(id: string): number {
     return this.db.transaction(() => {
+      // 先取受影响目标再删：删完就查不到了。
       const rows = this.db.prepare("SELECT target_kind, target_id FROM tag_links WHERE tag_id=?").all(id) as Array<{ target_kind: string; target_id: string }>;
+      this.catalog.remove(id); // 不存在 ⇒ NotFound（回滚整个事务）
       this.db.prepare("DELETE FROM tag_links WHERE tag_id=?").run(id);
-      for (const row of rows) this.bump(row.target_kind, row.target_id, at);
+      for (const row of rows) {
+        this.db.prepare("DELETE FROM tag_link_versions WHERE target_kind=? AND target_id=?").run(row.target_kind, row.target_id);
+      }
       return rows.length;
     })();
   }
 
-  /** 合并：源标签关联改指目标，源写墓碑。 */
+  /** 合并：源标签关联改指目标，源标签**物理删除**（删除 = 缺席）。 */
   merge(sourceId: string, targetId: string, at = new Date().toISOString()): number {
     if (sourceId === targetId) return 0;
     this.catalog.assertExist([targetId]);
-    this.catalog.tombstone(sourceId, at);
     return this.db.transaction(() => {
       const rows = this.db.prepare("SELECT target_kind, target_id FROM tag_links WHERE tag_id=?").all(sourceId) as Array<{ target_kind: string; target_id: string }>;
+      this.catalog.remove(sourceId); // 物理删除（删除 = 缺席）；不存在 ⇒ NotFound，事务回滚
       for (const row of rows) {
         const position = this.db.prepare("SELECT position FROM tag_links WHERE target_kind=? AND target_id=? AND tag_id=?").get(row.target_kind, row.target_id, sourceId) as { position?: number } | undefined;
         // 目标已有关联则直接删源，避免重复；否则改指向

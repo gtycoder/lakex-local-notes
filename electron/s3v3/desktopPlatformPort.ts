@@ -35,9 +35,10 @@ export function createDesktopPlatformPort(store: Store, quickNotes?: QuickNotesS
     },
     async listQuickTags(): Promise<QuickTagRow[]> {
       if (!qn) return [];
-      return qn.tags.list({ includeDeleted: true }).map((t) => ({
+      // 删除 = 缺席（261105）：表里只剩 active 行，**没有墓碑**；顺序是设备本地视图，不发布。
+      return qn.tags.list().map((t) => ({
         id: t.id, name: t.name,
-        createdAt: t.createdAt, updatedAt: t.updatedAt, ...(t.deletedAt ? { deletedAt: t.deletedAt } : {}),
+        createdAt: t.createdAt, updatedAt: t.updatedAt,
       }));
     },
     /** 桌面旧口径：quickDeletes 含已 purge 行（保持迁移前行为，由引擎用 quickPurges 区分不可恢复）。 */
@@ -140,31 +141,24 @@ export function createDesktopPlatformPort(store: Store, quickNotes?: QuickNotesS
       if (!qn) return;
       qn.applyRemoteQuickNoteTagLinks(quickNoteId, tagIds, tagsUpdatedAt);
     },
-    async mergeQuickTags(tags: QuickTagRow[]): Promise<void> {
+    async mergeQuickTags(tags: QuickTagRow[], removedIds: readonly string[] = []): Promise<void> {
       if (!qn) return;
-      const before = new Map(qn.tags.list({ includeDeleted: true }).map((t) => [t.id, t] as const));
-      qn.tags.mergeRemote(tags.map((t) => ({
-        id: t.id, name: t.name,
-        createdAt: t.createdAt, updatedAt: t.updatedAt, deletedAt: t.deletedAt ?? null,
-      })));
-      // 远端改名/墓碑会改变搜索索引缓存的标签名 ⇒ 只重刷关联到这些标签的小记（不全量重建）。
-      const after = qn.tags.list({ includeDeleted: true });
-      const changed = after
-        .filter((t) => {
-          const previous = before.get(t.id);
-          return !previous || previous.name !== t.name || (previous.deletedAt ?? null) !== (t.deletedAt ?? null);
-        })
-        .map((t) => t.id);
-      if (changed.length > 0) qn.reindexSearchTagsForTags(changed);
-      // 远端墓碑 = 删除：清掉本机关联（否则标签复活时关系会诈尸），并推进关系版本。
-      const tombstoned = after.filter((t) => {
-        const previous = before.get(t.id);
-        return !!t.deletedAt && (!previous || !previous.deletedAt);
-      });
-      for (const tag of tombstoned) {
-        qn.reindexSearchTagsForTags([tag.id]); // 先刷（墓碑名字已不在 active 名称表里）
-        qn.links.removeTag(tag.id);
-      }
+      // 单事务 upsert active 行 + 物理删本轮删除的标签（含清关联/版本、刷搜索索引）全在 QuickNotesStore 里。
+      qn.mergeQuickTags(tags, removedIds);
+    },
+    async listPendingTagDeletes(): Promise<string[]> {
+      // 本机待删（离线删过、远端还没确认缺席）：设备本地 DB 记账，不上传。
+      return qn ? qn.tags.listPendingDeletes() : [];
+    },
+    async addPendingTagDeletes(ids: readonly string[]): Promise<void> {
+      if (!qn) return;
+      // **追加**（幂等）：同步轮进行中用户又删的标签不能被覆盖写丢掉，否则下一轮远端重发就复活。
+      qn.tags.addPendingDeletes(ids);
+    },
+    async settlePendingTagDeletes(ids: readonly string[]): Promise<void> {
+      if (!qn) return;
+      // **结算**：远端已确认缺席的 id 从待删集合移除；空集合由 store 删掉 device_state 行。
+      qn.tags.settlePendingDeletes(ids);
     },
     async purgeQuickNote(quickNoteId: string): Promise<void> {
       requireQuick().purgeQuickNote(quickNoteId);

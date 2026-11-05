@@ -71,6 +71,63 @@ describe("QuickNotesStore", () => {
     }
   });
 
+  it("删除=缺席迁移：旧 deleted_at 墓碑并入本机待删 + 物理删行 + 清关联/版本（只跑一次）", () => {
+    const legacyRoot = fs.mkdtempSync(path.join(os.tmpdir(), "lake-quick-tag-absent-"));
+    const dbPath = path.join(legacyRoot, "quick-notes", "metadata.sqlite3");
+    fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+    const at = "2026-10-01T00:00:00.000Z";
+    const keepId = quickNoteTagId("保留");
+    const goneId = quickNoteTagId("已删");
+    const raw = new Database(dbPath);
+    raw.exec(`
+      CREATE TABLE tags (id TEXT PRIMARY KEY, name TEXT NOT NULL, sort_order INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, deleted_at TEXT);
+      CREATE TABLE device_state (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+      CREATE TABLE tag_links (target_kind TEXT NOT NULL, target_id TEXT NOT NULL, tag_id TEXT NOT NULL, position INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(target_kind, target_id, tag_id));
+      CREATE TABLE tag_link_versions (target_kind TEXT NOT NULL, target_id TEXT NOT NULL, links_updated_at TEXT NOT NULL, PRIMARY KEY(target_kind, target_id));
+    `);
+    const insertTag = raw.prepare("INSERT INTO tags(id,name,sort_order,created_at,updated_at,deleted_at) VALUES(?,?,?,?,?,?)");
+    insertTag.run(keepId, "保留", 0, at, at, null);
+    insertTag.run(goneId, "已删", 1, at, at, at);
+    raw.prepare("INSERT INTO tag_links(target_kind,target_id,tag_id,position) VALUES('quickNote','q1',?,0)").run(goneId);
+    raw.prepare("INSERT INTO tag_link_versions(target_kind,target_id,links_updated_at) VALUES('quickNote','q1',?)").run(at);
+    raw.close();
+
+    const migrated = new QuickNotesStore(legacyRoot);
+    try {
+      // 墓碑行物理删除，只剩 active；墓碑 id 记进待删（旧版已把它发到索引里，不抑制会复活）。
+      expect(migrated.tags.list().map((t) => t.id)).toEqual([keepId]);
+      expect(migrated.tags.listPendingDeletes()).toEqual([goneId]);
+      expect(migrated.links.listFor("q1")).toEqual([]);
+      expect(migrated.links.tagsUpdatedAt("q1")).toBe("");
+      // 迁移标记已落库：再开一次库不会重复迁移，也不会重复并待删。
+      const reopened = new QuickNotesStore(legacyRoot);
+      expect(reopened.tags.list().map((t) => t.id)).toEqual([keepId]);
+      expect(reopened.tags.listPendingDeletes()).toEqual([goneId]);
+    } finally {
+      fs.rmSync(legacyRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("本机待删记账：追加幂等、结算只移除已确认缺席（不覆盖写，避免丢掉同步期间的新删除）", () => {
+    const a = quickNotes.tagService.create("待删A");
+    const b = quickNotes.tagService.create("待删B");
+    quickNotes.tags.addPendingDeletes([a.id]);
+    quickNotes.tags.addPendingDeletes([a.id, b.id]); // 重复追加幂等，新 id 追加
+    expect(quickNotes.tags.listPendingDeletes()).toEqual([a.id, b.id].sort());
+    // 结算只减「远端已确认缺席」的，其余保留（覆盖写会丢掉同步轮进行中用户新删的标签）。
+    quickNotes.tags.settlePendingDeletes([a.id]);
+    expect(quickNotes.tags.listPendingDeletes()).toEqual([b.id]);
+    // 清空 ⇒ device_state 行删除（不残留 "[]" 空壳），之后仍能正常追加。
+    quickNotes.tags.settlePendingDeletes([b.id]);
+    expect(quickNotes.tags.listPendingDeletes()).toEqual([]);
+    const check = new Database(path.join(root, "quick-notes", "metadata.sqlite3"), { readonly: true });
+    try {
+      expect(check.prepare("SELECT value FROM device_state WHERE key='tag_deleted'").get()).toBeUndefined();
+    } finally { check.close(); }
+    quickNotes.tags.addPendingDeletes([a.id]);
+    expect(quickNotes.tags.listPendingDeletes()).toEqual([a.id]);
+  });
+
   it("无标题文字小记保存为独立 .qnote，并按时间线读取", () => {
     const saved = quickNotes.createQuickNote({ text: "临时想法\n第二行", draftId: crypto.randomUUID(), stagedImageIds: [] });
     expect(saved.content.text).toBe("临时想法\n第二行");
@@ -139,35 +196,31 @@ describe("QuickNotesStore", () => {
     expect(quickNotes.readQuickNote(saved.id).content.tags).toEqual([]);
   });
 
-  it("远端标签目录合并：改名/新增/墓碑按 updatedAt 生效，墓碑清掉小记引用", () => {
-    const inspiration = quickNotes.tagService.create("灵感");
-    const todo = quickNotes.tagService.create("待办");
+  it("删除 = 缺席（261105）：物理删行 + 清关联/版本 + 记本机待删，同名重建不撞主键", () => {
+    const tag = quickNotes.tagService.create("待删");
+    const keep = quickNotes.tagService.create("保留");
     const note = quickNotes.createQuickNote({
-      text: "合并目录",
+      text: "删除标签",
       draftId: crypto.randomUUID(),
       stagedImageIds: [],
     });
-    quickNotes.setQuickNoteTags(note.id, [inspiration.id, todo.id]);
-    // 远端时间必须晚于本端标签创建时间，LWW 才应接受（否则测试在真实当前时间会错误地期待远端胜）
-    const at = new Date(Date.now() + 60_000).toISOString();
-    const project = {
-      id: quickNoteTagId("项目"),
-      name: "项目",
-      createdAt: at,
-      updatedAt: at,
-      deletedAt: null,
-    };
-    quickNotes.tagService.applyRemote([
-      { ...inspiration, name: "灵感库", updatedAt: at },
-      { ...todo, updatedAt: at, deletedAt: at },
-      project,
-    ]);
-    // 默认顺序 = 新的在前（project 的 createdAt 最晚）
-    expect(quickNotes.tagService.list().map((tag) => tag.name)).toEqual(["项目", "灵感库"]);
-    expect(quickNotes.readQuickNote(note.id).content.tags).toEqual(["灵感库"]);
-    // 远端墓碑 = 删除：本机关联要清掉（否则标签复活时关系诈尸）
-    expect(quickNotes.links.listFor(note.id)).toEqual([inspiration.id]);
-    expect(quickNotes.search("待办")).toEqual([]);
+    quickNotes.setQuickNoteTags(note.id, [tag.id, keep.id]);
+    expect(quickNotes.search("待删").length).toBe(1);
+    expect(quickNotes.tagService.delete(tag.id).updated).toBe(1);
+    // 目录行**物理删除**（不是墓碑）：目录不再有，小记关联与关系版本一起清掉。
+    expect(quickNotes.tagService.list().map((t) => t.name)).toEqual(["保留"]);
+    expect(quickNotes.links.listFor(note.id)).toEqual([keep.id]);
+    expect(quickNotes.links.tagsUpdatedAt(note.id)).toBe("");
+    // 搜索索引里的标签词要跟着消失（关联已删，必须按受影响小记重刷，不能靠 tag_links 反查）。
+    expect(quickNotes.search("待删")).toEqual([]);
+    // 本机待删记账：同步侧据此抑制远端重发（设备本地，不上传）。
+    expect(quickNotes.tags.listPendingDeletes()).toEqual([tag.id]);
+    // 同名重建：派生 ID 与刚删的完全相同也不会撞主键（旧墓碑会撞）。
+    const again = quickNotes.tagService.create("待删");
+    expect(again.id).toBe(tag.id);
+    expect(quickNotes.tagService.list().map((t) => t.name).sort()).toEqual(["保留", "待删"].sort());
+    // 用户重建 = 撤销删除意图：待删必须清掉，否则下一轮同步会把刚建的行再删一次。
+    expect(quickNotes.tags.listPendingDeletes()).toEqual([]);
   });
 
   it("标签顺序 = 设备本地：默认新的在前；手动排序后按本机顺序；新增追加末尾；远端合并不搬家", () => {
@@ -176,16 +229,17 @@ describe("QuickNotesStore", () => {
     const at3 = "2026-03-01T00:00:00.000Z";
     const oldId = quickNoteTagId("旧");
     const newId = quickNoteTagId("新");
-    quickNotes.tagService.applyRemote([
-      { id: oldId, name: "旧", createdAt: at1, updatedAt: at1, deletedAt: null },
-      { id: newId, name: "新", createdAt: at2, updatedAt: at2, deletedAt: null },
+    quickNotes.mergeQuickTags([
+      { id: oldId, name: "旧", createdAt: at1, updatedAt: at1 },
+      { id: newId, name: "新", createdAt: at2, updatedAt: at2 },
     ]);
     expect(quickNotes.tagService.list().map((tag) => tag.name)).toEqual(["新", "旧"]);
     quickNotes.tagService.reorder([oldId, newId]);
     expect(quickNotes.tagService.list().map((tag) => tag.name)).toEqual(["旧", "新"]);
     quickNotes.tagService.create("更晚");
     expect(quickNotes.tagService.list().map((tag) => tag.name)).toEqual(["旧", "新", "更晚"]);
-    quickNotes.tagService.applyRemote([{ id: newId, name: "新2", createdAt: at2, updatedAt: at3, deletedAt: null }]);
+    // 远端改名只更新名称/时间，**不搬家**（顺序是设备本地视图）。
+    quickNotes.mergeQuickTags([{ id: newId, name: "新2", createdAt: at2, updatedAt: at3 }]);
     expect(quickNotes.tagService.list().map((tag) => tag.name)).toEqual(["旧", "新2", "更晚"]);
   });
 

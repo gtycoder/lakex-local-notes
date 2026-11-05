@@ -37,6 +37,8 @@ export function planStateOf(state: DeviceState): PlanState {
     folderPurgeIntents: [],
     quickDeletes: state.quickDeletes ?? [],
     purgedQuickIds: state.quickPurges ?? [],
+    // 本机待删标签：非空才带（保持既有 toEqual 断言不变）。
+    ...((state.pendingTagDeletes ?? []).length ? { pendingTagDeletes: state.pendingTagDeletes } : {}),
   };
 }
 
@@ -82,13 +84,36 @@ function dropPurgedQuick(state: DeviceState): DeviceState {
   return { ...state, quickNotes: { ...state.quickNotes, items: state.quickNotes.items.filter((q) => !purged.has(q.id)) } };
 }
 
-/** 把合并后的标签目录并进设备状态：**按 ID + 确定性 LWW**（远端改名/墓碑必须能落到本端；顺序是本机视图）。 */
-function mergeQuickTagsIntoState(state: DeviceState, tags: DeviceState["quickNotes"]["tags"] | undefined): DeviceState {
-  if (!tags || tags.length === 0) return state;
-  const local = state.quickNotes.tags ?? [];
-  const merged = mergeQuickNoteTags(local, tags);
-  if (sameQuickNoteTagDirectory(local, merged)) return state;
-  return { ...state, quickNotes: { ...state.quickNotes, tags: merged } };
+/**
+ * 把合并后的标签目录并进设备状态：**按 ID + 确定性 LWW**（远端改名必须能落到本端；顺序是本机视图）。
+ *
+ * 删除 = 缺席（261105）：`removed` 是本轮判定删除的 id（他端已删 / 本机待删），
+ * 一律并入 `pendingTagDeletes` 抑制远端重发；`settled` 是远端已确认缺席的 id，可以解除抑制。
+ */
+function mergeQuickTagsIntoState(
+  state: DeviceState,
+  tags: DeviceState["quickNotes"]["tags"] | undefined,
+  removed: readonly string[] = [],
+  settled: readonly string[] = [],
+): DeviceState {
+  const removedSet = new Set(removed);
+  const pending = new Set(state.pendingTagDeletes ?? []);
+  for (const id of removed) pending.add(id);
+  for (const id of settled) pending.delete(id);
+  const local = (state.quickNotes.tags ?? []).filter((tag) => !removedSet.has(tag.id));
+  const merged = mergeQuickNoteTags(local, tags ?? [], { exclude: removedSet });
+  const tagsChanged = !sameQuickNoteTagDirectory(local, merged);
+  const pendingBefore = state.pendingTagDeletes ?? [];
+  const pendingChanged = pending.size !== pendingBefore.length || [...pending].some((id) => !pendingBefore.includes(id));
+  const settledNow = settled.length > 0;
+  if (!tagsChanged && !pendingChanged && !settledNow) return state;
+  return {
+    ...state,
+    quickNotes: { ...state.quickNotes, tags: merged },
+    ...(pending.size > 0 ? { pendingTagDeletes: [...pending].sort() } : { pendingTagDeletes: [] }),
+    // 结算集合只在内存里过一手（saveState 消费后由端口从待删表移除；不落库）。
+    ...(settledNow ? { tagPendingSettled: [...settled] } : {}),
+  };
 }
 
 export function mergeRoundIntoState(state: DeviceState, round: RoundResult, opts: { bodyFailed?: ReadonlySet<string> } = {}): DeviceState {
@@ -98,7 +123,12 @@ export function mergeRoundIntoState(state: DeviceState, round: RoundResult, opts
   const cloudDeleted = new Set(lifecycle.filter((w) => w.lifecycle === "cloud-deleted").map((w) => w.id));
   const quickPurged = new Set(round.plan.writes.filter((w) => w.kind === "quick-purge").map((w) => w.id));
   const quickDeleted = new Set(round.plan.writes.filter((w) => w.kind === "quick-soft-delete").map((w) => w.id));
-  const sd0 = mergeQuickTagsIntoState(dropPurgedQuick(applyCloudDeleted(state, cloudDeleted)), round.plan.quickTags);
+  const sd0 = mergeQuickTagsIntoState(
+    dropPurgedQuick(applyCloudDeleted(state, cloudDeleted)),
+    round.plan.quickTags,
+    round.plan.quickTagRemoved,
+    round.plan.quickTagSettled,
+  );
   let sd = sd0;
   if (quickDeleted.size > 0) {
     sd = {

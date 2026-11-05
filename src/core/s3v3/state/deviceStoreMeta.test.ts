@@ -112,8 +112,8 @@ describe("createDeviceStoreMeta.loadState（内存端口等价）", () => {
         { id: "q1", createdAt: "T0", updatedAt: "T0", contentHash: H("c"), isConflict: false, tagIds: ["t1"], tagsUpdatedAt: "T3" },
       ],
       quickTags: [
-        { id: "t1", name: "标签", sortOrder: 0, pinned: true, createdAt: "T0", updatedAt: "T0", deletedAt: null },
-        { id: "t2", name: "已删", sortOrder: 1, pinned: false, createdAt: "T0", updatedAt: "T0", deletedAt: "T4" },
+        { id: "t1", name: "标签", createdAt: "T0", updatedAt: "T0" },
+        { id: "t2", name: "已删", createdAt: "T0", updatedAt: "T4" },
       ],
       quickDeleted: [{ id: "q2", purgedAt: null }, { id: "q3", purgedAt: "T5" }],
       purged: [{ id: "n9", purgedAt: "T6" }],

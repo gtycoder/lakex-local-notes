@@ -179,4 +179,61 @@ describe("planSync（v4 E1-2 决策层）", () => {
       expect(plan.publish).not.toBeNull();
       expect(plan.publish!.quickNotes.tags?.map((entry) => entry.name)).toEqual(["远端改名"]);
     });
+
+    // ---- 261105 定稿：删除 = 缺席（云端 tags[] 只出现 active 标签，墓碑永不进索引）----
+
+    it("删除 = 缺席：基线有 / 远端缺席 ⇒ 删本地，并发布不含该标签的目录", () => {
+      const gone = tag("已删", { id: "t_aaaaaaaaaaaaaaaa" });
+      const keep = tag("保留");
+      const plan = planSync({
+        local: world([], [], [], [keep, gone]),
+        base: world([], [], [], [keep, gone]),
+        remote: world([], [], [], [keep]),
+        state: state(),
+      });
+      expect(plan.quickTagRemoved).toEqual([gone.id]);
+      expect(plan.publish).not.toBeNull();
+      expect(plan.publish!.quickNotes.tags?.map((entry) => entry.id)).toEqual([keep.id]);
+    });
+
+    it("删除压编辑：本地改名晚于他端删除 ⇒ 仍按删除处理，不把改名发出去", () => {
+      const gone = tag("已删", { id: "t_bbbbbbbbbbbbbbbb" });
+      const renamed = { ...gone, name: "改名后", updatedAt: "2026-03-01T00:00:00.000Z" };
+      const plan = planSync({
+        local: world([], [], [], [renamed]),
+        base: world([], [], [], [gone]),
+        remote: world([], [], [], []),
+        state: state(),
+      });
+      expect(plan.quickTagRemoved).toEqual([gone.id]);
+      expect(plan.publish!.quickNotes.tags ?? []).toEqual([]);
+    });
+
+    it("本机待删（离线删过）：远端仍在也不复活，发布不含它；未确认前不解除抑制", () => {
+      const t = tag("待删", { id: "t_cccccccccccccccc" });
+      const plan = planSync({
+        local: world([], [], [], []),
+        base: world([], [], [], [t]),
+        remote: world([], [], [], [t]),
+        state: state({ pendingTagDeletes: [t.id] }),
+      });
+      expect(plan.publish).not.toBeNull();
+      expect(plan.publish!.quickNotes.tags ?? []).toEqual([]);
+      expect(plan.quickTagSettled).toEqual([]);
+    });
+
+    it("远端已缺席 ⇒ 本机待删记录可结算（quickTagSettled，同名标签随后能重建）", () => {
+      const plan = planSync({
+        local: world(), base: world(), remote: world(), state: state({ pendingTagDeletes: ["t_dddddddddddddddd"] }),
+      });
+      expect(plan.quickTagSettled).toEqual(["t_dddddddddddddddd"]);
+    });
+
+    it("发布白名单：目录条目永不携带墓碑字段（旧索引的 deletedAt 不会借发布传播）", () => {
+      const t = tag("新标签", { id: "t_eeeeeeeeeeeeeeee" });
+      const plan = planSync({ local: world([], [], [], [t]), base: world(), remote: world(), state: state() });
+      expect(plan.publish).not.toBeNull();
+      const published = plan.publish!.quickNotes.tags ?? [];
+      expect(Object.keys(published[0]).sort()).toEqual(["createdAt", "id", "name", "updatedAt"]);
+    });
   });

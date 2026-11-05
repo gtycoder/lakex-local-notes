@@ -134,7 +134,8 @@ LakeFolderEntry: { id, title, parentId, sortOrder, nodeType: "notebook"|"group",
 ```ts
 { v: 3, space: "quickNotes",
   items: QuickNoteEntry[],            // id/createdAt/updatedAt/contentHash/assetsHash?/tagIds?/tagsUpdatedAt?
-  tags?: QuickNoteTagEntry[],         // deletedAt 非空 = 标签墓碑（删除/合并要传播）
+  tags?: QuickNoteTagEntry[],         // 只含 active 标签（id/name/createdAt/updatedAt）：删除 = 缺席，索引不带墓碑
+                                      // 硬上限 S3V3_MAX_TAGS=5000；旧索引残留的 deletedAt 读取时按白名单丢弃
   purged?: string[] }                 // 已彻底删除的小记 id（跨端传播「不可恢复删除」）
 ```
 
@@ -289,9 +290,12 @@ retryPendingAssets（上轮失败附件先补）
 
 顺序：本地 purge 意图 → 显式恢复（优先于 purged 墓碑）→ `purgedIds`（本地/远端墓碑）→ 基线/新增 → 本地软删（`quickDeletes`）→ 内容变更（远端胜时归档本地版本，设备不支持则不留副本）。
 
-### 9.4 标签
+### 9.4 标签（删除 = 缺席，261105）
 
-`mergeQuickNoteTags` 按 id LWW（含 `deletedAt` 墓碑）；条目标签关系 `tagIds/tagsUpdatedAt` 按关系版本较新一侧胜出。
+- **云端目录只含 active 标签**：删除标签 = 本机物理删行 + 清关联；索引里该 id 直接消失（**没有墓碑可传播**，否则 S3 列表会永久留条目）。
+- **三方判定**：① 基线有 / 远端缺席 ⇒ 他端已删除 ⇒ 删本地（**删除压编辑**，本地改名也不上诉）；② 本机待删（`device_state.tag_deleted`，离线删过）⇒ 一律按已删处理，远端重发不复活；③ 其余按 id + `updatedAt` LWW。
+- 条目标签关系 `tagIds/tagsUpdatedAt`（集合 + 关系版本）仍按较新一侧胜出；顺序是设备本地视图，不传播。
+- 待删集合只在设备本地（不上传）；远端索引确认不含该 id 后结算，同名标签可重建。
 
 ## 10. 删除 = 缺席
 

@@ -91,22 +91,27 @@ export class QuickNoteTagLinksStore {
     return tagIds;
   }
 
-  /** 删除某标签的全部关联（跨所有目标类型）：返回受影响小记数。 */
-  removeTag(tagId: string, at = new Date().toISOString()): number {
+  /**
+   * 标签删除（261105「删除 = 缺席」）：清掉该标签在**所有目标类型**上的关联，
+   * 并按定稿**清掉受影响目标的关系版本**（tag_link_versions）——目录行都物理删了，
+   * 关系版本也不再保留（删除压编辑由目录层的「基线有 / 远端缺席」保证）。
+   * 返回受影响的小记 id（调用方用来刷新搜索索引）：**必须在删关联前读出来**，删完就查不到了。
+   */
+  clearTag(tagId: string): string[] {
     const rows = this.db.prepare("SELECT target_kind, target_id FROM tag_links WHERE tag_id=?").all(tagId) as Array<{ target_kind: string; target_id: string }>;
-    if (rows.length === 0) return 0;
+    if (rows.length === 0) return [];
     const noteIds = rows.filter((row) => row.target_kind === KIND).map((row) => row.target_id);
     this.db.transaction(() => {
       this.db.prepare("DELETE FROM tag_links WHERE tag_id=?").run(tagId);
-      for (const noteId of noteIds) this.upsertVersion(noteId, at);
+      for (const row of rows) this.db.prepare("DELETE FROM tag_link_versions WHERE target_kind=? AND target_id=?").run(row.target_kind, row.target_id);
     })();
-    return noteIds.length;
+    return noteIds;
   }
 
-  /** 合并：把源标签的关联替换为目标标签（保留位置、去重），返回受影响小记数。 */
-  replaceTag(sourceId: string, targetId: string, at = new Date().toISOString()): number {
+  /** 合并：把源标签的关联替换为目标标签（保留位置、去重），返回受影响小记 id（用于刷新搜索索引）。 */
+  replaceTag(sourceId: string, targetId: string, at = new Date().toISOString()): string[] {
     const rows = this.db.prepare("SELECT target_kind, target_id FROM tag_links WHERE tag_id=?").all(sourceId) as Array<{ target_kind: string; target_id: string }>;
-    if (rows.length === 0) return 0;
+    if (rows.length === 0) return [];
     const noteIds = rows.filter((row) => row.target_kind === KIND).map((row) => row.target_id);
     this.db.transaction(() => {
       for (const noteId of noteIds) {
@@ -121,7 +126,7 @@ export class QuickNoteTagLinksStore {
       }
       this.db.prepare("DELETE FROM tag_links WHERE tag_id=? AND target_kind<>?").run(sourceId, KIND);
     })();
-    return noteIds.length;
+    return noteIds;
   }
 
   /**

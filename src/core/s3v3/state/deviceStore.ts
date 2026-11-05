@@ -284,12 +284,13 @@ export function createDeviceStoreMeta(deps: DeviceStoreMetaDeps): DeviceStoreMet
         ...(q.tagsUpdatedAt ? { tagsUpdatedAt: q.tagsUpdatedAt } : {}),
       });
     }
-    // 标签目录：只同步名称/墓碑/时间（顺序是设备本地视图，不进索引）。
+    // 标签目录：只同步名称/时间（顺序是设备本地视图；删除 = 缺席，云端列表不放墓碑）。
     const quickTags: QuickNoteTagEntry[] = (await p.listQuickTags()).map((t: QuickTagRow) => ({
       id: t.id, name: t.name,
       createdAt: t.createdAt, updatedAt: t.updatedAt,
-      ...(t.deletedAt ? { deletedAt: t.deletedAt } : {}),
     }));
+    // 本机待删标签（离线删过、还没确认远端缺席）：设备本地，不上传。
+    const pendingTagDeletes = (await p.listPendingTagDeletes?.()) ?? [];
     // 两端 quickDeletes 口径本就不同（桌面旧实现含 purged 行、移动不含）⇒ 由平台端口各自给，
     // core 不做 if(platform)：deletes 用 listQuickDeleted 原样、purges 用独立 listQuickPurges。
     const quickDeletes = (await p.listQuickDeleted()).map((d) => d.id);
@@ -335,6 +336,7 @@ export function createDeviceStoreMeta(deps: DeviceStoreMetaDeps): DeviceStoreMet
     return {
       lake: { v: 3, space: "lake", notes, folders },
       quickNotes: { v: 3, space: "quickNotes", items: quickItems, tags: quickTags, ...(quickPurges.length ? { purged: quickPurges } : {}) },
+      ...(pendingTagDeletes.length ? { pendingTagDeletes } : {}),
       quickDeletes,
       quickPurges,
       quickPurgeTimes,
@@ -426,7 +428,13 @@ export function createDeviceStoreMeta(deps: DeviceStoreMetaDeps): DeviceStoreMet
         throw new Error("saveQuickNotes 失败(" + item.id + "): " + (err as Error).message);
       }
     }
-    await p.mergeQuickTags((state.quickNotes.tags ?? []) as QuickTagRow[]);
+    // 目录落库：upsert active 行 + 物理删掉本轮判定删除的标签（含 offline 待删），清其关联/版本。
+    const removedTagIds = state.pendingTagDeletes ?? [];
+    await p.mergeQuickTags((state.quickNotes.tags ?? []) as QuickTagRow[], removedTagIds);
+    // 待删集合：**追加**本轮结论（覆盖写会丢掉「同步期间用户又删的」那条），再结算远端已确认缺席的。
+    if (removedTagIds.length > 0) await p.addPendingTagDeletes?.(removedTagIds);
+    const settledTagIds = state.tagPendingSettled ?? [];
+    if (settledTagIds.length > 0) await p.settlePendingTagDeletes?.(settledTagIds);
 
     // quick-missing 三态判定（决策在 core，平台只落库）：
     // 1) purge：信封 intents / quickPurges（显式彻底删除）⇒ 永久删（桌面旧路径）；

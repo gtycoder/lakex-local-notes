@@ -73,7 +73,8 @@ export class QuickNotesQueries {
 
   /** 标签 ID → 名称（一次性载入目录，列表映射共用一个解析器；未知 ID 给空串以保持与 tagIds 对齐）。 */
   private tagNameResolver(): (ids: readonly string[]) => string[] {
-    const names = new Map(this.deps.listTags().filter((tag) => !tag.deletedAt).map((tag) => [tag.id, tag.name] as const));
+    // 删除 = 缺席（261105）：目录表只剩 active 行，不需要墓碑过滤。
+    const names = new Map(this.deps.listTags().map((tag) => [tag.id, tag.name] as const));
     return (ids) => ids.map((id) => names.get(id) ?? "");
   }
 

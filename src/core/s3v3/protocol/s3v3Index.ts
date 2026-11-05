@@ -11,6 +11,8 @@ export const S3V3_MAX_FOLDERS = 10_000;
 export const S3V3_MAX_QUICK_NOTES = 20_000;
 /** 小记 `purged` 墓碑保留窗口（天）：与回收站自动过期同口径（90 天，用户 261026 定稿）。 */
 export const S3V3_QUICK_PURGE_RETENTION_DAYS = 90;
+/** 标签目录硬上限（261105）：tags[] 不允许无界增长（异常端/旧实现都可能把它撑大）。 */
+export const S3V3_MAX_TAGS = 5_000;
 
 export interface AssetDeclEntry {
   filename: string;
@@ -62,13 +64,15 @@ export interface LakeIndex {
   folders: LakeFolderEntry[];
 }
 
+/**
+ * 标签目录条目：**只有 active 标签**（删除 = 缺席，261105 定稿）。
+ * 旧索引里可能残留 `deletedAt` 墓碑；读取时按「缺席」处理（校验阶段直接丢字段），发布时永不写回。
+ */
 export interface QuickNoteTagEntry {
   id: string;
   name: string;
   createdAt: string;
   updatedAt: string;
-  /** 非空 = 墓碑（标签删除/合并），同步必须传播。 */
-  deletedAt?: string | null;
 }
 
 export interface QuickNoteEntry {
@@ -225,7 +229,20 @@ export function validateQuickNotesIndex(raw: unknown): QuickNotesIndex {
   }
   const purged = idx.purged as string[] | undefined;
   if (purged !== undefined && (!Array.isArray(purged) || purged.some((id) => typeof id !== "string"))) throw new Error("小记 purged 列表非法");
-  return { v: S3V3_INDEX_VERSION, space: "quickNotes", items: idx.items as QuickNoteEntry[], tags: idx.tags as QuickNoteTagEntry[] | undefined, ...(purged ? { purged } : {}) };
+  // 标签目录：只接受 active 条目（字段白名单 ⇒ 旧索引残留的 deletedAt 墓碑在此被丢弃 = 缺席）。
+  let tags: QuickNoteTagEntry[] | undefined;
+  if (idx.tags !== undefined) {
+    if (!Array.isArray(idx.tags)) throw new Error("小记标签目录非数组");
+    if (idx.tags.length > S3V3_MAX_TAGS) throw new Error("标签条目过多: " + idx.tags.length);
+    const tagIds = new Set<string>();
+    tags = idx.tags.map((t) => {
+      if (!t || typeof t.id !== "string" || tagIds.has(t.id)) throw new Error("标签条目 id 非法/重复: " + String(t?.id));
+      tagIds.add(t.id);
+      if (typeof t.name !== "string" || typeof t.createdAt !== "string" || typeof t.updatedAt !== "string") throw new Error("标签条目字段非法: " + t.id);
+      return { id: t.id, name: t.name, createdAt: t.createdAt, updatedAt: t.updatedAt };
+    });
+  }
+  return { v: S3V3_INDEX_VERSION, space: "quickNotes", items: idx.items as QuickNoteEntry[], ...(tags ? { tags } : {}), ...(purged ? { purged } : {}) };
 }
 
 export function parseLakeIndexBytes(bytes: Uint8Array): { index: LakeIndex; commit: string; serialized: string } {

@@ -325,11 +325,21 @@ export const notesDomain = {
     });
   },
 
-  async purgeTreeItem(id: string, kind: "folder" | "note"): Promise<void> {
+  /**
+   * 彻底删除。返回是否真的删了（false = 自动过期守卫判定「已恢复/未到期」，一行未动）。
+   * options 只由回收站自动清理（sync/trashAutoPurge）传入；手动删除不传，行为不变。
+   */
+  async purgeTreeItem(
+    id: string,
+    kind: "folder" | "note",
+    options?: { expiredBefore?: string },
+  ): Promise<boolean> {
     return runWrite("purgeTreeItem", async () => {
       const d = await ensureDb();
-      await trashRepository.purgeTreeItem(d, id, kind);
-      await reconcileIndex(d);
+      const purged = await trashRepository.purgeTreeItem(d, id, kind, options);
+      // 守卫跳过时没有行变化，不必重算派生索引（省一次全库 diff）。
+      if (purged) await reconcileIndex(d);
+      return purged;
     });
   },
 

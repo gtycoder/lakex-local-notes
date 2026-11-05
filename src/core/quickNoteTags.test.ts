@@ -23,7 +23,6 @@ const tag = (name: string, patch: Partial<QuickNoteTag> = {}): QuickNoteTag => (
   name,
   createdAt: "2026-10-24T00:00:00.000Z",
   updatedAt: "2026-10-24T00:00:00.000Z",
-  deletedAt: null,
   ...patch,
 });
 
@@ -59,9 +58,10 @@ describe("quickNoteTags", () => {
     expect(removeQuickNoteTagId([b, a], b)).toEqual([a]);
   });
 
-  it("标签目录实体校验：墓碑归一（顺序/置顶已不在模型内）", () => {
-    const entity = normalizeQuickNoteTagEntity({ ...tag("灵感"), deletedAt: null });
-    expect(entity).toMatchObject({ name: "灵感", deletedAt: null });
+  it("标签目录实体校验：只保留白名单字段（旧索引残留的 deletedAt 墓碑被丢弃 = 缺席）", () => {
+    const entity = normalizeQuickNoteTagEntity({ ...tag("灵感"), deletedAt: "2026-10-25T00:00:00.000Z" });
+    expect(entity).toEqual(tag("灵感"));
+    expect("deletedAt" in entity).toBe(false);
     expect("pinned" in entity).toBe(false);
     expect("sortOrder" in entity).toBe(false);
     expect(() => normalizeQuickNoteTagEntity({ ...tag("灵感"), id: "bad" })).toThrow("标签 ID");
@@ -81,10 +81,9 @@ describe("quickNoteTags", () => {
   it("选择器/管理页选项含 0 条小记的标签（写作区曾因过滤掉而显示了 ID）", () => {
     const used = tag("灵感");
     const fresh = tag("新建未用");
-    const deleted = tag("已删", { deletedAt: "2026-10-25T00:00:00.000Z" });
-    const index = buildQuickNoteTagIndex([{ tagIds: [used.id] }], [used, fresh, deleted]);
+    const index = buildQuickNoteTagIndex([{ tagIds: [used.id] }], [used, fresh]);
     expect(index.tags.map((entry) => entry.name)).toEqual(["灵感"]);
-    expect(buildQuickNoteTagOptions([used, fresh, deleted], index.tags)).toEqual([
+    expect(buildQuickNoteTagOptions([used, fresh], index.tags)).toEqual([
       { ...used, count: 1 },
       { ...fresh, count: 0 },
     ]);
@@ -107,15 +106,20 @@ describe("quickNoteTags", () => {
     expect(filterQuickNotesByTag(notes, { kind: "selection", include: [], exclude: [c] }).map((n) => n.id)).toEqual(["a", "b", "c"]);
   });
 
-  it("目录合并按 ID + updatedAt LWW（远端更新覆盖本地、墓碑同样生效）", () => {
+  it("目录合并按 ID + updatedAt LWW（远端更新覆盖本地）", () => {
     const local = tag("灵感", { updatedAt: "2026-10-24T00:00:00.000Z" });
     const remoteNewer = { ...local, name: "灵感库", updatedAt: "2026-10-25T00:00:00.000Z" };
     const merged = mergeQuickNoteTags([local], [remoteNewer]);
     expect(merged.map((entry) => entry.name)).toEqual(["灵感库"]);
     const mergedOlder = mergeQuickNoteTags([local], [{ ...local, name: "旧名", updatedAt: "2026-10-23T00:00:00.000Z" }]);
     expect(mergedOlder.map((entry) => entry.name)).toEqual(["灵感"]);
-    const deleted = mergeQuickNoteTags([local], [{ ...local, updatedAt: "2026-10-25T00:00:00.000Z", deletedAt: "2026-10-25T00:00:00.000Z" }]);
-    expect(deleted[0].deletedAt).toBe("2026-10-25T00:00:00.000Z");
+  });
+
+  it("删除 = 缺席：exclude 里的 id 既不进结果，也不会被远端重发复活", () => {
+    const keep = tag("灵感");
+    const gone = tag("已删");
+    const merged = mergeQuickNoteTags([keep, gone], [gone], { exclude: new Set([gone.id]) });
+    expect(merged.map((entry) => entry.id)).toEqual([keep.id]);
   });
 
   it("目录等价比较：字段级、忽略顺序；任一字段变化即不等价（同步不做无谓重建）", () => {
@@ -124,7 +128,7 @@ describe("quickNoteTags", () => {
     expect(sameQuickNoteTagDirectory([a, b], [b, a])).toBe(true);
     expect(sameQuickNoteTagDirectory([a, b], [a])).toBe(false);
     expect(sameQuickNoteTagDirectory([a], [{ ...a, name: "灵感库" }])).toBe(false);
-    expect(sameQuickNoteTagDirectory([a], [{ ...a, deletedAt: "2026-10-25T00:00:00.000Z" }])).toBe(false);
+    expect(sameQuickNoteTagDirectory([a], [{ ...a, updatedAt: "2026-10-25T00:00:00.000Z" }])).toBe(false);
   });
 
   it("本机拖拽排序（纯函数）：前/后插入、未知 id 原样返回", () => {

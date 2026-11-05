@@ -110,6 +110,10 @@ export interface SyncPlan {
   publishes: { lake: string[]; quickNotes: string[] };
   /** 合并后的小记标签目录（远端优先、本地独有保留）：Apply/Commit 写回设备标签库用。 */
   quickTags?: QuickNoteTagEntry[];
+  /** 本轮判定删除的标签（他端已删除 + 本地还留着）：设备侧要物理删行并清关联（删除压编辑）。 */
+  quickTagRemoved?: string[];
+  /** 本机待删里「远端确认已缺席」的 id：可以清掉抑制记录（不再需要拦截远端重发）。 */
+  quickTagSettled?: string[];
   /** null = 零变更（不发布）。 */
   publish: { lake: LakeIndex; quickNotes: QuickNotesIndex } | null;
   intentChanges: Array<{ op: "add" | "clear"; intent: Intent }>;

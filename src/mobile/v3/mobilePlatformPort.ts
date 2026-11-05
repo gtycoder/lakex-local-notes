@@ -13,9 +13,13 @@ import {
 } from "../data/noteBodies.js";
 import { loadV3State } from "../data/v3StateRepository.js";
 import { MAX_QUICK_NOTE_TAGS } from "../../core/quickNoteTags.js";
-import { mergeRemoteQuickNoteTags } from "../data/quickNoteTagsRepository.js";
-import { reindexQuickNotesForTags } from "../data/quickNoteTagService.js";
-import { listQuickNoteIdsForTags, removeQuickNoteTagLinksInTransaction } from "../data/quickNoteTagLinksRepository.js";
+import {
+  addPendingTagDeletes as appendPendingTagDeletes,
+  applyQuickTagDirectory,
+  listPendingTagDeletes as readPendingTagDeletes,
+  settlePendingTagDeletes as removePendingTagDeletes,
+} from "../data/quickNoteTagsRepository.js";
+import { reindexQuickNotesByIds, reindexQuickNotesForTags } from "../data/quickNoteTagService.js";
 import { listQuickNoteAssetKeysFs, removeAssetBytesFs } from "../native/assetFs.js";
 
 /**
@@ -181,13 +185,24 @@ export function createMobilePlatformPort(db: MobileDb, ctxIn?: Partial<MobilePla
       }));
     },
     async listQuickTags(): Promise<QuickTagRow[]> {
-      // 只同步名称/墓碑/时间：**顺序与置顶是设备本地视图**，不进索引。
-      const rows = await db.prepare("SELECT id,name,created_at,updated_at,deleted_at FROM tags ORDER BY id").all() as Array<Record<string, unknown>>;
+      // 只同步名称/时间：**顺序是设备本地视图**、**删除 = 缺席**（云端 tags[] 不放墓碑）。
+      // 仍保留 deleted_at IS NULL：迁移未跑完的旧库不能把墓碑带上云端。
+      const rows = await db.prepare("SELECT id,name,created_at,updated_at FROM tags WHERE deleted_at IS NULL ORDER BY id").all() as Array<Record<string, unknown>>;
       return rows.map((r) => ({
         id: String(r.id), name: String(r.name),
         createdAt: String(r.created_at), updatedAt: String(r.updated_at),
-        ...(r.deleted_at ? { deletedAt: String(r.deleted_at) } : {}),
       }));
+    },
+    async listPendingTagDeletes(): Promise<string[]> {
+      return await readPendingTagDeletes(db);
+    },
+    /** 追加待删（幂等）：同步轮进行中用户新删的标签不会被本轮落库抹掉（覆盖写会丢）。 */
+    async addPendingTagDeletes(ids: readonly string[]): Promise<void> {
+      await appendPendingTagDeletes(db, ids);
+    },
+    /** 结算：远端已确认缺席的 id 从待删集合移除（其余保留）。 */
+    async settlePendingTagDeletes(ids: readonly string[]): Promise<void> {
+      await removePendingTagDeletes(db, ids);
     },
     /** 移动旧口径：quickDeletes 只收「可恢复」行（软删行 + purged_at 为空的墓碑），purged 行走 listQuickPurges。 */
     async listQuickDeleted(): Promise<QuickDeletedRow[]> {
@@ -491,37 +506,24 @@ export function createMobilePlatformPort(db: MobileDb, ctxIn?: Partial<MobilePla
         await db.prepare("INSERT INTO tag_link_versions(target_kind,target_id,links_updated_at) VALUES ('quickNote',?,?) ON CONFLICT(target_kind,target_id) DO UPDATE SET links_updated_at=excluded.links_updated_at").run(quickNoteId, version);
       });
     },
-    async mergeQuickTags(tags: QuickTagRow[]): Promise<void> {
-      // 目录 LWW（与桌面 mergeRemote 同口径）：只合并名称/墓碑/时间，按 updatedAt（含确定性 tie-break）取赢家；
-      // 顺序/置顶是设备本地视图，不在这里覆盖（旧实现固定 deleted_at=NULL ⇒ 会复活墓碑）。
-      const readDirectory = async (): Promise<Map<string, { name: string; deletedAt: string | null }>> => {
-        const rows = await db.prepare("SELECT id,name,deleted_at FROM tags").all() as Array<{ id: string; name: string; deleted_at: string | null }>;
-        return new Map(rows.map((row) => [String(row.id), { name: String(row.name), deletedAt: row.deleted_at ? String(row.deleted_at) : null }] as const));
-      };
-      const before = await readDirectory();
-      await mergeRemoteQuickNoteTags(db, tags.map((tag) => ({
+    /**
+     * 目录落库（删除 = 缺席）：upsert active 行 + 对 removedIds **物理删行并清关联/版本**（单事务）。
+     * 顺序是设备本地视图，这里不碰已有行的 sort_order（新行追加末尾）。
+     */
+    async mergeQuickTags(tags: QuickTagRow[], removedIds: readonly string[] = []): Promise<void> {
+      const beforeRows = await db.prepare("SELECT id,name FROM tags").all() as Array<{ id: string; name: string }>;
+      const before = new Map(beforeRows.map((row) => [String(row.id), String(row.name)] as const));
+      const { removedNoteIds } = await applyQuickTagDirectory(db, tags.map((tag) => ({
         id: tag.id,
         name: tag.name,
         createdAt: tag.createdAt,
         updatedAt: tag.updatedAt,
-        deletedAt: tag.deletedAt ?? null,
-      })));
-      // 远端改名/墓碑会改变搜索索引里缓存的标签名 ⇒ 只重刷「关联到这些标签的小记」（不全量重建）。
-      const changed: string[] = [];
-      const tombstoned: string[] = [];
-      for (const [id, next] of await readDirectory()) {
-        const previous = before.get(id);
-        if (!previous || previous.name !== next.name || previous.deletedAt !== next.deletedAt) changed.push(id);
-        if (next.deletedAt && (!previous || !previous.deletedAt)) tombstoned.push(id);
-      }
-      if (changed.length > 0) await reindexQuickNotesForTags(db, changed);
-      // 远端墓碑 = 删除：清掉本机关联（否则标签复活时关系会诈尸），并推进关系版本（LWW 可传播）。
-      const now = new Date().toISOString();
-      for (const id of tombstoned) {
-        const noteIds = await listQuickNoteIdsForTags(db, [id]);
-        if (noteIds.length === 0) continue;
-        await db.transaction(async () => { await removeQuickNoteTagLinksInTransaction(db, id, now); });
-      }
+      })), removedIds);
+      // 改名会改变搜索索引里缓存的标签名 ⇒ 只重刷「关联到这些标签的小记」（不全量重建）。
+      const renamed = tags.filter((tag) => before.get(tag.id) !== tag.name).map((tag) => tag.id);
+      if (renamed.length > 0) await reindexQuickNotesForTags(db, renamed);
+      // 删标签会清掉关联 ⇒ 受影响小记的标签列要重刷（id 在落库前已收集）。
+      if (removedNoteIds.length > 0) await reindexQuickNotesByIds(db, removedNoteIds);
     },
     /**
      * 移动端旧语义（端口各自表达平台差异，core 不 if(platform)）：

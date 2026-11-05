@@ -8,11 +8,12 @@
 import { normalizeQuickNoteTagIds } from "../../core/quickNoteTags.js";
 import type { MobileDb } from "./sqliteDb.js";
 import {
+  addPendingTagDeletes,
   assertQuickNoteTagsExist,
   createQuickNoteTag,
+  deleteQuickNoteTag,
   listQuickNoteTags,
   reorderQuickNoteTags,
-  tombstoneQuickNoteTag,
   updateQuickNoteTag,
 } from "./quickNoteTagsRepository.js";
 import {
@@ -37,7 +38,7 @@ export async function reindexQuickNotesForTags(d: MobileDb, tagIds: readonly str
 }
 
 export const mobileQuickNoteTags = {
-  list: (d: MobileDb, options: { includeDeleted?: boolean } = {}) => listQuickNoteTags(d, options),
+  list: (d: MobileDb) => listQuickNoteTags(d),
   create: (d: MobileDb, name: string) => createQuickNoteTag(d, name),
   update: async (d: MobileDb, id: string, patch: { name?: string }) => {
     const before = (await listQuickNoteTags(d)).find((tag) => tag.id === id)?.name;
@@ -47,26 +48,31 @@ export const mobileQuickNoteTags = {
     return tag;
   },
   reorder: (d: MobileDb, ids: readonly string[]) => reorderQuickNoteTags(d, ids),
+  /** 删除 = 缺席：物理删行 + 清关联/版本 + 记本机待删（抑制远端重发）。 */
   delete: async (d: MobileDb, id: string) => {
     const affected = await listQuickNoteIdsForTags(d, [id]);
+    await assertQuickNoteTagsExist(d, [id]);
     let updated = 0;
     // 事务内只能调用 *InTransaction 版本：SQLite 不支持嵌套 BEGIN。
     await d.transaction(async () => {
-      await tombstoneQuickNoteTag(d, id);
       updated = await removeQuickNoteTagLinksInTransaction(d, id);
+      await deleteQuickNoteTag(d, id);
+      await addPendingTagDeletes(d, [id]);
     });
     await reindexQuickNotesByIds(d, affected);
     return { updated, failed: 0 };
   },
+  /** 合并 = 源标签**物理消失**（删除 = 缺席）：关联改指向目标，源 id 进本机待删。 */
   merge: async (d: MobileDb, sourceId: string, targetId: string) => {
     if (sourceId === targetId) return { updated: 0, failed: 0 };
-    // 目标必须存在且未被删除（源标签在 tombstone 时会自行校验）。
-    await assertQuickNoteTagsExist(d, [targetId]);
+    // 目标必须存在且未被删除（源标签由本事务删除，先校验存在性）。
+    await assertQuickNoteTagsExist(d, [targetId, sourceId]);
     const affected = await listQuickNoteIdsForTags(d, [sourceId]);
     let updated = 0;
     await d.transaction(async () => {
       updated = await replaceQuickNoteTagLinksInTransaction(d, sourceId, targetId);
-      await tombstoneQuickNoteTag(d, sourceId);
+      await deleteQuickNoteTag(d, sourceId);
+      await addPendingTagDeletes(d, [sourceId]);
     });
     await reindexQuickNotesByIds(d, affected);
     return { updated, failed: 0 };

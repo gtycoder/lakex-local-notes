@@ -35,6 +35,7 @@ import {
   QuickNoteModelError,
   type StoredQuickNoteContent,
 } from "./quickNoteModel.js";
+import type { QuickNoteTag } from "../src/core/quickNoteTags.js";
 import { QuickNoteTagsStore } from "./quickNoteTagsStore.js";
 import { QuickNoteTagLinksStore } from "./quickNoteTagLinksStore.js";
 import { QuickNoteTagService } from "./quickNoteTagService.js";
@@ -125,7 +126,11 @@ export class QuickNotesStore {
     this.migrate();
     this.tags = new QuickNoteTagsStore(this.db);
     this.links = new QuickNoteTagLinksStore(this.db);
-    this.tagService = new QuickNoteTagService(this.db, this.tags, this.links, (tagIds) => this.reindexSearchTagsForTags(tagIds));
+    this.tagService = new QuickNoteTagService(this.db, this.tags, this.links, (tagIds, noteIds) => {
+      if (tagIds.length > 0) this.reindexSearchTagsForTags(tagIds);
+      // 关联已被删掉（删除标签/合并源标签）的场景：按小记 id 重刷，否则 FTS 里会残留旧标签词。
+      if (noteIds && noteIds.length > 0) this.reindexSearchForNoteIds(noteIds);
+    });
     this.queries = new QuickNotesQueries({
       db: this.db,
       itemPath: (id) => this.itemPath(id),
@@ -315,7 +320,7 @@ export class QuickNotesStore {
       "SELECT id, created_at, updated_at, preview_text, image_count, content_hash, is_dirty, is_conflict " +
       "FROM quick_notes ORDER BY created_at DESC"
     ).all() as QuickNoteRow[];
-    const tagNames = new Map(this.tags.list().filter((tag) => !tag.deletedAt).map((tag) => [tag.id, tag.name] as const));
+    const tagNames = this.tags.nameById();
     const links = this.links.listAll();
     const assetMimeTypes = new Map<string, string[]>();
     const assets = this.db.prepare("SELECT DISTINCT quick_note_id, mime_type FROM quick_note_assets").all() as Array<{ quick_note_id: string; mime_type: string }>;
@@ -375,6 +380,39 @@ export class QuickNotesStore {
     const changed = this.tagService.applyRemoteLinks(noteId, tagIds, tagsUpdatedAt);
     if (changed) this.reindexSearchTags(noteId);
     return changed;
+  }
+
+  /**
+   * 目录落库（同步端口，261105「删除 = 缺席」）——**单事务**：
+   *  - upsert 给定 active 行（name/createdAt/updatedAt；**不碰本机 sort_order**，新行追加末尾）；
+   *  - `removedIds` = 本轮判定删除（他端已删 / 本机待删）的标签：物理删目录行 + 清关联/关系版本，
+   *    不存在的 id = no-op（幂等）。删除压编辑：远端重发也不复活（抑制集合由 core 的 pendingTagDeletes 给）。
+   * 关联删掉前先收集受影响小记，事务后重刷它们的搜索索引（否则 FTS 里残留旧标签词）。
+   */
+  mergeQuickTags(tags: readonly QuickNoteTag[], removedIds: readonly string[] = []): void {
+    const removed = [...new Set(removedIds)];
+    const before = this.tags.nameById();
+    const notesLosingTag = this.links.listNoteIdsForTags(removed);
+    const tx = this.db.transaction(() => {
+      // 远端新标签追加到本机末尾；已有行只更新 name/createdAt/updatedAt，不动本机 sort_order。
+      let sortOrder = this.tags.nextSortOrder();
+      for (const tag of tags) {
+        if (this.tags.upsert(tag, sortOrder)) sortOrder += 1;
+      }
+      for (const id of removed) {
+        this.links.clearTag(id);
+        this.tags.deleteIfExists(id);
+      }
+    });
+    tx();
+    const changed = tags.filter((tag) => before.get(tag.id) !== tag.name).map((tag) => tag.id);
+    if (changed.length > 0) this.reindexSearchTagsForTags(changed);
+    if (notesLosingTag.length > 0) this.reindexSearchForNoteIds(notesLosingTag);
+  }
+
+  /** 关系已被删（删除标签/合并源标签）后用：按小记 id 重刷索引里的标签词（不能靠 tag_links 反查）。 */
+  reindexSearchForNoteIds(noteIds: readonly string[]): void {
+    for (const id of noteIds) this.reindexSearchTags(id);
   }
 
   private readRowForTags(noteId: string): void {

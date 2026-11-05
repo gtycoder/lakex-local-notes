@@ -96,17 +96,6 @@ export async function replaceQuickNoteTagLinksInTransaction(d: MobileDb, sourceI
   return noteIds.length;
 }
 
-/** 远端关系 LWW：远端版本更新才覆盖；deletedTagIds 由协调层传入（已墓碑的标签不写入）。 */
-export async function applyRemoteQuickNoteTagLinks(d: MobileDb, noteId: string, rawTagIds: readonly string[], remoteUpdatedAt: string, deletedTagIds: ReadonlySet<string>): Promise<boolean> {
-  if (!remoteUpdatedAt || remoteUpdatedAt <= await quickNoteTagsUpdatedAt(d, noteId)) return false;
-  const tagIds = normalizeQuickNoteTagIds(rawTagIds).filter((tagId) => !deletedTagIds.has(tagId));
-  await d.transaction(async () => {
-    await writeLinks(d, noteId, tagIds);
-    await upsertVersion(d, noteId, remoteUpdatedAt);
-  });
-  return true;
-}
-
 export async function removeQuickNoteLinks(d: MobileDb, noteId: string): Promise<void> {
   await d.transaction(async () => {
     await d.prepare("DELETE FROM tag_links WHERE target_kind=? AND target_id=?").run(KIND, noteId);

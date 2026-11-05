@@ -31,6 +31,8 @@ export interface PlanState {
   folderPurgeIntents: string[];
   /** 本地小记软删（用于区分远端新增）。 */
   quickDeletes?: string[];
+  /** 本机待删标签 id（离线删过、还没确认远端缺席）：索引里不能出现，远端重发也不复活。 */
+  pendingTagDeletes?: string[];
   /** 小记不可恢复删除（purged 墓碑）。 */
   purgedQuickIds?: string[];
   /**
@@ -191,17 +193,40 @@ export function planSync(input: PlanInput): SyncPlan {
     }
   }
 
-  // 标签目录：按 ID + 确定性 LWW 合并（本地新增/改名/墓碑都可能需要发布；顺序不参与）。
+  // 标签目录：**删除 = 缺席**（261105 定稿）——云端 tags[] 只出现 active 标签，墓碑永不进索引。
+  // 三方判定：
+  //  ① 基线有 / 远端缺席 ⇒ 他端已删除（**删除压编辑**：本地改名也不上诉）⇒ 删本地；
+  //  ② 本机待删（离线删过、还没发布成功）⇒ 一律按已删处理，远端重发也不复活；
+  //  ③ 其余按 ID + 确定性 LWW 合并（顺序不参与，纯本机视图）。
   const localTags = local.quickNotes.tags ?? [];
   const remoteTags = remote.quickNotes.tags ?? [];
+  const baseTags = base?.quickNotes.tags ?? [];
+  const remoteTagIds = new Set(remoteTags.map((tag) => tag.id));
+  const baseTagIds = new Set(baseTags.map((tag) => tag.id));
+  const pendingTagDeletes = new Set(input.state.pendingTagDeletes ?? []);
+  /** 他端删了、本地还留着 ⇒ 本轮删本地（删除压编辑）。 */
+  const quickTagRemoved = localTags
+    .filter((tag) => baseTagIds.has(tag.id) && !remoteTagIds.has(tag.id))
+    .map((tag) => tag.id);
+  const removedTagIds = new Set(quickTagRemoved);
+  /** 远端已缺席 ⇒ 本机待删记录可以结算（否则会一直抑制同名标签）。 */
+  const quickTagSettled = [...pendingTagDeletes].filter((id) => !remoteTagIds.has(id));
+  const quickTags = mergeQuickNoteTags(
+    localTags.filter((tag) => !removedTagIds.has(tag.id)),
+    remoteTags,
+    { exclude: new Set([...pendingTagDeletes, ...removedTagIds]) },
+  );
   const remoteTagById = new Map(remoteTags.map((tag) => [tag.id, tag] as const));
-  const quickTags = mergeQuickNoteTags(localTags, remoteTags);
   /** 本端目录有更新（远端没有 / 本端更新）⇒ 本轮必须发布；纯远端更新不需要本端再发一次。 */
   const localTagChanged = localTags.some((tag) => {
+    if (pendingTagDeletes.has(tag.id) || removedTagIds.has(tag.id)) return false;
     const other = remoteTagById.get(tag.id);
     return !other || compareQuickNoteTagVersion(tag, other) > 0;
   });
-  if (localTagChanged) indexChanged = true;
+  // 待删 / 删本地都要求「索引里没有它」：只要远端或基线还带着，就必须发布一次把缺席写出去。
+  const tagRemovalNeedsPublish = [...pendingTagDeletes, ...removedTagIds]
+    .some((id) => remoteTagIds.has(id) || baseTagIds.has(id));
+  if (localTagChanged || tagRemovalNeedsPublish) indexChanged = true;
 
   // 发布索引：只在本轮会改变索引时构建（零变更轮 publish=null，只读 pointer）。
   let publish: SyncPlan["publish"] = null;
@@ -223,11 +248,10 @@ export function planSync(input: PlanInput): SyncPlan {
     publish = {
       lake: { v: 3, space: "lake", notes: lakeNotes, folders },
       quickNotes: {
-        // 发布只带已知字段：旧索引可能残留 pinned/sortOrder（已废弃），不能借发布继续传播。
+        // 发布只带已知字段：旧索引可能残留 pinned/sortOrder/deletedAt（已废弃），不能借发布继续传播。
         v: 3, space: "quickNotes", items: quickItems,
         tags: quickTags.map((tag) => ({
           id: tag.id, name: tag.name, createdAt: tag.createdAt, updatedAt: tag.updatedAt,
-          ...(tag.deletedAt ? { deletedAt: tag.deletedAt } : {}),
         })),
         // 墓碑随索引传播（不可恢复删除；超过保留窗口的由引擎在入 plan 前裁掉）。
         ...((input.state.purgedQuickIds ?? []).length > 0 ? { purged: [...(input.state.purgedQuickIds ?? [])].sort() } : {}),
@@ -247,6 +271,8 @@ export function planSync(input: PlanInput): SyncPlan {
     deletes,
     publishes,
     quickTags,
+    quickTagRemoved,
+    quickTagSettled,
     publish,
     intentChanges,
     warnings,

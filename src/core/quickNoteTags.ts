@@ -1,7 +1,10 @@
 /**
  * 小记标签：**标签目录与关联表是唯一事实**，小记正文只存内容（text/body/images）。
- * - 目录 `tags` 独占名称/墓碑/时间；关联 `tag_links(target_kind,target_id,tag_id,position)` +
+ * - 目录 `tags` 独占名称/时间；关联 `tag_links(target_kind,target_id,tag_id,position)` +
  *   `tag_link_versions`（每目标关系 LWW）；两者只在协调层（两端各自的 `quickNoteTagService`）组合。
+ * - **删除 = 缺席（261105 定稿）**：标签删除是**物理删除**目录行 + 清关联；云端 `tags[]` 只出现 active 标签，
+ *   不允许墓碑进索引（「S3 列表表不得出现永久存在的条目」）。跨端删除靠「基线有 / 远端缺席」判定，
+ *   冲突按**删除压编辑**（与文档 purge 同口径）。离线删除期间的抑制靠设备本地 `pendingTagDeletes`。
  * - 标签 ID 由首次创建时的名称派生（`t_` + sha256 前 16 位）⇒ 同一名称在任何一端会得到同一个 ID；
  *   重命名只改目录，不重写 `.qnote`。
  * - **顺序不属于模型（置顶已删除，261105 用户定稿）**：目录展示顺序、单条小记上的标签顺序都是**设备本地视图**，
@@ -44,7 +47,7 @@ export function quickNoteTagId(name: string): string {
 }
 
 /**
- * 标签目录实体（本地表 + 索引共用）。`deletedAt` 非空 = 墓碑。
+ * 标签目录实体（本地表 + 索引共用）。**没有删除标记**：删除 = 行不存在（缺席）。
  *
  * **顺序是设备本地视图**（261105 用户定稿）：目录的展示顺序不参与同步；
  * 本实体也不再带 sortOrder/pinned（置顶功能已整体删除）。
@@ -54,7 +57,6 @@ export interface QuickNoteTag {
   name: string;
   createdAt: string;
   updatedAt: string;
-  deletedAt: string | null;
 }
 
 function requireIsoTime(raw: unknown, label: string): string {
@@ -68,12 +70,12 @@ export function normalizeQuickNoteTagEntity(raw: unknown): QuickNoteTag {
   const value = raw as Partial<QuickNoteTag>;
   if (typeof value.id !== "string" || !QUICK_NOTE_TAG_ID_RE.test(value.id)) throw new QuickNoteTagError("标签 ID 无效");
   const name = normalizeQuickNoteTag(value.name);
+  // 旧索引可能残留 deletedAt（墓碑）：**直接丢弃**，墓碑条目由调用方按「缺席」处理。
   return {
     id: value.id,
     name,
     createdAt: requireIsoTime(value.createdAt, "标签创建时间"),
     updatedAt: requireIsoTime(value.updatedAt, "标签更新时间"),
-    deletedAt: value.deletedAt == null ? null : requireIsoTime(value.deletedAt, "标签删除时间"),
   };
 }
 
@@ -143,7 +145,7 @@ export function buildQuickNoteTagIndex<T>(
   tags: readonly QuickNoteTag[],
   tagIdsOf: (note: T) => readonly string[] = (note) => (note as { tagIds: readonly string[] }).tagIds,
 ): QuickNoteTagIndex {
-  const active = new Map(tags.filter((tag) => !tag.deletedAt).map((tag) => [tag.id, tag] as const));
+  const active = new Map(tags.map((tag) => [tag.id, tag] as const));
   const counts = new Map<string, number>();
   let untaggedCount = 0;
   for (const note of notes) {
@@ -167,9 +169,7 @@ export function buildQuickNoteTagOptions(
   summaries: readonly QuickNoteTagSummary[],
 ): QuickNoteTagSummary[] {
   const counts = new Map(summaries.map((tag) => [tag.id, tag.count] as const));
-  return directory
-    .filter((tag) => !tag.deletedAt)
-    .map((tag) => ({ ...tag, count: counts.get(tag.id) ?? 0 }));
+  return directory.map((tag) => ({ ...tag, count: counts.get(tag.id) ?? 0 }));
 }
 
 /** 标签筛选：单选 / 无标签 / 多选包含 + 排除（全部按 ID，重命名不影响筛选）。 */
@@ -202,7 +202,6 @@ export interface QuickNoteTagLike {
   name: string;
   createdAt: string;
   updatedAt: string;
-  deletedAt?: string | null;
 }
 
 /**
@@ -214,20 +213,28 @@ export interface QuickNoteTagLike {
  */
 export function compareQuickNoteTagVersion(a: QuickNoteTagLike, b: QuickNoteTagLike): number {
   if (a.updatedAt !== b.updatedAt) return a.updatedAt > b.updatedAt ? 1 : -1;
-  const keyOf = (tag: QuickNoteTagLike): string => JSON.stringify([tag.name, tag.createdAt, tag.deletedAt ?? null]);
+  const keyOf = (tag: QuickNoteTagLike): string => JSON.stringify([tag.name, tag.createdAt]);
   const ka = keyOf(a);
   const kb = keyOf(b);
   return ka === kb ? 0 : (ka > kb ? 1 : -1);
 }
 
-/** 标签表合并（两端同步用）：按 ID + 确定性 LWW；墓碑只保留最新状态。 */
+/**
+ * 标签表合并（两端同步用）：按 ID + 确定性 LWW。
+ * `exclude` = 本轮被删除的 id（本机待删 / 他端已删）：既不入结果，也不因远端重发而复活。
+ */
 export function mergeQuickNoteTags<T extends QuickNoteTagLike>(
   local: readonly T[],
   remote: readonly T[],
+  options: { exclude?: ReadonlySet<string> } = {},
 ): T[] {
+  const exclude = options.exclude;
   const merged = new Map<string, T>();
-  for (const tag of local) merged.set(tag.id, tag);
+  for (const tag of local) {
+    if (!exclude?.has(tag.id)) merged.set(tag.id, tag);
+  }
   for (const tag of remote) {
+    if (exclude?.has(tag.id)) continue;
     const current = merged.get(tag.id);
     if (!current || compareQuickNoteTagVersion(tag, current) > 0) merged.set(tag.id, tag);
   }
@@ -246,7 +253,6 @@ export function sameQuickNoteTagDirectory(a: readonly QuickNoteTagLike[], b: rea
     return !!other
       && tag.name === other.name
       && tag.createdAt === other.createdAt
-      && tag.updatedAt === other.updatedAt
-      && (tag.deletedAt ?? null) === (other.deletedAt ?? null);
+      && tag.updatedAt === other.updatedAt;
   });
 }

@@ -75,7 +75,7 @@ describe("标签目录变化只重刷受影响小记的搜索索引", () => {
     } finally { await db.close(); }
   });
 
-  it("远端目录改名/墓碑（同步端口）：只重刷关联小记", async () => {
+  it("远端目录改名/删除=缺席（同步端口）：只重刷关联小记", async () => {
     const db = await freshDb();
     try {
       const port = createMobilePlatformPort(db);
@@ -84,8 +84,10 @@ describe("标签目录变化只重刷受影响小记的搜索索引", () => {
       expect(indexSpy.mock.calls.map((call) => call[1])).toContain("n1");
       expect(indexSpy.mock.calls.map((call) => call[1])).not.toContain("n2");
       indexSpy.mockClear();
-      await port.mergeQuickTags([{ id: TB, name: "B", createdAt: T1, updatedAt: T2, deletedAt: T2 }]);
+      // 他端删除 = 远端缺席 ⇒ removedIds 里带下来：物理删行 + 清关联 + 只重刷受影响小记。
+      await port.mergeQuickTags([{ id: TA, name: "A3", createdAt: T1, updatedAt: T2 }], [TB]);
       expect(indexSpy.mock.calls.map((call) => call[1])).toEqual(["n2"]);
+      expect(await db.prepare("SELECT 1 FROM tags WHERE id=?").get(TB)).toBeUndefined();
     } finally { await db.close(); }
   });
 });

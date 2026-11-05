@@ -67,13 +67,12 @@ export interface QuickNoteSyncRow {
   deletedAt?: string | null;
 }
 
-/** 标签目录同步行：**不含顺序**（设备本地视图，不参与同步）。 */
+/** 标签目录同步行：**不含顺序、不含墓碑**（顺序是设备本地视图；删除 = 缺席）。 */
 export interface QuickTagRow {
   id: string;
   name: string;
   createdAt: string;
   updatedAt: string;
-  deletedAt?: string | null;
 }
 
 export interface QuickDeletedRow { id: string; purgedAt?: string | null }
@@ -187,7 +186,20 @@ export interface PlatformDataPort {
   importRemoteQuickNote(item: QuickNoteWrite, body: Uint8Array, assets: QuickAssetWrite[]): Promise<void>;
   markQuickNoteSyncedIfUnchanged(quickNoteId: string, expectedContentHash: string): Promise<void>;
   applyQuickNoteTagLinks(quickNoteId: string, tagIds: string[], tagsUpdatedAt: string): Promise<void>;
-  mergeQuickTags(tags: QuickTagRow[]): Promise<void>;
+  /**
+   * 目录落库（单事务）：
+   *  - upsert 给定 active 行（name/createdAt/updatedAt；**不碰本机 sort_order**）；
+   *  - `removedIds` = 本轮判定删除的标签：物理删除行 + 清 `tag_links`/`tag_link_versions`（含文档标签关联）。
+   *    传不存在的 id 是 no-op（幂等）。
+   */
+  mergeQuickTags(tags: QuickTagRow[], removedIds?: readonly string[]): Promise<void>;
+  /** 本机待删标签 id（离线删过、还没确认远端缺席）；**不上传**，仅设备本地。缺省 = []。 */
+  listPendingTagDeletes?(): Promise<string[]>;
+  /** **追加**待删 id（幂等）。用追加而不是覆盖写：同步轮进行中用户又删了一个标签时，
+   *  覆盖写会把这条新待删丢掉 ⇒ 下一轮远端重发就复活。缺省 = 不持久化（降级为每轮重算）。 */
+  addPendingTagDeletes?(ids: readonly string[]): Promise<void>;
+  /** **结算**：远端已确认缺席的 id 可以从待删集合移除（其余保留）。缺省 = 不结算（只影响体积，不影响正确性）。 */
+  settlePendingTagDeletes?(ids: readonly string[]): Promise<void>;
   purgeQuickNote(quickNoteId: string): Promise<void>;
   deleteQuickNote(quickNoteId: string): Promise<void>;
   markQuickNotesCloudDeleted(quickNoteIds: string[]): Promise<void>;

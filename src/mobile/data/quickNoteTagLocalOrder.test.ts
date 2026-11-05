@@ -20,7 +20,7 @@ vi.mock("../native/assetFs", () => ({
 }));
 import { SqlJsAsyncDb, SqlJsDb } from "./sqliteDb.js";
 import { applyMobileSchema } from "./schema.js";
-import { createQuickNoteTag, listQuickNoteTags, mergeRemoteQuickNoteTags, reorderQuickNoteTags } from "./quickNoteTagsRepository.js";
+import { applyQuickTagDirectory, createQuickNoteTag, listQuickNoteTags, reorderQuickNoteTags } from "./quickNoteTagsRepository.js";
 
 async function freshDb() {
   const db = new SqlJsAsyncDb(await SqlJsDb.open());
@@ -46,16 +46,16 @@ describe("标签目录顺序（设备本地）", () => {
     } finally { await db.close(); }
   });
 
-  it("同步合并不覆盖本机顺序：远端改名/墓碑/新增都不搬家", async () => {
+  it("同步合并不覆盖本机顺序：远端改名/新增都不搬家（删除 = 缺席，见 quickNoteTagAbsence）", async () => {
     const db = await freshDb();
     try {
       await insertTag(db, "t_000000000000000a", "A", "2026-01-01T00:00:00.000Z");
       await insertTag(db, "t_000000000000000b", "B", "2026-02-01T00:00:00.000Z");
       await reorderQuickNoteTags(db, ["t_000000000000000b", "t_000000000000000a"]);
       expect((await listQuickNoteTags(db)).map((t) => t.name)).toEqual(["B", "A"]);
-      await mergeRemoteQuickNoteTags(db, [
-        { id: "t_000000000000000a", name: "A2", createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-03-01T00:00:00.000Z", deletedAt: null },
-        { id: "t_000000000000000c", name: "C", createdAt: "2026-04-01T00:00:00.000Z", updatedAt: "2026-04-01T00:00:00.000Z", deletedAt: null },
+      await applyQuickTagDirectory(db, [
+        { id: "t_000000000000000a", name: "A2", createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-03-01T00:00:00.000Z" },
+        { id: "t_000000000000000c", name: "C", createdAt: "2026-04-01T00:00:00.000Z", updatedAt: "2026-04-01T00:00:00.000Z" },
       ]);
       expect((await listQuickNoteTags(db)).map((t) => t.name)).toEqual(["B", "A2", "C"]);
     } finally { await db.close(); }

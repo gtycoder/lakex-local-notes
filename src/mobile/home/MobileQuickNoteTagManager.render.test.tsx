@@ -27,7 +27,7 @@ import { MobileQuickNoteTagManager } from "./MobileQuickNoteTagManager";
 
 const T1 = "2026-11-01T00:00:00.000Z";
 const tag = (id: string, name: string, over: Record<string, unknown> = {}) => ({
-  id, name, createdAt: T1, updatedAt: T1, deletedAt: null, count: 1, ...over,
+  id, name, createdAt: T1, updatedAt: T1, count: 1, ...over,
 });
 
 interface Mounted { container: HTMLElement; unmount: () => Promise<void> }

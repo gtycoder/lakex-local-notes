@@ -79,21 +79,31 @@ describe("E2-3 engineBridge：结果回写", () => {
     expect(retry.pending).toBe(s.pending); // retry：队列保持不动，下一轮重来
   });
 
-  it("标签目录：远端改名/置顶/墓碑按 LWW 写回 state（旧实现只补新 id ⇒ 改名永远不生效）", () => {
+  it("标签目录：远端改名按 LWW 写回；他端删除（quickTagRemoved）落本地并进待删抑制", () => {
     const localTag = { id: "t_a", name: "旧名", createdAt: ISO, updatedAt: ISO };
-    const tomb = { id: "t_del", name: "待删", createdAt: ISO, updatedAt: "2026-10-29T00:00:00.000Z", deletedAt: "2026-10-29T00:00:00.000Z" };
+    const removedTag = { id: "t_del", name: "待删", createdAt: ISO, updatedAt: ISO };
     const s = state();
-    s.quickNotes = { ...s.quickNotes, tags: [localTag, tomb] };
+    s.quickNotes = { ...s.quickNotes, tags: [localTag, removedTag] };
     const r = round();
     r.plan.quickTags = [
       { ...localTag, name: "新名", updatedAt: "2026-10-29T00:00:00.000Z" },
-      { ...tomb, updatedAt: ISO, deletedAt: null }, // 远端旧版仍 active：不得复活本地墓碑
-      { id: "t_b", name: "新标签", createdAt: ISO, updatedAt: ISO, deletedAt: ISO },
+      { id: "t_b", name: "新标签", createdAt: ISO, updatedAt: ISO },
     ];
+    r.plan.quickTagRemoved = ["t_del"];
     const next = mergeRoundIntoState(s, r);
     const byId = new Map((next.quickNotes.tags ?? []).map((tag) => [tag.id, tag]));
     expect(byId.get("t_a")).toMatchObject({ name: "新名" });
-    expect(byId.get("t_del")?.deletedAt).toBe("2026-10-29T00:00:00.000Z");
-    expect(byId.get("t_b")?.deletedAt).toBe(ISO);
+    expect(byId.has("t_del")).toBe(false);
+    expect(byId.get("t_b")).toMatchObject({ name: "新标签" });
+    expect(next.pendingTagDeletes).toEqual(["t_del"]);
+  });
+
+  it("标签待删抑制：远端已确认缺席（quickTagSettled）后解除，避免同名标签永远建不出来", () => {
+    const s = state({ pendingTagDeletes: ["t_del"] });
+    const r = round();
+    r.plan.quickTags = [{ id: "t_keep", name: "保留", createdAt: ISO, updatedAt: ISO }];
+    r.plan.quickTagSettled = ["t_del"];
+    const next = mergeRoundIntoState(s, r);
+    expect(next.pendingTagDeletes).toEqual([]);
   });
 });

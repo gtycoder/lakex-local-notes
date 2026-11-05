@@ -60,7 +60,11 @@ export interface IntentLogStateV3 {
 }
 
 /** 9 本账 = DeviceState 去掉 world（lake/quickNotes/folders）。 */
-export type DeviceLedger = Omit<DeviceState, "lake" | "quickNotes" | "folders">;
+/**
+ * 落盘账本（9 本 + 后续账）。`pendingTagDeletes` **不在账本里**：它是设备本地的标签删除抑制集合，
+ * 由平台端口直接读写 DB 的 `device_state`（不上传、不进 v3 状态信封），所以不参与这里的穷尽性约束。
+ */
+export type DeviceLedger = Omit<DeviceState, "lake" | "quickNotes" | "folders" | "pendingTagDeletes" | "tagPendingSettled">;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);

@@ -22,7 +22,6 @@ const tagOf = (name: string, patch: Partial<QuickNoteTag> = {}): QuickNoteTag =>
   name,
   createdAt: "2026-10-22T00:00:00.000Z",
   updatedAt: "2026-10-22T00:00:00.000Z",
-  deletedAt: null,
   ...patch,
 });
 const directoryOf = (names: string[]) => names.map((name) => tagOf(name));

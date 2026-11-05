@@ -57,6 +57,12 @@ export interface DeviceState {
   restorePending?: string[];
   /** 本地已软删/待传播的小记 ID（小记回收站墓碑）；用于区分“远端新增”与“本地删除”。 */
   quickDeletes?: string[];
+  /** 本机待删标签 id（离线删过、还没确认远端缺席）：索引里不出现它，远端重发也不复活。
+   *  设备本地、**不上传**；由引擎在同步成功轮结算（远端已缺席即解除）。 */
+  pendingTagDeletes?: string[];
+  /** 本轮可以从待删集合里结算掉的 id（远端已确认缺席）。**只在内存里过一手**：saveState 消费后由端口移除，
+   *  不落库、不进账本（否则会与「同步期间用户又删了一个」的追加写打架）。 */
+  tagPendingSettled?: string[];
   /** 本地已彻底删除的小记 ID（purged 墓碑；跨端传播不可恢复删除）。 */
   quickPurges?: string[];
   /** 本地小记彻底删除时间（id → purgedAt）；与他端恢复的 updatedAt 比较，避免本地 purge 被误判成远端恢复。 */

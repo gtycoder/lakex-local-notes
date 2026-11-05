@@ -225,7 +225,8 @@ describe("mobile purge 删除传播", () => {
     vi.mocked(removeNoteAssetsDirFs).mockRejectedValueOnce(new Error("EACCES"));
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     try {
-      await expect(bridge.purgeTreeItem(NID, "note")).resolves.toBeUndefined();
+      // 返回 true = 本次真的删了（自动过期守卫用 false 表示「已恢复/未到期，跳过」）
+      await expect(bridge.purgeTreeItem(NID, "note")).resolves.toBe(true);
       expect(warn).toHaveBeenCalled();
       expect((await bridge.listDeletedNotesForSync()).some((t) => t.id === NID)).toBe(true);
       expect((await bridge.listTrashTree()).some((t) => t.id === NID)).toBe(false);
