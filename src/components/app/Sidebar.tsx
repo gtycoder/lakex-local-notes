@@ -24,6 +24,8 @@ import { usePopoverPosition } from "../../hooks/usePopoverPosition";
 import { InlineRenameInput } from "../ui/InlineRenameInput";
 import { SidebarTagFilter } from "./SidebarTagFilter";
 import { NoteTagDialog } from "./NoteTagDialog";
+import { NamePromptDialog } from "./NamePromptDialog";
+import { getNativeErrorMessage } from "../../lib/nativeErrors";
 import { isTagSelectionActive, type TagSelection } from "../../features/tags/tagsModel";
 import type { QuickNoteTagSummary } from "../../core/quickNoteTags";
 
@@ -46,7 +48,8 @@ interface SidebarProps {
   /** 刷新目录树（从库里重读整棵树）：外部命令改动过库后，UI 目录可能滞后。 */
   onRefreshTree: () => void | Promise<void>;
   onSelect: (id: string) => void;
-  onCreate: (kind: CreateKind, parentId: string | null, title?: string) => void;
+  /** 返回新节点 id（弹窗据此选中/滚动）；失败可抛错（弹窗内显示）。 */
+  onCreate: (kind: CreateKind, parentId: string | null, title?: string) => void | Promise<string | void>;
   onRename: (id: string, title: string) => void;
   onMoveNode: (id: string, targetId: string, position: DropPosition) => void;
   onRequestDelete: (node: TreeNode) => void;
@@ -95,6 +98,10 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [contextId, setContextId] = useState<string | null>(null);
   const [pendingCreate, setPendingCreate] = useState<{ kind: CreateKind; parentId: string | null } | null>(null);
+  /** 新建笔记本 = 弹窗（261105 用户验收；内联行只保留「新建分组」）。 */
+  const [newNotebookOpen, setNewNotebookOpen] = useState(false);
+  const [newNotebookBusy, setNewNotebookBusy] = useState(false);
+  const [newNotebookError, setNewNotebookError] = useState<string | null>(null);
   const [newTitle, setNewTitle] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState("");
@@ -380,13 +387,19 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
 
   const create = (kind: CreateKind) => {
     setMenuOpen(false);
-    const parentId = kind === "notebook" ? null : kind === "group" ? groupParent : noteParent;
+    if (kind === "notebook") {
+      // 用户验收：新建笔记本改弹窗（不再插入内联输入行）。
+      setNewNotebookError(null);
+      setNewNotebookOpen(true);
+      return;
+    }
+    const parentId = kind === "group" ? groupParent : noteParent;
     if (kind === "note" || kind === "bitable" || kind === "board") {
       props.onCreate(kind, parentId);
       if (parentId) setExpanded((current) => expandAncestors(current, props.nodes, parentId));
     } else {
       setPendingCreate({ kind, parentId });
-      setNewTitle(kind === "notebook" ? "新建笔记本" : "新建分组");
+      setNewTitle("新建分组");
       if (parentId) setExpanded((current) => expandAncestors(current, props.nodes, parentId));
     }
   };
@@ -397,6 +410,25 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
     setPendingCreate(null);
     setNewTitle("");
   }, [newTitle, pendingCreate, props.onCreate]);
+
+  /** 弹窗提交：创建笔记本 → 关闭 → 选中并滚动到新节点；失败在弹窗内显示且不关闭。 */
+  const submitNewNotebook = useCallback(async (title: string) => {
+    setNewNotebookBusy(true);
+    setNewNotebookError(null);
+    try {
+      const id = await Promise.resolve(props.onCreate("notebook", null, title));
+      setNewNotebookOpen(false);
+      if (typeof id === "string" && id) {
+        props.onSelect(id);
+        // 树刷新是异步 setState：等一帧再 reveal（目录栏自己的滚动容器，不用 scrollIntoView）。
+        window.requestAnimationFrame(() => revealNodeRef.current(id));
+      }
+    } catch (reason) {
+      setNewNotebookError(getNativeErrorMessage(reason));
+    } finally {
+      setNewNotebookBusy(false);
+    }
+  }, [props.onCreate, props.onSelect]);
 
   const submitRename = useCallback((title: string) => {
     const next = title.trim();
@@ -702,7 +734,6 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
         <SidebarTagFilter tags={props.tagFilter.tags} selection={props.tagFilter.selection} onChange={props.tagFilter.onChange} />
       )}
       <nav className="note-list tree-list" ref={treeRef}>
-        {pendingCreate?.kind === "notebook" && createField(0)}
         {roots.map((node) => <TreeRow key={node.id} node={node} depth={0} {...treeRowProps} />)}
         {roots.length === 0 && <div className="empty-list">{
           query
@@ -715,6 +746,16 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
       {contextMenu && contextNode && <ContextMenu node={contextNode} x={contextMenu.x} y={contextMenu.y} onNewChild={menuNewChild} onRename={menuRename} onDelete={menuDelete} onCopyMarkdown={() => props.onCopyMarkdown(contextNode)} onExportAs={(format) => props.onExportAs(contextNode, format)} onCopyPaths={() => props.onCopyPaths(contextNode)} onShowInfo={() => props.onShowInfo(contextNode)} onOpenHistory={() => props.onOpenHistory(contextNode)} locked={contextNode.noteFileId ? props.lockedNoteIds.has(contextNode.noteFileId) : false} onToggleLock={() => props.onToggleLockNote(contextNode)} onAddTags={() => setTagEditor({ noteId: contextNode.noteFileId ?? contextNode.id, title: contextNode.title })} onClose={() => setContextMenu(null)} />}
       {createMenu && <CreateMenu anchor={createMenu.anchor} onNewChild={(kind) => createChild(createMenu.node, kind)} onClose={() => setCreateMenu(null)} />}
       {editingId && <TreeRenameDialog key={editingId} initial={editingTitle} onCancel={cancelRename} onConfirm={submitRename} />}
+      <NamePromptDialog
+        open={newNotebookOpen}
+        title="新建笔记本"
+        inputLabel="笔记本名称"
+        placeholder="输入笔记本名称"
+        busy={newNotebookBusy}
+        error={newNotebookError}
+        onSubmit={submitNewNotebook}
+        onClose={() => { if (!newNotebookBusy) setNewNotebookOpen(false); }}
+      />
       {tagEditor && (
         <NoteTagDialog open noteId={tagEditor.noteId} title={tagEditor.title}
           onClose={() => setTagEditor(null)}

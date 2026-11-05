@@ -37,7 +37,8 @@ export function useTreeActions({
   setHistoryNoteId, setHistoryOpen, setSearchPanelQuery, setSearchPanelOpen,
   setPendingRenameId, setError,
 }: UseTreeActionsOptions) {
-  const createTreeItem = useCallback(async (kind: "notebook" | "group" | "note" | "usheet" | "bitable" | "board" | "ink", parentId: string | null, title?: string) => {
+  /** 返回新节点 id（新建笔记本弹窗据此选中/滚动）；笔记类仍沿用各自「打开即选中」的行为。 */
+  const createTreeItem = useCallback(async (kind: "notebook" | "group" | "note" | "usheet" | "bitable" | "board" | "ink", parentId: string | null, title?: string): Promise<string | undefined> => {
     try {
       if (kind === "note") { await createNoteIn(parentId); return; }
       if (kind === "usheet") { await createUsheetIn(parentId); return; }
@@ -46,10 +47,18 @@ export function useTreeActions({
       if (kind === "ink") { await createInkIn(parentId); return; }
       const resolvedTitle = title?.trim();
       if (!resolvedTitle) return;
-      if (kind === "notebook") await native.createNotebook(resolvedTitle);
-      else if (parentId) await native.createGroup(parentId, resolvedTitle);
+      if (kind === "notebook") {
+        const node = await native.createNotebook(resolvedTitle);
+        setTreeNodes(await native.listTreeNodes());
+        return node.id;
+      }
+      if (parentId) await native.createGroup(parentId, resolvedTitle);
       setTreeNodes(await native.listTreeNodes());
-    } catch (reason) { setError(getNativeErrorMessage(reason)); }
+    } catch (reason) {
+      setError(getNativeErrorMessage(reason));
+      // 笔记本弹窗要就地显示错误且不关闭 ⇒ 只有 notebook 抛出（其它新建路径保持原「全局提示」行为）。
+      if (kind === "notebook") throw reason;
+    }
   }, []);
 
   const renameTreeNode = useCallback(async (id: string, title: string) => {
@@ -104,7 +113,8 @@ export function useTreeActions({
     void openNote(id);
   }, [openNote]);
   const sidebarCreate = useCallback((kind: "notebook" | "group" | "note" | "usheet" | "bitable" | "board" | "ink", parentId: string | null, title?: string) => {
-    void createTreeItem(kind, parentId, title);
+    // 返回 promise：新建笔记本弹窗用它拿 id / 捕获错误（笔记类调用方仍然忽略返回值）。
+    return createTreeItem(kind, parentId, title);
   }, [createTreeItem]);
   const sidebarRename = useCallback((id: string, title: string) => {
     void renameTreeNode(id, title);

@@ -136,13 +136,6 @@
   padding: var(--lake-space-xs);
 }
 
-.tags-dir__create {
-  display: flex;
-  align-items: center;
-  gap: var(--lake-space-xs);
-  padding: 2px var(--lake-space-xs);
-}
-
 /* 行操作入口：**始终可见**（用户验收：hover 才出现等于没有入口）；hover/打开时只做底色高亮 */
 .tags-dir__more { flex: none; }
 .tags-dir__more:hover,

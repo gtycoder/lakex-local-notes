@@ -224,7 +224,13 @@ describe("TagsWorkspace（标签空间）", () => {
     expect(buttons.length).toBeGreaterThanOrEqual(2); // 头部 + 空目录 CTA
     expect(document.body.textContent).toContain("新建一个标签");
     act(() => buttons[0]!.click());
+    // 261105 用户验收：新建标签 = 弹窗（不再是内联输入行）
+    expect(document.body.querySelector(".name-prompt-dialog")).not.toBeNull();
+    expect(document.body.textContent).toContain("新建标签");
     expect(document.body.querySelector('input[aria-label="新标签名称"]')).not.toBeNull();
+    // 空名 ⇒ 「创建」禁用
+    const createButton = [...document.body.querySelectorAll<HTMLButtonElement>(".name-prompt-dialog button")].find((btn) => (btn.textContent ?? "") === "创建")!;
+    expect(createButton.disabled).toBe(true);
   });
 
   it("新建标签：Enter 调 onCreateTag → reload → 自动选中该标签", async () => {

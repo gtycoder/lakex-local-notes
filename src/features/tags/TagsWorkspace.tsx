@@ -2,6 +2,7 @@ import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, type
 import { Check, FileText, GripVertical, MoreVertical, Merge, Pencil, Plus, RefreshCw, StickyNote, Tag as TagIcon, Trash, X } from "lucide-react";
 import { Dialog, Menu } from "../../components/ui/Overlay";
 import { InlineRenameInput } from "../../components/ui/InlineRenameInput";
+import { NamePromptDialog } from "../../components/app/NamePromptDialog";
 import { usePopoverPosition } from "../../hooks/usePopoverPosition";
 import { SplitHandle } from "../../components/ui/SplitHandle";
 import { writeLocalStorage } from "../../lib/localStorageSafe";
@@ -96,9 +97,9 @@ export function TagsWorkspace(props: TagsWorkspaceProps) {
   const [editName, setEditName] = useState("");
   const [mergeSource, setMergeSource] = useState<TagDirectoryEntry | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
-  /** 新建标签：目录顶部内联输入（Enter 创建 / Esc 取消）。 */
+  /** 新建标签：弹窗（261105 用户验收；行内重命名仍用 InlineRenameInput）。 */
   const [creating, setCreating] = useState(false);
-  const [newTagName, setNewTagName] = useState("");
+  const [createError, setCreateError] = useState<string | null>(null);
   /** 行操作 ⋯ 菜单（固定可见入口；重命名 / 合并到… / 删除）。 */
   const [rowMenu, setRowMenu] = useState<{ id: string; anchor: HTMLElement } | null>(null);
   /** 三栏可拖：宽度设备本地持久化（左 200–480 / 右 240–720，中栏自适应最小 360）。 */
@@ -178,28 +179,29 @@ export function TagsWorkspace(props: TagsWorkspaceProps) {
     try { await onReload(); } catch (error) { onError(getNativeErrorMessage(error)); } finally { setReloading(false); }
   }, [onReload, onError]);
 
-  /** 新建标签：创建（目录唯一来源）→ reload → 自动选中新标签并进入其聚合视图。 */
-  const createTag = useCallback(async (rawName?: string) => {
-    const name = (rawName ?? newTagName).trim();
-    if (!name) { setCreating(false); setNewTagName(""); return; }
+  /** 新建标签（弹窗提交）：创建（目录唯一来源）→ reload → 自动选中新标签；失败在弹窗内显示且不关闭。 */
+  const createTag = useCallback(async (name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
     setBusy(true);
+    setCreateError(null);
     try {
-      const id = await onCreateTag(name);
+      const id = await onCreateTag(trimmed);
       setCreating(false);
-      setNewTagName("");
       await onReload();
       if (id) setSelectedTagId(id);
     } catch (error) {
+      setCreateError(getNativeErrorMessage(error));
       onError(getNativeErrorMessage(error));
     } finally {
       setBusy(false);
     }
-  }, [newTagName, onCreateTag, onReload, onError]);
+  }, [onCreateTag, onReload, onError]);
 
   const startCreating = useCallback(() => {
     setRowMenu(null);
+    setCreateError(null);
     setCreating(true);
-    setNewTagName("");
   }, []);
 
   const saveRename = useCallback(async (entry: TagDirectoryEntry) => {
@@ -323,14 +325,6 @@ export function TagsWorkspace(props: TagsWorkspaceProps) {
             onClick={() => void reload()}><RefreshCw size={14} className={reloading ? "spin" : undefined} /></button>
         </header>
         <div className="tags-dir" role="listbox" aria-label="标签目录">
-          {creating && (
-            <div className="tags-dir__create">
-              <InlineRenameInput className="ln-input__field tags-dir__rename" value={newTagName} autoFocus
-                ariaLabel="新标签名称" emptyPolicy="reject"
-                onChange={setNewTagName} onCommit={(value) => void createTag(value)} onCancel={() => { setCreating(false); setNewTagName(""); }} />
-              <button type="button" className="ln-iconbtn ln-iconbtn--compact" aria-label="创建标签" disabled={busy} onClick={() => void createTag()}><Check size={13} /></button>
-            </div>
-          )}
           {directoryEmpty
             ? (creating ? null : (
               <div className="tags-dir__empty">
@@ -444,6 +438,16 @@ export function TagsWorkspace(props: TagsWorkspaceProps) {
           )}
         </div>
       </div>
+      <NamePromptDialog
+        open={creating}
+        title="新建标签"
+        inputLabel="新标签名称"
+        placeholder="输入标签名称"
+        busy={busy}
+        error={createError}
+        onSubmit={createTag}
+        onClose={() => { if (!busy) setCreating(false); }}
+      />
       {rowMenuEntry && (
         <Menu onDismiss={() => setRowMenu(null)} surfaceClassName="context-menu"
           surfaceRef={rowMenuPos.surfaceRef} style={rowMenuPos.style ?? { visibility: "hidden" }}>
