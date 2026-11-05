@@ -78,4 +78,22 @@ describe("E2-3 engineBridge：结果回写", () => {
     expect(retry.lake).toEqual(s.lake);
     expect(retry.pending).toBe(s.pending); // retry：队列保持不动，下一轮重来
   });
+
+  it("标签目录：远端改名/置顶/墓碑按 LWW 写回 state（旧实现只补新 id ⇒ 改名永远不生效）", () => {
+    const localTag = { id: "t_a", name: "旧名", sortOrder: 0, pinned: false, createdAt: ISO, updatedAt: ISO };
+    const tomb = { id: "t_del", name: "待删", sortOrder: 1, pinned: false, createdAt: ISO, updatedAt: "2026-10-29T00:00:00.000Z", deletedAt: "2026-10-29T00:00:00.000Z" };
+    const s = state();
+    s.quickNotes = { ...s.quickNotes, tags: [localTag, tomb] };
+    const r = round();
+    r.plan.quickTags = [
+      { ...localTag, name: "新名", pinned: true, updatedAt: "2026-10-29T00:00:00.000Z" },
+      { ...tomb, updatedAt: ISO, deletedAt: null }, // 远端旧版仍 active：不得复活本地墓碑
+      { id: "t_b", name: "新标签", sortOrder: 2, pinned: false, createdAt: ISO, updatedAt: ISO, deletedAt: ISO },
+    ];
+    const next = mergeRoundIntoState(s, r);
+    const byId = new Map((next.quickNotes.tags ?? []).map((tag) => [tag.id, tag]));
+    expect(byId.get("t_a")).toMatchObject({ name: "新名", pinned: true });
+    expect(byId.get("t_del")?.deletedAt).toBe("2026-10-29T00:00:00.000Z");
+    expect(byId.get("t_b")?.deletedAt).toBe(ISO);
+  });
 });

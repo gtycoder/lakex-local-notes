@@ -10,7 +10,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { writeLocalStorage } from "../../lib/localStorageSafe";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { ChevronDown, ChevronRight, CloudUpload, List, LayoutGrid, ArrowUpDown, BookMarked, Feather, MoreHorizontal, Pencil, Plus, Search, Settings, SmilePlus, Sparkles, Tag, Trash } from "lucide-react";
+import { ChevronDown, ChevronRight, CloudUpload, List, LayoutGrid, ArrowUpDown, BookMarked, Feather, MoreHorizontal, Pencil, Plus, Search, Settings, Settings2, SmilePlus, Sparkles, Tag, Trash } from "lucide-react";
 import type { TreeNode } from "../../lib/types";
 import type { LocalNoteSummary } from "../data/noteRepository";
 import { NotebookGrid } from "./NotebookGrid";
@@ -39,6 +39,7 @@ import { pushBackHandler } from "../ui/backStack";
 import { readFavoriteIds, readFavoritesOpen, subscribeFavorites, writeFavoritesOpen } from "../data/favorites";
 import { QuickNoteComposerLazy } from "./quickNoteComposerLazy";
 import { MobileQuickNoteTagSheet } from "./MobileQuickNoteTagSheet";
+import { MobileQuickNoteTagManager } from "./MobileQuickNoteTagManager";
 import { useQuickNoteDetailCache } from "./useQuickNoteDetailCache";
 import { notifyMissingQuickNoteOnce } from "./missingQuickNoteNotice";
 import { useQuickNoteListModel } from "./useQuickNoteListModel";
@@ -138,6 +139,7 @@ export function HomePage(props: HomePageProps) {
   const [libraryView, setLibraryView] = useState<LibraryView>(() => (localStorage.getItem(VIEW_KEY) === "list" ? "list" : "shelf"));
   const [quickMenuFor, setQuickMenuFor] = useState<string | null>(null);
   const [tagSheetFor, setTagSheetFor] = useState<string | null>(null);
+  const [tagManagerOpen, setTagManagerOpen] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
   // P0-6：同步进度（引擎 onProgress → 节流 → 顶部同步按钮 title/aria-label；不改 5 槽构图）。
   const [syncProgress, setSyncProgress] = useState<SyncProgressSnapshot | null>(() => readSyncProgress());
@@ -442,6 +444,12 @@ export function HomePage(props: HomePageProps) {
     }
   };
 
+  /** 标签管理写操作后：目录（名称/排序/置顶）与关系（合并/删除）都可能变 ⇒ 两边都刷新。 */
+  const applyTagManagerChanged = async (): Promise<void> => {
+    await onQuickNoteTagsChanged();
+    await onQuickNotesChanged();
+  };
+
   // 排序（小记专用；知识库顺序 = 共享 sort_order = 桌面端顺序，不做本地排序）
   //  261015 用户点单：**加创建时间两档** ⇒ 最近更新 / 最早更新 / 最新创建 / 最早创建。
   const filterItems = useMemo<MobileSheetItem[]>(
@@ -577,10 +585,13 @@ export function HomePage(props: HomePageProps) {
           </div>
         ) : (
           <div ref={setQuickScrollNode} className="mobile-scroll">
-            {quickTagIndex.tags.length > 0 && (
+            {(quickTagIndex.tags.length > 0 || tagDirectory.length > 0) && (
               <div className="qn-tag-filter-bar" role="group" aria-label="按标签筛选小记">
                 <button className={"qn-tag" + (quickTagFilter.kind === "all" ? " is-selected" : "")} onClick={() => setQuickTagFilter({ kind: "all" })}>
                   <span>全部</span><span className="qn-tag__count">{quickNotes.length}</span>
+                </button>
+                <button className="qn-tag" aria-label="标签管理" onClick={() => setTagManagerOpen(true)}>
+                  <Settings2 size={14} /><span>管理</span>
                 </button>
                 {quickTagIndex.tags.map((tag) => (
                   <button
@@ -722,6 +733,13 @@ export function HomePage(props: HomePageProps) {
         ]}
         onClose={() => setQuickMenuFor(null)}
         onSelect={(it) => { const id = quickMenuFor; setQuickMenuFor(null); if (!id) return; if (it.id === "edit") void openEdit(id); else if (it.id === "tag") setTagSheetFor(id); else if (it.id === "delete") void deleteQuickNote(id); }}
+      />
+
+      <MobileQuickNoteTagManager
+        open={tagManagerOpen}
+        tags={quickNoteTagOptions}
+        onClose={() => setTagManagerOpen(false)}
+        onChanged={applyTagManagerChanged}
       />
 
       {(() => {

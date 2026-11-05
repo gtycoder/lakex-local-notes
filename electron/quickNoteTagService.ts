@@ -7,7 +7,6 @@ import { AppError } from "../src/core/storeErrors.js";
 import {
   normalizeQuickNoteTagIds,
   QuickNoteTagError,
-  sameQuickNoteTagDirectory,
   type QuickNoteTag,
 } from "../src/core/quickNoteTags.js";
 import type { QuickNoteTagsStore } from "./quickNoteTagsStore.js";
@@ -18,8 +17,8 @@ export class QuickNoteTagService {
     private readonly db: DbLike,
     private readonly tags: QuickNoteTagsStore,
     private readonly links: QuickNoteTagLinksStore,
-    /** 标签名变化后刷新搜索索引里的标签词（由小记子系统提供，方向是单向回调）。 */
-    private readonly onTagNamesChanged: () => void,
+    /** 标签目录变化后刷新搜索索引里的标签词（传**受影响的标签 id**，由小记子系统决定重刷哪些小记）。 */
+    private readonly onTagNamesChanged: (tagIds: readonly string[]) => void,
   ) {}
 
   list(options: { includeDeleted?: boolean } = {}): QuickNoteTag[] {
@@ -33,7 +32,7 @@ export class QuickNoteTagService {
   update(id: string, patch: { name?: string; pinned?: boolean; sortOrder?: number }): QuickNoteTag {
     const before = this.tags.list().find((tag) => tag.id === id)?.name;
     const tag = this.tags.update(id, patch);
-    if (before !== undefined && before !== tag.name) this.onTagNamesChanged();
+    if (before !== undefined && before !== tag.name) this.onTagNamesChanged([id]);
     return tag;
   }
 
@@ -48,7 +47,7 @@ export class QuickNoteTagService {
       this.tags.tombstone(id);
       updated = this.links.removeTag(id);
     })();
-    this.onTagNamesChanged();
+    this.onTagNamesChanged([id]);
     return { updated, failed: 0 };
   }
 
@@ -62,7 +61,7 @@ export class QuickNoteTagService {
       updated = this.links.replaceTag(sourceId, targetId);
       this.tags.tombstone(sourceId);
     })();
-    this.onTagNamesChanged();
+    this.onTagNamesChanged([sourceId]);
     return { updated, failed: 0 };
   }
 
@@ -79,7 +78,14 @@ export class QuickNoteTagService {
         if (tag.deletedAt) linksRemoved += this.links.removeTag(tag.id);
       }
     })();
-    if (linksRemoved > 0 || !sameQuickNoteTagDirectory(before, merged)) this.onTagNamesChanged();
+    const beforeById = new Map(before.map((tag) => [tag.id, tag] as const));
+    const changed = merged
+      .filter((tag) => {
+        const previous = beforeById.get(tag.id);
+        return !previous || previous.name !== tag.name || (previous.deletedAt ?? null) !== (tag.deletedAt ?? null);
+      })
+      .map((tag) => tag.id);
+    if (changed.length > 0 || linksRemoved > 0) this.onTagNamesChanged(changed);
     return merged;
   }
 

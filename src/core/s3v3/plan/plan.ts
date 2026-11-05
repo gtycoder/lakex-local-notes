@@ -8,9 +8,10 @@
  *    资产级 transfer（声明差集）与「pending 清理计划」留到 E1-2 后续小步（见 TODO），
  *    但契约已占位；dry-run 对拍（E1-3）先比合并决策与读写集合。
  */
-import type { LakeIndex, QuickNoteTagEntry, QuickNotesIndex } from "../protocol/index.js";
+import type { LakeIndex, QuickNotesIndex } from "../protocol/index.js";
 import { lakeBodyKey, quickNoteBodyKey } from "../protocol/index.js";
 import { planLakeMerge, planQuickNotesMerge } from "../../s3v3Merge.js";
+import { compareQuickNoteTagVersion, mergeQuickNoteTags } from "../../quickNoteTags.js";
 import type {
   DeleteOp, Intent, PlanWarning, ReadOp, Space, SyncPlan, TransferOp, WriteOp,
 } from "./types.js";
@@ -189,13 +190,17 @@ export function planSync(input: PlanInput): SyncPlan {
     }
   }
 
-  // 标签目录：远端优先（名称/删除态以云端为准），本地独有的标签保留（可能是刚建还没发布的）。
-  const quickTags = (() => {
-    const byId = new Map<string, QuickNoteTagEntry>();
-    for (const t of local.quickNotes.tags ?? []) byId.set(t.id, t);
-    for (const t of remote.quickNotes.tags ?? []) byId.set(t.id, t);
-    return [...byId.values()];
-  })();
+  // 标签目录：按 ID + 确定性 LWW 合并（本地新增/改名/置顶/排序/墓碑都可能需要发布）。
+  const localTags = local.quickNotes.tags ?? [];
+  const remoteTags = remote.quickNotes.tags ?? [];
+  const remoteTagById = new Map(remoteTags.map((tag) => [tag.id, tag] as const));
+  const quickTags = mergeQuickNoteTags(localTags, remoteTags);
+  /** 本端目录有更新（远端没有 / 本端更新）⇒ 本轮必须发布；纯远端更新不需要本端再发一次。 */
+  const localTagChanged = localTags.some((tag) => {
+    const other = remoteTagById.get(tag.id);
+    return !other || compareQuickNoteTagVersion(tag, other) > 0;
+  });
+  if (localTagChanged) indexChanged = true;
 
   // 发布索引：只在本轮会改变索引时构建（零变更轮 publish=null，只读 pointer）。
   let publish: SyncPlan["publish"] = null;
@@ -215,7 +220,7 @@ export function planSync(input: PlanInput): SyncPlan {
     publish = {
       lake: { v: 3, space: "lake", notes: lakeNotes, folders },
       quickNotes: {
-        v: 3, space: "quickNotes", items: quickItems, tags: local.quickNotes.tags,
+        v: 3, space: "quickNotes", items: quickItems, tags: quickTags,
         // 墓碑随索引传播（不可恢复删除；超过保留窗口的由引擎在入 plan 前裁掉）。
         ...((input.state.purgedQuickIds ?? []).length > 0 ? { purged: [...(input.state.purgedQuickIds ?? [])].sort() } : {}),
       },

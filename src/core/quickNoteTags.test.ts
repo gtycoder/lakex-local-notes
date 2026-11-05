@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   MAX_QUICK_NOTE_TAG_LENGTH,
+  compareQuickNoteTagVersion,
   MAX_QUICK_NOTE_TAGS,
   addQuickNoteTagId,
   buildQuickNoteTagIndex,
@@ -124,5 +125,15 @@ describe("quickNoteTags", () => {
     expect(sameQuickNoteTagDirectory([a], [{ ...a, name: "灵感库" }])).toBe(false);
     expect(sameQuickNoteTagDirectory([a], [{ ...a, deletedAt: "2026-10-25T00:00:00.000Z" }])).toBe(false);
     expect(sameQuickNoteTagDirectory([a], [{ ...a, pinned: true }])).toBe(false);
+  });
+
+  it("同一 updatedAt 用确定性 tie-break：两端合并必须选出同一赢家（否则改名/删除永不收敛）", () => {
+    const local = tag("A");
+    const remote = { ...local, name: "B" }; // updatedAt 相同、字段不同
+    const ab = mergeQuickNoteTags([local], [remote]);
+    const ba = mergeQuickNoteTags([remote], [local]);
+    expect(ab.map((entry) => entry.name)).toEqual(ba.map((entry) => entry.name));
+    expect(compareQuickNoteTagVersion(local, remote)).toBe(-compareQuickNoteTagVersion(remote, local));
+    expect(compareQuickNoteTagVersion(local, { ...local })).toBe(0);
   });
 });

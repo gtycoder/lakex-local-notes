@@ -179,16 +179,52 @@ export function filterQuickNotesByTag<T>(
   return notes.filter((note) => matchesQuickNoteTagFilter(tagIdsOf(note), filter));
 }
 
-/** 标签表合并（两端同步用）：按 ID + `updatedAt` LWW；墓碑只保留最新状态。 */
-export function mergeQuickNoteTags(
-  local: readonly QuickNoteTag[],
-  remote: readonly QuickNoteTag[],
-): QuickNoteTag[] {
-  const merged = new Map<string, QuickNoteTag>();
+/** 标签版本的最小形状（本地表 `QuickNoteTag` 与云端索引条目共用；云端旧索引可能只有 `order`）。 */
+export interface QuickNoteTagLike {
+  id: string;
+  name: string;
+  sortOrder?: number;
+  order?: number;
+  pinned?: boolean;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt?: string | null;
+}
+
+function tagOrderOf(tag: QuickNoteTagLike): number {
+  return tag.sortOrder ?? tag.order ?? 0;
+}
+
+/**
+ * 标签版本比较：**>0 = a 胜出；0 = 完全等价；<0 = b 胜出**。
+ *
+ * `updatedAt` 相同时用**确定性 tie-break**（归一化字段串）——两端对同一对记录必须选出同一个赢家，
+ * 否则「各留本地」会让改名/删除在两端永远不收敛（`>` 比较下双方都判自己赢）。
+ */
+export function compareQuickNoteTagVersion(a: QuickNoteTagLike, b: QuickNoteTagLike): number {
+  if (a.updatedAt !== b.updatedAt) return a.updatedAt > b.updatedAt ? 1 : -1;
+  const keyOf = (tag: QuickNoteTagLike): string => JSON.stringify([
+    tag.name,
+    tagOrderOf(tag),
+    tag.pinned ? 1 : 0,
+    tag.createdAt,
+    tag.deletedAt ?? null,
+  ]);
+  const ka = keyOf(a);
+  const kb = keyOf(b);
+  return ka === kb ? 0 : (ka > kb ? 1 : -1);
+}
+
+/** 标签表合并（两端同步用）：按 ID + 确定性 LWW；墓碑只保留最新状态。 */
+export function mergeQuickNoteTags<T extends QuickNoteTagLike>(
+  local: readonly T[],
+  remote: readonly T[],
+): T[] {
+  const merged = new Map<string, T>();
   for (const tag of local) merged.set(tag.id, tag);
   for (const tag of remote) {
     const current = merged.get(tag.id);
-    if (!current || tag.updatedAt > current.updatedAt) merged.set(tag.id, tag);
+    if (!current || compareQuickNoteTagVersion(tag, current) > 0) merged.set(tag.id, tag);
   }
   return [...merged.values()];
 }
@@ -197,17 +233,17 @@ export function mergeQuickNoteTags(
  * 目录是否等价（同步用）：字段级比较，避免远端目录无变化时也全量重建搜索索引。
  * 顺序不参与比较（展示顺序由调用方按 sortOrder/pinned 重新排序）。
  */
-export function sameQuickNoteTagDirectory(a: readonly QuickNoteTag[], b: readonly QuickNoteTag[]): boolean {
+export function sameQuickNoteTagDirectory(a: readonly QuickNoteTagLike[], b: readonly QuickNoteTagLike[]): boolean {
   if (a.length !== b.length) return false;
   const byId = new Map(b.map((tag) => [tag.id, tag] as const));
   return a.every((tag) => {
     const other = byId.get(tag.id);
     return !!other
       && tag.name === other.name
-      && tag.sortOrder === other.sortOrder
-      && tag.pinned === other.pinned
+      && tagOrderOf(tag) === tagOrderOf(other)
+      && (tag.pinned ?? false) === (other.pinned ?? false)
       && tag.createdAt === other.createdAt
       && tag.updatedAt === other.updatedAt
-      && tag.deletedAt === other.deletedAt;
+      && (tag.deletedAt ?? null) === (other.deletedAt ?? null);
   });
 }

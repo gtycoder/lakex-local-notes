@@ -9,6 +9,7 @@
  * 基线写入（这些仍归引擎；切换分两步走，先切「决策+IO」，再收编标记类字段）。
  */
 import type { DeviceState } from "../../s3v3DeviceStore.js";
+import { mergeQuickNoteTags, sameQuickNoteTagDirectory } from "../../quickNoteTags.js";
 import { TRASH_NOTEBOOK_ID } from "../../syncDecisions.js";
 import type { PlanState, PlanWorld } from "../plan/plan.js";
 import { settleCloudDeleted } from "../state/cloudDeleted.js";
@@ -81,14 +82,13 @@ function dropPurgedQuick(state: DeviceState): DeviceState {
   return { ...state, quickNotes: { ...state.quickNotes, items: state.quickNotes.items.filter((q) => !purged.has(q.id)) } };
 }
 
-/** 把合并后的标签目录并进设备状态（远端优先；本地独有的标签保留）。 */
+/** 把合并后的标签目录并进设备状态：**按 ID + 确定性 LWW**（远端改名/置顶/排序/墓碑必须能落到本端）。 */
 function mergeQuickTagsIntoState(state: DeviceState, tags: DeviceState["quickNotes"]["tags"] | undefined): DeviceState {
   if (!tags || tags.length === 0) return state;
-  const byId = new Map<string, NonNullable<DeviceState["quickNotes"]["tags"]>[number]>();
-  for (const t of state.quickNotes.tags ?? []) byId.set(t.id, t);
-  let changed = false;
-  for (const t of tags) { if (!byId.has(t.id)) { byId.set(t.id, t); changed = true; } }
-  return changed ? { ...state, quickNotes: { ...state.quickNotes, tags: [...byId.values()] } } : state;
+  const local = state.quickNotes.tags ?? [];
+  const merged = mergeQuickNoteTags(local, tags);
+  if (sameQuickNoteTagDirectory(local, merged)) return state;
+  return { ...state, quickNotes: { ...state.quickNotes, tags: merged } };
 }
 
 export function mergeRoundIntoState(state: DeviceState, round: RoundResult, opts: { bodyFailed?: ReadonlySet<string> } = {}): DeviceState {
