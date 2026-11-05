@@ -14,7 +14,7 @@
 - **业务一致性**：core、electron、移动bridge/data/v3/home、标签管理和标签规格/用户指南与 `d2f76b3b` 的diff为空。保留标签无置顶、目录/文内顺序仅本机、wire不传播顺序、远端墓碑清本机关联的定稿；未修改内核或依赖。
 - **最终门禁**：tsc0；全量614文件（603通过/11 integration文件skip），3722 passed/12 skipped；core136文件0违规、mobileui/ui-metrics、桌面/Android构建、bundle/arch与diff-check通过。首屏gzip桌面552168B/600000、移动348137B/360000；APK42197356B。!important桌面9/移动19，字号/非主题颜色字面量0，跨文件重复103。
 - **设备实测**：桌面20,000条UI样本卡片19/索引22挂载，详情读取7、样本写入0；搜索/首尾键盘与真实编辑器切资源页再回来保留实例通过。手机0真落库并恢复、Picker焦点/返回/滚动锁、搜索结果原生按钮与安全区52/32/24通过。Pad实测首次Esc撤回数字、第二次退出分类；AI未保存模型重开保留，原生已保存值不变。手机6态与Pad1280×800的6态独立复采均0差异；新夹具与上一轮只差4条日期指纹和正文临时UUID，其余条目一致，未放宽快照断言。此前正文几何A/B与23屏全到达证据见上批；本轮未重复全量23屏，未测物理机帧率或2万条实库存储/同步。
-- **交付/记录**：三端预览沿用桌面9242、手机5588/CDP9362、Pad5590/CDP9363，覆盖更新、保留数据。专用验收9246/5594，不操作并行5584或正式数据。证据与全部文件清单见`.css-audit/final-review/REVIEW.md`；本轮推送目标仅Gitee/GitHub的master，两端最终hash以`ls-remote`核验，`feat/pad-touch-ui`保留原业务提交。
+- **交付/记录**：三端预览沿用桌面9242、手机5588/CDP9362、Pad5590/CDP9363，覆盖更新、保留数据。专用验收9246/5594，不操作并行5584或正式数据。证据与全部文件清单见`.css-audit/final-review/REVIEW.md`；本轮已双推Gitee/GitHub的master，两端`ls-remote`已核验与本地同hash，`feat/pad-touch-ui`保留原业务提交。
 
 ### 261105 · 九项 UI 交互与结构改进（`feat/ui-surface-polish`）
 - **依据与基线**：用户认可六项视觉优化，批准继续按数字输入→浮层→键盘/字段语义→大列表→加载→样式→组件→安全区→文案的顺序完成。本批先合入业务已提交的`a08dcfa2`（合并`4ba77d66`），不带主工作树在途修改；业务后续提交留在其分支，集成时再处理。
@@ -796,7 +796,7 @@
 | worktree | 分支 | HEAD | 状态 |
 | --- | --- | --- | --- |
 | `lakex-ui-surface-polish`（本会话） | `feat/ui-surface-polish` | 见 `git log -1` | UI各批及全量复审补漏已集成master，分支保留本地；推送目标仅master。当前工作树以`git status`为准 |
-| `lakex-local-notes`（主仓库） | `master` | 见 `git log -1`（不写死hash） | 已快进集成UI和另一会话最新标签定稿；本轮master推Gitee/GitHub，交付时两端`ls-remote`核验同hash；不更新`feat/pad-touch-ui`。并行状态以`git status`为准 |
+| `lakex-local-notes`（主仓库） | `master` | 见 `git log -1`（不写死hash） | 已快进集成UI和另一会话最新标签定稿；本轮master已双推Gitee/GitHub，两端`ls-remote`已核验与本地同hash；不更新`feat/pad-touch-ui`。并行状态以`git status`为准 |
 | `lakex-pad` | `feat/pad-adaptation` | `17f44dbd` | **历史残留**：平板第一批早已合入master，当前落后数量以git为准。旧README/AGENTS/HANDOFF不要当依据；此工作树本轮未操作 |
 
 - 本轮仅推进`master`（含UI复审），`feat/pad-touch-ui`保留另一会话已双推的`d2f76b3b`；不要再认为它与master恒同hash。两远端master的交付核验见`.css-audit/final-review/merge-verify.txt`。
