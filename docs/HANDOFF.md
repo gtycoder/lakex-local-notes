@@ -8,6 +8,14 @@
 
 ## 0. 最新交接（261027）
 
+### 261105 · UI 全量复审与 master 集成
+- **范围/并行保护**：复审 UI 分支对业务 master 的全部87个文件，含源码、样式、测试、快照与文档。先将另一会话的最新 `d2f76b3b` 合入 UI（`fd545402`），只冲突本交接文档，保留双方批次并按最新标签裁决收口；复审修复为 `5650834d` / `8466ae28`。随后主工作树以 `--ff-only` 合入 UI，没有回滚并行提交。
+- **补漏**：数字草稿Esc先撤回、再次Esc关浮层，组字不触发提交/关闭；子层同步卸载后同一次Esc不再关父层；虚拟小记隐藏时暂停测量但保留条目，24条阈值两侧父层/key一致，媒体/滑杆保留自身按键；移动AI读取关闭后不回填、重开保留草稿，原生测试异常显示失败/重试并撤销验证；鼠标已展开子菜单后，键盘仍能移入焦点。每项先复现失败再修复。冒烟脚本改查当前设置Dialog并恢复首焦点断言；设计摘要色值和写作组件同步注释一并纠正。
+- **业务一致性**：core、electron、移动bridge/data/v3/home、标签管理和标签规格/用户指南与 `d2f76b3b` 的diff为空。保留标签无置顶、目录/文内顺序仅本机、wire不传播顺序、远端墓碑清本机关联的定稿；未修改内核或依赖。
+- **最终门禁**：tsc0；全量614文件（603通过/11 integration文件skip），3722 passed/12 skipped；core136文件0违规、mobileui/ui-metrics、桌面/Android构建、bundle/arch与diff-check通过。首屏gzip桌面552168B/600000、移动348137B/360000；APK42197356B。!important桌面9/移动19，字号/非主题颜色字面量0，跨文件重复103。
+- **设备实测**：桌面20,000条UI样本卡片19/索引22挂载，详情读取7、样本写入0；搜索/首尾键盘与真实编辑器切资源页再回来保留实例通过。手机0真落库并恢复、Picker焦点/返回/滚动锁、搜索结果原生按钮与安全区52/32/24通过。Pad实测首次Esc撤回数字、第二次退出分类；AI未保存模型重开保留，原生已保存值不变。手机6态与Pad1280×800的6态独立复采均0差异；新夹具与上一轮只差4条日期指纹和正文临时UUID，其余条目一致，未放宽快照断言。此前正文几何A/B与23屏全到达证据见上批；本轮未重复全量23屏，未测物理机帧率或2万条实库存储/同步。
+- **交付/记录**：三端预览沿用桌面9242、手机5588/CDP9362、Pad5590/CDP9363，覆盖更新、保留数据。专用验收9246/5594，不操作并行5584或正式数据。证据与全部文件清单见`.css-audit/final-review/REVIEW.md`；本轮推送目标仅Gitee/GitHub的master，两端最终hash以`ls-remote`核验，`feat/pad-touch-ui`保留原业务提交。
+
 ### 261105 · 九项 UI 交互与结构改进（`feat/ui-surface-polish`）
 - **依据与基线**：用户认可六项视觉优化，批准继续按数字输入→浮层→键盘/字段语义→大列表→加载→样式→组件→安全区→文案的顺序完成。本批先合入业务已提交的`a08dcfa2`（合并`4ba77d66`），不带主工作树在途修改；业务后续提交留在其分支，集成时再处理。
 - **1 数字输入**：桌面与移动均保留草稿，失焦/Enter校验提交，Esc撤回，0合法，上下限夹取；整数step1，桌面AI温度step=any。跨端6例覆盖0、小数、空值、上下限、撤回与外部更新，Android真落库0并恢复原值。
@@ -781,22 +789,22 @@
 
 ## 1. 当前基线（唯一状态来源，261103 收盘）
 
-> 本节 261103 20:35 重建、**261104 15:10 按 git 实测更新（合 master 收尾）**；§0 的批次抬头保留当时口径（261102 及更早的「未提交 / 未 push」多已失效），**任何状态判断以本节为准**。
+> 本节 261103 20:35 重建、**261105 UI复审集成后按git实测更新**；§0 的批次抬头保留当时口径（261102 及更早的「未提交 / 未 push」多已失效），**任何状态判断以本节为准**。
 
 **仓库与 worktree（`git worktree list` 实测）**
 
 | worktree | 分支 | HEAD | 状态 |
 | --- | --- | --- | --- |
-| `lakex-ui-surface-polish`（本会话） | `feat/ui-surface-polish` | 见 `git log -1` | 独立UI分支，已合入主仓库截至`2c90119f`的提交；261105九项UI交互/结构改进已完成，仅本地提交，未推送、未回合业务分支。当前工作树以`git status`为准 |
-| `lakex-local-notes`（主仓库） | `master`（工作树当前；`feat/pad-touch-ui` 同一 commit） | 见 `git log -1`（**不写死 hash**；本批 = 261104 三项裁决 + 261105 资源/标签两批） | **已合 master 并双推**：Gitee / GitHub 的 `master` 与 `feat/pad-touch-ui` **均与本地同 hash**（两远端 `ls-remote` 实测 0/0）；工作树 clean，多会话并行状态以 `git status` 为准 |
-| `lakex-pad` | `feat/pad-adaptation` | `17f44dbd` | **历史残留**：平板第一批早已合入 master，本分支落后 master 15 提交、领先 0。其 README/AGENTS/HANDOFF 是旧口径（「平板走内核工具栏」「补丁 3 处」），**不要当依据**；确认不再用可 `git worktree remove lakex-pad`（需用户点头） |
+| `lakex-ui-surface-polish`（本会话） | `feat/ui-surface-polish` | 见 `git log -1` | UI各批及全量复审补漏已集成master，分支保留本地；推送目标仅master。当前工作树以`git status`为准 |
+| `lakex-local-notes`（主仓库） | `master` | 见 `git log -1`（不写死hash） | 已快进集成UI和另一会话最新标签定稿；本轮master推Gitee/GitHub，交付时两端`ls-remote`核验同hash；不更新`feat/pad-touch-ui`。并行状态以`git status`为准 |
+| `lakex-pad` | `feat/pad-adaptation` | `17f44dbd` | **历史残留**：平板第一批早已合入master，当前落后数量以git为准。旧README/AGENTS/HANDOFF不要当依据；此工作树本轮未操作 |
 
-- `master` = `feat/pad-touch-ui` **同一 commit**（本轮 ff 合并 + 双推；两远端 `ls-remote` 实测同 hash）。master 自 `408d6126` 前进 **80+ 提交**（手写板线 + 移动端/编辑面线 + 261104/261105 本批）。
-- 发版：只有 v0.0.1 / v0.0.2（`4b2a2467`），`package.json` = 0.0.2；**v0.0.2..HEAD 共 125 提交未发版**（下一版 v0.0.3 的发布说明必须写 inkDoc v4：旧端只读、手机/平板需重装）。
+- 本轮仅推进`master`（含UI复审），`feat/pad-touch-ui`保留另一会话已双推的`d2f76b3b`；不要再认为它与master恒同hash。两远端master的交付核验见`.css-audit/final-review/merge-verify.txt`。
+- 发版仍只有v0.0.1/v0.0.2，package.json=0.0.2；未发版提交数用`git rev-list --count v0.0.2..master`查询，别沿用125这个旧计数。下一版发布说明须写inkDoc v4：旧端只读、手机/平板需重装。
 - 261103 各批已全部提交并双推（20:08–20:21）：`ce442482`（usheet 35 行/双光标/整行整列）、`733ab4aa`（多维表头部+短名）、`2b29d9e8`（画板工具条+第 4 处补丁）、`75c46902`（ink 14 色）、`ae14ffd1`（胶囊/横滑/安全区/页签 44/useKeyboard）、`1f164f2b`（门禁装置+三份基线重烤）、`1e74c3f8`（文档）、`fdf9c455`（AI 默认关）。
 - 261103 之后（261104 凌晨，均已双推）：ink 三修（`912143da` 落笔/擦除按批渲染、`8f32a5ca` 中断不丢笔）+ 性能观测 `af169f96` + 图片页背景下采样 `8dc83a87` + 导入体积提示 `388232db` + 资源页本地占用 `1adcde27`。
 
-**门禁基线**（261105 11:50 主工作树实测，含本批 ①②③ + 资源管理 UI + 小记标签（同步修复/顺序本地/移动端拖拽管理 + review 补漏））：tsc 0 / 全量 vitest **604 文件 3698 例（3686 通过 + 12 skipped；另有 11 个 integration 文件 skipped）** / ui-metrics 0 违规 / `check:core` 136 文件 0 / `check:mobileui` / 双 build / `check:bundle`（mobile-entry-preload 27/30、mobile-js 55,767/61,440、mobile-css 138,061/141,312）/ `check:arch`（移动首屏 347.3KB/360KB；桌面 541.1KB/600KB；import 违规 0）/ `git diff --check` 0。**移动 6 态快照**本批未重跑（改动集中在设置子页/标签浮层，未动外壳几何；按 §3#21 发版前补跑）；23 屏走查与 `check:windowsweep` 未跑。**APK 已按合 master 后代码重装**（lake_mobile emulator-5584，debug，40,164,287B）；测试数据已清（文档 9 / 小记 4）。
+**门禁基线**（261105 UI复审集成后）：tsc0；全量614文件（603 passed/11 integration skipped），3722 passed/12 skipped；core136文件0违规、mobileui/ui-metrics、双构建、bundle/arch、diff-check通过。首屏桌面552168B/600000B、移动348137B/360000B；APK42197356B。手机/Pad各6态独立复采0差异；桌面/移动/Pad交互验证见§0最新批和`.css-audit/final-review/REVIEW.md`。当前预览9242/5588/5590；并行5584本轮未操作。
 
 **环境（本机实测 261104 追加，261105 更新）**：**GitHub 推送走 HTTPS**（SSH key 未在 GitHub 侧生效；keychain 里有 `gtycoder` 凭据）⇒ `git push https://github.com/gtycoder/lakex-local-notes.git <branch>` 可用；Gitee 仍 `origin` SSH 正常。**本机已把 `origin` 的第二 pushurl 改为该 HTTPS 地址** ⇒ `git push origin <branch>` 一次推两边。**261105 实测：本机到 GitHub 会偶发 HTTP2 framing / 443 连接超时**（Gitee 正常）；遇到时先 `git -c http.version=HTTP/1.1 push <url> <branch>` 重试，仍失败就只推 Gitee、恢复后补推。
 
