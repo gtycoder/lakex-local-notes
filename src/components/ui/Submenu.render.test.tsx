@@ -8,6 +8,13 @@ beforeEach(() => { vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true); host = docum
 afterEach(() => { act(() => root.unmount()); host.remove(); vi.unstubAllGlobals(); });
 const key = (element: Element, value: string) => act(() => { element.dispatchEvent(new KeyboardEvent("keydown", { key: value, bubbles: true, cancelable: true })); });
 describe("子菜单键盘路径", () => {
+  it("鼠标已打开子菜单后，方向键仍能把焦点移入选项", () => {
+    act(() => root.render(createElement(Submenu, { label: "导出", children: createElement("button", { role: "menuitem" }, "PDF") })));
+    const trigger = host.querySelector("button")!;
+    act(() => trigger.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 })));
+    act(() => trigger.focus()); key(trigger, "ArrowRight");
+    expect(document.activeElement?.textContent).toBe("PDF");
+  });
   it("可聚焦触发器，右键展开/上下移动/左键回到触发器/Esc先关子层", () => {
     act(() => root.render(createElement(Submenu, { label: "导出", children: [createElement("button", { key: 1, role: "menuitem" }, "PDF"), createElement("button", { key: 2, role: "menuitem", disabled: true }, "不可用"), createElement("button", { key: 3, role: "menuitem" }, "Word")] })));
     const trigger = host.querySelector("button")!; act(() => trigger.focus()); key(trigger, "ArrowRight");

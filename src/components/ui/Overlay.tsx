@@ -351,12 +351,19 @@ export function Submenu({ label, children, disabled = false, openDelayMs = 120, 
     if (panelRef.current?.contains(document.activeElement)) rowRef.current?.focus();
     setOpen(false);
   }, []);
+  const focusEdge = useCallback((edge: "first" | "last") => {
+    const items = [...(panelRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled),[role="menuitem"]:not([aria-disabled="true"])') ?? [])];
+    (edge === "last" ? items.at(-1) : items[0])?.focus();
+  }, []);
+  const openFromKeyboard = (edge: "first" | "last") => {
+    if (open) focusEdge(edge);
+    else { keyboardOpenRef.current = edge; setOpen(true); }
+  };
   useEffect(() => {
     if (!open || !keyboardOpenRef.current) return;
-    const items = [...(panelRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled),[role="menuitem"]:not([aria-disabled="true"])') ?? [])];
-    (keyboardOpenRef.current === "last" ? items.at(-1) : items[0])?.focus();
+    focusEdge(keyboardOpenRef.current);
     keyboardOpenRef.current = null;
-  }, [open]);
+  }, [open, focusEdge]);
 
 
   useLayoutEffect(() => {
@@ -382,11 +389,11 @@ export function Submenu({ label, children, disabled = false, openDelayMs = 120, 
         className={"context-menu-item has-submenu" + (disabled ? " is-disabled" : "")}
         aria-haspopup="menu"
         aria-expanded={open}
-        onClick={(event) => { if (event.detail === 0) keyboardOpenRef.current = "first"; setOpen(true); }}
+        onClick={(event) => { if (event.detail === 0) openFromKeyboard("first"); else setOpen(true); }}
         onKeyDown={(event) => {
           if (!["ArrowRight", "ArrowDown", "ArrowUp"].includes(event.key)) return;
           event.preventDefault(); event.stopPropagation();
-          keyboardOpenRef.current = event.key === "ArrowUp" ? "last" : "first"; setOpen(true);
+          openFromKeyboard(event.key === "ArrowUp" ? "last" : "first");
         }}
       >
         <span className="context-menu-item-label">{label}</span>
