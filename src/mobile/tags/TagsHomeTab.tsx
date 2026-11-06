@@ -1,18 +1,20 @@
 /**
- * 一级「标签」页（261106 用户验收；与小记/知识库并列，flomo 式信息架构）：
- * 标签即入口 → 点进去看内容 → 编辑动作收在「管理」次级入口。
+ * 一级「标签」页（261106 用户验收；与小记/知识库并列，flomo 式：标签即入口）。
  *
- * 列表：标签名 + 「N 篇文档、M 条小记」（设备本地顺序，不重新排序）+ chevron；
- *   右上「管理」进入管理态（新建/重命名/合并到…/删除/长按拖拽，主体复用 TagManageList），
- *   右上「＋」新建（弹输入，MobileSheet）。
- * 详情：点标签进来 —— 文档 / 小记两段（各自按 updatedAt 倒序），行点击打开对应内容；
- *   行内「移除」= 只删这条引用（文档 setNoteTags / 小记 setQuickNoteTags），成功后刷新关系与计数。
+ * 版面（261106 打磨）：与「小记」页**同一套页面骨架**——
+ *   .mobile-scroll（纵向滚动）+ .mobile-quick-cards（页面内距 12/16 + 组间距 12）
+ *   + .mb-set-title / .mb-set-section 卡片 + .mb-set-item 行（min-height 48、行间发丝、页内距 16）；
+ *   按钮 .mb-btn / .mb-iconbtn（44 命中）、空态 .mb-empty。**不新增自造类、不新增 CSS。**
  *
- * 计数/聚合复用 tags/tagAggregate 的纯函数（不复制第二套）；删除/合并文案复用 tagManageCopy。
- * 版面只用既有 mb-* / qn-tag* 语汇（0 新增 CSS）。
+ * 列表：标签名 + 「N 篇文档、M 条小记」（设备本地顺序，不重排）+ chevron；
+ *   头部卡右上「管理」（进管理态）/「＋」（新建标签，弹 MobileSheet 输入）。
+ * 详情：文档 / 小记两段（各自 updatedAt 倒序）；行点击打开；行尾 **× 图标**（44 命中）移除该条关联，
+ *   点击先二次确认（只删关联，不动标签本身与其它内容），确认后才调 setNoteTags / setQuickNoteTags。
+ *
+ * 计数/聚合复用 tags/tagAggregate 的纯函数（不复制第二套）；删除/合并/移除文案在 tagManageCopy。
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, Feather, FileText, Plus, Settings2, Tag } from "lucide-react";
+import { ChevronLeft, ChevronRight, Feather, FileText, Plus, Settings2, Tag, X } from "lucide-react";
 import type { QuickNoteTag } from "../../core/quickNoteTags";
 import { buildQuickNoteTagIndex, buildQuickNoteTagOptions } from "../../core/quickNoteTags";
 import { formatListTime } from "../../core/dateFormat";
@@ -20,6 +22,7 @@ import { getNativeErrorMessage } from "../../lib/nativeErrors";
 import type { LocalNoteSummary } from "../data/noteRepository";
 import type { MobileQuickNote } from "../home/HomePage";
 import { bridge } from "../bridge";
+import { confirmMobile } from "../ui/ConfirmDialog";
 import { MobileSheet } from "../ui/MobileSheet";
 import { showToast } from "../ui/toastBus";
 import { aggregateTagRows, tagCounts, type NoteTagLinks, type TagAggregateRow } from "./tagAggregate";
@@ -43,6 +46,9 @@ export interface TagsHomeTabProps {
 const fmtTime = (iso: string): string => {
   try { return formatListTime(new Date(iso), new Date()); } catch { return iso; }
 };
+
+/** 行内计数文案（列表 / 详情 / 管理态同一口径）。 */
+const countText = (docs: number, quickNotes: number): string => docs + " 篇文档、" + quickNotes + " 条小记";
 
 export function TagsHomeTab({ tags, notes, quickNotes, active, onOpenNote, onOpenQuickNote, onChanged }: TagsHomeTabProps) {
   const [links, setLinks] = useState<NoteTagLinks | null>(null);
@@ -99,9 +105,15 @@ export function TagsHomeTab({ tags, notes, quickNotes, active, onOpenNote, onOpe
     else onOpenQuickNote(row.id);
   };
 
-  /** 行内移除该标签：只动关系、不动正文；失败明确提示并保留原列表。 */
+  /** 行尾 ×：**先二次确认**（只删这条关联，标签本身与其它内容不受影响），确认后才落库。 */
   const removeRow = async (row: TagAggregateRow): Promise<void> => {
     if (!selectedTag || busy) return;
+    const ok = await confirmMobile({
+      title: "移除标签「" + selectedTag.name + "」？",
+      body: "仅从这条内容上移除该标签；标签本身、以及其它内容的关联不受影响。",
+      confirmText: "移除",
+    });
+    if (!ok) return;
     setBusy(true);
     try {
       if (row.kind === "doc") {
@@ -141,94 +153,132 @@ export function TagsHomeTab({ tags, notes, quickNotes, active, onOpenNote, onOpe
   const docs = rows.filter((row) => row.kind === "doc");
   const quickRows = rows.filter((row) => row.kind === "quick");
 
-  /** 聚合行：整行可点（role=button）+ 行尾「移除」（独立按钮，点击 stopPropagation）。 */
+  /** 聚合行：整行可点（main role=button）+ 行尾 ×（IconButton 44；stopPropagation 只走移除流程）。 */
   const renderRow = (row: TagAggregateRow) => (
-    <div
-      key={row.kind + row.id}
-      className="mb-row mb-row--two-line"
-      role="button"
-      tabIndex={0}
-      onClick={() => openRow(row)}
-      onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openRow(row); } }}
-    >
-      <span className="mb-row__main">
-        <span className="mb-row__title">{row.title}</span>
-        <span className="mb-row__sub">{row.kind === "doc" ? "文档" : "小记"}　{fmtTime(row.updatedAt)}</span>
-      </span>
-      <button
-        type="button"
-        className="mb-btn mb-btn--ghost"
-        disabled={busy}
-        aria-label={"从「" + (selectedTag?.name ?? "") + "」移除「" + row.title + "」"}
-        onClick={(event) => { event.stopPropagation(); void removeRow(row); }}
-      >移除</button>
+    <div key={row.kind + row.id} className="mb-set-item">
+      <div
+        className="mb-set-item__main"
+        role="button"
+        tabIndex={0}
+        onClick={() => openRow(row)}
+        onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openRow(row); } }}
+      >
+        <div className="mb-set-name">{row.title}</div>
+        <div className="mb-set-item__desc">{row.kind === "doc" ? "文档" : "小记"}　{fmtTime(row.updatedAt)}</div>
+      </div>
+      <div className="mb-set-item__ctl">
+        <button
+          type="button"
+          className="mb-iconbtn"
+          disabled={busy}
+          aria-label={"移除标签「" + row.title + "」"}
+          onClick={(event) => { event.stopPropagation(); void removeRow(row); }}
+        >
+          <X size={18} />
+        </button>
+      </div>
     </div>
   );
 
   return (
     <div className="mobile-scroll">
-      <div className="qn-tag-filter-bar" role="group" aria-label="标签页操作">
-        <button
-          type="button"
-          className={"qn-tag" + (manage ? " is-selected" : "")}
-          aria-pressed={manage}
-          aria-label={manage ? "完成标签管理" : "管理标签"}
-          onClick={() => { setManage(!manage); setSelectedTagId(null); }}
-        >
-          <Settings2 size={14} /><span>{manage ? "完成" : "管理"}</span>
-        </button>
-        <button type="button" className="qn-tag" aria-label="新建标签" onClick={() => { setCreateError(null); setCreateOpen(true); }}>
-          <Plus size={14} /><span>新建</span>
-        </button>
-      </div>
+      <div className="mobile-quick-cards">
+        {/* 页头：标题 + 计数 + 「管理」「＋」（mb-set 行规范：命中 44、aria 齐） */}
+        <div className="mb-set-section">
+          <div className="mb-set-item">
+            <div className="mb-set-item__main">
+              <div className="mb-set-name">标签</div>
+              <div className="mb-set-item__desc">{tags.length} 个标签，顺序只在本机生效</div>
+            </div>
+            <div className="mb-set-item__ctl">
+              <button
+                type="button"
+                className="mb-btn mb-btn--secondary"
+                aria-pressed={manage}
+                aria-label={manage ? "完成标签管理" : "管理标签"}
+                onClick={() => { setManage(!manage); setSelectedTagId(null); }}
+              >
+                <Settings2 size={16} />{manage ? "完成" : "管理"}
+              </button>
+              <button type="button" className="mb-iconbtn" aria-label="新建标签" onClick={() => { setCreateError(null); setCreateOpen(true); }}>
+                <Plus size={20} />
+              </button>
+            </div>
+          </div>
+        </div>
 
-      {selectedTag ? (
-        <div className="mb-set-items">
-          <button type="button" className="mb-row" onClick={() => setSelectedTagId(null)}>
-            <ChevronLeft size={16} className="mb-row__icon" />
-            <span className="mb-row__title">全部标签</span>
-          </button>
-          <div className="qn-tag-sheet__section">
-            <Tag size={14} /><span>{selectedTag.name}</span>
-            <span className="qn-tag-sheet__count">{(counts.docs[selectedTag.id] ?? 0) + " 篇文档、" + (counts.quickNotes[selectedTag.id] ?? 0) + " 条小记"}</span>
+        {selectedTag ? (
+          <>
+            <div className="mb-set-section">
+              <div className="mb-set-item">
+                <div className="mb-set-item__ctl">
+                  <button type="button" className="mb-iconbtn" aria-label="返回标签列表" onClick={() => setSelectedTagId(null)}>
+                    <ChevronLeft size={20} />
+                  </button>
+                </div>
+                <div className="mb-set-item__main">
+                  <div className="mb-set-name">{selectedTag.name}</div>
+                  <div className="mb-set-item__desc">
+                    {countText(counts.docs[selectedTag.id] ?? 0, counts.quickNotes[selectedTag.id] ?? 0)}
+                  </div>
+                </div>
+              </div>
+            </div>
+            {rows.length === 0 ? (
+              <div className="mb-empty">该标签下暂无内容</div>
+            ) : (
+              <>
+                <h4 className="mb-set-title"><FileText size={14} />文档（{docs.length}）</h4>
+                <div className="mb-set-section">{docs.map(renderRow)}</div>
+                <h4 className="mb-set-title"><Feather size={14} />小记（{quickRows.length}）</h4>
+                <div className="mb-set-section">{quickRows.map(renderRow)}</div>
+              </>
+            )}
+          </>
+        ) : manage ? (
+          <TagManageList tags={summaries} docCounts={counts.docs} onChanged={reloadAll} />
+        ) : linksError ? (
+          <div className="mb-set-section">
+            <div className="mb-set-item">
+              <div className="mb-set-item__main">
+                <div className="mb-set-name">标签目录暂不可用</div>
+                <div className="mb-set-item__desc">{linksError}</div>
+              </div>
+              <div className="mb-set-item__ctl">
+                <button type="button" className="mb-btn mb-btn--secondary" onClick={() => void loadLinks()}>重试</button>
+              </div>
+            </div>
           </div>
-          {rows.length === 0 ? (
-            <div className="mb-empty">该标签下暂无内容</div>
-          ) : (
-            <>
-              <div className="qn-tag-sheet__section"><FileText size={14} /><span>文档（{docs.length}）</span></div>
-              {docs.map(renderRow)}
-              <div className="qn-tag-sheet__section"><Feather size={14} /><span>小记（{quickRows.length}）</span></div>
-              {quickRows.map(renderRow)}
-            </>
-          )}
-        </div>
-      ) : manage ? (
-        <TagManageList tags={summaries} docCounts={counts.docs} onChanged={reloadAll} />
-      ) : linksError ? (
-        <div>
-          <div className="mb-empty" role="alert">标签目录暂不可用：{linksError}</div>
-          <div className="qn-tag-manager__actions">
-            <button type="button" className="mb-btn mb-btn--secondary" onClick={() => void loadLinks()}>重试</button>
-          </div>
-        </div>
-      ) : (
-        <div className="mb-set-items">
-          {tags.length === 0 ? (
-            <div className="mb-empty">还没有标签。新建一个标签，或在文档 / 小记里添加标签。</div>
-          ) : tags.map((tag) => (
-            <button key={tag.id} type="button" className="mb-row mb-row--two-line" onClick={() => setSelectedTagId(tag.id)}>
-              <Tag size={18} className="mb-row__icon" />
-              <span className="mb-row__main">
-                <span className="mb-row__title">{tag.name}</span>
-                <span className="mb-row__sub">{(counts.docs[tag.id] ?? 0) + " 篇文档、" + (counts.quickNotes[tag.id] ?? 0) + " 条小记"}</span>
-              </span>
-              <ChevronRight size={18} className="mb-row__chevron" />
-            </button>
-          ))}
-          {loadingLinks && tags.length > 0 && <div className="qn-tag-manager__hint">读取标签计数…</div>}
-        </div>
-      )}
+        ) : tags.length === 0 ? (
+          <div className="mb-empty">还没有标签。新建一个标签，或在文档 / 小记里添加标签。</div>
+        ) : (
+          <>
+            <div className="mb-set-section">
+              {tags.map((tag) => (
+                <div
+                  key={tag.id}
+                  className="mb-set-item"
+                  role="button"
+                  tabIndex={0}
+                  aria-label={tag.name}
+                  onClick={() => setSelectedTagId(tag.id)}
+                  onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelectedTagId(tag.id); } }}
+                >
+                  <Tag size={18} className="mb-row__icon" />
+                  <div className="mb-set-item__main">
+                    <div className="mb-set-name">{tag.name}</div>
+                    <div className="mb-set-item__desc">{countText(counts.docs[tag.id] ?? 0, counts.quickNotes[tag.id] ?? 0)}</div>
+                  </div>
+                  <div className="mb-set-item__ctl">
+                    <ChevronRight size={18} className="mb-row__chevron" />
+                  </div>
+                </div>
+              ))}
+            </div>
+            {loadingLinks && <div className="mb-set-item__desc">读取标签计数…</div>}
+          </>
+        )}
+      </div>
 
       <MobileSheet
         open={createOpen}

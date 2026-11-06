@@ -1,17 +1,15 @@
 /**
- * 标签管理**主体**（261106 从 MobileQuickNoteTagManager 抽出，单一来源）：
+ * 标签管理**主体**（261106 从 MobileQuickNoteTagManager 抽出；261106 打磨：改走 mb-set-* 原语）：
  * 新建 / 重命名 / 合并到… / 删除 / 长按拖拽排序。
  *
- * 两处复用（不要各写一套）：
- *  · 一级「标签」页的管理态直接嵌在列表里（TagsHomeTab）；
- *  · 底部 Sheet 形态（MobileQuickNoteTagManager，给小记标签条用）。
- *
- * 用户定稿：**标签顺序是设备本地视图**（不参与 S3 同步）；置顶已整体删除。
- * 拖拽与移动端目录栏同口径：长按 350ms 进入拖拽、跟手找落点（行前/行后）、松手提交一次 reorder。
+ * 宿主：一级「标签」页的管理态（TagsHomeTab 直接嵌在 .mobile-quick-cards 里）——
+ * 版面与列表/详情同一套：.mb-set-title / .mb-set-section 卡片 / .mb-set-item 行 / .mb-set-block 动作块 /
+ * .mb-btn / .mb-iconbtn（44 命中）/ .mb-empty。拖拽指示沿用既有的 .qn-tag-manager__row.is-dragging/is-drop-*。
+ * 用户定稿：**标签顺序是设备本地视图**（不参与 S3 同步）；置顶已删除；长按 350ms 进入拖拽、松手提交一次 reorder。
  * 删除/合并文案来自 tagManageCopy（与桌面同句）。
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { GripVertical, Merge, MoreHorizontal, Pencil, Trash } from "lucide-react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ChevronRight, GripVertical, Merge, MoreHorizontal, Pencil, Trash } from "lucide-react";
 import { bridge } from "../bridge";
 import { moveQuickNoteTagOrder, normalizeQuickNoteTag, type QuickNoteTagSummary } from "../../core/quickNoteTags";
 import { getNativeErrorMessage } from "../../lib/nativeErrors";
@@ -171,111 +169,149 @@ export function TagManageList({ tags, docCounts, onChanged }: TagManageListProps
 
   if (mergeSource) {
     return (
-      <div className="qn-tag-sheet__list">
-        <div className="qn-tag-sheet__section"><Merge size={14} /><span>把「{mergeSource.name}」合并到：</span></div>
-        <div className="qn-tag-manager__hint">{MERGE_TAG_HINT}</div>
-        {mergeTargets.map((tag) => (
-          <button
-            key={tag.id}
-            type="button"
-            className="qn-tag-sheet__item"
-            disabled={busy}
-            onClick={() => void merge(mergeSource, tag)}
-          >
-            <span className="mb-ellipsis">{tag.name}</span>
-            <span className="qn-tag-sheet__count">{countText(tag)}</span>
-          </button>
-        ))}
-        {mergeTargets.length === 0 && <div className="qn-tag-sheet__empty">没有其他标签可合并</div>}
-        <div className="qn-tag-manager__actions">
-          <button type="button" className="mb-btn mb-btn--secondary" onClick={() => setMergeSourceId(null)}>取消</button>
+      <>
+        <div className="mb-set-section">
+          <div className="mb-set-item">
+            <div className="mb-set-item__main">
+              <div className="mb-set-name">把「{mergeSource.name}」合并到…</div>
+              <div className="mb-set-item__desc">{MERGE_TAG_HINT}</div>
+            </div>
+          </div>
+          {mergeTargets.map((tag) => (
+            <div
+              key={tag.id}
+              className="mb-set-item"
+              role="button"
+              tabIndex={0}
+              aria-label={"合并到 " + tag.name}
+              onClick={() => { if (!busy) void merge(mergeSource, tag); }}
+              onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); if (!busy) void merge(mergeSource, tag); } }}
+            >
+              <div className="mb-set-item__main">
+                <div className="mb-set-name">{tag.name}</div>
+                <div className="mb-set-item__note">{countText(tag)}</div>
+              </div>
+              <div className="mb-set-item__ctl"><ChevronRight size={18} className="mb-row__chevron" /></div>
+            </div>
+          ))}
         </div>
-      </div>
+        {mergeTargets.length === 0 && <div className="mb-empty">没有其他标签可合并</div>}
+        <div className="mb-set-block">
+          <div className="mb-set-block__actions">
+            <button type="button" className="mb-btn mb-btn--secondary" onClick={() => setMergeSourceId(null)}>取消</button>
+          </div>
+        </div>
+      </>
     );
   }
 
   return (
-    <div className="qn-tag-sheet__list">
-      <div className="qn-tag-sheet__input-row">
-        <span className="mb-input qn-tag-sheet__input">
-          <input
-            value={newName}
-            aria-label="新标签名称"
-            placeholder="输入标签名称"
-            disabled={busy}
-            onChange={(event) => { setNewName(event.target.value); setError(null); }}
-            onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void create(); } }}
-          />
-        </span>
-        <button type="button" disabled={busy || !newName.trim()} onClick={() => void create()}>新建</button>
-      </div>
-      {tags.length === 0 && <div className="qn-tag-sheet__empty">还没有标签。在上方输入名称新建，或在写作卡 / 小记卡片上添加标签</div>}
-      {tags.length > 0 && <div className="qn-tag-manager__hint">长按拖动可排序（只在本机生效）</div>}
-      {tags.map((tag) => (
-        <div key={tag.id} className="qn-tag-manager__block">
-          {editingId === tag.id ? (
-            <div className="qn-tag-sheet__input-row">
-              <span className="mb-input qn-tag-sheet__input">
-                <input
-                  value={editName}
-                  autoFocus
-                  aria-label="标签名"
-                  onChange={(event) => { setEditName(event.target.value); setError(null); }}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") { event.preventDefault(); void saveRename(tag); }
-                    else if (event.key === "Escape") { setEditingId(null); }
-                  }}
-                />
-              </span>
-              <button type="button" disabled={busy} onClick={() => void saveRename(tag)}>保存</button>
-            </div>
-          ) : (
-            <div
-              className={"qn-tag-manager__row"
-                + (drag?.id === tag.id ? " is-dragging" : "")
-                + (drag?.overId === tag.id && !drag.after ? " is-drop-before" : "")
-                + (drag?.overId === tag.id && drag.after ? " is-drop-after" : "")}
-              data-tag-id={tag.id}
-              onTouchStart={(event) => {
-                if ((event.target as HTMLElement).closest("button")) return;
-                pressedId.current = tag.id;
-                longPress.onTouchStart(event);
-              }}
-              onTouchMove={longPress.onTouchMove}
-              onTouchEnd={longPress.onTouchEnd}
-              onTouchCancel={longPress.onTouchCancel}
-            >
-              <span className="qn-tag-manager__handle" aria-hidden="true"><GripVertical size={14} /></span>
-              <span className="qn-tag-manager__name">{tag.name}</span>
-              <span className="qn-tag-sheet__count">{countText(tag)}</span>
-              <button
-                type="button"
-                className="mb-iconbtn"
-                disabled={busy}
-                aria-label={"更多操作 " + tag.name}
-                aria-expanded={expandedId === tag.id}
-                onClick={() => setExpandedId(expandedId === tag.id ? null : tag.id)}
-              >
-                <MoreHorizontal size={16} />
-              </button>
-            </div>
-          )}
-          {expandedId === tag.id && editingId !== tag.id && (
-            <div className="qn-tag-manager__actions">
-              <button type="button" className="mb-btn mb-btn--secondary" disabled={busy} onClick={() => startRename(tag)}>
-                <Pencil size={14} />重命名
-              </button>
-              <button type="button" className="mb-btn mb-btn--secondary" disabled={busy || tags.length < 2} onClick={() => setMergeSourceId(tag.id)}>
-                <Merge size={14} />合并到…
-              </button>
-              <button type="button" className="mb-btn mb-btn--secondary" disabled={busy} onClick={() => void remove(tag)}>
-                <Trash size={14} />删除
-              </button>
-            </div>
-          )}
+    <>
+      <div className="mb-set-section">
+        <div className="mb-set-item">
+          <span className="mb-input mb-flex1">
+            <input
+              value={newName}
+              aria-label="新标签名称"
+              placeholder="输入标签名称"
+              disabled={busy}
+              onChange={(event) => { setNewName(event.target.value); setError(null); }}
+              onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void create(); } }}
+            />
+          </span>
+          <div className="mb-set-item__ctl">
+            <button type="button" className="mb-btn mb-btn--primary" disabled={busy || !newName.trim()} onClick={() => void create()}>新建</button>
+          </div>
         </div>
-      ))}
-      {error && <div className="qn-tag-sheet__error" role="alert">{error}</div>}
-    </div>
+      </div>
+
+      {tags.length === 0 ? (
+        <div className="mb-empty">还没有标签。在上方输入名称新建，或在写作卡 / 小记卡片上添加标签</div>
+      ) : (
+        <>
+          <h4 className="mb-set-title">长按拖动可排序（只在本机生效）</h4>
+          <div className="mb-set-section">
+            {tags.map((tag) => (
+              <Fragment key={tag.id}>
+                {editingId === tag.id ? (
+                  <div className="mb-set-item">
+                    <span className="mb-input mb-flex1">
+                      <input
+                        value={editName}
+                        autoFocus
+                        aria-label="标签名"
+                        onChange={(event) => { setEditName(event.target.value); setError(null); }}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") { event.preventDefault(); void saveRename(tag); }
+                          else if (event.key === "Escape") { setEditingId(null); }
+                        }}
+                      />
+                    </span>
+                    <div className="mb-set-item__ctl">
+                      <button type="button" className="mb-btn mb-btn--secondary" disabled={busy} onClick={() => void saveRename(tag)}>保存</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div
+                    className={"mb-set-item qn-tag-manager__row"
+                      + (drag?.id === tag.id ? " is-dragging" : "")
+                      + (drag?.overId === tag.id && !drag.after ? " is-drop-before" : "")
+                      + (drag?.overId === tag.id && drag.after ? " is-drop-after" : "")}
+                    data-tag-id={tag.id}
+                    onTouchStart={(event) => {
+                      if ((event.target as HTMLElement).closest("button")) return;
+                      pressedId.current = tag.id;
+                      longPress.onTouchStart(event);
+                    }}
+                    onTouchMove={longPress.onTouchMove}
+                    onTouchEnd={longPress.onTouchEnd}
+                    onTouchCancel={longPress.onTouchCancel}
+                  >
+                    <span className="mb-row__icon" aria-hidden="true"><GripVertical size={16} /></span>
+                    <div className="mb-set-item__main">
+                      <div className="mb-set-name">{tag.name}</div>
+                      <div className="mb-set-item__note">{countText(tag)}</div>
+                    </div>
+                    <div className="mb-set-item__ctl">
+                      <button
+                        type="button"
+                        className="mb-iconbtn"
+                        disabled={busy}
+                        aria-label={"更多操作 " + tag.name}
+                        aria-expanded={expandedId === tag.id}
+                        onClick={() => setExpandedId(expandedId === tag.id ? null : tag.id)}
+                      >
+                        <MoreHorizontal size={18} />
+                      </button>
+                    </div>
+                  </div>
+                )}
+                {expandedId === tag.id && editingId !== tag.id && (
+                  <div className="mb-set-block">
+                    <div className="mb-set-block__actions">
+                      <button type="button" className="mb-btn mb-btn--secondary" disabled={busy} onClick={() => startRename(tag)}>
+                        <Pencil size={14} />重命名
+                      </button>
+                      <button type="button" className="mb-btn mb-btn--secondary" disabled={busy || tags.length < 2} onClick={() => setMergeSourceId(tag.id)}>
+                        <Merge size={14} />合并到…
+                      </button>
+                      <button type="button" className="mb-btn mb-btn--secondary" disabled={busy} onClick={() => void remove(tag)}>
+                        <Trash size={14} />删除
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </Fragment>
+            ))}
+          </div>
+        </>
+      )}
+
+      {error && (
+        <div className="mb-set-block">
+          <div className="mb-set-item__error" role="alert">{error}</div>
+        </div>
+      )}
+    </>
   );
 }
