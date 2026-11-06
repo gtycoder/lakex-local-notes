@@ -261,3 +261,45 @@
 .tags-merge-dialog__hint { margin: 0 0 var(--lake-space-sm); color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); }
 .tags-merge-dialog__list { display: flex; flex-direction: column; gap: 2px; max-height: 320px; overflow-y: auto; }
 .tags-merge-dialog__footer { display: flex; justify-content: flex-end; margin-top: var(--lake-space-sm); }
+/* ===== 261106 用户验收：右栏预览改版 ===== */
+/* 文档预览只显示少量信息（类型/标题/更新时间），整卡点击 = 打开文档；不再内嵌正文。 */
+.tags-preview__open-doc {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lake-space-sm);
+  width: 100%;
+  padding: var(--lake-space-xl);
+  border: 0.5px solid var(--lake-border-1);
+  border-radius: var(--lake-radius-sm);
+  background: var(--lake-bg-panel);
+  color: var(--lake-text-1);
+  text-align: left;
+  cursor: pointer;
+}
+.tags-preview__open-doc:hover { background: var(--lake-bg-hover); }
+.tags-preview__open-doc-kind { color: var(--lake-text-4); font-size: var(--lake-font-size-tiny); }
+.tags-preview__open-doc-title { font-size: var(--lake-font-size-bodyLg); font-weight: var(--lake-font-weight-semibold); }
+.tags-preview__open-doc-meta { color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); }
+.tags-preview__open-doc-hint { margin-top: var(--lake-space-md); color: var(--lake-accent-text); font-size: var(--lake-font-size-tiny); }
+
+/* 小记预览 = 卡片 + 限高（令牌 240px，超出渐隐）+ 展开/收起（在右栏内展开全文，不跳空间）。 */
+.tags-preview__note-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lake-space-sm);
+  padding: var(--lake-space-lg);
+  border: 0.5px solid var(--lake-border-1);
+  border-radius: var(--lake-radius-sm);
+  background: var(--lake-bg-panel);
+}
+.tags-preview__note-body { position: relative; max-height: var(--lake-preview-note-max-h); overflow: hidden; }
+.tags-preview__note-body::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0;
+  height: var(--lake-space-huge);
+  background: linear-gradient(to bottom, transparent, var(--lake-bg-panel));
+}
+.tags-preview__note-card.is-expanded .tags-preview__note-body { max-height: 60vh; overflow-y: auto; }
+.tags-preview__note-card.is-expanded .tags-preview__note-body::after { content: none; }
+.tags-preview__note-actions { display: flex; justify-content: flex-end; gap: var(--lake-space-sm); }

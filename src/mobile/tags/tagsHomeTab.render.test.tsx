@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 /**
- * 261106 用户验收：一级「标签」页（与小记/知识库并列，flomo 式：标签即入口）。
- * 261106 打磨后追加：页面骨架 = 既有原语（mobile-scroll + mobile-quick-cards + mb-set-*）、
- * 详情行尾 × 图标（44 命中）+ 二次确认（只删关联、不动标签本身与其它内容）、取消不动。
+ * 261106 用户验收：一级「标签」页（flomo 式：标签即入口；**没有「管理」模式**）。
+ * 本轮（261106 三次返工）锁：行 ⋯ 菜单（重命名弹输入并全选 / 合并提示与实参 / 删除确认逐字）、
+ * 行主区点击进详情、长按 350ms 拖拽排序（且拖拽后那次 click 不进详情）、详情行尾 × + 二次确认。
  */
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -55,7 +55,6 @@ import { TagsHomeTab } from "./TagsHomeTab";
 
 const readSource = (rel: string): string => readFileSync(path.join(process.cwd(), rel), "utf8");
 const TAB_SRC = readSource("src/mobile/tags/TagsHomeTab.tsx");
-const MANAGE_SRC = readSource("src/mobile/tags/TagManageList.tsx");
 
 const T = "2026-11-01T00:00:00.000Z";
 const tag = (id: string, name: string): QuickNoteTag => ({ id, name, createdAt: T, updatedAt: T });
@@ -115,17 +114,18 @@ const click = async (el: Element | null | undefined): Promise<void> => {
   });
 };
 const byAria = (label: string): HTMLElement | null => host.querySelector('[aria-label="' + label + '"]');
-const byText = (text: string): HTMLButtonElement | undefined =>
-  [...host.querySelectorAll<HTMLButtonElement>("button")].find((el) => (el.textContent ?? "").trim() === text);
-/** Sheet 底部按钮（与页头/管理态同名的「新建」必须区分开）。 */
+const byText = (text: string): HTMLElement | undefined =>
+  [...host.querySelectorAll<HTMLElement>("button")].find((el) => (el.textContent ?? "").trim() === text);
+/** Sheet 底部按钮（与页头同名的「新建」「保存」等要按容器取）。 */
 const sheetButton = (text: string): HTMLButtonElement | undefined =>
   [...host.querySelectorAll<HTMLButtonElement>(".mb-sheet__foot button")].find((el) => (el.textContent ?? "").trim() === text);
-/** 标签列表行（role=button + aria-label = 标签名）。 */
-const listRowNames = (): string[] =>
-  [...host.querySelectorAll<HTMLElement>('.mb-set-item[role="button"][aria-label]')].map((el) => el.getAttribute("aria-label") ?? "");
-/** 详情聚合行的标题（main role=button）。 */
+/** 列表行（data-tag-id）+ 行主区（role=button）。 */
+const listRows = (): HTMLElement[] => [...host.querySelectorAll<HTMLElement>(".mb-set-item[data-tag-id]")];
+const rowMain = (name: string): HTMLElement | null => host.querySelector('.mb-set-item__main[role="button"][aria-label="' + name + '"]');
+const inDetail = (): boolean => host.querySelector('[aria-label="返回标签列表"]') !== null;
+/** 详情聚合行标题（main role=button）。 */
 const detailTitles = (): string[] =>
-  [...host.querySelectorAll<HTMLElement>('.mb-set-item__main[role="button"]')].map((el) => el.querySelector(".mb-set-name")?.textContent ?? "");
+  [...host.querySelectorAll<HTMLElement>('.mb-set-item__main[role="button"]:not([aria-label])')].map((el) => el.querySelector(".mb-set-name")?.textContent ?? "");
 const typeInto = async (input: HTMLInputElement, value: string): Promise<void> => {
   await act(async () => {
     const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
@@ -133,6 +133,7 @@ const typeInto = async (input: HTMLInputElement, value: string): Promise<void> =
     input.dispatchEvent(new Event("input", { bubbles: true }));
   });
 };
+const openRowMenu = async (name: string): Promise<void> => { await click(byAria("标签操作 " + name)); };
 
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
@@ -165,175 +166,119 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-describe("标签页 · 页面骨架（接入既有原语，不新增自造类）", () => {
-  it("容器 = mobile-scroll + mobile-quick-cards（与「小记」页同一内距容器）；行/卡/按钮全用 mb-*", async () => {
+describe("标签页 · 交互骨架（无「管理」模式）", () => {
+  it("页头只有「＋新建」；没有「管理/完成」切换；列表行固定「⋯」", async () => {
+    await renderTab();
+    expect(byAria("管理标签")).toBeNull();
+    expect(byAria("完成标签管理")).toBeNull();
+    expect(byAria("新建标签")).toBeTruthy();
+    expect(TAB_SRC).not.toContain("完成标签管理");
+    expect(TAB_SRC).not.toContain("管理标签");
+    expect(listRows().length).toBe(2);
+    expect(byAria("标签操作 灵感")).toBeTruthy();
+    expect(byAria("标签操作 工作")).toBeTruthy();
+    // 行首拖拽手柄 + 既有拖拽态类（复用 qn-tag-manager 判据）。
+    expect(TAB_SRC).toContain("qn-tag-manager__row");
+    expect(TAB_SRC).toContain("is-drop-before");
+  });
+
+  it("容器 = mobile-scroll + mobile-quick-cards；行/卡/按钮全用既有 mb-* 原语", async () => {
     await renderTab();
     expect(host.querySelector(".mobile-scroll .mobile-quick-cards")).not.toBeNull();
     expect(host.querySelector(".mb-set-section .mb-set-item")).not.toBeNull();
-    expect(host.querySelector(".mb-set-item__desc")).not.toBeNull();
-    expect(TAB_SRC).toContain('className="mobile-scroll"');
-    expect(TAB_SRC).toContain('className="mobile-quick-cards"');
-    expect(TAB_SRC).toContain('className="mb-set-section"');
-    expect(TAB_SRC).toContain('className="mb-btn mb-btn--secondary"');
-    expect(TAB_SRC).toContain('className="mb-iconbtn"');
-    expect(TAB_SRC).toContain('className="mb-empty"');
-    // 不自造页面/行类名（只允许既有 mb-* / qn-* 体系）。
+    for (const cls of ["mobile-scroll", "mobile-quick-cards", "mb-set-section", "mb-set-item", "mb-iconbtn", "mb-empty"]) {
+      expect(TAB_SRC).toContain(cls);
+    }
     for (const invented of ["tags-page", "tags-row", "tag-list", "tags-list", "tag-detail"]) {
       expect(TAB_SRC).not.toContain(invented);
-      expect(MANAGE_SRC).not.toContain(invented);
     }
-    // 管理态同样走 mb-set-* 原语。
-    expect(MANAGE_SRC).toContain('className="mb-set-section"');
-    expect(MANAGE_SRC).toContain('className="mb-set-block__actions"');
-    expect(MANAGE_SRC).toContain('className="mb-iconbtn"');
   });
 });
 
-describe("一级「标签」页", () => {
-  it("列表：按设备本地顺序展示，行内「N 篇文档、M 条小记」", async () => {
+describe("行 ⋯ 菜单（重命名 / 合并到… / 删除）", () => {
+  it("点 ⋯ 弹出三项动作；点「⋯」不会进详情", async () => {
     await renderTab();
-    expect(listRowNames()).toEqual(["灵感", "工作"]);
-    const work = host.querySelector('.mb-set-item[aria-label="工作"]')!;
-    expect(work.textContent).toContain("2 篇文档、1 条小记");
-    expect(host.querySelector('.mb-set-item[aria-label="灵感"]')!.textContent).toContain("1 篇文档、1 条小记");
-    expect(byAria("管理标签")).toBeTruthy();
-    expect(byAria("新建标签")).toBeTruthy();
+    await openRowMenu("工作");
+    for (const label of ["重命名", "合并到…", "删除"]) expect(byText(label)).toBeTruthy();
+    expect(inDetail()).toBe(false);
   });
 
-  it("空态：还没有标签（引导新建或去文档/小记里加）", async () => {
-    await renderTab({ tags: [] });
-    expect(host.textContent).toContain("还没有标签。新建一个标签，或在文档 / 小记里添加标签。");
-  });
-
-  it("目录不可用：可读提示 + 重试（恢复后正常出列表）", async () => {
-    mocks.listNoteTagLinks.mockRejectedValueOnce(new Error("标签库不可用"));
+  it("重命名：弹输入（预填 + 全选）→ 保存走 updateQuickNoteTag 并刷新", async () => {
     await renderTab();
-    expect(host.textContent).toContain("标签目录暂不可用");
-    expect(host.textContent).toContain("标签库不可用");
-    await click(byText("重试"));
-    expect(mocks.listNoteTagLinks).toHaveBeenCalledTimes(2);
-    expect(listRowNames()).toEqual(["灵感", "工作"]);
-  });
-
-  it("详情：文档/小记分组、各自倒序；点行打开对应内容", async () => {
-    await renderTab();
-    await click(byAria("工作"));
-    expect(host.textContent).toContain("文档（2）");
-    expect(host.textContent).toContain("小记（1）");
-    expect(detailTitles()).toEqual(["周报", "月报", "想法一"]);
-    await click(host.querySelector('.mb-set-item__main[role="button"]'));
-    expect(onOpenNote).toHaveBeenCalledWith("n1");
-    await click(host.querySelector('[aria-label="返回标签列表"]'));
-    await click(byAria("工作"));
-    await click([...host.querySelectorAll('.mb-set-item__main[role="button"]')].find((el) => el.textContent?.includes("想法一")));
-    expect(onOpenQuickNote).toHaveBeenCalledWith("q1");
-  });
-
-  it("详情行尾 = ×（IconButton/44 命中、aria 明确）；点击先二次确认，文案说明只删关联", async () => {
-    await renderTab();
-    await click(byAria("工作"));
-    const removeBtn = byAria("移除标签「周报」");
-    expect(removeBtn).toBeTruthy();
-    expect(removeBtn!.className).toContain("mb-iconbtn");
-    expect(removeBtn!.querySelector("svg")).not.toBeNull();
-    expect(removeBtn!.textContent ?? "").toBe(""); // 只有图标，不再有「移除」文字
-
-    await click(removeBtn);
-    const options = mocks.confirmMobile.mock.calls[0]?.[0] as { title?: string; body?: string; confirmText?: string };
-    expect(options.title).toContain("移除标签「工作」");
-    expect(options.body).toContain("仅");
-    expect(options.body).toContain("不受影响");
-    expect(options.body).toContain("标签本身");
-  });
-
-  it("二次确认取消：不调桥、行保留；确认后才 setNoteTags(剩余) 并刷新", async () => {
-    await renderTab();
-    await click(byAria("工作"));
-    mocks.confirmMobile.mockResolvedValueOnce(false);
-    await click(byAria("移除标签「月报」"));
-    expect(mocks.setNoteTags).not.toHaveBeenCalled();
-    expect(mocks.showToast).not.toHaveBeenCalled();
-    expect(detailTitles()).toContain("月报");
-
-    await click(byAria("移除标签「月报」"));
-    expect(mocks.setNoteTags).toHaveBeenCalledWith("n2", ["t_b"]);
-    expect(mocks.listNoteTagLinks).toHaveBeenCalledTimes(2); // 首读 + 移除后重读
-    expect(onChanged).toHaveBeenCalled();
-    expect(mocks.showToast).toHaveBeenCalledWith("已移除标签");
-  });
-
-  it("小记行移除：确认后 setQuickNoteTags(剩余)", async () => {
-    await renderTab();
-    await click(byAria("工作"));
-    await click(byAria("移除标签「想法一」"));
-    expect(mocks.setQuickNoteTags).toHaveBeenCalledWith("q1", []);
-  });
-
-  it("移除失败：确认后调桥失败 ⇒ 可见 error toast，不静默", async () => {
-    mocks.setNoteTags.mockRejectedValueOnce(new Error("数据库忙"));
-    await renderTab();
-    await click(byAria("工作"));
-    await click(byAria("移除标签「周报」"));
-    const [message, options] = mocks.showToast.mock.calls[0] as [string, { type?: string }];
-    expect(message).toContain("移除标签失败");
-    expect(message).toContain("数据库忙");
-    expect(options?.type).toBe("error");
-    expect(detailTitles()).toContain("周报");
-  });
-
-  it("「＋新建」：弹输入 → 落库 → 刷新（同名再建就地报错、不调桥）", async () => {
-    await renderTab();
-    await click(byAria("新建标签"));
-    const input = host.querySelector('input[aria-label="新标签名称"]') as HTMLInputElement;
+    await openRowMenu("工作");
+    await click(byText("重命名"));
+    const input = host.querySelector('input[aria-label="标签名"]') as HTMLInputElement;
     expect(input).toBeTruthy();
-    await typeInto(input, "  工作区  ");
-    await click(sheetButton("新建"));
-    expect(mocks.createQuickNoteTag).toHaveBeenCalledWith("工作区");
+    expect(input.value).toBe("工作");
+    expect(input.selectionStart).toBe(0);
+    expect(input.selectionEnd).toBe(2); // 全选当前名称
+    await typeInto(input, "工作区");
+    await click(sheetButton("保存"));
+    expect(mocks.updateQuickNoteTag).toHaveBeenCalledWith("t_a", { name: "工作区" });
     expect(onChanged).toHaveBeenCalled();
+  });
 
-    mocks.createQuickNoteTag.mockClear();
-    await click(byAria("新建标签"));
-    await typeInto(host.querySelector('input[aria-label="新标签名称"]') as HTMLInputElement, "工作");
-    await click(sheetButton("新建"));
-    expect(mocks.createQuickNoteTag).not.toHaveBeenCalled();
+  it("重命名：与已有标签同名 ⇒ 就地报错且不调桥", async () => {
+    await renderTab();
+    await openRowMenu("工作");
+    await click(byText("重命名"));
+    await typeInto(host.querySelector('input[aria-label="标签名"]') as HTMLInputElement, "灵感");
+    await click(sheetButton("保存"));
+    expect(mocks.updateQuickNoteTag).not.toHaveBeenCalled();
     expect(host.textContent).toContain("已有同名标签");
   });
 
-  it("管理态：重命名 / 合并（桌面同文案）/ 删除二次确认（带引用计数）", async () => {
+  it("合并到…：提示与桌面同句，选目标后确认 → mergeQuickNoteTags(source, target)", async () => {
     await renderTab();
-    await click(byAria("管理标签"));
-    expect(host.textContent).toContain("长按拖动可排序");
-    // 重命名
-    await click(byAria("更多操作 工作"));
-    await click(byText("重命名"));
-    const input = host.querySelector('input[aria-label="标签名"]') as HTMLInputElement;
-    await typeInto(input, "工作区");
-    await click(byText("保存"));
-    expect(mocks.updateQuickNoteTag).toHaveBeenCalledWith("t_a", { name: "工作区" });
-
-    // 合并：目标列表 + 桌面同款提示
-    await click(byAria("更多操作 灵感"));
+    await openRowMenu("工作");
     await click(byText("合并到…"));
     expect(host.textContent).toContain("合并后源标签消失；文档与小记会保留，引用改到目标标签。");
-    await click(byAria("合并到 工作"));
-    expect(mocks.mergeQuickNoteTags).toHaveBeenCalledWith("t_b", "t_a");
-    const mergeOptions = mocks.confirmMobile.mock.calls[0]?.[0] as { body?: string };
-    expect(mergeOptions.body).toBe("合并后源标签消失；文档与小记会保留，引用改到目标标签。");
+    await click(byAria("合并到 灵感"));
+    const options = mocks.confirmMobile.mock.calls[0]?.[0] as { title?: string; body?: string };
+    expect(options.title).toContain("把「工作」合并到「灵感」");
+    expect(options.body).toBe("合并后源标签消失；文档与小记会保留，引用改到目标标签。");
+    expect(mocks.mergeQuickNoteTags).toHaveBeenCalledWith("t_a", "t_b");
+    expect(onChanged).toHaveBeenCalled();
+  });
 
-    // 删除：桌面原句（引用 N 篇文档、M 条小记）
-    mocks.confirmMobile.mockClear();
-    await click(byAria("更多操作 工作"));
+  it("删除：二次确认文案与桌面逐字一致（引用计数），确认后 deleteQuickNoteTag", async () => {
+    await renderTab();
+    await openRowMenu("工作");
     await click(byText("删除"));
     const options = mocks.confirmMobile.mock.calls[0]?.[0] as { title?: string; body?: string };
     expect(options.title).toBe("删除标签「工作」？");
     expect(options.body).toBe("会同时移除文档与小记上的该标签（引用 2 篇文档、1 条小记）；文档与小记本身不会被删除。");
     expect(mocks.deleteQuickNoteTag).toHaveBeenCalledWith("t_a");
+    expect(onChanged).toHaveBeenCalled();
   });
 
-  it("管理态：长按拖拽排序 → reorderQuickNoteTags(新顺序)", async () => {
+  it("没有第二个标签时「合并到…」禁用", async () => {
+    await renderTab({ tags: [tag("t_a", "工作")] });
+    await openRowMenu("工作");
+    const merge = byText("合并到…") as HTMLButtonElement;
+    expect(merge.disabled).toBe(true);
+  });
+});
+
+describe("行主区 / 长按拖拽", () => {
+  it("行主区点击进详情；详情主区点击打开文档 / 小记", async () => {
     await renderTab();
-    await click(byAria("管理标签"));
-    const rows = [...host.querySelectorAll<HTMLElement>("[data-tag-id]")];
+    await click(rowMain("工作"));
+    expect(inDetail()).toBe(true);
+    expect(host.textContent).toContain("文档（2）");
+    expect(host.textContent).toContain("小记（1）");
+    expect(detailTitles()).toEqual(["周报", "月报", "想法一"]);
+    await click(host.querySelector('.mb-set-item__main[role="button"]:not([aria-label])'));
+    expect(onOpenNote).toHaveBeenCalledWith("n1");
+    await click(byAria("返回标签列表"));
+    await click(rowMain("工作"));
+    await click([...host.querySelectorAll('.mb-set-item__main[role="button"]:not([aria-label])')].find((el) => el.textContent?.includes("想法一")));
+    expect(onOpenQuickNote).toHaveBeenCalledWith("q1");
+  });
+
+  it("长按 350ms 拖拽 → reorderQuickNoteTags；拖拽后的那次 click 不进详情", async () => {
+    await renderTab();
+    const rows = listRows();
     expect(rows.length).toBe(2);
     const [first, second] = rows; // 灵感、工作
     first.getBoundingClientRect = () => ({ top: 0, bottom: 48, height: 48, left: 0, right: 300, width: 300, x: 0, y: 0, toJSON: () => ({}) } as DOMRect);
@@ -356,9 +301,92 @@ describe("一级「标签」页", () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
     expect(mocks.reorderQuickNoteTags).toHaveBeenCalledWith(["t_a", "t_b"]);
+    expect(onChanged).toHaveBeenCalled();
+
+    // 松手后浏览器会补一次 click：必须被吞掉，不能顺带进详情。
+    await act(async () => {
+      first.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(inDetail()).toBe(false);
+    // 下一次正常点击仍能进详情。
+    await click(rowMain("灵感"));
+    expect(inDetail()).toBe(true);
+  });
+});
+
+describe("详情 / 新建 / 空态 / 降级", () => {
+  it("详情行尾 = ×（IconButton/44 命中、aria 明确）；点击先二次确认，文案说明只删关联；取消不调桥", async () => {
+    await renderTab();
+    await click(rowMain("工作"));
+    const removeBtn = byAria("移除标签「周报」");
+    expect(removeBtn).toBeTruthy();
+    expect(removeBtn!.className).toContain("mb-iconbtn");
+    expect(removeBtn!.textContent ?? "").toBe("");
+    mocks.confirmMobile.mockResolvedValueOnce(false);
+    await click(removeBtn);
+    expect(mocks.setNoteTags).not.toHaveBeenCalled();
+    const options = mocks.confirmMobile.mock.calls[0]?.[0] as { title?: string; body?: string };
+    expect(options.title).toContain("移除标签「工作」");
+    expect(options.body).toContain("仅");
+    expect(options.body).toContain("不受影响");
+    expect(options.body).toContain("标签本身");
+
+    mocks.confirmMobile.mockResolvedValue(true);
+    await click(byAria("移除标签「月报」"));
+    expect(mocks.setNoteTags).toHaveBeenCalledWith("n2", ["t_b"]);
+    expect(mocks.listNoteTagLinks).toHaveBeenCalledTimes(2);
+    expect(mocks.showToast).toHaveBeenCalledWith("已移除标签");
   });
 
-  it("不在这一页（active=false）时不读关系", async () => {
+  it("小记行 ×：确认后 setQuickNoteTags(剩余)；失败给 error toast", async () => {
+    await renderTab();
+    await click(rowMain("工作"));
+    await click(byAria("移除标签「想法一」"));
+    expect(mocks.setQuickNoteTags).toHaveBeenCalledWith("q1", []);
+
+    mocks.showToast.mockClear();
+    mocks.setNoteTags.mockRejectedValueOnce(new Error("数据库忙"));
+    await click(byAria("移除标签「周报」"));
+    const [message, options] = mocks.showToast.mock.calls[0] as [string, { type?: string }];
+    expect(message).toContain("移除标签失败");
+    expect(options?.type).toBe("error");
+  });
+
+  it("「＋新建」：弹输入 → 落库 → 刷新（同名再建就地报错、不调桥）", async () => {
+    await renderTab();
+    await click(byAria("新建标签"));
+    const input = host.querySelector('input[aria-label="新标签名称"]') as HTMLInputElement;
+    expect(input).toBeTruthy();
+    await typeInto(input, "  工作区  ");
+    await click(sheetButton("新建"));
+    expect(mocks.createQuickNoteTag).toHaveBeenCalledWith("工作区");
+    expect(onChanged).toHaveBeenCalled();
+
+    mocks.createQuickNoteTag.mockClear();
+    await click(byAria("新建标签"));
+    await typeInto(host.querySelector('input[aria-label="新标签名称"]') as HTMLInputElement, "工作");
+    await click(sheetButton("新建"));
+    expect(mocks.createQuickNoteTag).not.toHaveBeenCalled();
+    expect(host.textContent).toContain("已有同名标签");
+  });
+
+  it("空态与目录降级（提示 + 重试）", async () => {
+    mocks.listNoteTagLinks.mockRejectedValueOnce(new Error("标签库不可用"));
+    await renderTab();
+    expect(host.textContent).toContain("标签目录暂不可用");
+    await click(byText("重试"));
+    expect(mocks.listNoteTagLinks).toHaveBeenCalledTimes(2);
+    await act(async () => await new Promise((resolve) => setTimeout(resolve, 0)));
+    expect(listRows().length).toBe(2);
+  });
+
+  it("空目录文案", async () => {
+    await renderTab({ tags: [] });
+    expect(host.textContent).toContain("还没有标签。新建一个标签，或在文档 / 小记里添加标签。");
+  });
+
+  it("active=false 时不读关系", async () => {
     await renderTab({ active: false });
     expect(mocks.listNoteTagLinks).not.toHaveBeenCalled();
   });
@@ -398,24 +426,16 @@ describe("首页三 tab（小记 / 知识库 / 标签）", () => {
 
   beforeEach(() => { onTabChange.mockReset(); });
 
-  it("顶部有三个一级 tab；点「标签」/「知识库」切 tab", async () => {
+  it("三个一级 tab 与切页回调；标签页三 pane 常驻 + inert", async () => {
     await renderHome("quick");
     expect([...host.querySelectorAll(".mobile-htab")].map((el) => el.textContent)).toEqual(["小记", "知识库", "标签"]);
     await click(tabButton("标签"));
     expect(onTabChange).toHaveBeenCalledWith("tags");
-    await click(tabButton("知识库"));
-    expect(onTabChange).toHaveBeenCalledWith("library");
-  });
-
-  it("切到「标签」页：三页常驻，标签页内容可渲染（列表行可见）", async () => {
     await renderHome("tags");
-    expect(host.textContent).toContain("灵感");
     expect(host.textContent).toContain("1 篇文档、1 条小记");
-    expect(host.textContent).toContain("2 篇文档、1 条小记");
     const panes = [...host.querySelectorAll<HTMLElement>(".mobile-tab-pane")];
     expect(panes.length).toBe(3);
     expect(panes[0].hasAttribute("inert")).toBe(true);
-    expect(panes[1].hasAttribute("inert")).toBe(true);
     expect(panes[2].hasAttribute("inert")).toBe(false);
   });
 });

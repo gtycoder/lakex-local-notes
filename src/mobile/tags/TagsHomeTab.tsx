@@ -1,22 +1,22 @@
 /**
- * 一级「标签」页（261106 用户验收；与小记/知识库并列，flomo 式：标签即入口）。
+ * 一级「标签」页（261106 用户验收；flomo 式：标签即入口 → 点进去看内容 → 编辑动作收在次级入口）。
  *
- * 版面（261106 打磨）：与「小记」页**同一套页面骨架**——
- *   .mobile-scroll（纵向滚动）+ .mobile-quick-cards（页面内距 12/16 + 组间距 12）
- *   + .mb-set-title / .mb-set-section 卡片 + .mb-set-item 行（min-height 48、行间发丝、页内距 16）；
- *   按钮 .mb-btn / .mb-iconbtn（44 命中）、空态 .mb-empty。**不新增自造类、不新增 CSS。**
+ * 261106 三次返工后的定稿交互（**没有「管理」模式**，列表永远可交互）：
+ *  · 页头：标题 + 计数 + 「＋新建」（.mb-iconbtn，aria「新建标签」，命中 44）；不再有「管理 / 完成」切换。
+ *  · 每行右侧固定「⋯」（.mb-iconbtn + MoreVertical，aria「标签操作 <名称>」，命中 44）→ 弹出既有 MobileSheetMenu：
+ *    重命名（弹输入、预填 + 全选）/ 合并到…（选目标，提示与桌面同句）/ 删除（二次确认，与桌面逐字一致）。
+ *  · 行主区点击 = 进详情；「⋯」stopPropagation 不触发详情。
+ *  · 长按 350ms 进入拖拽排序（复用既有 qn-tag-manager 拖拽态与判据）→ 松手 reorderQuickNoteTags（设备本地顺序）；
+ *    拖拽过的那一次 click 被吞掉，不会误进详情。
+ *  · 详情：文档 / 小记两段（各自 updatedAt 倒序）；行点击打开；行尾 ×（44 命中）→ 二次确认（只删该条关联）。
  *
- * 列表：标签名 + 「N 篇文档、M 条小记」（设备本地顺序，不重排）+ chevron；
- *   头部卡右上「管理」（进管理态）/「＋」（新建标签，弹 MobileSheet 输入）。
- * 详情：文档 / 小记两段（各自 updatedAt 倒序）；行点击打开；行尾 **× 图标**（44 命中）移除该条关联，
- *   点击先二次确认（只删关联，不动标签本身与其它内容），确认后才调 setNoteTags / setQuickNoteTags。
- *
- * 计数/聚合复用 tags/tagAggregate 的纯函数（不复制第二套）；删除/合并/移除文案在 tagManageCopy。
+ * 版面：mobile-scroll + mobile-quick-cards（与「小记」页同一内距容器）+ mb-set-section/mb-set-item/mb-set-title/
+ * mb-set-block/mb-btn/mb-iconbtn/mb-empty。**零新增 CSS。** 计数/聚合复用 tags/tagAggregate；文案复用 tagManageCopy。
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, Feather, FileText, Plus, Settings2, Tag, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ChevronLeft, ChevronRight, Feather, FileText, GripVertical, Merge, MoreVertical, Pencil, Plus, Trash, X } from "lucide-react";
 import type { QuickNoteTag } from "../../core/quickNoteTags";
-import { buildQuickNoteTagIndex, buildQuickNoteTagOptions } from "../../core/quickNoteTags";
+import { buildQuickNoteTagIndex, buildQuickNoteTagOptions, moveQuickNoteTagOrder, normalizeQuickNoteTag, type QuickNoteTagSummary } from "../../core/quickNoteTags";
 import { formatListTime } from "../../core/dateFormat";
 import { getNativeErrorMessage } from "../../lib/nativeErrors";
 import type { LocalNoteSummary } from "../data/noteRepository";
@@ -24,10 +24,12 @@ import type { MobileQuickNote } from "../home/HomePage";
 import { bridge } from "../bridge";
 import { confirmMobile } from "../ui/ConfirmDialog";
 import { MobileSheet } from "../ui/MobileSheet";
+import { MobileSheetMenu, type MobileSheetItem } from "../ui/MobileSheetMenu";
+import { useLongPress } from "../ui/useLongPress";
 import { showToast } from "../ui/toastBus";
 import { aggregateTagRows, tagCounts, type NoteTagLinks, type TagAggregateRow } from "./tagAggregate";
 import { createTagFromName } from "./tagCreate";
-import { TagManageList } from "./TagManageList";
+import { MERGE_TAG_HINT, deleteTagConfirmBody } from "./tagManageCopy";
 
 export interface TagsHomeTabProps {
   /** 标签目录（App 快照；顺序 = 设备本地展示顺序）。 */
@@ -43,24 +45,41 @@ export interface TagsHomeTabProps {
   onChanged(): Promise<void>;
 }
 
+interface DragState { id: string; overId: string | null; after: boolean }
+
 const fmtTime = (iso: string): string => {
   try { return formatListTime(new Date(iso), new Date()); } catch { return iso; }
 };
 
-/** 行内计数文案（列表 / 详情 / 管理态同一口径）。 */
+/** 行内计数文案（列表 / 详情同一口径）。 */
 const countText = (docs: number, quickNotes: number): string => docs + " 篇文档、" + quickNotes + " 条小记";
 
 export function TagsHomeTab({ tags, notes, quickNotes, active, onOpenNote, onOpenQuickNote, onChanged }: TagsHomeTabProps) {
   const [links, setLinks] = useState<NoteTagLinks | null>(null);
   const [loadingLinks, setLoadingLinks] = useState(false);
   const [linksError, setLinksError] = useState<string | null>(null);
-  const [manage, setManage] = useState(false);
   const [selectedTagId, setSelectedTagId] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  // 页头「＋新建」
   const [createOpen, setCreateOpen] = useState(false);
   const [createName, setCreateName] = useState("");
   const [createError, setCreateError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
-  const [busy, setBusy] = useState(false);
+  // 行 ⋯ 菜单 / 重命名 / 合并
+  const [menuFor, setMenuFor] = useState<QuickNoteTag | null>(null);
+  const [renaming, setRenaming] = useState<QuickNoteTag | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [renameError, setRenameError] = useState<string | null>(null);
+  const [mergeSource, setMergeSource] = useState<QuickNoteTag | null>(null);
+  const renameInputRef = useRef<HTMLInputElement | null>(null);
+  // 长按拖拽排序
+  const [drag, setDrag] = useState<DragState | null>(null);
+  const dragRef = useRef<DragState | null>(null);
+  dragRef.current = drag;
+  const pressedId = useRef<string | null>(null);
+  const startPoint = useRef<{ clientX: number; clientY: number } | null>(null);
+  /** 长按/拖拽过的那一次 click 要吞掉（否则松手会顺带进详情）。 */
+  const suppressClick = useRef(false);
 
   const loadLinks = useCallback(async (): Promise<void> => {
     setLoadingLinks(true);
@@ -97,15 +116,177 @@ export function TagsHomeTab({ tags, notes, quickNotes, active, onOpenNote, onOpe
     if (selectedTagId && !tags.some((tag) => tag.id === selectedTagId)) setSelectedTagId(null);
   }, [tags, selectedTagId]);
 
-  /** 管理态任一写操作完成后：关系可能变了 ⇒ 关系 + App 快照一起刷。 */
-  const reloadAll = async (): Promise<void> => { await loadLinks(); await onChanged(); };
+  /** 任一写操作完成后：关系可能变了 ⇒ 关系 + App 快照一起刷。 */
+  const reloadAll = useCallback(async (): Promise<void> => { await loadLinks(); await onChanged(); }, [loadLinks, onChanged]);
+
+  const countOf = useCallback((tag: QuickNoteTagSummary | QuickNoteTag): string => (
+    countText(counts.docs[tag.id] ?? 0, "count" in tag ? tag.count : (counts.quickNotes[tag.id] ?? 0))
+  ), [counts]);
 
   const openRow = (row: TagAggregateRow): void => {
     if (row.kind === "doc") onOpenNote(row.id);
     else onOpenQuickNote(row.id);
   };
 
-  /** 行尾 ×：**先二次确认**（只删这条关联，标签本身与其它内容不受影响），确认后才落库。 */
+  // ── 行 ⋯ 菜单 ────────────────────────────────────────────────────────────────
+  const menuItems: MobileSheetItem[] = [
+    { id: "rename", label: "重命名", icon: Pencil },
+    { id: "merge", label: "合并到…", icon: Merge, disabled: tags.length < 2 },
+    { id: "delete", label: "删除", icon: Trash, danger: true },
+  ];
+
+  const onMenuSelect = (item: MobileSheetItem): void => {
+    const tag = menuFor;
+    setMenuFor(null);
+    if (!tag) return;
+    if (item.id === "rename") startRename(tag);
+    else if (item.id === "merge") setMergeSource(tag);
+    else if (item.id === "delete") void removeTag(tag);
+  };
+
+  // ── 重命名（弹输入，预填 + 全选）──────────────────────────────────────────────
+  const startRename = (tag: QuickNoteTag): void => {
+    setRenameError(null);
+    setRenameValue(tag.name);
+    setRenaming(tag);
+  };
+
+  // 打开后全选当前名称（用户要求「重命名弹输入并全选」）。
+  useEffect(() => {
+    if (!renaming) return;
+    const input = renameInputRef.current;
+    if (input) { input.focus(); input.select(); }
+  }, [renaming]);
+
+  const submitRename = async (): Promise<void> => {
+    const tag = renaming;
+    if (!tag || busy) return;
+    const name = renameValue.trim();
+    if (!name) { setRenameError("标签名不能为空"); return; }
+    if (name === tag.name) { setRenaming(null); return; }
+    let normalized = "";
+    try { normalized = normalizeQuickNoteTag(name); } catch (error) {
+      setRenameError(getNativeErrorMessage(error));
+      return;
+    }
+    if (tags.some((item) => item.name === normalized && item.id !== tag.id)) { setRenameError("已有同名标签"); return; }
+    setBusy(true);
+    setRenameError(null);
+    try {
+      await bridge.updateQuickNoteTag(tag.id, { name: normalized });
+      setRenaming(null);
+      await reloadAll();
+      showToast("已重命名标签");
+    } catch (error) {
+      const message = getNativeErrorMessage(error);
+      setRenameError(message);
+      showToast("重命名失败：" + message, { type: "error" });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // ── 合并到…（选目标 → 二次确认 → mergeQuickNoteTags）─────────────────────────
+  const mergeTargets = useMemo(() => tags.filter((tag) => tag.id !== mergeSource?.id), [tags, mergeSource]);
+  const submitMerge = async (target: QuickNoteTag): Promise<void> => {
+    const source = mergeSource;
+    if (!source || busy) return;
+    const ok = await confirmMobile({
+      title: "把「" + source.name + "」合并到「" + target.name + "」？",
+      body: MERGE_TAG_HINT,
+      confirmText: "合并",
+    });
+    if (!ok) return;
+    setBusy(true);
+    try {
+      await bridge.mergeQuickNoteTags(source.id, target.id);
+      setMergeSource(null);
+      await reloadAll();
+      showToast("已合并标签");
+    } catch (error) {
+      showToast("合并失败：" + getNativeErrorMessage(error), { type: "error" });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // ── 删除（二次确认与桌面逐字一致）────────────────────────────────────────────
+  const removeTag = async (tag: QuickNoteTag): Promise<void> => {
+    if (busy) return;
+    const ok = await confirmMobile({
+      title: "删除标签「" + tag.name + "」？",
+      body: deleteTagConfirmBody(counts.docs[tag.id] ?? 0, counts.quickNotes[tag.id] ?? 0),
+      confirmText: "删除标签",
+      danger: true,
+    });
+    if (!ok) return;
+    setBusy(true);
+    try {
+      await bridge.deleteQuickNoteTag(tag.id);
+      if (selectedTagId === tag.id) setSelectedTagId(null);
+      await reloadAll();
+      showToast("已删除标签");
+    } catch (error) {
+      showToast("删除失败：" + getNativeErrorMessage(error), { type: "error" });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // ── 长按 350ms 拖拽排序（复用既有 qn-tag-manager 拖拽态/判据）───────────────────
+  const order = useMemo(() => tags.map((tag) => tag.id), [tags]);
+  const longPress = useLongPress((touch) => {
+    const id = pressedId.current;
+    if (!id) return;
+    suppressClick.current = true;     // 长按过 ⇒ 松手后的 click 不进详情
+    setDrag({ id, overId: null, after: false });
+    startPoint.current = touch;
+  }, { moveCancelPx: 0 });
+
+  useEffect(() => {
+    if (!drag) return;
+    const compute = (clientY: number): { overId: string | null; after: boolean } => {
+      const hit = document.elementFromPoint(startPoint.current?.clientX ?? 0, clientY) as HTMLElement | null;
+      const row = hit?.closest("[data-tag-id]") as HTMLElement | null;
+      const overId = row?.getAttribute("data-tag-id") ?? null;
+      if (!overId || overId === dragRef.current?.id) return { overId: null, after: false };
+      const rect = row!.getBoundingClientRect();
+      return { overId, after: clientY > rect.top + rect.height / 2 };
+    };
+    const onMove = (event: TouchEvent) => {
+      const touch = event.touches[0];
+      if (!touch) return;
+      event.preventDefault();
+      const next = compute(touch.clientY);
+      const current = dragRef.current;
+      if (!current) return;
+      if (current.overId === next.overId && current.after === next.after) return;
+      setDrag({ ...current, ...next });
+    };
+    const finish = () => {
+      const current = dragRef.current;
+      setDrag(null);
+      startPoint.current = null;
+      if (!current?.overId) return;
+      const nextOrder = moveQuickNoteTagOrder(order, current.id, current.overId, current.after ? "after" : "before");
+      if (nextOrder.join("\u0000") === order.join("\u0000")) return;
+      setBusy(true);
+      void bridge.reorderQuickNoteTags(nextOrder)
+        .then(reloadAll)
+        .catch((error: unknown) => showToast("排序失败：" + getNativeErrorMessage(error), { type: "error" }))
+        .finally(() => setBusy(false));
+    };
+    document.addEventListener("touchmove", onMove, { passive: false });
+    document.addEventListener("touchend", finish);
+    document.addEventListener("touchcancel", finish);
+    return () => {
+      document.removeEventListener("touchmove", onMove);
+      document.removeEventListener("touchend", finish);
+      document.removeEventListener("touchcancel", finish);
+    };
+  }, [drag !== null, order, reloadAll]);
+
+  // ── 详情行 × ：先二次确认（只删该条关联），确认后才落库 ───────────────────────
   const removeRow = async (row: TagAggregateRow): Promise<void> => {
     if (!selectedTag || busy) return;
     const ok = await confirmMobile({
@@ -153,8 +334,13 @@ export function TagsHomeTab({ tags, notes, quickNotes, active, onOpenNote, onOpe
   const docs = rows.filter((row) => row.kind === "doc");
   const quickRows = rows.filter((row) => row.kind === "quick");
 
-  /** 聚合行：整行可点（main role=button）+ 行尾 ×（IconButton 44；stopPropagation 只走移除流程）。 */
-  const renderRow = (row: TagAggregateRow) => (
+  const openDetail = (tag: QuickNoteTag): void => {
+    if (suppressClick.current) { suppressClick.current = false; return; }
+    setSelectedTagId(tag.id);
+  };
+
+  /** 详情聚合行：main role=button（打开）+ 行尾 ×（IconButton 44；stopPropagation 只走移除）。 */
+  const renderDetailRow = (row: TagAggregateRow) => (
     <div key={row.kind + row.id} className="mb-set-item">
       <div
         className="mb-set-item__main"
@@ -183,23 +369,14 @@ export function TagsHomeTab({ tags, notes, quickNotes, active, onOpenNote, onOpe
   return (
     <div className="mobile-scroll">
       <div className="mobile-quick-cards">
-        {/* 页头：标题 + 计数 + 「管理」「＋」（mb-set 行规范：命中 44、aria 齐） */}
+        {/* 页头：标题 + 计数 + 「＋新建」（没有「管理」模式；行内 ⋯ 直接给动作） */}
         <div className="mb-set-section">
           <div className="mb-set-item">
             <div className="mb-set-item__main">
               <div className="mb-set-name">标签</div>
-              <div className="mb-set-item__desc">{tags.length} 个标签，顺序只在本机生效</div>
+              <div className="mb-set-item__desc">{tags.length} 个标签，长按可拖动排序（只在本机生效）</div>
             </div>
             <div className="mb-set-item__ctl">
-              <button
-                type="button"
-                className="mb-btn mb-btn--secondary"
-                aria-pressed={manage}
-                aria-label={manage ? "完成标签管理" : "管理标签"}
-                onClick={() => { setManage(!manage); setSelectedTagId(null); }}
-              >
-                <Settings2 size={16} />{manage ? "完成" : "管理"}
-              </button>
               <button type="button" className="mb-iconbtn" aria-label="新建标签" onClick={() => { setCreateError(null); setCreateOpen(true); }}>
                 <Plus size={20} />
               </button>
@@ -229,14 +406,12 @@ export function TagsHomeTab({ tags, notes, quickNotes, active, onOpenNote, onOpe
             ) : (
               <>
                 <h4 className="mb-set-title"><FileText size={14} />文档（{docs.length}）</h4>
-                <div className="mb-set-section">{docs.map(renderRow)}</div>
+                <div className="mb-set-section">{docs.map(renderDetailRow)}</div>
                 <h4 className="mb-set-title"><Feather size={14} />小记（{quickRows.length}）</h4>
-                <div className="mb-set-section">{quickRows.map(renderRow)}</div>
+                <div className="mb-set-section">{quickRows.map(renderDetailRow)}</div>
               </>
             )}
           </>
-        ) : manage ? (
-          <TagManageList tags={summaries} docCounts={counts.docs} onChanged={reloadAll} />
         ) : linksError ? (
           <div className="mb-set-section">
             <div className="mb-set-item">
@@ -252,34 +427,65 @@ export function TagsHomeTab({ tags, notes, quickNotes, active, onOpenNote, onOpe
         ) : tags.length === 0 ? (
           <div className="mb-empty">还没有标签。新建一个标签，或在文档 / 小记里添加标签。</div>
         ) : (
-          <>
-            <div className="mb-set-section">
-              {tags.map((tag) => (
+          <div className="mb-set-section">
+            {summaries.map((tag) => (
+              <div
+                key={tag.id}
+                className={"mb-set-item qn-tag-manager__row"
+                  + (drag?.id === tag.id ? " is-dragging" : "")
+                  + (drag?.overId === tag.id && !drag.after ? " is-drop-before" : "")
+                  + (drag?.overId === tag.id && drag.after ? " is-drop-after" : "")}
+                data-tag-id={tag.id}
+                // 整行点击都进详情（点在手柄/内距上也一样）；拖拽过的那次 click 由 suppressClick 吞掉。
+                onClick={() => openDetail(tag)}
+                onTouchStart={(event) => {
+                  if ((event.target as HTMLElement).closest("button")) return;
+                  pressedId.current = tag.id;
+                  longPress.onTouchStart(event);
+                }}
+                onTouchMove={longPress.onTouchMove}
+                onTouchEnd={longPress.onTouchEnd}
+                onTouchCancel={longPress.onTouchCancel}
+              >
+                <span className="mb-row__icon" aria-hidden="true"><GripVertical size={16} /></span>
                 <div
-                  key={tag.id}
-                  className="mb-set-item"
+                  className="mb-set-item__main"
                   role="button"
                   tabIndex={0}
                   aria-label={tag.name}
-                  onClick={() => setSelectedTagId(tag.id)}
-                  onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelectedTagId(tag.id); } }}
+                  onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openDetail(tag); } }}
                 >
-                  <Tag size={18} className="mb-row__icon" />
-                  <div className="mb-set-item__main">
-                    <div className="mb-set-name">{tag.name}</div>
-                    <div className="mb-set-item__desc">{countText(counts.docs[tag.id] ?? 0, counts.quickNotes[tag.id] ?? 0)}</div>
-                  </div>
-                  <div className="mb-set-item__ctl">
-                    <ChevronRight size={18} className="mb-row__chevron" />
-                  </div>
+                  <div className="mb-set-name">{tag.name}</div>
+                  <div className="mb-set-item__desc">{countOf(tag)}</div>
                 </div>
-              ))}
-            </div>
-            {loadingLinks && <div className="mb-set-item__desc">读取标签计数…</div>}
-          </>
+                <div className="mb-set-item__ctl">
+                  <button
+                    type="button"
+                    className="mb-iconbtn"
+                    aria-label={"标签操作 " + tag.name}
+                    onClick={(event) => { event.stopPropagation(); setMenuFor(tag); }}
+                  >
+                    <MoreVertical size={18} />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        {!selectedTag && loadingLinks && tags.length > 0 && (
+          <div className="mb-set-item__desc">读取标签计数…</div>
         )}
       </div>
 
+      {/* 行 ⋯ 菜单（既有 .mb-menusheet 原语） */}
+      <MobileSheetMenu
+        open={menuFor !== null}
+        items={menuItems}
+        onClose={() => setMenuFor(null)}
+        onSelect={onMenuSelect}
+      />
+
+      {/* ＋新建 */}
       <MobileSheet
         open={createOpen}
         title="新建标签"
@@ -302,6 +508,65 @@ export function TagsHomeTab({ tags, notes, quickNotes, active, onOpenNote, onOpe
           />
         </span>
         {createError && <div className="qn-tag-sheet__error" role="alert">{createError}</div>}
+      </MobileSheet>
+
+      {/* 重命名：弹输入、预填 + 全选 */}
+      <MobileSheet
+        open={renaming !== null}
+        title="重命名标签"
+        onClose={() => { if (!busy) setRenaming(null); }}
+        className="qn-tag-sheet"
+        bodyClassName="qn-tag-sheet__body mb-sheet__body--form"
+        footer={<div className="mb-sheet__foot">
+          <button type="button" className="mb-btn mb-btn--secondary" disabled={busy} onClick={() => setRenaming(null)}>取消</button>
+          <button type="button" className="mb-btn mb-btn--primary" disabled={busy || !renameValue.trim()} onClick={() => void submitRename()}>保存</button>
+        </div>}
+      >
+        <span className="mb-input qn-tag-sheet__input">
+          <input
+            ref={renameInputRef}
+            value={renameValue}
+            aria-label="标签名"
+            onChange={(event) => { setRenameValue(event.target.value); setRenameError(null); }}
+            onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void submitRename(); } }}
+          />
+        </span>
+        {renameError && <div className="qn-tag-sheet__error" role="alert">{renameError}</div>}
+      </MobileSheet>
+
+      {/* 合并到…：选目标标签（排除自身），提示与桌面同句 */}
+      <MobileSheet
+        open={mergeSource !== null}
+        title="合并标签"
+        onClose={() => { if (!busy) setMergeSource(null); }}
+        className="qn-tag-sheet"
+        bodyClassName="qn-tag-sheet__body mb-sheet__body--form"
+        footer={<div className="mb-sheet__foot">
+          <button type="button" className="mb-btn mb-btn--secondary" disabled={busy} onClick={() => setMergeSource(null)}>取消</button>
+        </div>}
+      >
+        <div className="qn-tag-sheet__section"><Merge size={14} /><span>把「{mergeSource?.name ?? ""}」合并到：</span></div>
+        <div className="mb-set-item__desc">{MERGE_TAG_HINT}</div>
+        <div className="mb-set-section">
+          {mergeTargets.map((tag) => (
+            <div
+              key={tag.id}
+              className="mb-set-item"
+              role="button"
+              tabIndex={0}
+              aria-label={"合并到 " + tag.name}
+              onClick={() => void submitMerge(tag)}
+              onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); void submitMerge(tag); } }}
+            >
+              <div className="mb-set-item__main">
+                <div className="mb-set-name">{tag.name}</div>
+                <div className="mb-set-item__note">{countText(counts.docs[tag.id] ?? 0, counts.quickNotes[tag.id] ?? 0)}</div>
+              </div>
+              <div className="mb-set-item__ctl"><ChevronRight size={18} className="mb-row__chevron" /></div>
+            </div>
+          ))}
+        </div>
+        {mergeTargets.length === 0 && <div className="mb-empty">没有其他标签可合并</div>}
       </MobileSheet>
     </div>
   );

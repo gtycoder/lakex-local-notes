@@ -3,12 +3,13 @@ import { act, createElement, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TagsWorkspace, type TagsWorkspaceProps } from "./TagsWorkspace";
+import { TAG_STATE_STORAGE_KEY } from "./tagsWorkspaceState";
 import type { NoteSummary, QuickNoteListSummary, QuickNoteTag } from "../../lib/types";
 
 /**
  * 标签空间（P1）：目录（名称/计数/更新时间）、聚合列表（文档分组 + 小记分组、更新时间倒序、可切）、
- * 空态、就地元数据管理（改名/合并/删除/排序）、只读预览与跳转。预览正文（内核）在 Suspense 里，
- * 本测试只断言接线（onLoadPreview 被调用 + 「在文档中打开」入口存在）。
+ * 空态、就地元数据管理（改名/合并/删除/排序）、右栏预览与跳转。261106 起：文档预览只出少量信息
+ * （点击 = 打开文档，不内嵌正文）、小记预览 = 限高卡片 + 展开/收起 + 编辑；另验「记住上次状态」。
  */
 const tag = (id: string, name: string): QuickNoteTag => ({ id, name, createdAt: "2026-11-01T00:00:00.000Z", updatedAt: "2026-11-02T00:00:00.000Z" });
 const note = (id: string, title: string, updatedAt: string): NoteSummary => ({ id, title, parentId: "nb1", sortOrder: 0, updatedAt, isConflict: false } as NoteSummary);
@@ -22,6 +23,10 @@ beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   // 行 ⋯ 菜单用 usePopoverPosition 测量 → jsdom 需要 ResizeObserver
   vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
+  // 小记预览（QuickNotePreview 内核兜底）需要 IntersectionObserver
+  vi.stubGlobal("IntersectionObserver", class { observe() {} unobserve() {} disconnect() {} });
+  // 状态持久化：每个用例从干净存储开始（否则上一个用例的选中会漏到下一个）
+  localStorage.clear();
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
@@ -54,6 +59,12 @@ function render(overrides: Partial<TagsWorkspaceProps> = {}) {
   const merged = props(overrides);
   act(() => root.render(createElement(TagsWorkspace, merged)));
   return merged;
+}
+/** 重新挂载（模拟「离开标签空间再回来」）：换 root 而不是复用旧组件状态。 */
+function remount(overrides: Partial<TagsWorkspaceProps> = {}) {
+  act(() => root.unmount());
+  root = createRoot(host);
+  return render(overrides);
 }
 const byText = (text: string): HTMLElement | undefined => [...document.body.querySelectorAll<HTMLElement>("button, h1, h3, p, span, strong")].find((el) => (el.textContent ?? "").includes(text));
 const openRowMenu = (name: string) => act(() => byAria("标签操作 " + name).click());
@@ -169,24 +180,38 @@ describe("TagsWorkspace（标签空间）", () => {
     expect(document.body.textContent).not.toContain("小记（1）");
   });
 
-  it("点击聚合条目 ⇒ 调 onLoadPreview，并出现「在文档中打开」跳转", async () => {
-    vi.stubGlobal("IntersectionObserver", class { observe() {} disconnect() {} unobserve() {} } as unknown as typeof IntersectionObserver);
+  it("文档预览只显示少量信息（不读正文），点击卡片 = 打开文档", async () => {
     const merged = render();
     act(() => byText("灵感")!.closest("button")!.click());
     await act(async () => { byText("文档二")!.closest("button")!.click(); await Promise.resolve(); });
-    expect(merged.onLoadPreview).toHaveBeenCalledWith(expect.objectContaining({ kind: "doc", id: "n2" }));
-    expect(document.body.textContent).toContain("在文档中打开");
-    act(() => byText("在文档中打开")!.click());
+    // 261106：不再内嵌整篇正文 ⇒ 不读正文、不出内核预览容器
+    expect(merged.onLoadPreview).not.toHaveBeenCalled();
+    expect(document.querySelector(".tags-preview__open-doc")).not.toBeNull();
+    const card = document.querySelector<HTMLButtonElement>(".tags-preview__open-doc")!;
+    expect(card.textContent).toContain("文档二");
+    expect(card.textContent).toContain("更新于");
+    expect(card.textContent).toContain("点击打开文档");
+    act(() => card.click());
     expect(merged.onOpenDocument).toHaveBeenCalledWith("n2");
   });
 
-  it("点小记条目 ⇒ 预览取 readQuickNote 路径，并出现「在小记中打开」跳转", async () => {
+  it("小记预览 = 卡片（限高）+ 展开/收起 + 编辑入口打开小记", async () => {
     const merged = render();
     act(() => byText("灵感")!.closest("button")!.click());
     await act(async () => { byText("小记一")!.closest("button")!.click(); await Promise.resolve(); });
     expect(merged.onLoadPreview).toHaveBeenCalledWith(expect.objectContaining({ kind: "quickNote", id: "q1" }));
-    expect(document.body.textContent).toContain("在小记中打开");
-    act(() => byText("在小记中打开")!.click());
+    const card = document.querySelector(".tags-preview__note-card")!;
+    expect(card).not.toBeNull();
+    expect(card.classList.contains("is-expanded")).toBe(false);
+    expect(card.querySelector(".tags-preview__note-body")).not.toBeNull();
+    const toggle = [...card.querySelectorAll<HTMLButtonElement>("button")].find((btn) => (btn.textContent ?? "") === "展开")!;
+    act(() => toggle.click());
+    expect(document.querySelector(".tags-preview__note-card")!.classList.contains("is-expanded")).toBe(true);
+    const collapse = [...document.querySelectorAll<HTMLButtonElement>(".tags-preview__note-actions button")].find((btn) => (btn.textContent ?? "") === "收起")!;
+    act(() => collapse.click());
+    expect(document.querySelector(".tags-preview__note-card")!.classList.contains("is-expanded")).toBe(false);
+    const edit = [...document.querySelectorAll<HTMLButtonElement>(".tags-preview__note-actions button")].find((btn) => (btn.textContent ?? "") === "编辑")!;
+    act(() => edit.click());
     expect(merged.onOpenQuickNote).toHaveBeenCalledWith("q1");
   });
 
@@ -324,5 +349,67 @@ describe("TagsWorkspace（标签空间）", () => {
     expect(input!.selectionEnd).toBe(input!.value.length);
     // 进入编辑态后 ⋯ 让位给「保存名称」
     expect(byAria("保存名称")).toBeTruthy();
+  });
+});
+/**
+ * 261106 用户验收：标签空间记住上次状态（选中标签 / 聚合筛选 / 右栏预览 / 中栏滚动）。
+ * 设备本地 localStorage；坏值/标签已删回默认；数据不可用时不写坏状态。
+ */
+describe("TagsWorkspace（记住上次状态）", () => {
+  it("恢复选中标签 + 筛选 + 预览（离开再回来）", async () => {
+    localStorage.setItem(TAG_STATE_STORAGE_KEY, JSON.stringify({
+      tagId: "t1", filter: "quickNote", preview: { kind: "quickNote", id: "q1" }, scrollTop: 0,
+    }));
+    const merged = remount();
+    await act(async () => { await Promise.resolve(); });
+    expect(document.querySelector(".tags-dir__row.is-selected")?.textContent).toContain("灵感");
+    const activeTab = [...document.querySelectorAll<HTMLElement>('[role="tab"]')].find((tab) => tab.getAttribute("aria-selected") === "true");
+    expect(activeTab?.textContent).toBe("仅小记");
+    expect(merged.onLoadPreview).toHaveBeenCalledWith(expect.objectContaining({ id: "q1" }));
+    expect(document.querySelector(".tags-preview__note-card")).not.toBeNull();
+  });
+
+  it("选择/筛选/预览都写回设备本地（含滚动位置字段）", async () => {
+    render();
+    act(() => byText("灵感")!.closest("button")!.click());
+    act(() => byText("仅文档")!.click());
+    await act(async () => { byText("文档二")!.closest("button")!.click(); await Promise.resolve(); });
+    const stored = JSON.parse(localStorage.getItem(TAG_STATE_STORAGE_KEY) ?? "null");
+    expect(stored).toMatchObject({ tagId: "t1", filter: "doc", preview: { kind: "doc", id: "n2" } });
+    expect(typeof stored.scrollTop).toBe("number");
+  });
+
+  it("坏存储 / 标签已被删除：回未选中态，不报错", () => {
+    localStorage.setItem(TAG_STATE_STORAGE_KEY, "{坏 JSON");
+    const merged = remount();
+    expect(document.querySelector(".tags-dir__row.is-selected")).toBeNull();
+    expect(document.body.textContent).toContain("从左侧选择一个标签");
+    expect(merged.onError).not.toHaveBeenCalled();
+
+    localStorage.setItem(TAG_STATE_STORAGE_KEY, JSON.stringify({
+      tagId: "t_missing", filter: "all", preview: { kind: "doc", id: "n1" }, scrollTop: 120,
+    }));
+    remount();
+    expect(document.querySelector(".tags-dir__row.is-selected")).toBeNull();
+    expect(document.body.textContent).toContain("从左侧选择一个标签");
+  });
+
+  it("预览条目已不在该标签下 ⇒ 只清预览，保留标签与筛选", async () => {
+    localStorage.setItem(TAG_STATE_STORAGE_KEY, JSON.stringify({
+      tagId: "t1", filter: "all", preview: { kind: "doc", id: "n999" }, scrollTop: 0,
+    }));
+    const merged = remount({ documentLinks: { n1: ["t1"] } });
+    await act(async () => { await Promise.resolve(); });
+    expect(document.querySelector(".tags-dir__row.is-selected")?.textContent).toContain("灵感");
+    expect(document.querySelector(".tags-preview__open-doc")).toBeNull();
+    expect(document.body.textContent).toContain("选择一条内容查看只读预览");
+    expect(merged.onLoadPreview).not.toHaveBeenCalled();
+  });
+
+  it("数据不可用（降级）时不恢复也不覆盖存储", () => {
+    const stored = JSON.stringify({ tagId: "t1", filter: "doc", preview: null, scrollTop: 0 });
+    localStorage.setItem(TAG_STATE_STORAGE_KEY, stored);
+    render({ available: false });
+    expect(localStorage.getItem(TAG_STATE_STORAGE_KEY)).toBe(stored);
   });
 });

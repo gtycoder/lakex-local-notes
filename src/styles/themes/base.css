@@ -108,6 +108,8 @@
   --lake-font-weight-medium: 500;
   --lake-font-weight-semibold: 600;
   --lake-font-weight-bold: 700;
+  /* 标签空间右栏小记卡片限高（261106：约 240px，超出渐隐 + 展开/收起） */
+  --lake-preview-note-max-h: 240px;
   --lake-line-height-tight: 1.35;
   --lake-line-height-snug: 1.5;
   --lake-line-height-normal: 1.6;

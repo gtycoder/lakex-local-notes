@@ -171,3 +171,46 @@ describe("标签空间接线（P1）", () => {
     }
   });
 });
+/**
+ * 261106 三改（用户验收）：右栏文档预览只出少量信息（点击打开）、小记卡片限高 + 展开/收起 + 编辑、
+ * 记住上次状态（选中标签/筛选/预览，localStorage 设备本地）。
+ */
+describe("标签空间：预览改版 + 记住上次状态（261106）", () => {
+  it("文档预览不内嵌正文：只出模板信息、整卡点击 = 打开文档", () => {
+    expect(TAGS_WORKSPACE).toContain("tags-preview__open-doc");
+    expect(TAGS_WORKSPACE).toContain("点击打开文档");
+    // 文档分支在读正文**之前**就 return（不调 onLoadPreview）
+    expect(TAGS_WORKSPACE).toMatch(/if \(item\.kind === "doc"\) \{/);
+    expect(TAGS_WORKSPACE).toContain("onClick={() => onOpenDocument(previewItem.id)}");
+    // 类型名走统一映射（同一文档类型在标签空间/文档空间叫法一致）
+    expect(TAGS_WORKSPACE).toContain("DOC_KIND_LABELS");
+  });
+
+  it("小记预览 = 卡片 + 限高令牌 + 展开/收起 + 编辑入口", () => {
+    expect(TAGS_WORKSPACE).toContain("tags-preview__note-card");
+    expect(TAGS_WORKSPACE).toContain("tags-preview__note-body");
+    expect(TAGS_WORKSPACE).toContain("quickExpanded");
+    expect(TAGS_WORKSPACE).toContain("onClick={() => setQuickExpanded((value) => !value)}");
+    expect(TAGS_WORKSPACE).toContain('onClick={() => onOpenQuickNote(previewItem.id)}>编辑');
+    // 限高走令牌（240px 定义在 themes/base.css；这里不出现字号/尺寸字面量）
+    expect(read("../../styles/themes/base.css")).toContain("--lake-preview-note-max-h: 240px;");
+    const css = read("../../features/tags/tags.css");
+    expect(css).toContain("max-height: var(--lake-preview-note-max-h);");
+    expect(css).toContain(".tags-preview__note-card.is-expanded .tags-preview__note-body");
+  });
+
+  it("记住上次状态：设备本地 localStorage；恢复选中标签/筛选/预览，坏值与已删标签兜底", () => {
+    const STATE = read("../../features/tags/tagsWorkspaceState.ts");
+    expect(STATE).toContain('"lakex-local-notes-v3.tags-state"');
+    expect(STATE).toContain("parseTagSpaceState");
+    expect(STATE).toContain("resolveTagSpaceState");
+    expect(TAGS_WORKSPACE).toContain("readTagSpaceState()");
+    expect(TAGS_WORKSPACE).toContain("writeTagSpaceState({");
+    expect(TAGS_WORKSPACE).toContain("resolveTagSpaceState(restoredState");
+    // 降级时不写坏状态
+    expect(TAGS_WORKSPACE).toMatch(/if \(!restored \|\| !available \|\| dataError\) return;/);
+    // 三栏宽度不重复存（仍在 tagsLayout 的键里，本模块只存选中/筛选/预览/滚动）
+    expect(STATE).not.toContain("TAG_LAYOUT_STORAGE_KEY");
+    expect(STATE).not.toContain("serializeTagLayout");
+  });
+});

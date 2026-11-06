@@ -26,6 +26,14 @@ import { useConfirm } from "../../hooks/useConfirm";
 import { getNativeErrorMessage } from "../../lib/nativeErrors";
 import type { NoteSummary, QuickNoteListSummary, QuickNoteTag } from "../../lib/types";
 import {
+  readTagSpaceState,
+  resolveTagSpaceState,
+  samePreviewRef,
+  writeTagSpaceState,
+  type TagPreviewRef,
+  type TagSpaceState,
+} from "./tagsWorkspaceState";
+import {
   buildTagAggregate,
   buildTagDirectory,
   moveTagOrder,
@@ -74,6 +82,19 @@ const KIND_TABS: Array<{ id: TagAggregateKindFilter; label: string }> = [
   { id: "quickNote", label: "仅小记" },
 ];
 
+/** 文档类型的中文名（右栏只显示少量信息；与其它空间的叫法一致）。 */
+const DOC_KIND_LABELS: Record<string, string> = {
+  doc: "文档",
+  usheet: "表格",
+  bitable: "多维表",
+  board: "画板",
+  ink: "手写板",
+};
+
+function previewRefOf(item: TagAggregateItem): TagPreviewRef {
+  return { kind: item.kind, id: item.id };
+}
+
 function formatUpdated(iso: string): string {
   if (!iso) return "";
   const date = new Date(iso);
@@ -93,8 +114,10 @@ function formatUpdated(iso: string): string {
  */
 export function TagsWorkspace(props: TagsWorkspaceProps) {
   const { active, tags, documentLinks, notes, quickNotes, available, dataError = null, onReload, onCreateTag, onRenameTag, onMergeTag, onDeleteTag, onReorderTags, onOpenDocument, onOpenQuickNote, onLoadPreview, onRemoveTagFromItem, onError } = props;
-  const [selectedTagId, setSelectedTagId] = useState<string | null>(null);
-  const [kindFilter, setKindFilter] = useState<TagAggregateKindFilter>("all");
+  /** 上次状态（设备本地，261106）：选中标签/筛选初值直接来自存储；预览与滚动在数据就绪后恢复。 */
+  const [restoredState] = useState<TagSpaceState>(() => readTagSpaceState());
+  const [selectedTagId, setSelectedTagId] = useState<string | null>(restoredState.tagId);
+  const [kindFilter, setKindFilter] = useState<TagAggregateKindFilter>(restoredState.filter);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [mergeSource, setMergeSource] = useState<TagDirectoryEntry | null>(null);
@@ -124,6 +147,14 @@ export function TagsWorkspace(props: TagsWorkspaceProps) {
   const [previewError, setPreviewError] = useState<string | null>(null);
   /** 正在「移除该标签」的条目 key（禁点 + 显示进行中）。 */
   const [removingKey, setRemovingKey] = useState<string | null>(null);
+  /** 右栏小记卡片是否展开（内联展开/收起；纯视图，不持久化）。 */
+  const [quickExpanded, setQuickExpanded] = useState(false);
+  /** 上次状态是否已恢复（恢复完成前**不写**存储，避免默认值把存储覆盖掉）。 */
+  const [restored, setRestored] = useState(false);
+  /** 中栏滚动容器 + 最近一次滚动位置（滚动不触发重渲染，直接写存储）。 */
+  const aggregateRef = useRef<HTMLDivElement>(null);
+  const scrollTopRef = useRef(0);
+  const scrollSaveTimerRef = useRef<number | undefined>(undefined);
   const { confirm, confirmElement } = useConfirm();
 
   const directory = useMemo(() => buildTagDirectory({ tags, documentLinks, quickNotes }), [tags, documentLinks, quickNotes]);
@@ -245,6 +276,12 @@ export function TagsWorkspace(props: TagsWorkspaceProps) {
     setPreviewItem(item);
     setPreviewBody(null);
     setPreviewError(null);
+    setQuickExpanded(false);
+    // 261106 用户验收：文档预览**不内嵌正文**（只显示少量信息，点击 = 打开文档）⇒ 不读正文。
+    if (item.kind === "doc") {
+      setPreviewLoading(false);
+      return;
+    }
     setPreviewLoading(true);
     try {
       const body = await onLoadPreview(item);
@@ -257,11 +294,75 @@ export function TagsWorkspace(props: TagsWorkspaceProps) {
     }
   }, [onLoadPreview]);
 
-  const openInOrigin = () => {
-    if (!previewItem) return;
-    if (previewItem.kind === "doc") onOpenDocument(previewItem.id);
-    else onOpenQuickNote(previewItem.id);
-  };
+  /** 某个标签下的完整聚合条目（filter=all；用于恢复时的预览校验，不受当前筛选影响）。 */
+  const resolvedItems = useCallback((tagId: string | null): TagAggregateItem[] => {
+    if (!tagId) return [];
+    const full = buildTagAggregate({ tagId, documentLinks, notes, quickNotes, filter: "all" });
+    return [...full.docs, ...full.quickNotes];
+  }, [documentLinks, notes, quickNotes]);
+
+  /**
+   * 恢复上次状态（261106 用户验收）：选中标签 / 聚合筛选 / 右栏预览 / 中栏滚动。
+   * 数据未就绪（available=false / dataError）时不恢复也不写（防止把降级态写进存储）。
+   * 标签已删 ⇒ resolveTagSpaceState 回落默认；预览条目已不在该标签下 ⇒ 只清预览。
+   */
+  useEffect(() => {
+    if (restored) return;
+    if (!available || dataError) return;
+    const resolved = resolveTagSpaceState(restoredState, {
+      tagIds: directory.map((entry) => entry.id),
+      // 校验预览用「该标签的完整聚合」（不受当前筛选影响：用户可能是在仅文档下选的小记）。
+      items: resolvedItems(selectedTagId),
+    });
+    if (resolved.tagId !== selectedTagId) setSelectedTagId(resolved.tagId);
+    if (resolved.filter !== kindFilter) setKindFilter(resolved.filter);
+    if (resolved.preview) {
+      const item = resolvedItems(resolved.tagId).find((candidate) => samePreviewRef(previewRefOf(candidate), resolved.preview));
+      if (item) void openPreview(item);
+    }
+    scrollTopRef.current = resolved.scrollTop;
+    setRestored(true);
+    if (resolved.scrollTop > 0) {
+      // 等中栏渲染出列表后再恢复滚动（不参与状态、不触发重渲染）
+      window.setTimeout(() => {
+        const element = aggregateRef.current;
+        if (element) element.scrollTop = resolved.scrollTop;
+      }, 0);
+    }
+    // resolvedItems 是纯查询函数（依赖已由 directory/aggregate 覆盖）；恢复只跑一次
+  }, [restored, available, dataError, directory, aggregate, restoredState, selectedTagId, kindFilter, openPreview]);
+
+  /** 持久化：恢复完成且数据可用时，把当前状态写回设备本地。 */
+  useEffect(() => {
+    if (!restored || !available || dataError) return;
+    writeTagSpaceState({
+      tagId: selectedTagId,
+      filter: kindFilter,
+      preview: previewItem ? previewRefOf(previewItem) : null,
+      scrollTop: scrollTopRef.current,
+    });
+  }, [restored, available, dataError, selectedTagId, kindFilter, previewItem]);
+
+  /** 中栏滚动位置：滚动不触发重渲染，300ms 合并后连同当前状态一起写存储。 */
+  const saveScrollTop = useCallback(() => {
+    const element = aggregateRef.current;
+    if (!element) return;
+    scrollTopRef.current = element.scrollTop;
+    if (!restored || !available || dataError) return;
+    if (scrollSaveTimerRef.current !== undefined) window.clearTimeout(scrollSaveTimerRef.current);
+    scrollSaveTimerRef.current = window.setTimeout(() => {
+      writeTagSpaceState({
+        tagId: selectedTagId,
+        filter: kindFilter,
+        preview: previewItem ? previewRefOf(previewItem) : null,
+        scrollTop: scrollTopRef.current,
+      });
+    }, 300);
+  }, [restored, available, dataError, selectedTagId, kindFilter, previewItem]);
+
+  useEffect(() => () => {
+    if (scrollSaveTimerRef.current !== undefined) window.clearTimeout(scrollSaveTimerRef.current);
+  }, []);
 
   /** 「移除该标签」= 取消这一条与该标签的关系（可逆、无二次确认），成功后刷新目录/聚合。 */
   const removeTagFromItem = useCallback(async (item: TagAggregateItem) => {
@@ -415,7 +516,7 @@ export function TagsWorkspace(props: TagsWorkspaceProps) {
           onPreview={(next) => setWidths((current) => ({ ...current, dir: clampTagDirWidth(next, containerWidth, current.preview) }))}
           onCommit={(next) => commitWidths({ ...widths, dir: next ?? TAG_DIR_DEFAULT })}
         />
-        <div className="tags-aggregate" aria-label="标签内容">
+        <div className="tags-aggregate" aria-label="标签内容" ref={aggregateRef} onScroll={saveScrollTop}>
           <div className="ln-tabs tags-aggregate__tabs" role="tablist" aria-label="内容类型">
             {KIND_TABS.map((tab) => (
               <button key={tab.id} type="button" role="tab" aria-selected={kindFilter === tab.id}
@@ -451,11 +552,10 @@ export function TagsWorkspace(props: TagsWorkspaceProps) {
           ) : (
             <>
               <header className="tags-preview__head">
-                <span className="tags-preview__kind">{previewItem.kind === "doc" ? "文档" : "小记"}</span>
+                <span className="tags-preview__kind">
+                  {previewItem.kind === "doc" ? (DOC_KIND_LABELS[previewItem.docKind ?? "doc"] ?? "文档") : "小记"}
+                </span>
                 <strong className="ln-ellipsis tags-preview__title">{previewItem.title}</strong>
-                <button type="button" className="ln-btn ln-btn--secondary" onClick={openInOrigin}>
-                  {previewItem.kind === "doc" ? "在文档中打开" : "在小记中打开"}
-                </button>
                 {selectedTagId && (
                   <button type="button" className="ln-btn ln-btn--secondary" aria-label={"移除标签 " + (selected?.name ?? "")}
                     disabled={removingKey === previewItem.kind + ":" + previewItem.id}
@@ -465,12 +565,36 @@ export function TagsWorkspace(props: TagsWorkspaceProps) {
                   onClick={() => { setPreviewItem(null); setPreviewBody(null); setPreviewError(null); }}><X size={13} /></button>
               </header>
               <div className="tags-preview__body">
-                {previewLoading && <p className="tags-empty" role="status">正在读取正文…</p>}
-                {!previewLoading && previewError && <p className="tags-empty" role="status">{previewError}</p>}
-                {!previewLoading && !previewError && previewBody !== null && (
-                  <Suspense fallback={<p className="tags-empty" role="status">正在加载只读预览…</p>}>
-                    <TagPreviewBody kind={previewItem.kind} docKind={previewItem.docKind} body={previewBody} noteId={previewItem.id} />
-                  </Suspense>
+                {previewItem.kind === "doc" ? (
+                  /* 文档预览 = 少量信息 + 整卡点击打开（261106：不再内嵌整篇正文） */
+                  <button type="button" className="tags-preview__open-doc" onClick={() => onOpenDocument(previewItem.id)}
+                    aria-label={"打开文档 " + previewItem.title}>
+                    <span className="tags-preview__open-doc-kind">{DOC_KIND_LABELS[previewItem.docKind ?? "doc"] ?? "文档"}</span>
+                    <strong className="tags-preview__open-doc-title">{previewItem.title}</strong>
+                    <span className="tags-preview__open-doc-meta">
+                      {previewItem.updatedAt ? "更新于 " + formatUpdated(previewItem.updatedAt) : "本地文档"}
+                    </span>
+                    <span className="tags-preview__open-doc-hint">点击打开文档</span>
+                  </button>
+                ) : (
+                  <>
+                    {previewLoading && <p className="tags-empty" role="status">正在读取正文…</p>}
+                    {!previewLoading && previewError && <p className="tags-empty" role="status">{previewError}</p>}
+                    {!previewLoading && !previewError && previewBody !== null && (
+                      <div className={"tags-preview__note-card" + (quickExpanded ? " is-expanded" : "")}>
+                        <div className="tags-preview__note-body">
+                          <Suspense fallback={<p className="tags-empty" role="status">正在加载只读预览…</p>}>
+                            <TagPreviewBody kind="quickNote" body={previewBody} noteId={previewItem.id} />
+                          </Suspense>
+                        </div>
+                        <div className="tags-preview__note-actions">
+                          <button type="button" className="ln-btn ln-btn--ghost ln-btn--compact" aria-expanded={quickExpanded}
+                            onClick={() => setQuickExpanded((value) => !value)}>{quickExpanded ? "收起" : "展开"}</button>
+                          <button type="button" className="ln-btn ln-btn--secondary" onClick={() => onOpenQuickNote(previewItem.id)}>编辑</button>
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             </>
