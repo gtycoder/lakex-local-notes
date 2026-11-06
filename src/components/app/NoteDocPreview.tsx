@@ -18,7 +18,7 @@ import { useHistorySnapshotViewer } from "../hooks/useHistorySnapshotViewer";
 import "./noteDocPreview.css";
 
 /** 预览固定阅读档字号（内核 defaultFontsize 只认 12/13/14/15/16/19/22/24）。标题/行宽见 CSS。 */
-export const NOTE_DOC_PREVIEW_FONT_SIZE = 14;
+export const NOTE_DOC_PREVIEW_FONT_SIZE = 16;
 
 export interface NoteDocPreviewProps {
   /** 文档 id（资源/资产解析按它走）；空串 = 不渲染。 */

@@ -50,7 +50,7 @@ afterEach(() => {
 const render = (node: ReturnType<typeof createElement>) => act(() => { root.render(node); });
 
 describe("NoteDocPreview（doc 只读预览共用实现）", () => {
-  it("挂只读 Lake viewer：阅读档字号 14 + 禁原生大纲 + 正文走 setDocument", () => {
+  it("挂只读 Lake viewer：阅读档字号 16 + 禁原生大纲 + 正文走 setDocument", () => {
     render(createElement(NoteDocPreview, { noteId: "n1", body: "<p>正文</p>", className: "trash-preview-viewer" }));
 
     expect(h.createLakeDocument).toHaveBeenCalledTimes(1);
@@ -60,7 +60,7 @@ describe("NoteDocPreview（doc 只读预览共用实现）", () => {
     expect(noteId).toBe("n1");
     expect(scrollNode).toBe(element);
     expect(prefs).toMatchObject({ fontSize: NOTE_DOC_PREVIEW_FONT_SIZE, disableNativeToc: true });
-    expect(NOTE_DOC_PREVIEW_FONT_SIZE).toBe(14);
+    expect(NOTE_DOC_PREVIEW_FONT_SIZE).toBe(16);
     expect(viewer.setDocument).toHaveBeenCalledWith("text/lake", "<p>正文</p>");
     expect(viewer.requestCardHydration).toHaveBeenCalled();
     // 调用方容器类保留（滚动/边框仍由各处既有 CSS 负责），作用域类始终在
@@ -102,7 +102,7 @@ describe("NoteDocPreview（doc 只读预览共用实现）", () => {
     h.mobile.value = true;
     render(createElement(NoteDocPreview, { noteId: "n1", body: "<p>x</p>" }));
     expect(h.createLakeDocument.mock.calls[0][6]).toMatchObject({
-      fontSize: 14, disableNativeToc: true, disableVirtualRendering: true, showToolbar: false,
+      fontSize: 16, disableNativeToc: true, disableVirtualRendering: true, showToolbar: false,
     });
     act(() => root.unmount());
     h.mobile.value = false;
@@ -125,7 +125,7 @@ describe("noteDocPreview.css：统一阅读档排版", () => {
   const CSS = readFileSync(path.resolve("src/components/app/noteDocPreview.css"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
 
   it("正文基准走字号令牌（14px）+ 行高 1.7；标题按 em 缩放（内核是 28/24/20/16 px 定值）", () => {
-    expect(CSS).toMatch(/\.note-doc-preview \.ne-viewer-body \{[^}]*font-size: var\(--lake-font-size-body\)/s);
+    expect(CSS).toMatch(/\.note-doc-preview \.ne-viewer-body \{[^}]*font-size: var\(--lake-font-size-preview\)/s);
     expect(CSS).toMatch(/line-height: 1\.7;/);
     for (const [tag, size] of [["h1", "1.5em"], ["h2", "1.3em"], ["h3", "1.15em"], ["h4", "1em"]] as const) {
       expect(CSS, tag).toMatch(new RegExp(`\\.note-doc-preview ne-${tag} \\{ font-size: ${size.replace(".", "\\.")}`));

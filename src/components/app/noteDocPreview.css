@@ -35,7 +35,7 @@
 /* 正文基准：14px / 1.7（收掉 tokens.css 的字号继承与 misc.css 阅读态的 1.85） */
 .note-doc-preview .ne-viewer,
 .note-doc-preview .ne-viewer-body {
-  font-size: var(--lake-font-size-body);
+  font-size: var(--lake-font-size-preview);
   line-height: 1.7;
   letter-spacing: 0;
 }

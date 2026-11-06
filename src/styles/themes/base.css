@@ -100,6 +100,7 @@
   --lake-font-size-body: 14px;
   --lake-font-size-bodyMd: 15px;  /* 展开预览档（261008 用户：比表正文大 1px，先用 15 试） */
   --lake-font-size-bodyLg: 15.5px;
+  --lake-font-size-preview: 16px;  /* 阅读态正文预览基准（261106 用户：14 略小 → 16；回收站/标签空间/历史/属性共用 NoteDocPreview） */
   --lake-font-size-title: 18px;
   --lake-font-size-display: 20px;  /* 显示档：面板大标题 / 预览标题（261006 补，位于 title 与 h1 之间） */
   --lake-font-size-h1: 24px;
