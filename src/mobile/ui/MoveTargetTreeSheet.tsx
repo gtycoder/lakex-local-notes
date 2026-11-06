@@ -47,6 +47,19 @@ function ancestorsOf(id: string | null, byId: ReadonlyMap<string, MoveTargetNode
   return out;
 }
 
+/**
+ * 默认展开集合（261106 task-94）：
+ * · **所有根笔记本一层**（父级为 null 的笔记本/分组若有子级）——否则用户只看到几行、以为"没展示全部"；
+ * · 当前路径的祖先链（当前位置可见）。
+ */
+function defaultExpanded(childrenOf: ReadonlyMap<string | null, MoveTargetNode[]>, byId: ReadonlyMap<string, MoveTargetNode>, currentParentId: string | null): Set<string> {
+  const out = ancestorsOf(currentParentId, byId);
+  for (const root of childrenOf.get(null) ?? []) {
+    if ((childrenOf.get(root.id) ?? []).length > 0) out.add(root.id);
+  }
+  return out;
+}
+
 export function MoveTargetTreeSheet({ open, nodes, currentParentId, excludedIds, busy, error, onConfirm, onClose }: MoveTargetTreeSheetProps) {
   const { childrenOf, byId } = useMemo(() => {
     const children = new Map<string | null, MoveTargetNode[]>();
@@ -62,15 +75,18 @@ export function MoveTargetTreeSheet({ open, nodes, currentParentId, excludedIds,
   }, [nodes]);
 
   const excluded = useMemo(() => new Set(excludedIds ?? []), [excludedIds]);
-  /** 默认展开当前路径（祖先 + 自身）；打开时重置。 */
-  const [expanded, setExpanded] = useState<Set<string>>(() => ancestorsOf(currentParentId, byId));
+  /** 默认展开：所有根笔记本一层 + 当前路径；打开时重置。 */
+  const [expanded, setExpanded] = useState<Set<string>>(() => defaultExpanded(childrenOf, byId, currentParentId));
   const [picked, setPicked] = useState<string | null>(null);
+  /** 搜索（261106 task-94）：按名称过滤，命中项的祖先自动展开。 */
+  const [query, setQuery] = useState("");
 
   useEffect(() => {
     if (!open) return;
-    setExpanded(ancestorsOf(currentParentId, byId));
+    setExpanded(defaultExpanded(childrenOf, byId, currentParentId));
     setPicked(null);
-  }, [open, currentParentId, byId]);
+    setQuery("");
+  }, [open, currentParentId, byId, childrenOf]);
 
   const toggle = (id: string): void => {
     setExpanded((current) => {
@@ -80,12 +96,50 @@ export function MoveTargetTreeSheet({ open, nodes, currentParentId, excludedIds,
     });
   };
 
+  const needle = query.trim().toLocaleLowerCase();
+  /** 搜索命中的节点 + 其祖先（用于过滤与自动展开）。 */
+  const searchState = useMemo(() => {
+    if (!needle) return { matches: null as Set<string> | null, ancestors: new Set<string>() };
+    const matches = new Set<string>();
+    for (const node of nodes) {
+      if ((node.title || "未命名").toLocaleLowerCase().includes(needle)) matches.add(node.id);
+    }
+    const ancestors = new Set<string>();
+    for (const id of matches) for (const ancestor of ancestorsOf(id, byId)) ancestors.add(ancestor);
+    return { matches, ancestors };
+  }, [needle, nodes, byId]);
+  /** 渲染时展开集合 = 用户展开 ∪ 搜索命中的祖先（搜索时保证命中可见）。 */
+  const renderExpanded = useMemo(() => {
+    if (!needle || !searchState.matches) return expanded;
+    const out = new Set(expanded);
+    for (const id of searchState.ancestors) out.add(id);
+    return out;
+  }, [needle, searchState, expanded]);
+  const visibleBySearch = (node: MoveTargetNode): boolean => {
+    if (!needle || !searchState.matches) return true;
+    if (searchState.matches.has(node.id)) return true;
+    // 祖先节点：其子树里有命中项才保留（否则过滤掉）。
+    const stack = [node.id];
+    const seen = new Set<string>();
+    while (stack.length > 0) {
+      const cur = stack.pop() as string;
+      if (seen.has(cur)) continue;
+      seen.add(cur);
+      for (const kid of childrenOf.get(cur) ?? []) {
+        if (searchState.matches.has(kid.id)) return true;
+        stack.push(kid.id);
+      }
+    }
+    return false;
+  };
+
   const rows: Row[] = [];
   const walk = (parentId: string | null, depth: number): void => {
     for (const node of childrenOf.get(parentId) ?? []) {
+      if (!visibleBySearch(node)) continue;
       const kids = childrenOf.get(node.id) ?? [];
       rows.push({ node, depth, hasChildren: kids.length > 0 });
-      if (kids.length > 0 && expanded.has(node.id)) walk(node.id, depth + 1);
+      if (kids.length > 0 && renderExpanded.has(node.id)) walk(node.id, depth + 1);
     }
   };
   if (open) walk(null, 0);
@@ -110,9 +164,22 @@ export function MoveTargetTreeSheet({ open, nodes, currentParentId, excludedIds,
       </div>}
     >
       {error && <div className="qn-tag-sheet__error" role="alert">{error}</div>}
+      {/* 搜索框：数据源是全部未回收容器，靠搜索快速定位（命中自动展开祖先）。 */}
+      <span className="mb-input qn-tag-sheet__input">
+        <input
+          value={query}
+          aria-label="搜索笔记本"
+          placeholder="搜索笔记本/分组…"
+          onChange={(event) => setQuery(event.target.value)}
+        />
+      </span>
       {nodes.length === 0 ? (
         <div className="mb-empty">还没有笔记本：先新建一个知识库</div>
+      ) : rows.length === 0 ? (
+        <div className="mb-empty">没有匹配的笔记本</div>
       ) : (
+        /* 列表自身可滚动：不依赖外层 Sheet 内容被矮屏/键盘裁掉（高度与滚动都在这里）。 */
+        <div className="mb-tree-list">
         <div className="mb-set-items">
           {rows.map(({ node, depth, hasChildren }) => {
             const isCurrent = currentParentId === node.id;
@@ -140,7 +207,7 @@ export function MoveTargetTreeSheet({ open, nodes, currentParentId, excludedIds,
                 <div className="mb-set-item__main">
                   <button
                     type="button"
-                    className="mb-set-name"
+                    className="mb-set-name mb-ellipsis"
                     aria-label={"移动到 " + (node.title || "未命名")}
                     aria-pressed={isPicked}
                     disabled={isExcluded || busy}
@@ -155,6 +222,7 @@ export function MoveTargetTreeSheet({ open, nodes, currentParentId, excludedIds,
               </div>
             );
           })}
+        </div>
         </div>
       )}
     </MobileSheet>

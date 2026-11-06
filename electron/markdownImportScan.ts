@@ -2,32 +2,24 @@
  * 261106 Markdown 导入：主进程侧**文件发现 / 读取**（纯 fs，无 Electron 依赖 ⇒ 可直接单测）。
  *
  * 职责边界：
- * - 只负责「扫出 .md/.markdown 文件、stat 大小、读 UTF-8 正文（带 20MB 上限）、读导入图片字节」；
+ * - 只负责「描述一个 .md/.markdown 文件（stat 大小 + 读 UTF-8 正文，带 20MB 上限）、读导入图片字节」；
+ *   （261106 task-91：目录递归扫描随「文件夹导入」入口一起移除）
  * - **不**做 md → lake 转换（那是 renderer 侧内核管线，见 src/features/import/markdownImportPipeline.ts）；
  * - 不做落盘（建笔记/分组由 renderer 经既有 IPC 完成）。
  *
  * 约定（与 src/lib/types.ts 的 MarkdownPickedFileShape 一一对应）：
- * - 不支持的文件也返回（supported:false），由调用方计入「跳过数」——用户全选目录时不静默消失；
- * - 用户取消 = 空数组（不抛）；单文件读失败只在该条上给 error，不影响整批；
- * - 目录递归跳过隐藏目录 / node_modules / .git，并限制文件数与正文总量，防止一次导入拖垮进程。
+ * - 不支持的文件也返回（supported:false），由调用方计入「跳过数」——用户全选时不能静默消失；
+ * - 用户取消 = 空数组（不抛）；单文件读失败只在该条上给 error，不影响整批。
  */
 import fs from "node:fs";
 import path from "node:path";
 
 /** 单文件正文上限（与渲染层 importMarkdown 同一口径；超限不读正文，标记 tooLarge）。 */
 export const MAX_MARKDOWN_IMPORT_BYTES = 20 * 1024 * 1024;
-/** 一次「选择文件夹」最多返回的文件数（超出截断并标记 truncated）。 */
-export const MAX_MARKDOWN_FOLDER_FILES = 500;
-/** 一次目录导入读取的正文总量上限：超过后不再读取（该条给 error，避免主进程内存峰值）。 */
-export const MAX_MARKDOWN_FOLDER_TEXT_BYTES = 64 * 1024 * 1024;
-/** 目录递归深度上限（防异常深目录/软链环）。 */
-export const MAX_MARKDOWN_SCAN_DEPTH = 20;
 /** 单张导入图片上限。 */
 export const MAX_IMPORT_IMAGE_BYTES = 20 * 1024 * 1024;
 
 export const MARKDOWN_EXTENSIONS = [".md", ".markdown"] as const;
-/** 递归时整体跳过的目录名（隐藏目录由 startsWith(".") 统一跳过）。 */
-const SKIP_DIRS = new Set(["node_modules", ".git", ".hg", ".svn", "dist", "release"]);
 
 /** 该文件名是否是 Markdown（大小写不敏感；只认 .md / .markdown）。 */
 export function isSupportedMarkdownFile(name: string): boolean {
@@ -89,69 +81,12 @@ export function describeMarkdownFile(absPath: string, options: { readText?: bool
     entry.tooLarge = true;
     return entry;
   }
-  if (typeof options.textBudget === "number" && stat.size > options.textBudget) {
-    entry.error = "本次批量导入的正文总量已达上限，该文件未读取";
-    return entry;
-  }
   try {
     entry.text = fs.readFileSync(absPath, "utf8").replace(/^\uFEFF/, "");
   } catch (error) {
     entry.error = "读取正文失败：" + errorMessage(error);
   }
   return entry;
-}
-
-export interface MarkdownFolderScan {
-  files: MarkdownPickedFile[];
-  /** 命中 MAX_MARKDOWN_FOLDER_FILES 上限（后面还有文件未列出）。 */
-  truncated: boolean;
-}
-
-/**
- * 递归扫描目录：只收 .md/.markdown（其它文件忽略，不算 skipped —— 目录里通常有大量非 md 文件），
- * 保留子目录结构（relativePath）。按名字排序保证结果稳定；隐藏目录 / node_modules / .git 跳过。
- */
-export function listMarkdownFilesInDir(root: string, options: { maxFiles?: number; maxTextBytes?: number; readText?: boolean } = {}): MarkdownFolderScan {
-  const maxFiles = Math.max(1, options.maxFiles ?? MAX_MARKDOWN_FOLDER_FILES);
-  const maxTextBytes = options.maxTextBytes ?? MAX_MARKDOWN_FOLDER_TEXT_BYTES;
-  const readText = options.readText !== false;
-  const files: MarkdownPickedFile[] = [];
-  let truncated = false;
-  let textBudget = maxTextBytes;
-  /** 先收集路径（按目录顺序稳定排序），再逐个 stat/read，避免在递归中长时间持有句柄。 */
-  const paths: string[] = [];
-  const walk = (dir: string, depth: number): void => {
-    if (truncated || depth > MAX_MARKDOWN_SCAN_DEPTH) return;
-    let entries: fs.Dirent[];
-    try {
-      entries = fs.readdirSync(dir, { withFileTypes: true });
-    } catch {
-      return; // 读不到的目录跳过（权限/软链断裂），不阻断整批
-    }
-    entries.sort((a, b) => a.name.localeCompare(b.name));
-    for (const entry of entries) {
-      if (truncated) return;
-      if (entry.name.startsWith(".")) continue; // 隐藏文件/目录（.git/.obsidian/…）
-      const abs = path.join(dir, entry.name);
-      if (entry.isDirectory()) {
-        if (SKIP_DIRS.has(entry.name)) continue;
-        walk(abs, depth + 1);
-        continue;
-      }
-      if (!entry.isFile()) continue; // 软链/设备文件等一律跳过
-      if (!isSupportedMarkdownFile(entry.name)) continue;
-      if (paths.length >= maxFiles) { truncated = true; return; }
-      paths.push(abs);
-    }
-  };
-  walk(root, 0);
-  for (const abs of paths) {
-    const entry = describeMarkdownFile(abs, { readText, textBudget });
-    if (entry.text !== undefined) textBudget -= entry.size;
-    entry.relativePath = path.relative(root, abs).split(path.sep).join("/");
-    files.push(entry);
-  }
-  return { files, truncated };
 }
 
 /** 导入图片可接受的 MIME（按扩展名 + 魔数双重校验）。 */

@@ -21,6 +21,7 @@ import { useCallback, useEffect, useRef, type ReactNode } from "react";
 import { lockPageScroll } from "../../lib/pageScrollLock";
 import { X } from "lucide-react";
 import { pushBackHandler } from "./backStack";
+import { useKeyboardStableSheet } from "../hooks/useKeyboardStableSheet";
 import { useSwipeToClose } from "./useSwipeToClose";
 
 /** 模态移动浮层共用焦点收放与嵌套滚动锁；不规定头部/正文结构，不增加Tab陷阱。 */
@@ -94,6 +95,9 @@ export function MobileSheet({
   useSwipeToClose(sheetRef, dismiss, open && dismissible);
 
   useSheetModalFocus(open, sheetRef);
+  // 261106 task-94：键盘弹起时**不推动弹窗**（top/height 钉在键盘前几何，键盘覆盖下方列表；输入框自动滚入可见区）。
+  // 本原语覆盖全部含输入/无输入的底部 Sheet；无输入焦点时零副作用。
+  useKeyboardStableSheet(sheetRef, open);
 
   if (!open) return null;
 

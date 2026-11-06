@@ -25,7 +25,7 @@ import { checkDocBody } from "../../core/docBodySafety.js";
 import { docBaselineSettled } from "../../core/docBaseline.js";
 import { collectBoardAssetUrls, collectInlineImageUrls, replaceInlineImageUrls } from "./boardImageAssets.js";
 import { readBoardView, writeBoardView } from "./boardViewStore.js";
-import { registerBoardExport, triggerBoardExport } from "./boardExport";
+import { dataUrlToBytes, registerBoardBytes, registerBoardExport, triggerBoardExport } from "./boardExport";
 import { createBoardValueCoalescer } from "./boardValueCoalescer";
 import { installBoardInputDebugHooks, installBoardInputDiagnostics } from "./boardInputDiagnostics";
 
@@ -124,6 +124,17 @@ export function BoardEditor({ noteId, content, visible, readOnly: readOnlyProp, 
    * 只登记已挂载的画板；从目录树导出未打开的画板时注册表里没有 ⇒ 菜单给"先打开画板"的提示。
    */
   useEffect(() => registerBoardExport(noteId, (format) => triggerBoardExport(hostRef.current, format)), [noteId]);
+  /**
+   * 261106 task-95：批量导出要画板**图像字节**（主进程内嵌成 PDF）。
+   * 字节来源 = DrawnixBoardCore 的 `onChange({ previewImage })`（vendor 内部就是 @plait/core toImage，
+   * 与画板自己的 saveAsPng 同一函数）：挂载后 250ms 内首张快照、之后每次改动重新生成 ⇒ 与"导出 PNG"
+   * 同源同画面，不 patch vendor、不拦截下载。未打开的画板由 boardSnapshot.ts 离屏渲染补。
+   */
+  const latestBoardImageRef = useRef<Uint8Array | null>(null);
+  useEffect(() => registerBoardBytes(noteId, async () => {
+    const bytes = latestBoardImageRef.current;
+    return bytes && bytes.byteLength > 0 ? { bytes, format: "png" as const } : null;
+  }), [noteId]);
   /** 261103 八批：画板输入诊断（默认关，行为零开销；开关见 boardInputDiagnostics.ts 头注释）。 */
   useEffect(() => {
     installBoardInputDebugHooks();
@@ -465,6 +476,13 @@ export function BoardEditor({ noteId, content, visible, readOnly: readOnlyProp, 
 
   const handleCoreChange = useCallback<NonNullable<DrawnixBoardCoreProps["onChange"]>>(
     (partial) => {
+      // 批量导出的图像字节：previewImage 是整幅 PNG data URL（含未保存编辑），只进内存不落盘。
+      // 放在只读早退之前 —— 锁定/回收站里的画板同样允许导出。
+      const previewImage = (partial as { previewImage?: string }).previewImage;
+      if (typeof previewImage === "string" && previewImage.startsWith("data:image/")) {
+        const bytes = dataUrlToBytes(previewImage);
+        if (bytes && bytes.byteLength > 0) latestBoardImageRef.current = bytes;
+      }
       // 只读（锁定/回收站/被他端删除）：防御性兜底，绝不接收内容变更。
       // 正常路径由 plait 的 board.options.readonly 拦住；这里挡住"内核漏放"的写入。
       if (readOnlyRef.current) return;

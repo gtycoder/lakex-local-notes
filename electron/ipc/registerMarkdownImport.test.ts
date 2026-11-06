@@ -11,11 +11,12 @@ vi.mock("electron", () => ({
 }));
 
 import { registerMarkdownImportIpc } from "./registerMarkdownImport.js";
-import { describeMarkdownFile, listMarkdownFilesInDir } from "../markdownImportScan.js";
+import { describeMarkdownFile } from "../markdownImportScan.js";
 
 /**
- * 261106 Markdown 导入 IPC（pick_markdown_files / pick_markdown_folder / read_import_image）。
- * 真 fs + 假对话框：守住「取消 → 空（不抛）」「多选逐条描述」「目录递归」「图片校验」。
+ * 261106 Markdown 导入 IPC（pick_markdown_files / read_import_image）。
+ * 真 fs + 假对话框：守住「取消 → 空（不抛）」「多选逐条描述」「图片校验」。
+ * （261106 task-91：文件夹导入已移除，pick_markdown_folder 通道一并删除）
  */
 type Handler = (...args: unknown[]) => unknown;
 const roots: string[] = [];
@@ -48,8 +49,8 @@ function harness() {
 const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
 
 describe("registerMarkdownImportIpc：通道与取消语义", () => {
-  it("注册三个通道（与 preload/WEB_METHODS 同名）", () => {
-    expect(harness().channels()).toEqual(["pick_markdown_files", "pick_markdown_folder", "read_import_image"]);
+  it("注册两个通道（与 preload/WEB_METHODS 同名）", () => {
+    expect(harness().channels()).toEqual(["pick_markdown_files", "read_import_image"]);
   });
 
   it("多选文件：取消 ⇒ 空数组（不抛）", async () => {
@@ -72,20 +73,6 @@ describe("registerMarkdownImportIpc：通道与取消语义", () => {
     expect(result).toHaveLength(2);
     expect(result[0]).toMatchObject({ name: "a.md", relativePath: "a.md", supported: true, text: "# A" });
     expect(result[1]).toMatchObject({ name: "b.txt", supported: false, text: "hello" });
-  });
-
-  it("选择文件夹：取消 ⇒ 空结果；选中 ⇒ 递归扫描（保留 relativePath）", async () => {
-    const root = tempRoot();
-    fs.mkdirSync(path.join(root, "docs", "deep"), { recursive: true });
-    fs.writeFileSync(path.join(root, "a.md"), "# A");
-    fs.writeFileSync(path.join(root, "docs", "deep", "b.md"), "# B");
-    fs.writeFileSync(path.join(root, "docs", "skip.txt"), "x");
-    dialogMock.showOpenDialog.mockResolvedValue({ canceled: true, filePaths: [] });
-    expect(await harness().call("pick_markdown_folder")).toEqual({ files: [], truncated: false });
-    dialogMock.showOpenDialog.mockResolvedValue({ canceled: false, filePaths: [root] });
-    const scan = await harness().call("pick_markdown_folder") as { files: Array<Record<string, unknown>>; truncated: boolean };
-    expect(scan.truncated).toBe(false);
-    expect(scan.files.map((file) => file.relativePath)).toEqual(["a.md", "docs/deep/b.md"]);
   });
 });
 
@@ -112,10 +99,9 @@ describe("registerMarkdownImportIpc：read_import_image", () => {
 });
 
 describe("主进程扫描函数（被 IPC 复用）", () => {
-  it("describeMarkdownFile / listMarkdownFilesInDir 在临时目录上的口径与 IPC 一致", () => {
+  it("describeMarkdownFile 在临时目录上的口径与 IPC 一致", () => {
     const root = tempRoot();
     fs.writeFileSync(path.join(root, "x.markdown"), "# X");
     expect(describeMarkdownFile(path.join(root, "x.markdown")).text).toBe("# X");
-    expect(listMarkdownFilesInDir(root).files.map((file) => file.name)).toEqual(["x.markdown"]);
   });
 });

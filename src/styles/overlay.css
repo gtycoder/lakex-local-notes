@@ -264,7 +264,10 @@
 .tree-selection-bar__notice-row { display: flex; align-items: center; gap: var(--lake-space-sm); }
 .tree-selection-bar__notice { margin: 0; color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); }
 
-/* ===== 移动…（261106 task-90）：思源式目录树弹窗 ===== */
+/* ===== 移动…（261106 task-90；task-91 按截图重做）：思源式目录树弹窗 =====
+ * 结构全走 kit 原语（ln-dialog / ln-input--search / ln-row / ln-btn）；这里只补树形缩进、
+ * 展开箭头、「当前位置」徽标、命中高亮与禁用原因这几条必要声明（全令牌）。 */
+.move-target-tree-dialog { width: min(460px, 92vw); }
 .move-target-tree-dialog__search { margin-bottom: var(--lake-space-sm); }
 .move-target-tree-dialog__tree { display: flex; flex-direction: column; gap: 2px; max-height: 46vh; overflow-y: auto; padding: 2px 0; }
 .move-target-tree-dialog__node { display: flex; align-items: center; gap: 2px; min-width: 0; }
@@ -278,14 +281,14 @@
 .move-target-tree-dialog__toggle { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 20px; height: 24px; padding: 0; border: 0; background: transparent; color: var(--lake-text-3); cursor: pointer; }
 .move-target-tree-dialog__toggle:disabled { cursor: default; opacity: 0; }
 .move-target-tree-dialog__toggle.is-open svg { transform: rotate(90deg); }
-.move-target-tree-dialog__item { flex: 1 1 auto; gap: var(--lake-space-sm); min-width: 0; text-align: left; }
-.move-target-tree-dialog__item.is-selected { color: var(--lake-fg-selected); background: var(--lake-bg-selected); }
-.move-target-tree-dialog__item:disabled { opacity: 1; }
-.move-target-tree-dialog__title { min-width: 0; }
+.move-target-tree-dialog__item { flex: 1 1 auto; min-width: 0; }
+.move-target-tree-dialog__item:disabled .ln-row__icon,
+.move-target-tree-dialog__item:disabled .ln-row__title { color: var(--lake-text-4); }
 .move-target-tree-dialog__badge { flex: none; padding: 0 var(--lake-space-xs); border-radius: var(--lake-radius-pill); background: var(--lake-accent-tint); color: var(--lake-accent-text); font-size: var(--lake-font-size-nano); }
 .move-target-tree-dialog__reason { flex: none; margin-left: auto; color: var(--lake-text-4); font-size: var(--lake-font-size-nano); font-style: normal; }
 .move-target-tree-dialog__error { margin: var(--lake-space-sm) 0 0; color: var(--lake-status-error); font-size: var(--lake-font-size-tiny); }
 .move-target-tree-dialog__mark { border-radius: 2px; background: var(--lake-accent-tint); color: var(--lake-accent-text); }
+.move-target-tree-dialog__hint { margin: var(--lake-space-sm) 0 0; color: var(--lake-text-4); font-size: var(--lake-font-size-nano); }
 .batch-tag-dialog__list { display: flex; flex-direction: column; gap: 2px; max-height: 46vh; overflow-y: auto; }
 .batch-tag-dialog__item { gap: var(--lake-space-sm); text-align: left; }
 .batch-tag-dialog__error { margin: var(--lake-space-sm) 0 0; color: var(--lake-status-error); font-size: var(--lake-font-size-tiny); }

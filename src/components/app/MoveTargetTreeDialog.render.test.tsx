@@ -121,3 +121,47 @@ describe("移动目标树弹窗", () => {
     expect(document.body.textContent).not.toContain("当前位置");
   });
 });
+describe("移动目标树弹窗（task-91 视觉/键盘）", () => {
+  const rowButton = (text: string) => [...document.querySelectorAll<HTMLButtonElement>(".move-target-tree-dialog__item")].find((btn) => (btn.textContent ?? "").includes(text))!;
+  const input = () => document.querySelector<HTMLInputElement>('input[aria-label="搜索目标位置"]')!;
+  const press = (key: string, target: HTMLElement = input()) => act(() => {
+    target.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
+  });
+
+  it("走既有原语：kit 输入（带图标）+ 列表行 + 底部按钮区 + 键盘提示", () => {
+    render();
+    expect(document.querySelector(".ln-input.ln-input--search")).not.toBeNull();
+    expect(document.querySelector(".ln-input__icon")).not.toBeNull();
+    expect(document.querySelectorAll(".ln-row.move-target-tree-dialog__item").length).toBeGreaterThan(0);
+    expect(document.querySelector(".ln-row__icon")).not.toBeNull();
+    expect(document.querySelector(".ln-row__title")).not.toBeNull();
+    expect(document.querySelector(".ln-dialog__head")).not.toBeNull();
+    expect(document.querySelector(".ln-dialog__body")).not.toBeNull();
+    expect(document.querySelector(".ln-dialog__actions")).not.toBeNull();
+    expect(document.body.textContent).toContain("↑↓ 选择位置，Enter 确认");
+  });
+
+  it("键盘：↓ 选第一个可选行（跳过禁用）、再 ↓ 下一个、Enter 确认；↑ 回绕", () => {
+    const props = render({ movingIds: ["g1"], currentParentId: "nb1" });
+    press("ArrowDown");
+    // 第一个可选行 = 笔记本一（禁用行是分组一/分组二）
+    expect(rowButton("笔记本一").classList.contains("is-selected")).toBe(true);
+    press("ArrowDown");
+    expect(rowButton("笔记本二").classList.contains("is-selected")).toBe(true);
+    press("ArrowUp");
+    expect(rowButton("笔记本一").classList.contains("is-selected")).toBe(true);
+    press("ArrowUp");
+    expect(rowButton("笔记本二").classList.contains("is-selected")).toBe(true);
+    press("Enter");
+    expect(props.onConfirm).toHaveBeenCalledWith("nb2");
+  });
+
+  it("层级缩进用 data-depth（嵌套分组更深）", () => {
+    render();
+    const g1 = [...document.querySelectorAll<HTMLElement>(".move-target-tree-dialog__node")].find((node) => (node.textContent ?? "").includes("分组一"))!;
+    expect(g1.getAttribute("data-depth")).toBe("1");
+    // 当前路径默认展开（含分组一）⇒ 子分组二已经可见、再深一层
+    const g2 = [...document.querySelectorAll<HTMLElement>(".move-target-tree-dialog__node")].find((node) => (node.textContent ?? "").includes("分组二"))!;
+    expect(g2.getAttribute("data-depth")).toBe("2");
+  });
+});

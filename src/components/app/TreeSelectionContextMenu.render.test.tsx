@@ -39,18 +39,21 @@ function render(overrides: Partial<Parameters<typeof TreeSelectionContextMenu>[0
 const items = () => [...document.querySelectorAll<HTMLButtonElement>('[role="menu"] button')];
 
 describe("多选右键菜单", () => {
-  it("恰好三项，顺序 = 移入回收站 / 移动… / 导出…", () => {
+  it("恰好三项，顺序 = 移动… / 导出… / 移入回收站（危险项在最后、红色样式）", () => {
     render();
-    expect(items().map((btn) => (btn.textContent ?? "").trim())).toEqual(["移入回收站", "移动…", "导出…"]);
+    expect(items().map((btn) => (btn.textContent ?? "").trim())).toEqual(["移动…", "导出…", "移入回收站"]);
     expect(items()).toHaveLength(3);
+    // 与普通右键「删除」同 class（.danger 危险红）
+    expect(items()[2].className).toContain("danger");
+    expect(items()[0].className).not.toContain("danger");
   });
 
   it("分组/混选：移入回收站禁用并给原因，移动/导出仍可用", () => {
     render({ actions: { trash: false, move: true, export: true } });
-    expect(items()[0].disabled).toBe(true);
-    expect(items()[0].getAttribute("title")).toContain("分组不能移入回收站");
+    expect(items()[2].disabled).toBe(true);
+    expect(items()[2].getAttribute("title")).toContain("分组不能移入回收站");
+    expect(items()[0].disabled).toBe(false);
     expect(items()[1].disabled).toBe(false);
-    expect(items()[2].disabled).toBe(false);
   });
 
   it("busy 时三项全部禁用", () => {
@@ -60,12 +63,12 @@ describe("多选右键菜单", () => {
 
   it("动作回调 + 关闭：点任一项先执行再 onClose", () => {
     const props = render();
-    act(() => { items()[2].click(); });
-    expect(props.onExport).toHaveBeenCalledTimes(1);
+    act(() => { items()[0].click(); });
+    expect(props.onMove).toHaveBeenCalledTimes(1);
     expect(props.onClose).toHaveBeenCalledTimes(1);
     act(() => { items()[1].click(); });
-    expect(props.onMove).toHaveBeenCalledTimes(1);
-    act(() => { items()[0].click(); });
+    expect(props.onExport).toHaveBeenCalledTimes(1);
+    act(() => { items()[2].click(); });
     expect(props.onTrash).toHaveBeenCalledTimes(1);
   });
 });

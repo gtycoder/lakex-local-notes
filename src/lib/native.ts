@@ -167,11 +167,12 @@ export interface LakeNative {
   /** 261106 Markdown 导入：多选 .md 文件（取消 → 空数组；正文由主进程读取，>20MB 标记 tooLarge）。 */
   pickMarkdownFiles(): Promise<import("./types").MarkdownPickedFileShape[]>;
   /** 261106 Markdown 导入：选择文件夹递归扫描（保留 relativePath；上限 500 截断）。 */
-  pickMarkdownFolder(): Promise<import("./types").MarkdownFolderPickShape>;
   /** 261106 Markdown 导入：读一张本地图片字节（png/jpg/jpeg/gif/webp，≤20MB）。 */
   readImportImage(filePath: string): Promise<import("./types").ImportImageShape>;
-  /** 261106 批量导出：按类型默认格式导出到同一目录（dirPath 缺省弹选择框；取消 ⇒ cancelled）。 */
+  /** 261106 批量导出：按类型默认格式（doc→md 资料包 / usheet·bitable→csv / ink·board→pdf）导出到同一目录（dirPath 缺省弹选择框；取消 ⇒ cancelled）。 */
   exportNotesBatch(payload: import("./types").BatchExportRequestShape): Promise<import("./types").BatchExportResultShape>;
+  /** 261106 task-95：受控写盘（画板 PNG/SVG 字节落到本次选择框选中的导出目录；只允许 png/svg、≤50MB）。 */
+  writeBatchExportFile(payload: import("./types").WriteBatchExportFileShape): Promise<{ ok: boolean; path: string }>;
   /** 261106 task-88：批量导出后打开所在文件夹（主进程只允许最近一次选择框选中的目录）。 */
   openExportDir(dirPath: string): Promise<{ ok: boolean; error?: string; path: string }>;
   setNodeIcon(id: string, icon: string | null): Promise<TreeNode>;
@@ -407,9 +408,9 @@ export const native = {
   getBackupUsage: () => api().getBackupUsage(),
   batchNotes: (payload: import("./types").BatchNotesRequestShape) => api().batchNotes(payload),
   pickMarkdownFiles: () => api().pickMarkdownFiles(),
-  pickMarkdownFolder: () => api().pickMarkdownFolder(),
   readImportImage: (filePath: string) => api().readImportImage(filePath),
   exportNotesBatch: (payload: import("./types").BatchExportRequestShape) => api().exportNotesBatch(payload),
+  writeBatchExportFile: (payload: import("./types").WriteBatchExportFileShape) => api().writeBatchExportFile(payload),
   openExportDir: (dirPath: string) => api().openExportDir(dirPath),
   scanRebuildCandidates: () => api().scanRebuildCandidates(),
   rebuildOrphanNotes: (ids: string[]) => api().rebuildOrphanNotes(ids),

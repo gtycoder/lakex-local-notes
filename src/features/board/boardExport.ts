@@ -12,6 +12,11 @@
  * 已知边界（如实提示，不假装是保存到用户选定的目录）：
  * - 只有画板已打开（BoardEditor 挂载）时才能导出；从目录树导出未打开的画板会提示先去打开；
  * - 文件由浏览器下载通道落到系统下载目录（画板工具栏导出本来就是这种行为）。
+ *
+ * 261106 task-95 补充：批量导出要的是**字节**而不是浏览器下载 ⇒ 新增 registerBoardBytes / readBoardBytes。
+ * 字节与 Drawnix 导出**同源**：宿主从 DrawnixBoardCore 的 onChange({ previewImage }) 拿到整幅 PNG
+ * data URL（vendor 内部就是 @plait/core 的 toImage，与 saveAsPng 同一个函数），不 patch vendor、
+ * 也不拦截 anchor.click。没打开的画板由 boardSnapshot.ts 离屏挂载现取。
  */
 export type BoardImageFormat = "png" | "svg";
 
@@ -41,6 +46,63 @@ export async function exportBoardImage(noteId: string, format: BoardImageFormat)
     return await trigger(format);
   } catch {
     return false;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 261106 task-95：画板**字节**提供者（批量导出走主进程内嵌 PDF，不落浏览器下载）
+// ---------------------------------------------------------------------------
+
+export interface BoardBytesResult {
+  /** 整幅画板图像字节。 */
+  bytes: Uint8Array;
+  /** 批量导出只消费 png；svg 一并支持便于以后扩展。 */
+  format: BoardImageFormat;
+}
+
+/** provider 由 BoardEditor 挂载时注册（画板已打开 ⇒ 给当前画面，含未保存的编辑）。 */
+export type BoardBytesProvider = () => Promise<BoardBytesResult | null>;
+
+const bytesProviders = new Map<string, BoardBytesProvider>();
+
+/** BoardEditor 挂载时登记；返回注销函数（卸载必须调用，否则会留下已卸载画板的引用）。 */
+export function registerBoardBytes(noteId: string, provider: BoardBytesProvider): () => void {
+  bytesProviders.set(noteId, provider);
+  return () => {
+    if (bytesProviders.get(noteId) === provider) bytesProviders.delete(noteId);
+  };
+}
+
+/** 取某画板的图像字节：没有已打开的画板 ⇒ null（调用方回退到 boardSnapshot.ts 的离屏渲染）。 */
+export async function readBoardBytes(noteId: string): Promise<BoardBytesResult | null> {
+  const provider = bytesProviders.get(noteId);
+  if (!provider) return null;
+  try {
+    return await provider();
+  } catch {
+    return null;
+  }
+}
+
+/** 画板是否已打开（UI 可据此优先实时字节、否则离屏渲染）。 */
+export function hasBoardBytesProvider(noteId: string): boolean {
+  return bytesProviders.has(noteId);
+}
+
+/** data URL（`data:image/png;base64,...`）→ 字节；格式不认返回 null。 */
+export function dataUrlToBytes(dataUrl: string | null | undefined): Uint8Array | null {
+  if (typeof dataUrl !== "string") return null;
+  const match = /^data:([^;,]+)(;base64)?,([\s\S]*)$/.exec(dataUrl);
+  if (!match) return null;
+  const payload = match[3];
+  try {
+    if (!match[2]) return new TextEncoder().encode(decodeURIComponent(payload));
+    const binary = atob(payload);
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+    return bytes;
+  } catch {
+    return null;
   }
 }
 

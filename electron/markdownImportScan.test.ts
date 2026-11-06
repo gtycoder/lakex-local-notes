@@ -4,18 +4,15 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   MAX_IMPORT_IMAGE_BYTES,
-  MAX_MARKDOWN_FOLDER_FILES,
   describeMarkdownFile,
   isSupportedMarkdownFile,
-  listMarkdownFilesInDir,
   readImportImage,
 } from "./markdownImportScan.js";
 
 /**
  * 261106 Markdown 导入：主进程侧文件发现/读取（纯 fs）。
  * 覆盖：扩展名白名单、正文读取（去 BOM）、20MB too-large、消失文件逐条 error、
- * 目录递归（隐藏/node_modules/.git 跳过、保留 relativePath、上限截断、正文总量上限）、
- * 导入图片（扩展名+魔数双校验）。
+ * 导入图片（扩展名+魔数双校验）。（261106 task-91：目录递归随「文件夹导入」入口一起移除）
  */
 const roots: string[] = [];
 function tempRoot(): string {
@@ -79,51 +76,6 @@ describe("describeMarkdownFile", () => {
     const entry = describeMarkdownFile(file);
     expect(entry.supported).toBe(false);
     expect(entry.text).toBe("hello");
-  });
-});
-
-describe("listMarkdownFilesInDir：递归扫描", () => {
-  function fixture(): string {
-    const root = tempRoot();
-    write(path.join(root, "a.md"), "# A");
-    write(path.join(root, "sub", "b.markdown"), "# B");
-    write(path.join(root, "sub", "deep", "c.md"), "# C");
-    write(path.join(root, "sub", "ignore.txt"), "x");
-    write(path.join(root, ".hidden", "d.md"), "# D");         // 隐藏目录整棵跳过
-    write(path.join(root, "node_modules", "e.md"), "# E");    // 依赖目录跳过
-    write(path.join(root, "tiny", ".git", "f.md"), "# F");    // .git 跳过
-    fs.mkdirSync(path.join(root, "empty-dir"), { recursive: true });
-    return root;
-  }
-
-  it("只收 md、保留 relativePath（/ 分隔）、跳过隐藏与依赖目录", () => {
-    const root = fixture();
-    const scan = listMarkdownFilesInDir(root);
-    expect(scan.truncated).toBe(false);
-    expect(scan.files.map((file) => file.relativePath)).toEqual(["a.md", "sub/b.markdown", "sub/deep/c.md"]);
-    expect(scan.files.every((file) => file.supported && typeof file.text === "string")).toBe(true);
-  });
-
-  it("上限截断并标记 truncated", () => {
-    const root = fixture();
-    const scan = listMarkdownFilesInDir(root, { maxFiles: 2 });
-    expect(scan.truncated).toBe(true);
-    expect(scan.files).toHaveLength(2);
-    expect(MAX_MARKDOWN_FOLDER_FILES).toBe(500);
-  });
-
-  it("正文总量上限：超出后不再读（该条给 error）", () => {
-    const root = tempRoot();
-    write(path.join(root, "a.md"), "x".repeat(600));
-    write(path.join(root, "b.md"), "y".repeat(600));
-    const scan = listMarkdownFilesInDir(root, { maxTextBytes: 1000 });
-    expect(scan.files[0].text).toBeDefined();
-    expect(scan.files[1].text).toBeUndefined();
-    expect(scan.files[1].error).toContain("正文总量已达上限");
-  });
-
-  it("目录不存在 ⇒ 空结果（不抛）", () => {
-    expect(listMarkdownFilesInDir(path.join(tempRoot(), "nope"))).toEqual({ files: [], truncated: false });
   });
 });
 

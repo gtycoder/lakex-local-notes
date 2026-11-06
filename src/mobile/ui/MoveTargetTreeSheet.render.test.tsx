@@ -59,13 +59,50 @@ afterEach(async () => {
 });
 
 describe("MoveTargetTreeSheet（思源式目录树选择）", () => {
-  it("层级渲染：默认只展开根；点箭头展开/收起", async () => {
+  it("层级渲染：默认展开所有根笔记本一层（用户能直接看到全部笔记本与其下一级分组）", async () => {
     await render();
-    expect(rowTitles()).toEqual(["笔记本一", "笔记本二"]); // 笔记本下未展开
-    await click(byAria("展开 笔记本一"));
+    expect(rowTitles()).toEqual(["笔记本一", "分组一", "笔记本二"]); // 根笔记本展开一层；更深层（子分组）收起
+    await click(byAria("展开 分组一"));
+    expect(rowTitles()).toEqual(["笔记本一", "分组一", "子分组", "笔记本二"]);
+    await click(byAria("收起 分组一"));
     expect(rowTitles()).toEqual(["笔记本一", "分组一", "笔记本二"]);
     await click(byAria("收起 笔记本一"));
     expect(rowTitles()).toEqual(["笔记本一", "笔记本二"]);
+  });
+
+  it("多个根笔记本全部可见 + 列表自身可滚动（矮屏/键盘时不被外层裁掉）", async () => {
+    const many: MoveTargetNode[] = [
+      ...Array.from({ length: 6 }, (_, i) => ({
+        id: "nb" + i, title: "笔记本" + (i + 1), parentId: null, nodeType: "notebook",
+      })),
+      ...Array.from({ length: 6 }, (_, i) => ({
+        id: "g" + i, title: "分组" + (i + 1), parentId: "nb" + i, nodeType: "group",
+      })),
+    ];
+    await render({ nodes: many });
+    // 6 个根笔记本 + 各自展开一层的 6 个分组全部渲染（不是"只看到一行"）
+    expect(rowTitles()).toEqual(["笔记本1", "分组1", "笔记本2", "分组2", "笔记本3", "分组3", "笔记本4", "分组4", "笔记本5", "分组5", "笔记本6", "分组6"]);
+    expect(host.querySelector(".mb-tree-list")).not.toBeNull(); // 内部滚动容器（max-height 在 CSS）
+  });
+
+  it("搜索：按名称过滤，命中项祖先自动展开；无命中给空态", async () => {
+    await render();
+    const search = host.querySelector('input[aria-label="搜索笔记本"]') as HTMLInputElement;
+    expect(search).toBeTruthy();
+    const type = async (value: string) => {
+      await act(async () => {
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
+        setter?.call(search, value);
+        search.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+    };
+    await type("子分组"); // 深层命中：其祖先（笔记本一 > 分组一）保留并自动展开
+    expect(rowTitles()).toEqual(["笔记本一", "分组一", "子分组"]);
+    await type("笔记本二");
+    expect(rowTitles()).toEqual(["笔记本二"]);
+    await type("不存在");
+    expect(rowTitles()).toEqual([]);
+    expect(host.textContent).toContain("没有匹配的笔记本");
   });
 
   it("默认展开当前路径：当前位置在「分组一」⇒ 笔记本一 + 分组一都展开并标注当前位置", async () => {

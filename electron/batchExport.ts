@@ -1,37 +1,39 @@
 /**
  * 261106 批量导出（数据层）：多选文档/分组 → 按类型默认格式导出到同一目录。
  *
- * 默认格式（用户 261106 拍板）：doc → pdf；usheet → **xlsx**；bitable → **csv**；board → png；ink → png。
+ * 默认格式（用户 261106 二轮调整）：doc → **markdown**（资料包，图片随包相对引用、可继续编辑）；
+ * usheet → **csv**；bitable → **csv**；ink → **pdf**（既有逐页压平链路）；board → **pdf**（待渲染层方案，见下）。
  * 分组/笔记本**递归展开**为文档（自身不导出）；上限 500 项；重名追加「 (2)」；逐条结果；**只读不写源**。
  *
- * 为什么 board 在这里只给 skipped：画板导 PNG 走的是 Drawnix 画布自己的导出（必须在渲染层、
- * 且画板得先打开，见 src/features/board/boardExport.ts）——主进程没有画板渲染引擎，不伪造。
- * ⇒ 批量导出对 board 返回 skipped + 可读原因（UI 由 task-88 给单独入口），绝不产出坏文件。
+ * 为什么 board 仍只给 skipped：画板渲染在渲染层（Drawnix 画布，且要求画板已打开，见
+ * src/features/board/boardExport.ts），主进程没有画板渲染引擎 —— 不伪造，也不产出坏文件。
+ * ⇒ 对 board 返回 skipped + 可读原因；落地路径见 docs/HANDOFF 的本任务报告（受控写盘 IPC +
+ * 渲染层把 PNG/SVG 字节交回 → 主进程内嵌图片走 pdfRenderer 生成 <标题>.pdf）。
  *
  * 只读约束：本模块只调 store 的读/导出方法（exportPdfHtml / exportUsheetXlsx / exportBitableCsv /
  * readInkPageSvg）+ 写导出目录，**不 saveNote、不标 dirty、不广播**（导出不该改源数据）。
  */
 import fs from "node:fs";
 import path from "node:path";
-import sharp from "sharp";
 import type { Store } from "./store.js";
 import { exportNote } from "./export.js";
-import { parseInkBody } from "../src/core/inkDoc.js";
+import { boardImageToPdfBuffer, sniffBoardImageFormat, writeFileAtomicSync, type BoardImageFormat } from "./boardImagePdf.js";
 
 /** 单批上限（与批量操作同口径）。 */
 export const BATCH_EXPORT_MAX_ITEMS = 500;
 
-export type BatchExportFormat = "pdf" | "csv" | "xlsx" | "png";
+export type BatchExportFormat = "markdown" | "csv" | "pdf";
 export type BatchExportKind = "doc" | "usheet" | "bitable" | "board" | "ink";
 
 /** 按文档类型取默认导出格式（未知类型 = null ⇒ 不导出）。 */
 export function defaultBatchExportFormat(kind: string | null | undefined): BatchExportFormat | null {
   switch (kind ?? "doc") {
-    case "doc": return "pdf";
+    // 261106 二轮：导出物统一成"可编辑/可打印"的两类 —— 文本类给 markdown/csv，页面类给 pdf。
+    case "doc": return "markdown";
     case "bitable": return "csv";
-    case "usheet": return "xlsx";
-    case "board": return "png";
-    case "ink": return "png";
+    case "usheet": return "csv";
+    case "board": return "pdf";
+    case "ink": return "pdf";
     default: return null;
   }
 }
@@ -49,7 +51,8 @@ export function sanitizeBatchExportTitle(raw: string): string {
 }
 
 /**
- * 批量导出的唯一文件名："<title>.<ext>"，冲突追加「 (2)」「 (3)」…
+ * 批量导出的唯一路径："<title>.<ext>"，冲突追加「 (2)」「 (3)」…
+ * ext 传空串 = 目录（doc 的 markdown 资料包是**目录**，不是单文件）。
  * isTaken 缺省 = 目标已存在；reserved 让同一批内重名也不撞（大小写不敏感，兼容 macOS/Windows）。
  */
 export function uniqueBatchExportPath(
@@ -61,13 +64,14 @@ export function uniqueBatchExportPath(
   const isTaken = options.isTaken ?? ((candidate: string) => fs.existsSync(candidate));
   const reserved = options.reserved;
   const taken = (candidate: string): boolean => (reserved ? reserved.has(candidate.toLowerCase()) : false) || isTaken(candidate);
-  const first = path.join(dir, baseTitle + "." + ext);
+  const withExt = (stem: string): string => (ext ? stem + "." + ext : stem);
+  const first = path.join(dir, withExt(baseTitle));
   if (!taken(first)) { reserved?.add(first.toLowerCase()); return first; }
   for (let index = 2; index < 10_000; index += 1) {
-    const candidate = path.join(dir, baseTitle + " (" + index + ")." + ext);
+    const candidate = path.join(dir, withExt(baseTitle + " (" + index + ")"));
     if (!taken(candidate)) { reserved?.add(candidate.toLowerCase()); return candidate; }
   }
-  const fallback = path.join(dir, baseTitle + " (" + Date.now() + ")." + ext);
+  const fallback = path.join(dir, withExt(baseTitle + " (" + Date.now() + ")"));
   reserved?.add(fallback.toLowerCase());
   return fallback;
 }
@@ -122,8 +126,9 @@ export function expandBatchExportTargets(
 export interface BatchExportItemResult {
   id: string;
   ok: boolean;
-  /** 导出文件（ink 多页时给首个路径；全部见 paths）。 */
+  /** 导出产物：文件（csv/pdf）或**目录**（doc 的 markdown 资料包）。 */
   path?: string;
+  /** 预留：一个条目产出多个文件时给全量路径（当前五类默认格式都是单产物）。 */
   paths?: string[];
   format?: BatchExportFormat;
   /** 未导出（board / 未知类型）：不是失败，但要给原因。 */
@@ -147,38 +152,43 @@ export interface BatchExportResult {
 
 /** 可注入的导出实现（测试可替换；生产用 defaultBatchExportDeps）。 */
 export interface BatchExportDeps {
-  exportDocPdf(store: Store, id: string, dirPath: string): Promise<string>;
-  exportUsheetXlsx(store: Store, id: string, dirPath: string): Promise<string>;
+  /** doc → markdown 资料包（**目录**：<标题>/<标题>.md + images/）。 */
+  exportDocMarkdown(store: Store, id: string, dirPath: string): Promise<string>;
+  /** usheet → 单个工作表 CSV（导出器自己按「<标题> - <工作表>.csv」命名）。 */
+  exportUsheetCsv(store: Store, id: string, dirPath: string): Promise<string>;
   exportBitableCsv(store: Store, id: string, dirPath: string): Promise<string>;
-  exportInkPng(store: Store, id: string, options: {
-    dirPath: string;
-    title: string;
-    resolvePath: (baseTitle: string, ext: string) => string;
-  }): Promise<string[]>;
+  /** ink → 单文件 PDF（既有逐页压平链路：exportInkPdfHtml + pdfRenderer）。 */
+  exportInkPdf(store: Store, id: string, dirPath: string): Promise<string>;
+  /**
+   * board → 单文件 PDF：渲染层交回整幅 PNG/SVG 字节 ⇒ 主进程内嵌成 A4 单页 PDF。
+   * 拿不到字节时**不会**调用它（批量层直接 skipped，绝不伪造坏文件）。
+   */
+  exportBoardPdf(store: Store, id: string, options: { targetPath: string; image: BoardImageInput }): Promise<string>;
 }
 
 /** 生产实现：全部复用既有导出链路（不新增依赖、不另写渲染）。 */
 export const defaultBatchExportDeps: BatchExportDeps = {
-  exportDocPdf: async (store, id, dirPath) => (await exportNote(store, id, "pdf", dirPath)).exportPath,
-  exportUsheetXlsx: async (store, id, dirPath) => (await store.exportUsheetXlsx(id, dirPath)).exportPath,
+  // markdown 资料包 = 目录：以既有导出链路的「<标题>/ + images/」为准（图片相对引用 ⇒ 可继续编辑/搬运）。
+  // 既有产物的正文入口叫 index.md；批量导出把入口名统一成 <标题>.md（相对图片链接不变，更好认）。
+  exportDocMarkdown: async (store, id, dirPath) => {
+    const exportDir = (await exportNote(store, id, "markdown", dirPath)).exportPath;
+    try {
+      const indexMd = path.join(exportDir, "index.md");
+      const title = sanitizeBatchExportTitle(path.basename(exportDir));
+      const namedMd = path.join(exportDir, title + ".md");
+      if (fs.existsSync(indexMd) && namedMd !== indexMd && !fs.existsSync(namedMd)) fs.renameSync(indexMd, namedMd);
+    } catch { /* 改名失败不影响资料包本身可用（仍返回目录） */ }
+    return exportDir;
+  },
+  exportUsheetCsv: async (store, id, dirPath) => store.exportUsheetCsv(id, dirPath).exportPath,
   exportBitableCsv: async (store, id, dirPath) => store.exportBitableCsv(id, dirPath).exportPath,
-  exportInkPng: async (store, id, { title, resolvePath }) => {
-    const note = store.readNote(id);
-    const doc = parseInkBody(note.content);
-    if (!doc || doc.pages.length === 0) throw new Error("手写板正文无法解析或没有页面，未导出");
-    const safeTitle = sanitizeBatchExportTitle(note.title || title);
-    const single = doc.pages.length === 1;
-    const paths: string[] = [];
-    for (let index = 0; index < doc.pages.length; index += 1) {
-      const page = doc.pages[index];
-      const { svg } = await store.readInkPageSvg(id, [page.id]);
-      const target = resolvePath(single ? safeTitle : safeTitle + " - 第" + (index + 1) + "页", "png");
-      // 主进程栅格化（sharp/librsvg）：手写板页 SVG 自包含（底纹 + 页图 data URI + 笔迹路径）
-      const png = await sharp(Buffer.from(svg, "utf8"), { density: 144 }).png().toBuffer();
-      fs.writeFileSync(target, png);
-      paths.push(target);
-    }
-    return paths;
+  // 手写板 PDF 复用既有压平链路（每页底纹 + 页图 + 矢量笔迹 → 自包含 HTML → 隐藏窗口 printToPDF）
+  exportInkPdf: async (store, id, dirPath) => (await exportNote(store, id, "pdf", dirPath)).exportPath,
+  // 画板：图片字节（渲染层给）→ A4 单页 PDF（内嵌图片，复用 pdfRenderer）；写盘走原子写
+  exportBoardPdf: async (_store, _id, { targetPath, image }) => {
+    const pdf = await boardImageToPdfBuffer(image.bytes);
+    writeFileAtomicSync(targetPath, pdf);
+    return targetPath;
   },
 };
 
@@ -193,10 +203,40 @@ function moveToDesiredPath(produced: string, desired: string): string {
   }
 }
 
+/** 渲染层交回的画板图像字节（批量导出的 board→pdf 输入）。 */
+export interface BoardImageInput {
+  bytes: Uint8Array;
+  /** png / svg（只用于日志；真正认格式的是主进程的魔数校验）。 */
+  format: BoardImageFormat;
+}
+
+/** 把 IPC/HTTP 传来的 boardImages 归一成 {id → BoardImageInput}（非法条目直接丢弃 ⇒ 该画板 skipped）。 */
+export function normalizeBoardImages(raw: unknown): Record<string, BoardImageInput> {
+  const out: Record<string, BoardImageInput> = {};
+  if (!raw || typeof raw !== "object") return out;
+  for (const [id, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof id !== "string" || !id) continue;
+    const entry = value as { bytes?: unknown; format?: unknown } | null;
+    if (!entry || typeof entry !== "object") continue;
+    const bytes = entry.bytes instanceof Uint8Array
+      ? entry.bytes
+      : Array.isArray(entry.bytes)
+        ? Uint8Array.from(entry.bytes.filter((item): item is number => typeof item === "number"))
+        : null;
+    if (!bytes || bytes.byteLength === 0) continue;
+    const format: BoardImageFormat = entry.format === "svg" ? "svg" : "png";
+    if (sniffBoardImageFormat(bytes) !== format) continue; // 内容与声明不符 ⇒ 当作没有字节（skipped）
+    out[id] = { bytes, format };
+  }
+  return out;
+}
+
 export interface BatchExportOptions {
   store: Store;
   ids: readonly unknown[];
   dirPath: string;
+  /** 画板图像字节（渲染层先渲染再传；缺失的画板仍 skipped）。 */
+  boardImages?: Record<string, BoardImageInput>;
   deps?: Partial<BatchExportDeps>;
   log?: (message: string) => void;
 }
@@ -242,29 +282,42 @@ export async function exportNotesBatch(options: BatchExportOptions): Promise<Bat
       results.push({ id: target.id, ok: false, skipped: true, reason: "该类型不支持批量导出：" + kind });
       continue;
     }
+    const title = sanitizeBatchExportTitle(target.title);
     if (kind === "board") {
-      // 画板渲染在渲染层（Drawnix 画布），主进程不伪造 PNG。
-      results.push({ id: target.id, ok: false, skipped: true, format, reason: "画板需要先在应用中打开再导出（批量导出暂不支持画板）" });
+      // 画板渲染在渲染层（Drawnix 画布）：字节由渲染层经 boardImages 交回，主进程只做「内嵌成 PDF」。
+      const image = options.boardImages?.[target.id];
+      if (!image) {
+        results.push({ id: target.id, ok: false, skipped: true, format, reason: "缺少画板图像字节（画板未渲染或渲染失败），本批已跳过；无字节时不产出坏文件" });
+        continue;
+      }
+      try {
+        const targetPath = resolvePath(title, "pdf");
+        const produced = await deps.exportBoardPdf(store, target.id, { targetPath, image });
+        results.push({ id: target.id, ok: true, format: "pdf", path: produced });
+      } catch (error) {
+        results.push({ id: target.id, ok: false, format, reason: error instanceof Error ? error.message : String(error) });
+      }
       continue;
     }
-    const title = sanitizeBatchExportTitle(target.title);
     try {
       if (kind === "doc") {
-        const desired = resolvePath(title, "pdf");
-        const produced = await deps.exportDocPdf(store, target.id, dirPath);
-        results.push({ id: target.id, ok: true, format: "pdf", path: moveToDesiredPath(produced, desired) });
+        // markdown 资料包是**目录**（无扩展名）：<标题>/<标题>.md + <标题>/images/*
+        const desired = resolvePath(title, "");
+        const produced = await deps.exportDocMarkdown(store, target.id, dirPath);
+        results.push({ id: target.id, ok: true, format: "markdown", path: moveToDesiredPath(produced, desired) });
       } else if (kind === "usheet") {
-        const desired = resolvePath(title, "xlsx");
-        const produced = await deps.exportUsheetXlsx(store, target.id, dirPath);
-        results.push({ id: target.id, ok: true, format: "xlsx", path: moveToDesiredPath(produced, desired) });
+        const desired = resolvePath(title, "csv");
+        const produced = await deps.exportUsheetCsv(store, target.id, dirPath);
+        results.push({ id: target.id, ok: true, format: "csv", path: moveToDesiredPath(produced, desired) });
       } else if (kind === "bitable") {
         const desired = resolvePath(title, "csv");
         const produced = await deps.exportBitableCsv(store, target.id, dirPath);
         results.push({ id: target.id, ok: true, format: "csv", path: moveToDesiredPath(produced, desired) });
       } else {
-        // ink：多页分文件（每页 <标题> - 第N页.png；单页直接 <标题>.png）
-        const paths = await deps.exportInkPng(store, target.id, { dirPath, title, resolvePath });
-        results.push({ id: target.id, ok: paths.length > 0, format: "png", path: paths[0], paths, ...(paths.length === 0 ? { reason: "手写板没有可导出的页面" } : {}) });
+        // ink：单文件 PDF（多页在内部压平成一份，符合"导出到一个文件夹"的统一目标）
+        const desired = resolvePath(title, "pdf");
+        const produced = await deps.exportInkPdf(store, target.id, dirPath);
+        results.push({ id: target.id, ok: true, format: "pdf", path: moveToDesiredPath(produced, desired) });
       }
     } catch (error) {
       results.push({ id: target.id, ok: false, format, reason: error instanceof Error ? error.message : String(error) });

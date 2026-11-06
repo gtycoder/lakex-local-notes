@@ -2,6 +2,7 @@
 /**
  * 多选态右键菜单（261106 task-88）：**恰好三项**「移入回收站 / 移动… / 导出…」。
  *
+ * 顺序固定：移动… / 导出… / 移入回收站（危险动作最后、红色样式与普通右键「删除」一致）。
  * 与浮动操作条共用同一套动作判定（父级传 actions）：分组/混选不能移入回收站但可以移动、
  * 可导出其下文档（主进程递归展开）；busy 期间三项全部禁用。未多选时不渲染本菜单（旧右键菜单不变）。
  */
@@ -38,16 +39,17 @@ export function TreeSelectionContextMenu({ x, y, count, actions, busy = false, o
   return (
     <Menu surfaceClassName="context-menu tree-selection-menu" onDismiss={onClose} surfaceRef={menuRef} label={"已选 " + count + " 项"}
       style={pos ? { left: pos.left, top: pos.top } : { left: x, top: y, visibility: "hidden" }}>
-      <button role="menuitem" disabled={!actions.trash || busy}
-        title={actions.trash ? undefined : "分组不能移入回收站"}
-        onClick={() => { onTrash(); onClose(); }}>
-        <Trash2 size={15} aria-hidden="true" /><span>移入回收站</span>
-      </button>
       <button role="menuitem" disabled={!actions.move || busy} onClick={() => { onMove(); onClose(); }}>
         <FolderInput size={15} aria-hidden="true" /><span>移动…</span>
       </button>
       <button role="menuitem" disabled={!actions.export || busy} onClick={() => { onExport(); onClose(); }}>
         <Download size={15} aria-hidden="true" /><span>导出…</span>
+      </button>
+      {/* 危险动作放最后、红色样式与普通右键「删除」同一 class（261106 task-91） */}
+      <button role="menuitem" className="danger" disabled={!actions.trash || busy}
+        title={actions.trash ? undefined : "分组不能移入回收站"}
+        onClick={() => { onTrash(); onClose(); }}>
+        <Trash2 size={15} aria-hidden="true" /><span>移入回收站</span>
       </button>
     </Menu>
   );

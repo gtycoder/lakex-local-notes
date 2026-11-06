@@ -198,9 +198,8 @@ describe("DocListSheet 多选模式（261106 task-82）", () => {
     await act(async () => { rowByTitle("周报").click(); await Promise.resolve(); });
     await act(async () => { moveButton().click(); await new Promise((r) => setTimeout(r, 0)); });
     expect(bridgeMock.getHomeSnapshot).toHaveBeenCalled();
-    // 默认只展开根：先展开「笔记本」才看得到「分组A」
-    expect(treeTarget("分组A")).toBeNull();
-    await act(async () => { (host.querySelector('[aria-label="展开 笔记本"]') as HTMLButtonElement).click(); await Promise.resolve(); });
+    // task-94：树默认展开所有根笔记本一层 ⇒ 「分组A」直接可见（用户不用先展开）
+    expect(treeTarget("分组A")).not.toBeNull();
     await act(async () => { treeTarget("分组A")!.click(); await Promise.resolve(); });
     await act(async () => { treeConfirm().click(); await new Promise((r) => setTimeout(r, 0)); });
     expect(bridgeMock.batchNotes).toHaveBeenCalledWith({ action: "move", ids: ["n1"], space: "lake", parentId: "g1" });
@@ -218,7 +217,6 @@ describe("DocListSheet 多选模式（261106 task-82）", () => {
     await enterByButton();
     await act(async () => { rowByTitle("周报").click(); await Promise.resolve(); });
     await act(async () => { moveButton().click(); await new Promise((r) => setTimeout(r, 0)); });
-    await act(async () => { (host.querySelector('[aria-label="展开 笔记本"]') as HTMLButtonElement).click(); await Promise.resolve(); });
     await act(async () => { treeTarget("分组A")!.click(); await Promise.resolve(); });
     await act(async () => { treeConfirm().click(); await new Promise((r) => setTimeout(r, 0)); });
     expect(toastMock.showToast).toHaveBeenCalledWith("成功 0，失败 1（目标位置在回收站里）", { type: "error" });

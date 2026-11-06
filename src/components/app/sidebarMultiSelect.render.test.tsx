@@ -10,7 +10,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { TreeNode } from "../../lib/types";
 
-const mocks = vi.hoisted(() => ({ batchNotes: vi.fn(), listQuickNoteTags: vi.fn(), exportNotesBatch: vi.fn(), openExportDir: vi.fn() }));
+const mocks = vi.hoisted(() => ({ batchNotes: vi.fn(), listQuickNoteTags: vi.fn(), exportNotesBatch: vi.fn(), openExportDir: vi.fn(), pickExportDir: vi.fn() }));
 vi.mock("../../lib/native", () => ({ native: mocks }));
 
 // 浮层简化实现（与本目录其它 Sidebar 渲染测试同姿势）：只关心接线与实参。
@@ -46,6 +46,8 @@ beforeEach(() => {
   vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
   mocks.batchNotes.mockReset();
   mocks.listQuickNoteTags.mockReset();
+  mocks.pickExportDir.mockReset();
+  mocks.pickExportDir.mockResolvedValue("/tmp/export");
   mocks.exportNotesBatch.mockReset();
   mocks.openExportDir.mockReset();
   mocks.openExportDir.mockResolvedValue({ ok: true, path: "/tmp/export" });
@@ -267,8 +269,9 @@ describe("多选右键菜单（261106 task-88）：恰好三项 + 批量导出",
     clickRow("n1", { metaKey: true });
     clickRow("n2", { metaKey: true });
     openBatchMenu("n2");
-    expect(menuItems().map((btn) => (btn.textContent ?? "").trim())).toEqual(["移入回收站", "移动…", "导出…"]);
+    expect(menuItems().map((btn) => (btn.textContent ?? "").trim())).toEqual(["移动…", "导出…", "移入回收站"]);
     expect(menuItems()).toHaveLength(3);
+    expect(menuItems()[2].className).toContain("danger");
   });
 
   it("导出… → exportNotesBatch({ ids })；成功提示「导出 N 项」+ 打开所在文件夹", async () => {
@@ -283,7 +286,8 @@ describe("多选右键菜单（261106 task-88）：恰好三项 + 批量导出",
     clickRow("n2", { metaKey: true });
     openBatchMenu("n2");
     await act(async () => { menuItems().find((btn) => (btn.textContent ?? "").trim() === "导出…")!.click(); await Promise.resolve(); await Promise.resolve(); });
-    expect(mocks.exportNotesBatch).toHaveBeenCalledWith({ ids: ["n1", "n2"] });
+    expect(mocks.pickExportDir).toHaveBeenCalledTimes(1);
+    expect(mocks.exportNotesBatch).toHaveBeenCalledWith({ ids: ["n1", "n2"], dirPath: "/tmp/export" });
     const notice = document.querySelector(".tree-selection-bar__notice")?.textContent ?? "";
     expect(notice).toContain("导出 2 项");
     const openFolder = [...document.querySelectorAll<HTMLButtonElement>(".tree-selection-bar button")].find((btn) => (btn.textContent ?? "").trim() === "打开所在文件夹")!;
@@ -291,14 +295,13 @@ describe("多选右键菜单（261106 task-88）：恰好三项 + 批量导出",
     expect(mocks.openExportDir).toHaveBeenCalledWith("/tmp/export");
   });
 
-  it("用户取消目录 ⇒ 不提示失败（无结果提示）", async () => {
-    mocks.exportNotesBatch.mockResolvedValue({
-      ok: false, cancelled: true, results: [], summary: { total: 0, done: 0, failed: 0, skipped: 0 }, reason: "cancelled",
-    });
+  it("用户取消目录（pickExportDir 返回 null）⇒ 不收集、不导出、不提示失败", async () => {
+    mocks.pickExportDir.mockResolvedValue(null);
     render();
     clickRow("n1", { metaKey: true });
     openBatchMenu("n1");
     await act(async () => { menuItems().find((btn) => (btn.textContent ?? "").trim() === "导出…")!.click(); await Promise.resolve(); await Promise.resolve(); });
+    expect(mocks.exportNotesBatch).not.toHaveBeenCalled();
     expect(document.querySelector(".tree-selection-bar__notice")).toBeNull();
     expect(document.body.textContent).not.toContain("导出失败");
   });
@@ -326,10 +329,10 @@ describe("多选右键菜单（261106 task-88）：恰好三项 + 批量导出",
     clickRow("g1", { metaKey: true });
     openBatchMenu("g1");
     const buttons = menuItems();
-    expect(buttons[0].disabled).toBe(true);
-    expect(buttons[0].getAttribute("title")).toContain("分组不能移入回收站");
+    expect(buttons[2].disabled).toBe(true);
+    expect(buttons[2].getAttribute("title")).toContain("分组不能移入回收站");
+    expect(buttons[0].disabled).toBe(false);
     expect(buttons[1].disabled).toBe(false);
-    expect(buttons[2].disabled).toBe(false);
   });
 
   it("未多选时右键仍是旧菜单（不只三项）", () => {

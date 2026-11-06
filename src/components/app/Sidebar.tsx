@@ -54,6 +54,8 @@ import {
 } from "../../desktop/treeSelection";
 import { useConfirm } from "../../hooks/useConfirm";
 import { currentParentOf } from "../../desktop/moveTreeModel";
+import { readBoardBytes } from "../../features/board/boardExport";
+import { renderBoardSnapshotBytes } from "../../features/board/boardSnapshot";
 import { isTagSelectionActive, type TagSelection } from "../../features/tags/tagsModel";
 import type { QuickNoteTagSummary } from "../../core/quickNoteTags";
 
@@ -673,7 +675,7 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
   const baseNameOf = (path: string): string => path.replace(/\\/g, "/").split("/").pop() || path;
 
   /** 选中的文件 → 批量导入：不支持的/超 20MB/读失败 直接计入「跳过」；其余串行转换落盘。 */
-  const runMarkdownImport = useCallback(async (targetId: string, picked: readonly MarkdownPickedFileShape[], truncated: boolean) => {
+  const runMarkdownImport = useCallback(async (targetId: string, picked: readonly MarkdownPickedFileShape[]) => {
     const skipped: ImportResultItem[] = [];
     const items: MarkdownImportItem[] = [];
     for (const file of picked) {
@@ -684,7 +686,6 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
       items.push({ path: file.path, name: file.name, relativePath: file.relativePath || file.name, markdown: file.text });
     }
     const warnings: string[] = [];
-    if (truncated) warnings.push("文件夹里的 Markdown 超过单次上限，本次只处理了前 500 个");
     if (items.length === 0) {
       setImportResult({ success: 0, skipped, failed: [], warnings });
       return;
@@ -724,27 +725,21 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
     }
   }, [props.onRefreshTree]);
 
-  const startMarkdownImport = useCallback(async (mode: "files" | "folder", targetId: string | null) => {
+  const startMarkdownImport = useCallback(async (targetId: string | null) => {
     if (!targetId || importProgress) return;
     setMenuOpen(false);
     setCreateMenu(null);
     setContextMenu(null);
     let picked: MarkdownPickedFileShape[] = [];
-    let truncated = false;
     try {
-      if (mode === "files") picked = await native.pickMarkdownFiles();
-      else {
-        const folder = await native.pickMarkdownFolder();
-        picked = folder.files;
-        truncated = folder.truncated;
-      }
+      picked = await native.pickMarkdownFiles();
     } catch (error) {
-      setImportResult({ success: 0, skipped: [], failed: [{ name: mode === "files" ? "选择 Markdown 文件" : "选择 Markdown 文件夹", reason: getNativeErrorMessage(error) || "无法打开文件选择器" }], warnings: [] });
+      setImportResult({ success: 0, skipped: [], failed: [{ name: "选择 Markdown 文件", reason: getNativeErrorMessage(error) || "无法打开文件选择器" }], warnings: [] });
       return;
     }
     // 用户取消 ⇒ 无副作用
     if (picked.length === 0) return;
-    await runMarkdownImport(targetId, picked, truncated);
+    await runMarkdownImport(targetId, picked);
   }, [importProgress, runMarkdownImport]);
 
   const cancelMarkdownImport = useCallback(() => {
@@ -917,29 +912,95 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
     await runBatch({ action: "trash", ids });
   }, [confirm, runBatch, selection.ids]);
 
-  /** 打开「移动到…」树形弹层（多选 = 当前选择；单条 = 右键那一行）。 */
-  /** 批量导出（261106 task-88）：主进程弹目录；取消不提示失败；board 由主进程按 skipped 返回原因。 */
+  /**
+   * 批量导出（261106 task-88；task-96 接入画板）：
+   *  ① 先 pickExportDir（取消 ⇒ 静默返回）；
+   *  ② 对选中项里（含分组展开后）的**画板**串行收集字节：已打开的画板走 readBoardBytes（含未保存编辑），
+   *     否则 readNote 正文 + renderBoardSnapshotBytes 离屏渲染；进度「正在准备画板 N/M」可取消（中止后续）；
+   *  ③ exportNotesBatch({ ids, dirPath, boardImages })——主进程把字节内嵌成 PDF；缺字节的画板由主进程 skipped。
+   */
   const exportSelected = useCallback(async () => {
     const ids = [...selection.ids];
     if (ids.length === 0) return;
-    // 期间可见的进度态（bar 保持显示，动作按钮由 busy 禁用）
     setBatchNotice("正在导出 " + ids.length + " 项…");
     setBatchNoticeAction(null);
     setBatchBusy(true);
+    const prepFailures = new Map<string, string>();
     try {
-      const result = await native.exportNotesBatch({ ids });
-      if (result.cancelled) { setBatchNotice(null); return; } // 用户在选择框里取消 ⇒ 无副作用、不提示失败
+      const dirPath = await native.pickExportDir();
+      if (!dirPath) { setBatchNotice(null); return; } // 用户取消目录 ⇒ 无副作用、不提示失败
+
+      // 选中项 + 分组/笔记本展开后的画板（分组交给主进程展开导出，这里只为画板先收字节）
+      const nodeById = new Map(props.nodes.map((node) => [node.id, node]));
+      const childrenByParent = new Map<string | null, TreeNode[]>();
+      for (const node of props.nodes) {
+        const siblings = childrenByParent.get(node.parentId) ?? [];
+        siblings.push(node);
+        childrenByParent.set(node.parentId, siblings);
+      }
+      const boardIds: string[] = [];
+      const collect = (id: string, depth: number) => {
+        if (depth > 32) return;
+        const node = nodeById.get(id);
+        if (!node) return;
+        if (node.nodeType === "note") {
+          if ((node.kind ?? "doc") === "board" && !boardIds.includes(node.id)) boardIds.push(node.id);
+          return;
+        }
+        for (const child of childrenByParent.get(node.id) ?? []) collect(child.id, depth + 1);
+      };
+      for (const id of ids) collect(id, 0);
+
+      const controller = new AbortController();
+      const boardImages: Record<string, { bytes: Uint8Array; format: "png" | "svg" }> = {};
+      if (boardIds.length > 0) {
+        setBatchNoticeAction({ label: "取消", onClick: () => controller.abort() });
+        for (let index = 0; index < boardIds.length; index += 1) {
+          if (controller.signal.aborted) break;
+          const boardId = boardIds[index];
+          setBatchNotice("正在准备画板 " + (index + 1) + "/" + boardIds.length + "…");
+          let bytes: Uint8Array | null = null;
+          try {
+            const opened = await readBoardBytes(boardId);
+            bytes = opened?.bytes ?? null;
+          } catch { bytes = null; }
+          if (!bytes) {
+            try {
+              const doc = await native.readNote(boardId);
+              const snapshot = await renderBoardSnapshotBytes(doc.content);
+              bytes = snapshot?.bytes ?? null;
+            } catch { bytes = null; }
+          }
+          if (bytes && bytes.byteLength > 0) boardImages[boardId] = { bytes, format: "png" };
+          else prepFailures.set(boardId, "画板快照失败/超时");
+        }
+        if (controller.signal.aborted) {
+          setBatchNotice(null);
+          setBatchNoticeAction(null);
+          return; // 取消准备阶段 ⇒ 不导出
+        }
+      }
+      setBatchNotice("正在导出 " + ids.length + " 项…");
+      setBatchNoticeAction(null);
+
+      const result = await native.exportNotesBatch(
+        Object.keys(boardImages).length > 0 ? { ids, dirPath, boardImages } : { ids, dirPath },
+      );
+      if (result.cancelled) { setBatchNotice(null); return; }
       const failed = result.results.filter((entry) => !entry.ok && !entry.skipped);
       const skipped = result.results.filter((entry) => entry.skipped || (!entry.ok && !!entry.reason));
       const parts: string[] = ["导出 " + result.summary.done + " 项"];
       if (result.summary.failed > 0) parts.push("失败 " + result.summary.failed + "（" + summarizeReasons(failed.map((entry) => entry.reason)) + "）");
-      if (result.summary.skipped > 0) parts.push("跳过 " + result.summary.skipped + "（" + summarizeReasons(skipped.map((entry) => entry.reason)) + "）");
+      if (result.summary.skipped > 0) {
+        const reasons = skipped.map((entry) => prepFailures.get(entry.id) ?? entry.reason);
+        parts.push("跳过 " + result.summary.skipped + "（" + summarizeReasons(reasons) + "）");
+      }
       setBatchNotice(parts.join("，"));
       if (result.dirPath) {
-        const dirPath = result.dirPath;
+        const path = result.dirPath;
         setBatchNoticeAction({
           label: "打开所在文件夹",
-          onClick: () => { setBatchNotice(null); setBatchNoticeAction(null); void native.openExportDir(dirPath); },
+          onClick: () => { setBatchNotice(null); setBatchNoticeAction(null); void native.openExportDir(path); },
         });
       }
     } catch (error) {
@@ -947,7 +1008,9 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
     } finally {
       setBatchBusy(false);
     }
-  }, [selection.ids]);
+  }, [selection.ids, props.nodes]);
+
+  /** 打开「移动到…」树形弹层（多选 = 当前选择；单条 = 右键那一行）。 */
 
   const openMoveForIds = useCallback((ids: readonly string[]) => {
     if (ids.length === 0) return;
@@ -1057,8 +1120,7 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
               {/* 261106：导入 = 当前打开文档所在的笔记本/分组（根级 + 没有打开文档 ⇒ 禁用并提示） */}
               {importTargetOfActive ? (
                 <Submenu label={<><Download size={15} aria-hidden="true" /><span>导入</span></>}>
-                  <button role="menuitem" onClick={() => void startMarkdownImport("files", importTargetOfActive)}><FilePlus size={15} aria-hidden="true" /><span>Markdown…</span></button>
-                  <button role="menuitem" onClick={() => void startMarkdownImport("folder", importTargetOfActive)}><FolderOpen size={15} aria-hidden="true" /><span>Markdown 文件夹…</span></button>
+                  <button role="menuitem" onClick={() => void startMarkdownImport(importTargetOfActive)}><FilePlus size={15} aria-hidden="true" /><span>Markdown…</span></button>
                 </Submenu>
               ) : (
                 <button role="menuitem" disabled title="先打开或选择一个笔记本/分组"><Download size={15} aria-hidden="true" /><span>导入（先选择笔记本）</span></button>
@@ -1097,7 +1159,7 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
         />
       )}
       {contextMenu && contextNode && <ContextMenu node={contextNode} x={contextMenu.x} y={contextMenu.y} onRename={menuRename} onMove={() => { if (contextNode) openMoveForNode(contextNode); }} onDelete={menuDelete} onCopyMarkdown={() => props.onCopyMarkdown(contextNode)} onExportAs={(format) => props.onExportAs(contextNode, format)} onCopyPaths={() => props.onCopyPaths(contextNode)} onShowInfo={() => props.onShowInfo(contextNode)} onOpenHistory={() => props.onOpenHistory(contextNode)} locked={contextNode.noteFileId ? props.lockedNoteIds.has(contextNode.noteFileId) : false} onToggleLock={() => props.onToggleLockNote(contextNode)} onAddTags={() => setTagEditor({ noteId: contextNode.noteFileId ?? contextNode.id, title: contextNode.title })} onClose={() => setContextMenu(null)} />}
-      {createMenu && <CreateMenu anchor={createMenu.anchor} onNewChild={(kind) => createChild(createMenu.node, kind)} importTarget={containerAncestorOf(createMenu.node.id)} onImport={(mode, targetId) => void startMarkdownImport(mode, targetId)} onClose={() => setCreateMenu(null)} />}
+      {createMenu && <CreateMenu anchor={createMenu.anchor} onNewChild={(kind) => createChild(createMenu.node, kind)} importTarget={containerAncestorOf(createMenu.node.id)} onImport={(targetId) => void startMarkdownImport(targetId)} onClose={() => setCreateMenu(null)} />}
       {editingId && <TreeRenameDialog key={editingId} initial={editingTitle} onCancel={cancelRename} onConfirm={submitRename} />}
       {createDialog && (() => {
         const preset = CREATE_DIALOG_PRESETS[createDialog.kind];
@@ -1487,13 +1549,14 @@ function CreateChildItems({ onNewChild, onClose }: { onNewChild: (kind: CreateCh
 }
 
 /** 目录行「＋」的快捷「新建」菜单：锚在该行按钮上，定位走 usePopoverPosition（贴底翻转）。
- *  261106：末尾加「导入」子菜单（Markdown 多选 / Markdown 文件夹），目标 = 触发 + 的笔记本/分组。 */
+ *  261106：末尾加「导入」子菜单（Markdown 多选），目标 = 触发 + 的笔记本/分组。
+ *  261106 task-91：「Markdown 文件夹…」入口已删除（多选文件已覆盖，目录入口冗余）。 */
 function CreateMenu({ anchor, onNewChild, importTarget, onImport, onClose }: {
   anchor: HTMLElement;
   onNewChild: (kind: CreateChildKind) => void;
   /** 导入目标父级（最近容器）；null = 根级且没有所属笔记本 ⇒ 禁用并提示。 */
   importTarget: string | null;
-  onImport: (mode: "files" | "folder", targetId: string) => void;
+  onImport: (targetId: string) => void;
   onClose: () => void;
 }) {
   const { surfaceRef, style } = usePopoverPosition({ open: true, anchor, gap: 4, margin: 8 });
@@ -1503,8 +1566,7 @@ function CreateMenu({ anchor, onNewChild, importTarget, onImport, onClose }: {
       <div className="context-menu-sep" role="separator" />
       {importTarget ? (
         <Submenu label={<><Download size={15} aria-hidden="true" /><span>导入</span></>}>
-          <button role="menuitem" onClick={() => { onImport("files", importTarget); onClose(); }}><FilePlus size={15} aria-hidden="true" /><span>Markdown…</span></button>
-          <button role="menuitem" onClick={() => { onImport("folder", importTarget); onClose(); }}><FolderOpen size={15} aria-hidden="true" /><span>Markdown 文件夹…</span></button>
+          <button role="menuitem" onClick={() => { onImport(importTarget); onClose(); }}><FilePlus size={15} aria-hidden="true" /><span>Markdown…</span></button>
         </Submenu>
       ) : (
         <button role="menuitem" disabled title="先选择一个笔记本或分组"><Download size={15} aria-hidden="true" /><span>导入（先选择笔记本）</span></button>

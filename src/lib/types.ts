@@ -318,7 +318,7 @@ export interface BatchNotesResultShape {
 }
 
 /**
- * 261106 Markdown 导入：主进程 picker 返回的单个文件（桌面 `pick_markdown_files` / `pick_markdown_folder`）。
+ * 261106 Markdown 导入：主进程 picker 返回的单个文件（桌面 `pick_markdown_files`）。
  * 不支持的扩展名也返回（supported:false），由调用方计入「跳过数」——用户全选目录时不静默消失。
  */
 export interface MarkdownPickedFileShape {
@@ -340,12 +340,6 @@ export interface MarkdownPickedFileShape {
   error?: string;
 }
 
-/** 261106 Markdown 导入：选择文件夹的扫描结果（超过 500 个截断）。 */
-export interface MarkdownFolderPickShape {
-  files: MarkdownPickedFileShape[];
-  truncated: boolean;
-}
-
 /** 261106 Markdown 导入：读一张本地图片（供渲染层 uploadResource 物化为文档资产）。 */
 export interface ImportImageShape {
   bytes: Uint8Array;
@@ -356,16 +350,35 @@ export interface ImportImageShape {
 
 /**
  * 261106 批量导出（数据层 electron/batchExport.ts）：按类型默认格式导出到同一目录。
- * doc→pdf、usheet→xlsx、bitable→csv、board→png（主进程暂不支持，返回 skipped）、ink→png（多页分文件）。
+ * 261106 二轮默认格式：doc→**markdown**（资料包目录：<标题>/<标题>.md + images/）、
+ * usheet→**csv**、bitable→csv、ink→**pdf**、board→pdf（画板渲染在渲染层 ⇒ 当前返回 skipped）。
  * 只读：不写源数据、不标 dirty、不广播。
  */
-export type BatchExportFormatShape = "pdf" | "csv" | "xlsx" | "png";
+export type BatchExportFormatShape = "markdown" | "csv" | "pdf";
+
+/** 261106 task-95：渲染层交回的画板图像字节（批量导出的 board→pdf 输入）。 */
+export interface BoardImageInputShape {
+  /** PNG/SVG 字节（HTTP/JSON 客户端传 number[]）。 */
+  bytes: Uint8Array | number[];
+  format: "png" | "svg";
+}
 
 export interface BatchExportRequestShape {
   /** 文档或分组/笔记本 id（分组递归展开为文档；去重；上限 500）。 */
   ids: string[];
   /** 目标目录；缺省时主进程弹系统目录选择框。给了就必须是本进程选择框的返回值。 */
   dirPath?: string;
+  /** 画板图像字节（渲染层先渲染再传；缺失的画板返回 skipped，不产出坏文件）。 */
+  boardImages?: Record<string, BoardImageInputShape>;
+}
+
+/** 受控写盘（渲染层产出的画板 PNG/SVG 落到本次选择框选中的导出目录）。 */
+export interface WriteBatchExportFileShape {
+  dirPath: string;
+  /** 文件名（不含扩展名；主进程会清洗非法字符并做「 (2)」去重）。 */
+  fileName: string;
+  ext: "png" | "svg";
+  bytes: Uint8Array | number[];
 }
 
 export interface BatchExportItemResultShape {

@@ -9,8 +9,10 @@ import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { TreeNode } from "../../lib/types";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 
-const nativeMocks = vi.hoisted(() => ({ pickMarkdownFiles: vi.fn(), pickMarkdownFolder: vi.fn() }));
+const nativeMocks = vi.hoisted(() => ({ pickMarkdownFiles: vi.fn() }));
 vi.mock("../../lib/native", () => ({ native: nativeMocks }));
 
 const importMocks = vi.hoisted(() => ({
@@ -98,12 +100,16 @@ function deferred<T>() {
 }
 
 describe("Markdown 导入：菜单与目标父级", () => {
-  it("目录行「＋」菜单出现「导入」子菜单（Markdown… / Markdown 文件夹…）", () => {
+  it("目录行「＋」菜单出现「导入」子菜单（仅 Markdown…；文件夹入口已删除）", () => {
     render();
     openRowMenu("nb");
     expect(bodyText()).toContain("导入");
     expect(menuButton("Markdown…")).toBeTruthy();
-    expect(menuButton("Markdown 文件夹…")).toBeTruthy();
+    expect(menuButton("Markdown 文件夹…")).toBeUndefined();
+    // 源码级：入口与 native 绑定都不再出现（task-91）
+    const sidebar = readFileSync(path.resolve("src/components/app/Sidebar.tsx"), "utf8");
+    expect(sidebar).not.toContain("Markdown 文件夹…</span>");
+    expect(sidebar).not.toContain("pickMarkdownFolder");
   });
 
   it("目标父级 = 触发「＋」的笔记本（子项文件夹也落到它下面）", async () => {
@@ -193,21 +199,18 @@ describe("Markdown 导入：跳过/进度/结果", () => {
     expect(text).toContain("远程图片未下载");
   });
 
-  it("文件夹：保留相对路径 + 截断写进 warnings；进度浮层可取消（abort 信号）", async () => {
+  it("多选文件：进度浮层 N/M 可取消（abort 信号）；结果弹窗保留失败汇总", async () => {
     const gate = deferred<{ ok: boolean; results: never[]; summary: { total: number; done: number; failed: number; skipped: number }; warnings: string[] }>();
     let seenSignal: AbortSignal | null = null;
     importMocks.createNotesFromMarkdownBatch.mockImplementation((request: { signal?: AbortSignal; onProgress?: (p: { index: number; total: number; path: string }) => void }) => {
       seenSignal = request.signal ?? null;
-      request.onProgress?.({ index: 1, total: 2, path: "/tmp/import/sub/a.md" });
+      request.onProgress?.({ index: 1, total: 2, path: "/tmp/import/a.md" });
       return gate.promise;
     });
-    nativeMocks.pickMarkdownFolder.mockResolvedValue({
-      files: [file("a.md", { relativePath: "sub/a.md" }), file("b.md")],
-      truncated: true,
-    });
+    nativeMocks.pickMarkdownFiles.mockResolvedValue([file("a.md"), file("b.md")]);
     render();
     openRowMenu("nb");
-    await act(async () => { menuButton("Markdown 文件夹…")!.click(); await Promise.resolve(); await Promise.resolve(); });
+    await act(async () => { menuButton("Markdown…")!.click(); await Promise.resolve(); await Promise.resolve(); });
 
     // 进度浮层：N/M + 文件名 + 可取消
     expect(bodyText()).toContain("正在导入 1/2");
@@ -218,17 +221,15 @@ describe("Markdown 导入：跳过/进度/结果", () => {
     expect(bodyText()).toContain("正在停止");
 
     await act(async () => { gate.resolve({ ok: false, results: [], summary: { total: 2, done: 0, failed: 2, skipped: 0 }, warnings: [] }); await Promise.resolve(); await Promise.resolve(); });
-    expect(bodyText()).toContain("前 500 个");
-    const items = importMocks.createNotesFromMarkdownBatch.mock.calls[0][0].items;
-    expect(items.map((item: { relativePath: string }) => item.relativePath)).toEqual(["sub/a.md", "b.md"]);
     expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+    const request = importMocks.createNotesFromMarkdownBatch.mock.calls[0][0];
+    expect(request.items).toHaveLength(2);
   });
 
   it("导入进行中重复触发被 busy 挡住（不再调 picker）", async () => {
     const gate = deferred<never>();
     importMocks.createNotesFromMarkdownBatch.mockImplementation(() => gate.promise);
     nativeMocks.pickMarkdownFiles.mockResolvedValue([file("a.md")]);
-    nativeMocks.pickMarkdownFolder.mockResolvedValue({ files: [file("b.md")], truncated: false });
     props.activeId = "n1";
     render();
     act(() => { document.querySelector<HTMLButtonElement>('button[aria-label="新建"]')!.click(); });
@@ -236,8 +237,8 @@ describe("Markdown 导入：跳过/进度/结果", () => {
     expect(nativeMocks.pickMarkdownFiles).toHaveBeenCalledTimes(1);
 
     act(() => { document.querySelector<HTMLButtonElement>('button[aria-label="新建"]')!.click(); });
-    await act(async () => { menuButton("Markdown 文件夹…")!.click(); await Promise.resolve(); });
-    expect(nativeMocks.pickMarkdownFolder).not.toHaveBeenCalled();
+    await act(async () => { menuButton("Markdown…")!.click(); await Promise.resolve(); });
+    expect(nativeMocks.pickMarkdownFiles).toHaveBeenCalledTimes(1);
 
     await act(async () => { gate.resolve(undefined as never); await Promise.resolve(); await Promise.resolve(); });
   });
