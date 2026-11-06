@@ -12,6 +12,7 @@ import { HistorySnapshotPreview } from "./HistorySnapshotPreview";
 import { NoteDocPreview } from "./NoteDocPreview";
 import type { NoteKind } from "../../core/noteKind";
 import { formatDateTime } from "../../lib/formatTime";
+import { pickCurrentHistorySnapshotId } from "../../core/historyCurrent";
 
 export interface HistoryItem {
   id: number; createdAt: string; size: number; contentHash: string; refCount: number; filePath: string; protectedUntil: string | null;
@@ -164,8 +165,9 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
   const createSnapshot = async () => {
     if (!noteId) return;
     try {
-      const sid = await native.createHistorySnapshot(noteId, undefined, true);
-      if (sid === null) setError("当前内容与最近快照相同，未创建");
+      // 261106 定稿：手动创建也走同一去重口径（同 note 同内容 hash 永远不重复留档），不再传 force。
+      const sid = await native.createHistorySnapshot(noteId);
+      if (sid === null) setError("当前内容已有历史快照（同内容不重复留档）");
       await refreshHistory();
     } catch (e) {
       setError(getNativeErrorMessage(e));
@@ -257,6 +259,8 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
   };
 
   const cleanable = orphans.filter((o) => !o.protectedByHistory).length;
+  // 「当前」只标一条：正文已落盘 hash 对应的**最新**快照（同 hash 存量重复行只标最新那条）。
+  const currentSnapshotId = pickCurrentHistorySnapshotId(history, currentHash);
 
   if (!open || !noteId) return null;
   return (
@@ -273,9 +277,18 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
             <History size={16} />
             <h2>历史版本</h2>
           </div>
-          <button className="ln-close" onClick={onClose} aria-label="关闭"><X size={16} /></button>
+          {/* 261106：动作收到标题栏右侧（与回收站/设置等面板同位置）。此前挂在 .ln-tabs 行里当
+              「第三个页签」，描边小块贴着页签、与标题栏脱节。只做视觉与位置调整，行为不变。 */}
+          <div className="panel-actions">
+            {tab === "history" && (
+              <button className="ln-btn ln-btn--secondary" onClick={() => void createSnapshot()} title="手动创建快照">
+                <Camera size={14} /> 创建快照
+              </button>
+            )}
+            <button className="ln-close" onClick={onClose} aria-label="关闭"><X size={16} /></button>
+          </div>
         </header>
-        {/* 页签走 kit 层原语（.ln-tabs：墨线 + 计数徽标）；右侧动作走原语的 .ln-tabs__action */}
+        {/* 页签走 kit 层原语（.ln-tabs：墨线 + 计数徽标） */}
         <div className="ln-tabs">
           <div className="ln-tabs__track" role="tablist" aria-label="历史版本">
             <button type="button" role="tab" aria-selected={tab === "history"} className={`ln-tabs__item${tab === "history" ? " is-active" : ""}`} onClick={() => switchTab("history")}>
@@ -285,11 +298,6 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
               <Trash size={14} /> 未引用文件<span className="ln-tabs__count">{orphans.length}</span>
             </button>
           </div>
-          {tab === "history" && (
-            <button className="ln-btn ln-btn--secondary ln-tabs__action" onClick={() => void createSnapshot()} title="手动创建快照">
-              <Camera size={14} /> 创建快照
-            </button>
-          )}
         </div>
         <p className="history-hint">
           {tab === "history" ? "历史快照保存在本地，不参与同步。恢复前会自动保存当前版本。" : "未引用的资源文件（被历史引用的受保护，不会误删）。"}
@@ -327,8 +335,8 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
                     <span className="ln-row2__title">{label}</span>
                     <span className="ln-row2__meta">{(h.size / 1024).toFixed(1)} KB，{h.refCount} 个资源，{h.contentHash.slice(0, 8)}</span>
                   </div>
-                  {currentHash !== null && h.contentHash === currentHash && (
-                    <span className="badge badge--accent" title="正文与当前已保存版本一致">当前</span>
+                  {h.id === currentSnapshotId && (
+                    <span className="badge badge--accent" title="正文与当前已保存版本一致（同内容只标最新一条）">当前</span>
                   )}
                   {protectedUntil !== null && (
                     <span className="badge badge--warn" title="被远端覆盖时自动保留，保护期内不被自动清理（可手动删除）">

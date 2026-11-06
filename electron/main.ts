@@ -985,6 +985,7 @@ if (!app.requestSingleInstanceLock()) {
       const r = store.cleanupHistory();
       store.recordHistoryCleanup(r);
       if (r.deletedSnapshots > 0) log.history.info(`[history] 启动兜底清理：删除 ${r.deletedSnapshots} 份过期快照`);
+      if ((r.dedupedSnapshots ?? 0) > 0) log.history.info(`[history] 启动清理：收敛同内容重复快照 ${r.dedupedSnapshots} 份（保留最新一条）`);
     } catch (error) { console.warn("[history] 启动兜底清理失败:", error); }
     // 定时器管理：配置变更（设置面板保存）后重启定时器
     let snapshotTimer: NodeJS.Timeout | null = null;
@@ -1025,6 +1026,7 @@ if (!app.requestSingleInstanceLock()) {
             const r = store.cleanupHistory();
             store.recordHistoryCleanup(r);
             if (r.deletedSnapshots > 0) log.history.info(`[history] 定期清理：删除 ${r.deletedSnapshots} 份过期快照`);
+        if ((r.dedupedSnapshots ?? 0) > 0) log.history.info(`[history] 定期清理：收敛同内容重复快照 ${r.dedupedSnapshots} 份（保留最新一条）`);
           } catch (error) { console.warn("[history] 定期清理失败:", error); }
         }, cfg.cleanupIntervalHours * 3600 * 1000);
       }

@@ -14,11 +14,19 @@ import { describe, expect, it } from "vitest";
 const SRC = readFileSync(new URL("./HistorySnapshotPreview.tsx", import.meta.url), "utf8");
 
 describe("历史快照只读编辑器预览", () => {
-  it("三个编辑器都懒加载（不额外增加首屏体积）", () => {
-    for (const mod of ["../../features/usheet/UniverSheetEditor", "../../features/bitable/BitableEditor", "../../features/board/BoardEditor"]) {
+  it("四个只读预览（三个编辑器 + 手写画布）都懒加载（不额外增加首屏体积）", () => {
+    for (const mod of ["../../features/usheet/UniverSheetEditor", "../../features/bitable/BitableEditor", "../../features/board/BoardEditor", "../../features/ink/InkPreview"]) {
       expect(SRC).toContain(`import("${mod}")`);
     }
-    expect((SRC.match(/lazy\(\(\) => import\(/g) ?? []).length).toBe(3);
+    expect((SRC.match(/lazy\(\(\) => import\(/g) ?? []).length).toBe(4);
+  });
+
+  it("261106 ink 分支：解析成功走只读画布 InkPreview（懒加载），解析失败仍走结构化统计", () => {
+    // ink 不再固定"只出统计"：parseable 只对 doc 单独 false
+    expect(SRC).toMatch(/const parseable = kind === "doc" \? false : !\(blocks\.length === 1 && blocks\[0\]\.type === "empty"\)/);
+    expect(SRC).toMatch(/kind === "ink" \? \([\s\S]*?<InkPreview content=\{body\} \/>/);
+    // 画布与其它只读编辑器共用同一个预览槽（不第二套容器）
+    expect(SRC).toMatch(/<div className="history-editor-preview">[\s\S]*<InkPreview content=\{body\} \/>/);
   });
 
   it("一律只读 + onChange no-op（预览绝不写盘）", () => {
@@ -37,7 +45,7 @@ describe("历史快照只读编辑器预览", () => {
   it("失败/坏正文退回结构化摘要（不留空白、不炸弹窗）", () => {
     expect(SRC).toContain("class PreviewErrorBoundary");
     expect(SRC).toMatch(/fallback=\{<StructuredBlocks blocks=\{blocks\} \/>\}/);
-    expect(SRC).toMatch(/const parseable = kind === "doc" \|\| kind === "ink" \? false : !\(blocks\.length === 1 && blocks\[0\]\.type === "empty"\)/);
+    expect(SRC).toMatch(/const parseable = kind === "doc" \? false : !\(blocks\.length === 1 && blocks\[0\]\.type === "empty"\)/);
     expect(SRC).toMatch(/kind === "board" \? \([\s\S]*?<BoardEditor[\s\S]*?\) : \([\s\S]*?<StructuredBlocks blocks=\{blocks\} \/>/);
   });
 
@@ -101,10 +109,12 @@ describe("历史面板：复用 / 预热 / 当前版本 / 键盘", () => {
     expect(PANEL).toMatch(/prefetchPreviewChunk\(nextHistory\[0\]\?\.kind \?\? "doc"\)/);
   });
 
-  it("标出「当前」版本：拿当前正文 hash 与快照比", () => {
+  it("标出「当前」版本：拿当前正文 hash 与快照比（同内容只标最新一条）", () => {
     expect(PANEL).toMatch(/native\.getNoteInfo\(noteId\)/);
-    expect(PANEL).toMatch(/h\.contentHash === currentHash/);
-    expect(PANEL).toContain('title="正文与当前已保存版本一致"');
+    // 261106 去重口径由另一任务收敛到 core/historyCurrent：面板只取「最新那条同 hash 快照」的 id
+    expect(PANEL).toMatch(/pickCurrentHistorySnapshotId\(history, currentHash\)/);
+    expect(PANEL).toMatch(/h\.id === currentSnapshotId/);
+    expect(PANEL).toContain('title="正文与当前已保存版本一致');
   });
 
   it("↑/↓ 切换快照：只改列表自己的 scrollTop（不用 scrollIntoView）", () => {
@@ -113,5 +123,25 @@ describe("历史面板：复用 / 预热 / 当前版本 / 键盘", () => {
     expect(PANEL).toMatch(/moveSelection\(1\)|moveSelection\(-1\)/);
     expect(PANEL).toContain("list.scrollTop -=");
     expect(PANEL).not.toMatch(/\.scrollIntoView\(/);
+  });
+});
+/**
+ * 261106 用户验收：历史面板右上角「创建快照」原先挂在 .ln-tabs 行里当「第三个页签」，
+ * 描边小块贴着页签、与标题栏脱节。改成标题栏右侧的标准次级按钮（kit 原语 + Camera 14），
+ * 与回收站/设置等面板的动作位置一致；只动视觉与位置，不动行为。
+ */
+describe("历史面板：创建快照按钮（视觉/位置）", () => {
+  const PANEL = readFileSync(new URL("./HistoryPanel.tsx", import.meta.url), "utf8");
+
+  it("动作在标题栏右侧（.panel-actions 内、与关闭钮并排），不在页签行里", () => {
+    expect(PANEL).toMatch(/<header className="floating-dialog-header"[\s\S]*?<div className="panel-actions">[\s\S]*?创建快照[\s\S]*?ln-close[\s\S]*?<\/header>/);
+    expect(PANEL).not.toContain("ln-tabs__action");
+    // 页签行只留 tablist（不再挂右侧动作）
+    expect(PANEL).toMatch(/<div className="ln-tabs">\s*<div className="ln-tabs__track"/);
+  });
+
+  it("按钮走 kit 次级原语 + Camera 图标 14（与同面板其它按钮一致）", () => {
+    expect(PANEL).toContain('<button className="ln-btn ln-btn--secondary" onClick={() => void createSnapshot()} title="手动创建快照">');
+    expect(PANEL).toContain('<Camera size={14} /> 创建快照');
   });
 });

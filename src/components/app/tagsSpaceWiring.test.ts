@@ -148,6 +148,12 @@ describe("标签空间接线（P1）", () => {
     expect(read("../../features/tags/TagPreviewBody.tsx")).toContain("NoteDocPreview");
     expect(read("../../features/tags/TagPreviewBody.tsx")).toContain("HistorySnapshotPreview");
     expect(read("../../features/tags/TagPreviewBody.tsx")).not.toContain("QuickNoteKernelPreview");
+    // 261106 二批：手写板预览不在这里另写一套——非 doc 四族统一交给 HistorySnapshotPreview，
+    // 它的 ink 分支再懒加载 InkPreview（只读画布）⇒ 标签空间与历史面板同一实现、同一容器
+    const HSP = read("../../components/app/HistorySnapshotPreview.tsx");
+    expect(HSP).toContain('import("../../features/ink/InkPreview")');
+    expect(HSP).toContain("<InkPreview content={body} />");
+    expect(read("../../features/tags/TagPreviewBody.tsx")).not.toContain("<InkPreview");
     expect(read("../../features/tags/tags.css")).not.toContain("tags-preview__doc");
     // 中栏最小 270（容器下限 720）
     const layout = read("../../features/tags/tagsLayout.ts");

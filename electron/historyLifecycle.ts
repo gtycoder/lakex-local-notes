@@ -114,11 +114,15 @@ export class HistoryLifecycle {
     return zlib.gunzipSync(fs.readFileSync(path.join(this.ctx.root, filePath))).toString("utf8");
   }
 
-  /** 24h 内同 hash 是否已有快照（去重防抖，P0-2：不用 UNIQUE） */
-  private hasRecentDuplicate(noteId: string, hash: string): boolean {
+  /**
+   * 同 note 同内容 hash 是否**已存在**快照（261106 定稿：不设时间窗，永远去重）。
+   * 旧实现只看 24h（created_at > now-24h）⇒ 同一内容隔天再触发就会留第二份（用户截图
+   * 两条同 hash、不同时间、都标「当前」的复现路径之一）。
+   */
+  private hasDuplicateSnapshot(noteId: string, hash: string): boolean {
     const row = this.ctx.db.prepare(
-      "SELECT 1 FROM note_history WHERE note_id=? AND content_hash=? AND created_at > ? LIMIT 1"
-    ).get(noteId, hash, new Date(Date.now() - 24 * 3600 * 1000).toISOString());
+      "SELECT 1 FROM note_history WHERE note_id=? AND content_hash=? LIMIT 1"
+    ).get(noteId, hash);
     return !!row;
   }
 
@@ -306,7 +310,8 @@ export class HistoryLifecycle {
   }
 
   /** 创建历史快照。content 缺省时读磁盘 .lake；protectedDays>0 时写 protected_until（冲突归档保护，B3）。
-   * 返回快照 id；同 hash 且 24h 内已有则跳过返回 null。 */
+   * 返回快照 id；**同 note 同内容 hash 已有快照则跳过返回 null**（261106 定稿：不设时间窗，force 也一样去重——
+   * force 仅为历史接口兼容，不再有「手动/强制可重复留档」的例外）。 */
   createHistorySnapshot(noteId: string, content?: string, force = false, protectedDays?: number): number | null {
     const t0 = Date.now();
     if (!isSafePathSegment(noteId)) throw new AppError("InvalidInput", `无效的笔记 ID: ${noteId}`);
@@ -314,9 +319,12 @@ export class HistoryLifecycle {
     if (!fs.existsSync(lakePath)) return null;
     const body = content ?? fs.readFileSync(lakePath, "utf8");
     const hash = crypto.createHash("sha256").update(body).digest("hex");
-    // force=true 只在"用户手动创建快照"这类显式意图下使用（同 hash 也写）；
-    // 自动快照 / 恢复前留档 / 云端覆盖留档都是 force=false，走 24h 同 hash 防抖。
-    if (!force && this.hasRecentDuplicate(noteId, hash)) return null;
+    // 261106 定稿：同内容不重复留档（手动「创建快照」/ 兜底 / 冲突留档 / 同步覆盖留档统一口径）。
+    // 不再有 24h 时间窗、也不再允许 force 绕过；需要保留某段内容时，第一次留档就是它。
+    if (this.hasDuplicateSnapshot(noteId, hash)) {
+      this.ctx.logScopes.history.debug?.("[history] 跳过重复快照 " + noteId + " hash=" + hash.slice(0, 8) + (force ? " (force 同样去重)" : ""));
+      return null;
+    }
     const refs = [...extractAssetRefs(body)];
     const gz = this.gzipContent(body);
     const ts = new Date().toISOString().replace(/[:T]/g, "-").slice(0, 19); // YYYY-MM-DD-HH-mm-ss
@@ -398,13 +406,57 @@ export class HistoryLifecycle {
     this.ctx.logScopes.history.info(`[perf] delete-history ${historyId} ${Date.now() - t0}ms`);
   }
 
-  /** 惰性清理：每文档超 100 份删最旧；created_at < 30 天删。
+  /**
+   * 一次性收敛历史重复行（261106 定稿）：同一 note + 同 content_hash 只保留**最新**一条，
+   * 删除其余行与其 .body.gz（同内容 ⇒ refs 相同，不会误删资源引用；不同 hash 一行不动）。
+   * 幂等；只处理「同 note 同 hash」，保留行用 created_at DESC,id DESC 取最新。
+   * 文件删除失败仍删行（孤儿文件由资源页/孤儿清理兜底，与 deleteHistory 同口径）。
+   */
+  dedupeHistorySnapshots(): { deletedRows: number; freedBytes: number; groups: number } {
+    const t0 = Date.now();
+    const rows = this.ctx.db.prepare(
+      "SELECT id,note_id,file_path,content_hash,created_at FROM note_history ORDER BY note_id, content_hash, created_at DESC, id DESC",
+    ).all() as Array<{ id: number; note_id: string; file_path: string; content_hash: string; created_at: string }>;
+    const kept = new Set<string>(); // noteId\0hash（该组最新一条已保留）
+    const drop: typeof rows = [];
+    for (const row of rows) {
+      const key = row.note_id + "\u0000" + row.content_hash;
+      if (!kept.has(key)) { kept.add(key); continue; }
+      drop.push(row);
+    }
+    let freedBytes = 0;
+    const groups = new Set(drop.map((row) => row.note_id + "\u0000" + row.content_hash)).size;
+    for (const row of drop) {
+      try {
+        const abs = path.join(this.ctx.root, row.file_path);
+        if (fs.existsSync(abs)) {
+          freedBytes += fs.statSync(abs).size;
+          fs.rmSync(abs, { force: true });
+        }
+      } catch { /* 文件删失败仍删行 */ }
+    }
+    if (drop.length > 0) {
+      const del = this.ctx.db.prepare("DELETE FROM note_history WHERE id=?");
+      this.ctx.db.transaction(() => { for (const row of drop) del.run(row.id); })();
+    }
+    const deletedRows = drop.length;
+    if (deletedRows > 0) {
+      this.ctx.logScopes.history.warn("[history] 收敛重复快照 " + deletedRows + " 行（" + groups + " 组，释放 " + freedBytes + "B）耗时 " + (Date.now() - t0) + "ms");
+    }
+    return { deletedRows, freedBytes, groups };
+  }
+
+  /** 惰性清理：先收敛同 note 同 hash 重复行，再按保留策略（每文档超 100 份删最旧；created_at < 30 天删）。
    * 删除后对受影响文档重算引用，无引用资源物理删（方案 A）。 */
   cleanupHistory(): HistoryCleanupResult {
     const t0 = Date.now();
     // P5 + M8：保留策略可配置（份数硬上限 + 天数兜底 + 分层保留判定）
     const cfg = this.ctx.getHistorySettings();
-    const result: HistoryCleanupResult = { deletedSnapshots: 0, freedBytes: 0 };
+    const result: HistoryCleanupResult = { deletedSnapshots: 0, freedBytes: 0, dedupedSnapshots: 0 };
+    // 261106：先收敛「同 note 同 hash」重复行（旧 24h 窗口造成的存量重复）；幂等、每天/启动各一次即可。
+    const deduped = this.dedupeHistorySnapshots();
+    result.dedupedSnapshots = deduped.deletedRows;
+    result.freedBytes += deduped.freedBytes;
     const notes = this.ctx.db.prepare("SELECT DISTINCT note_id FROM note_history").all() as Array<{ note_id: string }>;
     for (const { note_id } of notes) {
       const rows = this.ctx.db.prepare(
@@ -443,7 +495,7 @@ export class HistoryLifecycle {
       this.ctx.cleanupUnreferencedAssetsForNote(note_id);
     }
     this.pruneEmptyHistoryDirs();
-    this.ctx.logScopes.history.info(`[perf] cleanup-history ${Date.now() - t0}ms (deleted=${result.deletedSnapshots}, freed=${result.freedBytes}B)`);
+    this.ctx.logScopes.history.info(`[perf] cleanup-history ${Date.now() - t0}ms (deleted=${result.deletedSnapshots}, deduped=${result.dedupedSnapshots ?? 0}, freed=${result.freedBytes}B)`);
     return result;
   }
 

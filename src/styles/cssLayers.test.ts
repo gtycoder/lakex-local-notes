@@ -53,6 +53,7 @@ const FILES = [
   "features/board/boardEditor.css",
   "features/ink/inkPad.shared.css",
   "features/ink/inkPad.desktop.css",
+  "features/ink/inkPreview.css",   // 261106：手写板只读预览（InkPreview）的槽位与减法规则
   "styles/dialog.css", "styles/document-status.css",   "styles/components.css",   "styles/tokens.css",   "styles/brand-launch.css",   // 261020：14A Paper Finch 启动动画（桌面）
   "styles/vendor-focus.css",   // 261023：第三方编辑器 UI 的焦点视觉归属（unlayered 覆盖层；规则见文件头）
   "styles/window-chrome.css",   // 261023：全屏（独立 Space）时撤掉「为红绿灯让位」的内距（顶栏 / 附件预览）
@@ -144,6 +145,7 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   // 260920：独立画板文档（kind=board）容器（铺满 tab 格 + 去掉卡片态边框/圆角 + 内核分包加载占位）
   "features/board/boardEditor.css": { decls: 17, dupGroups: 0 },
   "features/ink/inkPad.shared.css": { decls: 259, dupGroups: 0 },   // 261104 十八批：+3 = 缩略图书签小点（position/top/left 之外还有尺寸与圆角，净 +3 宣告）；新增交互形态非覆盖
+  "features/ink/inkPreview.css": { decls: 9, dupGroups: 0 },   // 261106 新文件：手写板只读预览槽位（flex/高度）+ 只读减法（工具条/纸张背景/只读角标/新建页 各 1 条 display:none），无重复组
   "features/ink/inkPad.desktop.css": { decls: 334, dupGroups: 0 }, // 261104 二十六批：138 → 305（+167）= 「页面」右侧悬浮面板（head/tabs/close/filters/chips/jump/summary/note 编辑区/search/list/row/grid/cell/角标/动作/新建/删除确认 ~40 条规则）+ 画布右侧留白（1 条）；同时整块删除旧「大纲」浮层（−约 20 条）。属**新增交互形态**（两个旧面板合并成一个），非覆盖叠层   // 261104 十八批：+68 = 大纲/书签面板（外壳 3 + 头部 9 + 当前页行 3 + 书签态 1 + 列表 5 + 行 15 + 页号 1 + 元信息 1 + 标签 1 + 空态 1 等）；新增交互形态非覆盖   // 261104 十七批：+25 = 单页导出（一个按钮 + 悬浮格式菜单），新增交互形态非覆盖   // 261102 T2-B：+4 = PDF 导入进度横幅（display/align-items/justify-content/gap；新增交互形态非覆盖）   // 260926：+1 = 内核「主题选择」岛抬到文档状态栏上方（bottom 按状态栏几何派生）；+2 = .board-editor--{restoring,hidden} 共用 content-visibility:hidden + pointer-events:none（display:none 会钳掉滚动位置、visibility:hidden 会被内核工具条的 visible 顶掉；均合法新增非覆盖回涨）；261006：+5 = 左侧创建栏三类工具项图标中轴对齐（隐藏 radio 移出流 3 条 + label 定位 1 条 + 注入触发器居中 1 条）
   "components/app/historySnapshotPreview.css": { decls: 77, dupGroups: 0 },
   "components/ui/markdown/markdown.css": { decls: 57, dupGroups: 0 },   // 261005：Markdown 轻量子集渲染的共用排版（从 bitableMarkdown.css 提出 43 条）.md-preview，bitable 与 AI 面板共用

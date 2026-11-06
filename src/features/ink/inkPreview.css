@@ -1,0 +1,24 @@
+/*
+ * 手写板只读预览（InkPreview，261106）：历史快照 / 标签空间共用。
+ *
+ * InkPad 的 readOnly 档仍是「完整编辑器外壳」——顶部笔工具、纸张/背景、『只读』角标在快照预览里
+ * 全是 disabled 的死控件，留着就是「半个编辑器」的观感。这里只做预览层的**减法**与槽位铺满：
+ * 容器尺寸/滚动/底色/边框一律由调用方的既有预览容器决定（.history-editor-preview / 标签预览槽），
+ * 不新写第二套滚动容器。
+ */
+.ink-preview {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--lake-bg-canvas);
+}
+
+/* 只读快照里没有「落笔」语义：笔/高亮/橡皮/颜色/笔宽/撤销重做整条工具条收掉 */
+.ink-preview .ink-toolbar { display: none; }
+/* 纸张底纹与背景来源（导入图片/PDF）在只读下不可用，收掉避免死按钮 */
+.ink-preview .ink-backgrounds { display: none; }
+/* 『只读』角标：预览本身就在只读上下文里（面板/标签预览头已说明），不必重复 */
+.ink-preview .ink-readonly-hint { display: none; }
+/* 『新建页』只读下无意义（翻页 / 页面缩略面板保留） */
+.ink-preview .ink-pages button[aria-label="新建页"] { display: none; }

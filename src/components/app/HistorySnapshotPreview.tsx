@@ -1,7 +1,8 @@
 /**
- * 历史快照预览（kind = usheet / bitable / board；ink 只显示结构化统计）。
+ * 历史快照预览（kind = usheet / bitable / board / ink）。
  *
  * doc 快照不归本组件：走 `NoteDocPreview`（只读 Lake viewer，261106 起回收站/历史/文档属性/标签空间共用）。
+ * ink 走 `InkPreview`（只读手写画布，懒加载；261106）。
  * 非 doc 的正文是内部 JSON，**图片只有编辑器认识**（表格单元格图片按 filename 拼资产 URL、多维表附件
  * 缩略图、画板整个 canvas）⇒ 自己画等于把资产解析/缩略图档位/画布渲染重写一遍。
  * 所以这里挂**只读编辑器**做真预览（用户 260926 口径："有一点成本也行"）。
@@ -22,6 +23,8 @@ import "./historySnapshotPreview.css";
 const BitableEditor = lazy(() => import("../../features/bitable/BitableEditor").then((m) => ({ default: m.BitableEditor })));
 const BoardEditor = lazy(() => import("../../features/board/BoardEditor").then((m) => ({ default: m.BoardEditor })));
 const UniverSheetEditor = lazy(() => import("../../features/usheet/UniverSheetEditor").then((m) => ({ default: m.UniverSheetEditor })));
+/** 手写板只读画布（InkPad readOnly；懒加载，与文档编辑器不同包）。 */
+const InkPreview = lazy(() => import("../../features/ink/InkPreview").then((m) => ({ default: m.InkPreview })));
 
 export interface HistorySnapshotPreviewProps {
   kind: NoteKind;
@@ -104,8 +107,8 @@ export function HistorySnapshotPreview({ kind, noteId, body, snapshotId }: Histo
   const blocks = useMemo(() => snapshotPreview(kind, body), [kind, body]);
   const facts = blocks.filter((b): b is Extract<SnapshotPreviewBlock, { type: "facts" }> => b.type === "facts");
   // 只有 facts 之外的块才说明"正文解析不了"（模型对坏正文只产出一条 empty/hint）。
-  // doc 由只读 Lake viewer 渲染；ink 当前没有只读画布预览，直接使用结构化统计。
-  const parseable = kind === "doc" || kind === "ink" ? false : !(blocks.length === 1 && blocks[0].type === "empty");
+  // doc 由只读 Lake viewer 渲染（不归本组件）；ink 解析成功 ⇒ 只读画布（InkPreview），失败 ⇒ 结构化统计。
+  const parseable = kind === "doc" ? false : !(blocks.length === 1 && blocks[0].type === "empty");
   const noop = useMemo(() => () => undefined, []);
 
   if (!parseable) {
@@ -141,6 +144,9 @@ export function HistorySnapshotPreview({ kind, noteId, body, snapshotId }: Histo
               <BitableEditor noteId={noteId} content={body} visible readOnly onChange={noop} chrome={false} />
             ) : kind === "board" ? (
               <BoardEditor noteId={noteId} content={body} visible readOnly onChange={noop} />
+            ) : kind === "ink" ? (
+              // 手写板只读画布：InkPad readOnly 档（不传 noteId ⇒ 不读写设备本地「当前页」导航键）
+              <InkPreview content={body} />
             ) : (
               // 未知/非编辑器型 kind 必须 fail-closed，不能把 JSON 误喂给画板。
               <StructuredBlocks blocks={blocks} />

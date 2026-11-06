@@ -802,25 +802,27 @@ describe("文档历史（快照，纯本地）", () => {
     expect(store.listNoteHistory(id).length).toBe(2);
   });
 
-  it("系统自动留档去重：24h 内同内容已有快照时，覆盖/恢复前留档不重复写；手动创建仍强制写", () => {
+  it("同内容永远去重：不再有 24h 窗口，force（手动/冲突留档）也一样跳过", () => {
     const { id } = makeNote();
     store.saveNote(id, "历史测试", "<p>X</p>");
     // 自动快照 X（force=false）
     expect(store.createHistorySnapshot(id)).toBeTruthy();
     expect(store.listNoteHistory(id).length).toBe(1);
-    // 云端覆盖留档（sync 现在用 force=false）：同 hash 24h 内已有 → 跳过，不产生第二份
+    // 同 hash 再触发：无论 force=false 还是 true（手动「创建快照」旧实现传 force=true）都不新增
     expect(store.createHistorySnapshot(id, undefined, false)).toBeNull();
+    expect(store.createHistorySnapshot(id, undefined, true)).toBeNull();
     expect(store.listNoteHistory(id).length).toBe(1);
-    // 手动创建快照（HistoryPanel 传 force=true）：用户显式意图，同 hash 也写
-    expect(store.createHistorySnapshot(id, undefined, true)).toBeTruthy();
+    // 内容变了才新增
+    store.saveNote(id, "历史测试", "<p>Y</p>");
+    expect(store.createHistorySnapshot(id)).toBeTruthy();
     expect(store.listNoteHistory(id).length).toBe(2);
   });
 
-  it("同秒 force 同内容快照文件名唯一：删一条不毁另一条（审计 F07）", () => {
+  it("同秒不同内容快照文件名唯一：删一条不毁另一条（审计 F07）", () => {
     const { id } = makeNote();
-    store.saveNote(id, "历史测试", "<p>同内容</p>");
-    const h1 = store.createHistorySnapshot(id, undefined, true);
-    const h2 = store.createHistorySnapshot(id, undefined, true);
+    store.saveNote(id, "历史测试", "<p>原文</p>");
+    const h1 = store.createHistorySnapshot(id, "<p>内容1</p>", true);
+    const h2 = store.createHistorySnapshot(id, "<p>内容2</p>", true);
     expect(h1).toBeTruthy();
     expect(h2).toBeTruthy();
     const rows = (store as any).db.prepare("SELECT id, file_path FROM note_history WHERE note_id=? ORDER BY id").all(id) as Array<{ id: number; file_path: string }>;
@@ -830,7 +832,7 @@ describe("文档历史（快照，纯本地）", () => {
     store.deleteHistory(h1!);
     expect(fs.existsSync(path.join(dir, rows[1].file_path))).toBe(true);
     store.restoreHistory(h2!);
-    expect(store.readNote(id).content).toContain("同内容");
+    expect(store.readNote(id).content).toContain("内容2");
   });
 
   it("恢复前留档去重：当前内容 24h 内已有快照时恢复不新增重复", () => {
