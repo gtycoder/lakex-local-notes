@@ -126,22 +126,36 @@ describe("历史面板：复用 / 预热 / 当前版本 / 键盘", () => {
   });
 });
 /**
- * 261106 用户验收：历史面板右上角「创建快照」原先挂在 .ln-tabs 行里当「第三个页签」，
- * 描边小块贴着页签、与标题栏脱节。改成标题栏右侧的标准次级按钮（kit 原语 + Camera 14），
- * 与回收站/设置等面板的动作位置一致；只动视觉与位置，不动行为。
+ * 261106 用户验收（二轮）：历史面板的「创建快照」**回到页签行 `.ln-tabs` 右侧**（用户截图红框处，
+ * 不要放标题栏），并**与页签文字垂直居中**。几何不在这里写死：kit 原语 `.ln-tabs__action` 负责
+ * `align-self:center` + 次级按钮高度，面板只按原语组合（ln-btn ln-btn--secondary + Camera 14）。
  */
-describe("历史面板：创建快照按钮（视觉/位置）", () => {
+describe("历史面板：创建快照按钮（页签行右侧 / 垂直居中）", () => {
   const PANEL = readFileSync(new URL("./HistoryPanel.tsx", import.meta.url), "utf8");
+  const LAYOUT = readFileSync(new URL("../../styles/kit.css", import.meta.url), "utf8");
 
-  it("动作在标题栏右侧（.panel-actions 内、与关闭钮并排），不在页签行里", () => {
-    expect(PANEL).toMatch(/<header className="floating-dialog-header"[\s\S]*?<div className="panel-actions">[\s\S]*?创建快照[\s\S]*?ln-close[\s\S]*?<\/header>/);
-    expect(PANEL).not.toContain("ln-tabs__action");
-    // 页签行只留 tablist（不再挂右侧动作）
-    expect(PANEL).toMatch(/<div className="ln-tabs">\s*<div className="ln-tabs__track"/);
+  it("按钮在页签行 .ln-tabs 内、track 右侧（不在标题栏）", () => {
+    const tabsStart = PANEL.indexOf('<div className="ln-tabs">');
+    const tabsEnd = PANEL.indexOf("</div>", PANEL.indexOf('<div className="ln-tabs__track"', tabsStart));
+    expect(tabsStart).toBeGreaterThanOrEqual(0);
+    const tabsHead = PANEL.slice(tabsStart, tabsEnd);
+    expect(tabsHead).toContain('<div className="ln-tabs__track"');
+    // header 里不再挂动作容器
+    const header = PANEL.slice(PANEL.indexOf('<header className="floating-dialog-header"'), PANEL.indexOf("</header>"));
+    expect(header).not.toContain("创建快照");
+    expect(header).not.toContain("panel-actions");
+    // 动作位置：`</div>`（track 结束）之后、`.ln-tabs` 收尾之前
+    const actionAt = PANEL.indexOf("ln-tabs__action", tabsStart);
+    expect(actionAt).toBeGreaterThan(tabsEnd - 20);
   });
 
-  it("按钮走 kit 次级原语 + Camera 图标 14（与同面板其它按钮一致）", () => {
-    expect(PANEL).toContain('<button className="ln-btn ln-btn--secondary" onClick={() => void createSnapshot()} title="手动创建快照">');
+  it("垂直居中：kit 的 .ln-tabs__action 带 align-self:center（页签行是 align-items:stretch）", () => {
+    expect(LAYOUT).toMatch(/\.ln-tabs__action \{ align-self: center; height: var\(--lake-ctl-h-sm\); \}/);
+  });
+
+  it("按钮走 kit 次级原语 + Camera 图标 14；「未引用文件」页签下隐藏", () => {
+    expect(PANEL).toContain('<button className="ln-btn ln-btn--secondary ln-tabs__action" onClick={() => void createSnapshot()} title="手动创建快照">');
     expect(PANEL).toContain('<Camera size={14} /> 创建快照');
+    expect(PANEL).toMatch(/\{tab === "history" && \(\s*<button className="ln-btn ln-btn--secondary ln-tabs__action"/);
   });
 });

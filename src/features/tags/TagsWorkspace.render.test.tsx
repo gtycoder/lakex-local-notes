@@ -312,11 +312,16 @@ describe("TagsWorkspace（标签空间）", () => {
     expect(byAria("标签操作 灵感").getAttribute("aria-expanded")).toBe("false");
   });
 
-  it("行 ⋯ 菜单：重命名进入内联编辑", () => {
+  it("行 ⋯ 菜单：重命名进入内联编辑，且打开即全选原名（261106）", () => {
     render();
     openRowMenu("灵感");
     act(() => menuItem("重命名").click());
-    expect(document.body.querySelector('input[aria-label="重命名标签 灵感"]')).not.toBeNull();
+    const input = document.body.querySelector<HTMLInputElement>('input[aria-label="重命名标签 灵感"]');
+    expect(input).not.toBeNull();
+    // 全选覆盖整个名称：直接打字 = 整体替换（标签行内输入与目录弹窗同一条 InlineRenameInput 契约）
+    expect(input!.value).toBe("灵感");
+    expect(input!.selectionStart).toBe(0);
+    expect(input!.selectionEnd).toBe(input!.value.length);
     // 进入编辑态后 ⋯ 让位给「保存名称」
     expect(byAria("保存名称")).toBeTruthy();
   });

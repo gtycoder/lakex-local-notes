@@ -583,7 +583,9 @@
   font-variant-numeric: tabular-nums;
 }
 .ln-tabs__item.is-active .ln-tabs__count { background: var(--lake-bg-selected); color: var(--lake-fg-selected); }
-.ln-tabs__action { height: var(--lake-ctl-h-sm); }
+/* 页签行右侧动作：高度按次级按钮档，并且**在页签行里垂直居中**（.ln-tabs 是 align-items:stretch，
+   不写 align-self 会被拉成整行高、文字贴着上下边）。261106 用户验收：动作回到页签行右侧并居中。 */
+.ln-tabs__action { align-self: center; height: var(--lake-ctl-h-sm); }
 
 .ln-toolbar { gap: var(--lake-space-md); padding: var(--lake-space-sm) var(--lake-space-xl) 0; }
 .ln-toolbar__info { color: var(--lake-text-3); font-size: var(--lake-font-size-small); }

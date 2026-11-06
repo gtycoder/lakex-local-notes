@@ -142,11 +142,19 @@ describe("InlineRenameInput：交互", () => {
     expect(calls.cancels).toBe(1);
   });
 
-  it("selectOnFocus 才全选（目录弹窗现状；标签行内输入不受影响）", () => {
+  it("默认聚焦即全选（261106：新建/重命名打开就是全选，直接打字整体替换）", () => {
     let selected = 0;
-    render({ initial: "原名字", policy: "fallback", selectOnFocus: true });
+    render({ initial: "原名字", policy: "fallback" });
     input().select = () => { selected += 1; };
     act(() => { input().dispatchEvent(new FocusEvent("focusin", { bubbles: true })); });
     expect(selected).toBe(1);
+  });
+
+  it("selectOnFocus={false} 可关掉全选（留给「光标落末尾」的场景）", () => {
+    let selected = 0;
+    render({ initial: "原名字", policy: "fallback", selectOnFocus: false });
+    input().select = () => { selected += 1; };
+    act(() => { input().dispatchEvent(new FocusEvent("focusin", { bubbles: true })); });
+    expect(selected).toBe(0);
   });
 });

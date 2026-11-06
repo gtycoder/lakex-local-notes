@@ -277,16 +277,7 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
             <History size={16} />
             <h2>历史版本</h2>
           </div>
-          {/* 261106：动作收到标题栏右侧（与回收站/设置等面板同位置）。此前挂在 .ln-tabs 行里当
-              「第三个页签」，描边小块贴着页签、与标题栏脱节。只做视觉与位置调整，行为不变。 */}
-          <div className="panel-actions">
-            {tab === "history" && (
-              <button className="ln-btn ln-btn--secondary" onClick={() => void createSnapshot()} title="手动创建快照">
-                <Camera size={14} /> 创建快照
-              </button>
-            )}
-            <button className="ln-close" onClick={onClose} aria-label="关闭"><X size={16} /></button>
-          </div>
+          <button className="ln-close" onClick={onClose} aria-label="关闭"><X size={16} /></button>
         </header>
         {/* 页签走 kit 层原语（.ln-tabs：墨线 + 计数徽标） */}
         <div className="ln-tabs">
@@ -298,6 +289,13 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
               <Trash size={14} /> 未引用文件<span className="ln-tabs__count">{orphans.length}</span>
             </button>
           </div>
+          {/* 261106 用户验收：动作回到页签行右侧（不是标题栏），与页签文字垂直居中；
+              几何由 kit 原语 `.ln-tabs__action`（align-self:center + 次级按钮高度）统一。 */}
+          {tab === "history" && (
+            <button className="ln-btn ln-btn--secondary ln-tabs__action" onClick={() => void createSnapshot()} title="手动创建快照">
+              <Camera size={14} /> 创建快照
+            </button>
+          )}
         </div>
         <p className="history-hint">
           {tab === "history" ? "历史快照保存在本地，不参与同步。恢复前会自动保存当前版本。" : "未引用的资源文件（被历史引用的受保护，不会误删）。"}

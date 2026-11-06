@@ -17,7 +17,7 @@ import { Database, PenTool, Table } from "lucide-react";
 import { getCreateMenuPosition, type CreateMenuPosition } from "../model/createMenuPosition";
 import { ExportSubmenuItem, type ExportFormat } from "../ui/ExportSubmenuItem";
 import { SIDEBAR_DEFAULT_WIDTH } from "../../core/layoutConstants";
-import { Dialog, Menu, Popover, Submenu } from "../ui/Overlay";
+import { Dialog, Menu, Popover } from "../ui/Overlay";
 import { rubberBandWidth, SplitHandle } from "../ui/SplitHandle";
 import { usePopoverPosition } from "../../hooks/usePopoverPosition";
 // 行内重命名的 Enter/Esc/空名口径统一走共用原语（DT-12；目录这里保留「弹窗 + 空名不提交」的现状）
@@ -544,7 +544,6 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
     setCreateMenu(null);
     openCreateDialog(kind, parentId);
   };
-  const menuNewChild = (kind: "group" | "note" | "usheet" | "bitable" | "board" | "ink") => createChild(contextNode, kind);
 
 
   const menuRename = () => {
@@ -723,7 +722,7 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
               : "点击 + 新建第一个笔记本"
         }</div>}
       </nav>
-      {contextMenu && contextNode && <ContextMenu node={contextNode} x={contextMenu.x} y={contextMenu.y} onNewChild={menuNewChild} onRename={menuRename} onDelete={menuDelete} onCopyMarkdown={() => props.onCopyMarkdown(contextNode)} onExportAs={(format) => props.onExportAs(contextNode, format)} onCopyPaths={() => props.onCopyPaths(contextNode)} onShowInfo={() => props.onShowInfo(contextNode)} onOpenHistory={() => props.onOpenHistory(contextNode)} locked={contextNode.noteFileId ? props.lockedNoteIds.has(contextNode.noteFileId) : false} onToggleLock={() => props.onToggleLockNote(contextNode)} onAddTags={() => setTagEditor({ noteId: contextNode.noteFileId ?? contextNode.id, title: contextNode.title })} onClose={() => setContextMenu(null)} />}
+      {contextMenu && contextNode && <ContextMenu node={contextNode} x={contextMenu.x} y={contextMenu.y} onRename={menuRename} onDelete={menuDelete} onCopyMarkdown={() => props.onCopyMarkdown(contextNode)} onExportAs={(format) => props.onExportAs(contextNode, format)} onCopyPaths={() => props.onCopyPaths(contextNode)} onShowInfo={() => props.onShowInfo(contextNode)} onOpenHistory={() => props.onOpenHistory(contextNode)} locked={contextNode.noteFileId ? props.lockedNoteIds.has(contextNode.noteFileId) : false} onToggleLock={() => props.onToggleLockNote(contextNode)} onAddTags={() => setTagEditor({ noteId: contextNode.noteFileId ?? contextNode.id, title: contextNode.title })} onClose={() => setContextMenu(null)} />}
       {createMenu && <CreateMenu anchor={createMenu.anchor} onNewChild={(kind) => createChild(createMenu.node, kind)} onClose={() => setCreateMenu(null)} />}
       {editingId && <TreeRenameDialog key={editingId} initial={editingTitle} onCancel={cancelRename} onConfirm={submitRename} />}
       {createDialog && (() => {
@@ -962,7 +961,6 @@ interface ContextMenuProps {
   node: TreeNode;
   x: number;
   y: number;
-  onNewChild: (kind: "group" | "note" | "usheet" | "bitable" | "board" | "ink") => void;
   onRename: () => void;
   onDelete: () => void;
   onCopyMarkdown: () => void;
@@ -1062,7 +1060,7 @@ function CreateMenu({ anchor, onNewChild, onClose }: { anchor: HTMLElement; onNe
   );
 }
 
-const ContextMenu = ({ node, x, y, onNewChild, onRename, onDelete, onCopyMarkdown, onExportAs, onCopyPaths, onShowInfo, onOpenHistory, locked, onToggleLock, onAddTags, onClose }: ContextMenuProps) => {
+const ContextMenu = ({ node, x, y, onRename, onDelete, onCopyMarkdown, onExportAs, onCopyPaths, onShowInfo, onOpenHistory, locked, onToggleLock, onAddTags, onClose }: ContextMenuProps) => {
   const menuRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
   // 视口边缘翻转：按光标先挂载，量出菜单真实尺寸后再定位——下方放不下就向上展开，保证整张菜单可点。
@@ -1087,11 +1085,8 @@ const ContextMenu = ({ node, x, y, onNewChild, onRename, onDelete, onCopyMarkdow
   // 相对侧边栏定位，导致菜单偏离光标右下；挂到 body 后恢复真正的视口固定定位。
   return (
     <Menu surfaceClassName="context-menu" onDismiss={onClose} surfaceRef={menuRef} style={pos ? { left: pos.left, top: pos.top } : { left: x, top: y, visibility: "hidden" }}>
-      {/* 「新建」收进子菜单：同一组创建动作只占一行，避免右键菜单过长（290930 用户） */}
-      <Submenu label={<><Plus size={15} /><span>新建</span></>}>
-        <CreateChildItems onNewChild={onNewChild} onClose={onClose} />
-      </Submenu>
-      <div className="context-menu-sep" />
+      {/* 261106 用户验收：右键菜单**不再提供「新建」**（行内/头部的「＋」已是唯一入口，
+          同一组创建动作只保留一处，菜单更短）。创建动作仍走 CREATE_CHILD_ITEMS 单一来源。 */}
       {node.nodeType === "note" ? (
         <>
           <button role="menuitem" onClick={() => { onRename(); onClose(); }}><Pencil size={15} /><span>重命名</span></button>

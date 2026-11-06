@@ -143,7 +143,7 @@ describe("Sidebar 六个 kind 统一新建弹窗", () => {
   it.each(SIX_KINDS)("$label：弹窗标题/预填默认名 → Enter 用默认名创建（带父级）", async ({ label, kind, title, inputLabel, defaultName }) => {
     props.onCreate = vi.fn(async () => "new-node");
     render();
-    // 目录行「＋」快捷新建（与右键「新建」子菜单同一份动作）
+    // 目录行「＋」快捷新建（261106 起这是唯一创建入口）
     act(() => byAria("新建子项").click());
     act(() => byText(label).click());
     expect(document.body.querySelector('[role="dialog"]')).not.toBeNull();
@@ -170,11 +170,32 @@ describe("Sidebar 六个 kind 统一新建弹窗", () => {
     expect(document.body.querySelector('[role="dialog"]')).toBeNull();
   });
 
-  it("右键「新建」子菜单同样走统一弹窗（表格）：预填「无标题表格」", () => {
+  it("261106：右键菜单不再有「新建」（创建入口只剩目录行/头部 ＋）", () => {
     render();
     const row = document.body.querySelector<HTMLElement>('[data-tree-node-id="book"]')!;
     act(() => { row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true })); });
-    act(() => byText("新建表格").click());
-    expect(document.body.querySelector<HTMLInputElement>('input[aria-label="表格名称"]')!.value).toBe("无标题表格");
+    const menu = document.body.querySelector('[role="menu"]')!;
+    expect(menu).not.toBeNull();
+    expect(menu.textContent).not.toContain("新建");
+    // 其余动作仍在（重命名/删除）
+    expect(menu.textContent).toContain("重命名");
+    expect(menu.textContent).toContain("删除");
+    expect(document.body.querySelector('input[aria-label="表格名称"]')).toBeNull();
+  });
+});
+/**
+ * 261106 用户验收：重命名弹窗打开后**名称默认全选**（直接打字即整体替换）。
+ * 目录节点重命名 = TreeRenameDialog（内部仍走 InlineRenameInput 的默认 selectOnFocus，不手写 selection）。
+ */
+describe("Sidebar 重命名弹窗（默认全选）", () => {
+  it("pendingRenameId 打开重命名弹窗：输入框内容全选", () => {
+    props.pendingRenameId = "n1";
+    render();
+    const input = document.body.querySelector<HTMLInputElement>('input[aria-label="节点名称"]')!;
+    expect(input).not.toBeNull();
+    expect(input.value).toBe("n1");
+    expect(input.selectionStart).toBe(0);
+    expect(input.selectionEnd).toBe(input.value.length);
+    expect(props.onPendingRenameConsumed).toHaveBeenCalled();
   });
 });

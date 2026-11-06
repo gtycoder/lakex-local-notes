@@ -1,4 +1,4 @@
-import { app, BrowserWindow, crashReporter, dialog, ipcMain, Menu, nativeTheme, powerMonitor, screen, session, shell, type IpcMainEvent, type WebFrameMain } from "electron";
+import { app, BrowserWindow, crashReporter, ipcMain, Menu, nativeTheme, powerMonitor, screen, session, shell, type IpcMainEvent, type WebFrameMain } from "electron";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -52,7 +52,7 @@ import { registerSyncConflictIpc } from "./ipc/registerSyncConflictIpc.js";
 import { registerBackupIpc, type BackupIpcRunner } from "./ipc/registerBackupIpc.js";
 import { AUTO_BACKUP_TICK_MS, decideAutoBackup, readDatabaseFingerprint, runBackupCycle } from "./autoBackup.js";
 import { createIpcRegistrar } from "./ipc/registrar.js";
-import { registerNotesIpc } from "./ipc/registerNotes.js";
+import { pickBackupDatabaseDialog, registerNotesIpc } from "./ipc/registerNotes.js";
 import { DraftJournal, draftJournalDir } from "./draftJournal.js";
 import { registerHistoryIpc } from "./ipc/registerHistory.js";
 import { registerWebIpc } from "./ipc/registerWeb.js";
@@ -787,15 +787,8 @@ if (!app.requestSingleInstanceLock()) {
         },
         async restoreFromBackup() {
           // Batch4-A：从整库备份导入恢复。文件选择框在主进程（渲染层拿不到任意路径），
-          // 校验失败/回滚都明确回传；成功后窗口模块会先展示「原库隔离到哪」再重启。
-          const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
-          const picked = await dialog.showOpenDialog(win, {
-            title: "选择整库备份（metadata*.sqlite3）",
-            buttonLabel: "用此备份恢复",
-            properties: ["openFile"],
-            filters: [{ name: "SQLite 备份", extensions: ["sqlite3"] }],
-          });
-          const chosen = picked.canceled ? null : (picked.filePaths[0] ?? null);
+          // defaultPath 与设置入口共用同一个选择框（autoBackup.backupsDir 单一来源）。
+          const chosen = await pickBackupDatabaseDialog(userDataDir, { buttonLabel: "用此备份恢复" });
           if (!chosen) return { ok: false, message: "已取消选择备份文件" };
           if (!rememberRestoreCandidate(chosen)) {
             return { ok: false, message: "备份文件无效：请选择由本应用「整库备份/导出」产生的 metadata*.sqlite3 文件（其他文件名不支持）" };
@@ -985,7 +978,6 @@ if (!app.requestSingleInstanceLock()) {
       const r = store.cleanupHistory();
       store.recordHistoryCleanup(r);
       if (r.deletedSnapshots > 0) log.history.info(`[history] 启动兜底清理：删除 ${r.deletedSnapshots} 份过期快照`);
-      if ((r.dedupedSnapshots ?? 0) > 0) log.history.info(`[history] 启动清理：收敛同内容重复快照 ${r.dedupedSnapshots} 份（保留最新一条）`);
     } catch (error) { console.warn("[history] 启动兜底清理失败:", error); }
     // 定时器管理：配置变更（设置面板保存）后重启定时器
     let snapshotTimer: NodeJS.Timeout | null = null;
@@ -1026,7 +1018,6 @@ if (!app.requestSingleInstanceLock()) {
             const r = store.cleanupHistory();
             store.recordHistoryCleanup(r);
             if (r.deletedSnapshots > 0) log.history.info(`[history] 定期清理：删除 ${r.deletedSnapshots} 份过期快照`);
-        if ((r.dedupedSnapshots ?? 0) > 0) log.history.info(`[history] 定期清理：收敛同内容重复快照 ${r.dedupedSnapshots} 份（保留最新一条）`);
           } catch (error) { console.warn("[history] 定期清理失败:", error); }
         }, cfg.cleanupIntervalHours * 3600 * 1000);
       }

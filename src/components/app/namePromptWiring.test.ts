@@ -110,3 +110,22 @@ describe("统一新建弹窗（NamePromptDialog）", () => {
     expect(TAGS).not.toContain("tags-dir__create");
   });
 });
+/**
+ * 261106 用户验收：所有新建/重命名输入**打开即全选名称**（直接打字即整体替换）。
+ * 实现只有一处：InlineRenameInput 的 selectOnFocus（默认开启 + 挂载后补选，覆盖 portal 首帧聚焦）；
+ * 调用方不得各自手写 onFocus/select（否则又会出现「有的输入框全选、有的不全选」）。
+ */
+describe("新建/重命名输入：默认全选（单一实现）", () => {
+  const INPUT = read("../ui/InlineRenameInput.tsx");
+  it("默认 selectOnFocus=true，且挂载后补一次 select（覆盖 Dialog 布局阶段聚焦的 portal 首帧）", () => {
+    expect(INPUT).toMatch(/selectOnFocus = true,/);
+    expect(INPUT).toMatch(/useEffect\(\(\) => \{\s*if \(!selectOnFocus\) return;/);
+    expect(INPUT).toMatch(/el\.select\(\)/);
+  });
+  it("各调用方不再手写 selection（只传/继承原语）", () => {
+    for (const src of [DIALOG, SIDEBAR, TAGS, read("../../features/quickNotes/QuickNoteTagManager.tsx")]) {
+      expect(src).not.toMatch(/\.select\(\)/);
+      expect(src).not.toContain("onFocus={");
+    }
+  });
+});

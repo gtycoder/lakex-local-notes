@@ -1,4 +1,4 @@
-import { useRef, type Ref } from "react";
+import { useCallback, useEffect, useRef, type Ref } from "react";
 
 /**
  * 行内重命名输入（DT-12，261028）：把「Enter 提交 / Esc 取消 / 失焦是否提交 / 空名怎么办」收敛成一个原语。
@@ -46,7 +46,11 @@ export interface InlineRenameInputProps {
   emptyPolicy: RenameEmptyPolicy;
   /** 失焦也走提交（默认 false：三处现状都只在 Enter 提交）。 */
   commitOnBlur?: boolean;
-  /** 聚焦即全选（目录重命名弹窗现状；标签行内输入保持不选）。 */
+  /**
+   * 聚焦即全选（**默认开启**，261106 用户验收：新建/重命名打开后名称默认全选，直接打字即整体替换）。
+   * 传 false 可关掉（例如以后要「光标落在末尾继续补全」的场景）；
+   * 统一由这一处实现，**调用方不要再手写 onFocus + select()**。
+   */
   selectOnFocus?: boolean;
   className?: string;
   /** 映射到 aria-label（调用方各自的原值）。 */
@@ -65,7 +69,7 @@ export function InlineRenameInput({
   onCancel,
   emptyPolicy,
   commitOnBlur = false,
-  selectOnFocus = false,
+  selectOnFocus = true,
   className,
   ariaLabel,
   autoFocus = false,
@@ -75,6 +79,25 @@ export function InlineRenameInput({
 }: InlineRenameInputProps) {
   /** Enter/Esc 已收尾后，紧随其后的 blur 不能再提交一次（提交常伴随失焦或卸载）。 */
   const settledRef = useRef(false);
+  /** 内部 ref：既转发给调用方（Dialog initialFocus 要它），又用于「打开即全选」的补选。 */
+  const innerRef = useRef<HTMLInputElement | null>(null);
+  const assignRef = useCallback((node: HTMLInputElement | null) => {
+    innerRef.current = node;
+    if (typeof inputRef === "function") inputRef(node);
+    else if (inputRef) (inputRef as { current: HTMLInputElement | null }).current = node;
+  }, [inputRef]);
+
+  /**
+   * 打开即全选（261106 用户验收）。为什么不能只靠 onFocus：弹窗里的输入框由 `Dialog` 的 initialFocus
+   * 在**布局阶段**的 focus() 聚焦（portal 首帧），React 的 focus 合成事件在那时可能还没挂上 ⇒ 实测
+   * `select()` 一次都没被调用（selection 停在 value 末尾）。这里在挂载后的被动 effect 里补一次，
+   * onFocus 仍然保留（用户之后 Tab 回来再全选）。两处都在这一组件内，调用方不手写 selection。
+   */
+  useEffect(() => {
+    if (!selectOnFocus) return;
+    const el = innerRef.current;
+    if (el && document.activeElement === el) el.select();
+  }, [selectOnFocus]);
 
   const settle = () => {
     const plan = resolveRenameCommit(value, emptyPolicy);
@@ -86,7 +109,7 @@ export function InlineRenameInput({
 
   return (
     <input
-      ref={inputRef}
+      ref={assignRef}
       className={className}
       value={value}
       aria-label={ariaLabel}

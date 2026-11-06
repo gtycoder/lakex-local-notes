@@ -406,57 +406,15 @@ export class HistoryLifecycle {
     this.ctx.logScopes.history.info(`[perf] delete-history ${historyId} ${Date.now() - t0}ms`);
   }
 
-  /**
-   * 一次性收敛历史重复行（261106 定稿）：同一 note + 同 content_hash 只保留**最新**一条，
-   * 删除其余行与其 .body.gz（同内容 ⇒ refs 相同，不会误删资源引用；不同 hash 一行不动）。
-   * 幂等；只处理「同 note 同 hash」，保留行用 created_at DESC,id DESC 取最新。
-   * 文件删除失败仍删行（孤儿文件由资源页/孤儿清理兜底，与 deleteHistory 同口径）。
-   */
-  dedupeHistorySnapshots(): { deletedRows: number; freedBytes: number; groups: number } {
-    const t0 = Date.now();
-    const rows = this.ctx.db.prepare(
-      "SELECT id,note_id,file_path,content_hash,created_at FROM note_history ORDER BY note_id, content_hash, created_at DESC, id DESC",
-    ).all() as Array<{ id: number; note_id: string; file_path: string; content_hash: string; created_at: string }>;
-    const kept = new Set<string>(); // noteId\0hash（该组最新一条已保留）
-    const drop: typeof rows = [];
-    for (const row of rows) {
-      const key = row.note_id + "\u0000" + row.content_hash;
-      if (!kept.has(key)) { kept.add(key); continue; }
-      drop.push(row);
-    }
-    let freedBytes = 0;
-    const groups = new Set(drop.map((row) => row.note_id + "\u0000" + row.content_hash)).size;
-    for (const row of drop) {
-      try {
-        const abs = path.join(this.ctx.root, row.file_path);
-        if (fs.existsSync(abs)) {
-          freedBytes += fs.statSync(abs).size;
-          fs.rmSync(abs, { force: true });
-        }
-      } catch { /* 文件删失败仍删行 */ }
-    }
-    if (drop.length > 0) {
-      const del = this.ctx.db.prepare("DELETE FROM note_history WHERE id=?");
-      this.ctx.db.transaction(() => { for (const row of drop) del.run(row.id); })();
-    }
-    const deletedRows = drop.length;
-    if (deletedRows > 0) {
-      this.ctx.logScopes.history.warn("[history] 收敛重复快照 " + deletedRows + " 行（" + groups + " 组，释放 " + freedBytes + "B）耗时 " + (Date.now() - t0) + "ms");
-    }
-    return { deletedRows, freedBytes, groups };
-  }
-
-  /** 惰性清理：先收敛同 note 同 hash 重复行，再按保留策略（每文档超 100 份删最旧；created_at < 30 天删）。
-   * 删除后对受影响文档重算引用，无引用资源物理删（方案 A）。 */
+  /** 惰性清理：每文档超 100 份删最旧；created_at < 30 天删。
+   * 删除后对受影响文档重算引用，无引用资源物理删（方案 A）。
+   * 261106 用户定稿：**不为历史数据写收敛/自动清理逻辑**（存量重复快照用户可自己删）；
+   * 这里只做保留策略删除，创建侧的同内容去重见 createHistorySnapshot。 */
   cleanupHistory(): HistoryCleanupResult {
     const t0 = Date.now();
     // P5 + M8：保留策略可配置（份数硬上限 + 天数兜底 + 分层保留判定）
     const cfg = this.ctx.getHistorySettings();
-    const result: HistoryCleanupResult = { deletedSnapshots: 0, freedBytes: 0, dedupedSnapshots: 0 };
-    // 261106：先收敛「同 note 同 hash」重复行（旧 24h 窗口造成的存量重复）；幂等、每天/启动各一次即可。
-    const deduped = this.dedupeHistorySnapshots();
-    result.dedupedSnapshots = deduped.deletedRows;
-    result.freedBytes += deduped.freedBytes;
+    const result: HistoryCleanupResult = { deletedSnapshots: 0, freedBytes: 0 };
     const notes = this.ctx.db.prepare("SELECT DISTINCT note_id FROM note_history").all() as Array<{ note_id: string }>;
     for (const { note_id } of notes) {
       const rows = this.ctx.db.prepare(
@@ -495,7 +453,7 @@ export class HistoryLifecycle {
       this.ctx.cleanupUnreferencedAssetsForNote(note_id);
     }
     this.pruneEmptyHistoryDirs();
-    this.ctx.logScopes.history.info(`[perf] cleanup-history ${Date.now() - t0}ms (deleted=${result.deletedSnapshots}, deduped=${result.dedupedSnapshots ?? 0}, freed=${result.freedBytes}B)`);
+    this.ctx.logScopes.history.info(`[perf] cleanup-history ${Date.now() - t0}ms (deleted=${result.deletedSnapshots}, freed=${result.freedBytes}B)`);
     return result;
   }
 

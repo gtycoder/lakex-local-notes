@@ -16,8 +16,6 @@ export interface HistorySettings {
 export interface HistoryCleanupResult {
   deletedSnapshots: number;
   freedBytes: number;
-  /** 261106：本次收敛掉的「同 note 同 hash 重复快照」行数（保留最新一条）。 */
-  dedupedSnapshots?: number;
 }
 
 /** S3 连接配置（密钥落盘前经 SecretCipher 加密）：单一来源 = src/core/syncUtils.ts（261029 收口）。 */

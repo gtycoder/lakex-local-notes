@@ -53,6 +53,14 @@ describe("NamePromptDialog", () => {
     expect(document.activeElement).toBe(input());
   });
 
+  it("打开即全选名称（261106）：selection 覆盖整个 value（直接打字即整体替换）", () => {
+    render({ initialValue: "我的笔记本" });
+    const el = input();
+    expect(el.value).toBe("我的笔记本");
+    expect(el.selectionStart).toBe(0);
+    expect(el.selectionEnd).toBe(el.value.length);
+  });
+
   it("空名：创建按钮禁用、Enter 不提交", () => {
     const props = render();
     expect(button("创建").disabled).toBe(true);

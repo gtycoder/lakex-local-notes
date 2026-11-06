@@ -22,9 +22,34 @@ import { ensureTrashNoteAssets } from "../syncEngineController.js";
 import { prepareAttachmentOpen } from "../attachmentOpen.js";
 import { exportWorkspaceBackup, prepareCloudRestore, relaunchApp, writeS3RestoreSeed } from "../workspaceBackup.js";
 import { isRememberedRestoreCandidate, rememberRestoreCandidate, restoreMainDatabaseFromBackup } from "../workspaceRestoreFromBackup.js";
+import { backupsDir } from "../autoBackup.js";
 
 /** 多维表 CSV 导入文件大小上限（本地优先、量级有限，防一次性读入超大文件）。 */
 const MAX_CSV_IMPORT_BYTES = 20 * 1024 * 1024;
+
+/**
+ * 「从备份恢复」文件选择框（设置页 IPC 与启动恢复页共用，路径口径单一来源）：
+ * - defaultPath = `autoBackup.backupsDir(userData)`（自动备份写在这里），不手拼字符串；
+ * - **不检查目录是否存在、不抛**：目录还没建时 Electron 自行回落到父级/用户目录；
+ * - 用户取消返回 null。
+ */
+export async function pickBackupDatabaseDialog(
+  userDataDir: string,
+  labels: { title?: string; buttonLabel?: string } = {},
+): Promise<string | null> {
+  const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
+  let defaultPath: string | undefined;
+  try { defaultPath = backupsDir(userDataDir); } catch { defaultPath = undefined; }
+  const result = await dialog.showOpenDialog(win, {
+    title: labels.title ?? "选择整库备份（metadata*.sqlite3）",
+    buttonLabel: labels.buttonLabel ?? "选择备份",
+    properties: ["openFile"],
+    filters: [{ name: "SQLite 备份", extensions: ["sqlite3"] }],
+    ...(defaultPath ? { defaultPath } : {}),
+  });
+  if (result.canceled) return null;
+  return result.filePaths[0] ?? null;
+}
 
 /** 保存版本守卫的 baseHash：sha256 十六进制（64 位）；缺省/null/空串 = 不启用守卫（旧行为）。 */
 function assertBaseHash(value: unknown): string | undefined {
@@ -212,15 +237,8 @@ export function registerNotesIpc(
   });
   // ---- Batch4-A 从备份导入恢复：选择框在主进程登记候选，IPC 只接受登记过的路径（防目录穿越/任意路径）----
   ipc.handle("pick_backup_database", async () => {
-    const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
-    const result = await dialog.showOpenDialog(win, {
-      title: "选择整库备份（metadata*.sqlite3）",
-      buttonLabel: "选择备份",
-      properties: ["openFile"],
-      filters: [{ name: "SQLite 备份", extensions: ["sqlite3"] }],
-    });
-    if (result.canceled || !result.filePaths[0]) return null;
-    const filePath = result.filePaths[0];
+    const filePath = await pickBackupDatabaseDialog(app.getPath("userData"));
+    if (!filePath) return null;
     if (!rememberRestoreCandidate(filePath)) {
       throw new IpcInputError("备份文件无效：仅支持应用「整库备份/导出」产生的 metadata*.sqlite3 文件");
     }
