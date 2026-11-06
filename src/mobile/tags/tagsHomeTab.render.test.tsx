@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   deleteQuickNoteTag: vi.fn(async () => undefined),
   mergeQuickNoteTags: vi.fn(async () => undefined),
   reorderQuickNoteTags: vi.fn(async () => undefined),
+  readQuickNote: vi.fn(),
   showToast: vi.fn(),
   confirmMobile: vi.fn(async (_options?: { title?: string; body?: string }) => true),
 }));
@@ -33,6 +34,7 @@ vi.mock("../bridge", () => ({
     deleteQuickNoteTag: mocks.deleteQuickNoteTag,
     mergeQuickNoteTags: mocks.mergeQuickNoteTags,
     reorderQuickNoteTags: mocks.reorderQuickNoteTags,
+    readQuickNote: mocks.readQuickNote,
   },
 }));
 vi.mock("../ui/toastBus", () => ({ showToast: mocks.showToast }));
@@ -51,6 +53,7 @@ import type { QuickNoteTag } from "../../core/quickNoteTags";
 import type { LocalNoteSummary } from "../data/noteRepository";
 import type { MobileQuickNote } from "../home/HomePage";
 import { HomePage } from "../home/HomePage";
+import { consumeBack } from "../ui/backStack";
 import { TagsHomeTab } from "./TagsHomeTab";
 
 const readSource = (rel: string): string => readFileSync(path.join(process.cwd(), rel), "utf8");
@@ -75,6 +78,12 @@ const QUICKS = [
   quick("q2", "想法二", "2026-11-02T09:00:00.000Z", ["t_b"]),
 ];
 const LINKS = { n1: ["t_a"], n2: ["t_a", "t_b"] };
+
+// 富预览正文：待办勾选框（1111）+ 一张图片卡（资源在 readQuickNote 的 images 里）。
+const CHECKBOX = (state: "true" | "false") => '<card type="inline" name="checkbox" value="data:' + state + '"></card>';
+const RICH_BODY = '<ul class="lake-list"><li class="lake-list-node lake-list-task">' + CHECKBOX("false") + '<span>1111</span></li></ul>'
+  + '<p><card type="inline" name="image" value="data:%7B%22src%22%3A%22pic.png%22%7D"></card></p>';
+const PIC = { id: "pic.png", filename: "pic.png", mimeType: "image/png", width: 4, height: 4, size: 9, hash: "h" };
 
 class IntersectionObserverStub {
   observe(): void {}
@@ -145,6 +154,19 @@ beforeEach(() => {
   root = createRoot(host);
   mocks.listNoteTagLinks.mockReset();
   mocks.listNoteTagLinks.mockResolvedValue(LINKS);
+  mocks.readQuickNote.mockReset();
+  mocks.readQuickNote.mockImplementation(async (id: string) => ({
+    id,
+    content: {
+      text: id === "q1" ? "1111" : "想法二",
+      body: id === "q1" ? RICH_BODY : '<p>想法二</p>',
+      images: id === "q1" ? [PIC] : [],
+    },
+    tagIds: [],
+    tags: [],
+    previewText: id === "q1" ? "想法一" : "想法二",
+    updatedAt: "2026-11-06T09:00:00.000Z",
+  }));
   for (const fn of [mocks.setNoteTags, mocks.setQuickNoteTags, mocks.updateQuickNoteTag, mocks.deleteQuickNoteTag, mocks.mergeQuickNoteTags, mocks.reorderQuickNoteTags]) {
     fn.mockReset();
     fn.mockResolvedValue(undefined);
@@ -267,13 +289,59 @@ describe("行主区 / 长按拖拽", () => {
     expect(inDetail()).toBe(true);
     expect(host.textContent).toContain("文档（2）");
     expect(host.textContent).toContain("小记（1）");
-    expect(detailTitles()).toEqual(["周报", "月报", "想法一"]);
+    expect(detailTitles()).toEqual(["周报", "月报"]);
     await click(host.querySelector('.mb-set-item__main[role="button"]:not([aria-label])'));
     expect(onOpenNote).toHaveBeenCalledWith("n1");
     await click(byAria("返回标签列表"));
     await click(rowMain("工作"));
-    await click([...host.querySelectorAll('.mb-set-item__main[role="button"]:not([aria-label])')].find((el) => el.textContent?.includes("想法一")));
+    await click(byAria("打开小记 想法一"));
     expect(onOpenQuickNote).toHaveBeenCalledWith("q1");
+  });
+
+  it("详情里小记用首页同一套富预览：待办 → 只读勾选框、媒体按卡片规则、正文按需 readQuickNote", async () => {
+    await renderTab({ tags: [tag("t_a", "工作")] });
+    expect(mocks.readQuickNote).not.toHaveBeenCalled(); // 列表页不读正文
+    await click(rowMain("工作"));
+    expect(mocks.readQuickNote).toHaveBeenCalledWith("q1");
+    expect(mocks.readQuickNote).not.toHaveBeenCalledWith("n1"); // 文档行不需要正文
+    const preview = host.querySelector(".quick-note-preview");
+    expect(preview).not.toBeNull();
+    // 待办 = 勾选框（只读），不再显示 "[ ] 1111"
+    const box = preview!.querySelector<HTMLInputElement>('input[type="checkbox"]');
+    expect(box).toBeTruthy();
+    expect(box!.readOnly).toBe(true);
+    expect(preview!.textContent).toContain("1111");
+    // 媒体卡按卡片规则渲染成图片（资源来自 readQuickNote 的 images）
+    const img = preview!.querySelector("img");
+    expect(img).toBeTruthy();
+    expect(img!.getAttribute("src") ?? "").toContain("pic.png");
+
+    // 点勾选框：只读、不切换，也不触发打开小记。
+    const opened = onOpenQuickNote.mock.calls.length;
+    await click(box);
+    expect(onOpenQuickNote.mock.calls.length).toBe(opened);
+    // 点卡片其它位置：打开小记。
+    await click(byAria("打开小记 想法一"));
+    expect(onOpenQuickNote).toHaveBeenCalledWith("q1");
+  });
+
+  it("× 在行右侧（文档/小记同一套；小记卡不再有底部单独 ×）；详情返回键先回列表", async () => {
+    await renderTab({ tags: [tag("t_a", "工作")] });
+    await click(rowMain("工作"));
+    const removeButtons = [...host.querySelectorAll<HTMLElement>('.mb-set-item__ctl [aria-label^="移除标签"]')];
+    expect(removeButtons.map((el) => el.getAttribute("aria-label"))).toEqual(["移除标签「周报」", "移除标签「月报」", "移除标签「想法一」"]);
+    for (const button of removeButtons) {
+      expect(button.className).toContain("mb-iconbtn");   // 44×44 命中
+      expect(button.textContent ?? "").toBe("");          // 只有图标
+    }
+    // 小记行只有这一个 ×（没有底部单独一条动作行）。
+    const quickRow = host.querySelector('.mb-set-item__main[aria-label="打开小记 想法一"]')!.closest(".mb-set-item")!;
+    expect(quickRow.querySelectorAll("button")).toHaveLength(1);
+
+    // 详情注册了返回栈：consumeBack 先回列表（不会落到「两次返回退出」）。
+    await act(async () => { expect(consumeBack()).toBe(true); });
+    expect(inDetail()).toBe(false);
+    expect(listRows().length).toBeGreaterThan(0);
   });
 
   it("长按 350ms 拖拽 → reorderQuickNoteTags；拖拽后的那次 click 不进详情", async () => {

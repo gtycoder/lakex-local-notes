@@ -25,6 +25,8 @@ import { bridge } from "../bridge";
 import { confirmMobile } from "../ui/ConfirmDialog";
 import { MobileSheet } from "../ui/MobileSheet";
 import { MobileSheetMenu, type MobileSheetItem } from "../ui/MobileSheetMenu";
+import { pushBackHandler } from "../ui/backStack";
+import { TagQuickNotePreview } from "./TagQuickNotePreview";
 import { useLongPress } from "../ui/useLongPress";
 import { showToast } from "../ui/toastBus";
 import { aggregateTagRows, tagCounts, type NoteTagLinks, type TagAggregateRow } from "./tagAggregate";
@@ -115,6 +117,12 @@ export function TagsHomeTab({ tags, notes, quickNotes, active, onOpenNote, onOpe
   useEffect(() => {
     if (selectedTagId && !tags.some((tag) => tag.id === selectedTagId)) setSelectedTagId(null);
   }, [tags, selectedTagId]);
+
+  // 详情页的返回键：先回标签列表（返回 true 消费；不要落到「两次返回退出」那条兜底）。
+  useEffect(() => {
+    if (!selectedTagId) return;
+    return pushBackHandler(() => { setSelectedTagId(null); return true; });
+  }, [selectedTagId]);
 
   /** 任一写操作完成后：关系可能变了 ⇒ 关系 + App 快照一起刷。 */
   const reloadAll = useCallback(async (): Promise<void> => { await loadLinks(); await onChanged(); }, [loadLinks, onChanged]);
@@ -339,9 +347,9 @@ export function TagsHomeTab({ tags, notes, quickNotes, active, onOpenNote, onOpe
     setSelectedTagId(tag.id);
   };
 
-  /** 详情聚合行：main role=button（打开）+ 行尾 ×（IconButton 44；stopPropagation 只走移除）。 */
-  const renderDetailRow = (row: TagAggregateRow) => (
-    <div key={row.kind + row.id} className="mb-set-item">
+  /** 文档行：标题 + 时间；× 在行右侧中轴（IconButton 44；stopPropagation 只走移除）。 */
+  const renderDocRow = (row: TagAggregateRow) => (
+    <div key={"doc-" + row.id} className="mb-set-item">
       <div
         className="mb-set-item__main"
         role="button"
@@ -350,7 +358,38 @@ export function TagsHomeTab({ tags, notes, quickNotes, active, onOpenNote, onOpe
         onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openRow(row); } }}
       >
         <div className="mb-set-name">{row.title}</div>
-        <div className="mb-set-item__desc">{row.kind === "doc" ? "文档" : "小记"}　{fmtTime(row.updatedAt)}</div>
+        <div className="mb-set-item__desc">文档　{fmtTime(row.updatedAt)}</div>
+      </div>
+      <div className="mb-set-item__ctl">
+        <button
+          type="button"
+          className="mb-iconbtn"
+          disabled={busy}
+          aria-label={"移除标签「" + row.title + "」"}
+          onClick={(event) => { event.stopPropagation(); void removeRow(row); }}
+        >
+          <X size={18} />
+        </button>
+      </div>
+    </div>
+  );
+
+  /**
+   * 小记行（261106）：富预览（与首页卡片同一个 QuickNotePreview，正文按需 readQuickNote），
+   * × 与文档行同一套——放在右侧中轴（不再在卡片底部单独一行）。预览内勾选框只读、不切换。
+   */
+  const renderQuickRow = (row: TagAggregateRow) => (
+    <div key={"quick-" + row.id} className="mb-set-item">
+      <div
+        className="mb-set-item__main"
+        role="button"
+        tabIndex={0}
+        aria-label={"打开小记 " + row.title}
+        onClick={() => onOpenQuickNote(row.id)}
+        onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpenQuickNote(row.id); } }}
+      >
+        <TagQuickNotePreview noteId={row.id} fallbackText={row.title} />
+        <div className="mb-set-item__desc">小记　{fmtTime(row.updatedAt)}</div>
       </div>
       <div className="mb-set-item__ctl">
         <button
@@ -406,9 +445,9 @@ export function TagsHomeTab({ tags, notes, quickNotes, active, onOpenNote, onOpe
             ) : (
               <>
                 <h4 className="mb-set-title"><FileText size={14} />文档（{docs.length}）</h4>
-                <div className="mb-set-section">{docs.map(renderDetailRow)}</div>
+                <div className="mb-set-section">{docs.map(renderDocRow)}</div>
                 <h4 className="mb-set-title"><Feather size={14} />小记（{quickRows.length}）</h4>
-                <div className="mb-set-section">{quickRows.map(renderDetailRow)}</div>
+                <div className="mb-set-section">{quickRows.map(renderQuickRow)}</div>
               </>
             )}
           </>

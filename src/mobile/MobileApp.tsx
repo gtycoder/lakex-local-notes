@@ -36,6 +36,7 @@ import { usePadShortcuts } from "./pad/usePadShortcuts";
 // 小记编辑器 = 按需加载壳（预取过则同步渲染；未预取先骨架）——见 home/quickNoteComposerLazy.tsx
 import { CreateNotebookSheet } from "./settings/CreateNotebookSheet";
 import { useBackHandler } from "./hooks/useBackHandler";
+import { useDoubleBackExit } from "./hooks/useDoubleBackExit";
 import { useRouteTransition } from "./hooks/useRouteTransition";
 import { useAutoSync } from "./hooks/useAutoSync";
 import { readSyncProgress, subscribeSyncProgress } from "./sync/syncProgressStore";
@@ -529,6 +530,12 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
     workspaceBackRef.current = handler;
   }, []);
 
+  /**
+   * 首页最终兜底（261106 用户要求）：按一次不再直接退 App，先提示「再按一次退出应用」，2 秒内再按才退出。
+   * 只改这一处兜底；浮层 → 小记 → Sheet → Drawer → 工作区 的优先级仍由 useBackHandler 原样给出。
+   */
+  const handleAppExit = useDoubleBackExit({ exit: exitApp });
+
   // B1：Android 返回键（浮层返回栈 → Sheet→Drawer→笔记本→首页→系统；编辑态由工作区自己注册）
   useBackHandler({
     route,
@@ -540,10 +547,8 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
     onBackFromNotebook: requestWorkspaceBack,
     onCloseDrawer: () => setDrawerOpen(false),
     onCloseSheets: () => { setCreateNbOpen(false); setSearchOpen(false); },
-    onAppExit: () => {
-      // 首页返回：交给系统退出（@capacitor/app 默认行为）
-      exitApp();
-    },
+    // 首页返回：两次确认才退出（第一次只提示）。
+    onAppExit: handleAppExit,
   });
 
   /** 打开文档：一律进第二层工作区（此前"首页/搜索→DocumentPage、笔记本→NotebookWorkspace"两套壳，形态不一致）。
