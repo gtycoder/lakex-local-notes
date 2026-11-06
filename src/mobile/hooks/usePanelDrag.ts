@@ -121,9 +121,24 @@ export function usePanelDrag(handlers: PanelDragHandlers): void {
 
     const onEnd = () => {
       const s = cancelled ? null : side;
+      /** 本次触摸期间是否真的发生过跟手拖拽（apply 过）。纯点击 = false。 */
+      const hadDrag = dragging;
       const h = ref.current;
       stop();
       if (!s) { h.getMask("left")?.classList.remove(MASK_SWIPING); h.getMask("right")?.classList.remove(MASK_SWIPING); return; }
+      /**
+       * 纯点击（没发生过 touchmove）**不是抽屉手势**：不写内联 transform/opacity、不 commit、不排归位。
+       *
+       * 261106 用户反馈「点目录行 ⋯ 抽屉/背景闪烁」的根因就在这里：tap 的 touchend 原本也走下面这段 ——
+       *  ① 给 .side-panel 写 translateX(0px)（CSS transition: transform 250ms 被触发，0→0 的空过渡；
+       *     CDP 实测：tap+40ms transitionrun、+200ms transitioncancel，keyframes 两端都是 translate(0px)）；
+       *  ② 调 commit ⇒ 再提交一次 sidebar/树状态；
+       *  ③ 200ms 后清掉内联样式。
+       * 抽屉是 will-change: transform 的 fixed 图层 ⇒ 与行菜单的 scrim/sheet 入场同帧发生无意义的图层重绘，
+       * 观感就是「闪一下」。抽屉的稳定 open 态本来就由 overlay 派生（isTreeVisibleForOverlay），
+       * tap 不需要再提交一次。
+       */
+      if (!hadDrag) return;
       const width = window.innerWidth || 1;
       const raw = dir * (lastX - startX);
       const next = panelCommit(openAtStart, raw, Date.now() - startTime, width);
