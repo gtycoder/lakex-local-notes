@@ -42,7 +42,8 @@ import { pushBackHandler } from "../ui/backStack";
 import { readFavoriteIds, readFavoritesOpen, subscribeFavorites, writeFavoritesOpen } from "../data/favorites";
 import { QuickNoteComposerLazy } from "./quickNoteComposerLazy";
 import { MobileQuickNoteTagSheet } from "./MobileQuickNoteTagSheet";
-import { MobileQuickNoteTagManager } from "./MobileQuickNoteTagManager";
+import { TagsHomeTab } from "../tags/TagsHomeTab";
+import type { HomeTab } from "./tabPager";
 import { quickNoteDetailOf, useQuickNoteDetailCache } from "./useQuickNoteDetailCache";
 import { notifyMissingQuickNoteOnce } from "./missingQuickNoteNotice";
 import { useQuickNoteListModel } from "./useQuickNoteListModel";
@@ -71,7 +72,7 @@ const QUICK_NOTE_VIRTUAL_THRESHOLD = 24;
 export type LibraryView = "shelf" | "list";
 
 export interface HomePageProps {
-  tab: "quick" | "library";
+  tab: HomeTab;
   notebooks: TreeNode[];
   /** 全部笔记（解析「常用」文档的标题/时间用） */
   notes: LocalNoteSummary[];
@@ -80,7 +81,7 @@ export interface HomePageProps {
   tagDirectory: readonly QuickNoteTag[];
   /** 笔记本 → 文档数 */
   docCounts: Record<string, number>;
-  onTabChange: (tab: "quick" | "library") => void;
+  onTabChange: (tab: HomeTab) => void;
   onOpenNotebook: (id: string) => void;
   onOpenNote: (id: string) => void;
   onOpenDrawer: () => void;
@@ -95,6 +96,10 @@ export interface HomePageProps {
   onQuickNotesChanged: () => Promise<void>;
   /** 标签目录变了（建标签/改名/删除）：只刷新标签目录，不回读小记列表。 */
   onQuickNoteTagsChanged: () => Promise<void>;
+  /** 「标签」页点小记：回小记 tab 并定位/高亮（与全局搜索同一条通路）。 */
+  onOpenQuickNote?: (id: string) => void;
+  /** 标签目录/关系变了（标签页里的管理动作）：刷新快照。 */
+  onTagsChanged?: () => Promise<void>;
   /** 全局搜索命中小记：首页常驻组件接力定位/高亮该条（不自动进编辑态）。 */
   pendingQuickNoteId?: string | null;
   onPendingQuickNoteConsumed?: () => void;
@@ -133,7 +138,7 @@ function fmtRelative(iso: string): string {
 export function HomePage(props: HomePageProps) {
   const {
     tab, notebooks, notes, quickNotes, tagDirectory, docCounts, onTabChange, onOpenNotebook,
-    onOpenNote, onOpenDrawer, onOpenSearch, onOpenAi, onCreateNotebook, onCreateNote, onTreeChanged, onQuickNotesChanged, onQuickNoteTagsChanged,
+    onOpenNote, onOpenQuickNote, onTagsChanged, onOpenDrawer, onOpenSearch, onOpenAi, onCreateNotebook, onCreateNote, onTreeChanged, onQuickNotesChanged, onQuickNoteTagsChanged,
     pendingQuickNoteId, onPendingQuickNoteConsumed,
   } = props;
   const [composer, setComposer] = useState<ComposerState>(null);
@@ -142,7 +147,7 @@ export function HomePage(props: HomePageProps) {
   const [libraryView, setLibraryView] = useState<LibraryView>(() => (localStorage.getItem(VIEW_KEY) === "list" ? "list" : "shelf"));
   const [quickMenuFor, setQuickMenuFor] = useState<string | null>(null);
   const [tagSheetFor, setTagSheetFor] = useState<string | null>(null);
-  const [tagManagerOpen, setTagManagerOpen] = useState(false);
+
   const [filterOpen, setFilterOpen] = useState(false);
   // P0-6：同步进度（引擎 onProgress → 节流 → 顶部同步按钮 title/aria-label；不改 5 槽构图）。
   const [syncProgress, setSyncProgress] = useState<SyncProgressSnapshot | null>(() => readSyncProgress());
@@ -184,11 +189,13 @@ export function HomePage(props: HomePageProps) {
   const quickScrollRef = useRef<HTMLDivElement | null>(null);
   const quickCardsRef = useRef<HTMLDivElement | null>(null);
   const libraryPaneRef = useRef<HTMLElement | null>(null);
+  const tagsPaneRef = useRef<HTMLElement | null>(null);
 
-  // ③ 非活动页 inert：两页都在 DOM 里，不能让读屏/焦点摸到屏幕外那页。
+  // ③ 非活动页 inert：三页都在 DOM 里，不能让读屏/焦点摸到屏幕外那页。
   useEffect(() => {
     quickPaneRef.current?.toggleAttribute("inert", tab !== "quick");
     libraryPaneRef.current?.toggleAttribute("inert", tab !== "library");
+    tagsPaneRef.current?.toggleAttribute("inert", tab !== "tags");
   }, [tab]);
 
   // ④ 写作/编辑小记时锁横向分页：切走会清掉写作卡（= 丢草稿）。CSS 侧只留纵向滚动（touch-action: pan-y）。
@@ -332,7 +339,7 @@ export function HomePage(props: HomePageProps) {
     return pushBackHandler(() => { closeComposer(); return true; });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [composer]);
-  const switchTab = (next: "quick" | "library"): void => { onTabChange(next); };
+  const switchTab = (next: HomeTab): void => { onTabChange(next); };
   const runSync = async (): Promise<void> => {
     try {
       const r = await bridge.syncNow();
@@ -469,10 +476,11 @@ export function HomePage(props: HomePageProps) {
     }
   };
 
-  /** 标签管理写操作后：目录（名称/排序/置顶）与关系（合并/删除）都可能变 ⇒ 两边都刷新。 */
-  const applyTagManagerChanged = async (): Promise<void> => {
-    await onQuickNoteTagsChanged();
-    await onQuickNotesChanged();
+  /** 标签页写操作后：目录（新建/改名/排序）与关系（合并/删除）都可能变 ⇒ 两边一起刷新。
+   *  （261106：管理动作已搬到一级「标签」页，原小记标签条只保留筛选 + 「管理」跳转。） */
+  const applyTagsTabChanged = async (): Promise<void> => {
+    if (onTagsChanged) await onTagsChanged();
+    else { await onQuickNoteTagsChanged(); await onQuickNotesChanged(); }
   };
 
   // 排序（小记专用；知识库顺序 = 共享 sort_order = 桌面端顺序，不做本地排序）
@@ -558,12 +566,17 @@ export function HomePage(props: HomePageProps) {
         <div className="mobile-home-tabs">
           <button className={tab === "quick" ? "mobile-htab active" : "mobile-htab"} onClick={() => switchTab("quick")}>小记</button>
           <button className={tab === "library" ? "mobile-htab active" : "mobile-htab"} onClick={() => switchTab("library")}>知识库</button>
+          {/* 261106 用户验收：标签升为一级页（与小记/知识库并列，flomo 式：标签即入口）。 */}
+          <button className={tab === "tags" ? "mobile-htab active" : "mobile-htab"} onClick={() => switchTab("tags")}>标签</button>
         </div>
         {/* 用户 261014 定稿：排序（小记）/ 视图（知识库）+ 云同步**固定挂在顶栏右上角**，云同步恒在最右。 */}
         {tab === "quick" ? (
           <button className="toolbar__button" onClick={() => setFilterOpen(true)} aria-label="排序" title="排序"><ArrowUpDown /></button>
-        ) : (
+        ) : tab === "library" ? (
           <button className="toolbar__button" onClick={toggleView} aria-label={libraryView === "shelf" ? "切换到列表" : "切换到书架"} title={libraryView === "shelf" ? "切换到列表" : "切换到书架"}>{viewIcon}</button>
+        ) : (
+          // 标签页的「管理 / ＋新建」在页内头部（与语雀/ flomo 的"管理收在次级入口"同形）；这里留等宽空槽保持 tab 居中。
+          <span className="mobile-topbar-gap" aria-hidden="true" />
         )}
         <button
           className="toolbar__button"
@@ -616,7 +629,7 @@ export function HomePage(props: HomePageProps) {
                 <button className={"qn-tag" + (quickTagFilter.kind === "all" ? " is-selected" : "")} onClick={() => setQuickTagFilter({ kind: "all" })}>
                   <span>全部</span><span className="qn-tag__count">{quickNotes.length}</span>
                 </button>
-                <button className="qn-tag" aria-label="标签管理" onClick={() => setTagManagerOpen(true)}>
+                <button className="qn-tag" aria-label="标签管理" onClick={() => switchTab("tags")}>
                   <Settings2 size={14} /><span>管理</span>
                 </button>
                 {quickTagIndex.tags.map((tag) => (
@@ -718,6 +731,18 @@ export function HomePage(props: HomePageProps) {
           </section>
         </div>
         </section>
+        {/* 一级「标签」页（261106）：标签即入口 → 点进去看文档/小记 → 管理动作收在「管理」里。 */}
+        <section ref={tagsPaneRef} className="mobile-tab-pane">
+          <TagsHomeTab
+            tags={tagDirectory}
+            notes={notes}
+            quickNotes={quickNotes}
+            active={tab === "tags"}
+            onOpenNote={onOpenNote}
+            onOpenQuickNote={onOpenQuickNote ?? (() => showToast("小记入口暂不可用", { type: "error" }))}
+            onChanged={applyTagsTabChanged}
+          />
+        </section>
       </div>
 
       {/* 底部胶囊栏（首页，用户 261014 定稿）：搜索 | ＋ | AI。
@@ -759,13 +784,6 @@ export function HomePage(props: HomePageProps) {
         ]}
         onClose={() => setQuickMenuFor(null)}
         onSelect={(it) => { const id = quickMenuFor; setQuickMenuFor(null); if (!id) return; if (it.id === "edit") void openEdit(id); else if (it.id === "tag") setTagSheetFor(id); else if (it.id === "delete") void deleteQuickNote(id); }}
-      />
-
-      <MobileQuickNoteTagManager
-        open={tagManagerOpen}
-        tags={quickNoteTagOptions}
-        onClose={() => setTagManagerOpen(false)}
-        onChanged={applyTagManagerChanged}
       />
 
       {(() => {

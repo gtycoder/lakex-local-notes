@@ -137,9 +137,11 @@ describe("首页新建流（261014）", () => {
     expect(PRESS).toMatch(/export function blockPressRelease/);
   });
 
-  it("小记 ↔ 知识库 = 原生横向分页（跟手 + 松手吸附；写作会话锁横滑）", () => {
-    // 两页常驻在同一个横向滚动容器里（手指拖动时两页同时可见）——不是"按 tab 条件渲染 + 手写横滑"
-    expect((HOME.match(/className="mobile-tab-pane"/g) || []).length).toBe(2);
+  it("小记 / 知识库 / 标签 = 原生横向分页（跟手 + 松手吸附；写作会话锁横滑）", () => {
+    // 三页常驻在同一个横向滚动容器里（手指拖动时相邻页同时可见）——不是"按 tab 条件渲染 + 手写横滑"。
+    // 261106：标签升为一级页（HOME_TABS 三页），分页判据仍是同一套纯函数（count 参数控制页数）。
+    expect((HOME.match(/className="mobile-tab-pane"/g) || []).length).toBe(3);
+    expect(HOME).toContain("<TagsHomeTab");
     expect(HOME).not.toContain("useHorizontalSwipe");
     expect(HOME).not.toMatch(/key=\{tab\}/);
     // 分页判据/状态机 = 纯函数单一来源（home/tabPager 的 reducePager + 单测 tabPager.test.ts），

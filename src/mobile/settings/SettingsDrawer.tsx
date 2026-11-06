@@ -4,7 +4,7 @@
  * （settingsSearch.ts 的 SETTING_ITEMS 继续生效）。
  * 注意：全部 App 设置为竖向（无横向 tab）；「回收站」并入总回收站（见 TrashList）。 */
 import { Suspense, lazy, useEffect, useRef, useState } from "react";
-import { Archive, ArrowLeft, ChevronRight, Cloud, HardDrive, History, Images, Info, List, Palette, Pencil, RefreshCw, Sparkles, Tag, Trash, TriangleAlert, X } from "lucide-react";
+import { Archive, ArrowLeft, ChevronRight, Cloud, HardDrive, History, Images, Info, List, Palette, Pencil, RefreshCw, Sparkles, Trash, TriangleAlert, X } from "lucide-react";
 import { loadSettings, saveSettings, fontSizeOptions, MAX_ATTACHMENT_MB_OPTIONS_SETTINGS, type AppSettings } from "../../lib/settings";
 import { Group, Item, Block, Switch, TextField, Field } from "../ui/settingsPrimitives";
 import { bridge } from "../bridge";
@@ -31,10 +31,6 @@ import { SyncConflictsEntry, SyncConflictsSheet } from "./SyncConflictsSheet";
 import type { OrphanAsset } from "./useSettingsSectionData";
 import { showToast } from "../ui/toastBus";
 import { formatS3v3Diagnostics } from "../../core/s3v3Report";
-import { TagsSettingsSection } from "./TagsSettingsSection";
-import type { QuickNoteTag } from "../../core/quickNoteTags";
-import type { LocalNoteSummary } from "../data/noteRepository";
-import type { MobileQuickNote } from "../home/HomePage";
 
 /** 回收站只读预览（内含 Lake 内核编辑器）：**按需加载**——设置页/首屏都不需要内核。 */
 const TrashPreviewPage = lazy(() => import("../trash/TrashPreviewPage").then((m) => ({ default: m.TrashPreviewPage })));
@@ -45,17 +41,9 @@ export interface SettingsDrawerProps {
   onRefresh: () => Promise<void>;
   /** 点击同步告警：打开对应文档。 */
   onOpenNote?: (noteId: string) => void;
-  /** 「标签」页数据（App 已加载的快照）：目录 / 文档 / 小记；缺省时该页只显示空目录。 */
-  tagDirectory?: readonly QuickNoteTag[];
-  notes?: readonly LocalNoteSummary[];
-  quickNotes?: readonly MobileQuickNote[];
-  /** 标签页里点小记：回首页小记 tab 并定位（与全局搜索同一条通路）。 */
-  onOpenQuickNote?: (quickNoteId: string) => void;
-  /** 标签目录/关系变了：只刷标签子系统（不回读整份快照）。 */
-  onTagsChanged?: () => Promise<void>;
 }
 
-type View = "menu" | "editor" | "appearance" | "history" | "tags" | "resources" | "s3" | "backup" | "ai" | "cache" | "trash" | "about";
+type View = "menu" | "editor" | "appearance" | "history" | "resources" | "s3" | "backup" | "ai" | "cache" | "trash" | "about";
 
 /**
  * 设置分组（261105 晚，用户验收：对齐桌面）。
@@ -69,8 +57,6 @@ const MENU: { key: Exclude<View, "menu">; label: string; icon: typeof Cloud }[] 
   { key: "editor", label: "编辑器", icon: List },
   { key: "appearance", label: "外观", icon: Palette },
   { key: "history", label: "历史", icon: History },
-  // 261106 用户验收：标签目录管理 + 简化标签空间（桌面是独立工作区，移动端收进设置一页）。
-  { key: "tags", label: "标签", icon: Tag },
   { key: "resources", label: "资源管理", icon: Images },
   { key: "cache", label: "清理缓存", icon: HardDrive },
   { key: "trash", label: "回收站", icon: Trash },
@@ -80,7 +66,7 @@ const MENU: { key: Exclude<View, "menu">; label: string; icon: typeof Cloud }[] 
 const MENU_LABEL = (key: Exclude<View, "menu">) => MENU.find((m) => m.key === key)?.label ?? "";
 
 export function SettingsDrawer(props: SettingsDrawerProps) {
-  const { open, onClose, onRefresh, onOpenNote, onOpenQuickNote, onTagsChanged } = props;
+  const { open, onClose, onRefresh, onOpenNote } = props;
   const [view, setView] = useState<View>("menu");
 
   /** 小记桌面快捷方式：部分机型不展示静态快捷方式，这里给「添加到桌面」兜底（对齐思源）。 */
@@ -327,17 +313,6 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
           {view === "ai" && <AiSettingsSection form={aiFormState} />}
 
           {view === "history" && hist && <HistorySettingsSection hist={hist} updateHist={updateHist} />}
-
-          {view === "tags" && (
-            <TagsSettingsSection
-              tags={props.tagDirectory ?? []}
-              notes={props.notes ?? []}
-              quickNotes={props.quickNotes ?? []}
-              onOpenNote={(noteId) => { onOpenNote?.(noteId); onClose(); }}
-              onOpenQuickNote={(quickNoteId) => { onOpenQuickNote?.(quickNoteId); onClose(); }}
-              onChanged={onTagsChanged ?? onRefresh}
-            />
-          )}
 
           {view === "resources" && (
             <Group title="资源管理" icon={<Images size={16} />}>

@@ -12,6 +12,7 @@ import { isGoneNote } from "../core/syncDecisions";
 import { setNoteRefHost } from "../features/editor/noteRef";
 import type { TreeNode } from "../lib/types";
 import { HomePage, type MobileQuickNote } from "./home/HomePage";
+import type { HomeTab } from "./home/tabPager";
 import { consumeSharedContent, readSharedContentBytes, sharedContentKind, sharedContentToSeed, sharedContentUnsupportedHint, subscribeSharedContent, type QuickNoteSeed, type SharedContent } from "./native/sharedContent";
 import { importSharedPdfAsInkNote, sharedPdfImportToast } from "./ink/mobilePdfImport";
 import { SHARE_QUEUE_FULL_HINT, ShareQueue } from "./ink/shareQueue";
@@ -82,7 +83,7 @@ function exitApp(): void {
 }
 
 export type Route =
-  | { kind: "home"; tab: "quick" | "library" }
+  | { kind: "home"; tab: HomeTab }
   | { kind: "notebook"; notebookId: string; initialNoteId?: string | null; initialMode?: "viewer" | "editor" };
 
 export function MobileApp({ initialCapture = false }: { initialCapture?: boolean } = {}) {
@@ -661,12 +662,6 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
             onClose={() => setDrawerOpen(false)}
             onRefresh={refreshAll}
             onOpenNote={(id) => void openNote(id, "viewer")}
-            // 「标签」页（261106）：目录/文档/小记直接用 App 快照；点小记回首页定位（与全局搜索同一条通路）。
-            tagDirectory={tagDirectory}
-            notes={notes}
-            quickNotes={quickNotes}
-            onOpenQuickNote={openQuickNoteFromSearch}
-            onTagsChanged={refreshAll}
           />
         </MobileErrorBoundary>
       </DeferredPanel>
@@ -684,6 +679,9 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
           onTabChange={(tab) => setRoute({ kind: "home", tab })}
           onOpenNotebook={(id) => setRoute({ kind: "notebook", notebookId: id })}
           onOpenNote={(id) => void openNote(id, "viewer")}
+          // 「标签」页点小记：与全局搜索同一条定位通路（回小记 tab + 高亮）。
+          onOpenQuickNote={openQuickNoteFromSearch}
+          onTagsChanged={refreshAll}
           pendingQuickNoteId={pendingQuickNoteId}
           onPendingQuickNoteConsumed={() => setPendingQuickNoteId(null)}
           onOpenDrawer={() => setDrawerOpen(true)}
