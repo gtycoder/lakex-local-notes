@@ -568,6 +568,10 @@
 .note-row:active { background: var(--lake-bg-press); filter: none; }
 .note-row.active { color: var(--lake-fg-selected); background: var(--lake-bg-selected); }
 .note-row.active:hover { background: var(--lake-bg-selected-hover); }
+/* 目录树多选选中态（261106 task-81）：比单选 active 更轻（淡底 + 主色内描边），可与 active 共存 */
+.note-row.is-multi-selected { color: var(--lake-text-1); background: var(--lake-bg-selected); box-shadow: inset 0 0 0 0.5px var(--lake-accent); }
+.note-row.is-multi-selected:hover { background: var(--lake-bg-selected-hover); }
+.note-row.is-multi-selected .tree-row-icon { color: var(--lake-accent-text); }
 .note-row-copy strong {
   /* 260923：标题色 text-1（近黑）→ text-2（中灰）——与内核原生大纲的普通项同色，
      近黑在 500 字重下显得又重又密，中灰更轻更透气（用户对比原生大纲后要求）。 */

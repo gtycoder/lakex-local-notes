@@ -39,6 +39,13 @@ import { localAssetHttpUrl, withAssetWidth } from "../../core/assetUrl.js";
 import { formatListTime } from "../../core/dateFormat";
 import { withAssetAccessToken } from "../../lib/assetPort";
 import { pushBackHandler } from "../ui/backStack";
+import { useLongPress } from "../ui/useLongPress";
+import { useSelectionMode } from "../ui/useSelectionMode";
+import { SelectionActionBar, type SelectionAction } from "../ui/SelectionActionBar";
+import { SelectionCheckbox } from "../ui/SelectionCheckbox";
+import { SelectionTopBar } from "../ui/SelectionTopBar";
+import { BatchTagPickerSheet } from "../ui/BatchTagPickerSheet";
+import { summarizeBatchResult } from "../ui/batchNotesResult";
 import { readFavoriteIds, readFavoritesOpen, subscribeFavorites, writeFavoritesOpen } from "../data/favorites";
 import { QuickNoteComposerLazy } from "./quickNoteComposerLazy";
 import { MobileQuickNoteTagSheet } from "./MobileQuickNoteTagSheet";
@@ -226,6 +233,59 @@ export function HomePage(props: HomePageProps) {
     quickSortOptions,
     sortedQuickNotes,
   } = useQuickNoteListModel(quickNotes, quickNoteDetails, tagDirectory);
+
+  /**
+   * 多选模式（261106 task-82）：只给小记列表用（目录抽屉/标签页长按仍是拖拽，笔记本卡片长按仍是菜单）。
+   * 可见集合 = sortedQuickNotes（当前筛选+排序后的列表，全选/剪枝都以它为准）。
+   * 动作 = 打标签 / **移入回收站**（软删，可恢复；不做批量彻底删除）。
+   * 桥接（bridge.batchNotes）在 task-80 落地后接入，本阶段先占位提示。
+   */
+  const selection = useSelectionMode(sortedQuickNotes.map((note) => note.id));
+  const quickSelectionActions: SelectionAction[] = [
+    { id: "tag", label: "打标签", icon: Tag },
+    { id: "trash", label: "移入回收站", icon: Trash },
+  ];
+  /** 批量操作：打标签走选择器 Sheet；移入回收站走二次确认。桥 = bridge.batchNotes（软删，可恢复）。 */
+  const [batchTagOpen, setBatchTagOpen] = useState(false);
+  const [batchBusy, setBatchBusy] = useState(false);
+  const [batchError, setBatchError] = useState<string | null>(null);
+  const applyQuickBatch = async (payload: { action: "trash" | "tag-add"; tagIds?: string[] }): Promise<void> => {
+    if (selection.count === 0) { showToast("请先选择小记"); return; }
+    setBatchBusy(true);
+    setBatchError(null);
+    try {
+      const result = await bridge.batchNotes({ ...payload, ids: [...selection.ids], space: "quickNotes" });
+      const failed = result.summary.failed;
+      const summary = summarizeBatchResult(result, payload.action === "trash" ? "已移入回收站" : "已加标签");
+      if (failed > 0) showToast(summary, { type: "error" });
+      else showToast(summary);
+      if (failed > 0) { setBatchError(summarizeBatchResult(result, "")); return; }
+      setBatchTagOpen(false);
+      selection.exit();
+      await onQuickNotesChanged();
+    } catch (error) {
+      showToast((payload.action === "trash" ? "移入回收站失败：" : "加标签失败：") + (error as Error).message, { type: "error" });
+    } finally {
+      setBatchBusy(false);
+    }
+  };
+  const runQuickSelectionAction = (actionId: string): void => {
+    if (selection.count === 0) { showToast("请先选择小记"); return; }
+    if (actionId === "tag") { setBatchError(null); setBatchTagOpen(true); return; }
+    if (actionId === "trash") {
+      void confirmMobile({
+        title: "移入回收站？",
+        body: "将把选中的 " + selection.count + " 条小记移入回收站（可在小记回收站恢复，不会彻底删除）。",
+        confirmText: "移入回收站",
+        danger: true,
+      }).then((ok) => { if (ok) void applyQuickBatch({ action: "trash" }); });
+    }
+  };
+  // 选择态下返回键先退出多选（不退出 App）。
+  useEffect(() => {
+    if (!selection.active) return;
+    return pushBackHandler(() => { selection.exit(); return true; });
+  }, [selection.active]);
 
   /** 写作区/选择器用完整目录（含 0 条小记的新标签）；标签条只用有计数的索引。 */
   const quickNoteTagOptions = useMemo(
@@ -553,11 +613,23 @@ export function HomePage(props: HomePageProps) {
       onMore={() => setQuickMenuFor(note.id)}
       onFilterTag={(tagId) => setQuickTagFilter({ kind: "tag", id: tagId })}
       onToggleTask={(checkboxIndex, checked) => { void toggleCardTask(note.id, checkboxIndex, checked); }}
+      selecting={selection.active}
+      selected={selection.isSelected(note.id)}
+      onEnterSelect={() => selection.enter(note.id)}
+      onToggleSelect={() => selection.toggle(note.id)}
     />
   );
 
   return (
     <div className="mobile-home">
+      {selection.active && tab === "quick" ? (
+        <SelectionTopBar
+          count={selection.count}
+          allSelected={selection.allSelected}
+          onCancel={() => selection.exit()}
+          onToggleAll={() => selection.toggleAll()}
+        />
+      ) : (
       <header className="toolbar toolbar--border mobile-topbar">
         <button className="toolbar__button" onClick={onOpenDrawer} aria-label="设置" title="设置"><Settings /></button>
         {/* 左侧等宽空槽：右侧固定挂**两枚**图标（排序/视图 + 云同步）⇒ 左也补一格，tab 才真的居中
@@ -585,6 +657,7 @@ export function HomePage(props: HomePageProps) {
           title={syncProgress ? "同步中：" + describeSyncProgress(syncProgress) : "立即同步"}
         ><CloudUpload /></button>
       </header>
+      )}
 
       {syncProgress && (
         <div className={"mobile-sync-strip" + (syncPct < 0 ? " is-indeterminate" : "")} role="status" aria-live="polite">
@@ -751,7 +824,7 @@ export function HomePage(props: HomePageProps) {
           · AI 已是真实入口（261023 P1 接入 MobileAiPage；开启开关与接口配置在 设置 → AI 助手）。
           ⚠️ 小记写作时**让位**：写作卡底部挂的是文档编辑那条 dock（用户 261013 定稿），
           两条都贴底会打架（胶囊 z-index 更高会把 dock 盖住）⇒ 编辑会话期间不渲染胶囊。 */}
-      {composer === null && (
+      {composer === null && !selection.active && (
       /* **整块触发**（261014 用户定稿）：手势挂在整条胶囊上 —— 按住**任意处**约 260ms，整块变成「小记」；
          继续上滑越过触发线松手 = 速记一条小记；不上滑松手 = 取消。短按不接手势（pass），条目自己的 onClick 照常。 */
       <nav
@@ -850,13 +923,42 @@ export function HomePage(props: HomePageProps) {
         onClose={() => setDocPickOpen(false)}
         onSelect={(it) => { setDocPickOpen(false); onCreateNote(it.id); }}
       />
+
+      {batchTagOpen && (
+        <BatchTagPickerSheet
+          open={batchTagOpen}
+          options={quickNoteTagOptions}
+          count={selection.count}
+          busy={batchBusy}
+          error={batchError}
+          onClose={() => setBatchTagOpen(false)}
+          onConfirm={(tagIds) => { void applyQuickBatch({ action: "tag-add", tagIds: [...tagIds] }); }}
+        />
+      )}
+
+      {/* 多选模式的底部操作条（小记：打标签 / 移入回收站；不做批量彻底删除）。 */}
+      {selection.active && tab === "quick" && (
+        <SelectionActionBar fixed actions={quickSelectionActions} onAction={runQuickSelectionAction} />
+      )}
     </div>
   );
 }
 
 /** 小记卡片：大图 + 摘要 + 日期 + 「...」（有图必展示，无图留中性占位）。 */
-function QuickNoteCard({ note, revealed, dateValue, onEdit, onMore, onFilterTag, onRequestDetail, onToggleTask }: { note: MobileQuickNote; revealed: boolean; dateValue: string; onEdit: () => void; onMore: () => void; onFilterTag: (tagId: string) => void; onRequestDetail: (id: string) => void; onToggleTask: (checkboxIndex: number, checked: boolean) => void }) {
+function QuickNoteCard({ note, revealed, dateValue, onEdit, onMore, onFilterTag, onRequestDetail, onToggleTask, selecting, selected, onEnterSelect, onToggleSelect }: {
+  note: MobileQuickNote; revealed: boolean; dateValue: string;
+  onEdit: () => void; onMore: () => void; onFilterTag: (tagId: string) => void; onRequestDetail: (id: string) => void;
+  onToggleTask: (checkboxIndex: number, checked: boolean) => void;
+  /** 多选模式（261106 task-82）：长按卡片进入、选择态下点卡片切换勾选（不打开编辑器）。 */
+  selecting: boolean; selected: boolean; onEnterSelect: () => void; onToggleSelect: () => void;
+}) {
   const cardRef = useRef<HTMLDivElement | null>(null);
+  /** 长按进入多选后，抬手补发的那一次 click 要吞掉（否则会误开小记）。 */
+  const suppressTap = useRef(false);
+  const longPress = useLongPress(() => {
+    suppressTap.current = true;
+    onEnterSelect();
+  }, { moveCancelPx: 10 });
   useEffect(() => {
     if (note.body || typeof IntersectionObserver === "undefined") return;
     const node = cardRef.current;
@@ -884,7 +986,23 @@ function QuickNoteCard({ note, revealed, dateValue, onEdit, onMore, onFilterTag,
       )
     : null;
   return (
-    <div ref={cardRef} className={"qn-card" + (revealed ? " is-revealed" : "")} data-quick-note-id={note.id} role="button" tabIndex={0} onClick={onEdit}>
+    <div
+      ref={cardRef}
+      className={"qn-card" + (revealed ? " is-revealed" : "") + (selected ? " is-selected" : "")}
+      data-quick-note-id={note.id}
+      role="button"
+      tabIndex={0}
+      aria-pressed={selecting ? selected : undefined}
+      onTouchStart={longPress.onTouchStart}
+      onTouchMove={longPress.onTouchMove}
+      onTouchEnd={longPress.onTouchEnd}
+      onTouchCancel={longPress.onTouchCancel}
+      onClick={() => {
+        if (suppressTap.current) { suppressTap.current = false; return; }
+        if (selecting) { onToggleSelect(); return; }
+        onEdit();
+      }}
+    >
       {thumbUrl && (
         <div className="qn-card__cover">
           <img className="qn-card__img" src={thumbUrl} alt="" loading="lazy" />
@@ -909,7 +1027,11 @@ function QuickNoteCard({ note, revealed, dateValue, onEdit, onMore, onFilterTag,
         )}
         <div className="qn-card__meta">
           <span className="qn-card__date">{fmtDate(dateValue)}</span>
-          <button className="qn-card__more mb-tap" onClick={(e) => { e.stopPropagation(); onMore(); }} aria-label="更多"><MoreHorizontal size={18} /></button>
+          {selecting ? (
+            <SelectionCheckbox compact checked={selected} />
+          ) : (
+            <button className="qn-card__more mb-tap" onClick={(e) => { e.stopPropagation(); onMore(); }} aria-label="更多"><MoreHorizontal size={18} /></button>
+          )}
         </div>
         {note.tagIds.length > 0 && (
           <div className="qn-card__tags">

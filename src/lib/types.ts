@@ -273,6 +273,50 @@ export interface BackupUsageShape {
   warnings: string[];
 }
 
+/**
+ * 261106 批量操作（A 方案：显式「选择」模式）——**契约单一来源**，桌面 IPC `batch_notes` 与移动端
+ * `bridge.batchNotes` 同形同结果（core 编排见 `src/core/batchNotes.ts`）。
+ * action 只有 move | trash | tag-add | tag-remove：**没有 purge/物理删除，也没有 restore**（回收站不做多选）；
+ * trash = 移入回收站（lake → trashed_at；quickNotes → deleted_at），都可恢复。
+ */
+export type BatchNotesActionShape = "move" | "trash" | "tag-add" | "tag-remove";
+export type BatchNotesSpaceShape = "lake" | "quickNotes";
+
+export interface BatchNotesRequestShape {
+  action: BatchNotesActionShape;
+  /** 条目 id 列表（去重；上限 500）。字段名固定 ids（不是 targets）。 */
+  ids: string[];
+  /** 空间（缺省 lake）：quickNotes = 小记（trash 进小记回收站）。 */
+  space?: BatchNotesSpaceShape;
+  /** move：目标父级（null / 省略 = 根层）。 */
+  parentId?: string | null;
+  /** tag-add / tag-remove：标签 id（必须存在于目录）。 */
+  tagIds?: string[];
+}
+
+/** 逐条结果原因（与 core 的 BatchNotesReason 一致；新增取值属于契约变更，两端同步改）。 */
+export type BatchNotesReasonShape =
+  | "invalid-input" | "invalid-action" | "empty-ids" | "too-many-ids" | "invalid-id"
+  | "not-found" | "notebook-not-batchable" | "unsupported"
+  | "already-trashed"
+  | "parent-not-found" | "parent-not-a-container" | "parent-in-trash" | "parent-cycle"
+  | "tag-unavailable" | "tag-not-found"
+  | "failed";
+
+export interface BatchNotesItemResultShape {
+  id: string;
+  ok: boolean;
+  reason?: BatchNotesReasonShape;
+}
+
+export interface BatchNotesResultShape {
+  ok: boolean;
+  results: BatchNotesItemResultShape[];
+  summary: { total: number; done: number; failed: number };
+  reason?: BatchNotesReasonShape;
+  message?: string;
+}
+
 /** A3 数据体检（只读诊断）报告：检查本地数据自洽性，不自动修复。 */
 /** Batch4-B：文件↔元数据对账候选（文件在、笔记行丢了；只报告，不自动重建）。 */
 export interface FileReconcileCandidateShape {

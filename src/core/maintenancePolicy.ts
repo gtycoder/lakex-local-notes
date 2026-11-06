@@ -63,6 +63,9 @@ export const WRITE_OPS = [
   "trashNote", "trashTreeItem", "restoreTreeItem", "purgeTreeItem",
   // 261105 P1 第 4 项：同步记录账本的标已读（纯本地小写；恢复动作内部走 saveNote 的写域，不在此列）
   "ackSyncConflicts",
+  // 261106 批量操作（A 方案）：一份 IPC 里改多条本地行（move/trash/tag-*），纯本地写、不出网。
+  // 删除语义 = 移入回收站（软删），**不含 purge**；因此归写域而不是维护域。
+  "batchNotes",
   // 从云端恢复（261028 用户批准，换机/坏库）：只清本机 v3 同步账本（baseline/intents/pending）；
   // 随后的整轮「只拉不打」网络工作由 syncNow 的维护域自己取锁（本方法内**不**再取维护域，I3）。
   "restoreFromCloud",

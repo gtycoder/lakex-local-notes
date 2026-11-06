@@ -53,6 +53,7 @@ import { registerBackupIpc, type BackupIpcRunner } from "./ipc/registerBackupIpc
 import { AUTO_BACKUP_TICK_MS, decideAutoBackup, readDatabaseFingerprint, runBackupCycle } from "./autoBackup.js";
 import { createIpcRegistrar } from "./ipc/registrar.js";
 import { pickBackupDatabaseDialog, registerNotesIpc } from "./ipc/registerNotes.js";
+import { registerBatchNotesIpc } from "./ipc/registerBatchNotes.js";
 import { DraftJournal, draftJournalDir } from "./draftJournal.js";
 import { registerHistoryIpc } from "./ipc/registerHistory.js";
 import { registerWebIpc } from "./ipc/registerWeb.js";
@@ -563,6 +564,8 @@ function registerIpc(): ReadonlyMap<string, (args: unknown[]) => Promise<unknown
     "rename_tree_node", "set_node_icon",
     "move_tree_node", "move_tree_node_ordered", "reorder_tree_nodes",
     "delete_tree_node", "delete_note", "restore_trash", "purge_trash", "empty_trash",
+    // 261106 批量操作：一次调用改多条 ⇒ 整批只广播一次（不逐条）。
+    "batch_notes",
   ]);
   const afterInvoke = (channel: string): void => {
     // 目录树变更：无条件广播（不能被下面 pending 摘要的早退吞掉）。
@@ -597,6 +600,16 @@ function registerIpc(): ReadonlyMap<string, (args: unknown[]) => Promise<unknown
     webServerController?.broadcast(channel, payload);
   });
 
+  // 261106 批量操作（A 方案）：core 编排 + 主进程单事务（lake 主库 / quickNotes 小记库）。
+  // 删除语义只有"移入回收站"；purge/物理删除仍只在回收站入口（purgeTrashItem / 清空回收站）。
+  registerBatchNotesIpc(ipc, {
+    store,
+    getQuickNotes: () => (getQuickNotesAvailability().mode === "ok" ? quickNotes : null),
+    activeTagIds: () => {
+      if (getQuickNotesAvailability().mode !== "ok") return null; // 目录不可用 ⇒ tag 操作整批拒绝
+      try { return new Set(quickNotes.tagService.list().map((tag) => tag.id)); } catch { return null; }
+    },
+  });
   registerNotesIpc(ipc, store, quickNotes, drafts, workspaceRoot(), (targetRoot) => {
     // A1 一致性快照：主库 + 小记库各经其连接 VACUUM INTO（单文件、可独立打开）
     const mainTarget = path.join(targetRoot, "metadata.sqlite3");

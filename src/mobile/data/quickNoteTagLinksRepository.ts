@@ -67,6 +67,14 @@ export async function setQuickNoteTags(d: MobileDb, noteId: string, rawTagIds: r
   return tagIds;
 }
 
+/** **事务内**整组替换（261106 task-82 批量操作复用）：调用方已持事务，语义同 setQuickNoteTags。 */
+export async function setQuickNoteTagsInTransaction(d: MobileDb, noteId: string, rawTagIds: readonly string[], at = new Date().toISOString()): Promise<string[]> {
+  const tagIds = normalizeQuickNoteTagIds(rawTagIds);
+  await writeLinks(d, noteId, tagIds);
+  await upsertVersion(d, noteId, at);
+  return tagIds;
+}
+
 /**
  * 事务内版本：调用方已持有事务（SQLite 不支持嵌套 BEGIN）。返回受影响小记数。
  *

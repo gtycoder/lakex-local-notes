@@ -18,6 +18,7 @@ import { quickNotesDomain } from "./bridge/quickNotes";
 import { treeDomain } from "./bridge/tree";
 import { homeDomain } from "./bridge/home";
 import { aiDomain } from "./bridge/ai";
+import { batchNotesDomain } from "./bridge/batchNotes";
 import { backfillQuickNoteListMetadata } from "./data/quickNotesRepository";
 import { cleanupPdfRenderCache } from "./native/pdfRender";
 
@@ -31,6 +32,7 @@ export const bridge = {
   ...treeDomain,
   ...homeDomain,
   ...aiDomain,
+  ...batchNotesDomain,
   async init(): Promise<void> {
     const d = await ensureDb();
     // 一次性把旧小记的首图元数据回填到 SQLite；失败不阻断 App，下次启动重试。

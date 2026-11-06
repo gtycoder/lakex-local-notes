@@ -87,6 +87,17 @@ export async function setNoteTags(d: MobileDb, noteId: string, rawTagIds: readon
 }
 
 /**
+ * **事务内**整组替换（261106 task-82 批量操作复用）：调用方已持事务（SQLite 不支持嵌套 BEGIN）。
+ * 语义与 setNoteTags 完全一致（关系 + 版本一起写），只是不自带事务。
+ */
+export async function setNoteTagsInTransaction(d: MobileDb, noteId: string, rawTagIds: readonly string[], at = new Date().toISOString()): Promise<string[]> {
+  const tagIds = normalizeQuickNoteTagIds(rawTagIds);
+  await writeLinks(d, noteId, tagIds);
+  await upsertVersion(d, noteId, at);
+  return tagIds;
+}
+
+/**
  * 远端关系 LWW：版本更新才覆盖；只接受目录里 active 的 id；保留本机顺序、远端新增插最前。
  * 返回是否采纳。**旧索引无字段时调用方不会调用**（state 保留本机关系）。
  */

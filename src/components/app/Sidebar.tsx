@@ -26,6 +26,27 @@ import { SidebarTagFilter } from "./SidebarTagFilter";
 import { NoteTagDialog } from "./NoteTagDialog";
 import { NamePromptDialog } from "./NamePromptDialog";
 import { getNativeErrorMessage } from "../../lib/nativeErrors";
+import { native } from "../../lib/native";
+import type { BatchNotesRequestShape, QuickNoteTag } from "../../lib/types";
+import { MoveTargetDialog } from "./MoveTargetDialog";
+import { BatchTagDialog, type BatchTagMode } from "./BatchTagDialog";
+import { TreeSelectionBar } from "./TreeSelectionBar";
+import { batchNotesResultNotice } from "./batchNotesFeedback";
+import {
+  EMPTY_TREE_SELECTION,
+  TREE_SELECTION_MAX,
+  clearTreeSelection,
+  isSelectableTreeNode,
+  plainClickSelection,
+  pruneTreeSelection,
+  rangeTreeSelection,
+  selectAllVisible,
+  selectableVisibleOrder,
+  toggleTreeSelection,
+  treeSelectionActions,
+  type TreeSelectionState,
+} from "../../desktop/treeSelection";
+import { useConfirm } from "../../hooks/useConfirm";
 import { isTagSelectionActive, type TagSelection } from "../../features/tags/tagsModel";
 import type { QuickNoteTagSummary } from "../../core/quickNoteTags";
 
@@ -119,6 +140,18 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
   const [contextMenu, setContextMenu] = useState<{ id: string; x: number; y: number } | null>(null);
   /** 右键「打标签…」：记录目标文档（id + 标题），用 NoteTagDialog 复用属性面板的标签编辑行。 */
   const [tagEditor, setTagEditor] = useState<{ noteId: string; title: string } | null>(null);
+  /** 目录树多选（261106 task-81）：设备本地视图，笔记本不参与；切筛选/搜索/执行完即清空。 */
+  const [selection, setSelection] = useState<TreeSelectionState>(EMPTY_TREE_SELECTION);
+  const [batchBusy, setBatchBusy] = useState(false);
+  const [batchNotice, setBatchNotice] = useState<string | null>(null);
+  const [batchDialogError, setBatchDialogError] = useState<string | null>(null);
+  /** 「移动到…」目标层：记录本次要移动的 id 快照（弹层打开期间不随选择变化）。 */
+  const [moveDialog, setMoveDialog] = useState<{ ids: string[] } | null>(null);
+  /** 批量「打标签…」层：id 快照 + 标签目录（打开时现读，复用 listQuickNoteTags）。 */
+  const [tagDialog, setTagDialog] = useState<{ ids: string[] } | null>(null);
+  const [tagCatalog, setTagCatalog] = useState<{ loading: boolean; error: string | null; tags: QuickNoteTag[] }>({ loading: false, error: null, tags: [] });
+  /** 批量「移入回收站」二次确认（与删除同一套确认原语）。 */
+  const { confirm, confirmElement } = useConfirm();
   /** 目录行「＋」的快捷「新建」菜单（锚在该行按钮上） */
   const [createMenu, setCreateMenu] = useState<{ node: TreeNode; anchor: HTMLElement } | null>(null);
   const [iconPicker, setIconPicker] = useState<{ node: TreeNode; anchor: HTMLElement } | null>(null);
@@ -148,6 +181,47 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
     return { childrenByParent: treeIndex.childrenByParent, visibleIds };
   }, [treeIndex, props.tagFilter]);
   const roots = (displayIndex.childrenByParent.get(null) ?? []).filter((node) => displayIndex.visibleIds.has(node.id));
+
+  // ---- 目录树多选（261106 task-81，用户定稿 A 方案）----
+  // 可见可多选行（DFS 顺序；笔记本跳过）：Shift 区间与「全选」都以它为准。
+  const visibleSelectableOrder = useMemo(() => selectableVisibleOrder(displayIndex), [displayIndex]);
+  const selectedIdSet = useMemo(() => new Set(selection.ids), [selection.ids]);
+  const nodeById = useMemo(() => new Map(props.nodes.map((node) => [node.id, node])), [props.nodes]);
+  const selectionActions = useMemo(() => treeSelectionActions(nodeById, selection), [nodeById, selection]);
+
+  // 可见集合变化（筛选/搜索/删除/移动）⇒ 剔除已不可选的 id（不改变选择顺序）。
+  useEffect(() => {
+    setSelection((state) => (state.ids.length === 0 ? state : pruneTreeSelection(state, visibleSelectableOrder)));
+  }, [visibleSelectableOrder]);
+
+  // 切换笔记本/筛选/搜索 ⇒ 清空多选（用户定稿）。只依赖真正会变的两个值，
+  // 不依赖 tagFilter 对象本身（App 每次渲染都会新建那个对象）。
+  const tagSelection = props.tagFilter?.selection;
+  const tagVisibleIds = props.tagFilter?.visibleIds;
+  useEffect(() => {
+    setSelection(EMPTY_TREE_SELECTION);
+    setBatchNotice(null);
+  }, [query, tagSelection, tagVisibleIds]);
+
+  // 批量结果提示自动消失（4s）：不长期占住屏幕底部；下一次选择/清空也会清。
+  useEffect(() => {
+    if (!batchNotice) return;
+    const timer = window.setTimeout(() => setBatchNotice(null), 4000);
+    return () => window.clearTimeout(timer);
+  }, [batchNotice]);
+
+  // Esc 清空多选（只在有多选时挂监听；重命名输入/浮层已经 preventDefault 的 Esc 不抢）。
+  useEffect(() => {
+    if (selection.ids.length === 0) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      setSelection(EMPTY_TREE_SELECTION);
+      setBatchNotice(null);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [selection.ids.length]);
+
 
   /** 目录刷新（右上角刷新按钮）：重读整棵树，进行中把图标转起来并禁用，避免连点。 */
   const refreshTree = useCallback(async () => {
@@ -637,6 +711,115 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
   const draggedParentId = draggedNode?.parentId ?? null;
 
   // W-2-B：聚合对象 useMemo 化——props 稳定后 TreeRow memo 才能在按键路径命中
+
+  // ---- 多选：点击语义 / 批量执行 / 弹层（261106 task-81）----
+  /**
+   * 目录行点击：
+   *  · ⌘/Ctrl = 切换该行（笔记本不参与）；
+   *  · Shift = 以锚点为界按**可见顺序**取区间（可见顺序里本就没有笔记本 ⇒ 自动跳过）；
+   *  · 普通点击 = 退出多选（记下锚点，方便紧接着 Shift），并保持原有单行行为。
+   */
+  const handleRowClick = useCallback((event: React.MouseEvent, node: TreeNode) => {
+    setBatchNotice(null);
+    // 笔记本在多选语义里是「不可选」：带 ⌘/Shift 点它直接忽略（避免多选途中的一次误触把笔记本收起）。
+    if (!isSelectableTreeNode(node) && (event.metaKey || event.ctrlKey || event.shiftKey)) {
+      setContextId(node.id);
+      return;
+    }
+    if (isSelectableTreeNode(node) && (event.metaKey || event.ctrlKey)) {
+      setSelection((state) => toggleTreeSelection(state, node.id));
+      setContextId(node.id);
+      return;
+    }
+    if (isSelectableTreeNode(node) && event.shiftKey) {
+      setSelection((state) => rangeTreeSelection(state, visibleSelectableOrder, node.id));
+      setContextId(node.id);
+      return;
+    }
+    setSelection(isSelectableTreeNode(node) ? plainClickSelection(node.id) : clearTreeSelection());
+    setContextId(node.id);
+    if (node.nodeType === "note") props.onSelect(node.id);
+    else toggleNode(node.id);
+  }, [visibleSelectableOrder, props.onSelect, toggleNode]);
+
+  /** 批量执行（桌面 batch_notes）：成功 ⇒ 刷新 + 清空；失败 ⇒ 失败项保持选中 + 可见提示。 */
+  const runBatch = useCallback(async (request: BatchNotesRequestShape) => {
+    if (batchBusy) return;
+    setBatchBusy(true);
+    setBatchDialogError(null);
+    try {
+      const result = await native.batchNotes(request);
+      const notice = batchNotesResultNotice(result, request.action);
+      setBatchNotice(notice.text);
+      if (result.ok) {
+        setSelection(EMPTY_TREE_SELECTION);
+        setMoveDialog(null);
+        setTagDialog(null);
+        await props.onRefreshTree();
+        if (request.action === "tag-add" || request.action === "tag-remove") props.onTagsChanged?.();
+      } else {
+        const failed = new Set(notice.failedIds);
+        if (failed.size > 0) setSelection((state) => ({ ...state, ids: state.ids.filter((id) => failed.has(id)) }));
+        // 弹层不关：把原因就地显示，方便改目标/换标签重试
+        setBatchDialogError(notice.text);
+      }
+    } catch (error) {
+      const message = getNativeErrorMessage(error) || "批量操作失败";
+      setBatchNotice(message);
+      setBatchDialogError(message);
+    } finally {
+      setBatchBusy(false);
+    }
+  }, [batchBusy, props.onRefreshTree, props.onTagsChanged]);
+
+  /** 批量「移入回收站」（删除 = 移入回收站；可在回收站恢复）：二次确认后走 batch_notes.trash。 */
+  const trashSelected = useCallback(async () => {
+    const ids = [...selection.ids];
+    if (ids.length === 0) return;
+    const ok = await confirm({
+      title: "把 " + ids.length + " 项移入回收站？",
+      body: "移入后可在回收站恢复；文档的历史快照会保留。",
+      confirmText: "移入回收站",
+    });
+    if (!ok) return;
+    await runBatch({ action: "trash", ids });
+  }, [confirm, runBatch, selection.ids]);
+
+  const openMoveDialog = useCallback(() => {
+    if (selection.ids.length === 0) return;
+    setBatchDialogError(null);
+    setMoveDialog({ ids: [...selection.ids] });
+  }, [selection.ids]);
+
+  /** 批量打标签：打开时现读标签目录（唯一来源 = 小记标签库）；读不到则弹层内提示。 */
+  const openBatchTagDialog = useCallback(() => {
+    if (selection.ids.length === 0) return;
+    setBatchDialogError(null);
+    setTagDialog({ ids: [...selection.ids] });
+    setTagCatalog({ loading: true, error: null, tags: [] });
+    void native.listQuickNoteTags()
+      .then((tags) => setTagCatalog({ loading: false, error: null, tags: Array.isArray(tags) ? tags : [] }))
+      .catch((error) => setTagCatalog({ loading: false, error: getNativeErrorMessage(error), tags: [] }));
+  }, [selection.ids]);
+
+  const confirmBatchTag = useCallback((mode: BatchTagMode, tagId: string) => {
+    const ids = tagDialog?.ids ?? [];
+    if (ids.length === 0) return;
+    void runBatch({ action: mode, ids, tagIds: [tagId] });
+  }, [tagDialog, runBatch]);
+
+  const selectAllVisibleRows = useCallback(() => {
+    if (visibleSelectableOrder.length > TREE_SELECTION_MAX) {
+      setBatchNotice("单次最多 " + TREE_SELECTION_MAX + " 项，已选前 " + TREE_SELECTION_MAX + " 项");
+    }
+    setSelection((state) => selectAllVisible(state, visibleSelectableOrder));
+  }, [visibleSelectableOrder]);
+
+  const cancelSelection = useCallback(() => {
+    setSelection(EMPTY_TREE_SELECTION);
+    setBatchNotice(null);
+  }, []);
+
   const treeRowProps = useMemo(() => ({
     treeIndex: displayIndex,
     query,
@@ -660,7 +843,9 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
     onSelect: props.onSelect,
     onIconClick: setTreeIcon,
     lockedNoteIds: props.lockedNoteIds,
-  }), [displayIndex, query, props.activeId, context?.id ?? null, expanded, draggingId, dropTarget, dropParentId, draggedParentId, releaseState, editingId, beginRename, beginTreeDrag, setContextNode, openContext, openCreateMenu, toggleNode, props.onSelect, setTreeIcon, props.lockedNoteIds]);
+    selectedIds: selectedIdSet,
+    onRowClick: handleRowClick,
+  }), [displayIndex, query, props.activeId, context?.id ?? null, expanded, draggingId, dropTarget, dropParentId, draggedParentId, releaseState, editingId, beginRename, beginTreeDrag, setContextNode, openContext, openCreateMenu, toggleNode, props.onSelect, setTreeIcon, props.lockedNoteIds, selectedIdSet, handleRowClick]);
 
   return (
     <aside
@@ -712,7 +897,7 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
       {filter.open && props.tagFilter && (
         <SidebarTagFilter tags={props.tagFilter.tags} selection={props.tagFilter.selection} onChange={props.tagFilter.onChange} />
       )}
-      <nav className="note-list tree-list" ref={treeRef}>
+      <nav className="note-list tree-list" ref={treeRef} onClick={(event) => { if (event.target === event.currentTarget) cancelSelection(); }}>
         {roots.map((node) => <TreeRow key={node.id} node={node} depth={0} {...treeRowProps} />)}
         {roots.length === 0 && <div className="empty-list">{
           query
@@ -764,6 +949,42 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
         onCommit={commitSplitWidth}
         onResizingChange={handleSplitResizingChange}
       />
+      {/* 多选浮动操作条（261106 task-81；固定定位，压状态栏、低于侧栏/顶栏） */}
+      <TreeSelectionBar
+        count={selection.ids.length}
+        actions={selectionActions}
+        busy={batchBusy}
+        notice={batchNotice}
+        onMove={openMoveDialog}
+        onTrash={() => void trashSelected()}
+        onTag={openBatchTagDialog}
+        onSelectAll={selectAllVisibleRows}
+        onCancel={cancelSelection}
+      />
+      {moveDialog && (
+        <MoveTargetDialog
+          open
+          nodes={props.nodes}
+          movingIds={moveDialog.ids}
+          busy={batchBusy}
+          error={batchDialogError}
+          onPick={(parentId) => { if (moveDialog) void runBatch({ action: "move", ids: moveDialog.ids, parentId }); }}
+          onClose={() => { if (!batchBusy) { setMoveDialog(null); setBatchDialogError(null); } }}
+        />
+      )}
+      {tagDialog && (
+        <BatchTagDialog
+          open
+          count={tagDialog.ids.length}
+          tags={tagCatalog.tags}
+          loading={tagCatalog.loading}
+          error={tagCatalog.error ?? batchDialogError}
+          busy={batchBusy}
+          onConfirm={confirmBatchTag}
+          onClose={() => { if (!batchBusy) { setTagDialog(null); setBatchDialogError(null); } }}
+        />
+      )}
+      {confirmElement}
     </aside>
   );
 });
@@ -794,6 +1015,10 @@ interface TreeRowProps {
   onIconClick?: (node: TreeNode, event: React.MouseEvent<HTMLElement>) => void;
   /** 已锁定（只读）的文档 id 集（行尾显示小锁） */
   lockedNoteIds: ReadonlySet<string>;
+  /** 多选集合（行显示最小选中态；笔记本永远不会在里面）。 */
+  selectedIds: ReadonlySet<string>;
+  /** 行点击（⌘/Shift 语义与普通点击都在 Sidebar 的 handleRowClick 里）。 */
+  onRowClick: (event: React.MouseEvent, node: TreeNode) => void;
 }
 
 const TreeRow = memo(function TreeRow(props: TreeRowProps) {
@@ -812,12 +1037,14 @@ const TreeRow = memo(function TreeRow(props: TreeRowProps) {
     <TreeRowFace
       node={props.node} open={open} expandable={expandable}
       active={props.node.id === props.activeId}
+      selected={props.selectedIds.has(props.node.id)}
       context={props.node.id === props.contextId && props.editingId !== props.node.id}
       dragging={isDragging} releasing={props.releasingId === props.node.id}
       dropParent={isDropParent} sameLevelLine={sameLevelLine} dropPosition={dropPosition}
       locked={Boolean(props.node.nodeType === "note" && props.node.noteFileId && props.lockedNoteIds.has(props.node.noteFileId))}
       onPointerDown={props.onPointerDown} onContextMenu={props.onContextMenu}
       onCreateMenu={props.onCreateMenu} onToggle={props.onToggle} onSelect={props.onSelect}
+      onRowClick={props.onRowClick}
       onIconClick={props.onIconClick} onContext={props.onContext}
       consumeSuppressedClick={props.consumeSuppressedClick}
     />
@@ -834,6 +1061,8 @@ interface TreeRowFaceProps {
   open: boolean;
   expandable: boolean;
   active: boolean;
+  /** 多选选中态（与单选 active 分开；图标/背景更轻） */
+  selected: boolean;
   context: boolean;
   dragging: boolean;
   releasing: boolean;
@@ -846,6 +1075,7 @@ interface TreeRowFaceProps {
   onCreateMenu: TreeRowProps["onCreateMenu"];
   onToggle: TreeRowProps["onToggle"];
   onSelect: TreeRowProps["onSelect"];
+  onRowClick: TreeRowProps["onRowClick"];
   onIconClick: TreeRowProps["onIconClick"];
   onContext: TreeRowProps["onContext"];
   consumeSuppressedClick: TreeRowProps["consumeSuppressedClick"];
@@ -857,15 +1087,11 @@ const TreeRowFace = memo(function TreeRowFace(props: TreeRowFaceProps) {
       role="treeitem"
       tabIndex={0}
       data-tree-node-id={props.node.id}
-      className={`note-row tree-row type-${props.node.nodeType} ${props.active ? "active" : ""} ${props.context ? "context" : ""} ${props.dragging ? "dragging" : ""} ${props.releasing ? "releasing" : ""} ${props.dropParent ? "drop-parent" : ""} ${props.sameLevelLine ? `drop-line-${props.dropPosition}` : ""}`}
-      onClick={() => {
+      className={`note-row tree-row type-${props.node.nodeType} ${props.active ? "active" : ""} ${props.selected ? "is-multi-selected" : ""} ${props.context ? "context" : ""} ${props.dragging ? "dragging" : ""} ${props.releasing ? "releasing" : ""} ${props.dropParent ? "drop-parent" : ""} ${props.sameLevelLine ? `drop-line-${props.dropPosition}` : ""}`}
+      aria-selected={props.selected || undefined}
+      onClick={(event) => {
         if (props.consumeSuppressedClick()) return;
-        props.onContext(props.node.id);
-        if (props.node.nodeType === "note") props.onSelect(props.node.id);
-        else {
-          // 选中笔记本后保持其可见，方便立即在顶部 + 菜单中创建分组。
-          props.onToggle(props.node.id);
-        }
+        props.onRowClick(event, props.node);
       }}
       onKeyDown={(event) => { if (event.key === "Enter") props.node.nodeType === "note" ? props.onSelect(props.node.id) : props.onToggle(props.node.id); }}
       onPointerDown={(event) => props.onPointerDown(event, props.node.id)}

@@ -162,6 +162,8 @@ export interface LakeNative {
   runBackupNow(): Promise<{ state: import("./types").BackupStateShape | null; message: string }>;
   /** 261105 task-68：备份目录只读占用统计（份数/总字节/最新最旧；不读文件内容、不删文件）。 */
   getBackupUsage(): Promise<import("./types").BackupUsageShape>;
+  /** 261106 批量操作（move / trash / tag-add / tag-remove）：先全部校验再单事务执行，逐条结果。 */
+  batchNotes(payload: import("./types").BatchNotesRequestShape): Promise<import("./types").BatchNotesResultShape>;
   setNodeIcon(id: string, icon: string | null): Promise<TreeNode>;
   searchNotes(query: string, limit?: number): Promise<NoteSearchHit[]>;
   rebuildSearchIndex(): Promise<boolean>;
@@ -393,6 +395,7 @@ export const native = {
   saveBackupSettings: (settings: import("./types").BackupSettingsShape) => api().saveBackupSettings(settings),
   runBackupNow: () => api().runBackupNow(),
   getBackupUsage: () => api().getBackupUsage(),
+  batchNotes: (payload: import("./types").BatchNotesRequestShape) => api().batchNotes(payload),
   scanRebuildCandidates: () => api().scanRebuildCandidates(),
   rebuildOrphanNotes: (ids: string[]) => api().rebuildOrphanNotes(ids),
   setNodeIcon: (id: string, icon: string | null) => api().setNodeIcon(id, icon),

@@ -75,6 +75,7 @@ contextBridge.exposeInMainWorld("lakeNative", {
   saveBackupSettings: (settings) => invoke("save_backup_settings", settings),
   runBackupNow: () => invoke("run_backup_now"),
   getBackupUsage: () => invoke("get_backup_usage"),
+  batchNotes: (payload) => invoke("batch_notes", payload),
   listNoteTagLinks: () => invoke("list_note_tag_links"),
   setNoteTags: (noteId, tagIds) => invoke("set_note_tags", noteId, tagIds),
   listSyncConflicts: () => invoke("list_sync_conflicts"),

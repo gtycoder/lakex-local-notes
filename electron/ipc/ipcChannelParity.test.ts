@@ -97,8 +97,9 @@ describe("IPC 通道三方一致性（C2-2）", () => {
     // → 152（261105 P1 文档标签：list_note_tag_links / set_note_tags）。
     // → 155（261105 P1 第 4 项同步记录账本：list/ack/restore_sync_conflict*）。
     // → 156（261105 task-68 备份可观测：get_backup_usage —— 只读 stat，不读文件内容/不删文件）。
-    expect(registrarChannels().size, "通道数变了 ⇒ 请确认是有意的并在 commit 里说明").toBe(156);
-    expect(preloadChannels().size).toBe(156);
-    expect(Object.keys(WEB_METHODS).length).toBe(156);
+    // → 157（261106 批量操作：batch_notes —— 先全部校验再单事务执行；删除=移入回收站，无 purge/restore）。
+    expect(registrarChannels().size, "通道数变了 ⇒ 请确认是有意的并在 commit 里说明").toBe(157);
+    expect(preloadChannels().size).toBe(157);
+    expect(Object.keys(WEB_METHODS).length).toBe(157);
   });
 });

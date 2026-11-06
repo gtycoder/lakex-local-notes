@@ -149,6 +149,14 @@ export class QuickNotesStore {
     this.ensureSearchIndex();
   }
 
+  /**
+   * 261106 批量操作：把一批小记写动作放进**单个事务**（嵌套调用由 better-sqlite3 走 SAVEPOINT）。
+   * 用途 = `batch_notes`（space=quickNotes）的"先全部校验、再一次性落地，异常整批回滚"。
+   */
+  batchTransaction<T>(fn: () => T): T {
+    return this.db.transaction(() => fn())() as T;
+  }
+
   /** A1 一致性 DB 快照：VACUUM INTO 单文件（无 WAL 依赖、可独立打开）。目标必须不存在。 */
   backupDatabaseTo(targetPath: string): void {
     const escaped = targetPath.replace(/'/g, "''");

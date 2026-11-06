@@ -4,6 +4,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { ASSET_PORT } from "./assetServer.js";
 import { DocumentTagsService } from "./documentTags.js";
+import { BatchNotesRepository } from "./batchNotesRepository.js";
 import { createSilentLoggerScopes, type LoggerScopes } from "../src/core/logger.js";
 import { AppError } from "../src/core/storeErrors.js";
 import { formatLogFields, perfMessage } from "../src/core/logFormat.js";
@@ -211,6 +212,8 @@ export class Store {
   readonly documentTags: DocumentTagsService;
   /** 261105 P1 第 4 项：同步记录账本（设备本地，不进 S3/git）。 */
   readonly syncConflicts: SyncConflictsRepository;
+  /** 261106 批量操作（A 方案）：树/父级/环/sortOrder 的只读端口 + 单事务入口。 */
+  readonly batchNotes: BatchNotesRepository;
 
   /** 数据根目录（v3 适配器/诊断用；只读）。 */
   get rootPath(): string { return this.root; }
@@ -240,6 +243,7 @@ export class Store {
     });
     this.schemaInit.migrate();
     this.documentTags = new DocumentTagsService(this.db);
+    this.batchNotes = new BatchNotesRepository({ db: this.db, trashNotebookId: TRASH_NOTEBOOK_ID });
     this.syncConflicts = new SyncConflictsRepository(this.db);
     this.settingsRepository = new SettingsRepository(this.db, secretCipher);
     this.historyRepository = new HistoryRepository(this.db, this.root);
