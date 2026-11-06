@@ -26,13 +26,14 @@ Local Lakex Notes 是一个自持数据的个人笔记应用：笔记、表格�
 ## 当前能力
 
 **编辑与文档**
-- 笔记本 / 分组 / 文档树，支持拖拽排序与移动层级
+- 笔记本 / 分组 / 文档树，支持拖拽排序与移动层级；**批量多选**（桌面 ⌘/Ctrl + Shift、移动端长按/选择模式）：移动（思源式目录树弹窗）、移入回收站、打标签
 - Lakex 富文本：标题、列表、待办、引用、代码块、公式、分栏、折叠块、图片、附件、文档引用
 - 表格（Univer）：公式库、数字格式、边框、合并、对齐、换行、冻结、排序、筛选、查找替换、超链接、单元格备注、十字高亮
 - 多维表（自研）：表格 / 看板视图、字段类型、筛选、排序、搜索、附件与正文详情
 - 画板（Drawnix）与手写板（多页 A4、笔迹/高亮/橡皮、撤销重做；**图片页背景**、编辑态**插入图片/PDF**、手写批注、**导出 PDF**；Android 可从系统分享直接新建并导入 PDF）
 - 小记：独立时间线、标签、预览快路径 + 内核只读兜底、转正式文档（**继承标签**）、单条「保存并同步」
-- 文档标签：属性面板打标签、标签空间（只读聚合 + 标签管理 + 跳转）、侧栏按标签筛选；移动端只读展示 + 筛选
+- 文档标签：属性面板打标签、标签空间（只读聚合 + 标签管理 + 跳转）、侧栏按标签筛选；移动端「标签」一级页（标签空间 + 管理：新建/重命名/合并/删除/拖拽）+ 文档标签查看与移除
+- **导入 / 导出**：Markdown 导入（桌面「+ → 导入 → Markdown…」多选；移动端系统分享 .md 到「默认笔记本」；图片物化、frontmatter/远程图降级）；批量导出默认格式统一为可编辑/同目录——文档 → Markdown 资料包、表格 → CSV、多维表 → CSV、手写板 → PDF、画板 → PDF
 - 同步记录：最近「被覆盖 / 他端删除 / 保存时磁盘被改」账本（角标 + 列表 + 一键恢复本地版）
 - 大纲、历史快照、回收站（软删 + 墓碑 + 恢复标记）、附件与图片管理、全文搜索（FTS5）
 - AI 助手：选区浮层 / 顶栏 / 块菜单入口，文本与图片、PDF 文本解析（Key 只在主进程）
@@ -207,6 +208,7 @@ bash scripts/android-build.sh --sync --install # 构建并安装到已连接设�
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 进程结构、关键文件、数据流 |
 | [docs/SYNC-PROTOCOL.md](docs/SYNC-PROTOCOL.md) · [docs/STORAGE-LAYERS.md](docs/STORAGE-LAYERS.md) | 同步协议（含 GC / 保留链 §13–§14）/ 存储分层 |
 | [docs/LAKEX-CONTRACT.md](docs/LAKEX-CONTRACT.md) | 闭源 Lakex 内核已核实行为 + 调试速查 |
+| [docs/lakexEditor-developer-docs/](docs/lakexEditor-developer-docs/) | Lakex 内核官方开发者文档离线镜像（API/事件/命令/工具栏/上传，导出自语雀） |
 | [docs/USHEET-UPGRADE.md](docs/USHEET-UPGRADE.md) | Univer 表格触点、升级 playbook、能力路线 |
 | [docs/MOBILE-BITABLE-DINGTALK.md](docs/MOBILE-BITABLE-DINGTALK.md) | 移动端多维表：钉钉实机实测 + 复刻方案与实施记录（含可点的 [样机](docs/mockups/mobile-bitable.html)） |
 | [docs/MOBILE-TECH-STACK.md](docs/MOBILE-TECH-STACK.md) · [docs/MOBILE-DESIGN.md](docs/MOBILE-DESIGN.md) | 移动端架构与设计 |

@@ -8,6 +8,14 @@
 
 ## 0. 最新交接（261027）
 
+### 261106 · 导入 / 批量导出 / 批量移动 / 移动端标签页与键盘稳定 · **已提交并双推**
+- **Markdown 导入**：`src/features/import/`（共享管线 md→lake：离屏内核 `setDocument("text/markdown")` → 等渲染 → `getDocument("text/lake")` + `data-lake-id` 校验；图片物化、远程图降级、frontmatter 丢弃、串行队列/超时）；桌面「+ → 导入 → Markdown…」多选（目标=点击 + 的笔记本/分组，进度可取消、结果汇总 warnings）；移动端系统分享 .md（SEND/SEND_MULTIPLE、冷/热启动、默认笔记本设置 + picker 默认选中、失败软删回滚、图片降级链接）。
+- **批量多选**：core `runBatchNotes`（move/trash/tag-add/tag-remove，ids 去重上限 500、先全量校验后单事务、笔记本 rejected、**无 restore/purge**）+ 桌面 `batch_notes` IPC（parity 162）；桌面目录树 ⌘/Ctrl + Shift 区间（跳过笔记本）、多选右键**仅三项**「移动… / 导出… / 移入回收站」（危险红）、浮动条；移动端小记/文档列表选择模式（长按或页头「选择」、顶部 取消/已选 N/全选、移动端 `bridge.batchNotes`）。**回收站不做多选/批量；「删除」= 移入回收站，仅回收站内可彻底删除**。
+- **批量导出**：`export_notes_batch` 默认格式统一为可编辑/同目录——doc→Markdown 资料包（`<标题>/<标题>.md` + images/，相对链接）、usheet→CSV、bitable→CSV、ink→PDF、board→PDF（渲染层字节提供者 + 离屏 `boardSnapshot` + 受控 `write_batch_export_file` + `boardImages` 内嵌图片走 pdfRenderer）；分组递归、上限 500、重名「 (2)」、只读不写源、逐条结果 + 打开所在文件夹。
+- **移动（思源式）**：桌面 `MoveTargetTreeDialog`（kit Dialog/ln-input/ln-row、搜索、默认展开当前路径+当前位置、自身/后代/回收站禁用；单条+批量共用；拖拽保留）；移动端 `MoveTargetTreeSheet`（同语义 + 默认展开全部根笔记本一层、内部滚动、搜索）。
+- **移动端标签一级页**：首页三 tab（小记/知识库/标签）；标签列表（标准页头 + 单个 ＋、白色强调块、行 ⋯ 重命名/合并/删除、长按拖拽）；详情独立页头（返回/标签名/⋯ + 副标题计数）、文档/小记两段白块、小记富预览限高 180 + 条件渐隐 + 展开/收起 + × 右列 + 仅删关联确认；设置页标签分组移除。
+- **移动端键盘稳定**：`useKeyboardStableSheet` 挂 `MobileSheet` 一处（focus 记录几何 → 键盘弹出钉住 top/height、键盘覆盖列表、收起还原；全站含输入 Sheet 审计）；首页返回两次退出（首次提示「再按一次退出应用」）。
+- **门禁**：tsc 0；全量 vitest **750 文件 / 4758 例全绿**；ui-metrics / check:mobileui / core 边界 / diff-check 通过；两侧远端同步（HEAD 见 §1）。
 ### 261106 · 并行五项：移动端标签管理/标签空间、桌面+移动搜索增强、备份可观测、移动 Bitable 视图拖拽 · **已提交并双推**
 - **移动端标签管理**：设置新增「标签」分组（管理 + 简化标签空间）：新建/重命名/合并到/删除（二次确认与桌面同文案）/拖拽排序；聚合列表（文档+小记倒序）行内可移除标签；数据只走既有桥（quick-notes 标签库 + setNoteTags/setQuickNoteTags）。顺手修 **跨 kind 删除 bug**：`quickNoteTagLinksRepository` 在事务内会跨 kind 删文档 tag_links ⇒ 合并后文档标签丢失 / 删除后版本不推进（跨端不传播）；修复为各仓储只处理自己的 kind。
 - **桌面搜索增强**：`src/features/search/`（范围 全部/标题/正文/标签 单一来源 + 最近搜索 localStorage 8 条 + 空态/无结果引导 + 标签命中不新增索引、4 个既有 IPC 渲染层拼装、不可用降级）；SearchPanel 用 ln-tabs 范围页签、打开结果才记历史、键盘/ Esc 不回归。
@@ -906,6 +914,7 @@
 - **分支策略（261105 起）**：只保留 `master`（本地 + Gitee + GitHub 各一条）；特性分支做完即合、合完即删，不留长期 worktree。
 - 两远端 master 的交付核验见 `.css-audit/final-review/merge-verify.txt`（该目录在 261105 清理中已删除，历史证据见 git 提交记录）。
 - **261105 标签缺席改造（本轮）**：已提交 `e83a6960` 并双推，改动面 = core 同步语义 + 两端标签库/端口 + 移动端回收站定时清空 + 文档。门禁实测：tsc 0；全量 vitest **608 文件（597 passed / 11 integration skip）、3763 passed / 12 skipped**；core 136 文件 0 违规；check:mobileui/ui-metrics 通过；`git diff --check` 干净。
+- **261106 基线**：`master` `362d2331`（已双推）。改动面 = 移动端标签一级页/搜索/键盘稳定/批量多选；桌面+移动 Markdown 导入、批量导出（doc→md / usheet/bitable→csv / ink/board→pdf）、思源式移动树、备份可观测、Bitable 视图拖拽。门禁实测：tsc 0；全量 vitest **750 文件（739 passed / 11 skip）、4758 passed / 12 skipped**；core 边界 0 违规；ui-metrics / check:mobileui / diff-check 通过。IPC parity = 162（新增 batch_notes / export_notes_batch / write_batch_export_file / open_export_dir / pick_markdown_files / read_import_image，移除 pick_markdown_folder）。
 - **261105 实测偏差修正**：`master..feat/pad-touch-ui = 0`（`d2f76b3b` 已是 master 祖先）⇒ §3 P0 原文「落后 6 个提交、发版前先合」已过期，本轮就地改掉。
 - 发版仍只有v0.0.1/v0.0.2，package.json=0.0.2；未发版提交数用`git rev-list --count v0.0.2..master`查询，别沿用125这个旧计数。下一版发布说明须写inkDoc v4：旧端只读、手机/平板需重装。
 - 261103 各批已全部提交并双推（20:08–20:21）：`ce442482`（usheet 35 行/双光标/整行整列）、`733ab4aa`（多维表头部+短名）、`2b29d9e8`（画板工具条+第 4 处补丁）、`75c46902`（ink 14 色）、`ae14ffd1`（胶囊/横滑/安全区/页签 44/useKeyboard）、`1f164f2b`（门禁装置+三份基线重烤）、`1e74c3f8`（文档）、`fdf9c455`（AI 默认关）。
@@ -950,6 +959,8 @@
 
 6. **小记标签（261105 收口后剩余）**：**文档标签要不要立项**（桌面主库独立目录 `target_kind=note`，不参与 S3；方案已写 §0）；小记→文档转换是否携带标签（等文档标签一起）。已收口、别再立项：置顶、标签顺序同步、单条小记标签顺序同步、移动端标签管理（拖拽/改名/删除/合并已做）、改名/删除全量重建。**标签删除语义已定稿（261105）：删除 = 缺席（物理删行，云端列表零墓碑，删除压编辑）**——不要再提「保留墓碑再裁剪窗口」或「标签墓碑随索引传播」。
 
+10. **Word / Excel 导入（261106 调研完成，用户暂缓）**：docx 需新增依赖 mammoth（docx→HTML→`setDocument("text/html")`，约 180 行 / 1.5–2 天）或自研 zip+XML（600–900 行）；不做页眉页脚/脚注/批注/修订/文本框/公式/分栏/页码/域/图表，合并单元格先扁平。xlsx：Univer 依赖无 import（Pro 商业包才有），先做 CSV→usheet（0.5–1 天），或 read-excel-file（值 100% / 无公式样式），或自研 OOXML（3–5 天）；不做图表/图片/透视/条件格式/数据验证/跨表公式/隐藏行列。**开 Word 前先向用户申请新依赖批准**。
+11. **导入 / 导出 / 键盘真机冒烟债**：① 桌面 Markdown 导入用真实 md（含图片/表格/脚注/超大文件）跑一遍；② 移动端 .md 系统分享（冷/热启动、多文件、未设置默认笔记本、失败回滚）真机验收；③ 批量导出真实目录（含画板 PDF 待打开/未打开两种、ink 多页、同名冲突）；④ 移动端键盘稳定（标签/批量打标签/搜索/新建/默认笔记本）真机键盘验收。
 **P2（体验缺口 / 长期）**
 
 7. **移动端文本格式（261104 设备实测已收口，别再按旧文档当缺口）**：H1–H6 / 字号 / 颜色 / 对齐 / 列表 / 缩进 / 行高 / 上下标 / 清除格式**全部生效**；**字号+行高已合并成一行步进器**（更多面板 4 行），对齐已是 4 档（含两端对齐）。已关闭、别再立项：首行缩进（内核只做整篇 set、无 undo ⇒ 文案改「全文首行缩进」）；clearFormat（只清行内 mark，与 Word/语雀一致）；Aa 面板溢出（字号搬进「更多」+ 面板下限 312 ⇒ 312/312 无裁切）。**分栏 3·4 已补**（贴着「分栏」条目弹锚定气泡）；**alert 类型不补**（块被选中后内核自带色板可改，用户口径）。未接入口：unlink（kernel 命令对 host 选区返回 false，只有内核链接面板那条路）/ replace（kernel 只收 ranges、移动端查找面板是宿主自研 ⇒ 本轮不做）/ style→code·quote / 表格块级命令族（lakex 表格卡上下文工具条）。另有：画图插入项解禁（文本绘图仍置灰）；移动视图拖拽排序；PdfRender `cacheDir` 清理；页面安全区已归mobile-*-safe-area（UI分支261105完成）。

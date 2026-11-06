@@ -186,3 +186,12 @@
   内核 HTML→块模型转换（闭源，只能靠减少粘贴内容规避）还是图片解码/重排；**不要**先怀疑 logger。
 - **不要混淆**：大表格粘贴（≥1000 行 / ≥5000 格）走的是另一条护栏（`features/editor/tablePasteGuard.ts`，
   HANDOFF §3#16），与本次现象无关。
+
+## O. 导入 / 导出 / 批量多选（261106 起）
+
+1. **Markdown 导入只能走 `setDocument("text/markdown")` → `getDocument("text/lake")`**：契约 §5.18 的 `readData→writeData` 配方产物**无 data-lake-id**（且 `<ul start="NaN">`），喂回内核会被重写 ⇒ 首开打脏多传一轮。落盘前必须校验产物含 `data-lake-id`，否则按失败处理（`markdownImportPipeline` 已内置）。
+2. **离屏内核容器必须可测量**：宽度固定 800（表格列宽按容器写死）、`position:fixed; left:-10000px; visibility:hidden`，**不能 `display:none`**；转换是异步渲染，等「连续两次快照一致」再取正文；容器用完必须 remove。图片必须先物化为资产再重写 md，否则留 `status:"error"` 坏卡。
+3. **画板导出的两条路径**：已打开画板用 `registerBoardBytes`（来自 Drawnix `onChange({previewImage})`，与「导出 PNG」同源）；未打开走 `renderBoardSnapshotBytes` 离屏挂载（800×600、8s 超时、必须 unmount）。**不要**拦截 `HTMLAnchorElement.prototype.click` 去偷下载。批量导出里画板缺字节 ⇒ `skipped`，绝不产坏文件。
+4. **批量通道的删除一律软删**：`batchNotes.trash` = 文档 `trashed_at` / 小记 `deleted_at`（可恢复）；**禁止**在批量里调用 purge/物理删除（测试有方法 spy + 源码静态红线）。回收站本身不提供多选。
+5. **批量导出目录必须来自本次系统选择框**：`pickedExportDir()` 是唯一判据（`export_notes_batch` / `write_batch_export_file` 都校验），渲染层传任意路径直接 `IpcInputError`；导出只读，不得 saveNote/标脏/广播。
+6. **移动端含输入 Sheet 的键盘行为**：统一由 `useKeyboardStableSheet` 挂在 `MobileSheet` 一处处理（focus 记录几何 → 键盘弹出钉住 top/height → 键盘覆盖列表 → 收起还原）。**不要在单个 Sheet 里另写键盘监听/位移补偿**；新增含输入 Sheet 仍走 `MobileSheet`（`keyboardSheetAudit.test.ts` 会拦）。

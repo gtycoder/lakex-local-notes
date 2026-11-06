@@ -52,6 +52,17 @@
 4. saveState 标签：批量版本读（一次全表）+ 版本未变跳过（2 万篇从 2 万次点查 → 1 次读）。
 5. 移动端：标签读全优先（>20000 才截断且 UI 提示）、同步记录账本批量 INSERT + 每轮 prune 一次、alive guard、加载占位、aria-pressed/44 命中盒、already-resolved 中性提示。
 
+## 3.4 261106 导入 / 批量 / 导出批（新失败面）
+
+| 失败面 | 降级 / 判据 | 护栏 |
+| --- | --- | --- |
+| Markdown 转换（离屏内核） | 单文件 15s 超时、渲染稳定连续两次快照 100ms 轮询、产物必须含 data-lake-id（否则 no-lake-id）、容器非 display:none、串行队列 | src/features/import/markdownImportPipeline.test.ts |
+| 导入图片 | 本地图物化为资产（>20MB/非法扩展名/魔数不符拒绝）；远程图 v1 不下载 ⇒ 降级链接 + warning；物化失败降级 | markdownBatchImport.test.ts、markdownImportScan.test.ts |
+| 批量落盘 | 单篇失败 ⇒ 软删回滚（移入回收站，不物理删）；不支持/超限计 skipped；取消=停止后续 | markdownBatchImport.test.ts |
+| 批量操作 | 先全量校验再单事务执行；异常整批回滚；笔记本 notebook-not-batchable；无 restore/purge | core/batchNotes.test.ts、electron/ipc/registerBatchNotes.test.ts、src/mobile/bridge/batchNotes.test.ts |
+| 批量导出 | 只读不写源；目录必须来自本次选择框（pickedExportDir）；画板缺字节 ⇒ skipped（不产坏文件）；逐条失败不影响其它 | electron/batchExport.test.ts、registerBatchExport.test.ts |
+| 画板快照（未打开） | 离屏可测量容器（800×600、visibility 隐藏非 display:none）、8s 超时、无论成功/失败都 unmount + 移除；解析失败 ⇒ skipped | src/features/board/boardSnapshot.render.test.tsx |
+| 键盘稳定 Sheet | focus 记录几何 → 键盘弹出钉住 top/height → 键盘覆盖列表 → 收起还原；无键盘/无焦点/未打开零副作用 | src/mobile/hooks/useKeyboardStableSheet、keyboardSheetAudit.test.ts |
 ## 4. 已知缺口（261105 收口后的真待办）
 
 **已修（261105 Batch 2）**
@@ -126,3 +137,8 @@
 - Kotlin 侧（CrashLogPlugin、MainActivity 崩溃 handler）未编译/未真机验证。
 - 安全模式与恢复页视觉未实机走查；移动端兜底历史/对账未做（两端默认值待统一）。
 - 突变保护：大小骤降分支未接线；可疑篇每轮重复 warning/归档（建议 (id,hash) 去重）。
+- Markdown 导入：真实 md（图片/表格/脚注/超大文件）桌面冒烟未做；移动端系统分享 .md 冷/热启动、多文件、首次未设默认笔记本、失败回滚未真机验收。
+- 批量导出：真实目录导出（画板 PDF 已打开/未打开两态、ink 多页、同名冲突、取消选目录）未真机冒烟；board 离屏快照在真机/低内存设备未验。
+- 移动端键盘稳定：标签弹窗/批量打标签/搜索/新建/默认笔记本在真机软键盘下未逐屏验收（当前为 jsdom 与 hook 单测）。
+- 移动端「两次返回退出」仅 adb keyevent 冒烟（已验两次返回回桌面），未在真实按键节奏/快速连按下复验。
+- 批量多选：桌面 Shift 区间跨大量节点（>500 上限提示、混选笔记本跳过）与移动端长按/滚动手势共存未真机走查。
