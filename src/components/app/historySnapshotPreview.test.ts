@@ -77,7 +77,7 @@ describe("历史面板：复用 / 预热 / 当前版本 / 键盘", () => {
     const NOTE_DOC = readFileSync(new URL("./NoteDocPreview.tsx", import.meta.url), "utf8");
     expect(NOTE_DOC).toContain("useHistorySnapshotViewer({");
     // 预览统一阅读档：14px 基准（字号细节在 noteDocPreview.css）
-    expect(NOTE_DOC).toContain("NOTE_DOC_PREVIEW_FONT_SIZE = 14");
+    expect(NOTE_DOC).toContain("NOTE_DOC_PREVIEW_FONT_SIZE = 16");
     expect(NOTE_DOC).toContain("fontSize: NOTE_DOC_PREVIEW_FONT_SIZE");
     // 四个入口（回收站 / 历史面板 / 文档属性 / 标签空间）都只经 NoteDocPreview，不再各自持 ref + 调 hook
     for (const rel of [
