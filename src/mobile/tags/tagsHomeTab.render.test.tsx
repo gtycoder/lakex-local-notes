@@ -147,11 +147,15 @@ const listRows = (): HTMLElement[] => [...host.querySelectorAll<HTMLElement>(".m
 /** 小记卡自己的「展开/收起」（在裁切区外，是 .mb-set-item__main 的直接子按钮）。 */
 const expandToggle = (): HTMLButtonElement | undefined =>
   [...host.querySelectorAll<HTMLButtonElement>(".mb-set-item__main > .quick-note-preview-toggle")][0];
-/** 模拟「内容真实高度」并触发一次 ResizeObserver 复测（对应真机上正文/图片到达）。 */
-const setCardScrollHeight = async (px: number): Promise<void> => {
+/**
+ * 模拟真机的「内容真实高度 / 被裁后的可视高度」并触发一次 ResizeObserver 复测。
+ * 卡片未展开时 clientHeight = 被 max-height 夹住的 180（判定 scrollHeight > clientHeight + 2 才有意义）。
+ */
+const setCardScrollHeight = async (scrollHeight: number): Promise<void> => {
   const card = host.querySelector<HTMLElement>(".tag-quick-card");
   expect(card).not.toBeNull();
-  (card as HTMLElement & { __scrollHeight?: number }).__scrollHeight = px;
+  (card as HTMLElement & { __scrollHeight?: number; __clientHeight?: number }).__scrollHeight = scrollHeight;
+  (card as HTMLElement & { __clientHeight?: number }).__clientHeight = 180;
   // 页面上有多个 RO（卡片判溢出 + 富预览自身的折叠测量）：全部触发一次，等价于真机上内容长高。
   await act(async () => {
     for (const ro of ResizeObserverStub.instances) ro.trigger();
@@ -177,7 +181,10 @@ beforeEach(() => {
   vi.stubGlobal("IntersectionObserver", IntersectionObserverStub);
   ResizeObserverStub.instances = [];
   vi.stubGlobal("ResizeObserver", ResizeObserverStub);
-  Object.defineProperty(HTMLElement.prototype, "clientHeight", { configurable: true, value: 800 });
+  Object.defineProperty(HTMLElement.prototype, "clientHeight", {
+    configurable: true,
+    get(this: HTMLElement & { __clientHeight?: number }) { return this.__clientHeight ?? 800; },
+  });
   // scrollHeight 默认 0（不溢出）；需要模拟「内容超限」时给单个元素打 __scrollHeight 再手动触发 RO。
   Object.defineProperty(HTMLElement.prototype, "scrollHeight", {
     configurable: true,
@@ -427,31 +434,40 @@ describe("行主区 / 长按拖拽", () => {
     await click(rowMain("工作"));
     await setCardScrollHeight(120);
     expect(expandToggle()).toBeUndefined();
-    // 静态防回归：测的是 .tag-quick-card 自己的 scrollHeight，ResizeObserver 观察内容子节点。
+    // 短内容：不溢出 ⇒ 不加 is-clipped（渐隐只由 CSS 的 .is-clipped 触发）。
+    expect(host.querySelector(".tag-quick-card")!.className).not.toContain("is-clipped");
+
+    // 静态防回归：判据是「卡片本体 scrollHeight > clientHeight + 2」，RO 观察内容子节点，且有 rAF 复测。
     expect(CARD_SRC).toContain("const el = cardRef.current");
-    expect(CARD_SRC).toContain("el.scrollHeight > COLLAPSED_MAX_PX");
+    expect(CARD_SRC).toContain("el.scrollHeight > el.clientHeight + OVERFLOW_SLACK_PX");
     expect(CARD_SRC).toContain("ro?.observe(contentRef.current)");
     expect(CARD_SRC).toContain("requestAnimationFrame(measure)");
-    // 限高 180 的唯一来源是 CSS（组件阈值与它保持一致）。
+    // 渐隐只在 .is-clipped 时画（短内容不会出现那层渐变）。
+    expect(QN_CSS).toContain(".tag-quick-card.is-clipped::after");
+    expect(QN_CSS).not.toMatch(/\.tag-quick-card::after/);
     expect(QN_CSS).toContain(".tag-quick-card {");
-    expect(QN_CSS).toContain("max-height: 180px");
-    expect(QN_CSS).toContain(".tag-quick-card.is-expanded");
   });
 
   it("小记卡：内容超 180 ⇒ 出现「展开」，点击 → is-expanded + 「收起」，再点恢复", async () => {
     await renderTab({ tags: [tag("t_a", "工作")] });
     await click(rowMain("工作"));
     await setCardScrollHeight(400);
+    // 长内容：真的被裁 ⇒ is-clipped（渐隐）+ 展开按钮。
+    expect(host.querySelector(".tag-quick-card")!.className).toContain("is-clipped");
     const toggle = expandToggle();
     expect(toggle).toBeTruthy();
     expect(toggle!.textContent?.trim()).toBe("展开");
     // 按钮在裁切区之外（不是 .tag-quick-card 的后代）⇒ 卡片被裁也不影响可点。
     expect(host.querySelector(".tag-quick-card")!.contains(toggle!)).toBe(false);
     await click(toggle);
-    expect(host.querySelector(".tag-quick-card")!.className).toContain("is-expanded");
+    const expandedClass = host.querySelector(".tag-quick-card")!.className;
+    expect(expandedClass).toContain("is-expanded");
+    expect(expandedClass).not.toContain("is-clipped"); // 展开后限制解除、渐隐消失
     expect(expandToggle()!.textContent?.trim()).toBe("收起");
     await click(expandToggle());
-    expect(host.querySelector(".tag-quick-card")!.className).not.toContain("is-expanded");
+    const collapsedClass = host.querySelector(".tag-quick-card")!.className;
+    expect(collapsedClass).not.toContain("is-expanded");
+    expect(collapsedClass).toContain("is-clipped");    // 收起后重新裁切
     expect(expandToggle()!.textContent?.trim()).toBe("展开");
   });
 
@@ -461,8 +477,9 @@ describe("行主区 / 长按拖拽", () => {
     await renderTab({ tags: [tag("t_a", "工作")] });
     await click(rowMain("工作"));
     expect(host.querySelector(".tag-quick-card")).not.toBeNull();
-    await setCardScrollHeight(40); // 只有回落摘要
+    await setCardScrollHeight(40); // 只有回落摘要，未溢出
     expect(expandToggle()).toBeUndefined();
+    expect(host.querySelector(".tag-quick-card")!.className).not.toContain("is-clipped");
 
     // 正文到达（异步）+ 内容长高（RO 由内容子节点触发）⇒ 复测后出现「展开」。
     await act(async () => {
@@ -474,6 +491,7 @@ describe("行主区 / 长按拖拽", () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
     await setCardScrollHeight(400);
+    expect(host.querySelector(".tag-quick-card")!.className).toContain("is-clipped");
     expect(expandToggle()).toBeTruthy();
   });
 

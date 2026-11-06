@@ -14,10 +14,8 @@ import { X } from "lucide-react";
 import { formatListTime } from "../../core/dateFormat";
 import { TagQuickNotePreview } from "./TagQuickNotePreview";
 
-/** 与 quick-notes.css 的 .tag-quick-card max-height 保持一致（判定是否给「展开」）。 */
-const COLLAPSED_MAX_PX = 180;
-/** 判定余量：避免边界 1px 抖动导致按钮忽隐忽现。 */
-const OVERFLOW_SLACK_PX = 8;
+/** 判定余量：溢出比较时给 2px 余量，避免亚像素/滚动条误差让按钮忽隐忽现。 */
+const OVERFLOW_SLACK_PX = 2;
 
 export interface TagQuickNoteCardProps {
   noteId: string;
@@ -35,7 +33,8 @@ const fmtTime = (iso: string): string => {
 
 export function TagQuickNoteCard({ noteId, title, updatedAt, busy, onOpen, onRemove }: TagQuickNoteCardProps) {
   const [expanded, setExpanded] = useState(false);
-  const [overflowing, setOverflowing] = useState(false);
+  /** true = 内容被 max-height 真裁到（此时才画渐隐、才给「展开」）。 */
+  const [clipped, setClipped] = useState(false);
   /** 被限高的卡片本体（scrollHeight 才是内容真实高度）。 */
   const cardRef = useRef<HTMLDivElement | null>(null);
   /** 卡片里的内容根节点（预览异步长高时由它触发 ResizeObserver）。 */
@@ -43,13 +42,19 @@ export function TagQuickNoteCard({ noteId, title, updatedAt, busy, onOpen, onRem
 
   useEffect(() => {
     setExpanded(false);
-    setOverflowing(false);
+    setClipped(false);
     let alive = true;
+    /**
+     * 溢出判据 = **实际裁切比较**：overflow:hidden + max-height 时 clientHeight 就是被夹住后的高度，
+     * scrollHeight 是内容真实高度 ⇒ scrollHeight > clientHeight + 2 才是「真的被裁了」。
+     * 展开态 clientHeight 也变成内容高度（比较恒 false）⇒ 展开期间不再复测，保住「收起」按钮。
+     */
     const measure = (): void => {
       if (!alive) return;
       const el = cardRef.current;
       if (!el) return;
-      setOverflowing(el.scrollHeight > COLLAPSED_MAX_PX + OVERFLOW_SLACK_PX);
+      if (el.classList.contains("is-expanded")) return;
+      setClipped(el.scrollHeight > el.clientHeight + OVERFLOW_SLACK_PX);
     };
     measure();
     // 异步正文到达后（同一帧内的布局变化 ResizeObserver 可能还没回调）再复测一次。
@@ -78,12 +83,12 @@ export function TagQuickNoteCard({ noteId, title, updatedAt, busy, onOpen, onRem
         }}
       >
         <div ref={contentRef}>
-          <div ref={cardRef} className={"tag-quick-card" + (expanded ? " is-expanded" : "")}>
+          <div ref={cardRef} className={"tag-quick-card" + (clipped && !expanded ? " is-clipped" : "") + (expanded ? " is-expanded" : "")}>
             <TagQuickNotePreview noteId={noteId} fallbackText={title} />
           </div>
         </div>
         {/* 按钮在裁切区外：卡片被 max-height 裁掉时「展开」仍可见可点。 */}
-        {overflowing && (
+        {(clipped || expanded) && (
           <button
             type="button"
             className="quick-note-preview-toggle"
