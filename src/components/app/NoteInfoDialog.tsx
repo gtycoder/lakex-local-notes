@@ -5,7 +5,7 @@
  * 第三部分：附件网格（高度受限可滚，避免附件过多撑破布局）；第四部分：历史版本（同一处理 + 内联快照预览）。
  * 动作复用 native.*；父级路径可点击跳转目录。
  */
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { Dialog } from "../ui/Overlay";
 import { Box, ChevronRight, Clock, File, FolderOpen, History, Image as ImageIcon, Paperclip, Tag as TagIcon, X } from "lucide-react";
 import { native } from "../../lib/native";
@@ -13,8 +13,8 @@ import { getNativeErrorMessage } from "../../lib/nativeErrors";
 import type { NoteInfo } from "../../lib/types";
 import { isMobileEnvironment } from "../../features/editor/clipboardHtml";
 import { HistorySnapshotPreview } from "./HistorySnapshotPreview";
+import { NoteDocPreview } from "./NoteDocPreview";
 import { NoteTagRow } from "./NoteTagRow";
-import { useHistorySnapshotViewer } from "../hooks/useHistorySnapshotViewer";
 import type { NoteKind } from "../../core/noteKind";
 import { formatNoteInfoSize, formatNoteInfoTime, noteInfoRows } from "../../core/noteInfo.js";
 
@@ -43,7 +43,6 @@ export function NoteInfoDialog({ note, onClose, onRevealNoteFile, onOpenAssetsDi
   const [histPreview, setHistPreview] = useState<{ id: number; kind: NoteKind; html: string } | null>(null);
   const [histLoading, setHistLoading] = useState<number | null>(null);
   const [size, setSize] = useState<{ w: number; h: number } | null>(null);
-  const previewHostRef = useRef<HTMLDivElement>(null);
 
   /** 右下角拖拽调整弹窗大小（默认尺寸见 .note-info-dialog）。 */
   const onResizeStart = (event: ReactPointerEvent<HTMLElement>): void => {
@@ -121,21 +120,11 @@ export function NoteInfoDialog({ note, onClose, onRevealNoteFile, onOpenAssetsDi
       .finally(() => setHistLoading(null));
   };
 
-  // 内联快照预览：doc 走只读 Lake viewer（与 HistoryPanel 同一套：**同实例复用**，切快照只 setDocument）；
-  // sheet/bitable/board 的正文是内部 JSON ⇒ 由只读编辑器预览渲染（见下方 JSX）。
+  // 内联快照预览：doc 走 <NoteDocPreview>（与回收站/历史面板/标签空间同一实现、同一排版字号；
+  // 内部仍是只读 Lake viewer + 同实例复用，移动端分支也在组件里统一）；sheet/bitable/board 的正文是
+  // 内部 JSON ⇒ 由只读编辑器预览渲染（见下方 JSX）。
   // 原 dangerouslySetInnerHTML 直接注入快照原始 lake 正文（可能来自 S3 同步/他端/导入），
   // 是未消毒 HTML 的 XSS 面。viewer 由内核渲染，快照正文只作为文档数据处理，不进 innerHTML。
-  useHistorySnapshotViewer({
-    hostRef: previewHostRef,
-    noteId: histPreview?.kind === "doc" ? note.noteFileId : null,
-    body: histPreview?.kind === "doc" ? histPreview.html : null,
-    // 移动端无内部滚动容器，必须禁用虚拟渲染（同 DocumentEditor），否则正文渲染不全
-    prefs: isMobileEnvironment()
-      ? { disableNativeToc: true, disableVirtualRendering: true, showToolbar: false }
-      : { disableNativeToc: true },
-    // 快照正文异常：预览留白即可，非关键路径
-    onError: () => undefined,
-  });
 
   // 主清单来自 core（两端同一份，见 core/noteInfo.ts）——改「属性显示什么」只改那一处
   const cells: Array<[string, string]> = info ? noteInfoRows(info) : [];
@@ -245,7 +234,7 @@ export function NoteInfoDialog({ note, onClose, onRevealNoteFile, onOpenAssetsDi
               )}
               {histPreview && (
                 histPreview.kind === "doc"
-                  ? <div className="note-info-history-viewer" ref={previewHostRef} />
+                  ? <NoteDocPreview noteId={note.noteFileId ?? ""} body={histPreview.html} className="note-info-history-viewer" />
                   : <HistorySnapshotPreview kind={histPreview.kind} noteId={note.noteFileId ?? ""} body={histPreview.html} snapshotId={histPreview.id} />
               )}
             </div>

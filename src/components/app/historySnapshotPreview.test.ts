@@ -71,10 +71,28 @@ describe("历史面板：复用 / 预热 / 当前版本 / 键盘", () => {
     expect(HOOK).toMatch(/if \(!viewerRef\.current\) \{/);
     expect(HOOK).toMatch(/viewerRef\.current\.setDocument\("text\/lake", addAssetAccessToken\(body\)\)/);
     expect(HOOK).toMatch(/hostNodeRef\.current !== host \|\| noteRef\.current !== noteId/);
-    // 两个入口（历史面板 / 属性弹窗）都走同一个 hook
-    expect(PANEL).toContain("useHistorySnapshotViewer({");
-    const infoDialog = readFileSync(new URL("./NoteInfoDialog.tsx", import.meta.url), "utf8");
-    expect(infoDialog).toContain("useHistorySnapshotViewer({");
+  });
+
+  it("261106：四个 doc 预览入口共用 NoteDocPreview（唯一 hook 消费者），不再各自内联宿主", () => {
+    const NOTE_DOC = readFileSync(new URL("./NoteDocPreview.tsx", import.meta.url), "utf8");
+    expect(NOTE_DOC).toContain("useHistorySnapshotViewer({");
+    // 预览统一阅读档：14px 基准（字号细节在 noteDocPreview.css）
+    expect(NOTE_DOC).toContain("NOTE_DOC_PREVIEW_FONT_SIZE = 14");
+    expect(NOTE_DOC).toContain("fontSize: NOTE_DOC_PREVIEW_FONT_SIZE");
+    // 四个入口（回收站 / 历史面板 / 文档属性 / 标签空间）都只经 NoteDocPreview，不再各自持 ref + 调 hook
+    for (const rel of [
+      "./HistoryPanel.tsx",
+      "./NoteInfoDialog.tsx",
+      "./TrashPanel.tsx",
+      "../../features/tags/TagPreviewBody.tsx",
+    ]) {
+      const src = readFileSync(new URL(rel, import.meta.url), "utf8");
+      expect(src, rel).toContain("NoteDocPreview");
+      expect(src, rel).not.toContain("useHistorySnapshotViewer(");
+    }
+    // 回收站不再内联 createLakeDocument（内核只经 NoteDocPreview 进入预览）
+    const TRASH = readFileSync(new URL("./TrashPanel.tsx", import.meta.url), "utf8");
+    expect(TRASH).not.toContain("createLakeDocument");
   });
 
   it("打开面板即预热预览分包（用历史列表里的 kind）", () => {

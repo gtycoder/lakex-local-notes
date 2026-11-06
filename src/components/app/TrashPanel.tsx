@@ -9,12 +9,11 @@ import { DialogResizeHandles } from "../ui/DialogResizeHandles";
 import { SplitPane } from "../ui/SplitPane";
 import { getNativeErrorMessage } from "../../lib/nativeErrors";
 import { reportNativeActionError } from "../../lib/nativeErrors";
-import { createLakeDocument, destroyLakeEditor, type LakeEditorInstance } from "../../features/editor/lakeRuntime";
-import { addAssetAccessToken } from "../../lib/assetPort";
 import { trashDaysUntilPurge, type TrashItem } from "../../core/trashPolicy";
 import { formatDateTime } from "../../lib/formatTime";
 import { cloudStateHint } from "../../core/cloudState";
 import { HistorySnapshotPreview } from "./HistorySnapshotPreview";
+import { NoteDocPreview } from "./NoteDocPreview";
 import type { NoteKind } from "../../core/noteKind";
 
 /** 组树：根 = parentId 为回收站笔记本或父不在列表内（旧数据/孤儿兜底）。 */
@@ -123,8 +122,6 @@ export function TrashPanel({ open, embed = false, onClose, onChanged, onRestored
   const docsVersionRef = useRef(createRequestVersion());
   const previewVersionRef = useRef(createRequestVersion());
   const quickVersionRef = useRef(createRequestVersion());
-  const previewHostRef = useRef<HTMLDivElement>(null);
-  const viewerRef = useRef<LakeEditorInstance | null>(null);
 
   const refresh = async () => {
     const version = docsVersionRef.current.next();
@@ -195,31 +192,9 @@ export function TrashPanel({ open, embed = false, onClose, onChanged, onRestored
     }
   };
 
-  // 选中文档 → Lake viewer 渲染（完整样式：图片/代码块/公式/画板；只读，不创建编辑器对象）
+  // 选中文档 → 文档只读预览（<NoteDocPreview>：与标签空间/历史面板/文档属性同一实现，同一排版与字号）。
   // ⚠️ 只给 **doc** 挂：表格/多维表/画板的正文是内部 JSON，塞给 doc viewer 会原样吐出 JSON
-  //（用户 261006 报"多维表预览又坏了"）⇒ 这三种走 <HistorySnapshotPreview>（与历史面板同一实现）。
-  useEffect(() => {
-    const host = previewHostRef.current;
-    if (!host || !selected?.noteId || (selected.kind ?? "doc") !== "doc") {
-      if (viewerRef.current) { destroyLakeEditor(viewerRef.current); viewerRef.current = null; }
-      return;
-    }
-    let disposed = false;
-    let viewer: LakeEditorInstance | null = null;
-    try {
-      viewer = createLakeDocument(host, "viewer", () => {}, false, selected.noteId, host, { disableNativeToc: true });
-      viewerRef.current = viewer;
-      viewer.setDocument("text/lake", addAssetAccessToken(selected.html));
-      viewer.requestCardHydration?.();
-    } catch (e) {
-      if (!disposed) setError(getNativeErrorMessage(e));
-    }
-    return () => {
-      disposed = true;
-      if (viewer) { try { destroyLakeEditor(viewer); } catch { /* ignore */ } }
-      if (viewerRef.current === viewer) viewerRef.current = null;
-    };
-  }, [selected?.id, selected?.noteId]);
+  //（用户 261006 报"多维表预览又坏了"）⇒ 其余的走 <HistorySnapshotPreview>（与历史面板同一实现）。
 
   const restoreQuick = async (id: string) => {
     try { await native.restoreQuickNote(id); await refreshQuick(); }
@@ -371,7 +346,7 @@ export function TrashPanel({ open, embed = false, onClose, onChanged, onRestored
                 selected.kind && selected.kind !== "doc" ? (
                   <HistorySnapshotPreview kind={selected.kind} noteId={selected.noteId ?? ""} body={selected.html} snapshotId={selected.id} />
                 ) : (
-                  <div className="trash-preview-viewer" ref={previewHostRef} />
+                  <NoteDocPreview noteId={selected.noteId ?? ""} body={selected.html} className="trash-preview-viewer" onError={setError} />
                 )
               ) : (
                 <div className="ln-empty">该节点无可预览内容（目录或正文已删）</div>

@@ -1,0 +1,54 @@
+/*
+ * 文档正文只读预览的排版作用域（`.note-doc-preview`，与 NoteDocPreview.tsx 同档、由组件自身 import）。
+ *
+ * 为什么**故意未分层**（与 historySnapshotPreview.css 同档）：正文排版要压内核 legacy 层的 px 定值，
+ * 而组件 JS import 的 CSS 无法进 @layer —— 未分层普通声明恰好压过所有分层声明，因此不需要 !important。
+ * （内核 `.ne-typography-traditional ne-h5/h6{font-size:14px!important}` 的自带 !important 仍照旧胜出，
+ *  这两个标题在 14px 基准下正好是 1em，视觉一致，不需要再压。）
+ *
+ * 字号来源（261106 实测 grep 内核 dist/style.css + 运行时 computed）：
+ *  · 正文基准 = 内核 `.ne-typography-traditional{font-size:14px;line-height:1.74}`，
+ *    但本项目 tokens.css 为「阅读态跟随设置」把 `.lake-editor-mount .ne-viewer/.ne-viewer-body`
+ *    改成 `font-size: inherit` ⇒ 预览会跟随挂载点的 inline 字号（历史默认 18px，正是「预览正文很大」的根因）；
+ *    misc.css 又给阅读态 1.85 行高。
+ *  · 标题 = 内核 px 定值 28/24/20/16（`.ne-typography-*.ne-viewer ne-h1..h4`），不随基准缩放。
+ * ⇒ 预览统一收敛到阅读档：正文 14px、行高 1.7、标题按 em 缩放、内容列宽 760px。
+ * 回收站 / 标签空间 / 历史面板 / 文档属性用的是同一份组件 + 同一份作用域，视觉必然一致。
+ */
+
+.note-doc-preview {
+  /* 不抢滚动：滚动容器是调用方的既有容器类（如 .trash-preview-viewer / .history-preview-viewer） */
+  flex: 1 1 auto;
+  min-height: 0;
+  color: var(--lake-text-1);
+}
+
+.note-doc-preview__error {
+  margin: 0 0 var(--lake-space-sm);
+  color: var(--lake-status-error);
+}
+
+/* 内核挂载点铺满宿主高度（回收站/历史面板里父级高度由 flex 算出） */
+.note-doc-preview__host,
+.note-doc-preview .lake-editor-mount { min-height: 100%; }
+
+/* 正文基准：14px / 1.7（收掉 tokens.css 的字号继承与 misc.css 阅读态的 1.85） */
+.note-doc-preview .ne-viewer,
+.note-doc-preview .ne-viewer-body {
+  font-size: var(--lake-font-size-body);
+  line-height: 1.7;
+  letter-spacing: 0;
+}
+
+/* 标题按 em 缩放（内核是 28/24/20/16 px 定值，不缩放会在 14px 正文里显得巨大） */
+.note-doc-preview ne-h1 { font-size: 1.5em; line-height: 1.35; }
+.note-doc-preview ne-h2 { font-size: 1.3em; line-height: 1.4; }
+.note-doc-preview ne-h3 { font-size: 1.15em; line-height: 1.45; }
+.note-doc-preview ne-h4 { font-size: 1em; line-height: 1.5; }
+
+/* 阅读列宽：内核 viewer 不限制宽度（只有编辑态 fixed 布局有 750px）⇒ 预览自己收一行宽 + 左右内距 */
+.note-doc-preview .ne-viewer-body {
+  max-width: 760px;
+  margin-inline: auto;
+  padding-inline: var(--lake-space-xl);
+}

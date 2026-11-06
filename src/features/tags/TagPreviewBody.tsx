@@ -1,11 +1,13 @@
-import { QuickNotePreview } from "../quickNotes/QuickNotePreview";
+import { NoteDocPreview } from "../../components/app/NoteDocPreview";
 import { HistorySnapshotPreview } from "../../components/app/HistorySnapshotPreview";
+import { QuickNotePreview } from "../quickNotes/QuickNotePreview";
 
 /**
- * 标签空间的只读预览正文（261106 用户验收：**复用通用只读预览**）。
+ * 标签空间的只读预览正文（261106 用户验收：**统一成同一个预览能力**）。
  *
- * - 文档（doc / usheet / bitable / board / ink）⇒ `HistorySnapshotPreview`（与回收站、历史面板同一实现、
- *   同一排版与字号；内部按 kind 懒加载各自只读编辑器，解析不了退化成结构化摘要）；
+ * - doc ⇒ `NoteDocPreview`（回收站/历史面板/文档属性同一实现：只读 Lake viewer + 统一阅读档排版，
+ *   正文 14px / 行高 1.7 / 标题 em 缩放 / 列宽 760px）；
+ * - 其余四族（usheet / bitable / board / ink）⇒ `HistorySnapshotPreview`（正文是内部 JSON，靠只读编辑器渲染）；
  * - 小记 ⇒ 既有「快路径 + 内核只读兜底」（QuickNotePreview 内部按 unsupported 节点自动落到内核）。
  *
  * 本模块**只能由 lazy 入口加载**（TagsWorkspace → lazy(() => import("./TagPreviewBody"))）：
@@ -18,7 +20,9 @@ export default function TagPreviewBody({ kind, docKind = "doc", body, noteId }: 
   noteId: string;
 }) {
   if (kind === "doc") {
-    return <HistorySnapshotPreview kind={docKind} noteId={noteId} body={body} snapshotId={noteId} />;
+    return docKind === "doc"
+      ? <NoteDocPreview noteId={noteId} body={body} />
+      : <HistorySnapshotPreview kind={docKind} noteId={noteId} body={body} snapshotId={noteId} />;
   }
   return (
     <div className="tags-preview__quick">

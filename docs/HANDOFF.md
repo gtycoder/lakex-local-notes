@@ -8,6 +8,11 @@
 
 ## 0. 最新交接（261027）
 
+### 261106 · 统一文档只读预览（NoteDocPreview）+ 字号收敛 · **已提交并双推**
+- 新增 `src/components/app/NoteDocPreview.tsx`（内部唯一使用 `useHistorySnapshotViewer`，14px 阅读档 + 移动端分支内置）：回收站 doc 分支、标签空间 doc 分支、历史面板、文档属性全部迁入（hook 消费者 3→1）；非 doc 四族仍 `HistorySnapshotPreview`、小记仍 `QuickNotePreview`；资源页无 doc 正文预览无需改。
+- 修标签空间预览空白（doc 误用 HistorySnapshotPreview 只出兜底文案）；字号根因 = tokens.css 让 viewer font-size:inherit（挂载点 18px）+ 内核标题 px 定值 ⇒ 新作用域类：正文 14/1.7、标题 em（1.5/1.3/1.15/1em）、760px 限宽、0 个 !important；实测回收站与标签空间一致（p 14/23.8、h1 21）。
+- 门禁：tsc 0；全量 vitest 699 文件 4317 例全绿；ui-metrics / diff-check 通过。
+
 ### 261105 · 标签空间 UI 三修（用户验收反馈）· **已提交并双推**
 - ① 标签空间**隐藏左侧目录栏**：App 给 shell 加 `tags-space-active`，chrome.css 照抄回收站/资源同口径（隐 sidebar/statusbar、workspace 铺满、三栏吃满整窗）；实测 CDP：`.app-shell` 含类、`.sidebar` display=none、`.tags-space` 存在。
 - ② **标签筛选并入原目录 Filter**：移除独立标签图标，`filter.open` 时在同一浮层渲染「名称筛选 + 标签（包含/排除）」；全侧栏只剩一个 Filter 按钮。

@@ -29,6 +29,7 @@ const FILES = [
   "components/ui/colorPalette.css",   // 261008：统一选色盘（从多维表 CSS 移出，表格/多维表共用）
   "components/ui/nodeIcon.css",   // 目录节点图标：彩色底块 + 线性轮廓、选择器色板/网格
   "components/app/historySnapshotPreview.css",
+  "components/app/noteDocPreview.css",   // 261106：文档只读预览统一排版作用域（NoteDocPreview）
   "features/bitable/bitableEditor.css",
   "features/bitable/bitableViewport.css",   // 主表/关联选择器共用的窗口结构，不复制视觉原语
   "features/bitable/bitableViews.css",   // V01：视图层（视图页签/回退提示），按职责从 bitableEditor 分出
@@ -74,6 +75,7 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   //   chrome.css +3 = 同步提示条去掉「单侧 3px 色条」改用图标色（.sync-toast-icon--ok/--error/--unavailable）；
   //   shell.css +3 = 目录/大纲筛选行高度动画改 grid-template-rows（.dock-filter-row 的 display/grid-template-rows/min-width
   //   与 .dock-filter-row__inner 的 min-height）。两处都是合法新增（非覆盖回涨）。
+  "components/app/noteDocPreview.css": { decls: 20, dupGroups: 0 },   // 261106 新文件：文档只读预览统一排版作用域（正文 14px/1.7 + 标题 em 缩放 + 列宽 760px）：容器/错误行/宿主铺满/字号行高/4 条标题/列宽，无重复组、无 !important
   "styles/index.css": { decls: 0, dupGroups: 0 },   // UI 重设计 P1：单入口（@layer 声明 + @import 编排，0 声明）
   "components/ui/nodeIcon.css": { decls: 95, dupGroups: 0 },   // 261020：117 → 95（−22）= 删掉旧 40 线性图标 + 8 档色板（−27），再加回容器的「表情符号｜图标」两页页签（+2）与面板自有空态（+1）；只剩表情页与语雀插画网格
   "components/ui/colorPalette.css": { decls: 77, dupGroups: 0 },   // 261008：统一选色盘（15 条 .bt-color-* + .bt-popover + @keyframes，从多维表 CSS 原样移出）

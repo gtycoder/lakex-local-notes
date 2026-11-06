@@ -34,8 +34,11 @@ describe("标签空间接线（P1）", () => {
   it("App 用 lazy 挂载标签空间；内核只读预览在组件内再懒一层（P12 内核边界）", () => {
     expect(APP).toContain('lazy(() => import("./features/tags/TagsWorkspace")');
     expect(WORKSPACE).toContain('lazy(() => import("./TagPreviewBody"))');
-    // 261106：文档预览统一复用 HistorySnapshotPreview（与回收站/历史同一实现），不再走内核包裹
+    // 261106：doc 预览统一走 NoteDocPreview（回收站/历史/属性弹窗同一实现、同一排版字号）；
+    // 非 doc 四族仍 HistorySnapshotPreview，小记仍 QuickNotePreview
+    expect(PREVIEW).toContain("NoteDocPreview");
     expect(PREVIEW).toContain("HistorySnapshotPreview");
+    expect(PREVIEW).toContain("QuickNotePreview");
     expect(PREVIEW).not.toContain("QuickNoteKernelPreview");
     // 预览组件本身不得被 App 静态 import
     expect(APP).not.toContain('import { TagPreviewBody }');
@@ -140,7 +143,9 @@ describe("标签空间接线（P1）", () => {
     expect(APP).toContain("const removeTagFromItem = useCallback");
     expect(APP).toContain("await native.setNoteTags(item.id, current.filter((id) => id !== tagId));");
     expect(APP).toContain("await native.setQuickNoteTags(item.id, (quick?.tagIds ?? []).filter((id) => id !== tagId));");
-    // 预览：复用通用只读实现；自定义大字号样式已删
+    // 预览：doc 走共享 NoteDocPreview（HistorySnapshotPreview 对 doc 只出结构化兜底 ⇒ 曾整块空白）；
+    // 行内自建内核宿主的自定义大字号样式已删
+    expect(read("../../features/tags/TagPreviewBody.tsx")).toContain("NoteDocPreview");
     expect(read("../../features/tags/TagPreviewBody.tsx")).toContain("HistorySnapshotPreview");
     expect(read("../../features/tags/TagPreviewBody.tsx")).not.toContain("QuickNoteKernelPreview");
     expect(read("../../features/tags/tags.css")).not.toContain("tags-preview__doc");

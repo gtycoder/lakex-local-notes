@@ -8,8 +8,8 @@ import { useConfirm } from "../../hooks/useConfirm";
 import { DialogResizeHandles } from "../ui/DialogResizeHandles";
 import { SplitPane } from "../ui/SplitPane";
 import { getNativeErrorMessage } from "../../lib/nativeErrors";
-import { useHistorySnapshotViewer } from "../hooks/useHistorySnapshotViewer";
 import { HistorySnapshotPreview } from "./HistorySnapshotPreview";
+import { NoteDocPreview } from "./NoteDocPreview";
 import type { NoteKind } from "../../core/noteKind";
 import { formatDateTime } from "../../lib/formatTime";
 
@@ -55,7 +55,6 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
     size?: number;
   } | null>(null);
   const [inline, setInline] = useState<{ id: number; title: string; kind: NoteKind; html: string; size?: number } | null>(null);
-  const previewHostRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   /** 当前正文（已落盘那份）的 hash：用来标出"与当前版本一致"的快照。 */
   const [currentHash, setCurrentHash] = useState<string | null>(null);
@@ -226,14 +225,9 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
     }
   };
 
-  // doc 快照：只读 Lake viewer，**同一实例复用**（切快照只 setDocument，不再重建整个内核）；
-  // sheet/bitable/board 的正文是内部 JSON ⇒ 由 <HistorySnapshotPreview> 挂只读编辑器预览。
-  useHistorySnapshotViewer({
-    hostRef: previewHostRef,
-    noteId: inline?.kind === "doc" ? noteId : null,
-    body: inline?.kind === "doc" ? inline.html : null,
-    onError: (message) => setError(message || "快照预览失败"),
-  });
+  // doc 快照：<NoteDocPreview>（只读 Lake viewer，同一实例复用，切快照只 setDocument；
+  // 与回收站/标签空间/文档属性同一排版）；sheet/bitable/board 的正文是内部 JSON
+  // ⇒ 由 <HistorySnapshotPreview> 挂只读编辑器预览。
 
   /** 预览孤儿文件：与设置-资源同口径 —— 不清空上一张已解码的图，新图解码完再替换，
    *  否则预览区会先塌成提示文本再撑开（实测跳动 190px 量级 = 用户看到的"闪一下"）。 */
@@ -366,7 +360,7 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
                 <>
                   <div className="history-preview-inline-title">{inline.title}{inline.size !== undefined ? `，${(inline.size / 1024).toFixed(1)} KB` : ""}</div>
                   {inline.kind === "doc"
-                    ? <div className="history-preview-viewer" ref={previewHostRef} />
+                    ? <NoteDocPreview noteId={noteId} body={inline.html} className="history-preview-viewer" onError={(message) => setError(message || "快照预览失败")} />
                     : <HistorySnapshotPreview kind={inline.kind} noteId={noteId} body={inline.html} snapshotId={inline.id} />}
                 </>
               ) : (
