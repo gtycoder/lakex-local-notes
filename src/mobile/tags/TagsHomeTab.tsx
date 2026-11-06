@@ -410,23 +410,21 @@ export function TagsHomeTab({ tags, notes, quickNotes, active, onOpenNote, onOpe
               <MoreVertical size={20} />
             </button>
           </header>
-          <div className="mb-set-title">
-            <span className="mb-set-item__desc">
-              {countText(counts.docs[selectedTag.id] ?? 0, counts.quickNotes[selectedTag.id] ?? 0)}
-            </span>
+          <div className="tag-detail-sub mb-set-item__desc">
+            {countText(counts.docs[selectedTag.id] ?? 0, counts.quickNotes[selectedTag.id] ?? 0)}
           </div>
 
           {rows.length === 0 ? (
             <div className="mb-empty">该标签下暂无内容</div>
           ) : (
             <>
-              <h4 className="mb-set-title"><FileText size={14} />文档（{docs.length}）</h4>
+              <h4 className="mb-set-title tag-detail-section"><FileText size={14} />文档（{docs.length}）</h4>
               {docs.length === 0 ? (
                 <div className="mb-empty mb-empty--inset">还没有文档</div>
               ) : (
                 <div className="mb-set-items">{docs.map(renderDocRow)}</div>
               )}
-              <h4 className="mb-set-title"><Feather size={14} />小记（{quickRows.length}）</h4>
+              <h4 className="mb-set-title tag-detail-section"><Feather size={14} />小记（{quickRows.length}）</h4>
               {quickRows.length === 0 ? (
                 <div className="mb-empty mb-empty--inset">还没有小记</div>
               ) : (

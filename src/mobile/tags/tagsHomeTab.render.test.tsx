@@ -58,8 +58,20 @@ import { TagsHomeTab } from "./TagsHomeTab";
 
 const readSource = (rel: string): string => readFileSync(path.join(process.cwd(), rel), "utf8");
 const TAB_SRC = readSource("src/mobile/tags/TagsHomeTab.tsx");
+const CARD_SRC = readSource("src/mobile/tags/TagQuickNoteCard.tsx");
 const QN_CSS = readSource("src/mobile/quick-notes.css");
 const MOBILE_CSS = readSource("src/mobile/mobile.css");
+
+/** ResizeObserver 桩：记录实例与观察目标，测试里可手动 trigger 复现「内容长高」。 */
+class ResizeObserverStub {
+  static instances: ResizeObserverStub[] = [];
+  readonly targets: Element[] = [];
+  constructor(private readonly callback?: ResizeObserverCallback) { ResizeObserverStub.instances.push(this); }
+  observe(target?: Element): void { if (target) this.targets.push(target); }
+  disconnect(): void {}
+  unobserve(): void {}
+  trigger(): void { this.callback?.([], this as unknown as ResizeObserver); }
+}
 
 const T = "2026-11-01T00:00:00.000Z";
 const tag = (id: string, name: string): QuickNoteTag => ({ id, name, createdAt: T, updatedAt: T });
@@ -132,6 +144,20 @@ const sheetButton = (text: string): HTMLButtonElement | undefined =>
   [...host.querySelectorAll<HTMLButtonElement>(".mb-sheet__foot button")].find((el) => (el.textContent ?? "").trim() === text);
 /** 列表行（data-tag-id）+ 行主区（role=button）。 */
 const listRows = (): HTMLElement[] => [...host.querySelectorAll<HTMLElement>(".mb-set-item[data-tag-id]")];
+/** 小记卡自己的「展开/收起」（在裁切区外，是 .mb-set-item__main 的直接子按钮）。 */
+const expandToggle = (): HTMLButtonElement | undefined =>
+  [...host.querySelectorAll<HTMLButtonElement>(".mb-set-item__main > .quick-note-preview-toggle")][0];
+/** 模拟「内容真实高度」并触发一次 ResizeObserver 复测（对应真机上正文/图片到达）。 */
+const setCardScrollHeight = async (px: number): Promise<void> => {
+  const card = host.querySelector<HTMLElement>(".tag-quick-card");
+  expect(card).not.toBeNull();
+  (card as HTMLElement & { __scrollHeight?: number }).__scrollHeight = px;
+  // 页面上有多个 RO（卡片判溢出 + 富预览自身的折叠测量）：全部触发一次，等价于真机上内容长高。
+  await act(async () => {
+    for (const ro of ResizeObserverStub.instances) ro.trigger();
+    await Promise.resolve();
+  });
+};
 const rowMain = (name: string): HTMLElement | null => host.querySelector('.mb-set-item__main[role="button"][aria-label="' + name + '"]');
 const inDetail = (): boolean => host.querySelector('[aria-label="返回标签列表"]') !== null;
 /** 详情聚合行标题（main role=button）。 */
@@ -149,9 +175,14 @@ const openRowMenu = async (name: string): Promise<void> => { await click(byAria(
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   vi.stubGlobal("IntersectionObserver", IntersectionObserverStub);
-  vi.stubGlobal("ResizeObserver", class { observe(): void {} disconnect(): void {} unobserve(): void {} });
+  ResizeObserverStub.instances = [];
+  vi.stubGlobal("ResizeObserver", ResizeObserverStub);
   Object.defineProperty(HTMLElement.prototype, "clientHeight", { configurable: true, value: 800 });
-  Object.defineProperty(HTMLElement.prototype, "scrollHeight", { configurable: true, value: 400 });
+  // scrollHeight 默认 0（不溢出）；需要模拟「内容超限」时给单个元素打 __scrollHeight 再手动触发 RO。
+  Object.defineProperty(HTMLElement.prototype, "scrollHeight", {
+    configurable: true,
+    get(this: HTMLElement & { __scrollHeight?: number }) { return this.__scrollHeight ?? 0; },
+  });
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
@@ -231,7 +262,7 @@ describe("标签页 · 交互骨架（无「管理」模式）", () => {
     for (const cls of ["mobile-scroll", "mobile-settings-head", "mb-set-items", "mb-set-item", "mb-iconbtn", "mb-empty"]) {
       expect(TAB_SRC).toContain(cls);
     }
-    for (const invented of ["tags-page", "tags-row", "tag-list", "tags-list", "tag-detail"]) {
+    for (const invented of ["tags-page", "tags-row", "tag-list", "tags-list", "tag-detail-page"]) {
       expect(TAB_SRC).not.toContain(invented);
     }
   });
@@ -391,26 +422,71 @@ describe("行主区 / 长按拖拽", () => {
     expect(listRows().length).toBeGreaterThan(0);
   });
 
-  it("小记卡限高 + 展开/收起：.tag-quick-card 默认收起，点「展开」→ is-expanded（CSS 与本组件同一阈值）", async () => {
+  it("小记卡：内容不超 180 ⇒ 不出现「展开」按钮（判的是卡片本体 scrollHeight，不是父容器）", async () => {
     await renderTab({ tags: [tag("t_a", "工作")] });
     await click(rowMain("工作"));
-    const card = host.querySelector(".tag-quick-card");
-    expect(card).not.toBeNull();
-    expect(card!.className).not.toContain("is-expanded");
-    // 卡片自己的「展开」是 .mb-set-item__main 的直接子按钮（预览内部自己的折叠按钮在 .tag-quick-card 里）。
-    const toggle = [...host.querySelectorAll<HTMLButtonElement>(".mb-set-item__main > .quick-note-preview-toggle")]
-      .find((el) => (el.textContent ?? "").trim() === "展开");
-    expect(toggle).toBeTruthy();
-    await click(toggle);
-    expect(host.querySelector(".tag-quick-card")!.className).toContain("is-expanded");
-    const collapse = [...host.querySelectorAll<HTMLButtonElement>(".mb-set-item__main > .quick-note-preview-toggle")]
-      .find((el) => (el.textContent ?? "").trim() === "收起");
-    expect(collapse).toBeTruthy();
-    // 限高 180（CSS 唯一来源）+ 展开后解除；阈值在组件里与 CSS 对齐。
+    await setCardScrollHeight(120);
+    expect(expandToggle()).toBeUndefined();
+    // 静态防回归：测的是 .tag-quick-card 自己的 scrollHeight，ResizeObserver 观察内容子节点。
+    expect(CARD_SRC).toContain("const el = cardRef.current");
+    expect(CARD_SRC).toContain("el.scrollHeight > COLLAPSED_MAX_PX");
+    expect(CARD_SRC).toContain("ro?.observe(contentRef.current)");
+    expect(CARD_SRC).toContain("requestAnimationFrame(measure)");
+    // 限高 180 的唯一来源是 CSS（组件阈值与它保持一致）。
     expect(QN_CSS).toContain(".tag-quick-card {");
     expect(QN_CSS).toContain("max-height: 180px");
     expect(QN_CSS).toContain(".tag-quick-card.is-expanded");
-    expect(MOBILE_CSS).toContain(".mobile-page-head");
+  });
+
+  it("小记卡：内容超 180 ⇒ 出现「展开」，点击 → is-expanded + 「收起」，再点恢复", async () => {
+    await renderTab({ tags: [tag("t_a", "工作")] });
+    await click(rowMain("工作"));
+    await setCardScrollHeight(400);
+    const toggle = expandToggle();
+    expect(toggle).toBeTruthy();
+    expect(toggle!.textContent?.trim()).toBe("展开");
+    // 按钮在裁切区之外（不是 .tag-quick-card 的后代）⇒ 卡片被裁也不影响可点。
+    expect(host.querySelector(".tag-quick-card")!.contains(toggle!)).toBe(false);
+    await click(toggle);
+    expect(host.querySelector(".tag-quick-card")!.className).toContain("is-expanded");
+    expect(expandToggle()!.textContent?.trim()).toBe("收起");
+    await click(expandToggle());
+    expect(host.querySelector(".tag-quick-card")!.className).not.toContain("is-expanded");
+    expect(expandToggle()!.textContent?.trim()).toBe("展开");
+  });
+
+  it("小记卡：正文异步到达后能从「无按钮」→「有按钮」（readQuickNote 延迟 resolve + 内容长高）", async () => {
+    let resolveDetail!: (value: unknown) => void;
+    mocks.readQuickNote.mockImplementationOnce(() => new Promise((resolve) => { resolveDetail = resolve; }));
+    await renderTab({ tags: [tag("t_a", "工作")] });
+    await click(rowMain("工作"));
+    expect(host.querySelector(".tag-quick-card")).not.toBeNull();
+    await setCardScrollHeight(40); // 只有回落摘要
+    expect(expandToggle()).toBeUndefined();
+
+    // 正文到达（异步）+ 内容长高（RO 由内容子节点触发）⇒ 复测后出现「展开」。
+    await act(async () => {
+      resolveDetail({
+        id: "q1",
+        content: { text: "1111", body: RICH_BODY, images: [PIC] },
+        tagIds: [], tags: [], previewText: "想法一", updatedAt: "2026-11-06T09:00:00.000Z",
+      });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    await setCardScrollHeight(400);
+    expect(expandToggle()).toBeTruthy();
+  });
+
+  it("详情副标题与段标题间距：用既有间距令牌的两个新类（横向仍是页内距 16）", async () => {
+    await renderTab({ tags: [tag("t_a", "工作")] });
+    await click(rowMain("工作"));
+    expect(host.querySelector(".tag-detail-sub")).not.toBeNull();
+    expect(host.querySelectorAll(".tag-detail-section").length).toBe(2);
+    expect(MOBILE_CSS).toContain(".tag-detail-sub");
+    expect(MOBILE_CSS).toContain(".tag-detail-section");
+    expect(MOBILE_CSS).toMatch(/\.tag-detail-sub \{[^}]*var\(--lake-space-/s);
+    expect(MOBILE_CSS).toMatch(/\.tag-detail-section \{[^}]*var\(--lake-space-/s);
+    expect(MOBILE_CSS).toMatch(/\.tag-detail-sub \{[^}]*var\(--mb-page-pad\)/s);
   });
 
   it("长按 350ms 拖拽 → reorderQuickNoteTags；拖拽后的那次 click 不进详情", async () => {
