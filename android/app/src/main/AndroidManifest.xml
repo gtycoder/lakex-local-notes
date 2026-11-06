@@ -44,6 +44,34 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="application/pdf" />
             </intent-filter>
+            <!-- 261106：Markdown 分享入口（单文件）。text/plain 已有上面那条 ⇒ 分享方把 .md 标成纯文本也能进来，
+                 插件再按 DISPLAY_NAME 的 .md/.markdown 后缀分类；这里补声明 markdown mime，让系统分享列表直接出现本 App。 -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/markdown" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/x-markdown" />
+            </intent-filter>
+            <!-- 261106：Markdown 多文件分享（ACTION_SEND_MULTIPLE）；text/plain 也接，插件按扩展名过滤 .md。 -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/markdown" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/x-markdown" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
 
             <!-- 长按桌面图标 → 静态快捷方式列表（res/xml/shortcuts.xml） -->
             <meta-data

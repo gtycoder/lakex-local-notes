@@ -164,6 +164,16 @@ export interface LakeNative {
   getBackupUsage(): Promise<import("./types").BackupUsageShape>;
   /** 261106 批量操作（move / trash / tag-add / tag-remove）：先全部校验再单事务执行，逐条结果。 */
   batchNotes(payload: import("./types").BatchNotesRequestShape): Promise<import("./types").BatchNotesResultShape>;
+  /** 261106 Markdown 导入：多选 .md 文件（取消 → 空数组；正文由主进程读取，>20MB 标记 tooLarge）。 */
+  pickMarkdownFiles(): Promise<import("./types").MarkdownPickedFileShape[]>;
+  /** 261106 Markdown 导入：选择文件夹递归扫描（保留 relativePath；上限 500 截断）。 */
+  pickMarkdownFolder(): Promise<import("./types").MarkdownFolderPickShape>;
+  /** 261106 Markdown 导入：读一张本地图片字节（png/jpg/jpeg/gif/webp，≤20MB）。 */
+  readImportImage(filePath: string): Promise<import("./types").ImportImageShape>;
+  /** 261106 批量导出：按类型默认格式导出到同一目录（dirPath 缺省弹选择框；取消 ⇒ cancelled）。 */
+  exportNotesBatch(payload: import("./types").BatchExportRequestShape): Promise<import("./types").BatchExportResultShape>;
+  /** 261106 task-88：批量导出后打开所在文件夹（主进程只允许最近一次选择框选中的目录）。 */
+  openExportDir(dirPath: string): Promise<{ ok: boolean; error?: string; path: string }>;
   setNodeIcon(id: string, icon: string | null): Promise<TreeNode>;
   searchNotes(query: string, limit?: number): Promise<NoteSearchHit[]>;
   rebuildSearchIndex(): Promise<boolean>;
@@ -396,6 +406,11 @@ export const native = {
   runBackupNow: () => api().runBackupNow(),
   getBackupUsage: () => api().getBackupUsage(),
   batchNotes: (payload: import("./types").BatchNotesRequestShape) => api().batchNotes(payload),
+  pickMarkdownFiles: () => api().pickMarkdownFiles(),
+  pickMarkdownFolder: () => api().pickMarkdownFolder(),
+  readImportImage: (filePath: string) => api().readImportImage(filePath),
+  exportNotesBatch: (payload: import("./types").BatchExportRequestShape) => api().exportNotesBatch(payload),
+  openExportDir: (dirPath: string) => api().openExportDir(dirPath),
   scanRebuildCandidates: () => api().scanRebuildCandidates(),
   rebuildOrphanNotes: (ids: string[]) => api().rebuildOrphanNotes(ids),
   setNodeIcon: (id: string, icon: string | null) => api().setNodeIcon(id, icon),

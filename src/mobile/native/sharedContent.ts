@@ -4,7 +4,7 @@
  * 原生 SharedContentPlugin 只把分享内容接住：文本原样、图片/文件复制到 filesDir/shared-inbox/。
  * 这里把它转成「小记」轻量框的 seed（文本 + 图片字节）；冷启动走 consume()，热启动走 "shared" 事件。
  */
-import { Directory, Filesystem } from "@capacitor/filesystem";
+import { Directory, Encoding, Filesystem } from "@capacitor/filesystem";
 import { registerPlugin } from "@capacitor/core";
 /**
  * 系统分享带入的初始内容（文本 + 图片字节）。
@@ -16,17 +16,31 @@ export interface QuickNoteSeed {
 }
 
 /** 分享内容显式分类（261102 T2-C：原生按 mime/后缀判定，JS 不再靠 imageFilename 猜）。 */
-export type SharedContentKind = "image" | "pdf" | "file";
+export type SharedContentKind = "image" | "pdf" | "markdown" | "file";
+
+/** 多文件分享（261106 ACTION_SEND_MULTIPLE）：每项的复制结果（失败项带 error，逐条提示）。 */
+export interface SharedContentFile {
+  filename?: string;
+  kind?: SharedContentKind;
+  mimeType?: string;
+  /** 原始显示名（分享方 DISPLAY_NAME；导入 Markdown 时用作标题）。 */
+  displayName?: string;
+  error?: string;
+}
 
 export interface SharedContent {
+  /** 多文件分享的文件清单（SEND_MULTIPLE；单文件分享也带一项，兼容旧字段 filename/kind）。 */
+  files?: SharedContentFile[];
   text?: string;
   /** 原生复制出的文件名（新字段；与 imageFilename 同值，旧字段保留给旧 APK/回滚）。 */
   filename?: string;
-  /** image | pdf | file；旧 APK 没有该字段 ⇒ JS 按 mime/后缀兜底（见 sharedContentKind）。 */
+  /** image | pdf | markdown | file；旧 APK 没有该字段 ⇒ JS 按 mime/后缀兜底（见 sharedContentKind）。 */
   kind?: SharedContentKind;
   /** @deprecated 旧字段，语义见 kind；新代码用 filename。 */
   imageFilename?: string;
   mimeType?: string;
+  /** 原始显示名（分享方 DISPLAY_NAME；新 APK 才有；导入 Markdown 用作标题）。 */
+  displayName?: string;
   /** 原生流式读取/大小校验失败时的可见原因（只带文本时也可能出现）。 */
   imageError?: string;
 }
@@ -59,20 +73,76 @@ function base64ToBytes(base64: string): Uint8Array {
  * 「PDF/其它文件不再被当图片读进小记」（261102 T2-C 的防静默失败核心）。
  */
 export function sharedContentKind(content: SharedContent): SharedContentKind {
-  if (content.kind === "image" || content.kind === "pdf" || content.kind === "file") return content.kind;
+  if (content.kind === "image" || content.kind === "pdf" || content.kind === "markdown" || content.kind === "file") return content.kind;
   const mime = (content.mimeType ?? "").toLowerCase();
   const name = (content.filename ?? content.imageFilename ?? "").toLowerCase();
   if (mime.startsWith("image/") || /\.(png|jpg|jpeg|gif|webp|avif)$/.test(name)) return "image";
   if (mime.startsWith("application/pdf") || name.endsWith(".pdf")) return "pdf";
+  if (isMarkdownMimeOrName(mime, name)) return "markdown";
   return "file";
+}
+
+/** Markdown 判定（261106）：mime text/markdown | text/x-markdown，或文件名 .md/.markdown。 */
+export function isMarkdownMimeOrName(mime: string, name: string): boolean {
+  return mime.startsWith("text/markdown") || mime.startsWith("text/x-markdown") || /\.(md|markdown)$/.test(name);
+}
+
+/**
+ * 分享里的 Markdown 文件清单（261106）：多文件取 files[] 里 md 的项；单文件兼容旧字段。
+ * 只负责**分类**，不读取内容（读取见 readSharedContentText）。
+ */
+export interface SharedMarkdownFile {
+  filename: string;
+  mimeType: string;
+  /** 原始显示名（用于文档标题；缺省回落 filename）。 */
+  displayName?: string;
+}
+
+export function sharedMarkdownFiles(content: SharedContent): SharedMarkdownFile[] {
+  const out: SharedMarkdownFile[] = [];
+  for (const file of content.files ?? []) {
+    const filename = file.filename ?? "";
+    if (!filename) continue;
+    const mime = (file.mimeType ?? "").toLowerCase();
+    if (file.kind === "markdown" || (!file.kind && isMarkdownMimeOrName(mime, filename.toLowerCase()))) {
+      out.push({ filename, mimeType: file.mimeType ?? "text/markdown", displayName: file.displayName });
+    }
+  }
+  if (out.length > 0) return out;
+  const filename = content.filename ?? content.imageFilename ?? "";
+  const mime = (content.mimeType ?? "").toLowerCase();
+  if (filename && (sharedContentKind(content) === "markdown" || isMarkdownMimeOrName(mime, filename.toLowerCase()))) {
+    out.push({ filename, mimeType: content.mimeType ?? "text/markdown", displayName: content.displayName });
+  }
+  return out;
 }
 
 /** pdf/file 分享的可见提示（调用方 toast；image ⇒ null）。 */
 export function sharedContentUnsupportedHint(content: SharedContent): string | null {
   const kind = sharedContentKind(content);
   if (kind === "pdf") return SHARED_PDF_IMPORT_HINT;
+  // Markdown 由「分享 → 导入为文档」分支处理（261106），不算不支持。
+  if (kind === "markdown") return null;
   if (kind === "file") return SHARED_FILE_UNSUPPORTED_HINT;
   return null;
+}
+
+/**
+ * 读取分享的 Markdown 文本（261106）：UTF-8 读 shared-inbox 里的临时文件。
+ * 语义与 readSharedContentBytes 一致：**读成功才删**（消费语义）；失败保留文件便于重试/排查。
+ */
+export async function readSharedContentText(filename: string): Promise<string | null> {
+  if (!filename) return null;
+  const path = "shared-inbox/" + filename;
+  try {
+    const file = await Filesystem.readFile({ path, directory: Directory.Data, encoding: Encoding.UTF8 });
+    const text = typeof file.data === "string" ? file.data : "";
+    if (!text) return null;
+    try { await Filesystem.deleteFile({ path, directory: Directory.Data }); } catch { /* 删除临时文件失败不影响本次导入 */ }
+    return text;
+  } catch {
+    return null;
+  }
 }
 
 /**

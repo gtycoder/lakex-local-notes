@@ -14,10 +14,20 @@ const menuLabelsInOrder = (): string[] =>
   [...DRAWER.matchAll(/\{ key: "[a-z0-9]+", label: "([^"]+)"/g)].map((m) => m[1]);
 
 describe("移动端设置分组（对齐桌面）", () => {
-  it("分组命名与顺序：云端与同步 → 备份与恢复 → AI → 编辑器 → 外观 → 历史 → 资源管理 → 清理缓存 → 回收站 → 关于", () => {
+  it("分组命名与顺序：云端与同步 → 备份与恢复 → AI → 编辑器 → 外观 → 历史 → 导入 → 资源管理 → 清理缓存 → 回收站 → 关于", () => {
+    // 261106 task-86：新增「导入」分组（默认笔记本；分享进来的 Markdown 落这里）。
     expect(menuLabelsInOrder()).toEqual([
-      "云端与同步", "备份与恢复", "AI 助手", "编辑器", "外观", "历史", "资源管理", "清理缓存", "回收站", "关于",
+      "云端与同步", "备份与恢复", "AI 助手", "编辑器", "外观", "历史", "导入", "资源管理", "清理缓存", "回收站", "关于",
     ]);
+  });
+
+  it("「导入」分组挂默认笔记本选择器（打开时默认选中当前值）", () => {
+    expect(DRAWER).toMatch(/type View = [^;]*"import"/);
+    expect(DRAWER).toContain('{ key: "import", label: "导入", icon: Download }');
+    expect(DRAWER).toContain('{view === "import" && (');
+    expect(DRAWER).toContain('name="默认笔记本"');
+    expect(DRAWER).toContain("<DefaultNotebookPickerSheet");
+    expect(DRAWER).toContain("currentId={importNotebookId}");
   });
 
   it("261106：设置页**不再有标签分组**（标签管理/标签空间已搬到一级「标签」页，避免双入口）", () => {

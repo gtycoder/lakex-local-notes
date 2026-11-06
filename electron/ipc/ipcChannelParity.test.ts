@@ -98,8 +98,11 @@ describe("IPC 通道三方一致性（C2-2）", () => {
     // → 155（261105 P1 第 4 项同步记录账本：list/ack/restore_sync_conflict*）。
     // → 156（261105 task-68 备份可观测：get_backup_usage —— 只读 stat，不读文件内容/不删文件）。
     // → 157（261106 批量操作：batch_notes —— 先全部校验再单事务执行；删除=移入回收站，无 purge/restore）。
-    expect(registrarChannels().size, "通道数变了 ⇒ 请确认是有意的并在 commit 里说明").toBe(157);
-    expect(preloadChannels().size).toBe(157);
-    expect(Object.keys(WEB_METHODS).length).toBe(157);
+    // → 160（261106 Markdown 导入：pick_markdown_files / pick_markdown_folder / read_import_image）。
+    // → 161（261106 批量导出：export_notes_batch —— 按类型默认格式，只读不写源）。
+    // → 162（261106 task-88：open_export_dir —— 只允许打开最近一次系统选择框选中的导出目录）。
+    expect(registrarChannels().size, "通道数变了 ⇒ 请确认是有意的并在 commit 里说明").toBe(162);
+    expect(preloadChannels().size).toBe(162);
+    expect(Object.keys(WEB_METHODS).length).toBe(162);
   });
 });

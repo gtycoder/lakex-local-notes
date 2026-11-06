@@ -317,6 +317,80 @@ export interface BatchNotesResultShape {
   message?: string;
 }
 
+/**
+ * 261106 Markdown 导入：主进程 picker 返回的单个文件（桌面 `pick_markdown_files` / `pick_markdown_folder`）。
+ * 不支持的扩展名也返回（supported:false），由调用方计入「跳过数」——用户全选目录时不静默消失。
+ */
+export interface MarkdownPickedFileShape {
+  /** 绝对路径。 */
+  path: string;
+  /** 文件名（含扩展名）。 */
+  name: string;
+  /** 相对所选目录的路径（多选文件 = 文件名；分隔符 "/"）。 */
+  relativePath: string;
+  /** 字节数（stat 失败 = 0）。 */
+  size: number;
+  /** .md / .markdown。 */
+  supported: boolean;
+  /** > 20MB：不读正文（按跳过处理）。 */
+  tooLarge?: boolean;
+  /** UTF-8 正文（去 BOM）；tooLarge / 读失败时缺省。 */
+  text?: string;
+  /** 读失败的可读原因（文件消失 / 无权限等）。 */
+  error?: string;
+}
+
+/** 261106 Markdown 导入：选择文件夹的扫描结果（超过 500 个截断）。 */
+export interface MarkdownFolderPickShape {
+  files: MarkdownPickedFileShape[];
+  truncated: boolean;
+}
+
+/** 261106 Markdown 导入：读一张本地图片（供渲染层 uploadResource 物化为文档资产）。 */
+export interface ImportImageShape {
+  bytes: Uint8Array;
+  mimeType: string;
+  /** 原始文件名（展示名）。 */
+  filename: string;
+}
+
+/**
+ * 261106 批量导出（数据层 electron/batchExport.ts）：按类型默认格式导出到同一目录。
+ * doc→pdf、usheet→xlsx、bitable→csv、board→png（主进程暂不支持，返回 skipped）、ink→png（多页分文件）。
+ * 只读：不写源数据、不标 dirty、不广播。
+ */
+export type BatchExportFormatShape = "pdf" | "csv" | "xlsx" | "png";
+
+export interface BatchExportRequestShape {
+  /** 文档或分组/笔记本 id（分组递归展开为文档；去重；上限 500）。 */
+  ids: string[];
+  /** 目标目录；缺省时主进程弹系统目录选择框。给了就必须是本进程选择框的返回值。 */
+  dirPath?: string;
+}
+
+export interface BatchExportItemResultShape {
+  id: string;
+  ok: boolean;
+  path?: string;
+  /** ink 多页 = 每页一个文件。 */
+  paths?: string[];
+  format?: BatchExportFormatShape;
+  /** 未导出（画板/未知类型）：不是失败，但要给原因。 */
+  skipped?: boolean;
+  reason?: string;
+}
+
+export interface BatchExportResultShape {
+  ok: boolean;
+  results: BatchExportItemResultShape[];
+  summary: { total: number; done: number; failed: number; skipped: number };
+  dirPath?: string;
+  /** 用户在目录选择框里取消。 */
+  cancelled?: boolean;
+  reason?: "too-many" | "empty-ids" | "invalid-input" | "cancelled";
+  message?: string;
+}
+
 /** A3 数据体检（只读诊断）报告：检查本地数据自洽性，不自动修复。 */
 /** Batch4-B：文件↔元数据对账候选（文件在、笔记行丢了；只报告，不自动重建）。 */
 export interface FileReconcileCandidateShape {

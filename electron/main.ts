@@ -54,6 +54,8 @@ import { AUTO_BACKUP_TICK_MS, decideAutoBackup, readDatabaseFingerprint, runBack
 import { createIpcRegistrar } from "./ipc/registrar.js";
 import { pickBackupDatabaseDialog, registerNotesIpc } from "./ipc/registerNotes.js";
 import { registerBatchNotesIpc } from "./ipc/registerBatchNotes.js";
+import { registerMarkdownImportIpc } from "./ipc/registerMarkdownImport.js";
+import { registerBatchExportIpc } from "./ipc/registerBatchExport.js";
 import { DraftJournal, draftJournalDir } from "./draftJournal.js";
 import { registerHistoryIpc } from "./ipc/registerHistory.js";
 import { registerWebIpc } from "./ipc/registerWeb.js";
@@ -600,6 +602,10 @@ function registerIpc(): ReadonlyMap<string, (args: unknown[]) => Promise<unknown
     webServerController?.broadcast(channel, payload);
   });
 
+  // 261106 批量导出（数据层 electron/batchExport.ts）：按类型默认格式导出到同一目录，只读不写源。
+  registerBatchExportIpc(ipc, { store });
+  // 261106 Markdown 导入：文件选择/目录扫描/图片字节（转换与落盘在 renderer 管线，见 src/features/import/）。
+  registerMarkdownImportIpc(ipc);
   // 261106 批量操作（A 方案）：core 编排 + 主进程单事务（lake 主库 / quickNotes 小记库）。
   // 删除语义只有"移入回收站"；purge/物理删除仍只在回收站入口（purgeTrashItem / 清空回收站）。
   registerBatchNotesIpc(ipc, {

@@ -14,6 +14,8 @@ export interface TreeSelectionBarProps {
   busy?: boolean;
   /** 最近一次批量结果提示（成功/部分失败）；null = 不显示。 */
   notice?: string | null;
+  /** 提示行右侧的动作（如导出后的「打开所在文件夹」）。 */
+  noticeAction?: { label: string; onClick(): void } | null;
   onMove(): void;
   onTrash(): void;
   onTag(): void;
@@ -21,7 +23,7 @@ export interface TreeSelectionBarProps {
   onCancel(): void;
 }
 
-export function TreeSelectionBar({ count, actions, busy = false, notice = null, onMove, onTrash, onTag, onSelectAll, onCancel }: TreeSelectionBarProps) {
+export function TreeSelectionBar({ count, actions, busy = false, notice = null, noticeAction = null, onMove, onTrash, onTag, onSelectAll, onCancel }: TreeSelectionBarProps) {
   // 选择被清空后仍要能看到批量结果（成功/部分失败）：只留提示条，不再显示动作。
   if (count <= 0 && !notice) return null;
   return (
@@ -52,7 +54,14 @@ export function TreeSelectionBar({ count, actions, busy = false, notice = null, 
           </button>
         </div>
       </div>}
-      {notice && <p className="tree-selection-bar__notice" role="status">{notice}</p>}
+      {notice && (
+        <div className="tree-selection-bar__notice-row">
+          <p className="tree-selection-bar__notice" role="status">{notice}</p>
+          {noticeAction && (
+            <button type="button" className="ln-btn ln-btn--ghost ln-btn--compact" onClick={noticeAction.onClick}>{noticeAction.label}</button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

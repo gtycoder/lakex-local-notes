@@ -23,6 +23,7 @@ import { prepareAttachmentOpen } from "../attachmentOpen.js";
 import { exportWorkspaceBackup, prepareCloudRestore, relaunchApp, writeS3RestoreSeed } from "../workspaceBackup.js";
 import { isRememberedRestoreCandidate, rememberRestoreCandidate, restoreMainDatabaseFromBackup } from "../workspaceRestoreFromBackup.js";
 import { backupsDir } from "../autoBackup.js";
+import { pickedExportDir, rememberPickedExportDir } from "./exportDirState.js";
 
 /** 多维表 CSV 导入文件大小上限（本地优先、量级有限，防一次性读入超大文件）。 */
 const MAX_CSV_IMPORT_BYTES = 20 * 1024 * 1024;
@@ -73,7 +74,8 @@ export function registerNotesIpc(
   enqueueMaintenance: <T>(task: () => Promise<T>) => Promise<T>,
 ): void {
   /** 导出目录白名单：只接受本进程 pick_export_dir 系统选择框的返回值。 */
-  let lastPickedExportDir: string | null = null;
+  // 261106：导出目录授权记录抽到 exportDirState（批量导出 IPC 与单条导出共用同一判据）。
+  const lastPickedExportDir = (): string | null => pickedExportDir();
 
   ipc.handle("bootstrap_workspace", () => store.bootstrap());
   ipc.handle("read_note", (id: string) => {
@@ -127,14 +129,14 @@ export function registerNotesIpc(
       buttonLabel: "导出到此目录",
       properties: ["openDirectory", "createDirectory"],
     });
-    lastPickedExportDir = result.canceled ? null : (result.filePaths[0] ?? null);
-    return lastPickedExportDir;
+    rememberPickedExportDir(result.canceled ? null : (result.filePaths[0] ?? null));
+    return pickedExportDir();
   });
   // 防渲染层任意路径写入：导出目录必须来自本进程的系统选择框。
   /** 目录可省略（= 主进程默认导出目录）；给了就必须是本进程系统选择框的返回值（防任意路径写入）。 */
   const optionalExportDir = (baseDir: unknown): string | undefined => {
     if (baseDir === undefined || baseDir === null || baseDir === "") return undefined;
-    if (typeof baseDir !== "string" || baseDir !== lastPickedExportDir) {
+    if (typeof baseDir !== "string" || baseDir !== lastPickedExportDir()) {
       throw new IpcInputError("导出目录无效：请先通过系统选择框选择目录");
     }
     return baseDir;
@@ -143,7 +145,7 @@ export function registerNotesIpc(
     Array.isArray(pageIds) ? pageIds.filter((item): item is string => typeof item === "string" && item.length > 0) : [];
 
   ipc.handle("export_note", (id: string, format: ExportFormat, baseDir?: string, options?: { pageIds?: string[] }) => {
-    if (baseDir !== undefined && baseDir !== null && baseDir !== lastPickedExportDir) {
+    if (baseDir !== undefined && baseDir !== null && baseDir !== lastPickedExportDir()) {
       throw new IpcInputError("导出目录无效：请先通过系统选择框选择目录");
     }
     return exportNote(store, id, format, baseDir ?? undefined, { pageIds: inkPageIds(options?.pageIds) });
@@ -162,25 +164,25 @@ export function registerNotesIpc(
     return saveInkPagePng(dir, sanitizeFileName(String(title ?? "手写板")), data);
   });
   ipc.handle("export_bitable_csv", (id: string, baseDir?: string) => {
-    if (baseDir !== undefined && baseDir !== null && baseDir !== lastPickedExportDir) {
+    if (baseDir !== undefined && baseDir !== null && baseDir !== lastPickedExportDir()) {
       throw new IpcInputError("导出目录无效：请先通过系统选择框选择目录");
     }
     return exportBitableCsv(store, id, baseDir ?? undefined);
   });
   ipc.handle("export_table_csv", (id: string, baseDir?: string, sheetId?: string) => {
-    if (baseDir !== undefined && baseDir !== null && baseDir !== lastPickedExportDir) {
+    if (baseDir !== undefined && baseDir !== null && baseDir !== lastPickedExportDir()) {
       throw new IpcInputError("导出目录无效：请先通过系统选择框选择目录");
     }
     return store.exportTableCsv(id, baseDir ?? undefined, typeof sheetId === "string" && sheetId.length > 0 ? sheetId : undefined);
   });
   ipc.handle("export_usheet_xlsx", (id: string, baseDir?: string) => {
-    if (baseDir !== undefined && baseDir !== null && baseDir !== lastPickedExportDir) {
+    if (baseDir !== undefined && baseDir !== null && baseDir !== lastPickedExportDir()) {
       throw new IpcInputError("导出目录无效：请先通过系统选择框选择目录");
     }
     return store.exportUsheetXlsx(id, baseDir ?? undefined);
   });
   ipc.handle("export_bitable_zip", (id: string, baseDir?: string) => {
-    if (baseDir !== undefined && baseDir !== null && baseDir !== lastPickedExportDir) {
+    if (baseDir !== undefined && baseDir !== null && baseDir !== lastPickedExportDir()) {
       throw new IpcInputError("导出目录无效：请先通过系统选择框选择目录");
     }
     return exportBitableZip(store, id, baseDir ?? undefined);

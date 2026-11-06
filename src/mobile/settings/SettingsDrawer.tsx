@@ -4,7 +4,7 @@
  * （settingsSearch.ts 的 SETTING_ITEMS 继续生效）。
  * 注意：全部 App 设置为竖向（无横向 tab）；「回收站」并入总回收站（见 TrashList）。 */
 import { Suspense, lazy, useEffect, useRef, useState } from "react";
-import { Archive, ArrowLeft, ChevronRight, Cloud, HardDrive, History, Images, Info, List, Palette, Pencil, RefreshCw, Sparkles, Trash, TriangleAlert, X } from "lucide-react";
+import { Archive, ArrowLeft, ChevronRight, Cloud, Download, HardDrive, History, Images, Info, List, Palette, Pencil, RefreshCw, Sparkles, Trash, TriangleAlert, X } from "lucide-react";
 import { loadSettings, saveSettings, fontSizeOptions, MAX_ATTACHMENT_MB_OPTIONS_SETTINGS, type AppSettings } from "../../lib/settings";
 import { Group, Item, Block, Switch, TextField, Field } from "../ui/settingsPrimitives";
 import { bridge } from "../bridge";
@@ -31,6 +31,8 @@ import { SyncConflictsEntry, SyncConflictsSheet } from "./SyncConflictsSheet";
 import type { OrphanAsset } from "./useSettingsSectionData";
 import { showToast } from "../ui/toastBus";
 import { formatS3v3Diagnostics } from "../../core/s3v3Report";
+import { readImportDefaultNotebook, writeImportDefaultNotebook } from "./importSettings";
+import { DefaultNotebookPickerSheet, type DefaultNotebookOption } from "./DefaultNotebookPickerSheet";
 
 /** 回收站只读预览（内含 Lake 内核编辑器）：**按需加载**——设置页/首屏都不需要内核。 */
 const TrashPreviewPage = lazy(() => import("../trash/TrashPreviewPage").then((m) => ({ default: m.TrashPreviewPage })));
@@ -43,7 +45,7 @@ export interface SettingsDrawerProps {
   onOpenNote?: (noteId: string) => void;
 }
 
-type View = "menu" | "editor" | "appearance" | "history" | "resources" | "s3" | "backup" | "ai" | "cache" | "trash" | "about";
+type View = "menu" | "editor" | "appearance" | "history" | "import" | "resources" | "s3" | "backup" | "ai" | "cache" | "trash" | "about";
 
 /**
  * 设置分组（261105 晚，用户验收：对齐桌面）。
@@ -57,6 +59,8 @@ const MENU: { key: Exclude<View, "menu">; label: string; icon: typeof Cloud }[] 
   { key: "editor", label: "编辑器", icon: List },
   { key: "appearance", label: "外观", icon: Palette },
   { key: "history", label: "历史", icon: History },
+  // 261106 task-86：分享导入相关设置（默认笔记本；分享 md 时落这里）。
+  { key: "import", label: "导入", icon: Download },
   { key: "resources", label: "资源管理", icon: Images },
   { key: "cache", label: "清理缓存", icon: HardDrive },
   { key: "trash", label: "回收站", icon: Trash },
@@ -131,6 +135,23 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
   } = useSyncSettingsForm(open, onRefresh);
   /** 「同步记录」列表页（261105 P1 第 4 项）：入口在「上次同步」下方。 */
   const [conflictsOpen, setConflictsOpen] = useState(false);
+  /** 「导入」分组（261106 task-86）：默认笔记本（设备本地）。笔记本清单在进入该页时读一次快照。 */
+  const [importNotebooks, setImportNotebooks] = useState<DefaultNotebookOption[]>([]);
+  const [importNotebookBusy, setImportNotebookBusy] = useState(false);
+  const [importPickerOpen, setImportPickerOpen] = useState(false);
+  const [importNotebookId, setImportNotebookId] = useState<string | null>(() => readImportDefaultNotebook());
+  useEffect(() => {
+    if (!open || view !== "import") return;
+    let alive = true;
+    setImportNotebookBusy(true);
+    void bridge.getHomeSnapshot().then((snapshot) => {
+      if (!alive) return;
+      setImportNotebooks(snapshot.treeNodes
+        .filter((node) => node.nodeType === "notebook")
+        .map((node) => ({ id: node.id, title: node.title || "未命名" })));
+    }).catch(() => { if (alive) setImportNotebooks([]); }).finally(() => { if (alive) setImportNotebookBusy(false); });
+    return () => { alive = false; };
+  }, [open, view]);
   // 缺正文/缺小记（261104 B-lite）：进「资源管理」时扫一次，恢复动作后 reload 刷新计数。
   const missingBodies = useMissingBodies(open && view === "resources");
   const [missingSheet, setMissingSheet] = useState<MissingBodiesMode | null>(null);
@@ -313,6 +334,32 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
           {view === "ai" && <AiSettingsSection form={aiFormState} />}
 
           {view === "history" && hist && <HistorySettingsSection hist={hist} updateHist={updateHist} />}
+
+          {view === "import" && (
+            <Group title="导入" icon={<Download size={16} />}>
+              <Block
+                itemId="import-default-notebook"
+                name="默认笔记本"
+                desc="通过系统分享导入的 Markdown 会在这个笔记本下新建文档（仅本机设置，不参与同步）。未设置时首次分享会先让你选一次。"
+              >
+                <div className="mb-set-block__actions">
+                  <span className="mb-row__meta">
+                    {importNotebookBusy
+                      ? "读取中…"
+                      : importNotebookId
+                        ? (importNotebooks.find((nb) => nb.id === importNotebookId)?.title ?? "（笔记本已不存在）")
+                        : "未设置"}
+                  </span>
+                  <button
+                    type="button"
+                    className="mb-btn mb-btn--secondary"
+                    disabled={importNotebookBusy}
+                    onClick={() => setImportPickerOpen(true)}
+                  >选择笔记本</button>
+                </div>
+              </Block>
+            </Group>
+          )}
 
           {view === "resources" && (
             <Group title="资源管理" icon={<Images size={16} />}>
@@ -652,6 +699,21 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
           })}
         </div>
       )}
+
+      <DefaultNotebookPickerSheet
+        open={importPickerOpen}
+        notebooks={importNotebooks}
+        currentId={importNotebookId}
+        busy={importNotebookBusy}
+        title="默认笔记本"
+        onClose={() => setImportPickerOpen(false)}
+        onPick={(id) => {
+          writeImportDefaultNotebook(id);
+          setImportNotebookId(id);
+          setImportPickerOpen(false);
+          showToast("已设为默认笔记本");
+        }}
+      />
 
       <SyncConflictsSheet
         open={conflictsOpen}

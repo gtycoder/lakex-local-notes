@@ -13,7 +13,10 @@ import { setNoteRefHost } from "../features/editor/noteRef";
 import type { TreeNode } from "../lib/types";
 import { HomePage, type MobileQuickNote } from "./home/HomePage";
 import type { HomeTab } from "./home/tabPager";
-import { consumeSharedContent, readSharedContentBytes, sharedContentKind, sharedContentToSeed, sharedContentUnsupportedHint, subscribeSharedContent, type QuickNoteSeed, type SharedContent } from "./native/sharedContent";
+import { consumeSharedContent, readSharedContentBytes, sharedContentKind, sharedContentToSeed, sharedContentUnsupportedHint, sharedMarkdownFiles, subscribeSharedContent, type QuickNoteSeed, type SharedContent, type SharedMarkdownFile } from "./native/sharedContent";
+import { readImportDefaultNotebook, writeImportDefaultNotebook } from "./settings/importSettings";
+import { DefaultNotebookPickerSheet, type DefaultNotebookOption } from "./settings/DefaultNotebookPickerSheet";
+import { importSharedMarkdown, markdownTitleOf } from "./import/markdownShareImport";
 import { importSharedPdfAsInkNote, sharedPdfImportToast } from "./ink/mobilePdfImport";
 import { SHARE_QUEUE_FULL_HINT, ShareQueue } from "./ink/shareQueue";
 import { sha256Sync } from "../core/sha256Sync.js";
@@ -397,8 +400,49 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
    * · image：保持原行为（落小记草稿 + 打开 capture）。
    * · file：保持「暂不支持该分享类型」可见提示。
    */
+  /**
+   * 分享 Markdown → 导入为文档（261106 task-86）：
+   * 默认笔记本 → 读文本 → 共享 md→lake 管线 → createNote + saveNote；多文件逐个导入并报进度。
+   * 失败逐条提示、不留半成品（服务层已把半成品软删回滚）；本地图片在分享场景不可达 ⇒ 管线降级为链接。
+   */
+  const [mdImportFiles, setMdImportFiles] = useState<SharedMarkdownFile[] | null>(null);
+  const runMarkdownShareImport = useCallback(async (files: SharedMarkdownFile[], notebookId: string) => {
+    const notebook = treeNodes.find((node) => node.id === notebookId && node.nodeType === "notebook");
+    if (!notebook) {
+      // 默认笔记本已不存在（可能被删/改名）：重新让用户选一次，不硬塞到未知父级。
+      setMdImportFiles(files);
+      return;
+    }
+    const summary = await importSharedMarkdown({
+      files,
+      notebookId,
+      onProgress: (index, total, file) => {
+        showToast(total > 1 ? "正在导入 " + index + "/" + total + "：" + markdownTitleOf(file.filename, file.displayName) : "正在导入 " + markdownTitleOf(file.filename, file.displayName));
+      },
+    });
+    await refreshAll().catch(() => undefined);
+    if (summary.imported.length > 0) {
+      const warn = summary.warnings.length > 0 ? "（" + summary.warnings.length + " 处图片已降级为链接）" : "";
+      showToast("已导入 " + summary.imported.length + " 篇 Markdown 到「" + (notebook.title || "未命名") + "」" + warn);
+      successFeedback();
+    }
+    if (summary.failed.length > 0) {
+      const first = summary.failed[0];
+      showToast("导入失败 " + summary.failed.length + " 个：" + first.reason, { type: "error" });
+      warnFeedback();
+    }
+  }, [refreshAll, treeNodes]);
+
   const processSharedContent = useCallback(async (content: SharedContent) => {
     if (content.imageError) showToast(content.imageError, { type: "error" });
+    // 261106：Markdown（单/多文件）→ 导入为文档；与 PDF（手写板）按类型分流。
+    const markdownFiles = sharedMarkdownFiles(content);
+    if (markdownFiles.length > 0) {
+      const notebookId = readImportDefaultNotebook();
+      if (!notebookId) { setMdImportFiles(markdownFiles); return; }
+      await runMarkdownShareImport(markdownFiles, notebookId);
+      return;
+    }
     if (sharedContentKind(content) === "pdf") {
       const payload = await readSharedContentBytes(content);
       if (!payload) {
@@ -511,6 +555,11 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
   }, [phase]);
 
   const notebooks = useMemo(() => treeNodes.filter((n) => n.nodeType === "notebook"), [treeNodes]);
+  /** 默认笔记本选择器（设置与首次分享共用）：只是把 treeNodes 里的笔记本投影成选项。 */
+  const notebookOptions: DefaultNotebookOption[] = useMemo(
+    () => notebooks.map((node) => ({ id: node.id, title: node.title || "未命名" })),
+    [notebooks],
+  );
   /** 首页常驻渲染：工作区打开期间它只是被盖住（inert），tab 值取当前 home 路由或回退「知识库」（返回落点）。 */
   const homeTab = route.kind === "home" ? route.tab : "library";
   // 笔记本 → 直接文档数（首页列表行 .counter；与 getWorkspaceSnapshot 的树归属口径一致）
@@ -756,6 +805,21 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
           </MobileErrorBoundary>
         </Suspense>
       )}
+      {/* 首次分享 Markdown 且未设置默认笔记本：弹一次选择器，选完记住并继续导入。 */}
+      <DefaultNotebookPickerSheet
+        open={mdImportFiles !== null}
+        notebooks={notebookOptions}
+        currentId={readImportDefaultNotebook()}
+        title="选择导入位置"
+        onClose={() => setMdImportFiles(null)}
+        onPick={(notebookId) => {
+          const files = mdImportFiles;
+          setMdImportFiles(null);
+          writeImportDefaultNotebook(notebookId);
+          if (files) void runMarkdownShareImport(files, notebookId);
+        }}
+      />
+
       <Toasts />
       <ConfirmHost />
       {/* 共享图片预览浮层（桌面/移动同一套控制器）：小记卡片、文档内图片点开都是它。 */}

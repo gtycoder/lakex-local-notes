@@ -184,18 +184,55 @@ describe("DocListSheet 多选模式（261106 task-82）", () => {
     expect(bridgeMock.batchNotes).toHaveBeenCalledWith({ action: "tag-add", ids: ["n1"], space: "lake", tagIds: ["t_work"] });
   });
 
-  it("移动：选目标（笔记本/分组）后调 bridge.batchNotes(move parentId)", async () => {
+  const moveButton = (): HTMLButtonElement =>
+    [...host.querySelectorAll<HTMLButtonElement>('[role="group"][aria-label="批量操作"] button')]
+      .find((b) => (b.textContent ?? "").trim() === "移动")!;
+  const treeTarget = (title: string): HTMLButtonElement | null =>
+    host.querySelector('[aria-label="移动到 ' + title + '"]') as HTMLButtonElement | null;
+  const treeConfirm = (): HTMLButtonElement =>
+    [...host.querySelectorAll<HTMLButtonElement>(".mb-sheet__foot button")].find((b) => (b.textContent ?? "").includes("移动到此处"))!;
+
+  it("移动（目录树）：展开笔记本 → 选分组 → 「移动到此处」调 batchNotes(move parentId)，成功后退出选择", async () => {
     await render();
     await enterByButton();
     await act(async () => { rowByTitle("周报").click(); await Promise.resolve(); });
-    const moveButton = [...host.querySelectorAll<HTMLButtonElement>('[role="group"][aria-label="批量操作"] button')]
-      .find((b) => (b.textContent ?? "").trim() === "移动")!;
-    await act(async () => { moveButton.click(); await new Promise((r) => setTimeout(r, 0)); });
+    await act(async () => { moveButton().click(); await new Promise((r) => setTimeout(r, 0)); });
     expect(bridgeMock.getHomeSnapshot).toHaveBeenCalled();
-    const target = [...host.querySelectorAll<HTMLButtonElement>(".mb-set-item")]
-      .find((el) => (el.textContent ?? "").includes("分组A"))!;
-    await act(async () => { target.click(); await new Promise((r) => setTimeout(r, 0)); });
+    // 默认只展开根：先展开「笔记本」才看得到「分组A」
+    expect(treeTarget("分组A")).toBeNull();
+    await act(async () => { (host.querySelector('[aria-label="展开 笔记本"]') as HTMLButtonElement).click(); await Promise.resolve(); });
+    await act(async () => { treeTarget("分组A")!.click(); await Promise.resolve(); });
+    await act(async () => { treeConfirm().click(); await new Promise((r) => setTimeout(r, 0)); });
     expect(bridgeMock.batchNotes).toHaveBeenCalledWith({ action: "move", ids: ["n1"], space: "lake", parentId: "g1" });
+    expect(host.querySelector('[role="toolbar"][aria-label="多选操作"]')).toBeNull(); // 成功退出选择
+  });
+
+  it("移动失败：弹窗内给原因并保留选择（不退出、不关窗）", async () => {
+    bridgeMock.batchNotes.mockResolvedValueOnce({
+      ok: false,
+      results: [{ id: "n1", ok: false, reason: "parent-in-trash" }],
+      summary: { total: 1, done: 0, failed: 1 },
+      reason: "invalid-input",
+    });
+    await render();
+    await enterByButton();
+    await act(async () => { rowByTitle("周报").click(); await Promise.resolve(); });
+    await act(async () => { moveButton().click(); await new Promise((r) => setTimeout(r, 0)); });
+    await act(async () => { (host.querySelector('[aria-label="展开 笔记本"]') as HTMLButtonElement).click(); await Promise.resolve(); });
+    await act(async () => { treeTarget("分组A")!.click(); await Promise.resolve(); });
+    await act(async () => { treeConfirm().click(); await new Promise((r) => setTimeout(r, 0)); });
+    expect(toastMock.showToast).toHaveBeenCalledWith("成功 0，失败 1（目标位置在回收站里）", { type: "error" });
+    expect(host.querySelector('[role="toolbar"][aria-label="多选操作"]')).not.toBeNull(); // 保留选择
+  });
+
+  it("移动取消：不改动（不调 batchNotes）", async () => {
+    await render();
+    await enterByButton();
+    await act(async () => { rowByTitle("周报").click(); await Promise.resolve(); });
+    await act(async () => { moveButton().click(); await new Promise((r) => setTimeout(r, 0)); });
+    const cancel = [...host.querySelectorAll<HTMLButtonElement>(".mb-sheet__foot button")].find((b) => (b.textContent ?? "").trim() === "取消")!;
+    await act(async () => { cancel.click(); await Promise.resolve(); });
+    expect(bridgeMock.batchNotes).not.toHaveBeenCalled();
   });
 
   it("返回键：选择态先退出多选（列表不关）", async () => {

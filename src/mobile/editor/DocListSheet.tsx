@@ -20,6 +20,7 @@ import { SelectionTopBar } from "../ui/SelectionTopBar";
 import { useSelectionMode } from "../ui/useSelectionMode";
 import { BatchTagPickerSheet } from "../ui/BatchTagPickerSheet";
 import { summarizeBatchResult } from "../ui/batchNotesResult";
+import { MoveTargetTreeSheet, type MoveTargetNode } from "../ui/MoveTargetTreeSheet";
 import { confirmMobile } from "../ui/ConfirmDialog";
 import type { QuickNoteTag, QuickNoteTagSummary } from "../../core/quickNoteTags";
 
@@ -127,7 +128,9 @@ export function DocListSheet({ open, documents, activeId, onPick, onClose }: Doc
   const [batchTagOpen, setBatchTagOpen] = useState(false);
   const [batchTagOptions, setBatchTagOptions] = useState<QuickNoteTagSummary[]>([]);
   const [moveOpen, setMoveOpen] = useState(false);
-  const [moveTargets, setMoveTargets] = useState<Array<{ id: string; title: string; depth: number }>>([]);
+  const [moveNodes, setMoveNodes] = useState<MoveTargetNode[]>([]);
+  const [moveCurrentParentId, setMoveCurrentParentId] = useState<string | null>(null);
+  const [moveExcludedIds, setMoveExcludedIds] = useState<string[]>([]);
   const applyBatch = async (payload: { action: "trash" | "tag-add" | "move"; tagIds?: string[]; parentId?: string | null }): Promise<void> => {
     if (selection.count === 0) { showToast("请先选择文档"); return; }
     setBatchBusy(true);
@@ -162,21 +165,20 @@ export function DocListSheet({ open, documents, activeId, onPick, onClose }: Doc
     }
   };
 
+  /** 移动到…：弹**目录树**（task-89），当前路径默认展开、当前位置高亮、自身/后代禁用。 */
   const openMovePicker = async (): Promise<void> => {
     setBatchError(null);
     try {
       const snapshot = await bridge.getHomeSnapshot();
-      const nodes = snapshot.treeNodes.filter((node) => node.nodeType === "notebook" || node.nodeType === "group");
-      const depthOf = (node: { id: string; parentId: string | null }): number => {
-        let depth = 0; let cur = node.parentId;
-        for (let hops = 0; cur && hops < 32; hops += 1) {
-          const parent = nodes.find((item) => item.id === cur);
-          if (!parent) break;
-          depth += 1; cur = parent.parentId;
-        }
-        return depth;
-      };
-      setMoveTargets(nodes.map((node) => ({ id: node.id, title: node.title || "未命名", depth: depthOf(node) })));
+      const containers: MoveTargetNode[] = snapshot.treeNodes
+        .filter((node) => node.nodeType === "notebook" || node.nodeType === "group")
+        .map((node) => ({ id: node.id, title: node.title || "未命名", parentId: node.parentId, nodeType: node.nodeType }));
+      // 当前位置：选中文档的父级（全在同一父级才高亮；混父级则不标当前位置）。
+      const parents = [...new Set(selection.ids
+        .map((id) => snapshot.notes.find((note) => note.id === id)?.parentId ?? null))];
+      setMoveNodes(containers);
+      setMoveCurrentParentId(parents.length === 1 ? parents[0] : null);
+      setMoveExcludedIds([...selection.ids]);
       setMoveOpen(true);
     } catch (error) {
       showToast("读取移动目标失败：" + (error as Error).message, { type: "error" });
@@ -277,27 +279,16 @@ export function DocListSheet({ open, documents, activeId, onPick, onClose }: Doc
           onConfirm={(tagIds) => { void applyBatch({ action: "tag-add", tagIds: [...tagIds] }); }}
         />
       )}
-      {moveOpen && (
-        <MobileSheet open title="移动到…" onClose={() => setMoveOpen(false)} bodyClassName="mb-sheet__body--form" footer={<div className="mb-sheet__foot">
-          <button type="button" className="mb-btn mb-btn--secondary" disabled={batchBusy} onClick={() => setMoveOpen(false)}>取消</button>
-        </div>}>
-          {batchError && <div className="qn-tag-sheet__error" role="alert">{batchError}</div>}
-          <div className="mb-set-items">
-            {moveTargets.map((target) => (
-              <button
-                key={target.id}
-                type="button"
-                className="mb-set-item"
-                disabled={batchBusy}
-                style={{ paddingLeft: 16 + target.depth * 16 }}
-                onClick={() => void applyBatch({ action: "move", parentId: target.id })}
-              >
-                <span className="mb-set-item__main"><span className="mb-set-name">{target.title}</span></span>
-              </button>
-            ))}
-          </div>
-        </MobileSheet>
-      )}
+      <MoveTargetTreeSheet
+        open={moveOpen}
+        nodes={moveNodes}
+        currentParentId={moveCurrentParentId}
+        excludedIds={moveExcludedIds}
+        busy={batchBusy}
+        error={batchError}
+        onClose={() => setMoveOpen(false)}
+        onConfirm={(parentId) => { void applyBatch({ action: "move", parentId }); }}
+      />
       {visible.length === 0 ? (
         <p className="mb-empty mb-empty--inset">{activeTagId ? "该标签下暂无文档" : "暂无文档"}</p>
       ) : (
