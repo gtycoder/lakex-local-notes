@@ -26,7 +26,7 @@ export function SidebarTagFilter({ tags, selection, onChange }: SidebarTagFilter
   if (tags.length === 0) {
     return (
       <div className="sidebar-tag-filter" role="group" aria-label="按标签筛选文档">
-        <p className="sidebar-tag-filter__empty">还没有标签。给文档打标签后可在这里筛选。</p>
+        <p className="sidebar-tag-filter__empty">还没有标签。给文档加标签后可在这里筛选。</p>
       </div>
     );
   }

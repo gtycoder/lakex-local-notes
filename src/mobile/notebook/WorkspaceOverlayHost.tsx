@@ -57,7 +57,7 @@ export interface WorkspaceOverlayHostProps {
   onPickIcon: (node: NotebookTreeItem, icon: string | null) => void;
   onCloseIcon: () => void;
 
-  /** 文档标签选择（目录行「打标签…」；只给文档行）。 */
+  /** 文档标签选择（目录行「标签…」；只给文档行）。 */
   noteTagsFor: NotebookTreeItem | null;
   onCloseNoteTags: () => void;
 

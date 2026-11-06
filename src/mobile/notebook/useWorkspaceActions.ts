@@ -132,8 +132,8 @@ export function useWorkspaceActions(options: UseWorkspaceActionsOptions) {
         ],
       },
       ...(node.kind === "note" ? [
-        // 261105 晚用户验收：目录行 ⋯ 菜单加「打标签…」（**只给文档行**；分组/笔记本没有标签）。
-        { id: "tags", label: "打标签…", icon: Tag },
+        // 261105 晚用户验收：目录行 ⋯ 菜单加「标签…」（**只给文档行**；分组/笔记本没有标签）。
+        { id: "tags", label: "标签…", icon: Tag },
         { id: "history", label: "历史版本", icon: History },
         { id: "info", label: "属性", icon: Info },
       ] : []),
@@ -151,7 +151,7 @@ export function useWorkspaceActions(options: UseWorkspaceActionsOptions) {
     // 否则输入框在关着的抽屉里（看不见的输入框 + autoFocus 抢焦点）。
     // 261105 晚已按用户要求恢复原样：手机开左抽屉；平板保持既有悬浮树（不强制改写其开关态）。
     if (root === "rename") { if (!padTwoPane) openOverlay({ kind: "sidebar" }); setRenamingId(node.id); setRenameValue(node.title); return; }
-    // 「打标签…」只对文档行出现（菜单组装已限定）；打开标签选择弹层，保存写 tag_links(kind='note')。
+    // 「标签…」只对文档行出现（菜单组装已限定）；打开标签选择弹层，保存写 tag_links(kind='note')。
     if (root === "tags") { openOverlay({ kind: "noteTags", node }); return; }
     if (root === "icon") { openOverlay({ kind: "icon", node }); return; }
     if (root === "favorite") { const on = toggleFavorite(node.id); showToast(on ? "已设为常用" : "已取消常用"); return; }

@@ -107,7 +107,7 @@ describe("工作区浮层唯一 owner（MOB-02）", () => {
   });
 
   it("自带返回栈的种类 = 菜单类 + MobileSheet（工作区不得重复登记）", () => {
-    // noteTags（261105 晚：目录行「打标签…」）走 MobileSheet 原语 ⇒ 自带返回栈，登记在这里。
+    // noteTags（261105 晚：目录行「标签…」）走 MobileSheet 原语 ⇒ 自带返回栈，登记在这里。
     expect([...SELF_REGISTERED_OVERLAY_KINDS].sort()).toEqual(["create", "history", "icon", "info", "menu", "noteTags", "notebookSwitch"]);
   });
 });

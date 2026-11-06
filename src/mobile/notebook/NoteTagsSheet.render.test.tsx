@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * 261105 晚：目录行「打标签…」弹层（NoteTagsSheet）。
+ * 261105 晚：目录行「标签…」弹层（NoteTagsSheet）；261106 文案统一为「标签」（标题 / 无障碍名同源）。
  * 多选/取消 + 新建标签；保存 = bridge.setNoteTags（移动桥单库写关系）；失败明确提示、不静默关闭。
  */
 import { act } from "react";
@@ -74,6 +74,13 @@ afterEach(async () => {
 });
 
 describe("NoteTagsSheet（文档标签多选）", () => {
+  it("标题 =「标签 · <文档标题>」，不再出现「打标签」（无标题时就是「标签」）", async () => {
+    await render();
+    // MobileSheet 以字符串标题同时作为 role=dialog 的无障碍名（单点派生，不另写 ariaLabel）。
+    expect(host.textContent).toContain("标签 · 文档一");
+    expect(host.textContent).not.toContain("打标签");
+  });
+
   it("按目录顺序列出全部标签；已关联的预选（aria-pressed）", async () => {
     await render();
     expect(tagButtons().map((el) => (el.textContent ?? "").replace(/\s+/g, ""))).toEqual(["工作", "灵感"]);

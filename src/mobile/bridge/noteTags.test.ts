@@ -1,5 +1,5 @@
 /**
- * 261105 晚：移动桥 setNoteTags / listNoteTagLinks（目录行「打标签…」的数据层）。
+ * 261105 晚：移动桥 setNoteTags / listNoteTagLinks（目录行「标签…」的数据层）。
  * 移动是单库：直接写 tag_links(kind='note') + bump tag_link_versions（关系 LWW 才能传播）。
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";

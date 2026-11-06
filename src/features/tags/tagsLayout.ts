@@ -2,8 +2,8 @@
  * 标签空间三栏布局的**纯逻辑**（261105 用户验收：三栏要可拖、宽度设备本地持久化）。
  *
  * 布局：[左目录][handle][中聚合 1fr][handle][右预览]
- * - 左栏 200–480，右栏 240–720，中栏自适应且最小 360；
- * - 窗口过窄（< 三栏最小宽 + 两条 handle）⇒ **退化为固定比例**（不出现负宽/横滚，隐藏 handle）；
+ * - 左栏 200–480，右栏 240–720，中栏自适应且最小 270；
+ * - 窗口过窄（< 三栏最小宽 720 + 两条 handle = 730）⇒ **退化为固定比例**（不出现负宽/横滚，隐藏 handle）；
  * - 宽度存 localStorage（设备本地，前缀沿用 lakex-local-notes-v3.*），坏值/越界一律回默认。
  *
  * 本文件零 IO、零 DOM：读写 localStorage 的动作在组件里（writeLocalStorage/parse 只用这里的函数）。
@@ -13,7 +13,8 @@ export const TAG_DIR_MIN = 200;
 export const TAG_DIR_MAX = 480;
 export const TAG_PREVIEW_MIN = 240;
 export const TAG_PREVIEW_MAX = 720;
-export const TAG_AGG_MIN = 360;
+/** 中栏最小宽（261106 用户验收：ceil(360×3/4) = 270，比原 360 更窄，给左右两栏更多空间）。 */
+export const TAG_AGG_MIN = 270;
 /** 两条分隔条占的栅格宽度（每条 5px；窄窗退化时会隐藏）。 */
 export const TAG_HANDLE_WIDTH = 5;
 export const TAG_HANDLE_TOTAL = TAG_HANDLE_WIDTH * 2;

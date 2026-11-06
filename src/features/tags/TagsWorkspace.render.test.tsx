@@ -45,6 +45,7 @@ function props(overrides: Partial<TagsWorkspaceProps> = {}): TagsWorkspaceProps 
     onOpenDocument: vi.fn(),
     onOpenQuickNote: vi.fn(),
     onLoadPreview: vi.fn(async () => "<p>正文</p>"),
+    onRemoveTagFromItem: vi.fn(async () => {}),
     onError: vi.fn(),
     ...overrides,
   };
@@ -112,13 +113,39 @@ describe("TagsWorkspace（标签空间）", () => {
     expect(document.body.querySelector('input[aria-label="新标签名称"]')).not.toBeNull();
   });
 
-  it("选中标签后中栏摘要含条数与「更新于 …」", () => {
+  it("选中标签后中栏说明：主文案（条数）+ 弱化时间（无「」/分号）", () => {
     render();
     act(() => byText("灵感")!.closest("button")!.click());
+    const main = document.querySelector(".tags-aggregate__hint-main")!;
+    const meta = document.querySelector(".tags-aggregate__hint-meta")!;
+    expect(main.textContent).toContain("2 篇文档");
+    expect(main.textContent).toContain("1 条小记");
+    expect(meta.textContent).toContain("按更新时间倒序");
+    expect(meta.textContent).toContain("更新于");
     const hint = document.querySelector(".tags-aggregate__hint")!.textContent ?? "";
-    expect(hint).toContain("2 篇文档");
-    expect(hint).toContain("1 条小记");
-    expect(hint).toContain("更新于");
+    expect(hint).not.toContain("「");
+    expect(hint).not.toContain("；");
+  });
+
+  it("聚合行「移除该标签」：调 onRemoveTagFromItem(当前条目, 当前标签) 并刷新（无二次确认）", async () => {
+    const merged = render();
+    act(() => byText("灵感")!.closest("button")!.click());
+    await act(async () => {
+      byAria("移除标签 灵感").click();
+      await Promise.resolve();
+    });
+    expect(merged.onRemoveTagFromItem).toHaveBeenCalledWith(expect.objectContaining({ kind: "doc", id: "n2" }), "t1");
+    expect(merged.onReload).toHaveBeenCalled();
+  });
+
+  it("预览头部也提供「移除该标签」（与行内同一动作）", async () => {
+    const merged = render();
+    act(() => byText("灵感")!.closest("button")!.click());
+    await act(async () => { byText("文档二")!.closest("button")!.click(); await Promise.resolve(); });
+    const removeBtn = [...document.querySelectorAll<HTMLButtonElement>(".tags-preview__head button")].find((btn) => (btn.textContent ?? "") === "移除标签")!;
+    expect(removeBtn).toBeTruthy();
+    await act(async () => { removeBtn.click(); await Promise.resolve(); });
+    expect(merged.onRemoveTagFromItem).toHaveBeenCalledWith(expect.objectContaining({ kind: "doc", id: "n2" }), "t1");
   });
 
   it("选中标签 ⇒ 文档分组 + 小记分组，各自按更新时间倒序", () => {
@@ -211,7 +238,7 @@ describe("TagsWorkspace（标签空间）", () => {
     act(() => byText("项目")!.closest("button")!.click());
     // 项目：有 1 篇文档、0 条小记 ⇒ 切「仅小记」给出空态
     act(() => byText("仅小记")!.click());
-    expect(document.body.textContent).toContain("「项目」下还没有小记");
+    expect(document.body.textContent).toContain("该标签下暂无内容");
     render({ available: false });
     expect(document.body.textContent).toContain("标签数据暂不可用");
     render({ dataError: "标签目录暂不可用：小记库降级" });
@@ -257,7 +284,8 @@ describe("TagsWorkspace（标签空间）", () => {
     await act(async () => { input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })); await Promise.resolve(); });
     expect(onCreateTag).toHaveBeenCalledWith("新标签");
     expect(onReload).toHaveBeenCalled();
-    expect(document.body.textContent).toContain("「新标签」");
+    // 创建后自动选中新标签（左栏出现 selected 行，中栏进入其聚合视图）
+    expect(document.querySelector(".tags-dir__row.is-selected")?.textContent).toContain("新标签");
   });
 
   it("新建标签：Esc 取消（不调 onCreateTag，输入消失）", () => {

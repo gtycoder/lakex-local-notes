@@ -116,6 +116,16 @@ export function App() {
     const quick = await native.readQuickNote(item.id);
     return quick.content?.body || quick.content?.text || "";
   }, []);
+  /** 「移除该标签」= 取消这一条与标签的关系（可逆、无二次确认）：文档 setNoteTags / 小记 setQuickNoteTags。 */
+  const removeTagFromItem = useCallback(async (item: TagAggregateItem, tagId: string): Promise<void> => {
+    if (item.kind === "doc") {
+      const current = tagSpace.links[item.id] ?? [];
+      await native.setNoteTags(item.id, current.filter((id) => id !== tagId));
+      return;
+    }
+    const quick = tagSpace.quickNotes.find((note) => note.id === item.id);
+    await native.setQuickNoteTags(item.id, (quick?.tagIds ?? []).filter((id) => id !== tagId));
+  }, [tagSpace.links, tagSpace.quickNotes]);
   const {
     // sidebar
     sidebarMode, sidebarRenderMode, narrowOverlay, setSidebarMode, sidebarWidth, sidebarResizing, sidebarResizingRef,
@@ -941,6 +951,7 @@ export function App() {
                 onOpenDocument={(id) => { void switchDesktopWorkspace("library"); void openNote(id); }}
                 onOpenQuickNote={(id) => void openQuickNoteFromSearch(id)}
                 onLoadPreview={loadTagPreview}
+                onRemoveTagFromItem={removeTagFromItem}
                 onError={setError}
               />
             </Suspense>

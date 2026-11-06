@@ -37,7 +37,7 @@ export type WorkspaceOverlay =
   | { kind: "icon"; node: NotebookTreeItem }
   /** 历史版本 */
   | { kind: "history"; node: NotebookTreeItem }
-  /** 文档标签选择（目录行「打标签…」；只给文档行） */
+  /** 文档标签选择（目录行「标签…」；只给文档行） */
   | { kind: "noteTags"; node: NotebookTreeItem };
 
 export type WorkspaceOverlayKind = WorkspaceOverlay["kind"];

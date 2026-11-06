@@ -212,7 +212,7 @@ export const notesDomain = {
   // ---- 261105 文档标签（与桌面同名通道）：单库直接写 tag_links(kind='note') + bump 关系版本 ----
   /**
    * 全部文档 ↔ 标签关系（noteId → tagIds，本机 position 顺序）。
-   * 用途：目录行菜单「打标签…」时预选、以及移动端展示（只读）。
+   * 用途：目录行菜单「标签…」时预选、以及移动端展示（只读）。
    */
   async listNoteTagLinks(): Promise<Record<string, string[]>> {
     const d = await ensureDb();

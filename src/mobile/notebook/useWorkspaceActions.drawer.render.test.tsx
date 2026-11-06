@@ -3,7 +3,7 @@
  * 261105 晚用户验收 + 修正（移动端目录）：
  * ① 新建/重命名**恢复原样**（不再强制撑开抽屉/就地重命名）；真正要的是「点行菜单(⋯)时目录抽屉保持出现」
  *    —— 该派生单点在 useWorkspaceOverlays.isTreeVisibleForOverlay（手机/平板两栏各有覆盖用例）；
- * ② 目录行 ⋯ 菜单「打标签…」**仅文档行**，选中后打开标签弹层（overlay.noteTags）。
+ * ② 目录行 ⋯ 菜单「标签…」**仅文档行**，选中后打开标签弹层（overlay.noteTags）；261106 文案由「打标签…」改为「标签…」。
  */
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
@@ -100,17 +100,19 @@ afterEach(async () => {
   host?.remove();
 });
 
-describe("目录行菜单（打标签）", () => {
-  it("「打标签…」只出现在文档行，分组行没有", async () => {
+describe("目录行菜单（标签）", () => {
+  it("「标签…」只出现在文档行，分组行没有", async () => {
     await render();
-    expect(api.treeMenuItems(node("n1", "note")).map((it) => it.label)).toContain("打标签…");
-    expect(api.treeMenuItems(node("g1", "group")).map((it) => it.label)).not.toContain("打标签…");
+    expect(api.treeMenuItems(node("n1", "note")).map((it) => it.label)).toContain("标签…");
+    expect(api.treeMenuItems(node("g1", "group")).map((it) => it.label)).not.toContain("标签…");
+    // 261106 文案统一：用户可见的旧文案不得再出现在菜单里。
+    expect(api.treeMenuItems(node("n1", "note")).map((it) => it.label)).not.toContain("打标签…");
   });
 
-  it("选中「打标签…」⇒ 打开 noteTags 浮层（不进入重命名）", async () => {
+  it("选中「标签…」⇒ 打开 noteTags 浮层（不进入重命名）", async () => {
     const target = node("n1", "note");
     await render(target);
-    await act(async () => { api.onTreeMenuSelect({ id: "tags", label: "打标签…" }, [{ id: "tags", label: "打标签…" }]); });
+    await act(async () => { api.onTreeMenuSelect({ id: "tags", label: "标签…" }, [{ id: "tags", label: "标签…" }]); });
     expect(calls.closeOverlay).toHaveBeenCalledWith("menu");
     expect(calls.openOverlay).toHaveBeenCalledWith({ kind: "noteTags", node: target });
     expect(calls.setRenamingId).not.toHaveBeenCalled();

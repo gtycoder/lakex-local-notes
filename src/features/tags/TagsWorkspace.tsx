@@ -63,6 +63,8 @@ export interface TagsWorkspaceProps {
   onOpenQuickNote(quickNoteId: string): void;
   /** 读正文（只读预览用）：文档 = readNote；小记 = readQuickNote。失败返回 null。 */
   onLoadPreview(item: TagAggregateItem): Promise<string | null>;
+  /** 取消某条内容上的当前标签（可逆、无二次确认）：文档 setNoteTags / 小记 setQuickNoteTags。 */
+  onRemoveTagFromItem(item: TagAggregateItem, tagId: string): Promise<void>;
   onError(message: string): void;
 }
 
@@ -90,7 +92,7 @@ function formatUpdated(iso: string): string {
  * 组件只吃 props（数据/回调由 App 注入）⇒ 可单测、不直接摸 native。
  */
 export function TagsWorkspace(props: TagsWorkspaceProps) {
-  const { active, tags, documentLinks, notes, quickNotes, available, dataError = null, onReload, onCreateTag, onRenameTag, onMergeTag, onDeleteTag, onReorderTags, onOpenDocument, onOpenQuickNote, onLoadPreview, onError } = props;
+  const { active, tags, documentLinks, notes, quickNotes, available, dataError = null, onReload, onCreateTag, onRenameTag, onMergeTag, onDeleteTag, onReorderTags, onOpenDocument, onOpenQuickNote, onLoadPreview, onRemoveTagFromItem, onError } = props;
   const [selectedTagId, setSelectedTagId] = useState<string | null>(null);
   const [kindFilter, setKindFilter] = useState<TagAggregateKindFilter>("all");
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -120,6 +122,8 @@ export function TagsWorkspace(props: TagsWorkspaceProps) {
   const [previewBody, setPreviewBody] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
+  /** 正在「移除该标签」的条目 key（禁点 + 显示进行中）。 */
+  const [removingKey, setRemovingKey] = useState<string | null>(null);
   const { confirm, confirmElement } = useConfirm();
 
   const directory = useMemo(() => buildTagDirectory({ tags, documentLinks, quickNotes }), [tags, documentLinks, quickNotes]);
@@ -259,6 +263,28 @@ export function TagsWorkspace(props: TagsWorkspaceProps) {
     else onOpenQuickNote(previewItem.id);
   };
 
+  /** 「移除该标签」= 取消这一条与该标签的关系（可逆、无二次确认），成功后刷新目录/聚合。 */
+  const removeTagFromItem = useCallback(async (item: TagAggregateItem) => {
+    const tagId = selectedTagId;
+    if (!tagId) return;
+    const key = item.kind + ":" + item.id;
+    setRemovingKey(key);
+    try {
+      await onRemoveTagFromItem(item, tagId);
+      // 这一条可能已不在当前标签下 ⇒ 预览随之关闭，避免展示已移除的内容。
+      if (previewItem && previewItem.kind === item.kind && previewItem.id === item.id) {
+        setPreviewItem(null);
+        setPreviewBody(null);
+        setPreviewError(null);
+      }
+      await onReload();
+    } catch (error) {
+      onError(getNativeErrorMessage(error));
+    } finally {
+      setRemovingKey(null);
+    }
+  }, [selectedTagId, onRemoveTagFromItem, previewItem, onReload, onError]);
+
   const directoryEmpty = directory.length === 0;
   let aggregateBody: ReactNode;
   if (!available) {
@@ -266,11 +292,11 @@ export function TagsWorkspace(props: TagsWorkspaceProps) {
   } else if (dataError) {
     aggregateBody = <p className="tags-empty" role="status">{dataError}</p>;
   } else if (directoryEmpty) {
-    aggregateBody = <p className="tags-empty" role="status">还没有标签。新建一个标签，或在文档属性/右键里给内容打标签。</p>;
+    aggregateBody = <p className="tags-empty" role="status">还没有标签。新建一个标签，或在文档属性/右键菜单里设置标签。</p>;
   } else if (!selected) {
     aggregateBody = <p className="tags-empty" role="status">从左侧选择一个标签，查看它下面的文档与小记。</p>;
   } else if (aggregate.total === 0) {
-    aggregateBody = <p className="tags-empty" role="status">「{selected.name}」下还没有{kindFilter === "doc" ? "文档" : kindFilter === "quickNote" ? "小记" : "内容"}。</p>;
+    aggregateBody = <p className="tags-empty" role="status">该标签下暂无内容。</p>;
   } else {
     aggregateBody = (
       <div className="tags-aggregate__groups">
@@ -298,12 +324,18 @@ export function TagsWorkspace(props: TagsWorkspaceProps) {
     const selectedRow = previewItem?.kind === item.kind && previewItem.id === item.id;
     return (
       <li key={item.kind + ":" + item.id}>
-        <button type="button" className={"ln-row tags-aggregate__row" + (selectedRow ? " is-selected" : "")}
-          onClick={() => void openPreview(item)} title={item.title}>
-          {item.kind === "doc" ? <FileText size={14} aria-hidden="true" /> : <StickyNote size={14} aria-hidden="true" />}
-          <span className="ln-ellipsis tags-aggregate__row-title">{item.title}</span>
-          <time className="tags-aggregate__row-time" dateTime={item.updatedAt}>{formatUpdated(item.updatedAt)}</time>
-        </button>
+        <div className={"ln-row tags-aggregate__row" + (selectedRow ? " is-selected" : "")} title={item.title}>
+          <button type="button" className="tags-aggregate__open" onClick={() => void openPreview(item)}>
+            {item.kind === "doc" ? <FileText size={14} aria-hidden="true" /> : <StickyNote size={14} aria-hidden="true" />}
+            <span className="ln-ellipsis tags-aggregate__row-title">{item.title}</span>
+            <time className="tags-aggregate__row-time" dateTime={item.updatedAt}>{formatUpdated(item.updatedAt)}</time>
+          </button>
+          {/* 「移除该标签」= 可逆动作（不删标签、无二次确认）；行悬停/键盘聚焦可见 */}
+          <button type="button" className="ln-iconbtn ln-iconbtn--compact tags-aggregate__remove"
+            aria-label={"移除标签 " + (selected?.name ?? "")} title="移除该标签"
+            disabled={removingKey === item.kind + ":" + item.id}
+            onClick={() => void removeTagFromItem(item)}><X size={12} /></button>
+        </div>
       </li>
     );
   }
@@ -329,7 +361,7 @@ export function TagsWorkspace(props: TagsWorkspaceProps) {
             ? (creating ? null : (
               <div className="tags-dir__empty">
                 <p className="tags-empty tags-empty--inset" role="status">
-                  {available ? "还没有标签。新建一个标签，或在文档属性/右键里给内容打标签。" : "标签目录暂不可用。"}
+                  {available ? "还没有标签。新建一个标签，或在文档属性/右键菜单里设置标签。" : "标签目录暂不可用。"}
                 </p>
                 {available && (
                   <button type="button" className="ln-btn ln-btn--secondary" aria-label="新建标签" disabled={busy} onClick={startCreating}>
@@ -393,8 +425,10 @@ export function TagsWorkspace(props: TagsWorkspaceProps) {
           </div>
           {selected && (
             <p className="tags-aggregate__hint">
-              「{selected.name}」：{aggregate.docs.length} 篇文档、{aggregate.quickNotes.length} 条小记（按更新时间倒序）
-              {latestUpdatedAt ? "；更新于 " + formatUpdated(latestUpdatedAt) : ""}
+              <span className="tags-aggregate__hint-main">{aggregate.docs.length} 篇文档、{aggregate.quickNotes.length} 条小记</span>
+              <span className="tags-aggregate__hint-meta">
+                按更新时间倒序{latestUpdatedAt ? "，更新于 " + formatUpdated(latestUpdatedAt) : ""}
+              </span>
             </p>
           )}
           {aggregateBody}
@@ -422,6 +456,11 @@ export function TagsWorkspace(props: TagsWorkspaceProps) {
                 <button type="button" className="ln-btn ln-btn--secondary" onClick={openInOrigin}>
                   {previewItem.kind === "doc" ? "在文档中打开" : "在小记中打开"}
                 </button>
+                {selectedTagId && (
+                  <button type="button" className="ln-btn ln-btn--secondary" aria-label={"移除标签 " + (selected?.name ?? "")}
+                    disabled={removingKey === previewItem.kind + ":" + previewItem.id}
+                    onClick={() => void removeTagFromItem(previewItem)} title="移除该标签">移除标签</button>
+                )}
                 <button type="button" className="ln-iconbtn ln-iconbtn--compact" aria-label="关闭预览" title="关闭预览"
                   onClick={() => { setPreviewItem(null); setPreviewBody(null); setPreviewError(null); }}><X size={13} /></button>
               </header>
@@ -476,7 +515,7 @@ export function TagsWorkspace(props: TagsWorkspaceProps) {
               {directory.filter((entry) => entry.id !== mergeSource.id).map((entry) => (
                 <button key={entry.id} type="button" className="ln-row" disabled={busy} onClick={() => void mergeInto(entry)}>
                   <span className="ln-ellipsis">{entry.name}</span>
-                  <span className="tags-dir__counts">文 {entry.docCount} · 记 {entry.quickNoteCount}</span>
+                  <span className="tags-dir__counts">{entry.docCount} 篇文档、{entry.quickNoteCount} 条小记</span>
                 </button>
               ))}
             </div>

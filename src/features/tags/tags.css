@@ -46,7 +46,7 @@
 .tags-space__cols {
   display: grid;
   flex: 1 1 auto;
-  grid-template-columns: minmax(200px, 0.85fr) minmax(360px, 1.35fr) minmax(240px, 1fr);
+  grid-template-columns: minmax(200px, 0.85fr) minmax(270px, 1.35fr) minmax(240px, 1fr);
   min-height: 0;
 }
 
@@ -145,10 +145,28 @@
 
 .tags-aggregate__tabs { align-self: flex-start; }
 
+/* 中栏说明：主文案（条数）+ 右侧弱化时间，一行两段（用户 261106：去掉「」和分号） */
 .tags-aggregate__hint {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 2px var(--lake-space-md);
   margin: 0;
-  color: var(--lake-text-3);
+}
+
+.tags-aggregate__hint-main {
+  color: var(--lake-text-2);
   font-size: var(--lake-font-size-tiny);
+  font-weight: var(--lake-font-weight-semibold);
+  font-variant-numeric: tabular-nums;
+}
+
+.tags-aggregate__hint-meta {
+  margin-left: auto;
+  color: var(--lake-text-4);
+  font-size: var(--lake-font-size-nano);
+  font-variant-numeric: tabular-nums;
 }
 
 .tags-aggregate__groups { display: flex; flex-direction: column; gap: var(--lake-space-md); }
@@ -165,11 +183,21 @@
 
 .tags-aggregate__list { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; }
 
+/* 行 = 主区按钮 + 「移除该标签」（悬停/键盘聚焦出现；可逆动作） */
 .tags-aggregate__row {
   display: flex;
   align-items: center;
-  gap: var(--lake-space-sm);
+  gap: 4px;
   width: 100%;
+  padding-right: 2px;
+}
+
+.tags-aggregate__open {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: var(--lake-space-sm);
+  min-width: 0;
   border: 0;
   color: inherit;
   background: transparent;
@@ -177,6 +205,17 @@
   text-align: left;
   cursor: pointer;
 }
+
+.tags-aggregate__remove {
+  flex: none;
+  opacity: 0;
+  color: var(--lake-text-4);
+}
+
+.tags-aggregate__row:hover .tags-aggregate__remove,
+.tags-aggregate__row:focus-within .tags-aggregate__remove { opacity: 1; }
+
+.tags-aggregate__remove:hover { color: var(--lake-text-2); }
 
 .tags-aggregate__row-title { flex: 1 1 auto; min-width: 0; }
 
@@ -191,6 +230,7 @@
 
 .tags-preview__head {
   display: flex;
+  flex-wrap: wrap;
   flex: none;
   align-items: center;
   gap: var(--lake-space-sm);
@@ -207,8 +247,6 @@
 .tags-preview__title { flex: 1 1 auto; min-width: 0; color: var(--lake-text-1); }
 
 .tags-preview__body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding-top: var(--lake-space-sm); }
-
-.tags-preview__doc { max-width: 760px; }
 
 .tags-empty {
   margin: var(--lake-space-md) 0;

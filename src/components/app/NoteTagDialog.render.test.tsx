@@ -76,7 +76,7 @@ describe("NoteTagDialog（打标签弹窗，与重命名/新建同口径）", ()
   it("展示目标文档标题 + 复用标签行（现有 chips 按本机顺序）", async () => {
     act(() => root.render(createElement(NoteTagDialog, { open: true, noteId: "n1", title: "周报", onClose: () => {} })));
     await flush();
-    expect(document.body.textContent).toContain("打标签");
+    expect(document.body.textContent).toContain("标签");
     expect(document.body.textContent).toContain("周报");
     expect(chipNames()).toEqual(["灵感"]);
   });
@@ -106,9 +106,9 @@ describe("NoteTagDialog（打标签弹窗，与重命名/新建同口径）", ()
     const onClose = vi.fn();
     act(() => root.render(createElement(NoteTagDialog, { open: true, noteId: "n1", title: "周报", onClose })));
     await flush();
-    act(() => document.body.querySelector<HTMLButtonElement>('button[aria-label="关闭打标签"]')!.click());
+    act(() => document.body.querySelector<HTMLButtonElement>('button[aria-label="关闭标签"]')!.click());
     expect(onClose).toHaveBeenCalled();
     act(() => root.render(createElement(NoteTagDialog, { open: false, noteId: "n1", title: "周报", onClose })));
-    expect(document.body.querySelector('button[aria-label="关闭打标签"]')).toBeNull();
+    expect(document.body.querySelector('button[aria-label="关闭标签"]')).toBeNull();
   });
 });

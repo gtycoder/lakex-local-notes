@@ -1,5 +1,5 @@
 /**
- * 目录行「打标签…」的文档标签选择弹层（261105 晚，用户验收反馈）。
+ * 目录行「标签…」的文档标签选择弹层（261105 晚，用户验收反馈；261106 文案统一为「标签」）。
  *
  * 语义：多选/取消 + 新建标签；保存调用 bridge.setNoteTags（单库写 tag_links(kind='note') + bump 关系版本，
  * 与桌面 set_note_tags 同语义）。**不写正文**（关系独立于正文 hash）。
@@ -101,7 +101,7 @@ export function NoteTagsSheet({ open, note, onClose }: NoteTagsSheetProps) {
   return (
     <MobileSheet
       open={open}
-      title={note?.title ? "打标签 · " + note.title : "打标签"}
+      title={note?.title ? "标签：" + note.title : "标签"}
       titleClassName="mb-ellipsis"
       onClose={onClose}
       className="qn-tag-sheet"

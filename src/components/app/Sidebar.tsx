@@ -1096,7 +1096,7 @@ const ContextMenu = ({ node, x, y, onNewChild, onRename, onDelete, onCopyMarkdow
         <>
           <button role="menuitem" onClick={() => { onRename(); onClose(); }}><Pencil size={15} /><span>重命名</span></button>
           <button role="menuitem" onClick={() => { onOpenHistory(); onClose(); }}><History size={15} /><span>历史版本</span></button>
-          <button role="menuitem" onClick={() => { onAddTags(); onClose(); }}><TagIcon size={15} /><span>打标签…</span></button>
+          <button role="menuitem" onClick={() => { onAddTags(); onClose(); }}><TagIcon size={15} /><span>标签…</span></button>
           <button role="menuitem" onClick={() => { onShowInfo(); onClose(); }}><Info size={15} /><span>属性</span></button>
           <button role="menuitem" onClick={() => { onToggleLock(); onClose(); }}>
             {locked ? <LockOpen size={15} /> : <Lock size={15} />}<span>{locked ? "解锁" : "锁定（只读）"}</span>

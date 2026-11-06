@@ -23,25 +23,25 @@ describe("标签空间三栏布局（纯逻辑）", () => {
   it("默认值 / 存储键 / 容器下限", () => {
     expect(TAG_LAYOUT_DEFAULTS).toEqual({ dir: TAG_DIR_DEFAULT, preview: TAG_PREVIEW_DEFAULT });
     expect(TAG_LAYOUT_STORAGE_KEY.startsWith("lakex-local-notes-v3.")).toBe(true);
-    expect(TAG_LAYOUT_MIN_CONTAINER).toBe(200 + 360 + 240 + 10);
+    expect(TAG_LAYOUT_MIN_CONTAINER).toBe(200 + 270 + 240 + 10); // 720
   });
 
-  it("左栏 clamp：200–480，且给中栏留 ≥360、给右栏留当前宽", () => {
+  it("左栏 clamp：200–480，且给中栏留 ≥270、给右栏留当前宽", () => {
     expect(clampTagDirWidth(10, 0, 380)).toBe(TAG_DIR_MIN);
     expect(clampTagDirWidth(9999, 0, 380)).toBe(TAG_DIR_MAX);
     expect(clampTagDirWidth(300, 0, 380)).toBe(300);
-    // 容器 1000、右栏 380 ⇒ 上界 = 1000-380-360-10 = 250
-    expect(clampTagDirWidth(400, 1000, 380)).toBe(250);
+    // 容器 1000、右栏 380 ⇒ 上界 = 1000-380-270-10 = 340
+    expect(clampTagDirWidth(400, 1000, 380)).toBe(340);
     // 容器未知（0）只做静态夹取
     expect(clampTagDirWidth(Number.NaN, 0, 380)).toBe(TAG_DIR_DEFAULT);
   });
 
-  it("右栏 clamp：240–720，且给中栏留 ≥360、给左栏留当前宽", () => {
+  it("右栏 clamp：240–720，且给中栏留 ≥270、给左栏留当前宽", () => {
     expect(clampTagPreviewWidth(10, 0, 260)).toBe(TAG_PREVIEW_MIN);
     expect(clampTagPreviewWidth(9999, 0, 260)).toBe(TAG_PREVIEW_MAX);
     expect(clampTagPreviewWidth(500, 0, 260)).toBe(500);
-    // 容器 1000、左栏 260 ⇒ 上界 = 1000-260-360-10 = 370
-    expect(clampTagPreviewWidth(700, 1000, 260)).toBe(370);
+    // 容器 1000、左栏 260 ⇒ 上界 = 1000-260-270-10 = 460
+    expect(clampTagPreviewWidth(700, 1000, 260)).toBe(460);
   });
 
   it("持久化解析：坏 JSON / 缺字段 / 负数 / 非数字 ⇒ null（回默认）", () => {
@@ -64,13 +64,13 @@ describe("标签空间三栏布局（纯逻辑）", () => {
     expect(narrow.templateColumns).toBeNull();
     const wide = resolveTagColumns(1600, { dir: 300, preview: 380 });
     expect(wide.mode).toBe("split");
-    expect(wide.templateColumns).toBe("300px 5px minmax(360px, 1fr) 5px 380px");
-    // 过宽的值在 split 下被夹到上界（1600-380-360-10=850 > 480 ⇒ 480）
+    expect(wide.templateColumns).toBe("300px 5px minmax(270px, 1fr) 5px 380px");
+    // 过宽的值在 split 下被夹到上界（1600-380-270-10=940 > 480 ⇒ 480）
     const clamped = resolveTagColumns(1600, { dir: 9999, preview: 9999 });
     expect(clamped.dir).toBe(TAG_DIR_MAX);
     expect(clamped.preview).toBe(TAG_PREVIEW_MAX);
     expect(TAG_HANDLE_TOTAL).toBe(10);
-    expect(TAG_AGG_MIN).toBe(360);
+    expect(TAG_AGG_MIN).toBe(270);
   });
 
   it("极端窄容器下左右栏仍各自 ≥ 最小值（不出现负宽）", () => {
