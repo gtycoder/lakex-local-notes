@@ -74,10 +74,10 @@ afterEach(async () => {
 });
 
 describe("NoteTagsSheet（文档标签多选）", () => {
-  it("标题 =「标签 · <文档标题>」，不再出现「打标签」（无标题时就是「标签」）", async () => {
+  it("标题 =「标签：<文档标题>」，不再出现「打标签」（无标题时就是「标签」）", async () => {
     await render();
     // MobileSheet 以字符串标题同时作为 role=dialog 的无障碍名（单点派生，不另写 ariaLabel）。
-    expect(host.textContent).toContain("标签 · 文档一");
+    expect(host.textContent).toContain("标签：文档一");
     expect(host.textContent).not.toContain("打标签");
   });
 
