@@ -49,6 +49,13 @@
 
 .quick-note-preview-toggle { align-self: flex-start; display: inline-flex; align-items: center; gap: 4px; margin-top: 2px; padding: 2px 4px; border: 0; color: var(--lake-accent-text); background: transparent; font-size: var(--lake-font-size-tiny); cursor: pointer; }
 
+/* 261106 task-76：标签详情里的小记卡 —— 复用 .quick-note-preview，但**限高**（超出渐隐 + 卡内「展开/收起」）；
+   × 放在 .mb-set-item__ctl 右侧独立列，不与正文重叠。属新增交互形态（标签详情页），非覆盖叠层。 */
+.tag-quick-card { position: relative; max-height: 180px; overflow: hidden; }
+.tag-quick-card::after { content: ""; position: absolute; inset: auto 0 0 0; height: 36px; background: linear-gradient(to bottom, transparent, var(--lake-bg-window)); pointer-events: none; }
+.tag-quick-card.is-expanded { max-height: none; overflow: visible; }
+.tag-quick-card.is-expanded::after { content: none; }
+
 .quick-note-preview-paragraph { margin: 0; white-space: pre-wrap; }
 
 .quick-note-preview-heading { margin: 2px 0 0; font-size: var(--lake-font-size-bodyLg); }

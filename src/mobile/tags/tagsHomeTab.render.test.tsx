@@ -58,6 +58,8 @@ import { TagsHomeTab } from "./TagsHomeTab";
 
 const readSource = (rel: string): string => readFileSync(path.join(process.cwd(), rel), "utf8");
 const TAB_SRC = readSource("src/mobile/tags/TagsHomeTab.tsx");
+const QN_CSS = readSource("src/mobile/quick-notes.css");
+const MOBILE_CSS = readSource("src/mobile/mobile.css");
 
 const T = "2026-11-01T00:00:00.000Z";
 const tag = (id: string, name: string): QuickNoteTag => ({ id, name, createdAt: T, updatedAt: T });
@@ -149,6 +151,7 @@ beforeEach(() => {
   vi.stubGlobal("IntersectionObserver", IntersectionObserverStub);
   vi.stubGlobal("ResizeObserver", class { observe(): void {} disconnect(): void {} unobserve(): void {} });
   Object.defineProperty(HTMLElement.prototype, "clientHeight", { configurable: true, value: 800 });
+  Object.defineProperty(HTMLElement.prototype, "scrollHeight", { configurable: true, value: 400 });
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
@@ -204,11 +207,28 @@ describe("标签页 · 交互骨架（无「管理」模式）", () => {
     expect(TAB_SRC).toContain("is-drop-before");
   });
 
-  it("容器 = mobile-scroll + mobile-quick-cards；行/卡/按钮全用既有 mb-* 原语", async () => {
+  it("标准页头：大标题「标签」+ 数量小字 + 右上仅「＋」；常驻长按说明已删除", async () => {
     await renderTab();
-    expect(host.querySelector(".mobile-scroll .mobile-quick-cards")).not.toBeNull();
-    expect(host.querySelector(".mb-set-section .mb-set-item")).not.toBeNull();
-    for (const cls of ["mobile-scroll", "mobile-quick-cards", "mb-set-section", "mb-set-item", "mb-iconbtn", "mb-empty"]) {
+    const head = host.querySelector("header.mobile-settings-head.mobile-page-head");
+    expect(head).not.toBeNull();
+    expect(head!.querySelector(".mobile-settings-title")!.textContent).toContain("标签");
+    expect(head!.textContent).toContain("2 个");
+    const buttons = [...head!.querySelectorAll("button")];
+    expect(buttons.map((b) => b.getAttribute("aria-label"))).toEqual(["新建标签"]);
+    expect(buttons[0].className).toContain("mb-iconbtn"); // 44 命中
+    expect(listRows().length).toBe(2);
+    // 常驻说明已删（不再有这句噪音）
+    expect(host.textContent).not.toContain("长按可拖动排序");
+    expect(TAB_SRC).not.toContain("长按可拖动排序");
+  });
+
+  it("列表行去卡化（不再包 .mb-set-section）；容器仍是首页同一套滚动/内距原语", async () => {
+    await renderTab();
+    expect(host.querySelector(".mobile-scroll")).not.toBeNull();
+    expect(host.querySelector(".mb-set-section")).toBeNull();
+    expect(host.querySelector(".mb-set-items > .mb-set-item")).not.toBeNull();
+    expect(TAB_SRC).not.toContain("mb-set-section");
+    for (const cls of ["mobile-scroll", "mobile-settings-head", "mb-set-items", "mb-set-item", "mb-iconbtn", "mb-empty"]) {
       expect(TAB_SRC).toContain(cls);
     }
     for (const invented of ["tags-page", "tags-row", "tag-list", "tags-list", "tag-detail"]) {
@@ -325,6 +345,31 @@ describe("行主区 / 长按拖拽", () => {
     expect(onOpenQuickNote).toHaveBeenCalledWith("q1");
   });
 
+  it("详情 = 独立页头（返回 / 标签名 / ⋯）+ 副标题计数；不再出现列表页头与「＋」", async () => {
+    await renderTab();
+    // 列表页：没有返回，页头只有「＋」
+    expect(byAria("返回标签列表")).toBeNull();
+    expect(host.querySelectorAll("header.mobile-settings-head").length).toBe(1);
+
+    await click(rowMain("工作"));
+    const headers = host.querySelectorAll<HTMLElement>("header.mobile-settings-head");
+    expect(headers.length).toBe(1); // 列表页头整块消失，只剩详情页头
+    const head = headers[0];
+    expect(head.querySelector(".mobile-settings-title")!.textContent).toBe("工作");
+    expect([...head.querySelectorAll("button")].map((b) => b.getAttribute("aria-label")))
+      .toEqual(["返回标签列表", "标签操作 工作"]);
+    // 详情没有「＋新建」
+    expect(byAria("新建标签")).toBeNull();
+    // 副标题计数 + 两个分区（各带计数）
+    expect(host.textContent).toContain("2 篇文档、1 条小记");
+    expect(host.textContent).toContain("文档（2）");
+    expect(host.textContent).toContain("小记（1）");
+    // 返回按钮回到列表
+    await click(byAria("返回标签列表"));
+    expect(inDetail()).toBe(false);
+    expect(byAria("新建标签")).toBeTruthy();
+  });
+
   it("× 在行右侧（文档/小记同一套；小记卡不再有底部单独 ×）；详情返回键先回列表", async () => {
     await renderTab({ tags: [tag("t_a", "工作")] });
     await click(rowMain("工作"));
@@ -334,14 +379,38 @@ describe("行主区 / 长按拖拽", () => {
       expect(button.className).toContain("mb-iconbtn");   // 44×44 命中
       expect(button.textContent ?? "").toBe("");          // 只有图标
     }
-    // 小记行只有这一个 ×（没有底部单独一条动作行）。
+    // × 只在右侧独立列（__ctl）里；卡片底部没有额外动作行。
     const quickRow = host.querySelector('.mb-set-item__main[aria-label="打开小记 想法一"]')!.closest(".mb-set-item")!;
-    expect(quickRow.querySelectorAll("button")).toHaveLength(1);
+    const ctlButtons = [...quickRow.querySelectorAll<HTMLElement>(".mb-set-item__ctl button")];
+    expect(ctlButtons.map((el) => el.getAttribute("aria-label"))).toEqual(["移除标签「想法一」"]);
+    expect(quickRow.querySelectorAll(".mb-set-item__ctl .mb-iconbtn").length).toBe(1);
 
     // 详情注册了返回栈：consumeBack 先回列表（不会落到「两次返回退出」）。
     await act(async () => { expect(consumeBack()).toBe(true); });
     expect(inDetail()).toBe(false);
     expect(listRows().length).toBeGreaterThan(0);
+  });
+
+  it("小记卡限高 + 展开/收起：.tag-quick-card 默认收起，点「展开」→ is-expanded（CSS 与本组件同一阈值）", async () => {
+    await renderTab({ tags: [tag("t_a", "工作")] });
+    await click(rowMain("工作"));
+    const card = host.querySelector(".tag-quick-card");
+    expect(card).not.toBeNull();
+    expect(card!.className).not.toContain("is-expanded");
+    // 卡片自己的「展开」是 .mb-set-item__main 的直接子按钮（预览内部自己的折叠按钮在 .tag-quick-card 里）。
+    const toggle = [...host.querySelectorAll<HTMLButtonElement>(".mb-set-item__main > .quick-note-preview-toggle")]
+      .find((el) => (el.textContent ?? "").trim() === "展开");
+    expect(toggle).toBeTruthy();
+    await click(toggle);
+    expect(host.querySelector(".tag-quick-card")!.className).toContain("is-expanded");
+    const collapse = [...host.querySelectorAll<HTMLButtonElement>(".mb-set-item__main > .quick-note-preview-toggle")]
+      .find((el) => (el.textContent ?? "").trim() === "收起");
+    expect(collapse).toBeTruthy();
+    // 限高 180（CSS 唯一来源）+ 展开后解除；阈值在组件里与 CSS 对齐。
+    expect(QN_CSS).toContain(".tag-quick-card {");
+    expect(QN_CSS).toContain("max-height: 180px");
+    expect(QN_CSS).toContain(".tag-quick-card.is-expanded");
+    expect(MOBILE_CSS).toContain(".mobile-page-head");
   });
 
   it("长按 350ms 拖拽 → reorderQuickNoteTags；拖拽后的那次 click 不进详情", async () => {

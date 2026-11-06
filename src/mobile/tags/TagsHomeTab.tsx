@@ -1,22 +1,24 @@
 /**
  * 一级「标签」页（261106 用户验收；flomo 式：标签即入口 → 点进去看内容 → 编辑动作收在次级入口）。
  *
- * 261106 三次返工后的定稿交互（**没有「管理」模式**，列表永远可交互）：
- *  · 页头：标题 + 计数 + 「＋新建」（.mb-iconbtn，aria「新建标签」，命中 44）；不再有「管理 / 完成」切换。
+ * 261106 task-76 重设计后的版面（**没有「管理」模式**，列表永远可交互）：
+ *  · 列表页 = 标准页头（大标题「标签」+ 数量小字，右上仅「＋」，aria「新建标签」，命中 44）；不再有常驻长按说明、不再有「管理 / 完成」。
  *  · 每行右侧固定「⋯」（.mb-iconbtn + MoreVertical，aria「标签操作 <名称>」，命中 44）→ 弹出既有 MobileSheetMenu：
  *    重命名（弹输入、预填 + 全选）/ 合并到…（选目标，提示与桌面同句）/ 删除（二次确认，与桌面逐字一致）。
  *  · 行主区点击 = 进详情；「⋯」stopPropagation 不触发详情。
  *  · 长按 350ms 进入拖拽排序（复用既有 qn-tag-manager 拖拽态与判据）→ 松手 reorderQuickNoteTags（设备本地顺序）；
  *    拖拽过的那一次 click 被吞掉，不会误进详情。
- *  · 详情：文档 / 小记两段（各自 updatedAt 倒序）；行点击打开；行尾 ×（44 命中）→ 二次确认（只删该条关联）。
+ *  · 详情 = **独立页头**（左返回、中标题 = 标签名、右「⋯」，副标题计数），不渲染列表页头、没有「＋」；
+ *    「文档」「小记」两段各带计数；小记卡 = 首页同一套富预览（限高 180px + 展开/收起），× 在右侧独立列。
  *
- * 版面：mobile-scroll + mobile-quick-cards（与「小记」页同一内距容器）+ mb-set-section/mb-set-item/mb-set-title/
- * mb-set-block/mb-btn/mb-iconbtn/mb-empty。**零新增 CSS。** 计数/聚合复用 tags/tagAggregate；文案复用 tagManageCopy。
+ * 版面只用既有原语：mobile-scroll / mobile-settings-head（+ 必要覆盖 .mobile-page-head）/ mb-set-title /
+ * mb-set-items / mb-set-item / mb-set-block / mb-btn / mb-iconbtn / mb-empty / quick-note-preview 系列。
+ * 计数/聚合复用 tags/tagAggregate；文案复用 tagManageCopy。
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Feather, FileText, GripVertical, Merge, MoreVertical, Pencil, Plus, Trash, X } from "lucide-react";
 import type { QuickNoteTag } from "../../core/quickNoteTags";
-import { buildQuickNoteTagIndex, buildQuickNoteTagOptions, moveQuickNoteTagOrder, normalizeQuickNoteTag, type QuickNoteTagSummary } from "../../core/quickNoteTags";
+import { buildQuickNoteTagIndex, buildQuickNoteTagOptions, moveQuickNoteTagOrder, normalizeQuickNoteTag } from "../../core/quickNoteTags";
 import { formatListTime } from "../../core/dateFormat";
 import { getNativeErrorMessage } from "../../lib/nativeErrors";
 import type { LocalNoteSummary } from "../data/noteRepository";
@@ -26,11 +28,11 @@ import { confirmMobile } from "../ui/ConfirmDialog";
 import { MobileSheet } from "../ui/MobileSheet";
 import { MobileSheetMenu, type MobileSheetItem } from "../ui/MobileSheetMenu";
 import { pushBackHandler } from "../ui/backStack";
-import { TagQuickNotePreview } from "./TagQuickNotePreview";
 import { useLongPress } from "../ui/useLongPress";
 import { showToast } from "../ui/toastBus";
 import { aggregateTagRows, tagCounts, type NoteTagLinks, type TagAggregateRow } from "./tagAggregate";
 import { createTagFromName } from "./tagCreate";
+import { TagQuickNoteCard } from "./TagQuickNoteCard";
 import { MERGE_TAG_HINT, deleteTagConfirmBody } from "./tagManageCopy";
 
 export interface TagsHomeTabProps {
@@ -126,10 +128,6 @@ export function TagsHomeTab({ tags, notes, quickNotes, active, onOpenNote, onOpe
 
   /** 任一写操作完成后：关系可能变了 ⇒ 关系 + App 快照一起刷。 */
   const reloadAll = useCallback(async (): Promise<void> => { await loadLinks(); await onChanged(); }, [loadLinks, onChanged]);
-
-  const countOf = useCallback((tag: QuickNoteTagSummary | QuickNoteTag): string => (
-    countText(counts.docs[tag.id] ?? 0, "count" in tag ? tag.count : (counts.quickNotes[tag.id] ?? 0))
-  ), [counts]);
 
   const openRow = (row: TagAggregateRow): void => {
     if (row.kind === "doc") onOpenNote(row.id);
@@ -347,7 +345,7 @@ export function TagsHomeTab({ tags, notes, quickNotes, active, onOpenNote, onOpe
     setSelectedTagId(tag.id);
   };
 
-  /** 文档行：标题 + 时间；× 在行右侧中轴（IconButton 44；stopPropagation 只走移除）。 */
+  /** 文档行：标题 + 类型/日期弱化行；× 在右侧独立列（IconButton 44；stopPropagation 只走移除）。 */
   const renderDocRow = (row: TagAggregateRow) => (
     <div key={"doc-" + row.id} className="mb-set-item">
       <div
@@ -374,148 +372,139 @@ export function TagsHomeTab({ tags, notes, quickNotes, active, onOpenNote, onOpe
     </div>
   );
 
-  /**
-   * 小记行（261106）：富预览（与首页卡片同一个 QuickNotePreview，正文按需 readQuickNote），
-   * × 与文档行同一套——放在右侧中轴（不再在卡片底部单独一行）。预览内勾选框只读、不切换。
-   */
+  /** 小记卡：富预览（限高 + 展开/收起）+ × 右侧独立列，见 TagQuickNoteCard。 */
   const renderQuickRow = (row: TagAggregateRow) => (
-    <div key={"quick-" + row.id} className="mb-set-item">
-      <div
-        className="mb-set-item__main"
-        role="button"
-        tabIndex={0}
-        aria-label={"打开小记 " + row.title}
-        onClick={() => onOpenQuickNote(row.id)}
-        onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpenQuickNote(row.id); } }}
-      >
-        <TagQuickNotePreview noteId={row.id} fallbackText={row.title} />
-        <div className="mb-set-item__desc">小记　{fmtTime(row.updatedAt)}</div>
-      </div>
-      <div className="mb-set-item__ctl">
-        <button
-          type="button"
-          className="mb-iconbtn"
-          disabled={busy}
-          aria-label={"移除标签「" + row.title + "」"}
-          onClick={(event) => { event.stopPropagation(); void removeRow(row); }}
-        >
-          <X size={18} />
-        </button>
-      </div>
-    </div>
+    <TagQuickNoteCard
+      key={"quick-" + row.id}
+      noteId={row.id}
+      title={row.title}
+      updatedAt={row.updatedAt}
+      busy={busy}
+      onOpen={() => onOpenQuickNote(row.id)}
+      onRemove={() => void removeRow(row)}
+    />
+  );
+
+  const createEntry = (
+    <button type="button" className="mb-iconbtn" aria-label="新建标签" onClick={() => { setCreateError(null); setCreateOpen(true); }}>
+      <Plus size={20} />
+    </button>
   );
 
   return (
     <div className="mobile-scroll">
-      <div className="mobile-quick-cards">
-        {/* 页头：标题 + 计数 + 「＋新建」（没有「管理」模式；行内 ⋯ 直接给动作） */}
-        <div className="mb-set-section">
-          <div className="mb-set-item">
-            <div className="mb-set-item__main">
-              <div className="mb-set-name">标签</div>
-              <div className="mb-set-item__desc">{tags.length} 个标签，长按可拖动排序（只在本机生效）</div>
-            </div>
-            <div className="mb-set-item__ctl">
-              <button type="button" className="mb-iconbtn" aria-label="新建标签" onClick={() => { setCreateError(null); setCreateOpen(true); }}>
-                <Plus size={20} />
-              </button>
-            </div>
+      {selectedTag ? (
+        <>
+          {/* 详情 = 独立页头：左返回、中标题、右 ⋯（重命名 / 合并到… / 删除）；副标题给计数。 */}
+          <header className="mobile-settings-head mobile-page-head">
+            <button type="button" className="mb-iconbtn" aria-label="返回标签列表" onClick={() => setSelectedTagId(null)}>
+              <ChevronLeft size={22} />
+            </button>
+            <div className="mobile-settings-title mb-ellipsis mb-flex1">{selectedTag.name}</div>
+            <button
+              type="button"
+              className="mb-iconbtn"
+              aria-label={"标签操作 " + selectedTag.name}
+              onClick={() => setMenuFor(selectedTag)}
+            >
+              <MoreVertical size={20} />
+            </button>
+          </header>
+          <div className="mb-set-title">
+            <span className="mb-set-item__desc">
+              {countText(counts.docs[selectedTag.id] ?? 0, counts.quickNotes[selectedTag.id] ?? 0)}
+            </span>
           </div>
-        </div>
 
-        {selectedTag ? (
-          <>
-            <div className="mb-set-section">
+          {rows.length === 0 ? (
+            <div className="mb-empty">该标签下暂无内容</div>
+          ) : (
+            <>
+              <h4 className="mb-set-title"><FileText size={14} />文档（{docs.length}）</h4>
+              {docs.length === 0 ? (
+                <div className="mb-empty mb-empty--inset">还没有文档</div>
+              ) : (
+                <div className="mb-set-items">{docs.map(renderDocRow)}</div>
+              )}
+              <h4 className="mb-set-title"><Feather size={14} />小记（{quickRows.length}）</h4>
+              {quickRows.length === 0 ? (
+                <div className="mb-empty mb-empty--inset">还没有小记</div>
+              ) : (
+                <div className="mb-set-items">{quickRows.map(renderQuickRow)}</div>
+              )}
+            </>
+          )}
+        </>
+      ) : (
+        <>
+          {/* 列表 = 标准页头：大标题「标签」+ 数量小字，右上仅「＋」；不再有常驻长按说明。 */}
+          <header className="mobile-settings-head mobile-page-head">
+            <div className="mobile-settings-title mb-flex1">标签<span className="mb-row__meta"> {tags.length} 个</span></div>
+            {createEntry}
+          </header>
+
+          {linksError ? (
+            <div className="mb-set-items">
               <div className="mb-set-item">
-                <div className="mb-set-item__ctl">
-                  <button type="button" className="mb-iconbtn" aria-label="返回标签列表" onClick={() => setSelectedTagId(null)}>
-                    <ChevronLeft size={20} />
-                  </button>
-                </div>
                 <div className="mb-set-item__main">
-                  <div className="mb-set-name">{selectedTag.name}</div>
-                  <div className="mb-set-item__desc">
-                    {countText(counts.docs[selectedTag.id] ?? 0, counts.quickNotes[selectedTag.id] ?? 0)}
+                  <div className="mb-set-name">标签目录暂不可用</div>
+                  <div className="mb-set-item__desc">{linksError}</div>
+                </div>
+                <div className="mb-set-item__ctl">
+                  <button type="button" className="mb-btn mb-btn--secondary" onClick={() => void loadLinks()}>重试</button>
+                </div>
+              </div>
+            </div>
+          ) : tags.length === 0 ? (
+            <div className="mb-empty">还没有标签。新建一个标签，或在文档 / 小记里添加标签。</div>
+          ) : (
+            <div className="mb-set-items">
+              {summaries.map((tag) => (
+                <div
+                  key={tag.id}
+                  className={"mb-set-item qn-tag-manager__row"
+                    + (drag?.id === tag.id ? " is-dragging" : "")
+                    + (drag?.overId === tag.id && !drag.after ? " is-drop-before" : "")
+                    + (drag?.overId === tag.id && drag.after ? " is-drop-after" : "")}
+                  data-tag-id={tag.id}
+                  onClick={() => openDetail(tag)}
+                  onTouchStart={(event) => {
+                    if ((event.target as HTMLElement).closest("button")) return;
+                    pressedId.current = tag.id;
+                    longPress.onTouchStart(event);
+                  }}
+                  onTouchMove={longPress.onTouchMove}
+                  onTouchEnd={longPress.onTouchEnd}
+                  onTouchCancel={longPress.onTouchCancel}
+                >
+                  <span className="mb-row__icon" aria-hidden="true"><GripVertical size={16} /></span>
+                  <div
+                    className="mb-set-item__main"
+                    role="button"
+                    tabIndex={0}
+                    aria-label={tag.name}
+                    onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openDetail(tag); } }}
+                  >
+                    <div className="mb-set-name">{tag.name}</div>
+                    <div className="mb-set-item__desc">{countText(counts.docs[tag.id] ?? 0, counts.quickNotes[tag.id] ?? 0)}</div>
+                  </div>
+                  <div className="mb-set-item__ctl">
+                    <button
+                      type="button"
+                      className="mb-iconbtn"
+                      aria-label={"标签操作 " + tag.name}
+                      onClick={(event) => { event.stopPropagation(); setMenuFor(tag); }}
+                    >
+                      <MoreVertical size={18} />
+                    </button>
                   </div>
                 </div>
-              </div>
+              ))}
             </div>
-            {rows.length === 0 ? (
-              <div className="mb-empty">该标签下暂无内容</div>
-            ) : (
-              <>
-                <h4 className="mb-set-title"><FileText size={14} />文档（{docs.length}）</h4>
-                <div className="mb-set-section">{docs.map(renderDocRow)}</div>
-                <h4 className="mb-set-title"><Feather size={14} />小记（{quickRows.length}）</h4>
-                <div className="mb-set-section">{quickRows.map(renderQuickRow)}</div>
-              </>
-            )}
-          </>
-        ) : linksError ? (
-          <div className="mb-set-section">
-            <div className="mb-set-item">
-              <div className="mb-set-item__main">
-                <div className="mb-set-name">标签目录暂不可用</div>
-                <div className="mb-set-item__desc">{linksError}</div>
-              </div>
-              <div className="mb-set-item__ctl">
-                <button type="button" className="mb-btn mb-btn--secondary" onClick={() => void loadLinks()}>重试</button>
-              </div>
-            </div>
-          </div>
-        ) : tags.length === 0 ? (
-          <div className="mb-empty">还没有标签。新建一个标签，或在文档 / 小记里添加标签。</div>
-        ) : (
-          <div className="mb-set-section">
-            {summaries.map((tag) => (
-              <div
-                key={tag.id}
-                className={"mb-set-item qn-tag-manager__row"
-                  + (drag?.id === tag.id ? " is-dragging" : "")
-                  + (drag?.overId === tag.id && !drag.after ? " is-drop-before" : "")
-                  + (drag?.overId === tag.id && drag.after ? " is-drop-after" : "")}
-                data-tag-id={tag.id}
-                // 整行点击都进详情（点在手柄/内距上也一样）；拖拽过的那次 click 由 suppressClick 吞掉。
-                onClick={() => openDetail(tag)}
-                onTouchStart={(event) => {
-                  if ((event.target as HTMLElement).closest("button")) return;
-                  pressedId.current = tag.id;
-                  longPress.onTouchStart(event);
-                }}
-                onTouchMove={longPress.onTouchMove}
-                onTouchEnd={longPress.onTouchEnd}
-                onTouchCancel={longPress.onTouchCancel}
-              >
-                <span className="mb-row__icon" aria-hidden="true"><GripVertical size={16} /></span>
-                <div
-                  className="mb-set-item__main"
-                  role="button"
-                  tabIndex={0}
-                  aria-label={tag.name}
-                  onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openDetail(tag); } }}
-                >
-                  <div className="mb-set-name">{tag.name}</div>
-                  <div className="mb-set-item__desc">{countOf(tag)}</div>
-                </div>
-                <div className="mb-set-item__ctl">
-                  <button
-                    type="button"
-                    className="mb-iconbtn"
-                    aria-label={"标签操作 " + tag.name}
-                    onClick={(event) => { event.stopPropagation(); setMenuFor(tag); }}
-                  >
-                    <MoreVertical size={18} />
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-        {!selectedTag && loadingLinks && tags.length > 0 && (
-          <div className="mb-set-item__desc">读取标签计数…</div>
-        )}
-      </div>
-
+          )}
+          {loadingLinks && tags.length > 0 && <div className="mb-set-item__desc">读取标签计数…</div>}
+        </>
+      )}
       {/* 行 ⋯ 菜单（既有 .mb-menusheet 原语） */}
       <MobileSheetMenu
         open={menuFor !== null}
@@ -586,7 +575,7 @@ export function TagsHomeTab({ tags, notes, quickNotes, active, onOpenNote, onOpe
       >
         <div className="qn-tag-sheet__section"><Merge size={14} /><span>把「{mergeSource?.name ?? ""}」合并到：</span></div>
         <div className="mb-set-item__desc">{MERGE_TAG_HINT}</div>
-        <div className="mb-set-section">
+        <div className="mb-set-items">
           {mergeTargets.map((tag) => (
             <div
               key={tag.id}

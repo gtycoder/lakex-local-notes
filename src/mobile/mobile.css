@@ -436,6 +436,12 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
 }
 .mobile-settings-close:active { background: var(--lake-bg-panel, var(--lake-bg-window)); }
 
+/* 261106 task-76：一级「标签」页页头复用设置页 .mobile-settings-head（sticky + 左/中/右三格），需两处覆盖：
+   ① 背景不能 inherit —— 首页 .mobile-scroll 没有底色，滚动内容会从 sticky 页头下发透出来；
+   ② 上方已有 App 顶栏（含安全区）⇒ 不再叠加 --mobile-top-safe-area。
+   属**新增页面形态**，不是覆盖叠层（只有这两条，其它几何全部沿用设置页页头）。 */
+.mobile-page-head { padding-top: 12px; background: var(--lake-bg-window); }
+
 /* 竖向设置菜单：设置项一行一行（思源移动端式），点某项进入新页面 */
 .mobile-settings-list { flex: 1; overflow-y: auto; background: var(--lake-bg-window); padding: 4px 0 calc(24px + var(--mobile-bottom-safe-area)); }
 /* 设置根页的行 = .mb-row.mobile-settings-row（P2/P4 起就是 mb-* 原语）；用父级作用域保证这里的 52 行高生效。 */
