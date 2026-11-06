@@ -20,7 +20,8 @@
   flex: none;
   align-items: center;
   gap: 6px;
-  padding: var(--lake-space-xs) var(--lake-space-sm);
+  /* 左侧与列表同一条内距（标题/按钮与行首对齐）；右侧保持原值。 */
+  padding: var(--lake-space-xs) var(--lake-space-sm) var(--lake-space-xs) calc(var(--lake-space-lg) + var(--lake-space-md));
   border-bottom: 0.5px solid var(--lake-border-1);
 }
 
@@ -72,7 +73,8 @@
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
-  padding: var(--lake-space-xs);
+  /* 左侧内距对齐目录栏（261106 用户验收：原 4px 太贴边）；右侧保持原内距。 */
+  padding: var(--lake-space-xs) var(--lake-space-xs) var(--lake-space-xs) calc(var(--lake-space-lg) + var(--lake-space-md));
 }
 
 /* 两条可拖分隔条（SplitHandle）：定位类只给宽与拉伸，视觉基线留在 kit 的 .ln-split-handle */
@@ -87,7 +89,7 @@
   align-items: center;
   gap: var(--lake-space-xs);
   min-width: 0;
-  padding-left: var(--lake-space-xs);
+  padding-left: var(--lake-space-lg);
 }
 
 .tags-dir__row.is-dragging { opacity: 0.6; }
