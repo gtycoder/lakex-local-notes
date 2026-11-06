@@ -442,10 +442,9 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
    属**新增页面形态**，不是覆盖叠层（只有这两条，其它几何全部沿用设置页页头）。 */
 .mobile-page-head { padding-top: 12px; background: var(--lake-bg-window); }
 
-/* 261106 task-77：标签详情页的副标题（N 篇文档、M 条小记）与段标题（文档（N）/小记（M））的间距——
-   横向仍用页内距 16（与页头标题同一条左缘），纵向只用既有间距令牌，不引入新数值。 */
+/* 261106 task-77/79：标签详情页副标题（N 篇文档、M 条小记）——在页头下方、**块外**；
+   横向页内距 16（与页头标题同一条左缘），纵向只用既有间距令牌，不引入新数值。 */
 .tag-detail-sub { padding: var(--lake-space-xs) var(--mb-page-pad) var(--lake-space-md); }
-.tag-detail-section { margin: var(--lake-space-md) 0 var(--lake-space-xs); }
 
 /* 竖向设置菜单：设置项一行一行（思源移动端式），点某项进入新页面 */
 .mobile-settings-list { flex: 1; overflow-y: auto; background: var(--lake-bg-window); padding: 4px 0 calc(24px + var(--mobile-bottom-safe-area)); }

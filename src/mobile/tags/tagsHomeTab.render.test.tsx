@@ -260,18 +260,45 @@ describe("标签页 · 交互骨架（无「管理」模式）", () => {
     expect(TAB_SRC).not.toContain("长按可拖动排序");
   });
 
-  it("列表行去卡化（不再包 .mb-set-section）；容器仍是首页同一套滚动/内距原语", async () => {
+  it("列表行 = 一个白色强调块（.mb-set-section，行间发丝）；页头在块外、不套双层卡", async () => {
     await renderTab();
     expect(host.querySelector(".mobile-scroll")).not.toBeNull();
-    expect(host.querySelector(".mb-set-section")).toBeNull();
-    expect(host.querySelector(".mb-set-items > .mb-set-item")).not.toBeNull();
-    expect(TAB_SRC).not.toContain("mb-set-section");
-    for (const cls of ["mobile-scroll", "mobile-settings-head", "mb-set-items", "mb-set-item", "mb-iconbtn", "mb-empty"]) {
+    const sections = [...host.querySelectorAll<HTMLElement>(".mb-set-section")];
+    expect(sections.length).toBe(1);                                  // 列表只有一个白块
+    expect(sections[0].querySelectorAll(":scope > .mb-set-item[data-tag-id]").length).toBe(2);
+    // 页头不在卡片里
+    const head = host.querySelector("header.mobile-settings-head")!;
+    expect(sections[0].contains(head)).toBe(false);
+    expect(head.querySelector(".mb-set-section")).toBeNull();
+    // 不双层套卡
+    expect(sections[0].querySelector(".mb-set-section")).toBeNull();
+    // 块外仍有页面内距（与设置页分组同一容器约定）
+    expect(host.querySelector(".mobile-quick-cards > .mb-set-section")).not.toBeNull();
+    for (const cls of ["mobile-scroll", "mobile-settings-head", "mobile-quick-cards", "mb-set-section", "mb-set-item", "mb-iconbtn", "mb-empty"]) {
       expect(TAB_SRC).toContain(cls);
     }
     for (const invented of ["tags-page", "tags-row", "tag-list", "tags-list", "tag-detail-page"]) {
       expect(TAB_SRC).not.toContain(invented);
     }
+  });
+
+  it("详情：文档 / 小记 = 两个白块，段标题在各自块内；副标题在块外；不双层套卡", async () => {
+    await renderTab({ tags: [tag("t_a", "工作")] });
+    await click(rowMain("工作"));
+    const sections = [...host.querySelectorAll<HTMLElement>(".mb-set-section")];
+    expect(sections.length).toBe(2);
+    const [docBlock, quickBlock] = sections;
+    expect(docBlock.querySelector(":scope > .mb-set-section__title")!.textContent).toBe("文档（2）");
+    expect(quickBlock.querySelector(":scope > .mb-set-section__title")!.textContent).toBe("小记（1）");
+    // 段标题在自己块内、行也在同一个块内
+    expect(docBlock.querySelectorAll(":scope > .mb-set-item").length).toBe(2);
+    expect(quickBlock.querySelectorAll(":scope > .mb-set-item").length).toBe(1);
+    // 副标题在块外
+    const subtitle = host.querySelector(".tag-detail-sub")!;
+    expect(subtitle).not.toBeNull();
+    expect(sections.some((section) => section.contains(subtitle))).toBe(false);
+    // 不双层套卡（小记卡自身不是又一个 mb-set-section）
+    expect(host.querySelector(".mb-set-section .mb-set-section")).toBeNull();
   });
 });
 
@@ -495,16 +522,17 @@ describe("行主区 / 长按拖拽", () => {
     expect(expandToggle()).toBeTruthy();
   });
 
-  it("详情副标题与段标题间距：用既有间距令牌的两个新类（横向仍是页内距 16）", async () => {
+  it("间距：副标题用既有间距令牌（块外、横向页内距 16）；段标题改用块内 .mb-set-section__title", async () => {
     await renderTab({ tags: [tag("t_a", "工作")] });
     await click(rowMain("工作"));
     expect(host.querySelector(".tag-detail-sub")).not.toBeNull();
-    expect(host.querySelectorAll(".tag-detail-section").length).toBe(2);
     expect(MOBILE_CSS).toContain(".tag-detail-sub");
-    expect(MOBILE_CSS).toContain(".tag-detail-section");
     expect(MOBILE_CSS).toMatch(/\.tag-detail-sub \{[^}]*var\(--lake-space-/s);
-    expect(MOBILE_CSS).toMatch(/\.tag-detail-section \{[^}]*var\(--lake-space-/s);
     expect(MOBILE_CSS).toMatch(/\.tag-detail-sub \{[^}]*var\(--mb-page-pad\)/s);
+    // 段标题现在用块内既有的 .mb-set-section__title（自定义 .tag-detail-section 已退役）
+    expect(host.querySelectorAll(".mb-set-section__title").length).toBe(2);
+    expect(TAB_SRC).not.toContain("tag-detail-section");
+    expect(MOBILE_CSS).not.toContain(".tag-detail-section");
   });
 
   it("长按 350ms 拖拽 → reorderQuickNoteTags；拖拽后的那次 click 不进详情", async () => {

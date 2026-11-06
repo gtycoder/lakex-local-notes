@@ -16,7 +16,7 @@
  * 计数/聚合复用 tags/tagAggregate；文案复用 tagManageCopy。
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, Feather, FileText, GripVertical, Merge, MoreVertical, Pencil, Plus, Trash, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, GripVertical, Merge, MoreVertical, Pencil, Plus, Trash, X } from "lucide-react";
 import type { QuickNoteTag } from "../../core/quickNoteTags";
 import { buildQuickNoteTagIndex, buildQuickNoteTagOptions, moveQuickNoteTagOrder, normalizeQuickNoteTag } from "../../core/quickNoteTags";
 import { formatListTime } from "../../core/dateFormat";
@@ -417,20 +417,25 @@ export function TagsHomeTab({ tags, notes, quickNotes, active, onOpenNote, onOpe
           {rows.length === 0 ? (
             <div className="mb-empty">该标签下暂无内容</div>
           ) : (
-            <>
-              <h4 className="mb-set-title tag-detail-section"><FileText size={14} />文档（{docs.length}）</h4>
-              {docs.length === 0 ? (
-                <div className="mb-empty mb-empty--inset">还没有文档</div>
-              ) : (
-                <div className="mb-set-items">{docs.map(renderDocRow)}</div>
-              )}
-              <h4 className="mb-set-title tag-detail-section"><Feather size={14} />小记（{quickRows.length}）</h4>
-              {quickRows.length === 0 ? (
-                <div className="mb-empty mb-empty--inset">还没有小记</div>
-              ) : (
-                <div className="mb-set-items">{quickRows.map(renderQuickRow)}</div>
-              )}
-            </>
+            // 文档 / 小记 = 各自一个白色强调块（段标题在块内）；块外页内距 16，块内 12/16 与设置页分组一致。
+            <div className="mobile-quick-cards">
+              <div className="mb-set-section">
+                <div className="mb-set-section__title">文档（{docs.length}）</div>
+                {docs.length === 0 ? (
+                  <div className="mb-empty mb-empty--inset">还没有文档</div>
+                ) : (
+                  docs.map(renderDocRow)
+                )}
+              </div>
+              <div className="mb-set-section">
+                <div className="mb-set-section__title">小记（{quickRows.length}）</div>
+                {quickRows.length === 0 ? (
+                  <div className="mb-empty mb-empty--inset">还没有小记</div>
+                ) : (
+                  quickRows.map(renderQuickRow)
+                )}
+              </div>
+            </div>
           )}
         </>
       ) : (
@@ -442,21 +447,25 @@ export function TagsHomeTab({ tags, notes, quickNotes, active, onOpenNote, onOpe
           </header>
 
           {linksError ? (
-            <div className="mb-set-items">
-              <div className="mb-set-item">
-                <div className="mb-set-item__main">
-                  <div className="mb-set-name">标签目录暂不可用</div>
-                  <div className="mb-set-item__desc">{linksError}</div>
-                </div>
-                <div className="mb-set-item__ctl">
-                  <button type="button" className="mb-btn mb-btn--secondary" onClick={() => void loadLinks()}>重试</button>
+            <div className="mobile-quick-cards">
+              <div className="mb-set-section">
+                <div className="mb-set-item">
+                  <div className="mb-set-item__main">
+                    <div className="mb-set-name">标签目录暂不可用</div>
+                    <div className="mb-set-item__desc">{linksError}</div>
+                  </div>
+                  <div className="mb-set-item__ctl">
+                    <button type="button" className="mb-btn mb-btn--secondary" onClick={() => void loadLinks()}>重试</button>
+                  </div>
                 </div>
               </div>
             </div>
           ) : tags.length === 0 ? (
             <div className="mb-empty">还没有标签。新建一个标签，或在文档 / 小记里添加标签。</div>
           ) : (
-            <div className="mb-set-items">
+            // 列表行 = 一个白色强调块（行间发丝）；页头不塞进卡片。
+            <div className="mobile-quick-cards">
+            <div className="mb-set-section">
               {summaries.map((tag) => (
                 <div
                   key={tag.id}
@@ -498,6 +507,7 @@ export function TagsHomeTab({ tags, notes, quickNotes, active, onOpenNote, onOpe
                   </div>
                 </div>
               ))}
+            </div>
             </div>
           )}
           {loadingLinks && tags.length > 0 && <div className="mb-set-item__desc">读取标签计数…</div>}
