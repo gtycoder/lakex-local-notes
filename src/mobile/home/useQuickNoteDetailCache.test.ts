@@ -122,6 +122,27 @@ describe("useQuickNoteDetailCache", () => {
     expect(cache.details.has("b")).toBe(true);
   });
 
+  it("cacheDetail 立刻回填一条详情（保存后不等重读），并遵守上限淘汰", async () => {
+    render({
+      notes: ["a", "b", "c"].map((id) => ({ id, updatedAt: "2026-10-22T00:00:00.000Z", tags: [] })),
+      readDetail: async (id) => full(id),
+      limit: 2,
+    });
+    const detail = (body: string) => ({ body, images: [], tags: [], tagIds: [], firstImage: null, updatedAt: "2026-10-22T00:00:00.000Z" });
+    act(() => cache.cacheDetail("c", detail("<p>新</p>")));
+    expect(cache.details.get("c")?.body).toBe("<p>新</p>");
+    act(() => cache.cacheDetail("b", detail("<p>b</p>")));
+    act(() => cache.cacheDetail("a", detail("<p>a</p>")));
+    expect([...cache.details.keys()]).toEqual(["b", "a"]);
+  });
+
+  it("回填的详情 updatedAt 与列表一致时保留（保存后刷新列表不回退成纯文本摘要）", async () => {
+    render({ notes: [{ id: "a", updatedAt: "2026-10-22T00:00:00.000Z", tags: [] }], readDetail: async (id) => full(id) });
+    act(() => cache.cacheDetail("a", { body: "<p>改后</p>", images: [], tags: [], tagIds: [], firstImage: null, updatedAt: "2026-10-22T01:00:00.000Z" }));
+    render({ notes: [{ id: "a", updatedAt: "2026-10-22T01:00:00.000Z", tags: [] }], readDetail: async (id) => full(id) });
+    expect(cache.details.get("a")?.body).toBe("<p>改后</p>");
+  });
+
   it("读取失败不缓存，并允许下一次可见时重试", async () => {
     const readDetail = vi.fn()
       .mockRejectedValueOnce(new Error("boom"))

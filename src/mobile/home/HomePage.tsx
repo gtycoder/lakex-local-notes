@@ -26,6 +26,9 @@ import { MobileNodeIconPicker } from "../ui/NodeIconPicker";
 import { confirmMobile } from "../ui/ConfirmDialog";
 import { showToast } from "../ui/toastBus";
 import { reportMobileActionError } from "../lib/reportMobileActionError";
+import { getNativeErrorMessage } from "../../lib/nativeErrors";
+// 待办勾选 = 与桌面同一实现（纯函数改写正文里那一个 checkbox 卡值）。
+import { toggleTaskInBody } from "../../features/quickNotes/quickNotePreviewParser";
 import { bridge } from "../bridge";
 import { describeSyncProgress, readSyncProgress, subscribeSyncProgress, type SyncProgressSnapshot } from "../sync/syncProgressStore";
 import { escapeId } from "../../lib/cssEscape";
@@ -40,7 +43,7 @@ import { readFavoriteIds, readFavoritesOpen, subscribeFavorites, writeFavoritesO
 import { QuickNoteComposerLazy } from "./quickNoteComposerLazy";
 import { MobileQuickNoteTagSheet } from "./MobileQuickNoteTagSheet";
 import { MobileQuickNoteTagManager } from "./MobileQuickNoteTagManager";
-import { useQuickNoteDetailCache } from "./useQuickNoteDetailCache";
+import { quickNoteDetailOf, useQuickNoteDetailCache } from "./useQuickNoteDetailCache";
 import { notifyMissingQuickNoteOnce } from "./missingQuickNoteNotice";
 import { useQuickNoteListModel } from "./useQuickNoteListModel";
 import { addQuickNoteTagId, buildQuickNoteTagOptions, type QuickNoteTag } from "../../core/quickNoteTags";
@@ -144,7 +147,7 @@ export function HomePage(props: HomePageProps) {
   // P0-6：同步进度（引擎 onProgress → 节流 → 顶部同步按钮 title/aria-label；不改 5 槽构图）。
   const [syncProgress, setSyncProgress] = useState<SyncProgressSnapshot | null>(() => readSyncProgress());
   useEffect(() => subscribeSyncProgress(() => setSyncProgress(readSyncProgress())), []);
-  const { details: quickNoteDetails, loadDetail: loadQuickNoteDetail } = useQuickNoteDetailCache(quickNotes);
+  const { details: quickNoteDetails, loadDetail: loadQuickNoteDetail, cacheDetail: cacheQuickNoteDetail } = useQuickNoteDetailCache(quickNotes);
   const [createOpen, setCreateOpen] = useState(false);
   /** 「空白文档」选笔记本：**只列已有笔记本**（用户 261014 定）；一个都没有就先去建知识库。 */
   const [docPickOpen, setDocPickOpen] = useState(false);
@@ -271,6 +274,28 @@ export function HomePage(props: HomePageProps) {
     } catch (error) { reportMobileActionError("打开小记", error); }
   };
   const closeComposer = (): void => { setComposer(null); setEditNote(null); };
+
+  /**
+   * 卡片预览里勾选待办（261106 用户反馈：移动端勾选框点不动 —— HomePage 此前没给 QuickNotePreview 传
+   * onToggleTask，组件在无回调时把复选框设成只读）。
+   * 与桌面 togglePreviewTask 同语义、不新增桥/IPC：读全文 → toggleTaskInBody 翻转第 N 个 checkbox →
+   * saveQuickNoteContent 原样回写 text/images → 回填详情缓存（勾选态立刻可见）+ 刷新列表（摘要/时间/排序）。
+   */
+  const toggleCardTask = async (noteId: string, checkboxIndex: number, checked: boolean): Promise<void> => {
+    try {
+      const full = await bridge.readQuickNote(noteId);
+      if (!full) { notifyMissingQuickNoteOnce(noteId, showToast); return; }
+      const body = toggleTaskInBody(full.content.body, checkboxIndex, checked);
+      if (body === full.content.body) return; // 序号越界 / 值本来就一致：不动库，也不打扰
+      await bridge.saveQuickNoteContent(noteId, { text: full.content.text, body, images: full.content.images });
+      // 勾选态要立刻变（不能等列表刷新后重新读正文，否则会先闪回纯文本摘要）。
+      const saved = await bridge.readQuickNote(noteId);
+      if (saved) cacheQuickNoteDetail(noteId, quickNoteDetailOf(saved));
+      await onQuickNotesChanged();
+    } catch (error) {
+      showToast("更新待办失败：" + getNativeErrorMessage(error), { type: "error" });
+    }
+  };
 
   // 全局搜索命中「小记」：HomePage 常驻 ⇒ 清标签筛选、滚到卡片并短暂高亮，**不自动进编辑**。
   // 注意：高亮计时器必须独立于 pending 清理，否则 pending 变 null 时 cleanup 会把计时器一起清掉、高亮永不消失。
@@ -519,6 +544,7 @@ export function HomePage(props: HomePageProps) {
       onEdit={() => { void openEdit(note.id); }}
       onMore={() => setQuickMenuFor(note.id)}
       onFilterTag={(tagId) => setQuickTagFilter({ kind: "tag", id: tagId })}
+      onToggleTask={(checkboxIndex, checked) => { void toggleCardTask(note.id, checkboxIndex, checked); }}
     />
   );
 
@@ -811,7 +837,7 @@ export function HomePage(props: HomePageProps) {
 }
 
 /** 小记卡片：大图 + 摘要 + 日期 + 「...」（有图必展示，无图留中性占位）。 */
-function QuickNoteCard({ note, revealed, dateValue, onEdit, onMore, onFilterTag, onRequestDetail }: { note: MobileQuickNote; revealed: boolean; dateValue: string; onEdit: () => void; onMore: () => void; onFilterTag: (tagId: string) => void; onRequestDetail: (id: string) => void }) {
+function QuickNoteCard({ note, revealed, dateValue, onEdit, onMore, onFilterTag, onRequestDetail, onToggleTask }: { note: MobileQuickNote; revealed: boolean; dateValue: string; onEdit: () => void; onMore: () => void; onFilterTag: (tagId: string) => void; onRequestDetail: (id: string) => void; onToggleTask: (checkboxIndex: number, checked: boolean) => void }) {
   const cardRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     if (note.body || typeof IntersectionObserver === "undefined") return;
@@ -857,6 +883,8 @@ function QuickNoteCard({ note, revealed, dateValue, onEdit, onMore, onFilterTag,
             // 卡片是「打开编辑」的入口：预览里的图片不抢点击（否则点图上只会弹放大预览、进不去编辑），
             // 需要放大看图时进编辑态点图（内核/浅色预览层在编辑态仍可用）。
             onImageClick={() => undefined}
+            // 勾选框可点（与桌面卡片预览同能力）；组件内部已 stopPropagation ⇒ 不会顺带进编辑态。
+            onToggleTask={onToggleTask}
           />
         ) : (
           <div className="qn-card__text">{note.previewText || (note.imageCount > 0 ? "[图片]" : "（空白小记）")}</div>
