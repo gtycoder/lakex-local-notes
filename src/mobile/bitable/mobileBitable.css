@@ -428,6 +428,19 @@
 /* 261102：视图行拆成「选择按钮 + ⋯」两个并列按钮（button 不能嵌套）——
    行外观 / 选中态留在 wrapper（.mbt-viewrow，div）上，选择按钮只做 UA 样式重置 + 撑满。 */
 .mbt-viewrow__main { flex: 1; display: flex; align-items: center; gap: var(--lake-space-md); min-width: 0; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; }
+/* 视图拖拽排序（261105 P1 parity）：长按行拖动，落点用 2px accent 线标出（伪元素画线，不改行几何）。
+   手势与落点判据复用 mobile 唯一长按实现（ui/useLongPress）+ 标签管理同款中线判前后，不新造拖拽实现。 */
+.mbt-viewrow.is-dragging { position: relative; opacity: .4; }
+.mbt-viewrow.is-drop-before, .mbt-viewrow.is-drop-after { position: relative; }
+.mbt-viewrow.is-drop-before::before,
+.mbt-viewrow.is-drop-after::after {
+  content: ""; position: absolute; left: 0; right: 0; height: 2px; background: var(--lake-accent); pointer-events: none;
+}
+.mbt-viewrow.is-drop-before::before { top: -1px; }
+.mbt-viewrow.is-drop-after::after { bottom: -1px; }
+/* 拖拽进行中禁掉原生纵向手势：否则 WebView 把滑动判给面板滚动 → touchcancel 掉拖拽（真机不重排的根因）。
+   只在拖拽激活时生效，平时列表照常滚。 */
+.mbt-viewlist-rows.is-dragging { touch-action: none; overscroll-behavior: none; }
 
 /* ── 看板 / 画册 / 日历（261030 P2）────────────────────────────── */
 .mbt-view-empty {

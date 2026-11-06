@@ -11,7 +11,7 @@
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createDefaultBitableTable, type BitableTable } from "../../core/bitableDoc";
+import { createBitableView, createDefaultBitableTable, type BitableTable } from "../../core/bitableDoc";
 import { MobileBitableViewListSheet } from "./MobileBitableViewListSheet";
 import { MobileBitableViewer } from "./MobileBitableViewer";
 
@@ -137,5 +137,142 @@ describe("MobileBitableViewer（新建表单视图 / 新增字段进编辑）", 
     // 「修改字段」已打开并带着新字段（字段面板仍在下面一层，关闭后回到它）
     expect(sheetTitles()).toEqual(["字段：数据表 1", "修改字段"]);
     expect(host.querySelector<HTMLInputElement>('input[aria-label="字段标题"]')!.value).toBe("截止日");
+  });
+});
+
+// ---- 261105 P1：视图长按拖拽排序 ----
+
+/** 三视图的表（grid / kanban / gallery ⇒ vew_a / vew_b / vew_c）。 */
+function threeViewTable(): BitableTable {
+  const table = createDefaultBitableTable("数据表 1", "tbl_a");
+  const views = [
+    createBitableView("grid", "表格", "vew_a"),
+    createBitableView("kanban", "看板", "vew_b"),
+    createBitableView("gallery", "画册", "vew_c"),
+  ];
+  return { ...table, views, activeViewId: views[0].id };
+}
+
+/** jsdom 没有 Touch/TouchEvent：手工造一个带 touches 的原生事件（React 委托在根容器上，泡泡能到）。 */
+function dispatchTouch(target: EventTarget, type: string, clientY: number): void {
+  const event = new Event(type, { bubbles: true, cancelable: true });
+  Object.defineProperty(event, "touches", {
+    value: type === "touchend" ? [] : [{ clientX: 10, clientY, identifier: 1 }],
+    configurable: true,
+  });
+  target.dispatchEvent(event);
+}
+
+/** 长按 + 拖到目标行（落点由 dropY 与目标行中线决定）；元素命中用 elementFromPoint 的桩。 */
+async function longPressDrag(sourceRow: HTMLElement, overRow: HTMLElement, dropY: number): Promise<void> {
+  const original = document.elementFromPoint;
+  Object.defineProperty(document, "elementFromPoint", { value: () => overRow, configurable: true });
+  try {
+    Object.defineProperty(overRow, "getBoundingClientRect", {
+      value: () => ({ top: 0, height: 52, bottom: 52, left: 0, right: 300, width: 300, x: 0, y: 0, toJSON: () => ({}) }),
+      configurable: true,
+    });
+    await act(async () => { dispatchTouch(sourceRow, "touchstart", 5); });
+    // 长按阈值 350ms（ui/useLongPress 的唯一实现）
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 380)); });
+    await act(async () => { dispatchTouch(document, "touchmove", dropY); });
+    await act(async () => { dispatchTouch(document, "touchend", dropY); });
+  } finally {
+    Object.defineProperty(document, "elementFromPoint", { value: original, configurable: true });
+  }
+}
+
+describe("MobileBitableViewListSheet（视图长按拖拽排序）", () => {
+  it("行带 data-view-id 且顺序 = 文档顺序；编辑态给「长按拖动可排序」提示", () => {
+    const table = threeViewTable();
+    act(() => {
+      root.render(createElement(MobileBitableViewListSheet, {
+        open: true, table, activeViewId: table.activeViewId, editable: true,
+        onSelect: () => undefined, onAddView: () => undefined, onViewActions: () => undefined,
+        onReorderViews: () => undefined, onClose: () => undefined,
+      }));
+    });
+    expect([...host.querySelectorAll("[data-view-id]")].map((el) => el.getAttribute("data-view-id"))).toEqual([
+      "vew_a", "vew_b", "vew_c",
+    ]);
+    expect(host.textContent).toContain("长按拖动可排序");
+  });
+
+  it("只读态 / 单视图：不起手、也不显示排序提示（视图顺序属正文）", () => {
+    const table = threeViewTable();
+    const single = { ...table, views: [table.views[0]], activeViewId: table.views[0].id };
+    act(() => {
+      root.render(createElement(MobileBitableViewListSheet, {
+        open: true, table: single, activeViewId: single.activeViewId, editable: true,
+        onSelect: () => undefined, onAddView: () => undefined, onViewActions: () => undefined, onClose: () => undefined,
+      }));
+    });
+    expect(host.textContent).not.toContain("长按拖动可排序");
+
+    act(() => {
+      root.render(createElement(MobileBitableViewListSheet, {
+        open: true, table, activeViewId: table.activeViewId, editable: false,
+        onSelect: () => undefined, onAddView: () => undefined, onViewActions: () => undefined,
+        onReorderViews: () => undefined, onClose: () => undefined,
+      }));
+    });
+    expect(host.textContent).not.toContain("长按拖动可排序");
+  });
+
+  it("长按第二行拖到第一行上方 ⇒ onReorderViews(第二, 第一, before)；拖完不触发切换", async () => {
+    const table = threeViewTable();
+    const onReorderViews = vi.fn();
+    const onSelect = vi.fn();
+    act(() => {
+      root.render(createElement(MobileBitableViewListSheet, {
+        open: true, table, activeViewId: table.activeViewId, editable: true,
+        onSelect, onAddView: () => undefined, onViewActions: () => undefined,
+        onReorderViews, onClose: () => undefined,
+      }));
+    });
+    const rows = () => [...host.querySelectorAll<HTMLElement>("[data-view-id]")];
+    await longPressDrag(rows()[1], rows()[0], 10); // 10 < 中线 26 ⇒ before
+    expect(onReorderViews).toHaveBeenCalledWith("vew_b", "vew_a", "before");
+    // 拖拽那一次抬手后的 click 被吞掉（不会顺手切视图）
+    act(() => host.querySelector<HTMLButtonElement>('button[aria-label="选择视图 看板"]')!.click());
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it("拖到目标行下半 ⇒ after；普通点击（没过长按阈值）照常切换", async () => {
+    const table = threeViewTable();
+    const onReorderViews = vi.fn();
+    const onSelect = vi.fn();
+    act(() => {
+      root.render(createElement(MobileBitableViewListSheet, {
+        open: true, table, activeViewId: table.activeViewId, editable: true,
+        onSelect, onAddView: () => undefined, onViewActions: () => undefined,
+        onReorderViews, onClose: () => undefined,
+      }));
+    });
+    const rows = () => [...host.querySelectorAll<HTMLElement>("[data-view-id]")];
+    await longPressDrag(rows()[0], rows()[2], 45); // 45 > 26 ⇒ after
+    expect(onReorderViews).toHaveBeenCalledWith("vew_a", "vew_c", "after");
+    // 真实点击 = 先 touchstart（复位"吞 click"标记）再 click ⇒ 正常切换
+    await act(async () => { dispatchTouch(host.querySelector<HTMLElement>('button[aria-label="选择视图 看板"]')!, "touchstart", 5); });
+    act(() => host.querySelector<HTMLButtonElement>('button[aria-label="选择视图 看板"]')!.click());
+    expect(onSelect).toHaveBeenCalledWith("vew_b");
+  });
+});
+describe("MobileBitableViewer（视图排序写回正文）", () => {
+  it("面板里长按拖拽后，onChange 的正文 views 顺序变了（顺序属文档数据，不是设备本地偏好）", async () => {
+    const table = threeViewTable();
+    const onChange = vi.fn();
+    act(() => root.render(createElement(MobileBitableViewer, {
+      noteId: "n-view-order", content: bodyOf(table), editing: true, onChange,
+    })));
+    act(() => host.querySelector<HTMLButtonElement>('button[aria-label="视图列表"]')!.click());
+    const rows = () => [...host.querySelectorAll<HTMLElement>("[data-view-id]")];
+    expect(rows().map((el) => el.getAttribute("data-view-id"))).toEqual(["vew_a", "vew_b", "vew_c"]);
+
+    await longPressDrag(rows()[0], rows()[2], 45); // 拖到最后一行下半 ⇒ after
+    const next = JSON.parse(onChange.mock.calls.at(-1)?.[0] ?? "{}") as { tables: BitableTable[] };
+    expect(next.tables[0].views.map((view) => view.id)).toEqual(["vew_b", "vew_c", "vew_a"]);
+    // 页签顺序跟着正文顺序走（重开文档也从正文读）
+    expect([...host.querySelectorAll(".mbt-viewtab")].map((el) => el.textContent)).toEqual(["看板", "画册", "表格"]);
   });
 });

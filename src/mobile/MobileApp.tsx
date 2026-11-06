@@ -661,6 +661,12 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
             onClose={() => setDrawerOpen(false)}
             onRefresh={refreshAll}
             onOpenNote={(id) => void openNote(id, "viewer")}
+            // 「标签」页（261106）：目录/文档/小记直接用 App 快照；点小记回首页定位（与全局搜索同一条通路）。
+            tagDirectory={tagDirectory}
+            notes={notes}
+            quickNotes={quickNotes}
+            onOpenQuickNote={openQuickNoteFromSearch}
+            onTagsChanged={refreshAll}
           />
         </MobileErrorBoundary>
       </DeferredPanel>

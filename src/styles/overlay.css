@@ -226,3 +226,16 @@
 .search-snippet { border-radius: var(--lake-radius-xs); }
 .search-snippet:hover { background: var(--lake-bg-hover); }
 .search-snippet.is-active, .search-snippet.active { background: var(--lake-accent-tint); color: var(--lake-accent-text); }
+
+/* 261106 搜索增强：范围页签（复用 kit .ln-tabs，只把内距压到与输入行同档）+ 最近搜索 + 空态引导 */
+.search-scope-tabs { gap: var(--lake-space-lg); padding: 0 var(--lake-space-lg); border-bottom-color: var(--lake-border-2); }
+.search-scope-tabs .ln-tabs__track { gap: var(--lake-space-lg); }
+.search-panel-idle strong { color: var(--lake-text-2); font-size: var(--lake-font-size-small); font-weight: var(--lake-font-weight-semibold); }
+.search-panel-empty { align-items: flex-start; text-align: left; }
+.search-panel-empty .ln-btn { margin-top: var(--lake-space-xs); }
+.search-recent { display: flex; flex-direction: column; gap: var(--lake-space-xxs); padding: 0 var(--lake-space-xs) var(--lake-space-xs); }
+.search-recent__head { display: flex; align-items: center; justify-content: space-between; padding: 0 var(--lake-space-xs); color: var(--lake-text-3); font-size: var(--lake-font-size-micro); }
+.search-recent__head > span { display: inline-flex; align-items: center; gap: var(--lake-space-xs); }
+.search-recent__clear { height: auto; padding: 0 var(--lake-space-xs); }
+.search-recent__list { display: flex; flex-direction: column; }
+.search-recent__item { text-align: left; }

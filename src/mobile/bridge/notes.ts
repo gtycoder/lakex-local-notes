@@ -15,7 +15,8 @@ import { emptyInkBody } from "../../core/inkDoc.js";
 import { normalizeNoteKind, type NoteKind } from "../../core/noteKind.js";
 import { canTouchNetwork } from "../../core/cloudState.js";
 import { sha256Hex } from "../../core/syncUtils.js";
-import type { SearchResult } from "../../core/searchTypes.js";
+import type { MobileSearchResult } from "../search/searchTypes.js";
+import { normalizeSearchScope, type SearchScope } from "../search/searchScope.js";
 
 import * as noteRepository from "../data/noteRepository.js";
 import * as noteTagLinksRepository from "../data/noteTagLinksRepository.js";
@@ -54,9 +55,13 @@ export const notesDomain = {
     return await noteRepository.noteGoneState(d, id);
   },
 
-  async searchNotes(query: string): Promise<SearchResult[]> {
+  /**
+   * 全文搜索。scope = 设备本地视图的范围筛选（全部/标题/正文/标签，定义见 search/searchScope.ts）；
+   * 入口（UI/旧调用）传任意值时回落「全部」，不让参数错误把搜索打空。
+   */
+  async searchNotes(query: string, scope: SearchScope = "all"): Promise<MobileSearchResult[]> {
     const d = await ensureDb();
-    return await noteRepository.searchNotes(d, query);
+    return await noteRepository.searchNotes(d, query, normalizeSearchScope(scope));
   },
 
   /**

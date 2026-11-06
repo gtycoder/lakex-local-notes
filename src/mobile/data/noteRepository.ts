@@ -1,8 +1,9 @@
 import { extractAssetRefs, extOf } from "../../core/assetNaming.js";
 import { searchTextForKind } from "../../core/noteSearchText.js";
-import { indexNote, removeNoteFromIndex, searchNotes as searchNotesIndexed } from "./searchIndex.js";
-import { searchQuickNotes } from "./quickNotesSearch.js";
-import type { SearchResult } from "../../core/searchTypes.js";
+import { indexNote, removeNoteFromIndex, searchDocsByScope } from "./searchIndex.js";
+import { searchQuickNotesByScope } from "./quickNotesSearch.js";
+import type { MobileSearchResult } from "../search/searchTypes.js";
+import { DEFAULT_SEARCH_SCOPE, type SearchScope } from "../search/searchScope.js";
 import { hasNoteSaveChanges } from "../../core/noteSaveDecision.js";
 import { sha256Sync } from "../../core/sha256Sync.js";
 import { normalizeNoteKind, type NoteKind } from "../../core/noteKind.js";
@@ -131,11 +132,15 @@ export async function noteGoneState(d: MobileDb, id: string): Promise<{ parentId
   return row ? { parentId: row.parent_id, syncState: row.is_purged === 1 ? "purged" : row.is_dirty === 1 ? "local" : "synced" } : null;
 }
 
-/** 全文搜索：FTS5 + unicode61，与桌面同分词/查询/摘要（src/core/search）。 */
-export async function searchNotes(d: MobileDb, query: string): Promise<SearchResult[]> {
-  // 全局搜索 = 文档 + 小记（文档在前、小记在后；小记最多 20 条）。顺序执行，避免同一连接上的索引对账与搜索交叉。
-  const notes = await searchNotesIndexed(d, query);
-  const quickNotes = await searchQuickNotes(d, query, 20);
+/**
+ * 全文搜索（按范围）：FTS5 + unicode61，与桌面同分词/查询/摘要（src/core/search）。
+ * 顺序 = 文档在前、小记在后（小记最多 20 条），与既有「全部」口径一致。
+ * 范围是**设备本地视图**（只影响召回字段，不改数据/不同步，定义见 src/mobile/search/searchScope.ts）。
+ */
+export async function searchNotes(d: MobileDb, query: string, scope: SearchScope = DEFAULT_SEARCH_SCOPE): Promise<MobileSearchResult[]> {
+  // 顺序执行：同一连接上的索引对账与搜索不能交叉（既有约定）。
+  const notes = await searchDocsByScope(d, query, scope);
+  const quickNotes = await searchQuickNotesByScope(d, query, scope, 20);
   return [...notes, ...quickNotes];
 }
 

@@ -347,6 +347,12 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
 .mobile-search-snippet { font-size: var(--lake-font-size-nano); color: var(--lake-text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mobile-search-snippet mark { background: transparent; color: var(--lake-accent-text); }
 .mobile-search-parent { color: var(--lake-text-3); font-size: var(--lake-font-size-nano); }
+/* 261105 搜索增强：范围分段（复用 kit 的 .mb-segment/.mb-chip/.mb-empty，这里只给版式）。
+ * 范围说明常驻可见（移动端没有 hover，不能把「这一档搜什么」藏在提示里）。 */
+.mobile-search-scope { display: flex; margin: 0 16px 8px; }
+.mobile-search-hint { margin: 0 16px 10px; color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); }
+.mobile-search-recent { margin: 4px 16px 12px; }
+.mobile-search-recent__head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); }
 
 /* 设置抽屉 */
 

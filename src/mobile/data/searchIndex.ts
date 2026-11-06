@@ -3,6 +3,8 @@ import { sha256Sync } from "../../core/sha256Sync.js";
 import { normalizeNoteKind } from "../../core/noteKind.js";
 import { searchTextForKind } from "../../core/noteSearchText.js";
 import type { SearchResult } from "../../core/searchTypes.js";
+import type { MobileSearchResult } from "../search/searchTypes.js";
+import type { SearchScope } from "../search/searchScope.js";
 import type { MobileDb } from "./sqliteDb.js";
 import { readNoteBody } from "./noteBodies.js";
 
@@ -197,7 +199,39 @@ export async function reconcileIndex(d: MobileDb): Promise<void> {
   }
 }
 
-/** 搜索：与桌面同一分词/查询/摘要核心；1/2/3+ 字统一。 */
+/** 行 → 搜索结果（摘要口径 = 桌面同一套 buildSnippet；正文优先 text_cache，缺失时读正文文件派生）。 */
+async function toDocResult(
+  row: Record<string, unknown>,
+  matchType: "title" | "body",
+  query: string,
+  matchedTags?: string[],
+): Promise<MobileSearchResult> {
+  const title = String(row.title ?? "");
+  const kind = normalizeNoteKind(row.doc_kind);
+  let plain: string;
+  if (row.text_cache != null) {
+    plain = String(row.text_cache);
+  } else {
+    const content = await readNoteBody(kind, String(row.note_id)).catch(() => null);
+    plain = content == null ? "" : (searchTextForKind(kind, content).plain ?? "");
+  }
+  const titleSnippet = matchType === "title" ? buildSnippet(title, query) : "";
+  const bodySnippet = buildSnippet(plain, query);
+  // 标签命中：摘要优先给**命中的标签名**（不然用户看不出"为什么匹配"）；没有标签摘要时才回落标题/正文片段。
+  const tagSnippet = matchedTags && matchedTags.length > 0 ? buildSnippet(matchedTags.join(" "), query) : "";
+  const result: MobileSearchResult = {
+    id: String(row.note_id),
+    title,
+    snippet: tagSnippet || (matchType === "title" ? (titleSnippet || bodySnippet) : (bodySnippet || titleSnippet)),
+    matchType,
+    updatedAt: String(row.updated_at ?? ""),
+    parentTitle: row.parent_title ? String(row.parent_title) : null,
+  };
+  if (matchedTags && matchedTags.length > 0) result.matchedTags = matchedTags;
+  return result;
+}
+
+/** 搜索：与桌面同一分词/查询/摘要核心；1/2/3+ 字统一。（= 「全部」范围的标题/正文部分） */
 export async function searchNotes(d: MobileDb, query: string, limit = 50): Promise<SearchResult[]> {
   const normalized = query.trim();
   if (!normalized) return [];
@@ -216,26 +250,131 @@ export async function searchNotes(d: MobileDb, query: string, limit = 50): Promi
     "WHERE notes_fts MATCH ? AND n.trashed_at IS NULL " +
     "ORDER BY title_match, bm25(notes_fts, 10.0, 1.0), n.updated_at DESC LIMIT ?"
   ).all(normalized, titlePrefix, titleContains, match, limit) as Array<Record<string, unknown>>;
-  return Promise.all(rows.map(async (row) => {
-    const title = String(row.title ?? "");
-    const kind = normalizeNoteKind(row.doc_kind);
-    let plain: string;
-    if (row.text_cache != null) {
-      plain = String(row.text_cache);
-    } else {
-      const content = await readNoteBody(kind, String(row.note_id)).catch(() => null);
-      plain = content == null ? "" : (searchTextForKind(kind, content).plain ?? "");
+  return Promise.all(rows.map((row) => toDocResult(row, Number(row.title_match ?? 3) < 3 ? "title" : "body", normalized)));
+}
+/** 单领域（文档）每次搜索的召回上限：与「全部」范围保持一致，避免切范围时结果条数跳变。 */
+export const DOC_SEARCH_SCOPE_LIMIT = 50;
+
+/** 标签名拼接分隔符（U+001F 单元分隔符）：标签名允许含空格，不能用空格拼。 */
+const TAG_NAME_SEPARATOR = "\u001f";
+
+function splitTagNames(raw: unknown): string[] {
+  const text = String(raw ?? "");
+  return text ? text.split(TAG_NAME_SEPARATOR).filter(Boolean) : [];
+}
+
+/** 标题范围：只匹配标题（LIKE 子串）。「全部」里的标题命中判定也是 LIKE，两个范围同一套匹配语义。 */
+async function searchDocsByTitle(d: MobileDb, query: string, limit: number): Promise<MobileSearchResult[]> {
+  const titlePrefix = escapeLike(query) + "%";
+  const titleContains = "%" + escapeLike(query) + "%";
+  const rows = await d.prepare(
+    "SELECT n.id AS note_id, n.title AS title, n.text_cache AS text_cache, n.doc_kind AS doc_kind, n.updated_at AS updated_at, f.title AS parent_title, " +
+    "CASE WHEN n.title = ? THEN 0 WHEN n.title LIKE ? ESCAPE '\\' THEN 1 ELSE 2 END AS title_match " +
+    "FROM notes n LEFT JOIN folders f ON n.parent_id = f.id " +
+    "WHERE n.trashed_at IS NULL AND n.title LIKE ? ESCAPE '\\' " +
+    "ORDER BY title_match, n.updated_at DESC LIMIT ?"
+  ).all(query, titlePrefix, titleContains, limit) as Array<Record<string, unknown>>;
+  return Promise.all(rows.map((row) => toDocResult(row, "title", query)));
+}
+
+/**
+ * 正文范围：只让正文列参与匹配（标题命中不算「正文」）。
+ * FTS5 列过滤语法 `body : (expr)`（已用系统 sqlite3 的 FTS5 实测：前缀词/多词短语括号分组都可用）；
+ * 无 FTS（Web 预览/测试）时降级为 text_cache 的 LIKE —— 语义仍是「正文里含这段文字」。
+ */
+async function searchDocsByBody(d: MobileDb, query: string, limit: number): Promise<MobileSearchResult[]> {
+  if (await hasSearchIndex(d)) {
+    const match = buildMatchExpression(query);
+    if (!match) return [];
+    const rows = await d.prepare(
+      "SELECT si.note_id AS note_id, n.title AS title, n.text_cache AS text_cache, n.doc_kind AS doc_kind, n.updated_at AS updated_at, f.title AS parent_title " +
+      "FROM notes_fts " +
+      "JOIN search_index si ON si.fts_rowid = notes_fts.rowid " +
+      "JOIN notes n ON n.id = si.note_id " +
+      "LEFT JOIN folders f ON n.parent_id = f.id " +
+      "WHERE notes_fts MATCH ? AND n.trashed_at IS NULL " +
+      "ORDER BY bm25(notes_fts, 1.0, 1.0), n.updated_at DESC LIMIT ?"
+    ).all("body : (" + match + ")", limit) as Array<Record<string, unknown>>;
+    return Promise.all(rows.map((row) => toDocResult(row, "body", query)));
+  }
+  const rows = await d.prepare(
+    "SELECT n.id AS note_id, n.title AS title, n.text_cache AS text_cache, n.doc_kind AS doc_kind, n.updated_at AS updated_at, f.title AS parent_title " +
+    "FROM notes n LEFT JOIN folders f ON n.parent_id = f.id " +
+    "WHERE n.trashed_at IS NULL AND IFNULL(n.text_cache, '') LIKE ? ESCAPE '\\' " +
+    "ORDER BY n.updated_at DESC LIMIT ?"
+  ).all("%" + escapeLike(query) + "%", limit) as Array<Record<string, unknown>>;
+  return Promise.all(rows.map((row) => toDocResult(row, "body", query)));
+}
+
+/**
+ * 标签范围：文档标签名（tag_links target_kind='note' → tags.name）。
+ * 删除标签 = 缺席：删除会清关系行，这里不读任何墓碑字段（261105 定稿）。
+ */
+async function searchDocsByTags(d: MobileDb, query: string, limit: number): Promise<MobileSearchResult[]> {
+  const rows = await d.prepare(
+    "SELECT n.id AS note_id, n.title AS title, n.text_cache AS text_cache, n.doc_kind AS doc_kind, n.updated_at AS updated_at, f.title AS parent_title, " +
+    "GROUP_CONCAT(t.name, '" + TAG_NAME_SEPARATOR + "') AS matched_tags " +
+    "FROM tag_links tl " +
+    "JOIN tags t ON t.id = tl.tag_id " +
+    "JOIN notes n ON n.id = tl.target_id " +
+    "LEFT JOIN folders f ON n.parent_id = f.id " +
+    "WHERE tl.target_kind = 'note' AND t.name LIKE ? ESCAPE '\\' AND n.trashed_at IS NULL " +
+    "GROUP BY n.id ORDER BY n.updated_at DESC LIMIT ?"
+  ).all("%" + escapeLike(query) + "%", limit) as Array<Record<string, unknown>>;
+  return Promise.all(rows.map((row) => toDocResult(row, "body", query, splitTagNames(row.matched_tags))));
+}
+
+/**
+ * 无 FTS 时的「全部」文档部分：标题 LIKE ∪ 正文 LIKE（去重）。生产原生 SQLite 恒有 FTS5，
+ * 这里只服务 Web 预览/旧库；不补的话会出现「标题/正文档能搜到、全部却搜不到」的自相矛盾。
+ */
+async function searchDocsWithoutFts(d: MobileDb, query: string, limit: number): Promise<MobileSearchResult[]> {
+  const titleHits = await searchDocsByTitle(d, query, limit);
+  if (titleHits.length >= limit) return titleHits;
+  const bodyHits = await searchDocsByBody(d, query, limit);
+  const merged: MobileSearchResult[] = [...titleHits];
+  const seen = new Set(titleHits.map((hit) => hit.id));
+  for (const hit of bodyHits) {
+    if (seen.has(hit.id)) continue;
+    if (merged.length >= limit) break;
+    merged.push(hit);
+    seen.add(hit.id);
+  }
+  return merged;
+}
+
+/**
+ * 文档搜索（按范围）。「全部」= 标题/正文命中在前（沿用既有排序），**标签独有命中**补在后 ——
+ * 「全部」就是不限字段，否则用户按标签名搜文档在默认范围里会一篇都搜不到。
+ */
+export async function searchDocsByScope(
+  d: MobileDb,
+  query: string,
+  scope: SearchScope,
+  limit = DOC_SEARCH_SCOPE_LIMIT,
+): Promise<MobileSearchResult[]> {
+  const normalized = query.trim();
+  if (!normalized) return [];
+  if (scope === "title") return searchDocsByTitle(d, normalized, limit);
+  if (scope === "body") return searchDocsByBody(d, normalized, limit);
+  if (scope === "tags") return searchDocsByTags(d, normalized, limit);
+  const primary: MobileSearchResult[] = await hasSearchIndex(d)
+    ? await searchNotes(d, normalized, limit)
+    : await searchDocsWithoutFts(d, normalized, limit);
+  if (primary.length >= limit) return primary;
+  const tagHits = await searchDocsByTags(d, normalized, limit);
+  const merged: MobileSearchResult[] = [...primary];
+  const byId = new Map<string, MobileSearchResult>(primary.map((item) => [item.id, item] as const));
+  for (const hit of tagHits) {
+    const existing = byId.get(hit.id);
+    if (existing) {
+      // 同一篇既命中标题/正文又命中标签：只出一条，但把标签名带上（结果行能看出"还命中了标签"）。
+      if (hit.matchedTags) existing.matchedTags = hit.matchedTags;
+      continue;
     }
-    const fromTitle = Number(row.title_match ?? 3) < 3;
-    const titleSnippet = fromTitle ? buildSnippet(title, normalized) : "";
-    const bodySnippet = buildSnippet(plain, normalized);
-    return {
-      id: String(row.note_id),
-      title,
-      snippet: fromTitle ? (titleSnippet || bodySnippet) : (bodySnippet || titleSnippet),
-      matchType: fromTitle ? "title" : "body",
-      updatedAt: String(row.updated_at ?? ""),
-      parentTitle: row.parent_title ? String(row.parent_title) : null,
-    } as SearchResult;
-  }));
+    if (merged.length >= limit) break;
+    merged.push(hit);
+    byId.set(hit.id, hit);
+  }
+  return merged;
 }

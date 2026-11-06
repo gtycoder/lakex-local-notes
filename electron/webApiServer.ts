@@ -77,6 +77,7 @@ export const WEB_METHODS: Record<string, string> = {
   getBackupSettings: "get_backup_settings",
   saveBackupSettings: "save_backup_settings",
   runBackupNow: "run_backup_now",
+  getBackupUsage: "get_backup_usage",
   listNoteTagLinks: "list_note_tag_links",
   setNoteTags: "set_note_tags",
   listSyncConflicts: "list_sync_conflicts",

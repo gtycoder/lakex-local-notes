@@ -22,6 +22,7 @@ import { fillSurfaceColor } from "../../core/colorPalette.js";
 import {
   applyViewToRecords,
   bitableFillBackgroundTokens,
+  bitableRecordTitle,
   bitableRowHeightPx,
   BITABLE_VIEW_TYPE_LABEL,
   buildBitableFillProjection,
@@ -64,6 +65,7 @@ import { MobileBitableViewListSheet } from "./MobileBitableViewListSheet";
 import { MobileBitableViewActions } from "./MobileBitableViewActions";
 import { FieldValue } from "./MobileBitableValue";
 import { mobileViewTabs, resolveMobileDefaultViewId } from "./mobileBitableViewTabs";
+import { reorderBitableViewsByDrag, type ViewDropPosition } from "./mobileBitableViewOrder";
 import { mobileBitableHeaderModel } from "./mobileBitableHeader";
 import { bitableViewStateSummary, bitableViewStateTab } from "./mobileBitableViewState";
 import { readBitableRecordLayout, writeBitableRecordLayout } from "./mobileBitableViewPrefs";
@@ -381,6 +383,14 @@ export function MobileBitableViewer({ noteId, content, editing = false, onChange
   };
 
   /**
+   * 视图排序（261105 P1 parity）：拖动只改正文 views 顺序（路径 = 与重命名/复制/删除同一份 `mutate` ⇒
+   * 只读文档自动拒绝、同一份防抖落盘）；顺序没变时纯函数返回原引用，`commit` 不写盘。
+   */
+  const reorderViews = (fromId: string, overId: string, position: ViewDropPosition) => {
+    mutate((current) => reorderBitableViewsByDrag(current, table.id, fromId, overId, position));
+  };
+
+  /**
    * 新增字段（261030 用户点单）：创建后**立刻打开「修改字段」**编辑这个新字段。
    * 字段面板保持打开（与行内铅笔同一层序）：取消修改 = 回到字段面板且新字段已在列表里，
    * 不会出现「取消了但字段不见了」的错觉；MobileSheet 的返回栈/滚动锁按嵌套层数工作。
@@ -506,7 +516,7 @@ export function MobileBitableViewer({ noteId, content, editing = false, onChange
         style={side ? ({ "--mbt-fill-side": side } as CSSProperties) : undefined}
         onClick={() => openRecord(record.id)}
         onKeyDown={(event) => { if (event.key === "Enter") openRecord(record.id); }}
-        tabIndex={0} role="row" aria-label="查看记录">
+        tabIndex={0} role="row" aria-label={"查看记录 " + bitableRecordTitle(table, record, displayCtx)}>
         <td className="mbt-grid__idx">{indexById.get(record.id) ?? ""}</td>
         {fields.map((field) => {
           const value: ReactNode = <FieldValue noteId={noteId} ctx={displayCtx} field={field} record={record} />;
@@ -561,7 +571,7 @@ export function MobileBitableViewer({ noteId, content, editing = false, onChange
               <div className="mbt-header__tabs" role="tablist" aria-label="视图">
                 {viewTabs.map((tab) => (
                   <button key={tab.view.id} type="button" role="tab" aria-selected={tab.view.id === view.id}
-                    className={"mbt-viewtab" + (tab.view.id === view.id ? " is-active" : "")}
+                    className={"mbt-viewtab mb-tap" + (tab.view.id === view.id ? " is-active" : "")}
                     onClick={() => switchView(tab.view.id)}>{tab.label}</button>
                 ))}
               </div>
@@ -569,14 +579,14 @@ export function MobileBitableViewer({ noteId, content, editing = false, onChange
             {/* 261103 五批（用户图）：视图列表入口钉在**最右侧**，不跟着页签跑（页签再多也只在左边横滑）。 */}
             <span className="mbt-header__spacer" />
             {header.showViewStateChip && (
-              <button type="button" className="mbt-viewstate-chip" aria-label={"视图状态：" + viewStateSummary}
+              <button type="button" className="mbt-viewstate-chip mb-tap" aria-label={"视图状态：" + viewStateSummary}
                 title={viewStateSummary}
                 onClick={() => { setConfigInitialTab(bitableViewStateTab(view) ?? "layout"); setConfigOpen(true); }}>
                 {viewStateSummary}
               </button>
             )}
             {header.showViews && (
-              <button type="button" className="mbt-viewmore" aria-label="视图列表" onClick={() => setViewListOpen(true)}>
+              <button type="button" className="mbt-viewmore mb-tap" aria-label="视图列表" onClick={() => setViewListOpen(true)}>
                 <LayoutList size={16} />
               </button>
             )}
@@ -802,6 +812,7 @@ export function MobileBitableViewer({ noteId, content, editing = false, onChange
         onSelect={(nextViewId) => { switchView(nextViewId); setViewListOpen(false); }}
         onAddView={addView}
         onViewActions={(nextViewId) => { setViewListOpen(false); setActionsViewId(nextViewId); }}
+        onReorderViews={reorderViews}
         onClose={() => setViewListOpen(false)}
       />
       {actionsView && (

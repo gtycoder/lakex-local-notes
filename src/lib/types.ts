@@ -254,6 +254,25 @@ export interface BackupStateShape {
   quickNotesFile: string | null;
 }
 
+/**
+ * 261105 task-68：备份目录占用（只读 stat，**不读文件内容**）。
+ * 口径与轮转一致：份数 = 备份组数（metadata+quicknotes 同一时间戳），字节 = 这两类备份文件大小之和。
+ */
+export interface BackupUsageShape {
+  dir: string;
+  /** 目录是否存在（还没备份过 ⇒ false，不等于错误）。 */
+  exists: boolean;
+  groups: number;
+  /** 备份文件数（含只有半份的组）。 */
+  files: number;
+  totalBytes: number;
+  /** 最新 / 最旧一组的时间（ISO；没有备份时 null）。 */
+  newestAt: string | null;
+  oldestAt: string | null;
+  /** 读目录/stat 失败或半份组提示（只报告，不影响统计）。 */
+  warnings: string[];
+}
+
 /** A3 数据体检（只读诊断）报告：检查本地数据自洽性，不自动修复。 */
 /** Batch4-B：文件↔元数据对账候选（文件在、笔记行丢了；只报告，不自动重建）。 */
 export interface FileReconcileCandidateShape {

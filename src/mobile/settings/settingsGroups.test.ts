@@ -14,10 +14,21 @@ const menuLabelsInOrder = (): string[] =>
   [...DRAWER.matchAll(/\{ key: "[a-z0-9]+", label: "([^"]+)"/g)].map((m) => m[1]);
 
 describe("移动端设置分组（对齐桌面）", () => {
-  it("分组命名与顺序：云端与同步 → 备份与恢复 → AI → 编辑器 → 外观 → 历史 → 资源管理 → 清理缓存 → 回收站 → 关于", () => {
+  it("分组命名与顺序：云端与同步 → 备份与恢复 → AI → 编辑器 → 外观 → 历史 → 标签 → 资源管理 → 清理缓存 → 回收站 → 关于", () => {
+    // 261106 用户验收：新增「标签」= 标签目录管理 + 简化标签空间（桌面是独立工作区，移动端收进设置一页）。
     expect(menuLabelsInOrder()).toEqual([
-      "云端与同步", "备份与恢复", "AI 助手", "编辑器", "外观", "历史", "资源管理", "清理缓存", "回收站", "关于",
+      "云端与同步", "备份与恢复", "AI 助手", "编辑器", "外观", "历史", "标签", "资源管理", "清理缓存", "回收站", "关于",
     ]);
+  });
+
+  it("「标签」子页存在且挂的是标签空间组件（不是死代码）", () => {
+    expect(DRAWER).toMatch(/type View = [^;]*"tags"/);
+    expect(DRAWER).toContain('{ key: "tags", label: "标签"');
+    expect(DRAWER).toContain('{view === "tags" && (');
+    expect(DRAWER).toContain("<TagsSettingsSection");
+    // 页面数据来自 App 快照，点小记回首页定位（与全局搜索同一条通路）。
+    expect(DRAWER).toContain("tags={props.tagDirectory ?? []}");
+    expect(DRAWER).toContain("onOpenQuickNote={(quickNoteId)");
   });
 
   it("「云端与同步」不再包含恢复动作；「备份与恢复」有从云端恢复 + 缺正文/缺小记引用", () => {

@@ -31,7 +31,7 @@ function depVersion(deps: Record<string, string> | undefined, name: string): str
 import { LAKE_THEMES } from "../../lib/themes";
 import { native } from "../../lib/native";
 import { hostCapabilities } from "../../lib/hostCapabilities";
-import type { BackupSettingsShape, BackupStateShape, DataHealthReport, S3Settings, SyncSettings } from "../../lib/types";
+import type { BackupSettingsShape, BackupStateShape, BackupUsageShape, DataHealthReport, S3Settings, SyncSettings } from "../../lib/types";
 import { SYNC_AUTO_MODE_OPTIONS, SYNC_OPEN_CLOSE_NOTE } from "../../core/syncModes";
 import { Dialog } from "../ui/Overlay";
 import { useFloatingDialog } from "../hooks/useFloatingDialog";
@@ -48,6 +48,7 @@ import { formatDateTime } from "../../core/dateFormat";
 import { formatS3v3Diagnostics, type S3v3DiagnosticReport } from "../../core/s3v3Report";
 import { effectiveS3Settings, isQiniuEndpoint, s3ConfigFingerprint } from "../../lib/s3FormState";
 import { loadAiEnabled, saveAiEnabled } from "../../lib/aiEnabled";
+import { backupResultView, backupUsageView } from "./settingsBackupObservability";
 
 /**
  * 设置分类（261105 用户验收重组）：「常规（编辑器/标签页/附件）/ 外观 / 快捷键 / 云端与同步 / 备份与恢复 /
@@ -257,6 +258,9 @@ let verifiedS3Fingerprint: string | null = null;
   // 261105 Batch4-E：自动备份配置 + 上次备份状态（本机 settings；不进云端）。
   const [backupCfg, setBackupCfg] = useState<BackupSettingsShape | null>(null);
   const [backupSnapshot, setBackupSnapshot] = useState<BackupStateShape | null>(null);
+  // 261105 task-68：备份目录占用（只读 stat IPC；独立 busy，不占用备份动作的 busy/状态栏）。
+  const [backupUsage, setBackupUsage] = useState<BackupUsageShape | null>(null);
+  const [backupUsageBusy, setBackupUsageBusy] = useState(false);
 
   // DT-13（261028）：十组手写 busy/msg（历史清理 / 数据体检 / 搜索索引 / 备份恢复 / 深度清理 / 同步策略 /
   // 日志读取 / 浏览器端 / AI 测试 / AI 拉模型）改走 useAsyncAction —— 成功/失败文案仍由调用方给，UI 结构与文案不变。
@@ -371,11 +375,26 @@ let verifiedS3Fingerprint: string | null = null;
     });
   };
 
+  /** 261105 task-68：读备份目录占用（只读 stat；失败只提示一条，不影响设置页其它内容）。 */
+  const loadBackupUsage = async () => {
+    if (backupUsageBusy) return;
+    setBackupUsageBusy(true);
+    try {
+      setBackupUsage(await native.getBackupUsage());
+    } catch (error) {
+      reportNativeActionError("备份占用读取", error);
+    } finally {
+      setBackupUsageBusy(false);
+    }
+  };
+
   /** 261105 Batch4-E：立即备份（主进程单飞；失败也会返回可读 message，不抛）。 */
   const runBackupNow = async () => {
     await backup.run(async () => {
       const result = await native.runBackupNow();
       setBackupSnapshot(result.state);
+      // 备份刚写过目录 ⇒ 份数/占用顺带刷新（失败也刷新：轮转可能已删掉旧备份）。
+      void loadBackupUsage();
       return result.message;
     }, { success: (text) => text });
   };
@@ -407,6 +426,14 @@ let verifiedS3Fingerprint: string | null = null;
     void native.getFileScanSettings().then((v) => setScanIntervalHours(v.intervalHours)).catch((error) => reportNativeActionError("设置页读取", error));
     void native.getBackupSettings().then((info) => { setBackupCfg(info.settings); setBackupSnapshot(info.state); }).catch((error) => reportNativeActionError("设置页读取", error));
   }, [open, openCategory]);
+
+  // 备份占用：每次进入「备份与恢复」分类都重新只读统计（自动备份/外部清理都会改动目录）。
+  useEffect(() => {
+    if (!open || category !== "backup") return;
+    let alive = true;
+    native.getBackupUsage().then((value) => { if (alive) setBackupUsage(value); }).catch(() => { /* 读不到就保持上一次读数（不打扰） */ });
+    return () => { alive = false; };
+  }, [open, category]);
 
   // 关于页：只读概览（版本/环境/存储）。每次进入分类都刷新，保证计数与磁盘一致。
   useEffect(() => {
@@ -681,6 +708,9 @@ let verifiedS3Fingerprint: string | null = null;
   // 提示文案仍落在原来的位置（同一个元素、同一个类名）：只是数据源从手写 state 换成 useAsyncAction。
   const histText = hist.error ?? hist.message;
   const searchText = searchIndex.error ?? searchIndex.message;
+  // 261105 task-68：备份可观测 —— 占用/结果/失败引导的文案由纯函数给（单测覆盖三态），这里只摆放。
+  const backupUsageInfo = backupUsageView(backupUsage, { maxTotalBytes: backupCfg?.maxTotalBytes });
+  const backupResult = backupResultView(backupSnapshot);
   const backupText = backup.error ?? backup.message;
   const logText = logLoad.error ?? logLoad.message;
   const webText = webRun.error ?? webRun.message;
@@ -957,19 +987,43 @@ let verifiedS3Fingerprint: string | null = null;
                         <Item itemId="auto-backup-keep" name="保留份数" desc="保留最近 N 份（超出按最旧优先删除；备份目录总大小上限 300MB，删除失败只记日志）。"><NumField label="保留份数" min={1} max={50} value={backupCfg.keepCount} onSave={(value) => saveBackupCfg({ keepCount: value })} floor={1} fallback={7} /></Item>
                         <div className="config-block__actions">
                           <button className="ln-btn ln-btn--secondary" onClick={() => void runBackupNow()} disabled={backup.busy}>{backup.busy ? "备份中…" : "立即备份"}</button>
-                          <button className="ln-btn ln-btn--secondary" onClick={() => void revealFolder("backups")}>打开备份目录</button>
-                          {backupSnapshot && (
-                            <span className="config-stats"><span>上次备份：{formatDateTime(new Date(backupSnapshot.lastBackupAt))}（{backupSnapshot.result === "ok" ? "成功" : backupSnapshot.result === "partial" ? "部分成功" : "失败"}）</span></span>
-                          )}
                         </div>
-                        {backupSnapshot && (
-                          <div className="checks">
-                            <div className={"checks__row " + (backupSnapshot.result === "ok" ? "checks__row--ok" : backupSnapshot.result === "partial" ? "checks__row--warn" : "checks__row--error")}>{backupSnapshot.message}</div>
-                          </div>
-                        )}
                       </>
                     ) : (
                       <div className="config-stats"><span>读取自动备份配置…</span></div>
+                    )}
+                  </Block>
+                  <Block itemId="backup-usage" name="备份占用" desc="只读统计 userData/backups 里的备份份数与总大小（只 stat、不读文件内容）。自动备份按「保留份数」与总大小上限删最旧的备份；这里不提供手动删除，避免误删兜底数据。">
+                    <div className="config-stats">
+                      <span>{backupUsageInfo.countText}</span>
+                      {backupUsageInfo.sizeText && <span>{backupUsageInfo.sizeText}</span>}
+                      {backupUsageInfo.limitText && <span>{backupUsageInfo.limitText}</span>}
+                      {backupUsageInfo.newestText && <span>{backupUsageInfo.newestText}</span>}
+                    </div>
+                    {backupUsageInfo.note && (
+                      <div className="checks">
+                        <div className={"checks__row checks__row--" + (backupUsageInfo.tone === "warn" ? "warn" : "ok")}>{backupUsageInfo.note}</div>
+                      </div>
+                    )}
+                    <div className="config-block__actions">
+                      <button className="ln-btn ln-btn--secondary" onClick={() => void loadBackupUsage()} disabled={backupUsageBusy}>{backupUsageBusy ? "统计中…" : "刷新统计"}</button>
+                      <button className="ln-btn ln-btn--secondary" onClick={() => void revealFolder("backups")}>打开备份目录</button>
+                    </div>
+                  </Block>
+                  <Block itemId="backup-last-result" name="上次备份结果" desc="最近一次自动/手动备份的结果（本机记录，不上传云端）：成功 / 部分成功 / 失败，以及可读的失败原因。部分成功 = 主库备份可用，但小记库不可用或备份校验失败。">
+                    {backupResult ? (
+                      <div className="checks">
+                        <div className={"checks__row checks__row--" + backupResult.tone}>{backupResult.headline}</div>
+                        {backupResult.message && <div className="checks__row">{backupResult.message}</div>}
+                        {backupResult.guidance && <div className={"checks__row checks__row--" + backupResult.tone}>{backupResult.guidance}</div>}
+                        {backupResult.retry && (
+                          <div className="config-block__actions">
+                            <button className="ln-btn ln-btn--secondary" onClick={() => void runBackupNow()} disabled={backup.busy}>{backup.busy ? "备份中…" : "立即备份"}</button>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="block__text">还没有备份记录（自动备份默认开启，每天一份；也可以点上面的「立即备份」）。</div>
                     )}
                   </Block>
                   {backupText && <Block name={backupText} />}

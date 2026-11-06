@@ -160,6 +160,8 @@ export interface LakeNative {
   saveBackupSettings(settings: import("./types").BackupSettingsShape): Promise<{ settings: import("./types").BackupSettingsShape }>;
   /** 261105：立即备份（main 单飞；失败返回可读 message，不抛）。 */
   runBackupNow(): Promise<{ state: import("./types").BackupStateShape | null; message: string }>;
+  /** 261105 task-68：备份目录只读占用统计（份数/总字节/最新最旧；不读文件内容、不删文件）。 */
+  getBackupUsage(): Promise<import("./types").BackupUsageShape>;
   setNodeIcon(id: string, icon: string | null): Promise<TreeNode>;
   searchNotes(query: string, limit?: number): Promise<NoteSearchHit[]>;
   rebuildSearchIndex(): Promise<boolean>;
@@ -390,6 +392,7 @@ export const native = {
   getBackupSettings: () => api().getBackupSettings(),
   saveBackupSettings: (settings: import("./types").BackupSettingsShape) => api().saveBackupSettings(settings),
   runBackupNow: () => api().runBackupNow(),
+  getBackupUsage: () => api().getBackupUsage(),
   scanRebuildCandidates: () => api().scanRebuildCandidates(),
   rebuildOrphanNotes: (ids: string[]) => api().rebuildOrphanNotes(ids),
   setNodeIcon: (id: string, icon: string | null) => api().setNodeIcon(id, icon),

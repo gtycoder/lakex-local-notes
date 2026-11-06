@@ -8,6 +8,15 @@
 
 ## 0. 最新交接（261027）
 
+### 261106 · 并行五项：移动端标签管理/标签空间、桌面+移动搜索增强、备份可观测、移动 Bitable 视图拖拽 · **已提交并双推**
+- **移动端标签管理**：设置新增「标签」分组（管理 + 简化标签空间）：新建/重命名/合并到/删除（二次确认与桌面同文案）/拖拽排序；聚合列表（文档+小记倒序）行内可移除标签；数据只走既有桥（quick-notes 标签库 + setNoteTags/setQuickNoteTags）。顺手修 **跨 kind 删除 bug**：`quickNoteTagLinksRepository` 在事务内会跨 kind 删文档 tag_links ⇒ 合并后文档标签丢失 / 删除后版本不推进（跨端不传播）；修复为各仓储只处理自己的 kind。
+- **桌面搜索增强**：`src/features/search/`（范围 全部/标题/正文/标签 单一来源 + 最近搜索 localStorage 8 条 + 空态/无结果引导 + 标签命中不新增索引、4 个既有 IPC 渲染层拼装、不可用降级）；SearchPanel 用 ln-tabs 范围页签、打开结果才记历史、键盘/ Esc 不回归。
+- **移动端搜索增强**：`src/mobile/search/`（范围纯逻辑、最近搜索、空态）；数据层真实召回：标题 LIKE / 正文 FTS5 列过滤（无 FTS 降级 text_cache LIKE）/ 标签 tag_links→tags.name；「全部」含标签命中；SearchSheet 分段 + 最近搜索 chips + 无结果放宽动作；`bridge.searchNotes(query, scope)` 向后兼容。
+- **备份可观测**：设置→备份与恢复新增「备份占用」（份数/体积/上限/最新，只 readdir+stat）与「上次备份结果」（ok/partial/failed + 原因 + 引导 + 非 ok 时立即备份）；新只读 IPC `get_backup_usage`（parity 155→156，三处同步）。
+- **移动 Bitable 视图拖拽排序**：复用 `useLongPress` + 既有落点判据（无新依赖），顺序写回文档（与重命名/复制/删除同一 mutate，只读自动拒绝）；消费式吞 click；a11y 命中区 44 + 记录行 aria 带标题。
+- **门禁**：tsc 0；全量 vitest **718 文件 / 4460 例全绿**；ui-metrics / check:mobileui / diff-check 通过。真机冒烟：手动备份生成 metadata+quicknotes 一组、quick_check=ok（21 表）。
+- **待裁决**：移动搜索范围每次打开重置「全部」（未持久化）；「标题」范围不含小记（无标题字段）；文档标签命中已并入「全部」。
+
 ### 261106 · 统一文档只读预览（NoteDocPreview）+ 字号收敛 · **已提交并双推**
 - 新增 `src/components/app/NoteDocPreview.tsx`（内部唯一使用 `useHistorySnapshotViewer`，14px 阅读档 + 移动端分支内置）：回收站 doc 分支、标签空间 doc 分支、历史面板、文档属性全部迁入（hook 消费者 3→1）；非 doc 四族仍 `HistorySnapshotPreview`、小记仍 `QuickNotePreview`；资源页无 doc 正文预览无需改。
 - 修标签空间预览空白（doc 误用 HistorySnapshotPreview 只出兜底文案）；字号根因 = tokens.css 让 viewer font-size:inherit（挂载点 18px）+ 内核标题 px 定值 ⇒ 新作用域类：正文 14/1.7、标题 em（1.5/1.3/1.15/1em）、760px 限宽、0 个 !important；实测回收站与标签空间一致（p 14/23.8、h1 21）。

@@ -78,7 +78,8 @@ describe("契约面归属（bridge 每个方法都要有主）", () => {
     expect(methods.length).toBeGreaterThan(60);
   });
 
-  it("每个方法至少有 T1/T2/T3 之一，否则必须在 TEST_SEAM（测试观测/播种口）里显式登记", () => {
+  // 这条要逐文件扫全仓 src/scripts，单跑 ~3.5s；全量套件并发 250+ worker 时会超默认 5s 假红（断言不变）。
+  it("每个方法至少有 T1/T2/T3 之一，否则必须在 TEST_SEAM（测试观测/播种口）里显式登记", { timeout: 20000 }, () => {
     const unowned: string[] = [];
     const classes: Record<string, string[]> = { t1: [], t2: [], t3: [], pending: [] };
     for (const name of methods) {

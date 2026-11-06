@@ -637,8 +637,10 @@ function registerIpc(): ReadonlyMap<string, (args: unknown[]) => Promise<unknown
     workspaceRoot: workspaceRoot(),
     onFileScanSettingsChanged: () => restartFileScanReconciler?.(),
   });
-  // 261105 Batch4-E：自动备份（配置/状态读取 + 保存 + 立即备份）；备份实现见 whenReady 里的调度器。
+  // 261105 Batch4-E：自动备份（配置/状态读取 + 保存 + 立即备份 + 只读占用统计）；备份实现见 whenReady 里的调度器。
   registerBackupIpc(ipc, {
+    // 占用统计只读 stat <userData>/backups（与调度器同一个 backupsDir/轮转口径）。
+    userDataDir: app.getPath("userData"),
     runner: {
       getSettings: () => autoBackupRunner?.getSettings() ?? store.getAutoBackupSettings(),
       getState: () => autoBackupRunner?.getState() ?? store.getAutoBackupState(),

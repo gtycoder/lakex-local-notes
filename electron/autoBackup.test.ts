@@ -13,9 +13,11 @@ import {
   AUTO_BACKUP_TICK_MS,
   backupDatabaseFile,
   backupFileNames,
+  backupStampToIso,
   backupsDir,
   decideAutoBackup,
   listBackupGroups,
+  measureBackupUsage,
   normalizeAutoBackupSettings,
   readDatabaseFingerprint,
   rotateBackups,
@@ -222,5 +224,61 @@ describe("runBackupCycle：端到端（主库+小记库、状态、轮转、失�
     const names = backupFileNames(new Date("2026-11-05T00:00:00.000Z"));
     expect(isAcceptableBackupPath(path.join(tempDir(), names.main))).toBe(true);
     expect(isAcceptableBackupPath(path.join(tempDir(), names.quickNotes))).toBe(false);
+  });
+});
+
+describe("备份目录占用（261105 task-68 设置页可观测；只读 stat）", () => {
+  const write = (dir: string, name: string, bytes: number): void => {
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, name), Buffer.alloc(bytes));
+  };
+
+  it("目录不存在 ⇒ exists:false、0 份、不抛（还没备份过的常态）", () => {
+    const dir = path.join(tempDir(), "backups");
+    expect(measureBackupUsage(dir)).toEqual({
+      dir, exists: false, groups: 0, files: 0, totalBytes: 0, newestAt: null, oldestAt: null, warnings: [],
+    });
+  });
+
+  it("空目录 ⇒ exists:true、0 份、无警告", () => {
+    const dir = tempDir();
+    const usage = measureBackupUsage(dir);
+    expect(usage.exists).toBe(true);
+    expect(usage.groups).toBe(0);
+    expect(usage.totalBytes).toBe(0);
+    expect(usage.newestAt).toBeNull();
+    expect(usage.warnings).toEqual([]);
+  });
+
+  it("多份备份 ⇒ 份数按组计、字节为主库+小记库之和、最新最旧按时间戳", () => {
+    const dir = tempDir();
+    write(dir, "metadata-2026-11-01T00-00-00.sqlite3", 100);
+    write(dir, "quicknotes-2026-11-01T00-00-00.sqlite3", 50);
+    write(dir, "metadata-2026-11-03T12-30-00.sqlite3", 200);
+    write(dir, "quicknotes-2026-11-03T12-30-00.sqlite3", 60);
+    write(dir, "unrelated.txt", 9999); // 目录里其它文件不计入（轮转也不管它们）
+    write(dir, "metadata-broken.sqlite3.bak", 10);
+    const usage = measureBackupUsage(dir);
+    expect(usage.groups).toBe(2);
+    expect(usage.files).toBe(4);
+    expect(usage.totalBytes).toBe(410);
+    expect(usage.newestAt).toBe(backupStampToIso("2026-11-03T12-30-00"));
+    expect(usage.oldestAt).toBe(backupStampToIso("2026-11-01T00-00-00"));
+  });
+
+  it("半份组（只有主库或只有小记库）⇒ 照常计入占用，但给可见警告", () => {
+    const dir = tempDir();
+    write(dir, "metadata-2026-11-04T00-00-00.sqlite3", 100);
+    const usage = measureBackupUsage(dir);
+    expect(usage.groups).toBe(1);
+    expect(usage.files).toBe(1);
+    expect(usage.totalBytes).toBe(100);
+    expect(usage.warnings.some((warning) => warning.includes("不完整"))).toBe(true);
+  });
+
+  it("时间戳换算：文件名里的 UTC 时间 → ISO；非常规文件名返回 null", () => {
+    expect(backupStampToIso("2026-11-06T14-08-04")).toBe("2026-11-06T14:08:04.000Z");
+    expect(backupStampToIso("2026-11-06")).toBeNull();
+    expect(backupStampToIso("nonsense")).toBeNull();
   });
 });

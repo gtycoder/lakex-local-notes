@@ -5,8 +5,10 @@
  * FTS5 在测试 sql.js 环境不可用时降级为内存过滤（生产原生 SQLite 有 FTS5）。
  */
 
-import { buildMatchExpression, buildSnippet, segmentToIndexText } from "../../core/search/index.js";
+import { buildMatchExpression, buildSnippet, escapeLike, segmentToIndexText } from "../../core/search/index.js";
 import type { SearchResult } from "../../core/searchTypes.js";
+import type { MobileSearchResult } from "../search/searchTypes.js";
+import type { SearchScope } from "../search/searchScope.js";
 import type { MobileDb } from "./sqliteDb.js";
 import { readQuickNoteBody } from "./noteBodies.js";
 import { quickNoteTagNames } from "./quickNoteTagsRepository.js";
@@ -133,8 +135,11 @@ function quickResult(row: { id: string; preview_text: string; updated_at: string
   };
 }
 
-/** FTS 不可用（sql.js 测试环境）时的降级：读活跃小记正文内存过滤；生产不常走。 */
-async function searchQuickNotesFallback(d: MobileDb, query: string, limit: number): Promise<Array<SearchResult & { kind: "quick-note" }>> {
+/**
+ * FTS 不可用（Web 预览/测试）时的降级：读活跃小记正文内存过滤；生产不常走。
+ * includeTags=false（「正文」范围）只比对正文，不把标签算成正文命中。
+ */
+async function searchQuickNotesFallback(d: MobileDb, query: string, limit: number, includeTags = true): Promise<Array<SearchResult & { kind: "quick-note" }>> {
   let rows: Array<{ id: string; preview_text: string; updated_at: string }> = [];
   try {
     rows = await d.prepare(
@@ -146,10 +151,93 @@ async function searchQuickNotesFallback(d: MobileDb, query: string, limit: numbe
   for (const row of rows) {
     const content = await readQuickContent(d, String(row.id));
     if (!content) continue;
-    const hay = [content.text, ...content.tags].join("\n").toLocaleLowerCase();
+    const hay = [content.text, ...(includeTags ? content.tags : [])].join("\n").toLocaleLowerCase();
     if (!hay.includes(needle)) continue;
     out.push(quickResult({ id: String(row.id), preview_text: String(row.preview_text), updated_at: String(row.updated_at), text_cache: content.text, tags: content.tags.join(" ") }, query));
     if (out.length >= limit) break;
   }
   return out;
+}
+/** 标签名拼接分隔符（U+001F 单元分隔符）：标签名允许含空格，不能用空格拼。 */
+const TAG_NAME_SEPARATOR = "\u001f";
+
+function splitTagNames(raw: unknown): string[] {
+  const text = String(raw ?? "");
+  return text ? text.split(TAG_NAME_SEPARATOR).filter(Boolean) : [];
+}
+
+/** 正文范围：只让 body 列参与匹配（标签不算正文）。无 FTS 时降级为只看正文的内存过滤。 */
+export async function searchQuickNotesByBody(
+  d: MobileDb,
+  query: string,
+  limit = 20,
+): Promise<Array<MobileSearchResult & { kind: "quick-note" }>> {
+  const normalized = query.trim();
+  if (!normalized) return [];
+  if (!(await hasQuickFts(d))) return searchQuickNotesFallback(d, normalized, limit, false);
+  await reconcileQuickNotesIndex(d);
+  const match = buildMatchExpression(normalized);
+  if (!match) return [];
+  const rows = await d.prepare(
+    "SELECT q.id AS id, q.preview_text AS preview_text, q.updated_at AS updated_at, si.text_cache AS text_cache, si.tags AS tags " +
+    "FROM quick_notes_fts f " +
+    "JOIN quick_notes_search_index si ON si.fts_rowid = f.rowid " +
+    "JOIN quick_notes q ON q.id = si.quick_note_id " +
+    "WHERE quick_notes_fts MATCH ? AND q.deleted_at IS NULL AND q.restore_pending_at IS NULL " +
+    "ORDER BY bm25(quick_notes_fts, 1.0, 1.0), q.updated_at DESC LIMIT ?"
+  ).all("body : (" + match + ")", Math.max(1, limit)) as Array<{ id: string; preview_text: string; updated_at: string; text_cache: string; tags: string }>;
+  return rows.map((row) => quickResult(row, normalized));
+}
+
+/**
+ * 标签范围：小记标签名（tag_links target_kind='quickNote' → tags.name）。
+ * 删除标签 = 缺席（删除清关系行），这里不读墓碑字段。
+ */
+export async function searchQuickNotesByTags(
+  d: MobileDb,
+  query: string,
+  limit = 20,
+): Promise<Array<MobileSearchResult & { kind: "quick-note" }>> {
+  const normalized = query.trim();
+  if (!normalized) return [];
+  const rows = await d.prepare(
+    "SELECT q.id AS id, q.preview_text AS preview_text, q.updated_at AS updated_at, " +
+    "GROUP_CONCAT(t.name, '" + TAG_NAME_SEPARATOR + "') AS matched_tags " +
+    "FROM tag_links tl " +
+    "JOIN tags t ON t.id = tl.tag_id " +
+    "JOIN quick_notes q ON q.id = tl.target_id " +
+    "WHERE tl.target_kind = 'quickNote' AND t.name LIKE ? ESCAPE '\\' AND q.deleted_at IS NULL AND q.restore_pending_at IS NULL " +
+    "GROUP BY q.id ORDER BY q.updated_at DESC LIMIT ?"
+  ).all("%" + escapeLike(normalized) + "%", Math.max(1, limit)) as Array<{ id: string; preview_text: string; updated_at: string; matched_tags: string }>;
+  return rows.map((row) => {
+    const matchedTags = splitTagNames(row.matched_tags);
+    const preview = String(row.preview_text ?? "").trim();
+    return {
+      id: String(row.id),
+      title: preview || "小记",
+      // 标签命中：摘要给命中的标签名（用户才知道"为什么匹配"）。
+      snippet: buildSnippet(matchedTags.join(" "), normalized) || preview,
+      matchType: "body" as const,
+      updatedAt: String(row.updated_at ?? ""),
+      parentTitle: null,
+      kind: "quick-note" as const,
+      matchedTags,
+    };
+  });
+}
+
+/**
+ * 小记搜索（按范围）：小记没有「标题」字段（列表显示的是正文首行预览）⇒ 标题范围不召回小记，
+ * 这是范围定义的一部分（见 src/mobile/search/searchScope.ts）。
+ */
+export async function searchQuickNotesByScope(
+  d: MobileDb,
+  query: string,
+  scope: SearchScope,
+  limit = 20,
+): Promise<Array<MobileSearchResult & { kind: "quick-note" }>> {
+  if (scope === "title") return [];
+  if (scope === "body") return searchQuickNotesByBody(d, query, limit);
+  if (scope === "tags") return searchQuickNotesByTags(d, query, limit);
+  return searchQuickNotes(d, query, limit);
 }

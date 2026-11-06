@@ -203,17 +203,20 @@ export function verifySqliteBackup(dbPath: string): { ok: boolean; reason?: stri
 
 export interface BackupGroup { stamp: string; files: string[]; bytes: number; mtimeMs: number }
 
-/** 列出备份目录里的备份组（按文件内嵌时间戳配对 metadata-/quicknotes-）。 */
-export function listBackupGroups(dir: string): BackupGroup[] {
+/**
+ * 列出备份目录里的备份组（按文件内嵌时间戳配对 metadata-/quicknotes-）。
+ * onSkip：读目录/stat 失败时回报（占用统计用；轮转不传 ⇒ 保持原静默语义）。
+ */
+export function listBackupGroups(dir: string, onSkip?: (name: string, error: unknown) => void): BackupGroup[] {
   let names: string[] = [];
-  try { names = fs.readdirSync(dir); } catch { return []; }
+  try { names = fs.readdirSync(dir); } catch (error) { onSkip?.(dir, error); return []; }
   const groups = new Map<string, BackupGroup>();
   for (const name of names) {
     const match = /^(metadata|quicknotes)-(.+)\.sqlite3$/.exec(name);
     if (!match) continue;
     const stamp = match[2];
     let stat: fs.Stats;
-    try { stat = fs.statSync(path.join(dir, name)); } catch { continue; }
+    try { stat = fs.statSync(path.join(dir, name)); } catch (error) { onSkip?.(name, error); continue; }
     if (!stat.isFile()) continue;
     const group = groups.get(stamp) ?? { stamp, files: [], bytes: 0, mtimeMs: 0 };
     group.files.push(name);
@@ -222,6 +225,52 @@ export function listBackupGroups(dir: string): BackupGroup[] {
     groups.set(stamp, group);
   }
   return [...groups.values()].sort((a, b) => b.stamp.localeCompare(a.stamp)); // 新 → 旧（时间戳字符串可直接比）
+}
+
+/** 备份文件名里的时间戳（`2026-11-06T14-08-04`，UTC）→ ISO 串；解析不了返回 null（只影响展示）。 */
+export function backupStampToIso(stamp: string): string | null {
+  const match = /^(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})$/.exec(stamp);
+  if (!match) return null;
+  const ms = Date.parse(match[1] + "T" + match[2] + ":" + match[3] + ":" + match[4] + "Z");
+  return Number.isFinite(ms) ? new Date(ms).toISOString() : null;
+}
+
+/**
+ * 备份目录占用（261105 task-68：设置页可观测）。**只读 stat，不读文件内容**。
+ * 口径与轮转一致（listBackupGroups 的备份组）：份数 = 备份组数，字节 = metadata-/quicknotes- 文件大小之和；
+ * 目录不存在 = 0 份（还没备份过，不是错误）；残留半份组/读失败只进 warnings，不抛出。
+ */
+export interface BackupUsage {
+  dir: string;
+  exists: boolean;
+  groups: number;
+  files: number;
+  totalBytes: number;
+  /** 最新 / 最旧一组的时间（ISO；没有备份时 null）。 */
+  newestAt: string | null;
+  oldestAt: string | null;
+  warnings: string[];
+}
+
+export function measureBackupUsage(dir: string): BackupUsage {
+  const warnings: string[] = [];
+  let exists = false;
+  try { exists = fs.statSync(dir).isDirectory(); } catch { exists = false; } // ENOENT = 还没备份过，不算异常
+  const usage: BackupUsage = { dir, exists, groups: 0, files: 0, totalBytes: 0, newestAt: null, oldestAt: null, warnings };
+  if (!exists) return usage;
+  const groups = listBackupGroups(dir, (name, error) => {
+    warnings.push("统计备份文件失败 " + name + "：" + (error instanceof Error ? error.message : String(error)));
+  });
+  for (const group of groups) {
+    usage.files += group.files.length;
+    usage.totalBytes += group.bytes;
+    // 只有主库或只有小记库 = 一组不完整（可能是备份中途崩溃/被手动删了一个）；照常计入占用。
+    if (group.files.length < 2) warnings.push("备份组不完整（缺主库或小记库文件）：" + group.stamp);
+  }
+  usage.groups = groups.length;
+  usage.newestAt = groups.length > 0 ? backupStampToIso(groups[0].stamp) : null;
+  usage.oldestAt = groups.length > 0 ? backupStampToIso(groups[groups.length - 1].stamp) : null;
+  return usage;
 }
 
 /** 轮转：保留最近 keepCount 组 + 总大小 ≤ maxTotalBytes（最旧优先删；删除失败只 warn）。 */

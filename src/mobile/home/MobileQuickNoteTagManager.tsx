@@ -1,5 +1,5 @@
 /**
- * 移动端标签管理（261105）：重命名 / 删除 / 合并 / 拖拽排序。
+ * 移动端标签管理（261105）：重命名 / 删除 / 合并 / 拖拽排序；261106 补「新建」（设置 → 标签 同一入口）。
  *
  * 用户定稿：**标签顺序是设备本地视图**（不参与 S3 同步，不同端可以不同）；置顶功能已整体删除。
  * 拖拽交互与移动端目录栏同口径：长按 350ms 进入拖拽、跟手找落点（行前/行后）、松手提交一次 reorder。
@@ -22,13 +22,17 @@ export interface MobileQuickNoteTagManagerProps {
   onClose(): void;
   /** 任一写操作完成后刷新目录与小记列表（关系可能变了）。 */
   onChanged(): Promise<void>;
+  /** 每个标签关联的**文档**数（来自 bridge.listNoteTagLinks）；给了就按桌面口径显示「N 篇文档、M 条小记」，
+   *  删除确认也说明会同时移除文档与小记上的该标签。 */
+  docCounts?: Readonly<Record<string, number>>;
 }
 
 interface DragState { id: string; overId: string | null; after: boolean }
 
-export function MobileQuickNoteTagManager({ open, tags, onClose, onChanged }: MobileQuickNoteTagManagerProps) {
+export function MobileQuickNoteTagManager({ open, tags, onClose, onChanged, docCounts }: MobileQuickNoteTagManagerProps) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [newName, setNewName] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
@@ -58,6 +62,23 @@ export function MobileQuickNoteTagManager({ open, tags, onClose, onChanged }: Mo
     }
   }, [busy, onChanged]);
 
+  /** 新建标签（目录唯一来源 = quick-notes 标签库，与桌面「新建标签」同一通道）。 */
+  const create = (): Promise<void> => {
+    const name = newName.trim();
+    if (!name) return Promise.resolve();
+    let normalized = "";
+    try { normalized = normalizeQuickNoteTag(name); } catch (reason) {
+      setError(getNativeErrorMessage(reason));
+      return Promise.resolve();
+    }
+    return run(async () => {
+      if (tags.some((tag) => tag.name === normalized)) throw new Error("已有同名标签");
+      await bridge.createQuickNoteTag(normalized);
+      setNewName("");
+      setError(null);
+    });
+  };
+
   const startRename = (tag: QuickNoteTagSummary): void => {
     setExpandedId(null);
     setEditingId(tag.id);
@@ -76,7 +97,10 @@ export function MobileQuickNoteTagManager({ open, tags, onClose, onChanged }: Mo
   const remove = (tag: QuickNoteTagSummary): Promise<void> => run(async () => {
     const ok = await confirmMobile({
       title: "删除标签「" + tag.name + "」？",
-      body: "将从 " + tag.count + " 条小记移除该标签，不会删除小记。",
+      // 与桌面 TagsWorkspace.removeTag 同一口径（会同时移除文档与小记上的该标签；内容本身不删）。
+      body: docCounts
+        ? "会同时移除文档与小记上的该标签（引用 " + (docCounts[tag.id] ?? 0) + " 篇文档、" + tag.count + " 条小记）；文档与小记本身不会被删除。"
+        : "会同时移除文档与小记上的该标签；文档与小记本身不会被删除。",
       confirmText: "删除标签",
       danger: true,
     });
@@ -88,7 +112,8 @@ export function MobileQuickNoteTagManager({ open, tags, onClose, onChanged }: Mo
   const merge = (source: QuickNoteTagSummary, target: QuickNoteTagSummary): Promise<void> => run(async () => {
     const ok = await confirmMobile({
       title: "把「" + source.name + "」合并到「" + target.name + "」？",
-      body: "合并后源标签消失，受影响的小记保留。",
+      // 文案与桌面合并弹窗一致：源标签消失，文档与小记保留、引用改到目标标签。
+      body: "合并后源标签消失；文档与小记会保留，引用改到目标标签。",
       confirmText: "合并",
     });
     if (!ok) return;
@@ -167,6 +192,7 @@ export function MobileQuickNoteTagManager({ open, tags, onClose, onChanged }: Mo
       {mergeSource ? (
         <div className="qn-tag-sheet__list">
           <div className="qn-tag-sheet__section"><Merge size={14} /><span>把「{mergeSource.name}」合并到：</span></div>
+          <div className="qn-tag-manager__hint">合并后源标签消失；文档与小记会保留，引用改到目标标签。</div>
           {mergeTargets.map((tag) => (
             <button
               key={tag.id}
@@ -176,7 +202,7 @@ export function MobileQuickNoteTagManager({ open, tags, onClose, onChanged }: Mo
               onClick={() => void merge(mergeSource, tag)}
             >
               <span className="mb-ellipsis">{tag.name}</span>
-              <span className="qn-tag-sheet__count">{tag.count}</span>
+              <span className="qn-tag-sheet__count">{docCounts ? (docCounts[tag.id] ?? 0) + " 篇、" + tag.count + " 条" : tag.count}</span>
             </button>
           ))}
           {mergeTargets.length === 0 && <div className="qn-tag-sheet__empty">没有其他标签可合并</div>}
@@ -186,7 +212,20 @@ export function MobileQuickNoteTagManager({ open, tags, onClose, onChanged }: Mo
         </div>
       ) : (
         <div className="qn-tag-sheet__list">
-          {tags.length === 0 && <div className="qn-tag-sheet__empty">还没有标签。在写作卡或小记卡片上添加标签后会出现在这里</div>}
+          <div className="qn-tag-sheet__input-row">
+            <span className="mb-input qn-tag-sheet__input">
+              <input
+                value={newName}
+                aria-label="新标签名称"
+                placeholder="输入标签名称"
+                disabled={busy}
+                onChange={(event) => { setNewName(event.target.value); setError(null); }}
+                onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void create(); } }}
+              />
+            </span>
+            <button type="button" disabled={busy || !newName.trim()} onClick={() => void create()}>新建</button>
+          </div>
+          {tags.length === 0 && <div className="qn-tag-sheet__empty">还没有标签。在上方输入名称新建，或在写作卡 / 小记卡片上添加标签</div>}
           {tags.length > 0 && <div className="qn-tag-manager__hint">长按拖动可排序（只在本机生效）</div>}
           {tags.map((tag) => (
             <div key={tag.id} className="qn-tag-manager__block">
@@ -224,7 +263,7 @@ export function MobileQuickNoteTagManager({ open, tags, onClose, onChanged }: Mo
                 >
                   <span className="qn-tag-manager__handle" aria-hidden="true"><GripVertical size={14} /></span>
                   <span className="qn-tag-manager__name">{tag.name}</span>
-                  <span className="qn-tag-sheet__count">{tag.count}</span>
+                  <span className="qn-tag-sheet__count">{docCounts ? (docCounts[tag.id] ?? 0) + " 篇、" + tag.count + " 条" : tag.count}</span>
                   <button
                     type="button"
                     className="mb-iconbtn"

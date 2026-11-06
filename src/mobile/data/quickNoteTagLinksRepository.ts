@@ -67,17 +67,27 @@ export async function setQuickNoteTags(d: MobileDb, noteId: string, rawTagIds: r
   return tagIds;
 }
 
-/** 事务内版本：调用方已持有事务（SQLite 不支持嵌套 BEGIN）。返回受影响小记数。 */
+/**
+ * 事务内版本：调用方已持有事务（SQLite 不支持嵌套 BEGIN）。返回受影响小记数。
+ *
+ * **只清本仓储的 kind（quickNote）**：文档关系由 noteTagLinksRepository.removeNoteTagLinksInTransaction
+ * 在同一事务里负责（那边要按文档 bump 关系版本，删除才能随同步传播）。此前在这里连 note 行一起删，
+ * 下游再查目标时已经查不到 ⇒ 文档关系「静默消失但版本不推进」，跨端永远看不到删除（261106 修）。
+ */
 export async function removeQuickNoteTagLinksInTransaction(d: MobileDb, tagId: string, at = new Date().toISOString()): Promise<number> {
   const rows = await q(d, "SELECT target_kind,target_id FROM tag_links WHERE tag_id=?").all(tagId) as Array<{ target_kind: string; target_id: string }>;
   if (rows.length === 0) return 0;
   const noteIds = rows.filter((row) => row.target_kind === KIND).map((row) => String(row.target_id));
-  await d.prepare("DELETE FROM tag_links WHERE tag_id=?").run(tagId);
+  await d.prepare("DELETE FROM tag_links WHERE tag_id=? AND target_kind=?").run(tagId, KIND);
   for (const noteId of noteIds) await upsertVersion(d, noteId, at);
   return noteIds.length;
 }
 
-/** 事务内版本：合并时源标签关联改指向目标（保留位置、去重）。 */
+/**
+ * 事务内版本：合并时源标签关联改指向目标（保留位置、去重）。**只处理 quickNote 行**——
+ * 文档关系的改指由 noteTagLinksRepository.mergeNoteTagLinksInTransaction 在同一事务里完成。
+ * （此前末尾还有一句跨 kind 的 DELETE；它会把文档行先删掉，导致文档合并函数查不到目标 ⇒ 文档关系直接丢失。）
+ */
 export async function replaceQuickNoteTagLinksInTransaction(d: MobileDb, sourceId: string, targetId: string, at = new Date().toISOString()): Promise<number> {
   const rows = await q(d, "SELECT target_kind,target_id FROM tag_links WHERE tag_id=?").all(sourceId) as Array<{ target_kind: string; target_id: string }>;
   if (rows.length === 0) return 0;
@@ -92,7 +102,6 @@ export async function replaceQuickNoteTagLinksInTransaction(d: MobileDb, sourceI
     await writeLinks(d, noteId, next);
     await upsertVersion(d, noteId, at);
   }
-  await d.prepare("DELETE FROM tag_links WHERE tag_id=? AND target_kind<>?").run(sourceId, KIND);
   return noteIds.length;
 }
 
