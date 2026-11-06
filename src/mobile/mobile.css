@@ -447,10 +447,14 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
 .tag-detail-sub { padding: var(--lake-space-xs) var(--mb-page-pad) var(--lake-space-md); }
 
 /* 261106 task-82：多选模式底部操作条（顶部栏复用上面那条设置页页头 .mobile-page-head）。
-   只有几何：页内距 + 底部安全区 + 发丝；fixed 变体给首页常驻层（列表 / Sheet 内用内联版）。 */
-.mobile-selection-bar { display: flex; align-items: center; justify-content: flex-end; gap: var(--lake-space-md); padding: var(--lake-space-md) var(--mb-page-pad) calc(var(--lake-space-md) + var(--mobile-bottom-safe-area)); border-top: .5px solid var(--lake-border-2); background: var(--lake-bg-window); }
+   只有几何：页内距 + 底部安全区 + 发丝；fixed 变体给首页常驻层（列表 / Sheet 内用内联版）。
+   flex-wrap：文档列表多选条有 4 个动作（创建副本/移动/移入回收站/打标签），窄屏一行放不下 ⇒ 允许换行
+   且仍右对齐；动作 ≤3 个时（小记多选条）不换行，视觉与之前一致。 */
+.mobile-selection-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--lake-space-md); padding: var(--lake-space-md) var(--mb-page-pad) calc(var(--lake-space-md) + var(--mobile-bottom-safe-area)); border-top: .5px solid var(--lake-border-2); background: var(--lake-bg-window); }
 .mobile-selection-bar.is-fixed { position: fixed; left: 0; right: 0; bottom: 0; z-index: var(--mobile-z-topbar); }
 .mb-iconbtn.is-checked { color: var(--lake-accent-text); }
+/* 261106 task-8：目录树多选的「不可选行」（笔记本/分组）复选框置灰——只降透明度，保留占位让左缘对齐。 */
+.mb-iconbtn.is-disabled { opacity: var(--lake-disabled-opacity); }
 
 /* 竖向设置菜单：设置项一行一行（思源移动端式），点某项进入新页面 */
 .mobile-settings-list { flex: 1; overflow-y: auto; background: var(--lake-bg-window); padding: 4px 0 calc(24px + var(--mobile-bottom-safe-area)); }
@@ -706,6 +710,9 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
 .side-panel > .toolbar .toolbar__icon > svg { width: 18px; height: 18px; }
 .side-panel > .toolbar .toolbar__text { font-size: var(--lake-font-size-small); padding-left: 8px; }
 .side-panel > .toolbar { background-color: var(--lake-bg-panel); min-height: calc(48px + var(--mobile-top-safe-area)); padding-top: var(--mobile-top-safe-area); }
+/* 261106 task-8：抽屉里的多选顶栏（SelectionTopBar）顶部就是屏幕顶（没有 App 顶栏）⇒ 补顶部安全区，
+   与抽屉工具栏同口径；选择态下它是抽屉第一行。 */
+.side-panel .mobile-page-head { padding-top: calc(12px + var(--mobile-top-safe-area)); }
 /* 抽屉首行 = 笔记本行（图标 + 标题）：左侧留出与页面内距同档的空间（用户 261014：图标太贴边、顶到抽屉边缘）。
    只作用在抽屉工具栏的滚动区，其它工具栏不受影响。 */
 .side-panel > .toolbar .toolbar__scroll { padding-left: var(--mb-page-pad); }

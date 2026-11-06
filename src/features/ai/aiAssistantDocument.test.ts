@@ -34,10 +34,24 @@ beforeEach(() => {
 afterEach(() => { act(() => root.unmount()); host.remove(); vi.unstubAllGlobals(); });
 
 function render(props: { selectionText?: string; attachments?: Array<{ noteId: string; filename: string }> } = {}) {
+  const selectionText = props.selectionText ?? "";
+  const hasSelection = Boolean(selectionText || props.attachments?.length);
   act(() => root.render(createElement(AiAssistantDialog, {
-    open: true, selectionText: props.selectionText ?? "", noteId: "note-1", onClose: () => {},
-    attachments: props.attachments,
-    onInsertAfter: () => {}, onReplace: () => {},
+    open: true,
+    onClose: () => {},
+    request: hasSelection
+      ? {
+        context: { kind: "selection", text: selectionText, attachments: props.attachments, range: null },
+        placement: { kind: "floating" },
+        outputs: ["after", "cursor"],
+        applyOutput: () => true,
+      }
+      : {
+        context: { kind: "none", allowDocument: { noteId: "note-1" } },
+        placement: { kind: "floating" },
+        outputs: ["after", "cursor"],
+        applyOutput: () => true,
+      },
   })));
 }
 const switchEl = () => host.querySelector<HTMLButtonElement>('[aria-label="附加当前文档全文"]')!;

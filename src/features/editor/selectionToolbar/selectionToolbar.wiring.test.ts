@@ -112,7 +112,7 @@ describe("AI 回写「插入到选区后」护栏（261005）", () => {
     expect(SRC).toContain("imageCardAssetRef");
     expect(SRC).toMatch(/tip="AI"[^\n]*openAiForImage/);
     // 面板拿到图片上下文
-    expect(SRC).toContain("attachments={aiAttachmentsRef.current}");
+    expect(SRC).toContain("attachments: aiAttachmentsRef.current");
     // 关面板清上下文（下次顶栏/文字入口不带旧图）
     expect(SRC).toContain("aiAttachmentsRef.current = []");
     // 图片浮栏的 AI 入口放**最后**（与文字浮栏「分隔线 + AI 收尾」一致）：源码顺序上「另存为」在它前面

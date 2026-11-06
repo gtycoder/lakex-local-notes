@@ -11,6 +11,8 @@ export interface SelectionAction {
   icon?: LucideIcon;
   danger?: boolean;
   disabled?: boolean;
+  /** 可访问性：动作按钮的 aria-pressed（目录树多选条按任务约定显式给 false；其它列表不传 = 不加属性）。 */
+  ariaPressed?: boolean;
 }
 
 export interface SelectionActionBarProps {
@@ -34,6 +36,7 @@ export function SelectionActionBar({ actions, onAction, fixed, hint }: Selection
             type="button"
             className={"mb-btn" + (action.danger ? " mb-btn--danger" : " mb-btn--secondary")}
             disabled={action.disabled}
+            aria-pressed={action.ariaPressed}
             onClick={() => onAction(action.id)}
           >
             {Icon ? <Icon size={16} /> : null}{action.label}

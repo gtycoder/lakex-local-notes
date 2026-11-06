@@ -8,6 +8,93 @@
 
 ## 0. 最新交接（261027）
 
+### 261107 · AI 助手架构收口（P1：请求模型 + 定位/输出单源）· **261107 收尾已提交**
+- **问题**：4 个入口（顶栏 / 选区浮栏 / 块菜单 / 写作助手卡）+ 10 个可选 props（selectionText/attachments/noteId/anchor/at/scroller/container/onInsertAfter/onReplace/onInsert）靠隐式优先级组合 → 最近的"面板跑到正文栏顶""插入到下一块""占位卡标签外露"都是这个结构造成的。
+- **新模型**：`src/features/ai/aiAssistantRequest.ts` —— 三个正交轴：
+  · `context` = selection（text/attachments/range/domRange）｜none（`allowDocument` 显式允许全文）；
+  · `placement` = floating（无锚点）｜point（光标点 at + container + scroller）；
+  · `outputs` = `"after" | "cursor"`（空数组 = 只读）；`applyOutput(text, mode)` 由入口执行内核落库。
+  另提供 `aiSelectionText / aiAttachments / aiDocumentNoteId / aiOutputLabel` 纯函数。
+- **Dialog 收口**：`AiAssistantDialog` 现在只接收 `{ open, request, onClose }`；定位由 placement 唯一解析（不再有 anchor 被 container 静默覆盖）；输出按钮由 `request.outputs.map` + `aiOutputLabel` 生成（有选区→替换选区，无选区→插入到光标处，after→插入到选区后）；全文开关只在 `context.kind === "none" && allowDocument` 时出现。
+- **四个入口已迁移**：顶栏（none/floating/allowDocument/无输出）、选区浮栏（selection/point/after+cursor）、块菜单（selection/point/after+cursor）、写作助手卡（none/point/cursor）。行为与文案保持不变。
+- **验证**：新增 `aiAssistantRequest.test.ts`（上下文/输出文案矩阵）；AI 专项 13 文件全绿；dev smoke：顶栏 dialog + 全文开关、写作卡 dialog（无标签/无全文开关/关闭清理）；全量 **764 文件（753 passed / 11 skipped）、4878 passed / 12 skipped**；tsc 0、`git diff --check` 干净。
+- **P2 单会话 Host（已做）**：新增 `aiAssistantSession.ts`（`openAiAssistant(request,onDismiss)` 单例 store + `useAiAssistantSession`）与 `AiAssistantHost.tsx`；App 只挂一个 Host，四个入口不再各自渲染 Dialog，只调 `openAiAssistant`。打开新会话会先清理旧会话（旧 onDismiss 撤占位卡/还选区），旧句柄再关闭不会误关新会话；`closeAiAssistant()` 供"再点按钮关掉"使用。**dev smoke**：写作卡打开（1 个 dialog）→ 再点顶栏 AI → 仍只有 1 个 dialog、占位卡被清、顶栏全文开关出现；关闭后 0 个。
+- **P3 对话逻辑拆分（已做）**：新增 `useAiConversation.ts`（输入/追问、轮次、流式请求、停止/重试、预设、全文读取、prompt 组装、docHint）；`AiAssistantDialog.tsx` 只保留布局/定位/拖高/复制反馈/渲染。源码护栏测试相应改为分别读 Dialog 与 Hook（定位/按钮仍在 Dialog，状态机/提示词/全文在 Hook）。行为不变，全量 765 文件 / 4878 passed。
+
+### 261107 · 新增：插入面板 / 斜杠菜单「AI 写作助手」卡（复用顶栏 AI 面板）· **261107 收尾已提交**
+- **入口**：自定义卡 `lake-ai-assistant`（斜杠项 `custom-lake-ai-assistant`，主搜索 `/ai`，分组「小工具」）同时进 **「+」插入面板**（general）与 **「/」斜杠菜单**（general + table 两份 cardSelect），与 noteRef/lockedText 同一套 `appendCustomCard + withCustomCardSlashItem` 注册方式；插入面板图标为自绘 `icon-lake-ai-assistant` symbol。
+- **交互**：选中后内核插入一张占位卡（`ai-writing-card`），检测到 `ne-focused` 后打开既有 `AiAssistantDialog`；request = `{ context:{kind:"none"}, placement:{kind:"point", at:占位卡底部, container, scroller}, outputs:["cursor"] }`（顶栏同款无上下文 + 光标锚点）。**占位卡完全不可见**（自身/内核外壳 0 尺寸，无标签/空行），只做光标锚点；面板只有一个「插入到光标处」（`aiOutputLabel`）；落库 = `focusCard → captureModelRange → applyAiReplace(insertAtSelection)`（替换语义，不插到下一块），随后删除占位卡；关闭也删。只读 viewer 不弹面板。
+- **dev 实测**：插入面板中出现「/ai AI 助手 写作助手…」项（data-testid `card-menu-item-custom-lake-ai-assistant`）；点击后 `ne-card` 占位卡出现、`.ai-dialog` 打开；点关闭后两者都消失；输入 `/` 的斜杠菜单同样命中该项。**AI 生成→插入/替换**未做端到端（需已配置 AI Key），落库命令与 noteRef/aiResultOps 现有路径一致。
+- **测试**：新增 `aiAssistantCard.test.ts`（卡名/斜杠项/主搜索/图标 symbol/分组注入幂等/lakeRuntime 双面板接线护栏）。
+- **门禁**：全量 **763 文件（752 passed / 11 skipped）、4878 passed / 12 skipped**；tsc 0、core 边界 0、`git diff --check` 干净。
+
+### 261107 · 修复：单块文字复制失效（块复制桥） · **261107 收尾已提交**
+- **现象（用户报）**：单块内选中文字 → 块手柄菜单「复制」→ 粘贴到外部/textarea 为空；多块菜单复制正常。
+- **三层根因（真机逐步定位）**：
+  ① 块菜单项是 activeElement，`execCommand("copy")` 的 copy 事件不经过编辑器宿主 ⇒ 编辑器 copy 处理器收不到，剪贴板没写入；
+  ② vendor 在块手柄/menu mousedown 时就会清掉浏览器选区/多块高亮 ⇒ click 时再取 live selection 已为 null（必须 mousedown 快照）；
+  ③ 悬停过的图片会残留在 `activeImage`，单块文字被误判成"单图片复制"（位图），textarea 自然粘不出来。
+- **最终修复**（保留多块复制/剪切，不做删除）：
+  · `onMouseDown` 对任意 mousedown 先快照选区（`pressedRange`）并记录当前顶层块（`activeBlock`）；
+  · **单块文字**优先于图片分支：用快照/local 选区 → `buildClipboardPayload` → **直写剪贴板**（`navigator.clipboard.write` html+plain；回退 writeText；再回退 textarea+execCommand）——不依赖 copy 事件/焦点；
+  · **单块图片**仍走 `native.copyAssetImage`（位图），但要求"当前块含本地资产图"，避免旧悬停图残留误判；
+  · **多块**仍走原有 copy 事件链路（`execCommand("copy")` + payload）；**多块剪切保持 vendor 原生，未改动**。
+- **dev 实测**：真实块手柄菜单点「复制」后 `navigator.clipboard.readText()` 返回选中文字（"张奕源Nic"）；菜单关闭、高亮清理、无异常。单元测试覆盖：单块选中文字直写、单块无选区直写整块、跨块仍走 copy 事件、单图片位图、mousedown 快照。
+- **纯文字换行丢失修复（同轮）**：根因 `buildClipboardPayload.plain = range.toString()` —— 对块级元素不产生分隔符，多段/标题/列表粘成一行（⌘C 与块菜单复制共用同一份 payload）。新增 `plainTextFromRange`：块级标签（p/h1-6/li/ul/ol/blockquote/pre/table/card…）与自定义 `NE-*` 块补 `\n`、`<br>` 转换行、**普通块间连续换行压成单换行（嵌套块不产生空行）**、**代码块（pre/NE-CODE-BLOCK）内部原样保留空行**（占位隔离后回填）、跳过隐藏节点/零宽字符、单段内选区不额外加换行；HTML 仍走 normalizeClipboardHtml。dev 模块实测跨块 `plain` 已含换行。测试：clipboardHtml 新增跨块换行 / 列表标题 / br / 隐藏节点 / 单段不额外换行 5 例。
+- **门禁**：tsc 0；全量 **762 文件（751 passed / 11 skipped）、4878 passed / 12 skipped**；`git diff --check` 干净。
+
+### 261107 · 桌面「置顶」+ 移动端「常用」改名「置顶」· **261107 收尾已提交**
+- **桌面端新增「置顶」**（用户点单，仅桌面）：顶部独立分组（BookMarked 图标 + 「置顶」+ 数量，底部分隔线），**设备本地**（localStorage `lakex-local-notes-v3.sidebar-pinned` 保序数组 + `...-open` 展开态），**不写库、不进 S3、多端独立**；原目录结构完全不动，仅给节点多一个入口。
+- 支持：① 单条右键（**文档 / 分组**；**笔记本不可置顶**，用户 261107 明确）「置顶 / 取消置顶」；② 多选右键菜单 + 浮动条「置顶 / 取消置顶」（选区**全部**已置顶时标签自动反转），批量按选择顺序写入；③ 分组/笔记本/含子文档的父节点置顶 ⇒ **连同子级递归展示**（同一节点既单独置顶又在置顶父级下时只显示一次）；④ 整段可折叠；⑤ 置顶区内部**拖拽排序**（只排顶层根，子级跟随；HTML5 drag，插线提示）；⑥ 搜索/标签筛选时隐藏置顶区（避免"目录筛掉、置顶还在"歧义）。
+- **右键菜单分组（261107 用户报"选项多了"）**：**仅文档菜单**分组 = 重命名/置顶 ｜ 创建副本/移动… ｜ 历史版本/标签…/属性 ｜ 锁定（只读）/导出 ｜ 删除（危险单独置底）；分组/笔记本右键很少用，**不做分组**（仅保留删除前的危险分隔线）。`.context-menu-sep` 此前**全仓没有样式**（只是空 div，所以分组看不见）——已在 `src/styles/app/dialogs.css` 补 `margin:5px 8px; border-top:0.5px solid var(--lake-border-1)`；底部危险分隔线补 `role="separator"`。测试断言文档/分组/笔记本三套菜单的分隔线序列（导出子菜单在 jsdom 内联展开，测试只断言主菜单分组）。
+- 实现：`src/features/sidebar/pinnedTree.ts`（纯读写/批量/重排/订阅）+ `SidebarPinnedSection.tsx`（渲染/折叠/拖拽）+ `treeIcons.tsx`（目录图标单源，Sidebar 与置顶区共用）；Sidebar 接单条/多选菜单、浮动条、右键单条菜单；多选动作 `treeSelectionActions.pin`。
+- **桌面实测（dev CDP）**：右键置顶→置顶区出现（header 置顶 N）；折叠/展开；笔记本置顶显示 10 行含子级后取消；多选 A+B → 菜单「置顶」→ storage 保序 + 提示「已置顶 2 项」；把 A 拖到 B 后 storage 顺序变 B,A、DOM 同步；reload 持久；测试后已清空置顶状态。截图 `/tmp/lakex-pinned-verify/desktop-pinned.png`。
+- **移动端「常用」全部改名「置顶」**（用户要求，逻辑/存储键不变）：目录行菜单「置顶 / 取消置顶」、toast「已置顶/已取消置顶」、知识库首页分组标题/aria、相关注释；`favorites.test` 同步更新。**移动端仍是原设备本地的"常用"实现**，与桌面置顶数据互不相关（多端独立）。
+- 测试：`pinnedTree` 纯逻辑 4 例、`SidebarPinnedSection` 渲染 6 例、Sidebar 单条右键置顶/多选置顶用例、treeSelection 动作面补 `pin`；全量 **762 文件（751 passed / 11 skipped）、4870 passed / 12 skipped**；tsc 0、`check-core-boundaries` 0 违规、`ui-metrics` 通过、`git diff --check` 干净。
+- 移动端改名后最终 APK：sha256 `907fa96eb28cc994dcfe46e40d25f49567cef4ec432974888d3141da4d76ce50`（0.0.2/1002，已装两台模拟器）；`dist-mobile` 构建产物已确认含「取消置顶」且不再含「设为常用」。
+
+### 261107 · 创建副本「落地后 review」+ 并发/性能重构（P1 架构收口）· **261107 收尾已提交**
+- **review 结论**：主干（新 id + 新建管线 + core 契约 + 两端同形）正确，不推倒；本轮还掉 5 处架构债：
+  ① 正文改写三件套（资源 URL / 块 id / 自引用）收成 **core 单一入口** `lakeBodyRewrite.prepareDuplicateBody`（两端不再各写一遍）；格式函数拆到 `src/core/lakeBodyRewrite.ts`；
+  ② 条目级错误从 `Object.assign(AppError,{duplicateReason})` 改为 **`core.DuplicateNoteFailure` + `duplicateReasonOf`**（桌面 store 与移动数据层同一类型，IPC/bridge 同一映射）；
+  ③ 契约类型单源：`lib/types` 的 DuplicateNotes*Shape 改为从 core **type re-export**（与 sharedTypes 同款做法）；
+  ④ `createNoteInWithContent` 的 8 个位置参数改 **options 对象**（kind/position/afterSortOrder/skipAssetCopy）；
+  ⑤ `unsupported` 文案修正（原文「仅正式文档」误导；实际支持五类，改为「笔记本、分组、小记不能复制」）；桌面 flush 失败从"继续复制旧内容"改为**中止并提示**（与移动端一致）。
+- **并发/性能重构（用户要求：多选混合类型并发、快且准）**：桌面 `duplicate_notes` 改为**三阶段**——
+  1) prepare（同步只读：校验/读正文/改写/资源清单）；2) copy（`fs.promises.copyFile` **有界并发 4**，临时文件+rename；单条失败只废该条并清理）；3) commit（**同步串行**落库；**提交时重读源 parent/sort_order**，避免同批插入导致错位）。
+  另外：整批**单飞队列**（多请求不交错半成品）、每条之间 `setImmediate` 让出事件循环、失败条目带 id/reason 记日志。移动端 `copyNoteAssets` 改为**有界并发 3**（bridge 写域仍串行）。
+- **实测（dev 实例，macOS）**：40 篇空文档批量复制 **370ms**（≈9ms/篇）；10 篇各带 2×110KB 图片 **97ms**；两批各 20 篇并发发起 **370ms 全成功**；结果树 100 条子项 sort_order **全部唯一**且副本**紧邻各自源**。
+- **测试**：IPC 新增并发（两批同时）、同源并发两次、混合类型（doc+usheet）+ 资源复制与 URL 重写 3 例；core 新增 prepare/自引用/remap/编码等；全量 **760 文件（749 passed / 11 skipped）、4854 passed / 12 skipped**；`check-core-boundaries` 144 文件 0 违规；`git diff --check` 干净。
+- **移动端原生化（261107 第二轮，用户要求「copy 不走桥」）**：`AssetSyncPlugin.copyAssetDir` 新增原生**整目录拷贝**（ioPool 执行、复用 resolveLocalAssetFile 的越界校验、跳过 `.tmp`、返回 copied/bytes）；`assetFs.copyNoteAssetsDirNativeFs` 一次桥调用完成 `note-assets/{源}/` → `note-assets/{副本}/`，旧 APK/web 预览回退 JS 逐文件（有界并发 3）。设备直连验证：`writeLocal→copyAssetDir→listLocal` = copied 1 / bytes 5，`../etc` 被拒；**最终 APK sha256 `bad40bd4ef40a2bcc6f544b63e2c25b5bf7e0559516cf7e5db060473e56a1337`**（0.0.2/1002，已装两台模拟器；首个带原生拷贝的包 770576d2… 只用于第一轮设备验证）。
+- **设备复验（android-dup-verify，261107）**：手机 5554 + Pad 5556 完成——A 批量（图片 doc + usheet）两副本紧邻源、打开正常、源不变 **PASS**；B 原生拷贝证据（logcat copyAssetDir 参数 + 副本目录同名文件 337B、与源 sha256 相同）**PASS**；C 单条 flush **PASS**；D 自引用/独立性（copy-of-copy 三份 URL 各指自己、块 id 交集 0、改副本不影响源）**PASS**；Pad 冒烟 **PASS**；无新增 FATAL。**发现并已修两个问题**：① **批量多选创建副本漏 flush**（`useTreeSelection.applyDuplicate` 未调保存屏障）→ 已加 `flushSaves`（NotebookWorkspace 用 ref 接线 `flushAllTabs`，顺序测试 + 失败中止测试）；② 无资产文档复制时原生 `copyAssetDir` 对「源目录不存在」reject 产生 Capacitor plugin error 噪声 → 改为 **resolve copied=0**（功能本就回退正确）。**修复后复验（同轮，新包 bad40bd4…）全部 PASS**：C-批量点击前 390ms 磁盘仍无未保存文字（diskLen=1117）→ 副本含该文字（copyLen=1143）且紧邻源；无资产文档复制 source dir missing=0、Sending plugin error=0；带图回归原生日志仍在、副本图片走副本 id；Pad 冒烟 PASS。
+- **移动端 createNote 排序根因修复**：`createNote` 新增 `sortOrder` 选项，缺省写「同级末尾（notes+folders MAX+1）」——此前恒写默认 0，导致"所有新文档 sort_order=0"，副本只能靠整组重排保证紧邻。副本仍保留整组归一化（只在 legacy/重复 sort_order 需要的场景生效，保证旧数据也紧邻），**这是与桌面算法有意的差异**（桌面历史数据始终唯一递增）。
+- **reason 标签单源**：`core.DUPLICATE_NOTES_REASONS`（运行时数组派生类型）+ `DUPLICATE_NOTES_REASON_LABELS`；桌面/移动端直接复用同一对象，parity 测试钉死（新增 reason 只改 core 数组）。
+- **其它「可原生化」审计结论（本轮不动）**：资产同步 v3 已走原生流式（`AssetSync.putFile/getFile`，字节不过桥）；正文/历史已走原生（`BodyStore`）；剩余过桥字节路径 = ① 同步引擎本地差集/哈希需在 JS 读字节（`loadAssetBytesFs`，涉及加密/清单判定，改造面大）② 用户上传/预览的字节本来就在 WebView（`uploadResource` / 预览）③ 系统分享/导入的文件内容需进 JS 解析。**真正的大块拷贝只有创建副本，已原生化**；后续若要继续，优先「同步引擎哈希/差集原生校验」，收益需先实测。
+- **review 遗留（P2，未做）**：① store 的 prepare/commit 可再抽 `electron/noteDuplication.ts`（当前 store=存储、IPC=编排，已可接受）；② 移动端 sort_order 根因（`createNote` 不写列）与桌面插入算法分叉 → 建议给 `createNote` 显式 position；③ 两端 reason→文案表仍两份（建议 parity 测试/共享 labels）；④ 大附件移动端仍是 JS 字节搬运（内存/耗时，建议原生 stream copy）；⑤ 批量无进度/取消；⑥ `forbidSelfNoteRefs` 未覆盖 JSON 转义斜杠（低概率）。
+
+### 261106 · 文档「创建副本」（桌面 + 移动）：新 id + 新建管线、正文/资源全量复制与 URL 重写、同父级下方、批量逐条结果 · **261107 收尾已提交**
+- **用户语义定稿**：副本 = **全新独立笔记**（编辑/删除/标签/历史/S3 对象互不影响）；标题 = 原名称 + " 副本 " + 本地时间 `YYYY-MM-DD HH:mm:ss`；自动插到**同父级、紧邻原笔记下方**；批量多选可一次复制多篇。**历史快照不复制**（新笔记历史从空开始）、锁定/回收站状态不继承；小记不在本次范围。
+- **契约单一来源**：`src/core/duplicateNotes.ts`（`duplicateNoteTitle` / `rewriteAssetNoteIds`（http/lake-asset/note-assets 三种形态的 noteId 段重写）/ `normalizeDuplicateIds`（去重/≤500/安全 id）/ `summarizeDuplicateResults`）；`src/lib/types.ts` 的 `DuplicateNotes*Shape`；桌面 IPC `duplicate_notes` 与移动 `bridge.duplicateNotes` **同形**：`{ ok, results:[{id,ok,newId?,reason?}], summary, reason?, message? }`；reason 9 值（invalid-input/empty-ids/too-many-ids/invalid-id + not-found/unsupported/already-trashed/body-missing/failed）。
+- **桌面**：`store.duplicateNote`（按 kind 读原文 → `rewriteAssetNoteIds` → 收集 note-assets/{源}/* → 走 `createNoteInWithContent` 新 id + `afterSortOrder` 紧邻插入（两表同事务移位）→ 复制文档标签关系（新版本））；逐条独立（一条失败不回滚其它条）、每 5 条让出事件循环；main 对 `duplicate_notes` 整批广播一次 `library-changed`；preload/webApi/native 三处同步。
+- **移动**：`src/mobile/data/duplicateNotes.ts`（createNote 管线 + 同父级 sort_order+1 + assetFs 复制 + 标签关系）+ `src/mobile/bridge/duplicateNotes.ts`（写域 runWrite、逐条结果）；UI = 目录树行 ⋮「创建副本」+ DocListSheet 文档多选条「创建副本」。
+- **补充裁决（261107）**：① **小记（quickNotes）不做副本**（用户明确不做）；② **创建副本前先 flush 未保存编辑**已落地（两端）：桌面 `App.flushNotesBeforeDuplicate`（只对涉及的 dirty 标签逐个 `persistTab`，失败沿用既有提示、复制继续）→ Sidebar `onBeforeDuplicate`；移动端 `useWorkspaceSession.flushAllTabs`（统一保存屏障）→ `useWorkspaceActions.duplicateDocument` 的 `flushSaves`。顺序护栏：`sidebarMultiSelect.render.test.tsx` / `useWorkspaceActions.drawer.render.test.tsx` 各 1 例（flush → duplicate）；③ **noteRef 语义澄清**：文档引用卡存的是**目标文档 id**，复制后仍指向同一目标（引用语义，如超链接）；图片/附件卡的资产 URL 已重写为副本 noteId 并复制文件，**不共用**。**自引用已按用户 261107 定稿加防护**：规则 = **副本内禁止出现指向自身的引用**；实现 = `core/duplicateNotes.forbidSelfNoteRefs`（防御性：若正文出现 `lake-note://{副本id}`（含百分号编码形态）就回退为指向源目标；正常路径不会出现），桌面/移动端复制管线均已接入；护栏 = core 4 例 + IPC 1 例（源自引用在副本里指向原目标、副本不含指向自身的引用）。资产侧再确认：副本是 `note-assets/{副本id}/{同名文件}` 的**独立副本**（S3 key `assets/{副本id}/{文件名}`），不是共用。
+- **类型面审计（261106）**：入口判据 = 树节点 `nodeType/kind === "note"`（与编辑器 kind 无关）⇒ **doc/表格/多维表/画板/手写板五类两端都有入口**（桌面逐类真实右键实测、移动端设备实测五类可复制可打开）；批量多选混选不同 kind 也可用（实测菜单 4 项均可用）。**发现并已修**：桌面副本建完后只 upsert 了标题索引（空正文）⇒ 副本内容搜不到（要等用户编辑一次）；已在 `store.duplicateNote` 里补 `searchTextFor` + `updateNoteCaches`（全 kind），移动端 `createNote` 本就写 `text_cache` 后 `indexNote`，无此问题。**类型相关边界**：usheet/bitable/board/ink 副本正文与源逐字节一致（不复用 doc 的块 id 重映射，避免破坏 Univer/plait/ink 内部 id）；这些第三方内部 id 跨文档重复经设备实测无串扰（实例隔离）。小记不在本次范围（用户复核中）；笔记本/分组不可复制（语义）；文档的子文档不随副本复制（只复制该篇本身）。
+- **设备实测抓到并已修的两处真 bug（261106 23:0x，Android 复测中）**：
+  ① **资源 URL 是百分号编码形态**：Lake 图片/文件卡的 value 是 `data:` 套 JSON 再整体编码，图片 URL 在正文里是 `...%2F{noteId}%2F...`；`rewriteAssetNoteIds` 原只匹配明文 `/` ⇒ 副本正文仍引用源资产（复制出来的资产成死数据）。已加 `%2F{id}%2F`（大小写）分支 + 单测；桌面用真实内核图片卡复验：副本正文 `%2F{newId}%2F`、无源 id 的资源引用。
+  ② **移动端副本不紧邻源**：`noteRepository.createNote` 的 INSERT 不写 `sort_order`（同级常全 0），旧「副本=源+1 且 >源 +1」在全 0 时无行可移 ⇒ 副本排到末尾。已改为**按同级显示顺序归一化后插入**（与目录渲染同口径：sortOrder → 标题 zh 排序；同一事务重编号 0..n-1，只动源父级这一组）；`createNote` 分配 max+1 的更大改动评估后不做（影响同步导入语义，另立任务）。
+- **第三轮设备实测（APK 42,250,811 B / sha256 192ce282…，23:30 构建）**：多选入口与批量、长按拖拽回归、D 方案块 id、资源双形态、五类文档 全部 PASS —— 块 id：源 8 / 副本 8、**交集 0**，副本打开标题/列表/图片正常；usheet/bitable/board/ink 副本正文与源**逐字节一致**（未重映射，打开正常）；双形态图片（data: 百分号编码卡 + 明文 URL）副本两处 URL 都指向副本 id、两个 img 均 naturalWidth=160；源文档仍指向自己的资源。
+- **门禁/实测**：tsc 0；全量 vitest **762 文件（751 passed / 11 skipped）、4870 passed / 12 skipped**（**注意：本机偶发 1 例 flake**，同一命令复跑即全绿；出现时把输出存文件看 "Failed Tests" 段定位；移动端 `src/mobile` 270 文件 / 1375 例）；`git diff --check` 干净；`check-core-boundaries` 144 文件 0 违规。桌面 dev 实例实测：单条/批量结果、紧邻源下方（A,A',B,B',C,C'）、标题 `原名称 副本 YYYY-MM-DD HH:mm:ss`、右键菜单含「创建副本」（单条菜单第 2 项；多选菜单 4 项：创建副本/移动…/导出…/移入回收站）、正文资源 URL 重写为新 id（源正文不变）、`readAssetPreview` 源/副本资源字节数一致、newId 行 is_dirty=1。Android 设备实测（两轮，emulator-5554 / APK 0.0.2+1002）：第一轮 PASS = 构建/安装/入口/命名/打开副本/编辑副本源不变/五类可打开/历史为空/回收站无副本入口；FAIL = 位置与资源独立性（见上，已修）。**第二轮（修复后）两项均 PASS**：同级全 0 的 3 篇中复制中间那篇 → drawer 紧邻、DB sort_order 0..n-1 唯一递增（旧数据 13 篇全 0 复制后归一化 0..13）；带图副本正文资产 URL 全部指向副本 id（DOM img.src = /{副本id}/、naturalWidth 160、资源目录同文件同字节，源目录 mtime 未变、源正文不变）。**移动端批量入口已补（261106 用户同意后落地，task-8）**：工作区「文档树」抽屉页头「选择」（平板为同 aria-label 图标钮）→ 选择态（取消/已选 N/全选、文档行复选框、分组置灰、行 aria-selected、底部条 创建副本/移动…/移入回收站、返回键先退选择、抽屉收起自动退出）——走既有 `bridge.duplicateNotes`/`bridge.batchNotes`，无新桥方法。**长按仍保持原「拖拽排序」**（不抢手势；多选入口只有「选择」按钮）；底部条为抽屉内联贴底（不用视口 fixed，抽屉 z=7 会盖住 fixed z=3）。文件清单见 `src/mobile/notebook/treeSelection.ts` / `useTreeSelection.ts` + NotebookTreeList / WorkspaceDrawers / WorkspacePanels。**设备复测 PASS**：入口/选择态页头（取消·已选 N·全选）/文档复选框·分组置灰/批量 3 篇与 2 篇（toast + 副本各自紧邻源 + 退出选择）/移动…（batchNotes move）/移入回收站（二次确认）/返回键只退选择/点遮罩关抽屉自动退选择/长按文档与分组**仍是拖拽**（不抢手势）/行内 ⋮＋ 可点/点文档可打开。**唯一不可达**：选择态页头被 SelectionTopBar 替换后没有「收起抽屉」按钮（只能点遮罩关）——按当前交互接受，若产品要保留收起入口需在 SelectionTopBar 加一个按钮。**块 id 已按 D 方案重映射（261106 用户裁决）**：离屏内核实测确认「内核保留给定 id、缺 id 时生成新 id、二次 round-trip 稳定」，因此不引入离屏内核管道，改为复制时在 `core/duplicateNotes.remapBlockIds` 里把 `id`/`data-lake-id`/`list`/`fid` 全量换新（同一旧 id 的所有出现一起换，URL/data: 不动）。实测：复制欢迎文档后源/副本 13 个块 id **交集 0**；两 tab 同开时新副本块 id 不在 DOM 重复 id 列表（列表剩余项为图标/画布既有全局 id）。桌面与移动端数据层均已接入（kind=doc 才做；JSON 类文档不做）。
+
+### 261106 · 修复：块菜单「复制」统一到 ⌘C 剪贴板管线（图文混排粘微信图裂）· **261107 收尾已提交**
+- **问题（用户 261106 报）**：块级多选（跨多块拖选）→ 点块手柄菜单「复制」→ 粘到微信**图裂**；同一选区按 ⌘C 正常。
+- **根因**：两条链路不一致 —— ⌘C = 浏览器 `copy` 事件 → `EditorTab`/`LakeEditor` 捕获处理器 → `buildClipboardPayload`（本地资产物化成 `data:`、清内核隐藏节点）；块菜单「复制」= vendor `copyDomBlock` → 内核 `renderer.execCommand("copy", range)`，内核直接写自己的剪贴板（图片保留 `http://127.0.0.1:19876/…`、无 base64）。
+- **修复**：新增 `src/features/editor/blockCopyBridge.ts`（由 `mountBlockHoverHandle` 挂到每个实例）：菜单「复制」项 mousedown 快照选区 → click 捕获拦截（挡掉 vendor `copyDomBlock`）→ 临时设选区后 `document.execCommand("copy")` 走回既有的 copy 处理器 ⇒ 与 ⌘C **同一份 payload**；选出区可回退 mousedown 快照 / `.ne-brick-highlight` 多块重建；单块与「复制代码/图片/表格」不接管；失败回退 ClipboardItem。另把 `LakeEditor`/`EditorTab` 的 copy/cut 处理器统一改用 `buildClipboardPayload`（去掉重复实现，单一来源）。
+- **文件**：`blockCopyBridge.ts`(新) · `blockHandleMount.ts` · `clipboardHtml.ts` · `LakeEditor.tsx` · `EditorTab.tsx`；测试 `blockCopyBridge.test.ts`(新 13 例) + `clipboardHtml.test.ts`(+3)。
+- **门禁**：tsc 0；定向 vitest 2 文件 37 例全绿；**全量 vitest 751 文件（740 passed / 11 skipped）、4768 passed / 12 skipped**；`git diff --check` 干净。
+- **实机复验（子 agent，dev 实例 CDP 真实鼠标/键盘 + navigator.clipboard.read）**：多块选区点「复制」被 bridge 拦下，剪贴板 HTML 与 ⌘C **逐字节一致**（去 Chromium 的 `<meta charset>` 前缀；文本 3 段 250 字符双双相等；图文混排 22151 字符双双相等，图片已是 `data:image/png;base64`、无 `127.0.0.1:19876`、无 `ne-clipboard`）。对照组（直接走 vendor `copyDomBlock` 的内核路径）HTML 2421 字符、含 `<ne-clipboard>` + 本地 URL ⇒ 图裂根因坐实。点击瞬间 `window.getSelection()` **非折叠**（BlockContextMenu 根节点 mousedown preventDefault + 手柄还原多块 range）⇒ bridge 走主路径；菜单自动关闭、高亮 0 残留。
+- **单图片块已按 A 落地（用户 261106 裁决，A/B 实测后）**：单张图片块菜单「复制/复制图片」→ `native.copyAssetImage`（与 ⌘C 图片复制同一入口，位图）；单块文本仍走内核（Lake→Lake 保真）。跟踪口径 = 最近悬停/按下图片 + 高亮兜底（菜单 mousedown 会清高亮，只靠高亮会漏）。**dev 实例实测**：单图块菜单复制剪贴板 = `image/png` 63,422（无 text/html、无本地 URL），菜单自动关闭。A/B 对照（同一 110,478B PNG 回粘 Lake）：A 正文 +806B / img src=本地资产 URL；B（HTML base64）正文 **+157,708B**、img src=`data:`、多造一个同 sha 孤儿资产、剪贴板**无位图** ⇒ 图片统一走位图。
+- **已知边界**：剪切（cut）**未**统一到该桥（同类风险，未立项）；bridge 的「选区折叠→高亮重建 / execCommand 失败→ClipboardItem」兜底未被真实路径触发（有单测）；「ClipboardItem 同写 image/png + text/html」未实测。详见 `docs/LAKEX-CONTRACT.md` §5.48。
+
 ### 261106 · 导入 / 批量导出 / 批量移动 / 移动端标签页与键盘稳定 · **已提交并双推**
 - **Markdown 导入**：`src/features/import/`（共享管线 md→lake：离屏内核 `setDocument("text/markdown")` → 等渲染 → `getDocument("text/lake")` + `data-lake-id` 校验；图片物化、远程图降级、frontmatter 丢弃、串行队列/超时）；桌面「+ → 导入 → Markdown…」多选（目标=点击 + 的笔记本/分组，进度可取消、结果汇总 warnings）；移动端系统分享 .md（SEND/SEND_MULTIPLE、冷/热启动、默认笔记本设置 + picker 默认选中、失败软删回滚、图片降级链接）。
 - **批量多选**：core `runBatchNotes`（move/trash/tag-add/tag-remove，ids 去重上限 500、先全量校验后单事务、笔记本 rejected、**无 restore/purge**）+ 桌面 `batch_notes` IPC（parity 162）；桌面目录树 ⌘/Ctrl + Shift 区间（跳过笔记本）、多选右键**仅三项**「移动… / 导出… / 移入回收站」（危险红）、浮动条；移动端小记/文档列表选择模式（长按或页头「选择」、顶部 取消/已选 N/全选、移动端 `bridge.batchNotes`）。**回收站不做多选/批量；「删除」= 移入回收站，仅回收站内可彻底删除**。
@@ -914,6 +1001,7 @@
 - **分支策略（261105 起）**：只保留 `master`（本地 + Gitee + GitHub 各一条）；特性分支做完即合、合完即删，不留长期 worktree。
 - 两远端 master 的交付核验见 `.css-audit/final-review/merge-verify.txt`（该目录在 261105 清理中已删除，历史证据见 git 提交记录）。
 - **261105 标签缺席改造（本轮）**：已提交 `e83a6960` 并双推，改动面 = core 同步语义 + 两端标签库/端口 + 移动端回收站定时清空 + 文档。门禁实测：tsc 0；全量 vitest **608 文件（597 passed / 11 integration skip）、3763 passed / 12 skipped**；core 136 文件 0 违规；check:mobileui/ui-metrics 通过；`git diff --check` 干净。
+- **261107 基线**：本次会话全部改动（创建副本/原生资源复制、桌面置顶、块复制与换行、AI 写作助手卡、AI 助手请求/单会话/对话 hook 架构收口）已本地提交并推 `origin/master`；最终门禁 **765 文件（754 passed / 11 skipped）、4878 passed / 12 skipped**、tsc 0、core 0、ui-metrics / check:mobileui / diff-check 通过。提交 hash 见 `git log -1`。
 - **261106 基线**：`master` `362d2331`（已双推）。改动面 = 移动端标签一级页/搜索/键盘稳定/批量多选；桌面+移动 Markdown 导入、批量导出（doc→md / usheet/bitable→csv / ink/board→pdf）、思源式移动树、备份可观测、Bitable 视图拖拽。门禁实测：tsc 0；全量 vitest **750 文件（739 passed / 11 skip）、4758 passed / 12 skipped**；core 边界 0 违规；ui-metrics / check:mobileui / diff-check 通过。IPC parity = 162（新增 batch_notes / export_notes_batch / write_batch_export_file / open_export_dir / pick_markdown_files / read_import_image，移除 pick_markdown_folder）。
 - **261105 实测偏差修正**：`master..feat/pad-touch-ui = 0`（`d2f76b3b` 已是 master 祖先）⇒ §3 P0 原文「落后 6 个提交、发版前先合」已过期，本轮就地改掉。
 - 发版仍只有v0.0.1/v0.0.2，package.json=0.0.2；未发版提交数用`git rev-list --count v0.0.2..master`查询，别沿用125这个旧计数。下一版发布说明须写inkDoc v4：旧端只读、手机/平板需重装。

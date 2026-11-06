@@ -51,7 +51,8 @@ import { useTabSessionPersistence } from "./hooks/useTabSessionPersistence";
 import { type OpenTab, EDGE_HANDLE_DWELL_MS, OUTLINE_SIDEBAR_MAX_WIDTH, OUTLINE_SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH, patchTabById, treeNodePath } from "./desktop/desktopTypes";
 import { SaveConflictDialog } from "./components/app/SaveConflictDialog";
 import { DesktopOverlays } from "./desktop/DesktopOverlays";
-import { AiAssistantDialog } from "./features/ai/AiAssistantDialog";
+import { AiAssistantHost } from "./features/ai/AiAssistantHost";
+import { openAiAssistant } from "./features/ai/aiAssistantSession";
 import { DesktopLibrary } from "./desktop/DesktopLibrary";
 import { DesktopQuickNotes } from "./desktop/DesktopQuickNotes";
 import { useDesktopShell } from "./desktop/useDesktopShell";
@@ -88,7 +89,7 @@ export function App() {
    * **不读选区、不提供「替换选区 / 插入到选区后」**：选区滚出可视区后从右上角进入会有锚点/滚动难题，
    * 所以这里彻底不参与正文写回；要替换 / 插入请用**选区浮动工具栏**的 AI（它只在有选中时出现）。
    */
-  const [aiAssistantOpen, setAiAssistantOpen] = useState(false);
+
   const { syncToast, setSyncToast, showSyncToast } = useSyncShell();
   const shell = useDesktopShell({ quickNotesRef });
 
@@ -408,6 +409,16 @@ export function App() {
   });
 
   // 保存管线已收拢到 useSavePipeline（persistTab 由 hook 提供）
+  /** 创建副本前把涉及的 dirty 标签先落盘（同一份 persistTab，含版本守卫/冲突处理）。 */
+  const flushNotesBeforeDuplicate = useCallback(async (ids: readonly string[]) => {
+    const dirty = new Set(openTabsRef.current.filter((tab) => tab.dirty).map((tab) => tab.noteId));
+    for (const id of ids) {
+      if (!dirty.has(id)) continue;
+      // 保存失败/被拦截 ⇒ 不创建副本（宁可让用户重试，也不复制旧内容）——与移动端统一。
+      const outcome = await persistTab(id);
+      if (!outcome || outcome.ok !== true) throw new Error("保存失败，未创建副本");
+    }
+  }, [persistTab]);
 
   /**
    * 「正文缺失」面板的重新读取（261023）：同步把正文拉回来后刷该 tab；仍缺失就明确告知，不静默。
@@ -807,7 +818,7 @@ export function App() {
       )}
       {/* 空间切换已并入顶栏工作空间菜单（S1+A）；活动栏不再渲染（壳层导航，功能见菜单 ⌘1–3） */}
       {/* keep-alive：Sidebar 常驻，小记/回收站空间由 shell class 隐藏（避免切回时重建目录树） */}
-      <Sidebar nodes={treeNodes} activeId={activeNoteId} search={search} mode={sidebarRenderMode} width={sidebarWidth} minWidth={SIDEBAR_MIN_WIDTH} maxWidth={SIDEBAR_MAX_WIDTH} onSearch={setSearch} onRefreshTree={refreshTree} onSelect={sidebarSelect} onCreate={sidebarCreate} onRename={sidebarRename} onMoveNode={sidebarMove} onRequestDelete={sidebarRequestDelete} onCopyMarkdown={copyMarkdownFromCache} onExportAs={exportAs} onCopyPaths={copyNotePaths} onSetIcon={sidebarSetIcon} onShowInfo={(node) => setInfoNote(node)} onOpenHistory={sidebarOpenHistory} lockedNoteIds={lockedNoteIds} onToggleLockNote={(node) => { if (node.noteFileId) void toggleNoteLock(node.noteFileId); }} revealNodeId={revealNodeId} onRevealConsumed={() => setRevealNodeId(null)} pendingRenameId={pendingRenameId} onPendingRenameConsumed={sidebarPendingRenameConsumed} onPreviewEnter={showSidebarPreview} onPreviewLeave={hideSidebarPreview} onResizeActiveChange={handleSidebarResizeActiveChange} onWidthChange={updateSidebarWidth} onWidthCommit={commitSidebarWidth} onToggleDock={toggleSidebarDock} docked={sidebarMode === "docked"} onSidebarHold={holdSidebarExpanded}
+      <Sidebar nodes={treeNodes} activeId={activeNoteId} search={search} mode={sidebarRenderMode} width={sidebarWidth} minWidth={SIDEBAR_MIN_WIDTH} maxWidth={SIDEBAR_MAX_WIDTH} onSearch={setSearch} onRefreshTree={refreshTree} onSelect={sidebarSelect} onCreate={sidebarCreate} onRename={sidebarRename} onMoveNode={sidebarMove} onRequestDelete={sidebarRequestDelete} onCopyMarkdown={copyMarkdownFromCache} onExportAs={exportAs} onCopyPaths={copyNotePaths} onBeforeDuplicate={flushNotesBeforeDuplicate} onSetIcon={sidebarSetIcon} onShowInfo={(node) => setInfoNote(node)} onOpenHistory={sidebarOpenHistory} lockedNoteIds={lockedNoteIds} onToggleLockNote={(node) => { if (node.noteFileId) void toggleNoteLock(node.noteFileId); }} revealNodeId={revealNodeId} onRevealConsumed={() => setRevealNodeId(null)} pendingRenameId={pendingRenameId} onPendingRenameConsumed={sidebarPendingRenameConsumed} onPreviewEnter={showSidebarPreview} onPreviewLeave={hideSidebarPreview} onResizeActiveChange={handleSidebarResizeActiveChange} onWidthChange={updateSidebarWidth} onWidthCommit={commitSidebarWidth} onToggleDock={toggleSidebarDock} docked={sidebarMode === "docked"} onSidebarHold={holdSidebarExpanded}
         tagFilter={{ tags: tagSpace.tagOptions, selection: tagSelection, visibleIds: tagVisibleIds, onChange: setTagSelection }}
         onTagsChanged={() => { void tagSpace.reload(); }} />
       <main className="workspace" onPointerDownCapture={(event) => {
@@ -1014,7 +1025,15 @@ export function App() {
         activeKind={activeKind}
         lockedNoteIds={lockedNoteIds}
         onToggleNoteLock={() => { void toggleNoteLock(); setTopMenuOpen(false); }}
-        onOpenAiAssistant={() => { setAiAssistantOpen(true); setTopMenuOpen(false); }}
+        onOpenAiAssistant={() => {
+          openAiAssistant({
+            context: { kind: "none", allowDocument: { noteId: activeNoteId ?? undefined } },
+            placement: { kind: "floating" },
+            outputs: [],
+            applyOutput: () => false,
+          });
+          setTopMenuOpen(false);
+        }}
         // 文档右上角「更多」里的导出：与目录树右键同一套动作，作用于当前文档
         onExportAs={(format) => { void exportNoteById(activeNoteId, format); }}
         onCopyMarkdown={() => void copyMarkdownById(activeNoteId)}
@@ -1051,12 +1070,7 @@ export function App() {
         cloudConfigured={cloudConfigured}
         cloudEnabled={cloudEnabled}
       />
-      <AiAssistantDialog
-        open={aiAssistantOpen}
-        selectionText=""
-        noteId={activeNoteId ?? undefined}
-        onClose={() => setAiAssistantOpen(false)}
-      />
+      <AiAssistantHost />
       {/* 大表格粘贴护栏（A+B，261008）：超阈值不粘进文档，改为明确提示 + 一键「存为表格文档」 */}
       <TablePasteGuardDialog parentId={notes.find((n) => n.id === activeNoteId)?.parentId ?? null} />
       {/* 资料库空态「新建文档」：与目录栏新建同一套弹窗（预填默认名，可改或直接确认） */}

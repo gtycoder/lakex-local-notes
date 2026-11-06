@@ -12,6 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   createGroup: vi.fn(),
   createNote: vi.fn(),
+  duplicateNotes: vi.fn(),
   showToast: vi.fn(),
 }));
 
@@ -19,6 +20,7 @@ vi.mock("../bridge", () => ({
   bridge: {
     createGroup: mocks.createGroup,
     createNote: mocks.createNote,
+    duplicateNotes: mocks.duplicateNotes,
     createUsheet: vi.fn(), createBitable: vi.fn(), createBoard: vi.fn(), createInk: vi.fn(),
   },
 }));
@@ -53,6 +55,7 @@ const calls = {
   restoreHistoryVersion: vi.fn(async () => true),
   openTab: vi.fn(async () => undefined),
   switchNotebook: vi.fn(async () => undefined),
+  flushSaves: vi.fn(async () => undefined),
 };
 
 function Harness({ menuFor, padTwoPane = false }: { menuFor: NotebookTreeItem | null; padTwoPane?: boolean }): null {
@@ -77,6 +80,7 @@ function Harness({ menuFor, padTwoPane = false }: { menuFor: NotebookTreeItem | 
     loadTree: calls.loadTree,
     switchNotebook: calls.switchNotebook,
     expandGroup: calls.expandGroup,
+    flushSaves: calls.flushSaves,
   });
   return null;
 }
@@ -92,6 +96,7 @@ beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   for (const fn of Object.values(calls)) fn.mockClear();
   mocks.createGroup.mockReset().mockResolvedValue({ id: "ng", title: "新建分组", kind: "group", parentId: "nb1", sortOrder: 0, icon: null });
+  mocks.duplicateNotes.mockReset().mockResolvedValue({ ok: true, results: [{ id: "n1", ok: true, newId: "n1copy" }], summary: { total: 1, done: 1, failed: 0 } });
   mocks.showToast.mockReset();
 });
 afterEach(async () => {
@@ -116,6 +121,47 @@ describe("目录行菜单（标签）", () => {
     expect(calls.closeOverlay).toHaveBeenCalledWith("menu");
     expect(calls.openOverlay).toHaveBeenCalledWith({ kind: "noteTags", node: target });
     expect(calls.setRenamingId).not.toHaveBeenCalled();
+  });
+});
+
+describe("创建副本（261106 副本）", () => {
+  it("创建副本前先 flushSaves（顺序：flush → duplicateNotes）", async () => {
+    const order: string[] = [];
+    mocks.duplicateNotes.mockImplementationOnce(async (request: { ids: string[] }) => {
+      order.push("dup");
+      return { ok: true, results: request.ids.map((id) => ({ id, ok: true, newId: id + "-copy" })), summary: { total: 1, done: 1, failed: 0 } };
+    });
+    calls.flushSaves.mockImplementationOnce(async () => { order.push("flush"); });
+    await render(node("n1", "note"));
+    await act(async () => { api.onTreeMenuSelect({ id: "duplicate", label: "创建副本" }, [{ id: "duplicate", label: "创建副本" }]); await Promise.resolve(); await Promise.resolve(); });
+    expect(order).toEqual(["flush", "dup"]);
+  });
+
+  const flush = async (): Promise<void> => { await act(async () => { await Promise.resolve(); await Promise.resolve(); }); };
+
+  it("「创建副本」只出现在文档行；选中 ⇒ bridge.duplicateNotes([id]) → 刷新目录 + toast 已创建 1 个副本", async () => {
+    await render(node("n1", "note"));
+    const labels = (kind: "note" | "group") => api.treeMenuItems(node(kind === "note" ? "n1" : "g1", kind)).map((item) => item.label);
+    expect(labels("note")).toContain("创建副本");
+    expect(labels("group")).not.toContain("创建副本");
+    await act(async () => { api.onTreeMenuSelect({ id: "duplicate", label: "创建副本" }, [{ id: "duplicate", label: "创建副本" }]); });
+    await flush();
+    expect(mocks.duplicateNotes).toHaveBeenCalledWith({ ids: ["n1"] });
+    expect(calls.loadTree).toHaveBeenCalledTimes(1);
+    expect(mocks.showToast).toHaveBeenCalledWith("已创建 1 个副本");
+  });
+
+  it("失败：给逐条 reason 文案（不刷新目录、不弹成功）", async () => {
+    mocks.duplicateNotes.mockResolvedValue({
+      ok: false,
+      results: [{ id: "n1", ok: false, reason: "already-trashed" }],
+      summary: { total: 1, done: 0, failed: 1 },
+    });
+    await render(node("n1", "note"));
+    await act(async () => { api.onTreeMenuSelect({ id: "duplicate", label: "创建副本" }, [{ id: "duplicate", label: "创建副本" }]); });
+    await flush();
+    expect(calls.loadTree).not.toHaveBeenCalled();
+    expect(mocks.showToast).toHaveBeenCalledWith("未创建副本：笔记已在回收站里", { type: "error" });
   });
 });
 

@@ -5,7 +5,7 @@
  * 名称由标签目录解析；目录里没有的 id 不参与筛选（只给降级提示）。筛选不写任何正文/元数据。
  */
 import { useEffect, useMemo, useRef, useState } from "react";
-import { FolderInput, Tag, Trash } from "lucide-react";
+import { Copy, FolderInput, Tag, Trash } from "lucide-react";
 import { MobileSheet } from "../ui/MobileSheet";
 import { bridge } from "../bridge";
 import { loadNoteTagIdsForNotes } from "../bridge/noteTagReads";
@@ -20,6 +20,8 @@ import { SelectionTopBar } from "../ui/SelectionTopBar";
 import { useSelectionMode } from "../ui/useSelectionMode";
 import { BatchTagPickerSheet } from "../ui/BatchTagPickerSheet";
 import { summarizeBatchResult } from "../ui/batchNotesResult";
+import { duplicateResultNotice } from "../ui/duplicateNotesResult";
+import { duplicateNoteTitle } from "../../core/duplicateNotes";
 import { MoveTargetTreeSheet, type MoveTargetNode } from "../ui/MoveTargetTreeSheet";
 import { confirmMobile } from "../ui/ConfirmDialog";
 import type { QuickNoteTag, QuickNoteTagSummary } from "../../core/quickNoteTags";
@@ -39,9 +41,11 @@ export interface DocListSheetProps {
 
 /**
  * 多选模式（261106 task-82）：长按行或点「选择」进入；顶部栏（取消/已选 N/全选）+ 行复选框 + 底部操作条。
- * 动作 = 移动 / 移入回收站 / 打标签（桥接 batchNotes 待 task-80 落地后接入，本阶段先占位提示）。
+ * 动作 = 创建副本 / 移动 / 移入回收站 / 打标签（创建副本 = 261106 副本功能，与桌面多选第 1 项同一语义）。
  */
 const DOC_SELECTION_ACTIONS: SelectionAction[] = [
+  // 非破坏性动作排在最前（与桌面右键/浮条的顺序一致）。
+  { id: "duplicate", label: "创建副本", icon: Copy },
   { id: "move", label: "移动", icon: FolderInput },
   { id: "trash", label: "移入回收站", icon: Trash, danger: true },
   { id: "tag", label: "打标签", icon: Tag },
@@ -58,6 +62,8 @@ export function DocListSheet({ open, documents, activeId, onPick, onClose }: Doc
   const [truncated, setTruncated] = useState<{ requested: number; loaded: number } | null>(null);
   /** 批量移入回收站成功后本地先隐藏这些行（父级刷新前列表立即正确）。 */
   const [hiddenIds, setHiddenIds] = useState<string[]>([]);
+  /** 批量创建副本后本地追加新行（父级没有刷新通道，先把权威数据读回来补进列表；下次打开自动归位）。 */
+  const [extraDocs, setExtraDocs] = useState<DocListItem[]>([]);
 
   // 依赖用 id 拼接：父组件每次渲染都可能给新数组，直接依赖 documents 会重复拉取。
   const idsKey = documents.map((doc) => doc.id).join("\u0000");
@@ -95,9 +101,15 @@ export function DocListSheet({ open, documents, activeId, onPick, onClose }: Doc
     return () => { alive = false; };
   }, [open, idsKey]);
 
+  // 列表数据 = 宿主给的本期列表 + 本会话内新建的副本（宿主刷新后 idsKey 变化即清空，避免重复行）。
+  useEffect(() => { setExtraDocs([]); }, [idsKey]);
+  const displayDocs = useMemo(() => {
+    const known = new Set(documents.map((doc) => doc.id));
+    return [...documents, ...extraDocs.filter((doc) => !known.has(doc.id))];
+  }, [documents, extraDocs]);
   const visible = useMemo(
-    () => filterDocsByTag(documents, docTagIds, activeTagId).filter((doc) => !hiddenIds.includes(doc.id)),
-    [documents, docTagIds, activeTagId, hiddenIds],
+    () => filterDocsByTag(displayDocs, docTagIds, activeTagId).filter((doc) => !hiddenIds.includes(doc.id)),
+    [displayDocs, docTagIds, activeTagId, hiddenIds],
   );
 
   // ── 多选（261106 task-82）：可见集合 = 当前筛选后的文档 ──────────────────────────
@@ -154,6 +166,57 @@ export function DocListSheet({ open, documents, activeId, onPick, onClose }: Doc
     }
   };
 
+  /**
+   * 批量创建副本（261106）：调 bridge.duplicateNotes（与桌面 IPC 同契约/同结果）。
+   *
+   * 「刷新列表」在移动端没有父级刷新通道（documents 由宿主传入），所以把结果里的新 id 用一次只读
+   * getHomeSnapshot 取回权威标题（读不到才回落 core 的 duplicateNoteTitle）补进本期列表，并同步复制
+   * 源行的标签集合（副本的标签关系是同一集合）——按标签筛选时新行也能正确归位。
+   */
+  const appendDuplicatedDocs = async (created: ReadonlyArray<{ id: string; newId: string }>): Promise<void> => {
+    const sourceById = new Map(displayDocs.map((doc) => [doc.id, doc]));
+    const titleById = new Map<string, string>();
+    try {
+      const snapshot = await bridge.getHomeSnapshot();
+      for (const note of snapshot.notes) titleById.set(note.id, note.title);
+    } catch { /* 读不到就回落 core 生成的标题（列表仍要刷新） */ }
+    const added: DocListItem[] = [];
+    const tags: Record<string, string[]> = {};
+    for (const item of created) {
+      const sourceTitle = sourceById.get(item.id)?.title ?? "";
+      added.push({ id: item.newId, title: titleById.get(item.newId) || duplicateNoteTitle(sourceTitle, new Date()) });
+      tags[item.newId] = docTagIds[item.id] ?? [];
+    }
+    setExtraDocs((current) => [...current, ...added]);
+    if (Object.keys(tags).length > 0) setDocTagIds((current) => ({ ...current, ...tags }));
+  };
+
+  /** 创建副本（批量）：成功 toast「已创建 N 个副本」并退出选择；部分/全部失败给逐条原因并保留选择。 */
+  const applyDuplicate = async (): Promise<void> => {
+    if (selection.count === 0) { showToast("请先选择文档"); return; }
+    setBatchBusy(true);
+    setBatchError(null);
+    try {
+      const result = await bridge.duplicateNotes({ ids: [...selection.ids] });
+      const notice = duplicateResultNotice(result);
+      const created = result.results.filter(
+        (item): item is { id: string; ok: true; newId: string } => item.ok && typeof item.newId === "string",
+      );
+      if (created.length > 0) await appendDuplicatedDocs(created);
+      if (notice.kind === "success") {
+        showToast(notice.text);
+        selection.exit();
+        return;
+      }
+      setBatchError(notice.text);
+      showToast(notice.text, { type: "error" });
+    } catch (error) {
+      showToast("创建副本失败：" + getNativeErrorMessage(error), { type: "error" });
+    } finally {
+      setBatchBusy(false);
+    }
+  };
+
   const openTagPicker = async (): Promise<void> => {
     setBatchError(null);
     try {
@@ -187,6 +250,7 @@ export function DocListSheet({ open, documents, activeId, onPick, onClose }: Doc
 
   const runSelectionAction = (actionId: string): void => {
     if (selection.count === 0) { showToast("请先选择文档"); return; }
+    if (actionId === "duplicate") { void applyDuplicate(); return; }
     if (actionId === "tag") { void openTagPicker(); return; }
     if (actionId === "move") { void openMovePicker(); return; }
     if (actionId === "trash") {

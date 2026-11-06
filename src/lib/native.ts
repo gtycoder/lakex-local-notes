@@ -164,6 +164,8 @@ export interface LakeNative {
   getBackupUsage(): Promise<import("./types").BackupUsageShape>;
   /** 261106 批量操作（move / trash / tag-add / tag-remove）：先全部校验再单事务执行，逐条结果。 */
   batchNotes(payload: import("./types").BatchNotesRequestShape): Promise<import("./types").BatchNotesResultShape>;
+  /** 261106 文档「创建副本」：新 id + 正文/资源全量复制（资源 URL 重写），逐条结果；两端契约同形。 */
+  duplicateNotes(payload: import("./types").DuplicateNotesRequestShape): Promise<import("./types").DuplicateNotesResultShape>;
   /** 261106 Markdown 导入：多选 .md 文件（取消 → 空数组；正文由主进程读取，>20MB 标记 tooLarge）。 */
   pickMarkdownFiles(): Promise<import("./types").MarkdownPickedFileShape[]>;
   /** 261106 Markdown 导入：选择文件夹递归扫描（保留 relativePath；上限 500 截断）。 */
@@ -407,6 +409,7 @@ export const native = {
   runBackupNow: () => api().runBackupNow(),
   getBackupUsage: () => api().getBackupUsage(),
   batchNotes: (payload: import("./types").BatchNotesRequestShape) => api().batchNotes(payload),
+  duplicateNotes: (payload: import("./types").DuplicateNotesRequestShape) => api().duplicateNotes(payload),
   pickMarkdownFiles: () => api().pickMarkdownFiles(),
   readImportImage: (filePath: string) => api().readImportImage(filePath),
   exportNotesBatch: (payload: import("./types").BatchExportRequestShape) => api().exportNotesBatch(payload),

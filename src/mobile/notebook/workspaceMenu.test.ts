@@ -107,6 +107,11 @@ describe("工作区「更多」菜单（261014）", () => {
     for (const label of ["重命名", "设置图标", "移动到…", "移入回收站"]) {
       expect(block).toContain(label);
     }
+    // 261106 副本：文档行菜单有「创建副本」（只给文档行 —— 分组/笔记本不能复制；渲染用例见
+    // useWorkspaceActions.drawer.render.test.tsx）。顺序约定：非破坏性动作在「移动到…」之前。
+    expect(block).toContain("创建副本");
+    expect(block).toContain('id: "duplicate"');
+    expect(block.indexOf("创建副本")).toBeLessThan(block.indexOf("移动到…"));
   });
 
   it("工作区胶囊最后一格 = 切换笔记本（261014：原「更多」已无意义）", () => {

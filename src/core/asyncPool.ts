@@ -35,3 +35,10 @@ export async function runAsyncPool<T, R>(
   await Promise.all(workers);
   return results;
 }
+
+/**
+ * 261107 review：业务模块（如创建副本的资源复制）需要「单条失败不终止」的有界并发池时，
+ * 统一从这里取（实现仍是 s3v3Pool，避免两份并发实现漂移）；单条失败即中止的语义见上面的 runAsyncPool。
+ */
+export { runPool, runPoolSettled } from "./s3v3Pool.js";
+export type { SettledPoolResult } from "./s3v3Pool.js";

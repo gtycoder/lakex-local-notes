@@ -1,0 +1,14 @@
+/* 「AI 写作助手」插入占位卡（261107）：只作为光标锚点，不渲染任何可见 UI。
+   内核卡片外壳（ne-hole/ne-card/ne-card-root/container）一并收成 0 尺寸，避免出现“顶部标签/空行”。 */
+.ai-writing-card { width: 0; height: 0; overflow: hidden; visibility: hidden; }
+ne-hole:has(.ai-writing-card),
+ne-card:has(.ai-writing-card),
+ne-card-root:has(.ai-writing-card),
+.ne-card-container:has(.ai-writing-card) {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-height: 0;
+  height: 0;
+  overflow: hidden;
+}

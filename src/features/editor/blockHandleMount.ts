@@ -12,13 +12,15 @@
  * 上下文 = **块句柄覆盖的区域**，落库/替换复用文字浮栏同一套（`aiResultOps`），
  * 即「和 AI 浮窗一样的功能，只是选区换成块」。云端 Lake 只给标题用，本项目对所有块开放（用户要求）。
  */
-import { createElement, Fragment, useCallback, useEffect, useState } from "react";
+import { createElement, useCallback, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { BlockHoverHandle } from "@dlient/lakex-doc-react";
 import type { LakeEditorInstance } from "./lakeRuntime";
-import { AiAssistantDialog } from "../ai/AiAssistantDialog";
+import { openAiAssistant } from "../ai/aiAssistantSession";
+import type { AiAssistantRequest } from "../ai/aiAssistantRequest";
 import { applyAiInsertAfter, applyAiReplace } from "./selectionToolbar/aiResultOps";
 import { captureModelRange, type CapturedModelRange } from "./selectionToolbar/aiModelSelection";
+import { attachBlockCopyBridge } from "./blockCopyBridge";
 
 const isDarkTheme = () => document.documentElement.dataset.theme === "dark";
 
@@ -53,8 +55,6 @@ function readBlockSelection(editor: unknown, blockElement: HTMLElement): string 
 /** 手柄宿主：跟随应用主题（data-theme）切换 dark 配色，避免深色下用浅色手柄；并承载块菜单的 AI 面板。 */
 function BlockHandleHost(props: { container: HTMLElement; editor: LakeEditorInstance; noteId?: string }) {
   const [dark, setDark] = useState(isDarkTheme);
-  /** 块菜单「AI 助手」打开时的上下文：覆盖块的文本 + 模型选区 + 落点。 */
-  const [ai, setAi] = useState<{ text: string; range: CapturedModelRange | null; at: { x: number; y: number } } | null>(null);
 
   useEffect(() => {
     const observer = new MutationObserver(() => setDark(isDarkTheme()));
@@ -76,33 +76,30 @@ function BlockHandleHost(props: { container: HTMLElement; editor: LakeEditorInst
     if (isCollapsedRange(range)) range = selectBlockModelRange(props.editor, data.blockElement);
     const text = readBlockSelection(props.editor, data.blockElement);
     const rect = data.blockElement.getBoundingClientRect();
-    setAi({ text, range, at: { x: rect.right, y: rect.bottom } });
-  }, [props.editor]);
-
-  return createElement(
-    Fragment,
-    null,
-    createElement(BlockHoverHandle, {
-      containerRef: { current: props.container },
-      editor: props.editor,
-      language: "zh-cn",
-      dark,
-      onBlockAction,
-    }),
-    ai
-      ? createElement(AiAssistantDialog, {
-        open: true,
-        selectionText: ai.text,
-        noteId: props.noteId,
-        at: ai.at,
-        scroller: props.container.querySelector<HTMLElement>(".ne-editor-wrap"),
+    const request: AiAssistantRequest = {
+      context: { kind: "selection", text, range },
+      placement: {
+        kind: "point",
+        at: { x: rect.right, y: rect.bottom },
         container: props.container,
-        onClose: () => setAi(null),
-        onInsertAfter: (text: string) => { applyAiInsertAfter(props.editor, props.container, ai.range, text); },
-        onReplace: (text: string) => { applyAiReplace(props.editor, props.container, ai.range, text); },
-      })
-      : null,
-  );
+        scroller: props.container.querySelector<HTMLElement>(".ne-editor-wrap") ?? undefined,
+      },
+      outputs: ["after", "cursor"],
+      applyOutput: (outputText, mode) => mode === "after"
+        ? applyAiInsertAfter(props.editor, props.container, range, outputText)
+        : applyAiReplace(props.editor, props.container, range, outputText),
+    };
+    // P2：单会话 Host 渲染；本入口不再持局部 dialog 状态。
+    openAiAssistant(request);
+  }, [props.container, props.editor]);
+
+  return createElement(BlockHoverHandle, {
+    containerRef: { current: props.container },
+    editor: props.editor,
+    language: "zh-cn",
+    dark,
+    onBlockAction,
+  });
 }
 
 /**
@@ -123,7 +120,10 @@ export function mountBlockHoverHandle(
   hostParent.appendChild(host);
   const root = createRoot(host);
   root.render(createElement(BlockHandleHost, { container, editor, noteId }));
+  // 块菜单「复制」统一到应用侧剪贴板管线（与 ⌘C 同一份 payload；见 blockCopyBridge.ts）
+  const detachCopyBridge = attachBlockCopyBridge(container);
   return () => {
+    detachCopyBridge();
     try {
       root.unmount();
     } catch {

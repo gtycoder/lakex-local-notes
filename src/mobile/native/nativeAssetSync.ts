@@ -33,6 +33,11 @@ export interface AssetSyncNativePlugin {
   listLocal(options: { path: string }): Promise<{ files: string[] }>;
   /** 轻量图片列表（filename/size，不算 sha256）；AI 图片选择器用。旧 APK 无此方法时回退 listAssets。 */
   listImageAssets?(options: { noteId: string }): Promise<{ assets: Array<{ filename: string; size: number }> }>;
+  /**
+   * 原生整目录拷贝（261107）：创建副本用。目录 key = `note-assets/<id>` / `quick-notes/assets/<id>`；
+   * 字节不过桥。旧 APK 无此方法 ⇒ 调用方回退 JS 逐文件复制。
+   */
+  copyAssetDir?(options: { sourceDir: string; targetDir: string }): Promise<{ copied: number; bytes?: number }>;
 }
 
 export const NativeAssetSync = registerPlugin<AssetSyncNativePlugin>("AssetSync");

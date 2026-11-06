@@ -27,7 +27,9 @@ import {
 } from "./imageIcons";
 import { KCheckbox, KEmbedIcon, KIcon, KLinkEditor, KSwitch, KToolbarButton, kernelHotkey, useHoverTip } from "./kernelUiAtoms";
 import { AiTagIcon } from "../../ai/AiTagIcon";
-import { AiAssistantDialog, AI_DIALOG_GAP } from "../../ai/AiAssistantDialog";
+import { AI_DIALOG_GAP } from "../../ai/AiAssistantDialog";
+import { closeAiAssistant, openAiAssistant } from "../../ai/aiAssistantSession";
+import type { AiAssistantRequest } from "../../ai/aiAssistantRequest";
 import { captureModelRange, modelRangeForNodeId, type CapturedModelRange } from "./aiModelSelection";
 import { applyAiInsertAfter, applyAiReplace } from "./aiResultOps";
 import { LakeColorBoard } from "./LakeColorBoard";
@@ -182,7 +184,7 @@ function CardMenuItem({ label, icon, selected, onClick }: { label: string; icon?
   );
 }
 
-export function SelectionToolbar({ editor, container, noteId }: {
+export function SelectionToolbar({ editor, container }: {
   editor: LakeEditorInstance; container: HTMLElement;
   /** 当前文档 id（AI 面板 P1：按需读取本地全文）。 */
   noteId?: string;
@@ -564,7 +566,8 @@ export function SelectionToolbar({ editor, container, noteId }: {
     if (rect.width || rect.height) aiAtRef.current = { x: rect.left, y: rect.bottom + AI_DIALOG_GAP };
     setMenu("ai");
     setAiOpen(true);
-  }, [editor]);
+    openAiAssistant(buildAiRequest(), closeAi);
+  }, [closeAi, editor]);
 
   /**
    * **卡片选中时 Cmd/Ctrl+X = 剪切这张卡**（261005；覆盖所有卡片类型）。
@@ -623,34 +626,39 @@ export function SelectionToolbar({ editor, container, noteId }: {
     return () => document.removeEventListener("keydown", onCutCardKey, true);
   }, [editor, targetRef]);
 
-  const aiDialog = aiOpen ? (
-    <AiAssistantDialog
-      open
-      at={aiAtRef.current}
-      // 传入编辑区滚动容器：AI 浮窗渲染进滚动内容、用内容坐标定位 ⇒ 随正文一起滚（与浮动工具栏同款几何）
-      scroller={container.querySelector<HTMLElement>(".ne-editor-wrap")}
-      // 本编辑器挂载点：AI 面板的文字栏几何直接量自己（不再全局猜「哪个 mount 可见」）。
-      container={container}
-      selectionText={aiSelectionRef.current}
-      noteId={noteId}
-      attachments={aiAttachmentsRef.current}
-      onClose={closeAi}
-      onInsertAfter={(text) => {
-        // 「插入到选区后」= 共用实现（aiResultOps）：分隔线 + 「AI 生成」提示 + 原生 Markdown + 分隔线。
-        if (applyAiInsertAfter(editor, container, aiModelRangeRef.current, text)) aiKeepSelectionRef.current = true;
-      }}
-      // 「替换选区」只在**有文字选区**时提供（图片入口没有选区，替换无意义 —— 用户 261005）。
-      onReplace={aiSelectionRef.current.trim() || aiRangeRef.current ? (text) => {
-        // 选区替换 = 共用实现（aiResultOps）：原样插入 AI 输出；模型选区优先，再补 DOM 兜底。
-        if (applyAiReplace(editor, container, aiModelRangeRef.current, text, aiRangeRef.current)) aiKeepSelectionRef.current = true;
-      } : undefined}
-    />
-  ) : null;
+  /** 当前快照 → AI 请求（P2：不再各自渲染 Dialog，只交给单会话 Host）。
+   *  用函数声明（而非 useCallback）：允许图片入口在本行之前调用（函数声明提升），同时每次读 refs 最新快照。 */
+  function buildAiRequest(): AiAssistantRequest {
+    return {
+      context: {
+        kind: "selection",
+        text: aiSelectionRef.current,
+        attachments: aiAttachmentsRef.current,
+        range: aiModelRangeRef.current,
+        domRange: aiRangeRef.current,
+      },
+      placement: {
+        kind: "point",
+        at: aiAtRef.current ?? { x: 0, y: 0 },
+        container,
+        scroller: container.querySelector<HTMLElement>(".ne-editor-wrap") ?? undefined,
+      },
+      // 「替换选区」只在有文字选区时提供（图片入口没有选区，替换无意义）。
+      outputs: aiSelectionRef.current.trim() || aiRangeRef.current ? ["after", "cursor"] : ["after"],
+      applyOutput: (text, mode) => {
+        const applied = mode === "after"
+          ? applyAiInsertAfter(editor, container, aiModelRangeRef.current, text)
+          : applyAiReplace(editor, container, aiModelRangeRef.current, text, aiRangeRef.current);
+        if (applied) aiKeepSelectionRef.current = true;
+        return applied;
+      },
+    };
+  }
 
   // 选区被对话框折叠后工具栏会消失 ⇒ 这时只剩「对话框」，它不依赖工具栏。
   // ⚠️ 工具栏槽位**必须保留成 null**（不是把整棵子树换成两个孩子）：Fragment 按位置对账，
   //    槽位少一个会让对话框换到另一个 index ⇒ 仍然整体重挂载、照样闪。
-  if (!target) return <>{aiSelectionOverlay}{null}{aiDialog}</>;
+  if (!target) return <>{aiSelectionOverlay}{null}{null}</>;
 
   const renderTextMenu = () => {
     if (menu === "fontsize") {
@@ -830,7 +838,7 @@ export function SelectionToolbar({ editor, container, noteId }: {
           // 再点一下 = 面板消失（用户 261003 定稿，不做开关态）。
           // 这条分支**不重算锚点**：此时选区已被面板输入框折叠，量到空矩形就会让面板落到
           // AiAssistantDialog 的 fallbackAt（右上角，那是给顶栏入口用的）—— 就是之前报的那个 bug。
-          if (aiOpen) { closeAi(); return; }
+          if (aiOpen) { closeAiAssistant(); return; }
           const sel = window.getSelection();
           aiSelectionRef.current = sel?.toString() ?? "";
           aiRangeRef.current = sel && sel.rangeCount > 0 ? sel.getRangeAt(0).cloneRange() : null;
@@ -845,6 +853,7 @@ export function SelectionToolbar({ editor, container, noteId }: {
           }
           aiModelRangeRef.current = captureModelRange(editor);
           setMenu("ai"); setAiOpen(true);
+          openAiAssistant(buildAiRequest(), closeAi);
         }}>
           <AiTagIcon size={18} />
         </KToolbarButton>
@@ -977,7 +986,7 @@ export function SelectionToolbar({ editor, container, noteId }: {
         {target.kind === "text" ? renderText() : renderImage(target)}
         {target.kind === "text" ? renderTextMenu() : null}
       </div>
-      {aiDialog}
+      {null}
     </>
   );
 }

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { AlertCircle } from "lucide-react";
 import { createLakeDocument, destroyLakeEditor, refreshTocSidebar, type LakeEditorInstance, type LakeEditorPrefs } from "./lakeRuntime";
-import { normalizeClipboardHtml, upgradePastedHtml } from "./clipboardHtml";
+import { buildClipboardPayload, upgradePastedHtml } from "./clipboardHtml";
 import { addAssetAccessToken, stripAssetAccessToken } from "../../lib/assetPort";
 import { getNativeErrorMessage } from "../../lib/nativeErrors";
 import { shouldAcceptEditorChange } from "../../core/editorChangeGuard";
@@ -61,10 +61,9 @@ export function LakeEditor({ noteId, content, mode = "editor", tocEnabled, onCha
       if (!event.clipboardData || !selection || selection.isCollapsed || selection.rangeCount === 0) return;
       const range = selection.getRangeAt(0);
       if (!host.contains(range.commonAncestorContainer)) return;
-      const plainText = selection.toString();
-      const html = normalizeClipboardHtml(range.cloneContents(), document);
+      const { html, plain } = buildClipboardPayload(range, document);
       event.clipboardData.setData("text/html", html);
-      event.clipboardData.setData("text/plain", plainText);
+      event.clipboardData.setData("text/plain", plain);
       event.preventDefault();
       event.stopImmediatePropagation();
     };
@@ -73,8 +72,9 @@ export function LakeEditor({ noteId, content, mode = "editor", tocEnabled, onCha
       if (!event.clipboardData || !selection || selection.isCollapsed || selection.rangeCount === 0) return;
       const range = selection.getRangeAt(0);
       if (!host.contains(range.commonAncestorContainer)) return;
-      event.clipboardData.setData("text/html", normalizeClipboardHtml(range.cloneContents(), document));
-      event.clipboardData.setData("text/plain", selection.toString());
+      const { html, plain } = buildClipboardPayload(range, document);
+      event.clipboardData.setData("text/html", html);
+      event.clipboardData.setData("text/plain", plain);
       event.preventDefault();
       event.stopImmediatePropagation();
       try { document.execCommand("delete"); } catch { /* 忽略 */ }

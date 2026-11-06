@@ -2,15 +2,15 @@
 // @vitest-environment jsdom
 /**
  * 桌面目录树多选（261106 task-81）：⌘/Ctrl 切换、Shift 区间（跳过笔记本）、Esc/点空白清空、
- * 浮动操作条（文档：移动/移入回收站/打标签；分组：移动）、batch_notes 实参、成功清空刷新、
- * 部分失败保留选择 + 汇总提示。
+ * 浮动操作条（文档：创建副本/移动/移入回收站/打标签；分组：移动）、batch_notes 实参、成功清空刷新、
+ * 部分失败保留选择 + 汇总提示；以及「创建副本」（261106）单条右键 + 多选菜单第 1 项 + duplicate_notes 实参。
  */
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { TreeNode } from "../../lib/types";
 
-const mocks = vi.hoisted(() => ({ batchNotes: vi.fn(), listQuickNoteTags: vi.fn(), exportNotesBatch: vi.fn(), openExportDir: vi.fn(), pickExportDir: vi.fn() }));
+const mocks = vi.hoisted(() => ({ batchNotes: vi.fn(), duplicateNotes: vi.fn(), listQuickNoteTags: vi.fn(), exportNotesBatch: vi.fn(), openExportDir: vi.fn(), pickExportDir: vi.fn() }));
 vi.mock("../../lib/native", () => ({ native: mocks }));
 
 // 浮层简化实现（与本目录其它 Sidebar 渲染测试同姿势）：只关心接线与实参。
@@ -44,7 +44,9 @@ beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   vi.stubGlobal("CSS", { escape: (value: string) => value });
   vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
+  localStorage.clear();
   mocks.batchNotes.mockReset();
+  mocks.duplicateNotes.mockReset();
   mocks.listQuickNoteTags.mockReset();
   mocks.pickExportDir.mockReset();
   mocks.pickExportDir.mockResolvedValue("/tmp/export");
@@ -58,6 +60,11 @@ beforeEach(() => {
   mocks.batchNotes.mockImplementation(async (request: { action: string; ids: string[] }) => ({
     ok: true,
     results: request.ids.map((id) => ({ id, ok: true })),
+    summary: { total: request.ids.length, done: request.ids.length, failed: 0 },
+  }));
+  mocks.duplicateNotes.mockImplementation(async (request: { ids: string[] }) => ({
+    ok: true,
+    results: request.ids.map((id) => ({ id, ok: true, newId: id + "-copy" })),
     summary: { total: request.ids.length, done: request.ids.length, failed: 0 },
   }));
   host = document.createElement("div");
@@ -95,6 +102,15 @@ const barButton = (text: string): HTMLButtonElement | undefined =>
   [...document.querySelectorAll<HTMLButtonElement>(".tree-selection-bar button")].find((btn) => (btn.textContent ?? "").trim() === text);
 const dialogButton = (text: string): HTMLButtonElement | undefined =>
   [...document.querySelectorAll<HTMLButtonElement>('.confirm-dialog button, [role="dialog"] button')].find((btn) => (btn.textContent ?? "").trim() === text);
+const rightClick = (id: string) => act(() => {
+  row(id).dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 60, clientY: 60 }));
+});
+const menuItems = (): HTMLButtonElement[] => [...document.querySelectorAll<HTMLButtonElement>('[role="menu"] button')];
+const menuItem = (text: string): HTMLButtonElement => {
+  const found = menuItems().find((btn) => (btn.textContent ?? "").trim() === text);
+  if (!found) throw new Error("找不到菜单项：" + text);
+  return found;
+};
 
 describe("目录树多选：选择语义", () => {
   it("⌘/Ctrl 点切换；普通点击退出多选（行仍走原来的单选行为）", () => {
@@ -152,8 +168,9 @@ describe("目录树多选：选择语义", () => {
     clickRow("n1", { metaKey: true });
     act(() => { barButton("全选")!.click(); });
     expect(barCount()).toBe("已选 4 项"); // g1 + n1 + n2 + n3
-    // 含分组 ⇒ 只剩「移动…」
+    // 含分组 ⇒ 只剩「移动…」（创建副本/移入回收站/打标签都不出现）
     expect(barButton("移动…")).toBeTruthy();
+    expect(barButton("创建副本")).toBeUndefined();
     expect(barButton("移入回收站")).toBeUndefined();
     expect(barButton("打标签…")).toBeUndefined();
   });
@@ -245,10 +262,10 @@ describe("目录树多选：批量动作", () => {
 describe("单条右键「移动…」：与多选共用同一棵树形弹窗", () => {
   it("右键文档 → 移动… → 选中目标确认 ⇒ batch_notes.move（ids 长度 1）并刷新", async () => {
     render();
-    act(() => { row("n1").dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 40, clientY: 40 })); });
-    const moveItem = [...document.querySelectorAll<HTMLButtonElement>('[role="menu"] button')].find((btn) => (btn.textContent ?? "").trim() === "移动…");
+    rightClick("n1");
+    const moveItem = menuItem("移动…");
     expect(moveItem).toBeTruthy();
-    act(() => { moveItem!.click(); });
+    act(() => { moveItem.click(); });
     expect(document.querySelector('[role="tree"][aria-label="目标位置"]')).not.toBeNull();
     const target = [...document.querySelectorAll<HTMLButtonElement>(".move-target-tree-dialog__item")].find((btn) => (btn.textContent ?? "").includes("nb"))!;
     act(() => { target.click(); });
@@ -258,20 +275,32 @@ describe("单条右键「移动…」：与多选共用同一棵树形弹窗", (
     expect(document.querySelector('[role="tree"]')).toBeNull();
   });
 });
-describe("多选右键菜单（261106 task-88）：恰好三项 + 批量导出", () => {
-  const menuItems = (): HTMLButtonElement[] => [...document.querySelectorAll<HTMLButtonElement>('[role="menu"] button')];
-  const openBatchMenu = (id: string) => act(() => {
-    row(id).dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 60, clientY: 60 }));
-  });
-
-  it("多选态右键 = 恰好三项（移入回收站/移动…/导出…）", () => {
+describe("多选右键菜单（261106 task-88；261106 副本第 4 项；261107 置顶）：五项 + 批量导出 + 创建副本", () => {
+  it("多选态右键 = 五项：置顶 / 创建副本 / 移动… / 导出… / 移入回收站", () => {
     render();
     clickRow("n1", { metaKey: true });
     clickRow("n2", { metaKey: true });
-    openBatchMenu("n2");
-    expect(menuItems().map((btn) => (btn.textContent ?? "").trim())).toEqual(["移动…", "导出…", "移入回收站"]);
-    expect(menuItems()).toHaveLength(3);
-    expect(menuItems()[2].className).toContain("danger");
+    rightClick("n2");
+    expect(menuItems().map((btn) => (btn.textContent ?? "").trim())).toEqual(["置顶", "创建副本", "移动…", "导出…", "移入回收站"]);
+    expect(menuItems()).toHaveLength(5);
+    expect(menuItems()[4].className).toContain("danger");
+  });
+
+  it("多选「置顶」⇒ 多项写入设备本地（原目录不动）+ 提示条；再选同批变为「取消置顶」", async () => {
+    render();
+    clickRow("n1", { metaKey: true });
+    clickRow("n2", { metaKey: true });
+    rightClick("n2");
+    await act(async () => { menuItem("置顶").click(); await Promise.resolve(); await Promise.resolve(); });
+    expect(JSON.parse(localStorage.getItem("lakex-local-notes-v3.sidebar-pinned") ?? "[]")).toEqual(["n1", "n2"]);
+    expect(document.querySelector(".tree-selection-bar__notice")?.textContent).toContain("已置顶 2 项");
+    // 原目录结构不变：行仍在 n1/n2 位置
+    expect(row("n1")).toBeTruthy();
+    // 再选同批，菜单应显示「取消置顶」
+    clickRow("n1", { metaKey: true });
+    clickRow("n2", { metaKey: true });
+    rightClick("n2");
+    expect(menuItems()[0].textContent).toContain("取消置顶");
   });
 
   it("导出… → exportNotesBatch({ ids })；成功提示「导出 N 项」+ 打开所在文件夹", async () => {
@@ -284,8 +313,8 @@ describe("多选右键菜单（261106 task-88）：恰好三项 + 批量导出",
     render();
     clickRow("n1", { metaKey: true });
     clickRow("n2", { metaKey: true });
-    openBatchMenu("n2");
-    await act(async () => { menuItems().find((btn) => (btn.textContent ?? "").trim() === "导出…")!.click(); await Promise.resolve(); await Promise.resolve(); });
+    rightClick("n2");
+    await act(async () => { menuItem("导出…").click(); await Promise.resolve(); await Promise.resolve(); });
     expect(mocks.pickExportDir).toHaveBeenCalledTimes(1);
     expect(mocks.exportNotesBatch).toHaveBeenCalledWith({ ids: ["n1", "n2"], dirPath: "/tmp/export" });
     const notice = document.querySelector(".tree-selection-bar__notice")?.textContent ?? "";
@@ -299,8 +328,8 @@ describe("多选右键菜单（261106 task-88）：恰好三项 + 批量导出",
     mocks.pickExportDir.mockResolvedValue(null);
     render();
     clickRow("n1", { metaKey: true });
-    openBatchMenu("n1");
-    await act(async () => { menuItems().find((btn) => (btn.textContent ?? "").trim() === "导出…")!.click(); await Promise.resolve(); await Promise.resolve(); });
+    rightClick("n1");
+    await act(async () => { menuItem("导出…").click(); await Promise.resolve(); await Promise.resolve(); });
     expect(mocks.exportNotesBatch).not.toHaveBeenCalled();
     expect(document.querySelector(".tree-selection-bar__notice")).toBeNull();
     expect(document.body.textContent).not.toContain("导出失败");
@@ -316,32 +345,154 @@ describe("多选右键菜单（261106 task-88）：恰好三项 + 批量导出",
     render();
     clickRow("n1", { metaKey: true });
     clickRow("n2", { metaKey: true });
-    openBatchMenu("n2");
-    await act(async () => { menuItems().find((btn) => (btn.textContent ?? "").trim() === "导出…")!.click(); await Promise.resolve(); await Promise.resolve(); });
+    rightClick("n2");
+    await act(async () => { menuItem("导出…").click(); await Promise.resolve(); await Promise.resolve(); });
     const notice = document.querySelector(".tree-selection-bar__notice")?.textContent ?? "";
     expect(notice).toContain("导出 1 项");
     expect(notice).toContain("跳过 1");
     expect(notice).toContain("画板需要先打开再单独导出");
   });
 
-  it("分组多选：移入回收站禁用（分组不能移入回收站），移动/导出可用", () => {
+  it("分组多选：创建副本禁用（只有文档可以创建副本）+ title 理由；移入回收站禁用；移动/导出可用", () => {
     render();
     clickRow("g1", { metaKey: true });
-    openBatchMenu("g1");
+    rightClick("g1");
     const buttons = menuItems();
-    expect(buttons[2].disabled).toBe(true);
-    expect(buttons[2].getAttribute("title")).toContain("分组不能移入回收站");
+    // 置顶对分组也可用（设备本地入口，不改目录）
     expect(buttons[0].disabled).toBe(false);
-    expect(buttons[1].disabled).toBe(false);
+    expect(buttons[1].disabled).toBe(true);
+    expect(buttons[1].getAttribute("title")).toContain("只有文档可以创建副本");
+    expect(buttons[4].disabled).toBe(true);
+    expect(buttons[4].getAttribute("title")).toContain("分组不能移入回收站");
+    expect(buttons[2].disabled).toBe(false);
+    expect(buttons[3].disabled).toBe(false);
   });
 
-  it("未多选时右键仍是旧菜单（不只三项）", () => {
+  it("多选创建副本：菜单 → duplicate_notes({ ids }) → 刷新 + 「已创建 N 个副本」+ 清空选择", async () => {
     render();
-    act(() => { row("n1").dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 60, clientY: 60 })); });
+    clickRow("n1", { metaKey: true });
+    clickRow("n2", { metaKey: true });
+    rightClick("n2");
+    await act(async () => { menuItem("创建副本").click(); await Promise.resolve(); await Promise.resolve(); });
+    expect(mocks.duplicateNotes).toHaveBeenCalledWith({ ids: ["n1", "n2"] });
+    expect(props.onRefreshTree).toHaveBeenCalled();
+    expect(barCount()).toBeUndefined();
+    expect(document.querySelector('[role="status"]')?.textContent).toBe("已创建 2 个副本");
+  });
+
+  it("单条右键按组加分隔线（文档 5 组 / 分组 3 组 / 笔记本 2 组）", () => {
+    render();
+    const tokens = (): string[] => {
+      // 只取最外层菜单：导出是子菜单，内层项不能算进主菜单分组。
+      const menu = [...document.querySelectorAll<HTMLElement>('[role="menu"]')].find((el) => !el.parentElement?.closest('[role="menu"]'));
+      if (!menu) return [];
+      return [...menu.querySelectorAll<HTMLElement>('button, [role="separator"]')]
+        .filter((el) => el.closest('[role="menu"]') === menu)
+        .map((el) => (el.getAttribute("role") === "separator" ? "---" : (el.textContent ?? "").trim()))
+        // 导出是子菜单（DOM 内联展开），其子项不计入主菜单分组。
+        .filter((label) => !/^导出为|^导出资料/.test(label));
+    };
+
+    rightClick("n1");
+    // 导出子菜单在 jsdom 里内联展开（真实 UI 是折叠子菜单）⇒ 只断言主菜单分组；分组 4 = 锁定 + 导出。
+    expect(tokens()).toEqual([
+      "重命名", "置顶", "---",
+      "创建副本", "移动…", "---",
+      "历史版本", "标签…", "属性", "---",
+      "锁定（只读）", "---",
+      "删除",
+    ]);
+    act(() => { document.body.dispatchEvent(new MouseEvent("mousedown", { bubbles: true })); });
+
+    rightClick("g1");
+    expect(tokens()).toEqual(["重命名", "置顶", "移动…", "---", "删除"]);
+    act(() => { document.body.dispatchEvent(new MouseEvent("mousedown", { bubbles: true })); });
+
+    rightClick("nb");
+    expect(tokens()).toEqual(["重命名", "---", "删除"]);
+  });
+
+  it("单条右键「置顶」⇒ 写入设备本地 + 出现置顶区；再次右键变为「取消置顶」", () => {
+    render();
+    rightClick("n1");
+    expect(menuItems().map((btn) => (btn.textContent ?? "").trim())).toContain("置顶");
+    act(() => { menuItem("置顶").click(); });
+    expect(JSON.parse(localStorage.getItem("lakex-local-notes-v3.sidebar-pinned") ?? "[]")).toEqual(["n1"]);
+    expect(document.querySelector(".sidebar-pinned")).not.toBeNull();
+    expect(document.querySelector('[data-pinned-node-id="n1"]')).not.toBeNull();
+    // 原目录不动：同一篇仍在原位置
+    expect(row("n1")).toBeTruthy();
+
+    act(() => { document.body.dispatchEvent(new MouseEvent("mousedown", { bubbles: true })); });
+    rightClick("n1");
+    expect(menuItems().map((btn) => (btn.textContent ?? "").trim())).toContain("取消置顶");
+  });
+
+  it("未多选时右键仍是旧菜单（不只四项；文档行有「创建副本」、分组行没有）", () => {
+    render();
+    rightClick("n1");
     const texts = menuItems().map((btn) => (btn.textContent ?? "").trim());
     expect(texts.length).toBeGreaterThan(3);
     expect(texts).toContain("重命名");
+    expect(texts).toContain("创建副本");
     expect(texts).toContain("删除");
     expect(texts).not.toContain("导出…");
+
+    act(() => { document.body.dispatchEvent(new MouseEvent("mousedown", { bubbles: true })); });
+    rightClick("g1");
+    const groupTexts = menuItems().map((btn) => (btn.textContent ?? "").trim());
+    expect(groupTexts).toContain("重命名");
+    expect(groupTexts).toContain("置顶");
+    expect(groupTexts).not.toContain("创建副本");
+
+    // 笔记本不可置顶（用户 261107）：右键菜单只有重命名/删除，没有置顶项
+    act(() => { document.body.dispatchEvent(new MouseEvent("mousedown", { bubbles: true })); });
+    rightClick("nb");
+    const notebookTexts = menuItems().map((btn) => (btn.textContent ?? "").trim());
+    expect(notebookTexts).not.toContain("置顶");
+    expect(notebookTexts).not.toContain("取消置顶");
+  });
+});
+
+describe("创建副本入口（261106）：单条右键 + 多选浮动条", () => {
+  it("文档行 → duplicate_notes({ ids: [id] }) → 刷新 + 「已创建 1 个副本」", async () => {
+    render();
+    rightClick("n1");
+    await act(async () => { menuItem("创建副本").click(); await Promise.resolve(); await Promise.resolve(); });
+    expect(mocks.duplicateNotes).toHaveBeenCalledWith({ ids: ["n1"] });
+    expect(props.onRefreshTree).toHaveBeenCalled();
+    expect(document.querySelector('[role="status"]')?.textContent).toBe("已创建 1 个副本");
+  });
+
+  it("创建副本前先 flush 未保存编辑（顺序：flush → duplicate_notes）", async () => {
+    const order: string[] = [];
+    props.onBeforeDuplicate = vi.fn(async () => { order.push("flush"); });
+    mocks.duplicateNotes.mockImplementationOnce(async (request: { ids: string[] }) => {
+      order.push("dup");
+      return { ok: true, results: request.ids.map((id) => ({ id, ok: true, newId: id + "-copy" })), summary: { total: 1, done: 1, failed: 0 } };
+    });
+    render();
+    rightClick("n1");
+    await act(async () => { menuItem("创建副本").click(); await Promise.resolve(); await Promise.resolve(); });
+    expect(order).toEqual(["flush", "dup"]);
+  });
+
+  it("失败（如正文缺失）：显示可读原因，不刷新", async () => {
+    mocks.duplicateNotes.mockResolvedValueOnce({
+      ok: false, results: [{ id: "n1", ok: false, reason: "body-missing" }], summary: { total: 1, done: 0, failed: 1 }, reason: "body-missing",
+    });
+    render();
+    rightClick("n1");
+    await act(async () => { menuItem("创建副本").click(); await Promise.resolve(); await Promise.resolve(); });
+    expect(props.onRefreshTree).not.toHaveBeenCalled();
+    expect(document.querySelector('[role="status"]')?.textContent).toContain("正文文件缺失");
+  });
+
+  it("多选浮动条也有「创建副本」（文档选择时出现，分组选择时没有）", async () => {
+    render();
+    clickRow("n1", { metaKey: true });
+    await act(async () => { barButton("创建副本")!.click(); await Promise.resolve(); await Promise.resolve(); });
+    expect(mocks.duplicateNotes).toHaveBeenCalledWith({ ids: ["n1"] });
+    expect(document.querySelector('[role="status"]')?.textContent).toBe("已创建 1 个副本");
   });
 });

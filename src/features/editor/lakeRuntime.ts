@@ -15,6 +15,7 @@ import { registerEditorInstance } from "./editorRegistry";
 import { uploadLakeResource } from "./resourceUpload";
 import { registerNoteRefCard, withNoteRefSlashItem } from "./noteRefCard";
 import { registerLockedTextCard, withLockedTextSlashItem } from "./lockedTextCard";
+import { registerAiAssistantCard, withAiAssistantSlashItem } from "./aiAssistantCard";
 import type { ResourceUploadOutput } from "../../lib/types";
 import { shouldSkipBoardCardFocus, useClickActivatedWheelGate } from "./canvasInteractionGate";
 import { ASSET_ORIGIN } from "../../lib/assetPort";
@@ -914,18 +915,22 @@ export function createLakeDocument(
       cardSelect: {
         general: {
           groups: withLockedTextSlashItem(
-            withNoteRefSlashItem(
-              (vendorSlash.slash?.cardSelect?.general?.groups || []).filter(
-                (g) => g.name !== "third-party-services"
+            withAiAssistantSlashItem(
+              withNoteRefSlashItem(
+                (vendorSlash.slash?.cardSelect?.general?.groups || []).filter(
+                  (g) => g.name !== "third-party-services"
+                )
               )
             )
           ),
         },
         table: {
           groups: withLockedTextSlashItem(
-            withNoteRefSlashItem(
-              (vendorSlash.slash?.cardSelect?.table?.groups || []).filter(
-                (g) => g.name !== "third-party-services"
+            withAiAssistantSlashItem(
+              withNoteRefSlashItem(
+                (vendorSlash.slash?.cardSelect?.table?.groups || []).filter(
+                  (g) => g.name !== "third-party-services"
+                )
               )
             )
           ),
@@ -959,6 +964,8 @@ export function createLakeDocument(
   registerNoteRefCard(mergedOptions);
   // 「加密文本」卡（261023）：同样必须在 prepareCustomCards 之前注册（否则卡不注册 ⇒ 面板无项、正文读成 fallback）。
   registerLockedTextCard(mergedOptions);
+  // 「AI 写作助手」插入卡（261107）：复用顶栏 AI 的无上下文面板 + 光标锚点，只增加插入能力。
+  registerAiAssistantCard(mergedOptions);
 
   // 先收集图标：新 vendor 的 React `icon` 挂在 `{ config, icon }` 包装上，prepareCustomCards 解包后会丢。
   ensureCustomCardIcons(mergedOptions);

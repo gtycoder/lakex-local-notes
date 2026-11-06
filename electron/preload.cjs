@@ -76,6 +76,7 @@ contextBridge.exposeInMainWorld("lakeNative", {
   runBackupNow: () => invoke("run_backup_now"),
   getBackupUsage: () => invoke("get_backup_usage"),
   batchNotes: (payload) => invoke("batch_notes", payload),
+  duplicateNotes: (payload) => invoke("duplicate_notes", payload),
   pickMarkdownFiles: () => invoke("pick_markdown_files"),
   readImportImage: (filePath) => invoke("read_import_image", filePath),
   exportNotesBatch: (payload) => invoke("export_notes_batch", payload),

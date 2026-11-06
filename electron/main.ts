@@ -54,6 +54,7 @@ import { AUTO_BACKUP_TICK_MS, decideAutoBackup, readDatabaseFingerprint, runBack
 import { createIpcRegistrar } from "./ipc/registrar.js";
 import { pickBackupDatabaseDialog, registerNotesIpc } from "./ipc/registerNotes.js";
 import { registerBatchNotesIpc } from "./ipc/registerBatchNotes.js";
+import { registerDuplicateNotesIpc } from "./ipc/registerDuplicateNotes.js";
 import { registerMarkdownImportIpc } from "./ipc/registerMarkdownImport.js";
 import { registerBatchExportIpc } from "./ipc/registerBatchExport.js";
 import { DraftJournal, draftJournalDir } from "./draftJournal.js";
@@ -568,6 +569,8 @@ function registerIpc(): ReadonlyMap<string, (args: unknown[]) => Promise<unknown
     "delete_tree_node", "delete_note", "restore_trash", "purge_trash", "empty_trash",
     // 261106 批量操作：一次调用改多条 ⇒ 整批只广播一次（不逐条）。
     "batch_notes",
+    // 261106 创建副本：一次调用可能新建多篇 ⇒ 整批只广播一次。
+    "duplicate_notes",
   ]);
   const afterInvoke = (channel: string): void => {
     // 目录树变更：无条件广播（不能被下面 pending 摘要的早退吞掉）。
@@ -608,6 +611,8 @@ function registerIpc(): ReadonlyMap<string, (args: unknown[]) => Promise<unknown
   registerMarkdownImportIpc(ipc);
   // 261106 批量操作（A 方案）：core 编排 + 主进程单事务（lake 主库 / quickNotes 小记库）。
   // 删除语义只有"移入回收站"；purge/物理删除仍只在回收站入口（purgeTrashItem / 清空回收站）。
+  // 261106 文档「创建副本」：逐条新 id + 新建管线（正文/资源全量复制 + URL 重写），逐条结果。
+  registerDuplicateNotesIpc(ipc, { store });
   registerBatchNotesIpc(ipc, {
     store,
     getQuickNotes: () => (getQuickNotesAvailability().mode === "ok" ? quickNotes : null),

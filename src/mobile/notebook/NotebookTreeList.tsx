@@ -20,6 +20,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import type { NotebookTreeItem } from "../data/notebookTreeRepository";
 import type { LongPressHandlers } from "../ui/useLongPress";
 import { MobileNodeIconGlyph } from "../ui/NodeIconGlyph";
+import { SelectionCheckbox } from "../ui/SelectionCheckbox";
 import type { NotebookTreeRow } from "./notebookTreeIndex";
 
 /** 超过这个行数才虚拟化：小树一次渲染更简单，也不会引入定位/测量开销。 */
@@ -34,6 +35,15 @@ export interface NotebookTreeDragState {
   id: string;
   overId: string | null;
   position: "before" | "after" | "inside" | null;
+}
+
+/** 多选模式（261106 task-8）：只影响行渲染/点击语义，不改变树结构与虚拟化。 */
+export interface NotebookTreeListSelection {
+  active: boolean;
+  isSelected: (id: string) => boolean;
+  /** 行是否可选（只允许文档；笔记本/分组置灰不可选）。 */
+  canSelect: (item: NotebookTreeItem) => boolean;
+  onToggle: (item: NotebookTreeItem) => void;
 }
 
 export interface NotebookTreeListProps {
@@ -54,6 +64,8 @@ export interface NotebookTreeListProps {
   onActivate: (item: NotebookTreeItem) => void;
   onOpenMenu: (item: NotebookTreeItem) => void;
   onOpenCreate: (item: NotebookTreeItem) => void;
+  /** 多选模式；不传 = 普通浏览态（行为与之前逐字一致）。 */
+  selection?: NotebookTreeListSelection;
 }
 
 export function NotebookTreeList(props: NotebookTreeListProps) {
@@ -91,13 +103,20 @@ export function NotebookTreeList(props: NotebookTreeListProps) {
     const it = row.item;
     const kids = hasChildren(it.id);
     const NodeIcon = it.kind === "group" ? FolderOpen : File;
+    // 多选模式（261106 task-8）：只允许文档可选；分组/笔记本置灰（保留复选框占位 ⇒ 左缘与文档行对齐）。
+    const selecting = props.selection?.active ?? false;
+    const selectable = selecting && (props.selection?.canSelect(it) ?? false);
+    const checked = selectable && (props.selection?.isSelected(it.id) ?? false);
     return (
       <button
-        className={"mb-row mb-indent" + (activeId === it.id ? " is-selected" : "") + (drag?.id === it.id ? " nb-dragging" : "") + (drag?.overId === it.id && drag.position ? (drag.position === "inside" ? " drop-parent" : " drop-line-" + drag.position) : "")}
+        className={"mb-row mb-indent" + (activeId === it.id || checked ? " is-selected" : "") + (drag?.id === it.id ? " nb-dragging" : "") + (drag?.overId === it.id && drag.position ? (drag.position === "inside" ? " drop-parent" : " drop-line-" + drag.position) : "")}
         data-depth={row.depth}
         data-node-id={it.id}
+        aria-selected={selecting ? (selectable ? checked : false) : undefined}
         onClick={() => {
           if (renamingId) return;
+          // 选择态：可选行 = 切换勾选（不打开文档）；不可选行（分组）保持原语义（展开/折叠）。
+          if (selecting && selectable) { props.selection?.onToggle(it); return; }
           props.onActivate(it);
         }}
         onTouchStart={(e) => { props.onPressRow(it); props.longPress.onTouchStart(e); }}
@@ -106,6 +125,13 @@ export function NotebookTreeList(props: NotebookTreeListProps) {
         onTouchCancel={props.longPress.onTouchCancel}
         onContextMenu={(e) => e.preventDefault()}
       >
+        {selecting && (
+          <SelectionCheckbox
+            checked={checked}
+            disabled={!selectable}
+            label={selectable ? "选择 " + (it.title || "无标题") : undefined}
+          />
+        )}
         {kids ? <ChevronRight size={16} className={expanded.has(it.id) ? "mb-chevron open" : "mb-chevron"} /> : <span className="mb-chevron-spacer" />}
         {renamingId === it.id ? (
           <input
@@ -125,11 +151,13 @@ export function NotebookTreeList(props: NotebookTreeListProps) {
             {it.icon ? <span className="mb-tree-icon"><MobileNodeIconGlyph value={it.icon} /></span> : <NodeIcon size={16} className="mb-tree-icon" />}
             <span className="mb-row__title">{it.title}</span>
             {/* 移动端无 hover：动作常显（对齐思源移动端 .b3-list-item 不带 --hide-action）。
-                ⋯ = 行菜单，＋ = 新建子项。 */}
-            <span className="nb-tree-actions">
-              <span role="button" tabIndex={0} className="nb-tree-action mb-tap" aria-label="更多" onClick={(e) => { e.stopPropagation(); props.onOpenMenu(it); }}><MoreVertical size={17} /></span>
-              <span role="button" tabIndex={0} className="nb-tree-action mb-tap" aria-label="新建子项" title="新建子项" onClick={(e) => { e.stopPropagation(); props.onOpenCreate(it); }}><Plus size={17} /></span>
-            </span>
+                ⋯ = 行菜单，＋ = 新建子项。选择态下整组隐藏：底部条才是动作入口，避免误触。 */}
+            {!selecting && (
+              <span className="nb-tree-actions">
+                <span role="button" tabIndex={0} className="nb-tree-action mb-tap" aria-label="更多" onClick={(e) => { e.stopPropagation(); props.onOpenMenu(it); }}><MoreVertical size={17} /></span>
+                <span role="button" tabIndex={0} className="nb-tree-action mb-tap" aria-label="新建子项" title="新建子项" onClick={(e) => { e.stopPropagation(); props.onOpenCreate(it); }}><Plus size={17} /></span>
+              </span>
+            )}
           </>
         )}
       </button>

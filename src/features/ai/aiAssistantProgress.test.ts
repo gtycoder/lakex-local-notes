@@ -26,7 +26,11 @@ beforeEach(() => {
     return new Promise<AiChatResult>((resolve, fail) => { settle = resolve; reject = fail; });
   });
   host = document.createElement("div"); document.body.append(host); root = createRoot(host);
-  act(() => root.render(createElement(AiAssistantDialog, { open: true, selectionText: "", onClose: () => {} })));
+  act(() => root.render(createElement(AiAssistantDialog, {
+    open: true,
+    onClose: () => {},
+    request: { context: { kind: "none" }, placement: { kind: "floating" }, outputs: [], applyOutput: () => false },
+  })));
 });
 afterEach(() => { act(() => root.unmount()); host.remove(); vi.unstubAllGlobals(); });
 

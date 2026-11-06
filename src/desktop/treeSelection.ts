@@ -31,6 +31,8 @@ export interface TreeSelectionActions {
   trash: boolean;
   /** 打标签…（只有文档）。 */
   tag: boolean;
+  /** 置顶/取消置顶（261107，设备本地入口；所有可选节点都支持）。 */
+  pin: boolean;
 }
 
 type NodeLike = Pick<TreeNode, "id" | "nodeType">;
@@ -117,5 +119,5 @@ export function treeSelectionLimitReached(state: TreeSelectionState): boolean {
 export function treeSelectionActions(nodes: ReadonlyMap<string, NodeLike>, state: TreeSelectionState): TreeSelectionActions {
   const selected = state.ids.map((id) => nodes.get(id)).filter((node): node is NodeLike => !!node);
   const notesOnly = selected.length > 0 && selected.every((node) => node.nodeType === "note");
-  return { move: selected.length > 0, trash: notesOnly, tag: notesOnly };
+  return { move: selected.length > 0, trash: notesOnly, tag: notesOnly, pin: selected.length > 0 };
 }

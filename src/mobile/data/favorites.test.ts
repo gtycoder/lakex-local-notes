@@ -21,7 +21,7 @@ const HOME = strip(read("../home/HomePage.tsx"));
 /** 261103 P11-②：目录行菜单/回调组装拆到 useWorkspaceActions.ts（工作区本身已不再持这些字符串）。 */
 const ACTIONS = strip(read("../notebook/useWorkspaceActions.ts"));
 
-describe("移动端「常用」文档（261019，仅设备本地）", () => {
+describe("移动端「置顶」文档（原「常用」261107 改名，仅设备本地）", () => {
   beforeEach(() => installEnv());
   afterEach(() => {
     delete (globalThis as unknown as { localStorage?: Storage }).localStorage;
@@ -57,8 +57,8 @@ describe("移动端「常用」文档（261019，仅设备本地）", () => {
     expect(hits).toBe(1);
   });
 
-  it("首页：只有「常用」分组，不再有最近文档 / recentNotes；可收起、横向卡", () => {
-    expect(HOME).toContain("\u5e38\u7528");
+  it("首页：只有「置顶」分组，不再有最近文档 / recentNotes；可收起、横向卡", () => {
+    expect(HOME).toContain("\u7f6e\u9876");
     expect(HOME).not.toContain("\u6700\u8fd1\u6587\u6863");
     expect(HOME).not.toContain("recentNotes");
     expect(HOME).toContain("readFavoriteIds");
@@ -67,10 +67,10 @@ describe("移动端「常用」文档（261019，仅设备本地）", () => {
     expect(HOME).toMatch(/favoriteOpen \? <ChevronDown/);
   });
 
-  it("目录菜单：文档行有「设为常用 / 取消常用」，走本地 toggle + toast", () => {
-    expect(ACTIONS).toMatch(/label: isFavorite\(node\.id\) \? "\u53d6\u6d88\u5e38\u7528" : "\u8bbe\u4e3a\u5e38\u7528"/);
+  it("目录菜单：文档行有「置顶 / 取消置顶」，走本地 toggle + toast", () => {
+    expect(ACTIONS).toMatch(/label: isFavorite\(node\.id\) \? "\u53d6\u6d88\u7f6e\u9876" : "\u7f6e\u9876"/);
     expect(ACTIONS).toMatch(/root === "favorite".*toggleFavorite\(node\.id\)/);
-    expect(ACTIONS).toContain("\u5df2\u8bbe\u4e3a\u5e38\u7528");
+    expect(ACTIONS).toContain("\u5df2\u7f6e\u9876");
   });
 
   it("只走 localStorage：不 import bridge / S3 / 同步模块（桌面零改动、不触发同步）", () => {

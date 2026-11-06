@@ -318,6 +318,28 @@ export interface BatchNotesResultShape {
 }
 
 /**
+ * 261106 文档「创建副本」——**契约单一来源**（桌面 IPC `duplicate_notes` 与移动端
+ * `bridge.duplicateNotes` 同形同结果；纯逻辑见 `src/core/duplicateNotes.ts`）。
+ *
+ * 语义：副本 = 全新笔记（新 id、同父级紧邻原笔记下方、标题 = 原名称 + " 副本 " + 时间），
+ * 正文与全部资源复制，资源 URL 里的原 noteId 已重写成新 id ⇒ 与原笔记完全独立（编辑/删除/标签/
+ * 历史/S3 对象互不影响）。请求级拒绝（invalid-* / empty-ids / too-many-ids）整批不执行；
+ * 条目级失败逐条返回，不回滚其它条。
+ */
+// 261107 review 收口：契约类型只存在于 core（与 sharedTypes 同款做法），lib/types 只做别名 re-export，
+// 避免「core 加一个 reason、这里忘改」的漂移。
+export type {
+  DuplicateNotesReason as DuplicateNotesReasonShape,
+  DuplicateNotesItemResult as DuplicateNotesItemResultShape,
+  DuplicateNotesResult as DuplicateNotesResultShape,
+} from "../core/duplicateNotes.js";
+
+export interface DuplicateNotesRequestShape {
+  /** 源笔记 id 列表（去重；上限 500）。只接受 lake 空间的正式笔记（doc/usheet/bitable/board/ink）。 */
+  ids: string[];
+}
+
+/**
  * 261106 Markdown 导入：主进程 picker 返回的单个文件（桌面 `pick_markdown_files`）。
  * 不支持的扩展名也返回（supported:false），由调用方计入「跳过数」——用户全选目录时不静默消失。
  */

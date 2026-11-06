@@ -27,7 +27,7 @@ describe("块菜单「AI 助手」（261005）", () => {
     expect(MOUNT).toContain("captureModelRange(props.editor)");
     expect(MOUNT).toContain("selectBlockModelRange(props.editor, data.blockElement)");
     expect(MOUNT).toContain('execCommand?.("getSelectionContent", "text/markdown")');
-    expect(MOUNT).toContain("selectionText: ai.text");
+    expect(MOUNT).toContain('context: { kind: "selection", text, range }');
   });
 
   it("折叠选区必须自己选整块（菜单点击会把选区压成光标，否则替换退化成光标处插入）", () => {
@@ -36,9 +36,9 @@ describe("块菜单「AI 助手」（261005）", () => {
     expect(MOUNT).toContain("range.start.node === range.end.node");
   });
   it("落库/替换复用浮栏同源实现，不在手柄侧另写一套", () => {
-    expect(MOUNT).toContain("applyAiInsertAfter(props.editor, props.container, ai.range, text)");
-    expect(MOUNT).toContain("applyAiReplace(props.editor, props.container, ai.range, text)");
-    expect(MOUNT).toContain("AiAssistantDialog");
+    expect(MOUNT).toContain("applyAiInsertAfter(props.editor, props.container, range, outputText)");
+    expect(MOUNT).toContain("applyAiReplace(props.editor, props.container, range, outputText)");
+    expect(MOUNT).toContain("openAiAssistant(request)");
     // 手柄侧不得直接拼内核插入命令（那是 aiResultOps 的职责）
     expect(MOUNT).not.toContain('"insertAtSelection"');
     expect(MOUNT).not.toContain('"insertAtPosition"');

@@ -19,6 +19,8 @@
 
 /* 表面/层序由标准原语提供（.ln-menu）；左右翻转与上下夹取由 <.Submenu> 计算内联 left/top。
    这里只留内容尺寸与高度兜底（比视口还高时子菜单内滚动）。 */
+/* 右键菜单分组线（261107）：此前只有空的 .context-menu-sep，没有样式 ⇒ 分组完全看不见。 */
+.context-menu-sep { margin: 5px 8px; border-top: 0.5px solid var(--lake-border-1); }
 .context-menu-submenu { width: 230px; max-height: calc(100vh - 16px); overflow-y: auto; }
 
 .context-menu-submenu > button { display: block; width: 100%; border: 0; background: transparent; text-align: left; font-size: var(--lake-font-size-tiny); white-space: nowrap; }

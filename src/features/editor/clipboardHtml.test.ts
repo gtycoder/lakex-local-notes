@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
-import { buildAssetDataUrlRequest, isMobileEnvironment, normalizeClipboardHtml, normalizeImageDataUrl, upgradePastedHtml } from "./clipboardHtml";
+import { buildAssetDataUrlRequest, buildClipboardPayload, isMobileEnvironment, normalizeClipboardHtml, normalizeImageDataUrl, upgradePastedHtml } from "./clipboardHtml";
 
 // jsdom 无 canvas 实现：mock getContext/toDataURL（仅测试 blob→png 分支的调用路径）
 const origGetContext = HTMLCanvasElement.prototype.getContext;
@@ -188,5 +188,72 @@ describe("upgradePastedHtml（知乎懒加载空 SVG → 真实 URL）", () => {
   it("无空 SVG 占位时原样返回", () => {
     const html = '<img src="https://cdn.example.com/e.jpg">';
     expect(upgradePastedHtml(html)).toBe(html);
+  });
+});
+describe("buildClipboardPayload（⌘C 与块菜单「复制」共用同一份）", () => {
+  function rangeAcross(html: string): { range: Range; host: HTMLElement } {
+    const host = document.createElement("div");
+    host.innerHTML = html;
+    document.body.appendChild(host);
+    const range = document.createRange();
+    range.setStartBefore(host.firstElementChild!);
+    range.setEndAfter(host.lastElementChild!);
+    return { range, host };
+  }
+
+  it("跨块 range：plain 按块保留换行、html 依次包含所有块", () => {
+    const { range, host } = rangeAcross("<p>第一段</p><p>第二段</p>");
+    const payload = buildClipboardPayload(range, document);
+    expect(payload.plain).toBe("第一段\n第二段");
+    expect(payload.html).toContain("第一段");
+    expect(payload.html).toContain("第二段");
+    expect(payload.html.indexOf("第一段")).toBeLessThan(payload.html.indexOf("第二段"));
+    host.remove();
+  });
+
+  it("html 复用 normalizeClipboardHtml（隐藏节点/零宽字符只清一次）", () => {
+    const { range, host } = rangeAcross('<div class="ne-card-toolbar">工具</div><p>正\u200B文</p>');
+    const payload = buildClipboardPayload(range, document);
+    expect(payload.html).not.toContain("工具");
+    expect(payload.html).toBe("<p>正文</p>");
+    host.remove();
+  });
+
+  it("plain 保留块间换行：段落/标题/列表项各自成行；单个段内选区不额外加换行", () => {
+    const { range, host } = rangeAcross("<p>a</p><h2>标题</h2><ul><li>x</li><li>y</li></ul>");
+    expect(buildClipboardPayload(range, document).plain).toBe("a\n标题\nx\ny");
+    host.remove();
+
+    const inline = document.createElement("div");
+    inline.innerHTML = "<p>hello world</p>";
+    document.body.appendChild(inline);
+    const textNode = inline.querySelector("p")!.firstChild!;
+    const inner = document.createRange();
+    inner.setStart(textNode, 0);
+    inner.setEnd(textNode, 5);
+    expect(buildClipboardPayload(inner, document).plain).toBe("hello");
+    inline.remove();
+  });
+
+  it("嵌套块（卡片内段落 / 块中块）只保留单换行，不产生空行", () => {
+    const { range, host } = rangeAcross(
+      "<ne-card><ne-p>a</ne-p><ne-p>b</ne-p></ne-card><ne-p>c</ne-p><div><div>d</div></div>",
+    );
+    expect(buildClipboardPayload(range, document).plain).toBe("a\nb\nc\nd");
+    host.remove();
+  });
+
+  it("代码块内部原始空行保留；代码块与段落之间仍单换行", () => {
+    const { range, host } = rangeAcross(
+      "<p>前</p><pre>a\n\nb</pre><p>后</p><ne-code-block><div>line1</div><div></div><div>line3</div></ne-code-block>",
+    );
+    expect(buildClipboardPayload(range, document).plain).toBe("前\na\n\nb\n后\nline1\n\nline3");
+    host.remove();
+  });
+
+  it("plain 把 <br> 转换行、跳过隐藏节点与零宽字符", () => {
+    const { range, host } = rangeAcross('<p>a<br>b</p><div class="ne-card-toolbar">工具</div><p>c\u200Bd</p>');
+    expect(buildClipboardPayload(range, document).plain).toBe("a\nb\ncd");
+    host.remove();
   });
 });

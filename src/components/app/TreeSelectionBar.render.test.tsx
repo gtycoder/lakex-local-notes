@@ -1,6 +1,6 @@
 
 // @vitest-environment jsdom
-/** 多选浮动操作条（261106 task-81）：渲染 + 动作回调（不摸 IPC）。 */
+/** 多选浮动操作条（261106 task-81；261106 副本追加「创建副本」）：渲染 + 动作回调（不摸 IPC）。 */
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -19,7 +19,10 @@ afterEach(() => { act(() => root.unmount()); host.remove(); vi.unstubAllGlobals(
 function render(overrides: Partial<TreeSelectionBarProps> = {}) {
   const props: TreeSelectionBarProps = {
     count: 2,
-    actions: { move: true, trash: true, tag: true },
+    actions: { duplicate: true, move: true, trash: true, tag: true, pin: true },
+    pinnedAll: false,
+    onPin: vi.fn(),
+    onDuplicate: vi.fn(),
     onMove: vi.fn(),
     onTrash: vi.fn(),
     onTag: vi.fn(),
@@ -42,9 +45,11 @@ describe("TreeSelectionBar", () => {
     expect(document.body.querySelector(".tree-selection-bar")).toBeNull();
   });
 
-  it("显示「已选 N 项」+ 文档三个动作 + 全选/取消", () => {
+  it("显示「已选 N 项」+ 文档五个动作 + 全选/取消", () => {
     render();
     expect(document.body.querySelector(".tree-selection-bar__count")?.textContent).toBe("已选 2 项");
+    expect(button("置顶")).toBeTruthy();
+    expect(button("创建副本")).toBeTruthy();
     expect(button("移动…")).toBeTruthy();
     expect(button("移入回收站")).toBeTruthy();
     expect(button("打标签…")).toBeTruthy();
@@ -52,32 +57,40 @@ describe("TreeSelectionBar", () => {
     expect(button("取消")).toBeTruthy();
   });
 
-  it("分组/混选只显示「移动…」（无移入回收站/打标签）", () => {
-    render({ actions: { move: true, trash: false, tag: false } });
+  it("分组/混选：可移动、可置顶（无创建副本/移入回收站/打标签）", () => {
+    render({ actions: { move: true, trash: false, tag: false, pin: true } });
     expect(button("移动…")).toBeTruthy();
+    expect(button("置顶")).toBeTruthy();
+    expect([...document.body.querySelectorAll("button")].some((item) => (item.textContent ?? "").includes("创建副本"))).toBe(false);
     expect([...document.body.querySelectorAll("button")].some((item) => (item.textContent ?? "").includes("移入回收站"))).toBe(false);
     expect([...document.body.querySelectorAll("button")].some((item) => (item.textContent ?? "").includes("打标签"))).toBe(false);
   });
 
   it("动作/全选/取消回调；busy 时全部按钮禁用", () => {
     const props = render();
+    act(() => button("置顶").click());
+    act(() => button("创建副本").click());
     act(() => button("移动…").click());
     act(() => button("移入回收站").click());
     act(() => button("打标签…").click());
     act(() => button("全选").click());
     act(() => button("取消").click());
+    expect(props.onPin).toHaveBeenCalledTimes(1);
+    expect(props.onDuplicate).toHaveBeenCalledTimes(1);
     expect(props.onMove).toHaveBeenCalledTimes(1);
     expect(props.onTrash).toHaveBeenCalledTimes(1);
     expect(props.onTag).toHaveBeenCalledTimes(1);
     expect(props.onSelectAll).toHaveBeenCalledTimes(1);
     expect(props.onCancel).toHaveBeenCalledTimes(1);
 
+    // busy = 批量操作进行中：所有动作都禁用（含「创建副本」）
     render({ busy: true });
+    expect(button("创建副本").disabled).toBe(true);
     expect([...document.body.querySelectorAll<HTMLButtonElement>("button")].every((item) => item.disabled)).toBe(true);
   });
 
   it("结果提示以 role=status 显示（成功/部分失败共用一条）", () => {
-    render({ notice: "已移入回收站 2 项" });
-    expect(document.body.querySelector('[role="status"]')?.textContent).toBe("已移入回收站 2 项");
+    render({ notice: "已创建 2 个副本" });
+    expect(document.body.querySelector('[role="status"]')?.textContent).toBe("已创建 2 个副本");
   });
 });

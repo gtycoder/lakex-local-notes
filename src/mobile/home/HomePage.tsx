@@ -2,7 +2,7 @@
  * 第一层（首页）：小记 / 知识库 两个 tab。
  * 布局（对齐 Yuque 官方移动端首层）：
  * - 小记 → 卡片（图在上/文在下/日期+更多「...」）；
- * - 知识库 → 「常用」分组（顶部固定、可收起；横向卡，左右滑动找）+ 笔记本书架（3:4 彩面书卡，右上角切换 书架↔列表）；
+ * - 知识库 → 「置顶」分组（顶部固定、可收起；横向卡，左右滑动找）+ 笔记本书架（3:4 彩面书卡，右上角切换 书架↔列表）；
  *   「最近文档」已按用户 261019 点单整体删除（手机端不存最近访问记录，也不展示）；
  * - 空态不做「创建」提示（默认空白即可）；
  * - 底部胶囊栏 = [筛选 | 新建 | 云同步]（新建按 tab 记性：小记=写小记、知识库=新建笔记本）。
@@ -81,7 +81,7 @@ export type LibraryView = "shelf" | "list";
 export interface HomePageProps {
   tab: HomeTab;
   notebooks: TreeNode[];
-  /** 全部笔记（解析「常用」文档的标题/时间用） */
+  /** 全部笔记（解析「置顶」文档的标题/时间用） */
   notes: LocalNoteSummary[];
   quickNotes: MobileQuickNote[];
   /** 标签目录（标签表是唯一来源；随小记 Manifest 同步）。 */
@@ -211,7 +211,7 @@ export function HomePage(props: HomePageProps) {
     stageRef.current?.scrollTo({ left: 0, behavior: "auto" });
   }, [composer, tab]);
 
-  // 「常用」= 设备本地收藏（工作区目录菜单「设为常用」写入；不同步、不进 S3）
+  // 「置顶」= 设备本地入口（工作区目录菜单「置顶」写入；不同步、不进 S3）
   const [favoriteIds, setFavoriteIds] = useState<string[]>(() => readFavoriteIds());
   const [favoriteOpen, setFavoriteOpen] = useState<boolean>(() => readFavoritesOpen());
   useEffect(() => subscribeFavorites(() => setFavoriteIds(readFavoriteIds())), []);
@@ -754,8 +754,8 @@ export function HomePage(props: HomePageProps) {
         </section>
         <section ref={libraryPaneRef} className="mobile-tab-pane">
         <div className="mobile-scroll mobile-library">
-          {/* 「常用」分组（261019 用户点单）：固定在最上方，三角可收起/展开；卡片样式与首页文档卡一致，
-              多个常用靠**横向滑动**浏览。内容只来自设备本地收藏（工作区目录菜单「设为常用」）。 */}
+          {/* 「置顶」分组（261019 用户点单，261107 原「常用」改名）：固定在最上方，三角可收起/展开；卡片样式与首页文档卡一致，
+              多个置顶项靠**横向滑动**浏览。内容只来自设备本地入口（工作区目录菜单「置顶」）。 */}
           {libraryView === "shelf" && favoriteNotes.length > 0 && (
             <section className="home-section home-favorite">
               <div className="home-section__head">
@@ -763,9 +763,9 @@ export function HomePage(props: HomePageProps) {
                   className="home-section__toggle"
                   onClick={toggleFavoriteOpen}
                   aria-expanded={favoriteOpen}
-                  aria-label={favoriteOpen ? "收起常用" : "展开常用"}
+                  aria-label={favoriteOpen ? "收起置顶" : "展开置顶"}
                 >
-                  <span className="home-section__title">常用</span>
+                  <span className="home-section__title">置顶</span>
                   {favoriteOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                 </button>
               </div>

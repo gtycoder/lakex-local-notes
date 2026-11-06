@@ -27,7 +27,7 @@ describe("互斥域判据（F16 红线化）", () => {
     // 261105 P1 第 4 项：+ackSyncConflicts（同步记录账本：标已读；恢复动作委托 saveNote 的写域不另取锁）。
     // 261105 晚 +setNoteTags（文档标签关系：移动端单库写 tag_links(kind='note') + bump 关系版本）。
     // 261106 +batchNotes（批量操作：一份 IPC 改多条本地行 move/trash/tag-*；删除=移入回收站，无 purge）。
-    expect(WRITE_OPS.length).toBe(42);
+    expect(WRITE_OPS.length).toBe(43);
     // 261026 +ensureSearchIndex（派生索引后台补建；按需资产补拉复用 ensureTrashNoteAssets）。
     expect(MAINTENANCE_OPS.length).toBe(4);
     // 261013：syncQuickNote（小记单条推送）；261027：+ensureNoteAssets / +ensureQuickNoteAssets（占位图点击补拉）。
@@ -42,7 +42,7 @@ describe("互斥域判据（F16 红线化）", () => {
     // 261105 P1 第 4 项：+listSyncConflicts（只读列表）+restoreSyncConflict（委托型写：内部走 notesDomain.saveNote 取锁）。
     // 261105 晚 +listNoteTagLinks（文档标签关系只读：目录行「打标签…」预选）。
     expect(NONE_OPS.length).toBe(47);
-    expect(ALL.length).toBe(98); // 42 写 + 4 维护 + 5 高优 + 47 none（261106 +batchNotes）
+    expect(ALL.length).toBe(99); // 43 写 + 4 维护 + 5 高优 + 47 none（261106 +batchNotes/+duplicateNotes）
   });
 
   it("I1（F16）：写域与维护域必须是不同互斥域", () => {

@@ -92,6 +92,55 @@ class AssetSyncPlugin : Plugin() {
         call.resolve(JSObject().put("available", true))
     }
 
+    /**
+     * 原生整目录拷贝（261107）：创建副本时把 note-assets/{源}/ 一次拷到 note-assets/{副本}/。
+     * 把 IO 放到 ioPool，字节完全不经过 WebView 桥（JS 只传两个目录 key）。
+     * 目录 key 形如 `note-assets/<id>` / `quick-notes/assets/<id>`，复用 resolveLocalAssetFile 的越界防护。
+     */
+    @PluginMethod
+    fun copyAssetDir(call: PluginCall) {
+        val sourceDirKey = call.getString("sourceDir")
+        val targetDirKey = call.getString("targetDir")
+        if (sourceDirKey.isNullOrEmpty() || targetDirKey.isNullOrEmpty()) {
+            call.reject("sourceDir/targetDir required")
+            return
+        }
+        if (sourceDirKey == targetDirKey) {
+            call.reject("source and target must differ")
+            return
+        }
+        ioPool.execute {
+            try {
+                val sourceDir = resolveLocalAssetFile(getContext().filesDir, "$sourceDirKey/__probe__").parentFile
+                val targetDir = resolveLocalAssetFile(getContext().filesDir, "$targetDirKey/__probe__").parentFile
+                if (sourceDir == null || targetDir == null) {
+                    call.reject("invalid asset dir")
+                    return@execute
+                }
+                // 源目录不存在 = 该笔记本来就没有资产（正常情况）⇒ 返回 0，不制造 plugin error 噪声。
+                if (!sourceDir.isDirectory) {
+                    call.resolve(JSObject().put("copied", 0).put("bytes", 0L))
+                    return@execute
+                }
+                targetDir.mkdirs()
+                var copied = 0
+                var bytes = 0L
+                sourceDir.listFiles()?.sortedBy { it.name }?.forEach { file ->
+                    if (!file.isFile || file.name.endsWith(".tmp")) return@forEach
+                    val destination = File(targetDir, file.name)
+                    FileInputStream(file).use { input ->
+                        FileOutputStream(destination).use { output -> input.copyTo(output, 64 * 1024) }
+                    }
+                    copied += 1
+                    bytes += destination.length()
+                }
+                call.resolve(JSObject().put("copied", copied).put("bytes", bytes))
+            } catch (error: Exception) {
+                call.reject(error.message ?: "copy failed")
+            }
+        }
+    }
+
     /** PUT：把本地 note-assets/localKey 流式上传到 S3 key（IO 在 ioPool，避免插件单线程串行）。 */
     @PluginMethod
     fun putFile(call: PluginCall) {

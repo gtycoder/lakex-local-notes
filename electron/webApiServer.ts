@@ -79,6 +79,7 @@ export const WEB_METHODS: Record<string, string> = {
   runBackupNow: "run_backup_now",
   getBackupUsage: "get_backup_usage",
   batchNotes: "batch_notes",
+  duplicateNotes: "duplicate_notes",
   pickMarkdownFiles: "pick_markdown_files",
   readImportImage: "read_import_image",
   exportNotesBatch: "export_notes_batch",

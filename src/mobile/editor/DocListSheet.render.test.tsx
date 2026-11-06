@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const bridgeMock = vi.hoisted(() => ({
   listQuickNoteTags: vi.fn(),
   batchNotes: vi.fn(),
+  duplicateNotes: vi.fn(),
   getHomeSnapshot: vi.fn(),
 }));
 const confirmMock = vi.hoisted(() => ({ confirmMobile: vi.fn(async (_options?: { title?: string; body?: string; confirmText?: string }) => true) }));
@@ -64,6 +65,7 @@ beforeEach(() => {
   tagReadsMock.loadNoteTagIdsForNotes.mockReset().mockResolvedValue({ byNoteId: TAGS, truncated: false, requested: 3, loaded: 3 });
   bridgeMock.listQuickNoteTags.mockReset().mockResolvedValue(DIR);
   bridgeMock.batchNotes.mockReset().mockResolvedValue({ ok: true, results: [{ id: "n1", ok: true }], summary: { total: 1, done: 1, failed: 0 } });
+  bridgeMock.duplicateNotes.mockReset().mockResolvedValue({ ok: true, results: [{ id: "n1", ok: true, newId: "n1copy" }], summary: { total: 1, done: 1, failed: 0 } });
   bridgeMock.getHomeSnapshot.mockReset().mockResolvedValue({
     treeNodes: [
       { id: "nb1", title: "笔记本", parentId: null, nodeType: "notebook" },
@@ -134,17 +136,18 @@ describe("DocListSheet 多选模式（261106 task-82）", () => {
     expect(host.querySelector('[role="toolbar"][aria-label="多选操作"]')).not.toBeNull();
   });
 
-  it("底部操作条：移动 / 移入回收站 / 打标签（没有批量彻底删除）；未选时提示先选", async () => {
+  it("底部操作条：创建副本 / 移动 / 移入回收站 / 打标签（没有批量彻底删除）；未选时提示先选", async () => {
     await render();
     await enterByButton();
     const bar = host.querySelector('[role="group"][aria-label="批量操作"]')!;
     const labels = [...bar.querySelectorAll("button")].map((b) => (b.textContent ?? "").trim());
-    expect(labels).toEqual(["移动", "移入回收站", "打标签"]);
+    expect(labels).toEqual(["创建副本", "移动", "移入回收站", "打标签"]);
     expect(labels.join("")).not.toContain("彻底");
     expect(labels.join("")).not.toContain("删除");
     await act(async () => { ([...bar.querySelectorAll("button")][1] as HTMLButtonElement).click(); await Promise.resolve(); });
     expect(toastMock.showToast).toHaveBeenCalledWith("请先选择文档");
     expect(bridgeMock.batchNotes).not.toHaveBeenCalled();
+    expect(bridgeMock.duplicateNotes).not.toHaveBeenCalled();
   });
 
   it("移入回收站：二次确认后调 bridge.batchNotes(trash lake)，成功后行消失、退出选择", async () => {
@@ -231,6 +234,50 @@ describe("DocListSheet 多选模式（261106 task-82）", () => {
     const cancel = [...host.querySelectorAll<HTMLButtonElement>(".mb-sheet__foot button")].find((b) => (b.textContent ?? "").trim() === "取消")!;
     await act(async () => { cancel.click(); await Promise.resolve(); });
     expect(bridgeMock.batchNotes).not.toHaveBeenCalled();
+  });
+
+  const duplicateButton = (): HTMLButtonElement =>
+    [...host.querySelectorAll<HTMLButtonElement>('[role="group"][aria-label="批量操作"] button')]
+      .find((b) => (b.textContent ?? "").trim() === "创建副本")!;
+
+  it("创建副本（批量）：调 bridge.duplicateNotes(lake ids)，成功后列表出现新行、退出选择并 toast「已创建 N 个副本」", async () => {
+    bridgeMock.getHomeSnapshot.mockResolvedValue({
+      treeNodes: [],
+      notes: [{ id: "n1copy", title: "周报 副本 2026-11-06 10:00:00", updatedAt: "2026-11-06T02:00:00.000Z", parentId: "nb1" }],
+      quickNotes: { items: [], nextCursor: null },
+    });
+    await render();
+    await enterByButton();
+    await act(async () => { rowByTitle("周报").click(); await Promise.resolve(); });
+    await act(async () => { duplicateButton().click(); await new Promise((resolve) => setTimeout(resolve, 0)); });
+    expect(bridgeMock.duplicateNotes).toHaveBeenCalledWith({ ids: ["n1"] });
+    expect(toastMock.showToast).toHaveBeenCalledWith("已创建 1 个副本");
+    expect(docTitles()).toContain("周报 副本 2026-11-06 10:00:00"); // 列表刷新：副本行可见
+    expect(host.querySelector('[role="toolbar"][aria-label="多选操作"]')).toBeNull(); // 成功退出选择
+  });
+
+  it("创建副本部分失败：toast 给逐条原因并保留选择；成功的那条仍出现在列表", async () => {
+    bridgeMock.duplicateNotes.mockResolvedValue({
+      ok: false,
+      results: [
+        { id: "n1", ok: true, newId: "n1copy" },
+        { id: "n2", ok: false, reason: "body-missing" },
+      ],
+      summary: { total: 2, done: 1, failed: 1 },
+    });
+    bridgeMock.getHomeSnapshot.mockResolvedValue({
+      treeNodes: [],
+      notes: [{ id: "n1copy", title: "周报 副本", updatedAt: "2026-11-06T02:00:00.000Z", parentId: "nb1" }],
+      quickNotes: { items: [], nextCursor: null },
+    });
+    await render();
+    await enterByButton();
+    await act(async () => { rowByTitle("周报").click(); await Promise.resolve(); });
+    await act(async () => { rowByTitle("随笔").click(); await Promise.resolve(); });
+    await act(async () => { duplicateButton().click(); await new Promise((resolve) => setTimeout(resolve, 0)); });
+    expect(toastMock.showToast).toHaveBeenCalledWith("已创建 1 个副本，失败 1 项：正文文件缺失，无法复制", { type: "error" });
+    expect(docTitles()).toContain("周报 副本");
+    expect(host.querySelector('[role="toolbar"][aria-label="多选操作"]')).not.toBeNull(); // 失败保留选择
   });
 
   it("返回键：选择态先退出多选（列表不关）", async () => {

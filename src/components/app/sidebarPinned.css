@@ -1,0 +1,31 @@
+/* 「置顶」区（261107）：顶部独立分组 + 分隔线；行沿用 .tree-row/.note-row 的几何与状态色。 */
+.sidebar-pinned { flex: 0 0 auto; }
+.sidebar-pinned__header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: var(--lake-radius-sm);
+  color: var(--lake-text-2);
+  cursor: pointer;
+  user-select: none;
+}
+.sidebar-pinned__header:hover { background: var(--lake-bg-hover); }
+.sidebar-pinned__header:focus-visible { outline: var(--lake-focus-ring-width) solid var(--lake-accent); outline-offset: -2px; }
+.sidebar-pinned__header .tree-chevron { flex: 0 0 16px; }
+.sidebar-pinned__header strong { font-size: var(--lake-font-size-body); font-weight: var(--lake-font-weight-semibold); }
+.sidebar-pinned__count {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+  color: var(--lake-text-4);
+  font-size: var(--lake-font-size-tiny);
+}
+/* 层级：置顶标题 = 一级；置顶项 = 二级（与目录 .tree-children 同口径缩进 16px，用户 261107 验收）。 */
+.sidebar-pinned__body { display: flex; flex-direction: column; margin-left: 16px; }
+/* 与下方目录的分隔线要明显（用户 261107）：用常规边框色而非极淡 hairline；线宽保持 0.5px 设计口径。 */
+.sidebar-pinned__divider { margin: 6px 8px; border-top: 0.5px solid var(--lake-border-1); }
+.pinned-row.is-dragging { opacity: 0.5; }
+.pinned-row.is-drop-before { box-shadow: inset 0 2px 0 0 var(--lake-accent); }
+.pinned-row.is-drop-after { box-shadow: inset 0 -2px 0 0 var(--lake-accent); }

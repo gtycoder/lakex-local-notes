@@ -23,6 +23,94 @@ export function normalizeClipboardHtml(fragment: DocumentFragment, document: Doc
   return html;
 }
 
+export interface ClipboardPayload {
+  html: string;
+  plain: string;
+}
+
+/**
+ * 把 DOM Range 转成写入剪贴板的两段内容（HTML + 纯文本）。
+ *
+ * **单一来源**：正文 ⌘C/剪切 的 copy/cut 捕获处理器与块菜单「复制」桥（blockCopyBridge）
+ * 都从这里取，保证「块级多选 → 点复制」和 ⌘C 产出**逐字节一致**的剪贴板内容
+ * （图片物化/空块清理/零宽字符都只在 normalizeClipboardHtml 里做一次）。
+ */
+/**
+ * Range → 纯文本（保留块级换行）。
+ *
+ * 为什么不用 `range.toString()`：它对块元素不做分隔，多段/标题/列表会粘成一行
+ * （用户 261107 报「纯文字复制换行没了」）。这里按块级标签补 `\n`、`<br>` 转换行，
+ * 隐藏节点同样跳过；单段内选区不会多出换行。
+ */
+/** 代码块内部纯文本：保留原有空行（该段不参与块间压缩）。 */
+function codeBlockPlainText(element: Element): string {
+  const out: string[] = [];
+  const visit = (node: Node): void => {
+    if (node.nodeType === Node.TEXT_NODE) { out.push(node.textContent ?? ""); return; }
+    if (node.nodeType !== Node.ELEMENT_NODE) return;
+    const el = node as Element;
+    if (el.matches(HIDDEN_SELECTORS)) return;
+    if (el.tagName === "BR") { out.push("\n"); return; }
+    for (const child of Array.from(el.childNodes)) visit(child);
+    // 代码行通常是 div / ne-line / li；行后补换行，空行（空 div）自然形成 \n\n。
+    if (el.tagName === "DIV" || el.tagName === "P" || el.tagName === "LI" || el.tagName === "NE-LINE") out.push("\n");
+  };
+  visit(element);
+  return out.join("").replace(/[ \t]+\n/g, "\n").replace(/^\n+|\n+$/g, "");
+}
+
+function isCodeBlock(element: Element): boolean {
+  return element.tagName === "PRE" || element.tagName === "NE-CODE-BLOCK" || element.classList.contains("ne-code-block");
+}
+
+export function plainTextFromRange(range: Range): string {
+  const CUSTOM_BLOCKS = /^(NE-P|NE-H[1-6]|NE-LI|NE-UL|NE-OL|NE-BLOCKQUOTE|NE-CODE-BLOCK|NE-TABLE|NE-CARD)$/;
+  const parts: string[] = [];
+  const codeBlocks: string[] = [];
+  const codeMarker = (index: number): string => "\u0000" + index + "\u0000";
+  const walk = (node: Node): void => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      parts.push(node.textContent ?? "");
+      return;
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) return;
+    const element = node as Element;
+    if (element.matches(HIDDEN_SELECTORS)) return;
+    if (element.tagName === "BR") {
+      parts.push("\n");
+      return;
+    }
+    if (isCodeBlock(element)) {
+      // 用占位符把代码块隔离：块间换行归一化不会碰到它内部的原始空行。
+      parts.push(codeMarker(codeBlocks.length));
+      codeBlocks.push(codeBlockPlainText(element));
+      parts.push("\n");
+      return;
+    }
+    for (const child of Array.from(element.childNodes)) walk(child);
+    if (BLOCK_TAGS.has(element.tagName) || CUSTOM_BLOCKS.test(element.tagName)) parts.push("\n");
+  };
+  for (const child of Array.from(range.cloneContents().childNodes)) walk(child);
+  let text = parts.join("")
+    .replace(/[\u200B\u200C\u200D\uFEFF]/g, "")
+    .replace(/[ \t]+\n/g, "\n")
+    // 嵌套块（卡片/列表里的段落）会让块级换行叠加成 \n\n ⇒ 压成单换行，避免复制出空行。
+    .replace(/\n{2,}/g, "\n")
+    .replace(/^\n+|\n+$/g, "");
+  // 代码块内部原样回填（保留内容本来就有空行），不回填后再做归一化。
+  for (let index = 0; index < codeBlocks.length; index += 1) {
+    text = text.split(codeMarker(index)).join(codeBlocks[index]);
+  }
+  return text;
+}
+
+export function buildClipboardPayload(range: Range, document: Document): ClipboardPayload {
+  return {
+    html: normalizeClipboardHtml(range.cloneContents(), document),
+    plain: plainTextFromRange(range),
+  };
+}
+
 export function normalizeImageDataUrl(value: string): string | null {
   const match = /^data:[^;,]+;base64,([a-z0-9+/=\s]+)$/i.exec(value);
   if (!match) return value.startsWith("data:") ? null : value;

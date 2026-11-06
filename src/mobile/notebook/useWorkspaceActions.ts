@@ -1,8 +1,9 @@
 import { useCallback } from "react";
-import { FolderOpen, History, Info, Move, Pencil, SmilePlus, Star, Tag, Trash } from "lucide-react";
+import { Copy, FolderOpen, History, Info, Move, Pencil, SmilePlus, Star, Tag, Trash } from "lucide-react";
 import { bridge } from "../bridge";
 import { isFavorite, toggleFavorite } from "../data/favorites";
 import { showToast } from "../ui/toastBus";
+import { duplicateResultNotice } from "../ui/duplicateNotesResult";
 import type { MobileSheetItem } from "../ui/MobileSheetMenu";
 import type { NotebookTreeItem } from "./useNotebookTreeData";
 import type { WorkspaceOverlay, WorkspaceOverlayKind } from "./useWorkspaceOverlays";
@@ -35,6 +36,8 @@ export interface UseWorkspaceActionsOptions {
   loadTree: () => Promise<NotebookTreeItem[]>;
   switchNotebook: (id: string) => Promise<void>;
   expandGroup: (id: string) => void;
+  /** 创建副本前先保存所有在途编辑（移动端统一保存屏障；缺省 = 跳过）。 */
+  flushSaves?: () => Promise<void>;
 }
 
 /** 「新建」清单 id → 文档 kind（清单与创建通道的唯一对应表；group 不走这里）。 */
@@ -101,6 +104,27 @@ export function useWorkspaceActions(options: UseWorkspaceActionsOptions) {
     } catch { showToast("新建失败", { type: "error" }); }
   }, [closeOverlay, loadTree, openTab, notebookId]);
 
+  /**
+   * 文档行「创建副本」（261106）：走 bridge.duplicateNotes（与桌面 IPC 同契约/同结果）。
+   * 成功后刷新目录（新笔记在源下方一行）并提示；失败给逐条原因（单条失败=reason 文案）。
+   */
+  const duplicateDocument = useCallback(async (node: NotebookTreeItem) => {
+    try {
+      // 先落盘在途编辑：复制读的是磁盘正文（261106 用户确认）。
+      await options.flushSaves?.();
+      const result = await bridge.duplicateNotes({ ids: [node.id] });
+      const notice = duplicateResultNotice(result);
+      if (notice.kind === "success") {
+        await loadTree();
+        showToast(notice.text);
+        return;
+      }
+      showToast(notice.text, { type: "error" });
+    } catch (error) {
+      showToast("创建副本失败：" + (error instanceof Error ? error.message : String(error)), { type: "error" });
+    }
+  }, [loadTree]);
+
   /** 行内 ＋ → 新建分组：在该节点下建子分组并展开父节点（261105 晚已按用户要求恢复原样）。 */
   const createChildGroup = useCallback(async (parentId: string) => {
     try {
@@ -120,9 +144,11 @@ export function useWorkspaceActions(options: UseWorkspaceActionsOptions) {
         { id: "rename", label: "重命名", icon: Pencil },
       ] : [{ id: "rename", label: "重命名", icon: Pencil }]),
       { id: "icon", label: "设置图标", icon: SmilePlus },
-      // 「常用」：只对文档开放（分组/笔记本没有卡片入口）；仅本机，不同步（用户 261019 点单）
+      // 「置顶」：只对文档开放（分组/笔记本没有卡片入口）；仅本机，不同步（用户 261019 点单，261107 改名）
       ...(node.kind === "note" ? [
-        { id: "favorite", label: isFavorite(node.id) ? "取消常用" : "设为常用", icon: Star },
+        { id: "favorite", label: isFavorite(node.id) ? "取消置顶" : "置顶", icon: Star },
+        // 261106：创建副本（非破坏性动作，放在「移动到…」之前；只给文档行 —— 分组/笔记本不能复制）。
+        { id: "duplicate", label: "创建副本", icon: Copy },
       ] : []),
       {
         id: "move", label: "移动到…", icon: Move,
@@ -154,7 +180,8 @@ export function useWorkspaceActions(options: UseWorkspaceActionsOptions) {
     // 「标签…」只对文档行出现（菜单组装已限定）；打开标签选择弹层，保存写 tag_links(kind='note')。
     if (root === "tags") { openOverlay({ kind: "noteTags", node }); return; }
     if (root === "icon") { openOverlay({ kind: "icon", node }); return; }
-    if (root === "favorite") { const on = toggleFavorite(node.id); showToast(on ? "已设为常用" : "已取消常用"); return; }
+    if (root === "favorite") { const on = toggleFavorite(node.id); showToast(on ? "已置顶" : "已取消置顶"); return; }
+    if (root === "duplicate") { void duplicateDocument(node); return; }
     if (root === "history") { openHistorySheet(node); return; }
     if (root === "info") { openOverlay({ kind: "info", node }); return; }
     if (root === "delete") { void applyDelete(node); }

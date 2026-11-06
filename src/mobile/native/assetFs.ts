@@ -107,6 +107,28 @@ export async function saveAssetBytesFs(key: string, bytes: Uint8Array): Promise<
   recordPerf(assetPerf.fsWrite, Date.now() - writeStart, bytes.length);
 }
 
+/**
+ * 原生整目录拷贝（261107，创建副本）：一次桥调用完成 note-assets/{源}/ → note-assets/{副本}/。
+ * 返回复制的文件数；原生不可用（web 预览/旧 APK）返回 null ⇒ 调用方回退 JS 逐文件复制。
+ * 后端 = AssetSyncPlugin.copyAssetDir（IO 在原生 ioPool，字节不过 WebView 桥）。
+ */
+export async function copyNoteAssetsDirNativeFs(sourceNoteId: string, targetNoteId: string): Promise<number | null> {
+  if (!isSafePathSegment(sourceNoteId) || !isSafePathSegment(targetNoteId) || sourceNoteId === targetNoteId) return null;
+  try {
+    const plugin = NativeAssetSync as unknown as {
+      copyAssetDir?: (options: { sourceDir: string; targetDir: string }) => Promise<{ copied?: number }>;
+    };
+    if (!nativeAssetSyncSupported() || typeof plugin.copyAssetDir !== "function") return null;
+    const result = await plugin.copyAssetDir({
+      sourceDir: ROOT + "/" + sourceNoteId,
+      targetDir: ROOT + "/" + targetNoteId,
+    });
+    return typeof result?.copied === "number" ? result.copied : 0;
+  } catch {
+    return null;
+  }
+}
+
 export async function loadAssetBytesFs(key: string): Promise<Uint8Array | null> {
   const path = requireAssetPath(key);
   if (nativeAssetFsAvailable()) {

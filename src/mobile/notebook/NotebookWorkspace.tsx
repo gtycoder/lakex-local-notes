@@ -40,6 +40,9 @@ import { useWorkspaceSession } from "./useWorkspaceSession";
 import { useWorkspaceAssemble } from "./useWorkspaceAssemble";
 import { useWorkspaceSync } from "./useWorkspaceSync";
 import { useWorkspaceActions } from "./useWorkspaceActions";
+import { useTreeSelection } from "./useTreeSelection";
+import { isTreeRowSelectable } from "./treeSelection";
+import { MoveTargetTreeSheet } from "../ui/MoveTargetTreeSheet";
 import { claimMissingBodyNotice, MISSING_DOC_OPEN_HINT } from "../data/missingBodyMessages";
 export type { NotebookTreeItem } from "./useNotebookTreeData";
 export type { PadPanelMode } from "./shellModel";
@@ -81,6 +84,19 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     firstNote,
     loadTree,
   } = useNotebookTreeData(notebookId);
+  /**
+   * 文档树多选模式（261106 task-8）：**唯一入口 = 抽屉页头的「选择」按钮**（长按文档行仍是拖拽排序，
+   * 不能为批量入口抢走既有能力）。状态 + 批量动作（创建副本 / 移动… / 移入回收站）全在 hook 里；
+   * 工作区只接线（行渲染、页头入口、底部条、返回键由 hook 自己注册）。
+   */
+  // 批量「创建副本」也要先过统一保存屏障；session hook 在本调用之后，用 ref 取最新实现（避免调换 hook 顺序）。
+  const flushSavesRef = useRef<(() => Promise<void>) | null>(null);
+  const treeSelection = useTreeSelection({
+    visibleRows,
+    loadTree,
+    flushSaves: () => flushSavesRef.current?.() ?? Promise.resolve(),
+  });
+  const selection = treeSelection.selection;
   const editorsRef = useRef<Map<string, LakeEditorInstance | null>>(new Map());
   /** 实例内正文（usheet / board）的同步 capture：完成/关标签前现取最新 body，绕过防抖。 */
   const liveBodyCapturesRef = useRef<Map<string, () => string | null>>(new Map());
@@ -236,6 +252,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     persistBitableNow,
     handlePaneCapture,
     handleEditorInstance,
+    flushAllTabs,
   } = useWorkspaceSession({
     tabsRef: tabsStateRef,
     active,
@@ -250,6 +267,8 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     editorsRef,
     liveBodyCapturesRef,
   });
+  // 批量「创建副本」的保存屏障（ref 在 useTreeSelection 之后才拿得到，两处同源）。
+  flushSavesRef.current = flushAllTabs;
 
   const {
     renamingId,
@@ -308,6 +327,8 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     loadTree,
     switchNotebook,
     expandGroup,
+    // 创建副本前先过统一保存屏障（否则复制到的是上一次落盘的正文）。
+    flushSaves: flushAllTabs,
   });
 
   // 261103 P11-②：浮层返回栈 / 手动同步 / 活动文档上报 → useWorkspaceSync（effect 顺序逐字保留）。
@@ -325,7 +346,14 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
 
 
   // ---- 目录树长按拖拽（计时/阈值/反馈/落点/FLIP 全在 useLongPress + useTreeDrag）----
+  // 261106 task-8 用户定稿：长按**仍是拖拽排序**（文档/分组同前），多选入口只走页头「选择」。
   const { drag, longPress, setPressedNode } = useTreeDrag({ tree, setTree, expandGroup, loadTree });
+
+  // 抽屉/悬浮树被收起（点遮罩、胶囊、手势）⇒ 退出多选：否则选择态会悬空（底部条已不可见）。
+  useEffect(() => {
+    if (!selection.active) return;
+    if (padTwoPane ? !padTreeOpen : !sidebarOpen) selection.exit();
+  }, [selection.active, selection.exit, padTwoPane, padTreeOpen, sidebarOpen]);
 
 
   /**
@@ -347,6 +375,11 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
       longPress={longPress}
       onPressRow={setPressedNode}
       onActivate={(item) => {
+        // 选择态：可选行（文档）的点击由行自己切成勾选；分组行保留展开/折叠。
+        if (selection.active && !isTreeRowSelectable(item)) {
+          if (childrenOf(item.id).length > 0) toggleGroup(item.id);
+          return;
+        }
         // 与原实现同序：有子节点先展开/折叠；没有子的文档才打开。
         if (childrenOf(item.id).length > 0) { toggleGroup(item.id); return; }
         if (item.kind === "note") {
@@ -356,6 +389,12 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
       }}
       onOpenMenu={(item) => openOverlay({ kind: "menu", node: item })}
       onOpenCreate={(item) => openOverlay({ kind: "create", parentId: item.id })}
+      selection={{
+        active: selection.active,
+        isSelected: selection.isSelected,
+        canSelect: (item) => isTreeRowSelectable(item),
+        onToggle: (item) => selection.toggle(item.id),
+      }}
     />
   );
 
@@ -367,6 +406,8 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     // 逐层收；**没东西可关时必须 return false**，否则 hook 会 preventDefault，
     // 上一层（MobileApp 的 Esc）永远收不到（261103 评审 W2）。顺序单一来源 = padEscapeTarget。
     escape: () => {
+      // 261106 task-8：选择态先退出选择（不收起树/浮层，Esc 逐层收）。
+      if (selection.active) { selection.exit(); return true; }
       const target = padEscapeTarget(padShell, !!overlayKind);
       if (target === "overlay") { closeOverlay(); return true; }
       if (target === "left") { closePadTree(); return true; }
@@ -413,6 +454,15 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
             onNew={() => openOverlay({ kind: "create", parentId: notebookId })}
             onTogglePin={togglePadTreePin}
             onClose={closePadTree}
+            selecting={selection.active}
+            selectionCount={selection.count}
+            selectionAllSelected={selection.allSelected}
+            canSelect={treeSelection.selectableCount > 0}
+            onEnterSelect={() => selection.enter()}
+            onCancelSelect={() => selection.exit()}
+            onToggleAllSelect={() => selection.toggleAll()}
+            selectionActions={treeSelection.actions}
+            onSelectionAction={treeSelection.runAction}
           />
         )}
 
@@ -511,6 +561,9 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
         onCloseHistory={() => closeOverlay("history")}
       />
 
+      {/* 选择模式的「移动到…」目录树弹窗（与文档列表多选同一份 MoveTargetTreeSheet）。 */}
+      <MoveTargetTreeSheet {...treeSelection.moveSheet} />
+
       {!padTwoPane && (
         <WorkspaceDrawers
           sidebarOpen={sidebarOpen}
@@ -528,6 +581,15 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
           onOpenCreate={() => openOverlay({ kind: "create", parentId: notebookId })}
           editor={activeId ? (editorsRef.current.get(activeId) ?? null) : null}
           onCloseOutline={() => closeOverlay("outline")}
+          selecting={selection.active}
+          selectionCount={selection.count}
+          selectionAllSelected={selection.allSelected}
+          canSelect={treeSelection.selectableCount > 0}
+          onEnterSelect={() => selection.enter()}
+          onCancelSelect={() => selection.exit()}
+          onToggleAllSelect={() => selection.toggleAll()}
+          selectionActions={treeSelection.actions}
+          onSelectionAction={treeSelection.runAction}
         />
       )}
     </div>

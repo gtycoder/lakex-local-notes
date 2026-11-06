@@ -192,6 +192,8 @@ export function useWorkspaceSession(options: UseWorkspaceSessionOptions) {
 
   return {
     scheduleAutoSave,
+    /** 统一保存屏障：创建副本前调用，保证副本读到最新正文（261106 用户确认）。 */
+    flushAllTabs,
     toggleEdit,
     handleBack,
     switchNotebook,

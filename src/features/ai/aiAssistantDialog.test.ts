@@ -11,6 +11,8 @@ import { describe, expect, it } from "vitest";
 const DIALOG = readFileSync(new URL("./AiAssistantDialog.tsx", import.meta.url), "utf8");
 const TOOLBAR = readFileSync(new URL("../editor/selectionToolbar/SelectionToolbar.tsx", import.meta.url), "utf8");
 const HOOK = readFileSync(new URL("../../hooks/usePopoverPosition.ts", import.meta.url), "utf8");
+const REQUEST = readFileSync(new URL("./aiAssistantRequest.ts", import.meta.url), "utf8");
+const CONV = readFileSync(new URL("./useAiConversation.ts", import.meta.url), "utf8");
 
 describe("AI 弹窗定位护栏（261004）", () => {
   it("关掉翻转：贴选区的弹窗只放选区下方", () => {
@@ -61,7 +63,7 @@ describe("AI 弹窗定位护栏（261004）", () => {
     // 高度上限 = 编辑区可视高 ⇒ 超出交面板内滚动（不再按选区下方可用高封顶）
     expect(DIALOG).toContain("Math.min(Math.ceil(wr.height - 2 * AI_DIALOG_MARGIN), AI_DIALOG_MAX_HEIGHT)");
     // 浮动工具栏入口把它传进滚动容器
-    expect(TOOLBAR).toMatch(/scroller=\{container\.querySelector<HTMLElement>\("\.ne-editor-wrap"\)\}/);
+    expect(TOOLBAR).toMatch(/scroller: container\.querySelector<HTMLElement>\("\.ne-editor-wrap"\)/);
   });
 
   it("右下角拖拽把手：只改高度（宽度不动）、有最小/上限、**不记忆**（打开即恢复自适应）", () => {
@@ -110,7 +112,7 @@ describe("AI 弹窗定位护栏（261004）", () => {
     // 261005 多模态：预设数组改为按上下文选（有图无字 → 图片预设），gate 也放开了「有图片」
     expect(DIALOG).toContain("{presets.map((preset) => (");
     expect(DIALOG).toContain("turns.length === 0 && (selectionText.trim().length > 0 || hasImages)");
-    expect(DIALOG).toContain("AI_PROMPT_PRESETS");
+    expect(CONV).toContain("AI_PROMPT_PRESETS");
     expect(DIALOG).toContain("applyPreset(preset)");
     // applyPreset 只 setInstruction + 聚焦，绝不调 run()（发送必须由用户点按钮）
     const body = DIALOG.slice(DIALOG.indexOf("const applyPreset"), DIALOG.indexOf("const copyMessage"));
@@ -136,9 +138,9 @@ describe("AI 弹窗定位护栏（261004）", () => {
   });
 
   it("多模态：attachments 作为 image 块随首轮发出；无文字选区时改出图片预设", () => {
-    expect(DIALOG).toContain("attachments?: AiAssetRef[]");
-    expect(DIALOG).toContain('...attachments!.map((asset) => ({ type: "image" as const, asset }))');
-    expect(DIALOG).toContain("AI_IMAGE_PRESETS");
+    expect(REQUEST).toContain("attachments?: AiAssetRef[]");
+    expect(CONV).toContain('...attachments!.map((asset) => ({ type: "image" as const, asset }))');
+    expect(CONV).toContain("AI_IMAGE_PRESETS");
     expect(DIALOG).toContain("hasImages");
     // 预设 gate：有文字选区**或**有图片才出现（图片-only 用图片预设）
     expect(DIALOG).toContain("selectionText.trim().length > 0 || hasImages");
@@ -159,13 +161,13 @@ describe("AI 弹窗定位护栏（261004）", () => {
     // 中断入口必须落在发送键那一格（三个入口共用本面板 ⇒ 一处覆盖全部）
     expect(DIALOG).toContain("{busy ? (");
     expect(DIALOG).toContain("onClick={stop}>停止</button>");
-    expect(DIALOG).toContain("void cancelAiChat(reqRef.current)");
+    expect(CONV).toContain("void cancelAiChat(reqRef.current)");
     // 旧的「disabled 生成中… + 旁边一个次要停止」形态已收敛
     expect(DIALOG).not.toContain("生成中…");
     // 主动停止 ≠ 报错：走 stoppedRef 判据，给中性提示而不是 error
-    expect(DIALOG).toContain("stoppedRef.current");
+    expect(CONV).toContain("stoppedRef.current");
     expect(DIALOG).toContain("已停止生成，已生成的内容保留");
-    expect(DIALOG).toContain("return last && last.role === \"assistant\" && !last.text ? prev.slice(0, -1) : prev;");
+    expect(CONV).toContain("return last && last.role === \"assistant\" && !last.text ? prev.slice(0, -1) : prev;");
   });
 
 });
@@ -175,17 +177,17 @@ describe("AI 弹窗定位护栏（261004）", () => {
  */
 describe("AI 提示词接线（261021 P0）", () => {
   it("首轮内容走 buildAiUserContent，发送时前置 withAiSystemMessage（历史不存 system）", () => {
-    expect(DIALOG).toContain("const firstPrompt = buildAiUserContent(instruction, selectionText, documentText);");
-    expect(DIALOG).toContain("withAiSystemMessage(messages, { imageOnly })");
-    expect(DIALOG).toContain("runAiChat(reqId, wireMessages, appendAssistant)");
+    expect(CONV).toContain("const firstPrompt = buildAiUserContent(instruction, selectionText, documentText);");
+    expect(CONV).toContain("withAiSystemMessage(messages, { imageOnly })");
+    expect(CONV).toContain("runAiChat(reqId, wireMessages, appendAssistant)");
     // 旧的「指令 + 两个换行 + 裸选区」已删除（防注入靠定界符 + 系统提示词）
     expect(DIALOG).not.toContain('instruction.trim() + "\\n\\n" + selectionText');
     expect(DIALOG).not.toContain("const firstPrompt = selectionText.trim() ?");
   });
 
   it("图片-only 仍走图片预设/图片系统提示词（imageOnly 判据只有一处）", () => {
-    expect(DIALOG).toContain("const imageOnly = hasImages && !selectionText.trim() && !includeDocument;");
-    expect(DIALOG).toContain("const presets = imageOnly ? AI_IMAGE_PRESETS : AI_PROMPT_PRESETS;");
+    expect(CONV).toContain("const imageOnly = hasImages && !selectionText.trim() && !includeDocument;");
+    expect(CONV).toContain("const presets = imageOnly ? AI_IMAGE_PRESETS : AI_PROMPT_PRESETS;");
   });
 });
 
@@ -195,26 +197,26 @@ describe("AI 提示词接线（261021 P0）", () => {
  */
 describe("AI 文档全文上下文接线（261021 P1）", () => {
   it("noteId 从入口传入；开关默认关，点击才读本地缓存", () => {
-    expect(DIALOG).toContain("noteId?: string;");
-    expect(DIALOG).toContain("const [includeDocument, setIncludeDocument] = useState(false);");
-    expect(DIALOG).toContain("native.readNoteCaches(noteId)");
-    expect(DIALOG).toContain("buildAiDocumentContext(await native.readNoteCaches(noteId))");
+    expect(REQUEST).toContain("allowDocument?: { noteId?: string }");
+    expect(CONV).toContain("const [includeDocument, setIncludeDocument] = useState(false);");
+    expect(CONV).toContain("native.readNoteCaches(noteId)");
+    expect(CONV).toContain("buildAiDocumentContext(await native.readNoteCaches(noteId))");
     // 空缓存/读取失败都给可见原因，不静默降级
-    expect(DIALOG).toContain("该文档还没有文本缓存，请先打开并保存一次");
-    expect(DIALOG).toContain("读取文档缓存失败，本次不附加全文");
+    expect(CONV).toContain("该文档还没有文本缓存，请先打开并保存一次");
+    expect(CONV).toContain("读取文档缓存失败，本次不附加全文");
   });
 
   it("开聊后锁定上下文；全文结果不自动插入/替换选区", () => {
-    expect(DIALOG).toContain("const docLocked = turns.length > 0;");
-    expect(DIALOG).toContain("setConversationDocMode(includeDocument)");
-    expect(DIALOG).toContain("lastOutput && onInsertAfter && !conversationDocMode");
-    expect(DIALOG).toContain("lastOutput && onReplace && !conversationDocMode");
+    expect(CONV).toContain("const docLocked = turns.length > 0;");
+    expect(CONV).toContain("setConversationDocMode(includeDocument)");
+    expect(DIALOG).toContain("request.outputs.map");
+    expect(DIALOG).toContain("aiOutputLabel(context, mode)");
     expect(DIALOG).toContain("全文模式的结果不自动回写，请复制使用");
   });
 
   it("开关只给无选区入口：有选区/图片/块上下文时整行不渲染（用户 261022）", () => {
-    expect(DIALOG).toContain("const selectionContext = selectionText.trim().length > 0 || hasImages;");
-    expect(DIALOG).toContain("noteId && !selectionContext && (");
+    expect(CONV).toContain("const selectionContext = selectionText.trim().length > 0 || hasImages;");
+    expect(DIALOG).toContain("noteId && allowDocument && !selectionContext && (");
   });
 
   it("开关行复用 kit 的 .ln-switch，且带 aria-checked / 可见说明", () => {
@@ -222,7 +224,7 @@ describe("AI 文档全文上下文接线（261021 P1）", () => {
     expect(DIALOG).toContain('role="switch"');
     expect(DIALOG).toContain('aria-checked={includeDocument}');
     expect(DIALOG).toContain("附加当前文档全文");
-    expect(DIALOG).toContain("开启后，发送时会把已保存的整篇正文发给 AI 供应商");
-    expect(DIALOG).toContain("docContext.truncated");
+    expect(CONV).toContain("开启后，发送时会把已保存的整篇正文发给 AI 供应商");
+    expect(CONV).toContain("docContext.truncated");
   });
 });

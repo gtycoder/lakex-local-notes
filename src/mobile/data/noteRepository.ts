@@ -167,6 +167,22 @@ export interface NoteWriteOptions {
   skipOrphanScan?: boolean;
   /** 跳过“内容是否变化”的读盘比较：正文来自云端权威数据，无需再读旧文件比对。 */
   skipChangeCheck?: boolean;
+  /**
+   * 目录排序位（261107 根因修复）：缺省 = 追加到同级末尾（notes+folders 的 MAX(sort_order)+1）。
+   * 创建副本等"插到指定位置"场景显式传入（源 sort_order+1，调用方先移位同事务）。
+   */
+  sortOrder?: number;
+}
+
+/** 同级（notes+folders，未删）末尾的排序位；空父级 = 0。 */
+async function nextSiblingSortOrder(d: MobileDb, parentId: string | null): Promise<number> {
+  const row = await d.prepare(
+    "SELECT COALESCE(MAX(sort_order), -1) AS max_order FROM (" +
+      "SELECT sort_order FROM notes WHERE parent_id IS ? AND trashed_at IS NULL " +
+      "UNION ALL SELECT sort_order FROM folders WHERE parent_id IS ? AND trashed_at IS NULL" +
+    ")",
+  ).get(parentId, parentId) as { max_order?: number } | undefined;
+  return Number(row?.max_order ?? -1) + 1;
 }
 
 /** 新建笔记（审计 F06：create 与 save 分离——新建走 INSERT，不对任何既有 id 做 upsert）。 */
@@ -183,13 +199,15 @@ export async function createNote(
 ): Promise<void> {
   const now = new Date().toISOString();
   const safeTitle = title.trim() ? title.trim() : (kind === "usheet" ? "无标题表格" : "无标题文档");
+  // 261107：新笔记必须有明确的目录排序位（此前恒写默认 0 ⇒ 同级全是 0，复制"紧邻源"只能靠整组重排）。
+  const sortOrder = opts.sortOrder ?? await nextSiblingSortOrder(d, parentId);
   // 先写正文文件、再提交 DB（对齐桌面 NoteContentRepository：DB 不应声称正文已存在）。
   await writeNoteBody(kind, id, content);
   try {
     const bodyPlain = plain ?? searchTextForKind(kind, content).plain ?? "";
     await d.prepare(
-      "INSERT INTO notes (id, title, parent_id, updated_at, content_hash, is_dirty, text_cache, doc_kind) VALUES (?,?,?,?,?,1,?,?)"
-    ).run(id, safeTitle, parentId, now, sha256Sync(new TextEncoder().encode(content)), bodyPlain, kind);
+      "INSERT INTO notes (id, title, parent_id, sort_order, updated_at, content_hash, is_dirty, text_cache, doc_kind) VALUES (?,?,?,?,?,?,1,?,?)"
+    ).run(id, safeTitle, parentId, sortOrder, now, sha256Sync(new TextEncoder().encode(content)), bodyPlain, kind);
   } catch (error) {
     // 只有"DB 里确实没有这一行"才清理刚写的正文：INSERT 失败也可能来自 id 已存在（并发/调用方误用），
     // 这时删正文会毁掉既有笔记。

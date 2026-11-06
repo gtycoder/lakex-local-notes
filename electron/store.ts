@@ -20,6 +20,13 @@ import { emptyUsheetBody } from "../src/core/usheetDoc.js";
 import { emptyBitableBody } from "../src/core/bitableDoc.js";
 import { emptyBoardBody } from "../src/core/boardDoc.js";
 import { emptyInkBody } from "../src/core/inkDoc.js";
+import { DuplicateNoteFailure, duplicateNoteTitle, type DuplicateNotesReason } from "../src/core/duplicateNotes.js";
+import { prepareDuplicateBody } from "../src/core/lakeBodyRewrite.js";
+
+/** 创建副本的条目级失败：统一类型化错误（IPC 用 duplicateReasonOf 映射，不做字符串猜测）。 */
+function duplicateFailure(reason: DuplicateNotesReason, message: string): DuplicateNoteFailure {
+  return new DuplicateNoteFailure(reason, message);
+}
 import { searchTextForKind } from "../src/core/noteSearchText.js";
 import { countTextStats } from "../src/core/textStats.js";
 import { missingBodyRecovery, type MissingBodyDoc } from "../src/core/missingBody.js";
@@ -83,6 +90,37 @@ export type { S3Settings, SyncSettings, S3GcSettings, HistorySettings, HistoryCl
 export interface ImportedNoteAsset {
   filename: string;
   sourcePath: string;
+}
+
+/** createNoteInWithContent 的入参（261107 review：位置参数改 options，防止 afterSortOrder/kind 传错位）。 */
+export interface CreateNoteWithContentOptions {
+  parentId: string | null;
+  title: string;
+  content: string;
+  assets: ImportedNoteAsset[];
+  id: string;
+  position: "top" | "bottom";
+  kind?: NoteKind;
+  /** 插到该 sort_order 的条目紧后面（同级其后整体 +1，两张表同事务）。 */
+  afterSortOrder?: number;
+  /** 调用方已把资源复制到 note-assets/{id}/（批量副本的异步复制阶段）。 */
+  skipAssetCopy?: boolean;
+}
+
+/**
+ * 批量创建副本的两阶段中间态（261107 并发设计）：
+ * - prepare 阶段：同步校验/读正文/改写/收集资源清单（只读，可并发）；
+ * - copy 阶段：调用方用**有界并发**复制资源（I/O 密集、可并行）；
+ * - commit 阶段：同步落库（串行，保证 sort_order 插入准确）。
+ */
+export interface PreparedDuplicate {
+  sourceId: string;
+  newId: string;
+  title: string;
+  kind: NoteKind;
+  content: string;
+  assets: ImportedNoteAsset[];
+  tagIds: string[];
 }
 
 /** 文档属性（设置里的"属性"弹窗数据）。 */
@@ -567,13 +605,13 @@ export class Store {
 
   createNoteIn(parentId: string | null, title: string): NoteDocument {
     const id = uuid();
-    return this.createNoteInWithContent(parentId, title, emptyLakeBody(id), [], id, "bottom");
+    return this.createNoteInWithContent({ parentId, title, content: emptyLakeBody(id), assets: [], id, position: "bottom" });
   }
 
   /** 新建 Univer 表格文档（kind="usheet"）：正文是 usheets/{id}.usheet.json（Univer IWorkbookData 快照）。 */
   createUsheetIn(parentId: string | null, title: string): NoteDocument {
     const id = uuid();
-    return this.createNoteInWithContent(parentId, title, emptyUsheetBody(), [], id, "bottom", "usheet");
+    return this.createNoteInWithContent({ parentId, title, content: emptyUsheetBody(), assets: [], id, position: "bottom", kind: "usheet" });
   }
 
   /**
@@ -582,7 +620,7 @@ export class Store {
    */
   createBitableIn(parentId: string | null, title: string): NoteDocument {
     const id = uuid();
-    return this.createNoteInWithContent(parentId, title, emptyBitableBody(), [], id, "bottom", "bitable");
+    return this.createNoteInWithContent({ parentId, title, content: emptyBitableBody(), assets: [], id, position: "bottom", kind: "bitable" });
   }
 
   /**
@@ -591,13 +629,119 @@ export class Store {
    */
   createBoardIn(parentId: string | null, title: string): NoteDocument {
     const id = uuid();
-    return this.createNoteInWithContent(parentId, title, emptyBoardBody(), [], id, "bottom", "board");
+    return this.createNoteInWithContent({ parentId, title, content: emptyBoardBody(), assets: [], id, position: "bottom", kind: "board" });
   }
 
   /** 新建手写板文档（kind="ink"）：正文是矢量墨迹 JSON（inks/{id}.ink.json）。 */
   createInkIn(parentId: string | null, title: string): NoteDocument {
     const id = uuid();
-    return this.createNoteInWithContent(parentId, title, emptyInkBody(), [], id, "bottom", "ink");
+    return this.createNoteInWithContent({ parentId, title, content: emptyInkBody(), assets: [], id, position: "bottom", kind: "ink" });
+  }
+
+
+  /**
+   * 261106 文档「创建副本」——阶段 1：**只读准备**（可并发）。
+   *
+   * 校验 → 按 kind 读正文 → 正文改写三件套 → 收集资源清单/标签 id。
+   * 不写盘、不写库；失败抛 DuplicateNoteFailure（带契约 reason）。
+   */
+  prepareDuplicate(sourceId: string, options: { title?: string; now?: Date } = {}): PreparedDuplicate {
+    if (!isSafePathSegment(sourceId)) throw duplicateFailure("invalid-id", `无效的笔记 ID: ${sourceId}`);
+    const row = this.db.prepare(
+      "SELECT n.title,n.parent_id,n.sort_order,n.kind,n.trashed_at,t.node_type,t.deleted_at AS node_deleted_at " +
+      "FROM notes n LEFT JOIN tree_nodes t ON t.id=n.id WHERE n.id=? AND n.deleted_at IS NULL",
+    ).get(sourceId) as { title: string; parent_id: string | null; sort_order: number; kind: string | null; trashed_at: string | null; node_type: string | null; node_deleted_at: string | null } | undefined;
+    if (!row) throw duplicateFailure("not-found", `笔记不存在: ${sourceId}`);
+    if (row.parent_id === TRASH_NOTEBOOK_ID || row.trashed_at) throw duplicateFailure("already-trashed", `笔记在回收站: ${sourceId}`);
+    if (row.node_type !== "note") throw duplicateFailure("unsupported", `只能复制文档: ${sourceId}`);
+    const kind = normalizeNoteKind(row.kind);
+    const sourceBodyPath = this.bodyPathFor(sourceId, kind);
+    if (!fs.existsSync(sourceBodyPath)) throw duplicateFailure("body-missing", `正文文件缺失: ${sourceId}`);
+    const sourceContent = fs.readFileSync(sourceBodyPath, "utf8");
+    const newId = uuid();
+    const title = options.title ?? duplicateNoteTitle(row.title, options.now ?? new Date());
+    const content = prepareDuplicateBody(sourceContent, { sourceId, newId, kind });
+    let tagIds: string[] = [];
+    try { tagIds = this.documentTags.getDocumentTagIds(sourceId); } catch { /* 标签是增量能力 */ }
+    return {
+      sourceId,
+      newId,
+      title,
+      kind,
+      content,
+      assets: this.collectNoteAssets(sourceId),
+      tagIds,
+    };
+  }
+
+  /**
+   * 阶段 3：**同步落库**（串行调用；调用方保证资源已就位）。
+   * 走同一条新建管线（skipAssetCopy），并在建完后补派生缓存/搜索索引与标签关系。
+   */
+  commitPreparedDuplicate(prepared: PreparedDuplicate): NoteDocument {
+    // 关键：**提交时重读**源的父级/sort_order。prepare 阶段（含资源复制的异步窗口）之后，
+    // 同批前面的副本已经插队、或用户移动了源 ⇒ 用旧 sort_order 会让副本错位/不紧邻源。
+    const fresh = this.db.prepare(
+      "SELECT parent_id,sort_order,trashed_at FROM notes WHERE id=? AND deleted_at IS NULL",
+    ).get(prepared.sourceId) as { parent_id: string | null; sort_order: number; trashed_at: string | null } | undefined;
+    if (!fresh) throw duplicateFailure("not-found", `笔记不存在: ${prepared.sourceId}`);
+    if (fresh.parent_id === TRASH_NOTEBOOK_ID || fresh.trashed_at) throw duplicateFailure("already-trashed", `笔记在回收站: ${prepared.sourceId}`);
+    const created = this.createNoteInWithContent({
+      parentId: fresh.parent_id ?? null,
+      title: prepared.title,
+      content: prepared.content,
+      assets: [],
+      id: prepared.newId,
+      position: "bottom",
+      kind: prepared.kind,
+      afterSortOrder: fresh.sort_order,
+      skipAssetCopy: true,
+    });
+    try {
+      const text = this.searchTextFor(created.id, prepared.content);
+      this.updateNoteCaches(created.id, text.markdown, text.plain);
+    } catch { /* 索引可由全量重建修复 */ }
+    try {
+      if (prepared.tagIds.length > 0) this.documentTags.setNoteTags(created.id, prepared.tagIds);
+    } catch { /* 标签是增量能力 */ }
+    return created;
+  }
+
+  /**
+   * 单条副本（同步便捷入口；批量走 orchestrator 的两阶段：并发复制资源 + 串行提交）。
+   * 测试与既有调用点继续可用；行为 = prepare → 同步复制资源 → commit。
+   */
+  duplicateNote(sourceId: string, options: { title?: string; now?: Date } = {}): NoteDocument {
+    const prepared = this.prepareDuplicate(sourceId, options);
+    if (prepared.assets.length > 0) {
+      const targetAssetsDir = this.noteAssetsDirFor(prepared.newId);
+      try {
+        fs.mkdirSync(targetAssetsDir, { recursive: true });
+        for (const asset of prepared.assets) {
+          const destination = path.join(targetAssetsDir, asset.filename);
+          const temporary = `${destination}.tmp-${process.pid}`;
+          fs.copyFileSync(asset.sourcePath, temporary);
+          fs.renameSync(temporary, destination);
+        }
+      } catch (error) {
+        try { fs.rmSync(targetAssetsDir, { force: true, recursive: true }); } catch { /* best effort */ }
+        throw duplicateFailure("failed", "复制资源失败: " + (error instanceof Error ? error.message : String(error)));
+      }
+    }
+    return this.commitPreparedDuplicate(prepared);
+  }
+
+  /** 源笔记 note-assets/{id}/ 下的现存文件（复制副本用；目录不存在 = 无资源）。 */
+  private collectNoteAssets(sourceId: string): ImportedNoteAsset[] {
+    const dir = this.noteAssetsDirFor(sourceId);
+    if (!fs.existsSync(dir)) return [];
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    const assets: ImportedNoteAsset[] = [];
+    for (const entry of entries) {
+      if (!entry.isFile() || entry.name.endsWith(".tmp")) continue;
+      assets.push({ filename: entry.name, sourcePath: path.join(dir, entry.name) });
+    }
+    return assets;
   }
 
   /**
@@ -608,31 +752,28 @@ export class Store {
    * 在跨空间转换中断，调用方的 conversion journal 会负责识别并清理未登记的目标文件。
    */
   createNoteInAtTopWithContent(parentId: string | null, title: string, content: string, assets: ImportedNoteAsset[], id = uuid(), kind: NoteKind = "doc"): NoteDocument {
-    return this.createNoteInWithContent(parentId, title, content, assets, id, "top", kind);
+    return this.createNoteInWithContent({ parentId, title, content, assets, id, position: "top", kind });
   }
 
-  private createNoteInWithContent(
-    parentId: string | null,
-    title: string,
-    content: string,
-    assets: ImportedNoteAsset[],
-    id: string,
-    position: "top" | "bottom",
-    kind: NoteKind = "doc",
-  ): NoteDocument {
+  private createNoteInWithContent(options: CreateNoteWithContentOptions): NoteDocument {
+    const {
+      parentId, title, content, assets, id, position,
+      kind = "doc", afterSortOrder, skipAssetCopy = false,
+    } = options;
     const parent = parentId ?? this.resolveParentNotebook();
     this.ensureParent(parent);
     this.assertParentCompatible(parent, "note");
     if (!isSafePathSegment(id)) throw new AppError("InvalidInput", `无效的笔记 ID: ${id}`);
     const normalizedTitle = title.trim() || "无标题文档";
     const updatedAt = nowIso();
-    const sortOrder = position === "top" ? 0 : this.nextSortOrder(parent);
+    const sortOrder = afterSortOrder !== undefined ? afterSortOrder + 1 : position === "top" ? 0 : this.nextSortOrder(parent);
     const targetAssetsDir = this.noteAssetsDirFor(id);
     const targetNotePath = this.bodyPathFor(id, kind);
 
     // 资源副本先完整落盘；任何失败都在写数据库前回收，保证源小记绝不被影响。
+    // skipAssetCopy = 调用方已用异步/有界并发把资源复制到 targetAssetsDir（批量创建副本用）。
     try {
-      if (assets.length > 0) fs.mkdirSync(targetAssetsDir, { recursive: true });
+      if (!skipAssetCopy && assets.length > 0) fs.mkdirSync(targetAssetsDir, { recursive: true });
       for (const asset of assets) {
         if (!isSafePathSegment(asset.filename)) throw new AppError("InvalidInput", `无效的资源文件名: ${asset.filename}`);
         if (!fs.existsSync(asset.sourcePath) || !fs.statSync(asset.sourcePath).isFile()) {
@@ -646,7 +787,13 @@ export class Store {
       }
       this.atomicWrite(targetNotePath, content);
       const tx = this.db.transaction(() => {
-        if (position === "top") {
+        if (afterSortOrder !== undefined) {
+          // 副本：只把「源之后的同级条目」整体后移一位（与 top 同款 twin 更新，保证两表排序不重叠）。
+          this.db.prepare("UPDATE tree_nodes SET sort_order=sort_order+1,updated_at=?,is_dirty=1 WHERE workspace_id=? AND parent_id=? AND sort_order>? AND deleted_at IS NULL")
+            .run(updatedAt, DEFAULT_WORKSPACE_ID, parent, afterSortOrder);
+          this.db.prepare("UPDATE notes SET sort_order=sort_order+1,updated_at=?,is_dirty=1 WHERE parent_id=? AND sort_order>? AND deleted_at IS NULL")
+            .run(updatedAt, parent, afterSortOrder);
+        } else if (position === "top") {
           // 同一事务内挪开所有同级节点和笔记元数据，避免排序重叠与 IPC 中断窗口。
           this.db.prepare("UPDATE tree_nodes SET sort_order=sort_order+1,updated_at=?,is_dirty=1 WHERE workspace_id=? AND parent_id=? AND deleted_at IS NULL")
             .run(updatedAt, DEFAULT_WORKSPACE_ID, parent);

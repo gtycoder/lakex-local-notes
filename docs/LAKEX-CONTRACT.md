@@ -2060,3 +2060,53 @@ DOM 文本节点扫描（移动端文档 `disableVirtualRendering:true`，整篇
 - **读态筛选的实现口径**（`src/mobile/usheet/usheetReadFilter.ts` + `useSheetReadFilter`）：筛选条件只存在于 Univer 运行时 `SHEET_FILTER_PLUGIN` 的 plugin resource；任何落盘路径前（capture / 切回编辑态 / 卸载）先 **同步** `remove-sheet-filter` 还原 ⇒ `book.save()` 与打开时逐字节一致，不标脏、不进 S3。恢复必须走 `syncExecuteCommand`，否则 capture 先跑会把筛选写进正文。
 - **为什么排序/冻结不能本机化**：Univer 的排序是**改单元格值与顺序**（不是视图层排序），冻结是 worksheet 快照字段；要「本机视图」化只能在落盘前逆向还原，语义假（切走/换端就丢）且与 AGENTS §4「冻结属文档数据」冲突。保护同理（workbook/worksheet resource，跨端应一致）。
 - **桌面侧**：Univer 内建右键菜单已提供「保护行列」；本项目不额外包一层，也不在移动端复制入口。
+
+### 5.48 块菜单「复制」与正文 ⌘C 统一到同一套剪贴板管线（261106 用户报「块级多选复制到微信图裂」）
+
+**现象**：跨多个顶层块拖选 → 点块手柄菜单「复制」→ 粘贴到微信，图文混排**图裂**；同一选区按 ⌘C 正常。
+
+**根因（两条链路不一致）**：
+- ⌘C = 浏览器 `copy` 事件 → `EditorTab` / `LakeEditor` 的捕获处理器接管 → `buildClipboardPayload`（= `normalizeClipboardHtml`：本地资产物化成 `data:`、去内核隐藏节点与零宽字符）→ 写剪贴板。
+- 块菜单「复制」= vendor `copyDomBlock` → 内核 `renderer.execCommand("copy", range)`：内核直接写它自己的剪贴板，HTML 里图片仍是 `http://127.0.0.1:19876/…`（无 base64）⇒ 外部应用取不到图。
+
+**修法（应用侧；不改内核、不 patch vendor）** = `src/features/editor/blockCopyBridge.ts`，由 `mountBlockHoverHandle` 挂到每个编辑器实例：
+1. 菜单项 `mousedown` 时对标签为「复制」的项**快照当前 DOM 选区**（`Range.cloneRange`）——菜单按下可能触发 vendor 清选区/清高亮，click 时再取可能已丢；
+2. `click`（捕获阶段，`preventDefault + stopImmediatePropagation` 阻止 vendor `copyDomBlock`）时取 `window.getSelection()` 非折叠选区，失效则用 mousedown 快照，再退化为 `.ne-brick-highlight` 多块重建（与 vendor `selectBlocksInEditor` 同口径：首块之前 → 末块之后）；
+3. 把该 Range 设成浏览器选区后执行一次 `document.execCommand("copy")` ⇒ 走回 ① 的 copy 捕获处理器 ⇒ 剪贴板内容与 ⌘C **同一份 payload**（图片同样变 `data:`）；
+4. 清掉借用高亮 + Esc 关菜单；`execCommand` 返回 false 时回退 `navigator.clipboard.write(ClipboardItem)`（仍是同一份 payload）。
+
+**单块分两类（261106 A/B 实测后定稿）**：
+- **单张图片块**（菜单「复制」/「复制图片」）⇒ 改走 `native.copyAssetImage`（与 ⌘C 图片复制**同一入口**，剪贴板是 `image/png` 位图）。跟踪口径 = 持续记录最近悬停/按下的 `<img>`（同 `imageCopyBridge` 思路）+ `.ne-brick-highlight` 兜底 —— **必须独立跟踪**，因为块菜单 mousedown 会触发 vendor 的 document 捕获清理（清高亮/收手柄），只靠高亮会漏。
+- **单块文本** ⇒ **不接管**，保持 vendor 内核 `ne-clipboard` 原生格式（Lake→Lake 回粘保真）；「复制代码 / 复制表格」等按标签精确排除。
+
+**为什么单图走位图而不是 HTML（同一张 110,478 B PNG 的 A/B 实测）**：
+
+| 维度 | A 位图（⌘C / 现在单图菜单复制） | B HTML base64（多块混排走这条） |
+| --- | --- | --- |
+| 剪贴板 flavors | `image/png` 63,422 + macOS 8 种位图 | `text/html` 147,418 + `text/plain` 0（**无位图**） |
+| 回粘 Lake 后 img src | 本地资产 URL（86 字符） | `data:image/png;base64,…`（**147,326 字符**） |
+| 正文 .lake 增量 | **+806 B** | **+157,708 B**（base64 以百分号编码进 card value） |
+| 资产 | +1 文件，被正文引用 | 另造 1 个同 sha 重复资产、正文不引用（潜在孤儿） |
+| 外部应用 | 拿得到真图 | 微信/Word 拿不到位图 |
+
+⇒ 图片复制一律位图（外部唯一可用形态 + 正文最小）；图文混排/多块才走 HTML base64（微信能渲染，代价是正文带 base64 —— 这是外部可用的必要代价）。
+
+**边界 / 未做**：剪切（cut）**未**统一；bridge 的「选区被折叠→高亮重建 / execCommand 失败→ClipboardItem」两条兜底**未被真实路径触发过**（有单测覆盖）；「同一 ClipboardItem 同写 image/png + text/html」可两者兼得，但未实测、未立项。护栏：`src/features/editor/blockCopyBridge.test.ts`（19 例：选区直取 / mousedown 快照 / 高亮回退 / mouseover 跟踪（高亮被清仍能命中）/ 单图位图 / 单文本与其他菜单项不接管 / 卸载 / execCommand 失败兜底 / 挂载接线）+ `clipboardHtml.test.ts` 的 `buildClipboardPayload` 3 例。
+
+**实测（261106，dev 实例 CDP 真实鼠标 + navigator.clipboard.read）**：
+- 多块文本 3 段：菜单复制与 ⌘C 的 text/html **逐字节相等**（250 字符，去 Chromium 补的 `<meta charset="utf-8">`）；text/plain 也相等。
+- 图文混排（真实拖入本地 PNG）：两者均 22151 字符、均含 `data:image/png;base64,`、均**无** `127.0.0.1:19876`、无 `ne-clipboard`。
+- 对照组（vendor 内核路径，同选区）：2421 字符、含 `<ne-clipboard data="…">` 与 `http://127.0.0.1:19876/…` 的 img ⇒ 外部应用取不到图（微信图裂）已坐实。
+- 点击瞬间 `window.getSelection()` **非折叠**（menu 根节点 mousedown `preventDefault` + 手柄还原多块 range）⇒ 主路径命中；菜单自动关闭、高亮无残留。
+- **已知缺口**：单块菜单复制仍走内核 ⇒ 单图片块复制到微信仍会裂图（1458 字符、含本地 URL）；单块文本仍保留内核 `ne-*` 格式（关系到 Lake→Lake 粘贴语义，未擅自改）。是否扩展待用户裁决。
+
+### 5.49 块 id 与「创建副本」：内核保留给定 id / 缺 id 时生成新 id（261106 实测）
+
+**背景**：同一窗口多 tab（keep-alive）与分屏会让源文档与副本**同时挂载**；若副本照抄源的块 id，DOM 里会出现两份相同 id。实测内核 bundle 有 `scrollByNodeId`（大纲跳转/滚动定位）等走 `document.getElementById`，会命中 DOM 里第一个匹配节点 ⇒ 可能滚错文档（仅 UI 定位问题，不影响数据/保存/S3）。
+
+**离屏内核实测（dev 实例，`markdownImportPipeline` 的容器 + 临时内核 `setDocument("text/lake") → getDocument("text/lake")`）**：
+- **带 id 的正文**：输出 id 与输入一致（`u1…` 原样保留；个别容器节点会被内核规范化，如 `ul` 的 id 被去掉但 `list` 引用保留）。
+- **不带 id 的正文**：内核会给每个块**生成新 id**（`h82QU`、`ubeb332b6` 等形态）；对产物再跑一遍 round-trip，**id 稳定不变**（第二次输出与第一次逐字节相等与否取决于其它规范化，但 id 集合稳定）。
+- 图片卡（`value="data:%7B…"`）round-trip 后 src 保持；卡片值可能被重新序列化（JSON 空白/顺序），不改变资源指向。
+
+**结论（D 方案落地）** = **不引入离屏内核**，复制时在主/移动端数据层把 Lake 正文的块 id **全量重映射**：`src/core/duplicateNotes.ts` 的 `remapBlockIds`（`id`/`data-lake-id`/`list`/`fid` 属性值；同一旧 id 的**所有出现**一起替换；URL/data:/路径不动）→ 副本块 id 与源完全不相交。实测：复制欢迎文档后源/副本正文 13 个块 id **交集 0**；同时在两个 tab 打开时，新副本的块 id 未出现在 DOM 重复 id 列表里（列表里剩下的都是图标/画布等既有全局 id）。

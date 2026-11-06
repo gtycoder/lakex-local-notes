@@ -11,7 +11,7 @@ import {
   type LakeEditorInstance,
   type LakeEditorPrefs,
 } from "./lakeRuntime";
-import { normalizeClipboardHtml, upgradePastedHtml } from "./clipboardHtml";
+import { buildClipboardPayload, upgradePastedHtml } from "./clipboardHtml";
 import { addAssetAccessToken, stripAssetAccessToken } from "../../lib/assetPort";
 import { registerOutlineTab, unregisterOutlineTab } from "../outline/registry";
 import { useOutline } from "../outline/useOutline";
@@ -207,10 +207,9 @@ export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance
       if (!event.clipboardData || !selection || selection.isCollapsed || selection.rangeCount === 0) return;
       const range = selection.getRangeAt(0);
       if (!host.contains(range.commonAncestorContainer)) return;
-      const plainText = selection.toString();
-      const html = normalizeClipboardHtml(range.cloneContents(), document);
+      const { html, plain } = buildClipboardPayload(range, document);
       event.clipboardData.setData("text/html", html);
-      event.clipboardData.setData("text/plain", plainText);
+      event.clipboardData.setData("text/plain", plain);
       event.preventDefault();
       event.stopImmediatePropagation();
     };
@@ -233,8 +232,9 @@ export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance
       if (!event.clipboardData || !selection || selection.isCollapsed || selection.rangeCount === 0) return;
       const range = selection.getRangeAt(0);
       if (!host.contains(range.commonAncestorContainer)) return;
-      event.clipboardData.setData("text/html", normalizeClipboardHtml(range.cloneContents(), document));
-      event.clipboardData.setData("text/plain", selection.toString());
+      const { html, plain } = buildClipboardPayload(range, document);
+      event.clipboardData.setData("text/html", html);
+      event.clipboardData.setData("text/plain", plain);
       event.preventDefault();
       event.stopImmediatePropagation();
       try {

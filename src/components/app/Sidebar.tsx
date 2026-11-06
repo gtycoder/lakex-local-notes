@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Book, ChevronRight, ChevronsDownUp, Download, EyeOff, FolderInput, FilePlus, File, Filter, Focus, Folder, FolderOpen, FolderPlus, History, Info, Lock, LockOpen, MoreVertical, Pencil, PenLine, Pin, Plus, RefreshCw, Tag as TagIcon, Trash } from "lucide-react";
+import { Book, ChevronRight, ChevronsDownUp, Copy, Download, EyeOff, FolderInput, FilePlus, Filter, Focus, FolderPlus, History, Info, Lock, LockOpen, MoreVertical, Pencil, PenLine, Pin, Plus, RefreshCw, Tag as TagIcon, Trash } from "lucide-react";
 import { DockFilterRow, useDockFilter } from "../ui/DockFilterBar";
 import { LAKE_EMOJIS } from "../../lib/lakeEmojis";
 import { escapeId } from "../../lib/cssEscape";
@@ -37,7 +37,18 @@ import { MoveTargetTreeDialog } from "./MoveTargetTreeDialog";
 import { BatchTagDialog, type BatchTagMode } from "./BatchTagDialog";
 import { TreeSelectionBar } from "./TreeSelectionBar";
 import { TreeSelectionContextMenu } from "./TreeSelectionContextMenu";
+import { SidebarPinnedSection } from "./SidebarPinnedSection";
+import { nodeIcon } from "./treeIcons";
+import {
+  readPinnedOpen,
+  readPinnedTreeIds,
+  setPinnedTreeIds,
+  togglePinnedTreeId,
+  writePinnedOpen,
+  writePinnedTreeIds,
+} from "../../features/sidebar/pinnedTree";
 import { batchNotesResultNotice } from "./batchNotesFeedback";
+import { duplicateNotesResultNotice } from "./duplicateNotesFeedback";
 import {
   EMPTY_TREE_SELECTION,
   TREE_SELECTION_MAX,
@@ -86,6 +97,8 @@ interface SidebarProps {
   onCopyMarkdown: (node: TreeNode) => void;
   onExportAs: (node: TreeNode, format: ExportFormat) => void;
   onCopyPaths: (node: TreeNode) => void;
+  /** 创建副本前先 flush 这些文档的未保存编辑（App 注入：dirty tab 先落盘，副本才拿到最新正文）。 */
+  onBeforeDuplicate?: (ids: readonly string[]) => Promise<void> | void;
   onSetIcon: (node: TreeNode, icon: string | null) => void;
   /** 文档属性弹窗 */
   onShowInfo: (node: TreeNode) => void;
@@ -161,9 +174,12 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
   const [batchNotice, setBatchNotice] = useState<string | null>(null);
   /** 提示行右侧动作（导出后的「打开所在文件夹」）。 */
   const [batchNoticeAction, setBatchNoticeAction] = useState<{ label: string; onClick(): void } | null>(null);
-  /** 多选态右键菜单（恰好三项；未多选时用旧菜单）。 */
+  /** 多选态右键菜单（恰好四项：创建副本/移动…/导出…/移入回收站；未多选时用旧菜单）。 */
   const [batchMenu, setBatchMenu] = useState<{ x: number; y: number } | null>(null);
   const [batchDialogError, setBatchDialogError] = useState<string | null>(null);
+  /** 桌面「置顶」：纯设备本地的入口列表（不改原目录、不写库、不进 S3）。 */
+  const [pinnedIds, setPinnedIds] = useState<string[]>(() => readPinnedTreeIds());
+  const [pinnedOpen, setPinnedOpen] = useState<boolean>(() => readPinnedOpen());
   /** 「移动到…」树形弹层：记录本次要移动的 id 快照与当前父级（弹层打开期间不随选择变化）。 */
   const [moveDialog, setMoveDialog] = useState<{ ids: string[]; currentParentId: string | null } | null>(null);
   /** 批量「打标签…」层：id 快照 + 标签目录（打开时现读，复用 listQuickNoteTags）。 */
@@ -212,6 +228,11 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
   const selectedIdSet = useMemo(() => new Set(selection.ids), [selection.ids]);
   const nodeById = useMemo(() => new Map(props.nodes.map((node) => [node.id, node])), [props.nodes]);
   const selectionActions = useMemo(() => treeSelectionActions(nodeById, selection), [nodeById, selection]);
+  /** 「创建副本」可用判据（261106）：选区里**全是文档**才成立 ⇒ 分组/笔记本/混选时菜单项禁用并给原因。 */
+  const selectionAllNotes = useMemo(
+    () => selection.ids.length > 0 && selection.ids.every((id) => nodeById.get(id)?.nodeType === "note"),
+    [nodeById, selection.ids],
+  );
 
   // 可见集合变化（筛选/搜索/删除/移动）⇒ 剔除已不可选的 id（不改变选择顺序）。
   useEffect(() => {
@@ -543,7 +564,7 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
     event.preventDefault();
     event.stopPropagation();
     setContextId(node.id);
-    // 261106 task-88：多选态右键 = 恰好三项（移入回收站/移动…/导出…）；未多选时保持旧菜单不变。
+    // 261106 task-88 + 副本：多选态右键 = 恰好四项（创建副本/移动…/导出…/移入回收站）；未多选时保持旧菜单不变。
     if (selection.ids.length > 0) {
       setContextMenu(null);
       setBatchMenu({ x: event.clientX, y: event.clientY });
@@ -558,6 +579,15 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
     event.preventDefault();
     event.stopPropagation();
     setCreateMenu({ node, anchor: event.currentTarget as HTMLElement });
+  }, []);
+
+  /** 置顶区行右键：始终走单条菜单（不因目录里存在多选而变成批量菜单）。 */
+  const openPinnedContext = useCallback((event: React.MouseEvent, node: TreeNode) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setBatchMenu(null);
+    setContextId(node.id);
+    setContextMenu({ id: node.id, x: event.clientX, y: event.clientY });
   }, []);
 
   const contextNode = props.nodes.find((node) => node.id === contextMenu?.id) ?? null;
@@ -1010,6 +1040,95 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
     }
   }, [selection.ids, props.nodes]);
 
+  /**
+   * 「创建副本」（261106；桌面 IPC duplicate_notes，移动端同形）：单条右键与多选右键/浮动条共用这一条通路。
+   * 主进程逐条复制（部分失败不回滚其它条）：成功 ⇒ 刷新目录树（副本紧邻原笔记下方）+「已创建 N 个副本」；
+   * 有失败 ⇒ 失败项保留选中（单条右键时选区本就为空，不凭空拉出多选条）并给逐条原因文案。
+   */
+  const runDuplicate = useCallback(async (ids: readonly string[]) => {
+    if (ids.length === 0 || batchBusy) return;
+    setBatchBusy(true);
+    setBatchNotice(null);
+    setBatchNoticeAction(null);
+    try {
+      // 先落盘未保存编辑（261106 用户确认）：复制读的是磁盘正文，不 flush 会漏掉最后一次输入。
+      await props.onBeforeDuplicate?.([...ids]);
+      const result = await native.duplicateNotes({ ids: [...ids] });
+      const notice = duplicateNotesResultNotice(result);
+      setBatchNotice(notice.text);
+      if (result.ok) {
+        setSelection(EMPTY_TREE_SELECTION);
+        await props.onRefreshTree();
+      } else {
+        const failed = new Set(notice.failedIds);
+        if (failed.size > 0) {
+          setSelection((state) => (state.ids.length === 0 ? state : { ...state, ids: state.ids.filter((id) => failed.has(id)) }));
+        }
+      }
+    } catch (error) {
+      setBatchNotice("创建副本失败：" + (getNativeErrorMessage(error) || "未知原因"));
+    } finally {
+      setBatchBusy(false);
+    }
+  }, [batchBusy, props.onRefreshTree]);
+
+  /** 单条右键「创建副本」（只在 note 行出现；笔记本/分组没有这个入口）。 */
+  const duplicateOne = useCallback((node: TreeNode) => {
+    if (node.nodeType !== "note") return;
+    void runDuplicate([node.id]);
+  }, [runDuplicate]);
+
+  /** 多选「创建副本」（菜单/浮动条；选区里全是文档时才可点）。 */
+  const duplicateSelected = useCallback(() => {
+    void runDuplicate(selection.ids.filter((id) => nodeById.get(id)?.nodeType === "note"));
+  }, [nodeById, runDuplicate, selection.ids]);
+
+  /** 置顶状态读写（设备本地）；节点 id 与目录树同源。 */
+  const pinnedSet = useMemo(() => new Set(pinnedIds), [pinnedIds]);
+  const selectionAllPinned = selection.ids.length > 0 && selection.ids.every((id) => pinnedSet.has(id));
+  /** 搜/筛选时隐藏置顶区：避免"目录被筛掉、置顶还在"的语义歧义。 */
+  const showPinnedSection = useMemo(
+    () => !query && !(props.tagFilter && isTagSelectionActive(props.tagFilter.selection)) && pinnedIds.some((id) => nodeById.has(id)),
+    [query, props.tagFilter, pinnedIds, nodeById],
+  );
+  const refreshPinnedState = useCallback(() => setPinnedIds(readPinnedTreeIds()), []);
+  const togglePinNode = useCallback((node: TreeNode) => {
+    // 笔记本不可置顶（用户 261107 明确）：只有文档 / 分组可以。
+    if (node.nodeType === "notebook") return;
+    const pinned = togglePinnedTreeId(node.id);
+    refreshPinnedState();
+    setBatchNotice((pinned ? "已置顶《" : "已取消置顶《") + node.title + "》");
+  }, [refreshPinnedState]);
+  const pinSelected = useCallback(() => {
+    if (selection.ids.length === 0) return;
+    const ids = [...selection.ids];
+    const allPinned = ids.every((id) => pinnedSet.has(id));
+    setPinnedTreeIds(ids, !allPinned);
+    refreshPinnedState();
+    setSelection(EMPTY_TREE_SELECTION);
+    setBatchNotice((allPinned ? "已取消置顶 " : "已置顶 ") + ids.length + " 项");
+  }, [selection.ids, pinnedSet, refreshPinnedState]);
+  // 历史/外部写入的"笔记本置顶"清理掉（节点已加载且确认是笔记本才删，避免加载期误删文档）。
+  useEffect(() => {
+    const notebookPinned = pinnedIds.filter((id) => nodeById.get(id)?.nodeType === "notebook");
+    if (notebookPinned.length === 0) return;
+    const next = pinnedIds.filter((id) => !notebookPinned.includes(id));
+    writePinnedTreeIds(next);
+    setPinnedIds(next);
+  }, [pinnedIds, nodeById]);
+
+  const reorderPinned = useCallback((next: string[]) => {
+    writePinnedTreeIds(next);
+    setPinnedIds(next);
+  }, []);
+  const togglePinnedOpen = useCallback(() => {
+    setPinnedOpen((current) => {
+      const next = !current;
+      writePinnedOpen(next);
+      return next;
+    });
+  }, []);
+
   /** 打开「移动到…」树形弹层（多选 = 当前选择；单条 = 右键那一行）。 */
 
   const openMoveForIds = useCallback((ids: readonly string[]) => {
@@ -1135,6 +1254,19 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
       {filter.open && props.tagFilter && (
         <SidebarTagFilter tags={props.tagFilter.tags} selection={props.tagFilter.selection} onChange={props.tagFilter.onChange} />
       )}
+      {showPinnedSection && (
+        <SidebarPinnedSection
+          nodes={props.nodes}
+          pinnedIds={pinnedIds}
+          activeId={props.activeId}
+          lockedNoteIds={props.lockedNoteIds}
+          open={pinnedOpen}
+          onToggleOpen={togglePinnedOpen}
+          onSelect={props.onSelect}
+          onContextMenu={openPinnedContext}
+          onReorder={reorderPinned}
+        />
+      )}
       <nav className="note-list tree-list" ref={treeRef} onClick={(event) => { if (event.target === event.currentTarget) cancelSelection(); }}>
         {roots.map((node) => <TreeRow key={node.id} node={node} depth={0} {...treeRowProps} />)}
         {roots.length === 0 && <div className="empty-list">{
@@ -1150,15 +1282,18 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
           x={batchMenu.x}
           y={batchMenu.y}
           count={selection.ids.length}
-          actions={{ trash: selectionActions.trash, move: selectionActions.move, export: selection.ids.length > 0 }}
+          actions={{ duplicate: selectionAllNotes, trash: selectionActions.trash, move: selectionActions.move, export: selection.ids.length > 0, pin: selection.ids.length > 0 }}
+          pinnedAll={selectionAllPinned}
           busy={batchBusy}
+          onPin={pinSelected}
+          onDuplicate={duplicateSelected}
           onTrash={() => void trashSelected()}
           onMove={openMoveDialog}
           onExport={() => void exportSelected()}
           onClose={() => setBatchMenu(null)}
         />
       )}
-      {contextMenu && contextNode && <ContextMenu node={contextNode} x={contextMenu.x} y={contextMenu.y} onRename={menuRename} onMove={() => { if (contextNode) openMoveForNode(contextNode); }} onDelete={menuDelete} onCopyMarkdown={() => props.onCopyMarkdown(contextNode)} onExportAs={(format) => props.onExportAs(contextNode, format)} onCopyPaths={() => props.onCopyPaths(contextNode)} onShowInfo={() => props.onShowInfo(contextNode)} onOpenHistory={() => props.onOpenHistory(contextNode)} locked={contextNode.noteFileId ? props.lockedNoteIds.has(contextNode.noteFileId) : false} onToggleLock={() => props.onToggleLockNote(contextNode)} onAddTags={() => setTagEditor({ noteId: contextNode.noteFileId ?? contextNode.id, title: contextNode.title })} onClose={() => setContextMenu(null)} />}
+      {contextMenu && contextNode && <ContextMenu node={contextNode} x={contextMenu.x} y={contextMenu.y} onRename={menuRename} onMove={() => { if (contextNode) openMoveForNode(contextNode); }} onDelete={menuDelete} onCopyMarkdown={() => props.onCopyMarkdown(contextNode)} onExportAs={(format) => props.onExportAs(contextNode, format)} onCopyPaths={() => props.onCopyPaths(contextNode)} onShowInfo={() => props.onShowInfo(contextNode)} onOpenHistory={() => props.onOpenHistory(contextNode)} locked={contextNode.noteFileId ? props.lockedNoteIds.has(contextNode.noteFileId) : false} onToggleLock={() => props.onToggleLockNote(contextNode)} onAddTags={() => setTagEditor({ noteId: contextNode.noteFileId ?? contextNode.id, title: contextNode.title })} onDuplicate={() => { if (contextNode) duplicateOne(contextNode); }} pinned={pinnedSet.has(contextNode.id)} onTogglePin={() => togglePinNode(contextNode)} busy={batchBusy} onClose={() => setContextMenu(null)} />}
       {createMenu && <CreateMenu anchor={createMenu.anchor} onNewChild={(kind) => createChild(createMenu.node, kind)} importTarget={containerAncestorOf(createMenu.node.id)} onImport={(targetId) => void startMarkdownImport(targetId)} onClose={() => setCreateMenu(null)} />}
       {editingId && <TreeRenameDialog key={editingId} initial={editingTitle} onCancel={cancelRename} onConfirm={submitRename} />}
       {createDialog && (() => {
@@ -1203,10 +1338,13 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
       {/* 多选浮动操作条（261106 task-81；固定定位，压状态栏、低于侧栏/顶栏） */}
       <TreeSelectionBar
         count={selection.ids.length}
-        actions={selectionActions}
+        actions={{ ...selectionActions, duplicate: selectionAllNotes }}
+        pinnedAll={selectionAllPinned}
         busy={batchBusy}
         notice={batchNotice}
         noticeAction={batchNoticeAction}
+        onPin={pinSelected}
+        onDuplicate={duplicateSelected}
         onMove={openMoveDialog}
         onTrash={() => void trashSelected()}
         onTag={openBatchTagDialog}
@@ -1405,16 +1543,7 @@ const TreeRowFace = memo(function TreeRowFace(props: TreeRowFaceProps) {
   );
 });
 
-function nodeIcon(type: TreeNodeType, open: boolean, customIcon?: string | null, kind?: string) {
-  if (customIcon) return <span className="tree-node-custom-icon"><NodeIconGlyph value={customIcon} /></span>;
-  if (type === "notebook") return <Book size={16} />;
-  if (type === "group") return open ? <FolderOpen size={16} /> : <Folder size={16} />;
-  if (kind === "usheet") return <Table size={16} />;
-  if (kind === "bitable") return <Database size={16} />;
-  if (kind === "board") return <PenTool size={16} />;
-  if (kind === "ink") return <PenLine size={16} />;
-  return <File size={16} />;
-}
+
 
 function toggleSet(current: Set<string>, id: string): Set<string> {
   const next = new Set(current);
@@ -1471,6 +1600,13 @@ interface ContextMenuProps {
   onToggleLock: () => void;
   /** 只对 note 行出现：「打标签…」打开复用属性面板标签行的弹层（P1 三修）。 */
   onAddTags: () => void;
+  /** 只对 note 行出现：「创建副本」（261106；与多选右键共用 duplicate_notes）。 */
+  onDuplicate: () => void;
+  /** 「置顶」入口（261107，设备本地）：文档/分组/笔记本都可置顶；不改变原目录。 */
+  pinned: boolean;
+  onTogglePin: () => void;
+  /** 批量操作进行中：创建副本禁用（IPC 并发复制没有意义）。 */
+  busy: boolean;
   onClose: () => void;
 }
 
@@ -1575,7 +1711,7 @@ function CreateMenu({ anchor, onNewChild, importTarget, onImport, onClose }: {
   );
 }
 
-const ContextMenu = ({ node, x, y, onRename, onMove, onDelete, onCopyMarkdown, onExportAs, onCopyPaths, onShowInfo, onOpenHistory, locked, onToggleLock, onAddTags, onClose }: ContextMenuProps) => {
+const ContextMenu = ({ node, x, y, onRename, onMove, onDelete, onCopyMarkdown, onExportAs, onCopyPaths, onShowInfo, onOpenHistory, locked, onToggleLock, onAddTags, onDuplicate, pinned, onTogglePin, busy, onClose }: ContextMenuProps) => {
   const menuRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
   // 视口边缘翻转：按光标先挂载，量出菜单真实尺寸后再定位——下方放不下就向上展开，保证整张菜单可点。
@@ -1604,11 +1740,21 @@ const ContextMenu = ({ node, x, y, onRename, onMove, onDelete, onCopyMarkdown, o
           同一组创建动作只保留一处，菜单更短）。创建动作仍走 CREATE_CHILD_ITEMS 单一来源。 */}
       {node.nodeType === "note" ? (
         <>
+          {/* 分组 1：行本身的命名与固定 */}
           <button role="menuitem" onClick={() => { onRename(); onClose(); }}><Pencil size={15} /><span>重命名</span></button>
+          <button role="menuitem" onClick={() => { onTogglePin(); onClose(); }}><Pin size={15} /><span>{pinned ? "取消置顶" : "置顶"}</span></button>
+          <div className="context-menu-sep" role="separator" />
+          {/* 分组 2：树结构 / 内容复制 */}
+          <button role="menuitem" disabled={busy} title={busy ? "正在执行其他操作，请稍候" : undefined}
+            onClick={() => { onDuplicate(); onClose(); }}><Copy size={15} /><span>创建副本</span></button>
           <button role="menuitem" onClick={() => { onMove(); onClose(); }}><FolderInput size={15} /><span>移动…</span></button>
+          <div className="context-menu-sep" role="separator" />
+          {/* 分组 3：内容信息（版本/分类/元数据） */}
           <button role="menuitem" onClick={() => { onOpenHistory(); onClose(); }}><History size={15} /><span>历史版本</span></button>
           <button role="menuitem" onClick={() => { onAddTags(); onClose(); }}><TagIcon size={15} /><span>标签…</span></button>
           <button role="menuitem" onClick={() => { onShowInfo(); onClose(); }}><Info size={15} /><span>属性</span></button>
+          <div className="context-menu-sep" role="separator" />
+          {/* 分组 4：状态与输出 */}
           <button role="menuitem" onClick={() => { onToggleLock(); onClose(); }}>
             {locked ? <LockOpen size={15} /> : <Lock size={15} />}<span>{locked ? "解锁" : "锁定（只读）"}</span>
           </button>
@@ -1618,12 +1764,13 @@ const ContextMenu = ({ node, x, y, onRename, onMove, onDelete, onCopyMarkdown, o
       ) : node.nodeType === "group" ? (
         <>
           <button role="menuitem" onClick={() => { onRename(); onClose(); }}><Pencil size={15} /><span>重命名</span></button>
+          <button role="menuitem" onClick={() => { onTogglePin(); onClose(); }}><Pin size={15} /><span>{pinned ? "取消置顶" : "置顶"}</span></button>
           <button role="menuitem" onClick={() => { onMove(); onClose(); }}><FolderInput size={15} /><span>移动…</span></button>
         </>
       ) : (
         <button role="menuitem" onClick={() => { onRename(); onClose(); }}><Pencil size={15} /><span>重命名</span></button>
       )}
-      <div className="context-menu-sep" />
+      <div className="context-menu-sep" role="separator" />
       <button role="menuitem" className="danger" onClick={() => { onDelete(); onClose(); }}><Trash size={15} /><span>删除</span></button>
     </Menu>
   );

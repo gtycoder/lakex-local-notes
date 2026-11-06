@@ -253,3 +253,65 @@ describe("目录抽屉树窗口化", () => {
     expect(host.querySelector(".mb-empty")?.textContent).toContain("暂无文档");
   });
 });
+
+describe("目录树多选模式（261106 task-8）", () => {
+  const selectionProps = (selected: string[] = [], onToggle = vi.fn(), onActivate = vi.fn()) => {
+    const selection = {
+      active: true,
+      isSelected: (id: string) => selected.includes(id),
+      canSelect: (item: NotebookTreeItem) => item.kind === "note",
+      onToggle,
+    };
+    return { selection, onToggle, onActivate };
+  };
+
+  it("选择态：文档行有复选框（可访问名 role=checkbox），分组行复选框置灰且 aria-selected=false", async () => {
+    const tree = [
+      node("g1", "nb1", 0, { kind: "group", title: "分组" }),
+      node("n1", "nb1", 1),
+      node("n2", "nb1", 2),
+    ];
+    const { selection } = selectionProps(["n1"]);
+    await renderList({ rows: rowsFor(tree), selection });
+
+    const docRow = host.querySelector('[data-node-id="n1"]') as HTMLElement;
+    const otherRow = host.querySelector('[data-node-id="n2"]') as HTMLElement;
+    const groupRow = host.querySelector('[data-node-id="g1"]') as HTMLElement;
+    expect(docRow.getAttribute("aria-selected")).toBe("true");
+    expect(otherRow.getAttribute("aria-selected")).toBe("false");
+    expect(groupRow.getAttribute("aria-selected")).toBe("false");
+    const checkedBox = docRow.querySelector('[data-selection-checkbox="on"]')!;
+    expect(checkedBox.getAttribute("role")).toBe("checkbox");
+    expect(checkedBox.getAttribute("aria-checked")).toBe("true");
+    expect(checkedBox.getAttribute("aria-label")).toBe("选择 标题-n1");
+    expect(otherRow.querySelector('[data-selection-checkbox="off"]')).not.toBeNull();
+    expect(groupRow.querySelector('[data-selection-checkbox="disabled"]')).not.toBeNull();
+    // 选择态下行内 ⋮/＋ 隐藏（底部条才是动作入口，避免误触）
+    expect(host.querySelectorAll(".nb-tree-action")).toHaveLength(0);
+  });
+
+  it("选择态：点文档行 = 切换勾选（不打开文档）；点分组行 = 保持展开/折叠", async () => {
+    const tree = [
+      node("g1", "nb1", 0, { kind: "group" }),
+      node("n1", "nb1", 1),
+    ];
+    const { selection, onToggle, onActivate } = selectionProps([]);
+    await renderList({ rows: rowsFor(tree), selection, onActivate });
+
+    await act(async () => { (host.querySelector('[data-node-id="n1"]') as HTMLElement).click(); });
+    expect(onToggle).toHaveBeenCalledTimes(1);
+    expect(onToggle.mock.calls[0][0].id).toBe("n1");
+    expect(onActivate).not.toHaveBeenCalled();
+
+    await act(async () => { (host.querySelector('[data-node-id="g1"]') as HTMLElement).click(); });
+    expect(onToggle).toHaveBeenCalledTimes(1); // 分组不可选：不产生勾选
+    expect(onActivate).toHaveBeenCalledTimes(1);
+  });
+
+  it("浏览态（不传 selection）：行为与之前一致——复选框不渲染、行内动作在、点行开文档", async () => {
+    await renderList({ rows: rowsFor([node("n1", "nb1", 1)]) });
+    expect(host.querySelectorAll("[data-selection-checkbox]")).toHaveLength(0);
+    expect(host.querySelectorAll(".nb-tree-action")).toHaveLength(2);
+    expect(host.querySelector('[data-node-id="n1"]')?.getAttribute("aria-selected")).toBeNull();
+  });
+});
