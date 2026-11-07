@@ -70,7 +70,7 @@
 }
 
 /* 「打标签」弹窗（与重命名/新建同族）：说明行弱化、chips 区留出呼吸、错误行同款 */
-.note-tag-dialog .ln-dialog__head { align-items: center; }
+.note-tag-dialog__head { align-items: center; }
 .note-tag-dialog__doc {
   margin: 0 0 var(--lake-space-sm);
   color: var(--lake-text-3);
@@ -83,7 +83,7 @@
   font-size: var(--lake-font-size-tiny);
 }
 .asset-rename-field { display: flex; align-items: center; gap: 6px; }
-.asset-rename-field .ln-text-field { flex: 1 1 auto; min-width: 0; }
+.asset-rename-field .asset-rename-input { flex: 1 1 auto; min-width: 0; }
 .asset-rename-ext { flex: 0 0 auto; font-size: var(--lake-font-size-tiny); color: var(--lake-text-3); }
 .asset-rename-hint { margin: 8px 0 0; font-size: var(--lake-font-size-micro); color: var(--lake-text-3); }
 .asset-rename-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 14px; }

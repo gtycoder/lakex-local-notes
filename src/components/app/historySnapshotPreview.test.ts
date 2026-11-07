@@ -135,7 +135,7 @@ describe("历史面板：创建快照按钮（页签行右侧 / 垂直居中）"
   const LAYOUT = readFileSync(new URL("../../styles/kit.css", import.meta.url), "utf8");
 
   it("按钮在页签行 .ln-tabs 内、track 右侧（不在标题栏）", () => {
-    const tabsStart = PANEL.indexOf('<div className="ln-tabs">');
+    const tabsStart = PANEL.indexOf('<div className="ln-tabs history-panel-tabs">');
     const tabsEnd = PANEL.indexOf("</div>", PANEL.indexOf('<div className="ln-tabs__track"', tabsStart));
     expect(tabsStart).toBeGreaterThanOrEqual(0);
     const tabsHead = PANEL.slice(tabsStart, tabsEnd);

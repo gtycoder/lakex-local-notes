@@ -408,7 +408,7 @@
   align-items: center;
   gap: 8px;
 }
-.trash-space-pane > .ln-tabs,
+.trash-space-pane > .trash-panel-tabs,
 .trash-space-pane > .trash-panel-hint,
 .trash-space-pane > .trash-panel-notice,
 .trash-space-pane > .trash-error {
@@ -757,4 +757,4 @@
 
 /* 小记壳层接 ln-segment：保留31px头部与26px按钮，层级高于kit。 */
 .quick-notes-view-switch { height: calc(var(--lake-ctl-h) + var(--lake-space-xs)); }
-.quick-notes-view-switch .ln-segment__item { min-width: 32px; height: calc(var(--lake-ctl-h) - 1px); padding: 0 var(--lake-space-md); justify-content: center; }
+.quick-notes-view-switch .quick-notes-view-segment { min-width: 32px; height: calc(var(--lake-ctl-h) - 1px); padding: 0 var(--lake-space-md); justify-content: center; }

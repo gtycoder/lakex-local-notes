@@ -82,6 +82,7 @@ export function SplitPane({ ariaLabel, storageKey, minWidth = 240, maxWidth = 96
     <div ref={ref} className={className + (resizing ? " is-resizing" : "")} style={style}>
       {leftPane}
       <SplitHandle
+        className={`${className}-handle`}
         ariaLabel={ariaLabel}
         minWidth={minWidth}
         maxWidth={maxWidth}

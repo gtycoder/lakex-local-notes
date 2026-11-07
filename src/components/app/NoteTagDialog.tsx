@@ -27,7 +27,7 @@ export function NoteTagDialog({ open, noteId, title, onClose, onChanged }: NoteT
   if (!open) return null;
   return (
     <Dialog open onDismiss={onClose} label={"给“" + (title || "无标题") + "”设置标签"} className="note-tag-dialog">
-      <div className="ln-dialog__head">
+      <div className="ln-dialog__head note-tag-dialog__head">
         <span className="ln-dialog__title">标签</span>
         <button type="button" className="ln-iconbtn ln-iconbtn--compact" aria-label="关闭标签" onClick={onClose}><X size={14} /></button>
       </div>

@@ -280,7 +280,7 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
           <button className="ln-close" onClick={onClose} aria-label="关闭"><X size={16} /></button>
         </header>
         {/* 页签走 kit 层原语（.ln-tabs：墨线 + 计数徽标） */}
-        <div className="ln-tabs">
+        <div className="ln-tabs history-panel-tabs">
           <div className="ln-tabs__track" role="tablist" aria-label="历史版本">
             <button type="button" role="tab" aria-selected={tab === "history"} className={`ln-tabs__item${tab === "history" ? " is-active" : ""}`} onClick={() => switchTab("history")}>
               <Clock size={14} /> 文档历史<span className="ln-tabs__count">{history.length}</span>
@@ -302,7 +302,7 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
         </p>
         {error && <div className="history-error">{error}</div>}
         {tab === "orphans" && orphans.length > 0 && (
-          <div className="ln-toolbar">
+          <div className="ln-toolbar history-panel-toolbar">
             <span className="ln-toolbar__info">共 {orphans.length} 个，可清理 {cleanable}，受历史保护 {orphans.length - cleanable}</span>
             <button className="ln-btn ln-btn--secondary ln-btn--danger-text" onClick={() => void cleanOrphan()} disabled={cleanable === 0}>
               清理全部可清（{cleanable} 个）

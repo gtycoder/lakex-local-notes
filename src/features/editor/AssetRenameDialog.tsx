@@ -34,7 +34,7 @@ export function AssetRenameDialog({ initial, onCancel, onConfirm }: {
           <div className="asset-rename-field">
             <input
               ref={inputRef}
-              className="ln-text-field"
+              className="ln-text-field asset-rename-input"
               value={value}
               aria-label="附件名称"
               onChange={(e) => setValue(e.target.value)}

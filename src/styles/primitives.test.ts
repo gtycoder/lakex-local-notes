@@ -19,7 +19,7 @@ const PRIMITIVE_FILES = [
   "mobile/kit.css",
   "mobile/floating.css",
 ];
-const CROSS_OWNERSHIP_BASELINE = 30;
+const CROSS_OWNERSHIP_BASELINE = 17;
 
 function primitiveClasses(): Set<string> {
   const names = new Set<string>();

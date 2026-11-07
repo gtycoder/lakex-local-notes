@@ -93,7 +93,7 @@
 .quick-notes-tag-filter-btn:hover { background: var(--lake-bg-hover); }
 .quick-notes-tag-filter-btn.is-on { color: var(--lake-accent-text); background: var(--lake-bg-selected); }
 .quick-notes-tag-filter-menu { min-width: 220px; max-height: 320px; overflow-y: auto; }
-.quick-notes-tag-filter-menu button > .ln-ellipsis { flex: 1 1 auto; min-width: 0; }
+.quick-notes-tag-filter-menu button > .quick-notes-tag-ellipsis { flex: 1 1 auto; min-width: 0; }
 .quick-notes-tag-filter-menu__count { margin-left: auto; color: var(--lake-text-3); font-variant-numeric: tabular-nums; }
 /* 列表视图搜索：放大镜点击后替换「标签」位（对齐语雀）；Enter 过滤、× 清空、Esc 收起 */
 .quick-notes-index-search { display: flex; flex: 1 1 auto; align-items: center; gap: 4px; min-width: 0; height: 30px; padding: 0 8px; border: 0.5px solid var(--lake-border-2); border-radius: var(--lake-radius-xs); background: var(--lake-bg-panel); }
@@ -203,7 +203,7 @@
 .quick-note-entry.editing { position: static; }
 
 /* 动作行直接复用 kit 的 ln-btn 三档（primary / secondary / ghost）；这里只收紧小记的密度。 */
-.quick-note-composer-actions .ln-btn, .quick-note-convert-dialog .ln-btn--ghost { height: 28px; min-height: 28px; padding: 0 10px; border-radius: var(--lake-radius-xs); font-size: var(--lake-font-size-tiny); }
+.quick-note-composer-actions .quick-note-publish, .quick-note-composer-actions .quick-note-discard, .quick-note-convert-dialog .quick-note-convert-cancel { height: 28px; min-height: 28px; padding: 0 10px; border-radius: var(--lake-radius-xs); font-size: var(--lake-font-size-tiny); }
 
 /* 260920 清理：早期的「草稿图片网格 / 已存图片网格 / 已存媒体列」三套类已随卡片预览改自研只读渲染而废弃
    （`QuickNotePreview` 用 .quick-note-preview-* 一套），删掉其遗留规则，媒体样式只剩下面这一套。 */
@@ -480,7 +480,7 @@
 .quick-note-tag-manager__footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 10px; }
 .quick-note-tag-manager__hint { color: var(--lake-text-3); font-size: var(--lake-font-size-micro); }
 .quick-note-tag-manager__merge p { margin: 0 0 8px; color: var(--lake-text-2); font-size: var(--lake-font-size-small); }
-.quick-note-tag-manager__merge .ln-row { width: 100%; }
+.quick-note-tag-manager__merge .qn-tag-merge-row { width: 100%; }
 
 /* 快捷筛选对话框（261024）：时间档 / 自定日期 / 类型 / 标签包含与排除 */
 .quick-note-filter-dialog { width: min(520px, calc(100vw - 48px)); }
@@ -492,8 +492,8 @@
 .quick-note-filter-dialog__chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .quick-note-filter-dialog__chips .quick-note-tag { display: inline-flex; align-items: center; gap: 4px; }
 .quick-note-filter-dialog__dates { display: flex; gap: 8px; }
-.quick-note-filter-dialog__dates .ln-input { flex: 1 1 0; display: flex; align-items: center; gap: 6px; min-width: 0; }
-.quick-note-filter-dialog__dates .ln-input > span { color: var(--lake-text-3); font-size: var(--lake-font-size-micro); }
+.quick-note-filter-dialog__dates .quick-note-date-input { flex: 1 1 0; display: flex; align-items: center; gap: 6px; min-width: 0; }
+.quick-note-filter-dialog__dates .quick-note-date-input > span { color: var(--lake-text-3); font-size: var(--lake-font-size-micro); }
 .quick-note-filter-dialog__empty { color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); }
 .quick-note-filter-dialog__minus { color: var(--lake-text-3); }
 .quick-note-tag--exclude.is-selected { color: var(--lake-status-error); border-color: var(--lake-status-error); }

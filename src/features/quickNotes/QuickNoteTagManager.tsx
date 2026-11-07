@@ -109,7 +109,7 @@ export function QuickNoteTagManager({ open, tags, onClose, onChanged, onError }:
             <p>把“{mergeSource.name}”合并到：</p>
             <div className="quick-note-tag-manager__list">
               {tags.filter((tag) => tag.id !== mergeSource.id).map((tag) => (
-                <button key={tag.id} type="button" className="ln-row" disabled={busy} onClick={() => void merge(mergeSource, tag)}>
+                <button key={tag.id} type="button" className="ln-row qn-tag-merge-row" disabled={busy} onClick={() => void merge(mergeSource, tag)}>
                   <span className="ln-ellipsis">{tag.name}</span>
                   <span className="quick-note-tag-manager__count">({tag.count})</span>
                 </button>

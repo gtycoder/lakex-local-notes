@@ -95,8 +95,8 @@ export function QuickNoteFilterDialog({ open, tags, value, onApply, onClose }: Q
           </div>
           {time.kind === "custom" && (
             <div className="quick-note-filter-dialog__dates">
-              <label className="ln-input"><span>起</span><input className="ln-input__field" type="date" value={time.from} onChange={(event) => setTime({ ...time, from: event.target.value })} aria-label="起始日期" /></label>
-              <label className="ln-input"><span>止</span><input className="ln-input__field" type="date" value={time.to} onChange={(event) => setTime({ ...time, to: event.target.value })} aria-label="结束日期" /></label>
+              <label className="ln-input quick-note-date-input"><span>起</span><input className="ln-input__field" type="date" value={time.from} onChange={(event) => setTime({ ...time, from: event.target.value })} aria-label="起始日期" /></label>
+              <label className="ln-input quick-note-date-input"><span>止</span><input className="ln-input__field" type="date" value={time.to} onChange={(event) => setTime({ ...time, to: event.target.value })} aria-label="结束日期" /></label>
             </div>
           )}
         </section>

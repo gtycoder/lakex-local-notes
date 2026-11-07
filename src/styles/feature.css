@@ -145,8 +145,8 @@ pre {
   font-weight: var(--lake-font-weight-semibold);
 }
 .quick-note-index-row:hover { background: var(--lake-bg-hover); }
-.quick-note-index-row.ln-list-item--focus,
-.quick-notes-index .ln-list-item.is-checked {
+.quick-note-index-row:focus-within,
+.quick-notes-index .quick-note-index-row.is-checked {
   background: var(--lake-accent-tint);
   color: var(--lake-accent-text);
 }

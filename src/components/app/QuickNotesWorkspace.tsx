@@ -982,12 +982,12 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
       {/* 版式切换（对齐云端：标题右侧的分段控件；左侧=列表视图，右侧=小记卡视图） */}
       <div className="ln-segment quick-notes-view-switch" role="group" aria-label="小记版式">
         <button
-          className={"ln-segment__item" + (viewMode === "list" ? " is-active" : "")}
+          className={"ln-segment__item quick-notes-view-segment" + (viewMode === "list" ? " is-active" : "")}
           aria-pressed={viewMode === "list"} title="列表视图" aria-label="列表视图"
           onClick={() => switchView("list")}
         ><LayoutList size={14} /></button>
         <button
-          className={"ln-segment__item" + (viewMode === "note" ? " is-active" : "")}
+          className={"ln-segment__item quick-notes-view-segment" + (viewMode === "note" ? " is-active" : "")}
           aria-pressed={viewMode === "note"} title="小记视图" aria-label="小记视图"
           onClick={() => switchView("note")}
         ><StickyNote size={14} /></button>
@@ -1193,7 +1193,7 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
       {tagIndex.tags.map((tag) => (
         <button key={tag.id} role="menuitemradio" aria-checked={tagFilter.kind === "tag" && tagFilter.id === tag.id} onClick={() => { tagMenu.close(); void changeTagFilter({ kind: "tag", id: tag.id }); }}>
           {tagFilter.kind === "tag" && tagFilter.id === tag.id ? <Check size={14} /> : <span className="quick-notes-menu-gap" />}
-          <span className="ln-ellipsis">{tag.name}</span><span className="quick-notes-tag-filter-menu__count">({tag.count})</span>
+          <span className="ln-ellipsis quick-notes-tag-ellipsis">{tag.name}</span><span className="quick-notes-tag-filter-menu__count">({tag.count})</span>
         </button>
       ))}
       {tagIndex.untaggedCount > 0 && (
@@ -1271,7 +1271,7 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
             {notebooks.map((notebook) => <button key={notebook.id} className="ln-list-item" disabled={saving} onClick={() => void convert(notebook.id)}><span className="ln-list-item__graphic"><FilePlus size={14} /></span><span className="ln-list-item__text ln-ellipsis">{notebook.title}</span></button>)}
             {notebooks.length === 0 && <span className="ln-empty">请先在文档中新建一个笔记本。</span>}
           </div>
-          <footer><button className="ln-btn ln-btn--ghost" disabled={saving} onClick={() => setConvertItems(null)}>取消</button></footer>
+          <footer><button className="ln-btn ln-btn--ghost quick-note-convert-cancel" disabled={saving} onClick={() => setConvertItems(null)}>取消</button></footer>
         </div>
       </Dialog>
     )}

@@ -180,7 +180,7 @@ export function SyncStatusPopover({
                 <p className="sync-status-local-note">数据仅保存在本机；开启云同步后可多端同步与备份。</p>
               </section>
               <footer className="sync-status-actions">
-                <button type="button" className="ln-btn ln-btn--secondary" onClick={() => { setOpen(false); onOpenSettings(); }}><Settings2 size={14} />去设置云同步</button>
+                <button type="button" className="ln-btn ln-btn--secondary sync-status-action" onClick={() => { setOpen(false); onOpenSettings(); }}><Settings2 size={14} />去设置云同步</button>
               </footer>
             </>
           ) : (
@@ -246,7 +246,7 @@ export function SyncStatusPopover({
           )}
           <footer className="sync-status-actions">
             {/* 「上次同步」已在上方明细行里（含耗时）；页脚不再重复，只留入口。 */}
-            <button type="button" className="ln-btn ln-btn--secondary" onClick={() => { setOpen(false); onOpenSettings(); }}><Settings2 size={14} />同步设置</button>
+            <button type="button" className="ln-btn ln-btn--secondary sync-status-action" onClick={() => { setOpen(false); onOpenSettings(); }}><Settings2 size={14} />同步设置</button>
           </footer>
             </>
           )}
