@@ -374,7 +374,7 @@ describe("多选右键菜单（261106 task-88；261106 副本第 4 项；261107 
     clickRow("n2", { metaKey: true });
     rightClick("n2");
     await act(async () => { menuItem("创建副本").click(); await Promise.resolve(); await Promise.resolve(); });
-    expect(mocks.duplicateNotes).toHaveBeenCalledWith({ ids: ["n1", "n2"] });
+    expect(mocks.duplicateNotes).toHaveBeenCalledWith(expect.objectContaining({ ids: ["n1", "n2"] }));
     expect(props.onRefreshTree).toHaveBeenCalled();
     expect(barCount()).toBeUndefined();
     expect(document.querySelector('[role="status"]')?.textContent).toBe("已创建 2 个副本");
@@ -459,7 +459,7 @@ describe("创建副本入口（261106）：单条右键 + 多选浮动条", () =
     render();
     rightClick("n1");
     await act(async () => { menuItem("创建副本").click(); await Promise.resolve(); await Promise.resolve(); });
-    expect(mocks.duplicateNotes).toHaveBeenCalledWith({ ids: ["n1"] });
+    expect(mocks.duplicateNotes).toHaveBeenCalledWith(expect.objectContaining({ ids: ["n1"] }));
     expect(props.onRefreshTree).toHaveBeenCalled();
     expect(document.querySelector('[role="status"]')?.textContent).toBe("已创建 1 个副本");
   });
@@ -492,7 +492,7 @@ describe("创建副本入口（261106）：单条右键 + 多选浮动条", () =
     render();
     clickRow("n1", { metaKey: true });
     await act(async () => { barButton("创建副本")!.click(); await Promise.resolve(); await Promise.resolve(); });
-    expect(mocks.duplicateNotes).toHaveBeenCalledWith({ ids: ["n1"] });
+    expect(mocks.duplicateNotes).toHaveBeenCalledWith(expect.objectContaining({ ids: ["n1"] }));
     expect(document.querySelector('[role="status"]')?.textContent).toBe("已创建 1 个副本");
   });
 });

@@ -250,12 +250,27 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
     setBatchNotice(null);
   }, [query, tagSelection, tagVisibleIds]);
 
-  // 批量结果提示自动消失（4s）：不长期占住屏幕底部；下一次选择/清空也会清。
+  // 批量结果提示自动消失（4s）：批量进行中不消失（进度提示要一直可见）；下一次选择/清空也会清。
   useEffect(() => {
-    if (!batchNotice) return;
+    if (!batchNotice || batchBusy) return;
     const timer = window.setTimeout(() => { setBatchNotice(null); setBatchNoticeAction(null); }, 4000);
     return () => window.clearTimeout(timer);
-  }, [batchNotice]);
+  }, [batchNotice, batchBusy]);
+
+  /** 261108：批量创建副本的进度（只接受当前请求 id，避免旧请求串台）。 */
+  const duplicateRequestIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    try {
+      if (typeof native.onDuplicateProgress !== "function") return;
+      return native.onDuplicateProgress((progress) => {
+        if (!duplicateRequestIdRef.current || progress.requestId !== duplicateRequestIdRef.current) return;
+        setBatchNotice("正在创建副本 " + progress.done + "/" + progress.total + "…");
+      });
+    } catch {
+      // 非 Electron 宿主（测试/Web shim）没有原生进度通道：静默跳过。
+      return;
+    }
+  }, []);
 
   // 选择被清空 ⇒ 多选右键菜单一起收起（Esc/点空白/操作完成）
   useEffect(() => {
@@ -1061,13 +1076,21 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
    */
   const runDuplicate = useCallback(async (ids: readonly string[]) => {
     if (ids.length === 0 || batchBusy) return;
+    const requestId = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : "dup-" + Date.now() + "-" + Math.random().toString(16).slice(2);
+    duplicateRequestIdRef.current = requestId;
     setBatchBusy(true);
-    setBatchNotice(null);
-    setBatchNoticeAction(null);
+    setBatchNotice("正在创建副本 0/" + ids.length + "…");
+    setBatchNoticeAction({ label: "取消", onClick: () => {
+      setBatchNotice("正在取消创建副本…");
+      setBatchNoticeAction(null);
+      void native.cancelDuplicateNotes?.(requestId);
+    } });
     try {
       // 先落盘未保存编辑（261106 用户确认）：复制读的是磁盘正文，不 flush 会漏掉最后一次输入。
       await props.onBeforeDuplicate?.([...ids]);
-      const result = await native.duplicateNotes({ ids: [...ids] });
+      const result = await native.duplicateNotes({ ids: [...ids], requestId });
       const notice = duplicateNotesResultNotice(result);
       setBatchNotice(notice.text);
       if (result.ok) {
@@ -1082,7 +1105,9 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
     } catch (error) {
       setBatchNotice("创建副本失败：" + (getNativeErrorMessage(error) || "未知原因"));
     } finally {
+      duplicateRequestIdRef.current = null;
       setBatchBusy(false);
+      setBatchNoticeAction(null);
     }
   }, [batchBusy, props.onRefreshTree]);
 

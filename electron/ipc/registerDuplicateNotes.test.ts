@@ -47,8 +47,19 @@ type Handler = (...args: unknown[]) => unknown;
 function registerHarness(over: Partial<DuplicateNotesIpcDeps> = {}) {
   const handlers = new Map<string, Handler>();
   const ipc = { handle: (channel: string, handler: Handler) => { handlers.set(channel, handler); }, handleEvent: (channel: string, handler: Handler) => { handlers.set(channel, handler); }, registry: new Map() };
+  const progress: unknown[] = [];
   registerDuplicateNotesIpc(ipc as unknown as Parameters<typeof registerDuplicateNotesIpc>[0], deps(over));
-  return { channels: () => [...handlers.keys()], call: (channel: string, ...args: unknown[]) => handlers.get(channel)!(...args) };
+  return {
+    channels: () => [...handlers.keys()],
+    progress,
+    call: (channel: string, ...args: unknown[]) => {
+      const handler = handlers.get(channel)!;
+      if (channel === "duplicate_notes") {
+        return handler({ sender: { send: (name: string, payload: unknown) => { if (name === "duplicate-progress") progress.push(payload); } } }, ...args);
+      }
+      return handler(...args);
+    },
+  };
 }
 
 const bodyPath = (id: string) => path.join(root, "notes", id + ".lake");
@@ -67,7 +78,7 @@ describe("duplicate_notes：通道与基本语义", () => {
     seedBodyAndAssets(a.id, "A正文");
 
     const h = registerHarness();
-    expect(h.channels()).toEqual(["duplicate_notes"]);
+    expect(h.channels()).toEqual(["cancel_duplicate_notes", "duplicate_notes"]);
     const result = await h.call("duplicate_notes", { ids: [a.id] }) as DuplicateNotesResultShape;
     expect(result.ok).toBe(true);
     expect(result.summary).toEqual({ total: 1, done: 1, failed: 0 });
@@ -273,5 +284,30 @@ describe("duplicate_notes：拒绝与部分失败", () => {
     expect(result.summary).toEqual({ total: 2, done: 1, failed: 1 });
     expect(result.results.find((item) => item.id === a.id)!.reason).toBe("failed");
     expect(result.results.find((item) => item.id === b.id)!.ok).toBe(true);
+  });
+});
+
+describe("duplicate_notes：261108 进度与取消", () => {
+  it("进度事件按阶段发送，requestId 原样回传", async () => {
+    const notebook = store.createNotebook("P");
+    const a = store.createNoteIn(notebook.id, "A");
+    const h = registerHarness();
+    const result = await h.call("duplicate_notes", { ids: [a.id], requestId: "req-progress" }) as DuplicateNotesResultShape;
+    expect(result.ok).toBe(true);
+    const events = h.progress as Array<{ requestId: string; phase: string; done: number; total: number }>;
+    expect(events.every((event) => event.requestId === "req-progress")).toBe(true);
+    expect(events.map((event) => event.phase)).toEqual(expect.arrayContaining(["prepare", "copy", "commit"]));
+  });
+
+  it("取消标记 ⇒ 未提交条目返回 canceled，不物理删除任何东西", async () => {
+    const notebook = store.createNotebook("C");
+    const a = store.createNoteIn(notebook.id, "A");
+    const b = store.createNoteIn(notebook.id, "B");
+    const h = registerHarness();
+    await h.call("cancel_duplicate_notes", "req-cancel");
+    const result = await h.call("duplicate_notes", { ids: [a.id, b.id], requestId: "req-cancel" }) as DuplicateNotesResultShape;
+    expect(result.ok).toBe(false);
+    expect(result.results.every((item) => !item.ok && item.reason === "canceled")).toBe(true);
+    expect(store.listNoteSummaries().filter((note) => note.title.includes("副本"))).toHaveLength(0);
   });
 });

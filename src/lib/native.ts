@@ -166,6 +166,10 @@ export interface LakeNative {
   batchNotes(payload: import("./types").BatchNotesRequestShape): Promise<import("./types").BatchNotesResultShape>;
   /** 261106 文档「创建副本」：新 id + 正文/资源全量复制（资源 URL 重写），逐条结果；两端契约同形。 */
   duplicateNotes(payload: import("./types").DuplicateNotesRequestShape): Promise<import("./types").DuplicateNotesResultShape>;
+  /** 261108：取消批量创建副本（按请求 id；已提交的条目不会回滚）。 */
+  cancelDuplicateNotes(requestId: string): Promise<boolean>;
+  /** 261108：批量创建副本进度（返回取消订阅函数）。 */
+  onDuplicateProgress(callback: (progress: import("./types").DuplicateNotesProgressShape) => void): () => void;
   /** 261106 Markdown 导入：多选 .md 文件（取消 → 空数组；正文由主进程读取，>20MB 标记 tooLarge）。 */
   pickMarkdownFiles(): Promise<import("./types").MarkdownPickedFileShape[]>;
   /** 261108 多选导入：按类型过滤（缺省 all）；返回 Markdown / Word(.docx) / Excel(.xlsx) / CSV。 */
