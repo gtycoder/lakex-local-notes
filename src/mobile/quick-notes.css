@@ -24,7 +24,10 @@
 /* 自带表情选择器（261010 起）——**261013 改成微信样式**（用户定稿：分类放顶部，更适合输入）。
    为什么自建：内核「表情」只插一张点不开的空占位卡（实测两次）。形态 = 顶部分类条（搜索 / 最近 / 8 组）
    + 浅灰底大格子 + 空态；表面沿用浮层令牌，定位由 JS 按**真实尺寸**夹进视口（同 usePopoverPosition 口径）。 */
-.quick-note-emoji-panel { position: fixed; z-index: var(--lake-z-overlay-menu); display: flex; flex-direction: column; gap: 6px; padding: 8px; width: min(340px, calc(100vw - 16px)); border-radius: var(--lake-radius-md); background: var(--lake-bg-panel); box-shadow: var(--lake-shadow-popover); }
+/* v2 柔光纸面（261107）：本文件里唯一的卡片面 = 这个浮动表情卡 —— 圆角/阴影改走 v2 令牌
+ * （--mb-radius-card / --mb-shadow-float），颜色仍只用主题令牌。小记卡本体的卡面在 mobile.css 的
+ * .qn-card（同批已改 --mb-radius-card + --mb-shadow-card），这里不重复定义。 */
+.quick-note-emoji-panel { position: fixed; z-index: var(--lake-z-overlay-menu); display: flex; flex-direction: column; gap: 6px; padding: 8px; width: min(340px, calc(100vw - 16px)); border-radius: var(--mb-radius-card); background: var(--lake-bg-panel); box-shadow: var(--mb-shadow-float); }
 .quick-note-emoji-panel__cats { display: flex; align-items: center; gap: 2px; overflow-x: auto; scrollbar-width: none; }
 .quick-note-emoji-panel__cats::-webkit-scrollbar { display: none; }
 .quick-note-emoji-panel__cat { flex: 0 0 auto; display: flex; align-items: center; justify-content: center; width: var(--mb-tap-min); height: var(--mb-tap-min); padding: 0; border: 0; border-radius: var(--lake-radius-sm); background: transparent; color: var(--lake-text-2); font-size: var(--mb-emoji-cat-size); line-height: 1; }

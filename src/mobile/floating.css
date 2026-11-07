@@ -31,11 +31,14 @@
 
 /* ── 底部 Sheet ─────────────────────────────────────────────────────── */
 /* 进场 = 挂载动画（组件用 {open && …} 渲染）；层序走 --mobile-z-* 令牌，不写魔法数字 */
+/* v2（261107）：顶角 28（--mb-radius-sheet）+ **头部玻璃**、body 仍是实色纸面。
+ * 根节点透明是玻璃头能"透出"页面内容的前提（头部半透明 + 背景模糊，body 自己铺 --lake-bg-panel）；
+ * 无 head/body 结构的变体（.mb-sheet--create）另行铺实色，见文件下方。 */
 .mb-sheet {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: var(--mobile-z-sheet);
   display: flex; flex-direction: column; max-height: 90dvh;
   border-radius: var(--mb-radius-sheet) var(--mb-radius-sheet) 0 0;
-  background: var(--lake-bg-panel); color: var(--lake-text-1);
+  background: transparent; color: var(--lake-text-1);
   box-shadow: var(--lake-shadow-popover); scrollbar-width: none;
   animation: mb-sheet-in var(--mobile-duration-panel) var(--mobile-ease-out);
 }
@@ -46,6 +49,13 @@
   position: relative; flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between;
   gap: 8px; min-height: var(--mb-list-item-h); padding: 8px 8px 0 var(--mb-page-pad);
   touch-action: none;
+  /* v2 头部玻璃底：--mb-glass-bg + 顶栏同一档模糊（--mb-blur-bar，只用于固定功能层）；
+     grabber 仍是 .mb-sheet__head::before 的 32×4，不动。 */
+  border-radius: var(--mb-radius-sheet) var(--mb-radius-sheet) 0 0;
+  background: var(--mb-glass-bg);
+  -webkit-backdrop-filter: var(--mb-blur-bar);
+  backdrop-filter: var(--mb-blur-bar);
+  box-shadow: inset 0 .5px 0 var(--mb-glass-highlight);
 }
 .mb-sheet__head::before {
   content: ""; position: absolute; top: 6px; left: calc(50% - 16px); width: 32px; height: 4px;
@@ -58,6 +68,7 @@
 }
 .mb-sheet__body {
   flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 6px 0 calc(16px + var(--mobile-bottom-safe-area));
+  background: var(--lake-bg-panel);
   scrollbar-width: none;
 }
 .mb-sheet__body::-webkit-scrollbar { display: none; }
@@ -84,6 +95,7 @@
   padding: 8px 8px calc(8px + var(--mobile-bottom-safe-area));
   background: var(--lake-bg-window);
   border-radius: var(--mb-radius-sheet) var(--mb-radius-sheet) 0 0;
+  box-shadow: var(--mb-shadow-float);
   transform: translateY(100%); transition: transform var(--mobile-duration-panel) var(--mobile-ease-out);
 }
 .mb-actionsheet.is-open { transform: translateY(0); }
@@ -119,7 +131,7 @@
   max-width: min(420px, 100%); padding: 12px 14px;
   border-radius: var(--mb-radius-card);
   background: var(--lake-bg-panel); color: var(--lake-text-1);
-  box-shadow: var(--lake-shadow-popover); font-size: var(--lake-font-size-small);
+  box-shadow: var(--mb-shadow-float); font-size: var(--lake-font-size-small);
   transition: transform var(--mobile-duration-panel) var(--mobile-ease-out), opacity var(--mobile-duration-panel) var(--mobile-ease-out);
 }
 .mb-toast.is-hide { transform: translateX(calc(100% + 16px)); opacity: 0; }
@@ -143,7 +155,7 @@
   height: 56dvh; max-height: 90dvh; display: flex; flex-direction: column; overflow: hidden;
   border-radius: var(--mb-radius-sheet) var(--mb-radius-sheet) 0 0;
   background: var(--lake-bg-panel); color: var(--lake-text-1);
-  box-shadow: var(--lake-shadow-popover);
+  box-shadow: var(--mb-shadow-float);
   transform: translateY(100%); transition: transform var(--mobile-duration-panel) var(--mobile-ease-out);
 }
 .mb-menusheet.is-open { transform: translateY(0); }
@@ -186,7 +198,7 @@
    形态照语雀 App（组标题 + 图标格子），**取值走移动端自身令牌**：只用一个强调色（用户 261012 定），
    不给每个格子配品牌色。表面仍用 .mb-sheet（浮层唯一来源），不新造弹层。
    内容 = 空白小记 / 拍摄 / 图片 / 待办 + 空白文档 / 知识库（**无模板、无 OCR**，见 CreateSheet.tsx）。 */
-.mb-sheet--create { padding: var(--mb-page-pad) 0 calc(16px + var(--mobile-bottom-safe-area)); }
+.mb-sheet--create { padding: var(--mb-page-pad) 0 calc(16px + var(--mobile-bottom-safe-area)); background: var(--lake-bg-panel); }
 .mb-create + .mb-create { margin-top: 20px; }
 .mb-create__title {
   margin: 0 0 6px; padding: 0 var(--mb-page-pad);

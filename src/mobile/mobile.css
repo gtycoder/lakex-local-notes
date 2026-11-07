@@ -10,7 +10,8 @@
    只钉 .mobile-app 不够 —— 261014 实测：app 已钉 530，但写作卡仍从 320 长到 428（它解析到 body 的 842）。
    无编辑 dock 时 --mb-app-h 未设置 ⇒ 退回 100%（今天的行为，设置页/首页不受影响）。 */
 html, body, #root { margin: 0; padding: 0; height: var(--mb-app-h, 100%); }
-body { font-family: var(--lake-font-family); background: var(--lake-bg-window); color: var(--lake-text-1); -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; text-rendering: optimizeLegibility; }
+/* v2 柔光纸面（261107）：body 只做外壳画布兜底，真实光场在 .mobile-app（见下）。 */
+body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); color: var(--lake-text-1); -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; text-rendering: optimizeLegibility; }
 /* 自有 Lucide 图标描边与桌面一致；不改变内核/第三方图标与触达尺寸。 */
 .toolbar__button > svg.lucide, .toolbar__icon > svg.lucide,
 .mobile-bottom-bar__item > svg.lucide, .mb-btn > svg.lucide,
@@ -41,7 +42,15 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
 /* 外壳高度：有编辑 dock 时 = **稳定外壳高 − 底部被占高度**（--mb-app-h 由 EditorDock 写，见 viewportShell.ts）
    —— 面板与输入法占同一块区域，内容视口恒定（语雀口径）；无 dock 时退回 100%（今天的行为）。
    261014 实测（改前）：面板一开视口 530→842，写作卡 320→428、整块编辑区跳 108px。 */
-.mobile-app { display: flex; flex-direction: column; height: var(--mb-app-h, 100%); position: relative; overflow: hidden; }
+/* v2 柔光纸面（261107）：外壳画布层 = 顶部主色光晕（--mb-canvas-glow）+ --mb-canvas-1 → --mb-canvas-2 渐变。
+   **只铺在这里**：文档正文（.mobile-doc-body）与编辑区（.lake-editor-mount）仍用纸面实色
+   （--lake-bg-canvas / --lake-bg-panel），不要把这些底色改到本规则或反之。 */
+.mobile-app {
+  display: flex; flex-direction: column; height: var(--mb-app-h, 100%); position: relative; overflow: hidden;
+  background:
+    radial-gradient(130% 64% at 18% -12%, var(--mb-canvas-glow), transparent 58%),
+    linear-gradient(180deg, var(--mb-canvas-1) 0%, var(--mb-canvas-2) 100%);
+}
 
 .mobile-topbar {
   display: flex; align-items: center; gap: 2px; flex: 0 0 auto;
@@ -49,12 +58,13 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
   margin-top: 8px;
   /* 高度必须把「安全区多出来的部分」算进去：只加 padding 不加高度会把 44px 内容区压扁/裁掉
      （261027 刘海屏实机：顶栏文字被上下裁切）。auto-hidden 时整体归零，不受影响。 */
+  /* 261107 v2：内容区高 52（--mobile-topbar-height 已改）；初始 transparent + 无底线（与光场融合），
+     滚动后的玻璃底/发丝线/渐隐统一在下方 .mobile-topbar.is-scrolled。 */
   height: calc(var(--mobile-topbar-height) + max(0px, calc(var(--mobile-top-safe-area) - 8px)));
-  background: var(--lake-bg-window);
-  border-bottom: .5px solid var(--lake-bg-block);
   position: sticky; top: 0; z-index: var(--mobile-z-topbar);
   /* 阅读时自动收起（261019，对齐思源）：收起靠高度/外边距过渡，正文自然上移（不改 position，避免重排错位）。 */
-  overflow: hidden;
+  /* 261107：overflow 必须可见 —— 滚动后的「底部 14px 渐隐」要垂到栏外；收起态再单独裁切（见 .mobile-topbar--auto-hidden）。 */
+  overflow: visible;
   transition: height var(--mobile-duration-panel) var(--mobile-ease-panel),
     margin-top var(--mobile-duration-panel) var(--mobile-ease-panel),
     padding-top var(--mobile-duration-panel) var(--mobile-ease-panel),
@@ -64,7 +74,34 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
 /* 阅读态顶栏收起：高度归零 + 淡出；由 NotebookWorkspace 的 chrome 判据控制（见 notebook/scrollChrome.ts）。 */
 .mobile-topbar--auto-hidden {
   height: 0; min-height: 0; margin-top: 0; padding-top: 0; border-bottom-width: 0; opacity: 0; pointer-events: none;
+  overflow: hidden;
 }
+/* ── v2 柔光纸面 · 顶栏滚动态（261107）──────────────────────────────────────
+ * 初始 .mobile-topbar 透明无底线（见上）；滚动后（.is-scrolled，由滚动接线加类）浮出玻璃底：
+ * --mb-glass-bg-bar + --mb-blur-bar + --mb-shadow-bar（内含底部 0.5px 发丝线），并向下投 14px 渐隐。
+ * 同时收掉首页纯文字 tab、居中显示当前页小标题（.mobile-topbar-collapsed-title）。
+ * ⚠️ 这两个类名由滚动接线（另一批）施加；本文件只提供视觉，不加第二套顶栏实现。
+ * 阅读态自动收起 .mobile-topbar--auto-hidden 的既有行为不变（上面那条只额外裁切）。 */
+.toolbar.mobile-topbar { background: transparent; border-bottom: 0; }
+.mobile-topbar.is-scrolled {
+  background: var(--mb-glass-bg-bar);
+  -webkit-backdrop-filter: var(--mb-blur-bar);
+  backdrop-filter: var(--mb-blur-bar);
+  box-shadow: var(--mb-shadow-bar);
+}
+/* 栏下 14px 渐隐：颜色由画布令牌派生（浅/深自动跟随，不写颜色字面量）。 */
+.mobile-topbar.is-scrolled::after {
+  content: ""; position: absolute; left: 0; right: 0; top: 100%; height: 14px; pointer-events: none;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--mb-canvas-1) 55%, transparent), transparent);
+}
+.mobile-topbar.is-scrolled .mobile-home-tabs { visibility: hidden; }
+/* 滚动后居中的当前页小标题（16/600）。默认不占位；DOM 由顶栏接线补，未接线时不显示。 */
+.mobile-topbar-collapsed-title {
+  display: none; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  white-space: nowrap; color: var(--lake-text-1);
+  font-size: var(--lake-font-size-body); font-weight: var(--lake-font-weight-semibold);
+}
+.mobile-topbar.is-scrolled .mobile-topbar-collapsed-title { display: block; }
 .mobile-topbar-title { flex: 1; text-align: center; font-size: var(--lake-font-size-title); line-height: 30px; font-weight: 400; color: var(--lake-text-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mobile-topbar-actions { display: flex; gap: 0; }
 /* 顶栏左侧等宽空槽（261014）：右侧固定挂**两枚**图标（排序/视图 + 云同步）⇒ 左也补一格，
@@ -152,7 +189,8 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
    ⇒ **光标一路跑出屏幕**（用户报的"光标必须始终在工具栏上方"在小记上就是这么坏的），
    而且面板一开卡片还会长高（352→664）。现在：卡片 = 滚动区内容盒的高度（外壳已被 --mb-app-h 钉住 ⇒ 两种状态同高），
    正文（.quick-note-editor）自己滚、底部动作行固定在卡片底部。 */
-.mobile-qn-composer { position: relative; display: flex; flex-direction: column; box-sizing: border-box; height: 100%; overflow: hidden; background: var(--lake-bg-canvas); border: .5px solid var(--lake-border-1); border-radius: var(--lake-radius-md); padding: 12px; }
+/* v2：写作卡同样是「卡片」（圆角 16 + 卡阴影；0.5px 边线由 --mb-shadow-card 的内描边承担）。 */
+.mobile-qn-composer { position: relative; display: flex; flex-direction: column; box-sizing: border-box; height: 100%; overflow: hidden; background: var(--lake-bg-canvas); border: 0; border-radius: var(--mb-radius-card); box-shadow: var(--mb-shadow-card); padding: 12px; }
 .mobile-qn-composer .quick-note-editor { flex: 1 1 auto; min-height: 0; overflow: hidden; }
 .mobile-qn-composer .mobile-qn-actions { flex: 0 0 auto; }
 /* 261022：capture 写作卡挂载时 120ms 淡入（只动 opacity，不挡输入、不延迟首帧）。 */
@@ -188,7 +226,9 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
 /* ===== 首页卡片语言（小记卡片 + 最近文档 + 笔记本书架/列表 + 带标签底部栏） ===== */
 /* —— 小记卡片（整张白卡：图片完整展示 + 摘要 + 日期 + 「...」，仿语雀） —— */
 .mobile-quick-cards { display: flex; flex-direction: column; gap: 12px; padding: 12px var(--mb-page-pad); }
-.qn-card { display: flex; flex-direction: column; background: var(--lake-bg-panel); border: .5px solid var(--lake-border-1); border-radius: var(--mb-radius-card); overflow: hidden; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+/* v2 卡片：圆角 16（--mb-radius-card）+ --mb-shadow-card（含 0.5px 内描边，替代原发丝边）。
+   border 保留 .5px 但透明：.qn-card.is-revealed 仍靠 border-color 表达搜索定位高亮（几何零变化）。 */
+.qn-card { display: flex; flex-direction: column; background: var(--lake-bg-panel); border: .5px solid transparent; border-radius: var(--mb-radius-card); box-shadow: var(--mb-shadow-card); overflow: hidden; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .qn-card:active { transform: scale(.99); }
 .qn-card.is-revealed { border-color: var(--lake-accent); }
 .qn-card__cover { position: relative; width: 100%; padding: 12px 12px 2px; display: flex; align-items: center; justify-content: center; background: var(--lake-bg-panel); }
@@ -202,7 +242,8 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
 .qn-card__more:active { background: var(--lake-bg-hover); color: var(--lake-text-2); }
 
 /* —— 首页分区（墨韵书房）：整页一张纸，分区不再包白卡，信息靠排印与 hairline 组织 —— */
-.mobile-library { background: var(--lake-bg-window); }
+/* v2：知识库滚动容器透明 ⇒ 露出 .mobile-app 的光场（不再铺平色）。 */
+.mobile-library { background: transparent; }
 .home-section { background: transparent; border-radius: 0; margin: 0; overflow: visible; }
 .home-section:first-child { margin-top: 0; }
 .home-section:last-child { margin-bottom: 0; }
@@ -230,13 +271,20 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
 .nb-shelf { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px 10px; padding: 4px var(--mb-page-pad) 22px; }
 .nb-shelf-card { display: flex; flex-direction: column; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .nb-shelf-cover {
-  position: relative; aspect-ratio: 3 / 3.8; border-radius: var(--lake-radius-md);
+  position: relative; aspect-ratio: 3 / 3.8; border-radius: var(--mb-radius-card);
   /* 封面保持中性卡（深色下把饱和色混进近黑会变成土黄/橄榄，观感发脏）；
      每个笔记本的色相只保留在图标底色与序号上——身份仍在，纸面干净。 */
   background: var(--lake-bg-panel);
-  border: .5px solid var(--lake-border-1);
-  box-shadow: none;
+  /* v2：卡面圆角 16 + 卡阴影（0.5px 内描边已含在 --mb-shadow-card 里，不再另画边线）。 */
+  border: .5px solid transparent;
+  box-shadow: var(--mb-shadow-card);
   display: flex; align-items: center; justify-content: center; overflow: hidden;
+}
+/* v2：知识库卡内光晕 —— 右上角一圈柔光（--mb-canvas-glow 由主题按主色 color-mix 取色，浅/深自动跟随）。 */
+.nb-shelf-cover::before {
+  content: ""; position: absolute; inset: -40% -30% auto auto; width: 150px; height: 150px;
+  border-radius: 50%; pointer-events: none;
+  background: radial-gradient(closest-side, var(--mb-canvas-glow), transparent);
 }
 .nb-shelf-card:active .nb-shelf-cover { transform: scale(.965); }
 /* 封面左上角的「01/02…」编号已按用户要求去掉（260915）；色相只留在图标徽章上。 */
@@ -260,7 +308,8 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
 
 /* —— 知识库列表（墨韵书房排印行：无卡、无投影，行间 hairline；hover/active 淡墨底） —— */
 .nb-list { display: flex; flex-direction: column; padding: 0 0 8px; }
-.nb-row { display: flex; align-items: center; gap: 12px; padding: 11px 16px; border-radius: 0; background: transparent; border-bottom: .5px solid var(--lake-bg-block); cursor: pointer; -webkit-tap-highlight-color: transparent; }
+/* v2：列表视图同样按卡片语言（圆角 16 + 卡阴影 + 页面内距）；行高/命中区不变。 */
+.nb-row { display: flex; align-items: center; gap: 12px; padding: 11px 16px; border-radius: var(--mb-radius-card); background: var(--lake-bg-panel); box-shadow: var(--mb-shadow-card); margin: 0 var(--mb-page-pad) var(--lake-space-md); cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .nb-row:active { background: var(--lake-bg-hover); }
 .nb-row__tile { flex: 0 0 auto; width: 32px; height: 32px; border-radius: var(--mb-radius); display: flex; align-items: center; justify-content: center; color: color-mix(in srgb, var(--nb-accent) 84%, var(--lake-text-2)); }
 .nb-row__tile > svg { width: 20px; height: 20px; }
@@ -283,7 +332,9 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
 /* FAB */
 
 /* 笔记本页文档行 */
-.mobile-doc-row { width: 100%; border: 0; text-align: left; font-family: inherit; color: inherit; display: flex; align-items: center; gap: 10px; padding: 0 16px; min-height: var(--mb-ctl-h); font-size: var(--lake-font-size-body); line-height: var(--mb-ctl-h); background: var(--lake-bg-window); border-bottom: .5px solid var(--lake-bg-block); cursor: pointer; -webkit-tap-highlight-color: transparent; }
+/* v2：列表行按卡片语言（圆角 16 + 卡阴影 + 卡面实色），去掉行间发丝线，改用 8px 间距分隔；
+   行高/内距/命中区（min-height 44）全部不变。 */
+.mobile-doc-row { width: 100%; border: 0; text-align: left; font-family: inherit; color: inherit; display: flex; align-items: center; gap: 10px; padding: 0 16px; min-height: var(--mb-ctl-h); font-size: var(--lake-font-size-body); line-height: var(--mb-ctl-h); background: var(--lake-bg-panel); border-radius: var(--mb-radius-card); box-shadow: var(--mb-shadow-card); margin-bottom: var(--lake-space-md); cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .mobile-doc-row:active { background: var(--lake-bg-hover); }
 
 /* 文档页 */
@@ -409,7 +460,10 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
 .mobile-settings-page {
   position: fixed; top: 0; bottom: 0; left: 0; width: min(86%, 360px); z-index: var(--mobile-z-settings);
   display: flex; flex-direction: column;
-  background: var(--lake-bg-window, var(--lake-bg-window));
+  /* v2：设置屏同样铺外壳光场（与 .mobile-app 同一套）；列表/内容层改透明让光场透出。 */
+  background:
+    radial-gradient(130% 64% at 18% -12%, var(--mb-canvas-glow), transparent 58%),
+    linear-gradient(180deg, var(--mb-canvas-1) 0%, var(--mb-canvas-2) 100%);
   color: var(--lake-text-1, var(--lake-text-1));
   border-radius: 0 var(--lake-radius-xl) var(--lake-radius-xl) 0;
   box-shadow: var(--lake-shadow-popover);
@@ -426,9 +480,17 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
   display: flex; align-items: center; justify-content: space-between;
   padding: calc(12px + var(--mobile-top-safe-area)) 16px 10px;
   border-bottom: .5px solid var(--lake-border-1, var(--lake-border-1));
-  position: sticky; top: 0; z-index: 2; background: inherit;
+  position: sticky; top: 0; z-index: 2;
+  /* v2：父级改成渐变光场后，background: inherit 会把整段渐变压进页头盒子（页头下沿出现色阶断层）
+     ⇒ 改透明：设置屏的滚动容器都在页头**下方**，内容不会从页头透出。 */
+  background: transparent;
 }
 .mobile-settings-title { font-size: var(--lake-font-size-title); font-weight: 600; }
+/* v2：设置**根页**的页面大标题 28/700（--mb-font-page）——预览稿 .set-head h1；子页标题仍是 18/600
+   （标题行/左右槽几何不动，只在根页把字号字重抬到页面标题档）。 */
+.mobile-settings-page:not(.mobile-settings-page--full) .mobile-settings-title {
+  font-size: var(--mb-font-page); font-weight: var(--lake-font-weight-bold); letter-spacing: -.025em;
+}
 .mobile-settings-close {
   width: 40px; height: 40px; border: 0; background: transparent; border-radius: var(--lake-radius-sm);
   display: flex; align-items: center; justify-content: center; color: var(--lake-text-2, var(--lake-text-1));
@@ -440,7 +502,12 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
    ① 背景不能 inherit —— 首页 .mobile-scroll 没有底色，滚动内容会从 sticky 页头下发透出来；
    ② 上方已有 App 顶栏（含安全区）⇒ 不再叠加 --mobile-top-safe-area。
    属**新增页面形态**，不是覆盖叠层（只有这两条，其它几何全部沿用设置页页头）。 */
-.mobile-page-head { padding-top: 12px; background: var(--lake-bg-window); }
+/* v2：标签页 sticky 页头改玻璃底（与滚动后顶栏同档），不再铺平色窗底。 */
+.mobile-page-head {
+  padding-top: 12px; background: var(--mb-glass-bg-bar);
+  -webkit-backdrop-filter: var(--mb-blur-bar);
+  backdrop-filter: var(--mb-blur-bar);
+}
 
 /* 261106 task-77/79：标签详情页副标题（N 篇文档、M 条小记）——在页头下方、**块外**；
    横向页内距 16（与页头标题同一条左缘），纵向只用既有间距令牌，不引入新数值。 */
@@ -457,7 +524,7 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
 .mb-iconbtn.is-disabled { opacity: var(--lake-disabled-opacity); }
 
 /* 竖向设置菜单：设置项一行一行（思源移动端式），点某项进入新页面 */
-.mobile-settings-list { flex: 1; overflow-y: auto; background: var(--lake-bg-window); padding: 4px 0 calc(24px + var(--mobile-bottom-safe-area)); }
+.mobile-settings-list { flex: 1; overflow-y: auto; background: transparent; padding: 4px 0 calc(24px + var(--mobile-bottom-safe-area)); }
 /* 设置根页的行 = .mb-row.mobile-settings-row（P2/P4 起就是 mb-* 原语）；用父级作用域保证这里的 52 行高生效。 */
 .mobile-settings-list .mobile-settings-row {
   width: 100%; display: flex; align-items: center; gap: var(--lake-space-lg);
@@ -478,7 +545,7 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
 .mobile-settings-spacer { flex: 0 0 auto; width: 40px; }
 
 .mobile-settings-content {
-  flex: 1; overflow-y: auto; background: var(--lake-bg-window);
+  flex: 1; overflow-y: auto; background: transparent;
   padding: var(--lake-space-lg) var(--mb-page-pad) calc(var(--mb-page-pad) + var(--mobile-bottom-safe-area));
   width: 100%; max-width: 960px; align-self: center;
   --mb-set-main-basis: 0;
@@ -522,8 +589,14 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
 }
 
 /* ===== 第二层工作区（精仿思源移动端：胶囊栏 + 左/右抽屉 + 全屏tab列表） ===== */
-.mobile-workspace { display: flex; flex-direction: column; height: 100%; position: relative; background: var(--lake-bg-canvas); }
-.mobile-workspace .mobile-topbar { background: var(--lake-bg-canvas); }
+/* v2：工作区铺外壳光场（与 .mobile-app 同一套）。路由层自身仍保持 --lake-bg-canvas 不透明底
+   （见下方转场注释与 useRouteTransition.test 的契约），光场由这层不透明地盖上去。 */
+.mobile-workspace {
+  display: flex; flex-direction: column; height: 100%; position: relative;
+  background:
+    radial-gradient(130% 64% at 18% -12%, var(--mb-canvas-glow), transparent 58%),
+    linear-gradient(180deg, var(--mb-canvas-1) 0%, var(--mb-canvas-2) 100%);
+}
 .doc-pane { display: none; flex: 1; min-height: 0; }
 .doc-pane.active { display: block; }
 
@@ -542,8 +615,11 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
   /* 整块手势必需：否则上滑被当页面滚动、中途 pointercancel；长按也不该选到字/弹系统菜单。 */
   touch-action: none; -webkit-touch-callout: none; user-select: none;
   border-radius: calc(var(--mobile-bottom-bar-height) / 2);
-  background: var(--lake-bg-raised);
-  box-shadow: var(--lake-shadow-card);
+  /* v2 柔光纸面：形态/尺寸/命中不变，只换材质 —— 玻璃底 + 浮起阴影 + 第二档模糊。 */
+  background: var(--mb-glass-bg);
+  -webkit-backdrop-filter: var(--mb-blur-float);
+  backdrop-filter: var(--mb-blur-float);
+  box-shadow: var(--mb-shadow-float);
   transition: opacity var(--mobile-duration-panel) var(--mobile-ease-panel), transform var(--mobile-duration-panel) var(--mobile-ease-panel), visibility var(--mobile-duration-panel);
 }
 /* 261014：首页胶囊只剩 3 项（搜索 / ＋ / AI）⇒ **左右收窄**到 4 槽上限（≈192px，对齐语雀 App 的紧凑度；
@@ -733,9 +809,10 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
   /* min-width 是 44 Rule 的兜底：语雀式文字 tab 的宽度由字数决定，单字标签会掉到 44 以下（261013 实测「小记」36px）。 */
   display: inline-flex; align-items: center; justify-content: center; min-width: var(--mb-tap-min); min-height: var(--mb-tap-min); padding: 0 4px;
   border: none; background: transparent; font-size: var(--lake-font-size-body); color: var(--lake-text-3);
-  cursor: pointer; font-weight: 400; -webkit-tap-highlight-color: transparent;
+  cursor: pointer; font-weight: var(--lake-font-weight-medium); -webkit-tap-highlight-color: transparent;
 }
-.mobile-htab.active { color: var(--lake-accent-text); font-weight: 600; }
+/* v2：选中 = 加粗 + 主文本色（纯文字，无底色/下划线；未选 = 常规 500 + caption 色）。 */
+.mobile-htab.active { color: var(--lake-text-1); font-weight: var(--lake-font-weight-semibold); }
 
 /* 目录树行内动作（移动端常显——无 hover，对齐思源移动端不带 --hide-action）。
    ⋯ = 长按菜单；视觉仍是 28×28，命中区由 .mb-tap 补到 44（261013 —— 28×28 正是走查探针的盲区，见 AGENTS §7.25/26）。
@@ -1204,7 +1281,8 @@ body.lake-mobile .ne-ui-boundary-popover:has(.ne-ui-search-card-menu) { top: 120
 }
 /* 工作区层必须**不透明**：首页层常驻在它下面（translateX(-25%)），而表格 / 多维表页面内部有大量透明容器
    （.mobile-bitable / .mbt-grid-wrap / TABLE 都是透明底）——不铺底就会透出首页卡片（261019 用户截图实测）。
-   底色用 --lake-bg-canvas（与多维表/表格 canvas 同一令牌；文字页自己的 .mobile-doc-body 会再铺 --lake-bg-window）。 */
+   底色用 --lake-bg-canvas（与多维表/表格 canvas 同一令牌）。v2 的光场由内层 .mobile-workspace 铺，
+   这里是**实色兜底**（不透明契约不变；useRouteTransition.test 断言这条 background）。 */
 .mobile-route-layer--workspace { transform: translateX(100%); z-index: 1; background: var(--lake-bg-canvas); }
 /* reduced-motion：转场直接到位（不播位移）；关闭等待也由 JS 侧降为 0ms（见 useRouteTransition）。 */
 @media (prefers-reduced-motion: reduce) { .mobile-route-layer { transition: none; } }

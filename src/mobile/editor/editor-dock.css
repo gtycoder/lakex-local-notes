@@ -13,25 +13,31 @@
   pointer-events: none;
 }
 
+/* 261107 v2 柔光纸面：编辑 dock 改为**浮动玻璃条** —— 横向内缩 8 + 圆角 26（--mb-radius-dock）+
+   --mb-glass-bg 毛玻璃（--mb-blur-float）+ --mb-shadow-float；去上边框。
+   ⚠️ **纵向几何不动**：bottom = --kb-offset、高度 = --mobile-bottom-bar-height。这两项是键盘契约与
+   .mobile-bottom-bar--above-dock（胶囊抬到 dock 上方）的几何依据，不要在这里加减 gap。
+   按钮视觉不变；面板（.med-panel）保持原样。 */
 .med-toolbar {
-  /* 思源 #keyboardToolbar(.keyboard) 口径：贴底 48px 直条 + 上边框，不是悬浮胶囊 */
   position: fixed;
-  left: 0;
-  right: 0;
+  /* 261103 六批 A1：横屏刘海用 max() 让位（竖屏下 = 8px 浮动内缩）。 */
+  left: max(8px, var(--mobile-left-safe-area));
+  right: max(8px, var(--mobile-right-safe-area));
   bottom: var(--kb-offset, 0px);
   /* 不做 bottom 过渡：它等于对"正在 resize 的视口"做动画，会把一帧错位放大成抖动（HANDOFF §8.8） */
   pointer-events: auto;
-  background: var(--lake-bg-window);
+  background: var(--mb-glass-bg);
+  -webkit-backdrop-filter: var(--mb-blur-float);
+  backdrop-filter: var(--mb-blur-float);
   border: 0;
-  border-top: .5px solid var(--lake-border-2);
-  box-shadow: none;
+  border-radius: var(--mb-radius-dock);
+  box-shadow: var(--mb-shadow-float);
   height: var(--mobile-bottom-bar-height);
   display: flex;
   align-items: center;
   overflow: hidden;
-  /* 261103 六批 A1：横屏刘海让出左右安全区（竖屏 0 ⇒ 无变化）。 */
-  padding-left: var(--mobile-left-safe-area);
-  padding-right: var(--mobile-right-safe-area);
+  padding-left: var(--lake-space-sm);
+  padding-right: var(--lake-space-sm);
 }
 /* 工具栏中间按钮的**横滑区**（261017 用户点单：B 放回后 9 个按钮放不下，按钮尺寸/间距保持原样）。
    键盘键不在这里 —— 它是固定尾键（.med-btn--kb），永远可见。 */

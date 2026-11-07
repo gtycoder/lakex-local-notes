@@ -29,7 +29,7 @@
 }
 .mb-btn:active:not(:disabled) { background: var(--lake-bg-press); }
 .mb-btn:disabled { opacity: var(--lake-disabled-opacity); cursor: default; }
-.mb-btn--primary { background: var(--lake-accent-ink); border-color: transparent; color: var(--lake-text-on-accent); }
+.mb-btn--primary { background: var(--mb-accent-ink); border-color: transparent; color: var(--lake-text-on-accent); }
 .mb-btn--primary:active:not(:disabled) { background: var(--lake-accent-ink-press); }
 .mb-btn--secondary { border-color: var(--lake-border-strong); }
 .mb-btn--ghost { padding: 0 10px; }
@@ -45,7 +45,7 @@
 .mb-iconbtn {
   display: inline-flex; align-items: center; justify-content: center;
   width: var(--mb-ctl-h); height: var(--mb-ctl-h); flex: 0 0 auto;
-  border: 0; border-radius: var(--mb-radius); background: transparent; color: var(--lake-text-2);
+  border: 0; border-radius: var(--mb-radius-card); background: transparent; color: var(--lake-text-2);
   cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation;
 }
 .mb-iconbtn:active:not(:disabled) { background: var(--lake-bg-press); }
@@ -96,7 +96,7 @@
   background: var(--lake-bg-panel); color: var(--lake-text-1);
   font-family: inherit; font-size: var(--lake-font-size-body);
 }
-.mb-input:focus-within { border-color: var(--lake-accent); box-shadow: 0 0 0 2px var(--lake-focus-halo); }
+.mb-input:focus-within { border-color: var(--mb-accent); box-shadow: 0 0 0 2px var(--lake-focus-halo); }
 .mb-input > input, .mb-input > textarea {
   flex: 1 1 auto; min-width: 0; border: 0; background: transparent; color: inherit;
   font: inherit; padding: 0; outline: none;
@@ -153,7 +153,9 @@
 .mb-chip-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--lake-space-md); }
 
 /* ── 卡片（.mb-card）────────────────────────────────────────────────── */
-.mb-card { border: .5px solid var(--lake-border-1); border-radius: var(--mb-radius-card); background: var(--lake-bg-panel); }
+/* v2（261107）：纸面卡 = r16 + 柔和投影；--mb-shadow-card 自带 0.5px 内描边 ⇒ 外框改透明，
+   保留 0.5px 边框宽度不动几何（去掉"细边 + 软阴影"两套并存）。 */
+.mb-card { border: .5px solid transparent; border-radius: var(--mb-radius-card); background: var(--lake-bg-panel); box-shadow: var(--mb-shadow-card); }
 .mb-card__head { display: flex; align-items: center; gap: 8px; min-height: var(--mb-ctl-h); padding: 0 var(--mb-page-pad); font-size: var(--lake-font-size-bodyMd); font-weight: var(--lake-font-weight-semibold); }
 .mb-card__body { padding: 0 var(--mb-page-pad) var(--mb-page-pad); color: var(--lake-text-2); font-size: var(--lake-font-size-small); }
 
@@ -189,15 +191,16 @@
 /* 分组标题 = 图标 + 文字：此前图标是裸内联 svg（与文字间距 0、图标中心比文字中心高 4px），
  * 且标题文字左缘 20 与行名 33 差 13px（实测）。统一成 flex 光学对齐 + 既有档位 8px 间距，
  * 并把左内距补到「页内距 + 分组卡 1px 发丝」= 33，与卡内行名/说明/块名同一条左缘。 */
-.mb-set-title { margin: 0; padding: 0 calc(var(--mb-page-pad) + 1px); color: var(--lake-text-2); font-size: var(--lake-font-size-small); font-weight: var(--lake-font-weight-semibold); display: flex; align-items: center; gap: var(--mb-gap); }
+.mb-set-title { margin: 0; padding: 0 18px; color: var(--lake-text-2); font-size: var(--lake-font-size-small); font-weight: var(--lake-font-weight-semibold); display: flex; align-items: center; gap: var(--mb-gap); }
 .mb-set-items { display: flex; flex-direction: column; gap: 12px; }
 /* 分组卡：261013 窗底转白后，白卡落在白底上会"消失" ⇒ 补 1px 细线承担分组边界
  * （语雀的设置页就是"白底 + 细线分组"，不是灰底白卡）。行间分隔仍由 .mb-set-item 的 border-top 提供。 */
-.mb-set-section { display: flex; flex-direction: column; border: .5px solid var(--lake-border-2); border-radius: var(--mb-radius-card); background: var(--lake-bg-panel); overflow: hidden; }
-.mb-set-section__title { padding: var(--lake-space-lg) var(--mb-page-pad) var(--lake-space-xs); color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); font-weight: var(--lake-font-weight-semibold); }
+/* v2：分组卡 = r16 + --mb-shadow-card（内描边由阴影层承担；仍保留 0.5px 边框宽度，几何不动）。 */
+.mb-set-section { display: flex; flex-direction: column; border: .5px solid transparent; border-radius: var(--mb-radius-card); background: var(--lake-bg-panel); box-shadow: var(--mb-shadow-card); overflow: hidden; }
+.mb-set-section__title { padding: var(--lake-space-lg) 18px var(--lake-space-xs); color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); font-weight: var(--lake-font-weight-semibold); }
 .mb-set-item {
   display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
-  min-height: var(--mb-ctl-h-lg); padding: 12px var(--mb-page-pad);
+  min-height: 60px; padding: 12px 18px;
   border-top: .5px solid var(--lake-border-2);
 }
 .mb-set-section > .mb-set-item:first-child, .mb-set-section__title + .mb-set-item { border-top: 0; }
@@ -212,6 +215,21 @@
 /* 密度只由设置页提供；多维表编辑面复用这些类时保留原来的自动宽度、2px 内距与字重。 */
 .mb-set-item__main { flex: 1 1 var(--mb-set-main-basis, auto); min-width: 0; display: flex; flex-direction: column; gap: var(--mb-set-main-gap, 2px); }
 .mb-set-name { color: var(--lake-text-1); font-size: var(--lake-font-size-body); font-weight: var(--mb-set-name-weight, var(--lake-font-weight-regular)); line-height: var(--lake-line-height-snug); }
+/* v2（261107）：设置行左侧彩色图标块 + 右侧当前值（预览稿 .set-ico / .set-val 的 mb-* 等价类）。
+   本轮**不改 DOM 结构**，所以这两个类先作为原语钩子：接线时行内补
+   <span class="mb-set-item__icon" style={{ "--c": color }}> / <span class="mb-set-item__val">；
+   --c 缺省回落动态主色 --mb-accent。图标块 34（预览 11px 圆角，按 v2 允许清单取 --mb-radius=12）。 */
+.mb-set-item__icon {
+  flex: 0 0 auto; display: flex; align-items: center; justify-content: center;
+  width: 34px; height: 34px; border-radius: var(--mb-radius);
+  background: linear-gradient(145deg,
+    color-mix(in srgb, var(--c, var(--mb-accent)) 26%, var(--lake-bg-panel)),
+    color-mix(in srgb, var(--c, var(--mb-accent)) 10%, var(--lake-bg-panel)));
+  color: color-mix(in srgb, var(--c, var(--mb-accent)) 82%, var(--lake-text-1));
+  box-shadow: inset 0 .5px 0 var(--mb-glass-highlight);
+}
+.mb-set-item__icon > svg { width: 19px; height: 19px; }
+.mb-set-item__val { flex: 0 0 auto; color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); font-variant-numeric: tabular-nums; }
 .mb-set-item__desc { color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); line-height: var(--lake-line-height-normal); }
 /* 行内警示（261029 FIX-M）：未配置 S3 时点开「启用云同步」的可见提示；只换文字色，几何沿用 .mb-set-item__desc。 */
 .mb-set-item__desc--warn { color: var(--lake-status-pending); }
@@ -227,14 +245,17 @@
 .mb-s3-notice__warn { display: flex; align-items: flex-start; gap: 6px; color: var(--lake-status-pending); font-weight: var(--lake-font-weight-medium); }
 .mb-s3-notice__warn svg { flex: 0 0 auto; margin-top: 1px; }
 .mb-s3-notice__disclaimer { color: var(--lake-text-3); }
-.mb-set-block { display: flex; flex-direction: column; gap: 8px; padding: 12px var(--mb-page-pad); border-top: .5px solid var(--lake-border-2); }
+.mb-set-block { display: flex; flex-direction: column; gap: 8px; padding: 12px 18px; border-top: .5px solid var(--lake-border-2); }
 .mb-set-section > .mb-set-block:first-child { border-top: 0; }
 .mb-set-block__name { color: var(--lake-text-1); font-size: var(--lake-font-size-body); font-weight: var(--lake-font-weight-medium); }
 /* ── 空态（.mb-empty；261013 A 批收敛，唯一来源）──────────────────────────
  * 此前有三套：.mobile-empty（外壳，padding 32/16 + 字号字面量 14）· .mb-set-empty（设置卡内，20/0）
  * · .mb-sheet__empty（浮层内，24/0）——同一语义三种几何。现收敛成一件 + 一个 --inset 变体。
  * 对比度：一律 --lake-text-3（AA）；不要用 text-4（有意 3:1 档只给元信息/占位）。 */
-.mb-empty { margin: 0; padding: 32px var(--mb-page-pad); text-align: center; color: var(--lake-text-3); font-size: var(--lake-font-size-small); }
+/* v2（261107）：空态 = 图标 + 一句说明 + 主 CTA 的**容器**（不改 JSX 与文案；纯文案空态同样成立）。
+   flex column + gap 让「说明 → 按钮」自然分层；对比度仍用 --lake-text-3（AA）。 */
+.mb-empty { display: flex; flex-direction: column; align-items: center; gap: var(--lake-space-lg); margin: 0; padding: 32px var(--mb-page-pad); text-align: center; color: var(--lake-text-3); font-size: var(--lake-font-size-small); }
+.mb-empty > svg { flex: 0 0 auto; width: 44px; height: 44px; }
 .mb-empty--inset { padding: 20px 0; }
 /* 统计块（清理缓存 / 关于·数据诊断）：一行一项，避免多个「标签 + 数字」连排成一句读不断。 */
 .mb-set-stats { display: flex; flex-direction: column; gap: 2px; color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); }
@@ -256,19 +277,19 @@
   cursor: pointer; -webkit-tap-highlight-color: transparent;
 }
 .mb-switch::after { content: ""; position: absolute; inset: -8px; }   /* 命中区扩到 44 */
-.mb-switch[aria-checked="true"] { background: var(--lake-accent-ink); }
+.mb-switch[aria-checked="true"] { background: var(--mb-accent-ink); }
 .mb-switch:disabled { opacity: var(--lake-disabled-opacity); cursor: default; }
 .mb-switch__knob {
   position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: var(--lake-radius-pill);
   background: var(--lake-bg-panel); box-shadow: var(--lake-shadow-knob);
-  transition: transform var(--mobile-duration-panel) var(--mobile-ease-out);
+  transition: transform var(--mb-dur-fast) var(--mb-ease);
 }
 .mb-switch[aria-checked="true"] .mb-switch__knob { transform: translateX(18px); }
 .mb-set-block__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 /* 手写分组（同步设置 / 清理缓存 / 关于）的行与块直接挂在 .mb-set-items 下、没有 Section 卡，
  * 少了分组卡那 1px 发丝 ⇒ 同一行名在「有卡页」33 /「无卡页」32（实测差 1px）。补同一条内缩。 */
 .mb-set-items > .mb-set-item,
-.mb-set-items > .mb-set-block { padding-left: calc(var(--mb-page-pad) + 1px); padding-right: calc(var(--mb-page-pad) + 1px); }
+.mb-set-items > .mb-set-block { padding-left: 18px; padding-right: 18px; }
 
 /* ── 勾选（checkbox / radio）── P5：自桌面 styles/kit.css 收编 ──────────────────
  * 桌面那份选择器写成 :is(.app-shell, .mobile-app) —— 那是**为移动端开的分支**（反向耦合）。
