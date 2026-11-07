@@ -8,6 +8,12 @@
 
 ## 0. 最新交接（261027）
 
+### 261107 · 移动端 v2「柔光纸面」P4（设置子页图标块 + 工作区顶栏滚动玻璃态）· **本地分支 `feat/mobile-paper-light`，未推送**
+- **设置原语扩展**：`settingsPrimitives.tsx` 的 `Item` / `Switch` 增加可选 `icon` / `tone` / `value`（复用 kit 的 `.mb-set-item__icon/__val`，颜色只由调用方 tone 提供，不写进 CSS）。已接线：外观·主题（Palette/琥珀）、编辑器·正文字号（List/紫）、AI·开关（Sparkles/绿）；其余子页行暂未加（避免每行一个彩色块变成噪音，等用户看过后按需铺）。
+- **工作区顶栏滚动玻璃态**：`NotebookWorkspace` 根节点挂 scroll 捕获监听（`.mobile-scroll` / `.ne-editor-wrap` 取最大 scrollTop），滚过 6px 给 `.mobile-topbar` 加 `.is-scrolled`（玻璃底 + 发丝线 + 14px 渐隐，与首页同一套样式）；阅读态自动收起（`.mobile-topbar--auto-hidden`）行为不变。
+- **门禁**：tsc（本仓 `src/mobile|core|lib` 范围 0 错；整仓 tsc 当前被**另一并发会话未提交的桌面改动**打断，非本批引入）；`npx vitest run src/mobile` 269 文件 / 1376 例通过；ui-metrics / check:mobileui 通过。**按要求本批不做快照基线重烤**。
+- **真机**：emulator-5554 设置→外观 子页已见「分组卡 + 琥珀图标块 + 浅色/深色/纯黑」；工作区滚动玻璃态代码路径与首页一致，但因当前打开的文档太短（不可滚动）未取得滚动态截图——需在长文档/长列表上复核一次。
+- **未做（按用户指示）**：6 态 / 23 屏快照基线重烤（用户要先自己调页面，功能做完后再重烤）；设置全部子页的图标块铺开；分支整理（桌面提交 `ed0d77fc` 与其它会话未提交改动 `Sidebar/TreeSelection/noteDuplication` 等仍在本工作树，勿一起提交）。
 ### 261107 · 移动端 v2「柔光纸面」P3（共享元素转场：小记卡 → 写作卡）· **本地分支 `feat/mobile-paper-light`，未推送**
 - **实现**：`HomePage.tsx` 新增 `morphCardToComposer(card)` —— 卡片克隆按当前矩形 `position:fixed` 浮起（`.qn-card-morph`），rAF 后按 `--mb-dur-page / --mb-ease` 扩到写作卡容器（`quickScrollRef`）矩形，330ms 后 180ms 淡出并移除；真实写作卡随后挂载。`QuickNoteCard` 的 `onEdit` 改为传出 `cardRef.current`（转场起点）。`prefers-reduced-motion` 直接跳过；只动几何 + opacity，不参与布局/命中。
 - **CSS**：`mobile.css` 新增 `.qn-card-morph` / `.is-out`（固定层、卡面/卡阴影、`z: var(--mobile-z-page)`、`will-change`、淡出过渡）；mobileLayers 基线 mobile.css 1585 → 1596（+11）。
