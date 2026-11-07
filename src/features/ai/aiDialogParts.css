@@ -24,7 +24,7 @@
 .ai-dialog__note { margin: var(--lake-space-xs) 0 0; color: var(--lake-text-3); font-size: var(--lake-font-size-small); }
 .ai-dialog__error { margin: var(--lake-space-xs) 0 0; color: var(--lake-status-error); font-size: var(--lake-font-size-small); }
 .ai-dialog__presets { margin: 0 var(--lake-space-lg) var(--lake-space-sm); }
-.ai-dialog__presets .ln-segment { flex-wrap: wrap; height: auto; }
+.ai-dialog__preset-segment { flex-wrap: wrap; height: auto; }
 .ai-dialog__doc { display: flex; align-items: center; flex-wrap: wrap; gap: var(--lake-space-sm); margin: 0 var(--lake-space-lg) var(--lake-space-sm); }
 .ai-dialog__doc-label { color: var(--lake-text-2); font-size: var(--lake-font-size-small); }
 .ai-dialog__doc-hint { color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); }

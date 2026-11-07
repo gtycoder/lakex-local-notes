@@ -767,6 +767,7 @@ export function MultiTabEditor({
         ))}</Suspense>}
         {splitActive && (
           <SplitHandle
+            className="split-view-handle"
             ariaLabel="调整分屏宽度"
             minWidth={SPLIT_WIDTH_LIMITS.minLeft}
             maxWidth={SPLIT_WIDTH_LIMITS.maxLeft}

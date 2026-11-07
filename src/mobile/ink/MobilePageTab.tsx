@@ -37,7 +37,7 @@ export function MobilePageTabButton({ state, onOpen }: { state: MobilePageTabSta
 
 export function MobilePageTabSheet({ state, open, onClose }: { state: MobilePageTabState | null; open: boolean; onClose: () => void }) {
   return (
-    <MobileSheet open={open} ariaLabel="页签" onClose={onClose}>
+    <MobileSheet open={open} ariaLabel="页签" onClose={onClose} bodyClassName="ink-page-tab-sheet">
       {state ? (
         <InkPageTabForm
           page={{ note: state.note }}

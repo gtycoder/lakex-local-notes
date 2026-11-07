@@ -190,9 +190,9 @@
 /* 页签（261104 二十六批四轮）：入口在顶部导航（按 .ink-tool 44 命中）；编辑在底部 Sheet 里，
    表单复用 features/ink/InkPageTabForm 的类名，这里只给移动端尺寸与排版（两端同一份逻辑）。 */
 .ink-pad--mobile .ink-tool.has-tab { color: var(--lake-accent-text); }
-.mb-sheet .ink-page-tab__form { display: flex; flex-direction: column; gap: var(--lake-space-md); }
-.mb-sheet .ink-page-tab__label { color: var(--lake-text-3); font-size: var(--lake-font-size-micro); }
-.mb-sheet .ink-page-tab__input {
+.ink-page-tab-sheet .ink-page-tab__form { display: flex; flex-direction: column; gap: var(--lake-space-md); }
+.ink-page-tab-sheet .ink-page-tab__label { color: var(--lake-text-3); font-size: var(--lake-font-size-micro); }
+.ink-page-tab-sheet .ink-page-tab__input {
   width: 100%;
   height: var(--mb-tap-min);
   padding: 0 var(--lake-space-md);
@@ -202,9 +202,9 @@
   color: var(--lake-text-1);
   font-size: var(--lake-font-size-body);
 }
-.mb-sheet .ink-page-tab__actions { display: flex; justify-content: flex-end; gap: var(--lake-space-sm); }
-.mb-sheet .ink-page-tab__save,
-.mb-sheet .ink-page-tab__clear {
+.ink-page-tab-sheet .ink-page-tab__actions { display: flex; justify-content: flex-end; gap: var(--lake-space-sm); }
+.ink-page-tab-sheet .ink-page-tab__save,
+.ink-page-tab-sheet .ink-page-tab__clear {
   min-width: var(--mb-tap-min);
   height: var(--mb-tap-min);
   padding: 0 var(--lake-space-md);
@@ -214,4 +214,4 @@
   color: var(--lake-accent-text);
   font-size: var(--lake-font-size-small);
 }
-.mb-sheet .ink-page-tab__clear { color: var(--lake-text-3); }
+.ink-page-tab-sheet .ink-page-tab__clear { color: var(--lake-text-3); }

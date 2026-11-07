@@ -13,8 +13,8 @@
 /* ── 二、面板骨架：几何沿用原观感（内距 16 / 正文 266 高 / 面板宽 418 由 usePopoverPosition 给） ── */
 .node-icon-picker { display: flex; flex-direction: column; overflow-y: auto; overscroll-behavior: contain; }
 .node-icon-picker > * { flex-shrink: 0; }
-.node-icon-picker__types .ln-tabs__item { height: 38px; }
-.node-icon-picker__types .ln-tabs__action { align-self: center; }
+.node-icon-picker__type-tab { height: 38px; }
+.node-icon-picker__type-action { align-self: center; }
 .node-icon-picker__head { display: flex; align-items: center; justify-content: space-between; gap: var(--lake-space-md); padding: var(--lake-space-lg) var(--lake-space-xl) var(--lake-space-md); }
 .node-icon-picker__title { font-size: var(--lake-font-size-tiny); color: var(--lake-text-3); }
 .node-icon-picker__search { padding: 0 var(--lake-space-xl) var(--lake-space-md); }

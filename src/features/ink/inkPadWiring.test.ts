@@ -304,7 +304,7 @@ describe("手写板正式端到端接线", () => {
     expect(MOBILE_INK_PAD).toContain("<MobilePageTabButton");
     expect(MOBILE_INK_PAD).toContain("<MobilePageTabSheet");
     expect(MOBILE_INK_PAD).not.toContain("createPortal");
-    expect(MOBILE_INK_CSS).toContain(".mb-sheet .ink-page-tab__input");
+    expect(MOBILE_INK_CSS).toContain(".ink-page-tab-sheet .ink-page-tab__input");
     expect(INK_PAD).toContain("const movePageTo = useCallback((id: string, toIndex: number) => {");
     expect(PAGES_PANEL).not.toContain("页后移");
     expect(PAGES_PANEL).toContain('aria-label={"删除第 " + (index + 1) + " 页"}');

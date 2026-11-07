@@ -25,7 +25,7 @@
 
 /* 分隔条：绝对定位在两列交界处（左栏顶边由 --split-left 给；没拖过时它等于 1fr，量出来再写）。
    命中带/药丸视觉仍由 kit 的 .ln-split-handle 唯一提供，这里只给位置（分隔线在右栏的 border 上）。 */
-.tab-panels.is-split > .ln-split-handle {
+.tab-panels.is-split > .split-view-handle {
   position: absolute;
   top: 0;
   bottom: 0;

@@ -346,7 +346,7 @@ export function AiAssistantDialog({ open, request, onClose }: {
       {/* 首轮预设（用户 261005）：**仅首轮 + 有选区**才出现；点击只填词、不发送；分段控件复用 kit 的 .ln-segment。 */}
       {turns.length === 0 && (selectionText.trim().length > 0 || hasImages) && (
         <div className="ai-dialog__presets">
-          <span className="ln-segment" role="group" aria-label="预设提示词">
+          <span className="ln-segment ai-dialog__preset-segment" role="group" aria-label="预设提示词">
             {presets.map((preset) => (
               <button key={preset.id} type="button" className={"ln-segment__item" + (presetId === preset.id ? " is-active" : "")} onClick={() => applyPreset(preset)}>{preset.label}</button>
             ))}
