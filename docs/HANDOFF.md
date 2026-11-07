@@ -8,6 +8,17 @@
 
 ## 0. 最新交接（261027）
 
+### 261107 · 移动端 v2「柔光纸面」P1（theme 令牌 + 三屏外壳 + 设置分组）· **本地分支 `feat/mobile-paper-light`，未推送**
+- **设计基线**：`docs/MOBILE-DESIGN.md` 顶部新增「## v2 视觉基线 ·「柔光纸面」」（唯一视觉参照 = `/Users/admin/file/local-lake/preview/mobile-paper-light.html`）。落地口径：页面光场（画布渐变 + 主色光晕）、三层表面（光场/纸面/柔光玻璃）、圆角 12/16/26/28、去线条、单点强调、光感反馈。
+- **theme**：`src/mobile/theme/{tokens,light,dark}.css` 新增 `--mb-canvas-1/2`、`--mb-canvas-glow`、`--mb-accent(-ink/-soft)`、`--mb-glass-*`、`--mb-shadow-card/-float/-bar`、`--mb-radius-dock/-capsule`、`--mb-dur-fast/mid/page`、`--mb-ease`、`--mb-blur-bar/float`、`--mb-font-page`；`--mb-radius` 8→12、card 12→16、sheet 20→28、顶栏 44→52。
+- **kit/floating**：设置分组卡/行高 60/内距 18/图标块与当前值钩子（`.mb-set-item__icon/__val`）、空态容器、卡片/输入/开关接 v2 令牌；Sheet 顶角 28 + 玻璃头（body 实色）、MenuSheet/ActionSheet 28 + 浮动阴影、Toast 浮动阴影。遮罩/层序/关闭三件套/安全区未动。
+- **三屏外壳**：`.mobile-app`/`.mobile-workspace`/`.mobile-settings-page` 光场；`.mobile-topbar` 初始透明无底线 + `.is-scrolled`（玻璃底 + 14px 渐隐）+ `.mobile-topbar-collapsed-title`（首页 tab 收起后居中标题）；首页顶栏滚动接线（`HomePage.tsx`：stage capture scroll → class，无 setState）；纯文字 tab；小记卡/文档行/笔记本书卡 r16 + 卡阴影；底部胶囊玻璃；编辑 dock 浮动 r26 玻璃（`--kb-offset`/above-dock 几何不变）。
+- **设置根页**：分组卡（4 组）+ 彩色图标块（`MENU` 新增 `tone`）+ 外观当前值；`settingsGroups.test.ts` 对 MENU 的逐字节断言改为正则（允许 tone）。
+- **门禁**：tsc 0；`npx vitest run src/mobile` 269 文件 / 1376 例通过；`ui-metrics` 通过（!important 19=基线、颜色/字号字面量 0）；`check:mobileui` 通过（mobileLayers 基线本批一次性 bump：tokens 204/light 75/dark 129/kit 596/floating 307/mobile 1585/editor-dock 300，理由写在 `mobileLayers.test.ts` 注释）；`git diff --check` 干净。
+- **真机**：emulator-5554（lake_mobile，debug APK `--sync --install`）实机截图：首页光场/透明顶栏/卡阴影/玻璃胶囊、知识库卡片行、滚动后玻璃顶栏 + 居中「知识库」、设置分组卡与图标块、表格页。截图存 `/tmp/mobile-*.png`（不入库）；滚动状态用 DOM 探针（临时高块 + scrollTop）验证，探针已移除。
+- **未完成（下一轮）**：纯黑 OLED 档（需 settings/themes 增加第 4 主题 + 桌面主题选择器排除）、笔记本动态主色（`--mb-accent` 按笔记本图标色写根节点）、共享元素转场（卡片→文档 FLIP）、设置子页图标块接线、6 态/23 屏快照基线重烤、`§1` 基线与计数回写。**本批未推送**。
+- **并发提醒**：同仓另有会话在桌面侧提交（本分支上出现过 `ed0d77fc feat(duplicate)…`，还有 `backup/desktop-duplicate-progress` 分支）；合并前需把桌面提交拆走或 rebase。
+
 ### 261108 · 文件导入：Word / Excel / CSV（并入 Markdown 统一入口）· **已提交**
 - **入口**：目录「＋」/ 行内「＋」→「导入」子菜单，按类型分项 **Markdown… / Word（.docx）… / Excel（.xlsx）… / CSV（.csv）…**（各自只开对应过滤器；仍保留「所有文件」用于不支持项进入跳过统计）；取消返回空，不支持/超 20MB/解析失败逐条计入跳过并给原因。
 - **主进程**：electron/documentImportScan.ts —— Markdown/CSV 读文本（UTF-8 优先、GBK 兜底）；.docx 用 mammoth → HTML（图片转 data URL）；.xlsx 用 read-excel-file → 所有工作表值 → usheet 工作簿。纯解析、不建笔记。
