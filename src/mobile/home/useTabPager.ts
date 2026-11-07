@@ -51,10 +51,12 @@ export function useTabPager({ tab, onTabChange }: TabPagerOptions): TabPagerApi 
     const el = stageRef.current;
     const effect = transition.effect;
     if (effect && el) {
+      // 回告状态机：这次滚动是程序化发起的（随后的 scroll 事件不得回写 tab）。
+      // 必须在 scrollTo **之前**置位：宽度变化时浏览器可能先派发一次 scroll（scrollLeft 尚未按新宽对齐），
+      // 若等 scrollTo 之后再置位，那一次 scroll 会被当成用户意图回写错 tab（261107 pad resize 实测）。
+      dispatchRef.current({ type: "programmatic-start" });
       // DOM 唯一动作。动效按 prefers-reduced-motion 降级（判据留在 DOM 侧，状态机不关心无障碍）。
       el.scrollTo({ left: effect.scrollLeft, behavior: prefersReducedMotion() ? "auto" : effect.behavior });
-      // 回告状态机：这次滚动是程序化发起的（随后的 scroll 事件不得回写 tab）。
-      dispatchRef.current({ type: "programmatic-start" });
       if (!supportsScrollend()) {
         window.clearTimeout(fallbackTimerRef.current);
         fallbackTimerRef.current = window.setTimeout(() => {

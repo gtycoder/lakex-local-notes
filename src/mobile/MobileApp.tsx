@@ -730,7 +730,9 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
           quickNotes={quickNotes}
           tagDirectory={tagDirectory}
           docCounts={docCounts}
-          onTabChange={(tab) => setRoute({ kind: "home", tab })}
+          // 首页在后台（工作区打开）时，分页器的 scroll/resize 回写**不得改路由**：
+          // 否则 pad 窗口 resize 会让隐藏首页把 tab 回写上来 ⇒ route 变 home、工作区被卸载（261107 实测）。
+          onTabChange={(tab) => { if (route.kind === "notebook") return; setRoute({ kind: "home", tab }); }}
           onOpenNotebook={(id) => setRoute({ kind: "notebook", notebookId: id })}
           onOpenNote={(id) => void openNote(id, "viewer")}
           // 「标签」页点小记：与全局搜索同一条定位通路（回小记 tab + 高亮）。

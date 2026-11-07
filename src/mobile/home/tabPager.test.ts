@@ -161,6 +161,11 @@ describe("分页状态机 reducePager（261028 MOB-03）", () => {
     const resized = reducePager({ ...state, programmatic: false }, { type: "resize", scrollLeft: 412, width: 300 });
     expect(resized.effect).toEqual({ scrollLeft: 300, behavior: "auto" });
     expect(resized.state.width).toBe(300);
+    // pad resize 回归：宽度变化只重对齐、**不得回写 tab**（隐藏首页若回写会让工作区被卸载）。
+    expect(resized.commitTab).toBeUndefined();
+    const fromHidden = reducePager({ ...state, programmatic: false }, { type: "resize", scrollLeft: 0, width: 1280 });
+    expect(fromHidden.effect).toEqual({ scrollLeft: 1280, behavior: "auto" });
+    expect(fromHidden.commitTab).toBeUndefined();
 
     const interacting = reducePager({ ...state, interacting: true }, { type: "resize", scrollLeft: 412, width: 300 });
     expect(interacting.effect).toBeUndefined();

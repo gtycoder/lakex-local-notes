@@ -8,6 +8,14 @@
 
 ## 0. 最新交接（261027）
 
+### 261107 · pad 检查 + 三套基线重烤（含 pad resize 回归修复）· **master 直接提交**
+- **pad 窗口矩阵回归（`check:windowsweep`）**：7 种窗口形态判据通过，但 `resize-retention-*` 红 —— 800×1280 打开文档后切 1280×800，工作区被卸载回首页。根因：**隐藏的首页分页器**（`useTabPager` 的 ResizeObserver）在宽度变化时重对齐滚动，其 scroll 被状态机当成用户意图 → `onTabChange` → `MobileApp.setRoute({kind:"home"})`；工作区 layer 条件失配被卸载（route 已 home、`wsMounted` 未变，故不经过 `close()`）。修复两处：① `MobileApp` 的 `onTabChange` 在 `route.kind === "notebook"` 时直接忽略（后台首页不得改路由）；② `useTabPager` 的 `programmatic-start` 移到 `scrollTo` **之前**（宽度变化时浏览器可能先派发一次 scroll，晚置位会被误判为回写）。回归用例：`tabPager.test.ts` 增 resize 不回写断言；新增 `homeTabResizeGuard.test.ts` 钉两处契约。修复后 `check:windowsweep` 全绿（含 resize-retention）。
+- **基线重烤（三套，均连跑两轮 0 差异）**：
+  · **手机 6 态**（lake_gate / 9336，暖态取样 `gate-warm2.json`）：新基线 `scripts/mobile-audit/baseline/mobile-snap.json`；home-doc 2014 / home-library 1838 / home-library-list 1843 / home-quicknotes 1838 / settings 1960 / settings-appearance 1872。
+  · **平板 6 态**（lake_tab / 9340，暖态 `tablet-warm12.json`）：新基线 `mobile-snap-tablet.json`；home-doc 2035 / library 1838 / list 1843 / quicknotes 1838 / settings 1960 / appearance 1872。
+  · **多维表专项 3 态**（9336，自建夹具）：新基线 `bitable-snap.json`；form 2123 / table 2089 / card 2101（元素数 +17 来自本批 v2 选择/行高原语）。
+- **安装**：最新 APK 已重装到 emulator-5554（手机）、emulator-5556（平板）、emulator-5558（lake_gate）；平板为整机重启 + 清数据后的干净验证。
+- **门禁**：tsc（本仓范围）0；**全量 vitest 762 文件 / 4907 例通过**；ui-metrics / check:mobileui / check:core / diff-check 绿；`check:windowsweep` 绿；三套整页快照门禁各连跑两轮 0 差异。
 ### 261107 · 新建 / 重命名统一改弹窗（不再原位置内联编辑）· **master 直接提交**
 - **新增 `NameSheet`**（`src/mobile/ui/NameSheet.tsx`）：MobileSheet 外壳 + 单行输入 + 取消/确定；打开时重置值、空值行内报错、busy 置灰、Enter 提交。统一承担「重命名」与「新建命名」。
 - **重命名改弹窗**（行内 input 全删）：目录树行（`NotebookTreeList`）、抽屉笔记本头（`WorkspaceDrawers`）、首页知识库卡（`NotebookGrid`）不再渲染 `<input>`；分别由 `NotebookWorkspace` 与 `HomePage` 渲染 `NameSheet`，提交时显式传值给 `applyRename(value)` / `renameNotebook(value)`（`useNotebookTreeActions.applyRename` 增加可选入参，避免依赖 state 时序）。
