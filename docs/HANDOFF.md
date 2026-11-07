@@ -8,6 +8,13 @@
 
 ## 0. 最新交接（261027）
 
+### 261107 · pad 设置根页展示修复（卡片被 flex 压扁）+ 三套快照基线按新构建重烤 · **master 直接提交**
+- **问题**：pad 竖屏打开设置，根页第 3 张分组卡里的「清理缓存」只露半截，列表也不滚动。
+- **根因**：`.mobile-settings-list` 是 `display:flex; flex-direction:column; overflow-y:auto` 的滚动列表，卡片未设 `flex-shrink:0`；窗口高度小于内容高度时卡被压扁（实测卡片 180/208/105px < scrollHeight 240/240/120），行再被卡片的 `overflow:hidden` 裁掉。
+- **修复**：`.mobile-settings-card { flex: 0 0 auto; }`（mobile.css +1；mobileLayers mobile 1606→1607 已同步，属 bug fix）。修复后实测卡片高度 = scrollHeight+1、列表 scrollHeight > clientHeight，可正常滚动。
+- **设备验证**：pad `lake_tab`（1280×800）重建安装后打开设置：卡片完整、滚动正常（截图 `preview/device/pad-settings.png`）；手机 emulator-5554 同步安装同一 APK。
+- **重要修正**：上一轮「三套快照 0 差异」是在**架构改动前的旧 APK**上跑的（gate/tablet 未重装新构建）⇒ 本轮用架构后的新 APK 重跑发现手机 6 态 / 平板 6 态 / 多维表 3 态全部指纹变化（元素数不变，DOM 类/标签变化）。**三套基线已按新构建重烤并各连跑两轮 0 差异**；后续设备验收必须以重装后的 APK 为准。
+- 门禁：tsc 0；全量 vitest 767 文件 / 4915 例；ui-metrics / check:mobileui / check:core / diff-check 绿。
 ### 261107 · 移动端架构收敛 P2 第四批（TagsHomeTab 拖拽 hook + 剩余 toast 收口）· **master 直接提交**
 - **`tags/useTagDragSort.ts`**：TagsHomeTab 的长按 350ms 拖拽排序（状态 + document touch 监听 + elementFromPoint 过半判定 + reorderQuickNoteTags）整体抽出，组件只拿 `{drag, pressedId, suppressClick, longPress}`；TagsHomeTab 608→**546** 行（JSX/类名/判据不变，tags 26 例全过）。
 - **toast 二轮收口**：再迁移 12 处 `(e as Error).message` / `instanceof 三目` 入口到 `toastActionError`（MobileAiPage 3 / DocListSheet 2 / HomePage 2 / TrashList 2 / QuickNoteComposer / useWorkspaceActions / useWorkspaceSync），累计 34 处 / 12 文件；文案逐字不变。剩余 3 处自定义前缀/fallback 文案保留原生写法（已记录）。
