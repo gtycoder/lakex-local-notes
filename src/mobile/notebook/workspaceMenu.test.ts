@@ -63,17 +63,20 @@ describe("工作区「更多」菜单（261014）", () => {
       expect(ACTIONS).toMatch(new RegExp(id + ': "' + kind + '"'));
     }
     expect(ACTIONS).toMatch(/const pid = parentId \|\| notebookId;/);
-    expect(ACTIONS).toContain('bridge.createNote("无标题文档", pid)');
-    expect(ACTIONS).toContain('bridge.createUsheet("无标题表格", pid)');
-    expect(ACTIONS).toContain('bridge.createBitable("无标题多维表", pid)');
-    expect(ACTIONS).toContain('bridge.createBoard("无标题画板", pid)');
-    expect(ACTIONS).toContain('bridge.createInk("无标题手写板", pid)');
+    // v2（261107）：新建走命名弹窗 ⇒ 创建通道接收 title（未填时回落默认名）。
+    expect(ACTIONS).toContain('bridge.createNote(title || "无标题文档", pid)');
+    expect(ACTIONS).toContain('bridge.createUsheet(title || "无标题表格", pid)');
+    expect(ACTIONS).toContain('bridge.createBitable(title || "无标题多维表", pid)');
+    expect(ACTIONS).toContain('bridge.createBoard(title || "无标题画板", pid)');
+    expect(ACTIONS).toContain('bridge.createInk(title || "无标题手写板", pid)');
     // 新建后关掉目录抽屉：否则编辑器在抽屉后面打开（设备实测）
-    expect(ACTIONS).toMatch(/createBoard\("无标题画板", pid\)[\s\S]{0,200}await loadTree\(\);[\s\S]{0,80}closeOverlay\("sidebar"\);/);
+    expect(ACTIONS).toMatch(/createBoard\(title \|\| "无标题画板", pid\)[\s\S]{0,200}await loadTree\(\);[\s\S]{0,80}closeOverlay\("sidebar"\);/);
     // 表格/数据表/画板建完直接进编辑态（文档与手写板停在阅读态）
     expect(ACTIONS).toMatch(/await openTab\(n\.id, \{ enterEditor: kind === "usheet" \|\| kind === "bitable" \|\| kind === "board" \}\);/);
-    // 菜单只把文档类交给创建通道，group 走分组创建
-    expect(ACTIONS).toMatch(/const kind = CREATE_MENU_KINDS\[it\.id\];/);
+    // 菜单只把文档类交给创建通道，group 走分组创建；v2 先弹命名弹窗（createNameSheet），提交后才落库。
+    expect(ACTIONS).toContain('CREATE_MENU_KINDS[it.id] ?? (it.id === "group" ? "group" : null)');
+    expect(ACTIONS).toContain("const createNameSheet = {");
+    expect(ACTIONS).toContain("setCreateDraft({ kind, parentId: createParent })");
   });
 
   it("笔记本编辑入口 = 首页「知识库」长按卡片（261014 用户最终定稿）", () => {
@@ -91,7 +94,10 @@ describe("工作区「更多」菜单（261014）", () => {
     // 删除笔记本 = 整棵移入回收站（可恢复），不是物理删除
     expect(HOMEPAGE).toMatch(/trashTreeItem\(nb\.id, "folder"\)/);
     // 重命名/设置图标仍保留（能力没丢）
-    expect(HOMEPAGE).toMatch(/renameTreeNode\(cur\.id, value\)/);
+    expect(HOMEPAGE).toMatch(/renameTreeNode\(cur\.id, title\)/);
+    // v2（261107）：重命名不再行内 input，统一走 NameSheet 弹窗。
+    expect(HOMEPAGE).toContain("<NameSheet");
+    expect(HOMEPAGE).toContain("onSubmit={(value) => { void renameNotebook(value); }}");
     expect(HOMEPAGE).toMatch(/setNodeIcon\(nb\.id, icon\)/);
   });
 

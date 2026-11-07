@@ -41,7 +41,7 @@ export interface NotebookGridProps {
 export function NotebookGrid(props: NotebookGridProps) {
   const {
     notebooks, docCounts, view, onOpenNotebook, onLongPressNotebook,
-    renamingId = null, renameValue = "", onRenameChange, onRenameCommit, onRenameCancel,
+
   } = props;
   /** 长按目标是"当前按下的那张卡"（hook 只能挂一次 ⇒ 用 ref 传目标）。 */
   const pressed = useRef<TreeNode | null>(null);
@@ -61,19 +61,6 @@ export function NotebookGrid(props: NotebookGridProps) {
     onTouchCancel: longPress.onTouchCancel,
   });
   const openNotebook = (nb: TreeNode) => { if (suppressClick.current) return; onOpenNotebook(nb.id); };
-  /** 就地重命名输入框（两个视图共用同一份，避免两套）。 */
-  const renameInput = (className: string) => (
-    <input
-      className={"mb-input " + className}
-      autoFocus
-      value={renameValue}
-      onChange={(e) => onRenameChange?.(e.target.value)}
-      onClick={(e) => e.stopPropagation()}
-      onBlur={() => onRenameCommit?.()}
-      onKeyDown={(e) => { if (e.key === "Enter") onRenameCommit?.(); if (e.key === "Escape") onRenameCancel?.(); }}
-    />
-  );
-
   if (notebooks.length === 0) return <div className="mb-empty">暂无知识库</div>;
 
   // 书架视图：简约书卡（序号角标 + 图标 + 名称 + 文档数）
@@ -90,9 +77,7 @@ export function NotebookGrid(props: NotebookGridProps) {
                   {nb.icon ? <span className="nb-shelf-emoji"><MobileNodeIconGlyph value={nb.icon} /></span> : <Book size={26} strokeWidth={1.75} className="nb-shelf-line" />}
                 </span>
               </div>
-              {renamingId === nb.id
-                ? renameInput("nb-shelf-name")
-                : <div className="nb-shelf-name">{nb.title || "未命名"}</div>}
+              <div className="nb-shelf-name">{nb.title || "未命名"}</div>
               <div className="nb-shelf-count">{count} 篇</div>
             </div>
           );
@@ -115,9 +100,7 @@ export function NotebookGrid(props: NotebookGridProps) {
               {nb.icon ? <span className="nb-row__emoji"><MobileNodeIconGlyph value={nb.icon} /></span> : <Book size={20} strokeWidth={1.9} />}
             </span>
             <span className="nb-row__main">
-              {renamingId === nb.id
-                ? renameInput("nb-row__title")
-                : <span className="nb-row__title">{nb.title || "未命名"}</span>}
+              <span className="nb-row__title">{nb.title || "未命名"}</span>
               <span className="nb-row__sub">{count} 篇{updated ? `，${updated}` : ""}</span>
             </span>
             <span className="nb-row__arrow"><ChevronRight size={16} /></span>

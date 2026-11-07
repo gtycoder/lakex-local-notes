@@ -18,6 +18,7 @@ import { QuickNotePreview } from "../../features/quickNotes/QuickNotePreview";
 import type { StoredQuickNoteImage } from "../../core/quickNoteModel.js";
 import { MobileSheetMenu, type MobileSheetItem } from "../ui/MobileSheetMenu";
 import { MobileSheet } from "../ui/MobileSheet";
+import { NameSheet } from "../ui/NameSheet";
 import { CreateSheet, type CreateActionId } from "../ui/CreateSheet";
 import { CREATE_LONG_PRESS_MS, blockPressRelease, createPressArmed, createPressRevealed } from "../ui/createPress";
 import { pickLocalFile } from "../ui/pickFile";
@@ -621,12 +622,13 @@ export function HomePage(props: HomePageProps) {
   };
 
   /** 笔记本编辑三项（用户 261014：入口 = 知识库页长按；抽屉里那个 ⋮ 已删）。 */
-  const renameNotebook = async (): Promise<void> => {
+  /** v2（261107）：重命名改为弹窗提交（value 由 NameSheet 传入，不再依赖行内 input 的 state 时序）。 */
+  const renameNotebook = async (value: string): Promise<void> => {
     const cur = renamingNb;
     setRenamingNb(null);
-    const value = cur?.value.trim();
-    if (!cur || !value) return;
-    try { await bridge.renameTreeNode(cur.id, value); await onTreeChanged(); }
+    const title = value.trim();
+    if (!cur || !title) return;
+    try { await bridge.renameTreeNode(cur.id, title); await onTreeChanged(); }
     catch { showToast("重命名失败", { type: "error" }); }
   };
   const applyNotebookIcon = async (icon: string | null): Promise<void> => {
@@ -862,11 +864,6 @@ export function HomePage(props: HomePageProps) {
               view={libraryView}
               onOpenNotebook={onOpenNotebook}
               onLongPressNotebook={(nb) => setNbMenuFor(nb)}
-              renamingId={renamingNb?.id ?? null}
-              renameValue={renamingNb?.value ?? ""}
-              onRenameChange={(value) => setRenamingNb((cur) => (cur ? { ...cur, value } : cur))}
-              onRenameCommit={() => void renameNotebook()}
-              onRenameCancel={() => setRenamingNb(null)}
             />
           </section>
         </div>
@@ -1002,6 +999,16 @@ export function HomePage(props: HomePageProps) {
           onConfirm={(tagIds) => { void applyQuickBatch({ action: "tag-add", tagIds: [...tagIds] }); }}
         />
       )}
+
+      {/* v2（261107）：知识库重命名走弹窗（不再在书卡/列表行内出现 input）。 */}
+      <NameSheet
+        open={!!renamingNb}
+        title="重命名知识库"
+        initialValue={renamingNb?.value ?? ""}
+        placeholder="知识库名称"
+        onSubmit={(value) => { void renameNotebook(value); }}
+        onClose={() => setRenamingNb(null)}
+      />
 
       {/* 多选模式的底部操作条（小记：打标签 / 移入回收站；不做批量彻底删除）。 */}
       {selection.active && tab === "quick" && (

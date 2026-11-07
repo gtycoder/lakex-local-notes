@@ -22,9 +22,10 @@ export function useNotebookTreeActions(opts: {
   const [renameValue, setRenameValue] = useState("");
   const [historyList, setHistoryList] = useState<Array<{ id: number; title: string; createdAt: string }>>([]);
 
-  const applyRename = useCallback(async () => {
+  /** v2（261107）：重命名改为弹窗提交 —— 可显式传入新名称（弹窗提交时不再依赖 state 时序）。 */
+  const applyRename = useCallback(async (value?: string) => {
     const id = renamingId;
-    const title = renameValue.trim();
+    const title = (value ?? renameValue).trim();
     setRenamingId(null);
     if (!id || !title) return;
     try {

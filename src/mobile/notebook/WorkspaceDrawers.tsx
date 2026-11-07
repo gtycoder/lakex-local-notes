@@ -47,7 +47,7 @@ export interface WorkspaceDrawersProps {
 }
 
 export function WorkspaceDrawers(props: WorkspaceDrawersProps) {
-  const { sidebarOpen, outlineOpen, title, nbIcon, renamingId, notebookId, renameValue, treeList, editor } = props;
+  const { sidebarOpen, outlineOpen, title, nbIcon, treeList, editor } = props;
   const selecting = props.selecting ?? false;
   return (
     <>
@@ -65,19 +65,8 @@ export function WorkspaceDrawers(props: WorkspaceDrawersProps) {
             <div className="toolbar__scroll">
               {/* 笔记本自己也是一行（用户 261014）：**图标 + 标题**；图标可点 = 设置图标（桌面 .tree-row-icon 同款手势） */}
               <span className="mb-tree-icon" aria-hidden="true">{nbIcon ? <MobileNodeIconGlyph value={nbIcon} /> : <Book size={16} />}</span>
-              {renamingId === notebookId ? (
-                <input
-                  className="mb-input"
-                  autoFocus
-                  value={renameValue}
-                  onChange={(e) => props.onRenameChange(e.target.value)}
-                  onClick={(e) => e.stopPropagation()}
-                  onBlur={props.onRenameCommit}
-                  onKeyDown={(e) => { if (e.key === "Enter") props.onRenameCommit(); if (e.key === "Escape") props.onRenameCancel(); }}
-                />
-              ) : (
-                <span className="toolbar__text">{title}</span>
-              )}
+              {/* v2（261107）：重命名改为弹窗（NameSheet），抽屉头只做展示。 */}
+              <span className="toolbar__text">{title}</span>
             </div>
             {/* 笔记本这一层**不放** ⋮（用户 261014：抽屉里的编辑入口去掉，改到首页「知识库」长按卡片） */}
             {/* 261106 task-8：文档多选入口（有可选文档时才出现） */}

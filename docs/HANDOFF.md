@@ -8,6 +8,13 @@
 
 ## 0. 最新交接（261027）
 
+### 261107 · 新建 / 重命名统一改弹窗（不再原位置内联编辑）· **master 直接提交**
+- **新增 `NameSheet`**（`src/mobile/ui/NameSheet.tsx`）：MobileSheet 外壳 + 单行输入 + 取消/确定；打开时重置值、空值行内报错、busy 置灰、Enter 提交。统一承担「重命名」与「新建命名」。
+- **重命名改弹窗**（行内 input 全删）：目录树行（`NotebookTreeList`）、抽屉笔记本头（`WorkspaceDrawers`）、首页知识库卡（`NotebookGrid`）不再渲染 `<input>`；分别由 `NotebookWorkspace` 与 `HomePage` 渲染 `NameSheet`，提交时显式传值给 `applyRename(value)` / `renameNotebook(value)`（`useNotebookTreeActions.applyRename` 增加可选入参，避免依赖 state 时序）。
+- **新建改弹窗**：目录抽屉「新建」清单（文档/表格/多维表/画板/手写板/分组）选中类型后不再立刻用默认名落库，而是 `useWorkspaceActions` 记录 `createDraft` → 弹 `NameSheet`（标题按类型：新建文档/新建表格/…）→ 提交后才 `createChildDocument(kind,parent,title)` / `createChildGroup(parent,title)`（两个函数新增可选 title，缺省仍回落「无标题…」）。修复了首版把 `CREATE_MENU_KINDS` 的 value（note→doc）当作键、导致弹窗标题只有「新建」的问题。
+- **测试**：`NameSheet.render.test.tsx` 3 例（预填/trim 提交、空值拦截、取消与 busy）；`NotebookTreeList.render.test` 的两条「行内输入框」用例改为「行内不再有 input」；`useWorkspaceActions.drawer.test` 改为「先弹窗、提交才落库」；`workspaceMenu.test` 的源码契约同步（title 参数、NameSheet、renameTreeNode(cur.id,title)）。
+- **门禁**：tsc（本仓范围）0；**全量 vitest 761 文件 / 4905 例通过**；ui-metrics / check:mobileui / check:core / diff-check 绿。无 CSS 变更 ⇒ mobileLayers 基线不动。
+- **真机**：emulator-5554 验证：目录行 ⋯ → 重命名 弹出「重命名」弹窗（预填原名）；抽屉「新建」→ 新建文档 弹出命名弹窗（标题「新建文档」，提交后创建并打开）。截图 `preview/device/rename-dialog2.png`、`create-dialog2.png`（后者为标题修正前的构建；修正后未再截图）。
 ### 261107 · 移动目标选择简化（单选/多选都只选笔记本）· **master 直接提交**
 - 用户点单：单条移动与批量移动都**只允许选笔记本**，不做层级目录树。`MoveTargetTreeSheet` 重写为平铺笔记本列表：只保留 `nodeType==="notebook"`（分组不展示/不可选）、搜索框（搜索笔记本…）、选中打勾、「当前位置」标注、自身/后代禁用并写明原因；行改用标准 `.mb-row.mb-row--two-line`（修掉旧版把 `<button class="mb-set-name">` 当行导致的浏览器默认边框/居中/说明文字像输入框的观感），未新增 CSS。
 - 影响面：文档树多选 `useTreeSelection.openMovePicker` 与文档列表多选 `DocListSheet` 共用同一组件 ⇒ 单选/多选两条路径同时变成「只选笔记本」。

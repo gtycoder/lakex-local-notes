@@ -132,13 +132,12 @@ describe("目录抽屉树窗口化", () => {
     expect(host.querySelector('[data-node-id="c1"]')).not.toBeNull();
   });
 
-  it("重命名中的行滚出窗口仍保留输入框（pin 一行，不破坏窗口化）", async () => {
+  it("重命名改为弹窗后：虚拟窗口不再 pin 输入框行（行只做展示）", async () => {
     const tree = Array.from({ length: 2000 }, (_, i) => node("fx" + i, "nb1", i));
     await renderList({ rows: rowsFor(tree), renamingId: "fx1999", renameValue: "改名中" });
-    // stub 窗口 = 6 行 + pin 的重命名行
-    expect(host.querySelectorAll("[data-node-id]")).toHaveLength(7);
-    const input = host.querySelector('[data-node-id="fx1999"] input.mb-input') as HTMLInputElement | null;
-    expect(input?.value).toBe("改名中");
+    // stub 窗口 = 6 行；v2（261107）重命名走 NameSheet，不再为输入框额外 pin 一行。
+    expect(host.querySelectorAll("[data-node-id]")).toHaveLength(6);
+    expect(host.querySelector("input.mb-input")).toBeNull();
   });
 
   it("行变化（展开/折叠）不重挂滚动容器：scrollTop 与虚拟窗口状态得以保留", async () => {
@@ -210,28 +209,14 @@ describe("目录抽屉树窗口化", () => {
     expect((host.querySelector('[data-node-id="n2"]') as HTMLElement).className).toContain("drop-parent");
   });
 
-  it("重命名输入框走原回调；空列表显示空态文案", async () => {
-    const onRenameChange = vi.fn();
-    const onRenameCommit = vi.fn();
-    const onRenameCancel = vi.fn();
+  it("行内不再渲染重命名输入框（v2 弹窗负责）；空列表显示空态文案", async () => {
     await renderList({
       rows: rowsFor([node("n1", "nb1", 1)]),
       renamingId: "n1",
       renameValue: "新名字",
-      onRenameChange,
-      onRenameCommit,
-      onRenameCancel,
     });
-    const input = host.querySelector("input.mb-input") as HTMLInputElement;
-    expect(input.value).toBe("新名字");
-    await act(async () => {
-      input.dispatchEvent(new Event("focusout", { bubbles: true }));
-    });
-    expect(onRenameCommit).toHaveBeenCalledTimes(1);
-    await act(async () => {
-      input.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-    });
-    expect(onRenameCancel).toHaveBeenCalledTimes(1);
+    // v2（261107）：重命名由 NameSheet 弹窗承担 —— 行内不出现任何 input。
+    expect(host.querySelector("input.mb-input")).toBeNull();
 
     await act(async () => { root.render(createElement(NotebookTreeList, {
       rows: [],

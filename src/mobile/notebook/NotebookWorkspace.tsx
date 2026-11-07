@@ -44,6 +44,7 @@ import { useTreeSelection } from "./useTreeSelection";
 import { isTreeRowSelectable } from "./treeSelection";
 import { MoveTargetTreeSheet } from "../ui/MoveTargetTreeSheet";
 import { BatchTagPickerSheet } from "../ui/BatchTagPickerSheet";
+import { NameSheet } from "../ui/NameSheet";
 import { claimMissingBodyNotice, MISSING_DOC_OPEN_HINT } from "../data/missingBodyMessages";
 export type { NotebookTreeItem } from "./useNotebookTreeData";
 export type { PadPanelMode } from "./shellModel";
@@ -304,6 +305,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     onTreeMenuSelect,
     tabIconOf,
     selectCreateItem,
+    createNameSheet,
     handleOpenTabFromList,
     handleSwitchNotebookItem,
     handlePickIcon,
@@ -567,6 +569,24 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
         onRestoreHistory={(id) => void applyRestoreHistory(id)}
         onDeleteHistory={(id) => void deleteHistory(id)}
         onCloseHistory={() => closeOverlay("history")}
+      />
+
+      {/* v2（261107）：新建 / 重命名统一走弹窗（NameSheet），目录行与抽屉头只做展示。 */}
+      <NameSheet
+        open={createNameSheet.open}
+        title={createNameSheet.title}
+        placeholder="名称"
+        confirmText="创建"
+        onSubmit={createNameSheet.onSubmit}
+        onClose={createNameSheet.onClose}
+      />
+      <NameSheet
+        open={renamingId !== null}
+        title="重命名"
+        initialValue={renameValue}
+        placeholder="名称"
+        onSubmit={(value) => { setRenameValue(value); void applyRename(value); }}
+        onClose={() => setRenamingId(null)}
       />
 
       {/* 选择模式的「移动到…」目录树弹窗（与文档列表多选同一份 MoveTargetTreeSheet）。 */}

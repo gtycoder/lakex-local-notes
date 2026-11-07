@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { Copy, FolderOpen, History, Info, Move, Pencil, SmilePlus, Star, Tag, Trash } from "lucide-react";
 import { bridge } from "../bridge";
 import { isFavorite, toggleFavorite } from "../data/favorites";
@@ -89,14 +89,14 @@ export function useWorkspaceActions(options: UseWorkspaceActionsOptions) {
    * 文档/手写板建完停在阅读态；表格/数据表/画板建完直接进编辑态。
    * createParent 理论上总是当前节点；空串兜底回当前笔记本，避免建出 parent_id="" 的孤儿。
    */
-  const createChildDocument = useCallback(async (kind: "doc" | "usheet" | "bitable" | "board" | "ink", parentId: string) => {
+  const createChildDocument = useCallback(async (kind: "doc" | "usheet" | "bitable" | "board" | "ink", parentId: string, title?: string) => {
     try {
       const pid = parentId || notebookId;
-      const n = kind === "doc" ? await bridge.createNote("无标题文档", pid)
-        : kind === "usheet" ? await bridge.createUsheet("无标题表格", pid)
-          : kind === "bitable" ? await bridge.createBitable("无标题多维表", pid)
-            : kind === "board" ? await bridge.createBoard("无标题画板", pid)
-              : await bridge.createInk("无标题手写板", pid);
+      const n = kind === "doc" ? await bridge.createNote(title || "无标题文档", pid)
+        : kind === "usheet" ? await bridge.createUsheet(title || "无标题表格", pid)
+          : kind === "bitable" ? await bridge.createBitable(title || "无标题多维表", pid)
+            : kind === "board" ? await bridge.createBoard(title || "无标题画板", pid)
+              : await bridge.createInk(title || "无标题手写板", pid);
       await loadTree();
       closeOverlay("sidebar");
       // 手写板沿用 remote ink 批的行为：建完停在阅读态（与文档一致），需要时再点顶栏「编辑」
@@ -126,9 +126,9 @@ export function useWorkspaceActions(options: UseWorkspaceActionsOptions) {
   }, [loadTree]);
 
   /** 行内 ＋ → 新建分组：在该节点下建子分组并展开父节点（261105 晚已按用户要求恢复原样）。 */
-  const createChildGroup = useCallback(async (parentId: string) => {
+  const createChildGroup = useCallback(async (parentId: string, title?: string) => {
     try {
-      await bridge.createGroup(parentId || notebookId, "新建分组");
+      await bridge.createGroup(parentId || notebookId, title || "新建分组");
       await loadTree();
       expandGroup(parentId || notebookId);
     } catch { showToast("新建失败", { type: "error" }); }
@@ -189,13 +189,32 @@ export function useWorkspaceActions(options: UseWorkspaceActionsOptions) {
 
   // ---- P9-5b 浮层/面板接线（原为 NotebookWorkspace 内联箭头）----
   const tabIconOf = useCallback((id: string) => itemById(id)?.icon ?? null, [itemById]);
+  /** v2（261107）：新建也走命名弹窗 —— 菜单选中类型后先存草稿，弹窗提交再创建（不在目录里内联命名）。 */
+  const [createDraft, setCreateDraft] = useState<{ kind: string; parentId: string } | null>(null);
   const selectCreateItem = useCallback((it: MobileSheetItem) => {
     closeOverlay("create");
-    // 复用目录树的同一份创建通道（行内 ＋ / 抽屉「新建」同源），不新造第二条；作用域 = 本次打开它的那个节点
-    const kind = CREATE_MENU_KINDS[it.id];
-    if (kind) void createChildDocument(kind, createParent);
-    else if (it.id === "group") void createChildGroup(createParent);
-  }, [closeOverlay, createChildDocument, createChildGroup, createParent]);
+    const kind = CREATE_MENU_KINDS[it.id] ?? (it.id === "group" ? "group" : null);
+    if (!kind) return;
+    setCreateDraft({ kind, parentId: createParent });
+  }, [closeOverlay, createParent]);
+
+  // 键 = CREATE_MENU_KINDS 的**值**（note→doc），不是菜单 id。
+  const CREATE_NAME_TITLE: Record<string, string> = {
+    doc: "新建文档", usheet: "新建表格", bitable: "新建多维表", board: "新建画板", ink: "新建手写板", group: "新建分组",
+  };
+  const submitCreateName = useCallback((title: string) => {
+    const draft = createDraft;
+    if (!draft) return;
+    setCreateDraft(null);
+    if (draft.kind === "group") { void createChildGroup(draft.parentId, title); return; }
+    void createChildDocument(draft.kind as "doc" | "usheet" | "bitable" | "board" | "ink", draft.parentId, title);
+  }, [createDraft, createChildDocument, createChildGroup]);
+  const createNameSheet = {
+    open: createDraft !== null,
+    title: createDraft ? CREATE_NAME_TITLE[createDraft.kind] ?? "新建" : "新建",
+    onSubmit: submitCreateName,
+    onClose: () => setCreateDraft(null),
+  };
   const handleOpenTabFromList = useCallback((id: string) => {
     void openTab(id);
     closeOverlay("tabs");
@@ -224,6 +243,7 @@ export function useWorkspaceActions(options: UseWorkspaceActionsOptions) {
     onTreeMenuSelect,
     tabIconOf,
     selectCreateItem,
+    createNameSheet,
     handleOpenTabFromList,
     handleSwitchNotebookItem,
     handlePickIcon,

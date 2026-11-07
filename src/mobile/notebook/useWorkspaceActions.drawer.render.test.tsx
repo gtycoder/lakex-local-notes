@@ -179,21 +179,28 @@ describe("新建/重命名（已按用户要求恢复 task-54 之前的行为）
     expect(calls.openOverlay).not.toHaveBeenCalled();
   });
 
-  it("新建分组恢复原样：只建 + 展开父节点，不再保持抽屉/就地重命名", async () => {
+  it("新建分组：先弹命名弹窗，提交后才落库并展开父节点", async () => {
     await render();
     await act(async () => { api.selectCreateItem({ id: "group", label: "新建分组" }); });
-    expect(mocks.createGroup).toHaveBeenCalledWith("nb1", "新建分组");
+    // v2（261107）：选中类型只记录草稿，不立刻用默认名落库。
+    expect(mocks.createGroup).not.toHaveBeenCalled();
+    expect(api.createNameSheet.open).toBe(true);
+    await act(async () => { api.createNameSheet.onSubmit("我的分组"); await Promise.resolve(); });
+    expect(mocks.createGroup).toHaveBeenCalledWith("nb1", "我的分组");
     expect(calls.expandGroup).toHaveBeenCalledWith("nb1");
     expect(calls.setRenamingId).not.toHaveBeenCalled();
     expect(calls.setRenameValue).not.toHaveBeenCalled();
   });
 
-  it("新建文档仍按原逻辑（打开标签，不进入重命名）", async () => {
-    mocks.createNote.mockResolvedValue({ id: "n9", title: "无标题文档" });
+  it("新建文档：命名弹窗提交后才创建并打开标签", async () => {
+    mocks.createNote.mockResolvedValue({ id: "n9", title: "我的文档" });
     await render();
     await act(async () => { api.selectCreateItem({ id: "note", label: "新建文档" }); });
-    expect(calls.setRenamingId).not.toHaveBeenCalled();
+    expect(mocks.createNote).not.toHaveBeenCalled();
+    await act(async () => { api.createNameSheet.onSubmit("我的文档"); await Promise.resolve(); });
+    expect(mocks.createNote).toHaveBeenCalledWith("我的文档", "nb1");
     expect(calls.openTab).toHaveBeenCalledWith("n9", { enterEditor: false });
+    expect(calls.setRenamingId).not.toHaveBeenCalled();
   });
 });
 

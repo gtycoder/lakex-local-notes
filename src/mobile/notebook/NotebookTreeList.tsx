@@ -69,7 +69,7 @@ export interface NotebookTreeListProps {
 }
 
 export function NotebookTreeList(props: NotebookTreeListProps) {
-  const { rows, expanded, hasChildren, activeId, drag, renamingId, renameValue } = props;
+  const { rows, expanded, hasChildren, activeId, drag } = props;
   const [scrollElement, setScrollElement] = useState<HTMLDivElement | null>(null);
   const setScrollNode = useCallback((node: HTMLDivElement | null) => setScrollElement(node), []);
   const getScrollElement = useCallback(() => scrollElement, [scrollElement]);
@@ -89,15 +89,6 @@ export function NotebookTreeList(props: NotebookTreeListProps) {
   });
 
   const virtualItems = virtualEnabled ? virtualizer.getVirtualItems() : [];
-  /**
-   * 重命名中的行即使滚出虚拟窗口也保留一条（绝对定位到它自己的 start）：
-   * 行被窗口卸掉会连带 autoFocus 输入框消失（焦点/内容都可能丢）。只多挂这一行，不破坏窗口化。
-   */
-  const renamingIndex = renamingId && virtualEnabled ? rows.findIndex((row) => row.item.id === renamingId) : -1;
-  const renamingInWindow = renamingIndex >= 0 && virtualItems.some((entry) => entry.index === renamingIndex);
-  const renamingOffset = renamingIndex >= 0 && !renamingInWindow
-    ? virtualizer.getOffsetForIndex(renamingIndex)?.[0]
-    : undefined;
 
   const renderRow = (row: NotebookTreeRow) => {
     const it = row.item;
@@ -114,7 +105,6 @@ export function NotebookTreeList(props: NotebookTreeListProps) {
         data-node-id={it.id}
         aria-selected={selecting ? (selectable ? checked : false) : undefined}
         onClick={() => {
-          if (renamingId) return;
           // 选择态：可选行 = 切换勾选（不打开文档）；不可选行（分组）保持原语义（展开/折叠）。
           if (selecting && selectable) { props.selection?.onToggle(it); return; }
           props.onActivate(it);
@@ -133,33 +123,19 @@ export function NotebookTreeList(props: NotebookTreeListProps) {
           </span>
         )}
         {kids ? <ChevronRight size={16} className={expanded.has(it.id) ? "mb-chevron open" : "mb-chevron"} /> : <span className="mb-chevron-spacer" />}
-        {renamingId === it.id ? (
-          <input
-            className="mb-input"
-            autoFocus
-            value={renameValue}
-            onChange={(e) => props.onRenameChange(e.target.value)}
-            onClick={(e) => e.stopPropagation()}
-            onBlur={() => props.onRenameCommit()}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") props.onRenameCommit();
-              if (e.key === "Escape") props.onRenameCancel();
-            }}
-          />
-        ) : (
-          <>
-            {it.icon ? <span className="mb-tree-icon"><MobileNodeIconGlyph value={it.icon} /></span> : <NodeIcon size={16} className="mb-tree-icon" />}
-            <span className="mb-row__title">{it.title}</span>
-            {/* 移动端无 hover：动作常显（对齐思源移动端 .b3-list-item 不带 --hide-action）。
-                ⋯ = 行菜单，＋ = 新建子项。选择态下整组隐藏：底部条才是动作入口，避免误触。 */}
-            {!selecting && (
-              <span className="nb-tree-actions">
-                <span role="button" tabIndex={0} className="nb-tree-action mb-tap" aria-label="更多" onClick={(e) => { e.stopPropagation(); props.onOpenMenu(it); }}><MoreVertical size={17} /></span>
-                <span role="button" tabIndex={0} className="nb-tree-action mb-tap" aria-label="新建子项" title="新建子项" onClick={(e) => { e.stopPropagation(); props.onOpenCreate(it); }}><Plus size={17} /></span>
-              </span>
-            )}
-          </>
-        )}
+        <>
+          {it.icon ? <span className="mb-tree-icon"><MobileNodeIconGlyph value={it.icon} /></span> : <NodeIcon size={16} className="mb-tree-icon" />}
+          <span className="mb-row__title">{it.title}</span>
+          {/* 移动端无 hover：动作常显（对齐思源移动端 .b3-list-item 不带 --hide-action）。
+              ⋯ = 行菜单，＋ = 新建子项。选择态下整组隐藏：底部条才是动作入口，避免误触。
+              v2（261107）：重命名改为弹窗（NameSheet），行内不再出现 input。 */}
+          {!selecting && (
+            <span className="nb-tree-actions">
+              <span role="button" tabIndex={0} className="nb-tree-action mb-tap" aria-label="更多" onClick={(e) => { e.stopPropagation(); props.onOpenMenu(it); }}><MoreVertical size={17} /></span>
+              <span role="button" tabIndex={0} className="nb-tree-action mb-tap" aria-label="新建子项" title="新建子项" onClick={(e) => { e.stopPropagation(); props.onOpenCreate(it); }}><Plus size={17} /></span>
+            </span>
+          )}
+        </>
       </button>
     );
   };
@@ -169,14 +145,6 @@ export function NotebookTreeList(props: NotebookTreeListProps) {
       {rows.length === 0 && <div className="mb-empty">暂无文档，点右上新建</div>}
       {virtualEnabled ? (
         <div style={{ position: "relative", height: virtualizer.getTotalSize() }}>
-          {renamingOffset !== undefined && rows[renamingIndex] && (
-            <div
-              key={"pin-" + renamingIndex}
-              style={{ position: "absolute", top: 0, left: 0, width: "100%", transform: `translateY(${renamingOffset}px)` }}
-            >
-              {renderRow(rows[renamingIndex])}
-            </div>
-          )}
           {virtualItems.map((entry) => {
             const row = rows[entry.index];
             if (!row) return null;
