@@ -22,12 +22,7 @@ export interface WorkspaceDrawersProps {
   outlineOpen: boolean;
   title: string;
   nbIcon: string | null;
-  renamingId: string | null;
   notebookId: string;
-  renameValue: string;
-  onRenameChange: (value: string) => void;
-  onRenameCommit: () => void;
-  onRenameCancel: () => void;
   /** 目录树（父层与平板悬浮左栏共用同一份 NotebookTreeList）。 */
   treeList: ReactNode;
   onOpenSidebar: (open: boolean) => void;

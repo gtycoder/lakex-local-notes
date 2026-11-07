@@ -53,11 +53,6 @@ export interface NotebookTreeListProps {
   hasChildren: (id: string) => boolean;
   activeId: string | null;
   drag: NotebookTreeDragState | null;
-  renamingId: string | null;
-  renameValue: string;
-  onRenameChange: (value: string) => void;
-  onRenameCommit: () => void;
-  onRenameCancel: () => void;
   longPress: LongPressHandlers;
   /** 按下行时登记长按目标（拖拽起手要用）。 */
   onPressRow: (item: NotebookTreeItem) => void;

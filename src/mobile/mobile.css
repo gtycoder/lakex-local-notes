@@ -201,7 +201,11 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
 .mb-composer-skel-cover { position: absolute; inset: 0; z-index: 1; background: var(--lake-bg-canvas); border-radius: inherit; }
 .mb-composer-skeleton--bare { height: 100%; }
 /* ⚠️ **不要再给这里加第二个滚动容器**（261014 实测踩到）：内核 note 版式内部已经有自己的滚动口
-   `.ne-editor-wrap-content { overflow-y: auto }
+   `.ne-editor-wrap-content { overflow-y: auto }`（实测 st=442 / sh=729 / ch=260）。我先前把 `.quick-note-editor`
+   也设成 `overflow-y:auto` ⇒ **两层滚动打架**：外层 scrollTop 会被"光标跟滚"和浏览器各自改一次，
+   切面板时正文位置来回跳（实测外层 st 0 → 239、sh 318 → 584，首块 Y 位移 46–73px）。
+   口径：**内核的滚动口就让它滚**，我们只负责把它的高度框住（卡片定高 + overflow:hidden）并提供
+   `useCaretIntoView` 去纠偏（它会顺着祖先链找到真正可滚的那一层）。 */
 .mobile-qn-error { color: var(--lake-status-error); font-size: var(--lake-font-size-micro); margin-top: 8px; }
 .mobile-qn-actions { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
 .mobile-qn-hint { font-size: var(--lake-font-size-nano); color: var(--lake-text-3); }

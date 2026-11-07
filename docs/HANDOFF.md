@@ -8,6 +8,13 @@
 
 ## 0. 最新交接（261027）
 
+### 261107 · 推送前 review（修复死样式清理误伤注释 + 清理重命名死 API）· **master 直接提交**
+- **发现并修复一个真实回归**：`a2c8c8ce` 的死样式清理脚本按「选择器 { 规则 }」正则删除时，把 `.ne-editor-wrap-content { overflow-y: auto }`（写在注释里的示例）当成规则删掉，**连带删掉了该注释的 `*/`** ⇒ mobile.css 出现未闭合注释，紧随其后的 `.mobile-qn-error/.mobile-qn-actions/.mobile-qn-hint/.mobile-qn-spacer/.mobile-qn-btn/.mobile-qn-primary` 被整体注释掉（QuickNoteComposer 的按钮/错误/动作行样式丢失）。已恢复完整注释并让规则重新生效：mobile.css 声明数 1607→**1617**（仍低于改动前 1665；mobileLayers 基线同步，附原因）。
+- **死 API 清理**：重命名改弹窗后，`NotebookGridProps` / `NotebookTreeListProps` / `WorkspaceDrawersProps` 仍保留 `renamingId/renameValue/onRename*`，且 NotebookWorkspace 还在传；已全部删除（WorkspaceDrawers 的 `notebookId` 也已无消费者一并删），测试 fixture 同步清理。
+- **测试断言加强**：`settingsGroups.test` 改为先从合并源码解析 `export type SettingsView = …;` 联合类型再断言 import/backup/tags，避免退化成「全文含某字符串」的弱断言。
+- **原语收敛**：`useTagDragSort` 返回值只保留消费者实际使用的 `{ drag, pressedId, suppressClick, longPress }`（去掉 setDrag/startPoint 泄漏）。
+- **注释配平核对**：mobile.css 现为 174/173（与 origin 一致的既有 1 条历史不配平；修复后不再新增）；kit.css/tokens.css 的不配平为历史注释写法，未动。
+- 门禁：tsc 0；全量 vitest 767 文件 / 4915 例；ui-metrics / check:mobileui / check:core / diff-check 绿。修复后手机/平板/多维表快照不受影响（受影响规则只服务 QuickNoteComposer，不在 6 态快照内）。
 ### 261107 · pad 设置根页展示修复（卡片被 flex 压扁）+ 三套快照基线按新构建重烤 · **master 直接提交**
 - **问题**：pad 竖屏打开设置，根页第 3 张分组卡里的「清理缓存」只露半截，列表也不滚动。
 - **根因**：`.mobile-settings-list` 是 `display:flex; flex-direction:column; overflow-y:auto` 的滚动列表，卡片未设 `flex-shrink:0`；窗口高度小于内容高度时卡被压扁（实测卡片 180/208/105px < scrollHeight 240/240/120），行再被卡片的 `overflow:hidden` 裁掉。

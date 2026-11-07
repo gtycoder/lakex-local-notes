@@ -86,5 +86,5 @@ export function useTagDragSort({ tags, reloadAll, setBusy }: UseTagDragSortOptio
     };
   }, [drag !== null, order, reloadAll, setBusy]);
 
-  return { drag, setDrag, pressedId, startPoint, suppressClick, longPress };
+  return { drag, pressedId, suppressClick, longPress };
 }

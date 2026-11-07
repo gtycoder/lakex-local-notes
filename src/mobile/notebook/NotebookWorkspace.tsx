@@ -371,11 +371,6 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
       hasChildren={(id) => childrenOf(id).length > 0}
       activeId={activeId}
       drag={drag}
-      renamingId={renamingId}
-      renameValue={renameValue}
-      onRenameChange={setRenameValue}
-      onRenameCommit={() => void applyRename()}
-      onRenameCancel={() => setRenamingId(null)}
       longPress={longPress}
       onPressRow={setPressedNode}
       onActivate={(item) => {
@@ -608,12 +603,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
           outlineOpen={outlineOpen}
           title={title}
           nbIcon={nbIcon}
-          renamingId={renamingId}
           notebookId={notebookId}
-          renameValue={renameValue}
-          onRenameChange={setRenameValue}
-          onRenameCommit={() => void applyRename()}
-          onRenameCancel={() => setRenamingId(null)}
           treeList={treeList}
           onOpenSidebar={openSidebar}
           onOpenCreate={() => openOverlay({ kind: "create", parentId: notebookId })}

@@ -24,19 +24,10 @@ export interface NotebookGridProps {
   onOpenNotebook: (id: string) => void;
   /** 长按笔记本（书卡 / 列表行）→ 打开编辑菜单（重命名 / 设置图标 / 删除笔记本）。用户 261014 定：笔记本编辑走这里。 */
   onLongPressNotebook?: (nb: TreeNode) => void;
-  /** 就地重命名（与目录树行同语义）：正在改的 id + 值 + 回调。 */
-  renamingId?: string | null;
-  renameValue?: string;
-  onRenameChange?: (value: string) => void;
-  onRenameCommit?: () => void;
-  onRenameCancel?: () => void;
 }
 
 export function NotebookGrid(props: NotebookGridProps) {
-  const {
-    notebooks, docCounts, view, onOpenNotebook, onLongPressNotebook,
-
-  } = props;
+  const { notebooks, docCounts, view, onOpenNotebook, onLongPressNotebook } = props;
   /** 长按目标是"当前按下的那张卡"（hook 只能挂一次 ⇒ 用 ref 传目标）。 */
   const pressed = useRef<TreeNode | null>(null);
   /** 长按过的那一次要吞掉随后的 click（否则长按开菜单的同时又进了笔记本）。 */

@@ -68,11 +68,6 @@ const renderList = async (props: Partial<Parameters<typeof NotebookTreeList>[0]>
     hasChildren: (id: string) => props.rows.some((row) => row.item.parentId === id),
     activeId: null,
     drag: null,
-    renamingId: null,
-    renameValue: "",
-    onRenameChange: () => {},
-    onRenameCommit: () => {},
-    onRenameCancel: () => {},
     longPress,
     onPressRow: () => {},
     onActivate: () => {},
@@ -134,8 +129,8 @@ describe("目录抽屉树窗口化", () => {
 
   it("重命名改为弹窗后：虚拟窗口不再 pin 输入框行（行只做展示）", async () => {
     const tree = Array.from({ length: 2000 }, (_, i) => node("fx" + i, "nb1", i));
-    await renderList({ rows: rowsFor(tree), renamingId: "fx1999", renameValue: "改名中" });
-    // stub 窗口 = 6 行；v2（261107）重命名走 NameSheet，不再为输入框额外 pin 一行。
+    await renderList({ rows: rowsFor(tree) });
+    // stub 窗口 = 6 行；v2（261107）重命名走 NameSheet，行内不渲染输入框、也不会为输入框额外 pin 一行。
     expect(host.querySelectorAll("[data-node-id]")).toHaveLength(6);
     expect(host.querySelector("input.mb-input")).toBeNull();
   });
@@ -210,11 +205,7 @@ describe("目录抽屉树窗口化", () => {
   });
 
   it("行内不再渲染重命名输入框（v2 弹窗负责）；空列表显示空态文案", async () => {
-    await renderList({
-      rows: rowsFor([node("n1", "nb1", 1)]),
-      renamingId: "n1",
-      renameValue: "新名字",
-    });
+    await renderList({ rows: rowsFor([node("n1", "nb1", 1)]) });
     // v2（261107）：重命名由 NameSheet 弹窗承担 —— 行内不出现任何 input。
     expect(host.querySelector("input.mb-input")).toBeNull();
 
@@ -224,11 +215,6 @@ describe("目录抽屉树窗口化", () => {
       hasChildren: () => false,
       activeId: null,
       drag: null,
-      renamingId: null,
-      renameValue: "",
-      onRenameChange: () => {},
-      onRenameCommit: () => {},
-      onRenameCancel: () => {},
       longPress,
       onPressRow: () => {},
       onActivate: () => {},
