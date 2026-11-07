@@ -523,6 +523,15 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
 /* 261106 task-8：目录树多选的「不可选行」（笔记本/分组）复选框置灰——只降透明度，保留占位让左缘对齐。 */
 .mb-iconbtn.is-disabled { opacity: var(--lake-disabled-opacity); }
 
+
+/* v2（261107）：共享元素转场（小记卡 → 写作卡）的浮起克隆。只由 HomePage.morphCardToComposer 挂载/移除。 */
+.qn-card-morph {
+  position: fixed; z-index: var(--mobile-z-page); margin: 0; pointer-events: none;
+  border-radius: var(--mb-radius-card); box-shadow: var(--mb-shadow-float); overflow: hidden;
+  background: var(--lake-bg-panel); will-change: left, top, width, height;
+  transition: opacity var(--mb-dur-fast) var(--mb-ease);
+}
+.qn-card-morph.is-out { opacity: 0; }
 /* 竖向设置菜单：设置项一行一行（思源移动端式），点某项进入新页面 */
 /* v2（261107）：根页 = 分组卡（r16 + 卡阴影）+ 彩色图标块 + 右侧当前值；卡间距 24。 */
 .mobile-settings-list { flex: 1; overflow-y: auto; background: transparent; padding: 8px var(--mb-page-pad) calc(24px + var(--mobile-bottom-safe-area)); display: flex; flex-direction: column; gap: 24px; }

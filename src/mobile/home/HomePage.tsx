@@ -355,6 +355,38 @@ export function HomePage(props: HomePageProps) {
     if (quickVirtualEnabled) quickVirtualizer.measure();
   }, [quickVirtualEnabled, sortedQuickNotes, quickVirtualizer]);
 
+  /** v2（261107）：共享元素转场 —— 小记卡 → 写作卡（FLIP 克隆）。
+   *  卡片克隆按当前矩形浮起，扩到写作卡容器（quickScroll）位置后淡出；真实写作卡随后挂载。
+   *  只动 transform/几何 + opacity，不参与布局；reduced-motion 下直接跳过。 */
+  const morphCardToComposer = useCallback((card: HTMLElement | null): void => {
+    const target = quickScrollRef.current;
+    if (!card || !target) return;
+    if (typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const from = card.getBoundingClientRect();
+    const to = target.getBoundingClientRect();
+    if (!from.width || !to.width) return;
+    const clone = card.cloneNode(true) as HTMLElement;
+    clone.className = "qn-card qn-card-morph";
+    clone.setAttribute("aria-hidden", "true");
+    clone.style.left = from.left + "px";
+    clone.style.top = from.top + "px";
+    clone.style.width = from.width + "px";
+    clone.style.height = from.height + "px";
+    document.body.appendChild(clone);
+    requestAnimationFrame(() => {
+      clone.style.transition = "left var(--mb-dur-page) var(--mb-ease), top var(--mb-dur-page) var(--mb-ease), width var(--mb-dur-page) var(--mb-ease), height var(--mb-dur-page) var(--mb-ease), border-radius var(--mb-dur-page) var(--mb-ease)";
+      clone.style.left = to.left + "px";
+      clone.style.top = to.top + "px";
+      clone.style.width = to.width + "px";
+      clone.style.height = to.height + "px";
+      clone.style.borderRadius = "var(--mb-radius-card)";
+    });
+    window.setTimeout(() => {
+      clone.classList.add("is-out");
+      window.setTimeout(() => clone.remove(), 180);
+    }, 330);
+  }, []);
+
   const openEdit = async (id: string): Promise<void> => {
     try {
       const full = await bridge.readQuickNote(id);
@@ -633,7 +665,7 @@ export function HomePage(props: HomePageProps) {
       revealed={revealedQuickNoteId === note.id}
       onRequestDetail={loadQuickNoteDetail}
       dateValue={quickNoteSortTime(note, quickSort)}
-      onEdit={() => { void openEdit(note.id); }}
+      onEdit={(card) => { morphCardToComposer(card); void openEdit(note.id); }}
       onMore={() => setQuickMenuFor(note.id)}
       onFilterTag={(tagId) => setQuickTagFilter({ kind: "tag", id: tagId })}
       onToggleTask={(checkboxIndex, checked) => { void toggleCardTask(note.id, checkboxIndex, checked); }}
@@ -973,7 +1005,7 @@ export function HomePage(props: HomePageProps) {
 /** 小记卡片：大图 + 摘要 + 日期 + 「...」（有图必展示，无图留中性占位）。 */
 function QuickNoteCard({ note, revealed, dateValue, onEdit, onMore, onFilterTag, onRequestDetail, onToggleTask, selecting, selected, onEnterSelect, onToggleSelect }: {
   note: MobileQuickNote; revealed: boolean; dateValue: string;
-  onEdit: () => void; onMore: () => void; onFilterTag: (tagId: string) => void; onRequestDetail: (id: string) => void;
+  onEdit: (card: HTMLElement | null) => void; onMore: () => void; onFilterTag: (tagId: string) => void; onRequestDetail: (id: string) => void;
   onToggleTask: (checkboxIndex: number, checked: boolean) => void;
   /** 多选模式（261106 task-82）：长按卡片进入、选择态下点卡片切换勾选（不打开编辑器）。 */
   selecting: boolean; selected: boolean; onEnterSelect: () => void; onToggleSelect: () => void;
@@ -1026,7 +1058,7 @@ function QuickNoteCard({ note, revealed, dateValue, onEdit, onMore, onFilterTag,
       onClick={() => {
         if (suppressTap.current) { suppressTap.current = false; return; }
         if (selecting) { onToggleSelect(); return; }
-        onEdit();
+        onEdit(cardRef.current);
       }}
     >
       {thumbUrl && (
