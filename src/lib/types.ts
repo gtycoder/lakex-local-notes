@@ -337,6 +337,16 @@ export type {
 export interface DuplicateNotesRequestShape {
   /** 源笔记 id 列表（去重；上限 500）。只接受 lake 空间的正式笔记（doc/usheet/bitable/board/ink）。 */
   ids: string[];
+  /** 261108：可选请求 id，用于进度事件与取消对应。 */
+  requestId?: string;
+}
+
+/** 261108：批量创建副本的进度事件（主进程 → 渲染层）。 */
+export interface DuplicateNotesProgressShape {
+  requestId: string;
+  phase: "prepare" | "copy" | "commit";
+  done: number;
+  total: number;
 }
 
 /**

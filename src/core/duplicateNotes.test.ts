@@ -104,6 +104,9 @@ describe("forbidSelfNoteRefs（261107：副本禁止自引用）", () => {
   it("百分号编码形态（卡片 value）也回退", () => {
     expect(forbidSelfNoteRefs("lake-note%3A%2F%2F" + self, self, source)).toBe("lake-note%3A%2F%2F" + source);
   });
+  it("JSON 转义斜杠形态（lake-note:\/\/id）也回退", () => {
+    expect(forbidSelfNoteRefs("lake-note:\\/\\/" + self, self, source)).toBe("lake-note:\\/\\/" + source);
+  });
   it("其他目标的引用不被动（引用语义保持）", () => {
     const body = "lake-note://" + source + " 与 lake-note://55555555-5555-4555-8555-555555555555";
     expect(forbidSelfNoteRefs(body, self, source)).toBe(body);

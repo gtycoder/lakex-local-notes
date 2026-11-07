@@ -89,6 +89,8 @@ export function forbidSelfNoteRefs(body: string, selfNoteId: string, fallbackNot
   const escaped = selfNoteId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   let next = body.replace(new RegExp("lake-note:\\/\\/" + escaped, "g"), "lake-note://" + fallbackNoteId);
   next = next.replace(new RegExp("lake-note%3[aA]%2[fF]%2[fF]" + escaped, "g"), "lake-note%3A%2F%2F" + fallbackNoteId);
+  // JSON 字符串里可能把斜杠转义成 \/（卡片 value 经 JSON 序列化后的形态）；同样必须回退。
+  next = next.replace(new RegExp("lake-note:\\\\/\\\\/" + escaped, "g"), "lake-note:\\/\\/" + fallbackNoteId);
   return next;
 }
 

@@ -77,6 +77,12 @@ contextBridge.exposeInMainWorld("lakeNative", {
   getBackupUsage: () => invoke("get_backup_usage"),
   batchNotes: (payload) => invoke("batch_notes", payload),
   duplicateNotes: (payload) => invoke("duplicate_notes", payload),
+  cancelDuplicateNotes: (requestId) => invoke("cancel_duplicate_notes", requestId),
+  onDuplicateProgress: (callback) => {
+    const listener = (_event, progress) => callback(progress);
+    ipcRenderer.on("duplicate-progress", listener);
+    return () => ipcRenderer.removeListener("duplicate-progress", listener);
+  },
   pickMarkdownFiles: () => invoke("pick_markdown_files"),
   pickImportFiles: (kind) => invoke("pick_import_files", kind),
   readImportImage: (filePath) => invoke("read_import_image", filePath),

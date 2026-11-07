@@ -22,6 +22,7 @@ import type { IpcRegistrar } from "./registrar.js";
 import type { PreparedDuplicate, Store } from "../store.js";
 import { log } from "../logger.js";
 import { runPoolSettled } from "../../src/core/asyncPool.js";
+import type { DuplicateNotesProgressShape } from "../../src/lib/types.js";
 import {
   duplicateReasonOf,
   normalizeDuplicateIds,
@@ -39,6 +40,10 @@ export interface DuplicateNotesIpcDeps {
   copyConcurrency?: number;
   /** 事件循环让出（测试可注入）。 */
   yieldNow?: () => Promise<void>;
+  /** 261108：进度回调（主进程 → 渲染层；测试可注入）。 */
+  emitProgress?: (progress: DuplicateNotesProgressShape) => void;
+  /** 261108：取消判据（requestId；测试可注入）。 */
+  isCanceled?: (requestId: string) => boolean;
 }
 
 const DEFAULT_COPY_CONCURRENCY = 4;
@@ -79,7 +84,8 @@ async function cleanupPreparedAssets(store: Store, prepared: PreparedDuplicate):
 }
 
 async function runBatch(raw: unknown, deps: DuplicateNotesIpcDeps): Promise<DuplicateNotesResult> {
-  const payload = (raw ?? {}) as { ids?: unknown };
+  const payload = (raw ?? {}) as { ids?: unknown; requestId?: unknown };
+  const requestId = typeof payload.requestId === "string" ? payload.requestId : "";
   const normalized = normalizeDuplicateIds(payload.ids);
   if (!normalized.ok) {
     return { ok: false, results: [], summary: { total: 0, done: 0, failed: 0 }, reason: normalized.reason, message: normalized.message };
@@ -88,11 +94,23 @@ async function runBatch(raw: unknown, deps: DuplicateNotesIpcDeps): Promise<Dupl
   const concurrency = Math.max(1, deps.copyConcurrency ?? DEFAULT_COPY_CONCURRENCY);
   const resultById = new Map<string, DuplicateNotesItemResult>();
   const failedIds = new Set<string>();
+  const total = normalized.ids.length;
+  const emit = (phase: DuplicateNotesProgressShape["phase"], done: number): void => {
+    if (!requestId) return;
+    try { deps.emitProgress?.({ requestId, phase, done, total }); } catch { /* 进度失败不影响复制 */ }
+  };
+  const canceled = (): boolean => Boolean(requestId) && deps.isCanceled?.(requestId) === true;
+  const markCanceledFrom = (ids: readonly string[], start: number): void => {
+    for (let index = start; index < ids.length; index += 1) resultById.set(ids[index], { id: ids[index], ok: false, reason: "canceled" });
+  };
 
   // 测试注入：保持旧单条同步路径（便于构造执行期异常用例）。
   if (deps.duplicateOne) {
     const duplicateOne = deps.duplicateOne;
-    for (const id of normalized.ids) {
+    emit("prepare", 0);
+    for (let index = 0; index < normalized.ids.length; index += 1) {
+      if (canceled()) { markCanceledFrom(normalized.ids, index); break; }
+      const id = normalized.ids[index];
       try {
         const created = duplicateOne(id);
         resultById.set(id, { id, ok: true, newId: created.id });
@@ -105,17 +123,28 @@ async function runBatch(raw: unknown, deps: DuplicateNotesIpcDeps): Promise<Dupl
   }
 
   // ---- 阶段 1：prepare（同步只读）----
+  emit("prepare", 0);
   const preparedItems: PreparedDuplicate[] = [];
-  for (const id of normalized.ids) {
+  for (let index = 0; index < normalized.ids.length; index += 1) {
+    if (canceled()) { markCanceledFrom(normalized.ids, index); break; }
+    const id = normalized.ids[index];
     try {
       preparedItems.push(deps.store.prepareDuplicate(id));
     } catch (error) {
       resultById.set(id, { id, ok: false, reason: duplicateReasonOf(error) });
     }
   }
+  emit("prepare", preparedItems.length);
   await yieldNow();
+  if (canceled()) {
+    for (const prepared of preparedItems) {
+      if (!resultById.has(prepared.sourceId)) resultById.set(prepared.sourceId, { id: prepared.sourceId, ok: false, reason: "canceled" });
+    }
+    return finish(normalized.ids, resultById);
+  }
 
   // ---- 阶段 2：copy（异步有界并发）----
+  emit("copy", 0);
   const jobs: AssetCopyJob[] = [];
   for (const prepared of preparedItems) {
     for (const asset of prepared.assets) jobs.push({ prepared, filename: asset.filename, sourcePath: asset.sourcePath });
@@ -130,10 +159,25 @@ async function runBatch(raw: unknown, deps: DuplicateNotesIpcDeps): Promise<Dupl
       await cleanupPreparedAssets(deps.store, prepared);
     }
   }
+  emit("copy", jobs.length);
   await yieldNow();
 
   // ---- 阶段 3：commit（同步串行）----
-  for (const prepared of preparedItems) {
+  if (canceled()) {
+    for (const prepared of preparedItems) {
+      if (!resultById.has(prepared.sourceId)) resultById.set(prepared.sourceId, { id: prepared.sourceId, ok: false, reason: "canceled" });
+    }
+    return finish(normalized.ids, resultById);
+  }
+  for (let index = 0; index < preparedItems.length; index += 1) {
+    if (canceled()) {
+      for (let rest = index; rest < preparedItems.length; rest += 1) {
+        const pending = preparedItems[rest];
+        if (!resultById.has(pending.sourceId)) resultById.set(pending.sourceId, { id: pending.sourceId, ok: false, reason: "canceled" });
+      }
+      break;
+    }
+    const prepared = preparedItems[index];
     if (failedIds.has(prepared.sourceId)) continue;
     try {
       const created = deps.store.commitPreparedDuplicate(prepared);
@@ -142,6 +186,7 @@ async function runBatch(raw: unknown, deps: DuplicateNotesIpcDeps): Promise<Dupl
       resultById.set(prepared.sourceId, { id: prepared.sourceId, ok: false, reason: duplicateReasonOf(error) });
       await cleanupPreparedAssets(deps.store, prepared);
     }
+    emit("commit", index + 1);
     await yieldNow();
   }
 
@@ -162,7 +207,30 @@ export function runDesktopDuplicateNotes(raw: unknown, deps: DuplicateNotesIpcDe
   return enqueueBatch(() => runBatch(raw, deps));
 }
 
+/** 261108：取消请求的暂存（按 requestId；批量单飞 ⇒ 同一时刻只有一个生效）。 */
+const canceledRequests = new Set<string>();
+
 export function registerDuplicateNotesIpc(ipc: IpcRegistrar, deps: DuplicateNotesIpcDeps): void {
-  // payload：{ ids: string[] }（与移动端 bridge.duplicateNotes 完全一致）
-  ipc.handle("duplicate_notes", (raw: unknown) => runDesktopDuplicateNotes(raw, deps));
+  ipc.handle("cancel_duplicate_notes", (raw: unknown): boolean => {
+    if (typeof raw !== "string" || !raw) return false;
+    canceledRequests.add(raw);
+    // 请求已结束时取消标记可能永远等不到清理；60s 后兜底释放。
+    const timer = setTimeout(() => canceledRequests.delete(raw), 60_000);
+    (timer as unknown as { unref?: () => void }).unref?.();
+    return true;
+  });
+  ipc.handleEvent("duplicate_notes", async (event, raw: unknown) => {
+    const requestId = typeof (raw as { requestId?: unknown } | null)?.requestId === "string"
+      ? (raw as { requestId: string }).requestId
+      : "";
+    const result = await runDesktopDuplicateNotes(raw, {
+      ...deps,
+      ...(requestId ? {
+        emitProgress: (progress) => { try { event.sender.send("duplicate-progress", progress); } catch { /* 广播失败不影响复制 */ } },
+        isCanceled: (id) => canceledRequests.has(id),
+      } : {}),
+    });
+    if (requestId) canceledRequests.delete(requestId);
+    return result;
+  });
 }

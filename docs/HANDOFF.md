@@ -84,7 +84,7 @@
 - **移动端 createNote 排序根因修复**：`createNote` 新增 `sortOrder` 选项，缺省写「同级末尾（notes+folders MAX+1）」——此前恒写默认 0，导致"所有新文档 sort_order=0"，副本只能靠整组重排保证紧邻。副本仍保留整组归一化（只在 legacy/重复 sort_order 需要的场景生效，保证旧数据也紧邻），**这是与桌面算法有意的差异**（桌面历史数据始终唯一递增）。
 - **reason 标签单源**：`core.DUPLICATE_NOTES_REASONS`（运行时数组派生类型）+ `DUPLICATE_NOTES_REASON_LABELS`；桌面/移动端直接复用同一对象，parity 测试钉死（新增 reason 只改 core 数组）。
 - **其它「可原生化」审计结论（本轮不动）**：资产同步 v3 已走原生流式（`AssetSync.putFile/getFile`，字节不过桥）；正文/历史已走原生（`BodyStore`）；剩余过桥字节路径 = ① 同步引擎本地差集/哈希需在 JS 读字节（`loadAssetBytesFs`，涉及加密/清单判定，改造面大）② 用户上传/预览的字节本来就在 WebView（`uploadResource` / 预览）③ 系统分享/导入的文件内容需进 JS 解析。**真正的大块拷贝只有创建副本，已原生化**；后续若要继续，优先「同步引擎哈希/差集原生校验」，收益需先实测。
-- **review 遗留（P2，未做）**：① store 的 prepare/commit 可再抽 `electron/noteDuplication.ts`（当前 store=存储、IPC=编排，已可接受）；② 移动端 sort_order 根因（`createNote` 不写列）与桌面插入算法分叉 → 建议给 `createNote` 显式 position；③ 两端 reason→文案表仍两份（建议 parity 测试/共享 labels）；④ 大附件移动端仍是 JS 字节搬运（内存/耗时，建议原生 stream copy）；⑤ 批量无进度/取消；⑥ `forbidSelfNoteRefs` 未覆盖 JSON 转义斜杠（低概率）。
+- **review 遗留（P2）**：① store 的 prepare/commit 可再抽 `electron/noteDuplication.ts`（当前 store=存储、IPC=编排，已可接受）；② 移动端 sort_order 根因（`createNote` 不写列）与桌面插入算法分叉 → 建议给 `createNote` 显式 position；③ **已收口**：reason 文案单源在 core，桌面/移动 alias 同一对象（`duplicateNotesFeedback.test` parity）；④ 大附件移动端仍是 JS 字节搬运（内存/耗时，建议原生 stream copy）；⑤ 批量无进度/取消；⑥ **已修**：`forbidSelfNoteRefs` 覆盖 JSON 转义斜杠（`lake-note:\/\/id`）。
 
 ### 261106 · 文档「创建副本」（桌面 + 移动）：新 id + 新建管线、正文/资源全量复制与 URL 重写、同父级下方、批量逐条结果 · **261107 收尾已提交**
 - **用户语义定稿**：副本 = **全新独立笔记**（编辑/删除/标签/历史/S3 对象互不影响）；标题 = 原名称 + " 副本 " + 本地时间 `YYYY-MM-DD HH:mm:ss`；自动插到**同父级、紧邻原笔记下方**；批量多选可一次复制多篇。**历史快照不复制**（新笔记历史从空开始）、锁定/回收站状态不继承；小记不在本次范围。

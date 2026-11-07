@@ -80,6 +80,7 @@ export const WEB_METHODS: Record<string, string> = {
   getBackupUsage: "get_backup_usage",
   batchNotes: "batch_notes",
   duplicateNotes: "duplicate_notes",
+  cancelDuplicateNotes: "cancel_duplicate_notes",
   pickMarkdownFiles: "pick_markdown_files",
   pickImportFiles: "pick_import_files",
   readImportImage: "read_import_image",

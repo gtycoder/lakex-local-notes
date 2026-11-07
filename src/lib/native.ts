@@ -412,6 +412,8 @@ export const native = {
   getBackupUsage: () => api().getBackupUsage(),
   batchNotes: (payload: import("./types").BatchNotesRequestShape) => api().batchNotes(payload),
   duplicateNotes: (payload: import("./types").DuplicateNotesRequestShape) => api().duplicateNotes(payload),
+  cancelDuplicateNotes: (requestId: string) => api().cancelDuplicateNotes(requestId),
+  onDuplicateProgress: (callback: (progress: import("./types").DuplicateNotesProgressShape) => void) => api().onDuplicateProgress(callback),
   pickMarkdownFiles: () => api().pickMarkdownFiles(),
   pickImportFiles: (kind?: import("./types").ImportPickerKind) => api().pickImportFiles(kind),
   readImportImage: (filePath: string) => api().readImportImage(filePath),

@@ -24,7 +24,7 @@ export const DUPLICATE_NOTES_MAX_IDS = 500;
 export const DUPLICATE_NOTES_REASONS = [
   "invalid-input", "empty-ids", "too-many-ids", "invalid-id",
   "not-found", "unsupported", "already-trashed",
-  "body-missing", "failed",
+  "body-missing", "failed", "canceled",
 ] as const;
 
 /** 契约 reason：**由运行时数组派生**（单一来源；新增 reason 只改数组）。 */
@@ -44,6 +44,7 @@ export const DUPLICATE_NOTES_REASON_LABELS: Record<DuplicateNotesReason, string>
   "already-trashed": "笔记已在回收站里",
   "body-missing": "正文文件缺失，无法复制",
   failed: "创建副本失败",
+  canceled: "已取消",
 };
 
 export interface DuplicateNotesItemResult {

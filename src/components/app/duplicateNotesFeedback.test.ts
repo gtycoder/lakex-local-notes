@@ -2,6 +2,7 @@
 /** 「创建副本」结果 → 文案（261106）：成功/部分失败/整批未执行 + 失败 id 保留依据。 */
 import { describe, expect, it } from "vitest";
 import { DUPLICATE_NOTES_REASON_TEXT, duplicateNotesReasonText, duplicateNotesResultNotice } from "./duplicateNotesFeedback";
+import { DUPLICATE_REASON_LABELS as MOBILE_DUPLICATE_REASON_LABELS } from "../../mobile/ui/duplicateNotesResult";
 import { DUPLICATE_NOTES_REASONS } from "../../core/duplicateNotes";
 import { DUPLICATE_REASON_LABELS } from "../../mobile/ui/duplicateNotesResult";
 import type { DuplicateNotesResultShape } from "../../lib/types";
@@ -53,11 +54,15 @@ describe("创建副本结果文案", () => {
   });
 
   it("reason 标签**单源**：桌面/移动端与 core 契约数组完全一致（新增 reason 只改 core 数组）", () => {
-    expect([...DUPLICATE_NOTES_REASONS]).toHaveLength(9);
+    expect([...DUPLICATE_NOTES_REASONS]).toHaveLength(10);
     expect(new Set(Object.keys(DUPLICATE_NOTES_REASON_TEXT))).toEqual(new Set(DUPLICATE_NOTES_REASONS));
     // 两端引用的是同一份 core 标签表（不是两份人工对齐的文案）
     expect(DUPLICATE_REASON_LABELS).toBe(DUPLICATE_NOTES_REASON_TEXT);
     for (const reason of DUPLICATE_NOTES_REASONS) expect(duplicateNotesReasonText(reason)).not.toBe("未知原因");
     expect(duplicateNotesReasonText(undefined)).toBe("未知原因");
   });
+  it("两端 reason 文案共用 core 单一来源（桌面/移动 alias 同一对象）", () => {
+    expect(MOBILE_DUPLICATE_REASON_LABELS).toBe(DUPLICATE_NOTES_REASON_TEXT);
+  });
+
 });

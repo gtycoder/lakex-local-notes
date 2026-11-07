@@ -42,6 +42,22 @@
   --lake-text-3: #aab4c4;   /* 261104：导航面与选中底上保留 AA 辅助文字对比。 */
   --lake-text-4: #6f7278;   /* vs #1e1f23 3.5:1（旧 #5c5d62 更低） */
   --lake-text-on-accent: #ffffff;
+
+  /* ── v2 柔光纸面（261107）────────────────────────────────────────────── */
+  --mb-canvas-1: #0c0d10;
+  --mb-canvas-2: #121419;
+  --mb-canvas-glow: color-mix(in srgb, var(--mb-accent) 20%, transparent);
+  --mb-accent: var(--lake-accent);
+  --mb-accent-ink: var(--lake-accent-ink);
+  --mb-accent-soft: var(--lake-accent-tint);
+  --mb-glass-bg: linear-gradient(180deg, rgba(36,40,48,.82), rgba(24,26,32,.70));
+  --mb-glass-bg-bar: linear-gradient(180deg, rgba(22,24,29,.94), rgba(18,20,25,.82));
+  --mb-glass-border: rgba(255,255,255,.12);
+  --mb-glass-highlight: rgba(255,255,255,.14);
+  --mb-shadow-card: inset 0 0 0 .5px rgba(255,255,255,.08), 0 10px 24px -18px rgba(0,0,0,.8);
+  --mb-shadow-float: inset 0 .5px 0 rgba(255,255,255,.14), 0 10px 24px -10px rgba(0,0,0,.6), 0 28px 52px -24px rgba(0,0,0,.7);
+  --mb-shadow-bar: inset 0 -0.5px 0 rgba(255,255,255,.07);
+
   /* 边框 */
   --lake-border-1: #3b414b;
   --lake-border-2: #232528;

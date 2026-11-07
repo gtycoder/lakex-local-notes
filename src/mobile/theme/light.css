@@ -64,6 +64,21 @@
   --lake-shadow-dialog: 0 8px 20px -8px rgba(16,24,40,.16), 0 20px 48px -20px rgba(16,24,40,.20);
   --lake-shadow-knob: 0 1px 2px rgba(16,24,40,.20);
 
+  /* ── v2 柔光纸面（261107）────────────────────────────────────────────── */
+  --mb-canvas-1: #f6f7fa;
+  --mb-canvas-2: #eef0f4;
+  --mb-canvas-glow: color-mix(in srgb, var(--mb-accent) 11%, transparent);
+  --mb-accent: var(--lake-accent);
+  --mb-accent-ink: var(--lake-accent-ink);
+  --mb-accent-soft: var(--lake-accent-tint);
+  --mb-glass-bg: linear-gradient(180deg, rgba(255,255,255,.78), rgba(255,255,255,.60));
+  --mb-glass-bg-bar: linear-gradient(180deg, rgba(246,247,250,.90), rgba(243,245,248,.76));
+  --mb-glass-border: rgba(255,255,255,.40);
+  --mb-glass-highlight: rgba(255,255,255,.95);
+  --mb-shadow-card: inset 0 0 0 .5px rgba(16,24,40,.05), 0 1px 2px rgba(16,24,40,.04), 0 10px 24px -18px rgba(16,24,40,.35);
+  --mb-shadow-float: inset 0 .5px 0 rgba(255,255,255,.95), 0 8px 20px -10px rgba(16,24,40,.24), 0 24px 48px -24px rgba(16,24,40,.42);
+  --mb-shadow-bar: inset 0 -0.5px 0 rgba(16,24,40,.07);
+
 
   /* ---- 过渡桥接：lakex 编辑器外围（设计 MIGRATION §3 批准的变量映射；选区色刻意不动） ---- */
   --lakex-editor-background: var(--lake-bg-canvas);
