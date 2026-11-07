@@ -125,12 +125,12 @@ export function NotebookTreeList(props: NotebookTreeListProps) {
         onTouchCancel={props.longPress.onTouchCancel}
         onContextMenu={(e) => e.preventDefault()}
       >
-        {selecting && (
-          <SelectionCheckbox
-            checked={checked}
-            disabled={!selectable}
-            label={selectable ? "选择 " + (it.title || "无标题") : undefined}
-          />
+        {/* v2：复选框**绝对定位覆盖**在行左侧留白上（不参与 flex 布局）⇒ 进入/退出选择态时目录不位移。
+            只有可选文档显示；分组/笔记本不可选，不画置灰占位（它们的展开箭头仍可点）。 */}
+        {selecting && selectable && (
+          <span className="nb-sel-cb" aria-hidden="true">
+            <SelectionCheckbox checked={checked} label={"选择 " + (it.title || "无标题")} />
+          </span>
         )}
         {kids ? <ChevronRight size={16} className={expanded.has(it.id) ? "mb-chevron open" : "mb-chevron"} /> : <span className="mb-chevron-spacer" />}
         {renamingId === it.id ? (

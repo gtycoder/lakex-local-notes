@@ -535,6 +535,11 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
 /* 抽屉选择态：动作条浮在树上方，树本体不因动作条插入而改变高度（避免进入选择态时整列闪一下）。 */
 .side-panel--selecting .side-panel-body { padding-bottom: calc(76px + var(--mobile-bottom-safe-area)); }
 
+/* v2（261107）：目录树多选复选框**覆盖在行左侧留白上**（不参与 flex 布局）⇒ 进出选择态目录零位移。 */
+.side-panel-body .mb-row { position: relative; }
+.nb-sel-cb { position: absolute; left: 0; top: 0; bottom: 0; width: var(--mb-tap-min); display: flex; align-items: center; justify-content: center; pointer-events: none; }
+
+
 .mb-iconbtn.is-checked { color: var(--lake-accent-text); }
 /* 261106 task-8：目录树多选的「不可选行」（笔记本/分组）复选框置灰——只降透明度，保留占位让左缘对齐。 */
 .mb-iconbtn.is-disabled { opacity: var(--lake-disabled-opacity); }

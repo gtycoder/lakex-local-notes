@@ -52,7 +52,8 @@ describe("文档树多选：工作区接线（261106 task-8）", () => {
   it("行：选择态左缘复选框 + aria-selected + 隐藏 ⋮/＋；分组/笔记本置灰不可选", () => {
     expect(LIST).toContain("<SelectionCheckbox");
     expect(LIST).toContain("aria-selected={selecting ?");
-    expect(LIST).toContain("disabled={!selectable}");
+    expect(LIST).toContain("selecting && selectable");
+    expect(LIST).toContain("nb-sel-cb");
     expect(LIST).toContain("{!selecting && (");
     expect(CHECKBOX).toContain('role: "checkbox"');
     expect(CHECKBOX).toContain('"aria-label": label');

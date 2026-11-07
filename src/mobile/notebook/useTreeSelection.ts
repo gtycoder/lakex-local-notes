@@ -12,7 +12,7 @@
  * · 返回键先退出选择（pushBackHandler），不关抽屉。
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Copy, FolderInput, Tag, Trash } from "lucide-react";
+import { Copy, FolderInput, Pin, Tag, Trash } from "lucide-react";
 import { bridge } from "../bridge";
 import { getNativeErrorMessage } from "../../lib/nativeErrors";
 import type { NotebookTreeRow } from "./notebookTreeIndex";
@@ -22,6 +22,7 @@ import type { SelectionAction } from "../ui/SelectionActionBar";
 import { pushBackHandler } from "../ui/backStack";
 import { confirmMobile } from "../ui/ConfirmDialog";
 import { duplicateResultNotice } from "../ui/duplicateNotesResult";
+import { addFavorites } from "../data/favorites";
 import { summarizeBatchResult } from "../ui/batchNotesResult";
 import { showToast } from "../ui/toastBus";
 import type { MoveTargetNode } from "../ui/MoveTargetTreeSheet";
@@ -74,8 +75,9 @@ export function useTreeSelection(options: UseTreeSelectionOptions) {
     try { await task(); } finally { busyRef.current = false; setBusy(false); }
   }, []);
 
-  /** 底部操作条：创建副本 / 移动 / 打标签 / 移入回收站（非破坏性在前，危险动作殿后）。 */
+  /** 底部操作条：置顶 / 创建副本 / 移动 / 打标签 / 移入回收站（非破坏性在前，危险动作殿后）。 */
   const actions: SelectionAction[] = useMemo(() => [
+    { id: "pin", label: "置顶", icon: Pin, ariaPressed: false, disabled: busy },
     { id: "duplicate", label: "创建副本", icon: Copy, ariaPressed: false, disabled: busy },
     { id: "move", label: "移动", icon: FolderInput, ariaPressed: false, disabled: busy },
     { id: "tag", label: "打标签", icon: Tag, ariaPressed: false, disabled: busy },
@@ -189,6 +191,13 @@ export function useTreeSelection(options: UseTreeSelectionOptions) {
   /** 底部条动作分发（底部条只认 id，具体动作/确认都在这里）。 */
   const runAction = useCallback((actionId: string): void => {
     if (selectedIds.length === 0) { showToast("请先选择文档"); return; }
+    if (actionId === "pin") {
+      // 置顶 = 设备本地偏好（不同步、不写正文），批量只追加；失败面只有 localStorage 写入，不触网。
+      const added = addFavorites(selectedIds);
+      showToast(added > 0 ? "已置顶 " + added + " 篇文档" : "所选文档已在置顶");
+      selection.exit();
+      return;
+    }
     if (actionId === "duplicate") { void applyDuplicate(); return; }
     if (actionId === "move") { void openMovePicker(); return; }
     if (actionId === "tag") {

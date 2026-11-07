@@ -38,6 +38,23 @@ export function toggleFavorite(id: string): boolean {
   return !has;
 }
 
+/** 批量加入置顶（目录树多选）：保持原顺序、去重、忽略重复项；返回实际新增数量。 */
+export function addFavorites(ids: readonly string[]): number {
+  const cur = readFavoriteIds();
+  const next = [...cur];
+  let added = 0;
+  for (const id of ids) {
+    if (typeof id !== "string" || !id || next.includes(id)) continue;
+    next.push(id);
+    added += 1;
+  }
+  if (added > 0) {
+    writeLocalStorage(KEY, JSON.stringify(next));
+    emitChange();
+  }
+  return added;
+}
+
 /** 「置顶」分组展开/收起（设备本地偏好；默认展开）。 */
 export function readFavoritesOpen(): boolean {
   try {

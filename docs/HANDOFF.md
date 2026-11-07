@@ -8,6 +8,12 @@
 
 ## 0. 最新交接（261027）
 
+### 261107 · 移动端多选页 P2（复选框覆盖式零位移 + 置顶动作）· **master 直接提交**
+- **目录零位移**：`NotebookTreeList` 选择态不再把 `SelectionCheckbox` 作为 flex 子项（原先 44px 会把行内容整体右推）；改为 `.nb-sel-cb` **绝对定位覆盖在行左侧留白**（44 命中盒、视觉 18，`pointer-events:none` 由行承接点击）。仅可选文档渲染复选框；分组/笔记本不再画置灰占位（展开箭头仍可点）。实测选中前后文档行图标 x 均为 44 ⇒ 进出选择态目录不动。
+- **新增「置顶」**：`favorites.ts` 增加 `addFavorites(ids)`（设备本地、去重追加、emit 变更）；树多选 5 个动作 = 置顶 / 创建副本 / 移动 / 打标签 / 删除（等分图标格）；置顶后 toast「已置顶 N 篇文档」并退出选择，首页「置顶」分组经由既有订阅刷新。
+- **测试**：`NotebookTreeList.render.test` 的分组行断言改为「不画复选框」+ `.nb-sel-cb` 存在；`treeSelectionWiring.test` 源码契约改 `selecting && selectable`；mobileLayers mobile.css 1655 → 1665、dupGroups 6 → 7（新增选择原语与既有按钮在同属性组，逐条对拍后接受）。
+- **门禁**：tsc（本仓范围）0；**全量 vitest 760 文件 / 4903 例通过**；ui-metrics / check:mobileui / check:core / diff-check 绿。
+- **真机**：emulator-5554 实测（截图 `preview/device/sel-4.png`、`sel-pin.png`）：复选框覆盖、目录零位移、5 动作；点「置顶」后 `localStorage favorites` 写入 2 个 id、toast 正常、选择退出。
 ### 261107 · 移动端多选页重做（v2：树抽屉选择态 + 打标签）· **master 直接提交（按用户指示）**
 - **顶部栏**：`SelectionTopBar` 重写为 `.mb-sel-topbar`（抽屉头同高 44、纯文字：取消 / 已选 N / 全选；不再复用 `.mb-btn`/设置页页头，进入选择态不再因头部高度跳变而闪）。
 - **底部动作条**：`SelectionActionBar` 重写为 `.mb-sel-actions`（浮动柔光玻璃 + 等分图标格 `.mb-sel-act`，危险动作红字但仍等分；`overlay` 贴抽屉底、`fixed` 给首页小记）。不再出现「两胶囊 + 一整行红字」的换行失衡。

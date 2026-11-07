@@ -265,7 +265,7 @@ describe("目录树多选模式（261106 task-8）", () => {
     return { selection, onToggle, onActivate };
   };
 
-  it("选择态：文档行有复选框（可访问名 role=checkbox），分组行复选框置灰且 aria-selected=false", async () => {
+  it("选择态：文档行有覆盖式复选框（可访问名 role=checkbox），分组行不画复选框且 aria-selected=false", async () => {
     const tree = [
       node("g1", "nb1", 0, { kind: "group", title: "分组" }),
       node("n1", "nb1", 1),
@@ -285,7 +285,9 @@ describe("目录树多选模式（261106 task-8）", () => {
     expect(checkedBox.getAttribute("aria-checked")).toBe("true");
     expect(checkedBox.getAttribute("aria-label")).toBe("选择 标题-n1");
     expect(otherRow.querySelector('[data-selection-checkbox="off"]')).not.toBeNull();
-    expect(groupRow.querySelector('[data-selection-checkbox="disabled"]')).not.toBeNull();
+    // v2（261107）：复选框改为覆盖在行左留白上、不再占用 flex 槽位；分组/笔记本不可选 ⇒ 不再画置灰占位。
+    expect(groupRow.querySelector("[data-selection-checkbox]")).toBeNull();
+    expect(docRow.querySelector(".nb-sel-cb")).not.toBeNull();
     // 选择态下行内 ⋮/＋ 隐藏（底部条才是动作入口，避免误触）
     expect(host.querySelectorAll(".nb-tree-action")).toHaveLength(0);
   });
