@@ -192,6 +192,8 @@ export function HomePage(props: HomePageProps) {
    * ③ 非活动页 inert；④ 写作会话中锁横滑（否则父级 [tab] effect 会清掉草稿）。
    */
   const { stageRef } = useTabPager({ tab, onTabChange });
+  // v2（261107）：顶栏滚动状态用 class 直接切（滚动里 setState 会整页重渲染）。
+  const topbarRef = useRef<HTMLElement | null>(null);
   const quickPaneRef = useRef<HTMLElement | null>(null);
   const quickScrollRef = useRef<HTMLDivElement | null>(null);
   const quickCardsRef = useRef<HTMLDivElement | null>(null);
@@ -204,6 +206,28 @@ export function HomePage(props: HomePageProps) {
     libraryPaneRef.current?.toggleAttribute("inert", tab !== "library");
     tagsPaneRef.current?.toggleAttribute("inert", tab !== "tags");
   }, [tab]);
+
+  // v2（261107）：首页顶栏滚动状态 —— 任一 pane 滚过 6px 就浮出玻璃底 / 收起 tab / 显示居中标题。
+  // 用 class 直接切（滚动里 setState 会让整页重渲染）；rAF 合并同一帧内的多次 scroll。
+  useEffect(() => {
+    const stage = stageRef.current;
+    const bar = topbarRef.current;
+    if (!stage || !bar) return;
+    let raf = 0;
+    const apply = () => {
+      raf = 0;
+      let y = 0;
+      stage.querySelectorAll<HTMLElement>(".mobile-scroll").forEach((node) => { y = Math.max(y, node.scrollTop); });
+      bar.classList.toggle("is-scrolled", y > 6);
+    };
+    const onScroll = () => { if (!raf) raf = requestAnimationFrame(apply); };
+    apply();
+    stage.addEventListener("scroll", onScroll, true);
+    return () => {
+      stage.removeEventListener("scroll", onScroll, true);
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, [stageRef, tab]);
 
   // ④ 写作/编辑小记时锁横向分页：切走会清掉写作卡（= 丢草稿）。CSS 侧只留纵向滚动（touch-action: pan-y）。
   useEffect(() => {
@@ -630,7 +654,7 @@ export function HomePage(props: HomePageProps) {
           onToggleAll={() => selection.toggleAll()}
         />
       ) : (
-      <header className="toolbar toolbar--border mobile-topbar">
+      <header ref={topbarRef} className="toolbar toolbar--border mobile-topbar">
         <button className="toolbar__button" onClick={onOpenDrawer} aria-label="设置" title="设置"><Settings /></button>
         {/* 左侧等宽空槽：右侧固定挂**两枚**图标（排序/视图 + 云同步）⇒ 左也补一格，tab 才真的居中
             （用户 261014 定稿的构图；冷启动骨架同构 5 槽，数据到达原地填充不跳）。 */}
@@ -641,6 +665,8 @@ export function HomePage(props: HomePageProps) {
           {/* 261106 用户验收：标签升为一级页（与小记/知识库并列，flomo 式：标签即入口）。 */}
           <button className={tab === "tags" ? "mobile-htab active" : "mobile-htab"} onClick={() => switchTab("tags")}>标签</button>
         </div>
+        {/* v2：滚动后 tab 收起，顶栏中央显示当前页标题（样式在 mobile.css） */}
+        <span className="mobile-topbar-collapsed-title" aria-hidden="true">{tab === "quick" ? "小记" : tab === "library" ? "知识库" : "标签"}</span>
         {/* 用户 261014 定稿：排序（小记）/ 视图（知识库）+ 云同步**固定挂在顶栏右上角**，云同步恒在最右。 */}
         {tab === "quick" ? (
           <button className="toolbar__button" onClick={() => setFilterOpen(true)} aria-label="排序" title="排序"><ArrowUpDown /></button>
