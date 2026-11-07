@@ -19,7 +19,9 @@ const PRIMITIVE_FILES = [
   "mobile/kit.css",
   "mobile/floating.css",
 ];
-const CROSS_OWNERSHIP_BASELINE = 17;
+/** 例外文件：kernel-theme = 内核 schema 未分层覆盖（AGENTS §3#14 明确保留）；compat = 思源 legacy 兼容层。 */
+const EXEMPT_FILES = new Set(["styles/kernel-theme.css", "styles/compat.css"]);
+const CROSS_OWNERSHIP_BASELINE = 14;
 
 function primitiveClasses(): Set<string> {
   const names = new Set<string>();
@@ -49,7 +51,7 @@ describe("原语变体门禁", () => {
     const offenders: string[] = [];
     for (const file of cssFiles(SRC)) {
       const rel = path.relative(SRC, file).split(path.sep).join("/");
-      if (PRIMITIVE_FILES.includes(rel)) continue;
+      if (PRIMITIVE_FILES.includes(rel) || EXEMPT_FILES.has(rel)) continue;
       const css = readFileSync(file, "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
       for (const rule of css.matchAll(/([^{}]+)\{/g)) {
         const selector = rule[1].trim().replace(/\s+/g, " ");
