@@ -31,6 +31,7 @@ import {
 } from "../../core/bitableDoc.js";
 import type { BitableFieldConfigPatch } from "../../core/bitableMutations";
 import { MobileSheet } from "../ui/MobileSheet";
+import { SheetFooter } from "../ui/SheetFooter";
 import { MobileBitableDateField } from "./MobileBitableDateField";
 import { dismissKeyboardOnPointerDown } from "../ui/dismissKeyboard";
 
@@ -127,10 +128,10 @@ export function MobileBitableFieldEditorSheet({ open, field, hasData, onSave, on
   return (
     <MobileSheet open={open} title="修改字段" bodyClassName="mb-sheet__body--form" onClose={onClose}
       footer={
-        <div className="mb-sheet__foot">
-          <button type="button" className="mb-btn mb-btn--secondary mb-flex1" onClick={onClose}>取消</button>
-          <button type="button" className="mb-btn mb-btn--primary mb-flex1" onClick={save}>确认</button>
-        </div>
+        <SheetFooter
+          cancel={{ label: "取消", grow: true, onClick: onClose }}
+          confirm={{ label: "确认", grow: true, onClick: save }}
+        />
       }>
       <div className="mbt-feditor" onPointerDown={dismissKeyboardOnPointerDown}>
         <section className="mb-set-section">

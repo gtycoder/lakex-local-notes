@@ -20,10 +20,9 @@ import { selectableTreeIds } from "./treeSelection";
 import { useSelectionMode } from "../ui/useSelectionMode";
 import type { SelectionAction } from "../ui/SelectionActionBar";
 import { pushBackHandler } from "../ui/backStack";
-import { confirmMobile } from "../ui/ConfirmDialog";
 import { duplicateResultNotice } from "../ui/duplicateNotesResult";
 import { addFavorites } from "../data/favorites";
-import { summarizeBatchResult } from "../ui/batchNotesResult";
+import { confirmTrashDocs, moveParentFromSnapshot, moveTargetsFromSnapshot, runDocBatch, tagOptionsFromTags } from "../ui/docBatch";
 import { showToast } from "../ui/toastBus";
 import type { MoveTargetNode } from "../ui/MoveTargetTreeSheet";
 import type { QuickNoteTagSummary } from "../../core/quickNoteTags";
@@ -118,13 +117,8 @@ export function useTreeSelection(options: UseTreeSelectionOptions) {
     setError(null);
     try {
       const snapshot = await bridge.getHomeSnapshot();
-      const containers: MoveTargetNode[] = snapshot.treeNodes
-        .filter((node) => node.nodeType === "notebook" || node.nodeType === "group")
-        .map((node) => ({ id: node.id, title: node.title || "未命名", parentId: node.parentId, nodeType: node.nodeType }));
-      // 当前位置：选中文档的父级（全在同一父级才高亮；混父级则不标当前位置）。
-      const parents = [...new Set(selectedIds.map((id) => snapshot.notes.find((note) => note.id === id)?.parentId ?? null))];
-      setMoveNodes(containers);
-      setMoveCurrentParentId(parents.length === 1 ? parents[0] : null);
+      setMoveNodes(moveTargetsFromSnapshot(snapshot));
+      setMoveCurrentParentId(moveParentFromSnapshot(snapshot, selectedIds));
       setMoveExcludedIds([...selectedIds]);
       setMoveOpen(true);
     } catch (err) {
@@ -135,14 +129,13 @@ export function useTreeSelection(options: UseTreeSelectionOptions) {
   const applyMove = useCallback((parentId: string) => withBusy(async () => {
     if (selectedIds.length === 0) return;
     try {
-      const result = await bridge.batchNotes({ action: "move", ids: [...selectedIds], space: "lake", parentId });
-      const summary = summarizeBatchResult(result, "已移动");
-      if (result.summary.failed > 0) {
-        setError(summarizeBatchResult(result, ""));
-        showToast(summary, { type: "error" });
+      const { text, detail, failed } = await runDocBatch(selectedIds, { action: "move", parentId });
+      if (failed > 0) {
+        setError(detail);
+        showToast(text, { type: "error" });
         return;
       }
-      showToast(summary);
+      showToast(text);
       setMoveOpen(false);
       selection.exit();
       await loadTree();
@@ -155,14 +148,13 @@ export function useTreeSelection(options: UseTreeSelectionOptions) {
   const applyTag = useCallback((tagIds: readonly string[]) => withBusy(async () => {
     if (selectedIds.length === 0 || tagIds.length === 0) return;
     try {
-      const result = await bridge.batchNotes({ action: "tag-add", ids: [...selectedIds], space: "lake", tagIds: [...tagIds] });
-      const summary = summarizeBatchResult(result, "已打标签");
-      if (result.summary.failed > 0) {
-        setError(summarizeBatchResult(result, ""));
-        showToast(summary, { type: "error" });
+      const { text, detail, failed } = await runDocBatch(selectedIds, { action: "tag-add", tagIds: [...tagIds] });
+      if (failed > 0) {
+        setError(detail);
+        showToast(text, { type: "error" });
         return;
       }
-      showToast(summary);
+      showToast(text);
       setTagOpen(false);
       selection.exit();
       await loadTree();
@@ -174,13 +166,12 @@ export function useTreeSelection(options: UseTreeSelectionOptions) {
   const applyTrash = useCallback(() => withBusy(async () => {
     if (selectedIds.length === 0) return;
     try {
-      const result = await bridge.batchNotes({ action: "trash", ids: [...selectedIds], space: "lake" });
-      const summary = summarizeBatchResult(result, "已移入回收站");
-      if (result.summary.failed > 0) {
-        showToast(summary, { type: "error" });
+      const { text, failed } = await runDocBatch(selectedIds, { action: "trash" });
+      if (failed > 0) {
+        showToast(text, { type: "error" });
         return;
       }
-      showToast(summary);
+      showToast(text);
       selection.exit();
       await loadTree();
     } catch (err) {
@@ -205,7 +196,7 @@ export function useTreeSelection(options: UseTreeSelectionOptions) {
         setError(null);
         try {
           const tags = await bridge.listQuickNoteTags();
-          setTagOptions(tags.map((t) => ({ ...t, count: 0 })));
+          setTagOptions(tagOptionsFromTags(tags));
           setTagOpen(true);
         } catch (err) {
           showToast("读取标签失败：" + getNativeErrorMessage(err), { type: "error" });
@@ -214,12 +205,7 @@ export function useTreeSelection(options: UseTreeSelectionOptions) {
       return;
     }
     if (actionId === "trash") {
-      void confirmMobile({
-        title: "移入回收站？",
-        body: "将把选中的 " + selectedIds.length + " 篇文档移入回收站（可恢复，不会彻底删除）。",
-        confirmText: "移入回收站",
-        danger: true,
-      }).then((ok) => { if (ok) void applyTrash(); });
+      void confirmTrashDocs(selectedIds.length).then((ok) => { if (ok) void applyTrash(); });
     }
   }, [selectedIds, applyDuplicate, openMovePicker, applyTrash]);
 

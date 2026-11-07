@@ -11,7 +11,7 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
-import { formatListTime } from "../../core/dateFormat";
+import { formatRelativeTime } from "../lib/listTime";
 import { TagQuickNotePreview } from "./TagQuickNotePreview";
 
 /** 判定余量：溢出比较时给 2px 余量，避免亚像素/滚动条误差让按钮忽隐忽现。 */
@@ -27,9 +27,7 @@ export interface TagQuickNoteCardProps {
   onRemove(): void;
 }
 
-const fmtTime = (iso: string): string => {
-  try { return formatListTime(new Date(iso), new Date()); } catch { return iso; }
-};
+const fmtTime = (iso: string): string => formatRelativeTime(iso);
 
 export function TagQuickNoteCard({ noteId, title, updatedAt, busy, onOpen, onRemove }: TagQuickNoteCardProps) {
   const [expanded, setExpanded] = useState(false);

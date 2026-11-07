@@ -11,15 +11,7 @@ import type { LibraryView } from "./HomePage";
 import { Book, ChevronRight } from "lucide-react";
 import { useLongPress } from "../ui/useLongPress";
 import { MobileNodeIconGlyph } from "../ui/NodeIconGlyph";
-import { formatListTime } from "../../core/dateFormat";
-
-/** 更新时间（仿语雀：今天/昨天 HH:mm，更早 MM-DD）。 */
-function fmtUpdated(iso: string | undefined): string {
-  try {
-    if (!iso) return "";
-    return formatListTime(new Date(iso), new Date());
-  } catch { return ""; }
-}
+import { formatUpdatedAt } from "../lib/listTime";
 
 export interface NotebookGridProps {
   notebooks: TreeNode[];
@@ -92,7 +84,7 @@ export function NotebookGrid(props: NotebookGridProps) {
     <div className="nb-list">
       {notebooks.map((nb) => {
         const count = docCounts[nb.id] ?? 0;
-        const updated = fmtUpdated(nb.updatedAt);
+        const updated = formatUpdatedAt(nb.updatedAt);
         return (
           <div key={nb.id} className="nb-row" role="button" tabIndex={0} data-prevent-swipe
             onClick={() => openNotebook(nb)} {...pressProps(nb)}>

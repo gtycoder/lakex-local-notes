@@ -7,6 +7,7 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { MobileSheet } from "./MobileSheet";
+import { SheetFooter } from "./SheetFooter";
 
 export interface NameSheetProps {
   open: boolean;
@@ -47,10 +48,10 @@ export function NameSheet({ open, title, initialValue = "", placeholder = "", co
       title={title}
       onClose={() => { if (!busy) onClose(); }}
       bodyClassName="mb-sheet__body--form"
-      footer={<div className="mb-sheet__foot">
-        <button type="button" className="mb-btn mb-btn--secondary" disabled={busy} onClick={onClose}>取消</button>
-        <button type="button" className="mb-btn mb-btn--primary" disabled={busy} onClick={submit}>{busy ? "处理中…" : confirmText}</button>
-      </div>}
+      footer={<SheetFooter
+        cancel={{ label: "取消", disabled: busy, onClick: onClose }}
+        confirm={{ label: confirmText, onClick: submit, busy }}
+      />}
     >
       <span className={"mb-input" + (error ? " is-invalid" : "")}>
         <input

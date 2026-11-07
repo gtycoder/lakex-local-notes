@@ -19,13 +19,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, GripVertical, Merge, MoreVertical, Pencil, Plus, Trash, X } from "lucide-react";
 import type { QuickNoteTag } from "../../core/quickNoteTags";
 import { buildQuickNoteTagIndex, buildQuickNoteTagOptions, moveQuickNoteTagOrder, normalizeQuickNoteTag } from "../../core/quickNoteTags";
-import { formatListTime } from "../../core/dateFormat";
+import { formatRelativeTime } from "../lib/listTime";
 import { getNativeErrorMessage } from "../../lib/nativeErrors";
 import type { LocalNoteSummary } from "../data/noteRepository";
 import type { MobileQuickNote } from "../home/HomePage";
 import { bridge } from "../bridge";
 import { confirmMobile } from "../ui/ConfirmDialog";
 import { MobileSheet } from "../ui/MobileSheet";
+import { SheetFooter } from "../ui/SheetFooter";
 import { MobileSheetMenu, type MobileSheetItem } from "../ui/MobileSheetMenu";
 import { pushBackHandler } from "../ui/backStack";
 import { useLongPress } from "../ui/useLongPress";
@@ -51,9 +52,7 @@ export interface TagsHomeTabProps {
 
 interface DragState { id: string; overId: string | null; after: boolean }
 
-const fmtTime = (iso: string): string => {
-  try { return formatListTime(new Date(iso), new Date()); } catch { return iso; }
-};
+const fmtTime = (iso: string): string => formatRelativeTime(iso);
 
 /** 行内计数文案（列表 / 详情同一口径）。 */
 const countText = (docs: number, quickNotes: number): string => docs + " 篇文档、" + quickNotes + " 条小记";
@@ -528,10 +527,10 @@ export function TagsHomeTab({ tags, notes, quickNotes, active, onOpenNote, onOpe
         onClose={() => { if (!creating) setCreateOpen(false); }}
         className="qn-tag-sheet"
         bodyClassName="qn-tag-sheet__body mb-sheet__body--form"
-        footer={<div className="mb-sheet__foot">
-          <button type="button" className="mb-btn mb-btn--secondary" disabled={creating} onClick={() => setCreateOpen(false)}>取消</button>
-          <button type="button" className="mb-btn mb-btn--primary" disabled={creating || !createName.trim()} onClick={() => void submitCreate()}>新建</button>
-        </div>}
+        footer={<SheetFooter
+          cancel={{ label: "取消", disabled: creating, onClick: () => setCreateOpen(false) }}
+          confirm={{ label: "新建", disabled: !createName.trim(), busy: creating, onClick: () => void submitCreate() }}
+        />}
       >
         <span className="mb-input qn-tag-sheet__input">
           <input
@@ -553,10 +552,10 @@ export function TagsHomeTab({ tags, notes, quickNotes, active, onOpenNote, onOpe
         onClose={() => { if (!busy) setRenaming(null); }}
         className="qn-tag-sheet"
         bodyClassName="qn-tag-sheet__body mb-sheet__body--form"
-        footer={<div className="mb-sheet__foot">
-          <button type="button" className="mb-btn mb-btn--secondary" disabled={busy} onClick={() => setRenaming(null)}>取消</button>
-          <button type="button" className="mb-btn mb-btn--primary" disabled={busy || !renameValue.trim()} onClick={() => void submitRename()}>保存</button>
-        </div>}
+        footer={<SheetFooter
+          cancel={{ label: "取消", disabled: busy, onClick: () => setRenaming(null) }}
+          confirm={{ label: "保存", disabled: !renameValue.trim(), busy, onClick: () => void submitRename() }}
+        />}
       >
         <span className="mb-input qn-tag-sheet__input">
           <input
@@ -577,9 +576,7 @@ export function TagsHomeTab({ tags, notes, quickNotes, active, onOpenNote, onOpe
         onClose={() => { if (!busy) setMergeSource(null); }}
         className="qn-tag-sheet"
         bodyClassName="qn-tag-sheet__body mb-sheet__body--form"
-        footer={<div className="mb-sheet__foot">
-          <button type="button" className="mb-btn mb-btn--secondary" disabled={busy} onClick={() => setMergeSource(null)}>取消</button>
-        </div>}
+        footer={<SheetFooter cancel={{ label: "取消", disabled: busy, onClick: () => setMergeSource(null) }} />}
       >
         <div className="qn-tag-sheet__section"><Merge size={14} /><span>把「{mergeSource?.name ?? ""}」合并到：</span></div>
         <div className="mb-set-item__desc">{MERGE_TAG_HINT}</div>

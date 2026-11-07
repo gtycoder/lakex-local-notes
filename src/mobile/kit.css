@@ -15,7 +15,6 @@
 /* ── 工具类 ─────────────────────────────────────────────────────────── */
 .mb-ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .mb-flex1 { flex: 1 1 auto; min-width: 0; }
-.mb-spacer { flex: 1 1 auto; }
 
 /* ── 按钮（.mb-btn；主/次/危险/幽灵 + 三档高度）──────────────────────── */
 .mb-btn {
@@ -36,7 +35,6 @@
 .mb-btn--danger { color: var(--lake-status-error); }
 /* 危险主按钮（确认框的「删除」）：实心 error 底 + on-accent 字（与桌面 kit 的 --danger 描边风格分叉） */
 .mb-btn--primary.mb-btn--danger { background: var(--lake-status-error); border-color: transparent; color: var(--lake-text-on-accent); }
-.mb-btn--lg { min-height: var(--mb-ctl-h-lg); font-size: var(--lake-font-size-bodyMd); }
 .mb-btn--sm { min-height: var(--mb-ctl-h-sm); padding: 0 12px; font-size: var(--lake-font-size-small); }
 .mb-btn--block { display: flex; width: 100%; }
 .mb-btn > svg, .mb-iconbtn > svg, .mb-segment__item > svg { display: block; flex-shrink: 0; }
@@ -74,8 +72,6 @@
 .mb-row__chevron { flex: 0 0 auto; color: var(--lake-text-4); }
 /* 触屏无 hover ⇒ 行内动作常驻可见（桌面 kit 是 hover 才显示） */
 .mb-row__action { flex: 0 0 auto; }
-.mb-row__actions { opacity: 1; }
-
 
 /* ── 列表容器（.mb-list / .mb-list-item；弹层与设置内的列表）──────────── */
 .mb-list { display: flex; flex-direction: column; padding: 4px 0; }
@@ -115,8 +111,6 @@
 /* 相邻徽标（一个单元格里的多个选项）之间留 4：多选值不靠外层容器包一层（那会改 DOM 元素数 ⇒ 快照计数涨）。 */
 .mb-tag + .mb-tag { margin-left: var(--lake-space-xs); }
 .mb-tag--pending { background: var(--lake-status-pending-soft); color: var(--lake-status-pending); }
-.mb-tag--ok { background: var(--lake-status-ok-soft); color: var(--lake-status-ok); }
-.mb-tag--error { background: var(--lake-status-error-soft); color: var(--lake-status-error); }
 
 /* ── 分段控件（.mb-segment；取值选择/图标型开关）────────────────────── */
 .mb-segment { display: inline-flex; align-items: center; gap: 4px; padding: 3px; border-radius: var(--mb-radius); background: var(--lake-bg-sunken); }

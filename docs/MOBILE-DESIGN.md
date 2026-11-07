@@ -401,3 +401,43 @@ node scripts/css-audit/drive.mjs 9335 scripts/css-audit/mobile-walkthrough.mjs  
 - 图片/附件预览、普通移动Sheet和桌面Dialog共用lib/pageScrollLock的计数控制。预览优先关闭；Pad Esc先消费返回栈，再处理页面。
 - 页面安全区只引用mobile-*-safe-area，env与原生WindowInsets的组合只在theme/tokens.css定义。
 - AI表单状态/动作归useAiSettingsForm，分类关闭使读取失效，重开刷新已保存元信息并保留未保存草稿；原生测试异常给出失败/重试提示并撤销验证。AI与基础设置视图归分类组件，SettingsDrawer保留导航与既有数据所有者。
+
+## UI 原语与架构审计（261107）
+
+> 本文档的「原语」= 移动端壳层内**一个交互语义只有一套实现**的 React 组件/纯函数/CSS 类。
+> 新代码必须优先复用下表；新增第二套（近似几何、另一套文案组装）先合并再写。
+
+### 分层事实（不要臆造）
+
+- **CSS 分层现状 = 未分层**：`theme/index.css` 只有 `@layer mtokens, mkit, mshell, mfeature, moverlay, ma11y;` 声明，
+  base/tokens/light/dark 是裸 `@import`，其余 20 个 CSS 由 JS import ⇒ **规则全部未分层，顺序靠 import 顺序**。
+  给单个文件加 `@layer{}` 会被未分层规则全量压过（观感回归）；全端 @layer 迁移是独立项目，**不要分批做**。
+- **预算 = `src/mobile/mobileLayers.test.ts` 逐文件声明数 + dupGroups 棘轮**（只许降）。kit/quick-notes/mobile 已在本轮收紧：
+  kit 596→**588**、quick-notes 281→**255**、mobile 1665→**1609**。新增规则前先在同一文件删等量，或说明为什么不删。
+- **颜色/literals 只在 theme/**；pad 几何只在 `pad/pad.css`；`ink/inkPad.shared.css` 是桌面副本（契约，不是重复）。
+
+### TS 原语台账（本轮新增）
+
+| 原语 | 位置 | 用途 | 规则 |
+| --- | --- | --- | --- |
+| `SheetFooter` | `src/mobile/ui/SheetFooter.tsx` | 底部 Sheet 的取消/主操作条（`.mb-sheet__foot` + `.mb-btn`），支持 busy/busyLabel/danger/grow/compact | 标准两键/单键一律用它；三键/自定义布局传 `children`（签名板、表格表单、日期选择、资源清理保持原样） |
+| `runDocBatch / moveTargetsFromSnapshot / moveParentFromSnapshot / tagOptionsFromTags / confirmTrashDocs` | `src/mobile/ui/docBatch.ts` | 两处文档多选（目录树 `useTreeSelection`、文档列表 `DocListSheet`）的 bridge.batchNotes 汇总、移动目标/当前位置计算、标签目录 options、回收站确认 | 批量动作只走这里；不统一两处动作条文案（树=置顶+短文案，列表=长文案）是**入口语义差异**，不是重复 |
+| `formatUpdatedAt / formatRelativeTime / formatDateOnly` | `src/mobile/lib/listTime.ts` | 列表时间统一包装（core/dateFormat + 坏值兜底=空串） | 不要在业务组件里再写 try/catch 包装；需要新措辞先改 core/dateFormat |
+
+既有原语不要重造：`MobileSheet`、`MobileSheetMenu`、`ConfirmDialog`、`toastBus`、`useLongPress`、`useSelectionMode`、`SelectionTopBar/SelectionActionBar/SelectionCheckbox`、`settingsPrimitives`（Item/Switch）、`pushBackHandler/useBackHandler`、`useSwipeToClose`、`haptics`、`dismissKeyboard`、`PanelLoading/DeferredPanel`、`MobileErrorBoundary`。
+
+### CSS 审计结论（本轮已删死规则）
+
+- 全端 23 个样式文件 / 1519 条规则 / 6394 条声明；**完全相同声明块 142 组**，但绝大多数是「同一视觉语义的不同状态选择器」（disabled/selected/active），属有意重复，**不做跨语义大合并**。
+- 本轮删除**已验证 0 引用**的死规则 21 条 / 90 声明：quick-notes 的 `.quick-note-emoji-panel*`（已被 ui/EmojiPanel 取代）与 4 个 `qn-tag-manager__*` 死件、mobile 的 `.mbt-tables/.mbt-table-tab*` 与 `.mobile-qn-textarea/images/add`、kit 的 `.mb-spacer/.mb-btn--lg/.mb-row__actions/.mb-tag--ok/error`；同时把 `.mbt-table-tab` 从命中区注册表移除。
+- **不做的合并**：两种卡面材质（`.mb-card` vs `.mbt-card` 细边白面）、行首图标槽 4 套、med-* dock vs mb-usheet-* dock、nodeIcon 表情页 vs 输入态 `.mb-emoji-*`、pad.css 几何回流、两套 z 阶梯/时长族/圆角族（词表保留）、动态拼接类名、第三方 `.ne-*/.univer-*/.draw-*`。
+
+### 后续 backlog（按收益/风险，未做）
+
+1. **P1 `toastActionError(action, error)`**（`src/mobile/lib/actionError.ts`）：收口 37 处「动作失败 + getNativeErrorMessage + toast」；只收口不改措辞。
+2. **P1 `EmptyState`**（`ui/EmptyState.tsx`）：49 处 `.mb-empty` 的 6 种变体（裸/inset/p/role/带动作）统一容器；kit 的图标+说明+CTA 已就位。
+3. **P1 PageHeader/TopBarIconButton**：8 处 `.mobile-topbar` + 4 处 `.mobile-settings-head` 的 3 种结构；HomePage（pager 折叠）与 WorkspaceTopBar（平板页签）先不接。
+4. **P2 `.mb-row` 吸收 `.mb-list-item`**（kit −26 声明）：两条规则近乎同构；同文件合并，不动 JSX。
+5. **P2 CSS 剩余合并**：`.mb-glass`（+4/−12）、`.mb-surface`（kit+3/bitable−30，需先腾预算）、`.mb-empty--compact`、`.mb-iconbtn--xs`；都需要设备快照验收。
+6. **P2 大文件拆分**：HomePage 1116（QuickNoteCard/Panes）、MobileApp 965（boot/ProblemPage）、SettingsDrawer 785、EditorDock 844、MobileUsheetViewer 998、TagsHomeTab 608（先拆 SettingsDrawer/TagsHomeTab）。
+7. **P2 a11y**：9 处可点行缺 Enter/Space 激活（`rowActivationProps` 原语）、6 处 `span role=button` 需改真 button。

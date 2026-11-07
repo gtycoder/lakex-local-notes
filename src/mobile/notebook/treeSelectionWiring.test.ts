@@ -67,11 +67,15 @@ describe("文档树多选：工作区接线（261106 task-8）", () => {
     }
   });
 
-  it("动作编排：创建副本走 duplicateNotes，移动/回收站走 batchNotes，结果文案复用既有 helper", () => {
+  it("动作编排：创建副本走 duplicateNotes，移动/回收站走共享 runDocBatch（含统一确认与汇总）", () => {
     expect(HOOK).toContain("bridge.duplicateNotes({ ids: [...selectedIds] })");
-    expect(HOOK).toContain('action: "move"');
-    expect(HOOK).toContain('action: "trash"');
+    expect(HOOK).toContain("runDocBatch(selectedIds");
+    expect(HOOK).toContain('{ action: "move", parentId }');
+    expect(HOOK).toContain('{ action: "trash" }');
     expect(HOOK).toContain("duplicateResultNotice(result)");
-    expect(HOOK).toContain("summarizeBatchResult(result");
+    // 回收站二次确认 / 移动目标 / 标签目录 options 都复用 ui/docBatch 的单一来源。
+    expect(HOOK).toContain("confirmTrashDocs(selectedIds.length)");
+    expect(HOOK).toContain("moveTargetsFromSnapshot(snapshot)");
+    expect(HOOK).toContain("tagOptionsFromTags(tags)");
   });
 });

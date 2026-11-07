@@ -7,6 +7,7 @@
 import { useEffect, useState } from "react";
 import { Copy, Pencil, Trash2 } from "lucide-react";
 import { MobileSheet } from "../ui/MobileSheet";
+import { SheetFooter } from "../ui/SheetFooter";
 import { confirmMobile } from "../ui/ConfirmDialog";
 
 export interface MobileBitableTableActionsProps {
@@ -47,10 +48,10 @@ export function MobileBitableTableActions({ open, tableName, recordCount, editab
       bodyClassName="mb-sheet__body--form"
       onClose={onClose}
       footer={mode === "rename" ? (
-        <div className="mb-sheet__foot">
-          <button type="button" className="mb-btn mb-btn--secondary" onClick={() => setMode("menu")}>取消</button>
-          <button type="button" className="mb-btn mb-btn--primary" disabled={!draft.trim()} onClick={() => onRename(draft)}>确定</button>
-        </div>
+        <SheetFooter
+          cancel={{ label: "取消", onClick: () => setMode("menu") }}
+          confirm={{ label: "确定", disabled: !draft.trim(), onClick: () => onRename(draft) }}
+        />
       ) : undefined}
     >
       {mode === "rename" ? (

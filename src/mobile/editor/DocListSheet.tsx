@@ -19,12 +19,11 @@ import { SelectionCheckbox } from "../ui/SelectionCheckbox";
 import { SelectionTopBar } from "../ui/SelectionTopBar";
 import { useSelectionMode } from "../ui/useSelectionMode";
 import { BatchTagPickerSheet } from "../ui/BatchTagPickerSheet";
-import { summarizeBatchResult } from "../ui/batchNotesResult";
+import { confirmTrashDocs, moveParentFromSnapshot, moveTargetsFromSnapshot, runDocBatch, tagOptionsFromTags, type DocBatchPayload } from "../ui/docBatch";
 import { duplicateResultNotice } from "../ui/duplicateNotesResult";
 import { duplicateNoteTitle } from "../../core/duplicateNotes";
 import { MoveTargetTreeSheet, type MoveTargetNode } from "../ui/MoveTargetTreeSheet";
-import { confirmMobile } from "../ui/ConfirmDialog";
-import type { QuickNoteTag, QuickNoteTagSummary } from "../../core/quickNoteTags";
+import type { QuickNoteTagSummary } from "../../core/quickNoteTags";
 
 export interface DocListItem {
   id: string;
@@ -143,18 +142,16 @@ export function DocListSheet({ open, documents, activeId, onPick, onClose }: Doc
   const [moveNodes, setMoveNodes] = useState<MoveTargetNode[]>([]);
   const [moveCurrentParentId, setMoveCurrentParentId] = useState<string | null>(null);
   const [moveExcludedIds, setMoveExcludedIds] = useState<string[]>([]);
-  const applyBatch = async (payload: { action: "trash" | "tag-add" | "move"; tagIds?: string[]; parentId?: string | null }): Promise<void> => {
+  const applyBatch = async (payload: DocBatchPayload): Promise<void> => {
     if (selection.count === 0) { showToast("请先选择文档"); return; }
     setBatchBusy(true);
     setBatchError(null);
     const ids = [...selection.ids];
     try {
-      const result = await bridge.batchNotes({ ...payload, ids, space: "lake" });
-      const verb = payload.action === "trash" ? "已移入回收站" : payload.action === "move" ? "已移动" : "已加标签";
-      const summary = summarizeBatchResult(result, verb);
-      if (result.summary.failed > 0) showToast(summary, { type: "error" });
-      else showToast(summary);
-      if (result.summary.failed > 0) { setBatchError(summarizeBatchResult(result, "")); return; }
+      const { text, detail, failed } = await runDocBatch(ids, payload);
+      if (failed > 0) showToast(text, { type: "error" });
+      else showToast(text);
+      if (failed > 0) { setBatchError(detail); return; }
       if (payload.action === "trash") setHiddenIds((current) => [...current, ...ids]);
       setBatchTagOpen(false);
       setMoveOpen(false);
@@ -221,7 +218,7 @@ export function DocListSheet({ open, documents, activeId, onPick, onClose }: Doc
     setBatchError(null);
     try {
       const tags = await bridge.listQuickNoteTags();
-      setBatchTagOptions(tags.map((tag: QuickNoteTag) => ({ ...tag, count: 0 })));
+      setBatchTagOptions(tagOptionsFromTags(tags));
       setBatchTagOpen(true);
     } catch (error) {
       showToast("标签目录暂不可用：" + (error as Error).message, { type: "error" });
@@ -233,14 +230,8 @@ export function DocListSheet({ open, documents, activeId, onPick, onClose }: Doc
     setBatchError(null);
     try {
       const snapshot = await bridge.getHomeSnapshot();
-      const containers: MoveTargetNode[] = snapshot.treeNodes
-        .filter((node) => node.nodeType === "notebook" || node.nodeType === "group")
-        .map((node) => ({ id: node.id, title: node.title || "未命名", parentId: node.parentId, nodeType: node.nodeType }));
-      // 当前位置：选中文档的父级（全在同一父级才高亮；混父级则不标当前位置）。
-      const parents = [...new Set(selection.ids
-        .map((id) => snapshot.notes.find((note) => note.id === id)?.parentId ?? null))];
-      setMoveNodes(containers);
-      setMoveCurrentParentId(parents.length === 1 ? parents[0] : null);
+      setMoveNodes(moveTargetsFromSnapshot(snapshot));
+      setMoveCurrentParentId(moveParentFromSnapshot(snapshot, selection.ids));
       setMoveExcludedIds([...selection.ids]);
       setMoveOpen(true);
     } catch (error) {
@@ -254,12 +245,7 @@ export function DocListSheet({ open, documents, activeId, onPick, onClose }: Doc
     if (actionId === "tag") { void openTagPicker(); return; }
     if (actionId === "move") { void openMovePicker(); return; }
     if (actionId === "trash") {
-      void confirmMobile({
-        title: "移入回收站？",
-        body: "将把选中的 " + selection.count + " 篇文档移入回收站（可恢复，不会彻底删除）。",
-        confirmText: "移入回收站",
-        danger: true,
-      }).then((ok) => { if (ok) void applyBatch({ action: "trash" }); });
+      void confirmTrashDocs(selection.count).then((ok) => { if (ok) void applyBatch({ action: "trash" }); });
     }
   };
 

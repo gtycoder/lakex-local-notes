@@ -1,33 +1,4 @@
-/* ── 移动端自有外观：小记编辑器宿主与只读预览（P6b，261012）────────────────────
- * 口径：**逻辑共享、外观移动端自有**。共享组件（features/quickNotes/QuickNotePreview.tsx）发出的结构类名
- * （.quick-note-editor / .quick-note-preview* / .quick-note-file-chip*）在这里由移动端定义视觉；
- * 桌面那份仍在 src/styles/app/quick-notes.css（只被桌面入口引用）。
- *
- * 本文件 = 从桌面那份**按移动端实际用到的选择器抽取**（小记时间线/卡片/预览），不是整份复制：
- * 桌面小记的写作卡外壳（.quick-note-composer*）、列表版式、批量条等移动端**不用**（移动端有自己的
- * .mobile-qn-composer 时间线外壳），故不搬。抽取后渲染应与抽取前**逐元素一致**（同一批声明、同一批类名）。
- *
- * 类名不需要桥接：调用方（移动端 HomePage）给组件传 `ellipsisClassName="mb-ellipsis"`，
- * 省略原语由 src/mobile/kit.css 提供 —— 组件只发调用方给的类名，两端样式各自拥有（无 ln-* 残留）。 */
 
-/* 写作区 = 单个 Lake 内核实例（260919）。移动端的写作卡外壳是 `.mobile-qn-composer`（261013 重做），
-   本文件头也写明桌面外壳 `.quick-note-composer` 移动端**不用** ⇒ 原先为它留的两条规则（原第 14/47 行）在移动端
-   永远不会命中（className 全仓只出现在桌面 JSX），261014 查漏补缺时删掉（死 CSS 口径：字面类名、非内核/词表/动态拼接，
-   且已用 `grep className` 确认移动端不渲染）。 */
-
-
-/* 261008：字体走令牌（原写死的系统栈不是 MiSans） */
-
-
-/* 260920 清理：早期的「草稿图片网格 / 已存图片网格 / 已存媒体列」三套类已随卡片预览改自研只读渲染而废弃
-   （`QuickNotePreview` 用 .quick-note-preview-* 一套），删掉其遗留规则，媒体样式只剩下面这一套。 */
-/* 自带表情选择器（261010 起）——**261013 改成微信样式**（用户定稿：分类放顶部，更适合输入）。
-   为什么自建：内核「表情」只插一张点不开的空占位卡（实测两次）。形态 = 顶部分类条（搜索 / 最近 / 8 组）
-   + 浅灰底大格子 + 空态；表面沿用浮层令牌，定位由 JS 按**真实尺寸**夹进视口（同 usePopoverPosition 口径）。 */
-/* v2 柔光纸面（261107）：本文件里唯一的卡片面 = 这个浮动表情卡 —— 圆角/阴影改走 v2 令牌
- * （--mb-radius-card / --mb-shadow-float），颜色仍只用主题令牌。小记卡本体的卡面在 mobile.css 的
- * .qn-card（同批已改 --mb-radius-card + --mb-shadow-card），这里不重复定义。 */
-.quick-note-emoji-panel { position: fixed; z-index: var(--lake-z-overlay-menu); display: flex; flex-direction: column; gap: 6px; padding: 8px; width: min(340px, calc(100vw - 16px)); border-radius: var(--mb-radius-card); background: var(--lake-bg-panel); box-shadow: var(--mb-shadow-float); }
 .quick-note-emoji-panel__cats { display: flex; align-items: center; gap: 2px; overflow-x: auto; scrollbar-width: none; }
 .quick-note-emoji-panel__cats::-webkit-scrollbar { display: none; }
 .quick-note-emoji-panel__cat { flex: 0 0 auto; display: flex; align-items: center; justify-content: center; width: var(--mb-tap-min); height: var(--mb-tap-min); padding: 0; border: 0; border-radius: var(--lake-radius-sm); background: transparent; color: var(--lake-text-2); font-size: var(--mb-emoji-cat-size); line-height: 1; }
@@ -131,12 +102,6 @@
 
 /* 261105 标签管理（移动端）：行内 [置顶][名称][计数][更多] + 展开动作行；复用 qn-tag-sheet 面板骨架，不新建浮层。 */
 .qn-tag-manager__row { display: flex; align-items: center; gap: 6px; min-height: var(--mb-tap-min); }
-.qn-tag-manager__name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.qn-tag-manager__actions { display: flex; flex-wrap: wrap; gap: 8px; padding: 2px 0 10px var(--mb-page-pad); }
-.qn-tag-manager__actions .mb-btn { min-height: var(--mb-tap-min); }
-/* 261105：拖拽排序（长按跟手；行前/行后落点线；顺序只在本机生效） */
-.qn-tag-manager__hint { padding: 2px 0 6px; color: var(--lake-text-4); font-size: var(--lake-font-size-small); }
-.qn-tag-manager__handle { flex: 0 0 auto; display: inline-flex; color: var(--lake-text-4); }
 .qn-tag-manager__row.is-dragging { opacity: .55; }
 .qn-tag-manager__row.is-drop-before { box-shadow: inset 0 2px 0 var(--lake-accent); }
 .qn-tag-manager__row.is-drop-after { box-shadow: inset 0 -2px 0 var(--lake-accent); }

@@ -37,7 +37,7 @@ import { useTabPager } from "./useTabPager";
 // 小记排序：**两端共用的单一来源**（档位/文案/比较器/本机持久化都在这里；261015 用户要求桌面与移动统一）
 import { quickNoteSortTime, type QuickNoteSort } from "../../core/quickNoteSort";
 import { localAssetHttpUrl, withAssetWidth } from "../../core/assetUrl.js";
-import { formatListTime } from "../../core/dateFormat";
+import { formatDateOnly, formatRelativeTime } from "../lib/listTime";
 import { withAssetAccessToken } from "../../lib/assetPort";
 import { pushBackHandler } from "../ui/backStack";
 import { useLongPress } from "../ui/useLongPress";
@@ -132,16 +132,6 @@ const VIEW_KEY = "lakex-local-notes-mobile.libraryView";
  */
 const COVER_THUMB_PX = 1024;
 
-function fmtDate(iso: string): string {
-  try { return formatListTime(new Date(iso), new Date(), true); }
-  catch { return iso; }
-}
-
-/** 列表时间措辞统一走 core/dateFormat.formatListTime（Q10/B）。 */
-function fmtRelative(iso: string): string {
-  try { return formatListTime(new Date(iso), new Date()); }
-  catch { return ""; }
-}
 
 export function HomePage(props: HomePageProps) {
   const {
@@ -846,7 +836,7 @@ export function HomePage(props: HomePageProps) {
                         <span className="doc-card__lines" />
                       </span>
                       <span className="doc-card__name">{r.title || "无标题"}</span>
-                      <span className="doc-card__date">{fmtRelative(r.updatedAt)}</span>
+                      <span className="doc-card__date">{formatRelativeTime(r.updatedAt)}</span>
                     </button>
                   ))}
                 </div>
@@ -1100,7 +1090,7 @@ function QuickNoteCard({ note, revealed, dateValue, onEdit, onMore, onFilterTag,
           <div className="qn-card__text">{note.previewText || (note.imageCount > 0 ? "[图片]" : "（空白小记）")}</div>
         )}
         <div className="qn-card__meta">
-          <span className="qn-card__date">{fmtDate(dateValue)}</span>
+          <span className="qn-card__date">{formatDateOnly(dateValue)}</span>
           {selecting ? (
             <SelectionCheckbox compact checked={selected} />
           ) : (

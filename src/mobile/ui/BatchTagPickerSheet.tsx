@@ -9,6 +9,7 @@ import { Check } from "lucide-react";
 import type { QuickNoteTagSummary } from "../../core/quickNoteTags";
 import { filterBatchTagOptions, toggleBatchTagSelection } from "../../core/batchTagging";
 import { MobileSheet } from "./MobileSheet";
+import { SheetFooter } from "./SheetFooter";
 
 export interface BatchTagPickerSheetProps {
   open: boolean;
@@ -45,15 +46,10 @@ export function BatchTagPickerSheet({ open, options, count, busy, error, onConfi
       onClose={() => { if (!busy) onClose(); }}
       className="qn-tag-sheet"
       bodyClassName="qn-tag-sheet__body mb-sheet__body--form"
-      footer={<div className="mb-sheet__foot">
-        <button type="button" className="mb-btn mb-btn--secondary" disabled={busy} onClick={onClose}>取消</button>
-        <button
-          type="button"
-          className="mb-btn mb-btn--primary"
-          disabled={busy || picked.length === 0 || count === 0}
-          onClick={() => onConfirm(picked)}
-        >{busy ? "处理中…" : "确认（" + count + " 条）"}</button>
-      </div>}
+      footer={<SheetFooter
+        cancel={{ label: "取消", disabled: busy, onClick: onClose }}
+        confirm={{ label: "确认（" + count + " 条）", disabled: picked.length === 0 || count === 0, busy, onClick: () => onConfirm(picked) }}
+      />}
     >
       <span className="mb-input qn-tag-sheet__input">
         <input

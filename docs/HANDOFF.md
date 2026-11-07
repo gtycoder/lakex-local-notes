@@ -8,6 +8,15 @@
 
 ## 0. 最新交接（261027）
 
+### 261107 · 移动端 UI 架构审计 + 原语抽取（SheetFooter / docBatch / listTime）+ 死样式清理 · **master 直接提交**
+- **审计方式**：两路只读并行审计（TSX 组件层 / CSS 样式层），产物落 `docs/MOBILE-DESIGN.md` 新增「UI 原语与架构审计（261107）」：分层事实（CSS 未分层、靠 import 顺序，禁止单文件加 @layer）、原语台账、CSS 去重结论与「不要做的合并」、后续 backlog（P1 toastActionError/EmptyState/PageHeader；P2 row 吸收 list-item、glass/surface、大文件拆分、a11y）。
+- **新增原语**：
+  · `src/mobile/ui/SheetFooter.tsx`：底部 Sheet 取消/主操作条（`.mb-sheet__foot` + `.mb-btn`），支持 busy/busyLabel/danger/grow/compact/children；迁移 13 个文件（标准两键/单键：NameSheet、BatchTagPickerSheet、MoveTargetTreeSheet、DefaultNotebookPickerSheet、NoteTagsSheet、TagsHomeTab×3、Bitable Table/ViewActions、FieldEditorSheet 等）。剩 5 处自定义底栏（签名板/表格表单/日期三键/资源清理）+3 处 `.ai-sheet__foot` 明确保留。
+  · `src/mobile/ui/docBatch.ts`：`runDocBatch`（batchNotes + 汇总/失败详情）、`moveTargetsFromSnapshot`、`moveParentFromSnapshot`、`tagOptionsFromTags`、`confirmTrashDocs`；`useTreeSelection` 与 `DocListSheet` 两处多选收敛到同一份判据，行为/文案不变。
+  · `src/mobile/lib/listTime.ts`：`formatUpdatedAt/formatRelativeTime/formatDateOnly`（core/dateFormat 包装 + 坏值=空串）；收掉 HomePage、NotebookGrid、TagsHomeTab、TagQuickNoteCard 的重复 try/catch。
+- **死样式清理（已验证 0 引用，−21 规则 / −90 声明）**：quick-notes 的 `.quick-note-emoji-panel*`（已被 ui/EmojiPanel 取代）+ 4 个 `qn-tag-manager__*` 死件；mobile 的 `.mbt-tables/.mbt-table-tab*` + `.mobile-qn-textarea/images/add`；kit 的 `.mb-spacer/.mb-btn--lg/.mb-row__actions/.mb-tag--ok/error`。mobileLayers 基线相应收紧：kit 596→588、quick-notes 281→255、mobile 1665→1609（dupGroups 不变）。
+- **测试**：新增 `SheetFooter.render.test.tsx`（3 例）、`lib/listTime.test.ts`；`treeSelectionWiring.test` 改为断言共享 `runDocBatch/confirmTrashDocs` 契约。
+- **门禁**：tsc（本仓范围）0；全量 vitest 通过（见 §1 当前计数）；ui-metrics / check:mobileui / check:core / diff-check 绿。设备级快照未重跑（DOM 结构未变；用户验收后按需跑全量）。
 ### 261107 · pad 检查 + 三套基线重烤（含 pad resize 回归修复）· **master 直接提交**
 - **pad 窗口矩阵回归（`check:windowsweep`）**：7 种窗口形态判据通过，但 `resize-retention-*` 红 —— 800×1280 打开文档后切 1280×800，工作区被卸载回首页。根因：**隐藏的首页分页器**（`useTabPager` 的 ResizeObserver）在宽度变化时重对齐滚动，其 scroll 被状态机当成用户意图 → `onTabChange` → `MobileApp.setRoute({kind:"home"})`；工作区 layer 条件失配被卸载（route 已 home、`wsMounted` 未变，故不经过 `close()`）。修复两处：① `MobileApp` 的 `onTabChange` 在 `route.kind === "notebook"` 时直接忽略（后台首页不得改路由）；② `useTabPager` 的 `programmatic-start` 移到 `scrollTo` **之前**（宽度变化时浏览器可能先派发一次 scroll，晚置位会被误判为回写）。回归用例：`tabPager.test.ts` 增 resize 不回写断言；新增 `homeTabResizeGuard.test.ts` 钉两处契约。修复后 `check:windowsweep` 全绿（含 resize-retention）。
 - **基线重烤（三套，均连跑两轮 0 差异）**：

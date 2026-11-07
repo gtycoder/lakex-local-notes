@@ -10,6 +10,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Check, FolderOpen } from "lucide-react";
 import { MobileSheet } from "./MobileSheet";
+import { SheetFooter } from "./SheetFooter";
 
 export interface MoveTargetNode {
   id: string;
@@ -57,15 +58,10 @@ export function MoveTargetTreeSheet({ open, nodes, currentParentId, excludedIds,
       title="移动到…"
       onClose={() => { if (!busy) onClose(); }}
       bodyClassName="mb-sheet__body--form"
-      footer={<div className="mb-sheet__foot">
-        <button type="button" className="mb-btn mb-btn--secondary" disabled={busy} onClick={onClose}>取消</button>
-        <button
-          type="button"
-          className="mb-btn mb-btn--primary"
-          disabled={!canConfirm}
-          onClick={() => { if (canConfirm && picked) onConfirm(picked); }}
-        >移动到此处</button>
-      </div>}
+      footer={<SheetFooter
+        cancel={{ label: "取消", disabled: busy, onClick: onClose }}
+        confirm={{ label: "移动到此处", disabled: !canConfirm, onClick: () => { if (canConfirm && picked) onConfirm(picked); } }}
+      />}
     >
       {error && <div className="qn-tag-sheet__error" role="alert">{error}</div>}
       <span className="mb-input qn-tag-sheet__input">

@@ -13,6 +13,7 @@ import { normalizeQuickNoteTag } from "../../core/quickNoteTags";
 import { getNativeErrorMessage } from "../../lib/nativeErrors";
 import { bridge } from "../bridge";
 import { MobileSheet } from "../ui/MobileSheet";
+import { SheetFooter } from "../ui/SheetFooter";
 import { showToast } from "../ui/toastBus";
 import type { NotebookTreeItem } from "./useNotebookTreeData";
 
@@ -142,12 +143,10 @@ export function NoteTagsSheet({ open, note, onClose }: NoteTagsSheetProps) {
           );
         })}
       </div>
-      <div className="mb-sheet__foot">
-        <button type="button" className="mb-btn mb-btn--secondary" disabled={busy} onClick={onClose}>取消</button>
-        <button type="button" className="mb-btn mb-btn--primary" disabled={busy || options === null} onClick={() => void save()}>
-          {busy ? "保存中…" : "保存"}
-        </button>
-      </div>
+      <SheetFooter
+        cancel={{ label: "取消", disabled: busy, onClick: onClose }}
+        confirm={{ label: "保存", disabled: options === null, busy, busyLabel: "保存中…", onClick: () => void save() }}
+      />
     </MobileSheet>
   );
 }
