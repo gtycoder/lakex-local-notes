@@ -343,21 +343,6 @@ export function AiAssistantDialog({ open, request, onClose }: {
         {error && <div className="ai-dialog__error">{error}</div>}
         {stopped && !error && <div className="ai-dialog__note">已停止生成，已生成的内容保留</div>}
       </div>
-      {/* 单横条：✦ 贴框内**左上角**（对齐云端浮条形态）；✕ 只清除输入内容，不关面板。 */}
-      <div className="ai-dialog__bar">
-        <AiSparkIcon size={18} />
-        {turns.length === 0 ? (
-          <textarea ref={fieldRef} className="ai-dialog__field" rows={1} placeholder="向智能助手提问…" value={instruction} onChange={(e) => { setInstruction(e.target.value); setPresetId(AI_PROMPT_CUSTOM_ID); }} onKeyDown={onFieldKeyDown} />
-        ) : (
-          <textarea ref={fieldRef} className="ai-dialog__field" rows={1} placeholder="继续追问…" value={followUp} onChange={(e) => setFollowUp(e.target.value)} onKeyDown={onFieldKeyDown} />
-        )}
-        {activeValue && (
-          <button type="button" className="ai-dialog__clear" aria-label="清除内容" onClick={() => {
-            if (turns.length === 0) setInstruction(""); else setFollowUp("");
-            fieldRef.current?.focus();
-          }}><X size={12} /></button>
-        )}
-      </div>
       {/* 首轮预设（用户 261005）：**仅首轮 + 有选区**才出现；点击只填词、不发送；分段控件复用 kit 的 .ln-segment。 */}
       {turns.length === 0 && (selectionText.trim().length > 0 || hasImages) && (
         <div className="ai-dialog__presets">
@@ -380,26 +365,42 @@ export function AiAssistantDialog({ open, request, onClose }: {
           <span className="ai-dialog__doc-hint">{docHint}</span>
         </div>
       )}
+      {/* 输入条复用 kit 的 .ln-input：多行文本只改高度/对齐，边框、聚焦环、占位色都走原语。 */}
+      <div className="ln-input ai-dialog__composer">
+        <span className="ln-input__icon"><AiSparkIcon size={18} /></span>
+        {turns.length === 0 ? (
+          <textarea ref={fieldRef} className="ln-input__field ai-dialog__field" rows={1} placeholder="向智能助手提问…" value={instruction} onChange={(e) => { setInstruction(e.target.value); setPresetId(AI_PROMPT_CUSTOM_ID); }} onKeyDown={onFieldKeyDown} />
+        ) : (
+          <textarea ref={fieldRef} className="ln-input__field ai-dialog__field" rows={1} placeholder="继续追问…" value={followUp} onChange={(e) => setFollowUp(e.target.value)} onKeyDown={onFieldKeyDown} />
+        )}
+        {activeValue && (
+          <button type="button" className="ln-iconbtn ln-iconbtn--compact ln-input__clear ai-dialog__clear" aria-label="清除内容" onClick={() => {
+            if (turns.length === 0) setInstruction(""); else setFollowUp("");
+            fieldRef.current?.focus();
+          }}><X size={12} /></button>
+        )}
+      </div>
+
       <div className="ln-dialog__actions">
         {/* 生成中 = 「生成/发送」**原位**变「停止」（用户 261008）：中断入口就落在发送键那一格，
             不再是一个旁边的小按钮。AI 助手三个入口（选区浮栏 / 块句柄菜单 / 顶栏）共用本面板 ⇒ 一处即全覆盖。 */}
         {busy ? (
-          <button type="button" className="ln-btn" onClick={stop}>停止</button>
+          <button type="button" className="ln-btn ln-btn--secondary" onClick={stop}>停止</button>
         ) : turns.length === 0 ? (
-          <button type="button" className="ln-btn" disabled={!canSendFirst} onClick={() => void run(true)}>生成</button>
+          <button type="button" className="ln-btn ln-btn--primary" disabled={!canSendFirst} onClick={() => void run(true)}>生成</button>
         ) : (
-          <button type="button" className="ln-btn" disabled={!followUp.trim()} onClick={() => void run(false)}>发送</button>
+          <button type="button" className="ln-btn ln-btn--primary" disabled={!followUp.trim()} onClick={() => void run(false)}>发送</button>
         )}
-        {turns.length > 0 && <button type="button" className="ln-btn" disabled={busy} onClick={() => void regenerate()}><RotateCcw size={12} /> 重新生成</button>}
+        {turns.length > 0 && <button type="button" className="ln-btn ln-btn--ghost" disabled={busy} onClick={() => void regenerate()}><RotateCcw size={12} /> 重新生成</button>}
         {/* 复制 / 插入 / 替换都依赖生成结果：**没有结果就不出这些选项**，只留「生成 + 关闭」。 */}
         {/* 全文模式的处理对象是整篇：结果不往选区写（避免"整篇改写覆盖一段"，用户 261021 P1）。 */}
         {lastOutput && !conversationDocMode && request.outputs.map((mode) => (
-          <button key={mode} type="button" className="ln-btn"
+          <button key={mode} type="button" className="ln-btn ln-btn--ghost"
             onClick={() => { request.applyOutput(lastOutput, mode); onClose(); }}>
             {mode === "after" ? <CornerDownRight size={12} /> : <Check size={12} />} {aiOutputLabel(context, mode)}
           </button>
         ))}
-        <button type="button" className="ln-btn" onClick={onClose}><X size={12} /> 关闭</button>
+        <button type="button" className="ln-btn ln-btn--ghost" onClick={onClose}><X size={12} /> 关闭</button>
       </div>
       {/* 右下角拖拽把手：只改高度（用户 261004：左右不动）。 */}
       <div className="ai-dialog__grip" role="separator" aria-label="拖动调整高度" onPointerDown={startResize} />

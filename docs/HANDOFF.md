@@ -8,6 +8,11 @@
 
 ## 0. 最新交接（261027）
 
+### 261107 · AI 面板视觉收敛 + 卡片图标去绿底（视觉 review）· **已提交**
+- **卡片图标**：去掉绿色底/描边 rect，改与插入面板其它图标同口径的**线性 monochrome sparkle**（主星描边 + 小星/圆点实心，currentColor 跟随主题，暗/暖自适应）；不再引 --lake-ai-icon-soft/ink/star。护栏：aiAssistantCard.test.ts 断言 symbol 无 soft 绿底、有 currentColor。
+- **AI 面板收敛**：所有 .ai-dialog* 布局从 selectionToolbar.css 归并到 features/ai/aiDialogParts.css 单一来源；回答去掉第二层边框/白底（直接 Markdown 正文），用户问题只留右侧浅底 pill；输入条改用 kit .ln-input（边框/聚焦环/占位色全部原语），只覆盖多行高度；动作行只保留生成/发送一个 primary，其余 ghost；复制动作改为 hover/focus 才出现（无 hover 设备常显）；全文开关移到输入条上方。
+- **验证**：dev 实拍插入面板与 AI 面板；tsc 0；AI/CSS 专项全绿；全量 765 文件 / 4878 passed / 12 skipped；ui-metrics 通过；git diff --check 干净。
+
 ### 261107 · AI 助手架构收口（P1：请求模型 + 定位/输出单源）· **261107 收尾已提交**
 - **问题**：4 个入口（顶栏 / 选区浮栏 / 块菜单 / 写作助手卡）+ 10 个可选 props（selectionText/attachments/noteId/anchor/at/scroller/container/onInsertAfter/onReplace/onInsert）靠隐式优先级组合 → 最近的"面板跑到正文栏顶""插入到下一块""占位卡标签外露"都是这个结构造成的。
 - **新模型**：`src/features/ai/aiAssistantRequest.ts` —— 三个正交轴：
@@ -1001,7 +1006,7 @@
 - **分支策略（261105 起）**：只保留 `master`（本地 + Gitee + GitHub 各一条）；特性分支做完即合、合完即删，不留长期 worktree。
 - 两远端 master 的交付核验见 `.css-audit/final-review/merge-verify.txt`（该目录在 261105 清理中已删除，历史证据见 git 提交记录）。
 - **261105 标签缺席改造（本轮）**：已提交 `e83a6960` 并双推，改动面 = core 同步语义 + 两端标签库/端口 + 移动端回收站定时清空 + 文档。门禁实测：tsc 0；全量 vitest **608 文件（597 passed / 11 integration skip）、3763 passed / 12 skipped**；core 136 文件 0 违规；check:mobileui/ui-metrics 通过；`git diff --check` 干净。
-- **261107 基线**：本次会话全部改动（创建副本/原生资源复制、桌面置顶、块复制与换行、AI 写作助手卡、AI 助手请求/单会话/对话 hook 架构收口）已本地提交并推 `origin/master`；最终门禁 **765 文件（754 passed / 11 skipped）、4878 passed / 12 skipped**、tsc 0、core 0、ui-metrics / check:mobileui / diff-check 通过。提交 hash 见 `git log -1`。
+- **261107 基线**：本次会话全部改动（创建副本/原生资源复制、桌面置顶、块复制与换行、AI 写作助手卡、AI 助手请求/单会话/对话 hook 架构收口、AI 面板视觉收敛与图标去绿底）已本地提交并推 `origin/master`；最终门禁 **765 文件（754 passed / 11 skipped）、4878 passed / 12 skipped**、tsc 0、core 0、ui-metrics / check:mobileui / diff-check 通过。提交 hash 见 `git log -1`。
 - **261106 基线**：`master` `362d2331`（已双推）。改动面 = 移动端标签一级页/搜索/键盘稳定/批量多选；桌面+移动 Markdown 导入、批量导出（doc→md / usheet/bitable→csv / ink/board→pdf）、思源式移动树、备份可观测、Bitable 视图拖拽。门禁实测：tsc 0；全量 vitest **750 文件（739 passed / 11 skip）、4758 passed / 12 skipped**；core 边界 0 违规；ui-metrics / check:mobileui / diff-check 通过。IPC parity = 162（新增 batch_notes / export_notes_batch / write_batch_export_file / open_export_dir / pick_markdown_files / read_import_image，移除 pick_markdown_folder）。
 - **261105 实测偏差修正**：`master..feat/pad-touch-ui = 0`（`d2f76b3b` 已是 master 祖先）⇒ §3 P0 原文「落后 6 个提交、发版前先合」已过期，本轮就地改掉。
 - 发版仍只有v0.0.1/v0.0.2，package.json=0.0.2；未发版提交数用`git rev-list --count v0.0.2..master`查询，别沿用125这个旧计数。下一版发布说明须写inkDoc v4：旧端只读、手机/平板需重装。

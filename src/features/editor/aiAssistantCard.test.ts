@@ -25,9 +25,11 @@ describe("AI 写作助手卡：注册形状", () => {
     expect(aiAssistantCardConfig.slash.description).toContain("写作助手");
   });
 
-  it("图标组件渲染 symbol（内核 sprite 约定）", () => {
+  it("图标组件渲染 symbol（内核 sprite 约定），且无线框/绿底：线性 sparkle、颜色走 currentColor", () => {
     const html = renderToStaticMarkup(AiAssistantIconSymbol());
     expect(html).toContain('<symbol id="' + AI_ASSISTANT_ICON_ID + '"');
+    expect(html).not.toContain("lake-ai-icon-soft");
+    expect(html).toContain('stroke="currentColor"');
   });
 
   it("斜杠项注入「小工具」分组；幂等且不动其它组", () => {

@@ -29,10 +29,11 @@ export const AI_ASSISTANT_SLASH_GROUP_TITLE = CUSTOM_CARD_SLASH_GROUP_TITLE;
 export function AiAssistantIconSymbol() {
   return (
     <symbol id={AI_ASSISTANT_ICON_ID} viewBox="0 0 72 72" fill="none">
-      <rect x="1" y="1" width="70" height="70" rx="12" fill="var(--lake-ai-icon-soft)" stroke="var(--lake-ai-icon-ink)" strokeWidth="1.8" />
-      <path d="M30 54c10.5-2.5 17.5-9 20-19.5" stroke="currentColor" strokeWidth="4" strokeLinecap="round" fill="none" />
-      <path d="M45 14l3.4 10.6L59 28l-10.6 3.4L45 42l-3.4-10.6L31 28l10.6-3.4z" fill="var(--lake-ai-icon-soft)" stroke="var(--lake-ai-icon-ink)" strokeWidth="2" strokeLinejoin="round" />
-      <path d="M17 13l1.7 4.3L23 19l-4.3 1.7L17 25l-1.7-4.3L11 19l4.3-1.7z" fill="var(--lake-ai-icon-star)" />
+      {/* 与目录/插入面板其它图标同口径：无底色、线性 sparkle；颜色交给 currentColor（不锁绿）。 */}
+      <path d="M33 12.5 38.2 25.8 51.5 31 38.2 36.2 33 49.5 27.8 36.2 14.5 31 27.8 25.8Z"
+        stroke="currentColor" strokeWidth="3.2" strokeLinejoin="round" />
+      <path d="M53 45l2.3 6.2 6.2 2.3-6.2 2.3L53 62l-2.3-6.2L44.5 53.5l6.2-2.3z" fill="currentColor" />
+      <circle cx="19" cy="53" r="3.2" fill="currentColor" />
     </symbol>
   );
 }

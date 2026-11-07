@@ -1,28 +1,52 @@
-/* AI 助手弹窗内的局部布局（261005）：首轮预设提示词行 + 每条回答的复制动作行。
-   按钮/分段都复用 kit 原语，这里只补间距与对齐。 */
-.ai-dialog__presets { margin: 0 8px 6px; }
-/* 261021 P0：预设从 4 条扩到 7 条；窄窗（面板最小 360）一行放不下时换行。
-   仍是 kit 的 .ln-segment 原语，只放开它在本处的换行与高度，不改单行几何。 */
+/* AI 助手面板（261107 视觉收敛）。
+   面板的全部布局集中在本文件（不再散落到 selectionToolbar.css）；
+   表面 / 输入 / 按钮一律复用 Overlay · kit 原语（.ln-dialog__*、.ln-input、.ln-btn、.ln-segment、.ln-switch），
+   这里只写 AI 专属的排版与密度，并遵守：0.5px 边、无装饰性过渡、颜色只走令牌。 */
+
+/* 外壳：Popover 表面默认不是 flex，补纵向布局后 body 才能在 max-height 内滚动。 */
+.ai-dialog { display: flex; flex-direction: column; overflow: hidden; }
+
+/* 线程：只留外层一次内距；消息之间用留白拉开，不再给回答加第二层边框。 */
+.ai-dialog .ln-dialog__body { flex: 1 1 auto; min-height: 0; overflow: auto; padding: var(--lake-space-lg) var(--lake-space-lg) var(--lake-space-sm); }
+.ai-dialog__thread { display: flex; flex-direction: column; gap: var(--lake-space-lg); }
+.ai-dialog__msg { font-size: var(--lake-font-size-body); line-height: 1.7; white-space: pre-wrap; color: var(--lake-text-1); }
+/* 用户问题：右侧浅底提示，无边框、无第二层圆角框。 */
+.ai-dialog__msg--user { align-self: flex-end; max-width: 85%; padding: 6px 11px; border-radius: var(--lake-radius-md); background: var(--lake-bg-block); }
+/* AI 回答：直接是正文排版，和编辑器正文同一观感；Markdown 样式由 MarkdownView 统一提供。 */
+.ai-dialog__msg--assistant { padding: 0; border: 0; background: transparent; }
+/* 复制动作只在悬停/聚焦时出现，避免每段回答下面都挂一排图标；触屏无 hover 时保持可见。 */
+.ai-dialog__copy-actions { display: flex; gap: 2px; margin-top: var(--lake-space-xs); opacity: 0; }
+.ai-dialog__msg--assistant:hover .ai-dialog__copy-actions,
+.ai-dialog__msg--assistant:focus-within .ai-dialog__copy-actions { opacity: 1; }
+@media (hover: none) { .ai-dialog__msg--assistant .ai-dialog__copy-actions { opacity: 1; } }
+
+/* 生成提示 / 状态行：紧贴线程，不额外画分隔线。 */
+.ai-dialog__note { margin: var(--lake-space-xs) 0 0; color: var(--lake-text-3); font-size: var(--lake-font-size-small); }
+.ai-dialog__error { margin: var(--lake-space-xs) 0 0; color: var(--lake-status-error); font-size: var(--lake-font-size-small); }
+.ai-dialog__presets { margin: 0 var(--lake-space-lg) var(--lake-space-sm); }
 .ai-dialog__presets .ln-segment { flex-wrap: wrap; height: auto; }
-/* 261021 P1：当前文档全文开关行（默认关；开启后整篇会随请求发给 AI 供应商，开聊后锁定）。 */
-.ai-dialog__doc { display: flex; align-items: center; flex-wrap: wrap; gap: var(--lake-space-sm); margin: 0 8px 6px; }
+.ai-dialog__doc { display: flex; align-items: center; flex-wrap: wrap; gap: var(--lake-space-sm); margin: 0 var(--lake-space-lg) var(--lake-space-sm); }
 .ai-dialog__doc-label { color: var(--lake-text-2); font-size: var(--lake-font-size-small); }
 .ai-dialog__doc-hint { color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); }
-.ai-dialog__copy-actions { display: inline-flex; gap: 2px; }
+
+/* 输入条：复用 .ln-input（边框/聚焦环/占位色都由原语给），这里只把它从单行改成可自增高。 */
+.ai-dialog__composer { height: auto; min-height: calc(var(--lake-ctl-h) + 8px); align-items: flex-start; margin: 0 var(--lake-space-lg) var(--lake-space-sm); padding: 9px 10px; gap: 8px; }
+.ai-dialog__composer .ai-dialog__field { max-height: 120px; padding: 2px 0; line-height: 1.55; resize: none; }
+.ai-dialog__clear { flex: 0 0 auto; margin-top: -2px; }
+
+/* 动作行：只保留一个主按钮（生成/发送），其余为 ghost；不再给整行加边框。 */
+.ai-dialog .ln-dialog__actions { flex: none; flex-wrap: nowrap; align-items: center; gap: var(--lake-space-xs); padding: var(--lake-space-sm) var(--lake-space-xl) var(--lake-space-md) var(--lake-space-lg); }
+.ai-dialog .ln-dialog__actions .ln-btn { padding: 2px 8px; gap: 5px; font-size: var(--lake-font-size-small); }
+
 /* 「复制为 Lake」的图标 = lake 四个字母（用户 261005：不用代码块图标）。 */
 .ai-dialog__lake-badge { font-size: var(--lake-font-size-nano); font-weight: var(--lake-font-weight-semibold); letter-spacing: .1px; }
 /* 复制按钮的 hover 说明：表面复用 kit 的 .ln-tip，这里只补定位（与 .bt-file-tip 同口径）。 */
 .ai-dialog__tip { position: fixed; pointer-events: none; }
 
 /* 请求发出即反馈；沿用全应用的 spin，不另造动效或等待计时器。 */
-.ai-dialog__progress {
-  display: flex;
-  align-items: center;
-  gap: var(--lake-space-sm);
-  color: var(--lake-text-3);
-  font-size: var(--lake-font-size-small);
-}
-/* 本文件是组件局部无层样式，显式提供减少动态效果的静态替代。 */
-@media (prefers-reduced-motion: reduce) {
-  .ai-dialog__progress .spin { animation: none; }
-}
+.ai-dialog__progress { display: flex; align-items: center; gap: var(--lake-space-sm); color: var(--lake-text-3); font-size: var(--lake-font-size-small); }
+@media (prefers-reduced-motion: reduce) { .ai-dialog__progress .spin { animation: none; } }
+
+/* 右下角拖拽把手：只改高度（用户 261004：上下可拖、左右不动）。 */
+.ai-dialog__grip { position: absolute; right: 2px; bottom: 2px; width: 12px; height: 12px; cursor: ns-resize; touch-action: none; border-right: 2px solid var(--lake-border-2); border-bottom: 2px solid var(--lake-border-2); }
+.ai-dialog__grip:hover { border-color: var(--lake-text-3); }
