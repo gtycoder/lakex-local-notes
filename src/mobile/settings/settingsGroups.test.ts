@@ -23,7 +23,8 @@ describe("移动端设置分组（对齐桌面）", () => {
 
   it("「导入」分组挂默认笔记本选择器（打开时默认选中当前值）", () => {
     expect(DRAWER).toMatch(/type View = [^;]*"import"/);
-    expect(DRAWER).toContain('{ key: "import", label: "导入", icon: Download }');
+    // v2（261107）：MENU 每项新增 tone（设置根页图标块取色）⇒ 用正则匹配，不再要求逐字节相同。
+    expect(DRAWER).toMatch(/\{ key: "import", label: "导入", icon: Download, tone: "[^"]+" \}/);
     expect(DRAWER).toContain('{view === "import" && (');
     expect(DRAWER).toContain('name="默认笔记本"');
     expect(DRAWER).toContain("<DefaultNotebookPickerSheet");

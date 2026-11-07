@@ -3,7 +3,7 @@
  * P4（261012）：版式原语已换成 src/mobile/ui/settingsPrimitives（mb-set-*），data-set-id 契约不变
  * （settingsSearch.ts 的 SETTING_ITEMS 继续生效）。
  * 注意：全部 App 设置为竖向（无横向 tab）；「回收站」并入总回收站（见 TrashList）。 */
-import { Suspense, lazy, useEffect, useRef, useState } from "react";
+import { Suspense, lazy, useEffect, useRef, useState, type CSSProperties } from "react";
 import { Archive, ArrowLeft, ChevronRight, Cloud, Download, HardDrive, History, Images, Info, List, Palette, Pencil, RefreshCw, Sparkles, Trash, TriangleAlert, X } from "lucide-react";
 import { loadSettings, saveSettings, fontSizeOptions, MAX_ATTACHMENT_MB_OPTIONS_SETTINGS, type AppSettings } from "../../lib/settings";
 import { Group, Item, Block, Switch, TextField, Field } from "../ui/settingsPrimitives";
@@ -52,19 +52,28 @@ type View = "menu" | "editor" | "appearance" | "history" | "import" | "resources
  * 顺序 = 云端与同步 → 备份与恢复 → AI → 编辑器 → 外观 → 历史 → 资源管理 → 清理缓存 → 回收站 → 关于。
  * 「云端与同步」只放联网配置与同步本身；「备份与恢复」只放恢复动作（移动端没有整库备份/导出）。
  */
-const MENU: { key: Exclude<View, "menu">; label: string; icon: typeof Cloud }[] = [
-  { key: "s3", label: "云端与同步", icon: Cloud },
-  { key: "backup", label: "备份与恢复", icon: Archive },
-  { key: "ai", label: "AI 助手", icon: Sparkles },
-  { key: "editor", label: "编辑器", icon: List },
-  { key: "appearance", label: "外观", icon: Palette },
-  { key: "history", label: "历史", icon: History },
+const MENU: { key: Exclude<View, "menu">; label: string; icon: typeof Cloud; tone: string }[] = [
+  { key: "s3", label: "云端与同步", icon: Cloud, tone: "#2a6b80" },
+  { key: "backup", label: "备份与恢复", icon: Archive, tone: "#3f5fa0" },
+  { key: "ai", label: "AI 助手", icon: Sparkles, tone: "#2b7350" },
+  { key: "editor", label: "编辑器", icon: List, tone: "#6b5bd6" },
+  { key: "appearance", label: "外观", icon: Palette, tone: "#b9822f" },
+  { key: "history", label: "历史", icon: History, tone: "#3f5fa0" },
   // 261106 task-86：分享导入相关设置（默认笔记本；分享 md 时落这里）。
-  { key: "import", label: "导入", icon: Download },
-  { key: "resources", label: "资源管理", icon: Images },
-  { key: "cache", label: "清理缓存", icon: HardDrive },
-  { key: "trash", label: "回收站", icon: Trash },
-  { key: "about", label: "关于", icon: Info },
+  { key: "import", label: "导入", icon: Download, tone: "#2a6b80" },
+  { key: "resources", label: "资源管理", icon: Images, tone: "#48b07a" },
+  { key: "cache", label: "清理缓存", icon: HardDrive, tone: "#8b93a1" },
+  { key: "trash", label: "回收站", icon: Trash, tone: "#b3382f" },
+  { key: "about", label: "关于", icon: Info, tone: "#5b6472" },
+];
+
+/** v2（261107）：设置根页分组卡（预览稿「分组卡 + 彩色图标块」）。
+ *  顺序仍按 MENU；这里只决定「哪几项合成一张卡」，不新增设置项、不改 data-set-id 契约。 */
+const MENU_GROUPS: Exclude<View, "menu">[][] = [
+  ["s3", "backup"],
+  ["ai", "editor", "appearance"],
+  ["history", "import", "resources", "cache"],
+  ["trash", "about"],
 ];
 
 const MENU_LABEL = (key: Exclude<View, "menu">) => MENU.find((m) => m.key === key)?.label ?? "";
@@ -687,16 +696,31 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
         </div>
       ) : (
         <div className="mobile-settings-list">
-          {MENU.map((m) => {
-            const Icon = m.icon;
-            return (
-              <button key={m.key} className="mb-row mobile-settings-row" onClick={() => { setView(m.key); setPreviewNoteId(null); }}>
-                <Icon size={20} className="mb-row__icon" />
-                <span className="mb-row__title">{m.label}</span>
-                <ChevronRight size={18} className="mb-row__chevron" />
-              </button>
-            );
-          })}
+          {MENU_GROUPS.map((group, gi) => (
+            <div key={gi} className="mobile-settings-card">
+              {group.map((key) => {
+                const m = MENU.find((item) => item.key === key);
+                if (!m) return null;
+                const Icon = m.icon;
+                const value = key === "appearance"
+                  ? (settings.theme === "light" ? "浅色" : settings.theme === "dark" ? "深色" : "暖色")
+                  : null;
+                return (
+                  <button
+                    key={m.key}
+                    className="mobile-settings-row"
+                    data-set-id={m.key}
+                    onClick={() => { setView(m.key); setPreviewNoteId(null); }}
+                  >
+                    <span className="mb-set-item__icon" style={{ "--c": m.tone } as CSSProperties}><Icon size={19} /></span>
+                    <span className="mb-set-name">{m.label}</span>
+                    {value ? <span className="mb-set-item__val">{value}</span> : null}
+                    <ChevronRight size={18} className="mb-row__chevron" />
+                  </button>
+                );
+              })}
+            </div>
+          ))}
         </div>
       )}
 
