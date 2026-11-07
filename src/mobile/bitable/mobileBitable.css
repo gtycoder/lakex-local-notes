@@ -168,10 +168,13 @@
 .mbt-cards__list { display: grid; gap: var(--lake-space-md); }
 .mbt-cards__list.cols-1 { grid-template-columns: 1fr; }
 .mbt-cards__list.cols-2 { grid-template-columns: 1fr 1fr; }
-.mbt-card {
+/* v2 架构收敛（261107）：细边白面 = 一个材质，选择器组共用；各卡片只留自己的布局/内容声明。 */
+.mbt-card, .mbt-field, .mbt-detail, .mbt-tile, .mbt-vcfg-row, .mbt-colbtn, .mbt-vcfg-fields, .mbt-viewlist-rows, .mbt-kanban-card, .mbt-gallery-card {
   border: .5px solid var(--lake-border-1);
   border-radius: var(--mb-radius-card);
   background: var(--lake-bg-panel);
+}
+.mbt-card {
   overflow: hidden;
   cursor: pointer;
 }
@@ -213,9 +216,6 @@
 .mbt-form-fields { display: flex; flex-direction: column; gap: var(--lake-space-md); padding: var(--lake-space-lg) var(--mb-page-pad) var(--lake-space-giant); }
 .mbt-field {
   padding: var(--lake-space-lg) var(--lake-space-lg) var(--lake-space-xl);
-  border: .5px solid var(--lake-border-1);
-  border-radius: var(--mb-radius-card);
-  background: var(--lake-bg-panel);
 }
 .mbt-field-head { display: flex; align-items: center; gap: var(--lake-space-sm); color: var(--lake-text-1); font-size: var(--lake-font-size-bodyMd); font-weight: var(--lake-font-weight-medium); }
 .mbt-field-no { color: var(--lake-text-4); font-size: var(--lake-font-size-tiny); font-weight: var(--lake-font-weight-regular); font-variant-numeric: tabular-nums; }
@@ -368,9 +368,6 @@
 .mbt-vcfg-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: var(--lake-space-lg); }
 .mbt-tile {
   padding: var(--lake-space-md) var(--lake-space-md) 0;
-  border: .5px solid var(--lake-border-1);
-  border-radius: var(--mb-radius-card);
-  background: var(--lake-bg-panel);
   overflow: hidden;
 }
 .mbt-tile.is-on { border-color: var(--lake-accent); }
@@ -388,9 +385,6 @@
   align-items: center;
   gap: var(--lake-space-lg);
   padding: var(--lake-space-lg);
-  border: .5px solid var(--lake-border-1);
-  border-radius: var(--mb-radius-card);
-  background: var(--lake-bg-panel);
 }
 .mbt-vcfg-row__main { flex: 1; min-width: 0; }
 .mbt-vcfg-row__t { color: var(--lake-text-1); font-size: var(--lake-font-size-body); }
@@ -398,9 +392,6 @@
 .mbt-vcfg-cols { display: grid; grid-template-columns: 1fr 1fr; gap: var(--lake-space-lg); }
 .mbt-colbtn {
   min-height: 64px;
-  border: .5px solid var(--lake-border-1);
-  border-radius: var(--mb-radius-card);
-  background: var(--lake-bg-panel);
   color: var(--lake-text-2);
   font-size: var(--lake-font-size-small);
 }
@@ -484,9 +475,6 @@
 }
 .mbt-kanban-card {
   padding: var(--lake-space-md) var(--lake-space-lg) var(--lake-space-lg);
-  border: .5px solid var(--lake-border-1);
-  border-radius: var(--mb-radius-card);
-  background: var(--lake-bg-panel);
   cursor: pointer;
 }
 .mbt-kanban-card:active { background: var(--lake-bg-hover); }
@@ -506,9 +494,6 @@
   padding-bottom: calc(var(--mobile-bottom-bar-height) + var(--mobile-bar-gap) + var(--mobile-bottom-safe-area) + var(--lake-space-xxl));
 }
 .mbt-gallery-card {
-  border: .5px solid var(--lake-border-1);
-  border-radius: var(--mb-radius-card);
-  background: var(--lake-bg-panel);
   overflow: hidden;
   cursor: pointer;
 }

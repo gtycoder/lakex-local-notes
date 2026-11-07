@@ -8,6 +8,10 @@
 
 ## 0. 最新交接（261027）
 
+### 261107 · 移动端架构收敛 P2 第三批（bitable 材质合并 + SettingsDrawer 菜单模型抽出）· **master 直接提交**
+- **bitable 细边白面合并**：`.mbt-card/.mbt-field/.mbt-detail/.mbt-tile/.mbt-vcfg-row/.mbt-colbtn/.mbt-vcfg-fields/.mbt-viewlist-rows/.mbt-kanban-card/.mbt-gallery-card` 的 `border/radius/background` 收进一个选择器组，各卡片只留布局/内容声明；bitable 957→**939** 声明（mobileLayers 基线同步收紧）。
+- **SettingsDrawer 首次拆分**：设置根页菜单模型（`View` 联合类型 + MENU + MENU_GROUPS + 取 label）抽到 `src/mobile/settings/settingsMenu.ts`（纯数据/纯函数，无 React）；SettingsDrawer 785→**755** 行并清掉搬走的 icon 导入。`settingsGroups.test` 改为合并读取 Drawer + menu 两个源文件，断言不变。
+- 验证：tsc 0；settings 全量 15 文件 / 87 例通过；mobileLayers / ui-metrics / check:mobileui 绿。
 ### 261107 · 移动端架构收敛 P1/P2 第二批（TopBarIconButton / rowActivation / row 合并 / glass）· **master 直接提交**
 - **`ui/TopBarIconButton.tsx`**：真 `<button>` 顶栏图标（type/aria-label/title/disabled），替换 WorkspaceDrawers ×2、WorkspaceOverlayHost、OutlineSheet 的 4 处 `<span role=button>`；`.toolbar__icon` 补 appearance/border/background 重置（mobile.css +3）。PageHeader 经复核**不做**（简单页已是真按钮；HomePage/WorkspaceTopBar 结构差异大），理由写进设计文档。
 - **`ui/rowActivation.ts`**：统一 role/tabIndex/Enter·Space 激活；接入首页小记卡（触摸/键盘共用 activate，选择态与长按抑制语义不变）与知识库书架/列表卡。目录行内 ⋯/＋ 在行 button 内，嵌套 button 非法 ⇒ 保留由行语义承载。

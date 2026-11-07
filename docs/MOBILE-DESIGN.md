@@ -438,7 +438,7 @@ node scripts/css-audit/drive.mjs 9335 scripts/css-audit/mobile-walkthrough.mjs  
 2. **P1 `EmptyState` 已完成（261107）**：`ui/EmptyState.tsx`，收口 43 处简单空态（25 文件，裸/inset/p/role 四类变体）；带自定义按钮/复杂布局的 6 处保留原生结构。
 3. **P1 TopBarIconButton 已完成（261107）**：`ui/TopBarIconButton.tsx` 把 4 处 `<span role=button>` 换成真 `<button>`（WorkspaceDrawers ×2 / WorkspaceOverlayHost / OutlineSheet），`.toolbar__icon` 补 appearance/border/background 重置。**PageHeader 经复核不做**：简单页已是真 button + `.mobile-topbar-title`，HomePage/WorkspaceTopBar 结构差异大，抽层只增耦合。
 4. **P2 `.mb-row` 吸收 `.mb-list-item` 已完成（261107）**：kit 588→575（含 glass +4）；list-item 仅保留 `gap:10px` 覆盖，active/meta 合并。
-5. **P2 `.mb-glass` 已完成（261107）**：kit +4 条声明（`.mb-glass`/`--bar`），替换 5 条稳定玻璃规则的重复 blur（mobile 1609→1603、floating −2、dock −2；顶栏滚动态因瞬态类保留）。**`.mb-surface`（bitable 细边白面）仍待做**（只在 bitable 内并选择器，预计 −30）；`.mb-empty--compact`/`.mb-iconbtn--xs` 需快照验收。
+5. **P2 `.mb-glass` / `.mb-surface` 已完成（261107）**：glass = kit +4 条声明替换 5 条稳定玻璃规则的重复 blur（mobile 1609→1603、floating −2、dock −2；顶栏滚动态因瞬态类保留）；surface = bitable 10 组细边白面的 border/radius/background 并成选择器组（bitable 957→**939**）。**`.mb-empty--compact` / `.mb-iconbtn--xs` 仍待做**（需设备快照验收）。
 5b. **P2 a11y 行激活部分完成（261107）**：`ui/rowActivation.ts` 接入首页小记卡 + 知识库书架/列表卡；目录行内 ⋯/＋ 在行 button 内（嵌套 button 非法），保留由行语义承载。
-6. **P2 大文件拆分**：HomePage 1116（QuickNoteCard/Panes）、MobileApp 965（boot/ProblemPage）、SettingsDrawer 785、EditorDock 844、MobileUsheetViewer 998、TagsHomeTab 608（先拆 SettingsDrawer/TagsHomeTab）。
-7. **P2 a11y**：9 处可点行缺 Enter/Space 激活（`rowActivationProps` 原语）、6 处 `span role=button` 需改真 button。
+6. **P2 大文件拆分（部分完成 261107）**：SettingsDrawer 785→**755**，菜单模型（View 类型/MENU/MENU_GROUPS/label）抽到 `settings/settingsMenu.ts`；剩余：SettingsDrawer 子页渲染、TagsHomeTab 608（Pane/Sheet/拖拽 hook）、HomePage 1116、MobileApp 965、EditorDock 844、MobileUsheetViewer 998。
+7. **P2 a11y 已完成（261107）**：`rowActivation` 接入首页小记卡 + 知识库书架/列表；`TopBarIconButton` 把 4 处非嵌套 `span role=button` 改真 button；目录行内 ⋯/＋ 因嵌套 button 非法保持行语义（已记录）。

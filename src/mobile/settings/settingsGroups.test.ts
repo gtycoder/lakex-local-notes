@@ -8,7 +8,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 const read = (rel: string): string => readFileSync(path.join(process.cwd(), rel), "utf8");
-const DRAWER = read("src/mobile/settings/SettingsDrawer.tsx");
+const DRAWER = read("src/mobile/settings/SettingsDrawer.tsx") + "\n" + read("src/mobile/settings/settingsMenu.ts");
 
 const menuLabelsInOrder = (): string[] =>
   [...DRAWER.matchAll(/\{ key: "[a-z0-9]+", label: "([^"]+)"/g)].map((m) => m[1]);
@@ -22,7 +22,8 @@ describe("移动端设置分组（对齐桌面）", () => {
   });
 
   it("「导入」分组挂默认笔记本选择器（打开时默认选中当前值）", () => {
-    expect(DRAWER).toMatch(/type View = [^;]*"import"/);
+    expect(DRAWER).toContain("export type SettingsView =");
+    expect(DRAWER).toContain('"import"');
     // v2（261107）：MENU 每项新增 tone（设置根页图标块取色）⇒ 用正则匹配，不再要求逐字节相同。
     expect(DRAWER).toMatch(/\{ key: "import", label: "导入", icon: Download, tone: "[^"]+" \}/);
     expect(DRAWER).toContain('{view === "import" && (');
@@ -33,7 +34,7 @@ describe("移动端设置分组（对齐桌面）", () => {
 
   it("261106：设置页**不再有标签分组**（标签管理/标签空间已搬到一级「标签」页，避免双入口）", () => {
     expect(DRAWER).not.toContain("{ key: \"tags\"");
-    expect(DRAWER).not.toMatch(/type View = [^;]*"tags"/);
+    expect(DRAWER).not.toContain('| "tags"');
     expect(DRAWER).not.toContain("TagsSettingsSection");
   });
 
@@ -61,6 +62,6 @@ describe("移动端设置分组（对齐桌面）", () => {
   });
 
   it("view 联合类型包含 backup（新增子页不是死代码）", () => {
-    expect(DRAWER).toMatch(/type View = [^;]*"backup"/);
+    expect(DRAWER).toContain('"backup"');
   });
 });

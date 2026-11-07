@@ -4,7 +4,7 @@
  * （settingsSearch.ts 的 SETTING_ITEMS 继续生效）。
  * 注意：全部 App 设置为竖向（无横向 tab）；「回收站」并入总回收站（见 TrashList）。 */
 import { Suspense, lazy, useEffect, useRef, useState, type CSSProperties } from "react";
-import { Archive, ArrowLeft, ChevronRight, Cloud, Download, HardDrive, History, Images, Info, List, Palette, Pencil, RefreshCw, Sparkles, Trash, TriangleAlert, X } from "lucide-react";
+import { Archive, ArrowLeft, ChevronRight, Cloud, Download, HardDrive, Images, List, Pencil, RefreshCw, TriangleAlert, X } from "lucide-react";
 import { loadSettings, saveSettings, fontSizeOptions, MAX_ATTACHMENT_MB_OPTIONS_SETTINGS, type AppSettings } from "../../lib/settings";
 import { Group, Item, Block, Switch, TextField, Field } from "../ui/settingsPrimitives";
 import { bridge } from "../bridge";
@@ -46,38 +46,7 @@ export interface SettingsDrawerProps {
   onOpenNote?: (noteId: string) => void;
 }
 
-type View = "menu" | "editor" | "appearance" | "history" | "import" | "resources" | "s3" | "backup" | "ai" | "cache" | "trash" | "about";
-
-/**
- * 设置分组（261105 晚，用户验收：对齐桌面）。
- * 顺序 = 云端与同步 → 备份与恢复 → AI → 编辑器 → 外观 → 历史 → 资源管理 → 清理缓存 → 回收站 → 关于。
- * 「云端与同步」只放联网配置与同步本身；「备份与恢复」只放恢复动作（移动端没有整库备份/导出）。
- */
-const MENU: { key: Exclude<View, "menu">; label: string; icon: typeof Cloud; tone: string }[] = [
-  { key: "s3", label: "云端与同步", icon: Cloud, tone: "#2a6b80" },
-  { key: "backup", label: "备份与恢复", icon: Archive, tone: "#3f5fa0" },
-  { key: "ai", label: "AI 助手", icon: Sparkles, tone: "#2b7350" },
-  { key: "editor", label: "编辑器", icon: List, tone: "#6b5bd6" },
-  { key: "appearance", label: "外观", icon: Palette, tone: "#b9822f" },
-  { key: "history", label: "历史", icon: History, tone: "#3f5fa0" },
-  // 261106 task-86：分享导入相关设置（默认笔记本；分享 md 时落这里）。
-  { key: "import", label: "导入", icon: Download, tone: "#2a6b80" },
-  { key: "resources", label: "资源管理", icon: Images, tone: "#48b07a" },
-  { key: "cache", label: "清理缓存", icon: HardDrive, tone: "#8b93a1" },
-  { key: "trash", label: "回收站", icon: Trash, tone: "#b3382f" },
-  { key: "about", label: "关于", icon: Info, tone: "#5b6472" },
-];
-
-/** v2（261107）：设置根页分组卡（预览稿「分组卡 + 彩色图标块」）。
- *  顺序仍按 MENU；这里只决定「哪几项合成一张卡」，不新增设置项、不改 data-set-id 契约。 */
-const MENU_GROUPS: Exclude<View, "menu">[][] = [
-  ["s3", "backup"],
-  ["ai", "editor", "appearance"],
-  ["history", "import", "resources", "cache"],
-  ["trash", "about"],
-];
-
-const MENU_LABEL = (key: Exclude<View, "menu">) => MENU.find((m) => m.key === key)?.label ?? "";
+import { SETTINGS_MENU as MENU, SETTINGS_MENU_GROUPS as MENU_GROUPS, settingsMenuLabel as MENU_LABEL, type SettingsView as View } from "./settingsMenu";
 
 export function SettingsDrawer(props: SettingsDrawerProps) {
   const { open, onClose, onRefresh, onOpenNote } = props;
