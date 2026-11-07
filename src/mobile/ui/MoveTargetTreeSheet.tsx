@@ -11,6 +11,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Check, FolderOpen } from "lucide-react";
 import { MobileSheet } from "./MobileSheet";
 import { SheetFooter } from "./SheetFooter";
+import { EmptyState } from "./EmptyState";
 
 export interface MoveTargetNode {
   id: string;
@@ -73,9 +74,9 @@ export function MoveTargetTreeSheet({ open, nodes, currentParentId, excludedIds,
         />
       </span>
       {notebooks.length === 0 ? (
-        <div className="mb-empty">还没有笔记本：先新建一个知识库</div>
+        <EmptyState>还没有笔记本：先新建一个知识库</EmptyState>
       ) : rows.length === 0 ? (
-        <div className="mb-empty">没有匹配的笔记本</div>
+        <EmptyState>没有匹配的笔记本</EmptyState>
       ) : (
         <div className="mb-tree-list">
           {rows.map((node) => {

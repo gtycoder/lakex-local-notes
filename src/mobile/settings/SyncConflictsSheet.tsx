@@ -18,6 +18,8 @@ import { bridge } from "../bridge";
 import { MobileSheet } from "../ui/MobileSheet";
 import { confirmMobile } from "../ui/ConfirmDialog";
 import { showToast } from "../ui/toastBus";
+import { toastActionError } from "../lib/actionError";
+import { EmptyState } from "../ui/EmptyState";
 
 export const SYNC_CONFLICT_KIND_LABEL: Record<SyncConflictKind, string> = {
   remote_wins: "远端覆盖本地",
@@ -130,7 +132,7 @@ export function SyncConflictsSheet({ open, onClose, onOpenNote, onChanged }: Syn
       await bridge.ackSyncConflicts(ids);
       await afterChange();
     } catch (reason) {
-      if (aliveRef.current) showToast("标记已读失败：" + getNativeErrorMessage(reason), { type: "error" });
+      if (aliveRef.current) toastActionError("标记已读", reason);
     } finally {
       if (aliveRef.current) setBusyKey(null);
     }
@@ -161,7 +163,7 @@ export function SyncConflictsSheet({ open, onClose, onOpenNote, onChanged }: Syn
       if (aliveRef.current) showToast("已恢复本地版本；下次同步会覆盖云端");
       await afterChange();
     } catch (reason) {
-      if (aliveRef.current) showToast("恢复失败：" + getNativeErrorMessage(reason), { type: "error" });
+      if (aliveRef.current) toastActionError("恢复", reason);
     } finally {
       if (aliveRef.current) setBusyKey(null);
     }
@@ -169,10 +171,10 @@ export function SyncConflictsSheet({ open, onClose, onOpenNote, onChanged }: Syn
 
   return (
     <MobileSheet open={open} title="同步记录" onClose={onClose}>
-      {error && <p className="mb-empty mb-empty--inset" role="alert">同步记录暂不可用：{error}</p>}
-      {!error && items === null && <p className="mb-empty mb-empty--inset">读取中…</p>}
+      {error && <EmptyState inset role="alert">同步记录暂不可用：{error}</EmptyState>}
+      {!error && items === null && <EmptyState inset>读取中…</EmptyState>}
       {!error && items !== null && items.length === 0 && (
-        <div className="mb-empty mb-empty--inset">还没有同步记录</div>
+        <EmptyState inset>还没有同步记录</EmptyState>
       )}
       {!error && items !== null && items.length > 0 && (
         <div className="mb-set-items">

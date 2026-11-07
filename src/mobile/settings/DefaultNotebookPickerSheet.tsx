@@ -5,6 +5,7 @@
 import { Check } from "lucide-react";
 import { MobileSheet } from "../ui/MobileSheet";
 import { SheetFooter } from "../ui/SheetFooter";
+import { EmptyState } from "../ui/EmptyState";
 
 export interface DefaultNotebookOption {
   id: string;
@@ -33,7 +34,7 @@ export function DefaultNotebookPickerSheet({ open, notebooks, currentId, busy, t
       footer={<SheetFooter cancel={{ label: "取消", disabled: busy, onClick: onClose }} />}
     >
       {notebooks.length === 0 ? (
-        <div className="mb-empty">还没有笔记本：先新建一个知识库</div>
+        <EmptyState>还没有笔记本：先新建一个知识库</EmptyState>
       ) : (
         <div className="mb-set-items">
           {notebooks.map((notebook) => {

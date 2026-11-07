@@ -18,6 +18,7 @@ import { formatNoteInfoSize, formatNoteInfoTime, noteInfoRows } from "../../core
 import { bridge } from "../bridge";
 import { loadNoteTagIdsForNotes } from "../bridge/noteTagReads";
 import { resolveDocTagChips, type DocTagChipView } from "./docTagChips";
+import { EmptyState } from "./EmptyState";
 
 /** 附件/历史条目的渲染上限。**比桌面更小**（桌面 200）：移动端一次渲染过多节点更伤滚动；
  *  不是"与桌面同口径"——原注释这么写是错的，261016 顺手改正。 */
@@ -91,8 +92,8 @@ export function NoteInfoSheet({ noteFileId, title, onClose, onOpenHistory }: Not
       ariaLabel={info?.title || title || "文档属性"}
       onClose={onClose}
     >
-      {error && <p className="mb-empty mb-empty--inset">{error}</p>}
-      {!info && !error && <p className="mb-empty mb-empty--inset">读取中…</p>}
+      {error && <EmptyState inset>{error}</EmptyState>}
+      {!info && !error && <EmptyState inset>读取中…</EmptyState>}
       {info && (
         <div className="minfo">
           <dl className="minfo-rows">

@@ -11,6 +11,7 @@ import { lakeBridge, resolveScrollNode, type LakeEditorInstance } from "../../fe
 import { execEditorCommand } from "./execCommand";
 import { MobileSheet } from "../ui/MobileSheet";
 import { reportMobileActionError } from "../lib/reportMobileActionError";
+import { EmptyState } from "../ui/EmptyState";
 
 interface TocEntry {
   id?: string;
@@ -88,7 +89,7 @@ export function OutlineSheet({ open, editor, onClose, side, rail, pinned = false
   };
 
   const list = entries.length === 0 ? (
-    <p className="mb-empty mb-empty--inset">暂无标题</p>
+    <EmptyState inset>暂无标题</EmptyState>
   ) : (
     entries.filter((e) => e.id && e.text).map((e) => (
       <button

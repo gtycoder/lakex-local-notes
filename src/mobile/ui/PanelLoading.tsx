@@ -1,9 +1,10 @@
 import { ArrowLeft, X } from "lucide-react";
 import { MobileSheet } from "./MobileSheet";
+import { EmptyState } from "./EmptyState";
 
 /** 按需模块加载期间沿用目标面板的壳，立即反馈且仍可返回，不载入业务依赖。 */
 export function PanelLoading({ kind, title, onClose }: { kind: "settings" | "search" | "page"; title: string; onClose(): void }) {
-  const content = <div className="mb-empty" role="status">正在加载{title}…</div>;
+  const content = <EmptyState role="status">正在加载{title}…</EmptyState>;
   if (kind === "search") return <MobileSheet open title={title} onClose={onClose} className="mb-sheet--search">{content}</MobileSheet>;
   return <>
     {kind === "settings" && <div className="mobile-settings-mask" onClick={onClose} />}

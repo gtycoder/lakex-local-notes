@@ -10,7 +10,6 @@ import { MobileNodeIconGlyph } from "../ui/NodeIconGlyph";
 import { bridge } from "../bridge";
 import type { LakeEditorInstance } from "../../features/editor/lakeRuntime";
 import { showToast } from "../ui/toastBus";
-import { getNativeErrorMessage } from "../../lib/nativeErrors";
 import { useNotebookTabs } from "./useNotebookTabs";
 import { useNotebookTreeData } from "./useNotebookTreeData";
 import { useNotebookTreeActions } from "./useNotebookTreeActions";
@@ -50,6 +49,7 @@ export type { NotebookTreeItem } from "./useNotebookTreeData";
 export type { PadPanelMode } from "./shellModel";
 import type { TreeNode } from "../../lib/types";
 import { mobileAccentVars } from "../../core/mobileAccent";
+import { toastActionError } from "../lib/actionError";
 
 /** 缺正文提示去重（模块级 = 整个 App 会话；每篇只提示一次，连点不刷屏）。 */
 const missingBodyNotifiedThisSession = new Set<string>();
@@ -104,7 +104,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   /** 实例内正文（usheet / board）的同步 capture：完成/关标签前现取最新 body，绕过防抖。 */
   const liveBodyCapturesRef = useRef<Map<string, () => string | null>>(new Map());
   const reportReadError = useCallback((reason: unknown) => {
-    showToast("打开文档失败：" + getNativeErrorMessage(reason), { type: "error" });
+    toastActionError("打开文档", reason);
   }, []);
   const reportReadMissing = useCallback((id: string) => {
     // 每篇每会话只提示一次（连点同一篇不刷屏）；文案与资源管理入口共用单一来源。

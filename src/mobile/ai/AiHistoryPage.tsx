@@ -13,6 +13,7 @@ import { pushBackHandler } from "../ui/backStack";
 import { confirmMobile } from "../ui/ConfirmDialog";
 import { AiMarkdown } from "./AiMarkdown";
 import { AiMessageImages } from "./AiMessageImages";
+import { EmptyState } from "../ui/EmptyState";
 
 export interface AiHistoryPageProps {
   open: boolean;
@@ -135,8 +136,8 @@ export function AiHistoryPage({ open, onClose, onList, onDetail, onContinue, onD
             </span>
           </div>
           <div className="ai-body ai-history-body">
-            {detailLoading && <div className="mb-empty mb-empty--inset">读取中…</div>}
-            {!detailLoading && items.length === 0 && <div className="mb-empty mb-empty--inset">{query.trim() ? "没有匹配的对话" : "还没有历史对话"}</div>}
+            {detailLoading && <EmptyState inset>读取中…</EmptyState>}
+            {!detailLoading && items.length === 0 && <EmptyState inset>{query.trim() ? "没有匹配的对话" : "还没有历史对话"}</EmptyState>}
             {items.map((item) => (
               <button key={item.id} type="button" className="mb-row mb-row--two-line ai-history-row" onClick={() => void openDetail(item.id)}>
                 <span className="mb-row__main">

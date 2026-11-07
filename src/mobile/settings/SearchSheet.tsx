@@ -28,6 +28,7 @@ import { bridge } from "../bridge";
 import { MobileSheet } from "../ui/MobileSheet";
 import { reportMobileActionError } from "../lib/reportMobileActionError";
 import { getNativeErrorMessage } from "../../lib/nativeErrors";
+import { EmptyState } from "../ui/EmptyState";
 
 export interface SearchSheetProps {
   open: boolean;
@@ -150,7 +151,7 @@ export function SearchSheet(props: SearchSheetProps) {
       </div>
       <p className="mobile-search-hint">{searchScopeHint(scope)}</p>
       <div className="mobile-search-results" aria-busy={searching}>
-        {searching && <div className="mb-empty" role="status">搜索中…</div>}
+        {searching && <EmptyState role="status">搜索中…</EmptyState>}
         {searchError && <div className="mb-empty" role="alert">
           <div>搜索失败：{searchError}</div>
           <button className="mb-btn mb-btn--secondary" onClick={() => setRetry((value) => value + 1)}>重试搜索</button>
@@ -173,7 +174,7 @@ export function SearchSheet(props: SearchSheetProps) {
             </div>
           </div>
         )}
-        {showIdleEmpty && <div className="mb-empty">{empty!.message}</div>}
+        {showIdleEmpty && <EmptyState>{empty!.message}</EmptyState>}
         {/* 无结果引导：非「全部」范围给「放宽/清空标签筛选」的直接动作（移动端没有 hover，行动要可见可点）。 */}
         {showNoResults && (
           <div className="mb-empty">

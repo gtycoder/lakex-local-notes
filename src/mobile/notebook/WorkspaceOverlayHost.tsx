@@ -8,6 +8,7 @@ import { NoteInfoSheet } from "../ui/NoteInfoSheet";
 import { NoteTagsSheet } from "./NoteTagsSheet";
 import type { NotebookTab } from "./useNotebookTabs";
 import type { NotebookTreeItem } from "./useNotebookTreeData";
+import { EmptyState } from "../ui/EmptyState";
 
 /**
  * 工作区浮层宿主（261103 P9-5b 拆件，原 NotebookWorkspace 内联 JSX，未改行为/DOM）：
@@ -102,7 +103,7 @@ export function WorkspaceOverlayHost(props: WorkspaceOverlayHostProps) {
               <span className="toolbar__icon" role="button" tabIndex={0} onClick={props.onCloseTabs} aria-label="关闭"><X /></span>
             </div>
             <div className="mobile-model-body">
-              {tabs.length === 0 && <div className="mb-empty">暂无打开的文档</div>}
+              {tabs.length === 0 && <EmptyState>暂无打开的文档</EmptyState>}
               {tabs.map((t) => (
                 <div key={t.id} className={"mb-row" + (t.id === activeId ? " is-selected" : "")} onClick={() => props.onOpenTab(t.id)}>
                   {props.tabIconOf(t.id) && <span className="mb-tree-icon"><MobileNodeIconGlyph value={props.tabIconOf(t.id)} /></span>}
@@ -162,7 +163,7 @@ export function WorkspaceOverlayHost(props: WorkspaceOverlayHostProps) {
       {/* 历史版本 sheet（MOB-11：骨架交给 MobileSheet；正文类名 mb-list 逐字保留） */}
       {historyFor && (
         <MobileSheet open title="历史版本" bodyClassName="mb-list" onClose={props.onCloseHistory}>
-          {historyList.length === 0 && <p className="mb-empty mb-empty--inset">暂无历史版本</p>}
+          {historyList.length === 0 && <EmptyState inset>暂无历史版本</EmptyState>}
           {historyList.map((h) => (
             <div key={h.id} className="mb-row" onClick={() => props.onRestoreHistory(h.id)}>
               <span className="mb-row__title">{h.title || "无标题"}</span>

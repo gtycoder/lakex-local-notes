@@ -26,6 +26,7 @@ import { confirmTrashDocs, moveParentFromSnapshot, moveTargetsFromSnapshot, runD
 import { showToast } from "../ui/toastBus";
 import type { MoveTargetNode } from "../ui/MoveTargetTreeSheet";
 import type { QuickNoteTagSummary } from "../../core/quickNoteTags";
+import { toastActionError } from "../lib/actionError";
 
 export interface TreeSelectionMoveSheet {
   open: boolean;
@@ -107,7 +108,7 @@ export function useTreeSelection(options: UseTreeSelectionOptions) {
       setError(notice.text);
       showToast(notice.text, { type: "error" });
     } catch (err) {
-      showToast("创建副本失败：" + getNativeErrorMessage(err), { type: "error" });
+      toastActionError("创建副本", err);
     }
   }), [withBusy, selectedIds, loadTree, selection.exit, options.flushSaves]);
 
@@ -122,7 +123,7 @@ export function useTreeSelection(options: UseTreeSelectionOptions) {
       setMoveExcludedIds([...selectedIds]);
       setMoveOpen(true);
     } catch (err) {
-      showToast("读取移动目标失败：" + getNativeErrorMessage(err), { type: "error" });
+      toastActionError("读取移动目标", err);
     }
   }, [selectedIds]);
 
@@ -140,7 +141,7 @@ export function useTreeSelection(options: UseTreeSelectionOptions) {
       selection.exit();
       await loadTree();
     } catch (err) {
-      showToast("移动失败：" + getNativeErrorMessage(err), { type: "error" });
+      toastActionError("移动", err);
     }
   }), [withBusy, selectedIds, selection.exit, loadTree]);
 
@@ -159,7 +160,7 @@ export function useTreeSelection(options: UseTreeSelectionOptions) {
       selection.exit();
       await loadTree();
     } catch (err) {
-      showToast("打标签失败：" + getNativeErrorMessage(err), { type: "error" });
+      toastActionError("打标签", err);
     }
   }), [withBusy, selectedIds, selection.exit, loadTree]);
 
@@ -175,7 +176,7 @@ export function useTreeSelection(options: UseTreeSelectionOptions) {
       selection.exit();
       await loadTree();
     } catch (err) {
-      showToast("移入回收站失败：" + getNativeErrorMessage(err), { type: "error" });
+      toastActionError("移入回收站", err);
     }
   }), [withBusy, selectedIds, selection.exit, loadTree]);
 
@@ -199,7 +200,7 @@ export function useTreeSelection(options: UseTreeSelectionOptions) {
           setTagOptions(tagOptionsFromTags(tags));
           setTagOpen(true);
         } catch (err) {
-          showToast("读取标签失败：" + getNativeErrorMessage(err), { type: "error" });
+          toastActionError("读取标签", err);
         }
       })();
       return;

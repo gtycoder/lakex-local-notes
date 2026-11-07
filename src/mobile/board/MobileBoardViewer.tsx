@@ -34,6 +34,7 @@ import { native } from "../../lib/native";
 import { bridge } from "../bridge";
 import { createBoardValueCoalescer } from "../../features/board/boardValueCoalescer";
 import { installBoardInputDebugHooks, installBoardInputDiagnostics } from "../../features/board/boardInputDiagnostics";
+import { EmptyState } from "../ui/EmptyState";
 
 const DrawnixBoardCore = lazy(() => loadDrawnixBoardCore().then((m) => ({ default: m.default })));
 
@@ -423,7 +424,7 @@ export function MobileBoardViewer({ noteId, content, active, editing = false, on
       </div>
       {boardEmpty && (
         <div className="mobile-board-empty" role="status" data-board-empty>
-          <div className="mb-empty mb-empty--inset">空白画板{canEdit ? "，点上方工具开始绘制" : "，这篇画板还没有内容"}</div>
+          <EmptyState inset>空白画板{canEdit ? "，点上方工具开始绘制" : "，这篇画板还没有内容"}</EmptyState>
         </div>
       )}
     </div>

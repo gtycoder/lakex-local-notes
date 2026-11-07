@@ -4,6 +4,7 @@ import { DocumentEditor } from "../editor/DocumentEditor";
 import { MobileBoardViewer } from "../board/MobileBoardViewer";
 import type { LakeEditorInstance } from "../../features/editor/lakeRuntime";
 import type { NotebookTab } from "./useNotebookTabs";
+import { EmptyState } from "../ui/EmptyState";
 
 /** 表格 / 多维表视图按需加载：只有真的打开这类文档才进分包（首屏不含它们）。 */
 const MobileBitableViewer = lazy(() => import("../bitable/MobileBitableViewer").then((m) => ({ default: m.MobileBitableViewer })));
@@ -62,7 +63,7 @@ export function NotePaneHost(props: NotePaneHostProps) {
             onCapture={(capture) => { props.onCapture(t.id, capture); }}
           />
         ) : t.kind === "ink" ? (
-          <Suspense fallback={<div className="mb-empty">正在加载手写板…</div>}>
+          <Suspense fallback={<EmptyState>正在加载手写板…</EmptyState>}>
             <MobileInkPad
               noteId={t.id}
               content={t.content}
@@ -76,7 +77,7 @@ export function NotePaneHost(props: NotePaneHostProps) {
         ) : t.kind === "bitable" ? (
           // 多维表：移动端查看/编辑（同一份 core 数据模型与写入纯函数；正文 JSON 绝不给 Lake 编辑器）。
           // 只有当前活动页可编辑：切走后自动收起记录/字段面板，回来再恢复编辑态。
-          <Suspense fallback={<div className="mb-empty">正在加载多维表…</div>}>
+          <Suspense fallback={<EmptyState>正在加载多维表…</EmptyState>}>
             <MobileBitableViewer
               noteId={t.id}
               content={t.content}
@@ -91,7 +92,7 @@ export function NotePaneHost(props: NotePaneHostProps) {
           </Suspense>
         ) : t.kind === "usheet" ? (
           // 表格：移动端查看/编辑（同一套 Univer 内核；正文 JSON 绝不喂 Lake 编辑器）
-          <Suspense fallback={<div className="mb-empty">正在加载表格…</div>}>
+          <Suspense fallback={<EmptyState>正在加载表格…</EmptyState>}>
             <MobileUsheetViewer
               noteId={t.id}
               content={t.content}
@@ -103,9 +104,9 @@ export function NotePaneHost(props: NotePaneHostProps) {
           </Suspense>
         ) : t.kind !== "doc" ? (
           // 兜底防腐坏（AGENTS §3）：未知类型的正文不是 Lake HTML，**绝不允许** Lake 编辑器打开/保存。
-          <div className="mb-empty">
+          <EmptyState>
             {t.title || "此文档"}：该类型暂不支持在移动端查看，请在桌面端打开。
-          </div>
+          </EmptyState>
         ) : (
         <DocumentEditor
           note={{ id: t.id, title: t.title, content: t.content } as LocalNote}
@@ -139,7 +140,7 @@ export function NotePaneHost(props: NotePaneHostProps) {
           <span className="mb-skel mb-doc-skeleton__line mb-doc-skeleton__line--short" />
         </div>
       ) : (
-        <div className="mb-empty">暂无打开的文档，点底部「文档树」打开</div>
+        <EmptyState>暂无打开的文档，点底部「文档树」打开</EmptyState>
       )
     ) : null}
     </>

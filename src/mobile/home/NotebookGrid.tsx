@@ -12,6 +12,7 @@ import { Book, ChevronRight } from "lucide-react";
 import { useLongPress } from "../ui/useLongPress";
 import { MobileNodeIconGlyph } from "../ui/NodeIconGlyph";
 import { formatUpdatedAt } from "../lib/listTime";
+import { EmptyState } from "../ui/EmptyState";
 
 export interface NotebookGridProps {
   notebooks: TreeNode[];
@@ -53,7 +54,7 @@ export function NotebookGrid(props: NotebookGridProps) {
     onTouchCancel: longPress.onTouchCancel,
   });
   const openNotebook = (nb: TreeNode) => { if (suppressClick.current) return; onOpenNotebook(nb.id); };
-  if (notebooks.length === 0) return <div className="mb-empty">暂无知识库</div>;
+  if (notebooks.length === 0) return <EmptyState>暂无知识库</EmptyState>;
 
   // 书架视图：简约书卡（序号角标 + 图标 + 名称 + 文档数）
   if (view === "shelf") {

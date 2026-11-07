@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { pushBackHandler } from "../ui/backStack";
 import { useSwipeToClose } from "../ui/useSwipeToClose";
 import { AI_CORPUS_MAX_CHARS, AI_CORPUS_MAX_DOCS } from "./aiSession";
+import { EmptyState } from "../ui/EmptyState";
 
 export interface CorpusCandidate {
   id: string;
@@ -56,7 +57,7 @@ export function AiCorpusSheet({ open, candidates, selectedIds, onToggle, onStart
           </span>
         </div>
         <div className="mb-sheet__body ai-sheet__body">
-          {rows.length === 0 && <div className="mb-empty mb-empty--inset">没有匹配的文档</div>}
+          {rows.length === 0 && <EmptyState inset>没有匹配的文档</EmptyState>}
           {rows.map((doc) => {
             const on = selectedIds.includes(doc.id);
             const disabled = Boolean(doc.disabledReason);

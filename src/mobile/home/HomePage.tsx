@@ -27,7 +27,6 @@ import { MobileNodeIconPicker } from "../ui/NodeIconPicker";
 import { confirmMobile } from "../ui/ConfirmDialog";
 import { showToast } from "../ui/toastBus";
 import { reportMobileActionError } from "../lib/reportMobileActionError";
-import { getNativeErrorMessage } from "../../lib/nativeErrors";
 // 待办勾选 = 与桌面同一实现（纯函数改写正文里那一个 checkbox 卡值）。
 import { toggleTaskInBody } from "../../features/quickNotes/quickNotePreviewParser";
 import { bridge } from "../bridge";
@@ -56,6 +55,8 @@ import { quickNoteDetailOf, useQuickNoteDetailCache } from "./useQuickNoteDetail
 import { notifyMissingQuickNoteOnce } from "./missingQuickNoteNotice";
 import { useQuickNoteListModel } from "./useQuickNoteListModel";
 import { addQuickNoteTagId, buildQuickNoteTagOptions, type QuickNoteTag } from "../../core/quickNoteTags";
+import { toastActionError } from "../lib/actionError";
+import { EmptyState } from "../ui/EmptyState";
 
 // 完整小记编辑器（内含 Lake 内核）：**按需加载**，加载壳见 ./quickNoteComposerLazy（预取过则同步渲染、零 fallback）。
 
@@ -416,7 +417,7 @@ export function HomePage(props: HomePageProps) {
       if (saved) cacheQuickNoteDetail(noteId, quickNoteDetailOf(saved));
       await onQuickNotesChanged();
     } catch (error) {
-      showToast("更新待办失败：" + getNativeErrorMessage(error), { type: "error" });
+      toastActionError("更新待办", error);
     }
   };
 
@@ -781,7 +782,7 @@ export function HomePage(props: HomePageProps) {
               </div>
             )}
             {sortedQuickNotes.length === 0 ? (
-              <div className="mb-empty">{quickTagFilter.kind === "all" ? "暂无小记" : "该筛选下暂无小记"}</div>
+              <EmptyState>{quickTagFilter.kind === "all" ? "暂无小记" : "该筛选下暂无小记"}</EmptyState>
             ) : quickVirtualEnabled ? (
               <div
                 ref={quickCardsRef}

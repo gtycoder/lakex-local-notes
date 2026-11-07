@@ -64,6 +64,7 @@ import { useSheetCommandActions } from "./useSheetCommandActions";
 import { useNativeSheetFormulaBar } from "./useNativeSheetFormulaBar";
 import { MobileSignaturePad } from "./MobileSignaturePad";
 import { MobileSheetFormView, buildSheetFormRows, type SheetFormRow } from "./MobileSheetFormView";
+import { EmptyState } from "../ui/EmptyState";
 
 /** 是否带 URL scheme（data:/blob:/http(s): 原样；裸文件名才是我们的资产）。 */
 const HAS_SCHEME_RE = /^[a-z][a-z0-9+.-]*:/i;
@@ -905,7 +906,7 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
           onSearch={openFindDialog}
         />
       )}
-      {ready ? <div id={containerId} className="mobile-usheet-root" /> : <div className="mb-empty">正在加载表格…</div>}
+      {ready ? <div id={containerId} className="mobile-usheet-root" /> : <EmptyState>正在加载表格…</EmptyState>}
       {ready && editable && <div className="mb-usheet-chrome-spacer" aria-hidden="true" />}
       {ready && editable && (
         <SheetDock

@@ -70,6 +70,7 @@ import { mobileBitableHeaderModel } from "./mobileBitableHeader";
 import { bitableViewStateSummary, bitableViewStateTab } from "./mobileBitableViewState";
 import { readBitableRecordLayout, writeBitableRecordLayout } from "./mobileBitableViewPrefs";
 import { submitMobileForm } from "./mobileBitableForm";
+import { EmptyState } from "../ui/EmptyState";
 import {
   addMobileField, addMobileOption, addMobileRecord, deleteMobileField, deleteMobileRecord,
   isMobileEditableField, recordWindow, serializeBitableBody, setMobileCell,
@@ -237,7 +238,7 @@ export function MobileBitableViewer({ noteId, content, editing = false, onChange
     );
   }
   if (!doc || !table || !view || !layout) {
-    return <div className="mb-empty">这张多维表还没有数据表。</div>;
+    return <EmptyState>这张多维表还没有数据表。</EmptyState>;
   }
 
   const isFormView = view.type === "form";

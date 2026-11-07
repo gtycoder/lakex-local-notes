@@ -12,6 +12,7 @@ import { bridge } from "../bridge";
 import type { BatchNotesResult } from "../../core/batchNotes";
 import type { QuickNoteTag, QuickNoteTagSummary } from "../../core/quickNoteTags";
 import { confirmMobile } from "./ConfirmDialog";
+import { summarizeBatchResult } from "./batchNotesResult";
 import type { MoveTargetNode } from "./MoveTargetTreeSheet";
 
 export type DocBatchPayload =
@@ -31,7 +32,6 @@ export async function runDocBatch(
   ids: readonly string[],
   payload: DocBatchPayload,
 ): Promise<{ result: BatchNotesResult; text: string; detail: string; failed: number }> {
-  const { summarizeBatchResult } = await import("./batchNotesResult");
   const result = await bridge.batchNotes({ ...payload, ids: [...ids], space: "lake" });
   return {
     result,

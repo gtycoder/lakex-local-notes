@@ -24,6 +24,8 @@ import { duplicateResultNotice } from "../ui/duplicateNotesResult";
 import { duplicateNoteTitle } from "../../core/duplicateNotes";
 import { MoveTargetTreeSheet, type MoveTargetNode } from "../ui/MoveTargetTreeSheet";
 import type { QuickNoteTagSummary } from "../../core/quickNoteTags";
+import { toastActionError } from "../lib/actionError";
+import { EmptyState } from "../ui/EmptyState";
 
 export interface DocListItem {
   id: string;
@@ -208,7 +210,7 @@ export function DocListSheet({ open, documents, activeId, onPick, onClose }: Doc
       setBatchError(notice.text);
       showToast(notice.text, { type: "error" });
     } catch (error) {
-      showToast("创建副本失败：" + getNativeErrorMessage(error), { type: "error" });
+      toastActionError("创建副本", error);
     } finally {
       setBatchBusy(false);
     }
@@ -340,7 +342,7 @@ export function DocListSheet({ open, documents, activeId, onPick, onClose }: Doc
         onConfirm={(parentId) => { void applyBatch({ action: "move", parentId }); }}
       />
       {visible.length === 0 ? (
-        <p className="mb-empty mb-empty--inset">{activeTagId ? "该标签下暂无文档" : "暂无文档"}</p>
+        <EmptyState inset>{activeTagId ? "该标签下暂无文档" : "暂无文档"}</EmptyState>
       ) : (
         visible.map((d) => {
           const checked = selection.active && selection.isSelected(d.id);

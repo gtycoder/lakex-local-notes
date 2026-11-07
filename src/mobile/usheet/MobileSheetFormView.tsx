@@ -10,6 +10,7 @@
 import { useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { MobileSheet } from "../ui/MobileSheet";
+import { EmptyState } from "../ui/EmptyState";
 
 export interface SheetFormField {
   /** 字段名 = 第一行对应单元格；首行该列空时回退为列号（A/B/...）。 */
@@ -128,7 +129,7 @@ export function MobileSheetFormView({ open, rows, sheetName, onClose }: MobileSh
       }
     >
       {total === 0 || !row ? (
-        <div className="mb-empty mb-empty--inset">当前工作表没有数据行（第一行作为字段名）</div>
+        <EmptyState inset>当前工作表没有数据行（第一行作为字段名）</EmptyState>
       ) : (
         <>
           <div className="mb-usheet-form__meta">

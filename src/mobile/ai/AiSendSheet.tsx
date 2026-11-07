@@ -8,6 +8,7 @@ import { pushBackHandler } from "../ui/backStack";
 import { Switch } from "../ui/settingsPrimitives";
 import { useSwipeToClose } from "../ui/useSwipeToClose";
 import { AI_CORPUS_MAX_CHARS } from "./aiSession";
+import { EmptyState } from "../ui/EmptyState";
 
 export interface AiSendDoc { id: string; title: string; chars: number }
 
@@ -40,7 +41,7 @@ export function AiSendSheet({ open, docs, sendIds, onToggle, onAll, onClose }: A
         </div>
         <p className="ai-sheet__note">默认继承上一轮。改动只影响之后：会从资料块起重<strong>建缓存</strong>（本轮全价，之后恢复命中）。资料集在会话里固定。</p>
         <div className="mb-sheet__body ai-sheet__body">
-          {docs.length === 0 && <div className="mb-empty mb-empty--inset">会话里还没有资料。先选择资料，或这一轮直接不带资料发问。</div>}
+          {docs.length === 0 && <EmptyState inset>会话里还没有资料。先选择资料，或这一轮直接不带资料发问。</EmptyState>}
           {docs.map((doc) => (
             <Switch
               key={doc.id}

@@ -8,6 +8,11 @@
 
 ## 0. 最新交接（261027）
 
+### 261107 · 移动端架构收敛 P1（toastActionError / EmptyState）· **master 直接提交**
+- **`src/mobile/lib/actionError.ts`**：统一 `toastActionError(action, error, {suffix, report})` = `getNativeErrorMessage` + `reportMobileActionError` debug + `showToast("<动作>失败：<详情>")`；codemod 收口 22 处（MobileApp 4 / useTreeSelection 6 / TagsHomeTab 4 / SyncConflictsSheet 2 / useWorkspaceSession 2 / DocListSheet 1 / HomePage 1 / NotebookWorkspace 1），**文案逐字不变**。剩余 15 处错误取文案方式不同（Error.message / instanceof 三目 / 自定义后缀），保留并在原语台账注明。
+- **`src/mobile/ui/EmptyState.tsx`**：统一 `.mb-empty` 容器（inset / role=status|alert / className），收口 43 处简单空态（25 文件：AI 三处、设置各 Sheet、Tags、NotePaneHost、MoveTargetTreeSheet…）；带自定义按钮/复杂布局的 6 处保留原生结构。**零 CSS 变更**。
+- 测试：新增 `lib/actionError.test.ts`、`ui/EmptyState.render.test.tsx`；全量 vitest 766 文件 / 4914 例通过；tsc / ui-metrics / check:mobileui / check:core / diff-check 绿。
+- 设计文档 `docs/MOBILE-DESIGN.md` 的 backlog 已标注 P1 两项完成；剩余 P1 = PageHeader/TopBarIconButton，P2 = row 合并 / glass/surface / 大文件拆分 / a11y。
 ### 261107 · 移动端 UI 架构审计 + 原语抽取（SheetFooter / docBatch / listTime）+ 死样式清理 · **master 直接提交**
 - **审计方式**：两路只读并行审计（TSX 组件层 / CSS 样式层），产物落 `docs/MOBILE-DESIGN.md` 新增「UI 原语与架构审计（261107）」：分层事实（CSS 未分层、靠 import 顺序，禁止单文件加 @layer）、原语台账、CSS 去重结论与「不要做的合并」、后续 backlog（P1 toastActionError/EmptyState/PageHeader；P2 row 吸收 list-item、glass/surface、大文件拆分、a11y）。
 - **新增原语**：

@@ -17,6 +17,7 @@ import { MobileSheet } from "../ui/MobileSheet";
 import { showToast } from "../ui/toastBus";
 import { getNativeErrorMessage } from "../../lib/nativeErrors";
 import type { MissingNoteBody, MissingQuickNote } from "../data/missingBodies";
+import { EmptyState } from "../ui/EmptyState";
 import {
   docRecoveryLabel,
   missingRecoveryFailureText,
@@ -154,7 +155,7 @@ export function MissingBodiesList(props: MissingBodiesListProps) {
     return (
       <div className="mb-set-items">
         {feedbackLine}
-        {props.docs.length === 0 && <div className="mb-empty mb-empty--inset">没有缺正文的文档</div>}
+        {props.docs.length === 0 && <EmptyState inset>没有缺正文的文档</EmptyState>}
         {props.docs.map((doc) => (
           <div key={doc.id} className="mb-set-block">
             <div className="mb-set-block__name mb-ellipsis">{doc.title || "未命名文档"}</div>
@@ -186,7 +187,7 @@ export function MissingBodiesList(props: MissingBodiesListProps) {
   return (
     <div className="mb-set-items">
       {feedbackLine}
-      {props.quickNotes.length === 0 && <div className="mb-empty mb-empty--inset">没有缺小记</div>}
+      {props.quickNotes.length === 0 && <EmptyState inset>没有缺小记</EmptyState>}
       {props.quickNotes.map((item) => (
         <div key={item.id} className="mb-set-block">
           <div className="mb-set-block__name mb-ellipsis">{item.previewText || "小记"}</div>

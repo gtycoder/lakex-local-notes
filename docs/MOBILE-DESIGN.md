@@ -434,8 +434,8 @@ node scripts/css-audit/drive.mjs 9335 scripts/css-audit/mobile-walkthrough.mjs  
 
 ### 后续 backlog（按收益/风险，未做）
 
-1. **P1 `toastActionError(action, error)`**（`src/mobile/lib/actionError.ts`）：收口 37 处「动作失败 + getNativeErrorMessage + toast」；只收口不改措辞。
-2. **P1 `EmptyState`**（`ui/EmptyState.tsx`）：49 处 `.mb-empty` 的 6 种变体（裸/inset/p/role/带动作）统一容器；kit 的图标+说明+CTA 已就位。
+1. **P1 `toastActionError` 已完成（261107）**：`src/mobile/lib/actionError.ts`，收口 22 处 `showToast("X失败：" + getNativeErrorMessage(e))`（9 文件），文案逐字不变；其余 15 处用 `Error.message` / `instanceof` 三目 / 自定义后缀的入口按语义差异保留，迁移时再逐个确认。
+2. **P1 `EmptyState` 已完成（261107）**：`ui/EmptyState.tsx`，收口 43 处简单空态（25 文件，裸/inset/p/role 四类变体）；带自定义按钮/复杂布局的 6 处保留原生结构。
 3. **P1 PageHeader/TopBarIconButton**：8 处 `.mobile-topbar` + 4 处 `.mobile-settings-head` 的 3 种结构；HomePage（pager 折叠）与 WorkspaceTopBar（平板页签）先不接。
 4. **P2 `.mb-row` 吸收 `.mb-list-item`**（kit −26 声明）：两条规则近乎同构；同文件合并，不动 JSX。
 5. **P2 CSS 剩余合并**：`.mb-glass`（+4/−12）、`.mb-surface`（kit+3/bitable−30，需先腾预算）、`.mb-empty--compact`、`.mb-iconbtn--xs`；都需要设备快照验收。

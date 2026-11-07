@@ -22,6 +22,7 @@ import type { LongPressHandlers } from "../ui/useLongPress";
 import { MobileNodeIconGlyph } from "../ui/NodeIconGlyph";
 import { SelectionCheckbox } from "../ui/SelectionCheckbox";
 import type { NotebookTreeRow } from "./notebookTreeIndex";
+import { EmptyState } from "../ui/EmptyState";
 
 /** 超过这个行数才虚拟化：小树一次渲染更简单，也不会引入定位/测量开销。 */
 export const TREE_VIRTUAL_THRESHOLD = 60;
@@ -142,7 +143,7 @@ export function NotebookTreeList(props: NotebookTreeListProps) {
 
   return (
     <div className="side-panel-body" ref={setScrollNode}>
-      {rows.length === 0 && <div className="mb-empty">暂无文档，点右上新建</div>}
+      {rows.length === 0 && <EmptyState>暂无文档，点右上新建</EmptyState>}
       {virtualEnabled ? (
         <div style={{ position: "relative", height: virtualizer.getTotalSize() }}>
           {virtualItems.map((entry) => {

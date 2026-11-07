@@ -7,6 +7,7 @@ import { pushBackHandler } from "../ui/backStack";
 import { useSwipeToClose } from "../ui/useSwipeToClose";
 import { bridge } from "../bridge";
 import { AI_IMAGES_MAX, type AiPendingImage } from "./aiImages";
+import { EmptyState } from "../ui/EmptyState";
 
 interface DocRef { id: string; title: string }
 interface AssetItem { noteId: string; noteTitle: string; filename: string; mimeType: string; dataUrl?: string }
@@ -81,8 +82,8 @@ export function AiImageSheet({ open, docs, used, onConfirm, onClose }: AiImageSh
           <button type="button" className="mb-btn mb-btn--ghost mb-btn--sm" onClick={onClose}>取消</button>
         </div>
         <div className="mb-sheet__body ai-sheet__body">
-          {loading && <div className="mb-empty mb-empty--inset">读取中…</div>}
-          {!loading && items.length === 0 && <div className="mb-empty mb-empty--inset">资料文档里没有可发送的图片</div>}
+          {loading && <EmptyState inset>读取中…</EmptyState>}
+          {!loading && items.length === 0 && <EmptyState inset>资料文档里没有可发送的图片</EmptyState>}
           {groups.map((group) => (
             <div key={group[0].noteId} className="ai-img-group">
               <div className="ai-img-group__title">《{group[0].noteTitle}》，{group.length} 张</div>

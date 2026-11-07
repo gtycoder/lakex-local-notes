@@ -67,6 +67,7 @@ import "./brand-launch.css";
 import { PanelLoading } from "./ui/PanelLoading";
 import { consumeBack } from "./ui/backStack";
 import { DeferredPanel } from "./ui/DeferredPanel";
+import { toastActionError } from "./lib/actionError";
 const NotebookWorkspace = lazy(() => import("./notebook/NotebookWorkspace").then((m) => ({ default: m.NotebookWorkspace })));
 /** AI 全屏页按需加载：不进首页首屏（与内核/表格一样不加重入口）。 */
 const MobileAiPage = lazy(() => import("./ai/MobileAiPage").then((m) => ({ default: m.MobileAiPage })));
@@ -263,7 +264,7 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
     try {
       await mobileCachePort.clearDerivedCaches();
     } catch (reason) {
-      showToast("清理缓存失败：" + getNativeErrorMessage(reason), { type: "error" });
+      toastActionError("清理缓存", reason);
       return;
     }
     await boot();
@@ -286,7 +287,7 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
       setError(null);
       await boot();
     } catch (reason) {
-      showToast("从云端恢复失败：" + getNativeErrorMessage(reason), { type: "error" });
+      toastActionError("从云端恢复", reason);
     }
   }, [boot]);
 
@@ -457,7 +458,7 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
         // 一句话说清三态（成功 / 截断 / 部分页失败），只弹一个 toast。
         showToast(sharedPdfImportToast(imported));
       } catch (reason) {
-        showToast("PDF 导入失败：" + getNativeErrorMessage(reason), { type: "error" });
+        toastActionError("PDF 导入", reason);
         warnFeedback();
       }
       return;
@@ -479,7 +480,7 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
     shareQueueRef.current = new ShareQueue<SharedContent>({
       handle: processSharedContent,
       onOverflow: () => showToast(SHARE_QUEUE_FULL_HINT, { type: "error" }),
-      onError: (_item, reason) => showToast("分享处理失败：" + getNativeErrorMessage(reason), { type: "error" }),
+      onError: (_item, reason) => toastActionError("分享处理", reason),
     });
   }
 

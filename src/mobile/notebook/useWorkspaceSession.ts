@@ -3,10 +3,9 @@ import type { LakeEditorInstance } from "../../features/editor/lakeRuntime";
 import { bridge } from "../bridge";
 import { useAutoSave } from "../hooks/useAutoSave";
 import { reportMobileActionError } from "../lib/reportMobileActionError";
-import { getNativeErrorMessage } from "../../lib/nativeErrors";
 import { successFeedback } from "../ui/haptics";
-import { showToast } from "../ui/toastBus";
 import type { NotebookTab } from "./useNotebookTabs";
+import { toastActionError } from "../lib/actionError";
 
 /**
  * 工作区「会话与保存屏障」逻辑（261103 P10-①，原 NotebookWorkspace 内联代码逐字搬移，未改行为）：
@@ -49,7 +48,7 @@ export function useWorkspaceSession(options: UseWorkspaceSessionOptions) {
 
   // 自动保存：编辑态内容变化防抖 1s 落盘；flush 返回真实写盘 Promise，失败保留界面并提示。
   const reportAutoSaveError = useCallback((_id: string, reason: unknown) => {
-    showToast("保存失败：" + getNativeErrorMessage(reason), { type: "error" });
+    toastActionError("保存", reason);
   }, []);
   const { schedule: scheduleAutoSave, flush: flushAutoSave, cancel: cancelAutoSave } = useAutoSave(async (id, title, content, plain) => {
     await bridge.saveNote(id, title, content, null, plain);
@@ -164,7 +163,7 @@ export function useWorkspaceSession(options: UseWorkspaceSessionOptions) {
       try {
         await bridge.saveNote(active.id, active.title, nextContent);
       } catch (reason) {
-        showToast("保存失败：" + getNativeErrorMessage(reason), { type: "error" });
+        toastActionError("保存", reason);
         return;
       }
       successFeedback(); // 只有真正落盘后才提示完成

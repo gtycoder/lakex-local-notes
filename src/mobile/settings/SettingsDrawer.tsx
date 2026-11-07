@@ -33,6 +33,7 @@ import { showToast } from "../ui/toastBus";
 import { formatS3v3Diagnostics } from "../../core/s3v3Report";
 import { readImportDefaultNotebook, writeImportDefaultNotebook } from "./importSettings";
 import { DefaultNotebookPickerSheet, type DefaultNotebookOption } from "./DefaultNotebookPickerSheet";
+import { EmptyState } from "../ui/EmptyState";
 
 /** 回收站只读预览（内含 Lake 内核编辑器）：**按需加载**——设置页/首屏都不需要内核。 */
 const TrashPreviewPage = lazy(() => import("../trash/TrashPreviewPage").then((m) => ({ default: m.TrashPreviewPage })));
@@ -396,7 +397,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                 </Block>
               )}
               {orphans.length === 0 && missingBodies.docs.length === 0 && missingBodies.quickNotes.length === 0 && (
-                <div className="mb-empty mb-empty--inset">暂无冗余资源</div>
+                <EmptyState inset>暂无冗余资源</EmptyState>
               )}
             </Group>
           )}
@@ -771,7 +772,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
 
       {previewNoteId && (
         <div className="mobile-settings-preview">
-          <Suspense fallback={<div className="mb-empty">正在加载预览…</div>}>
+          <Suspense fallback={<EmptyState>正在加载预览…</EmptyState>}>
             <TrashPreviewPage
               noteId={previewNoteId}
               onBack={() => setPreviewNoteId(null)}

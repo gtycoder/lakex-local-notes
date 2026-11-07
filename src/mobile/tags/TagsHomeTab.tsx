@@ -35,6 +35,8 @@ import { aggregateTagRows, tagCounts, type NoteTagLinks, type TagAggregateRow } 
 import { createTagFromName } from "./tagCreate";
 import { TagQuickNoteCard } from "./TagQuickNoteCard";
 import { MERGE_TAG_HINT, deleteTagConfirmBody } from "./tagManageCopy";
+import { toastActionError } from "../lib/actionError";
+import { EmptyState } from "../ui/EmptyState";
 
 export interface TagsHomeTabProps {
   /** 标签目录（App 快照；顺序 = 设备本地展示顺序）。 */
@@ -209,7 +211,7 @@ export function TagsHomeTab({ tags, notes, quickNotes, active, onOpenNote, onOpe
       await reloadAll();
       showToast("已合并标签");
     } catch (error) {
-      showToast("合并失败：" + getNativeErrorMessage(error), { type: "error" });
+      toastActionError("合并", error);
     } finally {
       setBusy(false);
     }
@@ -232,7 +234,7 @@ export function TagsHomeTab({ tags, notes, quickNotes, active, onOpenNote, onOpe
       await reloadAll();
       showToast("已删除标签");
     } catch (error) {
-      showToast("删除失败：" + getNativeErrorMessage(error), { type: "error" });
+      toastActionError("删除", error);
     } finally {
       setBusy(false);
     }
@@ -278,7 +280,7 @@ export function TagsHomeTab({ tags, notes, quickNotes, active, onOpenNote, onOpe
       setBusy(true);
       void bridge.reorderQuickNoteTags(nextOrder)
         .then(reloadAll)
-        .catch((error: unknown) => showToast("排序失败：" + getNativeErrorMessage(error), { type: "error" }))
+        .catch((error: unknown) => toastActionError("排序", error))
         .finally(() => setBusy(false));
     };
     document.addEventListener("touchmove", onMove, { passive: false });
@@ -313,7 +315,7 @@ export function TagsHomeTab({ tags, notes, quickNotes, active, onOpenNote, onOpe
       await onChanged();
       showToast("已移除标签");
     } catch (error) {
-      showToast("移除标签失败：" + getNativeErrorMessage(error), { type: "error" });
+      toastActionError("移除标签", error);
     } finally {
       setBusy(false);
     }
@@ -414,14 +416,14 @@ export function TagsHomeTab({ tags, notes, quickNotes, active, onOpenNote, onOpe
           </div>
 
           {rows.length === 0 ? (
-            <div className="mb-empty">该标签下暂无内容</div>
+            <EmptyState>该标签下暂无内容</EmptyState>
           ) : (
             // 文档 / 小记 = 各自一个白色强调块（段标题在块内）；块外页内距 16，块内 12/16 与设置页分组一致。
             <div className="mobile-quick-cards">
               <div className="mb-set-section">
                 <div className="mb-set-section__title">文档（{docs.length}）</div>
                 {docs.length === 0 ? (
-                  <div className="mb-empty mb-empty--inset">还没有文档</div>
+                  <EmptyState inset>还没有文档</EmptyState>
                 ) : (
                   docs.map(renderDocRow)
                 )}
@@ -429,7 +431,7 @@ export function TagsHomeTab({ tags, notes, quickNotes, active, onOpenNote, onOpe
               <div className="mb-set-section">
                 <div className="mb-set-section__title">小记（{quickRows.length}）</div>
                 {quickRows.length === 0 ? (
-                  <div className="mb-empty mb-empty--inset">还没有小记</div>
+                  <EmptyState inset>还没有小记</EmptyState>
                 ) : (
                   quickRows.map(renderQuickRow)
                 )}
@@ -460,7 +462,7 @@ export function TagsHomeTab({ tags, notes, quickNotes, active, onOpenNote, onOpe
               </div>
             </div>
           ) : tags.length === 0 ? (
-            <div className="mb-empty">还没有标签。新建一个标签，或在文档 / 小记里添加标签。</div>
+            <EmptyState>还没有标签。新建一个标签，或在文档 / 小记里添加标签。</EmptyState>
           ) : (
             // 列表行 = 一个白色强调块（行间发丝）；页头不塞进卡片。
             <div className="mobile-quick-cards">
@@ -599,7 +601,7 @@ export function TagsHomeTab({ tags, notes, quickNotes, active, onOpenNote, onOpe
             </div>
           ))}
         </div>
-        {mergeTargets.length === 0 && <div className="mb-empty">没有其他标签可合并</div>}
+        {mergeTargets.length === 0 && <EmptyState>没有其他标签可合并</EmptyState>}
       </MobileSheet>
     </div>
   );

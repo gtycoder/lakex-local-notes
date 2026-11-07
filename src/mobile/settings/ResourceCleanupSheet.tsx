@@ -13,6 +13,7 @@ import { Trash } from "lucide-react";
 import { MobileSheet } from "../ui/MobileSheet";
 import { formatBytes } from "../../lib/formatBytes";
 import type { OrphanAsset } from "./useSettingsSectionData";
+import { EmptyState } from "../ui/EmptyState";
 
 export type ResourceCleanupMode = "orphans" | "cloudGc";
 
@@ -59,7 +60,7 @@ export function ResourceCleanupSheet(props: ResourceCleanupSheetProps) {
     <MobileSheet open={props.open} title={title} onClose={props.onClose} footer={footer}>
       {isOrphans ? (
         <div className="mb-set-items">
-          {props.orphans.length === 0 && <div className="mb-empty mb-empty--inset">没有未引用的本地文件</div>}
+          {props.orphans.length === 0 && <EmptyState inset>没有未引用的本地文件</EmptyState>}
           {props.orphans.map((item) => (
             <div
               key={item.id}
