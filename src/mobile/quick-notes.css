@@ -62,7 +62,9 @@
 
 .quick-note-preview-paragraph { margin: 0; white-space: pre-wrap; }
 
-.quick-note-preview-heading { margin: 2px 0 0; font-size: var(--lake-font-size-bodyLg); }
+/* v2（261107）：内核/全局有一条未分层的 h1..h6 { color: rgba(0,0,0,.85) }，深色/纯黑下标题会发黑 ⇒
+   预览里的标题显式取文字色（class 选择器压过元素选择器，不新增 !important）。 */
+.quick-note-preview-heading { margin: 2px 0 0; font-size: var(--lake-font-size-bodyLg); color: var(--lake-text-1); }
 
 .quick-note-preview h1.quick-note-preview-heading { font-size: var(--lake-font-size-display); }
 

@@ -47,12 +47,14 @@ installFormFactor();
 // 启动即应用；saveSettings 的订阅回调让设置面板切换立即生效（桌面此前一直如此，移动端曾缺失
 // 导致「点深色没反应」：设置已持久化但 data-theme 不变）。
 // 系统栏（状态栏/导航栏）也跟着主题：深色下否则会留一条近白硬边（见 systemBars.ts）。
-const applyThemeEverywhere = (theme: ReturnType<typeof loadSettings>["theme"]): void => {
-  applyTheme(theme);
-  applySystemBarTheme(theme);
+const applyThemeEverywhere = (settings: ReturnType<typeof loadSettings>): void => {
+  applyTheme(settings.theme);
+  // 261107 v2：纯黑（OLED）档 = dark + html.oled（取值覆盖在 theme/dark.css 的 [data-theme="dark"].oled）。
+  document.documentElement.classList.toggle("oled", settings.oled === true && settings.theme === "dark");
+  applySystemBarTheme(settings.theme);
 };
-applyThemeEverywhere(loadSettings().theme);
-subscribeSettings((settings) => applyThemeEverywhere(settings.theme));
+applyThemeEverywhere(loadSettings());
+subscribeSettings((settings) => applyThemeEverywhere(settings));
 
 // 「退出时关闭全部标签」（261027）：冷启动先清掉上次标签存档；进入工作区时的恢复逻辑就会读到空。
 // 用「启动时清」而不是挂退出/后台回调：Android 杀进程没有可靠回调，切后台也不该清标签。

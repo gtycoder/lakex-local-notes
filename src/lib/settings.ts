@@ -14,6 +14,8 @@ export interface AppSettings {
   fontSize: number;
   /** 大纲增强：true=应用自建增强大纲（筛选/折叠/H 徽标/悬停/移动端大纲面板）；false=直接使用 Lake 原生大纲（对此不做任何改动）。 */
   outlineEnhance: boolean;
+  /** 纯黑（OLED）档（261107 移动端 v2）：仅在 theme=dark 时生效；桌面主题选择器不暴露该开关。 */
+  oled: boolean;
   /** 主题：见 src/lib/themes.ts 的 LAKE_THEMES（light/dark/warm），只本机、不跨端 */
   theme: ThemeMode;
   /** 最大同时打开标签数（0=不限；超限自动关闭最旧标签，当前标签与钉住标签除外）。 */
@@ -33,6 +35,7 @@ export interface AppSettings {
 export const DEFAULT_SETTINGS: AppSettings = {
   fontSize: 16,   // 内核正文字号默认（原 20 不在内核档位里）
   outlineEnhance: false,
+  oled: false,
   theme: "light",
   maxOpenTabs: 8,
   maxAttachmentBytes: DEFAULT_MAX_ATTACHMENT_BYTES,
@@ -77,6 +80,7 @@ export function loadSettings(): AppSettings {
       cached = {
         fontSize: FONT_SIZES.includes(parsed.fontSize ?? -1) ? (parsed.fontSize as number) : DEFAULT_SETTINGS.fontSize,
         outlineEnhance: parsed.outlineEnhance === true,
+        oled: parsed.oled === true,
         theme: isLakeThemeId(parsed.theme) ? parsed.theme : DEFAULT_THEME_ID,
         maxOpenTabs: MAX_OPEN_TAB_OPTIONS.includes(parsed.maxOpenTabs as number)
           ? (parsed.maxOpenTabs as number)

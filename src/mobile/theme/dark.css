@@ -1,6 +1,31 @@
 /* ── 移动端取色 · 深色（P1）────────────────────────────────────────────
  * 取值来源 = 本项目色阶（用户 261012 定稿：沿用我们的色阶、模仿语雀的形态）；
  * P1 阶段逐字节等于 src/styles/themes/dark.css（暖色移动端暂不做，见 docs/MOBILE-DESIGN §5.2）。 */
+/* v2（261107）：纯黑（OLED）档 —— html[data-theme="dark"].oled 时覆盖画布/纸面/玻璃/阴影。
+ * 只换取值，不改结构；默认深色不受影响。 */
+[data-theme="dark"].oled {
+  --mb-canvas-1: #000000;
+  --mb-canvas-2: #050506;
+  --mb-canvas-glow: color-mix(in srgb, var(--mb-accent) 14%, transparent);
+  --lake-bg-window: #000000;
+  --lake-bg-panel: #0f0f10;
+  --lake-bg-canvas: #0f0f10;
+  --lake-bg-raised: #141517;
+  --lake-bg-block: #191a1c;
+  --lake-bg-sunken: #080809;
+  --lake-bg-subtle: #121315;
+  --mb-glass-bg: linear-gradient(180deg, rgba(28,30,34,.90), rgba(14,15,17,.82));
+  --mb-glass-bg-bar: linear-gradient(180deg, rgba(8,9,10,.94), rgba(4,5,6,.86));
+  --mb-glass-border: rgba(255,255,255,.10);
+  --mb-glass-highlight: rgba(255,255,255,.12);
+  --mb-shadow-card: inset 0 0 0 .5px rgba(255,255,255,.09), 0 10px 24px -18px rgba(0,0,0,.95);
+  --mb-shadow-float: inset 0 .5px 0 rgba(255,255,255,.12), 0 10px 24px -10px rgba(0,0,0,.8), 0 28px 52px -24px rgba(0,0,0,.9);
+  --mb-shadow-bar: inset 0 -0.5px 0 rgba(255,255,255,.08);
+  --lake-border-1: #2c2e33;
+  --lake-border-2: #1c1e22;
+  --lake-border-strong: #3d4149;
+}
+
 [data-theme="dark"] {
   color-scheme: dark;
   /* 表面（260926：panel 与 canvas 取同值——浅色里两者都是 #ffffff，
