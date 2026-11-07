@@ -8,6 +8,13 @@
 
 ## 0. 最新交接（261027）
 
+### 261107 · 移动端 v2「柔光纸面」P3（共享元素转场：小记卡 → 写作卡）· **本地分支 `feat/mobile-paper-light`，未推送**
+- **实现**：`HomePage.tsx` 新增 `morphCardToComposer(card)` —— 卡片克隆按当前矩形 `position:fixed` 浮起（`.qn-card-morph`），rAF 后按 `--mb-dur-page / --mb-ease` 扩到写作卡容器（`quickScrollRef`）矩形，330ms 后 180ms 淡出并移除；真实写作卡随后挂载。`QuickNoteCard` 的 `onEdit` 改为传出 `cardRef.current`（转场起点）。`prefers-reduced-motion` 直接跳过；只动几何 + opacity，不参与布局/命中。
+- **CSS**：`mobile.css` 新增 `.qn-card-morph` / `.is-out`（固定层、卡面/卡阴影、`z: var(--mobile-z-page)`、`will-change`、淡出过渡）；mobileLayers 基线 mobile.css 1585 → 1596（+11）。
+- **门禁**：tsc 0；全量 `npx vitest run` **770 文件 / 4901 例通过**（12 skip）；ui-metrics / check:mobileui / check:core / `git diff --check` 绿。
+- **真机**：emulator-5554（debug APK）点小记卡 → 克隆卡片扩到写作卡（中间帧可见），写作卡与玻璃 dock 正常挂载；无运行时异常。截图 `/Users/admin/file/local-lake/preview/device/mobile-morph.png`、`mobile-composer.png`。
+- **未完成（下一轮）**：设置**子页**图标块接线、6 态/23 屏快照基线重烤、HANDOFF §1 计数回写、分支整理（桌面提交 `ed0d77fc` 仍在本分支）。**本批未推送**。
+
 ### 261107 · 移动端 v2「柔光纸面」P2（纯黑 OLED + 笔记本动态主色）· **本地分支 `feat/mobile-paper-light`，未推送**
 - **纯黑（OLED）档**：`AppSettings` 新增 `oled`（默认 false，仅 mobile 生效）；外观「主题」变三选一（浅色 / 深色 / 纯黑）。`src/mobile/main.tsx` 在 `theme==='dark' && oled` 时给 `html` 加 `.oled`；`theme/dark.css` 新增 `[data-theme="dark"].oled` 覆盖（画布 #000→#050506、纸面 #0f0f10、玻璃/阴影/边框全线加深）。**桌面主题选择器不出现该开关**。
 - **深色可读性修复**：内核/全局有一条未分层的 `h1..h6 { color: rgba(0,0,0,.85) }`，小记预览标题（`QuickNotePreview` 的 h1/h2）在深色/纯黑下发黑 ⇒ `quick-notes.css` 的 `.quick-note-preview-heading` 显式 `color: var(--lake-text-1)`（class 压元素选择器，不新增 !important）。
