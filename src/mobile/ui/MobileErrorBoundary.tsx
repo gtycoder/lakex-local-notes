@@ -76,7 +76,7 @@ export class MobileErrorBoundary extends Component<MobileErrorBoundaryProps, Sta
   render(): ReactNode {
     if (this.state.failed) {
       return (
-        <div className="mb-empty" role="alert">
+        <div className="mb-empty workspace-empty" role="alert">
           <div>{this.titleOf()}</div>
           <p className="mb-form__desc">已隔离：其它内容不受影响，本机数据未改动。</p>
           {this.state.message && <p className="mb-form__desc">{this.state.message}</p>}

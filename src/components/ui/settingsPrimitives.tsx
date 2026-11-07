@@ -147,7 +147,7 @@ export function NumField({ label, value, min, max, floor, fallback, onSave, step
   const accessibility = useSettingField();
   return (
     <input {...accessibility}
-      className="ln-text-field ln-w-200"
+      className="ln-text-field settings-text-field ln-w-200"
         type="number"
         step={step}
         aria-label={label}
@@ -171,7 +171,7 @@ export function TextField({ label, value, onSave, type = "text", placeholder }: 
   const accessibility = useSettingField();
   return (
     <input {...accessibility}
-      className="ln-text-field"
+      className="ln-text-field settings-text-field"
       type={type}
       aria-label={label}
       value={value}

@@ -118,7 +118,7 @@ export function BitableFormView(props: BitableFormViewProps) {
       <div className="bt-form-tabs">
         {/* 页签走 kit 层原语（.ln-tabs：墨线 + 可选计数徽标） */}
         <div className="ln-tabs">
-          <div className="ln-tabs__track" role="tablist" aria-label="表单模式">
+          <div className="ln-tabs__track bt-form-tabs__track" role="tablist" aria-label="表单模式">
             <button type="button" role="tab" aria-selected={mode === "edit"}
               className={"ln-tabs__item" + (mode === "edit" ? " is-active" : "")}
               onClick={() => setMode("edit")}>编辑表单</button>

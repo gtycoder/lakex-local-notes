@@ -152,7 +152,7 @@ function FilterMultiSelect({ field, rule, ctx, readOnly, onChange }: {
         <div className="bt-filter-multi">
           <label className="bt-filter-multi-search">
             <Search size={13} />
-            <input className="ln-input__field" value={query} placeholder="搜索" onChange={(event) => setQuery(event.target.value)} />
+            <input className="ln-input__field bt-filter-search-input" value={query} placeholder="搜索" onChange={(event) => setQuery(event.target.value)} />
           </label>
           <div className="bt-filter-multi-list">
             {visible.map((option) => (

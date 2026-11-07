@@ -370,3 +370,5 @@
 .mb-iconbtn.is-disabled { opacity: var(--lake-disabled-opacity); }
 /* 261108：原语直属图标尺寸（从 mobile.css 的跨所有权组合选择器收回）。 */
 .mb-btn > svg.lucide, .mb-iconbtn > svg.lucide, .mb-sheet__head > button > svg.lucide { width: 20px; height: 20px; flex-shrink: 0; }
+/* 261108：原语直属图标描边（从 mobile.css 的跨所有权组合选择器收回）。 */
+.mb-row__icon > svg.lucide, .mb-tree-icon > svg.lucide { stroke-width: 1.75; }

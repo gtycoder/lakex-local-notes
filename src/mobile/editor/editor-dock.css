@@ -129,7 +129,7 @@
  * 261013：9 个分类每个 ≈45.8px ⇒ 一屏放得下、不横滚（当时的口径）。
  * 261014 二次定稿：**一屏 8 格 + 横滑**（用户："一行 10 个可点目标确实太多"，对标微信）⇒ 每格固定 --mb-tap-min(44)，
  * 末尾动作键钉在轨道右侧不参与滚动；横滑安全性靠面板根的 data-prevent-swipe（外壳手势本就排除这类元素）。 */
-.med-panel-inner .mb-emoji-panel--fill .mb-emoji-cats { margin-inline: -12px; }
+.med-panel-inner .emoji-panel-cats { margin-inline: -12px; }
 .med-panel::-webkit-scrollbar, .med-panel-inner::-webkit-scrollbar { display: none; }
 /* 插入 / 更多面板：**方块网格**（261015 用户点单：照图1「图标在上、文字在下」的方块样式）。
    ⚠️ 这是 MOBILE-DESIGN「The White Rule」的**面板级例外** —— 用户 261015 为这个面板明确选了"浅灰底 + 白块"；

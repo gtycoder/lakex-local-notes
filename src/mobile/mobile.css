@@ -14,7 +14,7 @@ html, body, #root { margin: 0; padding: 0; height: var(--mb-app-h, 100%); }
 body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); color: var(--lake-text-1); -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; text-rendering: optimizeLegibility; }
 /* 自有 Lucide 图标描边与桌面一致；不改变内核/第三方图标与触达尺寸。 */
 .toolbar__button > svg.lucide, .toolbar__icon > svg.lucide,
-.mobile-bottom-bar__item > svg.lucide, .mb-row__icon > svg.lucide, .mb-tree-icon > svg.lucide,
+.mobile-bottom-bar__item > svg.lucide,
 .mobile-settings-close > svg.lucide,
 .minfo-title > svg.lucide { stroke-width: 1.75; }
 
@@ -600,7 +600,7 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
 
 .mobile-workspace-body { flex: 1; overflow: hidden; position: relative; display: flex; flex-direction: column; }
 .mobile-workspace-body .mobile-doc-body { height: 100%; }
-.mobile-workspace-body .mb-empty { flex: 1; display: flex; align-items: center; justify-content: center; }
+.mobile-workspace-body .workspace-empty { flex: 1; display: flex; align-items: center; justify-content: center; }
 
 /* 底部胶囊栏（思源 .mobile-bottom-bar：fixed 居中，圆角胶囊，宽度自适应） */
 .mobile-bottom-bar {
@@ -1279,7 +1279,6 @@ body.lake-mobile .ne-ui-boundary-popover:has(.ne-ui-search-card-menu) { top: 120
 /* ===== 按压反馈（261019；261029 收敛）=====
  * 不再做底色/颜色过渡（触屏按下即生效）；只有紧凑条目保留一次即时 scale(.98)，
  * 整行列表（目录行/设置行）不缩放 —— 整行缩放会显得"抖"，不采用。 */
-.mb-menusheet__item:active, .mb-actionsheet__item:active, .mb-actionsheet__cancel:active,
 .med-btn:active, .med-ins-item:active, .med-f-btn:active, .med-outline-item:active, .med-doc-item:active {
   transform: scale(.98);
 }

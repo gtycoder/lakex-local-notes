@@ -85,7 +85,7 @@ export function Select({ value, options, onChange, label, className, disabled, m
       <button {...accessibility}
         type="button"
         ref={triggerRef}
-        className={"ln-select" + (className ? " " + className : "")}
+        className={"ln-select settings-select" + (className ? " " + className : "")}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-label={label}

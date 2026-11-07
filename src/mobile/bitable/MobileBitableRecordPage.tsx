@@ -48,9 +48,9 @@ export function MobileBitableRecordPage({ noteId, table, fields, record, ctx, in
       <footer className="mbt-page-foot">
         <span className="mbt-page-note">这份收集表默认只读；记录内容不能在这里修改。</span>
         <div className="mbt-stepper">
-          <button type="button" className="mb-iconbtn" aria-label="上一条" disabled={total <= 1} onClick={onPrev}><ChevronLeft size={16} /></button>
+          <button type="button" className="mb-iconbtn mbt-stepper__btn" aria-label="上一条" disabled={total <= 1} onClick={onPrev}><ChevronLeft size={16} /></button>
           <span className="mbt-stepper__idx">{index + 1}/{Math.max(1, total)}</span>
-          <button type="button" className="mb-iconbtn" aria-label="下一条" disabled={total <= 1} onClick={onNext}><ChevronRight size={16} /></button>
+          <button type="button" className="mb-iconbtn mbt-stepper__btn" aria-label="下一条" disabled={total <= 1} onClick={onNext}><ChevronRight size={16} /></button>
         </div>
       </footer>
     </section>

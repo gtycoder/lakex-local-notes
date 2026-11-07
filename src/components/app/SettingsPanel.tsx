@@ -1133,7 +1133,7 @@ let verifiedS3Fingerprint: string | null = null;
                       <Select label="AI 供应商" value={aiProviderId} onChange={(v) => void switchAiProvider(v)} options={AI_PROVIDERS.map((p) => ({ value: p.id, label: p.label }))} />
                     </Field>
                     <Field itemId="ai-base-url" name="Base URL" desc={"留空即用该家默认；可改成任意 OpenAI 兼容端点，例如 " + activeDef.defaultBaseUrl + "。"} error={aiErr.baseUrl}>
-                      <span className="ln-input"><input className="ln-input__field" value={aiPending.baseUrl} placeholder={activeDef.defaultBaseUrl} spellCheck={false} onChange={(e) => setAiDraft((d) => ({ ...d, baseUrl: e.target.value }))} aria-label="Base URL" /></span>
+                      <span className="ln-input settings-input"><input className="ln-input__field" value={aiPending.baseUrl} placeholder={activeDef.defaultBaseUrl} spellCheck={false} onChange={(e) => setAiDraft((d) => ({ ...d, baseUrl: e.target.value }))} aria-label="Base URL" /></span>
                       <button className="ln-btn ln-btn--secondary" onClick={() => setAiDraft((d) => ({ ...d, baseUrl: activeDef.defaultBaseUrl }))}>恢复默认</button>
                     </Field>
                   </Section>
@@ -1145,7 +1145,7 @@ let verifiedS3Fingerprint: string | null = null;
                       desc="加密保存在本机（macOS Keychain），不同步、不上传；留空即沿用已保存的，输入新值即替换。"
                       error={aiErr.apiKey}
                     >
-                      <span className="ln-input">
+                      <span className="ln-input settings-input">
                         <input
                           className="ln-input__field"
                           type={aiKeyVisible ? "text" : "password"}
@@ -1181,7 +1181,7 @@ let verifiedS3Fingerprint: string | null = null;
                         ]} />
                       ) : (
                         <>
-                          <span className="ln-input"><input className="ln-input__field" value={aiPending.model} placeholder={activeDef.defaultModel || "模型名"} onChange={(e) => setAiDraft((d) => ({ ...d, model: e.target.value }))} aria-label="AI 模型" /></span>
+                          <span className="ln-input settings-input"><input className="ln-input__field" value={aiPending.model} placeholder={activeDef.defaultModel || "模型名"} onChange={(e) => setAiDraft((d) => ({ ...d, model: e.target.value }))} aria-label="AI 模型" /></span>
                           {aiModels && aiModels.length > 0 && <button className="ln-btn ln-btn--secondary" onClick={() => setAiManualModel(false)}>用列表</button>}
                         </>
                       )}

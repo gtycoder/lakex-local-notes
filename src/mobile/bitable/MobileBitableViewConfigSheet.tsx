@@ -404,7 +404,7 @@ export function MobileBitableViewConfigSheet({ open, table, view, layout, prefs,
                         {isTitle || isSubtitle
                           ? <span className="mbt-vcfg-field__tag">{isTitle ? "主标题" : "副标题"}</span>
                           : (
-                            <button type="button" className={"mb-switch" + (on ? " is-on" : "")} role="switch" aria-checked={on}
+                            <button type="button" className={"mb-switch mbt-vcfg-switch" + (on ? " is-on" : "")} role="switch" aria-checked={on}
                               aria-label={"展示 " + field.name} onClick={() => {
                                 const base = prefs.fieldIds ?? layout.fields.map((item) => item.id);
                                 const next = on ? base.filter((id) => id !== field.id) : [...base, field.id];

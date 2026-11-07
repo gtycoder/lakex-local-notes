@@ -74,7 +74,7 @@
 }
 .mbt-header__tabs::-webkit-scrollbar { display: none; }
 .mbt-header__spacer { flex: 1 1 auto; }
-.mbt-header .mb-iconbtn { width: var(--mb-ctl-h-sm); height: var(--mb-ctl-h-sm); }
+.mbt-header__btn, .mbt-header__tables { width: var(--mb-ctl-h-sm); height: var(--mb-ctl-h-sm); }
 .mbt-viewtab {
   flex: 0 0 auto;
   min-height: 34px;
@@ -337,7 +337,7 @@
 .mbt-page-foot { display: flex; align-items: center; gap: var(--lake-space-md); padding: 0 var(--mb-page-pad) var(--lake-space-xxl); }
 .mbt-page-note { flex: 1; color: var(--lake-text-4); font-size: var(--lake-font-size-micro); line-height: 1.5; }
 .mbt-stepper { display: flex; align-items: center; gap: 2px; padding: 2px; border: .5px solid var(--lake-border-1); border-radius: var(--lake-radius-pill); background: var(--lake-bg-panel); }
-.mbt-stepper .mb-iconbtn { width: 34px; height: 34px; }
+.mbt-stepper .mbt-stepper__btn { width: 34px; height: 34px; }
 .mbt-stepper__idx { min-width: 42px; color: var(--lake-text-2); font-size: var(--lake-font-size-tiny); text-align: center; font-variant-numeric: tabular-nums; }
 
 /* ── 视图配置面板 ───────────────────────────────────────────── */
@@ -405,7 +405,7 @@
 .mbt-vcfg-field:first-child { border-top: 0; }
 .mbt-vcfg-field__name { flex: 1; min-width: 0; color: var(--lake-text-1); font-size: var(--lake-font-size-small); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mbt-vcfg-field__tag { color: var(--lake-text-4); font-size: var(--lake-font-size-micro); }
-.mbt-vcfg-field .mb-switch { transform: scale(.86); }
+.mbt-vcfg-field .mbt-vcfg-switch { transform: scale(.86); }
 
 /* ── 视图列表 ───────────────────────────────────────────────── */
 .mbt-viewlist-rows { border: .5px solid var(--lake-border-1); border-radius: var(--mb-radius-card); background: var(--lake-bg-panel); overflow: hidden; margin-bottom: var(--lake-space-lg); }

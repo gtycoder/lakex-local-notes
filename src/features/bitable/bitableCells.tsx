@@ -71,7 +71,7 @@ export function FieldTypeGrid({ value, disabled, onPick }: { value?: string; dis
     <div className="bt-type-grid" role="listbox" aria-label="字段类型">
       {unknown && (
         <button type="button" className={"bt-menu-item ln-menu__item" + (unknown === value ? " is-selected" : "")} disabled={disabled} onClick={() => onPick(unknown)}>
-          <FieldTypeIcon type={unknown} /><span className="bt-menu-label ln-ellipsis">{unknown}（未知）</span><Check size={14} />
+          <FieldTypeIcon type={unknown} /><span className="bt-menu-label ln-ellipsis bt-type-ellipsis">{unknown}（未知）</span><Check size={14} />
         </button>
       )}
       {BITABLE_FIELD_TYPES.map((type) => (

@@ -19,7 +19,7 @@
 }
 
 /* 表单是居中版面：页签项在原语里居中，分隔线仍横贯整壳（几何由原语给，这里只调对齐） */
-.bt-form-tabs .ln-tabs__track { justify-content: center; }
+.bt-form-tabs .bt-form-tabs__track { justify-content: center; }
 
 .bt-form-canvas.is-preview {
   max-width: 760px;

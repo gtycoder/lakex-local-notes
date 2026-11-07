@@ -217,3 +217,5 @@
 }
 .mb-create__tile:active .mb-create__icon { background: var(--lake-bg-press); }
 .mb-create__label { font-size: var(--lake-font-size-tiny); line-height: 1; }
+/* 261108：菜单/动作面板按压反馈收回原语文件。 */
+.mb-menusheet__item:active, .mb-actionsheet__item:active, .mb-actionsheet__cancel:active { transform: scale(.98); }

@@ -55,7 +55,7 @@ export function EmojiPanel({ bucket = "icon", onPick, onClear, onBack, fill = fa
 
   return (
     <div className={"mb-emoji-panel" + (fill ? " mb-emoji-panel--fill" : "")} data-prevent-swipe>
-      <div className="mb-emoji-cats">
+      <div className="mb-emoji-cats emoji-panel-cats">
         {/* 分类轨道：**横滑**（用户 261014 二次定稿 —— 10 个可点目标挤一屏确实太多；微信也是一行 8 个）。
             横滑安全性：面板根已挂 `data-prevent-swipe`，外壳的 `usePanelDrag` / 弹层右滑关闭本就排除这类元素
             ⇒ 拖这条轨道只滚它自己，不会切 tab / 开大纲（261013 立的既有约定，未新造机制）。 */}

@@ -20,8 +20,12 @@ const PRIMITIVE_FILES = [
   "mobile/floating.css",
 ];
 /** 例外文件：kernel-theme = 内核 schema 未分层覆盖（AGENTS §3#14 明确保留）；compat = 思源 legacy 兼容层。 */
-const EXEMPT_FILES = new Set(["styles/kernel-theme.css", "styles/compat.css"]);
-const CROSS_OWNERSHIP_BASELINE = 14;
+const EXEMPT_FILES = new Set([
+  "styles/kernel-theme.css", // 内核 schema 未分层覆盖（AGENTS §3#14 保留）
+  "styles/compat.css",      // 思源 legacy 兼容层
+  "mobile/pad/pad.css",     // 平板外壳几何/状态单一归属（padCssOwnership 已钉死），不属于 feature 覆盖
+]);
+const CROSS_OWNERSHIP_BASELINE = 0;
 
 function primitiveClasses(): Set<string> {
   const names = new Set<string>();

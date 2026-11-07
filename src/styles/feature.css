@@ -37,7 +37,7 @@ pre {
 .name-prompt-dialog,
 .s3-transfer-dialog,
 .note-info-actions,
-.note-info-section-title > .ln-btn,
+.note-info-section-title > .note-info-btn,
 .sync-status-actions {
   --lake-ctl-h: var(--lake-ctl-h-settings);
   --lake-ctl-h-sm: var(--lake-ctl-h-settings-sm);
@@ -98,9 +98,9 @@ pre {
 /* flex-basis:0（不是 auto）：否则长说明按 max-content 撑开主列，flex-wrap 下会先把控件挤到下一行 */
 .settings-panel .config-item--field .config-item__main { flex-basis: 0; }
 .settings-panel .config-item--field .config-item__ctl { flex: 0 0 54%; min-width: 200px; justify-content: flex-start; }
-.settings-panel .config-item--field .config-item__ctl > .ln-text-field,
-.settings-panel .config-item--field .config-item__ctl > .ln-select { flex: 1 1 auto; width: auto; min-width: 0; }
-.settings-panel .config-item--field .config-item__ctl > .ln-input { flex: 1 1 auto; min-width: 0; }
+.settings-panel .config-item--field .config-item__ctl > .settings-text-field,
+.settings-panel .config-item--field .config-item__ctl > .settings-select { flex: 1 1 auto; width: auto; min-width: 0; }
+.settings-panel .config-item--field .config-item__ctl > .settings-input { flex: 1 1 auto; min-width: 0; }
 .settings-panel .config-item--field .config-item__error { flex: 1 1 100%; }
 /* 字段级错误 / 行内提示（此前 .settings-hint 没有任何定义，这些文案是裸文本） */
 .settings-panel .config-item__error,
