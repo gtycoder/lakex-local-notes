@@ -10,7 +10,8 @@ import type { BatchNotesActionShape, BatchNotesReasonShape, BatchNotesResultShap
 /** 动作名（界面文案；trash 一律叫「移入回收站」，用户 261106 定稿：删除 = 移入回收站）。 */
 export const BATCH_NOTES_ACTION_TEXT: Record<BatchNotesActionShape, string> = {
   move: "移动",
-  trash: "移入回收站",
+  trash: "删除",
+  "tag-add": "添加标签",
 };
 
 /** 逐条拒绝原因 → 可读说明（契约取值新增必须同步这里与移动端）。 */

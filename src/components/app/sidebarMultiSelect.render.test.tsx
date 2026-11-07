@@ -2,7 +2,7 @@
 // @vitest-environment jsdom
 /**
  * 桌面目录树多选（261106 task-81）：⌘/Ctrl 切换、Shift 区间（跳过笔记本）、Esc/点空白清空、
- * 右键批量菜单（文档：创建副本/移动/移入回收站；分组：移动）、batch_notes 实参、成功清空刷新、
+ * 右键批量菜单（文档：创建副本/移动/删除；分组：移动）、batch_notes 实参、成功清空刷新、
  * 部分失败保留选择 + 汇总提示；以及「创建副本」（261106）单条右键 + 多选菜单第 1 项 + duplicate_notes 实参。
  */
 import { act, createElement, type ReactNode } from "react";
@@ -10,7 +10,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { TreeNode } from "../../lib/types";
 
-const mocks = vi.hoisted(() => ({ batchNotes: vi.fn(), duplicateNotes: vi.fn(), listQuickNoteTags: vi.fn(), exportNotesBatch: vi.fn(), openExportDir: vi.fn(), pickExportDir: vi.fn() }));
+const mocks = vi.hoisted(() => ({ batchNotes: vi.fn(), duplicateNotes: vi.fn(), listQuickNoteTags: vi.fn(), createQuickNoteTag: vi.fn(), exportNotesBatch: vi.fn(), openExportDir: vi.fn(), pickExportDir: vi.fn() }));
 vi.mock("../../lib/native", () => ({ native: mocks }));
 
 // 浮层简化实现（与本目录其它 Sidebar 渲染测试同姿势）：只关心接线与实参。
@@ -48,6 +48,8 @@ beforeEach(() => {
   mocks.batchNotes.mockReset();
   mocks.duplicateNotes.mockReset();
   mocks.listQuickNoteTags.mockReset();
+  mocks.createQuickNoteTag.mockReset();
+  mocks.createQuickNoteTag.mockImplementation(async (name: string) => ({ id: "t_new", name, createdAt: "t", updatedAt: "t" }));
   mocks.pickExportDir.mockReset();
   mocks.pickExportDir.mockResolvedValue("/tmp/export");
   mocks.exportNotesBatch.mockReset();
@@ -183,34 +185,34 @@ describe("目录树多选：选择语义", () => {
     clickRow("n1", { metaKey: true });
     clickBarButton("全选");
     expect(barCount()).toBe("已选 4 项"); // g1 + n1 + n2 + n3
-    // 含分组 ⇒ 创建副本/移入回收站禁用；打标签入口已彻底移除
+    // 含分组 ⇒ 创建副本/删除禁用；添加标签对混选禁用
     expect(barButton("移动…")).toBeTruthy();
     expect(barButton("创建副本")?.disabled).toBe(true);
-    expect(barButton("移入回收站")?.disabled).toBe(true);
-    expect(barButton("打标签…")).toBeUndefined();
+    expect(barButton("删除")?.disabled).toBe(true);
+    expect(barButton("添加标签…")?.disabled).toBe(true);
   });
 });
 
 describe("目录树多选：批量动作", () => {
-  it("文档：移入回收站（二次确认）→ batch_notes.trash 实参；成功后刷新 + 清空", async () => {
+  it("文档：删除（二次确认）→ batch_notes.trash 实参；成功后刷新 + 清空", async () => {
     render();
     clickRow("n1", { metaKey: true });
     clickRow("n2", { metaKey: true });
-    clickBarButton("移入回收站");
-    expect(document.body.textContent).toContain("把 2 项移入回收站？");
-    await act(async () => { dialogButton("移入回收站")!.click(); await Promise.resolve(); await Promise.resolve(); });
+    clickBarButton("删除");
+    expect(document.body.textContent).toContain("删除 2 项？");
+    await act(async () => { dialogButton("删除")!.click(); await Promise.resolve(); await Promise.resolve(); });
 
     expect(mocks.batchNotes).toHaveBeenCalledWith({ action: "trash", ids: ["n1", "n2"] });
     expect(props.onRefreshTree).toHaveBeenCalled();
     expect(barCount()).toBeUndefined();
-    expect(document.querySelector('[role="status"]')?.textContent).toBe("已移入回收站 2 项");
+    expect(document.querySelector('[role="status"]')?.textContent).toBe("已删除 2 项");
   });
 
-  it("分组（或混选）：只有「移动…」，移动目标层排除选中项及其后代，实参带 parentId", async () => {
+  it("分组（或混选）：移动可用，删除/添加标签禁用；移动目标层排除选中项及其后代", async () => {
     render();
     clickRow("g1", { metaKey: true });
     expect(barButton("移动…")).toBeTruthy();
-    expect(barButton("移入回收站")?.disabled).toBe(true);
+    expect(barButton("删除")?.disabled).toBe(true);
     clickBarButton("移动…");
     // 261106 task-90：移动目标 = 思源式目录树弹窗；选中 g1 ⇒ g1/g2 禁用并给原因
     expect(document.querySelector('[role="tree"][aria-label="目标位置"]')).not.toBeNull();
@@ -225,6 +227,27 @@ describe("目录树多选：批量动作", () => {
     expect(mocks.batchNotes).toHaveBeenCalledWith({ action: "move", ids: ["g1"], parentId: "nb" });
   });
 
+  it("文档：添加标签…只追加，可现场新建标签", async () => {
+    render();
+    clickRow("n1", { metaKey: true });
+    clickRow("n2", { metaKey: true });
+    clickBarButton("添加标签…");
+    await act(async () => { await Promise.resolve(); });
+    expect(document.body.textContent).toContain("给 2 项添加标签");
+    const tagOption = [...document.querySelectorAll<HTMLButtonElement>('[role="option"]')].find((btn) => (btn.textContent ?? "").includes("灵感"))!;
+    act(() => { tagOption.click(); });
+    const input = document.querySelector<HTMLInputElement>(".batch-tag-dialog__create input")!;
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "新标签");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => { dialogButton("新建")!.click(); await Promise.resolve(); await Promise.resolve(); });
+    expect(mocks.createQuickNoteTag).toHaveBeenCalledWith("新标签");
+    await act(async () => { dialogButton("添加")!.click(); await Promise.resolve(); await Promise.resolve(); });
+    expect(mocks.batchNotes).toHaveBeenCalledWith({ action: "tag-add", ids: ["n1", "n2"], tagIds: ["t1", "t_new"] });
+    expect(props.onTagsChanged).toHaveBeenCalled();
+  });
+
   it("部分失败：失败项保持选中 + 可见汇总（成功/失败条数 + 原因）", async () => {
     mocks.batchNotes.mockResolvedValueOnce({
       ok: false,
@@ -235,8 +258,8 @@ describe("目录树多选：批量动作", () => {
     render();
     clickRow("n1", { metaKey: true });
     clickRow("n2", { metaKey: true });
-    clickBarButton("移入回收站");
-    await act(async () => { dialogButton("移入回收站")!.click(); await Promise.resolve(); await Promise.resolve(); });
+    clickBarButton("删除");
+    await act(async () => { dialogButton("删除")!.click(); await Promise.resolve(); await Promise.resolve(); });
 
     expect(barCount()).toBe("已选 1 项");
     expect(row("n2").classList.contains("is-multi-selected")).toBe(true);
@@ -253,10 +276,10 @@ describe("目录树多选：批量动作", () => {
     });
     render();
     clickRow("n1", { metaKey: true });
-    clickBarButton("移入回收站");
-    await act(async () => { dialogButton("移入回收站")!.click(); await Promise.resolve(); await Promise.resolve(); });
+    clickBarButton("删除");
+    await act(async () => { dialogButton("删除")!.click(); await Promise.resolve(); await Promise.resolve(); });
     expect(barCount()).toBe("已选 1 项");
-    expect(document.querySelector('[role="status"]')?.textContent).toContain("未移入回收站");
+    expect(document.querySelector('[role="status"]')?.textContent).toContain("未删除");
     expect(props.onRefreshTree).not.toHaveBeenCalled();
   });
 });
@@ -277,12 +300,12 @@ describe("单条右键「移动…」：与多选共用同一棵树形弹窗", (
   });
 });
 describe("多选右键菜单（261106 task-88；261106 副本第 4 项；261107 置顶）：七项 + 批量导出 + 创建副本", () => {
-  it("多选态右键 = 七项：置顶 / 创建副本 / 移动… / 导出… / 全选 / 取消选择 / 移入回收站", () => {
+  it("多选态右键 = 七项：置顶 / 创建副本 / 移动… / 导出… / 添加标签… / 全选 / 删除", () => {
     render();
     clickRow("n1", { metaKey: true });
     clickRow("n2", { metaKey: true });
     rightClick("n2");
-    expect(menuItems().map((btn) => (btn.textContent ?? "").trim())).toEqual(["置顶", "创建副本", "移动…", "导出…", "全选", "取消选择", "移入回收站"]);
+    expect(menuItems().map((btn) => (btn.textContent ?? "").trim())).toEqual(["置顶", "创建副本", "移动…", "导出…", "添加标签…", "全选", "删除"]);
     expect(menuItems()).toHaveLength(7);
     expect(menuItems()[6].className).toContain("danger");
   });
@@ -354,7 +377,7 @@ describe("多选右键菜单（261106 task-88；261106 副本第 4 项；261107 
     expect(notice).toContain("画板需要先打开再单独导出");
   });
 
-  it("分组多选：创建副本禁用（只有文档可以创建副本）+ title 理由；移入回收站禁用；移动/导出可用", () => {
+  it("分组多选：创建副本禁用（只有文档可以创建副本）+ title 理由；删除禁用；移动/导出可用", () => {
     render();
     clickRow("g1", { metaKey: true });
     rightClick("g1");
@@ -364,7 +387,7 @@ describe("多选右键菜单（261106 task-88；261106 副本第 4 项；261107 
     expect(buttons[1].disabled).toBe(true);
     expect(buttons[1].getAttribute("title")).toContain("只有文档可以创建副本");
     expect(buttons[6].disabled).toBe(true);
-    expect(buttons[6].getAttribute("title")).toContain("分组不能移入回收站");
+    expect(buttons[6].getAttribute("title")).toContain("分组不能删除");
     expect(buttons[2].disabled).toBe(false);
     expect(buttons[3].disabled).toBe(false);
   });

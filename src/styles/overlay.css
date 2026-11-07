@@ -260,6 +260,14 @@
 }
 .tree-batch-notice__text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+/* ===== 多选「添加标签…」（261108 重做：只追加 + 现场新建；两端 UI 各自实现） ===== */
+.batch-tag-dialog__hint { margin: 0 0 var(--lake-space-sm); color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); }
+.batch-tag-dialog__create { display: flex; align-items: center; gap: var(--lake-space-sm); margin-bottom: var(--lake-space-sm); }
+.batch-tag-dialog__create .ln-input { flex: 1 1 auto; }
+.batch-tag-dialog__list { display: flex; flex-direction: column; gap: 2px; max-height: 46vh; overflow-y: auto; }
+.batch-tag-dialog__item { gap: var(--lake-space-sm); text-align: left; }
+.batch-tag-dialog__error { margin: var(--lake-space-sm) 0 0; color: var(--lake-status-error); font-size: var(--lake-font-size-tiny); }
+
 /* ===== 移动…（261106 task-90；task-91 按截图重做）：思源式目录树弹窗 =====
  * 结构全走 kit 原语（ln-dialog / ln-input--search / ln-row / ln-btn）；这里只补树形缩进、
  * 展开箭头、「当前位置」徽标、命中高亮与禁用原因这几条必要声明（全令牌）。 */

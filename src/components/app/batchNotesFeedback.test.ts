@@ -9,8 +9,8 @@ const result = (overrides: Partial<BatchNotesResultShape>): BatchNotesResultShap
 });
 
 describe("批量操作结果文案", () => {
-  it("动作文案：trash 一律叫「移入回收站」（用户定稿：删除 = 移入回收站）", () => {
-    expect(BATCH_NOTES_ACTION_TEXT.trash).toBe("移入回收站");
+  it("动作文案：trash 与普通右键一致，界面统一叫「删除」", () => {
+    expect(BATCH_NOTES_ACTION_TEXT.trash).toBe("删除");
     expect(BATCH_NOTES_ACTION_TEXT.move).toBe("移动");
   });
 
@@ -42,7 +42,7 @@ describe("批量操作结果文案", () => {
       reason: "invalid-input",
     }), "trash");
     expect(notice.kind).toBe("error");
-    expect(notice.text).toContain("未移入回收站");
+    expect(notice.text).toContain("未删除");
     expect(notice.text).toContain("已在回收站里");
     expect(notice.failedIds).toEqual(["n1"]);
 

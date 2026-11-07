@@ -37,6 +37,8 @@ export interface BatchNotesApplyDeps {
   trashNode(id: string): void;
   /** quickNotes：移入小记回收站（软删，可恢复）。 */
   trashQuickNote(id: string): void;
+  getNoteTagIds(id: string): string[];
+  setNoteTags(id: string, tagIds: string[]): void;
 }
 
 /**
@@ -46,6 +48,8 @@ export interface BatchNotesApplyDeps {
  */
 export function desktopBatchSupports(action: BatchNotesAction, node: BatchNotesNodeInfo, space: BatchNotesSpace): true | BatchNotesReason {
   if (space === "quickNotes") return action === "trash" && node.kind === "quick-note" ? true : "unsupported";
+  // 桌面批量打标只支持追加；移除标签仍留给移动端自己的入口。
+  if (action === "tag-remove") return "unsupported";
   if (node.kind === "note") return true;
   if (action === "move" && node.kind === "folder") return true;
   return "unsupported";
@@ -75,6 +79,13 @@ export function applyBatchNotesItems(items: readonly BatchNotesItem[], deps: Bat
           else deps.trashNode(item.id);
           continue;
         }
+        if (item.action === "tag-add") {
+          // 只追加：保留本机已有顺序，只补缺的标签（不覆盖、不重排、不移除）。
+          const current = deps.getNoteTagIds(item.id);
+          const next = [...current];
+          for (const tagId of item.tagIds) if (!next.includes(tagId)) next.push(tagId);
+          if (next.length !== current.length) deps.setNoteTags(item.id, next);
+        }
       }
     });
   }
@@ -87,6 +98,8 @@ export interface BatchNotesIpcDeps {
   store: Store;
   /** 小记库（**惰性取**：注册 IPC 时可用性可能还没定；降级期间返回 null）。 */
   getQuickNotes(): BatchNotesQuickNotesPort | null;
+  /** 目录内 active 标签 id；null = 小记库降级/不可用（tag-add 整批拒绝）。 */
+  activeTagIds(): ReadonlySet<string> | null;
   /** 测试注入：覆盖单条落地动作（默认走 store）。 */
   apply?: Partial<BatchNotesApplyDeps>;
 }
@@ -120,6 +133,8 @@ export function createDesktopBatchExecutor(deps: BatchNotesIpcDeps): BatchNotesE
     moveToEnd: (id, parentId, sortOrder) => { store.moveTreeNode(id, parentId, sortOrder); },
     trashNode: (id) => { store.deleteTreeNode(id); },
     trashQuickNote: (id) => { deps.getQuickNotes()?.deleteQuickNote(id); },
+    getNoteTagIds: (id) => store.documentTags.getDocumentTagIds(id),
+    setNoteTags: (id, tagIds) => { store.documentTags.setNoteTags(id, tagIds); },
     ...deps.apply,
   };
   return {
@@ -131,6 +146,7 @@ export function createDesktopBatchExecutor(deps: BatchNotesIpcDeps): BatchNotesE
     supports: desktopBatchSupports,
     describeParent: (parentId) => store.batchNotes.describeParent(parentId),
     wouldCreateCycle: (id, parentId) => store.batchNotes.wouldCreateCycle(id, parentId),
+    activeTagIds: () => deps.activeTagIds(),
     execute: (items) => applyBatchNotesItems(items, apply),
   };
 }
@@ -152,6 +168,6 @@ export function runDesktopBatchNotes(raw: unknown, deps: BatchNotesIpcDeps): Bat
 }
 
 export function registerBatchNotesIpc(ipc: IpcRegistrar, deps: BatchNotesIpcDeps): void {
-  // payload：{ action: "move"|"trash", ids, space?, parentId? }（桌面不做批量打标）。
+  // payload：{ action: "move"|"trash"|"tag-add", ids, space?, parentId?, tagIds? }（桌面只追加标签）。
   ipc.handle("batch_notes", (raw: unknown) => runDesktopBatchNotes(raw, deps));
 }

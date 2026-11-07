@@ -35,6 +35,7 @@ function deps(over: Partial<BatchNotesIpcDeps> = {}): BatchNotesIpcDeps {
   return {
     store,
     getQuickNotes: () => quickNotes,
+    activeTagIds: () => new Set(quickNotes.tagService.list().map((tag) => tag.id)),
     ...over,
   };
 }
@@ -214,6 +215,46 @@ describe("batch_notes：trash = 移入回收站（软删，可恢复；无 purge
     expect(result.ok).toBe(false);
     expect(result.results[0]).toEqual({ id: q.id, ok: false, reason: "not-found" });
     expect(quickNotes.listQuickNoteTrash()).toEqual([]);
+  });
+});
+
+describe("batch_notes：批量打标只追加（桌面契约）", () => {
+  it("tag-add 保留已有顺序、只补缺的标签", () => {
+    const notebook = store.createNotebook("标签");
+    const doc = store.createNoteIn(notebook.id, "文档");
+    const tagA = quickNotes.tagService.create("A");
+    const tagB = quickNotes.tagService.create("B");
+    store.documentTags.setNoteTags(doc.id, [tagB.id]);
+    expect(run({ action: "tag-add", ids: [doc.id], tagIds: [tagA.id, tagB.id] }).ok).toBe(true);
+    expect(store.documentTags.getDocumentTagIds(doc.id)).toEqual([tagB.id, tagA.id]);
+  });
+
+  it("标签不存在 ⇒ tag-not-found，关系不变", () => {
+    const notebook = store.createNotebook("标签2");
+    const doc = store.createNoteIn(notebook.id, "文档");
+    const tagB = quickNotes.tagService.create("B");
+    store.documentTags.setNoteTags(doc.id, [tagB.id]);
+    const result = run({ action: "tag-add", ids: [doc.id], tagIds: ["tag-ghost"] });
+    expect(result.ok).toBe(false);
+    expect(result.reason).toBe("tag-not-found");
+    expect(store.documentTags.getDocumentTagIds(doc.id)).toEqual([tagB.id]);
+  });
+
+  it("activeTagIds=null ⇒ tag-unavailable", () => {
+    const notebook = store.createNotebook("标签3");
+    const doc = store.createNoteIn(notebook.id, "文档");
+    const result = run({ action: "tag-add", ids: [doc.id], tagIds: ["t"] }, { activeTagIds: () => null });
+    expect(result.ok).toBe(false);
+    expect(result.reason).toBe("tag-unavailable");
+  });
+
+  it("tag-remove 在桌面契约中不支持（仍然是移动端自己的入口）", () => {
+    const notebook = store.createNotebook("标签4");
+    const doc = store.createNoteIn(notebook.id, "文档");
+    const tag = quickNotes.tagService.create("A");
+    store.documentTags.setNoteTags(doc.id, [tag.id]);
+    const result = run({ action: "tag-remove", ids: [doc.id], tagIds: [tag.id] });
+    expect(result.results[0]).toEqual({ id: doc.id, ok: false, reason: "unsupported" });
   });
 });
 

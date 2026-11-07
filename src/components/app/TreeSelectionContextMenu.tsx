@@ -9,14 +9,14 @@
  * 未多选时不渲染本菜单（旧右键菜单不变）。
  */
 import { useEffect, useRef, useState } from "react";
-import { Copy, Download, FolderInput, Pin, Trash2 } from "lucide-react";
+import { Copy, Download, FolderInput, ListChecks, Pin, Tag, Trash2 } from "lucide-react";
 import { Menu } from "../ui/Overlay";
 
 export interface TreeSelectionContextMenuProps {
   x: number;
   y: number;
   count: number;
-  actions: { duplicate: boolean; trash: boolean; move: boolean; export: boolean; pin: boolean };
+  actions: { duplicate: boolean; trash: boolean; move: boolean; export: boolean; pin: boolean; tag: boolean };
   /** 选区是否**全部**已置顶（决定「置顶」还是「取消置顶」）。 */
   pinnedAll?: boolean;
   busy?: boolean;
@@ -25,13 +25,14 @@ export interface TreeSelectionContextMenuProps {
   onTrash(): void;
   onMove(): void;
   onExport(): void;
-  /** 工具栏移除后迁入：选中全部可见项 / 取消选择。 */
+  /** 批量追加标签（只新增，不提供移除/编辑）。 */
+  onTag(): void;
+  /** 选中全部可见项。 */
   onSelectAll(): void;
-  onCancelSelection(): void;
   onClose(): void;
 }
 
-export function TreeSelectionContextMenu({ x, y, count, actions, pinnedAll = false, busy = false, onPin, onDuplicate, onTrash, onMove, onExport, onSelectAll, onCancelSelection, onClose }: TreeSelectionContextMenuProps) {
+export function TreeSelectionContextMenu({ x, y, count, actions, pinnedAll = false, busy = false, onPin, onDuplicate, onTrash, onMove, onExport, onTag, onSelectAll, onClose }: TreeSelectionContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
   // 与目录右键菜单同一套视口边缘翻转：先挂载量真实尺寸，再夹进视口。
@@ -63,15 +64,21 @@ export function TreeSelectionContextMenu({ x, y, count, actions, pinnedAll = fal
       <button role="menuitem" disabled={!actions.export || busy} onClick={() => { onExport(); onClose(); }}>
         <Download size={15} aria-hidden="true" /><span>导出…</span>
       </button>
+      <button role="menuitem" disabled={!actions.tag || busy}
+        title={actions.tag ? undefined : "只有文档可以添加标签"}
+        onClick={() => { onTag(); onClose(); }}>
+        <Tag size={15} aria-hidden="true" /><span>添加标签…</span>
+      </button>
       <div className="context-menu-sep" role="separator" />
-      <button role="menuitem" disabled={busy} onClick={() => { onSelectAll(); onClose(); }}><span>全选</span></button>
-      <button role="menuitem" disabled={busy} onClick={() => { onCancelSelection(); onClose(); }}><span>取消选择</span></button>
+      <button role="menuitem" disabled={busy} onClick={() => { onSelectAll(); onClose(); }}>
+        <ListChecks size={15} aria-hidden="true" /><span>全选</span>
+      </button>
       <div className="context-menu-sep" role="separator" />
       {/* 危险动作放最后、红色样式与普通右键「删除」同一 class（261106 task-91） */}
       <button role="menuitem" className="danger" disabled={!actions.trash || busy}
-        title={actions.trash ? undefined : "分组不能移入回收站"}
+        title={actions.trash ? undefined : "分组不能删除"}
         onClick={() => { onTrash(); onClose(); }}>
-        <Trash2 size={15} aria-hidden="true" /><span>移入回收站</span>
+        <Trash2 size={15} aria-hidden="true" /><span>删除</span>
       </button>
     </Menu>
   );

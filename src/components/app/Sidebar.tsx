@@ -34,8 +34,9 @@ import { convertHtmlToLake } from "../../features/import/htmlImportPipeline";
 import type { UsheetWorkbook } from "../../core/usheetDoc";
 import { getNativeErrorMessage } from "../../lib/nativeErrors";
 import { native } from "../../lib/native";
-import type { BatchNotesRequestShape, ImportPickedFileShape, ImportPickerKind } from "../../lib/types";
+import type { BatchNotesRequestShape, ImportPickedFileShape, ImportPickerKind, QuickNoteTag } from "../../lib/types";
 import { MoveTargetTreeDialog } from "./MoveTargetTreeDialog";
+import { BatchTagDialog } from "./BatchTagDialog";
 import { TreeSelectionContextMenu } from "./TreeSelectionContextMenu";
 import { SidebarPinnedSection } from "./SidebarPinnedSection";
 import { nodeIcon } from "./treeIcons";
@@ -182,6 +183,9 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
   const [pinnedOpen, setPinnedOpen] = useState<boolean>(() => readPinnedOpen());
   /** 「移动到…」树形弹层：记录本次要移动的 id 快照与当前父级（弹层打开期间不随选择变化）。 */
   const [moveDialog, setMoveDialog] = useState<{ ids: string[]; currentParentId: string | null } | null>(null);
+  /** 批量「添加标签…」：只追加，可现场新建；id 快照与标签目录在打开时现读。 */
+  const [tagDialog, setTagDialog] = useState<{ ids: string[] } | null>(null);
+  const [tagCatalog, setTagCatalog] = useState<{ loading: boolean; error: string | null; tags: QuickNoteTag[] }>({ loading: false, error: null, tags: [] });
   /** 批量「移入回收站」二次确认（与删除同一套确认原语）。 */
   const { confirm, confirmElement } = useConfirm();
   /** Markdown 导入（261106 task-85）：进度浮层 / 结果汇总 / 中止句柄。 */
@@ -935,7 +939,9 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
       if (result.ok) {
         setSelection(EMPTY_TREE_SELECTION);
         setMoveDialog(null);
+        setTagDialog(null);
         await props.onRefreshTree();
+        if (request.action === "tag-add") props.onTagsChanged?.();
       } else {
         const failed = new Set(notice.failedIds);
         if (failed.size > 0) setSelection((state) => ({ ...state, ids: state.ids.filter((id) => failed.has(id)) }));
@@ -956,9 +962,9 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
     const ids = [...selection.ids];
     if (ids.length === 0) return;
     const ok = await confirm({
-      title: "把 " + ids.length + " 项移入回收站？",
-      body: "移入后可在回收站恢复；文档的历史快照会保留。",
-      confirmText: "移入回收站",
+      title: "删除 " + ids.length + " 项？",
+      body: "删除后可在回收站恢复；文档的历史快照会保留。",
+      confirmText: "删除",
     });
     if (!ok) return;
     await runBatch({ action: "trash", ids });
@@ -1171,6 +1177,29 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
   const openMoveDialog = useCallback(() => { openMoveForIds(selection.ids); }, [openMoveForIds, selection.ids]);
   const openMoveForNode = useCallback((node: TreeNode) => { openMoveForIds([node.id]); }, [openMoveForIds]);
 
+  /** 批量追加标签：打开时现读标签目录；新建由弹层调用 createQuickNoteTag，不提供移除/改名/图标编辑。 */
+  const openBatchTagDialog = useCallback(() => {
+    if (selection.ids.length === 0) return;
+    setBatchDialogError(null);
+    setTagDialog({ ids: [...selection.ids] });
+    setTagCatalog({ loading: true, error: null, tags: [] });
+    void native.listQuickNoteTags()
+      .then((tags) => setTagCatalog({ loading: false, error: null, tags: Array.isArray(tags) ? tags : [] }))
+      .catch((error) => setTagCatalog({ loading: false, error: getNativeErrorMessage(error), tags: [] }));
+  }, [selection.ids]);
+
+  const confirmBatchTag = useCallback((tagIds: string[]) => {
+    const ids = tagDialog?.ids ?? [];
+    if (ids.length === 0 || tagIds.length === 0) return;
+    void runBatch({ action: "tag-add", ids, tagIds });
+  }, [tagDialog, runBatch]);
+
+  const createBatchTag = useCallback(async (name: string): Promise<QuickNoteTag> => {
+    const created = await native.createQuickNoteTag(name);
+    setTagCatalog((current) => current.tags.some((tag) => tag.id === created.id) ? current : { ...current, tags: [...current.tags, created] });
+    return created;
+  }, []);
+
   const selectAllVisibleRows = useCallback(() => {
     if (visibleSelectableOrder.length > TREE_SELECTION_MAX) {
       setBatchNotice("单次最多 " + TREE_SELECTION_MAX + " 项，已选前 " + TREE_SELECTION_MAX + " 项");
@@ -1301,7 +1330,7 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
           x={batchMenu.x}
           y={batchMenu.y}
           count={selection.ids.length}
-          actions={{ duplicate: selectionAllNotes, trash: selectionActions.trash, move: selectionActions.move, export: selection.ids.length > 0, pin: selection.ids.length > 0 }}
+          actions={{ duplicate: selectionAllNotes, trash: selectionActions.trash, move: selectionActions.move, export: selection.ids.length > 0, pin: selection.ids.length > 0, tag: selectionActions.tag }}
           pinnedAll={selectionAllPinned}
           busy={batchBusy}
           onPin={pinSelected}
@@ -1309,8 +1338,8 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
           onTrash={() => void trashSelected()}
           onMove={openMoveDialog}
           onExport={() => void exportSelected()}
+          onTag={openBatchTagDialog}
           onSelectAll={selectAllVisibleRows}
-          onCancelSelection={cancelSelection}
           onClose={() => setBatchMenu(null)}
         />
       )}
@@ -1375,6 +1404,20 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
           error={batchDialogError}
           onConfirm={(parentId) => { if (moveDialog) void runBatch({ action: "move", ids: moveDialog.ids, parentId }); }}
           onClose={() => { if (!batchBusy) { setMoveDialog(null); setBatchDialogError(null); } }}
+        />
+      )}
+      {tagDialog && (
+        <BatchTagDialog
+          key={tagDialog.ids.join(",")}
+          open
+          count={tagDialog.ids.length}
+          tags={tagCatalog.tags}
+          loading={tagCatalog.loading}
+          error={tagCatalog.error ?? batchDialogError}
+          busy={batchBusy}
+          onCreateTag={createBatchTag}
+          onConfirm={confirmBatchTag}
+          onClose={() => { if (!batchBusy) { setTagDialog(null); setBatchDialogError(null); } }}
         />
       )}
       {confirmElement}

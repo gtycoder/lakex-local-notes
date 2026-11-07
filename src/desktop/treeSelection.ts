@@ -27,8 +27,10 @@ export const EMPTY_TREE_SELECTION: TreeSelectionState = { ids: [], anchorId: nul
 export interface TreeSelectionActions {
   /** 移动…（文档与分组都有）。 */
   move: boolean;
-  /** 移入回收站（只有文档）。 */
+  /** 删除（移入回收站；只有文档）。 */
   trash: boolean;
+  /** 添加标签（只有文档；只追加）。 */
+  tag: boolean;
   /** 置顶/取消置顶（261107，设备本地入口；所有可选节点都支持）。 */
   pin: boolean;
 }
@@ -117,5 +119,5 @@ export function treeSelectionLimitReached(state: TreeSelectionState): boolean {
 export function treeSelectionActions(nodes: ReadonlyMap<string, NodeLike>, state: TreeSelectionState): TreeSelectionActions {
   const selected = state.ids.map((id) => nodes.get(id)).filter((node): node is NodeLike => !!node);
   const notesOnly = selected.length > 0 && selected.every((node) => node.nodeType === "note");
-  return { move: selected.length > 0, trash: notesOnly, pin: selected.length > 0 };
+  return { move: selected.length > 0, trash: notesOnly, tag: notesOnly, pin: selected.length > 0 };
 }

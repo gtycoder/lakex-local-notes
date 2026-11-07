@@ -276,10 +276,10 @@ export interface BackupUsageShape {
 /**
  * 261106 批量操作（A 方案：显式「选择」模式）——**契约单一来源**，桌面 IPC `batch_notes` 与移动端
  * `bridge.batchNotes` 同形同结果（core 编排见 `src/core/batchNotes.ts`）。
- * action 只有 move | trash：**没有 purge/物理删除，也没有 restore**（回收站不做多选）；桌面不做批量打标。
+ * action 只有 move | trash | tag-add：**没有 purge/物理删除，也没有 restore**（回收站不做多选）；批量打标只追加。
  * trash = 移入回收站（lake → trashed_at；quickNotes → deleted_at），都可恢复。
  */
-export type BatchNotesActionShape = "move" | "trash";
+export type BatchNotesActionShape = "move" | "trash" | "tag-add";
 export type BatchNotesSpaceShape = "lake" | "quickNotes";
 
 export interface BatchNotesRequestShape {
@@ -290,6 +290,8 @@ export interface BatchNotesRequestShape {
   space?: BatchNotesSpaceShape;
   /** move：目标父级（null / 省略 = 根层）。 */
   parentId?: string | null;
+  /** tag-add：要追加的标签 id（必须存在于目录；只新增，不提供移除）。 */
+  tagIds?: string[];
 }
 
 /** 逐条结果原因（与 core 的 BatchNotesReason 一致；新增取值属于契约变更，两端同步改）。 */

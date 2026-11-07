@@ -7,6 +7,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Check } from "lucide-react";
 import type { QuickNoteTagSummary } from "../../core/quickNoteTags";
+import { filterBatchTagOptions, toggleBatchTagSelection } from "../../core/batchTagging";
 import { MobileSheet } from "./MobileSheet";
 
 export interface BatchTagPickerSheetProps {
@@ -31,14 +32,10 @@ export function BatchTagPickerSheet({ open, options, count, busy, error, onConfi
     setPicked([]);
   }, [open]);
 
-  const needle = query.trim().toLocaleLowerCase();
-  const visible = useMemo(
-    () => (needle ? options.filter((option) => option.name.toLocaleLowerCase().includes(needle)) : options),
-    [options, needle],
-  );
+  const visible = useMemo(() => filterBatchTagOptions(options, query), [options, query]);
 
   const toggle = (tagId: string): void => {
-    setPicked((current) => (current.includes(tagId) ? current.filter((id) => id !== tagId) : [...current, tagId]));
+    setPicked((current) => toggleBatchTagSelection(current, tagId));
   };
 
   return (
