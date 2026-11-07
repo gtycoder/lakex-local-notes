@@ -616,10 +616,6 @@ function registerIpc(): ReadonlyMap<string, (args: unknown[]) => Promise<unknown
   registerBatchNotesIpc(ipc, {
     store,
     getQuickNotes: () => (getQuickNotesAvailability().mode === "ok" ? quickNotes : null),
-    activeTagIds: () => {
-      if (getQuickNotesAvailability().mode !== "ok") return null; // 目录不可用 ⇒ tag 操作整批拒绝
-      try { return new Set(quickNotes.tagService.list().map((tag) => tag.id)); } catch { return null; }
-    },
   });
   registerNotesIpc(ipc, store, quickNotes, drafts, workspaceRoot(), (targetRoot) => {
     // A1 一致性快照：主库 + 小记库各经其连接 VACUUM INTO（单文件、可独立打开）

@@ -35,7 +35,6 @@ function deps(over: Partial<BatchNotesIpcDeps> = {}): BatchNotesIpcDeps {
   return {
     store,
     getQuickNotes: () => quickNotes,
-    activeTagIds: () => new Set(quickNotes.tagService.list().map((tag) => tag.id)),
     ...over,
   };
 }
@@ -209,53 +208,12 @@ describe("batch_notes：trash = 移入回收站（软删，可恢复；无 purge
     expect(quickNotes.listQuickNoteTrash().map((item) => item.id)).toEqual([q2.id]);
   });
 
-  it("space=quickNotes 只支持 trash：tag-add ⇒ unsupported", () => {
-    const q = quickNotes.createQuickNote({ text: "小记", draftId: "d-batch-3", stagedImageIds: [] });
-    const tag = quickNotes.tagService.create("标签");
-    const result = run({ action: "tag-add", ids: [q.id], tagIds: [tag.id], space: "quickNotes" });
-    expect(result.ok).toBe(false);
-    expect(result.results[0]).toEqual({ id: q.id, ok: false, reason: "unsupported" });
-  });
-
   it("小记空间降级（getQuickNotes=null）⇒ not-found，不落地", () => {
     const q = quickNotes.createQuickNote({ text: "小记", draftId: "d-batch-4", stagedImageIds: [] });
     const result = run({ action: "trash", ids: [q.id], space: "quickNotes" }, { getQuickNotes: () => null });
     expect(result.ok).toBe(false);
     expect(result.results[0]).toEqual({ id: q.id, ok: false, reason: "not-found" });
     expect(quickNotes.listQuickNoteTrash()).toEqual([]);
-  });
-});
-
-describe("batch_notes：标签（tag-add 追加 / tag-remove 移除指定）", () => {
-  it("tag-add 保留已有顺序、只补缺的标签；tag-remove 只删指定的", () => {
-    const notebook = store.createNotebook("标签");
-    const doc = store.createNoteIn(notebook.id, "文档");
-    const tagA = quickNotes.tagService.create("A");
-    const tagB = quickNotes.tagService.create("B");
-    store.documentTags.setNoteTags(doc.id, [tagB.id]);
-    expect(run({ action: "tag-add", ids: [doc.id], tagIds: [tagA.id, tagB.id] }).ok).toBe(true);
-    expect(store.documentTags.getDocumentTagIds(doc.id)).toEqual([tagB.id, tagA.id]); // 追加在末尾，不重排
-    expect(run({ action: "tag-remove", ids: [doc.id], tagIds: [tagB.id] }).ok).toBe(true);
-    expect(store.documentTags.getDocumentTagIds(doc.id)).toEqual([tagA.id]);
-  });
-
-  it("标签不存在 ⇒ tag-not-found（整批不执行，关系不变）", () => {
-    const notebook = store.createNotebook("标签2");
-    const doc = store.createNoteIn(notebook.id, "文档");
-    const tagB = quickNotes.tagService.create("B");
-    store.documentTags.setNoteTags(doc.id, [tagB.id]);
-    const result = run({ action: "tag-add", ids: [doc.id], tagIds: ["tag-ghost"] });
-    expect(result.ok).toBe(false);
-    expect(result.reason).toBe("tag-not-found");
-    expect(store.documentTags.getDocumentTagIds(doc.id)).toEqual([tagB.id]);
-  });
-
-  it("标签目录不可用（降级）⇒ tag-unavailable", () => {
-    const notebook = store.createNotebook("标签3");
-    const doc = store.createNoteIn(notebook.id, "文档");
-    const result = run({ action: "tag-add", ids: [doc.id], tagIds: ["t"] }, { activeTagIds: () => null });
-    expect(result.ok).toBe(false);
-    expect(result.reason).toBe("tag-unavailable");
   });
 });
 

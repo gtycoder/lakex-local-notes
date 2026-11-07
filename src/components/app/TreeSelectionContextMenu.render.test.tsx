@@ -33,6 +33,8 @@ function render(overrides: Partial<Parameters<typeof TreeSelectionContextMenu>[0
     onTrash: vi.fn(),
     onMove: vi.fn(),
     onExport: vi.fn(),
+    onSelectAll: vi.fn(),
+    onCancelSelection: vi.fn(),
     onClose: vi.fn(),
     ...overrides,
   };
@@ -42,12 +44,12 @@ function render(overrides: Partial<Parameters<typeof TreeSelectionContextMenu>[0
 const items = () => [...document.querySelectorAll<HTMLButtonElement>('[role="menu"] button')];
 
 describe("多选右键菜单", () => {
-  it("五项，顺序 = 置顶 / 创建副本 / 移动… / 导出… / 移入回收站（危险项在最后、红色样式）", () => {
+  it("七项，顺序 = 置顶 / 创建副本 / 移动… / 导出… / 全选 / 取消选择 / 移入回收站（危险项在最后、红色样式）", () => {
     render();
-    expect(items().map((btn) => (btn.textContent ?? "").trim())).toEqual(["置顶", "创建副本", "移动…", "导出…", "移入回收站"]);
-    expect(items()).toHaveLength(5);
+    expect(items().map((btn) => (btn.textContent ?? "").trim())).toEqual(["置顶", "创建副本", "移动…", "导出…", "全选", "取消选择", "移入回收站"]);
+    expect(items()).toHaveLength(7);
     // 与普通右键「删除」同 class（.danger 危险红）
-    expect(items()[4].className).toContain("danger");
+    expect(items()[6].className).toContain("danger");
     expect(items()[0].className).not.toContain("danger");
   });
 
@@ -60,8 +62,8 @@ describe("多选右键菜单", () => {
     render({ actions: { duplicate: false, trash: false, move: true, export: true, pin: true } });
     expect(items()[1].disabled).toBe(true);
     expect(items()[1].getAttribute("title")).toContain("只有文档可以创建副本");
-    expect(items()[4].disabled).toBe(true);
-    expect(items()[4].getAttribute("title")).toContain("分组不能移入回收站");
+    expect(items()[6].disabled).toBe(true);
+    expect(items()[6].getAttribute("title")).toContain("分组不能移入回收站");
     expect(items()[2].disabled).toBe(false);
     expect(items()[3].disabled).toBe(false);
     expect(items()[0].disabled).toBe(false);
@@ -73,7 +75,7 @@ describe("多选右键菜单", () => {
     expect(items()[1].getAttribute("title")).toBeNull();
   });
 
-  it("busy 时五项全部禁用", () => {
+  it("busy 时七项全部禁用", () => {
     render({ busy: true });
     expect(items().every((btn) => btn.disabled)).toBe(true);
   });
@@ -90,6 +92,10 @@ describe("多选右键菜单", () => {
     act(() => { items()[3].click(); });
     expect(props.onExport).toHaveBeenCalledTimes(1);
     act(() => { items()[4].click(); });
+    expect(props.onSelectAll).toHaveBeenCalledTimes(1);
+    act(() => { items()[5].click(); });
+    expect(props.onCancelSelection).toHaveBeenCalledTimes(1);
+    act(() => { items()[6].click(); });
     expect(props.onTrash).toHaveBeenCalledTimes(1);
   });
 });

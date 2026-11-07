@@ -239,30 +239,26 @@
 .search-recent__clear { height: auto; padding: 0 var(--lake-space-xs); }
 .search-recent__list { display: flex; flex-direction: column; }
 .search-recent__item { text-align: left; }
-/* ===== 目录树多选（261106 task-81）：浮动操作条 + 移动到… / 批量打标签 弹层内层 ===== */
-.tree-selection-bar {
+/* ===== 目录树多选结果/进度提示（261108 工具条移除后仅保留轻量 toast）===== */
+.tree-batch-notice {
   position: fixed;
   left: 50%;
   bottom: calc(var(--lake-space-huge) + var(--lake-space-xxs));
   z-index: var(--lake-z-statusbar-popover);
   display: flex;
-  flex-direction: column;
-  gap: var(--lake-space-xs);
-  min-width: 380px;
-  max-width: min(760px, calc(100vw - 32px));
-  padding: var(--lake-space-sm) var(--lake-space-md);
+  align-items: center;
+  gap: var(--lake-space-sm);
+  max-width: min(560px, calc(100vw - 32px));
+  padding: var(--lake-space-xs) var(--lake-space-sm);
   border: 0.5px solid var(--lake-border-1);
   border-radius: var(--lake-radius-md);
   background: var(--lake-bg-panel);
   box-shadow: var(--lake-shadow-dialog);
+  color: var(--lake-text-2);
+  font-size: var(--lake-font-size-tiny);
   transform: translateX(-50%);
 }
-.tree-selection-bar__row { display: flex; align-items: center; gap: var(--lake-space-sm); min-width: 0; }
-.tree-selection-bar__count { flex: none; color: var(--lake-text-1); font-size: var(--lake-font-size-small); font-weight: var(--lake-font-weight-semibold); }
-.tree-selection-bar__actions { display: flex; align-items: center; gap: var(--lake-space-xs); min-width: 0; }
-.tree-selection-bar__tail { display: flex; align-items: center; gap: var(--lake-space-xxs); margin-left: auto; }
-.tree-selection-bar__notice-row { display: flex; align-items: center; gap: var(--lake-space-sm); }
-.tree-selection-bar__notice { margin: 0; color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); }
+.tree-batch-notice__text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ===== 移动…（261106 task-90；task-91 按截图重做）：思源式目录树弹窗 =====
  * 结构全走 kit 原语（ln-dialog / ln-input--search / ln-row / ln-btn）；这里只补树形缩进、
@@ -289,10 +285,6 @@
 .move-target-tree-dialog__error { margin: var(--lake-space-sm) 0 0; color: var(--lake-status-error); font-size: var(--lake-font-size-tiny); }
 .move-target-tree-dialog__mark { border-radius: 2px; background: var(--lake-accent-tint); color: var(--lake-accent-text); }
 .move-target-tree-dialog__hint { margin: var(--lake-space-sm) 0 0; color: var(--lake-text-4); font-size: var(--lake-font-size-nano); }
-.batch-tag-dialog__list { display: flex; flex-direction: column; gap: 2px; max-height: 46vh; overflow-y: auto; }
-.batch-tag-dialog__item { gap: var(--lake-space-sm); text-align: left; }
-.batch-tag-dialog__error { margin: var(--lake-space-sm) 0 0; color: var(--lake-status-error); font-size: var(--lake-font-size-tiny); }
-.batch-tag-dialog__modes { display: flex; gap: var(--lake-space-xs); margin-bottom: var(--lake-space-sm); }
 /* ===== Markdown 导入（261106 task-85）：进度浮层 + 结果汇总 ===== */
 .import-progress-dialog__text { margin: 0; color: var(--lake-text-1); font-size: var(--lake-font-size-body); }
 .import-progress-dialog__hint { margin: var(--lake-space-sm) 0 0; color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); }

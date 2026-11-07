@@ -118,15 +118,15 @@ describe("动作面（按选中类型）", () => {
 
   it("全文档：移动 / 移入回收站 / 打标签都有", () => {
     const actions = treeSelectionActions(byId, { ids: ["n1", "n2"], anchorId: "n1" });
-    expect(actions).toEqual({ move: true, trash: true, tag: true, pin: true });
+    expect(actions).toEqual({ move: true, trash: true, pin: true });
   });
 
   it("含分组（或只有分组）：只剩「移动…」（不提供批量删除/打标签）", () => {
-    expect(treeSelectionActions(byId, { ids: ["g1"], anchorId: "g1" })).toEqual({ move: true, trash: false, tag: false, pin: true });
-    expect(treeSelectionActions(byId, { ids: ["g1", "n1"], anchorId: "g1" })).toEqual({ move: true, trash: false, tag: false, pin: true });
+    expect(treeSelectionActions(byId, { ids: ["g1"], anchorId: "g1" })).toEqual({ move: true, trash: false, pin: true });
+    expect(treeSelectionActions(byId, { ids: ["g1", "n1"], anchorId: "g1" })).toEqual({ move: true, trash: false, pin: true });
   });
 
   it("空选择：没有任何动作", () => {
-    expect(treeSelectionActions(byId, EMPTY_TREE_SELECTION)).toEqual({ move: false, trash: false, tag: false, pin: false });
+    expect(treeSelectionActions(byId, EMPTY_TREE_SELECTION)).toEqual({ move: false, trash: false, pin: false });
   });
 });

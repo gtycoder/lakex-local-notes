@@ -29,8 +29,6 @@ export interface TreeSelectionActions {
   move: boolean;
   /** 移入回收站（只有文档）。 */
   trash: boolean;
-  /** 打标签…（只有文档）。 */
-  tag: boolean;
   /** 置顶/取消置顶（261107，设备本地入口；所有可选节点都支持）。 */
   pin: boolean;
 }
@@ -115,9 +113,9 @@ export function treeSelectionLimitReached(state: TreeSelectionState): boolean {
   return state.ids.length >= TREE_SELECTION_MAX;
 }
 
-/** 按选中项的类型决定操作条上有哪些动作：混选（文档+分组）只剩「移动…」。 */
+/** 按选中项的类型决定右键菜单有哪些动作：混选（文档+分组）只剩「移动…」。 */
 export function treeSelectionActions(nodes: ReadonlyMap<string, NodeLike>, state: TreeSelectionState): TreeSelectionActions {
   const selected = state.ids.map((id) => nodes.get(id)).filter((node): node is NodeLike => !!node);
   const notesOnly = selected.length > 0 && selected.every((node) => node.nodeType === "note");
-  return { move: selected.length > 0, trash: notesOnly, tag: notesOnly, pin: selected.length > 0 };
+  return { move: selected.length > 0, trash: notesOnly, pin: selected.length > 0 };
 }

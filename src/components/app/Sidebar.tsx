@@ -34,10 +34,8 @@ import { convertHtmlToLake } from "../../features/import/htmlImportPipeline";
 import type { UsheetWorkbook } from "../../core/usheetDoc";
 import { getNativeErrorMessage } from "../../lib/nativeErrors";
 import { native } from "../../lib/native";
-import type { BatchNotesRequestShape, ImportPickedFileShape, ImportPickerKind, QuickNoteTag } from "../../lib/types";
+import type { BatchNotesRequestShape, ImportPickedFileShape, ImportPickerKind } from "../../lib/types";
 import { MoveTargetTreeDialog } from "./MoveTargetTreeDialog";
-import { BatchTagDialog, type BatchTagMode } from "./BatchTagDialog";
-import { TreeSelectionBar } from "./TreeSelectionBar";
 import { TreeSelectionContextMenu } from "./TreeSelectionContextMenu";
 import { SidebarPinnedSection } from "./SidebarPinnedSection";
 import { nodeIcon } from "./treeIcons";
@@ -184,9 +182,6 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
   const [pinnedOpen, setPinnedOpen] = useState<boolean>(() => readPinnedOpen());
   /** 「移动到…」树形弹层：记录本次要移动的 id 快照与当前父级（弹层打开期间不随选择变化）。 */
   const [moveDialog, setMoveDialog] = useState<{ ids: string[]; currentParentId: string | null } | null>(null);
-  /** 批量「打标签…」层：id 快照 + 标签目录（打开时现读，复用 listQuickNoteTags）。 */
-  const [tagDialog, setTagDialog] = useState<{ ids: string[] } | null>(null);
-  const [tagCatalog, setTagCatalog] = useState<{ loading: boolean; error: string | null; tags: QuickNoteTag[] }>({ loading: false, error: null, tags: [] });
   /** 批量「移入回收站」二次确认（与删除同一套确认原语）。 */
   const { confirm, confirmElement } = useConfirm();
   /** Markdown 导入（261106 task-85）：进度浮层 / 结果汇总 / 中止句柄。 */
@@ -940,9 +935,7 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
       if (result.ok) {
         setSelection(EMPTY_TREE_SELECTION);
         setMoveDialog(null);
-        setTagDialog(null);
         await props.onRefreshTree();
-        if (request.action === "tag-add" || request.action === "tag-remove") props.onTagsChanged?.();
       } else {
         const failed = new Set(notice.failedIds);
         if (failed.size > 0) setSelection((state) => ({ ...state, ids: state.ids.filter((id) => failed.has(id)) }));
@@ -1178,23 +1171,6 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
   const openMoveDialog = useCallback(() => { openMoveForIds(selection.ids); }, [openMoveForIds, selection.ids]);
   const openMoveForNode = useCallback((node: TreeNode) => { openMoveForIds([node.id]); }, [openMoveForIds]);
 
-  /** 批量打标签：打开时现读标签目录（唯一来源 = 小记标签库）；读不到则弹层内提示。 */
-  const openBatchTagDialog = useCallback(() => {
-    if (selection.ids.length === 0) return;
-    setBatchDialogError(null);
-    setTagDialog({ ids: [...selection.ids] });
-    setTagCatalog({ loading: true, error: null, tags: [] });
-    void native.listQuickNoteTags()
-      .then((tags) => setTagCatalog({ loading: false, error: null, tags: Array.isArray(tags) ? tags : [] }))
-      .catch((error) => setTagCatalog({ loading: false, error: getNativeErrorMessage(error), tags: [] }));
-  }, [selection.ids]);
-
-  const confirmBatchTag = useCallback((mode: BatchTagMode, tagId: string) => {
-    const ids = tagDialog?.ids ?? [];
-    if (ids.length === 0) return;
-    void runBatch({ action: mode, ids, tagIds: [tagId] });
-  }, [tagDialog, runBatch]);
-
   const selectAllVisibleRows = useCallback(() => {
     if (visibleSelectableOrder.length > TREE_SELECTION_MAX) {
       setBatchNotice("单次最多 " + TREE_SELECTION_MAX + " 项，已选前 " + TREE_SELECTION_MAX + " 项");
@@ -1333,6 +1309,8 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
           onTrash={() => void trashSelected()}
           onMove={openMoveDialog}
           onExport={() => void exportSelected()}
+          onSelectAll={selectAllVisibleRows}
+          onCancelSelection={cancelSelection}
           onClose={() => setBatchMenu(null)}
         />
       )}
@@ -1378,22 +1356,15 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
         onCommit={commitSplitWidth}
         onResizingChange={handleSplitResizingChange}
       />
-      {/* 多选浮动操作条（261106 task-81；固定定位，压状态栏、低于侧栏/顶栏） */}
-      <TreeSelectionBar
-        count={selection.ids.length}
-        actions={{ ...selectionActions, duplicate: selectionAllNotes }}
-        pinnedAll={selectionAllPinned}
-        busy={batchBusy}
-        notice={batchNotice}
-        noticeAction={batchNoticeAction}
-        onPin={pinSelected}
-        onDuplicate={duplicateSelected}
-        onMove={openMoveDialog}
-        onTrash={() => void trashSelected()}
-        onTag={openBatchTagDialog}
-        onSelectAll={selectAllVisibleRows}
-        onCancel={cancelSelection}
-      />
+      {/* 多选操作已全部迁入右键菜单；这里只保留批量结果/进度提示，不再有多选工具条。 */}
+      {batchNotice && (
+        <div className="tree-batch-notice" role="status" aria-live="polite">
+          <span className="tree-batch-notice__text">{batchNotice}</span>
+          {batchNoticeAction && (
+            <button type="button" className="ln-btn ln-btn--ghost ln-btn--compact" onClick={batchNoticeAction.onClick}>{batchNoticeAction.label}</button>
+          )}
+        </div>
+      )}
       {moveDialog && (
         <MoveTargetTreeDialog
           open
@@ -1404,18 +1375,6 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
           error={batchDialogError}
           onConfirm={(parentId) => { if (moveDialog) void runBatch({ action: "move", ids: moveDialog.ids, parentId }); }}
           onClose={() => { if (!batchBusy) { setMoveDialog(null); setBatchDialogError(null); } }}
-        />
-      )}
-      {tagDialog && (
-        <BatchTagDialog
-          open
-          count={tagDialog.ids.length}
-          tags={tagCatalog.tags}
-          loading={tagCatalog.loading}
-          error={tagCatalog.error ?? batchDialogError}
-          busy={batchBusy}
-          onConfirm={confirmBatchTag}
-          onClose={() => { if (!batchBusy) { setTagDialog(null); setBatchDialogError(null); } }}
         />
       )}
       {confirmElement}

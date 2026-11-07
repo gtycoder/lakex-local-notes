@@ -11,8 +11,6 @@ import type { BatchNotesActionShape, BatchNotesReasonShape, BatchNotesResultShap
 export const BATCH_NOTES_ACTION_TEXT: Record<BatchNotesActionShape, string> = {
   move: "移动",
   trash: "移入回收站",
-  "tag-add": "打标签",
-  "tag-remove": "移除标签",
 };
 
 /** 逐条拒绝原因 → 可读说明（契约取值新增必须同步这里与移动端）。 */

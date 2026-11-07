@@ -84,7 +84,7 @@ const row = (id: string): HTMLElement => document.querySelector<HTMLElement>('[d
 const clickRow = (id: string, mods: { metaKey?: boolean } = {}) => act(() => { row(id).dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, ...mods })); });
 const openBatchMenu = (id: string) => act(() => { row(id).dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 40, clientY: 40 })); });
 const exportItem = () => [...document.querySelectorAll<HTMLButtonElement>('[role="menu"] button')].find((btn) => (btn.textContent ?? "").trim() === "导出…")!;
-const noticeText = () => document.querySelector(".tree-selection-bar__notice")?.textContent ?? null;
+const noticeText = () => document.querySelector(".tree-batch-notice__text")?.textContent ?? null;
 const runExport = async () => act(async () => { exportItem().click(); await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); });
 
 describe("批量导出接画板（task-96）", () => {
@@ -167,7 +167,7 @@ describe("批量导出接画板（task-96）", () => {
     act(() => { exportItem().click(); });
     await act(async () => { await Promise.resolve(); });
     expect(noticeText()).toContain("正在准备画板 1/1");
-    const cancel = [...document.querySelectorAll<HTMLButtonElement>(".tree-selection-bar__notice-row button")].find((btn) => (btn.textContent ?? "").trim() === "取消")!;
+    const cancel = [...document.querySelectorAll<HTMLButtonElement>(".tree-batch-notice button")].find((btn) => (btn.textContent ?? "").trim() === "取消")!;
     expect(cancel).toBeTruthy();
     await act(async () => { cancel.click(); release(null); await Promise.resolve(); await Promise.resolve(); });
     expect(nativeMocks.exportNotesBatch).not.toHaveBeenCalled();
