@@ -8,6 +8,7 @@ import { Feather, FolderOpen, File, RotateCcw, Trash } from "lucide-react";
 import { bridge } from "../bridge";
 import { confirmMobile } from "../ui/ConfirmDialog";
 import { showToast } from "../ui/toastBus";
+import { toastActionError } from "../lib/actionError";
 
 export interface TrashRow {
   key: string;
@@ -53,7 +54,7 @@ export function TrashList({ title, onChanged, onPreview }: TrashListProps) {
       await load();
       await onChanged();
     } catch (e) {
-      showToast("恢复失败：" + (e as Error).message, { type: "error" });
+      toastActionError("恢复", e);
     }
   };
 
@@ -67,7 +68,7 @@ export function TrashList({ title, onChanged, onPreview }: TrashListProps) {
       await load();
       await onChanged();
     } catch (e) {
-      showToast("删除失败：" + (e as Error).message, { type: "error" });
+      toastActionError("删除", e);
     }
   };
 

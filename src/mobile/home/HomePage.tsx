@@ -465,7 +465,7 @@ export function HomePage(props: HomePageProps) {
       await Promise.all([onQuickNotesChanged(), onTreeChanged()]);
       const w = r.warnings?.length ?? 0;
       showToast((r.message || "已同步") + (w > 0 ? `，${w} 项被跳过` : ""));
-    } catch (e) { showToast("同步失败：" + (e as Error).message, { type: "error" }); }
+    } catch (e) { toastActionError("同步", e); }
   };
   const toggleView = (): void => {
     setLibraryView((v) => { const nv = v === "shelf" ? "list" : "shelf"; writeLocalStorage(VIEW_KEY, nv); return nv; });
@@ -590,7 +590,7 @@ export function HomePage(props: HomePageProps) {
       await bridge.setQuickNoteTags(id, tagIds);
       await onQuickNotesChanged();
     } catch (reason) {
-      showToast("更新标签失败：" + (reason as Error).message, { type: "error" });
+      toastActionError("更新标签", reason);
     }
   };
 

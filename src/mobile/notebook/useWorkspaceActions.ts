@@ -7,6 +7,7 @@ import { duplicateResultNotice } from "../ui/duplicateNotesResult";
 import type { MobileSheetItem } from "../ui/MobileSheetMenu";
 import type { NotebookTreeItem } from "./useNotebookTreeData";
 import type { WorkspaceOverlay, WorkspaceOverlayKind } from "./useWorkspaceOverlays";
+import { toastActionError } from "../lib/actionError";
 
 /**
  * 工作区「目录动作与菜单组装」逻辑（261103 P11-②，原 NotebookWorkspace 内联代码逐字搬移，未改行为）：
@@ -121,7 +122,7 @@ export function useWorkspaceActions(options: UseWorkspaceActionsOptions) {
       }
       showToast(notice.text, { type: "error" });
     } catch (error) {
-      showToast("创建副本失败：" + (error instanceof Error ? error.message : String(error)), { type: "error" });
+      toastActionError("创建副本", error);
     }
   }, [loadTree]);
 

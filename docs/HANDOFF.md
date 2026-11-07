@@ -8,6 +8,12 @@
 
 ## 0. 最新交接（261027）
 
+### 261107 · 移动端架构收敛 P2 第四批（TagsHomeTab 拖拽 hook + 剩余 toast 收口）· **master 直接提交**
+- **`tags/useTagDragSort.ts`**：TagsHomeTab 的长按 350ms 拖拽排序（状态 + document touch 监听 + elementFromPoint 过半判定 + reorderQuickNoteTags）整体抽出，组件只拿 `{drag, pressedId, suppressClick, longPress}`；TagsHomeTab 608→**546** 行（JSX/类名/判据不变，tags 26 例全过）。
+- **toast 二轮收口**：再迁移 12 处 `(e as Error).message` / `instanceof 三目` 入口到 `toastActionError`（MobileAiPage 3 / DocListSheet 2 / HomePage 2 / TrashList 2 / QuickNoteComposer / useWorkspaceActions / useWorkspaceSync），累计 34 处 / 12 文件；文案逐字不变。剩余 3 处自定义前缀/fallback 文案保留原生写法（已记录）。
+- **backlog 复核结论**：`.mb-empty--compact` / `.mb-iconbtn--xs` 不做（3 套空态语义 + 4 套 28px 方钮几何，归一会改观感、数字收益小）；已写入设计文档。
+- **设备级验证（三套快照全绿）**：手机 6 态 / 平板 6 态 / 多维表 3 态 **全部 0 差异**（对比本轮重烤基线），确认架构收敛未改变计算值/DOM。
+- 门禁：tsc 0；全量 vitest 767 文件 / 4915 例通过；ui-metrics / check:mobileui / check:core / diff-check 绿。
 ### 261107 · 移动端架构收敛 P2 第三批（bitable 材质合并 + SettingsDrawer 菜单模型抽出）· **master 直接提交**
 - **bitable 细边白面合并**：`.mbt-card/.mbt-field/.mbt-detail/.mbt-tile/.mbt-vcfg-row/.mbt-colbtn/.mbt-vcfg-fields/.mbt-viewlist-rows/.mbt-kanban-card/.mbt-gallery-card` 的 `border/radius/background` 收进一个选择器组，各卡片只留布局/内容声明；bitable 957→**939** 声明（mobileLayers 基线同步收紧）。
 - **SettingsDrawer 首次拆分**：设置根页菜单模型（`View` 联合类型 + MENU + MENU_GROUPS + 取 label）抽到 `src/mobile/settings/settingsMenu.ts`（纯数据/纯函数，无 React）；SettingsDrawer 785→**755** 行并清掉搬走的 icon 导入。`settingsGroups.test` 改为合并读取 Drawer + menu 两个源文件，断言不变。

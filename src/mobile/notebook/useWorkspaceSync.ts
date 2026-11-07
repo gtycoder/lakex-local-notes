@@ -5,6 +5,7 @@ import { showToast } from "../ui/toastBus";
 import { SELF_REGISTERED_OVERLAY_KINDS, type WorkspaceOverlayKind } from "./useWorkspaceOverlays";
 import type { NotebookTab } from "./useNotebookTabs";
 import type { NotebookTreeItem } from "./useNotebookTreeData";
+import { toastActionError } from "../lib/actionError";
 
 /**
  * 工作区「返回栈 + 同步」逻辑（261103 P11-②，原 NotebookWorkspace 内联代码逐字搬移，未改行为）：
@@ -51,7 +52,7 @@ export function useWorkspaceSync(options: UseWorkspaceSyncOptions) {
       if (activeTab && !activeTab.editing) await loadTabBody(activeTab.id, true);
       const w = r.warnings?.length ?? 0;
       showToast((r.message || "已同步") + (w > 0 ? `，${w} 项被跳过` : ""));
-    } catch (e) { showToast("同步失败：" + (e as Error).message, { type: "error" }); }
+    } catch (e) { toastActionError("同步", e); }
   }, [loadTree, openTab, activeId]);
 
   // 活动文档上报（MobileApp 的定时自动快照按当前文档留档）

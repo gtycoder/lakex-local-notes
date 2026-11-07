@@ -434,11 +434,11 @@ node scripts/css-audit/drive.mjs 9335 scripts/css-audit/mobile-walkthrough.mjs  
 
 ### 后续 backlog（按收益/风险，未做）
 
-1. **P1 `toastActionError` 已完成（261107）**：`src/mobile/lib/actionError.ts`，收口 22 处 `showToast("X失败：" + getNativeErrorMessage(e))`（9 文件），文案逐字不变；其余 15 处用 `Error.message` / `instanceof` 三目 / 自定义后缀的入口按语义差异保留，迁移时再逐个确认。
+1. **P1 `toastActionError` 已完成（261107，两轮）**：`src/mobile/lib/actionError.ts`；第一轮收口 22 处 `getNativeErrorMessage` 入口，第二轮再收 12 处 `(e as Error).message` / `instanceof 三目` 入口（累计 34 处 / 12 文件），文案逐字不变。剩余 3 处是「已保存到本机，同步失败…」类自定义前缀 / 带 fallback 文案（「请重试」），保留原生写法。
 2. **P1 `EmptyState` 已完成（261107）**：`ui/EmptyState.tsx`，收口 43 处简单空态（25 文件，裸/inset/p/role 四类变体）；带自定义按钮/复杂布局的 6 处保留原生结构。
 3. **P1 TopBarIconButton 已完成（261107）**：`ui/TopBarIconButton.tsx` 把 4 处 `<span role=button>` 换成真 `<button>`（WorkspaceDrawers ×2 / WorkspaceOverlayHost / OutlineSheet），`.toolbar__icon` 补 appearance/border/background 重置。**PageHeader 经复核不做**：简单页已是真 button + `.mobile-topbar-title`，HomePage/WorkspaceTopBar 结构差异大，抽层只增耦合。
 4. **P2 `.mb-row` 吸收 `.mb-list-item` 已完成（261107）**：kit 588→575（含 glass +4）；list-item 仅保留 `gap:10px` 覆盖，active/meta 合并。
-5. **P2 `.mb-glass` / `.mb-surface` 已完成（261107）**：glass = kit +4 条声明替换 5 条稳定玻璃规则的重复 blur（mobile 1609→1603、floating −2、dock −2；顶栏滚动态因瞬态类保留）；surface = bitable 10 组细边白面的 border/radius/background 并成选择器组（bitable 957→**939**）。**`.mb-empty--compact` / `.mb-iconbtn--xs` 仍待做**（需设备快照验收）。
+5. **P2 `.mb-glass` / `.mb-surface` 已完成（261107）**：glass = kit +4 条声明替换 5 条稳定玻璃规则的重复 blur（mobile 1609→1603、floating −2、dock −2；顶栏滚动态因瞬态类保留）；surface = bitable 10 组细边白面的 border/radius/background 并成选择器组（bitable 957→**939**）。**`.mb-empty--compact` / `.mb-iconbtn--xs` 复核后不做**：bitable 空态有 3 套内距/对比度语义（text-3/text-4、xxl/giant），28px 方钮有 4 套几何（toast 关闭/树行动作/文件×/色板），强行归一会改变观感且收益仅为数字，按「一个语义一套」原则保留各自实现。
 5b. **P2 a11y 行激活部分完成（261107）**：`ui/rowActivation.ts` 接入首页小记卡 + 知识库书架/列表卡；目录行内 ⋯/＋ 在行 button 内（嵌套 button 非法），保留由行语义承载。
-6. **P2 大文件拆分（部分完成 261107）**：SettingsDrawer 785→**755**，菜单模型（View 类型/MENU/MENU_GROUPS/label）抽到 `settings/settingsMenu.ts`；剩余：SettingsDrawer 子页渲染、TagsHomeTab 608（Pane/Sheet/拖拽 hook）、HomePage 1116、MobileApp 965、EditorDock 844、MobileUsheetViewer 998。
+6. **P2 大文件拆分（两处完成 261107）**：SettingsDrawer 785→**755**（菜单模型 → `settings/settingsMenu.ts`）；TagsHomeTab 608→**546**（长按拖拽排序 → `tags/useTagDragSort.ts`，行为/判据不变）。剩余（后续独立批次）：SettingsDrawer 子页渲染、HomePage 1116、MobileApp 965、EditorDock 844、MobileUsheetViewer 998。
 7. **P2 a11y 已完成（261107）**：`rowActivation` 接入首页小记卡 + 知识库书架/列表；`TopBarIconButton` 把 4 处非嵌套 `span role=button` 改真 button；目录行内 ⋯/＋ 因嵌套 button 非法保持行语义（已记录）。

@@ -36,6 +36,7 @@ import {
 import { appendPendingImages, compressImageFile, type AiPendingImage } from "./aiImages";
 import { answerTitle, lakeBodyFromText, suggestions, takeCorpus } from "./aiSession";
 import { pickLocalFile, pickLocalFiles } from "../ui/pickFile";
+import { toastActionError } from "../lib/actionError";
 
 export interface MobileAiPageProps {
   open: boolean;
@@ -146,7 +147,7 @@ export function MobileAiPage({ open, onClose, onChanged }: MobileAiPageProps) {
       setCandidates((prev) => prev.map((c) => (c.id === id ? { ...c, loading: false, chars: doc.totalChars, disabledReason: reason ?? undefined } : c)));
     } catch (error) {
       setCandidates((prev) => prev.map((c) => (c.id === id ? { ...c, loading: false } : c)));
-      showToast("读取文档失败：" + (error as Error).message, { type: "error" });
+      toastActionError("读取文档", error);
     }
   }, [chat.corpus]);
 
@@ -180,13 +181,13 @@ export function MobileAiPage({ open, onClose, onChanged }: MobileAiPageProps) {
       showToast("已存为新文档《" + title + "》");
       onChanged?.();
     } catch (error) {
-      showToast("保存失败：" + (error as Error).message, { type: "error" });
+      toastActionError("保存", error);
     }
   }, [onChanged]);
 
   const saveAsQuickNote = useCallback(async (text: string) => {
     try { await bridge.createQuickNote(text); showToast("已存为小记"); onChanged?.(); }
-    catch (error) { showToast("保存失败：" + (error as Error).message, { type: "error" }); }
+    catch (error) { toastActionError("保存", error); }
   }, [onChanged]);
 
   if (!open) return null;

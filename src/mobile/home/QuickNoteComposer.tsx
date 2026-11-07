@@ -46,6 +46,7 @@ import { sha256Sync } from "../../core/sha256Sync.js";
 import { isQuickNoteImageMime, quickNoteBodyFromTextAndImages, type StoredQuickNoteImage } from "../../core/quickNoteModel.js";
 import { addQuickNoteTagId, removeQuickNoteTagId, type QuickNoteTagSummary } from "../../core/quickNoteTags.js";
 import { MobileQuickNoteTagSheet } from "./MobileQuickNoteTagSheet";
+import { toastActionError } from "../lib/actionError";
 export interface QuickNoteComposerProps {
   /** 编辑目标（已有小记 id + 正文）；null = 新建 */
   editNote?: { id: string; text: string; body?: string; images: StoredQuickNoteImage[]; tagIds?: string[] } | null;
@@ -344,7 +345,7 @@ export function QuickNoteComposer({ editNote, tagOptions, onCreateTag, onSaved, 
           else if (outcome.reason === "no-remote-manifest") showToast("云端还没有小记清单，已执行一次完整同步");
           else showToast("这条小记已在其他设备删除，已按删除处理", { type: "error" });
         } catch (reason) {
-          showToast("已保存到本机，同步失败：" + (reason as Error).message, { type: "error" });
+          toastActionError("已保存到本机，同步", reason);
         } finally {
           setSyncing(false);
         }

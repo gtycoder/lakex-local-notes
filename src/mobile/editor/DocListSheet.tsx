@@ -159,7 +159,7 @@ export function DocListSheet({ open, documents, activeId, onPick, onClose }: Doc
       setMoveOpen(false);
       selection.exit();
     } catch (error) {
-      showToast("批量操作失败：" + (error as Error).message, { type: "error" });
+      toastActionError("批量操作", error);
     } finally {
       setBatchBusy(false);
     }
@@ -237,7 +237,7 @@ export function DocListSheet({ open, documents, activeId, onPick, onClose }: Doc
       setMoveExcludedIds([...selection.ids]);
       setMoveOpen(true);
     } catch (error) {
-      showToast("读取移动目标失败：" + (error as Error).message, { type: "error" });
+      toastActionError("读取移动目标", error);
     }
   };
 

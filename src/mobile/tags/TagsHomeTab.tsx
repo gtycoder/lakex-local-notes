@@ -18,7 +18,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, GripVertical, Merge, MoreVertical, Pencil, Plus, Trash, X } from "lucide-react";
 import type { QuickNoteTag } from "../../core/quickNoteTags";
-import { buildQuickNoteTagIndex, buildQuickNoteTagOptions, moveQuickNoteTagOrder, normalizeQuickNoteTag } from "../../core/quickNoteTags";
+import { buildQuickNoteTagIndex, buildQuickNoteTagOptions, normalizeQuickNoteTag } from "../../core/quickNoteTags";
 import { formatRelativeTime } from "../lib/listTime";
 import { getNativeErrorMessage } from "../../lib/nativeErrors";
 import type { LocalNoteSummary } from "../data/noteRepository";
@@ -29,10 +29,10 @@ import { MobileSheet } from "../ui/MobileSheet";
 import { SheetFooter } from "../ui/SheetFooter";
 import { MobileSheetMenu, type MobileSheetItem } from "../ui/MobileSheetMenu";
 import { pushBackHandler } from "../ui/backStack";
-import { useLongPress } from "../ui/useLongPress";
 import { showToast } from "../ui/toastBus";
 import { aggregateTagRows, tagCounts, type NoteTagLinks, type TagAggregateRow } from "./tagAggregate";
 import { createTagFromName } from "./tagCreate";
+import { useTagDragSort } from "./useTagDragSort";
 import { TagQuickNoteCard } from "./TagQuickNoteCard";
 import { MERGE_TAG_HINT, deleteTagConfirmBody } from "./tagManageCopy";
 import { toastActionError } from "../lib/actionError";
@@ -51,8 +51,6 @@ export interface TagsHomeTabProps {
   /** 目录/关系变了以后刷新 App 快照（目录 + 小记列表）。 */
   onChanged(): Promise<void>;
 }
-
-interface DragState { id: string; overId: string | null; after: boolean }
 
 const fmtTime = (iso: string): string => formatRelativeTime(iso);
 
@@ -77,15 +75,6 @@ export function TagsHomeTab({ tags, notes, quickNotes, active, onOpenNote, onOpe
   const [renameError, setRenameError] = useState<string | null>(null);
   const [mergeSource, setMergeSource] = useState<QuickNoteTag | null>(null);
   const renameInputRef = useRef<HTMLInputElement | null>(null);
-  // 长按拖拽排序
-  const [drag, setDrag] = useState<DragState | null>(null);
-  const dragRef = useRef<DragState | null>(null);
-  dragRef.current = drag;
-  const pressedId = useRef<string | null>(null);
-  const startPoint = useRef<{ clientX: number; clientY: number } | null>(null);
-  /** 长按/拖拽过的那一次 click 要吞掉（否则松手会顺带进详情）。 */
-  const suppressClick = useRef(false);
-
   const loadLinks = useCallback(async (): Promise<void> => {
     setLoadingLinks(true);
     setLinksError(null);
@@ -129,6 +118,8 @@ export function TagsHomeTab({ tags, notes, quickNotes, active, onOpenNote, onOpe
 
   /** 任一写操作完成后：关系可能变了 ⇒ 关系 + App 快照一起刷。 */
   const reloadAll = useCallback(async (): Promise<void> => { await loadLinks(); await onChanged(); }, [loadLinks, onChanged]);
+  // 长按拖拽排序（逻辑在 useTagDragSort：状态 + touch 监听，落库后 reloadAll）。
+  const { drag, pressedId, suppressClick, longPress } = useTagDragSort({ tags, reloadAll, setBusy });
 
   const openRow = (row: TagAggregateRow): void => {
     if (row.kind === "doc") onOpenNote(row.id);
@@ -239,59 +230,6 @@ export function TagsHomeTab({ tags, notes, quickNotes, active, onOpenNote, onOpe
       setBusy(false);
     }
   };
-
-  // ── 长按 350ms 拖拽排序（复用既有 qn-tag-manager 拖拽态/判据）───────────────────
-  const order = useMemo(() => tags.map((tag) => tag.id), [tags]);
-  const longPress = useLongPress((touch) => {
-    const id = pressedId.current;
-    if (!id) return;
-    suppressClick.current = true;     // 长按过 ⇒ 松手后的 click 不进详情
-    setDrag({ id, overId: null, after: false });
-    startPoint.current = touch;
-  }, { moveCancelPx: 0 });
-
-  useEffect(() => {
-    if (!drag) return;
-    const compute = (clientY: number): { overId: string | null; after: boolean } => {
-      const hit = document.elementFromPoint(startPoint.current?.clientX ?? 0, clientY) as HTMLElement | null;
-      const row = hit?.closest("[data-tag-id]") as HTMLElement | null;
-      const overId = row?.getAttribute("data-tag-id") ?? null;
-      if (!overId || overId === dragRef.current?.id) return { overId: null, after: false };
-      const rect = row!.getBoundingClientRect();
-      return { overId, after: clientY > rect.top + rect.height / 2 };
-    };
-    const onMove = (event: TouchEvent) => {
-      const touch = event.touches[0];
-      if (!touch) return;
-      event.preventDefault();
-      const next = compute(touch.clientY);
-      const current = dragRef.current;
-      if (!current) return;
-      if (current.overId === next.overId && current.after === next.after) return;
-      setDrag({ ...current, ...next });
-    };
-    const finish = () => {
-      const current = dragRef.current;
-      setDrag(null);
-      startPoint.current = null;
-      if (!current?.overId) return;
-      const nextOrder = moveQuickNoteTagOrder(order, current.id, current.overId, current.after ? "after" : "before");
-      if (nextOrder.join("\u0000") === order.join("\u0000")) return;
-      setBusy(true);
-      void bridge.reorderQuickNoteTags(nextOrder)
-        .then(reloadAll)
-        .catch((error: unknown) => toastActionError("排序", error))
-        .finally(() => setBusy(false));
-    };
-    document.addEventListener("touchmove", onMove, { passive: false });
-    document.addEventListener("touchend", finish);
-    document.addEventListener("touchcancel", finish);
-    return () => {
-      document.removeEventListener("touchmove", onMove);
-      document.removeEventListener("touchend", finish);
-      document.removeEventListener("touchcancel", finish);
-    };
-  }, [drag !== null, order, reloadAll]);
 
   // ── 详情行 × ：先二次确认（只删该条关联），确认后才落库 ───────────────────────
   const removeRow = async (row: TagAggregateRow): Promise<void> => {
