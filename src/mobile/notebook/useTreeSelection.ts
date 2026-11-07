@@ -112,7 +112,7 @@ export function useTreeSelection(options: UseTreeSelectionOptions) {
     }
   }), [withBusy, selectedIds, loadTree, selection.exit, options.flushSaves]);
 
-  /** 移动到…：弹目录树（只列笔记本/分组，与列表页同一份 MoveTargetTreeSheet）。 */
+  /** 移动到…：弹目标选择（v2 只列笔记本；与文档列表多选同一份 MoveTargetTreeSheet）。 */
   const openMovePicker = useCallback(async () => {
     if (selectedIds.length === 0) { showToast("请先选择文档"); return; }
     setError(null);

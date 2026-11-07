@@ -195,17 +195,18 @@ describe("DocListSheet 多选模式（261106 task-82）", () => {
   const treeConfirm = (): HTMLButtonElement =>
     [...host.querySelectorAll<HTMLButtonElement>(".mb-sheet__foot button")].find((b) => (b.textContent ?? "").includes("移动到此处"))!;
 
-  it("移动（目录树）：展开笔记本 → 选分组 → 「移动到此处」调 batchNotes(move parentId)，成功后退出选择", async () => {
+  it("移动：选笔记本（v2 只列笔记本）→「移动到此处」调 batchNotes(move parentId)，成功后退出选择", async () => {
     await render();
     await enterByButton();
     await act(async () => { rowByTitle("周报").click(); await Promise.resolve(); });
     await act(async () => { moveButton().click(); await new Promise((r) => setTimeout(r, 0)); });
     expect(bridgeMock.getHomeSnapshot).toHaveBeenCalled();
-    // task-94：树默认展开所有根笔记本一层 ⇒ 「分组A」直接可见（用户不用先展开）
-    expect(treeTarget("分组A")).not.toBeNull();
-    await act(async () => { treeTarget("分组A")!.click(); await Promise.resolve(); });
+    // v2（261107）：移动目标**只列笔记本**（分组不展示、不可选）。
+    expect(treeTarget("分组A")).toBeNull();
+    expect(treeTarget("笔记本")).not.toBeNull();
+    await act(async () => { treeTarget("笔记本")!.click(); await Promise.resolve(); });
     await act(async () => { treeConfirm().click(); await new Promise((r) => setTimeout(r, 0)); });
-    expect(bridgeMock.batchNotes).toHaveBeenCalledWith({ action: "move", ids: ["n1"], space: "lake", parentId: "g1" });
+    expect(bridgeMock.batchNotes).toHaveBeenCalledWith({ action: "move", ids: ["n1"], space: "lake", parentId: "nb1" });
     expect(host.querySelector('[role="toolbar"][aria-label="多选操作"]')).toBeNull(); // 成功退出选择
   });
 
@@ -220,7 +221,7 @@ describe("DocListSheet 多选模式（261106 task-82）", () => {
     await enterByButton();
     await act(async () => { rowByTitle("周报").click(); await Promise.resolve(); });
     await act(async () => { moveButton().click(); await new Promise((r) => setTimeout(r, 0)); });
-    await act(async () => { treeTarget("分组A")!.click(); await Promise.resolve(); });
+    await act(async () => { treeTarget("笔记本")!.click(); await Promise.resolve(); });
     await act(async () => { treeConfirm().click(); await new Promise((r) => setTimeout(r, 0)); });
     expect(toastMock.showToast).toHaveBeenCalledWith("成功 0，失败 1（目标位置在回收站里）", { type: "error" });
     expect(host.querySelector('[role="toolbar"][aria-label="多选操作"]')).not.toBeNull(); // 保留选择

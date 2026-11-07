@@ -228,7 +228,7 @@ export function DocListSheet({ open, documents, activeId, onPick, onClose }: Doc
     }
   };
 
-  /** 移动到…：弹**目录树**（task-89），当前路径默认展开、当前位置高亮、自身/后代禁用。 */
+  /** 移动到…：弹**笔记本选择**（v2 261107 只列笔记本），当前位置标注、自身/后代禁用。 */
   const openMovePicker = async (): Promise<void> => {
     setBatchError(null);
     try {

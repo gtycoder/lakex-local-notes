@@ -8,6 +8,12 @@
 
 ## 0. 最新交接（261027）
 
+### 261107 · 移动目标选择简化（单选/多选都只选笔记本）· **master 直接提交**
+- 用户点单：单条移动与批量移动都**只允许选笔记本**，不做层级目录树。`MoveTargetTreeSheet` 重写为平铺笔记本列表：只保留 `nodeType==="notebook"`（分组不展示/不可选）、搜索框（搜索笔记本…）、选中打勾、「当前位置」标注、自身/后代禁用并写明原因；行改用标准 `.mb-row.mb-row--two-line`（修掉旧版把 `<button class="mb-set-name">` 当行导致的浏览器默认边框/居中/说明文字像输入框的观感），未新增 CSS。
+- 影响面：文档树多选 `useTreeSelection.openMovePicker` 与文档列表多选 `DocListSheet` 共用同一组件 ⇒ 单选/多选两条路径同时变成「只选笔记本」。
+- 测试：`MoveTargetTreeSheet.render.test.tsx` 重写为 7 例（只列笔记本/当前位置/排除禁用/选择确认/搜索/取消返回/空态）；`DocListSheet.render.test.tsx` 的移动成功与失败两例改为直接选「笔记本」并断言 `parentId: nb1`。
+- 门禁：tsc（本仓范围）0；**全量 vitest 760 文件 / 4902 例通过**；ui-metrics / check:mobileui / check:core / diff-check 绿。无 CSS 变更 ⇒ mobileLayers 基线不动。
+- 真机：emulator-5554 打开移动 Sheet（截图 `preview/device/move-sheet.png`）确认只有 3 本笔记本、无分组、当前位置标注、确认按钮未选时置灰。
 ### 261107 · 移动端多选页 P2（复选框覆盖式零位移 + 置顶动作）· **master 直接提交**
 - **目录零位移**：`NotebookTreeList` 选择态不再把 `SelectionCheckbox` 作为 flex 子项（原先 44px 会把行内容整体右推）；改为 `.nb-sel-cb` **绝对定位覆盖在行左侧留白**（44 命中盒、视觉 18，`pointer-events:none` 由行承接点击）。仅可选文档渲染复选框；分组/笔记本不再画置灰占位（展开箭头仍可点）。实测选中前后文档行图标 x 均为 44 ⇒ 进出选择态目录不动。
 - **新增「置顶」**：`favorites.ts` 增加 `addFavorites(ids)`（设备本地、去重追加、emit 变更）；树多选 5 个动作 = 置顶 / 创建副本 / 移动 / 打标签 / 删除（等分图标格）；置顶后 toast「已置顶 N 篇文档」并退出选择，首页「置顶」分组经由既有订阅刷新。
