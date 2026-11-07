@@ -12,7 +12,9 @@
 - **实现**：`HomePage.tsx` 新增 `morphCardToComposer(card)` —— 卡片克隆按当前矩形 `position:fixed` 浮起（`.qn-card-morph`），rAF 后按 `--mb-dur-page / --mb-ease` 扩到写作卡容器（`quickScrollRef`）矩形，330ms 后 180ms 淡出并移除；真实写作卡随后挂载。`QuickNoteCard` 的 `onEdit` 改为传出 `cardRef.current`（转场起点）。`prefers-reduced-motion` 直接跳过；只动几何 + opacity，不参与布局/命中。
 - **CSS**：`mobile.css` 新增 `.qn-card-morph` / `.is-out`（固定层、卡面/卡阴影、`z: var(--mobile-z-page)`、`will-change`、淡出过渡）；mobileLayers 基线 mobile.css 1585 → 1596（+11）。
 - **门禁**：tsc 0；全量 `npx vitest run` **770 文件 / 4901 例通过**（12 skip）；ui-metrics / check:mobileui / check:core / `git diff --check` 绿。
-- **真机**：emulator-5554（debug APK）点小记卡 → 克隆卡片扩到写作卡（中间帧可见），写作卡与玻璃 dock 正常挂载；无运行时异常。截图 `/Users/admin/file/local-lake/preview/device/mobile-morph.png`、`mobile-composer.png`。
+- **真机**：emulator-5554（debug APK）点小记卡 → 克隆卡片扩到写作卡（中间帧可见），写作卡与玻璃 dock 正常挂载；无运行时异常。
+- **补充（本批末）**：同一套 `morphCardToRect` 也接到「置顶文档卡 → 文档工作区」（共享元素扩到整页，路由转场在其下方完成）；克隆类名泛化为 `.mb-morph-card`（保留原卡片类名，只叠几何）。
+- **cssLayers 门禁**：`cssLayers.test.ts` + `mobileLayers.test.ts` 7 例通过（颜色字面量只允许在 theme/、跨文件重复 103/105）。截图 `/Users/admin/file/local-lake/preview/device/mobile-morph.png`、`mobile-composer.png`。
 - **未完成（下一轮）**：设置**子页**图标块接线、6 态/23 屏快照基线重烤、HANDOFF §1 计数回写、分支整理（桌面提交 `ed0d77fc` 仍在本分支）。**本批未推送**。
 
 ### 261107 · 移动端 v2「柔光纸面」P2（纯黑 OLED + 笔记本动态主色）· **本地分支 `feat/mobile-paper-light`，未推送**
@@ -1042,6 +1044,7 @@
 - 两远端 master 的交付核验见 `.css-audit/final-review/merge-verify.txt`（该目录在 261105 清理中已删除，历史证据见 git 提交记录）。
 - **261105 标签缺席改造（本轮）**：已提交 `e83a6960` 并双推，改动面 = core 同步语义 + 两端标签库/端口 + 移动端回收站定时清空 + 文档。门禁实测：tsc 0；全量 vitest **608 文件（597 passed / 11 integration skip）、3763 passed / 12 skipped**；core 136 文件 0 违规；check:mobileui/ui-metrics 通过；`git diff --check` 干净。
 - **261107 基线**：本次会话全部改动（创建副本/原生资源复制、桌面置顶、块复制与换行、AI 写作助手卡、AI 助手请求/单会话/对话 hook 架构收口、AI 面板视觉收敛与图标去绿底）已本地提交并推 `origin/master`；最终门禁 **765 文件（754 passed / 11 skipped）、4878 passed / 12 skipped**、tsc 0、core 0、ui-metrics / check:mobileui / diff-check 通过。提交 hash 见 `git log -1`。
+- **261107 移动端 v2「柔光纸面」分支基线（`feat/mobile-paper-light`，**未推送**）**：HEAD 见 `git log -1`。本分支 = 设计基线（MOBILE-DESIGN v2）+ P1（theme 令牌 / kit+floating / 三屏外壳 / 设置分组卡）/ P2（OLED 纯黑 / 笔记本动态主色 / 预览标题深色修复）/ P3（共享元素转场：小记卡→写作卡、置顶文档卡→文档页）。门禁：**770 文件（759 passed / 11 skipped）、4901 passed / 12 skipped**、tsc 0、ui-metrics / check:mobileui / `cssLayers + mobileLayers`（7 例）/ core 146 文件 0 违规 / diff-check 通过。**并发提醒**：同分支混入另一会话的桌面提交 `ed0d77fc`（feat duplicate），合并前需拆走；另 `electron/noteDuplication*` / `electron/store.ts` 等未提交改动属别的会话，不要顺手提交。**6 态 / 23 屏快照基线尚未重烤**（下一批或发版前做，需 lake_gate 夹具）。
 - **261108 基线**：文件导入（Markdown / Word / Excel / CSV）——主进程 mammoth/read-excel-file 解析 + core CSV/sheet 导入 + 桌面通用批量；门禁 **769 文件（758 passed / 11 skipped）、4892 passed / 12 skipped**，tsc / build / diff-check 绿。版本仍 `0.0.2`，未发版。
 - **261106 基线**：`master` `362d2331`（已双推）。改动面 = 移动端标签一级页/搜索/键盘稳定/批量多选；桌面+移动 Markdown 导入、批量导出（doc→md / usheet/bitable→csv / ink/board→pdf）、思源式移动树、备份可观测、Bitable 视图拖拽。门禁实测：tsc 0；全量 vitest **750 文件（739 passed / 11 skip）、4758 passed / 12 skipped**；core 边界 0 违规；ui-metrics / check:mobileui / diff-check 通过。IPC parity = 162（新增 batch_notes / export_notes_batch / write_batch_export_file / open_export_dir / pick_markdown_files / read_import_image，移除 pick_markdown_folder）。
 - **261105 实测偏差修正**：`master..feat/pad-touch-ui = 0`（`d2f76b3b` 已是 master 祖先）⇒ §3 P0 原文「落后 6 个提交、发版前先合」已过期，本轮就地改掉。

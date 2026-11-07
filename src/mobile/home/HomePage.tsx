@@ -355,18 +355,17 @@ export function HomePage(props: HomePageProps) {
     if (quickVirtualEnabled) quickVirtualizer.measure();
   }, [quickVirtualEnabled, sortedQuickNotes, quickVirtualizer]);
 
-  /** v2（261107）：共享元素转场 —— 小记卡 → 写作卡（FLIP 克隆）。
-   *  卡片克隆按当前矩形浮起，扩到写作卡容器（quickScroll）位置后淡出；真实写作卡随后挂载。
-   *  只动 transform/几何 + opacity，不参与布局；reduced-motion 下直接跳过。 */
-  const morphCardToComposer = useCallback((card: HTMLElement | null): void => {
-    const target = quickScrollRef.current;
+  /** v2（261107）：共享元素转场 —— 卡片 → 目标容器（FLIP 克隆）。
+   *  克隆按卡片当前矩形浮起，扩到目标矩形后淡出；真实目标视图随后挂载/切换。
+   *  只动几何 + opacity，不参与布局；reduced-motion 下直接跳过。 */
+  const morphCardToRect = useCallback((card: HTMLElement | null, target: HTMLElement | null): void => {
     if (!card || !target) return;
     if (typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     const from = card.getBoundingClientRect();
     const to = target.getBoundingClientRect();
     if (!from.width || !to.width) return;
     const clone = card.cloneNode(true) as HTMLElement;
-    clone.className = "qn-card qn-card-morph";
+    clone.classList.add("mb-morph-card");
     clone.setAttribute("aria-hidden", "true");
     clone.style.left = from.left + "px";
     clone.style.top = from.top + "px";
@@ -386,6 +385,16 @@ export function HomePage(props: HomePageProps) {
       window.setTimeout(() => clone.remove(), 180);
     }, 330);
   }, []);
+
+  /** 小记卡 → 写作卡。 */
+  const morphCardToComposer = useCallback((card: HTMLElement | null): void => {
+    morphCardToRect(card, quickScrollRef.current);
+  }, [morphCardToRect]);
+
+  /** 置顶文档卡 → 文档工作区（共享元素扩到整页，路由转场在其下方完成）。 */
+  const morphCardToScreen = useCallback((card: HTMLElement | null): void => {
+    morphCardToRect(card, stageRef.current);
+  }, [morphCardToRect]);
 
   const openEdit = async (id: string): Promise<void> => {
     try {
@@ -830,7 +839,7 @@ export function HomePage(props: HomePageProps) {
               {favoriteOpen && (
                 <div className="home-card-row">
                   {favoriteNotes.map((r) => (
-                    <button key={r.id} className="doc-card" onClick={() => onOpenNote(r.id)} aria-label={r.title || "文档"}>
+                    <button key={r.id} className="doc-card" onClick={(e) => { morphCardToScreen(e.currentTarget); onOpenNote(r.id); }} aria-label={r.title || "文档"}>
                       <span className="doc-card__paper" aria-hidden="true">
                         <span className="doc-card__lines" />
                       </span>
