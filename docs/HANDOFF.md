@@ -8,6 +8,15 @@
 
 ## 0. 最新交接（261027）
 
+### 261108 · 文件导入：Word / Excel / CSV（并入 Markdown 统一入口）· **已提交**
+- **入口**：目录「＋」/ 行内「＋」→「导入文件…」统一 picker，支持 .md/.markdown/.docx/.xlsx/.csv；取消返回空，不支持/超 20MB/解析失败逐条计入跳过并给原因。
+- **主进程**：electron/documentImportScan.ts —— Markdown/CSV 读文本（UTF-8 优先、GBK 兜底）；.docx 用 mammoth → HTML（图片转 data URL）；.xlsx 用 read-excel-file → 所有工作表值 → usheet 工作簿。纯解析、不建笔记。
+- **core**：src/core/csv.ts（通用 CSV 解析，多维表导入同源）；src/core/sheetImport.ts（多表值 → usheet 工作簿，35×16 下限、日期压成年月日、200k×16384 上限）。
+- **renderer**：src/features/import/fileImportBatch.ts（桌面专用；目录/分组/标题去重/失败软删）——Markdown→lake、Word HTML→htmlImportPipeline→lake（图片先 uploadResource 物化）、Excel/CSV→usheet 正文；移动端 Markdown 分享继续用原 markdownBatchImport，不引入 Word/HTML/表格代码（移动入口预算）。
+- **依赖**：新增 mammoth@1.13.0（BSD-2，主进程）与 read-excel-file@9.3.14（MIT，主进程）；只进导入链路，不影响首屏。
+- **范围/限制**：.doc/.xls 不支持；Word 页眉页脚/脚注/批注/修订/文本框/公式/分栏/页码/域/图表不导入；Excel 只导入值（公式取缓存结果），样式/图表/图片/透视/条件格式/跨表公式/隐藏行列不导入；CSV 全按文本、无类型信息。
+- **验证**：真实 docx/xlsx/csv fixture 解析通过（标题/粗斜体/列表/表格/图片、双工作表/日期/数字、UTF-8/GBK CSV）；dev 实际内核端到端：docx→doc（季度报告 + 图片）、csv→usheet（people）均成功；UI 映射测试覆盖 docx/xlsx/csv；全量 **769 文件（758 passed / 11 skipped）、4891 passed / 12 skipped**，tsc / build / diff-check 绿。**check:bundle 的 mobile-entry 预算在 HEAD 已超（preload 32/30、js 64.3/61.4KB），非本批引入。**
+
 ### 261107 · AI 面板视觉收敛 + 卡片图标去绿底（视觉 review）· **已提交**
 - **卡片图标**：去掉绿色底/描边 rect，改与插入面板其它图标同口径的**线性 monochrome sparkle**（主星描边 + 小星/圆点实心，currentColor 跟随主题，暗/暖自适应）；不再引 --lake-ai-icon-soft/ink/star。护栏：aiAssistantCard.test.ts 断言 symbol 无 soft 绿底、有 currentColor。
 - **AI 面板收敛**：所有 .ai-dialog* 布局从 selectionToolbar.css 归并到 features/ai/aiDialogParts.css 单一来源；回答去掉第二层边框/白底（直接 Markdown 正文），用户问题只留右侧浅底 pill；输入条改用 kit .ln-input（边框/聚焦环/占位色全部原语），只覆盖多行高度；动作行只保留生成/发送一个 primary，其余 ghost；复制动作改为 hover/focus 才出现（无 hover 设备常显）；全文开关移到输入条上方。
@@ -1007,6 +1016,7 @@
 - 两远端 master 的交付核验见 `.css-audit/final-review/merge-verify.txt`（该目录在 261105 清理中已删除，历史证据见 git 提交记录）。
 - **261105 标签缺席改造（本轮）**：已提交 `e83a6960` 并双推，改动面 = core 同步语义 + 两端标签库/端口 + 移动端回收站定时清空 + 文档。门禁实测：tsc 0；全量 vitest **608 文件（597 passed / 11 integration skip）、3763 passed / 12 skipped**；core 136 文件 0 违规；check:mobileui/ui-metrics 通过；`git diff --check` 干净。
 - **261107 基线**：本次会话全部改动（创建副本/原生资源复制、桌面置顶、块复制与换行、AI 写作助手卡、AI 助手请求/单会话/对话 hook 架构收口、AI 面板视觉收敛与图标去绿底）已本地提交并推 `origin/master`；最终门禁 **765 文件（754 passed / 11 skipped）、4878 passed / 12 skipped**、tsc 0、core 0、ui-metrics / check:mobileui / diff-check 通过。提交 hash 见 `git log -1`。
+- **261108 基线**：文件导入（Markdown / Word / Excel / CSV）——主进程 mammoth/read-excel-file 解析 + core CSV/sheet 导入 + 桌面通用批量；门禁 **769 文件（758 passed / 11 skipped）、4891 passed / 12 skipped**，tsc / build / diff-check 绿。版本仍 `0.0.2`，未发版。
 - **261106 基线**：`master` `362d2331`（已双推）。改动面 = 移动端标签一级页/搜索/键盘稳定/批量多选；桌面+移动 Markdown 导入、批量导出（doc→md / usheet/bitable→csv / ink/board→pdf）、思源式移动树、备份可观测、Bitable 视图拖拽。门禁实测：tsc 0；全量 vitest **750 文件（739 passed / 11 skip）、4758 passed / 12 skipped**；core 边界 0 违规；ui-metrics / check:mobileui / diff-check 通过。IPC parity = 162（新增 batch_notes / export_notes_batch / write_batch_export_file / open_export_dir / pick_markdown_files / read_import_image，移除 pick_markdown_folder）。
 - **261105 实测偏差修正**：`master..feat/pad-touch-ui = 0`（`d2f76b3b` 已是 master 祖先）⇒ §3 P0 原文「落后 6 个提交、发版前先合」已过期，本轮就地改掉。
 - 发版仍只有v0.0.1/v0.0.2，package.json=0.0.2；未发版提交数用`git rev-list --count v0.0.2..master`查询，别沿用125这个旧计数。下一版发布说明须写inkDoc v4：旧端只读、手机/平板需重装。
@@ -1052,7 +1062,7 @@
 
 6. **小记标签（261105 收口后剩余）**：**文档标签要不要立项**（桌面主库独立目录 `target_kind=note`，不参与 S3；方案已写 §0）；小记→文档转换是否携带标签（等文档标签一起）。已收口、别再立项：置顶、标签顺序同步、单条小记标签顺序同步、移动端标签管理（拖拽/改名/删除/合并已做）、改名/删除全量重建。**标签删除语义已定稿（261105）：删除 = 缺席（物理删行，云端列表零墓碑，删除压编辑）**——不要再提「保留墓碑再裁剪窗口」或「标签墓碑随索引传播」。
 
-10. **Word / Excel 导入（261106 调研完成，用户暂缓）**：docx 需新增依赖 mammoth（docx→HTML→`setDocument("text/html")`，约 180 行 / 1.5–2 天）或自研 zip+XML（600–900 行）；不做页眉页脚/脚注/批注/修订/文本框/公式/分栏/页码/域/图表，合并单元格先扁平。xlsx：Univer 依赖无 import（Pro 商业包才有），先做 CSV→usheet（0.5–1 天），或 read-excel-file（值 100% / 无公式样式），或自研 OOXML（3–5 天）；不做图表/图片/透视/条件格式/数据验证/跨表公式/隐藏行列。**开 Word 前先向用户申请新依赖批准**。
+10. **Word / Excel / CSV 导入已实现（261108，桌面）**：统一「导入文件…」入口；剩余限制见 §0 该批（.doc/.xls、Word 页眉/脚注/修订、Excel 样式/图表、CSV 类型）。移动端分享导入仍只覆盖 Markdown，如需移动端 Word/Excel 另立项。
 11. **导入 / 导出 / 键盘真机冒烟债**：① 桌面 Markdown 导入用真实 md（含图片/表格/脚注/超大文件）跑一遍；② 移动端 .md 系统分享（冷/热启动、多文件、未设置默认笔记本、失败回滚）真机验收；③ 批量导出真实目录（含画板 PDF 待打开/未打开两种、ink 多页、同名冲突）；④ 移动端键盘稳定（标签/批量打标签/搜索/新建/默认笔记本）真机键盘验收。
 **P2（体验缺口 / 长期）**
 

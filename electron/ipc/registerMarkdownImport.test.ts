@@ -50,7 +50,7 @@ const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR
 
 describe("registerMarkdownImportIpc：通道与取消语义", () => {
   it("注册两个通道（与 preload/WEB_METHODS 同名）", () => {
-    expect(harness().channels()).toEqual(["pick_markdown_files", "read_import_image"]);
+    expect(harness().channels()).toEqual(["pick_import_files", "pick_markdown_files", "read_import_image"]);
   });
 
   it("多选文件：取消 ⇒ 空数组（不抛）", async () => {
@@ -60,6 +60,25 @@ describe("registerMarkdownImportIpc：通道与取消语义", () => {
     const call = dialogMock.showOpenDialog.mock.calls[0];
     expect(call[1]).toMatchObject({ properties: ["openFile", "multiSelections"] });
     expect(JSON.stringify(call[1].filters)).toContain("markdown");
+  });
+
+  it("统一导入：取消 ⇒ 空；Markdown/CSV/不支持文件都逐条返回", async () => {
+    dialogMock.showOpenDialog.mockResolvedValueOnce({ canceled: true, filePaths: [] });
+    expect(await harness().call("pick_import_files")).toEqual([]);
+    const root = tempRoot();
+    const md = path.join(root, "a.md");
+    const csv = path.join(root, "b.csv");
+    const txt = path.join(root, "c.txt");
+    fs.writeFileSync(md, "# A");
+    fs.writeFileSync(csv, "姓名,年龄\n张三,30\n");
+    fs.writeFileSync(txt, "hello");
+    dialogMock.showOpenDialog.mockResolvedValue({ canceled: false, filePaths: [md, csv, txt] });
+    const result = await harness().call("pick_import_files") as Array<Record<string, unknown>>;
+    expect(result).toHaveLength(3);
+    expect(result[0]).toMatchObject({ name: "a.md", kind: "markdown", supported: true, markdown: "# A" });
+    expect(result[1]).toMatchObject({ name: "b.csv", kind: "csv", supported: true });
+    expect((result[1].workbook as Record<string, unknown>).kind).toBeUndefined(); // workbook 本体，不是 UsheetDoc
+    expect(result[2]).toMatchObject({ name: "c.txt", kind: "other", supported: false });
   });
 
   it("多选文件：逐个读取正文（不支持的扩展名也返回，供计入跳过数）", async () => {

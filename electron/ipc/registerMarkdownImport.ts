@@ -17,11 +17,14 @@ import {
   readImportImage,
   type MarkdownPickedFile,
 } from "../markdownImportScan.js";
+import { describeImportFile, type ImportPickedFile } from "../documentImportScan.js";
 
 /** 主进程侧可注入点（测试替换对话框/描述函数）。 */
 export interface MarkdownImportIpcDeps {
   showOpenDialog?: typeof dialog.showOpenDialog;
   describeFile?: (absPath: string) => MarkdownPickedFile;
+  /** 新导入（Word/Excel/CSV/Markdown）的文件描述；测试可注入。 */
+  describeImport?: (absPath: string) => Promise<ImportPickedFile>;
   readImage?: typeof readImportImage;
 }
 
@@ -32,6 +35,7 @@ function focusedWindow(): BrowserWindow | null {
 export function registerMarkdownImportIpc(ipc: IpcRegistrar, deps: MarkdownImportIpcDeps = {}): void {
   const showOpenDialog = deps.showOpenDialog ?? dialog.showOpenDialog;
   const describeFile = deps.describeFile ?? ((absPath: string) => describeMarkdownFile(absPath));
+  const describeImport = deps.describeImport ?? ((absPath: string) => describeImportFile(absPath));
   const readImage = deps.readImage ?? readImportImage;
 
   // 多选 .md：取消 → []（不抛）。过滤器带「所有文件」是为了让用户能选非 md（调用方计入跳过数）。
@@ -49,6 +53,25 @@ export function registerMarkdownImportIpc(ipc: IpcRegistrar, deps: MarkdownImpor
     return result.filePaths.map((filePath) => describeFile(filePath));
   });
 
+
+  // 261108：Markdown / Word / Excel / CSV 统一入口；用户取消 → []。
+  ipc.handle("pick_import_files", async (): Promise<ImportPickedFile[]> => {
+    const result = await showOpenDialog(focusedWindow() ?? undefined as unknown as BrowserWindow, {
+      title: "选择导入文件（可多选）",
+      buttonLabel: "导入",
+      properties: ["openFile", "multiSelections"],
+      filters: [
+        { name: "支持的文件", extensions: ["md", "markdown", "docx", "xlsx", "csv"] },
+        { name: "Markdown", extensions: ["md", "markdown"] },
+        { name: "Word", extensions: ["docx"] },
+        { name: "Excel", extensions: ["xlsx"] },
+        { name: "CSV", extensions: ["csv"] },
+        { name: "所有文件", extensions: ["*"] },
+      ],
+    });
+    if (result.canceled || result.filePaths.length === 0) return [];
+    return Promise.all(result.filePaths.map((filePath) => describeImport(filePath)));
+  });
 
   // 读导入图片字节（供渲染层 uploadResource 物化资产）。
   ipc.handle("read_import_image", (filePath: unknown) => {

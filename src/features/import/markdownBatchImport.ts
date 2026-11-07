@@ -63,6 +63,8 @@ export interface MarkdownImportHost {
   listTreeNodes(): Promise<ReadonlyArray<Pick<TreeNode, "id" | "parentId" | "nodeType" | "title">>>;
   createGroup(parentId: string, title: string): Promise<{ id: string }>;
   createNoteIn(parentId: string | null, title: string): Promise<{ id: string }>;
+  /** 导入 xlsx/csv 时创建 usheet；缺省 = 该平台暂不支持表格导入。 */
+  createUsheetIn?(parentId: string | null, title: string): Promise<{ id: string }>;
   uploadResource(input: { bytes: Uint8Array; filename: string }, noteId: string): Promise<{ url: string }>;
   saveNote(id: string, title: string, body: string): Promise<unknown>;
   /** 失败回滚：软删 = 移入回收站（**绝不**物理删除）。 */
@@ -101,7 +103,7 @@ export function folderSegmentsOf(relativePath: string): string[] {
 }
 
 /** 同名去重：base → base (2) → base (3)…（只在该父目录的名称集合里判重）。 */
-class TitleLedger {
+export class TitleLedger {
   private readonly used = new Map<string, Set<string>>();
   constructor(nodes: ReadonlyArray<Pick<TreeNode, "id" | "parentId" | "nodeType" | "title">>) {
     for (const node of nodes) {
@@ -132,7 +134,7 @@ class TitleLedger {
 }
 
 /** 分组解析：按 (父 id, 标题) 复用已有分组，缺的逐级创建。 */
-class GroupResolver {
+export class GroupResolver {
   private readonly byKey = new Map<string, string>();
   constructor(private readonly host: MarkdownImportHost, nodes: ReadonlyArray<Pick<TreeNode, "id" | "parentId" | "nodeType" | "title">>) {
     for (const node of nodes) {
@@ -157,7 +159,7 @@ class GroupResolver {
   }
 }
 
-function errorMessage(error: unknown): string {
+export function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 

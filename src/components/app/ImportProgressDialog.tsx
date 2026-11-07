@@ -21,8 +21,8 @@ export function ImportProgressDialog({ open, done, total, currentFile = null, st
   const safeTotal = Math.max(0, total);
   const safeDone = Math.min(Math.max(0, done), safeTotal);
   return (
-    <Dialog open onDismiss={() => { if (!stopping) onCancel(); }} label="正在导入 Markdown" className="import-progress-dialog">
-      <div className="ln-dialog__head"><span className="ln-dialog__title">正在导入 Markdown</span></div>
+    <Dialog open onDismiss={() => { if (!stopping) onCancel(); }} label="正在导入文件" className="import-progress-dialog">
+      <div className="ln-dialog__head"><span className="ln-dialog__title">正在导入文件</span></div>
       <div className="ln-dialog__body">
         <p className="import-progress-dialog__text" role="status" aria-live="polite">
           {"正在导入 " + safeDone + "/" + safeTotal + (currentFile ? "：" + currentFile : "…")}

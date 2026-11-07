@@ -362,6 +362,25 @@ export interface MarkdownPickedFileShape {
   error?: string;
 }
 
+/** 261108 文档导入：主进程 picker 返回的单文件（Markdown / Word / Excel / CSV）。 */
+export interface ImportPickedFileShape {
+  path: string;
+  name: string;
+  relativePath: string;
+  size: number;
+  kind: "markdown" | "docx" | "xlsx" | "csv" | "other";
+  supported: boolean;
+  tooLarge?: boolean;
+  error?: string;
+  /** Markdown 原文。 */
+  markdown?: string;
+  /** Word → HTML（图片为 data URL，渲染层物化）。 */
+  html?: string;
+  /** Excel / CSV → usheet 工作簿。 */
+  workbook?: Record<string, unknown>;
+  warnings?: string[];
+}
+
 /** 261106 Markdown 导入：读一张本地图片（供渲染层 uploadResource 物化为文档资产）。 */
 export interface ImportImageShape {
   bytes: Uint8Array;

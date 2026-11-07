@@ -264,7 +264,7 @@ export function createMarkdownImportContainer(doc: Document = document): HTMLDiv
 }
 
 /** 缺省内核工厂：懒加载内核运行时后临时建一个编辑器（不静态 import，保桌面首屏）。 */
-async function createTemporaryLakeKernel(container: HTMLElement): Promise<MarkdownKernelHandle> {
+export async function createTemporaryLakeKernel(container: HTMLElement): Promise<MarkdownKernelHandle> {
   const runtime = await import("../editor/lakeRuntime");
   const mount = container.ownerDocument.createElement("div");
   container.appendChild(mount);

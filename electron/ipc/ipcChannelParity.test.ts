@@ -104,8 +104,9 @@ describe("IPC 通道三方一致性（C2-2）", () => {
     // → 161（261106 task-91：移除 pick_markdown_folder —— 「Markdown 文件夹」入口删除，多选文件已覆盖）。
     // → 162（261106 task-95 画板批量导出：write_batch_export_file —— 受控写盘，仅 png/svg、≤50MB、原子写）。
     // → 163（261106 文档创建副本：duplicate_notes —— 新 id + 新建管线，正文/资源全量复制）。
-    expect(registrarChannels().size, "通道数变了 ⇒ 请确认是有意的并在 commit 里说明").toBe(163);
-    expect(preloadChannels().size).toBe(163);
-    expect(Object.keys(WEB_METHODS).length).toBe(163);
+    // → 164（261108 文档导入：pick_import_files —— Markdown/Word/Excel/CSV 统一 picker）。
+    expect(registrarChannels().size, "通道数变了 ⇒ 请确认是有意的并在 commit 里说明").toBe(164);
+    expect(preloadChannels().size).toBe(164);
+    expect(Object.keys(WEB_METHODS).length).toBe(164);
   });
 });

@@ -168,6 +168,8 @@ export interface LakeNative {
   duplicateNotes(payload: import("./types").DuplicateNotesRequestShape): Promise<import("./types").DuplicateNotesResultShape>;
   /** 261106 Markdown 导入：多选 .md 文件（取消 → 空数组；正文由主进程读取，>20MB 标记 tooLarge）。 */
   pickMarkdownFiles(): Promise<import("./types").MarkdownPickedFileShape[]>;
+  /** 261108 多选导入：Markdown / Word(.docx) / Excel(.xlsx) / CSV。 */
+  pickImportFiles(): Promise<import("./types").ImportPickedFileShape[]>;
   /** 261106 Markdown 导入：选择文件夹递归扫描（保留 relativePath；上限 500 截断）。 */
   /** 261106 Markdown 导入：读一张本地图片字节（png/jpg/jpeg/gif/webp，≤20MB）。 */
   readImportImage(filePath: string): Promise<import("./types").ImportImageShape>;
@@ -411,6 +413,7 @@ export const native = {
   batchNotes: (payload: import("./types").BatchNotesRequestShape) => api().batchNotes(payload),
   duplicateNotes: (payload: import("./types").DuplicateNotesRequestShape) => api().duplicateNotes(payload),
   pickMarkdownFiles: () => api().pickMarkdownFiles(),
+  pickImportFiles: () => api().pickImportFiles(),
   readImportImage: (filePath: string) => api().readImportImage(filePath),
   exportNotesBatch: (payload: import("./types").BatchExportRequestShape) => api().exportNotesBatch(payload),
   writeBatchExportFile: (payload: import("./types").WriteBatchExportFileShape) => api().writeBatchExportFile(payload),

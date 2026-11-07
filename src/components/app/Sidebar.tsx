@@ -27,12 +27,14 @@ import { NoteTagDialog } from "./NoteTagDialog";
 import { NamePromptDialog } from "./NamePromptDialog";
 import { ImportProgressDialog } from "./ImportProgressDialog";
 import { ImportResultDialog, type ImportResultItem } from "./ImportResultDialog";
-import { createNotesFromMarkdownBatch, type MarkdownImportItem } from "../../features/import/markdownBatchImport";
+import { createNotesFromImportBatch, type FileImportItem } from "../../features/import/fileImportBatch";
 import { createDesktopMarkdownImportHost } from "../../features/import/markdownImportDesktop";
 import { convertMarkdownToLake } from "../../features/import/markdownImportPipeline";
+import { convertHtmlToLake } from "../../features/import/htmlImportPipeline";
+import type { UsheetWorkbook } from "../../core/usheetDoc";
 import { getNativeErrorMessage } from "../../lib/nativeErrors";
 import { native } from "../../lib/native";
-import type { BatchNotesRequestShape, MarkdownPickedFileShape, QuickNoteTag } from "../../lib/types";
+import type { BatchNotesRequestShape, ImportPickedFileShape, QuickNoteTag } from "../../lib/types";
 import { MoveTargetTreeDialog } from "./MoveTargetTreeDialog";
 import { BatchTagDialog, type BatchTagMode } from "./BatchTagDialog";
 import { TreeSelectionBar } from "./TreeSelectionBar";
@@ -705,17 +707,28 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
   const baseNameOf = (path: string): string => path.replace(/\\/g, "/").split("/").pop() || path;
 
   /** 选中的文件 → 批量导入：不支持的/超 20MB/读失败 直接计入「跳过」；其余串行转换落盘。 */
-  const runMarkdownImport = useCallback(async (targetId: string, picked: readonly MarkdownPickedFileShape[]) => {
+  const runImport = useCallback(async (targetId: string, picked: readonly ImportPickedFileShape[]) => {
     const skipped: ImportResultItem[] = [];
-    const items: MarkdownImportItem[] = [];
+    const items: FileImportItem[] = [];
+    const warnings: string[] = [];
     for (const file of picked) {
       const label = file.relativePath || file.name;
       if (!file.supported) { skipped.push({ name: label, reason: "不支持的文件类型" }); continue; }
       if (file.tooLarge) { skipped.push({ name: label, reason: "超过 20MB" }); continue; }
-      if (typeof file.text !== "string") { skipped.push({ name: label, reason: file.error ? "读取失败：" + file.error : "读取失败" }); continue; }
-      items.push({ path: file.path, name: file.name, relativePath: file.relativePath || file.name, markdown: file.text });
+      if (file.error) { skipped.push({ name: label, reason: "读取失败：" + file.error }); continue; }
+      const common = { path: file.path, name: file.name, relativePath: file.relativePath || file.name };
+      if (file.kind === "markdown" && typeof file.markdown === "string") {
+        items.push({ kind: "markdown", ...common, markdown: file.markdown });
+      } else if (file.kind === "docx" && typeof file.html === "string") {
+        items.push({ kind: "docx", ...common, html: file.html });
+      } else if ((file.kind === "xlsx" || file.kind === "csv") && file.workbook) {
+        items.push({ kind: "sheet", ...common, workbook: file.workbook as unknown as UsheetWorkbook });
+      } else {
+        skipped.push({ name: label, reason: "文件内容解析为空" });
+        continue;
+      }
+      if (file.warnings?.length) warnings.push(...file.warnings.map((warning) => label + "：" + warning));
     }
-    const warnings: string[] = [];
     if (items.length === 0) {
       setImportResult({ success: 0, skipped, failed: [], warnings });
       return;
@@ -725,11 +738,12 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
     setImportStopping(false);
     setImportProgress({ done: 0, total: items.length, current: null });
     try {
-      const result = await createNotesFromMarkdownBatch({
+      const result = await createNotesFromImportBatch({
         parentNotebookId: targetId,
         items,
         host: createDesktopMarkdownImportHost(),
-        convert: convertMarkdownToLake,
+        convertMarkdown: convertMarkdownToLake,
+        convertHtml: (input) => convertHtmlToLake(input),
         signal: controller.signal,
         onProgress: (progress) => setImportProgress({ done: progress.index, total: progress.total, current: progress.path ? baseNameOf(progress.path) : null }),
       });
@@ -755,22 +769,22 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
     }
   }, [props.onRefreshTree]);
 
-  const startMarkdownImport = useCallback(async (targetId: string | null) => {
+  const startImport = useCallback(async (targetId: string | null) => {
     if (!targetId || importProgress) return;
     setMenuOpen(false);
     setCreateMenu(null);
     setContextMenu(null);
-    let picked: MarkdownPickedFileShape[] = [];
+    let picked: ImportPickedFileShape[] = [];
     try {
-      picked = await native.pickMarkdownFiles();
+      picked = await native.pickImportFiles();
     } catch (error) {
-      setImportResult({ success: 0, skipped: [], failed: [{ name: "选择 Markdown 文件", reason: getNativeErrorMessage(error) || "无法打开文件选择器" }], warnings: [] });
+      setImportResult({ success: 0, skipped: [], failed: [{ name: "选择导入文件", reason: getNativeErrorMessage(error) || "无法打开文件选择器" }], warnings: [] });
       return;
     }
     // 用户取消 ⇒ 无副作用
     if (picked.length === 0) return;
-    await runMarkdownImport(targetId, picked);
-  }, [importProgress, runMarkdownImport]);
+    await runImport(targetId, picked);
+  }, [importProgress, runImport]);
 
   const cancelMarkdownImport = useCallback(() => {
     importAbortRef.current?.abort();
@@ -1239,7 +1253,7 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
               {/* 261106：导入 = 当前打开文档所在的笔记本/分组（根级 + 没有打开文档 ⇒ 禁用并提示） */}
               {importTargetOfActive ? (
                 <Submenu label={<><Download size={15} aria-hidden="true" /><span>导入</span></>}>
-                  <button role="menuitem" onClick={() => void startMarkdownImport(importTargetOfActive)}><FilePlus size={15} aria-hidden="true" /><span>Markdown…</span></button>
+                  <button role="menuitem" onClick={() => void startImport(importTargetOfActive)}><FilePlus size={15} aria-hidden="true" /><span>导入文件…</span></button>
                 </Submenu>
               ) : (
                 <button role="menuitem" disabled title="先打开或选择一个笔记本/分组"><Download size={15} aria-hidden="true" /><span>导入（先选择笔记本）</span></button>
@@ -1294,7 +1308,7 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
         />
       )}
       {contextMenu && contextNode && <ContextMenu node={contextNode} x={contextMenu.x} y={contextMenu.y} onRename={menuRename} onMove={() => { if (contextNode) openMoveForNode(contextNode); }} onDelete={menuDelete} onCopyMarkdown={() => props.onCopyMarkdown(contextNode)} onExportAs={(format) => props.onExportAs(contextNode, format)} onCopyPaths={() => props.onCopyPaths(contextNode)} onShowInfo={() => props.onShowInfo(contextNode)} onOpenHistory={() => props.onOpenHistory(contextNode)} locked={contextNode.noteFileId ? props.lockedNoteIds.has(contextNode.noteFileId) : false} onToggleLock={() => props.onToggleLockNote(contextNode)} onAddTags={() => setTagEditor({ noteId: contextNode.noteFileId ?? contextNode.id, title: contextNode.title })} onDuplicate={() => { if (contextNode) duplicateOne(contextNode); }} pinned={pinnedSet.has(contextNode.id)} onTogglePin={() => togglePinNode(contextNode)} busy={batchBusy} onClose={() => setContextMenu(null)} />}
-      {createMenu && <CreateMenu anchor={createMenu.anchor} onNewChild={(kind) => createChild(createMenu.node, kind)} importTarget={containerAncestorOf(createMenu.node.id)} onImport={(targetId) => void startMarkdownImport(targetId)} onClose={() => setCreateMenu(null)} />}
+      {createMenu && <CreateMenu anchor={createMenu.anchor} onNewChild={(kind) => createChild(createMenu.node, kind)} importTarget={containerAncestorOf(createMenu.node.id)} onImport={(targetId) => void startImport(targetId)} onClose={() => setCreateMenu(null)} />}
       {editingId && <TreeRenameDialog key={editingId} initial={editingTitle} onCancel={cancelRename} onConfirm={submitRename} />}
       {createDialog && (() => {
         const preset = CREATE_DIALOG_PRESETS[createDialog.kind];
@@ -1702,7 +1716,7 @@ function CreateMenu({ anchor, onNewChild, importTarget, onImport, onClose }: {
       <div className="context-menu-sep" role="separator" />
       {importTarget ? (
         <Submenu label={<><Download size={15} aria-hidden="true" /><span>导入</span></>}>
-          <button role="menuitem" onClick={() => { onImport(importTarget); onClose(); }}><FilePlus size={15} aria-hidden="true" /><span>Markdown…</span></button>
+          <button role="menuitem" onClick={() => { onImport(importTarget); onClose(); }}><FilePlus size={15} aria-hidden="true" /><span>导入文件…</span></button>
         </Submenu>
       ) : (
         <button role="menuitem" disabled title="先选择一个笔记本或分组"><Download size={15} aria-hidden="true" /><span>导入（先选择笔记本）</span></button>

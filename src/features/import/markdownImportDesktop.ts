@@ -12,6 +12,7 @@ export function createDesktopMarkdownImportHost(): MarkdownImportHost {
     listTreeNodes: () => native.listTreeNodes(),
     createGroup: (parentId: string, title: string) => native.createGroup(parentId, title),
     createNoteIn: (parentId: string | null, title: string) => native.createNoteIn(parentId, title),
+    createUsheetIn: (parentId: string | null, title: string) => native.createUsheetIn(parentId, title),
     uploadResource: (input, noteId) => native.uploadResource(input, noteId),
     saveNote: (id: string, title: string, body: string) => native.saveNote(id, title, body),
     // 失败回滚 = 软删（移入回收站），与「删除 = 移入回收站」一致
