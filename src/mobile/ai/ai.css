@@ -24,7 +24,7 @@
   height: 30px; padding: 0 10px; border: .5px solid var(--lake-border-1); border-radius: var(--lake-radius-pill);
   background: var(--lake-bg-panel); color: var(--lake-text-1); font-size: var(--lake-font-size-micro);
 }
-.ai-chip .mb-ellipsis { max-width: 130px; }
+.ai-chip__title { max-width: 130px; }
 .ai-chip.is-off { opacity: .55; }
 .ai-chip__dot { width: 6px; height: 6px; border-radius: 50%; background: var(--lake-status-pending); flex: 0 0 6px; }
 
@@ -46,7 +46,7 @@
 .ai-empty__title { margin: 8px 0 22px; color: var(--lake-text-1); font-size: var(--lake-font-size-h1); font-weight: 600; line-height: 1.35; }
 .ai-sugg { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
 .ai-empty__note { margin: 18px 0 0; color: var(--lake-text-4); font-size: var(--lake-font-size-micro); }
-.ai-sugg .mb-btn { border: .5px solid var(--lake-border-1); border-radius: var(--lake-radius-pill); background: var(--lake-bg-panel); color: var(--lake-text-2); }
+.ai-sugg .ai-btn { border: .5px solid var(--lake-border-1); border-radius: var(--lake-radius-pill); background: var(--lake-bg-panel); color: var(--lake-text-2); }
 
 .ai-divider { margin: 2px 0 14px; text-align: center; color: var(--lake-text-4); font-size: var(--lake-font-size-nano); }
 .ai-msg { margin-bottom: 14px; }
@@ -66,7 +66,7 @@
 .ai-typing i:nth-child(3) { animation-delay: .3s; }
 @keyframes ai-blink { 0%, 100% { opacity: .25; } 50% { opacity: 1; } }
 .ai-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
-.ai-actions .mb-btn { border: .5px solid var(--lake-border-1); border-radius: var(--lake-radius-sm); background: var(--lake-bg-panel); color: var(--lake-text-2); }
+.ai-actions .ai-btn { border: .5px solid var(--lake-border-1); border-radius: var(--lake-radius-sm); background: var(--lake-bg-panel); color: var(--lake-text-2); }
 
 .ai-hint {
   flex: 0 0 auto; height: 24px; padding: 0 16px; text-align: left;
@@ -88,7 +88,7 @@
 
 .ai-jump { align-self: center; margin: 0 0 6px; height: 30px; padding: 0 12px; border: .5px solid var(--lake-border-1); border-radius: var(--lake-radius-pill); background: var(--lake-bg-panel); color: var(--lake-accent-text); font-size: var(--lake-font-size-micro); }
 .ai-sheet__search { padding: 8px 16px 4px; }
-.ai-sheet__search .mb-input { width: 100%; }
+.ai-sheet__search .ai-sheet__input { width: 100%; }
 .ai-sheet__body { padding-bottom: 8px; }
 .ai-sheet__note { margin: 8px 16px 0; color: var(--lake-text-4); font-size: var(--lake-font-size-micro); line-height: 1.6; }
 .ai-sheet__foot {

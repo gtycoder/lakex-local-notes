@@ -364,3 +364,9 @@
 .mb-emoji-cell { display: flex; align-items: center; justify-content: center; height: var(--mb-tap-min); padding: 0; border: 0; border-radius: var(--lake-radius-sm); background: transparent; font-size: var(--mb-emoji-glyph-size); line-height: 1; }
 .mb-emoji-cell:active { background: var(--lake-bg-hover); }
 .mb-emoji-empty { padding: 24px 16px; text-align: center; color: var(--lake-text-3); font-size: var(--lake-font-size-small); }
+
+/* 261108：从 mobile.css 收回原语自身状态（跨所有权覆盖收口）。 */
+.mb-iconbtn.is-checked { color: var(--lake-accent-text); }
+.mb-iconbtn.is-disabled { opacity: var(--lake-disabled-opacity); }
+/* 261108：原语直属图标尺寸（从 mobile.css 的跨所有权组合选择器收回）。 */
+.mb-btn > svg.lucide, .mb-iconbtn > svg.lucide, .mb-sheet__head > button > svg.lucide { width: 20px; height: 20px; flex-shrink: 0; }

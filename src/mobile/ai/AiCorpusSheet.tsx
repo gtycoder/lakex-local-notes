@@ -52,7 +52,7 @@ export function AiCorpusSheet({ open, candidates, selectedIds, onToggle, onStart
           <button type="button" className="mb-btn mb-btn--ghost mb-btn--sm" onClick={onClose}>取消</button>
         </div>
         <div className="ai-sheet__search">
-          <span className="mb-input">
+          <span className="mb-input ai-sheet__input">
             <input aria-label="搜索文档" placeholder="搜索文档…" value={query} onChange={(event) => setQuery(event.target.value)} />
           </span>
         </div>

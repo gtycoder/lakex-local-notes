@@ -14,9 +14,8 @@ html, body, #root { margin: 0; padding: 0; height: var(--mb-app-h, 100%); }
 body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); color: var(--lake-text-1); -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; text-rendering: optimizeLegibility; }
 /* 自有 Lucide 图标描边与桌面一致；不改变内核/第三方图标与触达尺寸。 */
 .toolbar__button > svg.lucide, .toolbar__icon > svg.lucide,
-.mobile-bottom-bar__item > svg.lucide, .mb-btn > svg.lucide,
-.mb-iconbtn > svg.lucide, .mb-row__icon > svg.lucide, .mb-tree-icon > svg.lucide,
-.mb-sheet__head > button > svg.lucide, .mobile-settings-close > svg.lucide,
+.mobile-bottom-bar__item > svg.lucide, .mb-row__icon > svg.lucide, .mb-tree-icon > svg.lucide,
+.mobile-settings-close > svg.lucide,
 .minfo-title > svg.lucide { stroke-width: 1.75; }
 
 .poc-center { display: flex; align-items: center; justify-content: center; height: 100%; font-size: var(--lake-font-size-small); color: var(--lake-text-2); }
@@ -531,9 +530,6 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
 .side-panel-body .mb-row { position: relative; }
 .nb-sel-cb { position: absolute; left: 0; top: 0; bottom: 0; width: var(--mb-tap-min); display: flex; align-items: center; justify-content: center; pointer-events: none; }
 
-.mb-iconbtn.is-checked { color: var(--lake-accent-text); }
-/* 261106 task-8：目录树多选的「不可选行」（笔记本/分组）复选框置灰——只降透明度，保留占位让左缘对齐。 */
-.mb-iconbtn.is-disabled { opacity: var(--lake-disabled-opacity); }
 
 /* v2（261107）：共享元素转场的浮起克隆（小记卡→写作卡 / 置顶文档卡→文档页）。
    只由 HomePage.morphCardToRect 挂载/移除；保留原卡片类名，另外叠这一层几何。 */

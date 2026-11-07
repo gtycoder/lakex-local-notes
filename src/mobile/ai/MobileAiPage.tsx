@@ -212,7 +212,7 @@ export function MobileAiPage({ open, onClose, onChanged }: MobileAiPageProps) {
             return (
               <button key={doc.id} type="button" className={"ai-chip" + (on ? "" : " is-off")} onClick={() => toggleSend(doc.id)}>
                 {!on && <span className="ai-chip__dot" aria-hidden="true" />}
-                <span className="mb-ellipsis">{doc.title}</span>
+                <span className="mb-ellipsis ai-chip__title">{doc.title}</span>
               </button>
             );
           })}
@@ -233,7 +233,7 @@ export function MobileAiPage({ open, onClose, onChanged }: MobileAiPageProps) {
             <h1 className="ai-empty__title">想让我帮你做点什么？</h1>
             <div className="ai-sugg">
               {suggestions(docCount > 0, docCount).map((text) => (
-                <button key={text} type="button" className="mb-btn mb-btn--sm" onClick={() => { setDraft(text); inputRef.current?.focus(); }}>{text}</button>
+                <button key={text} type="button" className="mb-btn mb-btn--sm ai-btn" onClick={() => { setDraft(text); inputRef.current?.focus(); }}>{text}</button>
               ))}
             </div>
             <p className="ai-empty__note">内容由 AI 生成，可能有误。离开页面不会丢对话（App 退出才清空）。</p>
@@ -255,10 +255,10 @@ export function MobileAiPage({ open, onClose, onChanged }: MobileAiPageProps) {
                 {message.stopped && <div className="ai-stopped">已停止</div>}
                 {!message.streaming && (message.text || message.error) && (
                   <div className="ai-actions">
-                    {message.text && <button type="button" className="mb-btn mb-btn--sm" onClick={() => void copyAnswer(message.text)}>复制</button>}
-                    {message.text && <button type="button" className="mb-btn mb-btn--sm" onClick={() => void saveAsDoc(message.text, questionBefore(index))}>存为新文档</button>}
-                    {message.text && <button type="button" className="mb-btn mb-btn--sm" onClick={() => void saveAsQuickNote(message.text)}>存为小记</button>}
-                    {(message.error || message.stopped) && <button type="button" className="mb-btn mb-btn--sm" onClick={() => void retry(questionBefore(index))}>重试</button>}
+                    {message.text && <button type="button" className="mb-btn mb-btn--sm ai-btn" onClick={() => void copyAnswer(message.text)}>复制</button>}
+                    {message.text && <button type="button" className="mb-btn mb-btn--sm ai-btn" onClick={() => void saveAsDoc(message.text, questionBefore(index))}>存为新文档</button>}
+                    {message.text && <button type="button" className="mb-btn mb-btn--sm ai-btn" onClick={() => void saveAsQuickNote(message.text)}>存为小记</button>}
+                    {(message.error || message.stopped) && <button type="button" className="mb-btn mb-btn--sm ai-btn" onClick={() => void retry(questionBefore(index))}>重试</button>}
                   </div>
                 )}
               </div>

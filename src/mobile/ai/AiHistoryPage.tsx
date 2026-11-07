@@ -130,7 +130,7 @@ export function AiHistoryPage({ open, onClose, onList, onDetail, onContinue, onD
       ) : (
         <>
           <div className="ai-sheet__search">
-            <span className="mb-input">
+            <span className="mb-input ai-sheet__input">
               <Search size={16} aria-hidden="true" />
               <input aria-label="搜索历史对话" placeholder="搜索历史对话…" value={query} onChange={(event) => { setQuery(event.target.value); void loadList(event.target.value); }} />
             </span>
