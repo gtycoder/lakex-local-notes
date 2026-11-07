@@ -52,7 +52,7 @@ export function WorkspaceDrawers(props: WorkspaceDrawersProps) {
   return (
     <>
       <div className={"side-mask" + (sidebarOpen ? " on" : "")} data-panel-mask="left" onClick={() => props.onOpenSidebar(false)} />
-      <aside className={"side-panel side-panel--left" + (sidebarOpen ? " on" : "")} aria-label="目录">
+      <aside className={"side-panel side-panel--left" + (sidebarOpen ? " on" : "") + (selecting ? " side-panel--selecting" : "")} aria-label="目录">
         {selecting ? (
           <SelectionTopBar
             count={props.selectionCount ?? 0}
@@ -95,7 +95,7 @@ export function WorkspaceDrawers(props: WorkspaceDrawersProps) {
         {treeList}
         {/* 选择操作条：抽屉是 flex 列 + 树可滚动 ⇒ 条贴抽屉底（不 fixed 到视口：抽屉 z-index 更高会盖住它）。 */}
         {selecting && (
-          <SelectionActionBar actions={props.selectionActions ?? []} onAction={props.onSelectionAction ?? (() => undefined)} />
+          <SelectionActionBar overlay actions={props.selectionActions ?? []} onAction={props.onSelectionAction ?? (() => undefined)} />
         )}
       </aside>
       <OutlineSheet side open={outlineOpen} editor={editor} onClose={props.onCloseOutline} />

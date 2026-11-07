@@ -78,15 +78,17 @@ describe("多选原语组件", () => {
     await act(async () => { root.render(element); });
   };
 
-  it("顶部栏：取消 / 已选 N / 全选（全选后变全不选），按钮命中 44（.mb-btn）", async () => {
+  it("顶部栏：取消 / 已选 N / 全选（全选后变全不选），44 命中走 v2 选择顶栏", async () => {
     const onCancel = vi.fn();
     const onToggleAll = vi.fn();
     await mount(createElement(SelectionTopBar, { count: 2, allSelected: false, onCancel, onToggleAll }));
     const bar = host.querySelector('[role="toolbar"][aria-label="多选操作"]')!;
+    expect(bar.className).toContain("mb-sel-topbar");
     expect(bar.textContent).toContain("已选 2");
     const buttons = [...bar.querySelectorAll("button")];
     expect(buttons.map((b) => b.textContent?.trim())).toEqual(["取消", "全选"]);
-    for (const b of buttons) expect(b.className).toContain("mb-btn");
+    // v2（261107）：选择顶栏不再复用 .mb-btn（会带底色/胶囊），命中 44 由 .mb-sel-topbar__btn 的 min-width/min-height 提供。
+    for (const b of buttons) expect(b.className).toContain("mb-sel-topbar__btn");
     await act(async () => { (buttons[0] as HTMLButtonElement).click(); (buttons[1] as HTMLButtonElement).click(); });
     expect(onCancel).toHaveBeenCalled();
     expect(onToggleAll).toHaveBeenCalled();
@@ -108,7 +110,7 @@ describe("多选原语组件", () => {
     expect(box.className).toContain("is-checked");
   });
 
-  it("底部操作条：按传入动作渲染按钮，点击回调 id；fixed 变体带 is-fixed", async () => {
+  it("底部操作条：浮动玻璃条 + 等分动作格，点击回调 id；fixed 变体带 is-fixed", async () => {
     const onAction = vi.fn();
     await mount(createElement(SelectionActionBar, {
       actions: [
@@ -120,11 +122,13 @@ describe("多选原语组件", () => {
       hint: "1 项失败",
     }));
     const bar = host.querySelector('[role="group"][aria-label="批量操作"]')!;
+    expect(bar.className).toContain("mb-sel-actions");
     expect(bar.className).toContain("is-fixed");
     expect(bar.textContent).toContain("1 项失败");
     const buttons = [...bar.querySelectorAll("button")];
     expect(buttons.map((b) => b.textContent?.trim())).toEqual(["打标签", "删除"]);
-    expect(buttons[1].className).toContain("mb-btn--danger");
+    for (const b of buttons) expect(b.className).toContain("mb-sel-act");
+    expect(buttons[1].className).toContain("is-danger");
     await act(async () => { (buttons[0] as HTMLButtonElement).click(); });
     expect(onAction).toHaveBeenCalledWith("tag");
   });

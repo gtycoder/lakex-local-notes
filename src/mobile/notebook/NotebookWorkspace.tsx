@@ -43,6 +43,7 @@ import { useWorkspaceActions } from "./useWorkspaceActions";
 import { useTreeSelection } from "./useTreeSelection";
 import { isTreeRowSelectable } from "./treeSelection";
 import { MoveTargetTreeSheet } from "../ui/MoveTargetTreeSheet";
+import { BatchTagPickerSheet } from "../ui/BatchTagPickerSheet";
 import { claimMissingBodyNotice, MISSING_DOC_OPEN_HINT } from "../data/missingBodyMessages";
 export type { NotebookTreeItem } from "./useNotebookTreeData";
 export type { PadPanelMode } from "./shellModel";
@@ -570,6 +571,16 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
 
       {/* 选择模式的「移动到…」目录树弹窗（与文档列表多选同一份 MoveTargetTreeSheet）。 */}
       <MoveTargetTreeSheet {...treeSelection.moveSheet} />
+      {/* v2（261107）：文档批量打标签（只追加；目录 = 小记标签库，跨端同一份目录）。 */}
+      <BatchTagPickerSheet
+        open={treeSelection.tagSheet.open}
+        options={treeSelection.tagSheet.options}
+        count={treeSelection.tagSheet.count}
+        busy={treeSelection.tagSheet.busy}
+        error={treeSelection.tagSheet.error}
+        onClose={treeSelection.tagSheet.onClose}
+        onConfirm={(tagIds) => treeSelection.tagSheet.onConfirm(tagIds)}
+      />
 
       {!padTwoPane && (
         <WorkspaceDrawers

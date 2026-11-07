@@ -517,8 +517,24 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
    只有几何：页内距 + 底部安全区 + 发丝；fixed 变体给首页常驻层（列表 / Sheet 内用内联版）。
    flex-wrap：文档列表多选条有 4 个动作（创建副本/移动/移入回收站/打标签），窄屏一行放不下 ⇒ 允许换行
    且仍右对齐；动作 ≤3 个时（小记多选条）不换行，视觉与之前一致。 */
-.mobile-selection-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--lake-space-md); padding: var(--lake-space-md) var(--mb-page-pad) calc(var(--lake-space-md) + var(--mobile-bottom-safe-area)); border-top: .5px solid var(--lake-border-2); background: var(--lake-bg-window); }
-.mobile-selection-bar.is-fixed { position: fixed; left: 0; right: 0; bottom: 0; z-index: var(--mobile-z-topbar); }
+/* v2（261107）：多选页重做 —— 顶栏与抽屉头同高（不跳高度）、动作条 = 浮动玻璃 + 等分图标格。 */
+.mb-sel-topbar { flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: var(--lake-space-md); min-height: var(--mb-ctl-h-lg); padding: 0 var(--mb-page-pad); }
+.mb-sel-topbar__btn { min-width: var(--mb-tap-min); min-height: var(--mb-tap-min); padding: 0 2px; border: 0; background: transparent; color: var(--lake-accent-text); font: inherit; font-size: var(--lake-font-size-body); font-weight: var(--lake-font-weight-medium); cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.mb-sel-topbar__btn:active { opacity: .55; }
+.mb-sel-topbar__count { flex: 1 1 auto; text-align: center; color: var(--lake-text-1); font-size: var(--lake-font-size-bodyMd); font-weight: var(--lake-font-weight-semibold); font-variant-numeric: tabular-nums; }
+.mb-sel-actions { margin: var(--lake-space-md) var(--lake-space-lg) calc(var(--lake-space-lg) + var(--mobile-bottom-safe-area)); padding: var(--lake-space-md); border-radius: var(--mb-radius-xl); background: var(--mb-glass-bg); -webkit-backdrop-filter: var(--mb-blur-float); backdrop-filter: var(--mb-blur-float); box-shadow: var(--mb-shadow-float); }
+.mb-sel-actions.is-fixed { position: fixed; left: var(--lake-space-lg); right: var(--lake-space-lg); bottom: calc(var(--lake-space-lg) + var(--mobile-bottom-safe-area)); z-index: var(--mobile-z-topbar); margin: 0; }
+.mb-sel-actions.is-overlay { position: absolute; left: var(--lake-space-md); right: var(--lake-space-md); bottom: calc(var(--lake-space-sm) + var(--mobile-bottom-safe-area)); z-index: var(--mobile-z-topbar); margin: 0; }
+.mb-sel-actions__hint { display: block; margin: 0 0 var(--lake-space-xs); color: var(--lake-text-3); font-size: var(--lake-font-size-nano); }
+.mb-sel-actions__row { display: flex; gap: var(--lake-space-xxs); }
+.mb-sel-act { flex: 1 1 0; min-width: 0; min-height: var(--mb-ctl-h); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; border: 0; border-radius: var(--mb-radius); background: transparent; color: var(--lake-text-2); cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.mb-sel-act:active { background: var(--lake-bg-hover); }
+.mb-sel-act.is-danger { color: var(--lake-status-error); }
+.mb-sel-act:disabled { opacity: var(--lake-disabled-opacity); cursor: default; }
+.mb-sel-act__label { font-size: var(--lake-font-size-nano); font-weight: var(--lake-font-weight-medium); line-height: 1.1; }
+/* 抽屉选择态：动作条浮在树上方，树本体不因动作条插入而改变高度（避免进入选择态时整列闪一下）。 */
+.side-panel--selecting .side-panel-body { padding-bottom: calc(76px + var(--mobile-bottom-safe-area)); }
+
 .mb-iconbtn.is-checked { color: var(--lake-accent-text); }
 /* 261106 task-8：目录树多选的「不可选行」（笔记本/分组）复选框置灰——只降透明度，保留占位让左缘对齐。 */
 .mb-iconbtn.is-disabled { opacity: var(--lake-disabled-opacity); }

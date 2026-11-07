@@ -1,7 +1,8 @@
 /**
- * 多选模式的**底部操作条**（261106 task-82）：按列表给不同动作（小记：打标签/删除；文档：移动/移入回收站/打标签；
- * 回收站：恢复）。按钮复用 .mb-btn（命中 44）；容器 .mobile-selection-bar 只有一条几何规则（页内距 + 安全区），
- * fixed 变体用于首页（常驻层），列表内（设置页 / Sheet）用内联版。
+ * 多选模式的底部操作条（v2 261107 重做）：**浮动柔光玻璃条 + 等分图标按钮**。
+ * - 树抽屉里用 overlay（绝对定位贴在抽屉底，树本体不因插入动作条而改变高度 ⇒ 不闪）；
+ * - 首页小记/回收站用 fixed（贴视口底、盖住胶囊位置）；
+ * - 每个动作 = 图标 + 两字标签，危险动作用红字但仍是等分格（不再出现「两个胶囊 + 一整行红字」的失衡排版）。
  */
 import type { LucideIcon } from "lucide-react";
 
@@ -18,31 +19,39 @@ export interface SelectionAction {
 export interface SelectionActionBarProps {
   actions: readonly SelectionAction[];
   onAction(id: string): void;
-  /** 首页这类常驻层用 fixed（固定在底部、盖住胶囊位置）；列表/Sheet 内用内联。 */
+  /** 首页这类常驻层用 fixed（固定在底部、盖住胶囊位置）；列表/Sheet/抽屉内用 overlay（绝对贴容器底）。 */
   fixed?: boolean;
+  overlay?: boolean;
   /** 左侧附加说明（例如失败条目数）。 */
   hint?: string;
 }
 
-export function SelectionActionBar({ actions, onAction, fixed, hint }: SelectionActionBarProps) {
+export function SelectionActionBar({ actions, onAction, fixed, overlay, hint }: SelectionActionBarProps) {
   return (
-    <div className={"mobile-selection-bar" + (fixed ? " is-fixed" : "")} role="group" aria-label="批量操作">
-      {hint && <span className="mb-row__meta mb-flex1">{hint}</span>}
-      {actions.map((action) => {
-        const Icon = action.icon;
-        return (
-          <button
-            key={action.id}
-            type="button"
-            className={"mb-btn" + (action.danger ? " mb-btn--danger" : " mb-btn--secondary")}
-            disabled={action.disabled}
-            aria-pressed={action.ariaPressed}
-            onClick={() => onAction(action.id)}
-          >
-            {Icon ? <Icon size={16} /> : null}{action.label}
-          </button>
-        );
-      })}
+    <div
+      className={"mb-sel-actions" + (fixed ? " is-fixed" : "") + (overlay ? " is-overlay" : "")}
+      role="group"
+      aria-label="批量操作"
+    >
+      {hint && <span className="mb-sel-actions__hint">{hint}</span>}
+      <div className="mb-sel-actions__row">
+        {actions.map((action) => {
+          const Icon = action.icon;
+          return (
+            <button
+              key={action.id}
+              type="button"
+              className={"mb-sel-act" + (action.danger ? " is-danger" : "")}
+              disabled={action.disabled}
+              aria-pressed={action.ariaPressed}
+              onClick={() => onAction(action.id)}
+            >
+              {Icon ? <Icon size={19} strokeWidth={1.75} aria-hidden="true" /> : null}
+              <span className="mb-sel-act__label">{action.label}</span>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }

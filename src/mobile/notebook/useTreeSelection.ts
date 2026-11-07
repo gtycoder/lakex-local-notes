@@ -12,7 +12,7 @@
  * · 返回键先退出选择（pushBackHandler），不关抽屉。
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Copy, FolderInput, Trash } from "lucide-react";
+import { Copy, FolderInput, Tag, Trash } from "lucide-react";
 import { bridge } from "../bridge";
 import { getNativeErrorMessage } from "../../lib/nativeErrors";
 import type { NotebookTreeRow } from "./notebookTreeIndex";
@@ -25,6 +25,7 @@ import { duplicateResultNotice } from "../ui/duplicateNotesResult";
 import { summarizeBatchResult } from "../ui/batchNotesResult";
 import { showToast } from "../ui/toastBus";
 import type { MoveTargetNode } from "../ui/MoveTargetTreeSheet";
+import type { QuickNoteTagSummary } from "../../core/quickNoteTags";
 
 export interface TreeSelectionMoveSheet {
   open: boolean;
@@ -60,6 +61,9 @@ export function useTreeSelection(options: UseTreeSelectionOptions) {
   const [moveCurrentParentId, setMoveCurrentParentId] = useState<string | null>(null);
   const [moveExcludedIds, setMoveExcludedIds] = useState<string[]>([]);
   const selectedIds = selection.ids;
+  // v2（261107）：打标签 —— 目录用 bridge.listQuickNoteTags（目录单一来源），只追加。
+  const [tagOpen, setTagOpen] = useState(false);
+  const [tagOptions, setTagOptions] = useState<QuickNoteTagSummary[]>([]);
   /** 同一时刻只跑一个批量动作（底部条按钮也按 busy 置灰，双保险）。 */
   const busyRef = useRef(false);
   const withBusy = useCallback(async (task: () => Promise<void>): Promise<void> => {
@@ -70,11 +74,12 @@ export function useTreeSelection(options: UseTreeSelectionOptions) {
     try { await task(); } finally { busyRef.current = false; setBusy(false); }
   }, []);
 
-  /** 底部操作条：创建副本 / 移动… / 移入回收站（非破坏性动作在前，与桌面多选同序）。 */
+  /** 底部操作条：创建副本 / 移动 / 打标签 / 移入回收站（非破坏性在前，危险动作殿后）。 */
   const actions: SelectionAction[] = useMemo(() => [
     { id: "duplicate", label: "创建副本", icon: Copy, ariaPressed: false, disabled: busy },
-    { id: "move", label: "移动…", icon: FolderInput, ariaPressed: false, disabled: busy },
-    { id: "trash", label: "移入回收站", icon: Trash, danger: true, ariaPressed: false, disabled: busy },
+    { id: "move", label: "移动", icon: FolderInput, ariaPressed: false, disabled: busy },
+    { id: "tag", label: "打标签", icon: Tag, ariaPressed: false, disabled: busy },
+    { id: "trash", label: "删除", icon: Trash, danger: true, ariaPressed: false, disabled: busy },
   ], [busy]);
 
   // 选择态下返回键先退出选择（不关抽屉、不退工作区）；注册在浮层返回处理之后 ⇒ 栈顶优先。
@@ -144,6 +149,26 @@ export function useTreeSelection(options: UseTreeSelectionOptions) {
     }
   }), [withBusy, selectedIds, selection.exit, loadTree]);
 
+  /** 打标签（只追加）：成功退出选择；失败保留选择方便重试。 */
+  const applyTag = useCallback((tagIds: readonly string[]) => withBusy(async () => {
+    if (selectedIds.length === 0 || tagIds.length === 0) return;
+    try {
+      const result = await bridge.batchNotes({ action: "tag-add", ids: [...selectedIds], space: "lake", tagIds: [...tagIds] });
+      const summary = summarizeBatchResult(result, "已打标签");
+      if (result.summary.failed > 0) {
+        setError(summarizeBatchResult(result, ""));
+        showToast(summary, { type: "error" });
+        return;
+      }
+      showToast(summary);
+      setTagOpen(false);
+      selection.exit();
+      await loadTree();
+    } catch (err) {
+      showToast("打标签失败：" + getNativeErrorMessage(err), { type: "error" });
+    }
+  }), [withBusy, selectedIds, selection.exit, loadTree]);
+
   const applyTrash = useCallback(() => withBusy(async () => {
     if (selectedIds.length === 0) return;
     try {
@@ -166,6 +191,19 @@ export function useTreeSelection(options: UseTreeSelectionOptions) {
     if (selectedIds.length === 0) { showToast("请先选择文档"); return; }
     if (actionId === "duplicate") { void applyDuplicate(); return; }
     if (actionId === "move") { void openMovePicker(); return; }
+    if (actionId === "tag") {
+      void (async () => {
+        setError(null);
+        try {
+          const tags = await bridge.listQuickNoteTags();
+          setTagOptions(tags.map((t) => ({ ...t, count: 0 })));
+          setTagOpen(true);
+        } catch (err) {
+          showToast("读取标签失败：" + getNativeErrorMessage(err), { type: "error" });
+        }
+      })();
+      return;
+    }
     if (actionId === "trash") {
       void confirmMobile({
         title: "移入回收站？",
@@ -187,5 +225,15 @@ export function useTreeSelection(options: UseTreeSelectionOptions) {
     onConfirm: (parentId: string) => { void applyMove(parentId); },
   };
 
-  return { selection, actions, runAction, busy, error, selectableCount: selectableIds.length, moveSheet };
+  const tagSheet = {
+    open: tagOpen,
+    options: tagOptions,
+    count: selectedIds.length,
+    busy,
+    error,
+    onClose: () => { if (!busy) setTagOpen(false); },
+    onConfirm: (tagIds: readonly string[]) => applyTag(tagIds),
+  };
+
+  return { selection, actions, runAction, busy, error, selectableCount: selectableIds.length, moveSheet, tagSheet };
 }

@@ -8,6 +8,15 @@
 
 ## 0. 最新交接（261027）
 
+### 261107 · 移动端多选页重做（v2：树抽屉选择态 + 打标签）· **master 直接提交（按用户指示）**
+- **顶部栏**：`SelectionTopBar` 重写为 `.mb-sel-topbar`（抽屉头同高 44、纯文字：取消 / 已选 N / 全选；不再复用 `.mb-btn`/设置页页头，进入选择态不再因头部高度跳变而闪）。
+- **底部动作条**：`SelectionActionBar` 重写为 `.mb-sel-actions`（浮动柔光玻璃 + 等分图标格 `.mb-sel-act`，危险动作红字但仍等分；`overlay` 贴抽屉底、`fixed` 给首页小记）。不再出现「两胶囊 + 一整行红字」的换行失衡。
+- **抽屉选择态**：`.side-panel--selecting` + 树 body 底部留白，动作条**绝对定位覆盖**（树高度不因动作条插入变化 ⇒ 不闪）。⚠️ 过程中曾加 `.side-panel--selecting{position:relative}` 导致抽屉掉出 fixed、整块下滑，已删除。
+- **新增「打标签」**：树选择 4 动作为 创建副本 / 移动 / 打标签 / 删除；标签目录 = `bridge.listQuickNoteTags()`（目录单一来源），批量走 `bridge.batchNotes({action:"tag-add",space:"lake",tagIds})`（core 只追加语义），选择器复用 `BatchTagPickerSheet`；失败保留选择方便重试。
+- **测试**：`selectionMode.render.test.tsx` 跟随新原语更新（`.mb-sel-topbar__btn` / `.mb-sel-act` / `.is-danger`）；mobileLayers 基线 mobile.css 1596 → 1655（替换旧 `.mobile-selection-bar` 2 条 + 新增 v2 选择原语，属新增形态）。
+- **门禁**：tsc（本仓 src/mobile|core|lib）0；**全量 vitest 760 文件 / 4903 例通过**；ui-metrics / check:mobileui / check:core / diff-check 绿。**按要求不做快照基线重烤**。
+- **真机**：emulator-5554 复验（截图 `/Users/admin/file/local-lake/preview/device/mobile-sel-*.png`）：抽屉满高、选择顶栏、四动作为等分图标格、打标签 Sheet 正常打开；当前设备标签目录为空（空态文案「先到标签页新建」）。
+- **残余**：进入选择态时每行左侧新增复选框会让行内容右移一次（若仍觉得闪，可改「复选框覆盖式定位」）；多选页的长列表滚动性能/虚拟窗口未做专项。
 ### 261107 · 移动端 v2「柔光纸面」P4（设置子页图标块 + 工作区顶栏滚动玻璃态）· **已合并 master（261108）**
 - **设置原语扩展**：`settingsPrimitives.tsx` 的 `Item` / `Switch` 增加可选 `icon` / `tone` / `value`（复用 kit 的 `.mb-set-item__icon/__val`，颜色只由调用方 tone 提供，不写进 CSS）。已接线：外观·主题（Palette/琥珀）、编辑器·正文字号（List/紫）、AI·开关（Sparkles/绿）；其余子页行暂未加（避免每行一个彩色块变成噪音，等用户看过后按需铺）。
 - **工作区顶栏滚动玻璃态**：`NotebookWorkspace` 根节点挂 scroll 捕获监听（`.mobile-scroll` / `.ne-editor-wrap` 取最大 scrollTop），滚过 6px 给 `.mobile-topbar` 加 `.is-scrolled`（玻璃底 + 发丝线 + 14px 渐隐，与首页同一套样式）；阅读态自动收起（`.mobile-topbar--auto-hidden`）行为不变。
