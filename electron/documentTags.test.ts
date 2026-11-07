@@ -99,6 +99,25 @@ describe("文档标签关系（主库，261105 P1）", () => {
     }
   });
 
+  it("切到小记库后 runTagMutation 与目录共用事务：异常整批回滚", async () => {
+    const { root, store } = await freshStore();
+    const quickPath = await fs.mkdtemp(path.join(os.tmpdir(), "lake-tag-tx-"));
+    const quickDb = new Database(path.join(quickPath, "metadata.sqlite3"));
+    try {
+      store.attachDocumentTagsDatabase(quickDb);
+      quickDb.exec("CREATE TABLE tx_probe(v TEXT)");
+      expect(() => store.runTagMutation(quickDb, () => {
+        quickDb.prepare("INSERT INTO tx_probe VALUES('x')").run();
+        throw new Error("relation failed");
+      })).toThrow("relation failed");
+      expect(quickDb.prepare("SELECT COUNT(*) AS n FROM tx_probe").get()).toEqual({ n: 0 });
+    } finally {
+      quickDb.close();
+      await fs.rm(quickPath, { recursive: true, force: true });
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("切换到小记库后：关系写小记库的同构表（261107 存储统一）", async () => {
     const { root, store } = await freshStore();
     const quickPath = await fs.mkdtemp(path.join(os.tmpdir(), "lake-tag-quick-"));

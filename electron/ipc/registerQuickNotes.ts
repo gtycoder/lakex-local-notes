@@ -43,15 +43,20 @@ export function registerQuickNotesIpc(
   ipc.handle("update_quick_note_tag", (id: string, patch: { name?: string }) => quickNotes.tagService.update(id, patch));
   ipc.handle("reorder_quick_note_tags", (ids: string[]) => quickNotes.tagService.reorder(ids));
   // 261105 P1：目录唯一来源 = 小记库 tags；文档关系在**主库**，删除/合并由主进程跨库协调。
+  // 261107：标签关系已统一到小记库 ⇒ 目录变更 + 文档关系清理在**同一事务**里完成（不再吞异常）。
   ipc.handle("merge_quick_note_tags", (sourceId: string, targetId: string) => {
-    const result = quickNotes.tagService.merge(sourceId, targetId);
-    try { store.documentTags.mergeTag(sourceId, targetId); } catch { /* 主库关系清理失败不阻断目录合并（下轮/启动自检会收敛） */ }
-    return result;
+    return store.runTagMutation(quickNotes.databaseHandle, () => {
+      const result = quickNotes.tagService.merge(sourceId, targetId);
+      store.documentTags.mergeTag(sourceId, targetId);
+      return result;
+    });
   });
   ipc.handle("delete_quick_note_tag", (id: string) => {
-    const result = quickNotes.tagService.delete(id);
-    try { store.documentTags.removeTag(id); } catch { /* 同上：目录删除优先，关系由启动自检收敛 */ }
-    return result;
+    return store.runTagMutation(quickNotes.databaseHandle, () => {
+      const result = quickNotes.tagService.delete(id);
+      store.documentTags.removeTag(id);
+      return result;
+    });
   });
   // ---- 文档标签关系（261105 P1）：目录沿用 list_quick_note_tags；这里只读写主库关系 ----
   ipc.handle("list_note_tag_links", () => {

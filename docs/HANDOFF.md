@@ -9,7 +9,7 @@
 ## 0. 最新交接（261027）
 
 ### 261107 · 上线前最后一批：标签存储统一到小记库 + 数据安全守卫 + 同步/多选/安全修复 · **master 直接提交（未推）**
-- **标签存储统一（本批主项）**：桌面把主库 `tag_links/tag_link_versions(target_kind='note')` 一次性迁入小记库（小记库已有同构表，quickNote 关系保留）；迁移用 SQLite `ATTACH` 跨库事务 + 行数校验 + `tag_storage_meta.note_links_v2` 标记，失败保持主库旧服务（可回退，主库旧表保留一版）。`main.ts` 在 `QuickNotesStore` 打开后调用 `Store.attachDocumentTagsDatabase(quickNotes.databaseHandle)`；同步 wire（`tagIds/tagsUpdatedAt`）不变。
+- **标签存储统一（本批主项）**：桌面把主库 `tag_links/tag_link_versions(target_kind='note')` 一次性迁入小记库（小记库已有同构表，quickNote 关系保留）；迁移用 SQLite `ATTACH` 跨库事务 + 行数校验 + `tag_storage_meta.note_links_v2` 标记，失败保持主库旧服务（可回退，主库旧表保留一版）。`main.ts` 在 `QuickNotesStore` 打开后调用 `Store.attachDocumentTagsDatabase(quickNotes.databaseHandle)`；同步 wire（`tagIds/tagsUpdatedAt`）不变。标签**删除/合并**改 `Store.runTagMutation(quickNotes.databaseHandle, …)`：关系已在小记库时目录变更 + 文档关系清理在**同一事务**（异常整体回滚，不再吞异常）。
 - **前置：备份恢复补小记库**：`restoreMainDatabaseFromBackup` 现同时恢复同快照的 `quick-notes/metadata.sqlite3`（校验/隔离/临时名/失败整体回滚）；备份里没有小记库时只恢复主库并保留当前小记库。`registerNotes` 传当前小记库路径。
 - **数据安全三项**：① `saveBaseline` 改守卫式归位：桌面 `markNotesSyncedIfUnchanged` / 移动 `markUnchanged` 只清「本地 updated_at 仍等于基线快照」的行，窗口内改名/移动/恢复保留 dirty/restore_pending_at；② `applyRemoteNoteMeta` 接收引擎的**本轮开始前本地快照**（`saveState(next, previous)` 新增可选参数），仅当当前行 updated_at 仍等于快照才覆盖；引擎本轮自己写正文（下载/恢复）时无条件对齐远端 updatedAt；③ 空目录保护上收 `core/quickNoteTags.shouldSkipEmptyTagDirectoryCleanup`，桌面/移动共用。
 - **桌面 sync-progress 双订阅修复**：`useSyncController` 不再临时订阅 `onSyncProgress`，进度/分类/完成刷新由常驻 `useSyncProgress` 单一 owner；手动同步只 await 结果。
@@ -21,7 +21,7 @@
 - **发布门禁现状**：`check:bundle`/`check:arch` 在本批改动前的 HEAD 就已超移动端预算（entry 65,460B / preload 33 / 首屏 374,060B；非本批引入）。本轮按现状冻结预算（entry 66KB、preload 34、首屏 380KB）让 CI 恢复绿，目标值仍是 60KB/12 ×/360KB；「移动端首屏瘦身」已记入 §3，专项做完必须收紧。
 - **本轮已补（261107 round2/3）**：6 个桌面漏登记 CSS 已进 `cssLayers.test.ts` 基线（421 声明，此前完全在棘轮外）；8 个零引用 `--shell-*`/`--ease-out`/`--dur-*` 局部变量已删；新增 `src/styles/primitives.test.ts` 原语跨所有权覆盖门禁（基线 70，只许降）；`EmojiIconPicker` 从 Sidebar 抽到 `components/app/NodeIconPicker.tsx` 并 `React.lazy`（桌面入口 app-js 217.5→**176.3KB gz**，首屏 587→**546.3KB**；Sidebar 渲染测试改 async flush，12 例仍绿）。
 - **本轮明确未做（下一批/可延后）**：Sidebar/Settings 拆分、移动端 @layer、附件资产域（20 万未启动）、原语变体覆盖门禁（当前 35 条跨所有权选择器仅为审计结论，未加门禁）。
-- 门禁：tsc 0；全量 vitest 784 文件 / 4946 例（含新增 tagStorage/restoreQuickNotes/baselineGuard/syncWindowGuard/selection cap/primitives gate；tag aggregate 75 例 tags 全过）；check:core 0；ui-metrics / check:mobileui / 双端 build / diff-check 绿；check:bundle/check:arch 通过（桌面入口 app-js 176.3KB gz）。
+- 门禁：tsc 0；全量 vitest 784 文件 / 4947 例（含新增 tagStorage/restoreQuickNotes/baselineGuard/syncWindowGuard/selection cap/primitives gate；tag aggregate 75 例 tags 全过）；check:core 0；ui-metrics / check:mobileui / 双端 build / diff-check 绿；check:bundle/check:arch 通过（桌面入口 app-js 176.3KB gz）。
 - **设备快照（261107 重打 APK 后）**：手机 6 态、平板 6 态、多维表 3 态均**连跑两轮 0 差异**。三套基线按「pm clear + 重灌夹具后 id 变化」的既有流程重烤（`mobile-snap.json` / `mobile-snap-tablet.json` / `bitable-snap.json`）；重烤前逐行对拍确认当前构建两次快照 rows 完全一致、元素数不变，属装置 id 漂移不是视觉回归。
 
 ### 261107 · 推送前 review（修复死样式清理误伤注释 + 清理重命名死 API）· **master 直接提交**

@@ -237,6 +237,8 @@ export class Store {
    *  261107：存储统一到小记库后由 main 在 QuickNotesStore 打开后调用 attachDocumentTagsDatabase 切换；
    *  迁移失败时保持构造时的主库实例（旧行为，可回退）。 */
   private _documentTags: DocumentTagsService;
+  /** 261107：标签关系是否已切到小记库（决定删除/合并能否与小记目录共用同一事务）。 */
+  private _documentTagsOnQuickNotes = false;
   get documentTags(): DocumentTagsService { return this._documentTags; }
   /** 261105 P1 第 4 项：同步记录账本（设备本地，不进 S3/git）。 */
   readonly syncConflicts: SyncConflictsRepository;
@@ -251,6 +253,12 @@ export class Store {
   /** 261107：标签存储统一后把文档标签关系服务切到小记库（迁移成功才调用；失败保持主库）。 */
   attachDocumentTagsDatabase(db: Database.Database): void {
     this._documentTags = new DocumentTagsService(db);
+    this._documentTagsOnQuickNotes = true;
+  }
+
+  /** 标签删除/合并：关系已在小记库时与目录共用同一事务（要么都成功，要么都回滚）。 */
+  runTagMutation<T>(quickDb: Database.Database, fn: () => T): T {
+    return this._documentTagsOnQuickNotes ? quickDb.transaction(fn)() : fn();
   }
 
   constructor(root: string, secretCipher: SecretCipher = createPlaintextSecretCipher(), logScopes: LoggerScopes = createSilentLoggerScopes()) {
