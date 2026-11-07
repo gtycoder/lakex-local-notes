@@ -362,6 +362,9 @@ export interface MarkdownPickedFileShape {
   error?: string;
 }
 
+/** 261108 文档导入 picker 的类型过滤。 */
+export type ImportPickerKind = "markdown" | "docx" | "xlsx" | "csv" | "all";
+
 /** 261108 文档导入：主进程 picker 返回的单文件（Markdown / Word / Excel / CSV）。 */
 export interface ImportPickedFileShape {
   path: string;

@@ -54,12 +54,15 @@ export function registerMarkdownImportIpc(ipc: IpcRegistrar, deps: MarkdownImpor
   });
 
 
-  // 261108：Markdown / Word / Excel / CSV 统一入口；用户取消 → []。
-  ipc.handle("pick_import_files", async (): Promise<ImportPickedFile[]> => {
-    const result = await showOpenDialog(focusedWindow() ?? undefined as unknown as BrowserWindow, {
+  // 261108：按类型导入；picker 只给该类型过滤（另有「所有文件」用于让不支持项进入跳过统计）。
+  const pickerConfig = (raw: unknown) => {
+    const kind = raw === "markdown" || raw === "docx" || raw === "xlsx" || raw === "csv" ? raw : "all";
+    if (kind === "markdown") return { title: "选择 Markdown 文件（可多选）", filters: [{ name: "Markdown", extensions: ["md", "markdown"] }, { name: "所有文件", extensions: ["*"] }] };
+    if (kind === "docx") return { title: "选择 Word 文件（可多选）", filters: [{ name: "Word", extensions: ["docx"] }, { name: "所有文件", extensions: ["*"] }] };
+    if (kind === "xlsx") return { title: "选择 Excel 文件（可多选）", filters: [{ name: "Excel", extensions: ["xlsx"] }, { name: "所有文件", extensions: ["*"] }] };
+    if (kind === "csv") return { title: "选择 CSV 文件（可多选）", filters: [{ name: "CSV", extensions: ["csv"] }, { name: "所有文件", extensions: ["*"] }] };
+    return {
       title: "选择导入文件（可多选）",
-      buttonLabel: "导入",
-      properties: ["openFile", "multiSelections"],
       filters: [
         { name: "支持的文件", extensions: ["md", "markdown", "docx", "xlsx", "csv"] },
         { name: "Markdown", extensions: ["md", "markdown"] },
@@ -68,6 +71,15 @@ export function registerMarkdownImportIpc(ipc: IpcRegistrar, deps: MarkdownImpor
         { name: "CSV", extensions: ["csv"] },
         { name: "所有文件", extensions: ["*"] },
       ],
+    };
+  };
+  ipc.handle("pick_import_files", async (rawKind: unknown): Promise<ImportPickedFile[]> => {
+    const config = pickerConfig(rawKind);
+    const result = await showOpenDialog(focusedWindow() ?? undefined as unknown as BrowserWindow, {
+      title: config.title,
+      buttonLabel: "导入",
+      properties: ["openFile", "multiSelections"],
+      filters: config.filters,
     });
     if (result.canceled || result.filePaths.length === 0) return [];
     return Promise.all(result.filePaths.map((filePath) => describeImport(filePath)));

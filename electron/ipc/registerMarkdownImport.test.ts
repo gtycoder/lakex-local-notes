@@ -53,6 +53,19 @@ describe("registerMarkdownImportIpc：通道与取消语义", () => {
     expect(harness().channels()).toEqual(["pick_import_files", "pick_markdown_files", "read_import_image"]);
   });
 
+  it("按类型过滤：docx / xlsx / csv 各自打开对应标题与过滤器", async () => {
+    dialogMock.showOpenDialog.mockResolvedValue({ canceled: true, filePaths: [] });
+    const h = harness();
+    await h.call("pick_import_files", "docx");
+    const word = dialogMock.showOpenDialog.mock.calls.at(-1)![1];
+    expect(word.title).toContain("Word");
+    expect(JSON.stringify(word.filters)).toContain("docx");
+    await h.call("pick_import_files", "csv");
+    const csv = dialogMock.showOpenDialog.mock.calls.at(-1)![1];
+    expect(csv.title).toContain("CSV");
+    expect(JSON.stringify(csv.filters)).toContain("csv");
+  });
+
   it("多选文件：取消 ⇒ 空数组（不抛）", async () => {
     dialogMock.showOpenDialog.mockResolvedValue({ canceled: true, filePaths: [] });
     const result = await harness().call("pick_markdown_files");

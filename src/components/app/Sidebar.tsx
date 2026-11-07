@@ -34,7 +34,7 @@ import { convertHtmlToLake } from "../../features/import/htmlImportPipeline";
 import type { UsheetWorkbook } from "../../core/usheetDoc";
 import { getNativeErrorMessage } from "../../lib/nativeErrors";
 import { native } from "../../lib/native";
-import type { BatchNotesRequestShape, ImportPickedFileShape, QuickNoteTag } from "../../lib/types";
+import type { BatchNotesRequestShape, ImportPickedFileShape, ImportPickerKind, QuickNoteTag } from "../../lib/types";
 import { MoveTargetTreeDialog } from "./MoveTargetTreeDialog";
 import { BatchTagDialog, type BatchTagMode } from "./BatchTagDialog";
 import { TreeSelectionBar } from "./TreeSelectionBar";
@@ -769,14 +769,14 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
     }
   }, [props.onRefreshTree]);
 
-  const startImport = useCallback(async (targetId: string | null) => {
+  const startImport = useCallback(async (targetId: string | null, kind: ImportPickerKind) => {
     if (!targetId || importProgress) return;
     setMenuOpen(false);
     setCreateMenu(null);
     setContextMenu(null);
     let picked: ImportPickedFileShape[] = [];
     try {
-      picked = await native.pickImportFiles();
+      picked = await native.pickImportFiles(kind);
     } catch (error) {
       setImportResult({ success: 0, skipped: [], failed: [{ name: "选择导入文件", reason: getNativeErrorMessage(error) || "无法打开文件选择器" }], warnings: [] });
       return;
@@ -1253,7 +1253,11 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
               {/* 261106：导入 = 当前打开文档所在的笔记本/分组（根级 + 没有打开文档 ⇒ 禁用并提示） */}
               {importTargetOfActive ? (
                 <Submenu label={<><Download size={15} aria-hidden="true" /><span>导入</span></>}>
-                  <button role="menuitem" onClick={() => void startImport(importTargetOfActive)}><FilePlus size={15} aria-hidden="true" /><span>导入文件…</span></button>
+                  <button role="menuitem" onClick={() => void startImport(importTargetOfActive, "markdown")}><FilePlus size={15} aria-hidden="true" /><span>Markdown…</span></button>
+                  <button role="menuitem" onClick={() => void startImport(importTargetOfActive, "docx")}><FilePlus size={15} aria-hidden="true" /><span>Word（.docx）…</span></button>
+                  <div className="context-menu-sep" role="separator" />
+                  <button role="menuitem" onClick={() => void startImport(importTargetOfActive, "xlsx")}><FilePlus size={15} aria-hidden="true" /><span>Excel（.xlsx）…</span></button>
+                  <button role="menuitem" onClick={() => void startImport(importTargetOfActive, "csv")}><FilePlus size={15} aria-hidden="true" /><span>CSV（.csv）…</span></button>
                 </Submenu>
               ) : (
                 <button role="menuitem" disabled title="先打开或选择一个笔记本/分组"><Download size={15} aria-hidden="true" /><span>导入（先选择笔记本）</span></button>
@@ -1308,7 +1312,7 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
         />
       )}
       {contextMenu && contextNode && <ContextMenu node={contextNode} x={contextMenu.x} y={contextMenu.y} onRename={menuRename} onMove={() => { if (contextNode) openMoveForNode(contextNode); }} onDelete={menuDelete} onCopyMarkdown={() => props.onCopyMarkdown(contextNode)} onExportAs={(format) => props.onExportAs(contextNode, format)} onCopyPaths={() => props.onCopyPaths(contextNode)} onShowInfo={() => props.onShowInfo(contextNode)} onOpenHistory={() => props.onOpenHistory(contextNode)} locked={contextNode.noteFileId ? props.lockedNoteIds.has(contextNode.noteFileId) : false} onToggleLock={() => props.onToggleLockNote(contextNode)} onAddTags={() => setTagEditor({ noteId: contextNode.noteFileId ?? contextNode.id, title: contextNode.title })} onDuplicate={() => { if (contextNode) duplicateOne(contextNode); }} pinned={pinnedSet.has(contextNode.id)} onTogglePin={() => togglePinNode(contextNode)} busy={batchBusy} onClose={() => setContextMenu(null)} />}
-      {createMenu && <CreateMenu anchor={createMenu.anchor} onNewChild={(kind) => createChild(createMenu.node, kind)} importTarget={containerAncestorOf(createMenu.node.id)} onImport={(targetId) => void startImport(targetId)} onClose={() => setCreateMenu(null)} />}
+      {createMenu && <CreateMenu anchor={createMenu.anchor} onNewChild={(kind) => createChild(createMenu.node, kind)} importTarget={containerAncestorOf(createMenu.node.id)} onImport={(targetId, kind) => void startImport(targetId, kind)} onClose={() => setCreateMenu(null)} />}
       {editingId && <TreeRenameDialog key={editingId} initial={editingTitle} onCancel={cancelRename} onConfirm={submitRename} />}
       {createDialog && (() => {
         const preset = CREATE_DIALOG_PRESETS[createDialog.kind];
@@ -1706,7 +1710,7 @@ function CreateMenu({ anchor, onNewChild, importTarget, onImport, onClose }: {
   onNewChild: (kind: CreateChildKind) => void;
   /** 导入目标父级（最近容器）；null = 根级且没有所属笔记本 ⇒ 禁用并提示。 */
   importTarget: string | null;
-  onImport: (targetId: string) => void;
+  onImport: (targetId: string, kind: ImportPickerKind) => void;
   onClose: () => void;
 }) {
   const { surfaceRef, style } = usePopoverPosition({ open: true, anchor, gap: 4, margin: 8 });
@@ -1716,7 +1720,11 @@ function CreateMenu({ anchor, onNewChild, importTarget, onImport, onClose }: {
       <div className="context-menu-sep" role="separator" />
       {importTarget ? (
         <Submenu label={<><Download size={15} aria-hidden="true" /><span>导入</span></>}>
-          <button role="menuitem" onClick={() => { onImport(importTarget); onClose(); }}><FilePlus size={15} aria-hidden="true" /><span>导入文件…</span></button>
+          <button role="menuitem" onClick={() => { onImport(importTarget, "markdown"); onClose(); }}><FilePlus size={15} aria-hidden="true" /><span>Markdown…</span></button>
+          <button role="menuitem" onClick={() => { onImport(importTarget, "docx"); onClose(); }}><FilePlus size={15} aria-hidden="true" /><span>Word（.docx）…</span></button>
+          <div className="context-menu-sep" role="separator" />
+          <button role="menuitem" onClick={() => { onImport(importTarget, "xlsx"); onClose(); }}><FilePlus size={15} aria-hidden="true" /><span>Excel（.xlsx）…</span></button>
+          <button role="menuitem" onClick={() => { onImport(importTarget, "csv"); onClose(); }}><FilePlus size={15} aria-hidden="true" /><span>CSV（.csv）…</span></button>
         </Submenu>
       ) : (
         <button role="menuitem" disabled title="先选择一个笔记本或分组"><Download size={15} aria-hidden="true" /><span>导入（先选择笔记本）</span></button>

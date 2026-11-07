@@ -107,7 +107,7 @@ describe("Markdown 导入：菜单与目标父级", () => {
     render();
     openRowMenu("nb");
     expect(bodyText()).toContain("导入");
-    expect(menuButton("导入文件…")).toBeTruthy();
+    expect(menuButton("Markdown…")).toBeTruthy();
     expect(menuButton("Markdown 文件夹…")).toBeUndefined();
     // 源码级：入口与 native 绑定都不再出现（task-91）
     const sidebar = readFileSync(path.resolve("src/components/app/Sidebar.tsx"), "utf8");
@@ -115,21 +115,15 @@ describe("Markdown 导入：菜单与目标父级", () => {
     expect(sidebar).not.toContain("pickMarkdownFolder");
   });
 
-  it("统一 picker：Word → docx HTML，Excel/CSV → sheet 工作簿，交给通用批量", async () => {
-    const workbook = { id: "workbook", sheetOrder: ["s1"], sheets: { s1: { id: "s1", name: "Sheet1", cellData: {} } } };
-    nativeMocks.pickImportFiles.mockResolvedValue([
-      file("a.docx", { kind: "docx", html: "<h1>报告</h1>" }),
-      file("b.xlsx", { kind: "xlsx", workbook }),
-      file("c.csv", { kind: "csv", workbook }),
-    ]);
+  it("类型菜单分别把 kind 传给 picker；Word → docx HTML 交给通用批量", async () => {
+    nativeMocks.pickImportFiles.mockResolvedValue([file("a.docx", { kind: "docx", html: "<h1>报告</h1>" })]);
     importMocks.createNotesFromImportBatch.mockResolvedValue({ ok: true, results: [], summary: { total: 0, done: 0, failed: 0, skipped: 0 }, warnings: [] });
     render();
     openRowMenu("nb");
-    await act(async () => { menuButton("导入文件…")!.click(); await Promise.resolve(); await Promise.resolve(); });
+    await act(async () => { menuButton("Word（.docx）…")!.click(); await Promise.resolve(); await Promise.resolve(); });
+    expect(nativeMocks.pickImportFiles).toHaveBeenCalledWith("docx");
     const request = importMocks.createNotesFromImportBatch.mock.calls[0][0];
-    expect(request.items.map((item: { kind: string }) => item.kind)).toEqual(["docx", "sheet", "sheet"]);
-    expect(request.items[0]).toMatchObject({ name: "a.docx", html: "<h1>报告</h1>" });
-    expect(request.items[1]).toMatchObject({ name: "b.xlsx", workbook });
+    expect(request.items).toEqual([{ kind: "docx", path: "/tmp/import/a.docx", name: "a.docx", relativePath: "a.docx", html: "<h1>报告</h1>" }]);
     expect(typeof request.convertHtml).toBe("function");
   });
 
@@ -138,7 +132,8 @@ describe("Markdown 导入：菜单与目标父级", () => {
     importMocks.createNotesFromImportBatch.mockResolvedValue({ ok: true, results: [{ path: "/tmp/import/a.md", ok: true, noteId: "n9" }], summary: { total: 1, done: 1, failed: 0, skipped: 0 }, warnings: [] });
     render();
     openRowMenu("nb");
-    await act(async () => { menuButton("导入文件…")!.click(); await Promise.resolve(); await Promise.resolve(); });
+    await act(async () => { menuButton("Markdown…")!.click(); await Promise.resolve(); await Promise.resolve(); });
+    expect(nativeMocks.pickImportFiles).toHaveBeenCalledWith("markdown");
     expect(importMocks.createNotesFromImportBatch).toHaveBeenCalledTimes(1);
     const request = importMocks.createNotesFromImportBatch.mock.calls[0][0];
     expect(request.parentNotebookId).toBe("nb");
@@ -154,7 +149,7 @@ describe("Markdown 导入：菜单与目标父级", () => {
     importMocks.createNotesFromImportBatch.mockResolvedValue({ ok: true, results: [], summary: { total: 0, done: 0, failed: 0, skipped: 0 }, warnings: [] });
     render();
     openRowMenu("g1");
-    await act(async () => { menuButton("导入文件…")!.click(); await Promise.resolve(); await Promise.resolve(); });
+    await act(async () => { menuButton("Markdown…")!.click(); await Promise.resolve(); await Promise.resolve(); });
     expect(importMocks.createNotesFromImportBatch.mock.calls[0][0].parentNotebookId).toBe("g1");
   });
 
@@ -172,7 +167,7 @@ describe("Markdown 导入：菜单与目标父级", () => {
     importMocks.createNotesFromImportBatch.mockResolvedValue({ ok: true, results: [], summary: { total: 0, done: 0, failed: 0, skipped: 0 }, warnings: [] });
     render();
     act(() => { document.querySelector<HTMLButtonElement>('button[aria-label="新建"]')!.click(); });
-    await act(async () => { menuButton("导入文件…")!.click(); await Promise.resolve(); await Promise.resolve(); });
+    await act(async () => { menuButton("Markdown…")!.click(); await Promise.resolve(); await Promise.resolve(); });
     expect(importMocks.createNotesFromImportBatch.mock.calls[0][0].parentNotebookId).toBe("g1");
   });
 
@@ -180,7 +175,7 @@ describe("Markdown 导入：菜单与目标父级", () => {
     nativeMocks.pickImportFiles.mockResolvedValue([]);
     render();
     openRowMenu("nb");
-    await act(async () => { menuButton("导入文件…")!.click(); await Promise.resolve(); await Promise.resolve(); });
+    await act(async () => { menuButton("Markdown…")!.click(); await Promise.resolve(); await Promise.resolve(); });
     expect(importMocks.createNotesFromImportBatch).not.toHaveBeenCalled();
     expect(document.querySelector('[role="dialog"]')).toBeNull();
   });
@@ -205,7 +200,7 @@ describe("Markdown 导入：跳过/进度/结果", () => {
     });
     render();
     openRowMenu("nb");
-    await act(async () => { menuButton("导入文件…")!.click(); await Promise.resolve(); await Promise.resolve(); });
+    await act(async () => { menuButton("Markdown…")!.click(); await Promise.resolve(); await Promise.resolve(); });
 
     const request = importMocks.createNotesFromImportBatch.mock.calls[0][0];
     expect(request.items).toHaveLength(1);
@@ -231,7 +226,7 @@ describe("Markdown 导入：跳过/进度/结果", () => {
     nativeMocks.pickImportFiles.mockResolvedValue([file("a.md"), file("b.md")]);
     render();
     openRowMenu("nb");
-    await act(async () => { menuButton("导入文件…")!.click(); await Promise.resolve(); await Promise.resolve(); });
+    await act(async () => { menuButton("Markdown…")!.click(); await Promise.resolve(); await Promise.resolve(); });
 
     // 进度浮层：N/M + 文件名 + 可取消
     expect(bodyText()).toContain("正在导入 1/2");
@@ -254,11 +249,11 @@ describe("Markdown 导入：跳过/进度/结果", () => {
     props.activeId = "n1";
     render();
     act(() => { document.querySelector<HTMLButtonElement>('button[aria-label="新建"]')!.click(); });
-    await act(async () => { menuButton("导入文件…")!.click(); await Promise.resolve(); await Promise.resolve(); });
+    await act(async () => { menuButton("Markdown…")!.click(); await Promise.resolve(); await Promise.resolve(); });
     expect(nativeMocks.pickImportFiles).toHaveBeenCalledTimes(1);
 
     act(() => { document.querySelector<HTMLButtonElement>('button[aria-label="新建"]')!.click(); });
-    await act(async () => { menuButton("导入文件…")!.click(); await Promise.resolve(); });
+    await act(async () => { menuButton("Markdown…")!.click(); await Promise.resolve(); });
     expect(nativeMocks.pickImportFiles).toHaveBeenCalledTimes(1);
 
     await act(async () => { gate.resolve(undefined as never); await Promise.resolve(); await Promise.resolve(); });
@@ -274,7 +269,7 @@ describe("Markdown 导入：跳过/进度/结果", () => {
     });
     render();
     openRowMenu("nb");
-    await act(async () => { menuButton("导入文件…")!.click(); await Promise.resolve(); await Promise.resolve(); });
+    await act(async () => { menuButton("Markdown…")!.click(); await Promise.resolve(); await Promise.resolve(); });
     expect(document.querySelector("details.import-result-dialog__warnings")).not.toBeNull();
     expect(bodyText()).toContain("frontmatter 已丢弃");
     act(() => { dialogButton("完成")!.click(); });
