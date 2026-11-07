@@ -626,8 +626,8 @@
 /* 浮层打开时抬高整个表格宿主的层序：.mobile-usheet 自带 isolation + z0，内部 fixed 浮层的 z 无法越过
  * 工作区顶栏（z3）；抬到「页面级」层后 scrim/sheet 才真正覆盖 chrome（关闭即回 z0，不常驻）。 */
 .mobile-usheet[data-overlay="1"] { z-index: var(--mobile-z-page); }
-.mb-sheet.mb-usheet-sign-sheet { height: min(84dvh, 760px); }
-.mb-sheet__body.mb-usheet-sign {
+.mb-usheet-sign-sheet { height: min(84dvh, 760px); }
+.mb-usheet-sign {
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -662,9 +662,9 @@
   font-size: var(--lake-font-size-small);
 }
 .mb-usheet-sign__tools { display: flex; align-items: center; gap: 8px; }
-.mb-usheet-sign__foot .mb-btn { flex: 1 1 0; }
+.mb-usheet-sign__foot > button { flex: 1 1 0; }
 
-.mb-sheet__body.mb-usheet-form {
+.mb-usheet-form {
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -696,4 +696,4 @@
   color: var(--lake-text-1);
   font-size: var(--lake-font-size-body);
 }
-.mb-usheet-form__foot .mb-btn { flex: 1 1 0; }
+.mb-usheet-form__foot > button { flex: 1 1 0; }
