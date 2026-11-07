@@ -87,9 +87,9 @@
 
 ### 261107 · 桌面「置顶」+ 移动端「常用」改名「置顶」· **261107 收尾已提交**
 - **桌面端新增「置顶」**（用户点单，仅桌面）：顶部独立分组（BookMarked 图标 + 「置顶」+ 数量，底部分隔线），**设备本地**（localStorage `lakex-local-notes-v3.sidebar-pinned` 保序数组 + `...-open` 展开态），**不写库、不进 S3、多端独立**；原目录结构完全不动，仅给节点多一个入口。
-- 支持：① 单条右键（**文档 / 分组**；**笔记本不可置顶**，用户 261107 明确）「置顶 / 取消置顶」；② 多选右键菜单 + 浮动条「置顶 / 取消置顶」（选区**全部**已置顶时标签自动反转），批量按选择顺序写入；③ 分组/笔记本/含子文档的父节点置顶 ⇒ **连同子级递归展示**（同一节点既单独置顶又在置顶父级下时只显示一次）；④ 整段可折叠；⑤ 置顶区内部**拖拽排序**（只排顶层根，子级跟随；HTML5 drag，插线提示）；⑥ 搜索/标签筛选时隐藏置顶区（避免"目录筛掉、置顶还在"歧义）。
+- 支持：① 单条右键（**文档 / 分组**；**笔记本不可置顶**，用户 261107 明确）「置顶 / 取消置顶」；② 多选右键菜单「置顶 / 取消置顶」（多选浮动条已移除）（选区**全部**已置顶时标签自动反转），批量按选择顺序写入；③ 分组/笔记本/含子文档的父节点置顶 ⇒ **连同子级递归展示**（同一节点既单独置顶又在置顶父级下时只显示一次）；④ 整段可折叠；⑤ 置顶区内部**拖拽排序**（只排顶层根，子级跟随；HTML5 drag，插线提示）；⑥ 搜索/标签筛选时隐藏置顶区（避免"目录筛掉、置顶还在"歧义）。
 - **右键菜单分组（261107 用户报"选项多了"）**：**仅文档菜单**分组 = 重命名/置顶 ｜ 创建副本/移动… ｜ 历史版本/标签…/属性 ｜ 锁定（只读）/导出 ｜ 删除（危险单独置底）；分组/笔记本右键很少用，**不做分组**（仅保留删除前的危险分隔线）。`.context-menu-sep` 此前**全仓没有样式**（只是空 div，所以分组看不见）——已在 `src/styles/app/dialogs.css` 补 `margin:5px 8px; border-top:0.5px solid var(--lake-border-1)`；底部危险分隔线补 `role="separator"`。测试断言文档/分组/笔记本三套菜单的分隔线序列（导出子菜单在 jsdom 内联展开，测试只断言主菜单分组）。
-- 实现：`src/features/sidebar/pinnedTree.ts`（纯读写/批量/重排/订阅）+ `SidebarPinnedSection.tsx`（渲染/折叠/拖拽）+ `treeIcons.tsx`（目录图标单源，Sidebar 与置顶区共用）；Sidebar 接单条/多选菜单、浮动条、右键单条菜单；多选动作 `treeSelectionActions.pin`。
+- 实现：`src/features/sidebar/pinnedTree.ts`（纯读写/批量/重排/订阅）+ `SidebarPinnedSection.tsx`（渲染/折叠/拖拽）+ `treeIcons.tsx`（目录图标单源，Sidebar 与置顶区共用）；Sidebar 接单条/多选菜单、右键单条菜单；多选动作 `treeSelectionActions.pin`。
 - **桌面实测（dev CDP）**：右键置顶→置顶区出现（header 置顶 N）；折叠/展开；笔记本置顶显示 10 行含子级后取消；多选 A+B → 菜单「置顶」→ storage 保序 + 提示「已置顶 2 项」；把 A 拖到 B 后 storage 顺序变 B,A、DOM 同步；reload 持久；测试后已清空置顶状态。截图 `/tmp/lakex-pinned-verify/desktop-pinned.png`。
 - **移动端「常用」全部改名「置顶」**（用户要求，逻辑/存储键不变）：目录行菜单「置顶 / 取消置顶」、toast「已置顶/已取消置顶」、知识库首页分组标题/aria、相关注释；`favorites.test` 同步更新。**移动端仍是原设备本地的"常用"实现**，与桌面置顶数据互不相关（多端独立）。
 - 测试：`pinnedTree` 纯逻辑 4 例、`SidebarPinnedSection` 渲染 6 例、Sidebar 单条右键置顶/多选置顶用例、treeSelection 动作面补 `pin`；全量 **762 文件（751 passed / 11 skipped）、4870 passed / 12 skipped**；tsc 0、`check-core-boundaries` 0 违规、`ui-metrics` 通过、`git diff --check` 干净。
@@ -139,7 +139,7 @@
 
 ### 261106 · 导入 / 批量导出 / 批量移动 / 移动端标签页与键盘稳定 · **已提交并双推**
 - **Markdown 导入**：`src/features/import/`（共享管线 md→lake：离屏内核 `setDocument("text/markdown")` → 等渲染 → `getDocument("text/lake")` + `data-lake-id` 校验；图片物化、远程图降级、frontmatter 丢弃、串行队列/超时）；桌面「+ → 导入 → Markdown…」多选（目标=点击 + 的笔记本/分组，进度可取消、结果汇总 warnings）；移动端系统分享 .md（SEND/SEND_MULTIPLE、冷/热启动、默认笔记本设置 + picker 默认选中、失败软删回滚、图片降级链接）。
-- **批量多选**：core `runBatchNotes`（move/trash/tag-add/tag-remove，ids 去重上限 500、先全量校验后单事务、笔记本 rejected、**无 restore/purge**）+ 桌面 `batch_notes` IPC（parity 162）；桌面目录树 ⌘/Ctrl + Shift 区间（跳过笔记本）、多选右键**仅三项**「移动… / 导出… / 移入回收站」（危险红）、浮动条；移动端小记/文档列表选择模式（长按或页头「选择」、顶部 取消/已选 N/全选、移动端 `bridge.batchNotes`）。**回收站不做多选/批量；「删除」= 移入回收站，仅回收站内可彻底删除**。
+- **批量多选**：core `runBatchNotes`（move/trash/tag-add/tag-remove，ids 去重上限 500、先全量校验后单事务、笔记本 rejected、**无 restore/purge**）+ 桌面 `batch_notes` IPC（parity 162）；桌面目录树 ⌘/Ctrl + Shift 区间（跳过笔记本）、多选右键菜单「置顶/创建副本/移动…/导出…/全选/取消选择/移入回收站」（危险红在最后）；**无浮动条、无批量打标**；移动端小记/文档列表选择模式（长按或页头「选择」、顶部 取消/已选 N/全选、移动端 `bridge.batchNotes`）。**回收站不做多选/批量；「删除」= 移入回收站，仅回收站内可彻底删除**。
 - **批量导出**：`export_notes_batch` 默认格式统一为可编辑/同目录——doc→Markdown 资料包（`<标题>/<标题>.md` + images/，相对链接）、usheet→CSV、bitable→CSV、ink→PDF、board→PDF（渲染层字节提供者 + 离屏 `boardSnapshot` + 受控 `write_batch_export_file` + `boardImages` 内嵌图片走 pdfRenderer）；分组递归、上限 500、重名「 (2)」、只读不写源、逐条结果 + 打开所在文件夹。
 - **移动（思源式）**：桌面 `MoveTargetTreeDialog`（kit Dialog/ln-input/ln-row、搜索、默认展开当前路径+当前位置、自身/后代/回收站禁用；单条+批量共用；拖拽保留）；移动端 `MoveTargetTreeSheet`（同语义 + 默认展开全部根笔记本一层、内部滚动、搜索）。
 - **移动端标签一级页**：首页三 tab（小记/知识库/标签）；标签列表（标准页头 + 单个 ＋、白色强调块、行 ⋯ 重命名/合并/删除、长按拖拽）；详情独立页头（返回/标签名/⋯ + 副标题计数）、文档/小记两段白块、小记富预览限高 180 + 条件渐隐 + 展开/收起 + × 右列 + 仅删关联确认；设置页标签分组移除。
