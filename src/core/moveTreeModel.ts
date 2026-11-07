@@ -9,7 +9,8 @@
  *  · 防环：移动项**自身及其全部后代**禁用（不能移进自己内部）；
  *  · 回收站容器/回收站内节点禁用（本机目录树本身不含回收站节点，保留 trashedIds 入参以便两端同口径）。
  */
-import type { TreeNode } from "../lib/types";
+/** 只依赖移动树所需的最小结构（core 不得 import lib/平台类型）。 */
+export interface MoveTreeNodeLike { id: string; nodeType: string; parentId: string | null; title?: string; sortOrder: number; }
 
 export const MOVE_TREE_DISABLED_REASON = {
   self: "不能移动到自身或子项内部",
@@ -33,7 +34,7 @@ export interface MoveTreeRow {
 }
 
 export interface MoveTreeInput {
-  nodes: readonly TreeNode[];
+  nodes: readonly MoveTreeNodeLike[];
   /** 正在移动的节点 id（单条 = 长度 1）。 */
   movingIds: readonly string[];
   /** 移动项的当前父级（同父级批量时给出；否则 null = 没有「当前位置」）。 */
@@ -50,8 +51,8 @@ export interface MoveTreeResult {
   matchedIds: ReadonlySet<string>;
 }
 
-function childrenMap(nodes: readonly TreeNode[]): Map<string | null, TreeNode[]> {
-  const children = new Map<string | null, TreeNode[]>();
+function childrenMap(nodes: readonly MoveTreeNodeLike[]): Map<string | null, MoveTreeNodeLike[]> {
+  const children = new Map<string | null, MoveTreeNodeLike[]>();
   for (const node of nodes) {
     const siblings = children.get(node.parentId) ?? [];
     siblings.push(node);
@@ -62,7 +63,7 @@ function childrenMap(nodes: readonly TreeNode[]): Map<string | null, TreeNode[]>
 }
 
 /** 移动项自身 + 全部后代（这些都不能作为目标）。 */
-export function moveForbiddenIds(nodes: readonly TreeNode[], movingIds: readonly string[]): Set<string> {
+export function moveForbiddenIds(nodes: readonly MoveTreeNodeLike[], movingIds: readonly string[]): Set<string> {
   const children = childrenMap(nodes);
   const banned = new Set<string>(movingIds);
   const walk = (id: string) => {
@@ -77,7 +78,7 @@ export function moveForbiddenIds(nodes: readonly TreeNode[], movingIds: readonly
 }
 
 /** 默认展开：当前父级及其全部祖先（含父级自身，让「当前位置」直接可见）。 */
-export function initialMoveTreeExpanded(nodes: readonly TreeNode[], currentParentId: string | null): Set<string> {
+export function initialMoveTreeExpanded(nodes: readonly MoveTreeNodeLike[], currentParentId: string | null): Set<string> {
   const expanded = new Set<string>();
   if (!currentParentId) return expanded;
   const byId = new Map(nodes.map((node) => [node.id, node]));
@@ -90,7 +91,7 @@ export function initialMoveTreeExpanded(nodes: readonly TreeNode[], currentParen
 }
 
 /** 移动项的当前父级：单条/同父级批量给出；不同父级 ⇒ null（不标「当前位置」）。 */
-export function currentParentOf(nodes: readonly TreeNode[], movingIds: readonly string[]): string | null {
+export function currentParentOf(nodes: readonly MoveTreeNodeLike[], movingIds: readonly string[]): string | null {
   if (movingIds.length === 0) return null;
   const byId = new Map(nodes.map((node) => [node.id, node]));
   const parents = movingIds.map((id) => byId.get(id)?.parentId ?? null);

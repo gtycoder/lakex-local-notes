@@ -256,3 +256,11 @@ export function sameQuickNoteTagDirectory(a: readonly QuickNoteTagLike[], b: rea
       && tag.updatedAt === other.updatedAt;
   });
 }
+
+/**
+ * 「空目录」清理保护（261107，两端共用）：小记库降级/旧索引没有 tags[] 时目录可能是空集合，
+ * 此时绝不能把现有关系当孤儿清掉（会 bump 版本并随同步扩散）。真正的删除标签走删除/合并路径。
+ */
+export function shouldSkipEmptyTagDirectoryCleanup(validTagIdCount: number, existingLinkCount: number): boolean {
+  return validTagIdCount === 0 && existingLinkCount > 0;
+}

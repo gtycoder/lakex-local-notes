@@ -7,6 +7,7 @@
  *  · 聚合列表 = 文档 + 小记按 updatedAt 倒序（同时间按 kind/id 稳定排序，避免列表跳动）。
  */
 import type { QuickNoteTag } from "../../core/quickNoteTags";
+import { compareTagUpdatedAtDesc, countTagRefs, tagFallbackTitle } from "../../core/tagAggregate";
 
 /** 文档 ↔ 标签关系表（noteId → tagIds；来自 bridge.listNoteTagLinks）。 */
 export type NoteTagLinks = Readonly<Record<string, readonly string[]>>;
@@ -53,20 +54,14 @@ export function tagCounts(
   const docs: Record<string, number> = {};
   const quickNotes_ = {} as Record<string, number>;
   for (const tag of tags) { docs[tag.id] = 0; quickNotes_[tag.id] = 0; }
-  for (const [noteId, tagIds] of Object.entries(links ?? {})) {
-    if (!liveNotes.has(noteId)) continue;
-    for (const tagId of new Set(tagIds)) if (known.has(tagId)) docs[tagId] += 1;
+  for (const [tagId, count] of countTagRefs(links, liveNotes)) {
+    if (known.has(tagId)) docs[tagId] = count;
   }
   for (const note of quickNotes) {
     for (const tagId of new Set(note.tagIds)) if (known.has(tagId)) quickNotes_[tagId] += 1;
   }
   return { docs, quickNotes: quickNotes_ };
 }
-
-const timeOf = (iso: string): number => {
-  const at = Date.parse(iso);
-  return Number.isNaN(at) ? 0 : at;
-};
 
 /** 某个标签下的聚合：文档 + 小记，更新时间倒序（同时间按 kind/id 稳定排序）。 */
 export function aggregateTagRows(
@@ -78,11 +73,11 @@ export function aggregateTagRows(
   const rows: TagAggregateRow[] = [];
   for (const note of notes) {
     if (!(links?.[note.id] ?? []).includes(tagId)) continue;
-    rows.push({ kind: "doc", id: note.id, title: note.title || "无标题文档", updatedAt: note.updatedAt });
+    rows.push({ kind: "doc", id: note.id, title: note.title || tagFallbackTitle("doc"), updatedAt: note.updatedAt });
   }
   for (const note of quickNotes) {
     if (!note.tagIds.includes(tagId)) continue;
-    rows.push({ kind: "quick", id: note.id, title: note.previewText || "（空白小记）", updatedAt: note.updatedAt });
+    rows.push({ kind: "quick", id: note.id, title: note.previewText || tagFallbackTitle("quick"), updatedAt: note.updatedAt });
   }
-  return rows.sort((a, b) => timeOf(b.updatedAt) - timeOf(a.updatedAt) || a.kind.localeCompare(b.kind) || a.id.localeCompare(b.id));
+  return rows.sort((a, b) => compareTagUpdatedAtDesc(a, b));
 }

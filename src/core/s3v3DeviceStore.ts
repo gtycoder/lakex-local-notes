@@ -87,7 +87,8 @@ export interface DeviceBaseline {
 export interface S3v3DeviceStore {
   init(): Promise<void>;
   loadState(): Promise<DeviceState | null>;
-  saveState(state: DeviceState): Promise<void>;
+  /** previous = 本轮开始前的本地快照（可选）；平台据此只覆盖「窗口内未被本地修改」的元数据。 */
+  saveState(state: DeviceState, previous?: DeviceState): Promise<void>;
   loadBaseline(): Promise<DeviceBaseline | null>;
   saveBaseline(baseline: DeviceBaseline): Promise<void>;
 

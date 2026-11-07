@@ -4,6 +4,7 @@ import type { AppSettings } from "../../lib/settings";
 import type { HistoryMobileSettings } from "../bridge";
 import type { useSettingsSectionData } from "./useSettingsSectionData";
 import { S3V3_POINTER_VERSION } from "../../core/s3v3/protocol/s3v3Types";
+import { HISTORY_SETTINGS_DEFAULTS } from "../../core/settingsDefaults";
 import { formatBytes } from "../../lib/formatBytes";
 import { formatCrashEntries, readCrashLog } from "../lib/crashLog";
 import { showToast } from "../ui/toastBus";
@@ -33,7 +34,7 @@ export function HistorySettingsSection({ hist, updateHist }: { hist: HistoryMobi
                 <NumField label="保留天数" value={hist.retentionDays} min={1} max={365} floor={1} fallback={30} onSave={(n) => updateHist({ retentionDays: n })} />
               </Item>
               <Item itemId="history-snapshot-interval" name="自动快照间隔（分钟）" desc="0 = 关闭定时自动快照。">
-                <NumField label="自动快照间隔" value={hist.snapshotIntervalMinutes} min={0} max={1440} floor={0} fallback={15} onSave={(n) => updateHist({ snapshotIntervalMinutes: n })} />
+                <NumField label="自动快照间隔" value={hist.snapshotIntervalMinutes} min={0} max={1440} floor={0} fallback={HISTORY_SETTINGS_DEFAULTS.snapshotIntervalMinutes} onSave={(n) => updateHist({ snapshotIntervalMinutes: n })} />
               </Item>
               <Item itemId="history-cleanup-interval" name="定期清理间隔（小时）" desc="0 = 关闭定期巡检清理。">
                 <NumField label="定期清理间隔" value={hist.cleanupIntervalHours} min={0} max={168} floor={0} fallback={24} onSave={(n) => updateHist({ cleanupIntervalHours: n })} />

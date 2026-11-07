@@ -59,6 +59,8 @@
 > 声明/GC/同步/历史全复用现有资产管线（清单声明是**磁盘实扫** `listLocalAssets`；GC 保护靠 `extractAssetRefs` 命中 JSON 里的 filename）。
 > 已废弃的旧表格 `kind="sheet"` 正文不再识别（AGENTS §3#7：不做迁移 / 兼容）。
 >
+> **261107 标签存储统一**：文档标签关系（`tag_links`/`tag_link_versions` 的 `target_kind='note'`）已迁入 `quick-notes/metadata.sqlite3`，标签域（目录 + 所有关系 + 版本）单一归属小记库；主库旧表仅保留一版回退、不再读写。**备份/恢复必须同时覆盖两库**（`workspaceRestoreFromBackup` 已支持；旧备份无小记库时仅恢复主库并保留当前小记库）。
+>
 > **多维表文档（`kind="bitable"`，260920 实现 v1）**：正文落 `bitables/{noteId}.bitable.json`，路径同样由 `notes.kind` 决定（`store.bodyPathFor`）。
 > 正文格式 = **自研 record-based JSON**（`{kind:"bitable",version:1,tables[],activeTableId}`；一个文档可含多张数据表，为后期多表联合预留）。搜索文本由 `bitableToSearchText`（表名 + 各字段展示值）派生，**不进 Lake HTML 解析器**。附件字段存 filename，复用 `assets/{noteId}/{filename}` 资产管线。产品口径见 `docs/STORAGE-LAYERS.md`。
 > **手写板文档（`kind="ink"`，261020 正式 v1）**：正文落 `inks/{noteId}.ink.json`，格式 = `{kind:"ink",version:1,pages[],activePageId}`；页面为固定 A4 逻辑尺寸，笔迹只存矢量点和压力，**不存 PNG**。详见 `docs/INK-PAD.md`。

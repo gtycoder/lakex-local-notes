@@ -72,7 +72,7 @@ describe("标签聚合列表（文档分组 + 小记分组，按更新时间倒�
   it("同一更新时间用 id 兜底排序，结果稳定", () => {
     const same = [note("b", "B", "2026-11-05T00:00:00.000Z"), note("a", "A", "2026-11-05T00:00:00.000Z")];
     const result = buildTagAggregate({ tagId: "t1", documentLinks: { a: ["t1"], b: ["t1"] }, notes: same, quickNotes: [] });
-    expect(result.docs.map((item) => item.id)).toEqual(["b", "a"]);
+    expect(result.docs.map((item) => item.id)).toEqual(["a", "b"]); // 261107：两端统一为时间倒序 + id 升序
   });
 });
 

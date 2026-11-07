@@ -22,7 +22,7 @@ import {
 import {
   BITABLE_DOC_KIND, BITABLE_DOC_VERSION, BITABLE_FIELD_TYPE_LABEL,
   BITABLE_DATE_FORMAT_OPTIONS, BITABLE_NUMBER_FORMAT_OPTIONS,
-  BITABLE_OPTION_COLORS, aiPromptFieldNames, applyViewToRecords, bitableDisplayValue, bitableFieldText, bitableFieldValue, bitableFillBackgroundTokens, bitableFilterRuleCount, bitableViewNeedsClock, buildBitableFillProjection, createRelationPair, defaultRecordValues, duplicateValues, optionColorHex, unpairRelationFields,
+  BITABLE_DEFAULT_OPTION_COLOR, BITABLE_OPTION_COLORS, aiPromptFieldNames, applyViewToRecords, bitableDisplayValue, bitableFieldText, bitableFieldValue, bitableFillBackgroundTokens, bitableFilterRuleCount, bitableViewNeedsClock, buildBitableFillProjection, createRelationPair, defaultRecordValues, duplicateValues, optionColorHex, unpairRelationFields,
   createBitableField, createBitableRecord, createDefaultBitableTable,
   BITABLE_STAT_LABEL, groupRecords, isImplementedViewType,
   BITABLE_PROGRESS_MAX, BITABLE_RATING_MAX, BITABLE_ROW_HEIGHT_OPTIONS, applySortMode, bitableRowHeightPx, changeSortField, kanbanGroupField, sortModeLabel, sortModeOf, sortModesForField, statDisplayText, statForField, statsForField,
@@ -1981,7 +1981,7 @@ function FieldEditorModal({ field, readOnly, tables, tableId, onClose, onSave, o
                 <button type="button" className="bt-select-trigger"
                   aria-label="选择进度条颜色" aria-haspopup="dialog" aria-expanded={Boolean(progressColorAnchor)} disabled={readOnly}
                   onClick={(event) => setProgressColorAnchor(event.currentTarget)}>
-                  <span className="bt-color-square" style={{ backgroundColor: optionColorHex(progressColor) ?? "#e8e8e8" }} />
+                  <span className="bt-color-square" style={{ backgroundColor: optionColorHex(progressColor) ?? BITABLE_DEFAULT_OPTION_COLOR }} />
                   <span className="bt-field-name ln-ellipsis">进度条颜色</span>
                   <ChevronDown size={14} />
                 </button>
@@ -2066,7 +2066,7 @@ function FieldEditorModal({ field, readOnly, tables, tableId, onClose, onSave, o
                 onDragStart={() => setOptionDragId(option.id)}
                 onDragOver={(event) => { event.preventDefault(); if (optionDragId && optionDragId !== option.id) setOptions(moveItem(options, optionDragId, option.id, (o) => o.id)); }}
                 onDragEnd={() => setOptionDragId(null)}>
-                <button type="button" className="bt-color-square" style={{ backgroundColor: optionColorHex(option.color) ?? "#e8e8e8" }}
+                <button type="button" className="bt-color-square" style={{ backgroundColor: optionColorHex(option.color) ?? BITABLE_DEFAULT_OPTION_COLOR }}
                   aria-label="选择颜色" disabled={readOnly}
                   onMouseEnter={(event) => { if (!readOnly) setColorFor({ optionId: option.id, anchor: event.currentTarget }); }}
                   onClick={(event) => setColorFor({ optionId: option.id, anchor: event.currentTarget })} />

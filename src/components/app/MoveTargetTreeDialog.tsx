@@ -16,7 +16,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Dialog } from "../ui/Overlay";
 import { Book, ChevronRight, Folder, Search } from "lucide-react";
 import type { TreeNode } from "../../lib/types";
-import { buildMoveTreeRows, initialMoveTreeExpanded, visibleMoveTreeRows, type MoveTreeRow } from "../../desktop/moveTreeModel";
+import { buildMoveTreeRows, initialMoveTreeExpanded, visibleMoveTreeRows, type MoveTreeRow } from "../../core/moveTreeModel";
 
 export interface MoveTargetTreeDialogProps {
   open: boolean;

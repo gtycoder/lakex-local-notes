@@ -4,7 +4,7 @@
  * 261105 P1：按标签筛选文档（**只读**、设备本地）。标签关系读 noteTagReads.loadNoteTagIdsForNotes（tag_links kind=note），
  * 名称由标签目录解析；目录里没有的 id 不参与筛选（只给降级提示）。筛选不写任何正文/元数据。
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 import { Copy, FolderInput, Tag, Trash } from "lucide-react";
 import { MobileSheet } from "../ui/MobileSheet";
 import { bridge } from "../bridge";
@@ -44,6 +44,11 @@ export interface DocListSheetProps {
  * 多选模式（261106 task-82）：长按行或点「选择」进入；顶部栏（取消/已选 N/全选）+ 行复选框 + 底部操作条。
  * 动作 = 创建副本 / 移动 / 移入回收站 / 打标签（创建副本 = 261106 副本功能，与桌面多选第 1 项同一语义）。
  */
+/** 超过这个行数才虚拟化：普通笔记本（几十篇）保持全量渲染，行为/测试不变。 */
+const DOC_LIST_VIRTUAL_THRESHOLD = 80;
+/** 虚拟列表只在超过阈值时按需加载（不把 @tanstack/react-virtual 拉进入口 chunk）。 */
+const DocListVirtualList = lazy(() => import("./DocListVirtualList"));
+
 const DOC_SELECTION_ACTIONS: SelectionAction[] = [
   // 非破坏性动作排在最前（与桌面右键/浮条的顺序一致）。
   { id: "duplicate", label: "创建副本", icon: Copy },
@@ -55,6 +60,8 @@ const DOC_SELECTION_ACTIONS: SelectionAction[] = [
 export function DocListSheet({ open, documents, activeId, onPick, onClose }: DocListSheetProps) {
   /** 当前列表的 tagIds（一次桥往返；列表可能上百篇，走批量读）。 */
   const [docTagIds, setDocTagIds] = useState<Record<string, string[]>>({});
+  /** 大列表虚拟化的滚动容器（.mb-sheet__body；由 MobileSheet 的 bodyRef 注入）。 */
+  const [scrollElement, setScrollElement] = useState<HTMLDivElement | null>(null);
   const [filterView, setFilterView] = useState<DocTagFilterView | null>(null);
   /** 目录不可用/桥异常时的降级提示（列表照常显示，只是不启用标签筛选）。 */
   const [tagError, setTagError] = useState<string | null>(null);
@@ -114,6 +121,8 @@ export function DocListSheet({ open, documents, activeId, onPick, onClose }: Doc
   );
 
   // ── 多选（261106 task-82）：可见集合 = 当前筛选后的文档 ──────────────────────────
+  // 2 万篇文档时全量 map 会挂数万 DOM 节点；超过阈值交给按需加载的虚拟列表（与树/小记时间线同一套库）。
+  const virtualize = visible.length > DOC_LIST_VIRTUAL_THRESHOLD;
   const selection = useSelectionMode(visible.map((doc) => doc.id));
   const pressedId = useRef<string | null>(null);
   /** 长按进入多选后，抬手补发的那一次 click 要吞掉（否则会误开文档）。 */
@@ -260,6 +269,31 @@ export function DocListSheet({ open, documents, activeId, onPick, onClose }: Doc
 
   // MOB-11：scrim / 右滑关闭 / 返回栈 / 焦点与滚动锁统一由 MobileSheet 负责
   //（此前打开后按返回键会落到父层）；类名与 DOM 结构沿用原手写版（.mb-scrim + .mb-sheet，视觉不变）。
+  /** 单行渲染（全量 / 虚拟列表共用，保证长按、选中、点击语义只有一份）。 */
+  const renderDocRow = (d: DocListItem) => {
+    const checked = selection.active && selection.isSelected(d.id);
+    return (
+      <button
+        key={d.id}
+        className={"med-doc-item" + (d.id === activeId ? " med-active" : "") + (checked ? " is-selected" : "")}
+        aria-pressed={selection.active ? checked : undefined}
+        onTouchStart={(event) => { pressedId.current = d.id; longPress.onTouchStart(event); }}
+        onTouchMove={longPress.onTouchMove}
+        onTouchEnd={longPress.onTouchEnd}
+        onTouchCancel={longPress.onTouchCancel}
+        onClick={() => {
+          if (suppressTap.current) { suppressTap.current = false; return; }
+          if (selection.active) { selection.toggle(d.id); return; }
+          onPick(d.id);
+          onClose();
+        }}
+      >
+        {selection.active && <SelectionCheckbox checked={checked} />}
+        <span className="med-doc-item-title mb-ellipsis">{d.title || "无标题"}</span>
+      </button>
+    );
+  };
+
   return (
     <MobileSheet
       open={open}
@@ -268,6 +302,7 @@ export function DocListSheet({ open, documents, activeId, onPick, onClose }: Doc
       footer={selection.active
         ? <SelectionActionBar actions={DOC_SELECTION_ACTIONS} onAction={runSelectionAction} />
         : undefined}
+      bodyRef={setScrollElement}
     >
       {selection.active ? (
         <SelectionTopBar
@@ -343,31 +378,11 @@ export function DocListSheet({ open, documents, activeId, onPick, onClose }: Doc
       />
       {visible.length === 0 ? (
         <EmptyState inset>{activeTagId ? "该标签下暂无文档" : "暂无文档"}</EmptyState>
-      ) : (
-        visible.map((d) => {
-          const checked = selection.active && selection.isSelected(d.id);
-          return (
-            <button
-              key={d.id}
-              className={"med-doc-item" + (d.id === activeId ? " med-active" : "") + (checked ? " is-selected" : "")}
-              aria-pressed={selection.active ? checked : undefined}
-              onTouchStart={(event) => { pressedId.current = d.id; longPress.onTouchStart(event); }}
-              onTouchMove={longPress.onTouchMove}
-              onTouchEnd={longPress.onTouchEnd}
-              onTouchCancel={longPress.onTouchCancel}
-              onClick={() => {
-                if (suppressTap.current) { suppressTap.current = false; return; }
-                if (selection.active) { selection.toggle(d.id); return; }
-                onPick(d.id);
-                onClose();
-              }}
-            >
-              {selection.active && <SelectionCheckbox checked={checked} />}
-              <span className="med-doc-item-title mb-ellipsis">{d.title || "无标题"}</span>
-            </button>
-          );
-        })
-      )}
+      ) : virtualize ? (
+        <Suspense fallback={null}>
+          <DocListVirtualList items={visible} scrollElement={scrollElement} renderRow={(item) => renderDocRow(item as DocListItem)} />
+        </Suspense>
+      ) : visible.map(renderDocRow)}
     </MobileSheet>
   );
 }

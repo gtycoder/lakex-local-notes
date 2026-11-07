@@ -105,19 +105,24 @@ const render = (patch: Partial<Props> = {}) => {
 const row = (id: string) =>
   host.querySelector<HTMLElement>(`[data-tree-node-id="${id}"]`)!;
 const click = (element: HTMLElement) => act(() => element.click());
+/** 261107：图标选择器改为 lazy 加载；点开后等模块 chunk 解析完再断言。 */
+const flushPicker = () => act(async () => { await import("./NodeIconPicker"); await Promise.resolve(); });
 
 describe("目录行缓存：公共 Sidebar 的更新与交互", () => {
-  it("容器两页（默认图标）、文档只有表情；已保存的图标种类不改变默认页", () => {
+  it("容器两页（默认图标）、文档只有表情；已保存的图标种类不改变默认页", async () => {
     render({ nodes: nodes.map((n) => ({ ...n, icon: n.nodeType === "note" ? "i:star:0" : "🍏" })) });
     const activeTab = () => host.querySelector('.ln-tabs__item[aria-selected="true"]')?.textContent;
     click(row("book").querySelector<HTMLElement>(".tree-row-icon")!);
+    await flushPicker();
     expect(activeTab()).toBe("图标");
     expect(host.querySelector('[aria-label="选择笔记本图标"]')).not.toBeNull();
     click(host.querySelector<HTMLButtonElement>('.ln-tabs__item[role="tab"]:not([aria-selected="true"])')!);
     expect(host.querySelector(".node-icon-picker__grid")).not.toBeNull();
     click(row("group").querySelector<HTMLElement>(".tree-row-icon")!);
+    await flushPicker();
     expect(activeTab()).toBe("图标");
     click(row("n2").querySelector<HTMLElement>(".tree-row-icon")!);
+    await flushPicker();
     // 文档类型：没有类型页签，只有表情
     expect(host.querySelector('[role="tablist"][aria-label="图标类型"]')).toBeNull();
     expect(host.querySelector(".node-icon-picker__grid")).not.toBeNull();
@@ -158,9 +163,10 @@ describe("目录行缓存：公共 Sidebar 的更新与交互", () => {
     render({ lockedNoteIds: new Set() });
     expect(row("n2").querySelector('[aria-label="已锁定"]')).toBeNull();
   });
-  it("表情搜索支持中文关键词（房 → 房子），英文短名照旧", () => {
+  it("表情搜索支持中文关键词（房 → 房子），英文短名照旧", async () => {
     render();
     click(row("book").querySelector<HTMLElement>(".tree-row-icon")!);
+    await flushPicker();
     click([...host.querySelectorAll<HTMLButtonElement>('.ln-tabs__item[role="tab"]')].find((b) => b.textContent === "表情符号")!);
     const input = host.querySelector<HTMLInputElement>(".node-icon-picker__search input")!;
     const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!;
@@ -173,9 +179,10 @@ describe("目录行缓存：公共 Sidebar 的更新与交互", () => {
     expect(results()).not.toContain("🍎");
   });
 
-  it("笔记本连续试选插画与移除保持面板，选中格立即跟随最后一次选择", () => {
+  it("笔记本连续试选插画与移除保持面板，选中格立即跟随最后一次选择", async () => {
     render();
     click(row("book").querySelector<HTMLElement>(".tree-row-icon")!);
+    await flushPicker();
     const icon = (label: string) => host.querySelector<HTMLButtonElement>(`.node-icon-cell[aria-label="${label}"]`)!;
     expect(host.querySelectorAll(".node-icon-cell")).toHaveLength(17);
     click(icon("表格"));

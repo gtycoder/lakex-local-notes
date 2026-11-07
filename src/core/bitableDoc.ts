@@ -541,6 +541,8 @@ export const BITABLE_OPTION_PALETTE = DEFAULT_LIGHT_COLORS;
 
 /** 兼容别名（旧命名色键与 hex 通用；新代码用 BITABLE_OPTION_PALETTE）。 */
 export const BITABLE_OPTION_COLORS = BITABLE_OPTION_PALETTE;
+/** 选项/进度条无颜色时的默认灰（组件与填充规则共用；此前 BitableEditor 复制了字面量）。 */
+export const BITABLE_DEFAULT_OPTION_COLOR = "#e8e8e8";
 
 const LEGACY_OPTION_COLOR_HEX: Record<string, string> = {
   gray: "#e8e8e8",

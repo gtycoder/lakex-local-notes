@@ -42,7 +42,8 @@ import type { MobileTrashTreeItem } from "../data/trashRepository.js";
 const DAY_MS = 24 * 3600 * 1000;
 
 /** 回收站自动过期天数：移动端无设置项，取与桌面默认值一致的 90 天（理由见文件头）。 */
-export const TRASH_AUTO_PURGE_DAYS = 90;
+import { TRASH_AUTO_PURGE_DAYS } from "../../core/settingsDefaults";
+export { TRASH_AUTO_PURGE_DAYS };
 
 /** 每批处理的条数：一批 ≈ 一次事件循环让出，避免长任务卡住 UI。 */
 export const TRASH_PURGE_BATCH_SIZE = 20;

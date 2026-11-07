@@ -16,6 +16,24 @@ describe("IPC error payloads", () => {
     });
   });
 
+  it("core 全部 7 码经 IPC 编解码不降级（新增码不再被吞成 INTERNAL）", () => {
+    const cases = [
+      ["NotFound", "NOT_FOUND"],
+      ["InvalidInput", "INVALID_INPUT"],
+      ["NotConfigured", "NOT_CONFIGURED"],
+      ["Internal", "INTERNAL"],
+      ["Conflict", "CONFLICT"],
+      ["NetworkTimeout", "NETWORK_TIMEOUT"],
+      ["Cancelled", "CANCELLED"],
+    ] as const;
+    for (const [kind, code] of cases) {
+      const encoded = encodeIpcError(new AppError(kind, kind));
+      expect(parseIpcError(encoded.message)).toMatchObject({ code });
+      // 老格式（只有前缀、无 marker）同样不能把新码降级
+      expect(parseIpcError("[LAKE_IPC_CODE:" + code + "] " + kind)).toMatchObject({ code });
+    }
+  });
+
   it("normalizes unknown errors to INTERNAL without leaking extra fields", () => {
     expect(toIpcErrorPayload(new Error("网络失败"))).toEqual({
       name: "Error", message: "网络失败", code: "INTERNAL",

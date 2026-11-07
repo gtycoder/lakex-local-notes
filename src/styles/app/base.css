@@ -15,7 +15,7 @@
   --breadcrumb-height: 26px;
   --editor-toolbar-height: 30px;
   --tab-item-height: 28px;
-  --ease-out: var(--lake-ease-standard); --dur-enter: var(--lake-motion-fast); --dur-drawer: var(--lake-motion-panel); }
+}
 
 * { box-sizing: border-box; }
 
@@ -55,9 +55,7 @@ button { cursor: pointer; }
   --shell-text: var(--lake-text-1);
   --shell-text-secondary: var(--lake-text-2);
   --shell-text-tertiary: var(--lake-text-3);
-  --shell-separator: color-mix(in srgb, var(--lake-text-1) 9%, transparent);
   /* 不透明的冷调表面，保资料库可读 */
-  --shell-material: var(--lake-bg-block);
   --shell-ease: var(--lake-ease-standard);
 }
 
@@ -68,8 +66,3 @@ button { cursor: pointer; }
    260923 审计：本块原来的 --shell-card-shadow / --shell-micro-card 全仓零引用，已删（整块随之移除）。 */
 
 /* ===== 2026-08-13 统一窗口材质 / 思源式浮动面板 ===== */
-:root {
-  --shell-gradient-top: color-mix(in srgb, var(--lake-bg-window) 45%, var(--lake-bg-panel)); /* 浅色≈#fafbfd / 深色≈#191c21 */
-  --shell-unified-background: var(--lake-bg-window);
-  --shell-unified-topbar: var(--lake-bg-panel);
-}

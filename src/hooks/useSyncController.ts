@@ -50,25 +50,8 @@ export function useSyncController({
     const openSettings = () => { setSettingsCategory("sync"); setSettingsOpen(true); };
     // 对齐思源：同步过程只在状态栏按钮上反映（syncing 转圈/完成还原），成功不打扰；
     // 仅失败与未配置需要用户介入时才弹 toast。
-    const unsubscribe = native.onSyncProgress((progress) => {
-      if (progress.error) {
-        // 261028 P1：广播里带了分类 ⇒ 可重试的不当硬失败（与自动同步路径 useSyncProgress 同口径）。
-        const info = getNativeSyncErrorInfo({ syncCode: progress.errorCode, syncClass: progress.errorClass });
-        if (info?.className === "retryable") {
-          setSync((current) => ({ ...current, phase: "idle", message: retryableStatusMessage(info.code) }));
-          return;
-        }
-        if (info?.className === "action-required" && info.code === "epoch-mismatch") {
-          setSync((current) => ({ ...current, phase: "error", message: SYNC_EPOCH_MISMATCH_MESSAGE }));
-          showSyncToast({ kind: "error", title: SYNC_EPOCH_MISMATCH_TITLE, message: SYNC_EPOCH_MISMATCH_MESSAGE, action: { label: SYNC_EPOCH_MISMATCH_ACTION_LABEL, onClick: openSettings } });
-          return;
-        }
-        setSync((current) => ({ ...current, phase: "error", message: progress.error || "同步失败" }));
-        showSyncToast({ kind: "error", title: "同步失败", message: progress.error || "同步失败" });
-        return;
-      }
-      setSync((current) => ({ ...current, phase: "syncing", message: progress.message }));
-    });
+    // 261107：不再临时订阅 sync-progress。进度/分类/完成刷新由常驻的 useSyncProgress 单一 owner 处理，
+    // 手动同步这里只 await 结果；否则同一事件会被两套逻辑同时处理（重复刷新/双提示/错误路径分叉）。
     try {
       const settings = await native.getS3Settings();
       setCloudConfigured(Boolean(settings));
@@ -159,7 +142,7 @@ export function useSyncController({
         }
       }
     } finally {
-      unsubscribe();
+      // 进度订阅归 useSyncProgress（常驻）；这里无事可退订。
     }
   }, [setSync, setCloudConfigured, setSyncToast, setConflictSnapshotNotice, setSettingsCategory, setSettingsOpen, showSyncToast, showNoticeWithAction, setHistoryNoteId, setHistoryOpen]);
 }

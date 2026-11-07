@@ -1,4 +1,5 @@
 import { extractAssetRefs } from "../../core/assetNaming.js";
+import { HISTORY_SETTINGS_DEFAULTS } from "../../core/settingsDefaults";
 import { sha256Sync } from "../../core/sha256Sync.js";
 import { selectHistoryDrops } from "../../core/storeUtils.js";
 import { normalizeNoteKind } from "../../core/noteKind.js";
@@ -26,12 +27,7 @@ export interface HistorySnapshotSummary {
   createdAt: string;
 }
 
-export const DEFAULT_HISTORY_SETTINGS: HistoryMobileSettings = {
-  maxSnapshots: 100,
-  retentionDays: 30,
-  cleanupIntervalHours: 24,
-  snapshotIntervalMinutes: 15,
-};
+export const DEFAULT_HISTORY_SETTINGS: HistoryMobileSettings = { ...HISTORY_SETTINGS_DEFAULTS };
 
 type HistoryMeta = {
   title: string;

@@ -1,6 +1,7 @@
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import Database from "better-sqlite3";
 import { describe, expect, it } from "vitest";
 import { Store } from "./store.js";
 
@@ -93,6 +94,36 @@ describe("文档标签关系（主库，261105 P1）", () => {
       expect(store.documentTags.getDocumentTagIds("n2")).toEqual(["t_1111111111111111"]);
       expect(store.documentTags.cleanupOrphans(new Set(["t_1111111111111111"]), T3)).toEqual({ links: 0, tags: 0 });
       expect(store.documentTags.tagsUpdatedAt("n2")).toBe(T1);
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("切换到小记库后：关系写小记库的同构表（261107 存储统一）", async () => {
+    const { root, store } = await freshStore();
+    const quickPath = await fs.mkdtemp(path.join(os.tmpdir(), "lake-tag-quick-"));
+    const quickDb = new Database(path.join(quickPath, "metadata.sqlite3"));
+    try {
+      store.attachDocumentTagsDatabase(quickDb);
+      store.documentTags.setNoteTags("n1", ["t_1111111111111111"], T1);
+      const rows = quickDb.prepare("SELECT target_kind,target_id,tag_id FROM tag_links").all();
+      expect(rows).toEqual([{ target_kind: "note", target_id: "n1", tag_id: "t_1111111111111111" }]);
+    } finally {
+      quickDb.close();
+      await fs.rm(quickPath, { recursive: true, force: true });
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("空目录保护：目录为空（降级/旧索引）时绝不清理现有关系，也不推进版本", async () => {
+    const { root, store } = await freshStore();
+    try {
+      store.documentTags.setNoteTags("n1", ["t_1111111111111111"], T1);
+      expect(store.documentTags.cleanupOrphans(new Set(), T2)).toEqual({ links: 0, tags: 0 });
+      expect(store.documentTags.getDocumentTagIds("n1")).toEqual(["t_1111111111111111"]);
+      expect(store.documentTags.tagsUpdatedAt("n1")).toBe(T1);
+      // 真正的目录删除仍按传入的剩余集合清理（不是一刀切跳过所有清理）
+      expect(store.documentTags.cleanupOrphans(new Set(["t_2222222222222222"]), T3)).toEqual({ links: 1, tags: 1 });
     } finally {
       await fs.rm(root, { recursive: true, force: true });
     }

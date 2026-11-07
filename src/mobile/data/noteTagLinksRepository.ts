@@ -4,7 +4,7 @@
  * 定稿：目录单一来源 = quick-notes 库 tags（已随 quick-notes 索引同步）；文档关系只存 id/顺序/版本。
  * 与桌面同名语义：集合 + 关系版本 LWW；**保留本机顺序、远端新增插最前**；应用时过滤目录不存在的 id。
  */
-import { normalizeQuickNoteTagIds } from "../../core/quickNoteTags.js";
+import { normalizeQuickNoteTagIds, shouldSkipEmptyTagDirectoryCleanup } from "../../core/quickNoteTags.js";
 import type { MobileDb } from "./sqliteDb.js";
 
 const KIND = "note";
@@ -171,7 +171,7 @@ export async function cleanupOrphanNoteTagLinks(d: MobileDb, validTagIds: Readon
   //（那会清掉全部关系并 bump 版本、随同步扩散到所有端）。真正的删除标签走删除/合并路径。
   if (validTagIds.size === 0) {
     const existing = await d.prepare("SELECT COUNT(*) AS c FROM tag_links WHERE target_kind=?").get(KIND) as { c?: number } | undefined;
-    if (Number(existing?.c ?? 0) > 0) return 0;
+    if (shouldSkipEmptyTagDirectoryCleanup(0, Number(existing?.c ?? 0))) return 0;
   }
   const rows = await d.prepare("SELECT tag_id, target_id FROM tag_links WHERE target_kind=?").all(KIND) as Array<{ tag_id: string; target_id: string }>;
   const orphans = rows.filter((row) => !validTagIds.has(String(row.tag_id)));

@@ -9,8 +9,10 @@
  *
  * 这里只做纯状态变换，不碰 DOM / IPC；行渲染与批量执行在 Sidebar / 多选条。
  */
-import type { TreeNode } from "../lib/types";
-import type { TreeIndex } from "../core/treeIndex";
+import type { TreeIndex } from "./treeIndex";
+
+/** 只依赖渲染所需的最小结构（core 不得 import lib/平台类型）。 */
+export interface TreeNodeLike { id: string; nodeType: string; }
 
 /** 与主进程 batch_notes 的 ids 上限一致（超过由主进程拒绝；UI 提前挡一下并提示分批）。 */
 export const TREE_SELECTION_MAX = 500;
@@ -35,10 +37,10 @@ export interface TreeSelectionActions {
   pin: boolean;
 }
 
-type NodeLike = Pick<TreeNode, "id" | "nodeType">;
+type NodeLike = TreeNodeLike;
 
 /** 能否进多选集合：文档与分组可以，笔记本不可以。 */
-export function isSelectableTreeNode(node: Pick<TreeNode, "nodeType">): boolean {
+export function isSelectableTreeNode(node: Pick<TreeNodeLike, "nodeType">): boolean {
   return node.nodeType !== "notebook";
 }
 

@@ -111,9 +111,10 @@ export function createMobilePlatformPort(db: MobileDb, ctxIn?: Partial<MobilePla
   let batch: WriteBatch | null = null;
 
   /** 批量窗口内入队，窗口外立即执行（目录/小记/投影都在窗口外，与旧实现单条 SQL 同口径）。 */
-  async function write(statement: string, values: unknown[]): Promise<void> {
-    if (batch) { batch.statements.push({ statement, values }); return; }
-    await db.prepare(statement).run(...values);
+  async function write(statement: string, values: unknown[]): Promise<{ changes: number }> {
+    if (batch) { batch.statements.push({ statement, values }); return { changes: 1 }; }
+    const result = await db.prepare(statement).run(...values);
+    return { changes: Number(result.changes ?? 0) };
   }
 
   function titleOf(note: SyncNoteWrite): string {
@@ -347,9 +348,16 @@ export function createMobilePlatformPort(db: MobileDb, ctxIn?: Partial<MobilePla
       const snap = snapshot.get(note.id);
       if (snap) { snap.title = title; if (note.parentId !== null) snap.parent_id = note.parentId; snap.updated_at = note.updatedAt; snap.content_hash = note.contentHash; }
     },
-    async applyRemoteNoteMeta(note: SyncNoteWrite): Promise<void> {
+    async applyRemoteNoteMeta(note: SyncNoteWrite, expectedLocalUpdatedAt?: string): Promise<void> {
       const snap = snapshot.get(note.id);
-      if (!note.trashedAt) {
+      // 261107（数据安全）：窗口内用户改名/移动会把 updated_at 改掉；而平台内部的恢复/软删只改 is_dirty
+      // （updated_at 仍等于快照）。因此判据 = dirty 且 updated_at 与快照不同，才视为「用户新编辑」并跳过；
+      // 平台内部生命周期写入必须允许后面的元数据落库，否则恢复后父级会悬空。
+      const current = await db.prepare("SELECT updated_at,is_dirty FROM notes WHERE id=?").get(note.id) as { updated_at?: string; is_dirty?: number } | undefined;
+      // expectedLocalUpdatedAt（本轮引擎快照）优先：当前行仍等于快照才允许覆盖；
+      // 旧调用方没传时退化为「dirty 且 updated_at 与 snap 不同」判据。
+      const locallyEdited = expectedLocalUpdatedAt !== undefined && current?.updated_at !== expectedLocalUpdatedAt;
+      if (!note.trashedAt && !locallyEdited) {
         // 旧实现：只有在 title/parent 变化时才写这组（updatedAt 也一并落）。
         const titleChanged = !snap || snap.title !== note.title || (snap.parent_id ?? null) !== (note.parentId ?? null);
         if (titleChanged) {
@@ -363,7 +371,7 @@ export function createMobilePlatformPort(db: MobileDb, ctxIn?: Partial<MobilePla
         || (snap.icon ?? null) !== (note.icon ?? null)
         || snap.is_locked !== (note.isEditLocked ? 1 : 0)
         || snap.sort_order !== note.sortOrder;
-      if (metaChanged) {
+      if (metaChanged && !locallyEdited) {
         await write("UPDATE notes SET icon=?, is_locked=?, locked_at=?, sort_order=? WHERE id=?", [note.icon ?? null, note.isEditLocked ? 1 : 0, note.editLockedAt ?? null, note.sortOrder, note.id]);
       }
       if (snap) {

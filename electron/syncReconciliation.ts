@@ -120,25 +120,36 @@ export class SyncReconciliation {
   // ===== 应用远端（下载分支对账写） =====
 
   /** 正文 hash 相同、仅元数据变化（标题/父目录/排序/图标/回收站字段）时的对账。 */
-  applyRemoteNoteMeta(note: SyncNote): void {
+  applyRemoteNoteMeta(note: SyncNote, expectedLocalUpdatedAt?: string): void {
     const tx = this.ctx.db.transaction(() => {
       // 回收站条目：同步 trashed_at + deleted_from_parent_id；移出回收站（恢复传播）时清空。
       const inTrash = note.parentId === this.ctx.trashNotebookId;
       const trashedAt = inTrash ? (note.trashedAt ?? new Date().toISOString()) : null;
       const deletedFrom = inTrash ? (note.deletedFromParentId ?? null) : null;
+      // 261107（数据安全）：只覆盖同步窗口内没有本地改动的行。本地 is_dirty=1 的行留给下一轮三方合并，
+      // 否则「同步计划基于 T0 快照 → 窗口内用户改名 → 这里写回旧元数据 → saveBaseline 清 dirty」会丢改名。
+      const noteWhere = expectedLocalUpdatedAt ? "id=? AND updated_at=?" : "id=?";
+      const noteArgs = expectedLocalUpdatedAt
+        ? [note.title, note.parentId, note.sortOrder, note.updatedAt, note.isConflict ? 1 : 0, trashedAt, deletedFrom, note.id, expectedLocalUpdatedAt]
+        : [note.title, note.parentId, note.sortOrder, note.updatedAt, note.isConflict ? 1 : 0, trashedAt, deletedFrom, note.id];
       this.ctx.db.prepare(
-        "UPDATE notes SET title=?, parent_id=?, sort_order=?, updated_at=?, is_conflict=?, trashed_at=?, deleted_from_parent_id=? WHERE id=?"
-      ).run(note.title, note.parentId, note.sortOrder, note.updatedAt, note.isConflict ? 1 : 0, trashedAt, deletedFrom, note.id);
+        "UPDATE notes SET title=?, parent_id=?, sort_order=?, updated_at=?, is_conflict=?, trashed_at=?, deleted_from_parent_id=? WHERE " + noteWhere
+      ).run(...noteArgs);
       // 旧清单无 icon 字段时保留本地图标（icon=undefined 是"未声明"，null 才是"显式清除"）；
       // 否则旧客户端写出的 manifest 会把新端本地图标静默清掉（验收 #1 健壮性）。
+      const treeWhere = expectedLocalUpdatedAt ? "note_file_id=? AND updated_at=?" : "note_file_id=?";
       if (note.icon !== undefined) {
         this.ctx.db.prepare(
-          "UPDATE tree_nodes SET title=?, parent_id=?, sort_order=?, updated_at=?, icon=?, trashed_at=?, deleted_from_parent_id=? WHERE note_file_id=?"
-        ).run(note.title, note.parentId, note.sortOrder, note.updatedAt, note.icon ?? null, trashedAt, deletedFrom, note.id);
+          "UPDATE tree_nodes SET title=?, parent_id=?, sort_order=?, updated_at=?, icon=?, trashed_at=?, deleted_from_parent_id=? WHERE " + treeWhere
+        ).run(...(expectedLocalUpdatedAt
+          ? [note.title, note.parentId, note.sortOrder, note.updatedAt, note.icon ?? null, trashedAt, deletedFrom, note.id, expectedLocalUpdatedAt]
+          : [note.title, note.parentId, note.sortOrder, note.updatedAt, note.icon ?? null, trashedAt, deletedFrom, note.id]));
       } else {
         this.ctx.db.prepare(
-          "UPDATE tree_nodes SET title=?, parent_id=?, sort_order=?, updated_at=?, trashed_at=?, deleted_from_parent_id=? WHERE note_file_id=?"
-        ).run(note.title, note.parentId, note.sortOrder, note.updatedAt, trashedAt, deletedFrom, note.id);
+          "UPDATE tree_nodes SET title=?, parent_id=?, sort_order=?, updated_at=?, trashed_at=?, deleted_from_parent_id=? WHERE " + treeWhere
+        ).run(...(expectedLocalUpdatedAt
+          ? [note.title, note.parentId, note.sortOrder, note.updatedAt, trashedAt, deletedFrom, note.id, expectedLocalUpdatedAt]
+          : [note.title, note.parentId, note.sortOrder, note.updatedAt, trashedAt, deletedFrom, note.id]));
       }
     });
     tx();

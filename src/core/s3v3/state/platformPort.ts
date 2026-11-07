@@ -162,7 +162,9 @@ export interface PlatformDataPort {
   applyStagedBodyNote?(note: SyncNoteWrite): Promise<void>;
   /** caches 由 core 用 core/noteSearchText 预计算（doc 才有；其它类型为 null，平台自行按 kind 派生）。 */
   saveNote(noteId: string, title: string, content: string, caches: NoteSearchCaches | null): Promise<void>;
-  applyRemoteNoteMeta(note: SyncNoteWrite): Promise<void>;
+  /** expectedLocalUpdatedAt = 本轮开始时的本地快照 updatedAt：平台只在当前 DB 仍等于它时才覆盖，
+   *  防止同步窗口内用户改名/恢复被远端旧元数据覆盖（261107 数据安全）。 */
+  applyRemoteNoteMeta(note: SyncNoteWrite, expectedLocalUpdatedAt?: string): Promise<void>;
   applyRemoteEditLock(noteId: string, locked: boolean, editLockedAt: string | null): Promise<void>;
   /**
    * 文档标签关系 LWW（261105 P1）：远端关系更新时落库。

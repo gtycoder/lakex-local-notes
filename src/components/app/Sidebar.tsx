@@ -1,25 +1,20 @@
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Book, ChevronRight, ChevronsDownUp, Copy, Download, EyeOff, FolderInput, FilePlus, Filter, Focus, FolderPlus, History, Info, Lock, LockOpen, MoreVertical, Pencil, PenLine, Pin, Plus, RefreshCw, Tag as TagIcon, Trash } from "lucide-react";
+import { Suspense, lazy, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Book, ChevronRight, ChevronsDownUp, Copy, Download, FolderInput, FilePlus, Filter, Focus, FolderPlus, History, Info, Lock, LockOpen, MoreVertical, Pencil, PenLine, Pin, Plus, RefreshCw, Tag as TagIcon, Trash } from "lucide-react";
 import { DockFilterRow, useDockFilter } from "../ui/DockFilterBar";
-import { LAKE_EMOJIS } from "../../lib/lakeEmojis";
 import { escapeId } from "../../lib/cssEscape";
-import { LAKE_EMOJI_GROUPS } from "../../lib/lakeEmojiGroups";
-import { pushEmojiRecent, readEmojiRecents } from "../../lib/emojiRecents";
-import { nodeIconPickerMode, parseNodeIcon } from "../../lib/nodeIcons";
-import { NOTEBOOK_ICONS, encodeNotebookIcon } from "../../lib/notebookIcons";
-import { emojiZhKeywords } from "../../lib/emojiZhKeywords";
-import { filterEmojiChars } from "../../lib/emojiSearch";
-import { NodeIconGlyph } from "../ui/NodeIconGlyph";
-import type { TreeNode, TreeNodeType } from "../../lib/types";
+import type { TreeNode } from "../../lib/types";
 import { buildTreeIndex, type TreeIndex } from "../../core/treeIndex";
 import { computeDropPosition, createDragGhost, isValidTreeDrop, moveDragGhost, removeDragGhost, type DragGhost } from "../model/treeDrag";
 import { Database, PenTool, Table } from "lucide-react";
 import { getCreateMenuPosition, type CreateMenuPosition } from "../model/createMenuPosition";
 import { ExportSubmenuItem, type ExportFormat } from "../ui/ExportSubmenuItem";
 import { SIDEBAR_DEFAULT_WIDTH } from "../../core/layoutConstants";
-import { Dialog, Menu, Popover, Submenu } from "../ui/Overlay";
+import { Dialog, Menu, Submenu } from "../ui/Overlay";
 import { rubberBandWidth, SplitHandle } from "../ui/SplitHandle";
 import { usePopoverPosition } from "../../hooks/usePopoverPosition";
+
+/** 261107：图标选择器 + 表情源表按需加载（入口不再静态背约 41KB gzip）。 */
+const NodeIconPicker = lazy(() => import("./NodeIconPicker").then((m) => ({ default: m.NodeIconPicker })));
 // 行内重命名的 Enter/Esc/空名口径统一走共用原语（DT-12；目录这里保留「弹窗 + 空名不提交」的现状）
 import { InlineRenameInput } from "../ui/InlineRenameInput";
 import { SidebarTagFilter } from "./SidebarTagFilter";
@@ -63,9 +58,9 @@ import {
   toggleTreeSelection,
   treeSelectionActions,
   type TreeSelectionState,
-} from "../../desktop/treeSelection";
+} from "../../core/treeSelection";
 import { useConfirm } from "../../hooks/useConfirm";
-import { currentParentOf } from "../../desktop/moveTreeModel";
+import { currentParentOf } from "../../core/moveTreeModel";
 import { readBoardBytes } from "../../features/board/boardExport";
 import { renderBoardSnapshotBytes } from "../../features/board/boardSnapshot";
 import { isTagSelectionActive, type TagSelection } from "../../features/tags/tagsModel";
@@ -1367,11 +1362,15 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
           onClose={() => setTagEditor(null)}
           onChanged={() => props.onTagsChanged?.()} />
       )}
-      {iconPicker && <EmojiIconPicker key={iconPicker.node.id} anchor={iconPicker.anchor} nodeType={iconPicker.node.nodeType} value={iconPicker.node.icon ?? null} onPick={(icon) => {
-        props.onSetIcon(iconPicker.node, icon);
-        // 保持面板与当前分类/颜色，立即更新选中格，方便连续试选。
-        setIconPicker((current) => current && { ...current, node: { ...current.node, icon } });
-      }} onClose={() => setIconPicker(null)} />}
+      {iconPicker && (
+        <Suspense fallback={null}>
+          <NodeIconPicker key={iconPicker.node.id} anchor={iconPicker.anchor} nodeType={iconPicker.node.nodeType} value={iconPicker.node.icon ?? null} onPick={(icon) => {
+            props.onSetIcon(iconPicker.node, icon);
+            // 保持面板与当前分类/颜色，立即更新选中格，方便连续试选。
+            setIconPicker((current) => current && { ...current, node: { ...current.node, icon } });
+          }} onClose={() => setIconPicker(null)} />
+        </Suspense>
+      )}
       <SplitHandle
         className="sidebar-resize-handle desktop-only"
         ariaLabel="调整文档目录宽度"
@@ -1858,153 +1857,3 @@ export const ConfirmDelete = ({ node, onConfirm, onCancel }: ConfirmDeleteProps)
  * 因此现在**没有类型页签**：每类节点只有一类资源，面板顶部只留标题与「移除」。
  *
  * 表面仍是 Overlay 默认的 `.ln-popover`、输入走 kit 的 `.ln-input`，几何由 components/ui/nodeIcon.css 定义（禁自夹）。 */
-const EmojiIconPicker = ({ anchor, nodeType, value, onPick, onClose }: { anchor: HTMLElement; nodeType: TreeNodeType; value: string | null; onPick: (icon: string | null) => void; onClose: () => void }) => {
-  const current = parseNodeIcon(value);
-  // 容器（笔记本/分组）两类资源都能选 ⇒ 保留「表情符号 ｜ 图标」两页；文档类型只有表情，没有页签。
-  const isContainer = nodeType !== "note";
-  const [mode, setMode] = useState<"icon" | "emoji">(() => nodeIconPickerMode(nodeType));
-  const currentNotebookId = current?.kind === "notebook" ? current.icon.id : null;
-  const [filter, setFilter] = useState("");
-  const recents = useMemo(() => readEmojiRecents(), []);
-  const [active, setActive] = useState("最近"); // 「最近」常显（用户 261013 定），空的也留着位置
-  const contentRef = useRef<HTMLDivElement>(null);
-  // 贴齐当前行左缘（跟随层级缩进），放在整行下方，留出图标与名称供搭配预览。
-  const { surfaceRef, style } = usePopoverPosition({ open: true, anchor, side: "below-fixed", gap: 8, margin: 4, width: 418 });
-  // 悬停提示文案：优先中文短名（CLDR 取第一个词），没有中文就回英文短名。
-  const nameOf = useMemo(() => new Map(LAKE_EMOJIS.map((e) => [e.char, emojiZhKeywords(e.char).split(" ")[0] || e.name])), []);
-  const q = filter.trim().toLowerCase();
-  const sections = q
-    // 搜索三路（单一判据见 lib/emojiSearch.ts）：英文短名、CLDR 中文关键词、粘贴一个表情精确命中。
-    ? [{ name: "搜索结果", emojis: filterEmojiChars(filter) }]
-    : [
-        // 「最近」**常显**（用户 261013 定：空的也显示，避免"这功能到底有没有"的疑问）；内核对空最近是隐藏的，这里是有意偏离。
-        { name: "最近", emojis: recents },
-        ...LAKE_EMOJI_GROUPS.map((g) => ({ name: g.name, emojis: g.emojis })),
-      ];
-  const jump = (name: string) => {
-    setActive(name);
-    const box = contentRef.current;
-    const label = box?.querySelector<HTMLElement>(`[data-emoji-group="${name}"]`);
-    if (box && label) box.scrollTop = label.offsetTop - box.offsetTop - 4;
-  };
-  return (
-    <Popover
-      open
-      onDismiss={onClose}
-      label="设置图标"
-      surfaceRef={surfaceRef}
-      style={style ?? undefined}
-      className="node-icon-picker"
-      closeOnNestedOverlay
-    >
-      {isContainer ? (
-        <div className="ln-tabs node-icon-picker__types">
-          <div className="ln-tabs__track" role="tablist" aria-label="图标类型">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={mode === "emoji"}
-              className={"ln-tabs__item" + (mode === "emoji" ? " is-active" : "")}
-              onClick={() => { setMode("emoji"); setFilter(""); }}
-            >表情符号</button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={mode === "icon"}
-              className={"ln-tabs__item" + (mode === "icon" ? " is-active" : "")}
-              onClick={() => { setMode("icon"); setFilter(""); }}
-            >图标</button>
-          </div>
-          <button
-            type="button"
-            className="ln-btn ln-btn--ghost ln-tabs__action"
-            aria-label="移除图标"
-            onClick={() => onPick(null)}
-          ><EyeOff size={14} aria-hidden="true" /><span>移除</span></button>
-        </div>
-      ) : (
-        <div className="node-icon-picker__head">
-          <span className="node-icon-picker__title">表情符号</span>
-          <button
-            type="button"
-            className="ln-btn ln-btn--ghost"
-            aria-label="移除图标"
-            onClick={() => onPick(null)}
-          ><EyeOff size={14} aria-hidden="true" /><span>移除</span></button>
-        </div>
-      )}
-      {mode === "emoji" && (
-        <div className="node-icon-picker__search">
-          <span className="ln-input">
-            <input
-              className="ln-input__field"
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-              placeholder="搜索表情（中文或英文，如 房子 / house）"
-              autoFocus
-            />
-          </span>
-        </div>
-      )}
-      <div className={"node-icon-picker__body" + (mode === "icon" ? " node-icon-picker__body--icons" : "")} ref={contentRef}>
-        {mode === "icon" ? (
-          <div className="node-icon-grid" aria-label="选择笔记本图标">
-            {NOTEBOOK_ICONS.map((def) => (
-              <button
-                key={def.id}
-                type="button"
-                className={"node-icon-cell" + (def.id === currentNotebookId ? " is-selected" : "")}
-                title={def.label}
-                aria-label={def.label}
-                aria-pressed={def.id === currentNotebookId}
-                onClick={() => onPick(encodeNotebookIcon(def.id))}
-              >
-                <NodeIconGlyph value={encodeNotebookIcon(def.id)} />
-              </button>
-            ))}
-          </div>
-        ) : (
-        <>
-        {sections.map((section) => (
-          <div className="node-icon-picker__group" key={section.name}>
-            <div className="node-icon-picker__label" data-emoji-group={section.name}>{section.name}</div>
-            {section.emojis.length > 0 ? (
-              <div className="node-icon-picker__grid">
-                {section.emojis.map((char, index) => (
-                  <button
-                    type="button"
-                    className="node-icon-picker__emoji"
-                    key={char + index}
-                    title={nameOf.get(char) ?? char}
-                    onClick={() => { pushEmojiRecent(char); onPick(char); }}
-                  >{char}</button>
-                ))}
-              </div>
-            ) : section.name === "最近" ? (
-              <div className="node-icon-picker__empty">用过的表情会出现在这里</div>
-            ) : null}
-          </div>
-        ))}
-        {sections.every((section) => section.emojis.length === 0) && <div className="node-icon-picker__empty">无匹配表情</div>}
-        </>
-        )}
-      </div>
-      {mode === "emoji" && !q && (
-        <div className="node-icon-picker__footer">
-          <div className="node-icon-picker__tabs" role="tablist" aria-label="表情分组">
-            {sections.map((section) => (
-              <button
-                key={section.name}
-                type="button"
-                role="tab"
-                aria-selected={section.name === active}
-                className={"node-icon-picker__tab" + (section.name === active ? " is-active" : "")}
-                onClick={() => jump(section.name)}
-              >{section.name}</button>
-            ))}
-          </div>
-        </div>
-      )}
-    </Popover>
-  );
-};

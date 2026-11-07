@@ -253,6 +253,8 @@ export function registerNotesIpc(
     const result = restoreMainDatabaseFromBackup({
       backupPath,
       currentDbPath: path.join(workspaceRoot, "metadata.sqlite3"),
+      // 261107：小记库与主库同备份快照，必须一起恢复（标签关系已统一到小记库）。
+      currentQuickNotesDbPath: path.join(workspaceRoot, "quick-notes", "metadata.sqlite3"),
       userDataDir: app.getPath("userData"),
     });
     if (!result.ok) {

@@ -20,6 +20,8 @@ export const MAIN_DB_BASENAME = "metadata.sqlite3";
 const BACKUP_BASENAME_RE = /^metadata(?:-[A-Za-z0-9._-]+)?\.sqlite3$/;
 /** 主库必须存在的关键表（缺任一 ⇒ 不是本应用的库，拒绝恢复）。 */
 const REQUIRED_TABLES = ["notes", "tree_nodes", "settings", "device_state"];
+/** 小记库必须存在的最小表集（与 quickNotes 打开流程一致；缺任一 = 不是本应用小记库）。 */
+const REQUIRED_QUICK_NOTES_TABLES = ["quick_notes", "tags", "tag_links", "tag_link_versions"];
 
 // ---- 备份候选路径白名单（主进程选择框登记；IPC 只能恢复登记过的文件，防渲染层/HTTP 传任意路径） ----
 const rememberedCandidates = new Set<string>();
@@ -95,6 +97,29 @@ export function inspectBackupDatabase(dbPath: string): BackupInspection {
 }
 
 /** 可注入的文件操作（单测覆盖回滚路径用；缺省 = node:fs）。 */
+/** 校验小记库备份（表集不同；同样只读、不写文件）。 */
+export function inspectQuickNotesDatabase(dbPath: string): BackupInspection {
+  if (!fs.existsSync(dbPath)) return { ok: false, reason: "小记库备份不存在：" + dbPath };
+  let db: Database.Database | null = null;
+  try {
+    db = new Database(dbPath, { readonly: true, fileMustExist: true });
+    const messages = (db.prepare("PRAGMA quick_check").all() as Array<{ quick_check?: string }>)
+      .map((row) => row.quick_check ?? "").filter((message) => message.length > 0);
+    const tables = (db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as Array<{ name: string }>)
+      .map((row) => row.name);
+    if (!(messages.length <= 1 && messages[0] === "ok")) {
+      return { ok: false, reason: "小记库完整性检查未通过（quick_check=" + (messages.join("; ") || "unknown") + "）", tables };
+    }
+    const missing = REQUIRED_QUICK_NOTES_TABLES.filter((table) => !tables.includes(table));
+    if (missing.length > 0) return { ok: false, reason: "小记库备份缺少关键表：" + missing.join("、"), tables };
+    return { ok: true, tables };
+  } catch (error) {
+    return { ok: false, reason: "无法打开小记库备份：" + describeError(error) };
+  } finally {
+    try { db?.close(); } catch { /* 已关闭 */ }
+  }
+}
+
 export interface RestoreFsOps {
   existsSync: (target: string) => boolean;
   mkdirSync: (target: string, options?: { recursive?: boolean }) => void;
@@ -107,6 +132,10 @@ export interface RestoreFromBackupOptions {
   backupPath: string;
   /** 当前主库路径（<workspace>/metadata.sqlite3）。 */
   currentDbPath: string;
+  /** 当前小记库路径（<workspace>/quick-notes/metadata.sqlite3）；不传 = 不恢复小记库（旧行为）。 */
+  currentQuickNotesDbPath?: string;
+  /** 备份里同快照的小记库路径；缺省时自动找 backupPath 同级的 quick-notes/metadata.sqlite3。 */
+  backupQuickNotesPath?: string;
   userDataDir: string;
   now?: () => Date;
   fsOps?: Partial<RestoreFsOps>;
@@ -119,6 +148,8 @@ export interface RestoreFromBackupResult {
   rolledBack?: boolean;
   /** 成功时原库的隔离目录（**不删除**，可手动找回）。 */
   quarantinePath?: string;
+  /** 备份里是否包含小记库并已一起恢复（false = 备份没有小记库，当前小记库保持不动）。 */
+  quickNotesRestored?: boolean;
   message?: string;
 }
 
@@ -147,6 +178,16 @@ export function restoreMainDatabaseFromBackup(options: RestoreFromBackupOptions)
   const inspection = inspectBackupDatabase(backupPath);
   if (!inspection.ok) return { ok: false, reason: inspection.reason ?? "备份文件校验未通过" };
 
+  // 261107：小记库与主库同快照备份；有当前小记库路径且备份里存在小记库时一起恢复。
+  const quickBackupPath = path.resolve(options.backupQuickNotesPath ?? path.join(path.dirname(backupPath), "quick-notes", MAIN_DB_BASENAME));
+  const currentQuickNotesDbPath = options.currentQuickNotesDbPath ? path.resolve(options.currentQuickNotesDbPath) : undefined;
+  const restoreQuickNotes = !!currentQuickNotesDbPath && ops.existsSync(quickBackupPath);
+  if (restoreQuickNotes) {
+    if (!isAcceptableBackupPath(quickBackupPath)) return { ok: false, reason: "小记库备份路径无效" };
+    const quickInspection = inspectQuickNotesDatabase(quickBackupPath);
+    if (!quickInspection.ok) return { ok: false, reason: quickInspection.reason ?? "小记库备份校验未通过" };
+  }
+
   const quarantinePath = path.join(options.userDataDir, "corrupt", "restore-" + timestamp(now));
   const moved: Array<{ from: string; to: string }> = [];
   try {
@@ -159,6 +200,16 @@ export function restoreMainDatabaseFromBackup(options: RestoreFromBackupOptions)
       ops.renameSync(from, to);
       moved.push({ from, to });
     }
+    // 1b) 小记库同样隔离（文件名加前缀，避免与主库 quarantine 同名）。
+    if (restoreQuickNotes && currentQuickNotesDbPath) {
+      for (const suffix of ["", "-wal", "-shm"]) {
+        const from = currentQuickNotesDbPath + suffix;
+        if (!ops.existsSync(from)) continue;
+        const to = path.join(quarantinePath, "quick-notes-" + MAIN_DB_BASENAME + suffix);
+        ops.renameSync(from, to);
+        moved.push({ from, to });
+      }
+    }
     // 2) 复制备份到位：先临时名再 rename，避免半截文件；随后再校验一次落位结果。
     const tempPath = currentDbPath + ".restore-tmp";
     ops.copyFileSync(backupPath, tempPath);
@@ -169,15 +220,30 @@ export function restoreMainDatabaseFromBackup(options: RestoreFromBackupOptions)
     for (const suffix of sidecars) ops.renameSync(tempPath + suffix, currentDbPath + suffix);
     const verify = inspectBackupDatabase(currentDbPath);
     if (!verify.ok) throw new Error("替换后校验失败：" + (verify.reason ?? "unknown"));
+    // 2b) 小记库恢复（与主库同快照）：同样先临时名再 rename + 落位后校验。
+    if (restoreQuickNotes && currentQuickNotesDbPath) {
+      const tempQuick = currentQuickNotesDbPath + ".restore-tmp";
+      ops.copyFileSync(quickBackupPath, tempQuick);
+      const quickSidecars = ["-wal", "-shm"].filter((suffix) => ops.existsSync(quickBackupPath + suffix));
+      for (const suffix of quickSidecars) ops.copyFileSync(quickBackupPath + suffix, tempQuick + suffix);
+      ops.renameSync(tempQuick, currentQuickNotesDbPath);
+      for (const suffix of quickSidecars) ops.renameSync(tempQuick + suffix, currentQuickNotesDbPath + suffix);
+      const quickVerify = inspectQuickNotesDatabase(currentQuickNotesDbPath);
+      if (!quickVerify.ok) throw new Error("小记库替换后校验失败：" + (quickVerify.reason ?? "unknown"));
+    }
     return {
       ok: true,
       quarantinePath,
-      message: "已从备份恢复主库。原库已隔离保留在 " + quarantinePath + "（未删除）；请重启应用后生效。",
+      quickNotesRestored: restoreQuickNotes,
+      message: restoreQuickNotes
+        ? "已从备份恢复主库与小记库（含标签）。原库已隔离保留在 " + quarantinePath + "（未删除）；请重启应用后生效。"
+        : "已从备份恢复主库（备份中无小记库，小记库保持不动）。原库已隔离保留在 " + quarantinePath + "（未删除）；请重启应用后生效。",
     };
   } catch (error) {
     // 3) 回滚：删掉可能写入的新库，把隔离的原库按相反顺序移回。
     for (const suffix of ["", "-wal", "-shm"]) {
       try { ops.rmSync(currentDbPath + suffix, { force: true }); } catch { /* 尽力 */ }
+      if (currentQuickNotesDbPath) { try { ops.rmSync(currentQuickNotesDbPath + suffix, { force: true }); } catch { /* 尽力 */ } }
     }
     let rolledBack = true;
     for (const item of [...moved].reverse()) {

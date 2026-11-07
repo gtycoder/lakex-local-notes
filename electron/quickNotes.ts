@@ -98,6 +98,8 @@ function toStoreValidation<T>(operation: () => T): T {
  */
 export class QuickNotesStore {
   private db: DbLike;
+  /** 261107：供标签存储迁移/接线使用；不要用于绕过 store 的领域方法。 */
+  get databaseHandle(): Database.Database { return this.db as Database.Database; }
   private root: string;
   private itemsDir: string;
   private assetsDir: string;

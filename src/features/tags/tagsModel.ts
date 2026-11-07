@@ -7,6 +7,7 @@
  * - 本文件只做数据整形/筛选/排序，零 IO、可单测。
  */
 import type { NoteSummary, QuickNoteListSummary, QuickNoteTag } from "../../lib/types";
+import { compareTagUpdatedAtDesc, countTagRefs, tagFallbackTitle } from "../../core/tagAggregate";
 
 /** 目录行（展示用）：引用计数 = 文档数 / 小记数（同一篇文档重复引用只算一次）。 */
 export interface TagDirectoryEntry {
@@ -35,13 +36,9 @@ export function normalizeDocumentTagLinks(raw: unknown): DocumentTagLinks {
   return out;
 }
 
-/** 每个标签的文档引用数（同一篇重复引用只算一次）。 */
-export function documentCountByTag(links: DocumentTagLinks): Map<string, number> {
-  const counts = new Map<string, number>();
-  for (const tagIds of Object.values(links)) {
-    for (const tagId of new Set(tagIds)) counts.set(tagId, (counts.get(tagId) ?? 0) + 1);
-  }
-  return counts;
+/** 每个标签的文档引用数（同一篇重复引用只算一次；liveNoteIds 过滤已不存在/回收站的文档）。 */
+export function documentCountByTag(links: DocumentTagLinks, liveNoteIds?: ReadonlySet<string>): Map<string, number> {
+  return countTagRefs(links, liveNoteIds);
 }
 
 /** 每个标签的小记引用数（小记列表 summary 已带 tagIds）。 */
@@ -60,9 +57,11 @@ export function quickNoteCountByTag(quickNotes: readonly QuickNoteListSummary[])
 export function buildTagDirectory(input: {
   tags: readonly QuickNoteTag[];
   documentLinks: DocumentTagLinks;
+  notes?: readonly NoteSummary[];
   quickNotes: readonly QuickNoteListSummary[];
 }): TagDirectoryEntry[] {
-  const docCounts = documentCountByTag(input.documentLinks);
+  const liveNoteIds = input.notes ? new Set(input.notes.map((note) => note.id)) : undefined;
+  const docCounts = documentCountByTag(input.documentLinks, liveNoteIds);
   const quickCounts = quickNoteCountByTag(input.quickNotes);
   // 目录本身已是 active-only（标签删除 = 缺席，没有墓碑字段）⇒ 这里不再过滤。
   return input.tags
@@ -90,8 +89,7 @@ export interface TagAggregateItem {
 /** 只看文档 / 只看小记 / 两者都要。 */
 export type TagAggregateKindFilter = "all" | "doc" | "quickNote";
 
-const byUpdatedAtDesc = (a: TagAggregateItem, b: TagAggregateItem): number =>
-  (b.updatedAt || "").localeCompare(a.updatedAt || "") || (b.id < a.id ? -1 : b.id > a.id ? 1 : 0);
+const byUpdatedAtDesc = (a: TagAggregateItem, b: TagAggregateItem): number => compareTagUpdatedAtDesc(a, b);
 
 /**
  * 某个标签下的内容（文档分组 + 小记分组，各自按更新时间倒序）。
@@ -114,7 +112,7 @@ export function buildTagAggregate(input: {
     for (const note of input.notes) {
       const tagIds = input.documentLinks[note.id];
       if (!tagIds || !tagIds.includes(tagId)) continue;
-      docs.push({ kind: "doc", id: note.id, title: note.title || "无标题", updatedAt: note.updatedAt, docKind: note.kind ?? "doc" });
+      docs.push({ kind: "doc", id: note.id, title: note.title || tagFallbackTitle("doc"), updatedAt: note.updatedAt, docKind: note.kind ?? "doc" });
     }
     docs.sort(byUpdatedAtDesc);
   }
@@ -124,7 +122,7 @@ export function buildTagAggregate(input: {
       quickNotes.push({
         kind: "quickNote",
         id: note.id,
-        title: note.previewText || "空小记",
+        title: note.previewText || tagFallbackTitle("quickNote"),
         updatedAt: note.updatedAt,
         previewText: note.previewText,
       });

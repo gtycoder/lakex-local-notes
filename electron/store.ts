@@ -233,8 +233,11 @@ export class Store {
   private remoteImport: RemoteImportRepository;
   /** V5 Phase 2：日志注入点（桌面默认 = electron-log，由 main.ts 装配；sync/quickNotes 经此读取） */
   readonly logScopes: LoggerScopes;
-  /** 文档标签（目录 + tag_links(target_kind='note')）。 */
-  readonly documentTags: DocumentTagsService;
+  /** 文档标签（目录 + tag_links(target_kind='note')）。
+   *  261107：存储统一到小记库后由 main 在 QuickNotesStore 打开后调用 attachDocumentTagsDatabase 切换；
+   *  迁移失败时保持构造时的主库实例（旧行为，可回退）。 */
+  private _documentTags: DocumentTagsService;
+  get documentTags(): DocumentTagsService { return this._documentTags; }
   /** 261105 P1 第 4 项：同步记录账本（设备本地，不进 S3/git）。 */
   readonly syncConflicts: SyncConflictsRepository;
   /** 261106 批量操作（A 方案）：树/父级/环/sortOrder 的只读端口 + 单事务入口。 */
@@ -242,6 +245,13 @@ export class Store {
 
   /** 数据根目录（v3 适配器/诊断用；只读）。 */
   get rootPath(): string { return this.root; }
+  /** 主库绝对路径（标签存储迁移需要 ATTACH 源；只读）。 */
+  get databasePath(): string { return path.join(this.root, "metadata.sqlite3"); }
+
+  /** 261107：标签存储统一后把文档标签关系服务切到小记库（迁移成功才调用；失败保持主库）。 */
+  attachDocumentTagsDatabase(db: Database.Database): void {
+    this._documentTags = new DocumentTagsService(db);
+  }
 
   constructor(root: string, secretCipher: SecretCipher = createPlaintextSecretCipher(), logScopes: LoggerScopes = createSilentLoggerScopes()) {
     this.root = root;
@@ -267,7 +277,7 @@ export class Store {
       notePathFor: (noteId) => this.notePath(noteId),
     });
     this.schemaInit.migrate();
-    this.documentTags = new DocumentTagsService(this.db);
+    this._documentTags = new DocumentTagsService(this.db);
     this.batchNotes = new BatchNotesRepository({ db: this.db, trashNotebookId: TRASH_NOTEBOOK_ID });
     this.syncConflicts = new SyncConflictsRepository(this.db);
     this.settingsRepository = new SettingsRepository(this.db, secretCipher);
@@ -1669,6 +1679,40 @@ export class Store {
 
 
   /** v3 发布成功后批量标记已同步（只改同步账本/UI dirty，不碰正文）。 */
+  /**
+   * 261107（数据安全）：saveBaseline 的**守卫式**归位。只清「本地 updated_at 仍等于基线快照」的行；
+   * 同步窗口内被改名/移动/恢复的行保持 dirty / restore_pending_at，留给下一轮重传。
+   * 对比旧的 markNotesSynced（无条件清）——那是「窗口内编辑被标 synced 后永远不传」的根因。
+   */
+  markNotesSyncedIfUnchanged(entries: readonly { id: string; updatedAt: string }[]): { cleared: number; kept: number } {
+    const expected = new Map<string, string>();
+    for (const entry of entries) expected.set(entry.id, entry.updatedAt);
+    const ids = [...expected.keys()];
+    let cleared = 0;
+    let kept = 0;
+    for (let i = 0; i < ids.length; i += 400) {
+      const batch = ids.slice(i, i + 400);
+      const ph = batch.map(() => "?").join(",");
+      const current = new Map(
+        (this.db.prepare("SELECT id, updated_at FROM notes WHERE id IN (" + ph + ") AND is_purged=0").all(...batch) as Array<{ id: string; updated_at: string }>)
+          .map((row) => [row.id, row.updated_at] as const),
+      );
+      const good: string[] = [];
+      for (const id of batch) {
+        const now = current.get(id);
+        if (now === undefined) continue; // 已彻底删除：无需清 UI 标记
+        if (now === expected.get(id)) good.push(id);
+        else kept++;
+      }
+      cleared += good.length;
+      if (good.length === 0) continue;
+      const goodPh = good.map(() => "?").join(",");
+      this.db.prepare("UPDATE notes SET is_dirty=0, restore_pending_at=NULL WHERE id IN (" + goodPh + ") AND is_purged=0").run(...good);
+      this.db.prepare("UPDATE tree_nodes SET is_dirty=0 WHERE note_file_id IN (" + goodPh + ") AND is_purged=0").run(...good);
+    }
+    return { cleared, kept };
+  }
+
   markNotesSynced(ids: readonly string[]): void {
     const unique = [...new Set(ids)];
     for (let i = 0; i < unique.length; i += 200) {
@@ -1860,8 +1904,8 @@ export class Store {
   }
 
   /** 正文 hash 相同、仅元数据变化（标题/父目录/排序/图标/回收站字段）时的对账。 */
-  applyRemoteNoteMeta(note: SyncNote): void {
-    this.syncReconciliation.applyRemoteNoteMeta(note);
+  applyRemoteNoteMeta(note: SyncNote, expectedLocalUpdatedAt?: string): void {
+    this.syncReconciliation.applyRemoteNoteMeta(note, expectedLocalUpdatedAt);
   }
 
   /** 远端把该笔记移入回收站（软删传播，删除压编辑；详见 syncReconciliation）。 */

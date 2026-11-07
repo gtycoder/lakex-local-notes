@@ -11,6 +11,7 @@ import {
 } from "./autoBackup.js";
 import { defaultAiSettings, normalizeAiSettings, type AiSettings } from "../src/core/aiProviders.js";
 import { normalizeSyncSettings } from "../src/core/syncSettings.js";
+import { HISTORY_SETTINGS_DEFAULTS, TRASH_AUTO_PURGE_DAYS } from "../src/core/settingsDefaults.js";
 
 /**
  * settings 表存取（S3 / 同步 / S3 GC / 历史保留策略 + 密钥加解密）。
@@ -103,7 +104,7 @@ export class SettingsRepository {
   getHistorySettings(): HistorySettings {
     const row = this.db.prepare("SELECT value FROM settings WHERE key='history_settings'").get() as { value: string } | undefined;
     // Batch4-C：snapshotIntervalMinutes = **定时兜底快照**间隔（默认 10 分钟；0 = 关闭）。
-    const def: HistorySettings = { maxSnapshots: 100, retentionDays: 30, cleanupIntervalHours: 24, snapshotIntervalMinutes: 10 };
+    const def: HistorySettings = { ...HISTORY_SETTINGS_DEFAULTS };
     if (!row) return def;
     try {
       const parsed = JSON.parse(row.value) as Partial<HistorySettings>;
@@ -196,7 +197,7 @@ export class SettingsRepository {
 
   getS3GcSettings(): S3GcSettings {
     const row = this.db.prepare("SELECT value FROM settings WHERE key='s3_gc_settings'").get() as { value: string } | undefined;
-    const def: S3GcSettings = { gcRetentionDays: 7, gcIntervalHours: 24, trashAutoPurgeDays: 90 };
+    const def: S3GcSettings = { gcRetentionDays: 7, gcIntervalHours: 24, trashAutoPurgeDays: TRASH_AUTO_PURGE_DAYS };
     if (!row) return def;
     try {
       const parsed = JSON.parse(row.value) as Partial<S3GcSettings>;

@@ -10,6 +10,7 @@
  * 边界：用户取消 → 空数组 / 空结果（**不抛**）；单文件读失败只在该条上给 error（不整批失败）。
  * 转换（md→lake）与落盘都不在这里（renderer 管线 + 既有 create_note/save_note）。
  */
+import path from "node:path";
 import { BrowserWindow, dialog } from "electron";
 import type { IpcRegistrar } from "./registrar.js";
 import {
@@ -32,6 +33,26 @@ function focusedWindow(): BrowserWindow | null {
   return BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0] ?? null;
 }
 
+/**
+ * 导入图片读取授权（261107 安全加固）：read_import_image 只读「本会话通过系统选择框选过的文件所在目录」下的图片。
+ * 导入 Markdown 时图片是相对 md 的路径，所以授权范围是所选文件的目录（含子目录），不是单个文件。
+ * 这样既保留相对图片导入，又不再接受渲染层/HTTP 传任意绝对路径（本地任意图片读原语）。
+ */
+const grantedImportDirs = new Set<string>();
+function rememberImportRoots(filePaths: readonly string[]): void {
+  for (const filePath of filePaths) {
+    if (typeof filePath !== "string" || !path.isAbsolute(filePath)) continue;
+    grantedImportDirs.add(path.resolve(path.dirname(filePath)));
+  }
+}
+function isGrantedImportPath(filePath: string): boolean {
+  const resolved = path.resolve(filePath);
+  for (const root of grantedImportDirs) {
+    if (resolved === root || resolved.startsWith(root + path.sep)) return true;
+  }
+  return false;
+}
+
 export function registerMarkdownImportIpc(ipc: IpcRegistrar, deps: MarkdownImportIpcDeps = {}): void {
   const showOpenDialog = deps.showOpenDialog ?? dialog.showOpenDialog;
   const describeFile = deps.describeFile ?? ((absPath: string) => describeMarkdownFile(absPath));
@@ -50,6 +71,7 @@ export function registerMarkdownImportIpc(ipc: IpcRegistrar, deps: MarkdownImpor
       ],
     });
     if (result.canceled || result.filePaths.length === 0) return [];
+    rememberImportRoots(result.filePaths);
     return result.filePaths.map((filePath) => describeFile(filePath));
   });
 
@@ -82,12 +104,14 @@ export function registerMarkdownImportIpc(ipc: IpcRegistrar, deps: MarkdownImpor
       filters: config.filters,
     });
     if (result.canceled || result.filePaths.length === 0) return [];
+    rememberImportRoots(result.filePaths);
     return Promise.all(result.filePaths.map((filePath) => describeImport(filePath)));
   });
 
   // 读导入图片字节（供渲染层 uploadResource 物化资产）。
   ipc.handle("read_import_image", (filePath: unknown) => {
     if (typeof filePath !== "string" || !filePath) throw new Error("图片路径无效");
+    if (!isGrantedImportPath(filePath)) throw new Error("图片路径未授权：请先通过导入选择框选择 Markdown/文件");
     return readImage(filePath);
   });
 }

@@ -157,7 +157,7 @@ export function TagsWorkspace(props: TagsWorkspaceProps) {
   const scrollSaveTimerRef = useRef<number | undefined>(undefined);
   const { confirm, confirmElement } = useConfirm();
 
-  const directory = useMemo(() => buildTagDirectory({ tags, documentLinks, quickNotes }), [tags, documentLinks, quickNotes]);
+  const directory = useMemo(() => buildTagDirectory({ tags, documentLinks, notes, quickNotes }), [tags, documentLinks, notes, quickNotes]);
   const selected = directory.find((entry) => entry.id === selectedTagId) ?? null;
   const aggregate = useMemo(
     () => buildTagAggregate({ tagId: selectedTagId, documentLinks, notes, quickNotes, filter: kindFilter }),

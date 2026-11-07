@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { shouldSkipEmptyTagDirectoryCleanup } from "./quickNoteTags";
 import {
   MAX_QUICK_NOTE_TAG_LENGTH,
   compareQuickNoteTagVersion,
@@ -146,5 +147,11 @@ describe("quickNoteTags", () => {
     expect(ab.map((entry) => entry.name)).toEqual(ba.map((entry) => entry.name));
     expect(compareQuickNoteTagVersion(local, remote)).toBe(-compareQuickNoteTagVersion(remote, local));
     expect(compareQuickNoteTagVersion(local, { ...local })).toBe(0);
+  });
+
+  it("空目录清理保护：目录 0 但仍有关系时必须跳过；无关系/非空目录照常清理", () => {
+    expect(shouldSkipEmptyTagDirectoryCleanup(0, 1)).toBe(true);
+    expect(shouldSkipEmptyTagDirectoryCleanup(0, 0)).toBe(false);
+    expect(shouldSkipEmptyTagDirectoryCleanup(1, 3)).toBe(false);
   });
 });

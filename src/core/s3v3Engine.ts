@@ -681,7 +681,7 @@ export class S3v3SyncEngine {
       const localIds = new Set([...nextState.lake.notes.map((n) => n.id), ...nextState.quickNotes.items.map((q) => q.id)]);
       nextState = { ...nextState, remotePurged: (nextState.remotePurged ?? []).filter((id) => localIds.has(id)) };
     }
-    await this.device.saveState(nextState);
+    await this.device.saveState(nextState, state);
     // 261105 P1 第 4 项：同步记录账本（远端覆盖/他端删除）。落库在 saveState 之后（archive-local 历史已就绪），
     // 失败只记 warning，不阻断同步。
     await this.recordSyncConflicts(round, state);
@@ -798,7 +798,7 @@ export class S3v3SyncEngine {
     nextState.remotePurged = finalizeRemotePurged(nextState, {
       remoteIds: [...remote.lake.notes.map((n) => n.id), ...remote.quickNotes.items.map((q) => q.id)],
       restorePending: state.restorePending ?? [] }).remotePurged ?? [];
-    await this.device.saveState(nextState);
+    await this.device.saveState(nextState, state);
     await this.device.saveBaseline({
       epoch: pointer.epoch, generation: pointer.generation,
       lakeCommit: pointer.lake.commit, quickNotesCommit: pointer.quickNotes.commit,
@@ -841,7 +841,7 @@ export class S3v3SyncEngine {
       } }, ports, { lockWaitMs: this.publishLockWaitMs });
     if (round.commit.status !== "published" || !round.publish) return report;
     const nextState = mergeRoundIntoState(state, { ...round, nextPointer: round.commit.pointer, deleted: 0, remainingPending: state.pending, intents: { intents: state.intents, restorePending: state.restorePending ?? [] } } as never);
-    await this.device.saveState(nextState);
+    await this.device.saveState(nextState, state);
     await this.device.saveBaseline({
       epoch: round.commit.pointer.epoch, generation: round.commit.pointer.generation,
       lakeCommit: round.commit.lakeCommit, quickNotesCommit: round.commit.quickNotesCommit,
@@ -1184,7 +1184,7 @@ export class S3v3SyncEngine {
       if (state) {
         // 只摘掉「本轮真的删掉了目标」的待删项；前缀删除/未命中项保持原样等门禁重判。
         state.pending = state.pending.filter((p) => !deletedSet.has(p.key));
-        await this.device.saveState(state);
+        await this.device.saveState(state, state);
       }
     }
     return { deleted: toDelete, kept: keep.size, dryRun: !!opts.dryRun, skippedRecent, ageUnknown, previousIndexes };

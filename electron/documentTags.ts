@@ -8,7 +8,7 @@
  * - 关系按**集合 + 关系版本** LWW 同步（与小记 tagIds 同口径）：保留本机顺序、远端新增插最前。
  */
 import type { DbLike } from "./dbLike.js";
-import { normalizeQuickNoteTagIds, QuickNoteTagError } from "../src/core/quickNoteTags.js";
+import { normalizeQuickNoteTagIds, QuickNoteTagError, shouldSkipEmptyTagDirectoryCleanup } from "../src/core/quickNoteTags.js";
 import { AppError } from "../src/core/storeErrors.js";
 
 const KIND = "note";
@@ -139,6 +139,12 @@ export class DocumentTagsService {
    * 返回清理的行数与标签数；受影响文档推进关系版本（让删除也能传播）。
    */
   cleanupOrphans(validTagIds: ReadonlySet<string>, at = nowIso()): { links: number; tags: number } {
+    // 261107：空目录保护（与移动端同一判据）。目录为空 ≠ 标签全删；目录未加载/降级时必须跳过，
+    // 否则会把全部文档标签当孤儿删掉并 bump 版本，随 lake 索引扩散到所有端。
+    if (validTagIds.size === 0) {
+      const existing = this.db.prepare("SELECT COUNT(*) AS n FROM tag_links WHERE target_kind=?").get(KIND) as { n: number };
+      if (shouldSkipEmptyTagDirectoryCleanup(0, existing.n)) return { links: 0, tags: 0 };
+    }
     const rows = this.db.prepare("SELECT tag_id, target_id FROM tag_links WHERE target_kind=?").all(KIND) as Array<{ tag_id: string; target_id: string }>;
     const orphans = rows.filter((row) => !validTagIds.has(row.tag_id));
     if (orphans.length === 0) return { links: 0, tags: 0 };

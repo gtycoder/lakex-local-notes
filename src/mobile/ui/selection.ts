@@ -17,6 +17,9 @@ export interface SelectionState {
 }
 
 export const EMPTY_SELECTION: SelectionState = { active: false, ids: [] };
+/** 与 core 批量端口同一上限（500）：移动端也必须在进入选择/全选时就截断，
+ *  否则 2 万篇「全选」会先卡主线程、再被 core 整批拒绝。 */
+export const SELECTION_MAX = 500;
 
 /** 进入选择模式：可带首行 id（长按进入）。 */
 export function selectionEnter(state: SelectionState, id?: string | null): SelectionState {
@@ -27,15 +30,22 @@ export function selectionEnter(state: SelectionState, id?: string | null): Selec
 /** 选择态下切换一行；未进入时等于「以该行进入」。 */
 export function selectionToggle(state: SelectionState, id: string): SelectionState {
   if (!state.active) return { active: true, ids: [id] };
-  return state.ids.includes(id)
-    ? { active: true, ids: state.ids.filter((x) => x !== id) }
-    : { active: true, ids: [...state.ids, id] };
+  if (state.ids.includes(id)) return { active: true, ids: state.ids.filter((x) => x !== id) };
+  if (state.ids.length >= SELECTION_MAX) return state; // 达上限不再追加；UI 提示由调用方给。
+  return { active: true, ids: [...state.ids, id] };
 }
 
 /** 选当前可见的全部（去重、按传入顺序）。state 仅为签名一致（全选不看原有选择）。 */
 export function selectionSelectAll(_state: SelectionState, visibleIds: readonly string[]): SelectionState {
+  // 用 Set 去重（旧实现每条 includes ⇒ 2 万篇 O(n²) 卡死）；到 500 上限即停。
   const ids: string[] = [];
-  for (const id of visibleIds) if (!ids.includes(id)) ids.push(id);
+  const seen = new Set<string>();
+  for (const id of visibleIds) {
+    if (seen.has(id)) continue;
+    seen.add(id);
+    ids.push(id);
+    if (ids.length >= SELECTION_MAX) break;
+  }
   return { active: true, ids };
 }
 
@@ -56,7 +66,10 @@ export function selectionCount(state: SelectionState): number {
 /** 当前可见的是否「已全选」（空列表不算全选）。 */
 export function selectionAllSelected(state: SelectionState, visibleIds: readonly string[]): boolean {
   if (!state.active || visibleIds.length === 0) return false;
-  return visibleIds.every((id) => state.ids.includes(id));
+  // 可见数超过上限时不可能「全选」（最多 500），避免按钮显示全选却只选一部分。
+  if (visibleIds.length > SELECTION_MAX) return false;
+  const selected = new Set(state.ids);
+  return visibleIds.every((id) => selected.has(id));
 }
 
 /** 列表变化后剔除已不存在的 id（回收站恢复/删除、筛选切换都会用到）。 */

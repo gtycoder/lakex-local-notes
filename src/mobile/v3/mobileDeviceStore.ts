@@ -124,7 +124,7 @@ export class MobileDeviceStore implements S3v3DeviceStore {
    * 逐字段等价性由 mobile/v3 的对拍用例（conformance.mobile / mobileCloudDeleted / remParity / historySnapshot）
    * 与 deviceStoreMeta 的内存端口测试共同锁住。
    */
-  async saveState(state: DeviceState): Promise<void> {
+  async saveState(state: DeviceState, previous?: DeviceState): Promise<void> {
     // 本轮标记（与迁移前同一口径）：文档按 state.remotePurged 分派「云端已删除·仅本地」副本；
     // 回收站时间戳落远端 trashedAt（不是本地 now）；投影再并入本轮新打标的小记副本。
     // 端口持有的是同一批 Set/Map 实例 ⇒ 必须原地 clear+add（重新赋值不会同步给端口）。
@@ -133,7 +133,7 @@ export class MobileDeviceStore implements S3v3DeviceStore {
     this.portCtx.remoteTrashedAt.clear();
     for (const n of state.lake.notes) if (n.trashedAt) this.portCtx.remoteTrashedAt.set(n.id, n.trashedAt);
     this.portCtx.newlyCloudDeletedQuick.clear();
-    await this.meta.saveState(state);
+    await this.meta.saveState(state, previous);
   }
 
   async loadBaseline(): Promise<DeviceBaseline | null> {
@@ -142,22 +142,36 @@ export class MobileDeviceStore implements S3v3DeviceStore {
   }
   async saveBaseline(baseline: DeviceBaseline): Promise<void> {
     const s = await loadV3State(this.db);
-    // 发布成功后才写 baseline：此时这些条目已与云端一致，必须清 UI 待同步标记；
-    // 否则 is_dirty 永远停在 1（同步候选虽由三方比对得出，UI 会一直显示“待同步”）。
-    const sets: Array<{ sql: string; ids: string[] }> = [
-      { sql: "UPDATE notes SET is_dirty=0, restore_pending_at=NULL WHERE is_purged=0 AND id IN (", ids: baseline.lake.notes.map((n) => n.id) },
-      { sql: "UPDATE folders SET is_dirty=0 WHERE is_purged=0 AND id IN (", ids: baseline.lake.folders.map((f) => f.id) },
-      { sql: "UPDATE quick_notes SET is_dirty=0, restore_pending_at=NULL WHERE id IN (", ids: baseline.quickNotes.items.map((q) => q.id) },
-    ];
-    await this.db.transaction(async () => {
-      for (const { sql, ids } of sets) {
-        for (let i = 0; i < ids.length; i += 400) {
-          const part = ids.slice(i, i + 400);
-          if (part.length === 0) continue;
-          const ph = part.map(() => "?").join(",");
-          await this.db.prepare(sql + ph + ")").run(...part);
-        }
+    // 发布成功后才写 baseline；但必须**守卫式**归位（261107 数据安全）：
+    // 只清「本地 updated_at 仍等于基线快照」的行；同步窗口内改名/移动/恢复的行保持 dirty 与
+    // restore_pending_at，留给下一轮重传。旧实现无条件清是「窗口内编辑被标 synced 后永远不传」的根因。
+    const markUnchanged = async (
+      table: "notes" | "folders" | "quick_notes",
+      entries: ReadonlyArray<{ id: string; updatedAt: string }>,
+      clearRestorePending: boolean,
+      notPurged = true,
+    ): Promise<void> => {
+      const expected = new Map(entries.map((entry) => [entry.id, entry.updatedAt] as const));
+      const ids = [...expected.keys()];
+      for (let i = 0; i < ids.length; i += 400) {
+        const batch = ids.slice(i, i + 400);
+        if (batch.length === 0) continue;
+        const ph = batch.map(() => "?").join(",");
+        const purgeFilter = notPurged ? " AND is_purged=0" : "";
+        const rows = await this.db.prepare("SELECT id, updated_at FROM " + table + " WHERE id IN (" + ph + ")" + purgeFilter).all(...batch) as Array<{ id: string; updated_at: string }>;
+        const current = new Map(rows.map((row) => [row.id, row.updated_at] as const));
+        const good = batch.filter((id) => current.get(id) === expected.get(id));
+        if (good.length === 0) continue;
+        const goodPh = good.map(() => "?").join(",");
+        const setRestore = clearRestorePending ? ", restore_pending_at=NULL" : "";
+        await this.db.prepare("UPDATE " + table + " SET is_dirty=0" + setRestore + " WHERE id IN (" + goodPh + ")" + purgeFilter).run(...good);
       }
+    };
+    await this.db.transaction(async () => {
+      await markUnchanged("notes", baseline.lake.notes.map((n) => ({ id: n.id, updatedAt: n.updatedAt })), true);
+      await markUnchanged("folders", baseline.lake.folders.map((f) => ({ id: f.id, updatedAt: f.updatedAt })), false);
+      // quick_notes 没有 is_purged 列（墓碑用 purged_at/deleted_at）；沿用旧实现不过滤。
+      await markUnchanged("quick_notes", baseline.quickNotes.items.map((q) => ({ id: q.id, updatedAt: q.updatedAt })), true, false);
     });
     await saveV3State(this.db, { ...s, baseline: baseline as MobileV3Baseline });
   }

@@ -109,23 +109,32 @@ describe("registerMarkdownImportIpc：通道与取消语义", () => {
 });
 
 describe("registerMarkdownImportIpc：read_import_image", () => {
-  it("读 png 字节（含 mime/文件名）", () => {
+  async function grantRoot(h: ReturnType<typeof harness>, root: string): Promise<void> {
+    dialogMock.showOpenDialog.mockResolvedValueOnce({ canceled: false, filePaths: [path.join(root, "doc.md")] });
+    await h.call("pick_markdown_files");
+  }
+
+  it("读 png 字节（含 mime/文件名）", async () => {
     const root = tempRoot();
     const file = path.join(root, "图.png");
     fs.writeFileSync(file, PNG);
-    const image = harness().call("read_import_image", file) as { bytes: Uint8Array; mimeType: string; filename: string };
+    const h = harness();
+    await grantRoot(h, root);
+    const image = h.call("read_import_image", file) as { bytes: Uint8Array; mimeType: string; filename: string };
     expect(image.mimeType).toBe("image/png");
     expect(image.filename).toBe("图.png");
     expect(image.bytes.byteLength).toBe(PNG.byteLength);
   });
 
-  it("非法参数 / 非图片 ⇒ 抛可读错误", () => {
+  it("未授权路径拒绝读取；非法参数 / 非图片 ⇒ 抛可读错误", async () => {
     const h = harness();
     expect(() => h.call("read_import_image", "")).toThrowError(/路径无效/);
     expect(() => h.call("read_import_image", 42)).toThrowError(/路径无效/);
     const root = tempRoot();
     const txt = path.join(root, "a.png");
     fs.writeFileSync(txt, "not an image");
+    expect(() => h.call("read_import_image", txt)).toThrowError(/未授权/);
+    await grantRoot(h, root);
     expect(() => h.call("read_import_image", txt)).toThrowError(/魔数校验失败/);
   });
 });

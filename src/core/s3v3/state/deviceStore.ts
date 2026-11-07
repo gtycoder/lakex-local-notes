@@ -167,7 +167,7 @@ export interface DeviceStoreMetaDeps {
 
 export interface DeviceStoreMeta {
   loadState(): Promise<DeviceState>;
-  saveState(state: DeviceState): Promise<void>;
+  saveState(state: DeviceState, previous?: DeviceState): Promise<void>;
 }
 
 /**
@@ -479,7 +479,7 @@ export function createDeviceStoreMeta(deps: DeviceStoreMetaDeps): DeviceStoreMet
     if (remoteDeletedQuickIds.length > 0) await p.markQuickNotesCloudDeleted(remoteDeletedQuickIds);
   }
 
-  async function saveState(state: DeviceState): Promise<void> {
+  async function saveState(state: DeviceState, previous?: DeviceState): Promise<void> {
     // 正常轮（队列本来就是空且本轮没消费过）不碰队列：异常记账只在异常发生后写。
     if ((state.bodyRecoveryPending ?? []).length > 0) await p.markBodyRecoveryPending(state.bodyRecoveryPending ?? []);
     else deps.recoveryConsumed?.();
@@ -571,7 +571,12 @@ export function createDeviceStoreMeta(deps: DeviceStoreMetaDeps): DeviceStoreMet
             || (n.trashedAt ?? null) !== (cur.trashedAt ?? null)
             || (n.deletedFromParentId ?? null) !== (cur.deletedFromParentId ?? null)
             || (n.icon !== undefined && (cur.icon ?? null) !== (n.icon ?? null));
-          if (metaDiffers && !lifecycleRace) await p.applyRemoteNoteMeta(toNoteWrite(n, resolvedParentId));
+          if (metaDiffers && !lifecycleRace) {
+            const localSnapshot = previous?.lake.notes.find((entry) => entry.id === n.id);
+            // 引擎本轮自己写了正文（下载/恢复）时，DB 的 updated_at 是引擎写的、不是用户窗口内编辑 ⇒
+            // 必须无条件应用远端元数据把 updatedAt 对齐，否则下一轮会误判本地更新再发布。
+            await p.applyRemoteNoteMeta(toNoteWrite(n, resolvedParentId), contentChanged ? undefined : localSnapshot?.updatedAt);
+          }
           if (!!cur.isEditLocked !== !!n.isLocked || (cur.editLockedAt ?? null) !== (n.lockedAt ?? null)) {
             await p.applyRemoteEditLock(n.id, !!n.isLocked, n.lockedAt ?? null);
           }

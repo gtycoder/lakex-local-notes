@@ -99,8 +99,8 @@ export function createDesktopPlatformPort(store: Store, quickNotes?: QuickNotesS
     async saveNote(noteId: string, title: string, content: string, caches: NoteSearchCaches | null): Promise<void> {
       store.saveNote(noteId, title, content, caches ?? undefined);
     },
-    async applyRemoteNoteMeta(note: SyncNoteWrite): Promise<void> {
-      store.applyRemoteNoteMeta(note as never);
+    async applyRemoteNoteMeta(note: SyncNoteWrite, expectedLocalUpdatedAt?: string): Promise<void> {
+      store.applyRemoteNoteMeta(note as never, expectedLocalUpdatedAt);
     },
     async applyRemoteEditLock(noteId: string, locked: boolean, editLockedAt: string | null): Promise<void> {
       store.applyRemoteEditLock(noteId, locked, editLockedAt);

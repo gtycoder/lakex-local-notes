@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   EMPTY_SELECTION,
+  SELECTION_MAX,
   selectionAllSelected,
   selectionClear,
   selectionCount,
@@ -54,5 +55,18 @@ describe("选择模式纯状态机（task-82）", () => {
     expect(selectionCount(state)).toBe(2);
     expect(selectionIncludes(state, "a")).toBe(true);
     expect(selectionIncludes(state, "z")).toBe(false);
+  });
+
+  it("上限 500：全选截断到 500，toggle 不再追加，超量可见集永不显示「全选」", () => {
+    const many = Array.from({ length: 2000 }, (_, i) => "id-" + i);
+    const all = selectionSelectAll(EMPTY_SELECTION, many);
+    expect(all.ids).toHaveLength(SELECTION_MAX);
+    expect(all.ids[0]).toBe("id-0");
+    expect(all.ids[SELECTION_MAX - 1]).toBe("id-499");
+
+    const full = selectionSelectAll(EMPTY_SELECTION, many.slice(0, SELECTION_MAX));
+    expect(selectionToggle(full, "extra")).toBe(full);
+    expect(selectionAllSelected(full, many.slice(0, SELECTION_MAX + 1))).toBe(false);
+    expect(selectionAllSelected(full, many.slice(0, SELECTION_MAX))).toBe(true);
   });
 });

@@ -376,7 +376,6 @@
 .bt-rule-row .bt-select { flex: 1; min-width: 0; }
 .bt-rule-row .bt-select-trigger { height: 26px; font-size: var(--lake-font-size-small); padding: 0 6px; }
 .bt-row-menu { animation: bt-pop .13s ease-out; }
-.bt-tool-btn, .bt-icon-btn, .bt-menu-item, .bt-panel-add, .bt-primary, .bt-secondary, .bt-danger, .bt-tables-switch, .bt-select-trigger, .bt-option-item, .bt-date-day, .bt-tables-resize { transition: background .14s ease, border-color .14s ease, box-shadow .14s ease, color .14s ease; }
 
 
 

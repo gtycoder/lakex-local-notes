@@ -224,7 +224,7 @@ describe("小记列表多选（task-82）", () => {
     await renderHome();
     await longPress(cards()[0]);
     await click(actionButton("移入回收站"));
-    expect(mocks.showToast).toHaveBeenCalledWith("成功 0，失败 1（已在回收站）", { type: "error" });
+    expect(mocks.showToast).toHaveBeenCalledWith("成功 0，失败 1（条目已在回收站里）", { type: "error" });
     expect(topBar()!.textContent).toContain("已选 1"); // 失败保留选择
   });
 

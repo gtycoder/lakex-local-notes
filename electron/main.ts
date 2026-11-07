@@ -10,6 +10,7 @@ import { autoSyncIntervalMs, shouldSyncOnOpenClose } from "../src/core/syncModes
 import { historyFallbackMinutes, shouldRunHistoryFallback } from "../src/core/historyFallbackPolicy.js";
 import { createSafeStorageSecretCipher } from "./secretCipher.js";
 import { createUnavailableQuickNotesStore, QuickNotesStore } from "./quickNotes.js";
+import { migrateNoteTagLinksToQuickNotes } from "./tagStorage.js";
 import {
   decideQuickNotesAvailability,
   getQuickNotesAvailability,
@@ -908,6 +909,23 @@ if (!app.requestSingleInstanceLock()) {
       // 只有正常打开时才注册给 v3：降级替身的空世界会被同步判成删除/下载（desktopSync 另有前置断言）。
       setQuickNotesStoreForV3(quickNotes);
       quickNotes.recoverConversions((noteId) => store.hasNote(noteId), (noteId) => store.removeUntrackedNoteArtifacts(noteId));
+      // 261107（上线前最后一批）：标签存储统一 —— 文档标签关系一次性迁入小记库，成功后把 documentTags 切到小记库；
+      // 失败则保持主库旧关系（可回退），并在下次启动重试；旧表保留一个版本，不删除。
+      try {
+        const migration = migrateNoteTagLinksToQuickNotes({
+          mainDbPath: store.databasePath,
+          quickDb: quickNotes.databaseHandle,
+          log: (message) => log.app.info(message),
+        });
+        if (migration.ok) {
+          store.attachDocumentTagsDatabase(quickNotes.databaseHandle);
+          if (!migration.already) log.app.info("[tags] 标签存储已统一到小记库（moved=" + migration.moved + "）");
+        } else {
+          log.app.warn("[tags] 标签存储迁移失败，继续使用主库旧关系：" + (migration.reason ?? "unknown"));
+        }
+      } catch (error) {
+        log.app.warn("[tags] 标签存储迁移异常，继续使用主库旧关系：" + (error as Error).message);
+      }
       // 261105 P1：启动自检清理「文档关系指向不存在标签」的孤儿行（目录唯一来源 = 小记库 tags）。
       try {
         const cleanup = store.documentTags.cleanupOrphans(new Set(quickNotes.tags.list().map((tag) => tag.id)));

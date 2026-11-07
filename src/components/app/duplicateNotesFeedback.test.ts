@@ -27,7 +27,7 @@ describe("创建副本结果文案", () => {
       summary: { total: 2, done: 1, failed: 1 },
     }));
     expect(notice.kind).toBe("partial");
-    expect(notice.text).toBe("已创建 1 个副本，失败 1 项：1 项：正文文件缺失，无法复制");
+    expect(notice.text).toBe("已创建 1 个副本，失败 1 项：正文文件缺失，无法复制");
     expect(notice.failedIds).toEqual(["n2"]);
   });
 

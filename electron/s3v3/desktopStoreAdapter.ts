@@ -129,15 +129,16 @@ export class DesktopStoreDevice implements S3v3DeviceStore {
 
   // ===== E2-4：世界状态编排 = core 单一实现 =====
   async loadState(): Promise<DeviceState | null> { return this.meta.loadState(); }
-  async saveState(state: DeviceState): Promise<void> { return this.meta.saveState(state); }
+  async saveState(state: DeviceState, previous?: DeviceState): Promise<void> { return this.meta.saveState(state, previous); }
 
   async loadBaseline(): Promise<DeviceBaseline | null> {
     try { return JSON.parse(gunzipSync(await fs.readFile(this.baselineFile)).toString("utf8")) as DeviceBaseline; } catch { return null; }
   }
   async saveBaseline(baseline: DeviceBaseline): Promise<void> {
     await this.writeAtomic(this.baselineFile, gzipSync(Buffer.from(JSON.stringify(baseline)), { level: 1 }));
-    // baseline 只在发布成功后写 ⇒ 这里批量清 UI dirty；20k 也只两条批量 UPDATE。
-    this.store.markNotesSynced(baseline.lake.notes.map((n) => n.id));
+    // baseline 只在发布成功后写 ⇒ 这里清 UI dirty；但必须守卫：只清本地 updated_at 仍等于基线快照的行，
+    // 同步窗口内改名/移动/恢复的行保持 dirty，避免「标已同步后编辑永远不传」（261107 数据安全）。
+    this.store.markNotesSyncedIfUnchanged(baseline.lake.notes.map((n) => ({ id: n.id, updatedAt: n.updatedAt })));
   }
 
   /**

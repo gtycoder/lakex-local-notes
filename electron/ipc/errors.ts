@@ -1,4 +1,6 @@
-export type IpcErrorCode = "NOT_FOUND" | "INVALID_INPUT" | "NOT_CONFIGURED" | "INTERNAL";
+import { LAKE_ERROR_CODES, isLakeErrorCode, type LakeErrorCode } from "../../src/core/errorContract.js";
+
+export type IpcErrorCode = LakeErrorCode;
 
 /** 同步错误分类（与 src/core/s3v3Engine.ts 的 S3v3ErrorClass 同口径，跨 IPC 只走字符串）。 */
 export type IpcSyncErrorClass = "retryable" | "action-required" | "fatal";
@@ -19,7 +21,7 @@ export const IPC_ERROR_PREFIX = "[LAKE_IPC_CODE:";
 const SYNC_CODE_MAX_LENGTH = 64;
 
 function isIpcErrorCode(value: unknown): value is IpcErrorCode {
-  return value === "NOT_FOUND" || value === "INVALID_INPUT" || value === "NOT_CONFIGURED" || value === "INTERNAL";
+  return isLakeErrorCode(value);
 }
 
 function isIpcSyncErrorClass(value: unknown): value is IpcSyncErrorClass {
@@ -82,7 +84,7 @@ export function parseIpcError(message: unknown): IpcErrorPayload | null {
       }
     } catch { /* fall through to the prefix fallback */ }
   }
-  const match = message.match(/\[LAKE_IPC_CODE:(NOT_FOUND|INVALID_INPUT|NOT_CONFIGURED|INTERNAL)\]\s*([\s\S]*?)(?:\s+__LAKE_IPC_ERROR__.*)?$/);
+  const match = message.match(new RegExp("\\[LAKE_IPC_CODE:(" + LAKE_ERROR_CODES.join("|") + ")\\]\\s*([\\s\\S]*?)(?:\\s+__LAKE_IPC_ERROR__.*)?$"));
   if (!match) return null;
   return { name: "IpcError", message: match[2], code: match[1] as IpcErrorCode };
 }

@@ -17,7 +17,7 @@
  *  · 滚动锁：打开期间锁住页面滚动（html/body 的 overflow），按**打开中的面板数**嵌套计数，
  *    叠层时先关掉的那一个不会把锁提前放开。
  */
-import { useCallback, useEffect, useRef, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, type ReactNode, type Ref } from "react";
 import { lockPageScroll } from "../../lib/pageScrollLock";
 import { X } from "lucide-react";
 import { pushBackHandler } from "./backStack";
@@ -64,6 +64,8 @@ export interface MobileSheetProps {
   className?: string;
   /** 追加到 `.mb-sheet__body` 的类名。 */
   bodyClassName?: string;
+  /** 追加到 `.mb-sheet__body` 的 ref（长列表虚拟化需要拿到滚动容器；不改变默认行为）。 */
+  bodyRef?: Ref<HTMLDivElement>;
   /** 无障碍名（默认取字符串标题）。 */
   ariaLabel?: string;
   children: ReactNode;
@@ -78,6 +80,7 @@ export function MobileSheet({
   footer,
   className,
   bodyClassName,
+  bodyRef,
   ariaLabel,
   children,
 }: MobileSheetProps) {
@@ -121,7 +124,7 @@ export function MobileSheet({
             <button type="button" className="mobile-icon-btn" onClick={onClose} aria-label="关闭"><X size={20} /></button>
           )}
         </div>
-        <div className={"mb-sheet__body" + (bodyClassName ? " " + bodyClassName : "")}>{children}</div>
+        <div ref={bodyRef} className={"mb-sheet__body" + (bodyClassName ? " " + bodyClassName : "")}>{children}</div>
         {footer}
       </div>
     </>
