@@ -74,7 +74,7 @@
   --mb-canvas-glow: color-mix(in srgb, var(--mb-accent) 20%, transparent);
   --mb-accent: var(--lake-accent);
   --mb-accent-ink: var(--lake-accent-ink);
-  --mb-accent-soft: var(--lake-accent-tint);
+  --mb-accent-soft: color-mix(in srgb, var(--mb-accent) 24%, var(--lake-bg-panel));
   --mb-glass-bg: linear-gradient(180deg, rgba(36,40,48,.82), rgba(24,26,32,.70));
   --mb-glass-bg-bar: linear-gradient(180deg, rgba(22,24,29,.94), rgba(18,20,25,.82));
   --mb-glass-border: rgba(255,255,255,.12);

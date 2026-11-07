@@ -4,7 +4,7 @@
  * 骨架 .mobile-topbar/.mobile-bottom-bar/.side-panel(.side-panel--right)/.side-mask/.model。
  * 多 tab 的「顶部 tab 条」是桌面版；移动端是底部胶囊栏 #toolbarTabs 弹全屏列表（子代理已核对源码）。
  */
-import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type CSSProperties } from "react";
 import { Book } from "lucide-react";
 import { MobileNodeIconGlyph } from "../ui/NodeIconGlyph";
 import { bridge } from "../bridge";
@@ -47,6 +47,7 @@ import { claimMissingBodyNotice, MISSING_DOC_OPEN_HINT } from "../data/missingBo
 export type { NotebookTreeItem } from "./useNotebookTreeData";
 export type { PadPanelMode } from "./shellModel";
 import type { TreeNode } from "../../lib/types";
+import { mobileAccentVars } from "../../core/mobileAccent";
 
 /** 缺正文提示去重（模块级 = 整个 App 会话；每篇只提示一次，连点不刷屏）。 */
 const missingBodyNotifiedThisSession = new Set<string>();
@@ -417,8 +418,14 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   });
 
 
+  // v2（261107）：笔记本动态主色 —— 稳定映射到固定 5 色板，只写外壳 CSS 变量（不碰正文/同步）。
+  const accentVars = useMemo(() => mobileAccentVars(notebookId), [notebookId]);
+
   return (
-    <div className={"mobile-workspace" + (capsuleInEdit ? " mobile-workspace--capsule-edit" : "")}>
+    <div
+      className={"mobile-workspace" + (capsuleInEdit ? " mobile-workspace--capsule-edit" : "")}
+      style={accentVars as CSSProperties}
+    >
       <WorkspaceTopBar
         padTwoPane={padTwoPane}
         chromeHidden={chromeHiddenNow}
