@@ -57,10 +57,10 @@ export function Item({ itemId, name, desc, pathDesc, icon, tone, value, children
     <div className={"mb-set-item" + (pathDesc ? " mb-set-item--path" : "")} data-set-id={itemId} role="group" {...accessibility}>
       {icon && <span className="mb-set-item__icon" style={{ "--c": tone ?? "var(--mb-accent)" } as CSSProperties}>{icon}</span>}
       <div className="mb-set-item__main">
-        <div id={nameId} className="mb-set-name">{name}</div>
+        <div id={nameId} className="mb-set-name mobile-settings-name">{name}</div>
         {desc && <div id={descId} className="mb-set-item__desc">{desc}</div>}
       </div>
-      {value != null && <span className="mb-set-item__val">{value}</span>}
+      {value != null && <span className="mb-set-item__val mobile-settings-value">{value}</span>}
       {children && <div className="mb-set-item__ctl">{children}</div>}
     </div>
     </SettingFieldContext.Provider>
@@ -78,7 +78,7 @@ export function Field({ itemId, name, desc, pathDesc, error, children }: { itemI
     <SettingFieldContext.Provider value={accessibility}>
     <div className={"mb-set-item mb-set-item--field" + (pathDesc ? " mb-set-item--path" : "")} data-set-id={itemId} role="group" {...accessibility}>
       <div className="mb-set-item__main">
-        <div id={nameId} className="mb-set-name">{name}</div>
+        <div id={nameId} className="mb-set-name mobile-settings-name">{name}</div>
         {desc && <div id={descId} className="mb-set-item__desc">{desc}</div>}
       </div>
       {children && <div className="mb-set-item__ctl">{children}</div>}
@@ -111,7 +111,7 @@ export function Switch({ itemId, name, desc, note, icon, tone, checked, disabled
     <div className="mb-set-item" data-set-id={itemId}>
       {icon && <span className="mb-set-item__icon" style={{ "--c": tone ?? "var(--mb-accent)" } as CSSProperties}>{icon}</span>}
       <div className="mb-set-item__main">
-        <div className="mb-set-name">{name}</div>
+        <div className="mb-set-name mobile-settings-name">{name}</div>
         {desc && <div id={`${id}-desc`} className="mb-set-item__desc">{desc}</div>}
         {note && <div id={`${id}-note`} className="mb-set-item__note">{note}</div>}
       </div>
@@ -135,7 +135,7 @@ export function Switch({ itemId, name, desc, note, icon, tone, checked, disabled
 export function Shortcut({ itemId, name, keys }: { itemId?: string; name: string; keys: string }) {
   return (
     <div className="mb-set-item" data-set-id={itemId}>
-      <div className="mb-set-item__main"><div className="mb-set-name">{name}</div></div>
+      <div className="mb-set-item__main"><div className="mb-set-name mobile-settings-name">{name}</div></div>
       <div className="mb-set-item__ctl"><kbd className="mb-kbd">{keys}</kbd></div>
     </div>
   );

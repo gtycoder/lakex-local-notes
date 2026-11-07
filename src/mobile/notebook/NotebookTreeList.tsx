@@ -96,7 +96,7 @@ export function NotebookTreeList(props: NotebookTreeListProps) {
     const checked = selectable && (props.selection?.isSelected(it.id) ?? false);
     return (
       <button
-        className={"mb-row mb-indent" + (activeId === it.id || checked ? " is-selected" : "") + (drag?.id === it.id ? " nb-dragging" : "") + (drag?.overId === it.id && drag.position ? (drag.position === "inside" ? " drop-parent" : " drop-line-" + drag.position) : "")}
+        className={"mb-row mb-indent side-panel-row" + (activeId === it.id || checked ? " is-selected" : "") + (drag?.id === it.id ? " nb-dragging" : "") + (drag?.overId === it.id && drag.position ? (drag.position === "inside" ? " drop-parent" : " drop-line-" + drag.position) : "")}
         data-depth={row.depth}
         data-node-id={it.id}
         aria-selected={selecting ? (selectable ? checked : false) : undefined}
@@ -121,7 +121,7 @@ export function NotebookTreeList(props: NotebookTreeListProps) {
         {kids ? <ChevronRight size={16} className={expanded.has(it.id) ? "mb-chevron open" : "mb-chevron"} /> : <span className="mb-chevron-spacer" />}
         <>
           {it.icon ? <span className="mb-tree-icon"><MobileNodeIconGlyph value={it.icon} /></span> : <NodeIcon size={16} className="mb-tree-icon" />}
-          <span className="mb-row__title">{it.title}</span>
+          <span className="mb-row__title side-panel-row__title">{it.title}</span>
           {/* 移动端无 hover：动作常显（对齐思源移动端 .b3-list-item 不带 --hide-action）。
               ⋯ = 行菜单，＋ = 新建子项。选择态下整组隐藏：底部条才是动作入口，避免误触。
               v2（261107）：重命名改为弹窗（NameSheet），行内不再出现 input。 */}

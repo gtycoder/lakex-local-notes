@@ -685,7 +685,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                     <span className="mb-set-item__icon" style={{ "--c": m.tone } as CSSProperties}><Icon size={19} /></span>
                     <span className="mb-set-name">{m.label}</span>
                     {value ? <span className="mb-set-item__val">{value}</span> : null}
-                    <ChevronRight size={18} className="mb-row__chevron" />
+                    <ChevronRight size={18} className="mb-row__chevron mobile-settings-chevron" />
                   </button>
                 );
               })}

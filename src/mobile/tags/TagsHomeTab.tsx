@@ -535,7 +535,7 @@ export function TagsHomeTab({ tags, notes, quickNotes, active, onOpenNote, onOpe
                 <div className="mb-set-name">{tag.name}</div>
                 <div className="mb-set-item__note">{countText(counts.docs[tag.id] ?? 0, counts.quickNotes[tag.id] ?? 0)}</div>
               </div>
-              <div className="mb-set-item__ctl"><ChevronRight size={18} className="mb-row__chevron" /></div>
+              <div className="mb-set-item__ctl"><ChevronRight size={18} className="mb-row__chevron mobile-settings-chevron" /></div>
             </div>
           ))}
         </div>

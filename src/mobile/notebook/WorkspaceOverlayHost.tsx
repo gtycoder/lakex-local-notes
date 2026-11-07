@@ -106,10 +106,10 @@ export function WorkspaceOverlayHost(props: WorkspaceOverlayHostProps) {
             <div className="mobile-model-body">
               {tabs.length === 0 && <EmptyState>暂无打开的文档</EmptyState>}
               {tabs.map((t) => (
-                <div key={t.id} className={"mb-row" + (t.id === activeId ? " is-selected" : "")} onClick={() => props.onOpenTab(t.id)}>
+                <div key={t.id} className={"mb-row mobile-model-row" + (t.id === activeId ? " is-selected" : "")} onClick={() => props.onOpenTab(t.id)}>
                   {props.tabIconOf(t.id) && <span className="mb-tree-icon"><MobileNodeIconGlyph value={props.tabIconOf(t.id)} /></span>}
-                  <span className="mb-row__title">{t.title || "无标题"}</span>
-                  <button className="mb-iconbtn mb-row__action" onClick={(e) => { e.stopPropagation(); props.onCloseTab(t.id); }} aria-label="关闭"><X size={16} /></button>
+                  <span className="mb-row__title mobile-model-row__title">{t.title || "无标题"}</span>
+                  <button className="mb-iconbtn mb-row__action mobile-model-row__action" onClick={(e) => { e.stopPropagation(); props.onCloseTab(t.id); }} aria-label="关闭"><X size={16} /></button>
                 </div>
               ))}
               <button className="mb-btn mb-btn--secondary model-add" onClick={props.onOpenDocPicker}><Plus size={16} />打开文档</button>

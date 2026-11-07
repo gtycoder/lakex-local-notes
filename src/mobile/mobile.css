@@ -527,7 +527,7 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
 .side-panel--selecting .side-panel-body { padding-bottom: calc(76px + var(--mobile-bottom-safe-area)); }
 
 /* v2（261107）：目录树多选复选框**覆盖在行左侧留白上**（不参与 flex 布局）⇒ 进出选择态目录零位移。 */
-.side-panel-body .mb-row { position: relative; }
+.side-panel-body .side-panel-row { position: relative; }
 .nb-sel-cb { position: absolute; left: 0; top: 0; bottom: 0; width: var(--mb-tap-min); display: flex; align-items: center; justify-content: center; pointer-events: none; }
 
 
@@ -546,9 +546,9 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
 /* 261107 修：设置根页是 flex column 滚动列表 —— 卡必须 flex-shrink:0，否则窗口矮于内容时卡片被压扁、
    行被 overflow:hidden 裁掉（pad 竖屏实测「清理缓存」等行只露半截，且列表不滚动）。 */
 .mobile-settings-card { flex: 0 0 auto; border: .5px solid transparent; border-radius: var(--mb-radius-card); background: var(--lake-bg-panel); box-shadow: var(--mb-shadow-card); overflow: hidden; }
-.mobile-settings-list .mobile-settings-row .mb-set-name { flex: 1 1 auto; min-width: 0; }
-.mobile-settings-list .mobile-settings-row .mb-set-item__val { margin-left: auto; }
-.mobile-settings-list .mobile-settings-row .mb-row__chevron { color: var(--lake-text-4); }
+.mobile-settings-list .mobile-settings-row .mobile-settings-name { flex: 1 1 auto; min-width: 0; }
+.mobile-settings-list .mobile-settings-row .mobile-settings-value { margin-left: auto; }
+.mobile-settings-list .mobile-settings-row .mobile-settings-chevron { color: var(--lake-text-4); }
 /* 设置根页的行 = .mb-row.mobile-settings-row（P2/P4 起就是 mb-* 原语）；用父级作用域保证这里的 52 行高生效。 */
 .mobile-settings-list .mobile-settings-row {
   width: 100%; display: flex; align-items: center; gap: var(--lake-space-lg);
@@ -561,7 +561,7 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
 .mobile-settings-list .mobile-settings-row:active { background: var(--lake-bg-hover); }
 /* 行尾 chevron 必须落在行右内距上（= 头部右内距 396 / 338.5），不能跟着文案宽度走
  * —— 原实现 chevron 是标题后的普通 flex 项，实测右缘 96/111/126 三种。 */
-.mobile-settings-list .mobile-settings-row .mb-row__chevron { margin-left: auto; }
+.mobile-settings-list .mobile-settings-row .mobile-settings-chevron { margin-left: auto; }
 /* 图标保持中性墨色：整列蓝色图标会让每行都像"已选中"（桌面设置页同口径）。
    早先这里还有 .ln-row__icon/__title/__chevron 三条，P5 迁到 .mb-row 后永不命中、且与 kit.css 重复 ⇒ 261013 删除。 */
 /* 头部三格：左（返回 / 空槽）· 标题 · 右（空槽）。两侧槽必须**等宽**，space-between 才会把标题
@@ -730,15 +730,15 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
 .mobile-model-body { overflow-y: auto; padding: 14px 16px calc(16px + var(--mobile-bottom-safe-area)); }
 /* 全屏标签页列表的行是 .mb-row（P5 起）；原先这批 .ln-row 规则失效 ⇒ 标签页退化成无边框的裸行。
    ⚠️ 261013 修：选择器回接到 .mb-row，恢复「一张一张卡片 + 选中描边」的既定形态。 */
-.mobile-model-body .mb-row {
+.mobile-model-body .mobile-model-row {
   width: 100%; display: flex; align-items: center; gap: 10px;
   min-height: 48px; margin-bottom: 8px; padding: 10px 14px;
   border: .5px solid var(--lake-border-1); border-radius: var(--lake-radius-md);
   background: var(--lake-bg-window); cursor: pointer;
 }
-.mobile-model-body .mb-row.is-selected { border-color: var(--lake-accent); background: var(--lake-bg-selected); }
-.mobile-model-body .mb-row__title { flex: 1; min-width: 0; }
-.mobile-model-body .mb-row__action { border: 0; background: transparent; color: var(--lake-text-3); cursor: pointer; }
+.mobile-model-body .mobile-model-row.is-selected { border-color: var(--lake-accent); background: var(--lake-bg-selected); }
+.mobile-model-body .mobile-model-row__title { flex: 1; min-width: 0; }
+.mobile-model-body .mobile-model-row__action { border: 0; background: transparent; color: var(--lake-text-3); cursor: pointer; }
 .model-add { margin: 12px 20px 0; width: calc(100% - 40px); }
 
 /* ===== 思源移动端 .toolbar 口径（移植自 siyuan-master app/src/assets/scss/main/_mobile.scss:157-300，AGPL-3.0）=====
@@ -826,21 +826,21 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
    ① 这一段原先挂在 .ln-row 上，而 P5 之后树行是 .mb-row ⇒ **落点线从来没有渲染过**（拖拽没有反馈）；
    ② .drop-line-before::before 只写了 top，**没有 content** ⇒ 即使选选择器对了，"插到上方"那条线也画不出来。
    现在：选择器回接 .mb-row；两条线共用一个绘制块；左端沿用与行缩进同一个变量 --indent（不再读已死的 --ln-indent）。 */
-.side-panel-body .mb-row { position: relative; }
-.side-panel-body .mb-row.drop-line-before::before,
-.side-panel-body .mb-row.drop-line-after::after {
+.side-panel-body .side-panel-row { position: relative; }
+.side-panel-body .side-panel-row.drop-line-before::before,
+.side-panel-body .side-panel-row.drop-line-after::after {
   content: ""; position: absolute; right: 0; left: calc(var(--mb-page-pad) + var(--indent, 0px));
   height: 3px; border-radius: var(--lake-radius-hairline); background: var(--lake-accent); pointer-events: none;
 }
-.side-panel-body .mb-row.drop-line-before::before { top: -1px; }
-.side-panel-body .mb-row.drop-line-after::after { bottom: -1px; }
+.side-panel-body .side-panel-row.drop-line-before::before { top: -1px; }
+.side-panel-body .side-panel-row.drop-line-after::after { bottom: -1px; }
 /* 拖拽浮层：克隆源行跟随手指。 */
 [data-drag-ghost] {
   position: fixed; left: 0; top: 0; margin: 0; pointer-events: none; z-index: var(--mobile-z-drag-ghost);
   border-radius: var(--mb-radius); opacity: .9;
   transition: none; animation: none; will-change: transform; overflow: hidden;
 }
-.side-panel-body .mb-row.drop-parent {
+.side-panel-body .side-panel-row.drop-parent {
   color: var(--lake-text-2);
   background: color-mix(in srgb, var(--lake-accent) 12%, var(--lake-bg-panel));
   box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--lake-accent) 76%, transparent);
@@ -849,13 +849,13 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
 /* 拖拽中：禁掉原生手势，避免 WebView 把纵向滑动判给滚动 → 触发 touchcancel 取消拖拽（真机不重排的根因）。
    拖拽激活才加这个 class，不影响平时列表滚动。 */
 body.nb-drag-active .side-panel-body,
-body.nb-drag-active .side-panel-body .mb-row { touch-action: none; }
+body.nb-drag-active .side-panel-body .side-panel-row { touch-action: none; }
 body.nb-drag-active .side-panel-body { overscroll-behavior: none; }
 
 /* 长按拖拽：禁掉文字选择/系统 callout，否则长按会选字、弹选择手柄，盖住拖拽 */
 .side-panel-body,
-.side-panel-body .mb-row,
-.side-panel-body .mb-row__title { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.side-panel-body .side-panel-row,
+.side-panel-body .side-panel-row__title { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 /* 画板查看器（kind=board，移动端只读）：占满文档层，去掉卡片态边框/圆角，隐藏编辑工具条。 */
 .mobile-board-viewer {
   height: 100%;
