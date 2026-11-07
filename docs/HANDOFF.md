@@ -8,6 +8,14 @@
 
 ## 0. 最新交接（261027）
 
+### 261107 · 移动端 v2「柔光纸面」P2（纯黑 OLED + 笔记本动态主色）· **本地分支 `feat/mobile-paper-light`，未推送**
+- **纯黑（OLED）档**：`AppSettings` 新增 `oled`（默认 false，仅 mobile 生效）；外观「主题」变三选一（浅色 / 深色 / 纯黑）。`src/mobile/main.tsx` 在 `theme==='dark' && oled` 时给 `html` 加 `.oled`；`theme/dark.css` 新增 `[data-theme="dark"].oled` 覆盖（画布 #000→#050506、纸面 #0f0f10、玻璃/阴影/边框全线加深）。**桌面主题选择器不出现该开关**。
+- **深色可读性修复**：内核/全局有一条未分层的 `h1..h6 { color: rgba(0,0,0,.85) }`，小记预览标题（`QuickNotePreview` 的 h1/h2）在深色/纯黑下发黑 ⇒ `quick-notes.css` 的 `.quick-note-preview-heading` 显式 `color: var(--lake-text-1)`（class 压元素选择器，不新增 !important）。
+- **笔记本动态主色**：新增 `src/core/mobileAccent.ts`（`mobileAccentForNotebook` / `mobileAccentVars`，5 色固定板 + djb2 稳定散列，空 id 回落墨蓝；单测 5 例）。`NotebookWorkspace` 根节点写 `--mb-accent` / `-ink` / `-soft` / `--mb-canvas-glow`（自定义属性会在 :root 处完成 var() 替换，所以 soft/glow 随笔记本一起给出）。不写正文、不参与同步。
+- **门禁**：tsc 0；`npx vitest run src/mobile src/core` 405 文件 / 2420 例通过；全量 758 文件 / 4896 例通过（上一步）；ui-metrics / check:mobileui / check:core / diff-check 绿。mobileLayers 基线在 P1 已 bump，P2 仅 dark.css +20（OLED 覆盖）与 quick-notes.css +1，均已同步。
+- **真机**：emulator-5554 截图：纯黑首页（卡面 #0f0f10、标题可读）、工作区青绿主色（个人笔记 → `--mb-accent:#2f7a6b`）、设置分组卡。截图存 `/Users/admin/file/local-lake/preview/device/`（不入库）。
+- **未完成（下一轮）**：共享元素转场（卡片→文档 FLIP）、设置**子页**图标块接线、6 态/23 屏快照基线重烤、HANDOFF §1 计数回写。**本批未推送**。
+
 ### 261107 · 移动端 v2「柔光纸面」P1（theme 令牌 + 三屏外壳 + 设置分组）· **本地分支 `feat/mobile-paper-light`，未推送**
 - **设计基线**：`docs/MOBILE-DESIGN.md` 顶部新增「## v2 视觉基线 ·「柔光纸面」」（唯一视觉参照 = `/Users/admin/file/local-lake/preview/mobile-paper-light.html`）。落地口径：页面光场（画布渐变 + 主色光晕）、三层表面（光场/纸面/柔光玻璃）、圆角 12/16/26/28、去线条、单点强调、光感反馈。
 - **theme**：`src/mobile/theme/{tokens,light,dark}.css` 新增 `--mb-canvas-1/2`、`--mb-canvas-glow`、`--mb-accent(-ink/-soft)`、`--mb-glass-*`、`--mb-shadow-card/-float/-bar`、`--mb-radius-dock/-capsule`、`--mb-dur-fast/mid/page`、`--mb-ease`、`--mb-blur-bar/float`、`--mb-font-page`；`--mb-radius` 8→12、card 12→16、sheet 20→28、顶栏 44→52。
