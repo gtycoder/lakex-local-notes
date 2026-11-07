@@ -87,7 +87,6 @@
   border-radius: calc(var(--mobile-bottom-bar-height) / 2 - 4px);
 }
 .med-btn.med-aa { font-weight: 700; font-size: var(--lake-font-size-title); }
-.med-btn.med-b { font-weight: 700; font-size: var(--lake-font-size-title); }
 
 /* 收起过渡期（restore：键盘从面板上方滑上来）面板内容保持可见，但不再接受点击（见 EditorDock 注释）。 */
 .med-panel[data-closing="1"] { pointer-events: none; }

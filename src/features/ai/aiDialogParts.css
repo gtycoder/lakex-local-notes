@@ -7,7 +7,7 @@
 .ai-dialog { display: flex; flex-direction: column; overflow: hidden; }
 
 /* 线程：只留外层一次内距；消息之间用留白拉开，不再给回答加第二层边框。 */
-.ai-dialog .ln-dialog__body { flex: 1 1 auto; min-height: 0; overflow: auto; padding: var(--lake-space-lg) var(--lake-space-lg) var(--lake-space-sm); }
+.ai-dialog__body { flex: 1 1 auto; min-height: 0; overflow: auto; padding: var(--lake-space-lg) var(--lake-space-lg) var(--lake-space-sm); }
 .ai-dialog__thread { display: flex; flex-direction: column; gap: var(--lake-space-lg); }
 .ai-dialog__msg { font-size: var(--lake-font-size-body); line-height: 1.7; white-space: pre-wrap; color: var(--lake-text-1); }
 /* 用户问题：右侧浅底提示，无边框、无第二层圆角框。 */
@@ -35,8 +35,8 @@
 .ai-dialog__clear { flex: 0 0 auto; margin-top: -2px; }
 
 /* 动作行：只保留一个主按钮（生成/发送），其余为 ghost；不再给整行加边框。 */
-.ai-dialog .ln-dialog__actions { flex: none; flex-wrap: nowrap; align-items: center; gap: var(--lake-space-xs); padding: var(--lake-space-sm) var(--lake-space-xl) var(--lake-space-md) var(--lake-space-lg); }
-.ai-dialog .ln-dialog__actions .ln-btn { padding: 2px 8px; gap: 5px; font-size: var(--lake-font-size-small); }
+.ai-dialog__actions { flex: none; flex-wrap: nowrap; align-items: center; gap: var(--lake-space-xs); padding: var(--lake-space-sm) var(--lake-space-xl) var(--lake-space-md) var(--lake-space-lg); }
+.ai-dialog__btn { padding: 2px 8px; gap: 5px; font-size: var(--lake-font-size-small); }
 
 /* 「复制为 Lake」的图标 = lake 四个字母（用户 261005：不用代码块图标）。 */
 .ai-dialog__lake-badge { font-size: var(--lake-font-size-nano); font-weight: var(--lake-font-weight-semibold); letter-spacing: .1px; }

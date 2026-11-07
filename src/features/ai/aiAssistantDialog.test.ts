@@ -83,7 +83,7 @@ describe("AI 弹窗定位护栏（261004）", () => {
 
   it("替换/插入按钮不做特殊高亮（与其它按钮同级）；只有生成/发送用主按钮建立层级", () => {
     expect(DIALOG).not.toMatch(/request\.outputs\.map[\s\S]{0,300}ln-btn--primary/);
-    expect(DIALOG).toContain('className="ln-btn ln-btn--ghost"');
+    expect(DIALOG).toMatch(/className="ln-btn ln-btn--ghost( ai-dialog__btn)?"/);
   });
   it("对话式：每条 AI 回答各带两个复制按钮（纯文本 / Lake 格式，用户 261005）", () => {
     expect(DIALOG).toContain("copyMessage(t.text, i)");

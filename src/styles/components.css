@@ -26,7 +26,6 @@
 .sync-status-history-note span { color: var(--lake-text-3); line-height: 1.4; }
 /* 261028：浮窗收敛后的「查看历史」行内动作（不新造间距档，复用 4px）。 */
 .sync-status-history-note .sync-status-inline-action { justify-self: start; margin-top: 4px; }
-.sync-status-history-list { display: grid; gap: 1px; margin: 4px -9px -4px; padding: 2px 0; max-height: 132px; overflow-y: auto; }
 .sync-status-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--lake-space-md); margin-top: var(--lake-space-lg); padding-top: var(--lake-space-lg); border-top: 0.5px solid var(--lake-border-1); }
 /* 261013：动作行的按钮是**固定区，不可被压缩** —— 同步中 footer 文案会变长（「· 未同步 N 项」），
  * 按钮作为可收缩的 flex 子项会被挤窄 ⇒ 标签折两行、行盒错乱（设备复现：121px/1 行 → 109px/2 行 → 修后回 1 行）。
@@ -40,7 +39,6 @@
 .search-command-panel { width: min(680px, calc(100vw - 32px)); max-height: min(620px, calc(100vh - 96px)); }
 
 
-.sync-status-history-list .ln-list-item { margin: 0 4px; font-size: var(--lake-font-size-micro); line-height: 24px; min-height: 24px; }
 
 /* 草稿恢复框：表面/头体走浮层通用件 .ln-dialog，行复用思源 .ln-list-item（与回收站/历史同一套密度与 hover 语言）。
    这里只留间距与危险操作的着色。 */

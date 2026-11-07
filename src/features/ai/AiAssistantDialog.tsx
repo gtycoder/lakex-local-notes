@@ -285,7 +285,7 @@ export function AiAssistantDialog({ open, request, onClose }: {
 
   return (
     <Popover open={open} onDismiss={onClose} container={scroller} style={dialogStyle} surfaceRef={setSurface} className="ai-dialog" label="AI 助手">
-      <div className="ln-dialog__body">
+      <div className="ln-dialog__body ai-dialog__body">
         {turns.length > 0 && (
           <>
             <div className="ai-dialog__thread">
@@ -381,26 +381,26 @@ export function AiAssistantDialog({ open, request, onClose }: {
         )}
       </div>
 
-      <div className="ln-dialog__actions">
+      <div className="ln-dialog__actions ai-dialog__actions">
         {/* 生成中 = 「生成/发送」**原位**变「停止」（用户 261008）：中断入口就落在发送键那一格，
             不再是一个旁边的小按钮。AI 助手三个入口（选区浮栏 / 块句柄菜单 / 顶栏）共用本面板 ⇒ 一处即全覆盖。 */}
         {busy ? (
-          <button type="button" className="ln-btn ln-btn--secondary" onClick={stop}>停止</button>
+          <button type="button" className="ln-btn ln-btn--secondary ai-dialog__btn" onClick={stop}>停止</button>
         ) : turns.length === 0 ? (
-          <button type="button" className="ln-btn ln-btn--primary" disabled={!canSendFirst} onClick={() => void run(true)}>生成</button>
+          <button type="button" className="ln-btn ln-btn--primary ai-dialog__btn" disabled={!canSendFirst} onClick={() => void run(true)}>生成</button>
         ) : (
-          <button type="button" className="ln-btn ln-btn--primary" disabled={!followUp.trim()} onClick={() => void run(false)}>发送</button>
+          <button type="button" className="ln-btn ln-btn--primary ai-dialog__btn" disabled={!followUp.trim()} onClick={() => void run(false)}>发送</button>
         )}
-        {turns.length > 0 && <button type="button" className="ln-btn ln-btn--ghost" disabled={busy} onClick={() => void regenerate()}><RotateCcw size={12} /> 重新生成</button>}
+        {turns.length > 0 && <button type="button" className="ln-btn ln-btn--ghost ai-dialog__btn" disabled={busy} onClick={() => void regenerate()}><RotateCcw size={12} /> 重新生成</button>}
         {/* 复制 / 插入 / 替换都依赖生成结果：**没有结果就不出这些选项**，只留「生成 + 关闭」。 */}
         {/* 全文模式的处理对象是整篇：结果不往选区写（避免"整篇改写覆盖一段"，用户 261021 P1）。 */}
         {lastOutput && !conversationDocMode && request.outputs.map((mode) => (
-          <button key={mode} type="button" className="ln-btn ln-btn--ghost"
+          <button key={mode} type="button" className="ln-btn ln-btn--ghost ai-dialog__btn"
             onClick={() => { request.applyOutput(lastOutput, mode); onClose(); }}>
             {mode === "after" ? <CornerDownRight size={12} /> : <Check size={12} />} {aiOutputLabel(context, mode)}
           </button>
         ))}
-        <button type="button" className="ln-btn ln-btn--ghost" onClick={onClose}><X size={12} /> 关闭</button>
+        <button type="button" className="ln-btn ln-btn--ghost ai-dialog__btn" onClick={onClose}><X size={12} /> 关闭</button>
       </div>
       {/* 右下角拖拽把手：只改高度（用户 261004：左右不动）。 */}
       <div className="ai-dialog__grip" role="separator" aria-label="拖动调整高度" onPointerDown={startResize} />
