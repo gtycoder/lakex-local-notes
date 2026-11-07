@@ -13,7 +13,7 @@ export function AppearanceSettingsSection({ settings, update }: { settings: AppS
   return (
             <Group title="外观" icon={<Palette size={16} />}>
               {/* 用户 261012：说明文案去掉，只留选项（名字即语义）；261107 v2 增加「纯黑（OLED）」。 */}
-              <Item itemId="appearance-theme" name="主题">
+              <Item itemId="appearance-theme" name="主题" icon={<Palette size={16} />} tone="#b9822f">
                 <Seg ariaLabel="主题">
                   <button className={"mb-btn mb-btn--secondary mb-segment__item" + (settings.theme === "light" ? " is-active" : "")} onClick={() => update({ theme: "light", oled: false })}>浅色</button>
                   <button className={"mb-btn mb-btn--secondary mb-segment__item" + (settings.theme === "dark" && !settings.oled ? " is-active" : "")} onClick={() => update({ theme: "dark", oled: false })}>深色</button>

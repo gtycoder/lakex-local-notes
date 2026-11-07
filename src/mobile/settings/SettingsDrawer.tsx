@@ -295,7 +295,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
         <div className="mobile-settings-content">
           {view === "editor" && (
             <Group title="编辑器" icon={<Pencil size={16} />}>
-              <Item itemId="editor-font-size" name="正文字号" desc="作用于当前文档正文。">
+              <Item itemId="editor-font-size" name="正文字号" desc="作用于当前文档正文。" icon={<List size={16} />} tone="#6b5bd6">
                 <PickerSheet
                   label="正文字号"
                   value={settings.fontSize}

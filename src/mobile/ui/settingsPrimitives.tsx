@@ -11,7 +11,7 @@
  * 行语义（261102 用户点单 3b 定稿）：Item = 左标签右控件（选择器/动作/短数字）；Field = **内容输入类**
  *       （标签+说明在上、控件占满下一行，全宽 —— S3 连接信息 / AI 接入等长值输入）；Block = 标题 + 全宽内容。
  */
-import { Children, isValidElement, useId, useEffect, useState, type ReactNode } from "react";
+import { Children, isValidElement, useId, useEffect, useState, type CSSProperties, type ReactNode } from "react";
 
 import { SettingFieldContext, useSettingField } from "./fieldAccessibility";
 
@@ -39,7 +39,15 @@ export function Section({ title, children }: { title?: string; children: ReactNo
 }
 
 /** 标准行：左标题(+说明)，右控件。 */
-export function Item({ itemId, name, desc, pathDesc, children }: { itemId?: string; name: ReactNode; desc?: ReactNode; pathDesc?: boolean; children?: ReactNode }) {
+export function Item({ itemId, name, desc, pathDesc, icon, tone, value, children }: {
+  itemId?: string; name: ReactNode; desc?: ReactNode; pathDesc?: boolean; children?: ReactNode;
+  /** v2（261107）：行首彩色图标块（预览稿 .set-ico 的等价物）；tone 缺省回落动态主色。 */
+  icon?: ReactNode;
+  /** 图标块取色（主色字面量只来自 theme/tone 调用方，不进入 CSS 文件）。 */
+  tone?: string;
+  /** 右侧当前值（选择器/开关旁的只读摘要；控件本身已显示值时可省略）。 */
+  value?: ReactNode;
+}) {
   const id = useId();
   const nameId = `${id}-name`, descId = `${id}-desc`;
   const describedBy = desc ? descId : undefined;
@@ -47,10 +55,12 @@ export function Item({ itemId, name, desc, pathDesc, children }: { itemId?: stri
   return (
     <SettingFieldContext.Provider value={accessibility}>
     <div className={"mb-set-item" + (pathDesc ? " mb-set-item--path" : "")} data-set-id={itemId} role="group" {...accessibility}>
+      {icon && <span className="mb-set-item__icon" style={{ "--c": tone ?? "var(--mb-accent)" } as CSSProperties}>{icon}</span>}
       <div className="mb-set-item__main">
         <div id={nameId} className="mb-set-name">{name}</div>
         {desc && <div id={descId} className="mb-set-item__desc">{desc}</div>}
       </div>
+      {value != null && <span className="mb-set-item__val">{value}</span>}
       {children && <div className="mb-set-item__ctl">{children}</div>}
     </div>
     </SettingFieldContext.Provider>
@@ -90,11 +100,16 @@ export function Block({ itemId, name, desc, children }: { itemId?: string; name?
 }
 
 /** 开关行（触屏 44 命中区；开关本体 46×28）。 */
-export function Switch({ itemId, name, desc, note, checked, disabled, onChange }: { itemId?: string; name: string; desc?: string; note?: ReactNode; checked: boolean; disabled?: boolean; onChange: (checked: boolean) => void }) {
+export function Switch({ itemId, name, desc, note, icon, tone, checked, disabled, onChange }: {
+  itemId?: string; name: string; desc?: string; note?: ReactNode; checked: boolean; disabled?: boolean; onChange: (checked: boolean) => void;
+  /** v2：行首彩色图标块（与 Item 同一钩子）。 */
+  icon?: ReactNode; tone?: string;
+}) {
   const id = useId();
   const describedBy = [desc ? `${id}-desc` : null, note ? `${id}-note` : null].filter(Boolean).join(" ") || undefined;
   return (
     <div className="mb-set-item" data-set-id={itemId}>
+      {icon && <span className="mb-set-item__icon" style={{ "--c": tone ?? "var(--mb-accent)" } as CSSProperties}>{icon}</span>}
       <div className="mb-set-item__main">
         <div className="mb-set-name">{name}</div>
         {desc && <div id={`${id}-desc`} className="mb-set-item__desc">{desc}</div>}
