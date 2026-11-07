@@ -952,7 +952,7 @@ function MobileHomeSkeleton() {
           </div>
         </div>
         {/* 骨架的胶囊槽数必须与真实胶囊一致（261014 起 3 项：搜索 / ＋ / AI），否则数据到达时宽度会跳一次。 */}
-        <nav className="mobile-bottom-bar mobile-bottom-bar--home" aria-hidden="true">
+        <nav className="mobile-bottom-bar mobile-bottom-bar--home mb-glass" aria-hidden="true">
           <span className="mb-skel mb-skel--baritem" />
           <span className="mb-skel mb-skel--baritem" />
           <span className="mb-skel mb-skel--baritem" />

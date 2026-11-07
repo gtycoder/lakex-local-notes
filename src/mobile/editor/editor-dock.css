@@ -27,8 +27,6 @@
   /* 不做 bottom 过渡：它等于对"正在 resize 的视口"做动画，会把一帧错位放大成抖动（HANDOFF §8.8） */
   pointer-events: auto;
   background: var(--mb-glass-bg);
-  -webkit-backdrop-filter: var(--mb-blur-float);
-  backdrop-filter: var(--mb-blur-float);
   border: 0;
   border-radius: var(--mb-radius-dock);
   box-shadow: var(--mb-shadow-float);

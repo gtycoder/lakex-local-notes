@@ -69,7 +69,7 @@ export function PickerSheet<T extends string | number>({
         <>
           <div className="mb-scrim" data-prevent-swipe onClick={() => setOpen(false)} />
           <div ref={sheetRef} className="mb-sheet mb-sheet--picker" role="dialog" aria-modal="true" aria-label={label} tabIndex={-1} data-prevent-swipe>
-            <div className="mb-sheet__head">
+            <div className="mb-sheet__head mb-glass mb-glass--bar">
               <span className="mb-sheet__title">{label}</span>
             </div>
             <div className="mb-sheet__body" role="listbox" aria-label={label} onKeyDown={(event) => {

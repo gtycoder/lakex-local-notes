@@ -16,6 +16,10 @@
 .mb-ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .mb-flex1 { flex: 1 1 auto; min-width: 0; }
 
+/* 玻璃材质原语（261107）：只收口「模糊」这一档；背景/阴影/圆角因 bar/float/head 三种形态不同，留在各自规则。 */
+.mb-glass { --mb-blur: var(--mb-blur-float); -webkit-backdrop-filter: var(--mb-blur); backdrop-filter: var(--mb-blur); }
+.mb-glass--bar { --mb-blur: var(--mb-blur-bar); }
+
 /* ── 按钮（.mb-btn；主/次/危险/幽灵 + 三档高度）──────────────────────── */
 .mb-btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
@@ -52,21 +56,22 @@
 .mb-iconbtn > svg { display: block; }
 
 /* ── 行（.mb-row；列表行/设置行，两行版带 __meta）───────────────────── */
-.mb-row {
+/* v2 架构收敛（261107）：行原语只有一套 —— .mb-list-item 并入 .mb-row（历史类名保留，gap 用覆盖保持 10px）。 */
+.mb-row, .mb-list-item {
   display: flex; align-items: center; gap: var(--mb-gap); width: 100%;
   min-height: var(--mb-ctl-h); padding: 0 var(--mb-page-pad);
   border: 0; background: transparent; color: var(--lake-text-1); text-align: left;
   font-family: inherit; font-size: var(--lake-font-size-body); line-height: var(--lake-line-height-snug);
   cursor: pointer; -webkit-tap-highlight-color: transparent;
 }
-.mb-row:active { background: var(--lake-bg-press); }
+.mb-row:active, .mb-list-item:active { background: var(--lake-bg-press); }
 .mb-row.is-selected { background: var(--lake-bg-selected); color: var(--lake-fg-selected); font-weight: var(--lake-font-weight-medium); }
 .mb-row--two-line { min-height: var(--mb-list-item-h); padding-top: 8px; padding-bottom: 8px; }
 .mb-row__icon { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; width: 20px; color: var(--lake-text-3); }
 .mb-row__icon > svg { display: block; }
 .mb-row__main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .mb-row__title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.mb-row__meta { flex: 0 0 auto; color: var(--lake-text-4); font-size: var(--lake-font-size-tiny); }
+.mb-row__meta, .mb-list-item__meta { flex: 0 0 auto; color: var(--lake-text-4); font-size: var(--lake-font-size-tiny); }
 .mb-row--two-line .mb-row__title { font-size: var(--lake-font-size-bodyMd); }
 .mb-row__sub { color: var(--lake-text-3); font-size: var(--lake-font-size-small); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mb-row__chevron { flex: 0 0 auto; color: var(--lake-text-4); }
@@ -75,15 +80,8 @@
 
 /* ── 列表容器（.mb-list / .mb-list-item；弹层与设置内的列表）──────────── */
 .mb-list { display: flex; flex-direction: column; padding: 4px 0; }
-.mb-list-item {
-  display: flex; align-items: center; gap: 10px; width: 100%; min-height: var(--mb-ctl-h);
-  padding: 0 var(--mb-page-pad); border: 0; background: transparent; color: var(--lake-text-1);
-  font-family: inherit; font-size: var(--lake-font-size-body); text-align: left;
-  cursor: pointer; -webkit-tap-highlight-color: transparent;
-}
-.mb-list-item:active { background: var(--lake-bg-press); }
+.mb-list-item { gap: 10px; }
 .mb-list-item__text { flex: 1 1 auto; min-width: 0; }
-.mb-list-item__meta { flex: 0 0 auto; color: var(--lake-text-4); font-size: var(--lake-font-size-tiny); }
 
 /* ── 输入 / 下拉（触屏 44 高、16px 字号防 iOS 放大）──────────────────── */
 .mb-input {

@@ -8,6 +8,11 @@
 
 ## 0. 最新交接（261027）
 
+### 261107 · 移动端架构收敛 P1/P2 第二批（TopBarIconButton / rowActivation / row 合并 / glass）· **master 直接提交**
+- **`ui/TopBarIconButton.tsx`**：真 `<button>` 顶栏图标（type/aria-label/title/disabled），替换 WorkspaceDrawers ×2、WorkspaceOverlayHost、OutlineSheet 的 4 处 `<span role=button>`；`.toolbar__icon` 补 appearance/border/background 重置（mobile.css +3）。PageHeader 经复核**不做**（简单页已是真按钮；HomePage/WorkspaceTopBar 结构差异大），理由写进设计文档。
+- **`ui/rowActivation.ts`**：统一 role/tabIndex/Enter·Space 激活；接入首页小记卡（触摸/键盘共用 activate，选择态与长按抑制语义不变）与知识库书架/列表卡。目录行内 ⋯/＋ 在行 button 内，嵌套 button 非法 ⇒ 保留由行语义承载。
+- **CSS 合并**：`.mb-list-item` 并入 `.mb-row`（kit 588→575，含 glass 新增；仅保留 gap:10px 覆盖 + active/meta 合并）；新增 `.mb-glass/.mb-glass--bar`（kit +4）替换 5 条稳定玻璃规则的重复 blur（mobile 1609→1603、floating 307→305、editor-dock 300→298；顶栏滚动态因瞬态类保留）。mobileLayers 基线相应收紧。
+- 验证：tsc 0；全量 vitest（见 §1）；ui-metrics / check:mobileui / check:core / diff-check 绿；手机单跑 `home-quicknotes` 0 差异（glass 替换后计算值不变）。
 ### 261107 · 移动端架构收敛 P1（toastActionError / EmptyState）· **master 直接提交**
 - **`src/mobile/lib/actionError.ts`**：统一 `toastActionError(action, error, {suffix, report})` = `getNativeErrorMessage` + `reportMobileActionError` debug + `showToast("<动作>失败：<详情>")`；codemod 收口 22 处（MobileApp 4 / useTreeSelection 6 / TagsHomeTab 4 / SyncConflictsSheet 2 / useWorkspaceSession 2 / DocListSheet 1 / HomePage 1 / NotebookWorkspace 1），**文案逐字不变**。剩余 15 处错误取文案方式不同（Error.message / instanceof 三目 / 自定义后缀），保留并在原语台账注明。
 - **`src/mobile/ui/EmptyState.tsx`**：统一 `.mb-empty` 容器（inset / role=status|alert / className），收口 43 处简单空态（25 文件：AI 三处、设置各 Sheet、Tags、NotePaneHost、MoveTargetTreeSheet…）；带自定义按钮/复杂布局的 6 处保留原生结构。**零 CSS 变更**。

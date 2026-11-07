@@ -77,7 +77,7 @@ export function AiImageSheet({ open, docs, used, onConfirm, onClose }: AiImageSh
     <>
       <div className="mb-scrim" data-prevent-swipe onClick={onClose} aria-hidden="true" />
       <div ref={sheetRef} className="mb-sheet ai-sheet" role="dialog" aria-modal="true" aria-label="资料里的图片" data-prevent-swipe>
-        <div className="mb-sheet__head">
+        <div className="mb-sheet__head mb-glass mb-glass--bar">
           <span className="mb-sheet__title">资料里的图片</span>
           <button type="button" className="mb-btn mb-btn--ghost mb-btn--sm" onClick={onClose}>取消</button>
         </div>

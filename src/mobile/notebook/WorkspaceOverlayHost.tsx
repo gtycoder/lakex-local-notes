@@ -9,6 +9,7 @@ import { NoteTagsSheet } from "./NoteTagsSheet";
 import type { NotebookTab } from "./useNotebookTabs";
 import type { NotebookTreeItem } from "./useNotebookTreeData";
 import { EmptyState } from "../ui/EmptyState";
+import { TopBarIconButton } from "../ui/TopBarIconButton";
 
 /**
  * 工作区浮层宿主（261103 P9-5b 拆件，原 NotebookWorkspace 内联 JSX，未改行为/DOM）：
@@ -100,7 +101,7 @@ export function WorkspaceOverlayHost(props: WorkspaceOverlayHostProps) {
               {tabs.length > 0 && (
                 <button className="mobile-model-closeall" onClick={props.onCloseAllTabs} aria-label="关闭全部标签页">关闭全部</button>
               )}
-              <span className="toolbar__icon" role="button" tabIndex={0} onClick={props.onCloseTabs} aria-label="关闭"><X /></span>
+              <TopBarIconButton label="关闭" icon={<X />} onClick={props.onCloseTabs} />
             </div>
             <div className="mobile-model-body">
               {tabs.length === 0 && <EmptyState>暂无打开的文档</EmptyState>}

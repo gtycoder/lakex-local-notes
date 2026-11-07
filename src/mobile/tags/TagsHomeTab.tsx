@@ -397,7 +397,7 @@ export function TagsHomeTab({ tags, notes, quickNotes, active, onOpenNote, onOpe
       {selectedTag ? (
         <>
           {/* 详情 = 独立页头：左返回、中标题、右 ⋯（重命名 / 合并到… / 删除）；副标题给计数。 */}
-          <header className="mobile-settings-head mobile-page-head">
+          <header className="mobile-settings-head mobile-page-head mb-glass mb-glass--bar">
             <button type="button" className="mb-iconbtn" aria-label="返回标签列表" onClick={() => setSelectedTagId(null)}>
               <ChevronLeft size={22} />
             </button>
@@ -442,7 +442,7 @@ export function TagsHomeTab({ tags, notes, quickNotes, active, onOpenNote, onOpe
       ) : (
         <>
           {/* 列表 = 标准页头：大标题「标签」+ 数量小字，右上仅「＋」；不再有常驻长按说明。 */}
-          <header className="mobile-settings-head mobile-page-head">
+          <header className="mobile-settings-head mobile-page-head mb-glass mb-glass--bar">
             <div className="mobile-settings-title mb-flex1">标签<span className="mb-row__meta"> {tags.length} 个</span></div>
             {createEntry}
           </header>

@@ -53,8 +53,6 @@
      grabber 仍是 .mb-sheet__head::before 的 32×4，不动。 */
   border-radius: var(--mb-radius-sheet) var(--mb-radius-sheet) 0 0;
   background: var(--mb-glass-bg);
-  -webkit-backdrop-filter: var(--mb-blur-bar);
-  backdrop-filter: var(--mb-blur-bar);
   box-shadow: inset 0 .5px 0 var(--mb-glass-highlight);
 }
 .mb-sheet__head::before {

@@ -12,6 +12,7 @@ import { Book, ChevronRight } from "lucide-react";
 import { useLongPress } from "../ui/useLongPress";
 import { MobileNodeIconGlyph } from "../ui/NodeIconGlyph";
 import { formatUpdatedAt } from "../lib/listTime";
+import { rowActivationProps } from "../ui/rowActivation";
 import { EmptyState } from "../ui/EmptyState";
 
 export interface NotebookGridProps {
@@ -63,7 +64,8 @@ export function NotebookGrid(props: NotebookGridProps) {
         {notebooks.map((nb) => {
           const count = docCounts[nb.id] ?? 0;
           return (
-            <div key={nb.id} className="nb-shelf-card" role="button" tabIndex={0} data-prevent-swipe
+            <div key={nb.id} className="nb-shelf-card" data-prevent-swipe
+              {...rowActivationProps(() => openNotebook(nb))}
               onClick={() => openNotebook(nb)} {...pressProps(nb)}>
               <div className="nb-shelf-cover">
                 <span className="nb-shelf-glyph">
@@ -87,7 +89,8 @@ export function NotebookGrid(props: NotebookGridProps) {
         const count = docCounts[nb.id] ?? 0;
         const updated = formatUpdatedAt(nb.updatedAt);
         return (
-          <div key={nb.id} className="nb-row" role="button" tabIndex={0} data-prevent-swipe
+          <div key={nb.id} className="nb-row" data-prevent-swipe
+            {...rowActivationProps(() => openNotebook(nb))}
             onClick={() => openNotebook(nb)} {...pressProps(nb)}>
             <span className="nb-row__tile">
               {nb.icon ? <span className="nb-row__emoji"><MobileNodeIconGlyph value={nb.icon} /></span> : <Book size={20} strokeWidth={1.9} />}

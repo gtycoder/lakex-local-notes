@@ -35,7 +35,7 @@ export function AiSendSheet({ open, docs, sendIds, onToggle, onAll, onClose }: A
     <>
       <div className="mb-scrim" data-prevent-swipe onClick={onClose} aria-hidden="true" />
       <div ref={sheetRef} className="mb-sheet ai-sheet" role="dialog" aria-modal="true" aria-label="本轮发送" data-prevent-swipe>
-        <div className="mb-sheet__head">
+        <div className="mb-sheet__head mb-glass mb-glass--bar">
           <span className="mb-sheet__title">本轮发送</span>
           <button type="button" className="mb-btn mb-btn--ghost mb-btn--sm" onClick={onClose}>完成</button>
         </div>

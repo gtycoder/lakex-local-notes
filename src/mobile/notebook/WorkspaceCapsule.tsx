@@ -26,7 +26,7 @@ export function WorkspaceCapsule(props: WorkspaceCapsuleProps) {
   const { hidden, aboveDock, aboveSheet, treeActive, tabsActive, outlineActive, outlineAvailable, tabCount, title } = props;
   return (
     <nav
-      className={"mobile-bottom-bar"
+      className={"mobile-bottom-bar mb-glass"
         + (hidden ? " mobile-bottom-bar--hidden" : "")
         + (aboveDock ? " mobile-bottom-bar--above-dock" : "")
         + (aboveSheet ? " mobile-bottom-bar--above-sheet" : "")}

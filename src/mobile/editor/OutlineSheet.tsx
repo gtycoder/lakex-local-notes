@@ -12,6 +12,7 @@ import { execEditorCommand } from "./execCommand";
 import { MobileSheet } from "../ui/MobileSheet";
 import { reportMobileActionError } from "../lib/reportMobileActionError";
 import { EmptyState } from "../ui/EmptyState";
+import { TopBarIconButton } from "../ui/TopBarIconButton";
 
 interface TocEntry {
   id?: string;
@@ -135,7 +136,7 @@ export function OutlineSheet({ open, editor, onClose, side, rail, pinned = false
           {/* 侧栏头 = 思源 #sidebarRight .toolbar 口径：标题 + 箭头关闭（左栏收右箭头、右栏收左箭头） */}
           <div className="toolbar toolbar--border toolbar--dark" data-prevent-swipe>
             <div className="toolbar__scroll"><span className="toolbar__text">大纲</span></div>
-            <span className="toolbar__icon" role="button" tabIndex={0} onClick={onClose} aria-label="收起"><ChevronLeft /></span>
+            <TopBarIconButton label="收起" icon={<ChevronLeft />} onClick={onClose} />
           </div>
           {/* 261030：侧栏变体**不挂 .mb-sheet__body**（那是底部 Sheet 的正文原语，floating.css 后加载会把
               底部安全区从 .side-panel-body 的 24 覆盖成 16）。这里唯一来源 = .side-panel-body：

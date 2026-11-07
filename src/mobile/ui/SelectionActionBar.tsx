@@ -29,7 +29,7 @@ export interface SelectionActionBarProps {
 export function SelectionActionBar({ actions, onAction, fixed, overlay, hint }: SelectionActionBarProps) {
   return (
     <div
-      className={"mb-sel-actions" + (fixed ? " is-fixed" : "") + (overlay ? " is-overlay" : "")}
+      className={"mb-sel-actions mb-glass" + (fixed ? " is-fixed" : "") + (overlay ? " is-overlay" : "")}
       role="group"
       aria-label="批量操作"
     >

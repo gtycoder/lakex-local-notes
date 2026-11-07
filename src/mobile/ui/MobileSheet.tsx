@@ -115,7 +115,7 @@ export function MobileSheet({
         data-prevent-swipe
       >
         <div className="mb-sheet__grab" />
-        <div className="mb-sheet__head">
+        <div className="mb-sheet__head mb-glass mb-glass--bar">
           <span className={"mb-sheet__title" + (titleClassName ? " " + titleClassName : "")}>{title}</span>
           {dismissible && (
             <button type="button" className="mobile-icon-btn" onClick={onClose} aria-label="关闭"><X size={20} /></button>

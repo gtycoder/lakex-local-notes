@@ -44,7 +44,7 @@ describe("工作区「更多」菜单（261014）", () => {
 
   it("目录抽屉「新建」：工具栏（笔记本层）+ 每一行（子项）都有，清单与桌面同款，六类创建项都能用", () => {
     // 笔记本层：抽屉工具栏的「新建」（P9-5b：抽屉拆到 WorkspaceDrawers.tsx）
-    expect(DRAWERS).toContain('aria-label="新建" title="新建"');
+    expect(DRAWERS).toContain('<TopBarIconButton label="新建"');
     // 每一行的「新建子项」（行组件 = NotebookTreeList，见 261027 虚拟窗口化抽件）
     expect(TREE_LIST).toContain('aria-label="新建子项"');
     // 清单同款同序（桌面 Sidebar CREATE_CHILD_ITEMS：文档/表格/多维表/画板/手写板/分组）
@@ -108,7 +108,7 @@ describe("工作区「更多」菜单（261014）", () => {
     expect(block).not.toContain('id: "new-group"');
     // 新建能力没丢：行内 ＋（新建子项）与抽屉工具栏「新建」都还在，且共用同一份 6 项清单
     expect(TREE_LIST).toContain('aria-label="新建子项"');
-    expect(DRAWERS).toContain('aria-label="新建" title="新建"');
+    expect(DRAWERS).toContain('<TopBarIconButton label="新建"');
     // 菜单只保留「对这一行本身的动作」
     for (const label of ["重命名", "设置图标", "移动到…", "移入回收站"]) {
       expect(block).toContain(label);

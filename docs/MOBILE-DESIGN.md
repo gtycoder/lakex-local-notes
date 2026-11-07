@@ -436,8 +436,9 @@ node scripts/css-audit/drive.mjs 9335 scripts/css-audit/mobile-walkthrough.mjs  
 
 1. **P1 `toastActionError` 已完成（261107）**：`src/mobile/lib/actionError.ts`，收口 22 处 `showToast("X失败：" + getNativeErrorMessage(e))`（9 文件），文案逐字不变；其余 15 处用 `Error.message` / `instanceof` 三目 / 自定义后缀的入口按语义差异保留，迁移时再逐个确认。
 2. **P1 `EmptyState` 已完成（261107）**：`ui/EmptyState.tsx`，收口 43 处简单空态（25 文件，裸/inset/p/role 四类变体）；带自定义按钮/复杂布局的 6 处保留原生结构。
-3. **P1 PageHeader/TopBarIconButton**：8 处 `.mobile-topbar` + 4 处 `.mobile-settings-head` 的 3 种结构；HomePage（pager 折叠）与 WorkspaceTopBar（平板页签）先不接。
-4. **P2 `.mb-row` 吸收 `.mb-list-item`**（kit −26 声明）：两条规则近乎同构；同文件合并，不动 JSX。
-5. **P2 CSS 剩余合并**：`.mb-glass`（+4/−12）、`.mb-surface`（kit+3/bitable−30，需先腾预算）、`.mb-empty--compact`、`.mb-iconbtn--xs`；都需要设备快照验收。
+3. **P1 TopBarIconButton 已完成（261107）**：`ui/TopBarIconButton.tsx` 把 4 处 `<span role=button>` 换成真 `<button>`（WorkspaceDrawers ×2 / WorkspaceOverlayHost / OutlineSheet），`.toolbar__icon` 补 appearance/border/background 重置。**PageHeader 经复核不做**：简单页已是真 button + `.mobile-topbar-title`，HomePage/WorkspaceTopBar 结构差异大，抽层只增耦合。
+4. **P2 `.mb-row` 吸收 `.mb-list-item` 已完成（261107）**：kit 588→575（含 glass +4）；list-item 仅保留 `gap:10px` 覆盖，active/meta 合并。
+5. **P2 `.mb-glass` 已完成（261107）**：kit +4 条声明（`.mb-glass`/`--bar`），替换 5 条稳定玻璃规则的重复 blur（mobile 1609→1603、floating −2、dock −2；顶栏滚动态因瞬态类保留）。**`.mb-surface`（bitable 细边白面）仍待做**（只在 bitable 内并选择器，预计 −30）；`.mb-empty--compact`/`.mb-iconbtn--xs` 需快照验收。
+5b. **P2 a11y 行激活部分完成（261107）**：`ui/rowActivation.ts` 接入首页小记卡 + 知识库书架/列表卡；目录行内 ⋯/＋ 在行 button 内（嵌套 button 非法），保留由行语义承载。
 6. **P2 大文件拆分**：HomePage 1116（QuickNoteCard/Panes）、MobileApp 965（boot/ProblemPage）、SettingsDrawer 785、EditorDock 844、MobileUsheetViewer 998、TagsHomeTab 608（先拆 SettingsDrawer/TagsHomeTab）。
 7. **P2 a11y**：9 处可点行缺 Enter/Space 激活（`rowActivationProps` 原语）、6 处 `span role=button` 需改真 button。

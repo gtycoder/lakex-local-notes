@@ -47,7 +47,7 @@ export function AiCorpusSheet({ open, candidates, selectedIds, onToggle, onStart
     <>
       <div className="mb-scrim" data-prevent-swipe onClick={onClose} aria-hidden="true" />
       <div ref={sheetRef} className="mb-sheet ai-sheet" role="dialog" aria-modal="true" aria-label="选择资料" data-prevent-swipe>
-        <div className="mb-sheet__head">
+        <div className="mb-sheet__head mb-glass mb-glass--bar">
           <span className="mb-sheet__title">选择资料</span>
           <button type="button" className="mb-btn mb-btn--ghost mb-btn--sm" onClick={onClose}>取消</button>
         </div>

@@ -37,6 +37,7 @@ import { useTabPager } from "./useTabPager";
 import { quickNoteSortTime, type QuickNoteSort } from "../../core/quickNoteSort";
 import { localAssetHttpUrl, withAssetWidth } from "../../core/assetUrl.js";
 import { formatDateOnly, formatRelativeTime } from "../lib/listTime";
+import { rowActivationProps } from "../ui/rowActivation";
 import { withAssetAccessToken } from "../../lib/assetPort";
 import { pushBackHandler } from "../ui/backStack";
 import { useLongPress } from "../ui/useLongPress";
@@ -883,7 +884,7 @@ export function HomePage(props: HomePageProps) {
       /* **整块触发**（261014 用户定稿）：手势挂在整条胶囊上 —— 按住**任意处**约 260ms，整块变成「小记」；
          继续上滑越过触发线松手 = 速记一条小记；不上滑松手 = 取消。短按不接手势（pass），条目自己的 onClick 照常。 */
       <nav
-        className={"mobile-bottom-bar mobile-bottom-bar--home" + (pressRevealed ? " is-revealed" : "") + (pressArmed ? " is-armed" : "")}
+        className={"mobile-bottom-bar mobile-bottom-bar--home mb-glass" + (pressRevealed ? " is-revealed" : "") + (pressArmed ? " is-armed" : "")}
         aria-label="首页操作"
         data-prevent-swipe
         onPointerDown={onPressDown}
@@ -1050,23 +1051,24 @@ function QuickNoteCard({ note, revealed, dateValue, onEdit, onMore, onFilterTag,
         COVER_THUMB_PX,
       )
     : null;
+  /** 触摸点击 / 外接键盘 Enter·Space 共用同一激活语义（选择态 = 切换勾选，否则进编辑）。 */
+  const activate = (): void => {
+    if (suppressTap.current) { suppressTap.current = false; return; }
+    if (selecting) { onToggleSelect(); return; }
+    onEdit(cardRef.current);
+  };
   return (
     <div
       ref={cardRef}
       className={"qn-card" + (revealed ? " is-revealed" : "") + (selected ? " is-selected" : "")}
       data-quick-note-id={note.id}
-      role="button"
-      tabIndex={0}
+      {...rowActivationProps(activate)}
       aria-pressed={selecting ? selected : undefined}
       onTouchStart={longPress.onTouchStart}
       onTouchMove={longPress.onTouchMove}
       onTouchEnd={longPress.onTouchEnd}
       onTouchCancel={longPress.onTouchCancel}
-      onClick={() => {
-        if (suppressTap.current) { suppressTap.current = false; return; }
-        if (selecting) { onToggleSelect(); return; }
-        onEdit(cardRef.current);
-      }}
+      onClick={activate}
     >
       {thumbUrl && (
         <div className="qn-card__cover">

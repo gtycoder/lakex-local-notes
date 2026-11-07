@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Book, ChevronRight, Plus } from "lucide-react";
+import { TopBarIconButton } from "../ui/TopBarIconButton";
 import type { LakeEditorInstance } from "../../features/editor/lakeRuntime";
 import { OutlineSheet } from "../editor/OutlineSheet";
 import { MobileNodeIconGlyph } from "../ui/NodeIconGlyph";
@@ -74,8 +75,8 @@ export function WorkspaceDrawers(props: WorkspaceDrawersProps) {
               <button type="button" className="mb-btn mb-btn--ghost" aria-label="选择文档" onClick={props.onEnterSelect}>选择</button>
             )}
             {/* 261014 用户点单：目录栏加「新建」（桌面同款清单） */}
-            <span className="toolbar__icon" role="button" tabIndex={0} onClick={props.onOpenCreate} aria-label="新建" title="新建"><Plus /></span>
-            <span className="toolbar__icon" role="button" tabIndex={0} onClick={() => props.onOpenSidebar(false)} aria-label="收起"><ChevronRight /></span>
+            <TopBarIconButton label="新建" icon={<Plus />} onClick={props.onOpenCreate} />
+            <TopBarIconButton label="收起" icon={<ChevronRight />} onClick={() => props.onOpenSidebar(false)} />
           </div>
         )}
         {/* 树行 = 可见行扁平数组 + 视口窗口化（2000 节点时不一次挂 2000 个按钮，见 NotebookTreeList）。

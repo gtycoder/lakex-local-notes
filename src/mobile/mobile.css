@@ -495,8 +495,6 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
 /* v2：标签页 sticky 页头改玻璃底（与滚动后顶栏同档），不再铺平色窗底。 */
 .mobile-page-head {
   padding-top: 12px; background: var(--mb-glass-bg-bar);
-  -webkit-backdrop-filter: var(--mb-blur-bar);
-  backdrop-filter: var(--mb-blur-bar);
 }
 
 /* 261106 task-77/79：标签详情页副标题（N 篇文档、M 条小记）——在页头下方、**块外**；
@@ -512,7 +510,7 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
 .mb-sel-topbar__btn { min-width: var(--mb-tap-min); min-height: var(--mb-tap-min); padding: 0 2px; border: 0; background: transparent; color: var(--lake-accent-text); font: inherit; font-size: var(--lake-font-size-body); font-weight: var(--lake-font-weight-medium); cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .mb-sel-topbar__btn:active { opacity: .55; }
 .mb-sel-topbar__count { flex: 1 1 auto; text-align: center; color: var(--lake-text-1); font-size: var(--lake-font-size-bodyMd); font-weight: var(--lake-font-weight-semibold); font-variant-numeric: tabular-nums; }
-.mb-sel-actions { margin: var(--lake-space-md) var(--lake-space-lg) calc(var(--lake-space-lg) + var(--mobile-bottom-safe-area)); padding: var(--lake-space-md); border-radius: var(--mb-radius-xl); background: var(--mb-glass-bg); -webkit-backdrop-filter: var(--mb-blur-float); backdrop-filter: var(--mb-blur-float); box-shadow: var(--mb-shadow-float); }
+.mb-sel-actions { margin: var(--lake-space-md) var(--lake-space-lg) calc(var(--lake-space-lg) + var(--mobile-bottom-safe-area)); padding: var(--lake-space-md); border-radius: var(--mb-radius-xl); background: var(--mb-glass-bg); box-shadow: var(--mb-shadow-float); }
 .mb-sel-actions.is-fixed { position: fixed; left: var(--lake-space-lg); right: var(--lake-space-lg); bottom: calc(var(--lake-space-lg) + var(--mobile-bottom-safe-area)); z-index: var(--mobile-z-topbar); margin: 0; }
 .mb-sel-actions.is-overlay { position: absolute; left: var(--lake-space-md); right: var(--lake-space-md); bottom: calc(var(--lake-space-sm) + var(--mobile-bottom-safe-area)); z-index: var(--mobile-z-topbar); margin: 0; }
 .mb-sel-actions__hint { display: block; margin: 0 0 var(--lake-space-xs); color: var(--lake-text-3); font-size: var(--lake-font-size-nano); }
@@ -615,8 +613,6 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
   border-radius: calc(var(--mobile-bottom-bar-height) / 2);
   /* v2 柔光纸面：形态/尺寸/命中不变，只换材质 —— 玻璃底 + 浮起阴影 + 第二档模糊。 */
   background: var(--mb-glass-bg);
-  -webkit-backdrop-filter: var(--mb-blur-float);
-  backdrop-filter: var(--mb-blur-float);
   box-shadow: var(--mb-shadow-float);
   transition: opacity var(--mobile-duration-panel) var(--mobile-ease-panel), transform var(--mobile-duration-panel) var(--mobile-ease-panel), visibility var(--mobile-duration-panel);
 }
@@ -751,6 +747,7 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
 .toolbar--dark { background-color: var(--lake-bg-panel); }
 /* 思源原式是 20×20 + padding 10（content-box 语义）；本文件全局 border-box ⇒ 这里写成"总尺寸=图标+2×padding"，视觉等价 */
 .toolbar__icon {
+  appearance: none; border: 0; background: transparent;
   height: 40px; width: 40px; padding: 10px; flex-shrink: 0; margin: 4px;
   color: var(--lake-text-2); border-radius: var(--lake-radius-sm);
   display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
