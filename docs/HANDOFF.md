@@ -8,13 +8,13 @@
 
 ## 0. 最新交接（261027）
 
-### 261107 · 移动端 v2「柔光纸面」P4（设置子页图标块 + 工作区顶栏滚动玻璃态）· **本地分支 `feat/mobile-paper-light`，未推送**
+### 261107 · 移动端 v2「柔光纸面」P4（设置子页图标块 + 工作区顶栏滚动玻璃态）· **已合并 master（261108）**
 - **设置原语扩展**：`settingsPrimitives.tsx` 的 `Item` / `Switch` 增加可选 `icon` / `tone` / `value`（复用 kit 的 `.mb-set-item__icon/__val`，颜色只由调用方 tone 提供，不写进 CSS）。已接线：外观·主题（Palette/琥珀）、编辑器·正文字号（List/紫）、AI·开关（Sparkles/绿）；其余子页行暂未加（避免每行一个彩色块变成噪音，等用户看过后按需铺）。
 - **工作区顶栏滚动玻璃态**：`NotebookWorkspace` 根节点挂 scroll 捕获监听（`.mobile-scroll` / `.ne-editor-wrap` 取最大 scrollTop），滚过 6px 给 `.mobile-topbar` 加 `.is-scrolled`（玻璃底 + 发丝线 + 14px 渐隐，与首页同一套样式）；阅读态自动收起（`.mobile-topbar--auto-hidden`）行为不变。
 - **门禁**：tsc（本仓 `src/mobile|core|lib` 范围 0 错；整仓 tsc 当前被**另一并发会话未提交的桌面改动**打断，非本批引入）；`npx vitest run src/mobile` 269 文件 / 1376 例通过；ui-metrics / check:mobileui 通过。**按要求本批不做快照基线重烤**。
 - **真机**：emulator-5554 设置→外观 子页已见「分组卡 + 琥珀图标块 + 浅色/深色/纯黑」；工作区滚动玻璃态代码路径与首页一致，但因当前打开的文档太短（不可滚动）未取得滚动态截图——需在长文档/长列表上复核一次。
 - **未做（按用户指示）**：6 态 / 23 屏快照基线重烤（用户要先自己调页面，功能做完后再重烤）；设置全部子页的图标块铺开；分支整理（桌面提交 `ed0d77fc` 与其它会话未提交改动 `Sidebar/TreeSelection/noteDuplication` 等仍在本工作树，勿一起提交）。
-### 261107 · 移动端 v2「柔光纸面」P3（共享元素转场：小记卡 → 写作卡）· **本地分支 `feat/mobile-paper-light`，未推送**
+### 261107 · 移动端 v2「柔光纸面」P3（共享元素转场：小记卡 → 写作卡）· **已合并 master（261108）**
 - **实现**：`HomePage.tsx` 新增 `morphCardToComposer(card)` —— 卡片克隆按当前矩形 `position:fixed` 浮起（`.qn-card-morph`），rAF 后按 `--mb-dur-page / --mb-ease` 扩到写作卡容器（`quickScrollRef`）矩形，330ms 后 180ms 淡出并移除；真实写作卡随后挂载。`QuickNoteCard` 的 `onEdit` 改为传出 `cardRef.current`（转场起点）。`prefers-reduced-motion` 直接跳过；只动几何 + opacity，不参与布局/命中。
 - **CSS**：`mobile.css` 新增 `.qn-card-morph` / `.is-out`（固定层、卡面/卡阴影、`z: var(--mobile-z-page)`、`will-change`、淡出过渡）；mobileLayers 基线 mobile.css 1585 → 1596（+11）。
 - **门禁**：tsc 0；全量 `npx vitest run` **770 文件 / 4901 例通过**（12 skip）；ui-metrics / check:mobileui / check:core / `git diff --check` 绿。
@@ -23,7 +23,7 @@
 - **cssLayers 门禁**：`cssLayers.test.ts` + `mobileLayers.test.ts` 7 例通过（颜色字面量只允许在 theme/、跨文件重复 103/105）。截图 `/Users/admin/file/local-lake/preview/device/mobile-morph.png`、`mobile-composer.png`。
 - **未完成（下一轮）**：设置**子页**图标块接线、6 态/23 屏快照基线重烤、HANDOFF §1 计数回写、分支整理（桌面提交 `ed0d77fc` 仍在本分支）。**本批未推送**。
 
-### 261107 · 移动端 v2「柔光纸面」P2（纯黑 OLED + 笔记本动态主色）· **本地分支 `feat/mobile-paper-light`，未推送**
+### 261107 · 移动端 v2「柔光纸面」P2（纯黑 OLED + 笔记本动态主色）· **已合并 master（261108）**
 - **纯黑（OLED）档**：`AppSettings` 新增 `oled`（默认 false，仅 mobile 生效）；外观「主题」变三选一（浅色 / 深色 / 纯黑）。`src/mobile/main.tsx` 在 `theme==='dark' && oled` 时给 `html` 加 `.oled`；`theme/dark.css` 新增 `[data-theme="dark"].oled` 覆盖（画布 #000→#050506、纸面 #0f0f10、玻璃/阴影/边框全线加深）。**桌面主题选择器不出现该开关**。
 - **深色可读性修复**：内核/全局有一条未分层的 `h1..h6 { color: rgba(0,0,0,.85) }`，小记预览标题（`QuickNotePreview` 的 h1/h2）在深色/纯黑下发黑 ⇒ `quick-notes.css` 的 `.quick-note-preview-heading` 显式 `color: var(--lake-text-1)`（class 压元素选择器，不新增 !important）。
 - **笔记本动态主色**：新增 `src/core/mobileAccent.ts`（`mobileAccentForNotebook` / `mobileAccentVars`，5 色固定板 + djb2 稳定散列，空 id 回落墨蓝；单测 5 例）。`NotebookWorkspace` 根节点写 `--mb-accent` / `-ink` / `-soft` / `--mb-canvas-glow`（自定义属性会在 :root 处完成 var() 替换，所以 soft/glow 随笔记本一起给出）。不写正文、不参与同步。
@@ -31,7 +31,7 @@
 - **真机**：emulator-5554 截图：纯黑首页（卡面 #0f0f10、标题可读）、工作区青绿主色（个人笔记 → `--mb-accent:#2f7a6b`）、设置分组卡。截图存 `/Users/admin/file/local-lake/preview/device/`（不入库）。
 - **未完成（下一轮）**：共享元素转场（卡片→文档 FLIP）、设置**子页**图标块接线、6 态/23 屏快照基线重烤、HANDOFF §1 计数回写。**本批未推送**。
 
-### 261107 · 移动端 v2「柔光纸面」P1（theme 令牌 + 三屏外壳 + 设置分组）· **本地分支 `feat/mobile-paper-light`，未推送**
+### 261107 · 移动端 v2「柔光纸面」P1（theme 令牌 + 三屏外壳 + 设置分组）· **已合并 master（261108）**
 - **设计基线**：`docs/MOBILE-DESIGN.md` 顶部新增「## v2 视觉基线 ·「柔光纸面」」（唯一视觉参照 = `/Users/admin/file/local-lake/preview/mobile-paper-light.html`）。落地口径：页面光场（画布渐变 + 主色光晕）、三层表面（光场/纸面/柔光玻璃）、圆角 12/16/26/28、去线条、单点强调、光感反馈。
 - **theme**：`src/mobile/theme/{tokens,light,dark}.css` 新增 `--mb-canvas-1/2`、`--mb-canvas-glow`、`--mb-accent(-ink/-soft)`、`--mb-glass-*`、`--mb-shadow-card/-float/-bar`、`--mb-radius-dock/-capsule`、`--mb-dur-fast/mid/page`、`--mb-ease`、`--mb-blur-bar/float`、`--mb-font-page`；`--mb-radius` 8→12、card 12→16、sheet 20→28、顶栏 44→52。
 - **kit/floating**：设置分组卡/行高 60/内距 18/图标块与当前值钩子（`.mb-set-item__icon/__val`）、空态容器、卡片/输入/开关接 v2 令牌；Sheet 顶角 28 + 玻璃头（body 实色）、MenuSheet/ActionSheet 28 + 浮动阴影、Toast 浮动阴影。遮罩/层序/关闭三件套/安全区未动。
