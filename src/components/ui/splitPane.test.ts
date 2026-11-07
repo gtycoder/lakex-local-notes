@@ -53,7 +53,7 @@ describe("左右分栏（可拖动）", () => {
     expect(HANDLE).toContain('"ArrowRight"');
     expect(SRC).toContain("ResizeObserver");              // 容器变窄时夹回合法区间
     expect(PANELS).toContain("flex: 0 0 var(--split-left, 320px)");
-    expect(PANELS).toContain(".history-split > .ln-split-handle { position: relative; flex: 0 0 0; width: 0; }");
+    expect(PANELS).toContain(".history-split-handle { position: relative; flex: 0 0 0; width: 0; }");
   });
 
   it("分屏两栏之间有常驻 0.5px 发丝线，且画在右栏盒子上（261022 用户点单；261029 统一 0.5px）", () => {
