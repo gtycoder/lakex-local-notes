@@ -241,7 +241,7 @@ jobs:
           files: dist/**
       - name: Mirror assets to Gitee Release
         if: env.GITEE_TOKEN != ''
-        timeout-minutes: 10
+        timeout-minutes: 50
         continue-on-error: true
         env:
           TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}
@@ -275,7 +275,7 @@ jobs:
               exit 1
             fi
             echo "upload $f ($size bytes)"
-            code=$(curl -sS --connect-timeout 20 --max-time 300 --retry 2 --retry-delay 5 -o /tmp/gitee-upload.json -w '%{http_code}' -X POST "$api/releases/$rid/attach_files" \
+            code=$(curl -sS --connect-timeout 20 --max-time 2400 --retry 1 --retry-delay 10 -o /tmp/gitee-upload.json -w '%{http_code}' -X POST "$api/releases/$rid/attach_files" \
               -F "access_token=$GITEE_TOKEN" -F "file=@$f")
             if [ "$code" -lt 200 ] || [ "$code" -ge 300 ]; then
               echo "::error::Gitee 上传失败 HTTP $code：$(cat /tmp/gitee-upload.json)"

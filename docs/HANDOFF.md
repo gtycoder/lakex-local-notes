@@ -8,10 +8,13 @@
 
 ## 0. 最新交接（261027）
 
-### 261108 · v1.0.3（Gitee APK 镜像链路，待发布）
+### 261108 · v1.0.3（Gitee APK 镜像链路，已发布）
 
 - 无业务改动；验证 GitHub Release 全量 + Gitee Release 只同步 APK + Gitee 说明带 GitHub 链接。
 - Gitee 单附件 100MB、仓库总附件 1GB，mac/Windows 包超限，workflow 只上传 `android-release.apk` 并校验 HTTP 响应。
+- **GitHub Release**：<https://github.com/gtycoder/lakex-local-notes/releases/tag/v1.0.3>（6 个资产齐全，commit `213c2f79`）
+- **Gitee Release**：<https://gitee.com/gtycoder/lakex-local-notes/releases/tag/v1.0.3>；只含 `LakexLocalNotes-1.0.3-android-release.apk`，说明含 GitHub 链接。
+- 本次 Gitee APK 上传约 30 分钟；workflow 已把步骤超时放宽到 50 分钟、单请求 40 分钟，避免慢速上传被误杀。
 - 版本 1.0.3 / versionCode 11003；发布说明 `docs/RELEASE-NOTES-v1.0.3.md`。
 
 ### 261108 · v1.0.2（Android 正式签名，已发布）
