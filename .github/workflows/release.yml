@@ -64,7 +64,7 @@ jobs:
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
           ELECTRON_MIRROR: https://registry.npmmirror.com/-/binary/electron/
-        run: npx electron-builder --mac --publish never
+        run: npx electron-builder --mac --x64 --arm64 --publish never -c.mac.identity=- -c.mac.hardenedRuntime=false
       # 261027：发布前先证明「安装包能启动」（sharp @img/* 必须在 asar.unpacked 里；防主进程启动崩溃）。
       - name: Packaged smoke (launch check)
         run: SKIP_BUILD=1 bash scripts/ci-packaged-smoke.sh

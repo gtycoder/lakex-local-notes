@@ -8,6 +8,14 @@
 
 ## 0. 最新交接（261027）
 
+### 261108 · v1.0.1（macOS 双架构 + ad-hoc 签名）
+
+- **背景**：v1.0.0 的 macOS CI 产物未签名/签名无效，下载后被 macOS 判为「已损坏」，无法通过「隐私与安全性 → 仍要打开」；且只有 arm64。
+- **修复**：CI mac 改为 `--x64 --arm64` 分别打包，electron-builder 用 `mac.identity=- + mac.hardenedRuntime=false` 做 ad-hoc 有效签名；artifactName 带架构后缀便于区分。universal 单包因 sharp arm64/x64 原生依赖冲突不可用。
+- **用户体验**：未公证，首次打开走「系统设置 → 隐私与安全性 → 仍要打开」（或右键打开）；正式免提示仍需 Apple Developer ID + 公证。
+- **版本**：package.json 1.0.1（Android versionCode 11001）；发布说明 `docs/RELEASE-NOTES-v1.0.1.md`。
+- **本地验证**：arm64 ad-hoc（hardenedRuntime=false）安装后 `/Applications/LakexLocalNotes.app` 可正常启动；x64 构建产物为 Mach-O x86_64；本机构建冒烟通过。v1.0.0 tag 不再移动。
+
 ### 261108 · v1.0.0 正式发版（已发布）
 
 - **GitHub Release**：<https://github.com/gtycoder/lakex-local-notes/releases/tag/v1.0.0>（workflow run `42471006316` success）
