@@ -68,3 +68,12 @@ describe("全局搜索：范围筛选 / 最近搜索 / 空态引导", () => {
     expect(SRC).toMatch(/event\.key === "Escape"\s*\)? *\{ onClose\(\); return; \}/);
   });
 });
+
+describe("测试/断言与最新 UI 对齐", () => {
+  it("打包冒烟的搜索无障碍名与 SearchPanel 的 Dialog label 一致", () => {
+    const label = /<Dialog[^>]*label="([^"]+)"/.exec(SRC)?.[1];
+    expect(label).toBeTruthy();
+    const smoke = readFileSync(new URL("../../../scripts/e2e-electron-smoke.mjs", import.meta.url), "utf8");
+    expect(smoke).toContain(`result.search.dialogLabel !== "${label}"`);
+  });
+});
