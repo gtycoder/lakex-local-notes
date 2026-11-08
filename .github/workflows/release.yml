@@ -250,7 +250,7 @@ jobs:
           for attempt in 1 2; do
             resp=$(curl -sS -X POST "$api/releases" \
               -d "access_token=$GITEE_TOKEN" -d "tag_name=$TAG" -d "name=$TAG" \
-              -d "body=Automated release. Android APK mirrored; macOS/Windows: https://github.com/$GITHUB_REPOSITORY/releases/tag/$TAG" -d "target_commitish=master" || true)
+              -d "body=Android APK 已同步（正式 release keystore 签名）。macOS / Windows 安装包请到 GitHub Release 下载：https://github.com/$GITHUB_REPOSITORY/releases/tag/$TAG" -d "target_commitish=master" || true)
             rid=$(printf '%s' "$resp" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("id",""))' 2>/dev/null || true)
             [ -n "$rid" ] && break
             rid=$(curl -sS "$api/releases/tags/$TAG?access_token=$GITEE_TOKEN" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("id",""))' 2>/dev/null || true)
