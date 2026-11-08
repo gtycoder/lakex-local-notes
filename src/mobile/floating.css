@@ -47,7 +47,7 @@
 .mb-sheet__grab { display: none; }   /* grabber 统一由头部提供（避免两处重复） */
 .mb-sheet__head {
   position: relative; flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between;
-  gap: 8px; min-height: var(--mb-list-item-h); padding: 8px 8px 0 var(--mb-page-pad);
+  gap: 8px; min-height: var(--mb-list-item-h); padding: 8px var(--mb-page-pad) 0 var(--mb-page-pad);
   touch-action: none;
   /* v2 头部玻璃底：--mb-glass-bg + 顶栏同一档模糊（--mb-blur-bar，只用于固定功能层）；
      grabber 仍是 .mb-sheet__head::before 的 32×4，不动。 */

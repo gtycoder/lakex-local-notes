@@ -31,9 +31,13 @@
 /* 顶部导航（阅读/编辑同一条）：落在纸面上方的留白里；放大后可被它盖住，属预期。 */
 .ink-pad--mobile > [data-overlay="nav"] {
   top: var(--lake-space-md);
-  padding: 0 var(--lake-space-xs); gap: 0;
+  /* 页码/新建页 + 缩放 + 预览 + 页签四组在 412 宽内要排下：导航内部不再额外留 gap/分隔 margin。 */
+  padding: 0; gap: 0;
   border-radius: var(--lake-radius-pill);
 }
+.ink-pad--mobile > [data-overlay="nav"] .ink-toolbar { gap: 0; }
+.ink-pad--mobile > [data-overlay="nav"] .ink-toolbar__sep { margin: 0; }
+.ink-pad--mobile > [data-overlay="nav"] .ink-zoom__value { min-width: 40px; }
 /* 底部工具坞（仅编辑态）：贴底 + 安全区，两行整体缩小（工具行 48 / 纸张行 40）。 */
 .ink-pad--mobile > [data-overlay="dock"] {
   bottom: calc(var(--lake-space-md) + var(--mobile-bottom-safe-area));
@@ -147,6 +151,8 @@
 .ink-pad--mobile[data-readonly="true"] {
   padding-bottom: calc(var(--mobile-status-height) + var(--mobile-bar-gap) + var(--mobile-bottom-safe-area) + var(--mobile-bottom-bar-height) + var(--lake-space-md));
 }
+/* 阅读态左右滑动翻页：保留纵向滚动，横向手势交给 InkPad 的 touch 处理。 */
+.ink-pad--mobile[data-readonly="true"] .ink-page-stage { touch-action: pan-y; }
 /* PDF 导入进度（编辑态横幅）：文案 + 取消按钮一行排开；按钮沿用 .ink-tool（44 盒）。 */
 .ink-pad--mobile > [data-ink-pdf-progress] {
   display: flex; align-items: center; justify-content: space-between;

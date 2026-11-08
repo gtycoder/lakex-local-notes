@@ -53,7 +53,7 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
 
 .mobile-topbar {
   display: flex; align-items: center; gap: 2px; flex: 0 0 auto;
-  padding: max(0px, calc(var(--mobile-top-safe-area) - 8px)) max(4px, var(--mobile-right-safe-area)) 0 max(4px, var(--mobile-left-safe-area));
+  padding: max(0px, calc(var(--mobile-top-safe-area) - 8px)) max(var(--mb-page-pad), var(--mobile-right-safe-area)) 0 max(var(--mb-page-pad), var(--mobile-left-safe-area));
   margin-top: 8px;
   /* 高度必须把「安全区多出来的部分」算进去：只加 padding 不加高度会把 44px 内容区压扁/裁掉
      （261027 刘海屏实机：顶栏文字被上下裁切）。auto-hidden 时整体归零，不受影响。 */
@@ -106,6 +106,11 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
 /* 顶栏左侧等宽空槽（261014）：右侧固定挂**两枚**图标（排序/视图 + 云同步）⇒ 左也补一格，
    tab 才真的居中；冷启动骨架同构（左右各 2 槽），数据到达时原地填充不跳。 */
 .mobile-topbar-gap { flex: 0 0 auto; width: var(--mobile-topbar-height); height: var(--mobile-topbar-height); }
+/* 窄屏兜底：左右各 12 + 两枚右侧图标 + 设置，已放不下「居中空槽」；
+   去掉空槽优先保证三个 tab 不换行、不裁切。 */
+@media (max-width: 385px) {
+  .mobile-topbar-gap { display: none; }
+}
 /* 栏内图标按钮 = 思源 .toolbar__button：48×48、svg 20、按压缩口底色（不做缩放，避免密集栏抖动） */
 .mobile-icon-btn {
   width: var(--mobile-topbar-height); height: var(--mobile-topbar-height); border: none; background: transparent;
@@ -409,7 +414,7 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
 /* 回收站 */
 
 .mobile-drawer-trash-entry:active { background: var(--lake-bg-window); }
-.mobile-status-msg { padding: 6px 12px; font-size: var(--lake-font-size-nano); color: var(--lake-text-2); background: var(--lake-bg-window); border-bottom: .5px solid var(--lake-border-1); }
+.mobile-status-msg { padding: 6px var(--mb-page-pad); font-size: var(--lake-font-size-nano); color: var(--lake-text-2); background: var(--lake-bg-window); border-bottom: .5px solid var(--lake-border-1); }
 .mobile-trash-text { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 2px; padding: 6px 0; }
 .mobile-trash-title { min-width: 0; }   /* 截断走 .ln-ellipsis */
 .mobile-trash-cloud { align-self: flex-start; }   /* 复用 kit 的 .mb-tag 原语，只定位置；261026「云端已删除 · 仅本地」 */
@@ -720,7 +725,7 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
 /* 全屏 tab 列表（思源 #model） */
 .mobile-model-mask { position: fixed; inset: 0; z-index: var(--mobile-z-model-mask); background: var(--mobile-mask); display: flex; align-items: flex-end; }
 .mobile-model { width: 100%; max-width: 480px; margin: 0 auto; max-height: 80%; display: flex; flex-direction: column; background: var(--lake-bg-window, var(--lake-bg-window)); border-radius: var(--lake-radius-md) var(--lake-radius-md) 0 0; overflow: hidden; scrollbar-width: none; animation: mobile-sheet-in var(--mobile-duration-panel) var(--mobile-ease-panel); }
-.mobile-model-head { display: flex; align-items: center; justify-content: space-between; min-height: calc(var(--mobile-topbar-height) + var(--mobile-top-safe-area)); padding: calc(8px + var(--mobile-top-safe-area)) 8px 8px 16px; border-bottom: .5px solid var(--lake-bg-block); }
+.mobile-model-head { display: flex; align-items: center; justify-content: space-between; min-height: calc(var(--mobile-topbar-height) + var(--mobile-top-safe-area)); padding: calc(8px + var(--mobile-top-safe-area)) var(--mb-page-pad) 8px var(--mb-page-pad); border-bottom: .5px solid var(--lake-bg-block); }
 /* 标签页抽屉：标题右侧「关闭全部」（放在 × 左边；ml-auto 把它顶到右侧） */
 .mobile-model-closeall { margin-left: auto; margin-right: 4px; padding: 6px 8px; border: 0; border-radius: var(--lake-radius-sm); background: transparent; color: var(--lake-text-3); font-size: var(--lake-font-size-small); cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .mobile-model-closeall:active { background: var(--lake-bg-hover); color: var(--lake-text-2); }
@@ -801,10 +806,10 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
    未选 = 常规 + caption 色，**没有下划线指示线**。原实现是桌面 .ln-tabs 的墨线语言；
    桌面侧 261012 为 tab 选定的是那套，但那是**桌面**口径（MOBILE-TECH-STACK §一：两端 UI 不共享）⇒ 移动端走语雀形态。
    命中区仍 ≥44：父容器 min-height 撑开、tab 自身 align-items:stretch 撑满行高。 */
-.mobile-home-tabs { flex: 1; display: flex; justify-content: center; align-items: stretch; gap: 20px; min-height: var(--mb-tap-min); }
+.mobile-home-tabs { flex: 1; display: flex; justify-content: center; align-items: stretch; gap: 6px; min-height: var(--mb-tap-min); }
 .mobile-htab {
   /* min-width 是 44 Rule 的兜底：语雀式文字 tab 的宽度由字数决定，单字标签会掉到 44 以下（261013 实测「小记」36px）。 */
-  display: inline-flex; align-items: center; justify-content: center; min-width: var(--mb-tap-min); min-height: var(--mb-tap-min); padding: 0 4px;
+  display: inline-flex; align-items: center; justify-content: center; min-width: var(--mb-tap-min); min-height: var(--mb-tap-min); padding: 0 2px; white-space: nowrap; flex-shrink: 0;
   border: none; background: transparent; font-size: var(--lake-font-size-body); color: var(--lake-text-3);
   cursor: pointer; font-weight: var(--lake-font-weight-medium); -webkit-tap-highlight-color: transparent;
 }

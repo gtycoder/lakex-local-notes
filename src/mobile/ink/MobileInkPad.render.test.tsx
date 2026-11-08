@@ -73,6 +73,15 @@ function byText(container: HTMLElement, text: string): HTMLButtonElement | undef
   return Array.from(container.querySelectorAll("button")).find((b) => (b.textContent ?? "").trim() === text) as HTMLButtonElement | undefined;
 }
 
+type TouchLike = { identifier: number; clientX: number; clientY: number };
+
+function touchEvent(type: string, touches: TouchLike[], changedTouches: TouchLike[] = []): Event {
+  const event = new Event(type, { bubbles: true, cancelable: true });
+  Object.defineProperty(event, "touches", { value: touches });
+  Object.defineProperty(event, "changedTouches", { value: changedTouches });
+  return event;
+}
+
 function pageLabel(container: HTMLElement): string {
   return (container.querySelector(".ink-pages span")?.textContent ?? "").trim();
 }
@@ -124,6 +133,7 @@ describe("MobileInkPad 阅读态（默认打开态）", () => {
 
     // 翻页：纯视图，不写正文
     expect(byLabel(view.container, "上一页")!.disabled).toBe(true); // 已在第 1 页
+    expect(byLabel(view.container, "新建页")!.disabled).toBe(true); // 阅读态不能加页
     const next = byLabel(view.container, "下一页")!;
     expect(next.disabled).toBe(false);
     await act(async () => { next.click(); });
@@ -386,6 +396,43 @@ describe("MobileInkPad 编辑态 · 悬浮工具坞", () => {
       svg.dispatchEvent(new MouseEvent("pointercancel", { bubbles: true }));
     });
     expect(JSON.parse(capture()!).pages[0].strokes.length).toBe(2);
+    await view.unmount();
+  });
+});
+
+
+describe("MobileInkPad · 新建页与只读滑动", () => {
+  it("编辑态顶部 + 可直接新建页面", async () => {
+    const view = await mount({ content: twoPageBody(), readOnly: false });
+    expect(pageLabel(view.container)).toBe("1 / 2");
+    const add = byLabel(view.container, "新建页")!;
+    expect(add.disabled).toBe(false);
+    await act(async () => { add.click(); });
+    expect(pageLabel(view.container)).toBe("3 / 3");
+    await view.unmount();
+  });
+
+  it("阅读态左右滑动翻页：左滑下一页、右滑上一页，且不写正文", async () => {
+    const onChange = vi.fn();
+    const onDirty = vi.fn();
+    const view = await mount({ content: twoPageBody(), readOnly: true, onChange, onDirty });
+    const stage = view.container.querySelector(".ink-page-stage") as HTMLElement;
+    expect(stage).not.toBeNull();
+
+    await act(async () => {
+      stage.dispatchEvent(touchEvent("touchstart", [{ identifier: 7, clientX: 300, clientY: 200 }]));
+      stage.dispatchEvent(touchEvent("touchend", [], [{ identifier: 7, clientX: 100, clientY: 205 }]));
+    });
+    expect(pageLabel(view.container)).toBe("2 / 2");
+
+    await act(async () => {
+      stage.dispatchEvent(touchEvent("touchstart", [{ identifier: 8, clientX: 100, clientY: 200 }]));
+      stage.dispatchEvent(touchEvent("touchend", [], [{ identifier: 8, clientX: 300, clientY: 195 }]));
+    });
+    expect(pageLabel(view.container)).toBe("1 / 2");
+
+    expect(onChange).not.toHaveBeenCalled();
+    expect(onDirty).not.toHaveBeenCalled();
     await view.unmount();
   });
 });

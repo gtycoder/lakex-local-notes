@@ -84,6 +84,14 @@ describe("首页新建流（261014）", () => {
     expect(header).toContain("toggleView");
   });
 
+  it("顶栏文字 tab 不换行、不贴边（窄屏去掉居中空槽）", () => {
+    // 261108 实机：知识库被挤成两行、云按钮贴边 ⇒ 文字 tab 必须 nowrap，左右至少 12px。
+    expect(CSS).toMatch(/\.mobile-htab\s*\{[^}]*white-space:\s*nowrap/);
+    expect(CSS).toMatch(/\.mobile-topbar\s*\{[^}]*padding:[^;]*max\(var\(--mb-page-pad\)/);
+    expect(CSS).toMatch(/\.mobile-home-tabs\s*\{[^}]*gap:\s*6px/);
+    expect(CSS).toMatch(/@media\s*\(max-width:\s*385px\)[\s\S]*?\.mobile-topbar-gap\s*\{\s*display:\s*none/);
+  });
+
   it("同步进行中渲染可视进度条（P0-6）：条 + 阶段文案 + 百分比，读索引阶段走不确定态", () => {
     expect(HOME).toContain("mobile-sync-strip");
     expect(HOME).toContain("mobile-sync-strip__bar");

@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode, type TouchEvent as ReactTouchEvent } from "react";
 import type { EditorCaptureHandler } from "../../core/editorCapture";
 import { ChevronLeft, ChevronRight, Eraser, Highlighter, LayoutGrid, Minus, Pen, Plus, Redo2, SquarePlus, Sticker, Type, Undo2 } from "lucide-react";
 import { INK_DEFAULT_COLOR, INK_STROKE_COLORS } from "./inkPalette.js";
@@ -284,6 +284,8 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
   /** P5：正文是否还有未落盘的改动（序列化已移出热路径，保存时才现算）。 */
   const dirtyRef = useRef(false);
   const activePointerRef = useRef<{ id: number; type: string } | null>(null);
+  /** 阅读态左右滑动翻页：记录单指起点（不参与绘制）。 */
+  const swipeStartRef = useRef<{ x: number; y: number; id: number } | null>(null);
   /** 中断收口函数的前向引用（onPointerDown 定义在其前面，避免声明顺序依赖）。 */
   const finalizeInterruptedRef = useRef<(reason: string) => void>(() => {});
   const penDownRef = useRef(false);
@@ -1078,6 +1080,32 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
     selectPage(next.id);
   }, [selectPage]);
 
+  const onStageTouchStart = useCallback((event: ReactTouchEvent<HTMLDivElement>) => {
+    if (!readOnly || event.touches.length !== 1) {
+      swipeStartRef.current = null;
+      return;
+    }
+    const touch = event.touches[0];
+    swipeStartRef.current = { x: touch.clientX, y: touch.clientY, id: touch.identifier };
+  }, [readOnly]);
+
+  const clearStageSwipe = useCallback(() => {
+    swipeStartRef.current = null;
+  }, []);
+
+  /** 只读态：单指横向滑动 ≥60px 且明显大于纵向位移 ⇒ 翻页（纯视图，不写正文）。 */
+  const onStageTouchEnd = useCallback((event: ReactTouchEvent<HTMLDivElement>) => {
+    const start = swipeStartRef.current;
+    swipeStartRef.current = null;
+    if (!readOnly || !start || event.changedTouches.length !== 1) return;
+    const touch = event.changedTouches[0];
+    if (touch.identifier !== start.id) return;
+    const dx = touch.clientX - start.x;
+    const dy = touch.clientY - start.y;
+    if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+    switchPage(dx < 0 ? 1 : -1);
+  }, [readOnly, switchPage]);
+
   const setBackground = useCallback((background: InkBackground) => {
     const current = docRef.current;
     if (!current || !page || readOnly) return;
@@ -1486,6 +1514,7 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
             {/* 移动端页码紧凑（「第 n / N 页」→「n / N」）：顶部胶囊要塞下 翻页+缩放+全局预览+页签 四组 */}
             <span>{pageIndex + 1} / {doc.pages.length}</span>
             <button onClick={() => switchPage(1)} disabled={pageIndex >= doc.pages.length - 1} aria-label="下一页"><ChevronRight size={16} /></button>
+            <button onClick={addPage} disabled={readOnly} aria-label="新建页"><Plus size={16} /></button>
           </div>
           <span className="ink-toolbar__sep" />
           <div className="ink-zoom" role="group" aria-label="缩放">
@@ -1570,7 +1599,13 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
         </div>
       ) : null}
 
-      <div className="ink-page-stage" ref={stageRef}>
+      <div
+        className="ink-page-stage"
+        ref={stageRef}
+        onTouchStart={onStageTouchStart}
+        onTouchEnd={onStageTouchEnd}
+        onTouchCancel={clearStageSwipe}
+      >
         <div
           className="ink-page-frame"
           data-background={page.background}
