@@ -89,6 +89,23 @@ PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH" npm test   # vitest run，82 
   `electron/store.test.ts` 里 `vi.mock("electron")` 提供 safeStorage/net 替身（store.ts 模块加载即 import electron）
 - Store 层测试用真实 SQLite 临时目录 + 另开只读连接验证落盘内容（如 S3 密钥是否 `enc:v1:`）
 
+### 原生文件对话框测试钩子（仅 dev）
+
+CDP 无法操作 macOS 原生 NSOpenPanel/NSSavePanel。需要在自动化里走「导入 / 导出 / 从备份恢复」的 UI 时，可在 **dev** 启动时设置：
+
+```bash
+LAKE_TEST_PICK_FILE=/tmp/import.md \
+LAKE_TEST_PICK_DIR=/tmp/export-dir \
+LAKE_TEST_SAVE_FILE=/tmp/saved.md \
+npm run dev
+```
+
+- 仅当 `app.isPackaged === false` 且上述变量非空时生效；打包版无条件忽略。
+- 只替换主进程 `dialog.showOpenDialog/showSaveDialog` 的返回值，不新增 IPC/preload，不改 UI/业务代码。
+- 打开目录类对话框用 `LAKE_TEST_PICK_DIR`，打开文件用 `LAKE_TEST_PICK_FILE`，保存用 `LAKE_TEST_SAVE_FILE`。
+- 启动时会输出 `[test-hook] ...` warning；生产不会出现。
+- 实现与单测：`electron/testDialogHooks.ts` / `electron/testDialogHooks.test.ts`。
+
 ## 五、关键版本与依赖
 
 | 依赖 | 版本 | 备注 |

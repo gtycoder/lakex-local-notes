@@ -1,4 +1,4 @@
-import { app, BrowserWindow, crashReporter, ipcMain, Menu, nativeTheme, powerMonitor, screen, session, shell, type IpcMainEvent, type WebFrameMain } from "electron";
+import { app, BrowserWindow, crashReporter, dialog, ipcMain, Menu, nativeTheme, powerMonitor, screen, session, shell, type IpcMainEvent, type WebFrameMain } from "electron";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -71,6 +71,7 @@ import { TOPBAR_HEIGHT, TOPBAR_SEAM, TRAFFIC_LIGHT_DIAMETER } from "../src/lib/l
 import { APP_ORIGIN, isAppOriginUrl } from "./appOrigin.js";
 import { registerAppSchemePrivileges, serveAppDist } from "./appProtocol.js";
 import { buildAppMenuTemplate } from "./appMenu.js";
+import { installTestDialogHooks } from "./testDialogHooks.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDev = !app.isPackaged;
@@ -117,6 +118,10 @@ registerAppSchemePrivileges();
 // CORE-06：桌面进程内 SHA-256 走 node:crypto（core 默认纯 JS）。必须在任何正文/资产
 // hash 计算（同步、索引、历史）之前注入 —— 放在 app ready 之前的模块初始化段。
 installNativeSha256();
+// 仅 dev/测试：用环境变量替换原生文件对话框（生产 isPackaged 强制忽略）。
+if (installTestDialogHooks({ dialog: dialog as unknown as Parameters<typeof installTestDialogHooks>[0]["dialog"], isPackaged: app.isPackaged, env: process.env })) {
+  console.warn("[test-hook] 原生文件对话框已被 LAKE_TEST_PICK_FILE/DIR/SAVE_FILE 替换（仅开发环境）");
+}
 
 /**
  * 资产服务器访问令牌（审计：防外部网页 CORS 读本地笔记图片）。
