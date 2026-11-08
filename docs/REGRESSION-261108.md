@@ -43,7 +43,7 @@
 | D26 | 用 `LAKE_TEST_PICK_DIR=/tmp/export-reg` → 右键文档 → 导出为 Markdown 资料包 | 生成 `<标题>/index.md` 与 images 目录，内容与正文一致 | 生成 `/tmp/export-reg/import-reg/index.md`（内容正确）与 `images/`；无错误 | ✅（原生目录选择由 dev 钩子替代） |
 | D27 | 整库备份 → 删除「import-reg」→ 设置 →「从备份恢复…」→ 继续 → 重启 | 备份校验通过，当前库隔离到 corrupt/，重启后 import-reg 恢复 | 提示「已从备份恢复主库，原库已隔离保留…应用即将重启」；重启后 tree 中 import-reg 恢复，欢迎文档保留 | ✅（原生文件选择由 dev 钩子替代） |
 | D28 | 新建文档 → 剪贴板粘贴 64×64 PNG → 保存 → 同步到 S3 | 图片进 note-assets 并随文档上传 | 编辑器显示图片（64×64），本地生成 `note-assets/<noteId>/…png`；同步 `uploaded=1`、`uploadedBytes=1500`、`published:true gen:10` | ✅（图片上传） |
-| D29 | 第二个桌面实例（同一测试桶）同步 → 打开「图片上传测试2」 | 文档与图片一起下载，图片正常显示 | 新实例 tree 出现该文档；`note-assets/…p ng` 落盘，打开后图片 64×64 正常加载 | ✅（跨实例附件下载） |
+| D29 | 第二个桌面实例（同一测试桶）同步 → 打开「图片上传测试2」 | 文档与图片一起下载，图片正常显示 | 新实例 tree 出现该文档；`note-assets/…png` 落盘，打开后图片 64×64 正常加载 | ✅（跨实例附件下载） |
 
 ## 跨设备 S3（桌面 A / 桌面 B，同一测试桶）
 
