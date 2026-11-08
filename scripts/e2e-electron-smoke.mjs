@@ -92,7 +92,7 @@ if (result.baseline.tabBarHeight !== result.baseline.topbarToken) throw new Erro
 if (result.baseline.drawnixJs.length !== 0) throw new Error("普通文本启动不应加载 Drawnix JS");
 if (!result.baseline.status.includes("字数") || !result.baseline.status.includes("图片")) throw new Error("底部文档状态条缺少统计");
 if (!result.settings.open || result.settings.title !== "偏好设置") throw new Error("设置面板未能打开");
-if (result.search.dialogLabel !== "搜索标题和正文" || !result.search.inputDescription) throw new Error("搜索浮层无完整无障碍标记");
+if (result.search.dialogLabel !== "搜索标题、正文和标签" || !result.search.inputDescription) throw new Error("搜索浮层无完整无障碍标记");
 // 设置现已接Overlay：实际名称与首焦点都必须通过，不再保留旧浮层缺口。
 if (result.settings.role !== "dialog" || result.settings.dialogLabel !== "偏好设置" || !result.settings.focused) throw new Error("设置面板无完整 dialog 标记");
 if (result.appearance.customUi || result.appearance.codeSnippet) throw new Error("外观设置仍暴露自定义 UI 代码片段");
