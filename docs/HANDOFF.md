@@ -8,6 +8,13 @@
 
 ## 0. 最新交接（261027）
 
+### 261108 · 发版前 UI 抽样回归（桌面 + Android）+ 用户手册修正 · **master 直接提交**
+- **范围**：真实 CDP 鼠标/触摸事件驱动桌面（隔离用户数据 `/tmp/lake-regression-user`）与 Android gate AVD（lake_gate / emulator-5556），覆盖：新建笔记本/文档、目录多选（⌘/Ctrl）、右键批量菜单、创建副本、批量打标签、批量删除确认、文档标签、标签空间、全文搜索、Android 新建标签、小记长按多选、批量打标签。逐项记录「预期 → 实际」见 `docs/REGRESSION-261108.md`。
+- **结果**：未发现功能性报错/数据错误；批量删除仍进回收站，批量打标签两篇文档均落标签；Android 两条小记批量打标签后计数 2 / toast「已加标签 2 项」。
+- **文档修正（真实过期）**：`guide/08` 仍写「标签只用于小记」，已改为文档+小记共用标签（文档属性/右键标签、标签空间、批量打标签、Android 标签页）；`guide/02` 补多选完整操作与 500 上限；`guide/07` 修正交叉说明。
+- **未覆盖（需外部服务/真实文件）**：真实 S3 同步/恢复、AI 外部服务、桌面原生文件选择器、Android 系统分享、跨设备同步；详见回归文档末节。
+- **证据**：桌面标签空间显示「回归标签A 1」；全文搜索命中「回归文档2」；Android 标签页计数 1、选择模式「已选 2」、标签栏计数 2。
+
 ### 261107 · 上线前最后一批：标签存储统一到小记库 + 数据安全守卫 + 同步/多选/安全修复 · **master 直接提交（未推）**
 - **标签存储统一（本批主项）**：桌面把主库 `tag_links/tag_link_versions(target_kind='note')` 一次性迁入小记库（小记库已有同构表，quickNote 关系保留）；迁移用 SQLite `ATTACH` 跨库事务 + 行数校验 + `tag_storage_meta.note_links_v2` 标记，失败保持主库旧服务（可回退，主库旧表保留一版）。`main.ts` 在 `QuickNotesStore` 打开后调用 `Store.attachDocumentTagsDatabase(quickNotes.databaseHandle)`；同步 wire（`tagIds/tagsUpdatedAt`）不变。标签**删除/合并**改 `Store.runTagMutation(quickNotes.databaseHandle, …)`：关系已在小记库时目录变更 + 文档关系清理在**同一事务**（异常整体回滚，不再吞异常）。
 - **前置：备份恢复补小记库**：`restoreMainDatabaseFromBackup` 现同时恢复同快照的 `quick-notes/metadata.sqlite3`（校验/隔离/临时名/失败整体回滚）；备份里没有小记库时只恢复主库并保留当前小记库。`registerNotes` 传当前小记库路径。
