@@ -8,12 +8,18 @@
 
 ## 0. 最新交接（261027）
 
-### 261108 · v1.0.0 正式发版
+### 261108 · v1.0.0 正式发版（已发布）
 
-- 发版前 UI 回归完成（见下条 + `docs/REGRESSION-261108.md`）；全量门禁绿：774 文件/4939 例，设备快照三套两轮 0 差异。
-- 版本号 `package.json` 升到 **1.0.0**（Android versionName/versionCode 由根版本派生，versionCode=11000）。
-- 发布说明：`docs/RELEASE-NOTES-v1.0.0.md`。
-- 发布方式：推送注解 tag **v1.0.0** 触发 `.github/workflows/release.yml`（macOS dmg/zip + Windows NSIS + Android release APK → GitHub Release；配置 GITEE_TOKEN 时同步 Gitee Release）。macOS CI 产物未签名/未公证，Android 为 debug keystore 签的 release 变体。
+- **GitHub Release**：<https://github.com/gtycoder/lakex-local-notes/releases/tag/v1.0.0>（workflow run `42471006316` success）
+- 产物：`LakexLocalNotes-1.0.0-arm64.dmg`（199MB）/ `-arm64-mac.zip`（199MB）/ `LakexLocalNotes.Setup.1.0.0.exe`（165MB）/ `LakexLocalNotes-1.0.0-android-release.apk`（34.5MB）。
+- **发布过程修复**：
+  - 打包冒烟搜索无障碍断言过期（「搜索标题和正文」→「搜索标题、正文和标签」），已修正并加跨文件一致性测试。
+  - CI npm registry 固定官方源；electron/electron-builder 增加镜像；Gradle wrapper 改用腾讯镜像（GitHub Releases 偶发 504）。
+  - Android APK 改名步骤改为不依赖 `node -p` 的版本提取并打印 ls；此前 assemble 成功但 rename 失败导致 APK 丢失。
+- **注意**：v1.0.0 tag 在多次失败流水线后最终指向 `02be1b00`（发布产物来自该 commit）；此前 tag 已被移动过，后续 tag 不应再移动。
+- macOS CI 产物未签名/未公证；Android 为 debug keystore 签的 release 变体（debuggable=false）。Gitee 仅有代码+tag 镜像，未配置 GITEE_TOKEN 时无 Gitee 发行版。
+
+
 
 ### 261108 · 发版前 UI 抽样回归（桌面 + Android）+ 用户手册修正 · **master 直接提交**
 - **范围**：真实 CDP 鼠标/触摸事件驱动桌面（隔离用户数据 `/tmp/lake-regression-user`）与 Android gate 手机/平板 AVD，覆盖：新建笔记本/文档、目录多选（⌘/Ctrl）、右键批量菜单、创建副本、批量打标签、批量删除确认、回收站恢复、文档标签、标签空间、全文搜索、S3 配置/测试连接/首次拉取/上传发布、Android 手机与平板的新建标签/小记长按多选/批量打标签、平板设置与 S3 表单。逐项记录「预期 → 实际」见 `docs/REGRESSION-261108.md`。
