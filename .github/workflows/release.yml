@@ -143,8 +143,12 @@ jobs:
           echo "APK 非 debuggable ✓"
       - name: Rename APK with product name + version
         run: |
-          version=$(node -p "require('./package.json').version")
-          mv android/app/build/outputs/apk/release/app-release.apk "android/app/build/outputs/apk/release/LakexLocalNotes-${version}-android-release.apk"
+          set -euxo pipefail
+          version=$(sed -n 's/.*"version": "\([^"]*\)".*/\1/p' package.json | head -1)
+          test -n "$version"
+          ls -l android/app/build/outputs/apk/release/
+          mv -v android/app/build/outputs/apk/release/app-release.apk "android/app/build/outputs/apk/release/LakexLocalNotes-${version}-android-release.apk"
+          ls -l android/app/build/outputs/apk/release/
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: android
