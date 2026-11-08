@@ -36,7 +36,14 @@ jobs:
           node-version: 24
           cache: npm
       - name: Install dependencies
-        run: npm ci
+        id: install
+        continue-on-error: true
+        run: npm ci 2>&1 | tee npm-ci.log
+      - name: Report install failure
+        if: steps.install.outcome == 'failure'
+        run: |
+          tail -80 npm-ci.log | while IFS= read -r line; do echo "::error::$line"; done
+          exit 1
       - name: Typecheck & build web
         run: |
           npx tsc --noEmit
