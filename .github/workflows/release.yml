@@ -121,7 +121,12 @@ jobs:
         if: failure()
         working-directory: android
         run: |
-          tail -200 assemble.log | while IFS= read -r line; do echo "::error::$line"; done
+          {
+            echo "### Android assemble failure";
+            echo '\`\`\`';
+            tail -200 assemble.log;
+            echo '\`\`\`';
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: Assert APK is not debuggable
         working-directory: android
         shell: bash
