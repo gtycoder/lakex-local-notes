@@ -8,6 +8,14 @@
 
 ## 0. 最新交接（261027）
 
+### 261108 · v1.0.2（Android 正式签名，待发布）
+
+- Android APK 从 debug keystore 切换为 **release keystore**（GitHub Secrets 注入），CI 增加解码 + `apksigner` 指纹校验。
+- 证书 SHA-256：`A8:BA:87:F7:F7:A5:E0:68:71:CB:CF:4E:EF:10:78:A0:38:01:E2:B5:B6:DD:3C:82:55:51:6A:B5:CF:21:2E:35`。
+- v1.0.1 用户升级 v1.0.2 必须卸载重装（debug key 与 release key 不同）；之后同 key 可覆盖升级。
+- macOS 仍为 x64 + arm64 ad-hoc（未公证，走「仍要打开」）；Windows NSIS 不变。
+- 发布说明 `docs/RELEASE-NOTES-v1.0.2.md`；版本 1.0.2 / versionCode 11002。
+
 ### 261108 · v1.0.1（macOS 双架构 + ad-hoc 签名，已发布）
 
 - **GitHub Release**：<https://github.com/gtycoder/lakex-local-notes/releases/tag/v1.0.1>（run `42474413873` success，commit `3ec036b4`）

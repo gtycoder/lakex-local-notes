@@ -15,6 +15,18 @@ if (appSemver.find()) {
     appVersionCode = 1000 + major * 10000 + minor * 100 + patch
 }
 
+// Android 正式签名：CI 从 GitHub Secrets 解码 keystore 后通过环境变量注入。
+// 本地未设置时回退 debug 签名（仅用于开发/未配置环境；CI 会强制要求 release secrets）。
+def releaseKeystorePath = System.getenv("ANDROID_KEYSTORE_PATH")
+def releaseKeystorePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+def releaseKeyAlias = System.getenv("ANDROID_KEY_ALIAS")
+def releaseKeyPassword = System.getenv("ANDROID_KEY_PASSWORD")
+def hasReleaseSigning = releaseKeystorePath?.trim() &&
+    releaseKeystorePassword?.trim() &&
+    releaseKeyAlias?.trim() &&
+    releaseKeyPassword?.trim() &&
+    rootProject.file(releaseKeystorePath).isFile()
+
 android {
     namespace = "com.lakexlocalnotes.android"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -31,13 +43,23 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        if (hasReleaseSigning) {
+            release {
+                storeFile rootProject.file(releaseKeystorePath)
+                storePassword releaseKeystorePassword
+                keyAlias releaseKeyAlias
+                keyPassword releaseKeyPassword
+            }
+        }
+    }
     buildTypes {
         release {
             // SEC-03：release 变体必须配置签名，否则只能发 debug 包（android:debuggable=true ⇒
             // 任何装机者可 run-as 读私有目录里的明文笔记，也能给 WebView 挂调试器注入 JS）。
             // 这里用 debug keystore 签：签名强度不变，但 debuggable=false 立刻生效；
             // 正式发布换 release keystore 时只改这一行（+ 在 CI 注入对应 secrets）。
-            signingConfig signingConfigs.debug
+            signingConfig hasReleaseSigning ? signingConfigs.release : signingConfigs.debug
             // 维持 false：R8/Capacitor 反射面未验证，收紧混淆不在本轮范围。
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'

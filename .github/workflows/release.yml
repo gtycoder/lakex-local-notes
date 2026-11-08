@@ -99,6 +99,16 @@ jobs:
       - name: Install dependencies
         run: npm ci
       # SEC-03 静态门禁：先断言「CI/gradle 的 release 配置」本身没退回 debug 包，再花时间构建。
+      - name: Decode Android release keystore
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "::error::缺少 ANDROID_KEYSTORE_BASE64 secret"
+            exit 1
+          fi
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/release.keystore"
+          echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/release.keystore" >> "$GITHUB_ENV"
       - name: Check Android release config (static)
         run: node scripts/check-android-release-config.mjs
       - name: Build mobile web & sync Capacitor
@@ -112,6 +122,10 @@ jobs:
           sed -i '/maven.aliyun.com/d' android/build.gradle android/settings.gradle
       - name: Assemble release APK
         working-directory: android
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           chmod +x gradlew
           # SEC-03：出 release 变体（debug keystore 签，debuggable=false）；用 debug 包发版等于
@@ -127,6 +141,20 @@ jobs:
             tail -200 assemble.log;
             echo '\`\`\`';
           } >> "$GITHUB_STEP_SUMMARY"
+      - name: Verify APK is release-signed
+        working-directory: android
+        shell: bash
+        run: |
+          SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          APKSIGNER="$(ls "$SDK"/build-tools/*/apksigner 2>/dev/null | sort -V | tail -1)"
+          if [ -z "$APKSIGNER" ]; then echo "找不到 apksigner"; exit 1; fi
+          APK="app/build/outputs/apk/release/app-release.apk"
+          "$APKSIGNER" verify --print-certs "$APK" | tee /tmp/apksigner.txt
+          if grep -qi "Android Debug" /tmp/apksigner.txt; then
+            echo "::error::APK 仍是 debug keystore 签名"
+            exit 1
+          fi
+          grep -q "SHA-256 digest" /tmp/apksigner.txt || { echo "::error::APK 无证书指纹"; exit 1; }
       - name: Assert APK is not debuggable
         working-directory: android
         shell: bash

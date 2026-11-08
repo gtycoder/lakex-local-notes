@@ -199,13 +199,14 @@ function checkGradle() {
     fail("buildTypes 缺少 release 变体");
     return;
   }
-  const signing = /signingConfig\s*(?:=\s*)?(signingConfigs\.(?:debug|release|getByName\(\s*["'](?:debug|release)["']\s*\)))/.exec(release);
+  // 支持 CI 条件签名：hasReleaseSigning ? signingConfigs.release : signingConfigs.debug
+  const signing = /signingConfig[^\n]*signingConfigs\.(release|debug)/.exec(release);
   if (!signing) {
     fail("release 变体没有 signingConfig（无签名只能回退 debug 包）");
-  } else if (signing[1].includes("debug")) {
-    ok("release 变体用 debug keystore 签（SEC-03 保守方案：debuggable=false 立即生效）");
+  } else if (signing[1] === "release") {
+    ok("release 变体优先 release signingConfig（CI secrets 注入，未配置时回退 debug）");
   } else {
-    ok("release 变体配了 release signingConfig");
+    ok("release 变体用 debug keystore 签（SEC-03 保守方案：debuggable=false 立即生效）");
   }
   if (/debuggable\s*(?:=|\s)\s*true/.test(release)) fail("release 变体显式开启 debuggable");
   else ok("release 变体未显式开启 debuggable（AGP 默认 false）");
