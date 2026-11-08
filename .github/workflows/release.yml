@@ -24,6 +24,11 @@ env:
   GITEE_REPO: lakex-local-notes
   # GitHub runner 在境外：项目 .npmrc 指向 npmmirror，CI 里改用官方 registry，避免镜像不可达导致 npm ci 失败
   npm_config_registry: https://registry.npmjs.org/
+  npm_config_fetch_retries: "5"
+  npm_config_fetch_retry_maxtimeout: "120000"
+  # GitHub Releases 在本机/runner 上偶发 504：固定 electron / electron-builder 二进制镜像
+  ELECTRON_MIRROR: https://registry.npmmirror.com/-/binary/electron/
+  ELECTRON_BUILDER_BINARIES_MIRROR: https://npmmirror.com/mirrors/electron-builder-binaries/
 
 jobs:
   macos:
@@ -92,14 +97,7 @@ jobs:
           echo "sdk.dir=$sdk" > android/local.properties
           ls "$sdk" >/dev/null
       - name: Install dependencies
-        id: install
-        continue-on-error: true
-        run: npm ci 2>&1 | tee npm-ci.log
-      - name: Report install failure
-        if: steps.install.outcome == 'failure'
-        run: |
-          tail -80 npm-ci.log | while IFS= read -r line; do echo "::error::$line"; done
-          exit 1
+        run: npm ci
       # SEC-03 静态门禁：先断言「CI/gradle 的 release 配置」本身没退回 debug 包，再花时间构建。
       - name: Check Android release config (static)
         run: node scripts/check-android-release-config.mjs
@@ -113,20 +111,12 @@ jobs:
           # CI 在国外访问 google/mavenCentral 正常 ⇒ 构建前移除 aliyun 镜像（仅 CI checkout 内）
           sed -i '/maven.aliyun.com/d' android/build.gradle android/settings.gradle
       - name: Assemble release APK
-        id: assemble
-        continue-on-error: true
         working-directory: android
         run: |
           chmod +x gradlew
           # SEC-03：出 release 变体（debug keystore 签，debuggable=false）；用 debug 包发版等于
           # 把「可调试安装包」发给所有人——任何装机者都能读应用私有目录与给 WebView 挂调试器。
-          ./gradlew assembleRelease --no-daemon --stacktrace 2>&1 | tee assemble.log
-      - name: Report assemble failure
-        if: steps.assemble.outcome == 'failure'
-        working-directory: android
-        run: |
-          tail -120 assemble.log | while IFS= read -r line; do echo "::error::$line"; done
-          exit 1
+          ./gradlew assembleRelease --no-daemon --stacktrace
       - name: Assert APK is not debuggable
         working-directory: android
         shell: bash
