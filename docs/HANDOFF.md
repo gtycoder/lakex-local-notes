@@ -10,10 +10,11 @@
 
 ### 261108 · 发版前 UI 抽样回归（桌面 + Android）+ 用户手册修正 · **master 直接提交**
 - **范围**：真实 CDP 鼠标/触摸事件驱动桌面（隔离用户数据 `/tmp/lake-regression-user`）与 Android gate 手机/平板 AVD，覆盖：新建笔记本/文档、目录多选（⌘/Ctrl）、右键批量菜单、创建副本、批量打标签、批量删除确认、回收站恢复、文档标签、标签空间、全文搜索、S3 配置/测试连接/首次拉取/上传发布、Android 手机与平板的新建标签/小记长按多选/批量打标签、平板设置与 S3 表单。逐项记录「预期 → 实际」见 `docs/REGRESSION-261108.md`。
-- **结果**：未发现功能性报错/数据错误；批量删除仍进回收站且可恢复；批量打标签两篇文档均落标签；手机/平板两条小记批量打标签后计数 2 / toast「已加标签 2 项」。S3 用测试桶（前缀 `lakex-notes-dev3`）验证：测试连接成功、首次同步按「删除=缺席」把 5 个本地条目移入回收站并下载远端条目、新建文档同步 `published:true gen:5 uploaded=2`。
+- **结果**：未发现功能性报错/数据错误；批量删除仍进回收站且可恢复；批量打标签两篇文档均落标签；手机/平板两条小记批量打标签后计数 2 / toast「已加标签 2 项」。S3 用测试桶（前缀 `lakex-notes-dev3`）验证：测试连接成功、首次同步按「删除=缺席」把 5 个本地条目移入回收站并下载远端条目、新建文档同步 `published:true gen:5 uploaded=2`。编辑器烟测：新建并打开表格/多维表/画板/手写板，菜单与页导航正常；多维表「添加记录」3→4 条，手写板切网格无报错。
 - **文档修正（真实过期）**：`guide/08` 仍写「标签只用于小记」，已改为文档+小记共用标签（文档属性/右键标签、标签空间、批量打标签、Android 标签页）；`guide/02` 补多选完整操作与 500 上限；`guide/07` 修正交叉说明。
 - **未覆盖（需外部服务/真实文件）**：S3 冲突留档/恢复、附件资产传输与跨设备同步、AI 外部服务、桌面原生文件选择器、Android 系统分享。
 - **设备基线**：回归改动了 gate 手机/平板夹具数据，已 `pm clear` + 重灌夹具并重烤手机 6 态、平板 6 态、多维表 3 态基线；手机/多维表已双跑 0 差异，平板基线重烤后已连跑两轮 0 差异。
+- **环境插曲**：用 `am start -a SEND -t text/plain` 尝试 Android 系统分享时 gate 模拟器弹「System UI isn't responding」（SystemUI ANR，App 进程仍在），随后 WebView CDP 断开；判定为 AVD 故障，分享路径待重启模拟器后重测。
 
 ### 261107 · 上线前最后一批：标签存储统一到小记库 + 数据安全守卫 + 同步/多选/安全修复 · **master 直接提交（未推）**
 - **标签存储统一（本批主项）**：桌面把主库 `tag_links/tag_link_versions(target_kind='note')` 一次性迁入小记库（小记库已有同构表，quickNote 关系保留）；迁移用 SQLite `ATTACH` 跨库事务 + 行数校验 + `tag_storage_meta.note_links_v2` 标记，失败保持主库旧服务（可回退，主库旧表保留一版）。`main.ts` 在 `QuickNotesStore` 打开后调用 `Store.attachDocumentTagsDatabase(quickNotes.databaseHandle)`；同步 wire（`tagIds/tagsUpdatedAt`）不变。标签**删除/合并**改 `Store.runTagMutation(quickNotes.databaseHandle, …)`：关系已在小记库时目录变更 + 文档关系清理在**同一事务**（异常整体回滚，不再吞异常）。
