@@ -86,6 +86,7 @@
 - 桌面原生文件选择器（导入 Markdown、导出目录、附件重命名落盘）。
 - Android 系统分享导入、文件选择、返回键/后台恢复。
   - 本轮尝试 `am start -a SEND -t text/plain` 文本分享；模拟器弹出「System UI isn't responding」（SystemUI ANR，App 进程仍在），随后 CDP WebView 断开，无法判定分享结果。这是 AVD 环境故障，不是 App 崩溃证据；需重启模拟器后重测。
+  - 重启后用 `content://media/external/file/19` 分享 .md，原生插件因测试命令未授予 URI 读权限报 `SecurityException`（copyToInbox failed），未进入产品正常分享路径；不能据此判定产品行为，需从真实分享面板或带 grant 的发送方重测。
 - 桌面原生文件选择器：打开/取消可验证，但无法通过 CDP 操作系统窗口；需人工或测试替身。
 - 编辑器深路径：表格/多维表/画板/手写板的大内容、导入导出与异常恢复。
 - 彻底删除（purge）、回收站自动清理、删除传播。
