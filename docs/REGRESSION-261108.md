@@ -44,6 +44,8 @@
 
 ## S3 冲突（桌面 A / B）
 
+> 测试替身说明：A/B 的 S3 配置与部分同步触发直接走 preload IPC（`saveS3Settings/testS3Connection/syncNow`），正文编辑、同步结果横幅与「查看历史」走真实 UI；原生保存/选择窗口不在 CDP 可控范围。
+
 | # | 操作（UI） | 预期 | 实际 | 结果 |
 |---|---|---|---|---|
 | Y1 | A/B 同步同一文档后，A 改正文为「A本地修改」→ A 同步；B 改正文为「B本地修改」→ B 同步 | 检测到冲突：远端胜、B 被覆盖版本留历史快照 | 同步结果 `conflicts:1`、`supersededNotes:[冲突测试文档]`、warning `conflict_kept_history`；B 正文变为「A本地修改」并显示「远端修改已覆盖本地 1 篇（已存历史）」 | ✅ |
