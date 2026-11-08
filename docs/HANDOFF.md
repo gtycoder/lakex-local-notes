@@ -8,6 +8,12 @@
 
 ## 0. 最新交接（261027）
 
+### 261108 · v1.0.3（Gitee APK 镜像链路，待发布）
+
+- 无业务改动；验证 GitHub Release 全量 + Gitee Release 只同步 APK + Gitee 说明带 GitHub 链接。
+- Gitee 单附件 100MB、仓库总附件 1GB，mac/Windows 包超限，workflow 只上传 `android-release.apk` 并校验 HTTP 响应。
+- 版本 1.0.3 / versionCode 11003；发布说明 `docs/RELEASE-NOTES-v1.0.3.md`。
+
 ### 261108 · v1.0.2（Android 正式签名，已发布）
 
 - Android APK 从 debug keystore 切换为 **release keystore**（GitHub Secrets 注入），CI 增加解码 + `apksigner` 指纹校验。
