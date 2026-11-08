@@ -172,16 +172,16 @@ codesign -dv --verbose=4 "release/mac-arm64/LakexLocalNotes.app"
 
 | Job | Runner | 产物 |
 | --- | --- | --- |
-| macOS | `macos-15` | `*.dmg` / `*.zip`（未签名） |
+| macOS | `macos-15` | x64 + arm64 的 `*.dmg` / `*.zip`（ad-hoc 签名，未公证） |
 | Windows | `windows-latest` | NSIS 安装包 `*.exe`（未签名） |
-| Android | `ubuntu-24.04` | `LakexLocalNotes-<version>-android-release.apk`（release 变体，debug keystore 签） |
-| Publish | `ubuntu-24.04` | GitHub Release；配置 `GITEE_TOKEN` 时同步 Gitee 发行版 |
+| Android | `ubuntu-24.04` | `LakexLocalNotes-<version>-android-release.apk`（release 变体，release keystore 签） |
+| Publish | `ubuntu-24.04` | GitHub Release；配置 `GITEE_TOKEN` 时向 Gitee 发行版同步 **APK** |
 
 产物命名统一为「产品名 + 版本」：
 
-- macOS：`LakexLocalNotes-<version>-arm64.dmg` / `-arm64-mac.zip`
+- macOS：`LakexLocalNotes-<version>-arm64.dmg` / `-arm64.zip`、`-x64.dmg` / `-x64.zip`
 - Windows：`LakexLocalNotes Setup <version>.exe`（electron-builder NSIS 默认命名）
-- Android：`LakexLocalNotes-<version>-android-release.apk`（release 变体，debug keystore 签，`debuggable=false`）
+- Android：`LakexLocalNotes-<version>-android-release.apk`（release 变体，release keystore 签，`debuggable=false`）
 
 ### 3. 发版步骤
 
@@ -206,16 +206,15 @@ git push origin master v0.1.2
 
 - GitHub 仓库 → Settings → Secrets and variables → Actions → 新建 `GITEE_TOKEN`
   （Gitee 私人令牌，勾选 `projects` 权限）
-- 配置后 Publish job 会调 Gitee API 创建发行版并上传产物
-- ⚠️ Gitee 单附件有大小限制（通常 100MB 级）；dmg/zip 约 180MB 可能超限，
-  超限时只同步 apk，或把大文件放对象存储并在发行版里给链接
+- 配置后 Publish job 会调 Gitee API 创建发行版，**只上传 Android APK**
+- Gitee 单附件上限 100MB（GVP 200MB）、仓库附件总量 1GB；mac dmg/zip 约 190–205MB、Windows exe 约 165MB 均超限，因此只镜像 APK，mac/Windows 继续走 GitHub Release；发行版说明里附 GitHub 链接
 
 ### 5. 未签名说明
 
-- **macOS**：CI 里 `CSC_IDENTITY_AUTO_DISCOVERY=false`，产物未签名/未公证；
-  首次打开需 右键 → 打开
+- **macOS**：CI 用 `mac.identity=- + hardenedRuntime=false` 做 ad-hoc 签名，未公证；
+  首次打开走「系统设置 → 隐私与安全性 → 仍要打开」，或右键 → 打开
 - **Windows**：未签名，SmartScreen 提示「Windows 已保护你的电脑」→ 更多信息 → 仍要运行
-- **Android**：产物 = `assembleRelease` 的 release 变体（debug keystore 签，`android:debuggable=false`）；正式发布再换 release keystore（签名强度不变，但不再可调试）
+- **Android**：产物 = `assembleRelease` 的 release 变体，CI 从 GitHub Secrets 解码 release keystore 并签名；`debuggable=false`，`apksigner` 校验非 debug key。
 - 要正式分发：按本文一~三节配置 Apple 签名/公证，并在 CI 中加对应 secrets
 
 ### 6. 已知坑

@@ -250,7 +250,7 @@ jobs:
           for attempt in 1 2; do
             resp=$(curl -sS -X POST "$api/releases" \
               -d "access_token=$GITEE_TOKEN" -d "tag_name=$TAG" -d "name=$TAG" \
-              -d "body=Automated release (built on GitHub Actions)" -d "target_commitish=master" || true)
+              -d "body=Automated release. Android APK mirrored; macOS/Windows: https://github.com/$GITHUB_REPOSITORY/releases/tag/$TAG" -d "target_commitish=master" || true)
             rid=$(printf '%s' "$resp" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("id",""))' 2>/dev/null || true)
             [ -n "$rid" ] && break
             rid=$(curl -sS "$api/releases/tags/$TAG?access_token=$GITEE_TOKEN" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("id",""))' 2>/dev/null || true)
@@ -258,9 +258,29 @@ jobs:
             sleep 2
           done
           [ -n "$rid" ] || { echo "无法创建/找到 Gitee release"; exit 1; }
+          # Gitee 单附件上限 100MB（GVP 200MB），mac dmg/zip 与 Windows exe 都超过；
+          # 只镜像 Android APK，避免大文件上传失败而脚本静默成功。
+          uploaded=0
           for f in dist/*; do
             [ -f "$f" ] || continue
-            echo "upload $f"
-            curl -sS -X POST "$api/releases/$rid/attach_files" \
-              -F "access_token=$GITEE_TOKEN" -F "file=@$f" > /dev/null
+            case "$f" in
+              *android-release.apk) ;;
+              *) echo "skip（Gitee 只镜像 APK）: $f"; continue ;;
+            esac
+            size=$(wc -c < "$f")
+            if [ "$size" -gt 104857600 ]; then
+              echo "::error::Gitee 单附件超过 100MB：$f ($size bytes)"
+              exit 1
+            fi
+            echo "upload $f ($size bytes)"
+            code=$(curl -sS -o /tmp/gitee-upload.json -w '%{http_code}' -X POST "$api/releases/$rid/attach_files" \
+              -F "access_token=$GITEE_TOKEN" -F "file=@$f")
+            if [ "$code" -lt 200 ] || [ "$code" -ge 300 ]; then
+              echo "::error::Gitee 上传失败 HTTP $code：$(cat /tmp/gitee-upload.json)"
+              exit 1
+            fi
+            uploaded=$((uploaded + 1))
           done
+          if [ "$uploaded" -eq 0 ]; then
+            echo "::warning::没有找到可上传 Gitee 的 Android APK"
+          fi
