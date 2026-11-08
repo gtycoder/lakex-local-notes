@@ -8,6 +8,13 @@
 
 ## 0. 最新交接（261027）
 
+### 261108 · v1.0.0 正式发版
+
+- 发版前 UI 回归完成（见下条 + `docs/REGRESSION-261108.md`）；全量门禁绿：774 文件/4939 例，设备快照三套两轮 0 差异。
+- 版本号 `package.json` 升到 **1.0.0**（Android versionName/versionCode 由根版本派生，versionCode=11000）。
+- 发布说明：`docs/RELEASE-NOTES-v1.0.0.md`。
+- 发布方式：推送注解 tag **v1.0.0** 触发 `.github/workflows/release.yml`（macOS dmg/zip + Windows NSIS + Android release APK → GitHub Release；配置 GITEE_TOKEN 时同步 Gitee Release）。macOS CI 产物未签名/未公证，Android 为 debug keystore 签的 release 变体。
+
 ### 261108 · 发版前 UI 抽样回归（桌面 + Android）+ 用户手册修正 · **master 直接提交**
 - **范围**：真实 CDP 鼠标/触摸事件驱动桌面（隔离用户数据 `/tmp/lake-regression-user`）与 Android gate 手机/平板 AVD，覆盖：新建笔记本/文档、目录多选（⌘/Ctrl）、右键批量菜单、创建副本、批量打标签、批量删除确认、回收站恢复、文档标签、标签空间、全文搜索、S3 配置/测试连接/首次拉取/上传发布、Android 手机与平板的新建标签/小记长按多选/批量打标签、平板设置与 S3 表单。逐项记录「预期 → 实际」见 `docs/REGRESSION-261108.md`。
 - **结果**：未发现功能性报错/数据错误；批量删除仍进回收站且可恢复；批量打标签两篇文档均落标签；手机/平板两条小记批量打标签后计数 2 / toast「已加标签 2 项」。S3 用测试桶（前缀 `lakex-notes-dev3`）验证：测试连接成功、首次同步按「删除=缺席」把 5 个本地条目移入回收站并下载远端条目、新建文档同步 `published:true gen:5 uploaded=2`。编辑器烟测：新建并打开表格/多维表/画板/手写板，菜单与页导航正常；多维表「添加记录」3→4 条，手写板切网格无报错。Android gate 手机也配置同一测试桶并「立即同步」：`↑0 ↓4（1 项被跳过）`、下载 4/3/0 3.5MB，桌面文档与标签被拉到手机；本机 fixture 按「删除=缺席」进回收站（预期）。桌面 A/B 双实例跨设备：A 新建「跨设备文档A」同步后 B 拉到；B 彻底删除并同步后 A 同步→目录移除、打开标签变只读「该文档在回收站中」，出现 1 条同步记录（删除传播符合设计）。历史恢复：创建快照 → 改文档 → 历史「恢复此版本」→ 正文回到快照，恢复前版本自动存为第二条快照。附件下载：远端文档 large-s3 的 3.6MB 图片落本地 note-assets，图片 1100×1100 正常加载。大文档：插入 120 段/4212 字符，关闭标签再重开字符数不变（4212），无丢失。整库备份：设置→备份与恢复→立即备份，生成主库+小记库两个 .sqlite3（308KB，1 份），状态「成功」，刷新统计正常。原生对话框测试钩子：dev-only（`electron/testDialogHooks.ts`，`!app.isPackaged` 才生效，env `LAKE_TEST_PICK_FILE/DIR/SAVE_FILE`）；已用它跑通桌面导入 Markdown（生成 import-reg）、导出 Markdown 资料包（index.md+images）、从备份恢复（删除 import-reg 后恢复成功，原库隔离到 corrupt/）。S3 冲突：A/B 同改一篇，A 先同步、B 后同步 ⇒ `conflicts:1` + `supersededNotes` + `conflict_kept_history`，B 正文被远端覆盖为 A 版并提示「已存历史」；历史面板有 1 条快照，预览正文为 B 版「B本地修改」。
