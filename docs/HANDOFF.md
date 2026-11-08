@@ -8,7 +8,11 @@
 
 ## 0. 最新交接（261027）
 
-### 261108 · v1.0.1（macOS 双架构 + ad-hoc 签名）
+### 261108 · v1.0.1（macOS 双架构 + ad-hoc 签名，已发布）
+
+- **GitHub Release**：<https://github.com/gtycoder/lakex-local-notes/releases/tag/v1.0.1>（run `42474413873` success，commit `3ec036b4`）
+- 资产：`x64.dmg`/`x64.zip`、`arm64.dmg`/`arm64.zip`、Windows `Setup.1.0.1.exe`、`1.0.1-android-release.apk`。
+- macOS 为 ad-hoc 签名（未公证），首次打开用「系统设置 → 隐私与安全性 → 仍要打开」；APK 仍是 debug keystore 签的 release 变体（正式商店分发前需换 release keystore）。
 
 - **背景**：v1.0.0 的 macOS CI 产物未签名/签名无效，下载后被 macOS 判为「已损坏」，无法通过「隐私与安全性 → 仍要打开」；且只有 arm64。
 - **修复**：CI mac 改为 `--x64 --arm64` 分别打包，electron-builder 用 `mac.identity=- + mac.hardenedRuntime=false` 做 ad-hoc 有效签名；artifactName 带架构后缀便于区分。universal 单包因 sharp arm64/x64 原生依赖冲突不可用。
