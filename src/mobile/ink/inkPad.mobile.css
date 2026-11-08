@@ -14,7 +14,7 @@
 .ink-pad--mobile .ink-zoom button { min-width: var(--mb-tap-min); height: var(--mb-tap-min); padding: 0 7px; }
 .ink-pad--mobile .ink-toolbar__sep { height: 20px; margin: 0 2px; }
 /* 移动端页码改用紧凑写法（n / N），并把共享的 72px 最小宽归零：给「页签」入口腾位置，否则胶囊塞不下第四组 */
-.ink-pad--mobile .ink-pages span { font-size: var(--lake-font-size-micro); min-width: 0; }
+.ink-pad--mobile .ink-pages span { font-size: var(--lake-font-size-micro); min-width: 0; white-space: nowrap; }
 .ink-pad--mobile .ink-backgrounds button { font-size: var(--lake-font-size-micro); }
 
 /* 悬浮面共用：绝对定位（不占布局）+ 面板底 + 0.5px 边 + popover 阴影。 */

@@ -121,6 +121,10 @@ describe("手写板正式端到端接线", () => {
     expect(MOBILE_INK_CSS).not.toContain("backdrop-filter");
   });
 
+  it("移动端页码不换行（新页 + 按钮挤压时 3 / 3 不能被折成两行）", () => {
+    expect(MOBILE_INK_CSS).toMatch(/\.ink-pad--mobile \.ink-pages span \{[^}]*white-space: nowrap/);
+  });
+
   it("移动端底部工具坞是悬浮面且只在编辑态出现；颜色/笔宽收成「当前值按钮 + 悬浮面板」", () => {
     expect(INK_PAD).toContain(") : !readOnly ? (");
     expect(INK_PAD).toContain('role="toolbar" aria-label="手写工具"');
