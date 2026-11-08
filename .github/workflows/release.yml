@@ -116,7 +116,12 @@ jobs:
           chmod +x gradlew
           # SEC-03：出 release 变体（debug keystore 签，debuggable=false）；用 debug 包发版等于
           # 把「可调试安装包」发给所有人——任何装机者都能读应用私有目录与给 WebView 挂调试器。
-          ./gradlew assembleRelease --no-daemon --stacktrace
+          ./gradlew assembleRelease --no-daemon --stacktrace 2>&1 | tee assemble.log
+      - name: Report Android build failure
+        if: failure()
+        working-directory: android
+        run: |
+          tail -200 assemble.log | while IFS= read -r line; do echo "::error::$line"; done
       - name: Assert APK is not debuggable
         working-directory: android
         shell: bash
