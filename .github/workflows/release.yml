@@ -241,6 +241,8 @@ jobs:
           files: dist/**
       - name: Mirror assets to Gitee Release
         if: env.GITEE_TOKEN != ''
+        timeout-minutes: 10
+        continue-on-error: true
         env:
           TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}
         run: |
@@ -248,12 +250,12 @@ jobs:
           api="https://gitee.com/api/v5/repos/$GITEE_OWNER/$GITEE_REPO"
           rid=""
           for attempt in 1 2; do
-            resp=$(curl -sS -X POST "$api/releases" \
+            resp=$(curl -sS --connect-timeout 20 --max-time 60 -X POST "$api/releases" \
               -d "access_token=$GITEE_TOKEN" -d "tag_name=$TAG" -d "name=$TAG" \
               -d "body=Android APK 已同步（正式 release keystore 签名）。macOS / Windows 安装包请到 GitHub Release 下载：https://github.com/$GITHUB_REPOSITORY/releases/tag/$TAG" -d "target_commitish=master" || true)
             rid=$(printf '%s' "$resp" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("id",""))' 2>/dev/null || true)
             [ -n "$rid" ] && break
-            rid=$(curl -sS "$api/releases/tags/$TAG?access_token=$GITEE_TOKEN" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("id",""))' 2>/dev/null || true)
+            rid=$(curl -sS --connect-timeout 20 --max-time 60 "$api/releases/tags/$TAG?access_token=$GITEE_TOKEN" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("id",""))' 2>/dev/null || true)
             [ -n "$rid" ] && break
             sleep 2
           done
@@ -273,7 +275,7 @@ jobs:
               exit 1
             fi
             echo "upload $f ($size bytes)"
-            code=$(curl -sS -o /tmp/gitee-upload.json -w '%{http_code}' -X POST "$api/releases/$rid/attach_files" \
+            code=$(curl -sS --connect-timeout 20 --max-time 300 --retry 2 --retry-delay 5 -o /tmp/gitee-upload.json -w '%{http_code}' -X POST "$api/releases/$rid/attach_files" \
               -F "access_token=$GITEE_TOKEN" -F "file=@$f")
             if [ "$code" -lt 200 ] || [ "$code" -ge 300 ]; then
               echo "::error::Gitee 上传失败 HTTP $code：$(cat /tmp/gitee-upload.json)"
