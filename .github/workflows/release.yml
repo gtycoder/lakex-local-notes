@@ -22,6 +22,8 @@ permissions:
 env:
   GITEE_OWNER: gtycoder
   GITEE_REPO: lakex-local-notes
+  # GitHub runner 在境外：项目 .npmrc 指向 npmmirror，CI 里改用官方 registry，避免镜像不可达导致 npm ci 失败
+  npm_config_registry: https://registry.npmjs.org/
 
 jobs:
   macos:
