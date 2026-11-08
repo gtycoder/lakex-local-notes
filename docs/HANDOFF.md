@@ -14,7 +14,7 @@
 - **文档修正（真实过期）**：`guide/08` 仍写「标签只用于小记」，已改为文档+小记共用标签（文档属性/右键标签、标签空间、批量打标签、Android 标签页）；`guide/02` 补多选完整操作与 500 上限；`guide/07` 修正交叉说明。
 - **未覆盖（需外部服务/真实文件）**：S3 冲突留档/恢复、附件资产传输与跨设备同步、AI 外部服务、桌面原生文件选择器、Android 系统分享。
 - **设备基线**：回归（标签、S3 拉取、分享导入）多次改动 gate 夹具数据，均 `pm clear` + 重灌夹具后重烤；手机 6 态、平板 6 态、多维表 3 态均两轮 0 差异。
-- **Android 返回/后台**：设置页按系统返回键回到笔记本详情；Home 退后台再从桌面进入，仍停在原详情页、数据不变。**Android 分享**：真实第三方分享面板仍未跑通（首次遇 SystemUI ANR；`content://media` 命令因未授权报 SecurityException）。改用应用 FileProvider 测试替身分享 .md：文件进 shared-inbox → 弹「选择导入位置」→ 选「个人笔记」→ toast「已导入 1 篇 Markdown」→ 笔记本 5→6 篇、文档标题「分享导入测试」。测试后已 pm clear 重置夹具并重烤手机/多维表基线。
+- **设置搜索/资源页**：桌面设置搜索「回收站」过滤到「数据维护」1 项命中；Android 设置→资源管理正常显示本地/未引用/云端入口，未配置云同步文案正确。**Android 返回/后台**：设置页按系统返回键回到笔记本详情；Home 退后台再从桌面进入，仍停在原详情页、数据不变。**Android 分享**：真实第三方分享面板仍未跑通（首次遇 SystemUI ANR；`content://media` 命令因未授权报 SecurityException）。改用应用 FileProvider 测试替身分享 .md：文件进 shared-inbox → 弹「选择导入位置」→ 选「个人笔记」→ toast「已导入 1 篇 Markdown」→ 笔记本 5→6 篇、文档标题「分享导入测试」。测试后已 pm clear 重置夹具并重烤手机/多维表基线。
 
 ### 261107 · 上线前最后一批：标签存储统一到小记库 + 数据安全守卫 + 同步/多选/安全修复 · **master 直接提交（未推）**
 - **标签存储统一（本批主项）**：桌面把主库 `tag_links/tag_link_versions(target_kind='note')` 一次性迁入小记库（小记库已有同构表，quickNote 关系保留）；迁移用 SQLite `ATTACH` 跨库事务 + 行数校验 + `tag_storage_meta.note_links_v2` 标记，失败保持主库旧服务（可回退，主库旧表保留一版）。`main.ts` 在 `QuickNotesStore` 打开后调用 `Store.attachDocumentTagsDatabase(quickNotes.databaseHandle)`；同步 wire（`tagIds/tagsUpdatedAt`）不变。标签**删除/合并**改 `Store.runTagMutation(quickNotes.databaseHandle, …)`：关系已在小记库时目录变更 + 文档关系清理在**同一事务**（异常整体回滚，不再吞异常）。
