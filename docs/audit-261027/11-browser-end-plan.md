@@ -80,7 +80,7 @@ Electron 主进程
 
 ### P2 bundle 与启动分离（L，**已评估·不做** 261029）
 - 评估双 bundle（Electron 一份 / 浏览器一份）或构建期 `define` 剪裁 Electron-only import；以"浏览器端首屏字节/初始化时间"为判据，先量化再决定（AGENTS §3#17）。
-- **结论（261029，见 `docs/BROWSER-BUNDLE-SPLIT.md`）：不做。** 首屏 JS+CSS 10.65MB raw/2.78MB gz，其中 Lake 内核≈90%（浏览器读笔记必需）；web bundle 已无 Electron-only 依赖（7 类主进程依赖 0 import，251 chunk 无 electron 运行时）；可剪 <5KB 源码≈<0.5KB gz（<0.02%），成本却是第三条构建链 + 发布包 +20.4MB gz。
+- **结论（261029，见历史审计 BROWSER-BUNDLE-SPLIT（已删除，git 可查））：不做。** 首屏 JS+CSS 10.65MB raw/2.78MB gz，其中 Lake 内核≈90%（浏览器读笔记必需）；web bundle 已无 Electron-only 依赖（7 类主进程依赖 0 import，251 chunk 无 electron 运行时）；可剪 <5KB 源码≈<0.5KB gz（<0.02%），成本却是第三条构建链 + 发布包 +20.4MB gz。
 
 ---
 

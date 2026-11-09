@@ -1,6 +1,6 @@
 # 架构总览
 
-> ⚠️ **261103 注**：本文 §一/§二 的同步部分写于 **Manifest V2 时代**（现为 **S3 v3**：`meta/pointer.json` + 内容寻址索引 + 每文档资产声明，见 `docs/SYNC-PROTOCOL.md` 与 AGENTS §4）；文件索引也需按需核对。架构评审与目标架构见 [`ARCH-REVIEW-261103.md`](ARCH-REVIEW-261103.md)。
+> ⚠️ **261103 注**：本文 §一/§二 的同步部分写于 **Manifest V2 时代**（现为 **S3 v3**：`meta/pointer.json` + 内容寻址索引 + 每文档资产声明，见 `docs/SYNC-PROTOCOL.md` 与 AGENTS §4）；文件索引也需按需核对。架构评审与目标架构的结论已归档（原 ARCH-REVIEW-261103 已删除，git 可查）。
 
 ## 多维表渲染边界
 
@@ -124,7 +124,7 @@ Preload (electron/preload.cjs)：原生 CJS，contextBridge 暴露 window.lakeNa
 | `quick_note_deleted` | 删除 tombstone；转换时可暂缓上传 |
 | `quick_note_conversions` | 跨空间转换 journal |
 
-详见 [QUICK-NOTES-SPEC.md](./QUICK-NOTES-SPEC.md)。
+详见 `docs/TAG-SYSTEM-DESIGN.md` 与 AGENTS §4（原 QUICK-NOTES-SPEC 已被 261024 方案 B / 261105 标签库取代）。
 
 ### 4.4 S3 云端布局（prefix = `lakex-local-notes`）
 

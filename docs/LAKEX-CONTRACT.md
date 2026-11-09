@@ -820,7 +820,7 @@ symbol 无一个 `note-*`；语雀页面里的 `#ne-note-image` / `#ne-note-chec
   选中行灰底）+ 标签/搜索/更多工具行；右＝**全尺寸编辑器**（完整默认工具栏，无发布按钮 ⇒ 云端是自动保存）。
 - 我们按同一套做：`小记` = 写作卡 + 卡片流；`列表` = `b3-list--background` 索引 + `editorMode="document"` 编辑器
   （完整工具栏）；版式是**本机展示偏好**（localStorage，不进 S3）。差异：我们保留显式「保存/小记一下 + 取消」
-  （小记是手动保存语义，见 `docs/QUICK-NOTES-SPEC.md`），云端无此按钮。
+  （小记是手动保存语义，见 AGENTS §4；原 QUICK-NOTES-SPEC 已被 261024 方案 B / 261105 标签库取代），云端无此按钮。
 
 **五、附件「按类型成卡」的路由在内核哪里（260919 实测）**
 
@@ -858,7 +858,7 @@ symbol 无一个 `note-*`；语雀页面里的 `#ne-note-image` / `#ne-note-chec
 **七、小记的白名单与「内核写 / 我们读」分工（260919 用户定稿）**
 
 - **分工**：小记**编辑态挂内核**（保证产出是标准 lake 标记，不手拼），**卡片预览不挂内核**（自研只读渲染）。
-  ⇒ 代价从"每张卡一个内核实例（≈+5MB RSS/实例，见 `docs/QUICK-NOTES-SPEC.md`）"
+  ⇒ 代价从"每张卡一个内核实例（≈+5MB RSS/实例，见 AGENTS §4；原 QUICK-NOTES-SPEC 已被 261024 方案 B / 261105 标签库取代）"
   变成"一个纯字符串解析器"；同时因为没有手拼标记，也就没有"被内核改写"的风险。
 - **编辑态外观（260919 最终定稿）**：小记走内核 **note 版式**（`mount.ne-doc-note-editor.lakex-note-editor`
   + `uiSwitch.default='note'` + `fullscreen.enable`）——
@@ -919,7 +919,7 @@ symbol 无一个 `note-*`；语雀页面里的 `#ne-note-image` / `#ne-note-chec
 - 护栏：`quickNoteNoteUi.test.ts` / `quickNotesView.test.ts`（源码级）、`electron/quickNotes.test.ts`（stageFile 往返）。
 - 卡片预览 = **自研只读渲染器**（零内核实例）：按 `body` 解析白名单块（段落/标题/列表/待办/引用/分割线/
   行内格式/媒体卡），白名单外的块显示占位条。**不挂 viewer/viewer 的替代路线已被用户否掉**
-  （每卡一实例 ≈ +5MB RSS，见 `docs/QUICK-NOTES-SPEC.md`）；
+  （每卡一实例 ≈ +5MB RSS，见 AGENTS §4；原 QUICK-NOTES-SPEC 已被 261024 方案 B / 261105 标签库取代）；
   因此「预览显示不了的格式」必须同时从**工具栏**与**「+」面板**收掉（`filterQuickNoteInsert`），
   卡片注册保持全量（§5.8：不能摘，否则老内容里的表/自定义卡一编辑就被内核丢弃）。
 

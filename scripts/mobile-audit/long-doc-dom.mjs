@@ -5,7 +5,7 @@
  * 为什么需要：移动端 DocumentEditor 恒传 disableVirtualRendering:true（因为自研 DOM 查找
  * 需要整篇正文在 DOM 里，见 src/mobile/editor/mobileFind.ts），于是长文档打开即全量建 DOM +
  * 全量水合卡片；桌面同一篇在**编辑态**走内核 virtualRendering。要不要为此重做查找，
- * 必须先有可复现的数字（审计 04-mobile.md MOB-04「保守版：先量化」）。
+ * 必须先有可复现的数字（MOB-04「保守版：先量化」）。
  *
  * 量什么（全部在页内取，避免 CDP 往返把耗时算进产品）：
  *   · document.querySelectorAll('*').length（全页节点数）与正文子树节点数

@@ -10,13 +10,13 @@
 >
 > **261029 复核（本文件 §6）**：剩余项已按「不为无法出现的场景写防御代码」逐条给出功能口径裁决 —— **全部不做**（SEC-04/06/08/09/11/12 + SEC-13b/13e），只做两处**注释纠错**与一条发布正确性待办（SEC-03 真实 CI 首跑）；不新增任何防御代码。
 >
-> **Lead 核对（数字口径）**：IPC 通道数以 `electron/ipc/ipcChannelParity.test.ts:90-92` 的断言为准 = **135**（registrar / preload invoke / `WEB_METHODS` 三者一致）；本文 §1.2 的 138/132/124 是含 `handleEvent` 与 shim 手写行的另一统计口径，结论（三处镜像）不受影响。详见 `00-executive.md` §6。
+> **Lead 核对（数字口径）**：IPC 通道数以 `electron/ipc/ipcChannelParity.test.ts:90-92` 的断言为准 = **135**（registrar / preload invoke / `WEB_METHODS` 三者一致）；本文 §1.2 的 138/132/124 是含 `handleEvent` 与 shim 手写行的另一统计口径，结论（三处镜像）不受影响。详见历史审计 00-executive §6（已删除，git 可查）。
 
 ---
 
 ## 0. 结论摘要（按严重度）
 
-> **261028 晚注**：本节是审计当时（2026-10-27）的结论快照，**不代表当前状态**；逐条当前状态以文末「修复状态（261028）」表 + `13-audit-status.md` 为准（本文状态表已按工作树代码对齐）。
+> **261028 晚注**：本节是审计当时（2026-10-27）的结论快照，**不代表当前状态**；逐条当前状态以文末「修复状态（261028）」表 + 历史审计 13-audit-status（已删除，git 可查）为准（本文状态表已按工作树代码对齐）。
 
 | # | 结论 | 严重度 |
 |---|---|---|
@@ -24,7 +24,7 @@
 | 2 | **`save_s3_settings` 接受任意 endpoint/bucket/prefix**：渲染层可把同步目标整体改向攻击者的 https 桶，下一次整轮同步就把全库正文+附件上传出去（https 强制只在同步时才校验，存得进去）。 | **P1** |
 | 3 | **Android 分发产物只有 debug APK**（`assembleDebug` + `minifyEnabled false`，debuggable + debug keystore），桌面 macOS/Windows 产物未签名/未公证；"暂不做签名"已定，但 **debug 包是功能上可调试的**，不只是"签名弱"。 | **P1** |
 | 4 | **资产 HTTP 服务的 token 只在"带 Origin 的 CORS 请求"上校验**：本机任意进程（桌面）/ 设备上任意已安装 App（Android）不带 Origin 即可无凭据读取 note-assets 与 quick-notes 图片/附件（桌面 `assetServer.ts` 与 Android `AssetServer.kt` 同款设计）。 | **P2** |
-| 5 | **浏览器端（webApiServer）的 `/__native.js` 门禁可被非浏览器客户端伪造**：手写 `Sec-Fetch-Site: none` 就能拿到全量 IPC token ⇒ "本机进程不能拿 token" 的注释假设不成立（服务默认关、需先开启，故 P2；与 `01-product-architecture.md` 的"删掉浏览器端"同向）。 | **P2** |
+| 5 | **浏览器端（webApiServer）的 `/__native.js` 门禁可被非浏览器客户端伪造**：手写 `Sec-Fetch-Site: none` 就能拿到全量 IPC token ⇒ "本机进程不能拿 token" 的注释假设不成立（服务默认关、需先开启，故 P2；与历史审计 01-product-architecture（已删除，git 可查）的"删掉浏览器端"同向）。 | **P2** |
 | 6 | **缺 session 权限收敛**：全仓 0 处 `setPermissionRequestHandler` / `setPermissionCheckHandler`（相机/麦克风/地理位置/通知/clipboard-read/loopback-network 等交给 Electron 默认策略）。 | **P2** |
 | 7 | **CSP 与主进程都把 `http://127.0.0.1:*` 全端口放行**（桌面 prod/dev + 移动端 connect/img/media/object/frame）⇒ 渲染层可探测/滥用本机任意端口的本地服务（localhost SSRF），资产 token 也因此只对网页有效。 | **P2** |
 | 8 | **Android 平台级加密/混合内容未收口**：`network_security_config.xml` 是 `base-config cleartextTrafficPermitted="true"`（对所有域，不只 127.0.0.1）；Capacitor 固定 `MIXED_CONTENT_ALWAYS_ALLOW` + `androidScheme: http`。 | **P2** |
@@ -101,7 +101,7 @@
 | macOS 不签名/不公证、Windows 不签名 | `HANDOFF.md` §0「261027 下一步①」+ `docs/RELEASE.md` §七/§五（用户决定暂不做） |
 | 闭源内核以 vendored 形式公开分发、未取得授权 | `AGENTS.md` §2「闭源内核分发（261022 定稿）」+ `NOTICE` |
 | 移动端 S3 密钥必须可被 JS 读出（签名在 JS），Keystore 只保"静态" | `AGENTS.md` §5 + `docs/HANDOFF.md` §3#7c + `secretStore.ts` 头注释 |
-| 浏览器端去留 | `01-product-architecture.md` 已列 P1「删除或只读化」；本文只补安全维度证据，不重复立项 |
+| 浏览器端去留 | 历史审计 01-product-architecture（已删除，git 可查）已列 P1「删除或只读化」；本文只补安全维度证据，不重复立项 |
 | 墓碑/删除/保留等数据语义 | `AGENTS.md` §3/§4、HANDOFF §3；不在本文范围 |
 
 ---
@@ -334,10 +334,10 @@ bash scripts/ci-packaged-smoke.sh                  # 打包产物可启动（改
 3. **每个 P1 修完留一条负向用例**（修之前红、修之后绿），并在 `docs/HANDOFF.md` §0 记一行；本文不重复登记 backlog。
 ---
 
-## 修复状态（261028，见 `08-ab-execution.md`）
+## 修复状态（261028；历史审计 08-ab-execution 已删除，git 可查）
 
 > 261028 晚复核：状态以**工作树代码**为准（逐条 grep）；与 `08` 轮次冲突处以代码为准并注明。
-> 采样 = 2026-10-28 21:15–21:30（Asia/Shanghai）；完整逐条对账见 `13-audit-status.md` §1。
+> 采样 = 2026-10-28 21:15–21:30（Asia/Shanghai）；完整逐条对账见历史审计 13-audit-status §1（已删除，git 可查）。
 
 | 条目 | 状态 | 证据（文件 : 符号）与残余 |
 |---|---|---|

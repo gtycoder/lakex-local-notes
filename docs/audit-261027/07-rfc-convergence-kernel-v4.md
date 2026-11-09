@@ -5,7 +5,7 @@
 | 状态 | Draft（待用户评审；本 RFC 通过后按 §12 拆 PR 实施） |
 | 作者 | Lead（基于 `02`–`06` 审计） |
 | 日期 | 2026-10-27 / 基线 `master @ ea576a80`（审计快照 41def9f0） |
-| 关联 | `05-sync-data.md`（证据）、`06-redesign.md`（设计）、`AGENTS.md` §2–§4、`docs/S3-REDESIGN.md` §6/§15.1 |
+| 关联 | 历史审计 05-sync-data（证据）、06-redesign（设计）（均已删除，git 可查）、`AGENTS.md` §2–§4、`docs/S3-REDESIGN.md` §6/§15.1 |
 | 影响面 | `src/core/s3v3*`、`electron/s3v3/*`、`src/mobile/v3/*`、`electron/store.ts`、`src/mobile/data/*`、桌面/移动同步 UI 契约 |
 | 协议 | **wire format 不变**（pointer / 不可变索引 / 每篇资产声明 / 内容寻址对象） |
 
@@ -46,7 +46,7 @@ B' = R' ; I' = gc(I, R')         // finalize：基线单点原子落盘
 | 缺正文「可云恢复」误判 | 读 v3 永不写的 `sync_base` | 判据未跟随协议迁移 |
 | 待同步数永久挂起 | `published_at` 无人写 | 记账没有单一出口 |
 
-完整证据：`05-sync-data.md` SD-01..13；状态机补丁清单见 `06-redesign.md` §2。
+完整证据：历史审计 05-sync-data SD-01..13（已删除，git 可查）；状态机补丁清单见历史审计 06-redesign §2（已删除，git 可查）。
 
 ---
 
