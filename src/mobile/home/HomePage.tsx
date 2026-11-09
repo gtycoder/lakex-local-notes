@@ -7,7 +7,7 @@
  * - 空态不做「创建」提示（默认空白即可）；
  * - 底部胶囊栏 = [筛选 | 新建 | 云同步]（新建按 tab 记性：小记=写小记、知识库=新建笔记本）。
  */
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { writeLocalStorage } from "../../lib/localStorageSafe";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { ChevronDown, ChevronRight, CloudUpload, List, LayoutGrid, ArrowUpDown, BookMarked, Feather, MoreHorizontal, Pencil, Plus, Search, Settings, Settings2, SmilePlus, Sparkles, Tag, Trash } from "lucide-react";
@@ -51,7 +51,9 @@ import { readFavoriteIds, readFavoritesOpen, subscribeFavorites, writeFavoritesO
 import { QuickNoteComposerLazy } from "./quickNoteComposerLazy";
 import { MobileQuickNoteTagSheet } from "./MobileQuickNoteTagSheet";
 import { TagsHomeTab } from "../tags/TagsHomeTab";
-import { DiaryPage } from "../diary/DiaryPage";
+// 日记页按需加载（261109）：它把 core/diary + 自己的列表/搜索接线带进分包，
+// 静态引入会直接抬高移动端 entry 预算（check:bundle 的 mobile-entry-js/preload 是硬门禁）。
+const DiaryPage = lazy(() => import("../diary/DiaryPage").then((m) => ({ default: m.DiaryPage })));
 import type { HomeTab } from "./tabPager";
 import { quickNoteDetailOf, useQuickNoteDetailCache } from "./useQuickNoteDetailCache";
 import { notifyMissingQuickNoteOnce } from "./missingQuickNoteNotice";
@@ -892,12 +894,15 @@ export function HomePage(props: HomePageProps) {
         </section>
         {/* 一级「日记」页（261109 v1）：列表 + 写今天 + 搜索入口；正文编辑仍进现有工作区（不新造输入面）。 */}
         <section ref={diaryPaneRef} className="mobile-tab-pane">
-          <DiaryPage
-            nodes={diaryNodes ?? EMPTY_DIARY_NODES}
-            onOpenEntry={(input) => { onOpenDiaryEntry?.(input); }}
-            onOpenSearch={() => { onOpenDiarySearch?.(); }}
-            onChanged={onTreeChanged}
-          />
+          {/* 分包未就绪时不画空白：给一个同构骨架（面在惰性 tab 里，用户切过来时通常已加载完）。 */}
+          <Suspense fallback={<div className="mb-diary-skeleton" aria-hidden="true" />}>
+            <DiaryPage
+              nodes={diaryNodes ?? EMPTY_DIARY_NODES}
+              onOpenEntry={(input) => { onOpenDiaryEntry?.(input); }}
+              onOpenSearch={() => { onOpenDiarySearch?.(); }}
+              onChanged={onTreeChanged}
+            />
+          </Suspense>
         </section>
       </div>
 

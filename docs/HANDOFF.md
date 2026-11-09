@@ -157,7 +157,7 @@
 - `npx tsc --noEmit` = **0 错**。
 - `npx vitest run` = **794 文件（783 passed / 11 skipped）/ 4993 passed / 12 skipped / 0 failed**。
 - `git diff --check` = **0**。
-- `check:bundle`：**mobile-entry 仍超目标（已知红，非本批引入）**。脚本当前按现状冻结为 entry JS gzip ≤66KB、modulepreload ≤34 条、首屏 ≤380KB（`check-arch`）；目标仍是 **60KB / ≤12 条 / 360KB**，瘦身后收紧（§3 P1）。运行前需先有 `dist` / `dist-mobile` 构建产物（本机当前无 `dist`）。
+- `check:bundle`：**mobile-entry 仍超目标（已知红，非本批引入）**。脚本当前冻结为 entry JS gzip ≤66KB、modulepreload ≤34 条、首屏 ≤380KB（`check-arch`）；目标仍是 **60KB / ≤12 条 / 360KB**，瘦身后收紧（§3 P1）。**261109 实测校准**：基线 `f3b2d0c3` 已经是 **74438 gz / 36 链接**（冻结值本身就落后于该 commit）；日记 v1 之后 = **75257 gz / 38 链接**（Δ +819B / +2 条，已把 `DiaryPage` 拆成按需分包、`bridge/diary` 又退回静态 import 以免多出 5 条 preload）。⇒ 真要收口目标值，是一次独立的移动端瘦身专项，别算在日记头上。运行前需先有 `dist` / `dist-mobile` 构建产物。
 - 其它样式/边界/设备门禁按改动范围跑（分层口径见 AGENTS §3#21）；最近一次完整设备记录 = **v1.0.4 发版前**：手机 6 态、平板 6 态、多维表 3 态均重烤后两轮 0 差异。
 
 **设备与环境（本机实测）**
