@@ -13,6 +13,7 @@ import {
 } from "../data/noteBodies.js";
 import { loadV3State } from "../data/v3StateRepository.js";
 import { MAX_QUICK_NOTE_TAGS } from "../../core/quickNoteTags.js";
+import { TRASH_NOTEBOOK_ID } from "../../core/syncDecisions.js";
 import {
   addPendingTagDeletes as appendPendingTagDeletes,
   applyQuickTagDirectory,
@@ -123,9 +124,11 @@ export function createMobilePlatformPort(db: MobileDb, ctxIn?: Partial<MobilePla
 
   return {
     async listFoldersForSync(): Promise<SyncFolderRow[]> {
+      // 与桌面 listFoldersForSync 同口径：固定「回收站」笔记本是本机容器，绝不进云端 folders
+      // （否则移动端一发布就把 notebook-trash 写进索引，首轮同步平白多出一代）。
       const rows = await db.prepare(
-        "SELECT id,title,parent_id,sort_order,node_type,icon,updated_at,trashed_at,deleted_from_parent_id,cloud_deleted FROM folders ORDER BY id"
-      ).all() as Array<Record<string, unknown>>;
+        "SELECT id,title,parent_id,sort_order,node_type,icon,updated_at,trashed_at,deleted_from_parent_id,cloud_deleted FROM folders WHERE id != ? ORDER BY id"
+      ).all(TRASH_NOTEBOOK_ID) as Array<Record<string, unknown>>;
       return rows.map((r) => ({
         id: String(r.id), title: String(r.title), parentId: r.parent_id ? String(r.parent_id) : null,
         sortOrder: Number(r.sort_order), nodeType: r.node_type === "group" ? "group" : "notebook",

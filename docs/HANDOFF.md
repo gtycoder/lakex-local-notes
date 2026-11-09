@@ -16,6 +16,13 @@
 - 真机验证（大包 3.0GiB 合成数据：314 文档 + 165 资产 + 3 小记 + 4 标签；包 486 entries / 3,216,634,405 B，<4GiB）：导入成功，结果 314 文档 / 5 目录 / 3 小记 / 4 标签 / 482 文件（3065.2MB）。逐项核对：DB 行（notes/folders/quick_notes/tags/tag_links）与源完全一致、is_dirty 全 0、note_history 仅 1 条为导入后本机自动快照（非包内历史）、**482 个正文/资产文件 sha256 与源逐一相同**、165 个资产大小逐一相同（3,213,670,762 B）、手机 v3 baseline 与包内 baseline 完全相等（314/5/3/4，commits 一致）。S3 接续：src/core/s3v3Engine.ts 仅在无 baseline 时 full-sync；导入已写 baseline ⇒ 配好真实 S3 后走增量。该合成包用假 S3 基线，**不可用于真实 S3**；真实接续须从已同步的真实桌面导出。
 - 门禁：tsc 0；vitest **783 files / 4993 passed / 12 skipped / 0 failed**（含 perf 集成偶发，重跑通过）；check:core / check:mobileui / diff-check 通过；Kotlin 离线编译通过。
 
+### 261109 · 真实 S3 端到端验收（便携包 → 手机 → 增量同步）
+- 真实七牛桶（Endpoint s3.cn-north-1.qiniucs.com / Region cn-north-1 / Bucket local-lake-hebei），测试前缀 **lakex-notes-dev3-portabletest2**（保留：98 对象 / 约 5.1MB，供复测；旧 ...portabletest 已删）。
+- 桌面（隔离 userData，真实 dev 数据 14 文档 / 3 小记 / 75 资产）：首传 17 篇 + 92 对象、pending 0；导出便携包 5.6MB（baseline epoch 8cb91383、gen 1）。
+- 手机：覆盖导入包成功（14 文档 / 5 目录 / 3 小记 / 4 标签 / 92 文件）；用桌面导出的迁移码导入 S3 配置；首次同步 **↑0 ↓0**，云端 pointer **仍为 generation 1**、commits 与包 baseline 完全一致（未发布新索引）；手机 baseline = 14 notes / 4 folders。
+- 真机发现并修复：① 桌面同步成功后未清 folders.is_dirty ⇒ 待同步目录常驻、便携包导出被挡；已在 desktopSync 成功后按 updatedAt 条件 markFolderSynced。② 移动端 listFoldersForSync 把固定「回收站」笔记本也发布 ⇒ 首轮同步平白多发一代并把 notebook-trash 写进云端；已排除 TRASH_NOTEBOOK_ID（与桌面同口径）。
+- 门禁：tsc 0；vitest **783 files / 4993 passed / 12 skipped / 0 failed**；diff-check 通过；Android 离线构建通过。
+
 ### 261109 · 更新中心（桌面 + Android）
 - 新增应用内更新中心：检查更新（GitHub latest release 的 `latest.json`，CI 生成）/ 更新日志（复用 `docs/RELEASE-NOTES.md`）/ 自动检查（默认开，启动 + 6/12/24h）/ 自动下载（默认开；Android 仅 Wi-Fi）/ 忽略此版本；**不做静默安装**（桌面打开安装包、Android 拉起系统安装器）。
 - 桌面新增 8 个 IPC 通道（165→173，parity 通过）；Android 新增 `UpdatePlugin.kt`（DownloadManager + sha256/证书指纹校验 + FileProvider 安装器）；规格见 [docs/UPDATE-CENTER.md](UPDATE-CENTER.md)。
@@ -159,7 +166,7 @@
 
 **P1（该做但可排期）**
 
-- **便携包真实数据验证（261109 已做小包+3GiB 合成包，仍待真实 3GB 数据）**：小包与 3GiB 合成包真机导入、逐文件 hash 对拍已通过；仍需用你自己的真实数据（约 3GB）从已同步桌面导一次，验证真实内容与 S3 接续。
+- **便携包真实数据验证**：小包、3GiB 合成包、真实 S3 增量接续（dev 数据）均已验收；仍待用真实 3GB 数据从已同步桌面导一次（大小/耗时/内存）。
 - **更新中心设备验证（261109 已实现，待设备验收）**：Android 真机/模拟器走一遍「检查→下载（DownloadManager 通知）→ sha256/证书校验→系统安装器→覆盖安装保数据」；桌面走一遍「检查→下载→打开 dmg/exe」；验证「忽略此版本」「下载中断/重启恢复」「仅 Wi-Fi 自动下载」。规格 [docs/UPDATE-CENTER.md](UPDATE-CENTER.md)。
 - **桌面 3 项实机复核**：usheet 整行/整列选中不跳滚动、桌面手写板 14 色、设置/小记/历史 lazy 路径交互冒烟（P12 遗留）。**平板（lake_tab）复验页签/页面面板**：代码无形态分支（`formFactor` 只改外壳宽度与侧栏），Android 手机已实测，平板需装同一份 APK 复核一次。
 - **261104 三项裁决的残余验证**（裁决本身是 AGENTS §4 的定稿，别再立项）：**缺正文云端拉回需在配了 S3 的真机走一遍**（目前仅单测 mock）；**表单视图大表行数帽**（一次性 `getValues`、默认 35 行，超大表若卡再加）；**资源管理两处 UI 改动未重跑 6 态快照 + 23 屏走查**（只在设置子页，预期 0 差异，发版前一并跑）；**资源「附件」系统打开未设备专项验**（需真实附件 + 系统应用；图片 Lightbox 已验）。
