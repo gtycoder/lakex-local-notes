@@ -285,7 +285,8 @@ export function registerNotesIpc(
   ipc.handle("set_note_locked", (id: string, locked: boolean) => { store.setNoteEditLocked(id, locked); return store.readNote(id); });
   ipc.handle("list_tree_nodes", () => store.listTreeNodes());
   ipc.handle("list_note_summaries", () => store.listNoteSummaries());
-  ipc.handle("create_notebook", (title: unknown) => store.createNotebook(assertTitle(title)));
+  // space（261109）= 日记本标记：只接受 "diary" / null，其余归一成 null（非日记）。
+  ipc.handle("create_notebook", (title: unknown, space?: unknown) => store.createNotebook(assertTitle(title), space === "diary" ? "diary" : null));
   ipc.handle("create_group", (parentId: string, title: unknown) => store.createGroup(parentId, assertTitle(title)));
   ipc.handle("rename_tree_node", (id: string, title: unknown) => store.renameTreeNode(id, assertTitle(title)));
   ipc.handle("create_note_in", (parentId: string | null, title: unknown) => store.createNoteIn(parentId, assertTitle(title)));

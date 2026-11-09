@@ -50,6 +50,16 @@ export type SafeModeExitResult =
   | { ok: true; state: { active: boolean; exitedAt?: string } }
   | { ok: false; reason: string; state?: { active: boolean; exitedAt?: string } };
 
+/** 日记打开结果（与主进程 electron/diaryStore.ts 的 DiaryOpenResult 同形，跨片契约）。 */
+export interface DiaryOpenResultShape {
+  noteId: string;
+  /** 本次是否真的新建了文档（false = 命中已有）。 */
+  created: boolean;
+  notebookId: string;
+  /** 同名重复文档（历史脏数据）：只告警不删除。 */
+  duplicates: string[];
+}
+
 /** 复制诊断：主进程直接把崩溃现场 + 环境写进剪贴板。 */
 export interface SafeModeDiagnosticsResult { ok: boolean; text: string }
 
@@ -191,7 +201,13 @@ export interface LakeNative {
   deleteNote(id: string): Promise<void>;
   listTreeNodes(): Promise<TreeNode[]>;
   listNoteSummaries(): Promise<import("./types").NoteSummary[]>;
-  createNotebook(title: string): Promise<TreeNode>;
+  /** 新建笔记本；`space`（261109）= 日记本标记（"diary" | null，其它值按非日记处理）。 */
+  createNotebook(title: string, space?: "diary" | null): Promise<TreeNode>;
+  /**
+   * 日记（261109，**桌面专有**；移动端有自己的日记页）：幂等打开某一天。
+   * 只传 dateKey —— 主进程重新 plan，已存在直接返回（created=false），连点两次只产生一篇。
+   */
+  diaryOpenDate(dateKey: string): Promise<DiaryOpenResultShape>;
   createGroup(parentId: string, title: string): Promise<TreeNode>;
   renameTreeNode(id: string, title: string): Promise<TreeNode>;
   createNoteIn(parentId: string | null, title: string): Promise<NoteDocument>;
@@ -455,7 +471,8 @@ export const native = {
   deleteNote: (id: string) => api().deleteNote(id),
   listTreeNodes: () => api().listTreeNodes(),
   listNoteSummaries: () => api().listNoteSummaries(),
-  createNotebook: (title: string) => api().createNotebook(title),
+  createNotebook: (title: string, space?: "diary" | null) => api().createNotebook(title, space),
+  diaryOpenDate: (dateKey: string) => api().diaryOpenDate(dateKey),
   createGroup: (parentId: string, title: string) => api().createGroup(parentId, title),
   renameTreeNode: (id: string, title: string) => api().renameTreeNode(id, title),
   createNoteIn: (parentId: string | null, title: string) => api().createNoteIn(parentId, title),

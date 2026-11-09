@@ -65,6 +65,8 @@ export class SchemaInit {
         created_at TEXT NOT NULL, updated_at TEXT NOT NULL, deleted_at TEXT,
         is_conflict INTEGER NOT NULL DEFAULT 0,
         icon TEXT,
+        -- 日记本标记（261109，docs/DIARY.md）：只允许 'diary' 或 NULL（非日记）；分组/文档恒 NULL。
+        space TEXT,
         trashed_at TEXT,
         deleted_from_parent_id TEXT,
         is_purged INTEGER NOT NULL DEFAULT 0,
@@ -166,6 +168,8 @@ export class SchemaInit {
       //（is_purged = 本地/他端彻底删除的抑制位，cloud_deleted = 「云端已删除 · 仅本地」）。
       ["notes", "cloud_deleted", "ALTER TABLE notes ADD COLUMN cloud_deleted INTEGER NOT NULL DEFAULT 0"],
       ["tree_nodes", "cloud_deleted", "ALTER TABLE tree_nodes ADD COLUMN cloud_deleted INTEGER NOT NULL DEFAULT 0"],
+      // 日记本标记（261109）：列默认 NULL = 非日记，旧库不需要回填（AGENTS §3#7 不做数据迁移）。
+      ["tree_nodes", "space", "ALTER TABLE tree_nodes ADD COLUMN space TEXT"],
     ] as const) {
       const cols = this.ctx.db.prepare("PRAGMA table_info(" + table + ")").all() as Array<{ name: string }>;
       if (!cols.some((c) => c.name === column)) this.ctx.db.exec(ddl);

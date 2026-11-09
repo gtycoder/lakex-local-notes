@@ -1,4 +1,5 @@
 import { sha256Hex } from "../../syncUtils.js";
+import { normalizeFolderSpace, type DiaryFolderSpace } from "../../diary.js";
 import { assertSafeSegment } from "./s3v3Keys.js";
 import { S3V3_HASH_RE } from "./s3v3Types.js";
 
@@ -62,6 +63,13 @@ export interface LakeFolderEntry {
   nodeType: "notebook" | "group";
   icon: string | null;
   updatedAt: string;
+  /**
+   * 日记本标记（261109，docs/DIARY.md）。
+   * **发布时必须显式写**：非日记写 `null`（不是省略字段）——否则「取消日记标记」在 wire 上不可见、
+   * 两端会互刷（同 tagIds 空集合必须写 `[]` 的教训）。
+   * 读取容错：未知值/缺字段一律当非日记（`normalizeFolderSpace`）。
+   */
+  space?: DiaryFolderSpace | null;
   trashedAt?: string | null;
   deletedFromParentId?: string | null;
 }
@@ -305,7 +313,10 @@ export function validateLakeIndex(raw: unknown): LakeIndex {
     if (typeof f.title !== "string" || typeof f.updatedAt !== "string") throw new Error("目录 title/updatedAt 非法");
     if (f.nodeType !== "notebook" && f.nodeType !== "group") throw new Error("目录 nodeType 非法");
   }
-  return { v: S3V3_INDEX_VERSION, space: "lake", notes: idx.notes as LakeNoteEntry[], folders: idx.folders as LakeFolderEntry[] };
+  // 日记标记读取容错（DIARY.md）：未知值/缺字段一律当非日记，**不抛错、也不自动修复**
+  // （多个 space="diary" 的冲突由判据层取首个并告警，不在这里静默改数据）。
+  const folders: LakeFolderEntry[] = (idx.folders as LakeFolderEntry[]).map((f) => ({ ...f, space: normalizeFolderSpace(f.space) }));
+  return { v: S3V3_INDEX_VERSION, space: "lake", notes: idx.notes as LakeNoteEntry[], folders };
 }
 
 export function validateQuickNotesIndex(raw: unknown): QuickNotesIndex {

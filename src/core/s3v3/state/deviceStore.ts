@@ -27,6 +27,7 @@ import { ledgerOf, migratePersisted, mergeSyncMarkers, persistedNeedsMigration, 
 /** 信封标记合并的唯一实现（intentLogState.ts）；这里 re-export 保持既有导入点（适配器/测试）。 */
 export { mergeSyncMarkers };
 import { settleCloudDeleted } from "./cloudDeleted.js";
+import { normalizeFolderSpace } from "../../diary.js";
 import type { PlatformDataPort, QuickNoteSyncRow, QuickTagRow, SyncFolderRow, SyncNoteMetaRow } from "./platformPort.js";
 
 /** 资源文件名白名单（驱动/声明/键都已校验；这里是 SEC-13a 的纵深防御，单一来源）。 */
@@ -200,6 +201,8 @@ export function createDeviceStoreMeta(deps: DeviceStoreMetaDeps): DeviceStoreMet
   const toFolderEntry = (f: SyncFolderRow): LakeFolderEntry => ({
     id: f.id, title: f.title, parentId: f.parentId, sortOrder: f.sortOrder, nodeType: f.nodeType,
     icon: f.icon, updatedAt: f.updatedAt,
+    // 显式写 space（非日记 = null）：平台行缺列/旧库无该列时归一成 null，绝不省略字段。
+    space: normalizeFolderSpace(f.space),
     ...(f.trashedAt !== undefined && f.trashedAt !== null ? { trashedAt: f.trashedAt } : {}),
     ...(f.deletedFromParentId !== undefined && f.deletedFromParentId !== null ? { deletedFromParentId: f.deletedFromParentId } : {}),
   });
@@ -369,6 +372,7 @@ export function createDeviceStoreMeta(deps: DeviceStoreMetaDeps): DeviceStoreMet
             || (c.parentId ?? null) !== (parentId ?? null)
             || c.sortOrder !== f.sortOrder
             || (c.icon ?? null) !== (f.icon ?? null)
+            || normalizeFolderSpace(c.space) !== normalizeFolderSpace(f.space)
             || c.updatedAt !== f.updatedAt;
           if (changed) await p.applyRemoteFolderMeta({ ...folderRow(f), parentId });
         }
@@ -387,6 +391,7 @@ export function createDeviceStoreMeta(deps: DeviceStoreMetaDeps): DeviceStoreMet
     return {
       id: f.id, title: f.title, parentId: f.parentId, sortOrder: f.sortOrder, nodeType: f.nodeType,
       icon: f.icon ?? null, updatedAt: f.updatedAt,
+      space: normalizeFolderSpace(f.space),
       trashedAt: f.trashedAt ?? null, deletedFromParentId: f.deletedFromParentId ?? null,
     };
   }

@@ -15,6 +15,7 @@
  * - 错误语义：抛错 = 本轮同步失败（core 会按 note/folder id 包上上下文再抛）；"缺失"用 null/[] 表达，不抛。
  */
 import type { NoteKind } from "../../noteKind.js";
+import type { DiaryFolderSpace } from "../../diary.js";
 
 /** 同步目录行（世界投影）。 */
 export interface SyncFolderRow {
@@ -25,6 +26,8 @@ export interface SyncFolderRow {
   nodeType: "notebook" | "group";
   icon: string | null;
   updatedAt: string;
+  /** 日记本标记（261109，docs/DIARY.md）：缺省/未知 = 非日记（由 core 归一成 null）。 */
+  space?: DiaryFolderSpace | null;
   trashedAt?: string | null;
   deletedFromParentId?: string | null;
   /** 移动端 DB 投影（cloud_deleted=1 = 「云端已删除·仅本地」副本）：core 会并入 remotePurged。 */

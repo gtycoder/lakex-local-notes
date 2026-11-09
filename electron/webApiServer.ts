@@ -104,6 +104,7 @@ export const WEB_METHODS: Record<string, string> = {
   aiChat: "ai_chat",
   aiCancel: "ai_cancel",
   listTreeNodes: "list_tree_nodes",
+  diaryOpenDate: "diary_open_date",
   listNoteSummaries: "list_note_summaries",
   createNotebook: "create_notebook",
   createGroup: "create_group",

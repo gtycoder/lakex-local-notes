@@ -1,6 +1,7 @@
 import type { DbLike } from "./dbLike.js";
 import { AppError } from "../src/core/storeErrors.js";
 import { assertTreeNodeTitle } from "../src/core/treeRules.js";
+import { normalizeFolderSpace, type DiaryFolderSpace } from "../src/core/diary.js";
 import type { SyncFolder, TreeNode } from "./noteQueries.js";
 
 interface MetadataRepositoryDeps {
@@ -58,15 +59,16 @@ export class NoteMetadataRepository {
     }
   }
 
-  createNotebook(title: string): TreeNode {
+  /** 新建笔记本。`space`（261109）= 日记本标记；只有 "diary" 会被落库，其余归一成 NULL（非日记）。 */
+  createNotebook(title: string, space?: DiaryFolderSpace | null): TreeNode {
     let trimmed: string;
     try { trimmed = assertTreeNodeTitle(title); }
     catch { throw new AppError("InvalidInput", "名称不能为空"); }
     const id = this.deps.uuid();
     const now = this.deps.nowIso();
     const sortOrder = this.deps.nextSortOrder(null);
-    this.db.prepare("INSERT INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,is_dirty,is_conflict) VALUES(?,?,NULL,'notebook',?,NULL,?,?,?,1,0)")
-      .run(id, this.workspaceId, trimmed, sortOrder, now, now);
+    this.db.prepare("INSERT INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,is_dirty,is_conflict,space) VALUES(?,?,NULL,'notebook',?,NULL,?,?,?,1,0,?)")
+      .run(id, this.workspaceId, trimmed, sortOrder, now, now, normalizeFolderSpace(space));
     return this.deps.readTreeNode(id);
   }
 
@@ -219,21 +221,23 @@ export class NoteMetadataRepository {
       const parentId = this.wouldCreateParentCycle(folder.id, folder.parentId) ? null : folder.parentId;
       if (parentId !== folder.parentId) console.warn("[sync] 拒绝成环的远端父关系（importRemoteFolder）:", folder.id, folder.parentId);
       this.db.prepare(
-        `INSERT INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,deleted_at,is_dirty,is_conflict,icon,trashed_at,deleted_from_parent_id)
-         VALUES(?,?,?,?,?,NULL,?,?,?,NULL,0,0,?,?,?)`
+        `INSERT INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,deleted_at,is_dirty,is_conflict,icon,trashed_at,deleted_from_parent_id,space)
+         VALUES(?,?,?,?,?,NULL,?,?,?,NULL,0,0,?,?,?,?)`
       ).run(folder.id, this.workspaceId, parentId, folder.nodeType, folder.title, folder.sortOrder, folder.updatedAt, folder.updatedAt, folder.icon ?? null,
         parentId === this.trashNotebookId ? (folder.trashedAt ?? null) : null,
-        parentId === this.trashNotebookId ? (folder.deletedFromParentId ?? null) : null);
+        parentId === this.trashNotebookId ? (folder.deletedFromParentId ?? null) : null,
+        normalizeFolderSpace(folder.space));
       return;
     }
     if (folder.updatedAt > existing.updated_at) {
       const parentId = this.wouldCreateParentCycle(folder.id, folder.parentId) ? existing.parent_id : folder.parentId;
       if (parentId !== folder.parentId) console.warn("[sync] 拒绝成环的远端父关系（importRemoteFolder 更新）:", folder.id, folder.parentId);
       this.db.prepare(
-        "UPDATE tree_nodes SET parent_id=?, title=?, sort_order=?, updated_at=?, icon=?, is_dirty=0, node_type=?, trashed_at=?, deleted_from_parent_id=? WHERE id=?"
+        "UPDATE tree_nodes SET parent_id=?, title=?, sort_order=?, updated_at=?, icon=?, is_dirty=0, node_type=?, trashed_at=?, deleted_from_parent_id=?, space=? WHERE id=?"
       ).run(parentId, folder.title, folder.sortOrder, folder.updatedAt, folder.icon ?? null, folder.nodeType,
         parentId === this.trashNotebookId ? (folder.trashedAt ?? null) : null,
         parentId === this.trashNotebookId ? (folder.deletedFromParentId ?? null) : null,
+        normalizeFolderSpace(folder.space),
         folder.id);
     }
   }
@@ -257,8 +261,9 @@ export class NoteMetadataRepository {
     const parentId = this.wouldCreateParentCycle(folder.id, folder.parentId) ? existing.parent_id : folder.parentId;
     if (parentId !== folder.parentId) console.warn("[sync] 拒绝成环的远端父关系（applyRemoteFolderMeta）:", folder.id, folder.parentId);
     this.db.prepare(
-      "UPDATE tree_nodes SET title=?, parent_id=?, sort_order=?, node_type=?, icon=?, updated_at=?, is_dirty=0, trashed_at=?, deleted_from_parent_id=? WHERE id=?"
-    ).run(folder.title, parentId, folder.sortOrder, folder.nodeType, folder.icon ?? null, folder.updatedAt, trashedAt, deletedFrom, folder.id);
+      "UPDATE tree_nodes SET title=?, parent_id=?, sort_order=?, node_type=?, icon=?, updated_at=?, is_dirty=0, trashed_at=?, deleted_from_parent_id=?, space=? WHERE id=?"
+    ).run(folder.title, parentId, folder.sortOrder, folder.nodeType, folder.icon ?? null, folder.updatedAt, trashedAt, deletedFrom,
+      normalizeFolderSpace(folder.space), folder.id);
   }
 
   hasTreeNode(id: string): boolean {

@@ -55,6 +55,8 @@ import type { NoteSummary, SummaryRow, SyncFolder, SyncNote, TreeNode } from "./
 import { NoteMetadataRepository } from "./noteMetadataRepository.js";
 import { NoteContentRepository, type NoteCacheInput } from "./noteContentRepository.js";
 import { createPlaintextSecretCipher, type SecretCipher } from "../src/core/secretCipher.js";
+import type { DiaryFolderSpace } from "../src/core/diary.js";
+import { DiaryStore, type DiaryOpenResult } from "./diaryStore.js";
 import type { DbLike } from "./dbLike.js";
 import { ResourceRepository } from "./resourceRepository.js";
 import { draftJournalDir, readDraftEntry } from "./draftJournal.js";
@@ -245,6 +247,8 @@ export class Store {
   readonly syncConflicts: SyncConflictsRepository;
   /** 261106 批量操作（A 方案）：树/父级/环/sortOrder 的只读端口 + 单事务入口。 */
   readonly batchNotes: BatchNotesRepository;
+  /** 261109 日记：幂等打开某天的存储编排（笔记本 → 年组 → 月组 → 文档，单事务）。 */
+  private readonly diaryStore: DiaryStore;
 
   /** 数据根目录（v3 适配器/诊断用；只读）。 */
   get rootPath(): string { return this.root; }
@@ -305,6 +309,19 @@ export class Store {
       descendantIds: (id) => this.descendantIds(id),
       readTreeNode: (id) => this.readTreeNode(id),
       upsertSearch: (noteId, title, body) => this.searchRepository.upsert(noteId, title, body),
+    });
+    this.diaryStore = new DiaryStore({
+      db: this.db,
+      workspaceId: DEFAULT_WORKSPACE_ID,
+      // 与 IPC list_tree_nodes 同一读源：plan 只吃这一份快照（主进程重新 plan，不信渲染层）。
+      listTreeNodes: () => this.listTreeNodes(),
+      nextSortOrder: (parentId) => this.nextSortOrder(parentId),
+      uuid,
+      nowIso,
+      atomicWrite: (filePath, content) => this.atomicWrite(filePath, content),
+      noteBodyPath: (noteId) => this.notePath(noteId),
+      upsertSearch: (noteId, title, body) => this.searchRepository.upsert(noteId, title, body),
+      log: (message) => this.logScopes.store.warn(message),
     });
     this.noteContent = new NoteContentRepository({
       db: this.db,
@@ -827,8 +844,17 @@ export class Store {
     return !!this.db.prepare("SELECT 1 FROM notes WHERE id=? AND deleted_at IS NULL").get(id);
   }
 
-  createNotebook(title: string): TreeNode {
-    return this.noteMetadata.createNotebook(title);
+  /** 新建笔记本；`space`（261109）= 日记本标记（"diary" | null，其余归一成 null）。 */
+  createNotebook(title: string, space?: DiaryFolderSpace | null): TreeNode {
+    return this.noteMetadata.createNotebook(title, space);
+  }
+
+  /**
+   * 日记：幂等打开某一天的文档（IPC `diary_open_date` 的唯一实现）。
+   * 判据/分组/事务全在 diaryStore；这里只是让 Store 持有 db 与既有写口径。
+   */
+  openDiaryDate(dateKey: string): DiaryOpenResult {
+    return this.diaryStore.openDate(dateKey);
   }
 
   /**

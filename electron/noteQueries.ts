@@ -1,4 +1,5 @@
 import { rowToLocalState } from "../src/core/syncDecisions.js";
+import { normalizeFolderSpace, type DiaryFolderSpace } from "../src/core/diary.js";
 import { normalizeNoteKind } from "../src/core/noteKind.js";
 import { AppError } from "../src/core/storeErrors.js";
 import type { DbLike, DbLikeStatement } from "./dbLike.js";
@@ -38,6 +39,8 @@ export interface TreeNode {
   icon: string | null;
   /** 文档类型（doc | usheet | bitable | board；缺省 doc）。 */
   kind?: "doc" | "usheet" | "bitable" | "board" | "ink";
+  /** 日记本标记（261109）：只有 nodeType="notebook" 时可能为 "diary"，其余恒 null。 */
+  space?: DiaryFolderSpace | null;
 }
 
 export interface SyncNote {
@@ -66,6 +69,8 @@ export interface SyncFolder {
   nodeType: "notebook" | "group";
   icon: string | null;
   updatedAt: string;
+  /** 日记本标记（261109）：**显式** "diary" | null（发布时非日记写 null，不省略）。 */
+  space?: DiaryFolderSpace | null;
   trashedAt?: string | null;
   deletedFromParentId?: string | null;
 }
@@ -100,6 +105,8 @@ export interface TreeNodeRow {
   is_dirty?: number;
   cloud_deleted?: number;
   icon: string | null;
+  /** 日记本标记列（261109）：旧库经 ALTER 补列后为 NULL。 */
+  space?: string | null;
   /** LEFT JOIN notes 带来的文档类型；非 note 节点为 undefined。 */
   note_kind?: string | null;
 }
@@ -129,6 +136,7 @@ interface SyncFolderRow {
   node_type: "notebook" | "group";
   icon: string | null;
   updated_at: string;
+  space: string | null;
   trashed_at: string | null;
   deleted_from_parent_id: string | null;
 }
@@ -182,6 +190,8 @@ export class NoteQueries {
       icon: row.icon ?? null,
       // 渲染层据此对非 doc 隐藏导出/大纲等（缺省 doc）
       kind: normalizeNoteKind(row.note_kind),
+      // 日记本标记（261109）：显式归一 —— 未知值/缺列当非日记（null），不在这里修数据。
+      space: normalizeFolderSpace(row.space),
     };
   }
 
@@ -246,7 +256,7 @@ export class NoteQueries {
     // v5：排除 is_purged=1, is_dirty=0（收到他端 folder 墓碑后保留的回收站副本）——学习端不回填，
     // 对齐 notes 上传环的 purged continue；否则每端都会把已删目录当活跃条目重新发布 → manifest 震荡。
     const rows = this.db.prepare(
-      "SELECT id,title,parent_id,sort_order,node_type,icon,updated_at,trashed_at,deleted_from_parent_id FROM tree_nodes WHERE node_type IN ('notebook','group') AND deleted_at IS NULL AND is_purged = 0 AND is_purged = 0 AND id != ? ORDER BY sort_order"
+      "SELECT id,title,parent_id,sort_order,node_type,icon,updated_at,space,trashed_at,deleted_from_parent_id FROM tree_nodes WHERE node_type IN ('notebook','group') AND deleted_at IS NULL AND is_purged = 0 AND is_purged = 0 AND id != ? ORDER BY sort_order"
     ).all(this.trashNotebookId) as SyncFolderRow[];
     return rows.map((row) => ({
       id: row.id,
@@ -256,6 +266,8 @@ export class NoteQueries {
       nodeType: row.node_type,
       icon: row.icon ?? null,
       updatedAt: row.updated_at,
+      // 日记标记：显式写 null（非日记）——发布侧据此把 wire 字段写实。
+      space: normalizeFolderSpace(row.space),
       trashedAt: row.trashed_at ?? null,
       deletedFromParentId: row.deleted_from_parent_id ?? null,
     }));

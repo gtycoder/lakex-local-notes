@@ -51,6 +51,7 @@ import { registerSafeModeIpc } from "./ipc/registerSafeMode.js";
 import { registerDataRecoveryIpc } from "./ipc/registerDataRecovery.js";
 import { registerSyncConflictIpc } from "./ipc/registerSyncConflictIpc.js";
 import { registerBackupIpc, type BackupIpcRunner } from "./ipc/registerBackupIpc.js";
+import { registerDiaryIpc } from "./ipc/registerDiary.js";
 import { AUTO_BACKUP_TICK_MS, decideAutoBackup, readDatabaseFingerprint, runBackupCycle } from "./autoBackup.js";
 import { createIpcRegistrar } from "./ipc/registrar.js";
 import { UpdateService } from "./update/updateService.js";
@@ -668,6 +669,8 @@ function registerIpc(): ReadonlyMap<string, (args: unknown[]) => Promise<unknown
     fs.mkdirSync(quickDir, { recursive: true });
     quickNotes.backupDatabaseTo(path.join(quickDir, "metadata.sqlite3"));
   }, enqueueMaintenance);
+  // 261109 日记：幂等打开某天（判据/单事务在 electron/diaryStore.ts；通道见 docs/DIARY.md）。
+  registerDiaryIpc(ipc, { openDate: (dateKey) => store.openDiaryDate(dateKey) });
   registerHistoryIpc(ipc, store, () => restartHistoryTimers?.());
   registerAiIpc(ipc, store);
   registerWebIpc(ipc, () => webServerController);
