@@ -189,10 +189,10 @@ class PortablePackagePlugin : Plugin() {
         if (obj.optLong("limitBytes", 0L) != PORTABLE_LIMIT_BYTES) throw IOException("便携包上限声明不匹配")
         val source = obj.optJSONObject("source")
         if (source == null || source.optString("platform") != "desktop") throw IOException("便携包来源非法")
+        // baseline 允许为 null（纯离线包）：此时包内只有内容哈希，不写同步账本。
         val baseline = obj.optJSONObject("baseline")
-            ?: throw IOException("便携包缺少同步基线")
-        if (baseline.optString("epoch").isEmpty() || baseline.optString("lakeCommit").isEmpty() ||
-            baseline.optString("quickNotesCommit").isEmpty()
+        if (baseline != null && (baseline.optString("epoch").isEmpty() || baseline.optString("lakeCommit").isEmpty() ||
+                baseline.optString("quickNotesCommit").isEmpty())
         ) throw IOException("便携包基线不完整")
         if (!File(stage, "desktop/metadata.sqlite3").isFile) throw IOException("缺少 desktop/metadata.sqlite3")
         if (!File(stage, "desktop/quick-notes/metadata.sqlite3").isFile) throw IOException("缺少 desktop/quick-notes/metadata.sqlite3")

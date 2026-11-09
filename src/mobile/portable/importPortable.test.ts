@@ -129,6 +129,16 @@ describe("便携包导入编排", () => {
     expect(statements.some((sql) => sql.startsWith("INSERT OR REPLACE INTO notes"))).toBe(true);
   });
 
+  it("纯离线包（manifest.baseline=null）：只读内容哈希、不写云端基线", async () => {
+    const offline = staged();
+    (offline.manifest as unknown as { baseline: unknown }).baseline = null;
+    state.baselineJson = JSON.stringify({ localOnly: true, notes: { n1: H("a") }, quickNotes: { q1: H("b") } });
+    const result = await runPortableImport(offline as ReturnType<typeof staged>);
+    expect(result.hasCloudBaseline).toBe(false);
+    expect(state.savedBaseline).toBeNull();
+    expect(state.calls).toContain("commit");
+  });
+
   it("失败：回滚到导入前并明确告知（不提交）", async () => {
     state.failCopy = true;
     await expect(runPortableImport(staged())).rejects.toThrow(/已回滚到导入前的数据/);
@@ -139,7 +149,7 @@ describe("便携包导入编排", () => {
 
   it("基线不合法：在动数据前失败（不 begin、不回滚）", async () => {
     state.baselineJson = "{}";
-    await expect(runPortableImport(staged())).rejects.toThrow(/同步基线/);
+    await expect(runPortableImport(staged())).rejects.toThrow(/基线/);
     expect(state.calls).not.toContain("begin");
   });
 });

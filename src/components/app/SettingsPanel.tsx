@@ -266,13 +266,11 @@ let verifiedS3Fingerprint: string | null = null;
   // 261109 便携包（桌面 → 手机全量搬运）：入口可用性由主进程判定（云开启 + 上轮同步成功 + 无待同步）。
   const [portableStatus, setPortableStatus] = useState<PortableExportStatus | null>(null);
   const [portableProgress, setPortableProgress] = useState<PortableExportProgress | null>(null);
-  const portableAvailability = portableStatus?.availability ?? null;
-  const portableStatusText = portableAvailability === null
+  const portableStatusText = !portableStatus
     ? "读取便携包状态…"
-    : portableAvailability.available
-      ? "可用：云同步已启用，上一轮同步成功，当前没有待同步改动。"
-      : "暂不可用：" + portableAvailability.reason;
-  const portableUnavailableReason = portableAvailability && !portableAvailability.available ? portableAvailability.reason : undefined;
+    : portableStatus.cloudActive === true
+      ? "可用：云同步已启用，导出前会自动同步一次，包内带云端基线。"
+      : "可用：当前未启用云同步，按离线包导出（不带云端基线；之后配置 S3 可再同步）。";
   const portablePhaseText: Record<PortableExportProgress["phase"], string> = { snapshot: "生成数据库快照", collect: "收集文件", write: "写入 zip" };
   const portableProgressText = portableProgress
     ? portablePhaseText[portableProgress.phase] + "，已写入 " + formatBytes(portableProgress.bytesWritten) + "（" + portableProgress.filesDone + "/" + portableProgress.filesTotal + " 个条目）"
@@ -428,8 +426,18 @@ let verifiedS3Fingerprint: string | null = null;
   /** 261109 便携包导出：选目录 → 主进程打包（进度事件驱动文案）。 */
   const runPortableExport = async () => {
     if (!hostCapabilities().localFileSystem) { portable.setMessage("浏览器端不支持导出便携包（请在桌面端操作）"); return; }
-    if (!portableStatus?.availability.available) { portable.setMessage(portableUnavailableReason ?? "便携包导出暂不可用"); return; }
     await portable.run(async () => {
+      // 云同步启用时，导出前先同步一次：保证包内基线就是云端最新状态，手机导入后只做增量。
+      if (portableStatus?.cloudActive) {
+        portable.setMessage("正在先同步一次云端…");
+        try {
+          await native.syncNow();
+          void loadPortableStatus();
+        } catch (error) {
+          portable.setMessage("同步失败，已停止导出：" + getNativeErrorMessage(error));
+          return null;
+        }
+      }
       const dir = await native.portableExportPickDir();
       if (!dir) return null;
       const result = await native.portableExportRun();
@@ -1055,13 +1063,12 @@ let verifiedS3Fingerprint: string | null = null;
                 </Group>
 
                 <Group title="迁移到手机" icon={<Download size={16} />}>
-                  <Block itemId="backup-portable-export" name="导出便携包（桌面 → 手机）" descAfter desc="把本机全部数据（正文/资源/小记/标签/回收站，不含历史快照）打成一个 .zip.lln（上限 4GiB），经网盘或 USB 拷到手机后导入，手机之后只需增量同步。包内是明文笔记，请自行选择传输方式；不包含任何 S3 密钥。">
+                  <Block itemId="backup-portable-export" name="导出便携包（桌面 → 手机）" descAfter desc="把本机全部数据（正文/资源/小记/标签/回收站，不含历史快照）打成一个 .zip.lln（上限 4GiB），经网盘或 USB 拷到手机后导入。未配置 S3 也能离线导出；若已开启云同步，导出前会先同步一次，手机之后只需增量同步。包内是明文笔记，请自行选择传输方式；不包含任何 S3 密钥。">
                     <div className="config-block__actions">
                       <button
                         className="ln-btn ln-btn--settings"
                         onClick={() => void runPortableExport()}
-                        disabled={portable.busy || !hostCapabilities().localFileSystem || !(portableStatus?.availability.available ?? false)}
-                        title={portableUnavailableReason}
+                        disabled={portable.busy || !hostCapabilities().localFileSystem}
                       >
                         {portable.busy ? "导出中…" : "选择目录并导出…"}
                       </button>

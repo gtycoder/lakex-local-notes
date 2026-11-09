@@ -59,31 +59,28 @@ function makeSnapshot(targetRoot: string): void {
 }
 
 const AVAILABLE: PortableExportAvailability = { available: true };
-const DISABLED: PortableExportAvailability = { available: false, reason: "云同步已关闭：请到「云端与同步」启用后再导出" };
+const OFFLINE_CLOUD = { active: false, lastSyncedAt: null };
 
 describe("portable IPC（入口门禁 + 导出）", () => {
-  it("status 返回可用性与上次导出；不可用时 run 直接拒绝且不执行导出", async () => {
+  it("status 返回离线可用状态；未选目录时 run 拒绝且不执行导出", async () => {
     const workspace = makeWorkspace();
     const target = tempDir("lakex-portable-ipc-out-");
     const { ipc, call } = makeIpc();
-    let availability: PortableExportAvailability = DISABLED;
     let snapshots = 0;
     registerPortableIpc(ipc, {
       workspaceRoot: () => workspace,
       appVersion: () => "1.0.4",
       snapshotDatabases: (root) => { snapshots += 1; makeSnapshot(root); },
-      availability: () => availability,
+      availability: () => AVAILABLE,
+      cloudState: () => OFFLINE_CLOUD,
       counts: () => ({ folders: 0, quickNotes: 0, tags: 0 }),
       pickDirectory: async () => target,
     });
-    const status = await call("portable_export_status") as { availability: PortableExportAvailability; lastExport: unknown };
-    expect(status.availability).toEqual(DISABLED);
+    const status = await call("portable_export_status") as { availability: PortableExportAvailability; lastExport: unknown; cloudActive: boolean };
+    expect(status.availability).toEqual(AVAILABLE);
+    expect(status.cloudActive).toBe(false);
     expect(status.lastExport).toBeNull();
 
-    await expect(call("portable_export_run")).rejects.toThrow("云同步已关闭");
-    expect(snapshots).toBe(0);
-
-    availability = AVAILABLE;
     await expect(call("portable_export_run")).rejects.toThrow("请先选择导出目录");
     expect(snapshots).toBe(0);
   });
@@ -98,6 +95,7 @@ describe("portable IPC（入口门禁 + 导出）", () => {
       appVersion: () => "1.0.4",
       snapshotDatabases: makeSnapshot,
       availability: () => AVAILABLE,
+      cloudState: () => OFFLINE_CLOUD,
       counts: () => ({ folders: 1, quickNotes: 0, tags: 0 }),
       pickDirectory: async () => target,
       broadcastProgress: (event) => progress.push(event),
@@ -122,6 +120,7 @@ describe("portable IPC（入口门禁 + 导出）", () => {
       appVersion: () => "1.0.4",
       snapshotDatabases: makeSnapshot,
       availability: () => AVAILABLE,
+      cloudState: () => OFFLINE_CLOUD,
       counts: () => ({ folders: 0, quickNotes: 0, tags: 0 }),
       pickDirectory: async () => null,
     });

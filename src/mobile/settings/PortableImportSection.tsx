@@ -166,7 +166,9 @@ export function PortableImportSection({ onImported }: { onImported?: () => void 
                   <div className="mb-set-item__desc" role="alert">{result.warnings.join("；")}</div>
                 )}
                 <div className="mb-set-item__desc">
-                  本机已标记为「与云端一致」。如需增量同步，请到「云端与同步」配置 S3（只需拉取后续变更）。
+                  {result.hasCloudBaseline
+                    ? "本机已标记为「与云端一致」。如需增量同步，请到「云端与同步」配置 S3（只需拉取后续变更）。"
+                    : "这是纯离线包：本机未写入云端基线。之后配置 S3 时，空桶会按首次上传同步；若桶里已有数据则会先以云端为准拉取。"}
                 </div>
               </>
             )}

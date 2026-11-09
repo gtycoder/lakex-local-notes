@@ -25,6 +25,8 @@ export interface PortableIpcDeps {
   /** 主库 + 小记库 VACUUM INTO 到 targetRoot（main 里接 store/quickNotes）。 */
   snapshotDatabases: (targetRoot: string) => void;
   availability: () => PortableExportAvailability;
+  /** 云同步当前状态（UI 用来决定「导出前先同步一次」以及文案）。 */
+  cloudState: () => { active: boolean; lastSyncedAt: string | null };
   counts: () => { folders: number; quickNotes: number; tags: number };
   /** 进度广播（main 注入窗口 webContents + Web SSE）。 */
   broadcastProgress?: (progress: PortableExportProgress) => void;
@@ -48,7 +50,10 @@ export function registerPortableIpc(ipc: IpcRegistrar, deps: PortableIpcDeps): v
   let running = false;
   let lastExport: PortableExportStatus["lastExport"] = null;
 
-  ipc.handle("portable_export_status", (): PortableExportStatus => ({ availability: deps.availability(), lastExport }));
+  ipc.handle("portable_export_status", (): PortableExportStatus => {
+    const cloud = deps.cloudState();
+    return { availability: deps.availability(), lastExport, cloudActive: cloud.active, lastSyncedAt: cloud.lastSyncedAt };
+  });
 
   ipc.handle("portable_export_pick_dir", async () => {
     const dir = await (deps.pickDirectory ?? defaultPickDirectory)();

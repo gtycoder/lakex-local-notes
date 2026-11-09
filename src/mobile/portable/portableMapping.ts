@@ -132,7 +132,8 @@ export interface MobileQuickNoteDeletedRow {
 }
 
 export interface ParsedPortableBaseline {
-  baseline: MobileV3Baseline;
+  /** 云端基线；null = 纯离线包（只用内容哈希映射，不写同步账本）。 */
+  baseline: MobileV3Baseline | null;
   lakeHashById: Map<string, string>;
   quickHashById: Map<string, string>;
 }
@@ -158,6 +159,26 @@ export function parsePortableBaseline(raw: unknown): ParsedPortableBaseline {
     baseline: { epoch, generation, lakeCommit, quickNotesCommit, lake, quickNotes },
     lakeHashById: new Map(lake.notes.map((note) => [note.id, note.contentHash])),
     quickHashById: new Map(quickNotes.items.map((item) => [item.id, item.contentHash])),
+  };
+}
+
+/** 纯离线包：只解析本地内容哈希表（export 端在 baseline.json 写入 localOnly 标记）。 */
+export function parsePortableContentHashes(raw: unknown): ParsedPortableBaseline {
+  if (!raw || typeof raw !== "object") throw new Error("离线内容哈希不是对象");
+  const value = raw as Record<string, unknown>;
+  if (value.localOnly !== true) throw new Error("离线便携包缺少内容哈希标记");
+  const readMap = (input: unknown, label: string): Map<string, string> => {
+    if (!input || typeof input !== "object") throw new Error("离线内容哈希缺少 " + label);
+    const map = new Map<string, string>();
+    for (const [id, hash] of Object.entries(input as Record<string, unknown>)) {
+      if (typeof hash === "string" && hash.length > 0) map.set(id, hash);
+    }
+    return map;
+  };
+  return {
+    baseline: null,
+    lakeHashById: readMap(value.notes, "notes"),
+    quickHashById: readMap(value.quickNotes, "quickNotes"),
   };
 }
 

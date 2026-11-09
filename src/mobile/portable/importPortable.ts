@@ -36,6 +36,7 @@ import {
   mapDesktopQuickData,
   mapDesktopTree,
   parsePortableBaseline,
+  parsePortableContentHashes,
   type DesktopRow,
   type MappedQuickData,
 } from "./portableMapping";
@@ -66,6 +67,8 @@ export interface PortableImportResult {
   /** 与清单 counts 不一致时给出提示（不阻断：桌面导出时可能刚好有变动）。 */
   warnings: string[];
   skippedRows: number;
+  /** true = 包内带云端基线；false = 纯离线包（之后配置 S3 按无基线处理）。 */
+  hasCloudBaseline: boolean;
 }
 
 const PAGE_SIZE = 500;
@@ -277,9 +280,11 @@ async function runPortableImportInner(
   }
   let parsedBaseline: ReturnType<typeof parsePortableBaseline>;
   try {
-    parsedBaseline = parsePortableBaseline(JSON.parse(baselineFile.json));
+    const raw = JSON.parse(baselineFile.json);
+    // manifest.baseline=null = 纯离线导出：baseline.json 只是内容哈希清单，不写同步账本。
+    parsedBaseline = staged.manifest.baseline ? parsePortableBaseline(raw) : parsePortableContentHashes(raw);
   } catch (error) {
-    throw new Error("便携包同步基线不合法：" + (error instanceof Error ? error.message : String(error)));
+    throw new Error("便携包基线不合法：" + (error instanceof Error ? error.message : String(error)));
   }
 
   let dbOpened = false;
@@ -339,6 +344,7 @@ async function runPortableImportInner(
       },
       warnings: [],
       skippedRows: treeData.skipped + quickData.skipped,
+      hasCloudBaseline: staged.manifest.baseline !== null,
     };
     result.warnings = compareCounts(staged.manifest.counts, result);
 

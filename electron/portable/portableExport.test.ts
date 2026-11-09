@@ -148,13 +148,20 @@ describe("portableExport（桌面 → 手机便携包）", () => {
     expect(fs.existsSync(second.path)).toBe(true);
   });
 
-  it("缺同步基线 ⇒ 拒绝导出（不生成半成品）", async () => {
+  it("缺同步基线 ⇒ 仍可离线导出：manifest.baseline=null，包内写内容哈希清单", async () => {
     const workspace = makeWorkspace();
     fs.rmSync(path.join(workspace, "sync-v3", "baseline.json.gz"));
     const target = tempDir("lakex-portable-out-");
-    await expect(exportPortablePackage({ workspaceRoot: workspace, targetDir: target, appVersion: "1.0.4", snapshotDatabases: makeSnapshot, counts: COUNT_INPUT }))
-      .rejects.toThrow("同步基线");
-    expect(fs.readdirSync(target)).toEqual([]);
+    const hashes = Buffer.from(JSON.stringify({ localOnly: true, notes: { n1: "hash-n1" }, quickNotes: {} }));
+    const result = await exportPortablePackage({
+      workspaceRoot: workspace, targetDir: target, appVersion: "1.0.4",
+      snapshotDatabases: makeSnapshot, counts: COUNT_INPUT, offlineHashes: () => hashes,
+    });
+    const entries = readStoreZip(result.path);
+    const byName = new Map(entries.map((entry) => [entry.name, entry]));
+    const manifest = JSON.parse(byName.get("portable.json")!.data.toString("utf8")) as { baseline: unknown };
+    expect(manifest.baseline).toBeNull();
+    expect(JSON.parse(byName.get("desktop/sync-v3/baseline.json")!.data.toString("utf8"))).toMatchObject({ localOnly: true });
   });
 
   it("超过上限（测试用小上限模拟 4GiB）⇒ 失败且不留 zip", async () => {

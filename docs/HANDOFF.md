@@ -23,6 +23,14 @@
 - 真机发现并修复：① 桌面同步成功后未清 folders.is_dirty ⇒ 待同步目录常驻、便携包导出被挡；已在 desktopSync 成功后按 updatedAt 条件 markFolderSynced。② 移动端 listFoldersForSync 把固定「回收站」笔记本也发布 ⇒ 首轮同步平白多发一代并把 notebook-trash 写进云端；已排除 TRASH_NOTEBOOK_ID（与桌面同口径）。
 - 门禁：tsc 0；vitest **783 files / 4993 passed / 12 skipped / 0 failed**；diff-check 通过；Android 离线构建通过。
 
+### 261109 · 便携包纯离线导出 + 后续 S3 接续
+- 用户定稿：不配置 S3 也能导出；已启用云同步时导出前自动 sync 一次；纯离线迁移支持，之后配 S3 仍能同步。
+- 桌面 portableExport：无 baseline.json.gz 时不再拒绝，改为生成 localOnly 内容哈希清单（notes/quickNotes 的 sha256）；manifest baseline=null。有云端基线时行为不变（manifest 带 baseline）。
+- 手机导入：manifest.baseline=null 时只读内容哈希、不写 sync_v3_state.baseline；结果页明确提示「纯离线包」。Android staging 允许 baseline 为 null。
+- 导出前同步：设置页按钮始终可用；portableExportStatus 返回 cloudActive/lastSyncedAt，cloudActive=true 时先 syncNow，失败则停止导出。
+- 验证：桌面无 S3 隔离实例真实导出（5.6MB，baseline=null、内容哈希完整）；同一工作区随后配空 S3 前缀首传 14 文档/92 对象成功。手机（第二台模拟器）导入离线包成功（14/5/3/4/92，baseline=null），随后配 S3 同步成功并写入云端 baseline（↑0↓0，下载 4 目录；文档内容相同故 0 正文）。
+- 测试前缀 ...-portabletest2 / ...-offlinetest 已清理；原 lakex-notes-dev3 未写。
+
 ### 261109 · UI 整理（移动端 + 桌面设置）
 - 用户原则：能点的控件排在纯文字说明之前（免责声明除外）。
 - 移动端：设置菜单把「更新中心」从首项移到「关于」上方（倒数第二）；备份与恢复/便携包导入/关于诊断改为「标题 → 操作按钮 → 说明/状态」；更新中心「检查间隔」改用 Field（控件独占一行，说明不再被右控件挤成窄列）；新增 mb-set-block--actions-first 原语（无手写样式）。

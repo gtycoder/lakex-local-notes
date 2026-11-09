@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PORTABLE_LIMIT_BYTES, assertPortableSize, parsePortableManifest, portableExportAvailability, type PortableExportAvailabilityInput } from "./portableFormat";
+import { PORTABLE_LIMIT_BYTES, assertPortableSize, parsePortableManifest, portableExportAvailability, portableExportCloudActive, type PortableExportAvailabilityInput } from "./portableFormat";
 
 describe("portableFormat（共享格式/可用性）", () => {
   it("清单校验：合法通过、坏 format/版本/hasHistory/上限/counts 拒绝", () => {
@@ -15,6 +15,7 @@ describe("portableFormat（共享格式/可用性）", () => {
       baseline: { epoch: "e", generation: 1, lakeCommit: "lc", quickNotesCommit: "qc" },
     };
     expect(parsePortableManifest(valid).counts.notes).toBe(1);
+    expect(parsePortableManifest({ ...valid, baseline: null }).baseline).toBeNull();
     for (const broken of [
       { ...valid, format: "x" },
       { ...valid, formatVersion: 2 },
@@ -33,17 +34,23 @@ describe("portableFormat（共享格式/可用性）", () => {
     expect(() => assertPortableSize(PORTABLE_LIMIT_BYTES * 0.995)).toThrow("4GiB");
   });
 
-  it("导出可用性：未配置/关闭/从未同步/有待同步 ⇒ 禁用并给原因；已启用且干净 ⇒ 可用", () => {
+  it("导出可用性：始终允许（离线可导）；只有启用云同步时才要求导出前先同步", () => {
     const base: PortableExportAvailabilityInput = { s3Configured: true, sync: { enabled: true, autoMode: "manual" }, lastSyncedAt: "2026-11-09T00:00:00Z", pending: { documents: 0, folders: 0, quickNotes: 0 } };
-    expect(portableExportAvailability(base)).toEqual({ available: true });
-    expect(portableExportAvailability({ ...base, s3Configured: false })).toMatchObject({ available: false });
-    expect(portableExportAvailability({ ...base, s3Configured: false, sync: null })).toMatchObject({ available: false });
-    expect(portableExportAvailability({ ...base, sync: { enabled: false, autoMode: "manual" } })).toMatchObject({ available: false });
-    expect(portableExportAvailability({ ...base, lastSyncedAt: null })).toMatchObject({ available: false });
-    const pending = portableExportAvailability({ ...base, pending: { documents: 2, folders: 1, quickNotes: 3 } });
-    expect(pending.available).toBe(false);
-    if (!pending.available) expect(pending.reason).toContain("6");
-    // 自动模式同样可用（manual 不是禁用条件：默认 autoMode 就是 manual）
-    expect(portableExportAvailability({ ...base, sync: { enabled: true, autoMode: "interval" } })).toEqual({ available: true });
+    // 不再因未配置/关闭/从未同步/待同步而禁用
+    for (const input of [
+      base,
+      { ...base, s3Configured: false },
+      { ...base, s3Configured: false, sync: null },
+      { ...base, sync: { enabled: false, autoMode: "manual" } },
+      { ...base, lastSyncedAt: null },
+      { ...base, pending: { documents: 2, folders: 1, quickNotes: 3 } },
+    ] as PortableExportAvailabilityInput[]) {
+      expect(portableExportAvailability(input)).toEqual({ available: true });
+    }
+    // 云同步是否启用（决定 UI 是否先 sync 一次）
+    expect(portableExportCloudActive(base)).toBe(true);
+    expect(portableExportCloudActive({ ...base, sync: { enabled: true, autoMode: "interval" } })).toBe(true);
+    expect(portableExportCloudActive({ ...base, s3Configured: false })).toBe(false);
+    expect(portableExportCloudActive({ ...base, sync: { enabled: false, autoMode: "manual" } })).toBe(false);
   });
 });

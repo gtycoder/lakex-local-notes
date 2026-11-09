@@ -38,7 +38,8 @@ export interface PortableManifest {
   hasHistory: false;
   limitBytes: number;
   counts: PortableCounts;
-  baseline: PortableBaselineRef;
+  /** 云端基线；纯离线导出为 null（之后配置 S3 时按「无基线」处理：空桶首传 / 已有数据先拉取）。 */
+  baseline: PortableBaselineRef | null;
 }
 
 /** 解析并校验清单；不合法直接抛错（导入方按「文件无效」处理）。 */
@@ -53,8 +54,10 @@ export function parsePortableManifest(raw: unknown): PortableManifest {
   if (value.limitBytes !== PORTABLE_LIMIT_BYTES) throw new Error("便携包上限声明不匹配");
   const source = value.source as Record<string, unknown> | undefined;
   if (!source || source.platform !== "desktop") throw new Error("便携包来源非法");
-  const b = value.baseline as Record<string, unknown> | undefined;
-  if (!b || typeof b.epoch !== "string" || typeof b.generation !== "number" || typeof b.lakeCommit !== "string" || typeof b.quickNotesCommit !== "string") {
+  const baselineRaw = value.baseline as Record<string, unknown> | null | undefined;
+  if (baselineRaw !== null && baselineRaw !== undefined
+    && (typeof baselineRaw.epoch !== "string" || typeof baselineRaw.generation !== "number"
+      || typeof baselineRaw.lakeCommit !== "string" || typeof baselineRaw.quickNotesCommit !== "string")) {
     throw new Error("便携包 baseline 非法");
   }
   const c = value.counts as Record<string, unknown> | undefined;
@@ -71,12 +74,14 @@ export function parsePortableManifest(raw: unknown): PortableManifest {
     hasHistory: false,
     limitBytes: PORTABLE_LIMIT_BYTES,
     counts: c as unknown as PortableCounts,
-    baseline: {
-      epoch: b.epoch as string,
-      generation: b.generation as number,
-      lakeCommit: b.lakeCommit as string,
-      quickNotesCommit: b.quickNotesCommit as string,
-    },
+    baseline: baselineRaw
+      ? {
+        epoch: baselineRaw.epoch as string,
+        generation: baselineRaw.generation as number,
+        lakeCommit: baselineRaw.lakeCommit as string,
+        quickNotesCommit: baselineRaw.quickNotesCommit as string,
+      }
+      : null,
   };
 }
 
@@ -109,6 +114,9 @@ export interface PortableExportResult {
 export interface PortableExportStatus {
   availability: PortableExportAvailability;
   lastExport: { path: string; bytes: number; exportedAt: string } | null;
+  /** 云同步当前是否启用（决定导出前是否先同步一次）。 */
+  cloudActive: boolean;
+  lastSyncedAt: string | null;
 }
 
 export type PortableExportAvailability = { available: true } | { available: false; reason: string };
@@ -126,12 +134,13 @@ export interface PortableExportAvailabilityInput {
  * 说明：spec 原文写「必须是 auto」，但默认 autoMode = manual（settingsRepository），
  * 按字面会禁用绝大多数已启用云同步的用户；这里按「cloud 已启用」口径（unconfigured/offline 才禁用）。
  */
-export function portableExportAvailability(input: PortableExportAvailabilityInput): PortableExportAvailability {
+/** 云同步是否处于「启用」状态（manual/auto 都算；unconfigured/offline 不算）。 */
+export function portableExportCloudActive(input: PortableExportAvailabilityInput): boolean {
   const state = cloudStateOf(input.s3Configured, input.sync);
-  if (state === "unconfigured") return { available: false, reason: "尚未配置云同步：便携包依赖与云端一致的同步基线" };
-  if (state === "offline") return { available: false, reason: "云同步已关闭：请到「云端与同步」启用后再导出" };
-  if (!input.lastSyncedAt) return { available: false, reason: "还没有成功同步过：请先完成一次同步" };
-  const total = input.pending.documents + input.pending.folders + input.pending.quickNotes;
-  if (total > 0) return { available: false, reason: "还有 " + total + " 项等待同步：请先同步完成再导出" };
+  return state === "manual" || state === "auto";
+}
+
+/** 导出入口始终可用：配置了 S3 时 UI 会先同步一次；纯离线也可导出（baseline = null）。 */
+export function portableExportAvailability(_input: PortableExportAvailabilityInput): PortableExportAvailability {
   return { available: true };
 }

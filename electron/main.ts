@@ -69,7 +69,7 @@ import { registerAiIpc } from "./ipc/registerAi.js";
 import { registerSystemInfoIpc } from "./ipc/registerSystemInfo.js";
 import { registerUpdateIpc } from "./ipc/registerUpdate.js";
 import { registerPortableIpc } from "./ipc/registerPortable.js";
-import { portableExportAvailability, type PortableExportAvailability, type PortableExportProgress } from "../src/core/portable/portableFormat.js";
+import { portableExportAvailability, portableExportCloudActive, type PortableExportAvailability, type PortableExportProgress } from "../src/core/portable/portableFormat.js";
 import { clampWindowState, readWindowState, writeWindowState } from "./windowState.js";
 import { TOPBAR_HEIGHT, TOPBAR_SEAM, TRAFFIC_LIGHT_DIAMETER } from "../src/lib/layoutMetrics.js";
 import { APP_ORIGIN, isAppOriginUrl } from "./appOrigin.js";
@@ -730,6 +730,21 @@ function registerIpc(): ReadonlyMap<string, (args: unknown[]) => Promise<unknown
       quickNotes.backupDatabaseTo(path.join(quickDir, "metadata.sqlite3"));
     },
     availability: portableIpcAvailability,
+    cloudState: () => {
+      try {
+        const sync = store.getSyncSettings();
+        const status = store.getSyncStatus();
+        const input = {
+          s3Configured: store.getS3Settings() !== null,
+          sync: { enabled: sync.enabled, autoMode: sync.autoMode },
+          lastSyncedAt: status.lastSyncedAt,
+          pending: { documents: 0, folders: 0, quickNotes: 0 },
+        };
+        return { active: portableExportCloudActive(input), lastSyncedAt: status.lastSyncedAt };
+      } catch {
+        return { active: false, lastSyncedAt: null };
+      }
+    },
     counts: () => {
       const overview = store.getStorageOverview();
       let quickNotesCount = 0;

@@ -7,6 +7,7 @@ import {
   mapTagLinkRow,
   mapTagRow,
   parsePortableBaseline,
+  parsePortableContentHashes,
   type ParsedPortableBaseline,
 } from "./portableMapping";
 
@@ -40,7 +41,14 @@ const baseline = (): ParsedPortableBaseline => parsePortableBaseline(baselineJso
 describe("便携包同步基线解析（core 索引校验单一来源）", () => {
   it("解析出 MobileV3Baseline 与 id→contentHash 映射", () => {
     const parsed = baseline();
-    expect(parsed.baseline.epoch).toBe("epoch-1");
+    expect(parsed.baseline?.epoch).toBe("epoch-1");
+    expect(parsed.lakeHashById.get("n1")).toBe(H("a"));
+    expect(parsed.quickHashById.get("q1")).toBe(H("b"));
+  });
+
+  it("离线内容哈希：localOnly + notes/quickNotes 映射，baseline=null", () => {
+    const parsed = parsePortableContentHashes({ localOnly: true, notes: { n1: H("a") }, quickNotes: { q1: H("b") } });
+    expect(parsed.baseline).toBeNull();
     expect(parsed.lakeHashById.get("n1")).toBe(H("a"));
     expect(parsed.quickHashById.get("q1")).toBe(H("b"));
   });
