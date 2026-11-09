@@ -492,14 +492,14 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
      ⇒ 改透明：设置屏的滚动容器都在页头**下方**，内容不会从页头透出。 */
   background: transparent;
 }
-.mobile-settings-title { font-size: var(--lake-font-size-title); font-weight: 600; }
+.mobile-settings-title { margin: 0; font-size: var(--lake-font-size-title); font-weight: 600; }
 /* v2：设置**根页**的页面大标题 28/700（--mb-font-page）——预览稿 .set-head h1；子页标题仍是 18/600
    （标题行/左右槽几何不动，只在根页把字号字重抬到页面标题档）。 */
 .mobile-settings-page:not(.mobile-settings-page--full) .mobile-settings-title {
   font-size: var(--mb-font-page); font-weight: var(--lake-font-weight-bold); letter-spacing: -.025em;
 }
 .mobile-settings-close {
-  width: 40px; height: 40px; border: 0; background: transparent; border-radius: var(--lake-radius-sm);
+  width: 44px; height: 44px; border: 0; background: transparent; border-radius: var(--lake-radius-sm);
   display: flex; align-items: center; justify-content: center; color: var(--lake-text-2, var(--lake-text-1));
   cursor: pointer;
 }
@@ -580,7 +580,7 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
    早先这里还有 .ln-row__icon/__title/__chevron 三条，P5 迁到 .mb-row 后永不命中、且与 kit.css 重复 ⇒ 261013 删除。 */
 /* 头部三格：左（返回 / 空槽）· 标题 · 右（空槽）。两侧槽必须**等宽**，space-between 才会把标题
  * 放在页中线上；右槽曾用 18px 的小变体 ⇒ 标题比页中线偏右 11px（261029 实测 217 vs 206）。 */
-.mobile-settings-spacer { flex: 0 0 auto; width: 40px; }
+.mobile-settings-spacer { flex: 0 0 auto; width: 44px; }
 
 .mobile-settings-content {
   flex: 1; overflow-y: auto; background: transparent;

@@ -18,7 +18,7 @@ import { SettingFieldContext, useSettingField } from "./fieldAccessibility";
 export function Group({ title, icon, children }: { title: string; icon?: ReactNode; children: ReactNode }) {
   return (
     <section className="mb-set-group">
-      <h4 className="mb-set-title">{icon}{title}</h4>
+      <h2 className="mb-set-title">{icon}{title}</h2>
       <div className="mb-set-items">
         {Children.toArray(children).some((child) => isValidElement(child) && child.type === Section)
           ? children

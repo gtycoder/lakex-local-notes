@@ -256,7 +256,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
         ) : (
           <div className="mobile-settings-spacer" />
         )}
-        <div className="mobile-settings-title">{isSub ? MENU_LABEL(view) : "设置"}</div>
+        <h1 className="mobile-settings-title">{isSub ? MENU_LABEL(view) : "设置"}</h1>
         {/* 右槽与左槽等宽（40）⇒ 标题落在页中线上。根页右槽 = 可见「关闭」（261029 FIX-M2）；子页保留空槽。 */}
         {isSub ? <div className="mobile-settings-spacer" /> : (
           <button className="mobile-settings-close" onClick={onClose} aria-label="关闭设置"><X size={22} /></button>
