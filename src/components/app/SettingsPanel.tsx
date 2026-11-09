@@ -1039,39 +1039,7 @@ let verifiedS3Fingerprint: string | null = null;
                       <div className="config-stats"><span>读取自动备份配置…</span></div>
                     )}
                   </Block>
-                  <Block itemId="backup-usage" name="备份占用" desc="只读统计 userData/backups 里的备份份数与总大小（只 stat、不读文件内容）。自动备份按「保留份数」与总大小上限删最旧的备份；这里不提供手动删除，避免误删兜底数据。" descAfter>
-                    <div className="config-block__actions">
-                      <button className="ln-btn ln-btn--secondary" onClick={() => void loadBackupUsage()} disabled={backupUsageBusy}>{backupUsageBusy ? "统计中…" : "刷新统计"}</button>
-                      <button className="ln-btn ln-btn--secondary" onClick={() => void revealFolder("backups")}>打开备份目录</button>
-                    </div>
-                    <div className="config-stats">
-                      <span>{backupUsageInfo.countText}</span>
-                      {backupUsageInfo.sizeText && <span>{backupUsageInfo.sizeText}</span>}
-                      {backupUsageInfo.limitText && <span>{backupUsageInfo.limitText}</span>}
-                      {backupUsageInfo.newestText && <span>{backupUsageInfo.newestText}</span>}
-                    </div>
-                    {backupUsageInfo.note && (
-                      <div className="checks">
-                        <div className={"checks__row checks__row--" + (backupUsageInfo.tone === "warn" ? "warn" : "ok")}>{backupUsageInfo.note}</div>
-                      </div>
-                    )}
-                  </Block>
-                  <Block itemId="backup-last-result" name="上次备份结果" desc="最近一次自动/手动备份的结果（本机记录，不上传云端）：成功 / 部分成功 / 失败，以及可读的失败原因。部分成功 = 主库备份可用，但小记库不可用或备份校验失败。" descAfter>
-                    {backupResult ? (
-                      <div className="checks">
-                        <div className={"checks__row checks__row--" + backupResult.tone}>{backupResult.headline}</div>
-                        {backupResult.message && <div className="checks__row">{backupResult.message}</div>}
-                        {backupResult.guidance && <div className={"checks__row checks__row--" + backupResult.tone}>{backupResult.guidance}</div>}
-                        {backupResult.retry && (
-                          <div className="config-block__actions">
-                            <button className="ln-btn ln-btn--secondary" onClick={() => void runBackupNow()} disabled={backup.busy}>{backup.busy ? "备份中…" : "立即备份"}</button>
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="block__text">还没有备份记录（自动备份默认开启，每天一份；也可以点上面的「立即备份」）。</div>
-                    )}
-                  </Block>
+
                 </Group>
 
                 <Group title="恢复" icon={<RotateCcw size={16} />}>
@@ -1108,12 +1076,64 @@ let verifiedS3Fingerprint: string | null = null;
                   </Block>
                 </Group>
 
+                <Group title="存储占用" icon={<HardDrive size={16} />}>
+                  <Block itemId="backup-usage" name="备份占用" desc="只读统计 userData/backups 里的备份份数与总大小（只 stat、不读文件内容）。自动备份按「保留份数」与总大小上限删最旧的备份；这里不提供手动删除，避免误删兜底数据。" descAfter>
+                    <div className="config-block__actions">
+                      <button className="ln-btn ln-btn--secondary" onClick={() => void loadBackupUsage()} disabled={backupUsageBusy}>{backupUsageBusy ? "统计中…" : "刷新统计"}</button>
+                      <button className="ln-btn ln-btn--secondary" onClick={() => void revealFolder("backups")}>打开备份目录</button>
+                    </div>
+                    <div className="config-stats">
+                      <span>{backupUsageInfo.countText}</span>
+                      {backupUsageInfo.sizeText && <span>{backupUsageInfo.sizeText}</span>}
+                      {backupUsageInfo.limitText && <span>{backupUsageInfo.limitText}</span>}
+                      {backupUsageInfo.newestText && <span>{backupUsageInfo.newestText}</span>}
+                    </div>
+                    {backupUsageInfo.note && (
+                      <div className="checks">
+                        <div className={"checks__row checks__row--" + (backupUsageInfo.tone === "warn" ? "warn" : "ok")}>{backupUsageInfo.note}</div>
+                      </div>
+                    )}
+                  </Block>
+                  <Block itemId="backup-last-result" name="上次备份结果" desc="最近一次自动/手动备份的结果（本机记录，不上传云端）：成功 / 部分成功 / 失败，以及可读的失败原因。部分成功 = 主库备份可用，但小记库不可用或备份校验失败。" descAfter>
+                    {backupResult ? (
+                      <div className="checks">
+                        <div className={"checks__row checks__row--" + backupResult.tone}>{backupResult.headline}</div>
+                        {backupResult.message && <div className="checks__row">{backupResult.message}</div>}
+                        {backupResult.guidance && <div className={"checks__row checks__row--" + backupResult.tone}>{backupResult.guidance}</div>}
+                        {backupResult.retry && (
+                          <div className="config-block__actions">
+                            <button className="ln-btn ln-btn--secondary" onClick={() => void runBackupNow()} disabled={backup.busy}>{backup.busy ? "备份中…" : "立即备份"}</button>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="block__text">还没有备份记录（自动备份默认开启，每天一份；也可以点上面的「立即备份」）。</div>
+                    )}
+                  </Block>
+                </Group>
+
                 {backupText && <Block name={backupText} />}
               </>
             )}
 
             {category === "maintenance" && (
               <>
+              <Group title="回收站" icon={<Trash size={16} />}>
+                {gcCfg && (
+                  <Item itemId="trash-auto-purge-days" name="回收站自动过期（天）" desc="0 = 关闭。到期后自动彻底删除（含云端），不可撤销；需要保留请在到期前恢复。">
+                    <NumField label="回收站自动过期（天）" min={0} max={365} value={gcCfg.trashAutoPurgeDays} onSave={(v) => saveGcCfg({ trashAutoPurgeDays: v })}  floor={0} fallback={0} />
+                  </Item>
+                )}
+                <Block desc="回收站内容随云同步到所有设备；彻底删除会同时删除云端数据且不可撤销。" />
+              </Group>
+
+              <Group title="全文搜索" icon={<Search size={16} />}>
+                <Item itemId="search-rebuild" name="重建全文搜索索引" desc="标题与正文的全文索引（FTS5，中文单字分词），平时自动维护；索引异常或更换分词器后可手动重建。">
+                  {searchText && <span className="ln-label__text">{searchText}</span>}
+                  <button className="ln-btn ln-btn--secondary" disabled={searchIndex.busy} onClick={() => void rebuildSearchIndex()}>{searchIndex.busy ? "重建中…" : "重建"}</button>
+                </Item>
+              </Group>
+
                 <Group title="数据体检（只读诊断）" icon={<Info size={16} />}>
                   <Block itemId="history-data-health" name="一致性检查" desc="只读检查正文文件、历史快照、未归属记录与引用资源，不会自动修复。发现问题请从备份或云端恢复。">
                     <div className="config-block__actions">
@@ -1152,20 +1172,6 @@ let verifiedS3Fingerprint: string | null = null;
                     <RebuildDataBlock scan={() => native.scanRebuildCandidates()} rebuild={(ids) => native.rebuildOrphanNotes(ids)} confirm={confirm} />
                   </Block>
                 </Group>
-              <Group title="回收站" icon={<Trash size={16} />}>
-                {gcCfg && (
-                  <Item itemId="trash-auto-purge-days" name="回收站自动过期（天）" desc="0 = 关闭。到期后自动彻底删除（含云端），不可撤销；需要保留请在到期前恢复。">
-                    <NumField label="回收站自动过期（天）" min={0} max={365} value={gcCfg.trashAutoPurgeDays} onSave={(v) => saveGcCfg({ trashAutoPurgeDays: v })}  floor={0} fallback={0} />
-                  </Item>
-                )}
-                <Block desc="回收站内容随云同步到所有设备；彻底删除会同时删除云端数据且不可撤销。" />
-              </Group>
-              <Group title="全文搜索" icon={<Search size={16} />}>
-                <Item itemId="search-rebuild" name="重建全文搜索索引" desc="标题与正文的全文索引（FTS5，中文单字分词），平时自动维护；索引异常或更换分词器后可手动重建。">
-                  {searchText && <span className="ln-label__text">{searchText}</span>}
-                  <button className="ln-btn ln-btn--secondary" disabled={searchIndex.busy} onClick={() => void rebuildSearchIndex()}>{searchIndex.busy ? "重建中…" : "重建"}</button>
-                </Item>
-              </Group>
               <Group title="应用日志（只读）" icon={<Terminal size={16} />}>
                 <Block itemId="logs-main" name="主进程日志" desc="同步、回收站与历史清理过程写入 userData/logs/lakex-local-notes.log；按关键字过滤，每条命中附带上下文。">
                   <div className="config-block__actions">
@@ -1338,6 +1344,42 @@ let verifiedS3Fingerprint: string | null = null;
                 )}
                 {sysInfo && (
                   <>
+                    <Group title="数据与存储" icon={<HardDrive size={16} />}>
+                      <Block itemId="about-storage-stats" name="内容统计" desc="计数来自本机库与资源目录（只读遍历资源目录两层，不做全盘扫描）。">
+                        <div className="config-stats">
+                          <span>笔记 <strong>{sysInfo.storage.notes}</strong></span>
+                          <span>笔记本 <strong>{sysInfo.storage.notebooks}</strong></span>
+                          <span>分组 {sysInfo.storage.groups}</span>
+                          <span>小记 <strong>{sysInfo.quickNotes}</strong></span>
+                        </div>
+                        <div className="config-stats">
+                          <span>资源 <strong>{sysInfo.storage.assetFiles}</strong> 个，{formatBytes(sysInfo.storage.assetBytes)}</span>
+                          <span>历史快照 <strong>{sysInfo.storage.historySnapshots}</strong> 份，{formatBytes(sysInfo.storage.historyBytes)}</span>
+                          <span>库文件 {formatBytes(sysInfo.storage.dbBytes)}</span>
+                        </div>
+                        <div className="config-stats">
+                          <span>回收站节点 {sysInfo.storage.trashedNodes}</span>
+                          <span>删除标记 {sysInfo.storage.tombstones}</span>
+                          <span>未归属记录 {sysInfo.storage.orphanRows}</span>
+                        </div>
+                      </Block>
+                      <Item itemId="about-data-dir" name="数据目录" pathDesc desc={sysInfo.storage.root}>
+                        <button className="ln-btn ln-btn--secondary" onClick={() => revealFolder("data")}>在 Finder 中显示</button>
+                      </Item>
+                      <Item itemId="about-workspace-dir" name="工作空间" pathDesc desc={sysInfo.paths.workspace}>
+                        <button className="ln-btn ln-btn--secondary" onClick={() => revealFolder("workspace")}>在 Finder 中显示</button>
+                      </Item>
+                      <Item itemId="about-assets-dir" name="资源目录" desc="图片与附件按笔记分目录存放（note-assets/{noteId}/）。">
+                        <button className="ln-btn ln-btn--secondary" onClick={() => revealFolder("assets")}>在 Finder 中显示</button>
+                      </Item>
+                      <Item itemId="about-history-dir" name="历史快照目录" desc="快照与正文分离存放，恢复对应版本时从这里读。">
+                        <button className="ln-btn ln-btn--secondary" onClick={() => revealFolder("history")}>在 Finder 中显示</button>
+                      </Item>
+                      <Item itemId="about-logs-dir" name="日志目录" pathDesc desc={sysInfo.paths.logs}>
+                        <button className="ln-btn ln-btn--secondary" onClick={() => revealFolder("logs")}>在 Finder 中显示</button>
+                      </Item>
+                    </Group>
+
                     <Group title="关于" icon={<Info size={16} />}>
                       <Block itemId="about-app" name={`LakexLocalNotes ${sysInfo.app.version}${sysInfo.packaged ? "" : "（开发实例）"}`} desc="本地优先、离线可用；数据保存在本机，S3 只作云端备份。" />
                       <Block itemId="about-fonts" name="字体" desc="界面与正文使用内置 MiSans（小米科技，依《MiSans 字体知识产权许可协议》免费商用；此处按协议注明使用）。代码块使用 JetBrains Mono（SIL OFL 1.1）。两者均随应用内置、离线可用。" />
@@ -1378,43 +1420,6 @@ let verifiedS3Fingerprint: string | null = null;
                         </div>
                       </Block>
                     </Group>
-
-                    <Group title="数据与存储" icon={<HardDrive size={16} />}>
-                      <Block itemId="about-storage-stats" name="内容统计" desc="计数来自本机库与资源目录（只读遍历资源目录两层，不做全盘扫描）。">
-                        <div className="config-stats">
-                          <span>笔记 <strong>{sysInfo.storage.notes}</strong></span>
-                          <span>笔记本 <strong>{sysInfo.storage.notebooks}</strong></span>
-                          <span>分组 {sysInfo.storage.groups}</span>
-                          <span>小记 <strong>{sysInfo.quickNotes}</strong></span>
-                        </div>
-                        <div className="config-stats">
-                          <span>资源 <strong>{sysInfo.storage.assetFiles}</strong> 个，{formatBytes(sysInfo.storage.assetBytes)}</span>
-                          <span>历史快照 <strong>{sysInfo.storage.historySnapshots}</strong> 份，{formatBytes(sysInfo.storage.historyBytes)}</span>
-                          <span>库文件 {formatBytes(sysInfo.storage.dbBytes)}</span>
-                        </div>
-                        <div className="config-stats">
-                          <span>回收站节点 {sysInfo.storage.trashedNodes}</span>
-                          <span>删除标记 {sysInfo.storage.tombstones}</span>
-                          <span>未归属记录 {sysInfo.storage.orphanRows}</span>
-                        </div>
-                      </Block>
-                      <Item itemId="about-data-dir" name="数据目录" pathDesc desc={sysInfo.storage.root}>
-                        <button className="ln-btn ln-btn--secondary" onClick={() => revealFolder("data")}>在 Finder 中显示</button>
-                      </Item>
-                      <Item itemId="about-workspace-dir" name="工作空间" pathDesc desc={sysInfo.paths.workspace}>
-                        <button className="ln-btn ln-btn--secondary" onClick={() => revealFolder("workspace")}>在 Finder 中显示</button>
-                      </Item>
-                      <Item itemId="about-assets-dir" name="资源目录" desc="图片与附件按笔记分目录存放（note-assets/{noteId}/）。">
-                        <button className="ln-btn ln-btn--secondary" onClick={() => revealFolder("assets")}>在 Finder 中显示</button>
-                      </Item>
-                      <Item itemId="about-history-dir" name="历史快照目录" desc="快照与正文分离存放，恢复对应版本时从这里读。">
-                        <button className="ln-btn ln-btn--secondary" onClick={() => revealFolder("history")}>在 Finder 中显示</button>
-                      </Item>
-                      <Item itemId="about-logs-dir" name="日志目录" pathDesc desc={sysInfo.paths.logs}>
-                        <button className="ln-btn ln-btn--secondary" onClick={() => revealFolder("logs")}>在 Finder 中显示</button>
-                      </Item>
-                    </Group>
-
 
                     <Group title="第三方与许可" icon={<Info size={16} />}>
                       <Block itemId="about-siyuan-license" name="思源笔记 SiYuan" desc="界面版式与主题令牌移植自 SiYuan（AGPL-3.0，https://github.com/siyuan-note/siyuan）：相关规则已收编到 src/styles/compat.css 与 kit.css（保留署名）；本项目不构成分发思源代码。" />
