@@ -35,6 +35,7 @@ import { formatS3v3Diagnostics } from "../../core/s3v3Report";
 import { readImportDefaultNotebook, writeImportDefaultNotebook } from "./importSettings";
 import { DefaultNotebookPickerSheet, type DefaultNotebookOption } from "./DefaultNotebookPickerSheet";
 import { EmptyState } from "../ui/EmptyState";
+import { PortableImportSection } from "./PortableImportSection";
 
 /** 回收站只读预览（内含 Lake 内核编辑器）：**按需加载**——设置页/首屏都不需要内核。 */
 const TrashPreviewPage = lazy(() => import("../trash/TrashPreviewPage").then((m) => ({ default: m.TrashPreviewPage })));
@@ -631,8 +632,10 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                     >去资源管理查看</button>
                   </div>
                 </div>
+                {/* 261109：从便携包导入（覆盖本机；桌面导出 zip → 手机导入，不需要先配 S3）。 */}
+                <PortableImportSection onImported={() => void onRefresh()} />
                 <div className="mb-set-item__desc">
-                  移动端不提供整库自动备份 / 导出（桌面端有）；这里只有「从云端恢复」与缺正文、缺小记的恢复入口。
+                  移动端不提供整库自动备份 / 导出（桌面端有）；这里只有「从云端恢复」「从便携包导入」与缺正文、缺小记的恢复入口。
                 </div>
               </div>
             </div>

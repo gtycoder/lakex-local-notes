@@ -201,6 +201,10 @@ export const WEB_METHODS: Record<string, string> = {
   updateGetSettings: "update_get_settings",
   updateSetSettings: "update_set_settings",
   updateIgnoreVersion: "update_ignore_version",
+  // 261109 便携包导出（桌面）；进度推送走 SSE 事件 portable-export-progress。
+  portableExportStatus: "portable_export_status",
+  portableExportPickDir: "portable_export_pick_dir",
+  portableExportRun: "portable_export_run",
   runS3DeepCleanup: "run_s3_deep_cleanup",
   getTrashReminder: "get_trash_reminder",
   // Batch3-B 安全模式（桌面诊断态；Web 客户端同一批 handler）

@@ -58,6 +58,8 @@ class MainActivity : BridgeActivity() {
         registerPlugin(CrashLogPlugin::class.java)
         // 应用内更新中心（261109）：清单检查 / DownloadManager 下载 / sha256+证书校验 / 系统安装器。
         registerPlugin(UpdatePlugin::class.java)
+        // 便携包导入（261109）：系统文件选择 + zip 解压 + 只读读桌面库 + 文件复制 + 回滚隔离。
+        registerPlugin(PortablePackagePlugin::class.java)
         // 261105：原生未捕获异常落盘（崩溃前写 crash/last-crash.txt），下次启动由渲染层读出并入崩溃记录。
         // 越早装越好：super.onCreate 里 Capacitor 会做不少初始化，那一段崩了也要有堆栈。
         installCrashHandler()

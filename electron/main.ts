@@ -68,6 +68,8 @@ import { registerLogIpc } from "./ipc/registerLogIpc.js";
 import { registerAiIpc } from "./ipc/registerAi.js";
 import { registerSystemInfoIpc } from "./ipc/registerSystemInfo.js";
 import { registerUpdateIpc } from "./ipc/registerUpdate.js";
+import { registerPortableIpc } from "./ipc/registerPortable.js";
+import { portableExportAvailability, type PortableExportAvailability, type PortableExportProgress } from "../src/core/portable/portableFormat.js";
 import { clampWindowState, readWindowState, writeWindowState } from "./windowState.js";
 import { TOPBAR_HEIGHT, TOPBAR_SEAM, TRAFFIC_LIGHT_DIAMETER } from "../src/lib/layoutMetrics.js";
 import { APP_ORIGIN, isAppOriginUrl } from "./appOrigin.js";
@@ -566,6 +568,33 @@ function isTrustedSenderFrame(frame: WebFrameMain | null, sender: Electron.WebCo
   return isAppPageUrl(frame.url);
 }
 
+/** 便携包导出入口可用性（单一判据在 core/portableFormat；这里只喂同步状态）。 */
+function portableIpcAvailability(): PortableExportAvailability {
+  try {
+    const sync = store.getSyncSettings();
+    const status = store.getSyncStatus();
+    const pending = store.getSyncPendingSummary();
+    const quickPending = getQuickNotesAvailability().mode === "ok" ? quickNotes.getPendingSyncSummary() : { items: 0 };
+    return portableExportAvailability({
+      s3Configured: store.getS3Settings() !== null,
+      sync: { enabled: sync.enabled, autoMode: sync.autoMode },
+      lastSyncedAt: status.lastSyncedAt,
+      pending: { documents: pending.documents, folders: pending.folders, quickNotes: quickPending.items },
+    });
+  } catch (error) {
+    return { available: false, reason: "读取同步状态失败：" + (error instanceof Error ? error.message : String(error)) };
+  }
+}
+
+/** 便携包导出进度（窗口 + Web 客户端 SSE）。 */
+function broadcastPortableProgress(progress: PortableExportProgress): void {
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!trustedWebContents.has(win.webContents.id)) continue;
+    try { win.webContents.send("portable-export-progress", progress); } catch { /* 窗口已关闭 */ }
+  }
+  webServerController?.broadcast("portable-export-progress", progress);
+}
+
 function registerIpc(): ReadonlyMap<string, (args: unknown[]) => Promise<unknown>> {
   // 思源模式收敛：pending 待办计数不再依赖渲染层各操作点手动刷新（历史上有 10+ 处遗漏），
   // 改为 IPC 层单点拦截——每个调用完成后 diff 廉价指纹（微秒级 COUNT），变化才广播完整摘要。
@@ -689,6 +718,28 @@ function registerIpc(): ReadonlyMap<string, (args: unknown[]) => Promise<unknown
   // 261109 桌面更新中心（读状态/检查/下载/打开安装包/打开下载页/读写设置/忽略版本）。
   if (!updateService) throw new Error("更新服务未装配");
   registerUpdateIpc(ipc, { service: updateService });
+  // 261109 桌面 → 手机便携包（docs/PORTABLE-TRANSFER.md）：云开启 + 上轮同步成功 + 无待同步才可用。
+  registerPortableIpc(ipc, {
+    workspaceRoot: () => workspaceRoot(),
+    appVersion: () => app.getVersion(),
+    snapshotDatabases: (targetRoot) => {
+      // 与 A1 整库备份同一套一致性快照口径（VACUUM INTO；独立于运行中的 WAL）。
+      store.backupDatabaseTo(path.join(targetRoot, "metadata.sqlite3"));
+      const quickDir = path.join(targetRoot, "quick-notes");
+      fs.mkdirSync(quickDir, { recursive: true });
+      quickNotes.backupDatabaseTo(path.join(quickDir, "metadata.sqlite3"));
+    },
+    availability: portableIpcAvailability,
+    counts: () => {
+      const overview = store.getStorageOverview();
+      let quickNotesCount = 0;
+      let tagsCount = 0;
+      try { quickNotesCount = quickNotes.countQuickNotes(); } catch { quickNotesCount = 0; }
+      try { tagsCount = quickNotes.tagService.list().length; } catch { tagsCount = 0; }
+      return { folders: overview.notebooks + overview.groups, quickNotes: quickNotesCount, tags: tagsCount };
+    },
+    broadcastProgress: (progress) => broadcastPortableProgress(progress),
+  });
   return ipc.registry;
 }
 

@@ -116,6 +116,33 @@ export async function initializeDb(): Promise<NativeSqliteDb> {
   return openedDb;
 }
 
+/**
+ * 便携包导入（docs/PORTABLE-TRANSFER.md）：导入会**替换数据库文件**，必须先关连接，
+ * 原生才能把旧库搬进回滚目录、让新库重建。调用方随后用 ensureDb()/reopenDbForPortableImport() 重开。
+ */
+export async function closeDbForPortableImport(): Promise<void> {
+  const current = db;
+  db = null;
+  dbInitialization = null;
+  if (!current) return;
+  try {
+    await current.close();
+  } catch (error) {
+    // 关不掉也要继续：原生隔离失败会明确报错，由 UI 提示重启 App。
+    console.warn("[portable] 关闭数据库失败（继续尝试隔离）", error);
+  }
+}
+
+/** 便携包导入专用开库：只建 schema + v3 账本表，**不播种默认笔记本/欢迎小记、不重建索引**。 */
+export async function reopenDbForPortableImport(): Promise<NativeSqliteDb> {
+  const opened = await NativeSqliteDb.open(MOBILE_DATABASE);
+  await applyMobileSchema(opened);
+  await ensureV3StateTable(opened);
+  db = opened;
+  dbInitialization = null;
+  return opened;
+}
+
 export async function ensureDb(): Promise<NativeSqliteDb> {
   if (db) return db;
   dbInitialization ??= initializeDb().catch((error: unknown) => {

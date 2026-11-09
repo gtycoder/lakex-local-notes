@@ -108,8 +108,9 @@ describe("IPC 通道三方一致性（C2-2）", () => {
     // → 165（261108 创建副本进度/取消：cancel_duplicate_notes —— 进度事件走 send，不计通道）。
     // → 173（261109 桌面更新中心：update_{get_state,check,download,open_file,open_release_page,get_settings,set_settings,ignore_version}；
     //   update-state 状态推送走 send/SSE，不计通道）。
-    expect(registrarChannels().size, "通道数变了 ⇒ 请确认是有意的并在 commit 里说明").toBe(173);
-    expect(preloadChannels().size).toBe(173);
-    expect(Object.keys(WEB_METHODS).length).toBe(173);
+    // → 176（261109 便携包导出：portable_export_{status,pick_dir,run}；portable-export-progress 进度事件不计通道）。
+    expect(registrarChannels().size, "通道数变了 ⇒ 请确认是有意的并在 commit 里说明").toBe(176);
+    expect(preloadChannels().size).toBe(176);
+    expect(Object.keys(WEB_METHODS).length).toBe(176);
   });
 });

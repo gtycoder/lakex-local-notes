@@ -198,6 +198,10 @@ contextBridge.exposeInMainWorld("lakeNative", {
   updateGetSettings: () => invoke("update_get_settings"),
   updateSetSettings: (patch) => invoke("update_set_settings", patch),
   updateIgnoreVersion: (version) => invoke("update_ignore_version", version),
+  // 261109 便携包导出（桌面 → 手机全量搬运；进度走 portable-export-progress 事件）
+  portableExportStatus: () => invoke("portable_export_status"),
+  portableExportPickDir: () => invoke("portable_export_pick_dir"),
+  portableExportRun: () => invoke("portable_export_run"),
   runS3DeepCleanup: (dryRun, ignoreRetention = false) => invoke("run_s3_deep_cleanup", dryRun, ignoreRetention),
   getTrashReminder: () => invoke("get_trash_reminder"),
   // Batch3-B 安全模式：读状态 / 复制诊断 / 显式退出（下次启动正常）
@@ -238,6 +242,12 @@ contextBridge.exposeInMainWorld("lakeNative", {
     const listener = (_event, state) => callback(state);
     ipcRenderer.on("update-state", listener);
     return () => { ipcRenderer.removeListener("update-state", listener); };
+  },
+  /** 便携包导出进度（生成快照/收集/写 zip）；返回取消订阅。 */
+  onPortableExportProgress: (callback) => {
+    const listener = (_event, progress) => callback(progress);
+    ipcRenderer.on("portable-export-progress", listener);
+    return () => { ipcRenderer.removeListener("portable-export-progress", listener); };
   },
   /** macOS 菜单「设置…（⌘,）」→ 打开设置面板（主进程只发事件，渲染层决定开哪块）。 */
   onOpenSettings: (callback) => {

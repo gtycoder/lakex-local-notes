@@ -13,6 +13,8 @@ const api = vi.hoisted(() => ({
   getBackupUsage: vi.fn(),
   getBackupSettings: vi.fn(),
   runBackupNow: vi.fn(),
+  // 事件订阅类通道：返回取消订阅函数（Proxy 默认返回 Promise，会被当成 off() 调用）。
+  onPortableExportProgress: vi.fn(() => () => undefined),
 }));
 
 vi.mock("../../lib/native", () => {

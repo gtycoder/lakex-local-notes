@@ -67,6 +67,7 @@ export const SETTING_ITEMS: SettingItemEntry[] = [
   { id: "auto-backup-interval", category: "backup", label: "备份间隔", keywords: "备份 间隔 每天 每周 7 天" },
   { id: "auto-backup-keep", category: "backup", label: "保留份数", keywords: "备份 保留 份数 轮转 清理 大小" },
   { id: "backup-usage", category: "backup", label: "备份占用", keywords: "备份 占用 大小 份数 目录 多少 磁盘 空间 上限 轮转" },
+  { id: "backup-portable-export", category: "backup", label: "导出便携包", keywords: "便携包 导出 zip 手机 搬运 迁移 全量 换机 打包" },
   { id: "backup-last-result", category: "backup", label: "上次备份结果", keywords: "上次 备份 结果 失败 原因 部分成功 错误 重试 message" },
   { id: "data-scan-interval", category: "maintenance", label: "后台扫描间隔（小时）", keywords: "扫描 文件 元数据 对账 重建 间隔 小时 低频 只报告" },
   { id: "data-rebuild", category: "maintenance", label: "重建数据", keywords: "重建 恢复 文件 路丢 元数据 正文 恢复的笔记 扫描 候选" },

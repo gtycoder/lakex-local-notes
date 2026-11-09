@@ -43,6 +43,7 @@ import { useDoubleBackExit } from "./hooks/useDoubleBackExit";
 import { useRouteTransition } from "./hooks/useRouteTransition";
 import { useAutoSync } from "./hooks/useAutoSync";
 import { useUpdateAutoCheck } from "./hooks/useUpdateAutoCheck";
+import { consumePortableRecoveryNotice, recoverInterruptedPortableImport } from "./portable/importPortable";
 import { readSyncProgress, subscribeSyncProgress } from "./sync/syncProgressStore";
 import { Toasts } from "./ui/Toasts";
 import { AttachmentPreview } from "../features/attachment/AttachmentPreview";
@@ -207,6 +208,9 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
     // 启动速度优先：不加人为最短展示；native splash + WebView overlay 只覆盖真实加载时间。
     setError(null);
     try {
+      // 便携包导入中断恢复（docs/PORTABLE-TRANSFER.md §3.6）：**必须在打开数据库之前**按 pending 回滚，
+      // 否则旧库已被替换、新库半成品会带进来。失败只记日志，不阻断启动。
+      try { await recoverInterruptedPortableImport(); } catch (error) { console.warn("[portable] 中断导入恢复失败", error); }
       await bridge.init();
       // lakeNative 调试/测试契约（对齐桌面端）：供 CDP 驱动与真机调试直接调用 bridge 端口。
       // 实现从 bridge / 附加入口**派生**（名字清单单一来源见 ./lakeNativeContract）。
@@ -221,6 +225,8 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
       };
       await refreshAll();
       setPhase("ready");
+      const portableNotice = consumePortableRecoveryNotice();
+      if (portableNotice) showToast(portableNotice, { type: "info" });
     } catch (e) {
       bootErrorRef.current = e;
       setError(getNativeErrorMessage(e));

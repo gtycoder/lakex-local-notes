@@ -32,6 +32,7 @@ import { LAKE_THEMES } from "../../lib/themes";
 import { native } from "../../lib/native";
 import { hostCapabilities } from "../../lib/hostCapabilities";
 import type { BackupSettingsShape, BackupStateShape, BackupUsageShape, DataHealthReport, S3Settings, SyncSettings } from "../../lib/types";
+import type { PortableExportProgress, PortableExportStatus } from "../../core/portable/portableFormat";
 import { SYNC_AUTO_MODE_OPTIONS, SYNC_OPEN_CLOSE_NOTE } from "../../core/syncModes";
 import { Dialog } from "../ui/Overlay";
 import { useFloatingDialog } from "../hooks/useFloatingDialog";
@@ -262,6 +263,20 @@ let verifiedS3Fingerprint: string | null = null;
   // 261105 task-68：备份目录占用（只读 stat IPC；独立 busy，不占用备份动作的 busy/状态栏）。
   const [backupUsage, setBackupUsage] = useState<BackupUsageShape | null>(null);
   const [backupUsageBusy, setBackupUsageBusy] = useState(false);
+  // 261109 便携包（桌面 → 手机全量搬运）：入口可用性由主进程判定（云开启 + 上轮同步成功 + 无待同步）。
+  const [portableStatus, setPortableStatus] = useState<PortableExportStatus | null>(null);
+  const [portableProgress, setPortableProgress] = useState<PortableExportProgress | null>(null);
+  const portableAvailability = portableStatus?.availability ?? null;
+  const portableStatusText = portableAvailability === null
+    ? "读取便携包状态…"
+    : portableAvailability.available
+      ? "可用：云同步已启用，上一轮同步成功，当前没有待同步改动。"
+      : "暂不可用：" + portableAvailability.reason;
+  const portableUnavailableReason = portableAvailability && !portableAvailability.available ? portableAvailability.reason : undefined;
+  const portablePhaseText: Record<PortableExportProgress["phase"], string> = { snapshot: "生成数据库快照", collect: "收集文件", write: "写入 zip" };
+  const portableProgressText = portableProgress
+    ? portablePhaseText[portableProgress.phase] + "，已写入 " + formatBytes(portableProgress.bytesWritten) + "（" + portableProgress.filesDone + "/" + portableProgress.filesTotal + " 个条目）"
+    : null;
 
   // DT-13（261028）：十组手写 busy/msg（历史清理 / 数据体检 / 搜索索引 / 备份恢复 / 深度清理 / 同步策略 /
   // 日志读取 / 浏览器端 / AI 测试 / AI 拉模型）改走 useAsyncAction —— 成功/失败文案仍由调用方给，UI 结构与文案不变。
@@ -271,6 +286,7 @@ let verifiedS3Fingerprint: string | null = null;
   const healthCheck = useAsyncAction();
   const searchIndex = useAsyncAction();
   const backup = useAsyncAction();
+  const portable = useAsyncAction();
   const gcRun = useAsyncAction({ channel: { message: syncMsg, setMessage: setSyncMsg } });
   const syncCfgRun = useAsyncAction({ channel: { message: syncMsg, setMessage: setSyncMsg } });
   const logLoad = useAsyncAction();
@@ -400,6 +416,28 @@ let verifiedS3Fingerprint: string | null = null;
     }, { success: (text) => text });
   };
 
+  /** 261109 便携包：读入口可用性（主进程判据；失败只提示，不影响设置页其它内容）。 */
+  const loadPortableStatus = async () => {
+    try {
+      setPortableStatus(await native.portableExportStatus());
+    } catch (error) {
+      reportNativeActionError("读取便携包状态", error);
+    }
+  };
+
+  /** 261109 便携包导出：选目录 → 主进程打包（进度事件驱动文案）。 */
+  const runPortableExport = async () => {
+    if (!hostCapabilities().localFileSystem) { portable.setMessage("浏览器端不支持导出便携包（请在桌面端操作）"); return; }
+    if (!portableStatus?.availability.available) { portable.setMessage(portableUnavailableReason ?? "便携包导出暂不可用"); return; }
+    await portable.run(async () => {
+      const dir = await native.portableExportPickDir();
+      if (!dir) return null;
+      const result = await native.portableExportRun();
+      void loadPortableStatus();
+      return "便携包已导出：" + result.path + "（" + formatBytes(result.bytes) + "，" + result.entries + " 个条目）";
+    }, { success: (text) => text, errorPrefix: "导出失败：" });
+  };
+
   /** A3 数据体检：只读三查（notes↔文件/hash、history↔文件、orphan 登记↔文件）。 */
   const runHealth = async () => {
     await healthCheck.run(async () => {
@@ -434,6 +472,21 @@ let verifiedS3Fingerprint: string | null = null;
     let alive = true;
     native.getBackupUsage().then((value) => { if (alive) setBackupUsage(value); }).catch(() => { /* 读不到就保持上一次读数（不打扰） */ });
     return () => { alive = false; };
+  }, [open, category]);
+
+  // 便携包：每次进入「备份与恢复」都重判可用性（同步刚完成/关闭云同步都会改变它）。
+  useEffect(() => {
+    if (!open || category !== "backup") return;
+    let alive = true;
+    native.portableExportStatus().then((value) => { if (alive) setPortableStatus(value); }).catch(() => { /* 读不到就保持上一次状态 */ });
+    return () => { alive = false; };
+  }, [open, category]);
+
+  // 便携包进度（主进程事件；离开分类即退订并清空）。
+  useEffect(() => {
+    if (!open || category !== "backup") return;
+    const off = native.onPortableExportProgress((progress) => setPortableProgress(progress));
+    return () => { off(); setPortableProgress(null); };
   }, [open, category]);
 
   // 关于页：只读概览（版本/环境/存储）。每次进入分类都刷新，保证计数与磁盘一致。
@@ -1028,6 +1081,24 @@ let verifiedS3Fingerprint: string | null = null;
                     ) : (
                       <div className="block__text">还没有备份记录（自动备份默认开启，每天一份；也可以点上面的「立即备份」）。</div>
                     )}
+                  </Block>
+                  <Block itemId="backup-portable-export" name="导出便携包（桌面 → 手机）" desc="把本机全部数据（正文/资源/小记/标签/回收站，不含历史快照）打成一个 zip（上限 4GiB），经网盘或 USB 拷到手机后导入，手机之后只需增量同步。包内是明文笔记，请自行选择传输方式；不包含任何 S3 密钥。">
+                    <div className="config-stats">
+                      <span>{portableStatusText}</span>
+                    </div>
+                    {portableProgress && <div className="block__text">{portableProgressText}</div>}
+                    <div className="config-block__actions">
+                      <button
+                        className="ln-btn ln-btn--secondary"
+                        onClick={() => void runPortableExport()}
+                        disabled={portable.busy || !hostCapabilities().localFileSystem || !(portableStatus?.availability.available ?? false)}
+                        title={portableUnavailableReason}
+                      >
+                        {portable.busy ? "导出中…" : "选择目录并导出…"}
+                      </button>
+                      <button className="ln-btn ln-btn--secondary" onClick={() => void loadPortableStatus()} disabled={portable.busy}>刷新状态</button>
+                    </div>
+                    {portable.message && <div className="block__text">{portable.message}</div>}
                   </Block>
                   {backupText && <Block name={backupText} />}
                 </Group>

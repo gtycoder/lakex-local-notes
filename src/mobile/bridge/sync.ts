@@ -15,6 +15,7 @@ import { resolveDeferAssets } from "../sync/deferAssetsDefault";
 import { reconcileIndex } from "../data/searchIndex.js";
 import { backfillTextCache } from "../data/textCacheBackfill.js";
 import { clearV3State, loadV3State } from "../data/v3StateRepository.js";
+import { isPortableImportInProgress } from "../portable/importFlag";
 import type { AssetDeclaration } from "../../core/s3v3/protocol/s3v3Index.js";
 import { beginSyncProgress, endSyncProgress, pushSyncProgress } from "../sync/syncProgressStore";
 import { clearSyncInterrupted, markSyncInterrupted } from "../sync/syncResumeMarker";
@@ -397,6 +398,10 @@ export const syncDomain = {
     // 关闭云同步 = 纯离线本地空间：直接说明原因，**零请求**（与桌面同一判据）。
     if ((await mobileCloudState()) === "offline") {
       return { message: cloudStateHint("offline") ?? "云同步已关闭", quickNotes: null };
+    }
+    // 便携包导入会替换数据库与正文目录：导入期间拒绝启动同步（否则半成品数据会被上一轮同步覆盖）。
+    if (isPortableImportInProgress()) {
+      return { message: "便携包导入进行中，已暂停同步", quickNotes: null };
     }
     // 在途标记：restoreFromCloud 靠它拒绝"同步进行中恢复"（否则在途轮次收尾会把旧基线写回）。
     syncRoundsInFlight += 1;

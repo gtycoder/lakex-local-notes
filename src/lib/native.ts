@@ -5,6 +5,7 @@ import type { AiChatMessage, AiChatResult, AiListModelsResult, AiProviderPatch, 
 import type { S3TransferSummary } from "../core/s3ConfigTransfer";
 import type { HostCapabilityFlags } from "./hostCapabilities";
 import type { UpdateSettings, UpdateSettingsPatch, UpdateState } from "../core/update/updateTypes";
+import type { PortableExportProgress, PortableExportResult, PortableExportStatus } from "../core/portable/portableFormat";
 
 /** 全库搜索命中（IPC search_notes 返回项；DT-16：内联匿名类型改命名类型）。 */
 export interface NoteSearchHit {
@@ -315,6 +316,13 @@ export interface LakeNative {
   /** 忽略当前检测到的版本（下个版本恢复提示）。 */
   updateIgnoreVersion(version: string): Promise<UpdateState>;
   onUpdateState(callback: (state: UpdateState) => void): () => void;
+  /** 便携包导出（桌面）：入口可用性 + 本进程上次导出结果。 */
+  portableExportStatus(): Promise<PortableExportStatus>;
+  /** 选择导出目录（返回路径不能由渲染层伪造；导出只认最近一次选择）。取消 = null。 */
+  portableExportPickDir(): Promise<string | null>;
+  /** 执行导出（进度走 onPortableExportProgress 事件）。 */
+  portableExportRun(): Promise<PortableExportResult>;
+  onPortableExportProgress(callback: (progress: PortableExportProgress) => void): () => void;
   /** 关于页：在文件管理器中显示白名单目录（kind 由主进程解析，绝不传路径）。 */
   revealDataFolder(kind: import("./types").DataFolderKind): Promise<{ ok: boolean; path: string }>;
   runS3DeepCleanup(dryRun: boolean, ignoreRetention?: boolean): Promise<DeepCleanupResult>;
@@ -543,6 +551,10 @@ export const native = {
   updateSetSettings: (patch: UpdateSettingsPatch) => api().updateSetSettings(patch),
   updateIgnoreVersion: (version: string) => api().updateIgnoreVersion(version),
   onUpdateState: (callback: (state: UpdateState) => void) => api().onUpdateState(callback),
+  portableExportStatus: () => api().portableExportStatus(),
+  portableExportPickDir: () => api().portableExportPickDir(),
+  portableExportRun: () => api().portableExportRun(),
+  onPortableExportProgress: (callback: (progress: PortableExportProgress) => void) => api().onPortableExportProgress(callback),
   revealDataFolder: (kind: import("./types").DataFolderKind) => api().revealDataFolder(kind),
   runS3DeepCleanup: (dryRun: boolean, ignoreRetention = false) => api().runS3DeepCleanup(dryRun, ignoreRetention),
   getTrashReminder: () => api().getTrashReminder(),
