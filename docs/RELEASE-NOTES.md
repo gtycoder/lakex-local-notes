@@ -36,6 +36,14 @@
 - tsc / diff-check 通过；vitest 4995 通过、12 跳过（2 个性能护栏在并行负载下抖动，非功能失败）；移动端快照扩到 9 态并连续两轮 0 差异。
 - Android APK 使用正式 release keystore 签名，versionName 1.0.5 / versionCode 11005。
 
+## 升级说明
+
+- **Android**：v1.0.2 起使用同一正式 release keystore，可直接覆盖安装；从 v1.0.1 或 debug 签名版升级需先备份并卸载旧包（卸载会清本机数据）。
+- **macOS**：ad-hoc 签名、未公证；首次打开若被拦截，到「系统设置 → 隐私与安全性 → 仍要打开」。
+- **Windows**：未签名；SmartScreen 提示时选「更多信息 → 仍要运行」。
+- **更新中心**：本版起可在应用内检查更新；Android 自动下载仅 Wi-Fi，安装仍需系统确认，不会静默安装。
+- **便携包**：只接受 .zip.lln；旧 .zip 不再兼容。升级前建议先做一次整库备份或便携包导出。
+
 ---
 
 # LakexLocalNotes v1.0.4
