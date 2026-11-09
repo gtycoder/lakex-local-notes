@@ -5,6 +5,7 @@ import { escapeId } from "../../lib/cssEscape";
 import { ArrowLeftRight, ChevronDown, ChevronsLeft, ChevronsRight, Columns2, File, Pin, TriangleAlert, X, XCircle, XSquare } from "lucide-react";
 import { Menu } from "../../components/ui/Overlay";
 import { NodeIconGlyph } from "../../components/ui/NodeIconGlyph";
+import { TabItemVisual } from "./TabItemVisual";
 import { usePopoverPosition } from "../../hooks/usePopoverPosition";
 import { SplitHandle } from "../../components/ui/SplitHandle";
 import { SPLIT_WIDTH_LIMITS, clampSplitLeft } from "./splitGeometry";
@@ -578,24 +579,15 @@ export function MultiTabEditor({
               aria-selected={tab.noteId === activeNoteId}
               role="tab"
             >
-              {pinned.has(tab.noteId) && <Pin size={12} className="tab-pin" aria-hidden="true" />}
-              {tab.icon && <span className="tab-custom-icon" aria-hidden="true"><NodeIconGlyph value={tab.icon} /></span>}
-              <span className="tab-title">{tab.title || "无标题"}</span>
-              {tab.dirty && <span className="tab-dirty-dot" aria-label="有未保存更改" />}
-              {tab.deleted && <span className="tab-deleted-badge" title="文档在回收站中（本机或他端删除）：只读、编辑不会保存，恢复后才能继续写">已删除</span>}
-              <span
-                className="tab-close"
-                role="button"
-                aria-label={`关闭${tab.title || "无标题"}`}
-                title={pinned.has(tab.noteId) ? "钉住的标签只能通过「关闭全部」关闭" : `关闭${tab.title || "无标题"}`}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  if (pinned.has(tab.noteId)) return; // 钉住标签的 X 由 CSS 隐藏（思源式）
-                  handleTabClose(tab.noteId);
-                }}
-              >
-                <X size={12} />
-              </span>
+              <TabItemVisual
+                title={tab.title}
+                icon={tab.icon ? <NodeIconGlyph value={tab.icon} /> : null}
+                dirty={tab.dirty}
+                deleted={tab.deleted}
+                pinned={pinned.has(tab.noteId)}
+                /* 钉住标签的 X 由 CSS 隐藏（思源式）：这里直接不给 onClose，语义与样式一致。 */
+                onClose={pinned.has(tab.noteId) ? undefined : () => handleTabClose(tab.noteId)}
+              />
             </button>
             )
           ))}

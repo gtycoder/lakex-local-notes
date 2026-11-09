@@ -1,6 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { isCloudActive } from "./core/cloudState";
-import { PanelLeft, X as CloseIcon } from "lucide-react";
+import { PanelLeft } from "lucide-react";
+import { TabItemVisual } from "./features/editor/TabItemVisual";
 import { Sidebar } from "./components/app/Sidebar";
 import { SIDEBAR_CORRIDOR_SELECTORS, isInSidebarCorridor, reduceHover, type HoverEffect, type HoverEvent } from "./components/model/sidebarHoverMachine";
 import { useWindowShortcuts } from "./hooks/useWindowShortcuts";
@@ -1101,20 +1102,18 @@ export function App() {
             {/* 日记空间**独立 tab 条**（261109）：只列 `space==="diary"` 的标签，与文档空间互不影响。 */}
             <div className="tab-items" role="tablist" aria-label="打开的日记">
               {diaryTabs.map((tab) => (
-                <div
+                <button
                   key={tab.noteId}
+                  type="button"
                   className={"tab-item" + (tab.noteId === activeNoteId ? " active" : "")}
                   role="tab"
                   aria-selected={tab.noteId === activeNoteId}
                   title={tab.title}
+                  onClick={() => { void openNote(tab.noteId, "", false, "diary"); }}
                 >
-                  <button type="button" className="tab-title" onClick={() => { void openNote(tab.noteId, "", false, "diary"); }}>
-                    {tab.title}
-                  </button>
-                  <button type="button" className="tab-close" aria-label={"关闭 " + tab.title} onClick={() => closeTab(tab.noteId)}>
-                    <CloseIcon size={12} aria-hidden="true" />
-                  </button>
-                </div>
+                  {/* 视觉原子与文档标签同源（features/editor/TabItemVisual）；这里只差交互能力。 */}
+                  <TabItemVisual title={tab.title} onClose={() => closeTab(tab.noteId)} />
+                </button>
               ))}
             </div>
             <div className="tabbar-trailing">{topBarSearch}</div>
