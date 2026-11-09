@@ -61,6 +61,8 @@ export interface DiaryWorkspaceProps {
   onOpenSearch: () => void;
   /** 「转为文档」：把该日记条目移到目标笔记本（换父节点 = 移动，不复制正文/历史）。 */
   onConvertEntry: (nodeId: string, targetNotebookId: string) => void;
+  /** 「转为小记」：日期标题写入小记第一行 + 正文接在后面；成功后勤日记移入回收站。 */
+  onConvertToQuickNote: (nodeId: string) => void;
   onRenameNotebook: (title: string) => void;
   onSetNotebookIcon: (icon: string | null) => void;
   onContentChange: (noteId: string, content?: string) => void;
@@ -77,7 +79,7 @@ interface YearNode {
 export function DiaryWorkspace(props: DiaryWorkspaceProps) {
   const {
     active, treeNodes, activeNoteId, tabs, lockedNoteIds, tocEnabled, outlineEnhance, editorPrefs,
-    onOpenEntry, onWriteToday, onOpenSearch, onConvertEntry, onRenameNotebook, onSetNotebookIcon,
+    onOpenEntry, onWriteToday, onOpenSearch, onConvertEntry, onConvertToQuickNote, onRenameNotebook, onSetNotebookIcon,
     onContentChange, onEditorReady, onReloadNote,
   } = props;
 
@@ -283,6 +285,14 @@ export function DiaryWorkspace(props: DiaryWorkspaceProps) {
             onClick={() => { setConvertEntry(entryMenu.entry); setEntryMenu(null); }}
           >
             转为文档…
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="ln-menu__item"
+            onClick={() => { onConvertToQuickNote(entryMenu.entry.nodeId); setEntryMenu(null); }}
+          >
+            转为小记
           </button>
         </Menu>
       )}

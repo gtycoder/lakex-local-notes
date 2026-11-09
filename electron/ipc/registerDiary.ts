@@ -15,9 +15,11 @@ import type { DiaryOpenResult } from "../diaryStore.js";
 
 export interface DiaryIpcDeps {
   /** 实现 = Store.openDiaryDate（判据/事务全在 electron/diaryStore.ts）。 */
-  openDate: (dateKey: string) => DiaryOpenResult;
+  openDate: (dateKey: string, options?: { mode?: "open" | "new" }) => DiaryOpenResult;
 }
 
 export function registerDiaryIpc(ipc: IpcRegistrar, deps: DiaryIpcDeps): void {
-  ipc.handle("diary_open_date", (dateKey: string): DiaryOpenResult => deps.openDate(dateKey));
+  // mode 省略 = "open"（当天最新/没有就建）；"new" = 一天多篇（加号 / 选日期建新的）。
+  ipc.handle("diary_open_date", (dateKey: string, mode?: unknown): DiaryOpenResult =>
+    deps.openDate(dateKey, { mode: mode === "new" ? "new" : "open" }));
 }

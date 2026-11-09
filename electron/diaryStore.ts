@@ -22,6 +22,7 @@ import {
   DIARY_FOLDER_SPACE,
   diaryNotebooks,
   parseDiaryDateKey,
+  planDiaryCreate,
   planDiaryOpen,
   type DiaryTreeNode,
 } from "../src/core/diary.js";
@@ -58,26 +59,32 @@ export class DiaryStore {
   constructor(private readonly deps: DiaryStoreDeps) {}
 
   /**
-   * 打开某一天的日记（幂等）：已存在就直接返回，否则在**单事务**里补齐笔记本/年组/月组/文档。
+   * 打开 / 新建某一天的日记。
+   *
+   * `mode`：`"open"`（默认）= 当天已有就打开**最新一篇**、没有就建；`"new"` = **永远新建一篇**
+   * （261109 用户定稿：一天允许多篇，加号 / 选日期建新的）。两种模式都在单事务里补齐笔记本/年组/月组/文档。
    * 日期键非法 ⇒ `AppError("InvalidInput")`（fail-closed；不猜、不退化成今天）。
    */
-  openDate(rawDateKey: string): DiaryOpenResult {
+  openDate(rawDateKey: string, options: { mode?: "open" | "new" } = {}): DiaryOpenResult {
     const dateKey = parseDiaryDateKey(String(rawDateKey ?? ""));
     if (!dateKey) {
       throw new AppError("InvalidInput", "日期格式非法，要求 YYYY-MM-DD 且日期真实存在");
     }
 
+    const mode = options.mode === "new" ? "new" : "open";
+    /** 新建模式：永远"要建"（用 planDiaryCreate 的容器信息 + 空的「已存在/重复」字段）。 */
+    const planCreate = (): { notebookId: string | null; groupsToCreate: Array<{ parentId: string; title: string; nodeType: "group" }>; noteParentId: string | null; existingNoteId: null; duplicateNoteIds: string[] } => ({
+      ...planDiaryCreate(this.deps.listTreeNodes(), dateKey),
+      existingNoteId: null,
+      duplicateNoteIds: [],
+    });
+
     // 主进程现读一次节点快照后 plan：渲染层传什么都不影响落点。
-    const initialPlan = planDiaryOpen(this.deps.listTreeNodes(), dateKey);
+    const initialPlan = mode === "new" ? planCreate() : planDiaryOpen(this.deps.listTreeNodes(), dateKey);
     this.warnMultipleNotebooks();
 
     if (initialPlan.existingNoteId) {
-      return {
-        noteId: initialPlan.existingNoteId,
-        created: false,
-        notebookId: initialPlan.notebookId ?? "",
-        duplicates: initialPlan.duplicateNoteIds,
-      };
+      return { noteId: initialPlan.existingNoteId, created: false, notebookId: initialPlan.notebookId ?? "", duplicates: [] };
     }
 
     const id = this.deps.uuid();
@@ -95,7 +102,7 @@ export class DiaryStore {
         notebookId = plan.notebookId ?? this.ensureDiaryNotebook(now);
         // 笔记本不存在时 plan 只给出 notebookId=null（层级判据全依赖笔记本），所以**建完必须重新 plan**
         // （docs/DIARY.md「IPC 契约」：主进程重新 plan，不信渲染层；这里也是同一口径，只是多一轮）。
-        if (!plan.notebookId) plan = planDiaryOpen(this.deps.listTreeNodes(), dateKey);
+        if (!plan.notebookId) plan = mode === "new" ? planCreate() : planDiaryOpen(this.deps.listTreeNodes(), dateKey);
         // 2) 年 → 月分组：plan 已给出"缺哪些、按什么顺序、第一层的父是谁"。
         //    后续层的父 = 上一步真正创建/命中的那个节点（plan 里的 parentId 只在第一层是确定的）。
         let parentId = plan.groupsToCreate[0]?.parentId ?? notebookId;
@@ -117,10 +124,8 @@ export class DiaryStore {
     }
 
     try { this.deps.upsertSearch?.(id, dateKey, ""); } catch { /* 索引失败不阻断创建 */ }
-    if (plan.duplicateNoteIds.length > 0) {
-      this.deps.log?.("[diary] 同一天存在 " + plan.duplicateNoteIds.length + " 篇重复文档（只告警不删除）: " + plan.duplicateNoteIds.join(","));
-    }
-    return { noteId: id, created: true, notebookId, duplicates: plan.duplicateNoteIds };
+    // 261109 起一天允许多篇（mode:"new"），当天其它条目是正常数据，不再当"重复文档"告警。
+    return { noteId: id, created: true, notebookId, duplicates: [] };
   }
 
   /** 日记笔记本的行（只读；诊断/测试用）。 */

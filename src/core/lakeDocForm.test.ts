@@ -10,6 +10,8 @@ import {
   WELCOME_NOTE_BODY,
   WELCOME_TITLE,
   welcomeQuickNoteText,
+  lakeBodyForQuickNoteFromDiary,
+  lakeBodyToPlainText,
 } from "./lakeDocForm";
 
 describe("Lake 正文写入形态（单一来源）", () => {
@@ -76,5 +78,33 @@ describe("Lake 正文写入形态（单一来源）", () => {
       "originWidth", "originHeight", "ratio", "status", "style", "showTitle", "title",
       "rotation", "crop", "id", "margin",
     ]);
+  });
+});
+
+describe("日记 → 小记内容（261109）", () => {
+  it("日期标题成为第一段；正文接在后面；text 是纯文本镜像", () => {
+    const body = '<p class="ne-p"><span>今天下雨</span></p>';
+    const out = lakeBodyForQuickNoteFromDiary(body, "2026-11-09", { paragraphId: "p1", textId: "t1" });
+    expect(out.droppedMedia).toBe(false);
+    expect(out.body.startsWith('<p data-lake-id="p1" id="p1" class="ne-p"><span data-lake-id="t1" id="t1">2026-11-09</span></p>')).toBe(true);
+    expect(out.body).toContain("今天下雨");
+    expect(out.text.split("\n")[0]).toBe("2026-11-09");
+    expect(out.text).toContain("今天下雨");
+  });
+
+  it("媒体卡片被剥离并标 droppedMedia（不静默丢内容由调用方明说）", () => {
+    const body = '<p class="ne-p"><card type="inline" name="image" value="data:%7B%7D"></card></p><p class="ne-p"><span>正文</span></p>';
+    const out = lakeBodyForQuickNoteFromDiary(body, "2026-11-09", { paragraphId: "p2", textId: "t2" });
+    expect(out.droppedMedia).toBe(true);
+    expect(out.body).not.toContain("<card");
+    expect(out.body).toContain("正文");
+  });
+
+  it("lakeBodyToPlainText：块级标签换行、实体反转义、压缩空行", () => {
+    const text = lakeBodyToPlainText("<p>标题</p><p>a &amp; b</p><br><h2>小节</h2>");
+    expect(text).toContain("标题");
+    expect(text).toContain("a & b");
+    expect(text).toContain("小节");
+    expect(text).not.toMatch(/<[^>]+>/);
   });
 });

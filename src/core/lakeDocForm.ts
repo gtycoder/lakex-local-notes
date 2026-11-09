@@ -136,3 +136,33 @@ export function buildLakeImageCardValue(input: LakeImageCardInput): Record<strin
 export function lakeImageCardParagraph(paragraphId: string, cardValue: Record<string, unknown>): string {
   return `<p data-lake-id="${paragraphId}" id="${paragraphId}" class="ne-p"><card type="inline" name="image" value="data:${encodeURIComponent(JSON.stringify(cardValue))}"></card></p>`;
 }
+
+/** Lake 正文 → 纯文本镜像（小记的 text 字段/预览/搜索用；与内核渲染无关，只做标签剥离）。 */
+export function lakeBodyToPlainText(body: string): string {
+  return body
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(p|h[1-6]|li|blockquote|pre|div|tr)>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, "&")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+/**
+ * 日记条目 → 小记内容（261109）：**日期标题写入小记第一行**，其余正文原样接在后面。
+ *
+ * 媒体卡片（`<card …></card>`：图片/附件）**不搬运**（小记资源是另一套作用域，跨空间复制文件属于
+ * 主进程能力）；这里把它们剥掉并返回 `droppedMedia` 让调用方**明说**，绝不静默丢内容。
+ */
+export function lakeBodyForQuickNoteFromDiary(
+  body: string,
+  title: string,
+  ids: { paragraphId: string; textId: string },
+): { body: string; text: string; droppedMedia: boolean } {
+  const hasMedia = /<card[\s>]/i.test(body);
+  const withoutCards = body.replace(/<card[^>]*>[\s\S]*?<\/card>/gi, "").replace(/<card[^>]*\/>/gi, "");
+  const titleParagraph = lakeTextParagraph(ids.paragraphId, ids.textId, title);
+  const merged = titleParagraph + withoutCards;
+  const text = lakeBodyToPlainText(merged);
+  return { body: merged, text, droppedMedia: hasMedia };
+}

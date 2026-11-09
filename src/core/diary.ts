@@ -27,6 +27,7 @@ export interface DiaryTreeNode {
   /** 笔记本标记；只有 `nodeType === "notebook"` 时有效 */
   space?: DiaryFolderSpace | null;
   updatedAt?: string;
+  createdAt?: string;
   sortOrder?: number;
 }
 
@@ -120,6 +121,8 @@ export interface DiaryEntry {
   month: string;
   title: string;
   updatedAt: string;
+  /** 创建时间：同一天多篇时按它排先后（261109 允许同日多篇）。 */
+  createdAt: string;
   parentId: string | null;
 }
 
@@ -143,14 +146,18 @@ export function diaryEntries(nodes: readonly DiaryTreeNode[], notebookId: string
         const dateKey = parseDiaryDateKey(node.title);
         if (!dateKey) continue;
         const { year, month } = diaryGroupTitles(dateKey);
-        entries.push({ noteId: node.id, dateKey, year, month, title: node.title, updatedAt: node.updatedAt ?? "", parentId: node.parentId });
+        entries.push({
+          noteId: node.id, dateKey, year, month, title: node.title,
+          updatedAt: node.updatedAt ?? "", createdAt: node.createdAt ?? "", parentId: node.parentId,
+        });
       } else if (node.nodeType === "group") {
         walk(node.id);
       }
     }
   };
   walk(notebookId);
-  return entries.sort((a, b) => b.dateKey.localeCompare(a.dateKey) || b.updatedAt.localeCompare(a.updatedAt));
+  // 日期倒序；同一天多篇按创建时间倒序（最新写的在前）——261109 起允许同日多篇。
+  return entries.sort((a, b) => b.dateKey.localeCompare(a.dateKey) || b.createdAt.localeCompare(a.createdAt) || b.updatedAt.localeCompare(a.updatedAt));
 }
 
 /** 时间线按 年 → 月 分组（渲染直接用，不再在组件里重算）。 */
@@ -340,4 +347,35 @@ export function diarySubtreeIds(nodes: readonly DiaryTreeNode[]): Set<string> {
   };
   for (const root of roots) walk(root.id);
   return ids;
+}
+
+/**
+ * 新建一篇日记（**同一天允许重复**，261109 用户定稿）：与 `planDiaryOpen` 的区别是
+ * **永远返回「需要建」**，不看当天有没有已有条目；容器（年/月分组）仍按需补建。
+ * 调用方建立时用 `createdAt` 区分同日多篇的先后（时间线按日期倒序 + 同日按创建时间倒序）。
+ */
+export interface DiaryCreatePlan {
+  notebookId: string | null;
+  dateKey: string;
+  yearTitle: string;
+  monthTitle: string;
+  groupsToCreate: Array<{ parentId: string; title: string; nodeType: "group" }>;
+  noteParentId: string | null;
+}
+
+export function planDiaryCreate(nodes: readonly DiaryTreeNode[], dateKey: string): DiaryCreatePlan {
+  const normalized = parseDiaryDateKey(dateKey) ?? dateKey;
+  const { year, month } = diaryGroupTitles(normalized);
+  const notebookId = diaryNotebookId(nodes);
+  const base: DiaryCreatePlan = {
+    notebookId, dateKey: normalized, yearTitle: year, monthTitle: month, groupsToCreate: [], noteParentId: null,
+  };
+  if (!notebookId) return base;
+  const groupsToCreate: DiaryCreatePlan["groupsToCreate"] = [];
+  const yearGroup = findChildGroup(nodes, notebookId, year);
+  const effectiveYearId = yearGroup?.id ?? notebookId;
+  if (!yearGroup) groupsToCreate.push({ parentId: notebookId, title: year, nodeType: "group" });
+  const monthGroup = yearGroup ? findChildGroup(nodes, yearGroup.id, month) : null;
+  if (!monthGroup) groupsToCreate.push({ parentId: effectiveYearId, title: month, nodeType: "group" });
+  return { ...base, groupsToCreate, noteParentId: monthGroup?.id ?? effectiveYearId };
 }

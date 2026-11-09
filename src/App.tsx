@@ -41,6 +41,7 @@ import { AttachmentPreview } from "./features/attachment/AttachmentPreview";
 import { NativeTitleTips } from "./components/ui/NativeTitleTips";
 import { native } from "./lib/native";
 import { getNativeErrorMessage } from "./lib/nativeErrors";
+import { composeDiaryQuickNote } from "./features/diary/diaryQuickNote";
 import type { TreeNode } from "./lib/types";
 /** P12：回收站/单据属性弹窗都挂 Lake 内核（HistorySnapshotPreview → useHistorySnapshotViewer），
  *  只在真正打开时才需要 ⇒ 懒加载，避免内核重新进入首屏静态图。 */
@@ -572,6 +573,26 @@ export function App() {
     sidebarMove(nodeId, plan.targetId, "inside");
     showNotice("已转为文档：" + targetTitle);
   }, [treeNodes, sidebarMove, showNotice]);
+  /** 「转为小记」（261109）：日期标题写入小记第一行，正文接在后面；成功后把日记移入回收站（软删可恢复）。
+   *  媒体卡片不搬运（小记资源是另一套作用域）——`droppedMedia` 为真时**明说**，不静默丢内容。 */
+  const handleDiaryToQuickNote = useCallback(async (nodeId: string) => {
+    try {
+      const doc = await native.readNote(nodeId);
+      const composed = composeDiaryQuickNote({ title: doc.title, content: doc.content });
+      await native.createQuickNote({
+        text: composed.text,
+        body: composed.body,
+        draftId: crypto.randomUUID(),
+        stagedImageIds: [],
+      });
+      await native.deleteTreeNode(nodeId);
+      showNotice((composed.droppedMedia ? "已转为小记（图片 / 附件未搬运）" : "已转为小记") + "；日记已移入回收站，可恢复");
+      await refreshTree();
+    } catch (reason) {
+      setError(getNativeErrorMessage(reason));
+    }
+  }, [refreshTree, setError, showNotice]);
+
   /** 日记内搜索入口 = 打开**现有**全局搜索面板（日记是文档，已在 FTS 里；不新增索引）。
    *  范围收窄 = 面板的 `scopeNoteIds`（下面搜索面板处传入 `diaryNoteIds`），纯显示层过滤。 */
   const handleDiaryOpenSearch = useCallback(() => { sidebarOpenSearch(); }, [sidebarOpenSearch]);
@@ -1067,6 +1088,7 @@ export function App() {
                 onWriteToday={(dateKey) => { void handleDiaryWriteToday(dateKey); }}
                 onOpenSearch={handleDiaryOpenSearch}
                 onConvertEntry={handleDiaryConvertEntry}
+                onConvertToQuickNote={(nodeId) => { void handleDiaryToQuickNote(nodeId); }}
                 onRenameNotebook={handleDiaryRenameNotebook}
                 onSetNotebookIcon={handleDiarySetNotebookIcon}
                 onContentChange={handleContentChange}

@@ -671,7 +671,7 @@ function registerIpc(): ReadonlyMap<string, (args: unknown[]) => Promise<unknown
     quickNotes.backupDatabaseTo(path.join(quickDir, "metadata.sqlite3"));
   }, enqueueMaintenance);
   // 261109 日记：幂等打开某天（判据/单事务在 electron/diaryStore.ts；通道见 docs/DIARY.md）。
-  registerDiaryIpc(ipc, { openDate: (dateKey) => store.openDiaryDate(dateKey) });
+  registerDiaryIpc(ipc, { openDate: (dateKey, options) => store.openDiaryDate(dateKey, options) });
   registerHistoryIpc(ipc, store, () => restartHistoryTimers?.());
   registerAiIpc(ipc, store);
   registerAiWritingIpc(ipc, store);

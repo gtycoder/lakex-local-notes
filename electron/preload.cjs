@@ -101,7 +101,7 @@ contextBridge.exposeInMainWorld("lakeNative", {
   setNoteLocked: (id, locked) => invoke("set_note_locked", id, locked),
   listTreeNodes: () => invoke("list_tree_nodes"),
   // 261109 日记：幂等打开某一天（只传 dateKey，主进程重新 plan）。
-  diaryOpenDate: (dateKey) => invoke("diary_open_date", dateKey),
+  diaryOpenDate: (dateKey, mode) => invoke("diary_open_date", dateKey, mode),
   listNoteSummaries: () => invoke("list_note_summaries"),
   createNotebook: (title, space) => invoke("create_notebook", title, space),
   createGroup: (parentId, title) => invoke("create_group", parentId, title),

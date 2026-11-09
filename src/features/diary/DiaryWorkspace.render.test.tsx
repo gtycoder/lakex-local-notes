@@ -64,6 +64,7 @@ function props(overrides: Partial<DiaryWorkspaceProps> = {}): DiaryWorkspaceProp
     outlineEnhance: false,
     editorPrefs: { fontSize: 14 },
     onConvertEntry: vi.fn(),
+    onConvertToQuickNote: vi.fn(),
     onOpenEntry: vi.fn(),
     onWriteToday: vi.fn(),
     onOpenSearch: vi.fn(),
@@ -172,6 +173,20 @@ describe("日记空间（桌面）", () => {
     expect(confirm).toBeTruthy();
     act(() => confirm!.click());
     expect(onConvertEntry).toHaveBeenCalledWith("e-old", "nb-doc");
+  });
+
+  it("右键「转为小记」：把该条目的树节点 id 交给宿主（组合/落库在 App + 主进程）", () => {
+    const onConvertToQuickNote = vi.fn();
+    render({ treeNodes: tree(true), onConvertToQuickNote });
+    const entry = [...document.body.querySelectorAll<HTMLElement>(".diary-entry")]
+      .find((el) => (el.textContent ?? "").includes("2025-12-31"));
+    expect(entry).toBeTruthy();
+    act(() => { entry!.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 10, clientY: 10 })); });
+    const item = [...document.body.querySelectorAll<HTMLElement>("[role='menuitem']")]
+      .find((el) => (el.textContent ?? "").trim() === "转为小记");
+    expect(item).toBeTruthy();
+    act(() => item!.click());
+    expect(onConvertToQuickNote).toHaveBeenCalledWith("e-old");
   });
 
   it("搜索入口 = 打开现有全局搜索面板（不在日记里另造搜索）；标题里写明范围是全库", () => {

@@ -226,7 +226,8 @@ export interface LakeNative {
    * 日记（261109，**桌面专有**；移动端有自己的日记页）：幂等打开某一天。
    * 只传 dateKey —— 主进程重新 plan，已存在直接返回（created=false），连点两次只产生一篇。
    */
-  diaryOpenDate(dateKey: string): Promise<DiaryOpenResultShape>;
+  /** `mode`：省略 = 当天已有就开最新、没有就建；`"new"` = 永远新建一篇（一天多篇）。 */
+  diaryOpenDate(dateKey: string, mode?: "open" | "new"): Promise<DiaryOpenResultShape>;
   createGroup(parentId: string, title: string): Promise<TreeNode>;
   renameTreeNode(id: string, title: string): Promise<TreeNode>;
   createNoteIn(parentId: string | null, title: string): Promise<NoteDocument>;
@@ -500,7 +501,7 @@ export const native = {
   listTreeNodes: () => api().listTreeNodes(),
   listNoteSummaries: () => api().listNoteSummaries(),
   createNotebook: (title: string, space?: "diary" | null) => api().createNotebook(title, space),
-  diaryOpenDate: (dateKey: string) => api().diaryOpenDate(dateKey),
+  diaryOpenDate: (dateKey: string, mode?: "open" | "new") => api().diaryOpenDate(dateKey, mode),
   createGroup: (parentId: string, title: string) => api().createGroup(parentId, title),
   renameTreeNode: (id: string, title: string) => api().renameTreeNode(id, title),
   createNoteIn: (parentId: string | null, title: string) => api().createNoteIn(parentId, title),

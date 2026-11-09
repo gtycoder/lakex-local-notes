@@ -115,23 +115,32 @@ describe("diary_open_date 的存储编排", () => {
     } finally { db2.close(); }
   });
 
-  it("同一天已有重复文档（历史脏数据）：取最近的、只告警不删除", () => {
+  it("一天允许多篇（261109）：默认打开最新、mode:new 才新建；同日其它条目不是重复文档", () => {
     const first = store.openDiaryDate("2026-11-09");
-    const { month } = diaryHierarchy();
-    const dup = store.createNoteIn(month.id, "2026-11-09");
-
+    // 再次「打开」= 幂等复用（不新建）
     const again = store.openDiaryDate("2026-11-09");
     expect(again.created).toBe(false);
-    expect([first.noteId, dup.id]).toContain(again.noteId);
-    expect(again.duplicates).toHaveLength(1);
-    expect([first.noteId, dup.id]).toContain(again.duplicates[0]);
+    expect(again.noteId).toBe(first.noteId);
+    expect(again.duplicates).toEqual([]);
 
-    // 两篇都还在（绝不自动删除）
+    // mode:"new" = 显式新建第二篇（同一天多篇是合法形态）
+    const second = store.openDiaryDate("2026-11-09", { mode: "new" });
+    expect(second.created).toBe(true);
+    expect(second.noteId).not.toBe(first.noteId);
+    expect(second.duplicates).toEqual([]);
+
     const db = readOnlyDb();
     try {
       const row = db.prepare("SELECT COUNT(*) AS c FROM notes WHERE title='2026-11-09' AND deleted_at IS NULL").get() as { c: number };
       expect(row.c).toBe(2);
+      // 分组不重复建
+      expect((db.prepare("SELECT COUNT(*) AS c FROM tree_nodes WHERE node_type='group'").get() as { c: number }).c).toBe(2);
     } finally { db.close(); }
+
+    // 再次「打开」= 回到既有的一篇（不新建第三篇）
+    const third = store.openDiaryDate("2026-11-09");
+    expect(third.created).toBe(false);
+    expect([first.noteId, second.noteId]).toContain(third.noteId);
   });
 
   it("日期键非法 ⇒ 拒绝并明确报错，且不写任何行", () => {

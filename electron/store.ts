@@ -856,8 +856,8 @@ export class Store {
    * 日记：幂等打开某一天的文档（IPC `diary_open_date` 的唯一实现）。
    * 判据/分组/事务全在 diaryStore；这里只是让 Store 持有 db 与既有写口径。
    */
-  openDiaryDate(dateKey: string): DiaryOpenResult {
-    return this.diaryStore.openDate(dateKey);
+  openDiaryDate(dateKey: string, options: { mode?: "open" | "new" } = {}): DiaryOpenResult {
+    return this.diaryStore.openDate(dateKey, options);
   }
 
   /**
