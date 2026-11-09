@@ -13,6 +13,7 @@
 import {
   DIARY_FOLDER_SPACE,
   diaryNotebookId,
+  diaryNotebooks,
   normalizeFolderSpace,
   parseDiaryDateKey,
   planDiaryOpen,
@@ -109,6 +110,10 @@ export async function ensureDiaryNote(d: MobileDb, dateKey: string): Promise<Dia
   if (!normalized) throw new Error("日期键非法（要求 YYYY-MM-DD）：" + dateKey);
   return await d.transaction(async (): Promise<DiaryOpenResult> => {
     const folderRows = await d.prepare(LIST_FOLDERS_SQL).all() as unknown as FolderRow[];
+    // 硬规则 2：多个日记本 = 历史脏数据（如旧便携包丢了 space 又不小心建了第二本）⇒ 取第一个为准，只告警不自动修复。
+    if (diaryNotebooks(folderRows.map(folderToDiaryNode)).length > 1) {
+      console.warn("[diary] 存在多个 space='diary' 的笔记本：取第一个为准（不自动修复）");
+    }
     let notebookId = diaryNotebookId(folderRows.map(folderToDiaryNode));
     const statements: MobileBatchStatement[] = [];
     if (!notebookId) {

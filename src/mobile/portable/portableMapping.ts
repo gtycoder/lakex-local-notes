@@ -15,6 +15,7 @@ import {
   type QuickNotesIndex,
 } from "../../core/s3v3/protocol/s3v3Index";
 import type { MobileV3Baseline } from "../data/v3StateRepository";
+import { normalizeFolderSpace } from "../../core/diary";
 
 export type DesktopRow = Record<string, unknown>;
 
@@ -64,6 +65,8 @@ export interface MobileFolderRow {
   parent_id: string | null;
   sort_order: number;
   node_type: string;
+  /** 261109 日记：桌面 tree_nodes.space（便携包 SELECT * 已带出）必须搬到移动端，否则日记本降级成普通本。 */
+  space: string | null;
   icon: string | null;
   updated_at: string;
   trashed_at: string | null;
@@ -226,6 +229,8 @@ export function mapTreeRow(
         parent_id: parentId,
         sort_order: sortOrder,
         node_type: nodeType,
+        // 归一：未知值/缺字段一律当非日记；space 只对 notebook 有意义（与 wire 校验同口径）。
+        space: nodeType === "notebook" ? normalizeFolderSpace(node.space) : null,
         icon: asText(node.icon),
         updated_at: updatedAt,
         trashed_at: trashedAt,

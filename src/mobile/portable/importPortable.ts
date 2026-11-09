@@ -148,9 +148,9 @@ function noteStatements(rows: ReturnType<typeof mapDesktopTree>["notes"]) {
 function folderStatements(rows: ReturnType<typeof mapDesktopTree>["folders"]) {
   return rows.map((row): MobileBatchStatement => ({
     statement:
-      "INSERT OR REPLACE INTO folders (id,title,parent_id,sort_order,node_type,icon,updated_at,trashed_at,deleted_from_parent_id,is_dirty,is_purged,cloud_deleted) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+      "INSERT OR REPLACE INTO folders (id,title,parent_id,sort_order,node_type,space,icon,updated_at,trashed_at,deleted_from_parent_id,is_dirty,is_purged,cloud_deleted) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
     values: [
-      row.id, row.title, row.parent_id, row.sort_order, row.node_type, row.icon, row.updated_at, row.trashed_at,
+      row.id, row.title, row.parent_id, row.sort_order, row.node_type, row.space, row.icon, row.updated_at, row.trashed_at,
       row.deleted_from_parent_id, row.is_dirty, row.is_purged, row.cloud_deleted,
     ],
   }));

@@ -88,6 +88,21 @@ describe("tree_nodes + notes → folders/notes（含回收站与彻底删除）"
     expect(mapped.tombstones.some((t) => t.id === "grp-purged" && t.node_type === "folder")).toBe(true);
   });
 
+it("日记标记跨端搬运：notebook 保留、group/未知值一律 null（261109）", () => {
+    const rows = [
+      { id: "nb-diary", parent_id: null, node_type: "notebook", title: "日记", sort_order: 0, updated_at: TS, space: "diary" },
+      { id: "nb-plain", parent_id: null, node_type: "notebook", title: "个人笔记", sort_order: 1, updated_at: TS },
+      { id: "nb-album", parent_id: null, node_type: "notebook", title: "未知标记", sort_order: 2, updated_at: TS, space: "album" },
+      { id: "grp-diary", parent_id: "nb-diary", node_type: "group", title: "2026", sort_order: 0, updated_at: TS, space: "diary" },
+    ];
+    const { folders } = mapDesktopTree(rows, [], baseline());
+    const byId = new Map(folders.map((f) => [f.id, f]));
+    expect(byId.get("nb-diary")!.space).toBe("diary");
+    expect(byId.get("nb-plain")!.space).toBeNull();
+    expect(byId.get("nb-album")!.space).toBeNull();
+    expect(byId.get("grp-diary")!.space).toBeNull();
+  });
+
   it("note 业务 id = note_file_id；kind→doc_kind；content_hash 取基线", () => {
     const mapped = mapDesktopTree(treeRows, noteRows, baseline());
     const n1 = mapped.notes.find((n) => n.id === "n1")!;

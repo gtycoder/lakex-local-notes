@@ -315,7 +315,12 @@ export function validateLakeIndex(raw: unknown): LakeIndex {
   }
   // 日记标记读取容错（DIARY.md）：未知值/缺字段一律当非日记，**不抛错、也不自动修复**
   // （多个 space="diary" 的冲突由判据层取首个并告警，不在这里静默改数据）。
-  const folders: LakeFolderEntry[] = (idx.folders as LakeFolderEntry[]).map((f) => ({ ...f, space: normalizeFolderSpace(f.space) }));
+  // 互校：space 只对 notebook 有意义（坏端写出 group(space="diary") 时就地归一为 null，
+  // 与判据层「只认 notebook」同口径；不抛错 —— 别让一条脏字段毁掉整份索引）。
+  const folders: LakeFolderEntry[] = (idx.folders as LakeFolderEntry[]).map((f) => ({
+    ...f,
+    space: f.nodeType === "notebook" ? normalizeFolderSpace(f.space) : null,
+  }));
   return { v: S3V3_INDEX_VERSION, space: "lake", notes: idx.notes as LakeNoteEntry[], folders };
 }
 
