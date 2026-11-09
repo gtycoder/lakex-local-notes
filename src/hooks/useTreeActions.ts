@@ -4,6 +4,7 @@ import { native } from "../lib/native";
 import { getNativeErrorMessage } from "../lib/nativeErrors";
 import type { NoteSummary, TreeNode } from "../lib/types";
 import { patchNoteById, patchTabById, replaceTreeNode, type OpenTab } from "../desktop/desktopTypes";
+import { isDiaryEntryNode, type DiaryTreeNode } from "../core/diary";
 
 export interface UseTreeActionsOptions {
   /** 六个新建 kind 都收用户输入的名字，并回传新节点 id（统一弹窗 → 选中/滚动）。 */
@@ -67,6 +68,11 @@ export function useTreeActions({
   }, [createNoteIn, createUsheetIn, createBitableIn, createBoardIn, createInkIn]);
 
   const renameTreeNode = useCallback(async (id: string, title: string) => {
+    // 261109 用户定稿：日记条目**标题只能是日期** ⇒ 拒绝任何改名（标题就是日期，改了就不再是日记）。
+    if (isDiaryEntryNode(treeNodes as unknown as DiaryTreeNode[], id)) {
+      setError("日记标题就是日期，不能改");
+      return;
+    }
     try {
       const renamed = await native.renameTreeNode(id, title);
       setTreeNodes(replaceTreeNode(renamed));

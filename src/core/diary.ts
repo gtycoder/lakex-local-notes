@@ -379,3 +379,21 @@ export function planDiaryCreate(nodes: readonly DiaryTreeNode[], dateKey: string
   if (!monthGroup) groupsToCreate.push({ parentId: effectiveYearId, title: month, nodeType: "group" });
   return { ...base, groupsToCreate, noteParentId: monthGroup?.id ?? effectiveYearId };
 }
+
+/** 该节点是否是**日记条目**（在日记本子树下、nodeType=note、标题能解析成日期）：用于「标题只能是日期」守卫。 */
+export function isDiaryEntryNode(nodes: readonly DiaryTreeNode[], nodeId: string | null): boolean {
+  if (!nodeId) return false;
+  const byId = new Map(nodes.map((node) => [node.id, node]));
+  const node = byId.get(nodeId);
+  if (!node || node.nodeType !== "note" || parseDiaryDateKey(node.title) === null) return false;
+  const diaryIds = new Set(diaryNotebooks(nodes).map((root) => root.id));
+  if (diaryIds.size === 0) return false;
+  let parentId = node.parentId;
+  const seen = new Set<string>();
+  while (parentId && !seen.has(parentId)) {
+    if (diaryIds.has(parentId)) return true;
+    seen.add(parentId);
+    parentId = byId.get(parentId)?.parentId ?? null;
+  }
+  return false;
+}

@@ -31,6 +31,8 @@ export { OUTLINE_SIDEBAR_DEFAULT_WIDTH, OUTLINE_SIDEBAR_MIN_WIDTH, OUTLINE_SIDEB
 
 export interface OpenTab {
   noteId: string;
+  /** 标签归属的空间（261109）：`"diary"` = 只在日记空间出现；缺省 = 文档空间。两个空间的 tab 条各自独立。 */
+  space?: "library" | "diary";
   title: string;
   content: string;
   dirty: boolean;

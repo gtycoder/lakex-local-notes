@@ -88,7 +88,9 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "components/app/syncConflictsPanel.css": { decls: 87, dupGroups: 0 },   // 261107：补登记
   "features/editor/aiAssistantCard.css": { decls: 10, dupGroups: 0 },   // 261107：补登记
   "features/tags/tags.css": { decls: 217, dupGroups: 0 },   // 261107：补登记
-  "features/diary/diary.css": { decls: 118, dupGroups: 0 },   // 261109 实测：日记空间版面（左 280 年月栏 + 主区容器 + 空态），无重复组、无 !important
+  "features/diary/diary.css": { decls: 131, dupGroups: 0 },   // 261109 实测：日记空间版面（左 280 年月栏 + 主区容器 + 空态），无重复组、无 !important
+  // +13（261109 六改）：条目选中/hover 状态（之前被 background:transparent 盖掉，点了看不出选中）+ 同日多篇的时刻列 .diary-entry__time + 「按日期新建」浮层内距；
+  // 全部用既有 --lake-* 令牌，属新增状态/形态非覆盖叠层。
   "components/app/noteDocPreview.css": { decls: 20, dupGroups: 0 },   // 261106 新文件：文档只读预览统一排版作用域（正文 14px/1.7 + 标题 em 缩放 + 列宽 760px）：容器/错误行/宿主铺满/字号行高/4 条标题/列宽，无重复组、无 !important
   "styles/index.css": { decls: 0, dupGroups: 0 },   // UI 重设计 P1：单入口（@layer 声明 + @import 编排，0 声明）
   "components/ui/nodeIcon.css": { decls: 95, dupGroups: 0 },   // 261020：117 → 95（−22）= 删掉旧 40 线性图标 + 8 档色板（−27），再加回容器的「表情符号｜图标」两页页签（+2）与面板自有空态（+1）；只剩表情页与语雀插画网格

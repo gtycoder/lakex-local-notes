@@ -8,6 +8,14 @@
 
 ## 0. 最新交接（261109）
 
+### 261109 · 日记六改（独立 tab / 一天多篇 / 选日期 / 标题锁 / 选中态 / 转小记）
+- **独立 tab**：`OpenTab.space`（`desktopTypes`/`MultiTabEditor.TabInfo`/`desktopDerivedState` 三处透传）；App 按空间分流 `libraryTabs` / `diaryTabs`，日记空间顶栏渲染自己的 tab 条（`aria-label="打开的日记"`），切空间时活动标签回落到该空间。
+- **一天多篇**：`core.planDiaryCreate` + `diaryStore.openDate(dateKey, { mode })`（`open` 默认 / `new` 永远新建）+ IPC `diary_open_date(dateKey, mode)` + `native.diaryOpenDate(dateKey, mode)`；同日多篇不再当"重复文档"告警，`DiaryEntry.createdAt` 支撑同日按创建时间倒序。
+- **UI**：日记左栏 **＋ = 今天新建**、**日历 = 选日期新建**（Menu + `input[type=date]`）；同日多篇行内显示 HH:mm；**选中态**与目录树同一套令牌（此前被 `background:transparent` 盖掉）。
+- **标题锁**：`core.isDiaryEntryNode` 判据，`useTreeActions.renameTreeNode` 对日记条目直接拒绝（「日记标题就是日期，不能改」）。
+- **转为小记**：右键 →「转为小记」；日期标题写入小记第一行 + 正文接后面；媒体卡片不搬运（toast 明说）；成功后日记移入回收站（软删可恢复）。
+- 门禁：tsc 0；vitest **819 文件 / 5162 通过 / 12 skipped / 0 failed**；ui-metrics / check:mobileui / diff-check 通过；CSS 基线（diary.css 118→131、移动 mobile.css 1645）已登记实测理由。
+
 ### 261109 · 空间顺序与快捷键（用户定稿）
 - 空间菜单顺序改为 **文档 ⌘1 · 小记 ⌘2 · 日记 ⌘3 · AI 写作 ⌘4 · 标签 ⌘5**（日记与 AI 写作换位；标签也进快捷键表）。
 - **快捷键单一来源**：⌘1–5 全部收进 `src/hooks/useDesktopLifecycle.ts` 的一张 map；删掉 `App.tsx` 里单独注册的 ⌘4 监听（review 遗留项 ② 闭合）。护栏 `src/features/diary/diaryWorkspace.test.ts` ② 断言表内容 + App 不得再自注册。

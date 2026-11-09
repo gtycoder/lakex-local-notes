@@ -43,6 +43,8 @@ export interface TabInfo {
   kind?: "doc" | "usheet" | "bitable" | "board" | "ink";
   /** 正文文件缺失（被手动删除等）：渲染专用面板（只读、不挂编辑器、不弹 ENOENT）。 */
   bodyMissing?: boolean;
+  /** 标签归属空间（261109）：`"diary"` 只出现在日记空间 tab 条；缺省 = 文档空间。 */
+  space?: "library" | "diary";
 }
 
 interface MultiTabEditorProps {

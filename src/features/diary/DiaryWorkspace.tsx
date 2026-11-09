@@ -12,7 +12,7 @@
  * **不做月历**（v1 明确不做：会与多维表月历撞「同一交互语义只有一套视觉」）。
  */
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronRight, Image as ImageIcon, NotebookPen, Pencil, Search } from "lucide-react";
+import { CalendarDays, ChevronRight, Image as ImageIcon, NotebookPen, Pencil, Plus, Search } from "lucide-react";
 import {
   diaryConvertTargets,
   formatDiaryDateKey,
@@ -57,6 +57,8 @@ export interface DiaryWorkspaceProps {
   onOpenEntry: (noteId: string) => void;
   /** 写今天：App 侧 planDiaryOpen → 已存在就打开，否则走 IPC `diary_open_date`。 */
   onWriteToday: (dateKey: string) => void;
+  /** 新建某一天的日记（261109：一天允许多篇；加号=今天，选日期=任意历史日期，**永远新建**）。 */
+  onCreateEntry: (dateKey: string) => void;
   /** 打开现有全局搜索面板（v1 全库范围，日记已进 FTS）。 */
   onOpenSearch: () => void;
   /** 「转为文档」：把该日记条目移到目标笔记本（换父节点 = 移动，不复制正文/历史）。 */
@@ -76,10 +78,17 @@ interface YearNode {
   months: Array<{ month: string; entries: DiaryEntryView[] }>;
 }
 
+/** 时刻标签（同日多篇用）：只显示 HH:mm，空值回落为空串。 */
+function diaryClock(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false });
+}
+
 export function DiaryWorkspace(props: DiaryWorkspaceProps) {
   const {
     active, treeNodes, activeNoteId, tabs, lockedNoteIds, tocEnabled, outlineEnhance, editorPrefs,
-    onOpenEntry, onWriteToday, onOpenSearch, onConvertEntry, onConvertToQuickNote, onRenameNotebook, onSetNotebookIcon,
+    onOpenEntry, onWriteToday, onCreateEntry, onOpenSearch, onConvertEntry, onConvertToQuickNote, onRenameNotebook, onSetNotebookIcon,
     onContentChange, onEditorReady, onReloadNote,
   } = props;
 
@@ -123,6 +132,19 @@ export function DiaryWorkspace(props: DiaryWorkspaceProps) {
   }, [treeNodes]);
   /** 正在挑选目标的条目：null = 不在转换流程里。 */
   const [convertEntry, setConvertEntry] = useState<DiaryEntryView | null>(null);
+  /** 「选日期新建」浮层（加号 = 今天，这里 = 任意日期）。 */
+  const [dateMenu, setDateMenu] = useState<{ x: number; y: number } | null>(null);
+  const [pickDate, setPickDate] = useState(todayKey);
+  const dateMenuPos = usePopoverPosition({
+    open: Boolean(dateMenu),
+    at: dateMenu ? { x: dateMenu.x, y: dateMenu.y } : null,
+  });
+  /** 同一天多篇时行内显示时刻（HH:mm）区分；只有一篇仍显示「更新于」。 */
+  const sameDayCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const entry of entries) counts.set(entry.dateKey, (counts.get(entry.dateKey) ?? 0) + 1);
+    return counts;
+  }, [entries]);
 
   const isEntry = (noteId: string | null): boolean => noteId !== null && entryDocIds.has(noteId);
   const activeTab = activeNoteId !== null && isEntry(activeNoteId)
@@ -141,6 +163,29 @@ export function DiaryWorkspace(props: DiaryWorkspaceProps) {
         <div className="diary-dir__head">
           <h2 className="diary-dir__title"><NotebookPen size={15} aria-hidden="true" />日记</h2>
           <span className="diary-dir__count" title="日记篇数">{entries.length}</span>
+          {/* 261109：加号 = 今天新建一篇（一天允许多篇）；日历 = 任意日期新建。 */}
+          <button
+            type="button"
+            className="ln-iconbtn ln-iconbtn--compact"
+            aria-label="新建今天的日记"
+            title="新建今天的日记"
+            onClick={() => onCreateEntry(todayKey)}
+          >
+            <Plus size={15} />
+          </button>
+          <button
+            type="button"
+            className="ln-iconbtn ln-iconbtn--compact"
+            aria-label="选择日期新建日记"
+            title="选择日期新建日记"
+            onClick={(event) => {
+              const rect = event.currentTarget.getBoundingClientRect();
+              setPickDate(todayKey);
+              setDateMenu({ x: rect.left, y: rect.bottom + 4 });
+            }}
+          >
+            <CalendarDays size={15} />
+          </button>
           <button
             type="button"
             className="ln-iconbtn ln-iconbtn--compact"
@@ -199,6 +244,10 @@ export function DiaryWorkspace(props: DiaryWorkspaceProps) {
                         >
                           <span className="diary-entry__day">{entry.dateKey.slice(8, 10)}</span>
                           <span className="diary-entry__title ln-ellipsis">{entry.dateKey}</span>
+                          {/* 同一天多篇（261109）时用时刻区分，否则同名行分不清。 */}
+                          {(sameDayCounts.get(entry.dateKey) ?? 0) > 1 && (
+                            <span className="diary-entry__time">{diaryClock(entry.createdAt)}</span>
+                          )}
                         </button>
                       ))}
                     </div>
@@ -294,6 +343,34 @@ export function DiaryWorkspace(props: DiaryWorkspaceProps) {
           >
             转为小记
           </button>
+        </Menu>
+      )}
+
+      {/* 选日期新建（261109）：加号 = 今天；这里 = 任意日期，永远新建一篇。 */}
+      {dateMenu && (
+        <Menu
+          surfaceRef={dateMenuPos.surfaceRef}
+          style={dateMenuPos.style ?? undefined}
+          onDismiss={() => setDateMenu(null)}
+          aria-label="按日期新建日记"
+        >
+          <div className="diary-date-picker">
+            <input
+              type="date"
+              className="ln-input__field"
+              aria-label="选择日期"
+              value={pickDate}
+              onChange={(event) => setPickDate(event.target.value)}
+            />
+            <button
+              type="button"
+              className="ln-btn ln-btn--primary ln-btn--compact"
+              disabled={!/^\d{4}-\d{2}-\d{2}$/.test(pickDate)}
+              onClick={() => { onCreateEntry(pickDate); setDateMenu(null); }}
+            >
+              新建
+            </button>
+          </div>
         </Menu>
       )}
 

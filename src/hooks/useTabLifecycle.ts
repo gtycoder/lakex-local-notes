@@ -63,7 +63,7 @@ export function useTabLifecycle({
   }, [settingsMaxOpenTabs, pinnedNoteIds, persistTab, openTabsRef]);
 
   /** note → OpenTab（含"打开即只读"判定与缺正文一次性提示）：openNote 与 restoreTabs 共用，避免两套构造逻辑漂移。 */
-  const openTabFromNote = useCallback((note: NoteDocument, lastAccessedAt: number): OpenTab => {
+  const openTabFromNote = useCallback((note: NoteDocument, lastAccessedAt: number, space?: "library" | "diary"): OpenTab => {
     resetRevision(note.id, 0);
     // 打开即判定：回收站里 / 已被他端 purge 的文档直接以"已删除"标签打开（只读 + 不保存），
     // 不等下一次同步才标记——否则重启自动重开"最后文档"时会看到能编辑的已删文档。
@@ -82,12 +82,15 @@ export function useTabLifecycle({
       deleted: isGoneNote(note),
       bodyMissing,
       kind: note.kind ?? "doc",
+      // 261109：标签归属空间（日记 tab 只在日记空间出现）；缺省 = 文档空间。
+      ...(space ? { space } : {}),
       // Batch4-D：打开时记住正文 hash，保存时用它判断磁盘是否被外部改过。
       ...(note.contentHash ? { baseHash: note.contentHash } : {}),
     };
   }, [resetRevision, showNotice]);
 
-  const openNote = useCallback(async (id: string, locateQuery = "", _newTab = false): Promise<boolean> => {
+  /** `space`：从日记空间打开时传 `"diary"`（该 tab 只在日记 tab 条出现）。 */
+  const openNote = useCallback(async (id: string, locateQuery = "", _newTab = false, space?: "library" | "diary"): Promise<boolean> => {
     const locate = () => {
       if (!locateQuery) return;
       let attempts = 0;
@@ -127,7 +130,7 @@ export function useTabLifecycle({
         setActiveNoteId(id);
         return true;
       }
-      const newTab: OpenTab = openTabFromNote(note, Date.now());
+      const newTab: OpenTab = openTabFromNote(note, Date.now(), space);
       const nextForEvict = openTabsRef.current.some((t) => t.noteId === id)
         ? openTabsRef.current
         : [...openTabsRef.current, newTab];

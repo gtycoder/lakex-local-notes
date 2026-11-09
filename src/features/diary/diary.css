@@ -133,6 +133,26 @@
   cursor: pointer;
 }
 
+/* 261109：选中/hover 与目录树同一套令牌（之前 background: transparent 把 .ln-row 的选中底盖掉了，
+   导致「点了看不出选中」）。只补状态色，几何仍由 .ln-row 提供。 */
+.diary-entry:hover { background: var(--lake-bg-hover); }
+.diary-entry.is-selected { color: var(--lake-fg-selected); background: var(--lake-bg-selected); font-weight: var(--lake-font-weight-semibold); }
+.diary-entry.is-selected:hover { background: var(--lake-bg-selected-hover); }
+
+.diary-entry__time {
+  flex: none;
+  color: var(--lake-text-3);
+  font-size: var(--lake-font-size-micro);
+  font-variant-numeric: tabular-nums;
+}
+
+.diary-date-picker {
+  display: flex;
+  align-items: center;
+  gap: var(--lake-space-sm);
+  padding: var(--lake-space-sm);
+}
+
 .diary-entry__day {
   flex: none;
   min-width: 18px;

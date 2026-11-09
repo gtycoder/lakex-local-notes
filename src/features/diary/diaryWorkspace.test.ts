@@ -43,6 +43,16 @@ describe("日记空间接线", () => {
     expect(APP, "App 不应再自注册 ⌘4/⌘5 监听").not.toMatch(/event\.key !== "[45]"/);
   });
 
+  it("②c 独立 tab：日记/文档各看各的（按 OpenTab.space 分流）；日记条目标题不可改名", () => {
+    expect(APP).toContain('tabInfos.filter((tab) => (tab.space ?? "library") !== "diary")');
+    expect(APP).toContain('tabInfos.filter((tab) => tab.space === "diary")');
+    expect(APP).toContain('aria-label="打开的日记"');
+    expect(APP).toContain('openNote(noteId, "", false, "diary")');
+    const TREE_ACTIONS = read("../../hooks/useTreeActions.ts");
+    expect(TREE_ACTIONS).toContain("isDiaryEntryNode");
+    expect(TREE_ACTIONS).toContain("日记标题就是日期，不能改");
+  });
+
   it("②b shell：进入日记空间隐藏左侧目录栏与状态栏（与标签/回收站同口径）", () => {
     expect(CHROME).toContain(".app-shell.diary-space-active .sidebar { display: none; }");
     expect(CHROME).toContain(".app-shell.diary-space-active .statusbar { display: none; }");

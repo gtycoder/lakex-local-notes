@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { isCloudActive } from "./core/cloudState";
-import { PanelLeft } from "lucide-react";
+import { PanelLeft, X as CloseIcon } from "lucide-react";
 import { Sidebar } from "./components/app/Sidebar";
 import { SIDEBAR_CORRIDOR_SELECTORS, isInSidebarCorridor, reduceHover, type HoverEffect, type HoverEvent } from "./components/model/sidebarHoverMachine";
 import { useWindowShortcuts } from "./hooks/useWindowShortcuts";
@@ -573,6 +573,17 @@ export function App() {
     sidebarMove(nodeId, plan.targetId, "inside");
     showNotice("已转为文档：" + targetTitle);
   }, [treeNodes, sidebarMove, showNotice]);
+  /** 新建某天的日记（261109：一天允许多篇）：走 IPC `mode:"new"`，建完刷新树并按**日记空间**打开。 */
+  const handleDiaryCreateEntry = useCallback(async (dateKey: string) => {
+    try {
+      const result = await native.diaryOpenDate(dateKey, "new");
+      await refreshTree();
+      await openNote(result.noteId, "", false, "diary");
+    } catch (reason) {
+      setError(getNativeErrorMessage(reason));
+    }
+  }, [openNote, refreshTree, setError]);
+
   /** 「转为小记」（261109）：日期标题写入小记第一行，正文接在后面；成功后把日记移入回收站（软删可恢复）。
    *  媒体卡片不搬运（小记资源是另一套作用域）——`droppedMedia` 为真时**明说**，不静默丢内容。 */
   const handleDiaryToQuickNote = useCallback(async (nodeId: string) => {
@@ -818,9 +829,26 @@ export function App() {
    * 注意：这里**不用 useMemo** —— 该行位于 `if (!workspace) return` 之后，加 hook 会让
    * 「首次渲染提前 return、随后渲染多跑一个 hook」触发 hooks 顺序错误；过滤本身是 O(标签数)。
    */
-  const libraryTabs = desktopWorkspace === "diary"
-    ? tabInfos.filter((tab) => !diaryNoteIds.has(tab.noteId))
-    : tabInfos;
+  /** 两个空间各自独立 tab 条（261109）：按 tab 的 `space` 分流，不再靠「当前空间」猜。 */
+  const libraryTabs = tabInfos.filter((tab) => (tab.space ?? "library") !== "diary");
+  const diaryTabs = tabInfos.filter((tab) => tab.space === "diary");
+  /** 空间切换：活动标签必须属于当前空间（日记/文档各自独立的 tab 集合，261109）。 */
+  useEffect(() => {
+    const owns = (space: "library" | "diary"): boolean => {
+      if (!activeNoteId) return false;
+      const list = space === "diary" ? diaryTabs : libraryTabs;
+      return list.some((tab) => tab.noteId === activeNoteId);
+    };
+    if (desktopWorkspace !== "diary" && desktopWorkspace !== "library") return;
+    const space = desktopWorkspace === "diary" ? "diary" : "library";
+    if (owns(space)) return;
+    const list = space === "diary" ? diaryTabs : libraryTabs;
+    const next = list[list.length - 1]?.noteId ?? null;
+    if (next) setActiveNoteId(next);
+    // 只在空间切换时回落；tab 列表变化由各自的打开/关闭逻辑管理。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [desktopWorkspace]);
+
   /** 顶栏左侧 = **唯一渲染点**（DT-09）：四个空间共用这一个元素，各自在顶栏槽位用
    *  `DesktopWorkspaceSlotProvider` 声明归属；可见性与共享 ref 由组件按槽位推导（四态逐项等价）。 */
   const topBarLeading = (
@@ -1070,7 +1098,25 @@ export function App() {
             <div className="tabbar-leading">
               <DesktopWorkspaceSlotProvider workspace="diary">{topBarLeading}</DesktopWorkspaceSlotProvider>
             </div>
-            <div className="tab-items" />
+            {/* 日记空间**独立 tab 条**（261109）：只列 `space==="diary"` 的标签，与文档空间互不影响。 */}
+            <div className="tab-items" role="tablist" aria-label="打开的日记">
+              {diaryTabs.map((tab) => (
+                <div
+                  key={tab.noteId}
+                  className={"tab-item" + (tab.noteId === activeNoteId ? " active" : "")}
+                  role="tab"
+                  aria-selected={tab.noteId === activeNoteId}
+                  title={tab.title}
+                >
+                  <button type="button" className="tab-title" onClick={() => { void openNote(tab.noteId, "", false, "diary"); }}>
+                    {tab.title}
+                  </button>
+                  <button type="button" className="tab-close" aria-label={"关闭 " + tab.title} onClick={() => closeTab(tab.noteId)}>
+                    <CloseIcon size={12} aria-hidden="true" />
+                  </button>
+                </div>
+              ))}
+            </div>
             <div className="tabbar-trailing">{topBarSearch}</div>
           </header>
           {desktopWorkspace === "diary" && (
@@ -1079,13 +1125,14 @@ export function App() {
                 active
                 treeNodes={treeNodes}
                 activeNoteId={activeNoteId}
-                tabs={tabInfos}
+                tabs={diaryTabs}
                 lockedNoteIds={lockedNoteIds}
                 tocEnabled={tocEnabled}
                 outlineEnhance={outlineEnhance}
                 editorPrefs={editorPrefs}
-                onOpenEntry={(noteId) => { void openNote(noteId); }}
+                onOpenEntry={(noteId) => { void openNote(noteId, "", false, "diary"); }}
                 onWriteToday={(dateKey) => { void handleDiaryWriteToday(dateKey); }}
+                onCreateEntry={(dateKey) => { void handleDiaryCreateEntry(dateKey); }}
                 onOpenSearch={handleDiaryOpenSearch}
                 onConvertEntry={handleDiaryConvertEntry}
                 onConvertToQuickNote={(nodeId) => { void handleDiaryToQuickNote(nodeId); }}

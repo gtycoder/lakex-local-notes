@@ -65,6 +65,7 @@ function props(overrides: Partial<DiaryWorkspaceProps> = {}): DiaryWorkspaceProp
     editorPrefs: { fontSize: 14 },
     onConvertEntry: vi.fn(),
     onConvertToQuickNote: vi.fn(),
+    onCreateEntry: vi.fn(),
     onOpenEntry: vi.fn(),
     onWriteToday: vi.fn(),
     onOpenSearch: vi.fn(),
@@ -173,6 +174,24 @@ describe("日记空间（桌面）", () => {
     expect(confirm).toBeTruthy();
     act(() => confirm!.click());
     expect(onConvertEntry).toHaveBeenCalledWith("e-old", "nb-doc");
+  });
+
+  it("加号 = 今天新建；日历 = 选任意日期新建（一天多篇，走 mode:new）", () => {
+    const onCreateEntry = vi.fn();
+    render({ treeNodes: tree(true), onCreateEntry });
+    act(() => byAria("新建今天的日记")!.click());
+    expect(onCreateEntry).toHaveBeenCalledWith(formatDiaryDateKey());
+
+    act(() => byAria("选择日期新建日记")!.click());
+    const input = document.body.querySelector<HTMLInputElement>("input[type='date']")!;
+    expect(input).toBeTruthy();
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "2025-12-30");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    const create = [...document.body.querySelectorAll<HTMLButtonElement>("button")].find((el) => (el.textContent ?? "").trim() === "新建")!;
+    act(() => create.click());
+    expect(onCreateEntry).toHaveBeenCalledWith("2025-12-30");
   });
 
   it("右键「转为小记」：把该条目的树节点 id 交给宿主（组合/落库在 App + 主进程）", () => {

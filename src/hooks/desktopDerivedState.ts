@@ -68,6 +68,8 @@ export function deriveDesktopView(input: DesktopViewInput) {
     reloadKey: tab.reloadKey ?? 0,
     // v6：必须透传文档类型。漏掉它 ⇒ MultiTabEditor 收不到 kind=usheet，表格会被当成 Lake 文档用 EditorTab 渲染。
     kind: tab.kind ?? "doc",
+    // 261109：标签归属空间（日记 tab 与文档 tab 各自独立展示）。
+    ...(tab.space ? { space: tab.space } : {}),
   }));
 
   // 大纲增强=开 → 应用自建大纲侧栏；关 → 用 Lake 原生大纲（此侧栏隐藏），原生 by toc.enable。
