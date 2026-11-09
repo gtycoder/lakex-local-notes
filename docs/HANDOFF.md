@@ -14,6 +14,7 @@
 - **桌面**：`electron/diaryStore.ts`（主进程**重新 plan** + **单事务**建本/年组/月组/文档 + 正文半成品回收 + 连点只一篇）、IPC `diary_open_date`（落 `electron/ipc/registerDiary.ts`，通道 176→**177**）、`src/features/diary/**`（空间页复用 `EditorTab`，左栏年月，空态「写今天」）、文档空间目录树**过滤掉日记本**、⌘4。
 - **移动**：`src/mobile/diary/**`（`diaryRepository` 同款单事务 ensure + `DiaryPage`）、`bridge/diary.ts`（互斥域 `diaryOpenDate` 已登记进 `WRITE_OPS`）、首页 **第 4 个 tab**（只改 tab 行，不动 5 槽定稿构图；≤385px 收紧几何）、知识库/目录抽屉过滤日记本。
 - **搜索**：日记是文档 ⇒ 天然在 FTS；空间内搜索 = 复用现有面板 + `scopeNoteIds` **纯显示层**收窄（**不新增索引**）。
+- **转为文档（同日追加）**：日记条目右键（移动端条目操作入口）→「转为文档…」→ 选目标笔记本 → **移动**落地（同一 note，不复制）；判据 = `core.diaryConvertTargets/planDiaryConvert`，目标选择复用两端既有 `MoveTargetTreeDialog` / `MoveTargetTreeSheet`；不自动清理搬空的年/月分组。
 - **门禁**：tsc 0；vitest **799 文件 / 5090 通过 / 11 skipped / 12 skipped / 0 failed**（含独立验证者补的 10 例：wire 往返 7 / 移动事务 3）；ui-metrics、check:core、check:mobileui、diff-check 通过。**设备级未跑**（移动 6 态/走查、桌面 stylesnap 还没有"日记态"）。
 - **独立验证（片D，生产代码零改动）**：四条硬规则逐条自证通过（wire 显式写 null / 未知值当非日记 / 连点只一篇 / 事务回滚 / 桌面+移动树过滤）；另发现 **P1 已修**＝移动端便携包导入丢失 `space`（否则手机导入后日记本降级为普通本、再点「写今天」会建第二本）——修法 = `portableMapping` 行加 `space`（按 nodeType 归一）+ `importPortable` INSERT 加列 + 跨端搬运测试；同时补了移动端「多日记本告警」与 wire 侧 `space × nodeType` 互校。
 - **并行注意**：本批在 worktree `lakex-local-notes-diary`（`feat/diary-space`，起点 `f3b2d0c3`），**不含** AI 写作（那是 `feat/ai-writing-space` 另一个 worktree）⇒ 合并时 `App.tsx` / `desktop/desktopTypes.ts` / `desktop/DesktopTopBar.tsx` 必冲突，按"两边空间项都保留"手工合。
