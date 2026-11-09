@@ -109,7 +109,7 @@ export function PortableImportSection({ onImported }: { onImported?: () => void 
       <div className="mb-set-block__actions">
         <button
           type="button"
-          className="mb-btn mb-btn--secondary"
+          className="mb-btn mb-btn--settings"
           disabled={!native || picking || busy}
           onClick={() => void pick()}
         >

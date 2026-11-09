@@ -295,7 +295,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
               {pinState?.available && !pinState.pinned && (
                 <Item itemId="editor-pin-quick-note" name="新建小记" desc="添加到桌面。">
                   <button
-                    className="mb-btn mb-btn--secondary"
+                    className="mb-btn mb-btn--settings"
                     onClick={() => {
                       void requestPinQuickNoteShortcut().then((requested) => {
                         setPinMsg(requested ? "已请求，请在系统弹窗中确认" : "该机型不支持固定快捷方式");
@@ -333,7 +333,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                   </span>
                   <button
                     type="button"
-                    className="mb-btn mb-btn--secondary"
+                    className="mb-btn mb-btn--settings"
                     disabled={importNotebookBusy}
                     onClick={() => setImportPickerOpen(true)}
                   >选择笔记本</button>
@@ -351,20 +351,20 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
               </Block>
               {/* 261105 用户点单：删除入口不再外露在资源管理首页，必须先点「查看」进入明细面板。 */}
               <Block itemId="resources-clean" name="未引用的本地文件" desc="删除正文图片后残留的本地文件（不会被上传，可安全清理）。">
-                <button className="mb-btn mb-btn--primary" disabled={orphans.length === 0 || orphanBusy} onClick={() => setCleanupSheet("orphans")}>查看（{orphans.length}）</button>
+                <button className="mb-btn mb-btn--settings" disabled={orphans.length === 0 || orphanBusy} onClick={() => setCleanupSheet("orphans")}>查看（{orphans.length}）</button>
               </Block>
               <Block itemId="resources-gc" name="云端未引用文件" desc="删除云端 7 天以上、没有被任何文档或历史版本引用的文件。">
-                <button className="mb-btn mb-btn--primary" disabled={orphanBusy || !canTouchNetwork(cloudState)} onClick={() => setCleanupSheet("cloudGc")}>查看</button>
+                <button className="mb-btn mb-btn--settings" disabled={orphanBusy || !canTouchNetwork(cloudState)} onClick={() => setCleanupSheet("cloudGc")}>查看</button>
                 {(gcMsg || cloudBlockReason) && <div className="mb-form__desc">{gcMsg || cloudBlockReason}</div>}
               </Block>
               {missingBodies.docs.length > 0 && (
                 <Block itemId="resources-missing-bodies" name="缺正文" desc="文档还在，但正文文件已经不在了。可以从云端拉回、恢复历史版本，或彻底删除。">
-                  <button className="mb-btn mb-btn--primary" onClick={() => setMissingSheet("docs")}>查看（{missingBodies.docs.length}）</button>
+                  <button className="mb-btn mb-btn--settings" onClick={() => setMissingSheet("docs")}>查看（{missingBodies.docs.length}）</button>
                 </Block>
               )}
               {missingBodies.quickNotes.length > 0 && (
                 <Block itemId="resources-missing-quicknotes" name="缺小记" desc="小记还在列表里，但正文文件已经不在了。可以从云端拉回，或用搜索缓存重建纯文本。">
-                  <button className="mb-btn mb-btn--primary" onClick={() => setMissingSheet("quickNotes")}>查看（{missingBodies.quickNotes.length}）</button>
+                  <button className="mb-btn mb-btn--settings" onClick={() => setMissingSheet("quickNotes")}>查看（{missingBodies.quickNotes.length}）</button>
                 </Block>
               )}
               {orphans.length === 0 && missingBodies.docs.length === 0 && missingBodies.quickNotes.length === 0 && (
@@ -375,9 +375,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
 
           {view === "s3" && (
             <>
-              <div className="mb-set-group">
-                <div className="mb-set-title"><Cloud size={16} />连接信息</div>
-                <div className="mb-set-items">
+              <Group title="连接信息" icon={<Cloud size={16} />}>
                   {/* 261102 用户点单 3b：S3 连接信息是内容输入类 ⇒ 一律 Field（标签在上、输入框占满下一行），
                       与桌面设置页同一形态；此前是裸 .mb-set-item + <input class="mb-input">（第二套输入外观，
                       且窄屏上输入框被标签挤到只剩几十像素，Endpoint/AK/SK 长值看不全）。
@@ -400,12 +398,9 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                   <Field itemId="s3-secret-key" name="Secret Key">
                     <TextField label="Secret Key" type="password" value={s3Form.secretAccessKey} onSave={(v) => updateS3Form({ secretAccessKey: v })} />
                   </Field>
-                </div>
-              </div>
+              </Group>
 
-              <div className="mb-set-group">
-                <div className="mb-set-title"><RefreshCw size={16} />连接与同步</div>
-                <div className="mb-set-items">
+              <Group title="连接与同步" icon={<RefreshCw size={16} />}>
                   <Switch
                     name="启用云同步"
                     desc="关闭后本机按纯本地空间工作：不连 S3、不自动同步，回收站恢复/预览也不会去云端补拉缺失资源；重新开启后下次同步会自动补拉。"
@@ -425,9 +420,9 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                     <div className="mb-set-block__name">保存并测试连接</div>
                     <div className="mb-set-item__desc">配置保存在本机；S3 只用于同步。</div>
                     <div className="mb-set-block__actions">
-                      <button className="mb-btn mb-btn--primary" onClick={() => { void saveS3().then((ok) => { if (ok) setSyncEnableHint(""); }); }}>保存</button>
-                      <button className="mb-btn mb-btn--primary" onClick={() => void testS3()}>测试连接</button>
-                      <button className="mb-btn mb-btn--secondary" disabled={syncCfg?.enabled === false} title={syncCfg?.enabled === false ? "云同步已关闭：不会联网" : undefined} onClick={() => void runSync()}><RefreshCw size={14} />立即同步</button>
+                      <button className="mb-btn mb-btn--settings" onClick={() => { void saveS3().then((ok) => { if (ok) setSyncEnableHint(""); }); }}>保存</button>
+                      <button className="mb-btn mb-btn--settings" onClick={() => void testS3()}>测试连接</button>
+                      <button className="mb-btn mb-btn--settings" disabled={syncCfg?.enabled === false} title={syncCfg?.enabled === false ? "云同步已关闭：不会联网" : undefined} onClick={() => void runSync()}><RefreshCw size={14} />立即同步</button>
                     </div>
                     {s3Test && <div className="mb-set-item__desc">{s3Test}</div>}
                     {syncMsg && <div className="mb-set-item__desc">{syncMsg}</div>}
@@ -487,7 +482,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                       <div className="mb-set-item__desc">本机还没有同步记录。</div>
                     )}
                     <div className="mb-set-block__actions">
-                      <button className="mb-btn mb-btn--secondary" disabled={!syncDiagText} onClick={() => void copySyncDiagnostics()}>复制同步诊断</button>
+                      <button className="mb-btn mb-btn--settings" disabled={!syncDiagText} onClick={() => void copySyncDiagnostics()}>复制同步诊断</button>
                     </div>
                     {syncDiagMsg && <div className="mb-set-item__desc">{syncDiagMsg}</div>}
                   </div>
@@ -521,7 +516,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                               <div key={`${w.kind}-${w.noteId ?? i}`} className="mb-row">
                                 <span className="mb-row__title mb-ellipsis">{title}</span>
                                 <span className="mb-row__meta">正文缺失</span>
-                                <button className="mb-btn mb-btn--secondary" onClick={() => { setView("resources"); void missingBodies.reload(); }}>去恢复</button>
+                                <button className="mb-btn mb-btn--settings" onClick={() => { setView("resources"); void missingBodies.reload(); }}>去恢复</button>
                               </div>
                             );
                           }
@@ -543,25 +538,19 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                       </div>
                     </div>
                   )}
-                </div>
-              </div>
+              </Group>
 
-              <div className="mb-set-group">
-                <div className="mb-set-title"><Download size={16} />配置迁移</div>
-                <div className="mb-set-items">
+              <Group title="配置迁移" icon={<Download size={16} />}>
                   <Block itemId="s3-transfer" name="导入 / 导出迁移码" desc="在桌面端「设置 → 云端与同步 → S3 对象存储 → 配置迁移 → 导出到文件…」生成 .json 文件，发到手机后在这里导入；也可以粘贴另一台设备的迁移码（LLN1. 开头）。迁移码含 S3 密钥（已加密封装），请只在自己的设备间传递。">
                     <div className="mb-set-block__actions">
-                      <button className="mb-btn mb-btn--secondary" onClick={() => void importS3ConfigFromFile()}>从文件导入</button>
-                      <button className="mb-btn mb-btn--secondary" onClick={() => setS3ImportOpen(true)}>粘贴迁移码</button>
-                      <button className="mb-btn mb-btn--secondary" onClick={() => void openS3Export()}>导出迁移码</button>
+                      <button className="mb-btn mb-btn--settings" onClick={() => void importS3ConfigFromFile()}>从文件导入</button>
+                      <button className="mb-btn mb-btn--settings" onClick={() => setS3ImportOpen(true)}>粘贴迁移码</button>
+                      <button className="mb-btn mb-btn--settings" onClick={() => void openS3Export()}>导出迁移码</button>
                     </div>
                   </Block>
-                </div>
-              </div>
+              </Group>
 
-              <div className="mb-set-group">
-                <div className="mb-set-title"><TriangleAlert size={16} />服务说明</div>
-                <div className="mb-set-items">
+              <Group title="服务说明" icon={<TriangleAlert size={16} />}>
                   <div className="mb-s3-notice" role="note">
                     <div className="mb-s3-notice__title">第三方 S3 服务说明</div>
                     <p>当前使用的是 Amazon S3 协议兼容的第三方云端存储服务（如七牛云 Kodo、阿里云 OSS、Cloudflare R2）。</p>
@@ -575,12 +564,9 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                     <p className="mb-s3-notice__warn"><TriangleAlert size={14} aria-hidden="true" /><span>注意：笔记正文与附件会按原样上传到你的 S3，云端不做加密；请务必确认该桶为私有、未开放公开读。</span></p>
                     <p className="mb-s3-notice__disclaimer">免责声明：本应用仅通过公开的 S3 兼容 API 访问你自己配置的桶，不对第三方服务的可用性、计费或数据安全负责；请确认桶为私有，且凭据只由你保管。</p>
                   </div>
-                </div>
-              </div>
+              </Group>
               {s3Export && (
-                <div className="mb-set-group">
-                  <div className="mb-set-title"><Cloud size={16} />导出配置迁移码</div>
-                  <div className="mb-set-items">
+                <Group title="导出配置迁移码" icon={<Cloud size={16} />}>
                     <div className="mb-set-item">
                       <div className="mb-set-item__main">
                         <div className="mb-input mb-input--multiline">
@@ -592,12 +578,11 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                     </div>
                     <div className="mb-set-block">
                       <div className="mb-set-block__actions">
-                        <button className="mb-btn mb-btn--primary" onClick={() => void copyS3Transfer()}>复制迁移码</button>
-                        <button className="mb-btn mb-btn--ghost" onClick={closeS3Export}>关闭</button>
+                        <button className="mb-btn mb-btn--settings" onClick={() => void copyS3Transfer()}>复制迁移码</button>
+                        <button className="mb-btn mb-btn--settings" onClick={closeS3Export}>关闭</button>
                       </div>
                     </div>
-                  </div>
-                </div>
+                </Group>
               )}
               <S3ConfigImportSheet
                 open={s3ImportOpen}
@@ -609,9 +594,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
 
           {view === "backup" && (
             <>
-            <div className="mb-set-group">
-              <div className="mb-set-title"><Archive size={16} />恢复</div>
-              <div className="mb-set-items">
+            <Group title="恢复" icon={<Archive size={16} />}>
                 {/* 261028（用户批准）：从云端恢复（换机/坏库）——清本机同步基线后整轮只拉不打；
                     不照抄桌面的「整库改名隔离 + 重启」（移动端附件可能 1.6GB，隔离整库代价过高）。 */}
                 <div className="mb-set-block">
@@ -620,7 +603,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                   <div className="mb-set-block__actions">
                     <button
                       type="button"
-                      className="mb-btn mb-btn--secondary mb-btn--danger"
+                      className="mb-btn mb-btn--settings mb-btn--danger"
                       disabled={syncCfg?.enabled === false || restoreBusy}
                       title={syncCfg?.enabled === false ? "云同步已关闭：不会联网" : undefined}
                       onClick={() => void restoreFromCloud()}
@@ -631,19 +614,16 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                   </div>
                   {restoreMsg && <div className="mb-set-item__desc" aria-live="polite">{restoreMsg}</div>}
                 </div>
-              </div>
-            </div>
+            </Group>
 
-            <div className="mb-set-group">
-              <div className="mb-set-title"><TriangleAlert size={16} />修复缺失数据</div>
-              <div className="mb-set-items">
+            <Group title="修复缺失数据" icon={<TriangleAlert size={16} />}>
                 {/* 缺正文/缺小记：只在资源管理里扫描/恢复；这里给引用入口（不重复扫描逻辑）。 */}
                 <div className="mb-set-block">
                   <div className="mb-set-block__name">缺正文 / 缺小记</div>
                   <div className="mb-set-block__actions">
                     <button
                       type="button"
-                      className="mb-btn mb-btn--secondary"
+                      className="mb-btn mb-btn--settings"
                       onClick={() => { setView("resources"); void missingBodies.reload(); }}
                     >去资源管理查看</button>
                   </div>
@@ -651,23 +631,17 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                     文档或小记还在，但正文文件已经不在了。可以从云端拉回、恢复历史版本，或用搜索缓存重建纯文本。
                   </div>
                 </div>
-              </div>
-            </div>
+            </Group>
 
-            <div className="mb-set-group">
-              <div className="mb-set-title"><Download size={16} />从桌面迁移</div>
-              <div className="mb-set-items">
+            <Group title="从桌面迁移" icon={<Download size={16} />}>
                 {/* 261109：从便携包导入（覆盖本机；桌面导出 zip.lln → 手机导入，不需要先配 S3）。 */}
                 <PortableImportSection onImported={() => void onRefresh()} />
-              </div>
-            </div>
+            </Group>
             </>
           )}
 
           {view === "cache" && (
-            <div className="mb-set-group">
-              <div className="mb-set-title"><HardDrive size={16} />清理缓存</div>
-              <div className="mb-set-items">
+            <Group title="清理缓存" icon={<HardDrive size={16} />}>
                 <div className="mb-set-block">
                   <div className="mb-set-item__desc">清理派生搜索索引（FTS + 账本，清完在后台自动重建）与 PDF 渲染临时文件。不会删除正文、附件、历史快照、回收站内容或未同步的修改。</div>
                   {cacheSummary && (
@@ -677,12 +651,11 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                     </div>
                   )}
                   <div className="mb-set-block__actions">
-                    <button className="mb-btn mb-btn--primary" onClick={() => void clearCache()}>清理缓存</button>
+                    <button className="mb-btn mb-btn--settings" onClick={() => void clearCache()}>清理缓存</button>
                   </div>
                   {cacheMsg && <div className="mb-set-item__desc">{cacheMsg}</div>}
                 </div>
-              </div>
-            </div>
+            </Group>
           )}
 
           {view === "update" && <UpdateCenterSection appInfo={appInfo} />}

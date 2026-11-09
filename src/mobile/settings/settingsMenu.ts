@@ -31,18 +31,18 @@ export interface SettingsMenuItem {
 }
 
 export const SETTINGS_MENU: SettingsMenuItem[] = [
-  { key: "editor", label: "常规", icon: List, tone: "#6b5bd6" },
-  { key: "appearance", label: "外观", icon: Palette, tone: "#b9822f" },
-  { key: "s3", label: "云端与同步", icon: Cloud, tone: "#2a6b80" },
-  { key: "backup", label: "备份与恢复", icon: Archive, tone: "#3f5fa0" },
-  { key: "history", label: "历史", icon: History, tone: "#3f5fa0" },
-  { key: "import", label: "导入", icon: Download, tone: "#2a6b80" },
-  { key: "resources", label: "资源管理", icon: Images, tone: "#48b07a" },
-  { key: "cache", label: "清理缓存", icon: HardDrive, tone: "#8b93a1" },
-  { key: "trash", label: "回收站", icon: Trash, tone: "#b3382f" },
-  { key: "ai", label: "AI 助手", icon: Sparkles, tone: "#2b7350" },
-  { key: "update", label: "更新中心", icon: RefreshCw, tone: "#3f5fa0" },
-  { key: "about", label: "关于", icon: Info, tone: "#5b6472" },
+  { key: "editor", label: "常规", icon: List, tone: "var(--mb-set-tone-regular)" },
+  { key: "appearance", label: "外观", icon: Palette, tone: "var(--mb-set-tone-appearance)" },
+  { key: "s3", label: "云端与同步", icon: Cloud, tone: "var(--mb-set-tone-cloud)" },
+  { key: "backup", label: "备份与恢复", icon: Archive, tone: "var(--mb-set-tone-backup)" },
+  { key: "history", label: "历史", icon: History, tone: "var(--mb-set-tone-history)" },
+  { key: "import", label: "导入", icon: Download, tone: "var(--mb-set-tone-import)" },
+  { key: "resources", label: "资源管理", icon: Images, tone: "var(--mb-set-tone-resources)" },
+  { key: "cache", label: "清理缓存", icon: HardDrive, tone: "var(--mb-set-tone-cache)" },
+  { key: "trash", label: "回收站", icon: Trash, tone: "var(--mb-set-tone-trash)" },
+  { key: "ai", label: "AI 助手", icon: Sparkles, tone: "var(--mb-set-tone-ai)" },
+  { key: "update", label: "更新中心", icon: RefreshCw, tone: "var(--mb-set-tone-update)" },
+  { key: "about", label: "关于", icon: Info, tone: "var(--mb-set-tone-about)" },
 ];
 
 /** 根页分组卡：只决定哪几项合成一张卡，顺序仍按 SETTINGS_MENU。 */

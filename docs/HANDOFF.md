@@ -39,6 +39,9 @@
 - 移动端设置顺序对齐桌面：常规 → 外观 → 云端与同步 → 备份与恢复 → 历史 → 导入 → 资源管理 → 清理缓存 → 回收站 → AI 助手 → 更新中心 → 关于；编辑器页标题改为「常规」。
 - 移动端备份与恢复再拆三组：恢复 / 修复缺失数据 / 从桌面迁移；移除此前的页尾长说明，便携包说明压缩为一段。
 - 261110 移动端设置表面统一：恢复「灰底 + 白卡」层次（手写分组容器自动补卡，Group/Section 原语不变）；云端与同步拆为「连接信息 / 连接与同步 / 配置迁移 / 服务说明」四组；关于拆为「关于 / 数据诊断」两组。
+- 261110 P0 原语收敛：SettingsDrawer / BasicSettingsSections 全部改用 Group/Section，新增 settingsPrimitivesGuard 测试禁止再手写 mb-set-group/mb-set-items；S3/备份/关于按语义分组。
+- 261110 P1：新增移动端 .mb-btn--settings（主题色描边、透明底，仅设置页），替换设置页 primary/secondary/ghost；设置菜单图标底色改 --mb-set-tone-* 令牌，不再写死 hex。确认/重命名/更新弹窗仍用 primary 实心。
+- 仍待：设置子页（S3/备份/关于）快照态与深/暖色设备走查；当前移动快照仍 6 态。
 - 便携包 review：导出前同步下沉到主进程 beforeExport（任何入口一致）；离线哈希改用 noteBodyRelativePath 单一来源并缺正文直接报错；manifest.baseline=null 语义与 localOnly 哈希文件写入 spec §9。
 
 ### 261109 · UI 整理（移动端 + 桌面设置）

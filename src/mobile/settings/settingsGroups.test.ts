@@ -61,7 +61,7 @@ describe("移动端设置分组（对齐桌面）", () => {
   it("备份与恢复拆三组：恢复 / 修复缺失数据 / 从桌面迁移；不含整库备份/导出", () => {
     const backupStart = DRAWER.indexOf('{view === "backup" && (');
     const backupBody = DRAWER.slice(backupStart, DRAWER.indexOf('{view === "cache" && ('));
-    expect(backupBody).toContain(">恢复<");
+    expect(backupBody).toContain('title="恢复"');
     expect(backupBody).toContain("修复缺失数据");
     expect(backupBody).toContain("从桌面迁移");
     expect(backupBody).not.toContain("自动备份设置");

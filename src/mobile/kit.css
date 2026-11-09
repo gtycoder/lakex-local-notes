@@ -36,6 +36,10 @@
 .mb-btn--primary:active:not(:disabled) { background: var(--lake-accent-ink-press); }
 .mb-btn--secondary { border-color: var(--lake-border-strong); }
 .mb-btn--ghost { padding: 0 10px; }
+/* 261110：设置页专用动作按钮（主题色描边 + 透明底，与桌面 .ln-btn--settings 同语义；
+ * 仅设置页使用，确认/重命名等对话框仍用 primary 实心）。 */
+.mb-btn--settings { color: var(--lake-accent-text); border-color: var(--lake-accent); }
+.mb-btn--settings.mb-btn--danger { color: var(--lake-status-error); border-color: color-mix(in srgb, var(--lake-status-error) 45%, transparent); }
 .mb-btn--danger { color: var(--lake-status-error); }
 /* 危险主按钮（确认框的「删除」）：实心 error 底 + on-accent 字（与桌面 kit 的 --danger 描边风格分叉） */
 .mb-btn--primary.mb-btn--danger { background: var(--lake-status-error); border-color: transparent; color: var(--lake-text-on-accent); }

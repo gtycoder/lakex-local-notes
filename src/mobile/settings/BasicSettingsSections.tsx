@@ -45,9 +45,7 @@ export function HistorySettingsSection({ hist, updateHist }: { hist: HistoryMobi
 export function AboutSettingsSection({ appInfo, diag }: { appInfo: ReturnType<typeof useSettingsSectionData>["appInfo"]; diag: ReturnType<typeof useSettingsSectionData>["diagnostics"] }) {
   return (
             <>
-            <div className="mb-set-group">
-              <div className="mb-set-title"><Info size={16} />关于</div>
-              <div className="mb-set-items">
+            <Group title="关于" icon={<Info size={16} />}>
                 <div className="mb-set-block">
                   <div className="mb-set-block__name">{appInfo?.name ?? "LakexLocalNotes"}</div>
                   <div className="mb-set-item__desc">版本 {appInfo?.version ?? "…"}（构建 {appInfo?.build ?? "…"}）</div>
@@ -58,13 +56,10 @@ export function AboutSettingsSection({ appInfo, diag }: { appInfo: ReturnType<ty
                   <div className="mb-set-item__desc">本地优先：正文、附件与索引都保存在本机。</div>
                   <div className="mb-set-item__desc">字体：内置 MiSans（小米科技，依《MiSans 字体知识产权许可协议》免费商用并注明）+ JetBrains Mono（SIL OFL 1.1）</div>
                 </div>
-              </div>
-            </div>
+            </Group>
 
             {diag && (
-            <div className="mb-set-group">
-              <div className="mb-set-title"><Info size={16} />数据诊断</div>
-              <div className="mb-set-items">
+            <Group title="数据诊断" icon={<Info size={16} />}>
                 <div className="mb-set-block mb-set-block--actions-first">
                     <div className="mb-set-stats">
                       <span><strong>文档</strong> {diag.noteCount}</span>
@@ -80,7 +75,7 @@ export function AboutSettingsSection({ appInfo, diag }: { appInfo: ReturnType<ty
                     <div className="mb-set-block__actions">
                       <button
                         type="button"
-                        className="mb-btn mb-btn--secondary"
+                        className="mb-btn mb-btn--settings"
                         onClick={() => {
                           const lines = [
                             "时间：" + new Date().toISOString(),
@@ -100,8 +95,7 @@ export function AboutSettingsSection({ appInfo, diag }: { appInfo: ReturnType<ty
                       >复制诊断信息</button>
                     </div>
                   </div>
-              </div>
-            </div>
+            </Group>
             )}
             {/* 261109：更新中心（检查更新 / 自动检查 / 自动下载 / 仅 Wi-Fi / 更新日志）。 */}
             </>

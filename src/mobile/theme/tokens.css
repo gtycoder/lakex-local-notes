@@ -320,4 +320,17 @@
   --mobile-z-dialog: 90;
   --mobile-z-snackbar: 95;
   --mobile-z-drag-ghost: 9999;
+  /* 261110：设置菜单图标底色语义（唯一来源；settingsMenu 不再写死 hex）。 */
+  --mb-set-tone-regular: #6b5bd6;
+  --mb-set-tone-appearance: #b9822f;
+  --mb-set-tone-cloud: #2a6b80;
+  --mb-set-tone-backup: #3f5fa0;
+  --mb-set-tone-history: #3f5fa0;
+  --mb-set-tone-import: #2a6b80;
+  --mb-set-tone-resources: #48b07a;
+  --mb-set-tone-cache: #8b93a1;
+  --mb-set-tone-trash: #b3382f;
+  --mb-set-tone-ai: #2b7350;
+  --mb-set-tone-update: #3f5fa0;
+  --mb-set-tone-about: #5b6472;
 }
