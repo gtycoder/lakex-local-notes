@@ -270,3 +270,48 @@ export function recentDiaryDays(entries: readonly DiaryEntry[], todayKey: string
   }
   return out;
 }
+
+/** 「转为文档」：日记条目 → 文档空间的某本笔记本（换父节点 = 移动，不复制正文/历史）。 */
+export interface DiaryConvertTarget {
+  id: string;
+  title: string;
+  sortOrder: number;
+}
+
+/**
+ * 可承接日记的容器 = **文档空间的笔记本**（根层 notebook，排除日记本）。
+ * 只要笔记本、不要分组：日记转出去是"成为一篇正式文档"，落在分组里属于同一动作的另一种入口，
+ * 需要时再放宽（v1 不做，别预先设计）。
+ */
+export function diaryConvertTargets(nodes: readonly DiaryTreeNode[]): DiaryConvertTarget[] {
+  const diaryIds = new Set(diaryNotebooks(nodes).map((node) => node.id));
+  return nodes
+    .filter((node) => node.nodeType === "notebook" && node.parentId === null && !diaryIds.has(node.id))
+    .map((node) => ({ id: node.id, title: node.title, sortOrder: node.sortOrder ?? 0 }))
+    .sort((a, b) => a.sortOrder - b.sortOrder || a.id.localeCompare(b.id));
+}
+
+export type DiaryConvertRejection = "missing-entry" | "not-diary-entry" | "target-missing" | "target-is-diary" | "target-not-notebook";
+
+/**
+ * 校验一次「转为文档」。**渲染层与任何写入路径都先问这里**，不要在 UI 里另写一遍判据。
+ * 通过时返回目标笔记本 id 与条目所在的月分组 id（供移动/回滚用）。
+ */
+export function planDiaryConvert(
+  nodes: readonly DiaryTreeNode[],
+  entryNodeId: string | null,
+  targetNotebookId: string | null,
+): { ok: true; entry: DiaryEntry; targetId: string } | { ok: false; reason: DiaryConvertRejection } {
+  if (!entryNodeId) return { ok: false, reason: "missing-entry" };
+  const notebookIds = diaryNotebooks(nodes).map((node) => node.id);
+  const entry = notebookIds.length
+    ? diaryEntries(nodes, notebookIds[0]).find((item) => item.noteId === entryNodeId) ?? null
+    : null;
+  if (!entry) return { ok: false, reason: "not-diary-entry" };
+  if (!targetNotebookId) return { ok: false, reason: "target-missing" };
+  if (notebookIds.includes(targetNotebookId)) return { ok: false, reason: "target-is-diary" };
+  const target = nodes.find((node) => node.id === targetNotebookId);
+  if (!target) return { ok: false, reason: "target-missing" };
+  if (target.nodeType !== "notebook") return { ok: false, reason: "target-not-notebook" };
+  return { ok: true, entry, targetId: targetNotebookId };
+}

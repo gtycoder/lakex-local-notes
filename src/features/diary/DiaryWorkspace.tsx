@@ -14,10 +14,15 @@
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronRight, Image as ImageIcon, NotebookPen, Pencil, Search } from "lucide-react";
 import {
+  diaryConvertTargets,
   formatDiaryDateKey,
   groupDiaryEntries,
+  planDiaryConvert,
 } from "../../core/diary";
+import { Menu } from "../../components/ui/Overlay";
+import { usePopoverPosition } from "../../hooks/usePopoverPosition";
 import { NamePromptDialog } from "../../components/app/NamePromptDialog";
+import { MoveTargetTreeDialog } from "../../components/app/MoveTargetTreeDialog";
 import type { LakeEditorInstance } from "../editor/lakeRuntime";
 import type { TreeNode } from "../../lib/types";
 import { diaryEntryViews, diaryNotebookOf, type DiaryEntryView } from "./diaryTree";
@@ -54,6 +59,8 @@ export interface DiaryWorkspaceProps {
   onWriteToday: (dateKey: string) => void;
   /** 打开现有全局搜索面板（v1 全库范围，日记已进 FTS）。 */
   onOpenSearch: () => void;
+  /** 「转为文档」：把该日记条目移到目标笔记本（换父节点 = 移动，不复制正文/历史）。 */
+  onConvertEntry: (nodeId: string, targetNotebookId: string) => void;
   onRenameNotebook: (title: string) => void;
   onSetNotebookIcon: (icon: string | null) => void;
   onContentChange: (noteId: string, content?: string) => void;
@@ -70,7 +77,7 @@ interface YearNode {
 export function DiaryWorkspace(props: DiaryWorkspaceProps) {
   const {
     active, treeNodes, activeNoteId, tabs, lockedNoteIds, tocEnabled, outlineEnhance, editorPrefs,
-    onOpenEntry, onWriteToday, onOpenSearch, onRenameNotebook, onSetNotebookIcon,
+    onOpenEntry, onWriteToday, onOpenSearch, onConvertEntry, onRenameNotebook, onSetNotebookIcon,
     onContentChange, onEditorReady, onReloadNote,
   } = props;
 
@@ -100,6 +107,20 @@ export function DiaryWorkspace(props: DiaryWorkspaceProps) {
     const todayEntry = entries.find((entry) => entry.dateKey === todayKey);
     if (todayEntry && todayEntry.documentId !== activeNoteId) onOpenEntry(todayEntry.documentId);
   }, [active, notebook, entries, todayKey, activeNoteId, onOpenEntry]);
+
+  /** 右键菜单（条目级）：坐标锚点，走共用浮层定位（禁自己估算位置）。 */
+  const [entryMenu, setEntryMenu] = useState<{ entry: DiaryEntryView; x: number; y: number } | null>(null);
+  const entryMenuPos = usePopoverPosition({
+    open: Boolean(entryMenu),
+    at: entryMenu ? { x: entryMenu.x, y: entryMenu.y } : null,
+  });
+  /** 「转为文档」目标 = 文档空间的笔记本（判据在 core.diaryConvertTargets，排除日记本）。 */
+  const convertTargets = useMemo(() => {
+    const ids = new Set(diaryConvertTargets(treeNodes).map((target) => target.id));
+    return treeNodes.filter((node) => ids.has(node.id));
+  }, [treeNodes]);
+  /** 正在挑选目标的条目：null = 不在转换流程里。 */
+  const [convertEntry, setConvertEntry] = useState<DiaryEntryView | null>(null);
 
   const isEntry = (noteId: string | null): boolean => noteId !== null && entryDocIds.has(noteId);
   const activeTab = activeNoteId !== null && isEntry(activeNoteId)
@@ -168,6 +189,10 @@ export function DiaryWorkspace(props: DiaryWorkspaceProps) {
                           aria-selected={entry.documentId === activeNoteId}
                           className={"diary-entry ln-row" + (entry.documentId === activeNoteId ? " is-selected" : "")}
                           onClick={() => onOpenEntry(entry.documentId)}
+                          onContextMenu={(event) => {
+                            event.preventDefault();
+                            setEntryMenu({ entry, x: event.clientX, y: event.clientY });
+                          }}
                           title={entry.dateKey}
                         >
                           <span className="diary-entry__day">{entry.dateKey.slice(8, 10)}</span>
@@ -242,6 +267,42 @@ export function DiaryWorkspace(props: DiaryWorkspaceProps) {
           </div>
         )}
       </section>
+
+      {/* 条目右键菜单（新建浮层只挂一条动作；位置走共用 usePopoverPosition，禁自己估算）。 */}
+      {entryMenu && (
+        <Menu
+          surfaceRef={entryMenuPos.surfaceRef}
+          style={entryMenuPos.style ?? undefined}
+          onDismiss={() => setEntryMenu(null)}
+          aria-label="日记条目操作"
+        >
+          <button
+            type="button"
+            role="menuitem"
+            className="ln-menu__item"
+            onClick={() => { setConvertEntry(entryMenu.entry); setEntryMenu(null); }}
+          >
+            转为文档…
+          </button>
+        </Menu>
+      )}
+
+      {/* 转为文档 = 移到目标笔记本（同一个 note，不复制；正文/历史/回收站都跟着走）。 */}
+      {convertEntry && (
+        <MoveTargetTreeDialog
+          open
+          nodes={convertTargets}
+          movingIds={[convertEntry.nodeId]}
+          currentParentId={convertEntry.parentId}
+          onConfirm={(targetNotebookId) => {
+            const plan = planDiaryConvert(treeNodes, convertEntry.nodeId, targetNotebookId);
+            setConvertEntry(null);
+            if (!plan.ok) return;
+            onConvertEntry(plan.entry.noteId, plan.targetId);
+          }}
+          onClose={() => setConvertEntry(null)}
+        />
+      )}
 
       <NamePromptDialog
         open={renameOpen}

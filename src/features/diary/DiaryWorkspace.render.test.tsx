@@ -63,6 +63,7 @@ function props(overrides: Partial<DiaryWorkspaceProps> = {}): DiaryWorkspaceProp
     tocEnabled: true,
     outlineEnhance: false,
     editorPrefs: { fontSize: 14 },
+    onConvertEntry: vi.fn(),
     onOpenEntry: vi.fn(),
     onWriteToday: vi.fn(),
     onOpenSearch: vi.fn(),
@@ -138,6 +139,39 @@ describe("日记空间（桌面）", () => {
     act(() => yearHead!.click());
     expect(allText()).not.toContain("2025-12-31");
     expect(onOpenEntry.mock.calls.length).toBe(callsBeforeCollapse);
+  });
+
+  it("右键条目 →「转为文档…」：目标只列文档空间的笔记本（不含日记本），确认后交给宿主执行移动", () => {
+    const onConvertEntry = vi.fn();
+    render({ treeNodes: tree(true), onConvertEntry });
+    const entry = [...document.body.querySelectorAll<HTMLElement>(".diary-entry")]
+      .find((el) => (el.textContent ?? "").includes("2025-12-31"));
+    expect(entry).toBeTruthy();
+    act(() => {
+      entry!.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 20, clientY: 20 }));
+    });
+
+    const menuItem = [...document.body.querySelectorAll<HTMLElement>("[role='menuitem']")]
+      .find((el) => (el.textContent ?? "").trim() === "转为文档…");
+    expect(menuItem).toBeTruthy();
+    act(() => menuItem!.click());
+
+    // 目标树：只有「知识库」这一本（日记本已被 core.diaryConvertTargets 排除）
+    const targetTree = document.body.querySelector<HTMLElement>("[role='tree'][aria-label='目标位置']");
+    expect(targetTree).toBeTruthy();
+    expect(targetTree!.textContent).toContain("知识库");
+    expect(targetTree!.textContent).not.toContain("日记");
+
+    const targetRow = [...targetTree!.querySelectorAll<HTMLElement>("button")]
+      .find((el) => (el.textContent ?? "").includes("知识库"));
+    expect(targetRow).toBeTruthy();
+    act(() => targetRow!.click());
+
+    const confirm = [...document.body.querySelectorAll<HTMLButtonElement>("button")]
+      .find((el) => (el.textContent ?? "").trim() === "移动到此处");
+    expect(confirm).toBeTruthy();
+    act(() => confirm!.click());
+    expect(onConvertEntry).toHaveBeenCalledWith("e-old", "nb-doc");
   });
 
   it("搜索入口 = 打开现有全局搜索面板（不在日记里另造搜索）；标题里写明范围是全库", () => {

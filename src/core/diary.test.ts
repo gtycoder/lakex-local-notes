@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   DIARY_FOLDER_SPACE, diaryEntries, diaryGroupTitles, diaryNotebookId, diaryNotebooks,
   folderSpaceForWire, formatDiaryDateKey, groupDiaryEntries, isDiaryGroupTitle, normalizeFolderSpace,
-  parseDiaryDateKey, planDiaryOpen, recentDiaryDays, withoutDiaryNotebook,
+  diaryConvertTargets, parseDiaryDateKey, planDiaryConvert, planDiaryOpen, recentDiaryDays, withoutDiaryNotebook,
   type DiaryTreeNode,
 } from "./diary.js";
 
@@ -200,5 +200,44 @@ describe("recentDiaryDays", () => {
     const days = recentDiaryDays(entries, "2026-11-09", 3);
     expect(days.map((d) => d.dateKey)).toEqual(["2026-11-09", "2026-11-08", "2026-11-07"]);
     expect(days.map((d) => d.wrote)).toEqual([false, true, false]);
+  });
+});
+
+describe("转为文档：目标与校验（261109）", () => {
+  const nodes: DiaryTreeNode[] = [
+    notebook(),
+    node({ id: "y26", title: "2026", nodeType: "group", parentId: "nb-diary" }),
+    node({ id: "m11", title: "11", nodeType: "group", parentId: "y26" }),
+    node({ id: "d1109", title: "2026-11-09", parentId: "m11" }),
+    node({ id: "nb-work", title: "工作", nodeType: "notebook", parentId: null, sortOrder: 2 }),
+    node({ id: "nb-life", title: "生活", nodeType: "notebook", parentId: null, sortOrder: 1 }),
+    node({ id: "grp-in-work", title: "项目", nodeType: "group", parentId: "nb-work" }),
+  ];
+
+  it("目标 = 根层笔记本，排除日记本，按 sortOrder 稳定排序", () => {
+    expect(diaryConvertTargets(nodes).map((t) => t.id)).toEqual(["nb-life", "nb-work"]);
+  });
+
+  it("通过时给出条目与目标（条目仍留在日记里，直到真正移动）", () => {
+    const plan = planDiaryConvert(nodes, "d1109", "nb-work");
+    expect(plan.ok).toBe(true);
+    if (plan.ok) {
+      expect(plan.targetId).toBe("nb-work");
+      expect(plan.entry.dateKey).toBe("2026-11-09");
+    }
+  });
+
+  it("拒绝：不是日记条目 / 目标是日记本 / 目标是分组 / 目标不存在 / 空参数", () => {
+    expect(planDiaryConvert(nodes, "grp-in-work", "nb-work")).toEqual({ ok: false, reason: "not-diary-entry" });
+    expect(planDiaryConvert(nodes, "d1109", "nb-diary")).toEqual({ ok: false, reason: "target-is-diary" });
+    expect(planDiaryConvert(nodes, "d1109", "grp-in-work")).toEqual({ ok: false, reason: "target-not-notebook" });
+    expect(planDiaryConvert(nodes, "d1109", "nb-missing")).toEqual({ ok: false, reason: "target-missing" });
+    expect(planDiaryConvert(nodes, null, "nb-work")).toEqual({ ok: false, reason: "missing-entry" });
+    expect(planDiaryConvert(nodes, "d1109", null)).toEqual({ ok: false, reason: "target-missing" });
+  });
+
+  it("没有日记本时没有任何可转条目，也没有目标", () => {
+    const onlyDocs = nodes.filter((n) => n.id !== "nb-diary" && n.parentId !== "nb-diary" && n.parentId !== "y26" && n.parentId !== "m11");
+    expect(planDiaryConvert(onlyDocs, "d1109", "nb-work")).toEqual({ ok: false, reason: "not-diary-entry" });
   });
 });

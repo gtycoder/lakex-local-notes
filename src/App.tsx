@@ -64,7 +64,7 @@ const TrashPanel = lazy(() => import("./components/app/TrashPanel").then((m) => 
 const DiaryWorkspace = lazy(() => import("./features/diary/DiaryWorkspace").then((m) => ({ default: m.DiaryWorkspace })));
 import { documentTreeWithoutDiary, diaryEntryIds, diaryNotebookOf, documentIdOfTreeNode } from "./features/diary/diaryTree";
 import { diaryOpenErrorMessage, requestDiaryOpenDate } from "./features/diary/diaryOpen";
-import { formatDiaryDateKey, planDiaryOpen } from "./core/diary";
+import { formatDiaryDateKey, planDiaryConvert, planDiaryOpen } from "./core/diary";
 /** P1 标签空间（一级入口「标签」）：只读聚合 + 就地元数据管理；预览正文由组件内部再懒加载（内核边界）。 */
 const TagsWorkspace = lazy(() => import("./features/tags/TagsWorkspace").then((m) => ({ default: m.TagsWorkspace })));
 import { AssetsBrowser } from "./components/app/AssetsBrowser";
@@ -561,6 +561,15 @@ export function App() {
   const handleDiarySetNotebookIcon = useCallback((icon: string | null) => {
     if (diaryNotebook) sidebarSetIcon(diaryNotebook, icon);
   }, [diaryNotebook, sidebarSetIcon]);
+  /** 「转为文档」：把日记条目移到目标笔记本（**移动**，同一 note；正文/历史/回收站都跟着走）。
+   *  判据（是否日记条目、目标是否合法）由 core.planDiaryConvert 给，这里只执行 + 反馈。 */
+  const handleDiaryConvertEntry = useCallback((nodeId: string, targetNotebookId: string) => {
+    const plan = planDiaryConvert(treeNodes, nodeId, targetNotebookId);
+    if (!plan.ok) return;
+    const targetTitle = treeNodes.find((node) => node.id === plan.targetId)?.title ?? "笔记本";
+    sidebarMove(nodeId, plan.targetId, "inside");
+    showNotice("已转为文档：" + targetTitle);
+  }, [treeNodes, sidebarMove, showNotice]);
   /** 日记内搜索入口 = 打开**现有**全局搜索面板（日记是文档，已在 FTS 里；不新增索引）。
    *  范围收窄 = 面板的 `scopeNoteIds`（下面搜索面板处传入 `diaryNoteIds`），纯显示层过滤。 */
   const handleDiaryOpenSearch = useCallback(() => { sidebarOpenSearch(); }, [sidebarOpenSearch]);
@@ -1052,6 +1061,7 @@ export function App() {
                 onOpenEntry={(noteId) => { void openNote(noteId); }}
                 onWriteToday={(dateKey) => { void handleDiaryWriteToday(dateKey); }}
                 onOpenSearch={handleDiaryOpenSearch}
+                onConvertEntry={handleDiaryConvertEntry}
                 onRenameNotebook={handleDiaryRenameNotebook}
                 onSetNotebookIcon={handleDiarySetNotebookIcon}
                 onContentChange={handleContentChange}
