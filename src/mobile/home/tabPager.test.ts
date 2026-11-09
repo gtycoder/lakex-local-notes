@@ -2,17 +2,19 @@ import { describe, expect, it } from "vitest";
 import { HOME_TABS, initialPagerState, pagerScrollLeft, reducePager, settledIndex, tabAt, tabIndex } from "./tabPager";
 
 describe("首页横向分页判据（261019，对齐语雀 pager）", () => {
-  it("tab ↔ 下标：顺序固定为 小记 → 知识库 → 标签（261106 三页），未知值回落第一页", () => {
-    expect(HOME_TABS).toEqual(["quick", "library", "tags"]);
+  it("tab ↔ 下标：顺序固定为 小记 → 知识库 → 标签 → 日记（261109 四页），未知值回落第一页", () => {
+    expect(HOME_TABS).toEqual(["quick", "library", "tags", "diary"]);
     expect(tabIndex("quick")).toBe(0);
     expect(tabIndex("library")).toBe(1);
     expect(tabIndex("tags")).toBe(2);
+    expect(tabIndex("diary")).toBe(3);
     expect(tabIndex("nope" as never)).toBe(0);
     expect(tabAt(0)).toBe("quick");
     expect(tabAt(1)).toBe("library");
     expect(tabAt(2)).toBe("tags");
+    expect(tabAt(3)).toBe("diary");
     expect(tabAt(-3)).toBe("quick");
-    expect(tabAt(9)).toBe("tags");
+    expect(tabAt(9)).toBe("diary");
   });
 
   it("tab → 滚动目标：第 N 页 = N × 宽度；宽度未量到/非法时归 0（首帧不跳）", () => {
@@ -22,7 +24,7 @@ describe("首页横向分页判据（261019，对齐语雀 pager）", () => {
     expect(pagerScrollLeft(1, -10)).toBe(0);
     expect(pagerScrollLeft(1, Number.NaN)).toBe(0);
     expect(pagerScrollLeft(2, 412)).toBe(824);
-    expect(pagerScrollLeft(7, 412)).toBe(824);
+    expect(pagerScrollLeft(7, 412)).toBe(1236); // 越界夹到最后一页（261109：四页）
   });
 
   it("滚动位置 → 页码：过半算下一页，回弹/越界夹紧", () => {
@@ -32,7 +34,7 @@ describe("首页横向分页判据（261019，对齐语雀 pager）", () => {
     expect(settledIndex(412, 412)).toBe(1);
     expect(settledIndex(1.4 * 412, 412)).toBe(1);
     expect(settledIndex(-80, 412)).toBe(0);   // 首屏右滑回弹
-    expect(settledIndex(9999, 412)).toBe(2);  // 越界（三页时夹到最后一页）
+    expect(settledIndex(9999, 412)).toBe(3);  // 越界（四页时夹到最后一页）
     expect(settledIndex(412, 0)).toBe(0);     // 宽度未量到
     expect(settledIndex(Number.NaN, 412)).toBe(0);
   });

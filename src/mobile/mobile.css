@@ -107,9 +107,18 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
    tab 才真的居中；冷启动骨架同构（左右各 2 槽），数据到达时原地填充不跳。 */
 .mobile-topbar-gap { flex: 0 0 auto; width: var(--mobile-topbar-height); height: var(--mobile-topbar-height); }
 /* 窄屏兜底：左右各 12 + 两枚右侧图标 + 设置，已放不下「居中空槽」；
-   去掉空槽优先保证三个 tab 不换行、不裁切。 */
+   去掉空槽优先保证 tab 不换行、不裁切。 */
 @media (max-width: 385px) {
   .mobile-topbar-gap { display: none; }
+  /* 261109（第 4 个 tab「日记」）：4 × 44 + 3 × 6 = 194 > 360px 顶栏可用宽（≈166）⇒ 窄屏必须收紧几何，
+     否则 tab 行会溢出、压到右侧同步按钮上。收紧后 360px 实测算式：
+     可用宽 = 360 − 12×2(pad) − 52(设置) − 52×2(右侧两枚) − 0(容器 gap) = 180；
+     需要宽 = 4 × 40(tab 下限) + 3 × 4(gap) = 172 ⇒ 余 8。
+     tab **高度**仍取 --mb-tap-min(44)，触屏主判据不破；宽度下限 40 是被 4 个中文 tab 逼出来的，
+     只在 ≤385px 生效（设备门禁 AVD 412px 不命中本档）。 */
+  .mobile-topbar { gap: 0; padding-left: max(12px, var(--mobile-left-safe-area)); padding-right: max(12px, var(--mobile-right-safe-area)); }
+  .mobile-home-tabs { gap: 4px; }
+  .mobile-htab { min-width: 40px; }
 }
 /* 栏内图标按钮 = 思源 .toolbar__button：48×48、svg 20、按压缩口底色（不做缩放，避免密集栏抖动） */
 .mobile-icon-btn {

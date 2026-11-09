@@ -39,7 +39,7 @@ import {
  *
  * ⚠️ 只用于"建表/加列/建索引"这类幂等 DDL；**数据迁移仍然每次都按判据检查**（如旧库识别）。
  */
-export const MOBILE_SCHEMA_VERSION = 11; // 261105 P1 第 4 项：新增同步记录账本 sync_conflicts（设备本地）
+export const MOBILE_SCHEMA_VERSION = 12; // 261109 日记 v1：folders 加 space 列（日记本标记；wire 镜像 lake 索引 folders[].space）
 
 /**
  * 读当前库的 schema 版本（PRAGMA user_version；空库 = 0）。
@@ -110,7 +110,8 @@ export function baseSchemaStatements(): SchemaStatement[] {
     deleted_from_parent_id TEXT,
     is_dirty INTEGER NOT NULL DEFAULT 0,
     is_purged INTEGER NOT NULL DEFAULT 0,
-    cloud_deleted INTEGER NOT NULL DEFAULT 0
+    cloud_deleted INTEGER NOT NULL DEFAULT 0,
+    space TEXT
   )`);
   push(`CREATE TABLE IF NOT EXISTS device_state (
     key TEXT PRIMARY KEY,
@@ -282,6 +283,9 @@ export async function collectSchemaStatements(db: MobileDb): Promise<SchemaState
   if (!folderColumns.includes("is_dirty")) push("ALTER TABLE folders ADD COLUMN is_dirty INTEGER NOT NULL DEFAULT 0");
   if (!folderColumns.includes("is_purged")) push("ALTER TABLE folders ADD COLUMN is_purged INTEGER NOT NULL DEFAULT 0");
   if (folderColumns.includes("sync_state")) push("ALTER TABLE folders DROP COLUMN sync_state", { optional: true });
+  // 261109 日记 v1（docs/DIARY.md）：space = 空间标记，只有 nodeType === "notebook" 时有意义；
+  // 取值只有 "diary" / NULL（未知值读取时按非日记处理，见 core/diary.normalizeFolderSpace）。
+  if (!folderColumns.includes("space")) push("ALTER TABLE folders ADD COLUMN space TEXT");
   const noteColumns2 = (
     (await db.prepare("PRAGMA table_info(notes)").all()) as Array<{ name: string }>
   ).map((column) => column.name);

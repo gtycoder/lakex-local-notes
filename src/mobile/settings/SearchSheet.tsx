@@ -35,10 +35,17 @@ export interface SearchSheetProps {
   onClose: () => void;
   onOpenNote: (id: string) => void;
   onOpenQuickNote: (id: string) => void;
+  /**
+   * 显示层范围过滤（261109 日记内搜索）：只保留这些文档 id 的结果；小记结果一律不显示。
+   * **只过滤召回结果**，不动 FTS/索引与 bridge.searchNotes（docs/DIARY.md §搜索：不新增索引）。
+   */
+  scopeNoteIds?: ReadonlySet<string>;
+  /** 面板标题（缺省「搜索」；日记内 = 「搜索日记」）。 */
+  title?: string;
 }
 
 export function SearchSheet(props: SearchSheetProps) {
-  const { open, onClose, onOpenNote, onOpenQuickNote } = props;
+  const { open, onClose, onOpenNote, onOpenQuickNote, scopeNoteIds, title } = props;
   const [query, setQuery] = useState("");
   const [scope, setScope] = useState<SearchScope>(DEFAULT_SEARCH_SCOPE);
   const [results, setResults] = useState<MobileSearchResult[]>([]);
@@ -106,20 +113,24 @@ export function SearchSheet(props: SearchSheetProps) {
     onClose();
   };
 
+  // 范围过滤（日记内搜索）：纯显示层，落在渲染前一处，召回/索引/排序一律不动。
+  const visibleResults = scopeNoteIds
+    ? results.filter((result) => result.kind !== "quick-note" && scopeNoteIds.has(result.id))
+    : results;
   // 空态（纯逻辑在 searchEmptyState）：错误态优先，不叠加空态文案。
-  const empty = searchError ? null : searchEmptyState({ query, scope, hasResults: results.length > 0, searching });
+  const empty = searchError ? null : searchEmptyState({ query, scope, hasResults: visibleResults.length > 0, searching });
   const showIdleEmpty = empty?.kind === "idle" && recent.length === 0;
   const showNoResults = empty?.kind === "no-results";
 
   // MOB-11：scrim / 右滑 / 返回栈 / 焦点与滚动锁统一由 MobileSheet 负责；
   // 类名与 DOM 结构沿用原手写版（.mb-scrim + .mb-sheet，视觉快照不变）。
   return (
-    <MobileSheet open title="搜索" className="mb-sheet--search" onClose={onClose}>
+    <MobileSheet open title={title ?? "搜索"} className="mb-sheet--search" onClose={onClose}>
       <div className="mobile-search-input-row">
         <Search size={17} />
         <input
           className="mobile-search-input"
-          placeholder="搜索文档、小记与标签"
+          placeholder={scopeNoteIds ? "搜索日记（标题、正文、标签）" : "搜索文档、小记与标签"}
           autoFocus
           value={query}
           onChange={(e) => setQuery(e.target.value)}
@@ -188,7 +199,7 @@ export function SearchSheet(props: SearchSheetProps) {
             )}
           </div>
         )}
-        {results.map((r) => (
+        {visibleResults.map((r) => (
           <button type="button" key={`${r.kind ?? "note"}:${r.id}`} className="mobile-doc-row" onClick={() => openResult(r)}>
             <span className="mobile-search-main">
               <span className="mobile-search-title mb-ellipsis">{r.title || (r.kind === "quick-note" ? "小记" : "")}</span>

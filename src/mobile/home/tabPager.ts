@@ -1,12 +1,16 @@
 /**
- * 首页首层 tab（小记 / 知识库 / 标签）的**横向分页判据** —— 纯函数，单一来源。
+ * 首页首层 tab（小记 / 知识库 / 标签 / 日记）的**横向分页判据** —— 纯函数，单一来源。
  *
  * 交互形态（261019 用户点单）：对齐语雀 App 的横向分页 —— **手指跟手拖动 + 松手吸附**，
  * 由浏览器原生横向滚动容器（`overflow-x:auto` + `scroll-snap-type:x mandatory`）完成，
  * 等价于语雀 RN 侧的 `react-native-pager-view`；这里只负责"滚动位置 → 页码 → tab"的取整与夹紧。
  * DOM 侧（事件、inert、滚动对齐）在 `HomePage`，不在这里。
  */
-export const HOME_TABS = ["quick", "library", "tags"] as const;
+/**
+ * 首层 tab（261109：加第 4 个「日记」）。顺序 = 小记 / 知识库 / 标签 / 日记 ——
+ * 升为一级页的顺序按**加入时间**追加（标签 261106、日记 261109），不重排既有页，避免用户记忆里的位置漂移。
+ */
+export const HOME_TABS = ["quick", "library", "tags", "diary"] as const;
 export type HomeTab = (typeof HOME_TABS)[number];
 
 function clampIndex(index: number, count: number): number {

@@ -29,6 +29,7 @@ import "./pad/pad.css"; // 261102：平板外壳（正文满宽 + 悬浮目录/�
 import "./features.css"; // P6：图片 Lightbox / 附件预览的**移动端外观**（结构类名共享、视觉各端自有）
 import "./quick-notes.css"; // P6b：小记编辑器宿主与只读预览的移动端外观（自桌面那份抽取移动端子集）
 import "./ai/ai.css"; // 261023：AI 全屏功能页（布局 + Markdown），不进入口以外的作用域
+import "./diary/diary.css"; // 261109：日记页（只补月分组小标题与主按钮间距；其余复用 kit/设置页原语）
 // 编辑面里「内核按视口/按桌面写死的几何」的收口（doc/note 共用一份，宿主契约见该文件头）；
 // 放最后引：它压的是内核注入的未分层样式（部分需 !important），排在所有自有样式之后语义最清楚。
 import "./editor/edit-surface-kernel.css";

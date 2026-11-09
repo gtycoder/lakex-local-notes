@@ -129,9 +129,9 @@ afterEach(async () => {
 });
 
 describe("小记列表多选（task-82）", () => {
-  it("常规态：三个 tab、胶囊栏在、没有复选框；长按卡片 → 选择条 + 复选框 + 胶囊让位", async () => {
+  it("常规态：四个 tab、胶囊栏在、没有复选框；长按卡片 → 选择条 + 复选框 + 胶囊让位", async () => {
     await renderHome();
-    expect(host.querySelectorAll(".mobile-htab").length).toBe(3);
+    expect(host.querySelectorAll(".mobile-htab").length).toBe(4);
     expect(host.querySelector(".mobile-bottom-bar--home")).not.toBeNull();
     expect(host.querySelectorAll("[data-selection-checkbox]").length).toBe(0);
 
@@ -170,7 +170,7 @@ describe("小记列表多选（task-82）", () => {
 
     await click(topButtons()[0]);
     expect(topBar()).toBeNull();
-    expect(host.querySelectorAll(".mobile-htab").length).toBe(3);
+    expect(host.querySelectorAll(".mobile-htab").length).toBe(4);
     expect(host.querySelector(".mobile-bottom-bar--home")).not.toBeNull();
   });
 

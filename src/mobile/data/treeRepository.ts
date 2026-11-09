@@ -8,6 +8,7 @@ import {
   assertTreeNodeTitle,
   nextSortOrder,
 } from "../../core/treeRules.js";
+import { normalizeFolderSpace, type DiaryFolderSpace } from "../../core/diary.js";
 
 function noteRowToTreeNode(
   row: Record<string, unknown>,
@@ -44,34 +45,39 @@ function folderRowToTreeNode(
     updatedAt: overrides.updatedAt ?? String(row.updated_at),
     isConflict: false,
     icon: overrides.icon !== undefined ? overrides.icon : (row.icon ? String(row.icon) : null),
+    // 空间标记（261109）：未知值一律当非日记（core/diary.normalizeFolderSpace），wire 读取同口径。
+    space: normalizeFolderSpace(row.space),
   };
 }
 
 export async function listTreeNodes(d: MobileDb): Promise<TreeNode[]> {
   const rows = await d.prepare(
-    "SELECT id, title, parent_id, sort_order, node_type, icon, updated_at, trashed_at, deleted_from_parent_id FROM folders WHERE trashed_at IS NULL ORDER BY parent_id, sort_order",
+    "SELECT id, title, parent_id, sort_order, node_type, icon, updated_at, trashed_at, deleted_from_parent_id, space FROM folders WHERE trashed_at IS NULL ORDER BY parent_id, sort_order",
   ).all() as Array<{
-    id: string; title: string; parent_id: string | null; sort_order: number; node_type: string; icon: string | null; updated_at: string; trashed_at: string | null; deleted_from_parent_id: string | null;
+    id: string; title: string; parent_id: string | null; sort_order: number; node_type: string; icon: string | null; updated_at: string; trashed_at: string | null; deleted_from_parent_id: string | null; space: string | null;
   }>;
   return rows.map((r) => ({
     id: r.id, workspaceId: "mobile", parentId: r.parent_id, nodeType: r.node_type as TreeNodeType,
     title: r.title, noteFileId: null, sortOrder: r.sort_order, createdAt: r.updated_at, updatedAt: r.updated_at,
-    isConflict: false, icon: r.icon ?? null,
+    isConflict: false, icon: r.icon ?? null, space: normalizeFolderSpace(r.space),
   }));
 }
 
-export async function createNotebook(d: MobileDb, input: { title: string; icon: string | null }): Promise<TreeNode> {
+export async function createNotebook(
+  d: MobileDb,
+  input: { title: string; icon: string | null; /** 空间标记（261109 日记本 = "diary"）；缺省/null = 普通知识库。 */ space?: DiaryFolderSpace | null },
+): Promise<TreeNode> {
   const title = assertTreeNodeTitle(input.title);
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
   const maxRow = await d.prepare("SELECT MAX(sort_order) AS m FROM folders WHERE parent_id IS NULL AND trashed_at IS NULL").get() as { m: number | null } | undefined;
   const sortOrder = nextSortOrder(maxRow?.m ?? null);
-  await d.prepare("INSERT INTO folders (id, title, parent_id, sort_order, node_type, icon, updated_at, is_dirty) VALUES (?,?,NULL,?,?,?,?,1)")
-    .run(id, title, sortOrder, "notebook", null, now);
+  await d.prepare("INSERT INTO folders (id, title, parent_id, sort_order, node_type, icon, updated_at, is_dirty, space) VALUES (?,?,NULL,?,?,?,?,1,?)")
+    .run(id, title, sortOrder, "notebook", null, now, normalizeFolderSpace(input.space));
   if (input.icon) {
     await d.prepare("UPDATE folders SET icon = ?, is_dirty = 1 WHERE id = ?").run(input.icon, id);
   }
-  const row = await d.prepare("SELECT id, title, parent_id, sort_order, node_type, icon, updated_at FROM folders WHERE id=?").get(id) as Record<string, unknown>;
+  const row = await d.prepare("SELECT id, title, parent_id, sort_order, node_type, icon, updated_at, space FROM folders WHERE id=?").get(id) as Record<string, unknown>;
   return folderRowToTreeNode(row, { title, updatedAt: now, icon: input.icon ?? null });
 }
 

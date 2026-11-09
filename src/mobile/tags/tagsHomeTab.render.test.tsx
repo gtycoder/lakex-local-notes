@@ -685,16 +685,17 @@ describe("首页三 tab（小记 / 知识库 / 标签）", () => {
 
   beforeEach(() => { onTabChange.mockReset(); });
 
-  it("三个一级 tab 与切页回调；标签页三 pane 常驻 + inert", async () => {
+  it("四个一级 tab 与切页回调；标签页 panes 常驻 + inert", async () => {
     await renderHome("quick");
-    expect([...host.querySelectorAll(".mobile-htab")].map((el) => el.textContent)).toEqual(["小记", "知识库", "标签"]);
+    expect([...host.querySelectorAll(".mobile-htab")].map((el) => el.textContent)).toEqual(["小记", "知识库", "标签", "日记"]);
     await click(tabButton("标签"));
     expect(onTabChange).toHaveBeenCalledWith("tags");
     await renderHome("tags");
     expect(host.textContent).toContain("1 篇文档、1 条小记");
     const panes = [...host.querySelectorAll<HTMLElement>(".mobile-tab-pane")];
-    expect(panes.length).toBe(3);
+    expect(panes.length).toBe(4);
     expect(panes[0].hasAttribute("inert")).toBe(true);
     expect(panes[2].hasAttribute("inert")).toBe(false);
+    expect(panes[3].hasAttribute("inert")).toBe(true);
   });
 });

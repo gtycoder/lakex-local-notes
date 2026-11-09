@@ -1,0 +1,86 @@
+/**
+ * 日记空间标记（261109）在移动端同步端口上的往返：
+ *  · 发布方向：`listFoldersForSync` 必须把本机 `folders.space` 带出去，**非日记显式 null**
+ *    （否则「取消日记标记」在 wire 上不可见，两端互刷 —— docs/DIARY.md 硬规则 1）；
+ *  · 应用方向：`importRemoteFolder` / `applyRemoteFolderMeta` 必须把远端 `space` 落库（含 null 覆盖）。
+ * 判据本身在 core/diary（normalizeFolderSpace），本文件只卡端口的落库/投影形状。
+ */
+import { describe, expect, it, vi } from "vitest";
+import path from "node:path";
+
+vi.mock("sql.js/dist/sql-wasm.wasm?url", () => ({ default: path.join(process.cwd(), "node_modules/sql.js/dist/sql-wasm.wasm") }));
+vi.mock("../native/assetFs", () => ({
+  saveAssetBytesFs: async () => {},
+  loadAssetBytesFs: async () => null,
+  removeAssetBytesFs: async () => {},
+  listNoteAssetKeysFs: async () => [],
+  listQuickNoteAssetKeysFs: async () => [],
+  listAssetKeysFs: async () => [],
+  removeNoteAssetsDirFs: async () => {},
+  removeQuickNoteAssetsDirFs: async () => {},
+}));
+
+import { SqlJsAsyncDb, SqlJsDb } from "../data/sqliteDb.js";
+import { applyMobileSchema } from "../data/schema.js";
+import { createMobilePlatformPort } from "./mobilePlatformPort.js";
+import type { SyncFolderRow } from "../../core/s3v3/state/platformPort.js";
+
+const T = "2026-11-09T00:00:00.000Z";
+
+async function freshDb(): Promise<SqlJsAsyncDb> {
+  const db = new SqlJsAsyncDb(await SqlJsDb.open());
+  await applyMobileSchema(db);
+  return db;
+}
+
+async function insertFolder(db: SqlJsAsyncDb, id: string, nodeType: "notebook" | "group", space: string | null, parentId: string | null = null): Promise<void> {
+  await db.prepare("INSERT INTO folders (id,title,parent_id,sort_order,node_type,icon,updated_at,is_dirty,space) VALUES (?,?,?,?,?,NULL,?,1,?)")
+    .run(id, id, parentId, 0, nodeType, T, space);
+}
+
+describe("日记 space 随目录行同步（移动端端口）", () => {
+  it("发布：日记本带 space=diary，普通笔记本/分组**显式 null**", async () => {
+    const db = await freshDb();
+    await insertFolder(db, "nb-diary", "notebook", "diary");
+    await insertFolder(db, "nb-normal", "notebook", null);
+    await insertFolder(db, "g-year", "group", null, "nb-diary");
+    const port = createMobilePlatformPort(db);
+    const rows = await port.listFoldersForSync() as Array<SyncFolderRow & { space?: string | null }>;
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    expect(byId.get("nb-diary")?.space).toBe("diary");
+    // 显式 null（不是缺字段）：wire 上「取消日记标记」必须可见。
+    expect(byId.get("nb-normal")).toHaveProperty("space", null);
+    expect(byId.get("g-year")).toHaveProperty("space", null);
+    await db.close();
+  });
+
+  it("应用远端：importRemoteFolder 落 space，缺字段 = 非日记（null）", async () => {
+    const db = await freshDb();
+    const port = createMobilePlatformPort(db);
+    const remoteDiary: SyncFolderRow & { space?: "diary" | null } = {
+      id: "remote-diary", title: "日记", parentId: null, sortOrder: 0, nodeType: "notebook", icon: null, updatedAt: T,
+      space: "diary",
+    };
+    await port.importRemoteFolder(remoteDiary);
+    const row = await db.prepare("SELECT space FROM folders WHERE id=?").get("remote-diary") as { space: string | null };
+    expect(row.space).toBe("diary");
+    // 缺字段（旧端/未知值）= 非日记：写入 NULL，不保留脏值。
+    const remotePlain: SyncFolderRow = { id: "remote-plain", title: "普通", parentId: null, sortOrder: 1, nodeType: "notebook", icon: null, updatedAt: T };
+    await port.importRemoteFolder(remotePlain);
+    const plain = await db.prepare("SELECT space FROM folders WHERE id=?").get("remote-plain") as { space: string | null };
+    expect(plain.space).toBeNull();
+    await db.close();
+  });
+
+  it("应用远端元数据：space 可被改成 diary，也可被清回 null（取消标记）", async () => {
+    const db = await freshDb();
+    await insertFolder(db, "nb-1", "notebook", null);
+    const port = createMobilePlatformPort(db);
+    const base: SyncFolderRow = { id: "nb-1", title: "笔记本", parentId: null, sortOrder: 0, nodeType: "notebook", icon: null, updatedAt: T };
+    await port.applyRemoteFolderMeta({ ...base, space: "diary" } as SyncFolderRow & { space: "diary" });
+    expect((await db.prepare("SELECT space FROM folders WHERE id=?").get("nb-1") as { space: string | null }).space).toBe("diary");
+    await port.applyRemoteFolderMeta({ ...base, space: null } as SyncFolderRow & { space: null });
+    expect((await db.prepare("SELECT space FROM folders WHERE id=?").get("nb-1") as { space: string | null }).space).toBeNull();
+    await db.close();
+  });
+});

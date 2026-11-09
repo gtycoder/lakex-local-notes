@@ -9,6 +9,7 @@ import { bridge } from "./bridge";
 import { resetAssetPerf, snapshotAssetPerf } from "./native/assetPerf";
 import type { LocalNoteSummary } from "./data/noteRepository";
 import { isGoneNote } from "../core/syncDecisions";
+import { diaryEntries, diaryNotebooks } from "../core/diary.js";
 import { setNoteRefHost } from "../features/editor/noteRef";
 import type { TreeNode } from "../lib/types";
 import { HomePage, type MobileQuickNote } from "./home/HomePage";
@@ -128,11 +129,17 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [createNbOpen, setCreateNbOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  /**
+   * 搜索范围（261109）：null = 全库（首页胶囊那条）；"diary" = 日记内搜索（日记页入口）。
+   * **只在显示层过滤结果**（按日记条目 id 集合），不动 FTS/索引/public 搜索逻辑（docs/DIARY.md §搜索）。
+   */
+  const [searchScope, setSearchScope] = useState<null | "diary">(null);
   // 平板外接键盘：⌘/Ctrl+K = 全局搜索（手机不挂；判据见 pad/usePadShortcuts）。
   const padShell = useFormFactor() === "expanded";
   // 平板：⌘/Ctrl+K 全局搜索；Esc 逐层收（本层没东西可关时返回 false，把 Esc 让给工作区那条监听）。
   usePadShortcuts(padShell, {
-    search: () => setSearchOpen(true),
+    // ⌘/Ctrl+K 恒为**全库搜索**：不能让上一次「日记内搜索」的范围残留到这里。
+    search: () => { setSearchScope(null); setSearchOpen(true); },
     escape: () => {
       if (consumeBack()) return true;
       if (searchOpen) { setSearchOpen(false); return true; }
@@ -564,7 +571,16 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
     scheduleComposerPrewarm();
   }, [phase]);
 
-  const notebooks = useMemo(() => treeNodes.filter((n) => n.nodeType === "notebook"), [treeNodes]);
+  /**
+   * 知识库列表 = **不含日记本**（261109，与桌面同口径：日记是独立空间，不是知识库里的一本）。
+   * 判据取 core.diary.diaryNotebooks（不在这里重写"什么算日记本"）；渲染层过滤，存储不改。
+   */
+  const notebooks = useMemo(() => {
+    const diaryIds = new Set(diaryNotebooks(treeNodes).map((node) => node.id));
+    return treeNodes.filter((n) => n.nodeType === "notebook" && !diaryIds.has(n.id));
+  }, [treeNodes]);
+  /** 日记条目 id 集合（日记内搜索的结果过滤；来自 core.diary.diaryEntries）。 */
+  const diaryNoteIds = useMemo(() => new Set(diaryEntries(treeNodes, diaryNotebooks(treeNodes)[0]?.id ?? null).map((entry) => entry.noteId)), [treeNodes]);
   /** 默认笔记本选择器（设置与首次分享共用）：只是把 treeNodes 里的笔记本投影成选项。 */
   const notebookOptions: DefaultNotebookOption[] = useMemo(
     () => notebooks.map((node) => ({ id: node.id, title: node.title || "未命名" })),
@@ -640,6 +656,19 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
     setRoute({ kind: "home", tab: "quick" });
     setPendingQuickNoteId(id);
   }, []);
+
+  /**
+   * 日记条目 → 现有工作区（261109）。**不新造编辑面**：正文输入仍走工作区 + dock。
+   * 直接带 notebookId 进路由（不走 openNote 的祖先回溯）：当天日记刚被 ensure 建出来时，首页快照里还没有它。
+   */
+  const openDiaryEntry = useCallback((input: { noteId: string; notebookId: string; mode: "viewer" | "editor" }) => {
+    setRoute({ kind: "notebook", notebookId: input.notebookId, initialNoteId: input.noteId, initialMode: input.mode });
+    void refreshAll().catch(() => undefined);
+  }, [refreshAll]);
+
+  /** 打开搜索：首页胶囊 = 全库；日记页 = 日记内（结果按日记条目 id 过滤，见 SearchSheet.scopeNoteIds）。 */
+  const openSearchAll = useCallback(() => { setSearchScope(null); setSearchOpen(true); }, []);
+  const openDiarySearch = useCallback(() => { setSearchScope("diary"); setSearchOpen(true); }, []);
 
   /** 「文档引用」卡（内核自定义卡）在移动端也要能选目标文档：注册宿主（与桌面 App.tsx 同一接口）。
    *  移动端摘要只有 id/title/parentId/updatedAt ⇒ 补默认 sortOrder/syncState/isConflict；
@@ -751,7 +780,11 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
           pendingQuickNoteId={pendingQuickNoteId}
           onPendingQuickNoteConsumed={() => setPendingQuickNoteId(null)}
           onOpenDrawer={() => setDrawerOpen(true)}
-          onOpenSearch={() => setSearchOpen(true)}
+          onOpenSearch={openSearchAll}
+          // 日记页（261109）：全量树给判据、条目进现有工作区、搜索复用全库并按日记条目过滤。
+          diaryNodes={treeNodes}
+          onOpenDiaryEntry={openDiaryEntry}
+          onOpenDiarySearch={openDiarySearch}
           onOpenAi={() => setAiOpen(true)}
           onCreateNotebook={() => setCreateNbOpen(true)}
           onCreateNote={(notebookId) => void createNoteInParent(notebookId)}
@@ -807,6 +840,9 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
             onClose={() => setSearchOpen(false)}
             onOpenNote={(id) => void openNote(id, "viewer")}
             onOpenQuickNote={openQuickNoteFromSearch}
+            // 日记内搜索 = 同一个搜索面板 + 显示层过滤（不动 FTS/索引/公共搜索逻辑）。
+            scopeNoteIds={searchScope === "diary" ? diaryNoteIds : undefined}
+            title={searchScope === "diary" ? "搜索日记" : undefined}
           />
         </MobileErrorBoundary>
       </DeferredPanel>

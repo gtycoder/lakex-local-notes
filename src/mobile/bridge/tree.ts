@@ -18,7 +18,7 @@ export const treeDomain = {
     return { notebook: nodes.find((node) => node.id === notebookId) ?? null, tree };
   },
 
-  async createNotebook(input: { title: string; icon: string | null }): Promise<TreeNode> {
+  async createNotebook(input: { title: string; icon: string | null; space?: "diary" | null }): Promise<TreeNode> {
     return runWrite("createNotebook", async () => {
       const d = await ensureDb();
       const node = await treeRepository.createNotebook(d, input);

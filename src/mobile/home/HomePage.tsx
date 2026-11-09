@@ -1,5 +1,5 @@
 /**
- * 第一层（首页）：小记 / 知识库 两个 tab。
+ * 第一层（首页）：小记 / 知识库 / 标签 / 日记 四个 tab（tab 行横向分页，判据见 ./tabPager）。
  * 布局（对齐 Yuque 官方移动端首层）：
  * - 小记 → 卡片（图在上/文在下/日期+更多「...」）；
  * - 知识库 → 「置顶」分组（顶部固定、可收起；横向卡，左右滑动找）+ 笔记本书架（3:4 彩面书卡，右上角切换 书架↔列表）；
@@ -51,6 +51,7 @@ import { readFavoriteIds, readFavoritesOpen, subscribeFavorites, writeFavoritesO
 import { QuickNoteComposerLazy } from "./quickNoteComposerLazy";
 import { MobileQuickNoteTagSheet } from "./MobileQuickNoteTagSheet";
 import { TagsHomeTab } from "../tags/TagsHomeTab";
+import { DiaryPage } from "../diary/DiaryPage";
 import type { HomeTab } from "./tabPager";
 import { quickNoteDetailOf, useQuickNoteDetailCache } from "./useQuickNoteDetailCache";
 import { notifyMissingQuickNoteOnce } from "./missingQuickNoteNotice";
@@ -78,6 +79,8 @@ export interface MobileQuickNote {
 }
 
 const QUICK_NOTE_VIRTUAL_THRESHOLD = 24;
+/** 未接线（render 测试/宿主没传 diaryNodes）时的稳定空数组：稳定引用 ⇒ 日记页的 useMemo 不每帧重算。 */
+const EMPTY_DIARY_NODES: readonly TreeNode[] = [];
 
 export type LibraryView = "shelf" | "list";
 
@@ -113,6 +116,15 @@ export interface HomePageProps {
   /** 全局搜索命中小记：首页常驻组件接力定位/高亮该条（不自动进编辑态）。 */
   pendingQuickNoteId?: string | null;
   onPendingQuickNoteConsumed?: () => void;
+  /**
+   * 全量目录树（**含日记本**）：日记页的判据要看得见日记笔记本；知识库列表那份由 MobileApp 过滤掉日记本。
+   * 缺省 [] ⇒ 日记页显示空态（render 测试不传也能渲染）。
+   */
+  diaryNodes?: readonly TreeNode[];
+  /** 打开某天的日记：进现有工作区（日记不新造编辑面，正文输入仍走工作区 + dock）。 */
+  onOpenDiaryEntry?: (input: { noteId: string; notebookId: string; mode: "viewer" | "editor" }) => void;
+  /** 搜索日记：复用移动端既有全库搜索，由宿主按日记条目 id 过滤。 */
+  onOpenDiarySearch?: () => void;
 }
 
 /**
@@ -140,6 +152,7 @@ export function HomePage(props: HomePageProps) {
     tab, notebooks, notes, quickNotes, tagDirectory, docCounts, onTabChange, onOpenNotebook,
     onOpenNote, onOpenQuickNote, onTagsChanged, onOpenDrawer, onOpenSearch, onOpenAi, onCreateNotebook, onCreateNote, onTreeChanged, onQuickNotesChanged, onQuickNoteTagsChanged,
     pendingQuickNoteId, onPendingQuickNoteConsumed,
+    diaryNodes, onOpenDiaryEntry, onOpenDiarySearch,
   } = props;
   const [composer, setComposer] = useState<ComposerState>(null);
   const [editNote, setEditNote] = useState<{ id: string; text: string; body?: string; images: import("../../core/quickNoteModel.js").StoredQuickNoteImage[]; tagIds: string[] } | null>(null);
@@ -192,12 +205,14 @@ export function HomePage(props: HomePageProps) {
   const quickCardsRef = useRef<HTMLDivElement | null>(null);
   const libraryPaneRef = useRef<HTMLElement | null>(null);
   const tagsPaneRef = useRef<HTMLElement | null>(null);
+  const diaryPaneRef = useRef<HTMLElement | null>(null);
 
-  // ③ 非活动页 inert：三页都在 DOM 里，不能让读屏/焦点摸到屏幕外那页。
+  // ③ 非活动页 inert：各页都在 DOM 里，不能让读屏/焦点摸到屏幕外那页。
   useEffect(() => {
     quickPaneRef.current?.toggleAttribute("inert", tab !== "quick");
     libraryPaneRef.current?.toggleAttribute("inert", tab !== "library");
     tagsPaneRef.current?.toggleAttribute("inert", tab !== "tags");
+    diaryPaneRef.current?.toggleAttribute("inert", tab !== "diary");
   }, [tab]);
 
   // v2（261107）：首页顶栏滚动状态 —— 任一 pane 滚过 6px 就浮出玻璃底 / 收起 tab / 显示居中标题。
@@ -699,16 +714,19 @@ export function HomePage(props: HomePageProps) {
           <button className={tab === "library" ? "mobile-htab active" : "mobile-htab"} onClick={() => switchTab("library")}>知识库</button>
           {/* 261106 用户验收：标签升为一级页（与小记/知识库并列，flomo 式：标签即入口）。 */}
           <button className={tab === "tags" ? "mobile-htab active" : "mobile-htab"} onClick={() => switchTab("tags")}>标签</button>
+          {/* 261109 日记 v1：第 4 个一级页（**只加 tab 行内容，不加顶栏槽位** —— 5 槽构图定稿）。 */}
+          <button className={tab === "diary" ? "mobile-htab active" : "mobile-htab"} onClick={() => switchTab("diary")}>日记</button>
         </div>
         {/* v2：滚动后 tab 收起，顶栏中央显示当前页标题（样式在 mobile.css） */}
-        <span className="mobile-topbar-collapsed-title" aria-hidden="true">{tab === "quick" ? "小记" : tab === "library" ? "知识库" : "标签"}</span>
+        <span className="mobile-topbar-collapsed-title" aria-hidden="true">{tab === "quick" ? "小记" : tab === "library" ? "知识库" : tab === "diary" ? "日记" : "标签"}</span>
         {/* 用户 261014 定稿：排序（小记）/ 视图（知识库）+ 云同步**固定挂在顶栏右上角**，云同步恒在最右。 */}
         {tab === "quick" ? (
           <button className="toolbar__button" onClick={() => setFilterOpen(true)} aria-label="排序" title="排序"><ArrowUpDown /></button>
         ) : tab === "library" ? (
           <button className="toolbar__button" onClick={toggleView} aria-label={libraryView === "shelf" ? "切换到列表" : "切换到书架"} title={libraryView === "shelf" ? "切换到列表" : "切换到书架"}>{viewIcon}</button>
         ) : (
-          // 标签页的「管理 / ＋新建」在页内头部（与语雀/ flomo 的"管理收在次级入口"同形）；这里留等宽空槽保持 tab 居中。
+          // 标签/日记页的「管理 / 新建 / 搜索」在页内头部（与语雀/flomo "管理收在次级入口"同形）；
+          // 这里留等宽空槽保持 tab 居中（**不新增槽位**）。
           <span className="mobile-topbar-gap" aria-hidden="true" />
         )}
         <button
@@ -870,6 +888,15 @@ export function HomePage(props: HomePageProps) {
             onOpenNote={onOpenNote}
             onOpenQuickNote={onOpenQuickNote ?? (() => showToast("小记入口暂不可用", { type: "error" }))}
             onChanged={applyTagsTabChanged}
+          />
+        </section>
+        {/* 一级「日记」页（261109 v1）：列表 + 写今天 + 搜索入口；正文编辑仍进现有工作区（不新造输入面）。 */}
+        <section ref={diaryPaneRef} className="mobile-tab-pane">
+          <DiaryPage
+            nodes={diaryNodes ?? EMPTY_DIARY_NODES}
+            onOpenEntry={(input) => { onOpenDiaryEntry?.(input); }}
+            onOpenSearch={() => { onOpenDiarySearch?.(); }}
+            onChanged={onTreeChanged}
           />
         </section>
       </div>

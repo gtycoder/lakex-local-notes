@@ -23,6 +23,7 @@ import {
 import { reindexQuickNotesByIds, reindexQuickNotesForTags } from "../data/quickNoteTagService.js";
 import { applyRemoteNoteTags, cleanupOrphanNoteTagLinks, listAllNoteTagIds, listAllNoteTagsUpdatedAt } from "../data/noteTagLinksRepository.js";
 import { listQuickNoteAssetKeysFs, removeAssetBytesFs } from "../native/assetFs.js";
+import { normalizeFolderSpace } from "../../core/diary.js";
 
 /**
  * 移动端 PlatformDataPort（E2-4 phase C）：把移动仓库/DB 的既有读取/写入语义映射成窄端口。
@@ -127,7 +128,7 @@ export function createMobilePlatformPort(db: MobileDb, ctxIn?: Partial<MobilePla
       // 与桌面 listFoldersForSync 同口径：固定「回收站」笔记本是本机容器，绝不进云端 folders
       // （否则移动端一发布就把 notebook-trash 写进索引，首轮同步平白多出一代）。
       const rows = await db.prepare(
-        "SELECT id,title,parent_id,sort_order,node_type,icon,updated_at,trashed_at,deleted_from_parent_id,cloud_deleted FROM folders WHERE id != ? ORDER BY id"
+        "SELECT id,title,parent_id,sort_order,node_type,icon,updated_at,trashed_at,deleted_from_parent_id,cloud_deleted,space FROM folders WHERE id != ? ORDER BY id"
       ).all(TRASH_NOTEBOOK_ID) as Array<Record<string, unknown>>;
       return rows.map((r) => ({
         id: String(r.id), title: String(r.title), parentId: r.parent_id ? String(r.parent_id) : null,
@@ -136,6 +137,8 @@ export function createMobilePlatformPort(db: MobileDb, ctxIn?: Partial<MobilePla
         trashedAt: r.trashed_at ? String(r.trashed_at) : null,
         deletedFromParentId: r.deleted_from_parent_id ? String(r.deleted_from_parent_id) : null,
         ...(Number(r.cloud_deleted) === 1 ? { cloudDeleted: true } : {}),
+        // 日记本标记：**显式写 null**（非日记也写），否则「取消日记标记」在 wire 上不可见（docs/DIARY.md 硬规则 1）。
+        space: normalizeFolderSpace(r.space),
       }));
     },
     async listNotesSyncMeta(): Promise<SyncNoteMetaRow[]> {
@@ -432,14 +435,15 @@ export function createMobilePlatformPort(db: MobileDb, ctxIn?: Partial<MobilePla
 
     // ===== 目录写 =====
     async importRemoteFolder(folder: SyncFolderRow): Promise<void> {
+      // 日记本标记随目录行落地（未知值/缺字段 = 非日记，见 core/diary.normalizeFolderSpace）。
       await db.prepare(
-        "INSERT INTO folders (id,title,parent_id,sort_order,node_type,icon,updated_at,trashed_at,deleted_from_parent_id,is_dirty) VALUES (?,?,?,?,?,?,?,?,?,1)"
-      ).run(folder.id, folder.title, folder.parentId, folder.sortOrder, folder.nodeType, folder.icon ?? null, folder.updatedAt, folder.trashedAt ?? null, folder.deletedFromParentId ?? null);
+        "INSERT INTO folders (id,title,parent_id,sort_order,node_type,icon,updated_at,trashed_at,deleted_from_parent_id,is_dirty,space) VALUES (?,?,?,?,?,?,?,?,?,1,?)"
+      ).run(folder.id, folder.title, folder.parentId, folder.sortOrder, folder.nodeType, folder.icon ?? null, folder.updatedAt, folder.trashedAt ?? null, folder.deletedFromParentId ?? null, normalizeFolderSpace(folder.space));
     },
     async applyRemoteFolderMeta(folder: SyncFolderRow): Promise<void> {
       await db.prepare(
-        "UPDATE folders SET title=?,parent_id=?,sort_order=?,node_type=?,icon=?,updated_at=?,trashed_at=?,deleted_from_parent_id=?,is_dirty=1 WHERE id=?"
-      ).run(folder.title, folder.parentId, folder.sortOrder, folder.nodeType, folder.icon ?? null, folder.updatedAt, folder.trashedAt ?? null, folder.deletedFromParentId ?? null, folder.id);
+        "UPDATE folders SET title=?,parent_id=?,sort_order=?,node_type=?,icon=?,updated_at=?,trashed_at=?,deleted_from_parent_id=?,is_dirty=1,space=? WHERE id=?"
+      ).run(folder.title, folder.parentId, folder.sortOrder, folder.nodeType, folder.icon ?? null, folder.updatedAt, folder.trashedAt ?? null, folder.deletedFromParentId ?? null, normalizeFolderSpace(folder.space), folder.id);
     },
     async deleteTreeNode(nodeId: string): Promise<void> {
       await db.prepare("DELETE FROM folders WHERE id=?").run(nodeId);

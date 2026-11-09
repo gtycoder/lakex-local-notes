@@ -21,6 +21,7 @@ const DOMAIN_MODULES: Array<{ file: string; exportName: string }> = [
   { file: "src/mobile/bridge/home.ts", exportName: "homeDomain" },
   { file: "src/mobile/bridge/batchNotes.ts", exportName: "batchNotesDomain" },
   { file: "src/mobile/bridge/duplicateNotes.ts", exportName: "duplicateNotesDomain" },
+  { file: "src/mobile/bridge/diary.ts", exportName: "diaryDomain" },
 ];
 
 interface Method { name: string; file: string; from: number; to: number }

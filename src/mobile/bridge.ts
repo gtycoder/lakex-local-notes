@@ -8,6 +8,7 @@
  * - notes.ts    文档/历史/回收站
  * - quickNotes.ts 小记
  * - tree.ts     目录树/笔记本/图标/排序
+ * - diary.ts    日记（打开/写某一天；ensure 在 data/diary 层，单事务）
  * - home.ts     首页只读投影
  */
 import { ensureDb } from "./bridge/context";
@@ -17,6 +18,7 @@ import { notesDomain } from "./bridge/notes";
 import { quickNotesDomain } from "./bridge/quickNotes";
 import { treeDomain } from "./bridge/tree";
 import { homeDomain } from "./bridge/home";
+import { diaryDomain } from "./bridge/diary";
 import { aiDomain } from "./bridge/ai";
 import { batchNotesDomain } from "./bridge/batchNotes";
 import { duplicateNotesDomain } from "./bridge/duplicateNotes";
@@ -32,6 +34,7 @@ export const bridge = {
   ...quickNotesDomain,
   ...treeDomain,
   ...homeDomain,
+  ...diaryDomain,
   ...aiDomain,
   ...batchNotesDomain,
   ...duplicateNotesDomain,
