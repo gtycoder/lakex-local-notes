@@ -146,6 +146,9 @@ button.ln-btn { color: var(--lake-text-1); }
 button.ln-btn--primary { color: var(--lake-text-on-accent); }
 button.ln-btn--danger { color: var(--lake-status-error); }
 button.ln-btn--secondary { color: var(--lake-text-1); }
+/* 261109：描边动作按钮的文字也走主题色（kit 层规则会被这条未分层 button.ln-btn 盖掉，必须在这里补回）。 */
+button.ln-btn--outline { color: var(--lake-accent-text); }
+button.ln-btn--outline.ln-btn--danger { color: var(--lake-status-error); }
 button.ln-btn--ghost:not(.quick-note-discard) { color: var(--lake-text-2); }
 button.ln-btn--secondary.ln-btn--danger-text { color: var(--lake-status-error); }
 button.quick-note-tag { color: var(--lake-text-2); }
