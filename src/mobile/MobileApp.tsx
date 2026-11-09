@@ -10,6 +10,7 @@ import { resetAssetPerf, snapshotAssetPerf } from "./native/assetPerf";
 import type { LocalNoteSummary } from "./data/noteRepository";
 import { isGoneNote } from "../core/syncDecisions";
 import { diaryEntries, diaryNotebooks } from "../core/diary.js";
+import { diaryNodesFrom } from "./diary/diaryNodes.js";
 import { setNoteRefHost } from "../features/editor/noteRef";
 import type { TreeNode } from "../lib/types";
 import { HomePage, type MobileQuickNote } from "./home/HomePage";
@@ -579,8 +580,13 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
     const diaryIds = new Set(diaryNotebooks(treeNodes).map((node) => node.id));
     return treeNodes.filter((n) => n.nodeType === "notebook" && !diaryIds.has(n.id));
   }, [treeNodes]);
+  /**
+   * 日记判据的输入 = **目录 + 文档混合视图**：treeNodes 只有 folders，日记条目在 notes 表里
+   * （只喂 folders ⇒ 日记页空、日记内搜索恒 0 条、转文档找不到条目）。投影函数在 diary/diaryNodes.ts。
+   */
+  const diaryTreeNodes = useMemo(() => diaryNodesFrom(treeNodes, notes), [treeNodes, notes]);
   /** 日记条目 id 集合（日记内搜索的结果过滤；来自 core.diary.diaryEntries）。 */
-  const diaryNoteIds = useMemo(() => new Set(diaryEntries(treeNodes, diaryNotebooks(treeNodes)[0]?.id ?? null).map((entry) => entry.noteId)), [treeNodes]);
+  const diaryNoteIds = useMemo(() => new Set(diaryEntries(diaryTreeNodes, diaryNotebooks(diaryTreeNodes)[0]?.id ?? null).map((entry) => entry.noteId)), [diaryTreeNodes]);
   /** 默认笔记本选择器（设置与首次分享共用）：只是把 treeNodes 里的笔记本投影成选项。 */
   const notebookOptions: DefaultNotebookOption[] = useMemo(
     () => notebooks.map((node) => ({ id: node.id, title: node.title || "未命名" })),
@@ -782,7 +788,7 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
           onOpenDrawer={() => setDrawerOpen(true)}
           onOpenSearch={openSearchAll}
           // 日记页（261109）：全量树给判据、条目进现有工作区、搜索复用全库并按日记条目过滤。
-          diaryNodes={treeNodes}
+          diaryNodes={diaryTreeNodes}
           onOpenDiaryEntry={openDiaryEntry}
           onOpenDiarySearch={openDiarySearch}
           onOpenAi={() => setAiOpen(true)}

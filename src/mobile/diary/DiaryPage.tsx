@@ -1,27 +1,35 @@
 /**
  * 一级「日记」页（261109 v1，第 4 个 tab；契约见 docs/DIARY.md）。
  *
- * 职责只有三件（**不新造输入面**）：
+ * 职责（**不新造输入面**）：
  *  · 「写今天」主按钮 → `bridge.diaryOpenDate(今天)` 幂等 ensure → 交给宿主进**现有工作区**编辑（正文输入仍走工作区 + dock）；
  *  · 年/月分组列表 → 点条目同样进现有工作区（v1 没有日历/缺天提示/补写，见 docs/DIARY.md「不做」）；
- *  · 搜索入口 → 复用移动端既有全库搜索（结果集在宿主按日记条目 id 过滤，不新建索引）。
+ *  · 搜索入口 → 复用移动端既有全库搜索（结果集在宿主按日记条目 id 过滤，不新建索引）；
+ *  · 条目「⋯ → 转为文档…」= **移动**这条笔记到选中的笔记本（同一个 note，不复制正文/历史）。
  *
  * 判据全部来自 `src/core/diary`（**组件里不重算**）：
- *  · 日记本/条目 = diaryNotebookId + diaryEntries；分组 = groupDiaryEntries；今天 = formatDiaryDateKey。
+ *  · 日记本/条目 = diaryNotebookId + diaryEntries；分组 = groupDiaryEntries；今天 = formatDiaryDateKey；
+ *  · 可承接的笔记本 = diaryConvertTargets；移动前校验 = planDiaryConvert（UI 不另写一套）。
+ * 写入只走既有写域：`bridge.moveTreeNodeOrdered`（`runWrite("moveTreeNodeOrdered")`）。
  * **不打标**：本页不提供任何标签入口（docs/DIARY.md 决策 7）。
  */
 import { useCallback, useMemo, useState } from "react";
-import { ChevronRight, Pencil, Search } from "lucide-react";
+import { FileText, MoreVertical, Pencil, Search } from "lucide-react";
 import {
+  diaryConvertTargets,
   diaryEntries,
   diaryNotebookId,
   formatDiaryDateKey,
   groupDiaryEntries,
+  planDiaryConvert,
+  type DiaryConvertRejection,
   type DiaryEntry,
 } from "../../core/diary.js";
 import type { TreeNode } from "../../lib/types";
 import { bridge } from "../bridge";
 import { EmptyState } from "../ui/EmptyState";
+import { MobileSheetMenu } from "../ui/MobileSheetMenu";
+import { MoveTargetTreeSheet } from "../ui/MoveTargetTreeSheet";
 import { toastActionError } from "../lib/actionError";
 import { showToast } from "../ui/toastBus";
 import { formatRelativeTime } from "../lib/listTime";
@@ -38,6 +46,15 @@ export interface DiaryPageProps {
 }
 
 const WEEKDAYS = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
+
+/** planDiaryConvert 的拒绝原因 → 一句人话（判据在 core，这里只翻译文案）。 */
+const CONVERT_REJECTION_TEXT: Record<DiaryConvertRejection, string> = {
+  "missing-entry": "找不到这条日记",
+  "not-diary-entry": "这条已经不是日记条目了",
+  "target-missing": "目标笔记本不存在",
+  "target-is-diary": "不能转进日记本",
+  "target-not-notebook": "只能转到笔记本",
+};
 
 /** 「11 月 9 日 周日」——从日期键直接取，不经过 UTC（与 core 的本地日期口径一致）。 */
 function dayLabel(dateKey: string): string {
@@ -74,6 +91,53 @@ export function DiaryPage({ nodes, onOpenEntry, onOpenSearch, onChanged }: Diary
     if (!notebookId) return;
     onOpenEntry({ noteId: entry.noteId, notebookId, mode: "viewer" });
   }, [nodes, onOpenEntry]);
+
+  // ---- 条目操作：转为文档（= 移动到选中的笔记本；同一个 note，不复制正文/历史） ----
+  /** 可承接的笔记本：判据在 core（已排除日记本/分组），这里只做投影。 */
+  const convertTargets = useMemo(() => diaryConvertTargets(nodes), [nodes]);
+  const convertTargetNodes = useMemo(
+    () => convertTargets.map((target) => ({ id: target.id, title: target.title, parentId: null, nodeType: "notebook" })),
+    [convertTargets],
+  );
+  const [menuFor, setMenuFor] = useState<DiaryEntry | null>(null);
+  const [convertFor, setConvertFor] = useState<DiaryEntry | null>(null);
+  const [converting, setConverting] = useState(false);
+  const [convertError, setConvertError] = useState<string | null>(null);
+
+  const closeConvert = useCallback((): void => {
+    if (converting) return;
+    setConvertFor(null);
+    setConvertError(null);
+  }, [converting]);
+
+  const convertEntry = useCallback(async (entry: DiaryEntry, targetId: string): Promise<void> => {
+    // 判据单一来源：渲染层不另写「是不是日记条目/目标是不是笔记本」。
+    const plan = planDiaryConvert(nodes, entry.noteId, targetId);
+    if (!plan.ok) {
+      setConvertError(CONVERT_REJECTION_TEXT[plan.reason]);
+      return;
+    }
+    setConverting(true);
+    setConvertError(null);
+    try {
+      // orderedIds = 目标笔记本**现有子节点排序 + 本条追加末尾**（与 useTreeActions.moveTreeNode 的 "inside" 同口径；
+      // 只传 [id] 会被 assertOrderedChildren 判「必须包含该父节点的全部子节点」拒绝）。
+      const snapshot = await bridge.getWorkspaceSnapshot(plan.targetId);
+      const siblings = snapshot.tree
+        .filter((item) => item.parentId === plan.targetId && item.id !== entry.noteId)
+        .map((item) => item.id);
+      await bridge.moveTreeNodeOrdered(entry.noteId, plan.targetId, [...siblings, entry.noteId]);
+      const targetTitle = convertTargets.find((target) => target.id === plan.targetId)?.title ?? "文档";
+      setConvertFor(null);
+      showToast("已转为文档：《" + targetTitle + "》");
+      void onChanged();
+    } catch (error) {
+      setConvertError("转文档失败，请重试");
+      toastActionError("转为文档", error);
+    } finally {
+      setConverting(false);
+    }
+  }, [convertTargets, nodes, onChanged]);
 
   return (
     <div className="mobile-scroll">
@@ -118,7 +182,17 @@ export function DiaryPage({ nodes, onOpenEntry, onOpenSearch, onChanged }: Diary
                         <span className="mb-set-name">{dayLabel(entry.dateKey)}</span>
                         <span className="mb-set-item__desc">更新于 {formatRelativeTime(entry.updatedAt)}</span>
                       </button>
-                      <span className="mb-set-item__ctl"><ChevronRight size={16} /></span>
+                      {/* 行尾操作入口：⋮ → 弹层菜单（HomePage 同一份 MobileSheetMenu；不新造行样式）。 */}
+                      <span className="mb-set-item__ctl">
+                        <button
+                          type="button"
+                          className="mb-iconbtn"
+                          aria-label={"日记操作 " + entry.dateKey}
+                          onClick={() => setMenuFor(entry)}
+                        >
+                          <MoreVertical size={16} />
+                        </button>
+                      </span>
                     </div>
                   ))}
                 </div>
@@ -127,6 +201,31 @@ export function DiaryPage({ nodes, onOpenEntry, onOpenSearch, onChanged }: Diary
           </section>
         ))}
       </div>
+      {/* 条目 ⋯ 菜单：v1 只有一项「转为文档…」（移动端不新造 Sheet 类型）。 */}
+      <MobileSheetMenu
+        open={menuFor !== null}
+        items={[{ id: "convert", label: "转为文档…", icon: FileText }]}
+        onClose={() => setMenuFor(null)}
+        onSelect={(item) => {
+          const entry = menuFor;
+          setMenuFor(null);
+          if (!entry) return;
+          if (item.id === "convert") { setConvertError(null); setConvertFor(entry); }
+        }}
+      />
+      {/* 目标笔记本选择：复用既有 MoveTargetTreeSheet（只列笔记本；本列表来自 core.diary.diaryConvertTargets）。 */}
+      {convertFor && (
+        <MoveTargetTreeSheet
+          open
+          nodes={convertTargetNodes}
+          currentParentId={convertFor.parentId}
+          excludedIds={[convertFor.noteId]}
+          busy={converting}
+          error={convertError}
+          onConfirm={(targetId) => void convertEntry(convertFor, targetId)}
+          onClose={closeConvert}
+        />
+      )}
     </div>
   );
 }
