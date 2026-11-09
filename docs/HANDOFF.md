@@ -152,7 +152,7 @@
 - 代码：删除已确认无引用的死模块（`src/core/decideUpload*`、`lakeReconcile*`、`quickNoteReconcile*`、`syncDecision*`、`electron/mdToHtml.ts`、`electron/storeUtils.ts`、`electron/syncDecision.ts` 及若干一次性 scripts）；`QuickNoteEditor` / `QuickNotePreview` 等有小改。
 - 本文件（HANDOFF）已重写并随本批提交；其余文件清单与 diff 见上述提交。
 - **261109 更新中心批（本提交）**：`docs/UPDATE-CENTER.md` + `src/core/update/` + `electron/update/` + `electron/ipc/registerUpdate.ts` + 桌面 `UpdateCenter` UI + Android `UpdatePlugin.kt` + 移动更新中心 UI + CI `scripts/generate-update-manifest.mjs`；新增单测 37 例。
-- **261109 AI 写作批（本提交，分支 `feat/ai-writing-space`）**：`docs/AI-WRITING.md` + `src/core/aiWriting.ts`（纯逻辑/预算/消息组装 + IPC 载荷类型）+ `electron/aiWritingRepository.ts` + `electron/ipc/registerAiWriting.ts`（通道 176→185）+ `src/features/aiWriting/*`（工作区/侧栏/输入卡/提示词库/文档选择/消息/两个弹窗/回合与上下文模块/转换包装）+ 桌面壳层接入（`desktopTypes` / `DesktopTopBar` / `useDesktopLifecycle` / `App` / `shell.css`）；AI 流式思考内容贯通（`reasoning_content`）；新增单测 42 例（core 10 / 仓库 5 / turn 5 / context 4 / docs 7 / 转换 9 / 既有 AI 2）。
+- **261109 AI 写作批（已合并 master：`53fe678c` → `4ec1b6a4` → `84a6879a`，合并提交 `986e2151`）**：`docs/AI-WRITING.md` + `src/core/aiWriting.ts`（纯逻辑/预算/消息组装 + IPC 载荷类型）+ `electron/aiWritingRepository.ts` + `electron/ipc/registerAiWriting.ts`（通道 176→185）+ `src/features/aiWriting/*`（工作区/侧栏/输入卡/提示词库/文档选择/消息/两个弹窗/回合与上下文模块/转换包装）+ 桌面壳层接入（`desktopTypes` / `DesktopTopBar` / `useDesktopLifecycle` / `App` / `shell.css`）；AI 流式思考内容贯通（`reasoning_content`）；新增单测 42 例（core 10 / 仓库 5 / turn 5 / context 4 / docs 7 / 转换 9 / 既有 AI 2）。
 
 **门禁基线（261109 清理后 + AI 写作批实测）**
 
