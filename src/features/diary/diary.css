@@ -1,0 +1,200 @@
+/*
+ * 日记空间（桌面一级空间，261109；规格 docs/DIARY.md）。
+ *
+ * 与 features/tags/tags.css 同档：桌面专属、由组件自身 import、移动端不加载。
+ * 只用 --lake-* 令牌（无颜色/字号字面量、无 !important）；行/按钮/空态/滚动一律复用 kit 原语
+ * （.ln-row / .ln-iconbtn / .ln-btn / .ln-ellipsis / .ln-scroll / .ln-empty 的语义），
+ * 本文件只补「左 280 年月栏 + 右正文」这一层版面。
+ * **不做月历**（v1 明确不做：会与多维表月历撞「同一交互语义只有一套视觉」）。
+ */
+.diary-space {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  background: var(--lake-bg-panel);
+}
+
+/* ── 左栏：年 → 月清单（280px） ─────────────────────────────────── */
+.diary-dir {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  width: 280px;
+  min-height: 0;
+  border-right: 0.5px solid var(--lake-border-1);
+  background: var(--lake-bg-panel);
+}
+
+.diary-dir__head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--lake-space-sm);
+  padding: var(--lake-space-xs) var(--lake-space-sm) var(--lake-space-xs) var(--lake-space-lg);
+  border-bottom: 0.5px solid var(--lake-border-1);
+}
+
+.diary-dir__title {
+  display: flex;
+  align-items: center;
+  gap: var(--lake-space-xs);
+  margin: 0;
+  color: var(--lake-text-1);
+  font-size: var(--lake-font-size-body);
+  font-weight: var(--lake-font-weight-semibold);
+}
+
+.diary-dir__count {
+  margin-right: auto;
+  color: var(--lake-text-3);
+  font-size: var(--lake-font-size-tiny);
+  font-variant-numeric: tabular-nums;
+}
+
+.diary-tree {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: var(--lake-space-xs) var(--lake-space-sm);
+}
+
+.diary-tree__empty {
+  margin: 0;
+  padding: var(--lake-space-lg) var(--lake-space-sm);
+  color: var(--lake-text-3);
+  font-size: var(--lake-font-size-small);
+  line-height: var(--lake-line-height-snug);
+}
+
+.diary-year__head,
+.diary-month__head {
+  display: flex;
+  align-items: center;
+  gap: var(--lake-space-xs);
+  width: 100%;
+  padding: var(--lake-space-xs) var(--lake-space-sm);
+  border: 0;
+  border-radius: var(--lake-ctl-rad);
+  background: transparent;
+  color: var(--lake-text-1);
+  font-family: inherit;
+  font-size: var(--lake-font-size-small);
+  font-weight: var(--lake-font-weight-semibold);
+  text-align: left;
+  cursor: pointer;
+}
+
+.diary-month__head {
+  padding-left: calc(var(--lake-space-sm) + var(--lake-space-lg));
+  color: var(--lake-text-2);
+  font-weight: var(--lake-font-weight-regular);
+}
+
+.diary-year__head:hover,
+.diary-month__head:hover { background: var(--lake-bg-hover); }
+
+.diary-year__head:focus-visible,
+.diary-month__head:focus-visible {
+  outline: var(--lake-focus-ring-width) solid var(--lake-accent);
+  outline-offset: -2px;
+}
+
+.diary-year__label,
+.diary-month__label { flex: 1 1 auto; min-width: 0; }
+
+.diary-year__count {
+  flex: none;
+  color: var(--lake-text-4);
+  font-size: var(--lake-font-size-tiny);
+  font-weight: var(--lake-font-weight-regular);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 折叠箭头：只做位移（动效规则：只有入场/展开/位移可以过渡） */
+.diary-caret {
+  flex: none;
+  color: var(--lake-text-3);
+  transition: transform var(--lake-motion-fast) var(--lake-ease-standard);
+}
+
+.diary-caret.is-open { transform: rotate(90deg); }
+
+/* 条目行：几何由 .ln-row 提供，这里只排「日 + 日期键」两段 */
+.diary-entry {
+  width: 100%;
+  gap: var(--lake-space-sm);
+  padding-left: calc(var(--lake-space-sm) + var(--lake-space-xl));
+  border: 0;
+  background: transparent;
+  color: var(--lake-text-2);
+  font-family: inherit;
+  font-size: var(--lake-font-size-small);
+  text-align: left;
+  cursor: pointer;
+}
+
+.diary-entry__day {
+  flex: none;
+  min-width: 18px;
+  color: var(--lake-text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.diary-entry__title { flex: 1 1 auto; }
+
+.diary-dir__foot {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--lake-space-xs);
+  padding: var(--lake-space-xs) var(--lake-space-sm) var(--lake-space-xs) var(--lake-space-lg);
+  border-top: 0.5px solid var(--lake-border-1);
+}
+
+.diary-dir__book {
+  flex: 1 1 auto;
+  color: var(--lake-text-3);
+  font-size: var(--lake-font-size-tiny);
+}
+
+/* ── 主区：复用 EditorTab（不新写编辑器） ────────────────────────── */
+.diary-main {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.diary-main__loading {
+  margin: 0;
+  padding: var(--lake-space-xl);
+  color: var(--lake-text-3);
+  font-size: var(--lake-font-size-small);
+}
+
+.diary-empty {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--lake-space-md);
+  padding: var(--lake-space-huge);
+  text-align: center;
+}
+
+.diary-empty__title {
+  margin: 0;
+  color: var(--lake-text-1);
+  font-size: var(--lake-font-size-title);
+  font-weight: var(--lake-font-weight-semibold);
+}
+
+.diary-empty__hint {
+  max-width: 420px;
+  margin: 0;
+  color: var(--lake-text-3);
+  font-size: var(--lake-font-size-small);
+  line-height: var(--lake-line-height-reading);
+}

@@ -22,6 +22,7 @@ import {
 } from "../../features/search/searchScope";
 import { clearRecentSearches, pushRecentSearch, readRecentSearches, writeRecentSearches } from "../../features/search/recentSearches";
 import { loadTagSearchIndex } from "../../features/search/tagSearchIndex";
+import { filterDiarySearchHits } from "../../features/diary/diarySearch";
 
 function formatUpdatedAt(value?: string): string {
   if (!value) return "";
@@ -38,12 +39,18 @@ function readStoredScope(): SearchScope {
   }
 }
 
-export function SearchPanel({ open, initialQuery, onOpenNote, onOpenQuickNote, onClose }: {
+export function SearchPanel({ open, initialQuery, onOpenNote, onOpenQuickNote, onClose, scopeNoteIds }: {
   open: boolean;
   initialQuery: string;
   onOpenNote: (id: string, query: string) => void;
   onOpenQuickNote: (id: string) => void;
   onClose: () => void;
+  /**
+   * 可选的命中收窄（261109 日记空间用）：给定集合时只保留集合内的**文档**命中。
+   * 纯显示层过滤 —— 不改 FTS/索引、不改主进程 search_notes（日记就是普通文档，本来就在索引里）。
+   * 空集合 = 一篇都没有（不要当成"不过滤"）。
+   */
+  scopeNoteIds?: ReadonlySet<string> | null;
 }) {
   /** 范围筛选（261106）：设备本地视图，localStorage 记忆，不写设置。 */
   const [scope, setScope] = useState<SearchScope>(() => readStoredScope());
@@ -134,7 +141,12 @@ export function SearchPanel({ open, initialQuery, onOpenNote, onOpenQuickNote, o
   /** 主进程命中 + 标签命中（按 kind:id 去重，主进程顺序不动） */
   const mergedResults = useMemo(() => mergeSearchHits(results, tagHits), [results, tagHits]);
   /** 范围过滤（纯函数） */
-  const visibleResults = useMemo(() => filterByScope(mergedResults, scope), [mergedResults, scope]);
+  /** 范围收窄（日记空间）：判据单一来源 = features/diary/diarySearch 的 filterDiarySearchHits。 */
+  const scopedResults = useMemo(
+    () => (scopeNoteIds ? filterDiarySearchHits(mergedResults, scopeNoteIds) : mergedResults),
+    [mergedResults, scopeNoteIds],
+  );
+  const visibleResults = useMemo(() => filterByScope(scopedResults, scope), [scopedResults, scope]);
   /** 键盘导航目标：有关键词 = 结果列表；空查询 = 最近搜索。 */
   const navigable = trimmedQuery ? visibleResults : recent;
   const idleHint = searchIdleHint();

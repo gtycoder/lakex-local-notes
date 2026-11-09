@@ -212,6 +212,27 @@
   grid-row: 1;
   min-height: 0;
 }
+/* 壳：日记空间（261109，docs/DIARY.md）—— 与标签空间**同口径**：藏目录栏与状态栏，整窗铺满。
+ * 为什么必须藏目录栏：日记空间自带 280px「年/月」左栏，再叠文档目录会并排两个左栏（用户定稿：进入即隐藏）。
+ * 文档空间才显示日记本之外的目录（渲染层过滤 withoutDiaryNotebook，存储不动）。 */
+.app-shell.diary-space-active .sidebar { display: none; }
+.app-shell.diary-space-active {
+  grid-template-columns: var(--activity-rail-width) 0 minmax(0, 1fr);
+}
+.app-shell.diary-space-active .workspace {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+  grid-template-rows: minmax(0, 1fr);
+}
+.app-shell.diary-space-active .statusbar { display: none; }
+/* .workspace-view 是 display:contents ⇒ .diary-space 是 .workspace 的直接栅格项，占满唯一一行 */
+.app-shell.diary-space-active .diary-space {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  min-height: 0;
+}
 .app-shell.trash-space-active .trash-space-pane {
   grid-column: 1 / -1;
   grid-row: 1;

@@ -9,7 +9,7 @@
  *  ② 只有「活动空间那一份」接管 App 的共享 ref（`wsMenuWrapRef` / `syncBtnRef` ——
  *     工作空间菜单定位、外点判定、同步 toast 锚点全靠它；挂到隐藏副本会量到 0 尺寸）；
  *  ③ 只有活动副本可见：切空间即收起旧副本的同步浮窗（等价于旧代码的 `visible={desktopWorkspace === x}`）；
- *  ④ 棘轮：App.tsx 里不许再出现第 2 个 `<DesktopTopBarLeading>`，每个空间各声明一个槽位（现为 5 个）。
+ *  ④ 棘轮：App.tsx 里不许再出现第 2 个 `<DesktopTopBarLeading>`，每个空间各声明一个槽位（现为 6 个）。
  *
  * 边界：只验证「谁可见 / 谁的 ref / 渲染了哪份内容」这些合并点；四态真机几何（1315/1060/760）
  * 由 Lead 跑 `check-stylesnap` 并重烤基线，不在本用例范围（也不为此引入快照依赖）。
@@ -29,8 +29,10 @@ const nativeMock = vi.hoisted(() => ({
 vi.mock("../lib/native", () => ({ native: nativeMock }));
 
 // P1：+「标签」一级入口（与 文档/小记 并列）；261105 用户验收：空间名「资料库」改为「文档」
-const SLOTS: DesktopWorkspace[] = ["library", "quick-notes", "tags", "trash", "resources"];
+// 261109：+「日记」空间（docs/DIARY.md 决策 2：空间组第 4 项，⌘4）
+const SLOTS: DesktopWorkspace[] = ["library", "quick-notes", "diary", "tags", "trash", "resources"];
 const SPACE_LABEL: Record<DesktopWorkspace, string> = {
+  diary: "日记",
   library: "文档",
   "quick-notes": "小记",
   tags: "标签",
@@ -213,6 +215,7 @@ describe("桌面顶栏左侧 4→1（DT-09）", () => {
     // 槽位与空间必须一一对应（错了会让「可见的那份」和「接管 ref 的那份」分家）。
     expect(app.match(/<DesktopWorkspaceSlotProvider workspace="trash"/g)?.length ?? 0).toBe(1);
     expect(app.match(/<DesktopWorkspaceSlotProvider workspace="resources"/g)?.length ?? 0).toBe(1);
+    expect(app.match(/<DesktopWorkspaceSlotProvider workspace="diary"/g)?.length ?? 0).toBe(1);
     expect(read("./DesktopLibrary.tsx")).toContain('<DesktopWorkspaceSlotProvider workspace="library">{topbarLeading}</DesktopWorkspaceSlotProvider>');
     expect(read("./DesktopQuickNotes.tsx")).toContain('<DesktopWorkspaceSlotProvider workspace="quick-notes">{topbarLeading}</DesktopWorkspaceSlotProvider>');
   });

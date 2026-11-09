@@ -31,7 +31,9 @@ describe("全局搜索：范围筛选 / 最近搜索 / 空态引导", () => {
     expect(SRC).toContain('className="ln-tabs search-scope-tabs"');
     expect(SRC).toContain('role="tablist"');
     expect(SRC).toContain("aria-selected={scope === item.id}");
-    expect(SRC).toContain("filterByScope(mergedResults, scope)");
+    // 261109 日记空间：先按日记条目文档 id 集合收窄（单一来源 = features/diary/diarySearch），再走范围页签。
+    expect(SRC).toContain("filterDiarySearchHits(mergedResults, scopeNoteIds)");
+    expect(SRC).toContain("filterByScope(scopedResults, scope)");
     // 范围是设备本地视图（localStorage 记忆），不写设置
     expect(SRC).toContain("SEARCH_SCOPE_STORAGE_KEY");
     expect(SRC).toContain("writeLocalStorage(SEARCH_SCOPE_STORAGE_KEY, scope)");

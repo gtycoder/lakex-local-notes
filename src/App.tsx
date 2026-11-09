@@ -60,6 +60,11 @@ import { DesktopSplitButton, DesktopTopBarLeading, DesktopTopBarSearch } from ".
 import { DesktopWorkspaceSlotProvider } from "./desktop/desktopWorkspaceSlot";
 import { BrandLaunchMark } from "./components/app/BrandLaunchMark";
 const TrashPanel = lazy(() => import("./components/app/TrashPanel").then((m) => ({ default: m.TrashPanel })));
+/** 日记空间（docs/DIARY.md）：左栏年月 + 主区复用 EditorTab；组件内部再懒一层内核边界。 */
+const DiaryWorkspace = lazy(() => import("./features/diary/DiaryWorkspace").then((m) => ({ default: m.DiaryWorkspace })));
+import { documentTreeWithoutDiary, diaryEntryIds, diaryNotebookOf, documentIdOfTreeNode } from "./features/diary/diaryTree";
+import { diaryOpenErrorMessage, requestDiaryOpenDate } from "./features/diary/diaryOpen";
+import { formatDiaryDateKey, planDiaryOpen } from "./core/diary";
 /** P1 标签空间（一级入口「标签」）：只读聚合 + 就地元数据管理；预览正文由组件内部再懒加载（内核边界）。 */
 const TagsWorkspace = lazy(() => import("./features/tags/TagsWorkspace").then((m) => ({ default: m.TagsWorkspace })));
 import { AssetsBrowser } from "./components/app/AssetsBrowser";
@@ -527,6 +532,52 @@ export function App() {
     setPendingRenameId, setError,
   });
 
+  // ===== 日记空间（261109，片B：桌面空间 UI）=====
+  /** 文档空间目录树 = 全树 − 日记笔记本（表现层过滤，存储不动：DIARY.md 硬规则 5）。 */
+  const sidebarTreeNodes = useMemo(() => documentTreeWithoutDiary(treeNodes), [treeNodes]);
+  /** 日记条目 id 集合：资料库同篇去重（见 libraryTabs）与「打开某天」判定共用。 */
+  const diaryNoteIds = useMemo(() => diaryEntryIds(treeNodes), [treeNodes]);
+  const diaryNotebook = useMemo(() => diaryNotebookOf(treeNodes), [treeNodes]);
+
+  /** 写「今天」：已存在就直接打开；否则走主进程 `diary_open_date`（单事务 ensure，连点只产生一篇）。
+   *  IPC 未接线时**明确出声**，绝不静默失败、也不在渲染层自己建文档。 */
+  const handleDiaryWriteToday = useCallback(async (dateKey: string) => {
+    const todayKey = dateKey || formatDiaryDateKey();
+    const plan = planDiaryOpen(treeNodes, todayKey);
+    // core 的 existingNoteId 是**树节点 id**；打开文档要 noteFileId（两者不同，见 features/diary/diaryTree.ts）。
+    const existingDocumentId = documentIdOfTreeNode(treeNodes, plan.existingNoteId);
+    if (existingDocumentId) { await openNote(existingDocumentId); return; }
+    const outcome = await requestDiaryOpenDate(todayKey);
+    if (!outcome.ok) { showNotice(diaryOpenErrorMessage(outcome)); return; }
+    if (outcome.result.duplicates.length > 0) showNotice("同一天有重复日记（历史数据），已打开其中一篇");
+    // 树来自主进程（新建的 笔记本/年组/月组/文档 只有重读才可见），随后照既有方式打开。
+    await refreshTree();
+    await openNote(outcome.result.noteId);
+  }, [treeNodes, openNote, refreshTree, showNotice]);
+
+  const handleDiaryRenameNotebook = useCallback((title: string) => {
+    if (diaryNotebook) sidebarRename(diaryNotebook.id, title);
+  }, [diaryNotebook, sidebarRename]);
+  const handleDiarySetNotebookIcon = useCallback((icon: string | null) => {
+    if (diaryNotebook) sidebarSetIcon(diaryNotebook, icon);
+  }, [diaryNotebook, sidebarSetIcon]);
+  /** 日记内搜索入口 = 打开**现有**全局搜索面板（日记是文档，已在 FTS 里；不新增索引）。
+   *  范围收窄 = 面板的 `scopeNoteIds`（下面搜索面板处传入 `diaryNoteIds`），纯显示层过滤。 */
+  const handleDiaryOpenSearch = useCallback(() => { sidebarOpenSearch(); }, [sidebarOpenSearch]);
+
+  // ⌘4 = 日记空间（与 ⌘1/⌘2 同一判据：仅 meta/ctrl、不带 alt/shift、capture 不用，window keydown）。
+  // 放在 App 而不是 useDesktopLifecycle 的 ⌘1–3 表里：那个 hook 不在本片写域，待归并（见交付报告）。
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) return;
+      if (event.key !== "4") return;
+      event.preventDefault();
+      void switchDesktopWorkspace("diary");
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [switchDesktopWorkspace]);
+
   /** 资料库空态「新建文档」= 统一新建弹窗（261105 用户验收：所有需要写名字的新建都弹窗）。 */
   const [newNoteOpen, setNewNoteOpen] = useState(false);
   const [newNoteBusy, setNewNoteBusy] = useState(false);
@@ -740,6 +791,17 @@ export function App() {
     desktopWorkspace, activeOutlineEmpty, outlineEmptyOverride, outlineMode,
     sidebarWidth, sidebarMode, narrowOverlay, outlineSidebarWidth,
   });
+  /**
+   * 日记空间打开某篇日记时，**资料库视图不再挂同一篇**：EditorTab 每篇只能有一个实例
+   * （内核实例按 noteId 注册到 editorsRef，capture 会互相覆盖 ⇒ 保存丢字）。
+   * 资料库视图此时是 display:none（keep-alive），少挂这一篇用户看不见；离开日记空间立即恢复。
+   *
+   * 注意：这里**不用 useMemo** —— 该行位于 `if (!workspace) return` 之后，加 hook 会让
+   * 「首次渲染提前 return、随后渲染多跑一个 hook」触发 hooks 顺序错误；过滤本身是 O(标签数)。
+   */
+  const libraryTabs = desktopWorkspace === "diary"
+    ? tabInfos.filter((tab) => !diaryNoteIds.has(tab.noteId))
+    : tabInfos;
   /** 顶栏左侧 = **唯一渲染点**（DT-09）：四个空间共用这一个元素，各自在顶栏槽位用
    *  `DesktopWorkspaceSlotProvider` 声明归属；可见性与共享 ref 由组件按槽位推导（四态逐项等价）。 */
   const topBarLeading = (
@@ -778,7 +840,7 @@ export function App() {
   );
 
   return (
-    <div className={`app-shell ${shellPlatformClass} sidebar-${sidebarRenderMode} outline-${effectiveOutlineMode} ${workspaceMenuOpen ? "workspace-menu-open" : ""} ${focusMode ? "focus-mode" : ""} ${desktopWorkspace === "quick-notes" ? "quick-notes-active" : ""} ${desktopWorkspace === "trash" ? "trash-space-active" : ""} ${desktopWorkspace === "resources" ? "resources-space-active" : ""} ${desktopWorkspace === "tags" ? "tags-space-active" : ""} ${sidebarResizing ? "sidebar-resizing" : ""} ${outlineResizing ? "outline-resizing" : ""} activity-rail-hidden`} style={shellStyle}>
+    <div className={`app-shell ${shellPlatformClass} sidebar-${sidebarRenderMode} outline-${effectiveOutlineMode} ${workspaceMenuOpen ? "workspace-menu-open" : ""} ${focusMode ? "focus-mode" : ""} ${desktopWorkspace === "quick-notes" ? "quick-notes-active" : ""} ${desktopWorkspace === "trash" ? "trash-space-active" : ""} ${desktopWorkspace === "resources" ? "resources-space-active" : ""} ${desktopWorkspace === "tags" ? "tags-space-active" : ""} ${desktopWorkspace === "diary" ? "diary-space-active" : ""} ${sidebarResizing ? "sidebar-resizing" : ""} ${outlineResizing ? "outline-resizing" : ""} activity-rail-hidden`} style={shellStyle}>
       {/* 单例控制器只配一个应用级宿主，keep-alive 编辑器/历史/小记共享。 */}
       <ImageLightbox />
       <AttachmentPreview />
@@ -817,7 +879,7 @@ export function App() {
       )}
       {/* 空间切换已并入顶栏工作空间菜单（S1+A）；活动栏不再渲染（壳层导航，功能见菜单 ⌘1–3） */}
       {/* keep-alive：Sidebar 常驻，小记/回收站空间由 shell class 隐藏（避免切回时重建目录树） */}
-      <Sidebar nodes={treeNodes} activeId={activeNoteId} search={search} mode={sidebarRenderMode} width={sidebarWidth} minWidth={SIDEBAR_MIN_WIDTH} maxWidth={SIDEBAR_MAX_WIDTH} onSearch={setSearch} onRefreshTree={refreshTree} onSelect={sidebarSelect} onCreate={sidebarCreate} onRename={sidebarRename} onMoveNode={sidebarMove} onRequestDelete={sidebarRequestDelete} onCopyMarkdown={copyMarkdownFromCache} onExportAs={exportAs} onCopyPaths={copyNotePaths} onBeforeDuplicate={flushNotesBeforeDuplicate} onSetIcon={sidebarSetIcon} onShowInfo={(node) => setInfoNote(node)} onOpenHistory={sidebarOpenHistory} lockedNoteIds={lockedNoteIds} onToggleLockNote={(node) => { if (node.noteFileId) void toggleNoteLock(node.noteFileId); }} revealNodeId={revealNodeId} onRevealConsumed={() => setRevealNodeId(null)} pendingRenameId={pendingRenameId} onPendingRenameConsumed={sidebarPendingRenameConsumed} onPreviewEnter={showSidebarPreview} onPreviewLeave={hideSidebarPreview} onResizeActiveChange={handleSidebarResizeActiveChange} onWidthChange={updateSidebarWidth} onWidthCommit={commitSidebarWidth} onToggleDock={toggleSidebarDock} docked={sidebarMode === "docked"} onSidebarHold={holdSidebarExpanded}
+      <Sidebar nodes={sidebarTreeNodes} activeId={activeNoteId} search={search} mode={sidebarRenderMode} width={sidebarWidth} minWidth={SIDEBAR_MIN_WIDTH} maxWidth={SIDEBAR_MAX_WIDTH} onSearch={setSearch} onRefreshTree={refreshTree} onSelect={sidebarSelect} onCreate={sidebarCreate} onRename={sidebarRename} onMoveNode={sidebarMove} onRequestDelete={sidebarRequestDelete} onCopyMarkdown={copyMarkdownFromCache} onExportAs={exportAs} onCopyPaths={copyNotePaths} onBeforeDuplicate={flushNotesBeforeDuplicate} onSetIcon={sidebarSetIcon} onShowInfo={(node) => setInfoNote(node)} onOpenHistory={sidebarOpenHistory} lockedNoteIds={lockedNoteIds} onToggleLockNote={(node) => { if (node.noteFileId) void toggleNoteLock(node.noteFileId); }} revealNodeId={revealNodeId} onRevealConsumed={() => setRevealNodeId(null)} pendingRenameId={pendingRenameId} onPendingRenameConsumed={sidebarPendingRenameConsumed} onPreviewEnter={showSidebarPreview} onPreviewLeave={hideSidebarPreview} onResizeActiveChange={handleSidebarResizeActiveChange} onWidthChange={updateSidebarWidth} onWidthCommit={commitSidebarWidth} onToggleDock={toggleSidebarDock} docked={sidebarMode === "docked"} onSidebarHold={holdSidebarExpanded}
         tagFilter={{ tags: tagSpace.tagOptions, selection: tagSelection, visibleIds: tagVisibleIds, onChange: setTagSelection }}
         onTagsChanged={() => { void tagSpace.reload(); }} />
       <main className="workspace" onPointerDownCapture={(event) => {
@@ -834,7 +896,7 @@ export function App() {
         <div className={"workspace-view" + (desktopWorkspace === "library" ? "" : " workspace-view--hidden")}>
           <DesktopLibrary
             visible={desktopWorkspace === "library"}
-            tabs={tabInfos}
+            tabs={libraryTabs}
             activeNoteId={activeNoteId}
             tocEnabled={tocEnabled}
             outlineEnhance={outlineEnhance}
@@ -885,7 +947,7 @@ export function App() {
         </div>
         <div className={"workspace-view" + (desktopWorkspace === "quick-notes" ? "" : " workspace-view--hidden")}>
           <DesktopQuickNotes
-            notebooks={treeNodes}
+            notebooks={sidebarTreeNodes}
             visible={desktopWorkspace === "quick-notes"}
             // 判据用 cloudState 的 **UI 判据** isCloudActive（= 已配置 且 开关打开）；关了开关/没配置都算本地、不出网
             cloudReady={isCloudActive(cloudConfigured, cloudEnabled)}
@@ -963,6 +1025,38 @@ export function App() {
                 onLoadPreview={loadTagPreview}
                 onRemoveTagFromItem={removeTagFromItem}
                 onError={setError}
+              />
+            </Suspense>
+          )}
+        </div>
+        {/* 日记空间（261109）：独立空间页 —— 左 280 年月栏 + 主区复用 EditorTab；外置目录栏由 shell class 隐藏。 */}
+        <div className={"workspace-view" + (desktopWorkspace === "diary" ? "" : " workspace-view--hidden")}>
+          <header className="tab-bar desktop-only" aria-label="顶栏">
+            <div className="tabbar-leading">
+              <DesktopWorkspaceSlotProvider workspace="diary">{topBarLeading}</DesktopWorkspaceSlotProvider>
+            </div>
+            <div className="tab-items" />
+            <div className="tabbar-trailing">{topBarSearch}</div>
+          </header>
+          {desktopWorkspace === "diary" && (
+            <Suspense fallback={null}>
+              <DiaryWorkspace
+                active
+                treeNodes={treeNodes}
+                activeNoteId={activeNoteId}
+                tabs={tabInfos}
+                lockedNoteIds={lockedNoteIds}
+                tocEnabled={tocEnabled}
+                outlineEnhance={outlineEnhance}
+                editorPrefs={editorPrefs}
+                onOpenEntry={(noteId) => { void openNote(noteId); }}
+                onWriteToday={(dateKey) => { void handleDiaryWriteToday(dateKey); }}
+                onOpenSearch={handleDiaryOpenSearch}
+                onRenameNotebook={handleDiaryRenameNotebook}
+                onSetNotebookIcon={handleDiarySetNotebookIcon}
+                onContentChange={handleContentChange}
+                onEditorReady={handleEditorReady}
+                onReloadNote={reloadNoteTab}
               />
             </Suspense>
           )}
@@ -1047,6 +1141,7 @@ export function App() {
         onOpenNoteFromSearch={(id, query) => void openNote(id, query)}
         onOpenQuickNoteFromSearch={(id) => void openQuickNoteFromSearch(id)}
         onCloseSearch={() => setSearchPanelOpen(false)}
+        searchScopeNoteIds={desktopWorkspace === "diary" ? diaryNoteIds : null}
         trashOpen={desktopWorkspace === "trash"}
         trashEmbed
         onCloseTrash={() => void switchDesktopWorkspace("library")}
