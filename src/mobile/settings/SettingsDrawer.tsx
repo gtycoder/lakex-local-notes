@@ -614,12 +614,16 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                     >{restoreBusy ? "正在恢复…" : "从云端恢复…"}</button>
                   </div>
                   <div className="mb-set-item__desc">
-                    以云端为准重建本机：清空本机同步记录后全部重新下载（只下载，不上传本机内容）。
-                    云端没有的本机文档/小记会移入回收站并标「云端已删除（仅本地）」，正文与历史保留可恢复。
-                    用于换机、本机数据损坏，或提示「云端是另一套数据」时。需要先配置并开启云同步。
+                    以云端为准重建本机：清空同步记录后全部重新下载（只下载、不上传本机）。用于换机或本机数据损坏；需要先配置并开启云同步。
                   </div>
                   {restoreMsg && <div className="mb-set-item__desc" aria-live="polite">{restoreMsg}</div>}
                 </div>
+              </div>
+            </div>
+
+            <div className="mb-set-group">
+              <div className="mb-set-title"><TriangleAlert size={16} />修复缺失数据</div>
+              <div className="mb-set-items">
                 {/* 缺正文/缺小记：只在资源管理里扫描/恢复；这里给引用入口（不重复扫描逻辑）。 */}
                 <div className="mb-set-block">
                   <div className="mb-set-block__name">缺正文 / 缺小记</div>
@@ -642,9 +646,6 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
               <div className="mb-set-items">
                 {/* 261109：从便携包导入（覆盖本机；桌面导出 zip.lln → 手机导入，不需要先配 S3）。 */}
                 <PortableImportSection onImported={() => void onRefresh()} />
-                <div className="mb-set-item__desc">
-                  移动端不提供整库自动备份 / 导出（桌面端有）；这里只有「从云端恢复」「从便携包导入」与缺正文、缺小记的恢复入口。
-                </div>
               </div>
             </div>
             </>

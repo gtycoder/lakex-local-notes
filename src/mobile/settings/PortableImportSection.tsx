@@ -117,8 +117,7 @@ export function PortableImportSection({ onImported }: { onImported?: () => void 
         </button>
       </div>
       <div className="mb-set-item__desc">
-        用桌面导出的单个 .zip.lln 包（兼容旧 .zip）一次性搬全部数据（不含历史快照）。导入会覆盖本机全部笔记、小记、标签与回收站；
-        包内是明文笔记，请自行选择可信的传输方式。不需要先配置云同步。
+        用桌面导出的 .zip.lln 包（兼容旧 .zip）覆盖本机全部笔记、小记、标签与回收站（不含历史快照）；不需要先配置云同步。包内是明文笔记，请自行选择可信的传输方式。
       </div>
       {!native && <div className="mb-set-item__desc">浏览器预览不支持（需要 Android 原生解压与只读 SQLite 读取）。</div>}
       {error && <div className="mb-set-item__desc" role="alert">{error}</div>}

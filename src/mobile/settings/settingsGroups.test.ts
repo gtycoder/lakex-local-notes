@@ -58,11 +58,14 @@ describe("移动端设置分组（对齐桌面）", () => {
     expect(backupBody).toContain("missingBodies.reload()");
   });
 
-  it("移动端不硬塞桌面项：备份页明确说明没有整库自动备份/导出", () => {
+  it("备份与恢复拆三组：恢复 / 修复缺失数据 / 从桌面迁移；不含整库备份/导出", () => {
     const backupStart = DRAWER.indexOf('{view === "backup" && (');
     const backupBody = DRAWER.slice(backupStart, DRAWER.indexOf('{view === "cache" && ('));
-    expect(backupBody).toContain("移动端不提供整库自动备份 / 导出");
+    expect(backupBody).toContain(">恢复<");
+    expect(backupBody).toContain("修复缺失数据");
+    expect(backupBody).toContain("从桌面迁移");
     expect(backupBody).not.toContain("自动备份设置");
+    expect(backupBody).not.toContain("移动端不提供整库自动备份");
   });
 
   it("view 联合类型包含 backup（新增子页不是死代码）", () => {
