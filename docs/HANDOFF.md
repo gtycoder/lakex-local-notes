@@ -188,6 +188,8 @@
 - Android 签名 = release keystore（证书 SHA-256 见 §0 v1.0.2）；keystore 必须离线备份，丢失后无法覆盖升级。
 - macOS = x64 + arm64 分开打包，ad-hoc 签名未公证（首次打开走「仍要打开」）；免提示需 Apple Developer ID + 公证。
 - **GitHub 推送走 HTTPS**（SSH key 未在 GitHub 侧生效）；本机偶发 HTTP2 framing / 443 超时 ⇒ 先 `git -c http.version=HTTP/1.1 push <url> <branch>` 重试；仍失败就只推 Gitee、恢复后补推。曾用 `http.curloptResolve` 仅对单次 git 命令覆盖 DNS 解决（不改全局 DNS/代理/TLS，不固化 IP）。
+- **v1.1.0 发版（261109 20:03 CST）**：master = `075272b2`（已推 Gitee + GitHub），注解 tag **`v1.1.0`** 已推两处并触发 GitHub `Release` workflow（macOS x64+arm64 / Windows / Android / publish）；tag 指向 `075272b2`，**不可移动**。发版前 review 修掉三项 P1（AI 写作排除日记子树与日记本、槽位上移消除 features→desktop 违规、AI 写作改 lazy 回收首屏余量）。
+- **本机 `stash@{0}`**：一段**非本会话**的 a11y WIP（设置页标题改 h1/h2 + 关闭钮 44px + 对应基线），与 v1.1.0 无关，别误 apply；同目录还有未跟踪的 `src/mobile/settings/settingsA11y.test.ts`（属该 WIP）。
 - 发版流程见 [docs/RELEASE.md](RELEASE.md)；用户手册见 [guide/README.md](../guide/README.md)。
 
 **文档地图（现存；已删文档不要再链）**
