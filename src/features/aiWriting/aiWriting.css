@@ -66,7 +66,9 @@
 .aiw-think__dot { width: 6px; height: 6px; border-radius: 50%; background: var(--lake-accent); }
 .aiw-think__body { max-height: 240px; overflow-y: auto; margin-top: var(--lake-space-xs); color: var(--lake-text-2); font-size: var(--lake-font-size-small); }
 .aiw-think__body .md-preview { font-size: var(--lake-font-size-small); color: var(--lake-text-2); }
-.aiw-answer { color: var(--lake-text-1); }
+.aiw-answer { position: relative; color: var(--lake-text-1); }
+/* 内核还没出内容时：viewer 绝对定位且不可见（照常布局/测量，但不占位、不与兜底 Markdown 双份可见）。 */
+.aiw-answer--pending .aiw-answer-viewer { position: absolute; inset: 0 auto auto 0; width: 100%; visibility: hidden; pointer-events: none; }
 .aiw-msg__note { margin: 0; color: var(--lake-text-4); font-size: var(--lake-font-size-tiny); }
 .aiw-msg__error { margin: 0; color: var(--lake-status-error, var(--lake-text-1)); font-size: var(--lake-font-size-small); }
 .aiw-actions { display: flex; align-items: center; gap: var(--lake-space-sm); }

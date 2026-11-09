@@ -9,7 +9,7 @@
 2. **模型 = 现有 AI 供应商配置**（设置 → AI 助手），不内置语雀 DeepSeek。未配置 → 页面给引导。
 3. **深度思考默认开启、不提供关闭入口**（沿用供应商配置里的 thinking / reasoningEffort）。
 4. **生成文档只选到「知识库」= 我们的笔记本**，不再选目录、不做同级/子级。
-5. 答案渲染 v1 用现有 `MarkdownView`（流式轻）；markdown→Lakex viewer 留待 v1.1。
+5. 答案渲染 = **Markdown 交给 Lakex 只读 viewer**（与语雀同一条路径）：流式期间用轻量 `MarkdownView`，收尾后由内核 viewer 接管；内核失败/超时保留 `MarkdownView` 兜底。
 
 ## 信息架构
 
@@ -65,7 +65,8 @@ ai_writing_messages(id TEXT PK, conversation_id TEXT, role TEXT, content TEXT,
 | 主进程入口 | `electron/ipc/registerAiWriting.ts` | 9 个通道：校验/上限 → 仓库；通道三方一致由 `ipcChannelParity` 守 |
 | 一轮生成 | `src/features/aiWriting/aiWritingTurn.ts` | 流式聚合 + **停止/失败语义唯一实现**（stop 先置位再取消；abort 后正常结束也算停止） |
 | 资料读取 | `src/features/aiWriting/aiWritingContext.ts` | 注入 reader；文档优先 Markdown 缓存、小记取纯文本；单篇失败只跳过 |
-| 转换 | `src/features/aiWriting/convertAiMarkdown.ts` | Markdown→Lake（仅 render-timeout 重建重试一次，其它错误不重试） |
+| 转换 | `src/features/aiWriting/convertAiMarkdown.ts` | Markdown→Lake（仅 render-timeout 重建重试一次，其它错误不重试；可见性等待 + 可取消） |
+| 答案渲染 | `AiAnswerViewer.tsx` + `aiAnswerViewer.css` | **lazy 边界**：只读 viewer + `setDocument("text/markdown")`（内核原生解析）；懒挂载、单实例复用、pending→rich 切换 |
 | 状态 | `src/features/aiWriting/useAiWriting.ts` | 列表/当前会话/输入卡/发送/停止/重新生成（只做编排，不写网络） |
 | 视图 | `AiWritingSidebar / AiComposer / AiPromptLibrary / AiDocPicker / AiMessageView / PublishDocDialog / SaveQuickNoteDialog / AiWritingWorkspace` | 语雀同款交互；样式 `aiWriting.css`（`layer(feature)`，只用令牌） |
 | 壳层 | `desktopTypes` / `DesktopTopBar` / `useDesktopLifecycle` / `App` | 新空间 `ai-writing`（⌘3，空间菜单第 3 项；隐藏目录栏） |
@@ -76,6 +77,13 @@ ai_writing_messages(id TEXT PK, conversation_id TEXT, role TEXT, content TEXT,
 - **资料读取可注入**：多文档要读正文，但读法随宿主不同（桌面 IPC / 将来其它宿主）；用 reader 接口隔离，纯逻辑可测。
 - **IPC 类型单一来源**：渲染层与主进程各写一遍载荷是最容易漂移的地方；类型放 core，主进程只做「unknown → 校验 → 类型」。
 - **转换失败要有出口**：内核初始化偶发挂起（窗口被遮挡时 rAF 不触发，已修）；转换层超时重建一次，仍失败则在弹窗内报错、不关弹窗。
+
+## 答案渲染（v1.1，语雀同款）
+
+- **路径**：`createLakeDocument(host, "viewer")` + `setDocument("text/markdown")`。实测内核原生解析覆盖标题/有序无序列表/**任务清单**/表格/引用/代码/行内与块级公式；`getDocument("text/lake")` 仍用于「生成文档」（任务清单落成 `lake-list-task` + checkbox 卡、公式落成 `name="math"` 卡）。
+- **流式**：流式期间只用 `MarkdownView`（轻、跟手）；消息收尾后 viewer 挂载并在内核出内容后回调 `onReady` 切换。切换前 viewer 绝对定位 + `visibility:hidden`（照常布局/测量、不占位、不与兜底双份可见）。
+- **性能/边界**：viewer 是 **lazy 边界**（内核 chunk ~1.6MB gz 不进首屏；护栏 `desktopKernelLazy.test.ts`）；消息进入视口（提前 600px）才建实例、同实例多次 `setDocument` 不重建；内核 6s 内没出内容 ⇒ 回退 MarkdownView 并保留正文。
+- **观感**：正文 14px / 阅读行高 / 正文 400（粗体走内核 700、斜体走 font-style）；标题按 em 缩放（1.6/1.35/1.15/1）；隐藏 viewer 自带的「返回文档」头；首尾块清外边距。
 
 ## 测试与门禁
 

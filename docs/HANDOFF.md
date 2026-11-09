@@ -16,7 +16,8 @@
 - 生成文档：选知识库（笔记本）→ `convertAiMarkdown`（Markdown→Lake；仅 render-timeout 重建重试一次）→ `createNoteIn` + `saveNote`；保存到小记：纯文本镜像 + lake 正文。
 - 本轮修的通用问题：① 窗口被遮挡时 rAF 不触发 ⇒ Markdown 转换队列永久挂住（`nextFrame` 加 250ms 兜底，超时能报错而不是锁死队列）；② SDK 在 abort 后可能**正常结束**流 ⇒ 停止标记丢失（收敛到 `aiWritingTurn`，stop 先置位再取消）。
 - 真机/真实模型验证（dev，mimo）：单轮对话 + 思考块 + 停止（保留片段、标「已停止生成」）、多文档 11 篇资料总结、生成文档（lake 正文含标题/列表/引用/表格）、保存到小记（卡片预览为纯文本）、历史重命名/删除气泡、空间菜单与 ⌘3 切换。
-- 未跑：桌面 42 态 / 移动端 6 态 / 23 屏走查（本批只新增桌面空间，选择器都限定在 `.ai-writing-active` / `.aiw`，未改既有几何；发版前按 AGENTS §3#21 补跑一次全量）。
+- **v1.1 答案渲染对齐（261109，同分支）**：助手答案改为**内核只读 viewer**（`createLakeDocument(host,"viewer")` + `setDocument("text/markdown")`，内核原生解析）：任务清单/表格/引用/代码/行内与块级公式全部正确；流式期间仍用 MarkdownView，收尾后 pending→rich 切换（pending 期间 viewer 绝对定位隐藏，避免兜底与正文双份可见）；viewer 是 lazy 边界（内核 chunk 不进首屏，护栏 `desktopKernelLazy.test.ts`），进视口才建实例、同实例多次 setDocument。验证：真实模型输出（任务清单/两列表格/行内+块级公式/代码）在聊天里渲染正确、`生成文档` 落地为 `lake-list-task`+checkbox 卡 / `name="math"` 卡 / 表格。
+- 未跑：桌面 42 态 / 移动端 6 态 / 23 屏走查（本批只新增桌面空间与消息内 viewer，选择器都限定在 `.ai-writing-active` / `.aiw`，未改既有几何；发版前按 AGENTS §3#21 补跑一次全量）。
 
 ### 261109 · 便携包（桌面 → 手机 一次性全量搬运）
 - 需求：S3 首次全量同步贵；桌面导出单 zip（不含历史）→ 网盘/USB → 手机覆盖导入 → 之后 S3 只做增量。用户口径：覆盖；含回收站/小记/标签；排除历史快照；不加密；单包 **≤4GiB**（超限暂不支持分卷）；一次性 bootstrap；桌面仅在云同步已启用且上轮同步成功/无待同步时可用；手机导入不强制先配 S3。
@@ -155,7 +156,7 @@
 **门禁基线（261109 清理后 + AI 写作批实测）**
 
 - `npx tsc --noEmit` = **0 错**。
-- `npx vitest run` = **802 文件（791 passed / 11 skipped）/ 5053 passed / 12 skipped / 0 failed**（AI 写作批后实测；其中本批新增 42 例）。
+- `npx vitest run` = **803 文件（792 passed / 11 skipped）/ 5047 passed / 12 skipped / 0 failed**（AI 写作批 + v1.1 渲染实测；本批新增 47 例）。
 - `git diff --check` = **0**。
 - `check:bundle`：**mobile-entry 仍超目标（已知红，非本批引入）**。脚本当前按现状冻结为 entry JS gzip ≤66KB、modulepreload ≤34 条、首屏 ≤380KB（`check-arch`）；目标仍是 **60KB / ≤12 条 / 360KB**，瘦身后收紧（§3 P1）。运行前需先有 `dist` / `dist-mobile` 构建产物（本机当前无 `dist`）。
 - 其它样式/边界/设备门禁按改动范围跑（分层口径见 AGENTS §3#21）；最近一次完整设备记录 = **v1.0.4 发版前**：手机 6 态、平板 6 态、多维表 3 态均重烤后两轮 0 差异。
@@ -218,8 +219,6 @@
 - **依赖补丁 4 处升级复核**（仅当升级对应依赖时）：见 §2。
 
 **P2（体验缺口 / 长期）**
-
-- **AI 写作答案渲染保真度（v1.1）**：v1 用自研 `MarkdownView`（标题/列表/引用/代码/GFM 表格已支持；公式、任务列表、分隔线未渲染）⇒ 与语雀「消息正文 = Lakex 只读 viewer」有差距。升级路径：`markdownImportPipeline` 转 Lake + `createLakeDocument(host, "viewer")`（需处理流式期间的高频重建，建议收尾后替换）。**会话不进 S3、移动端不接**（用户 261109 定稿，别再立项）。
 
 - **大库与真实设备**：墓碑 payload 老化（261025 定「后续优化」）；大库阈值探测（>2 万文档 / 索引 3–5MB）；**真实 Android 物理机验收从未做过**；PARITY 残余（移动云清理无 UI 入口、目录恢复后 `deleted_notes` 残留）。移动缺正文的「云端拉回 / 历史恢复 / 重建纯文本」三条只在单测 mock 覆盖，需真机 + 配 S3 验证。
 - **移动端文本格式**：261104 设备实测已收口 —— H1–H6 / 字号 / 颜色 / 对齐 / 列表 / 缩进 / 行高 / 上下标 / 清除格式全部生效；字号+行高已合并成一行步进器，对齐 4 档（含两端对齐）。未接入口：unlink / replace / style→code·quote / 表格块级命令族；画图插入项解禁、移动视图拖拽排序、PdfRender `cacheDir` 清理按需再做。

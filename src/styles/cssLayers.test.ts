@@ -51,7 +51,8 @@ const FILES = [
   "features/editor/noteRefCardActions.css",   // 261008：引用卡的动条浮层 + 编辑浮层（几何全部复用内核 .ne-card-toolbar / .ne-link-editor）
   "components/ui/markdown/markdown.css",
   "features/ai/aiDialogParts.css",
-  "features/aiWriting/aiWriting.css",   // 261109：AI 写作空间（桌面本地空间；整页两栏 + 输入卡 + 消息）   // 261005：AI 助手弹窗内局部布局（预设提示词行 + 复制动作行）   // 261005：Markdown 轻量子集渲染（从 bitable 提出，bitable 与 AI 面板共用）   // 261004：Markdown / AI 字段（单元格预览 + 展开浮窗 + 预览排版）
+  "features/aiWriting/aiWriting.css",   // 261109：AI 写作空间（桌面本地空间；整页两栏 + 输入卡 + 消息）
+  "features/aiWriting/aiAnswerViewer.css",   // 261109：AI 答案的内核只读渲染（故意未分层：压内核 px 标题/字号，与 noteDocPreview.css 同档）   // 261005：AI 助手弹窗内局部布局（预设提示词行 + 复制动作行）   // 261005：Markdown 轻量子集渲染（从 bitable 提出，bitable 与 AI 面板共用）   // 261004：Markdown / AI 字段（单元格预览 + 展开浮窗 + 预览排版）
   "features/bitable/bitableFilterEditor.css",   // 260930：筛选条件树（远端 lake 风格 + 可复用）
   "features/bitable/bitableFillRules.css",   // 260930：条件填色配置与表格投影
   "features/board/boardEditor.css",
@@ -160,7 +161,8 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "components/app/historySnapshotPreview.css": { decls: 77, dupGroups: 0 },
   "components/ui/markdown/markdown.css": { decls: 57, dupGroups: 0 },   // 261005：Markdown 轻量子集渲染的共用排版（从 bitableMarkdown.css 提出 43 条）.md-preview，bitable 与 AI 面板共用
   "features/ai/aiDialogParts.css": { decls: 87, dupGroups: 0 },
-  "features/aiWriting/aiWriting.css": { decls: 430, dupGroups: 0 },   // 261109 新建：AI 写作空间（整页两栏 / 历史行 / 输入卡 / 思考块 / 消息操作条 / 提示词库 / 文档选择 / 弹窗局部）——合法新增，无覆盖   // 261107 视觉收敛：AI 面板全部布局从 selectionToolbar.css 归并到本文件（单一来源；表面/输入/按钮复用原语）。   // 261021 P1：+9 = 「附加当前文档全文」行（doc 行 flex/wrap/gap/margin 5 条 + label 2 + hint 2；开关本身复用 .ln-switch，无覆盖）。P0：+2 = 预设扩到 7 条后窄窗换行。261013：新增独立 progress 行 5 声明 + reduced-motion 1 声明；非覆盖/重复回涨。
+  "features/aiWriting/aiWriting.css": { decls: 436, dupGroups: 0 },
+  "features/aiWriting/aiAnswerViewer.css": { decls: 21, dupGroups: 0 },   // 261109 新建：AI 答案内核只读渲染（未分层压内核 px 标题/字号；与 noteDocPreview.css 同档）   // 261109 新建：AI 写作空间（整页两栏 / 历史行 / 输入卡 / 思考块 / 消息操作条 / 提示词库 / 文档选择 / 弹窗局部）——合法新增，无覆盖   // 261107 视觉收敛：AI 面板全部布局从 selectionToolbar.css 归并到本文件（单一来源；表面/输入/按钮复用原语）。   // 261021 P1：+9 = 「附加当前文档全文」行（doc 行 flex/wrap/gap/margin 5 条 + label 2 + hint 2；开关本身复用 .ln-switch，无覆盖）。P0：+2 = 预设扩到 7 条后窄窗换行。261013：新增独立 progress 行 5 声明 + reduced-motion 1 声明；非覆盖/重复回涨。
   "styles/dialog.css": { decls: 242, dupGroups: 8 }, // 261105：+3 = .name-prompt-dialog__error；+8 = 打标签弹窗（说明行/错误行/标题行对齐，令牌色；宽度选择器与 rename 并列复用） // 261105：+3 = .name-prompt-dialog__error（弹窗内错误文本：margin/color/font-size，令牌；与重命名同族弹窗共用尺寸选择器，不另写一套） // 261105：管理属性布局就地修改，并删去重复的窄屏 flex-wrap，按当前扫描收紧。   // 261017：+34 = S3 配置迁移弹窗（尺寸 + 多行迁移码输入/提示/错误/动作行；表面与按钮全部复用 .ln-dialog / .ln-btn，无覆盖）  |  +7 = .note-info-history-viewer 容器（260916 W-10：历史内联预览改只读 viewer，替代裸 dangerouslySetInnerHTML；合法新增非覆盖回涨）
   "styles/document-status.css": { decls: 94, dupGroups: 2 },   // 260930：+17 = 状态栏锁标识改可点（button 形态 + hover/focus）+ 解锁浮层内容类   // 260923 W1-L2：-8 = 被 shell 层 chrome.css 同名选择器覆盖；260926：+1 = 画板状态栏右缘对齐画板自己的 20px 栅格（[data-doc-kind="board"] 的 right；合法新增非覆盖回涨）
   "styles/components.css": { decls: 366, dupGroups: 0 }, // 261105 Batch3-B：+5 = 安全模式横幅容器 .safe-mode-banner（fixed 贴顶 5 条；内层复用 .tab-gone-banner，无新视觉）。   // 261105：设置尺寸归hook，删除强制宽度与重复表面。   // 261028：+2 = 同步浮窗收敛后的「查看历史」行内动作（.sync-status-inline-action）；261021：+2 = 全局搜索结果分组标题（.search-panel-section）   // 260930：-2 = .settings-panel-large .settings-header（其 padding 早已被 overlay 层的 .floating-dialog-header 压死）按职责并到 overlay.css 单一来源。此前 260929：-45 = .ln-tabs* 页签整套收编到 kit 层单一来源（那边同时 +33）；260923 W1-L2：-15 = 被更高层同名选择器完全压制的规则   // 260916 S4：原 overlays.css 改名 + 并入 @keyframes lake-pop-in；260926 续：+4 = .sync-status-local-note

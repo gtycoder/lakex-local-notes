@@ -17,6 +17,10 @@ const PREFETCH = read("./kernelPrefetch.ts");
 const APP = read("../../App.tsx");
 const OVERLAYS = read("../../desktop/DesktopOverlays.tsx");
 const QUICK_NOTES = read("../../components/app/QuickNoteComposer.tsx");
+// 261109 AI 写作：答案的内核只读渲染（Markdown → viewer）同样必须 lazy。
+const AI_MESSAGE = read("../aiWriting/AiMessageView.tsx");
+const AI_VIEWER = read("../aiWriting/AiAnswerViewer.tsx");
+const AI_WORKSPACE = read("../aiWriting/AiWritingWorkspace.tsx");
 
 describe("P12 桌面内核 lazy 边界（静态契约）", () => {
   it("MultiTabEditor：EditorTab 只能 lazy，不得静态 import", () => {
@@ -44,6 +48,15 @@ describe("P12 桌面内核 lazy 边界（静态契约）", () => {
   it("QuickNotesWorkspace：QuickNoteEditor lazy（workspace 保持常驻以保住 quickNotesRef 语义）", () => {
     expect(QUICK_NOTES.includes("import { QuickNoteEditor,")).toBe(false);
     expect(QUICK_NOTES).toContain('lazy(() => import("../../features/quickNotes/QuickNoteEditor")');
+  });
+
+  it("AI 写作：答案 viewer 只能 lazy 进入，工作区/消息组件不得静态 import 内核", () => {
+    expect(AI_MESSAGE.includes("import { AiAnswerViewer } from")).toBe(false);
+    expect(AI_MESSAGE).toContain('lazy(() => import("./AiAnswerViewer")');
+    // viewer 自己是边界内部：静态 import 内核是允许且必要的（只能被 lazy chunk 加载）。
+    expect(AI_VIEWER).toContain('from "../editor/lakeRuntime"');
+    expect(AI_WORKSPACE).not.toContain('from "../editor/lakeRuntime"');
+    expect(AI_WORKSPACE).not.toContain("import { AiAnswerViewer }");
   });
 
   it("kernelPrefetch：与 lazy 目标同一模块、空闲回调触发、失败静默", () => {
