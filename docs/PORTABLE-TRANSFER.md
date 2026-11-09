@@ -97,3 +97,10 @@ S3 密钥/seed、`sync-v3/state.json`（同步意图账本）以及任何设备�
 ## 7. 非目标（v1）
 
 分卷、加密、增量包、手机→桌面、导入时合并（只覆盖）、历史快照迁移。
+
+## 9. 架构边界（261109 review）
+
+- 导出前同步由**主进程**在 portable_export_run 内执行（beforeExport），渲染层只触发；Web/未来入口同一道门，不能绕过。
+- 离线内容哈希由桌面主进程从快照 DB + 正文生成；手机只消费哈希，不重新扫描正文。缺正文直接在导出时报错，避免产出「无法首传」的包。
+- baseline 语义：manifest.baseline=null 表示无云端血统；包内 baseline.json 此时仅为 localOnly 内容哈希清单（复用 Android staging 的读取路径，不写手机同步账本）。
+- 有基线时行为不变；手机导入后仍按云端增量。

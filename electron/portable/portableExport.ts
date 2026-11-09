@@ -15,7 +15,7 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 import { gunzipSync } from "node:zlib";
 import Database from "better-sqlite3";
-import { NOTE_BODY_DIR, NOTE_BODY_EXT, quickNoteBodyRelativePath } from "../../src/core/noteBodyPaths.js";
+import { noteBodyRelativePath, quickNoteBodyRelativePath } from "../../src/core/noteBodyPaths.js";
 import { NOTE_KINDS, type NoteKind } from "../../src/core/noteKind.js";
 import {
   assertPortableSize,
@@ -117,6 +117,7 @@ export function buildOfflineHashes(workspaceRoot: string, snapshotRoot: string):
   const sha256File = (abs: string): string => createHash("sha256").update(fs.readFileSync(abs)).digest("hex");
   const notes: Record<string, string> = {};
   const quickNotes: Record<string, string> = {};
+  const missingBodies: string[] = [];
   const main = new Database(path.join(snapshotRoot, "metadata.sqlite3"), { readonly: true });
   try {
     const rows = main.prepare(
@@ -124,8 +125,8 @@ export function buildOfflineHashes(workspaceRoot: string, snapshotRoot: string):
     ).all() as Array<{ id: string; kind: string }>;
     for (const row of rows) {
       if (!NOTE_KINDS.includes(row.kind as NoteKind)) continue;
-      const body = path.join(workspaceRoot, NOTE_BODY_DIR[row.kind as NoteKind], row.id + NOTE_BODY_EXT[row.kind as NoteKind]);
-      if (!fs.existsSync(body)) continue;
+      const body = path.join(workspaceRoot, noteBodyRelativePath(row.kind as NoteKind, row.id));
+      if (!fs.existsSync(body)) { missingBodies.push(row.id); continue; }
       notes[row.id] = sha256File(body);
     }
   } finally { main.close(); }
@@ -134,9 +135,13 @@ export function buildOfflineHashes(workspaceRoot: string, snapshotRoot: string):
     const rows = quick.prepare("SELECT id FROM quick_notes").all() as Array<{ id: string }>;
     for (const row of rows) {
       const body = path.join(workspaceRoot, quickNoteBodyRelativePath(row.id));
-      if (fs.existsSync(body)) quickNotes[row.id] = sha256File(body);
+      if (!fs.existsSync(body)) { missingBodies.push(row.id); continue; }
+      quickNotes[row.id] = sha256File(body);
     }
   } finally { quick.close(); }
+  if (missingBodies.length > 0) {
+    throw new Error("有 " + missingBodies.length + " 篇正文缺失，无法生成离线包内容哈希（首 3：" + missingBodies.slice(0, 3).join("、") + "）；请先修复/移入回收站后再导出");
+  }
   return Buffer.from(JSON.stringify({ localOnly: true, notes, quickNotes }, null, 2) + "\n", "utf8");
 }
 

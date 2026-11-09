@@ -43,7 +43,7 @@ describe("上次备份结果（ok / partial / failed）", () => {
     expect(view.retry).toBe(false);
   });
 
-  it("部分成功：warn 色阶、原因原样展示、引导「立即备份」再试", () => {
+  it("部分成功：warn 色阶、原因原样展示、引导「立即备份数据库」再试", () => {
     const view = backupResultView(state({
       result: "partial",
       message: "已备份主库：metadata-x.sqlite3；注意：小记库不可用：本次未备份小记库",
@@ -52,7 +52,7 @@ describe("上次备份结果（ok / partial / failed）", () => {
     expect(view.label).toBe("部分成功");
     expect(view.headline).toContain("（部分成功）");
     expect(view.message).toContain("小记库不可用");
-    expect(view.guidance).toContain("立即备份");
+    expect(view.guidance).toContain("立即备份数据库");
     expect(view.retry).toBe(true);
   });
 
@@ -62,7 +62,7 @@ describe("上次备份结果（ok / partial / failed）", () => {
     expect(view.label).toBe("失败");
     expect(view.headline).toContain("（失败）");
     expect(view.message).toContain("disk I/O error");
-    expect(view.guidance).toContain("立即备份");
+    expect(view.guidance).toContain("立即备份数据库");
     expect(view.guidance).toContain("本地数据不受影响");
     expect(view.retry).toBe(true);
   });

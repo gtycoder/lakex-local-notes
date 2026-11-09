@@ -27,6 +27,8 @@ export interface PortableIpcDeps {
   availability: () => PortableExportAvailability;
   /** 云同步当前状态（UI 用来决定「导出前先同步一次」以及文案）。 */
   cloudState: () => { active: boolean; lastSyncedAt: string | null };
+  /** 导出前强制同步一次（仅主进程执行；云同步启用时 run 前调用，任何入口都绕不过）。 */
+  beforeExport?: () => Promise<unknown>;
   counts: () => { folders: number; quickNotes: number; tags: number };
   /** 进度广播（main 注入窗口 webContents + Web SSE）。 */
   broadcastProgress?: (progress: PortableExportProgress) => void;
@@ -69,6 +71,14 @@ export function registerPortableIpc(ipc: IpcRegistrar, deps: PortableIpcDeps): v
     const targetDir = pickedDir;
     running = true;
     try {
+      // 云端启用时先在主进程同步一次：渲染层/Web/未来入口都走同一道门，不依赖 UI 自觉。
+      if (deps.cloudState().active) {
+        try {
+          await deps.beforeExport?.();
+        } catch (error) {
+          throw new IpcInputError("导出前同步失败：" + (error instanceof Error ? error.message : String(error)));
+        }
+      }
       const result = await exportPortablePackage({
         workspaceRoot: deps.workspaceRoot(),
         targetDir,

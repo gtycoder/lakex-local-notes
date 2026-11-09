@@ -745,6 +745,7 @@ function registerIpc(): ReadonlyMap<string, (args: unknown[]) => Promise<unknown
         return { active: false, lastSyncedAt: null };
       }
     },
+    beforeExport: () => runFullSync(broadcastSyncProgress),
     counts: () => {
       const overview = store.getStorageOverview();
       let quickNotesCount = 0;

@@ -112,6 +112,29 @@ describe("portable IPC（入口门禁 + 导出）", () => {
     expect(status.lastExport?.exportedAt).toBe("2026-11-09T12:00:00.000Z");
   });
 
+  it("云同步启用：run 前强制 beforeExport，失败则不导出", async () => {
+    const workspace = makeWorkspace();
+    const target = tempDir("lakex-portable-ipc-out-");
+    const { ipc, call } = makeIpc();
+    let syncAttempts = 0;
+    let snapshots = 0;
+    registerPortableIpc(ipc, {
+      workspaceRoot: () => workspace,
+      appVersion: () => "1.0.4",
+      snapshotDatabases: (root) => { snapshots += 1; makeSnapshot(root); },
+      availability: () => AVAILABLE,
+      cloudState: () => ({ active: true, lastSyncedAt: "2026-11-09T00:00:00Z" }),
+      beforeExport: async () => { syncAttempts += 1; throw new Error("网络不可用"); },
+      counts: () => ({ folders: 1, quickNotes: 0, tags: 0 }),
+      pickDirectory: async () => target,
+    });
+    await expect(call("portable_export_pick_dir")).resolves.toBe(target);
+    await expect(call("portable_export_run")).rejects.toThrow("导出前同步失败：网络不可用");
+    expect(syncAttempts).toBe(1);
+    expect(snapshots).toBe(0);
+    expect(fs.readdirSync(target)).toEqual([]);
+  });
+
   it("取消选择目录 ⇒ null，不留下导出状态", async () => {
     const workspace = makeWorkspace();
     const { ipc, call } = makeIpc();

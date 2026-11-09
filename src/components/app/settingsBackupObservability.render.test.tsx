@@ -129,15 +129,15 @@ describe("备份与恢复：上次结果三态 + 失败引导", () => {
     expect(textOf()).toContain("（成功）");
     expect(textOf()).not.toContain("本次备份不完整");
     expect(textOf()).not.toContain("这次没有生成可用备份");
-    expect(buttons("立即备份")).toHaveLength(1); // 只有自动备份配置里那一个
+    expect(buttons("立即备份数据库")).toHaveLength(1); // 只有自动备份配置里那一个
   });
 
-  it("部分成功：原因可见 + 引导 + 结果块里多一个「立即备份」", async () => {
+  it("部分成功：原因可见 + 引导 + 结果块里多一个「立即备份数据库」", async () => {
     await render(usage(), state({ result: "partial", message: "已备份主库：metadata-x.sqlite3；注意：小记库不可用：本次未备份小记库" }));
     expect(textOf()).toContain("（部分成功）");
     expect(textOf()).toContain("小记库不可用");
     expect(textOf()).toContain("本次备份不完整");
-    expect(buttons("立即备份")).toHaveLength(2);
+    expect(buttons("立即备份数据库")).toHaveLength(2);
   });
 
   it("失败：失败色文案 + 「本地数据不受影响」引导 + 重试入口", async () => {
@@ -145,12 +145,12 @@ describe("备份与恢复：上次结果三态 + 失败引导", () => {
     expect(textOf()).toContain("（失败）");
     expect(textOf()).toContain("disk I/O error");
     expect(textOf()).toContain("本地数据不受影响");
-    expect(buttons("立即备份")).toHaveLength(2);
+    expect(buttons("立即备份数据库")).toHaveLength(2);
   });
 
-  it("结果块里的「立即备份」会真的触发 runBackupNow", async () => {
+  it("结果块里的「立即备份数据库」会真的触发 runBackupNow", async () => {
     await render(usage(), state({ result: "failed", message: "主库备份失败：disk I/O error" }));
-    const retry = buttons("立即备份")[1];
+    const retry = buttons("立即备份数据库")[1];
     await act(async () => {
       retry.click();
       await new Promise((resolve) => setTimeout(resolve, 0));

@@ -427,17 +427,6 @@ let verifiedS3Fingerprint: string | null = null;
   const runPortableExport = async () => {
     if (!hostCapabilities().localFileSystem) { portable.setMessage("浏览器端不支持导出便携包（请在桌面端操作）"); return; }
     await portable.run(async () => {
-      // 云同步启用时，导出前先同步一次：保证包内基线就是云端最新状态，手机导入后只做增量。
-      if (portableStatus?.cloudActive) {
-        portable.setMessage("正在先同步一次云端…");
-        try {
-          await native.syncNow();
-          void loadPortableStatus();
-        } catch (error) {
-          portable.setMessage("同步失败，已停止导出：" + getNativeErrorMessage(error));
-          return null;
-        }
-      }
       const dir = await native.portableExportPickDir();
       if (!dir) return null;
       const result = await native.portableExportRun();
@@ -1023,15 +1012,15 @@ let verifiedS3Fingerprint: string | null = null;
             {category === "backup" && (
               <>
                 <Group title="备份" icon={<Archive size={16} />}>
-                  <Block itemId="backup-export" name="整库备份" desc="数据库 + 全部笔记/资源/历史快照 + 小记，导出到所选目录（不覆盖非空目录）。" descAfter>
+                  <Block itemId="backup-export" name="整库备份（完整目录）" desc="完整复制工作区：数据库快照 + 正文/资源/历史快照 + 小记，导出到所选空目录。用于整机迁移或归档；与下面的数据库快照互补，不能互相替代。" descAfter>
                     <div className="config-block__actions">
                       <button className="ln-btn ln-btn--settings" onClick={() => void runBackup()} disabled={backup.busy}><Archive size={14} /> {backup.busy ? "备份中…" : "整库备份到…"}</button>
                     </div>
                   </Block>
-                  <Block itemId="auto-backup" name="自动备份" desc="每天/每周把主库与小记库 VACUUM INTO 快照到 userData/backups，保留最近 N 份并限制总大小（本机保存、不进云端）。恢复入口是上面的「从备份恢复」（本轮只恢复主库；小记库备份文件同目录保留）。">
+                  <Block itemId="auto-backup" name="自动备份（仅数据库）" desc="每天/每周把主库与小记库 VACUUM INTO 快照到 userData/backups，保留最近 N 份并限制总大小（本机保存、不进云端）。只备份数据库，不含正文/资源/历史快照；恢复用「从数据库快照恢复」。">
                     {backupCfg ? (
                       <>
-                        <Switch itemId="auto-backup-enabled" name="启用自动备份" desc="应用就绪后每 6 小时检查一次（启动不会立刻跑）；内容未变则跳过。关闭后仍可用「立即备份」。" checked={backupCfg.enabled} onChange={(checked) => saveBackupCfg({ enabled: checked })} />
+                        <Switch itemId="auto-backup-enabled" name="启用自动备份" desc="应用就绪后每 6 小时检查一次（启动不会立刻跑）；内容未变则跳过。关闭后仍可用「立即备份数据库」。" checked={backupCfg.enabled} onChange={(checked) => saveBackupCfg({ enabled: checked })} />
                         <Item itemId="auto-backup-interval" name="备份间隔" desc="每天或每周（按上次成功备份时间计算；错过的会在下一次 6h 检查时补跑）。">
                           <Select label="备份间隔" value={String(backupCfg.intervalDays)} onChange={(v) => saveBackupCfg({ intervalDays: Number(v) })} options={[
                             { value: "1", label: "每天" }, { value: "7", label: "每周" },
@@ -1039,7 +1028,7 @@ let verifiedS3Fingerprint: string | null = null;
                         </Item>
                         <Item itemId="auto-backup-keep" name="保留份数" desc="保留最近 N 份（超出按最旧优先删除；备份目录总大小上限 300MB，删除失败只记日志）。"><NumField label="保留份数" min={1} max={50} value={backupCfg.keepCount} onSave={(value) => saveBackupCfg({ keepCount: value })} floor={1} fallback={7} /></Item>
                         <div className="config-block__actions">
-                          <button className="ln-btn ln-btn--settings" onClick={() => void runBackupNow()} disabled={backup.busy}>{backup.busy ? "备份中…" : "立即备份"}</button>
+                          <button className="ln-btn ln-btn--settings" onClick={() => void runBackupNow()} disabled={backup.busy}>{backup.busy ? "备份中…" : "立即备份数据库"}</button>
                         </div>
                       </>
                     ) : (
@@ -1050,7 +1039,7 @@ let verifiedS3Fingerprint: string | null = null;
                 </Group>
 
                 <Group title="恢复" icon={<RotateCcw size={16} />}>
-                  <Block itemId="backup-import" name="从备份恢复" desc="选择一个整库备份（metadata*.sqlite3）：先校验完整性/关键表，再把当前库改名隔离（不删除、可找回）并替换，重启应用后生效。" descAfter>
+                  <Block itemId="backup-import" name="从数据库快照恢复" desc="选择一个数据库快照（metadata*.sqlite3）：先校验完整性/关键表，再把当前库改名隔离（不删除、可找回）并替换，重启应用后生效。只恢复数据库；正文/资源/历史需用整库备份。" descAfter>
                     <div className="config-block__actions">
                       <button className="ln-btn ln-btn--settings" onClick={() => void runRestoreFromBackup()} disabled={backup.busy}>从备份恢复…</button>
                     </div>
@@ -1083,7 +1072,7 @@ let verifiedS3Fingerprint: string | null = null;
                 </Group>
 
                 <Group title="存储占用" icon={<HardDrive size={16} />}>
-                  <Block itemId="backup-usage" name="备份占用" desc="只读统计 userData/backups 里的备份份数与总大小（只 stat、不读文件内容）。自动备份按「保留份数」与总大小上限删最旧的备份；这里不提供手动删除，避免误删兜底数据。" descAfter>
+                  <Block itemId="backup-usage" name="数据库快照占用" desc="只读统计 userData/backups 里的数据库快照份数与总大小（只 stat、不读文件内容）。自动备份按「保留份数」与总大小上限删最旧的备份；这里不提供手动删除，避免误删兜底数据。" descAfter>
                     <div className="config-block__actions">
                       <button className="ln-btn ln-btn--settings" onClick={() => void loadBackupUsage()} disabled={backupUsageBusy}>{backupUsageBusy ? "统计中…" : "刷新统计"}</button>
                       <button className="ln-btn ln-btn--settings" onClick={() => void revealFolder("backups")}>打开备份目录</button>
@@ -1100,7 +1089,7 @@ let verifiedS3Fingerprint: string | null = null;
                       </div>
                     )}
                   </Block>
-                  <Block itemId="backup-last-result" name="上次备份结果" desc="最近一次自动/手动备份的结果（本机记录，不上传云端）：成功 / 部分成功 / 失败，以及可读的失败原因。部分成功 = 主库备份可用，但小记库不可用或备份校验失败。" descAfter>
+                  <Block itemId="backup-last-result" name="上次数据库备份结果" desc="最近一次自动/手动备份的结果（本机记录，不上传云端）：成功 / 部分成功 / 失败，以及可读的失败原因。部分成功 = 主库备份可用，但小记库不可用或备份校验失败。" descAfter>
                     {backupResult ? (
                       <div className="checks">
                         <div className={"checks__row checks__row--" + backupResult.tone}>{backupResult.headline}</div>
@@ -1108,12 +1097,12 @@ let verifiedS3Fingerprint: string | null = null;
                         {backupResult.guidance && <div className={"checks__row checks__row--" + backupResult.tone}>{backupResult.guidance}</div>}
                         {backupResult.retry && (
                           <div className="config-block__actions">
-                            <button className="ln-btn ln-btn--settings" onClick={() => void runBackupNow()} disabled={backup.busy}>{backup.busy ? "备份中…" : "立即备份"}</button>
+                            <button className="ln-btn ln-btn--settings" onClick={() => void runBackupNow()} disabled={backup.busy}>{backup.busy ? "备份中…" : "立即备份数据库"}</button>
                           </div>
                         )}
                       </div>
                     ) : (
-                      <div className="block__text">还没有备份记录（自动备份默认开启，每天一份；也可以点上面的「立即备份」）。</div>
+                      <div className="block__text">还没有备份记录（自动备份默认开启，每天一份；也可以点上面的「立即备份数据库」）。</div>
                     )}
                   </Block>
                 </Group>
