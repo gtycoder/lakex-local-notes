@@ -12,6 +12,7 @@
 - 新增应用内更新中心：检查更新（GitHub latest release 的 `latest.json`，CI 生成）/ 更新日志（复用 `docs/RELEASE-NOTES.md`）/ 自动检查（默认开，启动 + 6/12/24h）/ 自动下载（默认开；Android 仅 Wi-Fi）/ 忽略此版本；**不做静默安装**（桌面打开安装包、Android 拉起系统安装器）。
 - 桌面新增 8 个 IPC 通道（165→173，parity 通过）；Android 新增 `UpdatePlugin.kt`（DownloadManager + sha256/证书指纹校验 + FileProvider 安装器）；规格见 [docs/UPDATE-CENTER.md](UPDATE-CENTER.md)。
 - 门禁：`npx tsc --noEmit` = 0；`npx vitest run` = **788 文件（777 passed / 11 skipped）/ 4961 passed / 12 skipped / 0 failed**；`git diff --check` = 0；新增单测 37 例。**Android 设备侧未验证**（下载→校验→系统安装器交互留待真机/模拟器）。
+- 261109 追加：桌面更新中心改为设置独立「更新」分类页（无弹窗，检查频率用 Select 下拉）；移动端设置菜单「更新中心」置顶、「关于」置底；两端的检查间隔都改用既有下拉原语（Select / PickerSheet），未新增 CSS。
 
 ### 261109 · 文档收口与门禁复核
 - 重写本文件：删除 261106 及更早的 dated 批次（git 可查）；合并五份旧 RELEASE-NOTES；清理已删文档的悬空引用；所有相对链接重定向到现存文档（文档地图见 §1）。

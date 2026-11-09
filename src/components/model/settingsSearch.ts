@@ -90,7 +90,6 @@ export const SETTING_ITEMS: SettingItemEntry[] = [
   { id: "browser-open", category: "maintenance", label: "打开浏览器", keywords: "打开 浏览器 chrome 网页 访问 地址" },
   { id: "logs-main", category: "maintenance", label: "主进程日志", keywords: "日志 主进程 log 过滤 关键字" },
   { id: "about-app", category: "about", label: "LakexLocalNotes", keywords: "版本 简介" },
-  { id: "about-update-center", category: "about", label: "更新中心", keywords: "更新 升级 检查更新 自动更新 下载 安装 版本 release latest" },
   { id: "about-fonts", category: "about", label: "字体", keywords: "字体 MiSans JetBrains Mono 内置 字体授权" },
   { id: "about-version", category: "about", label: "应用版本", keywords: "版本号 version" },
   { id: "about-tech-stack", category: "about", label: "技术身份", keywords: "Electron React better-sqlite3 Lake 内核 技术栈 框架版本 lakex" },

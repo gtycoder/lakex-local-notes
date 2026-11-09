@@ -60,12 +60,12 @@ describe("设置页分组归属（重组后）", () => {
     const order = [...nav.matchAll(/id: "(\w+)" as const, label: "([^"]+)"/g)].map((m) => m[1] + ":" + m[2]);
     expect(order).toEqual([
       "editor:常规", "appearance:外观", "shortcuts:快捷键", "sync:云端与同步",
-      "backup:备份与恢复", "history:数据与历史", "maintenance:数据维护", "ai:AI 助手", "about:关于",
+      "backup:备份与恢复", "history:数据与历史", "maintenance:数据维护", "ai:AI 助手", "update:更新", "about:关于",
     ]);
   });
 
   it("每个 itemId 只属于一个分类，且注册表分类都能在面板找到分支", () => {
-    const categories = ["editor", "appearance", "shortcuts", "history", "maintenance", "sync", "backup", "ai", "about"];
+    const categories = ["editor", "appearance", "shortcuts", "history", "maintenance", "sync", "backup", "ai", "update", "about"];
     const seen = new Map<string, string>();
     for (const category of categories) {
       for (const id of itemIds(category)) {

@@ -18,6 +18,7 @@ import { formatBytes } from "../../lib/formatBytes";
 import { probePinShortcut, requestPinQuickNoteShortcut } from "../native/quickNoteShortcut";
 import { CLOUD_PRIVACY_NOTICE, canTouchNetwork, cloudStateOf } from "../../core/cloudState";
 import { AppearanceSettingsSection, HistorySettingsSection, AboutSettingsSection } from "./BasicSettingsSections";
+import { UpdateCenterSection } from "./UpdateCenterSection";
 import { useAiSettingsForm } from "./useAiSettingsForm";
 import { AiSettingsSection } from "./AiSettingsSection";
 import { useS3SettingsForm } from "./useS3SettingsForm";
@@ -657,6 +658,8 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
               </div>
             </div>
           )}
+
+          {view === "update" && <UpdateCenterSection appInfo={appInfo} />}
 
           {view === "about" && <AboutSettingsSection appInfo={appInfo} diag={diag} />}
 

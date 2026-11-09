@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Cloud, Coffee, ExternalLink, Files, Globe, History, Image as Info, Keyboard, Monitor, Moon, Palette, Paperclip, Terminal, TriangleAlert, Archive, HardDrive, Search, Settings, Sun, Trash, Type, X } from "lucide-react";
+import { Cloud, Coffee, ExternalLink, Files, Globe, History, Image as Info, Keyboard, Monitor, Moon, Palette, Paperclip, RefreshCw, Terminal, TriangleAlert, Archive, HardDrive, Search, Settings, Sun, Trash, Type, X } from "lucide-react";
 import { Sparkles, Eye, EyeOff } from "lucide-react";
 import { fontSizeOptions, type AppSettings } from "../../lib/settings";
 import { AI_PROVIDERS, AI_REASONING_EFFORTS, AI_THINKING_MODES, type AiReasoningEffort, type AiSettingsPatch, type AiSettingsView, type AiThinkingMode } from "../../core/aiProviders";
@@ -42,7 +42,7 @@ import { DialogResizeHandles } from "../ui/DialogResizeHandles";
 import { filterSettingsNav, searchSettingItems, type SettingItemEntry } from "../model/settingsSearch";
 import { getNativeErrorMessage, reportNativeActionError } from "../../lib/nativeErrors";
 import { S3ConfigImportDialog } from "./S3ConfigImportDialog";
-import { openUpdateCenter } from "./updateCenterSession";
+import { UpdateCenterSection } from "./UpdateCenter";
 import { RebuildDataBlock } from "./RebuildDataBlock";
 import { formatBytes } from "../../lib/formatBytes";
 import { formatDateTime } from "../../core/dateFormat";
@@ -56,7 +56,7 @@ import { backupResultView, backupUsageView } from "./settingsBackupObservability
  * 数据与历史 / 数据维护（数据体检、重建数据、回收站、全文搜索、浏览器端、应用日志）/ AI / 关于」。
  * 备份与恢复是**独立分类**（从云端恢复也放这里：它同样是恢复动作，只是需要云端配置）。
  */
-export type SettingsCategory = "editor" | "appearance" | "shortcuts" | "history" | "maintenance" | "sync" | "backup" | "ai" | "about";
+export type SettingsCategory = "editor" | "appearance" | "shortcuts" | "history" | "maintenance" | "sync" | "backup" | "ai" | "update" | "about";
 
 interface SettingsPanelProps {
   open: boolean;
@@ -526,6 +526,7 @@ let verifiedS3Fingerprint: string | null = null;
     { id: "history" as const, label: "数据与历史", keywords: "快照 保留 清理 文档历史", icon: <History size={15} /> },
     { id: "maintenance" as const, label: "数据维护", keywords: "体检 一致性 重建 恢复 回收站 搜索 日志 浏览器 扫描", icon: <HardDrive size={15} /> },
     { id: "ai" as const, label: "AI 助手", keywords: "AI 供应商 模型 key api openai deepseek 密钥", icon: <Sparkles size={15} /> },
+    { id: "update" as const, label: "更新", keywords: "更新 升级 检查更新 自动更新 下载 安装 版本 release latest", icon: <RefreshCw size={15} /> },
     { id: "about" as const, label: "关于", keywords: "版本", icon: <Info size={15} /> },
   ];
   const filteredNav = filterSettingsNav(nav, navQuery);
@@ -1240,6 +1241,10 @@ let verifiedS3Fingerprint: string | null = null;
                 </Group>
               </>
             )}
+            {category === "update" && (
+              <UpdateCenterSection />
+            )}
+
             {category === "about" && (
               <>
                 {!sysInfo && (
@@ -1251,9 +1256,6 @@ let verifiedS3Fingerprint: string | null = null;
                   <>
                     <Group title="关于" icon={<Info size={16} />}>
                       <Block itemId="about-app" name={`LakexLocalNotes ${sysInfo.app.version}${sysInfo.packaged ? "" : "（开发实例）"}`} desc="本地优先、离线可用；数据保存在本机，S3 只作云端备份。" />
-                      <Item itemId="about-update-center" name="更新中心" desc="检查 GitHub 稳定版更新；可设置自动检查（默认开 / 24 小时）与自动下载（默认开，下载完成后由你打开安装包）。">
-                        <button className="ln-btn ln-btn--secondary" onClick={() => openUpdateCenter()}>打开更新中心</button>
-                      </Item>
                       <Block itemId="about-fonts" name="字体" desc="界面与正文使用内置 MiSans（小米科技，依《MiSans 字体知识产权许可协议》免费商用；此处按协议注明使用）。代码块使用 JetBrains Mono（SIL OFL 1.1）。两者均随应用内置、离线可用。" />
                     </Group>
 
