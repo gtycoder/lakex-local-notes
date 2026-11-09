@@ -1,0 +1,38 @@
+/*
+ * AI 写作答案的内核只读渲染作用域（由 AiAnswerViewer 组件自身 import）。
+ *
+ * 为什么**故意未分层**（与 components/app/noteDocPreview.css 同档）：要压内核 legacy 层的 px 定值，
+ * 而 JS import 的 CSS 无法进 @layer；未分层普通声明恰好压过所有分层声明，因此不需要 !important。
+ * 本页需要的是「消息正文」观感（14px / 阅读行高 / 标题 em 缩放 / 无 viewer 头）。
+ */
+
+.aiw-answer-viewer .lake-editor-mount { font-size: inherit; }
+
+/* viewer 自带「返回文档」头（全屏出口），消息里不需要 */
+.aiw-answer-viewer .ne-viewer-header { display: none; }
+
+/* 高度随内容（内核 viewer 默认撑满宿主），滚动交给 .aiw-scroll */
+.aiw-answer-viewer .ne-viewer { height: auto; overflow: visible; }
+
+.aiw-answer-viewer .ne-viewer,
+.aiw-answer-viewer .ne-viewer-body {
+  font-size: var(--lake-font-size-body);
+  line-height: var(--lake-line-height-reading);
+  letter-spacing: 0;
+  color: var(--lake-text-1);
+  /* 内核正文默认 500；消息正文按本项目正文口径 400（粗体仍走内核 <strong>/bold 样式）。 */
+  font-weight: var(--lake-font-weight-regular);
+}
+
+/* 内核是固定 px 标题（28/24/20/16），在 14px 正文里按 em 缩放 */
+.aiw-answer-viewer ne-h1 { font-size: 1.6em; line-height: 1.35; }
+.aiw-answer-viewer ne-h2 { font-size: 1.35em; line-height: 1.4; }
+.aiw-answer-viewer ne-h3 { font-size: 1.15em; line-height: 1.45; }
+.aiw-answer-viewer ne-h4 { font-size: 1em; line-height: 1.5; }
+
+/* 消息里不要内核的左右留白与最大宽度（内容列宽由 .aiw-thread 统一 900px） */
+.aiw-answer-viewer .ne-viewer-body { padding-inline: 0; max-width: none; }
+
+/* 首尾块去掉多余外边距，让操作条紧贴正文 */
+.aiw-answer-viewer .ne-viewer-body > :first-child { margin-top: 0; }
+.aiw-answer-viewer .ne-viewer-body > :last-child { margin-bottom: 0; }

@@ -19,8 +19,8 @@ export const SIDEBAR_HOVER_HIDE_DELAY_MS = 220;
 export const EDGE_HANDLE_DWELL_MS = 240;
 
 export type SaveState = "idle" | "dirty" | "saving" | "saved" | "error";
-/** 空间（一级入口）。`diary` = 日记空间（261109，docs/DIARY.md：数据仍是普通 Lake 文档）。 */
-export type DesktopWorkspace = "library" | "quick-notes" | "diary" | "tags" | "trash" | "resources";
+/** 空间（一级入口）。`ai-writing` = AI 写作（261109 桌面本地会话）；`diary` = 日记（数据仍是普通 Lake 文档，docs/DIARY.md）。 */
+export type DesktopWorkspace = "library" | "quick-notes" | "ai-writing" | "diary" | "tags" | "trash" | "resources";
 
 // 左侧资料库与右侧大纲面板各自维护宽度；两侧常驻 activity rail 才保持同宽。
 // 261103 P10：数值已下沉 src/core/layoutConstants（components→desktop 违规清零），这里 re-export 保持兼容。

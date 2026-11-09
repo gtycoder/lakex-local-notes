@@ -7,7 +7,7 @@ function provider(over: Partial<ReturnType<typeof defaultAiProviderConfig>> = {}
   return { ...defaultAiProviderConfig("openai"), apiKey: "sk-test", ...over };
 }
 const fakeFactory = (deltas: string[], pong: () => void = () => {}) : AiClientFactory => () => ({
-  async *streamChat() { for (const d of deltas) yield d; },
+  async *streamChat() { for (const d of deltas) yield { content: d }; },
   async ping() { pong(); },
   async listModels() { return ["fake-model"]; },
 });
@@ -49,5 +49,43 @@ describe("重试职责", () => {
     });
     await expect(aiChat({ provider: provider(), messages: [{ role: "user", content: "hi" }], factory })).rejects.toThrow();
     expect(calls).toBe(1);
+  });
+});
+
+describe("思考内容（reasoning）", () => {
+  it("思考走 onReasoning、不进正文；两者交错也按序分类", async () => {
+    const seen: string[] = [];
+    const thoughts: string[] = [];
+    const factory: AiClientFactory = () => ({
+      async *streamChat() {
+        yield { reasoning: "先想" };
+        yield { content: "答" };
+        yield { reasoning: "再想" };
+        yield { content: "案" };
+      },
+      async ping() {},
+      async listModels() { return []; },
+    });
+    const text = await aiChat({
+      provider: provider(),
+      messages: [{ role: "user", content: "hi" }],
+      onDelta: (d) => seen.push(d),
+      onReasoning: (d) => thoughts.push(d),
+      factory,
+    });
+    expect(text).toBe("答案");
+    expect(seen.join("")).toBe("答案");
+    expect(thoughts.join("")).toBe("先想再想");
+  });
+
+  it("供应商没有思考输出时 onReasoning 永不回调", async () => {
+    let called = 0;
+    await aiChat({
+      provider: provider(),
+      messages: [{ role: "user", content: "hi" }],
+      onReasoning: () => { called += 1; },
+      factory: fakeFactory(["a", "b"]),
+    });
+    expect(called).toBe(0);
   });
 });

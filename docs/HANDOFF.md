@@ -11,13 +11,23 @@
 ### 261109 · 日记空间 v1（文档形态 + 独立空间；桌面 + 移动）
 - **定稿（用户 261109）**：日记 = **文档空间里的一本笔记本**（不新建数据空间/不新建表，正文/历史/回收站/搜索/导出/备份全复用）；表现 = 顶层**独立空间**（桌面空间组第 4 项 **⌘4**，移动端首页第 4 个 tab）；**标题即日期 `YYYY-MM-DD`**；`年 → 月` 两级分组自动建；**要搜索、不打标**；v1 不做缺天提示/补写/月历/streak/提醒。规格 [docs/DIARY.md](DIARY.md)。
 - **wire**：`folders[].space?: "diary" | null`（**不复用 `kind`** —— `TreeNode.kind` 是文档类型）；**发布显式写 null**（非日记不省略字段，同 `tagIds` 空集合教训）；两端 `tree_nodes.space` 列（移动 schema 11→12）。
-- **桌面**：`electron/diaryStore.ts`（主进程**重新 plan** + **单事务**建本/年组/月组/文档 + 正文半成品回收 + 连点只一篇）、IPC `diary_open_date`（落 `electron/ipc/registerDiary.ts`，通道 176→**177**）、`src/features/diary/**`（空间页复用 `EditorTab`，左栏年月，空态「写今天」）、文档空间目录树**过滤掉日记本**、⌘4。
+- **桌面**：`electron/diaryStore.ts`（主进程**重新 plan** + **单事务**建本/年组/月组/文档 + 正文半成品回收 + 连点只一篇）、IPC `diary_open_date`（落 `electron/ipc/registerDiary.ts`，通道 185→**186**）、`src/features/diary/**`（空间页复用 `EditorTab`，左栏年月，空态「写今天」）、文档空间目录树**过滤掉日记本**、⌘4。
 - **移动**：`src/mobile/diary/**`（`diaryRepository` 同款单事务 ensure + `DiaryPage`）、`bridge/diary.ts`（互斥域 `diaryOpenDate` 已登记进 `WRITE_OPS`）、首页 **第 4 个 tab**（只改 tab 行，不动 5 槽定稿构图；≤385px 收紧几何）、知识库/目录抽屉过滤日记本。
 - **搜索**：日记是文档 ⇒ 天然在 FTS；空间内搜索 = 复用现有面板 + `scopeNoteIds` **纯显示层**收窄（**不新增索引**）。
 - **转为文档（同日追加）**：日记条目右键（移动端条目操作入口）→「转为文档…」→ 选目标笔记本 → **移动**落地（同一 note，不复制）；判据 = `core.diaryConvertTargets/planDiaryConvert`，目标选择复用两端既有 `MoveTargetTreeDialog` / `MoveTargetTreeSheet`；不自动清理搬空的年/月分组。
 - **门禁**：tsc 0；vitest **799 文件 / 5090 通过 / 11 skipped / 12 skipped / 0 failed**（含独立验证者补的 10 例：wire 往返 7 / 移动事务 3）；ui-metrics、check:core、check:mobileui、diff-check 通过。**设备级未跑**（移动 6 态/走查、桌面 stylesnap 还没有"日记态"）。
 - **独立验证（片D，生产代码零改动）**：四条硬规则逐条自证通过（wire 显式写 null / 未知值当非日记 / 连点只一篇 / 事务回滚 / 桌面+移动树过滤）；另发现 **P1 已修**＝移动端便携包导入丢失 `space`（否则手机导入后日记本降级为普通本、再点「写今天」会建第二本）——修法 = `portableMapping` 行加 `space`（按 nodeType 归一）+ `importPortable` INSERT 加列 + 跨端搬运测试；同时补了移动端「多日记本告警」与 wire 侧 `space × nodeType` 互校。
-- **并行注意**：本批在 worktree `lakex-local-notes-diary`（`feat/diary-space`，起点 `f3b2d0c3`），**不含** AI 写作（那是 `feat/ai-writing-space` 另一个 worktree）⇒ 合并时 `App.tsx` / `desktop/desktopTypes.ts` / `desktop/DesktopTopBar.tsx` 必冲突，按"两边空间项都保留"手工合。
+- **并行注意（已合并）**：本批原在 worktree `lakex-local-notes-diary`（`feat/diary-space`，起点 `f3b2d0c3`），**不含** AI 写作（那是 `feat/ai-writing-space` 另一个 worktree）⇒ 合并时 `App.tsx` / `desktop/desktopTypes.ts` / `desktop/DesktopTopBar.tsx` 必冲突，按"两边空间项都保留"手工合。
+### 261109 · AI 写作空间 v1（桌面新空间，⌘3）
+- 需求：仿语雀 `/dashboard/ai`（真实登录态点测走查记录在仓库外 `.ai-writing-recon/`，**不入库**）；用户定稿：**只桌面**（移动端已有 AI 助手，不跨端）、会话**不进 S3**、**深度思考默认开且不提供关闭入口**、**生成文档只选到知识库（笔记本）**、模型用现有供应商配置。
+- 交互：左栏「AI 写作 / ＋新对话 / 历史记录（今天·昨天·更早；… → 重命名行内输入、删除行内确认气泡）」；主区分段「对话写作 / 多文档推理」；提示词库 6 卡（点卡片 = 挂到输入卡 chip，不写正文）；多文档「快捷组（今天/近一周/近一月 × 文档/小记）+ 按笔记本勾选」，chip 显示「N 篇文档」；发送/停止/重新生成/复制；助手消息 =「已深度思考（用时 X 秒）」+ 思考块 + Markdown 答案（GFM 表格）+ 操作条（生成文档 / 保存到小记）。
+- 数据：本地两表 `ai_writing_conversations` / `ai_writing_messages`（主库，**不进树/搜索/同步**）；IPC 9 个（通道 176→185）；渲染层 native 桥与主进程共用 `core/aiWriting` 的载荷类型。
+- AI：推理内容贯通（`reasoning_content`/`reasoning` → `ai:stream { reasoning: true }` → 思考块）；供应商无思考输出则不显示；思考与正文都不进上下文。
+- 生成文档：选知识库（笔记本）→ `convertAiMarkdown`（Markdown→Lake；仅 render-timeout 重建重试一次）→ `createNoteIn` + `saveNote`；保存到小记：纯文本镜像 + lake 正文。
+- 本轮修的通用问题：① 窗口被遮挡时 rAF 不触发 ⇒ Markdown 转换队列永久挂住（`nextFrame` 加 250ms 兜底，超时能报错而不是锁死队列）；② SDK 在 abort 后可能**正常结束**流 ⇒ 停止标记丢失（收敛到 `aiWritingTurn`，stop 先置位再取消）。
+- 真机/真实模型验证（dev，mimo）：单轮对话 + 思考块 + 停止（保留片段、标「已停止生成」）、多文档 11 篇资料总结、生成文档（lake 正文含标题/列表/引用/表格）、保存到小记（卡片预览为纯文本）、历史重命名/删除气泡、空间菜单与 ⌘3 切换。
+- **v1.1 答案渲染对齐（261109，同分支）**：助手答案改为**内核只读 viewer**（`createLakeDocument(host,"viewer")` + `setDocument("text/markdown")`，内核原生解析）：任务清单/表格/引用/代码/行内与块级公式全部正确；流式期间仍用 MarkdownView，收尾后 pending→rich 切换（pending 期间 viewer 绝对定位隐藏，避免兜底与正文双份可见）；viewer 是 lazy 边界（内核 chunk 不进首屏，护栏 `desktopKernelLazy.test.ts`），进视口才建实例、同实例多次 setDocument。验证：真实模型输出（任务清单/两列表格/行内+块级公式/代码）在聊天里渲染正确、`生成文档` 落地为 `lake-list-task`+checkbox 卡 / `name="math"` 卡 / 表格。
+- 未跑：桌面 42 态 / 移动端 6 态 / 23 屏走查（本批只新增桌面空间与消息内 viewer，选择器都限定在 `.ai-writing-active` / `.aiw`，未改既有几何；发版前按 AGENTS §3#21 补跑一次全量）。
 
 ### 261109 · 便携包（桌面 → 手机 一次性全量搬运）
 - 需求：S3 首次全量同步贵；桌面导出单 zip（不含历史）→ 网盘/USB → 手机覆盖导入 → 之后 S3 只做增量。用户口径：覆盖；含回收站/小记/标签；排除历史快照；不加密；单包 **≤4GiB**（超限暂不支持分卷）；一次性 bootstrap；桌面仅在云同步已启用且上轮同步成功/无待同步时可用；手机导入不强制先配 S3。
@@ -52,7 +62,8 @@
 - 261110 移动端设置表面统一：恢复「灰底 + 白卡」层次（手写分组容器自动补卡，Group/Section 原语不变）；云端与同步拆为「连接信息 / 连接与同步 / 配置迁移 / 服务说明」四组；关于拆为「关于 / 数据诊断」两组。
 - 261110 P0 原语收敛：SettingsDrawer / BasicSettingsSections 全部改用 Group/Section，新增 settingsPrimitivesGuard 测试禁止再手写 mb-set-group/mb-set-items；S3/备份/关于按语义分组。
 - 261110 P1：新增移动端 .mb-btn--settings（主题色描边、透明底，仅设置页），替换设置页 primary/secondary/ghost；设置菜单图标底色改 --mb-set-tone-* 令牌，不再写死 hex。确认/重命名/更新弹窗仍用 primary 实心。
-- 仍待：设置子页（S3/备份/关于）快照态与深/暖色设备走查；当前移动快照仍 6 态。
+- 261110 移动快照扩到 **9 态**：新增 settings-s3 / settings-backup / settings-about；设置抽屉/子页入口先判已开（避免二次点击把抽屉关掉），行用 DOM click + scrollIntoView。已在 lake_gate 连跑两轮，9 态 0 差异；基线 `scripts/mobile-audit/baseline/mobile-snap.json` 已重烤。
+- 仍待：深/暖色下的设置页设备走查（移动端当前只有浅色/深色/纯黑三档）。
 - 便携包 review：导出前同步下沉到主进程 beforeExport（任何入口一致）；离线哈希改用 noteBodyRelativePath 单一来源并缺正文直接报错；manifest.baseline=null 语义与 localOnly 哈希文件写入 spec §9。
 
 ### 261109 · UI 整理（移动端 + 桌面设置）
@@ -152,11 +163,12 @@
 - 代码：删除已确认无引用的死模块（`src/core/decideUpload*`、`lakeReconcile*`、`quickNoteReconcile*`、`syncDecision*`、`electron/mdToHtml.ts`、`electron/storeUtils.ts`、`electron/syncDecision.ts` 及若干一次性 scripts）；`QuickNoteEditor` / `QuickNotePreview` 等有小改。
 - 本文件（HANDOFF）已重写并随本批提交；其余文件清单与 diff 见上述提交。
 - **261109 更新中心批（本提交）**：`docs/UPDATE-CENTER.md` + `src/core/update/` + `electron/update/` + `electron/ipc/registerUpdate.ts` + 桌面 `UpdateCenter` UI + Android `UpdatePlugin.kt` + 移动更新中心 UI + CI `scripts/generate-update-manifest.mjs`；新增单测 37 例。
+- **261109 AI 写作批（已合并 master：`53fe678c` → `4ec1b6a4` → `84a6879a`，合并提交 `986e2151`）**：`docs/AI-WRITING.md` + `src/core/aiWriting.ts`（纯逻辑/预算/消息组装 + IPC 载荷类型）+ `electron/aiWritingRepository.ts` + `electron/ipc/registerAiWriting.ts`（通道 176→185）+ `src/features/aiWriting/*`（工作区/侧栏/输入卡/提示词库/文档选择/消息/两个弹窗/回合与上下文模块/转换包装）+ 桌面壳层接入（`desktopTypes` / `DesktopTopBar` / `useDesktopLifecycle` / `App` / `shell.css`）；AI 流式思考内容贯通（`reasoning_content`）；新增单测 42 例（core 10 / 仓库 5 / turn 5 / context 4 / docs 7 / 转换 9 / 既有 AI 2）。
 
-**门禁基线（261109 清理后实测）**
+**门禁基线（261109 清理后 + AI 写作批实测）**
 
 - `npx tsc --noEmit` = **0 错**。
-- `npx vitest run` = **794 文件（783 passed / 11 skipped）/ 4993 passed / 12 skipped / 0 failed**。
+- `npx vitest run` = **803 文件（792 passed / 11 skipped）/ 5047 passed / 12 skipped / 0 failed**（AI 写作批 + v1.1 渲染实测；本批新增 47 例）。
 - `git diff --check` = **0**。
 - `check:bundle`：**mobile-entry 仍超目标（已知红，非本批引入）**。脚本当前冻结为 entry JS gzip ≤66KB、modulepreload ≤34 条、首屏 ≤380KB（`check-arch`）；目标仍是 **60KB / ≤12 条 / 360KB**，瘦身后收紧（§3 P1）。**261109 实测校准**：基线 `f3b2d0c3` 已经是 **74438 gz / 36 链接**（冻结值本身就落后于该 commit）；日记 v1 之后 = **75257 gz / 38 链接**（Δ +819B / +2 条，已把 `DiaryPage` 拆成按需分包、`bridge/diary` 又退回静态 import 以免多出 5 条 preload）。⇒ 真要收口目标值，是一次独立的移动端瘦身专项，别算在日记头上。运行前需先有 `dist` / `dist-mobile` 构建产物。
 - 其它样式/边界/设备门禁按改动范围跑（分层口径见 AGENTS §3#21）；最近一次完整设备记录 = **v1.0.4 发版前**：手机 6 态、平板 6 态、多维表 3 态均重烤后两轮 0 差异。

@@ -10,6 +10,17 @@ const SNAP_EXPR = snapExpr(4);
 
 import { waitHome, settle, clickText, setLibraryView, clearTabs, reload, tapSel, tapByLabel, expectOn } from "./snap-lib.mjs";
 
+/** 设置子页统一入口：已开抽屉不重复点「设置」（会关掉），直接对行做 DOM click + scrollIntoView。 */
+const openSettingsItem = async (page, label) => {
+  if (!(await page.evaluate("!!document.querySelector('.mobile-settings-list')"))) {
+    await clickText(page, ".toolbar__button", "设置");
+    await page.sleep(600);
+  }
+  const clicked = await page.evaluate("(function(){var rows=[...document.querySelectorAll('.mobile-settings-row')];var e=rows.find(function(x){return ((x.textContent||'')).indexOf(" + JSON.stringify(label) + ")>=0;});if(!e)return false;e.scrollIntoView({block:'center'});e.click();return true;})()");
+  await page.sleep(700);
+  return clicked;
+};
+
 export const STATES = [
   // 261013：每态**钉住视图 + 自断言**。此前 6 态里只有 3 态有效：
   //   home-library-list 与 home-library 同一个态（按钮文案随视图变，clickText 找不到"切换到列表"）；
@@ -67,6 +78,20 @@ export const STATES = [
   } },
   { name: "settings", nav: async (page) => { await clickText(page, ".toolbar__button", "设置"); await page.sleep(600); await expectOn(page, "!!document.querySelector('.mobile-settings-list')", "设置抽屉根页"); } },
   { name: "settings-appearance", nav: async (page) => { await clickText(page, ".toolbar__button", "设置"); await page.sleep(600); await clickText(page, ".mobile-settings-row", "外观"); await page.sleep(600); await expectOn(page, "!!document.querySelector('.mobile-settings-page--full')", "设置 · 外观子页"); } },
+  // 261110：设置子页纳入快照（S3/备份/关于）。设置抽屉可能因上一态未关而仍开着，
+  // 再点「设置」会把它关掉 ⇒ 先判已开则不点；底部行先滚到菜单底部再点。
+  { name: "settings-s3", nav: async (page) => {
+    if (!(await openSettingsItem(page, "云端与同步"))) throw new Error("settings-s3: 设置菜单找不到「云端与同步」");
+    await expectOn(page, "document.body.innerText.includes('连接信息')", "设置 · 云端与同步");
+  } },
+  { name: "settings-backup", nav: async (page) => {
+    if (!(await openSettingsItem(page, "备份与恢复"))) throw new Error("settings-backup: 设置菜单找不到「备份与恢复」");
+    await expectOn(page, "document.body.innerText.includes('修复缺失数据')", "设置 · 备份与恢复");
+  } },
+  { name: "settings-about", nav: async (page) => {
+    if (!(await openSettingsItem(page, "关于"))) throw new Error("settings-about: 设置菜单找不到「关于」");
+    await expectOn(page, "document.body.innerText.includes('数据诊断')", "设置 · 关于");
+  } },
 ];
 
 export default async ({ page, args }) => {
