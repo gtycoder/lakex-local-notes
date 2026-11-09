@@ -5,6 +5,7 @@ import android.content.Intent
 import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
 import android.net.Uri
+import android.provider.OpenableColumns
 import android.util.Base64
 import androidx.activity.result.ActivityResult
 import com.getcapacitor.JSObject
@@ -38,6 +39,8 @@ class PortablePackagePlugin : Plugin() {
     companion object {
         private const val PORTABLE_FORMAT = "lakex-local-notes-portable"
         private const val PORTABLE_FORMAT_VERSION = 1
+        /** 只接受最新后缀；旧 .zip 不再兼容（用户 261110 定稿：不为历史数据做兼容）。 */
+        private const val PORTABLE_EXTENSION = ".zip.lln"
         private const val PORTABLE_LIMIT_BYTES = 4L * 1024 * 1024 * 1024
         private const val MAX_ENTRIES = 100_000
         private const val MAX_MANIFEST_BYTES = 2 * 1024 * 1024
@@ -109,6 +112,16 @@ class PortablePackagePlugin : Plugin() {
         val uri = result.data?.data
         if (uri == null) {
             call.reject("没有选中文件")
+            return
+        }
+        // 用户 261110 定稿：不为历史数据做兼容 ⇒ 只接受 .zip.lln，旧 .zip 直接拒绝。
+        val displayName = try {
+            getContext().contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst()) cursor.getString(0) else null
+            }
+        } catch (_: Exception) { null }
+        if (displayName == null || !displayName.endsWith(PORTABLE_EXTENSION, ignoreCase = true)) {
+            call.reject("只支持最新的 .zip.lln 便携包（不再兼容旧 .zip）")
             return
         }
         call.setKeepAlive(true)

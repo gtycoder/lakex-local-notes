@@ -23,6 +23,9 @@
 - 真机发现并修复：① 桌面同步成功后未清 folders.is_dirty ⇒ 待同步目录常驻、便携包导出被挡；已在 desktopSync 成功后按 updatedAt 条件 markFolderSynced。② 移动端 listFoldersForSync 把固定「回收站」笔记本也发布 ⇒ 首轮同步平白多发一代并把 notebook-trash 写进云端；已排除 TRASH_NOTEBOOK_ID（与桌面同口径）。
 - 门禁：tsc 0；vitest **783 files / 4993 passed / 12 skipped / 0 failed**；diff-check 通过；Android 离线构建通过。
 
+### 261110 · 便携包只接受 .zip.lln
+- 用户定稿：不为历史数据做兼容 ⇒ Android staging 按文件名只接受 .zip.lln，旧 .zip 直接拒绝；桌面导出/UI/文档同步去掉「兼容旧 .zip」。
+
 ### 261109 · 便携包纯离线导出 + 后续 S3 接续
 - 用户定稿：不配置 S3 也能导出；已启用云同步时导出前自动 sync 一次；纯离线迁移支持，之后配 S3 仍能同步。
 - 桌面 portableExport：无 baseline.json.gz 时不再拒绝，改为生成 localOnly 内容哈希清单（notes/quickNotes 的 sha256）；manifest baseline=null。有云端基线时行为不变（manifest 带 baseline）。
