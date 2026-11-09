@@ -185,6 +185,14 @@
  * 并把左内距补到「页内距 + 分组卡 1px 发丝」= 33，与卡内行名/说明/块名同一条左缘。 */
 .mb-set-title { margin: 0; padding: 0 18px; color: var(--lake-text-2); font-size: var(--lake-font-size-small); font-weight: var(--lake-font-weight-semibold); display: flex; align-items: center; gap: var(--mb-gap); }
 .mb-set-items { display: flex; flex-direction: column; gap: 12px; }
+/* 261110 用户定稿：恢复「灰底 + 白卡」层次。Group 原语自带 Section 卡；
+ * 手写分组（S3/备份/缓存/关于）直接放行/块时，容器补成同一张白卡。 */
+.mobile-settings-content .mb-set-items:not(:has(> .mb-set-section)) {
+  gap: 0; overflow: hidden;
+  border: .5px solid transparent; border-radius: var(--mb-radius-card);
+  background: var(--lake-bg-panel); box-shadow: var(--mb-shadow-card);
+}
+.mobile-settings-content .mb-set-items:not(:has(> .mb-set-section)) > :first-child { border-top: 0; }
 /* 分组卡：261013 窗底转白后，白卡落在白底上会"消失" ⇒ 补 1px 细线承担分组边界
  * （语雀的设置页就是"白底 + 细线分组"，不是灰底白卡）。行间分隔仍由 .mb-set-item 的 border-top 提供。 */
 /* v2：分组卡 = r16 + --mb-shadow-card（内描边由阴影层承担；仍保留 0.5px 边框宽度，几何不动）。 */

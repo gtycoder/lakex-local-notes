@@ -58,9 +58,14 @@ export function AboutSettingsSection({ appInfo, diag }: { appInfo: ReturnType<ty
                   <div className="mb-set-item__desc">本地优先：正文、附件与索引都保存在本机。</div>
                   <div className="mb-set-item__desc">字体：内置 MiSans（小米科技，依《MiSans 字体知识产权许可协议》免费商用并注明）+ JetBrains Mono（SIL OFL 1.1）</div>
                 </div>
-                {diag && (
-                  <div className="mb-set-block mb-set-block--actions-first">
-                    <div className="mb-set-block__name">数据诊断</div>
+              </div>
+            </div>
+
+            {diag && (
+            <div className="mb-set-group">
+              <div className="mb-set-title"><Info size={16} />数据诊断</div>
+              <div className="mb-set-items">
+                <div className="mb-set-block mb-set-block--actions-first">
                     <div className="mb-set-stats">
                       <span><strong>文档</strong> {diag.noteCount}</span>
                       <span><strong>分组</strong> {diag.folderCount}</span>
@@ -95,9 +100,9 @@ export function AboutSettingsSection({ appInfo, diag }: { appInfo: ReturnType<ty
                       >复制诊断信息</button>
                     </div>
                   </div>
-                )}
               </div>
             </div>
+            )}
             {/* 261109：更新中心（检查更新 / 自动检查 / 自动下载 / 仅 Wi-Fi / 更新日志）。 */}
             </>
   );
