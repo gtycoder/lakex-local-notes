@@ -14,7 +14,8 @@
 - **桌面**：`electron/diaryStore.ts`（主进程**重新 plan** + **单事务**建本/年组/月组/文档 + 正文半成品回收 + 连点只一篇）、IPC `diary_open_date`（落 `electron/ipc/registerDiary.ts`，通道 176→**177**）、`src/features/diary/**`（空间页复用 `EditorTab`，左栏年月，空态「写今天」）、文档空间目录树**过滤掉日记本**、⌘4。
 - **移动**：`src/mobile/diary/**`（`diaryRepository` 同款单事务 ensure + `DiaryPage`）、`bridge/diary.ts`（互斥域 `diaryOpenDate` 已登记进 `WRITE_OPS`）、首页 **第 4 个 tab**（只改 tab 行，不动 5 槽定稿构图；≤385px 收紧几何）、知识库/目录抽屉过滤日记本。
 - **搜索**：日记是文档 ⇒ 天然在 FTS；空间内搜索 = 复用现有面板 + `scopeNoteIds` **纯显示层**收窄（**不新增索引**）。
-- **门禁**：tsc 0；vitest **797 文件 / 5079 通过 / 11 skipped / 12 skipped / 0 failed**；ui-metrics、check:core、check:mobileui、diff-check 通过。**设备级未跑**（移动 6 态/走查、桌面 stylesnap 还没有"日记态"）。
+- **门禁**：tsc 0；vitest **799 文件 / 5090 通过 / 11 skipped / 12 skipped / 0 failed**（含独立验证者补的 10 例：wire 往返 7 / 移动事务 3）；ui-metrics、check:core、check:mobileui、diff-check 通过。**设备级未跑**（移动 6 态/走查、桌面 stylesnap 还没有"日记态"）。
+- **独立验证（片D，生产代码零改动）**：四条硬规则逐条自证通过（wire 显式写 null / 未知值当非日记 / 连点只一篇 / 事务回滚 / 桌面+移动树过滤）；另发现 **P1 已修**＝移动端便携包导入丢失 `space`（否则手机导入后日记本降级为普通本、再点「写今天」会建第二本）——修法 = `portableMapping` 行加 `space`（按 nodeType 归一）+ `importPortable` INSERT 加列 + 跨端搬运测试；同时补了移动端「多日记本告警」与 wire 侧 `space × nodeType` 互校。
 - **并行注意**：本批在 worktree `lakex-local-notes-diary`（`feat/diary-space`，起点 `f3b2d0c3`），**不含** AI 写作（那是 `feat/ai-writing-space` 另一个 worktree）⇒ 合并时 `App.tsx` / `desktop/desktopTypes.ts` / `desktop/DesktopTopBar.tsx` 必冲突，按"两边空间项都保留"手工合。
 
 ### 261109 · 便携包（桌面 → 手机 一次性全量搬运）
@@ -208,6 +209,8 @@
 - **移动端首屏瘦身**（发版后专项）：HEAD 实测 entry-js 65.5KB gz / preload 33 条 / 首屏 374KB，已超目标（60KB / ≤12 条 / 360KB）；先砍回目标值，再收紧 `check-bundle-budget.mjs` 与 `check-arch.mjs`。
 
 **P1（该做但可排期）**
+
+- **日记 v1 残余（验证者报告，非阻断）**：① 移动端「知识库/目录抽屉不含日记本」只有代码路径、**没有测试锁定**（过滤内联在 `MobileApp.tsx`，建议抽纯函数再断言）；② 「标签空间不聚合日记」靠"不提供入口"保证、**无测试**；③ **「取消日记标记」无端到端入口**（wire/plan/落库都支持并有测试，但没有 `UPDATE … SET space` 的写路径，别把测试能力误当已可用功能）；④ 移动端 `console.warn` 级告警不进设置页（与桌面 `diaryStore` 的 log 通道同义但不可见）。
 
 - **便携包真实数据验证**：小包、3GiB 合成包、真实 S3 增量接续（dev 数据）均已验收；仍待用真实 3GB 数据从已同步桌面导一次（大小/耗时/内存）。
 - **更新中心设备验证（261109 已实现，待设备验收）**：Android 真机/模拟器走一遍「检查→下载（DownloadManager 通知）→ sha256/证书校验→系统安装器→覆盖安装保数据」；桌面走一遍「检查→下载→打开 dmg/exe」；验证「忽略此版本」「下载中断/重启恢复」「仅 Wi-Fi 自动下载」。规格 [docs/UPDATE-CENTER.md](UPDATE-CENTER.md)。
