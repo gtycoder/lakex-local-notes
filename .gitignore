@@ -29,3 +29,6 @@ prototype/
 vendor/lakex-doc-react/
 public/vendor/lakex/
 public/vendor/lakex-doc/
+
+# 走查现场（截图/页面快照，不入库）
+.ai-writing-recon/
