@@ -13,6 +13,7 @@
 - 桌面：`electron/portable/{zipStore,portableExport}.ts`（自研 store-only zip、VACUUM INTO 快照、白名单遍历）+ `electron/ipc/registerPortable.ts` + 设置页「备份与恢复 → 导出便携包」；IPC 通道 173→176。
 - 手机：`PortablePackagePlugin.kt`（选包/解压/只读读桌面库/复制文件/回滚）+ `src/mobile/portable/*`（tree_nodes+notes→folders/notes、quick-notes→quick_notes/tags、baseline→sync_v3_state、FTS 重建、失败回滚）+ 设置页入口。
 - 验证：桌面在隔离 userData 上真实导出通过（5.6MB / 96 entries / 14 文档 / 4 目录 / 3 小记 / 4 标签 / 75 资产，无 history/draft/logs）；手机真机导入通过（14 文档：6 doc/3 usheet/2 bitable/2 ink/1 board、5 目录含回收站、3 小记、4 标签、92 文件；打开 doc 与 bitable 正常，note_history=0、is_dirty=0、v3 baseline 已写入）。**踩坑已修**：store-only zip 原先用数据描述符，Java `ZipInputStream` 会读成空文件（真机报「便携包无效」）⇒ 改为本地头写 CRC/大小（每个文件读两遍），重导通过。
+- 真机验证（大包 3.0GiB 合成数据：314 文档 + 165 资产 + 3 小记 + 4 标签；包 486 entries / 3,216,634,405 B，<4GiB）：导入成功，结果 314 文档 / 5 目录 / 3 小记 / 4 标签 / 482 文件（3065.2MB）。逐项核对：DB 行（notes/folders/quick_notes/tags/tag_links）与源完全一致、is_dirty 全 0、note_history 仅 1 条为导入后本机自动快照（非包内历史）、**482 个正文/资产文件 sha256 与源逐一相同**、165 个资产大小逐一相同（3,213,670,762 B）、手机 v3 baseline 与包内 baseline 完全相等（314/5/3/4，commits 一致）。S3 接续：src/core/s3v3Engine.ts 仅在无 baseline 时 full-sync；导入已写 baseline ⇒ 配好真实 S3 后走增量。该合成包用假 S3 基线，**不可用于真实 S3**；真实接续须从已同步的真实桌面导出。
 - 门禁：tsc 0；vitest **783 files / 4993 passed / 12 skipped / 0 failed**（含 perf 集成偶发，重跑通过）；check:core / check:mobileui / diff-check 通过；Kotlin 离线编译通过。
 
 ### 261109 · 更新中心（桌面 + Android）
@@ -158,7 +159,7 @@
 
 **P1（该做但可排期）**
 
-- **便携包设备验证（261109 已实现，待设备验收）**：用桌面真实导出包在手机走一遍「选包→校验→确认覆盖→导入计数→打开文档/小记/附件」，并确认失败/中断能回滚；3GB 级数据再跑一次（当前验证包 5.6MB 为隔离 dev 数据）。
+- **便携包真实数据验证（261109 已做小包+3GiB 合成包，仍待真实 3GB 数据）**：小包与 3GiB 合成包真机导入、逐文件 hash 对拍已通过；仍需用你自己的真实数据（约 3GB）从已同步桌面导一次，验证真实内容与 S3 接续。
 - **更新中心设备验证（261109 已实现，待设备验收）**：Android 真机/模拟器走一遍「检查→下载（DownloadManager 通知）→ sha256/证书校验→系统安装器→覆盖安装保数据」；桌面走一遍「检查→下载→打开 dmg/exe」；验证「忽略此版本」「下载中断/重启恢复」「仅 Wi-Fi 自动下载」。规格 [docs/UPDATE-CENTER.md](UPDATE-CENTER.md)。
 - **桌面 3 项实机复核**：usheet 整行/整列选中不跳滚动、桌面手写板 14 色、设置/小记/历史 lazy 路径交互冒烟（P12 遗留）。**平板（lake_tab）复验页签/页面面板**：代码无形态分支（`formFactor` 只改外壳宽度与侧栏），Android 手机已实测，平板需装同一份 APK 复核一次。
 - **261104 三项裁决的残余验证**（裁决本身是 AGENTS §4 的定稿，别再立项）：**缺正文云端拉回需在配了 S3 的真机走一遍**（目前仅单测 mock）；**表单视图大表行数帽**（一次性 `getValues`、默认 35 行，超大表若卡再加）；**资源管理两处 UI 改动未重跑 6 态快照 + 23 屏走查**（只在设置子页，预期 0 差异，发版前一并跑）；**资源「附件」系统打开未设备专项验**（需真实附件 + 系统应用；图片 Lightbox 已验）。
