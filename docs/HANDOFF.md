@@ -20,6 +20,11 @@
 - 空间菜单顺序改为 **文档 ⌘1 · 小记 ⌘2 · 日记 ⌘3 · AI 写作 ⌘4 · 标签 ⌘5**（日记与 AI 写作换位；标签也进快捷键表）。
 - **快捷键单一来源**：⌘1–5 全部收进 `src/hooks/useDesktopLifecycle.ts` 的一张 map；删掉 `App.tsx` 里单独注册的 ⌘4 监听（review 遗留项 ② 闭合）。护栏 `src/features/diary/diaryWorkspace.test.ts` ② 断言表内容 + App 不得再自注册。
 
+### 261109 · 标签视觉小抽 + 白屏修复
+- **白屏（开发版打不开）根因**：日记「空间切换回落」的 `useEffect` 被写在 `if (!workspace) return` **之后** ⇒ 首渲染少跑一个 hook ⇒ React「Hooks 顺序变化」⇒ 白屏。已移到早期 return 之前（判据改用 `openTabs`），并加护栏：effect 必须在早期 return 之前。
+- **小抽**：新增 `src/features/editor/TabItemVisual.tsx`（纯展示：标题/图标/钉住/脏点/已删除徽标/关闭），文档标签与日记标签**同源**；拖拽/钉住/分屏/右键仍留在 `MultiTabEditor`（那是文档空间语义）。护栏 `tabItemVisual.test.ts`：日记侧不得自写 `.tab-title/.tab-close`，文档侧普通标签必须走视觉原子。
+- 门禁：tsc 0；vitest **820 文件 / 5164 通过 / 12 skipped / 0 failed**；ui-metrics / check:mobileui / check:arch（import 违规 0） / diff-check 通过。
+
 ### 261109 · 更新中心两处修正（VPN 现场 ⇒ 可观测性 + 手动检查语义）
 - **现场**：v1.0.5 桌面点「检查更新」显示裸的 `fetch failed`。实测：失败时三次都是 **~10.5s**（= undici 默认 10s 连接超时），清单本身正常（隔离实例 2.0s 拿到 `available 1.1.0`）；根因是**开着 VPN 时到 GitHub 的连接被黑洞**，关掉即恢复。**不是代码/清单问题**。
 - **可观测性（此前为 0）**：`describeError` 现在把 `error.cause.code` 翻成可操作说明 + 保留原始码（如「连接 GitHub 超时 · 请检查代理 / VPN 后重试（UND_ERR_CONNECT_TIMEOUT）」），并在**检查失败时写主进程日志**（此前只有 `ipc.slow` 告警，现场无法复盘）。
@@ -206,7 +211,7 @@
 
 - Android 签名 = release keystore（证书 SHA-256 见 §0 v1.0.2）；keystore 必须离线备份，丢失后无法覆盖升级。
 - macOS = x64 + arm64 分开打包，ad-hoc 签名未公证（首次打开走「仍要打开」）；免提示需 Apple Developer ID + 公证。
-- **GitHub 推送走 HTTPS**（SSH key 未在 GitHub 侧生效）；本机偶发 HTTP2 framing / 443 超时 ⇒ 先 `git -c http.version=HTTP/1.1 push <url> <branch>` 重试；仍失败就只推 Gitee、恢复后补推。曾用 `http.curloptResolve` 仅对单次 git 命令覆盖 DNS 解决（不改全局 DNS/代理/TLS，不固化 IP）。
+- **GitHub 推送：优先走 SSH remote `github`**（261109 实测：HTTPS 到 github.com **完全不通**（443 连接超时/HTTP2 framing），SSH 22 **可用** ⇒ `git push github master`；`origin` 的 HTTPS pushurl 会失败）。**VPN 开启时 GitHub 一律不通（含发版 tag 推送）**，发版前确认 VPN 已关。HTTPS 可用时期的老办法：`git -c http.version=HTTP/1.1 push <url> <branch>`。曾用 `http.curloptResolve` 仅对单次 git 命令覆盖 DNS 解决（不改全局 DNS/代理/TLS，不固化 IP）。
 - **v1.1.0 发版（261109 20:03 CST）**：master = `075272b2`（已推 Gitee + GitHub），注解 tag **`v1.1.0`** 已推两处并触发 GitHub `Release` workflow（macOS x64+arm64 / Windows / Android / publish）；tag 指向 `075272b2`，**不可移动**。发版前 review 修掉三项 P1（AI 写作排除日记子树与日记本、槽位上移消除 features→desktop 违规、AI 写作改 lazy 回收首屏余量）。
 - **本机 `stash@{0}`**：一段**非本会话**的 a11y WIP（设置页标题改 h1/h2 + 关闭钮 44px + 对应基线），与 v1.1.0 无关，别误 apply；同目录还有未跟踪的 `src/mobile/settings/settingsA11y.test.ts`（属该 WIP）。
 - 发版流程见 [docs/RELEASE.md](RELEASE.md)；用户手册见 [guide/README.md](../guide/README.md)。
