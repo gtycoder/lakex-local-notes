@@ -200,6 +200,8 @@ git tag v0.1.2                           # 注解 tag 更稳（git tag -a）
 git push origin master v0.1.2
 ```
 
+> 更新清单（261109）：release job 会自动从 `docs/RELEASE-NOTES.md` 抽当前 tag 段落写 GitHub Release 正文，并用 `scripts/generate-update-manifest.mjs` 生成 `latest.json`（应用更新中心读取）。发版前可用 fake dist 本地干跑；`workflow_dispatch` 重跑旧 tag 需先在 UI 选中该 tag。
+
 ### 4. Gitee 发行版同步（可选）
 
 > **Gitee 侧不跑 CI**（Gitee Go 收费，用户 261029 定：CI 只在 GitHub）。这里说的「同步」= **GitHub Actions 里调 Gitee API 上传产物**，不占 Gitee CI、不额外收费；不配 secret 就跳过（Gitee 只保留代码+tag 镜像）。

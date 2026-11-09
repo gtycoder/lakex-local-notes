@@ -136,6 +136,8 @@ LakexLocalNotes = **本地优先**笔记应用：Electron 44.3 + React 18.3 + be
   长按唯一实现 = `src/mobile/ui/useLongPress.ts`（卡片 10px 取消；目录行 `moveCancelPx:0`），**别再写第二份计时器**。
 - **发版 / 版本号单一来源 = `package.json`（261030 起）**：发版只 `npm version patch --no-git-tag-version` + 提交 + **注解 tag `vX.Y.Z`** 并推 tag（只有 tag 触发 CI）；**不要手改** `android/app/build.gradle` 的版本号 —— 它从根 `package.json` 派生（versionName = 语义版本；versionCode = 1000 + major×10000 + minor×100 + patch，**只增不减**，否则 `adb install -r` 会因 `INSTALL_FAILED_VERSION_DOWNGRADE` 失败）。发出去的 tag **不可移动**，发错只能 bump 版本再发。
 
+- **更新中心（261109）**：只做稳定版（无通道）；清单 = GitHub latest release 的 `latest.json`（CI 生成，解析/比较以 `src/core/update/updateManifest.ts` 为准）；自动检查默认开（启动 + 6/12/24h）、自动下载默认开（Android 仅 Wi-Fi）；**不做静默安装**（桌面打开安装包、Android 拉起系统安装器）；下载必须校验 sha256，Android 另验 `ANDROID_RELEASE_CERT_SHA256`；设置只存设备本地；发版正文与更新日志同源 `docs/RELEASE-NOTES.md`（规格 `docs/UPDATE-CENTER.md`）。
+
 ## 5. 数据路径与安全
 
 | 项 | 路径 |

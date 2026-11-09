@@ -51,7 +51,7 @@ Electron 桌面（macOS 优先）+ Android（Capacitor WebView）
 
 已实现能力：笔记本树与批量多选（移动/删除/打标签）、富文本编辑（Lake 内核：标题/列表/待办/引用/表格/代码块/公式/分栏/折叠块等）、文档标签与标签空间、多维表（bitable）、表格（sheet）、画板（Drawnix）、手写板（矢量墨迹与多页 A4）、小记（独立时间线，可转正式笔记）、导入（桌面 Markdown / Word / Excel / CSV；Android 分享仅 Markdown）、AI 助手（文本/图片/PDF 多模态；选区浮动栏 + 顶栏 + 块菜单三个入口）、大纲、历史快照、回收站、附件/图片管理、S3 同步 + GC。
 
-计划中（**未实现**）：应用内更新中心（检查更新 / 更新日志 / 通道 / 自动下载）；当前更新方式 = 下载新包手动替换（见 README「打包与发布」）。
+已实现（261109）：应用内更新中心（检查更新 / 更新日志 / 自动下载；仅稳定版、不做静默安装；规格见 `docs/UPDATE-CENTER.md`）。
 
 技术栈（由现有代码回答，不再单列 ## Stack）：Electron 44.9 + React 18.3 + TypeScript 5.9 + better-sqlite3 13（N-API）+ vendored 的 `@dlient/lakex-doc-react`（内核 v1.99.0，已 pin）+ Drawnix 画板 + sharp + @aws-sdk/client-s3；移动端 Vite + Capacitor 8（Android）。准确版本以 `package.json` 为准。
 

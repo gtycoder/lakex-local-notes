@@ -5,6 +5,7 @@ import { bridge } from "../bridge";
 import { getNativeErrorMessage, reportNativeActionError } from "../../lib/nativeErrors";
 import { mobileAppInfoPort } from "../native/appInfoPort";
 import { mobileCachePort } from "../native/cachePort";
+import { nativeCleanupUpdateFiles } from "../native/updateManager";
 import { showToast } from "../ui/toastBus";
 import { notifyHistorySettingsChanged } from "../lib/historySettingsSync";
 
@@ -129,6 +130,9 @@ export function useSettingsSectionData(sections: {
     setCacheMsg("清理中…");
     try {
       const result = await mobileCachePort.clearDerivedCaches();
+      // 261109：更新中心的 staging（应用专属外部目录）与 cache/updates 残留一并清掉
+      // （卸载由系统清两处目录；主动清理走这里，避免下载中途取消/失败留下的安装包）。
+      void nativeCleanupUpdateFiles();
       // 261105：清缓存的真实内容是「派生搜索缓存（FTS/账本）+ 渲染临时文件」，索引在后台重建。
       const clearedEntries = result.cleared.tempFileBytes ?? 0;
       setCacheMsg(clearedEntries > 0

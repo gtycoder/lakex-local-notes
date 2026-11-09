@@ -60,6 +60,7 @@ import { ResourceRepository } from "./resourceRepository.js";
 import { draftJournalDir, readDraftEntry } from "./draftJournal.js";
 import { RemoteImportRepository } from "./remoteImportRepository.js";
 import type { ResourceUploadOutput, HistorySettings, HistoryCleanupResult, S3Settings, SyncSettings, S3GcSettings, FileScanSettings, FileReconcileState, AutoBackupSettings, AutoBackupState } from "./storeTypes.js";
+import type { UpdateSettings } from "../src/core/update/updateTypes.js";
 import { fileKindOf, renameFileCardDisplay, scanAssetCards } from "../src/core/fileCard.js";
 import { TRASH_NOTEBOOK_ID } from "../src/core/syncDecisions.js";
 import { saveExternalChangedEvent, type SyncConflictEvent } from "../src/core/syncConflictLog.js";
@@ -1595,6 +1596,15 @@ export class Store {
 
   saveAutoBackupState(state: AutoBackupState): void {
     this.settingsRepository.saveAutoBackupState(state);
+  }
+
+  /** 更新中心设置（261109；本机 settings 表，不进 S3/正文）。 */
+  getUpdateSettings(): UpdateSettings {
+    return this.settingsRepository.getUpdateSettings();
+  }
+
+  saveUpdateSettings(settings: UpdateSettings): UpdateSettings {
+    return this.settingsRepository.saveUpdateSettings(settings);
   }
 
   /** AI 设置（P0）：密钥加密落盘、独立 key，不参与 S3/同步/导出。 */

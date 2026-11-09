@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { isCloudActive } from "./core/cloudState";
 import { PanelLeft } from "lucide-react";
 import { Sidebar } from "./components/app/Sidebar";
@@ -45,12 +45,15 @@ import type { TreeNode } from "./lib/types";
 /** P12：回收站/单据属性弹窗都挂 Lake 内核（HistorySnapshotPreview → useHistorySnapshotViewer），
  *  只在真正打开时才需要 ⇒ 懒加载，避免内核重新进入首屏静态图。 */
 const NoteInfoDialog = lazy(() => import("./components/app/NoteInfoDialog").then((m) => ({ default: m.NoteInfoDialog })));
+/** 桌面更新中心（261109）：只在打开时加载（RELEASE-NOTES 原文 + MarkdownView，不进首屏静态图）。 */
+const UpdateCenter = lazy(() => import("./components/app/UpdateCenter").then((m) => ({ default: m.UpdateCenter })));
 import { saveSettings } from "./lib/settings";
 import { useSafeModeStatus } from "./hooks/useSafeModeStatus";
 import { useTabSessionPersistence } from "./hooks/useTabSessionPersistence";
 import { type OpenTab, EDGE_HANDLE_DWELL_MS, OUTLINE_SIDEBAR_MAX_WIDTH, OUTLINE_SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH, patchTabById, treeNodePath } from "./desktop/desktopTypes";
 import { SaveConflictDialog } from "./components/app/SaveConflictDialog";
 import { DesktopOverlays } from "./desktop/DesktopOverlays";
+import { installUpdateCenterAutoOpen, isUpdateCenterOpen, subscribeUpdateCenter } from "./components/app/updateCenterSession";
 import { AiAssistantHost } from "./features/ai/AiAssistantHost";
 import { openAiAssistant } from "./features/ai/aiAssistantSession";
 import { DesktopLibrary } from "./desktop/DesktopLibrary";
@@ -92,6 +95,9 @@ export function App() {
 
   const { syncToast, setSyncToast, showSyncToast } = useSyncShell();
   const shell = useDesktopShell({ quickNotesRef });
+  // 更新中心（261109）：设置页入口走会话 store；启动自动检查发现新版本时每版本最多自动弹一次。
+  const updateCenterOpen = useSyncExternalStore(subscribeUpdateCenter, isUpdateCenterOpen, isUpdateCenterOpen);
+  useEffect(() => installUpdateCenterAutoOpen(), []);
 
   // ===== P1 标签空间（一级入口「标签」）=====
   // 标签目录（quick-notes 库，已同步）+ 文档关系（主库）一份数据；侧栏「按标签筛选」与标签页共用。
@@ -1071,6 +1077,11 @@ export function App() {
         cloudEnabled={cloudEnabled}
       />
       <AiAssistantHost />
+      {updateCenterOpen && (
+        <Suspense fallback={null}>
+          <UpdateCenter />
+        </Suspense>
+      )}
       {/* 大表格粘贴护栏（A+B，261008）：超阈值不粘进文档，改为明确提示 + 一键「存为表格文档」 */}
       <TablePasteGuardDialog parentId={notes.find((n) => n.id === activeNoteId)?.parentId ?? null} />
       {/* 资料库空态「新建文档」：与目录栏新建同一套弹窗（预填默认名，可改或直接确认） */}

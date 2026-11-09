@@ -4,6 +4,7 @@ import type { MissingBodyDoc, MissingQuickNoteDoc } from "../core/missingBody";
 import type { AiChatMessage, AiChatResult, AiListModelsResult, AiProviderPatch, AiSettingsPatch, AiSettingsView, AiStreamEvent, AiTestResult } from "../core/aiProviders";
 import type { S3TransferSummary } from "../core/s3ConfigTransfer";
 import type { HostCapabilityFlags } from "./hostCapabilities";
+import type { UpdateSettings, UpdateSettingsPatch, UpdateState } from "../core/update/updateTypes";
 
 /** 全库搜索命中（IPC search_notes 返回项；DT-16：内联匿名类型改命名类型）。 */
 export interface NoteSearchHit {
@@ -300,6 +301,20 @@ export interface LakeNative {
   readAppLog(opts: { keyword?: string; maxLines?: number; context?: number }): Promise<{ matches: Array<{ line: string; hit: boolean }>; file: string; truncated: boolean; generatedAt: string }>;
   /** 关于页：版本与运行环境 + 数据与存储概览（只读）。 */
   getSystemInfo(): Promise<import("./types").SystemInfo>;
+  /** 更新中心（桌面）：状态快照（IPC 与 update-state 事件同形）。 */
+  updateGetState(): Promise<UpdateState>;
+  /** 立即检查更新（manual：不算「自动检查」，不触发每版本自动弹窗）。 */
+  updateCheck(): Promise<UpdateState>;
+  /** 下载当前检测到的安装包（单飞；进度走 update-state 事件）。 */
+  updateDownload(): Promise<UpdateState>;
+  /** 打开已下载的安装包（路径由主进程记录，渲染层不能传路径）。 */
+  updateOpenFile(): Promise<{ ok: boolean; path: string }>;
+  updateOpenReleasePage(): Promise<{ ok: boolean; url: string }>;
+  updateGetSettings(): Promise<UpdateSettings>;
+  updateSetSettings(patch: UpdateSettingsPatch): Promise<UpdateSettings>;
+  /** 忽略当前检测到的版本（下个版本恢复提示）。 */
+  updateIgnoreVersion(version: string): Promise<UpdateState>;
+  onUpdateState(callback: (state: UpdateState) => void): () => void;
   /** 关于页：在文件管理器中显示白名单目录（kind 由主进程解析，绝不传路径）。 */
   revealDataFolder(kind: import("./types").DataFolderKind): Promise<{ ok: boolean; path: string }>;
   runS3DeepCleanup(dryRun: boolean, ignoreRetention?: boolean): Promise<DeepCleanupResult>;
@@ -519,6 +534,15 @@ export const native = {
   runDataHealthCheck: () => api().runDataHealthCheck(),
   readAppLog: (opts: { keyword?: string; maxLines?: number; context?: number }) => api().readAppLog(opts),
   getSystemInfo: () => api().getSystemInfo(),
+  updateGetState: () => api().updateGetState(),
+  updateCheck: () => api().updateCheck(),
+  updateDownload: () => api().updateDownload(),
+  updateOpenFile: () => api().updateOpenFile(),
+  updateOpenReleasePage: () => api().updateOpenReleasePage(),
+  updateGetSettings: () => api().updateGetSettings(),
+  updateSetSettings: (patch: UpdateSettingsPatch) => api().updateSetSettings(patch),
+  updateIgnoreVersion: (version: string) => api().updateIgnoreVersion(version),
+  onUpdateState: (callback: (state: UpdateState) => void) => api().onUpdateState(callback),
   revealDataFolder: (kind: import("./types").DataFolderKind) => api().revealDataFolder(kind),
   runS3DeepCleanup: (dryRun: boolean, ignoreRetention = false) => api().runS3DeepCleanup(dryRun, ignoreRetention),
   getTrashReminder: () => api().getTrashReminder(),

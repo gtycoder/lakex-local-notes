@@ -42,6 +42,7 @@ import { useBackHandler } from "./hooks/useBackHandler";
 import { useDoubleBackExit } from "./hooks/useDoubleBackExit";
 import { useRouteTransition } from "./hooks/useRouteTransition";
 import { useAutoSync } from "./hooks/useAutoSync";
+import { useUpdateAutoCheck } from "./hooks/useUpdateAutoCheck";
 import { readSyncProgress, subscribeSyncProgress } from "./sync/syncProgressStore";
 import { Toasts } from "./ui/Toasts";
 import { AttachmentPreview } from "../features/attachment/AttachmentPreview";
@@ -313,6 +314,8 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
 
   // 自动同步（261012）：autoMode=interval 起定时器；onOpenClose 在冷启动就绪 + 回到前台时补一次。
   useAutoSync(phase === "ready");
+  // 应用内更新：就绪后检查一次 + 回前台按 24h 节流（设置里可关；仅 Android 原生）。
+  useUpdateAutoCheck(phase === "ready");
 
   /**
    * 按需资产占位（261027）：按需下载时，还没打开过的文档/小记里的图片本地没有文件，AssetServer 404 →

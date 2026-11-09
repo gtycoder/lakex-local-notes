@@ -42,6 +42,7 @@ import { DialogResizeHandles } from "../ui/DialogResizeHandles";
 import { filterSettingsNav, searchSettingItems, type SettingItemEntry } from "../model/settingsSearch";
 import { getNativeErrorMessage, reportNativeActionError } from "../../lib/nativeErrors";
 import { S3ConfigImportDialog } from "./S3ConfigImportDialog";
+import { openUpdateCenter } from "./updateCenterSession";
 import { RebuildDataBlock } from "./RebuildDataBlock";
 import { formatBytes } from "../../lib/formatBytes";
 import { formatDateTime } from "../../core/dateFormat";
@@ -1250,6 +1251,9 @@ let verifiedS3Fingerprint: string | null = null;
                   <>
                     <Group title="关于" icon={<Info size={16} />}>
                       <Block itemId="about-app" name={`LakexLocalNotes ${sysInfo.app.version}${sysInfo.packaged ? "" : "（开发实例）"}`} desc="本地优先、离线可用；数据保存在本机，S3 只作云端备份。" />
+                      <Item itemId="about-update-center" name="更新中心" desc="检查 GitHub 稳定版更新；可设置自动检查（默认开 / 24 小时）与自动下载（默认开，下载完成后由你打开安装包）。">
+                        <button className="ln-btn ln-btn--secondary" onClick={() => openUpdateCenter()}>打开更新中心</button>
+                      </Item>
                       <Block itemId="about-fonts" name="字体" desc="界面与正文使用内置 MiSans（小米科技，依《MiSans 字体知识产权许可协议》免费商用；此处按协议注明使用）。代码块使用 JetBrains Mono（SIL OFL 1.1）。两者均随应用内置、离线可用。" />
                     </Group>
 

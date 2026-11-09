@@ -189,6 +189,15 @@ contextBridge.exposeInMainWorld("lakeNative", {
   readAppLog: (opts) => invoke("read_app_log", opts),
   getSystemInfo: () => invoke("get_system_info"),
   revealDataFolder: (kind) => invoke("reveal_data_folder", kind),
+  // 261109 更新中心（桌面）：状态/检查/下载/打开安装包/打开下载页/设置/忽略版本；进度与状态走 update-state 事件。
+  updateGetState: () => invoke("update_get_state"),
+  updateCheck: () => invoke("update_check"),
+  updateDownload: () => invoke("update_download"),
+  updateOpenFile: () => invoke("update_open_file"),
+  updateOpenReleasePage: () => invoke("update_open_release_page"),
+  updateGetSettings: () => invoke("update_get_settings"),
+  updateSetSettings: (patch) => invoke("update_set_settings", patch),
+  updateIgnoreVersion: (version) => invoke("update_ignore_version", version),
   runS3DeepCleanup: (dryRun, ignoreRetention = false) => invoke("run_s3_deep_cleanup", dryRun, ignoreRetention),
   getTrashReminder: () => invoke("get_trash_reminder"),
   // Batch3-B 安全模式：读状态 / 复制诊断 / 显式退出（下次启动正常）
@@ -223,6 +232,12 @@ contextBridge.exposeInMainWorld("lakeNative", {
     const listener = (_event, detail) => callback(detail);
     ipcRenderer.on("library-changed", listener);
     return () => { ipcRenderer.removeListener("library-changed", listener); };
+  },
+  /** 更新中心状态（检查/下载进度/完成）；返回取消订阅。 */
+  onUpdateState: (callback) => {
+    const listener = (_event, state) => callback(state);
+    ipcRenderer.on("update-state", listener);
+    return () => { ipcRenderer.removeListener("update-state", listener); };
   },
   /** macOS 菜单「设置…（⌘,）」→ 打开设置面板（主进程只发事件，渲染层决定开哪块）。 */
   onOpenSettings: (callback) => {

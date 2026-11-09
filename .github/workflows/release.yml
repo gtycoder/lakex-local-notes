@@ -227,16 +227,34 @@ jobs:
     env:
       GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
     steps:
+      # release job 原本只 download-artifact；生成更新清单要读 package.json 与 docs/RELEASE-NOTES.md ⇒ 需要 checkout。
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           path: dist
           merge-multiple: true
+      # 更新中心（docs/UPDATE-CENTER.md §7）：从 RELEASE-NOTES.md 抽当前 tag 段落写 release-body.md；
+      # 扫描 dist 产物算 sha256/size 写 latest.json（URL 指向本 tag 的 release asset）。
+      # 注意：workflow_dispatch 重跑旧 tag 时必须在 UI 里选中该 tag 触发，否则 package.json 版本对不上会直接失败。
+      - name: Generate update manifest (latest.json) & release body
+        env:
+          TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}
+        run: >-
+          node scripts/generate-update-manifest.mjs
+          --tag "$TAG"
+          --dist dist
+          --out-dir dist
       - name: GitHub Release
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
           tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}
           name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}
-          generate_release_notes: true
+          # 正文与更新中心同源 = docs/RELEASE-NOTES.md 当前 tag 段落（不再 generate_release_notes 自动生成）。
+          body_path: dist/release-body.md
+          generate_release_notes: false
           overwrite_files: true
           files: dist/**
       - name: Mirror assets to Gitee Release

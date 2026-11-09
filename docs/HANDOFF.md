@@ -8,9 +8,14 @@
 
 ## 0. 最新交接（261109）
 
-### 261109 · 文档收口与门禁复核（本轮）
+### 261109 · 更新中心（桌面 + Android）
+- 新增应用内更新中心：检查更新（GitHub latest release 的 `latest.json`，CI 生成）/ 更新日志（复用 `docs/RELEASE-NOTES.md`）/ 自动检查（默认开，启动 + 6/12/24h）/ 自动下载（默认开；Android 仅 Wi-Fi）/ 忽略此版本；**不做静默安装**（桌面打开安装包、Android 拉起系统安装器）。
+- 桌面新增 8 个 IPC 通道（165→173，parity 通过）；Android 新增 `UpdatePlugin.kt`（DownloadManager + sha256/证书指纹校验 + FileProvider 安装器）；规格见 [docs/UPDATE-CENTER.md](UPDATE-CENTER.md)。
+- 门禁：`npx tsc --noEmit` = 0；`npx vitest run` = **788 文件（777 passed / 11 skipped）/ 4961 passed / 12 skipped / 0 failed**；`git diff --check` = 0；新增单测 37 例。**Android 设备侧未验证**（下载→校验→系统安装器交互留待真机/模拟器）。
+
+### 261109 · 文档收口与门禁复核
 - 重写本文件：删除 261106 及更早的 dated 批次（git 可查）；合并五份旧 RELEASE-NOTES；清理已删文档的悬空引用；所有相对链接重定向到现存文档（文档地图见 §1）。
-- 清理一批已完成/过期文档与死代码（清单见 §1「工作树」）；`docs/UPDATE-CENTER.md` 仍**不存在**，更新中心只有待办（§3），不要当成已有规格去读。
+- 清理一批已完成/过期文档与死代码（清单见 §1「工作树」）；更新中心规格与实现见 [docs/UPDATE-CENTER.md](UPDATE-CENTER.md)（见上一条 261109 更新中心）。
 - 门禁实测（清理后）：`npx tsc --noEmit` = **0**；`npx vitest run` = **770 文件 / 4918 passed / 12 skipped / 0 failed**（11 文件 skipped）；`git diff --check` = **0**。`check:bundle` 的 mobile-entry 仍超目标（已知红，见 §1）。
 - 本文件之后：先按 §1 核实 HEAD / worktree，再从 §3 领活；§2/§3 已定稿的语义不要再重新争论。
 
@@ -74,24 +79,25 @@
 
 **版本与仓库**
 
-- 分支 `master`，HEAD = **本提交**（以 `git log -1` 为准；其下两个清理提交 `e4f1fd3f` / `967c09e6`，再往上是 `b78c11df` = tag `v1.0.4` 指向的 commit）。
+- 分支 `master`，HEAD = **本提交**（以 `git log -1` 为准；其下 `04eb32a7`（文档对齐）、`967c09e6`（文档清理）、`e4f1fd3f`（代码清理），再往上是 `b78c11df` = tag `v1.0.4` 指向的 commit）。
 - `package.json` = **1.0.4**；Android `versionName 1.0.4` / `versionCode 11004`（从根 `package.json` 派生，版本号单一来源）。
 - tag：`v1.0.0`–`v1.0.4`（另有旧 `v0.0.1` / `v0.0.2`）；已发布 tag 不再移动。
 - **唯一 worktree**：`/Users/admin/file/local-lake/lakex-local-notes`；只有 `master`（本地 + Gitee + GitHub），无在途特性分支。
 - 远端：`origin` = Gitee（SSH，日常拉取/推送源），第二 pushurl = GitHub HTTPS ⇒ `git push origin <branch>` 一次推两边；GitHub 只在推 tag 时构建。
 - 发布说明：[docs/RELEASE-NOTES.md](RELEASE-NOTES.md)（v1.0.4 → v1.0.0 倒序合集，原五份独立文件已合并删除）。
 
-**工作树（261109 清理批，已提交）**
+**工作树（261109 清理批 + 更新中心批，已提交）**
 
-- 本批分三个本地提交：`e4f1fd3f`（代码死文件 26 个）、`967c09e6`（文档清理：删 20 篇 + 5 份旧发布说明合并为 [docs/RELEASE-NOTES.md](RELEASE-NOTES.md)）、本提交（HANDOFF / AGENTS / README / PRODUCT / DESIGN / MOBILE-OPS 对齐）；工作树应为 clean（以 `git status` 为准），未 push。
+- 清理批分三个本地提交：`e4f1fd3f`（代码死文件 26 个）、`967c09e6`（文档清理：删 20 篇 + 5 份旧发布说明合并为 [docs/RELEASE-NOTES.md](RELEASE-NOTES.md)）、`04eb32a7`（HANDOFF / AGENTS / README / PRODUCT / DESIGN / MOBILE-OPS 对齐）；工作树应为 clean（以 `git status` 为准），未 push。
 - 文档：删除一批已完成/过期的研究、审计、回归文档；新增 RELEASE-NOTES 合集；ARCHITECTURE / LAKEX-CONTRACT / MOBILE-LONG-DOC-PROBE 等随清理更新。
 - 代码：删除已确认无引用的死模块（`src/core/decideUpload*`、`lakeReconcile*`、`quickNoteReconcile*`、`syncDecision*`、`electron/mdToHtml.ts`、`electron/storeUtils.ts`、`electron/syncDecision.ts` 及若干一次性 scripts）；`QuickNoteEditor` / `QuickNotePreview` 等有小改。
 - 本文件（HANDOFF）已重写并随本批提交；其余文件清单与 diff 见上述提交。
+- **261109 更新中心批（本提交）**：`docs/UPDATE-CENTER.md` + `src/core/update/` + `electron/update/` + `electron/ipc/registerUpdate.ts` + 桌面 `UpdateCenter` UI + Android `UpdatePlugin.kt` + 移动更新中心 UI + CI `scripts/generate-update-manifest.mjs`；新增单测 37 例。
 
 **门禁基线（261109 清理后实测）**
 
 - `npx tsc --noEmit` = **0 错**。
-- `npx vitest run` = **781 文件（770 passed / 11 skipped）/ 4918 passed / 12 skipped / 0 failed**。
+- `npx vitest run` = **788 文件（777 passed / 11 skipped）/ 4961 passed / 12 skipped / 0 failed**。
 - `git diff --check` = **0**。
 - `check:bundle`：**mobile-entry 仍超目标（已知红，非本批引入）**。脚本当前按现状冻结为 entry JS gzip ≤66KB、modulepreload ≤34 条、首屏 ≤380KB（`check-arch`）；目标仍是 **60KB / ≤12 条 / 360KB**，瘦身后收紧（§3 P1）。运行前需先有 `dist` / `dist-mobile` 构建产物（本机当前无 `dist`）。
 - 其它样式/边界/设备门禁按改动范围跑（分层口径见 AGENTS §3#21）；最近一次完整设备记录 = **v1.0.4 发版前**：手机 6 态、平板 6 态、多维表 3 态均重烤后两轮 0 差异。
@@ -117,7 +123,7 @@
 - 同步 / 存储 / 容错：[docs/SYNC-PROTOCOL.md](SYNC-PROTOCOL.md) · [docs/STORAGE-LAYERS.md](STORAGE-LAYERS.md) · [docs/RESILIENCE.md](RESILIENCE.md) · [docs/SYNC-DEVICE-CONTRACT.md](SYNC-DEVICE-CONTRACT.md) · [docs/SYNC-STATE-CONVERGENCE.md](SYNC-STATE-CONVERGENCE.md)
 - 内核 / 表格 / 多维表 / 手写板：[docs/LAKEX-CONTRACT.md](LAKEX-CONTRACT.md) · [docs/lakexEditor-developer-docs/](lakexEditor-developer-docs/) · [docs/USHEET-UPGRADE.md](USHEET-UPGRADE.md) · [docs/INK-PAD.md](INK-PAD.md) · [docs/BITABLE-VIEWPORT.md](BITABLE-VIEWPORT.md)
 - 移动端：[docs/MOBILE-OPS.md](MOBILE-OPS.md) · [docs/MOBILE-TECH-STACK.md](MOBILE-TECH-STACK.md) · [docs/MOBILE-AI.md](MOBILE-AI.md) · [docs/MOBILE-BITABLE-DINGTALK.md](MOBILE-BITABLE-DINGTALK.md) · [docs/MOBILE-USHEET-YUQUE-PARITY.md](MOBILE-USHEET-YUQUE-PARITY.md)
-- 工程 / 排错：[docs/DEVELOPMENT.md](DEVELOPMENT.md) · [docs/CODEX-GUIDE.md](CODEX-GUIDE.md) · [docs/TROUBLESHOOTING.md](TROUBLESHOOTING.md) · [docs/LOGGING.md](LOGGING.md) · [docs/RELEASE.md](RELEASE.md)
+- 工程 / 排错：[docs/DEVELOPMENT.md](DEVELOPMENT.md) · [docs/CODEX-GUIDE.md](CODEX-GUIDE.md) · [docs/TROUBLESHOOTING.md](TROUBLESHOOTING.md) · [docs/LOGGING.md](LOGGING.md) · [docs/RELEASE.md](RELEASE.md) · [docs/UPDATE-CENTER.md](UPDATE-CENTER.md)
 
 ## 2. 风险与已知不稳定（跨批次，别再踩）
 
@@ -144,7 +150,7 @@
 
 **P1（该做但可排期）**
 
-- **更新中心（新待办）**：实现「检查更新 / 更新日志 / stable|beta 通道 / 可配置定时检测 / 自动下载 / 不做静默安装」。规格尚未沉淀（`docs/UPDATE-CENTER.md` 未创建），先定语义与失败面（离线、限流、下载中断、签名校验）再动代码。
+- **更新中心设备验证（261109 已实现，待设备验收）**：Android 真机/模拟器走一遍「检查→下载（DownloadManager 通知）→ sha256/证书校验→系统安装器→覆盖安装保数据」；桌面走一遍「检查→下载→打开 dmg/exe」；验证「忽略此版本」「下载中断/重启恢复」「仅 Wi-Fi 自动下载」。规格 [docs/UPDATE-CENTER.md](UPDATE-CENTER.md)。
 - **桌面 3 项实机复核**：usheet 整行/整列选中不跳滚动、桌面手写板 14 色、设置/小记/历史 lazy 路径交互冒烟（P12 遗留）。**平板（lake_tab）复验页签/页面面板**：代码无形态分支（`formFactor` 只改外壳宽度与侧栏），Android 手机已实测，平板需装同一份 APK 复核一次。
 - **261104 三项裁决的残余验证**（裁决本身是 AGENTS §4 的定稿，别再立项）：**缺正文云端拉回需在配了 S3 的真机走一遍**（目前仅单测 mock）；**表单视图大表行数帽**（一次性 `getValues`、默认 35 行，超大表若卡再加）；**资源管理两处 UI 改动未重跑 6 态快照 + 23 屏走查**（只在设置子页，预期 0 差异，发版前一并跑）；**资源「附件」系统打开未设备专项验**（需真实附件 + 系统应用；图片 Lightbox 已验）。
 - **小记标签剩余**：只有「小记→文档转换是否携带标签」待定。其余已收口、别再立项：置顶已删、标签顺序设备本地、删除 = 缺席、移动端标签管理（拖拽/改名/删除/合并已做）、改名/删除全量重建。

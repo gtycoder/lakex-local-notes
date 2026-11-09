@@ -192,6 +192,15 @@ export const WEB_METHODS: Record<string, string> = {
   readAppLog: "read_app_log",
   getSystemInfo: "get_system_info",
   revealDataFolder: "reveal_data_folder",
+  // 261109 更新中心（桌面）；状态推送走 SSE 事件 update-state，不在 HTTP 方法表里。
+  updateGetState: "update_get_state",
+  updateCheck: "update_check",
+  updateDownload: "update_download",
+  updateOpenFile: "update_open_file",
+  updateOpenReleasePage: "update_open_release_page",
+  updateGetSettings: "update_get_settings",
+  updateSetSettings: "update_set_settings",
+  updateIgnoreVersion: "update_ignore_version",
   runS3DeepCleanup: "run_s3_deep_cleanup",
   getTrashReminder: "get_trash_reminder",
   // Batch3-B 安全模式（桌面诊断态；Web 客户端同一批 handler）

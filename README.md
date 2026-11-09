@@ -196,7 +196,7 @@ CI 发版产出 `assembleRelease` 的**正式 release keystore 签名** APK（v1
 - 也可本地打包：`npx vite build && npx electron-builder --mac`（Windows 包建议交给 CI 的 `windows-latest`；Linux target 尚未配置）
 - ⚠️ 构建产物**包含闭源 Lakex 内核**（仓库已 vendored）；公开分发（Release 附件）前请确认你接受相应风险，详见 `NOTICE`
 - CI 发版产出的 macOS 包为 **ad-hoc 签名、未公证**（`mac.identity=-`）；首次打开需右键 → 打开；Windows 会弹 SmartScreen，需「更多信息 → 仍要运行」
-- 签名/公证流程与 Actions 发版指南见 `docs/RELEASE.md`；不提供自动更新，下载后手动替换
+- 签名/公证流程与 Actions 发版指南见 `docs/RELEASE.md`；内置更新中心（检查更新 / 更新日志 / 自动下载；仅稳定版，不做静默安装，下载后由用户打开安装包）
 
 ## 文档
 
@@ -211,6 +211,7 @@ CI 发版产出 `assembleRelease` 的**正式 release keystore 签名** APK（v1
 | [docs/lakexEditor-developer-docs/](docs/lakexEditor-developer-docs/) | Lakex 内核官方开发者文档离线镜像（API/事件/命令/工具栏/上传，导出自语雀） |
 | [docs/USHEET-UPGRADE.md](docs/USHEET-UPGRADE.md) | Univer 表格触点、升级 playbook、能力路线 |
 | [docs/RELEASE-NOTES.md](docs/RELEASE-NOTES.md) | 发布说明合集（v1.0.4 → v1.0.0；原五份独立说明已合并） |
+| [docs/UPDATE-CENTER.md](docs/UPDATE-CENTER.md) | 应用内更新中心规格（检查 / 下载 / 更新日志 / 校验；不做静默安装） |
 | [docs/MOBILE-BITABLE-DINGTALK.md](docs/MOBILE-BITABLE-DINGTALK.md) | 移动端多维表：钉钉实机实测 + 复刻方案与实施记录（含可点的 [样机](docs/mockups/mobile-bitable.html)） |
 | [docs/MOBILE-TECH-STACK.md](docs/MOBILE-TECH-STACK.md) · [docs/MOBILE-DESIGN.md](docs/MOBILE-DESIGN.md) | 移动端架构与设计 |
 | [docs/MOBILE-OPS.md](docs/MOBILE-OPS.md) | **Android 构建 / 安装 / AVD / CDP / 门禁 / 点按口径**（唯一运维手册） |

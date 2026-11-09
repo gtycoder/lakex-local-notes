@@ -8,6 +8,7 @@ import { HISTORY_SETTINGS_DEFAULTS } from "../../core/settingsDefaults";
 import { formatBytes } from "../../lib/formatBytes";
 import { formatCrashEntries, readCrashLog } from "../lib/crashLog";
 import { showToast } from "../ui/toastBus";
+import { UpdateCenterSection } from "./UpdateCenterSection";
 const LAKEX_KERNEL_VERSION = "1.99.0";
 
 export function AppearanceSettingsSection({ settings, update }: { settings: AppSettings; update(patch: Partial<AppSettings>): void }) {
@@ -44,6 +45,7 @@ export function HistorySettingsSection({ hist, updateHist }: { hist: HistoryMobi
 }
 export function AboutSettingsSection({ appInfo, diag }: { appInfo: ReturnType<typeof useSettingsSectionData>["appInfo"]; diag: ReturnType<typeof useSettingsSectionData>["diagnostics"] }) {
   return (
+            <>
             <div className="mb-set-group">
               <div className="mb-set-title"><Info size={16} />关于</div>
               <div className="mb-set-items">
@@ -97,5 +99,8 @@ export function AboutSettingsSection({ appInfo, diag }: { appInfo: ReturnType<ty
                 )}
               </div>
             </div>
+            {/* 261109：更新中心（检查更新 / 自动检查 / 自动下载 / 仅 Wi-Fi / 更新日志）。 */}
+            <UpdateCenterSection appInfo={appInfo} />
+            </>
   );
 }

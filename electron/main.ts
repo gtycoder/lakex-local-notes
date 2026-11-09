@@ -53,6 +53,7 @@ import { registerSyncConflictIpc } from "./ipc/registerSyncConflictIpc.js";
 import { registerBackupIpc, type BackupIpcRunner } from "./ipc/registerBackupIpc.js";
 import { AUTO_BACKUP_TICK_MS, decideAutoBackup, readDatabaseFingerprint, runBackupCycle } from "./autoBackup.js";
 import { createIpcRegistrar } from "./ipc/registrar.js";
+import { UpdateService } from "./update/updateService.js";
 import { pickBackupDatabaseDialog, registerNotesIpc } from "./ipc/registerNotes.js";
 import { registerBatchNotesIpc } from "./ipc/registerBatchNotes.js";
 import { registerDuplicateNotesIpc } from "./ipc/registerDuplicateNotes.js";
@@ -66,6 +67,7 @@ import { registerQuickNotesIpc } from "./ipc/registerQuickNotes.js";
 import { registerLogIpc } from "./ipc/registerLogIpc.js";
 import { registerAiIpc } from "./ipc/registerAi.js";
 import { registerSystemInfoIpc } from "./ipc/registerSystemInfo.js";
+import { registerUpdateIpc } from "./ipc/registerUpdate.js";
 import { clampWindowState, readWindowState, writeWindowState } from "./windowState.js";
 import { TOPBAR_HEIGHT, TOPBAR_SEAM, TRAFFIC_LIGHT_DIAMETER } from "../src/lib/layoutMetrics.js";
 import { APP_ORIGIN, isAppOriginUrl } from "./appOrigin.js";
@@ -153,6 +155,8 @@ let fileReconciler: FileMetadataReconciler | null = null;
 let restartFileScanReconciler: (() => void) | null = null;
 /** 自动备份 runner（261105；registerIpc 在 whenReady 里注册，runner 先于此装配）。 */
 let autoBackupRunner: BackupIpcRunner | null = null;
+/** 更新中心服务（261109；仅桌面：检查 GitHub latest.json / 后台下载 / 用户手动打开安装包）。 */
+let updateService: UpdateService | null = null;
 /** 261105 P2-B：正常启动是否真正跑通（只有跑通后退出才写「上次 OK」；恢复模式退出保持 dirty ⇒ 下次深检）。 */
 let normalStartupCompleted = false;
 /** 历史定时器重启函数（配置变更时调用，见 save_history_settings IPC） */
@@ -682,6 +686,9 @@ function registerIpc(): ReadonlyMap<string, (args: unknown[]) => Promise<unknown
   });
   // 261105 P1 第 4 项：同步记录账本（设备本地；列表/标已读/恢复动作）。
   registerSyncConflictIpc(ipc, { store, quickNotes });
+  // 261109 桌面更新中心（读状态/检查/下载/打开安装包/打开下载页/读写设置/忽略版本）。
+  if (!updateService) throw new Error("更新服务未装配");
+  registerUpdateIpc(ipc, { service: updateService });
   return ipc.registry;
 }
 
@@ -995,6 +1002,26 @@ if (!app.requestSingleInstanceLock()) {
       const timer = setInterval(() => { void runBackup(false); }, AUTO_BACKUP_TICK_MS);
       timer.unref?.();
     }
+    // 261109 桌面更新中心：只认 GitHub 稳定版 latest.json；自动检查/自动下载默认开（设置项本机、不进 S3）。
+    // 网络失败/坏清单只提示，不阻断启动；下载由主进程流式落盘 userData/updates，**不静默安装**。
+    updateService = new UpdateService({
+      userData: userDataDir,
+      currentVersion: app.getVersion(),
+      platform: process.platform,
+      arch: process.arch,
+      settings: {
+        get: () => store.getUpdateSettings(),
+        save: (settings) => store.saveUpdateSettings(settings),
+      },
+      onState: (state) => {
+        for (const win of BrowserWindow.getAllWindows()) {
+          if (!trustedWebContents.has(win.webContents.id)) continue;
+          try { win.webContents.send("update-state", state); } catch { /* 窗口已关闭 */ }
+        }
+        webServerController?.broadcast("update-state", state);
+      },
+      log: { info: (message) => log.app.info(message), warn: (message) => log.app.warn(message) },
+    });
     registerCdnRedirect();
     registerAssetTokenRedirect();
     startAssetServer(path.join(workspaceRoot(), "note-assets"), vendorCdnDir(), path.join(workspaceRoot(), "quick-notes"), assetToken);
@@ -1017,6 +1044,8 @@ if (!app.requestSingleInstanceLock()) {
     // 正常启动顺手清掉遗留状态文件：别让下一次启动误读上一次的 active:true。
     if (!safeModeActive) removeSafeModeState(userDataDir);
     createWindow();
+    // 更新中心：启动后延迟一次自动检查 + 每 N 小时（安全模式不联网检查）；失败只记状态，不阻断启动。
+    if (!safeModeActive) updateService?.start();
     // P2-B：正常启动已跑通；「上次 OK」在正常退出（will-quit）时落盘，运行中崩溃保持 dirty ⇒ 下次深检。
     normalStartupCompleted = true;
     logHeapPeak("startup");

@@ -12,6 +12,7 @@ import {
 import { defaultAiSettings, normalizeAiSettings, type AiSettings } from "../src/core/aiProviders.js";
 import { normalizeSyncSettings } from "../src/core/syncSettings.js";
 import { HISTORY_SETTINGS_DEFAULTS, TRASH_AUTO_PURGE_DAYS } from "../src/core/settingsDefaults.js";
+import { normalizeUpdateSettings, UPDATE_SETTINGS_DEFAULTS, type UpdateSettings } from "../src/core/update/updateTypes.js";
 
 /**
  * settings 表存取（S3 / 同步 / S3 GC / 历史保留策略 + 密钥加解密）。
@@ -214,6 +215,24 @@ export class SettingsRepository {
   saveS3GcSettings(settings: S3GcSettings): void {
     this.db.prepare("INSERT INTO settings(key,value) VALUES('s3_gc_settings',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
       .run(JSON.stringify(settings));
+  }
+
+  /** 更新中心设置（261109；settings key = update_settings；本机、不进 S3/正文）。 */
+  getUpdateSettings(): UpdateSettings {
+    const row = this.db.prepare("SELECT value FROM settings WHERE key='update_settings'").get() as { value: string } | undefined;
+    if (!row) return { ...UPDATE_SETTINGS_DEFAULTS };
+    try {
+      return normalizeUpdateSettings(JSON.parse(row.value));
+    } catch {
+      return { ...UPDATE_SETTINGS_DEFAULTS };
+    }
+  }
+
+  saveUpdateSettings(settings: UpdateSettings): UpdateSettings {
+    const normalized = normalizeUpdateSettings(settings);
+    this.db.prepare("INSERT INTO settings(key,value) VALUES('update_settings',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
+      .run(JSON.stringify(normalized));
+    return normalized;
   }
 
   /** 是否已配置 S3（只判存在性、不解密密钥）：全新安装没有任何 S3 配置时，「启用云同步」默认关闭。 */

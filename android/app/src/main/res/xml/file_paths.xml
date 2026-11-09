@@ -2,4 +2,6 @@
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- 附件资产目录（Directory.Data 下 note-assets/，与桌面同构）——系统应用打开附件用 -->
     <files-path name="note_assets" path="note-assets/" />
+    <!-- 应用内更新（261109）：安装包下载完成后落在 App 私有 cache/updates/，只把该单文件暴露给系统安装器 -->
+    <cache-path name="updates" path="updates/" />
 </paths>
