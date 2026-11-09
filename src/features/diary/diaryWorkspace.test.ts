@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 
 /**
  * 日记空间（桌面片B）的**接线护栏**：数据/判据在 core+主进程（其他片），这里钉渲染层六件事：
- * ① 空间注册：DesktopWorkspace 联合类型 + 顶栏空间菜单（日记 ⌘4）；
+ * ① 空间注册：DesktopWorkspace 联合类型 + 顶栏空间菜单（日记 ⌘3）；
  * ② App：lazy 挂载 DiaryWorkspace、keep-alive 分区、shell class；
  * ③ 文档空间目录树过滤：Sidebar 收到的是 `documentTreeWithoutDiary(treeNodes)`，不是原始树；
  * ④ 左栏分组**只来自 core**：组件调 `groupDiaryEntries`，不得自己算年/月；
@@ -20,14 +20,14 @@ const TREE = read("./diaryTree.ts");
 const CHROME = read("../../styles/chrome.css");
 
 describe("日记空间接线", () => {
-  it("① 空间注册：类型联合 + 顶栏空间菜单（日记 / ⌘4 / NotebookPen）", () => {
+  it("① 空间注册：类型联合 + 顶栏空间菜单（日记 / ⌘3 / NotebookPen）", () => {
     expect(TYPES).toContain('"diary"');
     expect(TOPBAR).toContain('diary: { label: "日记", Icon: NotebookPen }');
-    expect(TOPBAR).toContain('{ id: "diary", label: "日记", Icon: NotebookPen, hint: "⌘4" }');
+    expect(TOPBAR).toContain('{ id: "diary", label: "日记", Icon: NotebookPen, hint: "⌘3" }');
     expect(TOPBAR).toContain("NotebookPen");
   });
 
-  it("② App：lazy 挂载 + keep-alive 分区 + shell class + ⌘4", () => {
+  it("② App：lazy 挂载 + keep-alive 分区 + shell class；⌘1–5 快捷键收敛在 hook 一张表", () => {
     expect(APP).toContain('lazy(() => import("./features/diary/DiaryWorkspace")');
     // 必须是模板插值（少了 `$` 会变成 className 里的字面量文本，类名永远不生效）
     const shellLine = APP.split("\n").find((line) => line.includes('diary-space-active" : ""')) ?? "";
@@ -35,9 +35,12 @@ describe("日记空间接线", () => {
     expect(APP).toContain('(desktopWorkspace === "diary" ? "" : " workspace-view--hidden")');
     expect(APP).toContain('workspace="diary"');
     expect(APP).toContain("<DiaryWorkspace");
-    // ⌘4 绑定（与 ⌘1/⌘2 同判据：meta/ctrl + 无 alt/shift）
-    expect(APP).toMatch(/event\.key !== "4"/);
-    expect(APP).toContain('switchDesktopWorkspace("diary")');
+    // 快捷键**单一来源** = useDesktopLifecycle 的映射表（261109 收敛；App 里不得再自注册 keydown）。
+    const LIFECYCLE = read("../../hooks/useDesktopLifecycle.ts");
+    expect(LIFECYCLE).toContain('"3": "diary"');
+    expect(LIFECYCLE).toContain('"4": "ai-writing"');
+    expect(LIFECYCLE).toContain('"5": "tags"');
+    expect(APP, "App 不应再自注册 ⌘4/⌘5 监听").not.toMatch(/event\.key !== "[45]"/);
   });
 
   it("②b shell：进入日记空间隐藏左侧目录栏与状态栏（与标签/回收站同口径）", () => {

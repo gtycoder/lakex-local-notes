@@ -94,12 +94,13 @@ export function DesktopWorkspaceMenuItems({ desktopWorkspace, onSwitchWorkspace,
   const spaces: Array<{ id: DesktopWorkspace; label: string; Icon: typeof Files; hint?: string }> = [
     { id: "library", label: "文档", Icon: Files, hint: "⌘1" },
     { id: "quick-notes", label: "小记", Icon: Feather, hint: "⌘2" },
+    // 261109 用户定稿：日记第 3 项（⌘3）、AI 写作第 4 项（⌘4）。
+    { id: "diary", label: "日记", Icon: NotebookPen, hint: "⌘3" },
     // 261109：AI 写作空间（桌面本地会话；不进 S3）
-    { id: "ai-writing", label: "AI 写作", Icon: Sparkles, hint: "⌘3" },
-    // 261109：日记空间（docs/DIARY.md 决策 2）：空间组第 4 项，与「文档/小记/AI 写作」同列。
-    { id: "diary", label: "日记", Icon: NotebookPen, hint: "⌘4" },
+    { id: "ai-writing", label: "AI 写作", Icon: Sparkles, hint: "⌘4" },
     // P1 一级入口：标签空间 = 只读聚合视图 + 就地元数据管理（不是新数据空间）。
-    { id: "tags", label: "标签", Icon: Tag },
+    // 261109 用户定稿：标签也进快捷键表（⌘5）。
+    { id: "tags", label: "标签", Icon: Tag, hint: "⌘5" },
   ];
   const tools: Array<{ id: DesktopWorkspace; label: string; Icon: typeof Files }> = [
     { id: "trash", label: "回收站", Icon: Trash },

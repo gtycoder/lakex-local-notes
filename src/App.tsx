@@ -576,19 +576,6 @@ export function App() {
    *  范围收窄 = 面板的 `scopeNoteIds`（下面搜索面板处传入 `diaryNoteIds`），纯显示层过滤。 */
   const handleDiaryOpenSearch = useCallback(() => { sidebarOpenSearch(); }, [sidebarOpenSearch]);
 
-  // ⌘4 = 日记空间（与 ⌘1/⌘2 同一判据：仅 meta/ctrl、不带 alt/shift、capture 不用，window keydown）。
-  // 放在 App 而不是 useDesktopLifecycle 的 ⌘1–3 表里：那个 hook 不在本片写域，待归并（见交付报告）。
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) return;
-      if (event.key !== "4") return;
-      event.preventDefault();
-      void switchDesktopWorkspace("diary");
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [switchDesktopWorkspace]);
-
   /** 资料库空态「新建文档」= 统一新建弹窗（261105 用户验收：所有需要写名字的新建都弹窗）。 */
   const [newNoteOpen, setNewNoteOpen] = useState(false);
   const [newNoteBusy, setNewNoteBusy] = useState(false);

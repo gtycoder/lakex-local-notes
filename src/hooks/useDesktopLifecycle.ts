@@ -29,8 +29,8 @@ export interface UseDesktopLifecycleOptions {
   layoutWidthsRef: MutableRefObject<{ sidebar: number; outline: number }>;
   quickNotesDirty: boolean;
   persistTab: (noteId: string, title?: string, content?: string) => Promise<PersistOutcome>;
-  /** ⌘1/2/3 切空间（S1+A）；不传则不注册 */
-  onSwitchDesktopWorkspace?: (workspace: "library" | "quick-notes" | "ai-writing" | "trash") => void;
+  /** ⌘1–4 切空间（S1+A；261109 收敛为一张表）；不传则不注册 */
+  onSwitchDesktopWorkspace?: (workspace: "library" | "quick-notes" | "diary" | "ai-writing" | "tags") => void;
 }
 
 /** 桌面全局/窗口生命周期：同步锚点、活动历史计数、草稿落盘、设置订阅、钉住清理、主题、快捷键、beforeunload。 */
@@ -112,11 +112,14 @@ export function useDesktopLifecycle({
       if (!onSwitchDesktopWorkspace) return;
       if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) return;
       // 用户 261006：只有上半「空间」有快捷键；回收站/资源/偏好设置都不给。
-      // 261109：⌘3 = AI 写作（桌面本地空间，用户点单）。
-      const map: Record<string, "library" | "quick-notes" | "ai-writing"> = {
+      // 261109 用户定稿：⌘1 文档 / ⌘2 小记 / ⌘3 日记 / ⌘4 AI 写作 / ⌘5 标签
+      // （**单一来源**，别在别处再注册 keydown）。
+      const map: Record<string, "library" | "quick-notes" | "diary" | "ai-writing" | "tags"> = {
         "1": "library",
         "2": "quick-notes",
-        "3": "ai-writing",
+        "3": "diary",
+        "4": "ai-writing",
+        "5": "tags",
       };
       const next = map[event.key];
       if (!next) return;

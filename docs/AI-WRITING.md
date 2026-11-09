@@ -13,7 +13,7 @@
 
 ## 信息架构
 
-- 新空间 `ai-writing`（顶栏空间菜单第 3 项，⌘3 切换）：隐藏左侧目录栏，整页两栏。
+- 新空间 `ai-writing`（顶栏空间菜单第 4 项，⌘4 切换）：隐藏左侧目录栏，整页两栏。
 - 左栏（280px）：「AI 写作」标题 / 「＋ 新对话」/「历史记录」按日期分组（今天/昨天/更早），行悬停出「…」（重命名=行内输入；删除=行内确认气泡）。
 - 主区：
   - 空态：分段控件（对话写作 / 多文档推理）→ 大标题 → 「✦ 提示词」→ 输入卡 → 「点一点试试」两个 chip。
@@ -69,7 +69,7 @@ ai_writing_messages(id TEXT PK, conversation_id TEXT, role TEXT, content TEXT,
 | 答案渲染 | `AiAnswerViewer.tsx` + `aiAnswerViewer.css` | **lazy 边界**：只读 viewer + `setDocument("text/markdown")`（内核原生解析）；懒挂载、单实例复用、pending→rich 切换 |
 | 状态 | `src/features/aiWriting/useAiWriting.ts` | 列表/当前会话/输入卡/发送/停止/重新生成（只做编排，不写网络） |
 | 视图 | `AiWritingSidebar / AiComposer / AiPromptLibrary / AiDocPicker / AiMessageView / PublishDocDialog / SaveQuickNoteDialog / AiWritingWorkspace` | 语雀同款交互；样式 `aiWriting.css`（`layer(feature)`，只用令牌） |
-| 壳层 | `desktopTypes` / `DesktopTopBar` / `useDesktopLifecycle` / `App` | 新空间 `ai-writing`（⌘3，空间菜单第 3 项；隐藏目录栏） |
+| 壳层 | `desktopTypes` / `DesktopTopBar` / `useDesktopLifecycle` / `App` | 新空间 `ai-writing`（⌘4，空间菜单第 4 项；隐藏目录栏） |
 
 ### 为什么这样分
 

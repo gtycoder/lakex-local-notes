@@ -6,7 +6,7 @@
 ## 决策（用户 261109 定稿）
 
 1. **存储完全依托笔记本体系（D2）**：日记 = 一个带标记的笔记本；**不新建数据空间、不新建表**。正文/历史快照/回收站/FTS/导出/备份/便携包全部复用文档那一套。
-2. **表现 = 独立空间**：空间组第 4 项（文档 ⌘1 / 小记 ⌘2 / AI 写作 ⌘3 / **日记 ⌘4** / 标签），与文档目录树解耦。
+2. **表现 = 独立空间**：空间组第 3 项（文档 ⌘1 / 小记 ⌘2 / **日记 ⌘3** / AI 写作 ⌘4 / 标签 ⌘5），与文档目录树解耦。
 3. **标题即日期** `YYYY-MM-DD`；层级 `日记 → 2026 → 11 → 2026-11-09`，**年/月两级分组自动创建**（group 节点，随 `folders[]` 同步）。
 4. **没有旧端**：允许加 wire 字段，不为旧客户端写降级。
 5. **两端都做**（桌面空间页 + 移动第 4 个 tab）。
@@ -103,8 +103,8 @@ renderer: list_tree_nodes（含 space）
 | wire | `src/core/s3v3/protocol/s3v3Index.ts`（`LakeFolderEntry.space` + 校验归一）、`plan/plan.ts`（发布映射） |
 | 平台端口 | `src/core/s3v3/state/platformPort.ts`（`SyncFolderRow.space`）、`state/deviceStore.ts`（投影 + 变更判定） |
 | 桌面存储 | `electron/diaryStore.ts`（单事务 ensure）、`electron/ipc/registerDiary.ts`、`electron/schemaInit.ts`（列 + ALTER）、`electron/noteQueries.ts`/`noteMetadataRepository.ts`（读写 space） |
-| 桌面 UI | `src/features/diary/`（`DiaryWorkspace` / `diaryTree` 树过滤与 id 映射 / `diaryOpen` IPC 端口 / `diarySearch` / `diary.css`）、`App.tsx`（空间 + ⌘4 + 树过滤 + 搜索收窄）、`DesktopTopBar.tsx`、`styles/chrome.css` |
+| 桌面 UI | `src/features/diary/`（`DiaryWorkspace` / `diaryTree` 树过滤与 id 映射 / `diaryOpen` IPC 端口 / `diarySearch` / `diary.css`）、`App.tsx`（空间挂载 + 树过滤 + 搜索收窄；⌘3 在 `useDesktopLifecycle` 的 ⌘1–5 表里）、`DesktopTopBar.tsx`、`styles/chrome.css` |
 | 移动 | `src/mobile/diary/`（`diaryRepository` 单事务 ensure / `DiaryPage`）、`bridge/diary.ts`、`data/schema.ts`（v12）、`home/tabPager.ts`（4 tab）、`settings/SearchSheet.tsx`（`scopeNoteIds`） |
 | 搜索 | 复用既有 FTS + `SearchPanel.scopeNoteIds` / `SearchSheet.scopeNoteIds`（纯显示层；**不新增索引**） |
 
-**已知边界（v1）**：桌面与移动各自只有一份编辑器宿主（日记空间与资料库同篇互斥，见 `App.tsx` 的 `libraryTabs`）；⌘4 暂独立注册在 `App.tsx`（未并回 `useDesktopLifecycle` 的 ⌘1–3 表）；移动端关闭日记条目后落到「知识库」（沿用既有返回落点）。
+**已知边界（v1）**：桌面与移动各自只有一份编辑器宿主（日记空间与资料库同篇互斥，见 `App.tsx` 的 `libraryTabs`）；移动端关闭日记条目后落到「知识库」（沿用既有返回落点）。

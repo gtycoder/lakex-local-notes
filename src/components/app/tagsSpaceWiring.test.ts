@@ -25,7 +25,8 @@ describe("标签空间接线（P1）", () => {
   it("一级入口：空间类型 + 顶栏空间菜单 + App 视图（与 文档/小记 并列）", () => {
     expect(TYPES).toContain('"tags"');
     expect(TOPBAR).toContain('tags: { label: "标签", Icon: Tag }');
-    expect(TOPBAR).toContain('{ id: "tags", label: "标签", Icon: Tag }');
+    // 261109 用户定稿：标签也进快捷键表（⌘5）
+    expect(TOPBAR).toContain('{ id: "tags", label: "标签", Icon: Tag, hint: "⌘5" }');
     expect(APP).toContain('desktopWorkspace === "tags"');
     expect(APP).toContain("<TagsWorkspace");
     expect(APP).toContain('workspace="tags"');
