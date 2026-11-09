@@ -2,27 +2,39 @@
  "states": {
   "home-library": {
    "n": 1838,
-   "hash": "1njd4n2"
+   "hash": "mn02b6"
   },
   "home-quicknotes": {
    "n": 1838,
-   "hash": "1c5jd6c"
+   "hash": "1afvx58"
   },
   "home-library-list": {
    "n": 1843,
-   "hash": "msmh22"
+   "hash": "7rzmae"
   },
   "home-doc": {
    "n": 2014,
-   "hash": "1bi0vu3"
+   "hash": "1eq5lid"
   },
   "settings": {
-   "n": 1960,
-   "hash": "rp068q"
+   "n": 1971,
+   "hash": "ku9y5r"
   },
   "settings-appearance": {
    "n": 1872,
-   "hash": "1s4ixag"
+   "hash": "bfpcgg"
+  },
+  "settings-s3": {
+   "n": 1964,
+   "hash": "5uleir"
+  },
+  "settings-backup": {
+   "n": 1890,
+   "hash": "8dqypj"
+  },
+  "settings-about": {
+   "n": 1892,
+   "hash": "us287w"
   }
  }
 }
