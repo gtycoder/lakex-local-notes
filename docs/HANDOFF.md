@@ -52,7 +52,8 @@
 - 261110 移动端设置表面统一：恢复「灰底 + 白卡」层次（手写分组容器自动补卡，Group/Section 原语不变）；云端与同步拆为「连接信息 / 连接与同步 / 配置迁移 / 服务说明」四组；关于拆为「关于 / 数据诊断」两组。
 - 261110 P0 原语收敛：SettingsDrawer / BasicSettingsSections 全部改用 Group/Section，新增 settingsPrimitivesGuard 测试禁止再手写 mb-set-group/mb-set-items；S3/备份/关于按语义分组。
 - 261110 P1：新增移动端 .mb-btn--settings（主题色描边、透明底，仅设置页），替换设置页 primary/secondary/ghost；设置菜单图标底色改 --mb-set-tone-* 令牌，不再写死 hex。确认/重命名/更新弹窗仍用 primary 实心。
-- 仍待：设置子页（S3/备份/关于）快照态与深/暖色设备走查；当前移动快照仍 6 态。
+- 261110 移动快照扩到 **9 态**：新增 settings-s3 / settings-backup / settings-about；设置抽屉/子页入口先判已开（避免二次点击把抽屉关掉），行用 DOM click + scrollIntoView。已在 lake_gate 连跑两轮，9 态 0 差异；基线 `scripts/mobile-audit/baseline/mobile-snap.json` 已重烤。
+- 仍待：深/暖色下的设置页设备走查（移动端当前只有浅色/深色/纯黑三档）。
 - 便携包 review：导出前同步下沉到主进程 beforeExport（任何入口一致）；离线哈希改用 noteBodyRelativePath 单一来源并缺正文直接报错；manifest.baseline=null 语义与 localOnly 哈希文件写入 spec §9。
 
 ### 261109 · UI 整理（移动端 + 桌面设置）
