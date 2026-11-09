@@ -13,9 +13,9 @@ import type { AiWritingDocRef } from "../../core/aiWriting";
 import {
   AI_WRITING_QUICK_GROUPS,
   docRefKey,
+  documentsOfNotebook,
   refsForNotebook,
   refsForQuickGroup,
-  selectableDocuments,
   selectableNotebooks,
 } from "./aiWritingDocs";
 
@@ -45,7 +45,7 @@ export function AiDocPicker({ open, anchor, treeNodes, selected, onToggle, onRep
     return () => { alive = false; };
   }, [open]);
 
-  const docsOfNotebook = expandedNotebook ? selectableDocuments(treeNodes).filter((node) => node.parentId === expandedNotebook) : [];
+  const docsOfNotebook = expandedNotebook ? documentsOfNotebook(treeNodes, expandedNotebook) : [];
 
   return (
     <Popover open={open} onDismiss={onDismiss} label="选择文档" className="aiw-picker" style={style ?? undefined} surfaceRef={surfaceRef}>

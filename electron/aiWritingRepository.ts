@@ -209,6 +209,7 @@ export class AiWritingRepository {
 
   /** 追加消息（同时把会话 updated_at 推到最新 = 历史列表排序依据）。 */
   appendMessage(input: AppendMessageInput): AiWritingMessage {
+    if (!this.getConversation(input.conversationId)) throw new Error("会话不存在：" + input.conversationId);
     const row = this.db
       .prepare("SELECT COALESCE(MAX(sort_order), -1) AS maxOrder FROM ai_writing_messages WHERE conversation_id = ?")
       .get(input.conversationId) as { maxOrder: number } | undefined;

@@ -891,7 +891,10 @@ export function App() {
             topbarLeading={topBarLeading}
             onOpenSettings={() => { setSettingsCategory("ai"); setSettingsOpen(true); }}
             onNotice={(text, action) => { if (action) showNoticeWithAction(text, action); else showNotice(text); }}
-            onOpenNote={(noteId) => { void switchDesktopWorkspace("library"); void openNote(noteId); }}
+            onOpenNote={(noteId) => {
+              // 新建的文档要先进树，否则切回资料库时侧栏没有它（tab 能开、目录缺席）。
+              void refreshTree().then(() => { void switchDesktopWorkspace("library"); void openNote(noteId); }).catch(() => { void switchDesktopWorkspace("library"); void openNote(noteId); });
+            }}
           />
         </div>
         <div className={"workspace-view" + (desktopWorkspace === "quick-notes" ? "" : " workspace-view--hidden")}>

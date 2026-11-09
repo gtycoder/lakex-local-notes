@@ -24,6 +24,12 @@ import { AI_WRITING_SUGGESTIONS, aiWritingChatTitle, aiWritingDocsTitle } from "
 import { useAiWriting } from "./useAiWriting";
 import { DesktopWorkspaceSlotProvider } from "../../desktop/desktopWorkspaceSlot";
 
+/** 「生成文档」的默认标题：首行摘要；摘要为空/兜底文案时用固定名。 */
+function publishTitleOf(markdown: string): string {
+  const title = aiWritingTitleFrom(markdown);
+  return title && title !== "新的对话" ? title : "AI 生成文档";
+}
+
 export interface AiWritingWorkspaceProps {
   active: boolean;
   treeNodes: readonly TreeNode[];
@@ -82,7 +88,8 @@ export function AiWritingWorkspace({ active, treeNodes, topbarLeading, onOpenSet
       const markdown = publish.content;
       const converted = await convertAiMarkdown(markdown, undefined, { signal: controller.signal });
       if (controller.signal.aborted) return;
-      const docTitle = aiWritingTitleFrom(markdown) || "AI 生成文档";
+      const parsedTitle = aiWritingTitleFrom(markdown);
+      const docTitle = parsedTitle && parsedTitle !== "新的对话" ? parsedTitle : "AI 生成文档";
       const note = await native.createNoteIn(notebookId, docTitle);
       const saved = await native.saveNote(note.id, docTitle, converted.body);
       if (isSaveConflict(saved)) throw new Error("正文写入被拦截（磁盘已有改动）");
@@ -231,7 +238,7 @@ export function AiWritingWorkspace({ active, treeNodes, topbarLeading, onOpenSet
 
       <PublishDocDialog
         open={publish.open}
-        title={aiWritingTitleFrom(publish.content) || "AI 生成文档"}
+        title={publishTitleOf(publish.content)}
         notebooks={treeNodes}
         busy={publish.busy}
         error={publish.error}

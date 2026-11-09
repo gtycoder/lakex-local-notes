@@ -4,14 +4,12 @@ import {
   AI_WRITING_MAX_DOCS,
   AI_WRITING_MAX_HISTORY_TURNS,
   AI_WRITING_SYSTEM_PROMPT,
-  aiWritingPreviewOf,
   aiWritingTitleFrom,
   buildAiWritingDocsBlock,
   buildAiWritingMessages,
   groupAiWritingHistory,
   pickAiWritingHistory,
   type AiWritingConversation,
-  type AiWritingMessage,
 } from "./aiWriting";
 
 function conversation(overrides: Partial<AiWritingConversation> = {}): AiWritingConversation {
@@ -102,18 +100,5 @@ describe("buildAiWritingMessages", () => {
   it("对话写作模式不带资料块", () => {
     const messages = buildAiWritingMessages({ mode: "chat", input: "你好", docs: [{ title: "A", text: "B" }] });
     expect(String(messages[messages.length - 1].content)).not.toContain("【参考资料】");
-  });
-});
-
-describe("aiWritingPreviewOf", () => {
-  it("压平空白并截断", () => {
-    const message: AiWritingMessage = {
-      id: "m1", conversationId: "c1", role: "assistant", content: "第一行\n\n第二行 " + "长".repeat(80),
-      reasoning: null, durationMs: null, stopped: false, error: null, sortOrder: 0, createdAt: "2026-11-09T10:00:00.000Z",
-    };
-    const preview = aiWritingPreviewOf(message);
-    expect(preview.startsWith("第一行 第二行")).toBe(true);
-    // 40 字预算 + 「…（已截断）」后缀
-    expect(Array.from(preview).length).toBeLessThanOrEqual(46);
   });
 });

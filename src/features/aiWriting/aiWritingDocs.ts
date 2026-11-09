@@ -74,12 +74,28 @@ export function refsForQuickGroup(
     .map((note) => ({ kind: "quick-note" as const, id: note.id, title: note.previewText.slice(0, 24) || "小记" }));
 }
 
-/** 某个笔记本下的全部文档引用。 */
-export function refsForNotebook(treeNodes: readonly TreeNode[], notebookId: string): AiWritingDocRef[] {
+/** 某个笔记本（含其下所有分组）里的全部可当资料的文档（按 updatedAt 倒序）。 */
+export function documentsOfNotebook(treeNodes: readonly TreeNode[], notebookId: string): TreeNode[] {
+  const byId = new Map(treeNodes.map((node) => [node.id, node]));
+  const under = (node: TreeNode): boolean => {
+    const seen = new Set<string>();
+    let parentId = node.parentId;
+    while (parentId) {
+      if (parentId === notebookId) return true;
+      if (seen.has(parentId)) return false; // 防御坏数据环
+      seen.add(parentId);
+      parentId = byId.get(parentId)?.parentId ?? null;
+    }
+    return false;
+  };
   return selectableDocuments(treeNodes)
-    .filter((node) => node.parentId === notebookId)
-    .sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1))
-    .map((node) => ({ kind: "note" as const, id: node.noteFileId ?? node.id, title: node.title }));
+    .filter((node) => under(node))
+    .sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
+}
+
+/** 某个笔记本下的全部文档引用（含分组后代）。 */
+export function refsForNotebook(treeNodes: readonly TreeNode[], notebookId: string): AiWritingDocRef[] {
+  return documentsOfNotebook(treeNodes, notebookId).map((node) => ({ kind: "note" as const, id: node.noteFileId ?? node.id, title: node.title }));
 }
 
 /** 切换一条引用（已选 = 取消，未选 = 追加到末尾）。 */

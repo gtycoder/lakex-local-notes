@@ -28,7 +28,8 @@
 .aiw-hist__title { flex: 1 1 auto; min-width: 0; padding: 0; border: 0; background: transparent; color: var(--lake-text-1); font-size: var(--lake-font-size-small); text-align: left; cursor: pointer; }
 .aiw-hist__text { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .aiw-hist__more { flex: none; display: inline-flex; align-items: center; justify-content: center; width: var(--lake-ctl-h-sm); height: var(--lake-ctl-h-sm); border: 0; border-radius: var(--lake-radius-2xs); background: transparent; color: var(--lake-text-3); cursor: pointer; visibility: hidden; }
-.aiw-hist__item:hover .aiw-hist__more, .aiw-hist__item.is-selected .aiw-hist__more { visibility: visible; }
+.aiw-hist__item:hover .aiw-hist__more, .aiw-hist__item.is-selected .aiw-hist__more,
+.aiw-hist__item:focus-within .aiw-hist__more { visibility: visible; }
 .aiw-hist__more:hover { background: var(--lake-bg-press); color: var(--lake-text-1); }
 .aiw-hist__input { width: 100%; }
 .aiw-menu__danger { color: var(--lake-status-error, var(--lake-text-1)); }
@@ -90,6 +91,8 @@
 .aiw-chip__close:hover { background: var(--lake-bg-press); color: var(--lake-text-1); }
 .aiw-composer__input { display: block; width: 100%; min-height: 52px; padding: var(--lake-space-md) var(--lake-space-lg) 0; border: 0; background: transparent; color: var(--lake-text-1); font-family: var(--lake-font-family); font-size: var(--lake-font-size-body); line-height: var(--lake-line-height-normal); resize: none; outline: none; }
 .aiw-composer__input::placeholder { color: var(--lake-text-4); }
+/* 容器已有 focus-within 的主色边 + 柔光环；输入框自身不再叠一圈 outline。 */
+.aiw-composer__input:focus-visible { outline: none; }
 .aiw-composer__bar { display: flex; align-items: center; justify-content: space-between; gap: var(--lake-space-sm); padding: var(--lake-space-sm) var(--lake-space-md); }
 .aiw-composer__tools { display: flex; align-items: center; gap: var(--lake-space-xs); }
 .aiw-tool { display: inline-flex; align-items: center; gap: var(--lake-space-xxs); height: var(--lake-ctl-h-sm); padding: 0 var(--lake-space-sm); border: 0.5px solid transparent; border-radius: var(--lake-radius-sm); background: transparent; color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); cursor: pointer; }

@@ -52,10 +52,8 @@ export function AiMessageView(props: AiMessageViewProps) {
   const thinking = streaming && !content;
   /** 空助手消息（崩溃/重启打断了流）：给一句说明，别留一个空气泡。 */
   const interrupted = !busy && !streaming && content.length === 0 && reasoning.length === 0 && !message.error && !message.stopped;
-  const thinkingLabel = thinking
-    ? reasoning
-      ? "正在深度思考…"
-      : "正在思考中…"
+  const thinkingLabel = streaming
+    ? (reasoning ? "正在深度思考…" : "正在思考中…")
     : message.durationMs != null
       ? durationLabel(message.durationMs)
       : reasoning

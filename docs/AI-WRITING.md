@@ -85,6 +85,12 @@ ai_writing_messages(id TEXT PK, conversation_id TEXT, role TEXT, content TEXT,
 - **性能/边界**：viewer 是 **lazy 边界**（内核 chunk ~1.6MB gz 不进首屏；护栏 `desktopKernelLazy.test.ts`）；消息进入视口（提前 600px）才建实例、同实例多次 `setDocument` 不重建；内核 6s 内没出内容 ⇒ 回退 MarkdownView 并保留正文。
 - **观感**：正文 14px / 阅读行高 / 正文 400（粗体走内核 700、斜体走 font-style）；标题按 em 缩放（1.6/1.35/1.15/1）；隐藏 viewer 自带的「返回文档」头；首尾块清外边距。
 
+## 已知边界（review 记录）
+
+- 会话/消息只在本机主库：**整库备份**（DB 快照）会带上；**便携包**（桌面→手机）只搬笔记/小记/标签，**不含 AI 会话**（用户定稿：不跨端）。
+- 答案 viewer 复用固定 noteId `ai-writing-answer` 只为资源解析，不落盘、不建树节点；AI 输出里的远程图片按 URL 直出。
+- 流式期间仍用 MarkdownView（收尾后切内核 viewer），与语雀「直接流进 viewer」不同：实时 viewer 需要高频 `setDocument` 重排，按收益/复杂度暂不做（用户 261109 确认以实际效果为主即可）。
+
 ## 测试与门禁
 
 - 单测：`core/aiWriting.test.ts`（标题/分组/预算/消息组装）、`aiWritingRepository.test.ts`（CRUD/级联/排序）、

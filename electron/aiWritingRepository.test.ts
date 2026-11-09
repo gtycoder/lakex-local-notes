@@ -78,6 +78,13 @@ describe("AiWritingRepository", () => {
     expect(left.n).toBe(0);
   });
 
+  it("向不存在的会话追加消息 ⇒ 直接报错（不落孤儿消息）", () => {
+    const { raw, repo } = makeRepo();
+    expect(() => repo.appendMessage({ conversationId: "missing", role: "user", content: "x" })).toThrow(/会话不存在/);
+    const count = raw.prepare("SELECT COUNT(*) AS n FROM ai_writing_messages").get() as { n: number };
+    expect(count.n).toBe(0);
+  });
+
   it("历史列表按最近更新倒序", () => {
     const { repo } = makeRepo();
     const older = repo.createConversation({ mode: "chat", title: "旧" });

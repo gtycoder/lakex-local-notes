@@ -90,13 +90,15 @@ describe("refsForQuickGroup", () => {
 });
 
 describe("refsForNotebook / toggleDocRef / docRefKey", () => {
-  it("按笔记本取该笔记本直属文档", () => {
+  it("按笔记本取该笔记本的文档（含分组后代，不含其它笔记本）", () => {
     const nodes = [
       node({ id: "a", parentId: "nb-1", noteFileId: "f-a", updatedAt: daysAgo(2) }),
       node({ id: "b", parentId: "nb-1", noteFileId: "f-b", updatedAt: daysAgo(1) }),
+      node({ id: "group", nodeType: "group", parentId: "nb-1", noteFileId: null }),
+      node({ id: "nested", parentId: "group", noteFileId: "f-nested", updatedAt: daysAgo(3) }),
       node({ id: "c", parentId: "nb-2", noteFileId: "f-c" }),
     ];
-    expect(refsForNotebook(nodes, "nb-1").map((ref) => ref.id)).toEqual(["f-b", "f-a"]);
+    expect(refsForNotebook(nodes, "nb-1").map((ref) => ref.id)).toEqual(["f-b", "f-a", "f-nested"]);
   });
 
   it("toggle：已选取消、未选追加", () => {

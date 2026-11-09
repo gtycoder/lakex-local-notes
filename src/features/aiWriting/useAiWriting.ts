@@ -73,6 +73,8 @@ export function useAiWriting(options: { active: boolean }): AiWritingController 
   const [activeConversation, setActiveConversation] = useState<AiWritingConversation | null>(null);
   const [messages, setMessages] = useState<AiWritingMessage[]>([]);
   const [loading, setLoading] = useState(false);
+  const loadingRef = useRef(false);
+  loadingRef.current = loading;
   const [loadError, setLoadError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [stream, setStream] = useState<AiWritingStream | null>(null);
@@ -89,6 +91,8 @@ export function useAiWriting(options: { active: boolean }): AiWritingController 
   const conversationRef = useRef<AiWritingConversation | null>(null);
   conversationRef.current = activeConversation;
   const busyRef = useRef(false);
+  /** 发送中的哨兵：busyRef 要等占位消息写入后才置位，连点 Enter 会在这之前重复建会话。 */
+  const sendingRef = useRef(false);
   const turnRef = useRef<AiWritingTurn | null>(null);
   const composerRef = useRef({ mode, promptText, docRefs });
   composerRef.current = { mode, promptText, docRefs };
@@ -158,6 +162,9 @@ export function useAiWriting(options: { active: boolean }): AiWritingController 
   const selectConversation = useCallback((id: string) => {
     if (busyRef.current) return;
     setLoading(true);
+    // 先清空当前视图：否则加载期间会短暂看到上一篇（切换闪烁）。
+    setMessages([]);
+    setActiveConversation(null);
     void native.aiWritingGet(id)
       .then((payload) => {
         if (!payload) return;
@@ -182,18 +189,28 @@ export function useAiWriting(options: { active: boolean }): AiWritingController 
   }, []);
 
   const renameConversation = useCallback(async (id: string, title: string) => {
-    const updated = await native.aiWritingRename(id, title);
-    if (!updated) return;
-    setConversations((prev) => prev.map((item) => (item.id === id ? updated : item)));
-    setActiveConversation((prev) => (prev && prev.id === id ? updated : prev));
+    try {
+      const updated = await native.aiWritingRename(id, title);
+      if (!updated) return;
+      setConversations((prev) => prev.map((item) => (item.id === id ? updated : item)));
+      setActiveConversation((prev) => (prev && prev.id === id ? updated : prev));
+    } catch (error) {
+      setLoadError(getNativeErrorMessage(error) || "重命名失败");
+    }
   }, []);
 
   const deleteConversation = useCallback(async (id: string) => {
-    await native.aiWritingDelete(id);
-    setConversations((prev) => prev.filter((item) => item.id !== id));
-    if (conversationRef.current?.id === id) {
-      setActiveConversation(null);
-      setMessages([]);
+    // 正在生成的会话被删：先停流（否则请求结束后无处回填消息）。
+    if (conversationRef.current?.id === id) turnRef.current?.stop();
+    try {
+      await native.aiWritingDelete(id);
+      setConversations((prev) => prev.filter((item) => item.id !== id));
+      if (conversationRef.current?.id === id) {
+        setActiveConversation(null);
+        setMessages([]);
+      }
+    } catch (error) {
+      setLoadError(getNativeErrorMessage(error) || "删除失败");
     }
   }, []);
 
@@ -209,6 +226,7 @@ export function useAiWriting(options: { active: boolean }): AiWritingController 
     setBusy(true);
     setLoadError(null);
 
+    try {
     const placeholder = await native.aiWritingAppendMessage({ conversationId: conversation.id, role: "assistant", content: "" });
     const base = [...history, placeholder];
     setMessages(base);
@@ -239,18 +257,25 @@ export function useAiWriting(options: { active: boolean }): AiWritingController 
       error: outcome.error,
     });
     if (saved) setMessages(base.map((message) => (message.id === placeholder.id ? saved : message)));
-    setStream(null);
-    busyRef.current = false;
-    setBusy(false);
-    // 历史列表的检索依据是 updated_at：轻量重拉一次排序。
-    void native.aiWritingList().then((items) => setConversations(items)).catch(() => undefined);
+    } catch (error) {
+      // 占位消息写入失败 / 上下文读取异常：给出页面级错误，别把输入区永久卡在「生成中」。
+      setLoadError(getNativeErrorMessage(error) || "发送失败");
+    } finally {
+      turnRef.current = null;
+      setStream(null);
+      busyRef.current = false;
+      setBusy(false);
+      // 历史列表的检索依据是 updated_at：轻量重拉一次排序。
+      void native.aiWritingList().then((items) => setConversations(items)).catch(() => undefined);
+    }
   }, [docReader]);
 
   // ---- 发送 ----
   const send = useCallback((override?: string) => {
-    if (busyRef.current) return;
+    if (busyRef.current || sendingRef.current || loadingRef.current) return;
     const text = (override ?? input).trim();
     if (!text) return;
+    sendingRef.current = true;
     const { mode: currentMode, promptText: currentPrompt, docRefs: currentRefs } = composerRef.current;
     const history = messagesRef.current;
     void (async () => {
@@ -271,6 +296,8 @@ export function useAiWriting(options: { active: boolean }): AiWritingController 
         await runAssistant({ conversation, history: [...history, userMessage], userText: text });
       } catch (error) {
         setLoadError(getNativeErrorMessage(error) || "发送失败");
+      } finally {
+        sendingRef.current = false;
       }
     })();
   }, [input, runAssistant]);

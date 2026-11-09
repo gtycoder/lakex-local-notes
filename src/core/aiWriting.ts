@@ -9,7 +9,7 @@
  * 红线：AI Key 与网络只在主进程（见 electron/ai/aiClient.ts）；本模块只产出消息数组。
  * 规格：docs/AI-WRITING.md。
  */
-import { aiMessageText, type AiChatMessage } from "./aiProviders";
+import type { AiChatMessage } from "./aiProviders";
 
 export type AiWritingMode = "chat" | "docs";
 export const AI_WRITING_MODES: readonly AiWritingMode[] = ["chat", "docs"];
@@ -232,11 +232,4 @@ export function buildAiWritingMessages(input: BuildAiWritingMessagesInput): AiCh
   const content = parts.join("\n\n");
   messages.push({ role: "user", content: content || inputText });
   return messages;
-}
-
-/** 会话预览：最后一条消息前 40 字（历史列表不用重读全部消息）。 */
-export function aiWritingPreviewOf(message: AiWritingMessage | null | undefined): string {
-  if (!message) return "";
-  const text = aiMessageText({ role: message.role, content: message.content });
-  return clipText(text.replace(/\s+/g, " ").trim(), 40);
 }
