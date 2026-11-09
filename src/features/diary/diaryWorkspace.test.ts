@@ -43,6 +43,13 @@ describe("日记空间接线", () => {
     expect(APP, "App 不应再自注册 ⌘4/⌘5 监听").not.toMatch(/event\.key !== "[45]"/);
   });
 
+  it("②d 空间回落的 effect 必须在 `if (!workspace) return` 之前（放到之后 = hooks 顺序变化 ⇒ 白屏）", () => {
+    const effectAt = APP.indexOf("空间切换：活动标签必须属于当前空间");
+    const earlyReturnAt = APP.indexOf('if (!workspace) return <main className="loading-screen">');
+    expect(effectAt).toBeGreaterThan(-1);
+    expect(earlyReturnAt).toBeGreaterThan(-1);
+    expect(effectAt, "effect 必须在早期 return 之前").toBeLessThan(earlyReturnAt);
+  });
   it("②c 独立 tab：日记/文档各看各的（按 OpenTab.space 分流）；日记条目标题不可改名", () => {
     expect(APP).toContain('tabInfos.filter((tab) => (tab.space ?? "library") !== "diary")');
     expect(APP).toContain('tabInfos.filter((tab) => tab.space === "diary")');

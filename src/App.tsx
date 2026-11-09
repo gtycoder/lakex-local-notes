@@ -808,6 +808,21 @@ export function App() {
   // 跟踪当前文档是否为空大纲；切换标签时清除豁免、重新评估。
 
   /** 只读锁切换：先保存脏草稿，再写 SQLite（锁状态随 v3 索引条目同步；v3 无 manifest） */
+  /** 空间切换：活动标签必须属于当前空间（日记/文档各自独立的 tab 集合，261109）。
+   *  ⚠️ 必须放在下面 `if (!workspace) return` **之前**：放到早期 return 之后会让首渲染少跑一个 hook
+   *  ⇒ React「Hooks 顺序变化」并直接白屏（本文件下方注释已有同类教训）。这里用 openTabs 判据
+   *  （`tabInfos` 在早期 return 之后才派生，不能在这里用）。 */
+  useEffect(() => {
+    if (desktopWorkspace !== "diary" && desktopWorkspace !== "library") return;
+    const space = desktopWorkspace === "diary" ? "diary" : "library";
+    const inSpace = openTabs.filter((tab) => (tab.space ?? "library") === space);
+    if (activeNoteId && inSpace.some((tab) => tab.noteId === activeNoteId)) return;
+    const next = inSpace[inSpace.length - 1]?.noteId ?? null;
+    if (next) setActiveNoteId(next);
+    // 只在空间切换时回落；标签增删由各自的打开/关闭逻辑管理。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [desktopWorkspace]);
+
   if (!workspace) return <main className="loading-screen"><BrandLaunchMark label="正在打开本地知识库" />{error && <small>{error}</small>}</main>;
 
   // 字数/图片统计（W-2-A）：从渲染体移出，避免每次按键对整篇正文跑两次 O(n) 正则。
@@ -832,22 +847,7 @@ export function App() {
   /** 两个空间各自独立 tab 条（261109）：按 tab 的 `space` 分流，不再靠「当前空间」猜。 */
   const libraryTabs = tabInfos.filter((tab) => (tab.space ?? "library") !== "diary");
   const diaryTabs = tabInfos.filter((tab) => tab.space === "diary");
-  /** 空间切换：活动标签必须属于当前空间（日记/文档各自独立的 tab 集合，261109）。 */
-  useEffect(() => {
-    const owns = (space: "library" | "diary"): boolean => {
-      if (!activeNoteId) return false;
-      const list = space === "diary" ? diaryTabs : libraryTabs;
-      return list.some((tab) => tab.noteId === activeNoteId);
-    };
-    if (desktopWorkspace !== "diary" && desktopWorkspace !== "library") return;
-    const space = desktopWorkspace === "diary" ? "diary" : "library";
-    if (owns(space)) return;
-    const list = space === "diary" ? diaryTabs : libraryTabs;
-    const next = list[list.length - 1]?.noteId ?? null;
-    if (next) setActiveNoteId(next);
-    // 只在空间切换时回落；tab 列表变化由各自的打开/关闭逻辑管理。
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [desktopWorkspace]);
+
 
   /** 顶栏左侧 = **唯一渲染点**（DT-09）：四个空间共用这一个元素，各自在顶栏槽位用
    *  `DesktopWorkspaceSlotProvider` 声明归属；可见性与共享 ref 由组件按槽位推导（四态逐项等价）。 */
