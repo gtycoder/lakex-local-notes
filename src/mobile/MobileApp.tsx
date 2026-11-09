@@ -981,16 +981,21 @@ function MobileHomeSkeleton() {
   return (
     <div className="mobile-app">
       <div className="mobile-home" aria-busy="true">
-        {/* 与真实顶栏同构：左 = 设置 + 等宽空槽，右 = 排序/视图 + 云同步（两枚）⇒ tab 居中、填充不跳。 */}
-        <header className="toolbar toolbar--border mobile-topbar">
-          <span className="mb-skel mb-skel--icon" aria-hidden="true" />
-          <span className="mb-skel mb-skel--icon" aria-hidden="true" />
-          <div className="mobile-home-tabs">
-            <span className="mb-skel mb-skel--tab" aria-hidden="true" />
-            <span className="mb-skel mb-skel--tab" aria-hidden="true" />
+        {/* 与真实顶栏同构（261109 三组栅格）：左 = 设置，中 = tab 行，右 = 排序/视图 + 云同步 ⇒ 填充不跳。 */}
+        <header className="toolbar toolbar--border mobile-topbar mobile-topbar--home">
+          <div className="mobile-topbar-group mobile-topbar-group--start">
+            <span className="mb-skel mb-skel--icon" aria-hidden="true" />
           </div>
-          <span className="mb-skel mb-skel--icon" aria-hidden="true" />
-          <span className="mb-skel mb-skel--icon" aria-hidden="true" />
+          <div className="mobile-topbar-group mobile-topbar-group--center">
+            <div className="mobile-home-tabs">
+              <span className="mb-skel mb-skel--tab" aria-hidden="true" />
+              <span className="mb-skel mb-skel--tab" aria-hidden="true" />
+            </div>
+          </div>
+          <div className="mobile-topbar-group mobile-topbar-group--end">
+            <span className="mb-skel mb-skel--icon" aria-hidden="true" />
+            <span className="mb-skel mb-skel--icon" aria-hidden="true" />
+          </div>
         </header>
         <div className="mobile-tab-stage">
           <div className="mobile-scroll">

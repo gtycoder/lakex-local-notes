@@ -7,10 +7,10 @@
  * DOM 侧（事件、inert、滚动对齐）在 `HomePage`，不在这里。
  */
 /**
- * 首层 tab（261109：加第 4 个「日记」）。顺序 = 小记 / 知识库 / 标签 / 日记 ——
- * 升为一级页的顺序按**加入时间**追加（标签 261106、日记 261109），不重排既有页，避免用户记忆里的位置漂移。
+ * 首层 tab（261109 二改）。顺序 = 小记 / 知识库 / **日记 / 标签** ——
+ * 用户 261109 点单把「日记」排在「标签」前（不再按加入时间追加）；DOM 顺序、分页下标、顶栏按钮三处必须同源。
  */
-export const HOME_TABS = ["quick", "library", "tags", "diary"] as const;
+export const HOME_TABS = ["quick", "library", "diary", "tags"] as const;
 export type HomeTab = (typeof HOME_TABS)[number];
 
 function clampIndex(index: number, count: number): number {

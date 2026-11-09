@@ -2,19 +2,19 @@ import { describe, expect, it } from "vitest";
 import { HOME_TABS, initialPagerState, pagerScrollLeft, reducePager, settledIndex, tabAt, tabIndex } from "./tabPager";
 
 describe("首页横向分页判据（261019，对齐语雀 pager）", () => {
-  it("tab ↔ 下标：顺序固定为 小记 → 知识库 → 标签 → 日记（261109 四页），未知值回落第一页", () => {
-    expect(HOME_TABS).toEqual(["quick", "library", "tags", "diary"]);
+  it("tab ↔ 下标：顺序固定为 小记 → 知识库 → 日记 → 标签（261109 二改），未知值回落第一页", () => {
+    expect(HOME_TABS).toEqual(["quick", "library", "diary", "tags"]);
     expect(tabIndex("quick")).toBe(0);
     expect(tabIndex("library")).toBe(1);
-    expect(tabIndex("tags")).toBe(2);
-    expect(tabIndex("diary")).toBe(3);
+    expect(tabIndex("diary")).toBe(2);
+    expect(tabIndex("tags")).toBe(3);
     expect(tabIndex("nope" as never)).toBe(0);
     expect(tabAt(0)).toBe("quick");
     expect(tabAt(1)).toBe("library");
-    expect(tabAt(2)).toBe("tags");
-    expect(tabAt(3)).toBe("diary");
+    expect(tabAt(2)).toBe("diary");
+    expect(tabAt(3)).toBe("tags");
     expect(tabAt(-3)).toBe("quick");
-    expect(tabAt(9)).toBe("diary");
+    expect(tabAt(9)).toBe("tags");
   });
 
   it("tab → 滚动目标：第 N 页 = N × 宽度；宽度未量到/非法时归 0（首帧不跳）", () => {
@@ -68,12 +68,15 @@ describe("分页状态机 reducePager（261028 MOB-03）", () => {
     expect(settled.state.tab).toBe("library");
   });
 
-  it("第三页「标签」：点 tab 的目标 = 2 × 宽度（三页分页口径不变）", () => {
-    const click = reducePager(initialPagerState("quick", 412), { type: "tab-click", tab: "tags", scrollLeft: 0, width: 412 });
+  it("第三页「日记」/ 第四页「标签」：点 tab 的目标 = 下标 × 宽度", () => {
+    const click = reducePager(initialPagerState("quick", 412), { type: "tab-click", tab: "diary", scrollLeft: 0, width: 412 });
     expect(click.effect).toEqual({ scrollLeft: 824, behavior: "smooth" });
-    expect(click.state.tab).toBe("tags");
+    expect(click.state.tab).toBe("diary");
+    // 第四页（标签）从日记页继续：下标 3 ⇒ 1236。
+    const next = reducePager(click.state, { type: "tab-click", tab: "tags", scrollLeft: 824, width: 412 });
+    expect(next.effect).toEqual({ scrollLeft: 1236, behavior: "smooth" });
     // 从标签页点回小记：目标回到 0。
-    const back = reducePager(click.state, { type: "tab-click", tab: "quick", scrollLeft: 824, width: 412 });
+    const back = reducePager(next.state, { type: "tab-click", tab: "quick", scrollLeft: 1236, width: 412 });
     expect(back.effect).toEqual({ scrollLeft: 0, behavior: "smooth" });
   });
 

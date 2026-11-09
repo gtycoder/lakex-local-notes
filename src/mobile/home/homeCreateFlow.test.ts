@@ -64,9 +64,15 @@ describe("首页新建流（261014）", () => {
     expect(nav).not.toContain('aria-label="排序"');
   });
 
-  it("排序/视图 + 云同步**固定挂在顶栏右上角**，云同步恒在最右，tab 仍居中", () => {
+  it("三组栅格：设置 | tab 行 | 排序/视图+云同步；云同步恒在最右，tab 恒居中", () => {
     const header = HOME.slice(HOME.indexOf("<header"), HOME.indexOf("</header>"));
-    // P0-6：云按钮的 aria-label 变成进度感知（同步中显示阶段计数，空闲才是「立即同步」）⇒ 按表达式前缀断言。
+    // 261109 二改：左右各 1fr + 中间 auto ⇒ 加 tab 不再把右侧图标挤出去（旧「对称空槽」已删）。
+    expect(header).toContain("mobile-topbar--home");
+    expect(header).toContain("mobile-topbar-group--start");
+    expect(header).toContain("mobile-topbar-group--center");
+    expect(header).toContain("mobile-topbar-group--end");
+    expect(header).not.toContain("mobile-topbar-gap");
+    // 顺序：设置 → tab 行 → 排序 → 云同步
     const order = ['aria-label="设置"', "mobile-home-tabs", 'aria-label="排序"', "aria-label={syncProgress"];
     let last = -1;
     for (const label of order) {
@@ -78,18 +84,30 @@ describe("首页新建流（261014）", () => {
     // 云同步是顶栏最后一个按钮
     const cloud = header.indexOf("aria-label={syncProgress");
     expect(header.slice(cloud, header.indexOf("</header>"))).not.toContain("toolbar__button");
-    // 左侧等宽空槽（右两枚 ⇒ 左补一格，tab 才居中）
-    expect(header).toContain("mobile-topbar-gap");
     expect(header).toContain("setFilterOpen");
     expect(header).toContain("toggleView");
   });
 
-  it("顶栏文字 tab 不换行、不贴边（窄屏去掉居中空槽）", () => {
+  it("页面顺序：小记 / 知识库 / 日记 / 标签（日记在标签前）", () => {
+    const header = HOME.slice(HOME.indexOf("<header"), HOME.indexOf("</header>"));
+    const tabs = header.indexOf("mobile-home-tabs");
+    const order = [">小记</button>", ">知识库</button>", ">日记</button>", ">标签</button>"];
+    let last = tabs;
+    for (const label of order) {
+      const at = header.indexOf(label, tabs);
+      expect(at, label + " 顺序不对").toBeGreaterThan(last);
+      last = at;
+    }
+  });
+
+  it("顶栏文字 tab 不换行、不贴边（窄屏收紧几何）", () => {
     // 261108 实机：知识库被挤成两行、云按钮贴边 ⇒ 文字 tab 必须 nowrap，左右至少 12px。
     expect(CSS).toMatch(/\.mobile-htab\s*\{[^}]*white-space:\s*nowrap/);
     expect(CSS).toMatch(/\.mobile-topbar\s*\{[^}]*padding:[^;]*max\(var\(--mb-page-pad\)/);
-    expect(CSS).toMatch(/\.mobile-home-tabs\s*\{[^}]*gap:\s*6px/);
-    expect(CSS).toMatch(/@media\s*\(max-width:\s*385px\)[\s\S]*?\.mobile-topbar-gap\s*\{\s*display:\s*none/);
+    expect(CSS).toMatch(/\.mobile-home-tabs\s*\{[^}]*gap:\s*var\(--mb-home-tab-gap,\s*2px\)/);
+    // 261109 二改：右侧永不被挤出 ⇒ 页眉三组栅格 + 窄屏收紧（tab 40 / gap 0）
+    expect(CSS).toMatch(/\.mobile-topbar--home\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s+auto\s+minmax\(0,\s*1fr\)/);
+    expect(CSS).toMatch(/@media\s*\(max-width:\s*385px\)[\s\S]*?--mb-tab-w:\s*40px/);
   });
 
   it("同步进行中渲染可视进度条（P0-6）：条 + 阶段文案 + 百分比，读索引阶段走不确定态", () => {

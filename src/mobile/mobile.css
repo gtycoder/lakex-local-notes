@@ -103,22 +103,37 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
 .mobile-topbar.is-scrolled .mobile-topbar-collapsed-title { display: block; }
 .mobile-topbar-title { flex: 1; text-align: center; font-size: var(--lake-font-size-title); line-height: 30px; font-weight: 400; color: var(--lake-text-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mobile-topbar-actions { display: flex; gap: 0; }
-/* 顶栏左侧等宽空槽（261014）：右侧固定挂**两枚**图标（排序/视图 + 云同步）⇒ 左也补一格，
-   tab 才真的居中；冷启动骨架同构（左右各 2 槽），数据到达时原地填充不跳。 */
+/* 顶栏左侧等宽空槽（261014）：仍供非首页顶栏（启动失败/坏库页等）使用；
+   首页已改三组栅格（见下），不再依赖空槽凑居中。 */
 .mobile-topbar-gap { flex: 0 0 auto; width: var(--mobile-topbar-height); height: var(--mobile-topbar-height); }
-/* 窄屏兜底：左右各 12 + 两枚右侧图标 + 设置，已放不下「居中空槽」；
-   去掉空槽优先保证 tab 不换行、不裁切。 */
+
+/* ── 首页顶栏 = 三组栅格（261109 二改，**彻底解决「加 tab 就把右侧图标挤出去」**）─────────────
+ * 旧做法 = flex + 左右对称空槽：tab 数一变可用宽就算错（日记加入后 412px 也溢出、云同步被裁）。
+ * 现在：左组(1fr) | tab 组(auto) | 右组(1fr) —— 两侧 1fr 等宽 ⇒ **tab 恒在整栏居中**；
+ * 右组 flex-end ⇒ 排序/视图 + 云同步永远贴右，不被 tab 内容推走。
+ * 几何预算（412px）：内容宽 380 = tabs 194(4×44+3×6) + 两侧各 91 ≤ 92（右组 2×44 放得下）。
+ * 响应式几何全部走本组变量（窄屏只改变量，不重复声明属性 ⇒ 不给层围栏添重复组）。 */
+.mobile-topbar.mobile-topbar--home {
+  --mb-home-col-gap: 2px;
+  --mb-topbar-icon-w: var(--mb-tap-min);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  column-gap: var(--mb-home-col-gap);
+}
+.mobile-topbar--home .toolbar__button { width: var(--mb-topbar-icon-w); height: var(--mb-topbar-icon-w); }
+.mobile-topbar-group { display: flex; align-items: center; min-width: 0; }
+.mobile-topbar-group--start { justify-content: flex-start; }
+.mobile-topbar-group--end { justify-content: flex-end; }
+.mobile-topbar-group--center { justify-content: center; position: relative; min-width: 0; padding-inline: var(--mb-home-side-pad, 8px); }
+.mobile-topbar--home .mobile-home-tabs { flex: 0 0 auto; min-width: 0; }
+
+/* 窄屏兜底（≤385）：360px 实测预算 = 360 − 12×2(pad) − 44(设置) − 2×44(右侧两枚) = 204；
+   只改变量：tab 宽 40、tab 间距 0 ⇒ 160，两侧各 88 刚好放下右组。tab 高度仍是 44。 */
 @media (max-width: 385px) {
   .mobile-topbar-gap { display: none; }
-  /* 261109（第 4 个 tab「日记」）：4 × 44 + 3 × 6 = 194 > 360px 顶栏可用宽（≈166）⇒ 窄屏必须收紧几何，
-     否则 tab 行会溢出、压到右侧同步按钮上。收紧后 360px 实测算式：
-     可用宽 = 360 − 12×2(pad) − 52(设置) − 52×2(右侧两枚) − 0(容器 gap) = 180；
-     需要宽 = 4 × 40(tab 下限) + 3 × 4(gap) = 172 ⇒ 余 8。
-     tab **高度**仍取 --mb-tap-min(44)，触屏主判据不破；宽度下限 40 是被 4 个中文 tab 逼出来的，
-     只在 ≤385px 生效（设备门禁 AVD 412px 不命中本档）。 */
   .mobile-topbar { gap: 0; padding-left: max(12px, var(--mobile-left-safe-area)); padding-right: max(12px, var(--mobile-right-safe-area)); }
-  .mobile-home-tabs { gap: 4px; }
-  .mobile-htab { min-width: 40px; }
+  .mobile-topbar--home { --mb-home-col-gap: 0px; --mb-tab-w: 40px; --mb-topbar-icon-w: 40px; --mb-home-side-pad: 4px; }
+  .mobile-topbar--home .mobile-home-tabs { --mb-home-tab-gap: 0px; }
 }
 /* 栏内图标按钮 = 思源 .toolbar__button：48×48、svg 20、按压缩口底色（不做缩放，避免密集栏抖动） */
 .mobile-icon-btn {
@@ -815,10 +830,10 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
    未选 = 常规 + caption 色，**没有下划线指示线**。原实现是桌面 .ln-tabs 的墨线语言；
    桌面侧 261012 为 tab 选定的是那套，但那是**桌面**口径（MOBILE-TECH-STACK §一：两端 UI 不共享）⇒ 移动端走语雀形态。
    命中区仍 ≥44：父容器 min-height 撑开、tab 自身 align-items:stretch 撑满行高。 */
-.mobile-home-tabs { flex: 1; display: flex; justify-content: center; align-items: stretch; gap: 6px; min-height: var(--mb-tap-min); }
+.mobile-home-tabs { flex: 1; display: flex; justify-content: center; align-items: stretch; gap: var(--mb-home-tab-gap, 2px); min-height: var(--mb-tap-min); }
 .mobile-htab {
   /* min-width 是 44 Rule 的兜底：语雀式文字 tab 的宽度由字数决定，单字标签会掉到 44 以下（261013 实测「小记」36px）。 */
-  display: inline-flex; align-items: center; justify-content: center; min-width: var(--mb-tap-min); min-height: var(--mb-tap-min); padding: 0 2px; white-space: nowrap; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center; min-width: var(--mb-tab-w, var(--mb-tap-min)); min-height: var(--mb-tap-min); padding: 0 2px; white-space: nowrap; flex-shrink: 0;
   border: none; background: transparent; font-size: var(--lake-font-size-body); color: var(--lake-text-3);
   cursor: pointer; font-weight: var(--lake-font-weight-medium); -webkit-tap-highlight-color: transparent;
 }

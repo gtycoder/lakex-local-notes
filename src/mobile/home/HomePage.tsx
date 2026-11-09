@@ -706,37 +706,38 @@ export function HomePage(props: HomePageProps) {
           onToggleAll={() => selection.toggleAll()}
         />
       ) : (
-      <header ref={topbarRef} className="toolbar toolbar--border mobile-topbar">
-        <button className="toolbar__button" onClick={onOpenDrawer} aria-label="设置" title="设置"><Settings /></button>
-        {/* 左侧等宽空槽：右侧固定挂**两枚**图标（排序/视图 + 云同步）⇒ 左也补一格，tab 才真的居中
-            （用户 261014 定稿的构图；冷启动骨架同构 5 槽，数据到达原地填充不跳）。 */}
-        <span className="mobile-topbar-gap" aria-hidden="true" />
-        <div className="mobile-home-tabs">
-          <button className={tab === "quick" ? "mobile-htab active" : "mobile-htab"} onClick={() => switchTab("quick")}>小记</button>
-          <button className={tab === "library" ? "mobile-htab active" : "mobile-htab"} onClick={() => switchTab("library")}>知识库</button>
-          {/* 261106 用户验收：标签升为一级页（与小记/知识库并列，flomo 式：标签即入口）。 */}
-          <button className={tab === "tags" ? "mobile-htab active" : "mobile-htab"} onClick={() => switchTab("tags")}>标签</button>
-          {/* 261109 日记 v1：第 4 个一级页（**只加 tab 行内容，不加顶栏槽位** —— 5 槽构图定稿）。 */}
-          <button className={tab === "diary" ? "mobile-htab active" : "mobile-htab"} onClick={() => switchTab("diary")}>日记</button>
+      <header ref={topbarRef} className="toolbar toolbar--border mobile-topbar mobile-topbar--home">
+        {/* 三组栅格（261109 二改）：左右两侧各占 1fr、tab 组按内容定宽 ⇒
+            **tab 恒在整栏居中**；右侧（排序/视图 + 云同步）永远靠右，加 tab 也不会被挤出去。 */}
+        <div className="mobile-topbar-group mobile-topbar-group--start">
+          <button className="toolbar__button" onClick={onOpenDrawer} aria-label="设置" title="设置"><Settings /></button>
         </div>
-        {/* v2：滚动后 tab 收起，顶栏中央显示当前页标题（样式在 mobile.css） */}
-        <span className="mobile-topbar-collapsed-title" aria-hidden="true">{tab === "quick" ? "小记" : tab === "library" ? "知识库" : tab === "diary" ? "日记" : "标签"}</span>
-        {/* 用户 261014 定稿：排序（小记）/ 视图（知识库）+ 云同步**固定挂在顶栏右上角**，云同步恒在最右。 */}
-        {tab === "quick" ? (
-          <button className="toolbar__button" onClick={() => setFilterOpen(true)} aria-label="排序" title="排序"><ArrowUpDown /></button>
-        ) : tab === "library" ? (
-          <button className="toolbar__button" onClick={toggleView} aria-label={libraryView === "shelf" ? "切换到列表" : "切换到书架"} title={libraryView === "shelf" ? "切换到列表" : "切换到书架"}>{viewIcon}</button>
-        ) : (
-          // 标签/日记页的「管理 / 新建 / 搜索」在页内头部（与语雀/flomo "管理收在次级入口"同形）；
-          // 这里留等宽空槽保持 tab 居中（**不新增槽位**）。
-          <span className="mobile-topbar-gap" aria-hidden="true" />
-        )}
-        <button
-          className="toolbar__button"
-          onClick={() => void runSync()}
-          aria-label={syncProgress ? "同步中：" + describeSyncProgress(syncProgress) : "立即同步"}
-          title={syncProgress ? "同步中：" + describeSyncProgress(syncProgress) : "立即同步"}
-        ><CloudUpload /></button>
+        <div className="mobile-topbar-group mobile-topbar-group--center">
+          <div className="mobile-home-tabs">
+            <button className={tab === "quick" ? "mobile-htab active" : "mobile-htab"} onClick={() => switchTab("quick")}>小记</button>
+            <button className={tab === "library" ? "mobile-htab active" : "mobile-htab"} onClick={() => switchTab("library")}>知识库</button>
+            {/* 261109 日记 v1：第 4 个一级页；261109 二改按用户要求排在「标签」前。 */}
+            <button className={tab === "diary" ? "mobile-htab active" : "mobile-htab"} onClick={() => switchTab("diary")}>日记</button>
+            {/* 261106 用户验收：标签升为一级页（与小记/知识库并列，flomo 式：标签即入口）。 */}
+            <button className={tab === "tags" ? "mobile-htab active" : "mobile-htab"} onClick={() => switchTab("tags")}>标签</button>
+          </div>
+          {/* v2：滚动后 tab 收起，顶栏中央显示当前页标题（样式在 mobile.css） */}
+          <span className="mobile-topbar-collapsed-title" aria-hidden="true">{tab === "quick" ? "小记" : tab === "library" ? "知识库" : tab === "diary" ? "日记" : "标签"}</span>
+        </div>
+        <div className="mobile-topbar-group mobile-topbar-group--end">
+          {/* 用户 261014 定稿：排序（小记）/ 视图（知识库）+ 云同步**固定挂在顶栏右上角**，云同步恒在最右。 */}
+          {tab === "quick" ? (
+            <button className="toolbar__button" onClick={() => setFilterOpen(true)} aria-label="排序" title="排序"><ArrowUpDown /></button>
+          ) : tab === "library" ? (
+            <button className="toolbar__button" onClick={toggleView} aria-label={libraryView === "shelf" ? "切换到列表" : "切换到书架"} title={libraryView === "shelf" ? "切换到列表" : "切换到书架"}>{viewIcon}</button>
+          ) : null}
+          <button
+            className="toolbar__button"
+            onClick={() => void runSync()}
+            aria-label={syncProgress ? "同步中：" + describeSyncProgress(syncProgress) : "立即同步"}
+            title={syncProgress ? "同步中：" + describeSyncProgress(syncProgress) : "立即同步"}
+          ><CloudUpload /></button>
+        </div>
       </header>
       )}
 
@@ -880,18 +881,6 @@ export function HomePage(props: HomePageProps) {
           </section>
         </div>
         </section>
-        {/* 一级「标签」页（261106）：标签即入口 → 点进去看文档/小记 → 管理动作收在「管理」里。 */}
-        <section ref={tagsPaneRef} className="mobile-tab-pane">
-          <TagsHomeTab
-            tags={tagDirectory}
-            notes={notes}
-            quickNotes={quickNotes}
-            active={tab === "tags"}
-            onOpenNote={onOpenNote}
-            onOpenQuickNote={onOpenQuickNote ?? (() => showToast("小记入口暂不可用", { type: "error" }))}
-            onChanged={applyTagsTabChanged}
-          />
-        </section>
         {/* 一级「日记」页（261109 v1）：列表 + 写今天 + 搜索入口；正文编辑仍进现有工作区（不新造输入面）。 */}
         <section ref={diaryPaneRef} className="mobile-tab-pane">
           {/* 分包未就绪时不画空白：给一个同构骨架（面在惰性 tab 里，用户切过来时通常已加载完）。 */}
@@ -903,6 +892,18 @@ export function HomePage(props: HomePageProps) {
               onChanged={onTreeChanged}
             />
           </Suspense>
+        </section>
+        {/* 一级「标签」页（261106）：标签即入口 → 点进去看文档/小记 → 管理动作收在「管理」里。 */}
+        <section ref={tagsPaneRef} className="mobile-tab-pane">
+          <TagsHomeTab
+            tags={tagDirectory}
+            notes={notes}
+            quickNotes={quickNotes}
+            active={tab === "tags"}
+            onOpenNote={onOpenNote}
+            onOpenQuickNote={onOpenQuickNote ?? (() => showToast("小记入口暂不可用", { type: "error" }))}
+            onChanged={applyTagsTabChanged}
+          />
         </section>
       </div>
 
