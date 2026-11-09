@@ -23,11 +23,17 @@
 - 真机发现并修复：① 桌面同步成功后未清 folders.is_dirty ⇒ 待同步目录常驻、便携包导出被挡；已在 desktopSync 成功后按 updatedAt 条件 markFolderSynced。② 移动端 listFoldersForSync 把固定「回收站」笔记本也发布 ⇒ 首轮同步平白多发一代并把 notebook-trash 写进云端；已排除 TRASH_NOTEBOOK_ID（与桌面同口径）。
 - 门禁：tsc 0；vitest **783 files / 4993 passed / 12 skipped / 0 failed**；diff-check 通过；Android 离线构建通过。
 
+### 261109 · UI 整理（移动端 + 桌面设置）
+- 用户原则：能点的控件排在纯文字说明之前（免责声明除外）。
+- 移动端：设置菜单把「更新中心」从首项移到「关于」上方（倒数第二）；备份与恢复/便携包导入/关于诊断改为「标题 → 操作按钮 → 说明/状态」；更新中心「检查间隔」改用 Field（控件独占一行，说明不再被右控件挤成窄列）；新增 mb-set-block--actions-first 原语（无手写样式）。
+- 桌面设置：Block 新增 descAfter（操作/统计先出现、说明后置）；备份与恢复把「导出便携包」上移到自动备份之前、各操作块按钮前置；关于把「诊断（复制诊断信息）」上移到版本/环境之前，第三方许可保持最后。
+- 便携包后缀改为 .zip.lln（桌面导出文件名；导入端兼容旧 .zip），见 docs/PORTABLE-TRANSFER.md。
+
 ### 261109 · 更新中心（桌面 + Android）
 - 新增应用内更新中心：检查更新（GitHub latest release 的 `latest.json`，CI 生成）/ 更新日志（复用 `docs/RELEASE-NOTES.md`）/ 自动检查（默认开，启动 + 6/12/24h）/ 自动下载（默认开；Android 仅 Wi-Fi）/ 忽略此版本；**不做静默安装**（桌面打开安装包、Android 拉起系统安装器）。
 - 桌面新增 8 个 IPC 通道（165→173，parity 通过）；Android 新增 `UpdatePlugin.kt`（DownloadManager + sha256/证书指纹校验 + FileProvider 安装器）；规格见 [docs/UPDATE-CENTER.md](UPDATE-CENTER.md)。
 - 门禁：`npx tsc --noEmit` = 0；`npx vitest run` = **788 文件（777 passed / 11 skipped）/ 4961 passed / 12 skipped / 0 failed**；`git diff --check` = 0；新增单测 37 例。**Android 设备侧未验证**（下载→校验→系统安装器交互留待真机/模拟器）。
-- 261109 追加：桌面更新中心改为设置独立「更新」分类页（无弹窗，检查频率用 Select 下拉）；移动端设置菜单「更新中心」置顶、「关于」置底；两端的检查间隔都改用既有下拉原语（Select / PickerSheet），未新增 CSS。
+- 261109 追加：桌面更新中心改为设置独立「更新」分类页（无弹窗，检查频率用 Select 下拉）；移动端设置菜单「更新中心」放「关于」上方（倒数第二）、「关于」置底；两端的检查间隔都改用既有下拉原语（Select / PickerSheet），未新增 CSS。
 
 ### 261109 · 文档收口与门禁复核
 - 重写本文件：删除 261106 及更早的 dated 批次（git 可查）；合并五份旧 RELEASE-NOTES；清理已删文档的悬空引用；所有相对链接重定向到现存文档（文档地图见 §1）。

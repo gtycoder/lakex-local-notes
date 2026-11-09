@@ -1,7 +1,8 @@
 /**
  * 设置根页菜单模型（261107 架构整理：从 SettingsDrawer 抽出，纯数据 + 纯函数，无 React/hooks）。
  *
- * 顺序 = 更新中心 → 云端与同步 → 备份与恢复 → AI → 编辑器 → 外观 → 历史 → 导入 → 资源管理 → 清理缓存 → 回收站 → 关于
+ * 顺序 = 云端与同步 → 备份与恢复 → AI → 编辑器 → 外观 → 历史 → 导入 → 资源管理 → 清理缓存 → 回收站 → 更新中心 → 关于
+ * （261109 用户定稿：更新中心放在关于上方、倒数第二，不再作为第一项。）
  * （261105 晚用户验收，对齐桌面；「标签」不在此，已搬到一级标签页）。
  * tone = 设置根页图标块取色（v2 分组卡）；新增项必须同时补 MENU_GROUPS，否则根页渲染不到。
  */
@@ -30,7 +31,6 @@ export interface SettingsMenuItem {
 }
 
 export const SETTINGS_MENU: SettingsMenuItem[] = [
-  { key: "update", label: "更新中心", icon: RefreshCw, tone: "#3f5fa0" },
   { key: "s3", label: "云端与同步", icon: Cloud, tone: "#2a6b80" },
   { key: "backup", label: "备份与恢复", icon: Archive, tone: "#3f5fa0" },
   { key: "ai", label: "AI 助手", icon: Sparkles, tone: "#2b7350" },
@@ -41,15 +41,16 @@ export const SETTINGS_MENU: SettingsMenuItem[] = [
   { key: "resources", label: "资源管理", icon: Images, tone: "#48b07a" },
   { key: "cache", label: "清理缓存", icon: HardDrive, tone: "#8b93a1" },
   { key: "trash", label: "回收站", icon: Trash, tone: "#b3382f" },
+  { key: "update", label: "更新中心", icon: RefreshCw, tone: "#3f5fa0" },
   { key: "about", label: "关于", icon: Info, tone: "#5b6472" },
 ];
 
 /** 根页分组卡：只决定哪几项合成一张卡，顺序仍按 SETTINGS_MENU。 */
 export const SETTINGS_MENU_GROUPS: Exclude<SettingsView, "menu">[][] = [
-  ["update", "s3", "backup"],
+  ["s3", "backup"],
   ["ai", "editor", "appearance"],
   ["history", "import", "resources", "cache"],
-  ["trash", "about"],
+  ["trash", "update", "about"],
 ];
 
 export const settingsMenuLabel = (key: Exclude<SettingsView, "menu">): string =>

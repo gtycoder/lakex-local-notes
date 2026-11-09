@@ -602,11 +602,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                     不照抄桌面的「整库改名隔离 + 重启」（移动端附件可能 1.6GB，隔离整库代价过高）。 */}
                 <div className="mb-set-block">
                   <div className="mb-set-block__name">从云端恢复（换机或数据损坏）</div>
-                  <div className="mb-set-item__desc">
-                    以云端为准重建本机：清空本机同步记录后全部重新下载（只下载，不上传本机内容）。
-                    云端没有的本机文档/小记会移入回收站并标「云端已删除（仅本地）」，正文与历史保留可恢复。
-                    用于换机、本机数据损坏，或提示「云端是另一套数据」时。需要先配置并开启云同步。
-                  </div>
+                  {/* 261109 用户定稿：能点的放前面，说明/状态放后面。 */}
                   <div className="mb-set-block__actions">
                     <button
                       type="button"
@@ -616,20 +612,25 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                       onClick={() => void restoreFromCloud()}
                     >{restoreBusy ? "正在恢复…" : "从云端恢复…"}</button>
                   </div>
+                  <div className="mb-set-item__desc">
+                    以云端为准重建本机：清空本机同步记录后全部重新下载（只下载，不上传本机内容）。
+                    云端没有的本机文档/小记会移入回收站并标「云端已删除（仅本地）」，正文与历史保留可恢复。
+                    用于换机、本机数据损坏，或提示「云端是另一套数据」时。需要先配置并开启云同步。
+                  </div>
                   {restoreMsg && <div className="mb-set-item__desc" aria-live="polite">{restoreMsg}</div>}
                 </div>
                 {/* 缺正文/缺小记：只在资源管理里扫描/恢复；这里给引用入口（不重复扫描逻辑）。 */}
                 <div className="mb-set-block">
                   <div className="mb-set-block__name">缺正文 / 缺小记</div>
-                  <div className="mb-set-item__desc">
-                    文档或小记还在，但正文文件已经不在了。可以从云端拉回、恢复历史版本，或用搜索缓存重建纯文本。
-                  </div>
                   <div className="mb-set-block__actions">
                     <button
                       type="button"
                       className="mb-btn mb-btn--secondary"
                       onClick={() => { setView("resources"); void missingBodies.reload(); }}
                     >去资源管理查看</button>
+                  </div>
+                  <div className="mb-set-item__desc">
+                    文档或小记还在，但正文文件已经不在了。可以从云端拉回、恢复历史版本，或用搜索缓存重建纯文本。
                   </div>
                 </div>
                 {/* 261109：从便携包导入（覆盖本机；桌面导出 zip → 手机导入，不需要先配 S3）。 */}

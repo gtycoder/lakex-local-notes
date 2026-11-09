@@ -74,12 +74,15 @@ export function Field({ itemId, name, desc, pathDesc, error, children }: { itemI
 }
 
 /** 整块行：标题 + 说明 + 全宽内容（按钮组、统计、只读数据框）。 */
-export function Block({ itemId, name, desc, children }: { itemId?: string; name?: string; desc?: string; children?: ReactNode }) {
+export function Block({ itemId, name, desc, descAfter = false, children }: { itemId?: string; name?: string; desc?: string;
+  /** true = 可操作控件先出现、说明文字后置（用户 261109 定稿：能点的比纯说明更显眼；免责声明除外）。 */
+  descAfter?: boolean; children?: ReactNode }) {
   return (
     <div className="config-block" data-set-id={itemId}>
       {name && <div className="config-block__name">{name}</div>}
-      {desc && <div className="ln-label__text">{desc}</div>}
+      {desc && !descAfter && <div className="ln-label__text">{desc}</div>}
       {children}
+      {desc && descAfter && <div className="ln-label__text">{desc}</div>}
     </div>
   );
 }

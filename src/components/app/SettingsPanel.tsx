@@ -1015,20 +1015,38 @@ let verifiedS3Fingerprint: string | null = null;
             {category === "backup" && (
               <>
                 <Group title="备份与恢复" icon={<Archive size={16} />}>
-                  <Block itemId="backup-export" name="整库备份" desc="数据库 + 全部笔记/资源/历史快照 + 小记，导出到所选目录（不覆盖非空目录）。">
+                  <Block itemId="backup-export" name="整库备份" desc="数据库 + 全部笔记/资源/历史快照 + 小记，导出到所选目录（不覆盖非空目录）。" descAfter>
                     <div className="config-block__actions">
                       <button className="ln-btn ln-btn--secondary" onClick={() => void runBackup()} disabled={backup.busy}><Archive size={14} /> {backup.busy ? "备份中…" : "整库备份到…"}</button>
                     </div>
                   </Block>
-                  <Block itemId="backup-restore" name="从云端恢复" desc="当前数据先改名隔离保存，再从云端全量拉取重建（不会上传本机数据）。用于换机或本地库损坏。">
+                  <Block itemId="backup-restore" name="从云端恢复" desc="当前数据先改名隔离保存，再从云端全量拉取重建（不会上传本机数据）。用于换机或本地库损坏。" descAfter>
                     <div className="config-block__actions">
                       <button className="ln-btn ln-btn--secondary ln-btn--danger-text" onClick={() => void runCloudRestore()} disabled={backup.busy || cloudOffline} title={cloudOffline ? "云同步未启用：不会联网" : undefined}>从云端恢复（换机/坏库）…</button>
                     </div>
                   </Block>
-                  <Block itemId="backup-import" name="从备份恢复" desc="选择一个整库备份（metadata*.sqlite3）：先校验完整性/关键表，再把当前库改名隔离（不删除、可找回）并替换，重启应用后生效。">
+                  <Block itemId="backup-import" name="从备份恢复" desc="选择一个整库备份（metadata*.sqlite3）：先校验完整性/关键表，再把当前库改名隔离（不删除、可找回）并替换，重启应用后生效。" descAfter>
                     <div className="config-block__actions">
                       <button className="ln-btn ln-btn--secondary" onClick={() => void runRestoreFromBackup()} disabled={backup.busy}>从备份恢复…</button>
                     </div>
+                  </Block>
+                  <Block itemId="backup-portable-export" name="导出便携包（桌面 → 手机）" descAfter desc="把本机全部数据（正文/资源/小记/标签/回收站，不含历史快照）打成一个 .zip.lln（上限 4GiB），经网盘或 USB 拷到手机后导入，手机之后只需增量同步。包内是明文笔记，请自行选择传输方式；不包含任何 S3 密钥。">
+                    <div className="config-block__actions">
+                      <button
+                        className="ln-btn ln-btn--secondary"
+                        onClick={() => void runPortableExport()}
+                        disabled={portable.busy || !hostCapabilities().localFileSystem || !(portableStatus?.availability.available ?? false)}
+                        title={portableUnavailableReason}
+                      >
+                        {portable.busy ? "导出中…" : "选择目录并导出…"}
+                      </button>
+                      <button className="ln-btn ln-btn--secondary" onClick={() => void loadPortableStatus()} disabled={portable.busy}>刷新状态</button>
+                    </div>
+                    <div className="config-stats">
+                      <span>{portableStatusText}</span>
+                    </div>
+                    {portableProgress && <div className="block__text">{portableProgressText}</div>}
+                    {portable.message && <div className="block__text">{portable.message}</div>}
                   </Block>
                   <Block itemId="auto-backup" name="自动备份" desc="每天/每周把主库与小记库 VACUUM INTO 快照到 userData/backups，保留最近 N 份并限制总大小（本机保存、不进云端）。恢复入口是上面的「从备份恢复」（本轮只恢复主库；小记库备份文件同目录保留）。">
                     {backupCfg ? (
@@ -1049,7 +1067,11 @@ let verifiedS3Fingerprint: string | null = null;
                       <div className="config-stats"><span>读取自动备份配置…</span></div>
                     )}
                   </Block>
-                  <Block itemId="backup-usage" name="备份占用" desc="只读统计 userData/backups 里的备份份数与总大小（只 stat、不读文件内容）。自动备份按「保留份数」与总大小上限删最旧的备份；这里不提供手动删除，避免误删兜底数据。">
+                  <Block itemId="backup-usage" name="备份占用" desc="只读统计 userData/backups 里的备份份数与总大小（只 stat、不读文件内容）。自动备份按「保留份数」与总大小上限删最旧的备份；这里不提供手动删除，避免误删兜底数据。" descAfter>
+                    <div className="config-block__actions">
+                      <button className="ln-btn ln-btn--secondary" onClick={() => void loadBackupUsage()} disabled={backupUsageBusy}>{backupUsageBusy ? "统计中…" : "刷新统计"}</button>
+                      <button className="ln-btn ln-btn--secondary" onClick={() => void revealFolder("backups")}>打开备份目录</button>
+                    </div>
                     <div className="config-stats">
                       <span>{backupUsageInfo.countText}</span>
                       {backupUsageInfo.sizeText && <span>{backupUsageInfo.sizeText}</span>}
@@ -1061,12 +1083,8 @@ let verifiedS3Fingerprint: string | null = null;
                         <div className={"checks__row checks__row--" + (backupUsageInfo.tone === "warn" ? "warn" : "ok")}>{backupUsageInfo.note}</div>
                       </div>
                     )}
-                    <div className="config-block__actions">
-                      <button className="ln-btn ln-btn--secondary" onClick={() => void loadBackupUsage()} disabled={backupUsageBusy}>{backupUsageBusy ? "统计中…" : "刷新统计"}</button>
-                      <button className="ln-btn ln-btn--secondary" onClick={() => void revealFolder("backups")}>打开备份目录</button>
-                    </div>
                   </Block>
-                  <Block itemId="backup-last-result" name="上次备份结果" desc="最近一次自动/手动备份的结果（本机记录，不上传云端）：成功 / 部分成功 / 失败，以及可读的失败原因。部分成功 = 主库备份可用，但小记库不可用或备份校验失败。">
+                  <Block itemId="backup-last-result" name="上次备份结果" desc="最近一次自动/手动备份的结果（本机记录，不上传云端）：成功 / 部分成功 / 失败，以及可读的失败原因。部分成功 = 主库备份可用，但小记库不可用或备份校验失败。" descAfter>
                     {backupResult ? (
                       <div className="checks">
                         <div className={"checks__row checks__row--" + backupResult.tone}>{backupResult.headline}</div>
@@ -1081,24 +1099,6 @@ let verifiedS3Fingerprint: string | null = null;
                     ) : (
                       <div className="block__text">还没有备份记录（自动备份默认开启，每天一份；也可以点上面的「立即备份」）。</div>
                     )}
-                  </Block>
-                  <Block itemId="backup-portable-export" name="导出便携包（桌面 → 手机）" desc="把本机全部数据（正文/资源/小记/标签/回收站，不含历史快照）打成一个 zip（上限 4GiB），经网盘或 USB 拷到手机后导入，手机之后只需增量同步。包内是明文笔记，请自行选择传输方式；不包含任何 S3 密钥。">
-                    <div className="config-stats">
-                      <span>{portableStatusText}</span>
-                    </div>
-                    {portableProgress && <div className="block__text">{portableProgressText}</div>}
-                    <div className="config-block__actions">
-                      <button
-                        className="ln-btn ln-btn--secondary"
-                        onClick={() => void runPortableExport()}
-                        disabled={portable.busy || !hostCapabilities().localFileSystem || !(portableStatus?.availability.available ?? false)}
-                        title={portableUnavailableReason}
-                      >
-                        {portable.busy ? "导出中…" : "选择目录并导出…"}
-                      </button>
-                      <button className="ln-btn ln-btn--secondary" onClick={() => void loadPortableStatus()} disabled={portable.busy}>刷新状态</button>
-                    </div>
-                    {portable.message && <div className="block__text">{portable.message}</div>}
                   </Block>
                   {backupText && <Block name={backupText} />}
                 </Group>
@@ -1336,6 +1336,14 @@ let verifiedS3Fingerprint: string | null = null;
                       <Block itemId="about-fonts" name="字体" desc="界面与正文使用内置 MiSans（小米科技，依《MiSans 字体知识产权许可协议》免费商用；此处按协议注明使用）。代码块使用 JetBrains Mono（SIL OFL 1.1）。两者均随应用内置、离线可用。" />
                     </Group>
 
+                    <Group title="诊断" icon={<Search size={16} />}>
+                      <Block itemId="about-diagnostics" name="复制诊断信息" desc="把版本、运行环境、依赖与本机计数拼成一段纯文本，反馈问题时直接贴出来。" descAfter>
+                        <div className="config-block__actions">
+                          <button className="ln-btn ln-btn--secondary" onClick={() => void copyDiagnostics()} disabled={!sysInfo}>复制诊断信息</button>
+                        </div>
+                      </Block>
+                      <Block itemId="about-health-entry" name="一致性检查" desc="正文文件、历史快照、孤儿登记、引用资源与目录树父子链的只读体检在「文档与历史」页运行。" />
+                    </Group>
                     <Group title="版本与运行环境" icon={<Monitor size={16} />}>
                       <Item itemId="about-version" name="应用版本" desc={sysInfo.app.description || undefined}>
                         <span className="config-item__ctl"><code className="kv__v">v{sysInfo.app.version}</code></span>
@@ -1400,14 +1408,6 @@ let verifiedS3Fingerprint: string | null = null;
                       </Item>
                     </Group>
 
-                    <Group title="诊断" icon={<Search size={16} />}>
-                      <Block itemId="about-diagnostics" name="复制诊断信息" desc="把版本、运行环境、依赖与本机计数拼成一段纯文本，反馈问题时直接贴出来。">
-                        <div className="config-block__actions">
-                          <button className="ln-btn ln-btn--secondary" onClick={() => void copyDiagnostics()} disabled={!sysInfo}>复制诊断信息</button>
-                        </div>
-                      </Block>
-                      <Block itemId="about-health-entry" name="一致性检查" desc="正文文件、历史快照、孤儿登记、引用资源与目录树父子链的只读体检在「文档与历史」页运行。" />
-                    </Group>
 
                     <Group title="第三方与许可" icon={<Info size={16} />}>
                       <Block itemId="about-siyuan-license" name="思源笔记 SiYuan" desc="界面版式与主题令牌移植自 SiYuan（AGPL-3.0，https://github.com/siyuan-note/siyuan）：相关规则已收编到 src/styles/compat.css 与 kit.css（保留署名）；本项目不构成分发思源代码。" />

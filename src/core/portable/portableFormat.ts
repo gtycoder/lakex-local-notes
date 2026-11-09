@@ -7,6 +7,9 @@ import type { SyncSettings } from "../sharedTypes";
 
 export const PORTABLE_FORMAT = "lakex-local-notes-portable";
 export const PORTABLE_FORMAT_VERSION = 1;
+/** 便携包文件后缀：压缩包 + 专属后缀，便于在网盘/文件选择器里识别，避免误选普通 zip。
+ *  兼容旧包：导入端仍接受普通 `.zip`。 */
+export const PORTABLE_FILE_EXTENSION = ".zip.lln";
 /** 单包上限：4GiB（用户 261109 定；超限暂不支持分卷）。 */
 export const PORTABLE_LIMIT_BYTES = 4 * 1024 * 1024 * 1024;
 

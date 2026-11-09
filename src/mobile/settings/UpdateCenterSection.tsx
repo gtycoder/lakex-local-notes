@@ -1,5 +1,5 @@
 /**
- * 设置 → 关于 →「更新」分组（应用内更新中心，Android）。
+ * 设置 →「更新中心」（独立菜单项，位于「关于」上方；应用内更新中心，Android）。
  *
  * 四行 + 仅 Wi-Fi 行（docs/UPDATE-CENTER.md §2）：
  *   检查更新 / 自动检查（间隔 关闭·6·12·24h）/ 自动下载 / 仅 Wi-Fi 自动下载 / 更新日志。
@@ -9,7 +9,7 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import { Download, RefreshCw, ScrollText } from "lucide-react";
-import { Group, Item, Switch } from "../ui/settingsPrimitives";
+import { Field, Group, Item, Switch } from "../ui/settingsPrimitives";
 import { PickerSheet } from "../ui/PickerSheet";
 import { MobileSheet } from "../ui/MobileSheet";
 import { formatBytes } from "../../lib/formatBytes";
@@ -154,7 +154,7 @@ export function UpdateCenterSection({ appInfo }: { appInfo: AppInfo | null }) {
           onChange={(next) => applySettings({ autoCheck: next })}
         />
 
-        <Item itemId="update-check-interval" name="检查间隔" desc="「关闭」= 不自动检查，仍可手动检查">
+        <Field itemId="update-check-interval" name="检查间隔" desc="「关闭」= 不自动检查，仍可手动检查">
           <PickerSheet
             label="检查间隔"
             value={settings.checkIntervalHours}
@@ -164,7 +164,7 @@ export function UpdateCenterSection({ appInfo }: { appInfo: AppInfo | null }) {
             }))}
             onChange={(hours) => applySettings({ checkIntervalHours: hours })}
           />
-        </Item>
+        </Field>
 
         <Switch
           itemId="update-auto-download"

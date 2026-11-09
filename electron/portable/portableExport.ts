@@ -17,6 +17,7 @@ import {
   assertPortableSize,
   PORTABLE_FORMAT,
   PORTABLE_FORMAT_VERSION,
+  PORTABLE_FILE_EXTENSION,
   PORTABLE_LIMIT_BYTES,
   type PortableBaselineRef,
   type PortableCounts,
@@ -131,7 +132,7 @@ function uniqueZipPath(targetDir: string, now: Date): string {
   const stamp = now.toISOString().replace(/[:T]/g, "-").replace(/\..*$/, "");
   const base = "lakex-portable-" + stamp;
   for (let index = 1; index < 1000; index += 1) {
-    const candidate = path.join(targetDir, index === 1 ? base + ".zip" : base + "-" + index + ".zip");
+    const candidate = path.join(targetDir, index === 1 ? base + PORTABLE_FILE_EXTENSION : base + "-" + index + PORTABLE_FILE_EXTENSION);
     if (!fs.existsSync(candidate)) return candidate;
   }
   throw new Error("导出目录里同名文件过多，请换一个目录");

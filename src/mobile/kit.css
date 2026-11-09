@@ -278,6 +278,10 @@
 }
 .mb-switch[aria-checked="true"] .mb-switch__knob { transform: translateX(18px); }
 .mb-set-block__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+/* 261109 用户定稿：可点击控件排在说明/统计之前（免责声明除外）。 */
+.mb-set-block--actions-first { display: flex; flex-direction: column; }
+.mb-set-block--actions-first > .mb-set-block__actions { order: 1; }
+.mb-set-block--actions-first > .mb-set-stats { order: 2; }
 /* 手写分组（同步设置 / 清理缓存 / 关于）的行与块直接挂在 .mb-set-items 下、没有 Section 卡，
  * 少了分组卡那 1px 发丝 ⇒ 同一行名在「有卡页」33 /「无卡页」32（实测差 1px）。补同一条内缩。 */
 .mb-set-items > .mb-set-item,

@@ -90,6 +90,7 @@ describe("portableExport（桌面 → 手机便携包）", () => {
     });
 
     expect(fs.existsSync(result.path)).toBe(true);
+    expect(path.basename(result.path).endsWith(".zip.lln")).toBe(true);
     expect(result.entries).toBe(12);
     expect(result.bytes).toBe(fs.statSync(result.path).size);
     const entries = readStoreZip(result.path);

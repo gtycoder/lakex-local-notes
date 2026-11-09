@@ -59,7 +59,7 @@ export function AboutSettingsSection({ appInfo, diag }: { appInfo: ReturnType<ty
                   <div className="mb-set-item__desc">字体：内置 MiSans（小米科技，依《MiSans 字体知识产权许可协议》免费商用并注明）+ JetBrains Mono（SIL OFL 1.1）</div>
                 </div>
                 {diag && (
-                  <div className="mb-set-block">
+                  <div className="mb-set-block mb-set-block--actions-first">
                     <div className="mb-set-block__name">数据诊断</div>
                     <div className="mb-set-stats">
                       <span><strong>文档</strong> {diag.noteCount}</span>
