@@ -209,14 +209,21 @@ export async function exportPortablePackage(options: PortableExportOptions): Pro
     const zipPath = uniqueZipPath(options.targetDir, now);
     const filesTotal = sources.length;
     let filesDone = 0;
-    const tracked = sources.map((source) => ({
-      ...source,
-      read: (): AsyncIterable<Uint8Array> => (async function* () {
-        yield* source.read();
-        filesDone += 1;
-        emit({ phase: "write", filesDone, filesTotal, bytesWritten: 0 });
-      })(),
-    }));
+    const tracked = sources.map((source) => {
+      // zip 写入是两遍读（先算 CRC/大小、再写数据）⇒ 进度只按文件计一次。
+      let counted = false;
+      return {
+        ...source,
+        read: (): AsyncIterable<Uint8Array> => (async function* () {
+          yield* source.read();
+          if (!counted) {
+            counted = true;
+            filesDone += 1;
+            emit({ phase: "write", filesDone, filesTotal, bytesWritten: 0 });
+          }
+        })(),
+      };
+    });
     emit({ phase: "write", filesDone: 0, filesTotal, bytesWritten: 0 });
     const result = await writeStoreZip(zipPath, tracked, {
       maxBytes: limitBytes,

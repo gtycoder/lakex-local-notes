@@ -12,7 +12,7 @@
 - 需求：S3 首次全量同步贵；桌面导出单 zip（不含历史）→ 网盘/USB → 手机覆盖导入 → 之后 S3 只做增量。用户口径：覆盖；含回收站/小记/标签；排除历史快照；不加密；单包 **≤4GiB**（超限暂不支持分卷）；一次性 bootstrap；桌面仅在云同步已启用且上轮同步成功/无待同步时可用；手机导入不强制先配 S3。
 - 桌面：`electron/portable/{zipStore,portableExport}.ts`（自研 store-only zip、VACUUM INTO 快照、白名单遍历）+ `electron/ipc/registerPortable.ts` + 设置页「备份与恢复 → 导出便携包」；IPC 通道 173→176。
 - 手机：`PortablePackagePlugin.kt`（选包/解压/只读读桌面库/复制文件/回滚）+ `src/mobile/portable/*`（tree_nodes+notes→folders/notes、quick-notes→quick_notes/tags、baseline→sync_v3_state、FTS 重建、失败回滚）+ 设置页入口。
-- 验证：桌面在隔离 userData 上真实导出通过（5.6MB / 96 entries / 14 文档 / 4 目录 / 3 小记 / 4 标签 / 75 资产，无 history/draft/logs；见 [docs/PORTABLE-TRANSFER.md](PORTABLE-TRANSFER.md)）。**手机端导入尚未设备验证**（导出 zip 已推手机；手机锁屏待解锁后继续）。
+- 验证：桌面在隔离 userData 上真实导出通过（5.6MB / 96 entries / 14 文档 / 4 目录 / 3 小记 / 4 标签 / 75 资产，无 history/draft/logs）；手机真机导入通过（14 文档：6 doc/3 usheet/2 bitable/2 ink/1 board、5 目录含回收站、3 小记、4 标签、92 文件；打开 doc 与 bitable 正常，note_history=0、is_dirty=0、v3 baseline 已写入）。**踩坑已修**：store-only zip 原先用数据描述符，Java `ZipInputStream` 会读成空文件（真机报「便携包无效」）⇒ 改为本地头写 CRC/大小（每个文件读两遍），重导通过。
 - 门禁：tsc 0；vitest **783 files / 4993 passed / 12 skipped / 0 failed**（含 perf 集成偶发，重跑通过）；check:core / check:mobileui / diff-check 通过；Kotlin 离线编译通过。
 
 ### 261109 · 更新中心（桌面 + Android）

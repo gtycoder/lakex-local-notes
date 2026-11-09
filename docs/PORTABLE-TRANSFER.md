@@ -49,6 +49,7 @@ S3 密钥/seed、`sync-v3/state.json`（同步意图账本）以及任何设备�
 ```
 
 - 桌面导出前：**云同步已配置且已启用**（`autoMode` 为 manual/auto 均可；`cloudStateOf()` 不得是 unconfigured/offline）、**上一轮同步成功**、**没有待同步改动**；否则入口不可用并说明原因。
+- 手机端导入后会确保固定「回收站」目录，因此「目录」实际导入数可能比清单多 1（正常，不告警）。
 - 导出用 VACUUM INTO 生成两份 DB 快照（复用 workspaceBackup 的注入回调），再逐文件写入 zip；写 zip 用**自研 store-only 流式写入**（不引依赖，CRC32 + 标准中央目录；总大小 < 4GiB 不需要 ZIP64）。
 - 包内不写任何密钥；提醒用户包内是明文笔记。
 

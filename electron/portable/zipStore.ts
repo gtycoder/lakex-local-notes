@@ -6,8 +6,10 @@
  *
  * 格式要点：
  * - method 0（store，不压缩）：spec 明确「store-only，读写快」；
- * - 通用位标记 0x0008（数据描述符）+ 0x0800（UTF-8 文件名）：CRC/大小在数据后写，
- *   才能一边读文件一边写 zip（不必为了算 CRC 读两遍）；
+ * - **不用数据描述符**（0x0008）：store 条目若把 CRC/大小放在数据后，Java ZipInputStream
+ *   等实现会读成空文件（真机踩坑）。这里每个文件读两遍：先算 CRC/大小写进本地头，再写数据。
+ *   （4GiB 上限下多一次顺序读，换来所有解压器兼容。）
+ * - 通用位标记 0x0800（UTF-8 文件名）；
  * - 「总大小 ≤4GiB」：写入前由调用方 assertPortableSize 预检，写入时这里再按实际字节硬夹；
  * - 条目数 >65535 时补 ZIP64 EOCD（仅 EOCD，条目本身仍是 32 位字段；大小/偏移受 4GiB 限制不会溢出）。
  */
@@ -39,12 +41,11 @@ export interface WriteZipResult {
 }
 
 const LOCAL_HEADER_SIG = 0x04034b50;
-const DATA_DESCRIPTOR_SIG = 0x08074b50;
 const CENTRAL_HEADER_SIG = 0x02014b50;
 const EOCD_SIG = 0x06054b50;
 const ZIP64_EOCD_SIG = 0x06064b50;
 const ZIP64_LOCATOR_SIG = 0x07064b50;
-const FLAG_DATA_DESCRIPTOR_UTF8 = 0x0008 | 0x0800;
+const FLAG_UTF8 = 0x0800;
 const U16_MAX = 0xffff;
 const U32_MAX = 0xffffffff;
 
@@ -141,44 +142,46 @@ export async function writeStoreZip(filePath: string, entries: ZipEntrySource[],
       if (!Number.isSafeInteger(entry.size) || entry.size < 0) throw new Error("条目大小非法：" + entry.name);
       const nameBuffer = Buffer.from(entry.name, "utf8");
       const { time, date } = dosDateTime(entry.mtime);
-      const header = Buffer.alloc(30 + nameBuffer.length);
-      header.writeUInt32LE(LOCAL_HEADER_SIG, 0);
-      header.writeUInt16LE(20, 4);
-      header.writeUInt16LE(FLAG_DATA_DESCRIPTOR_UTF8, 6);
-      header.writeUInt16LE(0, 8);
-      header.writeUInt16LE(time, 10);
-      header.writeUInt16LE(date, 12);
-      header.writeUInt32LE(0, 14);
-      header.writeUInt32LE(0, 18);
-      header.writeUInt32LE(0, 22);
-      header.writeUInt16LE(nameBuffer.length, 26);
-      header.writeUInt16LE(0, 28);
-      nameBuffer.copy(header, 30);
-      const localOffset = written + pendingBytes;
-      await write(header);
-
+      // 第一遍：算 CRC/大小（store 条目的本地头必须带真实值，兼容 Java ZipInputStream）。
       let crc = 0;
       let size = 0;
       for await (const chunk of entry.read()) {
         crc = crc32Update(crc, chunk);
         size += chunk.length;
         if (size > entry.size) throw new Error("文件在导出过程中变大了：" + entry.name);
-        await write(chunk);
       }
       if (size !== entry.size) throw new Error("文件在导出过程中被修改：" + entry.name);
 
-      const descriptor = Buffer.alloc(16);
-      descriptor.writeUInt32LE(DATA_DESCRIPTOR_SIG, 0);
-      descriptor.writeUInt32LE(crc >>> 0, 4);
-      descriptor.writeUInt32LE(size, 8);
-      descriptor.writeUInt32LE(size, 12);
-      await write(descriptor);
+      const header = Buffer.alloc(30 + nameBuffer.length);
+      header.writeUInt32LE(LOCAL_HEADER_SIG, 0);
+      header.writeUInt16LE(20, 4);
+      header.writeUInt16LE(FLAG_UTF8, 6);
+      header.writeUInt16LE(0, 8);
+      header.writeUInt16LE(time, 10);
+      header.writeUInt16LE(date, 12);
+      header.writeUInt32LE(crc >>> 0, 14);
+      header.writeUInt32LE(size, 18);
+      header.writeUInt32LE(size, 22);
+      header.writeUInt16LE(nameBuffer.length, 26);
+      header.writeUInt16LE(0, 28);
+      nameBuffer.copy(header, 30);
+      const localOffset = written + pendingBytes;
+      await write(header);
+
+      // 第二遍：写数据（再校验一次大小，防两遍之间被改）。
+      let writtenSize = 0;
+      for await (const chunk of entry.read()) {
+        writtenSize += chunk.length;
+        if (writtenSize > size) throw new Error("文件在导出过程中变大了：" + entry.name);
+        await write(chunk);
+      }
+      if (writtenSize !== size) throw new Error("文件在导出过程中被修改：" + entry.name);
 
       const centralHeader = Buffer.alloc(46 + nameBuffer.length);
       centralHeader.writeUInt32LE(CENTRAL_HEADER_SIG, 0);
       centralHeader.writeUInt16LE(20, 4);
       centralHeader.writeUInt16LE(20, 6);
-      centralHeader.writeUInt16LE(FLAG_DATA_DESCRIPTOR_UTF8, 8);
+      centralHeader.writeUInt16LE(FLAG_UTF8, 8);
       centralHeader.writeUInt16LE(0, 10);
       centralHeader.writeUInt16LE(time, 12);
       centralHeader.writeUInt16LE(date, 14);

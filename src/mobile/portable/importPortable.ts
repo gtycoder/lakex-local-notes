@@ -228,7 +228,10 @@ function compareCounts(manifestCounts: PortableCounts, result: PortableImportRes
     if (expected !== actual) warnings.push(name + "：清单 " + expected + "，实际导入 " + actual);
   };
   check("笔记", manifestCounts.notes, result.counts.notes);
-  check("目录", manifestCounts.folders, result.counts.folders);
+  // 手机端启动/导入会确保固定「回收站」目录，但它不在桌面 manifest 的 folders 里 ⇒ 允许 +1，不告警。
+  if (result.counts.folders !== manifestCounts.folders && result.counts.folders !== manifestCounts.folders + 1) {
+    warnings.push("目录：清单 " + manifestCounts.folders + "，实际导入 " + result.counts.folders);
+  }
   check("小记", manifestCounts.quickNotes, result.counts.quickNotes);
   check("标签", manifestCounts.tags, result.counts.tags);
   return warnings;
