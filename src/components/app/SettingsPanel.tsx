@@ -56,7 +56,7 @@ import { backupResultView, backupUsageView } from "./settingsBackupObservability
  * 数据与历史 / 数据维护（数据体检、重建数据、回收站、全文搜索、浏览器端、应用日志）/ AI / 关于」。
  * 备份与恢复是**独立分类**（从云端恢复也放这里：它同样是恢复动作，只是需要云端配置）。
  */
-export type SettingsCategory = "editor" | "appearance" | "shortcuts" | "history" | "maintenance" | "sync" | "backup" | "ai" | "update" | "about";
+export type SettingsCategory = "editor" | "appearance" | "shortcuts" | "history" | "maintenance" | "sync" | "backup" | "ai" | "browser" | "update" | "about";
 
 interface SettingsPanelProps {
   open: boolean;
@@ -525,6 +525,7 @@ let verifiedS3Fingerprint: string | null = null;
     { id: "backup" as const, label: "备份与恢复", keywords: "备份 整库 恢复 云端恢复 自动备份 迁移", icon: <Archive size={15} /> },
     { id: "history" as const, label: "数据与历史", keywords: "快照 保留 清理 文档历史", icon: <History size={15} /> },
     { id: "maintenance" as const, label: "数据维护", keywords: "体检 一致性 重建 恢复 回收站 搜索 日志 浏览器 扫描", icon: <HardDrive size={15} /> },
+    { id: "browser" as const, label: "浏览器端", keywords: "浏览器 网页 web 端口 局域网 browser 127.0.0.1", icon: <Globe size={15} /> },
     { id: "ai" as const, label: "AI 助手", keywords: "AI 供应商 模型 key api openai deepseek 密钥", icon: <Sparkles size={15} /> },
     { id: "update" as const, label: "更新", keywords: "更新 升级 检查更新 自动更新 下载 安装 版本 release latest", icon: <RefreshCw size={15} /> },
     { id: "about" as const, label: "关于", keywords: "版本", icon: <Info size={15} /> },
@@ -1087,17 +1088,6 @@ let verifiedS3Fingerprint: string | null = null;
                   <button className="ln-btn ln-btn--secondary" disabled={searchIndex.busy} onClick={() => void rebuildSearchIndex()}>{searchIndex.busy ? "重建中…" : "重建"}</button>
                 </Item>
               </Group>
-              <Group title="浏览器端" icon={<Globe size={16} />}>
-                <Switch itemId="browser-enabled" name="启用浏览器端" desc="在本机浏览器中打开 LakexLocalNotes（与桌面端同一份本地数据）。只监听 127.0.0.1，不向局域网开放；开关即时生效，应用重启后恢复为关闭。" checked={webStatus?.enabled ?? false} disabled={!webStatus || webRun.busy} onChange={(checked) => void setWeb(checked)} />
-                <Block name="这是什么" desc="浏览器端不向局域网开放：它把桌面端的同一份本地库通过本机地址 http://127.0.0.1:19880/ 交给浏览器，数据不经过网络。打开开关后，用浏览器访问该地址即可。" />
-                <Block name="现状" desc="读写的是本机同一份数据；同步进度与待办会实时刷新；图片「另存为」走浏览器下载，附件在新标签打开。需要系统目录框的操作（导出、整库备份）请仍在桌面端使用。开关不保存，每次启动都从关闭开始。" />
-                {webStatus?.enabled && (
-                  <Item itemId="browser-open" name="在本机浏览器打开" desc={webStatus.url}>
-                    <button className="ln-btn ln-btn--secondary" onClick={() => void openWeb()}><ExternalLink size={14} /> 打开浏览器</button>
-                  </Item>
-                )}
-                {webText && <Block desc={webText} />}
-              </Group>
               <Group title="应用日志（只读）" icon={<Terminal size={16} />}>
                 <Block itemId="logs-main" name="主进程日志" desc="同步、回收站与历史清理过程写入 userData/logs/lakex-local-notes.log；按关键字过滤，每条命中附带上下文。">
                   <div className="config-block__actions">
@@ -1123,6 +1113,22 @@ let verifiedS3Fingerprint: string | null = null;
                     !logLoad.busy && <div className="config-empty">尚无日志或未读取。</div>
                   )}
                 </Block>
+              </Group>
+              </>
+            )}
+
+            {category === "browser" && (
+              <>
+              <Group title="浏览器端" icon={<Globe size={16} />}>
+                <Switch itemId="browser-enabled" name="启用浏览器端" desc="在本机浏览器中打开 LakexLocalNotes（与桌面端同一份本地数据）。只监听 127.0.0.1，不向局域网开放；开关即时生效，应用重启后恢复为关闭。" checked={webStatus?.enabled ?? false} disabled={!webStatus || webRun.busy} onChange={(checked) => void setWeb(checked)} />
+                <Block name="这是什么" desc="浏览器端不向局域网开放：它把桌面端的同一份本地库通过本机地址 http://127.0.0.1:19880/ 交给浏览器，数据不经过网络。打开开关后，用浏览器访问该地址即可。" />
+                <Block name="现状" desc="读写的是本机同一份数据；同步进度与待办会实时刷新；图片「另存为」走浏览器下载，附件在新标签打开。需要系统目录框的操作（导出、整库备份）请仍在桌面端使用。开关不保存，每次启动都从关闭开始。" />
+                {webStatus?.enabled && (
+                  <Item itemId="browser-open" name="在本机浏览器打开" desc={webStatus.url}>
+                    <button className="ln-btn ln-btn--secondary" onClick={() => void openWeb()}><ExternalLink size={14} /> 打开浏览器</button>
+                  </Item>
+                )}
+                {webText && <Block desc={webText} />}
               </Group>
               </>
             )}
