@@ -85,9 +85,46 @@ export interface UpdateServiceDeps {
   startupCheckDelayMs?: number;
 }
 
+/**
+ * 网络错误的**可操作说明**（261109 实测坑：VPN 开着时 undici 连接超时，界面上只显示
+ * 裸的 "fetch failed"，既看不出原因、主进程也没留日志 —— 用户只能猜）。
+ *
+ * undici 把真实原因放在 `error.cause`（带 `code`）；按 code 翻译成人话 + 保留原始码便于排障。
+ */
+const NETWORK_HINTS: Record<string, string> = {
+  ETIMEDOUT: "连接 GitHub 超时 · 请检查代理 / VPN 后重试",
+  UND_ERR_CONNECT_TIMEOUT: "连接 GitHub 超时 · 请检查代理 / VPN 后重试",
+  UND_ERR_HEADERS_TIMEOUT: "等待 GitHub 响应超时 · 请稍后重试",
+  UND_ERR_BODY_TIMEOUT: "读取清单超时 · 请稍后重试",
+  UND_ERR_SOCKET: "连接中断 · 请稍后重试",
+  ENOTFOUND: "域名解析失败（DNS）· 请检查网络 / 代理",
+  EAI_AGAIN: "DNS 暂时不可用 · 请稍后重试",
+  ECONNREFUSED: "连接被拒绝（可能被代理 / 防火墙拦截）",
+  ECONNRESET: "连接被重置 · 请稍后重试",
+  EHOSTUNREACH: "网络不可达 · 请检查网络 / 代理",
+  ENETUNREACH: "网络不可达 · 请检查网络 / 代理",
+  CERT_HAS_EXPIRED: "HTTPS 证书已过期（检查本机时间）",
+  UNABLE_TO_VERIFY_LEAF_SIGNATURE: "HTTPS 证书链无法校验（代理可能在做中间人）",
+  DEPTH_ZERO_SELF_SIGNED_CERT: "HTTPS 证书链无法校验（代理可能在做中间人）",
+  SELF_SIGNED_CERT_IN_CHAIN: "HTTPS 证书链无法校验（代理可能在做中间人）",
+  ERR_TLS_CERT_ALTNAME_INVALID: "HTTPS 证书与域名不匹配（代理可能在做中间人）",
+};
+
+function errorCodeOf(error: unknown): string | null {
+  const cause = error instanceof Error ? (error as { cause?: unknown }).cause : null;
+  const direct = (error as { code?: unknown } | null)?.code;
+  const fromCause = cause && typeof cause === "object" ? (cause as { code?: unknown }).code : null;
+  const code = typeof fromCause === "string" ? fromCause : typeof direct === "string" ? direct : null;
+  return code;
+}
+
 function describeError(error: unknown): string {
-  if (error instanceof Error && error.message) return error.message;
-  return String(error);
+  const message = error instanceof Error && error.message ? error.message : String(error);
+  if (error instanceof Error && error.name === "TimeoutError") return "请求超时 · 请检查网络后重试";
+  const code = errorCodeOf(error);
+  const hint = code ? NETWORK_HINTS[code] : undefined;
+  if (hint) return code ? hint + "（" + code + "）" : hint;
+  return code && !message.includes(code) ? message + "（" + code + "）" : message;
 }
 
 /** 清单里的 filename 只允许纯文件名（禁止路径穿越）。 */
@@ -280,6 +317,8 @@ export class UpdateService {
     } catch (error) {
       // 网络失败/404/坏清单：只提示失败，保留旧状态（available/downloading/downloaded 不被清掉）。
       this.state.lastError = describeError(error);
+      // 261109：失败必须留日志（此前只有 IPC 慢调用告警，现场无法复盘）。
+      this.deps.log?.warn("[update] 检查更新失败：" + this.state.lastError);
       const keep: UpdateStatus[] = ["available", "downloading", "downloaded"];
       this.state.status = keep.includes(this.statusBeforeCheck) ? this.statusBeforeCheck : "error";
       this.emit();
@@ -319,7 +358,9 @@ export class UpdateService {
     if (!keepDownloading && !alreadyDownloaded) this.state.status = "available";
     this.emit();
 
-    if (!this.state.ignored && this.settings.autoDownload && !keepDownloading && !alreadyDownloaded) {
+    // 261109 用户定稿：**手动检查只提示、绝不自动下载**（手动 = 用户自己决定何时下、从哪下）；
+    // 只有后台/启动的自动检查才按「自动下载」设置后台拉包。
+    if (wasAuto && !this.state.ignored && this.settings.autoDownload && !keepDownloading && !alreadyDownloaded) {
       // 自动下载失败只记状态（download 内部已 emit+记录），不向调度器抛。
       void this.download().catch(() => undefined);
     }

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { UpdateChecksumError, UpdateService, type UpdateDownloadIo, type UpdateHttpResponse, type UpdateServiceDeps } from "./updateService.js";
 import { normalizeUpdateSettings, type UpdateSettings } from "../../src/core/update/updateTypes.js";
 
@@ -76,6 +76,8 @@ interface Harness {
   calls: string[];
   sleeps: number[];
   states: Array<{ status: string; ignored: boolean }>;
+  /** 主进程日志（info/warn 前缀化，便于断言）。 */
+  logs: string[];
 }
 
 function makeService(options: {
@@ -88,6 +90,7 @@ function makeService(options: {
   const calls: string[] = [];
   const sleeps: number[] = [];
   const states: Array<{ status: string; ignored: boolean }> = [];
+  const logs: string[] = [];
   const deps: UpdateServiceDeps = {
     userData: "/tmp/lake-update-test",
     currentVersion: "1.0.4",
@@ -106,8 +109,9 @@ function makeService(options: {
     now: () => new Date("2026-11-09T00:00:00Z"),
     sleep: async (ms) => { sleeps.push(ms); },
     onState: (state) => { states.push({ status: state.status, ignored: state.ignored }); },
+    log: { info: (message) => { logs.push("info " + message); }, warn: (message) => { logs.push("warn " + message); } },
   };
-  return { service: new UpdateService(deps), io, calls, sleeps, states };
+  return { service: new UpdateService(deps), io, calls, sleeps, states, logs };
 }
 
 describe("UpdateService", () => {
@@ -132,6 +136,27 @@ describe("UpdateService", () => {
     expect(state.status).toBe("available");
     expect(state.lastError).toContain("HTTP 404");
     expect(state.manifest?.version).toBe("1.0.5");
+  });
+
+  it("网络失败 ⇒ 可操作的原因 + 主进程留日志（261109 VPN 坑：此前只显示裸 fetch failed）", async () => {
+    const connectTimeout = Object.assign(new TypeError("fetch failed"), {
+      cause: Object.assign(new Error("Connect Timeout Error"), { code: "UND_ERR_CONNECT_TIMEOUT" }),
+    });
+    const h = makeService({ fetchImpl: async () => { throw connectTimeout; } });
+    const state = await h.service.check({ manual: true });
+    expect(state.status).toBe("error");
+    // 用户看得懂：说明 + 中文提示 + 原始错误码（便于排障）
+    expect(state.lastError).toContain("连接 GitHub 超时");
+    expect(state.lastError).toContain("VPN");
+    expect(state.lastError).toContain("UND_ERR_CONNECT_TIMEOUT");
+    expect(h.logs.some((line) => line.startsWith("warn [update] 检查更新失败："))).toBe(true);
+
+    // DNS 解析失败：给出另一条可操作提示（不回落到裸消息）
+    const dnsError = Object.assign(new TypeError("fetch failed"), { cause: Object.assign(new Error("getaddrinfo ENOTFOUND"), { code: "ENOTFOUND" }) });
+    const dns = makeService({ fetchImpl: async () => { throw dnsError; } });
+    const dnsState = await dns.service.check({ manual: true });
+    expect(dnsState.lastError).toContain("域名解析失败");
+    expect(dnsState.lastError).not.toBe("fetch failed");
   });
 
   it("坏清单（非法 JSON / 校验失败）⇒ error + 可读原因", async () => {
@@ -216,6 +241,24 @@ describe("UpdateService", () => {
     const h = makeService({ fetchImpl: async () => jsonResponse(manifest()) });
     await Promise.all([h.service.check(), h.service.check()]);
     expect(h.calls).toHaveLength(1);
+  });
+
+  it("手动检查只提示、不自动下载；自动检查才按设置后台下载（261109 用户定稿）", async () => {
+    const manifestFetch = async (url: string) =>
+      url.endsWith(".dmg") ? bytesResponse([CONTENT]) : jsonResponse(manifest());
+
+    // 手动：autoDownload 开着也不许自动下（用户自己决定下载 / 前往发布页）
+    const manual = makeService({ fetchImpl: manifestFetch, settings: { autoDownload: true } });
+    const manualState = await manual.service.check({ manual: true });
+    expect(manualState.status).toBe("available");
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(manual.io.files.size, "手动检查不得产生任何下载文件").toBe(0);
+    expect(manual.calls.filter((url) => url.endsWith(".dmg"))).toEqual([]);
+
+    // 自动：按设置后台下载
+    const auto = makeService({ fetchImpl: manifestFetch, settings: { autoDownload: true } });
+    await auto.service.check({ manual: false });
+    await vi.waitFor(() => { expect(auto.service.getState().status).toBe("downloaded"); });
   });
 
   it("忽略版本：不弹/不自动下载（ignored=true），清除忽略后恢复", async () => {

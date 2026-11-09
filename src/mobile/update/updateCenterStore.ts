@@ -155,6 +155,9 @@ export async function checkForUpdates(options: { manual: boolean }): Promise<voi
       return;
     }
     emit({ status: "available", manifest, checkedAt, error: null });
+    // 261109 用户定稿：**手动检查只提示、不自动下载**（与桌面同口径）——
+    // 下载 / 前往发布页由用户点；自动下载只服务后台自动检查（含仅 Wi-Fi 约束）。
+    if (options.manual) return;
     const settings = loadUpdateSettings();
     if (isVersionIgnored(settings, manifest.version)) return;
     const network = await nativeUpdateNetwork();

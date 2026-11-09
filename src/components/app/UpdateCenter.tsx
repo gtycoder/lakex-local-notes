@@ -118,7 +118,7 @@ export function UpdateCenterSection() {
                 <button type="button" className="ln-btn ln-btn--settings" disabled={busy} onClick={openFile}>打开安装包</button>
               ) : (
                 <button type="button" className="ln-btn ln-btn--settings" disabled={busy || !canDownload} onClick={download}>
-                  {downloading ? "下载中… " + percent + "%" : "下载并安装"}
+                  {downloading ? "下载中… " + percent + "%" : "下载安装包"}
                 </button>
               )}
             </span>
@@ -137,9 +137,9 @@ export function UpdateCenterSection() {
               <MarkdownView source={manifest.notes} />
             </Block>
           )}
-          <Item itemId="update-actions" name="其它操作" desc="打开 GitHub Release 页；或忽略此版本（下个版本恢复提示）。">
+          <Item itemId="update-actions" name="其它操作" desc="前往 GitHub 发布页（当前最新 tag）手动下载；或忽略此版本（下个版本恢复提示）。">
             <span className="config-item__ctl">
-              <button type="button" className="ln-btn ln-btn--settings" disabled={busy} onClick={openReleasePage}>打开下载页</button>
+              <button type="button" className="ln-btn ln-btn--settings" disabled={busy} onClick={openReleasePage}>前往发布页</button>
               {!ignored && (
                 <button type="button" className="ln-btn ln-btn--ghost" disabled={busy} onClick={ignore}>忽略此版本</button>
               )}
@@ -169,7 +169,7 @@ export function UpdateCenterSection() {
         <Switch
           itemId="update-auto-download"
           name="自动下载"
-          desc="发现新版本即在后台下载（默认开）。不会自动安装：下载完成后由你打开安装包。"
+          desc="仅用于后台自动检查：发现新版本即在后台下载（默认开）。手动点「检查更新」不会自动下载，由你决定下载或前往发布页；下载后也不会自动安装。"
           checked={settings?.autoDownload ?? true}
           disabled={!settings || busy}
           onChange={(checked) => saveSettings({ autoDownload: checked })}

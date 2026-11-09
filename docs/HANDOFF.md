@@ -8,6 +8,13 @@
 
 ## 0. 最新交接（261109）
 
+### 261109 · 更新中心两处修正（VPN 现场 ⇒ 可观测性 + 手动检查语义）
+- **现场**：v1.0.5 桌面点「检查更新」显示裸的 `fetch failed`。实测：失败时三次都是 **~10.5s**（= undici 默认 10s 连接超时），清单本身正常（隔离实例 2.0s 拿到 `available 1.1.0`）；根因是**开着 VPN 时到 GitHub 的连接被黑洞**，关掉即恢复。**不是代码/清单问题**。
+- **可观测性（此前为 0）**：`describeError` 现在把 `error.cause.code` 翻成可操作说明 + 保留原始码（如「连接 GitHub 超时 · 请检查代理 / VPN 后重试（UND_ERR_CONNECT_TIMEOUT）」），并在**检查失败时写主进程日志**（此前只有 `ipc.slow` 告警，现场无法复盘）。
+- **手动检查不自动下载（用户定稿）**：`runCheck(wasAuto)` 的自动下载条件加 `wasAuto` —— 手动检查只停在「可用更新」，由用户点「下载安装包」或「前往发布页」（后者 = `manifest.releasePageUrl` = GitHub 最新 tag 页）。移动端 `checkForUpdates({manual})` 同口径（手动直接 return，不再走 `decideAutoDownload`）。规格已回填 [docs/UPDATE-CENTER.md](UPDATE-CENTER.md)。
+- 门禁：tsc 0；vitest **819 文件 / 5155 通过 / 12 skipped / 0 failed**；ui-metrics、check:mobileui、diff-check 通过。**设备级未验**（手动检查→停在可用更新→点下载/前往发布页，建议下一次设备走查覆盖）。
+
+
 ### 261109 · 日记空间 v1（文档形态 + 独立空间；桌面 + 移动）
 - **定稿（用户 261109）**：日记 = **文档空间里的一本笔记本**（不新建数据空间/不新建表，正文/历史/回收站/搜索/导出/备份全复用）；表现 = 顶层**独立空间**（桌面空间组第 4 项 **⌘4**，移动端首页第 4 个 tab）；**标题即日期 `YYYY-MM-DD`**；`年 → 月` 两级分组自动建；**要搜索、不打标**；v1 不做缺天提示/补写/月历/streak/提醒。规格 [docs/DIARY.md](DIARY.md)。
 - **wire**：`folders[].space?: "diary" | null`（**不复用 `kind`** —— `TreeNode.kind` 是文档类型）；**发布显式写 null**（非日记不省略字段，同 `tagIds` 空集合教训）；两端 `tree_nodes.space` 列（移动 schema 11→12）。

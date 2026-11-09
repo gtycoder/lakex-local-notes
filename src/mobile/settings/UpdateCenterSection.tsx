@@ -169,7 +169,7 @@ export function UpdateCenterSection({ appInfo }: { appInfo: AppInfo | null }) {
         <Switch
           itemId="update-auto-download"
           name="自动下载"
-          desc="发现新版本后后台下载（不会自动安装，安装前仍由你确认）"
+          desc="仅用于后台自动检查：发现新版本即在后台下载（不会自动安装）。手动检查不会自动下载，由你点「下载并安装」或「前往发布页」。"
           checked={settings.autoDownload}
           onChange={(next) => applySettings({ autoDownload: next })}
         />
@@ -223,7 +223,7 @@ export function UpdateCenterSection({ appInfo }: { appInfo: AppInfo | null }) {
               </button>
             ) : null}
             <button type="button" className="mb-btn mb-btn--secondary" onClick={openUpdateReleasePage}>
-              打开下载页
+              前往发布页
             </button>
             {snapshot.status === "available" ? (
               <button type="button" className="mb-btn mb-btn--ghost" onClick={ignoreThisVersion}>
