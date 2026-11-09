@@ -9,7 +9,8 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import { Download, RefreshCw, ScrollText } from "lucide-react";
-import { Group, Item, Seg, Switch } from "../ui/settingsPrimitives";
+import { Group, Item, Switch } from "../ui/settingsPrimitives";
+import { PickerSheet } from "../ui/PickerSheet";
 import { MobileSheet } from "../ui/MobileSheet";
 import { formatBytes } from "../../lib/formatBytes";
 import { formatUpdatedAt } from "../lib/listTime";
@@ -134,7 +135,6 @@ export function UpdateCenterSection({ appInfo }: { appInfo: AppInfo | null }) {
           desc={statusText(snapshot, settings, currentVersion)}
           icon={<RefreshCw size={16} />}
           tone="#3f5fa0"
-          value={currentVersion}
         >
           <button
             type="button"
@@ -155,19 +155,15 @@ export function UpdateCenterSection({ appInfo }: { appInfo: AppInfo | null }) {
         />
 
         <Item itemId="update-check-interval" name="检查间隔" desc="「关闭」= 不自动检查，仍可手动检查">
-          <Seg ariaLabel="检查间隔">
-            {UPDATE_CHECK_INTERVAL_OPTIONS.map((hours) => (
-              <button
-                key={hours}
-                type="button"
-                className={"mb-btn mb-btn--secondary mb-segment__item" + (settings.checkIntervalHours === hours ? " is-active" : "")}
-                disabled={!settings.autoCheck}
-                onClick={() => applySettings({ checkIntervalHours: hours })}
-              >
-                {hours === 0 ? "关闭" : hours + " 小时"}
-              </button>
-            ))}
-          </Seg>
+          <PickerSheet
+            label="检查间隔"
+            value={settings.checkIntervalHours}
+            options={UPDATE_CHECK_INTERVAL_OPTIONS.map((hours) => ({
+              value: hours,
+              label: hours === 0 ? "关闭" : hours + " 小时",
+            }))}
+            onChange={(hours) => applySettings({ checkIntervalHours: hours })}
+          />
         </Item>
 
         <Switch
@@ -250,11 +246,7 @@ export function UpdateCenterSection({ appInfo }: { appInfo: AppInfo | null }) {
                   正在下载 {formatBytes(snapshot.progress.received)} / {formatBytes(snapshot.progress.total)}（
                   {Math.min(100, Math.round((snapshot.progress.received / Math.max(1, snapshot.progress.total)) * 100))}%）
                 </div>
-                <progress
-                  value={snapshot.progress.received}
-                  max={Math.max(1, snapshot.progress.total)}
-                  aria-label="更新下载进度"
-                />
+
               </>
             ) : null}
             {snapshot.error ? (
