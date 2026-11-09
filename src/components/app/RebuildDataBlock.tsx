@@ -98,7 +98,7 @@ export function RebuildDataBlock({ scan, rebuild, confirm }: RebuildDataBlockPro
   return (
     <>
       <div className="config-block__actions">
-        <button className="ln-btn ln-btn--secondary" onClick={() => void runScan()} disabled={busy !== null}>
+        <button className="ln-btn ln-btn--settings" onClick={() => void runScan()} disabled={busy !== null}>
           {busy === "scan" ? "扫描中…" : "扫描"}
         </button>
         {scanResult && (
@@ -107,10 +107,10 @@ export function RebuildDataBlock({ scan, rebuild, confirm }: RebuildDataBlockPro
               扫描 {scanResult.scannedFiles} 个正文文件，候选 {scanResult.candidates.length} 个（可重建 {rebuildableCount}）
               {scanResult.truncated ? "（已截断）" : ""}
             </span>
-            <button className="ln-btn ln-btn--danger-text" onClick={() => void runRebuild()} disabled={busy !== null || selected.size === 0}>
+            <button className="ln-btn ln-btn--settings ln-btn--danger-text" onClick={() => void runRebuild()} disabled={busy !== null || selected.size === 0}>
               {busy === "rebuild" ? "重建中…" : `重建所选（${selected.size}）`}
             </button>
-            <button className="ln-btn ln-btn--secondary" onClick={() => { setScanResult(null); setSelected(new Set()); setResult(null); setNotice(null); }} disabled={busy !== null}>清除列表</button>
+            <button className="ln-btn ln-btn--settings" onClick={() => { setScanResult(null); setSelected(new Set()); setResult(null); setNotice(null); }} disabled={busy !== null}>清除列表</button>
           </>
         )}
       </div>

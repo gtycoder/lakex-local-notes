@@ -870,7 +870,7 @@ let verifiedS3Fingerprint: string | null = null;
                       {lastCleanup && <span>上次清理 {formatDateTime(new Date(lastCleanup.at))}，{lastCleanup.deletedSnapshots} 份，{formatBytes(lastCleanup.freedBytes)}</span>}
                     </div>
                     <div className="config-block__actions">
-                      <button className="ln-btn ln-btn--secondary" onClick={() => void runCleanup()} disabled={hist.busy}><Trash size={14} /> {hist.busy ? "清理中…" : "立即清理"}</button>
+                      <button className="ln-btn ln-btn--settings" onClick={() => void runCleanup()} disabled={hist.busy}><Trash size={14} /> {hist.busy ? "清理中…" : "立即清理"}</button>
                     </div>
                     {histText && <div className="block__text">{histText}</div>}
                   </Block>
@@ -920,15 +920,15 @@ let verifiedS3Fingerprint: string | null = null;
                   />
                   <Block itemId="s3-connection" name="连接" desc="测试仅探测桶可读性，不写入数据。">
                     <div className="config-block__actions">
-                      <button className="ln-btn ln-btn--secondary" onClick={() => void testS3()}>测试连接</button>
-                      <button className="ln-btn ln-btn--primary" onClick={() => void saveS3()}>保存配置</button>
+                      <button className="ln-btn ln-btn--settings" onClick={() => void testS3()}>测试连接</button>
+                      <button className="ln-btn ln-btn--settings" onClick={() => void saveS3()}>保存配置</button>
                     </div>
                   </Block>
                   <Block itemId="s3-transfer" name="配置迁移" desc="导出配置文件后在手机「同步设置 → 配置迁移 → 从文件导入」选择它，免去逐项填写。只含 S3 配置，导入会覆盖本机 S3 配置；文件含密钥（已加密），请勿外传。">
                     <div className="config-block__actions">
-                      <button className="ln-btn ln-btn--secondary" onClick={() => void exportS3ConfigFile()}>导出到文件…</button>
-                      <button className="ln-btn ln-btn--primary" onClick={() => void importS3ConfigFile()}>从文件导入…</button>
-                      <button className="ln-btn ln-btn--secondary" onClick={() => setS3ImportOpen(true)}>粘贴迁移码…</button>
+                      <button className="ln-btn ln-btn--settings" onClick={() => void exportS3ConfigFile()}>导出到文件…</button>
+                      <button className="ln-btn ln-btn--settings" onClick={() => void importS3ConfigFile()}>从文件导入…</button>
+                      <button className="ln-btn ln-btn--settings" onClick={() => setS3ImportOpen(true)}>粘贴迁移码…</button>
                     </div>
                   </Block>
                 </Group>
@@ -973,8 +973,8 @@ let verifiedS3Fingerprint: string | null = null;
                   )}
                   <Block itemId="gc-status" name="回收状态" desc="手动清理会立即删除云端已不再被文档或历史引用的对象；自动对账按回收窗口定期执行。清理数量偏少通常是被引用保护，不是漏删。">
                     <div className="config-block__actions">
-                      <button className="ln-btn ln-btn--secondary" onClick={() => void runGcAction(true)} disabled={gcRun.busy || cloudOffline}>深度清理预览</button>
-                      <button className="ln-btn ln-btn--secondary ln-btn--danger-text" onClick={() => void runGcAction(false)} disabled={gcRun.busy || cloudOffline}>执行深度清理</button>
+                      <button className="ln-btn ln-btn--settings" onClick={() => void runGcAction(true)} disabled={gcRun.busy || cloudOffline}>深度清理预览</button>
+                      <button className="ln-btn ln-btn--settings ln-btn--danger-text" onClick={() => void runGcAction(false)} disabled={gcRun.busy || cloudOffline}>执行深度清理</button>
                     </div>
                   </Block>
                   {gcCfg && (
@@ -1004,7 +1004,7 @@ let verifiedS3Fingerprint: string | null = null;
                       <div className="block__text">本机还没有同步记录。</div>
                     )}
                     <div className="config-block__actions">
-                      <button className="ln-btn ln-btn--secondary" onClick={() => void copySyncDiagnostics()} disabled={!syncDiagText}>复制同步诊断</button>
+                      <button className="ln-btn ln-btn--settings" onClick={() => void copySyncDiagnostics()} disabled={!syncDiagText}>复制同步诊断</button>
                     </div>
                     {syncDiagMsg && <div className="block__text">{syncDiagMsg}</div>}
                   </Block>
@@ -1017,7 +1017,7 @@ let verifiedS3Fingerprint: string | null = null;
                 <Group title="备份" icon={<Archive size={16} />}>
                   <Block itemId="backup-export" name="整库备份" desc="数据库 + 全部笔记/资源/历史快照 + 小记，导出到所选目录（不覆盖非空目录）。" descAfter>
                     <div className="config-block__actions">
-                      <button className="ln-btn ln-btn--outline" onClick={() => void runBackup()} disabled={backup.busy}><Archive size={14} /> {backup.busy ? "备份中…" : "整库备份到…"}</button>
+                      <button className="ln-btn ln-btn--settings" onClick={() => void runBackup()} disabled={backup.busy}><Archive size={14} /> {backup.busy ? "备份中…" : "整库备份到…"}</button>
                     </div>
                   </Block>
                   <Block itemId="auto-backup" name="自动备份" desc="每天/每周把主库与小记库 VACUUM INTO 快照到 userData/backups，保留最近 N 份并限制总大小（本机保存、不进云端）。恢复入口是上面的「从备份恢复」（本轮只恢复主库；小记库备份文件同目录保留）。">
@@ -1031,7 +1031,7 @@ let verifiedS3Fingerprint: string | null = null;
                         </Item>
                         <Item itemId="auto-backup-keep" name="保留份数" desc="保留最近 N 份（超出按最旧优先删除；备份目录总大小上限 300MB，删除失败只记日志）。"><NumField label="保留份数" min={1} max={50} value={backupCfg.keepCount} onSave={(value) => saveBackupCfg({ keepCount: value })} floor={1} fallback={7} /></Item>
                         <div className="config-block__actions">
-                          <button className="ln-btn ln-btn--outline" onClick={() => void runBackupNow()} disabled={backup.busy}>{backup.busy ? "备份中…" : "立即备份"}</button>
+                          <button className="ln-btn ln-btn--settings" onClick={() => void runBackupNow()} disabled={backup.busy}>{backup.busy ? "备份中…" : "立即备份"}</button>
                         </div>
                       </>
                     ) : (
@@ -1044,12 +1044,12 @@ let verifiedS3Fingerprint: string | null = null;
                 <Group title="恢复" icon={<RotateCcw size={16} />}>
                   <Block itemId="backup-import" name="从备份恢复" desc="选择一个整库备份（metadata*.sqlite3）：先校验完整性/关键表，再把当前库改名隔离（不删除、可找回）并替换，重启应用后生效。" descAfter>
                     <div className="config-block__actions">
-                      <button className="ln-btn ln-btn--outline" onClick={() => void runRestoreFromBackup()} disabled={backup.busy}>从备份恢复…</button>
+                      <button className="ln-btn ln-btn--settings" onClick={() => void runRestoreFromBackup()} disabled={backup.busy}>从备份恢复…</button>
                     </div>
                   </Block>
                   <Block itemId="backup-restore" name="从云端恢复" desc="当前数据先改名隔离保存，再从云端全量拉取重建（不会上传本机数据）。用于换机或本地库损坏。" descAfter>
                     <div className="config-block__actions">
-                      <button className="ln-btn ln-btn--outline ln-btn--danger" onClick={() => void runCloudRestore()} disabled={backup.busy || cloudOffline} title={cloudOffline ? "云同步未启用：不会联网" : undefined}>从云端恢复（换机/坏库）…</button>
+                      <button className="ln-btn ln-btn--settings ln-btn--danger" onClick={() => void runCloudRestore()} disabled={backup.busy || cloudOffline} title={cloudOffline ? "云同步未启用：不会联网" : undefined}>从云端恢复（换机/坏库）…</button>
                     </div>
                   </Block>
                 </Group>
@@ -1058,14 +1058,14 @@ let verifiedS3Fingerprint: string | null = null;
                   <Block itemId="backup-portable-export" name="导出便携包（桌面 → 手机）" descAfter desc="把本机全部数据（正文/资源/小记/标签/回收站，不含历史快照）打成一个 .zip.lln（上限 4GiB），经网盘或 USB 拷到手机后导入，手机之后只需增量同步。包内是明文笔记，请自行选择传输方式；不包含任何 S3 密钥。">
                     <div className="config-block__actions">
                       <button
-                        className="ln-btn ln-btn--outline"
+                        className="ln-btn ln-btn--settings"
                         onClick={() => void runPortableExport()}
                         disabled={portable.busy || !hostCapabilities().localFileSystem || !(portableStatus?.availability.available ?? false)}
                         title={portableUnavailableReason}
                       >
                         {portable.busy ? "导出中…" : "选择目录并导出…"}
                       </button>
-                      <button className="ln-btn ln-btn--outline" onClick={() => void loadPortableStatus()} disabled={portable.busy}>刷新状态</button>
+                      <button className="ln-btn ln-btn--settings" onClick={() => void loadPortableStatus()} disabled={portable.busy}>刷新状态</button>
                     </div>
                     <div className="config-stats">
                       <span>{portableStatusText}</span>
@@ -1078,8 +1078,8 @@ let verifiedS3Fingerprint: string | null = null;
                 <Group title="存储占用" icon={<HardDrive size={16} />}>
                   <Block itemId="backup-usage" name="备份占用" desc="只读统计 userData/backups 里的备份份数与总大小（只 stat、不读文件内容）。自动备份按「保留份数」与总大小上限删最旧的备份；这里不提供手动删除，避免误删兜底数据。" descAfter>
                     <div className="config-block__actions">
-                      <button className="ln-btn ln-btn--outline" onClick={() => void loadBackupUsage()} disabled={backupUsageBusy}>{backupUsageBusy ? "统计中…" : "刷新统计"}</button>
-                      <button className="ln-btn ln-btn--outline" onClick={() => void revealFolder("backups")}>打开备份目录</button>
+                      <button className="ln-btn ln-btn--settings" onClick={() => void loadBackupUsage()} disabled={backupUsageBusy}>{backupUsageBusy ? "统计中…" : "刷新统计"}</button>
+                      <button className="ln-btn ln-btn--settings" onClick={() => void revealFolder("backups")}>打开备份目录</button>
                     </div>
                     <div className="config-stats">
                       <span>{backupUsageInfo.countText}</span>
@@ -1101,7 +1101,7 @@ let verifiedS3Fingerprint: string | null = null;
                         {backupResult.guidance && <div className={"checks__row checks__row--" + backupResult.tone}>{backupResult.guidance}</div>}
                         {backupResult.retry && (
                           <div className="config-block__actions">
-                            <button className="ln-btn ln-btn--outline" onClick={() => void runBackupNow()} disabled={backup.busy}>{backup.busy ? "备份中…" : "立即备份"}</button>
+                            <button className="ln-btn ln-btn--settings" onClick={() => void runBackupNow()} disabled={backup.busy}>{backup.busy ? "备份中…" : "立即备份"}</button>
                           </div>
                         )}
                       </div>
@@ -1129,14 +1129,14 @@ let verifiedS3Fingerprint: string | null = null;
               <Group title="全文搜索" icon={<Search size={16} />}>
                 <Item itemId="search-rebuild" name="重建全文搜索索引" desc="标题与正文的全文索引（FTS5，中文单字分词），平时自动维护；索引异常或更换分词器后可手动重建。">
                   {searchText && <span className="ln-label__text">{searchText}</span>}
-                  <button className="ln-btn ln-btn--secondary" disabled={searchIndex.busy} onClick={() => void rebuildSearchIndex()}>{searchIndex.busy ? "重建中…" : "重建"}</button>
+                  <button className="ln-btn ln-btn--settings" disabled={searchIndex.busy} onClick={() => void rebuildSearchIndex()}>{searchIndex.busy ? "重建中…" : "重建"}</button>
                 </Item>
               </Group>
 
                 <Group title="数据体检（只读诊断）" icon={<Info size={16} />}>
                   <Block itemId="history-data-health" name="一致性检查" desc="只读检查正文文件、历史快照、未归属记录与引用资源，不会自动修复。发现问题请从备份或云端恢复。">
                     <div className="config-block__actions">
-                      <button className="ln-btn ln-btn--secondary" onClick={() => void runHealth()} disabled={healthCheck.busy}><Search size={14} /> {healthCheck.busy ? "检查中…" : "运行检查"}</button>
+                      <button className="ln-btn ln-btn--settings" onClick={() => void runHealth()} disabled={healthCheck.busy}><Search size={14} /> {healthCheck.busy ? "检查中…" : "运行检查"}</button>
                       {health && !healthCheck.busy && (
                         <span className="config-stats"><span>笔记 {health.notesChecked}，快照 {health.historyChecked}，未归属记录 {health.orphanRowsChecked}，树节点 {health.treeChecked}</span></span>
                       )}
@@ -1183,7 +1183,7 @@ let verifiedS3Fingerprint: string | null = null;
                       placeholder="过滤（如 GC / sync / trash / purge / snapshot）"
                       aria-label="日志关键字过滤"
                     />
-                    <button className="ln-btn ln-btn--secondary" onClick={() => void runLogLoad(logKeyword)} disabled={logLoad.busy}><Search size={14} /> {logLoad.busy ? "读取中…" : "读取"}</button>
+                    <button className="ln-btn ln-btn--settings" onClick={() => void runLogLoad(logKeyword)} disabled={logLoad.busy}><Search size={14} /> {logLoad.busy ? "读取中…" : "读取"}</button>
                   </div>
                   {logText && <div className="block__text">{logText}</div>}
                 </Block>
@@ -1208,7 +1208,7 @@ let verifiedS3Fingerprint: string | null = null;
                 <Block name="现状" desc="读写的是本机同一份数据；同步进度与待办会实时刷新；图片「另存为」走浏览器下载，附件在新标签打开。需要系统目录框的操作（导出、整库备份）请仍在桌面端使用。开关不保存，每次启动都从关闭开始。" />
                 {webStatus?.enabled && (
                   <Item itemId="browser-open" name="在本机浏览器打开" desc={webStatus.url}>
-                    <button className="ln-btn ln-btn--secondary" onClick={() => void openWeb()}><ExternalLink size={14} /> 打开浏览器</button>
+                    <button className="ln-btn ln-btn--settings" onClick={() => void openWeb()}><ExternalLink size={14} /> 打开浏览器</button>
                   </Item>
                 )}
                 {webText && <Block desc={webText} />}
@@ -1225,7 +1225,7 @@ let verifiedS3Fingerprint: string | null = null;
                     </Field>
                     <Field itemId="ai-base-url" name="Base URL" desc={"留空即用该家默认；可改成任意 OpenAI 兼容端点，例如 " + activeDef.defaultBaseUrl + "。"} error={aiErr.baseUrl}>
                       <span className="ln-input settings-input"><input className="ln-input__field" value={aiPending.baseUrl} placeholder={activeDef.defaultBaseUrl} spellCheck={false} onChange={(e) => setAiDraft((d) => ({ ...d, baseUrl: e.target.value }))} aria-label="Base URL" /></span>
-                      <button className="ln-btn ln-btn--secondary" onClick={() => setAiDraft((d) => ({ ...d, baseUrl: activeDef.defaultBaseUrl }))}>恢复默认</button>
+                      <button className="ln-btn ln-btn--settings" onClick={() => setAiDraft((d) => ({ ...d, baseUrl: activeDef.defaultBaseUrl }))}>恢复默认</button>
                     </Field>
                   </Section>
 
@@ -1257,7 +1257,7 @@ let verifiedS3Fingerprint: string | null = null;
                       </span>
                       {/* 清除：只删本机的 Key（换机/共享设备时抹掉），不清其它配置项 */}
                       {activeAi?.hasApiKey && (
-                        <button className="ln-btn ln-btn--secondary" onClick={() => void saveAi({ providers: [{ id: aiProviderId, clearApiKey: true }] })}>清除</button>
+                        <button className="ln-btn ln-btn--settings" onClick={() => void saveAi({ providers: [{ id: aiProviderId, clearApiKey: true }] })}>清除</button>
                       )}
                     </Field>
                   </Section>
@@ -1273,10 +1273,10 @@ let verifiedS3Fingerprint: string | null = null;
                       ) : (
                         <>
                           <span className="ln-input settings-input"><input className="ln-input__field" value={aiPending.model} placeholder={activeDef.defaultModel || "模型名"} onChange={(e) => setAiDraft((d) => ({ ...d, model: e.target.value }))} aria-label="AI 模型" /></span>
-                          {aiModels && aiModels.length > 0 && <button className="ln-btn ln-btn--secondary" onClick={() => setAiManualModel(false)}>用列表</button>}
+                          {aiModels && aiModels.length > 0 && <button className="ln-btn ln-btn--settings" onClick={() => setAiManualModel(false)}>用列表</button>}
                         </>
                       )}
-                      <button className="ln-btn ln-btn--secondary" disabled={aiModelsRun.busy} onClick={() => void fetchAiModels()}>{aiModelsRun.busy ? "拉取中…" : "获取模型列表"}</button>
+                      <button className="ln-btn ln-btn--settings" disabled={aiModelsRun.busy} onClick={() => void fetchAiModels()}>{aiModelsRun.busy ? "拉取中…" : "获取模型列表"}</button>
                     </Field>
                     {activeDef.supportsReasoning && (
                       <Item itemId="ai-reasoning" name="思考强度" desc="推理强度：越高思考越深入、耗时越长（默认 high）。思考模式下温度不生效。">
@@ -1298,9 +1298,9 @@ let verifiedS3Fingerprint: string | null = null;
                   <Section title="连通性">
                     <Block itemId="ai-test" name="测试并保存" desc="保存前先发一次最小真实请求：密钥或模型错误会拦住保存，网络或限流错误可以选择仍要保存。">
                       <div className="config-block__actions">
-                        <button className="ln-btn ln-btn--primary" disabled={aiRun.busy} onClick={() => void testAndSaveAi()}>{aiRun.busy ? "测试中…" : "测试并保存"}</button>
-                        <button className="ln-btn ln-btn--secondary" disabled={aiRun.busy} onClick={() => void testAi()}>仅测试</button>
-                        {aiForceSave && <button className="ln-btn ln-btn--secondary" onClick={() => void forceSaveAi()}>仍要保存</button>}
+                        <button className="ln-btn ln-btn--settings" disabled={aiRun.busy} onClick={() => void testAndSaveAi()}>{aiRun.busy ? "测试中…" : "测试并保存"}</button>
+                        <button className="ln-btn ln-btn--settings" disabled={aiRun.busy} onClick={() => void testAi()}>仅测试</button>
+                        {aiForceSave && <button className="ln-btn ln-btn--settings" onClick={() => void forceSaveAi()}>仍要保存</button>}
                       </div>
                       {aiErr.all && <div className="config-item__error">{aiErr.all}</div>}
                       {aiMsg && <div className="config-note">{aiMsg}</div>}
@@ -1368,19 +1368,19 @@ let verifiedS3Fingerprint: string | null = null;
                         </div>
                       </Block>
                       <Item itemId="about-data-dir" name="数据目录" pathDesc desc={sysInfo.storage.root}>
-                        <button className="ln-btn ln-btn--secondary" onClick={() => revealFolder("data")}>在 Finder 中显示</button>
+                        <button className="ln-btn ln-btn--settings" onClick={() => revealFolder("data")}>在 Finder 中显示</button>
                       </Item>
                       <Item itemId="about-workspace-dir" name="工作空间" pathDesc desc={sysInfo.paths.workspace}>
-                        <button className="ln-btn ln-btn--secondary" onClick={() => revealFolder("workspace")}>在 Finder 中显示</button>
+                        <button className="ln-btn ln-btn--settings" onClick={() => revealFolder("workspace")}>在 Finder 中显示</button>
                       </Item>
                       <Item itemId="about-assets-dir" name="资源目录" desc="图片与附件按笔记分目录存放（note-assets/{noteId}/）。">
-                        <button className="ln-btn ln-btn--secondary" onClick={() => revealFolder("assets")}>在 Finder 中显示</button>
+                        <button className="ln-btn ln-btn--settings" onClick={() => revealFolder("assets")}>在 Finder 中显示</button>
                       </Item>
                       <Item itemId="about-history-dir" name="历史快照目录" desc="快照与正文分离存放，恢复对应版本时从这里读。">
-                        <button className="ln-btn ln-btn--secondary" onClick={() => revealFolder("history")}>在 Finder 中显示</button>
+                        <button className="ln-btn ln-btn--settings" onClick={() => revealFolder("history")}>在 Finder 中显示</button>
                       </Item>
                       <Item itemId="about-logs-dir" name="日志目录" pathDesc desc={sysInfo.paths.logs}>
-                        <button className="ln-btn ln-btn--secondary" onClick={() => revealFolder("logs")}>在 Finder 中显示</button>
+                        <button className="ln-btn ln-btn--settings" onClick={() => revealFolder("logs")}>在 Finder 中显示</button>
                       </Item>
                     </Group>
 
@@ -1389,7 +1389,7 @@ let verifiedS3Fingerprint: string | null = null;
                     <Group title="诊断" icon={<Search size={16} />}>
                       <Block itemId="about-diagnostics" name="复制诊断信息" desc="把版本、运行环境、依赖与本机计数拼成一段纯文本，反馈问题时直接贴出来。" descAfter>
                         <div className="config-block__actions">
-                          <button className="ln-btn ln-btn--secondary" onClick={() => void copyDiagnostics()} disabled={!sysInfo}>复制诊断信息</button>
+                          <button className="ln-btn ln-btn--settings" onClick={() => void copyDiagnostics()} disabled={!sysInfo}>复制诊断信息</button>
                         </div>
                       </Block>
                       <Block itemId="about-health-entry" name="一致性检查" desc="正文文件、历史快照、孤儿登记、引用资源与目录树父子链的只读体检在「文档与历史」页运行。" />

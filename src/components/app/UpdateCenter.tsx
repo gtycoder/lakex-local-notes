@@ -99,7 +99,7 @@ export function UpdateCenterSection() {
           name="当前版本"
           desc={"v" + (state?.currentVersion ?? "—") + " · 上次检查：" + (state?.lastCheckAt ? formatDateTime(new Date(state.lastCheckAt)) : "从未")}
         >
-          <button type="button" className="ln-btn ln-btn--secondary" disabled={busy || checking} onClick={check}>
+          <button type="button" className="ln-btn ln-btn--settings" disabled={busy || checking} onClick={check}>
             {checking ? "检查中…" : "检查更新"}
           </button>
         </Item>
@@ -115,9 +115,9 @@ export function UpdateCenterSection() {
           >
             <span className="config-item__ctl">
               {downloaded ? (
-                <button type="button" className="ln-btn ln-btn--primary" disabled={busy} onClick={openFile}>打开安装包</button>
+                <button type="button" className="ln-btn ln-btn--settings" disabled={busy} onClick={openFile}>打开安装包</button>
               ) : (
-                <button type="button" className="ln-btn ln-btn--primary" disabled={busy || !canDownload} onClick={download}>
+                <button type="button" className="ln-btn ln-btn--settings" disabled={busy || !canDownload} onClick={download}>
                   {downloading ? "下载中… " + percent + "%" : "下载并安装"}
                 </button>
               )}
@@ -139,7 +139,7 @@ export function UpdateCenterSection() {
           )}
           <Item itemId="update-actions" name="其它操作" desc="打开 GitHub Release 页；或忽略此版本（下个版本恢复提示）。">
             <span className="config-item__ctl">
-              <button type="button" className="ln-btn ln-btn--secondary" disabled={busy} onClick={openReleasePage}>打开下载页</button>
+              <button type="button" className="ln-btn ln-btn--settings" disabled={busy} onClick={openReleasePage}>打开下载页</button>
               {!ignored && (
                 <button type="button" className="ln-btn ln-btn--ghost" disabled={busy} onClick={ignore}>忽略此版本</button>
               )}
@@ -178,7 +178,7 @@ export function UpdateCenterSection() {
 
       <Group title="更新日志">
         <Item itemId="update-release-notes" name="更新日志（当前版本及历史）" desc="与 GitHub Release body 同源：docs/RELEASE-NOTES.md。">
-          <button type="button" className="ln-btn ln-btn--secondary" onClick={() => setNotesOpen((value) => !value)}>
+          <button type="button" className="ln-btn ln-btn--settings" onClick={() => setNotesOpen((value) => !value)}>
             {notesOpen ? "收起" : "查看更新日志"}
           </button>
         </Item>
