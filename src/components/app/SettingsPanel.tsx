@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Cloud, Coffee, ExternalLink, Files, Globe, History, Image as Info, Keyboard, Monitor, Moon, Palette, Paperclip, RefreshCw, Terminal, TriangleAlert, Archive, HardDrive, Search, Settings, Sun, Trash, Type, X } from "lucide-react";
+import { Cloud, Coffee, Download, ExternalLink, Files, Globe, History, Image as Info, Keyboard, Monitor, Moon, Palette, Paperclip, RefreshCw, RotateCcw, Terminal, TriangleAlert, Archive, HardDrive, Search, Settings, Sun, Trash, Type, X } from "lucide-react";
 import { Sparkles, Eye, EyeOff } from "lucide-react";
 import { fontSizeOptions, type AppSettings } from "../../lib/settings";
 import { AI_PROVIDERS, AI_REASONING_EFFORTS, AI_THINKING_MODES, type AiReasoningEffort, type AiSettingsPatch, type AiSettingsView, type AiThinkingMode } from "../../core/aiProviders";
@@ -1014,39 +1014,11 @@ let verifiedS3Fingerprint: string | null = null;
 
             {category === "backup" && (
               <>
-                <Group title="备份与恢复" icon={<Archive size={16} />}>
+                <Group title="备份" icon={<Archive size={16} />}>
                   <Block itemId="backup-export" name="整库备份" desc="数据库 + 全部笔记/资源/历史快照 + 小记，导出到所选目录（不覆盖非空目录）。" descAfter>
                     <div className="config-block__actions">
                       <button className="ln-btn ln-btn--secondary" onClick={() => void runBackup()} disabled={backup.busy}><Archive size={14} /> {backup.busy ? "备份中…" : "整库备份到…"}</button>
                     </div>
-                  </Block>
-                  <Block itemId="backup-restore" name="从云端恢复" desc="当前数据先改名隔离保存，再从云端全量拉取重建（不会上传本机数据）。用于换机或本地库损坏。" descAfter>
-                    <div className="config-block__actions">
-                      <button className="ln-btn ln-btn--secondary ln-btn--danger-text" onClick={() => void runCloudRestore()} disabled={backup.busy || cloudOffline} title={cloudOffline ? "云同步未启用：不会联网" : undefined}>从云端恢复（换机/坏库）…</button>
-                    </div>
-                  </Block>
-                  <Block itemId="backup-import" name="从备份恢复" desc="选择一个整库备份（metadata*.sqlite3）：先校验完整性/关键表，再把当前库改名隔离（不删除、可找回）并替换，重启应用后生效。" descAfter>
-                    <div className="config-block__actions">
-                      <button className="ln-btn ln-btn--secondary" onClick={() => void runRestoreFromBackup()} disabled={backup.busy}>从备份恢复…</button>
-                    </div>
-                  </Block>
-                  <Block itemId="backup-portable-export" name="导出便携包（桌面 → 手机）" descAfter desc="把本机全部数据（正文/资源/小记/标签/回收站，不含历史快照）打成一个 .zip.lln（上限 4GiB），经网盘或 USB 拷到手机后导入，手机之后只需增量同步。包内是明文笔记，请自行选择传输方式；不包含任何 S3 密钥。">
-                    <div className="config-block__actions">
-                      <button
-                        className="ln-btn ln-btn--secondary"
-                        onClick={() => void runPortableExport()}
-                        disabled={portable.busy || !hostCapabilities().localFileSystem || !(portableStatus?.availability.available ?? false)}
-                        title={portableUnavailableReason}
-                      >
-                        {portable.busy ? "导出中…" : "选择目录并导出…"}
-                      </button>
-                      <button className="ln-btn ln-btn--secondary" onClick={() => void loadPortableStatus()} disabled={portable.busy}>刷新状态</button>
-                    </div>
-                    <div className="config-stats">
-                      <span>{portableStatusText}</span>
-                    </div>
-                    {portableProgress && <div className="block__text">{portableProgressText}</div>}
-                    {portable.message && <div className="block__text">{portable.message}</div>}
                   </Block>
                   <Block itemId="auto-backup" name="自动备份" desc="每天/每周把主库与小记库 VACUUM INTO 快照到 userData/backups，保留最近 N 份并限制总大小（本机保存、不进云端）。恢复入口是上面的「从备份恢复」（本轮只恢复主库；小记库备份文件同目录保留）。">
                     {backupCfg ? (
@@ -1100,8 +1072,43 @@ let verifiedS3Fingerprint: string | null = null;
                       <div className="block__text">还没有备份记录（自动备份默认开启，每天一份；也可以点上面的「立即备份」）。</div>
                     )}
                   </Block>
-                  {backupText && <Block name={backupText} />}
                 </Group>
+
+                <Group title="恢复" icon={<RotateCcw size={16} />}>
+                  <Block itemId="backup-import" name="从备份恢复" desc="选择一个整库备份（metadata*.sqlite3）：先校验完整性/关键表，再把当前库改名隔离（不删除、可找回）并替换，重启应用后生效。" descAfter>
+                    <div className="config-block__actions">
+                      <button className="ln-btn ln-btn--secondary" onClick={() => void runRestoreFromBackup()} disabled={backup.busy}>从备份恢复…</button>
+                    </div>
+                  </Block>
+                  <Block itemId="backup-restore" name="从云端恢复" desc="当前数据先改名隔离保存，再从云端全量拉取重建（不会上传本机数据）。用于换机或本地库损坏。" descAfter>
+                    <div className="config-block__actions">
+                      <button className="ln-btn ln-btn--secondary ln-btn--danger-text" onClick={() => void runCloudRestore()} disabled={backup.busy || cloudOffline} title={cloudOffline ? "云同步未启用：不会联网" : undefined}>从云端恢复（换机/坏库）…</button>
+                    </div>
+                  </Block>
+                </Group>
+
+                <Group title="迁移到手机" icon={<Download size={16} />}>
+                  <Block itemId="backup-portable-export" name="导出便携包（桌面 → 手机）" descAfter desc="把本机全部数据（正文/资源/小记/标签/回收站，不含历史快照）打成一个 .zip.lln（上限 4GiB），经网盘或 USB 拷到手机后导入，手机之后只需增量同步。包内是明文笔记，请自行选择传输方式；不包含任何 S3 密钥。">
+                    <div className="config-block__actions">
+                      <button
+                        className="ln-btn ln-btn--secondary"
+                        onClick={() => void runPortableExport()}
+                        disabled={portable.busy || !hostCapabilities().localFileSystem || !(portableStatus?.availability.available ?? false)}
+                        title={portableUnavailableReason}
+                      >
+                        {portable.busy ? "导出中…" : "选择目录并导出…"}
+                      </button>
+                      <button className="ln-btn ln-btn--secondary" onClick={() => void loadPortableStatus()} disabled={portable.busy}>刷新状态</button>
+                    </div>
+                    <div className="config-stats">
+                      <span>{portableStatusText}</span>
+                    </div>
+                    {portableProgress && <div className="block__text">{portableProgressText}</div>}
+                    {portable.message && <div className="block__text">{portable.message}</div>}
+                  </Block>
+                </Group>
+
+                {backupText && <Block name={backupText} />}
               </>
             )}
 

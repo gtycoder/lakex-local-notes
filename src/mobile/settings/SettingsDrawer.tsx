@@ -595,8 +595,9 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
           )}
 
           {view === "backup" && (
+            <>
             <div className="mb-set-group">
-              <div className="mb-set-title"><Archive size={16} />备份与恢复</div>
+              <div className="mb-set-title"><Archive size={16} />恢复</div>
               <div className="mb-set-items">
                 {/* 261028（用户批准）：从云端恢复（换机/坏库）——清本机同步基线后整轮只拉不打；
                     不照抄桌面的「整库改名隔离 + 重启」（移动端附件可能 1.6GB，隔离整库代价过高）。 */}
@@ -633,13 +634,20 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                     文档或小记还在，但正文文件已经不在了。可以从云端拉回、恢复历史版本，或用搜索缓存重建纯文本。
                   </div>
                 </div>
-                {/* 261109：从便携包导入（覆盖本机；桌面导出 zip → 手机导入，不需要先配 S3）。 */}
+              </div>
+            </div>
+
+            <div className="mb-set-group">
+              <div className="mb-set-title"><Download size={16} />从桌面迁移</div>
+              <div className="mb-set-items">
+                {/* 261109：从便携包导入（覆盖本机；桌面导出 zip.lln → 手机导入，不需要先配 S3）。 */}
                 <PortableImportSection onImported={() => void onRefresh()} />
                 <div className="mb-set-item__desc">
                   移动端不提供整库自动备份 / 导出（桌面端有）；这里只有「从云端恢复」「从便携包导入」与缺正文、缺小记的恢复入口。
                 </div>
               </div>
             </div>
+            </>
           )}
 
           {view === "cache" && (
