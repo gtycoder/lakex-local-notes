@@ -55,6 +55,7 @@ import { AiAssistantHost } from "./features/ai/AiAssistantHost";
 import { openAiAssistant } from "./features/ai/aiAssistantSession";
 import { DesktopLibrary } from "./desktop/DesktopLibrary";
 import { DesktopQuickNotes } from "./desktop/DesktopQuickNotes";
+import { AiWritingWorkspace } from "./features/aiWriting/AiWritingWorkspace";
 import { useDesktopShell } from "./desktop/useDesktopShell";
 import { DesktopSplitButton, DesktopTopBarLeading, DesktopTopBarSearch } from "./desktop/DesktopTopBar";
 import { DesktopWorkspaceSlotProvider } from "./desktop/desktopWorkspaceSlot";
@@ -778,7 +779,7 @@ export function App() {
   );
 
   return (
-    <div className={`app-shell ${shellPlatformClass} sidebar-${sidebarRenderMode} outline-${effectiveOutlineMode} ${workspaceMenuOpen ? "workspace-menu-open" : ""} ${focusMode ? "focus-mode" : ""} ${desktopWorkspace === "quick-notes" ? "quick-notes-active" : ""} ${desktopWorkspace === "trash" ? "trash-space-active" : ""} ${desktopWorkspace === "resources" ? "resources-space-active" : ""} ${desktopWorkspace === "tags" ? "tags-space-active" : ""} ${sidebarResizing ? "sidebar-resizing" : ""} ${outlineResizing ? "outline-resizing" : ""} activity-rail-hidden`} style={shellStyle}>
+    <div className={`app-shell ${shellPlatformClass} sidebar-${sidebarRenderMode} outline-${effectiveOutlineMode} ${workspaceMenuOpen ? "workspace-menu-open" : ""} ${focusMode ? "focus-mode" : ""} ${desktopWorkspace === "quick-notes" ? "quick-notes-active" : ""} ${desktopWorkspace === "ai-writing" ? "ai-writing-active" : ""} ${desktopWorkspace === "trash" ? "trash-space-active" : ""} ${desktopWorkspace === "resources" ? "resources-space-active" : ""} ${desktopWorkspace === "tags" ? "tags-space-active" : ""} ${sidebarResizing ? "sidebar-resizing" : ""} ${outlineResizing ? "outline-resizing" : ""} activity-rail-hidden`} style={shellStyle}>
       {/* 单例控制器只配一个应用级宿主，keep-alive 编辑器/历史/小记共享。 */}
       <ImageLightbox />
       <AttachmentPreview />
@@ -881,6 +882,16 @@ export function App() {
                 onWidthCommit={commitOutlineSidebarWidth}
               />
             ) : null}
+          />
+        </div>
+        <div className={"workspace-view" + (desktopWorkspace === "ai-writing" ? "" : " workspace-view--hidden")}>
+          <AiWritingWorkspace
+            active={desktopWorkspace === "ai-writing"}
+            treeNodes={treeNodes}
+            topbarLeading={topBarLeading}
+            onOpenSettings={() => { setSettingsCategory("ai"); setSettingsOpen(true); }}
+            onNotice={(text, action) => { if (action) showNoticeWithAction(text, action); else showNotice(text); }}
+            onOpenNote={(noteId) => { void switchDesktopWorkspace("library"); void openNote(noteId); }}
           />
         </div>
         <div className={"workspace-view" + (desktopWorkspace === "quick-notes" ? "" : " workspace-view--hidden")}>

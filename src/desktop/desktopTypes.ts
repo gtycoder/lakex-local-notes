@@ -19,7 +19,7 @@ export const SIDEBAR_HOVER_HIDE_DELAY_MS = 220;
 export const EDGE_HANDLE_DWELL_MS = 240;
 
 export type SaveState = "idle" | "dirty" | "saving" | "saved" | "error";
-export type DesktopWorkspace = "library" | "quick-notes" | "tags" | "trash" | "resources";
+export type DesktopWorkspace = "library" | "quick-notes" | "ai-writing" | "tags" | "trash" | "resources";
 
 // 左侧资料库与右侧大纲面板各自维护宽度；两侧常驻 activity rail 才保持同宽。
 // 261103 P10：数值已下沉 src/core/layoutConstants（components→desktop 违规清零），这里 re-export 保持兼容。

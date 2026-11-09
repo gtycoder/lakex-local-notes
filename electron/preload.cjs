@@ -217,6 +217,16 @@ contextBridge.exposeInMainWorld("lakeNative", {
   aiListModels: (draft) => invoke("ai_list_models", draft),
   aiChat: (requestId, messages) => invoke("ai_chat", requestId, messages),
   aiCancel: (requestId) => invoke("ai_cancel", requestId),
+  // AI 写作空间（261109，桌面本地会话；不走 S3）
+  aiWritingList: () => invoke("ai_writing_list"),
+  aiWritingGet: (id) => invoke("ai_writing_get", id),
+  aiWritingCreate: (input) => invoke("ai_writing_create", input),
+  aiWritingRename: (id, title) => invoke("ai_writing_rename", id, title),
+  aiWritingComposer: (id, patch) => invoke("ai_writing_composer", id, patch),
+  aiWritingDelete: (id) => invoke("ai_writing_delete", id),
+  aiWritingAppendMessage: (input) => invoke("ai_writing_append_message", input),
+  aiWritingUpdateMessage: (id, patch) => invoke("ai_writing_update_message", id, patch),
+  aiWritingDeleteLastAssistant: (id) => invoke("ai_writing_delete_last_assistant", id),
   onAiStream: (callback) => {
     const listener = (_event, chunk) => callback(chunk);
     ipcRenderer.on("ai:stream", listener);

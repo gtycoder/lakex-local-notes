@@ -242,7 +242,18 @@ function sleep(ms: number): Promise<void> {
 
 function nextFrame(): Promise<void> {
   if (typeof requestAnimationFrame !== "function") return Promise.resolve();
-  return new Promise((resolve) => requestAnimationFrame(() => resolve()));
+  // 窗口被遮挡/最小化时 rAF **不触发**（实测 visibilityState=hidden）⇒ 只等 rAF 会把整个
+  // 串行转换队列永久挂住（后续所有导入都排队）。这里用定时器兜底：宁可让本轮超时报错，也不锁死队列。
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      resolve();
+    };
+    requestAnimationFrame(finish);
+    setTimeout(finish, 250);
+  });
 }
 
 /** 离屏容器：**不能 display:none**（否则内核量不到尺寸、表格列宽/图片全塌）；用「移出视口 + visibility」隐藏。 */

@@ -376,8 +376,9 @@ export function aiContentPartsOf(content: string | AiContentPart[]): AiContentPa
 }
 export interface AiTestResult { ok: boolean; error?: string; /** 网络/限流类失败可"仍要保存"。 */ retryable?: boolean }
 export interface AiListModelsResult { ok: boolean; models?: string[]; error?: string; retryable?: boolean }
-export interface AiChatResult { ok: boolean; text?: string; error?: string }
-export interface AiStreamEvent { requestId: string; delta: string }
+export interface AiChatResult { ok: boolean; text?: string; /** 思考内容（供应商提供时）；UI 只展示、不入上下文。 */ reasoning?: string; error?: string }
+/** 流式事件：reasoning: true = 该增量属于思考内容（reasoning_content），否则是正文。 */
+export interface AiStreamEvent { requestId: string; delta: string; reasoning?: boolean }
 
 export function activeAiProvider(settings: AiSettings): AiProviderConfig | null {
   return settings.providers[settings.activeProviderId] ?? null;

@@ -33,9 +33,18 @@ export interface AiStreamArgs {
   signal?: AbortSignal;
 }
 
+/**
+ * 流式增量：正文与思考内容分开（DeepSeek 的 reasoning_content；少数兼容端点用 reasoning）。
+ * 思考内容只用于展示（AI 写作空间的「已深度思考」卡片），不进正文、不进上下文。
+ */
+export interface AiStreamDelta {
+  content?: string;
+  reasoning?: string;
+}
+
 /** 供应商适配的最小接口（P0 只有一种实现）。 */
 export interface AiChatClient {
-  streamChat(args: AiStreamArgs): AsyncIterable<string>;
+  streamChat(args: AiStreamArgs): AsyncIterable<AiStreamDelta>;
   /** 连通性探测：一次极小的真实请求。 */
   ping(model: string): Promise<void>;
   /** 模型列表（OpenAI 兼容 `GET /models`）；端点不支持时抛错，由调用方回落手填。 */
@@ -55,11 +64,15 @@ export function defaultAiClientFactory(provider: AiProviderConfig): AiChatClient
       const body: Record<string, unknown> = { model, messages, temperature, stream: true, ...extra };
       // 整体断言会丢掉 SDK 的「流式」重载（返回类型退化为非流式），故只对返回值断言。
       const stream = (await client.chat.completions.create(body as never, { signal })) as unknown as AsyncIterable<{
-        choices?: { delta?: { content?: string } }[];
+        choices?: { delta?: { content?: string; reasoning_content?: string; reasoning?: string } }[];
       }>;
       for await (const chunk of stream) {
-        const delta = chunk.choices?.[0]?.delta?.content;
-        if (delta) yield delta;
+        const delta = chunk.choices?.[0]?.delta;
+        if (!delta) continue;
+        // 思考内容：DeepSeek = reasoning_content；少数 OpenAI 兼容端点用 reasoning。
+        const reasoning = delta.reasoning_content ?? delta.reasoning;
+        if (reasoning) yield { reasoning };
+        if (delta.content) yield { content: delta.content };
       }
     },
     async ping(model) {
@@ -78,17 +91,24 @@ export interface AiChatOptions {
   messages: AiMessage[];
   signal?: AbortSignal;
   onDelta?: (delta: string) => void;
+  /** 思考内容增量（供应商没有思考输出时永不回调）。 */
+  onReasoning?: (delta: string) => void;
   factory?: AiClientFactory;
 }
 
 /** 流式对话：逐块回调，返回累计文本。 */
-export async function aiChat({ provider, messages, signal, onDelta, factory = defaultAiClientFactory }: AiChatOptions): Promise<string> {
+export async function aiChat({ provider, messages, signal, onDelta, onReasoning, factory = defaultAiClientFactory }: AiChatOptions): Promise<string> {
   const client = factory(provider);
   let text = "";
   // 重试由 client 一侧负责（默认工厂已给 SDK maxRetries:1）；这里再重试会造成双重重试与重复输出。
   for await (const delta of client.streamChat({ model: provider.model, messages, temperature: provider.temperature, reasoningEffort: provider.reasoningEffort, thinking: provider.thinking, signal })) {
-    text += delta;
-    onDelta?.(delta);
+    if (delta.reasoning) {
+      onReasoning?.(delta.reasoning);
+      continue;
+    }
+    const content = delta.content ?? "";
+    text += content;
+    if (content) onDelta?.(content);
   }
   return text;
 }

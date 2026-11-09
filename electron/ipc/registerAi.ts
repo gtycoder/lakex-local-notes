@@ -86,13 +86,19 @@ export function registerAiIpc(ipc: IpcRegistrar, store: Store): void {
     inflight.set(id, controller);
     try {
       const resolved = await resolveAiMessages(assertMessages(messages), store);
+      // 思考内容与正文同一条通道：reasoning:true 的增量只给「已深度思考」卡片（不进上下文）。
+      let reasoning = "";
       const text = await aiChat({
         provider,
         messages: resolved,
         signal: controller.signal,
         onDelta: (delta) => { try { event.sender.send("ai:stream", { requestId: id, delta }); } catch { /* 窗口已关 */ } },
+        onReasoning: (delta) => {
+          reasoning += delta;
+          try { event.sender.send("ai:stream", { requestId: id, delta, reasoning: true }); } catch { /* 窗口已关 */ }
+        },
       });
-      return { ok: true, text };
+      return reasoning ? { ok: true, text, reasoning } : { ok: true, text };
     } catch (err) {
       return { ok: false, error: aiErrorMessage(err) };
     } finally {

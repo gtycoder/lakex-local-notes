@@ -2,6 +2,15 @@ import type { CleanOrphanResult, DataHealthReport, DeepCleanupResult, DocumentTa
 import type { TrashItem } from "../core/trashPolicy";
 import type { MissingBodyDoc, MissingQuickNoteDoc } from "../core/missingBody";
 import type { AiChatMessage, AiChatResult, AiListModelsResult, AiProviderPatch, AiSettingsPatch, AiSettingsView, AiStreamEvent, AiTestResult } from "../core/aiProviders";
+import type {
+  AiWritingComposerPatch,
+  AiWritingConversation,
+  AiWritingConversationCreateInput,
+  AiWritingConversationDetail,
+  AiWritingMessage,
+  AiWritingMessageAppendInput,
+  AiWritingMessagePatch,
+} from "../core/aiWriting";
 import type { S3TransferSummary } from "../core/s3ConfigTransfer";
 import type { HostCapabilityFlags } from "./hostCapabilities";
 import type { UpdateSettings, UpdateSettingsPatch, UpdateState } from "../core/update/updateTypes";
@@ -106,6 +115,16 @@ export interface LakeNative {
   aiChat(requestId: string, messages: AiChatMessage[]): Promise<AiChatResult>;
   aiCancel(requestId: string): Promise<void>;
   onAiStream(callback: (chunk: AiStreamEvent) => void): () => void;
+  // ---- AI 写作空间（261109，桌面本地会话；不进 S3）----
+  aiWritingList(): Promise<AiWritingConversation[]>;
+  aiWritingGet(id: string): Promise<AiWritingConversationDetail | null>;
+  aiWritingCreate(input: AiWritingConversationCreateInput): Promise<AiWritingConversation>;
+  aiWritingRename(id: string, title: string): Promise<AiWritingConversation | null>;
+  aiWritingComposer(id: string, patch: AiWritingComposerPatch): Promise<AiWritingConversation | null>;
+  aiWritingDelete(id: string): Promise<{ ok: true }>;
+  aiWritingAppendMessage(input: AiWritingMessageAppendInput): Promise<AiWritingMessage>;
+  aiWritingUpdateMessage(id: string, patch: AiWritingMessagePatch): Promise<AiWritingMessage | null>;
+  aiWritingDeleteLastAssistant(conversationId: string): Promise<{ ok: true }>;
   createNote(title: string): Promise<NoteDocument>;
   /**
    * 保存正文。`baseHash`（可选，Batch4-D 保存版本守卫）= 打开/上次保存时的正文 sha256：
@@ -404,6 +423,15 @@ export const native = {
   aiChat: (requestId: string, messages: AiChatMessage[]) => api().aiChat(requestId, messages),
   aiCancel: (requestId: string) => api().aiCancel(requestId),
   onAiStream: (callback: (chunk: AiStreamEvent) => void) => api().onAiStream(callback),
+  aiWritingList: () => api().aiWritingList(),
+  aiWritingGet: (id: string) => api().aiWritingGet(id),
+  aiWritingCreate: (input: AiWritingConversationCreateInput) => api().aiWritingCreate(input),
+  aiWritingRename: (id: string, title: string) => api().aiWritingRename(id, title),
+  aiWritingComposer: (id: string, patch: AiWritingComposerPatch) => api().aiWritingComposer(id, patch),
+  aiWritingDelete: (id: string) => api().aiWritingDelete(id),
+  aiWritingAppendMessage: (input: AiWritingMessageAppendInput) => api().aiWritingAppendMessage(input),
+  aiWritingUpdateMessage: (id: string, patch: AiWritingMessagePatch) => api().aiWritingUpdateMessage(id, patch),
+  aiWritingDeleteLastAssistant: (conversationId: string) => api().aiWritingDeleteLastAssistant(conversationId),
   createNote: (title: string) => api().createNote(title),
   saveNote: (id: string, title: string, content: string, caches?: { markdown?: string | null; plain?: string | null }, baseHash?: string) => api().saveNote(id, title, content, caches, baseHash),
   updateNoteCaches: (id: string, markdown: string | null, plain: string | null) => api().updateNoteCaches(id, markdown, plain),

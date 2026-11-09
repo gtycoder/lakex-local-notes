@@ -205,6 +205,7 @@ CI 发版产出 `assembleRelease` 的**正式 release keystore 签名** APK（v1
 | [docs/HANDOFF.md](docs/HANDOFF.md) | **唯一交接文档**：当前状态 / 待办 / 踩坑 |
 | [AGENTS.md](AGENTS.md) | **长期红线与机制**（会话启动必读） |
 | [docs/PRODUCT.md](docs/PRODUCT.md) · [docs/DESIGN.md](docs/DESIGN.md) | 产品定位 / 设计系统（令牌、层序、组件规范） |
+| [docs/AI-WRITING.md](docs/AI-WRITING.md) | **AI 写作空间**（桌面 v1：会话/多文档/生成文档/小记；分层与门禁） |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 进程结构、关键文件、数据流 |
 | [docs/SYNC-PROTOCOL.md](docs/SYNC-PROTOCOL.md) · [docs/STORAGE-LAYERS.md](docs/STORAGE-LAYERS.md) | 同步协议（含 GC / 保留链 §13–§14）/ 存储分层 |
 | [docs/LAKEX-CONTRACT.md](docs/LAKEX-CONTRACT.md) | 闭源 Lakex 内核已核实行为 + 调试速查 |

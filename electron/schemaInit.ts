@@ -134,6 +134,30 @@ export class SchemaInit {
         device_id TEXT,
         ok INTEGER NOT NULL
       );
+      -- AI 写作空间（261109，桌面本地）：会话 + 消息。**不进树/搜索/同步/S3**（设备本地）。
+      -- 形状与上限的单一来源 = src/core/aiWriting.ts；仓库 = electron/aiWritingRepository.ts。
+      CREATE TABLE IF NOT EXISTS ai_writing_conversations (
+        id TEXT PRIMARY KEY,
+        mode TEXT NOT NULL DEFAULT 'chat',
+        title TEXT NOT NULL,
+        prompt_text TEXT,
+        doc_refs TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS ai_writing_messages (
+        id TEXT PRIMARY KEY,
+        conversation_id TEXT NOT NULL,
+        role TEXT NOT NULL,
+        content TEXT NOT NULL DEFAULT '',
+        reasoning TEXT,
+        duration_ms INTEGER,
+        stopped INTEGER NOT NULL DEFAULT 0,
+        error TEXT,
+        sort_order INTEGER NOT NULL,
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS ai_writing_messages_conversation ON ai_writing_messages(conversation_id, sort_order);
     `);
 
     // M2 全文搜索 v2：FTS5 + unicode61；中文按单字预分词（src/core/search），任意长度查询都可走索引。

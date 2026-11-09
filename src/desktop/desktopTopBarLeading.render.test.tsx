@@ -29,10 +29,11 @@ const nativeMock = vi.hoisted(() => ({
 vi.mock("../lib/native", () => ({ native: nativeMock }));
 
 // P1：+「标签」一级入口（与 文档/小记 并列）；261105 用户验收：空间名「资料库」改为「文档」
-const SLOTS: DesktopWorkspace[] = ["library", "quick-notes", "tags", "trash", "resources"];
+const SLOTS: DesktopWorkspace[] = ["library", "quick-notes", "ai-writing", "tags", "trash", "resources"];
 const SPACE_LABEL: Record<DesktopWorkspace, string> = {
   library: "文档",
   "quick-notes": "小记",
+  "ai-writing": "AI 写作",
   tags: "标签",
   trash: "回收站",
   resources: "资源",
@@ -206,7 +207,8 @@ describe("桌面顶栏左侧 4→1（DT-09）", () => {
     const read = (path: string): string => readFileSync(new URL(path, import.meta.url), "utf8");
     const app = read("../App.tsx");
     expect(app.match(/<DesktopTopBarLeading\b/g)?.length ?? 0).toBe(1);
-    const declarations = [app, read("./DesktopLibrary.tsx"), read("./DesktopQuickNotes.tsx")]
+    // 261109：AI 写作空间在自己的装配组件里声明槽位（与小记同构），这里一并纳入棘轮。
+    const declarations = [app, read("./DesktopLibrary.tsx"), read("./DesktopQuickNotes.tsx"), read("../features/aiWriting/AiWritingWorkspace.tsx")]
       .map((src) => src.match(/<DesktopWorkspaceSlotProvider\b/g)?.length ?? 0)
       .reduce((total, count) => total + count, 0);
     expect(declarations, "每个空间各一个槽位声明").toBe(SLOTS.length);
@@ -215,5 +217,6 @@ describe("桌面顶栏左侧 4→1（DT-09）", () => {
     expect(app.match(/<DesktopWorkspaceSlotProvider workspace="resources"/g)?.length ?? 0).toBe(1);
     expect(read("./DesktopLibrary.tsx")).toContain('<DesktopWorkspaceSlotProvider workspace="library">{topbarLeading}</DesktopWorkspaceSlotProvider>');
     expect(read("./DesktopQuickNotes.tsx")).toContain('<DesktopWorkspaceSlotProvider workspace="quick-notes">{topbarLeading}</DesktopWorkspaceSlotProvider>');
+    expect(read("../features/aiWriting/AiWritingWorkspace.tsx")).toContain('<DesktopWorkspaceSlotProvider workspace="ai-writing">{topbarLeading}</DesktopWorkspaceSlotProvider>');
   });
 });

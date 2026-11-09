@@ -8,6 +8,16 @@
 
 ## 0. 最新交接（261109）
 
+### 261109 · AI 写作空间 v1（桌面新空间，⌘3）
+- 需求：仿语雀 `/dashboard/ai`（真实登录态点测走查记录在仓库外 `.ai-writing-recon/`，**不入库**）；用户定稿：**只桌面**（移动端已有 AI 助手，不跨端）、会话**不进 S3**、**深度思考默认开且不提供关闭入口**、**生成文档只选到知识库（笔记本）**、模型用现有供应商配置。
+- 交互：左栏「AI 写作 / ＋新对话 / 历史记录（今天·昨天·更早；… → 重命名行内输入、删除行内确认气泡）」；主区分段「对话写作 / 多文档推理」；提示词库 6 卡（点卡片 = 挂到输入卡 chip，不写正文）；多文档「快捷组（今天/近一周/近一月 × 文档/小记）+ 按笔记本勾选」，chip 显示「N 篇文档」；发送/停止/重新生成/复制；助手消息 =「已深度思考（用时 X 秒）」+ 思考块 + Markdown 答案（GFM 表格）+ 操作条（生成文档 / 保存到小记）。
+- 数据：本地两表 `ai_writing_conversations` / `ai_writing_messages`（主库，**不进树/搜索/同步**）；IPC 9 个（通道 176→185）；渲染层 native 桥与主进程共用 `core/aiWriting` 的载荷类型。
+- AI：推理内容贯通（`reasoning_content`/`reasoning` → `ai:stream { reasoning: true }` → 思考块）；供应商无思考输出则不显示；思考与正文都不进上下文。
+- 生成文档：选知识库（笔记本）→ `convertAiMarkdown`（Markdown→Lake；仅 render-timeout 重建重试一次）→ `createNoteIn` + `saveNote`；保存到小记：纯文本镜像 + lake 正文。
+- 本轮修的通用问题：① 窗口被遮挡时 rAF 不触发 ⇒ Markdown 转换队列永久挂住（`nextFrame` 加 250ms 兜底，超时能报错而不是锁死队列）；② SDK 在 abort 后可能**正常结束**流 ⇒ 停止标记丢失（收敛到 `aiWritingTurn`，stop 先置位再取消）。
+- 真机/真实模型验证（dev，mimo）：单轮对话 + 思考块 + 停止（保留片段、标「已停止生成」）、多文档 11 篇资料总结、生成文档（lake 正文含标题/列表/引用/表格）、保存到小记（卡片预览为纯文本）、历史重命名/删除气泡、空间菜单与 ⌘3 切换。
+- 未跑：桌面 42 态 / 移动端 6 态 / 23 屏走查（本批只新增桌面空间，选择器都限定在 `.ai-writing-active` / `.aiw`，未改既有几何；发版前按 AGENTS §3#21 补跑一次全量）。
+
 ### 261109 · 便携包（桌面 → 手机 一次性全量搬运）
 - 需求：S3 首次全量同步贵；桌面导出单 zip（不含历史）→ 网盘/USB → 手机覆盖导入 → 之后 S3 只做增量。用户口径：覆盖；含回收站/小记/标签；排除历史快照；不加密；单包 **≤4GiB**（超限暂不支持分卷）；一次性 bootstrap；桌面仅在云同步已启用且上轮同步成功/无待同步时可用；手机导入不强制先配 S3。
 - 桌面：`electron/portable/{zipStore,portableExport}.ts`（自研 store-only zip、VACUUM INTO 快照、白名单遍历）+ `electron/ipc/registerPortable.ts` + 设置页「备份与恢复 → 导出便携包」；IPC 通道 173→176。
@@ -140,11 +150,12 @@
 - 代码：删除已确认无引用的死模块（`src/core/decideUpload*`、`lakeReconcile*`、`quickNoteReconcile*`、`syncDecision*`、`electron/mdToHtml.ts`、`electron/storeUtils.ts`、`electron/syncDecision.ts` 及若干一次性 scripts）；`QuickNoteEditor` / `QuickNotePreview` 等有小改。
 - 本文件（HANDOFF）已重写并随本批提交；其余文件清单与 diff 见上述提交。
 - **261109 更新中心批（本提交）**：`docs/UPDATE-CENTER.md` + `src/core/update/` + `electron/update/` + `electron/ipc/registerUpdate.ts` + 桌面 `UpdateCenter` UI + Android `UpdatePlugin.kt` + 移动更新中心 UI + CI `scripts/generate-update-manifest.mjs`；新增单测 37 例。
+- **261109 AI 写作批（本提交，分支 `feat/ai-writing-space`）**：`docs/AI-WRITING.md` + `src/core/aiWriting.ts`（纯逻辑/预算/消息组装 + IPC 载荷类型）+ `electron/aiWritingRepository.ts` + `electron/ipc/registerAiWriting.ts`（通道 176→185）+ `src/features/aiWriting/*`（工作区/侧栏/输入卡/提示词库/文档选择/消息/两个弹窗/回合与上下文模块/转换包装）+ 桌面壳层接入（`desktopTypes` / `DesktopTopBar` / `useDesktopLifecycle` / `App` / `shell.css`）；AI 流式思考内容贯通（`reasoning_content`）；新增单测 42 例（core 10 / 仓库 5 / turn 5 / context 4 / docs 7 / 转换 9 / 既有 AI 2）。
 
-**门禁基线（261109 清理后实测）**
+**门禁基线（261109 清理后 + AI 写作批实测）**
 
 - `npx tsc --noEmit` = **0 错**。
-- `npx vitest run` = **794 文件（783 passed / 11 skipped）/ 4993 passed / 12 skipped / 0 failed**。
+- `npx vitest run` = **802 文件（791 passed / 11 skipped）/ 5053 passed / 12 skipped / 0 failed**（AI 写作批后实测；其中本批新增 42 例）。
 - `git diff --check` = **0**。
 - `check:bundle`：**mobile-entry 仍超目标（已知红，非本批引入）**。脚本当前按现状冻结为 entry JS gzip ≤66KB、modulepreload ≤34 条、首屏 ≤380KB（`check-arch`）；目标仍是 **60KB / ≤12 条 / 360KB**，瘦身后收紧（§3 P1）。运行前需先有 `dist` / `dist-mobile` 构建产物（本机当前无 `dist`）。
 - 其它样式/边界/设备门禁按改动范围跑（分层口径见 AGENTS §3#21）；最近一次完整设备记录 = **v1.0.4 发版前**：手机 6 态、平板 6 态、多维表 3 态均重烤后两轮 0 差异。
@@ -207,6 +218,8 @@
 - **依赖补丁 4 处升级复核**（仅当升级对应依赖时）：见 §2。
 
 **P2（体验缺口 / 长期）**
+
+- **AI 写作答案渲染保真度（v1.1）**：v1 用自研 `MarkdownView`（标题/列表/引用/代码/GFM 表格已支持；公式、任务列表、分隔线未渲染）⇒ 与语雀「消息正文 = Lakex 只读 viewer」有差距。升级路径：`markdownImportPipeline` 转 Lake + `createLakeDocument(host, "viewer")`（需处理流式期间的高频重建，建议收尾后替换）。**会话不进 S3、移动端不接**（用户 261109 定稿，别再立项）。
 
 - **大库与真实设备**：墓碑 payload 老化（261025 定「后续优化」）；大库阈值探测（>2 万文档 / 索引 3–5MB）；**真实 Android 物理机验收从未做过**；PARITY 残余（移动云清理无 UI 入口、目录恢复后 `deleted_notes` 残留）。移动缺正文的「云端拉回 / 历史恢复 / 重建纯文本」三条只在单测 mock 覆盖，需真机 + 配 S3 验证。
 - **移动端文本格式**：261104 设备实测已收口 —— H1–H6 / 字号 / 颜色 / 对齐 / 列表 / 缩进 / 行高 / 上下标 / 清除格式全部生效；字号+行高已合并成一行步进器，对齐 4 档（含两端对齐）。未接入口：unlink / replace / style→code·quote / 表格块级命令族；画图插入项解禁、移动视图拖拽排序、PdfRender `cacheDir` 清理按需再做。

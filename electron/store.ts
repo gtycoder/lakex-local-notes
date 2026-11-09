@@ -38,6 +38,7 @@ import { SearchRepository } from "./searchRepository.js";
 import type { SearchResult } from "../src/core/searchTypes.js";
 import type { S3v3DiagnosticReport } from "../src/core/s3v3Report.js";
 import { HistoryRepository, type HistorySnapshotPreview, type HistorySnapshotSummary } from "./historyRepository.js";
+import { AiWritingRepository } from "./aiWritingRepository.js";
 import { TrashRepository } from "./trashRepository.js";
 import { TrashLifecycle } from "./trashLifecycle.js";
 import { HistoryLifecycle, type HistoryFallbackOptions, type HistoryFallbackResult } from "./historyLifecycle.js";
@@ -224,6 +225,8 @@ export class Store {
   /** Batch4-B：文件↔元数据对账报告的只读提供者（由 main 注入后台对账器；未启用 = null）。 */
   private fileReconcileReportProvider: (() => unknown) | null = null;
   private settingsRepository: SettingsRepository;
+  /** AI 写作空间（261109，桌面本地）：懒构造；数据在本库但**不属于**笔记域（不进树/搜索/同步）。 */
+  private aiWritingRepositoryInstance: AiWritingRepository | null = null;
   private noteExport: NoteExport;
   private schemaInit: SchemaInit;
   private assetRepository: AssetRepository;
@@ -2059,6 +2062,12 @@ export class Store {
 
   async downloadRemoteResource(url: string, noteId: string): Promise<ResourceUploadOutput> {
     return this.resourceRepository.downloadRemote(url, noteId);
+  }
+
+  /** AI 写作空间仓库（桌面本地；表结构见 schemaInit，形状见 src/core/aiWriting）。 */
+  getAiWritingRepository(): AiWritingRepository {
+    this.aiWritingRepositoryInstance ??= new AiWritingRepository(this.db);
+    return this.aiWritingRepositoryInstance;
   }
 
 }

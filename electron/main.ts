@@ -66,6 +66,7 @@ import { registerSyncIpc } from "./ipc/registerSync.js";
 import { registerQuickNotesIpc } from "./ipc/registerQuickNotes.js";
 import { registerLogIpc } from "./ipc/registerLogIpc.js";
 import { registerAiIpc } from "./ipc/registerAi.js";
+import { registerAiWritingIpc } from "./ipc/registerAiWriting.js";
 import { registerSystemInfoIpc } from "./ipc/registerSystemInfo.js";
 import { registerUpdateIpc } from "./ipc/registerUpdate.js";
 import { registerPortableIpc } from "./ipc/registerPortable.js";
@@ -670,6 +671,7 @@ function registerIpc(): ReadonlyMap<string, (args: unknown[]) => Promise<unknown
   }, enqueueMaintenance);
   registerHistoryIpc(ipc, store, () => restartHistoryTimers?.());
   registerAiIpc(ipc, store);
+  registerAiWritingIpc(ipc, store);
   registerWebIpc(ipc, () => webServerController);
   registerSyncIpc(ipc, {
     store,
