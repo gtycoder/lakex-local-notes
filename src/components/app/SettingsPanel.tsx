@@ -1017,7 +1017,7 @@ let verifiedS3Fingerprint: string | null = null;
                 <Group title="备份" icon={<Archive size={16} />}>
                   <Block itemId="backup-export" name="整库备份" desc="数据库 + 全部笔记/资源/历史快照 + 小记，导出到所选目录（不覆盖非空目录）。" descAfter>
                     <div className="config-block__actions">
-                      <button className="ln-btn ln-btn--secondary" onClick={() => void runBackup()} disabled={backup.busy}><Archive size={14} /> {backup.busy ? "备份中…" : "整库备份到…"}</button>
+                      <button className="ln-btn ln-btn--outline" onClick={() => void runBackup()} disabled={backup.busy}><Archive size={14} /> {backup.busy ? "备份中…" : "整库备份到…"}</button>
                     </div>
                   </Block>
                   <Block itemId="auto-backup" name="自动备份" desc="每天/每周把主库与小记库 VACUUM INTO 快照到 userData/backups，保留最近 N 份并限制总大小（本机保存、不进云端）。恢复入口是上面的「从备份恢复」（本轮只恢复主库；小记库备份文件同目录保留）。">
@@ -1025,14 +1025,13 @@ let verifiedS3Fingerprint: string | null = null;
                       <>
                         <Switch itemId="auto-backup-enabled" name="启用自动备份" desc="应用就绪后每 6 小时检查一次（启动不会立刻跑）；内容未变则跳过。关闭后仍可用「立即备份」。" checked={backupCfg.enabled} onChange={(checked) => saveBackupCfg({ enabled: checked })} />
                         <Item itemId="auto-backup-interval" name="备份间隔" desc="每天或每周（按上次成功备份时间计算；错过的会在下一次 6h 检查时补跑）。">
-                          <div className="config-block__actions">
-                            <button className="ln-btn ln-btn--secondary" onClick={() => saveBackupCfg({ intervalDays: 1 })} disabled={backupCfg.intervalDays === 1} aria-pressed={backupCfg.intervalDays === 1}>每天</button>
-                            <button className="ln-btn ln-btn--secondary" onClick={() => saveBackupCfg({ intervalDays: 7 })} disabled={backupCfg.intervalDays === 7} aria-pressed={backupCfg.intervalDays === 7}>每周</button>
-                          </div>
+                          <Select label="备份间隔" value={String(backupCfg.intervalDays)} onChange={(v) => saveBackupCfg({ intervalDays: Number(v) })} options={[
+                            { value: "1", label: "每天" }, { value: "7", label: "每周" },
+                          ]} />
                         </Item>
                         <Item itemId="auto-backup-keep" name="保留份数" desc="保留最近 N 份（超出按最旧优先删除；备份目录总大小上限 300MB，删除失败只记日志）。"><NumField label="保留份数" min={1} max={50} value={backupCfg.keepCount} onSave={(value) => saveBackupCfg({ keepCount: value })} floor={1} fallback={7} /></Item>
                         <div className="config-block__actions">
-                          <button className="ln-btn ln-btn--secondary" onClick={() => void runBackupNow()} disabled={backup.busy}>{backup.busy ? "备份中…" : "立即备份"}</button>
+                          <button className="ln-btn ln-btn--outline" onClick={() => void runBackupNow()} disabled={backup.busy}>{backup.busy ? "备份中…" : "立即备份"}</button>
                         </div>
                       </>
                     ) : (
@@ -1045,12 +1044,12 @@ let verifiedS3Fingerprint: string | null = null;
                 <Group title="恢复" icon={<RotateCcw size={16} />}>
                   <Block itemId="backup-import" name="从备份恢复" desc="选择一个整库备份（metadata*.sqlite3）：先校验完整性/关键表，再把当前库改名隔离（不删除、可找回）并替换，重启应用后生效。" descAfter>
                     <div className="config-block__actions">
-                      <button className="ln-btn ln-btn--secondary" onClick={() => void runRestoreFromBackup()} disabled={backup.busy}>从备份恢复…</button>
+                      <button className="ln-btn ln-btn--outline" onClick={() => void runRestoreFromBackup()} disabled={backup.busy}>从备份恢复…</button>
                     </div>
                   </Block>
                   <Block itemId="backup-restore" name="从云端恢复" desc="当前数据先改名隔离保存，再从云端全量拉取重建（不会上传本机数据）。用于换机或本地库损坏。" descAfter>
                     <div className="config-block__actions">
-                      <button className="ln-btn ln-btn--secondary ln-btn--danger-text" onClick={() => void runCloudRestore()} disabled={backup.busy || cloudOffline} title={cloudOffline ? "云同步未启用：不会联网" : undefined}>从云端恢复（换机/坏库）…</button>
+                      <button className="ln-btn ln-btn--outline ln-btn--danger" onClick={() => void runCloudRestore()} disabled={backup.busy || cloudOffline} title={cloudOffline ? "云同步未启用：不会联网" : undefined}>从云端恢复（换机/坏库）…</button>
                     </div>
                   </Block>
                 </Group>
@@ -1059,14 +1058,14 @@ let verifiedS3Fingerprint: string | null = null;
                   <Block itemId="backup-portable-export" name="导出便携包（桌面 → 手机）" descAfter desc="把本机全部数据（正文/资源/小记/标签/回收站，不含历史快照）打成一个 .zip.lln（上限 4GiB），经网盘或 USB 拷到手机后导入，手机之后只需增量同步。包内是明文笔记，请自行选择传输方式；不包含任何 S3 密钥。">
                     <div className="config-block__actions">
                       <button
-                        className="ln-btn ln-btn--secondary"
+                        className="ln-btn ln-btn--outline"
                         onClick={() => void runPortableExport()}
                         disabled={portable.busy || !hostCapabilities().localFileSystem || !(portableStatus?.availability.available ?? false)}
                         title={portableUnavailableReason}
                       >
                         {portable.busy ? "导出中…" : "选择目录并导出…"}
                       </button>
-                      <button className="ln-btn ln-btn--secondary" onClick={() => void loadPortableStatus()} disabled={portable.busy}>刷新状态</button>
+                      <button className="ln-btn ln-btn--outline" onClick={() => void loadPortableStatus()} disabled={portable.busy}>刷新状态</button>
                     </div>
                     <div className="config-stats">
                       <span>{portableStatusText}</span>
@@ -1079,8 +1078,8 @@ let verifiedS3Fingerprint: string | null = null;
                 <Group title="存储占用" icon={<HardDrive size={16} />}>
                   <Block itemId="backup-usage" name="备份占用" desc="只读统计 userData/backups 里的备份份数与总大小（只 stat、不读文件内容）。自动备份按「保留份数」与总大小上限删最旧的备份；这里不提供手动删除，避免误删兜底数据。" descAfter>
                     <div className="config-block__actions">
-                      <button className="ln-btn ln-btn--secondary" onClick={() => void loadBackupUsage()} disabled={backupUsageBusy}>{backupUsageBusy ? "统计中…" : "刷新统计"}</button>
-                      <button className="ln-btn ln-btn--secondary" onClick={() => void revealFolder("backups")}>打开备份目录</button>
+                      <button className="ln-btn ln-btn--outline" onClick={() => void loadBackupUsage()} disabled={backupUsageBusy}>{backupUsageBusy ? "统计中…" : "刷新统计"}</button>
+                      <button className="ln-btn ln-btn--outline" onClick={() => void revealFolder("backups")}>打开备份目录</button>
                     </div>
                     <div className="config-stats">
                       <span>{backupUsageInfo.countText}</span>
@@ -1102,7 +1101,7 @@ let verifiedS3Fingerprint: string | null = null;
                         {backupResult.guidance && <div className={"checks__row checks__row--" + backupResult.tone}>{backupResult.guidance}</div>}
                         {backupResult.retry && (
                           <div className="config-block__actions">
-                            <button className="ln-btn ln-btn--secondary" onClick={() => void runBackupNow()} disabled={backup.busy}>{backup.busy ? "备份中…" : "立即备份"}</button>
+                            <button className="ln-btn ln-btn--outline" onClick={() => void runBackupNow()} disabled={backup.busy}>{backup.busy ? "备份中…" : "立即备份"}</button>
                           </div>
                         )}
                       </div>
@@ -1344,6 +1343,11 @@ let verifiedS3Fingerprint: string | null = null;
                 )}
                 {sysInfo && (
                   <>
+                    <Group title="关于" icon={<Info size={16} />}>
+                      <Block itemId="about-app" name={`LakexLocalNotes ${sysInfo.app.version}${sysInfo.packaged ? "" : "（开发实例）"}`} desc="本地优先、离线可用；数据保存在本机，S3 只作云端备份。" />
+                      <Block itemId="about-fonts" name="字体" desc="界面与正文使用内置 MiSans（小米科技，依《MiSans 字体知识产权许可协议》免费商用；此处按协议注明使用）。代码块使用 JetBrains Mono（SIL OFL 1.1）。两者均随应用内置、离线可用。" />
+                    </Group>
+
                     <Group title="数据与存储" icon={<HardDrive size={16} />}>
                       <Block itemId="about-storage-stats" name="内容统计" desc="计数来自本机库与资源目录（只读遍历资源目录两层，不做全盘扫描）。">
                         <div className="config-stats">
@@ -1380,10 +1384,7 @@ let verifiedS3Fingerprint: string | null = null;
                       </Item>
                     </Group>
 
-                    <Group title="关于" icon={<Info size={16} />}>
-                      <Block itemId="about-app" name={`LakexLocalNotes ${sysInfo.app.version}${sysInfo.packaged ? "" : "（开发实例）"}`} desc="本地优先、离线可用；数据保存在本机，S3 只作云端备份。" />
-                      <Block itemId="about-fonts" name="字体" desc="界面与正文使用内置 MiSans（小米科技，依《MiSans 字体知识产权许可协议》免费商用；此处按协议注明使用）。代码块使用 JetBrains Mono（SIL OFL 1.1）。两者均随应用内置、离线可用。" />
-                    </Group>
+
 
                     <Group title="诊断" icon={<Search size={16} />}>
                       <Block itemId="about-diagnostics" name="复制诊断信息" desc="把版本、运行环境、依赖与本机计数拼成一段纯文本，反馈问题时直接贴出来。" descAfter>

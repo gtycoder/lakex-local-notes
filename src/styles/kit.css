@@ -42,6 +42,10 @@
 .ln-btn--ghost:active:not(:disabled) { background: var(--lake-bg-press); }
 .ln-btn--danger { color: var(--lake-status-error); border-color: color-mix(in srgb, var(--lake-status-error) 40%, transparent); }
 .ln-btn--danger:hover:not(:disabled) { background: var(--lake-status-error-soft); }
+/* 261109 用户定稿：设置页动作按钮统一「主题色描边 + 透明底」，不填色；跟着主题主色走。 */
+.ln-btn--outline { color: var(--lake-accent-text); border-color: var(--lake-accent); }
+.ln-btn--outline:hover:not(:disabled) { background: var(--lake-bg-hover); }
+.ln-btn--outline:active:not(:disabled) { background: var(--lake-bg-press); }
 /* 破坏性动作的「红字 + 中性描边」变体（原 .ft__error 组合）：只染文字，不改边框/底色。 */
 .ln-btn--danger-text { color: var(--lake-status-error); }
 .ln-btn--secondary.ln-btn--danger-text:hover:not(:disabled) { background: var(--lake-status-error-soft); }
