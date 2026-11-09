@@ -173,7 +173,7 @@
 - `npx tsc --noEmit` = **0 错**。
 - `npx vitest run` = **818 文件（807 passed / 11 skipped）/ 5148 passed / 12 skipped / 0 failed**（AI 写作 + 日记两批合并后实测；日记批新增 101 例）。
 - `git diff --check` = **0**。
-- `check:bundle`：**mobile-entry 仍超目标（已知红，非本批引入）**。脚本当前冻结为 entry JS gzip ≤66KB、modulepreload ≤34 条、首屏 ≤380KB（`check-arch`）；目标仍是 **60KB / ≤12 条 / 360KB**，瘦身后收紧（§3 P1）。**261109 实测校准**：基线 `f3b2d0c3` 已经是 **74438 gz / 36 链接**（冻结值本身就落后于该 commit）；日记 v1 之后 = **75257 gz / 38 链接**（Δ +819B / +2 条，已把 `DiaryPage` 拆成按需分包、`bridge/diary` 又退回静态 import 以免多出 5 条 preload）。⇒ 真要收口目标值，是一次独立的移动端瘦身专项，别算在日记头上。运行前需先有 `dist` / `dist-mobile` 构建产物。
+- `check:bundle`：**mobile-entry 仍超目标（已知红，非本批引入）**。脚本当前冻结为 entry JS gzip ≤66KB、modulepreload ≤34 条、首屏 ≤380KB（`check-arch`）；目标仍是 **60KB / ≤12 条 / 360KB**，瘦身后收紧（§3 P1）。**261109 实测校准（发版前，`v1.1.0` 合并后）**：`mobile-entry` = **75,316 gz / 39 链接**（冻结 67,584 / 34）；同日合并前的对照基线 `6b2bfbec` = 75,031 gz / 39 链接 ⇒ 日记与 AI 写作合并带来的增量 **+285B / +0 链接**。桌面首屏 586,076 / 600,000（余量 13.9KB，AI 写作改 lazy 前是 555,107）。⇒ 这套红是**跨版本既有**，收口是独立移动端瘦身专项（`check:arch` 的 mobile 首屏 390,727 / 380,000 同属此项）。运行前需先有 `dist` / `dist-mobile` 构建产物。
 - 其它样式/边界/设备门禁按改动范围跑（分层口径见 AGENTS §3#21）；最近一次完整设备记录 = **v1.0.4 发版前**：手机 6 态、平板 6 态、多维表 3 态均重烤后两轮 0 差异。
 
 **设备与环境（本机实测）**

@@ -22,7 +22,7 @@ import { PublishDocDialog } from "./PublishDocDialog";
 import { SaveQuickNoteDialog } from "./SaveQuickNoteDialog";
 import { AI_WRITING_SUGGESTIONS, aiWritingChatTitle, aiWritingDocsTitle } from "./aiWritingPrompts";
 import { useAiWriting } from "./useAiWriting";
-import { DesktopWorkspaceSlotProvider } from "../../desktop/desktopWorkspaceSlot";
+
 
 /** 「生成文档」的默认标题：首行摘要；摘要为空/兜底文案时用固定名。 */
 function publishTitleOf(markdown: string): string {
@@ -146,7 +146,8 @@ export function AiWritingWorkspace({ active, treeNodes, topbarLeading, onOpenSet
     <>
       <header className="tab-bar desktop-only" aria-label="顶栏">
         <div className="tabbar-leading">
-          <DesktopWorkspaceSlotProvider workspace="ai-writing">{topbarLeading}</DesktopWorkspaceSlotProvider>
+          {/* 槽位归属由 App 包裹（features 不得反向 import desktop，check-arch 门禁）。 */}
+          {topbarLeading}
         </div>
       </header>
       <div className="aiw">

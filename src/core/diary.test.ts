@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   DIARY_FOLDER_SPACE, diaryEntries, diaryGroupTitles, diaryNotebookId, diaryNotebooks,
   folderSpaceForWire, formatDiaryDateKey, groupDiaryEntries, isDiaryGroupTitle, normalizeFolderSpace,
-  diaryConvertTargets, parseDiaryDateKey, planDiaryConvert, planDiaryOpen, recentDiaryDays, withoutDiaryNotebook,
+  diaryConvertTargets, diarySubtreeIds, parseDiaryDateKey, planDiaryConvert, planDiaryOpen, recentDiaryDays, withoutDiaryNotebook,
   type DiaryTreeNode,
 } from "./diary.js";
 
@@ -239,5 +239,23 @@ describe("转为文档：目标与校验（261109）", () => {
   it("没有日记本时没有任何可转条目，也没有目标", () => {
     const onlyDocs = nodes.filter((n) => n.id !== "nb-diary" && n.parentId !== "nb-diary" && n.parentId !== "y26" && n.parentId !== "m11");
     expect(planDiaryConvert(onlyDocs, "d1109", "nb-work")).toEqual({ ok: false, reason: "not-diary-entry" });
+  });
+});
+
+describe("diarySubtreeIds（其它空间排除日记内容用，261109）", () => {
+  it("返回日记本 + 全部后代（含深分组），不含别的笔记本", () => {
+    const nodes: DiaryTreeNode[] = [
+      notebook(),
+      node({ id: "y", title: "2026", nodeType: "group", parentId: "nb-diary" }),
+      node({ id: "m", title: "11", nodeType: "group", parentId: "y" }),
+      node({ id: "d", title: "2026-11-09", parentId: "m" }),
+      node({ id: "nb-work", title: "工作", nodeType: "notebook", parentId: null }),
+      node({ id: "w", title: "文档", parentId: "nb-work" }),
+    ];
+    expect([...diarySubtreeIds(nodes)].sort()).toEqual(["d", "m", "nb-diary", "y"]);
+  });
+
+  it("没有日记本时为空集合", () => {
+    expect(diarySubtreeIds([node({ id: "x", title: "文档" })]).size).toBe(0);
   });
 });

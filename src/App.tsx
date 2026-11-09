@@ -55,7 +55,8 @@ import { AiAssistantHost } from "./features/ai/AiAssistantHost";
 import { openAiAssistant } from "./features/ai/aiAssistantSession";
 import { DesktopLibrary } from "./desktop/DesktopLibrary";
 import { DesktopQuickNotes } from "./desktop/DesktopQuickNotes";
-import { AiWritingWorkspace } from "./features/aiWriting/AiWritingWorkspace";
+// AI 写作空间按需加载（261109 发版前 review P2-4）：静态 import 会把入口 +28KB、首屏余量压到 13.9KB。
+const AiWritingWorkspace = lazy(() => import("./features/aiWriting/AiWritingWorkspace").then((m) => ({ default: m.AiWritingWorkspace })));
 import { useDesktopShell } from "./desktop/useDesktopShell";
 import { DesktopSplitButton, DesktopTopBarLeading, DesktopTopBarSearch } from "./desktop/DesktopTopBar";
 import { DesktopWorkspaceSlotProvider } from "./desktop/desktopWorkspaceSlot";
@@ -956,10 +957,12 @@ export function App() {
           />
         </div>
         <div className={"workspace-view" + (desktopWorkspace === "ai-writing" ? "" : " workspace-view--hidden")}>
+          {/* 懒加载分包：首次切进空间时才拉（壳层几何在 shell.css 里，空态只是一屏空白）。 */}
+          <Suspense fallback={null}>
           <AiWritingWorkspace
             active={desktopWorkspace === "ai-writing"}
             treeNodes={treeNodes}
-            topbarLeading={topBarLeading}
+            topbarLeading={<DesktopWorkspaceSlotProvider workspace="ai-writing">{topBarLeading}</DesktopWorkspaceSlotProvider>}
             onOpenSettings={() => { setSettingsCategory("ai"); setSettingsOpen(true); }}
             onNotice={(text, action) => { if (action) showNoticeWithAction(text, action); else showNotice(text); }}
             onOpenNote={(noteId) => {
@@ -967,6 +970,7 @@ export function App() {
               void refreshTree().then(() => { void switchDesktopWorkspace("library"); void openNote(noteId); }).catch(() => { void switchDesktopWorkspace("library"); void openNote(noteId); });
             }}
           />
+          </Suspense>
         </div>
         <div className={"workspace-view" + (desktopWorkspace === "quick-notes" ? "" : " workspace-view--hidden")}>
           <DesktopQuickNotes

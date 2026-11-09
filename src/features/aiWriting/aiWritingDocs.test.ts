@@ -60,6 +60,21 @@ describe("selectableDocuments / selectableNotebooks", () => {
     ];
     expect(selectableNotebooks(nodes).map((item) => item.id)).toEqual(["nb"]);
   });
+
+  it("日记是独立空间：资料集与「生成文档」目标都不含日记子树（261109）", () => {
+    const nodes = [
+      node({ id: "nb", nodeType: "notebook", noteFileId: null }),
+      node({ id: "nb-diary", nodeType: "notebook", noteFileId: null, space: "diary" }),
+      node({ id: "grp-diary", nodeType: "group", noteFileId: null, parentId: "nb-diary" }),
+      node({ id: "doc-diary", parentId: "grp-diary", noteFileId: "f-diary", updatedAt: NOW.toISOString() }),
+      node({ id: "doc-ok", noteFileId: "f-ok", updatedAt: NOW.toISOString() }),
+    ];
+    // 资料：日记正文默认不外发第三方（包含「今天我编辑的文档」这类快捷组）
+    expect(selectableDocuments(nodes).map((item) => item.id)).toEqual(["doc-ok"]);
+    expect(refsForQuickGroup(AI_WRITING_QUICK_GROUPS.find((item) => item.id === "today-docs")!, nodes, [], NOW).map((ref) => ref.id)).toEqual(["f-ok"]);
+    // 发布目标：日记本不能作为落点（否则文档既不进日记时间线、又被文档空间隐藏 ⇒ 找不到）
+    expect(selectableNotebooks(nodes).map((item) => item.id)).toEqual(["nb"]);
+  });
 });
 
 describe("refsForQuickGroup", () => {

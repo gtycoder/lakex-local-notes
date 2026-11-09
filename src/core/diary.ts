@@ -315,3 +315,29 @@ export function planDiaryConvert(
   if (target.nodeType !== "notebook") return { ok: false, reason: "target-not-notebook" };
   return { ok: true, entry, targetId: targetNotebookId };
 }
+
+/**
+ * 日记子树（日记笔记本 + 全部后代）的节点 id 集合。
+ *
+ * 用途：**其它空间不要把日记内容当普通资料混进来**（AI 写作的资料选择/快捷组/发布目标）。
+ * 注意 `withoutDiaryNotebook` 只剔笔记本这一行、保留子节点（渲染层靠容器隐藏），
+ * 这里要的是"整棵子树"语义，两者不要混用。
+ */
+export function diarySubtreeIds(nodes: readonly DiaryTreeNode[]): Set<string> {
+  const ids = new Set<string>();
+  const roots = diaryNotebooks(nodes);
+  if (roots.length === 0) return ids;
+  const children = new Map<string, DiaryTreeNode[]>();
+  for (const node of nodes) {
+    const key = node.parentId ?? "";
+    const bucket = children.get(key);
+    if (bucket) bucket.push(node);
+    else children.set(key, [node]);
+  }
+  const walk = (id: string): void => {
+    ids.add(id);
+    for (const child of children.get(id) ?? []) walk(child.id);
+  };
+  for (const root of roots) walk(root.id);
+  return ids;
+}

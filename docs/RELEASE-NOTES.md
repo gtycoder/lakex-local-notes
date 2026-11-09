@@ -38,7 +38,7 @@
 
 ## 验证
 
-- `tsc` 0 错；vitest **818 文件 / 5148 通过 / 11 skipped / 0 failed**；ui-metrics、check:core、check:mobileui、diff-check 通过。
+- `tsc` 0 错；vitest **818 文件（807 通过 / 11 跳过）· 5148 用例通过 / 12 跳过 / 0 失败**；ui-metrics、check:core、check:mobileui、diff-check 通过。
 - 桌面与移动两条 `vite build` 通过。设备级门禁（移动 6 态 + 23 屏走查、桌面 42 态）未随本版重跑，见 `docs/HANDOFF.md` §3。
 
 ## 升级说明

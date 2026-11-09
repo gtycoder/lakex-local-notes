@@ -96,7 +96,7 @@ ai_writing_messages(id TEXT PK, conversation_id TEXT, role TEXT, content TEXT,
 - 单测：`core/aiWriting.test.ts`（标题/分组/预算/消息组装）、`aiWritingRepository.test.ts`（CRUD/级联/排序）、
   `aiWritingTurn.test.ts`（正常/停止/失败/结果兜底）、`aiWritingContext.test.ts`（缓存回落/跳过/截断）、
   `aiWritingDocs.test.ts`（可选集合/窗口/上限/切换）、`convertAiMarkdown.test.ts`（重试策略）。
-- 通道：`ipcChannelParity`（注册↔preload↔WEB_METHODS，计数 185）。
+- 通道：`ipcChannelParity`（注册↔preload↔WEB_METHODS；本批 185，**日记批 +1 ⇒ 现 186**）。
 - 样式：`ui-metrics`（0 颜色字面量 / 0 字号字面量 / !important 不变）+ `cssLayers.test.ts`（新文件已登记基线 430）。
 - 设备/视觉：本页是桌面空间，按 AGENTS §3#21 只在改动外壳几何时跑 `check:stylesnap` 的相关态。
 

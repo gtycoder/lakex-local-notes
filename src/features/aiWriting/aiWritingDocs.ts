@@ -6,6 +6,7 @@
  */
 import type { QuickNoteListSummary, TreeNode } from "../../lib/types";
 import { TRASH_NOTEBOOK_ID } from "../../core/syncDecisions";
+import { diaryNotebooks, diarySubtreeIds } from "../../core/diary";
 import type { AiWritingDocRef } from "../../core/aiWriting";
 
 export type AiWritingQuickGroupId =
@@ -38,20 +39,33 @@ function withinDays(iso: string, days: number, now: Date): boolean {
   return time >= now.getTime() - days * 24 * 60 * 60 * 1000;
 }
 
-/** 目录树里的「可当资料」的文档（排除回收站、已删除、云端已删；只取 note 节点且落过盘）。 */
+/**
+ * 目录树里的「可当资料」的文档（排除回收站、已删除、云端已删；只取 note 节点且落过盘）。
+ *
+ * **排除日记子树**（261109）：日记是独立空间，把日记正文默认塞进 AI 资料集会超出用户预期
+ * （日记正文会被发到第三方供应商）。判据单一来源 = `core.diarySubtreeIds`。
+ */
 export function selectableDocuments(treeNodes: readonly TreeNode[]): TreeNode[] {
+  const diaryIds = diarySubtreeIds(treeNodes);
   return treeNodes.filter((node) =>
     node.nodeType === "note" &&
     Boolean(node.noteFileId) &&
     !node.isPurged &&
     !node.cloudDeleted &&
-    node.parentId !== TRASH_NOTEBOOK_ID,
+    node.parentId !== TRASH_NOTEBOOK_ID &&
+    !diaryIds.has(node.id),
   );
 }
 
-/** 笔记本（知识库）列表：排除回收站。 */
+/**
+ * 笔记本（知识库）列表：排除回收站，**并排除日记本**。
+ *
+ * 261109：日记本不能作为「生成文档」的落点 —— 建进去的文档标题不是日期 ⇒ 日记时间线不收录，
+ * 而日记本又被文档空间目录树隐藏 ⇒ 用户点完就再也找不到它（与「转为文档」禁止日记本作目标同口径）。
+ */
 export function selectableNotebooks(treeNodes: readonly TreeNode[]): TreeNode[] {
-  return treeNodes.filter((node) => node.nodeType === "notebook" && node.id !== TRASH_NOTEBOOK_ID && !node.isPurged);
+  const diaryIds = new Set(diaryNotebooks(treeNodes).map((node) => node.id));
+  return treeNodes.filter((node) => node.nodeType === "notebook" && node.id !== TRASH_NOTEBOOK_ID && !node.isPurged && !diaryIds.has(node.id));
 }
 
 /** 快捷组 → 具体引用（按 updatedAt 倒序，最多 50 篇，避免一次挂太多资料）。 */

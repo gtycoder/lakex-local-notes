@@ -209,8 +209,10 @@ describe("桌面顶栏左侧 4→1（DT-09）", () => {
     const read = (path: string): string => readFileSync(new URL(path, import.meta.url), "utf8");
     const app = read("../App.tsx");
     expect(app.match(/<DesktopTopBarLeading\b/g)?.length ?? 0).toBe(1);
-    // 261109：AI 写作空间在自己的装配组件里声明槽位（与小记同构），这里一并纳入棘轮。
-    const declarations = [app, read("./DesktopLibrary.tsx"), read("./DesktopQuickNotes.tsx"), read("../features/aiWriting/AiWritingWorkspace.tsx")]
+    // 261109：槽位声明只在**壳层**（App / DesktopLibrary / DesktopQuickNotes）。
+    // AI 写作原先在自己的 workspaces 里声明，导致 features 反向 import desktop（check-arch 违规）
+    // ⇒ 已上移到 App；features 侧不得再出现 DesktopWorkspaceSlotProvider。
+    const declarations = [app, read("./DesktopLibrary.tsx"), read("./DesktopQuickNotes.tsx")]
       .map((src) => src.match(/<DesktopWorkspaceSlotProvider\b/g)?.length ?? 0)
       .reduce((total, count) => total + count, 0);
     expect(declarations, "每个空间各一个槽位声明").toBe(SLOTS.length);
@@ -218,8 +220,11 @@ describe("桌面顶栏左侧 4→1（DT-09）", () => {
     expect(app.match(/<DesktopWorkspaceSlotProvider workspace="trash"/g)?.length ?? 0).toBe(1);
     expect(app.match(/<DesktopWorkspaceSlotProvider workspace="resources"/g)?.length ?? 0).toBe(1);
     expect(app.match(/<DesktopWorkspaceSlotProvider workspace="diary"/g)?.length ?? 0).toBe(1);
+    expect(app.match(/<DesktopWorkspaceSlotProvider workspace="ai-writing"/g)?.length ?? 0).toBe(1);
     expect(read("./DesktopLibrary.tsx")).toContain('<DesktopWorkspaceSlotProvider workspace="library">{topbarLeading}</DesktopWorkspaceSlotProvider>');
     expect(read("./DesktopQuickNotes.tsx")).toContain('<DesktopWorkspaceSlotProvider workspace="quick-notes">{topbarLeading}</DesktopWorkspaceSlotProvider>');
-    expect(read("../features/aiWriting/AiWritingWorkspace.tsx")).toContain('<DesktopWorkspaceSlotProvider workspace="ai-writing">{topbarLeading}</DesktopWorkspaceSlotProvider>');
+    // 架构棘轮：features 不得反向依赖 desktop（check-arch 的 features-no-desktop）。
+    expect(read("../features/aiWriting/AiWritingWorkspace.tsx")).not.toContain("DesktopWorkspaceSlotProvider");
+    expect(read("../features/aiWriting/AiWritingWorkspace.tsx")).not.toContain("desktop/desktopWorkspaceSlot");
   });
 });
