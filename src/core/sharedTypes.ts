@@ -109,6 +109,11 @@ export interface TreeNode {
   summary?: string | null;
   /** 文档类型（doc | usheet | bitable | board | ink；缺省 doc）：宿主据此对非 doc 隐藏导出/大纲等。 */
   kind?: "doc" | "usheet" | "bitable" | "board" | "ink";
+  /**
+   * 空间标记（261109）：日记笔记本 = "diary"，wire 上镜像 lake 索引 `folders[].space`。
+   * 与 `kind`（文档类型）是两件事，**不要合并**。只有 nodeType === "notebook" 时有意义。
+   */
+  space?: "diary" | null;
 }
 
 /** 小记图片（含附件扩展：mimeType 决定是否按图片渲染）。 */
