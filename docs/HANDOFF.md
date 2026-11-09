@@ -8,6 +8,15 @@
 
 ## 0. 最新交接（261109）
 
+### 261109 · 日记空间 v1（文档形态 + 独立空间；桌面 + 移动）
+- **定稿（用户 261109）**：日记 = **文档空间里的一本笔记本**（不新建数据空间/不新建表，正文/历史/回收站/搜索/导出/备份全复用）；表现 = 顶层**独立空间**（桌面空间组第 4 项 **⌘4**，移动端首页第 4 个 tab）；**标题即日期 `YYYY-MM-DD`**；`年 → 月` 两级分组自动建；**要搜索、不打标**；v1 不做缺天提示/补写/月历/streak/提醒。规格 [docs/DIARY.md](DIARY.md)。
+- **wire**：`folders[].space?: "diary" | null`（**不复用 `kind`** —— `TreeNode.kind` 是文档类型）；**发布显式写 null**（非日记不省略字段，同 `tagIds` 空集合教训）；两端 `tree_nodes.space` 列（移动 schema 11→12）。
+- **桌面**：`electron/diaryStore.ts`（主进程**重新 plan** + **单事务**建本/年组/月组/文档 + 正文半成品回收 + 连点只一篇）、IPC `diary_open_date`（落 `electron/ipc/registerDiary.ts`，通道 176→**177**）、`src/features/diary/**`（空间页复用 `EditorTab`，左栏年月，空态「写今天」）、文档空间目录树**过滤掉日记本**、⌘4。
+- **移动**：`src/mobile/diary/**`（`diaryRepository` 同款单事务 ensure + `DiaryPage`）、`bridge/diary.ts`（互斥域 `diaryOpenDate` 已登记进 `WRITE_OPS`）、首页 **第 4 个 tab**（只改 tab 行，不动 5 槽定稿构图；≤385px 收紧几何）、知识库/目录抽屉过滤日记本。
+- **搜索**：日记是文档 ⇒ 天然在 FTS；空间内搜索 = 复用现有面板 + `scopeNoteIds` **纯显示层**收窄（**不新增索引**）。
+- **门禁**：tsc 0；vitest **797 文件 / 5079 通过 / 11 skipped / 12 skipped / 0 failed**；ui-metrics、check:core、check:mobileui、diff-check 通过。**设备级未跑**（移动 6 态/走查、桌面 stylesnap 还没有"日记态"）。
+- **并行注意**：本批在 worktree `lakex-local-notes-diary`（`feat/diary-space`，起点 `f3b2d0c3`），**不含** AI 写作（那是 `feat/ai-writing-space` 另一个 worktree）⇒ 合并时 `App.tsx` / `desktop/desktopTypes.ts` / `desktop/DesktopTopBar.tsx` 必冲突，按"两边空间项都保留"手工合。
+
 ### 261109 · 便携包（桌面 → 手机 一次性全量搬运）
 - 需求：S3 首次全量同步贵；桌面导出单 zip（不含历史）→ 网盘/USB → 手机覆盖导入 → 之后 S3 只做增量。用户口径：覆盖；含回收站/小记/标签；排除历史快照；不加密；单包 **≤4GiB**（超限暂不支持分卷）；一次性 bootstrap；桌面仅在云同步已启用且上轮同步成功/无待同步时可用；手机导入不强制先配 S3。
 - 桌面：`electron/portable/{zipStore,portableExport}.ts`（自研 store-only zip、VACUUM INTO 快照、白名单遍历）+ `electron/ipc/registerPortable.ts` + 设置页「备份与恢复 → 导出便携包」；IPC 通道 173→176。
@@ -126,7 +135,8 @@
 
 **版本与仓库**
 
-- 分支 `master`，HEAD = **本提交**（以 `git log -1` 为准；其下 `04eb32a7`（文档对齐）、`967c09e6`（文档清理）、`e4f1fd3f`（代码清理），再往上是 `b78c11df` = tag `v1.0.4` 指向的 commit）。
+- **在途 worktree（261109）**：`lakex-local-notes-diary` = `feat/diary-space`（日记 v1，起点 `f3b2d0c3`）；`lakex-local-notes` = `feat/ai-writing-space`（AI 写作，未提交在途）；另有旧的 `/tmp/lln-a11y-score`（`test/a11y-acceptance`）。合并顺序：先 AI 写作落地 → 再把日记 rebase 到其上合接线。
+- 主分支 `master`，HEAD = **本提交**（以 `git log -1` 为准；其下 `04eb32a7`（文档对齐）、`967c09e6`（文档清理）、`e4f1fd3f`（代码清理），再往上是 `b78c11df` = tag `v1.0.4` 指向的 commit）。
 - `package.json` = **1.0.4**；Android `versionName 1.0.4` / `versionCode 11004`（从根 `package.json` 派生，版本号单一来源）。
 - tag：`v1.0.0`–`v1.0.4`（另有旧 `v0.0.1` / `v0.0.2`）；已发布 tag 不再移动。
 - **唯一 worktree**：`/Users/admin/file/local-lake/lakex-local-notes`；只有 `master`（本地 + Gitee + GitHub），无在途特性分支。
@@ -191,6 +201,8 @@
 
 **P0（不做就卡住主线）**
 
+- **日记 v1 收尾（261109 遗留）**：① 与 `feat/ai-writing-space` 合并（`App.tsx`/`desktopTypes.ts`/`DesktopTopBar.tsx` 冲突按"两边都保留"手工合）；② ⌘4 并回 `useDesktopLifecycle` 的 ⌘1–3 映射表（现在独立注册在 `App.tsx`）；③ 移动端关闭日记条目后的返回落点仍在「知识库」（沿用既有 `useRouteTransition` 语义，若产品要"回日记页"需单独改）。
+- **日记设备级验收**：移动 `check:mobilesnap` 6 态（**必须先在 `lake_gate` 上重烤基线**——首页 tab 行从 3 个变 4 个属于外壳构成变化）+ 23 屏走查；桌面 `check:stylesnap` 目前**没有"日记空间"这一态**，要纳入需新增 state 并重烤基线。
 - **每批收尾固定动作**：更新 §1 基线与门禁计数 + §3 + §0 批次抬头状态；提交/推送后立刻回写，别让 §0 的「未提交」标记漂移。
 - **下一版发布**（流程见 [docs/RELEASE.md](RELEASE.md)）：发布说明必须写清 ① inkDoc v4：旧端打开只读、手机/平板需重装；② 标签顺序只在设备本地生效（不同步）；③ 标签删除 = 缺席，两端都要升级（旧端仍会把墓碑写回索引）；④ 发布说明统一维护在 [docs/RELEASE-NOTES.md](RELEASE-NOTES.md)。发版前跑全量门禁：手机 6 态 + 平板 6 态 + 多维表 3 态 + 23 屏走查 + `check:windowsweep` + 桌面 42 态（桌面 42 态本机无合成夹具缓存，需有夹具的机器补）。
 - **移动端首屏瘦身**（发版后专项）：HEAD 实测 entry-js 65.5KB gz / preload 33 条 / 首屏 374KB，已超目标（60KB / ≤12 条 / 360KB）；先砍回目标值，再收紧 `check-bundle-budget.mjs` 与 `check-arch.mjs`。

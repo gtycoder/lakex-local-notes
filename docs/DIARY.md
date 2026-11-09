@@ -84,3 +84,17 @@ renderer: list_tree_nodes（含 space）
 ## 来源（机制参考，不是抄实现）
 
 思源 v3.8.4：路径模板 + IAL 标记 `custom-dailynote-YYYYMMDD`、先查后建的幂等、模板只在新建时套用（`kernel/model/file.go:1436`）。**它的坑不学**：中间路径段变成真文档 / 内核写死 `time.Now()` 无法补写 / 幂等键是标题路径 / 日记本只存在前端 localStorage。
+
+## 实现落点（261109 交付）
+
+| 层 | 文件 |
+| --- | --- |
+| 判据 | `src/core/diary.ts` + `diary.test.ts`（22 例） |
+| wire | `src/core/s3v3/protocol/s3v3Index.ts`（`LakeFolderEntry.space` + 校验归一）、`plan/plan.ts`（发布映射） |
+| 平台端口 | `src/core/s3v3/state/platformPort.ts`（`SyncFolderRow.space`）、`state/deviceStore.ts`（投影 + 变更判定） |
+| 桌面存储 | `electron/diaryStore.ts`（单事务 ensure）、`electron/ipc/registerDiary.ts`、`electron/schemaInit.ts`（列 + ALTER）、`electron/noteQueries.ts`/`noteMetadataRepository.ts`（读写 space） |
+| 桌面 UI | `src/features/diary/`（`DiaryWorkspace` / `diaryTree` 树过滤与 id 映射 / `diaryOpen` IPC 端口 / `diarySearch` / `diary.css`）、`App.tsx`（空间 + ⌘4 + 树过滤 + 搜索收窄）、`DesktopTopBar.tsx`、`styles/chrome.css` |
+| 移动 | `src/mobile/diary/`（`diaryRepository` 单事务 ensure / `DiaryPage`）、`bridge/diary.ts`、`data/schema.ts`（v12）、`home/tabPager.ts`（4 tab）、`settings/SearchSheet.tsx`（`scopeNoteIds`） |
+| 搜索 | 复用既有 FTS + `SearchPanel.scopeNoteIds` / `SearchSheet.scopeNoteIds`（纯显示层；**不新增索引**） |
+
+**已知边界（v1）**：桌面与移动各自只有一份编辑器宿主（日记空间与资料库同篇互斥，见 `App.tsx` 的 `libraryTabs`）；⌘4 暂独立注册在 `App.tsx`（未并回 `useDesktopLifecycle` 的 ⌘1–3 表）；移动端关闭日记条目后落到「知识库」（沿用既有返回落点）。
