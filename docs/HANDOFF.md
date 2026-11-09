@@ -148,13 +148,14 @@
 
 **版本与仓库**
 
-- **在途 worktree（261109）**：`lakex-local-notes-diary` = `feat/diary-space`（日记 v1，起点 `f3b2d0c3`）；`lakex-local-notes` = `feat/ai-writing-space`（AI 写作，未提交在途）；另有旧的 `/tmp/lln-a11y-score`（`test/a11y-acceptance`）。合并顺序：先 AI 写作落地 → 再把日记 rebase 到其上合接线。
+- **worktree（261109 发版时）**：`lakex-local-notes` = `master`（发版主工作树）；`lakex-local-notes-diary` = `feat/diary-space`（本批开发用，已合并 master 并合回 master）。AI 写作与日记**都已进 master**，两个空间共存（⌘3 / ⌘4）。
 - 主分支 `master`，HEAD = **本提交**（以 `git log -1` 为准；其下 `04eb32a7`（文档对齐）、`967c09e6`（文档清理）、`e4f1fd3f`（代码清理），再往上是 `b78c11df` = tag `v1.0.4` 指向的 commit）。
-- `package.json` = **1.0.4**；Android `versionName 1.0.4` / `versionCode 11004`（从根 `package.json` 派生，版本号单一来源）。
-- tag：`v1.0.0`–`v1.0.4`（另有旧 `v0.0.1` / `v0.0.2`）；已发布 tag 不再移动。
-- **唯一 worktree**：`/Users/admin/file/local-lake/lakex-local-notes`；只有 `master`（本地 + Gitee + GitHub），无在途特性分支。
+- `package.json` = **1.1.0**；Android `versionName 1.1.0` / `versionCode 11100`（从根 `package.json` 派生，版本号单一来源：`1000 + major*10000 + minor*100 + patch`）。
+- tag：`v1.0.0`–`v1.0.5`、**`v1.1.0`**（另有旧 `v0.0.1` / `v0.0.2`）；已发布 tag 不再移动。`v1.1.0` = AI 写作 + 日记两个新空间。
+- `v1.0.5` 是**发在 AI 写作合并之前**的：AI 写作第一次随本版发布，别在旧发布说明里找它。
+- 分支：`master`（唯一长期分支，本地 + Gitee + GitHub 同步）；特性分支用完即合，不留长期分支。
 - 远端：`origin` = Gitee（SSH，日常拉取/推送源），第二 pushurl = GitHub HTTPS ⇒ `git push origin <branch>` 一次推两边；GitHub 只在推 tag 时构建。
-- 发布说明：[docs/RELEASE-NOTES.md](RELEASE-NOTES.md)（v1.0.4 → v1.0.0 倒序合集，原五份独立文件已合并删除）。
+- 发布说明：[docs/RELEASE-NOTES.md](RELEASE-NOTES.md)（v1.1.0 → v1.0.0 倒序合集，原五份独立文件已合并删除）；**v1.1.0 段落 = CI 生成 GitHub Release 正文的来源**（release job 抽当前 tag 段落）。
 
 **工作树（261109 清理批 + 更新中心批，已提交）**
 
@@ -165,10 +166,12 @@
 - **261109 更新中心批（本提交）**：`docs/UPDATE-CENTER.md` + `src/core/update/` + `electron/update/` + `electron/ipc/registerUpdate.ts` + 桌面 `UpdateCenter` UI + Android `UpdatePlugin.kt` + 移动更新中心 UI + CI `scripts/generate-update-manifest.mjs`；新增单测 37 例。
 - **261109 AI 写作批（已合并 master：`53fe678c` → `4ec1b6a4` → `84a6879a`，合并提交 `986e2151`）**：`docs/AI-WRITING.md` + `src/core/aiWriting.ts`（纯逻辑/预算/消息组装 + IPC 载荷类型）+ `electron/aiWritingRepository.ts` + `electron/ipc/registerAiWriting.ts`（通道 176→185）+ `src/features/aiWriting/*`（工作区/侧栏/输入卡/提示词库/文档选择/消息/两个弹窗/回合与上下文模块/转换包装）+ 桌面壳层接入（`desktopTypes` / `DesktopTopBar` / `useDesktopLifecycle` / `App` / `shell.css`）；AI 流式思考内容贯通（`reasoning_content`）；新增单测 42 例（core 10 / 仓库 5 / turn 5 / context 4 / docs 7 / 转换 9 / 既有 AI 2）。
 
-**门禁基线（261109 清理后 + AI 写作批实测）**
+- **261109 日记批（本会话；已合并 master）**：`docs/DIARY.md` + `src/core/diary.ts`（判据单一来源）+ `electron/diaryStore.ts` + `electron/ipc/registerDiary.ts`（通道 185→**186**）+ `src/features/diary/*`（桌面空间页/右键「转为文档」）+ `src/mobile/diary/*`（第 4 tab、日记页、转文档、`diaryNodesFrom`）+ wire `folders[].space` + 两端 `tree_nodes/folders.space` 列（移动 schema 12）+ 便携包搬运 space。独立验证者补 10 例（wire 往返/移动事务），本会话累计新增约 101 例。
+
+**门禁基线（261109 发版前：AI 写作 + 日记合并后实测）**
 
 - `npx tsc --noEmit` = **0 错**。
-- `npx vitest run` = **803 文件（792 passed / 11 skipped）/ 5047 passed / 12 skipped / 0 failed**（AI 写作批 + v1.1 渲染实测；本批新增 47 例）。
+- `npx vitest run` = **818 文件（807 passed / 11 skipped）/ 5148 passed / 12 skipped / 0 failed**（AI 写作 + 日记两批合并后实测；日记批新增 101 例）。
 - `git diff --check` = **0**。
 - `check:bundle`：**mobile-entry 仍超目标（已知红，非本批引入）**。脚本当前冻结为 entry JS gzip ≤66KB、modulepreload ≤34 条、首屏 ≤380KB（`check-arch`）；目标仍是 **60KB / ≤12 条 / 360KB**，瘦身后收紧（§3 P1）。**261109 实测校准**：基线 `f3b2d0c3` 已经是 **74438 gz / 36 链接**（冻结值本身就落后于该 commit）；日记 v1 之后 = **75257 gz / 38 链接**（Δ +819B / +2 条，已把 `DiaryPage` 拆成按需分包、`bridge/diary` 又退回静态 import 以免多出 5 条 preload）。⇒ 真要收口目标值，是一次独立的移动端瘦身专项，别算在日记头上。运行前需先有 `dist` / `dist-mobile` 构建产物。
 - 其它样式/边界/设备门禁按改动范围跑（分层口径见 AGENTS §3#21）；最近一次完整设备记录 = **v1.0.4 发版前**：手机 6 态、平板 6 态、多维表 3 态均重烤后两轮 0 差异。
@@ -215,7 +218,7 @@
 
 **P0（不做就卡住主线）**
 
-- **日记 v1 收尾（261109 遗留）**：① 与 `feat/ai-writing-space` 合并（`App.tsx`/`desktopTypes.ts`/`DesktopTopBar.tsx` 冲突按"两边都保留"手工合）；② ⌘4 并回 `useDesktopLifecycle` 的 ⌘1–3 映射表（现在独立注册在 `App.tsx`）；③ 移动端关闭日记条目后的返回落点仍在「知识库」（沿用既有 `useRouteTransition` 语义，若产品要"回日记页"需单独改）。
+- **日记 v1 收尾（261109 遗留）**：~~① 与 `feat/ai-writing-space` 合并~~ **已合并（v1.1.0）**；② ⌘4 并回 `useDesktopLifecycle` 的 ⌘1–3 映射表（现在独立注册在 `App.tsx`，与 AI 写作 ⌘3 的注册位置分开）；③ 移动端关闭日记条目后的返回落点仍在「知识库」（沿用既有 `useRouteTransition` 语义，若产品要"回日记页"需单独改）；④ 「转为文档」两端目标选择器文案仍是「移动到…/移动到此处」（共享原语，未加 title/confirmLabel 参数）。
 - **日记设备级验收**：移动 `check:mobilesnap` 6 态（**必须先在 `lake_gate` 上重烤基线**——首页 tab 行从 3 个变 4 个属于外壳构成变化）+ 23 屏走查；桌面 `check:stylesnap` 目前**没有"日记空间"这一态**，要纳入需新增 state 并重烤基线。
 - **每批收尾固定动作**：更新 §1 基线与门禁计数 + §3 + §0 批次抬头状态；提交/推送后立刻回写，别让 §0 的「未提交」标记漂移。
 - **下一版发布**（流程见 [docs/RELEASE.md](RELEASE.md)）：发布说明必须写清 ① inkDoc v4：旧端打开只读、手机/平板需重装；② 标签顺序只在设备本地生效（不同步）；③ 标签删除 = 缺席，两端都要升级（旧端仍会把墓碑写回索引）；④ 发布说明统一维护在 [docs/RELEASE-NOTES.md](RELEASE-NOTES.md)。发版前跑全量门禁：手机 6 态 + 平板 6 态 + 多维表 3 态 + 23 屏走查 + `check:windowsweep` + 桌面 42 态（桌面 42 态本机无合成夹具缓存，需有夹具的机器补）。
