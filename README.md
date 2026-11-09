@@ -33,7 +33,7 @@ Local Lakex Notes 是一个自持数据的个人笔记应用：笔记、表格�
 - 画板（Drawnix）与手写板（多页 A4、笔迹/高亮/橡皮、撤销重做；**图片页背景**、编辑态**插入图片/PDF**、手写批注、**导出 PDF**；Android 可从系统分享直接新建并导入 PDF）
 - 小记：独立时间线、标签、预览快路径 + 内核只读兜底、转正式文档（**继承标签**）、单条「保存并同步」
 - 文档标签：属性面板打标签、标签空间（只读聚合 + 标签管理 + 跳转）、侧栏按标签筛选；移动端「标签」一级页（标签空间 + 管理：新建/重命名/合并/删除/拖拽）+ 文档标签查看与移除
-- **导入 / 导出**：Markdown 导入（桌面「+ → 导入 → Markdown…」多选；移动端系统分享 .md 到「默认笔记本」；图片物化、frontmatter/远程图降级）；批量导出默认格式统一为可编辑/同目录——文档 → Markdown 资料包、表格 → CSV、多维表 → CSV、手写板 → PDF、画板 → PDF
+- **导入 / 导出**：桌面「+ → 导入」按类型分项——Markdown / Word（.docx）/ Excel（.xlsx）/ CSV（多选；Markdown 图片物化、frontmatter/远程图降级，Word 转文档，Excel/CSV 转表格）；移动端系统分享仅 Markdown（进「默认笔记本」）；批量导出默认格式统一为可编辑/同目录——文档 → Markdown 资料包、表格 → CSV、多维表 → CSV、手写板 → PDF、画板 → PDF
 - 同步记录：最近「被覆盖 / 他端删除 / 保存时磁盘被改」账本（角标 + 列表 + 一键恢复本地版）
 - 大纲、历史快照、回收站（软删 + 墓碑 + 恢复标记）、附件与图片管理、全文搜索（FTS5）
 - AI 助手：选区浮层 / 顶栏 / 块菜单入口，文本与图片、PDF 文本解析（Key 只在主进程）
@@ -151,7 +151,7 @@ Android（构建 / 安装 / AVD / CDP / 门禁 / 点按口径）见 `docs/MOBILE
 
 ## 测试与门禁
 
-每次改动至少跑（约 25s；全量 vitest 含 perf 门禁，大档 perf 走手动脚本）：
+每次改动至少跑（全量 vitest 含 perf 门禁，大档 perf 走手动脚本）：
 
 ```bash
 npx tsc --noEmit
@@ -168,7 +168,7 @@ npm run check:mobileui
 npm run check:bundle
 ```
 
-视觉与移动端设备门禁按改动范围定点跑（完整口径见 `docs/HANDOFF.md` §3#21、`AGENTS.md` §3#21）。
+视觉与移动端设备门禁按改动范围定点跑（完整口径见 `AGENTS.md` §3#21；当前基线见 `docs/HANDOFF.md` §1）。
 
 ## 构建
 
@@ -188,14 +188,14 @@ bash scripts/android-build.sh --sync           # 构建 debug APK
 bash scripts/android-build.sh --sync --install # 构建并安装到已连接设备
 ```
 
-当前只产出 **debug 签名**的 APK；正式发布需要 release keystore 与 `assembleRelease`（尚未配置）。
+CI 发版产出 `assembleRelease` 的**正式 release keystore 签名** APK（v1.0.2 起：GitHub Secrets 注入 `ANDROID_KEYSTORE_PATH` / `ANDROID_KEYSTORE_PASSWORD` / `ANDROID_KEY_ALIAS` / `ANDROID_KEY_PASSWORD`）；本地注入同一组环境变量后，`assembleRelease` 也能出正式包，未注入时回退 debug 签名。`debug` 变体仍为 `debuggable=true`（供 WebView 调试）。
 
 ## 打包与发布
 
-- 推荐用 **GitHub Actions** 发版：**只有推 tag**（如 `v0.1.2`）才触发打包（普通 push 不构建、不消耗 macOS runner）；自动发布 macOS `.dmg/.zip`、Windows `.exe`、Android `.apk` 到 GitHub Releases；配置 `GITEE_TOKEN` 后同步上传 Gitee 发行版
+- 推荐用 **GitHub Actions** 发版：**只有推 tag**（如 `vX.Y.Z`）才触发打包（普通 push 不构建、不消耗 macOS runner）；自动发布 macOS `.dmg/.zip`、Windows `.exe`、Android `.apk` 到 GitHub Releases；配置 `GITEE_TOKEN` 后同步上传 Gitee 发行版
 - 也可本地打包：`npx vite build && npx electron-builder --mac`（Windows 包建议交给 CI 的 `windows-latest`；Linux target 尚未配置）
 - ⚠️ 构建产物**包含闭源 Lakex 内核**（仓库已 vendored）；公开分发（Release 附件）前请确认你接受相应风险，详见 `NOTICE`
-- 当前为**未签名**构建：macOS 首次打开需右键 → 打开；Windows 会弹 SmartScreen，需「更多信息 → 仍要运行」
+- CI 发版产出的 macOS 包为 **ad-hoc 签名、未公证**（`mac.identity=-`）；首次打开需右键 → 打开；Windows 会弹 SmartScreen，需「更多信息 → 仍要运行」
 - 签名/公证流程与 Actions 发版指南见 `docs/RELEASE.md`；不提供自动更新，下载后手动替换
 
 ## 文档
@@ -210,6 +210,7 @@ bash scripts/android-build.sh --sync --install # 构建并安装到已连接设�
 | [docs/LAKEX-CONTRACT.md](docs/LAKEX-CONTRACT.md) | 闭源 Lakex 内核已核实行为 + 调试速查 |
 | [docs/lakexEditor-developer-docs/](docs/lakexEditor-developer-docs/) | Lakex 内核官方开发者文档离线镜像（API/事件/命令/工具栏/上传，导出自语雀） |
 | [docs/USHEET-UPGRADE.md](docs/USHEET-UPGRADE.md) | Univer 表格触点、升级 playbook、能力路线 |
+| [docs/RELEASE-NOTES.md](docs/RELEASE-NOTES.md) | 发布说明合集（v1.0.4 → v1.0.0；原五份独立说明已合并） |
 | [docs/MOBILE-BITABLE-DINGTALK.md](docs/MOBILE-BITABLE-DINGTALK.md) | 移动端多维表：钉钉实机实测 + 复刻方案与实施记录（含可点的 [样机](docs/mockups/mobile-bitable.html)） |
 | [docs/MOBILE-TECH-STACK.md](docs/MOBILE-TECH-STACK.md) · [docs/MOBILE-DESIGN.md](docs/MOBILE-DESIGN.md) | 移动端架构与设计 |
 | [docs/MOBILE-OPS.md](docs/MOBILE-OPS.md) | **Android 构建 / 安装 / AVD / CDP / 门禁 / 点按口径**（唯一运维手册） |

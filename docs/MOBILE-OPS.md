@@ -35,7 +35,7 @@ export ANDROID_SERIAL=emulator-5554    # 单设备可省略；多设备改成 ad
 
 - 产物：`android/app/build/outputs/apk/debug/app-debug.apk`（**debug 签名 + debuggable=true** ⇒ 才有 WebView 调试；release 变体虽也用 debug keystore 签，但 `debuggable=false`，连不上 CDP）。
 - **`--sync` 是唯一把 web 产物送进 APK 的路径**：改了 `src/mobile/**` 却没加 `--sync` ⇒ 装上去的还是旧 bundle。
-- 正式发布需 release keystore + `assembleRelease`（尚未配置；`npm run check:android-release` 只校验配置项）。
+- 正式发布用 release keystore + `assembleRelease`：**v1.0.2 起 CI 已用正式 release keystore**（GitHub Secrets 注入 `ANDROID_KEYSTORE_PATH` / `ANDROID_KEYSTORE_PASSWORD` / `ANDROID_KEY_ALIAS` / `ANDROID_KEY_PASSWORD`，并校验 APK 非 debug 签名、非 debuggable）；本地注入同一组环境变量也可出正式包（未注入时回退 debug 签名）。`npm run check:android-release` 只做静态配置校验。
 - **装完必须重跑 `emu-cdp.sh`**（socket 名带 App PID，见 §3）。
 
 ## 3. 运行与调试（模拟器 / 真机）
