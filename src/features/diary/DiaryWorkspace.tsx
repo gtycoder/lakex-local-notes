@@ -181,7 +181,7 @@ export function DiaryWorkspace(props: DiaryWorkspaceProps) {
       <SplitPane
         ariaLabel="调整日记目录宽度"
         storageKey="diary-rail"
-        minWidth={220}
+        minWidth={200}
         maxWidth={560}
         minRight={420}
         className="diary-split"

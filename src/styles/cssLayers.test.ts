@@ -88,7 +88,8 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "components/app/syncConflictsPanel.css": { decls: 87, dupGroups: 0 },   // 261107：补登记
   "features/editor/aiAssistantCard.css": { decls: 10, dupGroups: 0 },   // 261107：补登记
   "features/tags/tags.css": { decls: 217, dupGroups: 0 },   // 261107：补登记
-  "features/diary/diary.css": { decls: 143, dupGroups: 0 },   // 261109 实测：日记空间版面（左 280 年月栏 + 主区容器 + 空态），无重复组、无 !important
+  // 261110 +1 = .diary-dir 的 min-width:0（flex 项默认 min-width:auto 会被内容顶住，拖拽无效）。
+  "features/diary/diary.css": { decls: 144, dupGroups: 0 },   // 261109 实测：日记空间版面（左 280 年月栏 + 主区容器 + 空态），无重复组、无 !important
   // +12（261109 七改）：左栏可拖分栏（容器/分隔条/拖拽态 3）+ 按日期确认行（4）+ 日记本图标位（2）+ 同一天多篇时刻列（3）；
   // 分隔条视觉复用 kit 的 .ln-split-handle，只有布局归属，属新增交互形态非覆盖。
   // +13（261109 六改）：条目选中/hover 状态（之前被 background:transparent 盖掉，点了看不出选中）+ 同日多篇的时刻列 .diary-entry__time + 「按日期新建」浮层内距；
@@ -170,7 +171,8 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "features/ai/aiDialogParts.css": { decls: 87, dupGroups: 0 },
   // 261109 七改：+5 = 左栏可拖（.aiw 从 grid 改 flex 净 +2、.aiw-handle 2、.aiw.is-resizing 1）；分隔条视觉复用 kit。
   // 261110：+2 = .aiw 补回 grid-column（.workspace-view 是 display:contents ⇒ .aiw 是 app-shell 网格子项）+ .aiw-main flex 吃余宽。
-  "features/aiWriting/aiWriting.css": { decls: 444, dupGroups: 0 },
+  // 261110 +2 = .aiw-side 的 min-width:0 + overflow:hidden（同上：历史标题把左栏顶到 342px ⇒ "拖不小"）。
+  "features/aiWriting/aiWriting.css": { decls: 446, dupGroups: 0 },
   "features/aiWriting/aiAnswerViewer.css": { decls: 21, dupGroups: 0 },   // 261109 新建：AI 答案内核只读渲染（未分层压内核 px 标题/字号；与 noteDocPreview.css 同档）   // 261109 新建：AI 写作空间（整页两栏 / 历史行 / 输入卡 / 思考块 / 消息操作条 / 提示词库 / 文档选择 / 弹窗局部）——合法新增，无覆盖   // 261107 视觉收敛：AI 面板全部布局从 selectionToolbar.css 归并到本文件（单一来源；表面/输入/按钮复用原语）。   // 261021 P1：+9 = 「附加当前文档全文」行（doc 行 flex/wrap/gap/margin 5 条 + label 2 + hint 2；开关本身复用 .ln-switch，无覆盖）。P0：+2 = 预设扩到 7 条后窄窗换行。261013：新增独立 progress 行 5 声明 + reduced-motion 1 声明；非覆盖/重复回涨。
   "styles/dialog.css": { decls: 242, dupGroups: 8 }, // 261105：+3 = .name-prompt-dialog__error；+8 = 打标签弹窗（说明行/错误行/标题行对齐，令牌色；宽度选择器与 rename 并列复用） // 261105：+3 = .name-prompt-dialog__error（弹窗内错误文本：margin/color/font-size，令牌；与重命名同族弹窗共用尺寸选择器，不另写一套） // 261105：管理属性布局就地修改，并删去重复的窄屏 flex-wrap，按当前扫描收紧。   // 261017：+34 = S3 配置迁移弹窗（尺寸 + 多行迁移码输入/提示/错误/动作行；表面与按钮全部复用 .ln-dialog / .ln-btn，无覆盖）  |  +7 = .note-info-history-viewer 容器（260916 W-10：历史内联预览改只读 viewer，替代裸 dangerouslySetInnerHTML；合法新增非覆盖回涨）
   "styles/document-status.css": { decls: 94, dupGroups: 2 },   // 260930：+17 = 状态栏锁标识改可点（button 形态 + hover/focus）+ 解锁浮层内容类   // 260923 W1-L2：-8 = 被 shell 层 chrome.css 同名选择器覆盖；260926：+1 = 画板状态栏右缘对齐画板自己的 20px 栅格（[data-doc-kind="board"] 的 right；合法新增非覆盖回涨）

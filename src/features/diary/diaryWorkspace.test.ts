@@ -52,9 +52,9 @@ describe("日记空间接线", () => {
   });
 
   it("②i 两个空间的分栏最小宽：日记 220（保证头部一排）、AI 写作 120", () => {
-    expect(WORKSPACE).toContain("minWidth={220}");
+    expect(WORKSPACE).toContain("minWidth={200}");
     const AIW = read("../aiWriting/AiWritingWorkspace.tsx");
-    expect(AIW).toContain("minWidth={120}");
+    expect(AIW).toContain("minWidth={200}");
   });
   it("②e 「今天」必须跨天刷新：点击时现算 + 定时/回前台同步（debug 版过夜不能拿到昨天）", () => {
     expect(WORKSPACE).toContain("onCreateEntry(formatDiaryDateKey())");

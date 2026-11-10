@@ -64,7 +64,23 @@ export class NoteContentRepository {
     // 只在调用方给了 baseHash 时才计算（不给 = 旧行为，逐字节一致）。
     if (baseHash !== undefined) {
       const diskHash = noteBodyHash(currentContent);
-      if (diskHash !== baseHash) return { diskHash };
+      if (diskHash !== baseHash) {
+        // **竞态自愈（261110 现场误报）**：磁盘上已经就是"我们正要写的内容"
+        // ⇒ 只是 baseHash 旧了（上一次保存/同步/他线程先落了同一份），不是"他处编辑过"。
+        // 这种情况不弹冲突、也不重复写正文，只补派生缓存（与「无变化早退」同路径）。
+        if (noteBodyHash(content) === diskHash) {
+          if (caches) {
+            const transaction = this.deps.db.transaction(() => {
+              this.deps.db.prepare("UPDATE notes SET md_cache=?,text_cache=? WHERE id=? AND deleted_at IS NULL")
+                .run(caches.markdown ?? null, caches.plain ?? null, noteId);
+              this.deps.upsertSearch(noteId, title, caches.plain ?? "");
+            });
+            transaction();
+          }
+          return null;
+        }
+        return { diskHash };
+      }
     }
 
     const updatedAt = new Date().toISOString();

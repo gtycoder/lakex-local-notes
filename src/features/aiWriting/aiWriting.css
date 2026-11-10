@@ -11,7 +11,9 @@
 .aiw { grid-column: 1 / -1; display: flex; flex: 1 1 auto; min-width: 0; min-height: 0; height: 100%; background: var(--lake-bg-panel); }
 
 /* ---------------- 左栏 ---------------- */
-.aiw-side { display: flex; flex: 0 0 var(--split-left, 288px); flex-direction: column; min-height: 0; padding: var(--lake-space-xl) var(--lake-space-lg) var(--lake-space-lg); border-right: 0.5px solid var(--lake-border-2); background: var(--lake-bg-subtle); }
+/* ⚠️ min-width: 0 必需：flex 项默认 min-width:auto = 内容最小宽，历史标题会把左栏撑到 ~342px，
+   于是 `flex-basis: var(--split-left)` 被顶住 ⇒ 拖拽 clamp 生效但视觉上"完全缩不小"（261110 现场）。 */
+.aiw-side { display: flex; flex: 0 0 var(--split-left, 288px); flex-direction: column; min-width: 0; overflow: hidden; min-height: 0; padding: var(--lake-space-xl) var(--lake-space-lg) var(--lake-space-lg); border-right: 0.5px solid var(--lake-border-2); background: var(--lake-bg-subtle); }
 .aiw-side__head { padding: 0 var(--lake-space-sm) var(--lake-space-md); }
 .aiw-side__title { margin: 0; font-size: var(--lake-font-size-title); font-weight: var(--lake-font-weight-semibold); color: var(--lake-text-1); line-height: var(--lake-line-height-tight); }
 .aiw-new { display: flex; align-items: center; justify-content: center; gap: var(--lake-space-sm); height: var(--lake-ctl-h-settings-sm); margin: 0 var(--lake-space-sm) var(--lake-space-md); border: 0.5px solid var(--lake-ctl-border); border-radius: var(--lake-radius-sm); background: var(--lake-bg-panel); color: var(--lake-text-1); font-size: var(--lake-font-size-small); font-weight: var(--lake-font-weight-medium); cursor: pointer; }

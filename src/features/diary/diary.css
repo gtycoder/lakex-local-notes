@@ -20,6 +20,8 @@
   display: flex;
   flex: none;
   flex-direction: column;
+  /* 与 .aiw-side 同理：flex 项默认 min-width:auto 会被内容顶住，拖拽就白拖。 */
+  min-width: 0;
   /* SplitPane 拖过之后 --split-left 是像素值；没拖过 = 280 默认 */
   width: var(--split-left, 280px);
   min-height: 0;

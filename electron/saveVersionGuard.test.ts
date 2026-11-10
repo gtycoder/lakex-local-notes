@@ -8,7 +8,7 @@ import { Store } from "./store.js";
 import { createSafeStorageSecretCipher } from "./secretCipher.js";
 import { noteBodyHash } from "./noteBodyHash.js";
 import { noteBodyRelativePath } from "../src/core/noteBodyPaths.js";
-import { SAVE_CONFLICT_CODE } from "../src/lib/types.js";
+import { SAVE_CONFLICT_CODE, isSaveConflict } from "../src/lib/types.js";
 
 // ===== electron mock（Store 模块加载即需要） =====
 const electronMock = vi.hoisted(() => {
@@ -98,6 +98,20 @@ describe("保存版本守卫（Batch4-D：外部/他端改过正文时不静默�
     expect(fs.readFileSync(bodyPath(note.id), "utf8")).toBe("<p>same</p>");
   });
 
+
+  it("竞态自愈：磁盘已是同一份内容 ⇒ 不判冲突、不重复写盘（261110 现场误报）", () => {
+    const note = store.createNote("竞态");
+    const same = "<p>同一份正文</p>";
+    store.saveNote(note.id, "竞态", same);
+    const before = fs.readFileSync(bodyPath(note.id), "utf8");
+    // 渲染层拿的是**过期** baseHash（另一次保存/同步已先落盘同一份），内容并未被他处改过
+    const staleBaseHash = noteBodyHash("<p>旧版本</p>");
+    const result = store.saveNoteVersioned(note.id, "竞态", same, undefined, staleBaseHash);
+    // 成功 = 返回 NoteDocument（不是冲突对象）
+    expect(isSaveConflict(result)).toBe(false);
+    expect("contentHash" in result && result.contentHash).toBe(noteBodyHash(same));
+    expect(fs.readFileSync(bodyPath(note.id), "utf8")).toBe(before);
+  });
   it("未提供 baseHash ⇒ 旧行为（无条件写，逐字节一致回归）", () => {
     const note = store.createNote("守卫");
     store.saveNote(note.id, "守卫", "<p>v1</p>");
