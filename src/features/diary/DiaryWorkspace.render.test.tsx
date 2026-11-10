@@ -66,6 +66,7 @@ function props(overrides: Partial<DiaryWorkspaceProps> = {}): DiaryWorkspaceProp
     onConvertEntry: vi.fn(),
     onConvertToQuickNote: vi.fn(),
     onDeleteEntry: vi.fn(),
+    onUnmarkNotebook: vi.fn(),
     onCreateEntry: vi.fn(),
     onOpenEntry: vi.fn(),
     onWriteToday: vi.fn(),
@@ -170,11 +171,44 @@ describe("日记空间（桌面）", () => {
     expect(targetRow).toBeTruthy();
     act(() => targetRow!.click());
 
-    const confirm = [...document.body.querySelectorAll<HTMLButtonElement>("button")]
-      .find((el) => (el.textContent ?? "").trim() === "移动到此处");
-    expect(confirm).toBeTruthy();
+    // 转文档文案 = 调用方传的 title/description/confirmLabel（不再显示「移动到…/移动到此处」）。
+    expect(document.body.querySelector(".ln-dialog__title")?.textContent).toBe("转为文档");
+    expect(document.body.textContent).toContain("选择目标笔记本");
+    const confirm = [...document.body.querySelectorAll<HTMLButtonElement>(".ln-dialog__actions button")]
+      .find((el) => (el.textContent ?? "").trim() === "转为文档");
+    expect(confirm, "确认按钮 = 转为文档，不是「移动到此处」").toBeTruthy();
     act(() => confirm!.click());
     expect(onConvertEntry).toHaveBeenCalledWith("e-old", "nb-doc");
+  });
+
+  it("右键「取消日记标记（整本）」：二次确认说明文档会保留，确认后才交给宿主（取消则不动）", () => {
+    const onUnmarkNotebook = vi.fn();
+    render({ treeNodes: tree(true), onUnmarkNotebook });
+    const entry = [...document.body.querySelectorAll<HTMLElement>(".diary-entry")]
+      .find((el) => (el.textContent ?? "").includes("2025-12-31"));
+    act(() => { entry!.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 20, clientY: 20 })); });
+    const item = [...document.body.querySelectorAll<HTMLElement>("[role='menuitem']")]
+      .find((el) => (el.textContent ?? "").trim() === "取消日记标记（整本）");
+    expect(item, "菜单项要写清是整本（否则会被当成只对这条生效）").toBeTruthy();
+    act(() => item!.click());
+
+    const dialog = document.body.querySelector<HTMLElement>(".confirm-dialog");
+    expect(dialog).toBeTruthy();
+    expect(dialog!.textContent).toContain("笔记本与其中的文档都会保留");
+    // 先点「取消」：不触发动作
+    const cancel = [...dialog!.querySelectorAll<HTMLButtonElement>("button")].find((el) => (el.textContent ?? "").trim() === "取消")!;
+    act(() => cancel.click());
+    expect(onUnmarkNotebook).not.toHaveBeenCalled();
+    expect(document.body.querySelector(".confirm-dialog")).toBeNull();
+
+    // 再次打开并确认
+    act(() => { entry!.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 20, clientY: 20 })); });
+    act(() => ([...document.body.querySelectorAll<HTMLElement>("[role='menuitem']")]
+      .find((el) => (el.textContent ?? "").trim() === "取消日记标记（整本）")!).click());
+    const confirmDialog = document.body.querySelector<HTMLElement>(".confirm-dialog")!;
+    const confirm = [...confirmDialog.querySelectorAll<HTMLButtonElement>("button")].find((el) => (el.textContent ?? "").trim() === "取消日记标记")!;
+    act(() => confirm.click());
+    expect(onUnmarkNotebook).toHaveBeenCalledTimes(1);
   });
 
   it("加号 = 今天新建；日历 = 选任意日期新建（一天多篇，走 mode:new）", () => {
@@ -251,5 +285,16 @@ describe("日记空间（桌面）", () => {
   it("活动笔记是日记条目但标签还没打开 ⇒ 仍显示空态（不渲染无正文的编辑器）", () => {
     render({ activeNoteId: "note-today", tabs: [] });
     expect(allText()).toContain("今天还没有写");
+  });
+
+  it("取消日记标记后（树里不再有 space=diary）⇒ 左栏年/月树立即清空，落到「还没有日记本」", () => {
+    const merged = render({ treeNodes: tree(true) });
+    expect(allText()).toContain(todayYear);
+    expect(allText()).toContain("12 月");
+    // 同一组件、只换树（模拟取消标记后 refreshTree 回来的数据）：左栏必须立刻没有年/月与条目。
+    act(() => { root.render(createElement(DiaryWorkspace, { ...merged, treeNodes: tree(false, false) })); });
+    expect(allText()).not.toContain(todayYear);
+    expect(allText()).not.toContain("12 月");
+    expect(allText()).toContain("还没有日记本");
   });
 });

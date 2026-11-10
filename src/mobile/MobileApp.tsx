@@ -8,9 +8,10 @@ import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } fro
 import { bridge } from "./bridge";
 import { resetAssetPerf, snapshotAssetPerf } from "./native/assetPerf";
 import type { LocalNoteSummary } from "./data/noteRepository";
-import { isGoneNote, TRASH_NOTEBOOK_ID } from "../core/syncDecisions";
+import { isGoneNote } from "../core/syncDecisions";
 import { diaryEntries, diaryNotebooks } from "../core/diary.js";
 import { diaryNodesFrom } from "./diary/diaryNodes.js";
+import { libraryNotebooks } from "./notebook/libraryNotebooks";
 import { setNoteRefHost } from "../features/editor/noteRef";
 import type { TreeNode } from "../lib/types";
 import { HomePage, type MobileQuickNote } from "./home/HomePage";
@@ -600,15 +601,11 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
   }, [phase]);
 
   /**
-   * 知识库列表 = **不含日记本**（261109，与桌面同口径：日记是独立空间，不是知识库里的一本）。
-   * 判据取 core.diary.diaryNotebooks（不在这里重写"什么算日记本"）；渲染层过滤，存储不改。
+   * 知识库列表 = **文档空间的笔记本**（261109，与桌面同口径：日记是独立空间，不是知识库里的一本）。
+   * 判据已抽到 `./notebook/libraryNotebooks`（core 的 withoutDiaryNotebook + TRASH_NOTEBOOK_ID 组合；
+   * 测试见 libraryNotebooks.test.ts）。只过滤渲染，不动存储/同步。
    */
-  const notebooks = useMemo(() => {
-    const diaryIds = new Set(diaryNotebooks(treeNodes).map((node) => node.id));
-    // 261110：知识库也不显示「回收站」笔记本（261026 起软删 = parentId 指向它，桌面侧同样按
-    // core 的 TRASH_NOTEBOOK_ID 判据过滤，见 features/aiWriting/aiWritingDocs）。只过滤渲染，不动存储/同步。
-    return treeNodes.filter((n) => n.nodeType === "notebook" && !diaryIds.has(n.id) && n.id !== TRASH_NOTEBOOK_ID);
-  }, [treeNodes]);
+  const notebooks = useMemo(() => libraryNotebooks(treeNodes), [treeNodes]);
   /**
    * 日记判据的输入 = **目录 + 文档混合视图**：treeNodes 只有 folders，日记条目在 notes 表里
    * （只喂 folders ⇒ 日记页空、日记内搜索恒 0 条、转文档找不到条目）。投影函数在 diary/diaryNodes.ts。

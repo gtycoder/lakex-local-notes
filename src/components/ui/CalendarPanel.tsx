@@ -64,8 +64,8 @@ export function CalendarPanel({ value, onPick, onClear }: CalendarPanelProps) {
           ))}
       </div>
       <div className="ln-calendar__foot">
-        <button type="button" onClick={() => onPick(localDateString(new Date()))}>今天</button>
-        {onClear && <button type="button" onClick={onClear}>清除</button>}
+        <button type="button" className="ln-btn ln-btn--link ln-btn--compact" onClick={() => onPick(localDateString(new Date()))}>今天</button>
+        {onClear && <button type="button" className="ln-btn ln-btn--link ln-btn--compact" onClick={onClear}>清除</button>}
       </div>
     </div>
   );

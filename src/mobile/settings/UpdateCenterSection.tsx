@@ -138,7 +138,7 @@ export function UpdateCenterSection({ appInfo }: { appInfo: AppInfo | null }) {
         >
           <button
             type="button"
-            className="mb-btn mb-btn--settings mb-btn--sm"
+            className="mb-btn mb-btn--outlined mb-btn--sm"
             disabled={!snapshot.native || snapshot.status === "checking" || snapshot.status === "downloading"}
             onClick={() => void checkForUpdates({ manual: true })}
           >
@@ -190,7 +190,7 @@ export function UpdateCenterSection({ appInfo }: { appInfo: AppInfo | null }) {
           icon={<ScrollText size={16} />}
           tone="#5b6472"
         >
-          <button type="button" className="mb-btn mb-btn--settings mb-btn--sm" onClick={() => setNotesSheetOpen(true)}>
+          <button type="button" className="mb-btn mb-btn--outlined mb-btn--sm" onClick={() => setNotesSheetOpen(true)}>
             查看
           </button>
         </Item>

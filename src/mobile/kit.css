@@ -20,29 +20,53 @@
 .mb-glass { --mb-blur: var(--mb-blur-float); -webkit-backdrop-filter: var(--mb-blur); backdrop-filter: var(--mb-blur); }
 .mb-glass--bar { --mb-blur: var(--mb-blur-bar); }
 
-/* ── 按钮（.mb-btn；主/次/危险/幽灵 + 三档高度）──────────────────────── */
+/* ── 按钮（.mb-btn；261110 对齐桌面 4 语义 + 危险 + 链接模型，移动端独立实现）──────
+ *   层级（每层只回答「这动作有多重要」）：
+ *   L1 primary   实心墨蓝（主操作：保存 / 确认 / 新建）
+ *   L2 outlined  主题色框 + 主题色字（常用操作；原设置页专用 --settings 收敛到这里）
+ *   L3 secondary 中性框 + 次要字色（一般操作）
+ *   L4 ghost     无框次要灰字（取消 / 关闭 / 工具）· L4b link 无框主题色字（跳转 / 引导）
+ *   L5 danger    红字 + 40% 红框（删除 / 清空）· --danger-text = 纯红字（可叠加 --secondary 保留中性框）
+ *   尺寸：默认 44（--mb-ctl-h）/ --sm 36（--mb-ctl-h-sm）—— 触屏目标沿用旧值，不对齐桌面 27/22。
+ *   状态：default / press（:active，触屏无 hover）/ disabled / focus-visible / is-selected。
+ *   基座 = L4 口径（裸 .mb-btn = 无框次要灰字）：任何裸用也有完整状态，不再「点了没反应」。
+ *   261110：删 --settings 两条（23 处调用迁 --outlined；--settings--danger 等价迁 --danger）。
+ *   声明数增加 = 补齐 L2 / L4b / 六态 / 危险两形态的原语能力，不是业务层叠覆盖。
+ */
 .mb-btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   min-height: var(--mb-ctl-h); padding: 0 var(--mb-page-pad);
   border: .5px solid transparent; border-radius: var(--mb-radius);
-  background: transparent; color: var(--lake-text-1);
+  background: transparent; color: var(--lake-text-2);
   font-family: inherit; font-size: var(--lake-font-size-body); font-weight: var(--lake-font-weight-medium);
   line-height: var(--lake-line-height-tight); white-space: nowrap;
   cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation;
 }
 .mb-btn:active:not(:disabled) { background: var(--lake-bg-press); }
+/* 焦点环：与桌面 kit 同口径（2px 主题色 + offset 令牌）；全局 base.css 的按钮环是兜底。 */
+.mb-btn:focus-visible { outline: var(--lake-focus-ring-width) solid var(--lake-accent); outline-offset: var(--lake-focus-ring-offset); }
 .mb-btn:disabled { opacity: var(--lake-disabled-opacity); cursor: default; }
+/* L1 主操作：实心墨蓝 + 白字。 */
 .mb-btn--primary { background: var(--mb-accent-ink); border-color: transparent; color: var(--lake-text-on-accent); }
 .mb-btn--primary:active:not(:disabled) { background: var(--lake-accent-ink-press); }
-.mb-btn--secondary { border-color: var(--lake-border-strong); }
-.mb-btn--ghost { padding: 0 10px; }
-/* 261110：设置页专用动作按钮（主题色描边 + 透明底，与桌面 .ln-btn--settings 同语义；
- * 仅设置页使用，确认/重命名等对话框仍用 primary 实心）。 */
-.mb-btn--settings { color: var(--lake-accent-text); border-color: var(--lake-accent); }
-.mb-btn--settings.mb-btn--danger { color: var(--lake-status-error); border-color: color-mix(in srgb, var(--lake-status-error) 45%, transparent); }
-.mb-btn--danger { color: var(--lake-status-error); }
-/* 危险主按钮（确认框的「删除」）：实心 error 底 + on-accent 字（与桌面 kit 的 --danger 描边风格分叉） */
+/* L2 常用：主题色框 + 主题色字（不填色）。 */
+.mb-btn--outlined { border-color: var(--lake-accent); color: var(--lake-accent-text); }
+/* L3 一般：中性框 + 次要字色。 */
+.mb-btn--secondary { border-color: var(--lake-border-strong); color: var(--lake-text-2); }
+/* L4 无框：视觉 = 基座，横向内距更紧（沿用旧值）。 */
+.mb-btn--ghost { border-color: transparent; color: var(--lake-text-2); padding: 0 10px; }
+/* L4b 链接：无框 + 主题色字（跳转 / 引导，不当成「次要灰字」）。 */
+.mb-btn--link { border-color: transparent; color: var(--lake-accent-text); }
+/* L5 危险：红字 + 40% 红框（删除 / 清空）。 */
+.mb-btn--danger { color: var(--lake-status-error); border-color: color-mix(in srgb, var(--lake-status-error) 40%, transparent); }
+.mb-btn--danger:active:not(:disabled) { background: var(--lake-status-error-soft); }
+/* 纯红字（无框危险动作）；叠加 --secondary 时保留中性框、只换字色。 */
+.mb-btn--danger-text { color: var(--lake-status-error); }
+/* 破坏性主按钮（确认框的「删除」）：实心 error 底 + on-accent 字（既有强调，不是第五档语义）。 */
 .mb-btn--primary.mb-btn--danger { background: var(--lake-status-error); border-color: transparent; color: var(--lake-text-on-accent); }
+.mb-btn--primary.mb-btn--danger:active:not(:disabled) { background: var(--lake-status-error-soft); border-color: var(--lake-status-error); color: var(--lake-status-error); }
+/* 选中/切换态：只经选中语义三件套，不给某一层另造视觉。 */
+.mb-btn--secondary.is-selected, .mb-btn--outlined.is-selected, .mb-btn--ghost.is-selected { color: var(--lake-fg-selected); background: var(--lake-bg-selected); border-color: var(--lake-accent); font-weight: var(--lake-font-weight-semibold); }
 .mb-btn--sm { min-height: var(--mb-ctl-h-sm); padding: 0 12px; font-size: var(--lake-font-size-small); }
 .mb-btn--block { display: flex; width: 100%; }
 .mb-btn > svg, .mb-iconbtn > svg, .mb-segment__item > svg { display: block; flex-shrink: 0; }

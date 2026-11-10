@@ -30,7 +30,7 @@ function render(selection: TagSelection = EMPTY_TAG_SELECTION, props: Partial<{ 
   act(() => root.render(createElement(SidebarTagFilter, { tags: props.tags ?? tags, selection, onChange })));
   return onChange;
 }
-const chips = (): HTMLButtonElement[] => [...document.body.querySelectorAll<HTMLButtonElement>("button.quick-note-tag")];
+const chips = (): HTMLButtonElement[] => [...document.body.querySelectorAll<HTMLButtonElement>("button.ln-chip")];
 const chip = (label: string): HTMLButtonElement => {
   const found = chips().find((btn) => (btn.textContent ?? "").includes(label));
   if (!found) throw new Error("找不到标签 chip：" + label);
@@ -61,9 +61,23 @@ describe("SidebarTagFilter（并入原 Filter 的标签段）", () => {
     const onChange = render({ include: ["t1"], exclude: [] });
     const rows = [...document.body.querySelectorAll<HTMLElement>(".sidebar-tag-filter__row")];
     const excludeRow = rows[1]!;
-    const target = [...excludeRow.querySelectorAll<HTMLButtonElement>("button.quick-note-tag")].find((btn) => (btn.textContent ?? "").includes("灵感"))!;
+    const target = [...excludeRow.querySelectorAll<HTMLButtonElement>("button.ln-chip")].find((btn) => (btn.textContent ?? "").includes("灵感"))!;
     act(() => target.click());
     expect(onChange).toHaveBeenLastCalledWith({ include: [], exclude: ["t1"] });
+  });
+
+  it("chips 已迁 kit 原语：类名只含 ln-*（261110 第二批）", () => {
+    render({ include: ["t1"], exclude: ["t2"] });
+    for (const btn of chips()) {
+      const classes = (btn.className || "").split(/\s+/).filter(Boolean);
+      expect(classes.every((name) => name.startsWith("ln-") || name.startsWith("is-"))).toBe(true);
+    }
+    // 排除档用危险变体；清除 = ln-btn--link
+    const excludeRow = document.body.querySelectorAll<HTMLElement>(".sidebar-tag-filter__row")[1]!;
+    const excludeChip = [...excludeRow.querySelectorAll<HTMLButtonElement>("button.ln-chip")].find((b) => (b.textContent ?? "").includes("项目"))!;
+    expect(excludeChip.className).toContain("ln-chip--danger");
+    const clear = document.body.querySelector<HTMLButtonElement>('button[aria-label="清除标签筛选"]')!;
+    expect(clear.className).toContain("ln-btn--link");
   });
 
   it("生效中显示摘要与清除；aria-pressed 标出选中态", () => {
@@ -77,6 +91,6 @@ describe("SidebarTagFilter（并入原 Filter 的标签段）", () => {
   it("空目录：给可读提示（不再是隐形图标）", () => {
     render(EMPTY_TAG_SELECTION, { tags: [] });
     expect(document.body.textContent).toContain("还没有标签");
-    expect(document.body.querySelectorAll(".quick-note-tag")).toHaveLength(0);
+    expect(document.body.querySelectorAll(".ln-chip")).toHaveLength(0);
   });
 });

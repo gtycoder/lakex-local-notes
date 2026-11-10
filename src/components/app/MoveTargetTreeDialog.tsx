@@ -26,6 +26,12 @@ export interface MoveTargetTreeDialogProps {
   movingIds: readonly string[];
   /** 移动项当前父级（同父级批量时给；不同父级 = null）。 */
   currentParentId: string | null;
+  /** 弹窗标题（默认「移动到…」；「转为文档」流程传自己的动作名，别让共享原语替业务说话）。 */
+  title?: string;
+  /** 主按钮文案（默认「移动到此处」；同 title，语义由调用方给）。 */
+  confirmLabel?: string;
+  /** 正文里的一句说明（可选；不传 = 不显示）。 */
+  description?: string;
   busy?: boolean;
   error?: string | null;
   onConfirm(parentId: string): void;
@@ -48,7 +54,9 @@ function highlightTitle(title: string, query: string) {
 }
 
 export function MoveTargetTreeDialog({
-  open, nodes, movingIds, currentParentId, busy = false, error = null, onConfirm, onClose,
+  open, nodes, movingIds, currentParentId,
+  title = "移动到…", confirmLabel = "移动到此处", description,
+  busy = false, error = null, onConfirm, onClose,
 }: MoveTargetTreeDialogProps) {
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
@@ -115,9 +123,10 @@ export function MoveTargetTreeDialog({
   };
 
   return (
-    <Dialog open onDismiss={() => { if (!busy) onClose(); }} label="移动到…" className="move-target-tree-dialog">
-      <div className="ln-dialog__head"><span className="ln-dialog__title">移动到…</span></div>
+    <Dialog open onDismiss={() => { if (!busy) onClose(); }} label={title} className="move-target-tree-dialog">
+      <div className="ln-dialog__head"><span className="ln-dialog__title">{title}</span></div>
       <div className="ln-dialog__body" onKeyDown={onBodyKeyDown}>
+        {description && <p className="move-target-tree-dialog__hint">{description}</p>}
         <span className="ln-input ln-input--search move-target-tree-dialog__search">
           <Search size={14} className="ln-input__icon" aria-hidden="true" />
           <input
@@ -178,7 +187,7 @@ export function MoveTargetTreeDialog({
       <div className="ln-dialog__actions">
         <button type="button" className="ln-btn ln-btn--ghost" onClick={onClose} disabled={busy}>取消</button>
         <button type="button" className="ln-btn ln-btn--primary" disabled={!canConfirm} onClick={() => { if (selected) onConfirm(selected); }}>
-          {busy ? "处理中…" : "移动到此处"}
+          {busy ? "处理中…" : confirmLabel}
         </button>
       </div>
     </Dialog>

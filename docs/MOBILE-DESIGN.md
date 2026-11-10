@@ -314,7 +314,7 @@ Toast        .mb-toast-host > .mb-toast[--error] > (.mb-toast__text, .mb-toast__
 
 原语库 = `src/mobile/kit.css`（`mb-*`）+ `src/mobile/floating.css`。清单：
 
-`mb-btn`（--primary/--secondary/--ghost/--danger、--lg/--sm/--block）· `mb-iconbtn`（--compact）·
+`mb-btn`（**4 语义 + 危险 + 链接**：--primary/--outlined/--secondary/--ghost + --danger/--danger-text + --link；默认 44 / --sm 36 / --block；default/press/disabled/focus-visible/is-selected 六态；261110 与桌面同模型、独立实现，原 `--settings` 已收敛为 `--outlined`；触屏几何沿用 44/36，不对齐桌面 27/22）· `mb-iconbtn`（--compact）·
 `mb-row`（--two-line、__icon/__main/__title/__sub/__meta/__chevron/__action/__actions、.is-selected）·
 `mb-list`/`mb-list-item`（__text/__meta）· `mb-input`（--num）· `mb-select` · `mb-tag`(--pending/--ok/--error) ·
 `mb-segment`/__item · `mb-chip`/`mb-chip-row`（选项胶囊：字段类型/筛选值/多选值；261030 把 bitable 并存的 `.mbt-feditor__choice`/`.mbt-chip`/`.mbt-form-chip` 三套收敛成这一件）· `mb-card`（__head/__body）· `mb-form__desc` · `mb-menu-note`/`mb-menu-head-action` ·

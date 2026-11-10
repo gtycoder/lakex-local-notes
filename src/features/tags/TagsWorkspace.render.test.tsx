@@ -246,6 +246,20 @@ describe("TagsWorkspace（标签空间）", () => {
     expect(menuItem("合并到…").disabled).toBe(true);
   });
 
+  it("行主区 = kit 的 .ln-row__main--row（261110 第二批）：父行仍负责 hover/选中", () => {
+    render();
+    const rowMain = document.body.querySelector<HTMLButtonElement>(".tags-dir__row .tags-dir__select")!;
+    expect(rowMain).not.toBeNull();
+    expect(rowMain.className).toContain("ln-row__main");
+    expect(rowMain.className).toContain("ln-row__main--row");
+    act(() => byText("灵感")!.closest("button")!.click());
+    const aggregateMain = document.body.querySelector<HTMLButtonElement>(".tags-aggregate__row .tags-aggregate__open")!;
+    expect(aggregateMain.className).toContain("ln-row__main");
+    // 父行 = ln-row（选中态仍由父行 is-selected 提供）
+    expect(document.body.querySelector(".tags-aggregate__row")!.className).toContain("ln-row");
+    expect(document.querySelector(".tags-dir__row.is-selected")).not.toBeNull();
+  });
+
   it("拖拽排序：把后一个拖到前一个之前 ⇒ onReorderTags", () => {
     const merged = render();
     const rows = [...document.body.querySelectorAll<HTMLElement>(".tags-dir__row")];

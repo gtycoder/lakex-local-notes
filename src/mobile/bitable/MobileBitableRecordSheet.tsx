@@ -253,7 +253,7 @@ export function MobileBitableRecordSheet({ noteId, table, fields, record, ctx, o
         })}
       </div>
       <div className="mbt-record-actions">
-        <button type="button" className="mb-btn mb-btn--danger mb-btn--block" onClick={onDelete}>删除记录</button>
+        <button type="button" className="mb-btn mb-btn--danger-text mb-btn--block" onClick={onDelete}>删除记录</button>
       </div>
     </MobileSheet>
   );

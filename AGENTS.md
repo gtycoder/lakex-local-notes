@@ -1,144 +1,116 @@
-# LakexLocalNotes Electron — 项目记忆（AGENTS.md）
+# LakexLocalNotes — 项目长期记忆（AGENTS.md）
 
-> 本项目的**长期记忆**，每次会话自动加载。接手顺序 **README → docs/HANDOFF.md → AGENTS.md**：README 看概览，HANDOFF 看当前状态/待办/坑，本文看长期红线与机制。
-> **本文只写长期内容**：分支名、commit、测试计数、当前焦点等易过期事实一律进 `docs/HANDOFF.md`。
-> **硬约束：本文不得超过 64KB 指令预算**（超了尾部会被截断 ⇒ §8 直接看不见）。新增内容前先删等量旧内容，**不要把 HANDOFF 该装的东西搬进来**。
+> 每次会话自动加载。接手顺序 **README → docs/HANDOFF.md → AGENTS.md**：README 概览、HANDOFF 唯一交接（当前状态/待办/坑）、本文长期红线与机制。
+> **本文只写长期内容**：分支、commit、测试计数、当前焦点等易过期事实一律进 `docs/HANDOFF.md`；**不要抄会被改的数值**（令牌 hex、元素数等），以对应单一来源为准。
+> **硬约束：≤64KB 指令预算**（超了尾部被截断）。新增前先删等量旧内容；已完成的研究/计划/审计不要搬进来。
 
 ## 1. 项目是什么
 
-LakexLocalNotes = **本地优先**笔记应用：Electron 44.3 + React 18.3 + better-sqlite3 13 + 语雀 Lake 内核 + S3 同步（七牛 Kodo，S3 兼容）。**本地是真相，S3 只是镜像。**
+本地优先笔记应用：Electron 44.9 + React 18.3 + better-sqlite3 13 + 语雀 Lakex 内核 v1.99.0（vendored，已 pin）+ S3 同步（七牛 Kodo）。**本地是真相，S3 只是镜像。**
 
-- 目录 `/Users/admin/file/local-lake/lakex-local-notes`（目录名 lakex-local-notes；数据目录：开发 lakex-local-notes-dev / 正式 lakex-local-notes，见 §5）；主分支 `master`（在途分支 / 提交 / 推送状态**只看 `docs/HANDOFF.md` §1**，不写进本文）
-- **身份已标准化为 `lakex-local-notes`（261029 全量改名：旧词序 `local-`+`lakex-notes`、旧驼峰与无分隔写法均已全仓清零，grep 三串 = 0）**：productName `LakexLocalNotes`；npm `lakex-local-notes`；**包名按平台区分**：桌面 `com.lakexlocalnotes.desktop`、Android `com.lakexlocalnotes.android`（`capacitor.config.ts appId` + `android/app/build.gradle namespace/applicationId` + Kotlin 包 `com.lakexlocalnotes.android`）、**iOS 预留 `com.lakexlocalnotes.ios`（尚无 ios 工程，建工程时用这个 bundle identifier，不要复用 Android id）**；数据目录 `lakex-local-notes-dev` / `lakex-local-notes`；localStorage `lakex-local-notes-v3.*` / `lakex-local-notes-mobile.*`；S3 迁移码 `LLN1.`（缩写仍是 Lakex Local Notes）；私有协议 `lakexlocalnotes://app`；深链 `lakexlocalnotes://quick-note`；日志 `lakex-local-notes.log`。**保留不动**：`LAKE_*` 开发环境变量、`--lake-*` 设计令牌、`lakex` 内核名与 `.lake` 格式。
-- Node **必须 24**（`$HOME/.nvm/versions/node/v24.18.0/bin`）
-- **目标量级 = 2 万文档 / 20 万附件（v3 定稿，261026）**：性能与同步决策按此验证，**别用"小库正常"下结论**。索引硬上限 = 10 万文档（`S3V3_MAX_LAKE_NOTES`）/ 2 万小记；超过 2 万文档后的下一步是 v3.1 按篇增量索引（当前变更轮整份拉索引约 3MB gzip），**不分片**。
+- 目录 `/Users/admin/file/local/lakex-local-notes`；两端 = 桌面（macOS 优先）+ Android（Capacitor 8）；共享 `src/core`，UI 层独立（桌面 `ln-*` / 移动 `mb-*`）。
+- 身份：productName `LakexLocalNotes`；npm `lakex-local-notes`；包名 `com.lakexlocalnotes.desktop` / `com.lakexlocalnotes.android`（iOS 预留 `...ios`）；数据目录 `lakex-local-notes-dev` / `lakex-local-notes`；私有协议 `lakexlocalnotes://app`；日志 `lakex-local-notes.log`。**保留不动**：`LAKE_*` 开发变量、`--lake-*` 设计令牌、`lakex` 内核名与 `.lake` 格式。
+- Node **必须 24**（`$HOME/.nvm/versions/node/v24.18.0/bin`）；移动端另需 JDK 21 + Android SDK。
+- 目标量级 **2 万文档 / 20 万附件**（性能与同步决策按此验证，别用「小库正常」下结论）；索引硬上限 10 万文档（`S3V3_MAX_LAKE_NOTES`）/ 2 万小记；超过 2 万文档的下一步是按篇增量索引，**不分片**。
+- 一级空间（两端同名）：**知识库 · 小记 · 日记 · AI 写作 · 标签**（桌面 ⌘1–5）。
 
 ## 2. 长期方向与文档分工
 
-- **长期焦点**：同步/存储热路径的性能与健壮性、移动端编辑收口、可维护性（安全/IPC/资源服务/渲染层职责/测试覆盖/拆大文件）。**待办只在 HANDOFF §3**。
-- 先修 Critical/Warning；**不在没有测试护栏的情况下做大规模架构重写**。
+- 长期焦点：同步/存储热路径的性能与健壮性、移动端编辑收口、可维护性（安全/IPC/资源服务/渲染层职责/测试覆盖/拆大文件）。**待办只看 HANDOFF §3**；先修 Critical/Warning；不在没有测试护栏时做大规模架构重写。
 - **内核（lakex）资料检索顺序**（凡涉及内核 API/配置/命令必走）：
-  ⓪ 先翻 vendored 源码树 `vendor/lakex-doc-react/src/**` ——**按「能力」搜**（类名族 `ne-card-toolbar` / `ne-ui-toolbar-*` / `ne-card-*`；图标名 `editor-main-*`，**不是** `ne-t-*`；检索「插入面板」用 `quickInput` / `slash` / `cardSelect` / `insertSlash`，`"insert-panel"` 在 bundle 里 0 命中），别只盯运行时 bundle。⚠️ vendor 的 **React 包装层**（`LakexEditor` 本体、`SvgIcon`、`ImageToolbar`、`BookmarkToolbar`、`drawingBoardAI` 适配）只挂在 `LakexEditor` 上，而我们直接 `Doc.createOpenEditor`（`lakeRuntime.ts`）⇒ **这一层从不运行**；`BlockHoverHandle` 是我们自己单独挂的例外（`blockHandleMount.ts`），**内核层 `ne-*` UI 不受影响**。⇒ 按能力找，不要按调用栈找。
-  ① **官方出处优先** `docs/lakexEditor-developer-docs/`（编号主题：47 通用配置 / 07 API与事件 / 08 命令列表 / 48 适配器 / 65 大纲 …）：**先确认官方有没有这个能力与语义**，有就走官方途径，别反编译猜用法、别写私有 hack。
+  ⓪ vendored 源码树 `vendor/lakex-doc-react/src/**` —— **按「能力」搜**（类名族 `ne-card-*` / `ne-ui-toolbar-*`；图标 `editor-main-*`；插入面板用 `quickInput` / `slash` / `cardSelect`，`insert-panel` 在 bundle 里 0 命中），别只盯运行时 bundle。⚠️ vendor 的 **React 包装层**（`LakexEditor` / `SvgIcon` / `ImageToolbar` / `BookmarkToolbar`）只挂在 `LakexEditor` 上，而我们直接 `Doc.createOpenEditor`（`lakeRuntime.ts`）⇒ **该层从不运行**；`BlockHoverHandle` 是唯一自挂例外。按能力找，不要按调用栈找。
+  ① **官方出处优先** `docs/lakexEditor-developer-docs/`（75 篇官方镜像：47 通用配置 / 07 API 与事件 / 08 命令列表 / 48 envAdapter / 65 大纲 …）：先确认官方有没有该能力与语义，有就走官方途径，别反编译猜用法、别写私有 hack。
   ② **本项目契约** `docs/LAKEX-CONTRACT.md`（已核实行为 + 调试速查）：**新观测必须回填此处**，别只留在 HANDOFF 或代码注释。
-  ③ **源码字典对照** `lake-editor-main/`（第三方 VSCode 插件）与 `lake-main/`（lakejs 社区版，**序列化方言已分叉、结论不可套用**）。
-  **最终仲裁 = vendor bundle `vendor/lakex-doc-react/src/components/lakex/lakex.js` + 运行时实测**（冲突时以实测为准）。
-- **内核已 vendored 并 pin（v1.99.0），不要随意升级**；必须改行为时按 `vendor/lakex-doc-react/LOCAL-CHANGES.md` 最小改。
-- **闭源内核分发（261022 定稿）**：语雀闭源内核产物（`vendor/lakex-doc-react/`、`public/vendor/lakex-doc/`、`public/vendor/lakex/`）**以 vendored 形式随本仓库与构建产物公开分发**；本项目未取得语雀/蚂蚁授权，风险自担（声明见 `NOTICE`，权利人要求即移除）。**两处托管**：Gitee `git@gitee.com:gtycoder/lakex-local-notes.git`（日常拉取源，origin）＋ GitHub `git@github.com:gtycoder/lakex-local-notes.git`（**SSH，不用密码**；发版主仓 / Actions 所在）。**remote 配置不入库** ⇒ 每个 clone 跑一次 `npm run setup:remotes`（`scripts/setup-remotes.mjs`，地址写死在脚本里）恢复双推；之后 `git push origin <branch>` 一次推两边，**GitHub 只在推 tag 时打包**（普通 push 不构建）。`npm run backup:lakex` 生成仓库外归档、`npm run setup:lakex` 从归档恢复（换机/核对用）。
-- **表格 = 第三方 Univer**（`@univerjs/*` 全部精确锁版本）：动之前先读 `src/features/usheet/usheetKernelContract.ts`（每处触点写了失效表现）；**升级只走 `docs/USHEET-UPGRADE.md` 的 playbook**（静态护栏 `univerContract.test.ts` + 运行时探针 `scripts/usheet-kernel-probes.mjs`），一次全升、**不要 npm update**。对 Univer 的补丁只有 `patches/@univerjs+ui+1.0.3.patch`（floating 容器留 `document.body` + `data-lake-owner`，应用侧按可见标签收起；**不要挂回实例宿主**——261022 排序对话框死循环）。**补丁面 = 4 处 / 两个目录（261103 对齐现状，别再写「只有一处」）**：`patches/@univerjs+ui+1.0.3.patch`（上一条）、`patches/@plait+draw+0.93.4.patch`（画板蓝点快创：提交权交给宿主、`hoverPreview:false` 时只关预览视觉，22.8KB）、`vendor/lakex-doc-react/patches/@xiangfa+mindmap+0.7.1.patch`（思维导图 `disableAutoFit`：双击编辑时不再自动重适配视图）、**`patches/lakex-drawnix+0.1.0.patch`（261103：删掉 `lakex-drawnix` 里按 UA 过滤 hand 工具的两处片段 —— `index.mjs` 的 `t.isMobile && n.pointer === v.hand ? null :` 与 cjs `index.js` 同义句；移动端工具条因此与桌面同款（手机顶部横轨可横滑 / >720px 左侧竖排可纵滚），**升级 lakex-drawnix 后必须 grep 这两句计数 = 0 且设备上工具条出现「手形工具 — H」**；只删过滤、不动排布）。四处都打在依赖构建产物上，重建 = `PATH=/usr/bin:$PATH npx patch-package --patch-dir patches`（vendor 侧换成 `--patch-dir vendor/lakex-doc-react/patches`；`postinstall` 已是这条），打完必须确认补丁语义真的生效（依赖小版本变化会出现「patch 打上了但没命中」）。**除这 4 处外不要再给依赖打 patch**（新增须先过 §3#17 并在此登记作用/重建/升级如何验）。
-- **多维表 Grid / 关联选择器的行窗口**：动视口或屏外交互前读 `docs/BITABLE-VIEWPORT.md` —— 记录全集不裁剪，主表/选择器共用一套有界行窗口；缓存不留滚过的全格；编辑/IME/选区/粘贴/统计/填色/搜索必须按完整模型验证，**只读与保存/历史协议不因性能改动放宽**。
-- **文档分工（防漂移）**：`README` 概览（不维护进度/计数）· `HANDOFF` 唯一交接 · `AGENTS` 长期红线。**已完成的研究/计划/spike/审计直接删**（git 可查），不建 archive 目录。
+  ③ **源码字典** `lake-editor-main/`（第三方 VSCode 插件）、`lake-main/`（lakejs 社区版，**序列化方言已分叉、结论不可套用**）。**最终仲裁 = vendor bundle + 运行时实测**（冲突以实测为准）。
+- 内核 vendored 并 pin（v1.99.0）：**不要随意升级**；必须改行为按 `vendor/lakex-doc-react/LOCAL-CHANGES.md` 最小改；**不清理依赖侧冗余/未用路径/死代码**（不要再提议）。
+- **闭源内核分发**：三处 vendored 产物随仓库与构建产物公开分发（未获授权，风险自担，见 `NOTICE`）。双远端：Gitee `origin`（日常源）+ GitHub `github`（SSH，发版主仓 / Actions）；**remote 不入库** ⇒ 每个 clone 跑 `npm run setup:remotes`；`git push origin <branch>` 双推，**GitHub 只在推 tag 时打包**；`backup:lakex` / `setup:lakex` 做仓库外归档与恢复。
+- **表格 = Univer**（`@univerjs/*` 精确锁）：动前读 `src/features/usheet/usheetKernelContract.ts`（每处触点写了失效表现）；升级只走 `docs/USHEET-UPGRADE.md` playbook（`univerContract.test.ts` + `scripts/usheet-kernel-probes.mjs`），一次全升、**不要 npm update**。
+- **依赖补丁 4 处 / 两个目录（261103 现状）**：`patches/@univerjs+ui+1.0.3.patch`（floating 容器留 body + 按可见标签收起）、`patches/@plait+draw+0.93.4.patch`（画板蓝点快创）、`vendor/lakex-doc-react/patches/@xiangfa+mindmap+0.7.1.patch`（`disableAutoFit`）、`patches/lakex-drawnix+0.1.0.patch`（删按 UA 过滤 hand 工具的两句 ⇒ 移动端工具条与桌面同款；升级后 grep 计数 = 0 且设备出现「手形工具 — H」）。重建 = `PATH=/usr/bin:$PATH npx patch-package --patch-dir patches`（vendor 侧换目录）；**补丁打上但未命中不会报错**，必须逐条验语义；**除这 4 处不再新增 patch**（新增先过 §3#17 并登记作用/重建/升级验法）。
+- 多维表行窗口：动视口/屏外交互前读 `docs/BITABLE-VIEWPORT.md` —— 记录全集不裁剪，主表/选择器共用一套有界行窗口；只读与保存/历史协议不因性能改动放宽。
+- 文档分工：README 概览（不维护进度/计数）· HANDOFF 唯一交接 · AGENTS 长期红线；**已完成的研究/计划/spike/审计直接删**（git 可查），不建 archive。
 
 ## 3. 核心设计原则
 
-1. **本地是真相，S3 只是镜像**：数据不丢由本地保证（回收站软删保留文件、历史快照、恢复标记），S3 只用于多端同步。
-2. **目录强一致性是同步的基础**：删除必须传播到所有端（墓碑权威）。
-3. **删除压编辑（v3：删除 = 缺席）**：云端没有墓碑；A 删除后，B 以本地基线判定该文档在云端已缺席，无论 B 改没改都不再上传（删除 = 判定该文档无效，继续编辑是在错误方向工作）；被删侧的本地编辑**强制留档**（历史快照）；小记不备份（随手记语义，丢了就丢）。
-4. **恢复是唯一显式例外**：从回收站恢复 = 明确撤销删除 → 写恢复标记（`notes.restore_pending_at` / `quick_notes.restore_pending_at`）→ 同步 local-wins、上传 active 覆盖墓碑并传播；标记在 `markSynced` 时清除（残留 ⇒ 墓碑永胜失效）。
-5. **删除不带云端内容副本（v3）**：Lake 彻底删除当轮清空索引条目 + 正文 + 附件 + 资产声明，**恢复只能靠本机回收站或本地历史**；被他端判定缺失的本地副本保留在回收站（可恢复）。小记是唯一带墓碑标记的空间——`quick-notes` 索引的 `purged` 数组只存 id（不携带正文/图片），表示「不可恢复删除」。
-
-   **回收站 ≠ 墓碑（用户 261026 二轮确认）**：移入回收站 = 软删除（移动到「回收站」笔记本，索引条目保留 trashedAt、正文/附件不删、**不写墓碑**）；只有彻底删除（purge）= 墓碑语义：云端索引移除 + 对象删除；曾持有副本的端在拉取时把本地副本保留在回收站并标「云端已删除·仅本地」（只读、可恢复、**不参与 S3**，唯一例外是显式恢复）；从未持有过的**新设备无法恢复**（用户 261026 接受）。回收站自动过期默认 **90 天**（trashAutoPurgeDays，261026 由 60 调整），**cloud_deleted 副本不豁免**，到点自动 purge。
+1. **本地是真相，S3 只是镜像**：数据不丢由本地保证（回收站软删保留文件、历史快照、恢复标记），S3 只做多端同步。
+2. **删除必须传播（墓碑权威）**：目录强一致性是同步的基础。
+3. **删除压编辑（v3：删除 = 缺席）**：云端没有墓碑；B 以本地基线判定该文档在云端已缺席即不再上传（继续编辑是在错误方向工作）；被删侧本地编辑**强制留历史快照**；小记不备份（随手记语义）。
+4. **恢复是唯一显式例外**：写恢复标记（`notes.restore_pending_at` / `quick_notes.restore_pending_at`）→ local-wins → 上传覆盖并传播；标记在 `markSynced` 清除（残留 ⇒ 墓碑永胜失效）。
+5. **删除不带云端内容副本**：Lake 彻底删除当轮清空索引条目 + 正文 + 附件 + 资产声明，恢复只能靠本机回收站或本地历史；被他端判定缺失的本地副本保留在回收站（可恢复）。**回收站 ≠ 墓碑**：移入回收站 = 软删除（移到「回收站」笔记本，索引保留 `trashedAt`、正文/附件不删、**不写墓碑**）；purge 才是墓碑。曾持有副本的端在拉取时把副本留在回收站并标「云端已删除·仅本地」（只读、可恢复、**不参与 S3**，唯一例外是显式恢复）；从未持有过的设备无法恢复（用户接受）。回收站自动过期默认 **90 天**（`trashAutoPurgeDays`；cloud_deleted 副本不豁免）。
 6. **同步顺序**：先拉远端（带冲突判定地合并）→ 再推合并后的本地。
-7. **不为旧数据写兼容/迁移**：判断标准 = **"这些数据能否删了重建？"能，就绝不写兼容**。
+7. **不为旧数据写兼容/迁移**：判据 = **「这些数据能否删了重建？」能，就绝不写兼容**。
 8. KISS/DRY；不引入未经验证的抽象、不加无谓依赖（见 17）。
 9. **多表写必须事务**（`db.transaction`）。
-11. **资产存在性 = 远端声明差集（v3：每篇文档一份不可变声明）**：`meta/assets/{noteId}/{declHash}.json` 是「该文档云端在用集」的权威快照（先对象后声明），索引条目的 `assetsHash` 指向它；**禁止逐对象 HEAD/GET、禁止"本机记过=已上传"的持久缓存**。上传只对声明里缺失的资产 PUT，声明**永远全量**。下载侧同样走差集：按本地实扫 size+sha256 跳过；`active→trash` 仅在**实读正文 sha256 相等**时复用本地。两个契约外前提：① 无带外删除；② 资产按 filename 内容寻址（`buildAssetFilename` 保证同名同内容）。旧清单的资产差集工具（`core/syncAssets.ts`）已于 261028 随 manifest 时代死代码删除；恢复/预览补拉走 `src/core/s3v3AssetBackfill.ts`。
-12. **兜底"未分类"笔记本只惰性创建**（真正回落到兜底父时才建；不在下载或冲突探测里提前解析）。
-13. **S3 并发上限 = 12（261026 用户批准，8 → 12；实测首同步约 1.5x）**：v3 传输池默认 `DEFAULT_TRANSFER_CONCURRENCY=12`（引擎可配 `transferConcurrency`，硬夹 32）、`deleteMany` 并发 12。**不得**为吞吐调到 16+（provider 限流/移动端内存）。
-14. **桌面 UI = 自有设计系统**（规格在 `docs/DESIGN.md` + `.impeccable/design.json`）：
-    - **令牌是唯一来源**：颜色/圆角/间距/字号/动效只用 `--lake-*`，定义在 `src/styles/themes/*`；**颜色字面量只允许出现在 themes/**。字号一律 `--lake-font-size-*`（离档值向上取档；要整体抬一档就改 `themes/base.css` 的令牌值）。
-    - **同一个交互语义，全仓只能有一套视觉与几何**：改前先 grep 复用；一旦又写一套（新类名/近似几何/另一套间距）**先合并到单一来源**。权威单一来源：行/菜单/图标钮/输入/页签/省略 = `kit.css` 的 `ln-*`（`.ln-row.is-selected` · `.ln-menu__item` · `.ln-iconbtn` · `.ln-tabs`（横向页签唯一）· `.ln-input__field` · `.ln-ellipsis` · `.ln-imgfill` · `.ln-tip`）；浮层表面 = `components/ui/Overlay.tsx` 的 `.ln-dialog/.ln-menu/.ln-popover`（**不要手写 createPortal**）；浮层定位 = `usePopoverPosition` + `topMenuPosition.placeVertical`（**禁止估算高度自己夹**）；分栏分隔条 = `components/ui/SplitHandle.tsx`；附件/图片展示 = `AttachmentChipList` + `FileKindIcon`/`fileKindOf()`；表格与多维表「添加」= `.bt-add-round`；Markdown = `components/ui/markdown/MarkdownView.tsx`；AI 正文 = `features/ai/AiMessageBody.tsx`、AI 结果落库 = `selectionToolbar/aiResultOps.ts`、AI 附件解析 = `electron/ai/aiContentResolver.ts`（跨 IPC 只传 `{noteId,filename}` 引用，字节只在主进程）、AI 消息块模型 = `core/aiProviders.ts`；应用内选色 = `core/colorPalette.ts`（最近使用按入口分桶；Lake 编辑器走 `LakeColorBoard` 适配器）。**判定数据只认** `scripts/css-audit/audit-lookalike.mjs` 与 `audit-primitives.mjs` + 实机几何。**两条已结案、别再立项**：面包屑链接 `.protyle-breadcrumb__item` 与小记列表行的主区按钮 `.quick-note-index-main` 都是**行内可点击文本条目**，**不并入** `.ln-row`/`.ln-input`。
-    - **层序即优先级**：`@layer vendor, legacy, tokens, kit, shell, feature, overlay, a11y`；新样式写进对应层即可压过旧样式，**不靠特异性/!important 取胜**。**`vendor` 层由构建自动填充**（`scripts/vendorCssLayer.ts` 把 JS import 的第三方 CSS 包进该层，排最底），**不要手写规则进 vendor**。`!important` **桌面守 9 条允许清单**（`scripts/ui-metrics.mjs` 的 `IMPORTANT_ALLOWLIST`，逐条写明"压谁"；清单外新增直接失败、只许降；移动端 19 条棘轮）。**不是"一点不能用"**（用户 261016 定）：唯一例外仍是"要压内核/第三方写进 element 的 inline style"或"要压 legacy 的 `!important`"，且必须写理由。
-    - **改落点**：找到根位置**就地改**，禁止一层层套覆盖；组件里不写 `style={{}}`；不要用 emoji/系统字形当图标（图标只有 lucide，描边 1.75）。
-    - **两条护栏**（改样式必跑）：`src/styles/cssLayers.test.ts`（逐文件声明数/重复组只许降）+ `node scripts/ui-metrics.mjs`（b3 引用 0 / 非主题颜色 0 / 字号字面量 0 / !important 逐条对允许清单 / 文字色误用裸 accent 0 / 跨文件重复组只许降 / 入口 b3 import 0）。
-    - **文字色阶口径**：`--lake-text-*` 按「实际会铺到的最浅/最深表面」标定（text-3 浅/暖 `#5f6874`、深 `#9398a1`；text-4 是**有意的 3:1 档，不要提亮**）。**文字一律用 `--lake-accent-text`**；`--lake-accent` 只做图形/边框/焦点环/底纹。
-    - **死 CSS 判定**（`scripts/css-audit/audit-dead-css.mjs`，报告非门禁）：判"没人用"必须排除 ① 内核/第三方命名空间（`ne- ant- lakex- plait- univer- b3- fn__`）② 动态拼接类名（**串中间的拼接也要算**）③ 设计词表（`kit.css` / `themes/` / `fonts/` / `kernel-theme.css` / `compat.css`）。只删「确认无人施加」的规则块，删完跑走查对拍（截图与探针应逐项不变）。
-    - **思源层与类名契约都已清零（261022）**：`src/b3/**` 已删；桌面产品代码里的 `.b3-*`/`fn__*` 类名也已全部改为自有 `ln-*`（按钮/输入/开关走 kit 原语，列表/版式在 `src/styles/compat.css`）。**不要再引入 `src/b3/*` 或思源类名**；AGPL-3.0 署名保留在设置页「关于」与 `compat.css` 文件头。
-    - **设置页**骨架 `.config-*` 由 `compat.css` 定义；**每加/改一行必须同步 `settingsSearch.ts` 的 `SETTING_ITEMS`**（护栏 `settingsSearch.test.ts`）。
-    - **碰内核的细节**：内核用 `focus()` 聚焦普通 `div[tabindex]` 时要补我们自己的 `:focus-visible` 环；碰到库里的**模块级单例**（缓存/标志位）时判据必须**限定在本实例容器内**（`.contains(document.activeElement)`），多实例挂载会串台。
-    - **第三方焦点视觉归属（261023）**：`tokens.css` 的全局 `:where(input, textarea, select, [role=button]):focus-visible` 只服务**自有控件**；第三方编辑器宿主（`.usheet-editor` / `[data-lake-univer-floating]` / `.lake-editor-mount` / `.ne-overlay-container` / `.board-editor`）里的字段由 `src/styles/vendor-focus.css` 收口（表格字段 = 主色边 + 2px 柔光环、`outline:0`），**否则就是「输入框两层/三层边框」**（反复出现过：多维表行内重命名、表格插入链接/查找替换）。**表格弹窗 portal 到 `[data-lake-univer-floating]`，只按 `.usheet-editor` 写作用域必漏**。新增第三方编辑器时宿主列表两处一起补（`vendor-focus.css` 的 `:is()` + `vendorFocusProbe.ts` 的 `VENDOR_HOST_SELECTORS`）；dev 下 `window.__vendorFocusProbe()` 为空数组才算干净。
-    - **观感红线（261029 UI 审计定型）**：边框一律 **0.5px**（例外只有必须被看见的图形描边：焦点环 2px / 对勾 / 进度环 / 画板笔迹；**文档正文与编辑器内部等「具体内容区」不参与统一**，引用竖线/表格线等保持内容语义原值）；动效**只保留入场与位移**、统一 `ease-out` 250ms，**不做装饰性过渡**（hover/颜色/背景/边框已删过渡 ⇒ 瞬时切换）。
-      界面文案**不用中点「·」作分隔符**；圆角与阴影克制（同一面「边 or 阴影」二选一；贴角内层走同心圆角，见 `docs/DESIGN.md` Shapes）。
-15. **"已彻底删除"的判定必须永久（v3：删除 = 缺席）**：云端索引里没有该 id 就是删了；判据 = 设备本地基线 + 持久删除意图（`state.intents`），不依赖云端墓碑。本地 purge **无条件**清索引条目并删前缀对象（`objects/{id}-`、`assets/{id}/`、`meta/assets/{id}/`），漏删 ⇒ 对象残留；被他端判定缺失的本地副本保留进回收站并打「云端已删除·仅本地」徽标（用户 261026 定稿）。小记仍有 `purged` 数组做不可恢复删除标记。
+11. **资产存在性 = 远端声明差集（v3：每篇文档一份不可变声明）**：`meta/assets/{noteId}/{declHash}.json` 是「该文档云端在用集」的权威快照（先对象后声明），索引 `assetsHash` 指向它；**禁止逐对象 HEAD/GET、禁止「本机记过 = 已上传」的持久缓存**；上传只对声明缺失资产 PUT，声明**永远全量**；下载同样走差集（本地实扫 size+sha256 跳过），`active→trash` 仅在**实读正文 sha256 相等**时复用。恢复/预览补拉走 `core/s3v3AssetBackfill.ts`。
+12. **兜底「未分类」笔记本只惰性创建**（真正回落时才建）。
+13. **S3 并发上限 = 12**：传输池默认 `DEFAULT_TRANSFER_CONCURRENCY=12`（硬夹 32）、`deleteMany` 并发 12；**不得**为吞吐调到 16+（provider 限流 / 移动端内存）。
+14. **桌面 UI = 自有设计系统**（规格 `docs/DESIGN.md` + `.impeccable/design.json`）：
+    - **令牌唯一来源**：颜色/圆角/间距/字号/动效只用 `--lake-*`，定义在 `src/styles/themes/*`；**颜色字面量只允许出现在 themes/**；字号用 `--lake-font-size-*`（离档向上取档）。令牌数值以 themes 为准，**本文不抄**。
+    - **同一个交互语义，全仓只能有一套视觉与几何**：改前先 grep；权威单一来源 = `kit.css` 的 `ln-*`（`.ln-row` / `.ln-menu__item` / `.ln-iconbtn` / `.ln-tabs` / `.ln-input__field` / `.ln-btn` 梯队 / `.ln-ellipsis` / `.ln-imgfill` / `.ln-tip`）；浮层 = `components/ui/Overlay.tsx`（**不要手写 createPortal**）；浮层定位 = `usePopoverPosition` + `topMenuPosition.placeVertical`（**禁止估算高度自夹**）；分隔条 = `components/ui/SplitHandle.tsx`；附件/图片 = `AttachmentChipList` + `FileKindIcon`/`fileKindOf()`；表格与多维表「添加」= `.bt-add-round`；Markdown = `components/ui/markdown/MarkdownView.tsx`；AI 正文/落库/解析/消息模型 = `AiMessageBody` / `selectionToolbar/aiResultOps` / `electron/ai/aiContentResolver`（跨 IPC 只传引用，字节只在主进程）/ `core/aiProviders`；选色 = `core/colorPalette.ts`。判定只认 `scripts/css-audit/audit-lookalike.mjs` 与 `audit-primitives.mjs` + 实机几何。**已结案别立项**：面包屑链接 `.protyle-breadcrumb__item` 与小记行主区 `.quick-note-index-main` 是行内可点文本条目，**不并入** `.ln-row`/`.ln-input`。
+    - **按钮 = 统一梯队（261110 用户定稿）**：4 语义 `--primary`（主操作实心）/ `--outlined`（主题色框+主题色字）/ `--secondary`（中性框）/ `--ghost`（无框）+ `--danger` + `--link`；尺寸只两档（默认 27 / `--compact` 22）；六态（default/hover/active/focus-visible/is-selected/disabled）；设置页按钮不再单列 `--settings` 变体。**移动端独立实现 `mb-btn` 同一模型**（UI 两端独立，不共享组件/CSS）。
+    - **层序即优先级**：`@layer vendor, legacy, tokens, kit, shell, feature, overlay, a11y`；新样式写进对应层压旧样式，**不靠特异性/!important 取胜**；`vendor` 层由 `scripts/vendorCssLayer.ts` 自动填充（**不要手写规则进 vendor**）。`!important` 桌面守 9 条允许清单（`ui-metrics.mjs` 的 `IMPORTANT_ALLOWLIST`，逐条写明压谁；清单外新增直接失败、只许降；移动端 19 条棘轮）；唯一例外 = 压内核/第三方写进 element 的 inline style 或压 legacy 的 `!important`，且必须写理由。
+    - **改落点**：就地改，禁止层层套覆盖；组件里不写 `style={{}}`；图标只用 lucide（描边 1.75），禁 emoji/系统字形。
+    - **两条护栏**（改样式必跑）：`src/styles/cssLayers.test.ts`（逐文件声明数/重复组只许降）+ `node scripts/ui-metrics.mjs`。
+    - **文字色阶**：`--lake-text-*` 按「实际会铺到的最浅/最深表面」标定；`--lake-text-4` 是**有意的 3:1 档，不要提亮**；文字一律 `--lake-accent-text`，`--lake-accent` 只做图形/边框/焦点环/底纹。
+    - **死 CSS 判定**（`scripts/css-audit/audit-dead-css.mjs`，报告非门禁）：判「没人用」必须排除①内核/第三方命名空间（`ne- ant- lakex- plait- univer- b3- fn__`）②动态拼接类名（串中间的拼接也要算）③设计词表（`kit.css`/`themes/`/`fonts/`/`kernel-theme.css`/`compat.css`）。只删确认无人施加的规则，删后跑走查对拍。
+    - **思源层与类名已清零（261022）**：`src/b3/**` 已删，产品代码 `.b3-*`/`fn__*` 已改 `ln-*`；**不要再引入**；AGPL 署名保留在设置页「关于」与 `compat.css` 文件头。
+    - **设置页**骨架 `.config-*` 由 `compat.css` 定义；**每加/改一行必须同步 `settingsSearch.ts` 的 `SETTING_ITEMS`**（`settingsSearch.test.ts`）。
+    - **碰内核**：内核用 `focus()` 聚焦普通 `div[tabindex]` 时要补我们自己的 `:focus-visible` 环；碰到库的**模块级单例**（缓存/标志位）判据必须限定在本实例容器内（`.contains(document.activeElement)`），多实例会串台。
+    - **第三方焦点视觉归属**：`tokens.css` 全局 `:where(input, textarea, select, [role=button]):focus-visible` 只服务自有控件；第三方编辑器宿主（`.usheet-editor` / `[data-lake-univer-floating]` / `.lake-editor-mount` / `.ne-overlay-container` / `.board-editor`）由 `src/styles/vendor-focus.css` 收口（否则就是「输入框两层/三层边框」）。新增宿主两处一起补：`vendor-focus.css` 的 `:is()` + `vendorFocusProbe.ts` 的 `VENDOR_HOST_SELECTORS`（dev 下 `window.__vendorFocusProbe()` 空数组才算干净）。
+    - **观感红线（261029 UI 审计定型）**：边框一律 **0.5px**（例外：焦点环 2px / 对勾 / 进度环 / 画板笔迹；**文档正文与编辑器内部等内容区不参与统一**）；动效**只保留入场与位移**、统一 `ease-out` 250ms、**不做装饰性过渡**（hover/颜色/背景/边框瞬时切换）；界面文案**不用中点「·」作分隔符**；圆角与阴影克制（同一面「边 or 阴影」二选一；贴角内层走同心圆角，见 DESIGN Shapes）。
+15. **「已彻底删除」的判定必须永久**：云端索引没有该 id 就是删了；判据 = 设备本地基线 + 持久删除意图（`state.intents`），不依赖云端墓碑。本地 purge **无条件**清索引条目并删前缀对象（`objects/{id}-`、`assets/{id}/`、`meta/assets/{id}/`）；被他端判定缺失的副本保留进回收站并打「云端已删除·仅本地」徽标；小记另有 `purged` 数组表示不可恢复删除。
 16. **任何打开文档的入口先判 `isGoneNote({parentId, syncState})`**（`core/syncDecisions.ts`）⇒ 已进回收站/被他端 purge 则**只读 + 横幅 + 保存被拦要明说**，绝不静默丢弃编辑；恢复走 `handleTrashRestored`。
-17. **拒绝"迎合式找需求"（红线）**：非 bug 改动三问缺一即不做 —— ① 问题真实存在吗（有复现/数据/历史证据）？② 不做会付什么代价？③ 收益是否明确大于新增复杂度？**过度设计信号**：为"统一/优雅/以后可能"加抽象层、把两个本就不同的东西强行合并、用新依赖解决旧依赖能解决的问题、收益只停在"代码更整洁"、只给方案不给反对意见。**宁可少做；不确定时先问"这是真问题，还是我想做的？"**
-18. **不清理 vendor/依赖的冗余、未用路径、死代码**（第三方本就带冗余）；必须改行为时按 `vendor/lakex-doc-react/LOCAL-CHANGES.md` 做最小改动。**不要再提议清理依赖侧的死路径。**
+17. **拒绝迎合式找需求（红线）**：非 bug 改动三问缺一不做 —— ① 问题真实存在（有复现/数据/历史证据）？② 不做会付什么代价？③ 收益是否明确大于新增复杂度？**过度设计信号**：为「统一/优雅/以后可能」加抽象层、把两个本就不同的东西强行合并、用新依赖解决旧依赖能解决的问题、收益只停在「代码更整洁」、只给方案不给反对意见。**宁可少做；不确定先问「这是真问题，还是我想做的？」**
+18. **不清理 vendor/依赖的冗余、未用路径、死代码**；必须改行为按 `vendor/lakex-doc-react/LOCAL-CHANGES.md` 最小改动。
 19. **多维表条件求值单一来源**：视图筛选 / 关联选择器临时筛选 / 条件填色统一用 `BitableFilterRule/Node`、`filterOperatorsFor()`、`evaluateFilterNode()` 与共享编辑器；字段取值走 `bitableFieldValue()`；**禁止**为某个视图另造操作符/空值语义/条件 UI；填色的 `cell/row/column` alpha 混色与 `rowSide` 语义不得改。
-20. **云同步只有一套状态判据（`src/core/cloudState.ts`，两端共用）**：`cloudStateOf()` → `unconfigured|offline|manual|auto`；`canTouchNetwork()` 是「能不能出网」的**唯一**判据，`isCloudActive()` 是 UI（状态灯/禁用态）判据。**关闭云同步 = 完全没配置**（任何路径不出网）；离线文案统一 `cloudStateHint()`。恢复**不等网络**（立刻生效 + 后台补拉 + 明确提示）。**「启用云同步」的默认值 = 是否已配置 S3（261022 用户定稿）**：没配置时默认关（全新安装不再显示为开）、已配置的旧库默认开、显式存过的值优先——桌面 `settingsRepository.getSyncSettings()`（`hasS3Settings()`，只判行存在）与移动 `bridge/context.readSyncSettings()`（`S3_STORAGE_KEY` 是否存过）同口径；判据仍只有 `cloudState` 一套。护栏：`electron/settingsRepository.test.ts`、`electron/syncDualAB.test.ts`、`src/mobile/bridgeCloudState.test.ts`。
-21. **门禁分层（通用规则，两端各自对应）**：
-    ① **每次改动都跑**（**实测 ≈31–36s**：687 文件 4215 例，261105 口径、最新计数见 `docs/HANDOFF.md` §1；isolate:true；isolate:false 可 −40% 但 deviceConformance 依赖模块隔离，暂不可开）：`npx tsc --noEmit` + 相关 `vitest` + `git diff --check`；改样式再加 `ui-metrics` 与对应侧层围栏。
-    ② **只有动了视觉/设备那一层才跑样式/设备装置，且只跑受影响的 1~2 个态/屏**：桌面 `check-stylesnap.mjs --states "…"`；移动 `check-mobile-snap.mjs --states home-quicknotes` + 走查传屏名；**多维表专项** `npm run check:bitablesnap`（表单/内容·表格/内容·卡片 3 态，夹具自建自删）。**全量**（桌面 42 态 / 移动 6 态 + 23 屏）只在换夹具、改装置、发版前跑。
-    ③ **动了外壳几何/构成，或重灌夹具 ⇒ 必须先重烤一次基线**（`--from <warm>.json --write-baseline`），否则下次全量必红；这是一次性成本。
-    ④ **移动端改动 ⇒ 先装包再交付**（261110 用户定）：动过 `src/mobile/**`、`android/**` 或任何影响移动端渲染的改动，交付时先 `bash scripts/android-build.sh --sync --install`（装 `lake_mobile`）让用户当场验收，不要留到发版或批量收尾。
+20. **云同步只有一套状态判据（`src/core/cloudState.ts`，两端共用）**：`cloudStateOf()` → `unconfigured|offline|manual|auto`；`canTouchNetwork()` 是「能不能出网」的**唯一**判据，`isCloudActive()` 是 UI 判据。**关闭云同步 = 完全没配置**（任何路径不出网）；离线文案统一 `cloudStateHint()`；恢复**不等网络**。「启用云同步」默认值 = 是否已配置 S3（桌面 `settingsRepository.getSyncSettings()` 的 `hasS3Settings()` 与移动 `context.readSyncSettings()` 同口径）。护栏：`electron/settingsRepository.test.ts`、`electron/syncDualAB.test.ts`、`src/mobile/bridgeCloudState.test.ts`。
+21. **门禁分层（两端各自对应）**：
+    ① **每次改动都跑**（≈31–36s，最新计数见 HANDOFF §1）：`npx tsc --noEmit` + 相关 `vitest` + `git diff --check`；改样式加 `ui-metrics` 与对应侧层围栏。
+    ② **只有动了视觉/设备那一层才跑样式/设备装置，且只跑受影响的 1~2 个态/屏**：桌面 `check-stylesnap.mjs --states`；移动 `check-mobile-snap.mjs --states`；多维表 `npm run check:bitablesnap`（3 态，夹具自建自删）。**全量**（桌面 42 态 / 手机 9 态 + 平板 9 态 + 23 屏）只在换夹具、改装置、发版前跑。
+    ③ **动了外壳几何/构成，或重灌夹具 ⇒ 必须先重烤基线**（`--from <warm>.json --write-baseline`），否则下次全量必红。
+    ④ **移动端改动 ⇒ 先装包再交付**（261110 用户定）：动过 `src/mobile/**`、`android/**` 或影响移动端渲染，交付时先 `bash scripts/android-build.sh --sync --install`（装 `lake_mobile`）让用户当场验收。
     顺序恒定：**先本地 → 再定点 → 最后全量**。
-22. **依赖准入（261021 调研定稿）**：新依赖**四问缺一不引入**（先过 §3#17「拒绝迎合式找需求」）——
-    ① 解决的是**已验证痛点**吗（有复现/实测证据，不是"更优雅/以后可能"）？② 会否引入**第二套样式/令牌/preflight**（撞 14）？
-    ③ 体积/离线/许可/打包成本算过吗（Electron 主进程 external、移动 bundle、离线可用）？④ 退出成本与**护栏**（现有门禁能否覆盖、删得掉、删除计划）？
-    - **禁止第二样式范式**：不引 Tailwind（preflight 是元素级 reset，会打 1.25MB 内核 CSS 与 Univer DOM；组件把颜色/字号写进 className 会让 `ui-metrics` 与 `cssLayers.test.ts` 失效）。设计系统唯一来源仍是 `--lake-*` 令牌 + `kit.css` 的 `ln-*` + `Overlay`/`usePopoverPosition`（`src/hooks/usePopoverPosition.ts`）。
-    - **headless 库（如 Radix）是唯一例外**：仅在**未来新复杂控件**（combobox/日期）确需明确 a11y 能力时引入，必须包一层自有 API/CSS（页面不直接 import 库组件），**不替换**现有浮层/选择器/`SplitHandle`。
-    - **Lucide 维持**（80+ 文件、唯一图标源；保持 devDependencies —— 移到 dependencies 会牵动主进程 external 派生）。
-    - **shadcn/ui（Nova/Tailwind）不引**：preflight 打穿内核/第三方；语义变量要再映射 `--lake-*`（warm 无 preset）；27/13/8px 规格与默认档错位；copy-in 后仍需逐类覆盖；桌面会出现 ln-*/Tailwind/mb-* 三套视觉。
-    - **Motion 不引**：撞 DESIGN 动效规则——禁 rAF 门控（隐藏窗口 rAF 不触发会把菜单卡成不可见）、JS initial opacity 绕过 a11y reduced-motion、layout 动画留 transform 祖先破坏 `position:fixed` 包含块（§7 已踩）；完整包实测 28.4KB gzip。
-    - **dnd-kit 不引**：4 个拖拽都带领域语义（分屏槽位、树 before/inside/after+父子约束、看板=写单选值、移动端长按与滚动共存）；Touch 要求 `touch-action:manipulation`，与「先长按再禁滚动」相悖；`DragOverlay` 会替换定稿的克隆浮层+FLIP；16.7KB gzip，真收益（键盘重排/自动滚动）自研约 50 行更便宜。
-    - **react-resizable-panels 不引**：只做容器内 pane，不覆盖浮动 8 向；`SplitHandle` 的 4px 死区/键盘/双击复位 3 处都有护栏测试锁死，替换收益≈0。
-    - **Zustand 不引（本轮未深挖，标注未取证）**：现状 = controller + `useSyncExternalStore` + IPC 仓储，无实证跨层状态痛点；数据真相在 SQLite/文件与主进程，换库不减少跨进程复杂度，只会多一套状态范式；未来单域试点必须先给痛点证据。
-    - **来源与翻案**：261021 两路只读调研（UI 层 / 交互层）+ 复核；未取证项（Zustand 深度盘点、Motion 隐藏窗口实测、dnd-kit 真机触摸/IME、rr-panels min+gzip）翻案前先补证据，不每轮重新调研。
+22. **依赖准入**：新依赖**四问缺一不引入**（先过 §3#17）—— ① 解决已验证痛点（有实测证据，不是「更优雅/以后可能」）？② 会否引入第二套样式/令牌/preflight（撞 14）？③ 体积/离线/许可/打包成本算过？④ 退出成本与护栏（门禁覆盖、删得掉）？
+    - **禁止第二样式范式**：不引 Tailwind（preflight 打穿 1.25MB 内核 CSS 与 Univer DOM，且写进 className 会让门禁失效）；**shadcn/ui 不引**（同上 + 语义变量要再映射 `--lake-*`）；**Motion 不引**（禁 rAF 门控、绕过 reduced-motion、layout 动画留 transform 祖先破坏 fixed；28.4KB gzip）；**dnd-kit 不引**（4 处拖拽都有领域语义、长按与滚动共存相悖、`DragOverlay` 替换定稿浮层；16.7KB）；**react-resizable-panels 不引**（不覆盖浮动 8 向，`SplitHandle` 已有护栏）；**Zustand 不引（未取证）**。headless 库（Radix）是唯一例外：仅未来新复杂控件且包自有 API/CSS，不替换现有浮层/选择器/分隔条。**Lucide 维持**唯一图标源（保持 devDependencies）。
 
 ## 4. 关键机制速览
 
-- **S3 协议 v3（261026 转正）**：云端只有 `meta/pointer.json`（约 200B）+ 两个不可变索引（`meta/index/{hash}.json` / `quick-notes/meta/index/{hash}.json`）+ 每篇文档资产声明 + 内容寻址正文/附件；**无墓碑、无 manifest 链、无全局资产清单**。发布 = 写索引 → 取锁 → 读回 pointer → 写 pointer（无 CAS，靠锁 + 读回 + 重试）；零变更轮只读 pointer。旧 `manifests/latest.json` **不读、不迁移、不删除**（孤儿）。核心纯逻辑 `src/core/s3v3*.ts`，适配器/远端 `electron/s3v3/*`、`src/mobile/v3/*`。
-- **macOS 应用菜单**（261029，参考思源；`electron/appMenu.ts` 纯函数模板 + `electron/appMenu.test.ts`）：只 darwin 装，分组 = appMenu / 编辑 / 窗口 / 帮助，**role 打底 + 中文 label**；「设置…（⌘,）」只 `webContents.send("open-settings")`（preload `onOpenSettings` → App 打开设置面板，主进程不造窗口）；帮助 = 使用文档/反馈（openExternal）+ 打开数据目录（`shell.openPath(userData)`）+ 开发者工具（仅 dev）。**标题事实**：macOS 应用菜单标题取 bundle 的 `CFBundleName`（dev = Electron.app ⇒ 显示 Electron；打包版 = productName），`app.setName`/MenuItem.label 都改不了它。**不做**多窗口切菜单 / 用户自定义热键 / i18n 语言包。
-- **壳层双 origin**：打包版页面 = 私有协议 `lakexlocalnotes://app`（`appOrigin.ts` + `appProtocol.ts` 服务 `dist/`），dev 走 vite。**判页面来源禁止比 `URL.origin`**（非特殊 scheme 在 Node 里恒为 `"null"`）⇒ 比 scheme+host（`isAppOriginUrl`）；资产服务白名单/ACAO 要同时放行 `APP_ORIGIN`。**主进程 external 从 `package.json.dependencies` 派生**（+ `@smithy/`），别退回首写清单。
-- **冲突判定 = 三方合并**（`src/core/s3v3Decision.ts` + `s3v3Merge.ts`，两端共用）：base×local×remote，顺序 = 恢复标记 → 本地删除意图 → 缺席/新增 → contentHash 变更；远端已发布 ⇒ 远端胜，本地被覆盖版本先强制 `createHistorySnapshot`。设备基线落 `sync-v3/baseline.json.gz`（移动 `sync_v3_state`），**绝不上传云端**。
-- `folders[]` 必填；手动同步只发触发窗口、自动同步广播所有窗口；同步/GC/深度清理共用 `enqueueMaintenance` 串行队列（进程内唯一必需互斥）。
-- **v3 资产传输**：按每文档 `declaration` 差集并发 PUT/GET（`runPool`，并发 12）；上传失败的笔记本轮不进新索引（回退远端旧条目，下轮重试）。
-- **旧 manifest 链已废弃**：v3 索引按 commit 内容寻址、无链；深度清理 = 列举对象与当前 pointer/索引/声明对比，删孤儿（`deepCleanup`）。
-- 小记独立前缀 `quick-notes/` + 独立库 `quick-notes/metadata.sqlite3`。
-- **日记空间（261109）**：日记 = 普通 Lake 文档（"日记"笔记本 + 标题即日期 `YYYY-MM-DD` + 年/月两级 group），wire 标记 `folders[].space`（**不用 `TreeNode.kind`** —— 那是文档类型；发布显式写、非日记写 `null`）；文档空间树不显示日记本、**不打标**、搜索复用 FTS（不新增索引）；打开某天由主进程/数据层重新 plan + 单事务。**契约只看 `docs/DIARY.md`。**
-- **编辑器「本机视图」= 设备本地**（用户定稿）：当前工作表/缩放/选区/滚动/折叠/画板视口 **不进正文、不标脏、不进 S3**；表格列宽行高隐藏冻结、多维表视图配置仍属文档数据。`onDirty` 只在正文真变时触发。
-  **表格语义已定稿（261104 用户裁决）**：**排序、冻结、单元格/行列保护 = 文档数据**（随正文同步）；**阅读态只读**——排序/冻结回编辑态做，**不提供移动端保护入口**；阅读态筛选是唯一例外（只对本机生效、绝不写正文，261021）。别再为「本机化排序/冻结」或「保护行列入口」立项（§3#17）。
-- **标签顺序 = 设备本地（261105 用户定稿）**：小记标签目录的展示顺序、单条小记上的标签顺序**都不参与同步**（不同端可以不同）。**标签置顶已删除**（不要恢复）。默认目录顺序 = **新的在前（createdAt DESC）→ 名称**；手动拖拽后本机记标记（`device_state.quick_tags_manual_order`）、按本机 `sort_order`，新增标签**追加末尾**；同步合并只更新名称/时间（删除=缺席，见下条）、不覆盖本机顺序。wire 上 `tagIds` 是**排序后的集合**（顺序不传播），对端应用时保留本机顺序、远端新增插最前。**文档标签已实现（261105 P1）**：关系随 lake 索引 `tagIds/tagsUpdatedAt` 同步（集合 + 版本 LWW），**目录仍只在小记标签库**（文档只同步关系，不新增目录协议）；**261107 起桌面文档标签关系也已迁入小记库**（迁移标记 + 备份恢复必须同时恢复两库；主库旧表保留一版可回退，不再读写）；移动端必须搬运这两个字段（否则移动端发布 lake 索引会清空文档标签）；发布时**有版本就必须显式写 `tagIds`（空集合也写 `[]`）**，否则「删光标签」在 wire 上不可见、两端会互刷。
-- **标签删除 = 缺席（261105 用户定稿；S3 列表红线）**：**云端 `tags[]` 只出现 active 标签，禁止墓碑进索引**（「S3 列表表不得出现永久存在的条目」）。删除 = 本机物理删行 + 清 `tag_links`/`tag_link_versions`（+ 文档标签关联）；跨端靠「基线有 / 远端缺席」判定，**删除压编辑**；离线删除用设备本地 `device_state.tag_deleted` 抑制远端重发（不上传，远端确认缺席后结算）；旧库 `deleted_at` 行由一次性迁移清掉（`tag_absent_migrated`）。**不要再引入标签墓碑/`deletedAt` 字段**。
-- **同步记录账本 = 设备本地审计，不进 S3（261105 第 4 项）**：只记三类「远端覆盖本地 / 他端删除（含 quick-purge）/ 保存时磁盘被改」，桌面/移动各一张本机表（500 条 / 90 天轮转）；恢复走历史快照 → 标 local-wins 重传；**后台同步绝不弹窗**，只给角标 + 列表；不做富文本合并界面、不做云端共享账本。
-- **容错与自愈契约 = `docs/RESILIENCE.md`（261105 起）**：崩溃/坏数据/坏库/异常操作的判据、降级与取证**单一来源**在本文档（六原则 + 能力表 + 故障模式矩阵 + 思源借鉴清单 + 验证债）。硬规则：**新增失败面必须回填**；同一失败面只允许一套判据（坏正文 = `core/docBodySafety`，DB 完整性 = 桌面 `electron/startupRecovery` 启动预检 / 移动 `src/mobile/data/dbHealth`）；「解析失败」路径**禁止写回**（只读 + 横幅）；坏库必须给用户可操作出口（恢复页 / 从备份恢复 / 云端恢复），不得卡启动画面；后台定时任务单飞 + 失败只记日志；同步窗口内的本地动作优先（不回滚、不重建、不清墓碑）。
-- **编辑器「打开 = 只读」（261023）**：打开文档**不得**因序列化/规范化差异写盘、标脏或触发同步。usheet 三件套（缺一即回归）：`core/usheetDoc.ts` 的 `normalizeUsheetWorkbook`（写入/比较的规范形式）、`UniverSheetEditor` 首次 flush 只对齐基线（`baselineSettledRef` + 内容输入判据）、capture 在**无真实改动或改回原样**时返回磁盘原文。护栏 `usheetOpenReadOnly.test.ts`。**移动端 usheet 保存路径已接同一 helper（261028；capture/基线都先 normalize）**。
-- **手动删数据（正文文件缺失）= 显式一次、可处置、不重复打扰（261023）**：`store.readNote` 遇 ENOENT 返回 `bodyMissing`（**不抛错**）⇒ 启动跳过 + 打开时只读专用面板（历史恢复 / 重新读取 / 关闭标签），每篇每会话只提示一次；同步**绝不上传空正文**（云端有副本 → 拉回恢复并给 warning；没有 → `local_body_missing` 跳过）；删除仍走目录右键（单一来源）；**资源页「缺正文」页签**按「可云恢复 / 仅历史 / 无备份」分组，行内可 从云端拉回 / 恢复最新历史 / 彻底删除（先移入回收站再 purge 清索引/对象）。护栏 `store.test.ts` / `electron/s3v3/syncEngine.test.ts` / `desktopDerivedState.test.ts`。**小记没有历史快照**：缺正文小记只有两条路——云端镜像（按 contentHash 校验）或搜索索引全文缓存（有损，重建纯文本后标 local）；判据 `missingQuickNoteRecovery`，入口 = 资源页「缺小记」页签（`quickNotes.purgeMissingQuickNote` 直接写含 purged_at 墓碑，不读正文）。**不要**退回"每次打开都弹 ENOENT"。
-  **移动端（261104 B-lite）**：文档缺正文 = **不打开** + 同源 toast（每篇每会话一次）；小记同（此前静默已修）。入口 = 设置→资源管理「缺正文 / 缺小记」（只 stat、判据同 `core/missingBody`；文档可云端**单篇**拉回 / 历史恢复 / 彻底删除，小记可云端 / 搜索缓存重建纯文本 / 彻底删除）。**不做**移动端只读编辑器、也不搬完整资源页。护栏 `src/mobile/data/missingBodies.test.ts` / `MissingBodiesSheet.render.test.tsx` / `bridge/missingBodyRecovery.test.ts`。
-- **多维表导航 = 设备本地**：`activeTableId`/`activeViewId` 不写正文（序列化恒写第一张表/第一个视图），只写 `localStorage`（`lakex-local-notes-v3.bitable-nav.<noteId>`）。**不要**把导航写回正文（纯导航会触发一次 S3 上传）。
-- **互斥域**（判据单一来源 `src/core/maintenancePolicy.ts`；移动端 `mobile/sync/maintenanceLocks.ts`）：**写域**（本地写 + 同步引擎的 DB 片段）／**维护域**（syncNow / GC / 资产补拉）／**高优先域**（用户当场发起、不得排在整轮同步后面的 `syncQuickNote`，判据 `PRIORITY_OPS`）。三条不变量：**I1** 网络往返不得持有写域；**I2** 跨网络窗口的「读 → 标记/落地」必须靠"未变才标 / 未变才应用"守卫（内容 hash），不靠全局互斥；**I3** 同域串行、**禁止同域嵌套**（`KeyedAsyncQueue` 无重入 ⇒ 自锁）。护栏：`electron/maintenanceQueueScope.test.ts`、`src/mobile/maintenancePolicyCoverage.test.ts`。
-- **同步要"看得见"**：移动端把「上次同步（时间/结果/失败原因）」落盘并**常驻设置页**（`mobile/sync/syncStatusStore.ts`，设备本地；**写入点唯一** = `bridge.syncNow()`；"离线没尝试"不写）；桌面有 `SyncStatusPopover`。
-- **S3 配置迁移（261017）**：主路径 = 桌面导出 `.json` 文件 → 手机选文件导入；内层统一走 `src/core/s3ConfigTransfer.ts` 的 `LLN1.` 迁移码（AES-GCM）。桌面**在主进程**弹框/封装/解码（渲染层不接触明文 Secret，不破 W-14），移动端导入强制虚拟托管（D2）；迁移码仅作备用。**固定种子只是防误读封装，不是安全边界**——文件/迁移码别外传，怀疑泄露就轮换 S3 密钥。
-- **开/关应用各同步一次**（只要 `autoMode !== "manual"`；`manual` 不补，保持真正不出网）：桌面 = 就绪 + `before-quit`（`QUIT_SYNC_DEADLINE_MS=60s` 兜底）；移动端 = 就绪（显式信号：`phase` 离开 booting）+ 回前台 + **进后台 best-effort（失败静默、不做等待）**，自动触发之间在途去重。判据单一来源 `core/syncModes.ts` 的 `shouldSyncOnOpenClose()`；文案 `SYNC_OPEN_CLOSE_NOTE`。**能不能出网仍另走 `canTouchNetwork()`，两条判据别合并**。
-  **两个例外（用户定稿）**：① 长按桌面图标「小记」的快捷入口 = **「假单独模块」**：这次会话**不主动发起任何同步**（入口/回前台/进后台全跳，只有点「保存并同步」出网；用户自己配的间隔定时器不在此列），提交后不进列表、停在写作界面可连续记，手动退出 = 直接退 App 回桌面。② **点「保存」而不点「保存并同步」= 用户不着急** ⇒ **不得**替他补一次隐式推送（"这种情况下做什么同步，不能想当然"）。
-- **AI 助手默认关（261103 定稿）**：桌面 `src/lib/aiEnabled.ts` 与移动 `src/mobile/ai/aiSettings.ts` **同口径、默认关**（判定 = localStorage `=== "1"`；存储不可用时也按关 = fail-closed）。关闭 = **任何路径不出网**（`lib/ai.ts` 的 `runAiChat` 拒绝 + `aiNetworkHint` 文案），**配置与 API Key 保留**；入口仍可见（否则用户找不到开关）。要改默认值 = 同时改两端 + 更新 `lib/aiEnabled.test.ts`。
-- **小记「保存并同步」= 整轮 v3 同步兜底（261026 起）**：旧单条推送实现已删除（`quickNotePush.ts` / `quickNotesSyncEngine.ts`）。桌面 IPC `sync_quick_note`、移动 `bridge.syncQuickNote` 走高优先域，并在 v3 串行门内跑一整轮 v3 同步（先查本地存在；返回 pushed）。**不要**再实现"只 upsert 一条清单"——v3 没有单文件覆盖写清单，小记与文档同一个 pointer 提交。UI：主按钮**保持原来的「保存 / 小记一下」**，「保存并同步」是**普通按钮**夹在中间；云同步关闭时**置灰 + 给理由**（移动端要有一行可见说明，没有 hover）。护栏 `src/components/app/quickNoteSyncGate.test.ts`。
-- **小记预览 = 快路径 + 内核只读兜底**：自研解析器（`src/features/quickNotes/quickNotePreviewParser.ts`）只画纯文字/列表/媒体（**零内核实例**，冷开不受影响）；出现它还原不了的块（表格/代码块/公式/画板/思维导图/日历/日期/表情…）⇒ **整条卡片交给内核只读视图**（`QuickNoteKernelPreview`，`createLakeDocument(host,"viewer",…)` + `IntersectionObserver` 只挂视口内）。判据 = 解析器自己的 `unsupported` 节点（`hasUnsupportedNodes`），**不另立清单**。⇒ 格式覆盖度由内核保证；「+」插入面板 = 内核全量。
-- **小记写作卡工具条 = 用户指定七项**：日期·表情·图片·附件·待办·无序·分隔线（精简掉引用/有序）。唯一来源 `src/features/editor/lakeRuntime.ts` 的 `QUICK_NOTE_TOOLBAR_ITEMS`，顺序由 `quickNoteToolbar.test.ts` 卡住。字符串 id 必须内核有效（**无效 id 会被静默丢弃**）；日期/表情/附件走**自定义工具项类**（`features/quickNotes/quickNoteToolbarWidgets.ts`）；**移动端不提供「展开」**。
-- **内核浮层 portal 到 `body`**（`.ne-overlay-container`）⇒ 移动端要覆盖内核浮层**必须用 body 级选择器**（入口已加 `body.lake-mobile`）。
-- **移动端 Lake 输入面 = 底部 dock，没有第二条路**：移动端编辑态内核工具栏**整条不存在**（`showToolbar:false` ⇒ `disabledPlugins:["save","toolbar"]`）、块悬浮手柄/选区浮栏不挂载、`/` 斜杠面板不可用 ⇒ **能输入什么只取决于 dock 接线了什么**（桌面固定栏 27 项 + 插入面板 22 项里没接进 dock 的，移动端能显示、不能输入）。新增移动端输入能力一律走 dock。**平板（261102 十四批定稿）同样只走 dock**：曾试过「expanded 改内核固定工具栏」，用户判定桌面工具条不适合触屏，已整体回退；平板只保留外壳层的宽/侧栏差异（`src/mobile/pad/`，规格见 `docs/PAD-ADAPTATION.md` §10.16）。**收面板→键盘（restore 档）必须让面板内容保持到被键盘盖住**（`closingHold`；提前播滑出/淡出 = 键盘还在升、面板先空一块，261019 用户报「闪烁」）。
-- **移动端正文 = 文件（261019 与桌面同构）**：正文/小记/历史/草稿落 App 私有 Data（相对路径单一来源 `src/core/noteBodyPaths.ts`，原生 `BodyStorePlugin` 原子写 + gzip 快照）；**SQLite 只存元数据/hash/同步账本/派生 text_cache+FTS**。旧库 `notes.content` 升级时**整库重置一次**（§3#7），**不要**为 content 列写兼容读取；浏览器预览的正文是内存（刷新即丢），真机/模拟器才是文件。
-- **移动端 SQLite schema = 版本门 + 批量 DDL**（261021，冷启动 DDL 2.4s → 185ms）：`applyMobileSchema` 先读 `PRAGMA user_version`（`MOBILE_SCHEMA_VERSION`，`src/mobile/data/schema.ts`），版本已到就整段跳过；首次把 DDL 拆两批走 `executeSet`（底表一批 / 条件语句一批）。**改表/索引必须 +1 版本号**；新增 DDL 只加到 `baseSchemaStatements`（不依赖读状态）或 `collectSchemaStatements`（依赖读状态），**不要再回到逐条 `db.exec`**（原生端一条 = 一次桥往返，实测 ~68ms）。
-- **移动端有自己的设计与样式层**（`src/mobile/**`，`mb-*` + 移动端 theme）：**不引桌面样式层**，两端 UI 不共享。
-- **桌面内核加载边界（261103 P12 定稿）**：桌面入口**不得静态 import** `features/editor/lakeRuntime`；内核只经 5 个 React.lazy 边界加载（`EditorTab` / `TrashPanel(embed)` / `NoteInfoDialog` / `HistoryPanel` / `QuickNoteEditor`），并由 `features/editor/kernelPrefetch.ts` 在启动就绪 3s 的空闲时预取同一 chunk。护栏 `desktopKernelLazy.test.ts`（5 边界静态契约 + 预取目标）、`check-arch` 桌面首屏预算 600KB、`check-bundle` app-js 300KB。**不要为了"少一次动态 import"把内核加回入口**；新增内核消费者 = 新增 React.lazy 边界并登记测试。
-- **平板外壳 = 判据 store + 外壳 reducer（261103 定稿）**：`pad/formFactor.ts` 是**单一 store**（`useSyncExternalStore`；`installFormFactor` 唯一 listener、幂等；写 `html[data-form-factor]`，**不要再加 body 类名/原生形态桥/第二份 resize 监听**）；判据 = 窗口宽 + 高（`expandedMinHeight=560`；有效高度取稳定外壳高，键盘不翻形态）。侧栏状态 = `notebook/shellModel.ts` 纯 reducer（每侧 closed/floating/pinned；`padEscapeTarget` 定 Esc 顺序；`padPinnedPrefs` 只记 pinned）——**开合/固定/收起/手势/Esc 一律 dispatch，不要在组件里再写布尔组合**。两侧栏**常驻 DOM**（开合切 class，手势才能跟手、状态才不丢）；平板通用几何**只在 `pad/pad.css`**（`padCssOwnership.test` 钉死），别再写回 `mobile.css`。
-- **手写板两端共享样式 = 副本 + 类名集合护栏（261104 二十五批）**：`src/mobile/ink/inkPad.shared.css` 是 `src/features/ink/inkPad.shared.css` 的**独立副本**（移动端不引桌面样式）；两份的类名集合由 `src/mobile/ink/inkSharedCssParity.test.ts` 钉死，**给共享文件加规则必须同步移动端副本**（v4 就因只加桌面侧 ⇒ 移动端文字框退化成默认 textarea）。差异只允许触发方式（桌面 :hover / 移动 :active）与命中盒尺寸。**瞬时动作结果**（导入失败/完成、插入贴图失败、导出完成）走 `InkPad` 的 `onTransientMessage`：移动端注入 `showToast`（`.mb-toast`，不占编辑空间）、桌面退回板内横幅；**常驻状态**（保存失败、正文坏、只读）才用板内横幅，别混用。
-- **手写板页面导航 = 单一入口左侧悬浮覆盖面板（261104 二十六批定稿；二/三轮修正）**：底栏只有 `◀ 第 n/N 页 ▶ ＋ ▦页面 ▮页签`；`页面` 打开 `InkPagesPanel`（**左侧悬浮覆盖编辑区、不移动画布、不可固定**；宽度可拖 **320–560**、记设备本地）。**最小宽 320 = 顶栏刚好一行 + 一行 2 个缩略图（grid `minmax(132px,1fr)`，面板内距 20 + 间距 10）**，改小前先算这两个约束。两视图：**缩略图** = 2 列大图 + **长按 300ms 拖拽排序**（移动 8px 取消、松手按槽位提交、拖拽后吞掉这次 click）+ 只留删除 + 新建页（无筛选/摘要/查找）；**大纲** = 列表 + 筛选 `全部|批注|页签` + 摘要 + 查找；跳页控件在面板头部；**滚动 + 页码直跳**（不做分页条）。**页签编辑 = 底栏独立 `InkPageTabButton`**（打标记 / 保存文字 / 清除；只读禁用；弹层按按钮位置自适应左/右展开，避免被面板或窗口裁），不在页面面板里；**表单本体 = `InkPageTabForm`（两端共享，已登记 SHARED）**：桌面弹层 / 移动底部 Sheet 同一份语义。**移动端入口在顶部悬浮导航**（InkPad 只留 `renderPageTab` 宿主注入点，按钮与 `MobileSheet` 由 `src/mobile/ink/MobilePageTab.tsx` 提供 —— 共享层不发 `mb-*` 类名）；Pad 与手机同一套外壳，自动兼容，不做平板专属分支。大纲「查找」只能搜**页签文字与页码**（笔迹无 OCR）。
-- **手写板正文格式 = inkDoc v4（261104；v3 读兼容）**：**读 1|2|3|4 写 4**（点编码扁平 + 定点 0.01）；`activePageId` 是**设备本地视图**（`lakex-local-notes-v3.ink-nav.<noteId>`）**不许写回正文**；`sourcePdf` 只留 `{name,pageCount}`、页级 `pdf` 只留 `{page}`（原 PDF 不入库）；坏页可丢但必须计数+告警，**v4 的集合字段坏元素只丢自己**（`page.note/images/texts`）。
-  v4 新增三件页级内容（**一次升版装齐，避免反复把旧端踢进只读**）：`page.note` **页签**（**字段存在即页签；空串 = 纯标记**，可选一句话说明；取代设备本地书签，跨端同步）、`page.images` 页内贴图、`page.texts` 页内文字块；三者都进导出（PDF/SVG/PNG）与全文搜索（`inkToSearchText`，笔迹仍不可搜）。**S3 协议不需要动**（正文按字节内容寻址、资产声明是全文扫描），唯一代价是**旧端读到 v4 进只读保护**（v1→v2→v3 同先例）；改格式必须走同款「新端写新版、旧端只读」并同步 `docs/INK-PAD.md`。落笔/翻页**不得**做整篇序列化（走 500ms 防抖 + capture 现算）。
-- **目录/知识库节点图标与文内表情输入解耦**：两端各自实现节点选择器与图形；只共享`src/lib/nodeIcons.ts`的目录/编解码与表情数据/最近记录逻辑。移动端节点选择器不得import输入态`EmojiPanel`或使用其`mb-emoji-*`类。**默认资源页**唯一判据`nodeIconPickerMode(nodeType)`：笔记本/分组→图标，所有文档类型→表情；当前保存的资源种类不覆盖这条默认规则。目录图标值仍为≤16字符短串，不改同步字段。
-- **移动端「文档内查找」= 自研一套**（261016 实测定稿）：内核查找面板只随工具栏 `search` descriptor 挂载，而移动端**关掉了工具栏插件** ⇒ 移动端既无面板也无热键。实现 = `src/mobile/editor/MobileFindBar.tsx`（DOM 文本节点扫描 + CSS Custom Highlight API 双高亮 + `n/m`；正文变化自动重扫），**入口 = 工作区顶栏右上角**（工作区胶囊是定稿四格、且不许放搜索）。**桌面不加入口**：内核自带 ⌘F 面板已够用，别再包一层（曾加过、已按用户要求整体回滚）。语义与实测见 `docs/LAKEX-CONTRACT.md` §5.39/§5.40/§5.41。
-- **移动端入口分工（261014 用户逐条定稿，都是"别再搬回去"型契约）**：
-  **首页 = 底部五格 Dock（小记·知识库·日记·AI·标签）+ 中央悬浮＋**（261110 改版，取代 261014 的「搜索·＋·AI」胶囊）：五格=五个一级空间，**左右滑动仍是同一分页容器**（`HOME_TABS` 单一来源）；顶栏 = 设置 | 空间标题 | 排序/视图 + 搜索 + **云同步（恒可见、最右）**；「＋」在 Dock 上方中央：短按新建面板、**长按 260ms+上滑=速记**（`ui/createPress.ts`）；AI=**第 4 格分页**（`MobileAiPage embedded`，非全屏路由；返回键回上一个非 AI 空间）；写作/多选态隐藏 Dock 与＋；
-  工作区胶囊 = **文档树 · 标签页 · 大纲 · 切换笔记本**（原「更多」已删 —— 编辑在顶栏、新建在抽屉与行内）；
-  **平板（261102 十四批定稿）与手机同一套胶囊**：曾把胶囊换成顶栏按钮/常驻侧栏，用户判定"和移动端一模一样就行"已回退；平板只多「更宽 + 树/大纲默认悬浮、可固定」。
-  **胶囊（261103 二轮定稿）**：**文档（Lake）编辑态常显**并抬到底部 dock 上方（`.mobile-bottom-bar--above-dock` + `.mobile-workspace--capsule-edit` 正文底距）——编辑态也可能没有光标、键盘与二级面板都没展开，此时要能切目录/看大纲/换标签/切笔记本；但**允许被覆盖**：① 键盘弹起 ⇒ `useWorkspaceChrome` 的 `capsuleHidden` 直接隐藏（fixed 会跟视口上浮）；② dock 二级工具栏展开 ⇒ 层序盖住（胶囊 above-dock **z=2** < dock 容器 **z=4**，见 `editor-dock.css`；反过来就是"胶囊浮在色板上"）。**261104：面板 open/closing 阶段胶囊可见性要冻结**（`notebook/capsuleVisibility.ts` + `editor/dockPanelPhase.ts`）、编辑态胶囊 CSS 过渡 = none——面板开合会顺带切 IME，旧判据在过渡里抖一次会把胶囊拉出来又塞回去（用户报「闪入闪出」）。**不要再让胶囊在面板过渡里跟着 keyboardOpen 滑入/滑出**。表格/多维表/画板/手写板编辑态仍隐藏（各自底部工具条占位）。表格**阅读态**仍用 `.mobile-bottom-bar--above-sheet` 让位 Univer 工具条。**横向手势拉侧栏只对文档开放**（`usePanelDrag.allowFrom` 豁免 Lake 正文 contenteditable；`canOpen` 收窄为「只认文档类型」）—— 其余编辑器自身有横滑语义，不要放开。胶囊底距 = status + gap + safe − `--mobile-capsule-drop`（12，261103 整体下移一档）。
-  工作区菜单里**不许再放搜索 / 设置**（设置 = 首页顶栏齿轮；搜索 = 首页顶栏放大镜，全库范围而非"笔记本内搜索"）；
-  目录抽屉 = 笔记本行（**只展示图标 + ＋，不放 ⋮**）+ 每一行 `[⋮][＋]`（**新建统一走 ＋ / 抽屉工具栏「新建」**；行 ⋮ = 重命名/设置图标/设为常用/移动到…/历史/属性/删除 —— 261019 用户点单去掉「新建文档 / 新建分组」）；
-  **笔记本的编辑入口 = 首页「知识库」长按卡片**（重命名 / 设置图标 / 删除笔记本；**不含**新建文档·新建分组，用户明确去掉）；
-  长按唯一实现 = `src/mobile/ui/useLongPress.ts`（卡片 10px 取消；目录行 `moveCancelPx:0`），**别再写第二份计时器**。
-- **发版 / 版本号单一来源 = `package.json`（261030 起）**：发版只 `npm version patch --no-git-tag-version` + 提交 + **注解 tag `vX.Y.Z`** 并推 tag（只有 tag 触发 CI）；**不要手改** `android/app/build.gradle` 的版本号 —— 它从根 `package.json` 派生（versionName = 语义版本；versionCode = 1000 + major×10000 + minor×100 + patch，**只增不减**，否则 `adb install -r` 会因 `INSTALL_FAILED_VERSION_DOWNGRADE` 失败）。发出去的 tag **不可移动**，发错只能 bump 版本再发。
-
-- **更新中心（261109）**：只做稳定版（无通道）；清单 = GitHub latest release 的 `latest.json`（CI 生成，解析/比较以 `src/core/update/updateManifest.ts` 为准）；自动检查默认开（启动 + 6/12/24h）、自动下载默认开（Android 仅 Wi-Fi）；**不做静默安装**（桌面打开安装包、Android 拉起系统安装器）；下载必须校验 sha256，Android 另验 `ANDROID_RELEASE_CERT_SHA256`；设置只存设备本地；发版正文与更新日志同源 `docs/RELEASE-NOTES.md`（规格 `docs/UPDATE-CENTER.md`）。
+- **S3 协议 v3（261026 转正）**：云端只有 `meta/pointer.json`（约 200B）+ 两个不可变索引（`meta/index/{hash}.json` / `quick-notes/meta/index/{hash}.json`）+ 每篇文档资产声明 + 内容寻址正文/附件；**无墓碑、无 manifest 链、无全局资产清单**。发布 = 写索引 → 取锁 → 读回 pointer → 写 pointer（无 CAS，靠锁 + 读回 + 重试）；零变更轮只读 pointer。深度清理 = 列举对象与当前 pointer/索引/声明对比删孤儿（`deepCleanup`）。旧 `manifests/latest.json` **不读、不迁移、不删除**（孤儿）。核心纯逻辑 `src/core/s3v3*.ts`（v4 编排内核 `src/core/s3v3/commit/*` + 单 DeviceStore，261029 收口）；适配器 `electron/s3v3/*`、`src/mobile/v3/*`。
+- **冲突判定 = 三方合并**（`core/s3v3Decision.ts` + `s3v3Merge.ts`）：base×local×remote，顺序 = 恢复标记 → 本地删除意图 → 缺席/新增 → contentHash；远端已发布 ⇒ 远端胜，被覆盖版本先 `createHistorySnapshot`；设备基线 `sync-v3/baseline.json.gz`（移动 `sync_v3_state`）**绝不上传**。`folders[]` 必填；手动同步只发触发窗口、自动同步广播所有窗口；同步/GC/深度清理共用 `enqueueMaintenance` 串行队列。v3 资产按每文档声明差集并发传输（`runPool`，并发 12）；上传失败的笔记本轮不进新索引。
+- **macOS 应用菜单**（`electron/appMenu.ts` 纯函数 + 测试）：只 darwin 装，分组 = appMenu/编辑/窗口/帮助，**role 打底 + 中文 label**；「设置…（⌘,）」只 `webContents.send(open-settings)`（主进程不造窗口）；帮助 = 使用文档/反馈/打开数据目录/开发者工具（仅 dev）。**标题取 bundle 的 `CFBundleName`**（dev 显示 Electron，打包版 = productName；`app.setName`/label 改不了）。**不做**多窗口切菜单/自定义热键/i18n。
+- **壳层双 origin**：打包版页面 = `lakexlocalnotes://app`（`appOrigin.ts` + `appProtocol.ts` 服务 `dist/`），dev 走 vite。**判页面来源禁止比 `URL.origin`**（非特殊 scheme 在 Node 恒为 `null`）⇒ 比 scheme+host（`isAppOriginUrl`）；资产服务白名单/ACAO 同时放行 `APP_ORIGIN`。**主进程 external 从 `package.json.dependencies` 派生**（+ `@smithy/`），别退回首写清单。
+- 小记独立前缀 `quick-notes/` + 独立库 `quick-notes/metadata.sqlite3`；标签目录只在小记标签库（261107 起桌面文档标签关系也已迁入）。
+- **日记空间（261109）**：日记 = 普通 Lake 文档（「日记」笔记本 + 标题即日期 `YYYY-MM-DD` + 年/月两级 group），wire 标记 `folders[].space`（**不用 `TreeNode.kind`**；发布显式写、非日记写 `null`）；文档树不显示日记本、不打标；搜索复用 FTS（不新增索引）；打开某天由主进程/数据层重新 plan + 单事务。**契约只看 `docs/DIARY.md`。**
+- **编辑器「本机视图」= 设备本地**：当前工作表/缩放/选区/滚动/折叠/画板视口**不进正文、不标脏、不进 S3**；表格列宽行高隐藏冻结、多维表视图配置仍属文档数据；`onDirty` 只在正文真变时触发。**表格语义（261104 用户裁决）**：排序、冻结、单元格/行列保护 = 文档数据；阅读态只读（排序/冻结回编辑态做，不提供移动端保护入口）；阅读态筛选是唯一例外（只本机、绝不写正文）。
+- **标签顺序 = 设备本地（261105）**：标签目录与单条顺序不参与同步；标签置顶已删除（不要恢复）；默认顺序 = 新的在前（`createdAt DESC`）→ 名称，拖拽后本机记 `device_state.quick_tags_manual_order`、新增追加末尾；wire 上 `tagIds` 是排序后的集合（顺序不传播）。文档标签关系随索引 `tagIds/tagsUpdatedAt` 同步（集合 + 版本 LWW）；**发布时有版本就必须显式写 `tagIds`（空集合也写 `[]`）**。
+- **标签删除 = 缺席（261105；S3 列表红线）**：云端 `tags[]` 只出现 active 标签，**禁止墓碑进索引**；删除 = 本机物理删行 + 清 `tag_links`/`tag_link_versions`，跨端靠「基线有 / 远端缺席」，删除压编辑；离线删除用 `device_state.tag_deleted` 抑制远端重发；旧库 `deleted_at` 行由一次性迁移清掉（`tag_absent_migrated`）。**不要再引入标签墓碑/`deletedAt`**。
+- **同步记录账本 = 设备本地审计，不进 S3**：只记三类「远端覆盖本地 / 他端删除 / 保存时磁盘被改」，桌面/移动各一张本机表（500 条 / 90 天轮转）；恢复走历史快照 → 标 local-wins 重传；**后台同步绝不弹窗**，只给角标 + 列表。
+- **容错与自愈契约 = `docs/RESILIENCE.md`**（判据/降级/取证单一来源）：**新增失败面必须回填**；同一失败面只允许一套判据（坏正文 = `core/docBodySafety`；DB 完整性 = 桌面 `electron/startupRecovery` / 移动 `src/mobile/data/dbHealth`）；「解析失败」路径**禁止写回**；坏库必须给可操作出口；后台定时任务单飞；同步窗口内本地动作优先。
+- **编辑器「打开 = 只读」**：打开文档不得因序列化/规范化差异写盘、标脏或触发同步。usheet 三件套：`normalizeUsheetWorkbook`（写入/比较的规范形式）、首次 flush 只对齐基线（`baselineSettledRef` + 内容输入判据）、capture 无真实改动/改回原样时返回磁盘原文；护栏 `usheetOpenReadOnly.test.ts`。移动端 usheet 保存路径已接同一 helper。
+- **手动删数据（正文文件缺失）**：`store.readNote` 遇 ENOENT 返回 `bodyMissing`（**不抛错**）⇒ 启动跳过 + 打开时只读面板（历史恢复/重新读取/关闭）；同步**绝不上传空正文**；资源页「缺正文」按「可云恢复 / 仅历史 / 无备份」分组处理；**不要**退回「每次打开都弹 ENOENT」。**小记没有历史快照**：恢复只有云端镜像或搜索索引全文缓存（判据 `missingQuickNoteRecovery`，入口资源页「缺小记」）。移动端（261104 B-lite）：缺正文**不打开** + 同源 toast（每篇每会话一次）；入口 = 设置→资源管理；**不做**移动只读编辑器。
+- **多维表导航 = 设备本地**：`activeTableId`/`activeViewId` 不写正文（序列化恒写第一张表/第一个视图），只写 `localStorage`（`lakex-local-notes-v3.bitable-nav.<noteId>`）。
+- **互斥域**（判据 `src/core/maintenancePolicy.ts`；移动 `mobile/sync/maintenanceLocks.ts`）：**写域** / **维护域**（syncNow/GC/资产补拉）/ **高优先域**（`syncQuickNote`，`PRIORITY_OPS`）。三条不变量：**I1** 网络往返不得持有写域；**I2** 跨网络窗口的「读 → 标记/落地」靠「未变才标 / 未变才应用」（内容 hash），不靠全局互斥；**I3** 同域串行、**禁止同域嵌套**（`KeyedAsyncQueue` 无重入 ⇒ 自锁）。
+- **同步要「看得见」**：移动端「上次同步（时间/结果/失败原因）」落盘并常驻设置页（`mobile/sync/syncStatusStore.ts`；**写入点唯一** = `bridge.syncNow()`）；桌面 `SyncStatusPopover`。
+- **S3 配置迁移（261017）**：主路径 = 桌面导出 `.json` → 手机选文件导入；内层统一 `src/core/s3ConfigTransfer.ts` 的 `LLN1.` 迁移码（AES-GCM）；桌面在**主进程**弹框/封装/解码（渲染层不接触明文 Secret），移动端强制虚拟托管；迁移码仅备用，**固定种子不是安全边界**。
+- **开/关应用各同步一次**（`autoMode !== manual`）：桌面 = 就绪 + `before-quit`（60s 兜底）；移动 = 就绪 + 回前台 + 进后台 best-effort；判据 `core/syncModes.ts` 的 `shouldSyncOnOpenClose()`。**两个例外**：① 长按图标「小记」入口 = 假单独模块（会话内不主动同步，只有「保存并同步」出网）；② 点「保存」而非「保存并同步」= 用户不着急 ⇒ **不得**补隐式推送。能不能出网仍另走 `canTouchNetwork()`。
+- **AI 助手默认关**：桌面 `src/lib/aiEnabled.ts` 与移动 `src/mobile/ai/aiSettings.ts` 同口径（localStorage `=== 1`，存储不可用 fail-closed）；关闭 = 任何路径不出网，配置与 Key 保留；入口仍可见。改默认值要同时改两端 + 测试。
+- **小记「保存并同步」= 整轮 v3 同步兜底**：桌面 IPC `sync_quick_note`、移动 `bridge.syncQuickNote` 走高优先域并跑整轮 v3（**不要再实现只 upsert 一条清单**）；UI 主按钮是「保存 / 小记一下」，「保存并同步」是普通按钮，云同步关闭时置灰 + 给理由；护栏 `quickNoteSyncGate.test.ts`。
+- **小记预览 = 快路径 + 内核只读兜底**：自研解析器（`quickNotePreviewParser.ts`）只画纯文字/列表/媒体（零内核实例）；出现它还原不了的块 ⇒ 整条卡片交给内核只读视图（`QuickNoteKernelPreview`，`createLakeDocument(host, viewer, …)` + `IntersectionObserver`）。判据 = 解析器自己的 `unsupported` 节点，不另立清单。
+- **小记写作卡工具条 = 用户指定七项**：日期·表情·图片·附件·待办·无序·分隔线；唯一来源 `QUICK_NOTE_TOOLBAR_ITEMS`（`lakeRuntime.ts`），顺序由 `quickNoteToolbar.test.ts` 卡住；字符串 id 必须内核有效（无效 id 被静默丢弃）；日期/表情/附件走自定义工具项类；**移动端不提供「展开」**。
+- **内核浮层 portal 到 `body`**（`.ne-overlay-container`）⇒ 移动端覆盖内核浮层必须用 body 级选择器（入口已加 `body.lake-mobile`）。
+- **移动端 Lake 输入面 = 底部 dock，没有第二条路**：移动端编辑态内核工具栏整条不存在（`showToolbar:false` ⇒ `disabledPlugins: [save, toolbar]`）、块手柄/选区浮栏不挂载、`/` 斜杠面板不可用 ⇒ **能输入什么只取决于 dock 接线了什么**（桌面 27 项 + 插入面板 22 项里没接进 dock 的，移动端能显示不能输入）。新增输入能力一律走 dock。**平板同样只走 dock**（261102 十四批定稿）：曾试「expanded 改内核固定工具栏」被整体回退，平板只保留外壳层宽/侧栏差异（`src/mobile/pad/`，见 `docs/PAD-ADAPTATION.md`）。**收面板→键盘（restore 档）必须让面板内容保持到被键盘盖住**（`closingHold`），否则用户报「闪烁」。
+- **移动端正文 = 文件**：正文/小记/历史/草稿落 App 私有 Data（路径单一来源 `src/core/noteBodyPaths.ts`，原生 `BodyStorePlugin` 原子写 + gzip 快照）；**SQLite 只存元数据/hash/同步账本/派生 text_cache+FTS**。旧库 `notes.content` 升级时**整库重置一次**（§3#7），**不要**写兼容读取；浏览器预览的正文在内存（刷新即丢）。
+- **移动端 SQLite schema = 版本门 + 批量 DDL**：`applyMobileSchema` 先读 `PRAGMA user_version`（`MOBILE_SCHEMA_VERSION`），已到就整段跳过；首次 DDL 拆两批走 `executeSet`（底表 / 条件语句）。**改表/索引必须 +1 版本号**；新增只加到 `baseSchemaStatements` 或 `collectSchemaStatements`，**不要再回到逐条 `db.exec`**（原生端一条 = 一次桥往返）。
+- **移动端有自己的设计与样式层**（`src/mobile/**`，`mb-*`）：**不引桌面样式层**，两端 UI 不共享。
+- **桌面内核加载边界**：桌面入口**不得静态 import** `features/editor/lakeRuntime`；内核只经 5 个 React.lazy 边界（`EditorTab` / `TrashPanel(embed)` / `NoteInfoDialog` / `HistoryPanel` / `QuickNoteEditor`）+ `kernelPrefetch.ts` 就绪 3s 空闲预取。护栏 `desktopKernelLazy.test.ts`、`check-arch` 桌面首屏 600KB、`check-bundle` app-js 300KB。新增内核消费者 = 新增 lazy 边界并登记测试。
+- **平板外壳 = 判据 store + 外壳 reducer**：`pad/formFactor.ts` 是单一 store（`useSyncExternalStore`，`installFormFactor` 唯一 listener、幂等，写 `html[data-form-factor]`，**不要再加 body 类名/第二份 resize 监听**）；判据 = 窗口宽 + 高（`expandedMinHeight=560`，键盘不翻形态）。侧栏 = `notebook/shellModel.ts` 纯 reducer（每侧 closed/floating/pinned；`padEscapeTarget` 定 Esc 顺序；`padPinnedPrefs` 只记 pinned）：**开合/固定/收起/手势/Esc 一律 dispatch**。两侧栏常驻 DOM；平板几何**只在 `pad/pad.css`**（`padCssOwnership.test` 钉死）。
+- **手写板两端共享样式 = 副本 + 类名集合护栏**：`src/mobile/ink/inkPad.shared.css` 是桌面副本的独立拷贝（移动端不引桌面样式），类名集合由 `inkSharedCssParity.test.ts` 钉死；**给共享文件加规则必须同步移动端副本**。差异只允许触发方式（桌面 hover / 移动 active）与命中盒尺寸。瞬时动作结果走 `onTransientMessage`（移动 toast / 桌面板内横幅），常驻状态才用板内横幅。
+- **手写板页面导航 = 单一入口左侧悬浮覆盖面板**：底栏只有 `◀ 第 n/N 页 ▶ ＋ ▦页面 ▮页签`；`页面` 打开 `InkPagesPanel`（左侧悬浮、不移动画布、不可固定；宽度可拖 320–560、设备本地）；缩略图视图 = 2 列 + 长按 300ms 拖拽排序 + 删除 + 新建页；大纲视图 = 列表 + 筛选（全部/批注/页签）+ 摘要 + 查找（只搜页签文字与页码，笔迹无 OCR）；**页签编辑 = 底栏独立 `InkPageTabButton`**，表单本体 `InkPageTabForm` 两端共享（桌面弹层 / 移动 Sheet）；移动端入口在顶部悬浮导航（共享层不发 `mb-*`）；Pad 同一套外壳。
+- **手写板正文格式 = inkDoc v4（261104；v3 读兼容）**：**读 1|2|3|4 写 4**（点编码扁平 + 定点 0.01）；`activePageId` 是设备本地视图（**不许写回正文**）；`sourcePdf` 只留 `{name,pageCount}`、页级 `pdf` 只留 `{page}`；坏页可丢但必须计数+告警，v4 集合字段坏元素只丢自己。v4 新增页签 `page.note`（字段存在即页签，空串 = 纯标记）/ 页内贴图 / 页内文字块，三者都进导出与全文搜索；**S3 协议不需要动**；旧端读到 v4 进只读保护 ⇒ 改格式必须「新端写新版、旧端只读」并同步 `docs/INK-PAD.md`；落笔/翻页**不得**整篇序列化（500ms 防抖 + capture 现算）。
+- **目录节点图标与文内表情输入解耦**：两端各自实现选择器与图形，只共享 `src/lib/nodeIcons.ts` 的编解码与表情数据；**默认资源页唯一判据 `nodeIconPickerMode(nodeType)`**（笔记本/分组→图标，文档类型→表情）；移动端节点选择器不得 import 输入态 `EmojiPanel` 或用其 `mb-emoji-*`；图标值仍为 ≤16 字符短串。
+- **移动端「文档内查找」= 自研**：内核查找面板只随工具栏 `search` descriptor 挂载，而移动端关掉了工具栏 ⇒ 实现 = `src/mobile/editor/MobileFindBar.tsx`（DOM 文本扫描 + CSS Custom Highlight API + `n/m`），入口 = 工作区顶栏右上角。**桌面不加入口**（内核 ⌘F 已够）。实测见 `docs/LAKEX-CONTRACT.md` §5.39–5.41。
+- **移动端入口分工（用户逐条定稿，别再搬回去）**：首页 = **底部五格 Dock（小记·知识库·日记·AI·标签）+ 中央悬浮＋**（261110 改版；五格 = 五个一级空间，左右滑动仍是同一分页容器，`HOME_TABS` 单一来源；顶栏 = 设置 | 空间标题 | 排序/视图 + 搜索 + 云同步（恒可见、最右）；＋ 短按新建面板、长按 260ms+上滑速记（`ui/createPress.ts`）；AI = 第 4 格分页内嵌；写作/多选态隐藏 Dock 与＋）。工作区胶囊 = 文档树 · 标签页 · 大纲 · 切换笔记本；**平板与手机同一套胶囊**，只多「更宽 + 树/大纲默认悬浮可固定」；胶囊在 Lake 编辑态常显并抬到 dock 上方，但可被覆盖（键盘弹起 ⇒ `capsuleHidden` 隐藏；dock 二级面板层序盖住，胶囊 z=2 < dock z=4）；**面板 open/closing 阶段胶囊可见性冻结**（`capsuleVisibility.ts` + `dockPanelPhase.ts`），编辑态胶囊过渡 = none；表格/多维表/画板/手写板编辑态仍隐藏；横向手势拉侧栏只对文档开放；工作区菜单不放搜索/设置；目录抽屉 = 笔记本行（只图标 + ＋）+ 每行 `[⋮][＋]`（行 ⋮ = 重命名/图标/常用/移动/历史/属性/删除，不含新建）；笔记本编辑入口 = 首页「知识库」长按卡片；**长按唯一实现 = `ui/useLongPress.ts`**（别再写第二份计时器）。
+- **发版 / 版本号单一来源 = `package.json`**：发版只 `npm version patch --no-git-tag-version` + 提交 + **注解 tag `vX.Y.Z`** 并推 tag（只有 tag 触发 CI）；**不要手改** `android/app/build.gradle` 版本（从根 package.json 派生：versionName = 语义版本，versionCode = 1000 + major×10000 + minor×100 + patch，**只增不减**）；已发 tag 不可移动。
+- **更新中心**：只做稳定版；清单 = GitHub latest release 的 `latest.json`（解析/比较以 `src/core/update/updateManifest.ts` 为准）；自动检查默认开（启动 + 6/12/24h）、自动下载默认开（Android 仅 Wi-Fi）；**不做静默安装**；下载必须校验 sha256，Android 另验证书 SHA-256；设置只存设备本地；发布说明与更新日志同源 `docs/RELEASE-NOTES.md`（规格 `docs/UPDATE-CENTER.md`）。
 
 ## 5. 数据路径与安全
 
@@ -157,21 +129,19 @@ LakexLocalNotes = **本地优先**笔记应用：Electron 44.3 + React 18.3 + be
 ```bash
 export PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH"
 cd /Users/admin/file/local-lake/lakex-local-notes
-npm run setup:remotes                                           # 首次/新 clone：配 Gitee+GitHub 双推（remote 不入库）
-npm run setup:lakex                                             # 首次/新 clone：从私有归档恢复闭源内核（缺归档会报错并给指引）
-npx tsc --noEmit && npx vitest run && git diff --check          # 日常门禁（实测 31–36s）
-npx vite build && npx vite build -c vite.mobile.config.ts       # 两条构建
+npm run setup:remotes    # 首次/新 clone：配 Gitee+GitHub 双推
+npm run setup:lakex      # 首次/新 clone：恢复闭源内核（缺归档会报错并给指引）
+npx tsc --noEmit && npx vitest run && git diff --check   # 日常门禁（31–36s）
+npx vite build && npx vite build -c vite.mobile.config.ts # 两条构建
 node scripts/ui-metrics.mjs && npm run check:core && npm run check:mobileui && npm run check:bundle
-bash scripts/clean-dev-artifacts.sh                             # 清可重建垃圾（dist/release/android 产物/.css-audit/dev 缓存/$TMPDIR/lake-*）；默认 dry-run，--apply 才删
-# 平板/折叠屏：窗口矩阵（形态判据 + resize 状态保持）——动形态/外壳/胶囊/侧栏时跑
-npm run check:windowsweep
-# check:arch（首屏资源图字节预算 + import 方向）已链进 check:bundle（需 dist 产物）
-# 设备/视觉门禁只在动了那一层时跑，且优先只跑受影响态/屏（口径见 §3#21）
+bash scripts/clean-dev-artifacts.sh   # 清可重建垃圾；默认 dry-run，--apply 才删
+npm run check:windowsweep             # 动形态/外壳/胶囊/侧栏时跑（窗口矩阵）
+# 设备/视觉门禁只在动了那一层时跑，优先只跑受影响态/屏（口径见 §3#21）
 # 起 Electron：env -u ELECTRON_RUN_AS_NODE ./node_modules/.bin/electron --disable-gpu --remote-debugging-port=9222 .
-# 多端：LAKE_USER_DATA="$TMPDIR/lake-device-b" LAKE_ASSET_PORT=19877 …（启动前临时给 vite.config.ts 的 electron 入口加 onstart: () => {}，结束必须还原）
+# 移动端构建/安装/CDP/点按口径 = docs/MOBILE-OPS.md
 node scripts/s3-ls.mjs --count | --note <id> | --prefix <prefix>   # 云端对象查看
-# dev 控制台：window.__cssLayerProbe() 取「未分层全局 CSS」命中（空数组 = 干净）；命中会自动 console.warn
-# 日志：分级/作用域/埋点/排查手册 = docs/LOGGING.md；现场排障开 debug：LAKE_LOG_LEVEL=debug（file+renderer）、LAKE_LOG_CONSOLE=1（主进程终端）
+# dev 控制台：window.__cssLayerProbe() 取未分层 CSS 命中（空数组 = 干净）
+# 日志：docs/LOGGING.md；现场排障 LAKE_LOG_LEVEL=debug、LAKE_LOG_CONSOLE=1
 ```
 
 ## 7. 踩坑记录
@@ -179,45 +149,42 @@ node scripts/s3-ls.mjs --count | --note <id> | --prefix <prefix>   # 云端对�
 ### 环境 / 进程
 1. vite dev server 会被会话回收 ⇒ 必须长驻 tty；单实例锁按 userData 隔离（资源端口 A=19876 / B=19877）。
 2. **杀 Electron 只按唯一 CDP 端口定位**（`pgrep -f "remote-debugging-port=92xx"`）；`pkill -f Electron` / `killall` 会误伤 SiYuan/VSCode，**也会打断 DSH 宿主自己**。
-3. **在 DSH 里起本仓 Electron 必须 `env -u ELECTRON_RUN_AS_NODE`**（宿主注入了 `ELECTRON_RUN_AS_NODE=1`，否则以纯 Node 启动、报 `bad option: --disable-gpu`）；改本仓代码不影响 DSH，但**别动 DSH 安装目录**。
-   同样因为「子进程按 PATH 找可执行文件」：**本机 `git` 要用 `/usr/bin/git`**（`/usr/local/bin/git` 是坏的，Bad CPU type）；
-   patch-package 重建补丁时必须 `PATH=/usr/bin:$PATH`（261022 踩到：`spawnSync git Unknown system error -86`）。
+3. **在 DSH 里起本仓 Electron 必须 `env -u ELECTRON_RUN_AS_NODE`**（宿主注入 `ELECTRON_RUN_AS_NODE=1`，否则以纯 Node 启动报 `bad option: --disable-gpu`）；改本仓代码不影响 DSH，但**别动 DSH 安装目录**。同理本机 `git` 要用 `/usr/bin/git`（`/usr/local/bin/git` 是坏的）；patch-package 重建补丁必须 `PATH=/usr/bin:$PATH`。
 
 ### 同步 / 数据 / 构建
-4. 同步完成必须广播 `sync-progress`（否则 tab / 状态栏 / 小记不刷新）；`markSynced` 要同时改 `tree_nodes.sync_state`。
+4. 同步完成必须广播 `sync-progress`（否则 tab/状态栏/小记不刷新）；`markSynced` 要同时改 `tree_nodes.sync_state`。
 5. `contentCache` 会让冲突后 tab 不刷新 ⇒ `reloadKey` 变化时先清缓存。
 6. IPC 三处同步改：`electron/main.ts`(handle) + `preload.cjs`(invoke) + `src/lib/native.ts`(类型+封装)。
 7. 同步函数里别用内层 `const remote = …` 遮住外层 `remote`（ObjectStore）⇒ `remote.put is not a function`。
-8. **`ObjectStore.test()` 必须用 ListObjectsV2**（七牛 HeadBucket 对存在的桶也 404）。正确配置：Endpoint `https://s3.cn-north-1.qiniucs.com` / Region `cn-north-1` / Bucket `local-lake-hebei` / `forcePathStyle=false`。
-9. 主进程 external **从 dependencies 派生**（别硬编码）；better-sqlite3 是 Electron ABI（系统 Node 跑不了，bench 用 python3 sqlite3）；vitest 下 electron-log 要静音。
-10. 打包：`electron-builder` 弱网会整批失败 ⇒ 换 `ELECTRON_MIRROR=https://registry.npmmirror.com/-/binary/electron/`；打包版默认写**正式数据目录** ⇒ 自测必须覆盖 `LAKE_USER_DATA`。
-11. e2e 里"非 http(s) 页面"不要写死 `file:`（打包版是 `lakexlocalnotes://app`）。
+8. **`ObjectStore.test()` 必须用 ListObjectsV2**（七牛 HeadBucket 对存在的桶也 404）。配置：Endpoint `https://s3.cn-north-1.qiniucs.com` / Region `cn-north-1` / Bucket `local-lake-hebei` / `forcePathStyle=false`。
+9. 主进程 external **从 dependencies 派生**（别硬编码）；better-sqlite3 是 Electron ABI（系统 Node 跑不了）；vitest 下 electron-log 要静音。
+10. 打包：electron-builder 弱网会整批失败 ⇒ 换 `ELECTRON_MIRROR=https://registry.npmmirror.com/-/binary/electron/`；打包版默认写**正式数据目录** ⇒ 自测必须覆盖 `LAKE_USER_DATA`。
+11. e2e 里「非 http(s) 页面」不要写死 `file:`（打包版是 `lakexlocalnotes://app`）。
 12. `KeyedAsyncQueue` **无重入** ⇒ 同域嵌套会永久挂起（按 I3 自查）。
 
 ### 移动端
-13. **移动端改动要过设备装置**：`check:mobilesnap`（6 态）+ 走查（`drive.mjs 9336 mobile-walkthrough.mjs`）；**验收一律设备级截图**（CDP 的 `Page.captureScreenshot` 抓不到 GPU canvas）；keep-alive 隐藏视图仍在 DOM ⇒ 导航必须带命中测试。
-14. 快照门禁**依赖设备里的数据**（用户随手记一条小记 ⇒ 该态 +17 元素、假红）⇒ 只在**专用 AVD `lake_gate`**（emulator-5556 / CDP 9336）+ 固定夹具（5 文档 + 4 小记，`scripts/mobile-audit/gate-fixture.mjs`）上跑；**重灌夹具或建过数据 ⇒ 先重烤基线**；`.css-audit/snap/` 的中间快照会被同名 tag 覆盖（别当对拍）。
-15. **移动端**懒加载入口若会挂内核，必须自带内核样式（`@dlient/lakex-doc-react/style.css`）；护栏 `src/mobile/kernelStyleBootstrap.test.ts`。
-    ⚠️ **桌面禁止照抄这条**（261021 事故）：桌面样式全在 `@layer` 里，而 **JS import 出来的 CSS 无法分层** ⇒ 未分层普通声明压过所有层序；桌面入口 `src/styles/index.css` 已用 `@import "@dlient/lakex-doc-react/style.css" layer(legacy)` 引入，懒 chunk 再 import 一份 = 把 antd base（`body{font-family}` / `button{margin:0}`）以未分层身份塞进来，实测让设置面板 × 偏离右上、全站字体变系统栈。护栏：`src/styles/cssLayers.test.ts` + `scripts/css-audit/audit-vendor-css.mjs`（挂在 `check:bundle`）。
-16. **内核「+」插入面板在手机上要夹进视口并归位**（面板 ~1294px 高、内核判定下方放不下会翻到 caret 上方、实测 `top=-558`）：`max-height` + `overflow-y:auto` + 改锚点（内核写的是行内样式，只能 `!important`），落点 `src/mobile/mobile.css`（261012 P5 起 `mobile-kit.css` 已删，规则整份并过去）、作用域 `body.lake-mobile`。
-17. **程序化 focus 不弹软键盘**（没有用户手势时）：原生 `ShowKeyboardPlugin` + `src/mobile/native/nativeKeyboard.ts`；只有"没有手势"的入口（快捷 capture / 系统分享）传 `raiseKeyboard`，聚焦后 300ms 请原生弹一次。判据：**innerHeight 收缩 >200px = 键盘弹起**（取样前必须是无键盘态）。
-18. **重依赖（内核/usheet/画板）不许进入口静态图**：`HomePage → QuickNotePreview → QuickNoteKernelPreview → lakeRuntime` 一旦静态 import，构建就给入口挂 40+ 条 `modulepreload`（含 1.25MB 内核 CSS），冷启动先拉 + 解析 6.1MB 内核才画首页（实测真首页 **6123 → 533ms**、DCL 3943 → 119ms；改 `lazy()` + Suspense 后 modulepreload 45 → 12；护栏 `quickNoteKernelFallback.test.ts`）。**后台工作一律排到首屏之后**：冷启动那次同步 = 就绪后第一段空闲；内核预热 = 就绪 **4s 后**再排空闲（`requestIdleCallback` 的 timeout 只是上限，实测 2.4s 就回调 ⇒ 必须显式延迟）。判据探针 `scripts/mobile-audit/boot-timeline.mjs`（`--no-idle` 做 A/B）。
-19. **设备级点按一律走 CDP `Input.dispatch*`**（本机模拟器上 `adb shell input tap/swipe` 对两个 App 都不生效、`keyevent` 正常）：坐标取 `getBoundingClientRect()`（页面 CSS px）；手势（长按/上滑）用 `Input.dispatchTouchEvent`（鼠标事件验不出 pointer 长按）。
-20. **容器级手势别用 `setPointerCapture`**：捕获会把 `mousedown/mouseup` 与合成的 `click` **目标重定向到捕获元素** ⇒ 子按钮 `onClick` 全失效（现象 = "点了没反应"，不报错、DOM 正常）。改挂 **window** 的 move/up/cancel 并在抬手/卸载时摘掉；长按过的那一次要**吞掉随后的 click**，短按语义留给条目自己。
+13. **移动端改动要过设备装置**：`check:mobilesnap`（9 态）+ 走查（`drive.mjs 9336 mobile-walkthrough.mjs`）；**验收一律设备级截图**（CDP `Page.captureScreenshot` 抓不到 GPU canvas）；keep-alive 隐藏视图仍在 DOM ⇒ 导航必须带命中测试。
+14. 快照门禁**依赖设备里的数据**（随手记一条小记 ⇒ 该态 +17 元素、假红）⇒ 只在**专用 AVD `lake_gate`**（CDP 9336）+ 固定夹具（5 文档 + 4 小记，`scripts/mobile-audit/gate-fixture.mjs`）上跑；**重灌夹具或建过数据 ⇒ 先重烤基线**；`.css-audit/snap/` 中间快照会被同名 tag 覆盖（别当对拍）。
+15. **移动端懒加载入口若会挂内核，必须自带内核样式**（`@dlient/lakex-doc-react/style.css`），护栏 `kernelStyleBootstrap.test.ts`。⚠️ **桌面禁止照抄**（261021 事故）：桌面样式全在 `@layer` 里，JS import 的 CSS 无法分层 ⇒ 懒 chunk 再 import 内核 CSS 会把 antd base 以未分层身份塞进来（实测设置面板偏移、字体变系统栈）。桌面入口已用 `@import ... layer(legacy)` 引入；护栏 `cssLayers.test.ts` + `audit-vendor-css.mjs`（挂 `check:bundle`）。
+16. **内核「+」插入面板在手机上要夹进视口并归位**（面板 ~1294px 高、内核可能翻到 caret 上方，实测 `top=-558`）：`max-height` + `overflow-y:auto` + 改锚点（内核写行内样式，只能 `!important`），落点 `src/mobile/mobile.css`，作用域 `body.lake-mobile`。
+17. **程序化 focus 不弹软键盘**（无用户手势时）：`ShowKeyboardPlugin` + `native/nativeKeyboard.ts`；只有无手势入口（快捷 capture / 系统分享）传 `raiseKeyboard`，聚焦后 300ms 请原生弹一次。判据：**innerHeight 收缩 >200px = 键盘弹起**（取样前必须无键盘态）。
+18. **重依赖（内核/usheet/画板）不许进入口静态图**：一旦静态 import，入口挂 40+ 条 `modulepreload`（含 1.25MB 内核 CSS），冷启动先拉解析才画首页（实测首页 6123 → 533ms）。**后台工作排到首屏之后**：冷启动同步 = 就绪后第一段空闲；内核预热 = 就绪 4s 后（`requestIdleCallback` 的 timeout 只是上限）。判据探针 `boot-timeline.mjs`。
+19. **设备级点按一律走 CDP `Input.dispatch*`**（本机模拟器 `adb shell input tap/swipe` 不生效、`keyevent` 正常）：坐标取 `getBoundingClientRect()`（CSS px）；手势用 `Input.dispatchTouchEvent`（鼠标事件验不出 pointer 长按）。
+20. **容器级手势别用 `setPointerCapture`**：捕获会把 mousedown/up 与合成 click 目标重定向 ⇒ 子按钮 `onClick` 全失效（现象 = 点了没反应、不报错）。改挂 **window** 的 move/up/cancel 并在抬手/卸载时摘掉；长按过的那次**吞掉随后的 click**。
 
 ### 壳层 / 渲染
-- **JS import 的 CSS 一定未分层**（261021）：设计系统靠 `@layer vendor, legacy, tokens, kit, shell, feature, overlay, a11y` 取胜，但**未分层普通声明压过所有分层声明**（与特异性无关）。三层防线：① **构建兜底** `scripts/vendorCssLayer.ts`（Vite 插件）把 JS import 的第三方 CSS 自动包进 `@layer vendor`（最底层；内核 CSS 例外，保持入口的 `layer(legacy)`）；② **dev 运行时探针** `src/lib/cssLayerProbe.ts`（仅 DEV，命中 console.warn；`window.__cssLayerProbe()` 取命中）；③ **产物审计** `scripts/css-audit/audit-vendor-css.mjs`（挂 `check:bundle`）+ 源码侧 `cssLayers.test.ts`。组件/懒 chunk 仍只许 import 自己作用域内的 CSS，且**内部不得出现裸标签选择器**（`body`/`button`/`input`/`*`…）。判据实现单一来源 = `src/lib/cssLayerScan.ts`。
-- **`transform` / `will-change: transform` 的祖先会把 `position: fixed` 的包含块改成它自己**（261019 踩到）：路由转场层常驻 transform ⇒ 编辑 dock 的 `.med-panel` / `.med-toolbar` 按 layer 盒（高度 = `--mb-app-h`，面板态只有 562）贴底，面板展开停在键盘上方、下方留空白。**转场播完必须撤掉 transform + will-change**（`is-settled`，见 `useRouteTransition`）；新增会位移的壳层时先确认它没有依赖视口的 fixed 子元素。
+- **JS import 的 CSS 一定未分层**：设计系统靠 `@layer` 取胜，但未分层普通声明压过所有分层声明（与特异性无关）。三层防线：① 构建兜底 `scripts/vendorCssLayer.ts`（自动包进 `@layer vendor`，内核 CSS 例外保持入口 `layer(legacy)`）；② dev 探针 `src/lib/cssLayerProbe.ts`（`window.__cssLayerProbe()`）；③ 产物审计 `audit-vendor-css.mjs` + 源码 `cssLayers.test.ts`。组件/懒 chunk 只 import 自己作用域 CSS，内部不得出现裸标签选择器。判据实现单一来源 = `src/lib/cssLayerScan.ts`。
+- **`transform` / `will-change: transform` 的祖先会把 `position: fixed` 的包含块改成它自己**：路由转场层常驻 transform ⇒ 编辑 dock 按 layer 盒贴底、面板展开停在键盘上方。**转场播完必须撤掉 transform + will-change**（`is-settled`）；新增会位移的壳层先确认没有依赖视口的 fixed 子元素。
 
 ### 装置 / 探针
-21. **写进"引号字符串"的正则，反斜杠会被 JS 吃掉 ⇒ 探针静默失效**（曾静默 3 个月）：一律写**双反斜杠**（`\\(`），改完**必须用一条已知会命中的样本自证**（不能只看"跑通了、结果是 0"）。
-22. **探针"看不见"比"报错"危险**：只扫组件族选择器 + 只读元素自身 opacity 会漏 ⇒ 要扫**全仓自有文字** + **祖先连乘的有效透明度**，并排除 1×1 sr-only / 内核 `.ne-*` / 第三方（univer/drawnix）。
-23. **收/放输入法不许遍历所有 contenteditable 逐个 blur/focus**（261104，用户报「光标漂移」）：正文里有嵌套编辑宿主（分栏卡 `NE-COLUMNS-CONTENT`、表格/卡片），旧实现循环 blur/focus 会把焦点搬到**最后一个嵌套宿主**、选区丢失、正文滚到底。只处理**当前聚焦宿主**（放回时取顶层宿主），`inputmode` 仍写全部；blur/focus 前后保存/恢复 DOM range 与滚动容器 `scrollTop`（`useEditSurface.applyImeSuppression`）。dock 按钮 `onMouseDown` 先 `snapshotSelection()`；inline 命令后选区失效用 `repairSelection`（同步 + rAF）补一次。
-
-24. **CDP 验收里 stub 过的 `input[type=file].click` 必须重启 App 再交还用户**（261104 现场事故）：桩打在页面里，**不随脚本退出还原**；用户接着点「贴图/背景图片」不弹选择器、直接插入脚本生成的 600×400 测试图（用户报「点添加怎么自动出一个图」）。收尾 = `adb shell am force-stop` → `am start` → 重跑 `emu-cdp.sh`，并复核 `String(HTMLInputElement.prototype.click).includes("[native code]")` 为真。**同理：在图面上做 CDP 点按会留下 4×4 的合成「点」笔迹**（`getBBox()` 极小、`d` 长度一致），交还前用整笔橡皮清掉；删贴图优先点「图面没有笔迹的位置」（笔迹画在上层，`elementFromPoint` 会返回 `<path>`）。
+21. **写进引号字符串的正则，反斜杠会被 JS 吃掉 ⇒ 探针静默失效**（曾静默 3 个月）：一律写**双反斜杠**，改完**必须用已知会命中的样本自证**（不能只看跑通了、结果是 0）。
+22. **探针「看不见」比「报错」危险**：只扫组件族选择器 + 只读元素自身 opacity 会漏 ⇒ 扫**全仓自有文字** + **祖先连乘的有效透明度**，排除 1×1 sr-only / 内核 `.ne-*` / 第三方（univer/drawnix）。
+23. **收/放输入法不许遍历所有 contenteditable 逐个 blur/focus**（261104 用户报「光标漂移」）：只处理**当前聚焦宿主**（放回时取顶层宿主），`inputmode` 仍写全部；blur/focus 前后保存/恢复 DOM range 与滚动容器 `scrollTop`（`useEditSurface.applyImeSuppression`）。dock 按钮 `onMouseDown` 先 `snapshotSelection()`；inline 命令后选区失效用 `repairSelection` 补一次。
+24. **CDP 验收里 stub 过的 `input[type=file].click` 必须重启 App 再交还用户**（261104 现场事故）：桩不随脚本退出还原，用户随后点「贴图/背景图片」会直接插入测试图。收尾 = `am force-stop` → `am start` → 重跑 `emu-cdp.sh`，并复核 `String(HTMLInputElement.prototype.click).includes("[native code]")` 为真。**同理：图面上做 CDP 点按会留下合成「点」笔迹**，交还前用整笔橡皮清掉。
 
 ## 8. 会话启动指引
 
 1. 按 **README → docs/HANDOFF.md → AGENTS.md** 读；涉及编辑器/lakex 一律走 §2 的三级检索，**新观测回填 `docs/LAKEX-CONTRACT.md`**。
 2. `git status` / `git log` / **`git worktree list`** 确认当前状态（曾漏看未记录的在途 worktree）；`vite.config.ts` 不应有改动（多端调试的 onstart 补丁用完必须还原）。
 3. 需要用户确认产品语义时给出选项 + 推荐；**删除/恢复语义已定稿**（§3），不要重新争论。
+4. 每批收尾：回写 HANDOFF §1 基线/计数 + §3 待办 + §0 抬头；并确认本文预算未超。

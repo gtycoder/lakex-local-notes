@@ -300,3 +300,28 @@ describe("小记搜索入口（261021）", () => {
     expect(WORKSPACE_SRC).toContain("is-revealed");
   });
 });
+describe("按钮原语第二批（261110）：小记工作区", () => {
+  it("勾选框 / 标签 chip / 图标钮 / 文字动作全部走 kit 原语", () => {
+    // 勾选框 = .ln-check（role=checkbox 的按钮），不再是 .qn-check
+    expect(WORKSPACE_SRC).toContain('className={"ln-check');
+    expect(WORKSPACE_SRC).not.toContain("qn-check");
+    // 标签条 chip = .ln-chip（选中态 is-selected 由原语给）
+    expect(WORKSPACE_SRC).toContain('className={"ln-chip"');
+    expect(WORKSPACE_SRC).toContain("ln-chip__count");
+    // 错误关闭 = ln-iconbtn；批量删除 = ln-iconbtn--danger；撤销 = ln-btn--link
+    expect(WORKSPACE_SRC).toContain('className="ln-iconbtn ln-iconbtn--compact" onClick={() => setError(null)}');
+    expect(WORKSPACE_SRC).toContain("ln-iconbtn--danger");
+    expect(WORKSPACE_SRC).toContain("ln-btn ln-btn--link ln-btn--compact");
+    // 批量条文字动作 = ln-btn 梯队
+    expect(WORKSPACE_SRC).toContain("ln-btn--danger-text");
+  });
+
+  it("小记行主区 .quick-note-index-main 保留（AGENTS 已结案例外：行内可点文本条目）", () => {
+    expect(WORKSPACE_SRC).toContain('className="quick-note-index-main"');
+    const css = read("../../styles/app/quick-notes.css");
+    // 原语视觉不再在原地重复；只剩「行主区复位」这一份（已结案例外）
+    expect(css).not.toMatch(/^\.qn-check/m);
+    expect(css).not.toMatch(/^\.quick-note-tag \{/m);
+    expect(css).toMatch(/^\.quick-note-index-main \{/m);
+  });
+});

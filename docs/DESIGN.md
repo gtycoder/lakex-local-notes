@@ -320,8 +320,10 @@ components:
 - **Shape:** 8px 圆角，高 27（`--lake-ctl-h`），内距 `0 11px`，13px / 500；紧凑档 `.ln-btn--compact` 高 22（`--lake-ctl-h-sm`）、内距 `0 9px`。**只有两档尺寸**，不新增第三档；设置页表单控件仍走 `--lake-ctl-h-settings`。
 - **六态（每层同一套）**：default / hover（`bg-hover`，字色升一档）/ active（`bg-press` + 0.5px 下沉 + 0.98 缩放）/ focus-visible（2px `accent` 环 + offset 0）/ is-selected（`bg-selected` + `fg-selected` + 600）/ disabled（`opacity: .45`，hover 不改底色）。
 - **基座 `.ln-btn` = L4 口径**（无框灰字）：任何裸用也有 hover，不得再出现「点了没反应」的按钮。
-- 图标钮（`.ln-iconbtn` 27 / `--compact` 22）是**形状**不是层级：静息 `text-3` → hover `bg-hover` + `text-1` → selected `bg-selected` + `fg-selected`；`--accent` 已并入 `is-selected`。
-- **移动端 `mb-btn` 下一轮按同一 4+危险+链接模型对齐**（当前仍为旧变体集合，暂不算不一致）。
+- 图标钮（`.ln-iconbtn` 27 / `--compact` 22）是**形状**不是层级：静息 `text-3` → hover `bg-hover` + `text-1` → selected `bg-selected` + `fg-selected`；`--accent` 已并入 `is-selected`。危险图标钮 `.ln-iconbtn--danger` = 与 `--danger-text` 同一套令牌口径（红字 + 红柔底只在 hover），**不是第二种危险长相**。
+- **列表勾选** `.ln-check`：20×20、绿色 `status-ok` 实心选中（用于小记卡片/列表行左槽位；与表单勾选 15×15 主色分开，不并入）。
+- **标签 / 筛选 chip** `.ln-chip`：24 / `--compact` 22，`is-selected` 只走选中三件套；`--add`（虚线空槽）、`--danger`（筛选「排除」档，选中后走 error 色）、`--static`（不可点展示标签，移除钮用 `.ln-iconbtn--compact`）；调用点只设 `--ln-chip-*` 容器变量。
+- **移动端 `mb-btn` 已按同一模型独立实现**（261110：4 语义 + `--danger`/`--danger-text` + `--link`、六态、`is-selected`；几何沿用触屏档 44/36 与 `--sm`/`--block`，两端不共享 CSS）。
 
 
 ### Icon Buttons

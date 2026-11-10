@@ -131,6 +131,11 @@
 .ln-iconbtn--accent:hover:not(:disabled) { color: var(--lake-accent-text); background: var(--lake-accent-tint); }
 .ln-iconbtn--accent.is-selected { color: var(--lake-fg-selected); background: var(--lake-bg-selected); }
 .ln-iconbtn--accent.is-selected:hover:not(:disabled) { background: var(--lake-bg-selected-hover); }
+/* 危险动作图标钮（删除类）：**不是第二种危险长相** —— 与 .ln-btn--danger-text 同一套令牌口径
+（红字 + 红柔底只在 hover），只是换成图标钮的圆形/方形容器；用来收编此前散在 feature CSS 里的
+三份「危险图标钮」写法（卡片删除 :hover、标签管理行删除 :hover、批量删除常红）。 */
+.ln-iconbtn--danger { color: var(--lake-status-error); }
+.ln-iconbtn--danger:hover:not(:disabled) { color: var(--lake-status-error); background: var(--lake-status-error-soft); }
 
 /* ── 00 单行省略（工具类）─────────────────────────────────────
    260930 审计：同一套「装不下就省略号」在 14 处各写了一遍（多维表标题/单元格、移动端、状态栏、页签…）。
@@ -191,6 +196,8 @@
  * 261110 审计：AI 写作历史行/小记行这类 <button> 曾各写一份 button 复位，统一到这一件。 */
 .ln-row__main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
 .ln-row__main:focus-visible { outline: var(--lake-focus-ring-width) solid var(--lake-accent); outline-offset: var(--lake-focus-ring-offset); }
+/* 单行横排变体（图标 + 标题 + 元信息同一行，如标签空间两条目录/聚合行）：复位与竖向主区同源，只换排布。 */
+.ln-row__main--row { flex-direction: row; align-items: center; gap: var(--lake-space-sm); }
 .ln-row__indent { flex: 0 0 auto; }
 
 /* ── 04 菜单 / 右键菜单 ────────────────────────────────────── */
@@ -397,6 +404,49 @@
 .ln-tag--ok { background: var(--lake-status-ok-soft); color: var(--lake-status-ok); }
 .ln-tag--error { background: var(--lake-status-error-soft); color: var(--lake-status-error); }
 .ln-tag--hoverable:hover { background: var(--lake-bg-hover); }
+/* ── 10b 筛选 / 标签 chip（桌面版 .mb-chip；261110 第二批按钮审计上收）────────────
+ * 语义 = 「一排可点的标签 / 筛选档」：小记标签条、卡片标签、筛选对话框（时间/类型/包含/排除）、
+ * 写作卡标签、属性面板「＋标签」、侧栏标签筛选。此前统一叫 .quick-note-tag / .quick-note-tag-add，
+ * 视觉与几何却写在 features 的 quick-notes.css 里（6 个屏共用一份、但属「feature 拥有原语」）。
+ * 现收为 kit 单一来源（与移动端 .mb-chip 同口径：桌面端下一轮也按同一模型）。
+ * 尺寸：默认 24（卡片 / 弹层 / 筛选条内）；--compact 22 与 ln-btn--compact 同档。
+ * 调用点只设容器变量（--ln-chip-height / --ln-chip-font-size / --ln-chip-max / --ln-chip-gap），
+ * 不写「.feature .ln-chip」覆盖（primitives.test.ts 基线 0）。 */
+.ln-chip {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--ln-chip-gap, 4px);
+  min-width: 0;
+  max-width: var(--ln-chip-max, 180px);
+  height: var(--ln-chip-height, 24px);
+  padding: 0 9px;
+  border: 0.5px solid var(--lake-border-2);
+  border-radius: var(--lake-radius-xs);
+  background: var(--lake-bg-panel);
+  color: var(--lake-text-2);
+  font-family: inherit;
+  font-size: var(--ln-chip-font-size, var(--lake-font-size-tiny));
+  font-weight: var(--lake-font-weight-regular);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.ln-chip:hover { background: var(--lake-bg-hover); }
+.ln-chip:focus-visible { outline: var(--lake-focus-ring-width) solid var(--lake-accent); outline-offset: var(--lake-focus-ring-offset); }
+/* 选中：与 .ln-btn--secondary.is-selected 同一套语义令牌（底 / 字 / 主色边） */
+.ln-chip.is-selected { border-color: var(--lake-accent); color: var(--lake-fg-selected); background: var(--lake-bg-selected); }
+.ln-chip.is-selected .ln-chip__count { color: inherit; }
+.ln-chip:disabled { opacity: var(--lake-disabled-opacity); cursor: default; }
+.ln-chip__count { color: var(--lake-text-3); font-variant-numeric: tabular-nums; }
+/* 变体 1「添加」：虚线空槽（＋标签 / 新建） */
+.ln-chip--add { border-style: dashed; border-color: var(--lake-ctl-border); background: transparent; }
+/* 变体 2「排除」：筛选里的「排除」档，选中后走危险色（与其他删除/清空同一长相，见 DESIGN 的 L5） */
+.ln-chip--danger.is-selected { border-color: var(--lake-status-error); color: var(--lake-status-error); }
+/* 变体 3「展示」：整块不可点（带移除钮的标签），右侧留出移除钮位；移除钮本身用 .ln-iconbtn--compact */
+.ln-chip--static { padding-right: 4px; cursor: default; }
+.ln-chip--static:hover { background: var(--lake-bg-panel); }
+/* 紧凑档（22）：只缩高度与内距，不换视觉 */
+.ln-chip--compact { height: var(--lake-ctl-h-sm); padding: 0 7px; }
 
 /* ── 11 卡片 ─────────────────────────────────────────────────
  * 261006 Phase 2.2：`.ln-card` 全仓**零调用**（设置页走 .config-* 骨架、多维表走 .bt-* 自己的卡）
@@ -730,6 +780,30 @@
 /* 内核正文里的勾选（待办列表）维持内核自己的绘制。 */
 .app-shell .lake-editor-mount input[type="checkbox"],
 .app-shell .ne-engine input[type="checkbox"] { appearance: auto; -webkit-appearance: auto; }
+
+/* ── 16b 列表多选勾选框（261110 第二批上收）────────────────────────────
+ * 小记卡片 / 小记列表行左侧的勾选框是 <button role="checkbox">（不是表单 input），
+ * 视觉 = 仿语雀的绿色实心方块 + 白勾：绿色是「完成 / 已选」语义，与上面表单勾选的主色蓝分开。
+ * 此前叫 .qn-check 写在 styles/app/quick-notes.css（legacy 层、feature 拥有原语）⇒ 上收为 kit 单一来源。
+ * 尺寸 20×20 是列表左槽位（--quick-notes-gutter 30）的实测值，不随按钮两档缩放。 */
+.ln-check {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0.5px solid var(--lake-ctl-border);
+  border-radius: var(--lake-radius-2xs);
+  color: var(--lake-text-on-accent);
+  background: var(--lake-bg-panel);
+  -webkit-tap-highlight-color: transparent;
+  cursor: pointer;
+}
+.ln-check:hover { border-color: var(--lake-status-ok); }
+.ln-check.is-on { border-color: var(--lake-status-ok); background: var(--lake-status-ok); }
+.ln-check:focus-visible { outline: var(--lake-focus-ring-width) solid var(--lake-accent); outline-offset: var(--lake-focus-ring-offset); }
+.ln-check:disabled { opacity: var(--lake-disabled-opacity); cursor: default; }
 
 /* ── 月历选择面板（261109 上收：多维表日期字段与日记「按日期新建」共用同一套视觉） ──
    结构：.ln-calendar > .ln-calendar__head / __week / __grid / __foot；只被 CalendarPanel 使用。 */

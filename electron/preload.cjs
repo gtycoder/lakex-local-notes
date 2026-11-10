@@ -102,6 +102,8 @@ contextBridge.exposeInMainWorld("lakeNative", {
   listTreeNodes: () => invoke("list_tree_nodes"),
   // 261109 日记：幂等打开某一天（只传 dateKey，主进程重新 plan）。
   diaryOpenDate: (dateKey, mode) => invoke("diary_open_date", dateKey, mode),
+  // 261110 日记收尾：取消整本日记标记（space=NULL，子树原样保留；幂等）。
+  diaryUnmark: (notebookId) => invoke("diary_unmark", notebookId),
   listNoteSummaries: () => invoke("list_note_summaries"),
   createNotebook: (title, space) => invoke("create_notebook", title, space),
   createGroup: (parentId, title) => invoke("create_group", parentId, title),

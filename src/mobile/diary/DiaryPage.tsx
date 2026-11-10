@@ -22,7 +22,7 @@
  * 白卡分组（.mb-set-section / .mb-item 原语）；行 = 名称 + 时刻 + 行尾 ⋯。**零新增视觉语言**，不新写页面骨架。
  */
 import { useCallback, useMemo, useRef, useState } from "react";
-import { CalendarDays, FileText, MoreVertical, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { BookX, CalendarDays, FileText, MoreVertical, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import {
   diaryConvertTargets,
   diaryEntries,
@@ -302,11 +302,12 @@ export function DiaryPage({ nodes, onOpenEntry, onOpenSearch, onChanged }: Diary
         />
       </MobileSheet>
 
-      {/* 条目 ⋯ 菜单：v1 只有两项（转为文档 / 删除）；移动端不新造 Sheet 类型。 */}
+      {/* 条目 ⋯ 菜单：转文档 / 删除 + 整本「取消日记标记」；移动端不新造 Sheet 类型。 */}
       <MobileSheetMenu
         open={menuFor !== null}
         items={[
           { id: "convert", label: "转为文档…", icon: FileText },
+          { id: "unmark", label: "取消日记标记（整本）", icon: BookX },
           { id: "delete", label: "删除", icon: Trash2 },
         ]}
         onClose={() => setMenuFor(null)}
@@ -315,6 +316,27 @@ export function DiaryPage({ nodes, onOpenEntry, onOpenSearch, onChanged }: Diary
           setMenuFor(null);
           if (!entry) return;
           if (item.id === "convert") { setConvertError(null); setConvertFor(entry); }
+          if (item.id === "unmark") {
+            // 整本取消标记：笔记本 + 全部文档都保留，只是不再归入日记空间（必须说清，防止误以为删数据）。
+            void (async () => {
+              const notebookId = diaryNotebookId(nodes);
+              if (!notebookId) return;
+              const ok = await confirmMobile({
+                title: "取消日记标记（整本）？",
+                body: "笔记本与其中的文档都会保留，只是不再归入日记空间（会回到知识库）。",
+                confirmText: "取消日记标记",
+                danger: true,
+              });
+              if (!ok) return;
+              try {
+                const result = await bridge.clearDiaryMark(notebookId);
+                showToast(result.cleared ? "已取消日记标记，笔记本已回到知识库" : "这本已经不是日记本了");
+                void onChanged();
+              } catch (error) {
+                toastActionError("取消日记标记", error);
+              }
+            })();
+          }
           if (item.id === "delete") {
             // 移入回收站（软删，可恢复；恢复会回日记空间，见 core/trash 判据）。
             void (async () => {
@@ -335,6 +357,9 @@ export function DiaryPage({ nodes, onOpenEntry, onOpenSearch, onChanged }: Diary
       {convertFor && (
         <MoveTargetTreeSheet
           open
+          title="转为文档"
+          confirmLabel="转为文档"
+          description="选择目标笔记本"
           nodes={convertTargetNodes}
           currentParentId={convertFor.parentId}
           excludedIds={[convertFor.noteId]}

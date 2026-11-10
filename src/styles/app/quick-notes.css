@@ -53,21 +53,21 @@
 .quick-notes-filter-menu__sep { height: 1px; margin: 4px 0; background: var(--lake-border-2); }
 .quick-notes-filter-menu button[aria-checked="true"] { color: var(--lake-accent-text); }
 
-/* 多选：勾选框（仿语雀：绿色实心方块 + 白勾） */
-.qn-check { display: grid; place-items: center; width: 20px; height: 20px; padding: 0; border: 1.5px solid var(--lake-border-1); border-radius: var(--lake-radius-2xs); color: var(--lake-text-on-accent); background: var(--lake-bg-panel); }
+/* 多选勾选框 = kit 的 .ln-check（261110 第二批上收；此前 .qn-check 写在本文件）。 */
 
-.qn-check:hover { border-color: var(--lake-status-ok); }
 
-.qn-check.is-on { border-color: var(--lake-status-ok); background: var(--lake-status-ok); }
+
+
+
 
 /* （多选条已并入头部那一行，见 .quick-notes-header-tools；这里只留链接按钮样式） */
-/* 文字动作 = ln-btn--ghost + compact（261110 审计）；这里只留危险色。 */
+/* 261110 第二批：文字动作全部落 ln-btn 梯队（危险动作 = ln-btn--danger-text），feature 侧色块删除。 */
 
 
 
 
 
-.quick-notes-link--danger { color: var(--lake-status-error); }
+
 
 /* 左右两栏：左＝常驻写作面板（含发布行），右＝小记卡片流，各自独立滚动 */
 .quick-notes-split { display: grid; grid-template-columns: minmax(290px, 36%) minmax(0, 1fr); gap: 18px; flex: 1; min-height: 0; padding-bottom: 18px; }
@@ -89,9 +89,9 @@
 /* 列表视图左栏头：标题/版式切换/新建小记（对齐语雀：新建在左，右侧编辑区从顶部开始） */
 .quick-notes-list-head { display: flex; align-items: center; gap: 8px; min-height: 31px; margin-bottom: 12px; }
 .quick-notes-index-tools { display: flex; align-items: center; gap: 6px; padding: 0 2px 6px; border-bottom: 0.5px solid var(--lake-border-2); margin-bottom: 6px; }
-.quick-notes-tag-filter-btn { display: inline-flex; align-items: center; gap: 5px; height: 30px; padding: 0 8px; border: 0; border-radius: var(--lake-radius-xs); color: var(--lake-text-2); background: transparent; font: inherit; font-size: var(--lake-font-size-small); cursor: pointer; }
-.quick-notes-tag-filter-btn:hover { background: var(--lake-bg-hover); }
-.quick-notes-tag-filter-btn.is-on { color: var(--lake-accent-text); background: var(--lake-bg-selected); }
+/* 「标签 ▾」筛选触发器 = ln-btn--ghost + compact（261110 第二批）；本类只留作 JSX/测试钩子。 */
+
+
 .quick-notes-tag-filter-menu { min-width: 220px; max-height: 320px; overflow-y: auto; }
 .quick-notes-tag-filter-menu button > .quick-notes-tag-ellipsis { flex: 1 1 auto; min-width: 0; }
 .quick-notes-tag-filter-menu__count { margin-left: auto; color: var(--lake-text-3); font-variant-numeric: tabular-nums; }
@@ -148,7 +148,7 @@
 
 .quick-notes-error { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; padding: 9px 11px; border: 0.5px solid color-mix(in srgb, var(--lake-status-error) 20%, transparent); border-radius: var(--lake-radius-sm); color: var(--lake-status-error); background: color-mix(in srgb, var(--lake-status-error) 6%, transparent); font-size: var(--lake-font-size-tiny); }
 
-.quick-notes-error button, .quick-note-card-actions button { display: grid; place-items: center; border: 0; background: transparent; }
+
 
 .quick-note-composer, .quick-note-entry { border: 0.5px solid var(--lake-border-2); border-radius: var(--lake-radius-md); }
 
@@ -306,9 +306,9 @@
 .quick-note-entry:hover .quick-note-card-actions,
 .quick-note-entry:focus-within .quick-note-card-actions { opacity: 1; }
 
-.quick-note-card-actions button { width: 26px; height: 26px; border-radius: var(--lake-radius-xs); color: var(--lake-text-3); }
 
-.quick-note-card-actions button.danger:hover { color: var(--lake-status-error); background: color-mix(in srgb, var(--lake-status-error) 10%, transparent); }
+
+
 
 .quick-note-conflict { padding: 2px 6px; border-radius: var(--lake-radius-pill); color: var(--lake-status-pending); background: var(--lake-status-pending-soft); font-size: var(--lake-font-size-nano); }
 
@@ -350,7 +350,7 @@
 .quick-note-composer textarea,
 .quick-note-entry p { color: var(--lake-text-1); }
 .quick-note-entry time { color: var(--lake-text-3); }
-.quick-note-card-actions button:hover { color: var(--lake-accent-text); background: var(--lake-accent-tint); }
+
 
 /* ── 以下规则自 `src/styles/ui-polish.css` 按职责并入（260916 S2/S3，只搬家不改声明）：小记入口 ── */
 /* ---- 跨屏微交互一致性收口（仅渲染层 CSS，不重排布局 / 不动内核） ----
@@ -377,7 +377,9 @@
 
 /* ── 小记标签（261020）────────────────────────────────────────
  * 标签只存在于 `.qnote`；筛选条与选择器的候选集合从有效小记现算。
- * 同一视觉语义只有一份：卡片 chip、写作 chip、筛选 chip 全走 `.quick-note-tag`。 */
+ * 261110 第二批按钮审计：chip 的视觉/几何（普通 / 选中 / 添加 / 移除 / 禁用五态）全部上收到
+ * kit 的 `.ln-chip`（与移动端 `.mb-chip` 同口径）；本文件只留「标签条」布局 + 30px 档的容器变量，
+ * 不再出现 `.feature .ln-chip` 这种跨所有权覆盖（primitives.test.ts 基线 0）。 */
 .quick-notes-tagbar {
   display: flex;
   flex: 0 0 auto;
@@ -388,62 +390,12 @@
   padding: 0;
   overflow-x: auto;
   scrollbar-width: none;
+  /* 右侧筛选条上的标签 chip：对齐语雀的 30px 档 / 正文档字号（卡片内仍用原语默认 24）。 */
+  --ln-chip-height: 30px;
+  --ln-chip-gap: 0;
+  --ln-chip-font-size: var(--lake-font-size-body);
 }
 .quick-notes-tagbar::-webkit-scrollbar { display: none; }
-.quick-note-tag {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  min-width: 0;
-  max-width: 180px;
-  height: 24px;
-  padding: 0 9px;
-  border: 0.5px solid var(--lake-border-2);
-  border-radius: var(--lake-radius-xs);
-  background: var(--lake-bg-panel);
-  font: inherit;
-  font-size: var(--lake-font-size-tiny);
-  white-space: nowrap;
-  cursor: pointer;
-}
-.quick-note-tag:hover { background: var(--lake-bg-hover); }
-/* 右侧筛选条上的标签 chip：对齐语雀的 30px 档（不动卡片内的同语义 chip，那里更紧凑）。 */
-.quick-notes-tagbar .quick-note-tag { height: 30px; gap: 0; font-size: var(--lake-font-size-body); }
-.quick-note-tag.is-selected { border-color: var(--lake-accent); color: var(--lake-fg-selected); background: var(--lake-bg-selected); }
-.quick-note-tag.is-selected .quick-note-tag__count { color: inherit; }
-.quick-note-tag.is-selectable { cursor: pointer; }
-.quick-note-tag.is-editable { cursor: default; padding-right: 4px; }
-.quick-note-tag__count { color: var(--lake-text-3); font-variant-numeric: tabular-nums; margin-left: 4px; }
-.quick-note-tag.is-editable > button {
-  display: grid;
-  place-items: center;
-  width: 18px;
-  height: 18px;
-  padding: 0;
-  border: 0;
-  border-radius: var(--lake-radius-2xs);
-  background: transparent;
-  cursor: pointer;
-}
-.quick-note-tag.is-editable > button:hover { background: var(--lake-bg-press); }
-.quick-note-tag:disabled { opacity: var(--lake-disabled-opacity); cursor: default; }
-.quick-note-tag-add {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  height: 24px;
-  padding: 0 8px;
-  border: 0.5px dashed var(--lake-ctl-border);
-  border-radius: var(--lake-radius-xs);
-  background: transparent;
-  font: inherit;
-  font-size: var(--lake-font-size-tiny);
-  cursor: pointer;
-}
-.quick-note-tag-add:hover:not(:disabled) { background: var(--lake-bg-hover); }
-.quick-note-tag-add:disabled { opacity: var(--lake-disabled-opacity); cursor: default; }
 .quick-note-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 4px 0 8px; min-height: 24px; }
 .quick-note-card-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 /* 全局搜索定位：短暂高亮目标卡片/行（只定位，不进编辑态） */
@@ -453,17 +405,17 @@
 .quick-note-tag-picker__head { display: flex; align-items: center; gap: 6px; color: var(--lake-text-1); font-size: var(--lake-font-size-small); }
 .quick-note-tag-picker__input { width: 100%; }
 .quick-note-tag-picker__error { color: var(--lake-status-error); font-size: var(--lake-font-size-micro); }
-.quick-note-tag-picker__create, .quick-note-tag-picker__item { display: flex; align-items: center; gap: 7px; width: 100%; min-width: 0; height: 28px; padding: 0 7px; border: 0; border-radius: var(--lake-radius-2xs); background: transparent; font: inherit; font-size: var(--lake-font-size-small); text-align: left; cursor: pointer; }
-.quick-note-tag-picker__create:hover, .quick-note-tag-picker__item:hover:not(:disabled) { background: var(--lake-bg-hover); }
-.quick-note-tag-picker__item:disabled { cursor: default; }
-.quick-note-tag-picker__item > span:first-child { flex: 1 1 auto; }
+/* 候选行/新建行 = kit 的 .ln-menu__item（261110 第二批；菜单行身份，与 AI 写作提示词库同款）。 */
+/* 悬停交给 .ln-menu__item（单一来源）。 */
+
+
 .quick-note-tag-picker__count { color: var(--lake-text-3); font-size: var(--lake-font-size-micro); font-variant-numeric: tabular-nums; }
 .quick-note-tag-picker__section { margin-top: 2px; color: var(--lake-text-3); font-size: var(--lake-font-size-micro); }
 .quick-note-tag-picker__list { display: flex; flex-direction: column; gap: 1px; max-height: 220px; overflow-y: auto; }
 .quick-note-tag-picker__empty { padding: 8px 6px; color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); }
 
 /* 标签管理（261024）：标签表是唯一来源；行 = 拖拽柄 + 置顶 + 名称 + 计数 + 动作 */
-.quick-note-tag--manage { color: var(--lake-text-3); }
+
 .quick-note-tag-manager { width: min(560px, calc(100vw - 48px)); }
 .quick-note-tag-manager__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
 .quick-note-tag-manager__head h3 { margin: 0; font-size: var(--lake-font-size-title); }
@@ -476,7 +428,7 @@
 .quick-note-tag-manager__name { flex: 1 1 auto; min-width: 0; font-size: var(--lake-font-size-small); }
 .quick-note-tag-manager__rename { flex: 1 1 auto; min-width: 0; height: 26px; }
 .quick-note-tag-manager__count { color: var(--lake-text-3); font-size: var(--lake-font-size-micro); font-variant-numeric: tabular-nums; }
-.quick-note-tag-manager__danger:hover { color: var(--lake-status-error); }
+
 .quick-note-tag-manager__footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 10px; }
 .quick-note-tag-manager__hint { color: var(--lake-text-3); font-size: var(--lake-font-size-micro); }
 .quick-note-tag-manager__merge p { margin: 0 0 8px; color: var(--lake-text-2); font-size: var(--lake-font-size-small); }
@@ -490,13 +442,13 @@
 .quick-note-filter-dialog__label { color: var(--lake-text-2); font-size: var(--lake-font-size-small); font-weight: 500; }
 .quick-note-filter-dialog__sublabel { color: var(--lake-text-3); font-size: var(--lake-font-size-micro); }
 .quick-note-filter-dialog__chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.quick-note-filter-dialog__chips .quick-note-tag { display: inline-flex; align-items: center; gap: 4px; }
+/* chip 的排布由 .ln-chip 提供（261110 第二批）。 */
 .quick-note-filter-dialog__dates { display: flex; gap: 8px; }
 .quick-note-filter-dialog__dates .quick-note-date-input { flex: 1 1 0; display: flex; align-items: center; gap: 6px; min-width: 0; }
 .quick-note-filter-dialog__dates .quick-note-date-input > span { color: var(--lake-text-3); font-size: var(--lake-font-size-micro); }
 .quick-note-filter-dialog__empty { color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); }
 .quick-note-filter-dialog__minus { color: var(--lake-text-3); }
-.quick-note-tag--exclude.is-selected { color: var(--lake-status-error); border-color: var(--lake-status-error); }
+/* 「排除」chip 的选中红 = kit 的 .ln-chip--danger.is-selected（261110 第二批）。 */
 .quick-note-filter-dialog__footer { display: flex; align-items: center; gap: 8px; padding-top: 10px; border-top: 0.5px solid var(--lake-border-2); }
 .quick-note-filter-dialog__hint { flex: 1 1 auto; color: var(--lake-text-3); font-size: var(--lake-font-size-micro); }
 

@@ -7,6 +7,7 @@ import { S3V3_POINTER_VERSION } from "../../core/s3v3/protocol/s3v3Types";
 import { HISTORY_SETTINGS_DEFAULTS } from "../../core/settingsDefaults";
 import { formatBytes } from "../../lib/formatBytes";
 import { formatCrashEntries, readCrashLog } from "../lib/crashLog";
+import { formatDiaryWarnings, readDiaryWarnings } from "../lib/diaryWarnLog";
 import { showToast } from "../ui/toastBus";
 const LAKEX_KERNEL_VERSION = "1.99.0";
 
@@ -16,9 +17,9 @@ export function AppearanceSettingsSection({ settings, update }: { settings: AppS
               {/* 用户 261012：说明文案去掉，只留选项（名字即语义）；261107 v2 增加「纯黑（OLED）」。 */}
               <Item itemId="appearance-theme" name="主题" icon={<Palette size={16} />} tone="#b9822f">
                 <Seg ariaLabel="主题">
-                  <button className={"mb-btn mb-btn--secondary mb-segment__item" + (settings.theme === "light" ? " is-active" : "")} onClick={() => update({ theme: "light", oled: false })}>浅色</button>
-                  <button className={"mb-btn mb-btn--secondary mb-segment__item" + (settings.theme === "dark" && !settings.oled ? " is-active" : "")} onClick={() => update({ theme: "dark", oled: false })}>深色</button>
-                  <button className={"mb-btn mb-btn--secondary mb-segment__item" + (settings.theme === "dark" && settings.oled ? " is-active" : "")} onClick={() => update({ theme: "dark", oled: true })}>纯黑</button>
+                  <button className={"mb-segment__item" + (settings.theme === "light" ? " is-active" : "")} onClick={() => update({ theme: "light", oled: false })}>浅色</button>
+                  <button className={"mb-segment__item" + (settings.theme === "dark" && !settings.oled ? " is-active" : "")} onClick={() => update({ theme: "dark", oled: false })}>深色</button>
+                  <button className={"mb-segment__item" + (settings.theme === "dark" && settings.oled ? " is-active" : "")} onClick={() => update({ theme: "dark", oled: true })}>纯黑</button>
                 </Seg>
               </Item>
             </Group>
@@ -75,7 +76,7 @@ export function AboutSettingsSection({ appInfo, diag }: { appInfo: ReturnType<ty
                     <div className="mb-set-block__actions">
                       <button
                         type="button"
-                        className="mb-btn mb-btn--settings"
+                        className="mb-btn mb-btn--outlined"
                         onClick={() => {
                           const lines = [
                             "时间：" + new Date().toISOString(),
@@ -88,6 +89,9 @@ export function AboutSettingsSection({ appInfo, diag }: { appInfo: ReturnType<ty
                           ];
                           const crashes = formatCrashEntries(readCrashLog(10));
                           lines.push("", "最近崩溃记录：", ...(crashes.length > 0 ? crashes : ["（无）"]));
+                          // 261110 wave2：日记告警（桌面 diaryStore 的 log 通道同义物）随诊断带出；只读本机缓冲，不进 S3。
+                          const diaryWarnings = formatDiaryWarnings(readDiaryWarnings(10));
+                          lines.push("", "最近日记告警：", ...(diaryWarnings.length > 0 ? diaryWarnings : ["（无）"]));
                           void navigator.clipboard.writeText(lines.join("\n"))
                             .then(() => showToast("诊断信息已复制"))
                             .catch(() => showToast("复制失败，请记录屏幕上的错误信息", { type: "error" }));

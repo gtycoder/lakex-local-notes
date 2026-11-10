@@ -96,8 +96,8 @@ export function QuickNoteTagPicker({ anchor, options, selected, onAdd, onCreate,
       </span>
       {(candidateError || error) && <div className="quick-note-tag-picker__error">{error || candidateError}</div>}
       {candidate && !candidateError && !exactExists && (
-        <button className="quick-note-tag-picker__create" disabled={creating} onClick={() => void create()}>
-          <Plus size={13} /><span>创建标签 “{candidate}”</span>
+        <button className="ln-menu__item" disabled={creating} onClick={() => void create()}>
+          <Plus size={13} /><span className="ln-menu__label">创建标签 “{candidate}”</span>
         </button>
       )}
       <div className="quick-note-tag-picker__section">已有标签（{options.length}）</div>
@@ -107,11 +107,11 @@ export function QuickNoteTagPicker({ anchor, options, selected, onAdd, onCreate,
           return (
             <button
               key={option.id}
-              className={"quick-note-tag-picker__item" + (checked ? " is-selected" : "")}
+              className={"ln-menu__item" + (checked ? " is-selected is-disabled" : "")}
               disabled={checked}
               onClick={() => addExisting(option.id)}
             >
-              <span className="ln-ellipsis">{option.name}</span>
+              <span className="ln-ellipsis ln-menu__label">{option.name}</span>
               {checked ? <Check size={13} /> : <span className="quick-note-tag-picker__count">{option.count}</span>}
             </button>
           );

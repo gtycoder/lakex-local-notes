@@ -63,7 +63,7 @@ export function AiSettingsSection({ form }: { form: ReturnType<typeof useAiSetti
               </Block>
               <Block itemId="ai-key-clear" name="API Key" desc={aiMeta?.hasKey ? "当前已配置（" + aiMeta.keyTail + "）；清除后需要重新填写才能使用。" : "尚未配置。"}>
                 <div className="ai-settings__actions">
-                  <button type="button" className="mb-btn mb-btn--secondary mb-btn--danger" disabled={!aiMeta?.hasKey} onClick={() => {
+                  <button type="button" className="mb-btn mb-btn--secondary mb-btn--danger-text" disabled={!aiMeta?.hasKey} onClick={() => {
                     void confirmMobile({ title: "清除 API Key？", body: "清除后 AI 将无法联网，直到重新填写。", confirmText: "清除", danger: true })
                       .then(async (ok) => {
                         if (!ok) return;

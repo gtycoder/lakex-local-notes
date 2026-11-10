@@ -40,7 +40,7 @@ export function SidebarTagFilter({ tags, selection, onChange }: SidebarTagFilter
         <div className="sidebar-tag-filter__chips">
           {tags.map((tag) => (
             <button key={tag.id} type="button"
-              className={"quick-note-tag" + (selection.include.includes(tag.id) ? " is-selected" : "")}
+              className={"ln-chip" + (selection.include.includes(tag.id) ? " is-selected" : "")}
               aria-pressed={selection.include.includes(tag.id)}
               onClick={() => onChange(toggleTagSelection(selection, tag.id, "include"))}>
               {selection.include.includes(tag.id) && <Check size={11} aria-hidden="true" />}
@@ -54,7 +54,7 @@ export function SidebarTagFilter({ tags, selection, onChange }: SidebarTagFilter
         <div className="sidebar-tag-filter__chips">
           {tags.map((tag) => (
             <button key={tag.id} type="button"
-              className={"quick-note-tag quick-note-tag--exclude" + (selection.exclude.includes(tag.id) ? " is-selected" : "")}
+              className={"ln-chip ln-chip--danger" + (selection.exclude.includes(tag.id) ? " is-selected" : "")}
               aria-pressed={selection.exclude.includes(tag.id)}
               onClick={() => onChange(toggleTagSelection(selection, tag.id, "exclude"))}>
               {selection.exclude.includes(tag.id) && <Check size={11} aria-hidden="true" />}
@@ -67,7 +67,7 @@ export function SidebarTagFilter({ tags, selection, onChange }: SidebarTagFilter
         <p className="sidebar-tag-filter__hint" role="status">
           已筛选：{selection.include.length > 0 ? "同时包含 " + selection.include.length + " 个标签" : "不限包含"}
           {selection.exclude.length > 0 ? "，排除 " + selection.exclude.length + " 个" : ""}
-          <button type="button" className="sidebar-tag-filter__clear" aria-label="清除标签筛选" onClick={() => onChange(EMPTY_TAG_SELECTION)}><X size={10} />清除</button>
+          <button type="button" className="ln-btn ln-btn--link ln-btn--compact sidebar-tag-filter__clear" aria-label="清除标签筛选" onClick={() => onChange(EMPTY_TAG_SELECTION)}><X size={10} />清除</button>
         </p>
       )}
     </div>

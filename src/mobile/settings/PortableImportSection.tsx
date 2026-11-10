@@ -96,7 +96,7 @@ export function PortableImportSection({ onImported }: { onImported?: () => void 
   ) : (
     <div className="mb-set-block__actions">
       <button type="button" className="mb-btn mb-btn--secondary" onClick={() => void closeSheet()}>取消</button>
-      <button type="button" className="mb-btn mb-btn--danger" disabled={!staged} onClick={() => void start()}>
+      <button type="button" className="mb-btn mb-btn--danger-text" disabled={!staged} onClick={() => void start()}>
         覆盖本机并导入
       </button>
     </div>
@@ -109,7 +109,7 @@ export function PortableImportSection({ onImported }: { onImported?: () => void 
       <div className="mb-set-block__actions">
         <button
           type="button"
-          className="mb-btn mb-btn--settings"
+          className="mb-btn mb-btn--outlined"
           disabled={!native || picking || busy}
           onClick={() => void pick()}
         >

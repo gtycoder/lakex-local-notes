@@ -63,14 +63,14 @@ export const NodeIconPicker = ({ anchor, nodeType, value, onPick, onClose }: { a
               type="button"
               role="tab"
               aria-selected={mode === "emoji"}
-              className={"ln-tabs__item node-icon-picker__type-tab" + (mode === "emoji" ? " is-active" : "")}
+              className={"ln-tabs__item" + (mode === "emoji" ? " is-active" : "")}
               onClick={() => { setMode("emoji"); setFilter(""); }}
             >表情符号</button>
             <button
               type="button"
               role="tab"
               aria-selected={mode === "icon"}
-              className={"ln-tabs__item node-icon-picker__type-tab" + (mode === "icon" ? " is-active" : "")}
+              className={"ln-tabs__item" + (mode === "icon" ? " is-active" : "")}
               onClick={() => { setMode("icon"); setFilter(""); }}
             >图标</button>
           </div>
@@ -157,7 +157,7 @@ export const NodeIconPicker = ({ anchor, nodeType, value, onPick, onClose }: { a
                 type="button"
                 role="tab"
                 aria-selected={section.name === active}
-                className={"node-icon-picker__type-tab" + (section.name === active ? " is-active" : "")}
+                className={"ln-tabs__item" + (section.name === active ? " is-active" : "")}
                 onClick={() => jump(section.name)}
               >{section.name}</button>
             ))}

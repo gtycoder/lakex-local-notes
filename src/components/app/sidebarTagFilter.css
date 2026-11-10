@@ -1,6 +1,6 @@
 /*
  * 侧栏目录筛选浮层里的「标签」段（261105 P1 三修：并入原 Filter，不再有独立标签图标）。
- * chips 复用 .quick-note-tag 既有语汇（同语义只有一套视觉）；颜色/间距/字号全部 --lake-* 令牌。
+ * chips 走 kit 的 .ln-chip（261110 第二批从 .quick-note-tag 上收；同语义只有一套视觉）；颜色/间距/字号全部 --lake-* 令牌。
  */
 .sidebar-tag-filter {
   display: flex;
@@ -15,21 +15,10 @@
 .sidebar-tag-filter__sublabel { flex: none; color: var(--lake-text-4); font-size: var(--lake-font-size-tiny); }
 
 .sidebar-tag-filter__row { display: flex; align-items: flex-start; gap: 6px; }
-.sidebar-tag-filter__chips { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
-.sidebar-tag-filter__chips .quick-note-tag { max-width: 132px; }
+.sidebar-tag-filter__chips { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; --ln-chip-max: 132px; }
 
-.sidebar-tag-filter__clear {
-  margin-left: auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  border: 0;
-  border-radius: var(--lake-radius-sm);
-  color: var(--lake-accent-text);
-  background: transparent;
-  font-size: var(--lake-font-size-tiny);
-  cursor: pointer;
-}
+/* 「清除」= ln-btn--link + compact（261110 第二批）；这里只留把它推到右缘的布局。 */
+.sidebar-tag-filter__clear { margin-left: auto; }
 
 .sidebar-tag-filter__hint {
   display: flex;

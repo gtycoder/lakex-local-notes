@@ -13,7 +13,6 @@
 /* ── 二、面板骨架：几何沿用原观感（内距 16 / 正文 266 高 / 面板宽 418 由 usePopoverPosition 给） ── */
 .node-icon-picker { display: flex; flex-direction: column; overflow-y: auto; overscroll-behavior: contain; }
 .node-icon-picker > * { flex-shrink: 0; }
-.node-icon-picker__type-tab { height: 38px; }
 .node-icon-picker__type-action { align-self: center; }
 .node-icon-picker__head { display: flex; align-items: center; justify-content: space-between; gap: var(--lake-space-md); padding: var(--lake-space-lg) var(--lake-space-xl) var(--lake-space-md); }
 .node-icon-picker__title { font-size: var(--lake-font-size-tiny); color: var(--lake-text-3); }
@@ -43,6 +42,7 @@
 /* ── 五、表情分组跳转行（底部；40px 小页签） ── */
 .node-icon-picker__tabs { display: flex; gap: var(--lake-space-xxs); margin: var(--lake-space-xs) 0; overflow-x: auto; scrollbar-width: none; }
 .node-icon-picker__tabs::-webkit-scrollbar { display: none; }
-.node-icon-picker__tab { flex: 1 1 0; display: flex; align-items: center; justify-content: center; min-width: 0; height: 26px; padding: 0 var(--lake-space-xxs); border: 0; border-radius: var(--lake-radius-xs); background: transparent; color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); cursor: pointer; }
-.node-icon-picker__tab:hover { background: var(--lake-bg-hover); }
-.node-icon-picker__tab.is-active { color: var(--lake-text-1); font-weight: var(--lake-font-weight-semibold); }
+/* 261110 第二批：页签（顶部「表情符号｜图标」+ 底部表情分组跳转）统一走 kit 的 .ln-tabs__item；
+   本文件原先的 .node-icon-picker__type-tab（38px 覆盖）与死类 .node-icon-picker__tab 一并删除。
+   表情/插画**选择格**（__emoji / .node-icon-cell）保留为本面板专属网格规格：格高由 9 列/6 列栅格
+   与 32/44px 决定，硬降成 27px 图标钮会把表情与插画挤扁（登记为例外）。 */

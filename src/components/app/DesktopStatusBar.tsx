@@ -61,7 +61,7 @@ export function DesktopStatusBar({ showDocumentStats, docKind = "doc", wordCount
           <button
             type="button"
             ref={lockRef}
-            className="document-statusbar-lock"
+            className="ln-btn ln-btn--ghost ln-btn--compact document-statusbar-lock"
             title="点击解锁"
             aria-label="解锁当前文档"
             aria-haspopup="dialog"
@@ -109,7 +109,7 @@ export function DesktopStatusBar({ showDocumentStats, docKind = "doc", wordCount
       {notice && (
         <div className="document-notice-toast" role="status" aria-live="polite">
           <span>{notice.text}</span>
-          {notice.action && <button type="button" onClick={notice.action.onClick}>{notice.action.label}</button>}
+          {notice.action && <button type="button" className="ln-btn ln-btn--link ln-btn--compact" onClick={notice.action.onClick}>{notice.action.label}</button>}
         </div>
       )}
     </>

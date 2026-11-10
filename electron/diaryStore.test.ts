@@ -296,3 +296,68 @@ describe("diaryStore 单事务（失败回滚）", () => {
     } finally { db.close(); }
   });
 });
+
+describe("取消日记标记（整本；261110 收尾）", () => {
+  it("只把笔记本 space 置 NULL：文档仍在原笔记本子树、日记空间不再包含它", () => {
+    const opened = store.openDiaryDate("2026-11-09");
+    const { notebook, month } = diaryHierarchy();
+
+    const result = store.unmarkDiaryNotebook(notebook.id);
+    expect(result).toEqual({ cleared: true });
+
+    const after = nodesOf();
+    const unmarked = after.find((n) => n.id === notebook.id)!;
+    expect(unmarked.space).toBeNull();
+    // 子树上没有任何 space="diary" 残留（年/月/文档本来就是 NULL，且层级没变）
+    expect(after.filter((n) => n.space === "diary")).toEqual([]);
+    const note = after.find((n) => n.id === opened.noteId)!;
+    expect(note.parentId).toBe(month.id);
+    expect(note.title).toBe("2026-11-09");
+    // 文档正文照旧可读（取消标记不是删数据）
+    expect(store.readNote(opened.noteId).content).toContain("ne-p");
+
+    // 「不再出现在日记空间」= core 的日记判据不再命中这本：diaryNotebook 为空、时间线为空。
+    expect(store.listTreeNodes().some((n) => n.space === "diary")).toBe(false);
+    const db = readOnlyDb();
+    try {
+      const row = db.prepare("SELECT space, is_dirty FROM tree_nodes WHERE id=?").get(notebook.id) as { space: string | null; is_dirty: number };
+      expect(row.space).toBeNull();
+      // 必须标脏（否则这次 space 变更不上传，wire 上看不到「取消日记标记」）
+      expect(row.is_dirty).toBe(1);
+    } finally { db.close(); }
+  });
+
+  it("连点幂等：第二次 cleared=false（不报错、行数不变）；非日记本同样 cleared=false", () => {
+    const opened = store.openDiaryDate("2026-11-09");
+    const { notebook } = diaryHierarchy();
+    expect(store.unmarkDiaryNotebook(notebook.id)).toEqual({ cleared: true });
+    const first = store.listTreeNodes();
+    expect(store.unmarkDiaryNotebook(notebook.id)).toEqual({ cleared: false });
+    const second = store.listTreeNodes();
+    expect(second).toEqual(first);
+    expect(second.find((n) => n.id === opened.noteId)).toBeTruthy();
+    // 普通笔记本 / 不存在的 id 都不会误改（也没有第二本被取消）
+    const plain = store.createNotebook("工作");
+    expect(store.unmarkDiaryNotebook(plain.id)).toEqual({ cleared: false });
+    expect(store.unmarkDiaryNotebook("nb-does-not-exist")).toEqual({ cleared: false });
+  });
+
+  it("取消时 bump updated_at（wire 靠目录 updatedAt 传播 space 变更；见 planFolderSpace.test）", () => {
+    store.openDiaryDate("2026-11-09");
+    const { notebook } = diaryHierarchy();
+    const before = store.listTreeNodes().find((n) => n.id === notebook.id)!;
+    const db = readOnlyDb();
+    const beforeUpdatedAt = (db.prepare("SELECT updated_at FROM tree_nodes WHERE id=?").get(notebook.id) as { updated_at: string }).updated_at;
+    db.close();
+    expect(store.unmarkDiaryNotebook(notebook.id)).toEqual({ cleared: true });
+    const after = store.listTreeNodes().find((n) => n.id === notebook.id)!;
+    expect(after.updatedAt >= before.updatedAt).toBe(true);
+    const db2 = readOnlyDb();
+    const afterUpdatedAt = (db2.prepare("SELECT updated_at FROM tree_nodes WHERE id=?").get(notebook.id) as { updated_at: string }).updated_at;
+    db2.close();
+    expect(Date.parse(afterUpdatedAt)).toBeGreaterThanOrEqual(Date.parse(beforeUpdatedAt));
+    // 标题/父级不变（只改 space）
+    expect(after.title).toBe(before.title);
+    expect(after.parentId).toBe(before.parentId);
+  });
+});

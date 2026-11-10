@@ -115,7 +115,9 @@ describe("标签空间接线（P1）", () => {
     const headBlock = TAGS_WORKSPACE.slice(TAGS_WORKSPACE.indexOf('<header className="tags-dir__head">'), TAGS_WORKSPACE.indexOf("</header>"));
     expect(headBlock.indexOf("新建标签")).toBeLessThan(headBlock.indexOf("刷新标签"));
     // 左栏行：只剩名称（条数/时间只在选中后的中栏摘要）
-    const selectBlock = TAGS_WORKSPACE.slice(TAGS_WORKSPACE.indexOf('className="tags-dir__select"'), TAGS_WORKSPACE.indexOf("</button>", TAGS_WORKSPACE.indexOf('className="tags-dir__select"')));
+    // 261110 第二批：行主区改为 .ln-row__main--row（钩子类名仍是 tags-dir__select）⇒ 按类名定位
+    const selectAt = TAGS_WORKSPACE.indexOf("tags-dir__select");
+    const selectBlock = TAGS_WORKSPACE.slice(selectAt, TAGS_WORKSPACE.indexOf("</button>", selectAt));
     expect(selectBlock).not.toContain("tags-dir__counts");
     expect(selectBlock).not.toContain("tags-dir__time");
   });

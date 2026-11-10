@@ -426,7 +426,7 @@ export function TagsWorkspace(props: TagsWorkspaceProps) {
     return (
       <li key={item.kind + ":" + item.id}>
         <div className={"ln-row tags-aggregate__row" + (selectedRow ? " is-selected" : "")} title={item.title}>
-          <button type="button" className="tags-aggregate__open" onClick={() => void openPreview(item)}>
+          <button type="button" className="ln-row__main ln-row__main--row tags-aggregate__open" onClick={() => void openPreview(item)}>
             {item.kind === "doc" ? <FileText size={14} aria-hidden="true" /> : <StickyNote size={14} aria-hidden="true" />}
             <span className="ln-ellipsis tags-aggregate__row-title">{item.title}</span>
             <time className="tags-aggregate__row-time" dateTime={item.updatedAt}>{formatUpdated(item.updatedAt)}</time>
@@ -485,7 +485,7 @@ export function TagsWorkspace(props: TagsWorkspaceProps) {
                     onChange={setEditName} onCommit={() => void saveRename(entry)} onCancel={() => setEditingId(null)} />
                 ) : (
                   // 用户验收：左行只留名称（条数与更新时间只在选中后于中栏摘要展示）
-                  <button type="button" className="tags-dir__select" onClick={() => setSelectedTagId(entry.id)} title={entry.name}>
+                  <button type="button" className="ln-row__main ln-row__main--row tags-dir__select" onClick={() => setSelectedTagId(entry.id)} title={entry.name}>
                     <span className="ln-ellipsis tags-dir__name">{entry.name}</span>
                   </button>
                 )}

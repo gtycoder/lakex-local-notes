@@ -101,20 +101,7 @@
   cursor: grab;
 }
 
-.tags-dir__select {
-  display: flex;
-  flex: 1 1 auto;
-  align-items: center;
-  gap: var(--lake-space-sm);
-  min-width: 0;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
+/* 目录行主区 = kit 的 .ln-row__main--row（261110 第二批；行 hover/选中仍由父 .ln-row 负责）。 */
 .tags-dir__name { flex: 1 1 auto; min-width: 0; }
 
 .tags-dir__counts {
@@ -194,19 +181,7 @@
   padding-right: 2px;
 }
 
-.tags-aggregate__open {
-  display: flex;
-  flex: 1 1 auto;
-  align-items: center;
-  gap: var(--lake-space-sm);
-  min-width: 0;
-  border: 0;
-  color: inherit;
-  background: transparent;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
+/* 聚合行主区 = kit 的 .ln-row__main--row（261110 第二批）。 */
 
 .tags-aggregate__remove {
   flex: none;

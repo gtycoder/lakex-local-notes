@@ -10,7 +10,8 @@ const CSS = readFileSync(new URL("../../styles/document-status.css", import.meta
  */
 describe("状态栏锁定标识", () => {
   it("锁标识是 button + 解锁浮层，且浮层走 Overlay 原语 + usePopoverPosition", () => {
-    expect(SRC).toMatch(/<button[\s\S]{0,200}className="document-statusbar-lock"/);
+    // 261110 第二批：锁胶囊改挂按钮梯队（ln-btn--ghost + compact），钩子类名仍在（CSS 与测试靠它定位）。
+    expect(SRC).toMatch(/<button[\s\S]{0,300}className="ln-btn ln-btn--ghost ln-btn--compact document-statusbar-lock"/);
     expect(SRC).toContain("onUnlock");
     expect(SRC).toMatch(/<Popover open onDismiss=\{\(\) => setUnlockOpen\(false\)\}/);
     expect(SRC).toContain("usePopoverPosition");

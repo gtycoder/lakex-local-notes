@@ -362,6 +362,32 @@ export function planDiaryConvert(
 }
 
 /**
+ * 「取消日记标记」的判据（261110 收尾；docs/DIARY.md 硬规则 1 的反向动作）。
+ *
+ * 语义定稿：**整本取消**，只改笔记本这一行的 `space`（置 NULL）；
+ * 笔记本与整棵子树（年/月分组、文档）**原样保留**，只是不再归入日记空间。
+ * 判据只认 `nodeType === "notebook" && space === "diary"`（不看标题）：
+ *  · 已经是普通笔记本（含连点第二次）⇒ `not-diary-notebook`，调用方按「无事发生」处理（幂等，不报错）；
+ *  · 节点不存在 / 不是笔记本 ⇒ `missing-notebook`。
+ * UI 与两端写入路径都先问这里，不要各自再判一遍。
+ */
+export type DiaryUnmarkRejection = "missing-notebook" | "not-diary-notebook";
+
+export function planDiaryUnmark(
+  nodes: readonly DiaryTreeNode[],
+  notebookId: string | null,
+): { ok: true; notebookId: string; title: string } | { ok: false; reason: DiaryUnmarkRejection } {
+  if (!notebookId) return { ok: false, reason: "missing-notebook" };
+  const target = nodes.find((node) => node.id === notebookId);
+  if (!target) return { ok: false, reason: "missing-notebook" };
+  // 节点在、但不是「带日记标记的笔记本」（普通笔记本/分组/文档/已取消）⇒ 同一个"不是日记本"原因。
+  if (!isNotebook(target) || normalizeFolderSpace(target.space) !== DIARY_FOLDER_SPACE) {
+    return { ok: false, reason: "not-diary-notebook" };
+  }
+  return { ok: true, notebookId: target.id, title: target.title };
+}
+
+/**
  * 日记子树（日记笔记本 + 全部后代）的节点 id 集合。
  *
  * 用途：**其它空间不要把日记内容当普通资料混进来**（AI 写作的资料选择/快捷组/发布目标）。

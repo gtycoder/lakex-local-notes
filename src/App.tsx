@@ -594,6 +594,26 @@ export function App() {
     if (node) sidebarRequestDelete(node);
   }, [treeNodes, sidebarRequestDelete]);
 
+  /** 「取消日记标记」（整本；261110 收尾）：笔记本 space 置 NULL，笔记本与整棵子树原样保留（只回到知识库）。
+   *  成功后三件事：① 重读树（日记左栏年/月树立即不再出现）；② 已打开的日记 tab 改回文档空间
+   *  （不关闭用户正在看的文档，否则 tab 被分流隐藏 ⇒ activeNoteId 悬空、编辑区空白）；
+   *  ③ 当前在日记空间则切回知识库（那里已经没有日记本了）。 */
+  const handleDiaryUnmarkNotebook = useCallback(async () => {
+    const notebook = diaryNotebook;
+    if (!notebook) return;
+    try {
+      const result = await native.diaryUnmark(notebook.id);
+      await refreshTree();
+      setOpenTabs((tabs) => tabs.map((tab) => (tab.space === "diary" ? { ...tab, space: "library" as const } : tab)));
+      if (desktopWorkspace === "diary") await switchDesktopWorkspace("library");
+      showNotice(result.cleared
+        ? "已取消「" + notebook.title + "」的日记标记，笔记本与文档仍在知识库"
+        : "「" + notebook.title + "」已经不是日记本了");
+    } catch (reason) {
+      setError(getNativeErrorMessage(reason));
+    }
+  }, [diaryNotebook, refreshTree, setOpenTabs, desktopWorkspace, switchDesktopWorkspace, showNotice, setError]);
+
   /** 「转为小记」（261109）：日期标题写入小记第一行，正文接在后面；成功后把日记移入回收站（软删可恢复）。
    *  媒体卡片不搬运（小记资源是另一套作用域）——`droppedMedia` 为真时**明说**，不静默丢内容。 */
   const handleDiaryToQuickNote = useCallback(async (nodeId: string) => {
@@ -1264,6 +1284,7 @@ export function App() {
                 onConvertEntry={handleDiaryConvertEntry}
                 onConvertToQuickNote={(nodeId) => { void handleDiaryToQuickNote(nodeId); }}
                 onDeleteEntry={handleDiaryDeleteEntry}
+                onUnmarkNotebook={() => { void handleDiaryUnmarkNotebook(); }}
                 onRenameNotebook={handleDiaryRenameNotebook}
                 onSetNotebookIcon={handleDiarySetNotebookIcon}
                 onContentChange={handleContentChange}

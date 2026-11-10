@@ -28,13 +28,23 @@ export interface MoveTargetTreeSheetProps {
   currentParentId: string | null;
   /** 不允许作为目标（选中项自身及后代）。 */
   excludedIds?: readonly string[];
+  /** Sheet 标题（默认「移动到…」；「转为文档」流程传自己的动作名，别让共享原语替业务说话）。 */
+  title?: string;
+  /** 主按钮文案（默认「移动到此处」；同 title，语义由调用方给）。 */
+  confirmLabel?: string;
+  /** 正文里的一句说明（可选；不传 = 不显示）。 */
+  description?: string;
   busy?: boolean;
   error?: string | null;
   onConfirm(parentId: string): void;
   onClose(): void;
 }
 
-export function MoveTargetTreeSheet({ open, nodes, currentParentId, excludedIds, busy, error, onConfirm, onClose }: MoveTargetTreeSheetProps) {
+export function MoveTargetTreeSheet({
+  open, nodes, currentParentId, excludedIds,
+  title = "移动到…", confirmLabel = "移动到此处", description,
+  busy, error, onConfirm, onClose,
+}: MoveTargetTreeSheetProps) {
   const excluded = useMemo(() => new Set(excludedIds ?? []), [excludedIds]);
   const notebooks = useMemo(() => nodes.filter((node) => node.nodeType === "notebook"), [nodes]);
   const [picked, setPicked] = useState<string | null>(null);
@@ -56,15 +66,16 @@ export function MoveTargetTreeSheet({ open, nodes, currentParentId, excludedIds,
   return (
     <MobileSheet
       open={open}
-      title="移动到…"
+      title={title}
       onClose={() => { if (!busy) onClose(); }}
       bodyClassName="mb-sheet__body--form"
       footer={<SheetFooter
         cancel={{ label: "取消", disabled: busy, onClick: onClose }}
-        confirm={{ label: "移动到此处", disabled: !canConfirm, onClick: () => { if (canConfirm && picked) onConfirm(picked); } }}
+        confirm={{ label: confirmLabel, disabled: !canConfirm, onClick: () => { if (canConfirm && picked) onConfirm(picked); } }}
       />}
     >
       {error && <div className="qn-tag-sheet__error" role="alert">{error}</div>}
+      {description && <div className="mb-set-item__desc">{description}</div>}
       <span className="mb-input qn-tag-sheet__input">
         <input
           value={query}

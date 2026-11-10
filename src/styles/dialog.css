@@ -42,8 +42,9 @@
 .note-info-stat { display: inline-flex; align-items: center; gap: 4px; padding: 2px 9px; border-radius: var(--lake-radius-pill); background: var(--lake-bg-block); font-size: var(--lake-font-size-tiny); color: var(--lake-text-1); }
 .note-info-stat em { font-style: normal; color: var(--lake-text-3); }
 .note-info-history li { display: block; padding: 0; }
-.note-info-history-row { display: flex; align-items: center; gap: 6px; width: 100%; padding: 4px 6px; border: 0; border-radius: var(--lake-radius-2xs); background: transparent; font-size: var(--lake-font-size-tiny); color: var(--lake-text-3); cursor: pointer; text-align: left; }
-.note-info-history-row:hover, .note-info-history-row.is-active { background: var(--lake-bg-block); }
+/* 历史行 = kit 的 .ln-row（261110 第二批）；这里只留撑满 + 「预览中」的中性底（预览态不是选中态）。 */
+.note-info-history-row { width: 100%; }
+.note-info-history-row.is-active { background: var(--lake-bg-block); }
 .note-info-history-row em { margin-left: auto; font-style: normal; opacity: .7; }
 .note-info-history-hint { color: var(--lake-accent-text); }
 .note-info-history-preview { margin-top: 8px; max-height: 260px; overflow: auto; padding: 8px 10px; border: 0.5px solid var(--lake-border-2); border-radius: var(--lake-radius-xs); background: var(--lake-bg-block); font-size: var(--lake-font-size-tiny); line-height: 1.6; }

@@ -46,11 +46,11 @@ export function QuickNoteCard({ item, onNeedDetail, revealed, deletePending, sel
   >
     {/* 勾选框常驻（左侧固定槽位）：默认 hover 才显形，点多选模式后常显 */}
     <button
-      className={"qn-check quick-note-select" + (checked ? " is-on" : "")}
+      className={"ln-check quick-note-select" + (checked ? " is-on" : "")}
       role="checkbox" aria-checked={checked} aria-label={checked ? "取消选择" : "选择这篇小记"}
       onClick={(event) => { event.stopPropagation(); onToggleSelect(); }}
     >{checked && <Check size={13} />}</button>
-    <header><time dateTime={item.updatedAt || item.createdAt}>更新于 {stamp}</time>{item.isConflict && <span className="badge badge--warn quick-note-conflict">同步冲突副本</span>}<div className="quick-note-card-actions"><button onClick={(event) => { event.stopPropagation(); onAddTag(event.currentTarget); }} aria-label="添加标签" title="添加标签"><Tag size={15} /></button><button onClick={onConvert} aria-label="转为正式笔记" title="转为正式笔记"><FilePlus size={15} /></button><button onClick={onEdit} aria-label="编辑小记" title="编辑小记"><Pencil size={15} /></button><button className="danger" aria-label="删除小记" onClick={onDelete} disabled={deletePending} title={deletePending ? "请先完成当前删除的撤销操作" : "删除小记"}><Trash size={15} /></button></div></header>
+    <header><time dateTime={item.updatedAt || item.createdAt}>更新于 {stamp}</time>{item.isConflict && <span className="badge badge--warn quick-note-conflict">同步冲突副本</span>}<div className="quick-note-card-actions"><button className="ln-iconbtn ln-iconbtn--compact" onClick={(event) => { event.stopPropagation(); onAddTag(event.currentTarget); }} aria-label="添加标签" title="添加标签"><Tag size={15} /></button><button className="ln-iconbtn ln-iconbtn--compact" onClick={onConvert} aria-label="转为正式笔记" title="转为正式笔记"><FilePlus size={15} /></button><button className="ln-iconbtn ln-iconbtn--compact" onClick={onEdit} aria-label="编辑小记" title="编辑小记"><Pencil size={15} /></button><button className="ln-iconbtn ln-iconbtn--compact ln-iconbtn--danger" aria-label="删除小记" onClick={onDelete} disabled={deletePending} title={deletePending ? "请先完成当前删除的撤销操作" : "删除小记"}><Trash size={15} /></button></div></header>
     {/* 卡片预览 = 自研只读渲染（零内核实例）：白名单块按真实结构显示（列表/待办/引用/标题/行内格式），
         媒体卡按正文顺序就地渲染；白名单外的块显示占位。解析不出内容时回落到纯文本镜像。 */}
     <QuickNotePreview
@@ -67,7 +67,7 @@ export function QuickNoteCard({ item, onNeedDetail, revealed, deletePending, sel
           const name = item.content.tags[index];
           if (!name) return null;
           return (
-            <button type="button" className="quick-note-tag is-selectable" key={tagId} onClick={(event) => { event.stopPropagation(); onFilterTag(tagId); }} title={`筛选标签：${name}`}>
+            <button type="button" className="ln-chip" key={tagId} onClick={(event) => { event.stopPropagation(); onFilterTag(tagId); }} title={`筛选标签：${name}`}>
               <span className="ln-ellipsis">{name}</span>
             </button>
           );

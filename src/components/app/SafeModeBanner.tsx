@@ -71,8 +71,8 @@ export function SafeModeBanner() {
           安全模式：已关闭自动同步与标签恢复，用于排查崩溃{detail ? "（" + detail + "）" : ""}
           {note ? " — " + note : ""}
         </span>
-        <button type="button" disabled={busy} onClick={() => void copyDiagnostics()}>复制诊断</button>
-        <button type="button" disabled={busy} onClick={() => void exitSafeMode()}>退出安全模式（下次正常启动）</button>
+        <button type="button" className="ln-btn ln-btn--secondary ln-btn--compact" disabled={busy} onClick={() => void copyDiagnostics()}>复制诊断</button>
+        <button type="button" className="ln-btn ln-btn--outlined ln-btn--compact" disabled={busy} onClick={() => void exitSafeMode()}>退出安全模式（下次正常启动）</button>
       </div>
     </div>
   );

@@ -57,7 +57,7 @@ import { NoteMetadataRepository } from "./noteMetadataRepository.js";
 import { NoteContentRepository, type NoteCacheInput } from "./noteContentRepository.js";
 import { createPlaintextSecretCipher, type SecretCipher } from "../src/core/secretCipher.js";
 import type { DiaryFolderSpace } from "../src/core/diary.js";
-import { DiaryStore, type DiaryOpenResult } from "./diaryStore.js";
+import { DiaryStore, type DiaryOpenResult, type DiaryUnmarkResult } from "./diaryStore.js";
 import type { DbLike } from "./dbLike.js";
 import { ResourceRepository } from "./resourceRepository.js";
 import { draftJournalDir, readDraftEntry } from "./draftJournal.js";
@@ -859,6 +859,14 @@ export class Store {
    */
   openDiaryDate(dateKey: string, options: { mode?: "open" | "new" } = {}): DiaryOpenResult {
     return this.diaryStore.openDate(dateKey, options);
+  }
+
+  /**
+   * 日记：取消笔记本的「日记本」标记（整本；IPC `diary_unmark` 的唯一实现）。
+   * 判据/幂等全在 diaryStore.unmarkNotebook；这里只转发。
+   */
+  unmarkDiaryNotebook(notebookId: string): DiaryUnmarkResult {
+    return this.diaryStore.unmarkNotebook(notebookId);
   }
 
   /**

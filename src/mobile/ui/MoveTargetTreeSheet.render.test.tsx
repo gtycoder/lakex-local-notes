@@ -21,7 +21,7 @@ let root: ReturnType<typeof createRoot>;
 const onConfirm = vi.fn();
 const onClose = vi.fn();
 
-const render = async (props: Partial<{ currentParentId: string | null; excludedIds: string[]; busy: boolean; nodes: MoveTargetNode[] }> = {}): Promise<void> => {
+const render = async (props: Partial<{ currentParentId: string | null; excludedIds: string[]; busy: boolean; nodes: MoveTargetNode[]; title: string; confirmLabel: string; description: string }> = {}): Promise<void> => {
   await act(async () => {
     root.render(createElement(MoveTargetTreeSheet, {
       open: true,
@@ -29,6 +29,9 @@ const render = async (props: Partial<{ currentParentId: string | null; excludedI
       currentParentId: props.currentParentId ?? null,
       excludedIds: props.excludedIds ?? [],
       busy: props.busy ?? false,
+      title: props.title,
+      confirmLabel: props.confirmLabel,
+      description: props.description,
       onConfirm,
       onClose,
     }));
@@ -124,5 +127,18 @@ describe("MoveTargetTreeSheet（简化：只选笔记本）", () => {
   it("没有笔记本时给空态（不崩）", async () => {
     await render({ nodes: [{ id: "g1", title: "分组", parentId: null, nodeType: "group" }] });
     expect(host.textContent).toContain("还没有笔记本");
+  });
+
+  it("文案参数：默认仍是「移动到…/移动到此处」；调用方可覆盖（转文档不再显示「移动到…」）", async () => {
+    await render();
+    expect(host.querySelector(".mb-sheet__title")?.textContent).toBe("移动到…");
+    expect(confirmButton().textContent).toContain("移动到此处");
+    expect(host.textContent).not.toContain("选择目标笔记本");
+
+    await render({ title: "转为文档", confirmLabel: "转为文档", description: "选择目标笔记本" });
+    expect(host.querySelector(".mb-sheet__title")?.textContent).toBe("转为文档");
+    const confirm = [...host.querySelectorAll<HTMLButtonElement>(".mb-sheet__foot button")].find((b) => (b.textContent ?? "").trim() === "转为文档");
+    expect(confirm, "主按钮应显示调用方给的 confirmLabel").toBeTruthy();
+    expect(host.textContent).toContain("选择目标笔记本");
   });
 });

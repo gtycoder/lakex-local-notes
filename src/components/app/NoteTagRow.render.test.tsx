@@ -72,7 +72,7 @@ describe("NoteTagRow（属性面板标签行）", () => {
     act(() => root.render(createElement(NoteTagRow, { noteId: "n1" })));
     await flush();
     act(() => document.body.querySelector<HTMLButtonElement>('button[aria-label="添加标签"]')!.click());
-    const option = [...document.body.querySelectorAll<HTMLButtonElement>(".quick-note-tag-picker__item")].find((btn) => (btn.textContent ?? "").includes("项目"))!;
+    const option = [...document.body.querySelectorAll<HTMLButtonElement>(".quick-note-tag-picker__list button.ln-menu__item")].find((btn) => (btn.textContent ?? "").includes("项目"))!;
     expect(option).toBeTruthy();
     await act(async () => { option.click(); await Promise.resolve(); });
     expect(h.setNoteTags).toHaveBeenCalledWith("n1", [TAG_PROJECT, TAG_INSPIRATION]);

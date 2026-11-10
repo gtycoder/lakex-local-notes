@@ -99,11 +99,11 @@ export function NoteTagRow({ noteId, onError, onChanged, emptyHint = "还没有�
       {tagIds.map((tagId) => (
         <span key={tagId} className="note-info-tag-chip">
           <span className="ln-ellipsis">{nameOf.get(tagId) ?? tagId}</span>
-          <button type="button" className="note-info-tag-remove" aria-label={"移除标签 " + (nameOf.get(tagId) ?? tagId)}
+          <button type="button" className="ln-iconbtn ln-iconbtn--compact note-info-tag-remove" aria-label={"移除标签 " + (nameOf.get(tagId) ?? tagId)}
             disabled={busy} onClick={() => void commit(removeQuickNoteTagId(tagIds, tagId))}><X size={11} /></button>
         </span>
       ))}
-      <button type="button" className="note-info-tag-add" disabled={busy}
+      <button type="button" className="ln-chip ln-chip--add ln-chip--compact note-info-tag-add" disabled={busy}
         aria-label="添加标签" title="添加标签"
         onClick={(event) => setPickerAnchor(event.currentTarget)}>
         <Plus size={12} /><span>标签</span>

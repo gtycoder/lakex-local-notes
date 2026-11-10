@@ -22,33 +22,7 @@
   font-size: var(--lake-font-size-tiny);
 }
 
-.note-info-tag-remove {
-  display: inline-flex;
-  align-items: center;
-  border: 0;
-  border-radius: var(--lake-radius-sm);
-  color: var(--lake-text-4);
-  background: transparent;
-  cursor: pointer;
-}
-
-.note-info-tag-remove:hover { color: var(--lake-accent-text); background: var(--lake-accent-tint); }
-
-.note-info-tag-add {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  padding: 2px var(--lake-space-xs);
-  border: 0.5px dashed var(--lake-border-2);
-  border-radius: var(--lake-radius-sm);
-  color: var(--lake-text-3);
-  background: transparent;
-  font-size: var(--lake-font-size-tiny);
-  cursor: pointer;
-}
-
-.note-info-tag-add:hover { color: var(--lake-accent-text); border-color: var(--lake-accent); }
-
+/* 移除钮 = .ln-iconbtn--compact、添加钮 = .ln-chip--add（261110 第二批上收到 kit；本文件只留芯片排版）。 */
 .note-info-tags-empty {
   margin: 0;
   color: var(--lake-text-4);

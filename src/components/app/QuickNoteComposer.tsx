@@ -90,14 +90,14 @@ export function QuickNoteComposer({ draft, saving, syncing, cloudReady, variant,
     <div className="quick-note-tags">
       <button
         type="button"
-        className="quick-note-tag-add"
+        className="ln-chip ln-chip--add"
         disabled={busy}
         onClick={(event) => setTagPickerAnchor(event.currentTarget)}
       ><Plus size={12} /><span>添加标签</span></button>
       {draft.tagIds.map((tagId) => (
-        <span className="quick-note-tag is-editable" key={tagId}>
+        <span className="ln-chip ln-chip--static" key={tagId}>
           <span className="ln-ellipsis">{tagNameOf(tagId)}</span>
-          <button type="button" aria-label={`移除标签 ${tagNameOf(tagId)}`} disabled={busy} onClick={() => onTagIdsChange(removeQuickNoteTagId(draft.tagIds, tagId))}><X size={11} /></button>
+          <button type="button" className="ln-iconbtn ln-iconbtn--compact" aria-label={`移除标签 ${tagNameOf(tagId)}`} disabled={busy} onClick={() => onTagIdsChange(removeQuickNoteTagId(draft.tagIds, tagId))}><X size={11} /></button>
         </span>
       ))}
     </div>

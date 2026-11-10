@@ -41,11 +41,16 @@ diary_open_date(dateKey: string, mode?: "open" | "new"): Promise<{
   notebookId: string;
   duplicates: string[];  // 同名重复文档（历史脏数据），只告警不删除
 }>
+
+// 261110 收尾：取消**整本**日记标记（笔记本 space → NULL，子树原样保留）；已取消/不是日记本
+// ⇒ cleared=false（幂等，不报错）。主进程用 core planDiaryUnmark 重新校验。
+diary_unmark(notebookId: string): Promise<{ cleared: boolean }>
 ```
 
 - **主进程重新 plan**，不信任渲染层传的 nodeId（防 TOCTOU）。
 - 整个 ensure（笔记本 → 年组 → 月组 → 文档）在**一个事务**里；并发由写域串行保证，连点只产生一篇。
 - 渲染层需要的列表/树继续走既有 `list_tree_nodes`（`TreeNode` 已加 `space`），**不新增列表 IPC**。
+- `diary_unmark`：只改**笔记本这一行**的 `space`（单条原子 `UPDATE … WHERE id=? AND space='diary'`，同时 bump `updated_at` + `is_dirty=1`，靠 updatedAt 传播目录元数据）；文档/分组/整棵子树原样保留。两端入口 = 桌面日记条目右键「取消日记标记（整本）」/ 移动条目 ⋯；成功后已打开的日记 tab 改回文档空间、日记空间切回知识库（不关闭用户正在看的文档）。
 
 ## 数据流
 
@@ -78,7 +83,17 @@ renderer: list_tree_nodes（含 space）
 - 移出后自然从日记时间线消失（`diaryEntries` 只扫日记本子树）；想恢复成日记 = 再把它移回日记本（标题仍匹配 `YYYY-MM-DD` 就重新计入）。
 - 判据单一来源：`core.diaryConvertTargets()`（可承接的容器 = 根层笔记本，**排除日记本**；不含分组）+ `core.planDiaryConvert()`（校验条目确实是日记、目标合法）。UI 与写入路径都先问 core，不另写一套。
 - 两端入口：桌面条目**右键菜单**（`Menu` + `usePopoverPosition`）；移动端条目行的操作入口（`MobileSheetMenu`）→ 目标选择复用两端已有的「移动目标」选择器（桌面 `MoveTargetTreeDialog` / 移动 `MoveTargetTreeSheet`）。
+- **目标选择器支持调用点文案**（261110）：`title` / `confirmLabel` / `description` 可选参数；转文档传「转为文档 / 转为文档 / 选择目标笔记本」，普通移动仍用默认「移动到… / 移动到此处」（两个 render 测试锁默认值不回归）。
 - **不做**：不自动清理搬空后的年/月分组（空分组无害，清理由用户或以后统一做）；不提供"转回日记"的专用动作（移回去即可）。
+
+## 取消日记标记（261110 收尾）
+
+- **语义 = 整本取消、单向**：只把日记笔记本的 `space` 置 NULL ⇒ 回到知识库、日记时间线不再包含它；**笔记本与整棵子树（年/月分组、文档、历史、回收站语义）全部原样保留**，不移动、不删除、不改标题。
+- **判据单一来源** `core.planDiaryUnmark`（只认 `nodeType=notebook 且 space=diary`，不看标题）；两端数据层再各用一条带守卫的 `UPDATE`（`WHERE id=? AND space='diary'`）落库。
+- **幂等**：已经取消 / 不是日记本 ⇒ `cleared:false`，按「无事发生」处理，不报错、不弹错误提示。
+- **wire**：取消后下一次发布必须写 `space=null`（硬规则 1 已覆盖）；跨端靠 folders 的 `updatedAt` 传播。
+- **不做「重新标记为日记本」**：取消后再「写今天」只会新建一个**新的**空日记本（旧本留在知识库）；要回标需另立项（§3#17 三问）。
+- **护栏**：`core/diary.test.ts`（plan 判据/幂等）、`electron/diaryStore.test.ts`、`src/mobile/diary/diaryRepository.test.ts`（space=null / 文档仍在原笔记本 / 连点幂等 / updated_at）、`DiaryWorkspace.render.test.tsx`、`diaryPage.render.test.tsx`。
 
 ## 搜索
 

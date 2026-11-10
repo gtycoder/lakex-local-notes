@@ -165,3 +165,24 @@ describe("移动目标树弹窗（task-91 视觉/键盘）", () => {
     expect(g2.getAttribute("data-depth")).toBe("2");
   });
 });
+
+describe("文案参数（261110 日记 v1 收尾）", () => {
+  const headTitle = () => document.querySelector(".ln-dialog__title")?.textContent ?? "";
+  const actionButton = (text: string) =>
+    [...document.querySelectorAll<HTMLButtonElement>(".ln-dialog__actions button")].find((btn) => (btn.textContent ?? "").trim() === text);
+
+  it("默认不传参：标题仍是「移动到…」、主按钮仍是「移动到此处」（共享原语不被业务文案污染）", () => {
+    render();
+    expect(headTitle()).toBe("移动到…");
+    expect(actionButton("移动到此处")).toBeTruthy();
+    expect(document.body.textContent).not.toContain("选择目标笔记本");
+  });
+
+  it("调用方可覆盖 title / confirmLabel / description（转文档不再显示「移动到…」）", () => {
+    render({ title: "转为文档", confirmLabel: "转为文档", description: "选择目标笔记本" });
+    expect(headTitle()).toBe("转为文档");
+    expect(actionButton("转为文档")).toBeTruthy();
+    expect(actionButton("移动到此处")).toBeUndefined();
+    expect(document.body.textContent).toContain("选择目标笔记本");
+  });
+});

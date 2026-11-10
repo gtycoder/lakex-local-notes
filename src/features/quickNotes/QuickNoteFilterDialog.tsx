@@ -88,7 +88,7 @@ export function QuickNoteFilterDialog({ open, tags, value, onApply, onClose }: Q
               <button
                 key={option.id}
                 type="button"
-                className={"quick-note-tag" + (time.kind === option.id ? " is-selected" : "")}
+                className={"ln-chip" + (time.kind === option.id ? " is-selected" : "")}
                 onClick={() => setTime(option.id === "custom" ? { kind: "custom", from: "", to: "" } : { kind: option.id } as QuickNoteTimeFilter)}
               >{option.label}</button>
             ))}
@@ -108,7 +108,7 @@ export function QuickNoteFilterDialog({ open, tags, value, onApply, onClose }: Q
               <button
                 key={option.id}
                 type="button"
-                className={"quick-note-tag" + (type === option.id ? " is-selected" : "")}
+                className={"ln-chip" + (type === option.id ? " is-selected" : "")}
                 onClick={() => setType(option.id)}
               >{option.label}</button>
             ))}
@@ -127,7 +127,7 @@ export function QuickNoteFilterDialog({ open, tags, value, onApply, onClose }: Q
                   <button
                     key={tag.id}
                     type="button"
-                    className={"quick-note-tag" + (include.includes(tag.id) ? " is-selected" : "")}
+                    className={"ln-chip" + (include.includes(tag.id) ? " is-selected" : "")}
                     onClick={() => toggleInclude(tag.id)}
                   >{include.includes(tag.id) && <Check size={11} />}<span className="ln-ellipsis">{tag.name}</span></button>
                 ))}
@@ -138,7 +138,7 @@ export function QuickNoteFilterDialog({ open, tags, value, onApply, onClose }: Q
                   <button
                     key={tag.id}
                     type="button"
-                    className={"quick-note-tag quick-note-tag--exclude" + (exclude.includes(tag.id) ? " is-selected" : "")}
+                    className={"ln-chip ln-chip--danger" + (exclude.includes(tag.id) ? " is-selected" : "")}
                     onClick={() => toggleExclude(tag.id)}
                   >{exclude.includes(tag.id) ? <Check size={11} /> : <span className="quick-note-filter-dialog__minus">−</span>}<span className="ln-ellipsis">{tag.name}</span></button>
                 ))}

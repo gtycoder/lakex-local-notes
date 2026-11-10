@@ -220,7 +220,7 @@ export function NoteInfoDialog({ note, onClose, onRevealNoteFile, onOpenAssetsDi
                 <ul className="note-info-history">
                   {info.history.slice(0, ITEM_LIMIT).map((h) => (
                     <li key={h.id}>
-                      <button className={"note-info-history-row" + (histPreview?.id === h.id ? " is-active" : "")} onClick={() => toggleHistory(h.id)}>
+                      <button className={"ln-row note-info-history-row" + (histPreview?.id === h.id ? " is-active" : "")} onClick={() => toggleHistory(h.id)}>
                         <Clock size={13} /><span>{formatNoteInfoTime(h.createdAt)}</span><em>{formatNoteInfoSize(h.size)}</em>
                         {info.contentHash !== "" && h.contentHash === info.contentHash && (
                           <span className="badge badge--accent" title="正文与当前已保存版本一致">当前</span>

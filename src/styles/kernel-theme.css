@@ -148,13 +148,13 @@ button.ln-btn--outlined, button.ln-btn--link { color: var(--lake-accent-text); }
 button.ln-btn--danger, button.ln-btn--danger-text { color: var(--lake-status-error); }
 button.ln-btn--secondary { color: var(--lake-text-2); }
 button.ln-btn--ghost { color: var(--lake-text-2); }
-button.quick-note-tag { color: var(--lake-text-2); }
-button.quick-note-tag.is-selected { color: var(--lake-fg-selected); }
-button.quick-note-tag-add { color: var(--lake-text-3); }
-button.quick-note-tag-picker__create { color: var(--lake-accent-text); }
-button.quick-note-tag-picker__item { color: var(--lake-text-1); }
-button.quick-note-tag-picker__item:disabled { color: var(--lake-text-4); }
-button.quick-note-tag.is-editable > button { color: var(--lake-text-3); }
+/* 261110 第二批按钮审计：原 7 条按旧类名（.quick-note-tag*）补钉，已随 chip / 勾选框 / 菜单行迁到 kit 原语
+   ⇒ 改指 ln-*（作用不变：把分层里的语义文字色放回未分层，否则内核 button{color:inherit} 会吃掉它）。 */
+button.ln-chip { color: var(--lake-text-2); }
+button.ln-chip.is-selected { color: var(--lake-fg-selected); }
+button.ln-chip--add { color: var(--lake-text-3); }
+button.ln-chip--danger.is-selected { color: var(--lake-status-error); }
+button.ln-check { color: var(--lake-text-on-accent); }
 
 /* 261014：这里原有 5 个为「选图标浮层复用内核表情面板」而钉的 --lakex-editor-* token（261013 加），
  * 随该浮层改为自有面板（.ln-popover + components/ui/nodeIcon.css）一并**删除** —— 面板不再依赖内核 token，

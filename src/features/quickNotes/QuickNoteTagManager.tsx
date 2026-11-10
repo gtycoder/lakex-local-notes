@@ -165,7 +165,7 @@ export function QuickNoteTagManager({ open, tags, onClose, onChanged, onError }:
                     <button type="button" className="ln-iconbtn ln-iconbtn--compact" disabled={busy} aria-label={`重命名 ${tag.name}`} title="重命名" onClick={() => { setEditingId(tag.id); setEditName(tag.name); }}><Pencil size={14} /></button>
                   )}
                   <button type="button" className="ln-iconbtn ln-iconbtn--compact" disabled={busy} aria-label={`合并 ${tag.name}`} title="合并到…" onClick={() => setMergeSource(tag)}><Merge size={14} /></button>
-                  <button type="button" className="ln-iconbtn ln-iconbtn--compact quick-note-tag-manager__danger" disabled={busy} aria-label={`删除 ${tag.name}`} title="删除标签（保留小记）" onClick={() => void remove(tag)}><Trash size={14} /></button>
+                  <button type="button" className="ln-iconbtn ln-iconbtn--compact ln-iconbtn--danger quick-note-tag-manager__danger" disabled={busy} aria-label={`删除 ${tag.name}`} title="删除标签（保留小记）" onClick={() => void remove(tag)}><Trash size={14} /></button>
                 </div>
               ))}
               {visible.length === 0 && (

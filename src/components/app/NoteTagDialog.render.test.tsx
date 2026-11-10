@@ -97,7 +97,7 @@ describe("NoteTagDialog（打标签弹窗，与重命名/新建同口径）", ()
     act(() => root.render(createElement(NoteTagDialog, { open: true, noteId: "n1", title: "周报", onClose: () => {} })));
     await flush();
     act(() => document.body.querySelector<HTMLButtonElement>('button[aria-label="添加标签"]')!.click());
-    const option = [...document.body.querySelectorAll<HTMLButtonElement>(".quick-note-tag-picker__item")].find((btn) => (btn.textContent ?? "").includes("项目"))!;
+    const option = [...document.body.querySelectorAll<HTMLButtonElement>(".quick-note-tag-picker__list button.ln-menu__item")].find((btn) => (btn.textContent ?? "").includes("项目"))!;
     await act(async () => { option.click(); await Promise.resolve(); });
     expect(h.setNoteTags).toHaveBeenCalledWith("n1", [TAG_B, TAG_A]);
   });

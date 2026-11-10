@@ -56,10 +56,13 @@ describe("崩溃隔离 + 全局异常（261105）", () => {
     expect(HOME).toContain('scope="ai"');
   });
 
-  it("诊断复制带上最近崩溃记录；设置页也有导出入口", () => {
+  it("诊断复制带上最近崩溃记录与日记告警；设置页也有导出入口", () => {
     expect(APP).toContain("formatCrashEntries(readCrashLog(10))");
     const ABOUT = readFileSync(new URL("./settings/BasicSettingsSections.tsx", import.meta.url), "utf8");
     expect(ABOUT).toContain("复制诊断信息");
     expect(ABOUT).toContain("formatCrashEntries(readCrashLog(10))");
+    // 261110 wave2：日记 console.warn 级告警（桌面 diaryStore 的 log 通道同义物）随同一份诊断带出。
+    expect(ABOUT).toContain("formatDiaryWarnings(readDiaryWarnings(10))");
+    expect(ABOUT).toContain("最近日记告警");
   });
 });

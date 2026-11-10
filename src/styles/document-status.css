@@ -89,18 +89,9 @@
   font-weight: 600;
   white-space: nowrap;
 }
-button.document-statusbar-lock {
-  padding: 1px 5px;
-  border: 0;
-  border-radius: var(--lake-radius-xs);
-  background: transparent;
-  font: inherit;
-  font-weight: 600;
-  cursor: pointer;
-  pointer-events: auto;
-}
-button.document-statusbar-lock:hover { background: var(--lake-bg-hover); }
-button.document-statusbar-lock:focus-visible { outline: var(--lake-focus-ring-width) solid var(--lake-accent); outline-offset: var(--lake-focus-ring-offset); }
+/* 可点的锁胶囊 = ln-btn--ghost + compact（261110 第二批上收到按钮梯队）；
+   注意状态栏容器 pointer-events:none，只有这一枚按钮要重新打开命中（仍在组件上用 ln-btn 之外的布局保证）。 */
+button.document-statusbar-lock { pointer-events: auto; }
 
 /* 解锁浮层内容（表面仍是 Overlay 的 .ln-popover，单一来源） */
 .document-lock-popover { display: grid; gap: 8px; padding: 10px 12px; font-size: var(--lake-font-size-small); }

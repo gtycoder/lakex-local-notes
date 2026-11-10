@@ -164,6 +164,25 @@ describe("日记空间接线", () => {
     expect(WORKSPACE).not.toContain("native.");
   });
 
+  it("②k 取消日记标记（整本）接线：diary_unmark 三处登记 + refreshTree + 日记 tab 收回 + 回知识库", () => {
+    // 渲染层只经 native 端口；判据/写入在主进程（core.planDiaryUnmark + 单条原子 UPDATE）。
+    expect(APP).toContain("native.diaryUnmark(");
+    expect(APP).toContain("handleDiaryUnmarkNotebook");
+    // 成功后三件事：重读树（左栏年月树立即消失）、日记 tab 不关闭而是改回文档空间、在日记空间则切回知识库。
+    expect(APP).toContain("await refreshTree()");
+    expect(APP).toContain('tab.space === "diary" ? { ...tab, space: "library" as const } : tab');
+    expect(APP).toContain('if (desktopWorkspace === "diary") await switchDesktopWorkspace("library")');
+    // 入口在日记条目右键（整本动作必须写清"整本"）并带二次确认。
+    expect(WORKSPACE).toContain("onUnmarkNotebook");
+    expect(WORKSPACE).toContain("取消日记标记（整本）");
+    expect(WORKSPACE).toContain("笔记本与其中的文档都会保留");
+    // IPC 三处 + parity：通道名在注册侧 / preload / native / WEB_METHODS 各一处。
+    expect(read("../../../electron/ipc/registerDiary.ts")).toContain('"diary_unmark"');
+    expect(read("../../../electron/preload.cjs")).toContain('invoke("diary_unmark"');
+    expect(read("../../../electron/webApiServer.ts")).toContain('diaryUnmark: "diary_unmark"');
+    expect(read("../../lib/native.ts")).toContain("diaryUnmark(notebookId");
+  });
+
   it("样式只用令牌：无颜色/字号字面量、无 !important、无内联 style", () => {
     // 与 scripts/ui-metrics.mjs 同口径：先剥块注释（注释里提到 !important / #hex 不算声明）。
     const css = read("./diary.css").replace(/\/\*[\s\S]*?\*\//g, "");
