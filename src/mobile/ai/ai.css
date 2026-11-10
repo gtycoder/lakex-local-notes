@@ -166,3 +166,6 @@
   animation: none; background: transparent;
 }
 .mobile-ai-page--embedded .mobile-ai-page__head { padding-left: var(--mb-page-pad); }
+
+/* 261110 内嵌模式收尾：全局顶栏已显示「AI」⇒ 内嵌页不再重复标题（只剩 历史 / 新对话 两个动作，靠右）。 */
+.mobile-ai-page--embedded .mobile-ai-page__head { justify-content: flex-end; }

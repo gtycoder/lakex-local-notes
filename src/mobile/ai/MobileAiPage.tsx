@@ -205,7 +205,9 @@ export function MobileAiPage({ open, onClose, onChanged, embedded = false }: Mob
     <div className={"mobile-ai-page" + (embedded ? " mobile-ai-page--embedded" : "")} role={embedded ? "region" : "dialog"} aria-modal={embedded ? undefined : true} aria-label="AI 助手">
       <header className={"toolbar toolbar--border mobile-topbar" + (embedded ? " mobile-ai-page__head" : "")}>
         {!embedded && <button type="button" className="toolbar__button" onClick={onClose} aria-label="返回"><ArrowLeft size={20} /></button>}
-        <span className="mobile-topbar-title">AI 助手</span>
+        {/* 内嵌在首页第 4 格时：全局顶栏已经显示空间名「AI」⇒ 这里不再重复标题，只留动作钮。 */}
+        {!embedded && <span className="mobile-topbar-title">AI 助手</span>}
+        {embedded && <span className="mobile-topbar-title mobile-ai-page__spacer" aria-hidden="true" />}
         <button type="button" className="toolbar__button" onClick={() => setHistoryOpen(true)} aria-label="历史对话"><Clock size={20} /></button>
         <button type="button" className="toolbar__button" onClick={() => { newConversation(); setPendingImages([]); }} aria-label="新对话"><Plus size={20} /></button>
       </header>
