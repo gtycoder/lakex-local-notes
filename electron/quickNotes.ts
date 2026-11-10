@@ -328,6 +328,11 @@ export class QuickNotesStore {
    * DT-05：列表只回投影（**不读 .qnote 正文**）——2 万小记时 body 是最大的一块 IPC payload。
    * 正文/资源在打开单条时走 readQuickNote；列表只读 DB 行 + 关联表 + 资源 mime。
    */
+  /** 单条存在性（只读 DB 行，**不读正文**）：单条推送的 fail-fast，避免为"不存在"多读一次正文。 */
+  hasQuickNote(id: string): boolean {
+    return !!this.db.prepare("SELECT 1 FROM quick_notes WHERE id=?").get(id);
+  }
+
   listQuickNotes(): QuickNoteListSummary[] {
     const rows = this.db.prepare(
       "SELECT id, created_at, updated_at, preview_text, image_count, content_hash, is_dirty, is_conflict " +

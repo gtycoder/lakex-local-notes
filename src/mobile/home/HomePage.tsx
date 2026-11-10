@@ -24,7 +24,9 @@ import { CreateSheet, type CreateActionId } from "../ui/CreateSheet";
 import { CREATE_LONG_PRESS_MS, blockPressRelease, createPressArmed, createPressRevealed } from "../ui/createPress";
 import { pickLocalFile } from "../ui/pickFile";
 import { longPressFeedback } from "../ui/haptics";
-import { MobileNodeIconPicker } from "../ui/NodeIconPicker";
+// 261111 首屏瘦身：图标/表情选择器带表情数据表（≈16.6KB gz），只在长按笔记本打开面板时用 ⇒
+// 懒加载，不进首屏静态图（Suspense 兜底 null：只有长按打开面板那一刻会拉分包，基本无感）。
+const MobileNodeIconPicker = lazy(() => import("../ui/NodeIconPicker").then((m) => ({ default: m.MobileNodeIconPicker })));
 import { confirmMobile } from "../ui/ConfirmDialog";
 import { showToast } from "../ui/toastBus";
 import { reportMobileActionError } from "../lib/reportMobileActionError";
@@ -1092,7 +1094,9 @@ export function HomePage(props: HomePageProps) {
           MOB-11：scrim / 右滑 / 返回栈 / 焦点 / 滚动锁交给 MobileSheet（此前漏了返回栈）。 */}
       {iconNb && (
         <MobileSheet open title="设置图标" onClose={() => setIconNb(null)}>
-          <MobileNodeIconPicker key={iconNb.id} nodeType="notebook" value={iconNb.icon ?? null} onPick={(icon) => void applyNotebookIcon(icon)} />
+          <Suspense fallback={null}>
+            <MobileNodeIconPicker key={iconNb.id} nodeType="notebook" value={iconNb.icon ?? null} onPick={(icon) => void applyNotebookIcon(icon)} />
+          </Suspense>
         </MobileSheet>
       )}
 

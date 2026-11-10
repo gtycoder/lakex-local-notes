@@ -12,7 +12,7 @@ import type { QuickNotePage, QuickNotePageOptions, QuickNoteTrashItem } from "..
 
 import * as quickNotesRepository from "../data/quickNotesRepository.js";
 import { mobileQuickNoteTags } from "../data/quickNoteTagService.js";
-import { ensureAssetsNative, mobileCloudState, pushSingleQuickNote, syncDomain } from "./sync";
+import { ensureAssetsNative, mobileCloudContext, mobileCloudState, pushSingleQuickNote, syncDomain } from "./sync";
 import { applyRestoredQuickNote, rebuildQuickNoteContentFromText } from "../data/missingBodies.js";
 
 
@@ -137,9 +137,10 @@ export const quickNotesDomain = {
   },
 
   async syncQuickNote(id: string): Promise<QuickNotePushOutcome> {
-    if ((await mobileCloudState()) === "offline") throw new Error(cloudStateHint("offline") ?? "云同步已关闭");
-    const outcome = await runPriority("syncQuickNote", () => pushSingleQuickNote(id));
-    return outcome;
+    // 261110 提速：设置只读一次（secret 走 Keystore/IndexedDB，不重复解密）；同一判据 fail-closed。
+    const { cfg, state } = await mobileCloudContext();
+    if (!canTouchNetwork(state)) throw new Error(cloudStateHint(state) ?? "云同步已关闭");
+    return await runPriority("syncQuickNote", () => pushSingleQuickNote(id, { cfg: cfg ?? undefined }));
   },
 
   async getCloudState(): Promise<CloudState> {

@@ -54,9 +54,19 @@ for (const budget of budgets) {
 // 只做护栏，不改构建；dist-mobile 不存在（没跑移动构建）时跳过并提示。
 // 261107：本批改动前的 HEAD 实测已是 33 条 / 65,460B gz（不是本批引入；历史批次未跑 check:bundle）。
 // 先按现状冻结为防回归护栏（目标仍是 ≤12 条），把「移动端入口瘦身」记入 HANDOFF 待办，下一次专门做时收紧。
-const MOBILE_ENTRY_PRELOAD_BUDGET = 34;
-// 261103 P10：设置抽屉改按需后入口 79,032 → 53,496B gz ⇒ 预算从 80KB 收紧到 60KB（+6,000B 余量）。
-const MOBILE_ENTRY_JS_GZIP_BUDGET = 66 * 1024;
+//
+// 261111 移动端首屏瘦身（专项，已完成）：入口静态图砍掉非首屏必需项（便携包编排 / Markdown 与 PDF 分享
+// 导入 / 更新中心自动检查 / 粘贴拦截器 / 图标选择器表情数据表 / 原生调试契约），再用 vite.mobile.config.ts
+// 的 codeSplitting groups 把「entry 与懒 chunk 共享」的碎片块收敛成 3 个域块（bridge-data / 图标 / 轻量 UI）。
+// 实测：**preload 47 → 6 条**、**入口 JS 61,148 → 59,638B gz**、首屏 393,720 → 347,809B gz。
+// ⇒ 三条预算按目标值收口（preload 目标 ≤12、入口 JS 目标 ≤60KB），并留出实测余量：
+//    preload 6（预算 12，+6 条余量）/ JS 59,638B（预算 61,440B，+1,802B 余量）。
+// 真入口字节的第一道护栏仍是 check-arch 首屏资源图（347,809 / 360,000B）。
+const MOBILE_ENTRY_PRELOAD_BUDGET = 12;
+// 261103 P10：设置抽屉改按需后入口 79,032 → 53,496B gz ⇒ 预算从 80KB 收紧到 60KB。
+// 261111：达标后维持 60KB 目标值（实测 59,638B）。
+const MOBILE_ENTRY_JS_GZIP_BUDGET = 60 * 1024;
+// 入口 CSS 不在本轮目标内（首屏 ≤360KB 由 check-arch 守）；维持 261103 的现状冻结值。
 const MOBILE_ENTRY_CSS_GZIP_BUDGET = 138 * 1024;
 
 const mobileHtml = path.resolve("dist-mobile/index.html");

@@ -1,9 +1,12 @@
 import { S3v3SyncEngine, type QuickNotePushResult, type S3v3DeepCleanupResult, type S3v3SyncReport } from "../../core/s3v3Engine.js";
 import type { S3v3Remote, S3v3Settings } from "../../core/s3v3Ports.js";
+import type { S3v3DeviceStore } from "../../core/s3v3DeviceStore.js";
 import type { MobileDb } from "../data/sqliteDb.js";
 import * as historyRepository from "../data/historyRepository.js";
 import { MobileDeviceStore } from "./mobileDeviceStore.js";
-import { createMobileS3v3Remote } from "./s3v3Remote.js";
+import { createMobileS3v3Remote, getMobileS3v3RemoteCached, invalidateMobileS3v3RemoteCache } from "./s3v3Remote.js";
+import { countRemoteOps, remoteOpSummary } from "../../core/s3v3/remoteStats.js";
+import { rlog } from "../../lib/log";
 
 /**
  * 移动端 v3 同步编排（feature flag 下由 bridge.syncNow 调用）。
@@ -64,20 +67,48 @@ export async function runMobileV3Sync(db: MobileDb, settings: S3v3Settings, opts
  * 单条小记推送（parity E2）：只 upsert 这一条，其余条目/标签/墓碑在云端逐字段不变。
  * 返回 full-sync 时由调用方（bridge.pushSingleQuickNote）执行一次整轮，不静默降级。
  */
+/** 单条推送专用选项（261110）：device 供测试注入以断言"不重建世界"。 */
+export type MobileV3PushOptions = Pick<MobileV3SyncOptions, "remote" | "deviceId"> & { device?: S3v3DeviceStore };
+
 export async function runMobileV3PushQuickNote(
   db: MobileDb,
   settings: S3v3Settings,
   id: string,
-  opts: MobileV3SyncOptions = {},
+  opts: MobileV3PushOptions = {},
 ): Promise<QuickNotePushResult> {
-  const store = new MobileDeviceStore(db);
-  await store.init();
-  const remote = opts.remote ?? createMobileS3v3Remote(settings);
+  const store = opts.device ?? new MobileDeviceStore(db);
+  // 单条推送不等整轮 staging 清点（省一次原生往返）；表结构用模块级 WeakSet 缓存，不重复 DDL。
+  await store.init({ skipStagingCleanup: true });
+  const remote = opts.remote ?? getMobileS3v3RemoteCached(settings);
+  // 261110 提速证据：请求数 + 分段耗时，一行 [perf]（低频用户动作 ⇒ info；LOGGING §8）。
+  const counted = countRemoteOps(remote);
+  const phases: Array<{ phase: string; ms: number }> = [];
   const engine = new S3v3SyncEngine({
-    remote, device: store, deviceId: opts.deviceId ?? mobileDeviceId(),
-    onPhase: (phase, ms) => { if (ms >= 2000) console.warn(`[v3][slow] push ${phase} ${ms}ms`); },
+    remote: counted.remote, device: store, deviceId: opts.deviceId ?? mobileDeviceId(),
+    onPhase: (phase, ms) => { if (ms >= 2000) console.warn(`[v3][slow] push ${phase} ${ms}ms`); phases.push({ phase, ms }); },
   });
-  return engine.pushQuickNote(id);
+  const startedAt = Date.now();
+  const log = (status: string, extra: Record<string, string | number> = {}): void => {
+    rlog.perf("sync.push-single", Date.now() - startedAt, {
+      id, status,
+      req: remoteOpSummary(counted.stats),
+      phases: phases.map((p) => p.phase + "=" + p.ms).join(","),
+      ...extra,
+    });
+  };
+  try {
+    const result = await engine.pushQuickNote(id);
+    const extra: Record<string, string | number> = result.status === "pushed"
+      ? { uploaded: result.uploadedContent ? 1 : 0, assets: result.uploadedAssets, unchanged: result.unchanged ? 1 : 0 }
+      : result.status === "full-sync" ? { reason: result.reason } : {};
+    log(result.status, extra);
+    return result;
+  } catch (error) {
+    log("failed", { error: error instanceof Error ? error.message : String(error) });
+    // 只有真实 remote 才失效缓存；测试注入的 remote 无缓存可失效。
+    if (!opts.remote) invalidateMobileS3v3RemoteCache();
+    throw error;
+  }
 }
 /**
  * 移动端云清理（v3 原生，parity：旧实现读 v3 永不写的 manifests/latest.json ⇒ 恒 0）：

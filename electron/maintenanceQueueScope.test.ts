@@ -33,8 +33,9 @@ function occurrenceLines(): number[] {
 describe("桌面维护队列范围（F16 的反向护栏）", () => {
   it("用法只有 6 处：整轮同步包装 + 5 个依赖注入（备份 / 同步装配 / 小记 / 文件↔元数据对账 / 自动备份）", () => {
     // 261013 收紧正则后**暴露出** registerSyncIpc 的依赖注入此前没被数到（旧正则只认 `enqueueMaintenance(` 与 `, enqueueMaintenance)`）。
-    // 第 5 处 = registerQuickNotesIpc 拿到 enqueueMaintenance，用来给 sync_quick_note 做**推送后回核**
-    // （单条推送本身走高优先域，判据见 src/core/maintenancePolicy.ts 的 PRIORITY_OPS）。
+    // 第 5 处 = registerQuickNotesIpc 拿到 enqueueMaintenance，只给「缺正文小记从云端拉回」这类维护操作；
+    // **sync_quick_note 本身不走这里**（261110：单条推送走高优先域，判据见 src/core/maintenancePolicy.ts
+    // 的 PRIORITY_OPS.syncQuickNote；接线护栏 electron/quickNotePushPriority.test.ts）。
     // 第 6 处 = 261105 Batch4-E 自动备份（VACUUM INTO 主库+小记库 + 轮转；与同步/GC 串行，不占写域）。
     expect(occurrenceLines()).toHaveLength(6);
   });

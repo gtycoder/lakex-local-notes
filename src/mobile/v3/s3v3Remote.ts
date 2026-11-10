@@ -149,6 +149,22 @@ export function createMobileS3v3Remote(settings: S3v3Settings): S3v3Remote {
   return remote;
 }
 
+/** 单条推送的 remote 缓存（261110）：同一份 settings 复用同一 client（构造成本在「保存并同步」快路径上是固定开销）。
+ *  设置变化（含 secret 轮换）⇒ 指纹不同自动重建；调用方可传 invalidate 在失败时失效。 */
+let cachedRemote: { key: string; remote: S3v3Remote } | null = null;
+export function getMobileS3v3RemoteCached(settings: S3v3Settings): S3v3Remote {
+  const key = [
+    settings.endpoint, settings.region, settings.bucket, settings.prefix,
+    settings.accessKeyId, settings.secretAccessKey,
+  ].join("\u0000");
+  if (cachedRemote?.key === key) return cachedRemote.remote;
+  const remote = createMobileS3v3Remote(settings);
+  cachedRemote = { key, remote };
+  return remote;
+}
+/** 推送失败/配置可疑时失效缓存（下次重建 client）。 */
+export function invalidateMobileS3v3RemoteCache(): void { cachedRemote = null; }
+
 export function mobileS3v3Endpoint(settings: S3v3Settings): string {
   return normalizeEndpoint(settings.endpoint);
 }

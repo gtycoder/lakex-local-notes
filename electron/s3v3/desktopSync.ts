@@ -3,13 +3,15 @@ import type { SyncProgress, SyncResult } from "../syncTypes.js";
 import type { Store } from "../store.js";
 import { S3v3S3Remote } from "./s3Remote.js";
 import { DesktopStoreDevice } from "./desktopStoreAdapter.js";
-import { S3v3SyncEngine, S3v3SyncError, classifyS3v3Error } from "./syncEngine.js";
+import { S3v3SyncEngine, S3v3SyncError, classifyS3v3Error, type QuickNotePushResult } from "./syncEngine.js";
 import { annotateSyncError } from "./syncErrorInfo.js";
 import type { S3v3Remote } from "./ports.js";
 import { getQuickNotesStoreForV3 } from "./quickNotesRegistry.js";
 import { assertQuickNotesSyncAvailable } from "../quickNotesAvailability.js";
 import type { QuickNotePushOutcome } from "../../src/core/quickNoteSyncTypes.js";
 import { buildS3v3DiagnosticReport, createS3v3PhaseCollector, type S3v3DiagnosticReport } from "../../src/core/s3v3Report.js";
+import { countRemoteOps, remoteOpSummary } from "../../src/core/s3v3/remoteStats.js";
+import { perfMessage } from "../../src/core/logFormat.js";
 
 /**
  * 桌面 v3 同步入口（feature flag: LAKE_SYNC_PROTOCOL=v3）。
@@ -231,10 +233,16 @@ export async function syncWithV3(
 export async function pushQuickNoteWithV3(
   store: Store,
   id: string,
-  deps: { remote?: S3v3Remote; deviceId?: string } = {},
+  deps: {
+    remote?: S3v3Remote;
+    deviceId?: string;
+    /** 回退整轮（一次）的入口：由调用方给（含 v3 发布串行门），保证同进程不会并发跑两个整轮。 */
+    fullSync?: (onProgress?: (p: SyncProgress) => void) => Promise<SyncResult>;
+  } = {},
 ): Promise<QuickNotePushOutcome> {
-  const settings = store.getS3Settings();
-  if (!settings && !deps.remote) throw new Error("请先保存 S3 配置");
+  // 注入了 remote（高优先路径的缓存实例）时不再读/解密 settings：省一次主库读 + safeStorage 解密。
+  const settings = deps.remote ? null : store.getS3Settings();
+  if (!deps.remote && !settings) throw new Error("请先保存 S3 配置");
   // Batch3-A：降级时先给「小记库不可用 + 出口」的可读错误，避免落到下面泛化的「未就绪」。
   assertQuickNotesSyncAvailable(true);
   const quickNotes = getQuickNotesStoreForV3();
@@ -244,18 +252,38 @@ export async function pushQuickNoteWithV3(
     accessKeyId: settings!.accessKeyId, secretAccessKey: settings!.secretAccessKey,
     prefix: settings!.prefix, forcePathStyle: settings!.forcePathStyle,
   });
+  // 261110 提速证据：请求数 + 分段耗时，一行 [perf] 落到日志（低频用户动作 ⇒ info；LOGGING §8）。
+  const counted = countRemoteOps(remote);
+  const phases: Array<{ phase: string; ms: number }> = [];
   const device = new DesktopStoreDevice(store, store.rootPath, { skipQuickNotesGuard: true, quickNotes });
-  await device.init();
+  await device.init({ skipStagingCleanup: true });
   const engine = new S3v3SyncEngine({
-    remote, device,
+    remote: counted.remote, device,
     deviceId: deps.deviceId ?? process.env.LAKE_S3V3_DEVICE_ID ?? desktopDeviceId(store),
+    onPhase: (phase, ms) => { phases.push({ phase, ms }); },
   });
   const startedAt = Date.now();
-  const result = await engine.pushQuickNote(id);
-  store.logScopes.sync.info(`[v3][push-single] ${id} -> ${result.status} ${Date.now() - startedAt}ms`);
-  if (result.status === "not-found") return { status: "not-found" };
+  const log = (status: string, extra: Record<string, string | number> = {}): void => {
+    store.logScopes.sync.info(perfMessage("sync.push-single", Date.now() - startedAt, {
+      id, status,
+      req: remoteOpSummary(counted.stats),
+      phases: phases.map((p) => p.phase + "=" + p.ms).join(","),
+      ...extra,
+    }));
+  };
+  let result: QuickNotePushResult;
+  try {
+    result = await engine.pushQuickNote(id);
+  } catch (error) {
+    log("failed", { error: error instanceof Error ? error.message : String(error) });
+    throw error;
+  }
+  if (result.status === "not-found") { log("not-found"); return { status: "not-found" }; }
   if (result.status === "full-sync") {
-    const full = await syncWithV3(store, undefined, deps);
+    log("full-sync", { reason: result.reason, req: remoteOpSummary(counted.stats) });
+    const full = deps.fullSync
+      ? await deps.fullSync()
+      : await syncWithV3(store, undefined, { ...(deps.remote ? { remote: deps.remote } : {}), ...(deps.deviceId ? { deviceId: deps.deviceId } : {}) });
     return {
       status: "full-sync",
       reason: result.reason === "remote-deleted" ? "remote-deleted" : "no-remote-manifest",
@@ -265,6 +293,13 @@ export async function pushQuickNoteWithV3(
       },
     };
   }
+  log("pushed", {
+    uploaded: result.uploadedContent ? 1 : 0,
+    assets: result.uploadedAssets,
+    unchanged: result.unchanged ? 1 : 0,
+    // 请求数按类别：pointer 读/索引读/写/上传（证据见 docs/SYNC-PROTOCOL.md「保存并同步快路径」）。
+    get: counted.stats.gets, put: counted.stats.puts,
+  });
   return {
     status: "pushed",
     uploadedContent: result.uploadedContent,

@@ -14,7 +14,7 @@
  *
  * 约束：core 不 import electron/node；只依赖 core 类型、`FileDriver`、`PlatformDataPort`。
  */
-import type { DeviceBaseline, DeviceState, S3v3DeviceStore } from "../../s3v3DeviceStore.js";
+import type { DeviceBaseline, DeviceState, QuickPushState, S3v3DeviceStore } from "../../s3v3DeviceStore.js";
 import type { LakeFolderEntry, LakeNoteEntry, QuickNoteEntry, QuickNoteTagEntry } from "../protocol/s3v3Index.js";
 import { TRASH_NOTEBOOK_ID } from "../../syncDecisions.js";
 import { normalizeNoteKind, type NoteKind } from "../../noteKind.js";
@@ -169,6 +169,20 @@ export interface DeviceStoreMetaDeps {
 export interface DeviceStoreMeta {
   loadState(): Promise<DeviceState>;
   saveState(state: DeviceState, previous?: DeviceState): Promise<void>;
+  /** 单条小记推送的轻量状态（261110）：见 `S3v3DeviceStore.loadQuickPushState`。 */
+  loadQuickPushState(id: string): Promise<QuickPushState | null>;
+}
+
+/** 小记同步行 → 索引条目（loadState 与 loadQuickPushState 共用，避免两份映射漂移）。 */
+function quickEntryOf(q: QuickNoteSyncRow, assetsQuick: Record<string, string>): QuickNoteEntry {
+  return {
+    id: q.id, createdAt: q.createdAt, updatedAt: q.updatedAt, contentHash: q.contentHash,
+    ...(q.isConflict ? { isConflict: true } : {}),
+    ...(assetsQuick[q.id] ?? q.assetsHash ? { assetsHash: assetsQuick[q.id] ?? q.assetsHash } : {}),
+    // 标签关系按集合同步：**排序后的 ID 列表**（顺序是设备本地视图，不能传播）。
+    ...(q.tagIds.length ? { tagIds: [...q.tagIds].sort() } : {}),
+    ...(q.tagsUpdatedAt ? { tagsUpdatedAt: q.tagsUpdatedAt } : {}),
+  };
 }
 
 /**
@@ -281,14 +295,7 @@ export function createDeviceStoreMeta(deps: DeviceStoreMetaDeps): DeviceStoreMet
     const quickPurgeTimes: Record<string, string> = { ...(ledger?.quickPurgeTimes ?? {}) };
     for (const q of await p.listQuickNotesForSync()) {
       if (q.cloudDeleted) { hasDbProjection = true; purged.add(q.id); }
-      quickItems.push({
-        id: q.id, createdAt: q.createdAt, updatedAt: q.updatedAt, contentHash: q.contentHash,
-        ...(q.isConflict ? { isConflict: true } : {}),
-        ...(assetsQuick[q.id] ?? q.assetsHash ? { assetsHash: assetsQuick[q.id] ?? q.assetsHash } : {}),
-        // 标签关系按集合同步：**排序后的 ID 列表**（顺序是设备本地视图，不能传播）。
-        ...(q.tagIds.length ? { tagIds: [...q.tagIds].sort() } : {}),
-        ...(q.tagsUpdatedAt ? { tagsUpdatedAt: q.tagsUpdatedAt } : {}),
-      });
+      quickItems.push(quickEntryOf(q, assetsQuick));
     }
     // 标签目录：只同步名称/时间（顺序是设备本地视图；删除 = 缺席，云端列表不放墓碑）。
     const quickTags: QuickNoteTagEntry[] = (await p.listQuickTags()).map((t: QuickTagRow) => ({
@@ -650,6 +657,46 @@ export function createDeviceStoreMeta(deps: DeviceStoreMetaDeps): DeviceStoreMet
     deps.clearAssetDirDeletions?.();
   }
 
-  return { loadState, saveState };
+  /**
+   * 单条小记推送的轻量状态（261110 提速）：**只读这条小记 + 标记**，不扫全库文档/不读其它正文。
+   * 与 loadState 的字段同义（index entry / remotePurged / restorePending / quickPurges / quickPurgeTimes），
+   * 供引擎在「保存并同步」时跳过 O(全库) 的世界重建。任何一步失败抛错 ⇒ 引擎回退 loadState()（语义不变）。
+   */
+  async function loadQuickPushState(id: string): Promise<QuickPushState | null> {
+    const rawPersisted = await deps.state.read();
+    const persisted = migratePersisted(rawPersisted, (message) => deps.log?.(message));
+    const ledger = persisted ? ledgerOf(persisted) : null;
+    const assetsQuick = persisted?.assets.quickNotes ?? {};
+    const purged = new Set(ledger?.remotePurged ?? []);
+    if (p.listCloudDeletedIds) {
+      // 平台有轻量投影就读轻量投影（桌面/移动都实现：几条 SQL，不拼世界）。
+      const marked = await p.listCloudDeletedIds();
+      for (const x of marked.folders) purged.add(x);
+      for (const x of marked.notes) purged.add(x);
+      for (const x of marked.quickNotes) purged.add(x);
+    } else {
+      for (const f of await p.listFoldersForSync()) if (f.cloudDeleted) purged.add(f.id);
+      for (const n of await p.listNotesSyncMeta()) if (n.cloudDeleted) purged.add(n.id);
+      for (const q of await p.listQuickNotesForSync()) if (q.cloudDeleted) purged.add(q.id);
+    }
+    const rows = await p.listQuickNotesForSync();
+    let quickNote: QuickNoteEntry | null = null;
+    for (const q of rows) if (q.id === id) quickNote = quickEntryOf(q, assetsQuick);
+    const quickPurgeRows = await p.listQuickPurges();
+    const quickPurgeTimes: Record<string, string> = { ...(ledger?.quickPurgeTimes ?? {}) };
+    for (const d of quickPurgeRows) quickPurgeTimes[d.id] = d.purgedAt;
+    // 显式恢复以 DB 为准（与 loadState 同口径：信封残留 + 文档/小记 DB 标记取并集）。
+    const restorePending = [...new Set([
+      ...(ledger?.restorePending ?? []),
+      ...(await p.listRestorePendingNoteIds()),
+      ...(await p.listRestorePendingQuickNoteIds()),
+    ])].sort();
+    return {
+      quickNote, restorePending, remotePurged: [...purged],
+      quickPurges: quickPurgeRows.map((d) => d.id), quickPurgeTimes,
+    };
+  }
+
+  return { loadState, saveState, loadQuickPushState };
 }
 

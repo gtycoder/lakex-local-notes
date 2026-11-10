@@ -76,6 +76,14 @@ export function createDesktopPlatformPort(store: Store, quickNotes?: QuickNotesS
     async listBodyRecoveryPending(): Promise<string[]> {
       return store.listBodyRecoveryPending();
     },
+    /** 单条推送轻量投影（261110）：只读 cloud_deleted 标记，不拼全库行。桌面目录没有该列 ⇒ 空。 */
+    async listCloudDeletedIds() {
+      return {
+        folders: [] as string[],
+        notes: store.listCloudDeletedNoteIds(),
+        quickNotes: qn ? qn.listCloudDeletedQuickNoteIds() : [],
+      };
+    },
     noteBodyPath(noteId: string): string {
       return store.notePathFor(noteId);
     },

@@ -130,9 +130,12 @@ export function registerQuickNotesIpc(
   });
   ipc.handle("convert_quick_note", (quickNoteId: string, notebookId: string) => convertQuickNoteToLake(quickNotes, store, quickNoteId, notebookId));
   /**
-   * 「保存并同步」：只推这一条小记（261013）。
-   * - **高优先域**：用户当场发起，**不等**在途整轮同步（长按小记 → 写完 → 桌面端及时看到 是高频场景）；
+   * 「保存并同步」：只推这一条小记（261013；261110 提速）。
+   * - **高优先域**：用户当场发起，**不等**在途整轮同步，也不进维护队列（261110：原实现排在
+   *   `enqueueMaintenance` 后面 = 会等大同步；现直接走 `pushQuickNoteViaEngine` 的 priority 门，
+   *   跨进程发布互斥仍由 S3 发布锁 + pointer CAS/读回重试保证 —— 与移动端 runPriority 同语义）；
    * - 出网判据单一来源 core/cloudState（AGENTS §3#20）：没配置/关闭云同步 ⇒ 直接抛，零请求；
+   * - 存在性只查 DB 行（hasQuickNote）：**不读正文**（旧实现 readQuickNote 让引擎又读一次）。
    */
   ipc.handle("sync_quick_note", async (id: string) => {
     const settings = store.getS3Settings();
@@ -140,9 +143,10 @@ export function registerQuickNotesIpc(
     const state = cloudStateOf(true, store.getSyncSettings());
     if (!canTouchNetwork(state)) throw new Error(cloudStateHint(state) ?? "云同步已关闭：不会联网");
     // v3 单条推送（parity E2）：只 upsert 这一条，其余条目/标签/墓碑在云端逐字段不变。
-    // 两条退回整轮的路径（云端无 pointer / 无基线 / 基线不同代；远端墓碑且本机无恢复标记）
+    // 退回整轮的路径（云端无 pointer / 无基线 / 基线不同代；远端墓碑且本机无恢复标记）
     // 由 pushQuickNoteWithV3 内部执行一次整轮并如实回传 full-sync（不静默降级）。
-    try { quickNotes.readQuickNote(id); } catch { return { status: "not-found" } satisfies QuickNotePushOutcome; }
-    return enqueueMaintenance(() => pushQuickNoteViaEngine(store, id));
+    if (!quickNotes.hasQuickNote(id)) return { status: "not-found" } satisfies QuickNotePushOutcome;
+    // settings 已在上面读过（含解密）：透传给 controller，快路径不再二次读。
+    return pushQuickNoteViaEngine(store, id, { settings });
   });
 }

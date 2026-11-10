@@ -6,7 +6,6 @@
  * 回前台同时恢复「下载中 / 已下载待安装」状态（原生按 downloadId 查询）。
  */
 import { useEffect } from "react";
-import { restoreDownloadedUpdate, runScheduledUpdateCheck } from "../update/updateCenterStore";
 
 export function useUpdateAutoCheck(ready = true): void {
   useEffect(() => {
@@ -16,10 +15,15 @@ export function useUpdateAutoCheck(ready = true): void {
     let idleHandle: number | null = null;
     let timeoutHandle: number | null = null;
 
+    // 261111 首屏瘦身：更新中心 store（含清单解析/下载状态机）只在自动检查/回前台时用 ⇒
+    // 就绪后动态 import；不进入口静态图（设置页的更新中心本来就在懒加载抽屉里）。
     const fire = (): void => {
       if (disposed) return;
-      void restoreDownloadedUpdate();
-      void runScheduledUpdateCheck();
+      void import("../update/updateCenterStore").then(({ restoreDownloadedUpdate, runScheduledUpdateCheck }) => {
+        if (disposed) return;
+        void restoreDownloadedUpdate();
+        void runScheduledUpdateCheck();
+      }).catch(() => undefined);
     };
 
     // 启动：排到首个空闲（最多 2s 兜底），避免与首屏渲染/首批交互抢主线程。

@@ -1,4 +1,4 @@
-import type { LakeIndex, QuickNotesIndex } from "./s3v3/protocol/s3v3Index.js";
+import type { LakeIndex, QuickNoteEntry, QuickNotesIndex } from "./s3v3/protocol/s3v3Index.js";
 import type { SyncConflictEvent } from "./syncConflictLog.js";
 import type { DeletionIntent } from "./s3v3Intent.js";
 import type { PendingDelete } from "./s3v3Gate.js";
@@ -84,9 +84,24 @@ export interface DeviceBaseline {
   quickNotes: QuickNotesIndex;
 }
 
+/** 单条小记推送的轻量状态（261110「保存并同步」提速）：只含这条小记与同步标记，
+ *  不需要重建整份世界（不扫全库文档、不读其它正文）。字段与 DeviceState 同义（子集）。 */
+export interface QuickPushState {
+  /** 该条小记的索引条目（null = 本地不存在 ⇒ not-found）。 */
+  quickNote: QuickNoteEntry | null;
+  restorePending: string[];
+  remotePurged: string[];
+  quickPurges: string[];
+  quickPurgeTimes: Record<string, string>;
+}
+
 export interface S3v3DeviceStore {
-  init(): Promise<void>;
+  /** `skipStagingCleanup`：单条推送不等同整轮，跳过 staging 清点（缺失退化 = 照常清理，只慢）。 */
+  init(opts?: { skipStagingCleanup?: boolean }): Promise<void>;
   loadState(): Promise<DeviceState | null>;
+  /** 单条小记推送的轻量状态（可选，261110）：**只读这条小记 + 标记**，不重建整个世界。
+   *  【缺失/异常退化】引擎回退 loadState()（语义不变，全库扫描更慢）。返回 null 视为"没有状态可读"⇒ 同样回退。 */
+  loadQuickPushState?(id: string): Promise<QuickPushState | null>;
   /** previous = 本轮开始前的本地快照（可选）；平台据此只覆盖「窗口内未被本地修改」的元数据。 */
   saveState(state: DeviceState, previous?: DeviceState): Promise<void>;
   loadBaseline(): Promise<DeviceBaseline | null>;

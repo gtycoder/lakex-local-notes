@@ -108,8 +108,11 @@ export const MAINTENANCE_OPS = [
  *    （弱网实测整轮可到分钟级）—— 而这正是本功能的高频场景（"记好了要让桌面端及时看到"）；
  *  · 归 none ⇒ 连自己之间都不串行：连点两下会两颗请求交叉"读 → 改 → 写"同一份**无 CAS 的小记清单**；
  *  · ⇒ **彼此串行，但绝不排在整轮同步后面**（用户 261013 定稿）。
- * 它与整轮同步的交叉风险（整轮同步拿旧快照覆盖我们刚写的清单条目）由**推送后回核**兜底：
- * 调用方在推送结束后往**维护域队尾**排一次幂等回核（见 src/mobile/bridge.ts、electron/ipc/registerQuickNotes.ts）。
+ * 两端实现：移动 runPriority（src/mobile/bridge/context.ts）；桌面 serializedQuickPush
+ * （electron/syncEngineController.ts，261110 起不再包 enqueueMaintenance —— 那会排在大同步后面）。
+ * 它与整轮同步的交叉风险（整轮同步拿旧快照覆盖我们刚写的清单条目）由**发布锁 + pointer CAS/读回重试**
+ * 兜底（v3 索引无 CAS 的替代协议，与多端并发发布同一套）；移动端另有推送后回核，桌面端
+ * 回退整轮走同步入口（含 v3Gate），不在本域里嵌套整轮。
  */
 export const PRIORITY_OPS = [
   "syncQuickNote",

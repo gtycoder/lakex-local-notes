@@ -8,7 +8,6 @@ import { installSafeAreaInsets } from "./native/safeAreaInsets";
 import { installFormFactor } from "./pad/formFactor";
 import { applySystemBarTheme } from "./native/systemBars";
 import { isQuickNoteShortcutUrl, readLaunchUrlHint } from "./native/quickNoteShortcut";
-import { installPasteInterceptor } from "../features/editor/clipboardHtml"; // 与桌面 src/main.tsx 一致：粘贴前先装 getData 升级拦截器
 import { installGlobalErrorHandlers } from "./lib/globalErrorHandlers";
 import { clearCrashLog, readCrashLog } from "./lib/crashLog";
 import { consumeNativeCrashLog } from "./native/crashLog";
@@ -61,8 +60,10 @@ subscribeSettings((settings) => applyThemeEverywhere(settings));
 // 用「启动时清」而不是挂退出/后台回调：Android 杀进程没有可靠回调，切后台也不该清标签。
 if (loadSettings().clearTabsOnExit) clearPersistedNotebookTabs();
 
-// 与桌面一致：必须在编辑器创建前安装粘贴拦截器（原生 paste 的 clipboardData 只读，getData 需包一层升级）
-installPasteInterceptor();
+// 261111 首屏瘦身：粘贴拦截器（features/editor/clipboardHtml，含表情数据表/卡片工具 ≈20KB gz）
+// **不再进入口静态图** —— 改由真正会挂内核的懒 chunk（editor/DocumentEditor、home/QuickNoteComposer）
+// 在模块求值时安装（幂等）。「编辑器创建前安装」的契约不变：那两个模块只在内核分包加载时评测。
+// 桌面端仍由 src/main.tsx 静态安装（两端各自入口，互不影响）。
 
 // 261105 全局异常兜底（与桌面 src/main.tsx:18-23 同口径，移动端此前缺失）：
 // 未捕获异常 / 未处理 Promise 拒绝 → crashLog 环形缓冲（localStorage）+ error 日志，不再只进 Logcat。

@@ -30,7 +30,7 @@ import { pullRound, readRemoteIndexes } from "./s3v3/commit/pullRound.js";
 import { finalizeRemotePurged, mergeRoundIntoState, planStateOf, planWorldOf } from "./s3v3/commit/engineBridge.js";
 import { createRoundPorts } from "./s3v3/commit/roundPorts.js";
 import { isSuspiciousBodyChange, isUnexplainedBodyChange } from "./s3v3/state/bodyChangeGuard.js";
-import type { DeviceBaseline, DeviceState, S3v3DeviceStore } from "./s3v3DeviceStore.js";
+import type { DeviceBaseline, DeviceState, QuickPushState, S3v3DeviceStore } from "./s3v3DeviceStore.js";
 import type { SyncWarning } from "./sharedTypes.js";
 import type { S3v3Remote } from "./s3v3Ports.js";
 import { selectConflictEvents, type SyncConflictEvent } from "./syncConflictLog.js";
@@ -317,6 +317,7 @@ export class S3v3SyncEngine {
     this.warnings = [];
     this.warningDetails = [];
     this.supersededNotes.length = 0;
+    this.phaseStart = Date.now();
     let lastErr: unknown = null;
     for (let attempt = 0; attempt < SINGLE_PUSH_MAX_RETRIES; attempt++) {
       try { return await this.pushQuickNoteOnce(id); }
@@ -341,14 +342,23 @@ export class S3v3SyncEngine {
     if (baseline.epoch !== pointer.epoch || baseline.generation !== pointer.generation || baseline.lakeCommit !== pointer.lake.commit) {
       return { status: "full-sync", reason: "cloud-changed" };
     }
-    const state = (await this.device.loadState()) ?? emptyState();
-    const local = state.quickNotes.items.find((q) => q.id === id);
+    this.phase("push-pointer");
+    // 轻量状态（261110）：只读这条小记 + 同步标记，不重建整个世界（桌面 2 万文档时省掉全库 stat/hash）。
+    // 端口缺失/抛错 ⇒ 回退整份 loadState（语义不变，只是慢）。
+    let light: QuickPushState | null = null;
+    if (this.device.loadQuickPushState) {
+      try { light = await this.device.loadQuickPushState(id); } catch { light = null; }
+    }
+    const state = light ? null : (await this.device.loadState()) ?? emptyState();
+    const local = light ? light.quickNote : state!.quickNotes.items.find((q) => q.id === id) ?? null;
     if (!local) return { status: "not-found" };
-    const restore = new Set(state.restorePending ?? []);
+    this.phase("push-state");
+    const restore = new Set(light ? light.restorePending : state!.restorePending ?? []);
     const remoteIndexBytes = await this.remote.get(indexKey("quickNotes", pointer.quickNotes.commit));
     if (!remoteIndexBytes) throw new S3v3SyncError("index-missing", "小记索引缺失: " + pointer.quickNotes.commit);
     const remoteIndex = parseQuickNotesIndexBytes(remoteIndexBytes).index;
     const remoteEntry = remoteIndex.items.find((q) => q.id === id) ?? null;
+    this.phase("push-index");
     const remoteTombs = remoteIndex.purged ?? [];
     // 墓碑权威：远端已彻底删除且本机无显式恢复标记 → 交给整轮语义处理（不静默复活）。
     if (remoteTombs.includes(id) && !restore.has(id)) return { status: "full-sync", reason: "remote-deleted" };
@@ -356,15 +366,26 @@ export class S3v3SyncEngine {
     const body = await this.device.readQuickBody(id);
     if (!body) throw new S3v3SyncError("quick-body-missing", "本地小记正文缺失: " + id);
     const contentHash = sha256Hex(body);
+    this.phase("push-body");
     const opsBefore = this.uploadOps.length;
-    const remoteDecl = remoteEntry?.assetsHash ? await this.getDeclaration("quickNotes", id, remoteEntry.assetsHash) : null;
-    const decl = await this.uploadQuickAssets(id, remoteDecl);
+    // 资产：先本地清点，再决定要不要 GET 远端声明。
+    //  · 本地 0 个资产 ⇒ 本次产出的索引不带 assetsHash，**不必**读远端声明（旧实现为它白跑一次 GET）；
+    //  · 远端已有同 declHash 的声明对象（内容寻址不可变）⇒ 不必重复 PUT。
+    const preparedAssets = await this.prepareAssetStats("quickNotes", id);
+    const remoteDecl = preparedAssets.filenames.length > 0 && remoteEntry?.assetsHash
+      ? await this.getDeclaration("quickNotes", id, remoteEntry.assetsHash)
+      : null;
+    const decl = await this.uploadQuickAssets(id, remoteDecl, preparedAssets);
     const uploadedAssets = this.uploadOps.length - opsBefore;
-    if (decl) {
+    if (decl && decl.declHash !== remoteEntry?.assetsHash) {
       this.uploadOps.push({ space: "quickNotes", noteId: id, key: declarationKey("quickNotes", id, decl.declHash), bytes: new TextEncoder().encode(serializeDeclaration(decl.declaration)), gzip: true });
     }
-    this.uploadOps.push({ space: "quickNotes", noteId: id, key: quickNoteBodyKey(contentHash), bytes: body });
+    // 正文按内容寻址：远端已有同 hash 对象 ⇒ 不重复 PUT（重复点「保存并同步」= 零上传）。
+    if (remoteEntry?.contentHash !== contentHash) {
+      this.uploadOps.push({ space: "quickNotes", noteId: id, key: quickNoteBodyKey(contentHash), bytes: body });
+    }
     const failures = await this.flushUploadOps();
+    this.phase("push-upload");
     const failure = failures.get("quickNotes:" + id);
     if (failure) throw new S3v3SyncError("upload-failed", "小记上传失败: " + failure);
 
@@ -376,7 +397,8 @@ export class S3v3SyncEngine {
     if (!decl) delete (entry as { assetsHash?: string }).assetsHash;
     const items = [...remoteIndex.items.filter((q) => q.id !== id), entry].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
     // SD-09：单条推送也是一次发布，同样按保留窗口裁剪（否则这条路径会把旧墓碑重新带回云端）。
-    const purged = pruneQuickPurgedIds(remoteTombs.filter((x) => x !== id), state.quickPurgeTimes, this.now());
+    const quickPurgeTimes = light ? light.quickPurgeTimes : state!.quickPurgeTimes ?? {};
+    const purged = pruneQuickPurgedIds(remoteTombs.filter((x) => x !== id), quickPurgeTimes, this.now());
     const nextIndex: QuickNotesIndex = {
       v: 3, space: "quickNotes", items,
       ...(remoteIndex.tags !== undefined ? { tags: remoteIndex.tags } : {}),
@@ -406,18 +428,22 @@ export class S3v3SyncEngine {
         await this.releaseLock();
       }
     }
-    // 记账：只标这一条（I2：适配器按内容 hash 未变才标），baseline 跟到新代。
+    this.phase("push-publish");
+    // 记账：只标这一条（I2：适配器按内容 hash 未变才标），baseline 跟到新代（lake 部分原样来自 baseline）。
     if (this.device.markQuickNoteSynced) await this.device.markQuickNoteSynced(id, contentHash);
     await this.device.saveBaseline({
       epoch: pointer.epoch, generation,
       lakeCommit: pointer.lake.commit, quickNotesCommit: commit,
       lake: baseline.lake, quickNotes: nextIndex });
+    this.phase("push-baseline");
     // 单条推送不走整轮 saveState：如果该条此前是「云端已删除·仅本地」副本（remotePurged）
     // 或正处于显式恢复（restorePending），必须把清除后的标记单独落盘；否则 sidecar/DB 残留旧标记，
     // 回收站徽标不消失、下轮还可能把它重新压回「仅本地」。
-    const markerPurged = (state.remotePurged ?? []).filter((x) => x !== id);
-    const markerRestore = (state.restorePending ?? []).filter((x) => x !== id);
-    const markersStale = markerPurged.length !== (state.remotePurged ?? []).length || markerRestore.length !== (state.restorePending ?? []).length;
+    const markerPurgedSource = light ? light.remotePurged : state!.remotePurged ?? [];
+    const markerRestoreSource = light ? light.restorePending : state!.restorePending ?? [];
+    const markerPurged = markerPurgedSource.filter((x) => x !== id);
+    const markerRestore = markerRestoreSource.filter((x) => x !== id);
+    const markersStale = markerPurged.length !== markerPurgedSource.length || markerRestore.length !== markerRestoreSource.length;
     if (markersStale && this.device.persistSyncMarkers) {
       try { await this.device.persistSyncMarkers({ remotePurged: markerPurged, restorePending: markerRestore }); }
       catch (e) { this.warn("同步标记落盘失败（下轮整轮同步会清理）: " + (e as Error).message, { kind: "remote_incomplete", noteId: id }); }
@@ -1020,7 +1046,8 @@ export class S3v3SyncEngine {
     return null;
   }
 
-  private async uploadAssets(space: "lake" | "quickNotes", id: string, remoteDecl: AssetDeclaration | null): Promise<ReturnType<typeof buildAssetDeclaration> | null> {
+  /** 本地资产清点（文件名 + 可选原生 size/hash 清单）：uploadAssets 与单条推送共用一次清点，避免重复列目录。 */
+  private async prepareAssetStats(space: "lake" | "quickNotes", id: string): Promise<{ filenames: string[]; stats: Map<string, { size: number; hash: string }> | null }> {
     // 261027 Phase1：原生「filename→size/sha256」清单优先 —— 上传声明完全不读字节（旧 APK 自动回退）。
     // 否则每张新增附件都要 readAsset（base64 过桥）+ 纯 JS SHA-256，大附件在真机上是主要上传成本与 OOM 风险。
     const statsFn = space === "lake" ? this.device.listAssetStats : this.device.listQuickAssetStats;
@@ -1034,6 +1061,16 @@ export class S3v3SyncEngine {
     const filenames = stats
       ? [...stats.keys()].sort()
       : (space === "lake" ? await this.device.listAssets(id) : await this.device.listQuickAssets(id));
+    return { filenames, stats };
+  }
+
+  private async uploadAssets(
+    space: "lake" | "quickNotes",
+    id: string,
+    remoteDecl: AssetDeclaration | null,
+    prepared?: { filenames: string[]; stats: Map<string, { size: number; hash: string }> | null },
+  ): Promise<ReturnType<typeof buildAssetDeclaration> | null> {
+    const { filenames, stats } = prepared ?? await this.prepareAssetStats(space, id);
     if (filenames.length === 0) return null;
     // 附件按 filename 内容寻址（同名 = 同内容）：远端声明已有的文件直接复用 size/hash，
     // 不读本地字节；只有新增/改名的附件才需要 size/hash（优先原生清单，其次 readAsset）。
@@ -1094,8 +1131,12 @@ export class S3v3SyncEngine {
     return failed;
   }
 
-  private async uploadQuickAssets(id: string, remoteDecl: AssetDeclaration | null) {
-    return this.uploadAssets("quickNotes", id, remoteDecl);
+  private async uploadQuickAssets(
+    id: string,
+    remoteDecl: AssetDeclaration | null,
+    prepared?: { filenames: string[]; stats: Map<string, { size: number; hash: string }> | null },
+  ) {
+    return this.uploadAssets("quickNotes", id, remoteDecl, prepared);
   }
 
   /**

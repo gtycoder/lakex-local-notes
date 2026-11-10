@@ -1,9 +1,11 @@
 /** 新建知识库 Sheet（§5：名称必填；默认图标不落库；自定义 Emoji 一次性提交）。 */
-import { useState } from "react";
+import { Suspense, lazy, useState } from "react";
 import { Book } from "lucide-react";
-import { MobileNodeIconPicker } from "../ui/NodeIconPicker";
 import { MobileNodeIconGlyph } from "../ui/NodeIconGlyph";
 import { MobileSheet } from "../ui/MobileSheet";
+
+// 261111 首屏瘦身：表情/图标选择器懒加载（同 HomePage；表情数据表不进入口静态图）。
+const MobileNodeIconPicker = lazy(() => import("../ui/NodeIconPicker").then((m) => ({ default: m.MobileNodeIconPicker })));
 
 export interface CreateNotebookSheetProps {
   open: boolean;
@@ -63,7 +65,9 @@ export function CreateNotebookSheet(props: CreateNotebookSheetProps) {
       </div>
       {showEmoji && (
         <div className="create-nb-emoji-picker">
-          <MobileNodeIconPicker nodeType="notebook" value={icon} onPick={setIcon} />
+          <Suspense fallback={null}>
+            <MobileNodeIconPicker nodeType="notebook" value={icon} onPick={setIcon} />
+          </Suspense>
         </div>
       )}
       {error && <div className="create-nb-error">{error}</div>}

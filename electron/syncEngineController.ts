@@ -25,6 +25,40 @@ import { perfMessage } from "../src/core/logFormat.js";
  * Step 5：桌面 Controller 化入口。
  */
 let v3Gate: Promise<unknown> = Promise.resolve();
+/**
+ * 单条推送的**高优先门**（261110）：只与其它单条推送串行，**不等**整轮同步、不进维护队列。
+ *
+ * 跨进程发布互斥仍由 S3 发布锁 + pointer CAS/读回重试保证（与 6 端并发发布同一套判据）；
+ * 本地 state/baseline 都是原子写（最后写者胜），与移动端「维护域 / 高优先域两个独立门」同口径。
+ * 判据登记：src/core/maintenancePolicy.ts 的 PRIORITY_OPS.syncQuickNote。
+ */
+let quickPushGate: Promise<unknown> = Promise.resolve();
+async function serializedQuickPush<T>(fn: () => Promise<T>): Promise<T> {
+  let release!: () => void;
+  const mine = new Promise<void>((r) => { release = r; });
+  const previous = quickPushGate;
+  quickPushGate = mine;
+  await previous.catch(() => undefined);
+  try { return await fn(); } finally { release(); }
+}
+
+/** S3 remote/client 缓存（261110）：同一份 settings 复用 AWS client（构造是快路径上的固定开销）。
+ *  设置变化（含 secret 轮换）⇒ 指纹不同自动重建；推送失败主动失效（下次重建）。 */
+let cachedPushRemote: { key: string; remote: S3v3S3Remote } | null = null;
+function pushRemoteFor(settings: S3Settings): S3v3S3Remote {
+  const key = [
+    settings.endpoint, settings.region, settings.bucket, settings.prefix,
+    settings.accessKeyId, settings.secretAccessKey, settings.forcePathStyle ? "1" : "0",
+  ].join("\u0000");
+  if (cachedPushRemote?.key === key) return cachedPushRemote.remote;
+  const remote = new S3v3S3Remote({
+    endpoint: settings.endpoint, region: settings.region, bucket: settings.bucket,
+    accessKeyId: settings.accessKeyId, secretAccessKey: settings.secretAccessKey,
+    prefix: settings.prefix, forcePathStyle: settings.forcePathStyle,
+  });
+  cachedPushRemote = { key, remote };
+  return remote;
+}
 /** v3 全量同步串行化：整轮同步与“单条推送→全量 v3”不会并发写同一设备 sidecar/索引。 */
 async function serializedV3<T>(fn: () => Promise<T>): Promise<T> {
   let release!: () => void;
@@ -48,14 +82,34 @@ export async function syncNowViaEngine(
 }
 
 /**
- * 单条小记推送入口（「保存并同步」）：与整轮同步共用 v3 串行门（同一设备 sidecar/指针不得并发写）。
+ * 单条小记推送入口（「保存并同步」；261110 提速）：**高优先门**，不等整轮同步。
  * 内部只 upsert 一条；遇到「必须整轮」的情形（云端无 pointer/无基线/不同代，或远端墓碑未恢复）
- * 会执行一次整轮并回传 full-sync（不静默降级）。
+ * 通过 `fullSync` 回退一次整轮并回传 full-sync（不静默降级；整轮本身仍走 v3Gate 串行）。
  */
-export async function pushQuickNoteViaEngine(store: Store, id: string): Promise<QuickNotePushOutcome> {
-  return serializedV3(async () => {
-    const { pushQuickNoteWithV3 } = await import("./s3v3/desktopSync.js");
-    return pushQuickNoteWithV3(store, id);
+export async function pushQuickNoteViaEngine(
+  store: Store,
+  id: string,
+  deps: { settings?: S3Settings } = {},
+): Promise<QuickNotePushOutcome> {
+  return serializedQuickPush(async () => {
+    // IPC 侧已读过设置（含 safeStorage 解密）：直接复用，快路径不再二次读。
+    const settings = deps.settings ?? store.getS3Settings();
+    if (!settings) throw new Error("请先保存 S3 配置");
+    const remote = pushRemoteFor(settings);
+    const startedAt = Date.now();
+    try {
+      const { pushQuickNoteWithV3 } = await import("./s3v3/desktopSync.js");
+      return await pushQuickNoteWithV3(store, id, {
+        remote,
+        // 回退整轮：走同步入口（含 v3Gate），避免同进程两个整轮并发写基线。
+        fullSync: (onProgress) => syncNowViaEngine(store, onProgress),
+      });
+    } catch (error) {
+      // 客户端/配置可能已失效：下次重建 remote（AWS client 没有显式 close 需求）。
+      cachedPushRemote = null;
+      store.logScopes.sync.warn("[v3][push-single] failed " + (error instanceof Error ? error.message : String(error)) + " ms=" + (Date.now() - startedAt));
+      throw error;
+    }
   });
 }
 

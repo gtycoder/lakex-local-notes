@@ -35,10 +35,15 @@ export interface MobileSyncResult {
   progress?: Array<{ phase: string; ms: number }>;
 }
 
+/** 云端状态 + 已读出的设置（一次读：secret 可能走 Keystore/IndexedDB，重复读在快路径上不便宜）。 */
+export async function mobileCloudContext(): Promise<{ cfg: S3Settings | null; state: CloudState }> {
+  const cfg = await syncDomain.getS3Settings();
+  return { cfg, state: cloudStateOf(Boolean(cfg), readSyncSettings()) };
+}
+
 /** 云端状态（单一判据，与桌面同源 src/core/cloudState）：没配置 或 关闭云同步 ⇒ 一律不出网。 */
 export async function mobileCloudState(): Promise<CloudState> {
-  const cfg = await syncDomain.getS3Settings();
-  return cloudStateOf(Boolean(cfg), readSyncSettings());
+  return (await mobileCloudContext()).state;
 }
 /** 下载这些笔记的已声明资产（best-effort）；失败不阻断调用方（恢复/预览红线）。
  * v3 原生路径（261026 parity B6）：pointer→索引→该篇 assetsHash→声明对象→本地差集下载，
@@ -190,9 +195,10 @@ async function materializeAllDeclaredAssetsChunked(): Promise<void> {
 
 /** 单条推送（「保存并同步」；云状态判据在调用方）。
  * v3 parity E2：只 upsert 这一条（其余条目/标签/墓碑云端逐字段不变）；
- * 必须整轮的两条路径（云端无 pointer/无基线/不同代、远端墓碑未恢复）执行一次整轮并回传 full-sync。 */
-export async function pushSingleQuickNote(id: string): Promise<QuickNotePushOutcome> {
-  const cfg = await syncDomain.getS3Settings();
+ * 必须整轮的两条路径（云端无 pointer/无基线/不同代、远端墓碑未恢复）执行一次整轮并回传 full-sync。
+ * `deps.cfg`：调用方已读出的设置（避免 secret 二次读，261110 提速）；缺省自行读取。 */
+export async function pushSingleQuickNote(id: string, deps: { cfg?: S3Settings } = {}): Promise<QuickNotePushOutcome> {
+  const cfg = deps.cfg ?? await syncDomain.getS3Settings();
   if (!cfg) throw new Error("未配置 S3");
   try { assertS3Credentials(cfg); } catch (e) { throw new Error((e as Error).message); }
   const d = await ensureDb();

@@ -10,19 +10,34 @@ export class FileDeviceStore implements S3v3DeviceStore {
 
   private p(...parts: string[]): string { return path.join(this.root, ...parts); }
 
-  async init(): Promise<void> {
+  async init(_opts?: { skipStagingCleanup?: boolean }): Promise<void> {
     await fs.mkdir(this.p("bodies"), { recursive: true });
     await fs.mkdir(this.p("assets"), { recursive: true });
     await fs.mkdir(this.p("history"), { recursive: true });
     await fs.mkdir(this.p("archive"), { recursive: true });
   }
 
-  async loadState(): Promise<DeviceState | null> {
+  private async readStateFile(): Promise<DeviceState | null> {
     try { return JSON.parse(await fs.readFile(this.p("state.json"), "utf8")) as DeviceState; } catch { return null; }
   }
 
+  async loadState(): Promise<DeviceState | null> { return await this.readStateFile(); }
+
   async saveState(state: DeviceState): Promise<void> {
     await this.atomicWrite(this.p("state.json"), JSON.stringify(state));
+  }
+
+  /** 单条推送轻量状态（测试/CLI 文件实现：直接从 state.json 取该条 + 标记，不重建世界）。 */
+  async loadQuickPushState(id: string) {
+    const state = await this.readStateFile();
+    if (!state) return null;
+    return {
+      quickNote: state.quickNotes.items.find((q) => q.id === id) ?? null,
+      restorePending: state.restorePending ?? [],
+      remotePurged: state.remotePurged ?? [],
+      quickPurges: state.quickPurges ?? [],
+      quickPurgeTimes: state.quickPurgeTimes ?? {},
+    };
   }
 
   async loadBaseline(): Promise<DeviceBaseline | null> {

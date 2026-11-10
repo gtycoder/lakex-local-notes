@@ -26,6 +26,9 @@ import type { SyncConflictEvent } from "../../core/syncConflictLog.js";
  * - 写侧细节（批量 executeSet 窗口、legacy 正文批写、移动旧口径回收站/小记删除）在 mobilePlatformPort。
  */
 
+/** 已建过 v3 状态表的库（单条推送/整轮共用同一 db 实例）：避免每次 `保存并同步` 都跑一次 DDL。 */
+const v3StateReady = new WeakSet<MobileDb>();
+
 export class MobileDeviceStore implements S3v3DeviceStore {
   private readonly db: MobileDb;
   /**
@@ -101,10 +104,13 @@ export class MobileDeviceStore implements S3v3DeviceStore {
     });
   }
 
-  async init(): Promise<void> {
-    await ensureV3StateTable(this.db);
-    // 上一轮崩溃可能留下 staging 正文；清理后由云端按 hash 重新下载。
-    await clearStagingBodies().catch(() => undefined);
+  async init(opts: { skipStagingCleanup?: boolean } = {}): Promise<void> {
+    if (!v3StateReady.has(this.db)) {
+      await ensureV3StateTable(this.db);
+      v3StateReady.add(this.db);
+    }
+    // 上一轮崩溃可能留下 staging 正文；整轮进维护域时清理（单条推送不需要，省一次原生往返）。
+    if (!opts.skipStagingCleanup) await clearStagingBodies().catch(() => undefined);
   }
 
   private async kindOf(id: string): Promise<NoteKind> {
@@ -117,6 +123,8 @@ export class MobileDeviceStore implements S3v3DeviceStore {
    * 本适配器只提供移动版 PlatformDataPort + 正文 FileDriver + 信封读写端口。
    */
   async loadState(): Promise<DeviceState | null> { return await this.meta.loadState(); }
+  /** 单条推送轻量状态（261110）：不重建世界。 */
+  async loadQuickPushState(id: string) { return await this.meta.loadQuickPushState(id); }
 
   /**
    * E2-4 phase C-3b-2：saveState 已上收到 core 单一编排（createDeviceStoreMeta.saveState）。

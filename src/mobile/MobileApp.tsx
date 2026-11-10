@@ -20,8 +20,6 @@ import { consumeSharedContent, readSharedContentBytes, sharedContentKind, shared
 import { readImportDefaultNotebook, writeImportDefaultNotebook } from "./settings/importSettings";
 import { readDefaultHomeTab } from "./settings/defaultSpace";
 import { DefaultNotebookPickerSheet, type DefaultNotebookOption } from "./settings/DefaultNotebookPickerSheet";
-import { importSharedMarkdown, markdownTitleOf } from "./import/markdownShareImport";
-import { importSharedPdfAsInkNote, sharedPdfImportToast } from "./ink/mobilePdfImport";
 import { SHARE_QUEUE_FULL_HINT, ShareQueue } from "./ink/shareQueue";
 import { sha256Sync } from "../core/sha256Sync.js";
 import { scheduleComposerPrewarm, scheduleKernelPrewarm } from "./native/kernelPrewarm";
@@ -47,7 +45,6 @@ import { useDoubleBackExit } from "./hooks/useDoubleBackExit";
 import { useRouteTransition } from "./hooks/useRouteTransition";
 import { useAutoSync } from "./hooks/useAutoSync";
 import { useUpdateAutoCheck } from "./hooks/useUpdateAutoCheck";
-import { consumePortableRecoveryNotice, recoverInterruptedPortableImport } from "./portable/importPortable";
 import { readSyncProgress, subscribeSyncProgress } from "./sync/syncProgressStore";
 import { Toasts } from "./ui/Toasts";
 import { AttachmentPreview } from "../features/attachment/AttachmentPreview";
@@ -62,11 +59,24 @@ import { ensureDb } from "./bridge/context";
 import { showToast } from "./ui/toastBus";
 import { getNativeErrorMessage, reportNativeActionError } from "../lib/nativeErrors";
 import { successFeedback, warnFeedback } from "./ui/haptics";
-import { runNativeSqliteSpike } from "./native/nativeSqlite";
-import { buildLakeNative } from "./native/lakeNativeContract";
-import { mobileCachePort } from "./native/cachePort";
+// 261111 首屏瘦身：原生调试契约（lakeNativeContract / nativeSqlite）与缓存清理（cachePort）都是
+// 「启动后/出错时才会用到」的重依赖 —— 改成用时动态 import，不进入口静态图。
 import "./mobile.css";
 import "./brand-launch.css";
+
+/**
+ * 启动链路里「不能进首屏静态图、但 boot 第一段就要用」的模块：**模块求值即预取**（与 React 首帧并行），
+ * boot 里再 await —— 这样首屏不多付字节，也不为动态 import 多等一轮往返（261111 首屏瘦身）。
+ * 预取失败收敛成 null（不抛未处理拒绝）：退化为「该步不可用」，与原先各处的 try/catch 同语义。
+ */
+const bootPortableModule = import("./portable/importPortable").catch((error) => {
+  console.warn("[portable] 编排模块加载失败", error);
+  return null;
+});
+const bootDebugModules = Promise.all([import("./native/lakeNativeContract"), import("./native/nativeSqlite")]).catch((error) => {
+  console.warn("[boot] 调试契约模块加载失败（不影响启动）", error);
+  return null;
+});
 
 /** 第二层工作区（内含 Lake 内核编辑器）：**按需加载**。
  * 冷启动不需要内核；静态引入会把整个内核打进入口 chunk（实测 6.7MB），拖慢所有启动路径。 */
@@ -245,14 +255,25 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
     try {
       // 便携包导入中断恢复（docs/PORTABLE-TRANSFER.md §3.6）：**必须在打开数据库之前**按 pending 回滚，
       // 否则旧库已被替换、新库半成品会带进来。失败只记日志，不阻断启动。
-      try { await recoverInterruptedPortableImport(); } catch (error) { console.warn("[portable] 中断导入恢复失败", error); }
+      // 261111：编排模块（映射/回滚/原生包）只在启动这一步用 ⇒ 动态 import（模块求值已预取）；
+      // **顺序契约不变**（仍在 init 前）。
+      try {
+        const portable = await bootPortableModule;
+        if (portable) await portable.recoverInterruptedPortableImport();
+      } catch (error) { console.warn("[portable] 中断导入恢复失败", error); }
       await bridge.init();
       // lakeNative 调试/测试契约（对齐桌面端）：供 CDP 驱动与真机调试直接调用 bridge 端口。
       // 实现从 bridge / 附加入口**派生**（名字清单单一来源见 ./lakeNativeContract）。
-      (window as unknown as Record<string, unknown>).lakeNative = buildLakeNative({
-        bridge: bridge as unknown as Record<string, unknown>,
-        extra: { runNativeSqliteSpike },
-      });
+      // 261111：调试契约与原生 sqlite spike 均非首屏必需 ⇒ 动态 import（模块求值已预取）。
+      // 加载失败只丢调试入口，**绝不让整个启动失败**。
+      const debugModules = await bootDebugModules;
+      if (debugModules) {
+        const [{ buildLakeNative }, { runNativeSqliteSpike }] = debugModules;
+        (window as unknown as Record<string, unknown>).lakeNative = buildLakeNative({
+          bridge: bridge as unknown as Record<string, unknown>,
+          extra: { runNativeSqliteSpike },
+        });
+      }
       // 资产传输性能观测（CDP 诊断：__lakePerf.reset() / __lakePerf.snapshot()）。
       (window as unknown as Record<string, unknown>).__lakePerf = {
         reset: resetAssetPerf,
@@ -260,8 +281,12 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
       };
       await refreshAll();
       setPhase("ready");
-      const portableNotice = consumePortableRecoveryNotice();
-      if (portableNotice) showToast(portableNotice, { type: "info" });
+      // 便携包恢复提示：复用启动时已预取的编排模块（失败 = 无提示，不影响就绪）。
+      const portable = await bootPortableModule;
+      if (portable) {
+        const portableNotice = portable.consumePortableRecoveryNotice();
+        if (portableNotice) showToast(portableNotice, { type: "info" });
+      }
     } catch (e) {
       bootErrorRef.current = e;
       setError(getNativeErrorMessage(e));
@@ -304,6 +329,8 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
   /** 「清派生缓存后重试」：只用现有 cachePort（只清可重建数据，不动正文/资源/未同步修改）。 */
   const clearCacheAndRetry = useCallback(async () => {
     try {
+      // 261111：错误页动作才会用 ⇒ 动态 import（不进入口静态图）。
+      const { mobileCachePort } = await import("./native/cachePort");
       await mobileCachePort.clearDerivedCaches();
     } catch (reason) {
       toastActionError("清理缓存", reason);
@@ -458,6 +485,8 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
       setMdImportFiles(files);
       return;
     }
+    // 261111 首屏瘦身：Markdown 导入管线（含桌面共用 pipeline）只在真的分享导入时用 ⇒ 动态 import。
+    const { importSharedMarkdown, markdownTitleOf } = await import("./import/markdownShareImport");
     const summary = await importSharedMarkdown({
       files,
       notebookId,
@@ -497,6 +526,8 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
       }
       showToast("正在导入 PDF…");
       try {
+        // 261111 首屏瘦身：PDF→手写板导入链（pdfImport + 手写板历史）只在分享 PDF 时用 ⇒ 动态 import。
+        const { importSharedPdfAsInkNote, sharedPdfImportToast } = await import("./ink/mobilePdfImport");
         const imported = await importSharedPdfAsInkNote(payload);
         workspaceOriginTabRef.current = null;
         setRoute({ kind: "notebook", notebookId: imported.notebookId, initialNoteId: imported.noteId });

@@ -26,6 +26,9 @@ import { subscribeSyncSettings } from "../sync/syncSettingsStore";
 import { addAssetAccessToken, stripAssetAccessToken } from "../../lib/assetPort";
 import { localAssetHttpUrl } from "../../core/assetUrl.js";
 import { uploadLakeResource } from "../../features/editor/resourceUpload";
+// 261111 首屏瘦身：粘贴拦截器（clipboardHtml）改由小记分包自己安装（幂等）；文档侧见 editor/DocumentEditor.tsx。
+// 本模块只在写作卡真正打开时求值 ⇒ 「编辑器创建前安装」不变，且不进首屏静态图。
+import { installPasteInterceptor } from "../../features/editor/clipboardHtml";
 import { editorCommandFailureMessage, execEditorCommandResult } from "../editor/execCommand";
 import { QuickNoteEditor, type QuickNoteEditorApi } from "../../features/quickNotes/QuickNoteEditor";
 import { QuickNoteComposerSkeleton } from "./QuickNoteComposerSkeleton";
@@ -47,6 +50,9 @@ import { isQuickNoteImageMime, quickNoteBodyFromTextAndImages, type StoredQuickN
 import { addQuickNoteTagId, removeQuickNoteTagId, type QuickNoteTagSummary } from "../../core/quickNoteTags.js";
 import { MobileQuickNoteTagSheet } from "./MobileQuickNoteTagSheet";
 import { toastActionError } from "../lib/actionError";
+
+installPasteInterceptor();
+
 export interface QuickNoteComposerProps {
   /** 编辑目标（已有小记 id + 正文）；null = 新建 */
   editNote?: { id: string; text: string; body?: string; images: StoredQuickNoteImage[]; tagIds?: string[] } | null;

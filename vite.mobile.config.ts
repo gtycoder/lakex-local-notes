@@ -119,6 +119,45 @@ export default defineConfig({
     sourcemap: false,
     rolldownOptions: {
       input: { mobile: "mobile.html" },
+      output: {
+        codeSplitting: {
+          // ── 移动端首屏共享 chunk 收敛（261111）────────────────────────────────────────────
+          // 背景：rolldown 会把「entry 与懒 chunk 都静态 import」的模块提升成**共享入口 chunk**（每个模块
+          // 一个文件）⇒ 移动端 modulepreload 曾达 47 条（HANDOFF §1 目标 ≤12）。这里按「首屏静态图里的
+          // 依赖族」把共享块合并成少数几个：**不新增任何模块、不把懒加载模块拉进首屏**（每条 group 的
+          // 根模块都已在入口静态图里，includeDependenciesRecursively 只收它的静态依赖 ⇒ 全部本来就要付）。
+          // ⚠️ 仍然不给 @dlient/lakex-doc-react / 画板（lakex-drawnix、@plait/*）加任何 group：实测会拆坏
+          // vendor 内部的 DrawnixBoardCore export 绑定（整页白屏，见文件下方警告与 mobileLazyChunks.test.ts）。
+          groups: [
+            {
+              // 移动端运行时桥 + 数据层：bridge.ts 的静态依赖闭包（DB/sqlite/schema/同步账本/笔记/小记/日记…）
+              // 全部是首屏要用的（入口要 bridge.init + getHomeSnapshot），此前被拆成 14+ 个共享块。
+              name: "mobile-bridge-data",
+              test: (id) => /[\\/]src[\\/]mobile[\\/]bridge\.ts$/.test(id),
+              includeDependenciesRecursively: true,
+            },
+            {
+              // 入口直接用的 lucide 图标（pencil/chevron/tag/plus/x）+ 图标工厂：6+1 个碎片块合成一块。
+              // 只匹配**这几个**图标（懒 chunk 才会用到的其它图标不能被卷进来）。
+              name: "mobile-entry-icons",
+              test: (id) =>
+                /lucide-react[\\/].*[\\/]icons[\\/](pencil|chevron-left|chevron-right|tag|plus|x)\.m?js$/.test(id) ||
+                /lucide-react[\\/].*createLucideIcon/.test(id),
+              includeDependenciesRecursively: true,
+            },
+            {
+              // 首屏就会挂的轻量 UI 共享块（底部 Sheet / toast / 返回栈 / 触感 / 错误上报 / 图片与附件预览控制器）。
+              name: "mobile-ui-shared",
+              test: (id) =>
+                /[\\/]src[\\/]mobile[\\/](ui[\\/](MobileSheet|toastBus|backStack|haptics)|hooks[\\/]gestureCore|lib[\\/]reportMobileActionError)/.test(id) ||
+                /[\\/]src[\\/]lib[\\/](nativeErrors|pageScrollLock|longPressTimer|immersivePreview)/.test(id) ||
+                /[\\/]src[\\/]features[\\/](editor[\\/]imagePreview|attachment[\\/]attachmentPreviewController)/.test(id) ||
+                /[\\/]src[\\/]core[\\/](syncDecisions|errorContract)\.ts$/.test(id),
+              includeDependenciesRecursively: true,
+            },
+          ],
+        },
+      },
       // 不手动把 Drawnix 合并为共享 chunk：文档页是懒加载路由，
       // 手动分组会让 Drawnix 被首页 HTML modulepreload，抵消懒加载收益。
       //

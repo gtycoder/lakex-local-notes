@@ -85,7 +85,8 @@ export class DesktopStoreDevice implements S3v3DeviceStore {
     });
   }
 
-  async init(): Promise<void> {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- 桌面 init 只有 mkdir，无需区分轻量/整轮
+  async init(_opts?: { skipStagingCleanup?: boolean }): Promise<void> {
     await fs.mkdir(path.dirname(this.stateFile), { recursive: true });
     if (!this.quickNotes && !this.skipQuickNotesGuard) {
       const quickDb = path.join(path.dirname(this.stateFile), "..", "quick-notes", "metadata.sqlite3");
@@ -129,6 +130,8 @@ export class DesktopStoreDevice implements S3v3DeviceStore {
 
   // ===== E2-4：世界状态编排 = core 单一实现 =====
   async loadState(): Promise<DeviceState | null> { return this.meta.loadState(); }
+  /** 单条推送轻量状态（261110）：不扫全库文档/不重算 hash。 */
+  async loadQuickPushState(id: string) { return this.meta.loadQuickPushState(id); }
   async saveState(state: DeviceState, previous?: DeviceState): Promise<void> { return this.meta.saveState(state, previous); }
 
   async loadBaseline(): Promise<DeviceBaseline | null> {

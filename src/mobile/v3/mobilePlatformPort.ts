@@ -248,6 +248,17 @@ export function createMobilePlatformPort(db: MobileDb, ctxIn?: Partial<MobilePla
     async listBodyRecoveryPending(): Promise<string[]> {
       return []; // 移动端不做缺正文恢复队列（桌面 device_state 专有）
     },
+    /** 单条推送轻量投影（261110）：三条只读标记 SQL，不拼全库世界。 */
+    async listCloudDeletedIds() {
+      const folders = await db.prepare("SELECT id FROM folders WHERE cloud_deleted=1 ORDER BY id").all() as Array<{ id: string }>;
+      const notes = await db.prepare("SELECT id FROM notes WHERE cloud_deleted=1 ORDER BY id").all() as Array<{ id: string }>;
+      const quickNotes = await db.prepare("SELECT id FROM quick_notes WHERE cloud_deleted=1 ORDER BY id").all() as Array<{ id: string }>;
+      return {
+        folders: folders.map((r) => r.id),
+        notes: notes.map((r) => r.id),
+        quickNotes: quickNotes.map((r) => r.id),
+      };
+    },
     noteBodyPath(noteId: string): string {
       // 路径需要 kind（正文目录按类型分）；这里用延迟解析的伪路径，由 FileDriver 反向查库。
       return "note:" + noteId;

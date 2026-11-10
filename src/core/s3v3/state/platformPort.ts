@@ -136,6 +136,9 @@ export interface PlatformDataPort {
   listPurgedTombstones(): Promise<PurgedTombstoneRow[]>;
   listRestorePendingNoteIds(): Promise<string[]>;
   listRestorePendingQuickNoteIds(): Promise<string[]>;
+  /** 「云端已删除·仅本地」DB 投影 id（可选，261110 单条推送提速）：只读标记列/表，不扫全库世界。
+   *  【缺失退化】core 回退 listFoldersForSync + listNotesSyncMeta + listQuickNotesForSync 逐行取 cloudDeleted。 */
+  listCloudDeletedIds?(): Promise<{ folders: string[]; notes: string[]; quickNotes: string[] }>;
   listBodyRecoveryPending(): Promise<string[]>;
 
   // ===== 路径 / 存在性 =====

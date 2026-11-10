@@ -22,9 +22,14 @@ import type { AttachmentPreviewItem } from "../../features/attachment/attachment
 import type { LocalAssetRef } from "../../core/assetUrl.js";
 import { parseLocalAssetUrl } from "../../core/assetUrl.js";
 import { isSafeShellOpenFilename } from "../../core/assetNaming.js";
+// 261111 首屏瘦身：粘贴拦截器（含表情数据表等，≈20KB gz）只在真会挂内核的懒 chunk 里安装 ——
+// 本模块由 NotePaneHost 静态引入，只有工作区分包加载时才评测 ⇒ 天然满足「编辑器创建前安装」，且不进首屏静态图。
+import { installPasteInterceptor } from "../../features/editor/clipboardHtml";
 import { registerPlugin } from "@capacitor/core";
 import { Filesystem, Directory } from "@capacitor/filesystem";
 import type { LocalNote } from "../data/noteRepository";
+
+installPasteInterceptor();
 
 /** 原生 OpenFile 插件（android/.../OpenFilePlugin.java）：系统默认应用打开本地文件。 */
 const OpenFile = registerPlugin<{ open: (opts: { path: string }) => Promise<void> }>("OpenFile");

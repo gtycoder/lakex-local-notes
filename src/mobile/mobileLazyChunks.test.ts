@@ -60,8 +60,29 @@ describe("移动端入口不静态引入 Lake 内核", () => {
     expect(read("./notebook/NotePaneHost.tsx")).toMatch(/lazy\(\(\) => import\("\.\.\/usheet\/MobileUsheetViewer"\)/);
   });
 
-  it("vite.mobile.config.ts 不给 @dlient/lakex-doc-react 加 codeSplitting 分组", () => {
-    // 只匹配配置项本身（\`codeSplitting:\`），别被解释这条坑的注释误伤
-    expect(read("../../vite.mobile.config.ts")).not.toMatch(/codeSplitting\s*:/);
+  it("vite.mobile.config.ts 的 codeSplitting 分组不碰内核/画板 vendor（只允许首屏自有共享块）", () => {
+    // 261111：允许用 codeSplitting.groups 收敛**首屏自有共享块**（bridge/data、入口图标、轻量 UI），
+    // 目标是 modulepreload 收敛到 ≤12 条；但**绝不允许**把内核（@dlient/lakex-doc-react）或画板 vendor
+    // （lakex-drawnix / @plait/*）卷进任何 group —— 261103 实测会把 vendor 内部懒 chunk
+    // （DrawnixBoardCore）的 export 绑定拆坏，打开编辑器即整页白屏（见本文件头与 vite.mobile.config.ts 注释）。
+    const cfg = read("../../vite.mobile.config.ts");
+    const start = cfg.indexOf("codeSplitting:");
+    expect(start).toBeGreaterThan(-1);
+    const open = cfg.indexOf("{", start);
+    let depth = 0;
+    let end = open;
+    for (let i = open; i < cfg.length; i += 1) {
+      if (cfg[i] === "{") depth += 1;
+      else if (cfg[i] === "}") { depth -= 1; if (depth === 0) { end = i; break; } }
+    }
+    // 去注释后再判：解释这条坑的注释里本来就会出现这些名字
+    const block = cfg.slice(start, end + 1).replace(/\/\/[^\n]*/g, "").replace(/\/\*[\s\S]*?\*\//g, "");
+    expect(block).not.toMatch(/@dlient|lakex-drawnix|@plait/);
+    // 分组名是白名单：新增分组必须同时在这里登记（否则等于绕过首屏字节审查）
+    const names = [...block.matchAll(/name:\s*"([^"]+)"/g)].map((m) => m[1]);
+    expect(names.length).toBeGreaterThan(0);
+    for (const name of names) {
+      expect(["mobile-bridge-data", "mobile-entry-icons", "mobile-ui-shared"]).toContain(name);
+    }
   });
 });
