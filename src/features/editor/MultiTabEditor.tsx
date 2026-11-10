@@ -827,5 +827,3 @@ export function MultiTabEditor({
     </div>
   );
 }
-
-
