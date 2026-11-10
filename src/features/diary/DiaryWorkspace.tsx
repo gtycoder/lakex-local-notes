@@ -12,7 +12,7 @@
  * **不做月历**（v1 明确不做：会与多维表月历撞「同一交互语义只有一套视觉」）。
  */
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
-import { CalendarDays, ChevronRight, NotebookPen, Pencil, Plus, Search } from "lucide-react";
+import { CalendarDays, ChevronRight, Feather, FileText, NotebookPen, Pencil, Plus, Search } from "lucide-react";
 import { NodeIconGlyph } from "../../components/ui/NodeIconGlyph";
 import {
   diaryConvertTargets,
@@ -101,7 +101,20 @@ export function DiaryWorkspace(props: DiaryWorkspaceProps) {
   const years: YearNode[] = useMemo(() => groupDiaryEntries(entries) as unknown as YearNode[], [entries]);
   const entryDocIds = useMemo(() => new Set(entries.map((entry) => entry.documentId)), [entries]);
   const notebook = useMemo(() => diaryNotebookOf(treeNodes), [treeNodes]);
-  const todayKey = formatDiaryDateKey();
+  /** 「今天」必须**跨天自动刷新**：debug 版常驻过夜时没有 re-render，闭包里的今天会一直是昨天
+   *  （261110 现场：昨天启动的实例今天点「＋」建出昨天的日记）。定时 + 回前台/可见性变化各刷新一次。 */
+  const [todayKey, setTodayKey] = useState(() => formatDiaryDateKey());
+  useEffect(() => {
+    const sync = () => setTodayKey(formatDiaryDateKey());
+    const timer = window.setInterval(sync, 60_000);
+    window.addEventListener("focus", sync);
+    document.addEventListener("visibilitychange", sync);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", sync);
+      document.removeEventListener("visibilitychange", sync);
+    };
+  }, []);
 
   const [collapsedYears, setCollapsedYears] = useState<Set<string>>(() => new Set());
   const [collapsedMonths, setCollapsedMonths] = useState<Set<string>>(() => new Set());
@@ -168,7 +181,7 @@ export function DiaryWorkspace(props: DiaryWorkspaceProps) {
       <SplitPane
         ariaLabel="调整日记目录宽度"
         storageKey="diary-rail"
-        minWidth={240}
+        minWidth={160}
         maxWidth={560}
         minRight={420}
         className="diary-split"
@@ -177,16 +190,6 @@ export function DiaryWorkspace(props: DiaryWorkspaceProps) {
         <div className="diary-dir__head">
           <h2 className="diary-dir__title"><NotebookPen size={15} aria-hidden="true" />日记</h2>
           <span className="diary-dir__count" title="日记篇数">{entries.length}</span>
-          {/* 261109：加号 = 今天新建一篇（一天允许多篇）；日历 = 任意日期新建。 */}
-          <button
-            type="button"
-            className="ln-iconbtn ln-iconbtn--compact"
-            aria-label="新建今天的日记"
-            title="新建今天的日记"
-            onClick={() => onCreateEntry(todayKey)}
-          >
-            <Plus size={15} />
-          </button>
           <button
             type="button"
             className="ln-iconbtn ln-iconbtn--compact"
@@ -194,7 +197,7 @@ export function DiaryWorkspace(props: DiaryWorkspaceProps) {
             title="选择日期新建日记"
             onClick={(event) => {
               const rect = event.currentTarget.getBoundingClientRect();
-              setPickDate(todayKey);
+              setPickDate(formatDiaryDateKey());
               setDateStage("calendar");
               setDateMenu({ x: rect.left, y: rect.bottom + 4 });
             }}
@@ -209,6 +212,16 @@ export function DiaryWorkspace(props: DiaryWorkspaceProps) {
             onClick={onOpenSearch}
           >
             <Search size={14} />
+          </button>
+          {/* 261110 用户点单：新建（＋）放最右，与搜索换位。 */}
+          <button
+            type="button"
+            className="ln-iconbtn ln-iconbtn--compact"
+            aria-label="新建今天的日记"
+            title="新建今天的日记"
+            onClick={() => onCreateEntry(formatDiaryDateKey())}
+          >
+            <Plus size={15} />
           </button>
         </div>
         <div className="diary-tree ln-scroll" role="tree" aria-label="年 / 月">
@@ -328,7 +341,7 @@ export function DiaryWorkspace(props: DiaryWorkspaceProps) {
                 ? "日记按天一篇，标题就是日期。点下面开始写今天这一篇。"
                 : "日记放在一个独立的日记本里（与文档同一套存储）。写今天时会自动建好它。"}
             </p>
-            <button type="button" className="ln-btn ln-btn--primary" onClick={() => onWriteToday(todayKey)}>
+            <button type="button" className="ln-btn ln-btn--primary" onClick={() => onWriteToday(formatDiaryDateKey())}>
               <NotebookPen size={15} aria-hidden="true" />写今天
             </button>
           </div>
@@ -350,7 +363,8 @@ export function DiaryWorkspace(props: DiaryWorkspaceProps) {
             className="ln-menu__item"
             onClick={() => { setConvertEntry(entryMenu.entry); setEntryMenu(null); }}
           >
-            转为文档…
+            <FileText size={15} aria-hidden="true" />
+            <span>转为文档…</span>
           </button>
           <button
             type="button"
@@ -358,7 +372,8 @@ export function DiaryWorkspace(props: DiaryWorkspaceProps) {
             className="ln-menu__item"
             onClick={() => { onConvertToQuickNote(entryMenu.entry.nodeId); setEntryMenu(null); }}
           >
-            转为小记
+            <Feather size={15} aria-hidden="true" />
+            <span>转为小记</span>
           </button>
         </Menu>
       )}

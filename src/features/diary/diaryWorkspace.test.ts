@@ -43,6 +43,25 @@ describe("日记空间接线", () => {
     expect(APP, "App 不应再自注册 ⌘4/⌘5 监听").not.toMatch(/event\.key !== "[45]"/);
   });
 
+  it("②e 「今天」必须跨天刷新：点击时现算 + 定时/回前台同步（debug 版过夜不能拿到昨天）", () => {
+    expect(WORKSPACE).toContain("onCreateEntry(formatDiaryDateKey())");
+    expect(WORKSPACE).toContain("setInterval(sync, 60_000)");
+    expect(WORKSPACE).toContain('window.addEventListener("focus", sync)');
+    expect(WORKSPACE).not.toContain("onCreateEntry(todayKey)");
+  });
+
+  it("②f 日记头按钮顺序：日历 → 搜索 → ＋（＋在最右）", () => {
+    const head = WORKSPACE.slice(WORKSPACE.indexOf("diary-dir__head"), WORKSPACE.indexOf("diary-tree ln-scroll"));
+    const order = ["选择日期新建日记", "搜日记", "新建今天的日记"].map((key) => head.indexOf(key));
+    expect(order.every((index) => index >= 0), "三个入口都要在头部").toBe(true);
+    expect(order[0]).toBeLessThan(order[1]);
+    expect(order[1]).toBeLessThan(order[2]);
+  });
+
+  it("②g 右键菜单项带图标（转文档 / 转小记）", () => {
+    expect(WORKSPACE).toContain("<FileText size={15} aria-hidden=\"true\" />");
+    expect(WORKSPACE).toContain("<Feather size={15} aria-hidden=\"true\" />");
+  });
   it("②d 空间回落的 effect 必须在 `if (!workspace) return` 之前（放到之后 = hooks 顺序变化 ⇒ 白屏）", () => {
     const effectAt = APP.indexOf("空间切换：活动标签必须属于当前空间");
     const earlyReturnAt = APP.indexOf('if (!workspace) return <main className="loading-screen">');

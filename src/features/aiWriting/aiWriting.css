@@ -6,7 +6,9 @@
  * 层序：入口以 layer(feature) 引入（见 styles/index.css）。
  */
 
-.aiw { display: flex; flex: 1 1 auto; min-width: 0; min-height: 0; height: 100%; background: var(--lake-bg-panel); }
+/* .workspace-view 是 display:contents ⇒ .aiw 是 app-shell 的**网格子项**：
+   必须跨满所有列（原来 grid 时是 grid-column: 1 / -1，改 flex 后漏了它 ⇒ 布局塌到第一列）。 */
+.aiw { grid-column: 1 / -1; display: flex; flex: 1 1 auto; min-width: 0; min-height: 0; height: 100%; background: var(--lake-bg-panel); }
 
 /* ---------------- 左栏 ---------------- */
 .aiw-side { display: flex; flex: 0 0 var(--split-left, 288px); flex-direction: column; min-height: 0; padding: var(--lake-space-xl) var(--lake-space-lg) var(--lake-space-lg); border-right: 0.5px solid var(--lake-border-2); background: var(--lake-bg-subtle); }
@@ -40,7 +42,8 @@
 .aiw-confirm__actions { display: flex; justify-content: flex-end; gap: var(--lake-space-sm); }
 
 /* ---------------- 主区 ---------------- */
-.aiw-main { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+/* flex 容器里主区必须自己吃掉剩余宽度（grid 时代是自动的）。 */
+.aiw-main { display: flex; flex: 1 1 auto; flex-direction: column; min-width: 0; min-height: 0; }
 .aiw-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 .aiw-banner { margin: var(--lake-space-md) auto 0; width: min(900px, calc(100% - 48px)); padding: var(--lake-space-sm) var(--lake-space-md); border: 0.5px solid var(--lake-border-2); border-radius: var(--lake-radius-sm); background: var(--lake-bg-block); color: var(--lake-text-2); font-size: var(--lake-font-size-small); }
 
