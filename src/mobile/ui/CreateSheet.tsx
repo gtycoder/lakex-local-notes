@@ -14,7 +14,7 @@
 import { useEffect, useRef } from "react";
 import { BookMarked, Camera, Feather, FileText, Image as ImageIcon, ListTodo, NotebookPen, type LucideIcon } from "lucide-react";
 import { pushBackHandler } from "./backStack";
-import { useSwipeToClose } from "./useSwipeToClose";
+import { useSwipeDownDismiss } from "./useSwipeDownDismiss";
 
 export type CreateActionId = "blank-quick" | "camera" | "image" | "todo" | "blank-doc" | "notebook" | "diary";
 
@@ -54,7 +54,7 @@ export interface CreateSheetProps {
 
 export function CreateSheet({ open, onClose, onAction }: CreateSheetProps) {
   const sheetRef = useRef<HTMLDivElement>(null);
-  useSwipeToClose(sheetRef, onClose, open);
+  useSwipeDownDismiss(sheetRef, onClose, { enabled: open });
   useEffect(() => {
     if (!open) return;
     return pushBackHandler(() => { onClose(); return true; });

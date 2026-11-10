@@ -36,7 +36,11 @@
  * 无 head/body 结构的变体（.mb-sheet--create）另行铺实色，见文件下方。 */
 .mb-sheet {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: var(--mobile-z-sheet);
-  display: flex; flex-direction: column; max-height: 90dvh;
+  display: flex; flex-direction: column;
+  /* 261110 用户点单：固定半屏（内容少也不缩成小条；内容多则 body 内滚），不再随内容高度自适应。 */
+  height: 50dvh; max-height: 90dvh;
+  /* 下滑关闭：跟手位移靠内联 transform，松手回弹靠这条过渡（拖动期间由 .is-dragging 关掉）。 */
+  transition: transform var(--mobile-duration-panel) var(--mobile-ease-out);
   border-radius: var(--mb-radius-sheet) var(--mb-radius-sheet) 0 0;
   background: transparent; color: var(--lake-text-1);
   box-shadow: var(--lake-shadow-popover); scrollbar-width: none;
@@ -225,3 +229,7 @@
 .mb-create__label { font-size: var(--lake-font-size-tiny); line-height: 1; }
 /* 261108：菜单/动作面板按压反馈收回原语文件。 */
 .mb-menusheet__item:active, .mb-actionsheet__item:active, .mb-actionsheet__cancel:active { transform: scale(.98); }
+
+/* 261110：下滑关闭的拖动态（禁过渡保跟手）与减少动效兜底。 */
+.mb-sheet.is-dragging { transition: none; }
+@media (prefers-reduced-motion: reduce) { .mb-sheet { transition: none; } }

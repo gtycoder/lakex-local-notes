@@ -13,7 +13,7 @@ import { useSheetModalFocus } from "./MobileSheet";
 import { useSettingField } from "./fieldAccessibility";
 import { Check, ChevronDown } from "lucide-react";
 import { pushBackHandler } from "./backStack";
-import { useSwipeToClose } from "./useSwipeToClose";
+import { useSwipeDownDismiss } from "./useSwipeDownDismiss";
 
 export interface PickerOption<T extends string | number = number> {
   value: T;
@@ -44,7 +44,7 @@ export function PickerSheet<T extends string | number>({
   useEffect(() => { if (open) sheetRef.current?.querySelector<HTMLElement>('[aria-selected="true"]')?.focus(); }, [open]);
   const current = options.find((o) => o.value === value);
 
-  useSwipeToClose(sheetRef, () => setOpen(false), open);
+  useSwipeDownDismiss(sheetRef, () => setOpen(false), { enabled: open, scrollSelector: ".mb-sheet__body" });
   useEffect(() => {
     if (!open) return;
     return pushBackHandler(() => { setOpen(false); return true; });

@@ -54,9 +54,10 @@ describe("移动端返回键先关浮层（MOB-01 / MOB-02）", () => {
     expect(SHEET_MENU).toContain("return pushBackHandler(() => { if (back()) return true; close(); return true; });");
   });
 
-  it("MobileSheet：返回栈 / 右滑 / 遮罩 / 焦点滚动锁只有这一份实现", () => {
+  it("MobileSheet：返回栈 / 下滑关闭 / 遮罩 / 焦点滚动锁只有这一份实现", () => {
     expect(SHEET).toContain("pushBackHandler");
-    expect(SHEET).toContain("useSwipeToClose");
+    // 261110：底部 Sheet 的关闭手势从「右滑」改为「下滑」（手柄本义；判据在 ui/swipeDownDismiss.ts）。
+    expect(SHEET).toContain("useSwipeDownDismiss");
     expect(SHEET).toContain("data-prevent-swipe");
     expect(SHEET).toContain("return pushBackHandler(() => { onClose(); return true; });");
     // 关闭 = 遮罩/右滑/返回/× 共用同一个回调（dismissible=false 时只能由流程关）

@@ -1431,3 +1431,6 @@ body.lake-mobile .ne-ui-boundary-popover:has(.ne-ui-search-card-menu) { top: 120
 .mobile-home .mobile-scroll { padding-bottom: calc(124px + var(--mobile-bottom-safe-area)); }
 /* 261110：内嵌 AI 页底部有输入条 ⇒ 给「Dock + safe」让位，避免被盖住（只在 AI 分页内生效）。 */
 .mobile-tab-pane--ai .mobile-ai-page--embedded { padding-bottom: calc(var(--mobile-bottom-bar-height) + var(--mobile-bottom-safe-area) + 8px); }
+
+/* 261110：设置抽屉下滑关闭的拖动态（禁过渡保跟手）。 */
+.mobile-settings-page.is-dragging { transition: none; }

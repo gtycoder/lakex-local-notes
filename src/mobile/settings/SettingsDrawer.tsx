@@ -13,6 +13,7 @@ import { PickerSheet } from "../ui/PickerSheet";
 import { SYNC_AUTO_MODE_OPTIONS, SYNC_OPEN_CLOSE_NOTE, syncIntervalOptions } from "../../core/syncModes";
 import { usePanelDrag } from "../hooks/usePanelDrag";
 import { pushBackHandler } from "../ui/backStack";
+import { useSwipeDownDismiss } from "../ui/useSwipeDownDismiss";
 import { TrashList } from "./TrashList";
 import { formatBytes } from "../../lib/formatBytes";
 import { probePinShortcut, requestPinQuickNoteShortcut } from "../native/quickNoteShortcut";
@@ -229,6 +230,8 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
   const pageRef = useRef<HTMLDivElement>(null);
   const maskRef = useRef<HTMLDivElement>(null);
   const isSub = view !== "menu";
+  /** 261110 用户点单：设置抽屉也支持**下滑关闭**（与底部 Sheet 同一套手势判据）；子页不启用（子页用返回）。 */
+  useSwipeDownDismiss(pageRef, onClose, { enabled: open && !isSub, scrollSelector: ".mobile-settings-list" });
   // 左滑跟手关闭（仅根菜单；子页全屏，用左上返回）。复用思源 usePanelDrag。
   usePanelDrag({
     getPanel: (side) => (side === "left" ? pageRef.current : null),

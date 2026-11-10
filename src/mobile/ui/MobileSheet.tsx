@@ -2,7 +2,7 @@
  * 移动端底部 Sheet 原语（MOB-11）。
  *
  * 背景：以前每个面板各写一套骨架 —— scrim、`data-prevent-swipe`（别让底层抽屉手势同时触发）、
- * `useSwipeToClose`、`pushBackHandler`（返回键/返回手势先关面板）。少写一件就是 MOB-01 那类洞：
+ * `useSwipeDownDismiss`、`pushBackHandler`（返回键/返回手势先关面板）。少写一件就是 MOB-01 那类洞：
  * 返回键直接退出 App 或退出工作区（用户体感「闪退」）。这里一次做对，业务面板只留「标题 + 内容」。
  *
  * 表面与几何**全部沿用既有 `.mb-sheet` 系列类名**（floating.css 是唯一来源，不新造第二套弹层）：
@@ -22,7 +22,7 @@ import { lockPageScroll } from "../../lib/pageScrollLock";
 import { X } from "lucide-react";
 import { pushBackHandler } from "./backStack";
 import { useKeyboardStableSheet } from "../hooks/useKeyboardStableSheet";
-import { useSwipeToClose } from "./useSwipeToClose";
+import { useSwipeDownDismiss } from "./useSwipeDownDismiss";
 
 /** 模态移动浮层共用焦点收放与嵌套滚动锁；不规定头部/正文结构，不增加Tab陷阱。 */
 export function useSheetModalFocus(open: boolean, surfaceRef: import("react").RefObject<HTMLElement | null>): void {
@@ -95,7 +95,8 @@ export function MobileSheet({
   }, [open, dismissible, onClose]);
 
   // 右滑关闭（阈值沿用浮层默认 64px；data-prevent-swipe 让底层抽屉手势不重复响应）。
-  useSwipeToClose(sheetRef, dismiss, open && dismissible);
+  // 261110 用户点单：底部 Sheet = 下滑关闭（手柄的本义）；内部滚动不在顶部时不启动，避免抢列表滚动。
+  useSwipeDownDismiss(sheetRef, dismiss, { enabled: open && dismissible, scrollSelector: ".mb-sheet__body" });
 
   useSheetModalFocus(open, sheetRef);
   // 261106 task-94：键盘弹起时**不推动弹窗**（top/height 钉在键盘前几何，键盘覆盖下方列表；输入框自动滚入可见区）。
