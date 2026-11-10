@@ -126,7 +126,7 @@
 - **第二批**：对话框内距统一 20 档；**对话框只有一套字阶**（标题 18 / 正文 14，删除 5 个「管理型弹窗」的分档覆盖与 `--lake-dialog-*` 变量）；空态三级层级升档（标题 14 / 说明 12 / 间距 6 / 图标统一 28）；行内元信息 11→12。
 - **护栏同步**：`cssLayers` 基线按实测收紧（overlay 305→290、components 366→358）；`namePromptWiring.test` 契约改为「一套 18/14 + 无分档变量」。
 - **门禁（master 合并后实测）**：tsc 0；全量 vitest **825 文件（814 passed / 11 skipped）/ 5216 passed / 12 skipped / 0 failed**；ui-metrics / check:core / check:mobileui / `git diff --check` 通过。
-- **遗留**：桌面 `check:stylesnap` 42 态未跑（本机无合成夹具缓存，且当前无「日记空间」态）——本批动了设置页表面与对话框几何 ⇒ **下次有夹具的机器必须重烤/复核**。样机与 before/after 对照装置在本地分支 `spike/astryx-visual-prototype`（未推），master 只收产品改动。
+- **遗留**：桌面 `check:stylesnap` 42 态未跑（本机无合成夹具缓存，且当前无「日记空间」态）——本批动了设置页表面与对话框几何 ⇒ **下次有夹具的机器必须重烤/复核**。样机与 before/after 对照装置当时在本地分支 `spike/astryx-visual-prototype`（未推）；**该分支已于 261110 按用户「只留 master」删除**（提交 `9a8bd0e8` / `d358473f` / `550fc843` 仅存本机 reflog；结论已全部写在本文件与 DESIGN.md，代码不再需要）。
 
 ### 261110 · 移动端首页改版：底部五格 Dock + 中央悬浮＋（方案 A）
 - **用户点单**（先讨论定方案 A，参照淘宝/京东底部五格）：5 个一级空间下沉到底部；三条硬要求：① 可左右滑动切换 ② 「＋」保留长按上滑速记 ③ **云同步始终可见、不收起**。
