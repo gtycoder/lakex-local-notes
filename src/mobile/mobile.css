@@ -116,9 +116,9 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
 .mobile-topbar.mobile-topbar--home {
   --mb-home-col-gap: 2px;
   --mb-topbar-icon-w: var(--mb-tap-min);
-  /* 261110 用户点单：首页顶栏**变薄**（52 → 40），并去掉顶部 8px 外边距（视觉更轻）；
-     安全区仍按基础公式叠加；其它页顶栏（工作区/设置）保持 52。 */
-  height: calc(40px + max(0px, calc(var(--mobile-top-safe-area) - 8px)));
+  /* 261110 用户点单：首页顶栏 52 → **44**（40 偏薄、52 偏厚取中间），
+     保留减重项（去顶部 8px 外边距、左右内距 12）；其它页顶栏（工作区/设置）仍 52。 */
+  height: calc(44px + max(0px, calc(var(--mobile-top-safe-area) - 8px)));
   margin-top: 0;
   padding-left: max(12px, var(--mobile-left-safe-area));
   padding-right: max(12px, var(--mobile-right-safe-area));
@@ -126,10 +126,7 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   column-gap: var(--mb-home-col-gap);
 }
-.mobile-topbar--home { --mb-topbar-icon-w: 40px; }
 .mobile-topbar--home .toolbar__button { width: var(--mb-topbar-icon-w); height: var(--mb-topbar-icon-w); }
-/* 40 高的顶栏里 20px 图标偏重：收到 18；标题也降一档（15.5 → 14）让栏更轻。 */
-.mobile-topbar--home .toolbar__button > svg { width: 18px; height: 18px; }
 .mobile-topbar-group { display: flex; align-items: center; min-width: 0; }
 .mobile-topbar-group--start { justify-content: flex-start; }
 .mobile-topbar-group--end { justify-content: flex-end; }
@@ -1424,7 +1421,7 @@ body.lake-mobile .ne-ui-boundary-popover:has(.ne-ui-search-card-menu) { top: 120
   font-size: var(--lake-font-size-tiny); line-height: 1.2; white-space: nowrap;
 }
 /* 顶栏当前空间标题（原中间四个 tab 下沉到 Dock 后，这里只读显示"在哪"）。 */
-.mobile-home-space-title { font-size: var(--lake-font-size-body); font-weight: var(--lake-font-weight-semibold); letter-spacing: .01em; }
+.mobile-home-space-title { font-size: var(--lake-font-size-bodyLg); font-weight: var(--lake-font-weight-semibold); letter-spacing: .01em; }
 /* AI 分页骨架（懒 chunk 未就绪时，避免白屏跳动）。 */
 .mb-ai-pane-skeleton { flex: 1; margin: 16px var(--mb-page-pad); border-radius: var(--lake-radius-md); background: var(--lake-bg-block); opacity: .6; }
 /* 冷启动骨架的悬浮＋占位（与 .mb-home-fab 同尺寸，避免数据到达时跳动）。 */

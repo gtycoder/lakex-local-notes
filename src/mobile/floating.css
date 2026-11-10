@@ -47,7 +47,9 @@
 .mb-sheet__grab { display: none; }   /* grabber 统一由头部提供（避免两处重复） */
 .mb-sheet__head {
   position: relative; flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between;
-  gap: 8px; min-height: var(--mb-list-item-h); padding: 8px var(--mb-page-pad) 0 var(--mb-page-pad);
+  /* 261110 用户点单：Sheet 头部偏厚是**原语问题** ⇒ 直接改这里（56 → 44，上内距 8 → 4），
+     所有 Sheet 一起变；不再按调用方逐个覆盖。 */
+  gap: 8px; min-height: 44px; padding: 4px var(--mb-page-pad) 0 var(--mb-page-pad);
   touch-action: none;
   /* v2 头部玻璃底：--mb-glass-bg + 顶栏同一档模糊（--mb-blur-bar，只用于固定功能层）；
      grabber 仍是 .mb-sheet__head::before 的 32×4，不动。 */
@@ -61,9 +63,13 @@
 }
 .mb-sheet__title {
   flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  font-size: var(--lake-font-size-title); font-weight: var(--lake-font-weight-semibold);
+  /* 18 → 16（bodyMd 档）：头部 44 之后 18 会显得头重脚轻 */
+  font-size: var(--lake-font-size-bodyMd); font-weight: var(--lake-font-weight-semibold);
   line-height: var(--lake-line-height-tight); color: var(--lake-text-1);
 }
+/* 头部变薄后，里面的关闭按钮跟着收到 40/18（顶栏的 .mobile-icon-btn 仍是 52/20，不扩散）。 */
+.mb-sheet__head .mobile-icon-btn { width: 40px; height: 40px; }
+.mb-sheet__head .mobile-icon-btn > svg { width: 18px; height: 18px; }
 .mb-sheet__body {
   flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 6px 0 calc(16px + var(--mobile-bottom-safe-area));
   background: var(--lake-bg-panel);

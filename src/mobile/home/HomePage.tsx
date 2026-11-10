@@ -1003,7 +1003,6 @@ export function HomePage(props: HomePageProps) {
         onClose={() => setFilterSheetOpen(false)}
         title="筛选"
         ariaLabel="筛选小记"
-        className="qn-filter-sheet"
         bodyClassName="qn-filter-sheet__body"
       >
         <div className="mb-chip-row qn-filter-sheet__chips" role="group" aria-label="按标签筛选小记">
