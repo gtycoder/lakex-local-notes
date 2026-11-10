@@ -819,7 +819,7 @@ export function HomePage(props: HomePageProps) {
               <div className="qn-filter-bar">
                 <button
                   type="button"
-                  className={"mb-chip" + (quickTagFilter.kind === "all" ? "" : " is-on")}
+                  className={"mb-chip mb-chip--shrink" + (quickTagFilter.kind === "all" ? "" : " is-on")}
                   aria-haspopup="dialog"
                   aria-expanded={filterSheetOpen}
                   aria-label="筛选小记"
@@ -1008,7 +1008,7 @@ export function HomePage(props: HomePageProps) {
         <div className="mb-chip-row qn-filter-sheet__chips" role="group" aria-label="按标签筛选小记">
           <button
             type="button"
-            className={"mb-chip" + (quickTagFilter.kind === "all" ? " is-on" : "")}
+            className={"mb-chip mb-chip--shrink" + (quickTagFilter.kind === "all" ? " is-on" : "")}
             aria-pressed={quickTagFilter.kind === "all"}
             onClick={() => { setQuickTagFilter({ kind: "all" }); setFilterSheetOpen(false); }}
           ><span>全部</span><span className="qn-num">{quickNotes.length}</span></button>
@@ -1018,7 +1018,7 @@ export function HomePage(props: HomePageProps) {
               <button
                 key={tag.id}
                 type="button"
-                className={"mb-chip" + (on ? " is-on" : "")}
+                className={"mb-chip mb-chip--shrink" + (on ? " is-on" : "")}
                 aria-pressed={on}
                 onClick={() => { setQuickTagFilter(on ? { kind: "all" } : { kind: "tag", id: tag.id }); setFilterSheetOpen(false); }}
               ><span className="mb-ellipsis">{tag.name}</span><span className="qn-num">{tag.count}</span></button>
@@ -1027,7 +1027,7 @@ export function HomePage(props: HomePageProps) {
           {quickTagIndex.untaggedCount > 0 && (
             <button
               type="button"
-              className={"mb-chip" + (quickTagFilter.kind === "untagged" ? " is-on" : "")}
+              className={"mb-chip mb-chip--shrink" + (quickTagFilter.kind === "untagged" ? " is-on" : "")}
               aria-pressed={quickTagFilter.kind === "untagged"}
               onClick={() => { setQuickTagFilter(quickTagFilter.kind === "untagged" ? { kind: "all" } : { kind: "untagged" }); setFilterSheetOpen(false); }}
             ><span>无标签</span><span className="qn-num">{quickTagIndex.untaggedCount}</span></button>

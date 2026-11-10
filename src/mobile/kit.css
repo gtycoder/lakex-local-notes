@@ -149,8 +149,15 @@
   font-weight: var(--lake-font-weight-medium);
 }
 .mb-chip:disabled { opacity: var(--lake-disabled-opacity); cursor: default; }
+/* 变体：**行内可压缩并省略**（长标签名 + 右侧固定按钮/计数这类行）。
+   只给需要的使用方挂 `.mb-chip--shrink`，基础 .mb-chip 的 computed 值保持原样 ——
+   否则所有既有 chip（多维表表单选项等）的 computed max-width/min-width 会变，白白污染快照基线。
+   max-width 走容器变量 --mb-chip-max（使用方只在自己的容器上设，不写 `.feature .mb-chip`）。 */
+.mb-chip--shrink { min-width: 0; max-width: var(--mb-chip-max, none); }
 /* 胶囊行：换行铺开（字段类型/显示格式这类多候选取值）；单行横滑用 .mbt-chips-row。 */
 .mb-chip-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--lake-space-md); }
+/* 空态落进胶囊行时要占满一行，否则只剩自身内容宽（居中失效）。 */
+.mb-chip-row > .mb-empty { width: 100%; }
 
 /* ── 卡片（.mb-card）────────────────────────────────────────────────── */
 /* v2（261107）：纸面卡 = r16 + 柔和投影；--mb-shadow-card 自带 0.5px 内描边 ⇒ 外框改透明，

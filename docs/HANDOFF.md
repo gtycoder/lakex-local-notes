@@ -19,6 +19,7 @@
 - **多维表 3 态重烤**：旧基线同样停在 11-08（`51a1db58`）⇒ 3/3 态**均匀 +71**、两轮一致；本轮没动 bitable 视图 DOM/样式，delta 全部来自首页外壳 ⇒ 重烤（form **2194** / table **2160** / card **2172**）。
 - **23 屏走查**：冷启动后单独跑，**23/23 ok**（无 escape / clip 失败；`smallTap` 计数是既有可观测量，未恶化）。
 - **文档口径**：`MOBILE-OPS` / `MOBILE-DESIGN` / `MOBILE-TECH-STACK` / `mobile-audit/README` / `check-mobile-snap` 等处的「6 态」统一改「9 态」，首页 DOM 速查改为 Dock + FAB。
+- **筛选 chip 的跨所有权覆盖已收进原语**（`src/styles/primitives.test.ts` 门禁基线 = 0，本轮全量 vitest 抓到的唯一红）：原先 `mobile/quick-notes.css` 写了 4 条 `.qn-filter-bar > .mb-chip` / `.mb-chip.is-on .qn-num` / `.qn-filter-sheet__chips .mb-chip|.mb-empty`。改为原语能力 —— `kit.css` 的 `.mb-chip` 加 `min-width:0` + `max-width: var(--mb-chip-max, none)`、`.mb-chip-row > .mb-empty` 占满行；feature 侧只在自己的容器上设 `--mb-chip-max`（筛选条 `calc(100% - 96px)`、Sheet `46vw`），`.qn-num` 改单类 `color: inherit; opacity: .75`。默认 fallback 用 `none`（不是 `100%`）—— 否则所有既有 chip 的 computed `max-width` 变化，会让多维表表单态基线无谓漂移。`mobileLayers`：kit 608 → **611**、quick-notes 270 → **269**。
 - **剩余**：桌面 `check:stylesnap` 42 态仍不跑（移动样式层独立 + 本机无合成夹具缓存，见 MOBILE-OPS §10）；`audit-dead-css` 桌面侧还剩 2 个候选（`.node-icon-picker__tab` / `.diary-split-handle`）留给桌面侧处理；移动「知识库」vs 桌面「文档」命名未统一（待用户定）。
 ### 261110 · 按钮原语全站审计 + 迁移（第一批）
 - **审计口径**：全仓桌面 `<button>` **682 个**（排除 mobile）；按「类名是否来自 `ln-*`/原语」分类：迁移前 **479 原语 / 268 非原语**。

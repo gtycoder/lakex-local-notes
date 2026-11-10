@@ -111,13 +111,11 @@
  * 候选 = Sheet 内的 .mb-chip-row / .mb-chip（选中 is-on，与全站同一套选中三件套）；
  * 标签管理行 = .mb-row 结构（图标/主区/箭头）。
  * 本段只补**版式与边界**：长标签省略、数量 tabular、chips 区超高可滚（底部入口不被顶走）。 */
-.qn-filter-bar { display: flex; align-items: center; gap: 8px; padding: 6px var(--mb-page-pad) 2px; }
-/* 入口限宽：长标签名省略，右侧「管理」永远可点 */
-.qn-filter-bar > .mb-chip { max-width: calc(100% - 96px); }
-.qn-num { flex: 0 0 auto; color: var(--lake-text-3); font-variant-numeric: tabular-nums; }
-.mb-chip.is-on .qn-num { color: inherit; }
+/* 入口限宽：长标签名省略，右侧「管理」永远可点 —— 只在自己的容器上设原语变量，
+   不写 `.qn-filter-bar > .mb-chip`（跨所有权覆盖，primitives.test 门禁基线 = 0）。 */
+.qn-filter-bar { display: flex; align-items: center; gap: 8px; padding: 6px var(--mb-page-pad) 2px; --mb-chip-max: calc(100% - 96px); }
+/* 计数跟随 chip 文字色（选中时 inherit = 选中色），只降低一档不透明；单类规则 = 不跨所有权。 */
+.qn-num { flex: 0 0 auto; color: inherit; opacity: .75; font-variant-numeric: tabular-nums; }
 /* 候选很多时在 Sheet 内滚动；「标签管理」留在滚动区外，始终可见。
    Sheet body 无横向内距 ⇒ chips 行自己补页内距（与头部标题同 16）。 */
-.qn-filter-sheet__chips { max-height: min(46dvh, 360px); overflow-y: auto; overscroll-behavior: contain; padding: 2px var(--mb-page-pad); }
-.qn-filter-sheet__chips .mb-chip { max-width: 46vw; }
-.qn-filter-sheet__chips .mb-empty { width: 100%; }
+.qn-filter-sheet__chips { max-height: min(46dvh, 360px); overflow-y: auto; overscroll-behavior: contain; padding: 2px var(--mb-page-pad); --mb-chip-max: 46vw; }
