@@ -819,19 +819,19 @@ export function HomePage(props: HomePageProps) {
               <div className="qn-filter-bar">
                 <button
                   type="button"
-                  className="qn-filter-bar__btn"
+                  className={"mb-chip" + (quickTagFilter.kind === "all" ? "" : " is-on")}
                   aria-haspopup="dialog"
                   aria-expanded={filterSheetOpen}
                   aria-label="筛选小记"
                   onClick={() => setFilterSheetOpen(true)}
                 >
                   <ListFilter size={14} aria-hidden="true" />
-                  <span className="qn-ellipsis">{quickFilterLabel}</span>
-                  <span className="qn-filter-bar__count">{sortedQuickNotes.length}</span>
+                  <span className="mb-ellipsis">{quickFilterLabel}</span>
+                  <span className="qn-num">{sortedQuickNotes.length}</span>
                   <ChevronDown size={14} aria-hidden="true" />
                 </button>
-                <button type="button" className="qn-filter-bar__manage" aria-label="标签管理" onClick={() => switchTab("tags")}>
-                  <Settings2 size={14} aria-hidden="true" /><span>管理</span>
+                <button type="button" className="mb-btn mb-btn--sm mb-btn--ghost" aria-label="标签管理" onClick={() => switchTab("tags")}>
+                  <Settings2 size={15} aria-hidden="true" /><span>管理</span>
                 </button>
               </div>
             )}
@@ -1005,33 +1005,46 @@ export function HomePage(props: HomePageProps) {
         ariaLabel="筛选小记"
         bodyClassName="qn-filter-sheet__body"
       >
-        <div className="qn-filter-sheet__chips" role="group" aria-label="按标签筛选小记">
+        <div className="mb-chip-row qn-filter-sheet__chips" role="group" aria-label="按标签筛选小记">
           <button
             type="button"
-            className={"qn-filter-chip" + (quickTagFilter.kind === "all" ? " is-selected" : "")}
+            className={"mb-chip" + (quickTagFilter.kind === "all" ? " is-on" : "")}
+            aria-pressed={quickTagFilter.kind === "all"}
             onClick={() => { setQuickTagFilter({ kind: "all" }); setFilterSheetOpen(false); }}
-          >全部<span className="qn-filter-chip__count">{quickNotes.length}</span></button>
-          {quickTagIndex.tags.map((tag) => (
-            <button
-              key={tag.id}
-              type="button"
-              className={"qn-filter-chip" + (quickTagFilter.kind === "tag" && quickTagFilter.id === tag.id ? " is-selected" : "")}
-              onClick={() => { setQuickTagFilter(quickTagFilter.kind === "tag" && quickTagFilter.id === tag.id ? { kind: "all" } : { kind: "tag", id: tag.id }); setFilterSheetOpen(false); }}
-            ><span className="qn-ellipsis">{tag.name}</span><span className="qn-filter-chip__count">{tag.count}</span></button>
-          ))}
+          ><span>全部</span><span className="qn-num">{quickNotes.length}</span></button>
+          {quickTagIndex.tags.map((tag) => {
+            const on = quickTagFilter.kind === "tag" && quickTagFilter.id === tag.id;
+            return (
+              <button
+                key={tag.id}
+                type="button"
+                className={"mb-chip" + (on ? " is-on" : "")}
+                aria-pressed={on}
+                onClick={() => { setQuickTagFilter(on ? { kind: "all" } : { kind: "tag", id: tag.id }); setFilterSheetOpen(false); }}
+              ><span className="mb-ellipsis">{tag.name}</span><span className="qn-num">{tag.count}</span></button>
+            );
+          })}
           {quickTagIndex.untaggedCount > 0 && (
             <button
               type="button"
-              className={"qn-filter-chip" + (quickTagFilter.kind === "untagged" ? " is-selected" : "")}
+              className={"mb-chip" + (quickTagFilter.kind === "untagged" ? " is-on" : "")}
+              aria-pressed={quickTagFilter.kind === "untagged"}
               onClick={() => { setQuickTagFilter(quickTagFilter.kind === "untagged" ? { kind: "all" } : { kind: "untagged" }); setFilterSheetOpen(false); }}
-            >无标签<span className="qn-filter-chip__count">{quickTagIndex.untaggedCount}</span></button>
+            ><span>无标签</span><span className="qn-num">{quickTagIndex.untaggedCount}</span></button>
+          )}
+          {quickTagIndex.tags.length === 0 && quickTagIndex.untaggedCount === 0 && (
+            <div className="mb-empty">还没有标签</div>
           )}
         </div>
         <button
           type="button"
-          className="qn-filter-sheet__manage"
+          className="mb-row qn-filter-sheet__manage"
           onClick={() => { setFilterSheetOpen(false); switchTab("tags"); }}
-        ><Settings2 size={15} aria-hidden="true" /><span>标签管理</span></button>
+        >
+          <span className="mb-row__icon"><Settings2 size={18} aria-hidden="true" /></span>
+          <span className="mb-row__main"><span className="mb-row__title">标签管理</span></span>
+          <ChevronRight className="mb-row__chevron" size={16} aria-hidden="true" />
+        </button>
       </MobileSheet>
 
       {/* 小记「...」菜单 */}

@@ -106,19 +106,20 @@
 .qn-tag-manager__row.is-drop-before { box-shadow: inset 0 2px 0 var(--lake-accent); }
 .qn-tag-manager__row.is-drop-after { box-shadow: inset 0 -2px 0 var(--lake-accent); }
 
-/* ── 261110 A+B：小记筛选 = 单入口 + 中性 Sheet ──────────────────────────
- * 用户点单：顶部不再常驻一排彩色药丸（视觉过重，且像第二层工具栏）。
- * 入口只有一行「筛选 · 当前条件 N ▾」+「管理」；候选（全部/各标签/无标签）收进底部 Sheet，
- * chip 一律中性底（--lake-bg-block），选中才用 --lake-bg-selected/--lake-fg-selected。 */
+/* ── 261110 A+B（接现有原语，不再新增视觉）──────────────────────────────
+ * 筛选入口 = kit 的 .mb-chip（打开 Sheet）+ .mb-btn--sm--ghost（标签管理）；
+ * 候选 = Sheet 内的 .mb-chip-row / .mb-chip（选中 is-on，与全站同一套选中三件套）；
+ * 标签管理行 = .mb-row 结构（图标/主区/箭头）。
+ * 本段只补**版式与边界**：长标签省略、数量 tabular、chips 区超高可滚（底部入口不被顶走）。 */
 .qn-filter-bar { display: flex; align-items: center; gap: 8px; padding: 6px var(--mb-page-pad) 2px; }
-.qn-filter-bar__btn { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 12px; border: 0; border-radius: var(--lake-radius-sm); background: var(--lake-bg-block); color: var(--lake-text-2); font-size: var(--lake-font-size-small); }
-.qn-filter-bar__btn:active { background: var(--lake-bg-press); }
-.qn-filter-bar__count { color: var(--lake-text-3); font-variant-numeric: tabular-nums; }
-.qn-filter-bar__manage { display: inline-flex; align-items: center; gap: 4px; min-height: 36px; padding: 0 10px; border: 0; border-radius: var(--lake-radius-sm); background: transparent; color: var(--lake-text-3); font-size: var(--lake-font-size-small); }
-.qn-filter-sheet__body { display: flex; flex-direction: column; gap: 12px; }
-.qn-filter-sheet__chips { display: flex; flex-wrap: wrap; gap: 8px; }
-.qn-filter-chip { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 14px; border: 0; border-radius: var(--lake-radius-sm); background: var(--lake-bg-block); color: var(--lake-text-2); font-size: var(--lake-font-size-small); }
-.qn-filter-chip.is-selected { background: var(--lake-bg-selected); color: var(--lake-fg-selected); font-weight: var(--lake-font-weight-semibold); }
-.qn-filter-chip__count { color: var(--lake-text-3); font-variant-numeric: tabular-nums; }
-.qn-filter-chip.is-selected .qn-filter-chip__count { color: inherit; }
-.qn-filter-sheet__manage { display: flex; align-items: center; gap: 8px; min-height: var(--mb-tap-min); padding: 0; border: 0; background: transparent; color: var(--lake-accent-text); font-size: var(--lake-font-size-body); text-align: left; }
+/* 入口限宽：长标签名省略，右侧「管理」永远可点 */
+.qn-filter-bar > .mb-chip { max-width: calc(100% - 96px); }
+.qn-num { flex: 0 0 auto; color: var(--lake-text-3); font-variant-numeric: tabular-nums; }
+.mb-chip.is-on .qn-num { color: inherit; }
+/* 候选很多时在 Sheet 内滚动；「标签管理」留在滚动区外，始终可见。
+   Sheet body 无横向内距 ⇒ chips 行自己补页内距（与头部标题同 16）。 */
+.qn-filter-sheet__chips { max-height: min(46dvh, 360px); overflow-y: auto; overscroll-behavior: contain; padding: 2px var(--mb-page-pad); }
+.qn-filter-sheet__chips .mb-chip { max-width: 46vw; }
+.qn-filter-sheet__chips .mb-empty { width: 100%; }
+/* 标签管理 = .mb-row 结构（自带按钮 reset/宽度/页内距），这里只把图标染成主色。 */
+.qn-filter-sheet__manage .mb-row__icon { color: var(--lake-accent-text); }

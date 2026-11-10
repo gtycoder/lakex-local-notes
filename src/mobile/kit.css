@@ -139,6 +139,10 @@
   line-height: var(--lake-line-height-tight); white-space: nowrap;
   cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation;
 }
+/* 261110 补登记：注释里承诺的「触达补足到 44」此前未落地 —— 这里只向上/下各扩 4px（36 → 44），
+   不横向扩，避免相邻 chip 的命中区互相覆盖。 */
+.mb-chip { position: relative; }
+.mb-chip::after { content: ""; position: absolute; inset: -4px 0; }
 .mb-chip:active:not(:disabled) { background: var(--lake-bg-press); }
 .mb-chip.is-on {
   border-color: transparent; background: var(--lake-bg-selected); color: var(--lake-fg-selected);
