@@ -32,7 +32,6 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
 .mb-skel--row { height: var(--mb-ctl-h); margin-bottom: 10px; border-radius: var(--mb-radius); }
 .mb-skel--baritem { flex: 1 1 0; height: 20px; margin: 0 14px; }
 @keyframes mb-skel-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .55; } }
-.poc-error { color: var(--lake-status-error); }
 
 /* ===== Phase 1 产品壳样式（MobileApp） ===== */
 /* overflow:hidden 加在根容器上：横向分页时相邻页会落在自身滚动容器之外，这里做最终裁剪兜底
@@ -93,14 +92,7 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
   content: ""; position: absolute; left: 0; right: 0; top: 100%; height: 14px; pointer-events: none;
   background: linear-gradient(180deg, color-mix(in srgb, var(--mb-canvas-1) 55%, transparent), transparent);
 }
-.mobile-topbar.is-scrolled .mobile-home-tabs { visibility: hidden; }
 /* 滚动后居中的当前页小标题（16/600）。默认不占位；DOM 由顶栏接线补，未接线时不显示。 */
-.mobile-topbar-collapsed-title {
-  display: none; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
-  white-space: nowrap; color: var(--lake-text-1);
-  font-size: var(--lake-font-size-body); font-weight: var(--lake-font-weight-semibold);
-}
-.mobile-topbar.is-scrolled .mobile-topbar-collapsed-title { display: block; }
 .mobile-topbar-title { flex: 1; text-align: center; font-size: var(--lake-font-size-title); line-height: 30px; font-weight: 400; color: var(--lake-text-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mobile-topbar-actions { display: flex; gap: 0; }
 /* 顶栏左侧等宽空槽（261014）：仍供非首页顶栏（启动失败/坏库页等）使用；
@@ -131,15 +123,13 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
 .mobile-topbar-group--start { justify-content: flex-start; }
 .mobile-topbar-group--end { justify-content: flex-end; }
 .mobile-topbar-group--center { justify-content: center; position: relative; min-width: 0; padding-inline: var(--mb-home-side-pad, 8px); }
-.mobile-topbar--home .mobile-home-tabs { flex: 0 0 auto; min-width: 0; }
 
 /* 窄屏兜底（≤385）：360px 实测预算 = 360 − 12×2(pad) − 44(设置) − 2×44(右侧两枚) = 204；
    只改变量：tab 宽 40、tab 间距 0 ⇒ 160，两侧各 88 刚好放下右组。tab 高度仍是 44。 */
 @media (max-width: 385px) {
   .mobile-topbar-gap { display: none; }
   .mobile-topbar { gap: 0; padding-left: max(12px, var(--mobile-left-safe-area)); padding-right: max(12px, var(--mobile-right-safe-area)); }
-  .mobile-topbar--home { --mb-home-col-gap: 0px; --mb-tab-w: 40px; --mb-topbar-icon-w: 40px; --mb-home-side-pad: 4px; }
-  .mobile-topbar--home .mobile-home-tabs { --mb-home-tab-gap: 0px; }
+  .mobile-topbar--home { --mb-home-col-gap: 0px; --mb-topbar-icon-w: 40px; --mb-home-side-pad: 4px; }
 }
 /* 栏内图标按钮 = 思源 .toolbar__button：48×48、svg 20、按压缩口底色（不做缩放，避免密集栏抖动） */
 .mobile-icon-btn {
@@ -150,7 +140,6 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
 .mobile-icon-btn > svg { width: 20px; height: 20px; }
 .mobile-icon-btn:active, .mobile-icon-btn:focus-visible { background: var(--lake-bg-hover); }
 
-/* 首页顶部 tab 主体样式单一来源在下方 .mobile-home-tabs 区块 */
 
 /* 261014：首页/小记这一层原先**没有规则**（普通 block、自动高度）⇒ 里面的 `.mobile-tab-stage/.mobile-scroll`（都是 flex:1）
    在一个 auto 高度的父里退化成"内容多高就多高、永远不滚"（实测 scroller 的 scrollHeight == clientHeight），
@@ -214,9 +203,7 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
 .mobile-scroll::-webkit-scrollbar { display: none; }
 /* （261013 A 批：空态统一到 .mb-empty，见 kit.css。） */
 
-/* 小记卡片 */
 
-.mobile-qcard:active { background: var(--lake-bg-hover); }
 
 /* 小记 composer —— 261014：改成**定高 + 内部滚动**（与文档 `.mobile-doc-body` 同一口径）。
    原先它是普通块、高度由内容决定：文字一多，内容直接溢出到卡片外，浏览器没有可依赖的滚动口
@@ -354,11 +341,8 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
 .nb-row:nth-child(6n+5) { --nb-accent: var(--mb-nb-accent-5); }
 .nb-row:nth-child(6n+6) { --nb-accent: var(--mb-nb-accent-6); }
 
-/* —— 带标签的底部栏（首页：筛选/新建/云同步） —— */
 
-.mobile-bottom-bar__item .bottom-bar-label { margin-top: 1px; font-size: var(--lake-font-size-nano); line-height: 1; color: inherit; opacity: .85; }
 
-/* FAB */
 
 /* 笔记本页文档行 */
 /* v2：列表行按卡片语言（圆角 16 + 卡阴影 + 卡面实色），去掉行间发丝线，改用 8px 间距分隔；
@@ -384,9 +368,7 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
 .mobile-doc-body .attachment-preview video { background: var(--lake-bg-window); }
 /* （大播放三角优化暂缓：用户后续用多模态模型处理——保留原生 controls） */
 
-/* Drawer */
 
-.mobile-drawer-item:active { background: var(--lake-bg-window); }
 
 /* 笔记本切换下拉（锚定右上角按钮，跟手弹出） */
 
@@ -405,7 +387,6 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
 .create-nb-input { flex: 1; border: .5px solid var(--lake-border-1); border-radius: var(--lake-radius-md); padding: 12px 14px; font-size: var(--lake-font-size-body); outline: none; background: var(--lake-bg-window); color: var(--lake-text-1); }
 .create-nb-input:focus { border-color: var(--lake-accent); }
 .create-nb-input::placeholder,
-.mobile-settings-form input::placeholder,
 .mobile-search-input::placeholder { color: var(--lake-text-3); opacity: 1; }
 
 /* 261013：建库/设图标的选图标改用移动端自带面板 mobile/ui/EmojiPanel（微信样式）⇒ 旧的内联网格与"清除自定义图标"规则删除。 */
@@ -435,15 +416,11 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
 
 /* 设置抽屉 */
 
-.mobile-drawer-tabs button.active { color: var(--lake-accent-text); border-bottom-color: var(--lake-accent); font-weight: 600; }
 
-.mobile-settings-form input:focus { border-color: var(--lake-accent); }
 
-.mobile-settings-actions button:active, .mobile-settings-form > button:active { background: var(--lake-bg-window); }
 
 /* 回收站 */
 
-.mobile-drawer-trash-entry:active { background: var(--lake-bg-window); }
 .mobile-status-msg { padding: 6px var(--mb-page-pad); font-size: var(--lake-font-size-nano); color: var(--lake-text-2); background: var(--lake-bg-window); border-bottom: .5px solid var(--lake-border-1); }
 .mobile-trash-text { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 2px; padding: 6px 0; }
 .mobile-trash-title { min-width: 0; }   /* 截断走 .ln-ellipsis */
@@ -454,29 +431,20 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
 
 /* 缓存统计 */
 
-/* 分组展开 */
 
-.mobile-chevron.open { transform: rotate(90deg); }
 
-/* 排序模式 */
 
-.mobile-sortbar button:last-child { background: var(--lake-border-2); color: var(--lake-text-2); }
 
-.mobile-nb-card[draggable="true"]:active { cursor: grabbing; opacity: .7; }
 
 /* ===== M5 动效（GPU 友好：仅 transform/opacity；reduced-motion 兜底） ===== */
 @keyframes mobile-fade-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes mobile-drawer-in { from { transform: translateX(-100%); } to { transform: translateX(0); } }
 @keyframes mobile-sheet-in { from { transform: translateY(100%); } to { transform: translateY(0); } }
-.mobile-drawer-mask{ animation: mobile-fade-in var(--mobile-duration-panel) var(--mobile-ease-out); }
-.mobile-fab:active { transform: scale(.94); }
 @media (prefers-reduced-motion: reduce) {
-  .mobile-drawer-mask, .mobile-drawer,
   .mobile-model, .mobile-model-mask, .mobile-dropdown, .side-panel, .side-mask, .mobile-settings-page, .mobile-settings-mask,
   .pad-tree, .pad-outline { animation: none; transition: none; }
-  .mobile-htab, .mobile-fab, .mobile-icon-btn, .mobile-drawer-item, .mobile-doc-row, .mobile-qcard,
-  .bottom-bar-btn, .mobile-bottom-bar, .med-btn, .med-ins-item, .med-f-btn { transition: none; }
-  .mobile-fab:active, .bottom-bar-btn:active { transform: none; }
+  .mobile-htab, .mobile-icon-btn, .mobile-doc-row,
+  .mobile-bottom-bar, .med-btn, .med-ins-item, .med-f-btn { transition: none; }
   .mb-skel { animation: none; }
   .mobile-topbar { transition: none; }
   .doc-pane--fresh .mobile-doc-body { animation: none; }
@@ -653,9 +621,6 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
   box-shadow: var(--mb-shadow-float);
   transition: opacity var(--mobile-duration-panel) var(--mobile-ease-panel), transform var(--mobile-duration-panel) var(--mobile-ease-panel), visibility var(--mobile-duration-panel);
 }
-/* 261014：首页胶囊只剩 3 项（搜索 / ＋ / AI）⇒ **左右收窄**到 4 槽上限（≈192px，对齐语雀 App 的紧凑度；
-   原来是按 6 槽 288px 给的，3 项时每个洞 96px 太空）。第二层工作区那条有 4 项，保持原上限、不跟着缩。 */
-.mobile-bottom-bar--home { width: min(calc(100% - 32px), calc(var(--mobile-bottom-bar-slot) * 4)); }
 
 /* 键盘/选区态：整条下滑淡出（思源 .mobile-keyboard--open / .mobile-selection--active） */
 .mobile-bottom-bar--hidden { opacity: 0; pointer-events: none; transform: translate3d(0, 100%, 0); visibility: hidden; }
@@ -696,21 +661,6 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
 .mobile-bottom-bar__item:first-child { border-top-left-radius: calc(var(--mobile-bottom-bar-height) / 2); border-bottom-left-radius: calc(var(--mobile-bottom-bar-height) / 2); }
 .mobile-bottom-bar__item:last-child { border-top-right-radius: calc(var(--mobile-bottom-bar-height) / 2); border-bottom-right-radius: calc(var(--mobile-bottom-bar-height) / 2); }
 
-/* ── 首页胶囊的**整块触发 / 整块变化**（261014 用户定稿：要语雀那种整块效果）──────────
-   按住**整条胶囊任意处** ≈260ms → 条目淡出、整块变成「小记」；继续上滑越过触发线松手 = 速记一条小记；
-   不上滑松手 = 取消（长按不误建）；**没长按到点 = 什么都不做**，条目自己的 onClick 照常（短按语义不变）。
-   这里只管视觉，判定全在 ui/createPress.ts（纯函数 + 单测）。 */
-.mobile-block-quick {
-  position: absolute; inset: 0; z-index: 0;
-  display: flex; align-items: center; justify-content: center; gap: 6px;
-  border-radius: inherit; background: var(--lake-accent); color: var(--lake-text-on-accent);
-  font-size: var(--lake-font-size-small); line-height: 1;
-  opacity: 0; pointer-events: none;
-  transition: opacity var(--mobile-duration-panel) var(--mobile-ease-out), transform var(--mobile-duration-panel) var(--mobile-ease-out);
-}
-.mobile-bottom-bar.is-revealed .mobile-block-quick { opacity: 1; }
-.mobile-bottom-bar.is-armed .mobile-block-quick { transform: translateY(-4px); }
-.mobile-bottom-bar.is-revealed .mobile-bottom-bar__item { opacity: 0; pointer-events: none; }
 
 /* 计数 = 思源 .toolbar__tabs-count：描边小方框，不是实心圆点 */
 .bottom-bar-count {
@@ -828,15 +778,8 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
 
 /* ===== B5 第一层（小记 / 知识库）：思源列表语言 + 底部胶囊栏留白 ===== */
 
-.mobile-nb-row:active, .mobile-quick-row:active { background: var(--lake-bg-hover); }
 
-.mobile-nb-row .counter { flex: 0 0 auto; }
 
-/* 首页 tab（261013 A 批）：语雀 App 的首页标题条就是**纯文字 tab** —— 选中 = 加粗 + 主文本色，
-   未选 = 常规 + caption 色，**没有下划线指示线**。原实现是桌面 .ln-tabs 的墨线语言；
-   桌面侧 261012 为 tab 选定的是那套，但那是**桌面**口径（MOBILE-TECH-STACK §一：两端 UI 不共享）⇒ 移动端走语雀形态。
-   命中区仍 ≥44：父容器 min-height 撑开、tab 自身 align-items:stretch 撑满行高。 */
-.mobile-home-tabs { flex: 1; display: flex; justify-content: center; align-items: stretch; gap: var(--mb-home-tab-gap, 2px); min-height: var(--mb-tap-min); }
 .mobile-htab {
   /* min-width 是 44 Rule 的兜底：语雀式文字 tab 的宽度由字数决定，单字标签会掉到 44 以下（261013 实测「小记」36px）。 */
   display: inline-flex; align-items: center; justify-content: center; min-width: var(--mb-tab-w, var(--mb-tap-min)); min-height: var(--mb-tap-min); padding: 0 2px; white-space: nowrap; flex-shrink: 0;
@@ -1333,8 +1276,8 @@ body.lake-mobile .ne-ui-boundary-popover:has(.ne-ui-search-card-menu) { top: 120
 .mb-composer-skeleton__actions { display: flex; align-items: center; gap: 8px; }
 .mb-composer-skeleton__btn { width: 56px; height: 32px; }
 .mb-composer-skeleton__btn--primary { margin-left: auto; width: 64px; }
-.mobile-route-skeleton__title { width: 44%; height: 22px; }
-.mobile-route-skeleton__line { width: 100%; height: 14px; }
+.mb-route-skeleton__title { width: 44%; height: 22px; }
+.mb-route-skeleton__line { width: 100%; height: 14px; }
 .mb-doc-skeleton { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 12px; padding: 16px; }
 .mb-doc-skeleton__title { width: 42%; height: 24px; }
 .mb-doc-skeleton__line { width: 100%; height: 14px; }

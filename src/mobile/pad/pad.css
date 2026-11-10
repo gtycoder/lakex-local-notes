@@ -32,12 +32,10 @@ html[data-form-factor="expanded"] .mobile-settings-page:not(.mobile-settings-pag
 html[data-form-factor="medium"] .nb-shelf,
 html[data-form-factor="medium"] .nb-list,
 html[data-form-factor="medium"] .mobile-scroll,
-html[data-form-factor="medium"] .mobile-home-tabs,
 html[data-form-factor="medium"] .mobile-doc-body .lake-editor-mount,
 html[data-form-factor="expanded"] .nb-shelf,
 html[data-form-factor="expanded"] .nb-list,
 html[data-form-factor="expanded"] .mobile-scroll,
-html[data-form-factor="expanded"] .mobile-home-tabs,
 html[data-form-factor="expanded"] .mobile-doc-body .lake-editor-mount { max-width: 760px; margin-left: auto; margin-right: auto; }
 /* ⚠️ 上一条给 .mobile-scroll 加了 auto 外边距，而它是 .mobile-tab-pane（column flex）的 **flex item**：
  * 交叉轴上的 auto margin 会让 stretch 失效 ⇒ 宽度退化成 fit-content（261103 实测小记时间线只剩 146px）。
@@ -309,10 +307,3 @@ html[data-form-factor="expanded"] .pad-outline--pinned {
  * 261103 曾以「平板上整屏手势与顶栏页签语义冲突」为由禁掉手指横滑（overflow-x:hidden / touch-action:pan-y /
  * scroll-snap-type:none）；用户实机验收要求恢复 ⇒ 不再写形态特例，expanded 直接吃 mobile.css 的分页规则。
  * 顶部页签点击仍走 useTabPager 的程序化 scrollTo；写作卡锁定态（.mobile-tab-stage--locked）照旧锁横滑。 */
-
-
-/* 首页顶部 tab 与加宽后的知识库对齐（否则 1080 内容挂在 760 的 tab 下会左偏）。
- * 注意：mobile.css 的平板块把 .mobile-home-tabs / .mobile-scroll 限到 760，本文件在其后加载
- * （main.tsx 的 import 顺序），同特异性覆盖成 1080；时间线（.mobile-scroll 非 .mobile-library）仍是 760。 */
-html[data-form-factor="medium"] .mobile-home-tabs,
-html[data-form-factor="expanded"] .mobile-home-tabs { max-width: var(--pad-content-width); }

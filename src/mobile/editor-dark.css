@@ -13,8 +13,7 @@
 [data-theme="dark"] input[type="password"],
 [data-theme="dark"] input:not([type="checkbox"]):not([type="radio"]),
 [data-theme="dark"] select,
-[data-theme="dark"] textarea,
-[data-theme="dark"] .secret-field {
+[data-theme="dark"] textarea {
   background: var(--lake-bg-window);
   color: var(--lake-text-1);
   border-color: var(--lake-border-1);
