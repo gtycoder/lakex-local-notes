@@ -7,7 +7,16 @@
  * 焦点环统一：2px solid --lake-accent + offset 0（贴边单环）。动效只动 color/background/border-color/opacity/transform。
  */
 
-/* ── 01 按钮 ───────────────────────────────────────────────── */
+/* ── 01 按钮（261110 用户定稿：4 语义 + 危险 + 链接 / 2 尺寸；桌面端；移动端下一轮对齐）─────
+ *   L1 primary   = 实心墨蓝（主操作）
+ *   L2 outlined  = 主题色框 + 主题色字（常用操作；原 --settings 收敛到这里）
+ *   L3 secondary = 中性框 + 次要字色（一般操作）
+ *   L4 ghost     = 无框次要灰字（更次要 / 取消 / 工具）
+ *   L4 link      = 无框主题色字（跳转 / 引导）
+ *   L5 danger    = 红字红框；配 --ghost / --danger-text = 纯红字
+ * 尺寸：默认 27（--lake-ctl-h）/ .ln-btn--compact 22（--lake-ctl-h-sm）。
+ * 状态：default / hover / active / focus-visible / is-selected / disabled —— 六态口径见 docs/DESIGN.md。
+ */
 .ln-btn {
   display: inline-flex;
   align-items: center;
@@ -16,7 +25,8 @@
   padding: 0 11px;
   border: 0.5px solid transparent;
   border-radius: var(--lake-ctl-rad);
-  color: var(--lake-text-1);
+  /* 基座 = L4 口径（无框次要灰字）：裸 .ln-btn 也有 hover，不再出现「点了没反应」。 */
+  color: var(--lake-text-2);
   background: transparent;
   font-family: inherit;
   font-size: var(--lake-font-size-small);
@@ -27,29 +37,38 @@
   transition: transform var(--lake-motion-instant) var(--lake-ease-standard);
 }
 /* 261017 A 批：按压物理 = 半像素下沉 + 轻微收缩（只动 transform，不触发布局）。 */
-.ln-btn:active:not(:disabled) { transform: translateY(.5px) scale(.98); }
+.ln-btn:hover:not(:disabled) { background: var(--lake-bg-hover); color: var(--lake-text-1); }
+.ln-btn:active:not(:disabled) { transform: translateY(.5px) scale(.98); background: var(--lake-bg-press); }
 .ln-btn:focus-visible { outline: var(--lake-focus-ring-width) solid var(--lake-accent); outline-offset: var(--lake-focus-ring-offset); }
 .ln-btn:disabled { opacity: var(--lake-disabled-opacity); cursor: default; }
+/* L1 主操作：实心墨蓝 + 白字。 */
 .ln-btn--primary { color: var(--lake-text-on-accent); background: var(--lake-accent-ink); }
-.ln-btn--primary:hover:not(:disabled) { background: var(--lake-accent-ink-hover); }
+.ln-btn--primary:hover:not(:disabled) { background: var(--lake-accent-ink-hover); color: var(--lake-text-on-accent); }
 .ln-btn--primary:active:not(:disabled) { background: var(--lake-accent-ink-press); }
-.ln-btn--secondary { border-color: var(--lake-border-1); }
-.ln-btn--secondary:hover:not(:disabled) { background: var(--lake-bg-hover); }
+/* L2 常用：主题色框 + 主题色字（不填色）。 */
+.ln-btn--outlined { border-color: var(--lake-accent); color: var(--lake-accent-text); }
+.ln-btn--outlined:hover:not(:disabled) { background: var(--lake-bg-hover); color: var(--lake-accent-text); }
+.ln-btn--outlined:active:not(:disabled) { background: var(--lake-bg-press); }
+/* L3 一般：中性框 + 次要字色。 */
+.ln-btn--secondary { border-color: var(--lake-ctl-border); color: var(--lake-text-2); }
+.ln-btn--secondary:hover:not(:disabled) { background: var(--lake-bg-hover); color: var(--lake-text-1); }
 .ln-btn--secondary:active:not(:disabled) { background: var(--lake-bg-press); }
-.ln-btn--secondary.is-selected { color: var(--lake-fg-selected); background: var(--lake-bg-selected); border-color: var(--lake-accent); font-weight: var(--lake-font-weight-semibold); }
-.ln-btn--secondary.is-selected:hover:not(:disabled) { background: var(--lake-bg-selected-hover); }
-.ln-btn--ghost:hover:not(:disabled) { background: var(--lake-bg-hover); }
-.ln-btn--ghost:active:not(:disabled) { background: var(--lake-bg-press); }
+/* L4 无框：显式列出，便于检索与文档（视觉 = 基座）。 */
+.ln-btn--ghost { border-color: transparent; color: var(--lake-text-2); }
+.ln-btn--ghost:hover:not(:disabled) { background: var(--lake-bg-hover); color: var(--lake-text-1); }
+/* L4b 链接：无框 + 主题色字（跳转/引导，不当成「次要灰字」）。 */
+.ln-btn--link { border-color: transparent; color: var(--lake-accent-text); }
+.ln-btn--link:hover:not(:disabled) { background: var(--lake-bg-hover); color: var(--lake-accent-ink); }
+/* L5 危险：红字红框；配 ghost / danger-text = 纯红字。 */
 .ln-btn--danger { color: var(--lake-status-error); border-color: color-mix(in srgb, var(--lake-status-error) 40%, transparent); }
 .ln-btn--danger:hover:not(:disabled) { background: var(--lake-status-error-soft); }
-/* 设置页专用动作按钮原语：主题色描边 + 透明底 + 默认文字色（不填色、不染字）。
- * 仅在设置页使用；重命名/确认等对话框仍用 primary/secondary 实心按钮。 */
-.ln-btn--settings { border-color: var(--lake-accent); }
-.ln-btn--settings:hover:not(:disabled) { background: var(--lake-bg-hover); }
-.ln-btn--settings:active:not(:disabled) { background: var(--lake-bg-press); }
-/* 破坏性动作的「红字 + 中性描边」变体（原 .ft__error 组合）：只染文字，不改边框/底色。 */
-.ln-btn--danger-text { color: var(--lake-status-error); }
-.ln-btn--secondary.ln-btn--danger-text:hover:not(:disabled) { background: var(--lake-status-error-soft); }
+.ln-btn--danger.ln-btn--ghost, .ln-btn--danger-text { border-color: transparent; color: var(--lake-status-error); }
+.ln-btn--danger-text:hover:not(:disabled), .ln-btn--danger.ln-btn--ghost:hover:not(:disabled) { background: var(--lake-status-error-soft); }
+/* 选中/切换态：同一套令牌，不给某一层另造视觉。 */
+.ln-btn--secondary.is-selected, .ln-btn--outlined.is-selected, .ln-btn--ghost.is-selected { color: var(--lake-fg-selected); background: var(--lake-bg-selected); border-color: var(--lake-accent); font-weight: var(--lake-font-weight-semibold); }
+.ln-btn--secondary.is-selected:hover:not(:disabled), .ln-btn--outlined.is-selected:hover:not(:disabled), .ln-btn--ghost.is-selected:hover:not(:disabled) { background: var(--lake-bg-selected-hover); }
+/* 紧凑尺寸（22）：只缩高度与内距，不换视觉。 */
+.ln-btn--compact { height: var(--lake-ctl-h-sm); padding: 0 9px; }
 /* 图标占位稳定、垂直居中；沿用调用方尺寸，不增加按钮或内容行高。 */
 .ln-btn > svg, .ln-iconbtn > svg, .ln-segment__item > svg { display: block; flex-shrink: 0; }
 
@@ -168,6 +187,10 @@
 .ln-menu__item.is-selected:hover { background: var(--lake-bg-selected-hover); }
 .ln-row.is-disabled { opacity: var(--lake-disabled-opacity); cursor: default; }
 .ln-row--notebook { min-height: calc(var(--lake-ctl-h) + 2px); }
+/* 行内「可点主区」（标题区）：撑满、透明、左对齐；行本身负责 hover/选中，这里只做命中与排版。
+ * 261110 审计：AI 写作历史行/小记行这类 <button> 曾各写一份 button 复位，统一到这一件。 */
+.ln-row__main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.ln-row__main:focus-visible { outline: var(--lake-focus-ring-width) solid var(--lake-accent); outline-offset: var(--lake-focus-ring-offset); }
 .ln-row__indent { flex: 0 0 auto; }
 
 /* ── 04 菜单 / 右键菜单 ────────────────────────────────────── */
@@ -412,7 +435,8 @@
   display: inline-flex;
   align-items: center;
   gap: 2px;
-  height: calc(var(--lake-ctl-h) - 1px);
+  /* 261110 用户定稿：分段控件整体加厚一档（轨道 27-1 → 27+3，段高 22 → 27），所有用例统一生效。 */
+  height: calc(var(--lake-ctl-h) + 3px);
   padding: 2px;
   border-radius: var(--lake-ctl-rad);
   /* 261006 Phase 2.2 重绘：轨道用**下沉底**而不是块面底 —— 块面底在白面板上几乎看不见，
@@ -423,7 +447,7 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  height: var(--lake-ctl-h-sm);
+  height: var(--lake-ctl-h);
   padding: 0 10px;
   border: 0;
   border-radius: var(--lake-ctl-rad-sm);

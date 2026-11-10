@@ -35,20 +35,20 @@ export function TabContextMenu({ x, y, split, pinned, onTogglePin, onCloseTab, o
   if (split) {
     return (
       <Menu surfaceClassName="context-menu" surfaceRef={surfaceRef} onDismiss={onClose} style={style ?? undefined}>
-        <button role="menuitem" onClick={() => { split.onExit(); onClose(); }}><X size={15} /><span>取消分屏</span></button>
-        <button role="menuitem" onClick={() => { split.onSwap(); onClose(); }}><ArrowLeftRight size={15} /><span>左右互换</span></button>
+        <button className="ln-menu__item" role="menuitem" onClick={() => { split.onExit(); onClose(); }}><X size={15} /><span>取消分屏</span></button>
+        <button className="ln-menu__item" role="menuitem" onClick={() => { split.onSwap(); onClose(); }}><ArrowLeftRight size={15} /><span>左右互换</span></button>
       </Menu>
     );
   }
   return (
     <Menu surfaceClassName="context-menu" surfaceRef={surfaceRef} onDismiss={onClose} style={style ?? undefined}>
-      <button role="menuitem" onClick={() => { onCloseTab(); onClose(); }}><X size={15} /><span>关闭</span></button>
-      {canCloseOthers && <button role="menuitem" onClick={() => { onCloseOthers(); onClose(); }}><XCircle size={15} /><span>关闭其他</span></button>}
-      {canCloseOthers && <button role="menuitem" onClick={() => { onCloseAll(); onClose(); }}><XSquare size={15} /><span>关闭全部</span></button>}
-      {hasLeft && <button role="menuitem" onClick={() => { onCloseLeft(); onClose(); }}><ChevronsLeft size={15} /><span>关闭左侧</span></button>}
-      {hasRight && <button role="menuitem" onClick={() => { onCloseRight(); onClose(); }}><ChevronsRight size={15} /><span>关闭右侧</span></button>}
+      <button className="ln-menu__item" role="menuitem" onClick={() => { onCloseTab(); onClose(); }}><X size={15} /><span>关闭</span></button>
+      {canCloseOthers && <button className="ln-menu__item" role="menuitem" onClick={() => { onCloseOthers(); onClose(); }}><XCircle size={15} /><span>关闭其他</span></button>}
+      {canCloseOthers && <button className="ln-menu__item" role="menuitem" onClick={() => { onCloseAll(); onClose(); }}><XSquare size={15} /><span>关闭全部</span></button>}
+      {hasLeft && <button className="ln-menu__item" role="menuitem" onClick={() => { onCloseLeft(); onClose(); }}><ChevronsLeft size={15} /><span>关闭左侧</span></button>}
+      {hasRight && <button className="ln-menu__item" role="menuitem" onClick={() => { onCloseRight(); onClose(); }}><ChevronsRight size={15} /><span>关闭右侧</span></button>}
       <div className="context-menu-sep" />
-      <button role="menuitem" onClick={() => { onTogglePin(); onClose(); }}><Pin size={15} /><span>{pinned ? "取消钉住" : "钉住"}</span></button>
+      <button className="ln-menu__item" role="menuitem" onClick={() => { onTogglePin(); onClose(); }}><Pin size={15} /><span>{pinned ? "取消钉住" : "钉住"}</span></button>
     </Menu>
   );
 }

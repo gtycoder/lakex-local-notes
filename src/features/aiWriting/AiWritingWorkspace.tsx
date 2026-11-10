@@ -222,7 +222,7 @@ export function AiWritingWorkspace({ active, treeNodes, topbarLeading, onOpenSet
                     <p className="aiw-suggest__label">点一点试试：</p>
                     <div className="aiw-suggest__chips">
                       {AI_WRITING_SUGGESTIONS[controller.mode].map((item) => (
-                        <button key={item.label} type="button" className="aiw-suggest__chip" onClick={() => controller.send(item.prompt)}>
+                        <button key={item.label} type="button" className="ln-btn ln-btn--secondary ln-btn--compact aiw-suggest__chip" onClick={() => controller.send(item.prompt)}>
                           {item.label}
                         </button>
                       ))}

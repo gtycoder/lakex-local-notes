@@ -35,7 +35,7 @@ export function InkExportMenu({ open, onToggle, onPick }: InkExportMenuProps) {
       {open && (
         <div className="ink-export__menu" role="menu" aria-label="导出当前页" data-ink-export-menu>
           {EXPORT_FORMATS.map((item) => (
-            <button key={item.value} role="menuitem" onClick={() => onPick(item.value)}>{item.label}</button>
+            <button className="ln-menu__item" key={item.value} role="menuitem" onClick={() => onPick(item.value)}>{item.label}</button>
           ))}
         </div>
       )}

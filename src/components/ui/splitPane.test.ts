@@ -65,7 +65,8 @@ describe("左右分栏（可拖动）", () => {
   });
 
   it("破坏性按钮只有一种长相：.ft__error 自带透明底（漏写 --outline 也不再是实心块）", () => {
-    expect(KIT).toContain(".ln-btn--danger-text { color: var(--lake-status-error); }");
+    // 261110：danger-text 与 danger+ghost 合并成一条「透明底红字」规则，意图不变（只有一种长相）。
+    expect(KIT).toMatch(/\.ln-btn--danger-text[^{]*\{[^}]*color: var\(--lake-status-error\)/);
   });
 
   it("拖拽有 4px 微抖死区，且只按下不移动不落盘（261017 B）", () => {

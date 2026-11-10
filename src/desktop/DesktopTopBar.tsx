@@ -107,7 +107,7 @@ export function DesktopWorkspaceMenuItems({ desktopWorkspace, onSwitchWorkspace,
     { id: "resources", label: "资源", Icon: Paperclip },
   ];
   const renderItem = ({ id, label, Icon, hint }: { id: DesktopWorkspace; label: string; Icon: typeof Files; hint?: string }) => (
-    <button key={id} role="menuitemradio" aria-checked={desktopWorkspace === id} onClick={() => onSwitchWorkspace(id)}>
+    <button className="ln-menu__item" key={id} role="menuitemradio" aria-checked={desktopWorkspace === id} onClick={() => onSwitchWorkspace(id)}>
       <Icon size={15} />
       <span>{label}{hint && <small>{hint}</small>}</span>
       {desktopWorkspace === id && <Check size={14} className="top-menu__check" aria-hidden="true" />}
@@ -120,7 +120,7 @@ export function DesktopWorkspaceMenuItems({ desktopWorkspace, onSwitchWorkspace,
       <div className="top-menu__sep" role="separator" />
       <div className="top-menu__label" role="presentation">工作空间</div>
       {tools.map(renderItem)}
-      <button role="menuitem" onClick={onOpenSettings}><Settings size={15} /><span>偏好设置</span></button>
+      <button className="ln-menu__item" role="menuitem" onClick={onOpenSettings}><Settings size={15} /><span>偏好设置</span></button>
     </>
   );
 }

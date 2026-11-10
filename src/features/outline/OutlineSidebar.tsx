@@ -248,9 +248,9 @@ export function OutlineSidebar({
               <ExpandLevelIcon size={14} />
             </button>
             {levelMenu.menu(<>
-              <button role="menuitem" onClick={() => { controller?.expandAll(); levelMenu.close(); }}>全部展开</button>
+              <button className="ln-menu__item" role="menuitem" onClick={() => { controller?.expandAll(); levelMenu.close(); }}>全部展开</button>
               {[1, 2, 3, 4, 5, 6].map((n) => (
-                <button key={n} role="menuitem" onClick={() => { controller?.expandToLevel(n); levelMenu.close(); }}>
+                <button className="ln-menu__item" key={n} role="menuitem" onClick={() => { controller?.expandToLevel(n); levelMenu.close(); }}>
                   展开到 {n} 级
                 </button>
               ))}

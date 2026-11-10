@@ -49,7 +49,8 @@ describe("动效契约", () => {
 
   it("按压物理只走 kit 原语，并且用 instant 档（跟手）", () => {
     const kit = read("kit.css");
-    expect(kit).toContain(".ln-btn:active:not(:disabled) { transform: translateY(.5px) scale(.98); }");
+    // 261110 按钮梯队：active 同时给按压物理 + 按压底色，断言只锁「transform 走 kit 原语」这半句。
+    expect(kit).toMatch(/\.ln-btn:active:not\(:disabled\) \{ transform: translateY\(\.5px\) scale\(\.98\)/);
     expect(kit).toContain(".ln-iconbtn:active:not(:disabled) { background: var(--lake-bg-press); transform: scale(.94); }");
     expect(kit).toMatch(/--lake-ease-overshoot/);
     expect(kit).not.toMatch(/\d+ms/); // kit 层一律走令牌，不许出现裸毫秒值

@@ -142,12 +142,12 @@
 /* 内核自带 antd 基底有一条未分层的 `button { color: inherit }`；dev 下它后注入，
  * 会盖掉 kit/legacy 分层里所有按钮的文字色（主按钮白字会被继承成正文色）。
  * 这里只把这些语义色放回未分层，不碰背景/边框/状态；!important 仍留给内核自己。 */
-button.ln-btn { color: var(--lake-text-1); }
+button.ln-btn { color: var(--lake-text-2); }
 button.ln-btn--primary { color: var(--lake-text-on-accent); }
-button.ln-btn--danger { color: var(--lake-status-error); }
-button.ln-btn--secondary { color: var(--lake-text-1); }
-button.ln-btn--ghost:not(.quick-note-discard) { color: var(--lake-text-2); }
-button.ln-btn--secondary.ln-btn--danger-text { color: var(--lake-status-error); }
+button.ln-btn--outlined, button.ln-btn--link { color: var(--lake-accent-text); }
+button.ln-btn--danger, button.ln-btn--danger-text { color: var(--lake-status-error); }
+button.ln-btn--secondary { color: var(--lake-text-2); }
+button.ln-btn--ghost { color: var(--lake-text-2); }
 button.quick-note-tag { color: var(--lake-text-2); }
 button.quick-note-tag.is-selected { color: var(--lake-fg-selected); }
 button.quick-note-tag-add { color: var(--lake-text-3); }

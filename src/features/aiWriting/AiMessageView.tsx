@@ -2,11 +2,13 @@
  * AI 写作 · 单条消息：用户气泡 / 助手（思考块 + 答案 + 操作条）。
  *
  * 答案渲染：流式期间 MarkdownView（轻、跟手）；收尾后由内核只读 viewer 接管（语雀同款，格式全量）。
- * 思考块仍是 MarkdownView（纯文本为主，不值得再起内核实例），常显不可折叠（与语雀一致）。
+ * 思考块仍是 MarkdownView（纯文本为主，不值得再起内核实例）；**默认折叠**（261110 用户定稿），
+ * 只显示一行「已深度思考（用时 X 秒）」/「正在深度思考…」，点开才渲染正文（见 AiThinkingBlock）。
  */
 import { lazy, Suspense, useCallback, useState } from "react";
 import { Copy, FilePlus2, RotateCcw, Sparkles } from "lucide-react";
 import { MarkdownView } from "../../components/ui/markdown/MarkdownView";
+import { AiThinkingBlock } from "./AiThinkingBlock";
 import type { AiWritingMessage } from "../../core/aiWriting";
 import type { AiWritingStream } from "./useAiWriting";
 
@@ -64,12 +66,8 @@ export function AiMessageView(props: AiMessageViewProps) {
     <div className="aiw-msg aiw-msg--assistant">
       <span className="aiw-avatar" aria-hidden="true"><Sparkles size={16} /></span>
       <div className="aiw-msg__main">
-        {thinkingLabel && <p className="aiw-think__label">{thinking && <span className="aiw-think__dot" aria-hidden="true" />}{thinkingLabel}</p>}
-        {reasoning && (
-          <div className="aiw-think">
-            <div className="aiw-think__body"><MarkdownView source={reasoning} /></div>
-          </div>
-        )}
+        {/* 思考块默认折叠（261110 用户定稿）：只占一行，点开才渲染思考正文。 */}
+        <AiThinkingBlock reasoning={reasoning} label={thinkingLabel} live={thinking} />
         {content && (
           <div className={"aiw-answer" + (richReady ? " aiw-answer--rich" : " aiw-answer--pending")}>
             {/* 流式中 / 内核未就绪 / 内核失败：都用 MarkdownView 兜底，保证任何时候都有正文。 */}

@@ -87,6 +87,17 @@ describe("AiComposer · 提示词库点卡片直接写入输入框", () => {
     expect(onInput).toHaveBeenCalledWith("这是我已经写的内容\n" + AI_WRITING_PROMPT_CARDS[1].prompt);
   });
 
+  it("输入卡控件走原语：工具钮 = ghost+compact，发送 = primary+compact", async () => {
+    await renderComposer("");
+    const tool = [...document.querySelectorAll(".aiw-composer__tools button")][0];
+    expect(tool.className).toContain("ln-btn");
+    expect(tool.className).toContain("ln-btn--ghost");
+    expect(tool.className).toContain("ln-btn--compact");
+    const send = document.querySelector<HTMLButtonElement>('.aiw-composer__send button[aria-label="发送"]')!;
+    expect(send.className).toContain("ln-btn--primary");
+    expect(send.className).toContain("ln-btn--compact");
+  });
+
   it("点击后面板关闭（不再停留在打开态）", async () => {
     await renderComposer("");
     await act(async () => { clickPromptTool(); });

@@ -118,7 +118,7 @@ export function AiComposer({
         <div className="aiw-composer__tools">
           <button
             type="button"
-            className={"ln-btn ln-btn--ghost aiw-tool" + (promptText ? " ln-btn--secondary is-selected" : "")}
+            className={"ln-btn ln-btn--ghost ln-btn--compact aiw-tool" + (promptText ? " is-selected" : "")}
             onClick={() => setPromptAnchor(promptAnchor ? null : composerRef.current)}
           >
             <Sparkles size={14} aria-hidden="true" />
@@ -127,7 +127,7 @@ export function AiComposer({
           {mode === "docs" && (
             <button
               type="button"
-              className={"ln-btn ln-btn--ghost aiw-tool" + (docRefs.length > 0 ? " ln-btn--secondary is-selected" : "")}
+              className={"ln-btn ln-btn--ghost ln-btn--compact aiw-tool" + (docRefs.length > 0 ? " is-selected" : "")}
               onClick={() => setDocAnchor(docAnchor ? null : composerRef.current)}
             >
               <FileText size={14} aria-hidden="true" />
@@ -138,11 +138,11 @@ export function AiComposer({
         <div className="aiw-composer__send">
           <span className="aiw-composer__hint" aria-hidden="true"><CornerDownLeft size={12} /> 发送</span>
           {busy ? (
-            <button type="button" className="ln-btn ln-btn--secondary aiw-send aiw-send--stop" aria-label="停止生成" onClick={onStop}>
+            <button type="button" className="ln-btn ln-btn--secondary ln-btn--compact aiw-send--stop" aria-label="停止生成" onClick={onStop}>
               <Square size={14} aria-hidden="true" />
             </button>
           ) : (
-            <button type="button" className="ln-btn ln-btn--primary aiw-send" aria-label="发送" disabled={!canSend} onClick={onSend}>
+            <button type="button" className="ln-btn ln-btn--primary ln-btn--compact" aria-label="发送" disabled={!canSend} onClick={onSend}>
               发送
             </button>
           )}
