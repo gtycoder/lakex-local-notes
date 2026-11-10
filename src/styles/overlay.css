@@ -67,7 +67,8 @@
   align-items: center;
   gap: var(--lake-space-md);
   flex: 0 0 auto;
-  padding: 14px 16px 0;
+  /* 261110 spike 第二批（借 Astryx 语汇）：对话框整体内距升到 20 档（原先 16/14 混排）。 */
+  padding: var(--lake-space-xl) var(--lake-space-xxl) 0;
   border-bottom: 0;
 }
 .ln-dialog__title {
@@ -78,23 +79,29 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--lake-text-1);
-  font-size: var(--lake-dialog-title-size, var(--lake-font-size-bodyLg));
+  font-size: var(--lake-font-size-title);
   font-weight: var(--lake-font-weight-semibold);
 }
 .ln-dialog__body {
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
-  padding: var(--lake-space-lg) var(--lake-space-xl) var(--lake-space-xl);
+  padding: var(--lake-space-lg) var(--lake-space-xxl) var(--lake-space-xl);
   color: var(--lake-text-2);
-  font-size: var(--lake-dialog-body-size, var(--lake-font-size-small));
+  font-size: var(--lake-font-size-body);
 }
-.ln-dialog__actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--lake-space-md); padding: 0 16px 12px; }
-/* 管理型弹窗采用标题/正文档；编辑型弹窗继续沿用自己的紧凑规格。 */
-:is(.note-info-dialog, .confirm-dialog, .rename-dialog, .name-prompt-dialog, .s3-transfer-dialog) {
-  --lake-dialog-title-size: var(--lake-font-size-title);
-  --lake-dialog-body-size: var(--lake-font-size-body);
+.ln-dialog__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--lake-space-md);
+  /* 261110 spike（借 Astryx 语汇）：操作区与正文之间加一条 0.5px 分隔线，按钮组自成一条「底栏」。 */
+  border-top: 0.5px solid var(--lake-border-1);
+  padding: var(--lake-space-md) var(--lake-space-xxl) var(--lake-space-lg);
 }
+/* 261110 spike 第二批：原先这里给 5 个「管理型弹窗」单独抬到 18/14 档，其余弹窗停在 15.5/13
+   ⇒ 同一类浮层出现两套字阶。现在 .ln-dialog__title/__body 直接取 18/14，本段删除：
+   对话框只有一套字阶，也不再需要 --lake-dialog-* 变量（已全仓清零）。 */
 .confirm-dialog .ln-dialog__title { white-space: normal; overflow-wrap: anywhere; }
 .ln-dialog__resize { color: var(--lake-text-4); }
 .ln-dialog__resize:hover { color: var(--lake-text-2); }

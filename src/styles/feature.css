@@ -56,7 +56,8 @@ pre {
 .settings-panel .config-items { display: flex; flex-direction: column; gap: var(--lake-space-lg); }
 .settings-panel .config-section {
   border: 0.5px solid var(--lake-border-1);
-  border-radius: var(--lake-radius-md);
+  /* 261110 spike：分组卡圆角升到 {rounded.card}(12)，与 Dialog/菜单的 10/14 档形成「卡 12」独立一档。 */
+  border-radius: var(--lake-radius-card);
   background: var(--lake-bg-panel);
   overflow: hidden;
 }

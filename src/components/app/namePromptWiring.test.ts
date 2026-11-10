@@ -39,7 +39,12 @@ describe("统一新建弹窗（NamePromptDialog）", () => {
     const CSS = read("../../styles/dialog.css");
     expect(CSS).toContain(".rename-dialog,\n.name-prompt-dialog,\n.note-tag-dialog { width: min(460px, 92vw); }");
     expect(CSS).toContain(".name-prompt-dialog__error {");
-    expect(read("../../styles/overlay.css")).toContain(".rename-dialog, .name-prompt-dialog, .s3-transfer-dialog");
+    // 261110 spike 第二批：对话框只有一套字阶（标题 18 / 正文 14），不再按类名给 5 个「管理型弹窗」单独抬档
+    // ⇒ 断言从「类名清单里包含它」改为「基础规则本身就是 18/14，且没有分档变量」。
+    const OVERLAY = read("../../styles/overlay.css");
+    expect(OVERLAY).toContain("font-size: var(--lake-font-size-title);");
+    expect(OVERLAY).toContain("font-size: var(--lake-font-size-body);");
+    expect(OVERLAY).not.toContain("--lake-dialog-title-size");
     expect(read("../../styles/feature.css")).toContain(".rename-dialog,\n.name-prompt-dialog,");
   });
 

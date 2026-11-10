@@ -523,7 +523,7 @@
 .ln-row2.ln-list-item--focus { background: var(--lake-accent-tint); color: var(--lake-accent-text); }
 .ln-row2__main { gap: 2px; padding: 3px 0; line-height: var(--lake-line-height-snug); }
 .ln-row2__title { color: inherit; font-size: var(--lake-font-size-small); }
-.ln-row2__meta { color: var(--lake-text-3); font-size: var(--lake-font-size-micro); }
+.ln-row2__meta { color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); }
 
 /* ── 横向页签原语（260929 用户在多方案对比里选定「B 墨线 + 计数徽标」）──────────────
  * 形态：文字 + 选中项变强调色 + **与文字等宽**的 2px 下划线（压在容器的 1px 分隔线上）；
@@ -596,13 +596,15 @@
 .ln-toolbar__info { color: var(--lake-text-3); font-size: var(--lake-font-size-small); }
 
 .ln-empty {
-  gap: var(--lake-space-xs);
+  gap: var(--lake-space-sm);
   padding: var(--lake-space-huge) var(--lake-space-lg);
   color: var(--lake-text-3);
   font-size: var(--lake-font-size-small);
 }
-.ln-empty strong { color: var(--lake-text-1); font-size: var(--lake-font-size-small); font-weight: var(--lake-font-weight-semibold); }
-.ln-empty small { font-size: var(--lake-font-size-micro); }
+/* 261110 spike 第二批（借 Astryx EmptyState 的三级层级）：标题升到 body(14)、说明升到 tiny(12)，
+   标题与说明之间的间距 = sm(6)；图标尺寸统一在 components.css 的 .ln-empty--idle svg（28）。 */
+.ln-empty strong { color: var(--lake-text-1); font-size: var(--lake-font-size-body); font-weight: var(--lake-font-weight-semibold); }
+.ln-empty small { font-size: var(--lake-font-size-tiny); }
 
 /* ── 输入框（P5-h：设计 07 / 08）────────
  * `.ln-text-field` = 原生 input 框；`.ln-input` = 带图标/清空按钮的包裹层（见 07 节）。桌面专属层。 */
