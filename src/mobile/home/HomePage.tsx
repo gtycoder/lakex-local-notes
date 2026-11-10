@@ -1003,6 +1003,7 @@ export function HomePage(props: HomePageProps) {
         onClose={() => setFilterSheetOpen(false)}
         title="筛选"
         ariaLabel="筛选小记"
+        className="qn-filter-sheet"
         bodyClassName="qn-filter-sheet__body"
       >
         <div className="mb-chip-row qn-filter-sheet__chips" role="group" aria-label="按标签筛选小记">
@@ -1036,15 +1037,6 @@ export function HomePage(props: HomePageProps) {
             <div className="mb-empty">还没有标签</div>
           )}
         </div>
-        <button
-          type="button"
-          className="mb-row qn-filter-sheet__manage"
-          onClick={() => { setFilterSheetOpen(false); switchTab("tags"); }}
-        >
-          <span className="mb-row__icon"><Settings2 size={18} aria-hidden="true" /></span>
-          <span className="mb-row__main"><span className="mb-row__title">标签管理</span></span>
-          <ChevronRight className="mb-row__chevron" size={16} aria-hidden="true" />
-        </button>
       </MobileSheet>
 
       {/* 小记「...」菜单 */}

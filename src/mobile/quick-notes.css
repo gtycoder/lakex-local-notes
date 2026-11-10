@@ -121,5 +121,7 @@
 .qn-filter-sheet__chips { max-height: min(46dvh, 360px); overflow-y: auto; overscroll-behavior: contain; padding: 2px var(--mb-page-pad); }
 .qn-filter-sheet__chips .mb-chip { max-width: 46vw; }
 .qn-filter-sheet__chips .mb-empty { width: 100%; }
-/* 标签管理 = .mb-row 结构（自带按钮 reset/宽度/页内距），这里只把图标染成主色。 */
-.qn-filter-sheet__manage .mb-row__icon { color: var(--lake-accent-text); }
+/* 261110 用户点单：筛选 Sheet 头部比常规 Sheet 薄（候选只有一行，不需要 52 的头）。
+   作用域 = 本 Sheet 表面类；不动全局 .mb-sheet__head。 */
+.mb-sheet.qn-filter-sheet .mb-sheet__head { min-height: 40px; padding: 2px var(--mb-page-pad) 0; }
+.mb-sheet.qn-filter-sheet .mb-sheet__title { font-size: var(--lake-font-size-bodyMd); }
