@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { NoteContentRepository } from "./noteContentRepository.js";
+import { noteBodyHash } from "./noteBodyHash.js";
 import type { DbLike } from "./dbLike.js";
 
 type NoteRow = { title: string; trashed_at: string | null; is_purged?: number | null };
@@ -77,5 +78,29 @@ describe("NoteContentRepository.save (W-7 文件写与 DB 事务分离)", () => 
     const repo = new NoteContentRepository(base);
     expect(() => repo.save("n1", "新标题", "<p>晚到保存</p>")).toThrow(/回收站|已删除/);
     expect(base.atomicWrite).not.toHaveBeenCalled();
+  });
+});
+
+describe("NoteContentRepository.save 保存守卫（261110 自伤竞态）", () => {
+  it("磁盘 = 本进程刚写的版本（排队竞态）⇒ 不判外部改动，按正常写路径继续", () => {
+    const { base, notePath } = deps();
+    const repo = new NoteContentRepository(base);
+    // 第一笔：正常写盘（A 版），进程记住 A 的 hash
+    repo.save("n1", "标题", "<p>A</p>");
+    const hashA = noteBodyHash("<p>A</p>");
+    // 第二笔：模拟"渲染层 baseHash 还是旧值（与磁盘不一致）"，但磁盘正是我们刚写的 A
+    const conflict = repo.save("n1", "标题", "<p>A+B</p>", undefined, hashA === "x" ? "x" : "旧基线");
+    expect(conflict).toBeNull();
+    expect(fs.readFileSync(notePath, "utf8")).toBe("<p>A+B</p>");
+  });
+
+  it("外部写入后（磁盘版本 ≠ 本进程写过的版本）仍按外部改动拦截", () => {
+    const { base, notePath } = deps();
+    const repo = new NoteContentRepository(base);
+    repo.save("n1", "标题", "<p>A</p>");
+    fs.writeFileSync(notePath, "<p>外部改过</p>", "utf8");
+    const conflict = repo.save("n1", "标题", "<p>B</p>", undefined, "旧基线");
+    expect(conflict).not.toBeNull();
+    expect(fs.readFileSync(notePath, "utf8")).toBe("<p>外部改过</p>");
   });
 });

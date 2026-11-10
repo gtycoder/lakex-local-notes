@@ -35,6 +35,11 @@ export function useSavePipelineGlue({
     // Batch4-D：保存成功即刷新 baseHash（否则下一次保存会把自己这次的写入判成"外部改动"）。
     setOpenTabs(patchTabById(saved.id, { title: saved.title, content: saved.content, dirty: false, lastDigest: { title: saved.title, updatedAt: saved.updatedAt }, ...(saved.contentHash ? { baseHash: saved.contentHash } : {}) }));
   }, [setOpenTabs]);
+  /** 261110：只刷 baseHash（保存期间有新编辑时走这条）——不覆盖 content/dirty，只更新磁盘基线。 */
+  const handleBaseHashRefreshed = useCallback((saved: NoteDocument) => {
+    if (!saved.contentHash) return;
+    setOpenTabs(patchTabById(saved.id, { baseHash: saved.contentHash }));
+  }, [setOpenTabs]);
   const handleDraftCleared = useCallback((noteId: string) => {
     void native.deleteDraftJournal(noteId).catch((error) => reportNativeActionError("保存后清草稿", error));
     setDraftEntries((entries) => entries.filter((entry) => entry.noteId !== noteId));
@@ -60,5 +65,5 @@ export function useSavePipelineGlue({
     try { return stripAssetAccessToken(editor.getDocument("text/lake")); } catch { return undefined; }
   }, [editorsRef]);
 
-  return { handleNoteSaved, handleOpenTabsApplied, handleDraftCleared, handleSaveError, handleGetOpenTab, handleGetEditorCaches, handleCaptureContent, handleCaptureReady };
+  return { handleNoteSaved, handleOpenTabsApplied, handleBaseHashRefreshed, handleDraftCleared, handleSaveError, handleGetOpenTab, handleGetEditorCaches, handleCaptureContent, handleCaptureReady };
 }

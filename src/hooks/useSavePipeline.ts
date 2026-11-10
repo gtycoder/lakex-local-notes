@@ -34,6 +34,12 @@ export interface SavePipelineOptions {
   onNoteSaved: (saved: NoteDocument) => void;
   /** 无新编辑时更新 openTabs（title/content/dirty/lastDigest）。 */
   onOpenTabsApplied: (saved: NoteDocument) => void;
+  /**
+   * 保存成功即刷新磁盘基线（**与 revision 无关**）。
+   * 261110 事故：保存期间用户又编辑 ⇒ revision 前进 ⇒ 旧实现跳过 onOpenTabsApplied（连带不刷 baseHash），
+   * 但磁盘其实已被这次保存写过 ⇒ 下一笔保存拿旧基线，把"自己上一笔的写入"判成外部改动（灯亮 + 三选项误弹）。
+   */
+  onBaseHashRefreshed?: (saved: NoteDocument) => void;
   /** 保存成功后清除本地草稿（deleteDraftJournal + draftEntries 过滤）。 */
   onDraftCleared: (noteId: string) => void;
   /** 保存失败提示（NOT_FOUND 自动忽略，不触发）。 */
@@ -54,7 +60,7 @@ export interface SavePipelineOptions {
  * 旧响应不得覆盖最新草稿/清除 dirty（审计 #7）。
  */
 export function useSavePipeline(options: SavePipelineOptions) {
-  const { onNoteSaved, onOpenTabsApplied, onDraftCleared, onError, onBlockedSave, getOpenTab, getEditorCaches, captureContent } = options;
+  const { onNoteSaved, onOpenTabsApplied, onBaseHashRefreshed, onDraftCleared, onError, onBlockedSave, getOpenTab, getEditorCaches, captureContent } = options;
   /**
    * 保存状态**按文档**记录（260930：不能做成全局单值——后台文档保存会污染当前文档的状态栏，
    * 表现为当前文档底栏在「保存中 ⇄ 待保存」之间闪）。状态栏只读活动文档那一条。
@@ -110,7 +116,10 @@ export function useSavePipeline(options: SavePipelineOptions) {
     markSaveState(noteId, "saving");
     return core.run(noteId, async (): Promise<PersistOutcome> => {
       try {
-        const saved = await native.saveNote(snapshot.noteId, snapshot.title.trim() || "无标题", snapshot.content, snapshot.caches, snapshot.baseHash);
+        // 261110：baseHash = **磁盘基线**，必须在任务真正执行时取最新（入队前绑定的快照可能已被
+        // 前一笔成功保存刷新）。正文/标题/revision 仍用入队快照（审计 F02 不可动摇）。
+        const queuedBaseHash = options?.baseHash ?? getOpenTab(noteId)?.baseHash ?? snapshot.baseHash;
+        const saved = await native.saveNote(snapshot.noteId, snapshot.title.trim() || "无标题", snapshot.content, snapshot.caches, queuedBaseHash);
         // Batch4-D：磁盘正文被外部/他端改过 ⇒ 主进程没写盘。挂起该文档的自动保存并交 UI 三选项确认。
         if (isSaveConflict(saved)) {
           recordConflict(saved);
@@ -118,11 +127,13 @@ export function useSavePipeline(options: SavePipelineOptions) {
           // 审计：谁在什么时候被拦下（渲染层 console 由主进程统一落盘，scope=renderer）。
           console.info(
             "[save-conflict] 检测到外部改动，已拦截写入" +
-            " noteId=" + snapshot.noteId + " diskHash=" + saved.diskHash.slice(0, 12) + " baseHash=" + (snapshot.baseHash ?? "none").slice(0, 12),
+            " noteId=" + snapshot.noteId + " diskHash=" + saved.diskHash.slice(0, 12) + " baseHash=" + (queuedBaseHash ?? "none").slice(0, 12),
           );
           return { ok: false, externalChanged: { diskHash: saved.diskHash } };
         }
         onNoteSaved(saved);
+        // 261110：baseHash 刷新**不受 revision 门控**——磁盘基线变了就是变了，与"有没有新编辑"无关。
+        onBaseHashRefreshed?.(saved);
         // ack 只认自己的 revision：期间有新编辑则不清 dirty、不清草稿、不覆盖正文（审计 F02）。
         if (core.revision(snapshot.noteId) === snapshot.revision) {
           // 无新编辑：安全覆盖 + 清除 dirty；同时更新 lastDigest（本机已保存，远端未变时无需重载）

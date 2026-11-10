@@ -223,7 +223,7 @@ export function App() {
     };
   }, [workspace, error]);
 
-  const { handleNoteSaved, handleOpenTabsApplied, handleDraftCleared, handleSaveError, handleGetOpenTab, handleGetEditorCaches, handleCaptureContent, handleCaptureReady } = useSavePipelineGlue({
+  const { handleNoteSaved, handleOpenTabsApplied, handleBaseHashRefreshed, handleDraftCleared, handleSaveError, handleGetOpenTab, handleGetEditorCaches, handleCaptureContent, handleCaptureReady } = useSavePipelineGlue({
     setNotes, setTreeNodes, setSync, setOpenTabs, setDraftEntries, setError, openTabsRef, editorsRef,
   });
 
@@ -239,6 +239,7 @@ export function App() {
   } = useSavePipeline({
     onNoteSaved: handleNoteSaved,
     onOpenTabsApplied: handleOpenTabsApplied,
+    onBaseHashRefreshed: handleBaseHashRefreshed,
     onDraftCleared: handleDraftCleared,
     onError: handleSaveError,
     // 回收站/被 purge 文档被丢弃保存时出声（编辑器此时已只读，这里是最后一道闸）

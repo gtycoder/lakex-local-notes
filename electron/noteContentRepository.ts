@@ -27,7 +27,25 @@ interface NoteContentRepositoryDeps {
  * 旧 revivePurgedIfNeeded（编辑即隐式恢复）已删除。恢复是唯一显式例外，走 trashLifecycle.restoreTrashItem。
  */
 export class NoteContentRepository {
+  /**
+   * 261110：本进程最近一次成功写入的正文 hash（按 note）。
+   * 用途 = 「自伤竞态」自愈：同一次编辑停顿里排队的两笔保存，第二笔的 baseHash 可能还是旧的
+   * （第一笔成功时渲染层因为"期间有新编辑"没刷新基线），此时 diskHash 恰好等于本进程刚写的版本。
+   * 外部写入不可能命中这个值 ⇒ 判据只在进程内有效、重启不保留（重启后外部改动照常拦截）。
+   * 上限 2000 条，超出丢最早键（粗略 LRU；只影响自愈命中率，不影响正确性）。
+   */
+  private readonly lastWrittenHash = new Map<string, string>();
+
   constructor(private readonly deps: NoteContentRepositoryDeps) {}
+
+  private rememberWritten(noteId: string, hash: string): void {
+    this.lastWrittenHash.delete(noteId);
+    this.lastWrittenHash.set(noteId, hash);
+    if (this.lastWrittenHash.size > 2000) {
+      const oldest = this.lastWrittenHash.keys().next().value;
+      if (oldest !== undefined) this.lastWrittenHash.delete(oldest);
+    }
+  }
 
   /**
    * 落盘正文（唯一写入口）。
@@ -64,7 +82,8 @@ export class NoteContentRepository {
     // 只在调用方给了 baseHash 时才计算（不给 = 旧行为，逐字节一致）。
     if (baseHash !== undefined) {
       const diskHash = noteBodyHash(currentContent);
-      if (diskHash !== baseHash) {
+      // 261110：磁盘版本 == 本进程刚写的那一版 ⇒ 是我们自己的写入（排队竞态），不是"他处编辑"。
+      if (diskHash !== baseHash && diskHash !== this.lastWrittenHash.get(noteId)) {
         // **竞态自愈（261110 现场误报）**：磁盘上已经就是"我们正要写的内容"
         // ⇒ 只是 baseHash 旧了（上一次保存/同步/他线程先落了同一份），不是"他处编辑过"。
         // 但**标题可能也变了**（用户同内容下改名）：那种情况不能在这里 return —— 要走正常写路径
@@ -89,6 +108,7 @@ export class NoteContentRepository {
     // W-7：文件写（正文）先于 DB 事务——落盘失败在触碰 DB 前就抛错，不产生「DB 已提交但正文没写进文件」；
     // 仅极罕见 DB 提交失败时留「新正文+旧元数据」，该态由保存幂等/同步自愈。
     this.deps.atomicWrite(notePath, content);
+    this.rememberWritten(noteId, noteBodyHash(content));
     const transaction = this.deps.db.transaction(() => {
       if (caches) {
         this.deps.db.prepare("UPDATE notes SET title=?,updated_at=?,is_dirty=1,md_cache=?,text_cache=? WHERE id=? AND deleted_at IS NULL")
