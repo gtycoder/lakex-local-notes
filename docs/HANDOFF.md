@@ -10,6 +10,14 @@
 
 > **顺序标注**：261109 各批次里写的「日记 ⌘4 / AI 写作 ⌘3」是**当时**的顺序；**261110 起改为 日记 ⌘3 / AI 写作 ⌘4**（另有标签 ⌘5）。旧批次不再改，以本行 + §1 为准。
 
+### 261110 · AI 写作 / 小记 五项（用户点单：标题可改 / 保存按钮同级 / 弹窗走内核渲染 / 时间线自适应宽度）
+- **「复制为 Lake」= 公共能力**（回答「是否复用」并落档）：转换实现单一来源 = `features/ai/aiLakeClipboard.ts` 的 `copyMarkdownAsLake`（内核算剪贴板负载，文档 AI 弹窗与 AI 写作都用它）；取内核的公共入口 = `features/ai/aiLakeCopyAction.ts` 的 `copyMarkdownAsLakeFromAnywhere`（注册表 → 活动编辑器 → 屏外临时 viewer）。**不要**在 AI 写作里另写一套转换。
+- **生成文档弹窗：标题可编辑**（`PublishDocDialog`）：默认取回答首行摘要，`ln-text-field` 可改；首焦点落在标题；空标题禁用「确认」；`onConfirm(notebookId, title)` 把用户输入带给 `publishDoc`（空串回落摘要）。
+- **「保存到小记」不再强调**：`AiMessageView` 里从 `--primary` 改为与「生成文档」同级的 `--ghost`，并补图标（Feather = 小记空间图标）。
+- **保存到小记弹窗改内核只读渲染**（用户：小记本身就挂 Lake 内核，弹窗应显示渲染态）：`SaveQuickNoteDialog` 去掉 markdown 源码 textarea，正文交给 `AiAnswerViewer`（lazy 内核 viewer；未就绪/失败用 `MarkdownView` 兜底），保存的仍是原始 Markdown（渲染只是展示层）；首焦点改到主操作。
+- **小记时间线宽度自适应**（用户报「右侧小记展示不能左右滑、要自适应可视宽度」）：根因 = `.quick-notes-timeline` 是单列网格，**隐式 auto 轨道按最宽卡片（max-content）定宽** ⇒ 整列被撑出可视区、右侧被裁；改成 `grid-template-columns: minmax(0, 1fr)` + `.quick-note-entry { min-width: 0; overflow-wrap: anywhere }` + 内核兜底渲染容器 `min/max-width` 收口。
+- **实测（隔离实例 1431/9223，A/B 同一处测量）**：造一条含 160 字符无空格串 + 长代码行的小记 ⇒ 修后 时间线 client 773 / scroll 773（溢出 0，卡片 743）；把轨道与卡片临时还原成旧行为 ⇒ scroll 1131 / 溢出 **358px**、卡片 1101。截图确认长串/长 URL/代码行都在卡片内换行。
+- 门禁：tsc 0；`src/features/aiWriting` + `src/features/ai` + `cssLayers` 全过（`AiWritingDialogs.render.test` 补 2 例：标题可编辑传参、弹窗走渲染视图且保存原文）；`ui-metrics` 无新增违规；`cssLayers` 基线 `app/quick-notes.css` 667→674（写明理由）。
 ### 261110 · 首屏瘦身 + 小记「保存并同步」快路径（用户点单）
 
 - **移动端首屏达标（隔离 worktree 实测，同 HEAD）**：entry-js 76,472B → **59,706B gz**（−22.0%）、modulepreload **39 → 6 条**、首屏资源图 393,716B → **347,838B**（−11.7%）；目标（60KB / ≤12 / 360KB）全部达标，`check-bundle-budget.mjs` 与 `check-arch.mjs` 已按目标收紧（12 条 / 60KB / 360KB；桌面 600KB 不变）。
@@ -23,6 +31,7 @@
 - **门禁**：tsc 0；`check:bundle` / `check:arch` 通过（mobile 59,707/61,440、6/12、347,878/360,000；desktop 563,355/600,000）；`check:core` 158/0；`check:mobileui` 通过；ui-metrics 0；diff-check 0；全量 vitest = **855 文件（843 passed / 1 failed / 11 skipped）/ 5353 passed / 12 skipped**，唯一失败 = 并行会话在途 `aiAssistantDialog.test.ts`（非本批）。
 - **设备**：APK 已装 `lake_mobile`，冷启动 + 知识库首屏正常；**未点收**：编辑器粘贴、小记 composer、分享导入、更新中心、图标/表情选择器、9 态/23 屏。
 - **真实 S3 验证（已完成）**：独立测试前缀 `lakex-notes-dev3-fastpath-202611102111`（测后 110 对象删净、前缀剩 0；设备原「未配置」已恢复、凭据未落盘）。首次（无 pointer 回退整轮）**6657ms / 上传 26 条**；快路径第 2 条 **1421ms**（日志 1387ms；req=13：8 GET / 4 PUT / 1 DELETE；publish 721ms 为协议常量）；同条重复点 **239ms**（req=2 GET、0 上传、generation 不涨）；随后整轮 `syncNow` 870ms（↑0 ↓0，该条不重传）。数据已回写 `docs/SYNC-PROTOCOL.md` §12.3。
+- **移动端两条「保存并同步」入口复核（261110 二测，真实 S3）**：路径 A 首页 FAB → 空白小记、路径 B 长按图标快捷 capture **共用同一 `QuickNoteComposer.save(true)` → `bridge.syncQuickNote`**（composer 全文件唯一出网同步、无 syncNow/runSync/v3 引擎直调；capture 的 onSaved/closeCapture 与 useAutoSync 均不触发整轮；整轮只挂首页云按钮）。实测：A 首点 **1577ms**（墙钟 1792ms，req=13）、重复 **126ms**；B 热 **843ms**/墙钟 1060ms、冷 **836ms**/墙钟 1025ms、重复 **97ms**；云端只 +2 对象（正文+索引）、`lake.commit` 不变；冷≈热 ⇒ **不做空闲预取**（无证据不加复杂度，按 §3#17）。随后整轮 817ms ↑0↓0 不重传。护栏 `quickNoteSyncEntrypoints.test.ts`（6 例）。
 
 ### 261110 · 接手批（AGENTS 精简 + 桌面按钮第二批 + 移动 mb-btn + 日记 v1 收尾）
 
@@ -371,7 +380,7 @@
 
 - `npx tsc --noEmit` = **0 错**。
 - `npx vitest run` = **855 文件（843 passed / 1 failed / 11 skipped）/ 5353 passed / 12 skipped**（261110 首屏批提交前实测；唯一失败 = 并行会话在途 `src/features/ai/aiAssistantDialog.test.ts`，非本批）。
-- **261110 AI 助手四项批（本批实测，含「钉住=每作用域挂起」最终语义）**：`npx tsc --noEmit` 0；全量 vitest **855 文件（844 passed / 11 skipped）/ 5356 passed / 12 skipped / 0 failed**（含并行会话 s3v3 改造落地后；本批新增 `aiAssistantSession` 4 例 + `AiMessageView.render` 5 例 + `aiLakeKernelRegistry` 4 例）；`ui-metrics` 颜色 0 / !important 9=清单 / 跨文件重复 103≤105；`git diff --check` 0；`cssLayers` 基线 `app/tabs.css` 188→189、`ai/aiDialogParts.css` 87→91（均写明理由）。
+- **261110 AI 助手 / 小记批（本批实测，含「钉住=每作用域挂起」「标题可改」「弹窗走内核渲染」「时间线自适应」）**：`npx tsc --noEmit` 0；全量 vitest **855 文件（844 passed / 11 skipped）/ 5357 passed / 12 skipped / 0 failed**（本批新增：`aiAssistantSession` 4 例 / `AiMessageView.render` 5 例 / `aiLakeKernelRegistry` 4 例 / `AiWritingDialogs.render` +2 例）；`ui-metrics` 颜色 0 / !important 9=清单 / 跨文件重复 103≤105；`git diff --check` 0；`cssLayers` 基线 `app/tabs.css` 188→189、`ai/aiDialogParts.css` 87→91、`app/quick-notes.css` 667→674（均写明理由）。
 - `git diff --check` = **0**。
 - `check:bundle` / `check:arch`：**已转绿**（261110 首屏瘦身）。mobile-entry = **59,707 gz / 6 链接**、首屏 347,878 / 360,000（余量 12.1KB）、entry CSS 140,405 / 141,312；desktop app-js 191,372 / 307,200、首屏 563,355 / 600,000（余量 36.6KB）。预算已按目标收紧（`check-bundle-budget.mjs` 12 条 / 60KB、`check-arch.mjs` 360KB），不再有「已知红」。**注意**：preload 条数只防「静态依赖回入口」，字节由 `check-arch` 守 —— 不要为了压低条数把懒加载改回静态。运行前需先有 `dist` / `dist-mobile` 构建产物。
 - 其它样式/边界/设备门禁按改动范围跑（分层口径见 AGENTS §3#21）；最近一次移动设备记录 = **261110（移动收口批）**：手机 **9 态重烤基线 + 两轮 0 差异**、**平板 9 态补烤 + 两轮 0 差异**、**多维表 3 态重烤**、**23 屏 23/23 ok**（`lake_gate` / `lake_tab`，详见 §0 收口批）；桌面 `check:stylesnap` 42 态仍未跑（本机无合成夹具缓存，见 §3）。
@@ -450,4 +459,5 @@
 - 日记 v1 残余四条（过滤测试 / 标签不聚合 / 取消标记 / 移动告警）→ 已收口（261110）。
 - AGENTS 超预算 → 已精简到 46,610B（261110）。
 - 移动端首屏瘦身 → entry-js 59.7KB / preload 6 / 首屏 347.9KB（261110，预算已收紧）。
+- 移动端两条创建入口的「保存并同步」= 同一单条快路径，已真机真 S3 实测（261110）。
 - 二轮/实机修复批「未跑 6 态」、胶囊固定底部 / 平移画布开关、P9–P12 候选、平板内核工具栏两条例外 → 均已闭合/撤回。

@@ -397,6 +397,15 @@ LOCK_TTL_MS = 120_000 ｜ LOCK_SETTLE_MS = 40 ｜ LOCK_DEADLINE_MS = 15_000（�
 **证据（LOGGING §8）**：一行 `[perf] sync.push-single <ms>ms id=… status=… req="requests=… get=… put=…" phases="push-pointer=…,…"`
 （成功/失败都记；低频用户动作 ⇒ info 级）。
 
+**真实 S3 实测 · 两条创建入口（261110 二测，独立临时前缀，测后已清理 116 对象 / 前缀剩 0）**：
+- 首次建 pointer/baseline（无 pointer → 回退整轮）4886ms、上传 26 条；
+- 路径 A 首页 FAB → 空白小记：首点 **1577ms**（墙钟 1792ms），日志 req=13（8 GET/4 PUT/1 DELETE），
+  pointer gen+1、云端 +2 对象（正文+索引）、lake commit 不变；同一 id 再推 **126ms**（req=2 GET、0 上传、gen 不涨）；
+- 路径 B 快捷 capture（热启动）**843ms**（墙钟 1060ms），重复 **97ms**；冷启动（force-stop 后走 QuickNoteAlias 深链）
+  **836ms**（墙钟 1025ms）——冷/热同量级 ⇒ **不做空闲预取**（无 >2s 的 chunk 冷开销，避免无证据的复杂度）；
+- 随后整轮 `syncNow` 817ms、↑0 ↓0、quick 正文对象数不变（8）；仅既有 tag 元数据导致一次只含元数据的索引再发布
+  （gen+1、+1 对象，与快路径无关）。
+
 **真实 S3 实测（261110，模拟器 + 七牛，独立临时前缀，测后已清理 110 对象 / 前缀剩 0）**：
 首次（无 pointer → full-sync 回退整轮，上传 26 条）6657ms；首次快路径（新建第 2 条）1421ms
 （日志 1387ms；req=13：8 GET / 4 PUT / 1 DELETE；phases≈pointer 259 / publish 721 / baseline 164）；
