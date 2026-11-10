@@ -218,6 +218,12 @@
 .mb-set-item--field .mb-set-item__ctl > .mb-select--trigger { flex: 1 1 auto; width: 100%; min-width: 0; }
 /* 密度只由设置页提供；多维表编辑面复用这些类时保留原来的自动宽度、2px 内距与字重。 */
 .mb-set-item__main { flex: 1 1 var(--mb-set-main-basis, auto); min-width: 0; display: flex; flex-direction: column; gap: var(--mb-set-main-gap, 2px); }
+/* 261110：同一原语可以落在 <button> 上（日记条目行 = 可点行；用真按钮保键盘/无障碍语义）。
+   移动端没有全局 button reset ⇒ 浏览器默认外观（外框 + 灰底 + 内距）会在行里多出一个"输入框"，这里清零。 */
+button.mb-set-item__main {
+  appearance: none; border: 0; margin: 0; padding: 0; background: none;
+  color: inherit; font: inherit; text-align: left;
+}
 .mb-set-name { color: var(--lake-text-1); font-size: var(--lake-font-size-body); font-weight: var(--mb-set-name-weight, var(--lake-font-weight-regular)); line-height: var(--lake-line-height-snug); }
 /* v2（261107）：设置行左侧彩色图标块 + 右侧当前值（预览稿 .set-ico / .set-val 的 mb-* 等价类）。
    本轮**不改 DOM 结构**，所以这两个类先作为原语钩子：接线时行内补

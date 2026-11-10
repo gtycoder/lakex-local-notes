@@ -3,6 +3,9 @@
  *
  * 与移动端一致：默认下次启动恢复上次标签；设置项 clearTabsOnExit=true 时不恢复并清掉存档。
  * 只存 id 与活动 id，标题/正文以启动时的库为准（已删除/已 purge 的文档在恢复时过滤掉）。
+ *
+ * **261110 用户定稿：日记空间的 tab 不进会话**（退出/重开后不自动恢复）；本文件因此只承载
+ * "文档空间"的标签会话。上限按空间独立计算见 `core/tabLimit`（文档/日记各算各的）。
  */
 export const TAB_SESSION_KEY = "lakex-local-notes-v3.tab-session";
 
@@ -48,7 +51,7 @@ export function clearTabSession(storage: TabSessionStorage = localStorage): void
  * 按 maxOpenTabs 截断恢复计划（DT-15）：会话按**打开顺序**存（越靠后越新），
  * 超过上限时只恢复最近 N 个——与"超限自动淘汰最旧标签"的语义一致，
  * 避免启动时先把旧标签打开再立刻被 evict（静默丢标签 + 逐次 persist）。
- * maxOpenTabs <= 0 = 不限制（与设置项语义一致）。
+ * maxOpenTabs <= 0 = 不限制（与设置项语义一致；261110 起设置上限为 16）。
  */
 export function restoreTabSessionForLimit(session: TabSession, maxOpenTabs: number): TabSession {
   if (!Number.isFinite(maxOpenTabs) || maxOpenTabs <= 0) return session;

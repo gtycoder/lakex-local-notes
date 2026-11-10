@@ -1,20 +1,28 @@
 /**
- * 一级「日记」页（261109 v1，第 4 个 tab；契约见 docs/DIARY.md）。
+ * 一级「日记」页（261109 v1；261110 二改 = 新建语义 + v2 柔光纸面重排 + 日历入口）。
  *
- * 职责（**不新造输入面**）：
- *  · 「写今天」主按钮 → `bridge.diaryOpenDate(今天)` 幂等 ensure → 交给宿主进**现有工作区**编辑（正文输入仍走工作区 + dock）；
- *  · 年/月分组列表 → 点条目同样进现有工作区（v1 没有日历/缺天提示/补写，见 docs/DIARY.md「不做」）；
- *  · 搜索入口 → 复用移动端既有全库搜索（结果集在宿主按日记条目 id 过滤，不新建索引）；
+ * 职责（**不新造输入面**：正文输入仍走工作区 + dock）：
+ *  · 页头右上角三个入口（左 → 右）= **搜索 / 日历 / ＋**：
+ *      ＋ = 今天新建（`mode:"new"`，永远新建一篇）；
+ *      日历 = 选任意日期新建（应用内月历 = 共享原语 `ui/MonthCalendar`，包在既有 `MobileSheet` 里）；
+ *      搜索 = 复用移动端既有全库搜索（宿主按日记条目 id 过滤，不新建索引）；
+ *  · 今日卡主按钮「写今天 / 继续写今天」= `mode:"open"` **幂等**（当天已有就开最新那篇）；
+ *  · 时间线 = 年（分组卡标题）→ 月（卡内小节）→ 条目行；同日多篇按行内时刻区分（docs/DIARY.md 决策 4）；
  *  · 条目「⋯ → 转为文档…」= **移动**这条笔记到选中的笔记本（同一个 note，不复制正文/历史）。
  *
  * 判据全部来自 `src/core/diary`（**组件里不重算**）：
  *  · 日记本/条目 = diaryNotebookId + diaryEntries；分组 = groupDiaryEntries；今天 = formatDiaryDateKey；
+ *  · 「新建 vs 幂等」= 数据层按 mode 选 planDiaryCreate / planDiaryOpen（本页只传 mode，不自己判"当天有没有"）；
  *  · 可承接的笔记本 = diaryConvertTargets；移动前校验 = planDiaryConvert（UI 不另写一套）。
- * 写入只走既有写域：`bridge.moveTreeNodeOrdered`（`runWrite("moveTreeNodeOrdered")`）。
+ * 写入只走既有写域：`bridge.diaryOpenDate(dateKey, mode)`（runWrite("diaryOpenDate")）/
+ * `bridge.moveTreeNodeOrdered`；连点由页面侧在途守卫（openingRef）+ 数据层单事务共同兜住。
  * **不打标**：本页不提供任何标签入口（docs/DIARY.md 决策 7）。
+ *
+ * 版式（261110 v2）：页头 = 玻璃条（.mobile-page-head + .mb-glass，与「标签」页同形）；今日卡与年段 =
+ * 白卡分组（.mb-set-section / .mb-item 原语）；行 = 名称 + 时刻 + 行尾 ⋯。**零新增视觉语言**，不新写页面骨架。
  */
-import { useCallback, useMemo, useState } from "react";
-import { FileText, MoreVertical, Pencil, Search, Trash2 } from "lucide-react";
+import { useCallback, useMemo, useRef, useState } from "react";
+import { CalendarDays, FileText, MoreVertical, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import {
   diaryConvertTargets,
   diaryEntries,
@@ -25,9 +33,12 @@ import {
   type DiaryConvertRejection,
   type DiaryEntry,
 } from "../../core/diary.js";
+import { formatHm } from "../../core/dateFormat.js";
 import type { TreeNode } from "../../lib/types";
-import { bridge } from "../bridge";
+import { bridge, type DiaryOpenMode } from "../bridge";
 import { EmptyState } from "../ui/EmptyState";
+import { MobileSheet } from "../ui/MobileSheet";
+import { MonthCalendar } from "../ui/MonthCalendar";
 import { MobileSheetMenu } from "../ui/MobileSheetMenu";
 import { MoveTargetTreeSheet } from "../ui/MoveTargetTreeSheet";
 import { toastActionError } from "../lib/actionError";
@@ -65,26 +76,75 @@ function dayLabel(dateKey: string): string {
   return month + " 月 " + day + " 日 " + weekday;
 }
 
+/** 日期键 → 月历游标（本地日期，不经 UTC）。 */
+function monthOf(dateKey: string): { year: number; month: number } {
+  return { year: Number(dateKey.slice(0, 4)), month: Number(dateKey.slice(5, 7)) };
+}
+
+/**
+ * 条目行内时刻（同日多篇靠它区分，docs/DIARY.md 决策 4「行内显示时刻」）：
+ * 优先创建时刻（新建时写入），历史条目缺失则回落到更新时刻；坏值返回空串（不显示该行说明）。
+ */
+function entryClock(entry: DiaryEntry): string {
+  const iso = entry.createdAt || entry.updatedAt;
+  if (!iso) return "";
+  const at = new Date(iso);
+  return Number.isNaN(at.getTime()) ? "" : formatHm(at);
+}
+
 export function DiaryPage({ nodes, onOpenEntry, onOpenSearch, onChanged }: DiaryPageProps) {
+  /** 在途守卫：＋/日历/写今天三条路共用（连点只发一次写请求；数据层另有单事务兜底）。 */
+  const openingRef = useRef(false);
   const [busy, setBusy] = useState(false);
   const todayKey = formatDiaryDateKey();
   const entries = useMemo(() => diaryEntries(nodes, diaryNotebookId(nodes)), [nodes]);
   const years = useMemo(() => groupDiaryEntries(entries), [entries]);
-  const wroteToday = entries.some((entry) => entry.dateKey === todayKey);
+  const todayCount = useMemo(() => entries.filter((entry) => entry.dateKey === todayKey).length, [entries, todayKey]);
+  const wroteToday = todayCount > 0;
+  /** 有日记的日期集合：只喂月历的「这一天已有」圆点（复用共享原语的 hasDot，不另画一套）。 */
+  const entryDateKeys = useMemo(() => new Set(entries.map((entry) => entry.dateKey)), [entries]);
 
-  const writeToday = useCallback(async (): Promise<void> => {
-    if (busy) return;
+  /**
+   * 打开/新建某天日记的唯一执行点：mode = "open"（幂等）/ "new"（永远新建）。
+   * 判据不在这里 —— 由 bridge → data 层按 mode 选 core 的 plan。
+   */
+  const openDate = useCallback(async (dateKey: string, mode: DiaryOpenMode, failLabel: string): Promise<void> => {
+    if (openingRef.current) return;
+    openingRef.current = true;
     setBusy(true);
     try {
-      const opened = await bridge.diaryOpenDate(todayKey);
+      const opened = await bridge.diaryOpenDate(dateKey, mode);
       onOpenEntry({ noteId: opened.noteId, notebookId: opened.notebookId, mode: "editor" });
       void onChanged();
     } catch (error) {
-      toastActionError("打开今天的日记", error);
+      toastActionError(failLabel, error);
     } finally {
+      openingRef.current = false;
       setBusy(false);
     }
-  }, [busy, onChanged, onOpenEntry, todayKey]);
+  }, [onChanged, onOpenEntry]);
+
+  const writeToday = useCallback((): void => { void openDate(todayKey, "open", "打开今天的日记"); }, [openDate, todayKey]);
+  const createToday = useCallback((): void => { void openDate(todayKey, "new", "新建今天的日记"); }, [openDate, todayKey]);
+
+  // ---- 日历：选任意日期新建（复用月历原语 + 既有 MobileSheet 浮层） ----
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const [cursor, setCursor] = useState(() => monthOf(todayKey));
+  const openCalendar = useCallback((): void => {
+    setCursor(monthOf(todayKey));
+    setCalendarOpen(true);
+  }, [todayKey]);
+  const shiftMonth = useCallback((delta: number): void => {
+    setCursor((current) => {
+      const next = new Date(current.year, current.month - 1 + delta, 1);
+      return { year: next.getFullYear(), month: next.getMonth() + 1 };
+    });
+  }, []);
+  /** 选中日期 = **新建**（一天允许多篇，所以不做"已存在就打开"的分支）。 */
+  const createOnDate = useCallback((dateKey: string): void => {
+    setCalendarOpen(false);
+    void openDate(dateKey, "new", "新建这一天的日记");
+  }, [openDate]);
 
   const openEntry = useCallback((entry: DiaryEntry): void => {
     const notebookId = diaryNotebookId(nodes);
@@ -141,26 +201,51 @@ export function DiaryPage({ nodes, onOpenEntry, onOpenSearch, onChanged }: Diary
 
   return (
     <div className="mobile-scroll">
+      {/* 页头 = 玻璃条（与「标签」页同一形态）：左标题 + 计数，右三个入口「搜索 / 日历 / ＋」。 */}
       <header className="mobile-settings-head mobile-page-head mb-glass mb-glass--bar">
         <div className="mobile-settings-title mb-flex1">
           日记
           <span className="mb-row__meta"> {entries.length} 篇</span>
         </div>
-        <button type="button" className="mb-iconbtn" aria-label="搜索日记" onClick={onOpenSearch}>
-          <Search size={18} />
-        </button>
+        <div className="mb-set-item__ctl">
+          <button type="button" className="mb-iconbtn" aria-label="搜索日记" onClick={onOpenSearch}>
+            <Search size={18} />
+          </button>
+          <button type="button" className="mb-iconbtn" aria-label="按日期新建日记" onClick={openCalendar}>
+            <CalendarDays size={18} />
+          </button>
+          <button type="button" className="mb-iconbtn" aria-label="今天新建日记" disabled={busy} onClick={createToday}>
+            <Plus size={18} />
+          </button>
+        </div>
       </header>
+
       <div className="mobile-quick-cards">
-        <button
-          type="button"
-          className="mb-btn mb-btn--primary mb-btn--block diary-write-today"
-          disabled={busy}
-          onClick={() => void writeToday()}
-          aria-label={wroteToday ? "继续写今天的日记" : "写今天的日记"}
-        >
-          <Pencil size={16} />
-          <span>{wroteToday ? "继续写今天" : "写今天"}</span>
-        </button>
+        {/* 今日卡（v2 纸面卡）：左 = 今天 + 状态，右 = 幂等主按钮「写今天 / 继续写今天」。 */}
+        <div className="mb-set-section">
+          <div className="mb-set-item">
+            <span className="mb-set-item__icon" aria-hidden="true"><CalendarDays size={19} /></span>
+            <div className="mb-set-item__main">
+              <div className="mb-set-name">今天</div>
+              <div className="mb-set-item__desc">
+                {dayLabel(todayKey)}，{wroteToday ? "已写 " + todayCount + " 篇，可继续写" : "还没有写"}
+              </div>
+            </div>
+            <div className="mb-set-item__ctl">
+              <button
+                type="button"
+                className="mb-btn mb-btn--primary mb-btn--sm"
+                disabled={busy}
+                onClick={writeToday}
+                aria-label={wroteToday ? "继续写今天的日记" : "写今天的日记"}
+              >
+                <Pencil size={16} />
+                <span>{wroteToday ? "继续写今天" : "写今天"}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
         {years.length === 0 ? (
           <EmptyState>还没有日记。点上面「写今天」写下第一篇。</EmptyState>
         ) : years.map((year) => (
@@ -180,7 +265,9 @@ export function DiaryPage({ nodes, onOpenEntry, onOpenSearch, onChanged }: Diary
                         aria-label={"打开 " + entry.dateKey + " 的日记"}
                       >
                         <span className="mb-set-name">{dayLabel(entry.dateKey)}</span>
-                        <span className="mb-set-item__desc">更新于 {formatRelativeTime(entry.updatedAt)}</span>
+                        <span className="mb-set-item__desc">
+                          {entryClock(entry) ? "写于 " + entryClock(entry) : "更新于 " + formatRelativeTime(entry.updatedAt)}
+                        </span>
                       </button>
                       {/* 行尾操作入口：⋮ → 弹层菜单（HomePage 同一份 MobileSheetMenu；不新造行样式）。 */}
                       <span className="mb-set-item__ctl">
@@ -201,7 +288,21 @@ export function DiaryPage({ nodes, onOpenEntry, onOpenSearch, onChanged }: Diary
           </section>
         ))}
       </div>
-      {/* 条目 ⋯ 菜单：v1 只有一项「转为文档…」（移动端不新造 Sheet 类型）。 */}
+
+      {/* 日历 = 选任意日期**新建**（应用内月历 = 共享原语；外壳 = 既有底部 Sheet，不引桌面日历）。 */}
+      <MobileSheet open={calendarOpen} title="按日期新建" onClose={() => setCalendarOpen(false)}>
+        <MonthCalendar
+          year={cursor.year}
+          month={cursor.month}
+          selected={null}
+          today={todayKey}
+          onShiftMonth={shiftMonth}
+          onPick={createOnDate}
+          hasDot={(dateKey) => entryDateKeys.has(dateKey)}
+        />
+      </MobileSheet>
+
+      {/* 条目 ⋯ 菜单：v1 只有两项（转为文档 / 删除）；移动端不新造 Sheet 类型。 */}
       <MobileSheetMenu
         open={menuFor !== null}
         items={[

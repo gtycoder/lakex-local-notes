@@ -1,11 +1,12 @@
-/* ── 移动端「日记」页（261109 v1）────────────────────────────────────────────
- * 只补两处原语覆盖不到的几何：① 月分组小标题（年用 .mb-set-section__title）；② 「写今天」主按钮与列表的间距。
- * 其余一律复用设置/标签页原语（.mobile-scroll / .mobile-settings-head / .mb-set-section / .mb-set-item /
- * .mb-btn / .mb-iconbtn / .mb-empty），不新造一套页面骨架（AGENTS §3#14 单一来源）。
- * 取值只用移动端令牌：颜色/字号/间距/圆角零字面量（ui-metrics 硬指标）。
+/* ── 移动端「日记」页（261109 v1；261110 二改）─────────────────────────────
+ * 只剩一处原语覆盖不到的几何：**月分组小标题**（年 = 分组卡标题 .mb-set-section__title，月 = 卡内小节）。
+ * 其余一律复用既有原语（.mobile-scroll / .mobile-settings-head + .mobile-page-head / .mb-glass /
+ * .mb-set-section / .mb-set-item / .mb-iconbtn / .mb-btn / .mb-empty），不新造页面骨架（AGENTS §3#14）。
+ * 261110 删除 `.diary-write-today`：主按钮进「今日卡」行内（.mb-btn--sm 自带 flex/居中），
+ * 那块 4 条 flex 声明不再需要（CSS 预算只许降）。
+ * 取值只用移动端令牌：颜色/字号/间距零字面量（ui-metrics 硬指标）。
  */
-.diary-write-today { display: flex; align-items: center; justify-content: center; gap: var(--lake-space-xs); }
-/* 月标题比年标题低一档：年 = 分组卡标题（.mb-set-section__title），月 = 卡内小节（更小、更浅）。 */
+/* 月标题比年标题低一档：年 = 分组卡标题，月 = 卡内小节（更小、更浅）。 */
 .diary-month__title {
   padding: var(--lake-space-sm) 18px var(--lake-space-xxs);
   color: var(--lake-text-4);

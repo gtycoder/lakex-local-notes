@@ -86,18 +86,18 @@ export function AiMessageView(props: AiMessageViewProps) {
         {message.error && !busy && <p className="aiw-msg__error" role="alert">生成失败：{message.error}</p>}
         {!busy && (Boolean(content) || Boolean(message.error) || interrupted || Boolean(message.stopped)) && (
           <div className="aiw-actions">
-            <button type="button" className="ln-iconbtn aiw-actions__icon" title="重新生成" aria-label="重新生成" onClick={onRegenerate}>
+            <button type="button" className="ln-iconbtn ln-iconbtn--compact aiw-actions__icon" title="重新生成" aria-label="重新生成" onClick={onRegenerate}>
               <RotateCcw size={14} aria-hidden="true" />
             </button>
             {content && (
-              <button type="button" className="ln-iconbtn aiw-actions__icon" title="复制" aria-label="复制" onClick={() => onCopy(content)}>
+              <button type="button" className="ln-iconbtn ln-iconbtn--compact aiw-actions__icon" title="复制" aria-label="复制" onClick={() => onCopy(content)}>
                 <Copy size={14} aria-hidden="true" />
               </button>
             )}
             {content && <span className="aiw-actions__sep" aria-hidden="true" />}
             {content && (
               <>
-                <button type="button" className="ln-btn aiw-actions__btn" onClick={() => onPublish(content)}>
+                <button type="button" className="ln-btn ln-btn--ghost aiw-actions__btn" onClick={() => onPublish(content)}>
                   <FilePlus2 size={14} aria-hidden="true" />
                   <span>生成文档</span>
                 </button>

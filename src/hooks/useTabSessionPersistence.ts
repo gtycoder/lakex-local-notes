@@ -27,6 +27,10 @@ export function useTabSessionPersistence(options: TabSessionPersistenceOptions):
     const decision = tabSessionWriteDecision(safeModeStatus, clearTabsOnExit);
     if (decision === "skip") return;
     if (decision === "clear") { clearTabSession(); return; }
-    writeTabSession({ ids: openTabs.map((tab) => tab.noteId), activeId: activeNoteId });
+    // 261110 用户定稿：**日记空间的 tab 不进会话**（退出/重开后不自动恢复）；文档空间仍按
+    // 「退出时关闭全部标签」设置决定恢不恢复。活动 id 若属于日记 tab，落 null（下次启动不替用户定位）。
+    const persistable = openTabs.filter((tab) => tab.space !== "diary");
+    const activeId = persistable.some((tab) => tab.noteId === activeNoteId) ? activeNoteId : (persistable[persistable.length - 1]?.noteId ?? null);
+    writeTabSession({ ids: persistable.map((tab) => tab.noteId), activeId });
   }, [ready, openTabs, activeNoteId, clearTabsOnExit, safeModeStatus]);
 }

@@ -21,7 +21,9 @@ function noteToTreeNode(note: LocalNoteSummary): TreeNode {
     title: note.title,
     noteFileId: note.id,
     sortOrder: 0,
-    createdAt: note.updatedAt,
+    // 261110：用**真实创建时间**（schema v13）；缺失才回落 updatedAt —— 同日多篇排序靠它，
+    // 拿 updatedAt 顶替会让"编辑旧的一条"把顺序顶乱（用户 261110 报的排序问题根因）。
+    createdAt: note.createdAt || note.updatedAt,
     updatedAt: note.updatedAt,
     isConflict: false,
     icon: null,

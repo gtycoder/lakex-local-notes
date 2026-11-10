@@ -48,6 +48,7 @@ describe("mobile startup performance contract", () => {
         id: "startup-note",
         title: "启动测试",
         updatedAt: expect.any(String),
+        createdAt: expect.any(String),
         parentId: null,
       },
     ]);

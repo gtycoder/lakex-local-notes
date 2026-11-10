@@ -10,6 +10,50 @@
 
 > **顺序标注**：261109 各批次里写的「日记 ⌘4 / AI 写作 ⌘3」是**当时**的顺序；**261110 起改为 日记 ⌘3 / AI 写作 ⌘4**（另有标签 ⌘5）。旧批次不再改，以本行 + §1 为准。
 
+### 261110 · AI 写作：提示词点击写入输入框 + 接入 ln-* 原语做风格统一
+- **提示词库（用户定稿）**：点卡片 = 把完整提示词**直接写进输入框**（已有文字换行追加、不覆盖；同时清掉旧 chip；面板关闭、焦点回输入框末尾），不再挂 chip；旧会话存过 `promptText` 的仍显示 chip 且可移除。
+- **审查抓到并已修**：`input.replace(/\s+$/,"")` 的 `\s` 在编辑时被字符串吃掉（AGENTS §7.21 同类坑）⇒ 变成 `/s+$/` 会误删尾部字母 s；已修为 `\s+`，并有 render 用例覆盖「已有文字追加」。
+- **风格统一（用户定稿：先统一、不改结构/交互）**：AI 写作控件全部换 kit 原语 —— 新对话 `ln-btn--secondary`；历史行 `ln-row` + `ln-row__actions`；chip `ln-tag` + `ln-iconbtn--compact` 关闭钮；工具钮 `ln-btn--ghost`（激活 `ln-btn--secondary is-selected`）；发送/停止 `ln-btn--primary` / `ln-btn--secondary`；消息操作 `ln-iconbtn--compact` + `ln-btn`；弹窗行 `ln-form__row`。**提示词库由 3 列卡片改为菜单行列表**（`ln-menu__item`，宽 360，与全仓菜单同一身份）。
+- **CSS**：`aiWriting.css` **446 → 301 声明**（删掉的全是「同一视觉又写一遍」的控件样式），`cssLayers.test.ts` 基线同步调小并写明理由；只留布局与独有语义件（思考块/气泡/头像/空态/门禁/横幅/建议 chip）。
+- **验收（隔离实例：独立 userData + vite 1431 + CDP 9223；未动用户/另一会话的实例）**：截图核对 空态 / 提示词菜单 / 对话线程（思考块+答案+操作条）/ 文档选择气泡；实测点提示词 → 输入框 = 完整提示词（173 字）、chip 清除、菜单关闭、焦点在输入框。
+- 门禁：tsc 0；vitest **831 文件 / 5248 passed / 12 skipped / 0 failed**；ui-metrics（颜色 0 / 字号 0 / !important 9=清单 9）；cssLayers 通过；diff-check 0。
+- **遗留（下轮讨论改版时定）**：chip 按 `ln-tag` 口径（18px）比原 22 小一档；建议 chip/思考块/气泡/空态/门禁属独有语义暂未并入原语；`ui-metrics` 跨文件重复基线 105 未下调（脚本不在本次写范围）。
+### 261110 · 桌面标签上限：按空间独立 + 上限 16 + 日记 tab 不恢复
+- **用户报**：日记端开 7 个，文档这边就只能开 1 个（上限 8 被两个空间共用）。定稿三条：① 上限**按空间独立**（文档/日记各算各的）；② 设置里最大只能 **16**（不再有「不限」/24 档）；③ **日记 tab 退出/重开不自动恢复**，文档空间仍按「退出时关闭全部标签」设置。
+- **实现**：`core/tabLimit` 增加 `space` 作用域（`TabLike.space` 缺省 library；`selectEvictionIds` / `trimTabsToLimit` 只在本空间计数与淘汰，不传 = 旧全量行为）；`useTabLifecycle.openNote` 把标签空间传给 evict/trim，`restoreTabs` 合并时两空间各自封顶。
+- **上限 16**：`MAX_OPEN_TAB_OPTIONS = [4,6,8,12,16]` + `normalizeMaxOpenTabs`（load/save 都夹，旧 0/24 → 16）；两端设置 UI 同源（桌面 Select / 移动 PickerSheet），文案写明「每个空间独立、最多 16」。
+- **日记 tab 不恢复**：会话只落文档空间 tab（`useTabSessionPersistence` 过滤 `space === "diary"`，活动 id 回落到最后一个文档标签）；恢复前再按 `isDiaryEntryNode(treeNodes, id)` 滤一次（兼容旧会话里已存的日记 id）。
+- 门禁：tsc 0；vitest **830 文件 / 5245 passed / 12 skipped / 0 failed**（新增：按空间淘汰/截断、不传 space 的向后兼容、设置夹上限、日记 tab 不落盘）。
+- **桌面实测（261110 15:30，隔离实例：独立 userData + 独立 vite 1431 + CDP 9223，不碰用户/另一会话的实例）**：
+  ① 文档空间连开 9 篇 → 上限 8 生效（第 8 篇起淘汰最旧：T1/T2 被淘汰，T2–T9 在）；
+  ② 日记空间连开 9 篇 → 日记 tab 8 个（10-09→10-02），**文档 8 个原样保留**（两空间合计 16 个 tab 同时存在）；
+  ③ 整页 reload（≈重开）→ 恢复 8 个文档 tab、**日记 tab 0 个恢复**；会话文件只含 8 个文档 id；
+  ④ 夹上限：localStorage 写 24 → 设置显示 **16 个**，下拉只剩 4/6/8/12/16；
+  ⑤ `clearTabsOnExit=true` → 会话清空、文档 tab 不恢复（只剩冷启动兜底 1 篇）。
+  实测后已恢复设置并清理隔离数据（1431/9223/19879 已释放，用户 1421 静态服务与 9222 实例未动）。
+
+### 261110 · 日记排序修复（同日多篇 = 真实创建时间）
+- **用户报**：移动端日记排序有问题 —— 同一天多篇的顺序会随"最后编辑"变化；口径确认 = **日期倒序 + 同日按创建时间倒序**（分组不变）。
+- **根因**：移动端 `notes` 表**没有 created_at**，`diaryNodes` 拿 `updatedAt` 顶替 `createdAt` ⇒ core 的同日 `createdAt` 比较实际比的是修改时间；行内「写于」也跟着编辑漂移（桌面端有真实 created_at，所以只有移动端出问题）。
+- **修法**：移动端 schema **v12 → v13** 给 `notes` 加 `created_at`（老行迁移回填 = `updated_at`）；`createNote` 写入、`listNotes` 摘要带出、`diaryNodes` 用真实创建时间、远端导入（`importRemoteNote`）按首次落地 `updatedAt` 记一次；core 排序逻辑不动（本来就是对的口径）。
+- **追加（同日二次确认）**：**工作区「文档树」抽屉**里的日记子树也必须时间倒序（用户原话「这里才是真正的笔记本里的排序」）⇒ 新增 core `compareDiarySiblings`（分组在笔记前、年/月**按数值**倒序、笔记日期倒序、同日 createdAt 倒序）+ `buildNotebookTreeIndex(tree, { diaryRootId })` 只重排日记子树（其它笔记本仍按 `sortOrder`；**只改显示，不改存储/拖拽落库**）；`NotebookTreeItem` 带出 `createdAt`。
+- 门禁：tsc 0；vitest **826 文件 / 5221 passed / 12 skipped / 0 failed**（新增 8 例：同日按 createdAt 排序、编辑不漂、v12→v13 回填、树内日记排序、非日记本不受影响、拖拽开关判据/接线/早退）。
+- 设备实测：① 迁移后既有顺序不变 → 连建两篇（14:20/14:21）新在前 → **编辑 14:20 那篇并保存后仍停在 14:21 之下**、「写于」不漂；② **文档树抽屉**：`2026 → 11 → [2026-11-13、5×2026-11-10、2026-11-05] → 10 → [2026-10-01]`（年/月数值倒序、日期倒序）。
+- **日记子树禁用长按拖拽**（261110 用户定稿，桌面端本来也没有）：`treeDragEnabled(space)` 判据 + `NotebookWorkspace` 把 `notebookSpace` 接进 `useTreeDrag.enabled`；禁用后长按不再起手（不挂 `nb-drag-active`、不建跟手浮层），多选 / 行内 ⋮ / ＋ 不受影响；护栏 `treeDragDisabled.test.ts`（判据 + 接线 + 早退）。
+
+### 261110 · 日记二改（移动为主）+ 两端「默认空间」
+- **移动「＋」改为永远新建**（用户报「点新建日记却进了已有编辑」）：移动端链路原本没有 mode ⇒ 新增 `bridge.diaryOpenDate(dateKey, mode)` → `ensureDiaryNote(d, dateKey, mode)`，`new` 走 `core.planDiaryCreate`（与桌面 `diaryStore.openDate` 同口径）、`open` 仍 `planDiaryOpen` 幂等；**主按钮「写今天/继续写今天」保持幂等 open**，＋/日历传 `new`；连点四层兜住（openingRef + disabled + 写域串行 + 单事务）。顺手修 data 层层级 bug：**月组已存在时新篇曾挂到日记本根**（现按 `plan.noteParentId` 落月组）。
+- **移动日记页 v2 重排**（用户报「太原始」）：玻璃页头 + 白卡分组（今日卡 / 年段卡）+ 行内 ⋯；`diary.css` 9→4 条，零新增视觉语言。行主区改**真按钮** `button.mb-set-item__main`，kit 补 8 条 reset（移动端无全局 button reset）；界面文案去掉「·」分隔（DESIGN 红线）。
+- **右上角三入口 = 搜索 / 日历 / ＋（左→右，两端一致）**：桌面只重排（`DiaryWorkspace.tsx`）；移动新增日历 + ＋。日历 = `MobileSheet` + **共享月历原语** `ui/MonthCalendar`（`core.calendarMonthDays`，42 格周一起始，已有日记打点），选中任意日期即 `mode:"new"`，一天可多篇；原多维表 `.mbt-calendar-*` 收编为 `.mb-calendar-*`（样式逐条照搬、只搬家改名），多维表日期 Sheet / 日历视图 / 日记共用一份（独立懒 chunk，不进首屏 CSS）。
+- **知识库列表过滤回收站笔记本**（`n.id !== TRASH_NOTEBOOK_ID`，判据取 core，不写字面量；只过滤渲染）。
+- **移动返回落点**：从日记条目进工作区后回「日记」页签（`workspaceOriginTabRef`；页面返回与安卓返回键都收敛到 `useRouteTransition.onClosed`），其余入口仍回知识库；首页下层 tab 取来源页，返回不闪知识库。
+- **「默认空间」设置（两端，仅本机）**：桌面 → 设置·常规·启动，5 空间、默认文档、键 `lakex-local-notes-v3.default-space`（`components/model/defaultSpace.ts`，同步 `settingsSearch`）；移动 → 设置·常规，4 tab、默认小记、键 `lakex-local-notes-mobile.default-space`（`settings/defaultSpace.ts`）；**不进 S3/wire**，值非法/未设置回落默认；只影响启动，⌘1–5 / tab 切换不变。
+- 门禁：tsc 0；vitest **825 文件 / 5225 passed / 12 skipped / 0 failed**；ui-metrics / check:core / check:mobileui / diff-check 通过；`mobile-entry-css` **140,166 / 141,312（余 1,146B）**；mobile-entry-js 75,623 / preload 39 条仍是既有红（§1）。
+- **状态**：以上改动**未提交**（工作树 29 改 + 6 新增；AGENTS 另加一条长期规则「移动端改动 ⇒ 先装包再交付」，§3#21④）。
+- 验收：**移动真机（lake_mobile / emulator-5556）逐条点验通过** —— ＋新建（2 篇同日、行内 HH:mm）／日历选 11-05 新建／返回回日记页签／知识库无回收站／默认空间改知识库并优雅退出重启生效（已恢复默认小记；dev AVD 留 2 条验证用日记）。
+- **设备门禁（261110 补跑，lake_gate / emulator-5558 / CDP 9336）**：9 态快照**重烤基线**（差异 = 每态恒 +35 元素，逐条对拍确认全部来自常驻挂载的日记页新构成：今日卡 + 三入口 + 空态；旧 `.diary-write-today` 已删）→ 连跑两轮 **0 差异**；**23 屏走查 23/23 ok**（顺手修装置陈旧标签：`mobile-walkthrough.mjs` 的「编辑器 / 同步设置」→「常规 / 云端与同步」，261110 P1 设置改名后未同步）。
+- **桌面实机点验（dev 9222，用户既有实例，只读式操作）**：日记空间头部按钮顺序 = 搜索 / 日期 / ＋（aria-label 实测）；设置·常规·启动组「默认空间」选项 = 文档/小记/日记/AI 写作/标签，选「日记」落盘 `lakex-local-notes-v3.default-space=diary`、面板值同步 → 已删键恢复默认文档。桌面 `check:stylesnap` 42 态仍需有夹具的机器补（无「日记空间」态）。
+
 ### 261110 · 正文字号 14 试调（空间菜单 / 日记 / AI 写作）
 - 用户点单：空间切换触发器（只 `.toolbar__workspace`，顶栏其它按钮不动）、下拉项（`.ln-menu__item` 是共用原语 ⇒ **全仓菜单项一起**变 14）、日记与 AI 写作正文统一 14（页面标题仍 18 档）；目录栏未动。
 - 护栏：`cssLayers` 基线 chrome.css 527→528（触发器新增一条 font-size，已写明理由）。
@@ -255,10 +299,10 @@
 **门禁基线（261109 发版前：AI 写作 + 日记合并后实测）**
 
 - `npx tsc --noEmit` = **0 错**。
-- `npx vitest run` = **818 文件（807 passed / 11 skipped）/ 5148 passed / 12 skipped / 0 failed**（AI 写作 + 日记两批合并后实测；日记批新增 101 例）。
+- `npx vitest run` = **825 文件（814 passed / 11 skipped）/ 5228 passed / 12 skipped / 0 failed**（261110 日记排序批后实测；较 261109 发版前 818/5148 增 7 文件 / 80 例）。
 - `git diff --check` = **0**。
 - `check:bundle`：**mobile-entry 仍超目标（已知红，非本批引入）**。脚本当前冻结为 entry JS gzip ≤66KB、modulepreload ≤34 条、首屏 ≤380KB（`check-arch`）；目标仍是 **60KB / ≤12 条 / 360KB**，瘦身后收紧（§3 P1）。**261109 实测校准（发版前，`v1.1.0` 合并后）**：`mobile-entry` = **75,316 gz / 39 链接**（冻结 67,584 / 34）；同日合并前的对照基线 `6b2bfbec` = 75,031 gz / 39 链接 ⇒ 日记与 AI 写作合并带来的增量 **+285B / +0 链接**。桌面首屏 586,076 / 600,000（余量 13.9KB，AI 写作改 lazy 前是 555,107）。⇒ 这套红是**跨版本既有**，收口是独立移动端瘦身专项（`check:arch` 的 mobile 首屏 390,727 / 380,000 同属此项）。运行前需先有 `dist` / `dist-mobile` 构建产物。
-- 其它样式/边界/设备门禁按改动范围跑（分层口径见 AGENTS §3#21）；最近一次完整设备记录 = **v1.0.4 发版前**：手机 6 态、平板 6 态、多维表 3 态均重烤后两轮 0 差异。
+- 其它样式/边界/设备门禁按改动范围跑（分层口径见 AGENTS §3#21）；最近一次移动设备记录 = **261110（日记二改批）**：手机 **9 态重烤基线 + 两轮 0 差异**、**23 屏 23/23 ok**（`lake_gate` / emulator-5558 / CDP 9336）；平板 6 态 / 多维表 3 态最近完整记录仍是 v1.0.4 发版前。
 
 **设备与环境（本机实测）**
 
@@ -288,6 +332,7 @@
 ## 2. 风险与已知不稳定（跨批次，别再踩）
 
 - **快照门禁依赖设备数据**：只在专用 AVD + 固定夹具上跑；改外壳几何/构成、重灌夹具、`pm clear`、装新构建、跑过造数据探针后**必须先重烤基线**（`--from <warm>.json --write-baseline`），否则下次全量必红。5554/5556 实例有验证数据，误跑必假红。23 屏走查装置修过「菜单页误点关闭」的潜伏 bug ⇒ **历史绿灯不完全可信**。
+- **模拟器 force-stop/am kill 会丢最近的 WebView localStorage 写入**（261110 实测，控制变量已验证：自写任意新键同样丢，**不是产品代码问题**；LevelDB log 未落盘、优雅退出才提交）⇒ **验「默认空间 / 主题 / 侧栏宽度」这类本机偏好必须用 App 自己的退出路径**（首页连按两次返回退出再启动），别用 `am force-stop` 下结论。
 - **验收状态**：「已合并 / 已双推 / 已发布」≠「用户逐条点收」。261102 十四批、261103 各批只有设备实测记录；设备绿灯只代表装置与计算值，不代表真实第三方环境（分享面板 / 文件选择器 / AI 外部服务 / S3 覆盖恢复）。
 - **平板回退史**：十三批「expanded 改内核固定工具栏」已被十四批整体回退；残留旧路径（内核工具栏、`body.lake-tablet`、`__lakeSetTablet`、`nativeDeviceHint`）若被重新引入 = 第三套口径。
 - **inkDoc v4（写 4、读 1|2|3|4）**：旧端读到 v4 会进只读保护 ⇒ 跨端混用必须在发布说明里写清（含「手机/平板需重装新包」）；改格式只能「新端写新版、旧端只读」并同步 [docs/INK-PAD.md](INK-PAD.md)。
@@ -304,8 +349,8 @@
 
 **P0（不做就卡住主线）**
 
-- **日记 v1 收尾（261109 遗留）**：~~① 与 `feat/ai-writing-space` 合并~~ **已合并（v1.1.0）**；~~② ⌘4 并回 `useDesktopLifecycle` 映射表~~ **已收敛为 ⌘1–5 一张表（261109）**；③ 移动端关闭日记条目后的返回落点仍在「知识库」（沿用既有 `useRouteTransition` 语义，若产品要"回日记页"需单独改）；④ 「转为文档」两端目标选择器文案仍是「移动到…/移动到此处」（共享原语，未加 title/confirmLabel 参数）。
-- **日记设备级验收**：移动 `check:mobilesnap` 6 态（**必须先在 `lake_gate` 上重烤基线**——首页 tab 行从 3 个变 4 个属于外壳构成变化）+ 23 屏走查；桌面 `check:stylesnap` 目前**没有"日记空间"这一态**，要纳入需新增 state 并重烤基线。
+- **日记 v1 收尾（261109 遗留）**：~~① 与 `feat/ai-writing-space` 合并~~ **已合并（v1.1.0）**；~~② ⌘4 并回 `useDesktopLifecycle` 映射表~~ **已收敛为 ⌘1–5 一张表（261109）**；~~③ 移动端关闭日记条目后的返回落点仍在「知识库」~~ **已修（261110：回日记页签）**；④ 「转为文档」两端目标选择器文案仍是「移动到…/移动到此处」（共享原语，未加 title/confirmLabel 参数）。
+- **日记设备级验收**：~~移动 9 态 + 23 屏~~ **已完成（261110：9 态重烤基线 + 两轮 0 差异；23 屏 23/23）**；剩桌面 `check:stylesnap` **没有"日记空间"这一态**，要纳入需新增 state 并重烤基线（本机无桌面合成夹具缓存，需有夹具的机器补）。
 - **每批收尾固定动作**：更新 §1 基线与门禁计数 + §3 + §0 批次抬头状态；提交/推送后立刻回写，别让 §0 的「未提交」标记漂移。
 - **下一版发布**（流程见 [docs/RELEASE.md](RELEASE.md)）：发布说明必须写清 ① inkDoc v4：旧端打开只读、手机/平板需重装；② 标签顺序只在设备本地生效（不同步）；③ 标签删除 = 缺席，两端都要升级（旧端仍会把墓碑写回索引）；④ 发布说明统一维护在 [docs/RELEASE-NOTES.md](RELEASE-NOTES.md)。发版前跑全量门禁：手机 6 态 + 平板 6 态 + 多维表 3 态 + 23 屏走查 + `check:windowsweep` + 桌面 42 态（桌面 42 态本机无合成夹具缓存，需有夹具的机器补）。
 - **移动端首屏瘦身**（发版后专项）：HEAD 实测 entry-js 65.5KB gz / preload 33 条 / 首屏 374KB，已超目标（60KB / ≤12 条 / 360KB）；先砍回目标值，再收紧 `check-bundle-budget.mjs` 与 `check-arch.mjs`。

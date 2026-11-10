@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>AI 写作 · B 方案示意</title>
+<style>
+  :root{
+    --bg-window:#e9edf3; --bg-panel:#fff; --bg-block:#f0f3f7; --bg-subtle:#f5f6f8; --bg-hover:#eef1f5;
+    --text-1:#1f2329; --text-2:#455166; --text-3:#566273; --text-4:#8b93a1;
+    --border-1:#d6dde7; --border-2:#e3e8ef; --ctl-border:#bcc7d6;
+    --accent:#3f5fa0; --accent-ink:#33497f; --accent-tint:#e1eafa; --accent-text:#33497f;
+    --radius-sm:8px; --radius-card:12px; --radius-pill:999px;
+    --font:"MiSans","PingFang SC",-apple-system,sans-serif; --mono:"JetBrains Mono",ui-monospace,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg-window);font-family:var(--font);color:var(--text-1);font-size:14px}
+  .win{height:100vh;display:flex;flex-direction:column;background:var(--bg-panel)}
+  .topbar{height:38px;display:flex;align-items:center;gap:10px;padding:0 14px;border-bottom:.5px solid var(--border-2);color:var(--text-2);font-size:13px}
+  .app{flex:1;display:flex;min-height:0}
+  /* ---- 左栏（261110：字号 14、搜索、置顶，两栏可拖）---- */
+  .side{width:300px;flex:none;display:flex;flex-direction:column;padding:18px 12px;border-right:.5px solid var(--border-2);background:var(--bg-subtle);font-size:14px}
+  .side h2{margin:0 6px 14px;font-size:17px;font-weight:600}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:27px;padding:0 11px;border:.5px solid transparent;border-radius:var(--radius-sm);background:transparent;color:var(--text-1);font-size:13px;font-weight:500;font-family:inherit}
+  .btn.secondary{border-color:var(--border-1)}
+  .side .new{width:100%;margin:0 0 10px}
+  .input{display:flex;align-items:center;gap:6px;height:27px;padding:0 9px;border:.5px solid var(--ctl-border);border-radius:var(--radius-sm);background:#fff;color:var(--text-3);font-size:14px}
+  .input .ph{color:var(--text-4)}
+  .group-label{margin:12px 6px 4px;color:var(--text-4);font-size:14px}
+  .row{display:flex;align-items:center;gap:5px;min-height:27px;padding:0 6px;border-radius:var(--radius-sm);font-size:14px}
+  .row.sel{background:var(--accent-tint);color:var(--accent-text);font-weight:600}
+  .row .t{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .row .pin{color:var(--text-4);font-size:11px}
+  .row .more{width:22px;height:22px;color:var(--text-3);text-align:center;line-height:22px;border-radius:6px}
+  /* ---- 主区 ---- */
+  .main{flex:1;display:flex;flex-direction:column;min-width:0}
+  .scroll{flex:1;overflow:auto;padding:28px 0 0}
+  .thread{width:min(900px,calc(100% - 64px));margin:0 auto;display:flex;flex-direction:column;gap:26px}
+  .msg-user{display:flex;justify-content:flex-end}
+  .bubble{max-width:68%;padding:8px 14px;border-radius:var(--radius-card);background:var(--bg-block);line-height:1.6}
+  .assist{display:flex;gap:14px;align-items:flex-start}
+  .avatar{flex:none;width:30px;height:30px;margin-top:2px;border-radius:50%;background:var(--accent-tint);color:var(--accent-text);display:flex;align-items:center;justify-content:center;font-size:14px}
+  .assist-main{flex:1;min-width:0}
+  .think{display:inline-flex;align-items:center;gap:6px;color:var(--text-3);font-size:13px;margin:0 0 8px}
+  /* 答案 = 文档面：白卡 + 发丝边 + 文档排版；操作条贴卡右上（hover 显现） */
+  .answer{position:relative;background:var(--bg-panel);border:.5px solid var(--border-2);border-radius:var(--radius-card);padding:20px 22px}
+  .answer .doc h2{margin:0 0 10px;font-size:20px;line-height:1.35}
+  .answer .doc h3{margin:16px 0 6px;font-size:15px;line-height:1.4;color:var(--text-1)}
+  .answer .doc p{margin:6px 0;line-height:1.75;color:var(--text-2)}
+  .answer .doc ul{margin:8px 0 8px 18px;padding:0;color:var(--text-2);line-height:1.8}
+  .answer table{border-collapse:collapse;margin:10px 0;font-size:13px;width:100%}
+  .answer th,.answer td{border:.5px solid var(--border-1);padding:6px 10px;text-align:left;color:var(--text-2)}
+  .answer th{background:var(--bg-block);color:var(--text-1);font-weight:600}
+  .answer pre{margin:10px 0 0;padding:10px 12px;background:var(--bg-block);border-radius:var(--radius-sm);font-family:var(--mono);font-size:12px;color:var(--text-2)}
+  .answer .actions{position:absolute;top:10px;right:12px;display:flex;align-items:center;gap:4px;background:var(--bg-panel)}
+  .iconbtn{width:22px;height:22px;border-radius:6px;color:var(--text-3);display:flex;align-items:center;justify-content:center;font-size:12px}
+  .meta{margin-top:8px;color:var(--text-4);font-size:12px}
+  /* ---- 输入卡 + 气泡居中 ---- */
+  .dock{flex:none;padding:0 24px 210px}
+  .composer{position:relative;width:min(900px,100%);margin:0 auto;border:.5px solid var(--ctl-border);border-radius:var(--radius-card);background:#fff}
+  .composer .ph{padding:14px 14px 6px;color:var(--text-4)}
+  .bar{display:flex;align-items:center;justify-content:space-between;padding:8px 10px}
+  .tools{display:flex;gap:4px}
+  .tool{display:inline-flex;align-items:center;gap:4px;height:22px;padding:0 7px;border-radius:6px;color:var(--text-3);font-size:13px}
+  .tool.active{border:.5px solid var(--border-1);background:var(--bg-block);color:var(--text-1)}
+  .send{height:22px;padding:0 12px;border-radius:6px;background:var(--accent-tint);color:var(--accent-text);display:flex;align-items:center;font-size:13px}
+  /* 气泡：输入卡下方居中 */
+  .pop{position:absolute;left:50%;transform:translateX(-50%);top:calc(100% + 8px);width:360px;background:#fff;border:.5px solid var(--border-1);border-radius:10px;box-shadow:0 4px 12px -4px rgba(16,24,40,.12),0 12px 28px -12px rgba(16,24,40,.16);padding:6px;z-index:5}
+  .mi{display:flex;gap:8px;align-items:flex-start;padding:6px 8px;border-radius:4px}
+  .mi:hover{background:var(--bg-hover)}
+  .mi .ic{flex:none;color:var(--text-3);margin-top:2px}
+  .mi .tt{font-size:13px;font-weight:500}
+  .mi .dd{font-size:12px;color:var(--text-4);margin-top:2px}
+  .hint{color:var(--text-4);font-size:12px;margin:14px auto 0;text-align:center}
+</style></head>
+<body>
+<div class="win">
+  <div class="topbar"><span>✦ AI 写作 ▾</span><span style="opacity:.5">|</span><span style="opacity:.6">当前仅本地</span></div>
+  <div class="app">
+    <aside class="side">
+      <h2>AI 写作</h2>
+      <button class="btn secondary new">＋ 新对话</button>
+      <div class="input">⌕ <span class="ph">搜索对话</span></div>
+      <div class="group-label">置顶</div>
+      <div class="row"><svg class="pin" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 17v5"></path><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"></path></svg><span class="t">项目复盘会纪要</span><span class="more">⋯</span></div>
+      <div class="group-label">今天</div>
+      <div class="row sel"><span class="t">统一样式验收</span><span class="more">⋯</span></div>
+      <div class="row"><span class="t">周报整理</span><span class="more">⋯</span></div>
+      <div class="group-label">昨天</div>
+      <div class="row"><span class="t">产品标语 brainstorm</span><span class="more">⋯</span></div>
+    </aside>
+    <main class="main">
+      <div class="scroll">
+        <div class="thread">
+          <div class="msg-user"><div class="bubble">帮我写一段项目介绍，并整理成表格。</div></div>
+          <div class="assist">
+            <span class="avatar">✦</span>
+            <div class="assist-main">
+              <p class="think">✓ 已深度思考（用时 3.2 秒） ▸</p>
+              <div class="answer">
+                <div class="actions">
+                  <span class="iconbtn" title="重新生成">⟲</span>
+                  <span class="iconbtn" title="复制">⧉</span>
+                  <span class="btn" style="height:22px;font-size:12px">生成文档</span>
+                  <span class="btn" style="height:22px;font-size:12px;background:var(--accent-ink);color:#fff">保存到小记</span>
+                </div>
+                <div class="doc">
+                  <h2>项目介绍</h2>
+                  <h3>亮点</h3>
+                  <ul><li>本地优先，离线可用</li><li>多端镜像同步</li></ul>
+                  <table><tr><th>项</th><th>值</th></tr><tr><td>平台</td><td>macOS / Android</td></tr><tr><td>数据</td><td>本地 SQLite + 文件</td></tr></table>
+                  <pre>const local = true; // 正文落在本机</pre>
+                </div>
+                <div class="meta">用时 3.2 秒 · 自定义（OpenAI 兼容）</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="dock">
+        <p class="hint" style="margin:0 auto 8px">B 方案示意：答案改为「文档面」（白卡 + 文档排版），操作条贴卡右上；思考块默认收起成一行；左栏 14px + 搜索 + 置顶；气泡贴输入卡下方居中。</p>
+        <div class="composer">
+          <div class="ph">从这里开始对话</div>
+          <div class="bar">
+            <div class="tools"><span class="tool active">✦ 提示词</span><span class="tool">▤ 请选择文档</span></div>
+            <div style="display:flex;align-items:center;gap:8px"><span style="color:var(--text-4);font-size:12px">⏎ 发送</span><span class="send">发送</span></div>
+          </div>
+          <div class="pop">
+            <div class="mi"><span class="ic">✦</span><span><span class="tt">生成产品标语</span><div class="dd">为产品写一句押韵、有记忆点的标语</div></span></div>
+            <div class="mi"><span class="ic">✎</span><span><span class="tt">润色与改写</span><div class="dd">保留原意，把文字改得更简洁通顺</div></span></div>
+            <div class="mi"><span class="ic">▤</span><span><span class="tt">写一份周报</span><div class="dd">整理成「本周进展 / 问题 / 下周计划」</div></span></div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+</body></html>

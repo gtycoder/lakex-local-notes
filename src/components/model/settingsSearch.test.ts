@@ -17,6 +17,9 @@ describe("条目级设置搜索", () => {
     expect(searchSettingItems("路径").map((h) => h.id)).toContain("about-data-dir");
     expect(searchSettingItems("回收 窗口").map((h) => h.id)).toContain("gc-retention-days");
     expect(searchSettingItems("回收 不存在的词")).toEqual([]);
+    // 261110 新增：默认空间（启动进入的空间）
+    expect(searchSettingItems("默认空间").map((h) => h.id)).toContain("editor-default-space");
+    expect(searchSettingItems("启动 空间").map((h) => h.id)).toContain("editor-default-space");
   });
 
   it("空查询返回全量，limit 生效", () => {

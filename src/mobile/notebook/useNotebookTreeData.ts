@@ -14,6 +14,8 @@ export function useNotebookTreeData(notebookId: string) {
   const [tree, setTree] = useState<NotebookTreeItem[]>([]);
   const [title, setTitle] = useState("知识库");
   const [notebookIcon, setNotebookIcon] = useState<string | null>(null);
+  /** 日记本标记（261110）：日记子树的显示顺序 = 时间倒序（判据在 core，不在这里重算）。 */
+  const [notebookSpace, setNotebookSpace] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set([notebookId]));
 
   const loadTree = useCallback(async () => {
@@ -23,6 +25,7 @@ export function useNotebookTreeData(notebookId: string) {
     if (notebook) {
       setTitle(notebook.title);
       setNotebookIcon(notebook.icon ?? null);
+      setNotebookSpace(notebook.space ?? null);
     }
     return snapshot.tree;
   }, [notebookId]);
@@ -43,7 +46,10 @@ export function useNotebookTreeData(notebookId: string) {
   }, []);
 
   /** 一次 O(n) 的父→子索引：tree 不变就复用（替代每次 filter+sort 的 childrenOf）。 */
-  const index = useMemo(() => buildNotebookTreeIndex(tree), [tree]);
+  const index = useMemo(
+    () => buildNotebookTreeIndex(tree, { diaryRootId: notebookSpace === "diary" ? notebookId : null }),
+    [tree, notebookSpace, notebookId],
+  );
   const childrenOf = useCallback((parentId: string) => index.childrenOf(parentId), [index]);
   const itemById = useCallback((id: string) => index.byId.get(id), [index]);
   /** 抽屉当前可见的扁平行（只含展开分支）；展开/折叠只重算这一份。 */
@@ -59,6 +65,7 @@ export function useNotebookTreeData(notebookId: string) {
     setTree,
     title,
     notebookIcon,
+    notebookSpace,
     expanded,
     toggleGroup,
     expandGroup,

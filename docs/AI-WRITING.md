@@ -18,7 +18,8 @@
 - 主区：
   - 空态：分段控件（对话写作 / 多文档推理）→ 大标题 → 「✦ 提示词」→ 输入卡 → 「点一点试试」两个 chip。
   - 会话态：消息流 + 底部输入卡（固定底）。
-- 输入卡：可选提示词 chip、可选文档 chip（多文档模式）、textarea（占位「从这里开始对话」）、发送/停止。
+- 输入卡：提示词库入口、可选文档 chip（多文档模式）、textarea（占位「从这里开始对话」）、发送/停止。
+  **提示词 = 点卡片直接把完整提示词写进输入框**（261110 用户定稿；已有文字则换行追加、不覆盖；面板随即关闭并聚焦输入框）。旧的「挂 chip」只保留给历史会话（存过 `promptText` 的仍显示 chip、可移除），新点击不再产生 chip。
 - 消息：用户右侧灰气泡；助手头像 + 「已深度思考（用时 X 秒）」+ 思考内容（有 reasoning 才显示）+ 答案 + 操作条（重新生成 / 复制 / 生成文档 / 保存到小记）。
 
 ## 数据（本地 SQLite，主库）
@@ -77,6 +78,25 @@ ai_writing_messages(id TEXT PK, conversation_id TEXT, role TEXT, content TEXT,
 - **资料读取可注入**：多文档要读正文，但读法随宿主不同（桌面 IPC / 将来其它宿主）；用 reader 接口隔离，纯逻辑可测。
 - **IPC 类型单一来源**：渲染层与主进程各写一遍载荷是最容易漂移的地方；类型放 core，主进程只做「unknown → 校验 → 类型」。
 - **转换失败要有出口**：内核初始化偶发挂起（窗口被遮挡时 rAF 不触发，已修）；转换层超时重建一次，仍失败则在弹窗内报错、不关弹窗。
+
+## 视觉与原语（261110 统一，用户定稿：先统一、再讨论改版）
+
+**AI 写作的控件全部接回 `kit.css` 的 `ln-*` 原语**，`aiWriting.css` 只留布局（宽度/内距/缩进/两行文本排布）与独有语义件（思考块 / 气泡 / 头像 / 空态 / 门禁 / 横幅 / 建议 chip / 行内确认气泡）。
+
+| 控件 | 原语落点 |
+| --- | --- |
+| 新对话 | `ln-btn ln-btn--secondary` |
+| 历史行 | `ln-row`（选中 `is-selected`）+ 标题 `flex:1` + `ln-ellipsis`；行尾「…」`ln-iconbtn ln-iconbtn--compact ln-row__actions` |
+| 提示词 chip / 文档 chip | `ln-tag` + 关闭钮 `ln-iconbtn ln-iconbtn--compact`（16px 命中盒） |
+| 工具钮（提示词 / 请选择文档） | `ln-btn ln-btn--ghost`，激活追加 `ln-btn--secondary is-selected` |
+| 发送 / 停止 | `ln-btn ln-btn--primary` / `ln-btn ln-btn--secondary`（保留 22px 高度布局） |
+| 提示词库 | 菜单行列表 `button.ln-menu__item`（宽 360，图标 + 标题 + 说明两行）——**取代原 3 列卡片**（与全仓菜单同一身份） |
+| 文档选择 | 快捷组/笔记本/文档行 → `ln-row`（展开 `is-selected`），文本 `ln-ellipsis` |
+| 消息操作条 | 重新生成/复制 → `ln-iconbtn--compact`；生成文档 `ln-btn--ghost`；保存到小记 `ln-btn--primary` |
+| 生成文档弹窗 | 行 `ln-form__row` + `ln-form__label` |
+
+- CSS 基线：`aiWriting.css` **446 → 301 声明**（删掉的都是「同一视觉在业务文件里又写了一遍」）；之后的改版继续复用原语，禁止再长回第二套。
+- 本轮**只统一视觉，不改结构/交互/逻辑**；下一轮改版在此基线上讨论。
 
 ## 答案渲染（v1.1，语雀同款）
 

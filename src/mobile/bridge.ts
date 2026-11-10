@@ -26,6 +26,8 @@ import { backfillQuickNoteListMetadata } from "./data/quickNotesRepository";
 import { cleanupPdfRenderCache } from "./native/pdfRender";
 
 export type { HistoryMobileSettings } from "./data/historyRepository.js";
+/** 日记「打开 / 新建」模式（页面只传 mode，判据在 data 层按 core 的 plan 选）。 */
+export type { DiaryOpenMode } from "./bridge/diary";
 
 export const bridge = {
   ...syncDomain,

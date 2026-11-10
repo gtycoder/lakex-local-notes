@@ -506,34 +506,9 @@
 .mbt-gallery-card__k { color: var(--lake-text-4); margin-right: var(--lake-space-xs); }
 .mbt-gallery-card__v { color: var(--lake-text-2); }
 .mbt-gallery-hint { grid-column: 1 / -1; color: var(--lake-text-4); font-size: var(--lake-font-size-micro); line-height: 1.6; text-align: center; }
+/* 261110：月历头/星期行/42 格/日号/打点 已收编为共享原语（ui/MonthCalendar → ui/monthCalendar.css 的 .mb-calendar-*），
+   本文件只保留多维表日历**视图自己**的容器与「选中日日程列表」。 */
 .mbt-calendar { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: auto; }
-.mbt-calendar-head { display: flex; align-items: center; justify-content: space-between; padding: var(--lake-space-xs) 0; }
-.mbt-calendar-title { color: var(--lake-text-1); font-size: var(--lake-font-size-bodyMd); font-weight: var(--lake-font-weight-semibold); }
-.mbt-calendar-week { display: grid; grid-template-columns: repeat(7, 1fr); padding: var(--lake-space-sm) 0; color: var(--lake-text-4); font-size: var(--lake-font-size-micro); text-align: center; }
-.mbt-calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
-.mbt-calendar-day {
-  position: relative;
-  min-height: 46px;
-  border: 0;
-  border-radius: var(--mb-radius-sm);
-  background: transparent;
-  color: var(--lake-text-1);
-  font-size: var(--lake-font-size-tiny);
-}
-.mbt-calendar-day.is-out { color: var(--lake-text-4); opacity: .55; }
-.mbt-calendar-day.is-today .mbt-calendar-day__num { color: var(--lake-accent-text); font-weight: var(--lake-font-weight-semibold); }
-.mbt-calendar-day.is-on { background: var(--lake-bg-selected); }
-.mbt-calendar-day__num { display: block; line-height: 1.2; padding-top: var(--lake-space-xs); }
-.mbt-calendar-day__dot {
-  position: absolute;
-  left: 50%;
-  bottom: var(--lake-space-xs);
-  width: 4px;
-  height: 4px;
-  margin-left: -2px;
-  border-radius: var(--lake-radius-pill);
-  background: var(--lake-accent);
-}
 .mbt-calendar-list { margin-top: var(--lake-space-xl); }
 .mbt-calendar-list__head { color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); margin-bottom: var(--lake-space-sm); }
 .mbt-calendar-empty { padding: var(--lake-space-xl) 0; color: var(--lake-text-4); font-size: var(--lake-font-size-tiny); text-align: center; }
@@ -581,9 +556,8 @@
 .mbt-date-trigger__value { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mbt-date-trigger__value.is-empty { color: var(--lake-text-4); }
 .mbt-date-trigger svg { flex: 0 0 auto; color: var(--lake-text-4); }
-/* （261030 整改：日期面板的底内距交给 .mb-sheet__body--form 的「20px + 安全区」，这里不再单独写 padding-bottom —— 否则会把安全区覆盖掉。） */
-.mbt-date-head { display: flex; align-items: center; justify-content: space-between; padding: var(--lake-space-xs) 0; }
-.mbt-date-title { color: var(--lake-text-1); font-size: var(--lake-font-size-bodyMd); font-weight: var(--lake-font-weight-semibold); }
+/* （261030 整改：日期面板的底内距交给 .mb-sheet__body--form 的「20px + 安全区」，这里不再单独写 padding-bottom —— 否则会把安全区覆盖掉。）
+   （261110：月历头已收编为共享原语 .mb-calendar-*，见 ui/monthCalendar.css。） */
 
 /* 数据表抽屉（261030 用户点单：对齐钉钉多数据表切换） */
 .mbt-drawer-scrim {

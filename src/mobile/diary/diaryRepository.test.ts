@@ -126,6 +126,77 @@ describe("ensureDiaryNote（幂等打开某天）", () => {
   });
 });
 
+describe("ensureDiaryNote（261110：mode='new' 永远新建，一天允许多篇）", () => {
+  it("同一天两次 new：两篇独立文档，标题相同、同一个月分组，行数各 +1", async () => {
+    const db = await freshDb();
+    const first = await ensureDiaryNote(db, "2026-11-09", "new");
+    const second = await ensureDiaryNote(db, "2026-11-09", "new");
+    expect(first.created).toBe(true);
+    expect(second.created).toBe(true);
+    expect(second.noteId).not.toBe(first.noteId);
+    expect(second.notebookId).toBe(first.notebookId);
+    // 当天其它条目是正常数据（同日多篇）⇒ 不再当"重复文档"告警（与桌面 openDate({mode:'new'}) 同口径）。
+    expect(first.duplicates).toEqual([]);
+    expect(second.duplicates).toEqual([]);
+    const notes = await db.prepare("SELECT id,title,parent_id FROM notes ORDER BY sort_order").all() as Array<{ id: string; title: string; parent_id: string }>;
+    expect(notes.length).toBe(2);
+    expect(notes.map((row) => row.title)).toEqual(["2026-11-09", "2026-11-09"]);
+    expect(notes[0].parent_id).toBe(notes[1].parent_id);
+    // 容器仍只有一份：日记本 + 年 + 月（new 不重复建本/建组）。
+    expect((await folderRows(db)).length).toBe(3);
+    await db.close();
+  });
+
+  it("全新库直接 new：照样补齐 日记本(space=diary) → 年 → 月 → 文档", async () => {
+    const db = await freshDb();
+    const created = await ensureDiaryNote(db, "2026-11-09", "new");
+    const folders = await folderRows(db);
+    const notebook = folders.find((row) => row.id === created.notebookId)!;
+    expect(notebook.space).toBe("diary");
+    const year = folders.find((row) => row.title === "2026")!;
+    const month = folders.find((row) => row.title === "11")!;
+    expect(year.parent_id).toBe(created.notebookId);
+    expect(month.parent_id).toBe(year.id);
+    const note = await readNote(db, created.noteId);
+    expect(note!.title).toBe("2026-11-09");
+    expect(note!.parentId).toBe(month.id);
+    await db.close();
+  });
+
+  it("open 仍幂等（打开最新一篇）：new 之后再 open 不会新增，且命中 new 建的那篇", async () => {
+    const db = await freshDb();
+    const created = await ensureDiaryNote(db, "2026-11-09", "new");
+    const opened = await ensureDiaryNote(db, "2026-11-09");
+    expect(opened.created).toBe(false);
+    expect(opened.noteId).toBe(created.noteId);
+    const count = await db.prepare("SELECT COUNT(*) AS c FROM notes").get() as { c: number };
+    expect(count.c).toBe(1);
+    await db.close();
+  });
+
+  it("createNote 写真实 created_at；之后编辑只动 updated_at（261110 排序稳定）", async () => {
+    const db = await freshDb();
+    const opened = await ensureDiaryNote(db, "2026-11-10", "new");
+    const first = await db.prepare("SELECT created_at, updated_at FROM notes WHERE id=?").get(opened.noteId) as { created_at: string; updated_at: string };
+    expect(first.created_at).toBeTruthy();
+    expect(first.created_at).toBe(first.updated_at);
+    await db.prepare("UPDATE notes SET updated_at=? WHERE id=?").run("2026-11-11T00:00:00.000Z", opened.noteId);
+    const after = await db.prepare("SELECT created_at, updated_at FROM notes WHERE id=?").get(opened.noteId) as { created_at: string; updated_at: string };
+    expect(after.created_at).toBe(first.created_at);
+    expect(after.updated_at).toBe("2026-11-11T00:00:00.000Z");
+    await db.close();
+  });
+
+  it("非法日期键：new 与 open 一样拒绝并明确报错，不留任何行", async () => {
+    const db = await freshDb();
+    await expect(ensureDiaryNote(db, "2026-02-30", "new")).rejects.toThrow("日期键非法");
+    expect(await folderRows(db)).toEqual([]);
+    const notes = await db.prepare("SELECT COUNT(*) AS c FROM notes").get() as { c: number };
+    expect(notes.c).toBe(0);
+    await db.close();
+  });
+});
+
 describe("移动端 schema 版本门（日记 space 列）", () => {
   it("全新库：版本写到位，folders 有 space 列", async () => {
     const db = await freshDb();

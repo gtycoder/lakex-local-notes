@@ -192,6 +192,17 @@ export function DiaryWorkspace(props: DiaryWorkspaceProps) {
         <div className="diary-dir__head">
           <h2 className="diary-dir__title"><NotebookPen size={15} aria-hidden="true" />日记</h2>
           <span className="diary-dir__count" title="日记篇数">{entries.length}</span>
+          {/* 261110 用户点单定稿：头部按钮左→右 = 搜索、日历、＋（＋始终最右）；
+              语义不变——搜索 = 打开既有全局搜索面板，日历 = 选日期新建，＋ = 今天新建。 */}
+          <button
+            type="button"
+            className="ln-iconbtn ln-iconbtn--compact"
+            aria-label="搜日记（全库范围，含日记）"
+            title="搜日记（全库范围，含日记）"
+            onClick={onOpenSearch}
+          >
+            <Search size={14} />
+          </button>
           <button
             type="button"
             className="ln-iconbtn ln-iconbtn--compact"
@@ -206,16 +217,6 @@ export function DiaryWorkspace(props: DiaryWorkspaceProps) {
           >
             <CalendarDays size={15} />
           </button>
-          <button
-            type="button"
-            className="ln-iconbtn ln-iconbtn--compact"
-            aria-label="搜日记（全库范围，含日记）"
-            title="搜日记（全库范围，含日记）"
-            onClick={onOpenSearch}
-          >
-            <Search size={14} />
-          </button>
-          {/* 261110 用户点单：新建（＋）放最右，与搜索换位。 */}
           <button
             type="button"
             className="ln-iconbtn ln-iconbtn--compact"

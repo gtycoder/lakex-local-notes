@@ -7,7 +7,7 @@ import { getNativeErrorMessage } from "../lib/nativeErrors";
 import { rlog } from "../lib/log";
 import { reportNativeActionError } from "../lib/nativeErrors";
 import { clearScrollMemory, locateEditorSearchHit } from "../features/editor/editorViewport";
-import { selectEvictionIds, trimTabsToLimit } from "../core/tabLimit";
+import { selectEvictionIds, trimTabsToLimit, type TabSpace } from "../core/tabLimit";
 import { runPoolSettled } from "../core/s3v3Pool";
 import type { DraftJournalEntry, NoteDocument } from "../lib/types";
 import type { OpenTab } from "../desktop/desktopTypes";
@@ -41,11 +41,12 @@ export function useTabLifecycle({
   settingsMaxOpenTabs, pinnedNoteIds, openTabsRef, persistTab, scheduleSave, resetRevision,
   showNotice, setError, setOpenTabs, setActiveNoteId, setPinnedNoteIds, setDraftEntries, setSaveState,
 }: UseTabLifecycleOptions) {
-  /** 返回本次真正淘汰的 id 与因保存失败而必须保留的 id（审计 F01：未确认持久化不得淘汰）。 */
-  const evictTabsForLimit = useCallback(async (nextTabs: OpenTab[], openedId: string): Promise<{ evictedIds: string[]; failedIds: string[] }> => {
+  /** 返回本次真正淘汰的 id 与因保存失败而必须保留的 id（审计 F01：未确认持久化不得淘汰）。
+   *  `space` = 本次打开标签所属空间：上限**按空间独立计数**（261110 用户定稿）。 */
+  const evictTabsForLimit = useCallback(async (nextTabs: OpenTab[], openedId: string, space: TabSpace = "library"): Promise<{ evictedIds: string[]; failedIds: string[] }> => {
     const limit = settingsMaxOpenTabs;
     if (limit <= 0) return { evictedIds: [], failedIds: [] };
-    const candidates = selectEvictionIds(nextTabs, { limit, activeNoteId: openedId, pinnedNoteIds });
+    const candidates = selectEvictionIds(nextTabs, { limit, activeNoteId: openedId, pinnedNoteIds, space });
     const evictedIds: string[] = [];
     const failedIds: string[] = [];
     for (const id of candidates) {
@@ -139,12 +140,14 @@ export function useTabLifecycle({
       const nextForEvict = openTabsRef.current.some((t) => t.noteId === id)
         ? openTabsRef.current
         : [...openTabsRef.current, newTab];
-      const { evictedIds, failedIds } = await evictTabsForLimit(nextForEvict, id);
+      // 上限按空间独立：只在本标签所属空间内淘汰/封顶（文档 8 个 + 日记 8 个互不挤占）。
+      const tabSpace: TabSpace = space ?? "library";
+      const { evictedIds, failedIds } = await evictTabsForLimit(nextForEvict, id, tabSpace);
       setOpenTabs((tabs) => {
         const base = tabs.some((t) => t.noteId === id) ? tabs : [...tabs, newTab];
         // 更新器内再次封顶：并发打开时以最新已提交状态为准，杜绝旧 ref 竞态超限。
         // 保存失败的标签受保护，不因封顶被顺手淘汰。
-        return trimTabsToLimit(base, { limit: settingsMaxOpenTabs, activeNoteId: id, pinnedNoteIds, protectNoteIds: new Set(failedIds) });
+        return trimTabsToLimit(base, { limit: settingsMaxOpenTabs, activeNoteId: id, pinnedNoteIds, protectNoteIds: new Set(failedIds), space: tabSpace });
       });
       if (evictedIds.length > 0) {
         setPinnedNoteIds((prev) => {
@@ -152,7 +155,7 @@ export function useTabLifecycle({
           for (const ev of evictedIds) next.delete(ev);
           return next.size === prev.size ? prev : next;
         });
-        showNotice(`已自动关闭最旧的标签（上限 ${settingsMaxOpenTabs}）`);
+        showNotice(`已自动关闭本空间最旧的标签（上限 ${settingsMaxOpenTabs}）`);
       }
       setActiveNoteId(id);
       locate();
@@ -173,7 +176,8 @@ export function useTabLifecycle({
    */
   const restoreTabs = useCallback(async (ids: readonly string[], activeId: string | null): Promise<number> => {
     const unique = Array.from(new Set(ids.filter((id): id is string => typeof id === "string" && id.length > 0)));
-    // 会话按打开顺序存（末尾最新）⇒ 超限时保留最近 N 个，与"自动淘汰最旧"同向。
+    // 会话按打开顺序存（末尾最新）⇒ 超限时保留最近 N 个。
+    // 261110：日记 tab 不进会话（user 定稿），所以这里只剩文档空间；上限按空间独立仍由 trim 兜住。
     const planned = settingsMaxOpenTabs > 0 ? unique.slice(-settingsMaxOpenTabs) : unique;
     if (planned.length === 0) return 0;
     const startedAt = Date.now();
@@ -192,7 +196,12 @@ export function useTabLifecycle({
       // 启动时通常为空；万一已有并发打开的标签，按 id 去重后仍强制封顶（不丢已打开标签）。
       const restoredIds = new Set(tabs.map((tab) => tab.noteId));
       const merged = [...current.filter((tab) => !restoredIds.has(tab.noteId)), ...tabs];
-      return trimTabsToLimit(merged, { limit: settingsMaxOpenTabs, activeNoteId: resolvedActiveId, pinnedNoteIds });
+      // 两个标签空间各自封顶（互不挤占）；active 标签在各自空间内受保护。
+      let trimmed = merged;
+      for (const space of ["library", "diary"] as TabSpace[]) {
+        trimmed = trimTabsToLimit(trimmed, { limit: settingsMaxOpenTabs, activeNoteId: resolvedActiveId, pinnedNoteIds, space });
+      }
+      return trimmed;
     });
     setActiveNoteId(resolvedActiveId);
     return tabs.length;

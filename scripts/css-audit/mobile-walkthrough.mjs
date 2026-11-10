@@ -197,7 +197,8 @@ export default async function run(ctx) {
   // 分类条末尾动作键 ⇒ 探针必须先看得见它，否则又是"探针全绿但整屏没量过"）。
   add("notebook-icon-sheet", async () => { await goHome(); await openNotebook(); await openTreeMenu(0); await sheetItem("设置图标"); });
   add("settings", async () => { await openSettings(); });
-  ["编辑器", "外观", "历史", "资源管理", "同步设置", "清理缓存", "回收站", "关于"].forEach(function (label) { add("settings-" + label, async () => { await openSettings(); await settingsPage(label); }); });
+  // 261110：设置根页标签随「常规 / 云端与同步」改名（261110 P1），装置同步更新（旧「编辑器 / 同步设置」已不存在）。
+  ["常规", "外观", "历史", "资源管理", "云端与同步", "清理缓存", "回收站", "关于"].forEach(function (label) { add("settings-" + label, async () => { await openSettings(); await settingsPage(label); }); });
 
   const only = (ctx.args[2] || "").split(",").filter(Boolean);
   const chosen = only.length ? screens.filter(function (s) { return only.indexOf(s[0]) >= 0; }) : screens;

@@ -69,6 +69,7 @@ LakexLocalNotes = **本地优先**笔记应用：Electron 44.3 + React 18.3 + be
     ① **每次改动都跑**（**实测 ≈31–36s**：687 文件 4215 例，261105 口径、最新计数见 `docs/HANDOFF.md` §1；isolate:true；isolate:false 可 −40% 但 deviceConformance 依赖模块隔离，暂不可开）：`npx tsc --noEmit` + 相关 `vitest` + `git diff --check`；改样式再加 `ui-metrics` 与对应侧层围栏。
     ② **只有动了视觉/设备那一层才跑样式/设备装置，且只跑受影响的 1~2 个态/屏**：桌面 `check-stylesnap.mjs --states "…"`；移动 `check-mobile-snap.mjs --states home-quicknotes` + 走查传屏名；**多维表专项** `npm run check:bitablesnap`（表单/内容·表格/内容·卡片 3 态，夹具自建自删）。**全量**（桌面 42 态 / 移动 6 态 + 23 屏）只在换夹具、改装置、发版前跑。
     ③ **动了外壳几何/构成，或重灌夹具 ⇒ 必须先重烤一次基线**（`--from <warm>.json --write-baseline`），否则下次全量必红；这是一次性成本。
+    ④ **移动端改动 ⇒ 先装包再交付**（261110 用户定）：动过 `src/mobile/**`、`android/**` 或任何影响移动端渲染的改动，交付时先 `bash scripts/android-build.sh --sync --install`（装 `lake_mobile`）让用户当场验收，不要留到发版或批量收尾。
     顺序恒定：**先本地 → 再定点 → 最后全量**。
 22. **依赖准入（261021 调研定稿）**：新依赖**四问缺一不引入**（先过 §3#17「拒绝迎合式找需求」）——
     ① 解决的是**已验证痛点**吗（有复现/实测证据，不是"更优雅/以后可能"）？② 会否引入**第二套样式/令牌/preflight**（撞 14）？

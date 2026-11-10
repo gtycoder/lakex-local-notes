@@ -57,7 +57,7 @@ export function fitPopoverInViewport(
 
 export interface PopoverPlacementOptions {
   /** 水平对齐：start = 与锚点左缘对齐（默认），end = 与锚点右缘对齐（贴右展开）。 */
-  align?: "start" | "end";
+  align?: "start" | "end" | "center";
   /** 视口四边至少留出的间距（默认 = gap）。 */
   margin?: number;
   /** false = 保持在锚点下方；调用方需限制面板高度并允许内容滚动。 */
@@ -88,6 +88,16 @@ export function placePopoverPosition(
 ): { top: number; left: number } {
   const margin = options.margin ?? gap;
   const maxLeft = Math.max(margin, viewport.width - popover.width - margin);
+  if (options.align === "center") {
+    // 居中对齐：气泡中心对准锚点中心（261110 AI 写作：气泡贴输入卡下方居中）。
+    // 只新增分支，start/end 的原逻辑完全不动。
+    const centerLeft = anchor.left + (anchor.right - anchor.left) / 2 - popover.width / 2;
+    const left = Math.max(margin, Math.min(centerLeft, maxLeft));
+    const top = options.allowFlip === false
+      ? Math.round(Math.max(margin, anchor.bottom + gap))
+      : placeVertical(anchor.top, anchor.bottom, viewport.height, popover.height, gap, margin);
+    return fitPopoverInViewport({ top, left }, viewport, popover, margin);
+  }
   const startLeft = anchor.left;
   const endLeft = anchor.right - popover.width;
   // 水平方向同样"哪边放得下放哪边"：首选"贴左展开"，右侧溢出且左侧更宽裕 ⇒ 改"贴右展开"；

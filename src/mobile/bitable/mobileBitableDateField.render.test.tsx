@@ -22,17 +22,17 @@ describe("MobileBitableDateField（自有日期选择，不用系统弹窗）", 
     const trigger = host.querySelector<HTMLButtonElement>("button.mbt-date-trigger")!;
     expect(trigger.textContent).toContain("选择日期");
     act(() => trigger.click());
-    // 自有月历：42 格 + 月份标题 + 今天/清除/确定
-    expect(host.querySelectorAll(".mbt-calendar-day").length).toBe(42);
+    // 自有月历（共享原语 ui/MonthCalendar）：42 格 + 月份标题 + 今天/清除/确定
+    expect(host.querySelectorAll(".mb-calendar-day").length).toBe(42);
     expect(host.textContent).toContain("选择日期");
     expect(btn("确定")).toBeTruthy();
     const today = localDateString(new Date());
-    const todayCell = [...host.querySelectorAll<HTMLButtonElement>(".mbt-calendar-day")].find((cell) => cell.getAttribute("aria-label") === today)!;
+    const todayCell = [...host.querySelectorAll<HTMLButtonElement>(".mb-calendar-day")].find((cell) => cell.getAttribute("aria-label") === today)!;
     act(() => todayCell.click());
     act(() => btn("确定")!.click());
     expect(onChange).toHaveBeenCalledWith(today);
     // 关闭后不再有月历
-    expect(host.querySelector(".mbt-calendar-grid")).toBeNull();
+    expect(host.querySelector(".mb-calendar-grid")).toBeNull();
   });
 
   it("已选值显示在触发器上；清除回写空串", () => {

@@ -9,6 +9,7 @@
  *   flattenVisibleRows(...)       只走展开分支，O(可见行)（expanded 变只重算这一份）；
  *   firstNoteInTree(...)          进入工作区自动开第一篇（替代原递归 childrenOf）。
  */
+import { compareDiarySiblings, type DiarySiblingLike } from "../../core/diary.js";
 import type { NotebookTreeItem } from "../data/notebookTreeRepository";
 
 /** 扁平行 = 节点 + 缩进层级；抽屉虚拟滚动只消费这份数组。 */
@@ -26,8 +27,20 @@ export interface NotebookTreeIndex {
 
 const EMPTY_CHILDREN: readonly NotebookTreeItem[] = Object.freeze([]);
 
-/** 一次 O(n)：父→子分桶 + 组内按 sortOrder 稳定排序。 */
-export function buildNotebookTreeIndex(tree: readonly NotebookTreeItem[]): NotebookTreeIndex {
+export interface NotebookTreeIndexOptions {
+  /**
+   * 日记本 id（261110 用户定稿）：传入后**该子树内**的兄弟顺序改按
+   * 「日期倒序 + 同日创建时间倒序」（判据 = core.compareDiarySiblings），
+   * 其余笔记本仍按 sortOrder。只影响显示，不改存储/拖拽落库。
+   */
+  diaryRootId?: string | null;
+}
+
+/** 一次 O(n)：父→子分桶 + 组内排序（默认 sortOrder；日记子树按时间倒序）。 */
+export function buildNotebookTreeIndex(
+  tree: readonly NotebookTreeItem[],
+  options: NotebookTreeIndexOptions = {},
+): NotebookTreeIndex {
   const byId = new Map<string, NotebookTreeItem>();
   const grouped = new Map<string, NotebookTreeItem[]>();
   for (const item of tree) {
@@ -39,9 +52,32 @@ export function buildNotebookTreeIndex(tree: readonly NotebookTreeItem[]): Noteb
     if (siblings) siblings.push(item);
     else grouped.set(key, [item]);
   }
+  // 日记子树：先算出哪些父节点属于日记本（根 + 所有分组/嵌套文档后代），只重排它们。
+  const diaryParents = new Set<string>();
+  if (options.diaryRootId) {
+    const stack = [options.diaryRootId];
+    while (stack.length > 0) {
+      const id = stack.pop() as string;
+      if (diaryParents.has(id)) continue;
+      diaryParents.add(id);
+      for (const child of grouped.get(id) ?? []) stack.push(child.id);
+    }
+  }
+  const asSibling = (item: NotebookTreeItem): DiarySiblingLike => ({
+    id: item.id,
+    title: item.title,
+    nodeType: item.kind === "note" ? "note" : "group",
+    createdAt: item.createdAt,
+  });
   // Array#sort 在现代 JS 引擎是稳定排序；仓储已按 (parentId, sortOrder) 预排，
   // 这里只补「同一父内 sortOrder 变化后（拖拽乐观重排）仍按 sortOrder」这一层。
-  for (const siblings of grouped.values()) siblings.sort((a, b) => a.sortOrder - b.sortOrder);
+  for (const [parentId, siblings] of grouped) {
+    if (diaryParents.has(parentId)) {
+      siblings.sort((a, b) => compareDiarySiblings(asSibling(a), asSibling(b)));
+    } else {
+      siblings.sort((a, b) => a.sortOrder - b.sortOrder);
+    }
+  }
   return {
     byId,
     childrenOf: (parentId: string) => grouped.get(parentId) ?? EMPTY_CHILDREN,

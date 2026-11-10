@@ -33,7 +33,7 @@ export interface UsePopoverPositionOptions {
   at?: { x: number; y: number } | null;
   /** 固定宽度：首帧就要写进 style，否则量到的是收缩后的宽度。 */
   width?: number;
-  align?: "start" | "end";
+  align?: "start" | "end" | "center";
   /** below 可翻转；right 贴右展开；below-fixed 固定在整行下方并限制可见高度。 */
   side?: "below" | "right" | "below-fixed";
   gap?: number;

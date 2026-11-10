@@ -22,6 +22,7 @@ import { PublishDocDialog } from "./PublishDocDialog";
 import { SaveQuickNoteDialog } from "./SaveQuickNoteDialog";
 import { AI_WRITING_SUGGESTIONS, aiWritingChatTitle, aiWritingDocsTitle } from "./aiWritingPrompts";
 import { useAiWriting } from "./useAiWriting";
+import { loadPinnedIds, prunePinnedIds, savePinnedIds, togglePinnedId } from "./aiWritingPins";
 import { SplitPane } from "../../components/ui/SplitPane";
 
 
@@ -43,6 +44,24 @@ export interface AiWritingWorkspaceProps {
 
 export function AiWritingWorkspace({ active, treeNodes, topbarLeading, onOpenSettings, onNotice, onOpenNote }: AiWritingWorkspaceProps) {
   const controller = useAiWriting({ active });
+  /** 置顶会话（设备本地偏好；261110 用户定稿：搜索 + 置顶，不做对话分组）。 */
+  const [pinnedIds, setPinnedIds] = useState<string[]>(() => loadPinnedIds());
+  useEffect(() => {
+    // 会话被删后剪掉幽灵置顶；列表尚未加载出来时不动（避免启动瞬间把置顶清空）。
+    if (controller.conversations.length === 0) return;
+    setPinnedIds((prev) => {
+      const next = prunePinnedIds(prev, new Set(controller.conversations.map((item) => item.id)));
+      if (next.length !== prev.length) savePinnedIds(next);
+      return next;
+    });
+  }, [controller.conversations]);
+  const togglePin = useCallback((id: string) => {
+    setPinnedIds((prev) => {
+      const next = togglePinnedId(prev, id);
+      savePinnedIds(next);
+      return next;
+    });
+  }, []);
   const [publish, setPublish] = useState<{ open: boolean; content: string; busy: boolean; error: string | null }>({ open: false, content: "", busy: false, error: null });
   const [quickNote, setQuickNote] = useState<{ open: boolean; content: string; busy: boolean; error: string | null }>({ open: false, content: "", busy: false, error: null });
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -163,10 +182,12 @@ export function AiWritingWorkspace({ active, treeNodes, topbarLeading, onOpenSet
       <AiWritingSidebar
         conversations={controller.conversations}
         activeId={controller.activeConversation?.id ?? null}
+        pinnedIds={pinnedIds}
         onNew={controller.newConversation}
         onSelect={controller.selectConversation}
         onRename={(id, value) => { void controller.renameConversation(id, value); }}
         onDelete={(id) => { void controller.deleteConversation(id); }}
+        onTogglePin={togglePin}
       />
       <main className="aiw-main">
         {!controller.ready ? (

@@ -39,7 +39,7 @@ import {
  *
  * ⚠️ 只用于"建表/加列/建索引"这类幂等 DDL；**数据迁移仍然每次都按判据检查**（如旧库识别）。
  */
-export const MOBILE_SCHEMA_VERSION = 12; // 261109 日记 v1：folders 加 space 列（日记本标记；wire 镜像 lake 索引 folders[].space）
+export const MOBILE_SCHEMA_VERSION = 13; // 261110 日记排序：notes 加 created_at（同日多篇按真实创建时间倒序；老行回填 = updated_at）。 // v12：folders 加 space 列（日记本标记；wire 镜像 lake 索引 folders[].space）
 
 /**
  * 读当前库的 schema 版本（PRAGMA user_version；空库 = 0）。
@@ -80,6 +80,7 @@ export function baseSchemaStatements(): SchemaStatement[] {
     parent_id TEXT,
     sort_order INTEGER NOT NULL DEFAULT 0,
     updated_at TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT '',
     content_hash TEXT,
     is_dirty INTEGER NOT NULL DEFAULT 0,
     is_purged INTEGER NOT NULL DEFAULT 0,
@@ -224,6 +225,12 @@ export async function collectSchemaStatements(db: MobileDb): Promise<SchemaState
   const addNoteColumn = (name: string, declaration: string): void => {
     if (!noteColumns.includes(name)) push(`ALTER TABLE notes ADD COLUMN ${name} ${declaration}`);
   };
+  addNoteColumn("created_at", "TEXT NOT NULL DEFAULT ''");
+  // 261110：v13 之前没有 created_at ⇒ 老行按 updated_at 回填一次（之后编辑不再改它）。
+  // 放在 ALTER 之后：同一条收集里，新增列才会存在。
+  if (noteColumns.length > 0 && !noteColumns.includes("created_at")) {
+    push("UPDATE notes SET created_at = updated_at WHERE created_at = ''");
+  }
   addNoteColumn("parent_id", "TEXT");
   addNoteColumn("sort_order", "INTEGER NOT NULL DEFAULT 0");
   addNoteColumn("content_hash", "TEXT");

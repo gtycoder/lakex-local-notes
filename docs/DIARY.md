@@ -34,7 +34,8 @@
 
 ```ts
 // preload → renderer；三处同步改：electron/main.ts(handle) + preload.cjs + src/lib/native.ts(类型)
-diary_open_date(dateKey: string): Promise<{
+// mode 省略 = "open"（幂等）；"new" = 永远新建一篇（261110；一天允许多篇）
+diary_open_date(dateKey: string, mode?: "open" | "new"): Promise<{
   noteId: string;
   created: boolean;      // 本次是否新建了文档
   notebookId: string;
@@ -63,7 +64,11 @@ renderer: list_tree_nodes（含 space）
 3. **失败分级**：日期键非法 = 拒绝并明确报错；正文模板失败 = 只告警、空文档保留。
 4. **建完只展开/选中今天节点，不抢正文焦点**。注意：主进程/数据层新建的 笔记本/年组/月组/文档 只有**重读一次树**才可见（现有实现：`refreshTree()` 之后 `openNote`），这是数据新鲜度的要求，不是「刷整棵树的观感」——**要避免的是**滚动跳动、抢焦点、其它空间重建。
 5. **文档空间不显示日记本**（渲染层过滤 `withoutDiaryNotebook`），存储不改。
-6. **移动端任何输入面仍只走 dock**；日记页只做"列表 + 写今天 + 搜索"，不新造输入面。
+6. **移动端任何输入面仍只走 dock**；日记页只做"列表 + 写今天 + 新建（今天/任意日期）+ 搜索"，不新造输入面。
+7. **"打开" vs "新建" 一律由 mode 表达**（两端口径一致）：`open` = 幂等（当天已有就开最新一篇）、`new` = 永远新建；**判断在哪天有没有文档由 core 的 plan 做**（`planDiaryOpen` / `planDiaryCreate`），UI 只传 mode，不自己判。
+8. **排序 = 日期倒序，同日按真实"创建时间"倒序**（用户 261110 定稿选 B）：分组（年/月）与日期倒序不变；同一天多篇必须用**创建时间**，**不许用修改时间**（编辑旧的一条会把它顶乱）。移动端 schema **v13** 起 `notes.created_at` 持久化真实创建时间（老行迁移回填 = `updated_at`；wire 不带文档创建时间 ⇒ 从桌面同步来的第一次落地按 `updatedAt` 记一次、之后不再变）；行内「写于」= 创建时间。
+    **同一判据也要用于目录树**（261110 二次确认：「这里才是真正的笔记本里的排序」）：移动端工作区「文档树」抽屉里日记本子树同样按 年/月 倒序 + 日期倒序 + 同日创建时间倒序（`core.compareDiarySiblings` + `buildNotebookTreeIndex({ diaryRootId })`）；**只改显示，不改 `sort_order`/不做落库迁移**（其它笔记本仍按 sort_order）。
+    **日记子树禁用长按拖拽排序**（261110 用户定稿；桌面端本来也没有拖拽排序）：顺序既由时间决定，拖拽就没有可表达的结果 ⇒ 直接不响应。判据 = `treeDragEnabled(space)`（`src/mobile/notebook/useTreeDrag.ts`），工作区把 `notebook.space` 传进 `useTreeDrag.enabled`；护栏 `treeDragDisabled.test.ts`。多选/行内 ⋮/＋ 不受影响。
 
 ## 转为文档（261109）
 
@@ -83,7 +88,7 @@ renderer: list_tree_nodes（含 space）
 
 ## 不做（v1，别再立项）
 
-缺天提示 / 补写任意日期 / 月历视图 / streak / 提醒 / 心情·天气·位置字段。
+缺天提示 / **月历浏览视图**（注：261110 加的「日历」入口只用于**选一个日期去新建**，不是翻看/管理月历，两者别混为一谈）/ streak / 提醒 / 心情·天气·位置字段。
 理由：§3#17 三问未过；月历还会与多维表月历撞「同一交互语义只有一套视觉」（`audit-lookalike.mjs`）。
 
 ## 护栏（必须有的测试）
@@ -93,6 +98,9 @@ renderer: list_tree_nodes（含 space）
 3. wire 片：`folders[].space` 往返（发布写 null / 应用缺字段当非日记）、便携包与整库备份保留 `space`。
 4. UI 片：文档空间树不含日记本；日记空间左栏年/月来自 `core.diary`，不在组件里重算。
 5. 移动片：schema 版本门 +1 生效、第 4 tab 不破首页 5 槽构图、tab 切换不改 `switchTab` 既有语义。
+6. **新建语义（261110）**：`diaryPage.render.test.tsx`（＋ = `mode:"new"`、日历选任意日期 = `new`、主按钮 = `open`、连点只发一次）+ `diaryRepository.test.ts`（`new` 恒新建 / `open` 幂等 / 月组已存在时新篇落月组而不是日记本根）。
+7. **默认空间（261110）**：`components/model/defaultSpace.test.ts`（桌面：默认文档、非法值回落、键前缀不进 AppSettings、三处接线）+ `settings/defaultSpace.test.ts`（移动：默认小记、非法回落、删除即回落默认、不进 S3）；桌面还有 `settingsSearch.test.ts` / `settingsGroups.test.ts` 同步项。
+8. **返回落点（261110）**：`mobileDiaryWiring.test.ts`（仅日记来源记 tab，关闭回日记页签；其它入口仍回知识库；来源用完即清）。
 
 ## 来源（机制参考，不是抄实现）
 
@@ -107,10 +115,11 @@ renderer: list_tree_nodes（含 space）
 | 平台端口 | `src/core/s3v3/state/platformPort.ts`（`SyncFolderRow.space`）、`state/deviceStore.ts`（投影 + 变更判定） |
 | 桌面存储 | `electron/diaryStore.ts`（单事务 ensure）、`electron/ipc/registerDiary.ts`、`electron/schemaInit.ts`（列 + ALTER）、`electron/noteQueries.ts`/`noteMetadataRepository.ts`（读写 space） |
 | 桌面 UI | `src/features/diary/`（`DiaryWorkspace` / `diaryTree` 树过滤与 id 映射 / `diaryOpen` IPC 端口 / `diarySearch` / `diary.css`）、`App.tsx`（空间挂载 + 树过滤 + 搜索收窄；⌘3 在 `useDesktopLifecycle` 的 ⌘1–5 表里）、`DesktopTopBar.tsx`、`styles/chrome.css` |
-| 移动 | `src/mobile/diary/`（`diaryRepository` 单事务 ensure / `DiaryPage`）、`bridge/diary.ts`、`data/schema.ts`（v12）、`home/tabPager.ts`（4 tab）、`settings/SearchSheet.tsx`（`scopeNoteIds`） |
+| 移动 | `src/mobile/diary/`（`diaryRepository` 单事务 ensure + `mode` / `DiaryPage`）、`bridge/diary.ts`、`ui/MonthCalendar.tsx` + `ui/monthCalendar.css`（月历原语）、`data/schema.ts`（v12）、`home/tabPager.ts`（4 tab）、`settings/SearchSheet.tsx`（`scopeNoteIds`）、`settings/defaultSpace.ts` |
+| 默认空间（261110） | 桌面 `src/components/model/defaultSpace.ts` + `SettingsPanel`「启动」组 + `desktop/useDesktopShell.ts` 初值；移动 `src/mobile/settings/defaultSpace.ts` + `SettingsDrawer`「常规」行 + `MobileApp` 初始 route |
 | 搜索 | 复用既有 FTS + `SearchPanel.scopeNoteIds` / `SearchSheet.scopeNoteIds`（纯显示层；**不新增索引**） |
 
-**已知边界（v1）**：桌面与移动各自只有一份编辑器宿主（日记空间与资料库同篇互斥，见 `App.tsx` 的 `libraryTabs`）；移动端关闭日记条目后落到「知识库」（沿用既有返回落点）。
+**已知边界**：桌面与移动各自只有一份编辑器宿主（日记空间与资料库同篇互斥，见 `App.tsx` 的 `libraryTabs`）。**移动端返回落点已修（261110）**：从日记条目进工作区后，返回（页面返回 / 安卓返回键两条都走 `useRouteTransition.onClosed`）回「日记」页签；其余入口（首页/搜索/置顶/笔记本）仍回「知识库」。
 
 ## 删除与恢复（261110）
 
@@ -127,7 +136,11 @@ renderer: list_tree_nodes（含 space）
 
 ## 交互补充（261110）
 
-- 一天多篇：左栏 **＋ = 今天新建**、**日历 = 选日期新建**（应用内月历，kit `.ln-calendar*` + `CalendarPanel`，与多维表日期字段同一原语）；新建是 `mode:"new"`，**写今天 / 移动端 ＋→日记** 是 `mode:"open"`（当天已有就开最新）。
+- 一天多篇：**＋ = 今天新建**、**日历 = 选日期新建**（应用内月历；桌面 = kit `.ln-calendar*` + `CalendarPanel`，移动 = 共享原语 `src/mobile/ui/MonthCalendar.tsx`，`.mbt-calendar-*` 已收编为 `.mb-calendar-*`，多维表日期 Sheet / 日历视图 / 日记共用一份）；新建是 `mode:"new"`，**写今天 / 移动端 ＋→日记** 是 `mode:"open"`（当天已有就开最新）。
+- **两端口头三个入口，左→右 = 搜索 / 日历 / ＋**（261110 用户点单；＋ 永远最右）。桌面顺序护栏见 `DiaryWorkspace.render.test.tsx`，移动见 `diaryPage.render.test.tsx`。
+- **移动日记页版式（261110 v2）**：玻璃页头 + 白卡分组（今日卡 / 年段卡）+ 行内 ⋯；行主区是**真按钮** `button.mb-set-item__main`（`kit.css` 有对应 reset —— 移动端没有全局 button reset，别再用 div 代按钮）。
+- **「默认空间」（261110，两端各一份，仅本机）**：启动落在哪个一级空间。桌面 5 个空间、默认「文档」，键 `lakex-local-notes-v3.default-space`（`src/components/model/defaultSpace.ts`）+ 设置 → 常规 → 启动；移动 4 个 tab、默认「小记」，键 `lakex-local-notes-mobile.default-space`（`src/mobile/settings/defaultSpace.ts`）+ 设置 → 常规。**不进 S3 / wire / 同步**，两端可以不同；值非法/未设置一律回落默认。
 - **标题只能是日期**：改名入口对日记条目直接拒绝（`core.isDiaryEntryNode`）。
 - **独立 tab**：`OpenTab.space` 标记；缺字段的旧 tab 按「当前树里是不是日记条目」回落分流；日记 tab 条有自己的关闭全部 / ▾ 切换器 / 右键菜单（复用 `TabContextMenu`：关闭族 + 钉住，钉住置顶且免批量关闭）。
+- **tab 上限按空间独立**（261110 用户定稿）：文档与日记各算各的（各 ≤ 设置值，上限 16），开 7 个日记 tab 不占文档的额度；**日记 tab 不进会话**（退出/重开后不自动恢复，文档空间仍按「退出时关闭全部标签」设置决定）。
 - **左栏可拖**：`SplitPane` + `SplitHandle`（宽度设备本地 `split.diary-rail`；最小 200）。**注意 flex 子项必须 `min-width:0`**，否则内容会把宽度顶住、拖拽看起来"完全无效"。

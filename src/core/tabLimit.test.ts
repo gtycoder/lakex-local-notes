@@ -8,6 +8,30 @@ const tabs = [
   { noteId: "d", lastAccessedAt: 400 },
 ];
 
+describe("上限按空间独立计算（261110 用户定稿）", () => {
+  const mixed = [
+    { noteId: "d1", lastAccessedAt: 100, space: "diary" as const },
+    { noteId: "d2", lastAccessedAt: 200, space: "diary" as const },
+    { noteId: "d3", lastAccessedAt: 300, space: "diary" as const },
+    { noteId: "a", lastAccessedAt: 10 },
+    { noteId: "b", lastAccessedAt: 20 },
+  ];
+
+  it("日记超限只淘汰日记；文档超限只淘汰文档（互不挤占）", () => {
+    expect(selectEvictionIds(mixed, { limit: 2, activeNoteId: "d3", space: "diary" })).toEqual(["d1"]);
+    expect(selectEvictionIds(mixed, { limit: 1, activeNoteId: "b", space: "library" })).toEqual(["a"]);
+  });
+
+  it("不传 space = 旧行为（全量计数，向后兼容）", () => {
+    expect(selectEvictionIds(mixed, { limit: 3, activeNoteId: "d3" })).toEqual(["a", "b"]);
+  });
+
+  it("trim 只裁本空间，另一空间原样保留", () => {
+    const trimmed = trimTabsToLimit(mixed, { limit: 2, activeNoteId: "d3", space: "diary" });
+    expect(trimmed.map((tab) => tab.noteId)).toEqual(["d2", "d3", "a", "b"]);
+  });
+});
+
 describe("selectEvictionIds", () => {
   it("limit=0 不淘汰", () => {
     expect(selectEvictionIds(tabs, { limit: 0, activeNoteId: "a" })).toEqual([]);

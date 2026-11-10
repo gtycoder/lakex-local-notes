@@ -30,7 +30,8 @@ export interface AiDocPickerProps {
 }
 
 export function AiDocPicker({ open, anchor, treeNodes, selected, onToggle, onReplace, onDismiss }: AiDocPickerProps) {
-  const { surfaceRef, style } = usePopoverPosition({ open, anchor, gap: 6, align: "start", margin: 10 });
+  // 锚点 = 整张输入卡：气泡在输入卡下方**居中**展开（261110 用户点单）。
+  const { surfaceRef, style } = usePopoverPosition({ open, anchor, gap: 8, align: "center", margin: 10 });
   const [quickNotes, setQuickNotes] = useState<QuickNoteListSummary[]>([]);
   const [expandedNotebook, setExpandedNotebook] = useState<string | null>(null);
   const notebooks = useMemo(() => selectableNotebooks(treeNodes), [treeNodes]);
@@ -54,15 +55,15 @@ export function AiDocPicker({ open, anchor, treeNodes, selected, onToggle, onRep
         <button
           key={group.id}
           type="button"
-          className="aiw-picker__row"
+          className="ln-row aiw-picker__row"
           onClick={() => {
             const refs = refsForQuickGroup(group, treeNodes, quickNotes);
             onReplace(refs);
             onDismiss();
           }}
         >
-          <FileText size={14} className="aiw-picker__icon" aria-hidden="true" />
-          <span className="aiw-picker__text">{group.label}</span>
+          <FileText size={14} className="ln-row__icon" aria-hidden="true" />
+          <span className="ln-ellipsis aiw-picker__text">{group.label}</span>
         </button>
       ))}
       <p className="aiw-picker__label">按笔记本选择</p>
@@ -73,12 +74,12 @@ export function AiDocPicker({ open, anchor, treeNodes, selected, onToggle, onRep
           <div key={notebook.id} className="aiw-picker__group">
             <button
               type="button"
-              className={"aiw-picker__row" + (expanded ? " is-open" : "")}
+              className={"ln-row aiw-picker__row" + (expanded ? " is-selected" : "")}
               onClick={() => setExpandedNotebook(expanded ? null : notebook.id)}
               aria-expanded={expanded}
             >
-              <FileText size={14} className="aiw-picker__icon" aria-hidden="true" />
-              <span className="aiw-picker__text">{notebook.title}</span>
+              <FileText size={14} className="ln-row__icon" aria-hidden="true" />
+              <span className="ln-ellipsis aiw-picker__text">{notebook.title}</span>
               <span className="aiw-picker__count">{refs.length}</span>
               {expanded ? <ChevronDown size={13} aria-hidden="true" /> : <ChevronRight size={13} aria-hidden="true" />}
             </button>
@@ -89,9 +90,9 @@ export function AiDocPicker({ open, anchor, treeNodes, selected, onToggle, onRep
                   const ref: AiWritingDocRef = { kind: "note", id: node.noteFileId ?? node.id, title: node.title };
                   const checked = selectedKeys.has(docRefKey(ref));
                   return (
-                    <label key={node.id} className={"aiw-picker__doc" + (checked ? " is-checked" : "")}>
+                    <label key={node.id} className="ln-row">
                       <input type="checkbox" checked={checked} onChange={() => onToggle(ref)} />
-                      <span className="aiw-picker__doc-name ln-ellipsis">{node.title}</span>
+                      <span className="ln-ellipsis">{node.title}</span>
                     </label>
                   );
                 })}

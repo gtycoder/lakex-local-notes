@@ -315,8 +315,10 @@ export function createMobilePlatformPort(db: MobileDb, ctxIn?: Partial<MobilePla
       const contentHash = staged ? note.contentHash : (content !== null ? sha256Sync(content) : note.contentHash);
       if (content !== null) batch?.legacyBodies.push({ kind: note.kind, id: note.id, content: new TextDecoder().decode(content) });
       await write(
-        "INSERT INTO notes (id,title,parent_id,updated_at,content_hash,is_dirty,text_cache,doc_kind,trashed_at,deleted_from_parent_id) VALUES (?,?,?,?,?,1,NULL,?,?,?)",
-        [note.id, title, parentId, note.updatedAt, contentHash, note.kind, note.trashedAt ?? null, note.deletedFromParentId ?? null],
+        // created_at：wire 不带文档创建时间（LakeNoteEntry 只有 updatedAt）⇒ 首次落地按 updatedAt 记一次，
+        // 之后编辑不再改动它（同端内排序稳定；跨端以"首次同步看到的时间"为创建时间近似）。
+        "INSERT INTO notes (id,title,parent_id,updated_at,created_at,content_hash,is_dirty,text_cache,doc_kind,trashed_at,deleted_from_parent_id) VALUES (?,?,?,?,?,?,1,NULL,?,?,?)",
+        [note.id, title, parentId, note.updatedAt, note.updatedAt, contentHash, note.kind, note.trashedAt ?? null, note.deletedFromParentId ?? null],
       );
       snapshot.set(note.id, {
         title, parent_id: parentId, sort_order: note.sortOrder, trashed_at: note.trashedAt ?? null,

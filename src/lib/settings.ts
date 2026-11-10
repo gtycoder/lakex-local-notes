@@ -66,7 +66,21 @@ function localStorageStorage(): SettingsStorage {
 
 const storage: SettingsStorage = localStorageStorage();
 /** 设置面板提供的上限档位；不在档位内的历史/异常值归一到默认档。 */
-const MAX_OPEN_TAB_OPTIONS = [0, 4, 6, 8, 12, 16, 24];
+/**
+ * 最大同时打开标签数：**只提供 ≤16 的档位**（261110 用户定稿：最多 16 个，不能再多；
+ * 撤掉旧的「不限(0)」与 24 档）。上限按空间独立计算（文档/日记各算各的，见 core/tabLimit）。
+ */
+export const MAX_OPEN_TAB_OPTIONS = [4, 6, 8, 12, 16] as const;
+/** 硬上限：加载/保存都夹（手改 localStorage 或旧存档里的 0/24 一律收敛）。 */
+export const MAX_OPEN_TABS_CAP = 16;
+
+/** 归一 maxOpenTabs：旧「不限」(≤0) 与超限值夹到硬上限，其余取整数并夹在 1..16。 */
+export function normalizeMaxOpenTabs(value: unknown): number {
+  const n = typeof value === "number" ? value : Number.NaN;
+  if (!Number.isFinite(n)) return DEFAULT_SETTINGS.maxOpenTabs;
+  if (n <= 0) return MAX_OPEN_TABS_CAP;
+  return Math.min(MAX_OPEN_TABS_CAP, Math.max(1, Math.floor(n)));
+}
 
 let cached: AppSettings | null = null;
 
@@ -82,9 +96,7 @@ export function loadSettings(): AppSettings {
         outlineEnhance: parsed.outlineEnhance === true,
         oled: parsed.oled === true,
         theme: isLakeThemeId(parsed.theme) ? parsed.theme : DEFAULT_THEME_ID,
-        maxOpenTabs: MAX_OPEN_TAB_OPTIONS.includes(parsed.maxOpenTabs as number)
-          ? (parsed.maxOpenTabs as number)
-          : DEFAULT_SETTINGS.maxOpenTabs,
+        maxOpenTabs: normalizeMaxOpenTabs(parsed.maxOpenTabs),
         maxAttachmentBytes: (MAX_ATTACHMENT_MB_OPTIONS as readonly number[]).includes(parsedMb)
           ? parsedMb * 1024 * 1024
           : DEFAULT_SETTINGS.maxAttachmentBytes,
@@ -101,6 +113,8 @@ export function loadSettings(): AppSettings {
 
 export function saveSettings(patch: Partial<AppSettings>): AppSettings {
   const next = { ...loadSettings(), ...patch };
+  // 硬上限（261110）：任何入口写入都夹到 ≤16，别让「不限」再从旧调用点漏进来。
+  next.maxOpenTabs = normalizeMaxOpenTabs(next.maxOpenTabs);
   cached = next;
   try { storage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch { /* 忽略 */ }
   notifySettingsChanged(next);

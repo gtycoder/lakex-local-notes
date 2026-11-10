@@ -76,9 +76,9 @@ describe("日记空间接线", () => {
     expect(WORKSPACE).not.toContain("onCreateEntry(todayKey)");
   });
 
-  it("②f 日记头按钮顺序：日历 → 搜索 → ＋（＋在最右）", () => {
+  it("②f 日记头按钮顺序：搜索 → 日历 → ＋（＋在最右；语义不变）", () => {
     const head = WORKSPACE.slice(WORKSPACE.indexOf("diary-dir__head"), WORKSPACE.indexOf("diary-tree ln-scroll"));
-    const order = ["选择日期新建日记", "搜日记", "新建今天的日记"].map((key) => head.indexOf(key));
+    const order = ["搜日记", "选择日期新建日记", "新建今天的日记"].map((key) => head.indexOf(key));
     expect(order.every((index) => index >= 0), "三个入口都要在头部").toBe(true);
     expect(order[0]).toBeLessThan(order[1]);
     expect(order[1]).toBeLessThan(order[2]);
