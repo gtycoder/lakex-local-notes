@@ -398,7 +398,7 @@ export function renderNativeShim(assetPort: number): string {
   }
   // SSE 推送：/__events 用同源 cookie 鉴权（EventSource 不能自定义凭据，故用 fetch 流 + credentials 自解析）。
   var EVENT_URL = "/__events";
-  var EVENT_NAMES = ["sync-progress", "pending-summary-changed", "library-changed", "ai:stream"];
+  var EVENT_NAMES = ["sync-progress", "pending-summary-changed", "library-changed", "note-body-changed", "ai:stream"];
   var NL = String.fromCharCode(10);
   var listeners = {};
   EVENT_NAMES.forEach(function (n) { listeners[n] = []; });
@@ -473,6 +473,8 @@ export function renderNativeShim(assetPort: number): string {
     onSyncProgress: function (cb) { return subscribe("sync-progress", cb); },
     onPendingSummaryChanged: function (cb) { return subscribe("pending-summary-changed", cb); },
     onLibraryChanged: function (cb) { return subscribe("library-changed", cb); },
+    // 261110：正文保存广播（另一端/桌面端保存后刷新已打开的正文；未打开不读盘）。
+    onNoteBodyChanged: function (cb) { return subscribe("note-body-changed", cb); },
     // AI 流式：registerAi 的 event.sender.send("ai:stream") 在 HTTP 调用方经 registrar 注入的
     // httpSend 转到 SSE（见 main.ts），这里按 requestId 过滤交给 lib/ai。
     onAiStream: function (cb) { return subscribe("ai:stream", cb); }

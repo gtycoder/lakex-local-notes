@@ -21,6 +21,7 @@ import { startAssetServer, ASSET_PORT } from "./assetServer.js";
 import { createWebServerController, type WebServerController, WEB_API_PORT } from "./webApiServer.js";
 import { resolveMirroredCdnRedirect, scanMirroredCdnFiles } from "./cdnRedirect.js";
 import type { SyncResult, SyncProgress } from "./syncTypes.js";
+import type { NoteDocument } from "../src/lib/types.js";
 import { syncNowViaEngine } from "./syncEngineController.js";
 import { initLogger, currentLogLevels, log, logHeapPeak, logStartupInfo } from "./logger.js";
 import { isLevelEnabled } from "./logLevels.js";
@@ -589,6 +590,19 @@ function portableIpcAvailability(): PortableExportAvailability {
 }
 
 /** 便携包导出进度（窗口 + Web 客户端 SSE）。 */
+/** 261110：正文保存成功 → 广播给所有桌面窗口 + 浏览器端（只带 id/hash，不带正文）。
+ *  各客户端自己判断"这篇是否打开 / 是否 dirty"（判据见 src/core/noteBodyBroadcast.ts），未打开不读盘。 */
+function broadcastNoteBodyChanged(saved: NoteDocument): void {
+  const payload = { noteId: saved.id, contentHash: saved.contentHash, title: saved.title, updatedAt: saved.updatedAt };
+  try {
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!trustedWebContents.has(win.webContents.id)) continue;
+      try { win.webContents.send("note-body-changed", payload); } catch { /* 窗口已关闭 */ }
+    }
+  } catch { /* 忽略 */ }
+  webServerController?.broadcast("note-body-changed", payload);
+}
+
 function broadcastPortableProgress(progress: PortableExportProgress): void {
   for (const win of BrowserWindow.getAllWindows()) {
     if (!trustedWebContents.has(win.webContents.id)) continue;
@@ -669,7 +683,7 @@ function registerIpc(): ReadonlyMap<string, (args: unknown[]) => Promise<unknown
     const quickDir = path.join(targetRoot, "quick-notes");
     fs.mkdirSync(quickDir, { recursive: true });
     quickNotes.backupDatabaseTo(path.join(quickDir, "metadata.sqlite3"));
-  }, enqueueMaintenance);
+  }, enqueueMaintenance, broadcastNoteBodyChanged);
   // 261109 日记：幂等打开某天（判据/单事务在 electron/diaryStore.ts；通道见 docs/DIARY.md）。
   registerDiaryIpc(ipc, { openDate: (dateKey, options) => store.openDiaryDate(dateKey, options) });
   registerHistoryIpc(ipc, store, () => restartHistoryTimers?.());

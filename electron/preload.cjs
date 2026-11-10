@@ -249,6 +249,12 @@ contextBridge.exposeInMainWorld("lakeNative", {
     ipcRenderer.on("library-changed", listener);
     return () => { ipcRenderer.removeListener("library-changed", listener); };
   },
+  /** 正文变更（其它窗口 / 浏览器端保存后广播；只带 id/hash，不带正文） */
+  onNoteBodyChanged: (callback) => {
+    const listener = (_event, detail) => callback(detail);
+    ipcRenderer.on("note-body-changed", listener);
+    return () => { ipcRenderer.removeListener("note-body-changed", listener); };
+  },
   /** 更新中心状态（检查/下载进度/完成）；返回取消订阅。 */
   onUpdateState: (callback) => {
     const listener = (_event, state) => callback(state);

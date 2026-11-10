@@ -72,6 +72,8 @@ export function registerNotesIpc(
   workspaceRoot: string,
   backupDatabases: (targetRoot: string) => void,
   enqueueMaintenance: <T>(task: () => Promise<T>) => Promise<T>,
+  /** 261110：正文保存成功后的广播钩子（跨窗口 / 浏览器端刷新已打开的正文）。 */
+  onNoteSaved?: (saved: import("../../src/lib/types.js").NoteDocument) => void,
 ): void {
   /** 导出目录白名单：只接受本进程 pick_export_dir 系统选择框的返回值。 */
   // 261106：导出目录授权记录抽到 exportDirState（批量导出 IPC 与单条导出共用同一判据）。
@@ -96,8 +98,12 @@ export function registerNotesIpc(
   ipc.handle("create_note", (title: unknown) => store.createNote(assertTitle(title)));
   // Batch4-D 保存版本守卫：可选第 5 参 baseHash（打开/上次保存时的正文 sha256）。
   // 不传 = 旧行为（逐字节一致）；传了且磁盘已变 ⇒ 返回 { ok:false, code:"external_changed", diskHash }，不写盘。
-  ipc.handle("save_note", (id: string, title: unknown, content: unknown, caches?: { markdown?: string | null; plain?: string | null }, baseHash?: unknown) =>
-    store.saveNoteVersioned(id, assertTitle(title), assertContentBytes(content), caches, assertBaseHash(baseHash)));
+  ipc.handle("save_note", (id: string, title: unknown, content: unknown, caches?: { markdown?: string | null; plain?: string | null }, baseHash?: unknown) => {
+    const saved = store.saveNoteVersioned(id, assertTitle(title), assertContentBytes(content), caches, assertBaseHash(baseHash));
+    // 只有真正写盘成功才广播（冲突/拦截 = 磁盘没变，广播无意义）。
+    if (saved && !("code" in saved)) onNoteSaved?.(saved);
+    return saved;
+  });
   ipc.handle("update_note_caches", (id: string, markdown: unknown, plain: unknown) => {
     // W-4：缓存文本同样可能达正文量级，统一走 32MiB 上限
     store.updateNoteCaches(id, assertOptionalContentBytes(markdown), assertOptionalContentBytes(plain));

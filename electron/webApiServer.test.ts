@@ -80,6 +80,9 @@ describe("webApiServer", () => {
     expect(shim).toContain(`onSyncProgress: function (cb) { return subscribe("sync-progress", cb); }`);
     expect(shim).toContain(`onPendingSummaryChanged: function (cb) { return subscribe("pending-summary-changed", cb); }`);
     expect(shim).toContain(`onLibraryChanged: function (cb) { return subscribe("library-changed", cb); }`);
+    // 261110：正文保存广播（跨窗/浏览器端刷新已打开正文）
+    expect(shim).toContain(`onNoteBodyChanged: function (cb) { return subscribe("note-body-changed", cb); }`);
+    expect(shim).toContain('"note-body-changed"');
     // AI 流式（261028）：ai:stream 加入 SSE 事件白名单，shim 提供 onAiStream
     expect(shim).toContain(`onAiStream: function (cb) { return subscribe("ai:stream", cb); }`);
     // 二进制入参（浏览器端插图/附件）：JSON 序列化把 TypedArray 转 number[]，主进程再归一

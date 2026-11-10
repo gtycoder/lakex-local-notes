@@ -7,6 +7,7 @@ const h = vi.hoisted(() => ({
   getSyncPendingSummary: vi.fn(async () => ({ documents: 0, folders: 0, resources: 0, generatedAt: "" })),
   onPendingSummaryChanged: vi.fn(() => () => {}),
   onLibraryChanged: vi.fn(() => () => {}),
+  onNoteBodyChanged: vi.fn(() => () => {}),
   listDraftJournals: vi.fn(async () => []),
   listTreeNodes: vi.fn(async () => []),
   listNoteSummaries: vi.fn(async () => []),
@@ -24,6 +25,7 @@ let handleTrashRestored: ((restoredId?: string) => void) | null = null;
 let refreshDraftEntries: (() => Promise<void>) | null = null;
 let reloadNoteTab: ((noteId: string) => void) | null = null;
 let draftEntries: unknown[] = [];
+let emitNoteBodyChanged: ((detail: { noteId: string; contentHash?: string }) => void) | null = null;
 const openTabsRef: { current: OpenTab[] } = { current: [] };
 function applyDraftEntries(updater: any) {
   draftEntries = typeof updater === "function" ? updater(draftEntries) : updater;
@@ -58,6 +60,11 @@ beforeEach(() => {
   host = document.createElement("div"); document.body.append(host); root = createRoot(host);
   h.readNote.mockReset();
   h.deleteDraftJournal.mockClear();
+  h.onNoteBodyChanged.mockReset();
+  h.onNoteBodyChanged.mockImplementation(((cb: (detail: { noteId: string; contentHash?: string }) => void) => {
+    emitNoteBodyChanged = cb;
+    return () => {};
+  }) as never);
   draftEntries = [];
 });
 afterEach(() => { act(() => root.unmount()); host.remove(); vi.unstubAllGlobals(); handleTrashRestored = null; reloadNoteTab = null; });
@@ -95,6 +102,46 @@ describe("useSyncRefresh.handleTrashRestored（审计 F04）", () => {
     await act(async () => { handleTrashRestored!("b"); await tick(); await tick(); });
     expect(openTabsRef.current.find((t) => t.noteId === "b")!.deleted).toBe(false);
     expect(openTabsRef.current.find((t) => t.noteId === "a")!.deleted).toBe(true);
+  });
+});
+
+describe("useSyncRefresh 正文变更广播（261110）", () => {
+  const openTab = (over: Partial<OpenTab> = {}): OpenTab => ({
+    noteId: "a", title: "A", content: "<p>old</p>", dirty: false, lastAccessedAt: 1, baseHash: "H1", ...over,
+  });
+  const changedDoc = { ...note("a", "nb", "local"), content: "<p>new</p>", contentHash: "H2" };
+
+  it("打开着且干净且落后 ⇒ 重读正文、刷新 baseHash、bump reloadKey", async () => {
+    h.readNote.mockResolvedValue(changedDoc as never);
+    openTabsRef.current = [openTab()];
+    act(() => root.render(createElement(Harness)));
+    await act(async () => { emitNoteBodyChanged!({ noteId: "a", contentHash: "H2" }); await tick(); await tick(); });
+    expect(h.readNote).toHaveBeenCalledWith("a");
+    const tab = openTabsRef.current.find((t) => t.noteId === "a")!;
+    expect(tab.content).toBe("<p>new</p>");
+    expect(tab.baseHash).toBe("H2");
+    expect(tab.reloadKey).toBe(1);
+  });
+
+  it("没打开这篇 ⇒ 不读盘（省资源）", async () => {
+    openTabsRef.current = [];
+    act(() => root.render(createElement(Harness)));
+    await act(async () => { emitNoteBodyChanged!({ noteId: "a", contentHash: "H2" }); await tick(); });
+    expect(h.readNote).not.toHaveBeenCalled();
+  });
+
+  it("本地有未保存编辑（dirty）⇒ 不覆盖，交给保存守卫", async () => {
+    openTabsRef.current = [openTab({ dirty: true })];
+    act(() => root.render(createElement(Harness)));
+    await act(async () => { emitNoteBodyChanged!({ noteId: "a", contentHash: "H2" }); await tick(); });
+    expect(h.readNote).not.toHaveBeenCalled();
+  });
+
+  it("baseHash 已是最新（自己的回声）⇒ 跳过", async () => {
+    openTabsRef.current = [openTab({ baseHash: "H2" })];
+    act(() => root.render(createElement(Harness)));
+    await act(async () => { emitNoteBodyChanged!({ noteId: "a", contentHash: "H2" }); await tick(); });
+    expect(h.readNote).not.toHaveBeenCalled();
   });
 });
 

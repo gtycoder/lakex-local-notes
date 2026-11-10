@@ -115,6 +115,9 @@ export interface SaveNoteConflict {
 /** save_note 的返回：正常保存回 NoteDocument；被磁盘版本拦下回 SaveNoteConflict。 */
 export type SaveNoteResult = NoteDocument | SaveNoteConflict;
 
+/** 正文变更广播的载荷（261110；判据见 src/core/noteBodyBroadcast.ts）。 */
+export type { NoteBodyChangedDetail } from "../core/noteBodyBroadcast";
+
 /** save_note 类型判别（主进程与渲染层共用，不要各自写 `"code" in x`）。 */
 export function isSaveConflict(value: unknown): value is SaveNoteConflict {
   if (!value || typeof value !== "object") return false;

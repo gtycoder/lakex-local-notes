@@ -7,6 +7,7 @@ import type { DraftJournalEntry, NoteSummary, SyncPendingSummary, TreeNode } fro
 import type { OpenTab } from "../desktop/desktopTypes";
 import type { NoteReloadGuard } from "../core/requestVersion";
 import { isGoneNote } from "../core/syncDecisions";
+import { shouldReloadOnNoteBodyChanged } from "../core/noteBodyBroadcast";
 
 export interface UseSyncRefreshOptions {
   setPendingSummary: Dispatch<SetStateAction<SyncPendingSummary>>;
@@ -39,6 +40,36 @@ export function useSyncRefresh({
       void native.listNoteSummaries().then(setNotes).catch((error) => reportNativeActionError("刷新同步摘要", error));
     });
   }, [setTreeNodes, setNotes]);
+
+  // 261110：别处（另一窗口 / 浏览器端）保存了正文 → 只重载"打开着且没有未保存编辑"的那篇；
+  // 未打开不读盘（省资源），dirty 交给保存守卫冲突流程（不静默覆盖）。
+  useEffect(() => {
+    return native.onNoteBodyChanged((detail) => {
+      const tab = openTabsRef.current.find((t) => t.noteId === detail.noteId);
+      if (!tab || !shouldReloadOnNoteBodyChanged(tab, detail)) return;
+      const token = noteReloadGuardRef.current.next(detail.noteId);
+      void (async () => {
+        try {
+          const t0 = performance.now();
+          const updated = await native.readNote(detail.noteId);
+          if (!noteReloadGuardRef.current.isCurrent(token)) return;
+          setOpenTabs((tabs) => tabs.map((t) => t.noteId === detail.noteId
+            ? {
+              ...t,
+              title: updated.title,
+              content: updated.content,
+              dirty: false,
+              reloadKey: (t.reloadKey ?? 0) + 1,
+              lastDigest: { title: updated.title, updatedAt: updated.updatedAt },
+              ...(updated.contentHash ? { baseHash: updated.contentHash } : {}),
+            }
+            : t));
+          bumpRevision(detail.noteId);
+          rlog.debug("sync-tab", "note-body-changed reload", { noteId: detail.noteId, readMs: Math.round(performance.now() - t0) });
+        } catch { /* 文档不存在/读取失败：忽略（下次打开自然是最新） */ }
+      })();
+    });
+  }, [openTabsRef, noteReloadGuardRef, setOpenTabs, bumpRevision]);
 
   const refreshDraftEntries = useCallback(async () => {
     try {

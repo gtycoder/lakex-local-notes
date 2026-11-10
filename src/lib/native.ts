@@ -388,6 +388,8 @@ export interface LakeNative {
   onPendingSummaryChanged(callback: (summary: import("./types").SyncPendingSummary) => void): () => void;
   /** 目录树结构变更（其它窗口/浏览器端写入后广播）→ 调用方重读目录树。 */
   onLibraryChanged(callback: (detail: { channel?: string }) => void): () => void;
+  /** 正文变更（其它窗口/浏览器端保存后广播；只带 id/hash）→ 调用方按"是否打开"决定是否重读。 */
+  onNoteBodyChanged(callback: (detail: import("./types").NoteBodyChangedDetail) => void): () => void;
   /** 窗口全屏（macOS 独立 Space）状态变化 → 顶栏据此去掉红绿灯让位（返回取消订阅）。 */
   onWindowFullscreen(callback: (fullscreen: boolean) => void): () => void;
   /** macOS 菜单「设置…（⌘,）」→ 打开设置面板（返回取消订阅）。 */
@@ -618,6 +620,7 @@ export const native = {
   onSyncProgress: (callback: (progress: SyncProgress) => void) => api().onSyncProgress(callback),
   onPendingSummaryChanged: (callback: (summary: import("./types").SyncPendingSummary) => void) => api().onPendingSummaryChanged(callback),
   onLibraryChanged: (callback: (detail: { channel?: string }) => void) => api().onLibraryChanged(callback),
+  onNoteBodyChanged: (callback: (detail: import("./types").NoteBodyChangedDetail) => void) => api().onNoteBodyChanged(callback),
   onWindowFullscreen: (callback: (fullscreen: boolean) => void) => api().onWindowFullscreen(callback),
   onOpenSettings: (callback: () => void) => api().onOpenSettings(callback),
 };
