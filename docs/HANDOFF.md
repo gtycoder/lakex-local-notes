@@ -10,6 +10,25 @@
 
 > **顺序标注**：261109 各批次里写的「日记 ⌘4 / AI 写作 ⌘3」是**当时**的顺序；**261110 起改为 日记 ⌘3 / AI 写作 ⌘4**（另有标签 ⌘5）。旧批次不再改，以本行 + §1 为准。
 
+### 261110 · 正文字号 14 试调（空间菜单 / 日记 / AI 写作）
+- 用户点单：空间切换触发器（只 `.toolbar__workspace`，顶栏其它按钮不动）、下拉项（`.ln-menu__item` 是共用原语 ⇒ **全仓菜单项一起**变 14）、日记与 AI 写作正文统一 14（页面标题仍 18 档）；目录栏未动。
+- 护栏：`cssLayers` 基线 chrome.css 527→528（触发器新增一条 font-size，已写明理由）。
+- 门禁：tsc 0；src/styles + diary + aiWriting + components/app = 59 文件 393 例；ui-metrics / diff-check 通过。**设备快照未重烤**（字号级变化，发版前必须）。
+
+### 261110 · 保存守卫误报修复（顶栏角标莫名亮「1」的排查结论）
+- 现场：顶栏同步角标常亮 1，但「本地空间」面板只写「当前仅本地」——记录区此前只在云端分支渲染。查账本 = 一条 `save_external_changed`（2026-11-26，10:00:37）；日志显示 10:00:36 有一次保存成功（168 字符），1s 后同一篇又被拦，diskHash 恰好是刚写入那版。
+- 根因：保存成功后的 baseHash 刷新被 **revision 门控**跳过（期间有新编辑 ⇒ 不调 onOpenTabsApplied），但那次已写盘成功 ⇒ 下一笔拿旧基线，把「自己上一笔的写入」判成外部改动（记录 +1、角标常亮、误弹三选项）。
+- 修复：`useSavePipeline` 新增 `onBaseHashRefreshed`（**与 revision 无关**，保存成功即刷）+ 任务执行时**重读** live baseHash（入队快照仍只用于正文/标题/revision，审计 F02 不变）；`noteContentRepository` 增加进程内「最近自写 hash」自愈（外部写入不可能命中；重启不保留）。
+- 护栏：`useSavePipeline.baseHash.render.test.tsx`（2 例：revision 前进仍刷 baseHash、排队第二笔读到最新基线）+ `noteContentRepository.test.ts`（+2 例：自写竞态放行 / 外部写入仍拦）。
+- UI：记录入口区块抽成一处、**两个分支共用**；摘要按 kind 聚合（远端覆盖本地 / 他端已删除 / 保存时磁盘被改）；新增「知道了」= ack（只清角标不删记录）。护栏 `syncConflicts.summary.test` + wiring 断言。
+
+### 261110 · 正文变更广播（桌面窗口 + 浏览器端）
+- 动机（用户实测）：浏览器端保存后，桌面端**已打开**的正文不刷新，关掉重开才对 ⇒ 已打开的要通知刷新、没打开的不读盘。
+- 实现：`save_note` 写盘成功 → 主进程广播 `note-body-changed { noteId, contentHash, title, updatedAt }`（所有可信桌面窗口 + `webServerController` → 浏览器端 SSE）；冲突/拦截不广播。判据单一来源 `src/core/noteBodyBroadcast.ts`：未打开 ⇒ 不读盘；dirty ⇒ 不覆盖（交保存守卫）；hash 相同 ⇒ 跳过（自己的回声）。`useSyncRefresh` 收到后 readNote + 刷 baseHash + bump reloadKey。
+- 三处同步：`preload.cjs` / `native.ts` / `webApiServer` shim（EVENT_NAMES + `onNoteBodyChanged`）。
+- 护栏：`noteBodyBroadcast.test`（6 例）、`useSyncRefresh.test`（+4 例）、`webApiServer.test`（shim 断言）。
+- 门禁：tsc 0；components/app + hooks + core + electron 相关 65 文件 433 例；ui-metrics / check:core / diff-check 通过。**全量 vitest 唯一红 = `electron/s3v3/perf.integration` 的既有时延门禁（本机负载下 899ms > 797ms，与本批无关）**。浏览器端 SSE 手工实测**未跑**（需开 web 服务后浏览器端与桌面端同开同一篇验证）。
+
 ### 261110 · UI 借 Astryx 语汇两批（设置页 / 对话框 / 空态 / 明细档）
 - **起因与取舍**：评估 Meta Astryx（MIT、React 19+、预编译 CSS、150+ 组件）是否替换自有体系 —— **结论不引入**：① 它强制 React ≥19，而 vendored 内核包装层 peer 是 `react ^18`；② 自带一套 `--color-*` 令牌 + reset/astryx-base 层（会追加到我们 8 层之后、压过 kit/a11y）；③ 体积（astryx.css 40KB gz）撞已红的 entry 预算；④ 视觉是另一套产品语言，且 261006 已定稿「品类标准 / 布局冻结」。⇒ 改为**只借语汇**，全部落在自有 `--lake-*` / `ln-*`，零新依赖。
 - **第一批**（`9c431b59` 之前的分支提交）：设置内容区 白→`--lake-bg-window`（白卡浮起来，与移动端「灰底 + 白卡」同构）；分组卡圆角 10→`--lake-radius-card`(12)；`.ln-dialog__actions` 加 0.5px 底栏分隔线。
