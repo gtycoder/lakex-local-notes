@@ -8,7 +8,7 @@ import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } fro
 import { bridge } from "./bridge";
 import { resetAssetPerf, snapshotAssetPerf } from "./native/assetPerf";
 import type { LocalNoteSummary } from "./data/noteRepository";
-import { isGoneNote } from "../core/syncDecisions";
+import { isGoneNote, TRASH_NOTEBOOK_ID } from "../core/syncDecisions";
 import { diaryEntries, diaryNotebooks } from "../core/diary.js";
 import { diaryNodesFrom } from "./diary/diaryNodes.js";
 import { setNoteRefHost } from "../features/editor/noteRef";
@@ -17,6 +17,7 @@ import { HomePage, type MobileQuickNote } from "./home/HomePage";
 import type { HomeTab } from "./home/tabPager";
 import { consumeSharedContent, readSharedContentBytes, sharedContentKind, sharedContentToSeed, sharedContentUnsupportedHint, sharedMarkdownFiles, subscribeSharedContent, type QuickNoteSeed, type SharedContent, type SharedMarkdownFile } from "./native/sharedContent";
 import { readImportDefaultNotebook, writeImportDefaultNotebook } from "./settings/importSettings";
+import { readDefaultHomeTab } from "./settings/defaultSpace";
 import { DefaultNotebookPickerSheet, type DefaultNotebookOption } from "./settings/DefaultNotebookPickerSheet";
 import { importSharedMarkdown, markdownTitleOf } from "./import/markdownShareImport";
 import { importSharedPdfAsInkNote, sharedPdfImportToast } from "./ink/mobilePdfImport";
@@ -96,8 +97,18 @@ export type Route =
   | { kind: "notebook"; notebookId: string; initialNoteId?: string | null; initialMode?: "viewer" | "editor" };
 
 export function MobileApp({ initialCapture = false }: { initialCapture?: boolean } = {}) {
-  /** 冷启动固定落在「小记」（用户 261014 定；快捷 capture 那条本来也落在小记）。 */
-  const [route, setRoute] = useState<Route>({ kind: "home", tab: "quick" });
+  /**
+   * 冷启动落点 = **设置 → 常规 → 默认空间**（261110 用户点单）；默认「小记」（261014 定）。
+   * 只读设备本地偏好（settings/defaultSpace，前缀 lakex-local-notes-mobile.，不进 S3）；
+   * 快捷 capture 那条入口不受影响（它本来也落在小记）。
+   */
+  const [route, setRoute] = useState<Route>(() => ({ kind: "home", tab: readDefaultHomeTab() }));
+  /**
+   * 工作区打开来源的一级页（261110）：**从日记打开 ⇒ 关闭/返回时回「日记」**，其余保持既有「知识库」落点。
+   * 两条返回路径（页面返回 = closeWorkspace；安卓返回键 = requestWorkspaceBack → 工作区 handler → closeWorkspace）
+   * 都收敛到 useRouteTransition 的 onClosed 回调，所以只在这里记一次来源就够，不必各写一套。
+   */
+  const workspaceOriginTabRef = useRef<HomeTab | null>(null);
   /**
    * 路由转场（261019，对齐语雀 push；状态机见 hooks/useRouteTransition）：
    * 工作区按需挂载、播完出场才卸载；首页层常驻（页栈语义）⇒ 返回时列表滚动位置与数据都在。
@@ -110,7 +121,13 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
     close: closeWorkspace,
     homeRef: routeHomeRef,
     wsRef: routeWsRef,
-  } = useRouteTransition(route.kind, () => setRoute({ kind: "home", tab: "library" }));
+  } = useRouteTransition(route.kind, () => {
+    // 261110：回「打开它的那个一级页」（日记 → 日记页签），其余保持既有「知识库」落点；
+    // 记完即清，下一次打开重新记（不会把上一次的来源带到别处）。
+    const origin = workspaceOriginTabRef.current;
+    workspaceOriginTabRef.current = null;
+    setRoute({ kind: "home", tab: origin ?? "library" });
+  });
   /** 小记（长按桌面图标的快捷方式）：独立入口，不等启动完成即可输入。
    *  261022：冷启动由原生同步 hint 在首帧前给出判定 ⇒ 首帧直接进 capture，不再先画首页骨架。 */
   const [captureOpen, setCaptureOpen] = useState(initialCapture);
@@ -471,6 +488,7 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
       showToast("正在导入 PDF…");
       try {
         const imported = await importSharedPdfAsInkNote(payload);
+        workspaceOriginTabRef.current = null;
         setRoute({ kind: "notebook", notebookId: imported.notebookId, initialNoteId: imported.noteId });
         // 一句话说清三态（成功 / 截断 / 部分页失败），只弹一个 toast。
         showToast(sharedPdfImportToast(imported));
@@ -578,7 +596,9 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
    */
   const notebooks = useMemo(() => {
     const diaryIds = new Set(diaryNotebooks(treeNodes).map((node) => node.id));
-    return treeNodes.filter((n) => n.nodeType === "notebook" && !diaryIds.has(n.id));
+    // 261110：知识库也不显示「回收站」笔记本（261026 起软删 = parentId 指向它，桌面侧同样按
+    // core 的 TRASH_NOTEBOOK_ID 判据过滤，见 features/aiWriting/aiWritingDocs）。只过滤渲染，不动存储/同步。
+    return treeNodes.filter((n) => n.nodeType === "notebook" && !diaryIds.has(n.id) && n.id !== TRASH_NOTEBOOK_ID);
   }, [treeNodes]);
   /**
    * 日记判据的输入 = **目录 + 文档混合视图**：treeNodes 只有 folders，日记条目在 notes 表里
@@ -593,7 +613,8 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
     [notebooks],
   );
   /** 首页常驻渲染：工作区打开期间它只是被盖住（inert），tab 值取当前 home 路由或回退「知识库」（返回落点）。 */
-  const homeTab = route.kind === "home" ? route.tab : "library";
+  // 工作区打开期间首页被盖住：tab 取「来源页」（从日记进入 ⇒ 日记页留在下层，返回时不会先闪一下知识库）。
+  const homeTab: HomeTab = route.kind === "home" ? route.tab : (workspaceOriginTabRef.current ?? "library");
   // 笔记本 → 直接文档数（首页列表行 .counter；与 getWorkspaceSnapshot 的树归属口径一致）
   const docCounts = useMemo(() => {
     const m: Record<string, number> = {};
@@ -651,6 +672,8 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
       cur = parentOfNote.get(cur) ?? null;
     }
     if (!notebookId) { showToast("未找到该文档所属笔记本（可在数据体检中修复）", { type: "error" }); return; }
+    // 来自首页/搜索/置顶等既有入口 ⇒ 返回落点保持原样（知识库）。
+    workspaceOriginTabRef.current = null;
     // 先起转场：首页列表的 refreshAll 不必挡在路由前面（实测会把 push 延迟 ~700ms，观感像"点了没反应"）。
     setRoute({ kind: "notebook", notebookId, initialNoteId: id, initialMode: mode });
     void refreshAll().catch(() => undefined);
@@ -668,6 +691,8 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
    * 直接带 notebookId 进路由（不走 openNote 的祖先回溯）：当天日记刚被 ensure 建出来时，首页快照里还没有它。
    */
   const openDiaryEntry = useCallback((input: { noteId: string; notebookId: string; mode: "viewer" | "editor" }) => {
+    // 记录来源页 = 日记 ⇒ 关闭/返回（页面返回或安卓返回键，两条都走 useRouteTransition.onClosed）回日记页签。
+    workspaceOriginTabRef.current = "diary";
     setRoute({ kind: "notebook", notebookId: input.notebookId, initialNoteId: input.noteId, initialMode: input.mode });
     void refreshAll().catch(() => undefined);
   }, [refreshAll]);
@@ -778,7 +803,7 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
           // 首页在后台（工作区打开）时，分页器的 scroll/resize 回写**不得改路由**：
           // 否则 pad 窗口 resize 会让隐藏首页把 tab 回写上来 ⇒ route 变 home、工作区被卸载（261107 实测）。
           onTabChange={(tab) => { if (route.kind === "notebook") return; setRoute({ kind: "home", tab }); }}
-          onOpenNotebook={(id) => setRoute({ kind: "notebook", notebookId: id })}
+          onOpenNotebook={(id) => { workspaceOriginTabRef.current = null; setRoute({ kind: "notebook", notebookId: id }); }}
           onOpenNote={(id) => void openNote(id, "viewer")}
           // 「标签」页点小记：与全局搜索同一条定位通路（回小记 tab + 高亮）。
           onOpenQuickNote={openQuickNoteFromSearch}

@@ -35,6 +35,8 @@ export interface LocalNoteSummary {
   id: string;
   title: string;
   updatedAt: string;
+  /** 创建时间（261110，schema v13）：日记同一天多篇按它倒序，**不随编辑漂移**。 */
+  createdAt: string;
   parentId: string | null;
 }
 
@@ -47,7 +49,12 @@ function rowToNote(r: Record<string, unknown>, content: string): LocalNote {
 }
 
 function rowToNoteSummary(r: Record<string, unknown>): LocalNoteSummary {
-  return { id: String(r.id), title: String(r.title), updatedAt: String(r.updated_at), parentId: r.parent_id ? String(r.parent_id) : null };
+  // created_at：v13 前的老行由迁移回填 = updated_at；查询未带该列时也回落 updatedAt（防御性，避免空串排序错位）。
+  return {
+    id: String(r.id), title: String(r.title), updatedAt: String(r.updated_at),
+    createdAt: String(r.created_at ?? "") || String(r.updated_at),
+    parentId: r.parent_id ? String(r.parent_id) : null,
+  };
 }
 
 /** 简单 MIME（孤儿列表展示用，等价桌面 mimeTypeForFilename）。 */
@@ -109,7 +116,7 @@ export async function orphanFilenamesForNote(d: MobileDb, noteId: string): Promi
 }
 
 export async function listNotes(d: MobileDb): Promise<LocalNoteSummary[]> {
-  const rows = await d.prepare("SELECT id, title, updated_at, parent_id FROM notes WHERE trashed_at IS NULL ORDER BY updated_at DESC").all();
+  const rows = await d.prepare("SELECT id, title, updated_at, created_at, parent_id FROM notes WHERE trashed_at IS NULL ORDER BY updated_at DESC").all();
   return rows.map(rowToNoteSummary);
 }
 
@@ -206,8 +213,8 @@ export async function createNote(
   try {
     const bodyPlain = plain ?? searchTextForKind(kind, content).plain ?? "";
     await d.prepare(
-      "INSERT INTO notes (id, title, parent_id, sort_order, updated_at, content_hash, is_dirty, text_cache, doc_kind) VALUES (?,?,?,?,?,?,1,?,?)"
-    ).run(id, safeTitle, parentId, sortOrder, now, sha256Sync(new TextEncoder().encode(content)), bodyPlain, kind);
+      "INSERT INTO notes (id, title, parent_id, sort_order, updated_at, created_at, content_hash, is_dirty, text_cache, doc_kind) VALUES (?,?,?,?,?,?,?,1,?,?)"
+    ).run(id, safeTitle, parentId, sortOrder, now, now, sha256Sync(new TextEncoder().encode(content)), bodyPlain, kind);
   } catch (error) {
     // 只有"DB 里确实没有这一行"才清理刚写的正文：INSERT 失败也可能来自 id 已存在（并发/调用方误用），
     // 这时删正文会毁掉既有笔记。

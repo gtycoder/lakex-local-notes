@@ -19,9 +19,9 @@ function blockOf(category: string): string {
 const itemIds = (category: string): string[] => [...blockOf(category).matchAll(/itemId="([^"]+)"/g)].map((m) => m[1]);
 
 describe("设置页分组归属（重组后）", () => {
-  it("常规 = 编辑器 / 标签页 / 附件", () => {
+  it("常规 = 编辑器 / 标签页 / 附件 / 启动（默认空间）", () => {
     expect(itemIds("editor").sort()).toEqual([
-      "editor-clear-tabs-on-exit", "editor-floating-toolbar", "editor-font-size",
+      "editor-clear-tabs-on-exit", "editor-default-space", "editor-floating-toolbar", "editor-font-size",
       "editor-max-attachment", "editor-max-open-tabs", "editor-outline-enhance", "editor-toolbar",
     ]);
   });

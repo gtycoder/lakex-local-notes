@@ -27,7 +27,7 @@ describe("派生索引后台自愈（261026）", () => {
 
   it("导入不写 text_cache，后台先补纯文本再建 FTS（261027）", () => {
     expect(MOBILE_PORT).toContain("text_cache,doc_kind");
-    expect(MOBILE_PORT).toContain("INSERT INTO notes (id,title,parent_id,updated_at,content_hash,is_dirty,text_cache,doc_kind,trashed_at,deleted_from_parent_id)");
+    expect(MOBILE_PORT).toContain("INSERT INTO notes (id,title,parent_id,updated_at,created_at,content_hash,is_dirty,text_cache,doc_kind,trashed_at,deleted_from_parent_id)");
     expect(MOBILE_PORT).toContain("1,NULL,");
     expect(SYNC).toContain("backfillTextCache(db)");
     expect(NOTES).toContain("backfillTextCache(d)");

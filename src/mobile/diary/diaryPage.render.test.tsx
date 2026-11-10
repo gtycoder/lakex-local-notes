@@ -2,7 +2,8 @@
 /**
  * 日记页（261109 v1）渲染判据：
  *  · 分组**只来自 core.diary.groupDiaryEntries**（组件里不重算）⇒ 年 → 月 两层标题与计数对得上；
- *  · 「写今天」= bridge.diaryOpenDate（幂等 ensure 在 data 层）→ 进现有工作区（mode=editor）；
+ *  · 「写今天」= bridge.diaryOpenDate(今天, "open")（幂等 ensure 在 data 层）→ 进现有工作区（mode=editor）；
+ *  · 右上角 ＋ = 今天新建（mode="new"）、日历 = 选任意日期新建（mode="new"）；连点只发一次请求；
  *  · 点条目 → 现有工作区（mode=viewer）；
  *  · 条目 ⋯ →「转为文档…」= **移动**到选中笔记本：调 bridge.moveTreeNodeOrdered，orderedIds =
  *    目标笔记本现有子节点排序 + 本条追加末尾（与 useTreeActions.moveTreeNode 的 inside 同口径）；
@@ -14,7 +15,8 @@ import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  diaryOpenDate: vi.fn(async (_dateKey: string) => ({ noteId: "new-note", created: true, notebookId: "nb-diary", duplicates: [] as string[] })),
+  // 261110：日记「打开 / 新建」带 mode（"open" 幂等 / "new" 永远新建）。
+  diaryOpenDate: vi.fn(async (_dateKey: string, _mode?: "open" | "new") => ({ noteId: "new-note", created: true, notebookId: "nb-diary", duplicates: [] as string[] })),
   getWorkspaceSnapshot: vi.fn(async (_notebookId: string) => ({ notebook: null, tree: [] as Array<{ id: string; parentId: string | null; sortOrder: number; title: string; kind: "group" | "note"; icon: null }> })),
   moveTreeNodeOrdered: vi.fn(async (_id: string, _parentId: string | null, _orderedIds: string[]) => ({})),
   showToast: vi.fn(),
@@ -29,6 +31,7 @@ vi.mock("../bridge", () => ({
 vi.mock("../ui/toastBus", () => ({ showToast: mocks.showToast }));
 
 import type { TreeNode } from "../../lib/types";
+import { formatDiaryDateKey } from "../../core/diary.js";
 import { DiaryPage } from "./DiaryPage";
 
 const T = "2025-12-31T09:00:00.000Z";
@@ -104,14 +107,68 @@ describe("日记页（移动端 v1）", () => {
     expect(text()).not.toContain("12 月 29 日");
   });
 
-  it("「写今天」走 bridge.diaryOpenDate → 进现有工作区（editor），并刷新目录", async () => {
+  it("「写今天」走 bridge.diaryOpenDate(今天, 'open') → 进现有工作区（editor），并刷新目录", async () => {
     await render();
     const write = [...host.querySelectorAll<HTMLButtonElement>("button")].find((el) => (el.textContent ?? "").includes("写今天"));
     expect(write).toBeTruthy();
     await act(async () => { write!.click(); await new Promise((resolve) => setTimeout(resolve, 0)); });
     expect(mocks.diaryOpenDate).toHaveBeenCalledTimes(1);
+    // 主按钮 = **幂等** open（当天已有就打开最新那篇），不是新建。
+    expect(mocks.diaryOpenDate.mock.calls[0][1]).toBe("open");
     expect(onOpenEntry).toHaveBeenCalledWith({ noteId: "new-note", notebookId: "nb-diary", mode: "editor" });
     expect(onChanged).toHaveBeenCalled();
+  });
+
+  it("右上角 ＋ = 今天新建（mode='new'）→ 进工作区编辑态", async () => {
+    await render();
+    const plus = button("今天新建日记");
+    expect(plus, "页头右上角必须有「＋ = 今天新建」").toBeTruthy();
+    await act(async () => { plus!.click(); await new Promise((resolve) => setTimeout(resolve, 0)); });
+    expect(mocks.diaryOpenDate).toHaveBeenCalledTimes(1);
+    expect(mocks.diaryOpenDate.mock.calls[0][1]).toBe("new");
+    expect(onOpenEntry).toHaveBeenCalledWith({ noteId: "new-note", notebookId: "nb-diary", mode: "editor" });
+  });
+
+  it("右上角日历 = 选任意日期新建（mode='new'，可多篇）；外壳是既有底部 Sheet + 共享月历", async () => {
+    // 今天所在月里已有日记（月历打开时定位到今天的月份）⇒ 该日应打点（hasDot 复用共享原语）。
+    const todayKey = formatDiaryDateKey();
+    await render([...NODES, node({ id: "d-today", title: todayKey, parentId: "m12" })]);
+    const calendar = button("按日期新建日记");
+    expect(calendar, "页头右上角必须有日历入口").toBeTruthy();
+    await click(calendar!);
+    // 共享月历原语：42 格（周一起始，来自 core.calendarMonthDays）
+    const cells = [...host.querySelectorAll<HTMLButtonElement>(".mb-calendar-day")];
+    expect(cells.length).toBe(42);
+    // 已有日记的日期在月历上打点（复用共享原语的 hasDot；不另画一套日历）
+    const dotted = [...host.querySelectorAll<HTMLButtonElement>(".mb-calendar-day")].filter((el) => el.querySelector(".mb-calendar-day__dot"));
+    expect(dotted.map((el) => el.getAttribute("aria-label"))).toContain(todayKey);
+    const cell = cells.find((el) => !el.classList.contains("is-out"))!;
+    const dateKey = cell.getAttribute("aria-label")!;
+    await act(async () => { cell.click(); await new Promise((resolve) => setTimeout(resolve, 0)); });
+    expect(mocks.diaryOpenDate).toHaveBeenCalledTimes(1);
+    expect(mocks.diaryOpenDate).toHaveBeenCalledWith(dateKey, "new");
+    // 选完即关面板，并直接进工作区
+    expect(host.querySelector(".mb-sheet")).toBeNull();
+    expect(onOpenEntry).toHaveBeenCalledWith({ noteId: "new-note", notebookId: "nb-diary", mode: "editor" });
+  });
+
+  it("连点防重：在途期间再点 ＋ 只发一次写请求（不会一天建出两篇）", async () => {
+    await render();
+    const plus = button("今天新建日记")!;
+    let release: (value: { noteId: string; created: boolean; notebookId: string; duplicates: string[] }) => void = () => {};
+    mocks.diaryOpenDate.mockImplementationOnce(() => new Promise((resolve) => { release = resolve; }));
+    await act(async () => {
+      plus.click();
+      plus.click();
+      plus.click();
+      await Promise.resolve();
+    });
+    expect(mocks.diaryOpenDate).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      release({ noteId: "new-note", created: true, notebookId: "nb-diary", duplicates: [] });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(onOpenEntry).toHaveBeenCalledTimes(1);
   });
 
   it("点条目 → 现有工作区（viewer）；搜索入口在页内头部", async () => {
@@ -124,6 +181,30 @@ describe("日记页（移动端 v1）", () => {
     expect(search).toBeTruthy();
     await act(async () => { search!.click(); });
     expect(onOpenSearch).toHaveBeenCalledTimes(1);
+  });
+
+  it("v2 版式：玻璃页头 + 白卡分组（今日卡 / 年段都走 .mb-set-section 原语），不新造页面骨架", async () => {
+    await render();
+    expect(host.querySelector("header.mobile-page-head.mb-glass.mb-glass--bar"), "页头 = 玻璃条（与标签页同形）").toBeTruthy();
+    const write = [...host.querySelectorAll<HTMLButtonElement>("button")].find((el) => (el.textContent ?? "").includes("写今天"))!;
+    expect(write.closest(".mb-set-section"), "主按钮在白卡分组（今日卡）里，不再裸放在页面上").toBeTruthy();
+    // 今日卡 1 + 年段 1 ⇒ 至少两张分组卡；年段标题仍是 .mb-set-section__title
+    expect(host.querySelectorAll(".mb-set-section").length).toBeGreaterThanOrEqual(2);
+    expect(host.querySelector(".mb-set-section__title")!.textContent).toContain("2025 年（2）");
+  });
+
+  it("同日多篇：行内显示时刻区分（docs/DIARY.md 决策 4）", async () => {
+    const sameDay: TreeNode[] = [
+      ...NODES,
+      node({ id: "d1231b", title: "2025-12-31", parentId: "m12", createdAt: "2025-12-31T02:30:00.000Z", updatedAt: "2025-12-31T02:30:00.000Z" }),
+    ];
+    await render(sameDay);
+    const rows = [...host.querySelectorAll(".mb-set-item__main")].map((el) => el.textContent ?? "");
+    const sameDayRows = rows.filter((text) => text.includes("12 月 31 日"));
+    expect(sameDayRows.length).toBe(2);
+    // 同一日期两篇 ⇒ 靠行内时刻区分（不会出现两行一模一样的"更新于 …"）
+    expect(new Set(sameDayRows).size).toBe(2);
+    expect(sameDayRows.some((text) => /写于 \d{2}:\d{2}/.test(text))).toBe(true);
   });
 
   it("不打标：页内没有任何标签入口", async () => {

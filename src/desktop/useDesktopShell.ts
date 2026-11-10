@@ -11,6 +11,7 @@ import type { OutlineMode } from "../features/outline/OutlineController";
 import { getOutlineTabsVersion, subscribeOutlineTabs } from "../features/outline/registry";
 import type { SidebarMode } from "../components/app/Sidebar";
 import type { SettingsCategory } from "../components/app/SettingsPanel";
+import { loadDefaultSpace } from "../components/model/defaultSpace";
 import type { TreeNode } from "../lib/types";
 import { initialOutlineMode, initialOutlineSidebarWidth, initialSidebarMode, initialSidebarWidth, OUTLINE_SIDEBAR_MAX_WIDTH, OUTLINE_SIDEBAR_MIN_WIDTH, SIDEBAR_HOVER_HIDE_DELAY_MS, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH, type DesktopWorkspace, type NoticeState } from "./desktopTypes";
 import { shouldCollapseSidebarOnHoverLeave, shouldKeepSidebarPreviewOpen } from "../components/model/sidebarInteraction";
@@ -60,7 +61,9 @@ export function useDesktopShell(options: UseDesktopShellOptions) {
   const [outlineResizing, setOutlineResizing] = useState(false);
 
   // ---- 工作区切换 ----
-  const [desktopWorkspace, setDesktopWorkspace] = useState<DesktopWorkspace>("library");
+  /** 启动进入的默认空间 = 设备本地偏好（设置 → 常规 → 默认空间；默认「文档」）。
+   *  取值 = ⌘1–5 那五个一级空间；只是**初始值**，之后仍由用户随时切换（不改既有切换语义）。 */
+  const [desktopWorkspace, setDesktopWorkspace] = useState<DesktopWorkspace>(() => loadDefaultSpace());
 
   // ---- 面板与杂项 ----
   const [focusMode, setFocusMode] = useState(false);

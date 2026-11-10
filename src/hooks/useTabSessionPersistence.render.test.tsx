@@ -79,6 +79,12 @@ describe("useTabSessionPersistence（会话写入门）", () => {
     expect(JSON.parse(readSession()!)).toEqual({ ids: ["a", "b"], activeId: "b" });
   });
 
+  it("日记空间的 tab 不进会话（261110 用户定稿：重开不自动恢复）", async () => {
+    await render({ safeModeStatus: "inactive", tabs: [tab("a"), { ...tab("d1"), space: "diary" }, tab("b")], activeId: "d1" });
+    // 日记 tab 不落盘；活动 id 若属于日记 ⇒ 回落到最后一个文档标签
+    expect(JSON.parse(readSession()!)).toEqual({ ids: ["a", "b"], activeId: "b" });
+  });
+
   it("正常模式 + 退出时关闭全部标签：清档（原语义）", async () => {
     await render({ safeModeStatus: "inactive", clearTabsOnExit: true, tabs: [tab("a")], activeId: "a" });
     expect(readSession()).toBeNull();

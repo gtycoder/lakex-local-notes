@@ -16,6 +16,16 @@ export interface UseTreeDragOptions {
   setTree: Dispatch<SetStateAction<NotebookTreeItem[]>>;
   expandGroup: (id: string) => void;
   loadTree: () => Promise<NotebookTreeItem[]>;
+  /**
+   * 是否允许长按拖拽排序（默认 true）。261110 用户定稿：**日记子树禁用** ——
+   * 日记顺序由「日期 + 创建时间」决定、桌面端也没有拖拽排序，拖了也不会改变显示顺序 ⇒ 直接不响应。
+   */
+  enabled?: boolean;
+}
+
+/** 拖拽是否启用：日记本子树一律禁用（判据单一来源，组件只传 notebook.space）。 */
+export function treeDragEnabled(space: string | null | undefined): boolean {
+  return space !== "diary";
 }
 
 export interface TreeDragState {
@@ -26,7 +36,10 @@ export interface TreeDragState {
 }
 
 export function useTreeDrag(options: UseTreeDragOptions) {
-  const { tree, setTree, expandGroup, loadTree } = options;
+  const { tree, setTree, expandGroup, loadTree, enabled = true } = options;
+  /** 用 ref 读开关：长按回调在 hook 创建时闭包捕获一次，开关变化要能即时生效。 */
+  const enabledRef = useRef(enabled);
+  enabledRef.current = enabled;
 
   /** 长按拖拽排序（思源口径）：长按进入拖拽，跟手位移 + 落点（前/后/内），松手重排或移入分组。 */
   const [drag, setDrag] = useState<TreeDragState | null>(null);
@@ -40,6 +53,7 @@ export function useTreeDrag(options: UseTreeDragOptions) {
   // ---- 目录树长按管理（计时/阈值/反馈 = 共用 hook，见 ui/useLongPress.ts）----
   /** 长按 = 进入拖拽排序（菜单走行内 ⋯）。移动取消阈值取 0：目录行上一动就是要滚动，不能误判成长按。 */
   const longPress = useLongPress((touch) => {
+    if (!enabledRef.current) return;
     const node = pressedNode.current;
     if (!node) return;
     {

@@ -7,6 +7,8 @@ export interface NotebookTreeItem {
   parentId: string | null;
   sortOrder: number;
   icon: string | null;
+  /** 创建时间（仅 note 有；261110 日记树同日多篇按它倒序）。 */
+  createdAt?: string;
 }
 
 /** 返回笔记本完整子树；note 也能作为父节点，桌面端嵌套文档在移动端保持可见。 */
@@ -27,11 +29,11 @@ export async function listNotebookTree(
         ) child
         JOIN subtree parent ON child.parent_id=parent.id
     )
-    SELECT id, title, parent_id, sort_order, 'group' AS kind, icon
+    SELECT id, title, parent_id, sort_order, 'group' AS kind, icon, NULL AS created_at
       FROM folders
      WHERE node_type='group' AND trashed_at IS NULL AND parent_id IN (SELECT id FROM subtree)
     UNION ALL
-    SELECT id, title, parent_id, sort_order, 'note' AS kind, icon
+    SELECT id, title, parent_id, sort_order, 'note' AS kind, icon, created_at
       FROM notes
      WHERE trashed_at IS NULL AND parent_id IN (SELECT id FROM subtree)
   `).all(notebookId) as Array<{
@@ -41,6 +43,7 @@ export async function listNotebookTree(
     sort_order: number;
     kind: "group" | "note";
     icon: string | null;
+    created_at: string | null;
   }>;
 
   const mapped: NotebookTreeItem[] = items.map((item) => ({
@@ -50,6 +53,7 @@ export async function listNotebookTree(
     parentId: item.parent_id,
     sortOrder: item.sort_order,
     icon: item.icon ?? null,
+    createdAt: item.created_at ?? "",
   }));
 
   // Array#sort 在现代 JS 引擎是稳定排序；不同父节点的相对顺序无业务含义。

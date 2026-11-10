@@ -31,8 +31,8 @@ export function PublishDocDialog({ open, title, notebooks, busy, error, onConfir
         {options.length === 0 ? (
           <p className="aiw-publish__empty">还没有可用的知识库，先到左侧目录新建一个笔记本。</p>
         ) : (
-          <div className="aiw-publish__row">
-            <span className="aiw-publish__label">知识库</span>
+          <div className="ln-form__row">
+            <span className="ln-form__label aiw-publish__label">知识库</span>
             <Select value={notebookId} options={options} onChange={setNotebookId} label="选择知识库" className="aiw-publish__select" />
           </div>
         )}

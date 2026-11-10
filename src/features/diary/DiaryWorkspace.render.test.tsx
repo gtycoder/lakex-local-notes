@@ -208,6 +208,16 @@ describe("日记空间（桌面）", () => {
     expect(onConvertToQuickNote).toHaveBeenCalledWith("e-old");
   });
 
+  it("头部按钮 DOM 顺序 = 搜索、日历、＋（261110 用户点单；语义不变）", () => {
+    render();
+    const head = document.body.querySelector<HTMLElement>(".diary-dir__head");
+    expect(head).toBeTruthy();
+    const labels = [...head!.querySelectorAll<HTMLElement>("button")]
+      .map((el) => el.getAttribute("aria-label") ?? "")
+      .filter((label) => label === "搜日记（全库范围，含日记）" || label === "选择日期新建日记" || label === "新建今天的日记");
+    expect(labels).toEqual(["搜日记（全库范围，含日记）", "选择日期新建日记", "新建今天的日记"]);
+  });
+
   it("搜索入口 = 打开现有全局搜索面板（不在日记里另造搜索）；标题里写明范围是全库", () => {
     const merged = render();
     const search = byAria("搜日记（全库范围，含日记）");

@@ -199,6 +199,44 @@ export function groupDiaryEntries(entries: readonly DiaryEntry[]): DiaryYearGrou
   return years;
 }
 
+/** 日记树里可排序的节点最小形状（目录树/时间线共用；不引入 UI 类型）。 */
+export interface DiarySiblingLike {
+  id: string;
+  title: string;
+  nodeType: "notebook" | "group" | "note";
+  /** 仅 note 有意义；缺失按空串处理（同日多篇的第二判据）。 */
+  createdAt?: string;
+}
+
+/** 年/月分组标题比较：都是数字按数值（否则 "9" > "11" 会排错），非数字按中文序。 */
+function compareGroupTitles(a: string, b: string): number {
+  const na = Number(a);
+  const nb = Number(b);
+  if (Number.isFinite(na) && Number.isFinite(nb) && a.trim() !== "" && b.trim() !== "") return nb - na;
+  return b.localeCompare(a, "zh");
+}
+
+/**
+ * 日记子树兄弟节点排序（261110 用户定稿：日期倒序 + 同日按真实创建时间倒序）。
+ *  · 分组（年/月）排在文档前面，组内标题倒序（11 月 → 10 月 → 9 月）；
+ *  · 文档按标题里的日期键倒序；同一天再按 createdAt 倒序（**不许用 updatedAt**）。
+ * 目录树（移动端抽屉）与时间线共用这一条判据，避免两套排序。
+ */
+export function compareDiarySiblings(a: DiarySiblingLike, b: DiarySiblingLike): number {
+  if (a.nodeType !== b.nodeType) return a.nodeType === "note" ? 1 : -1;
+  if (a.nodeType === "notebook") return 0;
+  if (a.nodeType === "group") return compareGroupTitles(a.title, b.title);
+  const da = parseDiaryDateKey(a.title);
+  const db = parseDiaryDateKey(b.title);
+  if (da && db && da !== db) return db.localeCompare(da);
+  if (da && !db) return -1;
+  if (!da && db) return 1;
+  const ca = a.createdAt ?? "";
+  const cb = b.createdAt ?? "";
+  if (ca !== cb) return cb.localeCompare(ca);
+  return b.title.localeCompare(a.title, "zh");
+}
+
 /** 打开某一天的计划（纯派生；调用方按 step 执行）。 */
 export interface DiaryOpenPlan {
   /** 需要的日记笔记本 id；null ⇒ 先建笔记本，再重新 plan。 */

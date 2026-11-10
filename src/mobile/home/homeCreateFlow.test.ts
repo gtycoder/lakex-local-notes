@@ -43,8 +43,10 @@ describe("首页新建流（261014）", () => {
     expect(MOBILE_APP).toMatch(/route\.kind === "home"\) void refreshAll\(\)/);
   });
 
-  it("冷启动默认进「小记」", () => {
-    expect(MOBILE_APP).toMatch(/useState<Route>\(\{ kind: "home", tab: "quick" \}\)/);
+  it("冷启动默认进「小记」（261110：落点改为读设置项「默认空间」，其默认值仍是小记）", () => {
+    // 落点判据在 settings/defaultSpace（可选值取 HOME_TABS）；本文件只钉"不再写死 tab"。
+    expect(MOBILE_APP).toMatch(/useState<Route>\(\(\) => \(\{ kind: "home", tab: readDefaultHomeTab\(\) \}\)\)/);
+    expect(MOBILE_APP).toContain('import { readDefaultHomeTab } from "./settings/defaultSpace"');
   });
 
   it("胶囊 = 搜索 | ＋ | AI（排序/视图 与 云同步都不在胶囊里）", () => {

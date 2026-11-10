@@ -22,13 +22,24 @@ const FOLDERS: TreeNode[] = [
   folder({ id: "nb-work", title: "工作", nodeType: "notebook" }),
 ];
 const NOTES: LocalNoteSummary[] = [
-  { id: "d1109", title: "2026-11-09", parentId: "m11", updatedAt: T },
-  { id: "n-work", title: "周报", parentId: "nb-work", updatedAt: T },
+  { id: "d1109", title: "2026-11-09", parentId: "m11", updatedAt: T, createdAt: T },
+  { id: "n-work", title: "周报", parentId: "nb-work", updatedAt: T, createdAt: T },
 ];
 
 describe("diaryNodesFrom（目录 + 文档混合视图）", () => {
   it("只有 folders 时日记条目为空（这正是漏投影的旧行为）", () => {
     expect(diaryEntries(FOLDERS, diaryNotebookId(FOLDERS))).toEqual([]);
+  });
+
+  it("同日多篇：排序用真实 createdAt，不用 updatedAt（261110 用户报的排序问题根因）", () => {
+    // a 创建更早、但最后编辑更晚（updatedAt 更新）⇒ 仍应排在 b 后面。
+    const notes: LocalNoteSummary[] = [
+      { id: "a", title: "2026-11-10", parentId: "m11", updatedAt: "2026-11-10T12:00:00.000Z", createdAt: "2026-11-10T10:00:00.000Z" },
+      { id: "b", title: "2026-11-10", parentId: "m11", updatedAt: "2026-11-10T11:00:00.000Z", createdAt: "2026-11-10T11:00:00.000Z" },
+    ];
+    const nodes = diaryNodesFrom(FOLDERS, notes);
+    const entries = diaryEntries(nodes, diaryNotebookId(nodes));
+    expect(entries.map((entry) => entry.noteId)).toEqual(["b", "a"]);
   });
 
   it("补上 notes 投影后，日记条目能被 core 判据识别（标题即日期 + 父子链）", () => {

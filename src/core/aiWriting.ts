@@ -114,6 +114,27 @@ export interface AiWritingHistoryGroup {
   label: AiWritingHistoryGroupLabel;
   conversations: AiWritingConversation[];
 }
+/**
+ * 侧栏「置顶」拆分（261110 用户定稿：做**搜索 + 置顶**，不做对话分组）。
+ * pinned 顺序 = 传入的置顶顺序（最新置顶在前）；rest 为其余会话（顺序/日期分组交给调用方）。
+ * 判据只在这里：组件不自己写「哪些算置顶」。
+ */
+export function splitPinnedConversations(
+  conversations: readonly AiWritingConversation[],
+  pinnedIds: readonly string[],
+): { pinned: AiWritingConversation[]; rest: AiWritingConversation[] } {
+  const byId = new Map(conversations.map((conversation) => [conversation.id, conversation]));
+  const pinned: AiWritingConversation[] = [];
+  const seen = new Set<string>();
+  for (const id of pinnedIds) {
+    const conversation = byId.get(id);
+    if (!conversation || seen.has(id)) continue;
+    pinned.push(conversation);
+    seen.add(id);
+  }
+  return { pinned, rest: conversations.filter((conversation) => !seen.has(conversation.id)) };
+}
+
 export function groupAiWritingHistory(conversations: readonly AiWritingConversation[], now: Date): AiWritingHistoryGroup[] {
   const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
   const today = startOfDay(now);

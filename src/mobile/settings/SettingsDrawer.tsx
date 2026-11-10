@@ -5,7 +5,7 @@
  * 注意：全部 App 设置为竖向（无横向 tab）；「回收站」并入总回收站（见 TrashList）。 */
 import { Suspense, lazy, useEffect, useRef, useState, type CSSProperties } from "react";
 import { Archive, ArrowLeft, ChevronRight, Cloud, Download, HardDrive, Images, List, Pencil, RefreshCw, TriangleAlert, X } from "lucide-react";
-import { loadSettings, saveSettings, fontSizeOptions, MAX_ATTACHMENT_MB_OPTIONS_SETTINGS, type AppSettings } from "../../lib/settings";
+import { loadSettings, saveSettings, fontSizeOptions, MAX_ATTACHMENT_MB_OPTIONS_SETTINGS, MAX_OPEN_TAB_OPTIONS, type AppSettings } from "../../lib/settings";
 import { Group, Item, Block, Switch, TextField, Field } from "../ui/settingsPrimitives";
 import { bridge } from "../bridge";
 import { confirmMobile } from "../ui/ConfirmDialog";
@@ -33,6 +33,8 @@ import type { OrphanAsset } from "./useSettingsSectionData";
 import { showToast } from "../ui/toastBus";
 import { formatS3v3Diagnostics } from "../../core/s3v3Report";
 import { readImportDefaultNotebook, writeImportDefaultNotebook } from "./importSettings";
+import { DEFAULT_SPACE_OPTIONS, readDefaultHomeTab, writeDefaultHomeTab } from "./defaultSpace";
+import type { HomeTab } from "../home/tabPager";
 import { DefaultNotebookPickerSheet, type DefaultNotebookOption } from "./DefaultNotebookPickerSheet";
 import { EmptyState } from "../ui/EmptyState";
 import { PortableImportSection } from "./PortableImportSection";
@@ -219,6 +221,8 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
       : "云同步已关闭：按纯本地空间处理，不能清理云端。";
   const [settings, setSettings] = useState<AppSettings>(() => loadSettings());
   const update = (patch: Partial<AppSettings>) => setSettings(saveSettings(patch));
+  /** 默认空间（261110）：设备本地偏好，决定**下次冷启动**落在哪个一级页；只存 localStorage，不进 S3。 */
+  const [defaultHomeTab, setDefaultHomeTab] = useState<HomeTab>(() => readDefaultHomeTab());
 
   const aiFormState = useAiSettingsForm(open && view === "ai");
 
@@ -275,15 +279,24 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                   onChange={(v) => update({ fontSize: v })}
                 />
               </Item>
-              <Item itemId="editor-max-open-tabs" name="最大同时打开标签数" desc="超过上限自动关闭最旧的标签。">
+              <Item itemId="editor-max-open-tabs" name="最大同时打开标签数" desc="每个空间（文档、日记）各自独立计算，超过上限自动关闭该空间最旧的标签；最多 16 个。">
                 <PickerSheet
                   label="最大同时打开标签数"
                   value={settings.maxOpenTabs}
-                  options={[{ value: 0, label: "不限" }, ...[4, 6, 8, 12, 16, 24].map((n) => ({ value: n, label: n + " 个" }))]}
+                  options={MAX_OPEN_TAB_OPTIONS.map((n) => ({ value: n, label: n + " 个" }))}
                   onChange={(v) => update({ maxOpenTabs: v })}
                 />
               </Item>
               <Switch itemId="editor-clear-tabs-on-exit" name="退出时关闭全部标签" desc="开启后下次启动不恢复上次打开的标签；关闭（默认）则恢复。仅本机偏好，不同步。" checked={settings.clearTabsOnExit} onChange={(checked) => update({ clearTabsOnExit: checked })} />
+              {/* 261110：默认空间 = 打开 App 落在哪个一级页（小记 / 知识库 / 日记 / 标签）。仅本机，不进 S3。 */}
+              <Item itemId="editor-default-space" name="默认空间" desc="打开 App 时落在哪个一级页。仅本机设置，不参与同步。">
+                <PickerSheet
+                  label="默认空间"
+                  value={defaultHomeTab}
+                  options={DEFAULT_SPACE_OPTIONS}
+                  onChange={(next) => { writeDefaultHomeTab(next); setDefaultHomeTab(next); showToast("已设为默认空间：" + (DEFAULT_SPACE_OPTIONS.find((o) => o.value === next)?.label ?? "")); }}
+                />
+              </Item>
               <Item itemId="editor-max-attachment" name="附件大小上限" desc="仅影响本机上传校验。">
                 <PickerSheet
                   label="附件大小上限"

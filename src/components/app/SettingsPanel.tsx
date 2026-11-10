@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Cloud, Coffee, Download, ExternalLink, Files, Globe, History, Image as Info, Keyboard, Monitor, Moon, Palette, Paperclip, RefreshCw, RotateCcw, Terminal, TriangleAlert, Archive, HardDrive, Search, Settings, Sun, Trash, Type, X } from "lucide-react";
+import { Cloud, Coffee, Download, ExternalLink, Files, Globe, History, Home, Image as Info, Keyboard, Monitor, Moon, Palette, Paperclip, RefreshCw, RotateCcw, Terminal, TriangleAlert, Archive, HardDrive, Search, Settings, Sun, Trash, Type, X } from "lucide-react";
 import { Sparkles, Eye, EyeOff } from "lucide-react";
-import { fontSizeOptions, type AppSettings } from "../../lib/settings";
+import { fontSizeOptions, MAX_OPEN_TAB_OPTIONS, type AppSettings } from "../../lib/settings";
 import { AI_PROVIDERS, AI_REASONING_EFFORTS, AI_THINKING_MODES, type AiReasoningEffort, type AiSettingsPatch, type AiSettingsView, type AiThinkingMode } from "../../core/aiProviders";
 import { Select } from "../ui/Select";
 import { canTouchNetwork, cloudStateHint, cloudStateOf, CLOUD_PRIVACY_NOTICE } from "../../core/cloudState";
@@ -50,6 +50,7 @@ import { formatDateTime } from "../../core/dateFormat";
 import { formatS3v3Diagnostics, type S3v3DiagnosticReport } from "../../core/s3v3Report";
 import { effectiveS3Settings, isQiniuEndpoint, s3ConfigFingerprint } from "../../lib/s3FormState";
 import { loadAiEnabled, saveAiEnabled } from "../../lib/aiEnabled";
+import { DEFAULT_SPACE_OPTIONS, isDefaultSpace, loadDefaultSpace, saveDefaultSpace } from "../model/defaultSpace";
 import { backupResultView, backupUsageView } from "./settingsBackupObservability";
 
 /**
@@ -124,6 +125,8 @@ let verifiedS3Fingerprint: string | null = null;
   const [aiMsg, setAiMsg] = useState<string | null>(null);
   /** AI 总开关（设备本地；关闭后任何路径不出网，配置与 Key 保留）。 */
   const [aiEnabled, setAiEnabled] = useState(() => loadAiEnabled());
+  /** 默认空间（设备本地偏好）：只决定**启动时**进哪个空间，之后照常用 ⌘1–5 切换；不进 S3。 */
+  const [defaultSpace, setDefaultSpace] = useState(() => loadDefaultSpace());
   /** 尝试在未配置 Key 时开启 AI 的行内提示。 */
   const [aiEnableAlert, setAiEnableAlert] = useState<string | null>(null);
   /** 字段级错误（键：apiKey / baseUrl / model / all）——比一个笼统提示好用。 */
@@ -811,12 +814,8 @@ let verifiedS3Fingerprint: string | null = null;
                   <Switch itemId="editor-floating-toolbar" name="浮动工具栏" desc="选中文字或图片时在选区旁弹出格式工具条；与固定工具栏互不影响。" checked={settings.floatingToolbar} onChange={(checked) => onChange({ floatingToolbar: checked })} />
                 </Group>
                 <Group title="标签页" icon={<Files size={16} />}>
-                  <Field itemId="editor-max-open-tabs" name="最大同时打开标签数" desc="超过上限时自动关闭最旧的标签（当前编辑的标签与钉住的标签除外），未保存内容会自动保存。">
-                    <Select label="最大同时打开标签数" value={String(settings.maxOpenTabs)} onChange={(v) => onChange({ maxOpenTabs: Number(v) })} options={[
-                      { value: "0", label: "不限" }, { value: "4", label: "4 个" }, { value: "6", label: "6 个" },
-                      { value: "8", label: "8 个" }, { value: "12", label: "12 个" }, { value: "16", label: "16 个" },
-                      { value: "24", label: "24 个" },
-                    ]} />
+                  <Field itemId="editor-max-open-tabs" name="最大同时打开标签数" desc="每个空间（文档、日记）各自独立计算，超过上限时自动关闭该空间最旧的标签（当前编辑的标签与钉住的标签除外），未保存内容会自动保存。">
+                    <Select label="最大同时打开标签数" value={String(settings.maxOpenTabs)} onChange={(v) => onChange({ maxOpenTabs: Number(v) })} options={MAX_OPEN_TAB_OPTIONS.map((n) => ({ value: String(n), label: n + " 个" }))} />
                   </Field>
                   <Switch itemId="editor-clear-tabs-on-exit" name="退出时关闭全部标签" desc="开启后下次启动不恢复上次打开的标签；默认关闭。只保存在本机，不参与同步。" checked={settings.clearTabsOnExit} onChange={(checked) => onChange({ clearTabsOnExit: checked })} />
                 </Group>
@@ -825,6 +824,11 @@ let verifiedS3Fingerprint: string | null = null;
                     <Select label="附件大小上限" value={String(settings.maxAttachmentBytes / (1024 * 1024))} onChange={(v) => onChange({ maxAttachmentBytes: Number(v) * 1024 * 1024 })} options={[
                       { value: "25", label: "25 MiB" }, { value: "50", label: "50 MiB" }, { value: "100", label: "100 MiB" },
                     ]} />
+                  </Field>
+                </Group>
+                <Group title="启动" icon={<Home size={16} />}>
+                  <Field itemId="editor-default-space" name="默认空间" desc="启动时进入的空间，只保存在本机，不参与同步；任何时候都能用 ⌘1–5 切换。">
+                    <Select label="默认空间" value={defaultSpace} onChange={(v) => { if (!isDefaultSpace(v)) return; setDefaultSpace(v); saveDefaultSpace(v); }} options={DEFAULT_SPACE_OPTIONS} />
                   </Field>
                 </Group>
               </>

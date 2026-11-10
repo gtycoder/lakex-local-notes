@@ -6,6 +6,7 @@ import { reportNativeActionError } from "../lib/nativeErrors";
 import type { NoteSummary, S3Settings, SyncPendingSummary, SyncStatus, TreeNode, WorkspaceSnapshot } from "../lib/types";
 import type { DraftJournalEntry } from "../lib/types";
 import { chooseColdStartNoteId } from "../core/coldStartNote.js";
+import { isDiaryEntryNode } from "../core/diary.js";
 import { loadSettings } from "../lib/settings";
 import { clearTabSession, readTabSession, restoreTabSessionForLimit, sanitizeTabSession } from "../desktop/tabSession";
 import { readSafeModeStatus } from "./useSafeModeStatus";
@@ -61,7 +62,8 @@ export function useBootstrap({
         setDraftEntries(entries.filter((entry) => liveIds.has(entry.noteId)));
         void Promise.all(orphaned.map((entry) => native.deleteDraftJournal(entry.noteId).catch((error) => reportNativeActionError("删除孤儿草稿", error))));
       }).catch((error) => reportNativeActionError("启动读取", error));
-      setTreeNodes(await native.listTreeNodes());
+      const treeNodes = await native.listTreeNodes();
+      setTreeNodes(treeNodes);
       // 恢复上次打开的标签（261027）：先过滤已删除/已 purge 的文档，再按 maxOpenTabs 截断（DT-15：
       // 会话按打开顺序存，只恢复最近 N 个——先全开再逐次淘汰会静默丢标签且线性拉长首屏）。
       // P2-C：判据收敛到 readSafeModeStatus（fail-closed）——
@@ -70,7 +72,16 @@ export function useBootstrap({
       const safeModeStatus = await readSafeModeStatus();
       if (safeModeStatus === "inactive" && clearOnExit) clearTabSession();
       const liveIds = new Set(snapshot.notes.map((note) => note.id));
-      const restored = savedSession && safeModeStatus === "inactive" ? sanitizeTabSession(savedSession, liveIds) : null;
+      const sanitized = savedSession && safeModeStatus === "inactive" ? sanitizeTabSession(savedSession, liveIds) : null;
+      // 261110 用户定稿：**日记空间的 tab 不自动恢复**（旧会话可能还存着日记 id ⇒ 这里按目录判据再滤一次）。
+      const restored = sanitized
+        ? (() => {
+          const ids = sanitized.ids.filter((id) => !isDiaryEntryNode(treeNodes, id));
+          if (ids.length === 0) return null;
+          const activeId = sanitized.activeId && ids.includes(sanitized.activeId) ? sanitized.activeId : ids[ids.length - 1];
+          return { ids, activeId };
+        })()
+        : null;
       const planned = restored ? restoreTabSessionForLimit(restored, settings.maxOpenTabs) : null;
       if (planned) {
         if (restoreTabs) {

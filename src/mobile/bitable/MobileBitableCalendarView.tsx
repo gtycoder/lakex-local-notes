@@ -1,17 +1,16 @@
 /**
- * 移动端多维表「日历」视图（261030 P2）。
+ * 移动端多维表「日历」视图（261030 P2；261110 月历格子改共享原语）。
  *
- * 日期语义全部来自 core（`calendarMonthDays` 本地日期、周一起始；`calendarEvents` / `calendarEventsByDay`
- * 含跨日展开）——移动端只做「月历 + 选中日列表」。只读/编辑只影响点日程后去哪（详情页 / 记录面板）。
+ * 日期语义全部来自 core（`calendarEvents` / `calendarEventsByDay` 含跨日展开；月份 42 格由
+ * `ui/MonthCalendar` 用 core 的 `calendarMonthDays` 画 —— 与日期 Sheet、日记日历同一份视觉）。
+ * 本文件只做「月历 + 选中日列表」；只读/编辑只影响点日程后去哪（详情页 / 记录面板）。
  */
 import { useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
 import {
-  calendarEvents, calendarEventsByDay, calendarMonthDays, calendarStartField, localDateString,
+  calendarEvents, calendarEventsByDay, calendarStartField, localDateString,
   type BitableCalendarEvent, type BitableDisplayContext, type BitableRecord, type BitableTable, type BitableView,
 } from "../../core/bitableDoc.js";
-
-const WEEKDAYS = ["一", "二", "三", "四", "五", "六", "日"];
+import { MonthCalendar } from "../ui/MonthCalendar";
 
 export interface MobileBitableCalendarViewProps {
   table: BitableTable;
@@ -27,7 +26,6 @@ export function MobileBitableCalendarView({ table, view, records, ctx, onOpen }:
   const [selected, setSelected] = useState(today);
   const startField = calendarStartField(table, view);
   const byDay = useMemo(() => calendarEventsByDay(calendarEvents(table, view, records, ctx)), [table, view, records, ctx]);
-  const days = useMemo(() => calendarMonthDays(cursor.year, cursor.month), [cursor]);
   const selectedEvents: BitableCalendarEvent[] = byDay.get(selected) ?? [];
 
   if (!startField) {
@@ -41,31 +39,15 @@ export function MobileBitableCalendarView({ table, view, records, ctx, onOpen }:
 
   return (
     <div className="mbt-calendar">
-      <header className="mbt-calendar-head">
-        <button type="button" className="mb-iconbtn" aria-label="上个月" onClick={() => shiftMonth(-1)}><ChevronLeft size={17} /></button>
-        <span className="mbt-calendar-title">{cursor.year} 年 {cursor.month} 月</span>
-        <button type="button" className="mb-iconbtn" aria-label="下个月" onClick={() => shiftMonth(1)}><ChevronRight size={17} /></button>
-      </header>
-      <div className="mbt-calendar-week" aria-hidden="true">
-        {WEEKDAYS.map((day) => <span key={day}>{day}</span>)}
-      </div>
-      <div className="mbt-calendar-grid" role="grid" aria-label="月历">
-        {days.map((cell) => {
-          const events = byDay.get(cell.date) ?? [];
-          const classes = ["mbt-calendar-day"];
-          if (!cell.inMonth) classes.push("is-out");
-          if (cell.date === today) classes.push("is-today");
-          if (cell.date === selected) classes.push("is-on");
-          return (
-            <button key={cell.date} type="button" className={classes.join(" ")} role="gridcell"
-              aria-label={cell.date + (events.length ? "，" + events.length + " 个日程" : "")}
-              onClick={() => setSelected(cell.date)}>
-              <span className="mbt-calendar-day__num">{cell.day}</span>
-              {events.length > 0 && <span className="mbt-calendar-day__dot" aria-hidden="true" />}
-            </button>
-          );
-        })}
-      </div>
+      <MonthCalendar
+        year={cursor.year}
+        month={cursor.month}
+        selected={selected}
+        today={today}
+        onShiftMonth={shiftMonth}
+        onPick={setSelected}
+        hasDot={(dateKey) => (byDay.get(dateKey)?.length ?? 0) > 0}
+      />
       <div className="mbt-calendar-list">
         <div className="mbt-calendar-list__head">{selected} · {selectedEvents.length} 个日程</div>
         {selectedEvents.length === 0 && <div className="mbt-calendar-empty">这一天没有日程</div>}

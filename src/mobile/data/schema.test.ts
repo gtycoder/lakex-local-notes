@@ -29,8 +29,22 @@ describe("mobile schema", () => {
       expect(Number(column!.notnull)).toBe(1);
       expect(String(column!.dflt_value)).toBe("0");
     }
-    // 261109 日记 v1：folders.space ⇒ 版本 12（改表必须 +1，见 schema.ts 头注释）。
-    expect(MOBILE_SCHEMA_VERSION).toBe(12);
+    // 261110 日记排序：notes.created_at ⇒ 版本 13（改表必须 +1，见 schema.ts 头注释）。
+    expect(MOBILE_SCHEMA_VERSION).toBe(13);
+  });
+
+  it("261110 v13：旧库（user_version=12、notes 无 created_at）升级补列并用 updated_at 回填", async () => {
+    const raw = await SqlJsDb.open();
+    raw.exec("CREATE TABLE notes (id TEXT PRIMARY KEY, title TEXT NOT NULL, parent_id TEXT, sort_order INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL, content_hash TEXT, is_dirty INTEGER NOT NULL DEFAULT 0, is_purged INTEGER NOT NULL DEFAULT 0, is_conflict INTEGER NOT NULL DEFAULT 0, deleted_at TEXT, doc_kind TEXT NOT NULL DEFAULT 'doc', cloud_deleted INTEGER NOT NULL DEFAULT 0);");
+    raw.exec("INSERT INTO notes (id,title,updated_at) VALUES ('n-old','老文档','2026-01-01T00:00:00.000Z');");
+    raw.exec("PRAGMA user_version = 12;");
+    const db = new SqlJsAsyncDb(raw);
+    await applyMobileSchema(db);
+    const columns = (await db.prepare("PRAGMA table_info(notes)").all() as Array<{ name: string }>).map((c) => c.name);
+    expect(columns).toContain("created_at");
+    const row = await db.prepare("SELECT created_at FROM notes WHERE id='n-old'").get() as { created_at: string };
+    expect(row.created_at).toBe("2026-01-01T00:00:00.000Z");
+    await db.close();
   });
 
   it("261021：版本已到 ⇒ 第二次应用整体跳过（冷启动省 ~2.4s 的建表往返）", async () => {

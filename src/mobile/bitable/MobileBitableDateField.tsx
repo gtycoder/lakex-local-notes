@@ -2,16 +2,16 @@
  * 移动端多维表的**自有日期选择**（261030 用户点单：不要系统日期弹窗）。
  *
  * 为什么自研：系统 `<input type="date">` 在每个 Android 版本/ROM 上样式与交互都不同（实测本机是 Material 绿色日历弹窗），
- * 与我们的设计系统完全脱节，也无法统一「今天/清除/确定」语义。这里用 core 的 `calendarMonthDays`（本地日期、周一起始）
- * 画月历，外壳走 `MobileSheet` 原语；表单与记录面板共用，日期值仍是正文里的 `YYYY-MM-DD`。
+ * 与我们的设计系统完全脱节，也无法统一「今天/清除/确定」语义。
+ * 月历格子 = 共享原语 `ui/MonthCalendar`（261110 收编，日记页的「日历新建」用同一份），
+ * 本文件只剩「触发器 + Sheet 外壳 + 今天/清除/确定」这套多维表语义；日期值仍是正文里的 `YYYY-MM-DD`。
  */
 import { useState } from "react";
-import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
-import { calendarMonthDays, localDateString } from "../../core/bitableDoc.js";
+import { CalendarDays } from "lucide-react";
+import { localDateString } from "../../core/bitableDoc.js";
 import { MobileSheet } from "../ui/MobileSheet";
+import { MonthCalendar } from "../ui/MonthCalendar";
 import { dismissKeyboard } from "../ui/dismissKeyboard";
-
-const WEEKDAYS = ["一", "二", "三", "四", "五", "六", "日"];
 
 function monthOf(date: string): { year: number; month: number } {
   const [y, m] = date.split("-").map(Number);
@@ -45,7 +45,10 @@ export function MobileBitableDateField({ value, onChange, ariaLabel, placeholder
     const next = new Date(cursor.year, cursor.month - 1 + delta, 1);
     setCursor({ year: next.getFullYear(), month: next.getMonth() + 1 });
   };
-  const days = calendarMonthDays(cursor.year, cursor.month);
+  const pickDay = (dateKey: string) => {
+    setDraft(dateKey);
+    setCursor(monthOf(dateKey));
+  };
 
   return (
     <>
@@ -57,7 +60,7 @@ export function MobileBitableDateField({ value, onChange, ariaLabel, placeholder
         open={open}
         title="选择日期"
         onClose={() => setOpen(false)}
-        bodyClassName="mbt-date-sheet mb-sheet__body--form"
+        bodyClassName="mb-sheet__body--form"
         footer={
           <div className="mb-sheet__foot">
             <button type="button" className="mb-btn mb-btn--secondary mb-btn--sm" onClick={() => { onChange(""); setOpen(false); }}>清除</button>
@@ -66,27 +69,14 @@ export function MobileBitableDateField({ value, onChange, ariaLabel, placeholder
           </div>
         }
       >
-        <header className="mbt-date-head">
-          <button type="button" className="mb-iconbtn" aria-label="上个月" onClick={() => shiftMonth(-1)}><ChevronLeft size={17} /></button>
-          <span className="mbt-date-title">{cursor.year} 年 {cursor.month} 月</span>
-          <button type="button" className="mb-iconbtn" aria-label="下个月" onClick={() => shiftMonth(1)}><ChevronRight size={17} /></button>
-        </header>
-        <div className="mbt-calendar-week" aria-hidden="true">{WEEKDAYS.map((day) => <span key={day}>{day}</span>)}</div>
-        <div className="mbt-calendar-grid" role="grid" aria-label="选择日期">
-          {days.map((cell) => {
-            const classes = ["mbt-calendar-day"];
-            if (!cell.inMonth) classes.push("is-out");
-            if (cell.date === today) classes.push("is-today");
-            if (cell.date === draft) classes.push("is-on");
-            return (
-              <button key={cell.date} type="button" role="gridcell" className={classes.join(" ")}
-                aria-label={cell.date} aria-pressed={cell.date === draft}
-                onClick={() => { setDraft(cell.date); setCursor(monthOf(cell.date)); }}>
-                <span className="mbt-calendar-day__num">{cell.day}</span>
-              </button>
-            );
-          })}
-        </div>
+        <MonthCalendar
+          year={cursor.year}
+          month={cursor.month}
+          selected={draft}
+          today={today}
+          onShiftMonth={shiftMonth}
+          onPick={pickDay}
+        />
       </MobileSheet>
     </>
   );

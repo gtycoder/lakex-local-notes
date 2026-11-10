@@ -24,7 +24,8 @@ describe("文档树索引（O(n) 一次构建）", () => {
   });
 
   it("hook 只按 tree 重建索引；childrenOf 不再走 tree.filter（旧 O(n) 每次调用）", () => {
-    expect(HOOK).toContain("buildNotebookTreeIndex(tree)");
+    expect(HOOK).toContain("buildNotebookTreeIndex(tree, {");
+    expect(HOOK).toContain("diaryRootId");
     expect(HOOK).toContain("useMemo");
     expect(HOOK).toContain("flattenVisibleRows");
     expect(HOOK).not.toMatch(/tree\.filter\(/);

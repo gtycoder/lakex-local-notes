@@ -73,8 +73,10 @@ describe("移动端多维表 P2 视图", () => {
     expect(html).toContain("mbt-calendar");
     expect(html).toContain("年");
     expect(html).toContain("月");
+    // 261110：月历格子收编为共享原语 .mb-calendar-*（多维表视图 / 日期 Sheet / 日记日历同一份视觉）。
+    expect(html).toContain("mb-calendar-grid");
     expect(html).toContain("is-today");
-    expect(html).toMatch(/mbt-calendar-day[^"]*is-on/);
+    expect(html).toMatch(/mb-calendar-day[^"]*is-on/);
     expect(html).toContain("mbt-calendar-event__title"); // 今天那条日程（标题 = 主字段「类型」）
     expect(html).toContain("个日程");
   });

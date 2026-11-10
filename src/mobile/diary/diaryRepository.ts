@@ -7,7 +7,8 @@
  * 判据**全部**来自 `src/core/diary`（单一来源，本文件不复制任何日期/分组/幂等逻辑）：
  *   · 日期键严格性 = parseDiaryDateKey（非法 ⇒ 拒绝并明确报错，docs/DIARY.md 硬规则 3）
  *   · 日记本定位 / 年月份组标题 = diaryNotebookId + diaryGroupTitles
- *   · 「打开已存在 / 需要新建」= planDiaryOpen
+ *   · 「打开已存在 / 需要新建」= planDiaryOpen（mode="open"）
+ *   · 「永远新建一篇」= planDiaryCreate（mode="new"，261110：一天允许多篇）
  * 本文件只做 IO（读行、建行、写正文文件），不做判据。
  */
 import {
@@ -16,6 +17,7 @@ import {
   diaryNotebooks,
   normalizeFolderSpace,
   parseDiaryDateKey,
+  planDiaryCreate,
   planDiaryOpen,
   type DiaryTreeNode,
 } from "../../core/diary.js";
@@ -29,6 +31,14 @@ import { executeBatchInTransaction, type MobileBatchStatement, type MobileDb } f
  * 不放进 core：core 是判据，命名是产品文案。
  */
 export const DIARY_NOTEBOOK_TITLE = "日记";
+
+/**
+ * 打开模式（与桌面 `diary_open_date` / `DiaryStore.openDate` 的 `mode` 同义，261110）：
+ * · `"open"`（默认）= 幂等：当天已有就打开最新一篇、没有就建（「写今天 / 继续写今天」、首页 ＋→日记）；
+ * · `"new"` = **永远新建一篇**（日记页右上角 ＋ = 今天新建、日历 = 选任意日期新建）。
+ * 两者的容器（笔记本 / 年组 / 月组）都由 core 的 plan 补齐，本文件不另写判据。
+ */
+export type DiaryOpenMode = "open" | "new";
 
 export interface DiaryOpenResult {
   noteId: string;
@@ -100,12 +110,13 @@ async function maxSortOrder(d: MobileDb, parentId: string | null): Promise<numbe
 }
 
 /**
- * 幂等打开 `dateKey` 当天的日记，返回文档 id。
+ * 打开 / 新建 `dateKey` 当天的日记，返回文档 id。
  *
+ * `mode`：`"open"`（默认，幂等）/ `"new"`（永远新建一篇；261110 用户定稿，一天允许多篇）。
  * 事务边界 = 整个 ensure（笔记本 → 年组 → 月组 → 文档）：任何一步失败整体回滚，不留半成品。
  * 失败分级（docs/DIARY.md 硬规则 3）：日期键非法 ⇒ 抛错（调用方明说）；建正文模板失败 ⇒ 抛错回滚。
  */
-export async function ensureDiaryNote(d: MobileDb, dateKey: string): Promise<DiaryOpenResult> {
+export async function ensureDiaryNote(d: MobileDb, dateKey: string, mode: DiaryOpenMode = "open"): Promise<DiaryOpenResult> {
   const normalized = parseDiaryDateKey(dateKey);
   if (!normalized) throw new Error("日期键非法（要求 YYYY-MM-DD）：" + dateKey);
   return await d.transaction(async (): Promise<DiaryOpenResult> => {
@@ -138,7 +149,12 @@ export async function ensureDiaryNote(d: MobileDb, dateKey: string): Promise<Dia
       ...folderRows.map(folderToDiaryNode),
       ...noteRows.map((row) => ({ id: row.id, parentId: row.parent_id, nodeType: "note", title: row.title, updatedAt: row.updated_at })),
     ];
-    const plan = planDiaryOpen(nodes, normalized);
+    // 判据单一来源：open = planDiaryOpen（命中已有就不建）；new = planDiaryCreate（永远新建）。
+    // new 模式下「已有/重复」字段恒空 —— 当天其它条目是正常数据，不再是"历史脏数据告警"
+    // （与桌面 electron/diaryStore.openDate 的 mode:"new" 同口径）。
+    const plan = mode === "new"
+      ? { ...planDiaryCreate(nodes, normalized), existingNoteId: null, duplicateNoteIds: [] as string[] }
+      : planDiaryOpen(nodes, normalized);
     if (plan.existingNoteId) {
       return { noteId: plan.existingNoteId, created: false, notebookId, duplicates: plan.duplicateNoteIds };
     }
@@ -156,10 +172,14 @@ export async function ensureDiaryNote(d: MobileDb, dateKey: string): Promise<Dia
       parentId = id;
     }
     await executeBatchInTransaction(d, statements);
+    // 落点：有新建分组 ⇒ 最内层那个（月）；一级都不用建 ⇒ 用 plan 给的 noteParentId（月 → 年 → 笔记本），
+    // **不能直接用 notebookId** —— 否则同月第二篇会挂到日记本根上、层级错位（与桌面
+    // electron/diaryStore.openDate 的 noteParentId 口径一致；261110 修）。
+    const noteParentId = plan.groupsToCreate.length > 0 ? parentId : (plan.noteParentId ?? notebookId);
     // 正文 = 空 Lake 文档（模板即"没有模板"；v1 不做模板，见 docs/DIARY.md「不做」）。
     // createNote 内部：先写正文文件、再插行、再索引；它在事务内 ⇒ 与上面的目录行同生共死。
     const noteId = crypto.randomUUID();
-    await createNote(d, noteId, normalized, emptyLakeBody(noteId), parentId, new Map(), undefined, "doc", {
+    await createNote(d, noteId, normalized, emptyLakeBody(noteId), noteParentId, new Map(), undefined, "doc", {
       skipOrphanScan: true,
     });
     return { noteId, created: true, notebookId, duplicates: plan.duplicateNoteIds };

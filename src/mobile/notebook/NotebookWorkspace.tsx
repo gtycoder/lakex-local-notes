@@ -33,7 +33,7 @@ import {
 } from "./shellModel";
 import { readPadPanelPrefs, writePadPanelPrefs } from "../pad/padPanelPrefs";
 import { usePadShortcuts } from "../pad/usePadShortcuts";
-import { useTreeDrag } from "./useTreeDrag";
+import { treeDragEnabled, useTreeDrag } from "./useTreeDrag";
 import { useWorkspaceChrome } from "./useWorkspaceChrome";
 import { useWorkspaceSession } from "./useWorkspaceSession";
 import { useWorkspaceAssemble } from "./useWorkspaceAssemble";
@@ -89,6 +89,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     visibleRows,
     firstNote,
     loadTree,
+    notebookSpace,
   } = useNotebookTreeData(notebookId);
   /**
    * 文档树多选模式（261106 task-8）：**唯一入口 = 抽屉页头的「选择」按钮**（长按文档行仍是拖拽排序，
@@ -354,7 +355,9 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
 
   // ---- 目录树长按拖拽（计时/阈值/反馈/落点/FLIP 全在 useLongPress + useTreeDrag）----
   // 261106 task-8 用户定稿：长按**仍是拖拽排序**（文档/分组同前），多选入口只走页头「选择」。
-  const { drag, longPress, setPressedNode } = useTreeDrag({ tree, setTree, expandGroup, loadTree });
+  // 261110 用户定稿：**日记子树禁用拖拽**（顺序由时间决定，桌面端也没有拖拽排序）⇒ 长按不再起手。
+  const dragEnabled = treeDragEnabled(notebookSpace);
+  const { drag, longPress, setPressedNode } = useTreeDrag({ tree, setTree, expandGroup, loadTree, enabled: dragEnabled });
 
   // 抽屉/悬浮树被收起（点遮罩、胶囊、手势）⇒ 退出多选：否则选择态会悬空（底部条已不可见）。
   useEffect(() => {
