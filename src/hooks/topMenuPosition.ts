@@ -36,6 +36,25 @@ export function chooseVisibleAnchor<T extends AnchorLike>(primary: T | null | un
   return candidates.find((candidate) => hasVisibleRect(candidate)) ?? null;
 }
 
+/**
+ * **公共兜底（261110 用户要求）**：无论哪种定位模式，最终都必须落在可视区域内。
+ * 四个方向都夹取（上下左右各留 margin）；放不下时由调用方给 maxHeight/maxWidth 让内容内部滚动。
+ * 例外：`placePopoverAtPointBelow`（AI 贴选区弹窗）按用户 261004 定稿**不允许翻到选点上方**。
+ */
+export function fitPopoverInViewport(
+  position: { top: number; left: number },
+  viewport: ViewportSize,
+  popover: PopoverSize,
+  margin: number,
+): { top: number; left: number } {
+  const maxLeft = Math.max(margin, viewport.width - popover.width - margin);
+  const maxTop = Math.max(margin, viewport.height - popover.height - margin);
+  return {
+    top: Math.round(Math.max(margin, Math.min(position.top, maxTop))),
+    left: Math.round(Math.max(margin, Math.min(position.left, maxLeft))),
+  };
+}
+
 export interface PopoverPlacementOptions {
   /** 水平对齐：start = 与锚点左缘对齐（默认），end = 与锚点右缘对齐（贴右展开）。 */
   align?: "start" | "end";
@@ -69,13 +88,25 @@ export function placePopoverPosition(
 ): { top: number; left: number } {
   const margin = options.margin ?? gap;
   const maxLeft = Math.max(margin, viewport.width - popover.width - margin);
-  const rawLeft = options.align === "end" ? anchor.right - popover.width : anchor.left;
-  return {
-    top: Math.round(options.allowFlip === false
-      ? Math.max(margin, anchor.bottom + gap)
-      : placeVertical(anchor.top, anchor.bottom, viewport.height, popover.height, gap, margin)),
-    left: Math.round(Math.max(margin, Math.min(rawLeft, maxLeft))),
-  };
+  const startLeft = anchor.left;
+  const endLeft = anchor.right - popover.width;
+  // 水平方向同样"哪边放得下放哪边"：首选"贴左展开"，右侧溢出且左侧更宽裕 ⇒ 改"贴右展开"；
+  // 两边都放不下 ⇒ 夹进视口（此时必然可见，只是不贴锚点）。
+  const fitsStart = startLeft >= margin && startLeft <= maxLeft;
+  const fitsEnd = endLeft >= margin && endLeft <= maxLeft;
+  const preferred = options.align === "end" ? [endLeft, startLeft] : [startLeft, endLeft];
+  const rawLeft = fitsStart && options.align !== "end" ? startLeft
+    : fitsEnd && options.align === "end" ? endLeft
+    : (preferred.find((candidate) => candidate >= margin && candidate <= maxLeft) ?? preferred[0]);
+  if (options.allowFlip === false) {
+    // 旧契约（AI 贴选区等）：**只放下方**、不翻不夹垂直；高度由调用方 maxHeight 限制、内容内部滚动。
+    return {
+      top: Math.round(Math.max(margin, anchor.bottom + gap)),
+      left: Math.round(Math.max(margin, Math.min(rawLeft, maxLeft))),
+    };
+  }
+  const top = placeVertical(anchor.top, anchor.bottom, viewport.height, popover.height, gap, margin);
+  return fitPopoverInViewport({ top, left: rawLeft }, viewport, popover, margin);
 }
 
 /** 侧向子菜单定位：优先贴锚点右侧；右侧放不下则翻到左侧，最后再夹进视口。 */
@@ -90,12 +121,13 @@ export function placePopoverBeside(
   const right = anchor.right + gap;
   const left = anchor.left - gap - popover.width;
   const openLeft = right + popover.width + margin > viewport.width && left >= margin;
-  const maxLeft = Math.max(margin, viewport.width - popover.width - margin);
-  const maxTop = Math.max(margin, viewport.height - popover.height - margin);
-  return {
-    top: Math.round(Math.max(margin, Math.min(anchor.top - 4, maxTop))),
-    left: Math.round(Math.max(margin, Math.min(openLeft ? left : right, maxLeft))),
-  };
+  // 垂直方向：优先与锚点顶部对齐（再上移 4px 视觉对齐）；下方放不下就改"底对齐"（向上展开）。
+  const preferredTop = anchor.top - 4;
+  const bottomAligned = anchor.bottom - popover.height;
+  const top = preferredTop + popover.height + margin <= viewport.height
+    ? preferredTop
+    : Math.max(margin, bottomAligned);
+  return fitPopoverInViewport({ top, left: openLeft ? left : right }, viewport, popover, margin);
 }
 
 /** 坐标锚点定位（右键菜单：没有稳定锚点元素）：点当作「零高度锚点」，同样优先下方、放不下翻上方。 */
@@ -105,10 +137,10 @@ export function placePopoverAtPoint(
   popover: PopoverSize,
   margin = 8,
 ): { top: number; left: number } {
-  return {
-    top: Math.round(placeVertical(point.y, point.y, viewport.height, popover.height, 0, margin)),
-    left: Math.round(Math.max(margin, Math.min(point.x, Math.max(margin, viewport.width - popover.width - margin)))),
-  };
+  return fitPopoverInViewport({
+    top: placeVertical(point.y, point.y, viewport.height, popover.height, 0, margin),
+    left: point.x,
+  }, viewport, popover, margin);
 }
 
 /** 水平夹取的共用实现（至少留出 margin）。 */

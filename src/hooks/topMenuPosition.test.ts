@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { chooseVisibleAnchor, clampPopoverPosition, placePopoverAtPoint, placePopoverAtPointBelow, placePopoverBeside, placePopoverPosition } from "./topMenuPosition";
+import { chooseVisibleAnchor, clampPopoverPosition, placePopoverAtPoint, placePopoverAtPointBelow, placePopoverBeside, placePopoverPosition, fitPopoverInViewport } from "./topMenuPosition";
 
 type Rect = { top: number; bottom: number; left: number; right: number; width: number; height: number };
 
@@ -36,7 +36,9 @@ describe("top menu positioning", () => {
       { width: 750, height: 500 },
       { width: 320, height: 240 },
       8,
-    )).toEqual({ top: 41, left: 422 });
+    // 261110：水平方向也"哪边放得下放哪边"——右侧溢出且左侧更宽裕 ⇒ 贴锚点右缘展开（410），
+    // 比"硬夹到 422"更贴锚点；两者都在视口内。
+    )).toEqual({ top: 41, left: 410 });
   });
 
   it("贴底时向上翻转（下方放不下 → 锚点上方；这是 260929 修的那类反复踩的坑）", () => {
@@ -91,5 +93,53 @@ describe("top menu positioning", () => {
       { width: 264, height: 320 },
       4,
     )).toEqual({ top: 276, left: 400 });
+  });
+});
+
+describe("定位一律落在可视区内（261110 统一口径）", () => {
+  const viewport = { width: 1280, height: 800 };
+  const within = (pos: { top: number; left: number }, size: { width: number; height: number }, margin: number) =>
+    pos.left >= margin && pos.top >= margin &&
+    pos.left + size.width <= viewport.width - margin &&
+    pos.top + size.height <= viewport.height - margin;
+
+  it("fitPopoverInViewport：四边都夹到 margin 内", () => {
+    expect(fitPopoverInViewport({ top: -50, left: -50 }, viewport, { width: 200, height: 100 }, 8)).toEqual({ top: 8, left: 8 });
+    expect(fitPopoverInViewport({ top: 900, left: 2000 }, viewport, { width: 200, height: 100 }, 8)).toEqual({ top: 692, left: 1072 });
+  });
+
+  it("锚定定位：四个角 + 普通位置都在视口内（下翻上 / 右翻左 / 再夹）", () => {
+    const size = { width: 320, height: 240 };
+    const anchors = [
+      { top: 760, bottom: 790, left: 1100, right: 1200 }, // 右下角
+      { top: 0, bottom: 30, left: 0, right: 100 },        // 左上角
+      { top: 760, bottom: 790, left: 0, right: 100 },     // 左下角
+      { top: 0, bottom: 30, left: 1100, right: 1200 },    // 右上角
+      { top: 380, bottom: 410, left: 600, right: 700 },   // 中间
+    ];
+    for (const align of ["start", "end"] as const) {
+      for (const anchor of anchors) {
+        const pos = placePopoverPosition(anchor, viewport, size, 6, { align, margin: 8 });
+        expect(within(pos, size, 8), JSON.stringify({ anchor, align, pos })).toBe(true);
+      }
+    }
+  });
+
+  it("侧向子菜单：贴底锚点也不溢出（底对齐向上展开）", () => {
+    const size = { width: 240, height: 320 };
+    const pos = placePopoverBeside({ top: 700, bottom: 740, left: 100, right: 200 }, viewport, size, 6, { margin: 8 });
+    expect(within(pos, size, 8)).toBe(true);
+  });
+
+  it("坐标锚点：右下角点也不溢出", () => {
+    const size = { width: 260, height: 300 };
+    const pos = placePopoverAtPoint({ x: 1250, y: 790 }, viewport, size, 8);
+    expect(within(pos, size, 8)).toBe(true);
+  });
+
+  it("例外：AI 贴选区（AtPointBelow）仍不翻到上方，只保证水平可见", () => {
+    const pos = placePopoverAtPointBelow({ x: 1250, y: 500 }, viewport, { width: 300, height: 400 }, 8);
+    expect(pos.top).toBeGreaterThanOrEqual(500);
+    expect(pos.left + 300).toBeLessThanOrEqual(viewport.width - 8);
   });
 });
