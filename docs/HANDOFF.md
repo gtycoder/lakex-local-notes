@@ -32,6 +32,8 @@
 - **移动端**：首页 ＋ 新建面板加「日记」（默认今天、幂等打开）；日记页 ⋯ 加「删除」；回收站行显示「日记」徽标。
 - 门禁：tsc 0；vitest **822 文件 / 5184 通过 / 12 skipped / 0 failed**；ui-metrics / check:mobileui / check:arch（import 0） / diff-check 通过。CSS 基线登记：kit 613、diary 144、aiWriting 446。
 - **未跑**：移动端设备门禁（首页 tab 4 个 + 顶栏栅格 + 新建面板变了，需在 `lake_gate` 重烤基线后双轮对拍 + 23 屏走查）；桌面 42 态。
+- **推送前 review 修复（261110）**：① 移出 `.ai-writing-recon/` 59 文件 / 15MB 走查资产（`git rm -r --cached`，本地保留；**历史里仍有**，未做 history rewrite）；② 移动端日记标题锁（顶栏只读 + `NotebookWorkspace` 拦截 + `treeRepository.renameTreeNode` 数据层兜底）；③ tab 空间分流三处回归（搜索命中日记切空间、目标空间无 tab 时清 active、重启按上次活动 tab 回日记空间；`openNote` 给已存在 tab 补 `space`）；④ 保存守卫自愈：内容相同但**标题变了**不再静默丢弃（走正常写路径）；⑤ 恢复时日记年/月分组建在**事务内**；⑥ 移动回收站徽标查询从 N+1 收敛为一次 folders 读取 + 内存回溯。
+- **仍待（review 遗留）**：`mobile-entry-css` 余量仅 **1,143B**（下批任意移动端 CSS 加行即破）；弹层定位统一后建议对「AI 贴选区 / NodeWidget 换图标（窗口底部）/ 多维表展开面板（屏幕右缘）」各做一次视觉走查。
 
 ### 261109 · 日记七改（月历原语上收 / 左栏可拖 / 日记本图标 / 标签条补全）
 - **月历原语上收**：`.bt-date-*` 面板样式 → kit 的 `.ln-calendar*`，行为抽成 `components/ui/CalendarPanel`（多维表日期字段与日记「按日期新建」**同一实现**）；日记流程改为「点日历 → 应用内月历 → 选完 → 确认新建」，不再弹系统 date picker。
