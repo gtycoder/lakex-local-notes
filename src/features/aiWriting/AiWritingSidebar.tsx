@@ -69,7 +69,7 @@ export function AiWritingSidebar({ conversations, activeId, pinnedIds, onNew, on
     }
     return (
       <div key={conversation.id} className={"ln-row" + (conversation.id === activeId ? " is-selected" : "")} role="listitem">
-        <button type="button" className="aiw-hist__title" title={conversation.title} onClick={() => onSelect(conversation.id)}>
+        <button type="button" className="ln-row__main aiw-hist__title" title={conversation.title} onClick={() => onSelect(conversation.id)}>
           {isPinned && <Pin size={12} className="aiw-hist__pin" aria-hidden="true" />}
           <span className="ln-ellipsis">{conversation.title}</span>
         </button>
@@ -90,14 +90,14 @@ export function AiWritingSidebar({ conversations, activeId, pinnedIds, onNew, on
       <div className="aiw-side__head">
         <h2 className="aiw-side__title">AI 写作</h2>
       </div>
-      <button type="button" className="ln-btn ln-btn--secondary aiw-new" onClick={onNew}>
+      <button type="button" className="ln-btn ln-btn--primary aiw-new" onClick={onNew}>
         <Plus size={15} aria-hidden="true" />
         <span>新对话</span>
       </button>
       <label className="ln-input ln-input--search aiw-search">
         <Search size={14} aria-hidden="true" />
         <input
-          className="ln-input__field"
+          className="ln-input__field aiw-search__field"
           type="search"
           placeholder="搜索对话"
           aria-label="搜索对话"

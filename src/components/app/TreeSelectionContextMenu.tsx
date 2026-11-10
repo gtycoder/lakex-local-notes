@@ -49,33 +49,33 @@ export function TreeSelectionContextMenu({ x, y, count, actions, pinnedAll = fal
   return (
     <Menu surfaceClassName="context-menu tree-selection-menu" onDismiss={onClose} surfaceRef={menuRef} label={"已选 " + count + " 项"}
       style={pos ? { left: pos.left, top: pos.top } : { left: x, top: y, visibility: "hidden" }}>
-      <button role="menuitem" disabled={!actions.pin || busy}
+      <button className="ln-menu__item" role="menuitem" disabled={!actions.pin || busy}
         onClick={() => { onPin(); onClose(); }}>
         <Pin size={15} aria-hidden="true" /><span>{pinnedAll ? "取消置顶" : "置顶"}</span>
       </button>
-      <button role="menuitem" disabled={!actions.duplicate || busy}
+      <button className="ln-menu__item" role="menuitem" disabled={!actions.duplicate || busy}
         title={actions.duplicate ? undefined : "只有文档可以创建副本（分组/笔记本不可）"}
         onClick={() => { onDuplicate(); onClose(); }}>
         <Copy size={15} aria-hidden="true" /><span>创建副本</span>
       </button>
-      <button role="menuitem" disabled={!actions.move || busy} onClick={() => { onMove(); onClose(); }}>
+      <button className="ln-menu__item" role="menuitem" disabled={!actions.move || busy} onClick={() => { onMove(); onClose(); }}>
         <FolderInput size={15} aria-hidden="true" /><span>移动…</span>
       </button>
-      <button role="menuitem" disabled={!actions.export || busy} onClick={() => { onExport(); onClose(); }}>
+      <button className="ln-menu__item" role="menuitem" disabled={!actions.export || busy} onClick={() => { onExport(); onClose(); }}>
         <Download size={15} aria-hidden="true" /><span>导出…</span>
       </button>
-      <button role="menuitem" disabled={!actions.tag || busy}
+      <button className="ln-menu__item" role="menuitem" disabled={!actions.tag || busy}
         title={actions.tag ? undefined : "只有文档可以添加标签"}
         onClick={() => { onTag(); onClose(); }}>
         <Tag size={15} aria-hidden="true" /><span>添加标签…</span>
       </button>
       <div className="context-menu-sep" role="separator" />
-      <button role="menuitem" disabled={busy} onClick={() => { onSelectAll(); onClose(); }}>
+      <button className="ln-menu__item" role="menuitem" disabled={busy} onClick={() => { onSelectAll(); onClose(); }}>
         <ListChecks size={15} aria-hidden="true" /><span>全选</span>
       </button>
       <div className="context-menu-sep" role="separator" />
       {/* 危险动作放最后、红色样式与普通右键「删除」同一 class（261106 task-91） */}
-      <button role="menuitem" className="danger" disabled={!actions.trash || busy}
+      <button className="ln-menu__item danger" role="menuitem" disabled={!actions.trash || busy}
         title={actions.trash ? undefined : "分组不能删除"}
         onClick={() => { onTrash(); onClose(); }}>
         <Trash2 size={15} aria-hidden="true" /><span>删除</span>

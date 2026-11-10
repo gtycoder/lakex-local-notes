@@ -156,14 +156,14 @@ export function DesktopOverlays(props: DesktopOverlaysProps) {
       {topMenuOpen && (
         <Menu surfaceClassName="top-menu top-menu--more" label="文档操作" onDismiss={onCloseTopMenu} surfaceRef={moreSurfaceRef}
           style={moreMenuPos.style ?? undefined}>
-          <button role="menuitem" onClick={onOpenAiAssistant}>
+          <button className="ln-menu__item" role="menuitem" onClick={onOpenAiAssistant}>
             <Sparkles size={15} /><span>AI 助手<small>对话</small></span>
           </button>
-          <button role="menuitem" aria-checked={focusMode} onClick={onToggleFocusMode}>
+          <button className="ln-menu__item" role="menuitem" aria-checked={focusMode} onClick={onToggleFocusMode}>
             <Focus size={15} /><span>{focusMode ? "退出专注模式" : "进入专注模式"}<small>⌘⇧Enter</small></span>
           </button>
           {activeNoteId && (
-            <button role="menuitem" onClick={onToggleNoteLock}>
+            <button className="ln-menu__item" role="menuitem" onClick={onToggleNoteLock}>
               {lockedNoteIds.has(activeNoteId) ? <Lock size={15} /> : <LockOpen size={15} />}
               <span>{lockedNoteIds.has(activeNoteId) ? "解锁当前文档" : "锁定当前文档（只读）"}</span>
             </button>

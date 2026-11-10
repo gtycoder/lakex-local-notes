@@ -33,7 +33,8 @@ describe("选中态语义令牌（261017 Q3）", () => {
 
   it("桌面选中面只经语义令牌（不再直接写 accent-tint / accent-text）", () => {
     expect(KIT).toMatch(/\.ln-row\.is-selected,[\s\S]{0,900}?background: var\(--lake-bg-selected\)/);
-    expect(KIT).toMatch(/\.ln-btn--secondary\.is-selected \{[^}]*background: var\(--lake-bg-selected\)/);
+    // 261110：选中态三层（secondary/outlined/ghost）合并成一条规则，仍只经语义令牌。
+    expect(KIT).toMatch(/\.ln-btn--secondary\.is-selected[^{]*\{[^}]*background: var\(--lake-bg-selected\)/);
     expect(KIT).toMatch(/\.ln-iconbtn\.is-selected \{[^}]*background: var\(--lake-bg-selected\)/);
     expect(KIT).toMatch(/\.ln-tabs__item\.is-active \.ln-tabs__count \{[^}]*background: var\(--lake-bg-selected\)/);
     expect(CHROME).toMatch(/\.note-row\.active \{[^}]*background: var\(--lake-bg-selected\)/);
@@ -42,7 +43,7 @@ describe("选中态语义令牌（261017 Q3）", () => {
   it("选中 + hover 走专用档（行/菜单/图标钮/目录行）", () => {
     expect(KIT).toMatch(/\.ln-row\.is-selected:hover,[\s\S]{0,220}?background: var\(--lake-bg-selected-hover\)/);
     expect(KIT).toMatch(/\.ln-iconbtn\.is-selected:hover:not\(:disabled\) \{ background: var\(--lake-bg-selected-hover\); \}/);
-    expect(KIT).toMatch(/\.ln-btn--secondary\.is-selected:hover:not\(:disabled\) \{ background: var\(--lake-bg-selected-hover\); \}/);
+    expect(KIT).toMatch(/\.ln-btn--secondary\.is-selected:hover:not\(:disabled\)[^{]*\{[^}]*background: var\(--lake-bg-selected-hover\)/);
     expect(CHROME).toMatch(/\.note-row\.active:hover \{ background: var\(--lake-bg-selected-hover\); \}/);
   });
 

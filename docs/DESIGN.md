@@ -304,11 +304,25 @@ components:
 状态由文字+图标表达；云端删除使用既有警示色。搜索失败与正常空结果分开，允许原地重试，
 过期请求和关闭前请求不能覆盖当前反馈。正文行高、目录尺寸、编辑工具占位不变。
 
-### Buttons
-- **Shape:** 8px 圆角（`{rounded.sm}`），高 27px，内距 `0 11px`，13px / 500。
-- **Primary:** 实心 `{colors.accent-ink}`，白字；hover/press 用 `accent-ink-hover/press`。
-- **Secondary / Ghost / Danger:** 描边用 `control-border` / 透明 / `status-error`。
-- **Disabled:** 统一 `opacity: .45`（`--lake-disabled-opacity`）。
+### Buttons（261110 定稿：4 语义 + 危险 + 链接 / 2 尺寸）
+
+**层级 = 实心→框+主题字→中性框→无框→链接；每层只回答「这动作有多重要」，不表达「好不好看」。**
+
+| 层 | 类 | 外观 | 典型场景 |
+| --- | --- | --- | --- |
+| L1 | `.ln-btn--primary` | 实心 `accent-ink` + 白字 | 主操作：新建 / 发送 / 确认 / 去开启 |
+| L2 | `.ln-btn--outlined` | `accent` 描边 + `accent-text` 字（不填色） | 常用操作：设置页动作、次一级的主操作 |
+| L3 | `.ln-btn--secondary` | `control-border` 描边 + `text-2` 字 | 一般操作：并列的次要按钮 |
+| L4 | `.ln-btn--ghost` | 无框 + `text-2` 字 | 更次要：取消 / 关闭 / 工具入口 |
+| L4b | `.ln-btn--link` | 无框 + `accent-text` 字 | 跳转 / 引导（不当成灰字次要） |
+| L5 | `.ln-btn--danger` | `status-error` 红字 + 40% 红框（配 `--ghost`/`--danger-text` = 纯红字） | 删除 / 清空 / 移入回收站 |
+
+- **Shape:** 8px 圆角，高 27（`--lake-ctl-h`），内距 `0 11px`，13px / 500；紧凑档 `.ln-btn--compact` 高 22（`--lake-ctl-h-sm`）、内距 `0 9px`。**只有两档尺寸**，不新增第三档；设置页表单控件仍走 `--lake-ctl-h-settings`。
+- **六态（每层同一套）**：default / hover（`bg-hover`，字色升一档）/ active（`bg-press` + 0.5px 下沉 + 0.98 缩放）/ focus-visible（2px `accent` 环 + offset 0）/ is-selected（`bg-selected` + `fg-selected` + 600）/ disabled（`opacity: .45`，hover 不改底色）。
+- **基座 `.ln-btn` = L4 口径**（无框灰字）：任何裸用也有 hover，不得再出现「点了没反应」的按钮。
+- 图标钮（`.ln-iconbtn` 27 / `--compact` 22）是**形状**不是层级：静息 `text-3` → hover `bg-hover` + `text-1` → selected `bg-selected` + `fg-selected`；`--accent` 已并入 `is-selected`。
+- **移动端 `mb-btn` 下一轮按同一 4+危险+链接模型对齐**（当前仍为旧变体集合，暂不算不一致）。
+
 
 ### Icon Buttons
 - **Shape:** 27×27（`--compact` 为 22×22），圆角 8/6；静息透明，hover 用 `--lake-bg-hover` 并把字色提到 `--lake-text-1`，选中用 `--lake-bg-selected` / `--lake-fg-selected`。

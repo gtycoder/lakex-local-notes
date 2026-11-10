@@ -93,6 +93,13 @@ describe("AiWritingSidebar（搜索 + 置顶）", () => {
     expect(document.querySelector(".aiw-hist__empty")?.textContent).toContain("没有匹配的对话");
   });
 
+  it("新对话 = 重点按钮（ln-btn--primary，261110 用户点单）", () => {
+    render();
+    const button = document.querySelector(".aiw-new")!;
+    expect(button.className).toContain("ln-btn");
+    expect(button.className).toContain("ln-btn--primary");
+  });
+
   it("行内 ⋯ → 置顶：回调带上会话 id", () => {
     const handlers = render();
     const more = document.querySelector<HTMLButtonElement>('[aria-label="对话操作"]')!;

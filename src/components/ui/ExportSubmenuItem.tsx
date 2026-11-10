@@ -42,36 +42,36 @@ export function ExportSubmenuItem({ kind, onExportAs, onCopyMarkdown, onCopyPath
     <Submenu label={<><Download size={15} /><span>导出</span></>}>
       {type === "doc" && (
         <>
-          <button role="menuitem" onClick={run(() => onExportAs("markdown"))}>导出为 Markdown 资料包</button>
-          <button role="menuitem" onClick={run(onCopyMarkdown)}>导出为 Markdown 文本（复制）</button>
-          <button role="menuitem" onClick={run(() => onExportAs("html"))}>导出为 HTML</button>
-          <button role="menuitem" onClick={run(() => onExportAs("docx"))}>导出为 Word</button>
-          <button role="menuitem" onClick={run(() => onExportAs("pdf"))}>导出为 PDF（图片内嵌）</button>
+          <button className="ln-menu__item" role="menuitem" onClick={run(() => onExportAs("markdown"))}>导出为 Markdown 资料包</button>
+          <button className="ln-menu__item" role="menuitem" onClick={run(onCopyMarkdown)}>导出为 Markdown 文本（复制）</button>
+          <button className="ln-menu__item" role="menuitem" onClick={run(() => onExportAs("html"))}>导出为 HTML</button>
+          <button className="ln-menu__item" role="menuitem" onClick={run(() => onExportAs("docx"))}>导出为 Word</button>
+          <button className="ln-menu__item" role="menuitem" onClick={run(() => onExportAs("pdf"))}>导出为 PDF（图片内嵌）</button>
         </>
       )}
       {type === "sheet" && (
         <>
-          <button role="menuitem" onClick={run(() => onExportAs("csv"))}>导出为 CSV</button>
-          <button role="menuitem" onClick={run(() => onExportAs("xlsx"))}>导出为 Excel</button>
+          <button className="ln-menu__item" role="menuitem" onClick={run(() => onExportAs("csv"))}>导出为 CSV</button>
+          <button className="ln-menu__item" role="menuitem" onClick={run(() => onExportAs("xlsx"))}>导出为 Excel</button>
         </>
       )}
       {type === "bitable" && (
         <>
-          <button role="menuitem" onClick={run(() => onExportAs("csv"))}>导出为 CSV</button>
-          <button role="menuitem" onClick={run(() => onExportAs("zip"))}>导出为压缩包（含附件）</button>
+          <button className="ln-menu__item" role="menuitem" onClick={run(() => onExportAs("csv"))}>导出为 CSV</button>
+          <button className="ln-menu__item" role="menuitem" onClick={run(() => onExportAs("zip"))}>导出为压缩包（含附件）</button>
         </>
       )}
       {type === "board" && (
         <>
-          <button role="menuitem" onClick={run(() => onExportAs("png"))}>导出为 PNG</button>
-          <button role="menuitem" onClick={run(() => onExportAs("svg"))}>导出为 SVG</button>
+          <button className="ln-menu__item" role="menuitem" onClick={run(() => onExportAs("png"))}>导出为 PNG</button>
+          <button className="ln-menu__item" role="menuitem" onClick={run(() => onExportAs("svg"))}>导出为 SVG</button>
         </>
       )}
       {type === "ink" && (
-        <button role="menuitem" onClick={run(() => onExportAs("pdf"))}>导出为 PDF（手写压平）</button>
+        <button className="ln-menu__item" role="menuitem" onClick={run(() => onExportAs("pdf"))}>导出为 PDF（手写压平）</button>
       )}
       <div className="context-menu-sep" />
-      <button role="menuitem" onClick={run(onCopyPaths)}>导出资料路径（本机 AI）</button>
+      <button className="ln-menu__item" role="menuitem" onClick={run(onCopyPaths)}>导出资料路径（本机 AI）</button>
     </Submenu>
   );
 }

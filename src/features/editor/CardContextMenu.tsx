@@ -57,29 +57,29 @@ export function CardContextMenu({ x, y, item, actions, onClose }: {
   return (
     <Menu surfaceClassName="context-menu" surfaceRef={surfaceRef} onDismiss={onClose} style={style ?? undefined}>
       {actions.cut && (
-        <button role="menuitem" onClick={() => run(actions.cut)}><Scissors size={15} /><span>剪切</span></button>
+        <button className="ln-menu__item" role="menuitem" onClick={() => run(actions.cut)}><Scissors size={15} /><span>剪切</span></button>
       )}
       {copyItems.length === 1 && (
-        <button role="menuitem" onClick={() => run(copyItems[0][1])}><Copy size={15} /><span>{copyItems[0][0]}</span></button>
+        <button className="ln-menu__item" role="menuitem" onClick={() => run(copyItems[0][1])}><Copy size={15} /><span>{copyItems[0][0]}</span></button>
       )}
       {copyItems.length > 1 && (
         <Submenu label={<><Copy size={15} /><span>复制</span></>}>
           {copyItems.map(([label, fn]) => (
-            <button key={label} role="menuitem" onClick={() => run(fn)}>{label}</button>
+            <button className="ln-menu__item" key={label} role="menuitem" onClick={() => run(fn)}>{label}</button>
           ))}
         </Submenu>
       )}
       {actions.rename && item.cardName === "file" && (
-        <button role="menuitem" onClick={() => run(actions.rename)}><Pencil size={15} /><span>重命名</span></button>
+        <button className="ln-menu__item" role="menuitem" onClick={() => run(actions.rename)}><Pencil size={15} /><span>重命名</span></button>
       )}
       {ref && actions.openOriginal && (
-        <button role="menuitem" onClick={() => run(actions.openOriginal)}><ExternalLink size={15} /><span>使用默认程序打开</span></button>
+        <button className="ln-menu__item" role="menuitem" onClick={() => run(actions.openOriginal)}><ExternalLink size={15} /><span>使用默认程序打开</span></button>
       )}
       {ref && actions.showInFolder && (
-        <button role="menuitem" onClick={() => run(actions.showInFolder)}><FolderOpen size={15} /><span>打开文件位置</span></button>
+        <button className="ln-menu__item" role="menuitem" onClick={() => run(actions.showInFolder)}><FolderOpen size={15} /><span>打开文件位置</span></button>
       )}
       {ref && actions.saveAs && (
-        <button role="menuitem" onClick={() => run(actions.saveAs)}><Download size={15} /><span>另存为…</span></button>
+        <button className="ln-menu__item" role="menuitem" onClick={() => run(actions.saveAs)}><Download size={15} /><span>另存为…</span></button>
       )}
     </Menu>
   );
@@ -100,10 +100,10 @@ export function TextContextMenu({ x, y, onClose }: { x: number; y: number; onClo
   };
   return (
     <Menu surfaceClassName="context-menu" surfaceRef={surfaceRef} onDismiss={onClose} style={style ?? undefined}>
-      <button role="menuitem" onClick={() => run("copy")}><Copy size={15} /><span>复制</span></button>
-      <button role="menuitem" onClick={() => run("cut")}><Scissors size={15} /><span>剪切</span></button>
-      <button role="menuitem" onClick={paste}><ClipboardPaste size={15} /><span>粘贴</span></button>
-      <button role="menuitem" onClick={() => run("selectAll")}><BoxSelect size={15} /><span>全选</span></button>
+      <button className="ln-menu__item" role="menuitem" onClick={() => run("copy")}><Copy size={15} /><span>复制</span></button>
+      <button className="ln-menu__item" role="menuitem" onClick={() => run("cut")}><Scissors size={15} /><span>剪切</span></button>
+      <button className="ln-menu__item" role="menuitem" onClick={paste}><ClipboardPaste size={15} /><span>粘贴</span></button>
+      <button className="ln-menu__item" role="menuitem" onClick={() => run("selectAll")}><BoxSelect size={15} /><span>全选</span></button>
     </Menu>
   );
 }

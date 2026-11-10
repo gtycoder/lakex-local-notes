@@ -1278,14 +1278,14 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
               {/* 261106：导入 = 当前打开文档所在的笔记本/分组（根级 + 没有打开文档 ⇒ 禁用并提示） */}
               {importTargetOfActive ? (
                 <Submenu label={<><Download size={15} aria-hidden="true" /><span>导入</span></>}>
-                  <button role="menuitem" onClick={() => void startImport(importTargetOfActive, "markdown")}><FilePlus size={15} aria-hidden="true" /><span>Markdown…</span></button>
-                  <button role="menuitem" onClick={() => void startImport(importTargetOfActive, "docx")}><FilePlus size={15} aria-hidden="true" /><span>Word（.docx）…</span></button>
+                  <button className="ln-menu__item" role="menuitem" onClick={() => void startImport(importTargetOfActive, "markdown")}><FilePlus size={15} aria-hidden="true" /><span>Markdown…</span></button>
+                  <button className="ln-menu__item" role="menuitem" onClick={() => void startImport(importTargetOfActive, "docx")}><FilePlus size={15} aria-hidden="true" /><span>Word（.docx）…</span></button>
                   <div className="context-menu-sep" role="separator" />
-                  <button role="menuitem" onClick={() => void startImport(importTargetOfActive, "xlsx")}><FilePlus size={15} aria-hidden="true" /><span>Excel（.xlsx）…</span></button>
-                  <button role="menuitem" onClick={() => void startImport(importTargetOfActive, "csv")}><FilePlus size={15} aria-hidden="true" /><span>CSV（.csv）…</span></button>
+                  <button className="ln-menu__item" role="menuitem" onClick={() => void startImport(importTargetOfActive, "xlsx")}><FilePlus size={15} aria-hidden="true" /><span>Excel（.xlsx）…</span></button>
+                  <button className="ln-menu__item" role="menuitem" onClick={() => void startImport(importTargetOfActive, "csv")}><FilePlus size={15} aria-hidden="true" /><span>CSV（.csv）…</span></button>
                 </Submenu>
               ) : (
-                <button role="menuitem" disabled title="先打开或选择一个笔记本/分组"><Download size={15} aria-hidden="true" /><span>导入（先选择笔记本）</span></button>
+                <button className="ln-menu__item" role="menuitem" disabled title="先打开或选择一个笔记本/分组"><Download size={15} aria-hidden="true" /><span>导入（先选择笔记本）</span></button>
               )}
             </Menu>
           )}
@@ -1720,7 +1720,7 @@ function CreateChildItems({ onNewChild, onClose }: { onNewChild: (kind: CreateCh
   return (
     <>
       {CREATE_CHILD_ITEMS.map((item) => (
-        <button key={item.kind} role="menuitem" onClick={() => { onNewChild(item.kind); onClose(); }}>
+        <button className="ln-menu__item" key={item.kind} role="menuitem" onClick={() => { onNewChild(item.kind); onClose(); }}>
           {item.icon}<span>{item.label}</span>
         </button>
       ))}
@@ -1746,14 +1746,14 @@ function CreateMenu({ anchor, onNewChild, importTarget, onImport, onClose }: {
       <div className="context-menu-sep" role="separator" />
       {importTarget ? (
         <Submenu label={<><Download size={15} aria-hidden="true" /><span>导入</span></>}>
-          <button role="menuitem" onClick={() => { onImport(importTarget, "markdown"); onClose(); }}><FilePlus size={15} aria-hidden="true" /><span>Markdown…</span></button>
-          <button role="menuitem" onClick={() => { onImport(importTarget, "docx"); onClose(); }}><FilePlus size={15} aria-hidden="true" /><span>Word（.docx）…</span></button>
+          <button className="ln-menu__item" role="menuitem" onClick={() => { onImport(importTarget, "markdown"); onClose(); }}><FilePlus size={15} aria-hidden="true" /><span>Markdown…</span></button>
+          <button className="ln-menu__item" role="menuitem" onClick={() => { onImport(importTarget, "docx"); onClose(); }}><FilePlus size={15} aria-hidden="true" /><span>Word（.docx）…</span></button>
           <div className="context-menu-sep" role="separator" />
-          <button role="menuitem" onClick={() => { onImport(importTarget, "xlsx"); onClose(); }}><FilePlus size={15} aria-hidden="true" /><span>Excel（.xlsx）…</span></button>
-          <button role="menuitem" onClick={() => { onImport(importTarget, "csv"); onClose(); }}><FilePlus size={15} aria-hidden="true" /><span>CSV（.csv）…</span></button>
+          <button className="ln-menu__item" role="menuitem" onClick={() => { onImport(importTarget, "xlsx"); onClose(); }}><FilePlus size={15} aria-hidden="true" /><span>Excel（.xlsx）…</span></button>
+          <button className="ln-menu__item" role="menuitem" onClick={() => { onImport(importTarget, "csv"); onClose(); }}><FilePlus size={15} aria-hidden="true" /><span>CSV（.csv）…</span></button>
         </Submenu>
       ) : (
-        <button role="menuitem" disabled title="先选择一个笔记本或分组"><Download size={15} aria-hidden="true" /><span>导入（先选择笔记本）</span></button>
+        <button className="ln-menu__item" role="menuitem" disabled title="先选择一个笔记本或分组"><Download size={15} aria-hidden="true" /><span>导入（先选择笔记本）</span></button>
       )}
     </Menu>
   );
@@ -1789,21 +1789,21 @@ const ContextMenu = ({ node, x, y, onRename, onMove, onDelete, onCopyMarkdown, o
       {node.nodeType === "note" ? (
         <>
           {/* 分组 1：行本身的命名与固定 */}
-          <button role="menuitem" onClick={() => { onRename(); onClose(); }}><Pencil size={15} /><span>重命名</span></button>
-          <button role="menuitem" onClick={() => { onTogglePin(); onClose(); }}><Pin size={15} /><span>{pinned ? "取消置顶" : "置顶"}</span></button>
+          <button className="ln-menu__item" role="menuitem" onClick={() => { onRename(); onClose(); }}><Pencil size={15} /><span>重命名</span></button>
+          <button className="ln-menu__item" role="menuitem" onClick={() => { onTogglePin(); onClose(); }}><Pin size={15} /><span>{pinned ? "取消置顶" : "置顶"}</span></button>
           <div className="context-menu-sep" role="separator" />
           {/* 分组 2：树结构 / 内容复制 */}
-          <button role="menuitem" disabled={busy} title={busy ? "正在执行其他操作，请稍候" : undefined}
+          <button className="ln-menu__item" role="menuitem" disabled={busy} title={busy ? "正在执行其他操作，请稍候" : undefined}
             onClick={() => { onDuplicate(); onClose(); }}><Copy size={15} /><span>创建副本</span></button>
-          <button role="menuitem" onClick={() => { onMove(); onClose(); }}><FolderInput size={15} /><span>移动…</span></button>
+          <button className="ln-menu__item" role="menuitem" onClick={() => { onMove(); onClose(); }}><FolderInput size={15} /><span>移动…</span></button>
           <div className="context-menu-sep" role="separator" />
           {/* 分组 3：内容信息（版本/分类/元数据） */}
-          <button role="menuitem" onClick={() => { onOpenHistory(); onClose(); }}><History size={15} /><span>历史版本</span></button>
-          <button role="menuitem" onClick={() => { onAddTags(); onClose(); }}><TagIcon size={15} /><span>标签…</span></button>
-          <button role="menuitem" onClick={() => { onShowInfo(); onClose(); }}><Info size={15} /><span>属性</span></button>
+          <button className="ln-menu__item" role="menuitem" onClick={() => { onOpenHistory(); onClose(); }}><History size={15} /><span>历史版本</span></button>
+          <button className="ln-menu__item" role="menuitem" onClick={() => { onAddTags(); onClose(); }}><TagIcon size={15} /><span>标签…</span></button>
+          <button className="ln-menu__item" role="menuitem" onClick={() => { onShowInfo(); onClose(); }}><Info size={15} /><span>属性</span></button>
           <div className="context-menu-sep" role="separator" />
           {/* 分组 4：状态与输出 */}
-          <button role="menuitem" onClick={() => { onToggleLock(); onClose(); }}>
+          <button className="ln-menu__item" role="menuitem" onClick={() => { onToggleLock(); onClose(); }}>
             {locked ? <LockOpen size={15} /> : <Lock size={15} />}<span>{locked ? "解锁" : "锁定（只读）"}</span>
           </button>
           {/* 按文档类型给各自的导出菜单（doc/sheet/bitable/board 不混用）；见 ExportSubmenuItem */}
@@ -1811,12 +1811,12 @@ const ContextMenu = ({ node, x, y, onRename, onMove, onDelete, onCopyMarkdown, o
         </>
       ) : node.nodeType === "group" ? (
         <>
-          <button role="menuitem" onClick={() => { onRename(); onClose(); }}><Pencil size={15} /><span>重命名</span></button>
-          <button role="menuitem" onClick={() => { onTogglePin(); onClose(); }}><Pin size={15} /><span>{pinned ? "取消置顶" : "置顶"}</span></button>
-          <button role="menuitem" onClick={() => { onMove(); onClose(); }}><FolderInput size={15} /><span>移动…</span></button>
+          <button className="ln-menu__item" role="menuitem" onClick={() => { onRename(); onClose(); }}><Pencil size={15} /><span>重命名</span></button>
+          <button className="ln-menu__item" role="menuitem" onClick={() => { onTogglePin(); onClose(); }}><Pin size={15} /><span>{pinned ? "取消置顶" : "置顶"}</span></button>
+          <button className="ln-menu__item" role="menuitem" onClick={() => { onMove(); onClose(); }}><FolderInput size={15} /><span>移动…</span></button>
         </>
       ) : (
-        <button role="menuitem" onClick={() => { onRename(); onClose(); }}><Pencil size={15} /><span>重命名</span></button>
+        <button className="ln-menu__item" role="menuitem" onClick={() => { onRename(); onClose(); }}><Pencil size={15} /><span>重命名</span></button>
       )}
       <div className="context-menu-sep" role="separator" />
       <button role="menuitem" className="danger" onClick={() => { onDelete(); onClose(); }}><Trash size={15} /><span>删除</span></button>

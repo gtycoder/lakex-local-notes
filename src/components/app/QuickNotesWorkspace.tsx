@@ -943,7 +943,7 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
             if (event.key === "Escape") { event.preventDefault(); closeSearch(); }
           }}
         />
-        {searchInput && <button type="button" className="quick-notes-index-search__clear" aria-label="清空搜索" onClick={() => { setSearchInput(""); setSearchQuery(""); }}><X size={13} /></button>}
+        {searchInput && <button type="button" className="ln-iconbtn ln-iconbtn--compact quick-notes-index-search__clear" aria-label="清空搜索" onClick={() => { setSearchInput(""); setSearchQuery(""); }}><X size={13} /></button>}
       </div>
     );
   }
@@ -995,7 +995,7 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
     </div>
   );
   const newNoteButton = (
-    <button className="quick-notes-new" title="新建小记" aria-label="新建小记" onClick={() => void startNewDraft()}>
+    <button className="ln-iconbtn quick-notes-new" title="新建小记" aria-label="新建小记" onClick={() => void startNewDraft()}>
       <span className="quick-notes-new__icon"><Feather size={14} /><Plus size={9} /></span>
     </button>
   );
@@ -1014,18 +1014,18 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
           <button className={"qn-check" + (selected.size > 0 && selected.size === items.length ? " is-on" : "")} role="checkbox" aria-checked={selected.size > 0 && selected.size === items.length} aria-label="全选" onClick={() => setSelected(selected.size === items.length ? new Set() : new Set(items.map((item) => item.id)))}>{selected.size > 0 && selected.size === items.length && <Check size={13} />}</button>
           <span className="quick-notes-select-info">共选择了 {selected.size} 篇小记</span>
           <span className="quick-notes-tools-divider" />
-          <button className="quick-notes-link" onClick={exitSelecting}>取消</button>
-          <button className="quick-notes-link" disabled={selected.size === 0 || saving} onClick={() => setConvertItems(items.filter((item) => selected.has(item.id)))}>转为文档</button>
-          <button className="quick-notes-link quick-notes-link--danger" disabled={selected.size === 0 || saving} onClick={() => void deleteSelected()}>批量删除</button>
+          <button className="ln-btn ln-btn--ghost ln-btn--compact quick-notes-link" onClick={exitSelecting}>取消</button>
+          <button className="ln-btn ln-btn--ghost ln-btn--compact quick-notes-link" disabled={selected.size === 0 || saving} onClick={() => setConvertItems(items.filter((item) => selected.has(item.id)))}>转为文档</button>
+          <button className="ln-btn ln-btn--ghost ln-btn--compact quick-notes-link quick-notes-link--danger" disabled={selected.size === 0 || saving} onClick={() => void deleteSelected()}>批量删除</button>
         </>}
         <span className="quick-notes-tools-spacer" />
         <span className="quick-notes-count">{items.length} 条</span>
-        <button className={"quick-notes-tool-btn" + (searchOpen ? " is-on" : "")} onClick={toggleSearch} title="搜索小记" aria-label="搜索小记"><Search size={16} /></button>
-        <button className={"quick-notes-tool-btn" + (typeFilter !== "all" || isQuickNoteTimeFilterActive(timeFilter) || tagFilter.kind === "selection" ? " is-on" : "")} {...filterMenu.anchorProps()} title={"筛选：" + quickNoteTimeFilterLabel(timeFilter)} aria-label="筛选小记"><Filter size={16} /></button>
+        <button className={"ln-iconbtn quick-notes-tool-btn" + (searchOpen ? " is-selected" : "")} onClick={toggleSearch} title="搜索小记" aria-label="搜索小记"><Search size={16} /></button>
+        <button className={"ln-iconbtn quick-notes-tool-btn" + (typeFilter !== "all" || isQuickNoteTimeFilterActive(timeFilter) || tagFilter.kind === "selection" ? " is-selected" : "")} {...filterMenu.anchorProps()} title={"筛选：" + quickNoteTimeFilterLabel(timeFilter)} aria-label="筛选小记"><Filter size={16} /></button>
         <div className="quick-notes-sort-wrap">
-          <button className="quick-notes-tool-btn" {...sortMenu.anchorProps()} title={"排序：" + sortLabel} aria-label="排序"><ArrowUpDown size={16} /></button>
+          <button className="ln-iconbtn quick-notes-tool-btn" {...sortMenu.anchorProps()} title={"排序：" + sortLabel} aria-label="排序"><ArrowUpDown size={16} /></button>
         </div>
-        <button className="quick-notes-tool-btn" onClick={() => setTagManagerOpen(true)} title="标签管理" aria-label="标签管理"><Tags size={16} /></button>
+        <button className="ln-iconbtn quick-notes-tool-btn" onClick={() => setTagManagerOpen(true)} title="标签管理" aria-label="标签管理"><Tags size={16} /></button>
       </div>
     </header>}
     {viewMode === "note" && notices}
@@ -1049,10 +1049,10 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
               ><Tag size={14} /><span>{tagFilter.kind === "all" ? "标签" : tagFilter.kind === "untagged" ? "无标签" : (tagIndex.tags.find((tag) => tag.id === (tagFilter as { id: string }).id)?.name ?? "标签")}</span><ChevronDown size={14} /></button>
             )}
             <span className="quick-notes-tools-spacer" />
-            <button className="quick-notes-tool-btn" onClick={() => setTagManagerOpen(true)} title="标签管理" aria-label="标签管理"><Tags size={16} /></button>
-            <button className="quick-notes-tool-btn" onClick={() => void openSearch()} title="搜索小记" aria-label="搜索小记"><Search size={16} /></button>
+            <button className="ln-iconbtn quick-notes-tool-btn" onClick={() => setTagManagerOpen(true)} title="标签管理" aria-label="标签管理"><Tags size={16} /></button>
+            <button className="ln-iconbtn quick-notes-tool-btn" onClick={() => void openSearch()} title="搜索小记" aria-label="搜索小记"><Search size={16} /></button>
           </>}
-          <button className="quick-notes-tool-btn" {...moreMenu.anchorProps()} title="更多" aria-label="更多"><MoreHorizontal size={16} /></button>
+          <button className="ln-iconbtn quick-notes-tool-btn" {...moreMenu.anchorProps()} title="更多" aria-label="更多"><MoreHorizontal size={16} /></button>
         </div>
         {/* 批量条（对齐云端图1）：勾选框 + N 篇 + 取消 + 动作 */}
         {selecting && <div className="quick-notes-batch">
@@ -1063,10 +1063,10 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
           >{selected.size > 0 && selected.size === items.length && <Check size={13} />}</button>
           <span className="quick-notes-select-info">{selected.size} 篇</span>
           <span className="quick-notes-tools-divider" />
-          <button className="quick-notes-link" onClick={exitSelecting}>取消</button>
+          <button className="ln-btn ln-btn--ghost ln-btn--compact quick-notes-link" onClick={exitSelecting}>取消</button>
           <span className="quick-notes-tools-spacer" />
-          <button className="quick-notes-tool-btn" title="转为正式文档" aria-label="转为正式文档" disabled={selected.size === 0 || saving} onClick={() => setConvertItems(items.filter((item) => selected.has(item.id)))}><FilePlus size={16} /></button>
-          <button className="quick-notes-tool-btn quick-notes-tool-btn--danger" title="批量删除" aria-label="批量删除" disabled={selected.size === 0 || saving} onClick={() => void deleteSelected()}><Trash size={16} /></button>
+          <button className="ln-iconbtn quick-notes-tool-btn" title="转为正式文档" aria-label="转为正式文档" disabled={selected.size === 0 || saving} onClick={() => setConvertItems(items.filter((item) => selected.has(item.id)))}><FilePlus size={16} /></button>
+          <button className="ln-iconbtn quick-notes-tool-btn quick-notes-tool-btn--danger" title="批量删除" aria-label="批量删除" disabled={selected.size === 0 || saving} onClick={() => void deleteSelected()}><Trash size={16} /></button>
         </div>}
         <QuickNotesVirtualList items={loading ? [] : listItems} mode="index" className="quick-notes-index ln-list-panel ln-list-panel--background" listRef={indexListRef}
           visible={visible} keepIds={[editingId, rowMenu.id, tagPickerFor?.noteId]} revealId={revealNoteId} onRevealed={clearReveal}
@@ -1091,7 +1091,7 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
                     <span className="ln-list-item__meta">{indexStamp(quickNoteSortTime(item, sortBy))}</span>
                   </button>
                   <span className="quick-note-index-actions">
-                    <button className="quick-notes-tool-btn" title="更多" aria-label="更多" {...rowMenu.anchorProps(item.id, { stopPropagation: true })}><MoreHorizontal size={16} /></button>
+                    <button className="ln-iconbtn quick-notes-tool-btn" title="更多" aria-label="更多" {...rowMenu.anchorProps(item.id, { stopPropagation: true })}><MoreHorizontal size={16} /></button>
                   </span>
                 </div>}
         />
@@ -1183,56 +1183,56 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
     {/* 排序菜单 / 行内 ⋯ 菜单：标准 <Menu>（portal + 外点/Esc + .quick-notes-*-menu 表面），open/定位由 useAnchoredMenu 管 */}
     {sortMenu.menu(<>
       {QUICK_NOTE_SORT_OPTIONS.map((o) => (
-        <button key={o.id} role="menuitemradio" aria-checked={sortBy === o.id} onClick={() => { setSortBy(o.id); writeQuickNoteSort(o.id); sortMenu.close(); }}>{sortBy === o.id ? <Check size={14} /> : <span className="quick-notes-menu-gap" />}{o.label}</button>
+        <button className="ln-menu__item" key={o.id} role="menuitemradio" aria-checked={sortBy === o.id} onClick={() => { setSortBy(o.id); writeQuickNoteSort(o.id); sortMenu.close(); }}>{sortBy === o.id ? <Check size={14} /> : <span className="quick-notes-menu-gap" />}{o.label}</button>
       ))}
     </>, "quick-notes-sort-menu")}
     {/* 列表视图标签筛选：收起为「标签 ▾」，不再把全部标签平铺在窄索引列里 */}
     {tagMenu.menu(<>
-      <button role="menuitemradio" aria-checked={tagFilter.kind === "all"} onClick={() => { tagMenu.close(); void changeTagFilter({ kind: "all" }); }}>{tagFilter.kind === "all" ? <Check size={14} /> : <span className="quick-notes-menu-gap" />}全部</button>
+      <button className="ln-menu__item" role="menuitemradio" aria-checked={tagFilter.kind === "all"} onClick={() => { tagMenu.close(); void changeTagFilter({ kind: "all" }); }}>{tagFilter.kind === "all" ? <Check size={14} /> : <span className="quick-notes-menu-gap" />}全部</button>
       <span className="quick-notes-filter-menu__sep" role="separator" />
       {tagIndex.tags.map((tag) => (
-        <button key={tag.id} role="menuitemradio" aria-checked={tagFilter.kind === "tag" && tagFilter.id === tag.id} onClick={() => { tagMenu.close(); void changeTagFilter({ kind: "tag", id: tag.id }); }}>
+        <button className="ln-menu__item" key={tag.id} role="menuitemradio" aria-checked={tagFilter.kind === "tag" && tagFilter.id === tag.id} onClick={() => { tagMenu.close(); void changeTagFilter({ kind: "tag", id: tag.id }); }}>
           {tagFilter.kind === "tag" && tagFilter.id === tag.id ? <Check size={14} /> : <span className="quick-notes-menu-gap" />}
           <span className="ln-ellipsis quick-notes-tag-ellipsis">{tag.name}</span><span className="quick-notes-tag-filter-menu__count">({tag.count})</span>
         </button>
       ))}
       {tagIndex.untaggedCount > 0 && (
-        <button role="menuitemradio" aria-checked={tagFilter.kind === "untagged"} onClick={() => { tagMenu.close(); void changeTagFilter({ kind: "untagged" }); }}>{tagFilter.kind === "untagged" ? <Check size={14} /> : <span className="quick-notes-menu-gap" />}无标签<span className="quick-notes-tag-filter-menu__count">({tagIndex.untaggedCount})</span></button>
+        <button className="ln-menu__item" role="menuitemradio" aria-checked={tagFilter.kind === "untagged"} onClick={() => { tagMenu.close(); void changeTagFilter({ kind: "untagged" }); }}>{tagFilter.kind === "untagged" ? <Check size={14} /> : <span className="quick-notes-menu-gap" />}无标签<span className="quick-notes-tag-filter-menu__count">({tagIndex.untaggedCount})</span></button>
       )}
       <span className="quick-notes-filter-menu__sep" role="separator" />
-      <button role="menuitem" onClick={() => { tagMenu.close(); setTagManagerOpen(true); }}>管理标签…</button>
+      <button className="ln-menu__item" role="menuitem" onClick={() => { tagMenu.close(); setTagManagerOpen(true); }}>管理标签…</button>
     </>, "quick-notes-sort-menu quick-notes-tag-filter-menu")}
     {/* 列表视图 ⋯：类型 / 排序 / 批量操作（对齐语雀把这三件收进 ⋯） */}
     {moreMenu.menu(<>
       <span className="quick-notes-menu-section">类型</span>
       {QUICK_NOTE_TYPE_OPTIONS.map((option) => (
-        <button key={option.id} role="menuitemradio" aria-checked={typeFilter === option.id} onClick={() => { moreMenu.close(); void changeTypeFilter(option.id); }}>{typeFilter === option.id ? <Check size={14} /> : <span className="quick-notes-menu-gap" />}{option.label}</button>
+        <button className="ln-menu__item" key={option.id} role="menuitemradio" aria-checked={typeFilter === option.id} onClick={() => { moreMenu.close(); void changeTypeFilter(option.id); }}>{typeFilter === option.id ? <Check size={14} /> : <span className="quick-notes-menu-gap" />}{option.label}</button>
       ))}
       <span className="quick-notes-filter-menu__sep" role="separator" />
       <span className="quick-notes-menu-section">排序</span>
       {QUICK_NOTE_SORT_OPTIONS.map((option) => (
-        <button key={option.id} role="menuitemradio" aria-checked={sortBy === option.id} onClick={() => { setSortBy(option.id); writeQuickNoteSort(option.id); moreMenu.close(); }}>{sortBy === option.id ? <Check size={14} /> : <span className="quick-notes-menu-gap" />}{option.label}</button>
+        <button className="ln-menu__item" key={option.id} role="menuitemradio" aria-checked={sortBy === option.id} onClick={() => { setSortBy(option.id); writeQuickNoteSort(option.id); moreMenu.close(); }}>{sortBy === option.id ? <Check size={14} /> : <span className="quick-notes-menu-gap" />}{option.label}</button>
       ))}
       <span className="quick-notes-filter-menu__sep" role="separator" />
-      <button role="menuitem" onClick={() => { moreMenu.close(); setFilterDialogOpen(true); }}>筛选小记…</button>
-      <button role="menuitem" onClick={() => { moreMenu.close(); setSelecting(true); }}>批量操作</button>
+      <button className="ln-menu__item" role="menuitem" onClick={() => { moreMenu.close(); setFilterDialogOpen(true); }}>筛选小记…</button>
+      <button className="ln-menu__item" role="menuitem" onClick={() => { moreMenu.close(); setSelecting(true); }}>批量操作</button>
     </>, "quick-notes-sort-menu quick-notes-more-menu")}
     {/* 类型筛选（对齐语雀 dashboard/notes）：小记 / 图片 / 附件；批量操作单独一档 */}
     {filterMenu.menu(<>
       {QUICK_NOTE_TYPE_OPTIONS.map((option) => (
-        <button key={option.id} role="menuitemradio" aria-checked={typeFilter === option.id} onClick={() => { filterMenu.close(); void changeTypeFilter(option.id); }}>{typeFilter === option.id ? <Check size={14} /> : <span className="quick-notes-menu-gap" />}{option.label}</button>
+        <button className="ln-menu__item" key={option.id} role="menuitemradio" aria-checked={typeFilter === option.id} onClick={() => { filterMenu.close(); void changeTypeFilter(option.id); }}>{typeFilter === option.id ? <Check size={14} /> : <span className="quick-notes-menu-gap" />}{option.label}</button>
       ))}
       <span className="quick-notes-filter-menu__sep" role="separator" />
-      <button role="menuitem" onClick={() => { filterMenu.close(); setFilterDialogOpen(true); }}>更多筛选…</button>
-      <button role="menuitem" onClick={() => { filterMenu.close(); setSelecting(true); }}>批量操作</button>
+      <button className="ln-menu__item" role="menuitem" onClick={() => { filterMenu.close(); setFilterDialogOpen(true); }}>更多筛选…</button>
+      <button className="ln-menu__item" role="menuitem" onClick={() => { filterMenu.close(); setSelecting(true); }}>批量操作</button>
     </>, "quick-notes-sort-menu quick-notes-filter-menu")}
     {rowMenuItem && rowMenu.menu(<>
-      <button role="menuitem" onClick={() => { rowMenu.close(); togglePin(rowMenuItem.id); }}>{pinned.has(rowMenuItem.id) ? "取消置顶" : "置顶"}</button>
-      <button role="menuitem" onClick={() => { rowMenu.close(); void startEditing(rowMenuItem); }}>编辑</button>
-      <button role="menuitem" onClick={() => { const anchor = rowMenu.anchor; rowMenu.close(); if (anchor) setTagPickerFor({ noteId: rowMenuItem.id, anchor }); }}>添加标签</button>
-      <button role="menuitem" onClick={() => { rowMenu.close(); void copyNoteText(rowMenuItem); }}>复制文本</button>
-      <button role="menuitem" onClick={() => { rowMenu.close(); setConvertItems([rowMenuItem]); }}>转为正式笔记</button>
-      <button role="menuitem" className="quick-notes-link--danger" onClick={() => { rowMenu.close(); scheduleDelete(rowMenuItem); }} disabled={pendingDelete !== null}>删除</button>
+      <button className="ln-menu__item" role="menuitem" onClick={() => { rowMenu.close(); togglePin(rowMenuItem.id); }}>{pinned.has(rowMenuItem.id) ? "取消置顶" : "置顶"}</button>
+      <button className="ln-menu__item" role="menuitem" onClick={() => { rowMenu.close(); void startEditing(rowMenuItem); }}>编辑</button>
+      <button className="ln-menu__item" role="menuitem" onClick={() => { const anchor = rowMenu.anchor; rowMenu.close(); if (anchor) setTagPickerFor({ noteId: rowMenuItem.id, anchor }); }}>添加标签</button>
+      <button className="ln-menu__item" role="menuitem" onClick={() => { rowMenu.close(); void copyNoteText(rowMenuItem); }}>复制文本</button>
+      <button className="ln-menu__item" role="menuitem" onClick={() => { rowMenu.close(); setConvertItems([rowMenuItem]); }}>转为正式笔记</button>
+      <button role="menuitem" className="ln-menu__item quick-notes-link--danger" onClick={() => { rowMenu.close(); scheduleDelete(rowMenuItem); }} disabled={pendingDelete !== null}>删除</button>
     </>, "quick-note-row-menu")}
     {tagPickerFor && (() => {
       const target = items.find((item) => item.id === tagPickerFor.noteId);

@@ -386,7 +386,7 @@ export function Submenu({ label, children, disabled = false, openDelayMs = 120, 
     <>
       <button type="button" role="menuitem" disabled={disabled}
         ref={rowRef}
-        className={"context-menu-item has-submenu" + (disabled ? " is-disabled" : "")}
+        className={"ln-menu__item context-menu-item has-submenu" + (disabled ? " is-disabled" : "")}
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={(event) => { if (event.detail === 0) openFromKeyboard("first"); else setOpen(true); }}

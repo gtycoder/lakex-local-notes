@@ -32,11 +32,11 @@
 .quick-notes-tools-spacer { flex: 1 1 auto; min-width: 12px; }
 
 /* 头部小工具（多选 / 排序）：纯图标按钮，hover 才着色 */
-.quick-notes-tool-btn { display: grid; place-items: center; width: 30px; height: 30px; border: 0; border-radius: var(--lake-radius-xs); color: var(--lake-text-3); background: transparent; }
+/* 工具钮 = ln-iconbtn（261110 审计：尺寸/悬停/选中态走原语；这里只留危险色）。 */
 
-.quick-notes-tool-btn:hover:not(:disabled), .quick-notes-tool-btn.is-on { color: var(--lake-accent-text); background: color-mix(in srgb, var(--lake-accent) 10%, transparent); }
 
-.quick-notes-tool-btn:disabled { opacity: .4; cursor: default; }
+
+
 
 .quick-notes-sort-wrap { position: relative; }
 
@@ -61,11 +61,11 @@
 .qn-check.is-on { border-color: var(--lake-status-ok); background: var(--lake-status-ok); }
 
 /* （多选条已并入头部那一行，见 .quick-notes-header-tools；这里只留链接按钮样式） */
-.quick-notes-link { border: 0; padding: 2px 4px; color: var(--lake-accent-text); background: transparent; font-size: var(--lake-font-size-small); cursor: pointer; }
+/* 文字动作 = ln-btn--ghost + compact（261110 审计）；这里只留危险色。 */
 
-.quick-notes-link:hover:not(:disabled) { text-decoration: underline; }
 
-.quick-notes-link:disabled { opacity: .45; cursor: default; }
+
+
 
 .quick-notes-link--danger { color: var(--lake-status-error); }
 
@@ -101,8 +101,8 @@
 .quick-notes-index-search:focus-within { border-color: var(--lake-accent); }
 .quick-notes-index-search > svg { flex: 0 0 auto; color: var(--lake-text-3); }
 .quick-notes-index-search input { flex: 1 1 auto; min-width: 0; border: 0; outline: none; color: var(--lake-text-1); background: transparent; font: inherit; font-size: var(--lake-font-size-small); }
-.quick-notes-index-search__clear { display: grid; place-items: center; width: 18px; height: 18px; padding: 0; border: 0; border-radius: var(--lake-radius-2xs); color: var(--lake-text-3); background: transparent; cursor: pointer; }
-.quick-notes-index-search__clear:hover { background: var(--lake-bg-hover); }
+/* 清空搜索 = ln-iconbtn--compact（261110 审计）。 */
+
 /* 列表视图 ⋯ 菜单：类型 / 排序 / 批量操作 */
 .quick-notes-more-menu { min-width: 200px; max-height: 360px; overflow-y: auto; }
 .quick-notes-menu-section { padding: 4px 8px 2px; color: var(--lake-text-3); font-size: var(--lake-font-size-micro); }
@@ -128,8 +128,8 @@
 .quick-note-row-menu button:hover:not(:disabled) { background: var(--lake-bg-hover); }
 .quick-note-row-menu button:disabled { opacity: .45; cursor: default; }
 /* 顶部「新建小记」（对齐云端图3：绿色羽毛 + 号） */
-.quick-notes-new { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border: 0; border-radius: var(--lake-radius-sm); background: transparent; cursor: pointer; }
-.quick-notes-new:hover { background: color-mix(in srgb, var(--lake-accent) 12%, transparent); }
+/* 新建钮 = ln-iconbtn（261110 审计），这里只保留组合图标的定位。 */
+
 .quick-notes-new__icon { position: relative; display: inline-flex; align-items: center; color: var(--lake-accent-text); }
 .quick-notes-new__icon > svg:last-child { position: absolute; right: -3px; bottom: -3px; }
 .quick-notes-hint { margin-bottom: 8px; padding: 6px 10px; border-radius: var(--lake-radius-sm); color: var(--lake-text-3); background: var(--lake-bg-hover); font-size: var(--lake-font-size-tiny); }
@@ -335,7 +335,7 @@
 @media (max-width: 560px) {
   .quick-notes-header { grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
   .quick-notes-header .quick-notes-header-tools { gap: 4px; }
-  .quick-notes-tool-btn { width: 26px; height: 26px; }
+
   .quick-notes-split { grid-template-columns: minmax(0, 1fr); gap: 10px; }
   .quick-note-composer { min-height: 150px; }
   .quick-notes-list { --quick-notes-gutter: 22px; }

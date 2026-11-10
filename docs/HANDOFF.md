@@ -10,6 +10,36 @@
 
 > **顺序标注**：261109 各批次里写的「日记 ⌘4 / AI 写作 ⌘3」是**当时**的顺序；**261110 起改为 日记 ⌘3 / AI 写作 ⌘4**（另有标签 ⌘5）。旧批次不再改，以本行 + §1 为准。
 
+### 261110 · 按钮原语全站审计 + 迁移（第一批）
+- **审计口径**：全仓桌面 `<button>` **682 个**（排除 mobile）；按「类名是否来自 `ln-*`/原语」分类：迁移前 **479 原语 / 268 非原语**。
+- **本轮迁移**：① 菜单项统一补 `.ln-menu__item`（context-menu / card / tab / tree-selection / export / ink-export / outline 等，视觉不变——legacy 选择器本就与它同一规则）；② AI 写作：历史行主区改用新原语 **`.ln-row__main`**（kit 新增，收编行内可点主区各写一份的 button 复位）、思考块折叠行 / 空态建议 chip / 工具 / 发送 / 停止全部落 `ln-btn--compact`；③ 小记空间：工具钮/新建/文字动作/清空搜索落 `ln-iconbtn` / `ln-btn--ghost--compact`，删掉 quick-notes.css 里重复的 30px/悬停/下划线视觉。
+- **迁移后**：**526 原语 / 156 非原语（77%）**；剩余全部是**专用编辑面**或 vendor/legacy 单一来源（见下），不是漏扫。
+- **例外清单（不并入按钮阶梯，理由 = 几何/语义由该编辑面规格决定，状态视觉已一致）**：手写板 `InkPad` / `InkPagesPanel` / `InkPageStrip` / `InkTextSelectionControls` / `InkPageTab*` / `InkExportMenu` / `InkImageSelection` / `InkBackgroundSourceButtons`（62）；图片 Lightbox / 附件预览 / 编辑器卡片内按钮（`lockedTextCard` / `noteRefCard`）；编辑器页签与顶栏 chrome（`tab-item` / `toolbar__item`，单一来源 chrome.css）；目录行与行内动作（legacy compat.css 单一来源）；表格（Univer）与多维表条件 UI；`quick-note-tag`（标签色板）与 `qn-check`（checkbox 原语，不是按钮）。
+- **后续（若继续收口）**：小记卡片/筛选弹窗/日记/标签空间等 app 级按钮约 40 个可再迁一轮，需逐屏视觉走查。
+- 门禁：tsc 0；vitest **835 文件 / 5264 passed / 12 skipped / 0 failed**；ui-metrics（颜色 0 / 字号 0 / !important 9=清单）；primitives 0；cssLayers `kit.css` 630 → **645**（`.ln-row__main`）、`aiWriting.css` → **321**。
+### 261110 · 桌面按钮原语定稿：4 语义 + 危险 + 链接（用户定稿，仿知乎层级）
+- **层级**：L1 `--primary` 实心墨蓝（主操作）；L2 **`--outlined`（新）主题色框 + 主题色字**（常用）；L3 `--secondary` 中性框 + `text-2`（一般）；L4 `--ghost` 无框灰字（更次要/取消/工具）、**`--link`（新）无框主题色字**（跳转/引导）；L5 `--danger` 红字红框，配 `--ghost` / `--danger-text` = 纯红字。
+- **尺寸只有两档**：默认 27（`--lake-ctl-h`）/ **`.ln-btn--compact` 22（新）**。
+- **基座 = L4 口径**并补 hover（此前裸 `.ln-btn` 没有 hover ⇒ 表现为「点了没反应」）；六态（default/hover/active/focus-visible/is-selected/disabled）逐层统一，选中态三层合并成一条规则、只经 `--lake-bg-selected` / `--lake-fg-selected`。
+- **收敛**：删除 `--settings`（43 处全部迁移到 `--outlined`，设置页按钮字色因此变为主题色——用户已知）；`--danger-text` 与 `--danger`+`--ghost` 合并为同一条「透明底红字」；`--outline` 本就 0 引用未新增。
+- **内核未分层补钉**（`kernel-theme.css`）：内核注入 `button{color:inherit}` 会吃掉分层颜色 ⇒ 逐层补 `button.ln-btn*` 的 color（基础/primary/outlined/link/secondary/ghost/danger）。
+- **文档与契约测试**：`docs/DESIGN.md` 的 Buttons 重写为层级表 + 六态；`motionContract` / `selectionTokens` / `splitPane` 三条断言按新结构更新（意图不变：按压走 kit instant、选中只走语义令牌、破坏性只有一种长相）。
+- **视觉实测（隔离实例）**：设置·备份与恢复页 8 个 L2 按钮（`accent` 框 + `accent-text` 字）渲染正确、`--settings` 残留 0。
+- 门禁：tsc 0；vitest **835 文件 / 5263 passed / 12 skipped / 0 failed**；ui-metrics（颜色 0 / 字号 0 / !important 9=清单）；primitives 跨所有权 0；cssLayers `kit.css` 613 → **630**（L2/L4b/danger 合并/selected 覆盖/compact，均写明理由）。
+- **移动端 `mb-btn` 本轮不做**（用户定稿：先桌面；下一轮按同一模型对齐）。设置页若觉得「主题色字」太跳，可再加一档「框 + 次要字色」（用户预留）。
+### 261110 · AI 写作二改：左栏 14px / 两栏可拖 / 搜索 + 置顶 / 气泡居中 / 思考块默认折叠
+- **左栏字号 14px**：不给 kit 原语加覆盖（`.aiw-side .ln-row` 这类跨所有权选择器会被 `primitives.test.ts` 打红，基线 0）⇒ 行标题、搜索字段各用自己的类设字号（feature 层压 kit 层）。
+- **两栏可拖（261110 真 bug + 修复）**：用户报「还是拖不动」——根因是上一轮把 `.aiw-handle`（`SplitHandle` 的定位类）当「零引用」删了：kit 的 `.ln-split-handle::before` 是**绝对定位**的 10px 命中带，没有 `position: relative` 锚点就落到初始包含块（视口左侧），鼠标抓不到。已恢复 `.aiw-handle { position: relative; flex: 0 0 0; width: 0; }`；**实测 CDP 真鼠标拖拽 288 → 371 并落盘** `split.ai-writing-side=371`。（教训：直接派发事件会绕过命中测试，验收必须走真实点击/拖拽。）
+- **对话搜索 + 置顶（用户定稿；「指定」= 置顶，不做对话分组）**：左栏顶部 `ln-input--search` 按标题过滤（纯显示层）；置顶 = 设备本地 `lakex-local-notes-v3.aiwriting.pins`（有序 id，最新置顶在前，删除会话自动剪枝），列表顶部独立「置顶」段，行内 ⋯ 可置顶/取消置顶。判据在 core `splitPinnedConversations`。
+- **气泡偏左根因与修正**：原锚点是输入卡左侧的**小按钮**且 `align:"start"` ⇒ 气泡从按钮左缘向右展开、看起来偏左。现改为**锚点 = 整张输入卡** + 新增 `usePopoverPosition` 的 `align:"center"`（`topMenuPosition.placePopoverPosition` 新增分支，start/end 原逻辑不动）⇒ 输入卡下方**居中**，放不下按既有规则翻上方仍居中。实测：输入卡中心 = 气泡中心（delta 0）。
+- **分段控件加厚（原语级，261110 用户定稿）**：直接改 kit 的 `.ln-segment`（轨道 27-1 → 27+3、段高 22 → 27；settings 档随 `--lake-ctl-h-settings` 到 35）——**全站统一**（设置·主题、小记版式、AI 模式切换等），声明数不变、只改值，kit 基线仍 613；已实测 AI 写作 30/27、设置外观 35/32 无裁切。
+- **两个弹窗升级为浮动窗（261110 用户定稿：原先太窄）**：`PublishDocDialog` / `SaveQuickNoteDialog` 改用 `useFloatingDialog`（标题栏拖动 + 8 向缩放 + 尺寸/位置设备本地记忆；默认 780×460 / 860×620，min 560×340 / 560×420），内容走 `ln-dialog__head/body/actions`、`ln-form__row`、`ln-text-field`、`ln-btn`；首焦点 = 主操作按钮 / 正文（不再落在右上关闭钮上）。实测：生成文档 780×460（拖右缘 → 920×460）、保存小记 860×620、textarea 501px 吃满。
+- **新对话 = 重点按钮**：左栏「＋ 新对话」由 `ln-btn--secondary` 改 **`ln-btn--primary`**（用户点单：左栏唯一实心主操作）。
+- **输入卡控件全部收口到按钮原语（261110 用户报「怎么都不一样」）**：工具钮（提示词/已选文档）= `ln-btn ln-btn--ghost ln-btn--compact`（激活用 `is-selected`）；发送 = `ln-btn--primary ln-btn--compact`；停止 = `ln-btn--secondary ln-btn--compact`（正方形）；空态建议 chip = **L3** `ln-btn--secondary ln-btn--compact` + 胶囊形；删除 `.aiw-tool/.aiw-send` 里的高度/内距覆盖（`aiWriting.css` 331 → **321**）。实测：工具/发送/建议 chip 全部 22px，类名只剩 ln-*。
+- **思考块默认折叠（用户定稿；B 方案不做）**：只显示一行「已深度思考（用时 X 秒）」/流式「正在深度思考…」，点开才渲染思考正文（`AiThinkingBlock`，`aria-expanded` + 箭头旋转，状态切换瞬时）；没有思考输出不渲染该行。B 的「文档面 + 操作条贴卡右上」**不做**（示意图留 `docs/mockups/ai-writing-b.html` 作记录）。
+- **C 口径澄清（未改代码）**：多文档模式里「选择文档」只是挂上下文，**不是发送**；正文在点发送时才读取，仍需用户点「发送」/⌘⏎。
+- 门禁：tsc 0；vitest **834 文件 / 5260 passed / 12 skipped / 0 failed**；ui-metrics（颜色 0 / 字号 0 / !important 9=清单 9）；primitives 跨所有权 0；cssLayers `aiWriting.css` 基线 301 → **320**（左栏字号/搜索/图钉/分隔条定位恢复/思考块折叠，均有理由）。
+
 ### 261110 · AI 写作：提示词点击写入输入框 + 接入 ln-* 原语做风格统一
 - **提示词库（用户定稿）**：点卡片 = 把完整提示词**直接写进输入框**（已有文字换行追加、不覆盖；同时清掉旧 chip；面板关闭、焦点回输入框末尾），不再挂 chip；旧会话存过 `promptText` 的仍显示 chip 且可移除。
 - **审查抓到并已修**：`input.replace(/\s+$/,"")` 的 `\s` 在编辑时被字符串吃掉（AGENTS §7.21 同类坑）⇒ 变成 `/s+$/` 会误删尾部字母 s；已修为 `\s+`，并有 render 用例覆盖「已有文字追加」。

@@ -90,14 +90,35 @@ ai_writing_messages(id TEXT PK, conversation_id TEXT, role TEXT, content TEXT,
 | 提示词 chip / 文档 chip | `ln-tag` + 关闭钮 `ln-iconbtn ln-iconbtn--compact`（16px 命中盒） |
 | 工具钮（提示词 / 请选择文档） | `ln-btn ln-btn--ghost`，激活追加 `ln-btn--secondary is-selected` |
 | 发送 / 停止 | `ln-btn ln-btn--primary` / `ln-btn ln-btn--secondary`（保留 22px 高度布局） |
+| 模式切换（对话写作 / 多文档推理） | `ln-segment` 原语；**261110 用户定稿：原语整体加厚一档**（轨道 26→30、段高 22→27，settings 档 31→35）——全站所有 `.ln-segment` 用例统一生效，不在本页覆盖 |
 | 提示词库 | 菜单行列表 `button.ln-menu__item`（宽 360，图标 + 标题 + 说明两行）——**取代原 3 列卡片**（与全仓菜单同一身份） |
 | 文档选择 | 快捷组/笔记本/文档行 → `ln-row`（展开 `is-selected`），文本 `ln-ellipsis` |
 | 消息操作条 | 重新生成/复制 → `ln-iconbtn--compact`；生成文档 `ln-btn--ghost`；保存到小记 `ln-btn--primary` |
-| 生成文档弹窗 | 行 `ln-form__row` + `ln-form__label` |
+| 生成文档 / 保存到小记弹窗 | **浮动窗**（`useFloatingDialog`：标题栏可拖、8 向缩放、尺寸/位置设备本地记忆；默认 780×460 / 860×620，min 560×340 / 560×420）；内容走 `ln-dialog__head/body/actions` + `ln-form__row` + `ln-btn`；首焦点 = 主操作 / 正文 |
+| 新对话按钮 | `ln-btn ln-btn--primary`（**重点按钮**，261110 用户点单；左栏唯一的实心主操作） |
 
 - CSS 基线：`aiWriting.css` **446 → 301 声明**（删掉的都是「同一视觉在业务文件里又写了一遍」）；之后的改版继续复用原语，禁止再长回第二套。
 - 本轮**只统一视觉，不改结构/交互/逻辑**；下一轮改版在此基线上讨论。
 
+## 左栏与气泡定位（261110 二改）
+
+| 项 | 口径 |
+| --- | --- |
+| 左栏字号 | **14px**（标题 17/18 保留层级；行标题与搜索字段用各自类设字号，**不覆盖 `ln-*` 原语**，原语跨所有权门禁保持 0） |
+| 两栏宽度 | `SplitPane`（`ai-writing-side`，本地记忆）：min 200 / max 520 / 右栏至少 480；分隔条 = kit `.ln-split-handle`（唯一实现）；拖到右栏下限时按 clamp 停住 |
+| 对话搜索 | 顶部 `ln-input--search` 按**标题**过滤（纯显示层，不建索引、不改数据）；无结果给「没有匹配的对话」 |
+| 置顶 | 设备本地 `lakex-local-notes-v3.aiwriting.pins`（有序 id，最新置顶在前；会话删除后自动剪枝）；列表顶部出现独立「置顶」段；**不做对话分组**。行内 ⋯ → 置顶/取消置顶 |
+| 气泡定位 | 提示词库 / 文档选择的气泡**锚点 = 整张输入卡**，在输入卡**下方居中**展开（`usePopoverPosition` 新增 `align: "center"`；下方放不下按既有规则翻上方，仍居中） |
+
+### 思考块默认折叠（261110 用户定稿；B 方案不做）
+
+- 消息里的思考内容默认**只占一行**：「已深度思考（用时 X 秒）」/流式时「正在深度思考…」+ 主色小点；点这行展开 Markdown 正文，再点收起（`aria-expanded` + 箭头旋转，状态切换瞬时，不做装饰性过渡）。
+- 实现：`AiThinkingBlock`（独立件，不把内核 viewer 拖进测试）；`AiMessageView` 只接线。没有思考输出（label=null）时整块不渲染。
+- **B 方案（文档面 + 操作条贴卡右上）不做**——只保留这条折叠。示意图仍留在 `docs/mockups/ai-writing-b.html` 作为讨论记录。
+### B 方案示意（讨论记录，已决定不做）
+
+- 示意图：[docs/mockups/ai-writing-b.html](mockups/ai-writing-b.html)（浏览器直接打开）
+- 改造要点：答案改为「文档面」（白卡 + 文档排版，操作条贴卡右上）；思考块默认收起成一行；用户消息仍为右对齐气泡；左栏 14px + 搜索 + 置顶；气泡贴输入卡下方居中。
 ## 答案渲染（v1.1，语雀同款）
 
 - **路径**：`createLakeDocument(host, "viewer")` + `setDocument("text/markdown")`。实测内核原生解析覆盖标题/有序无序列表/**任务清单**/表格/引用/代码/行内与块级公式；`getDocument("text/lake")` 仍用于「生成文档」（任务清单落成 `lake-list-task` + checkbox 卡、公式落成 `name="math"` 卡）。
