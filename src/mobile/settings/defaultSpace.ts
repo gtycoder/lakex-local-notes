@@ -1,7 +1,8 @@
 /**
  * 设备级「默认空间」设置（261110 用户点单）：打开 App 落在哪个一级页。
  *
- * 选项 = 首页四个 tab（小记 / 知识库 / 日记 / 标签），**默认小记**（用户 261014 定稿的冷启动落点）。
+ * 选项 = 首页五个 tab（小记 / 知识库 / 日记 / **AI** / 标签；261110 底部 Dock 扩到五格后同步），
+ * **默认小记**（用户 261014 定稿的冷启动落点）。
  * **仅本机**（localStorage，前缀 lakex-local-notes-mobile.，与 libraryView / 导入默认笔记本 / 平板面板偏好
  * 同口径）：不参与同步、**不进 S3**、不进 wire；换设备各自保留各自的落点。
  *
@@ -19,6 +20,7 @@ export const DEFAULT_SPACE_OPTIONS: Array<{ value: HomeTab; label: string }> = [
   { value: "quick", label: "小记" },
   { value: "library", label: "知识库" },
   { value: "diary", label: "日记" },
+  { value: "ai", label: "AI" },
   { value: "tags", label: "标签" },
 ];
 

@@ -14,11 +14,11 @@ const KEY = "lakex-local-notes-mobile.default-space";
 afterEach(() => { clearDefaultHomeTabForTest(); localStorage.clear(); });
 
 describe("默认空间（设备本地偏好）", () => {
-  it("未设置 = 小记；选项就是首页四个 tab，顺序与 tabPager 一致", () => {
+  it("未设置 = 小记；选项就是首页五个 tab（261110 含 AI），顺序与 tabPager 一致", () => {
     expect(DEFAULT_HOME_TAB).toBe("quick");
     expect(readDefaultHomeTab()).toBe("quick");
     expect(DEFAULT_SPACE_OPTIONS.map((o) => o.value)).toEqual([...HOME_TABS]);
-    expect(DEFAULT_SPACE_OPTIONS.map((o) => o.label)).toEqual(["小记", "知识库", "日记", "标签"]);
+    expect(DEFAULT_SPACE_OPTIONS.map((o) => o.label)).toEqual(["小记", "知识库", "日记", "AI", "标签"]);
   });
 
   it("写/读往返：四个 tab 都能存住；写回默认值 = 清掉键（不留无意义行）", () => {
