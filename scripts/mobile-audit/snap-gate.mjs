@@ -1,6 +1,6 @@
 // 快照门禁的共享执行器（261030 抽出）：生成快照 → 与已提交基线比对 → 有差异 exit 1。
 //
-// 6 态整页快照（mobile-snap）与多维表专项快照（mobile-bitable-snap）共用这一份「取快照 / 折叠 / 去抖重跑 / 比对」
+// 整页快照（mobile-snap，9 态）与多维表专项快照（mobile-bitable-snap）共用这一份「取快照 / 折叠 / 去抖重跑 / 比对」
 // 逻辑，避免两套装置漂移（口径与阈值原样来自原 check-mobile-snap.mjs）。
 import fs from "node:fs";
 import path from "node:path";

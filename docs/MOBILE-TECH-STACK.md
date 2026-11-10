@@ -392,7 +392,7 @@ bash scripts/android-build.sh --sync --install
 bash scripts/emu-up.sh            # AVD lake_mobile（Pixel 6 / API 36 / arm64）
 bash scripts/emu-cdp.sh 9335      # -> http://127.0.0.1:9335/json/list
 bash scripts/mobile-preview.sh
-npm run check:mobilesnap          # 6 态视觉基线
+npm run check:mobilesnap          # 9 态视觉基线
 ```
 
 真机重点：图片/附件、V1 同步、编辑保存、键盘安全区、长文档大纲、剪贴板。

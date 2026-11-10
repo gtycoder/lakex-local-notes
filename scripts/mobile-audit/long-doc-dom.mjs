@@ -406,7 +406,7 @@ const PAGE_ENVIRONMENT = [
 const PAGE_READY = [
   "(function () {",
   "  return JSON.stringify({",
-  "    ready: document.readyState === 'complete' && Boolean(window.lakeNative) && Boolean(document.querySelector('.mobile-htab') || document.querySelector('.mobile-workspace'))",
+  "    ready: document.readyState === 'complete' && Boolean(window.lakeNative) && Boolean(document.querySelector('.mb-home-dock__item') || document.querySelector('.mobile-workspace'))",
   "  });",
   "})()",
 ].join("\n");
@@ -847,12 +847,12 @@ async function main(opts) {
   // 回首页（reload 后本来就在首页；--no-reload 时兜底点返回）
   for (let attempt = 0; attempt < 6; attempt += 1) {
     const inWorkspace = await exists(".mobile-workspace");
-    if (!inWorkspace && (await exists(".mobile-htab"))) break;
+    if (!inWorkspace && (await exists(".mb-home-dock__item"))) break;
     if (!(await clickSelector('.toolbar__button[aria-label="返回"]', 900))) {
-      throw new Error("回不到首页：没有返回按钮也没有 .mobile-htab（--no-reload 时请先手动回首页）");
+      throw new Error("回不到首页：没有返回按钮也没有 .mb-home-dock__item（--no-reload 时请先手动回首页）");
     }
   }
-  if (!(await exists(".mobile-htab"))) throw new Error("仍在工作区（回不到首页）");
+  if (!(await exists(".mb-home-dock__item"))) throw new Error("仍在工作区（回不到首页）");
 
   log("准备文档：" + opts.title);
   const prepared = await evalJson(pagePrepare(opts.title));
@@ -950,7 +950,7 @@ async function main(opts) {
     // keep-alive 下小记/知识库两页都在 DOM：只判「存在」会误判成已在知识库（点不到 offscreen 的 .nb-row）。
     // 261029 实测修复：改为等「可见入口」，必要时点顶部页签再等可见。
     if (!(await pointOf(".nb-row, .nb-shelf-card"))) {
-      await clickSelector(".mobile-htab:nth-of-type(2)", 1300);
+      await clickSelector(".mb-home-dock__item:nth-of-type(2)", 1300);   // Dock 第 2 格 = 知识库（HOME_TABS：小记/知识库/日记/AI/标签）
       for (let i = 0; i < 10 && !(await pointOf(".nb-row, .nb-shelf-card")); i += 1) await sleep(200);
     }
     let entered = false;

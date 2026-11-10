@@ -5,7 +5,7 @@
 //   浏览器预览**跑不起来**（移动端启动依赖 Capacitor 原生 SQLite）⇒ 必须模拟器。
 // 基线只存"每态元素数 + 全态合并哈希"（几 KB，可入 git）；详细快照留在 .css-audit/。
 // 去抖：首次比对有差异时自动重跑一遍，只有两轮都差异才判失败（对齐桌面版）。
-// 261030：取快照/折叠/比对逻辑抽到 snap-gate.mjs（与多维表专项快照共用），本文件只留 6 态配置。
+// 261030：取快照/折叠/比对逻辑抽到 snap-gate.mjs（与多维表专项快照共用），本文件只留 9 态配置。
 import { runSnapGate } from "./snap-gate.mjs";
 
 await runSnapGate({
@@ -15,6 +15,6 @@ await runSnapGate({
   tagDefault: "mob-after",
   label: "mgate",
   passStates: true,
-  // 已知不稳定态（显式点名、不静默）：目前为空 —— 6 态在两轮独立运行中 0 差异。
+  // 已知不稳定态（显式点名、不静默）：目前为空 —— 9 态在两轮独立运行中 0 差异。
   unstable: [],
 });

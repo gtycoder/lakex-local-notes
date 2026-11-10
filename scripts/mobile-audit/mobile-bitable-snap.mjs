@@ -87,7 +87,7 @@ const cleanup = async (page) => page.evaluate(`(async () => {
 
 /** 每次从冷启动首页进：知识库 → 第一张笔记本卡 → 文档树 → 夹具文档行。 */
 const openFixture = async (page) => {
-  await clickText(page, ".mobile-htab", "知识库");
+  await clickText(page, ".mb-home-dock__item", "知识库");
   if (!(await tapSel(page, ".nb-shelf-card", 2600)) && !(await tapSel(page, ".nb-row", 2600))) {
     throw new Error("bitable-snap: 首页没有笔记本入口");
   }

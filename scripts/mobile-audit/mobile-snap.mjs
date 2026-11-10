@@ -28,17 +28,17 @@ export const STATES = [
   // 现在各自到达不同屏，且到不了就抛错 —— 装置宁可红，也不要静默地少测 3 个屏。
   // 261014：默认 tab 改成「小记」⇒ 这两个知识库态必须**自己切回知识库**（此前靠默认 tab 恰好是知识库）。
   { name: "home-library", view: "shelf", nav: async (page) => {
-    await clickText(page, ".mobile-htab", "知识库");
+    await clickText(page, ".mb-home-dock__item", "知识库");
     await expectOn(page, "!!document.querySelector('.nb-shelf')", "知识库 · 书架视图");
   } },
-  { name: "home-quicknotes", nav: async (page) => { await clickText(page, ".mobile-htab", "小记"); await expectOn(page, "(function(){var e=document.querySelector('.mobile-htab.active');return !!e && e.textContent.indexOf('小记')>=0;})()", "首页 · 小记 tab"); } },
+  { name: "home-quicknotes", nav: async (page) => { await clickText(page, ".mb-home-dock__item", "小记"); await expectOn(page, "(function(){var e=document.querySelector('.mb-home-dock__item.is-active');return !!e && e.textContent.indexOf('小记')>=0;})()", "首页 · 小记 tab"); } },
   { name: "home-library-list", view: "shelf", nav: async (page) => {
-    await clickText(page, ".mobile-htab", "知识库");
+    await clickText(page, ".mb-home-dock__item", "知识库");
     if (!(await tapByLabel(page, ".toolbar__button", "切换到列表", 800))) throw new Error("home-library-list: 顶栏右上角没有「切换到列表」按钮");
     await expectOn(page, "!!document.querySelector('.nb-list')", "知识库 · 列表视图");
   } },
   { name: "home-doc", view: "shelf", nav: async (page) => {
-    await clickText(page, ".mobile-htab", "知识库");   // 261014：默认 tab = 小记 ⇒ 知识库卡片要自己切过去
+    await clickText(page, ".mb-home-dock__item", "知识库");   // 261014：默认 tab = 小记 ⇒ 知识库卡片要自己切过去
 
     // 261013：「最近文档」卡片这条路在开发库上不可用 —— 实测 6 张全是 parent_id 为空的探针文档，
     // 点开只弹「未找到该文档所属笔记本」（HANDOFF §0 记过这批脏数据）。改走走查装置里已验证的路径：

@@ -28,7 +28,7 @@ const PROBE = '(function () {' +
   ' var inScroll = function (el) { var n = el.parentElement; for (var d = 0; d < 8 && n; d++) { var oy = getComputedStyle(n).overflowY; if (oy === "auto" || oy === "scroll") return true; n = n.parentElement; } return false; };' +
   ' var hasEll = function (el) { var n = el.parentElement; for (var d = 0; d < 4 && n; d++) { if (getComputedStyle(n).textOverflow === "ellipsis") return true; n = n.parentElement; } return false; };' +
   ' var vw = innerWidth, vh = innerHeight;' +
-  ' document.querySelectorAll("button,a[href],[role=button],input,select,textarea,[tabindex],.doc-card,.mobile-htab").forEach(function (el) {' +
+  ' document.querySelectorAll("button,a[href],[role=button],input,select,textarea,[tabindex],.doc-card,.mb-home-dock__item,.mb-home-fab").forEach(function (el) {' +
   '   if (!vis(el)) return; var r = el.getBoundingClientRect();' +
   // ⚠️ 261013 修：旧实现把 inScroll(el) 与 escape 一起做**前置 return**，于是「位于任何可滚动祖先内」的元素
   //    被**全部跳过** —— 列表行 / 目录树行 / 卡片（首页主体全在 .mobile-scroll 里）从来看不见。
@@ -63,7 +63,7 @@ const PROBE = '(function () {' +
   ' });' +
   ' document.querySelectorAll("body *").forEach(function (el) { var cs = getComputedStyle(el); if (cs.position !== "fixed" || !vis(el)) return; var r = el.getBoundingClientRect(); if (r.height < 24) return; out.fixedBars.push({ cls: String(el.className).slice(0, 40), rect: [Math.round(r.x), Math.round(r.y), Math.round(r.width), Math.round(r.height)], bottom: Math.round(vh - r.bottom) }); });' +
   ' out.fixedBars = out.fixedBars.slice(0, 6);' +
-  ' out.tabHit = [].slice.call(document.querySelectorAll(".mobile-htab")).map(function (e) { var p = e.parentElement; var r = e.getBoundingClientRect(); var pr = p ? p.getBoundingClientRect() : null; return { text: (e.textContent || "").trim(), self: [Math.round(r.width), Math.round(r.height)], parent: pr ? [Math.round(pr.width), Math.round(pr.height)] : null, parentCls: p ? String(p.className).slice(0, 30) : null }; });' +
+  ' out.tabHit = [].slice.call(document.querySelectorAll(".mb-home-dock__item")).map(function (e) { var p = e.parentElement; var r = e.getBoundingClientRect(); var pr = p ? p.getBoundingClientRect() : null; return { text: (e.textContent || "").trim(), self: [Math.round(r.width), Math.round(r.height)], parent: pr ? [Math.round(pr.width), Math.round(pr.height)] : null, parentCls: p ? String(p.className).slice(0, 30) : null }; });' +
   ' out.pageOverflowX = Math.max(0, document.documentElement.scrollWidth - vw);' +
   ' return out; })()';
 
@@ -83,7 +83,7 @@ const nthRow = (n) => '(function () { var rows = [].slice.call(document.querySel
 async function atHome() {
   // 261014：**小记写作卡开着也不算"在首页"** —— 顶栏 tab 仍在，若不排除，goHome() 会直接返回、
   // 后面的 openNotebook() 就找不到笔记本入口（quicknote-editor 这一屏会留下写作卡）。
-  return await pageRef.evaluate('(function () { return Boolean(document.querySelector(".mobile-htab")) && !document.querySelector(".mobile-qn-composer") && !document.querySelector(".mobile-settings-mask") && !document.querySelector(".mobile-settings-page") && !document.querySelector(".mobile-workspace"); })()');
+  return await pageRef.evaluate('(function () { return Boolean(document.querySelector(".mb-home-dock__item")) && !document.querySelector(".mobile-qn-composer") && !document.querySelector(".mobile-settings-mask") && !document.querySelector(".mobile-settings-page") && !document.querySelector(".mobile-workspace"); })()');
 }
 async function goHome() {
   for (var i = 0; i < 8; i++) {
@@ -122,7 +122,7 @@ async function openNotebook() {
   // 261029：keep-alive 下小记/知识库两页都在 DOM ⇒ 只判「存在」会点到 offscreen 的 .nb-row（点击无效）。
   // 改为等「可见入口」：不可见就点知识库 tab，再等它真正进视口。
   const visibleNb = async () => pageRef.evaluate('(function(){ var els=[].slice.call(document.querySelectorAll(".nb-row,.nb-shelf-card")); for (var i=0;i<els.length;i++){ var r=els[i].getBoundingClientRect(); if (r.width>0&&r.height>0&&r.top>=0&&r.bottom<=innerHeight&&r.left>=0&&r.right<=innerWidth) return true; } return false; })()');
-  if (!(await visibleNb())) { await tapExpr(centerByText(".mobile-htab", "知识库"), "知识库 tab", 1300); }
+  if (!(await visibleNb())) { await tapExpr(centerByText(".mb-home-dock__item", "知识库"), "知识库 tab", 1300); }
   // 首页滚动位置会保留；入口在折叠线以下时先滚到可见区，不能把它当成没有笔记本。
   await pageRef.evaluate('(function(){var els=[].slice.call(document.querySelectorAll(".nb-row,.nb-shelf-card"));var e=els.find(function(e){var r=e.getBoundingClientRect();return r.width>0&&r.left>=0&&r.right<=innerWidth;});if(e)e.scrollIntoView({block:"center",inline:"nearest"});})()');
   for (var i = 0; i < 10 && !(await visibleNb()); i += 1) await sleep(200);
@@ -168,11 +168,11 @@ export default async function run(ctx) {
   await sleep(800);
   const screens = [];
   const add = (name, fn) => screens.push([name, fn]);
-  add("home-library", async () => { await goHome(); await tapExpr(centerByText(".mobile-htab", "知识库"), "知识库", 1100); });
-  add("home-quicknotes", async () => { await tapExpr(centerByText(".mobile-htab", "小记"), "小记", 1400); });
+  add("home-library", async () => { await goHome(); await tapExpr(centerByText(".mb-home-dock__item", "知识库"), "知识库", 1100); });
+  add("home-quicknotes", async () => { await tapExpr(centerByText(".mb-home-dock__item", "小记"), "小记", 1400); });
   add("home-library-shelf", async () => {
     await goHome();
-    await tapExpr(centerByText(".mobile-htab", "知识库"), "知识库 tab", 1200);
+    await tapExpr(centerByText(".mb-home-dock__item", "知识库"), "知识库 tab", 1200);
     const t = await pageRef.evaluate('(function () { var els = [].slice.call(document.querySelectorAll(".toolbar__button")).filter(function (e) { var a = (e.getAttribute("aria-label") || "") + e.title; return /书架|列表/.test(a) && e.getBoundingClientRect().width > 0; }); if (!els.length) throw new Error("no view toggle"); var r = els[0].getBoundingClientRect(); return [Math.round(r.x + r.width / 2), Math.round(r.y + r.height / 2)]; })()');
     await pageRef.click(t[0], t[1]); await sleep(1400);
   });
@@ -180,11 +180,11 @@ export default async function run(ctx) {
   for (var di = 0; di < 5; di++) { (function (n) { add("doc-" + n, async () => { await goHome(); await openDoc(n); }); })(di); }
   add("quicknote-editor", async () => {
     await goHome();
-    await tapExpr(centerByText(".mobile-htab", "小记"), "小记 tab", 1500);
+    await tapExpr(centerByText(".mb-home-dock__item", "小记"), "小记 tab", 1500);
     // 261014：首页「＋」是**统一加号**（aria-label 从「新建小记」改为「新建」），且**短按 = 新建面板** ⇒
     // 装置跟着走单一来源：不再按 tab 找旧文案、也不再假设"点＋直接进写作卡"。
     // 这里走用户口径的「正常点击创建小记」：＋ → 空白小记 → 写作卡（长按上滑速记那条由设备探针单独验）。
-    await tapExpr(centerByText(".mobile-bottom-bar__item", String.fromCharCode(0x65b0, 0x5efa)), "新建", 1200);
+    await tapExpr(centerByText(".mb-home-fab", String.fromCharCode(0x65b0, 0x5efa)), "新建", 1200);
     await tapExpr(centerByText(".mb-create__tile", "空白小记"), "空白小记", 2600);
   });
   add("doc-outline", async () => {

@@ -115,7 +115,7 @@ components:
 
 ### 0.5 落地顺序与验收
 
-1. theme 令牌 → 2. kit/浮层 → 3. 三屏（首页/文档/设置）→ 4. 交互（滚动/转场）→ 5. 门禁 + 真机截图 → 6. 回写本文与 HANDOFF、重烤快照基线（6 态 + 23 屏）。
+1. theme 令牌 → 2. kit/浮层 → 3. 三屏（首页/文档/设置）→ 4. 交互（滚动/转场）→ 5. 门禁 + 真机截图 → 6. 回写本文与 HANDOFF、重烤快照基线（9 态 + 23 屏）。
 一次性完成后再动其它屏（表格/多维表/画板/手写板只跟随令牌，不单独改版）。
 ## Overview
 
@@ -192,7 +192,7 @@ Pad 设置根菜单仍为抽屉，子页恢复全屏（440px 规则排除 `--ful
 | 维度 | 档位 |
 | --- | --- |
 | 顶栏 | **44**（261013 A 批：48 → 44，对齐语雀标题条） |
-| 底部胶囊 | 高 **56** / 圆角 **28**（= 高/2）/ 宽上限：**首页（3 项）192＝4 槽**、工作区（4 项）288＝6 槽（**不再由高度推导**，见 `--mobile-bottom-bar-slot` 与 `.mobile-bottom-bar--home`；261014 设备实测首页 192×56、每项 64px） |
+| 底部胶囊 | 高 **56** / 圆角 **28**（= 高/2）/ 宽上限：工作区（4 项）288＝6 槽（**不再由高度推导**，见 `--mobile-bottom-bar-slot`）。**261110 用户点单：首页改固定五格 Dock + 中央悬浮＋**，首页胶囊用法与 `.mobile-bottom-bar--home`（4 槽/192px）已删，胶囊只剩工作区/表格阅读态 |
 | 触达 | 主 **48** / 常规 **44** / 紧凑 **36**（44 是触屏最小点按目标） |
 | 列表行 | 单行 **44** / 两行 **56**；设置页行 **48** |
 | 行高档收敛（261013 A） | 只用 **44 / 48 / 56** —— 原先并存的 40 与 52 已消除 |
@@ -324,7 +324,7 @@ Toast        .mb-toast-host > .mb-toast[--error] > (.mb-toast__text, .mb-toast__
 **空态 = `mb-empty`（+ `--inset` 变体；261013 A 批把 `.mobile-empty` / `.mb-set-empty` / `.mb-sheet__empty` 三套收敛成一件）** ·
 **文内输入表情 = `mb-emoji-panel`(`--fill`)/`cats`/`cat`(`--action`)/`body`/`grid`/`cell`/`empty`（微信样式：顶部分类条 + 浅灰底大格子；
 分类条末尾动作键是「返回」，退出表情选择、回「＋」面板。目录/知识库自定义图标不再使用此组件，见独立节点选择器）** ·
-**首页文字 tab = `.mobile-htab`（选中加粗 + `--lake-text-1`）** ·
+**首页 = 固定五格 Dock（`.mb-home-dock__item.is-active` = 主题色 + label 加粗）+ 中央 `.mb-home-fab`（261110 起；`.mobile-htab` 现只被 NodeIconPicker 的 Sheet 页签使用）** ·
 **冷启动骨架 = `.mb-skel`（--icon/--tab/--group/--row/--baritem；结构与首页同构、尺寸同源，填充不跳动；
 `prefers-reduced-motion` 下关掉呼吸）** ·
 `mb-switch` · `mb-kbd` · **勾选原语**（`.mobile-app input[type=checkbox|radio]`，排除内核待办框）。
@@ -372,7 +372,7 @@ Toast        .mb-toast-host > .mb-toast[--error] > (.mb-toast__text, .mb-toast__
 
 ```bash
 npm run check:mobileui     # 独立性 + 层护栏 + 内核样式护栏 + ui-metrics，一条命令
-npm run check:mobilesnap   # 设备级：6 态整页计算值快照（0 差异）
+npm run check:mobilesnap   # 设备级：9 态整页计算值快照（0 差异）
 node scripts/css-audit/drive.mjs 9335 scripts/css-audit/mobile-walkthrough.mjs   # 设备级：23 屏截图 + 五类探针
 ```
 

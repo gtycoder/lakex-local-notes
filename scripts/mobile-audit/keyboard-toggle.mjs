@@ -36,10 +36,10 @@ const hasDock = () => page.evaluate('Boolean([].slice.call(document.querySelecto
 export default async function run(ctx) {
   page = ctx.page;
   for (let i = 0; i < 30; i++) { if (await page.evaluate("Boolean(window.lakeNative)")) break; await sleep(1000); }
-  for (let i = 0; i < 20; i++) { if (await page.evaluate('Boolean(document.querySelector(".mobile-htab"))')) break; await sleep(1000); }
+  for (let i = 0; i < 20; i++) { if (await page.evaluate('Boolean(document.querySelector(".mb-home-dock__item"))')) break; await sleep(1000); }
   if (!(await hasDock())) {
-    await click('button[aria-label="新建"]'); await sleep(1500);
-    await click(".mb-create-item, .mb-create button, button", "空白小记"); await sleep(3000);
+    await click(".mb-home-fab"); await sleep(1500);
+    await click(".mb-create__tile", "空白小记"); await sleep(3000);
   }
   for (let i = 0; i < 10; i++) { if (await hasDock()) break; await sleep(1000); }
   if (!(await hasDock())) { console.log("FAILED: 进不了编辑态（dock 没挂上）"); process.exit(2); }

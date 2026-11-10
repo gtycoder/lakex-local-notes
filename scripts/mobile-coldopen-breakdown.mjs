@@ -69,11 +69,11 @@ const resourceTimings = () => ev(`JSON.stringify(performance.getEntriesByType("r
 const resetPage = async () => {
   await send("Page.enable");
   await send("Page.reload", { ignoreCache: false });
-  await waitFor(`Boolean(document.querySelector(".mobile-htab"))`, 20000);
+  await waitFor(`Boolean(document.querySelector(".mb-home-dock__item"))`, 20000);
   await sleep(400);
 };
 
-const goHome = async () => { for (let i = 0; i < 6; i += 1) { if (await ev(`Boolean(document.querySelector(".mobile-htab")) && !document.querySelector(".mobile-workspace") && !document.querySelector("[data-mobile-qn-flash]")`)) return true; if (await tapLabel("取消")) { await sleep(600); continue; } if (await tapLabel("返回")) { await sleep(800); continue; } break; } return await ev(`Boolean(document.querySelector(".mobile-htab"))`); };
+const goHome = async () => { for (let i = 0; i < 6; i += 1) { if (await ev(`Boolean(document.querySelector(".mb-home-dock__item")) && !document.querySelector(".mobile-workspace") && !document.querySelector("[data-mobile-qn-flash]")`)) return true; if (await tapLabel("取消")) { await sleep(600); continue; } if (await tapLabel("返回")) { await sleep(800); continue; } break; } return await ev(`Boolean(document.querySelector(".mb-home-dock__item"))`); };
 
 const results = {};
 

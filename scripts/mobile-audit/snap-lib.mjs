@@ -1,10 +1,10 @@
-// 移动端快照装置的共享导航/静默工具（261030 抽出，供 6 态整页快照与多维表专项快照共用）。
+// 移动端快照装置的共享导航/静默工具（261030 抽出，供整页快照（9 态）与多维表专项快照共用）。
 // 口径与阈值原样来自 scripts/mobile-audit/mobile-snap.mjs（抽出时不改任何数字/等待时长）。
 export const waitHome = async (page, ms = 20000) => {
   const t0 = Date.now();
   while (Date.now() - t0 < ms) {
     let ok = false;
-    try { ok = await page.evaluate("!!document.querySelector('.mobile-htab')"); } catch (e) { ok = false; }
+    try { ok = await page.evaluate("!!document.querySelector('.mb-home-dock__item')"); } catch (e) { ok = false; }
     if (ok) return true;
     await page.sleep(250);
   }
@@ -54,7 +54,7 @@ export const clearTabs = async (page) =>
 export const clearPadPanels = async (page) =>
   page.evaluate("(function(){try{localStorage.removeItem('lakex-local-notes-mobile.pad-panels');return true;}catch(e){return false;}})()");
 
-/** 每态都从"冷启动首页"开始：清标签 + 钉住视图 → reload → 等 .mobile-htab → 导航 → 等静默 */
+/** 每态都从"冷启动首页"开始：清标签 + 钉住视图 → reload → 等 .mb-home-dock（261110 起首页 = 五格 Dock）→ 导航 → 等静默 */
 export const reload = async (page, view) => {
   await clearTabs(page);
   await clearPadPanels(page);

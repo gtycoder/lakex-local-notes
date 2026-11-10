@@ -10,6 +10,16 @@
 
 > **顺序标注**：261109 各批次里写的「日记 ⌘4 / AI 写作 ⌘3」是**当时**的顺序；**261110 起改为 日记 ⌘3 / AI 写作 ⌘4**（另有标签 ⌘5）。旧批次不再改，以本行 + §1 为准。
 
+### 261110 · 移动端收口三件套：死 CSS 清理 / 装置迁移 / 三套快照基线重烤
+- **死 CSS 清理**（`f0f5d6d3`）：`mobile.css` **1737 → 1672 声明**（dupGroups 10 → 8）、`pad/pad.css` 158 → 157，`mobileLayers` 基线按实测收紧。删的全是**零引用**规则：旧胶囊首页（`.mobile-block-quick` 整块 15 声明 / `.mobile-bottom-bar--home` / 两者 `is-revealed`·`is-armed` 态）、首页 `.mobile-home-tabs`（顶栏 + 窄屏 + 主体三条）、`.mobile-topbar-collapsed-title`、思源遗留（`.mobile-qcard` / `.mobile-drawer*` / `.mobile-fab` / `.mobile-sortbar` / `.mobile-chevron` / `.mobile-nb-row` / `.mobile-quick-row` / `.bottom-bar-*` / `.poc-error` / `.mobile-settings-form` 等）+ 深色档 `.secret-field` 成员。判据 = 全仓引用扫描（含 vendor bundle / scripts）+ `audit-dead-css.mjs` 复核；**保留** `.mobile-htab`（NodeIconPicker 的 Sheet 页签在用）与 `.toolbar__icon-deactivate`（内核命名空间，不能按引用数删）。
+- **顺带修一个真 bug**：冷启动路由骨架 JSX 挂的是 `mb-route-skeleton__title/__line`，CSS 写的是 `.mobile-route-skeleton__*` ⇒ 这两条规则**从未命中**（骨架格尺寸全靠 `.mb-skel` 兜底）。CSS 改名为 `.mb-route-skeleton__*` 对齐。
+- **装置迁移**（首页 `.mobile-htab` 行已被 Dock 取代，设备实测 `htab:0 / dock:5 / fab:1`）：11 个脚本选择器全部迁移 —— `snap-lib` / `mobile-snap` / `mobile-bitable-snap` / `window-sweep` / `mobile-walkthrough`（首页「新建」改 `.mb-home-fab`）/ `edit-surface-invariants` / `keyboard-toggle` / `long-doc-dom` / `boot-timeline` / `mobile-coldopen-breakdown` / `mobile-kernel-perf`。⚠️ **判「首页就绪」必须用 `.mb-home-dock__item`，不要用裸 `.mb-home-dock`**：冷启动骨架里也有空 Dock（只有 `.mb-skel`），裸容器会让 waitHome 假就绪。`window-sweep.mjs` 的 `LIB` 原本写死指向 master checkout 的绝对路径（改本 worktree 的 snap-lib 对它无效），已改相对 import。
+- **手机 9 态重烤**（`lake_gate` + `pm clear` + `gate-fixture` + 合并后新包，CDP 9336）：逐态 delta **恰好 +17**（Dock nav 1 + 5 格×3 + FAB 1，可解释）⇒ 先暖态采样（`dock5-warm2`）确认 9/9 态两轮一致，再 `--from ... --write-baseline`，**连跑两轮 0 差异**。新基线：home-library **1909** / home-quicknotes **1909** / home-library-list **1914** / home-doc **2085** / settings **2042** / settings-appearance **1943** / settings-s3 **2035** / settings-backup **1961** / settings-about **1963**。
+- **平板 9 态补烤**（`lake_tab`，`--viewport 1280x800`）：旧基线停在 11-08（`06b30676`）且只有 **6 态**（脚本已 9 态 ⇒ 缺 settings-s3/backup/about，门禁本来就必红）。本轮补齐：home 系 **+71**、settings **+82**（= 首页外壳与设置页自 11-08 起的累积改动，与手机侧「+17 本批 + 上一档 54」同源）；新基线 home-doc **2106**、其余同手机 9 态数值，**连跑两轮 0 差异**。
+- **多维表 3 态重烤**：旧基线同样停在 11-08（`51a1db58`）⇒ 3/3 态**均匀 +71**、两轮一致；本轮没动 bitable 视图 DOM/样式，delta 全部来自首页外壳 ⇒ 重烤（form **2194** / table **2160** / card **2172**）。
+- **23 屏走查**：冷启动后单独跑，**23/23 ok**（无 escape / clip 失败；`smallTap` 计数是既有可观测量，未恶化）。
+- **文档口径**：`MOBILE-OPS` / `MOBILE-DESIGN` / `MOBILE-TECH-STACK` / `mobile-audit/README` / `check-mobile-snap` 等处的「6 态」统一改「9 态」，首页 DOM 速查改为 Dock + FAB。
+- **剩余**：桌面 `check:stylesnap` 42 态仍不跑（移动样式层独立 + 本机无合成夹具缓存，见 MOBILE-OPS §10）；`audit-dead-css` 桌面侧还剩 2 个候选（`.node-icon-picker__tab` / `.diary-split-handle`）留给桌面侧处理；移动「知识库」vs 桌面「文档」命名未统一（待用户定）。
 ### 261110 · 按钮原语全站审计 + 迁移（第一批）
 - **审计口径**：全仓桌面 `<button>` **682 个**（排除 mobile）；按「类名是否来自 `ln-*`/原语」分类：迁移前 **479 原语 / 268 非原语**。
 - **本轮迁移**：① 菜单项统一补 `.ln-menu__item`（context-menu / card / tab / tree-selection / export / ink-export / outline 等，视觉不变——legacy 选择器本就与它同一规则）；② AI 写作：历史行主区改用新原语 **`.ln-row__main`**（kit 新增，收编行内可点主区各写一份的 button 复位）、思考块折叠行 / 空态建议 chip / 工具 / 发送 / 停止全部落 `ln-btn--compact`；③ 小记空间：工具钮/新建/文字动作/清空搜索落 `ln-iconbtn` / `ln-btn--ghost--compact`，删掉 quick-notes.css 里重复的 30px/悬停/下划线视觉。
@@ -118,7 +128,7 @@
 - **冷启动骨架**同步成同构（标题 + 5 格 + ＋ 占位），数据到达不跳。
 - **门禁**：tsc 0；`src/mobile` **292 文件 / 1465 例通过**；`check:mobileui` 通过；Android `--sync --install` 设备验证（`lake_mobile` / emulator-5556）。
 - **设备实测**：Dock 点按切页（分页 scrollLeft 对齐）、横滑切页、FAB 短按开新建面板、长按浮出「继续上滑记小记」、云同步按钮在 小记/知识库/AI 均可见、AI 分页内嵌渲染。
-- **遗留**：首页构成变了 ⇒ 快照基线（9 态/23 屏）**未重烤**，发版前必须；旧胶囊首页规则（`.mobile-bottom-bar--home` 首页用法 / `.mobile-block-quick` / 首页 `.mobile-htab` 行）暂留（dead rules，mobileLayers 基线暂含）；移动「知识库」vs 桌面「文档」命名未统一（待用户定）。
+- **遗留（261110 收口批已结）**：~~快照基线未重烤~~ → 手机/平板 9 态 + 多维表 3 态已重烤并两轮 0 差异、走查 23/23 ok（见上一条收口批）；~~旧胶囊首页死规则暂留~~ → 已删并收紧 mobileLayers 基线；移动「知识库」vs 桌面「文档」命名仍未统一（待用户定）。
 
 ### 261109 · 日记六改（独立 tab / 一天多篇 / 选日期 / 标题锁 / 选中态 / 转小记）
 - **独立 tab**：`OpenTab.space`（`desktopTypes`/`MultiTabEditor.TabInfo`/`desktopDerivedState` 三处透传）；App 按空间分流 `libraryTabs` / `diaryTabs`，日记空间顶栏渲染自己的 tab 条（`aria-label="打开的日记"`），切空间时活动标签回落到该空间。

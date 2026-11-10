@@ -6,7 +6,7 @@
  * 计时用页内 performance.now()（MutationObserver 起止），不经 CDP 往返。
  *
  * 导航复用 scripts/css-audit/mobile-walkthrough.mjs 已验的配方：
- *   知识库 tab(.mobile-htab) → .nb-row → 抽屉打开时行选择器 = `.side-panel--left.on .ln-row` / `.mobile-workspace .ln-row`；
+ *   Dock 知识库格(.mb-home-dock__item:nth-of-type(2)) → .nb-row → 抽屉打开时行选择器 = `.side-panel--left.on .ln-row` / `.mobile-workspace .ln-row`；
  *   底栏「文档树」按 **aria-label/title** 找（.mobile-bottom-bar__item，textContent 不可靠）。
  *   ⚠️ 未打开的抽屉里也有 .ln-row（keep-alive 隐藏视图）⇒ **必须限定 `.on`**，否则点到不可见元素（HANDOFF §8 坑）。
  *
@@ -43,7 +43,7 @@ async function ensureDocTree() {
   const inWs = await ev('Boolean(document.querySelector(".mobile-workspace"))');
   if (!inWs) {
     if (!(await ev('Boolean(document.querySelector(".nb-row, .nb-shelf-card"))'))) {
-      await tapCenter('.mobile-htab:nth-of-type(2)', 1200);
+      await tapCenter('.mb-home-dock__item:nth-of-type(2)', 1200);
     }
     await tapCenter(".nb-row, .nb-shelf-card", 1600);
   }
@@ -72,11 +72,11 @@ const arm = `(()=>{
  * 与热切换（本文件的默认模式）分开报告：热切换走 keep-alive 复用宿主，量到的不是挂载成本。
  */
 if (argv.includes("--cold")) {
-  const atHome = await ev(`Boolean(document.querySelector(".mobile-htab")) && !document.querySelector(".mobile-workspace")`);
+  const atHome = await ev(`Boolean(document.querySelector(".mb-home-dock__item")) && !document.querySelector(".mobile-workspace")`);
   if (!atHome) { console.error("--cold 需要先在首页（返回后再跑）"); ws.close(); process.exit(4); }
   await ev(arm);
   const t0 = Date.now();
-  await tapCenter('.mobile-htab:nth-of-type(2)', 1200);
+  await tapCenter('.mb-home-dock__item:nth-of-type(2)', 1200);
   await tapCenter(".nb-row, .nb-shelf-card", 1600);
   let coldMs = null;
   while (Date.now() - t0 < 30000) { const v = await ev("window.__km && window.__km.done"); if (typeof v === "number") { coldMs = v; break; } await sleep(80); }

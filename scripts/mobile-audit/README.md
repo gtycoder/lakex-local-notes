@@ -53,7 +53,7 @@ node scripts/mobile-audit/check-mobile-snap.mjs --port 9336 --tag gate-warm     
 node scripts/mobile-audit/check-mobile-snap.mjs --port 9336 --from .css-audit/snap/gate-warm<N>.json --write-baseline
 node scripts/mobile-audit/check-mobile-snap.mjs --port 9336                       # 连跑两次应 0 差异
 ```
-⚠️ **基线绑定"专用实例 + 该夹具"**：拿它去比"用户的真实数据"必然 6/6 态红，那是预期，不是回归。
+⚠️ **基线绑定"专用实例 + 该夹具"**：拿它去比"用户的真实数据"必然 9/9 态红，那是预期，不是回归。
 ⚠️ **261016 实测到的确切成因**：`home-doc` 的指纹 row key 里带**文档节点 id**（形如 `ne-p$<uuid>-body#0`）⇒ 每次 `pm clear` + 重灌夹具都会生成**新 id**，
 即使元素数完全相同，指纹也会变（本次实测 `1880 → 1880` 但指纹不同，逐行对拍只差这一条）⇒ **重灌夹具后必须重烤**；只盯元素数会误判成"没变"。
 
@@ -76,7 +76,7 @@ node scripts/mobile-audit/check-mobile-snap.mjs --port 9336                     
 - **每态前清平板「目录/大纲固定」偏好**（`lakex-local-notes-mobile.pad-panels`，`snap-lib.clearPadPanels`）：它是设备本地持久偏好，不清会把人为固定过的停靠布局带进快照。
 
 ```bash
-# 前置：专用实例 + 固定夹具（与 6 态同一份 gate-fixture）
+# 前置：专用实例 + 固定夹具（与整页快照同一份 gate-fixture）
 export ANDROID_SERIAL=emulator-5580
 adb shell pm clear com.lakexlocalnotes.android && adb shell am start -n com.lakexlocalnotes.android/.MainActivity && sleep 10
 bash scripts/emu-cdp.sh 9340
@@ -87,7 +87,7 @@ npm run check:tabletsnap -- --port 9340 --write-baseline
 npm run check:tabletsnap -- --port 9340
 ```
 
-实测（261102 十四批）：6 态 = home-library 1822 / home-quicknotes 1822 / home-library-list 1827 / **home-doc 1897**（胶囊回归 + 知识库加宽 + 画布高度；261103 胶囊下移 12px 后重烤，干净夹具下 1897 —— 上一版 1912 当时带着一篇测试表）/ settings 1912 / settings-appearance 1849，
+实测（261102 十四批，当时 6 态；261110 起扩到 9 态，最新数值见 HANDOFF）：6 态 = home-library 1822 / home-quicknotes 1822 / home-library-list 1827 / **home-doc 1897**（胶囊回归 + 知识库加宽 + 画布高度；261103 胶囊下移 12px 后重烤，干净夹具下 1897 —— 上一版 1912 当时带着一篇测试表）/ settings 1912 / settings-appearance 1849，
 连跑两轮 **0 差异**。⚠️ 与手机基线同理：**基线绑定"专用实例 + 夹具"**，换数据/换设备必红，那是预期。
 ⚠️ **烤基线前必须回到干净夹具**：平板 `home-doc` 会把 `home-doc` 的左栏树行数算进元素数（每多一篇文档 ≈ +8~17 元素）——
 261102 实测过一次「在已有测试文档（表格/多维表）的实例上烤基线」⇒ 之后干净夹具上必红。
@@ -104,10 +104,10 @@ npm run check:bitablesnap                     # 3 态：表单 / 内容·表格 
 node scripts/mobile-audit/check-bitable-snap.mjs --port 9336 --write-baseline   # 首次或有意改 UI 后重烤
 ```
 
-- 快照/折叠/比对逻辑与 6 态共用 `snap-gate.mjs`（261030 从 check-mobile-snap 抽出，口径不变）。
+- 快照/折叠/比对逻辑与整页快照共用 `snap-gate.mjs`（261030 从 check-mobile-snap 抽出，口径不变）。
 - 基线：`baseline/bitable-snap.json`；详细快照在 `.css-audit/snap/bitable-<tag>.json`。
 - 夹具每次用**新 noteId**（先删后建）⇒ 设备本地布局偏好天然从默认（表格）起步，三态顺序稳定；实测两轮 0 差异。
-- 共享装置的导航/静默工具在 `snap-lib.mjs`（`tapByText` 等），6 态脚本与它共用。
+- 共享装置的导航/静默工具在 `snap-lib.mjs`（`tapByText` 等），整页快照脚本与它共用。
 
 ## 编辑面不变量（261014 起，动 dock / 输入法 / 键盘适配时必跑）
 
@@ -135,7 +135,7 @@ node scripts/css-audit/drive.mjs 9335 scripts/mobile-audit/insert-panel-geometry
 **G4 零截断** · **G5 命中区 ≥44** · **G6 方块形态**（`flex-direction: column` + 居中 + 有圆角与底色 ⇒ 不是"图标左文字右"的行）。
 失败 exit 1 并逐条打印取样值。
 
-> ⚠️ **快照 6 态与走查 23 屏都不覆盖这个面板** —— 别拿"门禁绿了"代替它。
+> ⚠️ **整页快照（9 态）与走查 23 屏都不覆盖这个面板** —— 别拿"门禁绿了"代替它。
 >
 > ⚠️ **设备截图裁切必须算状态栏**：页面 CSS `y=0` ↔ 设备 **`y=128`**（本机 1080×2400 / 412×842，dpr 2.625）⇒
 > `ffmpeg crop` 的 y = `CSS_y × 2.625 + 128`。261015 实测：直接按 CSS 值裁会把面板最后一行切掉，**看起来像"产品裁切"，其实是裁切窗口短了 47px**（差点误判）。
@@ -208,7 +208,7 @@ curl -s http://127.0.0.1:9335/json/list         # 校验 type==page
 ## 实测设备事实（260923）
 - viewport **412×842**（dpr 2.625；设备 1080×2209）
 - `#root` → `div.mobile-app`（已过 booting）；`window.lakeNative` 存在
-- 首页：`.mobile-home` / `.mobile-home-tabs` / `.mobile-htab`（小记 · 知识库）/ `.home-section` / `.home-recent` /
+- 首页：`.mobile-home` / `.mb-home-dock` + `.mb-home-dock__item`（五格：小记 · 知识库 · 日记 · AI · 标签，选中 `is-active`）/ `.mb-home-fab`（中央悬浮＋）/ `.home-section` /
   `.doc-card`（最近文档）/ `.nb-shelf` / `.nb-shelf-card`（笔记本书架）/ `.mobile-bottom-bar__item` /
   `.toolbar__button`（设置 / 切换列表）
 - ⚠️ 模拟器沙盒里有**历史数据**（多笔记本/笔记）⇒ 快照状态必须**先钉死到确定入口**，不能依赖现场数据。

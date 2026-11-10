@@ -70,10 +70,10 @@ async function scenarioQuickNote() {
   const tapQ = async (sel, t, wait) => { const p = await page.evaluate(t ? QT(sel, t) : Q(sel)); if (p) await click(p[0], p[1]); await sleep(wait || 1500); };
   await page.evaluate("location.reload()");
   await sleep(7000);
-  for (let i = 0; i < 20; i++) { if (await page.evaluate('Boolean(document.querySelector(".mobile-htab"))')) break; await sleep(1000); }
-  await tapQ(".mobile-htab", "小记", 1800);
-  // 261014：首页「＋」的 aria-label 由「新建小记」改为「新建」（统一加号；短按开新建面板）——装置跟着改，别按旧文案找。
-  await tapQ(".mobile-bottom-bar__item", "新建", 3000);
+  for (let i = 0; i < 20; i++) { if (await page.evaluate('Boolean(document.querySelector(".mb-home-dock__item"))')) break; await sleep(1000); }
+  await tapQ(".mb-home-dock__item", "小记", 1800);
+  // 261014/261110：首页「＋」已由底栏项改为**中央悬浮** .mb-home-fab（aria-label「新建（长按上滑可速记）」，短按开新建面板）——装置跟着改，别按旧文案找。
+  await tapQ(".mb-home-fab", "新建", 3000);
   await sleep(800);
   await tapQ(".mb-create__tile", String.fromCharCode(0x7a7a, 0x767d, 0x5c0f, 0x8bb0), 2500);   // 「空白小记」→ 写作卡
   const ed = await page.evaluate('(function(){var e=[].slice.call(document.querySelectorAll(".ne-engine")).filter(function(x){return x.getBoundingClientRect().width>0;})[0];if(!e)return null;var r=e.getBoundingClientRect();return [Math.round(r.x+r.width/2),Math.round(r.y+40)];})()');
@@ -113,8 +113,8 @@ async function scenarioDocument() {
     const tapQ = async (sel, t, wait) => { const p = await page.evaluate(t ? QT(sel, t) : Q(sel)); if (p) await click(p[0], p[1]); await sleep(wait || 1500); };
     await page.evaluate("location.reload()");
     await sleep(7000);
-    for (let i = 0; i < 20; i++) { if (await page.evaluate('Boolean(document.querySelector(".mobile-htab"))')) break; await sleep(1000); }
-    await tapQ(".mobile-htab", "知识库", 1800);
+    for (let i = 0; i < 20; i++) { if (await page.evaluate('Boolean(document.querySelector(".mb-home-dock__item"))')) break; await sleep(1000); }
+    await tapQ(".mb-home-dock__item", "知识库", 1800);
     await tapQ(".nb-row, .nb-shelf-card", null, 2200);
     const opened = await page.evaluate('Boolean([].slice.call(document.querySelectorAll(".side-panel--left.on .mb-row, .side-panel--left.on .ln-row")).filter(function(e){return e.getBoundingClientRect().width>0;}).length)');
     if (!opened) await tapQ(".mobile-bottom-bar__item", "文档树", 1500);

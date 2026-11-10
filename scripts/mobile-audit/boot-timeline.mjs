@@ -9,7 +9,7 @@
  *   · navigation: TTFB / DCL / load
  *   · paint: first-paint / first-contentful-paint
  *   · longtask: 逐个长任务（含时长）——"谁在抢主线程"的直接证据
- *   · 里程碑：bar=骨架胶囊 / native=桥就绪(window.lakeNative) / home=真首页(.mobile-htab)
+ *   · 里程碑：bar=骨架胶囊 / native=桥就绪(window.lakeNative) / home=真首页(.mb-home-dock__item；别用容器 .mb-home-dock，冷启动骨架里也有它)
  *
  * 用法（先起 App + 转发 CDP；脚本会 addScriptToEvaluateOnNewDocument 后 reload 一次）：
  *   bash scripts/emu-cdp.sh 9336
@@ -54,7 +54,7 @@ const instrument = [
   "    try {",
   "      if (!window.__boot.bar && document.querySelector('.mobile-bottom-bar')) window.__boot.bar = Math.round(performance.now());",
   "      if (!window.__boot.native && window.lakeNative) window.__boot.native = Math.round(performance.now());",
-  "      if (!window.__boot.home && document.querySelector('.mobile-htab')) window.__boot.home = Math.round(performance.now());",
+  "      if (!window.__boot.home && document.querySelector('.mb-home-dock__item')) window.__boot.home = Math.round(performance.now());",
   "    } catch (e) {}",
   "  }, 20);",
   "  setTimeout(function () { clearInterval(iv); }, 20000);",

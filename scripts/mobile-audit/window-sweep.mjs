@@ -7,7 +7,7 @@
 // 用法（专用实例，CDP 已转发）：
 //   node scripts/css-audit/drive.mjs 9340 scripts/mobile-audit/window-sweep.mjs
 // 断言失败 exit 1；成功打印 JSON 摘要。
-const LIB = "file:///Users/admin/file/local-lake/lakex-local-notes/scripts/mobile-audit/snap-lib.mjs";
+const LIB = new URL("./snap-lib.mjs", import.meta.url).href; // 261110：原作写死指向 master checkout 的绝对路径，改完后会拿到旧 snap-lib
 
 // 与 src/mobile/pad/formFactor.ts 的 FORM_FACTOR_BREAKPOINTS 同源（改那边必须同步这里）。
 const BREAKPOINTS = { medium: 600, expanded: 800, expandedMinHeight: 560 };
@@ -49,7 +49,7 @@ export default async ({ page }) => {
   // 工作区活动页/标签数/滚动位置不得被重置。
   await setViewport(800, 1280);
   await reload(page, "shelf");
-  await clickText(page, ".mobile-htab", "知识库");
+  await clickText(page, ".mb-home-dock__item", "知识库");
   await sleep(600);
   if (!(await page.evaluate("Boolean(document.querySelector('.mobile-workspace'))"))) await tapSel(page, ".nb-shelf-card", 2600);
   await settle(page);
