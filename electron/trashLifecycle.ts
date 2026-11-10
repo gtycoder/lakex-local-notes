@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { DbLike } from "./dbLike.js";
+import { isNotebookAvailable, resolveDiaryOriginNotebookId } from "./trashDiaryOrigin.js";
 import { AppError } from "../src/core/storeErrors.js";
 import { isSafePathSegment } from "../src/core/storeUtils.js";
 import { sqlParameterBatches } from "../src/core/sqlParameterBatch.js";
@@ -150,7 +151,14 @@ export class TrashLifecycle {
       const parent = this.ctx.db.prepare(
         "SELECT id FROM tree_nodes WHERE id=? AND deleted_at IS NULL AND (parent_id IS NULL OR parent_id != ?)"
       ).get(parentId, this.ctx.trashNotebookId) as { id: string } | undefined;
-      if (!parent) parentId = this.ctx.resolveParentNotebook();
+      if (!parent) {
+        // 261110：原父已删/也在回收站时，**先看来源是不是日记本**（只认原始父链，不看标题）。
+        // 日记条目必须回日记空间；旧逻辑一律回落「默认笔记本」= 文档空间（用户现场担心的问题）。
+        const diaryNotebookId = resolveDiaryOriginNotebookId(this.ctx.db, parentId);
+        parentId = diaryNotebookId && isNotebookAvailable(this.ctx.db, diaryNotebookId)
+          ? diaryNotebookId
+          : this.ctx.resolveParentNotebook();
+      }
     }
     const now = nowIso();
     const tx = this.ctx.db.transaction(() => {

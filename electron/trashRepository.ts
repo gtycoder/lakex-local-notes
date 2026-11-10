@@ -13,6 +13,7 @@
 
 import type { DbLike } from "./dbLike.js";
 import type { TrashItem, TrashReminderItem } from "../src/core/trashPolicy.js";
+import { resolveDiaryOriginNotebookId } from "./trashDiaryOrigin.js";
 
 export type { TrashItem, TrashReminderItem };
 
@@ -28,6 +29,7 @@ interface TrashRow {
   updated_at: string;
   is_purged?: number;
   cloud_deleted?: number;
+  deleted_from_parent_id?: string | null;
 }
 
 /** 只读回收站查询（restore/purge 写操作在各端 store 实现）。 */
@@ -43,7 +45,7 @@ export class TrashRepository {
          UNION
          SELECT c.id FROM tree_nodes c JOIN trash_tree tt ON c.parent_id=tt.id AND c.deleted_at IS NULL
        )
-       SELECT t.id,t.title,t.node_type,t.note_file_id,t.parent_id,t.trashed_at,t.updated_at,t.is_purged,t.cloud_deleted
+       SELECT t.id,t.title,t.node_type,t.note_file_id,t.parent_id,t.trashed_at,t.updated_at,t.is_purged,t.cloud_deleted,t.deleted_from_parent_id
        FROM tree_nodes t JOIN trash_tree tt ON t.id=tt.id
        ORDER BY t.sort_order`
     ).all(this.trashNotebookId) as TrashRow[];
@@ -58,6 +60,10 @@ export class TrashRepository {
       hasFile: !!row.note_file_id,
       purged: row.is_purged === 1,
       cloudDeleted: row.cloud_deleted === 1,
+      // 261110：只为「文档」行算来源（分组/笔记本没有日记语义）；判据 = 原始父链命中日记本，不看标题。
+      ...(row.node_type === "note"
+        ? { fromDiary: resolveDiaryOriginNotebookId(this.db, row.deleted_from_parent_id ?? row.parent_id) !== null }
+        : {}),
     }));
   }
 

@@ -12,6 +12,9 @@ export interface TrashItem {
   /** v3：云端已彻底删除（远端索引缺失）、本机仅保留回收站副本 —— 只打标，不限制恢复。
    *  与 purged 独立：purged=抑制位，cloudDeleted=「云端已删除 · 仅本地」展示位。 */
   cloudDeleted?: boolean;
+  /** 来源是日记本（261110）：用于回收站「日记」徽标，以及**恢复回日记空间**的判据。
+   *  只按「原始父链命中 space=diary 的笔记本」判定，**不看标题**（标题像日期不等于日记）。 */
+  fromDiary?: boolean;
 }
 
 export interface TrashReminderItem {

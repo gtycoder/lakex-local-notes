@@ -119,6 +119,22 @@ export async function listTrashTree(d: MobileDb): Promise<MobileTrashTreeItem[]>
  * 261027 conformance 抓到：只 COALESCE(deleted_from_parent_id,parent_id) 会把文档挂到已删目录上 ⇒
  * 活跃文档父级悬空、树里不可见。没有活跃笔记本时懒建「未分类」（与 syncDbPort.defaultNotebookId 同口径）。
  */
+/** 261110：沿「原始父链」找到来源是否日记本（只认 space=diary 的笔记本，**不看标题**）。 */
+async function resolveDiaryOriginNotebook(d: MobileDb, start: string | null): Promise<string | null> {
+  let current = start;
+  const seen = new Set<string>();
+  while (current && !seen.has(current)) {
+    seen.add(current);
+    const row = await d.prepare(
+      "SELECT node_type, space, parent_id, deleted_from_parent_id FROM folders WHERE id=?",
+    ).get(current) as { node_type: string; space: string | null; parent_id: string | null; deleted_from_parent_id: string | null } | undefined;
+    if (!row) return null;
+    if (row.node_type === "notebook" && row.space === "diary") return current;
+    current = row.deleted_from_parent_id ?? row.parent_id;
+  }
+  return null;
+}
+
 async function resolveRestoreParent(
   d: MobileDb,
   preferred: string | null,
@@ -129,6 +145,12 @@ async function resolveRestoreParent(
     if (restoringFolderIds.has(preferred)) return preferred;
     const parent = await d.prepare("SELECT id FROM folders WHERE id=? AND trashed_at IS NULL").get(preferred) as { id?: string } | undefined;
     if (parent?.id) return preferred;
+  }
+  // 261110：原位置不可用时，**日记条目必须先回日记本**（否则会落进默认笔记本 = 文档空间）。
+  const diaryNotebookId = await resolveDiaryOriginNotebook(d, preferred);
+  if (diaryNotebookId) {
+    const diary = await d.prepare("SELECT id FROM folders WHERE id=? AND node_type='notebook' AND trashed_at IS NULL").get(diaryNotebookId) as { id?: string } | undefined;
+    if (diary?.id) return diary.id;
   }
   const notebook = await d.prepare("SELECT id FROM folders WHERE node_type='notebook' AND trashed_at IS NULL ORDER BY sort_order LIMIT 1").get() as { id?: string } | undefined;
   if (notebook?.id) return notebook.id;

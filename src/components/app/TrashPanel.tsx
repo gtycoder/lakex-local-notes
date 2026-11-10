@@ -60,6 +60,7 @@ function TrashTreeRow({ item, items, selectedId, onSelect, onRestore, onPurge, t
             {item.deletedAt ? `，${formatDateTime(item.deletedAt)}` : ""}
           </span>
         </div>
+        {item.fromDiary && <span className="badge badge--muted" title="来源是日记本；原位置若已不在，恢复后回到日记空间">日记</span>}
         {item.purged && <span className="badge badge--error" title="其他设备已彻底删除；本机仍保留可恢复副本">已被他端删除</span>}
         {item.cloudDeleted && <span className="badge badge--warn" title="云端已彻底删除，本机仅保留这份可恢复副本；恢复后会重新上传">云端已删除（仅本地）</span>}
         {fileMissing && <span className="badge badge--muted" title="正文文件已不在本机">正文已删</span>}

@@ -77,4 +77,24 @@ describe("回收站恢复：原父缺失回落兜底笔记本（261027）", () =
       expect(restored.parent_id).toBe("nb1");
     } finally { await db.close(); }
   });
+
+  it("日记条目：原父（月分组）也在回收站时，恢复回日记本而不是默认笔记本（261110）", async () => {
+    await insertFolder(db, "nb-diary", "notebook");
+    await db.prepare("UPDATE folders SET space='diary' WHERE id=?").run("nb-diary");
+    await insertFolder(db, "y26", "group", "nb-diary");
+    await insertFolder(db, "m11", "group", "y26", NOW); // 月分组已进回收站
+    await seedTrashedNote(db, "dn", "m11");
+    await restoreTreeItem(db, "dn", "note", async () => undefined);
+    const row = await db.prepare("SELECT parent_id, trashed_at FROM notes WHERE id='dn'").get() as { parent_id: string | null; trashed_at: string | null };
+    expect(row.trashed_at).toBeNull();
+    expect(row.parent_id, "必须回到日记本，不能落进默认笔记本").toBe("nb-diary");
+  });
+
+  it("普通文档同样场景仍回落活跃笔记本（旧行为不变）", async () => {
+    await insertFolder(db, "nb1", "notebook");
+    await seedTrashedNote(db, "n2", "deleted-folder");
+    await restoreTreeItem(db, "n2", "note", async () => undefined);
+    const row = await db.prepare("SELECT parent_id FROM notes WHERE id='n2'").get() as { parent_id: string | null };
+    expect(row.parent_id).toBe("nb1");
+  });
 });
