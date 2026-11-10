@@ -2,11 +2,11 @@ import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRe
 import { EditorErrorBoundary } from "./EditorErrorBoundary";
 import { writeLocalStorage } from "../../lib/localStorageSafe";
 import { escapeId } from "../../lib/cssEscape";
-import { ArrowLeftRight, ChevronDown, ChevronsLeft, ChevronsRight, Columns2, File, Pin, TriangleAlert, X, XCircle, XSquare } from "lucide-react";
+import { ChevronDown, Columns2, File, Pin, TriangleAlert, X } from "lucide-react";
 import { Menu } from "../../components/ui/Overlay";
+import { TabContextMenu } from "./TabContextMenu";
 import { NodeIconGlyph } from "../../components/ui/NodeIconGlyph";
 import { TabItemVisual } from "./TabItemVisual";
-import { usePopoverPosition } from "../../hooks/usePopoverPosition";
 import { SplitHandle } from "../../components/ui/SplitHandle";
 import { SPLIT_WIDTH_LIMITS, clampSplitLeft } from "./splitGeometry";
 import { expandTabSlots, moveSlot } from "./tabOrder";
@@ -829,44 +829,3 @@ export function MultiTabEditor({
 }
 
 
-interface TabContextMenuProps {
-  x: number;
-  y: number;
-  /** 复合的分屏标签：只给分屏专属动作（取消分屏 / 左右互换），不混入单页的关闭/钉住语义。 */
-  split?: { onExit: () => void; onSwap: () => void };
-  pinned: boolean;
-  onTogglePin: () => void;
-  onCloseTab: () => void;
-  onCloseOthers: () => void;
-  onCloseLeft: () => void;
-  onCloseRight: () => void;
-  onCloseAll: () => void;
-  canCloseOthers: boolean;
-  hasLeft: boolean;
-  hasRight: boolean;
-  onClose: () => void;
-}
-
-const TabContextMenu = ({ x, y, split, pinned, onTogglePin, onCloseTab, onCloseOthers, onCloseLeft, onCloseRight, onCloseAll, canCloseOthers, hasLeft, hasRight, onClose }: TabContextMenuProps) => {
-  // 坐标菜单统一走「先量尺寸、贴底翻上方」的共用定位（不再按 210/280 估算高度夹取）
-  const { surfaceRef, style } = usePopoverPosition({ open: true, at: { x, y } });
-  if (split) {
-    return (
-      <Menu surfaceClassName="context-menu" surfaceRef={surfaceRef} onDismiss={onClose} style={style ?? undefined}>
-        <button role="menuitem" onClick={() => { split.onExit(); onClose(); }}><X size={15} /><span>取消分屏</span></button>
-        <button role="menuitem" onClick={() => { split.onSwap(); onClose(); }}><ArrowLeftRight size={15} /><span>左右互换</span></button>
-      </Menu>
-    );
-  }
-  return (
-    <Menu surfaceClassName="context-menu" surfaceRef={surfaceRef} onDismiss={onClose} style={style ?? undefined}>
-      <button role="menuitem" onClick={() => { onCloseTab(); onClose(); }}><X size={15} /><span>关闭</span></button>
-      {canCloseOthers && <button role="menuitem" onClick={() => { onCloseOthers(); onClose(); }}><XCircle size={15} /><span>关闭其他</span></button>}
-      {canCloseOthers && <button role="menuitem" onClick={() => { onCloseAll(); onClose(); }}><XSquare size={15} /><span>关闭全部</span></button>}
-      {hasLeft && <button role="menuitem" onClick={() => { onCloseLeft(); onClose(); }}><ChevronsLeft size={15} /><span>关闭左侧</span></button>}
-      {hasRight && <button role="menuitem" onClick={() => { onCloseRight(); onClose(); }}><ChevronsRight size={15} /><span>关闭右侧</span></button>}
-      <div className="context-menu-sep" />
-      <button role="menuitem" onClick={() => { onTogglePin(); onClose(); }}><Pin size={15} /><span>{pinned ? "取消钉住" : "钉住"}</span></button>
-    </Menu>
-  );
-};

@@ -4,6 +4,7 @@ import { ChevronDown, PanelLeft, XSquare } from "lucide-react";
 import { Menu } from "./components/ui/Overlay";
 import { usePopoverPosition } from "./hooks/usePopoverPosition";
 import { TabItemVisual } from "./features/editor/TabItemVisual";
+import { TabContextMenu } from "./features/editor/TabContextMenu";
 import { Sidebar } from "./components/app/Sidebar";
 import { SIDEBAR_CORRIDOR_SELECTORS, isInSidebarCorridor, reduceHover, type HoverEffect, type HoverEvent } from "./components/model/sidebarHoverMachine";
 import { useWindowShortcuts } from "./hooks/useWindowShortcuts";
@@ -826,6 +827,9 @@ export function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [desktopWorkspace]);
 
+  /** 日记标签右键菜单（261110）：动作集与文档标签一致（关闭/关闭其他/全部/左侧/右侧/钉住），复用 TabContextMenu。 */
+  const [diaryTabCtx, setDiaryTabCtx] = useState<{ noteId: string; x: number; y: number } | null>(null);
+
   /** 日记标签切换器（▾）：打开时按可视位置弹菜单；与文档标签的切换器同语义、数据不同。 */
   const [diaryTabMenu, setDiaryTabMenu] = useState<{ x: number; y: number } | null>(null);
   const diaryTabMenuPos = usePopoverPosition({
@@ -861,6 +865,11 @@ export function App() {
     tab.space ? tab.space === "diary" : diaryNoteIds.has(tab.noteId);
   const libraryTabs = tabInfos.filter((tab) => !ownsDiary(tab));
   const diaryTabs = tabInfos.filter((tab) => ownsDiary(tab));
+  /** 日记标签显示顺序：**钉住的始终在前**（思源式固定页签），其余保持打开顺序（与文档标签同口径）。 */
+  const diaryTabsOrdered = [
+    ...diaryTabs.filter((tab) => pinnedNoteIds.has(tab.noteId)),
+    ...diaryTabs.filter((tab) => !pinnedNoteIds.has(tab.noteId)),
+  ];
 
 
   /** 顶栏左侧 = **唯一渲染点**（DT-09）：四个空间共用这一个元素，各自在顶栏槽位用
@@ -1114,36 +1123,45 @@ export function App() {
             </div>
             {/* 日记空间**独立 tab 条**（261109）：只列 `space==="diary"` 的标签，与文档空间互不影响。 */}
             <div className="tab-items" role="tablist" aria-label="打开的日记">
-              {diaryTabs.map((tab) => (
+              {diaryTabsOrdered.map((tab) => (
                 <button
                   key={tab.noteId}
                   type="button"
-                  className={"tab-item" + (tab.noteId === activeNoteId ? " active" : "")}
+                  className={"tab-item" + (tab.noteId === activeNoteId ? " active" : "") + (pinnedNoteIds.has(tab.noteId) ? " pinned" : "")}
                   role="tab"
                   aria-selected={tab.noteId === activeNoteId}
                   title={tab.title}
                   onClick={() => { void openNote(tab.noteId, "", false, "diary"); }}
+                  onContextMenu={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    setDiaryTabCtx({ noteId: tab.noteId, x: event.clientX, y: event.clientY });
+                  }}
                 >
-                  {/* 视觉原子与文档标签同源（features/editor/TabItemVisual）；这里只差交互能力。 */}
-                  <TabItemVisual title={tab.title} onClose={() => closeTab(tab.noteId)} />
+                  {/* 视觉原子与文档标签同源（features/editor/TabItemVisual）；右键动作与文档标签同源（TabContextMenu）。 */}
+                  <TabItemVisual
+                    title={tab.title}
+                    pinned={pinnedNoteIds.has(tab.noteId)}
+                    onClose={pinnedNoteIds.has(tab.noteId) ? undefined : () => closeTab(tab.noteId)}
+                  />
                 </button>
               ))}
               {/* 日记标签条自带「关闭全部 + ▾ 切换器」（与文档标签条同语义，数据各自独立）。 */}
-              {diaryTabs.length > 1 && (
+              {diaryTabsOrdered.length > 1 && (
                 <>
                   <button
                     type="button"
                     className="ln-iconbtn ln-iconbtn--compact"
                     aria-label="关闭全部日记标签"
                     title="关闭全部"
-                    onClick={() => { for (const tab of diaryTabs) closeTab(tab.noteId); }}
+                    onClick={() => { for (const tab of diaryTabsOrdered) { if (!pinnedNoteIds.has(tab.noteId)) closeTab(tab.noteId); } }}
                   >
                     <XSquare size={13} />
                   </button>
                   <button
                     type="button"
                     className="ln-iconbtn ln-iconbtn--compact"
-                    aria-label={"切换日记标签，共 " + diaryTabs.length + " 个"}
+                    aria-label={"切换日记标签，共 " + diaryTabsOrdered.length + " 个"}
                     title="切换标签"
                     aria-haspopup="menu"
                     aria-expanded={Boolean(diaryTabMenu)}
@@ -1164,7 +1182,7 @@ export function App() {
                 onDismiss={() => setDiaryTabMenu(null)}
                 aria-label="日记标签列表"
               >
-                {diaryTabs.map((tab) => (
+                {diaryTabsOrdered.map((tab) => (
                   <button
                     key={tab.noteId}
                     type="button"
@@ -1178,6 +1196,33 @@ export function App() {
               </Menu>
             )}
             <div className="tabbar-trailing">{topBarSearch}</div>
+            {/* 日记标签右键菜单：与文档标签同一组件（关闭/其他/全部/左右/钉住），钉住项不参与批量关闭。 */}
+            {diaryTabCtx && (() => {
+              const index = diaryTabsOrdered.findIndex((tab) => tab.noteId === diaryTabCtx.noteId);
+              const canCloseOthers = diaryTabsOrdered.length > 1;
+              return (
+                <TabContextMenu
+                  x={diaryTabCtx.x}
+                  y={diaryTabCtx.y}
+                  pinned={pinnedNoteIds.has(diaryTabCtx.noteId)}
+                  canCloseOthers={canCloseOthers}
+                  hasLeft={index > 0}
+                  hasRight={index >= 0 && index < diaryTabsOrdered.length - 1}
+                  onTogglePin={() => {
+                    const next = new Set(pinnedNoteIds);
+                    if (next.has(diaryTabCtx.noteId)) next.delete(diaryTabCtx.noteId);
+                    else next.add(diaryTabCtx.noteId);
+                    setPinnedNoteIds(next);
+                  }}
+                  onCloseTab={() => closeTab(diaryTabCtx.noteId)}
+                  onCloseOthers={() => { for (const tab of diaryTabsOrdered) { if (tab.noteId !== diaryTabCtx.noteId && !pinnedNoteIds.has(tab.noteId)) closeTab(tab.noteId); } }}
+                  onCloseLeft={() => { for (const tab of diaryTabsOrdered.slice(0, index)) { if (!pinnedNoteIds.has(tab.noteId)) closeTab(tab.noteId); } }}
+                  onCloseRight={() => { for (const tab of diaryTabsOrdered.slice(index + 1)) { if (!pinnedNoteIds.has(tab.noteId)) closeTab(tab.noteId); } }}
+                  onCloseAll={() => { for (const tab of diaryTabsOrdered) { if (!pinnedNoteIds.has(tab.noteId)) closeTab(tab.noteId); } }}
+                  onClose={() => setDiaryTabCtx(null)}
+                />
+              );
+            })()}
           </header>
           {desktopWorkspace === "diary" && (
             <Suspense fallback={null}>

@@ -155,7 +155,7 @@ export function AiWritingWorkspace({ active, treeNodes, topbarLeading, onOpenSet
       <SplitPane
         ariaLabel="调整 AI 写作侧栏宽度"
         storageKey="ai-writing-side"
-        minWidth={160}
+        minWidth={120}
         maxWidth={520}
         minRight={480}
         className="aiw"

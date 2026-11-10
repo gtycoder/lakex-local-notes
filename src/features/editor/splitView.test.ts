@@ -13,6 +13,8 @@ import { describe, expect, it } from "vitest";
 
 const read = (p: string) => readFileSync(new URL(p, import.meta.url), "utf8");
 const MULTITAB = read("./MultiTabEditor.tsx");
+// 261110：标签右键菜单抽成独立组件（App 的日记标签也要用，而 App 不能静态 import MultiTabEditor）。
+const TABMENU = read("./TabContextMenu.tsx");
 const EDITORTAB = read("./EditorTab.tsx");
 const USHEET = read("../usheet/UniverSheetEditor.tsx");
 const BITABLE = read("../bitable/BitableEditor.tsx");
@@ -56,9 +58,9 @@ describe("文档分屏（左右两栏、不同文档、临时）", () => {
     expect(MULTITAB).not.toContain("tab-split-controls");
     // CSS 里允许在注释中提到它（写明"已删除、别再回来"），但**不许再有任何规则**
     expect(SPLITCSS).not.toContain(".tab-split-controls {");
-    expect(MULTITAB).toContain("取消分屏");
-    expect(MULTITAB).toContain("左右互换");
-    expect(MULTITAB).not.toContain("切换到垂直");
+    expect(TABMENU).toContain("取消分屏");
+    expect(TABMENU).toContain("左右互换");
+    expect(TABMENU).not.toContain("切换到垂直");
   });
 
   it("复合的分屏标签右键 = 分屏专属菜单（取消分屏 / 左右互换），不混入单页语义（261014 用户点单）", () => {
@@ -69,9 +71,9 @@ describe("文档分屏（左右两栏、不同文档、临时）", () => {
     expect(ctxAt, "合并标签自己带 onContextMenu（右键分屏菜单）").toBeGreaterThan(groupAt);
     expect(MULTITAB).toContain("split: true");
     // 菜单在 split 模式下只给两项（取消分屏 / 左右互换），直接 return、不落到单页那套
-    expect(MULTITAB).toMatch(/if \(split\) \{\s*return \(/);
-    expect(MULTITAB).toMatch(/split\.onExit\(\)[\s\S]{0,200}取消分屏/);
-    expect(MULTITAB).toMatch(/split\.onSwap\(\)[\s\S]{0,200}左右互换/);
+    expect(TABMENU).toMatch(/if \(split\) \{\s*return \(/);
+    expect(TABMENU).toMatch(/split\.onExit\(\)[\s\S]{0,200}取消分屏/);
+    expect(TABMENU).toMatch(/split\.onSwap\(\)[\s\S]{0,200}左右互换/);
     // 两个动作都接在 App 既有回调上（不新造一套分屏开关）
     expect(MULTITAB).toContain("onExitSplit?.()");
     expect(MULTITAB).toContain("onSwapSplit?.()");

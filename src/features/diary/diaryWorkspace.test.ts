@@ -43,6 +43,19 @@ describe("日记空间接线", () => {
     expect(APP, "App 不应再自注册 ⌘4/⌘5 监听").not.toMatch(/event\.key !== "[45]"/);
   });
 
+  it("②h 日记标签右键复用 TabContextMenu（钉住/关闭族），钉住项排在最前且不参与批量关闭", () => {
+    expect(APP).toContain("TabContextMenu");
+    expect(APP).toContain("diaryTabsOrdered");
+    expect(APP).toContain("pinnedNoteIds.has(tab.noteId)");
+    expect(APP).toContain("onCloseLeft");
+    expect(APP).toContain("onCloseRight");
+  });
+
+  it("②i 两个空间的分栏最小宽：日记 220（保证头部一排）、AI 写作 120", () => {
+    expect(WORKSPACE).toContain("minWidth={220}");
+    const AIW = read("../aiWriting/AiWritingWorkspace.tsx");
+    expect(AIW).toContain("minWidth={120}");
+  });
   it("②e 「今天」必须跨天刷新：点击时现算 + 定时/回前台同步（debug 版过夜不能拿到昨天）", () => {
     expect(WORKSPACE).toContain("onCreateEntry(formatDiaryDateKey())");
     expect(WORKSPACE).toContain("setInterval(sync, 60_000)");
