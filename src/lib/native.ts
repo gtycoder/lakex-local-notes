@@ -620,7 +620,12 @@ export const native = {
   onSyncProgress: (callback: (progress: SyncProgress) => void) => api().onSyncProgress(callback),
   onPendingSummaryChanged: (callback: (summary: import("./types").SyncPendingSummary) => void) => api().onPendingSummaryChanged(callback),
   onLibraryChanged: (callback: (detail: { channel?: string }) => void) => api().onLibraryChanged(callback),
-  onNoteBodyChanged: (callback: (detail: import("./types").NoteBodyChangedDetail) => void) => api().onNoteBodyChanged(callback),
+  // 老主进程 / 老 preload 没有这个通道时返回空订阅（dev HMR 期间主进程尚未重启也不会抛 TypeError）。
+  onNoteBodyChanged: (callback: (detail: import("./types").NoteBodyChangedDetail) => void) => {
+    const host = api();
+    if (typeof host.onNoteBodyChanged !== "function") return () => {};
+    return host.onNoteBodyChanged(callback);
+  },
   onWindowFullscreen: (callback: (fullscreen: boolean) => void) => api().onWindowFullscreen(callback),
   onOpenSettings: (callback: () => void) => api().onOpenSettings(callback),
 };
