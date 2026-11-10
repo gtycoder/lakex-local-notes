@@ -854,9 +854,13 @@ export function App() {
    * 注意：这里**不用 useMemo** —— 该行位于 `if (!workspace) return` 之后，加 hook 会让
    * 「首次渲染提前 return、随后渲染多跑一个 hook」触发 hooks 顺序错误；过滤本身是 O(标签数)。
    */
-  /** 两个空间各自独立 tab 条（261109）：按 tab 的 `space` 分流，不再靠「当前空间」猜。 */
-  const libraryTabs = tabInfos.filter((tab) => (tab.space ?? "library") !== "diary");
-  const diaryTabs = tabInfos.filter((tab) => tab.space === "diary");
+  /** 两个空间各自独立 tab 条（261109）：按 tab 的 `space` 分流。
+   *  兜底：**加 space 之前**打开的旧 tab 没有该字段 ⇒ 用「当前树里它是不是日记条目」判一次，
+   *  否则旧会话的日期 tab 会一直粘在文档空间（用户报过「tab 混在一起」）。 */
+  const ownsDiary = (tab: { noteId: string; space?: "library" | "diary" }): boolean =>
+    tab.space ? tab.space === "diary" : diaryNoteIds.has(tab.noteId);
+  const libraryTabs = tabInfos.filter((tab) => !ownsDiary(tab));
+  const diaryTabs = tabInfos.filter((tab) => ownsDiary(tab));
 
 
   /** 顶栏左侧 = **唯一渲染点**（DT-09）：四个空间共用这一个元素，各自在顶栏槽位用

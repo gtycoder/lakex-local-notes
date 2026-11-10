@@ -51,8 +51,11 @@ describe("日记空间接线", () => {
     expect(effectAt, "effect 必须在早期 return 之前").toBeLessThan(earlyReturnAt);
   });
   it("②c 独立 tab：日记/文档各看各的（按 OpenTab.space 分流）；日记条目标题不可改名", () => {
-    expect(APP).toContain('tabInfos.filter((tab) => (tab.space ?? "library") !== "diary")');
-    expect(APP).toContain('tabInfos.filter((tab) => tab.space === "diary")');
+    // 分流判据：优先 tab.space；缺字段（加 space 之前打开的老 tab）回落到「当前树里是不是日记条目」。
+    expect(APP).toContain("const ownsDiary");
+    expect(APP).toContain("diaryNoteIds.has(tab.noteId)");
+    expect(APP).toContain("tabInfos.filter((tab) => !ownsDiary(tab))");
+    expect(APP).toContain("tabInfos.filter((tab) => ownsDiary(tab))");
     expect(APP).toContain('aria-label="打开的日记"');
     expect(APP).toContain('openNote(noteId, "", false, "diary")');
     const TREE_ACTIONS = read("../../hooks/useTreeActions.ts");
