@@ -193,7 +193,9 @@
   color: var(--lake-text-1);
   background: transparent;
   font-family: inherit;
-  font-size: var(--lake-font-size-small);
+  /* 261110 用户试调：空间下拉项与触发器一起抬到 14。注意这是**共用原语**（顶栏下拉 / 右键菜单 / ＋菜单同一身份）
+     ⇒ 全仓菜单项一起变 14；若只想动空间下拉，要另立变体（当前不做，保持单一来源）。 */
+  font-size: var(--lake-font-size-body);
   text-align: left;
   cursor: pointer;
 

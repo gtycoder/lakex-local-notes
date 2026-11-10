@@ -51,7 +51,7 @@
 .diary-dir__count {
   margin-right: auto;
   color: var(--lake-text-3);
-  font-size: var(--lake-font-size-tiny);
+  font-size: var(--lake-font-size-body);
   font-variant-numeric: tabular-nums;
 }
 
@@ -65,7 +65,7 @@
   margin: 0;
   padding: var(--lake-space-lg) var(--lake-space-sm);
   color: var(--lake-text-3);
-  font-size: var(--lake-font-size-small);
+  font-size: var(--lake-font-size-body);
   line-height: var(--lake-line-height-snug);
 }
 
@@ -81,7 +81,7 @@
   background: transparent;
   color: var(--lake-text-1);
   font-family: inherit;
-  font-size: var(--lake-font-size-small);
+  font-size: var(--lake-font-size-body);
   font-weight: var(--lake-font-weight-semibold);
   text-align: left;
   cursor: pointer;
@@ -108,7 +108,7 @@
 .diary-year__count {
   flex: none;
   color: var(--lake-text-4);
-  font-size: var(--lake-font-size-tiny);
+  font-size: var(--lake-font-size-body);
   font-weight: var(--lake-font-weight-regular);
   font-variant-numeric: tabular-nums;
 }
@@ -131,7 +131,7 @@
   background: transparent;
   color: var(--lake-text-2);
   font-family: inherit;
-  font-size: var(--lake-font-size-small);
+  font-size: var(--lake-font-size-body);
   text-align: left;
   cursor: pointer;
 }
@@ -145,7 +145,7 @@
 .diary-entry__time {
   flex: none;
   color: var(--lake-text-3);
-  font-size: var(--lake-font-size-micro);
+  font-size: var(--lake-font-size-body);
   font-variant-numeric: tabular-nums;
 }
 
@@ -184,7 +184,7 @@
 .diary-dir__book {
   flex: 1 1 auto;
   color: var(--lake-text-3);
-  font-size: var(--lake-font-size-tiny);
+  font-size: var(--lake-font-size-body);
 }
 
 /* ── 主区：复用 EditorTab（不新写编辑器） ────────────────────────── */
@@ -200,7 +200,7 @@
   margin: 0;
   padding: var(--lake-space-xl);
   color: var(--lake-text-3);
-  font-size: var(--lake-font-size-small);
+  font-size: var(--lake-font-size-body);
 }
 
 .diary-empty {
@@ -225,7 +225,7 @@
   max-width: 420px;
   margin: 0;
   color: var(--lake-text-3);
-  font-size: var(--lake-font-size-small);
+  font-size: var(--lake-font-size-body);
   line-height: var(--lake-line-height-reading);
 }
 /* 日记空间左右分栏（SplitPane）：分隔条零宽 flex 项，视觉走 kit 的 .ln-split-handle。 */
