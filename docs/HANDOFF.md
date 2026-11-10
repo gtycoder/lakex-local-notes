@@ -10,6 +10,14 @@
 
 > **顺序标注**：261109 各批次里写的「日记 ⌘4 / AI 写作 ⌘3」是**当时**的顺序；**261110 起改为 日记 ⌘3 / AI 写作 ⌘4**（另有标签 ⌘5）。旧批次不再改，以本行 + §1 为准。
 
+### 261110 · UI 借 Astryx 语汇两批（设置页 / 对话框 / 空态 / 明细档）
+- **起因与取舍**：评估 Meta Astryx（MIT、React 19+、预编译 CSS、150+ 组件）是否替换自有体系 —— **结论不引入**：① 它强制 React ≥19，而 vendored 内核包装层 peer 是 `react ^18`；② 自带一套 `--color-*` 令牌 + reset/astryx-base 层（会追加到我们 8 层之后、压过 kit/a11y）；③ 体积（astryx.css 40KB gz）撞已红的 entry 预算；④ 视觉是另一套产品语言，且 261006 已定稿「品类标准 / 布局冻结」。⇒ 改为**只借语汇**，全部落在自有 `--lake-*` / `ln-*`，零新依赖。
+- **第一批**（`9c431b59` 之前的分支提交）：设置内容区 白→`--lake-bg-window`（白卡浮起来，与移动端「灰底 + 白卡」同构）；分组卡圆角 10→`--lake-radius-card`(12)；`.ln-dialog__actions` 加 0.5px 底栏分隔线。
+- **第二批**：对话框内距统一 20 档；**对话框只有一套字阶**（标题 18 / 正文 14，删除 5 个「管理型弹窗」的分档覆盖与 `--lake-dialog-*` 变量）；空态三级层级升档（标题 14 / 说明 12 / 间距 6 / 图标统一 28）；行内元信息 11→12。
+- **护栏同步**：`cssLayers` 基线按实测收紧（overlay 305→290、components 366→358）；`namePromptWiring.test` 契约改为「一套 18/14 + 无分档变量」。
+- **门禁（master 合并后实测）**：tsc 0；全量 vitest **825 文件（814 passed / 11 skipped）/ 5216 passed / 12 skipped / 0 failed**；ui-metrics / check:core / check:mobileui / `git diff --check` 通过。
+- **遗留**：桌面 `check:stylesnap` 42 态未跑（本机无合成夹具缓存，且当前无「日记空间」态）——本批动了设置页表面与对话框几何 ⇒ **下次有夹具的机器必须重烤/复核**。样机与 before/after 对照装置在本地分支 `spike/astryx-visual-prototype`（未推），master 只收产品改动。
+
 ### 261109 · 日记六改（独立 tab / 一天多篇 / 选日期 / 标题锁 / 选中态 / 转小记）
 - **独立 tab**：`OpenTab.space`（`desktopTypes`/`MultiTabEditor.TabInfo`/`desktopDerivedState` 三处透传）；App 按空间分流 `libraryTabs` / `diaryTabs`，日记空间顶栏渲染自己的 tab 条（`aria-label="打开的日记"`），切空间时活动标签回落到该空间。
 - **一天多篇**：`core.planDiaryCreate` + `diaryStore.openDate(dateKey, { mode })`（`open` 默认 / `new` 永远新建）+ IPC `diary_open_date(dateKey, mode)` + `native.diaryOpenDate(dateKey, mode)`；同日多篇不再当"重复文档"告警，`DiaryEntry.createdAt` 支撑同日按创建时间倒序。
