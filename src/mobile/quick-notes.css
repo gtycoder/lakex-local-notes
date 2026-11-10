@@ -105,3 +105,20 @@
 .qn-tag-manager__row.is-dragging { opacity: .55; }
 .qn-tag-manager__row.is-drop-before { box-shadow: inset 0 2px 0 var(--lake-accent); }
 .qn-tag-manager__row.is-drop-after { box-shadow: inset 0 -2px 0 var(--lake-accent); }
+
+/* ── 261110 A+B：小记筛选 = 单入口 + 中性 Sheet ──────────────────────────
+ * 用户点单：顶部不再常驻一排彩色药丸（视觉过重，且像第二层工具栏）。
+ * 入口只有一行「筛选 · 当前条件 N ▾」+「管理」；候选（全部/各标签/无标签）收进底部 Sheet，
+ * chip 一律中性底（--lake-bg-block），选中才用 --lake-bg-selected/--lake-fg-selected。 */
+.qn-filter-bar { display: flex; align-items: center; gap: 8px; padding: 6px var(--mb-page-pad) 2px; }
+.qn-filter-bar__btn { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 12px; border: 0; border-radius: var(--lake-radius-sm); background: var(--lake-bg-block); color: var(--lake-text-2); font-size: var(--lake-font-size-small); }
+.qn-filter-bar__btn:active { background: var(--lake-bg-press); }
+.qn-filter-bar__count { color: var(--lake-text-3); font-variant-numeric: tabular-nums; }
+.qn-filter-bar__manage { display: inline-flex; align-items: center; gap: 4px; min-height: 36px; padding: 0 10px; border: 0; border-radius: var(--lake-radius-sm); background: transparent; color: var(--lake-text-3); font-size: var(--lake-font-size-small); }
+.qn-filter-sheet__body { display: flex; flex-direction: column; gap: 12px; }
+.qn-filter-sheet__chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.qn-filter-chip { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 14px; border: 0; border-radius: var(--lake-radius-sm); background: var(--lake-bg-block); color: var(--lake-text-2); font-size: var(--lake-font-size-small); }
+.qn-filter-chip.is-selected { background: var(--lake-bg-selected); color: var(--lake-fg-selected); font-weight: var(--lake-font-weight-semibold); }
+.qn-filter-chip__count { color: var(--lake-text-3); font-variant-numeric: tabular-nums; }
+.qn-filter-chip.is-selected .qn-filter-chip__count { color: inherit; }
+.qn-filter-sheet__manage { display: flex; align-items: center; gap: 8px; min-height: var(--mb-tap-min); padding: 0; border: 0; background: transparent; color: var(--lake-accent-text); font-size: var(--lake-font-size-body); text-align: left; }

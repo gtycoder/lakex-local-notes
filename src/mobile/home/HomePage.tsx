@@ -10,7 +10,7 @@
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { writeLocalStorage } from "../../lib/localStorageSafe";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { ChevronDown, ChevronRight, CloudUpload, List, LayoutGrid, ArrowUpDown, BookMarked, Feather, MoreHorizontal, NotebookPen, Pencil, Plus, Search, Settings, Settings2, SmilePlus, Sparkles, Tag, Trash } from "lucide-react";
+import { ChevronDown, ChevronRight, CloudUpload, List, LayoutGrid, ArrowUpDown, BookMarked, Feather, ListFilter, MoreHorizontal, NotebookPen, Pencil, Plus, Search, Settings, Settings2, SmilePlus, Sparkles, Tag, Trash } from "lucide-react";
 import type { TreeNode } from "../../lib/types";
 import type { LocalNoteSummary } from "../data/noteRepository";
 import { NotebookGrid } from "./NotebookGrid";
@@ -180,6 +180,8 @@ export function HomePage(props: HomePageProps) {
   const [tagSheetFor, setTagSheetFor] = useState<string | null>(null);
 
   const [filterOpen, setFilterOpen] = useState(false);
+  /** 261110 A+B：小记筛选用**单入口 + 中性底部 Sheet**（不再有一排彩色常驻 chips）。 */
+  const [filterSheetOpen, setFilterSheetOpen] = useState(false);
   // P0-6：同步进度（引擎 onProgress → 节流 → 顶部同步按钮 title/aria-label；不改 5 槽构图）。
   const [syncProgress, setSyncProgress] = useState<SyncProgressSnapshot | null>(() => readSyncProgress());
   useEffect(() => subscribeSyncProgress(() => setSyncProgress(readSyncProgress())), []);
@@ -348,6 +350,14 @@ export function HomePage(props: HomePageProps) {
     [tagDirectory, quickTagIndex.tags],
   );
 
+  /** 261110 A+B：筛选入口上显示「当前条件」的人话（all / untagged / 某标签 / 选中集合）。 */
+  const quickFilterLabel = quickTagFilter.kind === "all"
+    ? "全部"
+    : quickTagFilter.kind === "untagged"
+      ? "无标签"
+      : quickTagFilter.kind === "tag"
+        ? (quickTagIndex.tags.find((tag) => tag.id === quickTagFilter.id)?.name ?? "标签")
+        : "已选筛选";
   const quickVirtualEnabled = tab === "quick" && composer === null && sortedQuickNotes.length > QUICK_NOTE_VIRTUAL_THRESHOLD;
   const [quickScrollMargin, setQuickScrollMargin] = useState(0);
   const [quickScrollElement, setQuickScrollElement] = useState<HTMLDivElement | null>(null);
@@ -806,27 +816,23 @@ export function HomePage(props: HomePageProps) {
         ) : (
           <div ref={setQuickScrollNode} className="mobile-scroll">
             {(quickTagIndex.tags.length > 0 || tagDirectory.length > 0) && (
-              <div className="qn-tag-filter-bar" role="group" aria-label="按标签筛选小记">
-                <button className={"qn-tag" + (quickTagFilter.kind === "all" ? " is-selected" : "")} onClick={() => setQuickTagFilter({ kind: "all" })}>
-                  <span>全部</span><span className="qn-tag__count">{quickNotes.length}</span>
+              <div className="qn-filter-bar">
+                <button
+                  type="button"
+                  className="qn-filter-bar__btn"
+                  aria-haspopup="dialog"
+                  aria-expanded={filterSheetOpen}
+                  aria-label="筛选小记"
+                  onClick={() => setFilterSheetOpen(true)}
+                >
+                  <ListFilter size={14} aria-hidden="true" />
+                  <span className="qn-ellipsis">{quickFilterLabel}</span>
+                  <span className="qn-filter-bar__count">{sortedQuickNotes.length}</span>
+                  <ChevronDown size={14} aria-hidden="true" />
                 </button>
-                <button className="qn-tag" aria-label="标签管理" onClick={() => switchTab("tags")}>
-                  <Settings2 size={14} /><span>管理</span>
+                <button type="button" className="qn-filter-bar__manage" aria-label="标签管理" onClick={() => switchTab("tags")}>
+                  <Settings2 size={14} aria-hidden="true" /><span>管理</span>
                 </button>
-                {quickTagIndex.tags.map((tag) => (
-                  <button
-                    key={tag.id}
-                    className={"qn-tag" + (quickTagFilter.kind === "tag" && quickTagFilter.id === tag.id ? " is-selected" : "")}
-                    onClick={() => setQuickTagFilter(quickTagFilter.kind === "tag" && quickTagFilter.id === tag.id ? { kind: "all" } : { kind: "tag", id: tag.id })}
-                  >
-                    <span className="mb-ellipsis">{tag.name}</span><span className="qn-tag__count">{tag.count}</span>
-                  </button>
-                ))}
-                {quickTagIndex.untaggedCount > 0 && (
-                  <button className={"qn-tag" + (quickTagFilter.kind === "untagged" ? " is-selected" : "")} onClick={() => setQuickTagFilter(quickTagFilter.kind === "untagged" ? { kind: "all" } : { kind: "untagged" })}>
-                    <span>无标签</span><span className="qn-tag__count">{quickTagIndex.untaggedCount}</span>
-                  </button>
-                )}
               </div>
             )}
             {sortedQuickNotes.length === 0 ? (
@@ -989,6 +995,44 @@ export function HomePage(props: HomePageProps) {
           )}
         </div>
       )}
+
+      {/* 261110 A+B：小记筛选 —— 入口是顶部一行「筛选 · 当前条件」；候选（中性 chips）收进底部 Sheet，
+          不再有一排彩色药丸常驻占位。 */}
+      <MobileSheet
+        open={filterSheetOpen}
+        onClose={() => setFilterSheetOpen(false)}
+        title="筛选"
+        ariaLabel="筛选小记"
+        bodyClassName="qn-filter-sheet__body"
+      >
+        <div className="qn-filter-sheet__chips" role="group" aria-label="按标签筛选小记">
+          <button
+            type="button"
+            className={"qn-filter-chip" + (quickTagFilter.kind === "all" ? " is-selected" : "")}
+            onClick={() => { setQuickTagFilter({ kind: "all" }); setFilterSheetOpen(false); }}
+          >全部<span className="qn-filter-chip__count">{quickNotes.length}</span></button>
+          {quickTagIndex.tags.map((tag) => (
+            <button
+              key={tag.id}
+              type="button"
+              className={"qn-filter-chip" + (quickTagFilter.kind === "tag" && quickTagFilter.id === tag.id ? " is-selected" : "")}
+              onClick={() => { setQuickTagFilter(quickTagFilter.kind === "tag" && quickTagFilter.id === tag.id ? { kind: "all" } : { kind: "tag", id: tag.id }); setFilterSheetOpen(false); }}
+            ><span className="qn-ellipsis">{tag.name}</span><span className="qn-filter-chip__count">{tag.count}</span></button>
+          ))}
+          {quickTagIndex.untaggedCount > 0 && (
+            <button
+              type="button"
+              className={"qn-filter-chip" + (quickTagFilter.kind === "untagged" ? " is-selected" : "")}
+              onClick={() => { setQuickTagFilter(quickTagFilter.kind === "untagged" ? { kind: "all" } : { kind: "untagged" }); setFilterSheetOpen(false); }}
+            >无标签<span className="qn-filter-chip__count">{quickTagIndex.untaggedCount}</span></button>
+          )}
+        </div>
+        <button
+          type="button"
+          className="qn-filter-sheet__manage"
+          onClick={() => { setFilterSheetOpen(false); switchTab("tags"); }}
+        ><Settings2 size={15} aria-hidden="true" /><span>标签管理</span></button>
+      </MobileSheet>
 
       {/* 小记「...」菜单 */}
       <MobileSheetMenu
