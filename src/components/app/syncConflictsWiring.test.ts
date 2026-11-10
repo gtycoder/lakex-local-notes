@@ -25,7 +25,9 @@ describe("同步记录 UI 接线（P1 第 4 项）", () => {
 
   it("入口：not open 时也拉（角标常显）；浮层内一行「最近同步有 N 处覆盖/删除 → 查看」", () => {
     expect(POPOVER).toContain("data-sync-conflicts-entry");
-    expect(POPOVER).toContain("最近同步有 {conflicts.unacked} 处覆盖/删除");
+    // 261110：文案改为按 kind 聚合的摘要（不再是"同步覆盖/删除"的一刀切），两个分支共用同一区块
+    expect(POPOVER).toContain("syncConflictsSummary(conflicts.items)");
+    expect(POPOVER).toContain("知道了");
     expect(POPOVER).toContain("查看同步记录");
     expect(POPOVER).toContain("sync.lastSyncedAt");
   });

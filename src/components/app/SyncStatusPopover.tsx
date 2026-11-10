@@ -13,6 +13,7 @@ import { HoverPopover } from "../ui/Overlay";
 import { SyncConflictBadge } from "./SyncConflictBadge";
 import { SyncConflictsPanel } from "./SyncConflictsPanel";
 import { useSyncConflicts } from "./useSyncConflicts";
+import { syncConflictsSummary } from "./syncConflicts";
 
 export interface SyncStatusPopoverProps {
   buttonRef?: RefObject<HTMLButtonElement>;
@@ -85,6 +86,29 @@ export function SyncStatusPopover({
    * 4 份 keep-alive 顶栏只有可见那份拉取（visible=false 直接跳过），避免重复 IPC。
    */
   const conflicts = useSyncConflicts({ enabled: visible, syncToken: sync.lastSyncedAt });
+  /**
+   * 261110：记录入口区块**两个分支共用**（此前只在云端分支渲染 ⇒ 本地空间时角标亮着但面板无任何说明）。
+   * 文案按 kind 聚合（保存守卫/他端覆盖/他端删除分开说），并给「知道了」= ack（不删记录，只清角标）。
+   */
+  const conflictsEntry = conflicts.unacked > 0 ? (
+    <section className="sync-status-history-note" role="status" data-sync-conflicts-entry>
+      <Clock size={14} aria-hidden="true" />
+      <div>
+        <strong>{syncConflictsSummary(conflicts.items)}</strong>
+        <span>多为另一窗口或浏览器端改过这篇正文；不处理不会丢数据，可在记录里查看并恢复本地版。</span>
+        <button
+          type="button"
+          className="ln-btn ln-btn--secondary sync-status-inline-action"
+          onClick={() => { void conflicts.ackAll(); }}
+        >知道了</button>
+        <button
+          type="button"
+          className="ln-btn ln-btn--secondary sync-status-inline-action"
+          onClick={() => { setOpen(false); conflicts.openPanel(); }}
+        >查看同步记录</button>
+      </div>
+    </section>
+  ) : null;
   // 云同步未启用 / 未配置 = 本地空间：同一个浮层，换成「仅本地」内容 + 去设置入口。
   // 顶栏图标 = 云同步状态灯：关了开关 或 没配置 S3 ⇒ 磁盘（判据与后端同源，见 core/cloudState）。
   const localOnly = !isCloudActive(cloudConfigured, cloudEnabled);
@@ -179,6 +203,7 @@ export function SyncStatusPopover({
               <section className="sync-status-section">
                 <p className="sync-status-local-note">数据仅保存在本机；开启云同步后可多端同步与备份。</p>
               </section>
+              {conflictsEntry}
               <footer className="sync-status-actions">
                 <button type="button" className="ln-btn ln-btn--secondary sync-status-action" onClick={() => { setOpen(false); onOpenSettings(); }}><Settings2 size={14} />去设置云同步</button>
               </footer>
@@ -221,20 +246,7 @@ export function SyncStatusPopover({
               </div>
             </section>
           )}
-          {conflicts.unacked > 0 && (
-            <section className="sync-status-history-note" role="status" data-sync-conflicts-entry>
-              <Clock size={14} aria-hidden="true" />
-              <div>
-                <strong>最近同步有 {conflicts.unacked} 处覆盖/删除</strong>
-                <span>可在这里查看记录并恢复本地被覆盖版（不会自动弹窗）。</span>
-                <button
-                  type="button"
-                  className="ln-btn ln-btn--secondary sync-status-inline-action"
-                  onClick={() => { setOpen(false); conflicts.openPanel(); }}
-                >查看同步记录</button>
-              </div>
-            </section>
-          )}
+          {conflictsEntry}
           {stats?.warnings && stats.warnings.length > 0 && (
             <section className="sync-status-history-note" role="status">
               <TriangleAlert size={14} aria-hidden="true" />

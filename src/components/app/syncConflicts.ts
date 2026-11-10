@@ -42,6 +42,19 @@ export function canRestoreSyncConflict(row: Pick<SyncConflictRow, "kind" | "spac
   return true;
 }
 
+/**
+ * 未读记录的摘要文案（261110：原先硬编码「最近同步有 N 处覆盖/删除」，把保存守卫也当成了同步事件）。
+ * 按 kind 聚合并用人话写出，**不处理也不会丢数据**（提示里要说清）。
+ */
+export function syncConflictsSummary(rows: readonly SyncConflictRow[]): string {
+  const unacked = rows.filter((row) => !row.ackedAt);
+  if (!unacked.length) return "";
+  const counts = new Map<SyncConflictKind, number>();
+  for (const row of unacked) counts.set(row.kind, (counts.get(row.kind) ?? 0) + 1);
+  const parts = Array.from(counts.entries()).map(([kind, n]) => (n > 1 ? SYNC_CONFLICT_KIND_LABEL[kind] + " " + n + " 条" : SYNC_CONFLICT_KIND_LABEL[kind]));
+  return "最近有 " + unacked.length + " 条记录（" + parts.join("，") + "）";
+}
+
 /** 时间倒序（主进程已排好；UI 再兜一次，防脏数据打乱顺序）。 */
 export function sortConflictsNewestFirst(items: readonly SyncConflictRow[]): SyncConflictRow[] {
   return [...items].sort((a, b) => {
