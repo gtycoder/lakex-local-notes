@@ -2,17 +2,19 @@ import { describe, expect, it } from "vitest";
 import { HOME_TABS, initialPagerState, pagerScrollLeft, reducePager, settledIndex, tabAt, tabIndex } from "./tabPager";
 
 describe("首页横向分页判据（261019，对齐语雀 pager）", () => {
-  it("tab ↔ 下标：顺序固定为 小记 → 知识库 → 日记 → 标签（261109 二改），未知值回落第一页", () => {
-    expect(HOME_TABS).toEqual(["quick", "library", "diary", "tags"]);
+  it("tab ↔ 下标：顺序固定为 小记 → 知识库 → 日记 → AI → 标签（261109 二改 + 261110 五格 Dock），未知值回落第一页", () => {
+    expect(HOME_TABS).toEqual(["quick", "library", "diary", "ai", "tags"]);
     expect(tabIndex("quick")).toBe(0);
     expect(tabIndex("library")).toBe(1);
     expect(tabIndex("diary")).toBe(2);
-    expect(tabIndex("tags")).toBe(3);
+    expect(tabIndex("ai")).toBe(3);
+    expect(tabIndex("tags")).toBe(4);
     expect(tabIndex("nope" as never)).toBe(0);
     expect(tabAt(0)).toBe("quick");
     expect(tabAt(1)).toBe("library");
     expect(tabAt(2)).toBe("diary");
-    expect(tabAt(3)).toBe("tags");
+    expect(tabAt(3)).toBe("ai");
+    expect(tabAt(4)).toBe("tags");
     expect(tabAt(-3)).toBe("quick");
     expect(tabAt(9)).toBe("tags");
   });
@@ -24,7 +26,7 @@ describe("首页横向分页判据（261019，对齐语雀 pager）", () => {
     expect(pagerScrollLeft(1, -10)).toBe(0);
     expect(pagerScrollLeft(1, Number.NaN)).toBe(0);
     expect(pagerScrollLeft(2, 412)).toBe(824);
-    expect(pagerScrollLeft(7, 412)).toBe(1236); // 越界夹到最后一页（261109：四页）
+    expect(pagerScrollLeft(7, 412)).toBe(1648); // 越界夹到最后一页（261110：五页）
   });
 
   it("滚动位置 → 页码：过半算下一页，回弹/越界夹紧", () => {
@@ -34,7 +36,7 @@ describe("首页横向分页判据（261019，对齐语雀 pager）", () => {
     expect(settledIndex(412, 412)).toBe(1);
     expect(settledIndex(1.4 * 412, 412)).toBe(1);
     expect(settledIndex(-80, 412)).toBe(0);   // 首屏右滑回弹
-    expect(settledIndex(9999, 412)).toBe(3);  // 越界（四页时夹到最后一页）
+    expect(settledIndex(9999, 412)).toBe(4);  // 越界（五页时夹到最后一页）
     expect(settledIndex(412, 0)).toBe(0);     // 宽度未量到
     expect(settledIndex(Number.NaN, 412)).toBe(0);
   });
@@ -68,15 +70,18 @@ describe("分页状态机 reducePager（261028 MOB-03）", () => {
     expect(settled.state.tab).toBe("library");
   });
 
-  it("第三页「日记」/ 第四页「标签」：点 tab 的目标 = 下标 × 宽度", () => {
+  it("第三页「日记」/ 第四页「AI」/ 第五页「标签」：点 tab 的目标 = 下标 × 宽度", () => {
     const click = reducePager(initialPagerState("quick", 412), { type: "tab-click", tab: "diary", scrollLeft: 0, width: 412 });
     expect(click.effect).toEqual({ scrollLeft: 824, behavior: "smooth" });
     expect(click.state.tab).toBe("diary");
-    // 第四页（标签）从日记页继续：下标 3 ⇒ 1236。
-    const next = reducePager(click.state, { type: "tab-click", tab: "tags", scrollLeft: 824, width: 412 });
-    expect(next.effect).toEqual({ scrollLeft: 1236, behavior: "smooth" });
+    // 第四页（AI）从日记页继续：下标 3 ⇒ 1236。
+    const ai = reducePager(click.state, { type: "tab-click", tab: "ai", scrollLeft: 824, width: 412 });
+    expect(ai.effect).toEqual({ scrollLeft: 1236, behavior: "smooth" });
+    // 第五页（标签）：下标 4 ⇒ 1648。
+    const next = reducePager(ai.state, { type: "tab-click", tab: "tags", scrollLeft: 1236, width: 412 });
+    expect(next.effect).toEqual({ scrollLeft: 1648, behavior: "smooth" });
     // 从标签页点回小记：目标回到 0。
-    const back = reducePager(next.state, { type: "tab-click", tab: "quick", scrollLeft: 1236, width: 412 });
+    const back = reducePager(next.state, { type: "tab-click", tab: "quick", scrollLeft: 1648, width: 412 });
     expect(back.effect).toEqual({ scrollLeft: 0, behavior: "smooth" });
   });
 

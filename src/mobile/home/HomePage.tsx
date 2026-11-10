@@ -10,12 +10,13 @@
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { writeLocalStorage } from "../../lib/localStorageSafe";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { ChevronDown, ChevronRight, CloudUpload, List, LayoutGrid, ArrowUpDown, BookMarked, Feather, MoreHorizontal, Pencil, Plus, Search, Settings, Settings2, SmilePlus, Sparkles, Tag, Trash } from "lucide-react";
+import { ChevronDown, ChevronRight, CloudUpload, List, LayoutGrid, ArrowUpDown, BookMarked, Feather, MoreHorizontal, NotebookPen, Pencil, Plus, Search, Settings, Settings2, SmilePlus, Sparkles, Tag, Trash } from "lucide-react";
 import type { TreeNode } from "../../lib/types";
 import type { LocalNoteSummary } from "../data/noteRepository";
 import { NotebookGrid } from "./NotebookGrid";
 import { QuickNotePreview } from "../../features/quickNotes/QuickNotePreview";
 import type { StoredQuickNoteImage } from "../../core/quickNoteModel.js";
+import { MobileErrorBoundary } from "../ui/MobileErrorBoundary";
 import { MobileSheetMenu, type MobileSheetItem } from "../ui/MobileSheetMenu";
 import { MobileSheet } from "../ui/MobileSheet";
 import { NameSheet } from "../ui/NameSheet";
@@ -55,7 +56,9 @@ import { TagsHomeTab } from "../tags/TagsHomeTab";
 // 日记页按需加载（261109）：它把 core/diary + 自己的列表/搜索接线带进分包，
 // 静态引入会直接抬高移动端 entry 预算（check:bundle 的 mobile-entry-js/preload 是硬门禁）。
 const DiaryPage = lazy(() => import("../diary/DiaryPage").then((m) => ({ default: m.DiaryPage })));
-import type { HomeTab } from "./tabPager";
+/** 第五个空间（底部 Dock 的「AI」）：内嵌 AI 页（embedded 模式，不再全屏路由）。 */
+const MobileAiPage = lazy(() => import("../ai/MobileAiPage").then((m) => ({ default: m.MobileAiPage })));
+import { HOME_TABS, type HomeTab } from "./tabPager";
 import { quickNoteDetailOf, useQuickNoteDetailCache } from "./useQuickNoteDetailCache";
 import { notifyMissingQuickNoteOnce } from "./missingQuickNoteNotice";
 import { useQuickNoteListModel } from "./useQuickNoteListModel";
@@ -102,8 +105,8 @@ export interface HomePageProps {
   onOpenNote: (id: string) => void;
   onOpenDrawer: () => void;
   onOpenSearch: () => void;
-  /** 打开 AI 全屏页（261023 P1）。 */
-  onOpenAi?: () => void;
+  /** AI 页内「存为文档 / 存为小记」后刷新首页数据（AI 现在是第四格分页，不再全屏路由）。 */
+  onAiChanged?: () => void;
   onCreateNotebook: () => void;
   /** 「空白文档」：在用户选中的笔记本下建文档并进编辑态（归属判定复用 MobileApp.createNoteInParent）。 */
   onCreateNote: (notebookId: string) => void;
@@ -149,11 +152,23 @@ const VIEW_KEY = "lakex-local-notes-mobile.libraryView";
  */
 const COVER_THUMB_PX = 1024;
 
+/**
+ * 首层五空间（261110 底部 Dock）：顺序 = HOME_TABS，图标 + 文字同一个来源。
+ * 与桌面五空间 1:1（文档=知识库 / 小记 / 日记 / AI（移动为助手，已有会话历史）/ 标签）。
+ */
+const HOME_TAB_META: Record<HomeTab, { label: string; Icon: typeof Feather }> = {
+  quick: { label: "小记", Icon: Feather },
+  library: { label: "知识库", Icon: BookMarked },
+  diary: { label: "日记", Icon: NotebookPen },
+  ai: { label: "AI", Icon: Sparkles },
+  tags: { label: "标签", Icon: Tag },
+};
+
 
 export function HomePage(props: HomePageProps) {
   const {
     tab, notebooks, notes, quickNotes, tagDirectory, docCounts, onTabChange, onOpenNotebook,
-    onOpenNote, onOpenQuickNote, onTagsChanged, onOpenDrawer, onOpenSearch, onOpenAi, onCreateNotebook, onCreateNote, onTreeChanged, onQuickNotesChanged, onQuickNoteTagsChanged,
+    onOpenNote, onOpenQuickNote, onTagsChanged, onOpenDrawer, onOpenSearch, onAiChanged, onCreateNotebook, onCreateNote, onTreeChanged, onQuickNotesChanged, onQuickNoteTagsChanged,
     pendingQuickNoteId, onPendingQuickNoteConsumed,
     diaryNodes, onOpenDiaryEntry, onOpenDiarySearch,
   } = props;
@@ -209,6 +224,10 @@ export function HomePage(props: HomePageProps) {
   const libraryPaneRef = useRef<HTMLElement | null>(null);
   const tagsPaneRef = useRef<HTMLElement | null>(null);
   const diaryPaneRef = useRef<HTMLElement | null>(null);
+  const aiPaneRef = useRef<HTMLElement | null>(null);
+  /** AI 页首次进入才挂载（懒 chunk，不进首页首屏）；切走后保留 DOM（会话/流在 store 里不丢）。 */
+  const [aiMounted, setAiMounted] = useState(false);
+  useEffect(() => { if (tab === "ai") setAiMounted(true); }, [tab]);
 
   // ③ 非活动页 inert：各页都在 DOM 里，不能让读屏/焦点摸到屏幕外那页。
   useEffect(() => {
@@ -216,6 +235,7 @@ export function HomePage(props: HomePageProps) {
     libraryPaneRef.current?.toggleAttribute("inert", tab !== "library");
     tagsPaneRef.current?.toggleAttribute("inert", tab !== "tags");
     diaryPaneRef.current?.toggleAttribute("inert", tab !== "diary");
+    aiPaneRef.current?.toggleAttribute("inert", tab !== "ai");
   }, [tab]);
 
   // v2（261107）：首页顶栏滚动状态 —— 任一 pane 滚过 6px 就浮出玻璃底 / 收起 tab / 显示居中标题。
@@ -725,16 +745,8 @@ export function HomePage(props: HomePageProps) {
           <button className="toolbar__button" onClick={onOpenDrawer} aria-label="设置" title="设置"><Settings /></button>
         </div>
         <div className="mobile-topbar-group mobile-topbar-group--center">
-          <div className="mobile-home-tabs">
-            <button className={tab === "quick" ? "mobile-htab active" : "mobile-htab"} onClick={() => switchTab("quick")}>小记</button>
-            <button className={tab === "library" ? "mobile-htab active" : "mobile-htab"} onClick={() => switchTab("library")}>知识库</button>
-            {/* 261109 日记 v1：第 4 个一级页；261109 二改按用户要求排在「标签」前。 */}
-            <button className={tab === "diary" ? "mobile-htab active" : "mobile-htab"} onClick={() => switchTab("diary")}>日记</button>
-            {/* 261106 用户验收：标签升为一级页（与小记/知识库并列，flomo 式：标签即入口）。 */}
-            <button className={tab === "tags" ? "mobile-htab active" : "mobile-htab"} onClick={() => switchTab("tags")}>标签</button>
-          </div>
-          {/* v2：滚动后 tab 收起，顶栏中央显示当前页标题（样式在 mobile.css） */}
-          <span className="mobile-topbar-collapsed-title" aria-hidden="true">{tab === "quick" ? "小记" : tab === "library" ? "知识库" : tab === "diary" ? "日记" : "标签"}</span>
+          {/* 261110 底部 Dock 改版：空间切换全部下沉到 Dock，顶栏中间只显示**当前空间标题**。 */}
+          <span className="mobile-topbar-title mobile-home-space-title" aria-live="polite">{HOME_TAB_META[tab].label}</span>
         </div>
         <div className="mobile-topbar-group mobile-topbar-group--end">
           {/* 用户 261014 定稿：排序（小记）/ 视图（知识库）+ 云同步**固定挂在顶栏右上角**，云同步恒在最右。 */}
@@ -743,6 +755,8 @@ export function HomePage(props: HomePageProps) {
           ) : tab === "library" ? (
             <button className="toolbar__button" onClick={toggleView} aria-label={libraryView === "shelf" ? "切换到列表" : "切换到书架"} title={libraryView === "shelf" ? "切换到列表" : "切换到书架"}>{viewIcon}</button>
           ) : null}
+          <button className="toolbar__button" onClick={onOpenSearch} aria-label="搜索" title="搜索"><Search /></button>
+          {/* 261110 用户要求：云同步入口**始终可见**（不收起、不藏进菜单），恒在最右。 */}
           <button
             className="toolbar__button"
             onClick={() => void runSync()}
@@ -905,6 +919,16 @@ export function HomePage(props: HomePageProps) {
             />
           </Suspense>
         </section>
+        {/* 一级「AI」页（261110 底部 Dock 第四格）：内嵌嵌入式 AI 页；懒挂载，切走保留 DOM。 */}
+        <section ref={aiPaneRef} className="mobile-tab-pane mobile-tab-pane--ai">
+          {aiMounted ? (
+            <Suspense fallback={<div className="mb-ai-pane-skeleton" aria-hidden="true" />}>
+              <MobileErrorBoundary scope="ai" title="AI 面板加载失败">
+                <MobileAiPage open embedded onClose={() => switchTab("quick")} onChanged={onAiChanged} />
+              </MobileErrorBoundary>
+            </Suspense>
+          ) : null}
+        </section>
         {/* 一级「标签」页（261106）：标签即入口 → 点进去看文档/小记 → 管理动作收在「管理」里。 */}
         <section ref={tagsPaneRef} className="mobile-tab-pane">
           <TagsHomeTab
@@ -919,33 +943,48 @@ export function HomePage(props: HomePageProps) {
         </section>
       </div>
 
-      {/* 底部胶囊栏（首页，用户 261014 定稿）：搜索 | ＋ | AI。
-          · 排序 / 视图 与 云同步**都在顶栏右上角**（不在胶囊里）；
-          · 「＋」是**统一加号**（不再按 tab 换成"新建知识库"图标）：短按开新建面板、长按上滑速记；
-          · AI 已是真实入口（261023 P1 接入 MobileAiPage；开启开关与接口配置在 设置 → AI 助手）。
-          ⚠️ 小记写作时**让位**：写作卡底部挂的是文档编辑那条 dock（用户 261013 定稿），
-          两条都贴底会打架（胶囊 z-index 更高会把 dock 盖住）⇒ 编辑会话期间不渲染胶囊。 */}
+      {/* 底部 Dock（261110 用户点单，方案 A）：五格空间 + 中央悬浮「＋」。
+          · 五个空间 = 小记 / 知识库 / 日记 / AI / 标签（与桌面五空间 1:1；左右滑动仍是同一个分页容器）；
+          · 「＋」悬浮在 Dock 中央上方：短按 = 新建面板（按 tab 记性）；**长按 260ms + 上滑 = 速记一条小记**
+            （手势判据沿用 ui/createPress.ts，与旧胶囊同源）；
+          · 云同步与搜索在顶栏右上角：**同步恒可见**（用户 261110 明确要求，不收起）；
+          · 写作会话 / 多选态期间不渲染（底部让给文档编辑 dock，避免两条贴底打架）。 */}
       {composer === null && !selection.active && (
-      /* **整块触发**（261014 用户定稿）：手势挂在整条胶囊上 —— 按住**任意处**约 260ms，整块变成「小记」；
-         继续上滑越过触发线松手 = 速记一条小记；不上滑松手 = 取消。短按不接手势（pass），条目自己的 onClick 照常。 */
-      <nav
-        className={"mobile-bottom-bar mobile-bottom-bar--home mb-glass" + (pressRevealed ? " is-revealed" : "") + (pressArmed ? " is-armed" : "")}
-        aria-label="首页操作"
-        data-prevent-swipe
-        onPointerDown={onPressDown}
-        onContextMenu={(e) => e.preventDefault()}
-        /* 长按过的那一次，吞掉随后由同一次按压合成的 click。 */
-        onClickCapture={(e) => { if (suppressTapRef.current) { e.preventDefault(); e.stopPropagation(); } }}
-      >
-        {/* 整块变化层（语雀效果）：常挂载，只在 is-revealed 时可见（条件渲染会让变化没有过渡）。 */}
-        <div className="mobile-block-quick" aria-hidden="true">
-          <Feather size={20} />
-          <span className="mobile-block-quick__label">小记</span>
+        <div className="mb-home-dockwrap" data-prevent-swipe>
+          <nav className="mb-home-dock" aria-label="空间">
+            {HOME_TABS.map((id) => {
+              const meta = HOME_TAB_META[id];
+              const active = tab === id;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  className={"mb-home-dock__item" + (active ? " is-active" : "")}
+                  aria-current={active ? "page" : undefined}
+                  onClick={() => switchTab(id)}
+                >
+                  <meta.Icon size={22} aria-hidden="true" />
+                  <span className="mb-home-dock__label">{meta.label}</span>
+                </button>
+              );
+            })}
+          </nav>
+          <button
+            type="button"
+            className={"mb-home-fab" + (pressRevealed ? " is-revealed" : "") + (pressArmed ? " is-armed" : "")}
+            aria-label="新建（长按上滑可速记）"
+            aria-haspopup="dialog"
+            aria-expanded={createOpen}
+            onPointerDown={onPressDown}
+            onContextMenu={(e) => e.preventDefault()}
+            /* 长按过的那一次，吞掉随后由同一次按压合成的 click。 */
+            onClickCapture={(e) => { if (suppressTapRef.current) { e.preventDefault(); e.stopPropagation(); } }}
+            onClick={() => setCreateOpen(true)}
+          >
+            <Plus size={24} aria-hidden="true" />
+            {pressRevealed && <span className="mb-home-fab__tip" aria-hidden="true">{pressArmed ? "松手记一条小记" : "继续上滑记小记"}</span>}
+          </button>
         </div>
-        <button className="mobile-bottom-bar__item" onClick={onOpenSearch} aria-label="搜索" title="搜索"><Search /></button>
-        <button className="mobile-bottom-bar__item" onClick={() => setCreateOpen(true)} aria-label="新建" title="新建" aria-haspopup="dialog" aria-expanded={createOpen}><Plus /></button>
-        <button className="mobile-bottom-bar__item" onClick={() => { if (onOpenAi) onOpenAi(); else showToast("AI 助手暂不可用"); }} aria-label="AI 助手" title="AI 助手"><Sparkles /></button>
-      </nav>
       )}
 
       {/* 小记「...」菜单 */}

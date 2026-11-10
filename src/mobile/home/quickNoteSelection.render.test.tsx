@@ -129,18 +129,20 @@ afterEach(async () => {
 });
 
 describe("小记列表多选（task-82）", () => {
-  it("常规态：四个 tab、胶囊栏在、没有复选框；长按卡片 → 选择条 + 复选框 + 胶囊让位", async () => {
+  it("常规态：底部五格 Dock 在、没有复选框；长按卡片 → 选择条 + 复选框 + Dock 让位", async () => {
     await renderHome();
-    expect(host.querySelectorAll(".mobile-htab").length).toBe(4);
-    expect(host.querySelector(".mobile-bottom-bar--home")).not.toBeNull();
+    expect(host.querySelector(".mb-home-dock")).not.toBeNull();
+    expect(host.querySelectorAll(".mb-home-dock__item").length).toBe(5);
+    expect(host.querySelector(".mb-home-fab")).not.toBeNull();
     expect(host.querySelectorAll("[data-selection-checkbox]").length).toBe(0);
 
     await longPress(cards()[0]);
     expect(topBar()).not.toBeNull();
     expect(topBar()!.textContent).toContain("已选 1");
     expect(host.querySelectorAll("[data-selection-checkbox]").length).toBe(2);
-    expect(host.querySelector(".mobile-bottom-bar--home")).toBeNull();   // 胶囊让位
-    expect(host.querySelectorAll(".mobile-htab").length).toBe(0);        // 顶部换成选择条
+    expect(host.querySelector(".mb-home-dock")).toBeNull();   // Dock 让位
+    expect(host.querySelector(".mb-home-fab")).toBeNull();
+    expect(host.querySelectorAll(".mobile-htab").length).toBe(0);        // 顶栏换成选择条
   });
 
   it("长按抬手补发的 click 被吞掉（不打开编辑器）；选择态点卡片 = 切换勾选", async () => {
@@ -170,8 +172,9 @@ describe("小记列表多选（task-82）", () => {
 
     await click(topButtons()[0]);
     expect(topBar()).toBeNull();
-    expect(host.querySelectorAll(".mobile-htab").length).toBe(4);
-    expect(host.querySelector(".mobile-bottom-bar--home")).not.toBeNull();
+    // 261110：常规态 = 底部五格 Dock + 悬浮＋（顶部 tab 行已下沉到 Dock）
+    expect(host.querySelectorAll(".mb-home-dock__item").length).toBe(5);
+    expect(host.querySelector(".mb-home-fab")).not.toBeNull();
   });
 
   const actionButton = (label: string): HTMLButtonElement =>

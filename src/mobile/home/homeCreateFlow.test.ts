@@ -6,8 +6,8 @@
  *
  * 盯住六条：
  *  1. 冷启动默认落在「小记」tab；
- *  2. 首页胶囊 = 搜索 | ＋ | 排序/视图 | AI | 云同步，且**云同步恒在最右**；
- *  3. 排序/视图**不再挂在顶栏**（已下移），顶栏留等宽空槽保持 tab 居中；
+ *  2. 261110 改版：底部 **五格 Dock**（小记/知识库/日记/AI/标签）+ 中央悬浮「＋」；顶栏 = 设置 | 空间标题 | 空间内动作 + 搜索 + **云同步（恒可见、恒最右）**；
+ *  3. 空间切换只在 Dock（单一来源 HOME_TABS），左右横滑仍是同一个分页容器；
  *  4. 新建面板 = 图 3 那两组（261110 起七项，含「日记」），**没有模板、没有 OCR 识图**（我们没有该能力）；
  *  5. 拍摄/图片 → 内核 insertFiles 通道；待办 → 内核 taskList 命令；空白文档 → 只选**已有**笔记本；
  *  6. 「＋」的长按/上滑判定走纯函数，且**长按不误建**（不上滑松手 = 取消）。
@@ -47,33 +47,28 @@ describe("首页新建流（261014）", () => {
     expect(MOBILE_APP).toMatch(/useState<Route>\(\{ kind: "home", tab: "quick" \}\)/);
   });
 
-  it("胶囊 = 搜索 | ＋ | AI（排序/视图 与 云同步都不在胶囊里）", () => {
-    const nav = HOME.slice(HOME.indexOf('aria-label="首页操作"'), HOME.indexOf("</nav>"));
-    expect(nav.length).toBeGreaterThan(0);
-    const order = ['aria-label="搜索"', 'aria-label="新建"', 'aria-label="AI 助手"'];
-    let last = -1;
-    for (const label of order) {
-      const at = nav.indexOf(label);
-      expect(at, label + " 应出现在胶囊里且顺序正确").toBeGreaterThan(last);
-      last = at;
-    }
-    // AI 是胶囊最后一个（也是唯一另一个）按钮；排序/视图与云同步都不在这里
-    const ai = nav.indexOf('aria-label="AI 助手"');
-    expect(nav.slice(ai)).not.toContain("mobile-bottom-bar__item");
-    expect(nav).not.toContain('aria-label="立即同步"');
-    expect(nav).not.toContain('aria-label="排序"');
+  it("底部 Dock = 五格空间（HOME_TABS 单一来源）；＋ 是 Dock 外的中央悬浮按钮", () => {
+    const dock = HOME.slice(HOME.indexOf('aria-label="空间"'), HOME.indexOf("</nav>"));
+    expect(dock.length).toBeGreaterThan(0);
+    expect(HOME).toContain("HOME_TABS.map((id)");
+    expect(HOME).toContain("HOME_TAB_META[id]");
+    // 搜索 / ＋ / 同步都不在 Dock 格子里（分别去了顶栏与悬浮按钮）
+    expect(dock).not.toContain("<Search");
+    expect(dock).not.toContain("<Plus");
+    expect(dock).not.toContain("立即同步");
+    // ＋ = 悬浮按钮（Dock 的兄弟节点），带长按上滑速记的 aria 说明
+    expect(HOME).toContain("mb-home-fab");
+    expect(HOME).toMatch(/aria-label="新建（长按上滑可速记）"/);
   });
 
-  it("三组栅格：设置 | tab 行 | 排序/视图+云同步；云同步恒在最右，tab 恒居中", () => {
+  it("顶栏：设置 | 当前空间标题 | 空间内动作 + 搜索 + 云同步（同步恒在最右、任何空间都可见）", () => {
     const header = HOME.slice(HOME.indexOf("<header"), HOME.indexOf("</header>"));
-    // 261109 二改：左右各 1fr + 中间 auto ⇒ 加 tab 不再把右侧图标挤出去（旧「对称空槽」已删）。
     expect(header).toContain("mobile-topbar--home");
     expect(header).toContain("mobile-topbar-group--start");
     expect(header).toContain("mobile-topbar-group--center");
     expect(header).toContain("mobile-topbar-group--end");
-    expect(header).not.toContain("mobile-topbar-gap");
-    // 顺序：设置 → tab 行 → 排序 → 云同步
-    const order = ['aria-label="设置"', "mobile-home-tabs", 'aria-label="排序"', "aria-label={syncProgress"];
+    // 顺序：设置 → 空间标题 → 排序/视图 → 搜索 → 云同步（云同步恒最后）
+    const order = ['aria-label="设置"', "mobile-home-space-title", 'aria-label="排序"', 'aria-label="搜索"', "aria-label={syncProgress"];
     let last = -1;
     for (const label of order) {
       const at = header.indexOf(label);
@@ -81,33 +76,22 @@ describe("首页新建流（261014）", () => {
       last = at;
     }
     expect(header).toContain('"立即同步"');
-    // 云同步是顶栏最后一个按钮
+    // 云同步是顶栏最后一个按钮（用户 261110：必须始终可见，不收起）
     const cloud = header.indexOf("aria-label={syncProgress");
     expect(header.slice(cloud, header.indexOf("</header>"))).not.toContain("toolbar__button");
     expect(header).toContain("setFilterOpen");
     expect(header).toContain("toggleView");
   });
 
-  it("页面顺序：小记 / 知识库 / 日记 / 标签（日记在标签前）", () => {
-    const header = HOME.slice(HOME.indexOf("<header"), HOME.indexOf("</header>"));
-    const tabs = header.indexOf("mobile-home-tabs");
-    const order = [">小记</button>", ">知识库</button>", ">日记</button>", ">标签</button>"];
-    let last = tabs;
-    for (const label of order) {
-      const at = header.indexOf(label, tabs);
-      expect(at, label + " 顺序不对").toBeGreaterThan(last);
-      last = at;
-    }
+  it("空间顺序单一来源：HOME_TABS = 小记 / 知识库 / 日记 / AI / 标签（Dock 与分页同源）", () => {
+    expect(TAB_PAGER).toContain('export const HOME_TABS = ["quick", "library", "diary", "ai", "tags"] as const;');
+    expect(HOME).toContain("HOME_TABS.map((id)");
   });
 
-  it("顶栏文字 tab 不换行、不贴边（窄屏收紧几何）", () => {
-    // 261108 实机：知识库被挤成两行、云按钮贴边 ⇒ 文字 tab 必须 nowrap，左右至少 12px。
-    expect(CSS).toMatch(/\.mobile-htab\s*\{[^}]*white-space:\s*nowrap/);
-    expect(CSS).toMatch(/\.mobile-topbar\s*\{[^}]*padding:[^;]*max\(var\(--mb-page-pad\)/);
-    expect(CSS).toMatch(/\.mobile-home-tabs\s*\{[^}]*gap:\s*var\(--mb-home-tab-gap,\s*2px\)/);
-    // 261109 二改：右侧永不被挤出 ⇒ 页眉三组栅格 + 窄屏收紧（tab 40 / gap 0）
-    expect(CSS).toMatch(/\.mobile-topbar--home\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s+auto\s+minmax\(0,\s*1fr\)/);
-    expect(CSS).toMatch(/@media\s*\(max-width:\s*385px\)[\s\S]*?--mb-tab-w:\s*40px/);
+  it("Dock 几何：五列等分 + 标签 nowrap/省略 + FAB 圆形", () => {
+    expect(CSS).toMatch(/\.mb-home-dock\s*\{[^}]*grid-template-columns:\s*repeat\(5,\s*minmax\(0,\s*1fr\)\)/);
+    expect(CSS).toMatch(/\.mb-home-dock__label\s*\{[^}]*white-space:\s*nowrap/);
+    expect(CSS).toMatch(/\.mb-home-fab\s*\{[^}]*border-radius:\s*50%/);
   });
 
   it("同步进行中渲染可视进度条（P0-6）：条 + 阶段文案 + 百分比，读索引阶段走不确定态", () => {
@@ -118,14 +102,19 @@ describe("首页新建流（261014）", () => {
     expect(HOME).not.toContain("alert(");
   });
 
-  it("首页胶囊用收窄变体（3 项紧凑宽度），冷启动骨架同步", () => {
-    expect(HOME).toContain("mobile-bottom-bar--home");
-    expect(MOBILE_APP).toContain("mobile-bottom-bar--home");
+  it("首页用底部 Dock + 悬浮＋；AI 内嵌为第 4 格分页（不再全屏路由）", () => {
+    expect(HOME).toContain("mb-home-dock");
+    expect(HOME).toContain("mb-home-fab");
+    expect(HOME).toContain("<MobileAiPage open embedded");
+    // AI 从全屏路由下线：MobileApp 不再 import 页组件，改由首页内嵌；首页给回写刷新回调
+    expect(MOBILE_APP).not.toContain("MobileAiPage");
+    expect(MOBILE_APP).toContain("onAiChanged");
   });
 
-  it("「＋」是统一加号（不再按 tab 换图标），并给出新建面板入口", () => {
+  it("「＋」是统一加号（悬浮 FAB），并给出新建面板入口", () => {
     expect(HOME).not.toContain("FolderPlus");
-    expect(HOME).toMatch(/aria-label="新建"[\s\S]{0,900}<Plus \/>/);
+    // 长按上滑速记的 aria 说明挂在 FAB 上；图标是统一的 Plus
+    expect(HOME).toMatch(/aria-label="新建（长按上滑可速记）"[\s\S]{0,500}<Plus size=\{24\}/);
     expect(HOME).toMatch(/<CreateSheet open=\{createOpen\}/);
   });
 
@@ -150,13 +139,14 @@ describe("首页新建流（261014）", () => {
     expect(HOME).toMatch(/notebooks\.map/);
   });
 
-  it("整块触发：手势挂在整条胶囊上（不是只挂 ＋），长按不上滑松手 = 取消（不误建）", () => {
-    const nav = HOME.slice(HOME.indexOf('aria-label="首页操作"'), HOME.indexOf("</nav>"));
-    expect(nav.length).toBeGreaterThan(0);
-    expect(nav).toMatch(/onPointerDown=\{onPressDown\}/);
-    expect(nav).toContain("mobile-block-quick");
-    // 手势不能在胶囊上"捕获指针"：捕获会把随后的 click 重定向到胶囊本身，条目自己的 onClick 就再也不触发（261014 实测踩过）。
-    expect(nav).not.toContain("setPointerCapture");
+  it("悬浮＋：短按开新建面板，长按 260ms + 上滑 = 速记（判据走纯函数；长按不上滑松手 = 取消）", () => {
+    const fabStart = HOME.indexOf('className={"mb-home-fab"');
+    expect(fabStart).toBeGreaterThan(0);
+    const fab = HOME.slice(fabStart, HOME.indexOf("</button>", fabStart));
+    expect(fab).toMatch(/onPointerDown=\{onPressDown\}/);
+    expect(fab).toContain("mb-home-fab__tip");
+    // 手势不能"捕获指针"：捕获会把随后的 click 重定向到按钮本身（261014 实测踩过）。
+    expect(fab).not.toContain("setPointerCapture");
     expect(HOME).not.toContain("setPointerCapture");
     expect(HOME).toMatch(/blockPressRelease\(\{ revealed: createPressRevealed\(elapsed\), dy \}\)/);
     expect(HOME).toMatch(/CREATE_LONG_PRESS_MS/);
@@ -165,8 +155,8 @@ describe("首页新建流（261014）", () => {
 
   it("小记 / 知识库 / 标签 = 原生横向分页（跟手 + 松手吸附；写作会话锁横滑）", () => {
     // 三页常驻在同一个横向滚动容器里（手指拖动时相邻页同时可见）——不是"按 tab 条件渲染 + 手写横滑"。
-    // 261106：标签升为一级页（HOME_TABS 三页），分页判据仍是同一套纯函数（count 参数控制页数）。
-    expect((HOME.match(/className="mobile-tab-pane"/g) || []).length).toBe(4); // 261109：+ 日记页
+    // 261110：五页（小记/知识库/日记/AI/标签），分页判据仍是同一套纯函数（count 参数控制页数）。
+    expect((HOME.match(/className="mobile-tab-pane[ "]/g) || []).length).toBe(5); // 261109 +日记；261110 +AI（带修饰类）
     expect(HOME).toContain("<TagsHomeTab");
     expect(HOME).not.toContain("useHorizontalSwipe");
     expect(HOME).not.toMatch(/key=\{tab\}/);

@@ -7,10 +7,11 @@
  * DOM 侧（事件、inert、滚动对齐）在 `HomePage`，不在这里。
  */
 /**
- * 首层 tab（261109 二改）。顺序 = 小记 / 知识库 / **日记 / 标签** ——
- * 用户 261109 点单把「日记」排在「标签」前（不再按加入时间追加）；DOM 顺序、分页下标、顶栏按钮三处必须同源。
+ * 首层 tab（261109 二改；261110 底部 Dock 五格）。顺序 = 小记 / 知识库 / 日记 / **AI / 标签** ——
+ * 桌面五空间（文档/小记/日记/AI 写作/标签）在移动端 1:1 映射（移动的 AI = 助手，已有完整会话历史）；
+ * DOM 顺序、分页下标、底部 Dock 三处必须同源。
  */
-export const HOME_TABS = ["quick", "library", "diary", "tags"] as const;
+export const HOME_TABS = ["quick", "library", "diary", "ai", "tags"] as const;
 export type HomeTab = (typeof HOME_TABS)[number];
 
 function clampIndex(index: number, count: number): number {

@@ -43,11 +43,16 @@ export interface MobileAiPageProps {
   onClose: () => void;
   /** 新建了文档/小记后让首页刷新。 */
   onChanged?: () => void;
+  /**
+   * 261110：作为首页第 5 个分页（底部 Dock 的「AI」）内嵌 —— 不是全屏页、没有返回按钮、
+   * 不注册返回栈（返回语义交给首页 tab 切换），根节点也不抢 z-index/inset。
+   */
+  embedded?: boolean;
 }
 
 const fmt = (n: number): string => n.toLocaleString("en-US");
 
-export function MobileAiPage({ open, onClose, onChanged }: MobileAiPageProps) {
+export function MobileAiPage({ open, onClose, onChanged, embedded = false }: MobileAiPageProps) {
   const chat = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
   const [draft, setDraft] = useState("");
   const [corpusOpen, setCorpusOpen] = useState(false);
@@ -67,6 +72,7 @@ export function MobileAiPage({ open, onClose, onChanged }: MobileAiPageProps) {
   useEffect(() => {
     if (!open) return;
     init();
+    if (embedded) return () => {};
     return pushBackHandler(() => { onClose(); return true; });
   }, [open, onClose]);
 
@@ -196,9 +202,9 @@ export function MobileAiPage({ open, onClose, onChanged }: MobileAiPageProps) {
   const docCount = chat.corpus.length;
 
   return (
-    <div className="mobile-ai-page" role="dialog" aria-modal="true" aria-label="AI 助手">
-      <header className="toolbar toolbar--border mobile-topbar">
-        <button type="button" className="toolbar__button" onClick={onClose} aria-label="返回"><ArrowLeft size={20} /></button>
+    <div className={"mobile-ai-page" + (embedded ? " mobile-ai-page--embedded" : "")} role={embedded ? "region" : "dialog"} aria-modal={embedded ? undefined : true} aria-label="AI 助手">
+      <header className={"toolbar toolbar--border mobile-topbar" + (embedded ? " mobile-ai-page__head" : "")}>
+        {!embedded && <button type="button" className="toolbar__button" onClick={onClose} aria-label="返回"><ArrowLeft size={20} /></button>}
         <span className="mobile-topbar-title">AI 助手</span>
         <button type="button" className="toolbar__button" onClick={() => setHistoryOpen(true)} aria-label="历史对话"><Clock size={20} /></button>
         <button type="button" className="toolbar__button" onClick={() => { newConversation(); setPendingImages([]); }} aria-label="新对话"><Plus size={20} /></button>

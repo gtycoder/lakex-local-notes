@@ -13,6 +13,7 @@ import { describe, expect, it } from "vitest";
 
 const APP = readFileSync(new URL("./MobileApp.tsx", import.meta.url), "utf8");
 const MAIN = readFileSync(new URL("./main.tsx", import.meta.url), "utf8");
+const HOME = readFileSync(new URL("./home/HomePage.tsx", import.meta.url), "utf8");
 
 describe("坏库页（261105）", () => {
   it("坏库分支优先于启动失败分支（重试没意义时先给恢复出口）", () => {
@@ -48,10 +49,11 @@ describe("崩溃隔离 + 全局异常（261105）", () => {
     expect(MAIN).toContain("MobileApp initialCapture");
   });
 
-  it("逐层隔离：首页/工作区/设置/搜索/AI 各一层", () => {
-    for (const scope of ["home", "workspace", "settings", "search", "ai"]) {
+  it("逐层隔离：首页/工作区/设置/搜索/AI 各一层（261110：AI 从全屏路由改为首页第 4 格分页，隔离层跟着搬进 HomePage）", () => {
+    for (const scope of ["home", "workspace", "settings", "search"]) {
       expect(APP).toContain('scope="' + scope + '"');
     }
+    expect(HOME).toContain('scope="ai"');
   });
 
   it("诊断复制带上最近崩溃记录；设置页也有导出入口", () => {

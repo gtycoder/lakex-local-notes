@@ -37,6 +37,15 @@
 - **门禁（master 合并后实测）**：tsc 0；全量 vitest **825 文件（814 passed / 11 skipped）/ 5216 passed / 12 skipped / 0 failed**；ui-metrics / check:core / check:mobileui / `git diff --check` 通过。
 - **遗留**：桌面 `check:stylesnap` 42 态未跑（本机无合成夹具缓存，且当前无「日记空间」态）——本批动了设置页表面与对话框几何 ⇒ **下次有夹具的机器必须重烤/复核**。样机与 before/after 对照装置在本地分支 `spike/astryx-visual-prototype`（未推），master 只收产品改动。
 
+### 261110 · 移动端首页改版：底部五格 Dock + 中央悬浮＋（方案 A）
+- **用户点单**（先讨论定方案 A，参照淘宝/京东底部五格）：5 个一级空间下沉到底部；三条硬要求：① 可左右滑动切换 ② 「＋」保留长按上滑速记 ③ **云同步始终可见、不收起**。
+- **结构**：`HOME_TABS` 扩到 5（quick / library / diary / **ai** / tags），Dock 与分页 DOM 同源；AI = 第 4 格分页内嵌（`MobileAiPage embedded`，**不再全屏路由**；返回键回上一个非 AI 空间；会话 store 不变）；顶栏 = 设置 | 空间标题 | 排序/视图 + 搜索 + **云同步（最右、恒可见）**；Dock 五格（图标 + 10px 标签）+ 悬浮＋（52 圆、主色、位于 Dock 上方）；写作/多选态隐藏 Dock 与＋。
+- **手势**：沿用 `ui/createPress.ts`（260ms 长按 + 36px 上滑），从旧胶囊搬到 FAB；⚠️ **FAB 必须 `touch-action:none`**（否则上滑被判成页面滚动 → pointercancel，速记永远不触发；设备实测踩到）。
+- **冷启动骨架**同步成同构（标题 + 5 格 + ＋ 占位），数据到达不跳。
+- **门禁**：tsc 0；`src/mobile` **292 文件 / 1465 例通过**；`check:mobileui` 通过；Android `--sync --install` 设备验证（`lake_mobile` / emulator-5556）。
+- **设备实测**：Dock 点按切页（分页 scrollLeft 对齐）、横滑切页、FAB 短按开新建面板、长按浮出「继续上滑记小记」、云同步按钮在 小记/知识库/AI 均可见、AI 分页内嵌渲染。
+- **遗留**：首页构成变了 ⇒ 快照基线（9 态/23 屏）**未重烤**，发版前必须；旧胶囊首页规则（`.mobile-bottom-bar--home` 首页用法 / `.mobile-block-quick` / 首页 `.mobile-htab` 行）暂留（dead rules，mobileLayers 基线暂含）；移动「知识库」vs 桌面「文档」命名未统一（待用户定）。
+
 ### 261109 · 日记六改（独立 tab / 一天多篇 / 选日期 / 标题锁 / 选中态 / 转小记）
 - **独立 tab**：`OpenTab.space`（`desktopTypes`/`MultiTabEditor.TabInfo`/`desktopDerivedState` 三处透传）；App 按空间分流 `libraryTabs` / `diaryTabs`，日记空间顶栏渲染自己的 tab 条（`aria-label="打开的日记"`），切空间时活动标签回落到该空间。
 - **一天多篇**：`core.planDiaryCreate` + `diaryStore.openDate(dateKey, { mode })`（`open` 默认 / `new` 永远新建）+ IPC `diary_open_date(dateKey, mode)` + `native.diaryOpenDate(dateKey, mode)`；同日多篇不再当"重复文档"告警，`DiaryEntry.createdAt` 支撑同日按创建时间倒序。

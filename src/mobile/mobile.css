@@ -1356,3 +1356,70 @@ body.lake-mobile .ne-ui-boundary-popover:has(.ne-ui-search-card-menu) { top: 120
 }
 
 /* 平板 / 折叠屏的通用几何已整体迁入 src/mobile/pad/pad.css（261103 A4：data-form-factor 只许出现在那里）。 */
+
+/* ── 261110 底部 Dock（方案 A：五格空间 + 中央悬浮＋）────────────────────────
+ * 取代原首页胶囊（261014 定稿的「搜索·＋·AI」）：空间入口全部下沉到底部（拇指热区），
+ * 顶栏只留「当前空间标题 + 空间内动作 + 搜索 + 云同步（恒可见）」。
+ * z 与旧胶囊同档（--mobile-z-page 之下、toast 之上），不新造层级。 */
+.mb-home-dockwrap {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: calc(var(--mobile-z-page) - 1);
+  padding: 0 var(--mb-page-pad) var(--mobile-bottom-safe-area);
+  pointer-events: none;
+}
+.mb-home-dock {
+  pointer-events: auto;
+  display: grid; grid-template-columns: repeat(5, minmax(0, 1fr));
+  align-items: center; height: var(--mobile-bottom-bar-height);
+  padding: 3px 2px;
+  border: 0.5px solid var(--lake-border-1);
+  border-radius: var(--mobile-bottom-bar-height);
+  background: var(--lake-bg-panel);
+  box-shadow: var(--lake-shadow-popover);
+}
+.mb-home-dock__item {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  min-width: 0; height: calc(var(--mobile-bottom-bar-height) - 8px);
+  padding: 0; border: 0; background: transparent;
+  color: var(--lake-text-3); font: inherit; cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.mb-home-dock__item:active { color: var(--lake-text-1); }
+.mb-home-dock__item.is-active { color: var(--lake-accent-text); }
+.mb-home-dock__item > svg { flex: 0 0 auto; }
+.mb-home-dock__label {
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: var(--lake-font-size-nano); line-height: 1.2;
+}
+.mb-home-dock__item.is-active .mb-home-dock__label { font-weight: var(--lake-font-weight-semibold); }
+/* 中央悬浮「＋」：短按新建面板；长按 260ms + 上滑 = 速记（手势判据 ui/createPress.ts）。 */
+.mb-home-fab {
+  pointer-events: auto; position: absolute; left: 50%;
+  /* 261110：整体位于 Dock **上方**（不压住中间那格），Dock 五格全部可读可点。 */
+  bottom: calc(var(--mobile-bottom-safe-area) + var(--mobile-bottom-bar-height) + 6px);
+  transform: translateX(-50%);
+  display: flex; align-items: center; justify-content: center;
+  width: 52px; height: 52px; padding: 0; border: 0; border-radius: 50%;
+  background: var(--lake-accent-ink); color: var(--lake-text-on-accent);
+  box-shadow: var(--lake-shadow-popover); cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  /* 长按上滑速记：必须自己收掉触摸手势（否则一上滑就被判成页面滚动 → pointercancel，速记永远不触发）。 */
+  touch-action: none;
+}
+.mb-home-fab:active { transform: translateX(-50%) scale(.94); }
+.mb-home-fab.is-revealed { background: var(--lake-accent-ink-hover); }
+.mb-home-fab.is-armed { background: var(--lake-status-ok); }
+.mb-home-fab__tip {
+  position: absolute; bottom: calc(100% + 10px); left: 50%; transform: translateX(-50%);
+  padding: 6px 10px; border-radius: var(--lake-radius-sm);
+  background: var(--tooltip-bg, var(--lake-text-1)); color: var(--tooltip-fg, var(--lake-bg-panel));
+  font-size: var(--lake-font-size-tiny); line-height: 1.2; white-space: nowrap;
+}
+/* 顶栏当前空间标题（原中间四个 tab 下沉到 Dock 后，这里只读显示"在哪"）。 */
+.mobile-home-space-title { font-size: var(--lake-font-size-bodyLg); font-weight: var(--lake-font-weight-semibold); }
+/* AI 分页骨架（懒 chunk 未就绪时，避免白屏跳动）。 */
+.mb-ai-pane-skeleton { flex: 1; margin: 16px var(--mb-page-pad); border-radius: var(--lake-radius-md); background: var(--lake-bg-block); opacity: .6; }
+/* 冷启动骨架的悬浮＋占位（与 .mb-home-fab 同尺寸，避免数据到达时跳动）。 */
+.mb-skel--fab { position: absolute; left: 50%; bottom: calc(var(--mobile-bottom-safe-area) + var(--mobile-bottom-bar-height) + 6px); transform: translateX(-50%); width: 52px; height: 52px; border-radius: 50%; }
+
+/* 261110：悬浮＋整体位于 Dock 上方 ⇒ 首页滚动区把「Dock + ＋」一起让出来（只首页作用域，不动工作区/设置）。 */
+.mobile-home .mobile-scroll { padding-bottom: calc(124px + var(--mobile-bottom-safe-area)); }

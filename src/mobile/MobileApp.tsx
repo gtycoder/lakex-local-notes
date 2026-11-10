@@ -69,12 +69,11 @@ import "./brand-launch.css";
 /** 第二层工作区（内含 Lake 内核编辑器）：**按需加载**。
  * 冷启动不需要内核；静态引入会把整个内核打进入口 chunk（实测 6.7MB），拖慢所有启动路径。 */
 import { PanelLoading } from "./ui/PanelLoading";
-import { consumeBack } from "./ui/backStack";
+import { consumeBack, pushBackHandler } from "./ui/backStack";
 import { DeferredPanel } from "./ui/DeferredPanel";
 import { toastActionError } from "./lib/actionError";
 const NotebookWorkspace = lazy(() => import("./notebook/NotebookWorkspace").then((m) => ({ default: m.NotebookWorkspace })));
 /** AI 全屏页按需加载：不进首页首屏（与内核/表格一样不加重入口）。 */
-const MobileAiPage = lazy(() => import("./ai/MobileAiPage").then((m) => ({ default: m.MobileAiPage })));
 /** 搜索 Sheet 按需加载（MOB-15 首屏预算）：只在点「搜索」时打开，静态引入会把它的依赖链
  *  （reportMobileActionError → toastBus/nativeErrors）拆成入口预加载 chunk（261028 实测 +3）。 */
 const SearchSheet = lazy(() => import("./settings/SearchSheet").then((m) => ({ default: m.SearchSheet })));
@@ -98,6 +97,18 @@ export type Route =
 export function MobileApp({ initialCapture = false }: { initialCapture?: boolean } = {}) {
   /** 冷启动固定落在「小记」（用户 261014 定；快捷 capture 那条本来也落在小记）。 */
   const [route, setRoute] = useState<Route>({ kind: "home", tab: "quick" });
+  /**
+   * 261110（底部 Dock 五格）：AI 空间是**页面而不是浮层** ⇒ 返回键应先回上一个非 AI 空间。
+   * 记录"最近一个非 AI 的首页 tab"，返回 AI 时回到它（默认小记）。
+   */
+  const lastNonAiTabRef = useRef<HomeTab>("quick");
+  useEffect(() => {
+    if (route.kind === "home" && route.tab !== "ai") lastNonAiTabRef.current = route.tab;
+  }, [route]);
+  useEffect(() => {
+    if (route.kind !== "home" || route.tab !== "ai") return;
+    return pushBackHandler(() => { setRoute({ kind: "home", tab: lastNonAiTabRef.current }); return true; });
+  }, [route]);
   /**
    * 路由转场（261019，对齐语雀 push；状态机见 hooks/useRouteTransition）：
    * 工作区按需挂载、播完出场才卸载；首页层常驻（页栈语义）⇒ 返回时列表滚动位置与数据都在。
@@ -144,13 +155,11 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
     escape: () => {
       if (consumeBack()) return true;
       if (searchOpen) { setSearchOpen(false); return true; }
-      if (aiOpen) { setAiOpen(false); return true; }
       if (drawerOpen) { setDrawerOpen(false); return true; }
       if (createNbOpen) { setCreateNbOpen(false); return true; }
       return false;
     },
   });
-  const [aiOpen, setAiOpen] = useState(false);
   /** 全局搜索命中「小记」后待首页打开的 id（首页常驻，交给 HomePage 的 effect 接力）。 */
   const [pendingQuickNoteId, setPendingQuickNoteId] = useState<string | null>(null);
   // 用 HomePage 导出的 MobileQuickNote：这条链（仓储 → bridge → 列表 → 卡片）字段必须一路一致，
@@ -791,7 +800,7 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
           diaryNodes={diaryTreeNodes}
           onOpenDiaryEntry={openDiaryEntry}
           onOpenDiarySearch={openDiarySearch}
-          onOpenAi={() => setAiOpen(true)}
+          onAiChanged={() => void refreshAll()}
           onCreateNotebook={() => setCreateNbOpen(true)}
           onCreateNote={(notebookId) => void createNoteInParent(notebookId)}
           onTreeChanged={refreshAll}
@@ -852,13 +861,6 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
           />
         </MobileErrorBoundary>
       </DeferredPanel>
-      {aiOpen && (
-        <Suspense fallback={<PanelLoading kind="page" title="AI 助手" onClose={() => setAiOpen(false)} />}>
-          <MobileErrorBoundary scope="ai" title="AI 页面加载失败">
-            <MobileAiPage open onClose={() => setAiOpen(false)} onChanged={() => void refreshAll()} />
-          </MobileErrorBoundary>
-        </Suspense>
-      )}
       {/* 首次分享 Markdown 且未设置默认笔记本：弹一次选择器，选完记住并继续导入。 */}
       <DefaultNotebookPickerSheet
         open={mdImportFiles !== null}
@@ -981,18 +983,16 @@ function MobileHomeSkeleton() {
   return (
     <div className="mobile-app">
       <div className="mobile-home" aria-busy="true">
-        {/* 与真实顶栏同构（261109 三组栅格）：左 = 设置，中 = tab 行，右 = 排序/视图 + 云同步 ⇒ 填充不跳。 */}
+        {/* 与真实顶栏同构（261110 底部 Dock 改版）：左 = 设置，中 = **当前空间标题**，右 = 空间内动作 + 搜索 + 云同步。 */}
         <header className="toolbar toolbar--border mobile-topbar mobile-topbar--home">
           <div className="mobile-topbar-group mobile-topbar-group--start">
             <span className="mb-skel mb-skel--icon" aria-hidden="true" />
           </div>
           <div className="mobile-topbar-group mobile-topbar-group--center">
-            <div className="mobile-home-tabs">
-              <span className="mb-skel mb-skel--tab" aria-hidden="true" />
-              <span className="mb-skel mb-skel--tab" aria-hidden="true" />
-            </div>
+            <span className="mb-skel mb-skel--tab" aria-hidden="true" />
           </div>
           <div className="mobile-topbar-group mobile-topbar-group--end">
+            <span className="mb-skel mb-skel--icon" aria-hidden="true" />
             <span className="mb-skel mb-skel--icon" aria-hidden="true" />
             <span className="mb-skel mb-skel--icon" aria-hidden="true" />
           </div>
@@ -1007,12 +1007,13 @@ function MobileHomeSkeleton() {
             </section>
           </div>
         </div>
-        {/* 骨架的胶囊槽数必须与真实胶囊一致（261014 起 3 项：搜索 / ＋ / AI），否则数据到达时宽度会跳一次。 */}
-        <nav className="mobile-bottom-bar mobile-bottom-bar--home mb-glass" aria-hidden="true">
-          <span className="mb-skel mb-skel--baritem" />
-          <span className="mb-skel mb-skel--baritem" />
-          <span className="mb-skel mb-skel--baritem" />
-        </nav>
+        {/* 骨架与真实底部同构（261110）：五格 Dock + 中央悬浮＋，否则数据到达时宽度/位置会跳一次。 */}
+        <div className="mb-home-dockwrap" aria-hidden="true">
+          <nav className="mb-home-dock">
+            {[0, 1, 2, 3, 4].map((i) => <span key={i} className="mb-skel mb-skel--baritem" />)}
+          </nav>
+          <span className="mb-skel mb-skel--fab" />
+        </div>
       </div>
       <div className="mb-launch-overlay">
         <MobileBrandLaunchMark label="正在打开本地知识库" />

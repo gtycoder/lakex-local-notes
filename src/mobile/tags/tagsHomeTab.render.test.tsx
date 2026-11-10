@@ -680,23 +680,25 @@ describe("首页三 tab（小记 / 知识库 / 标签）", () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
   };
+  // 261110：空间入口从顶栏文字 tab 下沉到【底部五格 Dock】；按 label 文本定位同一颗按钮。
   const tabButton = (label: string): HTMLButtonElement | undefined =>
-    [...host.querySelectorAll<HTMLButtonElement>(".mobile-htab")].find((el) => (el.textContent ?? "").trim() === label);
+    [...host.querySelectorAll<HTMLButtonElement>(".mb-home-dock__item")].find((el) => (el.textContent ?? "").trim() === label);
 
   beforeEach(() => { onTabChange.mockReset(); });
 
-  it("四个一级 tab 与切页回调；标签页 panes 常驻 + inert", async () => {
+  it("五个一级空间（底部 Dock）与切页回调；标签页 panes 常驻 + inert", async () => {
     await renderHome("quick");
-    expect([...host.querySelectorAll(".mobile-htab")].map((el) => el.textContent)).toEqual(["小记", "知识库", "日记", "标签"]);
+    expect([...host.querySelectorAll(".mb-home-dock__label")].map((el) => el.textContent)).toEqual(["小记", "知识库", "日记", "AI", "标签"]);
     await click(tabButton("标签"));
     expect(onTabChange).toHaveBeenCalledWith("tags");
     await renderHome("tags");
     expect(host.textContent).toContain("1 篇文档、1 条小记");
     const panes = [...host.querySelectorAll<HTMLElement>(".mobile-tab-pane")];
-    expect(panes.length).toBe(4);
-    // pane 顺序 = HOME_TABS（小记 / 知识库 / 日记 / 标签）；只有当前页不是 inert。
+    expect(panes.length).toBe(5);
+    // pane 顺序 = HOME_TABS（小记 / 知识库 / 日记 / AI / 标签）；只有当前页不是 inert。
     expect(panes[0].hasAttribute("inert")).toBe(true);
     expect(panes[2].hasAttribute("inert")).toBe(true);
-    expect(panes[3].hasAttribute("inert")).toBe(false);
+    expect(panes[3].hasAttribute("inert")).toBe(true);
+    expect(panes[4].hasAttribute("inert")).toBe(false);
   });
 });
