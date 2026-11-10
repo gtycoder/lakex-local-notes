@@ -324,7 +324,7 @@
 - **261110 历史清理（一次性）**：`.ai-writing-recon/`（走查截图 / 页面快照 / 探针脚本，59 文件 ≈15MB）已用 `git filter-repo --invert-paths` 从**全部历史**移除；被重写的是 **v1.1.0 之后的 23 个提交**（hash 以 `git log` 为准），**v1.0.x / v1.1.0 的 tag 与其提交 hash 未变**（不含该目录）⇒ 已发布 Release 与 CI 产物不受影响。重写前快照：`/Users/admin/file/local-lake/lakex-local-notes-backup-<stamp>/all.bundle`（62MB，含全部 refs）。**旧 clone / worktree 需 `git fetch --force --prune` + `git reset --hard origin/master` 或重新 clone**（旧 hash 已不可达）；本机原 `lakex-local-notes-diary` worktree 已删除（其分支是 master 祖先，无内容丢失）。
 
 - **worktree（261109 发版时）**：`lakex-local-notes` = `master`（发版主工作树）；`lakex-local-notes-diary` = `feat/diary-space`（本批开发用，已合并 master 并合回 master）。AI 写作与日记**都已进 master**，两个空间共存（⌘3 / ⌘4）。
-- 主分支 `master`，HEAD = **本提交**（以 `git log -1` 为准；其下 `04eb32a7`（文档对齐）、`967c09e6`（文档清理）、`e4f1fd3f`（代码清理），再往上是 `b78c11df` = tag `v1.0.4` 指向的 commit）。
+- 主分支 `master`，HEAD 以 `git log -1` 为准（261110 收口时为 `5b94f549` 桌面一级空间改名「知识库」；其前含按钮原语梯队 `02fe0402`、移动 Dock 五格合并 `270974ad` 等）；**origin/GitHub 均 0/0，已推送**。
 - `package.json` = **1.1.0**；Android `versionName 1.1.0` / `versionCode 11100`（从根 `package.json` 派生，版本号单一来源：`1000 + major*10000 + minor*100 + patch`）。
 - tag：`v1.0.0`–`v1.0.5`、**`v1.1.0`**（另有旧 `v0.0.1` / `v0.0.2`）；已发布 tag 不再移动。`v1.1.0` = AI 写作 + 日记两个新空间。
 - `v1.0.5` 是**发在 AI 写作合并之前**的：AI 写作第一次随本版发布，别在旧发布说明里找它。
@@ -346,10 +346,10 @@
 **门禁基线（261109 发版前：AI 写作 + 日记合并后实测）**
 
 - `npx tsc --noEmit` = **0 错**。
-- `npx vitest run` = **825 文件（814 passed / 11 skipped）/ 5228 passed / 12 skipped / 0 failed**（261110 日记排序批后实测；较 261109 发版前 818/5148 增 7 文件 / 80 例）。
+- `npx vitest run` = **837 文件（826 passed / 11 skipped）/ 5269 passed / 12 skipped / 0 failed**（261110 合并后实测：按钮原语梯队 + AI 写作二改 + 移动 Dock 五格 + 日记/空间收口批全部合入后）。
 - `git diff --check` = **0**。
 - `check:bundle`：**mobile-entry 仍超目标（已知红，非本批引入）**。脚本当前冻结为 entry JS gzip ≤66KB、modulepreload ≤34 条、首屏 ≤380KB（`check-arch`）；目标仍是 **60KB / ≤12 条 / 360KB**，瘦身后收紧（§3 P1）。**261109 实测校准（发版前，`v1.1.0` 合并后）**：`mobile-entry` = **75,316 gz / 39 链接**（冻结 67,584 / 34）；同日合并前的对照基线 `6b2bfbec` = 75,031 gz / 39 链接 ⇒ 日记与 AI 写作合并带来的增量 **+285B / +0 链接**。桌面首屏 586,076 / 600,000（余量 13.9KB，AI 写作改 lazy 前是 555,107）。⇒ 这套红是**跨版本既有**，收口是独立移动端瘦身专项（`check:arch` 的 mobile 首屏 390,727 / 380,000 同属此项）。运行前需先有 `dist` / `dist-mobile` 构建产物。
-- 其它样式/边界/设备门禁按改动范围跑（分层口径见 AGENTS §3#21）；最近一次移动设备记录 = **261110（日记二改批）**：手机 **9 态重烤基线 + 两轮 0 差异**、**23 屏 23/23 ok**（`lake_gate` / emulator-5558 / CDP 9336）；平板 6 态 / 多维表 3 态最近完整记录仍是 v1.0.4 发版前。
+- 其它样式/边界/设备门禁按改动范围跑（分层口径见 AGENTS §3#21）；最近一次移动设备记录 = **261110（移动收口批）**：手机 **9 态重烤基线 + 两轮 0 差异**、**平板 9 态补烤 + 两轮 0 差异**、**多维表 3 态重烤**、**23 屏 23/23 ok**（`lake_gate` / `lake_tab`，详见 §0 收口批）；桌面 `check:stylesnap` 42 态仍未跑（本机无合成夹具缓存，见 §3）。
 
 **设备与环境（本机实测）**
 
@@ -364,7 +364,7 @@
 - macOS = x64 + arm64 分开打包，ad-hoc 签名未公证（首次打开走「仍要打开」）；免提示需 Apple Developer ID + 公证。
 - **GitHub 推送：优先走 SSH remote `github`**（261109 实测：HTTPS 到 github.com **完全不通**（443 连接超时/HTTP2 framing），SSH 22 **可用** ⇒ `git push github master`；`origin` 的 HTTPS pushurl 会失败）。**VPN 开启时 GitHub 一律不通（含发版 tag 推送）**，发版前确认 VPN 已关。HTTPS 可用时期的老办法：`git -c http.version=HTTP/1.1 push <url> <branch>`。曾用 `http.curloptResolve` 仅对单次 git 命令覆盖 DNS 解决（不改全局 DNS/代理/TLS，不固化 IP）。
 - **v1.1.0 发版（261109 20:03 CST）**：master = `075272b2`（已推 Gitee + GitHub），注解 tag **`v1.1.0`** 已推两处并触发 GitHub `Release` workflow（macOS x64+arm64 / Windows / Android / publish）；tag 指向 `075272b2`，**不可移动**。发版前 review 修掉三项 P1（AI 写作排除日记子树与日记本、槽位上移消除 features→desktop 违规、AI 写作改 lazy 回收首屏余量）。
-- **本机 `stash@{0}`**：一段**非本会话**的 a11y WIP（设置页标题改 h1/h2 + 关闭钮 44px + 对应基线），与 v1.1.0 无关，别误 apply；同目录还有未跟踪的 `src/mobile/settings/settingsA11y.test.ts`（属该 WIP）。
+- **本机 stash 已清空**（原 a11y WIP 已合并进 master，261110）；`git status` 应为 clean。
 - 发版流程见 [docs/RELEASE.md](RELEASE.md)；用户手册见 [guide/README.md](../guide/README.md)。
 
 **文档地图（现存；已删文档不要再链）**
@@ -423,6 +423,14 @@
 - **旧「资料库」称呼残留（注释级）**：`src/styles/kit.css:75`、`src/styles/app/shell.css:235/253/419`、`src/styles/app/base.css:58`、`styles/kit.css` 分隔条注释等处仍写「资料库」。本轮没动 —— 桌面会话正在改这些文件，避免写冲突；下次有人碰时顺手统一。
 - **平板/历史文档口径**：`docs/PAD-ADAPTATION.md` 历史批次里的「6 态」是当时记录（未回改，属历史）；新写内容统一 9 态。
 
+**按钮原语梯队落地后（261110 移交，新会话接手）**
+
+- **按钮审计第二批（app 级 ~40 个）**：`QuickNotesWorkspace` 剩余（卡片勾选/筛选菜单/toast 撤销等）、`QuickNoteFilterDialog`、`QuickNoteTagPicker`、`QuickNoteComposer`、`NoteTagRow`、`TagsWorkspace`、`NodeIconPicker`、`NoteInfoDialog`、`CalendarPanel`、`DiaryWorkspace` 残余、`DesktopStatusBar`、`SafeModeBanner` 等仍是非原语按钮；按 4 语义 + 危险 + 链接迁移，逐屏截图走查（本轮只做第一批：菜单项 / AI 写作 / 小记工具条 / 行主区）。
+- **移动端 `mb-btn` 对齐桌面按钮梯队**：4 语义（primary / outlined / secondary / ghost）+ danger + link、两尺寸、六态；与 `mb-btn--settings` 的对应关系一并收敛（本轮用户定稿：先桌面，移动下一轮做）。
+- **按钮梯队后的桌面视觉门禁**：`check:stylesnap` 相关态（设置页全部子页 / 对话框 / 小记 / 菜单）需在有夹具的机器上跑；**重点看设置页 43 处 L2 改「主题色字」后的观感**——若用户觉得太跳，按预留方案加一档「框 + 次要字色」（`ln-btn--outlined-subtle`），再全量复核。
+- **AI 写作二改的用户点收**：隔离实例已验（弹窗 780×460 拖到 920、提示词写输入 173 字、思考块折叠、搜索/置顶、气泡中心 delta 0、左栏拖拽 288→371），但**用户尚未在自己环境逐条点收**；另外移动端未动（AI 写作仅桌面）。
+- **`AGENTS.md` 指令预算已超**：现 **65,709 B / 上限 65,536 B**（尾部被截断，§8 可能看不见）⇒ 下次往 AGENTS 加内容前**必须先删等量旧内容**（优先删已完成/重复的历史条目，别删红线）。
+- **`ln-row__main` 可继续复用**：Sidebar 目录行 / 小记列表行主区等仍各自写 button 复位；下一批可统一到 `.ln-row__main`（注意保留行 hover/选中由父行负责）。
 **P2（体验缺口 / 长期）**
 
 - **大库与真实设备**：墓碑 payload 老化（261025 定「后续优化」）；大库阈值探测（>2 万文档 / 索引 3–5MB）；**真实 Android 物理机验收从未做过**；PARITY 残余（移动云清理无 UI 入口、目录恢复后 `deleted_notes` 残留）。移动缺正文的「云端拉回 / 历史恢复 / 重建纯文本」三条只在单测 mock 覆盖，需真机 + 配 S3 验证。
