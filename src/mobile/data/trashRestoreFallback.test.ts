@@ -84,10 +84,17 @@ describe("回收站恢复：原父缺失回落兜底笔记本（261027）", () =
     await insertFolder(db, "y26", "group", "nb-diary");
     await insertFolder(db, "m11", "group", "y26", NOW); // 月分组已进回收站
     await seedTrashedNote(db, "dn", "m11");
+    // 标题 = 日期（原路返回才能按日期补回年/月分组）
+    await db.prepare("UPDATE notes SET title='2026-11-09' WHERE id=?").run("dn");
     await restoreTreeItem(db, "dn", "note", async () => undefined);
     const row = await db.prepare("SELECT parent_id, trashed_at FROM notes WHERE id='dn'").get() as { parent_id: string | null; trashed_at: string | null };
     expect(row.trashed_at).toBeNull();
-    expect(row.parent_id, "必须回到日记本，不能落进默认笔记本").toBe("nb-diary");
+    // 原路返回：月分组（11）被补回到年分组（2026）下，年分组在日记本下
+    const month = await db.prepare("SELECT title, parent_id FROM folders WHERE id=?").get(row.parent_id) as { title: string; parent_id: string | null } | undefined;
+    expect(month?.title).toBe("11");
+    const year = await db.prepare("SELECT title, parent_id FROM folders WHERE id=?").get(month?.parent_id) as { title: string; parent_id: string | null } | undefined;
+    expect(year?.title).toBe("2026");
+    expect(year?.parent_id).toBe("nb-diary");
   });
 
   it("普通文档同样场景仍回落活跃笔记本（旧行为不变）", async () => {

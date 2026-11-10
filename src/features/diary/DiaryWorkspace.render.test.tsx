@@ -65,6 +65,7 @@ function props(overrides: Partial<DiaryWorkspaceProps> = {}): DiaryWorkspaceProp
     editorPrefs: { fontSize: 14 },
     onConvertEntry: vi.fn(),
     onConvertToQuickNote: vi.fn(),
+    onDeleteEntry: vi.fn(),
     onCreateEntry: vi.fn(),
     onOpenEntry: vi.fn(),
     onWriteToday: vi.fn(),

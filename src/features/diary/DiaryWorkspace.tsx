@@ -12,7 +12,7 @@
  * **不做月历**（v1 明确不做：会与多维表月历撞「同一交互语义只有一套视觉」）。
  */
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
-import { CalendarDays, ChevronRight, Feather, FileText, NotebookPen, Pencil, Plus, Search } from "lucide-react";
+import { CalendarDays, ChevronRight, Feather, FileText, NotebookPen, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { NodeIconGlyph } from "../../components/ui/NodeIconGlyph";
 import {
   diaryConvertTargets,
@@ -68,6 +68,8 @@ export interface DiaryWorkspaceProps {
   onConvertEntry: (nodeId: string, targetNotebookId: string) => void;
   /** 「转为小记」：日期标题写入小记第一行 + 正文接在后面；成功后勤日记移入回收站。 */
   onConvertToQuickNote: (nodeId: string) => void;
+  /** 「删除」：移入回收站（软删，可恢复）。走既有删除确认与 deleteTreeNode，不新造删除路径。 */
+  onDeleteEntry: (nodeId: string) => void;
   onRenameNotebook: (title: string) => void;
   onSetNotebookIcon: (icon: string | null) => void;
   onContentChange: (noteId: string, content?: string) => void;
@@ -91,7 +93,7 @@ function diaryClock(iso: string): string {
 export function DiaryWorkspace(props: DiaryWorkspaceProps) {
   const {
     active, treeNodes, activeNoteId, tabs, lockedNoteIds, tocEnabled, outlineEnhance, editorPrefs,
-    onOpenEntry, onWriteToday, onCreateEntry, onOpenSearch, onConvertEntry, onConvertToQuickNote, onRenameNotebook, onSetNotebookIcon,
+    onOpenEntry, onWriteToday, onCreateEntry, onOpenSearch, onConvertEntry, onConvertToQuickNote, onDeleteEntry, onRenameNotebook, onSetNotebookIcon,
     onContentChange, onEditorReady, onReloadNote,
   } = props;
 
@@ -374,6 +376,16 @@ export function DiaryWorkspace(props: DiaryWorkspaceProps) {
           >
             <Feather size={15} aria-hidden="true" />
             <span>转为小记</span>
+          </button>
+          <div className="context-menu-sep" />
+          <button
+            type="button"
+            role="menuitem"
+            className="ln-menu__item ln-menu__item--danger"
+            onClick={() => { onDeleteEntry(entryMenu.entry.nodeId); setEntryMenu(null); }}
+          >
+            <Trash2 size={15} aria-hidden="true" />
+            <span>删除</span>
           </button>
         </Menu>
       )}

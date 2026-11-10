@@ -31,3 +31,32 @@ export function isNotebookAvailable(db: DbLike, notebookId: string): boolean {
   ).get(notebookId);
   return Boolean(row);
 }
+
+/**
+ * 恢复日记条目时**还原它的年/月分组**（261110）：
+ * 原父若是被删掉的月分组，恢复到日记本根虽然"空间对"，但结构不对；
+ * 这里按标题日期补建 年/月 分组（已存在则复用），让恢复尽量"原路返回"。
+ * 标题不是日期 ⇒ 直接回日记本（调用方不会再猜）。
+ */
+export function ensureDiaryGroupsForRestore(
+  db: DbLike,
+  createGroup: (parentId: string, title: string) => { id: string },
+  notebookId: string,
+  title: string,
+): string {
+  const matched = /^(\d{4})-(\d{2})-\d{2}$/.exec(title.trim());
+  if (!matched) return notebookId;
+  const yearTitle = matched[1];
+  const monthTitle = matched[2];
+  const findGroup = (parentId: string, groupTitle: string): string | null => {
+    const row = db.prepare(
+      "SELECT id FROM tree_nodes WHERE parent_id=? AND node_type='group' AND title=? AND deleted_at IS NULL ORDER BY sort_order LIMIT 1",
+    ).get(parentId, groupTitle) as { id?: string } | undefined;
+    return row?.id ?? null;
+  };
+  let yearId = findGroup(notebookId, yearTitle);
+  if (!yearId) yearId = createGroup(notebookId, yearTitle).id;
+  const monthId = findGroup(yearId, monthTitle);
+  if (!monthId) return createGroup(yearId, monthTitle).id;
+  return monthId;
+}

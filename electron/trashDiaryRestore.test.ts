@@ -47,7 +47,14 @@ describe("回收站恢复：日记条目回日记空间（261110）", () => {
     store.deleteTreeNode(note.id);
     store.deleteTreeNode(month.id);
     store.restoreTrashItem(note.id);
-    expect(parentOf(note.id)).toBe(diary.id);
+    // 原路返回：按标题日期把 年/月 分组补回来（日记 → 2026 → 11 → 文档）
+    const nodes = () => store.listTreeNodes();
+    const parent = nodes().find((n) => n.id === parentOf(note.id));
+    expect(parent?.nodeType).toBe("group");
+    expect(parent?.title).toBe("11");
+    const yearNode = nodes().find((n) => n.id === parent?.parentId);
+    expect(yearNode?.title).toBe("2026");
+    expect(yearNode?.parentId).toBe(diary.id);
   });
 
   it("普通文档（非日记）同样场景仍回落默认笔记本（旧行为不变）", () => {

@@ -426,6 +426,7 @@ export class Store {
       upsertSearch: (noteId, title, body) => this.searchRepository.upsert(noteId, title, body),
       removeSearch: (noteIds) => this.searchRepository.remove(noteIds),
       resolveParentNotebook: () => this.resolveParentNotebook(),
+      createGroup: (parentId, title) => this.noteMetadata.createGroup(parentId, title),
     });
     this.schemaInit.seed();
     // M2 v2：增量账本；仅在账本缺失/与活跃文档数不符时全量重建，正常启动零重建。

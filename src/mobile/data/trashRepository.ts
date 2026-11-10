@@ -103,14 +103,25 @@ export interface MobileTrashTreeItem {
   parentId: string | null;
   deletedAt: string | null;
   cloudDeleted: boolean;
+  /** 261110：来源是日记本（回收站行打「日记」徽标；判据 = 原始父链，不看标题）。 */
+  fromDiary?: boolean;
 }
 
 export async function listTrashTree(d: MobileDb): Promise<MobileTrashTreeItem[]> {
   const folders = await d.prepare("SELECT id, title, parent_id, trashed_at, cloud_deleted FROM folders WHERE trashed_at IS NOT NULL").all() as Array<{ id: string; title: string; parent_id: string | null; trashed_at: string | null; cloud_deleted: number }>;
-  const notes = await d.prepare("SELECT id, title, parent_id, trashed_at, cloud_deleted FROM notes WHERE trashed_at IS NOT NULL").all() as Array<{ id: string; title: string; parent_id: string | null; trashed_at: string | null; cloud_deleted: number }>;
+  const notes = await d.prepare("SELECT id, title, parent_id, trashed_at, cloud_deleted, deleted_from_parent_id FROM notes WHERE trashed_at IS NOT NULL").all() as Array<{ id: string; title: string; parent_id: string | null; trashed_at: string | null; cloud_deleted: number; deleted_from_parent_id: string | null }>;
+  const noteRows = await Promise.all(notes.map(async (n) => ({
+    id: n.id,
+    title: n.title,
+    kind: "note" as const,
+    parentId: n.parent_id,
+    deletedAt: n.trashed_at,
+    cloudDeleted: n.cloud_deleted === 1,
+    fromDiary: (await resolveDiaryOriginNotebook(d, n.deleted_from_parent_id ?? n.parent_id)) !== null,
+  })));
   return [
     ...folders.map((f) => ({ id: f.id, title: f.title, kind: "folder" as const, parentId: f.parent_id, deletedAt: f.trashed_at, cloudDeleted: f.cloud_deleted === 1 })),
-    ...notes.map((n) => ({ id: n.id, title: n.title, kind: "note" as const, parentId: n.parent_id, deletedAt: n.trashed_at, cloudDeleted: n.cloud_deleted === 1 })),
+    ...noteRows,
   ].sort((a, b) => (b.deletedAt ?? "").localeCompare(a.deletedAt ?? ""));
 }
 
@@ -135,10 +146,34 @@ async function resolveDiaryOriginNotebook(d: MobileDb, start: string | null): Pr
   return null;
 }
 
+/** 261110：恢复日记条目时按标题日期把 年/月 分组补回来（已存在则复用）——"原路返回"。 */
+async function ensureDiaryRestoreGroup(d: MobileDb, notebookId: string, title: string): Promise<string> {
+  const matched = /^(\d{4})-(\d{2})-\d{2}$/.exec(title.trim());
+  if (!matched) return notebookId;
+  const findGroup = async (parentId: string, groupTitle: string): Promise<string | null> => {
+    const row = await d.prepare(
+      "SELECT id FROM folders WHERE parent_id=? AND node_type='group' AND title=? AND trashed_at IS NULL ORDER BY sort_order LIMIT 1",
+    ).get(parentId, groupTitle) as { id?: string } | undefined;
+    return row?.id ?? null;
+  };
+  const createGroup = async (parentId: string, groupTitle: string): Promise<string> => {
+    const id = "group-" + globalThis.crypto.randomUUID();
+    const now = new Date().toISOString();
+    const max = await d.prepare("SELECT COALESCE(MAX(sort_order), -1) + 1 AS next FROM folders WHERE parent_id=?").get(parentId) as { next?: number } | undefined;
+    await d.prepare(
+      "INSERT INTO folders (id,title,parent_id,sort_order,node_type,icon,updated_at,is_dirty) VALUES (?,?,?,?,'group',NULL,?,1)",
+    ).run(id, groupTitle, parentId, max?.next ?? 0, now);
+    return id;
+  };
+  const yearId = (await findGroup(notebookId, matched[1])) ?? (await createGroup(notebookId, matched[1]));
+  return (await findGroup(yearId, matched[2])) ?? (await createGroup(yearId, matched[2]));
+}
+
 async function resolveRestoreParent(
   d: MobileDb,
   preferred: string | null,
   restoringFolderIds: ReadonlySet<string> = new Set(),
+  title = "",
 ): Promise<string | null> {
   if (preferred) {
     // 本次一起恢复的子树成员还没落库（trashed_at 仍是删除时的值）⇒ 视为可用，否则嵌套组/子文档会被拆散。
@@ -150,7 +185,8 @@ async function resolveRestoreParent(
   const diaryNotebookId = await resolveDiaryOriginNotebook(d, preferred);
   if (diaryNotebookId) {
     const diary = await d.prepare("SELECT id FROM folders WHERE id=? AND node_type='notebook' AND trashed_at IS NULL").get(diaryNotebookId) as { id?: string } | undefined;
-    if (diary?.id) return diary.id;
+    // 原路返回：按标题日期补建 年/月 分组；标题非日期时回日记本根。
+    if (diary?.id) return await ensureDiaryRestoreGroup(d, diary.id, title);
   }
   const notebook = await d.prepare("SELECT id FROM folders WHERE node_type='notebook' AND trashed_at IS NULL ORDER BY sort_order LIMIT 1").get() as { id?: string } | undefined;
   if (notebook?.id) return notebook.id;
@@ -193,8 +229,8 @@ export async function restoreTreeItem(
     // 是 parent=TRASH 容器表示——不移回则恢复后行仍挂在回收站容器下，上传条目 parentId=TRASH，
     // 他端"跟随恢复"后同样卡在回收站（260910 四端实测）。
     // 261027：原父已被删（或不在活跃目录里）⇒ 回落兜底笔记本，绝不恢复成悬空文档。
-    const row = await d.prepare("SELECT COALESCE(deleted_from_parent_id, parent_id) AS pid FROM notes WHERE id=?").get(id) as { pid?: string | null } | undefined;
-    const parentId = await resolveRestoreParent(d, row?.pid ?? null, new Set(folderIds));
+    const row = await d.prepare("SELECT COALESCE(deleted_from_parent_id, parent_id) AS pid, title FROM notes WHERE id=?").get(id) as { pid?: string | null; title?: string } | undefined;
+    const parentId = await resolveRestoreParent(d, row?.pid ?? null, new Set(folderIds), row?.title ?? "");
     await d.prepare(
       "UPDATE notes SET parent_id=?, trashed_at=NULL, restore_pending_at=?, is_dirty=1, updated_at=? WHERE id=?"
     ).run(parentId, now, now, id);

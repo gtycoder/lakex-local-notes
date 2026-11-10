@@ -588,6 +588,12 @@ export function App() {
     }
   }, [openNote, refreshTree, setError]);
 
+  /** 「删除」日记条目：复用目录树的删除确认与 deleteTreeNode（软删进回收站，可恢复）。 */
+  const handleDiaryDeleteEntry = useCallback((nodeId: string) => {
+    const node = treeNodes.find((item) => item.id === nodeId);
+    if (node) sidebarRequestDelete(node);
+  }, [treeNodes, sidebarRequestDelete]);
+
   /** 「转为小记」（261109）：日期标题写入小记第一行，正文接在后面；成功后把日记移入回收站（软删可恢复）。
    *  媒体卡片不搬运（小记资源是另一套作用域）——`droppedMedia` 为真时**明说**，不静默丢内容。 */
   const handleDiaryToQuickNote = useCallback(async (nodeId: string) => {
@@ -1241,6 +1247,7 @@ export function App() {
                 onOpenSearch={handleDiaryOpenSearch}
                 onConvertEntry={handleDiaryConvertEntry}
                 onConvertToQuickNote={(nodeId) => { void handleDiaryToQuickNote(nodeId); }}
+                onDeleteEntry={handleDiaryDeleteEntry}
                 onRenameNotebook={handleDiaryRenameNotebook}
                 onSetNotebookIcon={handleDiarySetNotebookIcon}
                 onContentChange={handleContentChange}

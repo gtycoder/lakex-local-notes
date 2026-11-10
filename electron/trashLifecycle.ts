@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { DbLike } from "./dbLike.js";
-import { isNotebookAvailable, resolveDiaryOriginNotebookId } from "./trashDiaryOrigin.js";
+import { ensureDiaryGroupsForRestore, isNotebookAvailable, resolveDiaryOriginNotebookId } from "./trashDiaryOrigin.js";
 import { AppError } from "../src/core/storeErrors.js";
 import { isSafePathSegment } from "../src/core/storeUtils.js";
 import { sqlParameterBatches } from "../src/core/sqlParameterBatch.js";
@@ -33,6 +33,8 @@ export interface TrashLifecycleContext {
   removeSearch: (noteIds: readonly string[]) => void;
   /** 兜底父笔记本（原父缺失时恢复目标） */
   resolveParentNotebook: () => string;
+  /** 建分组（261110：恢复日记条目时按标题日期补建 年/月 分组，尽量"原路返回"） */
+  createGroup: (parentId: string, title: string) => { id: string };
 }
 
 /**
@@ -155,9 +157,15 @@ export class TrashLifecycle {
         // 261110：原父已删/也在回收站时，**先看来源是不是日记本**（只认原始父链，不看标题）。
         // 日记条目必须回日记空间；旧逻辑一律回落「默认笔记本」= 文档空间（用户现场担心的问题）。
         const diaryNotebookId = resolveDiaryOriginNotebookId(this.ctx.db, parentId);
-        parentId = diaryNotebookId && isNotebookAvailable(this.ctx.db, diaryNotebookId)
-          ? diaryNotebookId
-          : this.ctx.resolveParentNotebook();
+        if (diaryNotebookId && isNotebookAvailable(this.ctx.db, diaryNotebookId)) {
+          // 原路返回：按标题日期把 年/月 分组补回来（已存在则复用）；标题非日期时回日记本根。
+          const titleRow = node.note_file_id
+            ? this.ctx.db.prepare("SELECT title FROM notes WHERE id=?").get(node.note_file_id) as { title?: string } | undefined
+            : undefined;
+          parentId = ensureDiaryGroupsForRestore(this.ctx.db, this.ctx.createGroup, diaryNotebookId, titleRow?.title ?? "");
+        } else {
+          parentId = this.ctx.resolveParentNotebook();
+        }
       }
     }
     const now = nowIso();

@@ -18,6 +18,8 @@ export interface TrashRow {
   deletedAt: string;
   /** 远端已彻底删除、本机仅保留副本：显示「云端已删除 · 仅本地」，仍可恢复。 */
   cloudDeleted: boolean;
+  /** 来源是日记本（261110）：行内打「日记」徽标。 */
+  fromDiary?: boolean;
 }
 
 export interface TrashListProps {
@@ -39,7 +41,7 @@ export function TrashList({ title, onChanged, onPreview }: TrashListProps) {
     const trashIds = new Set(tree.map((it) => it.id));
     const noteRows: TrashRow[] = tree
       .filter((it) => !(it.parentId && trashIds.has(it.parentId)))
-      .map((it) => ({ key: "t-" + it.id, id: it.id, title: it.title, kind: it.kind === "folder" ? "folder" : "note", deletedAt: it.deletedAt ?? "", cloudDeleted: it.cloudDeleted }));
+      .map((it) => ({ key: "t-" + it.id, id: it.id, title: it.title, kind: it.kind === "folder" ? "folder" : "note", deletedAt: it.deletedAt ?? "", cloudDeleted: it.cloudDeleted, fromDiary: it.fromDiary }));
     const quickRows: TrashRow[] = quick.map((r) => ({ key: "q-" + r.id, id: r.id, title: r.previewText || "（空白小记）", kind: "quick", deletedAt: r.deletedAt, cloudDeleted: r.cloudDeleted }));
     setRows([...noteRows, ...quickRows].sort((a, b) => (b.deletedAt || "").localeCompare(a.deletedAt || "")));
   }, []);
@@ -89,6 +91,9 @@ export function TrashList({ title, onChanged, onPreview }: TrashListProps) {
             <Icon size={18} />
             <span className="mobile-trash-text">
               <span className="mobile-trash-title mb-ellipsis">{row.title}</span>
+              {row.fromDiary && (
+                <span className="mb-tag" title="来源是日记本；恢复后回到日记空间">日记</span>
+              )}
               {row.cloudDeleted && (
                 <span className="mb-tag mobile-trash-cloud" title="云端已彻底删除，本机仅保留这份回收站副本；恢复并同步成功后重新上传">云端已删除（仅本地）</span>
               )}

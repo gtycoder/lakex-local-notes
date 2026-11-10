@@ -14,7 +14,7 @@
  * **不打标**：本页不提供任何标签入口（docs/DIARY.md 决策 7）。
  */
 import { useCallback, useMemo, useState } from "react";
-import { FileText, MoreVertical, Pencil, Search } from "lucide-react";
+import { FileText, MoreVertical, Pencil, Search, Trash2 } from "lucide-react";
 import {
   diaryConvertTargets,
   diaryEntries,
@@ -32,6 +32,7 @@ import { MobileSheetMenu } from "../ui/MobileSheetMenu";
 import { MoveTargetTreeSheet } from "../ui/MoveTargetTreeSheet";
 import { toastActionError } from "../lib/actionError";
 import { showToast } from "../ui/toastBus";
+import { confirmMobile } from "../ui/ConfirmDialog";
 import { formatRelativeTime } from "../lib/listTime";
 
 export interface DiaryPageProps {
@@ -204,13 +205,30 @@ export function DiaryPage({ nodes, onOpenEntry, onOpenSearch, onChanged }: Diary
       {/* 条目 ⋯ 菜单：v1 只有一项「转为文档…」（移动端不新造 Sheet 类型）。 */}
       <MobileSheetMenu
         open={menuFor !== null}
-        items={[{ id: "convert", label: "转为文档…", icon: FileText }]}
+        items={[
+          { id: "convert", label: "转为文档…", icon: FileText },
+          { id: "delete", label: "删除", icon: Trash2 },
+        ]}
         onClose={() => setMenuFor(null)}
         onSelect={(item) => {
           const entry = menuFor;
           setMenuFor(null);
           if (!entry) return;
           if (item.id === "convert") { setConvertError(null); setConvertFor(entry); }
+          if (item.id === "delete") {
+            // 移入回收站（软删，可恢复；恢复会回日记空间，见 core/trash 判据）。
+            void (async () => {
+              const ok = await confirmMobile({ title: "删除这篇日记？", body: "会移入回收站，可恢复。", confirmText: "删除", danger: true });
+              if (!ok) return;
+              try {
+                await bridge.trashTreeItem(entry.noteId, "note");
+                showToast("已移入回收站");
+                onChanged();
+              } catch (error) {
+                toastActionError("删除日记", error);
+              }
+            })();
+          }
         }}
       />
       {/* 目标笔记本选择：复用既有 MoveTargetTreeSheet（只列笔记本；本列表来自 core.diary.diaryConvertTargets）。 */}
