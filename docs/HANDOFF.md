@@ -10,6 +10,12 @@
 
 > **顺序标注**：261109 各批次里写的「日记 ⌘4 / AI 写作 ⌘3」是**当时**的顺序；**261110 起改为 日记 ⌘3 / AI 写作 ⌘4**（另有标签 ⌘5）。旧批次不再改，以本行 + §1 为准。
 
+### 261110 · 桌面一级空间改名「知识库」（两端同名，用户定稿）
+- **点单**：移动端第 2 格叫「知识库」，桌面一级空间一直叫「文档」（更早叫「资料库」）⇒ 用户定：**桌面统一改「知识库」**。
+- **落点（只改「空间名」）**：`desktop/DesktopTopBar.tsx` 的 `SPACE_META.library.label` 与空间菜单项、`components/model/defaultSpace.ts` 的「默认空间」选项、`settingsSearch` 关键词补「知识库」、空间称呼的注释/文档（`ARCHITECTURE` / `DIARY` / `desktopWorkspaceSlot`）。
+- **不改**：`文档` 表示「一篇文档」的全部文案（回收站类型列、标签聚合的文档分组、附件预览、资源页 `doc` 过滤项、`noteRef` 的默认 kind label、空态「新建文档」）。**空间名与文档类型名是两个概念，别一起替换。**
+- **护栏同步**：`defaultSpace.test` / `desktopTopBarLeading.render.test` / `tagsSpaceWiring.test` 三处断言改「知识库」（`tagsSpaceWiring` 那条测试标题也记了「资料库→文档→知识库」的沿革）。
+- **门禁**：tsc 0；全量 vitest（计数见 §1）；`ui-metrics` / `git diff --check` 通过。**桌面 42 态快照未跑**（本机无桌面合成夹具缓存）→ 已登记 §3。
 ### 261110 · 移动端收口三件套：死 CSS 清理 / 装置迁移 / 三套快照基线重烤
 - **死 CSS 清理**（`f0f5d6d3`）：`mobile.css` **1737 → 1672 声明**（dupGroups 10 → 8）、`pad/pad.css` 158 → 157，`mobileLayers` 基线按实测收紧。删的全是**零引用**规则：旧胶囊首页（`.mobile-block-quick` 整块 15 声明 / `.mobile-bottom-bar--home` / 两者 `is-revealed`·`is-armed` 态）、首页 `.mobile-home-tabs`（顶栏 + 窄屏 + 主体三条）、`.mobile-topbar-collapsed-title`、思源遗留（`.mobile-qcard` / `.mobile-drawer*` / `.mobile-fab` / `.mobile-sortbar` / `.mobile-chevron` / `.mobile-nb-row` / `.mobile-quick-row` / `.bottom-bar-*` / `.poc-error` / `.mobile-settings-form` 等）+ 深色档 `.secret-field` 成员。判据 = 全仓引用扫描（含 vendor bundle / scripts）+ `audit-dead-css.mjs` 复核；**保留** `.mobile-htab`（NodeIconPicker 的 Sheet 页签在用）与 `.toolbar__icon-deactivate`（内核命名空间，不能按引用数删）。
 - **顺带修一个真 bug**：冷启动路由骨架 JSX 挂的是 `mb-route-skeleton__title/__line`，CSS 写的是 `.mobile-route-skeleton__*` ⇒ 这两条规则**从未命中**（骨架格尺寸全靠 `.mb-skel` 兜底）。CSS 改名为 `.mb-route-skeleton__*` 对齐。
@@ -20,7 +26,7 @@
 - **23 屏走查**：冷启动后单独跑，**23/23 ok**（无 escape / clip 失败；`smallTap` 计数是既有可观测量，未恶化）。
 - **文档口径**：`MOBILE-OPS` / `MOBILE-DESIGN` / `MOBILE-TECH-STACK` / `mobile-audit/README` / `check-mobile-snap` 等处的「6 态」统一改「9 态」，首页 DOM 速查改为 Dock + FAB。
 - **筛选 chip 的跨所有权覆盖已收进原语**（`src/styles/primitives.test.ts` 门禁基线 = 0，本轮全量 vitest 抓到的唯一红）：原先 `mobile/quick-notes.css` 写了 4 条 `.qn-filter-bar > .mb-chip` / `.mb-chip.is-on .qn-num` / `.qn-filter-sheet__chips .mb-chip|.mb-empty`。改为原语能力 —— `kit.css` 的 `.mb-chip` 加 `min-width:0` + `max-width: var(--mb-chip-max, none)`、`.mb-chip-row > .mb-empty` 占满行；feature 侧只在自己的容器上设 `--mb-chip-max`（筛选条 `calc(100% - 96px)`、Sheet `46vw`），`.qn-num` 改单类 `color: inherit; opacity: .75`。默认 fallback 用 `none`（不是 `100%`）—— 否则所有既有 chip 的 computed `max-width` 变化，会让多维表表单态基线无谓漂移。`mobileLayers`：kit 608 → **611**、quick-notes 270 → **269**。
-- **剩余**：桌面 `check:stylesnap` 42 态仍不跑（移动样式层独立 + 本机无合成夹具缓存，见 MOBILE-OPS §10）；`audit-dead-css` 桌面侧还剩 2 个候选（`.node-icon-picker__tab` / `.diary-split-handle`）留给桌面侧处理；移动「知识库」vs 桌面「文档」命名未统一（待用户定）。
+- **剩余**：桌面 `check:stylesnap` 42 态仍不跑（移动样式层独立 + 本机无合成夹具缓存，见 MOBILE-OPS §10）；`audit-dead-css` 桌面侧还剩 2 个候选（`.node-icon-picker__tab` / `.diary-split-handle`）留给桌面侧处理；~~移动「知识库」vs 桌面「文档」命名未统一~~ → **已定：桌面改「知识库」，两端同名（见上一条）**。
 ### 261110 · 按钮原语全站审计 + 迁移（第一批）
 - **审计口径**：全仓桌面 `<button>` **682 个**（排除 mobile）；按「类名是否来自 `ln-*`/原语」分类：迁移前 **479 原语 / 268 非原语**。
 - **本轮迁移**：① 菜单项统一补 `.ln-menu__item`（context-menu / card / tab / tree-selection / export / ink-export / outline 等，视觉不变——legacy 选择器本就与它同一规则）；② AI 写作：历史行主区改用新原语 **`.ln-row__main`**（kit 新增，收编行内可点主区各写一份的 button 复位）、思考块折叠行 / 空态建议 chip / 工具 / 发送 / 停止全部落 `ln-btn--compact`；③ 小记空间：工具钮/新建/文字动作/清空搜索落 `ln-iconbtn` / `ln-btn--ghost--compact`，删掉 quick-notes.css 里重复的 30px/悬停/下划线视觉。
@@ -393,7 +399,7 @@
 - **日记 v1 收尾（261109 遗留）**：~~① 与 `feat/ai-writing-space` 合并~~ **已合并（v1.1.0）**；~~② ⌘4 并回 `useDesktopLifecycle` 映射表~~ **已收敛为 ⌘1–5 一张表（261109）**；~~③ 移动端关闭日记条目后的返回落点仍在「知识库」~~ **已修（261110：回日记页签）**；④ 「转为文档」两端目标选择器文案仍是「移动到…/移动到此处」（共享原语，未加 title/confirmLabel 参数）。
 - **日记设备级验收**：~~移动 9 态 + 23 屏~~ **已完成（261110：9 态重烤基线 + 两轮 0 差异；23 屏 23/23）**；剩桌面 `check:stylesnap` **没有"日记空间"这一态**，要纳入需新增 state 并重烤基线（本机无桌面合成夹具缓存，需有夹具的机器补）。
 - **每批收尾固定动作**：更新 §1 基线与门禁计数 + §3 + §0 批次抬头状态；提交/推送后立刻回写，别让 §0 的「未提交」标记漂移。
-- **下一版发布**（流程见 [docs/RELEASE.md](RELEASE.md)）：发布说明必须写清 ① inkDoc v4：旧端打开只读、手机/平板需重装；② 标签顺序只在设备本地生效（不同步）；③ 标签删除 = 缺席，两端都要升级（旧端仍会把墓碑写回索引）；④ 发布说明统一维护在 [docs/RELEASE-NOTES.md](RELEASE-NOTES.md)。发版前跑全量门禁：手机 6 态 + 平板 6 态 + 多维表 3 态 + 23 屏走查 + `check:windowsweep` + 桌面 42 态（桌面 42 态本机无合成夹具缓存，需有夹具的机器补）。
+- **下一版发布**（流程见 [docs/RELEASE.md](RELEASE.md)）：发布说明必须写清 ① inkDoc v4：旧端打开只读、手机/平板需重装；② 标签顺序只在设备本地生效（不同步）；③ 标签删除 = 缺席，两端都要升级（旧端仍会把墓碑写回索引）；④ 发布说明统一维护在 [docs/RELEASE-NOTES.md](RELEASE-NOTES.md)。发版前跑全量门禁：手机 9 态 + 平板 9 态 + 多维表 3 态 + 23 屏走查 + `check:windowsweep` + 桌面 42 态（桌面 42 态本机无合成夹具缓存，需有夹具的机器补）。
 - **移动端首屏瘦身**（发版后专项）：HEAD 实测 entry-js 65.5KB gz / preload 33 条 / 首屏 374KB，已超目标（60KB / ≤12 条 / 360KB）；先砍回目标值，再收紧 `check-bundle-budget.mjs` 与 `check-arch.mjs`。
 
 **P1（该做但可排期）**
@@ -409,6 +415,14 @@
 - **移动端 Word / Excel / CSV 导入（如需）**：目前只有桌面导入；移动端分享导入仍只覆盖 Markdown，需要时另立项（注意移动入口预算）。
 - **依赖补丁 4 处升级复核**（仅当升级对应依赖时）：见 §2。
 
+**261110 收口后移交（新会话直接从这里接手）**
+
+- **桌面 `check:stylesnap` 42 态**：本机无合成夹具缓存，已连续两批（按钮原语梯队 / 空间改名）未跑 ⇒ 需在有夹具的机器上跑一次全量并重烤；同时确认「日记空间」态是否要新增、空间名改「知识库」后有无文案类快照差异（快照只存计算值，预期 0，但要实测）。
+- **手机快照盲区：`.mb-sheet` 打开态**：9 态里没有任何一态打开底部 Sheet ⇒ 本轮「固定 50dvh + 下滑关闭」只能靠手工设备验（已验，但门禁看不见）。建议新增 1 态 `home-filter-sheet`（打开筛选 Sheet）并重烤手机基线，顺带覆盖 CreateSheet。
+- **`audit-dead-css` 桌面剩 2 个候选**：`.node-icon-picker__tab`（`src/components/ui/nodeIcon.css`）、`.diary-split-handle`（`src/features/diary/diary.css`）—— 判定前先确认不是动态拼接/内核命名空间，删了要配桌面快照复核。
+- **旧「资料库」称呼残留（注释级）**：`src/styles/kit.css:75`、`src/styles/app/shell.css:235/253/419`、`src/styles/app/base.css:58`、`styles/kit.css` 分隔条注释等处仍写「资料库」。本轮没动 —— 桌面会话正在改这些文件，避免写冲突；下次有人碰时顺手统一。
+- **平板/历史文档口径**：`docs/PAD-ADAPTATION.md` 历史批次里的「6 态」是当时记录（未回改，属历史）；新写内容统一 9 态。
+
 **P2（体验缺口 / 长期）**
 
 - **大库与真实设备**：墓碑 payload 老化（261025 定「后续优化」）；大库阈值探测（>2 万文档 / 索引 3–5MB）；**真实 Android 物理机验收从未做过**；PARITY 残余（移动云清理无 UI 入口、目录恢复后 `deleted_notes` 残留）。移动缺正文的「云端拉回 / 历史恢复 / 重建纯文本」三条只在单测 mock 覆盖，需真机 + 配 S3 验证。
@@ -416,6 +430,8 @@
 - **顶栏真 44 → 52**（六批 A4 结论）需另开需求；平板内容画布「点空白落光标」待用户裁决。
 
 **已闭合，别重复**
+
+- 「移动 知识库 / 桌面 文档」命名不统一 → **已定稿：桌面也改「知识库」**（261110）。
 
 - 二轮/实机修复批「未跑 6 态」→ 六批 A3 已重烤、0 差异。
 - 「胶囊固定底部」与「平移画布开关」已被二轮覆盖（前者撤回、后者整体删除）。

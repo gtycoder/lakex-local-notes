@@ -27,7 +27,8 @@ export interface DesktopTopBarLeadingProps {
 }
 
 const SPACE_META: Record<DesktopWorkspace, { label: string; Icon: typeof Files }> = {
-  library: { label: "文档", Icon: Files },
+  // 261110 用户定稿：桌面一级空间「文档」改名「知识库」，与移动端第 2 格同名（原文案「资料库」→「文档」→「知识库」）。
+  library: { label: "知识库", Icon: Files },
   "quick-notes": { label: "小记", Icon: Feather },
   "ai-writing": { label: "AI 写作", Icon: Sparkles },
   diary: { label: "日记", Icon: NotebookPen },
@@ -92,7 +93,7 @@ export function DesktopWorkspaceMenuItems({ desktopWorkspace, onSwitchWorkspace,
   // 用户 261006：上半「空间」只剩文档/小记（带 ⌘1/⌘2）；回收站与资源下沉到「工作空间」，
   // 与偏好设置并列、且**都不再给快捷键**（⌘3 的绑定与提示一并去掉）。
   const spaces: Array<{ id: DesktopWorkspace; label: string; Icon: typeof Files; hint?: string }> = [
-    { id: "library", label: "文档", Icon: Files, hint: "⌘1" },
+    { id: "library", label: "知识库", Icon: Files, hint: "⌘1" },
     { id: "quick-notes", label: "小记", Icon: Feather, hint: "⌘2" },
     // 261109 用户定稿：日记第 3 项（⌘3）、AI 写作第 4 项（⌘4）。
     { id: "diary", label: "日记", Icon: NotebookPen, hint: "⌘3" },

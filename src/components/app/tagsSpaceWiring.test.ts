@@ -97,10 +97,10 @@ describe("标签空间接线（P1）", () => {
     expect(NOTE_TAG_DIALOG).toContain("onError={(message) => setError(message)}");
   });
 
-  it("261105 验收：空间名「资料库」→「文档」；三栏可拖（SplitHandle + tagsLayout）；头部按钮移到左栏", () => {
+  it("261105 验收：空间名「资料库」→「文档」→「知识库」（261110）；三栏可拖（SplitHandle + tagsLayout）；头部按钮移到左栏", () => {
     const TOPBAR_SRC = read("../../desktop/DesktopTopBar.tsx");
-    expect(TOPBAR_SRC).toContain('library: { label: "文档", Icon: Files },');
-    expect(TOPBAR_SRC).toContain('{ id: "library", label: "文档", Icon: Files, hint: "⌘1" },');
+    expect(TOPBAR_SRC).toContain('library: { label: "知识库", Icon: Files },');
+    expect(TOPBAR_SRC).toContain('{ id: "library", label: "知识库", Icon: Files, hint: "⌘1" },');
     // 三栏：两条 SplitHandle（目录/预览）+ 纯逻辑在 tagsLayout
     expect(TAGS_WORKSPACE).toContain("<SplitHandle");
     expect(TAGS_WORKSPACE).toContain('ariaLabel="调整标签目录宽度"');

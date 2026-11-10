@@ -119,7 +119,7 @@ renderer: list_tree_nodes（含 space）
 | 默认空间（261110） | 桌面 `src/components/model/defaultSpace.ts` + `SettingsPanel`「启动」组 + `desktop/useDesktopShell.ts` 初值；移动 `src/mobile/settings/defaultSpace.ts` + `SettingsDrawer`「常规」行 + `MobileApp` 初始 route |
 | 搜索 | 复用既有 FTS + `SearchPanel.scopeNoteIds` / `SearchSheet.scopeNoteIds`（纯显示层；**不新增索引**） |
 
-**已知边界**：桌面与移动各自只有一份编辑器宿主（日记空间与资料库同篇互斥，见 `App.tsx` 的 `libraryTabs`）。**移动端返回落点已修（261110）**：从日记条目进工作区后，返回（页面返回 / 安卓返回键两条都走 `useRouteTransition.onClosed`）回「日记」页签；其余入口（首页/搜索/置顶/笔记本）仍回「知识库」。
+**已知边界**：桌面与移动各自只有一份编辑器宿主（日记空间与知识库同篇互斥，见 `App.tsx` 的 `libraryTabs`）。**移动端返回落点已修（261110）**：从日记条目进工作区后，返回（页面返回 / 安卓返回键两条都走 `useRouteTransition.onClosed`）回「日记」页签；其余入口（首页/搜索/置顶/笔记本）仍回「知识库」。
 
 ## 删除与恢复（261110）
 

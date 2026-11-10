@@ -61,7 +61,7 @@ export function useDesktopShell(options: UseDesktopShellOptions) {
   const [outlineResizing, setOutlineResizing] = useState(false);
 
   // ---- 工作区切换 ----
-  /** 启动进入的默认空间 = 设备本地偏好（设置 → 常规 → 默认空间；默认「文档」）。
+  /** 启动进入的默认空间 = 设备本地偏好（设置 → 常规 → 默认空间；默认「知识库」）。
    *  取值 = ⌘1–5 那五个一级空间；只是**初始值**，之后仍由用户随时切换（不改既有切换语义）。 */
   const [desktopWorkspace, setDesktopWorkspace] = useState<DesktopWorkspace>(() => loadDefaultSpace());
 

@@ -44,7 +44,7 @@ Preload (electron/preload.cjs)：原生 CJS，contextBridge 暴露 window.lakeNa
 | `electron/syncTypes.ts` | 桌面同步进度/结果/warning 类型 |
 | `electron/quickNotesSync.ts` | 小记 Manifest v1 同步（独立 prefix、tombstone、冲突副本、转换等待保护） |
 | `electron/preload.cjs` | **原生 CJS**（不走 Vite），暴露 lakeNative；打包版需 asarUnpack |
-| `src/App.tsx` | 主应用（多 Tab、资料库/小记工作台切换、侧边栏、状态栏、同步面板入口） |
+| `src/App.tsx` | 主应用（多 Tab、知识库/小记工作台切换、侧边栏、状态栏、同步面板入口） |
 | `src/components/app/QuickNotesWorkspace.tsx` | 小记时间线、新建/原地编辑、图片选择/粘贴/拖放、删除 Undo、转换弹窗 |
 | `src/main.tsx` | React 入口：**顶部**调用 `installPasteInterceptor()` |
 | `src/lib/native.ts` | 前端 IPC 封装 + 类型（`window.lakeNative`） |

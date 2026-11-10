@@ -80,12 +80,12 @@ describe("统一新建弹窗（NamePromptDialog）", () => {
     expect(TAGS).toContain('ariaLabel={"重命名标签 " + entry.name}');
   });
 
-  it("所有入口都走同一弹窗：目录右键/行内「＋」、资料库空态「新建文档」", () => {
+  it("所有入口都走同一弹窗：目录右键/行内「＋」、知识库空态「新建文档」", () => {
     // 目录：create() 与 createChild() 都只打开弹窗（不再直接 onCreate / 内联行）
     const openCount = (SIDEBAR.match(/openCreateDialog\(/g) ?? []).length;
     expect(openCount).toBeGreaterThanOrEqual(2); // create + createChild（定义在 useCallback 里，不计入）
     expect(SIDEBAR).not.toContain("props.onCreate(kind, parentId);");
-    // 资料库空态「新建文档」= App 级同一弹窗（预填默认名）
+    // 知识库空态「新建文档」= App 级同一弹窗（预填默认名）
     expect(APP).toContain("<NamePromptDialog");
     expect(APP).toContain('title="新建文档"');
     expect(APP).toContain('initialValue="无标题文档"');

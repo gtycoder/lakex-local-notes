@@ -16,7 +16,7 @@ export type DefaultSpace = "library" | "quick-notes" | "diary" | "ai-writing" | 
 
 /** 设置页下拉的选项：顺序 = 空间菜单顺序（与 ⌘1–5 一一对应）。 */
 export const DEFAULT_SPACE_OPTIONS: Array<{ value: DefaultSpace; label: string }> = [
-  { value: "library", label: "文档" },
+  { value: "library", label: "知识库" },
   { value: "quick-notes", label: "小记" },
   { value: "diary", label: "日记" },
   { value: "ai-writing", label: "AI 写作" },
@@ -33,7 +33,7 @@ export function isDefaultSpace(value: unknown): value is DefaultSpace {
   return DEFAULT_SPACE_OPTIONS.some((option) => option.value === value);
 }
 
-/** 读默认空间；存储不可用或值非法（旧版本/手改）一律回落文档。 */
+/** 读默认空间；存储不可用或值非法（旧版本/手改）一律回落知识库。 */
 export function loadDefaultSpace(): DefaultSpace {
   try {
     const raw = window.localStorage.getItem(DEFAULT_SPACE_KEY);

@@ -31,7 +31,7 @@ export const SETTING_ITEMS: SettingItemEntry[] = [
   { id: "editor-max-open-tabs", category: "editor", label: "最大同时打开标签数", keywords: "标签 页签 tab 上限 空间 独立 日记 文档" },
   { id: "editor-clear-tabs-on-exit", category: "editor", label: "退出时关闭全部标签", keywords: "标签 恢复 退出 关闭 清空 tab session 重启 下次启动" },
   { id: "editor-max-attachment", category: "editor", label: "附件大小上限", keywords: "附件 上传 大小 上限 MiB" },
-  { id: "editor-default-space", category: "editor", label: "默认空间", keywords: "默认空间 启动 首屏 进入 打开 空间 文档 小记 日记 AI 写作 标签 startup default workspace space 本机" },
+  { id: "editor-default-space", category: "editor", label: "默认空间", keywords: "默认空间 启动 首屏 进入 打开 空间 知识库 文档 小记 日记 AI 写作 标签 startup default workspace space 本机" },
   { id: "appearance-theme", category: "appearance", label: "主题", keywords: "主题 深色 浅色 暖色 纸质 护眼 换肤 dark light warm 夜间 亮蓝 亮橙 暗紫" },
   { id: "shortcut-search", category: "shortcuts", label: "打开全局搜索（标题和正文）", keywords: "搜索 快捷键 ⌘K" },
   { id: "shortcut-focus", category: "shortcuts", label: "进入或退出专注模式", keywords: "专注模式 全屏写作" },

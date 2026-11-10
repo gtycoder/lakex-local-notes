@@ -26,7 +26,7 @@ describe("默认空间（设备本地偏好）", () => {
 
   it("选项 = 文档 / 小记 / 日记 / AI 写作 / 标签（顺序与 ⌘1–5 对应）", () => {
     expect(DEFAULT_SPACE_OPTIONS).toEqual([
-      { value: "library", label: "文档" },
+      { value: "library", label: "知识库" },
       { value: "quick-notes", label: "小记" },
       { value: "diary", label: "日记" },
       { value: "ai-writing", label: "AI 写作" },

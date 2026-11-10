@@ -28,12 +28,12 @@ const nativeMock = vi.hoisted(() => ({
 }));
 vi.mock("../lib/native", () => ({ native: nativeMock }));
 
-// P1：+「标签」一级入口（与 文档/小记 并列）；261105 用户验收：空间名「资料库」改为「文档」
+// P1：+「标签」一级入口（与 知识库/小记 并列）；261105 空间名「资料库」→「文档」，261110 用户点单再改「知识库」（与移动端同名）
 // 261109：+「日记」（⌘3）与「AI 写作」（⌘4），顺序与顶栏空间菜单一致（文档 · 小记 · 日记 · AI 写作 · 标签 · 回收站 · 资源）
 const SLOTS: DesktopWorkspace[] = ["library", "quick-notes", "diary", "ai-writing", "tags", "trash", "resources"];
 const SPACE_LABEL: Record<DesktopWorkspace, string> = {
   diary: "日记",
-  library: "文档",
+  library: "知识库",
   "quick-notes": "小记",
   "ai-writing": "AI 写作",
   tags: "标签",
