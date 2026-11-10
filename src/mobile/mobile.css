@@ -116,6 +116,9 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
 .mobile-topbar.mobile-topbar--home {
   --mb-home-col-gap: 2px;
   --mb-topbar-icon-w: var(--mb-tap-min);
+  /* 261110 用户点单：首页顶栏**变薄**（52 → 44）——只覆盖内容区高度，安全区仍按基础公式叠加；
+     其它页顶栏（工作区/设置）保持 52。 */
+  height: calc(44px + max(0px, calc(var(--mobile-top-safe-area) - 8px)));
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   column-gap: var(--mb-home-col-gap);
