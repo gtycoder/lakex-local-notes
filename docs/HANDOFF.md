@@ -10,6 +10,20 @@
 
 > **顺序标注**：261109 各批次里写的「日记 ⌘4 / AI 写作 ⌘3」是**当时**的顺序；**261110 起改为 日记 ⌘3 / AI 写作 ⌘4**（另有标签 ⌘5）。旧批次不再改，以本行 + §1 为准。
 
+### 261110 · 首屏瘦身 + 小记「保存并同步」快路径（用户点单）
+
+- **移动端首屏达标（隔离 worktree 实测，同 HEAD）**：entry-js 76,472B → **59,706B gz**（−22.0%）、modulepreload **39 → 6 条**、首屏资源图 393,716B → **347,838B**（−11.7%）；目标（60KB / ≤12 / 360KB）全部达标，`check-bundle-budget.mjs` 与 `check-arch.mjs` 已按目标收紧（12 条 / 60KB / 360KB；桌面 600KB 不变）。
+- **做法**：① 非首屏必需移出静态图 —— 便携包编排、Markdown/PDF 分享导入、更新中心自动检查、粘贴拦截器（移入内核懒 chunk 模块求值，仍早于任何内核实例）、图标/表情选择器（含表情数据表）、原生调试契约/cachePort；② 3 个 `codeSplitting` 域块只合并「已在入口静态图里」的共享块（`includeDependenciesRecursively`），**绝不给内核/画板 vendor 分组**；③ `mobileLazyChunks.test.ts` 改为「禁 vendor + 组名白名单」。总产物未膨胀，内核/表格/Drawix 懒 chunk 尺寸不变。
+- **小记「保存并同步」快路径**（用户定稿：唯一自同步特例、必须最快；**替换 261026 的「整轮兜底」口径**）：
+  - 最短链 = 读 pointer → 读 quick-notes 索引（合并语义必需）→ 上传本条正文/资产 → 写新索引 → 写 pointer → **只更新本条基线**；**不拉 lake 索引、不处理其他待同步、不跑整轮 plan/apply**。
+  - **桌面队列修正**：旧 `enqueueMaintenance`（与整轮同步/GC 同一串行队列 ⇒ 必等大同步）→ 新 `serializedQuickPush` 高优先门（只与其它单条推送串行；发布互斥仍靠 S3 锁 + pointer CAS/读回）。
+  - **省请求/省本地**：重复点（内容未变）= 0 上传、0 发布、≈0–1ms；无资产时不再 GET 远端声明、同 `declHash` 不重复 PUT；`loadQuickPushState` 只读小记摘要（2000 文档真库实测旧 `loadState` 226ms → 新 1ms）。
+  - **回退只限**：无 pointer / 无基线 / epoch·generation·lakeCommit 不符 / 远端 quick 索引该条 `purged` 且无恢复标记 ⇒ 整轮并如实回传 full-sync；失败不写基线、不标 synced。
+  - 契约：`docs/SYNC-PROTOCOL.md` §12.3；埋点 `docs/LOGGING.md`；护栏 `quickPushFastPath.test.ts`（两端）、`quickNotePushPriority.test.ts`；AGENTS §4 已同步（含「不要排进 enqueueMaintenance」）。
+- **门禁**：tsc 0；`check:bundle` / `check:arch` 通过（mobile 59,707/61,440、6/12、347,878/360,000；desktop 563,355/600,000）；`check:core` 158/0；`check:mobileui` 通过；ui-metrics 0；diff-check 0；全量 vitest = **855 文件（843 passed / 1 failed / 11 skipped）/ 5353 passed / 12 skipped**，唯一失败 = 并行会话在途 `aiAssistantDialog.test.ts`（非本批）。
+- **设备**：APK 已装 `lake_mobile`，冷启动 + 知识库首屏正常；**未点收**：编辑器粘贴、小记 composer、分享导入、更新中心、图标/表情选择器、9 态/23 屏。
+- **真实 S3 验证（进行中）**：用户提供真实七牛桶（独立测试前缀），按「首次全量建基线 → 连续新建小记保存并同步 → 重复点击 → 下一轮整轮不重传」验收；结果回写 §3。
+
 ### 261110 · 接手批（AGENTS 精简 + 桌面按钮第二批 + 移动 mb-btn + 日记 v1 收尾）
 
 - **AGENTS 精简（Lead）**：65,709B → **45,833B**（预算 65,536，留 ~20KB）。全部红线/机制保留；删过期数值（text-3 hex、测试计数、「6 态」、「Electron 44.3」等）并合并重复表述；补两条长期事实：**一级空间 = 知识库/小记/日记/AI 写作/标签（两端同名）**、**按钮 = kit 统一梯队（4 语义+危险+链接）**；§7 编号保持（21–24 与外部引用对齐）。
@@ -334,7 +348,7 @@
 - **261110 历史清理（一次性）**：`.ai-writing-recon/`（走查截图 / 页面快照 / 探针脚本，59 文件 ≈15MB）已用 `git filter-repo --invert-paths` 从**全部历史**移除；被重写的是 **v1.1.0 之后的 23 个提交**（hash 以 `git log` 为准），**v1.0.x / v1.1.0 的 tag 与其提交 hash 未变**（不含该目录）⇒ 已发布 Release 与 CI 产物不受影响。重写前快照：`/Users/admin/file/local-lake/lakex-local-notes-backup-<stamp>/all.bundle`（62MB，含全部 refs）。**旧 clone / worktree 需 `git fetch --force --prune` + `git reset --hard origin/master` 或重新 clone**（旧 hash 已不可达）；本机原 `lakex-local-notes-diary` worktree 已删除（其分支是 master 祖先，无内容丢失）。
 
 - **worktree（261109 发版时）**：`lakex-local-notes` = `master`（发版主工作树）；`lakex-local-notes-diary` = `feat/diary-space`（本批开发用，已合并 master 并合回 master）。AI 写作与日记**都已进 master**，两个空间共存（⌘3 / ⌘4）。
-- 主分支 `master`，HEAD = **`09f41ba1`**（261110 接手批：AGENTS 精简 + 桌面按钮第二批 + 移动 mb-btn + 日记 v1 收尾）；其前 = 桌面一级空间改名「知识库」（`5b94f549`）、按钮原语梯队（`02fe0402`）、移动 Dock 五格（`270974ad`）。**`origin`（Gitee）已推到 `544f2532`；本批 `09f41ba1` 尚未 push**（`git push origin master` 双推）。
+- 主分支 `master`，HEAD = **`fc654c05`**（261110 首屏瘦身 + 小记「保存并同步」快路径）；前序 = `ab26f3c8`（HANDOFF 回写）、`09f41ba1`（按钮第二批 / mb-btn / 日记 v1 收尾）、`544f2532`（Gitee 已推到这里）。**本批 `09f41ba1` / `ab26f3c8` / `fc654c05` 均未 push**（`git push origin master` 双推；并行会话的 AI 批次仍在工作树、未提交）。
 - `package.json` = **1.1.0**；Android `versionName 1.1.0` / `versionCode 11100`（从根 `package.json` 派生，版本号单一来源：`1000 + major*10000 + minor*100 + patch`）。
 - tag：`v1.0.0`–`v1.0.5`、**`v1.1.0`**（另有旧 `v0.0.1` / `v0.0.2`）；已发布 tag 不再移动。`v1.1.0` = AI 写作 + 日记两个新空间。
 - `v1.0.5` 是**发在 AI 写作合并之前**的：AI 写作第一次随本版发布，别在旧发布说明里找它。
@@ -344,7 +358,7 @@
 
 **工作树（261109 清理批 + 更新中心批，已提交）**
 
-- 清理批分三个本地提交：`e4f1fd3f`（代码死文件 26 个）、`967c09e6`（文档清理：删 20 篇 + 5 份旧发布说明合并为 [docs/RELEASE-NOTES.md](RELEASE-NOTES.md)）、`04eb32a7`（HANDOFF / AGENTS / README / PRODUCT / DESIGN / MOBILE-OPS 对齐）；本批提交后工作树仍非 clean —— 另一会话在途 AI 助手改动（`src/features/ai/**`、`features/aiWriting/**`、`styles/app/misc.css`、`styles/app/tabs.css`、共享 `cssLayers.test.ts` 的对方增量），不属本批（见 §0 末尾与 §2）。
+- 清理批分三个本地提交：`e4f1fd3f`（代码死文件 26 个）、`967c09e6`（文档清理：删 20 篇 + 5 份旧发布说明合并为 [docs/RELEASE-NOTES.md](RELEASE-NOTES.md)）、`04eb32a7`（HANDOFF / AGENTS / README / PRODUCT / DESIGN / MOBILE-OPS 对齐）；**工作树仍未 clean** —— 另一会话的 AI 助手批次（`src/features/ai/**`、`features/aiWriting/**`、`styles/app/misc.css`、`styles/app/tabs.css`、`cssLayers.test.ts` 增量与 HANDOFF 里的该批次条目）尚未提交；提交本批时已按文件隔离，不属本批。
 - 文档：删除一批已完成/过期的研究、审计、回归文档；新增 RELEASE-NOTES 合集；ARCHITECTURE / LAKEX-CONTRACT / MOBILE-LONG-DOC-PROBE 等随清理更新。
 - 代码：删除已确认无引用的死模块（`src/core/decideUpload*`、`lakeReconcile*`、`quickNoteReconcile*`、`syncDecision*`、`electron/mdToHtml.ts`、`electron/storeUtils.ts`、`electron/syncDecision.ts` 及若干一次性 scripts）；`QuickNoteEditor` / `QuickNotePreview` 等有小改。
 - 本文件（HANDOFF）已重写并随本批提交；其余文件清单与 diff 见上述提交。
@@ -356,9 +370,10 @@
 **门禁基线（261109 发版前：AI 写作 + 日记合并后实测）**
 
 - `npx tsc --noEmit` = **0 错**。
-- `npx vitest run` = **852 文件（841 passed / 11 skipped）/ 5342 passed / 12 skipped / 0 failed**（261110 接手批提交前实测；工作树含另一会话在途 AI 助手改动 ⇒ 计数含对方新增用例，本批自身新增约 90 例）。
+- `npx vitest run` = **855 文件（843 passed / 1 failed / 11 skipped）/ 5353 passed / 12 skipped**（261110 首屏批提交前实测；唯一失败 = 并行会话在途 `src/features/ai/aiAssistantDialog.test.ts`，非本批）。
+- **261110 AI 助手四项批（本批实测，与本文件 §0 首条同批）**：`npx tsc --noEmit` 0；全量 vitest **852 文件 / 5341 passed / 12 skipped / 2 failed** —— 2 条红都在 `electron/s3v3/quickPushSingle.test.ts`（`state.quickPurgeTimes` 读到 null），**来自并行会话在途的 s3v3 v4 改造**（`src/core/s3v3Engine.ts` / `electron/s3v3/*` / `src/core/s3v3/**` 均在其未提交改动里），与本批（AI 面板 / tab 宽度 / 复制为 Lake）无关；`ui-metrics` 颜色 0 / !important 9=清单 / 跨文件重复 103≤105；`git diff --check` 0。
 - `git diff --check` = **0**。
-- `check:bundle`：**mobile-entry 仍超目标（已知红，非本批引入）**。脚本当前冻结为 entry JS gzip ≤66KB、modulepreload ≤34 条、首屏 ≤380KB（`check-arch`）；目标仍是 **60KB / ≤12 条 / 360KB**，瘦身后收紧（§3 P1）。**261109 实测校准（发版前，`v1.1.0` 合并后）**：`mobile-entry` = **75,316 gz / 39 链接**（冻结 67,584 / 34）；同日合并前的对照基线 `6b2bfbec` = 75,031 gz / 39 链接 ⇒ 日记与 AI 写作合并带来的增量 **+285B / +0 链接**。桌面首屏 586,076 / 600,000（余量 13.9KB，AI 写作改 lazy 前是 555,107）。⇒ 这套红是**跨版本既有**，收口是独立移动端瘦身专项（`check:arch` 的 mobile 首屏 390,727 / 380,000 同属此项）。运行前需先有 `dist` / `dist-mobile` 构建产物。
+- `check:bundle` / `check:arch`：**已转绿**（261110 首屏瘦身）。mobile-entry = **59,707 gz / 6 链接**、首屏 347,878 / 360,000（余量 12.1KB）、entry CSS 140,405 / 141,312；desktop app-js 191,372 / 307,200、首屏 563,355 / 600,000（余量 36.6KB）。预算已按目标收紧（`check-bundle-budget.mjs` 12 条 / 60KB、`check-arch.mjs` 360KB），不再有「已知红」。**注意**：preload 条数只防「静态依赖回入口」，字节由 `check-arch` 守 —— 不要为了压低条数把懒加载改回静态。运行前需先有 `dist` / `dist-mobile` 构建产物。
 - 其它样式/边界/设备门禁按改动范围跑（分层口径见 AGENTS §3#21）；最近一次移动设备记录 = **261110（移动收口批）**：手机 **9 态重烤基线 + 两轮 0 差异**、**平板 9 态补烤 + 两轮 0 差异**、**多维表 3 态重烤**、**23 屏 23/23 ok**（`lake_gate` / `lake_tab`，详见 §0 收口批）；桌面 `check:stylesnap` 42 态仍未跑（本机无合成夹具缓存，见 §3）。
 
 **设备与环境（本机实测）**
@@ -408,9 +423,8 @@
 **P0（不做就卡住主线）**
 
 - **桌面 `check:stylesnap` 42 态**：本机无合成夹具缓存，已连续三批未跑（按钮梯队 / 空间改名 / 按钮第二批）。下次有夹具的机器全量跑并重烤；**重点看本批视觉 delta**（清单见 §0）；同时确认是否新增「日记空间」态。
-- **移动端本批设备点收**：`bash scripts/android-build.sh --sync --install`（lake_mobile）后看：① 设置各子页按钮（`--outlined` 与旧 `--settings` 应 0 变化）；② AI 页操作键形状（自绘胶囊→L3 中性框）；③ 基座/ghost 字色略浅的屏；④ 日记「取消日记标记」/ 转文档文案；⑤ 9 态快照（DOM 未变，预期 0 diff）与 23 屏走查。
+- **移动端本批设备点收**：`bash scripts/android-build.sh --sync --install`（lake_mobile）后看：① 设置各子页按钮（`--outlined` 与旧 `--settings` 应 0 变化）；② AI 页操作键形状（自绘胶囊→L3 中性框）；③ 基座/ghost 字色略浅的屏；④ 日记「取消日记标记」/ 转文档文案；⑤ 9 态快照（DOM 未变，预期 0 diff）与 23 屏走查；⑥ 首屏懒 chunk 冒烟：开文档后粘贴、小记 composer、分享导入 MD/PDF、更新中心、图标/表情选择器；⑦ 冷启动首页（已验）与 9 态/23 屏。
 - **手机快照盲区：`.mb-sheet` 打开态**：9 态无一态打开底部 Sheet ⇒ 新增 `home-filter-sheet` 态并重烤，顺带覆盖 CreateSheet。
-- **移动端首屏瘦身**：entry-js 65.5KB gz / preload 33 条 / 首屏 374KB，已超目标（60KB / ≤12 / 360KB）；先砍回再收紧 `check-bundle-budget.mjs` 与 `check-arch.mjs`。
 - **每批收尾固定动作**：更新 §1 基线与门禁计数 + §3 + §0 批次抬头；提交后立刻回写。
 - **下一版发布**（流程 `docs/RELEASE.md`）：发布说明写清 ① inkDoc v4 旧端只读/手机需重装；② 标签顺序仅设备本地；③ 标签删除=缺席两端都要升级；④ 发版前全量门禁矩阵（手机 9 + 平板 9 + 多维表 3 + 23 屏 + windowsweep + 桌面 42）。
 
@@ -418,6 +432,7 @@
 
 - **日记「取消标记」残余验收**：跨端 wire 传播（一端取消 → 另一端知识库出现该本、日记空间消失）需**真机 + 配 S3** 验；取消是单向的（无回标入口，回标另立项）。
 - **按钮第二批的用户点收**（清单见 §0）：尤其「删除图标常红」「选中标签项变淡」「AI 页操作键形状」是否接受。
+- **小记快路径真实 S3 验收（进行中）**：独立测试前缀下，首次（含回退整轮）/ 快路径 / 重复点击的耗时与对象增量；验收后清理前缀并恢复设备 S3 配置。
 - **便携包真实 3GB 数据验证**；**更新中心设备验收**（Android 下载→校验→系统安装器）；**桌面 3 项实机复核 + 平板复验**；261104 三项裁决残余验证；小记→文档标签携带待定；导入/导出/键盘真机冒烟债；依赖补丁 4 处升级复核。
 - **`audit-dead-css` 桌面剩 2 候选**（`.node-icon-picker__tab` / `.diary-split-handle`）；旧「资料库」注释残留；`docs/audit-261027/` 4 份过期审计/计划（07 v4 RFC 已由 `03ef3fb3` 落地、02 安全审计已暂停、11 浏览器端计划保留）按 AGENTS「已完成直接删」清理。
 
@@ -432,5 +447,6 @@
 - 移动/桌面空间命名 → 已定稿两端「知识库」（261110）。
 - 桌面按钮原语梯队 + 第二批（app 级 39 个）→ 已迁移；移动 `mb-btn` 同模型已独立实现（261110）。
 - 日记 v1 残余四条（过滤测试 / 标签不聚合 / 取消标记 / 移动告警）→ 已收口（261110）。
-- AGENTS 超预算 → 已精简到 45,833B（261110）。
+- AGENTS 超预算 → 已精简到 46,610B（261110）。
+- 移动端首屏瘦身 → entry-js 59.7KB / preload 6 / 首屏 347.9KB（261110，预算已收紧）。
 - 二轮/实机修复批「未跑 6 态」、胶囊固定底部 / 平移画布开关、P9–P12 候选、平板内核工具栏两条例外 → 均已闭合/撤回。
