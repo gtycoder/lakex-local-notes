@@ -397,6 +397,13 @@ LOCK_TTL_MS = 120_000 ｜ LOCK_SETTLE_MS = 40 ｜ LOCK_DEADLINE_MS = 15_000（�
 **证据（LOGGING §8）**：一行 `[perf] sync.push-single <ms>ms id=… status=… req="requests=… get=… put=…" phases="push-pointer=…,…"`
 （成功/失败都记；低频用户动作 ⇒ info 级）。
 
+**真实 S3 实测（261110，模拟器 + 七牛，独立临时前缀，测后已清理 110 对象 / 前缀剩 0）**：
+首次（无 pointer → full-sync 回退整轮，上传 26 条）6657ms；首次快路径（新建第 2 条）1421ms
+（日志 1387ms；req=13：8 GET / 4 PUT / 1 DELETE；phases≈pointer 259 / publish 721 / baseline 164）；
+同一条重复点「保存并同步」**239ms**（日志 201ms；req=2 GET，0 PUT，generation 不涨）；
+随后整轮 `syncNow` 870ms（↑0 ↓0，无正文重传；移动端因既有 tag 版本元数据做了一次只含元数据的再发布，
+quick 正文对象数不变）。设备原 S3 配置为「未配置」，测后已恢复为空。
+
 ### 12.4 读回失败/并发
 
 - `publish-conflict`（重试超限）与 `lock-busy` 都是 retryable；UI 可自动重试。

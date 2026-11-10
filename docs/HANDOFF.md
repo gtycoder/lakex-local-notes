@@ -22,7 +22,7 @@
   - 契约：`docs/SYNC-PROTOCOL.md` §12.3；埋点 `docs/LOGGING.md`；护栏 `quickPushFastPath.test.ts`（两端）、`quickNotePushPriority.test.ts`；AGENTS §4 已同步（含「不要排进 enqueueMaintenance」）。
 - **门禁**：tsc 0；`check:bundle` / `check:arch` 通过（mobile 59,707/61,440、6/12、347,878/360,000；desktop 563,355/600,000）；`check:core` 158/0；`check:mobileui` 通过；ui-metrics 0；diff-check 0；全量 vitest = **855 文件（843 passed / 1 failed / 11 skipped）/ 5353 passed / 12 skipped**，唯一失败 = 并行会话在途 `aiAssistantDialog.test.ts`（非本批）。
 - **设备**：APK 已装 `lake_mobile`，冷启动 + 知识库首屏正常；**未点收**：编辑器粘贴、小记 composer、分享导入、更新中心、图标/表情选择器、9 态/23 屏。
-- **真实 S3 验证（进行中）**：用户提供真实七牛桶（独立测试前缀），按「首次全量建基线 → 连续新建小记保存并同步 → 重复点击 → 下一轮整轮不重传」验收；结果回写 §3。
+- **真实 S3 验证（已完成）**：独立测试前缀 `lakex-notes-dev3-fastpath-202611102111`（测后 110 对象删净、前缀剩 0；设备原「未配置」已恢复、凭据未落盘）。首次（无 pointer 回退整轮）**6657ms / 上传 26 条**；快路径第 2 条 **1421ms**（日志 1387ms；req=13：8 GET / 4 PUT / 1 DELETE；publish 721ms 为协议常量）；同条重复点 **239ms**（req=2 GET、0 上传、generation 不涨）；随后整轮 `syncNow` 870ms（↑0 ↓0，该条不重传）。数据已回写 `docs/SYNC-PROTOCOL.md` §12.3。
 
 ### 261110 · 接手批（AGENTS 精简 + 桌面按钮第二批 + 移动 mb-btn + 日记 v1 收尾）
 
@@ -371,7 +371,7 @@
 
 - `npx tsc --noEmit` = **0 错**。
 - `npx vitest run` = **855 文件（843 passed / 1 failed / 11 skipped）/ 5353 passed / 12 skipped**（261110 首屏批提交前实测；唯一失败 = 并行会话在途 `src/features/ai/aiAssistantDialog.test.ts`，非本批）。
-- **261110 AI 助手四项批（本批实测，与本文件 §0 首条同批）**：`npx tsc --noEmit` 0；全量 vitest **852 文件 / 5341 passed / 12 skipped / 2 failed** —— 2 条红都在 `electron/s3v3/quickPushSingle.test.ts`（`state.quickPurgeTimes` 读到 null），**来自并行会话在途的 s3v3 v4 改造**（`src/core/s3v3Engine.ts` / `electron/s3v3/*` / `src/core/s3v3/**` 均在其未提交改动里），与本批（AI 面板 / tab 宽度 / 复制为 Lake）无关；`ui-metrics` 颜色 0 / !important 9=清单 / 跨文件重复 103≤105；`git diff --check` 0。
+- **261110 AI 助手四项批（本批实测，含「钉住=每作用域挂起」最终语义）**：`npx tsc --noEmit` 0；全量 vitest **855 文件（844 passed / 11 skipped）/ 5356 passed / 12 skipped / 0 failed**（含并行会话 s3v3 改造落地后；本批新增 `aiAssistantSession` 4 例 + `AiMessageView.render` 5 例 + `aiLakeKernelRegistry` 4 例）；`ui-metrics` 颜色 0 / !important 9=清单 / 跨文件重复 103≤105；`git diff --check` 0；`cssLayers` 基线 `app/tabs.css` 188→189、`ai/aiDialogParts.css` 87→91（均写明理由）。
 - `git diff --check` = **0**。
 - `check:bundle` / `check:arch`：**已转绿**（261110 首屏瘦身）。mobile-entry = **59,707 gz / 6 链接**、首屏 347,878 / 360,000（余量 12.1KB）、entry CSS 140,405 / 141,312；desktop app-js 191,372 / 307,200、首屏 563,355 / 600,000（余量 36.6KB）。预算已按目标收紧（`check-bundle-budget.mjs` 12 条 / 60KB、`check-arch.mjs` 360KB），不再有「已知红」。**注意**：preload 条数只防「静态依赖回入口」，字节由 `check-arch` 守 —— 不要为了压低条数把懒加载改回静态。运行前需先有 `dist` / `dist-mobile` 构建产物。
 - 其它样式/边界/设备门禁按改动范围跑（分层口径见 AGENTS §3#21）；最近一次移动设备记录 = **261110（移动收口批）**：手机 **9 态重烤基线 + 两轮 0 差异**、**平板 9 态补烤 + 两轮 0 差异**、**多维表 3 态重烤**、**23 屏 23/23 ok**（`lake_gate` / `lake_tab`，详见 §0 收口批）；桌面 `check:stylesnap` 42 态仍未跑（本机无合成夹具缓存，见 §3）。
@@ -432,7 +432,7 @@
 
 - **日记「取消标记」残余验收**：跨端 wire 传播（一端取消 → 另一端知识库出现该本、日记空间消失）需**真机 + 配 S3** 验；取消是单向的（无回标入口，回标另立项）。
 - **按钮第二批的用户点收**（清单见 §0）：尤其「删除图标常红」「选中标签项变淡」「AI 页操作键形状」是否接受。
-- **小记快路径真实 S3 验收（进行中）**：独立测试前缀下，首次（含回退整轮）/ 快路径 / 重复点击的耗时与对象增量；验收后清理前缀并恢复设备 S3 配置。
+- **小记快路径后续优化（非必须）**：真实网络下快路径 1.4s 里 publish 721ms（锁 4 GET + settle + PUT pointer + 读回）与 pointer 259ms 是 RTT/协议常量主导，继续压缩只能改协议；若后续要抠，先测「锁 settle 40ms 是否可降」与「写后读回是否可用条件写替代」，别为几十 ms 破坏正确性。
 - **便携包真实 3GB 数据验证**；**更新中心设备验收**（Android 下载→校验→系统安装器）；**桌面 3 项实机复核 + 平板复验**；261104 三项裁决残余验证；小记→文档标签携带待定；导入/导出/键盘真机冒烟债；依赖补丁 4 处升级复核。
 - **`audit-dead-css` 桌面剩 2 候选**（`.node-icon-picker__tab` / `.diary-split-handle`）；旧「资料库」注释残留；`docs/audit-261027/` 4 份过期审计/计划（07 v4 RFC 已由 `03ef3fb3` 落地、02 安全审计已暂停、11 浏览器端计划保留）按 AGENTS「已完成直接删」清理。
 
@@ -441,6 +441,7 @@
 - 大库与**真实 Android 物理机验收从未做过**；墓碑 payload 老化；移动云清理无 UI 入口、目录恢复后 `deleted_notes` 残留；缺正文/缺小记三条恢复路径只有单测 mock。
 - 移动端文本格式未接入口（unlink / replace / style→code·quote / 表格块级命令族）；顶栏 44→52 需另开需求；平板「点空白落光标」待用户裁决。
 - **脚本/源码注释里的旧 `§7.x` 引用**（`§7.25/27/28/30/31`，与 AGENTS 现编号 21–24 不符；历史遗留）⇒ 下次碰时统一，不单独开批。
+- **移动端首轮元数据再发布**：初始发布后第一轮整轮同步会因既有 tag 版本元数据做一次「只含元数据」的再发布（gen+1、正文对象不涨）；与快路径无关，可单独立项评估是否省掉。
 
 **已闭合，别重复**
 
