@@ -1,6 +1,30 @@
 import { useCallback, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { placePopoverAtPoint, placePopoverAtPointBelow, placePopoverBeside, placePopoverPosition } from "./topMenuPosition";
 
+/** below-fixed 的落点（纯函数，便于单测）。
+ *  下方空间不足 MIN_BELOW 且上方更宽裕 ⇒ **翻到上方**（同一 left，按上方可用高度夹）。
+ *  现场：锚点在窗口最底部（日记本「换图标」按钮）时，下方只剩 0px，面板会被压成 1px 并排到视口外。 */
+export function resolveBelowFixed(args: {
+  anchor: { top: number; bottom: number };
+  viewport: { height: number };
+  size: { height: number };
+  gap: number;
+  margin: number;
+  left: number;
+  width?: number;
+}): { top: number; maxHeight: number; flipped: boolean; left: number; width?: number } {
+  const { anchor, viewport, size, gap, margin, left, width } = args;
+  const spaceBelow = viewport.height - anchor.bottom - gap - margin;
+  const spaceAbove = anchor.top - gap - margin;
+  const MIN_BELOW = 160;
+  if (spaceBelow < MIN_BELOW && spaceAbove > spaceBelow) {
+    const height = Math.min(size.height, Math.max(0, spaceAbove));
+    return { left, width, top: Math.max(margin, anchor.top - gap - height), maxHeight: Math.max(0, spaceAbove), flipped: true };
+  }
+  const top = anchor.bottom + gap;
+  return { left, width, top, maxHeight: Math.max(0, viewport.height - top - margin), flipped: false };
+}
+
 export interface UsePopoverPositionOptions {
   open: boolean;
   /** 锚点元素（与 at 二选一；at 优先）。 */
@@ -63,9 +87,12 @@ export function usePopoverPosition({
           : placePopoverPosition(anchor.getBoundingClientRect(), viewport, size, gap, { align, margin, allowFlip: side !== "below-fixed" })
         : null;
     if (!next) return;
-    setStyle({ left: next.left, top: next.top, width,
-      ...(anchor && side === "below-fixed" ? { maxHeight: Math.max(0, viewport.height - next.top - margin) } : {}),
-    });
+    if (anchor && side === "below-fixed") {
+      const resolved = resolveBelowFixed({ anchor: anchor.getBoundingClientRect(), viewport, size, gap, margin, left: next.left, width });
+      setStyle({ left: resolved.left, top: resolved.top, width: resolved.width, maxHeight: resolved.maxHeight });
+      return;
+    }
+    setStyle({ left: next.left, top: next.top, width });
   }, [anchor, atX, atY, align, side, gap, margin, width, allowFlip]);
 
   useLayoutEffect(() => {
