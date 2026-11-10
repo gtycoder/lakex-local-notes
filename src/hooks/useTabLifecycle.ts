@@ -101,6 +101,11 @@ export function useTabLifecycle({
       window.setTimeout(tryLocate, 180);
     };
     const existing = openTabsRef.current.find((tab) => tab.noteId === id);
+    // 261110：已存在的 tab 若没有 space 标记（旧会话 / 从文档空间搜索打开日记），按入参补上，
+    // 否则它会被 tab 空间分流当成"文档 tab"，导致日记空间看不见、library 里又被剔除 ⇒ 编辑区空白。
+    if (existing && space && existing.space !== space) {
+      setOpenTabs((prev) => prev.map((tab) => (tab.noteId === id ? { ...tab, space } : tab)));
+    }
     if (existing) {
       // 曾被标记"已删除"的标签：重新读一次落库状态再决定——可能已从回收站恢复（清标记），
       // 也可能仍在回收站（必须保持标记；旧实现无条件 deleted:false 会把守卫解开）。

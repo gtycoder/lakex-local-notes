@@ -8,6 +8,8 @@
 
 ## 0. 最新交接（261109）
 
+> **顺序标注**：261109 各批次里写的「日记 ⌘4 / AI 写作 ⌘3」是**当时**的顺序；**261110 起改为 日记 ⌘3 / AI 写作 ⌘4**（另有标签 ⌘5）。旧批次不再改，以本行 + §1 为准。
+
 ### 261109 · 日记六改（独立 tab / 一天多篇 / 选日期 / 标题锁 / 选中态 / 转小记）
 - **独立 tab**：`OpenTab.space`（`desktopTypes`/`MultiTabEditor.TabInfo`/`desktopDerivedState` 三处透传）；App 按空间分流 `libraryTabs` / `diaryTabs`，日记空间顶栏渲染自己的 tab 条（`aria-label="打开的日记"`），切空间时活动标签回落到该空间。
 - **一天多篇**：`core.planDiaryCreate` + `diaryStore.openDate(dateKey, { mode })`（`open` 默认 / `new` 永远新建）+ IPC `diary_open_date(dateKey, mode)` + `native.diaryOpenDate(dateKey, mode)`；同日多篇不再当"重复文档"告警，`DiaryEntry.createdAt` 支撑同日按创建时间倒序。
@@ -19,6 +21,17 @@
 ### 261109 · 空间顺序与快捷键（用户定稿）
 - 空间菜单顺序改为 **文档 ⌘1 · 小记 ⌘2 · 日记 ⌘3 · AI 写作 ⌘4 · 标签 ⌘5**（日记与 AI 写作换位；标签也进快捷键表）。
 - **快捷键单一来源**：⌘1–5 全部收进 `src/hooks/useDesktopLifecycle.ts` 的一张 map；删掉 `App.tsx` 里单独注册的 ⌘4 监听（review 遗留项 ② 闭合）。护栏 `src/features/diary/diaryWorkspace.test.ts` ② 断言表内容 + App 不得再自注册。
+
+### 261110 · 日记收尾（删除 / 原路恢复 / 徽标 / 弹层定位统一 / 保存守卫自愈）
+- **日记删除**：桌面条目右键 + 移动端 ⋯ →「删除」，复用既有删除确认与 `deleteTreeNode`（软删进回收站）。
+- **恢复 = 原路返回**（用户定稿：没转换就"从哪来回哪去"）：原父被删时，桌面 `trashLifecycle` / 移动 `resolveRestoreParent` 先认来源（`space="diary"` 的笔记本，**只看原始父链不看标题**），再**按标题日期补建 年/月 分组**后恢复；普通文档回落不变；已「转为小记」的软删也回日记空间。
+- **回收站徽标**：「日记」（桌面 `.badge` / 移动 `.mb-tag`），来源判据与恢复同一份（`electron/trashDiaryOrigin.ts`）。
+- **弹层定位统一**（用户点单）：所有模式都保证落在视口内 —— 下翻上、右翻左、四边夹取（`fitPopoverInViewport`）；`below-fixed` 补上方翻转（修「日记本换图标按钮在窗口底部 → 面板压成 1px 不可见」）；AI 贴选区弹窗仍是**不翻上**的显式例外。
+- **保存守卫竞态自愈**：磁盘内容若**正好等于**我方要写的内容，则只当作 baseHash 陈旧（不弹「已被他处编辑」）；内容不同仍照常拦截。
+- **更新中心**：手动检查**不自动下载**（两端），给「下载安装包 / 前往发布页」；网络失败给可操作原因 + 主进程日志。
+- **移动端**：首页 ＋ 新建面板加「日记」（默认今天、幂等打开）；日记页 ⋯ 加「删除」；回收站行显示「日记」徽标。
+- 门禁：tsc 0；vitest **822 文件 / 5184 通过 / 12 skipped / 0 failed**；ui-metrics / check:mobileui / check:arch（import 0） / diff-check 通过。CSS 基线登记：kit 613、diary 144、aiWriting 446。
+- **未跑**：移动端设备门禁（首页 tab 4 个 + 顶栏栅格 + 新建面板变了，需在 `lake_gate` 重烤基线后双轮对拍 + 23 屏走查）；桌面 42 态。
 
 ### 261109 · 日记七改（月历原语上收 / 左栏可拖 / 日记本图标 / 标签条补全）
 - **月历原语上收**：`.bt-date-*` 面板样式 → kit 的 `.ln-calendar*`，行为抽成 `components/ui/CalendarPanel`（多维表日期字段与日记「按日期新建」**同一实现**）；日记流程改为「点日历 → 应用内月历 → 选完 → 确认新建」，不再弹系统 date picker。

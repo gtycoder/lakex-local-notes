@@ -77,7 +77,6 @@ export function DiaryPage({ nodes, onOpenEntry, onOpenSearch, onChanged }: Diary
     setBusy(true);
     try {
       const opened = await bridge.diaryOpenDate(todayKey);
-      if (opened.duplicates.length > 0) showToast("同一天有多篇日记，已打开最新一篇", { type: "info" });
       onOpenEntry({ noteId: opened.noteId, notebookId: opened.notebookId, mode: "editor" });
       void onChanged();
     } catch (error) {

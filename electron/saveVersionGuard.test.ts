@@ -112,6 +112,17 @@ describe("保存版本守卫（Batch4-D：外部/他端改过正文时不静默�
     expect("contentHash" in result && result.contentHash).toBe(noteBodyHash(same));
     expect(fs.readFileSync(bodyPath(note.id), "utf8")).toBe(before);
   });
+  it("竞态自愈但标题变了 ⇒ 照常落标题（不能静默丢改名）", () => {
+    const note = store.createNote("旧标题");
+    const same = "<p>同一份正文</p>";
+    store.saveNote(note.id, "旧标题", same);
+    const staleBaseHash = noteBodyHash("<p>更旧的版本</p>");
+    const result = store.saveNoteVersioned(note.id, "新标题", same, undefined, staleBaseHash);
+    expect(isSaveConflict(result)).toBe(false);
+    expect(store.readNote(note.id).title).toBe("新标题");
+    expect(store.listTreeNodes().find((n) => n.noteFileId === note.id)?.title).toBe("新标题");
+  });
+
   it("未提供 baseHash ⇒ 旧行为（无条件写，逐字节一致回归）", () => {
     const note = store.createNote("守卫");
     store.saveNote(note.id, "守卫", "<p>v1</p>");

@@ -556,7 +556,6 @@ export function App() {
     if (existingDocumentId) { await openNote(existingDocumentId); return; }
     const outcome = await requestDiaryOpenDate(todayKey);
     if (!outcome.ok) { showNotice(diaryOpenErrorMessage(outcome)); return; }
-    if (outcome.result.duplicates.length > 0) showNotice("同一天有重复日记（历史数据），已打开其中一篇");
     // 树来自主进程（新建的 笔记本/年组/月组/文档 只有重读才可见），随后照既有方式打开。
     await refreshTree();
     await openNote(outcome.result.noteId);
@@ -828,13 +827,29 @@ export function App() {
     const inSpace = openTabs.filter((tab) => (tab.space ?? "library") === space);
     if (activeNoteId && inSpace.some((tab) => tab.noteId === activeNoteId)) return;
     const next = inSpace[inSpace.length - 1]?.noteId ?? null;
-    if (next) setActiveNoteId(next);
+    // 目标空间没有任何 tab ⇒ 必须把 active 清掉；留着旧值会让编辑区空白/误显示空态。
+    setActiveNoteId(next);
     // 只在空间切换时回落；标签增删由各自的打开/关闭逻辑管理。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [desktopWorkspace]);
 
   /** 日记标签右键菜单（261110）：动作集与文档标签一致（关闭/关闭其他/全部/左侧/右侧/钉住），复用 TabContextMenu。 */
   const [diaryTabCtx, setDiaryTabCtx] = useState<{ noteId: string; x: number; y: number } | null>(null);
+
+  /** 261110：重启后若上次活动的是日记 tab（workspace 默认回 library），把它切回日记空间，
+   *  否则 tab 被空间分流隐藏、activeNoteId 悬空 ⇒ 编辑区空白（最容易被当成"又白屏"）。 */
+  const initialSpaceRestoredRef = useRef(false);
+  useEffect(() => {
+    if (initialSpaceRestoredRef.current) return;
+    initialSpaceRestoredRef.current = true;
+    if (!activeNoteId) return;
+    const tab = openTabs.find((item) => item.noteId === activeNoteId);
+    if (!tab) return;
+    const isDiaryTab = tab.space ? tab.space === "diary" : diaryNoteIds.has(tab.noteId);
+    if (isDiaryTab && desktopWorkspace === "library") void switchDesktopWorkspace("diary");
+    // 只在首次挂载跑一次（后续由空间切换 effect 接管）。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /** 日记标签切换器（▾）：打开时按可视位置弹菜单；与文档标签的切换器同语义、数据不同。 */
   const [diaryTabMenu, setDiaryTabMenu] = useState<{ x: number; y: number } | null>(null);
@@ -1334,7 +1349,16 @@ export function App() {
         onCloseDrafts={() => setDraftEntries([])}
         searchPanelOpen={searchPanelOpen}
         searchPanelQuery={searchPanelQuery}
-        onOpenNoteFromSearch={(id, query) => void openNote(id, query)}
+        onOpenNoteFromSearch={(id, query) => {
+          // 261110：日记文档被 tab 空间分流排除在文档标签条外 ⇒ 必须切到日记空间并按 diary 打开，
+          // 否则 activeNoteId 指向一个不显示的 tab ⇒ 编辑区空白（用户会当成"文档没了"）。
+          if (diaryNoteIds.has(id)) {
+            void switchDesktopWorkspace("diary");
+            void openNote(id, query, false, "diary");
+            return;
+          }
+          void openNote(id, query);
+        }}
         onOpenQuickNoteFromSearch={(id) => void openQuickNoteFromSearch(id)}
         onCloseSearch={() => setSearchPanelOpen(false)}
         searchScopeNoteIds={desktopWorkspace === "diary" ? diaryNoteIds : null}

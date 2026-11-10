@@ -43,6 +43,19 @@ describe("日记空间接线", () => {
     expect(APP, "App 不应再自注册 ⌘4/⌘5 监听").not.toMatch(/event\.key !== "[45]"/);
   });
 
+  it("②j tab 空间分流回归护栏：搜索命中日记切空间、空空间清 active、重启回日记空间、旧 tab 补 space", () => {
+    // 搜索命中日记文档 ⇒ 切日记空间 + 按 diary space 打开（否则 tab 被分流隐藏、编辑区空白）
+    expect(APP).toContain("if (diaryNoteIds.has(id))");
+    expect(APP).toContain('switchDesktopWorkspace("diary")');
+    expect(APP).toContain('openNote(id, query, false, "diary")');
+    // 目标空间没有任何 tab ⇒ active 必须清空（不是留着旧值）
+    expect(APP).toContain("setActiveNoteId(next)");
+    // 重启后上次活动是日记 tab ⇒ 自动回日记空间
+    expect(APP).toContain("initialSpaceRestoredRef");
+    // 已存在的 tab 缺 space 时按入参补上（旧会话/从文档空间搜索打开）
+    const LIFECYCLE = read("../../hooks/useTabLifecycle.ts");
+    expect(LIFECYCLE).toContain("existing.space !== space");
+  });
   it("②h 日记标签右键复用 TabContextMenu（钉住/关闭族），钉住项排在最前且不参与批量关闭", () => {
     expect(APP).toContain("TabContextMenu");
     expect(APP).toContain("diaryTabsOrdered");
@@ -51,7 +64,7 @@ describe("日记空间接线", () => {
     expect(APP).toContain("onCloseRight");
   });
 
-  it("②i 两个空间的分栏最小宽：日记 220（保证头部一排）、AI 写作 120", () => {
+  it("②i 两个空间的分栏最小宽：日记 / AI 写作 都是 200", () => {
     expect(WORKSPACE).toContain("minWidth={200}");
     const AIW = read("../aiWriting/AiWritingWorkspace.tsx");
     expect(AIW).toContain("minWidth={200}");

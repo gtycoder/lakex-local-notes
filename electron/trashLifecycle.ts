@@ -144,6 +144,8 @@ export class TrashLifecycle {
     // 笔记本只能回根层（parentId=null）；note/group 回原位置，原父缺失/被删/在回收站 → 默认笔记本
     const isNotebook = node.node_type === "notebook";
     let parentId: string | null = isNotebook ? null : node.deleted_from_parent_id;
+    /** 需要"原路返回日记空间"时记下目标（年/月分组在事务内补建，见下）。 */
+    let diaryRestore: { notebookId: string; title: string } | null = null;
     if (parentId === null || parentId === this.ctx.trashNotebookId) {
       parentId = isNotebook ? null : this.ctx.resolveParentNotebook();
     } else {
@@ -158,11 +160,14 @@ export class TrashLifecycle {
         // 日记条目必须回日记空间；旧逻辑一律回落「默认笔记本」= 文档空间（用户现场担心的问题）。
         const diaryNotebookId = resolveDiaryOriginNotebookId(this.ctx.db, parentId);
         if (diaryNotebookId && isNotebookAvailable(this.ctx.db, diaryNotebookId)) {
-          // 原路返回：按标题日期把 年/月 分组补回来（已存在则复用）；标题非日期时回日记本根。
-          const titleRow = node.note_file_id
-            ? this.ctx.db.prepare("SELECT title FROM notes WHERE id=?").get(node.note_file_id) as { title?: string } | undefined
-            : undefined;
-          parentId = ensureDiaryGroupsForRestore(this.ctx.db, this.ctx.createGroup, diaryNotebookId, titleRow?.title ?? "");
+          // 原路返回：目标 = 日记本；**年/月分组的补建放在恢复事务里**（失败不残留空分组）。
+          parentId = diaryNotebookId;
+          diaryRestore = {
+            notebookId: diaryNotebookId,
+            title: node.note_file_id
+              ? (this.ctx.db.prepare("SELECT title FROM notes WHERE id=?").get(node.note_file_id) as { title?: string } | undefined)?.title ?? ""
+              : "",
+          };
         } else {
           parentId = this.ctx.resolveParentNotebook();
         }
@@ -170,6 +175,10 @@ export class TrashLifecycle {
     }
     const now = nowIso();
     const tx = this.ctx.db.transaction(() => {
+      // 261110：日记条目的 年/月 分组在**事务内**补建（已存在则复用；标题非日期时回日记本根）。
+      if (diaryRestore) {
+        parentId = ensureDiaryGroupsForRestore(this.ctx.db, this.ctx.createGroup, diaryRestore.notebookId, diaryRestore.title);
+      }
       if (node.note_file_id) {
         this.ctx.db.prepare(
           "UPDATE notes SET parent_id=?,trashed_at=NULL,deleted_from_parent_id=NULL,updated_at=?,is_dirty=1,is_purged=0,restore_pending_at=? WHERE id=?"

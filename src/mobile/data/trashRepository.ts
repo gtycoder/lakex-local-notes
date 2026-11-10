@@ -110,15 +110,30 @@ export interface MobileTrashTreeItem {
 export async function listTrashTree(d: MobileDb): Promise<MobileTrashTreeItem[]> {
   const folders = await d.prepare("SELECT id, title, parent_id, trashed_at, cloud_deleted FROM folders WHERE trashed_at IS NOT NULL").all() as Array<{ id: string; title: string; parent_id: string | null; trashed_at: string | null; cloud_deleted: number }>;
   const notes = await d.prepare("SELECT id, title, parent_id, trashed_at, cloud_deleted, deleted_from_parent_id FROM notes WHERE trashed_at IS NOT NULL").all() as Array<{ id: string; title: string; parent_id: string | null; trashed_at: string | null; cloud_deleted: number; deleted_from_parent_id: string | null }>;
-  const noteRows = await Promise.all(notes.map(async (n) => ({
+  // 261110 性能：一次读全量 folders，在内存里回溯（此前每行一次桥查询 = N+1）。
+  const allFolders = await d.prepare("SELECT id, parent_id, node_type, space FROM folders").all() as Array<{ id: string; parent_id: string | null; node_type: string; space: string | null }>;
+  const folderById = new Map(allFolders.map((f) => [f.id, f]));
+  const isDiaryOrigin = (start: string | null): boolean => {
+    let current = start;
+    const seen = new Set<string>();
+    while (current && !seen.has(current)) {
+      seen.add(current);
+      const row = folderById.get(current);
+      if (!row) return false;
+      if (row.node_type === "notebook" && row.space === "diary") return true;
+      current = row.parent_id ?? null;
+    }
+    return false;
+  };
+  const noteRows = notes.map((n) => ({
     id: n.id,
     title: n.title,
     kind: "note" as const,
     parentId: n.parent_id,
     deletedAt: n.trashed_at,
     cloudDeleted: n.cloud_deleted === 1,
-    fromDiary: (await resolveDiaryOriginNotebook(d, n.deleted_from_parent_id ?? n.parent_id)) !== null,
-  })));
+    fromDiary: isDiaryOrigin(n.deleted_from_parent_id ?? n.parent_id),
+  }));
   return [
     ...folders.map((f) => ({ id: f.id, title: f.title, kind: "folder" as const, parentId: f.parent_id, deletedAt: f.trashed_at, cloudDeleted: f.cloud_deleted === 1 })),
     ...noteRows,

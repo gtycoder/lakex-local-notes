@@ -73,6 +73,9 @@ export interface NotebookWorkspaceProps {
 
 export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   const { notebookId, initialNoteId, initialMode, onBack, notebooks, onSwitchNotebook, onActiveNoteChange, onRegisterBackHandler } = props;
+  /** 261110：日记本（space="diary"）里的文档标题只能是日期 ⇒ 顶栏标题只读 + 改名拦截。
+   *  判据用「当前笔记本的 space」，与桌面 core.isDiaryEntryNode 同一契约。 */
+  const isDiaryNotebook = notebooks.some((nb) => nb.id === notebookId && nb.space === "diary");
   const {
     tree,
     setTree,
@@ -439,7 +442,10 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
         onToggleFind={() => toggleOverlay("find")}
         onToggleEdit={toggleEdit}
         onSync={() => void runSync()}
+        titleReadOnly={isDiaryNotebook}
         onRename={(id, nextTitle) => {
+          // 261110：日记标题只能是日期（与桌面同一份契约）——这里直接拒绝，不让它落盘。
+          if (isDiaryNotebook) { showToast("日记标题就是日期，不能改"); return; }
           updateTab(id, { title: nextTitle });
           scheduleAutoSave(id, nextTitle, tabs.find((x) => x.id === id)?.content ?? "");
         }}

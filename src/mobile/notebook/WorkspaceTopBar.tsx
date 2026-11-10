@@ -23,6 +23,8 @@ export interface WorkspaceTopBarProps {
   onSync: () => void;
   /** 手机顶栏改名：父层负责 updateTab + 排自动保存（content 由父层取）。 */
   onRename: (id: string, title: string) => void;
+  /** 标题只读（261110：日记条目标题只能是日期，**不允许改**）。 */
+  titleReadOnly?: boolean;
 }
 
 const EDITABLE_KINDS = ["doc", "usheet", "bitable", "board", "ink"];
@@ -84,7 +86,8 @@ export function WorkspaceTopBar(props: WorkspaceTopBarProps) {
           <input
             className={"toolbar__title" + (active?.editing && active.loaded ? "" : " toolbar__title--readonly")}
             value={active?.title ?? title}
-            readOnly={!active?.editing || !active.loaded}
+            readOnly={!active?.editing || !active.loaded || props.titleReadOnly === true}
+            title={props.titleReadOnly ? "日记标题就是日期，不能改" : undefined}
             placeholder={active ? "" : title}
             aria-label="文档标题"
             onChange={(e) => { if (activeId && active?.loaded) props.onRename(activeId, e.target.value); }}

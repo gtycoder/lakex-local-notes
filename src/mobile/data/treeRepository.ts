@@ -95,6 +95,22 @@ export async function createGroup(d: MobileDb, parentId: string, title: string):
   return folderRowToTreeNode(row, { title: trimmed, updatedAt: now });
 }
 
+/** 261110：该 note 是否在日记本子树（标题锁的判据）——沿 folders 父链只认 `space="diary"`，不看标题。 */
+async function isNoteInDiaryNotebook(d: MobileDb, noteId: string): Promise<boolean> {
+  const note = await d.prepare("SELECT parent_id FROM notes WHERE id=?").get(noteId) as { parent_id?: string | null } | undefined;
+  let current = note?.parent_id ?? null;
+  const seen = new Set<string>();
+  while (current && !seen.has(current)) {
+    seen.add(current);
+    const row = await d.prepare("SELECT node_type, space, parent_id FROM folders WHERE id=?").get(current) as
+      { node_type?: string; space?: string | null; parent_id?: string | null } | undefined;
+    if (!row) return false;
+    if (row.node_type === "notebook" && row.space === "diary") return true;
+    current = row.parent_id ?? null;
+  }
+  return false;
+}
+
 export async function renameTreeNode(d: MobileDb, id: string, title: string): Promise<TreeNode> {
   const trimmed = assertTreeNodeTitle(title);
   const now = new Date().toISOString();
@@ -104,6 +120,10 @@ export async function renameTreeNode(d: MobileDb, id: string, title: string): Pr
     return folderRowToTreeNode(row, { title: trimmed, updatedAt: now });
   }
   // 文档（notes）也是目录树节点：移动端长按重命名 / 顶栏改名都走这里；与桌面 renameTreeNode 语义对齐。
+  // 261110 标题锁：日记条目标题只能是日期（与桌面 core.isDiaryEntryNode 同一契约，数据层最后一道闸）。
+  if (await isNoteInDiaryNotebook(d, id)) {
+    throw new Error("日记标题就是日期，不能改");
+  }
   const changedNote = (await d.prepare("UPDATE notes SET title=?, updated_at=?, is_dirty=1 WHERE id=? AND trashed_at IS NULL").run(trimmed, now, id)).changes;
   if (changedNote) {
     const row = await d.prepare("SELECT id, title, parent_id, sort_order, icon, updated_at, is_dirty, is_conflict FROM notes WHERE id=?").get(id) as Record<string, unknown>;

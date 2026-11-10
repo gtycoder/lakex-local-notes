@@ -67,8 +67,10 @@ export class NoteContentRepository {
       if (diskHash !== baseHash) {
         // **竞态自愈（261110 现场误报）**：磁盘上已经就是"我们正要写的内容"
         // ⇒ 只是 baseHash 旧了（上一次保存/同步/他线程先落了同一份），不是"他处编辑过"。
-        // 这种情况不弹冲突、也不重复写正文，只补派生缓存（与「无变化早退」同路径）。
-        if (noteBodyHash(content) === diskHash) {
+        // 但**标题可能也变了**（用户同内容下改名）：那种情况不能在这里 return —— 要走正常写路径
+        // 把 title / updated_at / tree_nodes.title 一并落库，否则改名会被静默丢弃。
+        if (noteBodyHash(content) !== diskHash) return { diskHash };
+        if (title === current.title) {
           if (caches) {
             const transaction = this.deps.db.transaction(() => {
               this.deps.db.prepare("UPDATE notes SET md_cache=?,text_cache=? WHERE id=? AND deleted_at IS NULL")
@@ -79,7 +81,7 @@ export class NoteContentRepository {
           }
           return null;
         }
-        return { diskHash };
+        // 标题变了 ⇒ 落到下面的正常写路径（正文同字节重写无害，元数据必须更新）。
       }
     }
 
