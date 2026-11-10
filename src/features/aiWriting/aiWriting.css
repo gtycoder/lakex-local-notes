@@ -6,10 +6,10 @@
  * 层序：入口以 layer(feature) 引入（见 styles/index.css）。
  */
 
-.aiw { grid-column: 1 / -1; display: grid; grid-template-columns: 288px minmax(0, 1fr); min-height: 0; height: 100%; background: var(--lake-bg-panel); }
+.aiw { display: flex; flex: 1 1 auto; min-width: 0; min-height: 0; height: 100%; background: var(--lake-bg-panel); }
 
 /* ---------------- 左栏 ---------------- */
-.aiw-side { display: flex; flex-direction: column; min-height: 0; padding: var(--lake-space-xl) var(--lake-space-lg) var(--lake-space-lg); border-right: 0.5px solid var(--lake-border-2); background: var(--lake-bg-subtle); }
+.aiw-side { display: flex; flex: 0 0 var(--split-left, 288px); flex-direction: column; min-height: 0; padding: var(--lake-space-xl) var(--lake-space-lg) var(--lake-space-lg); border-right: 0.5px solid var(--lake-border-2); background: var(--lake-bg-subtle); }
 .aiw-side__head { padding: 0 var(--lake-space-sm) var(--lake-space-md); }
 .aiw-side__title { margin: 0; font-size: var(--lake-font-size-title); font-weight: var(--lake-font-weight-semibold); color: var(--lake-text-1); line-height: var(--lake-line-height-tight); }
 .aiw-new { display: flex; align-items: center; justify-content: center; gap: var(--lake-space-sm); height: var(--lake-ctl-h-settings-sm); margin: 0 var(--lake-space-sm) var(--lake-space-md); border: 0.5px solid var(--lake-ctl-border); border-radius: var(--lake-radius-sm); background: var(--lake-bg-panel); color: var(--lake-text-1); font-size: var(--lake-font-size-small); font-weight: var(--lake-font-weight-medium); cursor: pointer; }
@@ -142,3 +142,6 @@
 .aiw-publish__select { flex: 1 1 auto; }
 .aiw-publish__error, .aiw-quicknote__error { margin: var(--lake-space-sm) 0 0; color: var(--lake-status-error, var(--lake-text-1)); font-size: var(--lake-font-size-small); }
 .aiw-quicknote__input { width: 100%; min-height: 180px; resize: vertical; }
+/* 左栏可拖（SplitPane）：分隔条零宽 flex 项，视觉走 kit 的 .ln-split-handle。 */
+.aiw-handle { position: relative; flex: 0 0 0; width: 0; }
+.aiw.is-resizing { user-select: none; }

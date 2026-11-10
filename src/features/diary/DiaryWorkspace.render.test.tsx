@@ -182,16 +182,15 @@ describe("日记空间（桌面）", () => {
     act(() => byAria("新建今天的日记")!.click());
     expect(onCreateEntry).toHaveBeenCalledWith(formatDiaryDateKey());
 
+    // 两段式：点日历 → 应用内月历（kit 的 .ln-calendar）→ 选「今天」→ 确认弹窗 → 新建
     act(() => byAria("选择日期新建日记")!.click());
-    const input = document.body.querySelector<HTMLInputElement>("input[type='date']")!;
-    expect(input).toBeTruthy();
-    act(() => {
-      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "2025-12-30");
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-    });
+    const calendar = document.body.querySelector(".ln-calendar");
+    expect(calendar, "应弹出应用内月历（不再是系统 date picker）").toBeTruthy();
+    const todayCell = [...calendar!.querySelectorAll<HTMLButtonElement>("button")].find((el) => (el.textContent ?? "").trim() === "今天")!;
+    act(() => todayCell.click());
     const create = [...document.body.querySelectorAll<HTMLButtonElement>("button")].find((el) => (el.textContent ?? "").trim() === "新建")!;
     act(() => create.click());
-    expect(onCreateEntry).toHaveBeenCalledWith("2025-12-30");
+    expect(onCreateEntry).toHaveBeenCalledWith(formatDiaryDateKey());
   });
 
   it("右键「转为小记」：把该条目的树节点 id 交给宿主（组合/落库在 App + 主进程）", () => {
@@ -234,7 +233,8 @@ describe("日记空间（桌面）", () => {
     expect(submit).toBeTruthy();
     act(() => submit!.click());
     expect(merged.onRenameNotebook).toHaveBeenCalledWith("每日记录");
-    expect(byAria("换日记本图标")).toBeTruthy();
+    // 261109 用户定稿：日记本图标就摆在名字前，点它 = 换图标（复用笔记本那套 NodeIconPicker）。
+    expect(byAria("更换日记本图标")).toBeTruthy();
   });
 
   it("活动笔记是日记条目但标签还没打开 ⇒ 仍显示空态（不渲染无正文的编辑器）", () => {

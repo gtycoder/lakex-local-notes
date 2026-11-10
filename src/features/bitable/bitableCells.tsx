@@ -9,8 +9,9 @@ import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent
 import { reportNativeActionError } from "../../lib/nativeErrors";
 import { Popover as OverlayPopover } from "../../components/ui/Overlay";
 import { Popover, isInsideDialog } from "../../components/ui/ColorPalette";
+import { CalendarPanel } from "../../components/ui/CalendarPanel";
 import { BitableRelationPicker } from "./BitableRelationPicker.js";
-import { ArrowLeftRight, Calendar, CalendarClock, Check, ChevronDown, ChevronLeft, ChevronRight, CircleDot, Clock, Download, Gauge, Hash, HelpCircle, Image as ImageIcon, Link, Link2, Maximize2, Paperclip, Pencil, Plus, Search, Sparkles, SquareCheck, Star, Tags, TextQuote, Type, X } from "lucide-react";
+import { ArrowLeftRight, Calendar, CalendarClock, Check, ChevronDown, CircleDot, Clock, Download, Gauge, Hash, HelpCircle, Image as ImageIcon, Link, Link2, Maximize2, Paperclip, Pencil, Plus, Search, Sparkles, SquareCheck, Star, Tags, TextQuote, Type, X } from "lucide-react";
 import { usePopoverPosition } from "../../hooks/usePopoverPosition";
 import { placePopoverPosition } from "../../hooks/topMenuPosition";
 import { extOf, isImageExtension } from "../../core/assetNaming.js";
@@ -23,7 +24,7 @@ import "./bitableMarkdown.css";
 import "./bitableExpandPreview.css";
 import { MarkdownView, markdownToPlainText } from "../../components/ui/markdown/MarkdownView";
 import { native } from "../../lib/native.js";
-import { ATTACHMENT_GRID, BITABLE_FIELD_TYPES, BITABLE_FIELD_TYPE_LABEL, BITABLE_PROGRESS_MAX, BITABLE_RATING_MAX, BITABLE_STAT_LABEL, aiPromptFieldNames, attachmentGridColumns, bitableAttachments, bitableDisplayValue, bitableFieldText, bitableRecordTitle, computeColumnStat, isKnownFieldType, localDateString, optionChipStyle, relationRecordIds, relationTargetRecords, relationTargetTable, statDisplayText, type BitableAttachment, type BitableDisplayContext, type BitableField, type BitableFieldOption, type BitableRecord, type BitableStatType } from "../../core/bitableDoc.js";
+import { ATTACHMENT_GRID, BITABLE_FIELD_TYPES, BITABLE_FIELD_TYPE_LABEL, BITABLE_PROGRESS_MAX, BITABLE_RATING_MAX, BITABLE_STAT_LABEL, aiPromptFieldNames, attachmentGridColumns, bitableAttachments, bitableDisplayValue, bitableFieldText, bitableRecordTitle, computeColumnStat, isKnownFieldType, optionChipStyle, relationRecordIds, relationTargetRecords, relationTargetTable, statDisplayText, type BitableAttachment, type BitableDisplayContext, type BitableField, type BitableFieldOption, type BitableRecord, type BitableStatType } from "../../core/bitableDoc.js";
 import { readOnlyBoolean, readOnlyLink, readOnlyProgress, readOnlyRating } from "../../core/bitableReadOnly.js";
 import type { CSSProperties } from "react";
 
@@ -1018,47 +1019,18 @@ export function DatePicker({ value, readOnly, onChange }: { value: unknown; read
   const [open, setOpen] = useState(false);
   const anchorRef = useRef<HTMLButtonElement>(null);
   const text = typeof value === "string" ? value : "";
-  const [cursor, setCursor] = useState(() => {
-    const d = text ? new Date(text + "T00:00:00") : new Date();
-    return Number.isNaN(d.getTime()) ? new Date() : d;
-  });
-  useEffect(() => {
-    if (!text) return;
-    const d = new Date(text + "T00:00:00");
-    if (!Number.isNaN(d.getTime())) setCursor(d);
-  }, [text]);
-  const year = cursor.getFullYear();
-  const month = cursor.getMonth();
-  const startWeekday = new Date(year, month, 1).getDay();
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const cells: Array<number | null> = [];
-  for (let i = 0; i < startWeekday; i += 1) cells.push(null);
-  for (let d = 1; d <= daysInMonth; d += 1) cells.push(d);
-  const fmt = (d: number) => localDateString(new Date(year, month, d));
-  const pickToday = () => { onChange(localDateString(new Date())); setOpen(false); };
   return (
     <div className="bt-date-cell">
       <button ref={anchorRef} type="button" className={"bt-date-trigger" + (text ? "" : " is-empty")} disabled={readOnly} onClick={() => setOpen((v) => !v)}>
         <span className="ln-ellipsis">{text || "请选择日期"}</span><Calendar size={13} />
       </button>
       <Popover open={open} anchor={anchorRef.current} onClose={() => setOpen(false)} width={264}>
-        <div className="bt-date-panel">
-          <div className="bt-date-head">
-            <button type="button" className="bt-icon-btn" aria-label="上个月" onClick={() => setCursor(new Date(year, month - 1, 1))}><ChevronLeft size={14} /></button>
-            <span>{year} 年 {month + 1} 月</span>
-            <button type="button" className="bt-icon-btn" aria-label="下个月" onClick={() => setCursor(new Date(year, month + 1, 1))}><ChevronRight size={14} /></button>
-          </div>
-          <div className="bt-date-week">{["日", "一", "二", "三", "四", "五", "六"].map((w) => <span key={w}>{w}</span>)}</div>
-          <div className="bt-date-grid">
-            {cells.map((d, i) => d === null
-              ? <span key={"e" + i} className="bt-date-empty" />
-              : <button key={d} type="button" className={"bt-date-day" + (text === fmt(d) ? " is-selected" : "")} onClick={() => { onChange(fmt(d)); setOpen(false); }}>{d}</button>)}
-          </div>
-          <div className="bt-date-foot">
-            <button type="button" onClick={pickToday}>今天</button>
-            <button type="button" onClick={() => { onChange(""); setOpen(false); }}>清除</button>
-          </div>
-        </div>
+        {/* 月历面板 = 共享原语（kit 的 .ln-calendar + components/ui/CalendarPanel），与日记按日期新建同源。 */}
+        <CalendarPanel
+          value={text}
+          onPick={(dateKey) => { onChange(dateKey); setOpen(false); }}
+          onClear={() => { onChange(""); setOpen(false); }}
+        />
       </Popover>
     </div>
   );

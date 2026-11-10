@@ -22,6 +22,7 @@ import { PublishDocDialog } from "./PublishDocDialog";
 import { SaveQuickNoteDialog } from "./SaveQuickNoteDialog";
 import { AI_WRITING_SUGGESTIONS, aiWritingChatTitle, aiWritingDocsTitle } from "./aiWritingPrompts";
 import { useAiWriting } from "./useAiWriting";
+import { SplitPane } from "../../components/ui/SplitPane";
 
 
 /** 「生成文档」的默认标题：首行摘要；摘要为空/兜底文案时用固定名。 */
@@ -150,7 +151,15 @@ export function AiWritingWorkspace({ active, treeNodes, topbarLeading, onOpenSet
           {topbarLeading}
         </div>
       </header>
-      <div className="aiw">
+      {/* 左栏可拖（SplitPane：与日记/回收站同一分隔条实现；宽度设备本地记忆）。 */}
+      <SplitPane
+        ariaLabel="调整 AI 写作侧栏宽度"
+        storageKey="ai-writing-side"
+        minWidth={240}
+        maxWidth={520}
+        minRight={480}
+        className="aiw"
+      >
       <AiWritingSidebar
         conversations={controller.conversations}
         activeId={controller.activeConversation?.id ?? null}
@@ -236,6 +245,7 @@ export function AiWritingWorkspace({ active, treeNodes, topbarLeading, onOpenSet
           </>
         )}
       </main>
+      </SplitPane>
 
       <PublishDocDialog
         open={publish.open}
@@ -254,7 +264,6 @@ export function AiWritingWorkspace({ active, treeNodes, topbarLeading, onOpenSet
         onConfirm={(text) => { void saveQuickNote(text); }}
         onClose={closeQuickNote}
       />
-      </div>
     </>
   );
 }

@@ -20,6 +20,13 @@
 - 空间菜单顺序改为 **文档 ⌘1 · 小记 ⌘2 · 日记 ⌘3 · AI 写作 ⌘4 · 标签 ⌘5**（日记与 AI 写作换位；标签也进快捷键表）。
 - **快捷键单一来源**：⌘1–5 全部收进 `src/hooks/useDesktopLifecycle.ts` 的一张 map；删掉 `App.tsx` 里单独注册的 ⌘4 监听（review 遗留项 ② 闭合）。护栏 `src/features/diary/diaryWorkspace.test.ts` ② 断言表内容 + App 不得再自注册。
 
+### 261109 · 日记七改（月历原语上收 / 左栏可拖 / 日记本图标 / 标签条补全）
+- **月历原语上收**：`.bt-date-*` 面板样式 → kit 的 `.ln-calendar*`，行为抽成 `components/ui/CalendarPanel`（多维表日期字段与日记「按日期新建」**同一实现**）；日记流程改为「点日历 → 应用内月历 → 选完 → 确认新建」，不再弹系统 date picker。
+- **左栏可拖**：日记空间与 AI 写作空间都改用 `SplitPane`/`SplitHandle`（分隔条唯一实现；宽度存 `lakex-local-notes-v3.split.<key>`，设备本地）。
+- **日记本图标前置**：名字前显示笔记本图标（默认图标兜底），点它直接复用 `NodeIconPicker`；移除原来独立的图片图标按钮。
+- **日记标签条补全**：多于 1 个标签时出现「关闭全部」与「▾ 切换器」（菜单列标签，当前项高亮）。
+- 门禁：tsc 0；vitest **820 文件 / 5164 通过 / 12 skipped / 0 failed**；ui-metrics / check:mobileui / check:arch（import 0） / diff-check 通过；CSS 基线登记 kit 576→613（月历原语）、diary 131→143、aiWriting 437→442。
+
 ### 261109 · 标签视觉小抽 + 白屏修复
 - **白屏（开发版打不开）根因**：日记「空间切换回落」的 `useEffect` 被写在 `if (!workspace) return` **之后** ⇒ 首渲染少跑一个 hook ⇒ React「Hooks 顺序变化」⇒ 白屏。已移到早期 return 之前（判据改用 `openTabs`），并加护栏：effect 必须在早期 return 之前。
 - **小抽**：新增 `src/features/editor/TabItemVisual.tsx`（纯展示：标题/图标/钉住/脏点/已删除徽标/关闭），文档标签与日记标签**同源**；拖拽/钉住/分屏/右键仍留在 `MultiTabEditor`（那是文档空间语义）。护栏 `tabItemVisual.test.ts`：日记侧不得自写 `.tab-title/.tab-close`，文档侧普通标签必须走视觉原子。

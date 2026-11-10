@@ -355,16 +355,8 @@
 .bt-date-trigger { display: flex; align-items: center; justify-content: space-between; gap: 6px; width: 100%; min-height: 26px; border: 0; background: transparent; cursor: pointer; padding: 3px 8px; font: inherit; font-size: var(--lake-font-size-body); color: inherit; }
 .bt-date-trigger.is-empty { color: var(--lake-text-3); }
 /* 日期/时间文案是**单行可省略**的：走 kit 的 .ln-ellipsis（挂在那个 <span> 上），列窄了省略号、行高不变。 */
-.bt-date-panel { padding: 8px; }
-.bt-date-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; font-size: var(--lake-font-size-body); }
-.bt-date-week { display: grid; grid-template-columns: repeat(7, 1fr); font-size: var(--lake-font-size-tiny); color: var(--lake-text-3); text-align: center; margin-bottom: 2px; }
-.bt-date-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
-.bt-date-day { border: 0; background: transparent; border-radius: var(--lake-radius-2xs); padding: 5px 0; cursor: pointer; font: inherit; font-size: var(--lake-font-size-small); color: inherit; }
-.bt-date-day:hover { background: var(--lake-bg-hover); }
-.bt-date-day.is-selected { background: var(--lake-accent); color: var(--lake-text-on-accent); }
-.bt-date-empty { display: block; }
-.bt-date-foot { display: flex; justify-content: space-between; margin-top: 6px; border-top: 1px solid var(--lake-border-1); padding-top: 6px; }
-.bt-date-foot button { border: 0; background: transparent; cursor: pointer; font: inherit; font-size: var(--lake-font-size-small); color: var(--lake-accent-text); }
+/* 月历面板样式已上收 kit 的 .ln-calendar*（261109：多维表与「日记按日期新建」共用同一原语），
+   这里只保留多维表的触发按钮外壳。 */
 
 /* ── 260920 云端对齐：去边框 / 补动效 / 补齐颜色与自定义下拉 ── */
 .bt-tables-switch:hover { background: var(--lake-bg-hover); }

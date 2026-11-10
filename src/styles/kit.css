@@ -702,3 +702,16 @@
 /* 内核正文里的勾选（待办列表）维持内核自己的绘制。 */
 .app-shell .lake-editor-mount input[type="checkbox"],
 .app-shell .ne-engine input[type="checkbox"] { appearance: auto; -webkit-appearance: auto; }
+
+/* ── 月历选择面板（261109 上收：多维表日期字段与日记「按日期新建」共用同一套视觉） ──
+   结构：.ln-calendar > .ln-calendar__head / __week / __grid / __foot；只被 CalendarPanel 使用。 */
+.ln-calendar { padding: var(--lake-space-md); }
+.ln-calendar__head { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--lake-space-sm); font-size: var(--lake-font-size-body); }
+.ln-calendar__week { display: grid; grid-template-columns: repeat(7, 1fr); margin-bottom: var(--lake-space-xxs); color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); text-align: center; }
+.ln-calendar__grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: var(--lake-space-xxs); }
+.ln-calendar__day { border: 0; border-radius: var(--lake-radius-2xs); padding: 5px 0; background: transparent; color: inherit; font: inherit; font-size: var(--lake-font-size-small); cursor: pointer; }
+.ln-calendar__day:hover { background: var(--lake-bg-hover); }
+.ln-calendar__day.is-selected { background: var(--lake-accent); color: var(--lake-text-on-accent); }
+.ln-calendar__empty { display: block; }
+.ln-calendar__foot { display: flex; justify-content: space-between; margin-top: var(--lake-space-sm); border-top: 1px solid var(--lake-border-1); padding-top: var(--lake-space-sm); }
+.ln-calendar__foot button { border: 0; background: transparent; color: var(--lake-accent-text); font: inherit; font-size: var(--lake-font-size-small); cursor: pointer; }

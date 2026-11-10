@@ -1,6 +1,8 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { isCloudActive } from "./core/cloudState";
-import { PanelLeft } from "lucide-react";
+import { ChevronDown, PanelLeft, XSquare } from "lucide-react";
+import { Menu } from "./components/ui/Overlay";
+import { usePopoverPosition } from "./hooks/usePopoverPosition";
 import { TabItemVisual } from "./features/editor/TabItemVisual";
 import { Sidebar } from "./components/app/Sidebar";
 import { SIDEBAR_CORRIDOR_SELECTORS, isInSidebarCorridor, reduceHover, type HoverEffect, type HoverEvent } from "./components/model/sidebarHoverMachine";
@@ -824,6 +826,13 @@ export function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [desktopWorkspace]);
 
+  /** 日记标签切换器（▾）：打开时按可视位置弹菜单；与文档标签的切换器同语义、数据不同。 */
+  const [diaryTabMenu, setDiaryTabMenu] = useState<{ x: number; y: number } | null>(null);
+  const diaryTabMenuPos = usePopoverPosition({
+    open: Boolean(diaryTabMenu),
+    at: diaryTabMenu,
+  });
+
   if (!workspace) return <main className="loading-screen"><BrandLaunchMark label="正在打开本地知识库" />{error && <small>{error}</small>}</main>;
 
   // 字数/图片统计（W-2-A）：从渲染体移出，避免每次按键对整篇正文跑两次 O(n) 正则。
@@ -1115,7 +1124,55 @@ export function App() {
                   <TabItemVisual title={tab.title} onClose={() => closeTab(tab.noteId)} />
                 </button>
               ))}
+              {/* 日记标签条自带「关闭全部 + ▾ 切换器」（与文档标签条同语义，数据各自独立）。 */}
+              {diaryTabs.length > 1 && (
+                <>
+                  <button
+                    type="button"
+                    className="ln-iconbtn ln-iconbtn--compact"
+                    aria-label="关闭全部日记标签"
+                    title="关闭全部"
+                    onClick={() => { for (const tab of diaryTabs) closeTab(tab.noteId); }}
+                  >
+                    <XSquare size={13} />
+                  </button>
+                  <button
+                    type="button"
+                    className="ln-iconbtn ln-iconbtn--compact"
+                    aria-label={"切换日记标签，共 " + diaryTabs.length + " 个"}
+                    title="切换标签"
+                    aria-haspopup="menu"
+                    aria-expanded={Boolean(diaryTabMenu)}
+                    onClick={(event) => {
+                      const rect = event.currentTarget.getBoundingClientRect();
+                      setDiaryTabMenu({ x: rect.left, y: rect.bottom + 4 });
+                    }}
+                  >
+                    <ChevronDown size={13} />
+                  </button>
+                </>
+              )}
             </div>
+            {diaryTabMenu && (
+              <Menu
+                surfaceRef={diaryTabMenuPos.surfaceRef}
+                style={diaryTabMenuPos.style ?? undefined}
+                onDismiss={() => setDiaryTabMenu(null)}
+                aria-label="日记标签列表"
+              >
+                {diaryTabs.map((tab) => (
+                  <button
+                    key={tab.noteId}
+                    type="button"
+                    role="menuitem"
+                    className={"ln-menu__item" + (tab.noteId === activeNoteId ? " is-selected" : "")}
+                    onClick={() => { setDiaryTabMenu(null); void openNote(tab.noteId, "", false, "diary"); }}
+                  >
+                    {tab.title}
+                  </button>
+                ))}
+              </Menu>
+            )}
             <div className="tabbar-trailing">{topBarSearch}</div>
           </header>
           {desktopWorkspace === "diary" && (

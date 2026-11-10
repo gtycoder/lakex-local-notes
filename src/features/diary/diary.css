@@ -20,7 +20,8 @@
   display: flex;
   flex: none;
   flex-direction: column;
-  width: 280px;
+  /* SplitPane 拖过之后 --split-left 是像素值；没拖过 = 280 默认 */
+  width: var(--split-left, 280px);
   min-height: 0;
   border-right: 0.5px solid var(--lake-border-1);
   background: var(--lake-bg-panel);
@@ -150,7 +151,14 @@
   display: flex;
   align-items: center;
   gap: var(--lake-space-sm);
-  padding: var(--lake-space-sm);
+  padding: var(--lake-space-sm) var(--lake-space-md);
+}
+
+.diary-date-picker__value {
+  flex: 1 1 auto;
+  color: var(--lake-text-1);
+  font-size: var(--lake-font-size-body);
+  font-variant-numeric: tabular-nums;
 }
 
 .diary-entry__day {
@@ -218,3 +226,7 @@
   font-size: var(--lake-font-size-small);
   line-height: var(--lake-line-height-reading);
 }
+/* 日记空间左右分栏（SplitPane）：分隔条零宽 flex 项，视觉走 kit 的 .ln-split-handle。 */
+.diary-split { display: flex; flex: 1 1 auto; min-width: 0; min-height: 0; }
+.diary-split-handle { position: relative; flex: 0 0 0; width: 0; }
+.diary-split.is-resizing { user-select: none; }

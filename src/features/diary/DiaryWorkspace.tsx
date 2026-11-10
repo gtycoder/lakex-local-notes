@@ -12,7 +12,8 @@
  * **不做月历**（v1 明确不做：会与多维表月历撞「同一交互语义只有一套视觉」）。
  */
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
-import { CalendarDays, ChevronRight, Image as ImageIcon, NotebookPen, Pencil, Plus, Search } from "lucide-react";
+import { CalendarDays, ChevronRight, NotebookPen, Pencil, Plus, Search } from "lucide-react";
+import { NodeIconGlyph } from "../../components/ui/NodeIconGlyph";
 import {
   diaryConvertTargets,
   formatDiaryDateKey,
@@ -20,6 +21,8 @@ import {
   planDiaryConvert,
 } from "../../core/diary";
 import { Menu } from "../../components/ui/Overlay";
+import { CalendarPanel } from "../../components/ui/CalendarPanel";
+import { SplitPane } from "../../components/ui/SplitPane";
 import { usePopoverPosition } from "../../hooks/usePopoverPosition";
 import { NamePromptDialog } from "../../components/app/NamePromptDialog";
 import { MoveTargetTreeDialog } from "../../components/app/MoveTargetTreeDialog";
@@ -132,9 +135,11 @@ export function DiaryWorkspace(props: DiaryWorkspaceProps) {
   }, [treeNodes]);
   /** 正在挑选目标的条目：null = 不在转换流程里。 */
   const [convertEntry, setConvertEntry] = useState<DiaryEntryView | null>(null);
-  /** 「选日期新建」浮层（加号 = 今天，这里 = 任意日期）。 */
+  /** 「选日期新建」浮层（加号 = 今天，这里 = 任意日期）。
+   *  两段式：先弹**应用内月历**（kit 的 .ln-calendar，与多维表日期字段同源），选完再弹确认（保持原弹窗语义）。 */
   const [dateMenu, setDateMenu] = useState<{ x: number; y: number } | null>(null);
   const [pickDate, setPickDate] = useState(todayKey);
+  const [dateStage, setDateStage] = useState<"calendar" | "confirm">("calendar");
   const dateMenuPos = usePopoverPosition({
     open: Boolean(dateMenu),
     at: dateMenu ? { x: dateMenu.x, y: dateMenu.y } : null,
@@ -159,6 +164,15 @@ export function DiaryWorkspace(props: DiaryWorkspaceProps) {
 
   return (
     <div className="diary-space" data-diary-space>
+      {/* 左栏可拖（SplitPane：分隔条唯一实现，宽度设备本地记忆）。 */}
+      <SplitPane
+        ariaLabel="调整日记目录宽度"
+        storageKey="diary-rail"
+        minWidth={240}
+        maxWidth={560}
+        minRight={420}
+        className="diary-split"
+      >
       <aside className="diary-dir" aria-label="日记目录">
         <div className="diary-dir__head">
           <h2 className="diary-dir__title"><NotebookPen size={15} aria-hidden="true" />日记</h2>
@@ -181,6 +195,7 @@ export function DiaryWorkspace(props: DiaryWorkspaceProps) {
             onClick={(event) => {
               const rect = event.currentTarget.getBoundingClientRect();
               setPickDate(todayKey);
+              setDateStage("calendar");
               setDateMenu({ x: rect.left, y: rect.bottom + 4 });
             }}
           >
@@ -258,6 +273,18 @@ export function DiaryWorkspace(props: DiaryWorkspaceProps) {
           })}
         </div>
         <div className="diary-dir__foot">
+          {/* 261109 用户定稿：日记本名字前就是**笔记本图标**（默认图标兜底），点它直接换图标。 */}
+          <button
+            ref={iconBtnRef}
+            type="button"
+            className="ln-iconbtn ln-iconbtn--compact diary-dir__icon"
+            aria-label="更换日记本图标"
+            title="更换日记本图标"
+            disabled={!notebook}
+            onClick={() => setIconAnchor(iconBtnRef.current)}
+          >
+            {notebook?.icon ? <NodeIconGlyph value={notebook.icon} /> : <NotebookPen size={14} aria-hidden="true" />}
+          </button>
           <span className="diary-dir__book ln-ellipsis" title={notebook?.title ?? "日记本"}>
             {notebook?.title ?? "日记本"}
           </span>
@@ -270,17 +297,6 @@ export function DiaryWorkspace(props: DiaryWorkspaceProps) {
             onClick={() => setRenameOpen(true)}
           >
             <Pencil size={13} />
-          </button>
-          <button
-            ref={iconBtnRef}
-            type="button"
-            className="ln-iconbtn ln-iconbtn--compact"
-            aria-label="换日记本图标"
-            title="换日记本图标"
-            disabled={!notebook}
-            onClick={() => setIconAnchor(iconBtnRef.current)}
-          >
-            <ImageIcon size={13} />
           </button>
         </div>
       </aside>
@@ -318,6 +334,7 @@ export function DiaryWorkspace(props: DiaryWorkspaceProps) {
           </div>
         )}
       </section>
+      </SplitPane>
 
       {/* 条目右键菜单（新建浮层只挂一条动作；位置走共用 usePopoverPosition，禁自己估算）。 */}
       {entryMenu && (
@@ -352,25 +369,26 @@ export function DiaryWorkspace(props: DiaryWorkspaceProps) {
           surfaceRef={dateMenuPos.surfaceRef}
           style={dateMenuPos.style ?? undefined}
           onDismiss={() => setDateMenu(null)}
-          aria-label="按日期新建日记"
+          aria-label={dateStage === "calendar" ? "选择日期" : "确认新建日记"}
         >
-          <div className="diary-date-picker">
-            <input
-              type="date"
-              className="ln-input__field"
-              aria-label="选择日期"
+          {dateStage === "calendar" ? (
+            /* 月历 = 共享原语（与多维表日期字段同一实现），不再是系统 date picker。 */
+            <CalendarPanel
               value={pickDate}
-              onChange={(event) => setPickDate(event.target.value)}
+              onPick={(dateKey) => { setPickDate(dateKey); setDateStage("confirm"); }}
             />
-            <button
-              type="button"
-              className="ln-btn ln-btn--primary ln-btn--compact"
-              disabled={!/^\d{4}-\d{2}-\d{2}$/.test(pickDate)}
-              onClick={() => { onCreateEntry(pickDate); setDateMenu(null); }}
-            >
-              新建
-            </button>
-          </div>
+          ) : (
+            <div className="diary-date-picker">
+              <span className="diary-date-picker__value">{pickDate}</span>
+              <button
+                type="button"
+                className="ln-btn ln-btn--primary ln-btn--compact"
+                onClick={() => { onCreateEntry(pickDate); setDateMenu(null); }}
+              >
+                新建
+              </button>
+            </div>
+          )}
         </Menu>
       )}
 
