@@ -1,7 +1,7 @@
 /**
  * 首页「＋」的**新建面板**（261014 用户点单；形态照语雀 App 图 3）：
  *   新建小记：空白小记 / 拍摄 / 图片 / 待办
- *   文档与知识库：空白文档 / 知识库
+ *   文档与知识库：空白文档 / 知识库 / **日记**（261110 用户点单：默认今天，幂等打开）
  *
  * 两条明确的"不做"（用户定稿）：
  *   · **不做模板**；
@@ -12,11 +12,11 @@
  * 配色走移动端自身令牌（**只用一个强调色**，261012 用户定），不给每个格子配品牌色。
  */
 import { useEffect, useRef } from "react";
-import { BookMarked, Camera, Feather, FileText, Image as ImageIcon, ListTodo, type LucideIcon } from "lucide-react";
+import { BookMarked, Camera, Feather, FileText, Image as ImageIcon, ListTodo, NotebookPen, type LucideIcon } from "lucide-react";
 import { pushBackHandler } from "./backStack";
 import { useSwipeToClose } from "./useSwipeToClose";
 
-export type CreateActionId = "blank-quick" | "camera" | "image" | "todo" | "blank-doc" | "notebook";
+export type CreateActionId = "blank-quick" | "camera" | "image" | "todo" | "blank-doc" | "notebook" | "diary";
 
 interface CreateTile {
   id: CreateActionId;
@@ -40,6 +40,8 @@ export const CREATE_SECTIONS: Array<{ title: string; tiles: CreateTile[] }> = [
     tiles: [
       { id: "blank-doc", label: "空白文档", Icon: FileText },
       { id: "notebook", label: "知识库", Icon: BookMarked },
+      // 261110 用户点单：默认建「今天」的日记（当天已有就打开当天那篇，不重复建）。
+      { id: "diary", label: "日记", Icon: NotebookPen },
     ],
   },
 ];

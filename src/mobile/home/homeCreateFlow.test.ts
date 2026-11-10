@@ -8,7 +8,7 @@
  *  1. 冷启动默认落在「小记」tab；
  *  2. 首页胶囊 = 搜索 | ＋ | 排序/视图 | AI | 云同步，且**云同步恒在最右**；
  *  3. 排序/视图**不再挂在顶栏**（已下移），顶栏留等宽空槽保持 tab 居中；
- *  4. 新建面板 = 图 3 那两组六项，**没有模板、没有 OCR 识图**（我们没有该能力）；
+ *  4. 新建面板 = 图 3 那两组（261110 起七项，含「日记」），**没有模板、没有 OCR 识图**（我们没有该能力）；
  *  5. 拍摄/图片 → 内核 insertFiles 通道；待办 → 内核 taskList 命令；空白文档 → 只选**已有**笔记本；
  *  6. 「＋」的长按/上滑判定走纯函数，且**长按不误建**（不上滑松手 = 取消）。
  */
@@ -131,7 +131,7 @@ describe("首页新建流（261014）", () => {
 
   it("新建面板 = 两组六项；无模板、无 OCR", () => {
     const ids = [...SHEET.matchAll(/id: "([a-z-]+)"/g)].map((m) => m[1]);
-    expect(ids).toEqual(["blank-quick", "camera", "image", "todo", "blank-doc", "notebook"]);
+    expect(ids).toEqual(["blank-quick", "camera", "image", "todo", "blank-doc", "notebook", "diary"]);
     expect(SHEET).not.toMatch(/ocr/i);
     expect(SHEET).not.toMatch(/模板/);
     expect(SHEET).toMatch(/新建小记/);
@@ -200,5 +200,15 @@ describe("首页新建流（261014）", () => {
   it("桌面图标快捷 capture 那条路没被动（仍是独立入口）", () => {
     expect(MOBILE_APP).toMatch(/captureLaunchedRef/);
     expect(MOBILE_APP).toMatch(/setCaptureOpen\(true\)/);
+  });
+
+  it("新建面板第三格 =「日记」：默认今天、幂等打开（同一天点两次不会建两篇）", () => {
+    // 面板唯一来源（CreateSheet）：文档与知识库组里出现 diary 格
+    expect(SHEET).toContain('{ id: "diary", label: "日记"');
+    // 分派：默认今天 + 幂等（不是 mode:"new"）
+    expect(HOME).toContain("bridge.diaryOpenDate(formatDiaryDateKey())");
+    expect(HOME).not.toContain('formatDiaryDateKey(), "new"');
+    // 打开后直接进工作区编辑态
+    expect(HOME).toContain('mode: "editor"');
   });
 });

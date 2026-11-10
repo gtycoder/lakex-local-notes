@@ -35,6 +35,7 @@ import { escapeId } from "../../lib/cssEscape";
 import { useTabPager } from "./useTabPager";
 // 小记排序：**两端共用的单一来源**（档位/文案/比较器/本机持久化都在这里；261015 用户要求桌面与移动统一）
 import { quickNoteSortTime, type QuickNoteSort } from "../../core/quickNoteSort";
+import { formatDiaryDateKey } from "../../core/diary";
 import { localAssetHttpUrl, withAssetWidth } from "../../core/assetUrl.js";
 import { formatDateOnly, formatRelativeTime } from "../lib/listTime";
 import { rowActivationProps } from "../ui/rowActivation";
@@ -522,6 +523,17 @@ export function HomePage(props: HomePageProps) {
       case "notebook":
         onCreateNotebook();
         return;
+      case "diary": {
+        // 261110：默认「今天」——bridge.diaryOpenDate 幂等（当天已有就打开最新那篇，没有就建一篇）。
+        try {
+          const result = await bridge.diaryOpenDate(formatDiaryDateKey());
+          await onTreeChanged();
+          onOpenDiaryEntry?.({ noteId: result.noteId, notebookId: result.notebookId, mode: "editor" });
+        } catch (error) {
+          toastActionError("打开今天的日记", error);
+        }
+        return;
+      }
     }
   };
 
