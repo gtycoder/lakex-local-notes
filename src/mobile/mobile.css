@@ -1423,3 +1423,5 @@ body.lake-mobile .ne-ui-boundary-popover:has(.ne-ui-search-card-menu) { top: 120
 
 /* 261110：悬浮＋整体位于 Dock 上方 ⇒ 首页滚动区把「Dock + ＋」一起让出来（只首页作用域，不动工作区/设置）。 */
 .mobile-home .mobile-scroll { padding-bottom: calc(124px + var(--mobile-bottom-safe-area)); }
+/* 261110：内嵌 AI 页底部有输入条 ⇒ 给「Dock + safe」让位，避免被盖住（只在 AI 分页内生效）。 */
+.mobile-tab-pane--ai .mobile-ai-page--embedded { padding-bottom: calc(var(--mobile-bottom-bar-height) + var(--mobile-bottom-safe-area) + 8px); }

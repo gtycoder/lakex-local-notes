@@ -969,6 +969,8 @@ export function HomePage(props: HomePageProps) {
               );
             })}
           </nav>
+          {/* AI 页自带「新对话」入口，且底部有自己的输入条 ⇒ 这一格不显示全局＋（否则会压住输入条）。 */}
+          {tab !== "ai" && (
           <button
             type="button"
             className={"mb-home-fab" + (pressRevealed ? " is-revealed" : "") + (pressArmed ? " is-armed" : "")}
@@ -984,6 +986,7 @@ export function HomePage(props: HomePageProps) {
             <Plus size={24} aria-hidden="true" />
             {pressRevealed && <span className="mb-home-fab__tip" aria-hidden="true">{pressArmed ? "松手记一条小记" : "继续上滑记小记"}</span>}
           </button>
+          )}
         </div>
       )}
 
