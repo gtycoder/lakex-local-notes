@@ -10,6 +10,16 @@
 
 > **顺序标注**：261109 各批次里写的「日记 ⌘4 / AI 写作 ⌘3」是**当时**的顺序；**261110 起改为 日记 ⌘3 / AI 写作 ⌘4**（另有标签 ⌘5）。旧批次不再改，以本行 + §1 为准。
 
+### 261110 · 接手批（AGENTS 精简 + 桌面按钮第二批 + 移动 mb-btn + 日记 v1 收尾）
+
+- **AGENTS 精简（Lead）**：65,709B → **45,833B**（预算 65,536，留 ~20KB）。全部红线/机制保留；删过期数值（text-3 hex、测试计数、「6 态」、「Electron 44.3」等）并合并重复表述；补两条长期事实：**一级空间 = 知识库/小记/日记/AI 写作/标签（两端同名）**、**按钮 = kit 统一梯队（4 语义+危险+链接）**；§7 编号保持（21–24 与外部引用对齐）。
+- **桌面按钮审计第二批（app 级 39 个）**：全部迁 `ln-*`；新增 kit 原语 `.ln-chip`（普通/选中/添加/排除/展示）、`.ln-check`（20×20 绿色勾选）、`.ln-iconbtn--danger`、`.ln-row__main--row`；feature CSS 合计 **−244 声明**（quick-notes 828→667、tags 217→195、noteTagRow 38→17、sidebarTagFilter 40→31、nodeIcon 95→78、dialog 242→231、document-status 94→83、kernel-theme 79→75），kit 645→708。`kernel-theme.css` 7 条旧类名补钉改指 ln-*（「内核未分层 button{color} 会吃掉语义色」的理由不变）。**视觉 delta（需点收）**：卡片动作钮 26→22、锁胶囊/筛选触发器变紧凑、属性面板标签 chip 约 +6px、节点图标页签 38→34 且选中加下划线、选中标签项变淡（disabled 口径）、删除图标常红、菜单行 28→27/字 13→14、chip-add 内距 8→9、移除钮 18→22、勾选框边框 1.5→0.5（DESIGN 红线）。
+- **移动端 mb-btn 模型（用户定稿：借鉴桌面、自己实现，UI 两端独立）**：`--primary/--outlined/--secondary/--ghost + --danger/--danger-text + --link`、六态、`is-selected`；**触控几何一律沿用 44/36**（不对齐桌面 27/22）；`--settings` 23 处 → `--outlined`、`--settings--danger` → `--danger`、原纯红字 → `--danger-text`（0 视觉 delta）；ai.css 两条自绘 `.ai-btn` 视觉删掉回 kit L3；主题三钮去掉 mb-btn 叠用。**视觉 delta**：AI 页操作键由自绘胶囊→L3 中性框、基座/ghost 字色 text-1→text-2（略浅）。
+- **日记 v1 收尾**：① 移动「知识库不含日记本」过滤抽 `src/mobile/notebook/libraryNotebooks.ts` + 测试；② 「标签空间不聚合日记」补测试（锁数据前提）；③ **取消日记标记端到端**（`core.planDiaryUnmark` 单一判据；桌面 `diaryStore.unmarkNotebook` 单条原子 UPDATE + IPC `diary_unmark`（通道 186→187）+ 日记 tab 改回文档空间；移动 `clearDiaryNotebookMark` + `bridge.diary.clearDiaryMark` + WRITE_OPS；幂等 `cleared:false`；**单向**，无回标入口）；④ 转文档目标选择器文案（`title`/`confirmLabel`/`description`，默认「移动到…/移动到此处」不回归）；⑤ 移动日记告警进「复制诊断信息」（`src/mobile/lib/diaryWarnLog.ts`，50 条设备本地，结构上不落正文/Key）。
+- **门禁（261110 20:35 实测，提交 `09f41ba1`）**：tsc 0；vitest **852 文件（841 passed / 11 skipped）/ 5342 passed / 12 skipped / 0 failed**；ui-metrics 0（桌面 !important 9/9、移动 19/19、颜色 0、字号 0、跨文件重复 103≤105）；`check:core` 157 文件 / 0 违规；`check:mobileui` 通过；`git diff --check` 0。
+- **未跑**：桌面 42 态 stylesnap（本机无夹具，且没有「日记空间」态）；移动 9 态快照（本批 DOM 未变，理论 0 diff）、23 屏走查、设备装包点收（`bash scripts/android-build.sh --sync --install` 待用户在 `lake_mobile` 验）。
+- ⚠️ **提交时工作树还有另一会话的在途改动**（AI 助手「固定」/复制：`src/features/ai/**`、`features/aiWriting/**`、`styles/app/misc.css`、`styles/app/tabs.css`）。只 stage 了本批文件；共享的 `src/styles/cssLayers.test.ts` 用 index 分离（HEAD 版只含本批基线，对方的 aiDialogParts 87→91 / tabs 188→189 留在工作树未提交）。
+
 ### 261110 · 桌面一级空间改名「知识库」（两端同名，用户定稿）
 - **点单**：移动端第 2 格叫「知识库」，桌面一级空间一直叫「文档」（更早叫「资料库」）⇒ 用户定：**桌面统一改「知识库」**。
 - **落点（只改「空间名」）**：`desktop/DesktopTopBar.tsx` 的 `SPACE_META.library.label` 与空间菜单项、`components/model/defaultSpace.ts` 的「默认空间」选项、`settingsSearch` 关键词补「知识库」、空间称呼的注释/文档（`ARCHITECTURE` / `DIARY` / `desktopWorkspaceSlot`）。
@@ -324,7 +334,7 @@
 - **261110 历史清理（一次性）**：`.ai-writing-recon/`（走查截图 / 页面快照 / 探针脚本，59 文件 ≈15MB）已用 `git filter-repo --invert-paths` 从**全部历史**移除；被重写的是 **v1.1.0 之后的 23 个提交**（hash 以 `git log` 为准），**v1.0.x / v1.1.0 的 tag 与其提交 hash 未变**（不含该目录）⇒ 已发布 Release 与 CI 产物不受影响。重写前快照：`/Users/admin/file/local-lake/lakex-local-notes-backup-<stamp>/all.bundle`（62MB，含全部 refs）。**旧 clone / worktree 需 `git fetch --force --prune` + `git reset --hard origin/master` 或重新 clone**（旧 hash 已不可达）；本机原 `lakex-local-notes-diary` worktree 已删除（其分支是 master 祖先，无内容丢失）。
 
 - **worktree（261109 发版时）**：`lakex-local-notes` = `master`（发版主工作树）；`lakex-local-notes-diary` = `feat/diary-space`（本批开发用，已合并 master 并合回 master）。AI 写作与日记**都已进 master**，两个空间共存（⌘3 / ⌘4）。
-- 主分支 `master`，HEAD 以 `git log -1` 为准（261110 收口时为 `5b94f549` 桌面一级空间改名「知识库」；其前含按钮原语梯队 `02fe0402`、移动 Dock 五格合并 `270974ad` 等）；**origin/GitHub 均 0/0，已推送**。
+- 主分支 `master`，HEAD = **`09f41ba1`**（261110 接手批：AGENTS 精简 + 桌面按钮第二批 + 移动 mb-btn + 日记 v1 收尾）；其前 = 桌面一级空间改名「知识库」（`5b94f549`）、按钮原语梯队（`02fe0402`）、移动 Dock 五格（`270974ad`）。**`origin`（Gitee）已推到 `544f2532`；本批 `09f41ba1` 尚未 push**（`git push origin master` 双推）。
 - `package.json` = **1.1.0**；Android `versionName 1.1.0` / `versionCode 11100`（从根 `package.json` 派生，版本号单一来源：`1000 + major*10000 + minor*100 + patch`）。
 - tag：`v1.0.0`–`v1.0.5`、**`v1.1.0`**（另有旧 `v0.0.1` / `v0.0.2`）；已发布 tag 不再移动。`v1.1.0` = AI 写作 + 日记两个新空间。
 - `v1.0.5` 是**发在 AI 写作合并之前**的：AI 写作第一次随本版发布，别在旧发布说明里找它。
@@ -334,7 +344,7 @@
 
 **工作树（261109 清理批 + 更新中心批，已提交）**
 
-- 清理批分三个本地提交：`e4f1fd3f`（代码死文件 26 个）、`967c09e6`（文档清理：删 20 篇 + 5 份旧发布说明合并为 [docs/RELEASE-NOTES.md](RELEASE-NOTES.md)）、`04eb32a7`（HANDOFF / AGENTS / README / PRODUCT / DESIGN / MOBILE-OPS 对齐）；工作树应为 clean（以 `git status` 为准），未 push。
+- 清理批分三个本地提交：`e4f1fd3f`（代码死文件 26 个）、`967c09e6`（文档清理：删 20 篇 + 5 份旧发布说明合并为 [docs/RELEASE-NOTES.md](RELEASE-NOTES.md)）、`04eb32a7`（HANDOFF / AGENTS / README / PRODUCT / DESIGN / MOBILE-OPS 对齐）；本批提交后工作树仍非 clean —— 另一会话在途 AI 助手改动（`src/features/ai/**`、`features/aiWriting/**`、`styles/app/misc.css`、`styles/app/tabs.css`、共享 `cssLayers.test.ts` 的对方增量），不属本批（见 §0 末尾与 §2）。
 - 文档：删除一批已完成/过期的研究、审计、回归文档；新增 RELEASE-NOTES 合集；ARCHITECTURE / LAKEX-CONTRACT / MOBILE-LONG-DOC-PROBE 等随清理更新。
 - 代码：删除已确认无引用的死模块（`src/core/decideUpload*`、`lakeReconcile*`、`quickNoteReconcile*`、`syncDecision*`、`electron/mdToHtml.ts`、`electron/storeUtils.ts`、`electron/syncDecision.ts` 及若干一次性 scripts）；`QuickNoteEditor` / `QuickNotePreview` 等有小改。
 - 本文件（HANDOFF）已重写并随本批提交；其余文件清单与 diff 见上述提交。
@@ -346,7 +356,7 @@
 **门禁基线（261109 发版前：AI 写作 + 日记合并后实测）**
 
 - `npx tsc --noEmit` = **0 错**。
-- `npx vitest run` = **837 文件（826 passed / 11 skipped）/ 5269 passed / 12 skipped / 0 failed**（261110 合并后实测：按钮原语梯队 + AI 写作二改 + 移动 Dock 五格 + 日记/空间收口批全部合入后）。
+- `npx vitest run` = **852 文件（841 passed / 11 skipped）/ 5342 passed / 12 skipped / 0 failed**（261110 接手批提交前实测；工作树含另一会话在途 AI 助手改动 ⇒ 计数含对方新增用例，本批自身新增约 90 例）。
 - `git diff --check` = **0**。
 - `check:bundle`：**mobile-entry 仍超目标（已知红，非本批引入）**。脚本当前冻结为 entry JS gzip ≤66KB、modulepreload ≤34 条、首屏 ≤380KB（`check-arch`）；目标仍是 **60KB / ≤12 条 / 360KB**，瘦身后收紧（§3 P1）。**261109 实测校准（发版前，`v1.1.0` 合并后）**：`mobile-entry` = **75,316 gz / 39 链接**（冻结 67,584 / 34）；同日合并前的对照基线 `6b2bfbec` = 75,031 gz / 39 链接 ⇒ 日记与 AI 写作合并带来的增量 **+285B / +0 链接**。桌面首屏 586,076 / 600,000（余量 13.9KB，AI 写作改 lazy 前是 555,107）。⇒ 这套红是**跨版本既有**，收口是独立移动端瘦身专项（`check:arch` 的 mobile 首屏 390,727 / 380,000 同属此项）。运行前需先有 `dist` / `dist-mobile` 构建产物。
 - 其它样式/边界/设备门禁按改动范围跑（分层口径见 AGENTS §3#21）；最近一次移动设备记录 = **261110（移动收口批）**：手机 **9 态重烤基线 + 两轮 0 差异**、**平板 9 态补烤 + 两轮 0 差异**、**多维表 3 态重烤**、**23 屏 23/23 ok**（`lake_gate` / `lake_tab`，详见 §0 收口批）；桌面 `check:stylesnap` 42 态仍未跑（本机无合成夹具缓存，见 §3）。
@@ -355,7 +365,7 @@
 
 - Node **v24.18.0**（`$HOME/.nvm/versions/node/v24.18.0/bin`，必须 24）；JDK **21**（`/Library/Java/JavaVirtualMachines/jdk-21.jdk`；系统默认 java 是 1.8，手跑 gradlew 必须指 21）；Android SDK `/opt/homebrew/share/android-commandlinetools`。
 - AVD 3 个：`lake_mobile`（开发默认）/ `lake_gate`（门禁固定夹具，**勿改其数据**）/ `lake_tab`（平板与窗口矩阵）；移动端 AVD 的 CDP **9335 开发 / 9336 门禁 / 9340 平板与窗口矩阵**（桌面 dev 走 9222；设备 serial 以 `adb devices` 现场为准）。
-- 手机 6 态 / 平板 6 态 / 多维表 3 态 = v1.0.4 前重烤并两轮 0 差异；**23 屏走查最近一次记录是 261103**（A3 修过装置里「菜单页误点关闭」的 bug），之后未随 v1.0.4 重跑，发版前需补。
+- 手机 9 态 / 平板 9 态 / 多维表 3 态 = 261110 收口批重烤并两轮 0 差异；23 屏走查 261110 23/23。本批（261110 接手批）未重跑设备装置、未装包，见 §3。
 - 桌面数据：开发 `~/Library/Application Support/lakex-local-notes-dev`，正式 `~/Library/Application Support/lakex-local-notes`（**禁止触碰**）；日志在对应目录 `logs/`。
 
 **发布与推送事实**
@@ -385,6 +395,7 @@
 - **inkDoc v4（写 4、读 1|2|3|4）**：旧端读到 v4 会进只读保护 ⇒ 跨端混用必须在发布说明里写清（含「手机/平板需重装新包」）；改格式只能「新端写新版、旧端只读」并同步 [docs/INK-PAD.md](INK-PAD.md)。
 - **依赖补丁 4 处**（univer ui / plait draw / xiangfa mindmap / lakex-drawnix）：升级后必须 grep 过滤句计数 = 0 且设备上出现「手形工具 — H」；**patch 打上但未命中不会报错**，必须逐条确认语义生效（登记见 AGENTS §2）。
 - **设备装置不进 CI**（无 AVD/GPU）：`.github` 的 PR 门禁只覆盖 tsc/vitest/双 build/core/ui-metrics/bundle/arch；设备类验证必须人工跑。
+- **并行会话共用工作树（261110 实测）**：同一 checkout 里可能有另一 DSH 会话在改别的功能（本轮 = AI 助手固定/复制）。提交前必须 `git status` 分辨；只 stage 本批文件；**共享基线文件**（如 `src/styles/cssLayers.test.ts`）被双方各改几行时，用 `git hash-object -w` + `git update-index --cacheinfo` 只提交本批版本，对方增量留在工作树；**绝不用 `git add -A`**。
 - **门禁预算现状**：`check:bundle` 的 mobile-entry 在 HEAD 已超目标，脚本冻结的是「现状值」；不要把它当绿，也不要把冻结值当目标。
 - **历史文档已删除**：261109 起一批研究/审计/回归/旧发布说明已删（git 可查）；旧文档/代码注释里的「HANDOFF §3#N / §4」是历史编号，**不对应本文**，待办只看 §3（本节不编号）。README / 其它文档中若仍有指向已删文档或旧编号的引用，以 git 与现存文档为准（本批不改其它文件）。
 - **发布链路**：Gitee 单附件 100MB / 仓库 1GB 上限（mac/Windows 包只能走 GitHub）；GitHub 慢速上传需依赖 workflow 的 50 分钟步骤超时，不要缩短。
@@ -396,52 +407,30 @@
 
 **P0（不做就卡住主线）**
 
-- **日记 v1 收尾（261109 遗留）**：~~① 与 `feat/ai-writing-space` 合并~~ **已合并（v1.1.0）**；~~② ⌘4 并回 `useDesktopLifecycle` 映射表~~ **已收敛为 ⌘1–5 一张表（261109）**；~~③ 移动端关闭日记条目后的返回落点仍在「知识库」~~ **已修（261110：回日记页签）**；④ 「转为文档」两端目标选择器文案仍是「移动到…/移动到此处」（共享原语，未加 title/confirmLabel 参数）。
-- **日记设备级验收**：~~移动 9 态 + 23 屏~~ **已完成（261110：9 态重烤基线 + 两轮 0 差异；23 屏 23/23）**；剩桌面 `check:stylesnap` **没有"日记空间"这一态**，要纳入需新增 state 并重烤基线（本机无桌面合成夹具缓存，需有夹具的机器补）。
-- **每批收尾固定动作**：更新 §1 基线与门禁计数 + §3 + §0 批次抬头状态；提交/推送后立刻回写，别让 §0 的「未提交」标记漂移。
-- **下一版发布**（流程见 [docs/RELEASE.md](RELEASE.md)）：发布说明必须写清 ① inkDoc v4：旧端打开只读、手机/平板需重装；② 标签顺序只在设备本地生效（不同步）；③ 标签删除 = 缺席，两端都要升级（旧端仍会把墓碑写回索引）；④ 发布说明统一维护在 [docs/RELEASE-NOTES.md](RELEASE-NOTES.md)。发版前跑全量门禁：手机 9 态 + 平板 9 态 + 多维表 3 态 + 23 屏走查 + `check:windowsweep` + 桌面 42 态（桌面 42 态本机无合成夹具缓存，需有夹具的机器补）。
-- **移动端首屏瘦身**（发版后专项）：HEAD 实测 entry-js 65.5KB gz / preload 33 条 / 首屏 374KB，已超目标（60KB / ≤12 条 / 360KB）；先砍回目标值，再收紧 `check-bundle-budget.mjs` 与 `check-arch.mjs`。
+- **桌面 `check:stylesnap` 42 态**：本机无合成夹具缓存，已连续三批未跑（按钮梯队 / 空间改名 / 按钮第二批）。下次有夹具的机器全量跑并重烤；**重点看本批视觉 delta**（清单见 §0）；同时确认是否新增「日记空间」态。
+- **移动端本批设备点收**：`bash scripts/android-build.sh --sync --install`（lake_mobile）后看：① 设置各子页按钮（`--outlined` 与旧 `--settings` 应 0 变化）；② AI 页操作键形状（自绘胶囊→L3 中性框）；③ 基座/ghost 字色略浅的屏；④ 日记「取消日记标记」/ 转文档文案；⑤ 9 态快照（DOM 未变，预期 0 diff）与 23 屏走查。
+- **手机快照盲区：`.mb-sheet` 打开态**：9 态无一态打开底部 Sheet ⇒ 新增 `home-filter-sheet` 态并重烤，顺带覆盖 CreateSheet。
+- **移动端首屏瘦身**：entry-js 65.5KB gz / preload 33 条 / 首屏 374KB，已超目标（60KB / ≤12 / 360KB）；先砍回再收紧 `check-bundle-budget.mjs` 与 `check-arch.mjs`。
+- **每批收尾固定动作**：更新 §1 基线与门禁计数 + §3 + §0 批次抬头；提交后立刻回写。
+- **下一版发布**（流程 `docs/RELEASE.md`）：发布说明写清 ① inkDoc v4 旧端只读/手机需重装；② 标签顺序仅设备本地；③ 标签删除=缺席两端都要升级；④ 发版前全量门禁矩阵（手机 9 + 平板 9 + 多维表 3 + 23 屏 + windowsweep + 桌面 42）。
 
 **P1（该做但可排期）**
 
-- **日记 v1 残余（验证者报告，非阻断）**：① 移动端「知识库/目录抽屉不含日记本」只有代码路径、**没有测试锁定**（过滤内联在 `MobileApp.tsx`，建议抽纯函数再断言）；② 「标签空间不聚合日记」靠"不提供入口"保证、**无测试**；③ **「取消日记标记」无端到端入口**（wire/plan/落库都支持并有测试，但没有 `UPDATE … SET space` 的写路径，别把测试能力误当已可用功能）；④ 移动端 `console.warn` 级告警不进设置页（与桌面 `diaryStore` 的 log 通道同义但不可见）。
+- **日记「取消标记」残余验收**：跨端 wire 传播（一端取消 → 另一端知识库出现该本、日记空间消失）需**真机 + 配 S3** 验；取消是单向的（无回标入口，回标另立项）。
+- **按钮第二批的用户点收**（清单见 §0）：尤其「删除图标常红」「选中标签项变淡」「AI 页操作键形状」是否接受。
+- **便携包真实 3GB 数据验证**；**更新中心设备验收**（Android 下载→校验→系统安装器）；**桌面 3 项实机复核 + 平板复验**；261104 三项裁决残余验证；小记→文档标签携带待定；导入/导出/键盘真机冒烟债；依赖补丁 4 处升级复核。
+- **`audit-dead-css` 桌面剩 2 候选**（`.node-icon-picker__tab` / `.diary-split-handle`）；旧「资料库」注释残留；`docs/audit-261027/` 4 份过期审计/计划（07 v4 RFC 已由 `03ef3fb3` 落地、02 安全审计已暂停、11 浏览器端计划保留）按 AGENTS「已完成直接删」清理。
 
-- **便携包真实数据验证**：小包、3GiB 合成包、真实 S3 增量接续（dev 数据）均已验收；仍待用真实 3GB 数据从已同步桌面导一次（大小/耗时/内存）。
-- **更新中心设备验证（261109 已实现，待设备验收）**：Android 真机/模拟器走一遍「检查→下载（DownloadManager 通知）→ sha256/证书校验→系统安装器→覆盖安装保数据」；桌面走一遍「检查→下载→打开 dmg/exe」；验证「忽略此版本」「下载中断/重启恢复」「仅 Wi-Fi 自动下载」。规格 [docs/UPDATE-CENTER.md](UPDATE-CENTER.md)。
-- **桌面 3 项实机复核**：usheet 整行/整列选中不跳滚动、桌面手写板 14 色、设置/小记/历史 lazy 路径交互冒烟（P12 遗留）。**平板（lake_tab）复验页签/页面面板**：代码无形态分支（`formFactor` 只改外壳宽度与侧栏），Android 手机已实测，平板需装同一份 APK 复核一次。
-- **261104 三项裁决的残余验证**（裁决本身是 AGENTS §4 的定稿，别再立项）：**缺正文云端拉回需在配了 S3 的真机走一遍**（目前仅单测 mock）；**表单视图大表行数帽**（一次性 `getValues`、默认 35 行，超大表若卡再加）；**资源管理两处 UI 改动未重跑 6 态快照 + 23 屏走查**（只在设置子页，预期 0 差异，发版前一并跑）；**资源「附件」系统打开未设备专项验**（需真实附件 + 系统应用；图片 Lightbox 已验）。
-- **小记标签剩余**：只有「小记→文档转换是否携带标签」待定。其余已收口、别再立项：置顶已删、标签顺序设备本地、删除 = 缺席、移动端标签管理（拖拽/改名/删除/合并已做）、改名/删除全量重建。
-- **导入 / 导出 / 键盘真机冒烟债**：① 桌面 Markdown 导入用真实 md（含图片/表格/脚注/超大文件）跑一遍；② 移动端 .md 系统分享（冷/热启动、多文件、未设置默认笔记本、失败回滚）真机验收；③ 批量导出真实目录（画板 PDF 打开/未打开两种、ink 多页、同名冲突）；④ 移动端键盘稳定（标签/批量打标签/搜索/新建/默认笔记本）真机键盘验收。
-- **移动端 Word / Excel / CSV 导入（如需）**：目前只有桌面导入；移动端分享导入仍只覆盖 Markdown，需要时另立项（注意移动入口预算）。
-- **依赖补丁 4 处升级复核**（仅当升级对应依赖时）：见 §2。
-
-**261110 收口后移交（新会话直接从这里接手）**
-
-- **桌面 `check:stylesnap` 42 态**：本机无合成夹具缓存，已连续两批（按钮原语梯队 / 空间改名）未跑 ⇒ 需在有夹具的机器上跑一次全量并重烤；同时确认「日记空间」态是否要新增、空间名改「知识库」后有无文案类快照差异（快照只存计算值，预期 0，但要实测）。
-- **手机快照盲区：`.mb-sheet` 打开态**：9 态里没有任何一态打开底部 Sheet ⇒ 本轮「固定 50dvh + 下滑关闭」只能靠手工设备验（已验，但门禁看不见）。建议新增 1 态 `home-filter-sheet`（打开筛选 Sheet）并重烤手机基线，顺带覆盖 CreateSheet。
-- **`audit-dead-css` 桌面剩 2 个候选**：`.node-icon-picker__tab`（`src/components/ui/nodeIcon.css`）、`.diary-split-handle`（`src/features/diary/diary.css`）—— 判定前先确认不是动态拼接/内核命名空间，删了要配桌面快照复核。
-- **旧「资料库」称呼残留（注释级）**：`src/styles/kit.css:75`、`src/styles/app/shell.css:235/253/419`、`src/styles/app/base.css:58`、`styles/kit.css` 分隔条注释等处仍写「资料库」。本轮没动 —— 桌面会话正在改这些文件，避免写冲突；下次有人碰时顺手统一。
-- **平板/历史文档口径**：`docs/PAD-ADAPTATION.md` 历史批次里的「6 态」是当时记录（未回改，属历史）；新写内容统一 9 态。
-
-**按钮原语梯队落地后（261110 移交，新会话接手）**
-
-- **按钮审计第二批（app 级 ~40 个）**：`QuickNotesWorkspace` 剩余（卡片勾选/筛选菜单/toast 撤销等）、`QuickNoteFilterDialog`、`QuickNoteTagPicker`、`QuickNoteComposer`、`NoteTagRow`、`TagsWorkspace`、`NodeIconPicker`、`NoteInfoDialog`、`CalendarPanel`、`DiaryWorkspace` 残余、`DesktopStatusBar`、`SafeModeBanner` 等仍是非原语按钮；按 4 语义 + 危险 + 链接迁移，逐屏截图走查（本轮只做第一批：菜单项 / AI 写作 / 小记工具条 / 行主区）。
-- **移动端 `mb-btn` 对齐桌面按钮梯队**：4 语义（primary / outlined / secondary / ghost）+ danger + link、两尺寸、六态；与 `mb-btn--settings` 的对应关系一并收敛（本轮用户定稿：先桌面，移动下一轮做）。
-- **按钮梯队后的桌面视觉门禁**：`check:stylesnap` 相关态（设置页全部子页 / 对话框 / 小记 / 菜单）需在有夹具的机器上跑；**重点看设置页 43 处 L2 改「主题色字」后的观感**——若用户觉得太跳，按预留方案加一档「框 + 次要字色」（`ln-btn--outlined-subtle`），再全量复核。
-- **AI 写作二改的用户点收**：隔离实例已验（弹窗 780×460 拖到 920、提示词写输入 173 字、思考块折叠、搜索/置顶、气泡中心 delta 0、左栏拖拽 288→371），但**用户尚未在自己环境逐条点收**；另外移动端未动（AI 写作仅桌面）。
-- **`AGENTS.md` 指令预算已超**：现 **65,709 B / 上限 65,536 B**（尾部被截断，§8 可能看不见）⇒ 下次往 AGENTS 加内容前**必须先删等量旧内容**（优先删已完成/重复的历史条目，别删红线）。
-- **`ln-row__main` 可继续复用**：Sidebar 目录行 / 小记列表行主区等仍各自写 button 复位；下一批可统一到 `.ln-row__main`（注意保留行 hover/选中由父行负责）。
 **P2（体验缺口 / 长期）**
 
-- **大库与真实设备**：墓碑 payload 老化（261025 定「后续优化」）；大库阈值探测（>2 万文档 / 索引 3–5MB）；**真实 Android 物理机验收从未做过**；PARITY 残余（移动云清理无 UI 入口、目录恢复后 `deleted_notes` 残留）。移动缺正文的「云端拉回 / 历史恢复 / 重建纯文本」三条只在单测 mock 覆盖，需真机 + 配 S3 验证。
-- **移动端文本格式**：261104 设备实测已收口 —— H1–H6 / 字号 / 颜色 / 对齐 / 列表 / 缩进 / 行高 / 上下标 / 清除格式全部生效；字号+行高已合并成一行步进器，对齐 4 档（含两端对齐）。未接入口：unlink / replace / style→code·quote / 表格块级命令族；画图插入项解禁、移动视图拖拽排序、PdfRender `cacheDir` 清理按需再做。
-- **顶栏真 44 → 52**（六批 A4 结论）需另开需求；平板内容画布「点空白落光标」待用户裁决。
+- 大库与**真实 Android 物理机验收从未做过**；墓碑 payload 老化；移动云清理无 UI 入口、目录恢复后 `deleted_notes` 残留；缺正文/缺小记三条恢复路径只有单测 mock。
+- 移动端文本格式未接入口（unlink / replace / style→code·quote / 表格块级命令族）；顶栏 44→52 需另开需求；平板「点空白落光标」待用户裁决。
+- **脚本/源码注释里的旧 `§7.x` 引用**（`§7.25/27/28/30/31`，与 AGENTS 现编号 21–24 不符；历史遗留）⇒ 下次碰时统一，不单独开批。
 
 **已闭合，别重复**
 
-- 「移动 知识库 / 桌面 文档」命名不统一 → **已定稿：桌面也改「知识库」**（261110）。
-
-- 二轮/实机修复批「未跑 6 态」→ 六批 A3 已重烤、0 差异。
-- 「胶囊固定底部」与「平移画布开关」已被二轮覆盖（前者撤回、后者整体删除）。
-- P9–P12 候选：`s3v3Report` 按需（−1.2KB，否决）、`isolate:false`（回退留结论）。
-- 平板「走内核工具栏 / 不挂胶囊」两条例外已撤回（AGENTS 已同步）。
+- 移动/桌面空间命名 → 已定稿两端「知识库」（261110）。
+- 桌面按钮原语梯队 + 第二批（app 级 39 个）→ 已迁移；移动 `mb-btn` 同模型已独立实现（261110）。
+- 日记 v1 残余四条（过滤测试 / 标签不聚合 / 取消标记 / 移动告警）→ 已收口（261110）。
+- AGENTS 超预算 → 已精简到 45,833B（261110）。
+- 二轮/实机修复批「未跑 6 态」、胶囊固定底部 / 平移画布开关、P9–P12 候选、平板内核工具栏两条例外 → 均已闭合/撤回。
