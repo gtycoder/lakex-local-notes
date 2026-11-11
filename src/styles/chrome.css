@@ -639,6 +639,9 @@
    行内 affordance 属内容区例外（与「文档正文/编辑器内部不参与统一厚度」同一口径）。
    落点必须在 shell 层：app/shell.css 在 legacy 层，压不过 kit 的 .ln-iconbtn--compact。 */
 .tree-row .tree-row-action { width: 22px; height: 22px; }
+/* 笔记本行比文档行高 2px（min-height 29）⇒ 视口外占位也要按它算（25 + 上下内距 4 = 29），
+   否则滚入视口时 27→29 还会跳 2px（261111 目录跳动修复的残余）。 */
+.tree-row.type-notebook { contain-intrinsic-size: auto 25px; }
 .tree-row-actions { display: none; }
 /* 只在行 hover / 键盘聚焦时显形（用 :has(:focus-visible) 而非 :focus-within ——
  * 后者会被鼠标点击后的残余 focus 钉住，导致选中行标题被 ⋯ 挤窄，用户 260914）。 */

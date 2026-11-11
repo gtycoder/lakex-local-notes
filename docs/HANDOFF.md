@@ -10,6 +10,11 @@
 
 > **顺序标注**：261109 各批次里写的「日记 ⌘4 / AI 写作 ⌘3」是**当时**的顺序；**261110 起改为 日记 ⌘3 / AI 写作 ⌘4**（另有标签 ⌘5）。旧批次不再改，以本行 + §1 为准。
 
+### 261111 · 查漏补缺（review：编辑态标签行溢出 / 目录笔记本行占位高）
+- **编辑态标签行并进动作行后的溢出**：多标签时原 `overflow: hidden` 会直接裁掉（用户既看不到也移不掉）⇒ 改 `overflow-x: auto` + **隐藏滚动条**（`scrollbar-width: none` + `::-webkit-scrollbar { display: none }`），标签仍全部可达。
+- **目录笔记本行占位高**：上一条跳动修复按文档行算（内容 23 ⇒ 占位 27），但笔记本行真实高 29 ⇒ 滚入视口仍会 27→29 跳 2px。补 `.tree-row.type-notebook { contain-intrinsic-size: auto 25px }`（25 + 上下内距 4 = 29）。
+- **新增护栏**：`QuickNoteComposer.render.test.tsx` —— 写作卡（pane）的标签行必须在动作行**之外**（独立一行）；编辑态（inline）必须在动作行**之内且为第一个子元素**，并存在 `.quick-note-actions-spacer`（标签靠左、按钮靠右）。防以后又把两条版式合并/搬回去。
+- 门禁：`tsc` 0；`cssLayers` `chrome.css` 530→**531** / `app/quick-notes.css` 690→**692**（写明理由）；全量 vitest 见 §1；`ui-metrics` / `git diff --check` 通过。
 ### 261111 · 小记编辑态：标签并进动作行 + 「保存并同步」支持编辑（核对结论）
 - **布局**（用户点单「标签太贴边，放到取消/保存那一行的最左边」）：编辑既有小记（`variant="inline"`）时，标签行（`+ 添加标签` + 已选标签）从原来「独立一行贴卡片左下角」**并进动作行**：标签靠左、`quick-note-actions-spacer` 撑开、`取消 / 保存并同步 / 保存` 靠右，同在一行；写作卡（`variant="pane"`）保持标签独立一行不变。实测：动作行 742×40，标签 519→676、按钮组 1035→1237，同一 top。
 - **「保存并同步」在编辑态是否支持编辑后出网？→ 支持，保留**：`saveDraftAndSync` = `saveDraft`（编辑走 `native.updateQuickNote`；**无改动不写库**但会回传 note id）→ `pushOneNote(id)` → `native.syncQuickNote(id)`（单条快路径 `engine.pushQuickNote`：pushed / unchanged「已是最新」/ 无远端清单回退整轮 / 不在本机 都有明确提示；失败文案「已保存到本机，同步失败：…」）。⇒ 它是「改完立刻出网」的唯一入口，**不删**。

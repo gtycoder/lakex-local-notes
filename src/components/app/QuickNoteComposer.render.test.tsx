@@ -81,6 +81,22 @@ describe("QuickNoteComposer（261110 第二批）", () => {
     expect(onlyPrimitive(remove)).toBe(true);
   });
 
+  it("编辑既有小记（inline）：标签并进动作行、靠左；写作卡（pane）标签仍是独立一行", () => {
+    const props = render();   // pane（写作卡）
+    const paneTags = document.body.querySelector<HTMLElement>(".quick-note-tags")!;
+    // 写作卡：标签行在动作行**之外**（独立一行，保持原样）
+    expect(paneTags.closest(".quick-note-composer-actions")).toBeNull();
+    // 重渲染成 inline（编辑既有小记）：标签行并进动作行，且是动作行**第一个**子元素（靠左）
+    act(() => root.render(createElement(QuickNoteComposer, { ...props, variant: "inline" as const })));
+    const inlineTags = document.body.querySelector<HTMLElement>(".quick-note-tags")!;
+    const actions = inlineTags.closest<HTMLElement>(".quick-note-composer-actions")!;
+    expect(actions).not.toBeNull();
+    expect(actions.className).toContain("quick-note-composer-actions--inline");
+    expect(actions.firstElementChild?.className).toContain("quick-note-tags");
+    // spacer 撑开 ⇒ 按钮组靠右（用户 261111 点单：标签在取消/保存那一行的最左边）
+    expect(actions.querySelector(".quick-note-actions-spacer")).not.toBeNull();
+  });
+
   it("移除钮点击 = 从 tagIds 移除；主按钮仍是 ln-btn--primary", () => {
     const { onTagIdsChange } = render();
     const remove = document.body.querySelector<HTMLButtonElement>('button[aria-label="移除标签 灵感"]')!;
