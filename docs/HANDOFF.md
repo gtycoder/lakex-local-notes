@@ -560,7 +560,7 @@
 - **261110 历史清理（一次性）**：`.ai-writing-recon/`（走查截图 / 页面快照 / 探针脚本，59 文件 ≈15MB）已用 `git filter-repo --invert-paths` 从**全部历史**移除；被重写的是 **v1.1.0 之后的 23 个提交**（hash 以 `git log` 为准），**v1.0.x / v1.1.0 的 tag 与其提交 hash 未变**（不含该目录）⇒ 已发布 Release 与 CI 产物不受影响。重写前快照：`/Users/admin/file/local-lake/lakex-local-notes-backup-<stamp>/all.bundle`（62MB，含全部 refs）。**旧 clone / worktree 需 `git fetch --force --prune` + `git reset --hard origin/master` 或重新 clone**（旧 hash 已不可达）；本机原 `lakex-local-notes-diary` worktree 已删除（其分支是 master 祖先，无内容丢失）。
 
 - **worktree（261109 发版时）**：`lakex-local-notes` = `master`（发版主工作树）；`lakex-local-notes-diary` = `feat/diary-space`（本批开发用，已合并 master 并合回 master）。AI 写作与日记**都已进 master**，两个空间共存（⌘3 / ⌘4）。
-- 主分支 `master`，HEAD = **`87c5ceb1`**（261111 写作卡内核图片显示缩略）；前序 = `191ff7f8`（抖动/图片二步/脚本修复）、`a9e50def`（快照基线）、`79b91eb1`（骨架/预取/图片）及并行会话提交。**`origin`（Gitee）仍停在 `544f2532`，以上均未 push**（`git push origin master` 双推）。
+- 主分支 `master`，HEAD = **`b83f53ca`**（261111 写作卡内核图片显示缩略 + 回写）；前序 = `87c5ceb1`（内核图片显示缩略）、`f30da7bb`（锁定态大纲让开底部状态栏）、`562b738e`（分帧渲染 review 补齐）、`793f246c`（阅读态分帧渲染 + 两套大纲兜底）、`dbc96ccd`（引擎撑满可视区）、`191ff7f8`（抖动/图片二步/脚本修复）及并行会话提交。**双远端（Gitee `origin` / GitHub `github`）均已到 `b83f53ca`，本地与之同步**（`git push origin master` 双推）。
 - `package.json` = **1.1.0**；Android `versionName 1.1.0` / `versionCode 11100`（从根 `package.json` 派生，版本号单一来源：`1000 + major*10000 + minor*100 + patch`）。
 - tag：`v1.0.0`–`v1.0.5`、**`v1.1.0`**（另有旧 `v0.0.1` / `v0.0.2`）；已发布 tag 不再移动。`v1.1.0` = AI 写作 + 日记两个新空间。
 - `v1.0.5` 是**发在 AI 写作合并之前**的：AI 写作第一次随本版发布，别在旧发布说明里找它。
