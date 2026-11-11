@@ -244,7 +244,9 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
 /* v2 卡片：圆角 16（--mb-radius-card）+ --mb-shadow-card（含 0.5px 内描边，替代原发丝边）。
    border 保留 .5px 但透明：.qn-card.is-revealed 仍靠 border-color 表达搜索定位高亮（几何零变化）。 */
 .qn-card { display: flex; flex-direction: column; background: var(--lake-bg-panel); border: .5px solid transparent; border-radius: var(--mb-radius-card); box-shadow: var(--mb-shadow-card); overflow: hidden; cursor: pointer; -webkit-tap-highlight-color: transparent; }
-.qn-card:active { transform: scale(.99); }
+/* 261111 用户报「去掉一个待办卡片就抖一下」：整卡 :active 缩放会**连带卡内勾选框的按下**一起触发
+   （点 checkbox → 卡片 scale(.99) → 松开回弹 = 整张卡抖一下）。卡片里有可交互子控件时不做整卡缩放；
+   与桌面「卡片点击抖动去 :active 缩放」同一口径（eb526bf7），点击打开由 cursor/tap 语义承担。 */
 .qn-card.is-revealed { border-color: var(--lake-accent); }
 .qn-card__cover { position: relative; width: 100%; padding: 12px 12px 2px; display: flex; align-items: center; justify-content: center; background: var(--lake-bg-panel); }
 .qn-card__img { max-width: 100%; max-height: 210px; width: auto; height: auto; object-fit: contain; border-radius: var(--mb-radius); display: block; }
