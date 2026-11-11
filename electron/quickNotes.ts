@@ -328,6 +328,24 @@ export class QuickNotesStore {
    * DT-05：列表只回投影（**不读 .qnote 正文**）——2 万小记时 body 是最大的一块 IPC payload。
    * 正文/资源在打开单条时走 readQuickNote；列表只读 DB 行 + 关联表 + 资源 mime。
    */
+  /** 单条小记的同步行（261110 单条推送提速）：只读 DB 行 + 标签关系，不读正文、不扫其它小记。 */
+  getQuickNoteSyncRow(id: string): {
+    id: string; createdAt: string; updatedAt: string; contentHash: string; isConflict: boolean;
+    tagIds: string[]; tagsUpdatedAt: string | null; cloudDeleted?: boolean; deletedAt?: string;
+  } | null {
+    const row = this.db.prepare("SELECT id,created_at,updated_at,content_hash,is_conflict,cloud_deleted,deleted_at FROM quick_notes WHERE id=?").get(id) as
+      { id: string; created_at: string; updated_at: string; content_hash: string; is_conflict: number; cloud_deleted?: number; deleted_at?: string | null } | undefined;
+    if (!row) return null;
+    return {
+      id: row.id, createdAt: row.created_at, updatedAt: row.updated_at, contentHash: row.content_hash,
+      isConflict: Number(row.is_conflict) === 1,
+      tagIds: [...this.listQuickNoteTagIds(row.id)].sort(),
+      tagsUpdatedAt: this.links.tagsUpdatedAt(row.id),
+      ...(Number(row.cloud_deleted) === 1 ? { cloudDeleted: true } : {}),
+      ...(row.deleted_at ? { deletedAt: row.deleted_at } : {}),
+    };
+  }
+
   /** 单条存在性（只读 DB 行，**不读正文**）：单条推送的 fail-fast，避免为"不存在"多读一次正文。 */
   hasQuickNote(id: string): boolean {
     return !!this.db.prepare("SELECT 1 FROM quick_notes WHERE id=?").get(id);

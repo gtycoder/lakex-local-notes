@@ -45,6 +45,11 @@ export function createDesktopPlatformPort(store: Store, quickNotes?: QuickNotesS
         tagsUpdatedAt: qn.links.tagsUpdatedAt(q.id),
       }));
     },
+    /** 单条推送提速（261110）：只读这一条小记行 + 标签关系。 */
+    async getQuickNoteSyncRow(id: string): Promise<QuickNoteSyncRow | null> {
+      if (!qn) return null;
+      return qn.getQuickNoteSyncRow(id);
+    },
     async listQuickTags(): Promise<QuickTagRow[]> {
       if (!qn) return [];
       // 删除 = 缺席（261105）：表里只剩 active 行，**没有墓碑**；顺序是设备本地视图，不发布。

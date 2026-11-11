@@ -99,8 +99,8 @@ describe("引擎：单条推送最短链 + 轻量状态（261110）", () => {
     expect(out.status).toBe("pushed");
 
     const stats = counted.stats;
-    // pointer：开头读 + 锁内 CAS 读 + 写后校验（与整轮同一套发布协议，SINGLE_PUSH 不省）。
-    expect(stats.getKeys.filter((k) => k === "meta/pointer.json")).toHaveLength(3);
+    // pointer：锁内 CAS 读 + 写后校验（261110 独立管线：入口那次 pointer 读已省，锁内只读一次）。
+    expect(stats.getKeys.filter((k) => k === "meta/pointer.json")).toHaveLength(2);
     // quick 索引只读一次；lake 索引一次都不读。
     expect(keysWithPrefix(stats.getKeys, "quick-notes/meta/index/")).toHaveLength(1);
     expect(keysWithPrefix(stats.getKeys, "meta/index/")).toHaveLength(0);
@@ -217,6 +217,9 @@ describe("桌面适配层：pushQuickNoteWithV3（261110）", () => {
     if (out2.status !== "pushed") throw new Error("unreachable");
     expect(out2.unchanged).toBe(true);
     expect(counted2.stats.puts).toBe(0);
+    // 重复点：只读一次 pointer（不取锁/不读索引/不写），generation 不涨。
+    expect(counted2.stats.total).toBe(1);
+    expect(counted2.stats.getKeys).toEqual(["meta/pointer.json"]);
     expect(JSON.parse(gunzipSync(await fs.readFile(baselinePath(a.root))).toString("utf8")).generation).toBe(after.generation);
   });
 

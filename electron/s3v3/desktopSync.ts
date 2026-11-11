@@ -11,6 +11,7 @@ import { assertQuickNotesSyncAvailable } from "../quickNotesAvailability.js";
 import type { QuickNotePushOutcome } from "../../src/core/quickNoteSyncTypes.js";
 import { buildS3v3DiagnosticReport, createS3v3PhaseCollector, type S3v3DiagnosticReport } from "../../src/core/s3v3Report.js";
 import { countRemoteOps, remoteOpSummary } from "../../src/core/s3v3/remoteStats.js";
+import { runQuickPush } from "../../src/core/s3v3/quickPush/pipeline.js";
 import { perfMessage } from "../../src/core/logFormat.js";
 
 /**
@@ -257,11 +258,11 @@ export async function pushQuickNoteWithV3(
   const phases: Array<{ phase: string; ms: number }> = [];
   const device = new DesktopStoreDevice(store, store.rootPath, { skipQuickNotesGuard: true, quickNotes });
   await device.init({ skipStagingCleanup: true });
-  const engine = new S3v3SyncEngine({
+  const quickPushDeps = {
     remote: counted.remote, device,
     deviceId: deps.deviceId ?? process.env.LAKE_S3V3_DEVICE_ID ?? desktopDeviceId(store),
-    onPhase: (phase, ms) => { phases.push({ phase, ms }); },
-  });
+    onPhase: (phase: string, ms: number) => { phases.push({ phase, ms }); },
+  } as const;
   const startedAt = Date.now();
   const log = (status: string, extra: Record<string, string | number> = {}): void => {
     store.logScopes.sync.info(perfMessage("sync.push-single", Date.now() - startedAt, {
@@ -273,7 +274,7 @@ export async function pushQuickNoteWithV3(
   };
   let result: QuickNotePushResult;
   try {
-    result = await engine.pushQuickNote(id);
+    result = await runQuickPush(quickPushDeps, id);
   } catch (error) {
     log("failed", { error: error instanceof Error ? error.message : String(error) });
     throw error;

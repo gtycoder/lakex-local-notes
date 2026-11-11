@@ -127,6 +127,9 @@ export interface PlatformDataPort {
   listFoldersForSync(): Promise<SyncFolderRow[]>;
   listNotesSyncMeta(): Promise<SyncNoteMetaRow[]>;
   listQuickNotesForSync(): Promise<QuickNoteSyncRow[]>;
+  /** 单条小记同步行（可选，261110 单条推送提速）：只读这一条（含标签关系），不读其它小记正文。
+   *  【缺失退化】core 回退 listQuickNotesForSync()（读全部小记行，语义不变）。 */
+  getQuickNoteSyncRow?(id: string): Promise<QuickNoteSyncRow | null>;
   listQuickTags(): Promise<QuickTagRow[]>;
   /** 小记可恢复删除（软删/学习墓碑）：口径由平台沿用各自旧实现（桌面含已 purge 行、移动不含）。 */
   listQuickDeleted(): Promise<QuickDeletedRow[]>;

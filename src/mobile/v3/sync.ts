@@ -6,6 +6,7 @@ import * as historyRepository from "../data/historyRepository.js";
 import { MobileDeviceStore } from "./mobileDeviceStore.js";
 import { createMobileS3v3Remote, getMobileS3v3RemoteCached, invalidateMobileS3v3RemoteCache } from "./s3v3Remote.js";
 import { countRemoteOps, remoteOpSummary } from "../../core/s3v3/remoteStats.js";
+import { runQuickPush } from "../../core/s3v3/quickPush/pipeline.js";
 import { rlog } from "../../lib/log";
 
 /**
@@ -83,10 +84,10 @@ export async function runMobileV3PushQuickNote(
   // 261110 提速证据：请求数 + 分段耗时，一行 [perf]（低频用户动作 ⇒ info；LOGGING §8）。
   const counted = countRemoteOps(remote);
   const phases: Array<{ phase: string; ms: number }> = [];
-  const engine = new S3v3SyncEngine({
+  const quickPushDeps = {
     remote: counted.remote, device: store, deviceId: opts.deviceId ?? mobileDeviceId(),
-    onPhase: (phase, ms) => { if (ms >= 2000) console.warn(`[v3][slow] push ${phase} ${ms}ms`); phases.push({ phase, ms }); },
-  });
+    onPhase: (phase: string, ms: number) => { if (ms >= 2000) console.warn("[v3][slow] push " + phase + " " + ms + "ms"); phases.push({ phase, ms }); },
+  };
   const startedAt = Date.now();
   const log = (status: string, extra: Record<string, string | number> = {}): void => {
     rlog.perf("sync.push-single", Date.now() - startedAt, {
@@ -97,7 +98,7 @@ export async function runMobileV3PushQuickNote(
     });
   };
   try {
-    const result = await engine.pushQuickNote(id);
+    const result = await runQuickPush(quickPushDeps, id);
     const extra: Record<string, string | number> = result.status === "pushed"
       ? { uploaded: result.uploadedContent ? 1 : 0, assets: result.uploadedAssets, unchanged: result.unchanged ? 1 : 0 }
       : result.status === "full-sync" ? { reason: result.reason } : {};

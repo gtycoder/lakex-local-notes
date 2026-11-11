@@ -76,7 +76,8 @@ describe("移动端单条推送最短链（261110）", () => {
     expect(out.uploadedContent).toBe(true);
 
     const stats = counted.stats;
-    expect(stats.getKeys.filter((k) => k === "meta/pointer.json")).toHaveLength(3);
+    // pointer：锁内 CAS 读 + 写后校验（入口那次已省；共 2 次）。
+    expect(stats.getKeys.filter((k) => k === "meta/pointer.json")).toHaveLength(2);
     expect(keysWithPrefix(stats.getKeys, "quick-notes/meta/index/")).toHaveLength(1);
     expect(keysWithPrefix(stats.getKeys, "meta/index/")).toHaveLength(0);
     expect(keysWithPrefix(stats.getKeys, "quick-notes/objects/")).toHaveLength(0);
@@ -109,6 +110,8 @@ describe("移动端单条推送最短链（261110）", () => {
     if (out2.status !== "pushed") throw new Error("unreachable");
     expect(out2.unchanged).toBe(true);
     expect(counted2.stats.puts).toBe(0);
+    expect(counted2.stats.total).toBe(1);
+    expect(counted2.stats.getKeys).toEqual(["meta/pointer.json"]);
     expect((await pointerOf(remote)).generation).toBe(genAfterFullRound);
     void phases;
     await db.close();

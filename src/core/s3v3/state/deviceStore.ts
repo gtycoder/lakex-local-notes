@@ -679,9 +679,15 @@ export function createDeviceStoreMeta(deps: DeviceStoreMetaDeps): DeviceStoreMet
       for (const n of await p.listNotesSyncMeta()) if (n.cloudDeleted) purged.add(n.id);
       for (const q of await p.listQuickNotesForSync()) if (q.cloudDeleted) purged.add(q.id);
     }
-    const rows = await p.listQuickNotesForSync();
+    // 单条推送提速（261110）：平台有单行查询就只读这一条；否则回退 list（读全部小记行）。
     let quickNote: QuickNoteEntry | null = null;
-    for (const q of rows) if (q.id === id) quickNote = quickEntryOf(q, assetsQuick);
+    if (p.getQuickNoteSyncRow) {
+      const row = await p.getQuickNoteSyncRow(id);
+      if (row) quickNote = quickEntryOf(row, assetsQuick);
+    } else {
+      const rows = await p.listQuickNotesForSync();
+      for (const q of rows) if (q.id === id) quickNote = quickEntryOf(q, assetsQuick);
+    }
     const quickPurgeRows = await p.listQuickPurges();
     const quickPurgeTimes: Record<string, string> = { ...(ledger?.quickPurgeTimes ?? {}) };
     for (const d of quickPurgeRows) quickPurgeTimes[d.id] = d.purgedAt;

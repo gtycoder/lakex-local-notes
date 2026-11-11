@@ -360,58 +360,45 @@ LOCK_TTL_MS = 120_000 ｜ LOCK_SETTLE_MS = 40 ｜ LOCK_DEADLINE_MS = 15_000（�
 5. `saveState(finalState)` → `saveBaseline` → 执行待删（§13）；**清理失败只降级 warning**，不把已成功的发布报成失败。
 6. 释放锁（finally）。
 
-### 12.3 单条小记推送 `pushQuickNote`（「保存并同步」快路径，261110 提速）
+### 12.3 单条小记推送（「保存并同步」快路径，261110 / 独立管线 261111）
 
 用户语义：这是**唯一**用户主动发起的 S3 同步特例，只推当前这一条小记、必须最快；
 不处理其他待同步、不拉数据、**不等在途整轮同步**。
 
-**门与互斥**
-- 桌面 = 高优先门 `serializedQuickPush`（`electron/syncEngineController.ts`）：只与其它单条推送串行，
-  **不排** `enqueueMaintenance`（维护域）、**不等** `v3Gate`（整轮串行门）；移动 = `runPriority("syncQuickNote")`。
-  判据登记 `src/core/maintenancePolicy.ts` 的 `PRIORITY_OPS.syncQuickNote`（两端同语义）。
-- 发布互斥仍由 §12.1 的 S3 锁 + 锁内读回（CAS）+ 写后校验保证（与多端并发发布同一套）；
-  同进程整轮/单条并发时后写者按 `PublishRetry` 重来（移动端两个域本就并存，口径一致）。
-  回退整轮（见下）走同步入口（含 `v3Gate`），避免同进程两个整轮并发写基线。
+**实现 = 独立管线** `src/core/s3v3/quickPush/`（261111 从 `S3v3SyncEngine` 剥离）：
+- `pipeline.ts` 是唯一实现；`S3v3SyncEngine.pushQuickNote` 是薄委托，桌面 `pushQuickNoteWithV3` /
+  移动 `runMobileV3PushQuickNote` **直接调用** `runQuickPush`（不再为一次推送构造整轮引擎）。
+- 窄接口 `types.ts`：remote 只给 get/put/deleteMany（+可选 putFromFile）；device 只给
+  loadBaseline / 单条同步行（loadQuickPushState）/ 读正文 / 资产清点 / markQuickNoteSynced /
+  saveBaseline / persistSyncMarkers；不暴露 lake 索引、plan/apply、意图账本、GC。
+- 门与互斥：桌面 `serializedQuickPush` 高优先门（不排 `enqueueMaintenance`、不等 `v3Gate`）；
+  移动 `runPriority("syncQuickNote")`；判据 `PRIORITY_OPS.syncQuickNote`。
 
-**请求序列（成功、无资产）**：3 pointer GET（开头 + 锁内 CAS + 写后校验）+ 1 quick 索引 GET
-+ 1 quick 索引 PUT + 1 pointer PUT + 1 正文 PUT（另加发布锁：4 GET / 1 PUT / 1 DELETE）。
-**不读 lake 索引、不 GET 任何正文/声明**；正文按内容寻址、已存在时不重复 PUT
-（重复点「保存并同步」= 零上传、零发布）。有资产时：本地 0 资产不读远端声明；远端已有同 `declHash` 声明不重复 PUT。
+**请求序列（成功、无资产）— 11 次**（旧实现 13 次）：
+1. 取锁：GET owner → PUT lock →（静置 40ms）→ GET owner（2 GET + 1 PUT）
+2. **锁内只读一次 pointer**（与 baseline 做 epoch/generation/lakeCommit 判定 + CAS 基线）（1 GET）
+3. 与 quick-notes 索引 GET **并行** PUT 本条正文（内容寻址）（1 GET + 1 PUT）
+4. 需要时 GET 远程声明 + 上传新增资产/声明（有资产才有；本地 0 资产不读声明）
+5. PUT 新 quick 索引（1 PUT）
+6. 写 pointer 前 GET 校验仍持锁（1 GET）
+7. PUT pointer（generation+1，lake 不动）（1 PUT）
+8. 读回校验 pointer（1 GET）
+9. finally 释放锁：**距取锁成功 < TTL-5s 时直接 DELETE**（省掉 owner GET）；超出余量才保守 GET+校验（1 DELETE）
 
-**本地步骤**（`S3v3SyncEngine.pushQuickNote`）
-1. `loadQuickPushState(id)`（可选端口）：只读这条小记 + 同步标记，**不重建整个世界**
-   （桌面 2 万文档时省掉全库 stat/hash；端口缺失/抛错 ⇒ 回退 `loadState()`，语义不变）；
-2. 读正文 → sha256 → 本地资产清点（0 资产时不 GET 远端声明）；
-3. 只 upsert 这一条：items 其余条目、tags、purged 逐字段保持云端原样（purged 只按窗口裁剪/恢复移除）；
-4. 与整轮同一套锁 + 读回 + 重试（`SINGLE_PUSH_MAX_RETRIES = 3`）；成功后
-   `markQuickNoteSynced(id, hash)`（I2 守卫）+ `saveBaseline`（**lake 部分原样、quick 只更新本条**）
-   + `persistSyncMarkers`（仅当该条 remotePurged/restorePending 有变化时落盘）。
+**重复点（内容 / 元数据 / 资产声明都没变）**：只读 1 次 pointer（确认云端仍停在 baseline 那一代）就返回
+`unchanged` —— **不取锁、不读索引、0 上传、0 发布、generation 不涨**。
 
-**回退条件（`full-sync`，不静默降级）**：云端无 pointer / 无基线 / baseline 与 pointer 不同代
-（epoch 或 generation 或 lakeCommit 不一致）⇒ 退回整轮；远端 quick 索引里该条是 `purged`
-且本机无显式恢复标记 ⇒ `full-sync(remote-deleted)`（墓碑权威，不复活）。
+**本地读**：优先平台**单行查询**（`getQuickNoteSyncRow`，桌面/移动已实现；只读这一条小记行 + 标签关系），
+端口缺失/异常回退整份 `loadState`；不再为单条推送重建整个世界。
 
-**基线/后续轮口径**：单条推送写完 baseline（generation = pointer+1、quickNotes = 新索引、lake = 旧 commit），
-下一轮整轮同步据此判定「已同步」；**不得**改其他小记/文档的 baseline 或待同步状态；失败时不写 baseline、不标 synced。
+**只 upsert 这一条**：items 其余条目、tags、purged（按保留窗口）逐字段保持云端原样；
+成功后 `markQuickNoteSynced`（I2）+ baseline（lake 原样、quick 只更新本条）+ markers；失败不写基线、不标同步。
 
-**证据（LOGGING §8）**：一行 `[perf] sync.push-single <ms>ms id=… status=… req="requests=… get=… put=…" phases="push-pointer=…,…"`
-（成功/失败都记；低频用户动作 ⇒ info 级）。
+**回退条件（`full-sync`，不静默降级，且已释放锁）**：云端无 pointer / 本机无 baseline /
+baseline 与 pointer 不同代（epoch·generation·lakeCommit）/ 远端 quick 索引里该条 `purged` 且无显式恢复标记。
+回退由调用方执行一次整轮（走同步入口，含 v3Gate）。
 
-**真实 S3 实测 · 两条创建入口（261110 二测，独立临时前缀，测后已清理 116 对象 / 前缀剩 0）**：
-- 首次建 pointer/baseline（无 pointer → 回退整轮）4886ms、上传 26 条；
-- 路径 A 首页 FAB → 空白小记：首点 **1577ms**（墙钟 1792ms），日志 req=13（8 GET/4 PUT/1 DELETE），
-  pointer gen+1、云端 +2 对象（正文+索引）、lake commit 不变；同一 id 再推 **126ms**（req=2 GET、0 上传、gen 不涨）；
-- 路径 B 快捷 capture（热启动）**843ms**（墙钟 1060ms），重复 **97ms**；冷启动（force-stop 后走 QuickNoteAlias 深链）
-  **836ms**（墙钟 1025ms）——冷/热同量级 ⇒ **不做空闲预取**（无 >2s 的 chunk 冷开销，避免无证据的复杂度）；
-- 随后整轮 `syncNow` 817ms、↑0 ↓0、quick 正文对象数不变（8）；仅既有 tag 元数据导致一次只含元数据的索引再发布
-  （gen+1、+1 对象，与快路径无关）。
-
-**真实 S3 实测（261110，模拟器 + 七牛，独立临时前缀，测后已清理 110 对象 / 前缀剩 0）**：
-首次（无 pointer → full-sync 回退整轮，上传 26 条）6657ms；首次快路径（新建第 2 条）1421ms
-（日志 1387ms；req=13：8 GET / 4 PUT / 1 DELETE；phases≈pointer 259 / publish 721 / baseline 164）；
-同一条重复点「保存并同步」**239ms**（日志 201ms；req=2 GET，0 PUT，generation 不涨）；
-随后整轮 `syncNow` 870ms（↑0 ↓0，无正文重传；移动端因既有 tag 版本元数据做了一次只含元数据的再发布，
-quick 正文对象数不变）。设备原 S3 配置为「未配置」，测后已恢复为空。
+**证据（LOGGING §8）**：一行 `[perf] sync.push-single <ms>ms id=… status=… req="requests=… get=… put=…" phases="push-pointer=…,…"`。
 
 ### 12.4 读回失败/并发
 
@@ -561,7 +548,7 @@ state sidecar：桌面 `<storeRoot>/sync-v3/state.json`；移动同表 `sync_v3_
 | 待删门禁/清理 | `electron/s3v3/deepCleanupWindow.test.ts`、`src/core/s3v3Gc`（经 core 测试） |
 | 双端一致性 | 单实现契约 `src/mobile/v3/deviceConformance.mobile.test.ts`（21 it）+ 跨端混合 `electron/s3v3/deviceConformance.mixed.test.ts`（3 it）+ `parity.test.ts` |
 | 单条小记推送/标记落盘 | `electron/s3v3/quickPushSingle.test.ts`、`markerPersist.test.ts`、`src/mobile/v3/remParity.test.ts` |
-| 「保存并同步」快路径（最短链/轻量状态/高优先域） | `electron/s3v3/quickPushFastPath.test.ts`、`src/mobile/v3/quickPushFastPath.test.ts`、`electron/quickNotePushPriority.test.ts` |
+| 「保存并同步」快路径（独立管线/最短链/轻量状态/高优先域） | `src/core/s3v3/quickPush/pipeline.test.ts`（请求序列/回退/别端变更）、`pipeline.parity.test.ts`（与旧实现逐字节对拍）、`electron/s3v3/quickPushFastPath.test.ts`、`src/mobile/v3/quickPushFastPath.test.ts`、`electron/quickNotePushPriority.test.ts` |
 | 传输端口护栏（key/gzip/404/客户端单例） | `src/mobile/native/s3PortGuards.test.ts` |
 
 ## 20. 变更记录

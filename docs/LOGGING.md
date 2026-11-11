@@ -57,7 +57,7 @@
 | `[ipc] <channel> 失败` | error | 同上 | 通道名 + 耗时 + 错误摘要 |
 | `[perf] note.save` | debug / info | `electron/store.ts` | 保存耗时 + 正文字数；≥200ms 或 ≥1MB 升 info |
 | `[perf] sync.round` | info | `electron/syncEngineController.ts` | 一轮同步：耗时、上传/下载条数、字节数、文件夹数、墓碑数、冲突数、warnings |
-| `[perf] sync.push-single` | info | `electron/s3v3/desktopSync.ts` / `src/mobile/v3/sync.ts` | 「保存并同步」单条推送：状态、请求数与分类、phase 分段耗时（pointer/index/body/upload/publish/baseline） |
+| `[perf] sync.push-single` | info | `src/core/s3v3/quickPush/pipeline.ts`（phase 由适配层记录） | 「保存并同步」单条推送：状态、请求数与分类、phase 分段耗时（pointer/index/body/upload/publish/baseline） |
 | `[perf] paste.html` | info | `src/features/editor/clipboardHtml.ts` | 一次粘贴：chars（HTML 字符数）/ getData 次数 / 我们升级耗时 / 大表护栏是否命中 |
 | `[perf] 资源上传 …` | info | `src/lib/uploadStats.ts` | 一次上传爆发：次数、远程数、墙钟、单次最长、重试、失败（阈值 ≥3 次/≥1.5s/有失败） |
 | `[perf] editor.init` | info | `src/features/editor/EditorTab.tsx` | 打开文档初始化耗时 + noteId / mode / chars / locked |

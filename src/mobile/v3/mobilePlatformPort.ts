@@ -202,6 +202,24 @@ export function createMobilePlatformPort(db: MobileDb, ctxIn?: Partial<MobilePla
         ...(assets.has(String(r.id)) ? { assetsHash: assets.get(String(r.id))! } : {}),
       }));
     },
+    /** 单条推送提速（261110）：只读这一条小记行（含标签关系/资产 hash），不读其它小记正文。 */
+    async getQuickNoteSyncRow(id: string): Promise<QuickNoteSyncRow | null> {
+      const assets = await assetsHashOf();
+      const r = await db.prepare(
+        "SELECT q.id,q.created_at,q.updated_at,q.content_hash,q.is_conflict,q.restore_pending_at,q.cloud_deleted,q.deleted_at,COALESCE(v.links_updated_at,'') AS tags_updated_at FROM quick_notes q LEFT JOIN tag_link_versions v ON v.target_kind='quickNote' AND v.target_id=q.id WHERE q.id=? AND (q.deleted_at IS NULL OR q.cloud_deleted=1)"
+      ).get(id) as Record<string, unknown> | undefined;
+      if (!r) return null;
+      const linkRows = await db.prepare("SELECT tag_id FROM tag_links WHERE target_kind='quickNote' AND target_id=? ORDER BY position").all(id) as Array<{ tag_id: string }>;
+      return {
+        id: String(r.id), createdAt: String(r.created_at), updatedAt: String(r.updated_at), contentHash: String(r.content_hash),
+        isConflict: Number(r.is_conflict) === 1,
+        tagIds: linkRows.map((x) => x.tag_id).sort(),
+        tagsUpdatedAt: r.tags_updated_at ? String(r.tags_updated_at) : null,
+        ...(Number(r.cloud_deleted) === 1 ? { cloudDeleted: true } : {}),
+        ...(r.deleted_at ? { deletedAt: String(r.deleted_at) } : {}),
+        ...(assets.has(String(r.id)) ? { assetsHash: assets.get(String(r.id))! } : {}),
+      };
+    },
     async listQuickTags(): Promise<QuickTagRow[]> {
       // 只同步名称/时间：**顺序是设备本地视图**、**删除 = 缺席**（云端 tags[] 不放墓碑）。
       // 仍保留 deleted_at IS NULL：迁移未跑完的旧库不能把墓碑带上云端。
