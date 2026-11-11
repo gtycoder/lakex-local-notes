@@ -1053,8 +1053,9 @@ export function createLakeDocument(
   // 锁定态（Viewer）分帧渲染的配套：阅读态原生大纲点击用 querySelector 找标题，分帧收集期
   // 找不到就静默不滚（lakex.js 236848 _scrollTo）⇒ 补「延后一帧 + 按需 flush + 几何对齐」，
   // 并在分帧铺完（viewer ready）时补发一次 scroll 让内核大纲 watcher 重算当前小节。
-  // 详见 lakeTileRender.ts 文件头。
-  if (mode === "viewer") {
+  // 详见 lakeTileRender.ts 文件头。与 tileRendering 同一道门（仅桌面）：移动端本轮不开分帧，
+  // 多挂一个捕获监听 + ready 时的 scroll 派发都是无收益的移动端行为变化（改移动端须过设备门禁）。
+  if (mode === "viewer" && isDesktop()) {
     try {
       const disposeTocAssist = setupViewerTocClickAssist(element, editor, () => resolveScrollNode(scrollNode));
       const prevDispose = editor.__disposeExtras;

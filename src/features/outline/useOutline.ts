@@ -164,7 +164,16 @@ export function useOutline(
     // 锁定态（Viewer）分帧渲染（tileRendering）：每帧只铺 30 个顶层块，视口外标题陆续进 DOM。
     // 内核 Viewer 的 renderer 不抛 tileRenderCompleted（那是引擎渲染器的），只在实例上抛
     // firstRender / ready ⇒ 这里补订阅，否则高亮会停在加载瞬间算出的那一项，直到用户手动滚动。
-    const onViewerRender = (): void => compute();
+    // firstRender 每帧一次（长文几十次），而 compute 内含 O(标题数) 的几何读取 ⇒ 用 rAF 合并，
+    // 避免「为修高亮反而在加载期制造抖动」。
+    let viewerRenderRaf = 0;
+    const onViewerRender = (): void => {
+      if (viewerRenderRaf) return;
+      viewerRenderRaf = window.requestAnimationFrame(() => {
+        viewerRenderRaf = 0;
+        compute();
+      });
+    };
     const bindViewerRender = (): void => {
       try {
         editor.on?.("firstRender", onViewerRender);
@@ -194,6 +203,7 @@ export function useOutline(
       } catch {
         /* 忽略 */
       }
+      if (viewerRenderRaf) window.cancelAnimationFrame(viewerRenderRaf);
       scroller.removeEventListener("scroll", onScroll);
       window.clearTimeout(contentTimer);
       for (const id of timers) window.clearTimeout(id);
