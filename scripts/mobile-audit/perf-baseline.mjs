@@ -77,33 +77,33 @@ const DEFAULT_BASELINE = data("perf/mobile-perf.json");
 const LIMITS = {
   coldStartToHome: {
     kind: "ms", definition: "force-stop → am start → 真首页就绪（.mb-home-dock__item）墙钟毫秒",
-    p50Pct: 0.25, p50AbsMs: 200, worstPct: 0.6, worstAbsMs: 600, ceilingMs: 15000,
-    why: "最用户可见；模拟器冷启动同构建噪声 ±100–300ms ⇒ p50 允许 +25% 或 +200ms（取大），最坏值 +60% 或 +600ms；硬上限只兜装置卡死。",
+    p50Pct: 0.5, p50AbsMs: 600, worstPct: 0.8, worstAbsMs: 1500, ceilingMs: 15000,
+    why: "最用户可见；261111 真机实测（模拟器 + 宿主 load≈20 时）同一构建 p50 4904→6361ms（+30%）、单轮最坏 8.4–9.1s ⇒ p50 允 +50% 或 +600ms、最坏 +80% 或 +1500ms，避免开发机负载把门禁打红（真回归 >8.4s 仍会被 p50 抓住）；硬上限只兜装置卡死。",
   },
   captureColdToInput: {
     kind: "ms", definition: "force-stop → 快捷入口深链（QuickNoteAlias）→ 写作卡可输入（可见 contenteditable）毫秒",
-    p50Pct: 0.3, p50AbsMs: 250, worstPct: 0.7, worstAbsMs: 800, ceilingMs: 20000,
-    why: "比普通冷启多一层深链路由 + 内核卡片挂载；HANDOFF 261111 记录冷/热写作卡≈同量级（~0.8–1.7s 保存链路），留 30% 余量。",
+    p50Pct: 0.5, p50AbsMs: 800, worstPct: 0.8, worstAbsMs: 1500, ceilingMs: 20000,
+    why: "比普通冷启多一层深链路由 + 内核卡片挂载；真机实测同构建 7.6–14.5s（宿主负载主导，轮间差近 2×）⇒ p50 允 +50% 或 +800ms、最坏 +80% 或 +1500ms。",
   },
   composerHotToInput: {
     kind: "ms", definition: "首页 FAB 点按 → 新建面板「空白小记」→ 写作卡可输入毫秒（含点按派发 ~10–30ms）",
-    p50Pct: 0.35, p50AbsMs: 150, worstPct: 0.8, worstAbsMs: 500, ceilingMs: 15000,
-    why: "热路径，基线通常 300ms 量级 ⇒ 百分比余量太小，用 +150ms 绝对余量兜模拟器抖动。",
+    p50Pct: 0.8, p50AbsMs: 400, worstPct: 1.0, worstAbsMs: 1500, ceilingMs: 15000,
+    why: "热路径，真机基线 0.6–1.1s 量级且受宿主负载影响大（实测同构建 668→977ms，+46%）⇒ p50 允 +80% 或 +400ms、最坏 +100% 或 +1500ms（首次挂载已由预热排除；真回归到 >1.2s 仍会被抓）。",
   },
   keyboardOpenLongTasks: {
     kind: "longtask", definition: "聚焦正文（真实点按弹键盘）后 1500ms 内 >50ms 长任务的个数/总时长",
-    countPct: 0.5, countAbs: 2, totalPct: 0.5, totalAbsMs: 100, ceilingCount: 20, ceilingTotalMs: 3000,
-    why: "HANDOFF 261111 实测修复后弹出 1–4 个 / 271–312ms（轮次天然抖动）⇒ p50 个数 +2、总时长 +50% 或 +100ms；硬上限兜键盘动画+整页重排级事故。",
+    countPct: 0.5, countAbs: 2, totalPct: 0.5, totalAbsMs: 200, ceilingCount: 20, ceilingTotalMs: 3000,
+    why: "HANDOFF 261111 实测修复后弹出 1–4 个 / 271–312ms（轮次天然抖动）⇒ p50 个数 +2、总时长 +50% 或 +200ms；真机干净环境基线可能是 0（实测 5554 采到 0/0），绝对余量 200ms 才不误报 0↔2 个 / ~137ms 的正常抖动；硬上限兜键盘动画+整页重排级事故。",
   },
   keyboardCloseLongTasks: {
     kind: "longtask", definition: "adb keyevent 4 收键盘后 1500ms 内 >50ms 长任务的个数/总时长",
-    countPct: 0.5, countAbs: 2, totalPct: 0.5, totalAbsMs: 100, ceilingCount: 20, ceilingTotalMs: 3000,
-    why: "HANDOFF 261111 实测修复后收起 0–4 个 / ≤326ms；与弹出同阈值。",
+    countPct: 0.5, countAbs: 2, totalPct: 0.5, totalAbsMs: 200, ceilingCount: 20, ceilingTotalMs: 3000,
+    why: "HANDOFF 261111 实测修复后收起 0–4 个 / ≤326ms；与弹出同阈值（含 0 基线时的 200ms 绝对余量，理由同上）。",
   },
   docOpenToContent: {
     kind: "ms", definition: "（可选 --with-doc-open）目录行点按 → 活动 pane 内核内容可用（.ne-viewer / .ne-engine）毫秒",
-    p50Pct: 0.3, p50AbsMs: 250, worstPct: 0.7, worstAbsMs: 800, ceilingMs: 20000,
-    why: "可选指标，依赖夹具里的文档与内核分包；与 mobile-kernel-perf 的首次挂载口径对齐，只作参考回归。",
+    p50Pct: 0.5, p50AbsMs: 500, worstPct: 1.0, worstAbsMs: 800, ceilingMs: 20000,
+    why: "可选指标，依赖设备里的文档与内核分包；常只有几十 ms、逐轮 10–600ms 跳（点击命中/缓存）⇒ 用 +500ms 绝对余量，只作参考回归，不作硬判据。",
   },
 };
 
@@ -129,6 +129,8 @@ const HOME_READY_JS = "(function(){var vis=function(e){return !!e&&e.getBounding
 const COMPOSER_READY_JS = "(function(){var vis=function(e){return !!e&&e.getBoundingClientRect().width>0;};var root=[].slice.call(document.querySelectorAll('.mobile-qn-composer')).filter(vis)[0];if(!root)return false;return [].slice.call(root.querySelectorAll('[contenteditable=true]')).filter(vis).length>0;})()";
 /** 可见写作卡正文的点击中心（真实点按弹键盘；程序化 focus 不弹软键盘——AGENTS §7.17）。 */
 const COMPOSER_CENTER_JS = "(function(){var vis=function(e){return !!e&&e.getBoundingClientRect().width>0;};var root=[].slice.call(document.querySelectorAll('.mobile-qn-composer')).filter(vis)[0];if(!root)return null;var ce=[].slice.call(root.querySelectorAll('[contenteditable=true]')).filter(vis)[0];if(!ce)return null;var r=ce.getBoundingClientRect();if(r.width<=0||r.height<=0)return null;var x=Math.round(r.x+r.width/2),y=Math.min(Math.round(r.y+Math.min(48,r.height/2)),Math.round(r.y+r.height)-8);var h=document.elementFromPoint(x,y);if(!h||!(ce===h||ce.contains(h)))return null;return [x,y];})()";
+/** 新建面板（CreateSheet）是否可见：它盖在首页上会挡住 FAB 点按 ⇒ 热开前要先收起。 */
+const CREATE_SHEET_JS = "(function(){var vis=function(e){return !!e&&e.getBoundingClientRect().width>0;};return [].slice.call(document.querySelectorAll('.mb-create__tile')).filter(vis).length>0;})()";
 /** 键盘判据：相对"键盘收起时的 innerHeight"收缩 >200px（AGENTS §7.17 的判据）。 */
 function keyboardStateJs(ihClosed) {
   return "(function(){var vis=function(e){return !!e&&e.getBoundingClientRect().width>0;};var root=[].slice.call(document.querySelectorAll('.mobile-qn-composer')).filter(vis)[0];var ce=root?[].slice.call(root.querySelectorAll('[contenteditable=true]')).filter(vis)[0]:null;return {ih:innerHeight,kb:innerHeight<(" + JSON.stringify(ihClosed) + "-200),composer:!!root,inputmode:ce?ce.getAttribute('inputmode'):null};})()";
@@ -355,19 +357,60 @@ function pickSerial(adb, requested) {
   return devices[0].serial;
 }
 
-/** 按当前 App PID 重建 adb forward（socket 名带宿主 PID；App 重启后旧 socket 仍挂在 /proc/net/unix —— MOBILE-OPS §3）。 */
-async function ensureForward(adb, port) {
-  adb.run(["forward", "--remove", "tcp:" + port], { allowFail: true });
-  const pidRes = adb.shell(["pidof", PKG], { allowFail: true });
-  const pid = (pidRes.stdout || "").trim().split(/\s+/).filter(Boolean)[0] || "";
+/** App 页面 URL 判据（Capacitor 本地页；旧 target 常是 about:blank / devtools://）。 */
+function isAppUrl(url) {
+  return typeof url === "string" && /^(https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?\/|capacitor:\/\/localhost\/)/.test(url);
+}
+
+/** 当前 App 进程 PID（无进程返回空串）。 */
+function readAppPid(adb) {
+  const r = adb.shell(["pidof", PKG], { allowFail: true });
+  return (r.stdout || "").trim().split(/\s+/).filter(Boolean)[0] || "";
+}
+
+/** 等旧进程真正退出（force-stop 是异步的；旧 WebView socket 会短暂残留 —— MOBILE-OPS §3）。 */
+async function waitPidGone(adb, pid, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (readAppPid(adb) !== pid) return true;
+    await sleep(80);
+  }
+  return false;
+}
+
+/** 等新进程出现且 PID 与旧的不同（同一 PID 说明还没重启完）。 */
+async function waitNewPid(adb, oldPid, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const pid = readAppPid(adb);
+    if (pid && pid !== oldPid) return pid;
+    await sleep(80);
+  }
+  return "";
+}
+
+/** 在 /proc/net/unix 里找**指定 PID** 的 WebView devtools socket。
+ *  ⚠️ 绝不回退到「最后一个 socket」：那可能是旧进程/其它 App 的残留，会把 forward 指到死 socket。 */
+function webviewSocketForPid(adb, pid) {
+  if (!pid) return "";
   const unix = adb.shell(["cat", "/proc/net/unix"], { allowFail: true }).stdout || "";
-  const matches = [...unix.matchAll(/webview_devtools_remote_[0-9a-zA-Z]+/g)].map((m) => m[0]);
-  let sock = "";
-  if (pid) sock = matches.find((m) => m === "webview_devtools_remote_" + pid) || "";
-  if (!sock) sock = matches[matches.length - 1] || "";
-  if (!sock) return null;
-  adb.run(["forward", "tcp:" + port, "localabstract:" + sock], { allowFail: true });
-  return { sock, pid };
+  const want = "webview_devtools_remote_" + pid;
+  return unix.includes(want) ? want : "";
+}
+
+/** 等指定 PID 的 socket 出现，再把 tcp:port 转发到它（只影响本端口，不碰其它 forward）。 */
+async function bindForwardToPid(adb, port, pid, timeoutMs) {
+  adb.run(["forward", "--remove", "tcp:" + port], { allowFail: true });
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const sock = webviewSocketForPid(adb, pid);
+    if (sock) {
+      adb.run(["forward", "tcp:" + port, "localabstract:" + sock], { allowFail: true });
+      return sock;
+    }
+    await sleep(120);
+  }
+  return null;
 }
 
 async function fetchPageTarget(port) {
@@ -381,10 +424,51 @@ async function fetchPageTarget(port) {
   }
 }
 
-/** 起动 App 并尽快连上 CDP（先建 forward → 轮询 /json/list → connect）。 */
+function connectWithTimeout(port, timeoutMs) {
+  return Promise.race([
+    connect(port),
+    new Promise((_resolve, reject) => setTimeout(() => reject(new Error("connect timeout " + timeoutMs + "ms")), timeoutMs)),
+  ]);
+}
+
+/** 粘到「本进程的有效 page」：URL 是 App 页 + Runtime.evaluate 可用；无效（旧 target / 导航中）则断开重试。 */
+async function attachValidPage({ adb, port, pid, sock, deadline }) {
+  let attempts = 0;
+  while (Date.now() < deadline) {
+    attempts += 1;
+    const target = await fetchPageTarget(port);
+    if (!target) { await sleep(80); continue; }
+    if (target.url && !isAppUrl(target.url)) { await sleep(80); continue; }
+    let page = null;
+    try { page = await connectWithTimeout(port, 4000); } catch { await sleep(120); continue; }
+    try {
+      const href = await evalOrNull(page, "location.href");
+      if (!href || !isAppUrl(href)) { try { page.ws.close(); } catch { /* ignore */ } await sleep(120); continue; }
+      const probe = await evalOrNull(page, "1+1");
+      if (probe !== 2) { try { page.ws.close(); } catch { /* ignore */ } await sleep(120); continue; }
+      if (process.env.PERF_DEBUG === "1") log("attach ok pid=" + pid + " sock=" + sock + " url=" + href + " attempts=" + attempts);
+      return page;
+    } catch {
+      try { page.ws.close(); } catch { /* ignore */ }
+      await sleep(120);
+    }
+  }
+  throw Object.assign(new Error("连不上本进程（PID " + pid + "）的有效 CDP page（旧 target 竞态/页面在导航）；最多等 " + COLD_TIMEOUT_MS + "ms，尝试 " + attempts + " 次"), { exitCode: 2 });
+}
+
+/** 起动 App 并**只附着到本进程**的 CDP page：
+ *  force-stop → 等旧 PID 退出 → am start → 等新 PID → 按新 PID 的 socket 重建 forward →
+ *  轮询 /json/list（URL 必须是 App 页）→ connect → 校验 location.href + Runtime.evaluate → 返回。
+ *  每轮冷启动都重建一遍，不再复用上一轮的 forward/target。 */
 async function launchAndAttach({ adb, port, kind }) {
+  const oldPid = readAppPid(adb);
   adb.shell(["am", "force-stop", PKG]);
   adb.run(["forward", "--remove", "tcp:" + port], { allowFail: true });
+  if (oldPid && !(await waitPidGone(adb, oldPid, 5000))) {
+    // 少数 ROM force-stop 慢；补一刀再等，避免旧进程的 WebView socket 被当成新进程的
+    adb.shell(["am", "force-stop", PKG], { allowFail: true });
+    await sleep(400);
+  }
   const t0 = Date.now();
   const args = kind === "capture"
     ? ["am", "start", "-n", CAPTURE_ACTIVITY, "-a", "android.intent.action.VIEW", "-d", CAPTURE_URL]
@@ -393,27 +477,12 @@ async function launchAndAttach({ adb, port, kind }) {
   if (/Error|Exception/.test(started.stdout + started.stderr)) {
     throw Object.assign(new Error("am start 失败（包名/activity 不对？先 android-build.sh --sync --install）：" + (started.stdout + started.stderr).trim()), { exitCode: 3 });
   }
-  const deadline = Date.now() + COLD_TIMEOUT_MS;
-  let lastForwardAt = 0;
-  while (Date.now() < deadline) {
-    if (Date.now() - lastForwardAt > 700) { await ensureForward(adb, port).catch(() => null); lastForwardAt = Date.now(); }
-    if (!(await fetchPageTarget(port))) { await sleep(100); continue; }
-    try {
-      const page = await connect(port);
-      // 261111 修：force-stop 后旧 WebView target 可能仍短暂挂在 /json/list 里（socket 复用/导航中），
-      // 连上去会 evaluate 失败 → 标记注入返回 null。连上后先确认真的是 App 页面（非 about:blank/devtools）。
-      const href = await evalOrNull(page, "location.href");
-      if (!href || href === "about:blank" || href === "devtools://") {
-        try { page.ws.close(); } catch { /* ignore */ }
-        await sleep(150);
-        continue;
-      }
-      return { page, t0, attachMs: Date.now() - t0 };
-    } catch {
-      await sleep(120);
-    }
-  }
-  throw Object.assign(new Error("连不上 CDP :" + port + "（App 起来了吗？debug 构建 + emu-cdp 转发；最多等 " + COLD_TIMEOUT_MS + "ms）"), { exitCode: 2 });
+  const pid = await waitNewPid(adb, oldPid, COLD_TIMEOUT_MS);
+  if (!pid) throw Object.assign(new Error("App 启动后拿不到新进程 PID（旧 PID " + (oldPid || "无") + "）"), { exitCode: 2 });
+  const sock = await bindForwardToPid(adb, port, pid, COLD_TIMEOUT_MS);
+  if (!sock) throw Object.assign(new Error("找不到本进程（PID " + pid + "）的 WebView devtools socket（debug 构建？App 真起来了吗？）"), { exitCode: 2 });
+  const page = await attachValidPage({ adb: adb, port: port, pid: pid, sock: sock, deadline: Date.now() + COLD_TIMEOUT_MS });
+  return { page, t0, attachMs: Date.now() - t0, pid };
 }
 
 /* ------------------------------------------------------------------ *
@@ -423,8 +492,9 @@ async function launchAndAttach({ adb, port, kind }) {
 /** 在页内装一个 16ms 轮询的"就绪标记"，记录首次命中时的 performance.now()/Date.now()，避免 CDP 往返误差。 */
 function armMarkerJs(kind) {
   const pred = kind === "home" ? HOME_READY_JS : COMPOSER_READY_JS;
+  // ⚠️ READY_JS 是「已求值的 IIFE」（返回 boolean），不是函数 —— 必须包一层 function 再给 tick 调。
   return "(function(){try{if(window.__perfGen)clearInterval(window.__perfGen);}catch(e){}" +
-    "var pred=" + pred + ";" +
+    "var pred=function(){return " + pred + ";};" +
     "window.__perfMarker={kind:" + JSON.stringify(kind) + ",armedAt:performance.now(),done:null,doneAt:null};" +
     "var tick=function(){if(window.__perfMarker.done===null&&pred()){window.__perfMarker.done=performance.now();window.__perfMarker.doneAt=Date.now();}};" +
     "tick();window.__perfGen=setInterval(tick,16);" +
@@ -549,17 +619,53 @@ async function sampleCold({ adb, port, kind }) {
   }
 }
 
-/** 热开写作卡：假设当前在首页（page 已连）；FAB → 空白小记 → 可输入。 */
-async function sampleComposerHot(page) {
+/** 保证在「真首页 + 无浮层」：写作卡开着就先关；新建面板挡住 FAB 时按一次返回；都不行就 reload。 */
+async function ensureHome(page, adb, timeoutMs) {
+  if (await evalOrNull(page, HOME_READY_JS)) {
+    if (await evalOrNull(page, CREATE_SHEET_JS)) {
+      adb.shell(["input", "keyevent", "4"], { allowFail: true });
+      await sleep(600);
+    }
+    if (await evalOrNull(page, HOME_READY_JS)) return true;
+  }
+  if (await evalOrNull(page, COMPOSER_READY_JS)) {
+    if (await closeComposer(page, adb)) return true;
+  }
+  await page.send("Page.reload", { ignoreCache: false }).catch(() => {});
+  await sleep(1200);
+  return waitPage(page, HOME_READY_JS, timeoutMs);
+}
+
+/** 首页点 FAB → 新建面板 →「空白小记」（可重试；每步都等目标出现再继续）。 */
+async function openComposerUi(page) {
+  let sheet = false;
+  for (let i = 0; i < 3 && !sheet; i += 1) {
+    await clickJs(page, centerExpr(".mb-home-fab"));
+    sheet = await waitPage(page, CREATE_SHEET_JS, 3000);
+    if (!sheet) await sleep(500);
+  }
+  if (!sheet) return false;
+  await sleep(250); // 面板入场动画播完再点，避免点到位移中的磁贴
+  for (let i = 0; i < 3; i += 1) {
+    await clickJs(page, centerByTextExpr(".mb-create__tile", "空白小记"));
+    if (await waitPage(page, COMPOSER_READY_JS, 5000)) return true;
+    await sleep(600);
+  }
+  return false;
+}
+
+/** 热开写作卡：先在首页（必要时收起残留浮层）→ 布防 → FAB → 空白小记 → 可输入。 */
+async function sampleComposerHot(page, adb) {
   const tWall = Date.now();
+  if (!(await ensureHome(page, adb, 6000))) throw Object.assign(new Error("热开前回不到首页（有残留写作卡/浮层？）"), { exitCode: 3 });
   await evalOrNull(page, "(function(){try{if(window.__perfGen)clearInterval(window.__perfGen);}catch(e){}return true;})()");
   const marker = await evalOrNull(page, armMarkerJs("composer"));
   if (!marker) throw Object.assign(new Error("页内标记注入失败"), { exitCode: 3 });
-  const pressed = await clickJs(page, centerExpr(".mb-home-fab"));
-  if (!pressed) throw Object.assign(new Error("首页找不到 .mb-home-fab（不在首页？）"), { exitCode: 3 });
-  const tileReady = await waitPage(page, "(function(){var vis=function(e){return !!e&&e.getBoundingClientRect().width>0;};var els=[].slice.call(document.querySelectorAll('.mb-create__tile')).filter(vis);return els.some(function(e){return ((e.textContent||'').indexOf('空白小记')>=0);});})()", 4000);
-  if (!tileReady) throw Object.assign(new Error("点 FAB 后没有「空白小记」入口（新建面板没打开？）"), { exitCode: 3 });
-  if (!(await clickJs(page, centerByTextExpr(".mb-create__tile", "空白小记")))) throw Object.assign(new Error("点不到「空白小记」磁贴"), { exitCode: 3 });
+  const opened = await openComposerUi(page);
+  if (!opened) {
+    const state = await evalOrNull(page, "(function(){return {sheet:" + CREATE_SHEET_JS + ",composer:" + COMPOSER_READY_JS + ",href:location.href};})()");
+    throw Object.assign(new Error("写作卡没打开（状态 " + JSON.stringify(state) + "）"), { exitCode: 3 });
+  }
   const hit = await waitMarker(page, HOT_TIMEOUT_MS);
   if (!hit) throw Object.assign(new Error("写作卡在 " + HOT_TIMEOUT_MS + "ms 内没到可输入（内核分包/挂载异常）"), { exitCode: 3 });
   return { ms: Math.round(hit.done - hit.armedAt), method: "page-side（FAB 点按前的 armedAt → 可输入）", wallMs: Date.now() - tWall, armedAt: hit.armedAt, done: hit.done };
@@ -574,18 +680,15 @@ async function closeComposer(page, adb) {
   await sleep(700);
   if (await waitPage(page, HOME_READY_JS, 3000)) return true;
   await page.send("Page.reload", { ignoreCache: false }).catch(() => {});
+  await sleep(1200);
   return waitPage(page, HOME_READY_JS, HOT_TIMEOUT_MS);
 }
 
 /** 确保写作卡打开（键盘指标前置；不算进 hot-open 指标）。 */
 async function ensureComposerOpen(page, adb) {
   if (await evalOrNull(page, COMPOSER_READY_JS)) return true;
-  if (!(await waitPage(page, HOME_READY_JS, 4000))) throw Object.assign(new Error("既不在首页也不在写作卡（装置状态未知）"), { exitCode: 3 });
-  await evalOrNull(page, armMarkerJs("composer"));
-  if (!(await clickJs(page, centerExpr(".mb-home-fab")))) throw Object.assign(new Error("点不到首页 FAB"), { exitCode: 3 });
-  if (!(await waitPage(page, "Boolean(document.querySelector('.mb-create__tile'))", 4000))) throw Object.assign(new Error("新建面板没打开"), { exitCode: 3 });
-  if (!(await clickJs(page, centerByTextExpr(".mb-create__tile", "空白小记")))) throw Object.assign(new Error("点不到「空白小记」"), { exitCode: 3 });
-  if (!(await waitMarker(page, HOT_TIMEOUT_MS))) throw Object.assign(new Error("写作卡没就绪"), { exitCode: 3 });
+  if (!(await ensureHome(page, adb, 6000))) throw Object.assign(new Error("既不在首页也不在写作卡（装置状态未知）"), { exitCode: 3 });
+  if (!(await openComposerUi(page))) throw Object.assign(new Error("写作卡没打开"), { exitCode: 3 });
   return true;
 }
 
@@ -632,16 +735,30 @@ async function sampleKeyboardWindow(page, adb, { action }) {
 
 /** 可选：首页 → 知识库 → 笔记本 → 目录行 → 活动 pane 内核内容出现。 */
 async function sampleDocOpen(page) {
-  if (!(await clickJs(page, centerByTextExpr(".mb-home-dock__item", "知识库")))) throw Object.assign(new Error("找不到 Dock「知识库」"), { exitCode: 3 });
-  await sleep(900);
-  if (!(await clickJs(page, centerExpr(".nb-shelf-card, .nb-row")))) throw Object.assign(new Error("首页没有笔记本入口（.nb-shelf-card / .nb-row）"), { exitCode: 3 });
-  if (!(await waitPage(page, "Boolean(document.querySelector('.mobile-workspace'))", 8000))) throw Object.assign(new Error("点笔记本没进工作区"), { exitCode: 3 });
+  let docked = false;
+  for (let i = 0; i < 3 && !docked; i += 1) {
+    if (await clickJs(page, centerByTextExpr(".mb-home-dock__item", "知识库"))) {
+      await sleep(900);
+      docked = await evalOrNull(page, "(function(){var e=document.querySelector('.mb-home-dock__item.is-active');return !!e&&(e.textContent||'').indexOf('知识库')>=0;})()");
+    }
+    if (!docked) await sleep(600);
+  }
+  if (!docked) throw Object.assign(new Error("切不到 Dock「知识库」"), { exitCode: 3 });
+  let opened = false;
+  for (let i = 0; i < 3 && !opened; i += 1) {
+    await clickJs(page, centerExpr(".nb-shelf-card, .nb-row"));
+    opened = await waitPage(page, "Boolean(document.querySelector('.mobile-workspace'))", 6000);
+    if (!opened) await sleep(800);
+  }
+  if (!opened) throw Object.assign(new Error("点笔记本没进工作区"), { exitCode: 3 });
   await sleep(600);
-  let rowTapped = await clickJs(page, centerExpr(".side-panel--left.on .mb-row, .side-panel--left.on .ln-row"));
-  if (!rowTapped) {
-    await clickJs(page, centerByTextExpr(".mobile-bottom-bar__item", "文档树"));
-    await sleep(1100);
+  let rowTapped = false;
+  for (let i = 0; i < 3 && !rowTapped; i += 1) {
     rowTapped = await clickJs(page, centerExpr(".side-panel--left.on .mb-row, .side-panel--left.on .ln-row"));
+    if (!rowTapped) {
+      await clickJs(page, centerByTextExpr(".mobile-bottom-bar__item", "文档树"));
+      await sleep(1100);
+    }
   }
   if (!rowTapped) throw Object.assign(new Error("目录抽屉里没有可点文档行（设备数据为空？）"), { exitCode: 3 });
   const tWall = Date.now();
@@ -726,56 +843,84 @@ async function runMetrics(opts) {
       const warmEnv = await evalOrNull(page, "(function(){return {w:innerWidth,h:innerHeight,dpr:devicePixelRatio,ua:navigator.userAgent};})()");
       absorbEnv(warmEnv, null);
       if (enabled.includes("composerHotToInput")) {
+        // 261111 修：热开第 1 轮会把「本进程首次挂载写作卡/内核 chunk」算进去（实测 6.2s vs 后续 0.4–1.7s），
+        // 那不是热开。先**不计时**开一次再关掉，把 chunk/样式预热掉，再开始计时。
+        try {
+          await ensureComposerOpen(page, adb);
+          await sleep(500);
+          await closeComposer(page, adb);
+          await ensureHome(page, adb, 6000);
+        } catch (error) { warnings.push("热开预热失败（首轮可能仍带冷挂载）：" + error.message); }
         const samples = [];
         for (let round = 1; round <= opts.rounds; round += 1) {
           try {
-            const sample = await sampleComposerHot(page);
+            const sample = await sampleComposerHot(page, adb);
             sample.round = round;
             samples.push(sample);
             log("写作卡热开 第" + round + "轮：" + sample.ms + "ms");
-          } catch (error) { warnings.push("写作卡热开 第" + round + "轮失败：" + error.message); }
+          } catch (error) {
+            warnings.push("写作卡热开 第" + round + "轮失败：" + error.message);
+            log("写作卡热开 第" + round + "轮失败：" + error.message);
+          }
           const closed = await closeComposer(page, adb);
-          if (!closed) { warnings.push("写作卡热开 第" + round + "轮后回不到首页，后续轮次可能失真"); }
-          await sleep(600);
+          if (!closed) {
+            warnings.push("写作卡热开 第" + round + "轮后回不到首页，尝试 reload 恢复");
+            if (!(await ensureHome(page, adb, 6000))) {
+              warnings.push("热开阶段连 reload 也回不到首页，跳过剩余轮次");
+              break;
+            }
+          }
+          await sleep(500);
         }
         metrics.composerHotToInput = { ...summarizeMs(samples), definition: LIMITS.composerHotToInput.definition, unit: "ms" };
       }
       if (enabled.includes("keyboardOpenLongTasks") || enabled.includes("keyboardCloseLongTasks")) {
-        await ensureComposerOpen(page, adb);
-        await sleep(800);
         const openSamples = [];
         const closeSamples = [];
-        for (let round = 1; round <= opts.rounds; round += 1) {
-          if (!(await evalOrNull(page, COMPOSER_READY_JS))) await ensureComposerOpen(page, adb);
-          const open = await sampleKeyboardWindow(page, adb, { action: "open" });
-          open.round = round;
-          openSamples.push(open);
-          log("键盘弹出 第" + round + "轮：" + open.count + " 个 / " + open.totalMs + "ms" + (open.valid ? "" : "（无效：" + open.detail + "）"));
-          await sleep(500);
-          if (!(await evalOrNull(page, COMPOSER_READY_JS))) await ensureComposerOpen(page, adb);
-          const close = await sampleKeyboardWindow(page, adb, { action: "close" });
-          close.round = round;
-          closeSamples.push(close);
-          log("键盘收起 第" + round + "轮：" + close.count + " 个 / " + close.totalMs + "ms" + (close.valid ? "" : "（无效：" + close.detail + "）"));
-          await sleep(700);
+        // 键盘阶段失败只记 warning / 无效样本，**绝不中断整轮采集**（否则 --record 会被一次装置抖动打断）。
+        try {
+          await ensureComposerOpen(page, adb);
+          await sleep(800);
+          for (let round = 1; round <= opts.rounds; round += 1) {
+            if (!(await evalOrNull(page, COMPOSER_READY_JS))) await ensureComposerOpen(page, adb);
+            let open;
+            try { open = await sampleKeyboardWindow(page, adb, { action: "open" }); }
+            catch (error) { open = { valid: false, detail: "采集异常：" + error.message, entries: [], count: 0, totalMs: 0 }; }
+            open.round = round;
+            openSamples.push(open);
+            log("键盘弹出 第" + round + "轮：" + open.count + " 个 / " + open.totalMs + "ms" + (open.valid ? "" : "（无效：" + open.detail + "）"));
+            await sleep(500);
+            if (!(await evalOrNull(page, COMPOSER_READY_JS))) await ensureComposerOpen(page, adb);
+            let close;
+            try { close = await sampleKeyboardWindow(page, adb, { action: "close" }); }
+            catch (error) { close = { valid: false, detail: "采集异常：" + error.message, entries: [], count: 0, totalMs: 0 }; }
+            close.round = round;
+            closeSamples.push(close);
+            log("键盘收起 第" + round + "轮：" + close.count + " 个 / " + close.totalMs + "ms" + (close.valid ? "" : "（无效：" + close.detail + "）"));
+            await sleep(700);
+          }
+        } catch (error) {
+          warnings.push("键盘长任务阶段失败（已跳过剩余轮次）：" + error.message);
+          log("键盘阶段失败：" + error.message);
         }
         metrics.keyboardOpenLongTasks = { ...summarizeLongTasks(openSamples), definition: LIMITS.keyboardOpenLongTasks.definition, unit: "longtask>50ms" };
         metrics.keyboardCloseLongTasks = { ...summarizeLongTasks(closeSamples), definition: LIMITS.keyboardCloseLongTasks.definition, unit: "longtask>50ms" };
-        await closeComposer(page, adb);
+        await closeComposer(page, adb).catch(() => false);
       }
       if (enabled.includes("docOpenToContent")) {
-        await sleep(500);
         const samples = [];
         for (let round = 1; round <= opts.rounds; round += 1) {
           try {
+            if (!(await ensureHome(page, adb, 8000))) { warnings.push("文档打开 第" + round + "轮：回不到首页，跳过"); continue; }
             const sample = await sampleDocOpen(page);
             sample.round = round;
             samples.push(sample);
             log("文档打开 第" + round + "轮：" + sample.ms + "ms");
-          } catch (error) { warnings.push("文档打开 第" + round + "轮失败：" + error.message); }
-          await page.send("Page.reload", { ignoreCache: false }).catch(() => {});
-          await sleep(1200);
-          await waitPage(page, HOME_READY_JS, HOT_TIMEOUT_MS);
+          } catch (error) {
+            warnings.push("文档打开 第" + round + "轮失败：" + error.message);
+            log("文档打开 第" + round + "轮失败：" + error.message);
+          }
+          await ensureHome(page, adb, 8000);
         }
         metrics.docOpenToContent = { ...summarizeMs(samples), definition: LIMITS.docOpenToContent.definition, unit: "ms" };
       }
@@ -784,12 +929,17 @@ async function runMetrics(opts) {
     }
   }
 
-  // 收尾：把 App 恢复到首页（方便交还设备；默认开）
+  // 收尾：把 App 恢复到首页（方便交还设备；默认开）。启动后顺手重建 forward，
+  // 否则 tcp:<port> 还指向刚被杀的那次进程的 socket（下次手工连 CDP 会落到死 socket）。
   if (!opts.noRestore) {
     try {
+      const oldPid = readAppPid(adb);
       adb.shell(["am", "force-stop", PKG], { allowFail: true });
+      if (oldPid) await waitPidGone(adb, oldPid, 5000);
       adb.shell(["am", "start", "-n", MAIN_ACTIVITY], { allowFail: true });
-      log("已把 App 恢复到首页启动");
+      const newPid = await waitNewPid(adb, oldPid, 15000);
+      if (newPid) await bindForwardToPid(adb, port, newPid, 15000).catch(() => null);
+      log("已把 App 恢复到首页启动" + (newPid ? "（PID " + newPid + "，已重建 tcp:" + port + " 转发）" : ""));
     } catch { /* ignore */ }
   }
 
