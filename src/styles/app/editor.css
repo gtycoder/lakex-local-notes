@@ -12,6 +12,20 @@
    移动端不受影响：mobile.css 对 .ne-engine 的 padding 有 !important 归零。 */
 .lake-editor-mount .ne-engine { padding-left: 56px; }
 
+/* 引擎高度 = **可视区**，不是内核预设的 1024px（261111 用户报「新建空白文档也能往下滚」）。
+   内核 `.ne-layout-mode-fixed/.ne-layout-mode-adapt .ne-engine { min-height:1024px }` 是给**独立整页编辑器**
+   写的（见 LAKEX-CONTRACT §5.36；移动端早已在 mobile.css 归零）。我们的文档面板可视高常 < 1024 ⇒
+   空文档 scrollHeight 1025 / clientHeight 706，凭空多出 319px 可滚区。
+   修法：把内核那四层盒子钉成 `height:100%`（父级 `.ne-editor-wrap-content` 有确定高），
+   引擎自身 `min-height:100%` ⇒ 撑满可视区、内容多了继续长；**不能只写 min-height:0**
+   （那样引擎只有内容高，正文下方的空白区点不到光标：实测点到的是选区浮栏宿主）。
+   作用域限 `.ne-doc-major-editor`（文档版式）：小记的 note 版式有自己的 40vh 口径，不动。 */
+.lake-editor-mount.ne-doc-major-editor .ne-editor-outer-wrap-box,
+.lake-editor-mount.ne-doc-major-editor .ne-editor-wrap-box,
+.lake-editor-mount.ne-doc-major-editor .ne-editor-box,
+.lake-editor-mount.ne-doc-major-editor .ne-engine-box { height: 100%; min-height: 0; }
+.lake-editor-mount.ne-doc-major-editor .ne-engine { min-height: 100%; }
+
 /* 块手柄「可见图标」在命中盒内右移、贴紧正文（260923 用户要求：只往右挪、尺寸不变）。
    vendor 的排布 = 外层 .ne-block-hover-handle（34px 命中盒，left 由 JS inline 算）+ 内层
    .ne-block-handle-inner（24px 图标，靠 padding-left: 6px 靠左）⇒ 图标右缘离正文还差 4px。

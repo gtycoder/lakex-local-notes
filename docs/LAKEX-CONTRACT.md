@@ -1683,6 +1683,10 @@ unicodeEmoji = `{emoji}`（`insertCardNode(t,n,'unicodeEmoji',{})`，`:121559`�
 设备级联实测（把合成的 `.ne-layout-mode-fixed > .ne-engine` 放进 `.mobile-doc-body` 读计算值）：
 改前 `min-height:1024px` / `padding-bottom:90px`；改后（`mobile.css` 加 `min-height:0!important; padding-bottom:0!important`）= **0 / 0**。
 小记写作卡用的是 **note 版式**（`.ne-doc-note-editor`），引擎几何是 16/8/24、min-height 实测 336.9px（不是 1024）⇒ 不受本条影响。
+- **桌面同样中招（261111）**：桌面文档面板可视高常 < 1024（本机 706）⇒ 空文档 scrollHeight 1025 / clientHeight 706，凭空多出 **319px** 可滚区（用户报「新建的文档什么都没写就能往下滚」）。
+  修法在 src/styles/app/editor.css（legacy 层、晚于内核样式导入 ⇒ 普通声明即可胜）：文档版式四层盒子 .ne-editor-outer-wrap-box / .ne-editor-wrap-box / .ne-editor-box / .ne-engine-box 钉 height:100%，引擎 .ne-engine { min-height:100% } ⇒ 引擎撑满可视区、内容多时继续长。实测 706 可视区：overflow 319→**0**、engine 1024→**705**。
+  **不能只写 min-height:0**：引擎只剩内容高（177），正文下方空白区点不到光标（实测点到的是 .lake-selection-toolbar-host）。移动端能归零是因为手机面板另有整屏容器；桌面要的是「填满可视区」。
+  作用域限 .lake-editor-mount.ne-doc-major-editor（小记 note 版式的 40vh 口径不动）。
 
 **④ 为什么这里必须 `!important`（机制，别记错）**：内核 CSS **未分层**（由内核/入口直接注入），我们的移动端样式在 `@layer` 里。
 按 CSS Cascade 5：**普通声明：未分层 > 分层**；**`!important` 声明：分层 > 未分层（层序反转）**。

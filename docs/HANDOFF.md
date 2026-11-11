@@ -10,6 +10,13 @@
 
 > **顺序标注**：261109 各批次里写的「日记 ⌘4 / AI 写作 ⌘3」是**当时**的顺序；**261110 起改为 日记 ⌘3 / AI 写作 ⌘4**（另有标签 ⌘5）。旧批次不再改，以本行 + §1 为准。
 
+### 261111 · 桌面空白文档也能往下滚（内核引擎 min-height:1024px）
+- **现场**：新建文档什么都没写，右侧就有 ~319px 可滚区（用户截图）。根因 = 内核给**独立整页编辑器**预设的几何：`.ne-layout-mode-fixed/.ne-layout-mode-adapt .ne-engine { min-height:1024px; padding:20px 70px 90px 70px !important }`；我们文档面板可视高通常 < 1024（本机 706）⇒ 空文档 `scrollHeight 1025 / clientHeight 706`。
+- **修法**（`src/styles/app/editor.css`，legacy 层、晚于内核样式导入 ⇒ 普通声明即可胜；作用域 `.lake-editor-mount.ne-doc-major-editor`）：文档版式四层盒子 `.ne-editor-outer-wrap-box / .ne-editor-wrap-box / .ne-editor-box / .ne-engine-box` 钉 `height:100%`，引擎 `.ne-engine { min-height:100% }` ⇒ 引擎**撑满可视区**、内容多了继续长。
+- **实测**：706 可视区下 overflow **319 → 0**、engine **1024 → 705**；正文下方空白区点击仍落在 `.ne-engine`（光标正常，实测 anchor 在 `ne-b-filler`）。
+- **不能只写 `min-height:0`**：引擎只剩内容高（177），正文下方 500+px 空白区点不到光标（实测点到 `.lake-selection-toolbar-host`）。移动端能归零是因为手机面板另有整屏容器（mobile.css 早已归零，见 LAKEX-CONTRACT §5.34 ③）。
+- **回填**：[docs/LAKEX-CONTRACT.md](LAKEX-CONTRACT.md) §5.34 ③ 补桌面条目（含「为什么桌面要用 100% 而不是 0」）。
+- **门禁**：`tsc` 0；`cssLayers` `app/editor.css` 118→**121**（+3）；全量 vitest 见 §1；`ui-metrics` / `git diff --check` 通过。**桌面 42 态快照会因编辑器几何变化必变**（已登记 §3 待重烤）。
 ### 261111 · 小记勾选抖动修复 + 图片缩略第二步 + 性能脚本修复（用户点单）
 
 - **勾选抖动**：`.qn-card:active { transform: scale(.99) }` 会被卡内 checkbox 的按下连带触发（按下缩/回弹各一次 = 整卡抖一下）⇒ 删除整卡缩放；与桌面 `eb526bf7`「卡片点击抖动去 :active 缩放」同口径。设备验证（5554）：`:active` 时 `getComputedStyle(.qn-card).transform = none`，勾选框点击后 `checked` 正常翻转。`mobileLayers` mobile.css 1679→1678（−1，写理由）。
