@@ -10,6 +10,17 @@
 
 > **顺序标注**：261109 各批次里写的「日记 ⌘4 / AI 写作 ⌘3」是**当时**的顺序；**261110 起改为 日记 ⌘3 / AI 写作 ⌘4**（另有标签 ⌘5）。旧批次不再改，以本行 + §1 为准。
 
+### 261111 · 小记快路径独立管线（不动整轮 S3，用户定稿）
+
+- **定稿**：正常 S3 = 串起来的整轮链路；「只推当前这一条小记」单独一条小管线，只调用底层原语（remote get/put/delete、锁、索引序列化、pointer 校验、本地单行/基线），不进入整轮的 plan/apply/三方对比/lake 索引/意图账本。
+- **实现**：`src/core/s3v3/quickPush/{pipeline,types}.ts` 唯一实现 `runQuickPush`；引擎 `pushQuickNote` 改**薄委托**；桌面 `pushQuickNoteWithV3` / 移动 `runMobileV3PushQuickNote` 直接调用；锁/错误原语上收 `protocol/{publishLock,syncErrors}.ts` 共用；新增平台端口 `getQuickNoteSyncRow`（单行读取，缺失回退整表）。
+- **请求 13 → 11**（6 GET / 4 PUT / 1 DELETE）：进锁后单次读 pointer（省入口读）、释放锁 TTL 内直接 DELETE（省 owner GET）、正文 PUT 与 quick 索引 GET 并行；**保留**锁内 CAS、写 pointer 前 assert、写后读回。重复点 **2 → 1 次 GET**（0 上传、generation 不涨）。
+- **对拍与护栏**：`quickPush/pipeline.parity.test.ts` 冻结旧实现逐字节一致（remote 全对象 base64 / 发布索引 / pointer / baseline 增量 / 返回值）；请求顺序 11 步断言；别端 items/tags/purged 原样保留；4 条回退条件锁已释放；not-found 零网络；无单行端口走回退。
+- **整轮未受影响**：`electron/s3v3 + core/s3v3* + mobile/v3 + mobile/bridge` 105 文件 538 例全过（含 conformance/lock-contention/perf）；引擎只删 push 专用死状态（`uploadOps`/`report` 字段与 push 上传器），整轮 `sync/pull/apply/publish/GC` 未改。
+- **真机 + 真实 S3**（前缀 `...quickpush-202611110943`，测后删 114 对象/前缀 0、设备配置恢复、整库恢复、凭据未落盘）：请求 11 与 fake 一致；**本次网络 RTT 偏高**（pointer 1.1–2.0s、publish 0.45–1.6s）⇒ 内部 2.7–6.0s、墙钟 4.9/9.0s，**慢在网络不在管线**（对照：任务 12 同日为 1.4s/0.84s）；云端每次只 +2 对象、`lake.commit` 全程不变；随后整轮 817ms `↑0↓0`（仅既有 tag 元数据再发布 +1 索引）。
+- **门禁**：tsc 0；全量 vitest **858 文件（847 passed / 11 skipped）/ 5375 例 0 失败**；check:core 162/0；check:bundle+arch 通过（mobile 59,703/6/347,904；desktop 563,553）；ui-metrics 0；diff-check 0；APK 已重装 `lake_mobile`。
+- **未做/后续**：重复点首次 `push-state` 约 1455ms（SQLite/原生桥多次调用；第二次 25ms）⇒ 可合并一次窄端口调用（本次未扩接口）；快捷 capture 冷启动本次未复测（任务 12 已验证同一代码路径）；改条件写替代锁才会再省 ~5 次往返（协议级，另立项）。
+
 ### 261110 · AI 写作 / 小记 五项（用户点单：标题可改 / 保存按钮同级 / 弹窗走内核渲染 / 时间线自适应宽度）
 - **「复制为 Lake」= 公共能力**（回答「是否复用」并落档）：转换实现单一来源 = `features/ai/aiLakeClipboard.ts` 的 `copyMarkdownAsLake`（内核算剪贴板负载，文档 AI 弹窗与 AI 写作都用它）；取内核的公共入口 = `features/ai/aiLakeCopyAction.ts` 的 `copyMarkdownAsLakeFromAnywhere`（注册表 → 活动编辑器 → 屏外临时 viewer）。**不要**在 AI 写作里另写一套转换。
 - **生成文档弹窗：标题可编辑**（`PublishDocDialog`）：默认取回答首行摘要，`ln-text-field` 可改；首焦点落在标题；空标题禁用「确认」；`onConfirm(notebookId, title)` 把用户输入带给 `publishDoc`（空串回落摘要）。
@@ -357,7 +368,7 @@
 - **261110 历史清理（一次性）**：`.ai-writing-recon/`（走查截图 / 页面快照 / 探针脚本，59 文件 ≈15MB）已用 `git filter-repo --invert-paths` 从**全部历史**移除；被重写的是 **v1.1.0 之后的 23 个提交**（hash 以 `git log` 为准），**v1.0.x / v1.1.0 的 tag 与其提交 hash 未变**（不含该目录）⇒ 已发布 Release 与 CI 产物不受影响。重写前快照：`/Users/admin/file/local-lake/lakex-local-notes-backup-<stamp>/all.bundle`（62MB，含全部 refs）。**旧 clone / worktree 需 `git fetch --force --prune` + `git reset --hard origin/master` 或重新 clone**（旧 hash 已不可达）；本机原 `lakex-local-notes-diary` worktree 已删除（其分支是 master 祖先，无内容丢失）。
 
 - **worktree（261109 发版时）**：`lakex-local-notes` = `master`（发版主工作树）；`lakex-local-notes-diary` = `feat/diary-space`（本批开发用，已合并 master 并合回 master）。AI 写作与日记**都已进 master**，两个空间共存（⌘3 / ⌘4）。
-- 主分支 `master`，HEAD = **`fc654c05`**（261110 首屏瘦身 + 小记「保存并同步」快路径）；前序 = `ab26f3c8`（HANDOFF 回写）、`09f41ba1`（按钮第二批 / mb-btn / 日记 v1 收尾）、`544f2532`（Gitee 已推到这里）。**本批 `09f41ba1` / `ab26f3c8` / `fc654c05` 均未 push**（`git push origin master` 双推；并行会话的 AI 批次仍在工作树、未提交）。
+- 主分支 `master`，HEAD = **`154294b6`**（261111 单条小记推送独立管线：请求 13→11）；前序 = `8bf41e65`（两条入口护栏+实测）、`a032bb64`/`0642c763`（HANDOFF/AGENTS 回写）、`fc654c05`（首屏瘦身+快路径）、`09f41ba1`（按钮第二批/mb-btn/日记 v1）、`544f2532`（Gitee 已推到这里）。**本批均未 push**（`git push origin master` 双推；并行会话的 AI 批次与 mobile Dock 胶囊改动仍在工作树、未提交）。
 - `package.json` = **1.1.0**；Android `versionName 1.1.0` / `versionCode 11100`（从根 `package.json` 派生，版本号单一来源：`1000 + major*10000 + minor*100 + patch`）。
 - tag：`v1.0.0`–`v1.0.5`、**`v1.1.0`**（另有旧 `v0.0.1` / `v0.0.2`）；已发布 tag 不再移动。`v1.1.0` = AI 写作 + 日记两个新空间。
 - `v1.0.5` 是**发在 AI 写作合并之前**的：AI 写作第一次随本版发布，别在旧发布说明里找它。
@@ -379,10 +390,10 @@
 **门禁基线（261109 发版前：AI 写作 + 日记合并后实测）**
 
 - `npx tsc --noEmit` = **0 错**。
-- `npx vitest run` = **855 文件（843 passed / 1 failed / 11 skipped）/ 5353 passed / 12 skipped**（261110 首屏批提交前实测；唯一失败 = 并行会话在途 `src/features/ai/aiAssistantDialog.test.ts`，非本批）。
+- `npx vitest run` = **858 文件（847 passed / 11 skipped）/ 5375 passed / 12 skipped / 0 failed**（261111 独立管线提交前实测，含并行会话在途用例；0 失败）。
 - **261110 AI 助手 / 小记批（本批实测，含「钉住=每作用域挂起」「标题可改」「弹窗走内核渲染」「时间线自适应」）**：`npx tsc --noEmit` 0；全量 vitest **855 文件（844 passed / 11 skipped）/ 5357 passed / 12 skipped / 0 failed**（本批新增：`aiAssistantSession` 4 例 / `AiMessageView.render` 5 例 / `aiLakeKernelRegistry` 4 例 / `AiWritingDialogs.render` +2 例）；`ui-metrics` 颜色 0 / !important 9=清单 / 跨文件重复 103≤105；`git diff --check` 0；`cssLayers` 基线 `app/tabs.css` 188→189、`ai/aiDialogParts.css` 87→91、`app/quick-notes.css` 667→674（均写明理由）。
 - `git diff --check` = **0**。
-- `check:bundle` / `check:arch`：**已转绿**（261110 首屏瘦身）。mobile-entry = **59,707 gz / 6 链接**、首屏 347,878 / 360,000（余量 12.1KB）、entry CSS 140,405 / 141,312；desktop app-js 191,372 / 307,200、首屏 563,355 / 600,000（余量 36.6KB）。预算已按目标收紧（`check-bundle-budget.mjs` 12 条 / 60KB、`check-arch.mjs` 360KB），不再有「已知红」。**注意**：preload 条数只防「静态依赖回入口」，字节由 `check-arch` 守 —— 不要为了压低条数把懒加载改回静态。运行前需先有 `dist` / `dist-mobile` 构建产物。
+- `check:bundle` / `check:arch`：**已转绿**（261110 首屏瘦身）。mobile-entry = **59,703 gz / 6 链接**、首屏 347,904 / 360,000（余量 12.1KB）、entry CSS 140,438 / 141,312；desktop app-js 191,515 / 307,200、首屏 563,553 / 600,000（余量 36.4KB）。预算已按目标收紧（`check-bundle-budget.mjs` 12 条 / 60KB、`check-arch.mjs` 360KB），不再有「已知红」。**注意**：preload 条数只防「静态依赖回入口」，字节由 `check-arch` 守 —— 不要为了压低条数把懒加载改回静态。运行前需先有 `dist` / `dist-mobile` 构建产物。
 - 其它样式/边界/设备门禁按改动范围跑（分层口径见 AGENTS §3#21）；最近一次移动设备记录 = **261110（移动收口批）**：手机 **9 态重烤基线 + 两轮 0 差异**、**平板 9 态补烤 + 两轮 0 差异**、**多维表 3 态重烤**、**23 屏 23/23 ok**（`lake_gate` / `lake_tab`，详见 §0 收口批）；桌面 `check:stylesnap` 42 态仍未跑（本机无合成夹具缓存，见 §3）。
 
 **设备与环境（本机实测）**
@@ -441,7 +452,8 @@
 
 - **日记「取消标记」残余验收**：跨端 wire 传播（一端取消 → 另一端知识库出现该本、日记空间消失）需**真机 + 配 S3** 验；取消是单向的（无回标入口，回标另立项）。
 - **按钮第二批的用户点收**（清单见 §0）：尤其「删除图标常红」「选中标签项变淡」「AI 页操作键形状」是否接受。
-- **小记快路径后续优化（非必须）**：真实网络下快路径 1.4s 里 publish 721ms（锁 4 GET + settle + PUT pointer + 读回）与 pointer 259ms 是 RTT/协议常量主导，继续压缩只能改协议；若后续要抠，先测「锁 settle 40ms 是否可降」与「写后读回是否可用条件写替代」，别为几十 ms 破坏正确性。
+- **小记快路径后续优化（非必须）**：请求已 13→11；重复点首次 `push-state` 约 1455ms（SQLite/原生桥多次调用，第二次 25ms）⇒ 若要再快，可把 baseline+单条行+标记合并成一次窄端口调用；**不要再省写后 pointer 读回**（「已同步」可信度）；要再省 ~5 次往返只能上条件写替代锁（协议级，另立项）。
+- **发版前补一次快捷 capture 冷启动真机**（本次只测热启动；同一代码路径，请求数相同）。
 - **便携包真实 3GB 数据验证**；**更新中心设备验收**（Android 下载→校验→系统安装器）；**桌面 3 项实机复核 + 平板复验**；261104 三项裁决残余验证；小记→文档标签携带待定；导入/导出/键盘真机冒烟债；依赖补丁 4 处升级复核。
 - **`audit-dead-css` 桌面剩 2 候选**（`.node-icon-picker__tab` / `.diary-split-handle`）；旧「资料库」注释残留；`docs/audit-261027/` 4 份过期审计/计划（07 v4 RFC 已由 `03ef3fb3` 落地、02 安全审计已暂停、11 浏览器端计划保留）按 AGENTS「已完成直接删」清理。
 
@@ -460,4 +472,5 @@
 - AGENTS 超预算 → 已精简到 46,610B（261110）。
 - 移动端首屏瘦身 → entry-js 59.7KB / preload 6 / 首屏 347.9KB（261110，预算已收紧）。
 - 移动端两条创建入口的「保存并同步」= 同一单条快路径，已真机真 S3 实测（261110）。
+- 单条小记推送请求数 13→11（独立管线，261111）。
 - 二轮/实机修复批「未跑 6 态」、胶囊固定底部 / 平移画布开关、P9–P12 候选、平板内核工具栏两条例外 → 均已闭合/撤回。
