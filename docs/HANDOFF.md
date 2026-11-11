@@ -10,6 +10,12 @@
 
 > **顺序标注**：261109 各批次里写的「日记 ⌘4 / AI 写作 ⌘3」是**当时**的顺序；**261110 起改为 日记 ⌘3 / AI 写作 ⌘4**（另有标签 ⌘5）。旧批次不再改，以本行 + §1 为准。
 
+### 261111 · 目录栏头部「＋」（新建）菜单：样式对齐目录右键 + 移除「导入」
+- **样式乱**（用户截图）：这处菜单原来用 `surfaceClassName="create-menu"` + 裸 `<button>`（吃 legacy `.create-menu > button` 视觉）+ 往里面塞 `ln-menu__item` 的 Submenu ⇒ 两种规格混在一个表面里（「新建笔记本」<strong> 粗体、`导入` 字大且错位）。
+  - **修**：表面改 **`surfaceClassName="context-menu"`**（与目录右键同一套）；「新建笔记本」按同款条目 = `.ln-menu__item` + **15px** `Book` 图标 + `<span>`（去掉 `<strong>`）。实测：菜单 = `ln-overlay-surface context-menu`，单条 27px / 14px / 图标齐全。
+- **移除该位置的「导入」子菜单**（用户：「这个位置不应该出现导入」）：连同 `importTargetOfActive` 派生一并删除；**行级「＋」菜单的导入保留**（目标 = 触发的笔记本/分组，语义不同）。
+- **护栏**：`sidebarMarkdownImport.render.test.tsx` —— 头部「＋」菜单条目必须恰好 `["新建笔记本"]`（无「导入」）；源码断言 `importTargetOfActive` 已删、表面用 `context-menu`。**该测试把 Overlay mock 成裸 `div[role=menu]`**，所以表面类只能走源码断言，不要在 render 断言里查 `.ln-overlay-surface`（本次踩过）。
+- 门禁：`tsc` 0；全量 vitest 见 §1；`ui-metrics` / `git diff --check` 通过（纯 TSX 改动，无 CSS 基线变化）。
 ### 261111 · 查漏补缺（review：编辑态标签行溢出 / 目录笔记本行占位高）
 - **编辑态标签行并进动作行后的溢出**：多标签时原 `overflow: hidden` 会直接裁掉（用户既看不到也移不掉）⇒ 改 `overflow-x: auto` + **隐藏滚动条**（`scrollbar-width: none` + `::-webkit-scrollbar { display: none }`），标签仍全部可达。
 - **目录笔记本行占位高**：上一条跳动修复按文档行算（内容 23 ⇒ 占位 27），但笔记本行真实高 29 ⇒ 滚入视口仍会 27→29 跳 2px。补 `.tree-row.type-notebook { contain-intrinsic-size: auto 25px }`（25 + 上下内距 4 = 29）。

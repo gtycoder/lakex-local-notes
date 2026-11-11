@@ -115,6 +115,20 @@ describe("Markdown 导入：菜单与目标父级", () => {
     expect(sidebar).not.toContain("pickMarkdownFolder");
   });
 
+  it("目录栏头部「＋」菜单：只剩「新建笔记本」，不再提供「导入」（用户 261111）", () => {
+    render();
+    act(() => { document.querySelector<HTMLButtonElement>(".create-btn")!.click(); });
+    const menu = document.querySelector('[role="menu"]');
+    expect(menu).not.toBeNull();
+    const items = [...menu!.querySelectorAll<HTMLButtonElement>("button")].map((b) => (b.textContent ?? "").trim());
+    // 头部「＋」只保留「新建笔记本」；「导入」属于行级「＋」（目标语义不同）
+    expect(items).toEqual(["新建笔记本"]);
+    // 源码级：表面/条目改成与目录右键同款；头部导入的派生数据与子菜单已删干净
+    const sidebar = readFileSync(path.resolve("src/components/app/Sidebar.tsx"), "utf8");
+    expect(sidebar).not.toContain("importTargetOfActive");
+    expect(sidebar).toContain('surfaceClassName="context-menu"');
+  });
+
   it("类型菜单分别把 kind 传给 picker；Word → docx HTML 交给通用批量", async () => {
     nativeMocks.pickImportFiles.mockResolvedValue([file("a.docx", { kind: "docx", html: "<h1>报告</h1>" })]);
     importMocks.createNotesFromImportBatch.mockResolvedValue({ ok: true, results: [], summary: { total: 0, done: 0, failed: 0, skipped: 0 }, warnings: [] });
@@ -153,23 +167,6 @@ describe("Markdown 导入：菜单与目标父级", () => {
     expect(importMocks.createNotesFromImportBatch.mock.calls[0][0].parentNotebookId).toBe("g1");
   });
 
-  it("顶部「＋」：没有打开文档 ⇒ 禁用并提示先选笔记本；有打开文档 ⇒ 目标 = 所在容器", async () => {
-    render();
-    act(() => { document.querySelector<HTMLButtonElement>('button[aria-label="新建"]')!.click(); });
-    const disabled = [...document.querySelectorAll<HTMLButtonElement>('[role="menu"] button')].find((btn) => (btn.textContent ?? "").includes("导入"));
-    expect(disabled?.disabled).toBe(true);
-    expect(disabled?.getAttribute("title")).toContain("先");
-
-    // 先关掉上一次打开的菜单，再设置 activeId（否则再点一次是把菜单关掉）
-    act(() => { document.querySelector<HTMLButtonElement>('button[aria-label="新建"]')!.click(); });
-    props.activeId = "n1";
-    nativeMocks.pickImportFiles.mockResolvedValue([file("b.md")]);
-    importMocks.createNotesFromImportBatch.mockResolvedValue({ ok: true, results: [], summary: { total: 0, done: 0, failed: 0, skipped: 0 }, warnings: [] });
-    render();
-    act(() => { document.querySelector<HTMLButtonElement>('button[aria-label="新建"]')!.click(); });
-    await act(async () => { menuButton("Markdown…")!.click(); await Promise.resolve(); await Promise.resolve(); });
-    expect(importMocks.createNotesFromImportBatch.mock.calls[0][0].parentNotebookId).toBe("g1");
-  });
 
   it("取消选择器（空数组）⇒ 无副作用（不调批量、不弹结果）", async () => {
     nativeMocks.pickImportFiles.mockResolvedValue([]);
@@ -248,11 +245,12 @@ describe("Markdown 导入：跳过/进度/结果", () => {
     nativeMocks.pickImportFiles.mockResolvedValue([file("a.md")]);
     props.activeId = "n1";
     render();
-    act(() => { document.querySelector<HTMLButtonElement>('button[aria-label="新建"]')!.click(); });
+    // 用**目录行「＋」**菜单触发导入（头部「＋」已不再提供导入，用户 261111）
+    openRowMenu("nb");
     await act(async () => { menuButton("Markdown…")!.click(); await Promise.resolve(); await Promise.resolve(); });
     expect(nativeMocks.pickImportFiles).toHaveBeenCalledTimes(1);
 
-    act(() => { document.querySelector<HTMLButtonElement>('button[aria-label="新建"]')!.click(); });
+    openRowMenu("nb");
     await act(async () => { menuButton("Markdown…")!.click(); await Promise.resolve(); });
     expect(nativeMocks.pickImportFiles).toHaveBeenCalledTimes(1);
 

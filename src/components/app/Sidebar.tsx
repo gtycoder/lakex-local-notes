@@ -711,9 +711,6 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
     }
     return null;
   }, [byIdRef]);
-  /** 顶部「＋」菜单的导入目标：当前打开文档所在的笔记本/分组；没打开文档 ⇒ null（禁用并提示）。 */
-  const importTargetOfActive = useMemo(() => containerAncestorOf(props.activeId), [containerAncestorOf, props.activeId]);
-
   const baseNameOf = (path: string): string => path.replace(/\\/g, "/").split("/").pop() || path;
 
   /** 选中的文件 → 批量导入：不支持的/超 20MB/读失败 直接计入「跳过」；其余串行转换落盘。 */
@@ -1271,23 +1268,11 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
             else { updateCreateMenuPosition(); setMenuOpen(true); }
           }} title="新建" aria-label="新建" aria-pressed={menuOpen}><Plus size={14} /></button>
           {menuOpen && createMenuPosition && (
-            <Menu surfaceClassName="create-menu" onDismiss={() => setMenuOpen(false)} surfaceRef={createMenuRef}
+            /* 表面/条目规格与目录右键菜单**同款**（用户 261111）：context-menu 表面 + ln-menu__item + 15px 图标 + span；
+               本菜单只保留「新建笔记本」（user 260918；文档/分组创建走选中节点的右键）。「导入」不属于这个位置（用户 261111 点单移除）。 */
+            <Menu surfaceClassName="context-menu" onDismiss={() => setMenuOpen(false)} surfaceRef={createMenuRef}
               style={{ position: "fixed", top: createMenuPosition.top, left: createMenuPosition.left, width: createMenuPosition.width }}>
-              {/* 「+」只保留新建笔记本（user 260918）：文档/分组的创建走选中节点后的右键「新建文档/新建分组」。 */}
-              <button onClick={() => create("notebook")}><Book size={16} /><span><strong>新建笔记本</strong></span></button>
-              <div className="context-menu-sep" role="separator" />
-              {/* 261106：导入 = 当前打开文档所在的笔记本/分组（根级 + 没有打开文档 ⇒ 禁用并提示） */}
-              {importTargetOfActive ? (
-                <Submenu label={<><Download size={15} aria-hidden="true" /><span>导入</span></>}>
-                  <button className="ln-menu__item" role="menuitem" onClick={() => void startImport(importTargetOfActive, "markdown")}><FilePlus size={15} aria-hidden="true" /><span>Markdown…</span></button>
-                  <button className="ln-menu__item" role="menuitem" onClick={() => void startImport(importTargetOfActive, "docx")}><FilePlus size={15} aria-hidden="true" /><span>Word（.docx）…</span></button>
-                  <div className="context-menu-sep" role="separator" />
-                  <button className="ln-menu__item" role="menuitem" onClick={() => void startImport(importTargetOfActive, "xlsx")}><FilePlus size={15} aria-hidden="true" /><span>Excel（.xlsx）…</span></button>
-                  <button className="ln-menu__item" role="menuitem" onClick={() => void startImport(importTargetOfActive, "csv")}><FilePlus size={15} aria-hidden="true" /><span>CSV（.csv）…</span></button>
-                </Submenu>
-              ) : (
-                <button className="ln-menu__item" role="menuitem" disabled title="先打开或选择一个笔记本/分组"><Download size={15} aria-hidden="true" /><span>导入（先选择笔记本）</span></button>
-              )}
+              <button className="ln-menu__item" role="menuitem" onClick={() => create("notebook")}><Book size={15} aria-hidden="true" /><span>新建笔记本</span></button>
             </Menu>
           )}
         </div>
