@@ -297,6 +297,16 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // 每次**进入**小记空间都重新拉列表与标签目录（261111 用户报「AI 写作保存到小记后找不到」）。
+  // 本工作区是 keep-alive：只在挂载时拉一次 ⇒ 在别处新增/改动的小记（AI 写作保存、同步拉取、他端改动）
+  // 切过来时列表仍是旧的，看着就像「没存上」。进入即刷新，成本只有两条本地 IPC。
+  useEffect(() => {
+    if (!visible) return;
+    void refreshItems(false);
+    void refreshTags();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible]);
+
   useEffect(() => { onDirtyChange(dirty); }, [dirty, onDirtyChange]);
 
   useEffect(() => {
@@ -954,6 +964,14 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
     if (typeFilter !== "all" || tagFilter.kind === "selection" || items.length === 0 || tagIndex.tags.length === 0) return null;
     return (
       <div className="quick-notes-tagbar" role="group" aria-label="按标签筛选小记">
+        {/* 「全部」= 默认态（不筛标签）：用户 261111 点单，必须能一键回到全量列表。 */}
+        <button
+          className={"ln-chip" + (tagFilter.kind === "all" ? " is-selected" : "")}
+          aria-pressed={tagFilter.kind === "all"}
+          onClick={() => void changeTagFilter({ kind: "all" })}
+        >
+          <span>全部</span><span className="ln-chip__count">({items.length})</span>
+        </button>
         {tagIndex.tags.map((tag) => (
           <button
             key={tag.id}
