@@ -10,6 +10,14 @@
 
 > **顺序标注**：261109 各批次里写的「日记 ⌘4 / AI 写作 ⌘3」是**当时**的顺序；**261110 起改为 日记 ⌘3 / AI 写作 ⌘4**（另有标签 ⌘5）。旧批次不再改，以本行 + §1 为准。
 
+### 261111 · 小记勾选抖动修复 + 图片缩略第二步 + 性能脚本修复（用户点单）
+
+- **勾选抖动**：`.qn-card:active { transform: scale(.99) }` 会被卡内 checkbox 的按下连带触发（按下缩/回弹各一次 = 整卡抖一下）⇒ 删除整卡缩放；与桌面 `eb526bf7`「卡片点击抖动去 :active 缩放」同口径。设备验证（5554）：`:active` 时 `getComputedStyle(.qn-card).transform = none`，勾选框点击后 `checked` 正常翻转。`mobileLayers` mobile.css 1679→1678（−1，写理由）。
+- **图片缩略第二步**：标签详情 `TagQuickNotePreview` 列表富预览图片接 `?w=1024`（与首页卡同 helper/同档）；共享只读预览 `QuickNotePreview` 的 `<img>` 加 `decoding=async` + 元数据可用时 width/height 比例盒（加载前占位不跳版）；`imageBoxAttrs` 上收 `src/lib/imageBox.ts` 单一来源；盘点确认搜索/回收站/资源管理均为纯文本列表（无图可缩）。
+- **性能基线脚本修复**：冷启动 CDP target 竞态（force-stop 后旧 target/forward 残留 ⇒ 页内标记注入失败）⇒ 每轮重建 forward、校验 page target（URL + 可 evaluate）、失败重连、标记注入带重试。5554 上 `--only coldStartToHome --rounds 3` **3/3 采样成功**（9.0/9.4/10.3s；当前双模拟器负载下，仅证明采集链路通，绝对值随装置/负载漂移）；`--self-check` 28 项通过；基线文件 `.css-audit/perf` 不入库。
+- **门禁**：tsc 0；全量 vitest **862 文件（851 passed / 11 skipped）/ 5399 例**；check:core 162/0；ui-metrics 0；diff-check 0；APK 已重装 `lake_mobile`。
+- **剩余**：平板 9 态（需 lake_tab）、桌面 42 态。
+
 ### 261111 · 菜单省略号 `…` 约定写入 DESIGN + 全仓核查（用户问「为什么很多菜单有三点」）
 - **规则已写入 `docs/DESIGN.md` Voice & Copy**：菜单项末尾 `…` = **点了还要再补一步**（对话框 / 选择器 / 系统文件面板 / 二次确认）；打开子菜单用 `›`（`导出 ›`）；只是展示内容的浮窗·面板·页签（`属性` / `历史版本` / `AI 助手对话`）**不加**；立刻生效的动作（删除/重命名/置顶/锁定/创建副本）不加；**二级子菜单里的格式项不再逐个加**（父项已表达「还有下一步」）；与 CSS 截断区分（截断紧贴文字、不出现于菜单文案）；附自查问句「点了之后用户还要不要填东西/再选一步？」。
 - **核查结论：现有用法已一致，0 处该加没加、0 处该删没删**。逐项看过：目录右键（`移动…` / `标签…` / `导出 ›` / `属性`·`历史版本` 不加）、头部「＋」（`新建笔记本` 不加）、页签右键（关闭/钉住 不加）、多选右键（`导出…` = 弹目录选择器，正确）、小记（`管理标签…` / `筛选小记…` / `更多筛选…`）、移动端（`合并到…` / `标签…` / `移动…` / `转为文档…`；`属性`·`历史版本` 打开只读 Sheet，不加）。
@@ -507,7 +515,7 @@
 - **261110 历史清理（一次性）**：`.ai-writing-recon/`（走查截图 / 页面快照 / 探针脚本，59 文件 ≈15MB）已用 `git filter-repo --invert-paths` 从**全部历史**移除；被重写的是 **v1.1.0 之后的 23 个提交**（hash 以 `git log` 为准），**v1.0.x / v1.1.0 的 tag 与其提交 hash 未变**（不含该目录）⇒ 已发布 Release 与 CI 产物不受影响。重写前快照：`/Users/admin/file/local-lake/lakex-local-notes-backup-<stamp>/all.bundle`（62MB，含全部 refs）。**旧 clone / worktree 需 `git fetch --force --prune` + `git reset --hard origin/master` 或重新 clone**（旧 hash 已不可达）；本机原 `lakex-local-notes-diary` worktree 已删除（其分支是 master 祖先，无内容丢失）。
 
 - **worktree（261109 发版时）**：`lakex-local-notes` = `master`（发版主工作树）；`lakex-local-notes-diary` = `feat/diary-space`（本批开发用，已合并 master 并合回 master）。AI 写作与日记**都已进 master**，两个空间共存（⌘3 / ⌘4）。
-- 主分支 `master`，HEAD = **`a9e50def`**（261111 骨架/预取/图片缩略/性能基线 + 快照基线重烤）；本批代码 = `79b91eb1`；其间并行会话提交 `eb526bf7`/`aa41333d`/`5383032a`（小记预览收口）与 `48b8f3d5`（桌面预热）。**`origin`（Gitee）仍停在 `544f2532`，以上均未 push**（`git push origin master` 双推）。
+- 主分支 `master`，HEAD = **`191ff7f8`**（261111 勾选抖动修复 + 图片缩略第二步 + 性能脚本修复）；前序 = `8087d38e`（图片二步）、`5ea48c16`（抖动）、`a9e50def`（快照基线）、`79b91eb1`（骨架/预取/图片/脚本）及并行会话提交。**`origin`（Gitee）仍停在 `544f2532`，以上均未 push**（`git push origin master` 双推）。
 - `package.json` = **1.1.0**；Android `versionName 1.1.0` / `versionCode 11100`（从根 `package.json` 派生，版本号单一来源：`1000 + major*10000 + minor*100 + patch`）。
 - tag：`v1.0.0`–`v1.0.5`、**`v1.1.0`**（另有旧 `v0.0.1` / `v0.0.2`）；已发布 tag 不再移动。`v1.1.0` = AI 写作 + 日记两个新空间。
 - `v1.0.5` 是**发在 AI 写作合并之前**的：AI 写作第一次随本版发布，别在旧发布说明里找它。
@@ -529,7 +537,7 @@
 **门禁基线（261109 发版前：AI 写作 + 日记合并后实测）**
 
 - `npx tsc --noEmit` = **0 错**。
-- `npx vitest run` = **862 文件（850 passed / 11 skipped）/ 5398 例**（261111 骨架/预取/图片批提交前实测；唯一失败 `electron/s3v3/perf.integration` 的时延门禁在本机满负载下 flaky，孤立重跑通过——既有口径）。
+- `npx vitest run` = **862 文件（851 passed / 11 skipped）/ 5399 例 0 失败**（261111 抖动/图片2/脚本修复批提交前实测）。
 - **261110 AI 助手 / 小记批（本批实测，含「钉住=每作用域挂起」「标题可改」「弹窗走内核渲染」「时间线自适应」）**：`npx tsc --noEmit` 0；全量 vitest **855 文件（844 passed / 11 skipped）/ 5357 passed / 12 skipped / 0 failed**（本批新增：`aiAssistantSession` 4 例 / `AiMessageView.render` 5 例 / `aiLakeKernelRegistry` 4 例 / `AiWritingDialogs.render` +2 例）；`ui-metrics` 颜色 0 / !important 9=清单 / 跨文件重复 103≤105；`git diff --check` 0；`cssLayers` 基线 `app/tabs.css` 188→189、`ai/aiDialogParts.css` 87→91、`app/quick-notes.css` 667→674（均写明理由）。
 - `git diff --check` = **0**。
 - `check:bundle` / `check:arch`：**已转绿**（261110 首屏瘦身）。mobile-entry = **59,835 gz / 6 链接**、首屏 347,990 / 360,000（余量 12.0KB）、entry CSS 140,392 / 141,312；desktop app-js 191,799 / 307,200、首屏 564,378 / 600,000（余量 35.6KB）。预算已按目标收紧（`check-bundle-budget.mjs` 12 条 / 60KB、`check-arch.mjs` 360KB），不再有「已知红」。**注意**：preload 条数只防「静态依赖回入口」，字节由 `check-arch` 守 —— 不要为了压低条数把懒加载改回静态。运行前需先有 `dist` / `dist-mobile` 构建产物。
@@ -591,8 +599,8 @@
 **P1（该做但可排期）**
 
 - **平板 9 态快照**：本轮只烤手机/多维表；平板需另起 `lake_tab` + 重烤，发版前补（写作卡全屏/图片缩略后平板可能漂）。
-- **移动性能基线脚本冷启动采集**：CDP page target 竞态（页内标记注入失败）待修；修好后在 lake_gate 录一份基线并纳入本地门禁。
-- **图片缩略第二步**：写作卡/内核内图片、标签详情预览仍原图（同法 `?w=1024`）。
+- **移动性能基线**：脚本冷启动竞态已修、5554 上 3/3 采样通过；待在有夹具的 lake_gate 录一份稳定基线并纳入本地门禁（换设备/包/视口必须重烤）。
+- **图片缩略第三段（内核管线）**：写作卡/内核内 `<img>` 仍原图（内核渲染，需内核适配，另立项）。
 - **日记「取消标记」残余验收**：跨端 wire 传播（一端取消 → 另一端知识库出现该本、日记空间消失）需**真机 + 配 S3** 验；取消是单向的（无回标入口，回标另立项）。
 - **按钮第二批的用户点收**（清单见 §0）：尤其「删除图标常红」「选中标签项变淡」「AI 页操作键形状」是否接受。
 - **小记快路径后续优化（非必须）**：请求已 13→11；重复点首次 `push-state` 约 1455ms（SQLite/原生桥多次调用，第二次 25ms）⇒ 若要再快，可把 baseline+单条行+标记合并成一次窄端口调用；**不要再省写后 pointer 读回**（「已同步」可信度）；要再省 ~5 次往返只能上条件写替代锁（协议级，另立项）。
@@ -619,6 +627,7 @@
 - 移动端两条创建入口的「保存并同步」= 同一单条快路径，已真机真 S3 实测（261110）。
 - 小记写作卡卡顿（长按创建 / 键盘开合）→ 全屏 + 长任务 775→72ms（261111）。
 - 桌面编辑器 fallback 骨架 / capture 首帧预取 / 列表图片缩略 / 手机 9 态+多维表 3 态重烤+23 屏（261111）。
+- 小记卡片勾选抖动 / 标签详情图片缩略 / 性能脚本冷启动采集（261111）。
 - 桌面冷启动预热三条触发已上（261111）；首篇 fallback 是内核 chunk 地板，未消除（解法见 §3）。
 - 单条小记推送请求数 13→11（独立管线，261111）。
 - 二轮/实机修复批「未跑 6 态」、胶囊固定底部 / 平移画布开关、P9–P12 候选、平板内核工具栏两条例外 → 均已闭合/撤回。
