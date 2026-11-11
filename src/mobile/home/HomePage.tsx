@@ -39,7 +39,8 @@ import { useTabPager } from "./useTabPager";
 // 小记排序：**两端共用的单一来源**（档位/文案/比较器/本机持久化都在这里；261015 用户要求桌面与移动统一）
 import { quickNoteSortTime, type QuickNoteSort } from "../../core/quickNoteSort";
 import { formatDiaryDateKey } from "../../core/diary";
-import { localAssetHttpUrl, withAssetWidth } from "../../core/assetUrl.js";
+import { localAssetHttpUrl } from "../../core/assetUrl.js";
+import { imageBoxAttrs, quickNoteImageUrl, quickNotePreviewAssetUrl } from "./quickNoteImage";
 import { formatDateOnly, formatRelativeTime } from "../lib/listTime";
 import { rowActivationProps } from "../ui/rowActivation";
 import { withAssetAccessToken } from "../../lib/assetPort";
@@ -145,14 +146,6 @@ type ComposerState =
   | null;
 
 const VIEW_KEY = "lakex-local-notes-mobile.libraryView";
-
-/**
- * 卡片封面缩略图档位。封面是整列宽、最高 210px（`.qn-card__img` max-width 100% / max-height 210px），
- * 手机宽屏约 360 CSS px ⇒ dpr 2~3 需要 720~1080 设备像素，**只有最大档位 1024 不会发虚**
- * （再往上会超过档位表上限、反而退回原图）。
- * 一张手机照片 4000×3000 是 48MB 位图，1024 档只剩 ~3MB —— 一屏多张封面的差别是几百 MB。
- */
-const COVER_THUMB_PX = 1024;
 
 /**
  * 首层五空间（261110 底部 Dock）：顺序 = HOME_TABS，图标 + 文字同一个来源。
@@ -1181,17 +1174,21 @@ function QuickNoteCard({ note, revealed, dateValue, onEdit, onMore, onFilterTag,
     return () => observer.disconnect();
   }, [note.id, note.body, onRequestDetail]);
 
-  /** 预览用资源（canonical URL + token）：图片卡/附件卡都靠它渲染。 */
-  const previewAssets = (note.images ?? []).map((image) => ({
-    ...image,
-    url: withAssetAccessToken(localAssetHttpUrl(note.id, image.filename, { space: "quick-notes" })),
-  }));
+  /**
+   * 预览用资源（canonical URL + token + 图片离散缩略档位）：
+   *  · 图片走 `?w=1024`（与封面同一档 ⇒ 同一张图在封面/正文里是同一个 URL，浏览器只解码一次）；
+   *  · 视频/音频/附件原样（服务端只缩图片，加 query 只会打散缓存）。
+   */
+  const previewAssets = (note.images ?? []).map((image) => {
+    const withToken = withAssetAccessToken(localAssetHttpUrl(note.id, image.filename, { space: "quick-notes" }));
+    return { ...image, url: quickNotePreviewAssetUrl(withToken, image.mimeType) };
+  });
   const thumbUrl = note.firstImage
-    ? withAssetWidth(
-        withAssetAccessToken(localAssetHttpUrl(note.id, note.firstImage, { space: "quick-notes" })),
-        COVER_THUMB_PX,
-      )
+    ? quickNoteImageUrl(withAssetAccessToken(localAssetHttpUrl(note.id, note.firstImage, { space: "quick-notes" })))
     : null;
+  /** 封面比例盒（宽高元数据可用时先占位，加载完不跳版）。 */
+  const coverImage = note.firstImage ? (note.images ?? []).find((image) => image.filename === note.firstImage) : undefined;
+  const coverBox = imageBoxAttrs(coverImage);
   /** 触摸点击 / 外接键盘 Enter·Space 共用同一激活语义（选择态 = 切换勾选，否则进编辑）。 */
   const activate = (): void => {
     if (suppressTap.current) { suppressTap.current = false; return; }
@@ -1213,7 +1210,14 @@ function QuickNoteCard({ note, revealed, dateValue, onEdit, onMore, onFilterTag,
     >
       {thumbUrl && (
         <div className="qn-card__cover">
-          <img className="qn-card__img" src={thumbUrl} alt="" loading="lazy" />
+          <img
+            className="qn-card__img"
+            src={thumbUrl}
+            alt=""
+            loading="lazy"
+            decoding="async"
+            {...(coverBox ?? {})}
+          />
           {note.imageCount > 1 && <span className="qn-card__count">{note.imageCount}</span>}
         </div>
       )}

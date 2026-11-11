@@ -5,6 +5,7 @@ import type { QuickNoteTagSummary } from "../../core/quickNoteTags";
 import { addQuickNoteTagId, removeQuickNoteTagId } from "../../core/quickNoteTags";
 import type { QuickNoteEditorApi } from "../../features/quickNotes/QuickNoteEditor";
 import { QuickNoteTagPicker } from "../../features/quickNotes/QuickNoteTagPicker";
+import { EditorLoadingSkeleton } from "../../features/editor/EditorLoadingSkeleton";
 import type { DraftState } from "../model/quickNoteDraft";
 // 仅写作时加载内核，工作区仍常驻以接收搜索定位。
 const QuickNoteEditor = lazy(() => import("../../features/quickNotes/QuickNoteEditor").then(m => ({ default: m.QuickNoteEditor })));
@@ -75,7 +76,7 @@ export function QuickNoteComposer({ draft, saving, syncing, cloudReady, variant,
     <div className="quick-note-composer" onKeyDownCapture={publishOnShortcut}>
       {/* 写作区 = 一个 Lake 内核实例（编辑时挂、离开即销毁）；图片直接拖入或粘贴。
           P12：编辑器已 React.lazy ⇒ 首次打开时才加载内核 chunk，Suspense 给一个最小占位。 */}
-      <Suspense fallback={<div className="empty-workspace-hint">正在加载编辑器…</div>}>
+      <Suspense fallback={<div className="quick-note-editor"><EditorLoadingSkeleton variant="composer" /></div>}>
       <QuickNoteEditor
         ownerId={draft.id}
         initialBody={draft.body}

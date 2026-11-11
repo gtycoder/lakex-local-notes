@@ -1,3 +1,15 @@
+/* 通用视觉隐藏（261111 task-16）：元素保留在无障碍树与可选中文本里，但不参与视觉排版。
+ * 供「骨架/加载占位仍需可访问名」的场景复用（此前各组件各写一份 clip 内联/私有类）。
+ * 放在 a11y 层（最高层）⇒ 不需要 !important；纯位置属性，不涉及颜色/字号。 */
+.a11y-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+}
+
 /* 无障碍层（P7-e）：层序里 a11y 是**最高层** —— 这层规则天然压过所有其他层（含内核 legacy），
  * 因此这里**不需要任何 !important**（原先散在 tokens.css / motion.css 的 reduced-motion 契约靠
  * !important 取胜，现在改由层序保证，语义更单一、也不再和组件规则打架）。

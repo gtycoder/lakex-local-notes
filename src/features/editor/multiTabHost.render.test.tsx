@@ -236,7 +236,16 @@ describe("MultiTabEditor 宿主层（DT-04 试点）", () => {
     // 必须排在其他用例之前：ink 模块的加载门只挂起一次（模块缓存），这里放行后续用例才能直接复用。
     const host = await mountHost({ tabs: [ALL_TABS[4]], activeNoteId: "ink-1" });
     try {
+      // 261111 task-16：fallback = 编辑器同构骨架（不是裸文字），可访问文案仍在（视觉隐藏）。
+      // fallback 直接落在 .tab-panels 的 grid 区（document 变体 grid-column:1/-1 覆盖分屏两栏）
+      const skeleton = host.container.querySelector(".tab-panels > .editor-skeleton");
+      expect(skeleton).not.toBeNull();
+      expect(skeleton!.querySelector(".editor-skeleton__toolbar")).not.toBeNull();
+      expect(skeleton!.querySelectorAll(".editor-skeleton__line").length).toBeGreaterThanOrEqual(4);
+      expect(skeleton!.querySelector(".a11y-visually-hidden")?.textContent).toContain("正在加载编辑器…");
       expect(host.container.textContent).toContain("正在加载编辑器…");
+      // 旧实现是一行 .empty-workspace-hint 文字兜底；现在不应再出现（该类的其它用途不受影响）。
+      expect(host.container.querySelector(".tab-panels > .empty-workspace-hint")).toBeNull();
       await act(async () => {
         harness.releaseInk?.();
         await harness.inkReady;

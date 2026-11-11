@@ -3,10 +3,17 @@ import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-// 写作区 = Lake 内核实例（懒加载）：本用例只验动作行按钮，编辑器桩掉。
-vi.mock("../../features/quickNotes/QuickNoteEditor", () => ({
-  QuickNoteEditor: () => createElement("div", { className: "quick-note-editor-stub" }),
-}));
+// 写作区 = Lake 内核实例（懒加载）：默认桩成普通 div；需要验 fallback 时把桩改成"挂起"。
+const suspendState = vi.hoisted(() => ({ suspend: false }));
+vi.mock("../../features/quickNotes/QuickNoteEditor", () => {
+  const pending = new Promise<void>(() => { /* 永不 resolve：模拟 chunk 未到 */ });
+  return {
+    QuickNoteEditor: () => {
+      if (suspendState.suspend) throw pending;
+      return createElement("div", { className: "quick-note-editor-stub" });
+    },
+  };
+});
 
 import { QuickNoteComposer } from "./QuickNoteComposer";
 
@@ -40,6 +47,24 @@ function render(onTagIdsChange = vi.fn(), onSave = vi.fn()) {
 }
 
 describe("QuickNoteComposer（261110 第二批）", () => {
+  it("懒加载挂起时 = 编辑器骨架 fallback（composer 变体），不再是一行裸文字", () => {
+    suspendState.suspend = true;
+    try {
+      render();
+      // 复用 .quick-note-editor 既有 flex/min-height 槽位，骨架自己不带固定高
+      const slot = document.body.querySelector<HTMLElement>(".quick-note-composer .quick-note-editor");
+      expect(slot).not.toBeNull();
+      const fallback = slot!.querySelector<HTMLElement>(".editor-skeleton--composer");
+      expect(fallback).not.toBeNull();
+      expect(fallback!.querySelector(".editor-skeleton__toolbar")).toBeNull();
+      expect(fallback!.querySelectorAll(".editor-skeleton__line").length).toBeGreaterThanOrEqual(4);
+      // 可访问文案保留（视觉隐藏）
+      expect(fallback!.querySelector(".a11y-visually-hidden")?.textContent).toBe("正在加载编辑器…");
+    } finally {
+      suspendState.suspend = false;
+    }
+  });
+
   it("「添加标签」= ln-chip--add；标签 chip = ln-chip--static + ln-iconbtn 移除钮", () => {
     render();
     const add = [...document.body.querySelectorAll<HTMLButtonElement>(".quick-note-tags button")].find((b) => (b.textContent ?? "").includes("添加标签"))!;

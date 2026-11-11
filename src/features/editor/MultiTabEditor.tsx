@@ -10,6 +10,8 @@ import { TabItemVisual } from "./TabItemVisual";
 import { SplitHandle } from "../../components/ui/SplitHandle";
 import { SPLIT_WIDTH_LIMITS, clampSplitLeft } from "./splitGeometry";
 import { expandTabSlots, moveSlot } from "./tabOrder";
+// 261111：懒加载兜底 = 编辑器同构骨架（纯静态、无内核依赖，不改变 lazy 边界）。
+import { EditorLoadingSkeleton } from "./EditorLoadingSkeleton";
 /** Lake 文档编辑器（闭源内核，入口里占 ≈1.78MB gz）：**按需加载**。
  *  P12（261103）：与 Univer/Bitable/Board/Ink 同一模式；已有的 Suspense（下方「正在加载编辑器…」）
  *  顺带承担首 tab / 自动恢复会话的占位；不要改回静态 import（会让 6.1MB 内核回到入口）。 */
@@ -665,7 +667,7 @@ export function MultiTabEditor({
           <h2>开始写第一篇笔记</h2>
           <p className="empty-workspace-hint">新建文档开始记录，或按 ⌘K 搜索已有笔记</p>
           {emptyAction}
-        </section> : <Suspense fallback={<div className="empty-workspace-hint">正在加载编辑器…</div>}>{tabs.map((tab) => (
+        </section> : <Suspense fallback={<EditorLoadingSkeleton />}>{tabs.map((tab) => (
           tab.bodyMissing ? (
             <MissingBodyPanel
               key={"mb-" + tab.noteId}

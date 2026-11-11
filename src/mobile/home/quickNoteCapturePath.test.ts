@@ -177,4 +177,20 @@ describe("capture 首帧（261022，零等待）", () => {
     expect(COMPOSER).toContain("QuickNoteComposerSkeleton bare");
     expect(COMPOSER).toContain('data-capture={draft ? "1" : undefined}');
   });
+
+  // 261111（task-17）：冷启动首帧就并发预取写作卡分包（含内核 chunk），别再等 React 提交后的 effect。
+  it("capture 首帧前预取写作卡/内核分包；普通启动不预取，失败静默、不阻塞首帧", () => {
+    // 与懒加载壳用**同一个** loader ⇒ 同一模块 / 同一 pending promise（不会多拉一份 chunk）
+    expect(MAIN).toMatch(/import \{ loadQuickNoteComposer \} from "\.\/home\/quickNoteComposerLazy"/);
+    expect(COMPOSER_LAZY).toMatch(/export function loadQuickNoteComposer/);
+    // 只在 initialCapture 时触发（普通启动 / 非原生平台 = 不预取；入口预算与首屏行为不变）
+    expect(MAIN).toMatch(/if \(initialCapture\) void loadQuickNoteComposer\(\)\.catch\(\(\) => undefined\)/);
+    // 只此一处调用；且不 await（绝不阻塞首帧）
+    expect((MAIN.match(/loadQuickNoteComposer\(/g) ?? []).length).toBe(1);
+    expect(MAIN).not.toMatch(/await loadQuickNoteComposer/);
+    // 时序：同步 hint 判定之后、React 挂载之前起跑
+    expect(MAIN.indexOf("readLaunchUrlHint()")).toBeGreaterThan(-1);
+    expect(MAIN.indexOf("readLaunchUrlHint()")).toBeLessThan(MAIN.indexOf("loadQuickNoteComposer()"));
+    expect(MAIN.indexOf("loadQuickNoteComposer()")).toBeLessThan(MAIN.indexOf("ReactDOM.createRoot"));
+  });
 });

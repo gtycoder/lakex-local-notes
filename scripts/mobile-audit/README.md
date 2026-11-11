@@ -190,6 +190,31 @@ node scripts/mobile-audit/long-doc-dom.mjs --self-check          # 不连设备�
 用法/字段/A/B 方案/验收判据见 **`docs/MOBILE-LONG-DOC-PROBE.md`**。
 ⚠️ 探针会造数据（一篇固定标题文档 + 200 个 1×1 PNG，且该篇会被置 `is_dirty=1`）⇒ 跑过之后要重烤门禁基线；别在配了 S3 的日常机上跑。
 
+## 性能基线（261111 起；本地跑，**不进 CI**）
+
+把「流畅度」变成可重复测量的本地门禁：`scripts/mobile-audit/perf-baseline.mjs`（= `npm run check:perfmobile`）。
+**不进 CI**：设备装置不进 CI（AGENTS §3#21②），且基线绑定实例/构建/数据。
+
+```bash
+# 前置：模拟器 + debug 包 + adb（详见上文「环境」）。建议专用 AVD（如 lake_gate，不配 S3）。
+export ANDROID_SERIAL=emulator-5556          # 多设备必填
+node scripts/mobile-audit/perf-baseline.mjs --record          # 采 3 轮并写基线
+npm run check:perfmobile                                      # 日常：与基线比，超阈值 exit 1
+node scripts/mobile-audit/perf-baseline.mjs --json            # 机器可读（日志走 stderr）
+node scripts/mobile-audit/perf-baseline.mjs --self-check      # 无设备自检纯逻辑/阈值
+```
+
+- **指标**（每项 ≥3 轮，报 p50/最坏/全部样本；阈值理由写在脚本 `LIMITS` 注释里）：
+  `coldStartToHome` 冷启动→真首页（`.mb-home-dock__item`，非骨架）· `captureColdToInput` 快捷入口深链冷启→写作卡可输入 ·
+  `composerHotToInput` 首页 FAB→空白小记→可输入 · `keyboardOpenLongTasks`/`keyboardCloseLongTasks` 键盘开合后 1.5s 内
+  >50ms 长任务个数/总时长（`adb shell input keyevent 4` 收键盘）· 可选 `docOpenToContent`（`--with-doc-open`，需设备里有文档）。
+- **基线**：`.css-audit/perf/mobile-perf.json`（数据目录，不入库）；`--record` 写、`--compare` 比。
+  换 AVD / 换构建（appVersion）/ 改视口 / 重灌夹具后**必须重烤基线**，否则 env 不一致直接 exit 2。
+- **判据**：`cur > base + max(base×相对比例, 绝对余量)`；p50 是主判据，最坏值另有宽余量，长任务按 p50 个数/总时长。
+  硬上限只兜装置级事故（如冷启动 >15s / 长任务 >20 个），不是回归口径。
+- ⚠️ **别把模拟器数字当结论**：同构建冷启动可差 ±100–300ms（见本文件「261012 P2 冷暖取样」）；跑的时候别手动操作设备
+  （脚本自己 force-stop/am start，结束默认恢复到首页）。真机与模拟器/不同 AVD 基线不可混用。
+
 ## 环境（260923 实测可用）
 ```bash
 export PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH"

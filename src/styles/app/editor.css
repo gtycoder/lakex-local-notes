@@ -246,3 +246,24 @@ ne-card[data-card-name="file"] .ne-card-file {
 .document-pane .lake-editor-mount .ne-viewer-body h3 {
   color: var(--lake-text-1);
 }
+
+/* ── 编辑器懒加载骨架（261111，task-16）────────────────────────────────────────
+ * Suspense fallback 由「一行文字」改为与编辑器同构的静态占位：顶栏条 + 正文行（composer 变体只留正文行）。
+ * 几何全部由宿主决定，不写死大 px：
+ *   · document = .tab-panels 的 grid 子项 ⇒ grid-column:1/-1 + grid-row:1 同时覆盖普通与分屏两栏，
+ *     高度由 grid 行的 1fr 拉伸（不需要 height:100% 或视口单位）；
+ *   · composer = 外层 .quick-note-editor 已有 flex:1 + min-height 槽位 ⇒ 这里只 flex:1 填满。
+ * 纯静态、无动画（DESIGN：不做装饰性动效）；颜色/圆角/间距全走 --lake-* 令牌，0.5px 发丝边，无 !important。
+ * 可访问名：视觉隐藏文案走 a11y 层的 .a11y-visually-hidden（组件里不写 clip/内联样式）。 */
+.editor-skeleton { grid-column: 1 / -1; grid-row: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; padding: var(--lake-space-xl); background: var(--lake-bg-panel); overflow: hidden; }
+.editor-skeleton--composer { flex: 1 1 auto; padding: var(--lake-space-md); background: transparent; }
+.editor-skeleton__toolbar { display: flex; flex: 0 0 auto; align-items: center; gap: var(--lake-space-sm); min-height: var(--lake-ctl-h); padding-bottom: var(--lake-space-md); border-bottom: 0.5px solid var(--lake-border-1); }
+.editor-skeleton__pill { display: block; width: 64px; height: 18px; border-radius: var(--lake-radius-2xs); background: var(--lake-bg-block); }
+.editor-skeleton__pill--short { width: 40px; }
+.editor-skeleton__pill--tiny { width: 22px; }
+.editor-skeleton__spacer { flex: 1 1 auto; }
+.editor-skeleton__body { display: flex; flex: 1 1 auto; flex-direction: column; gap: var(--lake-space-sm); min-height: 0; padding-top: var(--lake-space-xxl); }
+.editor-skeleton__line { display: block; flex: 0 0 auto; height: 12px; border-radius: var(--lake-radius-2xs); background: var(--lake-bg-block); }
+.editor-skeleton__line--title { width: 38%; height: 22px; margin-bottom: var(--lake-space-xs); }
+.editor-skeleton__line--w90 { width: 90%; }
+.editor-skeleton__line--w70 { width: 70%; }
