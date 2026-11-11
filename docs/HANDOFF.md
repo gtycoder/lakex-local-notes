@@ -10,6 +10,71 @@
 
 > **顺序标注**：261109 各批次里写的「日记 ⌘4 / AI 写作 ⌘3」是**当时**的顺序；**261110 起改为 日记 ⌘3 / AI 写作 ⌘4**（另有标签 ⌘5）。旧批次不再改，以本行 + §1 为准。
 
+### 261111 · AI 写作两处收口：停止按钮（颜色/错位）+ 提示词库条目加厚
+- **停止按钮（用户报「错位，且颜色应该是红色」）**：① 颜色从 `ln-btn--secondary`（中性）改 **`ln-btn--danger`**（红字 + 40% 红框，DESIGN L5）；② 补 `height` + `justify-content: center` 把 26×26 固定成**正方形、图标居中**（此前只写了 width，图标被 5px gap 推偏 ⇒ 看起来错位）；③ 生成中**隐藏「↩ 发送」提示**（按钮已变成停止，还挂着发送提示会读成错位）。实测注入同 class 样本：26×26、`color: rgb(179,56,47)`、红框 40%。护栏 `AiComposer.prompt.render.test.tsx` +1 例（忙态 = danger / 非 secondary / 有 `aiw-send--stop` / 无 hint 元素）。
+- **提示词库条目（用户报「太紧凑」）**：条目上下内距 0 → **8**（高度由两行文字撑开到 ≈46），菜单容器 `gap: 4`（条目之间留间隔），标题与说明之间 2 → 4。落点是 `.aiw-prompts` / `.aiw-prompts__item`（**只作用于这个气泡**，不动全仓共用的 `.ln-menu__item`）。
+- 门禁：`tsc` 0；全量 vitest **860 文件（849 passed / 11 skipped）/ 5389 passed / 12 skipped / 0 failed**；`cssLayers` `aiWriting.css` → **350**（分两次 +2/+2 写明理由）；`ui-metrics`、`git diff --check` 通过。
+### 261111 · AI 写作空态：建议 chip 加厚 + 场景扩充（用户点单）
+- **加厚**：「点一点试试」的建议 chip 从 26（compact）→ **31** = `calc(var(--lake-ctl-h) + 4px)`，内距 `0 var(--lake-space-lg)`。落点是 `aiWriting.css` 的 `.aiw-suggest__chip`（**只在空态这一屏**；按钮原语的「两档」口径不动，避免又开第三档）。实测 31px。
+- **场景扩充（用户定稿名单，别自己改顺序）**：`AI_WRITING_SUGGESTIONS.chat` 前 9 个 = 用户点名：**今日信息差 / 推荐一本新书 / 金融行业要闻 / 科技行业要闻 / 时政要闻 / 每天一个心理学知识 / 每天了解一段历史 / 今日新闻热榜 / AI最新进展**；其后 8 个是我扩展的、同样**不需要用户先提供上下文**的：一个冷知识 / 推荐一部电影 / 推荐一个思维模型 / 今天的复盘三问 / 一道逻辑谜题 / 写一首短诗 / 今日体育要闻 / 解释一个概念。
+- **明确不要**「需要素材才能跑」的场景（用户点名删掉「把这段话写得更自然」：没有上下文写不了）。护栏测试 `aiWritingSuggestions.test.ts` 钉 4 件事：① 9 个用户项在且顺序不乱；② label ≤14 字、不重复、prompt 非空；③ 对话模式禁止出现「把这段话 / 改写下文 / 下面这段 / 粘贴」这类需要外部素材的措辞；④ 多文档模式每条 prompt 必须写明「只依据资料 / 不要编造 / 资料没写」，且 ≥6 条。
+- 新闻类 prompt 都加了「无法确认时效就标注、不要编造具体数字与日期」的约束（AI 没有实时联网时的防编造口径）。
+- 门禁：`tsc` 0；全量 vitest **859 文件（848 passed / 11 skipped）/ 5383 passed / 12 skipped / 0 failed**；`cssLayers` `aiWriting.css` 345→**346**；`ui-metrics`、`git diff --check` 通过。
+### 261111 · 目录栏鼠标划过整列跳动（回归，已修）
+- **现场**：鼠标扫过文档树行时整列上下跳（用户录屏）。
+- **根因 1（本批厚度 review 引入）**：`--lake-ctl-h-sm` 22→26 连带目录行内动作钮（⋯ / ＋）从 22 变 26；`.note-row` 是 27px 行 + 上下各 2px 内距，而 `.tree-row-actions` 是 `display:none → flex` 的**hover 才显形** ⇒ 悬停时该行 27→30，划过整列每行都 +3/−3。
+  - **修**：`.tree-row .tree-row-action { width: 22px; height: 22px }`，**必须落 shell 层 `chrome.css`** —— 放 `app/shell.css` 无效（那个文件在 `legacy` 层，压不过 `kit` 层的 `.ln-iconbtn--compact`）。行内 affordance 记为「内容区例外」，与「正文/编辑器内部不参与统一厚度」同口径。
+- **根因 2（既有，顺带修）**：`.tree-row { content-visibility: auto; contain-intrinsic-size: auto 28px }` —— 视口外行的占位高 = 28+4 = **32**，真实行高 27 ⇒ 滚入视口时 32→27 跳 5px。改成 `auto 23px`（内容盒 23 + 内距 4 = 27）。
+- **实测**（隔离实例 + CDP `Input.dispatchMouseEvent` 真鼠标逐行扫过 9 行，`PerformanceObserver('layout-shift')` 观察）：修复前 hover 行高 **30** vs 静止 27；修复后 静止 / 悬停 / 扫过后全部 **27（笔记本 29）**，行内动作钮实测 22，树相关 layout-shift **0 条**。
+- 门禁：`tsc` 0；全量 vitest **859 文件（848 passed / 11 skipped）/ 5383 passed / 12 skipped / 0 failed**；`cssLayers` 基线 `chrome.css` 528→**530**（写明理由）；`ui-metrics`、`git diff --check` 通过。
+
+### 261111 · 厚度 review：紧凑档 / 徽标 / chip 全站加厚（用户点单「选1 都加厚」）
+- **起因**：用户发现 AI 写作的工具钮/气泡比设置页薄，怀疑「不是同一套原语」。核对结论：**确实是同一套原语、两档厚度在起作用** —— AI 写作工具钮/发送/建议气泡 = `.ln-btn--compact`(22)、文档 chip = `.ln-tag`(18)、筛选 chip = `.ln-chip`(24)；设置页 = `--lake-ctl-h-settings`(32) 管理档。所以是「档位差」不是两套实现。
+- **改动（原语级，一处生效）**：`--lake-ctl-h-sm` **22 → 26**；`.ln-tag` **18 → 22**（内距 7 → 8）；`.ln-tag--status` **22 → 26**；`.ln-chip` 默认 **24 → 26**。标准档 27 / 管理档 32 **不动** ⇒ AI 写作与设置页的落差从 10px 收到 6px，全站「薄一档」观感消失。
+- **实测（隔离实例 1431/9223）**：AI 写作 工具钮/发送/建议气泡 26、文档 chip 22、行尾 ⋯ 26、新会话主按钮 27、分段段高 27；`--lake-ctl-h-sm` computed = 26px。
+- **影响面 / 必须重烤**：所有 compact 档几何 +4px（AI 写作、标签选择器、小记动作行、页签动作、`.ln-chip` 各屏…）；桌面 `check:stylesnap` **42 态计算值会变** ⇒ 发版前必须重烤（本机无桌面合成夹具，登记 §3）。移动端 `mb-*` 独立、**未动**。
+- 门禁：`tsc` 0；全量 vitest **859 文件（848 passed / 11 skipped）/ 5380 passed / 12 skipped / 0 failed**；`ui-metrics`（颜色 0 / `!important` 9=清单 / 跨文件重复 103≤105）；`git diff --check` 0；`cssLayers` 声明数未变（只改值）。文档同步：`docs/DESIGN.md`（Buttons/Icon Buttons/chip/分段）、`AGENTS.md` §3#14 两档数值。
+
+### 261111 · AI 写作历史记录菜单：改成与知识库目录右键**同款**（用户点单）
+- **形式**（用户原话「用和知识库目录栏右键以及菜单一模一样的形式」）：`surfaceClassName="context-menu"`（覆盖 Menu 默认 `.ln-menu`）、每项 `ln-menu__item` + **15px lucide 图标** + `<span>`、分组用 `.context-menu-sep`、危险项走 `className="danger"`（红字，与目录右键「删除」同一 class）。三项 = 置顶/取消置顶（Pin/PinOff）· 重命名（Pencil）· 删除（Trash，分隔线之后）。
+- **位置**（用户报「为什么局限在左侧分栏内」）：原来 `anchor` + `align:"end"` 会让菜单贴着左栏右缘、看起来被分栏"框住"。改成**触发点坐标** `usePopoverPosition({ at })`：点行尾 ⋯ = 按钮左下角，**右键行 = 指针位置**（新增 `onContextMenu` 入口，与目录右键同一交互）；视口翻转/夹取交给 hook。浮层本来 portal 到 body，`.aiw-side { overflow: hidden }` 裁不到它。
+- **实测（隔离实例 1431/9223，先 `aiWritingCreate` 造两条会话）**：菜单 220×105，右缘 466 > 左栏右缘 288（已跨过分栏）；三项图标齐全、分隔线 1 条、删除项 class = danger；portal 落在 body。
+- 测试：`AiWritingSidebar.render.test.tsx` +2 例（右键行打开同款菜单：表面/分隔线/danger 逐项断言；⋯ 菜单三项都带图标且不在 `.aiw-side` 内）；全量 vitest **859 文件（848 passed / 11 skipped）/ 5380 passed / 12 skipped / 0 failed**；`tsc` 0；`ui-metrics` / `git diff --check` 通过。
+
+### 261111 · 多文档选择：笔记本文档改「右侧列」展开（用户点单）+ 构建/门禁
+- **问题**：原来点笔记本是**内联**展开文档列表，会把下面的笔记本行往下挤（用户截图红框指的位置是右边空白）。
+- **改法**：`AiDocPicker` 从单列改**两列**——左 `.aiw-picker__list`（快捷组 + 笔记本行，**布局稳定**）+ 右 `.aiw-picker__side`（当前本的文档列，头部 = 笔记本名 + 「N 篇」；每行复选框走原有 `onToggle`）。表面自身不再滚动，两列各自滚动；**关闭气泡即收起右列**（不记忆上次展开）。
+- **定位**：宽度按展开态固定传给 `usePopoverPosition`（展开 560 / 收起 320）——右列一出现表面就变宽，hook 会重测并重新夹视口，避免贴右缘被裁。
+- **实测（隔离实例 1431/9223）**：展开前后笔记本行 `top/left` 完全不变（562/445 ⇒ **内联挤压已消失**）；气泡 560×248、右列 224 宽贴右；点「个人笔记」右列出现「欢迎来到 LakexLocalNotes」并可勾选。
+- 测试：新增 `AiDocPicker.render.test.tsx` 3 例（右列出现且不挤行 / 单篇 `onToggle` / 整本勾选 `onReplace`）；`aiWriting.css` 基线 321→**345**（+24 = 两列布局与右列头/标题，写明理由）。全量 vitest **859 文件（848 passed / 11 skipped）/ 5378 passed / 12 skipped / 0 failed**；`tsc` 0；`ui-metrics` 无新增违规；`git diff --check` 0。
+
+### 261111 · 移动端底栏选中效果（参照小米商店，用户点单）+ 快照基线待重烤
+- **选中项 = 浅色胶囊底**：`.mb-home-dock__item.is-active::before`（绝对定位、`inset: 6px 13px`、`border-radius: 999px`、`background: var(--lake-bg-selected)`，选中字/图标 = `--lake-fg-selected`）。**只加背景层**：五格几何、底栏高度（56）、FAB、手势热区都不动；`item` 加 `position: relative` + `isolation: isolate` 让胶囊只在本格内绘制。左右内缩 ≈ 格宽 1/6（参照图胶囊约占格宽 2/3）。
+- 实测（`lake_mobile` / emulator-5554，装包后设备级截图）：选中格背景 `rgb(225,234,250)`（= accent tint）、圆角 999、inset 6/13；底栏高 56 / 格 82×56 **未变**；切到「标签」胶囊随之移动。
+- 门禁：`tsc` 0；`mobileLayers` 基线 `mobile/mobile.css` 1672→**1682**（+10，写明理由）；全量 vitest 见 §1；`ui-metrics` 移动端 `!important` 19=基线、颜色字面量 0；`git diff --check` 0。
+- ⚠️ **9 态设备快照基线需要重烤**：home-* 态的计算值指纹包含该格背景/字色 ⇒ 在 `lake_gate` 跑全量会红（元素数不变，只是指纹变）。已登记 §3。
+
+### 261111 · AI 写作两项（提示词气泡位置 / 笔记本整本多选）+ 一处测试去日期绑定
+- **提示词 / 选择文档气泡位置修复**（用户报「提示词弹窗位置错误」）：261110 曾把两处气泡的锚点改成**整张输入卡 + align:center**（当时为修「偏左」），结果是弹层飘在卡片中下方、和触发按钮对不上。现改回**锚到触发它的那个按钮**（`AiComposer` 传 `event.currentTarget`）并默认 `align:"start"`（左缘对齐按钮；下方放不下由 `usePopoverPosition` 翻到按钮上方）。实测：按钮 left 343 / 气泡 left 343、气泡顶 = 按钮底 + 6。
+- **多文档选择：可整本勾选 + 多本同时选**（用户点单）：按笔记本区块的行首加**三态勾选框**（全选 / 半选 / 未选）——勾上 = 该笔记本下全部文档进资料集，可同时勾多个本（互不覆盖）；行按钮仍负责展开/收起逐篇勾选。逻辑单一来源 = `features/aiWriting/aiWritingDocs.ts` 的 `notebookSelectionState()` / `toggleNotebookRefs()`（已选全 ⇒ 只移除该本；未全选 ⇒ 补齐缺的那几篇，**半选点一下 = 补成整本**，与原生 checkbox 口径一致）；UI = `AiDocPicker`（`.aiw-picker__grouprow` + `.aiw-picker__check`）。实测：勾整本 → chip「1 篇文档」；取消其中一篇 → chip 清空、框回未选；再点 → 全选；再点 → 取消。
+- **顺带修一处隔天必红的测试**：`AiWritingSidebar.render.test.tsx` 的分组用例把「今天/昨天」写成了固定日期（2026-11-10/11-09）⇒ 261111 早上跑就红（今天桶空）。改成**相对 now** 生成（now / now-1h / 昨天中午12点）。**写时间相关的用例不要写死日期。**
+- 门禁：`npx tsc --noEmit` 0；全量 vitest **858 文件（847 passed / 11 skipped）/ 5375 passed / 12 skipped / 0 failed**；`ui-metrics` 无新增违规；`git diff --check` 0。`aiWriting.css` 新增 8 条（picker 勾选框布局）仍在基线 321 内，未改基线。
+
+### 261110 · AI 助手四项（用户点单：tab 长度 / 钉住 / 每条重新生成 / AI 写作复制为 Lake）
+- **多 tab 长度**：`.tab-title` 统一 `max-width: min(133px, 34vw)`（= 用户口径「原 200px 档的 2/3」）；窄窗 `34vw` 副本从 `src/styles/app/misc.css` 并入 `src/styles/app/tabs.css`（单处定义；misc.css 只留 `.current-note`，声明数不变）。超长标题省略、悬停 title 看全名。
+- **AI 助手面板「钉住」**（左上角新入口 `.ai-dialog__head`，`ln-iconbtn` + `is-selected`）——用户三轮定稿后的**最终语义**：
+  - 钉住 = 面板**拴在打开它的作用域**（空间 + 文档 tab）：切到别的页面先收起、**回来原样还在**（同一段对话、仍钉住、同落位）；在别的页面打开 AI 是**它自己的新会话**，互不影响；tab / 文档被关掉则这份**跟着丢弃**；
+  - 未钉住的：切走即关闭（「挂起」只属于钉住的面板）；Esc / 关闭按钮随时关；钉住只挡「点面板外面」（在本文档里点正文不消失）。
+  - 落点：会话模型从「全局单会话」改成**每作用域一份**（`features/ai/aiAssistantSession.ts`：`readAiScope` / `aiScopeNoteId` / sessions 数组 / `openAiAssistant` 同作用域替换）；`AiAssistantHost` 一次渲染全部会话；面板自己按 `scope` 判 `inScope`，切走时 **`return null` 不卸载**（`useAiConversation` 与钉住态因此都保留），切回重建 Popover 按当时几何落位；丢弃判据 = 该 `data-note-id` 的编辑器宿主已不在（属性 + 标签条 childList 观察，**不轮询、不读几何**）。
+  - **不要再引入**：一改的「冻结矩形 + 视口级 fixed / 跨空间浮窗」（已整条撤回），以及二改的「切走就关闭」（会丢对话）。
+- **文档 AI 面板「重新生成」下沉**：从底部按钮行移到**最后一条回答**的动作行（`ln-iconbtn` + 即时 hover 气泡，与 AI 写作操作条同款）；底部不再重复（同一语义只留一处）。`useAiConversation.regenerate` 语义未动（只重跑最后一轮）⇒ 历史回答不带该按钮。
+- **AI 写作每条输出「复制为 Lake」**：`AiMessageView` 在「复制」旁加图标钮（lake 文字徽标、成功 1200ms 勾、`aria-label="复制为 Lake"`）；内核来源顺序 = `src/features/ai/aiLakeKernelRegistry.ts`（`AiAnswerViewer` 挂载即登记、卸载撤销）→ `editorInstanceAt(activeEditorMount())?.kernel` → 动态 import 建的屏外 1×1 viewer（模块级缓存；**禁止静态 import lakeRuntime**）；转换只走 `aiLakeClipboard.copyMarkdownAsLake`。
+- **实测（隔离实例：`LAKE_DEV_PORT=1431` / CDP 9223 / 独立 userData + 独立资源端口；未动用户 1421/9222 实例）**：① tab 标题 computed `max-width: 133px`、超长省略；② B 文档钉住 + 草稿 → 切到欢迎 tab：**B 不显示**；切回 B：**面板 + 草稿 + 钉住态原样**；⌘2 切空间同理；③ 在欢迎 tab 另开一份（草稿各自独立）→ 两个 tab 各显示自己的草稿；④ 关掉 B 的 tab 再重开：B 是**全新面板**（草稿空、未钉住），A 的那份不受影响；⑤ 未钉住的面板切走即关（回来无面板）。
+- 门禁：tsc 0；`src/features/ai` + `src/features/aiWriting` + `src/styles/cssLayers.test.ts` 全过；`ui-metrics`（颜色 0 / !important 9=清单 / 跨文件重复 103≤105）；`git diff --check` 0；`cssLayers` 基线 `app/tabs.css` 188→189、`ai/aiDialogParts.css` 87→91（均写明理由）。
+- **改动文件**：`src/features/ai/{AiAssistantDialog,AiAssistantHost,aiAssistantSession,aiLakeKernelRegistry,aiLakeCopyAction}.*`、`src/features/aiWriting/{AiMessageView,AiWritingWorkspace,AiAnswerViewer}.*`、`src/styles/app/{tabs,misc}.css`、`src/features/ai/aiDialogParts.css`、`src/features/aiWriting/aiWriting.css`（+ 各自测试；基线见 `cssLayers.test.ts`）。
+- **未做**：桌面 `check:stylesnap` 42 态（本机无合成夹具）；AI 写作的「复制为 Lake」真机点收（隔离实例造不出回答，只有单测 `AiMessageView.render.test.tsx` 5 例 + 代码路径核对）。
+- **状态**：本批与并行会话（按钮第二批 / mb-btn）的改动同在未提交工作树。
+
 ### 261111 · 桌面冷启动首篇文档预热（用户反馈「刚打开软件就看到正在加载编辑器」）
 
 - **现状与根因**：桌面启动必然自动打开一篇文档（恢复标签；没有则落 `lastOpenedNoteId`），EditorTab 的 lazy import 在挂载瞬间发起；旧 prefetch 要「就绪后 3s 的第一个空闲」才开始 ⇒ 预取永远慢于真实首篇挂载，等于没帮忙。prod 首篇 fallback ≈ 内核 chunk 下载+parse（本机 200–300ms）**是地板**。

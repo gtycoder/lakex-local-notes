@@ -23,10 +23,13 @@ const conversation = (id: string, title: string, updatedAt: string): AiWritingCo
   createdAt: updatedAt, updatedAt,
 });
 
+// 时间**相对 now** 生造：写死日期会让这条用例过一天就红（261111 实测：隔天跑「今天」桶空了）。
+const now = new Date();
+const yesterdayNoon = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 12).toISOString();
 const list = [
-  conversation("a", "周报整理", "2026-11-10T09:00:00.000Z"),
-  conversation("b", "产品标语", "2026-11-10T08:00:00.000Z"),
-  conversation("c", "翻译练习", "2026-11-09T08:00:00.000Z"),
+  conversation("a", "周报整理", now.toISOString()),
+  conversation("b", "产品标语", new Date(now.getTime() - 3600_000).toISOString()),
+  conversation("c", "翻译练习", yesterdayNoon),
 ];
 
 function render(props: Partial<Parameters<typeof AiWritingSidebar>[0]> = {}) {
@@ -107,5 +110,39 @@ describe("AiWritingSidebar（搜索 + 置顶）", () => {
     const pinItem = [...document.querySelectorAll('[role="menuitem"]')].find((el) => (el.textContent ?? "").includes("置顶"))!;
     act(() => { pinItem.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true })); });
     expect(handlers.onTogglePin).toHaveBeenCalledWith("a");
+  });
+
+  it("右键行 = 打开同一个菜单（与知识库目录右键同一入口/同一形式，用户 261111）", () => {
+    render();
+    const row = document.querySelector<HTMLElement>(".aiw-hist .ln-row[role=listitem]")!;
+    act(() => {
+      row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 120, clientY: 200 }));
+    });
+    const items = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')];
+    expect(items.map((el) => (el.textContent ?? "").trim())).toEqual(["置顶", "重命名", "删除"]);
+    // 与目录右键同一套表面/分隔线/危险项（surfaceClassName 覆盖默认 .ln-menu ⇒ 表面类就是 .context-menu）
+    const surface = document.querySelector(".context-menu")!;
+    expect(surface).toBeTruthy();
+    expect(surface.querySelector(".context-menu-sep")).toBeTruthy();
+    const danger = [...surface.querySelectorAll('button[role="menuitem"]')].find((el) => (el.textContent ?? "").includes("删除"))!;
+    expect(danger.className).toBe("danger");
+  });
+
+  it("行内 ⋯ 菜单：三项都带图标、且挂到 body（不受左栏 overflow 裁剪，用户 261111）", () => {
+    render();
+    const more = document.querySelector<HTMLButtonElement>('[aria-label="对话操作"]')!;
+    act(() => { more.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true })); });
+    const items = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')];
+    expect(items.map((el) => (el.textContent ?? "").trim())).toEqual(["置顶", "重命名", "删除"]);
+    // 每一项都有 lead 图标（与知识库右键菜单同一身份：lucide 14 / aria-hidden）
+    for (const item of items) {
+      const icon = item.querySelector("svg");
+      expect(icon, "菜单项缺图标：" + (item.textContent ?? "")).toBeTruthy();
+      expect(icon!.getAttribute("aria-hidden")).toBe("true");
+    }
+    // 菜单是 portal 到 body 的浮层 ⇒ 左栏 .aiw-side 的 overflow:hidden 裁不到它
+    const surface = document.querySelector(".context-menu")!;
+    expect(surface).toBeTruthy();
+    expect(surface.closest(".aiw-side")).toBeNull();
   });
 });

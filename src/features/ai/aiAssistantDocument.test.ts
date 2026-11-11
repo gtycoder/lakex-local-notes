@@ -38,6 +38,8 @@ function render(props: { selectionText?: string; attachments?: Array<{ noteId: s
   const hasSelection = Boolean(selectionText || props.attachments?.length);
   act(() => root.render(createElement(AiAssistantDialog, {
     open: true,
+    /** 作用域：jsdom 里没有 .app-shell/编辑器宿主 ⇒ readAiScope() = "library::"，即本面板当前在作用域内。 */
+    scope: "library::",
     onClose: () => {},
     request: hasSelection
       ? {

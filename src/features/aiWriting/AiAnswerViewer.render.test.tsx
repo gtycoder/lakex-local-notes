@@ -21,6 +21,7 @@ vi.mock("./../../features/editor/lakeRuntime", () => ({
 }));
 
 import { AiAnswerViewer } from "./AiAnswerViewer";
+import { getRegisteredLakeKernel } from "../ai/aiLakeKernelRegistry";
 
 let host: HTMLDivElement;
 let rootEl: ReturnType<typeof createRoot>;
@@ -91,6 +92,15 @@ describe("AiAnswerViewer", () => {
     render("正文");
     act(() => rootEl.render(createElement("div")));
     expect(h.destroyLakeEditor).toHaveBeenCalledTimes(1);
+  });
+
+  it("创建后把内核登记给「复制为 Lake」，卸载时撤销（AI 写作没有活动文档编辑器，靠这张表取内核）", () => {
+    const kernel = { readData: vi.fn(), writeData: vi.fn() };
+    h.createLakeDocument.mockReturnValue({ setDocument: vi.fn(), kernel });
+    render("正文");
+    expect(getRegisteredLakeKernel()).toBe(kernel);
+    act(() => rootEl.render(createElement("div")));
+    expect(getRegisteredLakeKernel()).toBeNull();
   });
 
   it("渲染失败只回调 onError，不向宿主抛异常", () => {

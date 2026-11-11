@@ -1326,9 +1326,24 @@ body.lake-mobile .ne-ui-boundary-popover:has(.ne-ui-search-card-menu) { top: 120
   padding: 0; border: 0; background: transparent;
   color: var(--lake-text-3); font: inherit; cursor: pointer;
   -webkit-tap-highlight-color: transparent;
+  /* 选中胶囊的定位锚（::before 贴在这一格内部，不改变五格几何）。 */
+  position: relative;
+  isolation: isolate;
 }
 .mb-home-dock__item:active { color: var(--lake-text-1); }
-.mb-home-dock__item.is-active { color: var(--lake-accent-text); }
+/* 261111 用户点单（参照小米商店底栏）：选中项 = **浅色胶囊底**。
+   只加一层背景（不加位移/缩放/阴影），五格几何与底栏高度都不动；颜色走语义令牌，
+   选中口径与桌面一致（底 = --lake-bg-selected，字/图标 = --lake-fg-selected）。
+   胶囊在格内上下/左右内缩，左右内缩取「格宽 1/6」≈ 13px（参照图胶囊约占格宽 2/3）。 */
+.mb-home-dock__item.is-active::before {
+  content: "";
+  position: absolute;
+  inset: 6px 13px;
+  z-index: -1;
+  border-radius: 999px;
+  background: var(--lake-bg-selected);
+}
+.mb-home-dock__item.is-active { color: var(--lake-fg-selected); }
 .mb-home-dock__item > svg { flex: 0 0 auto; }
 .mb-home-dock__label {
   max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;

@@ -49,6 +49,8 @@
    标题恒单行、列宽处直接裁切不打省略号（见 .note-row-copy strong）。 */
 .tree-row-actions {align-items: center; justify-content: flex-end; background: inherit;}
 
+/* 目录行内动作钮的 22px 约束见 shell 层的 chrome.css（本文件在 legacy 层，压不过 kit）。 */
+
 .tree-row:hover .tree-row-actions, .tree-row-actions:has(:focus-visible) { display: inline-flex; }
 
 .tree-row { cursor: pointer; user-select: none; touch-action: pan-y; }
@@ -390,7 +392,9 @@
 /* 树长列表：跳过视口外行的渲染（content-visibility） */
 .tree-row {
   content-visibility: auto;
-  contain-intrinsic-size: auto 28px;
+  /* 视口外行的**占位高度必须等于真实行高**：真实 note 行 = 27px（内含上下各 2px 内距 ⇒ 内容盒 23）。
+     原来写 auto 28px（= 占位 32px）⇒ 滚动进入视口时 32 → 27 会有 5px 跳动（261111 用户报「目录栏跳动」的第二个来源）。 */
+  contain-intrinsic-size: auto 23px;
 }
 
 /* 工作空间菜单位于窗口级顶栏下方；打开时禁用侧栏的原生命中，

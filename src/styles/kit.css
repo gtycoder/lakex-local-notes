@@ -14,7 +14,7 @@
  *   L4 ghost     = 无框次要灰字（更次要 / 取消 / 工具）
  *   L4 link      = 无框主题色字（跳转 / 引导）
  *   L5 danger    = 红字红框；配 --ghost / --danger-text = 纯红字
- * 尺寸：默认 27（--lake-ctl-h）/ .ln-btn--compact 22（--lake-ctl-h-sm）。
+ * 尺寸：默认 27（--lake-ctl-h）/ .ln-btn--compact 26（--lake-ctl-h-sm；261111 厚度 review：22 → 26）。
  * 状态：default / hover / active / focus-visible / is-selected / disabled —— 六态口径见 docs/DESIGN.md。
  */
 .ln-btn {
@@ -389,8 +389,9 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  height: 18px;
-  padding: 0 7px;
+  /* 261111 厚度 review：徽标/标签 18 → 22（与紧凑按钮同一厚度档，AI 写作输入卡的文档 chip 就是它）。 */
+  height: 22px;
+  padding: 0 8px;
   border-radius: var(--lake-radius-pill);
   background: var(--lake-bg-block);
   color: var(--lake-text-2);
@@ -398,7 +399,7 @@
   font-weight: var(--lake-font-weight-medium);
   white-space: nowrap;
 }
-.ln-tag--status { height: 22px; }
+.ln-tag--status { height: 26px; }   /* 261111：状态徽标与紧凑按钮同档（22 → 26）。 */
 .ln-tag--sync { background: var(--lake-status-sync-soft); color: var(--lake-status-sync); }
 .ln-tag--pending { background: var(--lake-status-pending-soft); color: var(--lake-status-pending); }
 .ln-tag--ok { background: var(--lake-status-ok-soft); color: var(--lake-status-ok); }
@@ -419,7 +420,7 @@
   gap: var(--ln-chip-gap, 4px);
   min-width: 0;
   max-width: var(--ln-chip-max, 180px);
-  height: var(--ln-chip-height, 24px);
+  height: var(--ln-chip-height, 26px);   /* 261111 厚度 review：chip 24 → 26，与紧凑按钮同档。 */
   padding: 0 9px;
   border: 0.5px solid var(--lake-border-2);
   border-radius: var(--lake-radius-xs);

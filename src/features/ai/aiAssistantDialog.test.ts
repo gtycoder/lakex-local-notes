@@ -58,6 +58,7 @@ describe("AI 弹窗定位护栏（261004）", () => {
 
   it("AI 浮窗渲染进编辑区滚动容器、用内容坐标定位（随正文滚）且**高度封顶**", () => {
     expect(DIALOG).toContain("contentGeom");
+    // 261110：钉住**不**改 portal（不跨作用域 ⇒ 不需要脱离编辑区容器）
     expect(DIALOG).toContain("container={scroller}");
     expect(DIALOG).toContain('position: "absolute"');
     // 高度上限 = 编辑区可视高 ⇒ 超出交面板内滚动（不再按选区下方可用高封顶）
@@ -85,6 +86,49 @@ describe("AI 弹窗定位护栏（261004）", () => {
     expect(DIALOG).not.toMatch(/request\.outputs\.map[\s\S]{0,300}ln-btn--primary/);
     expect(DIALOG).toMatch(/className="ln-btn ln-btn--ghost( ai-dialog__btn)?"/);
   });
+  it("钉住（用户 261110 二改）：左上角开关；只挡「点面板外面」，Esc 仍关闭", () => {
+    // 左上角入口：面板头里的 ln-iconbtn，两个 aria-label 互为开/关
+    expect(DIALOG).toContain('className="ai-dialog__head"');
+    expect(DIALOG).toContain('aria-label={pinned ? "取消钉住" : "钉住面板"}');
+    expect(DIALOG).toContain("aria-pressed={pinned}");
+    // 只挡外点：ignoreOutside 只在钉住态生效；onDismiss（Esc 走它）仍是 onClose
+    expect(DIALOG).toContain("ignoreOutside={pinned ? () => true : undefined}");
+    expect(DIALOG).toContain("onDismiss={onClose}");
+    // 钉住**不动几何**：不再有「冻结矩形 + 视口级 fixed」那套（二改把跨空间保留整条撤回）
+    expect(DIALOG).not.toContain("pinnedGeom");
+    expect(DIALOG).not.toContain('position: "fixed" as const');
+    // 打开/换入口重置钉住态
+    expect(DIALOG).toContain("setPinned(false);");
+  });
+
+  it("钉住**不跨**作用域：切走挂起隐藏、切回原样恢复；未钉住切走即关；文档关掉即丢弃（用户 261110 定稿）", () => {
+    // 作用域读取/判据来自 session 单一来源，这里不再写第二份
+    expect(DIALOG).toContain('import { aiScopeNoteId, readAiScope } from "./aiAssistantSession";');
+    expect(DIALOG).toContain("const [inScope, setInScope] = useState(() =>");
+    // 切走 = 不渲染（组件不卸载 ⇒ 对话/输入/钉住态都保留），切回重建 Popover 按当时几何落位
+    expect(DIALOG).toContain("if (!open || !inScope) return null;");
+    // 未钉住 ⇒ 切走就关闭（挂起只属于钉住的面板）
+    expect(DIALOG).toContain("if (open && !inScope && !pinned) onCloseRef.current();");
+    // 自己的文档 / tab 被关掉 ⇒ 丢弃（判据 = 该 data-note-id 的编辑器宿主已不在）
+    expect(DIALOG).toContain('.some((el) => el.getAttribute("data-note-id") === noteId)');
+    expect(DIALOG).toContain("if (!alive) onCloseRef.current();");
+    // 观察点：属性（class/data-active）+ 标签条 childList；不轮询、不读几何
+    expect(DIALOG).toContain('attributeFilter: ["class", "data-active"]');
+    expect(DIALOG).toContain('document.querySelector(".tab-items")');
+    // 用户口径写进 hover 说明：切走先收起、回来还在
+    expect(DIALOG).toContain("钉住：切到别的页面先收起，回来还在");
+  });
+
+  it("重新生成下沉到「最后一条回答」旁（对齐 AI 写作操作条，用户 261110）", () => {
+    expect(DIALOG).toContain("const isLast = i === turns.length - 1;");
+    expect(DIALOG).toContain('aria-label="重新生成"');
+    expect(DIALOG).toContain("onClick={() => void regenerate()}");
+    // 底部按钮行不再重复一个「重新生成」（同一语义只留一处）
+    expect(DIALOG).not.toMatch(/ln-btn--ghost ai-dialog__btn"? disabled={busy} onClick=\(\) => void regenerate/);
+    // 动作行：最后一条即使没有正文（失败/中断）也要出重新生成
+    expect(DIALOG).toContain("{!streaming && (t.text || isLast) && (");
+  });
+
   it("对话式：每条 AI 回答各带两个复制按钮（纯文本 / Lake 格式，用户 261005）", () => {
     expect(DIALOG).toContain("copyMessage(t.text, i)");
     expect(DIALOG).toContain("void copyAsLake(t.text, i)");

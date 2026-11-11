@@ -11,6 +11,8 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { createLakeDocument, destroyLakeEditor, type LakeEditorInstance } from "../editor/lakeRuntime";
+import { registerLakeKernel, unregisterLakeKernel } from "../ai/aiLakeKernelRegistry";
+import type { LakePayloadKernel } from "../ai/aiLakeClipboard";
 import "./aiAnswerViewer.css";
 
 /** 视口预挂载余量：提前这么多像素建实例，滚到时已渲染好。 */
@@ -57,6 +59,8 @@ export function AiAnswerViewer({ markdown, onReady, onError }: AiAnswerViewerPro
     if (!mounted) return;
     const host = hostRef.current;
     if (!host) return;
+    /** 登记给「复制为 Lake」的内核（销毁前撤销；拿不到就保持 null）。 */
+    let registered: LakePayloadKernel | null = null;
     try {
       editorRef.current = createLakeDocument(host, "viewer", () => {}, false, "ai-writing-answer", null, {
         disableNativeToc: true,
@@ -66,11 +70,18 @@ export function AiAnswerViewer({ markdown, onReady, onError }: AiAnswerViewerPro
         floatingToolbar: false,
         blockHandle: false,
       });
+      // AI 写作没有活动文档编辑器 ⇒ 把本 viewer 的内核登记进注册表，「复制为 Lake」才拿得到内核。
+      const kernel = editorRef.current.kernel as unknown as Partial<LakePayloadKernel> | undefined;
+      if (kernel && typeof kernel.readData === "function" && typeof kernel.writeData === "function") {
+        registered = kernel as LakePayloadKernel;
+        registerLakeKernel(registered);
+      }
     } catch (error) {
       callbacksRef.current.onError?.(error instanceof Error ? error.message : String(error));
       setFailed(true);
     }
     return () => {
+      if (registered) unregisterLakeKernel(registered);
       destroyLakeEditor(editorRef.current);
       editorRef.current = null;
     };

@@ -241,8 +241,9 @@
      出现两个问题（用户 260915 截图）：rail 离开窗口右沿 13px 看着错位，且压住正文右缘的
      编辑器滚动条与面包屑右侧图标。260922 起大纲搬进编辑区、不再占列（宽度由 pane 的右内推承担），
      大纲不可用时该列就是 0，正文仍然是满宽。 */
-  /* 顶栏：标题区允许压缩，控件不换行 */
-  .current-note, .tab-item .tab-title { max-width: 34vw; }
+  /* 顶栏：标题区允许压缩，控件不换行。tab 标题的宽度上限已并入 app/tabs.css 的 .tab-title
+     （min(133px, 34vw)，单处定义）——这里不再补第二份 max-width。 */
+  .current-note { max-width: 34vw; }
   /* 左轨顶部留白（padding-top: --topbar-height）随组 2 一起进共用作用域，窄窗不再补副本。 */
   /* 侧栏横向裁剪（避免标题/缩进线拖出竖线）由共用作用域的
      `.sidebar.sidebar-docked, .sidebar.sidebar-floating { overflow: hidden }` 承担。 */

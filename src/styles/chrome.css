@@ -633,6 +633,12 @@
 }
 .tree-chevron:hover:not(:disabled) { color: var(--lake-text-2); background: var(--lake-bg-hover); }
 .tree-chevron:disabled { cursor: default; }
+/* 目录行内动作钮（⋯ / ＋）**受行高约束固定 22×22**，不跟随 --lake-ctl-h-sm（26）。
+   原因：.note-row = 27px 行 + 上下各 2px 内距 ⇒ 26px 按钮会把它撑成 30px；这两个按钮又是
+   display:none → flex 的「hover 才显形」⇒ 鼠标划过整列上下跳 3px（261111 用户报「目录栏跳动」）。
+   行内 affordance 属内容区例外（与「文档正文/编辑器内部不参与统一厚度」同一口径）。
+   落点必须在 shell 层：app/shell.css 在 legacy 层，压不过 kit 的 .ln-iconbtn--compact。 */
+.tree-row .tree-row-action { width: 22px; height: 22px; }
 .tree-row-actions { display: none; }
 /* 只在行 hover / 键盘聚焦时显形（用 :has(:focus-visible) 而非 :focus-within ——
  * 后者会被鼠标点击后的残余 focus 钉住，导致选中行标题被 ⋯ 挤窄，用户 260914）。 */

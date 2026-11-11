@@ -28,6 +28,7 @@ beforeEach(() => {
   host = document.createElement("div"); document.body.append(host); root = createRoot(host);
   act(() => root.render(createElement(AiAssistantDialog, {
     open: true,
+    scope: "library::",
     onClose: () => {},
     request: { context: { kind: "none" }, placement: { kind: "floating" }, outputs: [], applyOutput: () => false },
   })));

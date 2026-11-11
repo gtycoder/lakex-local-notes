@@ -5,8 +5,8 @@
  * 思考块仍是 MarkdownView（纯文本为主，不值得再起内核实例）；**默认折叠**（261110 用户定稿），
  * 只显示一行「已深度思考（用时 X 秒）」/「正在深度思考…」，点开才渲染正文（见 AiThinkingBlock）。
  */
-import { lazy, Suspense, useCallback, useState } from "react";
-import { Copy, FilePlus2, RotateCcw, Sparkles } from "lucide-react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { Check, Copy, Feather, FilePlus2, RotateCcw, Sparkles } from "lucide-react";
 import { MarkdownView } from "../../components/ui/markdown/MarkdownView";
 import { AiThinkingBlock } from "./AiThinkingBlock";
 import type { AiWritingMessage } from "../../core/aiWriting";
@@ -25,6 +25,8 @@ export interface AiMessageViewProps {
   busy: boolean;
   onRegenerate: () => void;
   onCopy: (content: string) => void;
+  /** 复制为 Lake（Markdown → 内核剪贴板负载；与文档 AI 弹窗同一能力，内核来源由父级解析）。 */
+  onCopyAsLake: (content: string) => Promise<boolean>;
   onPublish: (content: string) => void;
   onSaveQuickNote: (content: string) => void;
 }
@@ -35,12 +37,18 @@ function durationLabel(ms: number): string {
 }
 
 export function AiMessageView(props: AiMessageViewProps) {
-  const { message, stream, busy, onRegenerate, onCopy, onPublish, onSaveQuickNote } = props;
+  const { message, stream, busy, onRegenerate, onCopy, onCopyAsLake, onPublish, onSaveQuickNote } = props;
   // hooks 必须在任何 return 之前（用户/助手分支共用同一实例生命周期）。
   const [richReady, setRichReady] = useState(false);
   const [richFailed, setRichFailed] = useState(false);
   const handleRichReady = useCallback(() => setRichReady(true), []);
   const handleRichFailed = useCallback(() => setRichFailed(true), []);
+  /** 「复制为 Lake」成功反馈：勾 1200ms 后复原（与文档 AI 弹窗 markCopied 同口径）。 */
+  const [lakeCopied, setLakeCopied] = useState(false);
+  const lakeTimerRef = useRef<number | null>(null);
+  useEffect(() => () => {
+    if (lakeTimerRef.current !== null) window.clearTimeout(lakeTimerRef.current);
+  }, []);
   if (message.role === "user") {
     return (
       <div className="aiw-msg aiw-msg--user">
@@ -54,6 +62,18 @@ export function AiMessageView(props: AiMessageViewProps) {
   const thinking = streaming && !content;
   /** 空助手消息（崩溃/重启打断了流）：给一句说明，别留一个空气泡。 */
   const interrupted = !busy && !streaming && content.length === 0 && reasoning.length === 0 && !message.error && !message.stopped;
+  /** 复制为 Lake：成功才显示勾（失败静默，不新增 toast 语义）。 */
+  const copyAsLake = () => {
+    void onCopyAsLake(content).then((ok) => {
+      if (!ok) return;
+      setLakeCopied(true);
+      if (lakeTimerRef.current !== null) window.clearTimeout(lakeTimerRef.current);
+      lakeTimerRef.current = window.setTimeout(() => {
+        setLakeCopied(false);
+        lakeTimerRef.current = null;
+      }, 1200);
+    });
+  };
   const thinkingLabel = streaming
     ? (reasoning ? "正在深度思考…" : "正在思考中…")
     : message.durationMs != null
@@ -92,6 +112,18 @@ export function AiMessageView(props: AiMessageViewProps) {
                 <Copy size={14} aria-hidden="true" />
               </button>
             )}
+            {content && (
+              <button
+                type="button"
+                className={"ln-iconbtn ln-iconbtn--compact aiw-actions__icon" + (lakeCopied ? " is-selected" : "")}
+                title="复制为 Lake"
+                aria-label="复制为 Lake"
+                disabled={streaming}
+                onClick={copyAsLake}
+              >
+                {lakeCopied ? <Check size={14} aria-hidden="true" /> : <span className="aiw-lake-badge" aria-hidden="true">lake</span>}
+              </button>
+            )}
             {content && <span className="aiw-actions__sep" aria-hidden="true" />}
             {content && (
               <>
@@ -99,8 +131,10 @@ export function AiMessageView(props: AiMessageViewProps) {
                   <FilePlus2 size={14} aria-hidden="true" />
                   <span>生成文档</span>
                 </button>
-                <button type="button" className="ln-btn ln-btn--primary aiw-actions__btn" onClick={() => onSaveQuickNote(content)}>
-                  保存到小记
+                {/* 「保存到小记」与「生成文档」同级（用户 261110：不要强调成主操作），图标 = 小记空间的 Feather。 */}
+                <button type="button" className="ln-btn ln-btn--ghost aiw-actions__btn" onClick={() => onSaveQuickNote(content)}>
+                  <Feather size={14} aria-hidden="true" />
+                  <span>保存到小记</span>
                 </button>
               </>
             )}

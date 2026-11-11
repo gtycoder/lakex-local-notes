@@ -41,8 +41,11 @@ export function AiComposer({
   onInput, onSend, onStop, onSetPrompt, onSetDocRefs,
 }: AiComposerProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  /** 气泡锚点 = 整张输入卡（261110 用户定稿：气泡贴输入卡下方居中，而不是贴左侧小按钮）。 */
-  const composerRef = useRef<HTMLDivElement>(null);
+  /**
+   * 气泡锚点 = **触发它的那个按钮**（用户 261111 报「提示词弹窗位置错误」：
+   * 曾经锚到整张输入卡并居中，弹层飘在卡片中下方、和按钮对不上）。
+   * 现在点哪个按钮就贴哪个按钮的左缘展开（放不下时由 usePopoverPosition 翻到上方）。
+   */
   const [promptAnchor, setPromptAnchor] = useState<HTMLElement | null>(null);
   const [docAnchor, setDocAnchor] = useState<HTMLElement | null>(null);
 
@@ -77,7 +80,7 @@ export function AiComposer({
   };
 
   return (
-    <div className="aiw-composer" ref={composerRef}>
+    <div className="aiw-composer">
       {(promptText || docRefs.length > 0) && (
         <div className="aiw-composer__chips">
           {promptText && (
@@ -119,7 +122,7 @@ export function AiComposer({
           <button
             type="button"
             className={"ln-btn ln-btn--ghost ln-btn--compact aiw-tool" + (promptText ? " is-selected" : "")}
-            onClick={() => setPromptAnchor(promptAnchor ? null : composerRef.current)}
+            onClick={(event) => setPromptAnchor(promptAnchor ? null : event.currentTarget)}
           >
             <Sparkles size={14} aria-hidden="true" />
             <span>提示词</span>
@@ -128,7 +131,7 @@ export function AiComposer({
             <button
               type="button"
               className={"ln-btn ln-btn--ghost ln-btn--compact aiw-tool" + (docRefs.length > 0 ? " is-selected" : "")}
-              onClick={() => setDocAnchor(docAnchor ? null : composerRef.current)}
+              onClick={(event) => setDocAnchor(docAnchor ? null : event.currentTarget)}
             >
               <FileText size={14} aria-hidden="true" />
               <span>{docRefs.length > 0 ? "已选 " + docRefs.length + " 篇" : "请选择文档"}</span>
@@ -136,9 +139,11 @@ export function AiComposer({
           )}
         </div>
         <div className="aiw-composer__send">
-          <span className="aiw-composer__hint" aria-hidden="true"><CornerDownLeft size={12} /> 发送</span>
+          {/* 快捷键提示只在「能发送」时显示：生成中按钮已变成「停止」，还挂着「↩ 发送」会读成错位（261111 用户报）。 */}
+          {!busy && <span className="aiw-composer__hint" aria-hidden="true"><CornerDownLeft size={12} /> 发送</span>}
           {busy ? (
-            <button type="button" className="ln-btn ln-btn--secondary ln-btn--compact aiw-send--stop" aria-label="停止生成" onClick={onStop}>
+            /* 停止 = 危险档（红字 + 40% 红框）：中断是要看得见的动作，不再用中性 secondary（261111 用户点单）。 */
+            <button type="button" className="ln-btn ln-btn--danger ln-btn--compact aiw-send--stop" aria-label="停止生成" onClick={onStop}>
               <Square size={14} aria-hidden="true" />
             </button>
           ) : (

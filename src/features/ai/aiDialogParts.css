@@ -6,6 +6,11 @@
 /* 外壳：Popover 表面默认不是 flex，补纵向布局后 body 才能在 max-height 内滚动。 */
 .ai-dialog { display: flex; flex-direction: column; overflow: hidden; }
 
+/* 面板头（用户 261110）：左上角只放「钉住」一个入口，不加标题、不加分隔线。
+   钉住 = 点面板外面不关闭（在本文档里点正文/工具栏不消失）；切空间/文档/标签时本面板**挂起隐藏**
+   （对话与钉住态保留），切回原作用域自动恢复；Esc 仍关闭。判据见 aiAssistantSession 的 readAiScope（几何不参与）。 */
+.ai-dialog__head { display: flex; align-items: center; gap: var(--lake-space-xs); padding: var(--lake-space-sm) var(--lake-space-lg) 0; }
+
 /* 线程：只留外层一次内距；消息之间用留白拉开，不再给回答加第二层边框。 */
 .ai-dialog__body { flex: 1 1 auto; min-height: 0; overflow: auto; padding: var(--lake-space-lg) var(--lake-space-lg) var(--lake-space-sm); }
 .ai-dialog__thread { display: flex; flex-direction: column; gap: var(--lake-space-lg); }

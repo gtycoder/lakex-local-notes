@@ -16,13 +16,15 @@ export interface AiPromptLibraryProps {
 
 export function AiPromptLibrary({ open, anchor, activePrompt, onPick, onDismiss }: AiPromptLibraryProps) {
   // 固定宽度 360：两行文本（标题 + 说明）按行省略，不收宽度会按 max-content 撑到整屏（贴底时还会被夹成一条）。
-  // 锚点 = 整张输入卡（AiComposer 传进来）：气泡在输入卡下方**居中**展开（261110 用户点单）。
-  const { surfaceRef, style } = usePopoverPosition({ open, anchor, gap: 8, align: "center", margin: 10, width: 360 });
+  // 锚点 = 「提示词」按钮本身（用户 261111 报位置错误：居中锚整张输入卡会让弹层和按钮对不上）；
+  // 左缘对齐按钮，下方放不下时 usePopoverPosition 自动翻到按钮上方。
+  const { surfaceRef, style } = usePopoverPosition({ open, anchor, gap: 6, margin: 10, width: 360 });
   return (
     <Menu
       open={open}
       onDismiss={onDismiss}
       label="提示词"
+      className="aiw-prompts"
       style={style ?? undefined}
       surfaceRef={surfaceRef}
     >
@@ -34,7 +36,7 @@ export function AiPromptLibrary({ open, anchor, activePrompt, onPick, onDismiss 
             key={card.id}
             type="button"
             role="menuitem"
-            className={"ln-menu__item" + (selected ? " is-selected" : "")}
+            className={"ln-menu__item aiw-prompts__item" + (selected ? " is-selected" : "")}
             onClick={() => onPick(card)}
           >
             <span className="ln-row__icon" aria-hidden="true"><card.Icon size={16} /></span>

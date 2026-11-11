@@ -48,6 +48,30 @@ async function renderComposer(input: string, promptText: string | null = null) {
   return { onInput, onSetPrompt };
 }
 
+/** 忙态渲染（生成中）：用于卡「停止」按钮与「↩ 发送」提示的显隐。 */
+async function renderBusy() {
+  host = document.createElement("div");
+  document.body.append(host);
+  root = createRoot(host);
+  await act(async () => {
+    root!.render(
+      <AiComposer
+        mode="chat"
+        input=""
+        busy
+        promptText={null}
+        docRefs={[]}
+        treeNodes={[]}
+        onInput={() => {}}
+        onSend={() => {}}
+        onStop={() => {}}
+        onSetPrompt={() => {}}
+        onSetDocRefs={() => {}}
+      />,
+    );
+  });
+}
+
 function clickPromptTool(): void {
   const tool = [...document.querySelectorAll("button")].find((b) => (b.textContent || "").includes("提示词"));
   expect(tool).toBeTruthy();
@@ -64,6 +88,37 @@ afterEach(() => {
   act(() => { root?.unmount(); });
   host?.remove();
   root = null;
+});
+
+describe("AiComposer · 生成中的「停止」（261111 用户报错位/颜色）", () => {
+  it("停止 = 危险档红色按钮、正方形居中；「↩ 发送」提示在忙态隐藏", async () => {
+    await renderBusy();
+    const stop = document.querySelector<HTMLButtonElement>('[aria-label="停止生成"]')!;
+    expect(stop).toBeTruthy();
+    // 颜色语义 = 危险档（红字 + 红框），不再用中性 secondary
+    expect(stop.className).toContain("ln-btn--danger");
+    expect(stop.className).not.toContain("ln-btn--secondary");
+    // 正方形、图标水平垂直居中（此前只有 width，图标被 gap 推偏 ⇒ 视觉错位）
+    expect(stop.className).toContain("aiw-send--stop");
+    // 忙态没有「↩ 发送」提示
+    expect(document.querySelector(".aiw-composer__hint")).toBeNull();
+    expect((stop.textContent || "").trim()).toBe("");
+  });
+});
+
+describe("AiComposer · 生成中的「停止」（261111 用户报错位/颜色）", () => {
+  it("停止 = 危险档红色按钮、正方形居中；「↩ 发送」提示在忙态隐藏", async () => {
+    await renderBusy();
+    const stop = document.querySelector<HTMLButtonElement>('[aria-label="停止生成"]')!;
+    expect(stop).toBeTruthy();
+    // 颜色语义 = 危险档（红字 + 红框），不再用中性 secondary
+    expect(stop.className).toContain("ln-btn--danger");
+    expect(stop.className).not.toContain("ln-btn--secondary");
+    // 正方形 + 图标居中（此前只有 width，图标被 gap 推偏 ⇒ 视觉错位）
+    expect(stop.className).toContain("aiw-send--stop");
+    // 忙态不显示「↩ 发送」提示
+    expect(document.querySelector(".aiw-composer__hint")).toBeNull();
+  });
 });
 
 describe("AiComposer · 提示词库点卡片直接写入输入框", () => {

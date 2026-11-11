@@ -2,11 +2,13 @@ import { describe, expect, it } from "vitest";
 import {
   AI_WRITING_QUICK_GROUPS,
   docRefKey,
+  notebookSelectionState,
   refsForNotebook,
   refsForQuickGroup,
   selectableDocuments,
   selectableNotebooks,
   toggleDocRef,
+  toggleNotebookRefs,
 } from "./aiWritingDocs";
 import { TRASH_NOTEBOOK_ID } from "../../core/syncDecisions";
 import type { QuickNoteListSummary, TreeNode } from "../../lib/types";
@@ -114,6 +116,43 @@ describe("refsForNotebook / toggleDocRef / docRefKey", () => {
       node({ id: "c", parentId: "nb-2", noteFileId: "f-c" }),
     ];
     expect(refsForNotebook(nodes, "nb-1").map((ref) => ref.id)).toEqual(["f-b", "f-a", "f-nested"]);
+  });
+
+  it("整本勾选：none ⇒ 补齐缺的；all ⇒ 只移除该本；多本互不影响（用户 261111）", () => {
+    const nb1 = refsForNotebook([
+      node({ id: "a", parentId: "nb-1", noteFileId: "f-a", updatedAt: daysAgo(2) }),
+      node({ id: "b", parentId: "nb-1", noteFileId: "f-b", updatedAt: daysAgo(1) }),
+    ], "nb-1");
+    const nb2 = refsForNotebook([
+      node({ id: "c", parentId: "nb-2", noteFileId: "f-c", updatedAt: daysAgo(1) }),
+    ], "nb-2");
+    expect(nb1.map((r) => r.id)).toEqual(["f-b", "f-a"]);
+
+    // 空 → 勾整本 1
+    expect(notebookSelectionState([], nb1)).toBe("none");
+    const first = toggleNotebookRefs([], nb1);
+    expect(first.map((r) => r.id)).toEqual(["f-b", "f-a"]);
+    expect(notebookSelectionState(first, nb1)).toBe("all");
+
+    // 再勾整本 2 ⇒ 两本同时选（多选）
+    const both = toggleNotebookRefs(first, nb2);
+    expect(both.map((r) => r.id)).toEqual(["f-b", "f-a", "f-c"]);
+    expect(notebookSelectionState(both, nb2)).toBe("all");
+
+    // 取消整本 1 ⇒ 只移除 nb-1，nb-2 保留
+    const onlyTwo = toggleNotebookRefs(both, nb1);
+    expect(onlyTwo.map((r) => r.id)).toEqual(["f-c"]);
+    expect(notebookSelectionState(onlyTwo, nb2)).toBe("all");
+
+    // 半选：整本内只选了一部分
+    const partial = toggleDocRef(toggleNotebookRefs([], nb1), nb1[0]);
+    expect(notebookSelectionState(partial, nb1)).toBe("some");
+    // 半选时再点勾选框 ⇒ 补齐其余（而不是全部取消）
+    expect(toggleNotebookRefs(partial, nb1).map((r) => r.id).sort()).toEqual(["f-a", "f-b"]);
+
+    // 空笔记本：状态 none，切换不改动
+    expect(notebookSelectionState(both, [])).toBe("none");
+    expect(toggleNotebookRefs(both, [])).toEqual(both);
   });
 
   it("toggle：已选取消、未选追加", () => {

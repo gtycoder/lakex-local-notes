@@ -17,18 +17,21 @@ export interface PublishDocDialogProps {
   notebooks: readonly TreeNode[];
   busy: boolean;
   error: string | null;
-  onConfirm: (notebookId: string) => void;
+  /** 确认：目标知识库 + **用户改过的标题**（空标题不允许确认）。 */
+  onConfirm: (notebookId: string, title: string) => void;
   onClose: () => void;
 }
 
 export function PublishDocDialog({ open, title, notebooks, busy, error, onConfirm, onClose }: PublishDocDialogProps) {
   const floating = useFloatingDialog({ id: "aiw-publish-doc", initialSize: { w: 780, h: 460 }, minSize: { w: 560, h: 340 } });
-  /** 首焦点 = 主操作（否则落在右上关闭钮上，一开就一圈焦点环）。 */
-  const confirmRef = useRef<HTMLButtonElement>(null);
+  /** 首焦点 = 标题输入（用户 261110：标题必须可改，进来就能直接改）。 */
+  const titleRef = useRef<HTMLInputElement>(null);
   const options = selectableNotebooks(notebooks).map((node) => ({ value: node.id, label: node.title }));
   const [notebookId, setNotebookId] = useState(options[0]?.value ?? "");
-  useEffect(() => { if (open) setNotebookId(options[0]?.value ?? ""); }, [open, options[0]?.value]);
-  const canConfirm = Boolean(notebookId) && !busy;
+  /** 文档标题：默认取回答首行摘要，**可编辑**（用户 261110 点单）。 */
+  const [docTitle, setDocTitle] = useState(title);
+  useEffect(() => { if (open) { setNotebookId(options[0]?.value ?? ""); setDocTitle(title); } }, [open, title, options[0]?.value]);
+  const canConfirm = Boolean(notebookId) && docTitle.trim().length > 0 && !busy;
   return (
     <Dialog
       open={open}
@@ -37,7 +40,7 @@ export function PublishDocDialog({ open, title, notebooks, busy, error, onConfir
       surfaceRef={floating.panelRef}
       surfaceClassName="floating-dialog aiw-publish"
       style={floating.panelStyle}
-      initialFocus={confirmRef}
+      initialFocus={titleRef}
     >
       <div className="ln-dialog__head floating-dialog-header" onPointerDown={floating.startDrag}>
         <span className="ln-dialog__title">生成文档</span>
@@ -56,13 +59,23 @@ export function PublishDocDialog({ open, title, notebooks, busy, error, onConfir
               <Select value={notebookId} options={options} onChange={setNotebookId} label="选择知识库" className="aiw-publish__select" />
             </div>
           )}
-          <p className="aiw-publish__hint">标题：{title || "AI 生成文档"}</p>
+          <div className="ln-form__row aiw-publish__row">
+            <span className="ln-form__label aiw-publish__label">标题</span>
+            <input
+              ref={titleRef}
+              className="ln-text-field aiw-publish__title"
+              value={docTitle}
+              aria-label="文档标题"
+              placeholder="AI 生成文档"
+              onChange={(event) => setDocTitle(event.target.value)}
+            />
+          </div>
           {error && <p className="aiw-publish__error" role="alert">{error}</p>}
         </div>
       </div>
       <div className="ln-dialog__actions">
         <button type="button" className="ln-btn ln-btn--ghost" onClick={onClose}>{busy ? "取消生成" : "取消"}</button>
-        <button ref={confirmRef} type="button" className="ln-btn ln-btn--primary" disabled={!canConfirm} onClick={() => onConfirm(notebookId)}>
+        <button type="button" className="ln-btn ln-btn--primary" disabled={!canConfirm} onClick={() => onConfirm(notebookId, docTitle.trim())}>
           {busy ? "生成中…" : "确认"}
         </button>
       </div>

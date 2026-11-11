@@ -8,6 +8,9 @@ import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { PublishDocDialog } from "./PublishDocDialog";
 import { SaveQuickNoteDialog } from "./SaveQuickNoteDialog";
+
+/** 弹窗正文改走内核只读视图（lazy）：测试里换掉它，避免在 jsdom 里拉起真内核；MarkdownView 兜底仍可见。 */
+vi.mock("./AiAnswerViewer", () => ({ default: () => null }));
 import type { TreeNode } from "../../lib/types";
 
 let host: HTMLDivElement;
@@ -43,17 +46,44 @@ describe("AI 写作弹窗（浮动窗 + 原语 + 可缩放）", () => {
     expect(el.querySelector(".ln-btn--primary")).toBeTruthy();
   });
 
-  it("保存到小记：默认 860×620、正文 textarea 吃满、关闭钮可点", () => {
+  it("保存到小记：默认 860×620、正文用渲染视图（不再是源码 textarea）、关闭钮可点（用户 261110）", () => {
     const onClose = vi.fn();
-    render(<SaveQuickNoteDialog open content="这是一条小记正文" busy={false} error={null} onConfirm={() => {}} onClose={onClose} />);
+    const onConfirm = vi.fn();
+    render(<SaveQuickNoteDialog open content={"# 标题\n\n这是一条小记正文"} busy={false} error={null} onConfirm={onConfirm} onClose={onClose} />);
     const el = section();
     expect(el.className).toContain("aiw-quicknote");
     expect(el.style.width).toBe("860px");
     expect(el.style.height).toBe("620px");
     expect(el.querySelectorAll(".floating-dialog-resize").length).toBe(8);
-    expect((el.querySelector("textarea") as HTMLTextAreaElement).value).toBe("这是一条小记正文");
+    // 内核只读视图（lazy）+ MarkdownView 兜底：不再暴露源码 textarea，正文以渲染态出现
+    expect(el.querySelector("textarea")).toBeNull();
+    const preview = el.querySelector(".aiw-quicknote__preview")!;
+    expect(preview.getAttribute("role")).toBe("document");
+    expect(preview.textContent).toContain("这是一条小记正文");
+    // 保存的仍是原始 Markdown（渲染只是展示层，不改入库内容）
+    const save = [...el.querySelectorAll("button")].find((b) => (b.textContent || "").includes("小记一下"))!;
+    act(() => { save.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true })); });
+    expect(onConfirm).toHaveBeenCalledWith("# 标题\n\n这是一条小记正文");
     const close = el.querySelector<HTMLButtonElement>('[aria-label="关闭"]')!;
     act(() => { close.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true })); });
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("生成文档：标题可编辑，确认时把用户改过的标题带给 onConfirm（用户 261110 点单）", () => {
+    const onConfirm = vi.fn();
+    render(<PublishDocDialog open title="AI 生成文档" notebooks={[notebook]} busy={false} error={null} onConfirm={onConfirm} onClose={() => {}} />);
+    const el = section();
+    const input = el.querySelector<HTMLInputElement>('[aria-label="文档标题"]')!;
+    expect(input).toBeTruthy();
+    expect(input.value).toBe("AI 生成文档");
+    // React 受控输入：走原生 setter + input 事件
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+    act(() => {
+      setter.call(input, "我改过的标题");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    const confirm = [...el.querySelectorAll("button")].find((b) => (b.textContent || "").trim() === "确认")!;
+    act(() => { confirm.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true })); });
+    expect(onConfirm).toHaveBeenCalledWith("nb1", "我改过的标题");
   });
 });

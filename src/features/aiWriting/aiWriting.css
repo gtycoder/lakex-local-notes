@@ -58,8 +58,10 @@
 .aiw-suggest { width: min(900px, 100%); margin-top: var(--lake-space-xl); }
 .aiw-suggest__label { margin: 0 0 var(--lake-space-md); color: var(--lake-text-3); font-size: var(--lake-font-size-body); }
 .aiw-suggest__chips { display: flex; flex-wrap: wrap; gap: var(--lake-space-md); }
-/* 空态建议 = L3 次级描边紧凑档（可点的建议，要看得出来能点；只把形状改成胶囊）。 */
-.aiw-suggest__chip { border-radius: var(--lake-radius-pill); padding: 0 var(--lake-space-md); }
+/* 空态建议 = L3 次级描边档（可点的建议，要看得出来能点；形状改成胶囊）。
+   261111 用户点单：这里再**厚一点** —— 高度取「标准档 + 4」= 31（比 compact 26 高一档，但不再另立全局档位；
+   只作用于空态建议 chip，属于该屏排版，不动按钮原语的两档口径）。 */
+.aiw-suggest__chip { height: calc(var(--lake-ctl-h) + 4px); border-radius: var(--lake-radius-pill); padding: 0 var(--lake-space-lg); }
 
 /* 会话流 */
 .aiw-thread { display: flex; flex-direction: column; gap: var(--lake-space-xxl); width: min(900px, calc(100% - 64px)); margin: 0 auto; padding: var(--lake-space-xxl) 0 var(--lake-space-huge); }
@@ -87,6 +89,9 @@
 .aiw-actions { display: flex; align-items: center; gap: var(--lake-space-sm); }
 .aiw-actions__sep { width: 0.5px; height: 16px; margin: 0 var(--lake-space-xxs); background: var(--lake-border-2); }
 .aiw-actions__btn { gap: var(--lake-space-xs); }
+/* 「复制为 Lake」的图标 = lake 四个字母（与文档 AI 弹窗 .ai-dialog__lake-badge 同一口径；
+   本页自有类，不复用 .ai-dialog__*，两处懒 chunk 互不依赖）。 */
+.aiw-lake-badge { font-size: var(--lake-font-size-nano); font-weight: var(--lake-font-weight-semibold); letter-spacing: .1px; }
 
 /* 底部输入区（会话态固定底） */
 .aiw-dock { flex: none; padding: 0 var(--lake-space-xxl) var(--lake-space-lg); }
@@ -110,24 +115,41 @@
 .aiw-tool { gap: var(--lake-space-xxs); }
 .aiw-composer__send { display: flex; align-items: center; gap: var(--lake-space-sm); }
 .aiw-composer__hint { display: inline-flex; align-items: center; gap: var(--lake-space-xxs); color: var(--lake-text-4); font-size: var(--lake-font-size-body); }
-/* 发送 = ln-btn--primary / 停止 = ln-btn--secondary；这里只留紧凑档高度与图标钮宽度。 */
-/* 停止 = 紧凑档 secondary 图标钮：只固定成正方形，视觉走原语。 */
-.aiw-send--stop { width: var(--lake-ctl-h-sm); padding: 0; }
+/* 发送 = ln-btn--primary / 停止 = **ln-btn--danger**（红字 + 40% 红框，261111 用户点单：
+   中断要看得见；此前用 secondary 中性档，和「发送」并排时读不出哪个是停止）。这里只固定成正方形。 */
+.aiw-send--stop { width: var(--lake-ctl-h-sm); height: var(--lake-ctl-h-sm); padding: 0; justify-content: center; }
 
 /* ---------------- 提示词库 ---------------- */
 /* 菜单行列表（与全仓菜单同一身份）：每项 = .ln-menu__item，左侧图标 + 两行文本。 */
-.aiw-prompts__body { display: flex; flex: 1 1 auto; flex-direction: column; gap: var(--lake-space-xxs); min-width: 0; }
+/* 提示词库（261111 用户点单：条目太紧凑）——
+   · 每条**加厚**：上下内距 0 → 8（条目高度由两行文字撑开 ≈ 46，不再贴着 27 的兜底线）；
+   · 条目之间**留间隔**：菜单容器 gap 4（原先条条紧挨，视觉上像一整块）。
+   只作用于这个气泡（feature 层），不动 .ln-menu__item 这个全仓共用原语。 */
+.aiw-prompts { gap: var(--lake-space-xs); }
+.aiw-prompts__item { padding: 8px; }
+.aiw-prompts__body { display: flex; flex: 1 1 auto; flex-direction: column; gap: var(--lake-space-xs); min-width: 0; }
 .aiw-prompts__title { color: var(--lake-text-1); font-size: var(--lake-font-size-small); font-weight: var(--lake-font-weight-medium); }
 .aiw-prompts__desc { color: var(--lake-text-3); font-size: var(--lake-font-size-micro); }
 
 /* ---------------- 文档选择 ---------------- */
-.aiw-picker { display: flex; flex-direction: column; min-width: 320px; max-height: 460px; overflow-y: auto; padding: var(--lake-space-xs); }
+/* 两列布局（用户 261111 点单）：左 = 快捷组 + 笔记本列表（**布局稳定**）；右 = 当前笔记本的文档。
+   表面自身不滚动，两列各自滚动 ⇒ 展开文档只多出一列，不把左边的行挤走。 */
+.aiw-picker { display: flex; flex-direction: row; align-items: stretch; min-width: 320px; max-height: 460px; overflow: hidden; padding: var(--lake-space-xs); }
+.aiw-picker__list { display: flex; flex: 1 1 auto; flex-direction: column; min-width: 0; overflow-y: auto; }
+.aiw-picker__side { display: flex; flex: 0 0 224px; flex-direction: column; min-width: 0; min-height: 0; margin-left: var(--lake-space-xs); padding-left: var(--lake-space-sm); border-left: 0.5px solid var(--lake-border-1); overflow-y: auto; }
+.aiw-picker__side-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--lake-space-sm); padding: var(--lake-space-sm) var(--lake-space-sm) var(--lake-space-xs); }
+.aiw-picker__side-title { min-width: 0; color: var(--lake-text-2); font-size: var(--lake-font-size-small); font-weight: var(--lake-font-weight-semibold); }
 .aiw-picker__label { margin: var(--lake-space-xs) 0 var(--lake-space-xxs); padding: 0 var(--lake-space-sm); color: var(--lake-text-4); font-size: var(--lake-font-size-tiny); font-weight: var(--lake-font-weight-medium); }
 /* 行 = .ln-row（展开态 = .is-selected）；行需要铺满气泡宽度，文本省略交给 .ln-ellipsis。 */
 .aiw-picker__row { width: 100%; }
 .aiw-picker__text { flex: 1 1 auto; }
 .aiw-picker__count { color: var(--lake-text-4); font-size: var(--lake-font-size-micro); }
-.aiw-picker__docs { padding: var(--lake-space-xxs) 0 var(--lake-space-xs) var(--lake-space-xl); }
+/* 笔记本行 = 行首勾选框 + 行按钮（用户 261111：整本勾选、多本同时选；勾 / 半选 / 不勾三态）。 */
+.aiw-picker__grouprow { display: flex; align-items: center; gap: var(--lake-space-sm); }
+.aiw-picker__grouprow .aiw-picker__row { flex: 1 1 auto; min-width: 0; }
+.aiw-picker__check { flex: 0 0 auto; margin: 0; accent-color: var(--lake-accent); }
+/* 文档列在右侧容器里，左右内距由 side 负责，这里只留纵向留白（旧的内联缩进已不再需要）。 */
+.aiw-picker__docs { padding: var(--lake-space-xxs) 0 var(--lake-space-xs); }
 .aiw-picker__empty { margin: var(--lake-space-xxs) 0; color: var(--lake-text-4); font-size: var(--lake-font-size-tiny); }
 
 /* ---------------- 门禁（未开启 / 未配置 AI） ---------------- */
@@ -140,15 +162,19 @@
 /* 261110 用户定稿：两个弹窗都升级为**浮动窗**（useFloatingDialog：标题栏可拖、8 向缩放、尺寸设备本地记忆），
    内容区走 ln-* 原语；.ln-dialog__body 的 padding 由 overlay.css 单一来源，这里只排自己的一列。 */
 .aiw-publish__body { display: flex; flex-direction: column; gap: var(--lake-space-xl); }
-.aiw-publish__desc, .aiw-publish__hint, .aiw-publish__empty { margin: 0; color: var(--lake-text-3); font-size: var(--lake-font-size-body); }
+.aiw-publish__desc, .aiw-publish__empty { margin: 0; color: var(--lake-text-3); font-size: var(--lake-font-size-body); }
 /* 表单行 = .ln-form__row，标签 = .ln-form__label；这里只留固定标签列宽与控件吃满。 */
 .aiw-publish__row { margin: 0; }
 .aiw-publish__label { flex: 0 0 64px; }
 .aiw-publish__select { flex: 1 1 auto; }
+/* 标题输入（261110 用户点单：生成文档前可改标题）：与知识库选择器共用 ln-text-field 外观，只是撑满行。 */
+.aiw-publish__title { flex: 1 1 auto; min-width: 0; }
 .aiw-publish__error, .aiw-quicknote__error { margin: 0; color: var(--lake-status-error, var(--lake-text-1)); font-size: var(--lake-font-size-body); }
 /* 小记正文吃满窗体高度（浮动窗可缩放 ⇒ textarea 自身不再手动 resize）。 */
 .aiw-quicknote__body { display: flex; flex-direction: column; gap: var(--lake-space-md); height: 100%; min-height: 0; }
-.aiw-quicknote__input { flex: 1 1 auto; height: auto; min-height: 0; padding: var(--lake-space-md) var(--lake-space-lg); line-height: var(--lake-line-height-normal); resize: none; }
+/* 正文预览（261110 用户点单）：用内核只读视图渲染，滚动交给这个盒子；内距与文档正文一致。 */
+.aiw-quicknote__preview { flex: 1 1 auto; min-height: 0; overflow: auto; padding: var(--lake-space-md) var(--lake-space-lg); }
+.aiw-quicknote__preview .aiw-answer-viewer { min-height: 0; }
 /* 左栏可拖（SplitPane）：分隔条视觉/命中带由 kit 的 .ln-split-handle 提供，
    但它的 ::before 是绝对定位的 10px 命中带 ⇒ 必须给**定位类**一个 position:relative 锚点（零宽 flex 项原地不占位）。
    261110 教训：上一轮按「零引用」把它删了 ⇒ 命中带落到初始包含块（视口左侧），鼠标完全抓不到；别再删。 */

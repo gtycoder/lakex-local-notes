@@ -249,7 +249,8 @@
 /* 内核兜底渲染（261010）：正文出现快路径还原不了的块时，整条卡片由内核只读视图画。
    内核阅读态根节点 `.ne-viewer` 是 height:100% + overflow-y:auto（为"整页阅读"设计），
    放进卡片必须交回内容高度 —— 否则要么被压成固定高、要么卡片里出现第二个滚动条。 */
-.quick-note-kernel-preview .ne-viewer { height: auto; overflow: visible; }
+.quick-note-kernel-preview { min-width: 0; max-width: 100%; }
+.quick-note-kernel-preview .ne-viewer { height: auto; overflow: visible; min-width: 0; max-width: 100%; }
 
 /* 小记编辑器的「展开」(内核 fullscreen) 适配窗口外壳：
    内核 `.ne-ui-fullscreen{position:fixed;inset:0;z-index:1000}` 是为「无外壳编辑器」设计的，
@@ -265,9 +266,14 @@
 }
 .quick-notes-pane .ne-ui-exit-fullscreen { position: absolute; top: 6px; right: 6px; }
 
-.quick-notes-timeline { display: grid; gap: 13px; align-content: start; padding-bottom: 4px; }
+/* 261110 用户报「小记展示不能左右滑动、要自动适应可视宽度」：
+   时间线是单列网格，隐式轨道默认按**最宽卡片**（= max-content）定宽 ⇒ 整列被撑出可视区、内容右侧被裁。
+   显式钉成 minmax(0, 1fr) 让轨道等于容器宽，长文本/代码/表格由卡片内部自己换行或滚动。 */
+.quick-notes-timeline { display: grid; grid-template-columns: minmax(0, 1fr); gap: 13px; align-content: start; padding-bottom: 4px; }
 
-.quick-note-entry { position: relative; padding: 14px; }
+/* min-width:0 = 允许卡片比内容窄（否则 grid/flex 子项按 min-content 撑开）；
+   overflow-wrap:anywhere = 超长 URL / 无空格串也在卡片内换行，不撑破宽度。 */
+.quick-note-entry { position: relative; min-width: 0; padding: 14px; overflow-wrap: anywhere; }
 
 /* 多选态：整卡可点选，动作行让位给勾选框 */
 .quick-note-entry.selecting { cursor: pointer; }

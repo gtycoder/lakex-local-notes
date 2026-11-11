@@ -12,6 +12,7 @@ import type { TreeNode } from "../../lib/types";
 import { native } from "../../lib/native";
 import { getNativeErrorMessage } from "../../lib/nativeErrors";
 import { convertAiMarkdown } from "./convertAiMarkdown";
+import { copyMarkdownAsLakeFromAnywhere } from "../ai/aiLakeCopyAction";
 import { markdownToPlainText } from "../../core/markdown";
 import { isSaveConflict } from "../../lib/types";
 import { aiWritingTitleFrom } from "../../core/aiWriting";
@@ -87,6 +88,8 @@ export function AiWritingWorkspace({ active, treeNodes, topbarLeading, onOpenSet
       .then(() => onNotice("复制完成"))
       .catch(() => onNotice("复制失败，请手动选择文本"));
   }, [onNotice]);
+  /** 复制为 Lake：与文档 AI 弹窗同一能力（内核来源由 copyMarkdownAsLakeFromAnywhere 解析）。 */
+  const copyAsLake = useCallback((content: string) => copyMarkdownAsLakeFromAnywhere(content), []);
 
   const closePublish = useCallback(() => {
     publishAbortRef.current?.abort();
@@ -100,7 +103,8 @@ export function AiWritingWorkspace({ active, treeNodes, topbarLeading, onOpenSet
     setQuickNote({ open: false, content: "", busy: false, error: null });
   }, []);
 
-  const publishDoc = useCallback(async (notebookId: string) => {
+  /** 生成文档：标题由弹窗传入（用户 261110 可编辑），空标题回落到回答摘要。 */
+  const publishDoc = useCallback(async (notebookId: string, nextTitle?: string) => {
     setPublish((prev) => ({ ...prev, busy: true, error: null }));
     const controller = new AbortController();
     publishAbortRef.current = controller;
@@ -109,7 +113,7 @@ export function AiWritingWorkspace({ active, treeNodes, topbarLeading, onOpenSet
       const converted = await convertAiMarkdown(markdown, undefined, { signal: controller.signal });
       if (controller.signal.aborted) return;
       const parsedTitle = aiWritingTitleFrom(markdown);
-      const docTitle = parsedTitle && parsedTitle !== "新的对话" ? parsedTitle : "AI 生成文档";
+      const docTitle = nextTitle?.trim() || (parsedTitle && parsedTitle !== "新的对话" ? parsedTitle : "AI 生成文档");
       const note = await native.createNoteIn(notebookId, docTitle);
       const saved = await native.saveNote(note.id, docTitle, converted.body);
       if (isSaveConflict(saved)) throw new Error("正文写入被拦截（磁盘已有改动）");
@@ -239,6 +243,7 @@ export function AiWritingWorkspace({ active, treeNodes, topbarLeading, onOpenSet
                       busy={controller.busy}
                       onRegenerate={controller.regenerate}
                       onCopy={copyContent}
+                      onCopyAsLake={copyAsLake}
                       onPublish={(content) => setPublish({ open: true, content, busy: false, error: null })}
                       onSaveQuickNote={(content) => setQuickNote({ open: true, content, busy: false, error: null })}
                     />
@@ -274,7 +279,7 @@ export function AiWritingWorkspace({ active, treeNodes, topbarLeading, onOpenSet
         notebooks={treeNodes}
         busy={publish.busy}
         error={publish.error}
-        onConfirm={(notebookId) => { void publishDoc(notebookId); }}
+        onConfirm={(notebookId, nextTitle) => { void publishDoc(notebookId, nextTitle); }}
         onClose={closePublish}
       />
       <SaveQuickNoteDialog

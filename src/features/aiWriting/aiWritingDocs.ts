@@ -112,6 +112,43 @@ export function refsForNotebook(treeNodes: readonly TreeNode[], notebookId: stri
   return documentsOfNotebook(treeNodes, notebookId).map((node) => ({ kind: "note" as const, id: node.noteFileId ?? node.id, title: node.title }));
 }
 
+/**
+ * 某个笔记本在「当前已选」里的覆盖状态（勾选框三态）。
+ * 用户 261111：笔记本要能**整本勾选**，且同时选多个笔记本。
+ */
+export type NotebookSelectionState = "none" | "some" | "all";
+
+export function notebookSelectionState(
+  selected: readonly AiWritingDocRef[],
+  notebookRefs: readonly AiWritingDocRef[],
+): NotebookSelectionState {
+  if (notebookRefs.length === 0) return "none";
+  const keys = new Set(selected.map(docRefKey));
+  const hit = notebookRefs.filter((ref) => keys.has(docRefKey(ref))).length;
+  if (hit === 0) return "none";
+  return hit === notebookRefs.length ? "all" : "some";
+}
+
+/**
+ * 整本勾选 / 取消（与原生三态 checkbox 口径一致）：
+ * - **已全选** ⇒ 只移除该本的文档（其它笔记本的选择不动 = 多本同时可选）；
+ * - 未全选（含半选 / 全未选）⇒ 补齐该本**还缺的**文档（已选的不重复、顺序保持已有在前）。
+ * 半选时点一下 = 补成整本，而不是全部取消。
+ */
+export function toggleNotebookRefs(
+  selected: readonly AiWritingDocRef[],
+  notebookRefs: readonly AiWritingDocRef[],
+): AiWritingDocRef[] {
+  const state = notebookSelectionState(selected, notebookRefs);
+  const notebookKeys = new Set(notebookRefs.map(docRefKey));
+  if (state !== "all") {
+    const keys = new Set(selected.map(docRefKey));
+    const missing = notebookRefs.filter((ref) => !keys.has(docRefKey(ref)));
+    return [...selected, ...missing];
+  }
+  return selected.filter((ref) => !notebookKeys.has(docRefKey(ref)));
+}
+
 /** 切换一条引用（已选 = 取消，未选 = 追加到末尾）。 */
 export function toggleDocRef(refs: readonly AiWritingDocRef[], ref: AiWritingDocRef): AiWritingDocRef[] {
   const exists = refs.some((item) => item.id === ref.id && item.kind === ref.kind);

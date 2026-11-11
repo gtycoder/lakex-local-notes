@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { Check, Copy, CornerDownRight, LoaderCircle, RotateCcw, X } from "lucide-react";
+import { Check, Copy, CornerDownRight, LoaderCircle, Pin, RotateCcw, X } from "lucide-react";
 import { AiSparkIcon } from "./AiSparkIcon";
 import { Popover } from "../../components/ui/Overlay";
 import { usePopoverPosition } from "../../hooks/usePopoverPosition";
 import { activeEditorMount } from "../editor/activeEditor";
 import { AiMessageBody } from "./AiMessageBody";
 import { copyMarkdownAsLake, type LakePayloadKernel } from "./aiLakeClipboard";
+import { aiScopeNoteId, readAiScope } from "./aiAssistantSession";
 import { editorInstanceAt } from "../editor/editorRegistry";
 import { AI_PROMPT_CUSTOM_ID, AI_PROMPT_CUSTOM_LABEL, type AiPromptPreset } from "./aiPrompts";
 import { aiDocumentNoteId, aiOutputLabel, aiSelectionText, type AiAssistantRequest } from "./aiAssistantRequest";
@@ -83,10 +84,15 @@ function useCopyTip() {
   return { surface, show, hide };
 }
 
-export function AiAssistantDialog({ open, request, onClose }: {
+export function AiAssistantDialog({ open, request, scope, onClose }: {
   open: boolean;
   /** 入口描述（上下文 / 锚点 / 输出策略 / 落库回调）：见 aiAssistantRequest.ts。 */
   request: AiAssistantRequest;
+  /**
+   * 归属作用域（打开时由 openAiAssistant 记下：空间态 + 活动文档 id）。见 aiAssistantSession.ts。
+   * 面板只在「当前作用域 == scope」时显示；切走时**隐藏但不卸载**，所以对话/输入/钉住态都还在。
+   */
+  scope: string;
   onClose: () => void;
 }) {
   const context = request.context;
@@ -107,6 +113,13 @@ export function AiAssistantDialog({ open, request, onClose }: {
   const fieldRef = useRef<HTMLTextAreaElement | null>(null);
   /** 用户在右下角拖出来的高度（null = 跟随内容自适应）；**不做记忆**，每次打开都从自适应开始。 */
   const [userHeight, setUserHeight] = useState<number | null>(null);
+  /**
+   * 「钉住」（用户 261110；二改定稿）：
+   * - **只挡「点面板外面」**——在本文档里点正文、点工具栏都不会把面板关掉（"失去光标"不再消失）；
+   * - **不跨空间 / 不跨文档 / 不跨标签**：切空间、切文档、切 tab 时面板照常关闭（见下方作用域观察 effect）；
+   * - Esc 仍可关（用户定稿），「关闭」按钮照旧。
+   */
+  const [pinned, setPinned] = useState(false);
   const panelRef = useRef<HTMLElement | null>(null);
   /** 复制反馈：记「哪一条 + 哪种复制」用于对应按钮上的勾（1200ms 复原）。 */
   const [copied, setCopied] = useState<{ index: number; mode: "plain" | "lake" } | null>(null);
@@ -115,16 +128,53 @@ export function AiAssistantDialog({ open, request, onClose }: {
   const copyTip = useCopyTip();
 
 
-  // 打开/换入口即重置「只属于展示层」的状态（拖高/复制反馈）；对话状态在 useAiConversation 内重置。
+  // 打开/换入口即重置「只属于展示层」的状态（拖高/复制反馈/固定）；对话状态在 useAiConversation 内重置。
   useEffect(() => {
     if (!open) return;
     setUserHeight(null);
+    setPinned(false);
     setCopied(null);
     if (copyTimerRef.current !== null) { window.clearTimeout(copyTimerRef.current); copyTimerRef.current = null; }
   }, [open, context]);
 
   // 卸载时清掉「已复制」定时器（避免对已卸载组件 setState）。
   useEffect(() => () => { if (copyTimerRef.current !== null) window.clearTimeout(copyTimerRef.current); }, []);
+
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
+  /**
+   * 作用域跟踪（用户 261110 三改定稿）：
+   * - 面板只在「当前作用域 == 自己的 scope」时显示；切走 ⇒ **隐藏但不卸载**（对话/输入/钉住态都还在）；
+   * - 切回来 ⇒ 原样恢复；未钉住的切走即关闭（「挂起」只属于钉住的面板）；
+   * - 自己的文档 / tab 被关掉 ⇒ 这一份跟着丢弃（判据 = 该 data-note-id 的编辑器宿主已不在）。
+   * 判据一律取显式信号（空间态类 + data-active / data-note-id），不轮询、不读几何。
+   */
+  const [inScope, setInScope] = useState(() => (typeof document === "undefined" ? true : readAiScope() === scope));
+  useEffect(() => {
+    if (!open) return;
+    const noteId = aiScopeNoteId(scope);
+    const sync = () => {
+      setInScope(readAiScope() === scope);
+      if (!noteId) return;
+      const alive = [...document.querySelectorAll<HTMLElement>(".lake-editor-tab[data-note-id]")]
+        .some((el) => el.getAttribute("data-note-id") === noteId);
+      if (!alive) onCloseRef.current();
+    };
+    sync();
+    if (typeof MutationObserver === "undefined") return;
+    const observer = new MutationObserver(sync);
+    observer.observe(document.body, { subtree: true, attributes: true, attributeFilter: ["class", "data-active"] });
+    const strip = document.querySelector(".tab-items");
+    const stripObserver = strip ? new MutationObserver(sync) : null;
+    stripObserver?.observe(strip as HTMLElement, { childList: true });
+    return () => { observer.disconnect(); stripObserver?.disconnect(); };
+  }, [open, scope]);
+
+  // 未钉住 ⇒ 切走就关闭（不留挂起会话）；钉住的交给 Host 保留，切回来原样恢复。
+  useEffect(() => {
+    if (open && !inScope && !pinned) onCloseRef.current();
+  }, [open, inScope, pinned]);
 
   // 无预设：进来就是自定义提问；选区只作为**上下文**附在后面（不在面板里回显原文，对齐云端）。
   // 261021 P0：原文用定界符包住（buildAiUserContent）；system 提示词在发送时前置（withAiSystemMessage）。
@@ -260,6 +310,12 @@ export function AiAssistantDialog({ open, request, onClose }: {
     fieldRef.current?.focus({ preventScroll: true });
   };
 
+  /** 钉住 / 取消钉住（用户 261110 二改）：只切「点面板外面是否关闭」，几何一丝不动。 */
+  const togglePin = () => {
+    setPinned((value) => !value);
+    fieldRef.current?.focus({ preventScroll: true });
+  };
+
   /** 复制成功反馈：对应按钮短暂显示勾再复原。 */
   const markCopied = (index: number, mode: "plain" | "lake") => {
     setCopied({ index, mode });
@@ -283,14 +339,47 @@ export function AiAssistantDialog({ open, request, onClose }: {
 
 
 
+  // 切走的作用域不渲染：组件仍挂载 ⇒ useAiConversation 与展示层状态都不丢；
+  // 切回来重建 Popover，并按当时的正文栏几何重新落位。
+  if (!open || !inScope) return null;
+
   return (
-    <Popover open={open} onDismiss={onClose} container={scroller} style={dialogStyle} surfaceRef={setSurface} className="ai-dialog" label="AI 助手">
+    <Popover
+      open={open}
+      onDismiss={onClose}
+      /* 钉住只挡「点面板外面」（用户 261110）：Esc 仍走 onDismiss 正常关闭；
+         切空间 / 切文档 / 切标签时，钉住的面板**挂起隐藏**（对话与钉住态保留），切回原作用域自动恢复。 */
+      container={scroller}
+      ignoreOutside={pinned ? () => true : undefined}
+      style={dialogStyle}
+      surfaceRef={setSurface}
+      className="ai-dialog"
+      label="AI 助手"
+    >
+      {/* 面板头（用户 261110）：左上角「钉住」——钉住后点面板外面不关闭；切空间/文档/标签时本面板挂起，回来还在。 */}
+      <div className="ai-dialog__head">
+        <button
+          type="button"
+          className={"ln-iconbtn ln-iconbtn--compact" + (pinned ? " is-selected" : "")}
+          aria-label={pinned ? "取消钉住" : "钉住面板"}
+          aria-pressed={pinned}
+          onMouseEnter={(e) => copyTip.show(pinned ? "取消钉住" : "钉住：切到别的页面先收起，回来还在", e.currentTarget)}
+          onMouseLeave={copyTip.hide}
+          onFocus={(e) => copyTip.show(pinned ? "取消钉住" : "钉住：切到别的页面先收起，回来还在", e.currentTarget)}
+          onBlur={copyTip.hide}
+          onClick={togglePin}
+        >
+          <Pin size={14} aria-hidden="true" />
+        </button>
+      </div>
       <div className="ln-dialog__body ai-dialog__body">
         {turns.length > 0 && (
           <>
             <div className="ai-dialog__thread">
               {turns.map((t, i) => {
                 const streaming = busy && i === turns.length - 1;
+                /** 只有最后一条回答能「重新生成」：对话模型只重跑最后一轮（useAiConversation.regenerate）。 */
+                const isLast = i === turns.length - 1;
                 if (t.role === "user") return <div key={i} className="ai-dialog__msg ai-dialog__msg--user">{t.text}</div>;
                 return (
                   <div key={i} className="ai-dialog__msg ai-dialog__msg--assistant">
@@ -301,35 +390,57 @@ export function AiAssistantDialog({ open, request, onClose }: {
                         <span>{t.text.trim() ? "正在生成…" : "正在等待回复…"}</span>
                       </div>
                     )}
-                    {/* 对话式：**每条** AI 回答各带一个复制（用户 261005），不再只给最后一条 */}
-                    {t.text && !streaming && (
+                    {/*
+                      每条回答的动作行（用户 261005 / 261110）：
+                      - 「重新生成」只给**最后一条**（对话模型只能重跑最后一轮；图标与 AI 写作操作条同款）；
+                      - 「复制文字 / 复制为 Lake」每条都有。说明一律走即时 hover 气泡（无 title 延时）。
+                    */}
+                    {!streaming && (t.text || isLast) && (
                       <div className="ai-dialog__copy-actions">
-                        {/* 两个复制：复制文字 / 复制为 Lake（用户 261005）。说明 = 即时 hover 气泡（无 title 延时）。 */}
-                        <button
-                          type="button"
-                          className={"ln-iconbtn ln-iconbtn--compact" + (copied?.index === i && copied.mode === "plain" ? " is-selected" : "")}
-                          aria-label="复制文字"
-                          onMouseEnter={(e) => copyTip.show("复制文字", e.currentTarget)}
-                          onMouseLeave={copyTip.hide}
-                          onFocus={(e) => copyTip.show("复制文字", e.currentTarget)}
-                          onBlur={copyTip.hide}
-                          onClick={() => copyMessage(t.text, i)}
-                        >
-                          {copied?.index === i && copied.mode === "plain" ? <Check size={12} /> : <Copy size={12} />}
-                        </button>
-                        <button
-                          type="button"
-                          className={"ln-iconbtn ln-iconbtn--compact" + (copied?.index === i && copied.mode === "lake" ? " is-selected" : "")}
-                          aria-label="复制为 Lake"
-                          disabled={!editorInstanceAt(container ?? activeEditorMount())?.kernel}
-                          onMouseEnter={(e) => copyTip.show("复制为 Lake", e.currentTarget)}
-                          onMouseLeave={copyTip.hide}
-                          onFocus={(e) => copyTip.show("复制为 Lake", e.currentTarget)}
-                          onBlur={copyTip.hide}
-                          onClick={() => void copyAsLake(t.text, i)}
-                        >
-                          {copied?.index === i && copied.mode === "lake" ? <Check size={12} /> : <span className="ai-dialog__lake-badge" aria-hidden="true">lake</span>}
-                        </button>
+                        {isLast && (
+                          <button
+                            type="button"
+                            className="ln-iconbtn ln-iconbtn--compact"
+                            aria-label="重新生成"
+                            disabled={busy}
+                            onMouseEnter={(e) => copyTip.show("重新生成", e.currentTarget)}
+                            onMouseLeave={copyTip.hide}
+                            onFocus={(e) => copyTip.show("重新生成", e.currentTarget)}
+                            onBlur={copyTip.hide}
+                            onClick={() => void regenerate()}
+                          >
+                            <RotateCcw size={12} />
+                          </button>
+                        )}
+                        {t.text && (
+                          <>
+                            <button
+                              type="button"
+                              className={"ln-iconbtn ln-iconbtn--compact" + (copied?.index === i && copied.mode === "plain" ? " is-selected" : "")}
+                              aria-label="复制文字"
+                              onMouseEnter={(e) => copyTip.show("复制文字", e.currentTarget)}
+                              onMouseLeave={copyTip.hide}
+                              onFocus={(e) => copyTip.show("复制文字", e.currentTarget)}
+                              onBlur={copyTip.hide}
+                              onClick={() => copyMessage(t.text, i)}
+                            >
+                              {copied?.index === i && copied.mode === "plain" ? <Check size={12} /> : <Copy size={12} />}
+                            </button>
+                            <button
+                              type="button"
+                              className={"ln-iconbtn ln-iconbtn--compact" + (copied?.index === i && copied.mode === "lake" ? " is-selected" : "")}
+                              aria-label="复制为 Lake"
+                              disabled={!editorInstanceAt(container ?? activeEditorMount())?.kernel}
+                              onMouseEnter={(e) => copyTip.show("复制为 Lake", e.currentTarget)}
+                              onMouseLeave={copyTip.hide}
+                              onFocus={(e) => copyTip.show("复制为 Lake", e.currentTarget)}
+                              onBlur={copyTip.hide}
+                              onClick={() => void copyAsLake(t.text, i)}
+                            >
+                              {copied?.index === i && copied.mode === "lake" ? <Check size={12} /> : <span className="ai-dialog__lake-badge" aria-hidden="true">lake</span>}
+                            </button>
+                          </>
+                        )}
                       </div>
                     )}
                   </div>
@@ -391,7 +502,6 @@ export function AiAssistantDialog({ open, request, onClose }: {
         ) : (
           <button type="button" className="ln-btn ln-btn--primary ai-dialog__btn" disabled={!followUp.trim()} onClick={() => void run(false)}>发送</button>
         )}
-        {turns.length > 0 && <button type="button" className="ln-btn ln-btn--ghost ai-dialog__btn" disabled={busy} onClick={() => void regenerate()}><RotateCcw size={12} /> 重新生成</button>}
         {/* 复制 / 插入 / 替换都依赖生成结果：**没有结果就不出这些选项**，只留「生成 + 关闭」。 */}
         {/* 全文模式的处理对象是整篇：结果不往选区写（避免"整篇改写覆盖一段"，用户 261021 P1）。 */}
         {lastOutput && !conversationDocMode && request.outputs.map((mode) => (

@@ -19,7 +19,7 @@
   align-items: center;
   gap: 6px;
   /* 顶栏占满时不再收缩 tab（flex:0 0 auto 见下方「顶栏 tab 胶囊」一处设定）；
-     单个超长标题封顶 200px，省略部分用悬停 title 展示完整名称 */
+     标题宽度上限**只在 .tab-title 定义一处**（见下），超长省略、悬停 title 看全名 */
   white-space: nowrap;
 }
 
@@ -29,7 +29,10 @@
 }
 
 .tab-title {
-  /* 未超 240px 时完整展示；超长时省略，悬停 title 显示完整名称 */
+  /* 标题宽度上限 = **单处定义**（用户 261110 点单：多 tab 时长度收敛，取原 200px 档的 2/3 ⇒ 133px）。
+     窄窗再按 34vw 收（原 misc.css 窄窗副本已并入这里，取二者小值，不写第二份 max-width）；
+     超长省略，悬停 title 显示完整名称。 */
+  max-width: min(133px, 34vw);
   overflow: hidden;
   text-overflow: ellipsis;
 }

@@ -317,17 +317,18 @@ components:
 | L4b | `.ln-btn--link` | 无框 + `accent-text` 字 | 跳转 / 引导（不当成灰字次要） |
 | L5 | `.ln-btn--danger` | `status-error` 红字 + 40% 红框（配 `--ghost`/`--danger-text` = 纯红字） | 删除 / 清空 / 移入回收站 |
 
-- **Shape:** 8px 圆角，高 27（`--lake-ctl-h`），内距 `0 11px`，13px / 500；紧凑档 `.ln-btn--compact` 高 22（`--lake-ctl-h-sm`）、内距 `0 9px`。**只有两档尺寸**，不新增第三档；设置页表单控件仍走 `--lake-ctl-h-settings`。
+- **Shape:** 8px 圆角，高 27（`--lake-ctl-h`），内距 `0 11px`，13px / 500；紧凑档 `.ln-btn--compact` 高 **26**（`--lake-ctl-h-sm`；261111 厚度 review：22 → 26，与标准档只差 1px，全站「薄一档」观感消失）、内距 `0 9px`。**只有两档尺寸**，不新增第三档；设置页表单控件仍走 `--lake-ctl-h-settings`（32，管理档）。
 - **六态（每层同一套）**：default / hover（`bg-hover`，字色升一档）/ active（`bg-press` + 0.5px 下沉 + 0.98 缩放）/ focus-visible（2px `accent` 环 + offset 0）/ is-selected（`bg-selected` + `fg-selected` + 600）/ disabled（`opacity: .45`，hover 不改底色）。
 - **基座 `.ln-btn` = L4 口径**（无框灰字）：任何裸用也有 hover，不得再出现「点了没反应」的按钮。
-- 图标钮（`.ln-iconbtn` 27 / `--compact` 22）是**形状**不是层级：静息 `text-3` → hover `bg-hover` + `text-1` → selected `bg-selected` + `fg-selected`；`--accent` 已并入 `is-selected`。危险图标钮 `.ln-iconbtn--danger` = 与 `--danger-text` 同一套令牌口径（红字 + 红柔底只在 hover），**不是第二种危险长相**。
+- 图标钮（`.ln-iconbtn` 27 / `--compact` **26**）是**形状**不是层级：静息 `text-3` → hover `bg-hover` + `text-1` → selected `bg-selected` + `fg-selected`；`--accent` 已并入 `is-selected`。危险图标钮 `.ln-iconbtn--danger` = 与 `--danger-text` 同一套令牌口径（红字 + 红柔底只在 hover），**不是第二种危险长相**。
 - **列表勾选** `.ln-check`：20×20、绿色 `status-ok` 实心选中（用于小记卡片/列表行左槽位；与表单勾选 15×15 主色分开，不并入）。
-- **标签 / 筛选 chip** `.ln-chip`：24 / `--compact` 22，`is-selected` 只走选中三件套；`--add`（虚线空槽）、`--danger`（筛选「排除」档，选中后走 error 色）、`--static`（不可点展示标签，移除钮用 `.ln-iconbtn--compact`）；调用点只设 `--ln-chip-*` 容器变量。
+- **厚度例外（261111）**：两档口径之外只有两处，都必须写在这条里 —— ①**目录行内 affordance**（`.tree-row .tree-row-action`）受 27px 行高约束**固定 22×22**，不跟随 compact 26（26 会把行撑到 30，hover 显形时整列跳动）；②**AI 写作空态建议 chip** 高 31（该屏排版，非原语档位）。同理「文档正文 / 编辑器内部」等内容区不参与统一厚度。
+- **标签 / 筛选 chip** `.ln-chip`：**26**（261111 厚度 review：24 → 26）/ `--compact` 同高、仅内距更紧（`0 7px`），`is-selected` 只走选中三件套；`--add`（虚线空槽）、`--danger`（筛选「排除」档，选中后走 error 色）、`--static`（不可点展示标签，移除钮用 `.ln-iconbtn--compact`）；调用点只设 `--ln-chip-*` 容器变量。
 - **移动端 `mb-btn` 已按同一模型独立实现**（261110：4 语义 + `--danger`/`--danger-text` + `--link`、六态、`is-selected`；几何沿用触屏档 44/36 与 `--sm`/`--block`，两端不共享 CSS）。
 
 
 ### Icon Buttons
-- **Shape:** 27×27（`--compact` 为 22×22），圆角 8/6；静息透明，hover 用 `--lake-bg-hover` 并把字色提到 `--lake-text-1`，选中用 `--lake-bg-selected` / `--lake-fg-selected`。
+- **Shape:** 27×27（`--compact` 为 **26×26**），圆角 8/6；静息透明，hover 用 `--lake-bg-hover` 并把字色提到 `--lake-text-1`，选中用 `--lake-bg-selected` / `--lake-fg-selected`。
 
 ### Inputs / Selects
 - **Style:** 高 27px，圆角 8px，静息边 **`control-border`**（不是发丝线——输入框必须在浅底上看得见）。
