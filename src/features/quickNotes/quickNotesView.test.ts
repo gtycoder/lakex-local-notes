@@ -156,6 +156,9 @@ describe("小记附件（内核 file 卡）", () => {
     // 绝对定位后代的定位基准，展开层高度 810 → 约 220、按钮从鼠标下跑掉。
     const quickNotesCss = read("../../styles/app/quick-notes.css");   // P7-c：styles/quick-notes.css 已并入此处
     expect(quickNotesCss).toMatch(/\.quick-note-entry\.editing,[\s\S]{0,60}\.quick-note-entry\.editing:active\s*\{\s*transform: none;/);
+    // 261111 用户点单：卡片点击/选中**不许有缩放抖动**（按压反馈只留 kit 原语；DESIGN Motion）。
+    expect(quickNotesCss).not.toMatch(/\.quick-note-entry:active\s*\{[^}]*transform:\s*scale/);
+    expect(quickNotesCss).not.toMatch(/\.quick-note-entry\s*\{[^}]*transition:\s*transform/);
   });
 
   it("历史遗留的 pending 死卡不再锁死保存（对齐文档侧：不等、不拒绝，只提示）", () => {

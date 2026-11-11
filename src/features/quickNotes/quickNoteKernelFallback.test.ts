@@ -75,6 +75,11 @@ describe("小记预览：快路径 + 内核只读兜底", () => {
     expect(KERNEL_SRC).toMatch(/createLakeDocument\(host, "viewer"/);
     expect(KERNEL_SRC).toMatch(/addAssetAccessToken\(body\)/);
     expect(KERNEL_SRC).toMatch(/destroyLakeEditor\(editor\)/);
+    // 261111 用户报「向下滚动闪屏」：离开视口就 destroy、滚回来又 create ⇒ 来回滚反复白屏。
+    // 现在 = **视口闩锁**（进入一次常驻，只在卡片卸载/正文变化时销毁）。
+    expect(KERNEL_SRC).toMatch(/setRevealed\(true\)/);
+    expect(KERNEL_SRC).not.toMatch(/setRevealed\(false\)/);
+    expect(KERNEL_SRC).not.toMatch(/setInView\(/);
     // 布局代价：实例数 = 屏幕内条数，与库里小记总数无关
     expect(KERNEL_SRC).toMatch(/IntersectionObserver/);
     expect(KERNEL_SRC).toMatch(/rootMargin/);

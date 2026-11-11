@@ -391,13 +391,10 @@
  * 按压反馈只给独立卡片（小记）。设置/历史/回收站的密集列表行用思源式 hover 底色反馈，
  * 不做 scale：一行只有 28~40px，按压缩放会让文字抖动，还与滚动条抢空间。
  * 侧栏 note-row / tree-row 的 transform 被拖拽占用，按压改用 filter:brightness。 */
-.quick-note-entry {
-  transition: transform var(--lake-motion-press) var(--lake-ease-standard);
-}
-
-.quick-note-entry:active {
-  transform: scale(.98);
-}
+/* 261111 用户点单：**卡片点击 / 选中不再有任何缩放抖动**（原先 `:active` 有 scale(.98) + transition）。
+   按压反馈只留在 kit 原语（.ln-btn / .ln-iconbtn）上 —— DESIGN Motion 的既有口径；
+   整卡是内容面，缩放会在点选/编辑时把内容一起抖一下，体感很差。
+   下面这条 editing 守卫保留：万一以后又给卡片加 transform，编辑态绝不能被带上（260920 真凶）。 */
 
 /* 编辑态卡片**禁止**按压缩放（260920 实测的真凶）：
    `transform` 会让元素成为绝对定位后代的**定位基准**（CSS 规范），而卡片编辑态里挂着

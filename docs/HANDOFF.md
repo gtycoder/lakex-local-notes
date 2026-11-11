@@ -10,6 +10,12 @@
 
 > **顺序标注**：261109 各批次里写的「日记 ⌘4 / AI 写作 ⌘3」是**当时**的顺序；**261110 起改为 日记 ⌘3 / AI 写作 ⌘4**（另有标签 ⌘5）。旧批次不再改，以本行 + §1 为准。
 
+### 261111 · 小记：滚动闪屏 + 卡片点击抖动（用户点单）
+- **点击/选中抖动**：删掉 `.quick-note-entry` 的 `transition: transform` 与 `:active { transform: scale(.98) }`（用户原话「点击或者选中小记的这个抖动」）。按压反馈只留在 kit 原语（`.ln-btn` / `.ln-iconbtn`）上 —— DESIGN Motion 的既有口径；整卡是内容面，缩放会把内容一起抖。`.editing` 的 `transform: none` 守卫**保留**（260920 真凶的护栏）。
+- **滚动闪屏**：根因 = `QuickNoteKernelPreview` 原先「**离开视口即 destroyLakeEditor**、滚回来又 createLakeDocument」⇒ 向下/向上滚动时每跨过一条内核兜底卡片就重建一次实例，首帧是白的（用户 GIF 里 3 次闪屏）。改为**视口闩锁**：进入过一次即常驻，只在「卡片卸载 / 正文变化」时销毁。代价 = 已看过的卡片各留一个只读实例；列表 >24 条走窗口化，行卸载时实例随之释放（文件头 ② 已写明取舍）。
+- 护栏（新增 2 条源码断言，防回归）：`quickNoteKernelFallback.test.ts` —— 必须有 `setRevealed(true)`、不许出现 `setRevealed(false)` / `setInView(`；`quickNotesView.test.ts` —— 不许再出现 `.quick-note-entry:active { transform: scale… }` 与卡片上的 `transition: transform`。
+- 门禁：`tsc` 0；`cssLayers` `app/quick-notes.css` 686→**684**（删 2 声明）；全量 vitest 见 §1；`ui-metrics` / `git diff --check` 通过。
+- **未做**：真屏录验证（本机隔离实例里卡片详情是懒加载 + 依赖窗口可见性，滚动录屏复现不稳定）⇒ 这两条以机制 + 护栏锁住；请用户在真实库上再扫一遍确认。
 ### 261111 · 小记卡片预览字号统一（用户报「都是 15px 为什么有的大有的小」）
 - **根因 = 两条渲染路径字号没对齐**（实测，隔离实例 + 设备像素量 computed）：
   - 快路径（自研 DOM）：正文 `.quick-note-preview-paragraph` = **14**、h1 标题 = **20**（h2 18 / 其余 15.5）；

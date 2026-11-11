@@ -8,8 +8,10 @@
  *
  * 代价可控的两个前提：
  * ① 只有快路径判不出来的正文才走这里（普通文字小记 = 零内核实例，移动端冷开不受影响）；
- * ② 只给**进入视口**的卡片挂实例（提前 ${PREMOUNT_MARGIN_PX}px 预挂载，离开视口即销毁）——
- *    实例数 = 屏幕内条数，与库里小记总数无关（实例创建 ≈80ms，见 261010 预热/实测）。
+ * ② 只给**进入视口**的卡片挂实例（提前 ${PREMOUNT_MARGIN_PX}px 预挂载）；**进入一次后不再销毁**
+ *    （直到卡片本身卸载）—— 261111 用户报「向下滚动时闪屏」：原先离开视口即 destroy，滚回去又
+ *    create，来回滚每次都白一下（实例创建 ≈80ms，且首帧是白的）。现在一次挂载常驻，
+ *    代价 = 已看过的卡片各留一个只读实例；列表 >24 条走窗口化，行卸载时实例随之释放。
  *
  * 与编辑态的关系：同一份正文、同一个内核，只是 `mode="viewer"`（只读）——
  * 预览与编辑不再有两套渲染口径（旧的自研解析器就是第二套，必然漂移）。
@@ -35,23 +37,25 @@ interface QuickNoteKernelPreviewProps {
 
 export function QuickNoteKernelPreview({ body, noteId }: QuickNoteKernelPreviewProps) {
   const hostRef = useRef<HTMLDivElement>(null);
-  const [inView, setInView] = useState(false);
+  /** 视口闩锁：进入过一次就常驻（不再随离开视口销毁 —— 见文件头 ②，滚动闪屏的根因）。 */
+  const [revealed, setRevealed] = useState(false);
 
   useEffect(() => {
+    if (revealed) return;
     const host = hostRef.current;
     if (!host) return;
     // 没有 IntersectionObserver 的环境（老 WebView / 测试）直接挂，保证功能不丢。
-    if (typeof IntersectionObserver === "undefined") { setInView(true); return; }
+    if (typeof IntersectionObserver === "undefined") { setRevealed(true); return; }
     const observer = new IntersectionObserver(
-      (entries) => setInView(entries.some((entry) => entry.isIntersecting)),
+      (entries) => { if (entries.some((entry) => entry.isIntersecting)) setRevealed(true); },
       { rootMargin: `${PREMOUNT_MARGIN_PX}px 0px` },
     );
     observer.observe(host);
     return () => observer.disconnect();
-  }, []);
+  }, [revealed]);
 
   useEffect(() => {
-    if (!inView) return;
+    if (!revealed) return;
     const host = hostRef.current;
     if (!host) return;
     let editor: LakeEditorInstance | null = null;
@@ -68,8 +72,9 @@ export function QuickNoteKernelPreview({ body, noteId }: QuickNoteKernelPreviewP
     } catch {
       // 渲染失败不留白块：外层卡片仍有标题/时间等元信息，点开即编辑态。
     }
+    // 只在「卡片卸载」或「正文变了」时销毁；滚出视口**不销毁**（否则来回滚 = 反复白屏）。
     return () => { destroyLakeEditor(editor); };
-  }, [inView, body, noteId]);
+  }, [revealed, body, noteId]);
 
   return <div className="quick-note-kernel-preview" ref={hostRef} data-note-id={noteId} />;
 }
