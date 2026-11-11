@@ -10,6 +10,15 @@
 
 > **顺序标注**：261109 各批次里写的「日记 ⌘4 / AI 写作 ⌘3」是**当时**的顺序；**261110 起改为 日记 ⌘3 / AI 写作 ⌘4**（另有标签 ⌘5）。旧批次不再改，以本行 + §1 为准。
 
+### 261111 · 小记写作卡全屏 + 长按创建/键盘开合流畅性（用户点单）
+
+- **点单**：小记改成占满屏幕；可点项随可用空间伸缩、键盘开合时始终可见可点；两条入口都要改（长按图标 capture / 正常新建）；并优化长按创建与键盘弹收卡顿。
+- **布局（两条入口同一容器）**：新增 `.mobile-qn-screen`（状态栏安全区下 → 外壳底）；`.mobile-qn-composer` 去浮卡外距/圆角/阴影 → flex 撑满；正文唯一滚动、标签行/动作行 `flex:0`；动作行底距 = dock 占位（bar + gap + safe），永远落在 dock 上方；写作时隐藏首页顶栏（退出恢复）。删 `.mobile-qn-composer-wrap` / `.mobile-scroll--with-dock` / capture 淡入 3 条。
+- **卡顿根因与改法**：① `--mb-app-h` 每次变化 cleanup remove→set（键盘动画十几轮）⇒ 同值直接 return、adjustResize 键盘态值==innerHeight 时不写、只在卸载清一次；② window/visualViewport resize 连发 ⇒ `useKeyboard` 按帧合并（每帧最多一次 emit）；③ `useCaretIntoView` 每个 resize 都读祖先几何 + smooth scroll ⇒ 120ms 合并、视口稳定后纠一次；④ capture 淡入与内核 mount 同帧竞争 ⇒ 删除；⑤ 已弹键盘时重复 `showNativeKeyboard` ⇒ 用 shellHeight 判据跳过；⑥ 浮卡阴影/圆角/双层滚动删除 ⇒ resize 期重绘与盒数下降。
+- **设备实测（CDP longtask >50ms 个数/总时长）**：正常新建 5/775ms → **1/72ms**；capture 热启 6/1396ms → **4/787ms**（冷启仍有内核首次 mount ≈0.5s 长任务，非本批可消）；键盘收起 2/651ms → 0–4/≤326ms；键盘弹出 4/840ms → 1–4/271–312ms。键盘开/合两态 `elementFromPoint`：添加标签/取消/保存并同步/保存/dock 全可点；连续 14 行后光标仍在工具栏上方。
+- **门禁**：tsc 0；全量 vitest **859 文件（848 passed / 11 skipped）/ 5380 例 0 失败**；check:core 162/0；check:bundle+arch 通过（mobile 59,713/6/347,868；desktop 563,628）；ui-metrics 0；diff-check 0；APK 已重装 `lake_mobile`。
+- **未做**：9 态/23 屏设备快照（9 态无写作卡、不受影响；23 屏需覆盖两条入口 + 键盘开合，发版前补）；冷启 capture 无 A/B（旧包已覆盖）；返回键「先收键盘再退写作」未单独复测（走原 backHandler，未改）。
+
 ### 261111 · 小记快路径独立管线（不动整轮 S3，用户定稿）
 
 - **定稿**：正常 S3 = 串起来的整轮链路；「只推当前这一条小记」单独一条小管线，只调用底层原语（remote get/put/delete、锁、索引序列化、pointer 校验、本地单行/基线），不进入整轮的 plan/apply/三方对比/lake 索引/意图账本。
@@ -368,7 +377,7 @@
 - **261110 历史清理（一次性）**：`.ai-writing-recon/`（走查截图 / 页面快照 / 探针脚本，59 文件 ≈15MB）已用 `git filter-repo --invert-paths` 从**全部历史**移除；被重写的是 **v1.1.0 之后的 23 个提交**（hash 以 `git log` 为准），**v1.0.x / v1.1.0 的 tag 与其提交 hash 未变**（不含该目录）⇒ 已发布 Release 与 CI 产物不受影响。重写前快照：`/Users/admin/file/local-lake/lakex-local-notes-backup-<stamp>/all.bundle`（62MB，含全部 refs）。**旧 clone / worktree 需 `git fetch --force --prune` + `git reset --hard origin/master` 或重新 clone**（旧 hash 已不可达）；本机原 `lakex-local-notes-diary` worktree 已删除（其分支是 master 祖先，无内容丢失）。
 
 - **worktree（261109 发版时）**：`lakex-local-notes` = `master`（发版主工作树）；`lakex-local-notes-diary` = `feat/diary-space`（本批开发用，已合并 master 并合回 master）。AI 写作与日记**都已进 master**，两个空间共存（⌘3 / ⌘4）。
-- 主分支 `master`，HEAD = **`154294b6`**（261111 单条小记推送独立管线：请求 13→11）；前序 = `8bf41e65`（两条入口护栏+实测）、`a032bb64`/`0642c763`（HANDOFF/AGENTS 回写）、`fc654c05`（首屏瘦身+快路径）、`09f41ba1`（按钮第二批/mb-btn/日记 v1）、`544f2532`（Gitee 已推到这里）。**本批均未 push**（`git push origin master` 双推；并行会话的 AI 批次与 mobile Dock 胶囊改动仍在工作树、未提交）。
+- 主分支 `master`，HEAD = **`f7d39f45`**（261111 小记写作卡全屏 + 流畅性）；前序 = `154294b6`（单条推送独立管线 13→11）、`8bf41e65`、`a032bb64`/`0642c763`、`fc654c05`、`09f41ba1`、`544f2532`（Gitee 已推到这里）。**本批均未 push**（`git push origin master` 双推；并行会话的 AI 批次 / 桌面厚度 review / mobile Dock 胶囊改动仍在工作树、未提交）。
 - `package.json` = **1.1.0**；Android `versionName 1.1.0` / `versionCode 11100`（从根 `package.json` 派生，版本号单一来源：`1000 + major*10000 + minor*100 + patch`）。
 - tag：`v1.0.0`–`v1.0.5`、**`v1.1.0`**（另有旧 `v0.0.1` / `v0.0.2`）；已发布 tag 不再移动。`v1.1.0` = AI 写作 + 日记两个新空间。
 - `v1.0.5` 是**发在 AI 写作合并之前**的：AI 写作第一次随本版发布，别在旧发布说明里找它。
@@ -390,10 +399,10 @@
 **门禁基线（261109 发版前：AI 写作 + 日记合并后实测）**
 
 - `npx tsc --noEmit` = **0 错**。
-- `npx vitest run` = **858 文件（847 passed / 11 skipped）/ 5375 passed / 12 skipped / 0 failed**（261111 独立管线提交前实测，含并行会话在途用例；0 失败）。
+- `npx vitest run` = **859 文件（848 passed / 11 skipped）/ 5380 passed / 12 skipped / 0 failed**（261111 写作卡全屏批提交前实测，含并行会话在途用例；0 失败）。
 - **261110 AI 助手 / 小记批（本批实测，含「钉住=每作用域挂起」「标题可改」「弹窗走内核渲染」「时间线自适应」）**：`npx tsc --noEmit` 0；全量 vitest **855 文件（844 passed / 11 skipped）/ 5357 passed / 12 skipped / 0 failed**（本批新增：`aiAssistantSession` 4 例 / `AiMessageView.render` 5 例 / `aiLakeKernelRegistry` 4 例 / `AiWritingDialogs.render` +2 例）；`ui-metrics` 颜色 0 / !important 9=清单 / 跨文件重复 103≤105；`git diff --check` 0；`cssLayers` 基线 `app/tabs.css` 188→189、`ai/aiDialogParts.css` 87→91、`app/quick-notes.css` 667→674（均写明理由）。
 - `git diff --check` = **0**。
-- `check:bundle` / `check:arch`：**已转绿**（261110 首屏瘦身）。mobile-entry = **59,703 gz / 6 链接**、首屏 347,904 / 360,000（余量 12.1KB）、entry CSS 140,438 / 141,312；desktop app-js 191,515 / 307,200、首屏 563,553 / 600,000（余量 36.4KB）。预算已按目标收紧（`check-bundle-budget.mjs` 12 条 / 60KB、`check-arch.mjs` 360KB），不再有「已知红」。**注意**：preload 条数只防「静态依赖回入口」，字节由 `check-arch` 守 —— 不要为了压低条数把懒加载改回静态。运行前需先有 `dist` / `dist-mobile` 构建产物。
+- `check:bundle` / `check:arch`：**已转绿**（261110 首屏瘦身）。mobile-entry = **59,713 gz / 6 链接**、首屏 347,868 / 360,000（余量 12.1KB）、entry CSS 140,392 / 141,312；desktop app-js 191,516 / 307,200、首屏 563,628 / 600,000（余量 36.4KB）。预算已按目标收紧（`check-bundle-budget.mjs` 12 条 / 60KB、`check-arch.mjs` 360KB），不再有「已知红」。**注意**：preload 条数只防「静态依赖回入口」，字节由 `check-arch` 守 —— 不要为了压低条数把懒加载改回静态。运行前需先有 `dist` / `dist-mobile` 构建产物。
 - 其它样式/边界/设备门禁按改动范围跑（分层口径见 AGENTS §3#21）；最近一次移动设备记录 = **261110（移动收口批）**：手机 **9 态重烤基线 + 两轮 0 差异**、**平板 9 态补烤 + 两轮 0 差异**、**多维表 3 态重烤**、**23 屏 23/23 ok**（`lake_gate` / `lake_tab`，详见 §0 收口批）；桌面 `check:stylesnap` 42 态仍未跑（本机无合成夹具缓存，见 §3）。
 
 **设备与环境（本机实测）**
@@ -442,6 +451,7 @@
 
 **P0（不做就卡住主线）**
 
+- **写作卡全屏后的设备门禁**：9 态里没有写作卡（不受影响），但 **23 屏走查需覆盖两条入口 + 键盘开合**；发版前补跑。
 - **桌面 `check:stylesnap` 42 态**：本机无合成夹具缓存，已连续三批未跑（按钮梯队 / 空间改名 / 按钮第二批）。下次有夹具的机器全量跑并重烤；**重点看本批视觉 delta**（清单见 §0）；同时确认是否新增「日记空间」态。
 - **移动端本批设备点收**：`bash scripts/android-build.sh --sync --install`（lake_mobile）后看：① 设置各子页按钮（`--outlined` 与旧 `--settings` 应 0 变化）；② AI 页操作键形状（自绘胶囊→L3 中性框）；③ 基座/ghost 字色略浅的屏；④ 日记「取消日记标记」/ 转文档文案；⑤ 9 态快照（DOM 未变，预期 0 diff）与 23 屏走查；⑥ 首屏懒 chunk 冒烟：开文档后粘贴、小记 composer、分享导入 MD/PDF、更新中心、图标/表情选择器；⑦ 冷启动首页（已验）与 9 态/23 屏。
 - **手机快照盲区：`.mb-sheet` 打开态**：9 态无一态打开底部 Sheet ⇒ 新增 `home-filter-sheet` 态并重烤，顺带覆盖 CreateSheet。
@@ -472,5 +482,6 @@
 - AGENTS 超预算 → 已精简到 46,610B（261110）。
 - 移动端首屏瘦身 → entry-js 59.7KB / preload 6 / 首屏 347.9KB（261110，预算已收紧）。
 - 移动端两条创建入口的「保存并同步」= 同一单条快路径，已真机真 S3 实测（261110）。
+- 小记写作卡卡顿（长按创建 / 键盘开合）→ 全屏 + 长任务 775→72ms（261111）。
 - 单条小记推送请求数 13→11（独立管线，261111）。
 - 二轮/实机修复批「未跑 6 态」、胶囊固定底部 / 平移画布开关、P9–P12 候选、平板内核工具栏两条例外 → 均已闭合/撤回。

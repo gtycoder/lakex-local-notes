@@ -306,6 +306,8 @@ Toast        .mb-toast-host > .mb-toast[--error] > (.mb-toast__text, .mb-toast__
 
 ## Components
 
+- **小记写作卡（261111 用户点单）**：写作 = **全屏编辑会话**，不是浮卡 —— `capture`（长按图标）与正常新建共用 `.mobile-qn-screen` 容器（状态栏安全区以下、dock/键盘以上）；去掉外距/圆角/阴影死区；正文唯一滚动，标签行 + 取消/保存并同步/保存 + 编辑 dock 固定在可视区内，键盘开合只让正文伸缩。写作时隐藏首页顶栏，退出恢复。
+
 **节点图标（目录 / 知识库）**：`ui/NodeIconPicker.tsx`与`ui/NodeIconGlyph.tsx`是移动端独立实现，样式只在`ui/nodeIcon.css`。
 40枚lucide线性图标配八档浅渐变圆角底块；图标与emoji共用1.15em居中槽。颜色/字号自行定义在移动端`theme/tokens.css`，不import桌面CSS。
 节点选择器的表情页与文内输入`EmojiPanel`**彻底分离**，只共享资源表与最近记录逻辑，最近使用仍只写`icon`桶。

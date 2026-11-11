@@ -96,6 +96,7 @@
 - **小记「保存并同步」= 单条快路径（261110 用户定稿；唯一自同步特例，替换 261026 的「整轮兜底」口径）**：只推当前这一条 —— 最短链 = pointer → quick-notes 索引（合并语义必需）→ 本条正文/资产 → 新索引 → pointer → **只更新本条基线**；**不拉 lake 索引、不处理其他待同步、不跑整轮**。**实现 = 独立管线 `runQuickPush`（`src/core/s3v3/quickPush/pipeline.ts`，11 次请求 / 重复点 1 次；引擎只做薄委托，整轮 sync/pull/apply **不感知**这条快路径）**：桌面 IPC `sync_quick_note` 走 `serializedQuickPush` 高优先门（**不要排进 `enqueueMaintenance`**）；移动 `bridge.syncQuickNote` 走 `runPriority`。回退整轮只限「无 pointer / 无基线 / epoch·generation·lakeCommit 不符 / 远端墓碑且无恢复标记」，且如实回传 full-sync；失败不写基线、不标已同步；重复点内容未变 ⇒ 0 上传、0 发布。UI 主按钮仍是「保存 / 小记一下」，「保存并同步」是普通按钮，云同步关闭置灰 + 给理由；护栏 `quickNoteSyncGate.test.ts`、`quickPushFastPath.test.ts`（两端）、`quickNotePushPriority.test.ts`；契约 `docs/SYNC-PROTOCOL.md` §12.3。
 - **小记预览 = 快路径 + 内核只读兜底**：自研解析器（`quickNotePreviewParser.ts`）只画纯文字/列表/媒体（零内核实例）；出现它还原不了的块 ⇒ 整条卡片交给内核只读视图（`QuickNoteKernelPreview`，`createLakeDocument(host, viewer, …)` + `IntersectionObserver`）。判据 = 解析器自己的 `unsupported` 节点，不另立清单。
 - **小记写作卡工具条 = 用户指定七项**：日期·表情·图片·附件·待办·无序·分隔线；唯一来源 `QUICK_NOTE_TOOLBAR_ITEMS`（`lakeRuntime.ts`），顺序由 `quickNoteToolbar.test.ts` 卡住；字符串 id 必须内核有效（无效 id 被静默丢弃）；日期/表情/附件走自定义工具项类；**移动端不提供「展开」**。
+- **小记写作卡 = 全屏编辑会话（261111 用户定稿）**：长按图标 capture 与正常新建**共用** `.mobile-qn-screen` 容器；写作时隐藏首页顶栏（退出恢复）；正文唯一滚动，标签行/动作行/dock 固定且键盘开合时始终可点；动作行底距 = dock 占位（bar + gap + 安全区）。改动前先跑设备 longtask 对比，别凭感觉调。
 - **内核浮层 portal 到 `body`**（`.ne-overlay-container`）⇒ 移动端覆盖内核浮层必须用 body 级选择器（入口已加 `body.lake-mobile`）。
 - **移动端 Lake 输入面 = 底部 dock，没有第二条路**：移动端编辑态内核工具栏整条不存在（`showToolbar:false` ⇒ `disabledPlugins: [save, toolbar]`）、块手柄/选区浮栏不挂载、`/` 斜杠面板不可用 ⇒ **能输入什么只取决于 dock 接线了什么**（桌面 27 项 + 插入面板 22 项里没接进 dock 的，移动端能显示不能输入）。新增输入能力一律走 dock。**平板同样只走 dock**（261102 十四批定稿）：曾试「expanded 改内核固定工具栏」被整体回退，平板只保留外壳层宽/侧栏差异（`src/mobile/pad/`，见 `docs/PAD-ADAPTATION.md`）。**收面板→键盘（restore 档）必须让面板内容保持到被键盘盖住**（`closingHold`），否则用户报「闪烁」。
 - **移动端正文 = 文件**：正文/小记/历史/草稿落 App 私有 Data（路径单一来源 `src/core/noteBodyPaths.ts`，原生 `BodyStorePlugin` 原子写 + gzip 快照）；**SQLite 只存元数据/hash/同步账本/派生 text_cache+FTS**。旧库 `notes.content` 升级时**整库重置一次**（§3#7），**不要**写兼容读取；浏览器预览的正文在内存（刷新即丢）。
@@ -175,6 +176,7 @@ node scripts/s3-ls.mjs --count | --note <id> | --prefix <prefix>   # 云端对�
 ### 壳层 / 渲染
 - **JS import 的 CSS 一定未分层**：设计系统靠 `@layer` 取胜，但未分层普通声明压过所有分层声明（与特异性无关）。三层防线：① 构建兜底 `scripts/vendorCssLayer.ts`（自动包进 `@layer vendor`，内核 CSS 例外保持入口 `layer(legacy)`）；② dev 探针 `src/lib/cssLayerProbe.ts`（`window.__cssLayerProbe()`）；③ 产物审计 `audit-vendor-css.mjs` + 源码 `cssLayers.test.ts`。组件/懒 chunk 只 import 自己作用域 CSS，内部不得出现裸标签选择器。判据实现单一来源 = `src/lib/cssLayerScan.ts`。
 - **`transform` / `will-change: transform` 的祖先会把 `position: fixed` 的包含块改成它自己**：路由转场层常驻 transform ⇒ 编辑 dock 按 layer 盒贴底、面板展开停在键盘上方。**转场播完必须撤掉 transform + will-change**（`is-settled`）；新增会位移的壳层先确认没有依赖视口的 fixed 子元素。
+- **键盘（adjustResize）态不要写 `--mb-app-h`**：值与 `innerHeight` 相同 ⇒ `100%` 等价，写字面量等于每帧全页重排（键盘动画十几轮）；只写与视口不同的值（面板 / edge-to-edge），卸载/退出编辑时清一次，resize 事件按帧合并（`useKeyboard`）。261111 实测：写作态长任务 775→72ms。
 
 ### 装置 / 探针
 21. **写进引号字符串的正则，反斜杠会被 JS 吃掉 ⇒ 探针静默失效**（曾静默 3 个月）：一律写**双反斜杠**，改完**必须用已知会命中的样本自证**（不能只看跑通了、结果是 0）。
