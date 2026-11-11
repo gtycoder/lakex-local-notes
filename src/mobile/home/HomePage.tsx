@@ -262,7 +262,8 @@ export function HomePage(props: HomePageProps) {
       stage.removeEventListener("scroll", onScroll, true);
       if (raf) cancelAnimationFrame(raf);
     };
-  }, [stageRef, tab]);
+    // 261111：写作会话会卸载顶栏（全屏写作卡）⇒ 依赖里带上 composer，退出写作时重新绑定新顶栏节点。
+  }, [stageRef, tab, composer]);
 
   // ④ 写作/编辑小记时锁横向分页：切走会清掉写作卡（= 丢草稿）。CSS 侧只留纵向滚动（touch-action: pan-y）。
   useEffect(() => {
@@ -742,7 +743,8 @@ export function HomePage(props: HomePageProps) {
 
   return (
     <div className="mobile-home">
-      {selection.active && tab === "quick" ? (
+      {/* 写作会话 = 全屏（261111）：顶栏让位给写作卡（取消/保存在卡内），保证写作区占满状态栏以下。 */}
+      {composer === null && (selection.active && tab === "quick" ? (
         <SelectionTopBar
           count={selection.count}
           allSelected={selection.allSelected}
@@ -777,7 +779,7 @@ export function HomePage(props: HomePageProps) {
           ><CloudUpload /></button>
         </div>
       </header>
-      )}
+      ))}
 
       {syncProgress && (
         <div className={"mobile-sync-strip" + (syncPct < 0 ? " is-indeterminate" : "")} role="status" aria-live="polite">
@@ -800,8 +802,8 @@ export function HomePage(props: HomePageProps) {
         {/* 两页**常驻**：手指拖动时两页同时可见（语雀 pager 同形态）；非活动页由 effect 挂 inert。 */}
         <section ref={quickPaneRef} className="mobile-tab-pane">
         {composer !== null ? (
-          /* 写作 = 编辑会话：滚动区给底部 dock 留白（见 .mobile-scroll--with-dock），底栏同时让位。 */
-          <div className="mobile-scroll mobile-scroll--with-dock">
+          /* 写作 = 全屏编辑会话（261111）：与 capture 入口共用 .mobile-qn-screen；底栏/＋已让位。 */
+          <div className="mobile-qn-screen">
             <QuickNoteComposerLazy
               editNote={editNote}
               tagOptions={quickNoteTagOptions}

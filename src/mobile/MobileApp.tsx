@@ -766,7 +766,7 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
   if (captureOpen) {
     return (
       <div className="mobile-app">
-        <div className="mobile-qn-composer-wrap">
+        <div className="mobile-qn-screen">
           {seedReady ? (
             <QuickNoteComposerLazy
               key={captureNonce}

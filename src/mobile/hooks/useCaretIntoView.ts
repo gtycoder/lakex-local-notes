@@ -101,11 +101,20 @@ export function useCaretIntoView(rootRef: RefObject<HTMLElement | null>, enabled
     // 261014：**视口变化也要复核**（不是只有选区变才需要）。移动端"键盘 ⇄ 面板"切换会让视口 530 ⇄ 842：
     // 浏览器自己的"把光标滚进视口"是按**视口**算的，会把它停在面板/键盘后面（实测：面板一开光标落到 y=585，
     // 而面板从 530 起盖住）。这里按**我们自己的容器盒**再纠一次 —— 小记与文档两条路都吃这条。
-    window.addEventListener("resize", schedule);
+    // 261111 流畅性：IME 动画期间 resize 连发，逐帧纠一次 = 逐帧 getComputedStyle/getBoundingClientRect
+    // （强制同步布局）再 smooth scroll，反而和浏览器抢滚动。改为**等视口稳定一拍**再纠（120ms 合并）：
+    // 键盘/面板停下来那一刻光标仍会落进可视区；中间帧交给浏览器的"滚光标进视口"。
+    let resizeTimer = 0;
+    const scheduleAfterResize = (): void => {
+      if (resizeTimer) window.clearTimeout(resizeTimer);
+      resizeTimer = window.setTimeout(() => { resizeTimer = 0; lastKey = ""; schedule(); }, 120);
+    };
+    window.addEventListener("resize", scheduleAfterResize);
     return () => {
       document.removeEventListener("selectionchange", schedule);
       document.removeEventListener("pointerup", schedule);
-      window.removeEventListener("resize", schedule);
+      window.removeEventListener("resize", scheduleAfterResize);
+      if (resizeTimer) window.clearTimeout(resizeTimer);
       if (raf) cancelAnimationFrame(raf);
     };
   }, [rootRef, enabled]);

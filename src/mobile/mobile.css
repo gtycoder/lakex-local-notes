@@ -197,27 +197,26 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
 .mobile-scroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior-y: contain; padding-bottom: calc(96px + var(--mobile-bottom-safe-area)); scrollbar-width: none; }
 /* 261103 六批 A1：列表/首页内容在横屏刘海下不再压边（竖屏 inset=0，与原来完全一致；页子元素自己的 --mb-page-pad 仍生效）。 */
 .mobile-scroll { padding-left: var(--mobile-left-safe-area); padding-right: var(--mobile-right-safe-area); }
-/* 小记写作（261013 重做）：写作时**底部挂的是文档编辑那条 dock**（EditorDockHost），不是首页胶囊栏，
- *  所以底距改按 dock 的占位算（与 .mobile-doc-body 同一口径），否则动作行会被 dock 压住。 */
-.mobile-scroll--with-dock { padding-bottom: calc(80px + var(--mobile-bottom-safe-area)); }
 .mobile-scroll::-webkit-scrollbar { display: none; }
 /* （261013 A 批：空态统一到 .mb-empty，见 kit.css。） */
 
 
 
-/* 小记 composer —— 261014：改成**定高 + 内部滚动**（与文档 `.mobile-doc-body` 同一口径）。
-   原先它是普通块、高度由内容决定：文字一多，内容直接溢出到卡片外，浏览器没有可依赖的滚动口
-   ⇒ **光标一路跑出屏幕**（用户报的"光标必须始终在工具栏上方"在小记上就是这么坏的），
-   而且面板一开卡片还会长高（352→664）。现在：卡片 = 滚动区内容盒的高度（外壳已被 --mb-app-h 钉住 ⇒ 两种状态同高），
-   正文（.quick-note-editor）自己滚、底部动作行固定在卡片底部。 */
-/* v2：写作卡同样是「卡片」（圆角 16 + 卡阴影；0.5px 边线由 --mb-shadow-card 的内描边承担）。 */
-.mobile-qn-composer { position: relative; display: flex; flex-direction: column; box-sizing: border-box; height: 100%; overflow: hidden; background: var(--lake-bg-canvas); border: 0; border-radius: var(--mb-radius-card); box-shadow: var(--mb-shadow-card); padding: 12px; }
+/* 小记写作 = **全屏编辑会话**（261111 用户点单；两条入口同一容器 .mobile-qn-screen）：
+   区域 = 外壳高（--mb-app-h，键盘/面板已扣掉）− 顶部状态栏安全区；去掉浮卡外距/圆角/阴影造成的死区。
+   卡片仍是**定高 + 内部滚动**（261014 口径不变）：正文（.quick-note-editor）自己滚，标签行/动作行固定在底部，
+   键盘开合时只有正文区伸缩（flex + min-height:0），可点项始终在可视区内。
+   底部内距 = dock 占位（bar-height + 8 gap + 安全区），动作行因此落在 dock 上方；dock 本体 fixed 覆盖在卡片下缘。 */
+.mobile-qn-composer {
+  position: relative; display: flex; flex-direction: column; box-sizing: border-box;
+  flex: 1 1 auto; min-height: 0; height: auto; overflow: hidden;
+  background: var(--lake-bg-canvas); border: 0; border-radius: 0; box-shadow: none;
+  padding: 12px 12px calc(var(--mobile-bottom-bar-height) + var(--mobile-bar-gap) + var(--mobile-bottom-safe-area));
+}
 .mobile-qn-composer .quick-note-editor { flex: 1 1 auto; min-height: 0; overflow: hidden; }
 .mobile-qn-composer .mobile-qn-actions { flex: 0 0 auto; }
-/* 261022：capture 写作卡挂载时 120ms 淡入（只动 opacity，不挡输入、不延迟首帧）。 */
-@keyframes mb-composer-in { from { opacity: .6; } to { opacity: 1; } }
-.mobile-qn-composer[data-capture="1"] { animation: mb-composer-in var(--mobile-duration-panel) var(--mobile-ease-out); }
-@media (prefers-reduced-motion: reduce) { .mobile-qn-composer[data-capture="1"] { animation: none; } }
+/* 261022 的 capture 120ms 淡入已删（261111 流畅性）：内核挂载与淡入同帧竞争时整屏重绘，
+   实测把长任务拉长；全屏容器本身没有"出现感"需求，瞬时出现即可。 */
 /* 261022：内核就绪前用同构骨架盖住卡片空白（纯进度占位，就绪即揭）。 */
 .mb-composer-skel-cover { position: absolute; inset: 0; z-index: 1; background: var(--lake-bg-canvas); border-radius: inherit; }
 .mb-composer-skeleton--bare { height: 100%; }
@@ -1142,17 +1141,12 @@ body.nb-drag-active .side-panel-body { overscroll-behavior: none; }
   gap: 8px;
 }
 
-/* 小记 capture 路径的外层容器。
- * 261010：capture 与工作台**统一为内核卡片**，原先"不挂内核的轻量速记框"（`.mobile-qn-flash*` 6 条规则）已删除——
- * 只保留这层布局（与工作台 composer 同一套组件，见 MobileApp 的 capture 分支）。 */
-.mobile-qn-composer-wrap {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-height: 0;
-  height: 100%;
-  /* 底部让位给 dock（261013：小记改用文档编辑那条工具栏）——与 .mobile-doc-body 同一口径。 */
-  padding: 8px 8px calc(80px + var(--mobile-bottom-safe-area));
+/* 小记写作的**全屏容器**（261111）：两条入口共用（capture 独立路由 / 首页新建），单一来源。
+   状态栏安全区以下起、外壳底部（键盘上方）止；卡片本体在它里面 flex 撑满 ⇒ 不再有 8px 浮卡外距。 */
+.mobile-qn-screen {
+  flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column;
+  padding-top: var(--mobile-top-safe-area);
+  background: var(--lake-bg-canvas);
 }
 /* 表格只读查看器（kind=usheet，移动端）：占满文档层，Univer 容器铺满。
  * ⚠️ 必须建**层叠上下文**：Univer 内部给 canvas 写了 inline z-index:8，而移动端底栏 z-index:3、

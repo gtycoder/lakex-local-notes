@@ -72,17 +72,26 @@ function emit(): void {
 function startWatching(): void {
   if (stopWatching || typeof window === "undefined") return;
   lastWidth = window.innerWidth;
-  const update = (): void => emit();
-  const onOrient = (): void => { resetShellHeight(); emit(); };
+  /* 261111 流畅性：IME 动画期间 window/visualViewport 会连发多次 resize（同一帧内也可能有多条），
+     每次 emit 都会让所有订阅者重渲染 + 写 --mb-app-h。这里合并成**每帧最多一次**（rAF）：
+     键盘开合/面板收放最多晚一帧，但省掉成串的同步 reflow。
+     ⚠️ 不是"隐藏窗口不调度"的 rAF 门控：本 store 只服务可见编辑面，可见窗口 rAF 恒有回调。 */
+  let frame = 0;
+  const schedule = (): void => {
+    if (frame) return;
+    frame = window.requestAnimationFrame(() => { frame = 0; emit(); });
+  };
+  const onOrient = (): void => { resetShellHeight(); schedule(); };
   window.addEventListener("orientationchange", onOrient);
-  window.visualViewport?.addEventListener("resize", update);
-  window.visualViewport?.addEventListener("scroll", update);
-  window.addEventListener("resize", update);
+  window.visualViewport?.addEventListener("resize", schedule);
+  window.visualViewport?.addEventListener("scroll", schedule);
+  window.addEventListener("resize", schedule);
   stopWatching = () => {
     window.removeEventListener("orientationchange", onOrient);
-    window.visualViewport?.removeEventListener("resize", update);
-    window.visualViewport?.removeEventListener("scroll", update);
-    window.removeEventListener("resize", update);
+    window.visualViewport?.removeEventListener("resize", schedule);
+    window.visualViewport?.removeEventListener("scroll", schedule);
+    window.removeEventListener("resize", schedule);
+    if (frame) { window.cancelAnimationFrame(frame); frame = 0; }
     stopWatching = null;
   };
   emit();

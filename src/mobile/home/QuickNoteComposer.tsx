@@ -36,6 +36,7 @@ import { EditorDockHost } from "../editor/EditorDockHost";
 // 光标/选区自动跟随滚动：**与文档编辑器同一份实现**（261014 —— 用户：光标必须始终在工具栏上方、
 // 不被工具栏/键盘盖住）。小记此前没有这一环，文字一多光标就跑到屏幕外。
 import { useCaretIntoView } from "../hooks/useCaretIntoView";
+import { shellHeight } from "../hooks/viewportShell";
 import type { LakeEditorInstance } from "../../features/editor/lakeRuntime";
 // 内核样式（ne-* / ne-icon-symbol 的尺寸与配色）**由挂内核的入口自己保证**：
 // 桌面走 styles/index.css 的全局 @import；移动端入口不引它，此前只有 mobile/editor/DocumentEditor 引 ⇒
@@ -207,7 +208,12 @@ export function QuickNoteComposer({ editNote, tagOptions, onCreateTag, onSaved, 
     window.setTimeout(tryFocus, 150);
     // 没手势的入口（快捷 capture / 分享）：DOM 焦点不够，Android 不会自己弹键盘 ⇒ 请原生动一次手（AGENTS §7.28）。
     // 放在两次聚焦之后，确保 WebView/编辑器已经拿到焦点再弹。
-    if (raiseKeyboard) window.setTimeout(() => showNativeKeyboard(), 300);
+    // 261111 流畅性：**键盘已经弹着就别再请求一次**（capture 保存后重挂新小记、或用户已经点开键盘时，
+    // 重复 ShowKeyboard 会让 IME 再跑一轮收缩/展开动画 = 肉眼卡顿）。判据用统一的 shellHeight（AGENTS §7.17）。
+    if (raiseKeyboard) window.setTimeout(() => {
+      const alreadyOpen = shellHeight() > 0 && window.innerHeight < shellHeight() - 8;
+      if (!alreadyOpen) showNativeKeyboard();
+    }, 300);
   }, [editNote, raiseKeyboard]);
 
   /**

@@ -258,15 +258,39 @@ export function useEditSurface<M extends string = Exclude<PanelMode, null>>(opts
 
   // 外壳高度 = 稳定外壳高 − 底部占用（写到 :root，消费方是各编辑面的滚动容器）。
   //  ⚠️ 必须 useLayoutEffect（绘制前落地）：否则 vh 系的内核规则会先按旧视口算一次、被内容撑住，之后缩不回去。
+  //  261111 流畅性（键盘开合卡顿的主因之一）：旧写法在每次 occupation 变化时先 cleanup 移除、再重新 set，
+  //  一次键盘动画 = 十几轮「移除 + 设置 + 全页 style 重算」，每轮还会被 layout effect 里的 rect 读取强制同步布局。
+  //  现在：① 只写**变化了的**值（同值直接 return，避免一次无意义的全页失效）；
+  //       ② adjustResize 下键盘只改变视口、外壳高恰好等于 innerHeight ⇒ **不写变量**（html/body 的 100% 已经是它，
+  //          写一次等于平白触发全页重算）；只有面板态 / edge-to-edge（值与视口不同）才写；
+  //       ③ 清除只在卸载或退出编辑态时做一次，不在每次变化时 remove→set 往返。
+  const appHeightWrittenRef = useRef<string | null>(null);
   useLayoutEffect(() => {
-    if (!writeAppHeight || !editing || !base) return;  // 表格不接管外壳高；base=0 = 还没量到视口 ⇒ 不写（否则外壳会变 0px）
-    const dock = dockRef.current;
-    if (!dock || !dock.getBoundingClientRect().width) return;
     const root = document.documentElement;
-    const value = `${shellSurfaceHeight(base, occupation)}px`;
+    if (!writeAppHeight || !editing || !base) {  // 表格不接管外壳高；base=0 = 还没量到视口 ⇒ 不写（否则外壳会变 0px）
+      if (appHeightWrittenRef.current !== null) { root.style.removeProperty("--mb-app-h"); appHeightWrittenRef.current = null; }
+      return;
+    }
+    const dock = dockRef.current;
+    if (!dock || !dock.getBoundingClientRect().width) return;  // 隐藏视图（rect 宽 0）不覆盖可见实例的值
+    const target = shellSurfaceHeight(base, occupation);
+    // 键盘（adjustResize）态：外壳高 == 视口高 ⇒ 100% 即等价，清掉变量而不是写一个新值。
+    if (Math.abs(target - window.innerHeight) <= 2) {
+      if (appHeightWrittenRef.current !== null) { root.style.removeProperty("--mb-app-h"); appHeightWrittenRef.current = null; }
+      return;
+    }
+    const value = `${target}px`;
+    if (appHeightWrittenRef.current === value) return;
     root.style.setProperty("--mb-app-h", value);
-    return () => { if (root.style.getPropertyValue("--mb-app-h") === value) root.style.removeProperty("--mb-app-h"); };
+    appHeightWrittenRef.current = value;
   }, [writeAppHeight, editing, base, occupation, dockRef]);
+  // 卸载时把变量交还给外壳（不能留在某个已卸载编辑面的旧值上）。
+  useEffect(() => () => {
+    if (appHeightWrittenRef.current !== null) {
+      document.documentElement.style.removeProperty("--mb-app-h");
+      appHeightWrittenRef.current = null;
+    }
+  }, []);
 
   // ── 焦点守卫 ───────────────────────────────────────────────────────────────
   const closePanelRef = useRef(closePanel);
