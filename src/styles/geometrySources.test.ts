@@ -39,6 +39,10 @@ describe("垂直几何：令牌单一来源（PANEL-CONTRACT §1）", () => {
     expect(read("styles/app/tabs.css")).toMatch(/padding:\s*calc\(\(var\(--topbar-height\)\s*-\s*var\(--tab-item-height\)\)\s*\/\s*2\s*\+\s*2px\)\s*10px\s*calc\(\(var\(--topbar-height\)\s*-\s*var\(--tab-item-height\)\)\s*\/\s*2\s*-\s*2px\)/);
     // 阅读态大纲顶 = 顶栏 + 4 拼接缝 + 面包屑
     expect(read("styles/app/editor.css")).toMatch(/\.ne-viewer-toc-sidebar\s*\{[^}]*top:\s*calc\(var\(--topbar-height\)\s*\+\s*4px\s*\+\s*var\(--breadcrumb-height\)\)/);
+    // 阅读态大纲底 = 状态栏保留高：内核浮层是 bottom:0（铺到视口底、压住状态栏 z 180），
+    // 只在状态栏实际存在时上收，其他空间不留空
+    expect(read("styles/app/editor.css")).toContain(".app-shell:has(.document-statusbar) .lake-editor-tab .ne-viewer-toc-sidebar");
+    expect(read("styles/app/editor.css")).toMatch(/bottom:\s*var\(--statusbar-reserve\)/);
   });
 
   it("目录浮层从顶栏下缘起，底部仍保留 12px；固定态不受影响", () => {

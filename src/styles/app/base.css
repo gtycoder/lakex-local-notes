@@ -15,6 +15,10 @@
   --breadcrumb-height: 26px;
   --editor-toolbar-height: 30px;
   --tab-item-height: 28px;
+  /* 底部文档状态栏的保留高（261111）：状态栏胶囊 26 + bottom 8 + 与浮层 8 呼吸 = 42。
+     内核阅读态大纲是 position:fixed/top:…/bottom:0/z-index:412 的浮层，会盖住状态栏（z 180）；
+     编辑态不冲突（内核把编辑态大纲挂在 .ne-editor-body 里，absolute/z 1）⇒ 只在阅读态按此上收。 */
+  --statusbar-reserve: 42px;
 }
 
 * { box-sizing: border-box; }
