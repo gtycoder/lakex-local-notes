@@ -21,6 +21,7 @@ import { shouldSkipBoardCardFocus, useClickActivatedWheelGate } from "./canvasIn
 import { ASSET_ORIGIN, withLocalImageThumb } from "../../lib/assetPort";
 import type { LocalAssetRef } from "../../core/assetUrl.js";
 import { imageThumbKey } from "../../core/quickNoteImageThumb.js";
+import { createImageThumbUploadTracker } from "./imageThumbUploadTracker";
 import type { AttachmentPreviewItem } from "../attachment/attachmentPreviewController.js";
 
 // DT-07：KaTeX/mhchem 顺序注入、audio 卡重试、TOC 滚动跟随、perf 订阅各自成模块，
@@ -791,6 +792,31 @@ export function createLakeDocument(
    * - 只裁剪「工具栏 items」，卡片注册、「+」面板、上传钩子、其余 option 全部照旧（261010 起面板不再过滤）。
    */
   const quickNoteUi = mode === "editor" ? prefs?.quickNoteUi : undefined;
+  /**
+   * 【task-26 / 边界 A】新插入图片的缩略「放行」器（只在启用显示缩略时创建；逻辑见 imageThumbUploadTracker.ts）。
+   * 实测（261111，5554）：文件选择 / 粘贴在上传 promise resolve 之前，内核已把**真实 origin**
+   * （来自上传前对 File 的解码）写进模型、src 仍为空 ⇒ resolve 时若正文里恰好一张这样的待上传卡，
+   * 可以安全放行；并发/异常时退避重试，等 src 回填后按正文 origin 放行。
+   */
+  const thumbEditorHolder: { editor: LakeEditorInstance | null } = { editor: null };
+  const imageThumbTracker = typeof prefs?.imageThumbWidth === "number"
+    && prefs.imageThumbWidth > 0
+    && prefs.imageThumbAllowFiles instanceof Set
+    ? createImageThumbUploadTracker({
+        width: prefs.imageThumbWidth,
+        allow: prefs.imageThumbAllowFiles as Set<string>,
+        readBody: () => {
+          const instance = thumbEditorHolder.editor;
+          if (!instance) return "";
+          try { return instance.getDocument("text/lake") || ""; } catch { return ""; }
+        },
+        schedule: (delayMs: number, run: () => void) => {
+          const timer = window.setTimeout(run, delayMs);
+          return () => window.clearTimeout(timer);
+        },
+      })
+    : null;
+
   const mount = document.createElement("div");
   // 小记走内核 note 版式（小卡片外观 + 展开按钮）；`.ne-doc-note-editor` 是小记版式的挂载点前缀
   // （内核 fullscreen 把 `.ne-ui-fullscreen` 加到 editorNode 的父节点 = 本 mount，小记的展开整窗规则
@@ -911,7 +937,15 @@ export function createLakeDocument(
       KaTexURL: [LAKE_KATEX_SCRIPT, LAKE_MHCHEM_SCRIPT],
     },
     image: {
-      createUploadPromise: (request: unknown) => (uploadResource ?? ((req: unknown) => uploadLakeResource(req, noteId)))(request),
+      // 边界 A：上传完成后登记本条资产（tracker 在 promise resolve 时确认 origin 已正确，再并进活 allowlist）。
+      createUploadPromise: (request: unknown) => {
+        const upload = (uploadResource ?? ((req: unknown) => uploadLakeResource(req, noteId)))(request);
+        if (!imageThumbTracker) return upload;
+        return Promise.resolve(upload).then((output) => {
+          imageThumbTracker.onUploaded(output as { url?: unknown });
+          return output;
+        });
+      },
       // 本地资源服务器 URL 必须排除，否则 Lake 每次 setDocument 都会重新下载并上传本地图片
       isCaptureImageURL: (url: string) => !url.startsWith("data:") && !url.startsWith("blob:") && !url.startsWith(`${ASSET_ORIGIN}/`),
       // 【task-26，仅移动端小记写作卡】只改显示 src（内核 toDisplaySrc 出口），模型/保存不受影响。
@@ -1031,6 +1065,14 @@ export function createLakeDocument(
   lakeMeasure("lake:create:openEditor", "lake:create:start", "lake:create:end");
   hardenDestroyedHotKeyLookup(editor);
   appendDisposeExtras(editor, disposeKatexInjection);
+  if (imageThumbTracker) {
+    thumbEditorHolder.editor = editor;
+    appendDisposeExtras(editor, () => {
+      imageThumbTracker.dispose();
+      // 销毁后残留定时器不该再碰已销毁的内核实例。
+      thumbEditorHolder.editor = null;
+    });
+  }
   if (mode === "editor") {
     editor.on("contentchange", onChange);
   }

@@ -5,6 +5,7 @@ import { imageThumbAllowFiles } from "../../core/quickNoteImageThumb.js";
 import type { ResourceUploadOutput } from "../../lib/types";
 import { createLakeDocument, type LakeEditorInstance } from "../editor/lakeRuntime";
 import { installMediaCardCategoryRouter } from "../editor/mediaCardRouting";
+import { attachSelectionClipboard } from "../editor/selectionClipboard";
 
 /** 交给父组件的取正文句柄（「有没有内容」与「保存什么」用**同一个来源**，避免两套口径打架）。 */
 export interface QuickNoteEditorApi {
@@ -116,6 +117,9 @@ export function QuickNoteEditor({ ownerId, initialBody, ui = "card", active = tr
       { disableNativeToc: true, quickNoteUi: ui, disableVirtualRendering: true, showToolbar, ...(imageThumbWidth && imageThumbWidth > 0 ? { imageThumbWidth, imageThumbAllowFiles: imageThumbAllowFiles(initialBody || emptyLakeBody(ownerId)) } : {}) },
       (request: unknown) => callbacksRef.current.uploadResource(request),
     );
+    // 复制/剪切 = 应用侧统一管线（与文档编辑器同一份）：小记里显示的图可能带 ?w=1024，
+    // 直接交给内核/WebView 会把**显示缩略**写进剪贴板（粘到微信就糊）；这里统一物化成原图 data URL。
+    const detachSelectionClipboard = attachSelectionClipboard(host);
     // 兜底：DOM 层 input 事件（真实键入必触发）——内核 contentchange 之外的第二条信号。
     host.addEventListener("input", emitText, true);
     /**
@@ -142,6 +146,7 @@ export function QuickNoteEditor({ ownerId, initialBody, ui = "card", active = tr
     callbacksRef.current.onTextChange(readText());
     return () => {
       host.removeEventListener("input", emitText, true);
+      detachSelectionClipboard();
       detachMediaCardRouter();
       callbacksRef.current.onReady(null);
       callbacksRef.current.onEditorInstance?.(null);

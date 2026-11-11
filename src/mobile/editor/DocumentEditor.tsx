@@ -22,6 +22,7 @@ import type { AttachmentPreviewItem } from "../../features/attachment/attachment
 import type { LocalAssetRef } from "../../core/assetUrl.js";
 import { parseLocalAssetUrl } from "../../core/assetUrl.js";
 import { isSafeShellOpenFilename } from "../../core/assetNaming.js";
+import { imageThumbAllowFiles, MOBILE_IMAGE_THUMB_WIDTH } from "../../core/quickNoteImageThumb.js";
 // 261111 首屏瘦身：粘贴拦截器（含表情数据表等，≈20KB gz）只在真会挂内核的懒 chunk 里安装 ——
 // 本模块由 NotePaneHost 静态引入，只有工作区分包加载时才评测 ⇒ 天然满足「编辑器创建前安装」，且不进首屏静态图。
 import { installPasteInterceptor } from "../../features/editor/clipboardHtml";
@@ -108,6 +109,27 @@ export function DocumentEditor(props: DocumentEditorProps) {
     },
   }), []);
 
+  /**
+   * 【task-26 / 边界 C】移动端文档编辑器的图片显示缩略 allowlist（活集合，内核 onBeforeRenderImage 闭包持有）。
+   *
+   * 只放「正文里已带正数 origin（originWidth/originHeight）」的资产 —— 缺 origin 的卡一旦显示 1024 缩略，
+   * 内核会用当前显示图 naturalWidth 补写原尺寸并落盘（LAKEX-CONTRACT §5.51 实测）。
+   * 按 note 首次进入时解析一次正文；正文异步到货后再补一次；新插入图片由 lakeRuntime 的上传钩子
+   * 在确认 origin 后往同一个 Set 里增量补（imageThumbLearnFromBody）。
+   * 桌面文档编辑器不传（Retina 清晰度优先，见 HANDOFF §3），移动端才是内存/解码瓶颈。
+   */
+  const thumbAllowRef = useRef<{ noteId: string; files: Set<string>; seeded: boolean }>({ noteId: "", files: new Set(), seeded: false });
+  if (thumbAllowRef.current.noteId !== note.id) {
+    thumbAllowRef.current = { noteId: note.id, files: imageThumbAllowFiles(content), seeded: Boolean(content) };
+  } else if (!thumbAllowRef.current.seeded && content) {
+    // 首次渲染正文可能还没加载完（note 元数据先到）；到货后补解析**一次**，避免整篇这一会话都不缩。
+    // 只解一次：正文里本来没有图片的文档若每次渲染都解析，等于每次按键扫全篇。
+    // ⚠️ 必须就地增补、不能换新 Set —— 内核 onBeforeRenderImage 闭包持有的是这个实例
+    // （换实例 = 已创建的内核永远看不到新 allowlist）。
+    for (const file of imageThumbAllowFiles(content)) thumbAllowRef.current.files.add(file);
+    thumbAllowRef.current.seeded = true;
+  }
+
   const bodyRef = useRef<HTMLElement | null>(null);
   /**
    * 正文容器同时以 state 暴露给查找条：ref 变化不触发重渲染，查找条首帧会拿到 null。
@@ -193,7 +215,16 @@ export function DocumentEditor(props: DocumentEditorProps) {
           }}
           // MOB-04（261029 切换）：查找已接内核（不依赖全量 DOM）⇒ 编辑态开内核虚拟渲染；
           // 只保留视口附近节点（实测 500 块文档编辑节点 5552→2202、进编辑 5117→2102ms）。
-          prefs={{ fontSize: loadSettings().fontSize, showToolbar: !editing, disableVirtualRendering: false, attachment: attachmentPrefs }}
+          prefs={{
+            fontSize: loadSettings().fontSize,
+            showToolbar: !editing,
+            disableVirtualRendering: false,
+            attachment: attachmentPrefs,
+            // 编辑态与阅读态都缩：移动端文档里的截图/照片解码是主要内存开销（原图 4000×3000 ≈ 48MB 位图）。
+            // 预览（双击放大）取正文原图（LakeEditor 的 resolver），不受显示缩略影响。
+            imageThumbWidth: MOBILE_IMAGE_THUMB_WIDTH,
+            imageThumbAllowFiles: thumbAllowRef.current.files,
+          }}
         />
       </section>
       {/* 编辑态底部 dock（app 化工具栏，悬浮输入法上方；替代 Lake 桌面样式原生工具栏）。

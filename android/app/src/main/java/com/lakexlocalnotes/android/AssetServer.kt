@@ -3,6 +3,7 @@ package com.lakexlocalnotes.android
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.util.Base64
 import android.util.Log
 import android.webkit.MimeTypeMap
 import java.io.BufferedInputStream
@@ -64,6 +65,13 @@ object AssetServer {
     /** 缩略图磁盘缓存条目上限（超出后删最旧一半）。 */
     private const val THUMB_CACHE_MAX_FILES = 1024
 
+    /** ?base64=1 时 WebP/AVIF→PNG 转换的像素上限（防解码 OOM）。桌面 50MP 基于 Node 堆，Android
+     *  堆更紧（24MP 位图 ARGB_8888 ≈96MB，再加 PNG 与 base64 会顶到上限）⇒ 取 12MP；
+     *  超限/失败返回非 200 ⇒ JS 侧退回 canvas PNG（不丢图，但可能是显示缩略图尺寸，见 docs/LAKEX-CONTRACT §5.52）。 */
+    private const val BASE64_MAX_PIXELS = 12_000_000L
+    /** 转 PNG 后的字节上限（噪声照片 PNG 可能远大于原 webp；超过就回退 canvas，避免 base64 拉爆内存）。 */
+    private const val BASE64_MAX_PNG_BYTES = 24 * 1024 * 1024
+
     @Volatile
     private var sServerSocket: ServerSocket? = null
 
@@ -117,6 +125,7 @@ object AssetServer {
     private fun handle(socket: Socket, appContext: Context) {
         try {
             socket.use {
+                socket.soTimeout = 20_000   // 半开连接不得长期占用线程池（POOL_SIZE=4）
                 val reader = BufferedReader(InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8), BUFFER_SIZE)
                 val out = socket.getOutputStream()
                 val requestLine = reader.readLine() ?: return
@@ -187,6 +196,14 @@ object AssetServer {
                 if ("application/octet-stream" == mime) {
                     val sniffed = sniffMime(file)
                     if (sniffed != null) mime = sniffed
+                }
+                // ?base64=1：返回**原图**字节的 data URL（剪贴板物化用；与桌面 assetServer 同语义）。
+                // 必须忽略 w/date 等显示参数（否则复制到微信拿到的是 ?w=1024 缩略图）。
+                // webp/avif 统一转 PNG（微信等外部应用对 data:image/webp 兼容性不确定；对齐桌面）。
+                if (uri?.let { queryParameter(it, "base64") } == "1") {
+                    // 边界 B：剪贴板物化必须取**原图**（忽略 w/date）；实现见 writeBase64DataUrl 注释。
+                    writeBase64DataUrl(out, file, mime, isHead)
+                    return
                 }
                 // ?w=<档位>：按需缩略图（不落盘、不上传、可重建）。失败或格式不支持 → 落到下面的原图分支。
                 // 缩略图不参与 Range（没有 seek 需求），直接整段返回。
@@ -323,6 +340,72 @@ object AssetServer {
         if (name.lowercase(Locale.ROOT).endsWith(".png")) "image/png" else "image/jpeg"
 
     /**
+     * ?base64=1 → **原图**字节的 data URL（剪贴板物化；与桌面 assetServer 同语义）。
+     *
+     * 流式写：普通位图直接 Base64 编码到 socket，不再 readBytes + String + ByteArray 三份副本
+     * （25MiB 图曾≈180MB 峰值；池只有 4 线程，OOM 后 JS 回退 canvas 会把 1024 缩略图写进剪贴板）。
+     * webp/avif：先 inJustDecodeBounds 查尺寸（超限不整读），再转 PNG（外部应用对 data:image/webp
+     * 兼容性不确定；对齐桌面语义）。
+     */
+    private fun writeBase64DataUrl(out: OutputStream, file: File, mime: String, isHead: Boolean) {
+        val ext = file.name.substringAfterLast('.', "").lowercase(Locale.ROOT)
+        val needsPng = ext == "webp" || ext == "avif"
+        val png = if (needsPng) base64PngBytes(file) else null
+        if (needsPng && png == null) {
+            // 解不了/超限：明确失败，让 JS 退回 canvas（绝不返回半截 data URL）。
+            writeError(out, 500, "base64 encode failed")
+            return
+        }
+        val payloadMime = if (png != null) "image/png" else mime
+        val prefix = ("data:" + payloadMime + ";base64,").toByteArray(StandardCharsets.UTF_8)
+        val rawLength = png?.size?.toLong() ?: file.length()
+        val encodedLength = 4L * ((rawLength + 2) / 3)
+        val total = prefix.size.toLong() + encodedLength
+        val head = StringBuilder(256)
+        head.append("HTTP/1.1 200 OK\r\n")
+        head.append("Content-Type: text/plain; charset=utf-8\r\n")
+        head.append("Content-Length: ").append(if (isHead) 0 else total).append("\r\n")
+        head.append("X-Content-Type-Options: nosniff\r\n")
+        head.append("Access-Control-Allow-Origin: ").append(ALLOWED_ORIGIN).append("\r\n")
+        head.append("Cache-Control: no-store\r\n")
+        head.append("Connection: close\r\n\r\n")
+        out.write(head.toString().toByteArray(StandardCharsets.UTF_8))
+        if (isHead) { out.flush(); return }
+        out.write(prefix)
+        // minSdk 24：不能用 java.util.Base64（API 26+）⇒ android.util.Base64OutputStream（close 时补齐 padding）。
+        val b64 = android.util.Base64OutputStream(out, android.util.Base64.NO_WRAP)
+        if (png != null) b64.write(png) else file.inputStream().use { input -> input.copyTo(b64) }
+        b64.close()
+    }
+
+    /** webp/avif → PNG 字节（尺寸/体积双重上限；任何失败返回 null 让调用方回 500）。 */
+    private fun base64PngBytes(file: File): ByteArray? = try {
+        val probe = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(file.absolutePath, probe)
+        val pixels = probe.outWidth.toLong() * probe.outHeight.toLong()
+        if (probe.outWidth <= 0 || probe.outHeight <= 0 || pixels > BASE64_MAX_PIXELS) {
+            Log.w(TAG, "base64: skip png conversion " + file.name + " (" + probe.outWidth + "x" + probe.outHeight + ")")
+            null
+        } else {
+            val bitmap = BitmapFactory.decodeFile(file.absolutePath)
+            if (bitmap == null) null else try {
+                val png = ByteArrayOutputStream(minOf(pixels * 2, 8L * 1024 * 1024).toInt().coerceAtLeast(64 * 1024))
+                bitmap.compress(Bitmap.CompressFormat.PNG, 100, png)
+                val bytes = png.toByteArray()
+                if (bytes.size > BASE64_MAX_PNG_BYTES) {
+                    Log.w(TAG, "base64: png too large " + file.name + " (" + bytes.size + ")")
+                    null
+                } else bytes
+            } finally {
+                bitmap.recycle()
+            }
+        }
+    } catch (t: Throwable) {
+        Log.w(TAG, "base64 png failed: " + file.name, t)
+        null
+    }
+
+    /**
      * 按需缩略图。先用 `inJustDecodeBounds` 只读尺寸、再按 `inSampleSize` 只解 1/N —— 这是关键：
      * 直接 `decodeFile` 一张 4000×3000 就是 48MB 位图进内存，正是我们要省掉的那笔开销。
      * 任何失败都返回 null，调用方落回原图：缩略图是纯优化，绝不能因为它把图弄没。
@@ -434,6 +517,9 @@ object AssetServer {
         head.append("HTTP/1.1 ").append(code).append(" ").append(msg).append("\r\n")
         head.append("Content-Type: text/plain; charset=utf-8\r\n")
         head.append("Content-Length: ").append(body.size).append("\r\n")
+        // 错误也带 nosniff + CORS：页面里的同步 XHR / fetch 才能读到状态与正文（否则只有 NetworkError）。
+        head.append("X-Content-Type-Options: nosniff\r\n")
+        head.append("Access-Control-Allow-Origin: ").append(ALLOWED_ORIGIN).append("\r\n")
         head.append("Connection: close\r\n\r\n")
         out.write(head.toString().toByteArray(StandardCharsets.UTF_8))
         out.write(body)
@@ -448,6 +534,8 @@ object AssetServer {
         head.append("Content-Type: text/plain; charset=utf-8\r\n")
         head.append("Content-Range: bytes */").append(size).append("\r\n")
         head.append("Content-Length: ").append(body.size).append("\r\n")
+        head.append("X-Content-Type-Options: nosniff\r\n")
+        head.append("Access-Control-Allow-Origin: ").append(ALLOWED_ORIGIN).append("\r\n")
         head.append("Connection: close\r\n\r\n")
         out.write(head.toString().toByteArray(StandardCharsets.UTF_8))
         out.write(body)

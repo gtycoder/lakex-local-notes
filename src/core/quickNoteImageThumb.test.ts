@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { imageThumbAllowFiles, imageThumbKey } from "./quickNoteImageThumb";
+import { imageThumbAllowFiles, imageThumbKey, imageThumbLearnFromBody, imageThumbPendingCount, imageThumbPendingOrigins, MOBILE_IMAGE_THUMB_WIDTH } from "./quickNoteImageThumb";
 
 /** 按内核正文形态造一张 image 卡（data: + encodeURIComponent(JSON)）。 */
 function card(value: Record<string, unknown>, name = "image"): string {
@@ -44,6 +44,53 @@ describe("imageThumbAllowFiles（缩略 allowlist 解析）", () => {
 
   it("空正文 → 空集合", () => {
     expect(imageThumbAllowFiles("")).toEqual(new Set());
+  });
+});
+
+describe("imageThumbLearnFromBody（边界 A：新插入图片的增量放行）", () => {
+  it("正文出现正数 origin 后才把资产并进活 allowlist（幂等）", () => {
+    const allow = new Set<string>();
+    // 还没有原文尺寸（内核尚未写 origin）⇒ 不放行
+    expect(imageThumbLearnFromBody(card({ src: SRC }), allow)).toBe(0);
+    expect(allow.size).toBe(0);
+    // 内核写完 origin ⇒ 放行
+    expect(imageThumbLearnFromBody(card({ src: SRC, originWidth: 4032, originHeight: 3024 }), allow)).toBe(1);
+    expect(allow.has("1794_a.jpg")).toBe(true);
+    // 再来一次不重复计数
+    expect(imageThumbLearnFromBody(card({ src: SRC, originWidth: 4032, originHeight: 3024 }), allow)).toBe(0);
+  });
+
+  it("只补新资产，不动调用方原有条目；空正文 0", () => {
+    const allow = new Set(["keep.png"]);
+    const body = [
+      card({ src: "http://127.0.0.1:19876/quick-notes/q1/a.png", originWidth: 10, originHeight: 10 }),
+      card({ src: "http://127.0.0.1:19876/quick-notes/q1/b.png", originWidth: 0, originHeight: 0 }),
+    ].join("");
+    expect(imageThumbLearnFromBody(body, allow)).toBe(1);
+    expect([...allow].sort()).toEqual(["a.png", "keep.png"]);
+    expect(imageThumbLearnFromBody("", allow)).toBe(0);
+  });
+
+  it("档位常量 = 资产服务支持的 1024", () => {
+    expect(MOBILE_IMAGE_THUMB_WIDTH).toBe(1024);
+  });
+
+  it("待上传卡计数/尺寸（A 的身份校验）：src 空才算，origin 缺则不计尺寸", () => {
+    const body = [
+      card({ src: "", originWidth: 640, originHeight: 480 }),
+      card({ src: "", width: 300 }),                 // 带 width、无 origin
+      card({ src: SRC, originWidth: 10, originHeight: 10 }),
+    ].join("");
+    expect(imageThumbPendingCount(body)).toBe(2);
+    expect(imageThumbPendingOrigins(body)).toEqual([{ width: 640, height: 480 }]);
+    expect(imageThumbPendingCount("")).toBe(0);
+    expect(imageThumbPendingCount(card({ src: SRC }))).toBe(0);
+  });
+
+  it("属性匹配只认 name=，不被 data-name= 命中", () => {
+    const encoded = "data:" + encodeURIComponent(JSON.stringify({ src: SRC, originWidth: 4032, originHeight: 3024 }));
+    const dataNameOnly = '<p><card type="inline" data-name="image" value="' + encoded + '"></card></p>';
+    expect(imageThumbAllowFiles(dataNameOnly).size).toBe(0);
   });
 });
 

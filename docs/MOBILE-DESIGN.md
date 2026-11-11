@@ -306,7 +306,7 @@ Toast        .mb-toast-host > .mb-toast[--error] > (.mb-toast__text, .mb-toast__
 
 ## Components
 
-- **小记写作卡（261111 用户点单）**：写作 = **全屏编辑会话**，不是浮卡 —— `capture`（长按图标）与正常新建共用 `.mobile-qn-screen` 容器（状态栏安全区以下、dock/键盘以上）；去掉外距/圆角/阴影死区；正文唯一滚动，标签行 + 取消/保存并同步/保存 + 编辑 dock 固定在可视区内，键盘开合只让正文伸缩。写作时隐藏首页顶栏，退出恢复。图片显示：内核内图片经 display-only 钩子走资产服务 `?w=1024`，仅对卡片已带 original 尺寸的图生效（缺 original 的历史卡保持原图；见 LAKEX-CONTRACT §5.51）。
+- **小记写作卡（261111 用户点单）**：写作 = **全屏编辑会话**，不是浮卡 —— `capture`（长按图标）与正常新建共用 `.mobile-qn-screen` 容器（状态栏安全区以下、dock/键盘以上）；去掉外距/圆角/阴影死区；正文唯一滚动，标签行 + 取消/保存并同步/保存 + 编辑 dock 固定在可视区内，键盘开合只让正文伸缩。写作时隐藏首页顶栏，退出恢复。图片显示：内核内图片经 display-only 钩子走资产服务 `?w=1024`，仅对卡片已带 original 尺寸的图生效（缺 original 的历史卡保持原图；见 LAKEX-CONTRACT §5.51/§5.52）；**移动端文档编辑器同档启用**（编辑+阅读，allowlist 按正文解析），新插入图片在上传确认 origin 后当会话即缩略；大图预览取原图。
 
 **节点图标（目录 / 知识库）**：`ui/NodeIconPicker.tsx`与`ui/NodeIconGlyph.tsx`是移动端独立实现，样式只在`ui/nodeIcon.css`。
 40枚lucide线性图标配八档浅渐变圆角底块；图标与emoji共用1.15em居中槽。颜色/字号自行定义在移动端`theme/tokens.css`，不import桌面CSS。

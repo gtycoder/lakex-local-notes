@@ -114,13 +114,16 @@ export function buildClipboardPayload(range: Range, document: Document): Clipboa
 export function normalizeImageDataUrl(value: string): string | null {
   const match = /^data:[^;,]+;base64,([a-z0-9+/=\s]+)$/i.exec(value);
   if (!match) return value.startsWith("data:") ? null : value;
+  const payload = match[1].replace(/\s/g, "");
   try {
-    const binary = atob(match[1].replace(/\s/g, ""));
-    const bytes = Array.from(binary, (character) => character.charCodeAt(0));
-    const format = sniffImageFormat(bytes);
+    // 只解前 24 个 base64 字符（≈18 字节）做格式嗅探：复制事件里整串 atob 一张 12MP 照片
+    // 会产生 10MB+ 的二进制串与逐字节数组（卡主线程/吃内存），而签名判断只需要开头几字节。
+    const headLength = Math.min(24, Math.floor(payload.length / 4) * 4);
+    const head = atob(payload.slice(0, headLength));
+    const format = sniffImageFormat(Array.from(head, (character) => character.charCodeAt(0)));
     if (!format) return null;
     // Return corrected MIME type based on actual image format
-    return `data:${format.mimeType};base64,${match[1].replace(/\s/g, "")}`;
+    return `data:${format.mimeType};base64,${payload}`;
   } catch {
     return null;
   }
@@ -203,21 +206,35 @@ function imageToPngDataUrl(image: HTMLImageElement): string | null {
 
 function normalizeImage(image: HTMLImageElement, document: Document): HTMLImageElement | null {
   let source = image.getAttribute("src") ?? "";
-  // 移动端：本地资源图（canonical http://127.0.0.1:19876 或 blob:）且已解码 → canvas 转 PNG data URL
-  // （微信等无法访问 127.0.0.1 的 canonical URL；对齐桌面 assetServer ?base64=1 行为）
-  const isLocalSrc = source.startsWith("blob:") || /^https?:\/\/127\.0\.0\.1:/.test(source);
-  if (isMobileEnvironment() && isLocalSrc && image.complete && image.naturalWidth > 0) {
-    const converted = imageToPngDataUrl(image);
-    if (converted) source = converted;
-    else return null;
-  }
+  // 移动端本地资源图（canonical http://127.0.0.1:19876 或 blob:）：
+  //   · 本地资产：**两端统一先同步取原图**（?base64=1，去掉显示用 w/date、保留 token）。
+  //     不能再用 canvas —— 写作卡里 img 的 currentSrc 是 ?w=1024 缩略图，canvas 会把缩略图写进剪贴板。
+  //   · blob: 临时预览：取不到原图字节，仍用 canvas 转 PNG（兜底不让复制裂图）。
+  // 兜底：XHR 失败（旧服务/参数被破坏）时，移动端退回当前显示图 canvas（可能仍是缩略图，但不丢图）；
+  // 桌面没有 canvas 兜底 ⇒ 与既有行为一致：取不到就丢弃该图（不写半截内容）。
+  /** XHR/canvas 拿到的 data URL 还要按真实格式修正 MIME（避免 data:image/jpeg 里塞 PNG 头）。 */
+  let needsFormatFix = false;
   if (source.startsWith(LOCAL_ASSET_PREFIX)) {
     const converted = assetUrlToDataUrlSync(source);
-    if (converted) source = converted;
-    else return null;
+    if (converted) { source = converted; needsFormatFix = true; }
+    else if (isMobileEnvironment() && image.complete && image.naturalWidth > 0) {
+      const canvasPng = imageToPngDataUrl(image);
+      if (!canvasPng) return null;
+      source = canvasPng; needsFormatFix = true;
+    } else return null;
+  } else if (source.startsWith("blob:")) {
+    if (!isMobileEnvironment() || !image.complete || image.naturalWidth <= 0) return null;
+    const canvasPng = imageToPngDataUrl(image);
+    if (!canvasPng) return null;
+    source = canvasPng; needsFormatFix = true;
   } else {
     const normalized = normalizeImageDataUrl(source);
     if (!normalized || (!normalized.startsWith("data:image/") && !/^https?:\/\//i.test(normalized))) return null;
+    source = normalized;
+  }
+  if (needsFormatFix && source.startsWith("data:")) {
+    const normalized = normalizeImageDataUrl(source);
+    if (!normalized) return null;
     source = normalized;
   }
   const output = document.createElement("img");
@@ -237,6 +254,23 @@ function copySafeAttributes(source: Element, target: HTMLElement): void {
   if (style) target.setAttribute("style", style);
 }
 
+/**
+ * 复制取图的 URL 规范化：把**显示专用**的 `w`（缩略档位）与 `date`（缓存破坏）去掉，
+ * 其余 query（尤其 `token`）原样保留 —— 剪贴板物化必须写**原图**，不能写当前显示缩略图。
+ * 非本地资产 URL 原样返回（外部图不归我们处理）。
+ */
+export function canonicalAssetUrlForCopy(url: string): string {
+  if (!url.startsWith(LOCAL_ASSET_PREFIX)) return url;
+  try {
+    const parsed = new URL(url);
+    parsed.searchParams.delete("w");
+    parsed.searchParams.delete("date");
+    return parsed.toString();
+  } catch {
+    return url;
+  }
+}
+
 /** 组装资产服务器「取 data URL」请求。URL 已带 ?token= 时不能再拼第二个 ?（会把 base64 参数吞掉、返回二进制→裂图）。 */
 export function buildAssetDataUrlRequest(url: string, token: string): string | null {
   if (!url.startsWith(LOCAL_ASSET_PREFIX)) return null;
@@ -251,7 +285,7 @@ export function buildAssetDataUrlRequest(url: string, token: string): string | n
 }
 
 function assetUrlToDataUrlSync(url: string): string | null {
-  const requestUrl = buildAssetDataUrlRequest(url, assetToken());
+  const requestUrl = buildAssetDataUrlRequest(canonicalAssetUrlForCopy(url), assetToken());
   if (!requestUrl) return null;
   try {
     const xhr = new XMLHttpRequest();

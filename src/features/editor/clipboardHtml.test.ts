@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { describe, expect, it, beforeAll, afterAll } from "vitest";
-import { buildAssetDataUrlRequest, buildClipboardPayload, isMobileEnvironment, normalizeClipboardHtml, normalizeImageDataUrl, upgradePastedHtml } from "./clipboardHtml";
+import { describe, expect, it, beforeAll, afterAll, afterEach } from "vitest";
+import { buildAssetDataUrlRequest, buildClipboardPayload, canonicalAssetUrlForCopy, isMobileEnvironment, normalizeClipboardHtml, normalizeImageDataUrl, upgradePastedHtml } from "./clipboardHtml";
 
 // jsdom 无 canvas 实现：mock getContext/toDataURL（仅测试 blob→png 分支的调用路径）
 const origGetContext = HTMLCanvasElement.prototype.getContext;
@@ -41,6 +41,22 @@ describe("isMobileEnvironment（平台判定）", () => {
   });
 });
 
+describe("canonicalAssetUrlForCopy（复制取原图前的 URL 规范化）", () => {
+  const base = "http://127.0.0.1:19876/n1/a.jpg";
+  it("去掉显示用 w 与 date，保留 token 与其它 query", () => {
+    expect(canonicalAssetUrlForCopy(base + "?w=1024&date=123&token=T&x=1")).toBe(base + "?token=T&x=1");
+    expect(canonicalAssetUrlForCopy(base + "?token=T&w=1024")).toBe(base + "?token=T");
+  });
+  it("只有 w 时不留空 query", () => {
+    expect(canonicalAssetUrlForCopy(base + "?w=1024")).toBe(base);
+  });
+  it("非本地资产 / 无 query 原样", () => {
+    const external = "https://example.com/a.png?w=1024";
+    expect(canonicalAssetUrlForCopy(external)).toBe(external);
+    expect(canonicalAssetUrlForCopy(base)).toBe(base);
+  });
+});
+
 describe("buildAssetDataUrlRequest（复制到第三方的图片 URL 组装）", () => {
   it("已带 token 的 URL 不重复拼接（单一 query，base64 生效）", () => {
     const out = buildAssetDataUrlRequest("http://127.0.0.1:19876/n1/1700_ab.webp?token=ABC", "ABC")!;
@@ -54,6 +70,70 @@ describe("buildAssetDataUrlRequest（复制到第三方的图片 URL 组装）",
   });
   it("非本地资产 URL → null", () => {
     expect(buildAssetDataUrlRequest("https://example.com/a.png", "T")).toBeNull();
+  });
+});
+
+describe("本地资产复制取原图（task-30）", () => {
+  const RealXhr = globalThis.XMLHttpRequest;
+  class FakeXhr {
+    static lastUrl = "";
+    static status = 200;
+    static body = `data:image/png;base64,${PNG_1PX}`;
+    open(_method: string, url: string): void { FakeXhr.lastUrl = url; }
+    send(): void { /* 同步桩 */ }
+    get status(): number { return FakeXhr.status; }
+    get responseText(): string { return FakeXhr.body; }
+  }
+  beforeAll(() => {
+    (globalThis as unknown as { XMLHttpRequest: unknown }).XMLHttpRequest = FakeXhr;
+  });
+  afterAll(() => {
+    (globalThis as unknown as { XMLHttpRequest: unknown }).XMLHttpRequest = RealXhr;
+  });
+  afterEach(() => {
+    FakeXhr.lastUrl = "";
+    FakeXhr.status = 200;
+    FakeXhr.body = `data:image/png;base64,${PNG_1PX}`;
+    delete (window as unknown as { Capacitor?: unknown }).Capacitor;
+    delete (window as unknown as { lakeAssetToken?: unknown }).lakeAssetToken;
+  });
+
+  it("移动端：本地资产先同步取 ?base64=1 原图（w/date 去掉、token 保留），不走 canvas 缩略图", () => {
+    (window as unknown as { Capacitor?: unknown }).Capacitor = { isNativePlatform: () => true };
+    (window as unknown as { lakeAssetToken?: unknown }).lakeAssetToken = { getToken: () => "T" };
+    const html = normalizeClipboardHtml(
+      fragmentFromHtml('<img src="http://127.0.0.1:19876/quick-notes/q1/a.jpg?w=1024&date=123&token=T">'),
+      document
+    );
+    expect(html).toContain('src="data:image/png;base64,');
+    const requestUrl = new URL(FakeXhr.lastUrl);
+    expect(requestUrl.searchParams.get("base64")).toBe("1");
+    expect(requestUrl.searchParams.get("w")).toBeNull();
+    expect(requestUrl.searchParams.get("date")).toBeNull();
+    expect(requestUrl.searchParams.get("token")).toBe("T");
+  });
+
+  it("桌面：本地资产同样先取原图（URL 去 w，不影响桌面 base64=1 语义）", () => {
+    const html = normalizeClipboardHtml(
+      fragmentFromHtml('<img src="http://127.0.0.1:19876/n1/a.png?w=1024">'),
+      document
+    );
+    expect(html).toContain('src="data:image/png;base64,');
+    const requestUrl = new URL(FakeXhr.lastUrl);
+    expect(requestUrl.searchParams.get("base64")).toBe("1");
+    expect(requestUrl.searchParams.get("w")).toBeNull();
+  });
+
+  it("移动端：取原图失败才退回 canvas（已解码图不丢）", () => {
+    (window as unknown as { Capacitor?: unknown }).Capacitor = { isNativePlatform: () => true };
+    FakeXhr.status = 500;
+    const frag = fragmentFromHtml('<img src="http://127.0.0.1:19876/n1/a.jpg?w=1024" width="1" height="1">');
+    const imgEl = frag.querySelector("img")!;
+    Object.defineProperty(imgEl, "naturalWidth", { value: 1, configurable: true });
+    Object.defineProperty(imgEl, "complete", { value: true, configurable: true });
+    const html = normalizeClipboardHtml(frag, document);
+    expect(html).toContain('src="data:image/png;base64,');
+    expect(new URL(FakeXhr.lastUrl).searchParams.get("base64")).toBe("1");
   });
 });
 
@@ -154,6 +234,13 @@ describe("normalizeImageDataUrl", () => {
 
   it("普通 http 地址原样返回", () => {
     expect(normalizeImageDataUrl("https://example.com/a.png")).toBe("https://example.com/a.png");
+  });
+
+  it("大图只嗅探前缀、payload 原样保留（复制不被整串 atob 卡住）", () => {
+    const padding = "A".repeat(2_000_000);   // ≈1.5MB 二进制：整串 atob 会明显吃内存
+    const value = `data:image/jpeg;base64,${PNG_1PX}${padding}`;
+    const out = normalizeImageDataUrl(value);
+    expect(out).toBe(`data:image/png;base64,${PNG_1PX}${padding}`);
   });
 });
 

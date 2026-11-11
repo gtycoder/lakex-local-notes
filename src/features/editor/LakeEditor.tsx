@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { AlertCircle } from "lucide-react";
 import { createLakeDocument, destroyLakeEditor, refreshTocSidebar, type LakeEditorInstance, type LakeEditorPrefs } from "./lakeRuntime";
-import { buildClipboardPayload, upgradePastedHtml } from "./clipboardHtml";
+import { upgradePastedHtml } from "./clipboardHtml";
+import { attachSelectionClipboard } from "./selectionClipboard";
 import { addAssetAccessToken, stripAssetAccessToken } from "../../lib/assetPort";
 import { getNativeErrorMessage } from "../../lib/nativeErrors";
 import { shouldAcceptEditorChange } from "../../core/editorChangeGuard";
@@ -56,29 +57,8 @@ export function LakeEditor({ noteId, content, mode = "editor", tocEnabled, onCha
     const host = hostRef.current;
     if (!host) return;
 
-    const copyRichSelection = (event: ClipboardEvent) => {
-      const selection = window.getSelection();
-      if (!event.clipboardData || !selection || selection.isCollapsed || selection.rangeCount === 0) return;
-      const range = selection.getRangeAt(0);
-      if (!host.contains(range.commonAncestorContainer)) return;
-      const { html, plain } = buildClipboardPayload(range, document);
-      event.clipboardData.setData("text/html", html);
-      event.clipboardData.setData("text/plain", plain);
-      event.preventDefault();
-      event.stopImmediatePropagation();
-    };
-    const cutRichSelection = (event: ClipboardEvent) => {
-      const selection = window.getSelection();
-      if (!event.clipboardData || !selection || selection.isCollapsed || selection.rangeCount === 0) return;
-      const range = selection.getRangeAt(0);
-      if (!host.contains(range.commonAncestorContainer)) return;
-      const { html, plain } = buildClipboardPayload(range, document);
-      event.clipboardData.setData("text/html", html);
-      event.clipboardData.setData("text/plain", plain);
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      try { document.execCommand("delete"); } catch { /* 忽略 */ }
-    };
+    // 复制/剪切 = 应用侧统一管线（图片来源见 selectionClipboard.ts 文件头；单一来源，别在这里再写一份）。
+    const detachSelectionClipboard = attachSelectionClipboard(host);
     const pasteHandler = (event: ClipboardEvent) => {
       const dt = event.clipboardData;
       if (!dt) return;
@@ -98,8 +78,6 @@ export function LakeEditor({ noteId, content, mode = "editor", tocEnabled, onCha
       }
     };
     host.addEventListener("mousedown", preventCardBlur, true);
-    host.addEventListener("copy", copyRichSelection, true);
-    host.addEventListener("cut", cutRichSelection, true);
     host.addEventListener("paste", pasteHandler, true);
     // 点击任意位置清理 Lake 卡片 hover 残留（打开系统应用/遮罩时 mouseleave 可能被吞）
     const detachHoverCleaner = createCardHoverResidueCleaner(host);
@@ -168,8 +146,7 @@ export function LakeEditor({ noteId, content, mode = "editor", tocEnabled, onCha
     }
     return () => {
       host.removeEventListener("mousedown", preventCardBlur, true);
-      host.removeEventListener("copy", copyRichSelection, true);
-      host.removeEventListener("cut", cutRichSelection, true);
+      detachSelectionClipboard();
       host.removeEventListener("paste", pasteHandler, true);
       detachHoverCleaner();
       detachImagePreview();

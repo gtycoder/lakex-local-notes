@@ -2151,8 +2151,20 @@ DOM 文本节点扫描（移动端文档 `disableVirtualRendering:true`，整篇
 **结论**：本构建 image 插件有一个**未文档化内建** option `onBeforeRenderImage(src, isCapture) => src`，是渲染期唯一改写点；**只影响显示、不影响模型/保存**。官方 62/48/47 均未收录（48 的 `previewImgs` 语义相近但本构建不派发，见 §5.40）。
 
 - **链路**：卡 `value.src` → `cardData.getSrc()` 原串；显示走 `getDisplaySrc/getPreviewSrc → toDisplaySrc = onBeforeRenderImage(src, isCaptureImageURL(src)) || src`（lakex.js 72214–72231）；渲染 `img.ne-image`（150940–150960）；保存序列化写**模型 attrs**（75224），显示 URL 只存 cardUI/组件 state ⇒ 显示改写不进正文。
+- **两个出口都过钩子**：`getDisplaySrc` 与 `getPreviewSrc` 都调 `toDisplaySrc` ⇒ 若将来接 `envAdapter.previewImgs`（§5.40 记录本构建不派发），其 `src/msrc` 也会是缩略；应用侧大图预览因此走**正文 resolver**（`imagePreview.extractImagesFromContent`），不依赖内核 payload。
 - **⚠️ 已知副作用（必须先 allowlist 规避）**：卡缺 `original`（`originWidth/originHeight`）时，内核会用**当前显示图**的 naturalWidth/Height 补写原尺寸并 `sync(true)`（150833→151778→72365）。实测缺 origin 卡：不加缩略打开补 4032×3024；若显示图是 1024 缩略则补成 **1024×768**，用户保存后会写进正文。⇒ 只能对**卡片已有正数 origin** 的图加缩略（`core/quickNoteImageThumb.imageThumbAllowFiles`）。
-- **资产服务**：两端均支持 `?w=128|256|512|1024`（GIF/SVG 不缩）；本批只移动端写作卡启用 1024（`mobile/home/QuickNoteComposer.tsx` → `QuickNoteEditor` → `lakeRuntime.image.onBeforeRenderImage`），桌面/文档编辑器不传 = 零变化。
+- **资产服务**：两端均支持 `?w=128|256|512|1024`（GIF/SVG 不缩；**都不放大**）。⚠️ 两端对小图的行为**不一致**：Android `AssetServer.kt`（`probe.outWidth <= targetWidth` 短路）直接回**原文件字节**；桌面 `electron/assetServer.ts` 的 `thumbnailBuffer` 走 sharp `resize({withoutEnlargement:true})`，同尺寸也会**重编码**（JPEG 有损、PNG 变字节）。⇒「w ≥ 原宽 = 无损」只对 Android 成立，别写进跨端结论。261111 起**移动端写作卡 + 移动端文档编辑器**启用 1024（`mobile/home/QuickNoteComposer.tsx` / `mobile/editor/DocumentEditor.tsx` → `lakeRuntime.image.onBeforeRenderImage`），桌面编辑器不传 = 零变化。
 - **实测（任务-26，5554；A/B/C 各 3 轮 + 正式包 A/B 1 轮）**：A（有 origin）显示 URL 带 `w=1024`、persisted/body 未变、dirty 0、original 仍 4032；B（缺 origin）**不加 w**、打开后 model 补 4032（既有）、保存后 persisted original=4032（不是 1024）；C（3 图）3/3 加 w、body 未变。PSS 前后 on/off 在噪声内（缩略内存收益按图片像素量决定，待真实带图小记再量）。
-- **覆盖边界**：allowlist 在挂载时按 `initialBody` 解析 ⇒ **会话内新插入的图片**不在集合内（本次不缩，后续可用上传元数据补 allowlist）；剪贴板“复制到微信”若读 DOM 可能拿到 1024 版（未复现、未处理）。
-- **护栏**：`src/features/editor/lakexImageRenderThumb.test.ts`（bundle 含 hook / runtime fail-safe / 移动传 1024 / 桌面不传 / 本节含 hook）；内核升级后此测试先红，再按 §8 复发实测流程复查。
+- **覆盖边界（261111 收口后）**：allowlist 在挂载时按 `initialBody` 解析；**会话内新插入的图片**由 `editor/imageThumbUploadTracker` 在上传 resolve 时按「正文里恰好一张上传中且已有正数 origin 的卡」即时确认后放行（判据来源见 §5.52），并发/异常退避重试；**移动端文档编辑器**同档启用（编辑+阅读；桌面不传 = 零变化）。剪贴板复制统一走 `editor/selectionClipboard` + `?base64=1` 取原图（见 §5.52），不再把 1024 缩略写进剪贴板。
+
+- **护栏**：`src/features/editor/lakexImageRenderThumb.test.ts`（bundle 含 hook / runtime fail-safe / 移动传 1024 / 移动文档编辑器启用 / 桌面不传 / 本节含 hook）；内核升级后此测试先红，再按 §8 复发实测流程复查。
+
+### 5.52 图片「上传时 origin」与「剪贴板物化」两条实测事实（261111；缩略 A/B/C 判据来源）
+
+**结论**：① 新插入图片的 **origin 在上传 promise resolve 前**就由内核按原 File 解码写入（src 仍空），因此可在 resolve 时安全放行缩略；② 复制到外部应用时**取显示图 = 可能拿到 1024**，两端统一改为取原图字节。
+
+- **上传时序（5554 实测，file / base64 两类任务）**：卡创建后上传预览用 `URL.createObjectURL(file)`（`lakex.js:152323`，另有 152495/153040），其 onLoad 在 `width` 缺省且协议为 `blob:` 时调 `onImageSizeResolved({naturalWidth})`（`lakex.js:149055–149068`）→ `setImageOriginSize`（`lakex.js:151778`）。实测 upload promise resolve 时正文卡 `src=""`、`originWidth/Height` = 真实尺寸（640×480 / 320×200），约 100ms 后 src 才回填；`?w` 从未参与该测量。
+- **例外（必须按正文判、不能凭类型）**：① 卡带显式 `width` 属性（如粘贴 HTML `<img width=…>`）时上传预览跳过尺寸解析 ⇒ origin 可能缺；② `url` 类任务 resource URL 就是原 URL（非 blob）⇒ 不触发该解析（只有 `file`/`base64` 任务会转 blob）；③ 大图 blob 解码可能晚于上传 resolve。⇒ 放行判据 = 正文里**待上传（src 空）image 卡总数恰好 1**（`imageThumbPendingCount(b) === 1`，证明那张就是我这张；遗留的失败 pending 卡会让计数变 2 ⇒ 自动放弃）**且**该卡已有正数 origin；否则退回「等 src 回填后按正文 origin 放行」；失败就本会话不缩（允许的降级）。
+- **剪贴板物化（双保险）**：两端 `?base64=1` 分支都在 `?w=` 之前（桌面 `assetServer.ts` / Android `AssetServer.kt`）⇒ 即使请求 URL 带 w 也拿原图；应用侧仍先 `canonicalAssetUrlForCopy` 去掉 w/date 再请求。移动端旧路径 `imageToPngDataUrl(canvas)` 画的是当前显示 `<img>` ⇒ 显示缩略时剪贴板写 1024（微信里糊）；桌面 `electron/assetServer.ts` 的 `?base64=1` 分支**忽略 w、读原文件**（webp/avif→PNG）已保真。⇒ 统一为「本地资产先同步 XHR `?base64=1` 取原图（请求前 `canonicalAssetUrlForCopy` 去掉显示用 `w`/`date`、保留 token），失败才回退 canvas」；Android `AssetServer.kt` 本轮补同等 `?base64=1`（webp/avif→PNG，24MP 上限，超限/失败返回非 200 让 JS 回退）。
+- **落地**：`editor/selectionClipboard.ts`（copy/cut 单一来源：LakeEditor / 移动文档编辑器 / QuickNoteEditor）、`editor/imageThumbUploadTracker.ts`（新插入放行）、`clipboardHtml.canonicalAssetUrlForCopy`、`core/quickNoteImageThumb.imageThumbPendingOrigins`。护栏：`selectionClipboard.test.ts`、`imageThumbUploadTracker.test.ts`、`clipboardHtml.test.ts`、`lakexImageRenderThumb.test.ts`。
+- **剩余边界**：XHR 失败/旧包时 canvas 回退仍可能是显示尺寸；复制多张大图会同步阻塞（剪贴板 API 限制）。
