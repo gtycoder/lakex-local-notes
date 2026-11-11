@@ -172,6 +172,11 @@
 /* 卡片内编辑（分块视图）：动作行落在卡片页脚位置，补上与正文一致的左右/下内边距，避免贴住卡片边框。 */
 .quick-note-entry.editing .quick-note-composer-actions { padding: 0 12px 12px; }
 
+/* 编辑既有小记（inline 版式）：**标签行并进动作行** —— 标签靠左、按钮靠右，同一行（用户 261111 点单：
+   原先标签单独一行贴在卡片左下角，离「取消 / 保存」很远）。 */
+.quick-note-composer-actions--inline .quick-note-tags { flex: 0 1 auto; flex-wrap: nowrap; min-height: 0; margin: 0; overflow: hidden; }
+.quick-note-composer-actions > .quick-note-actions-spacer { flex: 1 1 auto; }
+
 /* 展开态（内核 fullscreen）：动作行必须浮在展开层之上，否则「保存 / 取消」既看不到也点不到
    —— `.ne-ui-fullscreen` 的定位基准就是动作行所在的盒子（面板 / 卡片），z-index 30 会整个盖住它。
    浮层贴该盒子右下角成一组；展开后工具栏已可见，提示文案隐去（否则压在正文上是噪音）。 */

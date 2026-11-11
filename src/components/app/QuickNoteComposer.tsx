@@ -72,6 +72,23 @@ export function QuickNoteComposer({ draft, saving, syncing, cloudReady, variant,
     </button>
   );
   const cancel = <button className="ln-btn ln-btn--ghost quick-note-discard" disabled={busy} onClick={onCancel}>取消</button>;
+  /** 标签行（「+ 添加标签」+ 已选标签）：写作卡在自己一行；**编辑既有小记时并进动作行左侧**（用户 261111 点单）。 */
+  const tagsRow = (
+    <div className="quick-note-tags">
+      <button
+        type="button"
+        className="ln-chip ln-chip--add"
+        disabled={busy}
+        onClick={(event) => setTagPickerAnchor(event.currentTarget)}
+      ><Plus size={12} /><span>添加标签</span></button>
+      {draft.tagIds.map((tagId) => (
+        <span className="ln-chip ln-chip--static" key={tagId}>
+          <span className="ln-ellipsis">{tagNameOf(tagId)}</span>
+          <button type="button" className="ln-iconbtn ln-iconbtn--compact" aria-label={`移除标签 ${tagNameOf(tagId)}`} disabled={busy} onClick={() => onTagIdsChange(removeQuickNoteTagId(draft.tagIds, tagId))}><X size={11} /></button>
+        </span>
+      ))}
+    </div>
+  );
   return <>
     <div className="quick-note-composer" onKeyDownCapture={publishOnShortcut}>
       {/* 写作区 = 一个 Lake 内核实例（编辑时挂、离开即销毁）；图片直接拖入或粘贴。
@@ -88,20 +105,8 @@ export function QuickNoteComposer({ draft, saving, syncing, cloudReady, variant,
       />
       </Suspense>
     </div>
-    <div className="quick-note-tags">
-      <button
-        type="button"
-        className="ln-chip ln-chip--add"
-        disabled={busy}
-        onClick={(event) => setTagPickerAnchor(event.currentTarget)}
-      ><Plus size={12} /><span>添加标签</span></button>
-      {draft.tagIds.map((tagId) => (
-        <span className="ln-chip ln-chip--static" key={tagId}>
-          <span className="ln-ellipsis">{tagNameOf(tagId)}</span>
-          <button type="button" className="ln-iconbtn ln-iconbtn--compact" aria-label={`移除标签 ${tagNameOf(tagId)}`} disabled={busy} onClick={() => onTagIdsChange(removeQuickNoteTagId(draft.tagIds, tagId))}><X size={11} /></button>
-        </span>
-      ))}
-    </div>
+    {/* 写作卡：标签行独立一行（在动作行上方）；编辑既有小记时它并进动作行（见下方）。 */}
+    {variant === "pane" ? tagsRow : null}
     <div className={`quick-note-composer-actions quick-note-composer-actions--${variant}`}>
       {variant === "pane" ? <>
         {/* 写作卡（新建）：主按钮在最左、次级动作跟在后面（仿评论框），快捷键提示退到最后。 */}
@@ -109,7 +114,9 @@ export function QuickNoteComposer({ draft, saving, syncing, cloudReady, variant,
         {saveAndSync}
         {cancel}
       </> : <>
-        {/* 编辑既有小记：整组靠右下（对齐对话框底栏惯例：次级在左、主按钮在右），不再分居两角 */}
+        {/* 编辑既有小记（261111 用户点单）：**标签靠左、按钮靠右，同在一行**；按钮组仍按「次级在左、主按钮在右」。 */}
+        {tagsRow}
+        <span className="quick-note-actions-spacer" aria-hidden="true" />
         {cancel}
         {saveAndSync}
         {primary}

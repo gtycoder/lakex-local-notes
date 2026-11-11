@@ -10,6 +10,10 @@
 
 > **顺序标注**：261109 各批次里写的「日记 ⌘4 / AI 写作 ⌘3」是**当时**的顺序；**261110 起改为 日记 ⌘3 / AI 写作 ⌘4**（另有标签 ⌘5）。旧批次不再改，以本行 + §1 为准。
 
+### 261111 · 小记编辑态：标签并进动作行 + 「保存并同步」支持编辑（核对结论）
+- **布局**（用户点单「标签太贴边，放到取消/保存那一行的最左边」）：编辑既有小记（`variant="inline"`）时，标签行（`+ 添加标签` + 已选标签）从原来「独立一行贴卡片左下角」**并进动作行**：标签靠左、`quick-note-actions-spacer` 撑开、`取消 / 保存并同步 / 保存` 靠右，同在一行；写作卡（`variant="pane"`）保持标签独立一行不变。实测：动作行 742×40，标签 519→676、按钮组 1035→1237，同一 top。
+- **「保存并同步」在编辑态是否支持编辑后出网？→ 支持，保留**：`saveDraftAndSync` = `saveDraft`（编辑走 `native.updateQuickNote`；**无改动不写库**但会回传 note id）→ `pushOneNote(id)` → `native.syncQuickNote(id)`（单条快路径 `engine.pushQuickNote`：pushed / unchanged「已是最新」/ 无远端清单回退整轮 / 不在本机 都有明确提示；失败文案「已保存到本机，同步失败：…」）。⇒ 它是「改完立刻出网」的唯一入口，**不删**。
+- 门禁：`tsc` 0；`cssLayers` `app/quick-notes.css` 684→**690**（+6 = inline 标签容器与 spacer，写明理由）；全量 vitest 见 §1；`ui-metrics` / `git diff --check` 通过。
 ### 261111 · 渲染骨架 fallback + capture 预取 / 图片缩略 / 性能基线（用户点单）
 
 - **桌面编辑器 fallback = 同构轻骨架**：`MultiTabEditor` / `QuickNoteComposer` 的「正在加载编辑器…」裸文字换 `EditorLoadingSkeleton`（document/composer 两变体；`role=status` + `aria-busy` + `.a11y-visually-hidden` 文案；纯静态无动画、不写死高度）；样式只进 `app/editor.css`（+43）+ a11y 通用隐藏类（+6）；lazy 边界/首屏预算未动。**桌面 42 态 stylesnap 未跑**（无夹具），点收：冷启首篇 / 切文档 / 小记写作卡 / 分屏。
