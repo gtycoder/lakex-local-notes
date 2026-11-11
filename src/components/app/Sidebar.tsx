@@ -12,6 +12,7 @@ import { SIDEBAR_DEFAULT_WIDTH } from "../../core/layoutConstants";
 import { Dialog, Menu, Submenu } from "../ui/Overlay";
 import { rubberBandWidth, SplitHandle } from "../ui/SplitHandle";
 import { usePopoverPosition } from "../../hooks/usePopoverPosition";
+import { prefetchEditorKernelNow } from "../../features/editor/kernelPrefetch";
 
 /** 261107：图标选择器 + 表情源表按需加载（入口不再静态背约 41KB gzip）。 */
 const NodeIconPicker = lazy(() => import("./NodeIconPicker").then((m) => ({ default: m.NodeIconPicker })));
@@ -1545,8 +1546,20 @@ const TreeRowFace = memo(function TreeRowFace(props: TreeRowFaceProps) {
         if (props.consumeSuppressedClick()) return;
         props.onRowClick(event, props.node);
       }}
-      onKeyDown={(event) => { if (event.key === "Enter") props.node.nodeType === "note" ? props.onSelect(props.node.id) : props.onToggle(props.node.id); }}
-      onPointerDown={(event) => props.onPointerDown(event, props.node.id)}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") {
+          // 261111 意图预取：键盘打开文档也先开始加载内核 chunk（与 hover/pointerdown 同一入口）。
+          if (props.node.nodeType === "note") prefetchEditorKernelNow();
+          props.node.nodeType === "note" ? props.onSelect(props.node.id) : props.onToggle(props.node.id);
+        }
+      }}
+      // 261111 意图预取：文档行 hover / 按下即开始加载内核 chunk（不拦截事件、不改冒泡）。
+      // 不用 onFocus（目录栏的 onFocus 属于「重命名输入全选」单一实现，见 namePromptWiring 护栏）。
+      onMouseEnter={props.node.nodeType === "note" ? prefetchEditorKernelNow : undefined}
+      onPointerDown={(event) => {
+        if (props.node.nodeType === "note") prefetchEditorKernelNow();
+        props.onPointerDown(event, props.node.id);
+      }}
       onContextMenu={(event) => props.onContextMenu(event, props.node)}
     >
       <button type="button" className={`tree-chevron ${props.open && props.expandable ? "open" : ""}`} disabled={!props.expandable} onClick={(event) => { event.stopPropagation(); if (props.expandable) props.onToggle(props.node.id); }} aria-label={props.open ? "收起" : "展开"}>{props.expandable ? <ChevronRight size={14} /> : null}</button>

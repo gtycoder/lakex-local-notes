@@ -14,7 +14,8 @@ import { SafeModeBanner } from "./components/app/SafeModeBanner";
 import { NamePromptDialog } from "./components/app/NamePromptDialog";
 import { getDocumentStatus } from "./components/model/documentStatusModel";
 import { clearScrollMemory } from "./features/editor/editorViewport";
-import { prefetchEditorKernel } from "./features/editor/kernelPrefetch";
+import { prefetchEditorKernel, prefetchEditorKernelNow } from "./features/editor/kernelPrefetch";
+
 import { setNoteRefHost } from "./features/editor/noteRef";
 import { TablePasteGuardDialog } from "./features/editor/TablePasteGuardDialog";
 import { OutlineSidebar } from "./features/outline/OutlineSidebar";
@@ -380,7 +381,15 @@ export function App() {
   /** Batch3-B：内核预取只按启动时的安全模式判定一次（避免每次标签变化都打 IPC）。 */
   const safeModeCheckedRef = useRef(false);
 
-  // P12：启动就绪后（首个 workspace 到达）安排一次内核 chunk 的空闲预取；幂等，后续标签变化再调无副作用。
+  // 261111 冷启动预热：安全模式判据（启动最早的 IPC 之一）一到就**立即**预取内核 chunk。
+  // 启动时必然马上打开一篇文档（恢复标签 / lastOpenedNoteId），EditorTab 在几百 ms 内就挂载；
+  // 等 workspace 再排空闲已经错过这段窗口（旧实现 3s ⇒ 首篇必看「正在加载编辑器…」）。
+  // 安全模式仍不预热（Batch3-B 契约）；幂等，判据未知/active 时什么也不做。
+  useEffect(() => {
+    if (safeModeStatus === "inactive") prefetchEditorKernelNow();
+  }, [safeModeStatus]);
+
+  // P12：启动就绪后（首个 workspace 到达）安排一次内核 chunk 的空闲预取（失败/未知判据的兜底）；幂等，后续标签变化再调无副作用。
   // Batch3-B：安全模式**不预热内核 chunk**（崩溃排查时少一个后台重活）⇒ 就绪后问一次主进程，结果只问一次。
   // 注：这里保留自己的查询（与上面会话判据分开问）——预取是另一件事，Batch3-B 的既有契约（含其静态护栏）
   // 不因会话门槛而改变；两处都是「启动时一次」，代价可忽略。

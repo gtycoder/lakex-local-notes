@@ -6,6 +6,7 @@ import { getNativeErrorMessage } from "../../lib/nativeErrors";
 import { writeLocalStorage } from "../../lib/localStorageSafe";
 import { createRequestVersion } from "../../core/requestVersion";
 import { initialSearchIndex, nextSearchIndex } from "../model/searchNavigation";
+import { prefetchEditorKernelNow } from "../../features/editor/kernelPrefetch";
 import {
   DEFAULT_SEARCH_SCOPE,
   SEARCH_SCOPES,
@@ -289,7 +290,8 @@ export function SearchPanel({ open, initialQuery, onOpenNote, onOpenQuickNote, o
                 className={`ln-list-item ln-row2${index === activeIndex ? " ln-list-item--focus" : ""}`}
                 role="option"
                 aria-selected={index === activeIndex}
-                onMouseEnter={() => setActiveIndex(index)}
+                onMouseEnter={() => { setActiveIndex(index); if (result.kind !== "quick-note") prefetchEditorKernelNow(); }}
+                onFocus={() => { if (result.kind !== "quick-note") prefetchEditorKernelNow(); }}
                 onClick={() => { setActiveIndex(index); openResult(result); }}
               >
                 <span className="ln-list-item__graphic">{result.kind === "quick-note" ? <StickyNote size={14} /> : <File size={14} />}</span>

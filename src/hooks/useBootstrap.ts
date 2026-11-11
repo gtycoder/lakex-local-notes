@@ -9,6 +9,7 @@ import { chooseColdStartNoteId } from "../core/coldStartNote.js";
 import { isDiaryEntryNode } from "../core/diary.js";
 import { loadSettings } from "../lib/settings";
 import { clearTabSession, readTabSession, restoreTabSessionForLimit, sanitizeTabSession } from "../desktop/tabSession";
+import { prefetchEditorKernelNow } from "../features/editor/kernelPrefetch";
 import { readSafeModeStatus } from "./useSafeModeStatus";
 
 export interface UseBootstrapOptions {
@@ -84,6 +85,8 @@ export function useBootstrap({
         : null;
       const planned = restored ? restoreTabSessionForLimit(restored, settings.maxOpenTabs) : null;
       if (planned) {
+        // 261111：恢复标签 = 本次启动必然要挂 EditorTab ⇒ 在恢复流程一开始就与正文读取并行预取内核 chunk。
+        prefetchEditorKernelNow();
         if (restoreTabs) {
           // 一次 setOpenTabs 恢复整批（有界并发读正文）。
           const opened = await restoreTabs(planned.ids, planned.activeId);
@@ -101,6 +104,9 @@ export function useBootstrap({
       // 冷启动落点：Lake 文档优先、其次多维表（用户 261022 定）——别把首开成本高的表格/画板钉在启动交互上。
       const id = chooseColdStartNoteId(snapshot.notes, snapshot.lastOpenedNoteId);
       if (id) {
+        // 261111：冷启动落点也必然挂 EditorTab（缺正文时会换候选，但首篇成功即用同一 chunk）⇒ 先预取。
+        // 安全模式仍不预热（Batch3-B：崩溃排查时少一个后台重活）；判据已在上面拿到，这里只认 inactive。
+        if (safeModeStatus === "inactive") prefetchEditorKernelNow();
         // 手动删过正文文件时不要一启动就弹 ENOENT：跳过缺正文的文档（最多试 8 个候选），
         // 汇总成一次提示；都打不开则保持空态，不停在错误页。
         const recent = snapshot.notes

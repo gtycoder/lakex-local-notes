@@ -21,6 +21,8 @@ const QUICK_NOTES = read("../../components/app/QuickNoteComposer.tsx");
 const AI_MESSAGE = read("../aiWriting/AiMessageView.tsx");
 const AI_VIEWER = read("../aiWriting/AiAnswerViewer.tsx");
 const AI_WORKSPACE = read("../aiWriting/AiWritingWorkspace.tsx");
+const SIDEBAR = read("../../components/app/Sidebar.tsx");
+const SEARCH_PANEL = read("../../components/app/SearchPanel.tsx");
 
 describe("P12 桌面内核 lazy 边界（静态契约）", () => {
   it("MultiTabEditor：EditorTab 只能 lazy，不得静态 import", () => {
@@ -59,9 +61,30 @@ describe("P12 桌面内核 lazy 边界（静态契约）", () => {
     expect(AI_WORKSPACE).not.toContain("import { AiAnswerViewer }");
   });
 
-  it("kernelPrefetch：与 lazy 目标同一模块、空闲回调触发、失败静默", () => {
+  it("kernelPrefetch：与 lazy 目标同一模块、空闲回调 + 立即预取两个入口、失败静默", () => {
     expect(PREFETCH).toContain('import("./EditorTab")');
     expect(PREFETCH).toContain("requestIdleCallback");
+    expect(PREFETCH).toContain("export function prefetchEditorKernelNow");
     expect(PREFETCH).toContain(".catch(");
+    // 261111：空闲兜底不再等 3s（首帧后最早空闲），并且 Now 与兜底共享同一幂等 flag。
+    expect(PREFETCH).not.toContain("3000");
+    expect(PREFETCH).toContain("clearTimeout");
+  });
+
+  it("261111 冷启动预热：恢复标签 / 冷启动首篇 / 安全模式判据 / 目录与搜索结果意图都触发立即预取", () => {
+    expect(APP).toContain("prefetchEditorKernelNow");
+    expect(APP).toMatch(/if \(safeModeStatus === "inactive"\) prefetchEditorKernelNow\(\);/);
+    const BOOTSTRAP = read("../../hooks/useBootstrap.ts");
+    expect(BOOTSTRAP).toContain("prefetchEditorKernelNow");
+    // 恢复标签计划确定后、冷启动落点确定后各一次（都在真正的正文读取/挂载之前）。
+    expect(BOOTSTRAP.match(/prefetchEditorKernelNow\(\);/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
+    expect(SIDEBAR).toContain("prefetchEditorKernelNow");
+    expect(SIDEBAR).toMatch(/onMouseEnter=\{props\.node\.nodeType === "note" \? prefetchEditorKernelNow : undefined\}/);
+    expect(SEARCH_PANEL).toContain("prefetchEditorKernelNow");
+    // 仍然守住静态边界：任何一处都不得把 EditorTab/lakeRuntime 改成静态 import。
+    for (const src of [APP, BOOTSTRAP, SIDEBAR, SEARCH_PANEL]) {
+      expect(src.includes("import { EditorTab }")).toBe(false);
+      expect(src).not.toMatch(/from "[^"]*lakeRuntime"/);
+    }
   });
 });
