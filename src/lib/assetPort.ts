@@ -1,4 +1,4 @@
-import { assetThumbWidthFor } from "../core/assetUrl.js";
+import { assetThumbWidthFor, withAssetWidth } from "../core/assetUrl.js";
 
 /**
  * 本地资源服务器端口（可由主进程 LAKE_ASSET_PORT 覆盖，多端同机双开用）。
@@ -76,6 +76,27 @@ export function addAssetAccessToken(content: string): string {
     url.searchParams.set("token", token);
     return url.toString();
   });
+}
+
+/** 可走资产服务缩略的图片后缀（与 Android AssetServer.isThumbResizable / 桌面 isThumbResizable 对齐；GIF/SVG 不缩）。 */
+const LOCAL_IMAGE_THUMB_EXT_RE = /\.(png|jpe?g|webp)$/i;
+
+/**
+ * 【task-26】给**本地资产 + 可缩图片**的显示 URL 加离散缩略档位；其余一律原样返回。
+ * - 只认 `ASSET_ORIGIN`（桌面/Android 资产服务），`lake-asset://`/外部 URL/data/blob 都不动；
+ * - 保留 token/其它 query（由 withAssetWidth 负责），不会冲掉渲染层注入的访问令牌；
+ * - 只用于**显示**（内核 onBeforeRenderImage 出口），不写回正文/模型。
+ */
+export function withLocalImageThumb(src: string, width: number): string {
+  if (!Number.isFinite(width) || width <= 0) return src;
+  if (!src.startsWith(LOCAL_ASSET_PREFIX)) return src;
+  try {
+    const parsed = new URL(src);
+    if (!LOCAL_IMAGE_THUMB_EXT_RE.test(parsed.pathname)) return src;
+  } catch {
+    return src;
+  }
+  return withAssetWidth(src, width);
 }
 
 /** Removes the transient token before a document is saved or cached. */

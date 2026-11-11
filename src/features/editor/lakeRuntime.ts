@@ -18,8 +18,9 @@ import { registerLockedTextCard, withLockedTextSlashItem } from "./lockedTextCar
 import { registerAiAssistantCard, withAiAssistantSlashItem } from "./aiAssistantCard";
 import type { ResourceUploadOutput } from "../../lib/types";
 import { shouldSkipBoardCardFocus, useClickActivatedWheelGate } from "./canvasInteractionGate";
-import { ASSET_ORIGIN } from "../../lib/assetPort";
+import { ASSET_ORIGIN, withLocalImageThumb } from "../../lib/assetPort";
 import type { LocalAssetRef } from "../../core/assetUrl.js";
+import { imageThumbKey } from "../../core/quickNoteImageThumb.js";
 import type { AttachmentPreviewItem } from "../attachment/attachmentPreviewController.js";
 
 // DT-07：KaTeX/mhchem 顺序注入、audio 卡重试、TOC 滚动跟随、perf 订阅各自成模块，
@@ -542,6 +543,17 @@ export interface LakeEditorPrefs {
     directOpen?: boolean;
   };
   /**
+   * 图片显示缩略档位（px，仅任务-26 移动端小记写作卡传 1024）：>0 且同时有 `imageThumbAllowFiles` 时，
+   * 给 allowlist 内的本地图片显示 URL 加 `?w=<值>`（保留 token/其它 query），不影响模型/保存。
+   * 桌面/文档编辑器不传 = 零变化。
+   */
+  imageThumbWidth?: number;
+  /**
+   * 允许加显示缩略的本地资产 **filename** 集合（`core/quickNoteImageThumb.ts` 从正文解析）。
+   * **没有这个集合就绝不加 w**（fail-safe）：缺 `original` 的历史卡会被内核把缩略图尺寸写成原尺寸。
+   */
+  imageThumbAllowFiles?: ReadonlySet<string>;
+  /**
    * 小记编辑器的版式（260919 用户定稿）：
    * - `card`：小卡片（最小工具条 + 右上角展开 → 同一实例切完整工具条），用于**分块视图**的写作卡；
    * - `full`：**直接就是文档样式**（完整工具条、无展开按钮），用于**列表视图**右侧的编辑器。
@@ -748,6 +760,17 @@ function appendDisposeExtras(editor: LakeEditorInstance, dispose: () => void): v
   };
 }
 
+/**
+ * 【task-26】显示缩略决策（fail-safe）：width>0 且 allowlist 命中才加 `?w=`；其余原样。
+ * 只影响内核 toDisplaySrc 出口，模型/保存仍用卡片 value（原图 URL）。
+ */
+function imageThumbDisplaySrc(src: string, width: number | undefined, allow: ReadonlySet<string> | undefined): string {
+  if (!allow || typeof width !== "number" || !(width > 0)) return src;
+  const file = imageThumbKey(src);
+  if (!file || !allow.has(file)) return src;
+  return withLocalImageThumb(src, width);
+}
+
 export function createLakeDocument(
   element: HTMLElement,
   mode: "viewer" | "editor",
@@ -891,6 +914,16 @@ export function createLakeDocument(
       createUploadPromise: (request: unknown) => (uploadResource ?? ((req: unknown) => uploadLakeResource(req, noteId)))(request),
       // 本地资源服务器 URL 必须排除，否则 Lake 每次 setDocument 都会重新下载并上传本地图片
       isCaptureImageURL: (url: string) => !url.startsWith("data:") && !url.startsWith("blob:") && !url.startsWith(`${ASSET_ORIGIN}/`),
+      // 【task-26，仅移动端小记写作卡】只改显示 src（内核 toDisplaySrc 出口），模型/保存不受影响。
+      // 必须同时拿到 allowlist（卡片已带 original 的图）才挂 hook；缺集合/宽度一律不挂 = fail-safe。
+      ...(typeof prefs?.imageThumbWidth === "number"
+        && prefs.imageThumbWidth > 0
+        && prefs.imageThumbAllowFiles instanceof Set
+        ? {
+            onBeforeRenderImage: (src: string): string =>
+              imageThumbDisplaySrc(src, prefs.imageThumbWidth, prefs.imageThumbAllowFiles),
+          }
+        : {}),
     },
     file: {
       createUploadPromise: (request: unknown) => (uploadResource ?? ((req: unknown) => uploadLakeResource(req, noteId)))(request),

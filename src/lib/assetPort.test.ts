@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { addAssetAccessToken, stripAssetAccessToken, assetThumbWidthForCss } from "./assetPort";
+import { addAssetAccessToken, stripAssetAccessToken, assetThumbWidthForCss, withLocalImageThumb } from "./assetPort";
 
 afterEach(() => {
   vi.resetModules();
@@ -39,6 +39,42 @@ describe("asset access token rewriting", () => {
     const externalUrl = "https://example.test/image.png";
     expect(runtimeAssetPort.withAssetAccessToken(url)).toContain("token=android-secret");
     expect(runtimeAssetPort.withAssetAccessToken(externalUrl)).toBe(externalUrl);
+  });
+});
+
+describe("withLocalImageThumb（task-26 显示缩略）", () => {
+  const base = "http://127.0.0.1:19876/quick-notes/q1/a";
+
+  it("本地 png/jpg/jpeg/webp → 加 ?w=", () => {
+    expect(withLocalImageThumb(base + ".png", 1024)).toBe(base + ".png?w=1024");
+    expect(withLocalImageThumb(base + ".jpg", 1024)).toBe(base + ".jpg?w=1024");
+    expect(withLocalImageThumb(base + ".jpeg", 512)).toBe(base + ".jpeg?w=512");
+    expect(withLocalImageThumb(base + ".webp", 256)).toBe(base + ".webp?w=256");
+  });
+
+  it("保留 token/其它 query，已有 w 替换", () => {
+    expect(withLocalImageThumb(base + ".jpg?token=t", 1024)).toBe(base + ".jpg?token=t&w=1024");
+    expect(withLocalImageThumb(base + ".jpg?w=256&token=t", 1024)).toBe(base + ".jpg?w=1024&token=t");
+  });
+
+  it("GIF/SVG/非图片扩展名 → 原样（资产服务不缩）", () => {
+    expect(withLocalImageThumb(base + ".gif", 1024)).toBe(base + ".gif");
+    expect(withLocalImageThumb(base + ".svg", 1024)).toBe(base + ".svg");
+    expect(withLocalImageThumb(base + ".pdf", 1024)).toBe(base + ".pdf");
+  });
+
+  it("非本地资产（外部 URL/data/blob/lake-asset）→ 原样", () => {
+    const external = "https://example.test/a.png";
+    expect(withLocalImageThumb(external, 1024)).toBe(external);
+    expect(withLocalImageThumb("data:image/png;base64,AAAA", 1024)).toBe("data:image/png;base64,AAAA");
+    expect(withLocalImageThumb("blob:http://127.0.0.1:1421/u", 1024)).toBe("blob:http://127.0.0.1:1421/u");
+    expect(withLocalImageThumb("lake-asset://q1/a.png", 1024)).toBe("lake-asset://q1/a.png");
+  });
+
+  it("width 非正/非法 → 原样", () => {
+    expect(withLocalImageThumb(base + ".png", 0)).toBe(base + ".png");
+    expect(withLocalImageThumb(base + ".png", -1)).toBe(base + ".png");
+    expect(withLocalImageThumb(base + ".png", Number.NaN)).toBe(base + ".png");
   });
 });
 

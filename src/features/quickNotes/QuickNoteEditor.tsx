@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { addAssetAccessToken, stripAssetAccessToken } from "../../lib/assetPort";
 import { emptyLakeBody } from "../../core/lakeDocForm.js";
+import { imageThumbAllowFiles } from "../../core/quickNoteImageThumb.js";
 import type { ResourceUploadOutput } from "../../lib/types";
 import { createLakeDocument, type LakeEditorInstance } from "../editor/lakeRuntime";
 import { installMediaCardCategoryRouter } from "../editor/mediaCardRouting";
@@ -50,6 +51,9 @@ interface QuickNoteEditorProps {
    * 与文档编辑器编辑态同一开关（内核 `disabledPlugins` 里去掉 "toolbar"），不是我们另做一套隐藏。
    */
   showToolbar?: boolean;
+  /** 图片显示缩略档位（px；仅移动端小记写作卡传 1024；不传 = 原图显示，桌面零变化）。
+   *  allowlist 由 `core/quickNoteImageThumb.ts` 从 `initialBody` 解析：缺 original 的历史卡不加 w。 */
+  imageThumbWidth?: number;
   /**
    * 把小记的**内核实例**交给宿主（移动端 dock 要拿它执行命令）。
    * 与 `DocumentEditor` 的 `onEditorInstance` 同一模式；桌面不传即可（保持不受影响）。
@@ -68,7 +72,7 @@ interface QuickNoteEditorProps {
  * `editor.getDocument("text/plain")` 可能拿不到内容 ⇒ 必须再加 DOM `input` 兜底 + DOM 文本回退，
  * 否则「输入了字但判定为空、点发布没反应」。
  */
-export function QuickNoteEditor({ ownerId, initialBody, ui = "card", active = true, uploadResource, onTextChange, onReady, showToolbar = true, onEditorInstance }: QuickNoteEditorProps) {
+export function QuickNoteEditor({ ownerId, initialBody, ui = "card", active = true, uploadResource, onTextChange, onReady, showToolbar = true, onEditorInstance, imageThumbWidth }: QuickNoteEditorProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const callbacksRef = useRef({ uploadResource, onTextChange, onReady, onEditorInstance });
   callbacksRef.current = { uploadResource, onTextChange, onReady, onEditorInstance };
@@ -109,7 +113,7 @@ export function QuickNoteEditor({ ownerId, initialBody, ui = "card", active = tr
       // 虚拟渲染靠 `scrollNode` 量视口，而小记编辑器没有 Lake 内部滚动容器，fallback 到 `.document-pane`
       // 会量错 ⇒ 正文被换成 `.ne-virtual-render-placeholder`（顶部留白 100+px、输入触发重渲染后整片变占位）。
       // 移动端早已为此置位（见 QuickNotesWorkspace 前的 HANDOFF §8.8 同款坑）。
-      { disableNativeToc: true, quickNoteUi: ui, disableVirtualRendering: true, showToolbar },
+      { disableNativeToc: true, quickNoteUi: ui, disableVirtualRendering: true, showToolbar, ...(imageThumbWidth && imageThumbWidth > 0 ? { imageThumbWidth, imageThumbAllowFiles: imageThumbAllowFiles(initialBody || emptyLakeBody(ownerId)) } : {}) },
       (request: unknown) => callbacksRef.current.uploadResource(request),
     );
     // 兜底：DOM 层 input 事件（真实键入必触发）——内核 contentchange 之外的第二条信号。
@@ -143,7 +147,7 @@ export function QuickNoteEditor({ ownerId, initialBody, ui = "card", active = tr
       callbacksRef.current.onEditorInstance?.(null);
       try { (editor.destroy ?? editor.destory)?.call(editor); } catch { /* 已销毁 */ }
     };
-  }, [everActive, ownerId, initialBody, ui, showToolbar]);
+  }, [everActive, ownerId, initialBody, ui, showToolbar, imageThumbWidth]);
 
   return <div className="quick-note-editor" ref={hostRef} data-owner={ownerId} />;
 }

@@ -2145,3 +2145,14 @@ DOM 文本节点扫描（移动端文档 `disableVirtualRendering:true`，整篇
   是**引擎渲染器**的（编辑态虚拟渲染用），阅读态收不到 ⇒ 自建大纲高亮要订阅实例级事件（`useOutline` 已补）。
 - **移动端暂不启用**（`isDesktop()` 门）：移动端「文档内查找」是自研 DOM 扫描 + 文本高亮，以「全文已在 DOM」为前提；
   要开必须另做查找兜底并过设备门禁（AGENTS §21④）。
+
+### 5.51 图片「显示缩略」：内建钩子 `image.onBeforeRenderImage`（261111 实验 3×3 轮 + 正式包设备验收）
+
+**结论**：本构建 image 插件有一个**未文档化内建** option `onBeforeRenderImage(src, isCapture) => src`，是渲染期唯一改写点；**只影响显示、不影响模型/保存**。官方 62/48/47 均未收录（48 的 `previewImgs` 语义相近但本构建不派发，见 §5.40）。
+
+- **链路**：卡 `value.src` → `cardData.getSrc()` 原串；显示走 `getDisplaySrc/getPreviewSrc → toDisplaySrc = onBeforeRenderImage(src, isCaptureImageURL(src)) || src`（lakex.js 72214–72231）；渲染 `img.ne-image`（150940–150960）；保存序列化写**模型 attrs**（75224），显示 URL 只存 cardUI/组件 state ⇒ 显示改写不进正文。
+- **⚠️ 已知副作用（必须先 allowlist 规避）**：卡缺 `original`（`originWidth/originHeight`）时，内核会用**当前显示图**的 naturalWidth/Height 补写原尺寸并 `sync(true)`（150833→151778→72365）。实测缺 origin 卡：不加缩略打开补 4032×3024；若显示图是 1024 缩略则补成 **1024×768**，用户保存后会写进正文。⇒ 只能对**卡片已有正数 origin** 的图加缩略（`core/quickNoteImageThumb.imageThumbAllowFiles`）。
+- **资产服务**：两端均支持 `?w=128|256|512|1024`（GIF/SVG 不缩）；本批只移动端写作卡启用 1024（`mobile/home/QuickNoteComposer.tsx` → `QuickNoteEditor` → `lakeRuntime.image.onBeforeRenderImage`），桌面/文档编辑器不传 = 零变化。
+- **实测（任务-26，5554；A/B/C 各 3 轮 + 正式包 A/B 1 轮）**：A（有 origin）显示 URL 带 `w=1024`、persisted/body 未变、dirty 0、original 仍 4032；B（缺 origin）**不加 w**、打开后 model 补 4032（既有）、保存后 persisted original=4032（不是 1024）；C（3 图）3/3 加 w、body 未变。PSS 前后 on/off 在噪声内（缩略内存收益按图片像素量决定，待真实带图小记再量）。
+- **覆盖边界**：allowlist 在挂载时按 `initialBody` 解析 ⇒ **会话内新插入的图片**不在集合内（本次不缩，后续可用上传元数据补 allowlist）；剪贴板“复制到微信”若读 DOM 可能拿到 1024 版（未复现、未处理）。
+- **护栏**：`src/features/editor/lakexImageRenderThumb.test.ts`（bundle 含 hook / runtime fail-safe / 移动传 1024 / 桌面不传 / 本节含 hook）；内核升级后此测试先红，再按 §8 复发实测流程复查。

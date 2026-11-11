@@ -404,6 +404,8 @@ export function QuickNoteComposer({ editNote, tagOptions, onCreateTag, onSaved, 
           setEditorReady(true);
           autoFocusIfCreating();
         }}
+        /* task-26：移动端写作卡统一走资产服务 1024 档缩略（只影响显示；缺 original 的历史卡由 allowlist 排除）。 */
+        imageThumbWidth={1024}
         /* 顶部不要内核那套九项工具条（用户 261013）：移动端小记改用**文档编辑那条 dock**（EditorDockHost），
            关掉用的是内核既有开关（showToolbar:false ⇒ disabledPlugins 去掉 toolbar），不是我们另做一套隐藏。 */
         showToolbar={false}
