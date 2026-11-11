@@ -267,6 +267,18 @@
 .quick-note-kernel-preview .ne-viewer :is(ne-h2, ne-h3, ne-h4, ne-h5, ne-h6) ne-heading-content,
 .quick-note-kernel-preview .ne-viewer :is(ne-h2, ne-h3, ne-h4, ne-h5, ne-h6) ne-heading-content ne-text { font-size: var(--lake-font-size-body); line-height: var(--lake-line-height-normal); }
 .quick-note-kernel-preview .ne-viewer ne-p { line-height: 1.68; }
+/* 内核兜底预览 = 卡片里「同一份正文」的第二种渲染，只保留内容本身：
+   ① 藏掉内核阅读页自带的控件（「返回文档」= ne-ui-exit-max-view-btn），卡片预览里不该出现；
+   ② 块间距 / 列表缩进对齐快路径（标题下 6 / 引用上下 6 / 列表 22 / 表格下 10），避免同屏两种节奏。 */
+.quick-note-kernel-preview .ne-ui-exit-max-view-btn { display: none; }
+.quick-note-kernel-preview .ne-viewer ne-h1 { margin-bottom: 6px; }
+.quick-note-kernel-preview .ne-viewer ne-quote { margin: 6px 0; }
+.quick-note-kernel-preview .ne-viewer ne-uli { padding-left: 22px; }
+.quick-note-kernel-preview .ne-viewer ne-table-hole { margin-bottom: 10px; }
+/* 卡片预览里的宽表格不露横向滚动条（内核 table 最小宽 750 > 卡片宽，会画出一条灰色滚动条，像渲染异常）：
+   视觉隐藏滚动条，内容仍可触控/滚轮横向查看。 */
+.quick-note-kernel-preview .ne-viewer ne-table-inner-wrap { scrollbar-width: none; }
+.quick-note-kernel-preview .ne-viewer ne-table-inner-wrap::-webkit-scrollbar { display: none; }
 
 /* 小记编辑器的「展开」(内核 fullscreen) 适配窗口外壳：
    内核 `.ne-ui-fullscreen{position:fixed;inset:0;z-index:1000}` 是为「无外壳编辑器」设计的，

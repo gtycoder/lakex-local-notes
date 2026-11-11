@@ -19,7 +19,12 @@
   2. 快路径标题收档：h1 `bodyLg` 15.5 / h2+ `body` 14（此前 20 / 18 / 15.5，卡片里过大）；
   3. 内核兜底标题三层都要打（内核把字号写在自己元素上）：`ne-h1 / ne-heading-content / ne-text` 收 **15.5**、h2–h6 同一挂三层收 **14**、`ne-p` 行高对齐 1.68。落点 `app/quick-notes.css`（legacy 层且晚于内核样式导入 ⇒ 直接生效，无需 !important）。
 - **实测（同一屏两张卡）**：快路径 p 14 / h1 15.5；内核兜底 p 14 / h1 15.5（原 18 / 28）——两条路径现在**同档**。
-- 门禁：`tsc` 0；`cssLayers` `app/quick-notes.css` 674→**679**（+5，写明理由，dupGroups 6）；全量 vitest 见 §1；`ui-metrics` / `git diff --check` 通过。
+- **一致性收口（用户定稿口径：内核兜底只是「省内核开销」的实现细节，对外观感必须与快路径一致、不许出现异常）**：
+  1. 藏掉内核阅读页自带的控件 **「返回文档」**（`.ne-ui-exit-max-view-btn`）——它会在卡片预览里露出来，是明显的异常；
+  2. 块间距对齐卡片节奏：标题下 6 / 引用上下 6 / 列表缩进 22（与快路径 `.quick-note-preview-list` 同值）/ 表格下 10；
+  3. 宽表格不再露横向滚动条（内核 table 最小宽 750 > 卡片宽，会画出一条灰色滚动条像渲染异常）——视觉隐藏，仍可触控横向查看。
+- 实测（同屏两张卡，逐项量 computed）：`ne-h1 ne-text` 15.5 / `ne-p` 14（lh 23.52，与快路径逐像素一致）、引用 padding-left 10、列表 padding-left 22、「返回文档」`display: none`。
+- 门禁：`tsc` 0；`cssLayers` `app/quick-notes.css` 674→**686**（+12，写明理由，dupGroups 6）；全量 vitest 见 §1；`ui-metrics` / `git diff --check` 通过。
 ### 261111 · 小记两处（保存后找不到 + 标签条「全部」）
 - **「AI 写作保存到小记后找不到」根因**：`QuickNotesWorkspace` 是 keep-alive（空间切走仍挂载），列表**只在挂载时拉一次** ⇒ 在别处新增的小记（AI 写作保存、同步拉取、他端改动）切过来时列表还是旧的，读起来就像「没存上」。**保存本身是成功的**（`native.createQuickNote` 已落库）。
 - **修**：新增「进入小记空间即刷新」effect（`visible` 变 true ⇒ `refreshItems(false)` + `refreshTags()`；两条本地 IPC，无 loading 闪烁）。实测：在知识库空间用 IPC 造一条小记 → 切回小记，列表 2 → **3**、`全部(2)` → **全部(3)**，无需重载。
