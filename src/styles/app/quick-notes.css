@@ -232,9 +232,12 @@
 .quick-note-preview.is-collapsed::after { content: ""; position: absolute; inset: auto 0 0 0; height: 44px; background: linear-gradient(to bottom, transparent, var(--lake-bg-panel)); pointer-events: none; }
 .quick-note-preview-toggle { align-self: flex-start; display: inline-flex; align-items: center; gap: 4px; margin-top: 2px; padding: 2px 4px; border: 0; color: var(--lake-accent-text); background: transparent; font-size: var(--lake-font-size-tiny); cursor: pointer; }
 .quick-note-preview-paragraph { margin: 0; white-space: pre-wrap; }
-.quick-note-preview-heading { margin: 2px 0 0; font-size: var(--lake-font-size-bodyLg); }
-.quick-note-preview h1.quick-note-preview-heading { font-size: var(--lake-font-size-display); }
-.quick-note-preview h2.quick-note-preview-heading { font-size: var(--lake-font-size-title); }
+/* 卡片预览的标题只比正文大一档（261111 用户报「都是 15px 为什么有的字大有的字小」——
+   根因是 **两条渲染路径的字号没对齐**：快路径正文 14 / 标题 20-15.5，内核兜底整篇吃挂载点默认 18。
+   现在：内核兜底 prefs.fontSize = 14（与快路径正文同档），快路径标题也收到 15.5/14 两档。 */
+.quick-note-preview-heading { margin: 2px 0 0; font-size: var(--lake-font-size-body); }
+.quick-note-preview h1.quick-note-preview-heading { font-size: var(--lake-font-size-bodyLg); }
+.quick-note-preview h2.quick-note-preview-heading { font-size: var(--lake-font-size-body); }
 .quick-note-preview-list { margin: 0; padding-left: 22px; }
 .quick-note-preview-list li { margin: 1px 0; }
 .quick-note-preview-task { list-style: none; display: flex; align-items: flex-start; gap: 6px; margin-left: -18px; }
@@ -251,6 +254,19 @@
    放进卡片必须交回内容高度 —— 否则要么被压成固定高、要么卡片里出现第二个滚动条。 */
 .quick-note-kernel-preview { min-width: 0; max-width: 100%; }
 .quick-note-kernel-preview .ne-viewer { height: auto; overflow: visible; min-width: 0; max-width: 100%; }
+/* 卡片预览的字号口径（261111 用户报「都是 15px 为什么有的字大有的字小」）：
+   快路径正文 14 / 标题 15.5，而内核兜底的内核标题是 **em 倍数**（h1 = 2em ⇒ 28px），正文行高也到 1.85
+   ⇒ 同一屏里两种渲染路径的字号/行距看着不一样。这里把内核兜底的标题压到卡片档、行高对齐快路径。
+   （选择器打在内核实际元素 ne-heading-content / ne-p 上；本文件在 legacy 层且晚于内核样式导入 ⇒ 直接生效。） */
+/* 内核标题的字号写在内核元素自己身上（ne-h1 及其子 ne-heading-content → ne-text 都是 em 倍数），
+   所以三层都要打：外层标题元素 / 内容层 / 文本层。h1 收 15.5（与快路径标题同档），h2–h6 收 14（正文档）。 */
+.quick-note-kernel-preview .ne-viewer ne-h1,
+.quick-note-kernel-preview .ne-viewer ne-h1 ne-heading-content,
+.quick-note-kernel-preview .ne-viewer ne-h1 ne-heading-content ne-text { font-size: var(--lake-font-size-bodyLg); line-height: var(--lake-line-height-normal); }
+.quick-note-kernel-preview .ne-viewer :is(ne-h2, ne-h3, ne-h4, ne-h5, ne-h6),
+.quick-note-kernel-preview .ne-viewer :is(ne-h2, ne-h3, ne-h4, ne-h5, ne-h6) ne-heading-content,
+.quick-note-kernel-preview .ne-viewer :is(ne-h2, ne-h3, ne-h4, ne-h5, ne-h6) ne-heading-content ne-text { font-size: var(--lake-font-size-body); line-height: var(--lake-line-height-normal); }
+.quick-note-kernel-preview .ne-viewer ne-p { line-height: 1.68; }
 
 /* 小记编辑器的「展开」(内核 fullscreen) 适配窗口外壳：
    内核 `.ne-ui-fullscreen{position:fixed;inset:0;z-index:1000}` 是为「无外壳编辑器」设计的，

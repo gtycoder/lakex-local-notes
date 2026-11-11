@@ -10,6 +10,16 @@
 
 > **顺序标注**：261109 各批次里写的「日记 ⌘4 / AI 写作 ⌘3」是**当时**的顺序；**261110 起改为 日记 ⌘3 / AI 写作 ⌘4**（另有标签 ⌘5）。旧批次不再改，以本行 + §1 为准。
 
+### 261111 · 小记卡片预览字号统一（用户报「都是 15px 为什么有的大有的小」）
+- **根因 = 两条渲染路径字号没对齐**（实测，隔离实例 + 设备像素量 computed）：
+  - 快路径（自研 DOM）：正文 `.quick-note-preview-paragraph` = **14**、h1 标题 = **20**（h2 18 / 其余 15.5）；
+  - 内核兜底（`QuickNoteKernelPreview`）：`createLakeDocument` 的 `prefs.fontSize` 默认 **18** 写进挂载点内联 font-size ⇒ 内核正文 `ne-p` = **18**，而内核标题是 **em 倍数**（h1 = 2em ⇒ **28px**，行高 44.8）⇒ 同一屏里看着一大一小。
+- **修（三处，单一来源）**：
+  1. `QuickNoteKernelPreview` 传 `prefs.fontSize: 14` ⇒ 内核正文与快路径正文同档（实测 `NE-P` 14 / lh 23.52）；
+  2. 快路径标题收档：h1 `bodyLg` 15.5 / h2+ `body` 14（此前 20 / 18 / 15.5，卡片里过大）；
+  3. 内核兜底标题三层都要打（内核把字号写在自己元素上）：`ne-h1 / ne-heading-content / ne-text` 收 **15.5**、h2–h6 同一挂三层收 **14**、`ne-p` 行高对齐 1.68。落点 `app/quick-notes.css`（legacy 层且晚于内核样式导入 ⇒ 直接生效，无需 !important）。
+- **实测（同一屏两张卡）**：快路径 p 14 / h1 15.5；内核兜底 p 14 / h1 15.5（原 18 / 28）——两条路径现在**同档**。
+- 门禁：`tsc` 0；`cssLayers` `app/quick-notes.css` 674→**679**（+5，写明理由，dupGroups 6）；全量 vitest 见 §1；`ui-metrics` / `git diff --check` 通过。
 ### 261111 · 小记两处（保存后找不到 + 标签条「全部」）
 - **「AI 写作保存到小记后找不到」根因**：`QuickNotesWorkspace` 是 keep-alive（空间切走仍挂载），列表**只在挂载时拉一次** ⇒ 在别处新增的小记（AI 写作保存、同步拉取、他端改动）切过来时列表还是旧的，读起来就像「没存上」。**保存本身是成功的**（`native.createQuickNote` 已落库）。
 - **修**：新增「进入小记空间即刷新」effect（`visible` 变 true ⇒ `refreshItems(false)` + `refreshTags()`；两条本地 IPC，无 loading 闪烁）。实测：在知识库空间用 IPC 造一条小记 → 切回小记，列表 2 → **3**、`全部(2)` → **全部(3)**，无需重载。

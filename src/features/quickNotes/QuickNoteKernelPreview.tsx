@@ -60,6 +60,9 @@ export function QuickNoteKernelPreview({ body, noteId }: QuickNoteKernelPreviewP
         // 与编辑态同款：小记没有 Lake 自己的滚动容器，虚拟渲染会量错视口（260919 踩坑）；阅读态也不需要大纲。
         disableNativeToc: true,
         disableVirtualRendering: true,
+        // 卡片预览的字号与快路径对齐（261111 用户报「预览有的字大有的字小」）：
+        // prefs.fontSize 会写进挂载点内联 font-size，内核正文/标题随之缩放（默认 18 ⇒ 卡片里明显偏大）。
+        fontSize: 14,
       });
       editor.setDocument("text/lake", addAssetAccessToken(body));
     } catch {
