@@ -10,6 +10,14 @@
 
 > **顺序标注**：261109 各批次里写的「日记 ⌘4 / AI 写作 ⌘3」是**当时**的顺序；**261110 起改为 日记 ⌘3 / AI 写作 ⌘4**（另有标签 ⌘5）。旧批次不再改，以本行 + §1 为准。
 
+### 261111 · 桌面冷启动首篇文档预热（用户反馈「刚打开软件就看到正在加载编辑器」）
+
+- **现状与根因**：桌面启动必然自动打开一篇文档（恢复标签；没有则落 `lastOpenedNoteId`），EditorTab 的 lazy import 在挂载瞬间发起；旧 prefetch 要「就绪后 3s 的第一个空闲」才开始 ⇒ 预取永远慢于真实首篇挂载，等于没帮忙。prod 首篇 fallback ≈ 内核 chunk 下载+parse（本机 200–300ms）**是地板**。
+- **改动**：`prefetchEditorKernelNow()`（立即/幂等/清空闲定时器）挂到 ①安全模式判据 `inactive` ②恢复标签计划确定 ③冷启动首篇候选确定（`useBootstrap`）④用户意图（目录文档行 `mouseenter`/`pointerdown`/Enter、搜索结果行 `mouseenter`/`focus`；不拦截事件、无全局监听）；空闲兜底 3s → 首帧后 500ms 首个空闲（timeout 1500）。
+- **实测（隔离实例 prod，各 4 轮；未碰用户 1421/9222）**：场景 A（就绪后 500ms 点目录文档）fallback 171–444 → 181–437ms、mount 263–564 → 274–563ms；场景 B（恢复 2 标签，冷启动）fallback 208–304 → 260–364ms、mount 303–413 → 352–474ms ⇒ **差异在 ±50ms 噪声内（未改善也未回归）**。把预取提前到 App 模块求值：prod B 回退约 200ms（已否决并记录）。
+- **门禁**：tsc 0；全量 vitest **859 文件（848 passed / 11 skipped）/ 5383 例 0 失败**；check:core 162/0；check:bundle+arch 通过（desktop 563,649/600,000、app-js 191,521/300,000）；ui-metrics 0；diff-check 0。
+- **结论/后续（需用户裁决）**：预热**不能**再消除首篇 fallback；要再降只有 ①拆内核 chunk（大改，需 RFC）②改「启动自动打开文档」的产品语义（例如恢复标签为空时不自动开、或先画列表再开）。可选的「编辑器同构骨架 fallback」观感最好，但需新增 editor CSS + `cssLayers` 基线，且该文件正被并行会话改动，留到下一批。
+
 ### 261111 · 小记写作卡全屏 + 长按创建/键盘开合流畅性（用户点单）
 
 - **点单**：小记改成占满屏幕；可点项随可用空间伸缩、键盘开合时始终可见可点；两条入口都要改（长按图标 capture / 正常新建）；并优化长按创建与键盘弹收卡顿。
@@ -377,7 +385,7 @@
 - **261110 历史清理（一次性）**：`.ai-writing-recon/`（走查截图 / 页面快照 / 探针脚本，59 文件 ≈15MB）已用 `git filter-repo --invert-paths` 从**全部历史**移除；被重写的是 **v1.1.0 之后的 23 个提交**（hash 以 `git log` 为准），**v1.0.x / v1.1.0 的 tag 与其提交 hash 未变**（不含该目录）⇒ 已发布 Release 与 CI 产物不受影响。重写前快照：`/Users/admin/file/local-lake/lakex-local-notes-backup-<stamp>/all.bundle`（62MB，含全部 refs）。**旧 clone / worktree 需 `git fetch --force --prune` + `git reset --hard origin/master` 或重新 clone**（旧 hash 已不可达）；本机原 `lakex-local-notes-diary` worktree 已删除（其分支是 master 祖先，无内容丢失）。
 
 - **worktree（261109 发版时）**：`lakex-local-notes` = `master`（发版主工作树）；`lakex-local-notes-diary` = `feat/diary-space`（本批开发用，已合并 master 并合回 master）。AI 写作与日记**都已进 master**，两个空间共存（⌘3 / ⌘4）。
-- 主分支 `master`，HEAD = **`f7d39f45`**（261111 小记写作卡全屏 + 流畅性）；前序 = `154294b6`（单条推送独立管线 13→11）、`8bf41e65`、`a032bb64`/`0642c763`、`fc654c05`、`09f41ba1`、`544f2532`（Gitee 已推到这里）。**本批均未 push**（`git push origin master` 双推；并行会话的 AI 批次 / 桌面厚度 review / mobile Dock 胶囊改动仍在工作树、未提交）。
+- 主分支 `master`，HEAD = **`48b8f3d5`**（261111 桌面冷启动预热）；前序 = `f7d39f45`（写作卡全屏+流畅性）、`154294b6`（单条推送独立管线）、`8bf41e65`、`a032bb64`/`0642c763`、`fc654c05`、`09f41ba1`、`544f2532`（Gitee 已推到这里）。**本批均未 push**（`git push origin master` 双推；并行会话的 AI 批次 / 桌面厚度 review / mobile Dock 胶囊改动仍在工作树、未提交）。
 - `package.json` = **1.1.0**；Android `versionName 1.1.0` / `versionCode 11100`（从根 `package.json` 派生，版本号单一来源：`1000 + major*10000 + minor*100 + patch`）。
 - tag：`v1.0.0`–`v1.0.5`、**`v1.1.0`**（另有旧 `v0.0.1` / `v0.0.2`）；已发布 tag 不再移动。`v1.1.0` = AI 写作 + 日记两个新空间。
 - `v1.0.5` 是**发在 AI 写作合并之前**的：AI 写作第一次随本版发布，别在旧发布说明里找它。
@@ -399,10 +407,10 @@
 **门禁基线（261109 发版前：AI 写作 + 日记合并后实测）**
 
 - `npx tsc --noEmit` = **0 错**。
-- `npx vitest run` = **859 文件（848 passed / 11 skipped）/ 5380 passed / 12 skipped / 0 failed**（261111 写作卡全屏批提交前实测，含并行会话在途用例；0 失败）。
+- `npx vitest run` = **859 文件（848 passed / 11 skipped）/ 5383 passed / 12 skipped / 0 failed**（261111 桌面预热批提交前实测，含并行会话在途用例；0 失败）。
 - **261110 AI 助手 / 小记批（本批实测，含「钉住=每作用域挂起」「标题可改」「弹窗走内核渲染」「时间线自适应」）**：`npx tsc --noEmit` 0；全量 vitest **855 文件（844 passed / 11 skipped）/ 5357 passed / 12 skipped / 0 failed**（本批新增：`aiAssistantSession` 4 例 / `AiMessageView.render` 5 例 / `aiLakeKernelRegistry` 4 例 / `AiWritingDialogs.render` +2 例）；`ui-metrics` 颜色 0 / !important 9=清单 / 跨文件重复 103≤105；`git diff --check` 0；`cssLayers` 基线 `app/tabs.css` 188→189、`ai/aiDialogParts.css` 87→91、`app/quick-notes.css` 667→674（均写明理由）。
 - `git diff --check` = **0**。
-- `check:bundle` / `check:arch`：**已转绿**（261110 首屏瘦身）。mobile-entry = **59,713 gz / 6 链接**、首屏 347,868 / 360,000（余量 12.1KB）、entry CSS 140,392 / 141,312；desktop app-js 191,516 / 307,200、首屏 563,628 / 600,000（余量 36.4KB）。预算已按目标收紧（`check-bundle-budget.mjs` 12 条 / 60KB、`check-arch.mjs` 360KB），不再有「已知红」。**注意**：preload 条数只防「静态依赖回入口」，字节由 `check-arch` 守 —— 不要为了压低条数把懒加载改回静态。运行前需先有 `dist` / `dist-mobile` 构建产物。
+- `check:bundle` / `check:arch`：**已转绿**（261110 首屏瘦身）。mobile-entry = **59,713 gz / 6 链接**、首屏 347,868 / 360,000（余量 12.1KB）、entry CSS 140,392 / 141,312；desktop app-js 191,521 / 307,200、首屏 563,649 / 600,000（余量 36.4KB）。预算已按目标收紧（`check-bundle-budget.mjs` 12 条 / 60KB、`check-arch.mjs` 360KB），不再有「已知红」。**注意**：preload 条数只防「静态依赖回入口」，字节由 `check-arch` 守 —— 不要为了压低条数把懒加载改回静态。运行前需先有 `dist` / `dist-mobile` 构建产物。
 - 其它样式/边界/设备门禁按改动范围跑（分层口径见 AGENTS §3#21）；最近一次移动设备记录 = **261110（移动收口批）**：手机 **9 态重烤基线 + 两轮 0 差异**、**平板 9 态补烤 + 两轮 0 差异**、**多维表 3 态重烤**、**23 屏 23/23 ok**（`lake_gate` / `lake_tab`，详见 §0 收口批）；桌面 `check:stylesnap` 42 态仍未跑（本机无合成夹具缓存，见 §3）。
 
 **设备与环境（本机实测）**
@@ -465,7 +473,9 @@
 - **小记快路径后续优化（非必须）**：请求已 13→11；重复点首次 `push-state` 约 1455ms（SQLite/原生桥多次调用，第二次 25ms）⇒ 若要再快，可把 baseline+单条行+标记合并成一次窄端口调用；**不要再省写后 pointer 读回**（「已同步」可信度）；要再省 ~5 次往返只能上条件写替代锁（协议级，另立项）。
 - **发版前补一次快捷 capture 冷启动真机**（本次只测热启动；同一代码路径，请求数相同）。
 - **便携包真实 3GB 数据验证**；**更新中心设备验收**（Android 下载→校验→系统安装器）；**桌面 3 项实机复核 + 平板复验**；261104 三项裁决残余验证；小记→文档标签携带待定；导入/导出/键盘真机冒烟债；依赖补丁 4 处升级复核。
-- **`audit-dead-css` 桌面剩 2 候选**（`.node-icon-picker__tab` / `.diary-split-handle`）；旧「资料库」注释残留；`docs/audit-261027/` 4 份过期审计/计划（07 v4 RFC 已由 `03ef3fb3` 落地、02 安全审计已暂停、11 浏览器端计划保留）按 AGENTS「已完成直接删」清理。
+- **死 CSS 审计复核（261111）**：桌面候选 `.diary-split-handle` 是 `SplitPane` 的 `${className}-handle` 动态拼接、移动端 `.lv1–3` 是大纲层级动态类 ⇒ **均为假阳性，不删**；`docs/audit-261027/` 4 份**保留**（`TROUBLESHOOTING` / `SYNC-PROTOCOL` / 源码注释仍引用，删了会断出处）。旧「资料库」注释残留：`shell.css` / `app/base.css` 待并行会话收尾后统一，`kit.css` 1 处因该文件在别人写作用域暂不动。
+- **首篇编辑器 fallback 的最终解法（需用户裁决）**：① 拆内核 chunk（大改，需 RFC）；② 改「启动自动打开文档」语义（恢复标签为空时不自动开 / 先画列表再开）。当前预热只覆盖「用户中途点文档」，自动开首篇仍会看到 200–300ms fallback。
+- **编辑器同构骨架 fallback（可选，观感最好）**：替换「正在加载编辑器…」文字为轻骨架；需新增 editor CSS + `cssLayers` 基线，等并行会话释放后做。
 
 **P2（体验缺口 / 长期）**
 
@@ -483,5 +493,6 @@
 - 移动端首屏瘦身 → entry-js 59.7KB / preload 6 / 首屏 347.9KB（261110，预算已收紧）。
 - 移动端两条创建入口的「保存并同步」= 同一单条快路径，已真机真 S3 实测（261110）。
 - 小记写作卡卡顿（长按创建 / 键盘开合）→ 全屏 + 长任务 775→72ms（261111）。
+- 桌面冷启动预热三条触发已上（261111）；首篇 fallback 是内核 chunk 地板，未消除（解法见 §3）。
 - 单条小记推送请求数 13→11（独立管线，261111）。
 - 二轮/实机修复批「未跑 6 态」、胶囊固定底部 / 平移画布开关、P9–P12 候选、平板内核工具栏两条例外 → 均已闭合/撤回。
