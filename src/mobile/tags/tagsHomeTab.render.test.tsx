@@ -399,7 +399,10 @@ describe("行主区 / 长按拖拽", () => {
     // 媒体卡按卡片规则渲染成图片（资源来自 readQuickNote 的 images）
     const img = preview!.querySelector("img");
     expect(img).toBeTruthy();
-    expect(img!.getAttribute("src") ?? "").toContain("pic.png");
+    const imgSrc = img!.getAttribute("src") ?? "";
+    expect(imgSrc).toContain("pic.png");
+    // 261111 图片缩略第二步：列表式富预览的图片也走资产服务离散档位（与首页卡片同 helper）。
+    expect(imgSrc).toContain("w=1024");
 
     // 点勾选框：只读、不切换，也不触发打开小记。
     const opened = onOpenQuickNote.mock.calls.length;

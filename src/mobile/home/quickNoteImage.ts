@@ -18,6 +18,7 @@
  */
 import { ASSET_THUMB_WIDTHS, withAssetWidth } from "../../core/assetUrl.js";
 import { isQuickNoteImageMime } from "../../core/quickNoteModel.js";
+import { imageBoxAttrs } from "../../lib/imageBox";
 
 /** 卡片内图片统一档位（与封面 261109 的 1024 档一致；最大档 ≈ 360 CSS px × 3 DPR）。 */
 export const CARD_IMAGE_THUMB_PX = 1024;
@@ -33,18 +34,8 @@ export function quickNoteImageUrl(raw: string): string {
   return withAssetWidth(raw, CARD_IMAGE_THUMB_PX);
 }
 
-/**
- * <img> 的比例盒属性：只在宽高都是**正整数**时返回（脏数据/附件不写属性，避免把 0×0 钉死）。
- * 用 width/height 属性而不是内联 style：CSS 的 max-width/max-height 仍生效，加载前浏览器先按比例占位。
- */
-export function imageBoxAttrs(image: { width?: number | null; height?: number | null } | null | undefined):
-  { width: number; height: number } | null {
-  const width = image?.width;
-  const height = image?.height;
-  if (typeof width !== "number" || typeof height !== "number") return null;
-  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return null;
-  return { width: Math.round(width), height: Math.round(height) };
-}
+/** 比例盒判据的单一来源在 `src/lib/imageBox.ts`（与共享预览组件共用）。 */
+export { imageBoxAttrs };
 
 /** 档位取值域（单测/诊断用；与本地资源服务一致）。 */
 export function cardImageThumbWidths(): readonly number[] {

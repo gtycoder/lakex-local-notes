@@ -13,6 +13,7 @@ import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, ChevronUp, Paperclip } from "lucide-react";
 import { isQuickNoteImageMime } from "../../core/quickNoteModel";
 import type { QuickNoteImage } from "../../lib/types";
+import { imageBoxAttrs } from "../../lib/imageBox";
 import { hasUnsupportedNodes, parseQuickNotePreview, type PreviewRun, type QuickNotePreviewNode } from "./quickNotePreviewParser";
 /**
  * 内核只读兜底 = **懒加载**（261014 冷启动修复）。
@@ -71,7 +72,11 @@ function Media({ filename, cardName, label, assets, onImageClick, ellipsisClassN
     return <span className="quick-note-preview-unsupported">{displayName ? `${displayName}（资源缺失）` : cardName === "image" ? "图片（资源缺失）" : "附件（资源缺失）"}</span>;
   }
   if (isQuickNoteImageMime(asset.mimeType)) {
-    return <img className="quick-note-preview-image" src={asset.url} alt="小记图片" loading="lazy" title="点击放大"
+    // 比例盒：宽高元数据可用时给 <img> 写 width/height 属性（CSS max-width/max-height 仍生效），
+    // 加载前浏览器先按比例占位 —— 列表式预览不再因图片到达而跳版；老数据缺尺寸则不写。
+    const box = imageBoxAttrs(asset);
+    return <img className="quick-note-preview-image" src={asset.url} alt="小记图片" loading="lazy" decoding="async" title="点击放大"
+      {...(box ?? {})}
       onClick={(event) => { event.stopPropagation(); onImageClick(asset); }} />;
   }
   if (asset.mimeType.startsWith("video/")) {

@@ -10,6 +10,7 @@
  */
 import { useEffect, useState } from "react";
 import { localAssetHttpUrl } from "../../core/assetUrl.js";
+import { quickNotePreviewAssetUrl } from "../home/quickNoteImage";
 import type { StoredQuickNoteImage } from "../../core/quickNoteModel.js";
 import { withAssetAccessToken } from "../../lib/assetPort";
 import { QuickNotePreview } from "../../features/quickNotes/QuickNotePreview";
@@ -45,10 +46,12 @@ export function TagQuickNotePreview({ noteId, fallbackText }: TagQuickNotePrevie
     return <div className="mb-set-item__desc">{failed ? "正文不可用，进入小记里查看" : fallbackText}</div>;
   }
 
-  const assets = detail.images.map((image) => ({
-    ...image,
-    url: withAssetAccessToken(localAssetHttpUrl(noteId, image.filename, { space: "quick-notes" })),
-  }));
+  // 图片统一走资产服务的离散缩略档位（与首页卡片同一个 helper / 同一个 ?w=1024）：
+  // 标签详情是列表式富预览，原图直出会在多行卡片里把 WebView 内存顶穿。
+  const assets = detail.images.map((image) => {
+    const withToken = withAssetAccessToken(localAssetHttpUrl(noteId, image.filename, { space: "quick-notes" }));
+    return { ...image, url: quickNotePreviewAssetUrl(withToken, image.mimeType) };
+  });
   return (
     <QuickNotePreview
       body={detail.body}
