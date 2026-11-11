@@ -28,6 +28,7 @@ import { injectKatexScriptsInOrder, LAKE_KATEX_SCRIPT, LAKE_MHCHEM_SCRIPT } from
 import { setupAudioCardRetry } from "./lakeAudioCardRetry";
 import { setupTocScrollFollow } from "./lakeTocScrollFollow";
 import { subscribeDocInitPerf, type LakeDocInitPerf } from "./lakePerfSubscription";
+import { setupViewerTocClickAssist } from "./lakeTileRender";
 
 export interface LakeKernelInstance {
   /** 内核命令入口（style/insertCard/insertAtSelection/delete… 与编辑器同一套命令）。 */
@@ -868,6 +869,14 @@ export function createLakeDocument(
     // 内核编辑态写死 40（bundle 179499），阅读态默认 0 → 两态高亮口径不一致（阅读态刚滚过
     // 标题就切高亮）。统一为 40。仅阅读态传（编辑态无此 option）。
     ...(mode === "viewer" ? { boundaryTopOffset: 40 } : {}),
+    // 锁定态（Viewer）分帧渲染（261111）：内核 ViewerRenderer 的 tile controller 每帧只渲 30 个
+    // 顶层块（_tileSize 硬编码，lakex.js 57095）⇒ 首帧 ~9ms、长文档的长任务被摊平成 N 帧；
+    // **DOM 节点/堆总量与 direct 完全一致**（不省占用，只省首帧阻塞）。编辑态不受影响：内核先判
+    // virtualRendering 走引擎 windowed controller（lakex.js 48281-48285）。
+    // 代价与配套（大纲/位置恢复必须处理）见 lakeTileRender.ts 文件头。
+    // 仅桌面：移动端的文档内查找（MobileFindBar 自研 DOM 扫描）与阅读态走查都以「全文已在 DOM」
+    // 为前提，分帧会先只铺 30 块；移动端要开必须另做查找兜底并过设备门禁（AGENTS §21④）。
+    ...(mode === "viewer" && isDesktop() ? { tileRendering: true } : {}),
     codeblock: {
       // 使用与当前 Lake 资源链匹配的 CodeMirror 7.1.3，旧版 lakex-doc 资源
       // 在 Slash 新建代码块时可能只留下空壳而没有可编辑实例。
@@ -1038,6 +1047,20 @@ export function createLakeDocument(
         for (const dispose of disposes) {
           try { dispose(); } catch { /* 忽略 */ }
         }
+      };
+    } catch { /* 非编辑器环境忽略 */ }
+  }
+  // 锁定态（Viewer）分帧渲染的配套：阅读态原生大纲点击用 querySelector 找标题，分帧收集期
+  // 找不到就静默不滚（lakex.js 236848 _scrollTo）⇒ 补「延后一帧 + 按需 flush + 几何对齐」，
+  // 并在分帧铺完（viewer ready）时补发一次 scroll 让内核大纲 watcher 重算当前小节。
+  // 详见 lakeTileRender.ts 文件头。
+  if (mode === "viewer") {
+    try {
+      const disposeTocAssist = setupViewerTocClickAssist(element, editor, () => resolveScrollNode(scrollNode));
+      const prevDispose = editor.__disposeExtras;
+      editor.__disposeExtras = () => {
+        try { if (typeof prevDispose === "function") prevDispose(); } catch { /* ignore */ }
+        try { disposeTocAssist(); } catch { /* 忽略 */ }
       };
     } catch { /* 非编辑器环境忽略 */ }
   }

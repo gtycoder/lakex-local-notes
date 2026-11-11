@@ -161,6 +161,20 @@ export function useOutline(
     renderer?.on?.("tileRenderCompleted", onTile);
     renderer?.on?.("generalRenderCompleted", onTile);
 
+    // 锁定态（Viewer）分帧渲染（tileRendering）：每帧只铺 30 个顶层块，视口外标题陆续进 DOM。
+    // 内核 Viewer 的 renderer 不抛 tileRenderCompleted（那是引擎渲染器的），只在实例上抛
+    // firstRender / ready ⇒ 这里补订阅，否则高亮会停在加载瞬间算出的那一项，直到用户手动滚动。
+    const onViewerRender = (): void => compute();
+    const bindViewerRender = (): void => {
+      try {
+        editor.on?.("firstRender", onViewerRender);
+        editor.on?.("ready", onViewerRender);
+      } catch {
+        /* 忽略 */
+      }
+    };
+    bindViewerRender();
+
     return () => {
       try {
         offToc?.();
@@ -174,6 +188,12 @@ export function useOutline(
       }
       renderer?.off?.("tileRenderCompleted", onTile);
       renderer?.off?.("generalRenderCompleted", onTile);
+      try {
+        editor.off?.("firstRender", onViewerRender);
+        editor.off?.("ready", onViewerRender);
+      } catch {
+        /* 忽略 */
+      }
       scroller.removeEventListener("scroll", onScroll);
       window.clearTimeout(contentTimer);
       for (const id of timers) window.clearTimeout(id);

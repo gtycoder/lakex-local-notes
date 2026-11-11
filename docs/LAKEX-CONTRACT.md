@@ -201,8 +201,10 @@
 - **阅读态大纲点击跳转链路**：`_tocSidebar._scrollTo(id)` → `viewer.domRootNode.querySelector('[id="id"]')` +
   `viewer.scrollNode.scrollTop = ...`（bundle 236848–236876）；**因此 `scrollNode` 必须下发到阅读态**，否则内核回退
   `document.scrollingElement`（html，被 `overflow:hidden` 锁死）⇒ 点击只切高亮、正文不滚（260916 用户报的"点了不跳"）。
-- **阅读态实例没有 `renderer`**：`editor.renderer.scrollByNodeId` 只存在于编辑态；阅读态实例的 `_renderer` 是空壳，
-  其定位能力只在 toc 插件内部（`_scrollTo`）。拿不到 `renderer` 时按 DOM 计算滚动更可靠。
+- **阅读态实例的 `renderer` 有渲染控制器、但**没有定位 API**（261111 实测修正）：`editor.renderer.scrollByNodeId` 只存在于
+  引擎渲染器链路；阅读态 `ed.renderer` 是 `ViewerRenderer`，只暴露 `_renderController`（tile/direct，见 §5.50），
+  `typeof ed.renderer.scrollByNodeId === 'undefined'`。其定位能力只在 toc 插件内部（`_scrollTo`）⇒ 拿不到 `renderer`
+  定位时按 DOM 几何计算滚动更可靠。
 
 ### 5.5 编辑态 ↔ 阅读态：渲染模型差异（跨态恢复位置的唯一可靠依据）（2026-09-16 实测）
 
@@ -2114,3 +2116,32 @@ DOM 文本节点扫描（移动端文档 `disableVirtualRendering:true`，整篇
 - 图片卡（`value="data:%7B…"`）round-trip 后 src 保持；卡片值可能被重新序列化（JSON 空白/顺序），不改变资源指向。
 
 **结论（D 方案落地）** = **不引入离屏内核**，复制时在主/移动端数据层把 Lake 正文的块 id **全量重映射**：`src/core/duplicateNotes.ts` 的 `remapBlockIds`（`id`/`data-lake-id`/`list`/`fid` 属性值；同一旧 id 的**所有出现**一起替换；URL/data:/路径不动）→ 副本块 id 与源完全不相交。实测：复制欢迎文档后源/副本正文 13 个块 id **交集 0**；同时在两个 tab 打开时，新副本的块 id 未出现在 DOM 重复 id 列表里（列表里剩下的都是图标/画布等既有全局 id）。
+
+### 5.50 阅读态（锁定 Viewer）能「分帧渲染」，但**接不上 `virtualRendering`**（261111 读码 + 隔离实例实测）
+
+**背景**：用户问「锁定态能否也接虚拟渲染，从而比编辑态更省」。结论 = 内核层面接不上，但有一个**只改时间维度**的
+官方内部开关 `tileRendering`，且必须给两套大纲与位置恢复补配套（已落地 `src/features/editor/lakeTileRender.ts`）。
+
+- **`virtualRendering` 是引擎渲染器的 option，Viewer 链路没有消费者 ⇒ 传给 Viewer 是静默 no-op**：
+  消费点全在 `renderer.option.virtualRendering`（lakex.js 145671）、`engineOption`（48281–48285 三选一、52567 getter、
+  181194、212625、225381、226868）；ViewerOption 默认表（55602–55612）与 getter 列表（55636–55715）里**只有
+  `tileRendering`，没有 `virtualRendering`**。实测（980×706，300/800/1500 三档）：`viewer ± virtualRendering` 的 DOM 块数、
+  `scrollHeight`、就绪耗时**完全一致**（差异在噪声内）⇒ 传了不报错、也不生效（最坏的失败模式）。
+- **Viewer 的渲染器只有两个 controller**：`ViewerRenderer`（lakex.js 57200 `pW`，在 viewerDoc ready 后创建）按
+  `viewer.option.isTileRendering()` 二选一（57222–57224）：tile（57085 `pH`）/ direct（57027 `pU`）。
+- **`tileRendering: true`（阅读态顶层 option，默认 false；官方 75 篇与 README 均未收录）**：每帧只渲 **30** 个顶层块
+  （`_tileSize` 硬编码 57095），每帧发 `firstRender`、铺完发 `ready`；**DOM 总量与 direct 完全一致**。
+  - 实测 2000 段文档：blocks 60→90→180→300→480→720…（≈30/帧）；完整 DOM 2061 与 direct 相同；1500 块时首帧 **8.6ms**、
+    铺完 **830ms**（direct 首帧同步阻塞 ≈135ms）。
+  - 应用侧可拿 `ed.renderer._renderController`：`tileRender()` 同步渲一批，`_currentTileIndex / _tileCount / _total /
+    _tileSize` 可读 ⇒ 支持「按需推进到目标块」与「全量 flush」（`flushViewerTiles`）。
+- **必须配套的两处定位**（否则收集期静默失效，用户会以为「大纲点了不跳」）：
+  1. **阅读态大纲点击** `_scrollTo(id)` 用 `viewer.domRootNode.querySelector('[id="…"]')`，命中不到**静默不滚**
+     （lakex.js 236848–236876）⇒ 应用侧捕获点击、延后一帧先 flush 到目标块出现再按几何对齐（实测收集期
+     「720/2061 块已渲染」时点击，60ms 内落到 delta 0）。
+  2. **锁/解锁的阅读位置恢复**：锚点块未渲染时 `EditorTab.restoreByAnchor` 只能退回「按比例映射」⇒ 必须**全量 flush**
+     后再对齐。实测 flush 后锚点屏幕偏移 365px **恒定不变**（100→2000ms 八档采样），与关闭 `tileRendering` 的基线逐档一致。
+- **内核事件差异**：viewer 实例只抛 `firstRender` / `ready`；`renderer.on('tileRenderCompleted'/'generalRenderCompleted')`
+  是**引擎渲染器**的（编辑态虚拟渲染用），阅读态收不到 ⇒ 自建大纲高亮要订阅实例级事件（`useOutline` 已补）。
+- **移动端暂不启用**（`isDesktop()` 门）：移动端「文档内查找」是自研 DOM 扫描 + 文本高亮，以「全文已在 DOM」为前提；
+  要开必须另做查找兜底并过设备门禁（AGENTS §21④）。

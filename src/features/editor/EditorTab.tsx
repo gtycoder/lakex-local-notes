@@ -15,6 +15,7 @@ import { buildClipboardPayload, upgradePastedHtml } from "./clipboardHtml";
 import { addAssetAccessToken, stripAssetAccessToken } from "../../lib/assetPort";
 import { registerOutlineTab, unregisterOutlineTab } from "../outline/registry";
 import { useOutline } from "../outline/useOutline";
+import { flushViewerTiles, scrollIntoViewByNodeId } from "./lakeTileRender";
 import { native } from "../../lib/native";
 import { attachImagePreviewClick } from "./imagePreview";
 import { attachFileCardClick, createCardHoverResidueCleaner, resolveCardAsset, findCardData, type AttachmentPreviewItem } from "../attachment/attachmentPreviewController";
@@ -121,6 +122,13 @@ export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance
 
   const { controller, refresh } = useOutline(editorState, hostRef.current, noteId, tocEnabled, visible);
 
+  /** 大纲跳转的异步补偿（锁定态分帧渲染期间会逐帧等目标块）在卸载时统一取消。 */
+  const cancelOutlineScrollRef = useRef<(() => void) | null>(null);
+  useEffect(() => () => {
+    cancelOutlineScrollRef.current?.();
+    cancelOutlineScrollRef.current = null;
+  }, []);
+
   const handleOutlineNavigate = (id: string): void => {
     const editor = editorRef.current;
     const host = hostRef.current;
@@ -129,6 +137,15 @@ export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance
     try {
       lakeBridge(editor).renderer?.execCommand?.("headingUnfold", id);
     } catch { /* 忽略 */ }
+    // 锁定态（Viewer）单独一条：Viewer 的 renderer **没有 scrollByNodeId**（实测 undefined），
+    // 且分帧渲染（tileRendering）收集期目标块可能还没进 DOM ⇒ 走「按需把剩余块渲完 + 几何对齐」
+    // （lakeTileRender.ts）。这条路径不依赖内核定位，两套大纲（自建/原生）最终都落在同一几何口径。
+    if (locked) {
+      const scroller = resolveScrollNode(host);
+      cancelOutlineScrollRef.current?.();
+      cancelOutlineScrollRef.current = scroller ? scrollIntoViewByNodeId(host, scroller, id, editor) : null;
+      return;
+    }
     try {
       lakeBridge(editor).renderer?.scrollByNodeId?.(id);
     } catch { /* 忽略 */ }
@@ -534,7 +551,14 @@ export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance
           renderer.scrollByNodeId(anchorId);
           return true;
         }
-        const el = anchorEl();
+        let el = anchorEl();
+        if (!el && mode === "viewer") {
+          // 锁定态分帧渲染（tileRendering）收集期：锚点块可能还没进 DOM。这里用**全量推进**
+          // （flush）而不是「渲到锚点出现」：切换瞬间新旧挂载点并存，按 id 命中依赖挂载点判定，
+          // 全量推进后几何与 direct 渲染完全一致，位置恢复与改动前同口径（实测 100→2000ms 偏移恒定）。
+          flushViewerTiles(editor);
+          el = anchorEl();
+        }
         if (!el) return false;
         const delta = alignDelta(el);
         if (Math.abs(delta) > 1) scroller.scrollTop += delta;

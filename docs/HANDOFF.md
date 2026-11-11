@@ -10,6 +10,23 @@
 
 > **顺序标注**：261109 各批次里写的「日记 ⌘4 / AI 写作 ⌘3」是**当时**的顺序；**261110 起改为 日记 ⌘3 / AI 写作 ⌘4**（另有标签 ⌘5）。旧批次不再改，以本行 + §1 为准。
 
+### 261111 · 锁定态（阅读态）分帧渲染 tileRendering：接不上 virtualRendering，但先把首帧摊平（用户点单；两套大纲都实测过）
+
+- **用户诉求**：锁定态能否也接虚拟渲染、「比编辑态都省」；硬要求 = 两套大纲（应用自建 / 内核原生）点击定位**绝不能坏**（历史上虚拟渲染破过大纲）。
+- **调研结论**：`virtualRendering` 只属于**引擎渲染器**，Viewer 链路没有消费者（ViewerOption 无该字段、ViewerRenderer 只判 tile）⇒ 传给 Viewer 是**静默 no-op**（实测 300/800/1500 三档 DOM/耗时完全一致）。Viewer 可用的内部开关是 **`tileRendering`**：30 块/帧、首帧 8.6ms（direct ≈135ms）、1500 块铺完 830ms；**DOM/堆总量与 direct 完全一致**（不省占用，只把首帧同步阻塞摊成 N 帧）。
+- **落地**（仅桌面 `isDesktop()` 门；移动端不动 —— 自研「文档内查找」依赖全文已在 DOM）：
+  - `src/features/editor/lakeRuntime.ts`：viewer 下 `tileRendering: true`；并安装 `setupViewerTocClickAssist`（原生大纲点击兜底 + `ready` 补发 scroll 让内核 watcher 重算当前小节）。
+  - 新增 `src/features/editor/lakeTileRender.ts`：`flushViewerTiles`（全量推进）、`scrollIntoViewByNodeId`（按需推进到目标块 + 几何对齐 + 140ms 补校正）、`setupViewerTocClickAssist`；`findRenderedNode` 取「最后 append 的当前挂载点」（过渡期旧层未标 `is-outgoing` 也不误命中）。
+  - `EditorTab.tsx`：锁定态自建大纲点击改走几何对齐（Viewer 的 `renderer` 没有 `scrollByNodeId`，实测 undefined）；锁/解锁位置恢复在锚点未渲染时先**全量 flush** 再对齐。
+  - `src/features/outline/useOutline.ts`：补订阅 viewer 实例级 `firstRender/ready`（阅读态收不到引擎渲染器的 `tileRenderCompleted`）。
+- **实测（隔离实例，2000 段 / 61 标题，980×706，CDP 真实 DOM）**：
+  - 分帧生效：blocks 60→90→180→300→480→720…（≈30/帧）；**收集期**点原生大纲最后一条（当时 720/2061 已渲染）⇒ 60ms 内 `delta 0`、选中项匹配；回滚 6000px 后高亮跟随正确。
+  - 自建大纲：点最后一条 ⇒ 200ms 起 `delta 0`、`outline-item--selected` 匹配；滚动跟随匹配。
+  - 锁/解锁位置恢复：锚点屏幕偏移 **365px 八档采样恒定**（100→2000ms），与关闭 tile 的基线逐档相同。
+- **回填**：[docs/LAKEX-CONTRACT.md](LAKEX-CONTRACT.md) 新增 **§5.50**（no-op 证据 / controller 形状 / 两处定位配套 / 事件差异 / 移动端闸门）；§5.4 第 5 条修正为「阅读态有渲染控制器、但没有定位 API」。
+- **门禁**：tsc 0；全量 vitest **863 文件（852 passed / 11 skipped）/ 5417 passed / 12 skipped / 0 failed**（新增 `lakeTileRender.test.ts` 18 例）；ui-metrics 0；`git diff --check` 0；无 CSS 改动（`cssLayers` 基线未动）。
+- **风险**：`tileRendering` 是**半官方内部开关**（README 与官方 75 篇均未收录）⇒ 升级内核若被改名会**静默退回 direct**（行为仍正确，只是失去分帧）；护栏 = `lakeTileRender.test.ts` 的私有字段形状断言 + 首帧块数 ≈30 的验收口径。
+
 ### 261111 · 桌面空白文档也能往下滚（内核引擎 min-height:1024px）
 - **现场**：新建文档什么都没写，右侧就有 ~319px 可滚区（用户截图）。根因 = 内核给**独立整页编辑器**预设的几何：`.ne-layout-mode-fixed/.ne-layout-mode-adapt .ne-engine { min-height:1024px; padding:20px 70px 90px 70px !important }`；我们文档面板可视高通常 < 1024（本机 706）⇒ 空文档 `scrollHeight 1025 / clientHeight 706`。
 - **修法**（`src/styles/app/editor.css`，legacy 层、晚于内核样式导入 ⇒ 普通声明即可胜；作用域 `.lake-editor-mount.ne-doc-major-editor`）：文档版式四层盒子 `.ne-editor-outer-wrap-box / .ne-editor-wrap-box / .ne-editor-box / .ne-engine-box` 钉 `height:100%`，引擎 `.ne-engine { min-height:100% }` ⇒ 引擎**撑满可视区**、内容多了继续长。
