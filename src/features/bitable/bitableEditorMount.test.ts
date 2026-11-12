@@ -10,7 +10,19 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-const EDITOR = readFileSync(new URL("./BitableEditor.tsx", import.meta.url), "utf8");
+/** 261112 R1-S2：编辑器已拆成「容器 + 6 个 useBitable* hook + model + FieldEditorModal」，
+ *  本文件的护栏继续在**实现文本**上断言 ⇒ 拼读拆出的全部文件（= 原来的单文件实现文本）。 */
+const EDITOR = [
+  "BitableEditor.tsx",
+  "useBitableChromeMenu.ts",
+  "useBitableTables.ts",
+  "useBitableViews.ts",
+  "useBitableFields.ts",
+  "useBitableRecords.ts",
+  "useBitableImport.ts",
+  "bitableEditorModel.tsx",
+  "FieldEditorModal.tsx",
+].map((name) => readFileSync(new URL("./" + name, import.meta.url), "utf8")).join("\n");
 const VIEWPORT_CELL = readFileSync(new URL("./BitableViewportCell.tsx", import.meta.url), "utf8");
 const SESSION = readFileSync(new URL("./useBitableSession.ts", import.meta.url), "utf8");
 const APP = readFileSync(new URL("../../App.tsx", import.meta.url), "utf8");
