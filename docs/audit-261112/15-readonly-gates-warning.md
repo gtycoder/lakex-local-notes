@@ -62,7 +62,10 @@
 | 小记卡编辑 / 标签详情编辑 / 搜索命中 → 首页定位 | 单击 | 首页/标签/搜索的**列表与搜索 SQL 已过滤**（`quickNotesRepository.ts:130`、`quickNotesSearch.ts:117,186`）⇒ 正常情况打不开已删小记；**但保存路径会复活**（见 M2） | ⚠️ M2 |
 | 编辑锁（桌面锁定的文档） | 打开 | `isEditLocked` 只在数据层出现（`mobile/v3/mobilePlatformPort.ts:187,374-379`、`bridge/notes.ts:155`），`MobileApp`/`notebook`/`editor`/`ui` **0 处消费** | ❌ 缺口 M3 |
 
-### M1【P1｜漏判】移动日记入口绕过 gone 判据
+### M1【已降级：实测不可复现 → 防御性建议】移动日记入口绕过 gone 判据
+
+> **实测复核（task-57 / 18 号报告 §1）：不可复现**——日记页列表与 `ensureDiaryNote` 都过滤 `trashed_at`（`diaryRepository.ts:155,158-168`），已删日记根本不列出；点「写今天」会新建同日活跃文档，不会打开回收站那篇。
+> 故本条从 P1 现存缺陷**降级为防御性建议**（入口自身仍无 gone 判据，若日后列表/入口改为包含回收站条目会立刻回归）。证据：`docs/audit-261112/18-evidence-lifecycle.md`、`evidence/shots/M1-01-diary-page.png`。
 
 - 证据：`src/mobile/MobileApp.tsx:743-751`（`openDiaryEntry` 直接 `setRoute`）；`src/mobile/diary/DiaryPage.tsx:117,152`（`mode:"editor"` / `"viewer"`）；`src/mobile/notebook/useWorkspaceSession.ts` **无任何 gone/trashed 判断**（其保存走 `bridge.saveNote`，`bridge/notes.ts:89-99` 才拒绝）。
 - 用户可见后果：某天日记文档在桌面被删除（进回收站）后，手机「日记」页点该天 → 进入**正常编辑工作区**（不是回收站预览），没有横幅/只读标记；用户编辑后保存，只得到一条错误 toast「笔记已在回收站或已被删除，保存被拒绝；请先显式恢复」——**判据放在了写函数而不是打开入口**，正是 §3#16 与 F04 同一形状的"下游兜底"。
