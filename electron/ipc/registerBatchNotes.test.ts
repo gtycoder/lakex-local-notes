@@ -287,7 +287,9 @@ describe("batch_notes：执行期异常 ⇒ 整批回滚（不产生半批）", 
 });
 
 describe("batch_notes：接线与硬红线（静态守卫）", () => {
-  const mainSource = fs.readFileSync(new URL("../main.ts", import.meta.url), "utf8");
+  // 261112 R2：registerIpc 已从 main.ts 拆到 boot/ipcWiring.ts ⇒ 静态守卫按「入口 + 接线」聚合读。
+  const mainSource = fs.readFileSync(new URL("../main.ts", import.meta.url), "utf8")
+    + "\n" + fs.readFileSync(new URL("../boot/ipcWiring.ts", import.meta.url), "utf8");
   const handlerSource = fs.readFileSync(new URL("./registerBatchNotes.ts", import.meta.url), "utf8");
 
   it("main 注册 batch_notes 且把它列进 TREE_CHANGING_CHANNELS（整批只广播一次，不逐条）", () => {

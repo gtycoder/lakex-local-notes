@@ -1,6 +1,5 @@
 import { app, BrowserWindow, crashReporter, dialog, ipcMain, Menu, nativeTheme, powerMonitor, screen, session, shell, type IpcMainEvent, type WebFrameMain } from "electron";
 import crypto from "node:crypto";
-import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Store } from "./store.js";
@@ -48,76 +47,45 @@ import {
 import { showRecoveryWindow } from "./startupRecoveryWindow.js";
 import { rememberRestoreCandidate, restoreMainDatabaseFromBackup } from "./workspaceRestoreFromBackup.js";
 import { decideSafeMode, readSafeModeState, removeSafeModeState, writeSafeModeState, type SafeModeState } from "./safeMode.js";
-import { registerSafeModeIpc } from "./ipc/registerSafeMode.js";
-import { registerDataRecoveryIpc } from "./ipc/registerDataRecovery.js";
-import { registerSyncConflictIpc } from "./ipc/registerSyncConflictIpc.js";
-import { registerBackupIpc, type BackupIpcRunner } from "./ipc/registerBackupIpc.js";
-import { registerDiaryIpc } from "./ipc/registerDiary.js";
+import type { BackupIpcRunner } from "./ipc/registerBackupIpc.js";
 import { AUTO_BACKUP_TICK_MS, decideAutoBackup, readDatabaseFingerprint, runBackupCycle } from "./autoBackup.js";
-import { createIpcRegistrar } from "./ipc/registrar.js";
 import { UpdateService } from "./update/updateService.js";
-import { pickBackupDatabaseDialog, registerNotesIpc } from "./ipc/registerNotes.js";
-import { registerBatchNotesIpc } from "./ipc/registerBatchNotes.js";
-import { registerDuplicateNotesIpc } from "./ipc/registerDuplicateNotes.js";
-import { registerMarkdownImportIpc } from "./ipc/registerMarkdownImport.js";
-import { registerBatchExportIpc } from "./ipc/registerBatchExport.js";
+import { pickBackupDatabaseDialog } from "./ipc/registerNotes.js";
 import { DraftJournal, draftJournalDir } from "./draftJournal.js";
-import { registerHistoryIpc } from "./ipc/registerHistory.js";
-import { registerWebIpc } from "./ipc/registerWeb.js";
-import { registerSyncIpc } from "./ipc/registerSync.js";
-import { registerQuickNotesIpc } from "./ipc/registerQuickNotes.js";
-import { registerLogIpc } from "./ipc/registerLogIpc.js";
-import { registerAiIpc } from "./ipc/registerAi.js";
-import { registerAiWritingIpc } from "./ipc/registerAiWriting.js";
-import { registerSystemInfoIpc } from "./ipc/registerSystemInfo.js";
-import { registerUpdateIpc } from "./ipc/registerUpdate.js";
-import { registerPortableIpc } from "./ipc/registerPortable.js";
-import { portableExportAvailability, portableExportCloudActive, type PortableExportAvailability, type PortableExportProgress } from "../src/core/portable/portableFormat.js";
+import type { PortableExportProgress } from "../src/core/portable/portableFormat.js";
 import { clampWindowState, readWindowState, writeWindowState } from "./windowState.js";
 import { TOPBAR_HEIGHT, TOPBAR_SEAM, TRAFFIC_LIGHT_DIAMETER } from "../src/lib/layoutMetrics.js";
 import { APP_ORIGIN, isAppOriginUrl } from "./appOrigin.js";
 import { registerAppSchemePrivileges, serveAppDist } from "./appProtocol.js";
 import { buildAppMenuTemplate } from "./appMenu.js";
 import { installTestDialogHooks } from "./testDialogHooks.js";
+import {
+  APP_DISPLAY_NAME,
+  DEV_SERVER_URL,
+  PROJECT_URL,
+  applyUserDataPath,
+  isDev,
+  logFilePath,
+  rendererDistDir,
+  rendererMode,
+  vendorCdnDir,
+  windowStatePath,
+  workspaceRoot,
+} from "./boot/paths.js";
+import { registerIpc } from "./boot/ipcWiring.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const isDev = !app.isPackaged;
-/** 产品显示名（macOS 菜单/关于面板；与 package.json productName 一致）。 */
-const APP_DISPLAY_NAME = "LakexLocalNotes";
-/** 项目主页（帮助菜单：使用文档 / 反馈问题）。 */
-const PROJECT_URL = "https://github.com/gtycoder/lakex-local-notes";
 /** 主窗口引用（macOS 菜单「设置…」需要给渲染层发事件；单窗口应用，关窗即清空）。 */
 let mainWindow: BrowserWindow | null = null;
 
 /** 启动遮罩窗口：在主进程初始化 + 渲染层加载期间先显示 logo，避免主窗口白屏。 */
 let bootWindow: BrowserWindow | null = null;
 
-// userData 隔离（必须在 app ready 前设置）：
-// - dev 默认 lakex-local-notes-dev（空库+种子），打包版默认 lakex-local-notes（正式数据）；
-// - 两者路径不同、单实例锁各自独立，可同时运行。
-// - 任意模式可用 LAKE_USER_DATA 覆盖：dev 模拟多「设备」，打包版隔离测试（避免触碰正式数据）。
-const userDataOverride = process.env.LAKE_USER_DATA?.trim();
-app.setPath(
-  "userData",
-  userDataOverride ||
-    (isDev
-      ? path.join(app.getPath("appData"), "lakex-local-notes-dev")
-      : path.join(app.getPath("appData"), "lakex-local-notes")),
-);
-// dev server 地址可经 LAKE_DEV_SERVER_URL 覆盖：多端/隔离冒烟时避开默认 1421（IPC 信任判定同用此值）。
-const DEV_SERVER_URL = process.env.LAKE_DEV_SERVER_URL?.trim() || "http://127.0.0.1:1421";
-/**
- * 渲染层加载方式（对齐 DSH 桌面壳：不打 file://）：
- * - `vite`：dev 默认走 vite dev server（保留 HMR；LAKE_DEV_SERVER_URL 可覆盖）；
- * - `scheme`：打包版走私有协议 lakexlocalnotes://app（服务构建产物 dist/）。dev 下亦可用
- *   LAKE_RENDERER=scheme 强制走这条路径（需先 vite build），用于本机验证该分支。
- */
-const rendererMode: "vite" | "scheme" = !isDev || process.env.LAKE_RENDERER?.trim() === "scheme" ? "scheme" : "vite";
-
-/** 渲染层构建产物目录：私有协议静态服务与 Web 客户端共用同一份 dist。 */
-function rendererDistDir(): string {
-  return path.join(__dirname, "..", "dist");
-}
+/** 构建产物位置锚点（**唯一**依赖入口位置的路径；boot.html / dist / CDN 镜像都按它定位）。
+ *  放在入口而不是 boot/paths.ts：那里刻意不读 import.meta.url（见该文件头注释）。 */
+const APP_DIR = path.join(__dirname, "..");
+// userData 隔离必须在 app ready 前生效，且早于任何 userDataDir()/workspaceRoot() 读取。
+applyUserDataPath();
 
 // 私有协议必须在 app ready 之前注册（Electron 要求）。
 registerAppSchemePrivileges();
@@ -274,22 +242,13 @@ function isAppPageUrl(url: string): boolean {
   return parsed.origin === DEV_SERVER_URL;
 }
 
-function workspaceRoot(): string {
-  return path.join(app.getPath("userData"), "workspace-default");
-}
-
-/** Lake 编辑器 CDN 资源本地镜像（public/vendor/cdn → dist/vendor/cdn） */
-function vendorCdnDir(): string {
-  return path.join(__dirname, "..", isDev ? "public" : "dist", "vendor", "cdn");
-}
-
 /**
  * 资源本地化只接管已随应用镜像的 Lake 运行时资源。gw.alipayobjects.com 同时
  * 承载用户粘贴图片，若按 host 全量重定向，未镜像的 /zos/skylark/... 会变成本地 404。
  */
 function registerCdnRedirect() {
   // W-5：镜像清单启动时一次性读入内存（目录随包固定），回调内零 I/O。
-  const mirrored = scanMirroredCdnFiles(vendorCdnDir());
+  const mirrored = scanMirroredCdnFiles(vendorCdnDir(APP_DIR));
   session.defaultSession.webRequest.onBeforeRequest(
     { urls: ["*://gw.alipayobjects.com/*"] },
     (details, callback) => {
@@ -335,9 +294,9 @@ function registerAssetTokenRedirect() {
  */
 function createBootWindow() {
   if (bootWindow && !bootWindow.isDestroyed()) return;
-  const windowStatePath = path.join(app.getPath("userData"), "window-state.json");
+  const windowStateFile = windowStatePath();
   const workArea = screen.getPrimaryDisplay().workArea;
-  const restored = clampWindowState(readWindowState(windowStatePath), workArea);
+  const restored = clampWindowState(readWindowState(windowStateFile), workArea);
   const boot = new BrowserWindow({
     x: restored.x,
     y: restored.y,
@@ -398,9 +357,9 @@ function installCrashLogging(userDataDir: string): void {
 async function createWindow() {
   // macOS 关窗后从 Dock 重开时也要先有 boot 窗口，否则主窗口会隐藏到 renderer-ready 才出现。
   if (!bootWindow || bootWindow.isDestroyed()) createBootWindow();
-  const windowStatePath = path.join(app.getPath("userData"), "window-state.json");
+  const windowStateFile = windowStatePath();
   const workArea = screen.getPrimaryDisplay().workArea;
-  const restored = clampWindowState(readWindowState(windowStatePath), workArea);
+  const restored = clampWindowState(readWindowState(windowStateFile), workArea);
   const win = new BrowserWindow({
     x: restored.x,
     y: restored.y,
@@ -468,7 +427,7 @@ async function createWindow() {
   const persistWindowState = () => {
     if (win.isDestroyed()) return;
     const bounds = win.getNormalBounds();
-    writeWindowState(windowStatePath, {
+    writeWindowState(windowStateFile, {
       x: bounds.x,
       y: bounds.y,
       width: bounds.width,
@@ -571,24 +530,6 @@ function isTrustedSenderFrame(frame: WebFrameMain | null, sender: Electron.WebCo
   return isAppPageUrl(frame.url);
 }
 
-/** 便携包导出入口可用性（单一判据在 core/portableFormat；这里只喂同步状态）。 */
-function portableIpcAvailability(): PortableExportAvailability {
-  try {
-    const sync = store.getSyncSettings();
-    const status = store.getSyncStatus();
-    const pending = store.getSyncPendingSummary();
-    const quickPending = getQuickNotesAvailability().mode === "ok" ? quickNotes.getPendingSyncSummary() : { items: 0 };
-    return portableExportAvailability({
-      s3Configured: store.getS3Settings() !== null,
-      sync: { enabled: sync.enabled, autoMode: sync.autoMode },
-      lastSyncedAt: status.lastSyncedAt,
-      pending: { documents: pending.documents, folders: pending.folders, quickNotes: quickPending.items },
-    });
-  } catch (error) {
-    return { available: false, reason: "读取同步状态失败：" + (error instanceof Error ? error.message : String(error)) };
-  }
-}
-
 /** 便携包导出进度（窗口 + Web 客户端 SSE）。 */
 /** 261110：正文保存成功 → 广播给所有桌面窗口 + 浏览器端（只带 id/hash，不带正文）。
  *  各客户端自己判断"这篇是否打开 / 是否 dirty"（判据见 src/core/noteBodyBroadcast.ts），未打开不读盘。 */
@@ -609,176 +550,6 @@ function broadcastPortableProgress(progress: PortableExportProgress): void {
     try { win.webContents.send("portable-export-progress", progress); } catch { /* 窗口已关闭 */ }
   }
   webServerController?.broadcast("portable-export-progress", progress);
-}
-
-function registerIpc(): ReadonlyMap<string, (args: unknown[]) => Promise<unknown>> {
-  // 思源模式收敛：pending 待办计数不再依赖渲染层各操作点手动刷新（历史上有 10+ 处遗漏），
-  // 改为 IPC 层单点拦截——每个调用完成后 diff 廉价指纹（微秒级 COUNT），变化才广播完整摘要。
-  let lastPendingSig = "";
-  /** 目录树结构会变的 IPC 通道：写库后广播 library-changed，让其它窗口（含浏览器端）刷新目录树。 */
-  const TREE_CHANGING_CHANNELS = new Set<string>([
-    "create_note", "create_notebook", "create_group", "create_note_in",
-    "create_usheet_in", "create_bitable_in", "create_board_in", "create_ink_in",
-    "rename_tree_node", "set_node_icon",
-    "move_tree_node", "move_tree_node_ordered", "reorder_tree_nodes",
-    "delete_tree_node", "delete_note", "restore_trash", "purge_trash", "empty_trash",
-    // 261106 批量操作：一次调用改多条 ⇒ 整批只广播一次（不逐条）。
-    "batch_notes",
-    // 261106 创建副本：一次调用可能新建多篇 ⇒ 整批只广播一次。
-    "duplicate_notes",
-  ]);
-  const afterInvoke = (channel: string): void => {
-    // 目录树变更：无条件广播（不能被下面 pending 摘要的早退吞掉）。
-    if (TREE_CHANGING_CHANNELS.has(channel)) {
-      try {
-        for (const win of BrowserWindow.getAllWindows()) {
-          if (!trustedWebContents.has(win.webContents.id)) continue;
-          try { win.webContents.send("library-changed", { channel }); } catch { /* 窗口已关闭 */ }
-        }
-        webServerController?.broadcast("library-changed", { channel });
-      } catch { /* 忽略 */ }
-    }
-    try {
-      const sig = `${store.pendingSignature()}:${quickNotes.getPendingSyncSummary().items}`;
-      if (sig === lastPendingSig) return;
-      lastPendingSig = sig;
-      const lake = store.getSyncPendingSummary();
-      const quick = quickNotes.getPendingSyncSummary();
-      const summary = { documents: lake.documents, folders: lake.folders, resources: 0, quickNotes: quick.items, total: lake.documents + lake.folders + quick.items, generatedAt: new Date().toISOString() };
-      for (const win of BrowserWindow.getAllWindows()) {
-        try { win.webContents.send("pending-summary-changed", summary); } catch { /* 窗口已关闭 */ }
-      }
-      // 浏览器端（Web 客户端）：走 SSE 推送（未开启时 no-op）
-      webServerController?.broadcast("pending-summary-changed", summary);
-    } catch { /* store 未就绪（早期调用）忽略 */ }
-  };
-  const ipc = createIpcRegistrar((event) => {
-    if (!isTrustedSenderFrame(event.senderFrame, event.sender)) throw new Error("IPC 调用来源不受信任");
-  }, afterInvoke, (channel, payload) => {
-    // HTTP 调用方（浏览器端）没有 Electron 窗口：handleEvent 的 send 统一转到 SSE 广播
-    //（sync-progress / ai:stream 等），否则浏览器端收不到流式与进度。
-    webServerController?.broadcast(channel, payload);
-  });
-
-  // 261106 批量导出（数据层 electron/batchExport.ts）：按类型默认格式导出到同一目录，只读不写源。
-  registerBatchExportIpc(ipc, { store });
-  // 261106 Markdown 导入：文件选择/目录扫描/图片字节（转换与落盘在 renderer 管线，见 src/features/import/）。
-  registerMarkdownImportIpc(ipc);
-  // 261106 批量操作（A 方案）：core 编排 + 主进程单事务（lake 主库 / quickNotes 小记库）。
-  // 删除语义只有"移入回收站"；purge/物理删除仍只在回收站入口（purgeTrashItem / 清空回收站）。
-  // 261106 文档「创建副本」：逐条新 id + 新建管线（正文/资源全量复制 + URL 重写），逐条结果。
-  registerDuplicateNotesIpc(ipc, { store });
-  registerBatchNotesIpc(ipc, {
-    store,
-    getQuickNotes: () => (getQuickNotesAvailability().mode === "ok" ? quickNotes : null),
-    activeTagIds: () => {
-      if (getQuickNotesAvailability().mode !== "ok") return null; // 目录不可用 ⇒ tag-add 整批拒绝
-      try { return new Set(quickNotes.tagService.list().map((tag) => tag.id)); } catch { return null; }
-    },
-  });
-  registerNotesIpc(ipc, store, quickNotes, drafts, workspaceRoot(), (targetRoot) => {
-    // A1 一致性快照：主库 + 小记库各经其连接 VACUUM INTO（单文件、可独立打开）
-    const mainTarget = path.join(targetRoot, "metadata.sqlite3");
-    store.backupDatabaseTo(mainTarget);
-    const quickDir = path.join(targetRoot, "quick-notes");
-    fs.mkdirSync(quickDir, { recursive: true });
-    quickNotes.backupDatabaseTo(path.join(quickDir, "metadata.sqlite3"));
-  }, enqueueMaintenance, broadcastNoteBodyChanged);
-  // 261109 日记：幂等打开某天（判据/单事务在 electron/diaryStore.ts；通道见 docs/DIARY.md）。
-  registerDiaryIpc(ipc, {
-    openDate: (dateKey, options) => store.openDiaryDate(dateKey, options),
-    unmark: (notebookId) => store.unmarkDiaryNotebook(notebookId),
-  });
-  registerHistoryIpc(ipc, store, () => restartHistoryTimers?.());
-  registerAiIpc(ipc, store);
-  registerAiWritingIpc(ipc, store);
-  registerWebIpc(ipc, () => webServerController);
-  registerSyncIpc(ipc, {
-    store,
-    quickNotes,
-    // 小记库降级时在「设置→同步诊断」顶部给一条可读告警（复用既有 S3v3DiagnosticReport 通道）。
-    quickNotesAvailability: () => getQuickNotesAvailability(),
-    runFullSync,
-    enqueueMaintenance,
-    broadcastSyncProgress,
-    restartGcTimers: () => restartGcTimers?.(),
-    restartSyncTimers: () => restartSyncTimers?.(),
-  });
-  registerQuickNotesIpc(ipc, quickNotes, store, enqueueMaintenance);
-  registerLogIpc(ipc);
-  registerSystemInfoIpc(ipc, { store, quickNotes, workspaceRoot });
-  // Batch3-B：安全模式三件事（读状态 / 复制诊断 / 显式退出）。通道登记见 electron/ipc/ipcChannelParity.test.ts。
-  registerSafeModeIpc(ipc, {
-    userDataDir: app.getPath("userData"),
-    logPath: path.join(app.getPath("userData"), "logs", "lakex-local-notes.log"),
-    appVersion: app.getVersion(),
-    platform: process.platform,
-    state: () => safeModeState,
-    onExit: () => { safeModeActive = false; safeModeState = null; },
-  });
-  // 261105 Batch4-D：低频扫描设置（0=关闭）+ 手动「重建数据」候选/执行（只允许本次扫描候选）。
-  registerDataRecoveryIpc(ipc, {
-    store,
-    workspaceRoot: workspaceRoot(),
-    onFileScanSettingsChanged: () => restartFileScanReconciler?.(),
-  });
-  // 261105 Batch4-E：自动备份（配置/状态读取 + 保存 + 立即备份 + 只读占用统计）；备份实现见 whenReady 里的调度器。
-  registerBackupIpc(ipc, {
-    // 占用统计只读 stat <userData>/backups（与调度器同一个 backupsDir/轮转口径）。
-    userDataDir: app.getPath("userData"),
-    runner: {
-      getSettings: () => autoBackupRunner?.getSettings() ?? store.getAutoBackupSettings(),
-      getState: () => autoBackupRunner?.getState() ?? store.getAutoBackupState(),
-      saveSettings: (settings) => (autoBackupRunner ?? {
-        saveSettings: (value: typeof settings) => store.saveAutoBackupSettings(value),
-      }).saveSettings(settings),
-      runNow: () => autoBackupRunner?.runNow() ?? Promise.resolve({ state: store.getAutoBackupState(), message: "备份服务未就绪" }),
-    },
-  });
-  // 261105 P1 第 4 项：同步记录账本（设备本地；列表/标已读/恢复动作）。
-  registerSyncConflictIpc(ipc, { store, quickNotes });
-  // 261109 桌面更新中心（读状态/检查/下载/打开安装包/打开下载页/读写设置/忽略版本）。
-  if (!updateService) throw new Error("更新服务未装配");
-  registerUpdateIpc(ipc, { service: updateService });
-  // 261109 桌面 → 手机便携包（docs/PORTABLE-TRANSFER.md）：云开启 + 上轮同步成功 + 无待同步才可用。
-  registerPortableIpc(ipc, {
-    workspaceRoot: () => workspaceRoot(),
-    appVersion: () => app.getVersion(),
-    snapshotDatabases: (targetRoot) => {
-      // 与 A1 整库备份同一套一致性快照口径（VACUUM INTO；独立于运行中的 WAL）。
-      store.backupDatabaseTo(path.join(targetRoot, "metadata.sqlite3"));
-      const quickDir = path.join(targetRoot, "quick-notes");
-      fs.mkdirSync(quickDir, { recursive: true });
-      quickNotes.backupDatabaseTo(path.join(quickDir, "metadata.sqlite3"));
-    },
-    availability: portableIpcAvailability,
-    cloudState: () => {
-      try {
-        const sync = store.getSyncSettings();
-        const status = store.getSyncStatus();
-        const input = {
-          s3Configured: store.getS3Settings() !== null,
-          sync: { enabled: sync.enabled, autoMode: sync.autoMode },
-          lastSyncedAt: status.lastSyncedAt,
-          pending: { documents: 0, folders: 0, quickNotes: 0 },
-        };
-        return { active: portableExportCloudActive(input), lastSyncedAt: status.lastSyncedAt };
-      } catch {
-        return { active: false, lastSyncedAt: null };
-      }
-    },
-    beforeExport: () => runFullSync(broadcastSyncProgress),
-    counts: () => {
-      const overview = store.getStorageOverview();
-      let quickNotesCount = 0;
-      let tagsCount = 0;
-      try { quickNotesCount = quickNotes.countQuickNotes(); } catch { quickNotesCount = 0; }
-      try { tagsCount = quickNotes.tagService.list().length; } catch { tagsCount = 0; }
-      return { folders: overview.notebooks + overview.groups, quickNotes: quickNotesCount, tags: tagsCount };
-    },
-    broadcastProgress: (progress) => broadcastPortableProgress(progress),
-  });
-  return ipc.registry;
 }
 
 // Increase renderer memory limit for large documents with base64 images
@@ -880,7 +651,7 @@ if (!app.requestSingleInstanceLock()) {
         detail: startupDecision.detail,
         dataDir: userDataDir,
         workspacePath: workspaceRoot(),
-        logPath: path.join(userDataDir, "logs", "lakex-local-notes.log"),
+        logPath: logFilePath(),
         // P2-B：与自动备份同一目录口径（<userData>/backups/），恢复页不再展示另一个目录。
         backupDir: path.join(userDataDir, "backups"),
         crashMarker: startupDecision.crashMarker,
@@ -1113,13 +884,36 @@ if (!app.requestSingleInstanceLock()) {
     });
     registerCdnRedirect();
     registerAssetTokenRedirect();
-    startAssetServer(path.join(workspaceRoot(), "note-assets"), vendorCdnDir(), path.join(workspaceRoot(), "quick-notes"), assetToken);
-    const webApiRegistry = registerIpc();
+    startAssetServer(path.join(workspaceRoot(), "note-assets"), vendorCdnDir(APP_DIR), path.join(workspaceRoot(), "quick-notes"), assetToken);
+    // IPC 接线依赖**全部显式传入**（单例仍在 main：token/窗口白名单/定时器/控制器都不搬家）。
+    const webApiRegistry = registerIpc({
+      store,
+      quickNotes,
+      drafts,
+      workspaceRoot: () => workspaceRoot(),
+      enqueueMaintenance,
+      runFullSync,
+      broadcastSyncProgress,
+      broadcastNoteBodyChanged,
+      broadcastPortableProgress,
+      getWebServerController: () => webServerController,
+      getUpdateService: () => updateService,
+      getAutoBackupRunner: () => autoBackupRunner,
+      restartHistoryTimers: () => restartHistoryTimers?.(),
+      restartGcTimers: () => restartGcTimers?.(),
+      restartSyncTimers: () => restartSyncTimers?.(),
+      restartFileScanReconciler: () => restartFileScanReconciler?.(),
+      quickNotesAvailability: () => getQuickNotesAvailability(),
+      validateSender: (frame, sender) => isTrustedSenderFrame(frame, sender),
+      isTrustedWebContents: (id) => trustedWebContents.has(id),
+      getSafeModeState: () => safeModeState,
+      onSafeModeExit: () => { safeModeActive = false; safeModeState = null; },
+    });
     // 浏览器端（桌面附属窗口）：默认不启动（纯内存态，不落盘；每次启动都从关闭开始）。
     // 设置里打开/关闭即时起停服务；只绑 127.0.0.1、不做局域网伺服；复用同一批 IPC handler。
-    serveAppDist(rendererDistDir());
+    serveAppDist(rendererDistDir(APP_DIR));
     webServerController = createWebServerController({
-      distDir: rendererDistDir(),
+      distDir: rendererDistDir(APP_DIR),
       registry: webApiRegistry,
       token: webApiToken,
       assetToken,

@@ -10,6 +10,8 @@ import { readFileSync } from "node:fs";
  * 这些依赖 Electron 运行时（powerMonitor/BrowserWindow），没有单测入口，只能静态锁。
  */
 const main = readFileSync(new URL("./main.ts", import.meta.url), "utf8");
+/** 261112 拆分：IPC 接线装配搬到 electron/boot/ipcWiring.ts（main 只传依赖）。 */
+const ipcWiring = readFileSync(new URL("./boot/ipcWiring.ts", import.meta.url), "utf8");
 const store = readFileSync(new URL("./store.ts", import.meta.url), "utf8");
 const diagnostics = readFileSync(new URL("./diagnostics.ts", import.meta.url), "utf8");
 const reconcile = readFileSync(new URL("./fileMetadataReconcile.ts", import.meta.url), "utf8");
@@ -23,7 +25,11 @@ describe("file metadata reconcile wiring（主进程）", () => {
     expect(main).toContain("intervalHours,");
     // 设置变更后重建对账器（save_file_scan_settings → main 回调）。
     expect(main).toContain("restartFileScanReconciler");
-    expect(main).toContain("registerDataRecoveryIpc(");
+    // 261112 拆分：注册动作在接线层、依赖仍在 main（单一接线点，防两处各注册一次）。
+    expect(ipcWiring).toContain("registerDataRecoveryIpc(");
+    expect(ipcWiring).toContain("onFileScanSettingsChanged: () => deps.restartFileScanReconciler()");
+    expect(main).toContain("restartFileScanReconciler: () => restartFileScanReconciler?.()");
+    expect(main, "注册动作只允许在 boot/ipcWiring.ts 一处").not.toContain("registerDataRecoveryIpc(");
   });
 
   it("P2-B：lastRun 跨重启持久化 + 定时器按到期 sleep（不再每 60s 醒）", () => {
