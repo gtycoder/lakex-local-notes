@@ -444,7 +444,7 @@ SPACE_CAPABILITIES = {
 
 ## 附录 D · R0 执行状态（261112，Work in Progress）
 
-> 本批只执行「不需要用户裁决」的项；**未 commit / 未 push**，等用户验收。
+> 本批只执行「不需要用户裁决」的项；已本地提交四笔（`996b4d6e` docs / `fab629dc` chore / `8e20a6a3` fix / `40e83260` handoff），**未 push**，等用户验收。
 
 **已完成（全部有门禁证据，见 docs/HANDOFF.md §0 该批）**
 - 文档：guide 新增 16/17/18/19 四章 + 全量纠偏；README 文档表收为单一来源入口（指向 HANDOFF §1）；ARCHITECTURE 重写 + STORAGE-LAYERS 按 v3 重写 + TAG/MOBILE-AI/TROUBLESHOOTING/SYNC-DEVICE-CONTRACT/MOBILE-DESIGN 回填；SYNC-PROTOCOL 删 s3v3Gc 死引用；DIARY 修过期口径；HANDOFF 新增批次 + 文档地图 + 基线/风险/待办回写。
@@ -459,4 +459,4 @@ SPACE_CAPABILITIES = {
 - 设备/视觉矩阵：桌面 42 态、手机/平板 10 态、23 屏、windowsweep（本机无夹具/未启动模拟器）。
 - 拆分类（L2）全部推迟：bitableDoc/BitableEditor/QuickNotesWorkspace/Sidebar/SettingsPanel/lakeRuntime/InkPad/electron 大文件。
 
-**门禁实测（本批）**：tsc 0；全量 vitest 874 文件 / 5512 passed / 12 skipped / 0 failed；ui-metrics 66/21；check:core 163/0；双 build + bundle/arch PASS（数字见 HANDOFF §0）；git diff --check 0。
+**门禁实测（本批）**：tsc 0；全量 vitest 874 文件 / 5512 passed / 12 skipped / 0 failed；ui-metrics 66/21；check:core 163/0；双 build + bundle/arch PASS（数字见 HANDOFF §0）；git diff --check 0。已本地提交四笔、未 push（HEAD `40e83260`）。
