@@ -24,12 +24,31 @@ import { assertQuickNoteTagsExist } from "../data/quickNoteTagsRepository.js";
 import { noteBodyPath } from "../data/noteBodies.js";
 import { applyRestoredNoteBody, scanMissingBodies, type MissingBodiesSnapshot } from "../data/missingBodies.js";
 import type { LocalNote } from "../data/noteRepository.js";
+import type { MobileDb } from "../data/sqliteDb.js";
 import * as trashRepository from "../data/trashRepository.js";
 import * as historyRepository from "../data/historyRepository.js";
 import type { HistoryMobileSettings } from "../data/historyRepository.js";
 import * as syncConflictRepository from "../data/syncConflictRepository.js";
 import { downloadDeclaredAssetsFor, ensureAssetsNative, mobileCloudState, syncDomain } from "./sync";
 
+
+/**
+ * 恢复历史版本专用写路径（history / sync-conflict 恢复共用；261112 task-53 修正口径）：
+ * **「恢复历史版本」只写回内容，不改变生命周期**（用户裁决：只有回收站里显式「恢复」才改生命周期）。
+ * 对齐桌面 `NoteContentRepository.restoreHistory`（直接写正文、行仍留在回收站）。
+ *  - 目标已被彻底删除（墓碑 / is_purged）⇒ 明确拒绝「不可恢复」；
+ *  - 目标在回收站 ⇒ 走允许写回收站行的恢复专用写（等价桌面 saveSynced/allowTrashed）：
+ *    只写正文/标题/派生缓存，**不动 trashed_at / parent_id / restore_pending_at**；
+ *  - 其余按普通保存正文（不创建新行；不吞错 —— 失败由调用方转成结构化失败文案）。
+ * 写域：与用户保存同一队列（runWrite("saveNote")），但不经过用户保存守卫。
+ */
+async function saveRestoredSnapshot(d: MobileDb, noteId: string, title: string, content: string): Promise<void> {
+  const purgedMessage = "笔记已被彻底删除（不可恢复），无法恢复历史版本";
+  if (await noteRepository.isTombstoned(d, noteId)) throw new Error(purgedMessage);
+  await runWrite("saveNote", async () => {
+    await noteRepository.saveRestoredNoteContent(d, noteId, title, content);
+  });
+}
 
 export const notesDomain = {
   async readNote(id: string): Promise<LocalNote | null> {
@@ -92,10 +111,14 @@ export const notesDomain = {
       const state = await noteRepository.noteWriteState(d, id);
       if (state === "gone") throw new Error("笔记已在回收站或已被删除，保存被拒绝；请先显式恢复");
       if (state === "missing") {
-        if (await noteRepository.isTombstoned(d, id)) throw new Error("笔记已被彻底删除，保存被拒绝");
+        // 261112 task-56（N5）：与桌面 `electron/noteContentRepository` 的 purged 文案逐字对齐（含「不可恢复」）。
+        if (await noteRepository.isTombstoned(d, id)) throw new Error("笔记已被彻底删除（不可恢复），保存被拒绝；已删除条目不可复原");
         await noteRepository.createNote(d, id, title, content, parentId, assets, plain, kind);
         return;
       }
+      // 261112 task-56（N4）：编辑锁 = 只读。用户保存入口必须明确拒绝（同步专用写/显式恢复不经此守卫）。
+      const lock = await d.prepare("SELECT is_locked FROM notes WHERE id=?").get(id) as { is_locked: number } | undefined;
+      if (lock?.is_locked === 1) throw new Error("文档已锁定（只读），保存被拒绝；请先在桌面端解锁后再编辑");
       await noteRepository.saveNote(d, id, title, content, parentId, assets, plain);
     });
   },
@@ -110,8 +133,8 @@ export const notesDomain = {
     const d = await ensureDb();
     const note = await noteRepository.readNote(d, id);
     if (!note) throw new Error("笔记不存在");
-    const row = await d.prepare("SELECT is_dirty, is_purged, is_conflict, updated_at FROM notes WHERE id=?").get(id) as
-      { is_dirty: number; is_purged: number; is_conflict: number; updated_at: string } | undefined;
+    const row = await d.prepare("SELECT is_dirty, is_purged, is_conflict, updated_at, is_locked, locked_at FROM notes WHERE id=?").get(id) as
+      { is_dirty: number; is_purged: number; is_conflict: number; updated_at: string; is_locked: number; locked_at: string | null } | undefined;
     // 与搜索索引共用同一条按 kind 分派的派生口径；表格/多维表/画板正文是 JSON，不能喂 Lake HTML 解析器。
     const plain = searchTextForKind(note.kind, note.content).plain ?? "";
     // 字数/字符数 = 与内核 wordCount 同语义的单一来源（261016，B1；此前这里另写了一套正则）。
@@ -152,7 +175,9 @@ export const notesDomain = {
       isDirty: row ? row.is_dirty === 1 : true,
       isPurged: row?.is_purged === 1,
       isConflict: Boolean(row?.is_conflict),
-      isEditLocked: false,
+      // 261112 task-56（N4）：锁字段必须透出（此前硬编码 false ⇒ 移动端完全不知道文档被锁）。
+      isEditLocked: row?.is_locked === 1,
+      editLockedAt: row?.locked_at ?? null,
       lakePath: noteBodyPath(note.kind, note.id),
       assetsDir: `note-assets/${id}`,
       sizeBytes: new TextEncoder().encode(note.content).length,
@@ -175,9 +200,11 @@ export const notesDomain = {
     const d = await ensureDb();
     const mobileDb = d;
     const snapshot = await historyRepository.readHistory(mobileDb, historyId);
-    if (!snapshot) return;
+    // 不得静默失败（task-53）：快照已被清理/文件缺失时与桌面一样明确报错，而不是无声返回。
+    if (!snapshot) throw new Error("历史快照已过期或被清理，无法恢复");
     await historyRepository.backupCurrentNote(mobileDb, snapshot.noteId);
-    await notesDomain.saveNote(snapshot.noteId, snapshot.title, snapshot.content);
+    // task-53：恢复专用写（回收站中的目标先出回收站再写正文；不复用用户保存守卫）。
+    await saveRestoredSnapshot(mobileDb, snapshot.noteId, snapshot.title, snapshot.content);
   },
 
   async deleteHistory(historyId: number): Promise<void> {
@@ -280,7 +307,8 @@ export const notesDomain = {
       const snapshot = await historyRepository.readHistory(d, historyId);
       if (!snapshot) return { ok: false, reason: "history-expired", message: "历史快照已过期或被清理，无法恢复" };
       await historyRepository.backupCurrentNote(d, snapshot.noteId);
-      await notesDomain.saveNote(snapshot.noteId, snapshot.title, snapshot.content);
+      // task-53：同上 —— 恢复是显式例外；目标在回收站时先恢复行（离开回收站）再写正文。
+      await saveRestoredSnapshot(d, snapshot.noteId, snapshot.title, snapshot.content);
       await syncConflictRepository.markSyncConflictResolved(d, id, "restored");
       return { ok: true, noteId: row.noteId, restoredFromHistory: true };
     } catch (error) {

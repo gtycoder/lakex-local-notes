@@ -740,7 +740,19 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
    * 日记条目 → 现有工作区（261109）。**不新造编辑面**：正文输入仍走工作区 + dock。
    * 直接带 notebookId 进路由（不走 openNote 的祖先回溯）：当天日记刚被 ensure 建出来时，首页快照里还没有它。
    */
-  const openDiaryEntry = useCallback((input: { noteId: string; notebookId: string; mode: "viewer" | "editor" }) => {
+  const openDiaryEntry = useCallback(async (input: { noteId: string; notebookId: string; mode: "viewer" | "editor" }) => {
+    // 261112 task-55（M1）：日记条目也是「打开文档」入口 ⇒ 必须先过 AGENTS §3#16 的 gone 判据
+    // （本机回收站 / 被他端 purge）：进只读预览 + 横幅，绝不静默打开一条已删的陈旧条目。
+    const state = await bridge.noteGoneState(input.noteId).catch(() => null);
+    if (!state) {
+      showToast("日记不存在（可能已被删除）", { type: "error" });
+      void refreshAll().catch(() => undefined);
+      return;
+    }
+    if (isGoneNote({ parentId: state.parentId, syncState: state.syncState })) {
+      setTrashPreviewId(input.noteId);
+      return;
+    }
     // 记录来源页 = 日记 ⇒ 关闭/返回（页面返回或安卓返回键，两条都走 useRouteTransition.onClosed）回日记页签。
     workspaceOriginTabRef.current = "diary";
     setRoute({ kind: "notebook", notebookId: input.notebookId, initialNoteId: input.noteId, initialMode: input.mode });

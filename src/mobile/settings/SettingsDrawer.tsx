@@ -8,6 +8,7 @@ import { Archive, ArrowLeft, ChevronRight, Cloud, Download, HardDrive, Images, L
 import { loadSettings, saveSettings, fontSizeOptions, MAX_ATTACHMENT_MB_OPTIONS_SETTINGS, MAX_OPEN_TAB_OPTIONS, type AppSettings } from "../../lib/settings";
 import { Group, Item, Block, Switch, TextField, Field } from "../ui/settingsPrimitives";
 import { bridge } from "../bridge";
+import { syncWarningCopy, syncWarningRows, syncWarningSummary, syncWarningSummaryText, syncWarningTitle } from "../../core/syncWarningText";
 import { confirmMobile } from "../ui/ConfirmDialog";
 import { PickerSheet } from "../ui/PickerSheet";
 import { SYNC_AUTO_MODE_OPTIONS, SYNC_OPEN_CLOSE_NOTE, syncIntervalOptions } from "../../core/syncModes";
@@ -520,20 +521,22 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                   )}
                   {syncWarnings.length > 0 && (
                     <div className="mb-set-block">
-                      <div className="mb-set-block__name">同步有 {syncWarnings.length} 项被跳过</div>
-                      <div className="mb-set-item__desc">远端缺少对象/资源或文件名不合法的条目已跳过；本地内容未改动。可重试类会在下次同步重试，文件名不合法需改名后再同步。</div>
+                      {/* 261112 task-56：文案/重试语义单一来源 = core/syncWarningText（不再手写一份）。 */}
+                      <div className="mb-set-block__name">{syncWarningSummaryText(syncWarningSummary(syncWarnings))}</div>
                       <div className="mb-list" role="list">
-                        {syncWarnings.map((w, i) => {
+                        {syncWarningRows(syncWarnings).map((w, i) => {
                           // 只有「正文缺失」类警告才给「去恢复」入口；资源类（asset_missing / asset_kept_remote /
                           // asset_invalid_name 等）一律按附件行展示，别把文件名问题误报成正文缺失。
+                          // 文案/顺序/可重试语义全部来自 core/syncWarningText（需处理在前）。
+                          const copy = syncWarningCopy(w.kind);
                           const missingBody = w.kind === "local_body_missing" || w.kind === "local_body_restored";
-                          const title = w.title || w.noteId || "未命名文档";
+                          const title = syncWarningTitle(w);
                           // 缺正文行给「去恢复」入口：正文文件不在，点开文档只会被拦，直接跳资源管理的清单。
                           if (missingBody) {
                             return (
                               <div key={`${w.kind}-${w.noteId ?? i}`} className="mb-row">
                                 <span className="mb-row__title mb-ellipsis">{title}</span>
-                                <span className="mb-row__meta">正文缺失</span>
+                                <span className="mb-row__meta">{copy.label}</span>
                                 <button className="mb-btn mb-btn--outlined" onClick={() => { setView("resources"); void missingBodies.reload(); }}>去恢复</button>
                               </div>
                             );
@@ -547,9 +550,9 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                               onClick={() => { if (w.noteId) onOpenNote?.(w.noteId); }}
                             >
                               <span className="mb-list-item__text mb-ellipsis">{title}</span>
-                              <span className="mb-list-item__meta">
-                                {w.kind === "asset_invalid_name" ? `${w.filename ?? "附件"}（文件名不支持同步）` : w.filename ?? "资源缺失"}
-                              </span>
+                              <span className="mb-list-item__meta">{copy.label}{w.filename ? "：" + w.filename : ""}</span>
+                              {/* hint 逐项可见：可重试与需人工处理不再共用一句笼统说明。 */}
+                              <span className="mb-set-item__desc">{copy.hint}</span>
                             </button>
                           );
                         })}

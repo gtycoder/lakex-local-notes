@@ -28,6 +28,9 @@ export interface LocalNote {
   kind: NoteKind;
   /** 远端已彻底删除、本机仅保留回收站副本（「云端已删除 · 仅本地」）；恢复上传成功后清除。 */
   cloudDeleted?: boolean;
+  /** 编辑锁（桌面端锁定 = 只读；移动端必须同语义拦截编辑/保存）。 */
+  editLocked?: boolean;
+  editLockedAt?: string | null;
 }
 
 /** 列表页只需要元数据；正文在 readNote() 打开文档时按需读取。 */
@@ -45,6 +48,8 @@ function rowToNote(r: Record<string, unknown>, content: string): LocalNote {
     id: String(r.id), title: String(r.title), content, updatedAt: String(r.updated_at), parentId: r.parent_id ? String(r.parent_id) : null,
     kind: normalizeNoteKind(r.doc_kind),
     ...(Number(r.cloud_deleted) === 1 ? { cloudDeleted: true } : {}),
+    ...(Number(r.is_locked) === 1 ? { editLocked: true } : {}),
+    ...(r.locked_at ? { editLockedAt: String(r.locked_at) } : {}),
   };
 }
 
@@ -121,7 +126,7 @@ export async function listNotes(d: MobileDb): Promise<LocalNoteSummary[]> {
 }
 
 export async function readNote(d: MobileDb, id: string): Promise<LocalNote | null> {
-  const row = await d.prepare("SELECT id, title, updated_at, parent_id, doc_kind, cloud_deleted FROM notes WHERE id = ?").get(id);
+  const row = await d.prepare("SELECT id, title, updated_at, parent_id, doc_kind, cloud_deleted, is_locked, locked_at FROM notes WHERE id = ?").get(id);
   if (!row) return null;
   const kind = normalizeNoteKind(row.doc_kind);
   const content = await readNoteBody(kind, id);
@@ -275,12 +280,44 @@ export async function saveNote(
   return true;
 }
 
+/**
+ * 恢复历史快照专用写（261112 task-53 修正口径）：**只写内容，不动生命周期**。
+ * 与 saveNote 的差异 = 允许写「已进回收站」的行（对齐桌面 NoteContentRepository.saveSynced/allowTrashed）：
+ * 回收站行的 trashed_at / parent_id / restore_pending_at **原样保留**；purged 仍拒绝（不可复活）。
+ * 「恢复历史版本」是内容动作；改变生命周期只能由回收站里显式「恢复」入口做（用户裁决）。
+ */
+export async function saveRestoredNoteContent(d: MobileDb, id: string, title: string, content: string): Promise<void> {
+  const existing = await d.prepare("SELECT doc_kind, trashed_at, is_purged FROM notes WHERE id=?").get(id) as
+    | { doc_kind?: string | null; trashed_at: string | null; is_purged: number }
+    | undefined;
+  if (!existing) throw new Error("笔记不存在，无法恢复历史版本");
+  if (existing.is_purged === 1) throw new Error("笔记已被彻底删除（不可恢复），无法恢复历史版本");
+  const kind = normalizeNoteKind(existing.doc_kind);
+  const now = new Date().toISOString();
+  const safeTitle = title.trim() ? title.trim() : "无标题文档";
+  const bodyPlain = searchTextForKind(kind, content).plain ?? "";
+  await writeNoteBody(kind, id, content);
+  const changed = (await d.prepare(
+    "UPDATE notes SET title=?, updated_at=?, content_hash=?, is_dirty=1, text_cache=? WHERE id=?",
+  ).run(safeTitle, now, sha256Sync(new TextEncoder().encode(content)), bodyPlain, id)).changes;
+  if (changed === 0) throw new Error("笔记状态已变化，恢复历史版本失败");
+  // 回收站行不重建派生索引（trashNote 已把它移出 FTS；显式回收站恢复入口会 reconcileIndex）；
+  // 活跃行与普通保存同口径补索引/孤儿扫描。
+  if (existing.trashed_at == null) {
+    await detectOrphans(d, id, content, new Map());
+    await indexNote(d, id);
+  }
+}
+
 /** 本地软删（入回收站）：同步时上传墓碑（删除压编辑）。 */
 export async function trashNote(d: MobileDb, id: string): Promise<void> {
   // 261026：软删必须 bump updated_at —— v3 索引的 trashedAt/恢复靠 updatedAt 做 LWW 传播；
   // 不 bump 时对端看到的 updatedAt 没变，回收站状态永远同步不过去（conformance 抓到）。
   const now = new Date().toISOString();
-  await d.prepare("UPDATE notes SET trashed_at=?, updated_at=?, is_dirty=1, restore_pending_at=NULL WHERE id=?").run(now, now, id);
+  // 261112 task-55（N2）：软删必须记「删除前父」——恢复原路返回、跨端恢复位置都依赖它（桌面同语义）。
+  await d.prepare(
+    "UPDATE notes SET trashed_at=?, updated_at=?, is_dirty=1, restore_pending_at=NULL, deleted_from_parent_id=COALESCE(deleted_from_parent_id, parent_id) WHERE id=?",
+  ).run(now, now, id);
   await removeNoteFromIndex(d, id);
 }
 

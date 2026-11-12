@@ -51,6 +51,12 @@ export function NotePaneHost(props: NotePaneHostProps) {
     {tabs.map((t) => (!mountedIds.has(t.id) ? null : (
       <div key={t.id} className={"doc-pane" + (t.id === activeId ? " active" : "") + (t.id === freshId ? " doc-pane--fresh" : "")}>
         <>
+        {/* 261112 task-56（N4）：编辑锁 = 只读横幅（桌面端锁定的文档在移动端也必须可见、可理解）。 */}
+        {t.editLocked && (
+          <div className="mobile-status-msg" role="status">
+            该文档已在桌面端锁定（只读）：可以阅读，不能编辑或保存。在桌面端解锁后回到这里即可编辑。
+          </div>
+        )}
         {/* 标题只在顶栏（思源 #toolbarName 口径）；正文区不再重复一个标题输入框 */}
         {t.kind === "board" ? (
           // 画板：移动端查看/编辑（同一套 Drawnix 引擎；正文只进画板实例，绝不喂 Lake 编辑器）
@@ -58,7 +64,7 @@ export function NotePaneHost(props: NotePaneHostProps) {
             noteId={t.id}
             content={t.content}
             active={t.id === activeId}
-            editing={t.editing}
+            editing={t.editing && !t.editLocked}
             onChange={(c) => { props.onBodyChange(t, c); }}
             onCapture={(capture) => { props.onCapture(t.id, capture); }}
           />
@@ -68,7 +74,7 @@ export function NotePaneHost(props: NotePaneHostProps) {
               noteId={t.id}
               content={t.content}
               active={t.id === activeId}
-              readOnly={!t.editing}
+              readOnly={!t.editing || t.editLocked === true}
               onChange={(c) => props.onBodyChange(t, c)}
               // 与 board/usheet 同一条写边界：完成编辑/退出前现取实例正文（绕过 500ms 防抖）。
               onEditorCapture={(capture) => { props.onCapture(t.id, capture); }}
@@ -81,7 +87,7 @@ export function NotePaneHost(props: NotePaneHostProps) {
             <MobileBitableViewer
               noteId={t.id}
               content={t.content}
-              editing={t.editing && t.id === activeId}
+              editing={t.editing && t.id === activeId && !t.editLocked}
               onChange={(c) => { props.onBodyChange(t, c); }}
               // 只读文档里提交表单必须真正落盘（不走「编辑态才自动保存」的防抖路径）：
               // 与「完成编辑」同一条写边界（bridge.saveNote），失败抛出由 viewer 提示。
@@ -97,7 +103,7 @@ export function NotePaneHost(props: NotePaneHostProps) {
               noteId={t.id}
               content={t.content}
               active={t.id === activeId}
-              editing={t.editing}
+              editing={t.editing && !t.editLocked}
               onChange={(c) => { props.onBodyChange(t, c); }}
               onCapture={(capture) => { props.onCapture(t.id, capture); }}
             />
@@ -111,7 +117,7 @@ export function NotePaneHost(props: NotePaneHostProps) {
         <DocumentEditor
           note={{ id: t.id, title: t.title, content: t.content } as LocalNote}
           content={t.content}
-          editing={t.editing}
+          editing={t.editing && !t.editLocked}
           onContentChange={(c, plain) => props.onBodyChange(t, c, plain)}
           documents={[]}
           hidePanels

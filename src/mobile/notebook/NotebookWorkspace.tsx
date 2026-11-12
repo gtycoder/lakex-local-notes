@@ -143,6 +143,8 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     onReadError: reportReadError,
     onMissing: reportReadMissing,
     onDrop: dropTabResources,
+    // 261112 task-56（N4）：桌面端锁定的文档在移动端只读；用户点编辑 ⇒ 可见提示（不静默）。
+    onLockedEdit: () => showToast("文档已在桌面端锁定（只读），不能编辑；请先在桌面端解锁", { type: "info" }),
   });
 
   /**

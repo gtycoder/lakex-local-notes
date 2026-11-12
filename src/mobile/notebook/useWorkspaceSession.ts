@@ -6,6 +6,7 @@ import { reportMobileActionError } from "../lib/reportMobileActionError";
 import { successFeedback } from "../ui/haptics";
 import type { NotebookTab } from "./useNotebookTabs";
 import { toastActionError } from "../lib/actionError";
+import { showToast } from "../ui/toastBus";
 
 /**
  * 工作区「会话与保存屏障」逻辑（261103 P10-①，原 NotebookWorkspace 内联代码逐字搬移，未改行为）：
@@ -150,6 +151,11 @@ export function useWorkspaceSession(options: UseWorkspaceSessionOptions) {
 
   const toggleEdit = useCallback(async () => {
     if (!active?.loaded) return;
+    // 261112 task-56（N4）：编辑锁 = 只读（桌面端锁定）。入口统一拦在这里，文案明说怎么解锁。
+    if (active.editLocked) {
+      showToast("文档已在桌面端锁定（只读），不能编辑；请先在桌面端解锁", { type: "info" });
+      return;
+    }
     // usheet / board / ink 的正文在实例里；完成时同步 capture，不能只读父级 state
     // （可能还在 500ms/1s 防抖窗口内 —— 手写板「切完纸张立刻点完成」就会丢最后一笔纸张改动）。
     const captured = active.kind === "usheet" || active.kind === "board" || active.kind === "ink"

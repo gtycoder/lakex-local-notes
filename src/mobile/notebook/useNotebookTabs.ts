@@ -13,6 +13,8 @@ export interface NotebookTab {
   loaded: boolean;
   lastAccessedAt: number;
   kind: NoteKind;
+  /** 编辑锁（桌面端锁定）：移动端必须只读 —— 强制退出编辑态、不给编辑入口（task-56 N4）。 */
+  editLocked?: boolean;
 }
 
 export interface OpenNotebookTabOptions {
@@ -87,6 +89,8 @@ interface UseNotebookTabsOptions {
   onMissing: (id: string) => void;
   /** 编辑器实例、capture 等 tab 外部资源；关闭或 LRU 淘汰时同步释放。 */
   onDrop?: (id: string) => void;
+  /** 尝试编辑一篇「已锁定（桌面端锁）」的文档：宿主给可见提示（不静默）。 */
+  onLockedEdit?: (id: string) => void;
 }
 
 /** NotebookWorkspace 的标签会话所有者：tabs / active / loaded / mounted / LRU / 关闭全部。 */
@@ -128,6 +132,7 @@ export function useNotebookTabs(opts: UseNotebookTabsOptions) {
   const onReadErrorRef = useRef(opts.onReadError);
   const onMissingRef = useRef(opts.onMissing);
   const onDropRef = useRef(opts.onDrop);
+  const onLockedEditRef = useRef(opts.onLockedEdit);
 
   tabsRef.current = tabs;
   activeIdRef.current = activeId;
@@ -136,6 +141,7 @@ export function useNotebookTabs(opts: UseNotebookTabsOptions) {
   onReadErrorRef.current = opts.onReadError;
   onMissingRef.current = opts.onMissing;
   onDropRef.current = opts.onDrop;
+  onLockedEditRef.current = opts.onLockedEdit;
 
   /** 只给真正激活的标签读正文；恢复历史标签时先建占位，不并发预读。 */
   const loadTabBody = useCallback((id: string, force = false): Promise<void> => {
@@ -158,8 +164,17 @@ export function useNotebookTabs(opts: UseNotebookTabsOptions) {
       }
       setFreshId(id);
       window.setTimeout(() => setFreshId((cur) => (cur === id ? null : cur)), 260);
+      // 261112 task-56（N4）：锁信息在正文读出后才知道 ⇒ 一旦锁定就强制退出编辑态并给可见提示。
+      if (note.editLocked) {
+        const wasEditing = tabsRef.current.find((tab) => tab.id === id)?.editing === true;
+        if (wasEditing) onLockedEditRef.current?.(id);
+      }
       setTabs((prev) => prev.map((tab) => tab.id === id
-        ? { ...tab, title: note.title, content: note.content, kind: note.kind, loaded: true, lastAccessedAt: Date.now() }
+        ? {
+            ...tab, title: note.title, content: note.content, kind: note.kind, loaded: true, lastAccessedAt: Date.now(),
+            editLocked: note.editLocked === true,
+            editing: note.editLocked ? false : tab.editing,
+          }
         : tab));
     }).catch((reason) => {
       onReadErrorRef.current(reason);
@@ -181,7 +196,12 @@ export function useNotebookTabs(opts: UseNotebookTabsOptions) {
       const existing = prev.find((tab) => tab.id === id);
       const next = existing
         ? prev.map((tab) => tab.id === id
-          ? { ...tab, editing: enterEditor ? true : tab.editing, lastAccessedAt: Date.now() }
+          ? {
+              ...tab,
+              // 已锁定（已知）的文档不允许进入编辑态：提示由宿主给，这里保持只读。
+              editing: enterEditor ? (tab.editLocked ? false : true) : tab.editing,
+              lastAccessedAt: Date.now(),
+            }
           : tab)
         : [...prev, {
             id,
@@ -201,6 +221,10 @@ export function useNotebookTabs(opts: UseNotebookTabsOptions) {
       const evictedSet = new Set(evicted);
       return next.filter((tab) => !evictedSet.has(tab.id));
     });
+    if (enterEditor) {
+      const known = tabsRef.current.find((tab) => tab.id === id);
+      if (known?.editLocked) onLockedEditRef.current?.(id);
+    }
     return load ? loadTabBody(id) : Promise.resolve();
   }, [loadTabBody]);
 

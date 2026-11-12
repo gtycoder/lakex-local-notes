@@ -25,6 +25,7 @@ vi.mock("../native/assetFs", () => ({
 import { SqlJsAsyncDb, SqlJsDb, type MobileDb } from "../data/sqliteDb.js";
 import { applyMobileSchema } from "../data/schema.js";
 import { MobileDeviceStore } from "./mobileDeviceStore.js";
+import { createMobilePlatformPort } from "./mobilePlatformPort.js";
 import { sha256Sync } from "../../core/sha256Sync.js";
 import type { DeviceState } from "../../core/s3v3DeviceStore.js";
 
@@ -118,4 +119,69 @@ describe("移动写侧批量窗口（E2-4 phase C-3b-2）", () => {
     expect(((await db.prepare("SELECT cloud_deleted FROM quick_notes WHERE id=?").get("q1")) as { cloud_deleted: number }).cloud_deleted).toBe(0);
     await db.close();
   }, 120_000);
+});
+describe("staged 正文应用的回收站父归一（261112 task-55 N1：移动端不能把 notebook-trash 写进普通父列）", () => {
+  const stagedNote = (over: Record<string, unknown>) => ({
+    id: "t1", title: "回收站条目", parentId: "notebook-trash", sortOrder: 0,
+    updatedAt: "2026-11-12T00:00:00.000Z", contentHash: "hash-t1", isConflict: false,
+    isEditLocked: false, editLockedAt: null, icon: null,
+    trashedAt: "2026-11-12T00:00:00.000Z", deletedFromParentId: null, kind: "doc", ...over,
+  }) as never;
+
+  it("trashed 条目：父取 deletedFromParentId（不是回收站容器 id）", async () => {
+    const { db } = await freshStore();
+    const t = "2026-11-12T00:00:00.000Z";
+    await db.prepare(
+      "INSERT INTO notes (id,title,parent_id,updated_at,created_at,content_hash,is_dirty,text_cache,doc_kind,trashed_at,deleted_from_parent_id) VALUES ('t1','回收站条目','nb1',?,?,?,1,NULL,'doc',?,'nb1')",
+    ).run(t, t, "hash-old", t);
+    const port = createMobilePlatformPort(db);
+    await port.applyStagedBodyNote!(stagedNote({ deletedFromParentId: "nb1" }));
+    const row = await db.prepare("SELECT parent_id, trashed_at FROM notes WHERE id='t1'").get() as { parent_id: string | null; trashed_at: string | null };
+    expect(row.parent_id).toBe("nb1");
+    expect(row.trashed_at).toBe(t);
+    await db.close();
+  }, 60_000);
+
+  it("trashed 条目且 deletedFromParentId 缺失：保留现有父，绝不让容器 id 落库", async () => {
+    const { db } = await freshStore();
+    const t = "2026-11-12T00:00:00.000Z";
+    await db.prepare(
+      "INSERT INTO notes (id,title,parent_id,updated_at,created_at,content_hash,is_dirty,text_cache,doc_kind,trashed_at,deleted_from_parent_id) VALUES ('t1','回收站条目','nb2',?,?,?,1,NULL,'doc',?,NULL)",
+    ).run(t, t, "hash-old", t);
+    const port = createMobilePlatformPort(db);
+    await port.applyStagedBodyNote!(stagedNote({}));
+    const row = await db.prepare("SELECT parent_id FROM notes WHERE id='t1'").get() as { parent_id: string | null };
+    expect(row.parent_id).toBe("nb2");
+    expect(row.parent_id).not.toBe("notebook-trash");
+    await db.close();
+  }, 60_000);
+});
+
+describe("trashed 行元数据全写（261112 task-56 N3：内容级字段对齐桌面，位置三件套不动）", () => {
+  it("回收站行 applyRemoteNoteMeta：标题/排序/更新时间/图标/锁落库；parent 与 trashed_at 原样", async () => {
+    const { db } = await freshStore();
+    const t = "2026-11-12T00:00:00.000Z";
+    const t2 = "2026-11-12T01:00:00.000Z";
+    await db.prepare(
+      "INSERT INTO notes (id,title,parent_id,updated_at,created_at,content_hash,is_dirty,text_cache,doc_kind,trashed_at,deleted_from_parent_id) VALUES ('t1','旧标题','nb1',?,?,?,1,NULL,'doc',?,'nb1')",
+    ).run(t, t, "hash-old", t);
+    const port = createMobilePlatformPort(db);
+    await port.applyRemoteNoteMeta({
+      id: "t1", title: "新标题", parentId: "notebook-trash", sortOrder: 7, updatedAt: t2,
+      contentHash: "hash-old", isConflict: false, isEditLocked: true, editLockedAt: t2,
+      icon: "📄", trashedAt: t, deletedFromParentId: "nb1", kind: "doc",
+    } as never);
+    const row = await db.prepare("SELECT title,parent_id,trashed_at,deleted_from_parent_id,updated_at,sort_order,icon,is_locked,locked_at FROM notes WHERE id='t1'").get() as Record<string, unknown>;
+    expect(row.title).toBe("新标题");
+    expect(row.sort_order).toBe(7);
+    expect(row.updated_at).toBe(t2);
+    expect(row.icon).toBe("📄");
+    expect(row.is_locked).toBe(1);
+    expect(row.locked_at).toBe(t2);
+    // 位置三件套保持（移动端回收站模型；容器 id 不落普通父列）
+    expect(row.parent_id).toBe("nb1");
+    expect(row.trashed_at).toBe(t);
+    expect(row.deleted_from_parent_id).toBe("nb1");
+    await db.close();
+  }, 60_000);
 });

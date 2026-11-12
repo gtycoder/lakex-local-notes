@@ -224,6 +224,15 @@ async function persistQuickNoteContent(
   draft: { text: string; body: string; images: StoredQuickNoteImage[] },
   previous: { raw: string | null; parsed: StoredQuickNoteContent | null },
 ): Promise<void> {
+  // 261112 task-55（M2，用户裁决 B）：陈旧编辑器保存**已删小记**必须拒绝并明说 —— 不得静默复活。
+  // 场景：编辑器打开后该小记在别处被删除/被他端同步删除（deleted_at 非空）或已彻底删除（墓碑），
+  // 用户再点保存。旧实现的 ON CONFLICT 会把 deleted_at 清空 = 默默复活一条已删小记。
+  const existing = await d.prepare("SELECT deleted_at FROM quick_notes WHERE id=?").get(id) as { deleted_at: string | null } | undefined;
+  if (existing?.deleted_at != null) {
+    throw new Error("小记已在回收站或被删除（可能在其它设备删除），保存被拒绝；请先在「设置 → 回收站」恢复后再编辑");
+  }
+  const tombstone = await d.prepare("SELECT 1 FROM quick_note_deleted WHERE id=?").get(id);
+  if (tombstone) throw new Error("小记已被彻底删除（不可恢复），保存被拒绝");
   const now = new Date().toISOString();
   const content = normalizeQuickNoteContent(draft.text, draft.body, draft.images);
   const serialized = serializeQuickNoteContent(content);

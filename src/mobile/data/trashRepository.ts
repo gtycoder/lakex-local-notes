@@ -2,10 +2,14 @@ import { sqlParameterBatches } from "../../core/sqlParameterBatch.js";
 import { executeBatchInTransaction, type MobileBatchStatement, type MobileDb } from "./sqliteDb";
 import { deleteNoteBodies, deleteHistorySnapshot } from "./noteBodies.js";
 import { removeNoteAssetsDirFs } from "../native/assetFs";
+import { TRASH_NOTEBOOK_ID } from "../../core/syncDecisions.js";
 
 interface ParentedNode {
   id: string;
   parent_id: string | null;
+  /** 删除前原始父（回收站平铺后仍保留）：purge/restore 收集塌陷子树时与 parent 一起作为边。 */
+  deleted_from_parent_id?: string | null;
+  trashed_at?: string | null;
 }
 
 interface SubtreeIds {
@@ -31,6 +35,16 @@ function collectSubtree(folders: ParentedNode[], notes: ParentedNode[], rootId: 
   }
   for (const note of notes) {
     if (note.parent_id) addChild(note.parent_id, note.id, "note");
+  }
+  // F-01 同类防护（261112 P0，与桌面 trashLifecycle.purgeSubtreeIds 同口径）：回收站子树可能被同步
+  // 「扁平化」——子文档 parent 归一成回收站容器/空，原始父只剩 deleted_from_parent_id。只按 parent_id
+  // 遍历会漏掉这些后代 ⇒ purge 只删根、子文档残留并继续以 trashed 条目发布。这里把原始父链也当作一条边
+  // （仅对 trashed 行；visited 去重 + MAX_SUBTREE_NODES 上限保证收敛）。
+  for (const folder of folders) {
+    if (folder.trashed_at && folder.deleted_from_parent_id) addChild(folder.deleted_from_parent_id, folder.id, "folder");
+  }
+  for (const note of notes) {
+    if (note.trashed_at && note.deleted_from_parent_id) addChild(note.deleted_from_parent_id, note.id, "note");
   }
 
   const rootNode = folders.find((node) => node.id === rootId) ?? notes.find((node) => node.id === rootId);
@@ -62,12 +76,15 @@ export async function trashTreeItem(d: MobileDb, id: string, kind: "folder" | "n
   await d.transaction(async () => {
     const now = new Date().toISOString();
     if (kind === "note") {
-      await d.prepare("UPDATE notes SET trashed_at=?, is_dirty=1, restore_pending_at=NULL WHERE id=?").run(now, id);
+      // 261112 task-55（N2）：记「删除前父」（恢复原路返回 / 跨端恢复位置都依赖它）。
+      await d.prepare(
+        "UPDATE notes SET trashed_at=?, is_dirty=1, restore_pending_at=NULL, deleted_from_parent_id=COALESCE(deleted_from_parent_id, parent_id) WHERE id=?",
+      ).run(now, id);
       return;
     }
 
-    const allFolders = await d.prepare("SELECT id, parent_id FROM folders").all() as Array<{ id: string; parent_id: string | null }>;
-    const allNotes = await d.prepare("SELECT id, parent_id FROM notes").all() as Array<{ id: string; parent_id: string | null }>;
+    const allFolders = await d.prepare("SELECT id, parent_id, deleted_from_parent_id, trashed_at FROM folders").all() as Array<{ id: string; parent_id: string | null }>;
+    const allNotes = await d.prepare("SELECT id, parent_id, deleted_from_parent_id, trashed_at FROM notes").all() as Array<{ id: string; parent_id: string | null }>;
     const subtree = collectSubtree(allFolders, allNotes, id);
     const folderIdList = Array.from(subtree.folderIds);
     if (folderIdList.length === 0) return;
@@ -87,7 +104,8 @@ export async function trashTreeItem(d: MobileDb, id: string, kind: "folder" | "n
     }
     for (const n of noteRows) {
       statements.push({
-        statement: "UPDATE notes SET trashed_at=?, is_dirty=1, restore_pending_at=NULL, updated_at=? WHERE id=?",
+        // 261112 task-55（N2）：子树软删同样记「删除前父」。
+        statement: "UPDATE notes SET trashed_at=?, is_dirty=1, restore_pending_at=NULL, deleted_from_parent_id=COALESCE(deleted_from_parent_id, parent_id), updated_at=? WHERE id=?",
         values: [now, now, n.id],
       });
     }
@@ -190,6 +208,9 @@ async function resolveRestoreParent(
   restoringFolderIds: ReadonlySet<string> = new Set(),
   title = "",
 ): Promise<string | null> {
+  // 261112 task-55 防御性归一（不写数据迁移）：历史损坏行可能把回收站容器 id 当普通父存在（旧 staged 路径）。
+  // 读到它一律按「无原父」处理 ⇒ 回落日记本/兜底笔记本，绝不让恢复卡在不存在的目录上。
+  if (preferred === TRASH_NOTEBOOK_ID) preferred = null;
   if (preferred) {
     // 本次一起恢复的子树成员还没落库（trashed_at 仍是删除时的值）⇒ 视为可用，否则嵌套组/子文档会被拆散。
     if (restoringFolderIds.has(preferred)) return preferred;
@@ -223,8 +244,8 @@ export async function restoreTreeItem(
   if (kind === "note") {
     restoreNoteIds = [id];
   } else {
-    const allFolders = await d.prepare("SELECT id, parent_id FROM folders").all() as Array<{ id: string; parent_id: string | null }>;
-    const allNotes = await d.prepare("SELECT id, parent_id FROM notes").all() as Array<{ id: string; parent_id: string | null }>;
+    const allFolders = await d.prepare("SELECT id, parent_id, deleted_from_parent_id, trashed_at FROM folders").all() as Array<{ id: string; parent_id: string | null }>;
+    const allNotes = await d.prepare("SELECT id, parent_id, deleted_from_parent_id, trashed_at FROM notes").all() as Array<{ id: string; parent_id: string | null }>;
     const subtree = collectSubtree(allFolders, allNotes, id);
     folderIds = Array.from(subtree.folderIds);
     restoreNoteIds = [];
@@ -247,7 +268,7 @@ export async function restoreTreeItem(
     const row = await d.prepare("SELECT COALESCE(deleted_from_parent_id, parent_id) AS pid, title FROM notes WHERE id=?").get(id) as { pid?: string | null; title?: string } | undefined;
     const parentId = await resolveRestoreParent(d, row?.pid ?? null, new Set(folderIds), row?.title ?? "");
     await d.prepare(
-      "UPDATE notes SET parent_id=?, trashed_at=NULL, restore_pending_at=?, is_dirty=1, updated_at=? WHERE id=?"
+      "UPDATE notes SET parent_id=?, trashed_at=NULL, restore_pending_at=?, is_dirty=1, updated_at=?, deleted_from_parent_id=NULL WHERE id=?"
     ).run(parentId, now, now, id);
     return;
   }
@@ -270,7 +291,7 @@ export async function restoreTreeItem(
     for (const nid of restoreNoteIds) {
       // 子树内 notes：applyRemoteFolderDelete 会把子笔记 parent 移到 TRASH 容器 → 恢复时一并移回原父
       statements.push({
-        statement: "UPDATE notes SET parent_id=COALESCE(deleted_from_parent_id, parent_id), trashed_at=NULL, restore_pending_at=?, is_dirty=1, updated_at=? WHERE id=?",
+        statement: "UPDATE notes SET parent_id=COALESCE(deleted_from_parent_id, parent_id), trashed_at=NULL, restore_pending_at=?, is_dirty=1, updated_at=?, deleted_from_parent_id=NULL WHERE id=?",
         values: [now, now, nid],
       });
     }
@@ -347,8 +368,8 @@ export async function purgeTreeItem(
       return true;
     }
 
-    const allFolders = await d.prepare("SELECT id, parent_id FROM folders").all() as Array<{ id: string; parent_id: string | null }>;
-    const allNotes = await d.prepare("SELECT id, parent_id FROM notes").all() as Array<{ id: string; parent_id: string | null }>;
+    const allFolders = await d.prepare("SELECT id, parent_id, deleted_from_parent_id, trashed_at FROM folders").all() as Array<{ id: string; parent_id: string | null }>;
+    const allNotes = await d.prepare("SELECT id, parent_id, deleted_from_parent_id, trashed_at FROM notes").all() as Array<{ id: string; parent_id: string | null }>;
     const subtree = collectSubtree(allFolders, allNotes, id);
     // 根已不存在 ⇒ 什么都没删（返回 false，供自动过期计数；手动删除不关心返回值）。
     if (subtree.allIds.size === 0) return false;

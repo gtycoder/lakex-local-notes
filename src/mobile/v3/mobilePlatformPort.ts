@@ -392,42 +392,59 @@ export function createMobilePlatformPort(db: MobileDb, ctxIn?: Partial<MobilePla
     async applyStagedBodyNote(note: SyncNoteWrite): Promise<void> {
       // 移动端：正文已由引擎写到 staging 文件，这里只更新行（正文由 moveStagedBodyFiles 钩子搬）。
       const title = titleOf(note);
+      // 261112 task-55（N1）：core 对「远端 trashed / 本地 keepLocalTrash」条目一律传 parentId=回收站容器
+      // （notebook-trash —— 那是**桌面侧**的物理父）。移动端回收站 = 「trashed_at + 原父」模型，容器 id 在本机
+      // folders 里不存在 ⇒ 绝不能把它写进普通父列（恢复会找不到原父；后续发布还可能把容器当普通 parent 带出去）。
+      // 归一：原父取 deletedFromParentId；缺失时传 null 让 COALESCE 保留现有父（不覆盖）。
+      const parentId = (note.trashedAt || note.parentId === TRASH_NOTEBOOK_ID)
+        ? (note.deletedFromParentId ?? null)
+        : note.parentId;
       await write(
         "UPDATE notes SET title=?, parent_id=COALESCE(?, parent_id), updated_at=?, content_hash=?, is_dirty=0, text_cache=NULL WHERE id=?",
-        [title, note.parentId, note.updatedAt, note.contentHash, note.id],
+        [title, parentId, note.updatedAt, note.contentHash, note.id],
       );
       const snap = snapshot.get(note.id);
-      if (snap) { snap.title = title; if (note.parentId !== null) snap.parent_id = note.parentId; snap.updated_at = note.updatedAt; snap.content_hash = note.contentHash; }
+      if (snap) { snap.title = title; if (parentId !== null) snap.parent_id = parentId; snap.updated_at = note.updatedAt; snap.content_hash = note.contentHash; }
     },
     async applyRemoteNoteMeta(note: SyncNoteWrite, expectedLocalUpdatedAt?: string): Promise<void> {
       const snap = snapshot.get(note.id);
-      // 261107（数据安全）：窗口内用户改名/移动会把 updated_at 改掉；而平台内部的恢复/软删只改 is_dirty
-      // （updated_at 仍等于快照）。因此判据 = dirty 且 updated_at 与快照不同，才视为「用户新编辑」并跳过；
-      // 平台内部生命周期写入必须允许后面的元数据落库，否则恢复后父级会悬空。
+      // 261107（数据安全）：窗口内用户改名/移动会把 updated_at 改掉；平台内部恢复/软删只改 is_dirty
+      // （updated_at 仍等于快照）。因此 `expectedLocalUpdatedAt` 优先：当前行仍等于它才允许覆盖。
       const current = await db.prepare("SELECT updated_at,is_dirty FROM notes WHERE id=?").get(note.id) as { updated_at?: string; is_dirty?: number } | undefined;
-      // expectedLocalUpdatedAt（本轮引擎快照）优先：当前行仍等于快照才允许覆盖；
-      // 旧调用方没传时退化为「dirty 且 updated_at 与 snap 不同」判据。
       const locallyEdited = expectedLocalUpdatedAt !== undefined && current?.updated_at !== expectedLocalUpdatedAt;
-      if (!note.trashedAt && !locallyEdited) {
-        // 旧实现：只有在 title/parent 变化时才写这组（updatedAt 也一并落）。
-        const titleChanged = !snap || snap.title !== note.title || (snap.parent_id ?? null) !== (note.parentId ?? null);
-        if (titleChanged) {
+      if (!locallyEdited) {
+        if (note.trashedAt) {
+          // 261112 task-56（N3）：回收站行的**内容级元数据**与桌面全写口径对齐（标题/排序/更新时间/图标/锁）。
+          // 但位置三件套不动：trashed_at/deleted_from_parent_id 是本地生命周期（位置合并已决定应用与否），
+          // parent_id 在移动端模型里是「原父」——回收站容器 id 永不落库（与 applyStagedBodyNote 同口径）。
           await write(
-            "UPDATE notes SET title=?, parent_id=COALESCE(?, parent_id), sort_order=?, updated_at=? WHERE id=?",
-            [note.title, note.parentId, note.sortOrder, note.updatedAt, note.id],
+            "UPDATE notes SET title=?, sort_order=?, updated_at=?, icon=?, is_locked=?, locked_at=? WHERE id=?",
+            [note.title, note.sortOrder, note.updatedAt, note.icon ?? null, note.isEditLocked ? 1 : 0, note.editLockedAt ?? null, note.id],
           );
+        } else {
+          // 活跃行：标题/父级/排序/更新时间（parent 缺省保留）+ 图标/锁两组（与旧实现同序，减少无谓 UPDATE）。
+          const titleChanged = !snap || snap.title !== note.title || (snap.parent_id ?? null) !== (note.parentId ?? null);
+          if (titleChanged) {
+            await write(
+              "UPDATE notes SET title=?, parent_id=COALESCE(?, parent_id), sort_order=?, updated_at=? WHERE id=?",
+              [note.title, note.parentId, note.sortOrder, note.updatedAt, note.id],
+            );
+          }
+          const metaChanged = !snap
+            || (snap.icon ?? null) !== (note.icon ?? null)
+            || snap.is_locked !== (note.isEditLocked ? 1 : 0)
+            || snap.sort_order !== note.sortOrder;
+          if (metaChanged) {
+            await write("UPDATE notes SET icon=?, is_locked=?, locked_at=?, sort_order=? WHERE id=?", [note.icon ?? null, note.isEditLocked ? 1 : 0, note.editLockedAt ?? null, note.sortOrder, note.id]);
+          }
         }
       }
-      const metaChanged = !snap
-        || (snap.icon ?? null) !== (note.icon ?? null)
-        || snap.is_locked !== (note.isEditLocked ? 1 : 0)
-        || snap.sort_order !== note.sortOrder;
-      if (metaChanged && !locallyEdited) {
-        await write("UPDATE notes SET icon=?, is_locked=?, locked_at=?, sort_order=? WHERE id=?", [note.icon ?? null, note.isEditLocked ? 1 : 0, note.editLockedAt ?? null, note.sortOrder, note.id]);
-      }
       if (snap) {
+        // 位置字段只对活跃行做快照同步（回收站行的父/生命周期由专门的写路径维护）。
         if (!note.trashedAt) { snap.title = note.title; if (note.parentId !== null) snap.parent_id = note.parentId; snap.updated_at = note.updatedAt; }
-        snap.icon = note.icon ?? null; snap.is_locked = note.isEditLocked ? 1 : 0; snap.sort_order = note.sortOrder;
+        else { snap.title = note.title; snap.updated_at = note.updatedAt; }
+        snap.sort_order = note.sortOrder;
+        snap.icon = note.icon ?? null; snap.is_locked = note.isEditLocked ? 1 : 0;
       }
     },
     async applyRemoteEditLock(noteId: string, locked: boolean, editLockedAt: string | null): Promise<void> {
@@ -437,6 +454,9 @@ export function createMobilePlatformPort(db: MobileDb, ctxIn?: Partial<MobilePla
       if (snap) { snap.is_locked = locked ? 1 : 0; snap.locked_at = editLockedAt; }
     },
     async setNodeIcon(noteId: string, icon: string): Promise<void> {
+      // 261112 G3（与桌面 applyRemoteNodeIcon 同口径）：**同步镜像写**，只写 notes.icon，
+      // 不经用户入口（bridge.saveNote/桌面 setNodeIcon 的回收站守卫）⇒ 回收站行可正常接收远端图标，
+      // 不会让整轮 syncNow 失败；purged 行在移动端已被物理删除（行不存在 ⇒ UPDATE 影响 0 行，不抛错）。
       // importRemoteNote 已把 icon 写在同一批里 ⇒ 不再补一条重复 UPDATE（与旧实现同一批语句数）。
       if (batch?.importedIds.has(noteId)) return;
       await write("UPDATE notes SET icon=? WHERE id=?", [icon, noteId]);
