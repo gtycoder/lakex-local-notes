@@ -87,7 +87,15 @@ export function LakeEditor({ noteId, content, mode = "editor", tocEnabled, onCha
     // 注：不依赖 Lake 内置 allowClickToMaximize（该选项在本构建未传导到渲染层，实测无效）。
     // 列表取自**正文**（latestDocumentRef 每次 contentchange 都刷新）：虚拟渲染下 DOM 只有视口内的图，
     // 数不到全部图片就没法左右切换（260928 实测）。
-    const detachImagePreview = attachImagePreviewClick(host, () => extractImagesFromContent(latestDocumentRef.current));
+    // 触发方式（261112 用户定稿：**点击看图片、双击编辑**）：
+    // - 桌面：双击预览（单击留给内核选中图片/拖角改尺寸 —— 用户此前确认过的桌面口径）；
+    // - 移动端：单击预览、双击 = 编辑（交给内核；双击判定窗在 imagePreview 里统一实现）。
+    const tapToPreview = !isDesktop();
+    const detachImagePreview = attachImagePreviewClick(
+      host,
+      () => extractImagesFromContent(latestDocumentRef.current),
+      { tap: tapToPreview },
+    );
     // 附件：file 卡片点击 → 打开（桌面/移动端共用，媒体内嵌播放、非媒体系统打开）。
     // - 媒体附件（音频/视频）：应用内嵌播放 overlay（AudioPreview 内联 <audio>/<video>，不跳系统浏览器）
     // - 非媒体附件（PDF/Office/zip 等）：点击直接系统应用打开（跳过预览弹窗——本地文件无需中间层）

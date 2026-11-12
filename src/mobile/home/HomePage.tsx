@@ -15,6 +15,7 @@ import type { TreeNode } from "../../lib/types";
 import type { LocalNoteSummary } from "../data/noteRepository";
 import { NotebookGrid } from "./NotebookGrid";
 import { QuickNotePreview } from "../../features/quickNotes/QuickNotePreview";
+import { openImagePreview } from "../../features/editor/imagePreview";
 import type { StoredQuickNoteImage } from "../../core/quickNoteModel.js";
 import { MobileErrorBoundary } from "../ui/MobileErrorBoundary";
 import { MobileSheetMenu, type MobileSheetItem } from "../ui/MobileSheetMenu";
@@ -1145,6 +1146,13 @@ export function HomePage(props: HomePageProps) {
 }
 
 /** 小记卡片：大图 + 摘要 + 日期 + 「...」（有图必展示，无图留中性占位）。 */
+/**
+ * 小记卡片图片「单击 vs 双击」判定窗（ms）：窗口内同一张图再次点按 = 双击（编辑）。
+ * 卡片走的是 click（不是内核宿主，没有元素被重渲染的问题）：WebView 的 click 延迟 ~150ms、
+ * 实测两击间隔可达 251ms ⇒ 取 320ms 覆盖它（250ms 会把双击判成两个单击）。
+ */
+const IMAGE_TAP_WINDOW_MS = 320;
+
 function QuickNoteCard({ note, revealed, dateValue, onEdit, onMore, onFilterTag, onRequestDetail, onToggleTask, selecting, selected, onEnterSelect, onToggleSelect }: {
   note: MobileQuickNote; revealed: boolean; dateValue: string;
   onEdit: (card: HTMLElement | null) => void; onMore: () => void; onFilterTag: (tagId: string) => void; onRequestDetail: (id: string) => void;
@@ -1155,6 +1163,9 @@ function QuickNoteCard({ note, revealed, dateValue, onEdit, onMore, onFilterTag,
   const cardRef = useRef<HTMLDivElement | null>(null);
   /** 长按进入多选后，抬手补发的那一次 click 要吞掉（否则会误开小记）。 */
   const suppressTap = useRef(false);
+  /** 卡片图片「单击看大图 / 双击进编辑」的判定状态（261112 用户定稿）。 */
+  const imageTapTimer = useRef<number | null>(null);
+  const lastImageTap = useRef<{ key: string; at: number } | null>(null);
   const longPress = useLongPress(() => {
     suppressTap.current = true;
     onEnterSelect();
@@ -1189,6 +1200,39 @@ function QuickNoteCard({ note, revealed, dateValue, onEdit, onMore, onFilterTag,
   /** 封面比例盒（宽高元数据可用时先占位，加载完不跳版）。 */
   const coverImage = note.firstImage ? (note.images ?? []).find((image) => image.filename === note.firstImage) : undefined;
   const coverBox = imageBoxAttrs(coverImage);
+  useEffect(() => () => {
+    if (imageTapTimer.current !== null) window.clearTimeout(imageTapTimer.current);
+  }, []);
+
+  /**
+   * 卡片图片（用户 261112 定稿：**单击看图片、双击编辑**）：
+   * - 单击 → 判定窗后开大图（画廊 = 本条小记全部图片，按正文顺序）；
+   * - 判定窗内再点同一张 → 取消预览，走卡片默认动作（进编辑）；
+   * - 选择态：与卡片一致只切勾选（不看大图）；长按刚进多选后补发的那次点击吞掉。
+   * 图片的 click 在 QuickNotePreview 内部已 stopPropagation ⇒ 不会顺带触发卡片 activate。
+   */
+  const handleImageTap = (image: { filename?: string }): void => {
+    if (suppressTap.current) { suppressTap.current = false; return; }
+    if (selecting) { onToggleSelect(); return; }
+    const key = image.filename ?? "";
+    const now = Date.now();
+    const previous = lastImageTap.current;
+    const doubleTap = previous !== null && previous.key === key && now - previous.at <= IMAGE_TAP_WINDOW_MS;
+    lastImageTap.current = { key, at: now };
+    if (doubleTap) {
+      if (imageTapTimer.current !== null) { window.clearTimeout(imageTapTimer.current); imageTapTimer.current = null; }
+      lastImageTap.current = null;
+      onEdit(cardRef.current);
+      return;
+    }
+    if (imageTapTimer.current !== null) window.clearTimeout(imageTapTimer.current);
+    imageTapTimer.current = window.setTimeout(() => {
+      imageTapTimer.current = null;
+      const shots = previewAssets.filter((asset) => Boolean(asset.url));
+      const index = Math.max(0, shots.findIndex((asset) => asset.filename === image.filename));
+      openImagePreview(shots.map((asset) => ({ src: asset.url as string })), index);
+    }, IMAGE_TAP_WINDOW_MS);
+  };
   /** 触摸点击 / 外接键盘 Enter·Space 共用同一激活语义（选择态 = 切换勾选，否则进编辑）。 */
   const activate = (): void => {
     if (suppressTap.current) { suppressTap.current = false; return; }
@@ -1217,6 +1261,9 @@ function QuickNoteCard({ note, revealed, dateValue, onEdit, onMore, onFilterTag,
             loading="lazy"
             decoding="async"
             {...(coverBox ?? {})}
+            // 封面也是「一点就开大图」的主入口（用户 261112：点击看图片、双击编辑）：
+            // 单击 = 预览（画廊 = 本条全部图片，当前这张为第一张）；双击 = 进编辑。
+            onClick={(event) => { event.stopPropagation(); handleImageTap({ filename: note.firstImage ?? undefined }); }}
           />
           {note.imageCount > 1 && <span className="qn-card__count">{note.imageCount}</span>}
         </div>
@@ -1228,9 +1275,8 @@ function QuickNoteCard({ note, revealed, dateValue, onEdit, onMore, onFilterTag,
             body={note.body}
             noteId={note.id}
             assets={previewAssets}
-            // 卡片是「打开编辑」的入口：预览里的图片不抢点击（否则点图上只会弹放大预览、进不去编辑），
-            // 需要放大看图时进编辑态点图（内核/浅色预览层在编辑态仍可用）。
-            onImageClick={() => undefined}
+            // 图片：单击看大图、双击进编辑（261112 用户定稿；判定窗见 handleImageTap）。
+            onImageClick={handleImageTap}
             // 封面上方已经画过第一张图 ⇒ 预览不再重复（261112 用户报「插一张图预览里出现两张」）。
             hiddenMediaNames={thumbUrl && note.firstImage ? new Set([note.firstImage]) : undefined}
             // 勾选框可点（与桌面卡片预览同能力）；组件内部已 stopPropagation ⇒ 不会顺带进编辑态。

@@ -108,21 +108,48 @@ export function extractImagesFromContent(content: string): PreviewImage[] {
   return out;
 }
 
+export interface AttachImagePreviewOptions {
+  /**
+   * 触发方式（261112 用户定稿：**点击看图片、双击编辑**）：
+   * - `"dblclick"`（默认，桌面）：单击留给选中/改尺寸，双击看大图；
+   * - `"tap"`（移动端）：**单击看大图**（判定窗内、几乎同一点再按下 = 双击 ⇒ 取消预览、
+   *   交给宿主/内核做「编辑」）。判据挂在 `pointerdown` 上，见下方常量注释。
+   */
+  tap?: boolean;
+}
+
 /**
- * 给编辑器宿主挂图片双击放大预览监听（桌面 EditorTab / 共享 LakeEditor 共用）。
- * - **双击**触发（用户确认：单击留给选中/改图片大小，单击预览太容易误触）；
- *   捕获阶段监听 dblclick（不 preventDefault，Lake 行为照常）。
+ * 触屏「单击 vs 双击」判定窗（ms）：窗口内、几乎同一点（≤ `TAP_SAME_POINT_PX`）再次按下 = 双击（编辑）。
+ *
+ * 为什么是 `pointerdown` 而不是 `click`：Android WebView 的 click 要等 ~150ms 才派发（还要再等系统
+ * 双击判定），实测两次点按的 click 间隔可达 **251ms**；且内核第一次点按后会重渲染图片卡
+ * （DOM 元素被换掉）⇒ 比 click、比元素身份都会把双击误判成两次单击（设备实测：写作卡里双击弹大图）。
+ */
+const TAP_DOUBLE_CLICK_WINDOW_MS = 300;
+/** 两次按下位置差 ≤ 该值视为「同一张图上的双击」（DOM 可能已被内核重渲染，不能比元素身份）。 */
+const TAP_SAME_POINT_PX = 28;
+/** 按下后移动超过该值 = 滚动/拖拽，取消这次单击预览。 */
+const TAP_MOVE_CANCEL_PX = 12;
+
+/**
+ * 给编辑器宿主挂图片放大预览监听（桌面 EditorTab / 共享 LakeEditor / 小记写作卡共用）。
+ * - 触发：默认**双击**（桌面：单击留给选中/改图片大小）；传 `{ tap: true }` 时改为
+ *   **移动端单击**（判定窗内同位置第二击 = 双击/编辑）—— 详见 `AttachImagePreviewOptions`。
+ *   两种模式都在捕获阶段监听、**不 preventDefault**（宿主/内核行为照常）。
  * - `resolveImages` 提供**权威全量列表**（正文解析的），DOM 只用来定位"双击的是哪一张"：
  *   DOM 图片是正文列表的一个**子序列**（虚拟渲染只渲染视口内），按顺序贪心对齐即可，
  *   同一张图出现两次也不会跳错；解析不到或不给 resolver 时回退旧的 DOM 收集。
  * - 返回清理函数（组件卸载时移除）。
  */
-export function attachImagePreviewClick(host: HTMLElement, resolveImages?: () => PreviewImage[]): () => void {
-  const onDoubleClick = (event: MouseEvent) => {
+export function attachImagePreviewClick(host: HTMLElement, resolveImages?: () => PreviewImage[], options: AttachImagePreviewOptions = {}): () => void {
+  const targetImage = (event: Event): HTMLImageElement | null => {
     const target = event.target as HTMLElement | null;
-    if (!target || typeof target.closest !== "function") return;
+    if (!target || typeof target.closest !== "function") return null;
     const img = target.closest("img.ne-image") as HTMLImageElement | null;
-    if (!img || !host.contains(img)) return;
+    return img && host.contains(img) ? img : null;
+  };
+  /** 打开某张图对应的画廊（DOM 只用来定位；列表来自 resolver）。 */
+  const openFor = (img: HTMLImageElement) => {
     const elements = Array.from(host.querySelectorAll<HTMLImageElement>("img.ne-image"));
     const domIndex = elements.indexOf(img);
     const fallback = () => {
@@ -144,6 +171,66 @@ export function attachImagePreviewClick(host: HTMLElement, resolveImages?: () =>
     }
     openImagePreview(resolved, index < 0 ? 0 : index);
   };
-  host.addEventListener("dblclick", onDoubleClick, true);
-  return () => host.removeEventListener("dblclick", onDoubleClick, true);
+
+  if (!options.tap) {
+    const onDoubleClick = (event: MouseEvent) => { const img = targetImage(event); if (img) openFor(img); };
+    host.addEventListener("dblclick", onDoubleClick, true);
+    return () => host.removeEventListener("dblclick", onDoubleClick, true);
+  }
+
+  // 移动端「点击看图片、双击编辑」。**判定必须挂在 pointerdown 上，不能挂 click**：
+  // Android WebView 的 click 要等 ~150ms 才派发（还要再等双击判定），实测两次点按的 click 间隔
+  // 会超过任何合理窗口；而 pointerdown 是即时的。判据用「时间窗 + 位置」而不是 DOM 元素身份
+  // —— 内核第一次点按后会重渲染图片卡（选中态），元素会被换掉（设备实测：写作卡里双击弹了大图）。
+  //
+  // - 单击：按下后等一个判定窗再开预览（期间手指滑动超过阈值 = 滚动，取消）；
+  // - 双击：窗口内、几乎同一点（≤ SAME_POINT_PX）第二次按下 ⇒ 取消预览，交给内核做编辑；
+  // - 不 preventDefault：宿主/内核的点击/选中行为照常。
+  let timer: number | null = null;
+  let pending: { x: number; y: number; at: number; img: HTMLImageElement } | null = null;
+  const clearPending = () => {
+    if (timer !== null) { window.clearTimeout(timer); timer = null; }
+    pending = null;
+  };
+  const onPointerDown = (event: PointerEvent) => {
+    const img = targetImage(event);
+    if (!img) return;
+    const now = Date.now();
+    const { clientX: x, clientY: y } = event;
+    if (pending && now - pending.at <= TAP_DOUBLE_CLICK_WINDOW_MS
+      && Math.hypot(x - pending.x, y - pending.y) <= TAP_SAME_POINT_PX) {
+      clearPending(); // 双击 = 编辑
+      return;
+    }
+    clearPending();
+    pending = { x, y, at: now, img };
+    timer = window.setTimeout(() => {
+      timer = null;
+      pending = null;
+      // 300ms 后元素可能已被内核重渲染替换 ⇒ 按坐标找回当前挂载的那张图，找不到才用按下时的元素
+      // （jsdom / 老内核没有 elementFromPoint ⇒ 直接回退，不抛）。
+      let live: HTMLImageElement = img;
+      try {
+        const hit = typeof document.elementFromPoint === "function" ? document.elementFromPoint(x, y) : null;
+        const found = (hit as HTMLElement | null)?.closest?.("img.ne-image") as HTMLImageElement | null;
+        if (found && host.contains(found)) live = found;
+      } catch { /* 取不到坐标命中 ⇒ 用按下时的元素 */ }
+      if (live.isConnected) openFor(live);
+    }, TAP_DOUBLE_CLICK_WINDOW_MS);
+  };
+  const onPointerMove = (event: PointerEvent) => {
+    if (!pending) return;
+    if (Math.hypot(event.clientX - pending.x, event.clientY - pending.y) > TAP_MOVE_CANCEL_PX) clearPending();
+  };
+  host.addEventListener("pointerdown", onPointerDown, true);
+  host.addEventListener("pointermove", onPointerMove, true);
+  host.addEventListener("pointercancel", clearPending, true);
+  host.addEventListener("scroll", clearPending, true);
+  return () => {
+    clearPending();
+    host.removeEventListener("pointerdown", onPointerDown, true);
+    host.removeEventListener("pointermove", onPointerMove, true);
+    host.removeEventListener("pointercancel", clearPending, true);
+    host.removeEventListener("scroll", clearPending, true);
+  };
 }

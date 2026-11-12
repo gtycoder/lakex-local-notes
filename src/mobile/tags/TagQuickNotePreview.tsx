@@ -14,6 +14,7 @@ import { quickNotePreviewAssetUrl } from "../home/quickNoteImage";
 import type { StoredQuickNoteImage } from "../../core/quickNoteModel.js";
 import { withAssetAccessToken } from "../../lib/assetPort";
 import { QuickNotePreview } from "../../features/quickNotes/QuickNotePreview";
+import { openImagePreview } from "../../features/editor/imagePreview";
 import { bridge } from "../bridge";
 
 export interface TagQuickNotePreviewProps {
@@ -57,8 +58,13 @@ export function TagQuickNotePreview({ noteId, fallbackText }: TagQuickNotePrevie
       body={detail.body}
       noteId={noteId}
       assets={assets}
-      // 卡片是「打开小记」的入口：图片不抢点击（与首页 qn-card 同口径）。
-      onImageClick={() => undefined}
+      // 图片单击看大图（261112 用户定稿「点击看图片、双击编辑」；本页行点击仍是打开小记，
+      // 图片 click 在 QuickNotePreview 里已 stopPropagation ⇒ 不会误开）。
+      onImageClick={(image) => {
+        const shots = assets.filter((asset) => Boolean(asset.url));
+        const index = Math.max(0, shots.findIndex((asset) => asset.filename === image.filename));
+        openImagePreview(shots.map((asset) => ({ src: asset.url as string })), index);
+      }}
       ellipsisClassName="mb-ellipsis"
     />
   );

@@ -17,7 +17,7 @@ import { registerOutlineTab, unregisterOutlineTab } from "../outline/registry";
 import { useOutline } from "../outline/useOutline";
 import { flushViewerTiles, scrollIntoViewByNodeId } from "./lakeTileRender";
 import { native } from "../../lib/native";
-import { attachImagePreviewClick } from "./imagePreview";
+import { attachImagePreviewClick, extractImagesFromContent } from "./imagePreview";
 import { attachFileCardClick, createCardHoverResidueCleaner, resolveCardAsset, findCardData, type AttachmentPreviewItem } from "../attachment/attachmentPreviewController";
 import { openAssetEntry } from "../attachment/openAssetEntry";
 import { CardContextMenu, TextContextMenu, cutCardElement } from "./CardContextMenu";
@@ -812,8 +812,19 @@ export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance
     // 点击任意位置清理 Lake 卡片 hover 残留（mouseleave 被系统应用/遮罩吞掉 → 背景一直着色）
     const detachHoverCleaner = createCardHoverResidueCleaner(host);
 
-    // 图片点击放大预览（桌面编辑/锁定态共用）：宿主级点击监听 + 共享 Lightbox
-    const detachImagePreview = attachImagePreviewClick(host);
+    // 图片双击放大预览（桌面编辑/锁定态共用）：宿主级监听 + 共享 Lightbox。
+    // 画廊列表必须取自**正文**：编辑态开了虚拟渲染 + 卡片懒加载，DOM 里只有视口附近那几张
+    // （261112 用户实测：107 张图的文档只数到 8 张、左右切不到）。这里现场序列化一次
+    // getDocument（含**未保存**的新插图，比上次捕获的 latestDocumentRef 新）；取不到就返回空，
+    // attachImagePreviewClick 会按既有约定回退到 DOM 收集（至少还能看当前这张）。
+    // 代价 = 每次双击一次整篇序列化（用户动作、单次；多 MB 文档实测数十 ms，可接受）。
+    const detachImagePreview = attachImagePreviewClick(host, () => {
+      try {
+        const live = editorRef.current?.getDocument?.("text/lake");
+        if (typeof live === "string" && live.length > 0) return extractImagesFromContent(live);
+      } catch { /* 实例重建/销毁中不可读 ⇒ 交给 DOM 回退 */ }
+      return [];
+    });
     // 附件：file 卡片点击 → 公共入口 openAssetEntry（与多维表/小记同一套分流）
     const detachFileCard = attachFileCardClick(host, (src, name, size) => {
       openAssetEntry(src, name, size);
