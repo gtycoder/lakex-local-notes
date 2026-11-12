@@ -65,6 +65,7 @@ function memoryPlatform(world: Partial<{ folders: any[]; notes: any[]; quickNote
     async defaultNotebookId() { calls.push("defaultNotebookId"); return "notebook-fallback"; },
     async importRemoteNote(note) { calls.push("importRemoteNote:" + note.id); importedNotes.set(note.id, note); },
     async saveNote(id) { calls.push("saveNote:" + id); },
+    async saveSyncedNote(id) { calls.push("saveSyncedNote:" + id); },
     async applyRemoteNoteMeta(note) { calls.push("applyRemoteNoteMeta:" + note.id); importedNotes.set(note.id, note); },
     async applyRemoteEditLock(id) { calls.push("applyRemoteEditLock:" + id); },
     async setNodeIcon(id) { calls.push("setNodeIcon:" + id); },
@@ -258,7 +259,21 @@ describe("createDeviceStoreMeta.saveState（只经端口落库）", () => {
       files,
       assets: createFileBackedAssetIo({ files, assetDirFor: (id) => "assets/" + id }),
       state: { read: async () => null, write: async () => {} },
-      baseline: { load: async () => null },
+      // 261112 task-44（lead 裁决）：该用例模拟「他端显式恢复」⇒ 基线里 n2 必须是**回收站条目**。
+      // 语义本身没改（基线 trashed → 远端 active 才 restoreTrashItem），改的是夹具的真实性。
+      baseline: {
+        load: async () => ({
+          epoch: "e1", generation: 1, lakeCommit: "c1", quickNotesCommit: "q1",
+          lake: {
+            v: 3, space: "lake", folders: [],
+            notes: [
+              { id: "n1", title: "N1", parentId: null, sortOrder: 0, updatedAt: "T0", contentHash: H("a") },
+              { id: "n2", title: "N2", parentId: "trash", sortOrder: 0, updatedAt: "T0", contentHash: H("b"), trashedAt: "T1" },
+            ],
+          },
+          quickNotes: { v: 3, space: "quickNotes", items: [], tags: [] },
+        }),
+      },
       stagedBodies: new Map(),
       protectedFolderIds: new Set(["fallback"]),
     });
@@ -277,6 +292,44 @@ describe("createDeviceStoreMeta.saveState（只经端口落库）", () => {
     expect(platform.calls).toContain("restoreTrashItem:n2");
     expect(platform.calls).toContain("deleteTreeNode:old");
     expect(platform.calls).not.toContain("deleteTreeNode:trash");
+  });
+
+  it("P0（261112 task-44）：基线 active + 远端 active + 本地回收站 ⇒ 不隐式恢复、正文走 saveSyncedNote、位置保留回收站", async () => {
+    const files = memoryFiles({ "bodies/n1.lake": new TextEncoder().encode("<p>旧</p>") });
+    const platform = memoryPlatform({
+      folders: [],
+      notes: [
+        { id: "n1", title: "N1", parentId: "notebook-trash", sortOrder: 0, updatedAt: "T5", contentHash: H("b"), kind: "doc", icon: null, isEditLocked: false, editLockedAt: null, isConflict: false, trashedAt: "T5", deletedFromParentId: null },
+      ],
+    });
+    const meta = createDeviceStoreMeta({
+      platform: platform.port,
+      files,
+      assets: createFileBackedAssetIo({ files, assetDirFor: (id) => "assets/" + id }),
+      state: { read: async () => null, write: async () => {} },
+      // 基线 = **active**（用户刚在本地删掉、云端还没见过删除动作）⇒ 位置赢家 = 本地
+      baseline: {
+        load: async () => ({
+          epoch: "e1", generation: 2, lakeCommit: "c2", quickNotesCommit: "q2",
+          lake: { v: 3, space: "lake", folders: [], notes: [{ id: "n1", title: "N1", parentId: null, sortOrder: 0, updatedAt: "T0", contentHash: H("a") }] },
+          quickNotes: { v: 3, space: "quickNotes", items: [], tags: [] },
+        }),
+      },
+      stagedBodies: new Map([["n1", new TextEncoder().encode("<p>他端改过</p>")]]),
+    });
+    const state: DeviceState = {
+      lake: { v: 3, space: "lake", notes: [{ id: "n1", title: "N1-edit", parentId: null, sortOrder: 0, updatedAt: "T9", contentHash: H("c") }], folders: [] },
+      quickNotes: { v: 3, space: "quickNotes", items: [], tags: [] },
+      folders: [{ id: "trash", title: "回收站", parentId: null, sortOrder: 9, nodeType: "notebook", icon: null, updatedAt: "T0" }],
+      intents: [], pending: [], remotePurged: [], restorePending: [],
+    };
+    await meta.saveState(state);
+    expect(platform.calls).not.toContain("restoreTrashItem:n1");
+    expect(platform.calls).toContain("saveSyncedNote:n1");
+    expect(platform.calls).not.toContain("saveNote:n1");
+    const applied = platform.importedNotes.get("n1")!;
+    expect(applied.parentId).toBe("notebook-trash"); // 位置保留回收站（core 的 TRASH_NOTEBOOK_ID）
+    expect(applied.trashedAt).toBe("T5");
   });
 
   it("quick 缺失三态（C-3 第 4 处漂移）：purge / baseline 内→软删打标 / 从未同步→物理删（无 discard 端口则回落软删）", async () => {

@@ -160,7 +160,10 @@ export function mergeRoundIntoState(state: DeviceState, round: RoundResult, opts
         title: meta.title ?? prev?.title ?? w.id,
         parentId: meta.parentId === undefined ? (prev?.parentId ?? null) : meta.parentId,
         sortOrder: meta.sortOrder ?? prev?.sortOrder ?? 0,
-        nodeType: (meta.kind === "group" ? "group" : prev?.nodeType ?? "notebook") as DeviceState["folders"][number]["nodeType"],
+        // 261112 task-44：目录 meta 的字段名是 **nodeType**（LakeFolderEntry），不是 kind。
+        // 旧实现读 meta.kind（永远 undefined）⇒ 远端分组被落成 notebook，配合 deviceStore 的
+        // 「notebook 只能根层」判据把 parentId 强行置 null（跨端目录结构永久不一致）。
+        nodeType: (meta.nodeType === "group" ? "group" : prev?.nodeType ?? "notebook") as DeviceState["folders"][number]["nodeType"],
         icon: meta.icon === undefined ? (prev?.icon ?? null) : meta.icon,
         updatedAt: meta.updatedAt ?? prev?.updatedAt ?? new Date(0).toISOString(),
         ...(meta.trashedAt !== undefined ? { trashedAt: meta.trashedAt } : {}),
@@ -182,11 +185,21 @@ export function mergeRoundIntoState(state: DeviceState, round: RoundResult, opts
     };
   }
   // 未发布（纯拉取/零变更）：先把 apply-remote 写回本地索引（漏掉 = 正文落盘但标题/锁/图标不变）。
-  // **快路径**：本轮没有任何 apply-remote ⇒ 索引原样复用（不回 O(n) 复制、也不排序）。
-  if (!round.plan.writes.some((w) => w.kind === "apply-remote") && folderWrites.length === 0) {
+  // **快路径**：本轮没有任何 apply-remote / 位置写 ⇒ 索引原样复用（不回 O(n) 复制、也不排序）。
+  if (!round.plan.writes.some((w) => w.kind === "apply-remote" || w.kind === "apply-position") && folderWrites.length === 0) {
     return { ...sd, pending: round.commit.status === "retry" ? state.pending : round.remainingPending, intents: round.intents.intents, restorePending: round.intents.restorePending };
   }
   const lakeById = new Map(sd.lake.notes.map((n) => [n.id, n] as const));
+  // task-44：纯位置写（远端移动/移入回收站，而本地内容是赢家）——只改位置三件套，正文/hash 不动。
+  for (const w of round.plan.writes) {
+    if (w.kind !== "apply-position" || w.space !== "lake") continue;
+    const prev = lakeById.get(w.id);
+    if (!prev) continue;
+    const next = { ...prev, parentId: w.position.parentId } as typeof prev & { trashedAt?: string; deletedFromParentId?: string };
+    if (w.position.trashedAt) next.trashedAt = w.position.trashedAt; else delete next.trashedAt;
+    if (w.position.deletedFromParentId) next.deletedFromParentId = w.position.deletedFromParentId; else delete next.deletedFromParentId;
+    lakeById.set(w.id, next);
+  }
   const quickById = new Map(sd.quickNotes.items.map((q) => [q.id, q] as const));
   for (const w of round.plan.writes) {
     if (w.kind !== "apply-remote") continue;

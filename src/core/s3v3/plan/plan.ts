@@ -11,6 +11,7 @@
 import type { LakeIndex, QuickNotesIndex } from "../protocol/index.js";
 import { lakeBodyKey, quickNoteBodyKey } from "../protocol/index.js";
 import { planLakeMerge, planQuickNotesMerge } from "../../s3v3Merge.js";
+import { mergeNotePosition, positionFields, positionOf } from "./positionMerge.js";
 import { compareQuickNoteTagVersion, mergeQuickNoteTags } from "../../quickNoteTags.js";
 import { folderSpaceForWire } from "../../diary.js";
 import type {
@@ -62,6 +63,19 @@ export interface PlanInput {
 
 export interface PlanResult extends SyncPlan {}
 
+/** 位置字段投影进索引条目/写操作（null 显式写，便于两端比较；wire 字段沿用既有 parentId/trashedAt/deletedFromParentId）。 */
+function withPosition<T extends { parentId?: string | null; trashedAt?: string | null; deletedFromParentId?: string | null }>(
+  entry: T,
+  pos: { parentId: string | null; trashedAt: string | null; deletedFromParentId: string | null },
+): T {
+  return {
+    ...entry,
+    parentId: pos.parentId,
+    ...(pos.trashedAt ? { trashedAt: pos.trashedAt } : {}),
+    ...(pos.deletedFromParentId ? { deletedFromParentId: pos.deletedFromParentId } : {}),
+  };
+}
+
 function addRead(reads: ReadOp[], space: Space, id: string, remoteAssetsHash: string | undefined, needBody: boolean, bodyHash: string | null): void {
   if (needBody && bodyHash) reads.push({ kind: "body", space, id, hash: bodyHash });
   if (remoteAssetsHash) reads.push({ kind: "declaration", space, id, declHash: remoteAssetsHash });
@@ -110,9 +124,21 @@ export function planSync(input: PlanInput): SyncPlan {
   /** P1-4：引擎按 core 判据算出的「疑似外部损坏」条目——本轮不碰它们的正文与索引。 */
   const suspiciousBodyIds = new Set(input.state.suspiciousBodyIds ?? []);
 
+  const baseNotesById = new Map((base?.lake.notes ?? []).map((n) => [n.id, n] as const));
   for (const p of lakePlan.notes) {
     const l = p.local;
     const r = p.remote;
+    // task-44：位置字段（parentId / trashedAt / deletedFromParentId）**独立三方合并**（判据见 plan/positionMerge）。
+    // 内容与位置是两个正交维度：位置本地赢 ⇒ 必须发布本地位置（纯移动轮也要 indexChanged）；
+    // 位置远端赢 ⇒ 本地应用远端位置（apply-position）。两边都动 ⇒ updatedAt LWW 兜底。
+    const posMerge = mergeNotePosition({
+      base: positionOf(baseNotesById.get(p.id)),
+      local: positionOf(l),
+      remote: positionOf(r),
+      localUpdatedAt: l?.updatedAt ?? "",
+      remoteUpdatedAt: r?.updatedAt ?? "",
+    });
+    if (posMerge.winner === "local") indexChanged = true;
     // P1-4 正文突变保护：可疑篇**不上传、不发布本地内容**，先留档历史 + warning。
     // 注意：仍允许「远端更新」路径把云端版本写回（那是修复本地损坏，不是上传）；
     // 发布索引里可疑篇只用远端版本（远端没有 ⇒ 整条不发布 = 不拿可疑内容覆盖云端）。
@@ -136,7 +162,12 @@ export function planSync(input: PlanInput): SyncPlan {
     // P1-4：可疑篇不上传（远端更新仍走下面的 apply-remote 修复本地）。
     if (!suspiciousBody && (p.uploadLocal || fieldChanged.has(p.id)) && l) {
       const bodyChanged = !r || r.contentHash !== l.contentHash;
-      if (bodyChanged) {
+      // 261112 task-44：**内容赢家是远端时不得上传本地旧字节**。字段级变更（移动/回收站/改名等）会进
+      // fieldChanged 分支，但这一轮内容判定可能是 download —— applyPlan 先下载后上传，本地正文此时已是
+      // 远端字节 ⇒ 上传必然 hash_mismatch，进而 failedUploads 把索引条目回退成远端（位置本地赢被抹掉、
+      // 纯移动轮 published=false）。元数据仍由下面的 indexChanged/publish 发布。
+      const contentWinsRemote = p.kind === "download" || p.kind === "remote-wins-history";
+      if (bodyChanged && !contentWinsRemote) {
         transfers.push({ op: "put", space: "lake", id: p.id, key: lakeBodyKey(p.id, l.contentHash), hash: l.contentHash, size: 0, kind: "body" });
       }
       // 只有「本地要发布」才改索引：纯拉取轮（applyRemote）不重发索引（与 v3 一致）。
@@ -146,8 +177,15 @@ export function planSync(input: PlanInput): SyncPlan {
     // 可疑篇的归档已按 suspicious 理由生成，避免同内容两份历史快照。
     if (p.archiveLocal && !suspiciousBody) writes.push({ kind: "archive-local", space: "lake", id: p.id, reason: p.kind === "remote-purged-trash" ? "cloud-absent" : "remote-wins" });
     if (p.applyRemote && r) {
-      writes.push({ kind: "apply-remote", space: "lake", id: p.id, meta: { ...r }, bodyHash: r.contentHash });
+      // task-44：应用远端内容时**位置取位置合并赢家**（本地赢 ⇒ 保留本地 parentId/trashedAt/deletedFromParentId，
+      // 于是「B 编辑正文」不会回滚「A 的移动/移入回收站」）。
+      const meta = posMerge.winner === "local" && l ? withPosition({ ...r }, positionFields(posMerge.position!)) : { ...r };
+      writes.push({ kind: "apply-remote", space: "lake", id: p.id, meta, bodyHash: r.contentHash });
       if (p.kind === "remote-wins-history") warnings.push({ code: "conflict_kept_history", space: "lake", id: p.id, title: r.title });
+    }
+    // 位置远端赢（且本轮没有 apply-remote 覆盖元数据）：把远端位置写回本地（纯位置变化，不动正文）。
+    if (posMerge.winner === "remote" && posMerge.position && !(p.applyRemote && r)) {
+      writes.push({ kind: "apply-position", space: "lake", id: p.id, position: positionFields(posMerge.position) });
     }
     if (p.kind === "remote-purged-trash") {
       writes.push({ kind: "set-lifecycle", space: "lake", id: p.id, lifecycle: "cloud-deleted" });
@@ -169,7 +207,9 @@ export function planSync(input: PlanInput): SyncPlan {
       if (localSet !== remoteSet || lt !== rt) {
         if (rt > lt) {
           // 远端关系更新 ⇒ 应用远端（保留本机顺序由落库侧实现）；正文 hash 可能没变，不重复 PUT 正文。
-          writes.push({ kind: "apply-remote", space: "lake", id: p.id, meta: { ...r }, bodyHash: r.contentHash });
+          // task-44：位置仍取位置合并赢家（否则「远端改标签」会把本地刚做的移动/删除回滚）。
+          const tagMeta = posMerge.winner === "local" && l ? withPosition({ ...r }, positionFields(posMerge.position!)) : { ...r };
+          writes.push({ kind: "apply-remote", space: "lake", id: p.id, meta: tagMeta, bodyHash: r.contentHash });
         } else if (lt > rt || (lt === rt && localSet !== remoteSet)) {
           indexChanged = true;
           publishedLakeIds.add(p.id);
@@ -186,8 +226,10 @@ export function planSync(input: PlanInput): SyncPlan {
   publishes.lake = [...publishedLakeIds];
 
   // 目录：只有本地要发布（uploadLocal）才改索引；纯下载/应用远端不重发。
+  // P1-b（261112 真实 S3 验收）：**本地 purge 也必须标记 indexChanged**——purge 后本地已无该目录，
+  // 若本轮没有别的变更就会走「零变更短路」不发布，云端索引 folders[] 永久保留已删目录（对端会重新导入）。
   for (const f of lakePlan.folders) {
-    if (f.uploadLocal || f.kind === "local-delete") indexChanged = true;
+    if (f.uploadLocal || f.kind === "local-delete" || f.kind === "local-purge") indexChanged = true;
     // 目录元数据也要真正落到本地状态（否则对端永远显示活跃：回收站/父级变更传不过去）。
     if (f.applyRemote && f.remote) writes.push({ kind: "apply-remote-folder", space: "lake", id: f.id, meta: { ...f.remote } });
     else if (f.kind === "remote-purged-trash") writes.push({ kind: "remove-folder", id: f.id });
@@ -287,8 +329,22 @@ export function planSync(input: PlanInput): SyncPlan {
       .filter((p) => p.kind !== "local-purge" && p.kind !== "remote-purged-trash")
       // P1-4：可疑篇只允许用**远端版本**进索引（远端没有就整条不进，绝不用可疑本地内容覆盖云端）。
       .map((p) => {
-        const picked = suspiciousBodyIds.has(p.id) ? p.remote : (p.applyRemote && p.remote ? p.remote : p.local ?? p.remote);
+        let picked = suspiciousBodyIds.has(p.id) ? p.remote : (p.applyRemote && p.remote ? p.remote : p.local ?? p.remote);
         if (!picked) return picked;
+        // task-44：**发布条目按位置赢家组装**——内容取内容判定赢家，位置三件套取位置合并赢家。
+        // 这是「纯移动轮/回收站轮也能把位置发出去」的关键（旧实现只取 p.remote/p.local 的原始位置）。
+        {
+          const posMerge = mergeNotePosition({
+            base: positionOf(baseNotesById.get(p.id)),
+            local: positionOf(p.local),
+            remote: positionOf(p.remote),
+            localUpdatedAt: p.local?.updatedAt ?? "",
+            remoteUpdatedAt: p.remote?.updatedAt ?? "",
+          });
+          if (posMerge.position && (posMerge.winner === "local" || posMerge.winner === "remote")) {
+            picked = withPosition({ ...picked }, positionFields(posMerge.position)) as typeof picked;
+          }
+        }
         // 261105 P1 复核（Review-A P1-1/P1-2）：标签字段按**关系 LWW 胜者单独合成**，与内容判定解耦。
         // 否则「远端标签更新 + 本地内容要发布」这一轮会用本地旧标签覆盖远端（published 分支还会丢弃 plan.writes）。
         const localTags = p.local?.tagIds;

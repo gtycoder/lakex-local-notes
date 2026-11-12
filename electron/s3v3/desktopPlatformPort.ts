@@ -112,6 +112,10 @@ export function createDesktopPlatformPort(store: Store, quickNotes?: QuickNotesS
     async saveNote(noteId: string, title: string, content: string, caches: NoteSearchCaches | null): Promise<void> {
       store.saveNote(noteId, title, content, caches ?? undefined);
     },
+    async saveSyncedNote(noteId: string, title: string, content: string, caches: NoteSearchCaches | null): Promise<void> {
+      // P0：同步专用写路径（允许回收站行接收远端正文，保留 trash 状态；purged 仍拒绝）。
+      store.saveSyncedNote(noteId, title, content, caches ?? undefined);
+    },
     async applyRemoteNoteMeta(note: SyncNoteWrite, expectedLocalUpdatedAt?: string): Promise<void> {
       store.applyRemoteNoteMeta(note as never, expectedLocalUpdatedAt);
     },

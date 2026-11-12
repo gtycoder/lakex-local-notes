@@ -15,6 +15,7 @@ import { NativeAssetSync, nativeAssetSyncSupported } from "../native/nativeAsset
 import * as historyRepository from "../data/historyRepository.js";
 import { insertSyncConflicts } from "../data/syncConflictRepository.js";
 import type { SyncConflictEvent } from "../../core/syncConflictLog.js";
+import type { PlanWarning } from "../../core/s3v3/plan/types.js";
 
 /**
  * 移动端 S3v3DeviceStore（E2-4 phase C）：**只做端口装配与正文 staging**，
@@ -30,6 +31,8 @@ import type { SyncConflictEvent } from "../../core/syncConflictLog.js";
 const v3StateReady = new WeakSet<MobileDb>();
 
 export class MobileDeviceStore implements S3v3DeviceStore {
+  /** 单篇 apply 失败的警告队列（drainApplyWarnings 消费；不进持久状态）。 */
+  private applyWarnings: PlanWarning[] = [];
   private readonly db: MobileDb;
   /**
    * 同步下载的正文先落 staging/<id>.body（见 noteBodies staging 注释），这里只记 id；
@@ -101,7 +104,16 @@ export class MobileDeviceStore implements S3v3DeviceStore {
         },
       },
       log: (message: string) => console.info(message),
+      // task-44：单篇 apply 失败的结构化警告（由 v3 同步编排并入 report.warningDetails）。
+      onApplyWarning: (warning) => this.applyWarnings.push(warning),
     });
+  }
+
+  /** 排空「单篇 apply 失败」警告（261112 task-44）。 */
+  drainApplyWarnings(): PlanWarning[] {
+    const out = this.applyWarnings;
+    this.applyWarnings = [];
+    return out;
   }
 
   async init(opts: { skipStagingCleanup?: boolean } = {}): Promise<void> {

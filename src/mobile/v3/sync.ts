@@ -62,7 +62,14 @@ export async function runMobileV3Sync(db: MobileDb, settings: S3v3Settings, opts
       if (override === "upload" || override === "stay" || override === "throw") mode = override;
     } catch { /* 设备本地调试开关读不到 ⇒ 按默认 upload（不参与同步数据） */ }
   }
-  return engine.sync({ ...(mode === "throw" ? {} : { onEmptyCloud: mode }), ...(opts.deferAssets ? { deferAssets: true } : {}) });
+  const report = await engine.sync({ ...(mode === "throw" ? {} : { onEmptyCloud: mode }), ...(opts.deferAssets ? { deferAssets: true } : {}) });
+  // task-44：单篇 apply 失败（已跳过、下一轮重试）并入结构化警告（复用既有 warningDetails 结构）。
+  const applyWarnings = store.drainApplyWarnings();
+  for (const w of applyWarnings) {
+    report.warningDetails.push({ kind: "remote_incomplete", noteId: w.id, title: w.title, message: w.detail ?? "" });
+    report.warnings.push("apply 跳过 " + w.id + "：" + (w.detail ?? ""));
+  }
+  return report;
 }
 /**
  * 单条小记推送（parity E2）：只 upsert 这一条，其余条目/标签/墓碑在云端逐字段不变。

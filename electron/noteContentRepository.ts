@@ -52,7 +52,24 @@ export class NoteContentRepository {
    * `baseHash`（Batch4-D 保存版本守卫）：编辑器打开/上次保存时的正文 hash；磁盘当前正文 hash 不一致
    * ⇒ **不写盘**，返回 `{ diskHash }` 由调用方（Store）包装成结构化冲突。缺省 = 旧行为（无条件写）。
    */
-  save(noteId: string, title: string, content: string, caches?: NoteCacheInput, baseHash?: string): { diskHash: string } | null {
+  /**
+   * 同步专用正文写入（261112 P0）：**允许写「已进回收站」的行**（保留 trashed 状态，只更新正文/标题/缓存）；
+   * 与用户保存的唯一差异 = 不触发「回收站拒写」守卫。**purged / 已删仍拒绝**（不可复活）。
+   * 为什么需要：回收站 = 特殊笔记本，内容编辑与位置移动是独立字段；远端编辑应用到本地回收站行时
+   * 不得因生命周期而整篇失败（否则一篇卡死整轮同步）。
+   */
+  saveSynced(noteId: string, title: string, content: string, caches?: NoteCacheInput): void {
+    this.save(noteId, title, content, caches, undefined, { allowTrashed: true });
+  }
+
+  save(
+    noteId: string,
+    title: string,
+    content: string,
+    caches?: NoteCacheInput,
+    baseHash?: string,
+    opts?: { allowTrashed?: boolean },
+  ): { diskHash: string } | null {
     const notePath = this.deps.notePathFor(noteId);
     if (!fs.existsSync(notePath)) throw new AppError("NotFound", `笔记不存在: ${noteId}`);
 
@@ -60,7 +77,13 @@ export class NoteContentRepository {
       | { title: string; trashed_at: string | null; is_purged?: number | null }
       | undefined;
     if (!current) throw new AppError("NotFound", `笔记不存在: ${noteId}`);
-    if (current.trashed_at != null || current.is_purged === 1) {
+    // purged = 永久删除，任何写入路径都拒绝；trashed 只在**同步专用路径**（allowTrashed）放行，
+    // 且该路径不会改动 trashed_at -> 仍留在回收站（见 saveSynced）。
+    if (current.is_purged === 1) {
+      // 文案保留「已删除」字样（noteContentRepository.test.ts 的 F04 断言判据），并说明不可恢复。
+      throw new AppError("InvalidInput", `笔记已被彻底删除（不可恢复），保存被拒绝；已删除条目不可复原: ${noteId}`);
+    }
+    if (current.trashed_at != null && !opts?.allowTrashed) {
       throw new AppError("InvalidInput", `笔记已在回收站或已被删除，保存被拒绝；请先显式恢复: ${noteId}`);
     }
     const currentContent = fs.readFileSync(notePath, "utf8");

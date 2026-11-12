@@ -107,3 +107,21 @@ describe("E2-3 engineBridge：结果回写", () => {
     expect(next.pendingTagDeletes).toEqual([]);
   });
 });
+describe("task-44：目录 meta 的 nodeType（P1-a 根治）", () => {
+  it("apply-remote-folder 的 meta.nodeType=group ⇒ 合并后的世界条目必须是 group（旧实现读 meta.kind 恒 undefined ⇒ 落成 notebook + parent 被清）", () => {
+    const s = state();
+    const merged = mergeRoundIntoState(s, round({
+      plan: {
+        version: 4, reads: [], transfers: [], deletes: [], publishes: { lake: [], quickNotes: [] }, publish: null,
+        intentChanges: [], warnings: [], total: { ops: 0, bytes: 0 },
+        writes: [
+          { kind: "apply-remote-folder", space: "lake", id: "grp", meta: { id: "grp", title: "G", parentId: "nb", sortOrder: 0, nodeType: "group", updatedAt: ISO } },
+        ],
+      },
+      commit: { status: "unchanged", pointer: round().nextPointer },
+    }));
+    const grp = merged.folders.find((f) => f.id === "grp")!;
+    expect(grp.nodeType).toBe("group");
+    expect(grp.parentId).toBe("nb");
+  });
+});

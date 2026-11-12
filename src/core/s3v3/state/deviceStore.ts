@@ -18,6 +18,7 @@ import type { DeviceBaseline, DeviceState, QuickPushState, S3v3DeviceStore } fro
 import type { LakeFolderEntry, LakeNoteEntry, QuickNoteEntry, QuickNoteTagEntry } from "../protocol/s3v3Index.js";
 import { TRASH_NOTEBOOK_ID } from "../../syncDecisions.js";
 import { normalizeNoteKind, type NoteKind } from "../../noteKind.js";
+import type { PlanWarning } from "../plan/types.js";
 import { searchTextForKind } from "../../noteSearchText.js";
 import { sha256Hex } from "../../syncUtils.js";
 import type { FileDriver } from "./ports.js";
@@ -164,6 +165,8 @@ export interface DeviceStoreMetaDeps {
   flushAssetDirDeletion?: (noteId: string) => Promise<void>;
   clearAssetDirDeletions?: () => void;
   log?: (message: string) => void;
+  /** 单篇 apply 失败的结构化警告出口（261112 task-44）：适配器收集，同步结果里透出（复用既有 SyncWarning 结构）。 */
+  onApplyWarning?: (warning: PlanWarning) => void;
 }
 
 export interface DeviceStoreMeta {
@@ -363,10 +366,37 @@ export function createDeviceStoreMeta(deps: DeviceStoreMetaDeps): DeviceStoreMet
     };
   }
 
+  /**
+   * 目录按「父先子后」排序（261112 P1-a）：同轮的 parent 可能也在这个 incoming 列表里（首拉/新端），
+   * 若按 id 字典序先落子再落父，resolveRemoteFolderParent 找不到父 ⇒ 子目录被落成根目录（parentId=null），
+   * 且此后每轮 changed 比较又把 null 当既有值写回，跨端目录结构永久不一致。
+   * 只在本列表内定序；父不在本列表（已存在/远端孤儿）时保持原样交给 resolveRemoteFolderParent 兜底。
+   */
+  function foldersParentsFirst(list: readonly LakeFolderEntry[]): LakeFolderEntry[] {
+    const byId = new Map(list.map((f) => [f.id, f] as const));
+    const out: LakeFolderEntry[] = [];
+    const seen = new Set<string>();
+    const visit = (f: LakeFolderEntry, depth = 0): void => {
+      if (seen.has(f.id) || depth > 64) return;
+      seen.add(f.id);
+      const parent = f.parentId ? byId.get(f.parentId) : undefined;
+      if (parent) visit(parent, depth + 1);
+      out.push(f);
+    };
+    for (const f of list) visit(f);
+    return out;
+  }
+
   /** 目录落库：先 import/更新（deleteMissing=false），再在 saveState 收尾删缺失（true）。 */
   async function saveFolders(folders: LakeFolderEntry[], deleteMissing: boolean): Promise<void> {
     const current = new Map((await p.listFoldersForSync()).map((f: SyncFolderRow) => [f.id, f] as const));
-    for (const f of folders) {
+    for (const raw of foldersParentsFirst(folders)) {
+      // P1-a 兜底（261112 真实 S3）：**notebook 只能根层**。带 parent 却标 notebook 的条目 =
+      // 远端类型在合并层丢了（engineBridge.applyFolders 读 meta.kind，而计划的 meta 只有 nodeType）
+      // ⇒ 按 group 落库，否则 resolveRemoteFolderParent 会把父强行置 null，跨端目录结构永久不一致。
+      const f = raw.nodeType === "notebook" && raw.parentId && raw.parentId !== TRASH_NOTEBOOK_ID
+        ? { ...raw, nodeType: "group" as const }
+        : raw;
       const c = current.get(f.id);
       try {
         const parentId = await resolveRemoteFolderParent(f);
@@ -517,6 +547,12 @@ export function createDeviceStoreMeta(deps: DeviceStoreMetaDeps): DeviceStoreMet
     const purgedNow = new Map((await p.listPurgedTombstones()).map((t) => [t.id, t.purgedAt ?? ""] as const));
     const restoringNow = new Set(state.restorePending ?? []);
     const wanted = new Map(state.lake.notes.map((n) => [n.id, n]));
+    // P0 判据来源：必须看**云端基线**（上次成功发布的集合）。本轮的 previous/state 已包含本地刚做的删除，
+    // 拿它当基线会把「用户刚删」误判成「基线本来就是回收站」⇒ 远端 active 时隐式恢复。
+    const deviceBaseline = await deps.baseline.load();
+    const baselineTrashedIds = new Set(
+      (deviceBaseline?.lake.notes ?? []).filter((entry) => !!entry.trashedAt).map((entry) => entry.id),
+    );
     const stagedMoves: Array<{ id: string; kind: NoteKind }> = [];
     for (const n of wanted.values()) {
       const stagedBytes = deps.stagedBodies.get(n.id);
@@ -524,8 +560,14 @@ export function createDeviceStoreMeta(deps: DeviceStoreMetaDeps): DeviceStoreMet
       const content = stagedBytes !== undefined ? new TextDecoder().decode(stagedBytes) : null;
       const cur = current.get(n.id);
       const curHash = cur ? (hashCache.get(n.id)?.hash ?? cur.contentHash ?? "") : "";
+      // P0（261112 真实 S3 验收）：**回收站 = 特殊笔记本**，内容编辑与位置移动是独立字段。
+      // 本地在回收站 + 远端 active 的最新编辑 ⇒ 应用正文/标题/标签等字段，**保留本地回收站生命周期**；
+      // 绝不因「远端 active」隐式恢复（restoreTrashItem 会把用户删掉的东西塞回文档树）。
+      // 仅两条例外允许恢复：① 基线本来就是回收站条目（远端 active = 他端显式恢复传播）② 本机 restore_pending。
+      const keepLocalTrash = !!cur && cur.trashedAt != null && !n.trashedAt
+        && !restoringNow.has(n.id) && !baselineTrashedIds.has(n.id);
       // C5：远端 parent 可能是本机还没有/已删的目录（首拉父未落库）——不得直接落库。
-      const resolvedParentId = n.trashedAt ? TRASH_NOTEBOOK_ID : await resolveRemoteParent(n.parentId);
+      const resolvedParentId = n.trashedAt || keepLocalTrash ? TRASH_NOTEBOOK_ID : await resolveRemoteParent(n.parentId);
       try {
         if (!cur) {
           // 轮内被 purge：以本地新动作为准（墓碑优先，不重建）；显式恢复/远端复活是例外。
@@ -553,7 +595,9 @@ export function createDeviceStoreMeta(deps: DeviceStoreMetaDeps): DeviceStoreMet
             const caches = kind === "doc" ? searchTextForKind("doc", content!) : null;
             const bodyPath = p.noteBodyPath(n.id);
             if (await files.stat(bodyPath)) {
-              await p.saveNote(n.id, n.title, content!, caches);
+              // P0：本地在回收站的行也要能接收远端正文（同步专用写路径，保留 trash 状态；purged 仍拒绝）。
+              if (cur.trashedAt != null && p.saveSyncedNote) await p.saveSyncedNote(n.id, n.title, content!, caches);
+              else await p.saveNote(n.id, n.title, content!, caches);
             } else {
               // P0：本地正文文件被删（DB 行还在）⇒ 普通 saveNote 会以「笔记不存在」拒绝；
               // 这是「从云端拉回正文」的恢复路径，必须走 importRemoteNote 重建文件。
@@ -570,24 +614,33 @@ export function createDeviceStoreMeta(deps: DeviceStoreMetaDeps): DeviceStoreMet
             // 远端墓碑 → 回收站：必须走 deleteNote（不能 moveTreeNode 到回收站隐藏笔记本）
             await p.deleteNote(n.id);
           } else if (!n.trashedAt && cur.trashedAt) {
-            await p.restoreTrashItem(n.id);
+            // P0：只有「基线 trashed → 远端 active」或显式 restore_pending 才恢复（见 keepLocalTrash）；
+            // 其余情况保留本地回收站：远端内容仍会按上面的正文/元数据路径应用。
+            if (!keepLocalTrash) await p.restoreTrashItem(n.id);
           }
           // P1（v3 空发布抖动根因）：本轮合并结果的元数据必须原样落库，尤其 updatedAt。
+          // P0：keepLocalTrash 时把生命周期字段固定为**本地回收站值**（position 归本地、内容归远端），
+          // 这样 applyRemoteNoteMeta 不会把行移出回收站（它的 inTrash 判据 = parentId === 回收站笔记本）。
+          const metaNote = keepLocalTrash
+            ? { ...toNoteWrite(n, resolvedParentId), trashedAt: cur.trashedAt ?? null, deletedFromParentId: cur.deletedFromParentId ?? null }
+            : toNoteWrite(n, resolvedParentId);
+          const effTrashedAt = keepLocalTrash ? cur.trashedAt : (n.trashedAt ?? null);
+          const effDeletedFrom = keepLocalTrash ? (cur.deletedFromParentId ?? null) : (n.deletedFromParentId ?? null);
           const metaDiffers = contentChanged
-            || (!!n.trashedAt !== !!cur.trashedAt)
+            || (!!effTrashedAt !== !!cur.trashedAt)
             || n.updatedAt !== cur.updatedAt
             || n.title !== cur.title
-            || (resolvedParentId ?? null) !== (cur.parentId ?? null)
+            || (metaNote.parentId ?? null) !== (cur.parentId ?? null)
             || n.sortOrder !== cur.sortOrder
             || !!n.isConflict !== !!cur.isConflict
-            || (n.trashedAt ?? null) !== (cur.trashedAt ?? null)
-            || (n.deletedFromParentId ?? null) !== (cur.deletedFromParentId ?? null)
+            || (effTrashedAt ?? null) !== (cur.trashedAt ?? null)
+            || (effDeletedFrom ?? null) !== (cur.deletedFromParentId ?? null)
             || (n.icon !== undefined && (cur.icon ?? null) !== (n.icon ?? null));
           if (metaDiffers && !lifecycleRace) {
             const localSnapshot = previous?.lake.notes.find((entry) => entry.id === n.id);
             // 引擎本轮自己写了正文（下载/恢复）时，DB 的 updated_at 是引擎写的、不是用户窗口内编辑 ⇒
             // 必须无条件应用远端元数据把 updatedAt 对齐，否则下一轮会误判本地更新再发布。
-            await p.applyRemoteNoteMeta(toNoteWrite(n, resolvedParentId), contentChanged ? undefined : localSnapshot?.updatedAt);
+            await p.applyRemoteNoteMeta(metaNote, contentChanged ? undefined : localSnapshot?.updatedAt);
           }
           if (!!cur.isEditLocked !== !!n.isLocked || (cur.editLockedAt ?? null) !== (n.lockedAt ?? null)) {
             await p.applyRemoteEditLock(n.id, !!n.isLocked, n.lockedAt ?? null);
@@ -616,7 +669,13 @@ export function createDeviceStoreMeta(deps: DeviceStoreMetaDeps): DeviceStoreMet
           if (stat) hashCache.set(n.id, { mtimeMs: stat.mtimeMs, size: stat.size, hash: sha256Hex(new TextEncoder().encode(content)) });
         }
       } catch (e) {
-        throw new Error("saveState 失败(" + n.id + "): " + (e as Error).message);
+        // P0（261112 真实 S3 验收：一篇卡死整台设备）：**单篇应用失败必须降级**——
+        // 记 warning（日志 + 结构化出口）后继续下一篇，绝不把异常抛成整轮 syncNow 失败。
+        // 下一轮会重新计划该篇（未标 synced/未推进基线），因此这里是可重试的跳过而不是丢数据。
+        const detail = "应用远端更新失败（已跳过，下一轮重试）：" + (e as Error).message;
+        deps.log?.("[sync][apply][warn] 跳过本篇 " + n.id + " " + detail);
+        deps.onApplyWarning?.({ code: "remote_incomplete", space: "lake", id: n.id, title: n.title, detail });
+        continue;
       }
     }
     // 正文 staging 搬到最终路径（移动），然后一次性提交批量语句（executeSet 单事务）。

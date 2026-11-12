@@ -938,6 +938,16 @@ export class Store {
   }
 
   /**
+   * 同步专用正文写入（261112 P0；端口 PlatformDataPort.saveSyncedNote 的实现）：
+   * 允许写「已进回收站」的行（保留 trashed 状态/父级），purged 仍拒绝。
+   * 只落正文/标题/派生缓存；**不**改 parent_id/trashed_at/排序（那是元数据应用路径的事）。
+   */
+  saveSyncedNote(id: string, title: string, content: string, caches?: NoteCacheInput): void {
+    const kind = this.kindOf(id);
+    this.noteContent.save(id, title, content, kind === "doc" ? caches : this.searchTextFor(id, content), undefined, { allowTrashed: true });
+  }
+
+  /**
    * 保存正文（Batch4-D 保存版本守卫）。`baseHash` = 打开/上次保存时的正文 sha256：
    * 磁盘当前正文 hash 不一致 ⇒ **不写盘**，返回 `{ ok:false, code:"external_changed", diskHash }`，
    * 由渲染层弹三选项确认。缺省 = 旧行为（逐字节一致回归）。

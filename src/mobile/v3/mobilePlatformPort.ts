@@ -123,6 +123,26 @@ export function createMobilePlatformPort(db: MobileDb, ctxIn?: Partial<MobilePla
     return note.title.trim() ? note.title.trim() : (note.kind === "usheet" ? "无标题表格" : "无标题文档");
   }
 
+  /**
+   * legacy 正文写路径（同步 apply 用；桌面 legacy 同口径）。**不改生命周期列**
+   * （trashed_at/parent_id 由 applyRemoteNoteMeta / 生命周期分支负责），因此回收站行也能安全接收正文。
+   * 261112 P0：saveNote 与 saveSyncedNote 共用这一份，避免两条写路径语义漂移。
+   */
+  async function applySyncedBody(noteId: string, title: string, content: string, caches: NoteSearchCaches | null): Promise<void> {
+    const row = await db.prepare("SELECT doc_kind FROM notes WHERE id=?").get(noteId) as { doc_kind?: string | null } | undefined;
+    const kind = normalizeNoteKind(row?.doc_kind);
+    const bodyHash = sha256Sync(new TextEncoder().encode(content));
+    const at = nowIso();
+    if (batch) batch.legacyBodies.push({ kind, id: noteId, content });
+    else await writeNoteBody(kind, noteId, content);
+    await write(
+      "UPDATE notes SET title=?, updated_at=?, content_hash=?, is_dirty=0, text_cache=? WHERE id=?",
+      [title.trim() ? title.trim() : "无标题文档", at, bodyHash, caches?.plain ?? null, noteId],
+    );
+    const snap = snapshot.get(noteId);
+    if (snap) { snap.title = title; snap.updated_at = at; snap.content_hash = bodyHash; }
+  }
+
   return {
     async listFoldersForSync(): Promise<SyncFolderRow[]> {
       // 与桌面 listFoldersForSync 同口径：固定「回收站」笔记本是本机容器，绝不进云端 folders
@@ -362,18 +382,12 @@ export function createMobilePlatformPort(db: MobileDb, ctxIn?: Partial<MobilePla
     },
     async saveNote(noteId: string, title: string, content: string, caches: NoteSearchCaches | null): Promise<void> {
       // 桌面 legacy 路径：正文随调用落盘（移动端正常走 staged 路径，这里保持等价实现）。
-      const row = await db.prepare("SELECT doc_kind FROM notes WHERE id=?").get(noteId) as { doc_kind?: string | null } | undefined;
-      const kind = normalizeNoteKind(row?.doc_kind);
-      const bodyHash = sha256Sync(new TextEncoder().encode(content));
-      const at = nowIso();
-      if (batch) batch.legacyBodies.push({ kind, id: noteId, content });
-      else await writeNoteBody(kind, noteId, content);
-      await write(
-        "UPDATE notes SET title=?, updated_at=?, content_hash=?, is_dirty=0, text_cache=? WHERE id=?",
-        [title.trim() ? title.trim() : "无标题文档", at, bodyHash, caches?.plain ?? null, noteId],
-      );
-      const snap = snapshot.get(noteId);
-      if (snap) { snap.title = title; snap.updated_at = at; snap.content_hash = bodyHash; }
+      await applySyncedBody(noteId, title, content, caches);
+    },
+    async saveSyncedNote(noteId: string, title: string, content: string, caches: NoteSearchCaches | null): Promise<void> {
+      // P0（261112）：同步专用写路径。移动端这条 SQL 本就不带 trashed 守卫（生命周期由元数据/分支负责），
+      // 与桌面 store.saveSyncedNote 同语义：允许回收站行接收远端正文，不改 trashed_at/parent_id。
+      await applySyncedBody(noteId, title, content, caches);
     },
     async applyStagedBodyNote(note: SyncNoteWrite): Promise<void> {
       // 移动端：正文已由引擎写到 staging 文件，这里只更新行（正文由 moveStagedBodyFiles 钩子搬）。

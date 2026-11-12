@@ -232,6 +232,65 @@ export function defineDeviceContract(name: string, make: ContractHarnessFactory)
       } finally { await a.close(); await b.close(); }
     }, 180_000);
 
+    it("P0：本地已进回收站 + 他端编辑并发布 → 应正文/保留回收站、且整轮不失败", async () => {
+      const remote = new MemoryRemote();
+      const a = await newDevice(make, remote);
+      const b = await newDevice(make, remote);
+      try {
+        await a.seedNote("n1", "标题一", "<p>正文一</p>");
+        await a.sync({ onEmptyCloud: "upload" });
+        await b.sync();
+        // A 本地移入回收站（**不先同步**：模拟用户删完还没同步，他端已编辑）
+        await a.trashNote("n1");
+        // B 编辑并发布（远端仍 active、updatedAt 更新）
+        await b.editNote("n1", "标题二", "<p>他端改过</p>");
+        await b.sync();
+        // A 同步：**不得抛错**（261112 真实 S3：曾抛 INTERNAL saveState 失败并让设备永久卡死）
+        const r = await a.sync();
+        expect(r).toBeTruthy();
+        // 生命周期保留：仍在回收站、不在活跃树（不隐式恢复）
+        expect(await a.listActiveIds()).not.toContain("n1");
+        expect(await a.listTrashIds()).toContain("n1");
+        // 内容已应用：内容编辑与位置移动是独立字段
+        expect(await a.readBody("n1")).toBe("<p>他端改过</p>");
+        // 再跑一轮仍稳定（不反复报错/搬运）
+        const again = await a.sync();
+        expect(again).toBeTruthy();
+        expect(await a.listActiveIds()).not.toContain("n1");
+        // 显式恢复是唯一允许的恢复路径
+        await a.restoreNote("n1");
+        await a.sync();
+        expect(await a.listActiveIds()).toContain("n1");
+      } finally { await a.close(); await b.close(); }
+    }, 180_000);
+
+    it("task-44：回收站位置必须传播（A 移入回收站 + B 编辑 → 两端都在回收站、云端 trashedAt 非空、内容=B、多轮不抖动）", async () => {
+      const remote = new MemoryRemote();
+      const a = await newDevice(make, remote);
+      const b = await newDevice(make, remote);
+      try {
+        await a.seedNote("n1", "标题一", "<p>正文一</p>");
+        await a.sync({ onEmptyCloud: "upload" });
+        await b.sync();
+        await a.trashNote("n1");            // A 本地移入回收站（未同步）
+        await b.editNote("n1", "标题二", "<p>B 改过</p>");   // B 编辑正文（位置仍是 base）
+        await b.sync();
+        await a.sync();                      // A：应用远端内容 + **发布本地位置**
+        await b.sync();                      // B 跟随进回收站
+        expect(await a.listTrashIds()).toContain("n1");
+        expect(await b.listTrashIds()).toContain("n1");
+        expect(await a.readBody("n1")).toBe("<p>B 改过</p>");
+        const cloud = await readCloudLakeIndex(remote);
+        expect(cloud.index.notes.find((n) => n.id === "n1")!.trashedAt ?? null).not.toBe(null);
+        // 多轮不抖动（位置/内容都已收敛）
+        await a.sync();
+        await b.sync();
+        expect(await a.listTrashIds()).toContain("n1");
+        expect(await b.listTrashIds()).toContain("n1");
+        expect(await a.readBody("n1")).toBe("<p>B 改过</p>");
+      } finally { await a.close(); await b.close(); }
+    }, 180_000);
+
     it("云端彻底删除 → 对端保留回收站副本、正文仍在、打「云端已删除」标记", async () => {
       const remote = new MemoryRemote();
       const a = await newDevice(make, remote);

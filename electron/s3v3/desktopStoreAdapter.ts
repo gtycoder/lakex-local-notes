@@ -12,6 +12,7 @@ import {
 import { createDesktopPlatformPort } from "./desktopPlatformPort.js";
 import { createNodeFileDriver } from "./nodeFileDriver.js";
 import type { SyncConflictEvent } from "../../src/core/syncConflictLog.js";
+import type { PlanWarning } from "../../src/core/s3v3/plan/types.js";
 
 /**
  * 桌面现有 Store → S3v3DeviceStore 适配器（E2-4：**薄壳**）。
@@ -24,6 +25,8 @@ import type { SyncConflictEvent } from "../../src/core/syncConflictLog.js";
  * - baseline 文件（gzip）与 saveBaseline 的 UI dirty 清理。
  */
 export class DesktopStoreDevice implements S3v3DeviceStore {
+  /** 单篇 apply 失败的警告队列（drainApplyWarnings 消费；不进持久状态）。 */
+  private applyWarnings: PlanWarning[] = [];
   static readonly MISSING_SCAN_INTERVAL_MS = 15 * 60_000;
   private readonly store: Store;
   private readonly stateFile: string;
@@ -82,7 +85,16 @@ export class DesktopStoreDevice implements S3v3DeviceStore {
       },
       clearAssetDirDeletions: () => this.clearedAssets.clear(),
       log: (message: string) => this.store.logScopes.sync.info(message),
+      // task-44：单篇 apply 失败的结构化警告（由 desktopSync 并入 SyncResult.warnings）。
+      onApplyWarning: (warning) => this.applyWarnings.push(warning),
     });
+  }
+
+  /** 排空「单篇 apply 失败」警告（261112 task-44）。 */
+  drainApplyWarnings(): PlanWarning[] {
+    const out = this.applyWarnings;
+    this.applyWarnings = [];
+    return out;
   }
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars -- 桌面 init 只有 mkdir，无需区分轻量/整轮

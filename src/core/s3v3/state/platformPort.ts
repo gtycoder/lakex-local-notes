@@ -171,6 +171,14 @@ export interface PlatformDataPort {
   applyStagedBodyNote?(note: SyncNoteWrite): Promise<void>;
   /** caches 由 core 用 core/noteSearchText 预计算（doc 才有；其它类型为 null，平台自行按 kind 派生）。 */
   saveNote(noteId: string, title: string, content: string, caches: NoteSearchCaches | null): Promise<void>;
+  /**
+   * 同步专用正文写入（261112 P0）：与 saveNote 的唯一差异 = **允许写「已进回收站」的行**
+   * （保留 trashed 状态/父级，只更新正文/标题/派生缓存）；purged / 已删仍拒绝。
+   * 场景：本地把文档移入回收站（软删）后，他端又编辑并发布该文档 —— 内容编辑与位置移动是独立字段，
+   * 必须能应用正文而不隐式恢复、也不能整轮失败。
+   * 缺省 = 平台未接入 ⇒ core 回落 saveNote（旧行为，可能被用户保存守卫拒绝）。
+   */
+  saveSyncedNote?(noteId: string, title: string, content: string, caches: NoteSearchCaches | null): Promise<void>;
   /** expectedLocalUpdatedAt = 本轮开始时的本地快照 updatedAt：平台只在当前 DB 仍等于它时才覆盖，
    *  防止同步窗口内用户改名/恢复被远端旧元数据覆盖（261107 数据安全）。 */
   applyRemoteNoteMeta(note: SyncNoteWrite, expectedLocalUpdatedAt?: string): Promise<void>;

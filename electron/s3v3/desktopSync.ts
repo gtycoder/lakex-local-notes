@@ -173,6 +173,9 @@ export async function syncWithV3(
       if (baseline) store.markRemoteNoteIds(baseline.lake.notes.map((n) => n.id));
     } catch { /* 读基线失败时保持上一轮集合 */ }
     for (const w of r.warnings) store.logScopes.sync.warn("[v3] " + w);
+    // task-44：单篇 apply 失败（已跳过、下一轮重试）并入结构化警告，不再只留在日志里。
+    const applyWarnings = device.drainApplyWarnings();
+    for (const w of applyWarnings) store.logScopes.sync.warn("[v3][apply] " + w.id + " " + (w.detail ?? ""));
     const result: SyncResult = {
       uploaded: r.uploadedNotes, downloaded: r.downloadedNotes, conflicts: r.supersededNotes.length,
       manifestId: "v3-g" + r.generation, completedAt: new Date().toISOString(),
@@ -187,7 +190,14 @@ export async function syncWithV3(
       uploadedBytes: r.uploadedBytes ?? 0,
       downloadedBytes: r.downloadedBytes ?? 0,
       // 旧协议有的结构化警告（UI SyncStatusPopover 读取 warnings；只增不减）。
-      ...(r.warningDetails.length > 0 ? { warnings: r.warningDetails } : {}),
+      ...(r.warningDetails.length + applyWarnings.length > 0
+        ? {
+            warnings: [
+              ...r.warningDetails,
+              ...applyWarnings.map((w) => ({ kind: "remote_incomplete" as const, noteId: w.id, title: w.title, message: w.detail ?? "" })),
+            ],
+          }
+        : {}),
     };
     store.logScopes.sync.info("[v3] sync done " + JSON.stringify({ published: r.published, gen: r.generation, warnings: r.warnings.length, ms: result.durationMs }));
     recordV3Diagnostic(store, buildS3v3DiagnosticReport({

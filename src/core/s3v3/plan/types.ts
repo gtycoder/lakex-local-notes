@@ -34,6 +34,8 @@ export interface EntryMeta {
   trashedAt?: string | null;
   deletedFromParentId?: string | null;
   kind?: string;
+  /** 目录节点类型（LakeFolderEntry 的字段；目录计划 meta = 原样远端条目 ⇒ 合并层必须读它判断 group/notebook）。 */
+  nodeType?: "notebook" | "group";
 }
 
 /** 只读远端对象（正文/声明/索引片段）：plan 只携带引用，不携带字节。 */
@@ -49,6 +51,14 @@ export type WriteOp =
   /** reason：remote-wins = 冲突留档；cloud-absent = 云端已删留档；suspicious = 疑似外部损坏/替换留档（P1-4）。 */
   | { kind: "archive-local"; space: Space; id: string; reason: "remote-wins" | "cloud-absent" | "suspicious" }
   | { kind: "set-lifecycle"; space: Space; id: string; lifecycle: "active" | "trashed" | "cloud-deleted" | "purged" }
+  /** 位置字段（parentId / trashedAt / deletedFromParentId）以远端为准：**只改位置**，不动正文/内容 hash。
+   *  用于「远端移动/移入回收站 + 本地内容要上传」的一轮（内容归本地、位置归远端）。 */
+  | {
+      kind: "apply-position";
+      space: "lake";
+      id: string;
+      position: { parentId: string | null; trashedAt: string | null; deletedFromParentId: string | null };
+    }
   /** 目录元数据以远端为准（下载/回收站传播）；目录没有正文。 */
   | { kind: "apply-remote-folder"; space: "lake"; id: string; meta: EntryMeta }
   /** 目录在远端已缺席（仅本地副本进回收站/跟随删除）。 */
