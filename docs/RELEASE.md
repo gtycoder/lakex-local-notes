@@ -202,6 +202,9 @@ git push origin master v0.1.2
 
 > 更新清单（261109）：release job 会自动从 `docs/RELEASE-NOTES.md` 抽当前 tag 段落写 GitHub Release 正文，并用 `scripts/generate-update-manifest.mjs` 生成 `latest.json`（应用更新中心读取）。发版前可用 fake dist 本地干跑；`workflow_dispatch` 重跑旧 tag 需先在 UI 选中该 tag。
 
+> **段落标题格式（发版必核）**：`docs/RELEASE-NOTES.md` 里当前 tag 的段落标题必须逐字为 **`# LakexLocalNotes vX.Y.Z`**（例：tag `v1.1.1` ⇒ 标题 `# LakexLocalNotes v1.1.1`）。`generate-update-manifest.mjs` 按它抽取正文与更新日志，**找不到会直接失败**；段落到下一个 `# LakexLocalNotes` 标题为止。
+> **Android 版本号不手改 `build.gradle`**：`versionName` = 根 `package.json` 版本，`versionCode` = `1000 + major×10000 + minor×100 + patch`（只增不减；例：1.1.1 ⇒ 11101）。
+
 ### 4. Gitee 发行版同步（可选）
 
 > **Gitee 侧不跑 CI**（Gitee Go 收费，用户 261029 定：CI 只在 GitHub）。这里说的「同步」= **GitHub Actions 里调 Gitee API 上传产物**，不占 Gitee CI、不额外收费；不配 secret 就跳过（Gitee 只保留代码+tag 镜像）。
