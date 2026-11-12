@@ -74,11 +74,15 @@ describe("历史面板：复用 / 预热 / 当前版本 / 键盘", () => {
   const PANEL = readFileSync(new URL("./HistoryPanel.tsx", import.meta.url), "utf8");
   const HOOK = readFileSync(new URL("../hooks/useHistorySnapshotViewer.ts", import.meta.url), "utf8");
 
-  it("doc 快照 viewer 同实例复用（切快照只 setDocument）", () => {
-    // 只在没有实例时创建；已有实例（同一宿主 + 同一文档）继续用
-    expect(HOOK).toMatch(/if \(!viewerRef\.current\) \{/);
-    expect(HOOK).toMatch(/viewerRef\.current\.setDocument\("text\/lake", addAssetAccessToken\(body\)\)/);
-    expect(HOOK).toMatch(/hostNodeRef\.current !== host \|\| noteRef\.current !== noteId/);
+  it("doc 快照 viewer 同实例复用（实现收口到 useReadOnlyKernelViewer）", () => {
+    // 261112 R1：create/setDocument/destroy 的判据收口到 features/preview/useReadOnlyKernelViewer
+    //（全仓唯一 createLakeDocument("viewer") 包装）。本 hook 只保留历史快照的契约：
+    // key = noteId（切快照只 setDocument）+ 滚动容器 = 宿主节点。
+    expect(HOOK).toContain("useReadOnlyKernelViewer({");
+    expect(HOOK).toMatch(/key:\s*noteId/);
+    expect(HOOK).toMatch(/scrollNode:\s*\(\)\s*=>\s*hostRef\.current/);
+    // 行为（同实例只 setDocument / 换文档重建 / 卸载销毁 / token 必加）由
+    // src/features/preview/useReadOnlyKernelViewer.render.test.tsx 钉住。
   });
 
   it("261106：四个 doc 预览入口共用 NoteDocPreview（唯一 hook 消费者），不再各自内联宿主", () => {
