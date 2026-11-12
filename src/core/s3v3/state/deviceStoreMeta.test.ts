@@ -428,6 +428,60 @@ describe("createDeviceStoreMeta.saveState：同步窗口守卫", () => {
     expect(platform.calls).not.toContain("applyRemoteNoteMeta:n1");
   });
 
+  it("H73-G1 远端 trashed + 本地内容更新更晚（位置本地未动）⇒ 生命周期必须落地（deleteNote + 对齐元数据）", async () => {
+    // 真实形态：A 改 v2 → A 删除并同步；B 未同步改 v2B（updatedAt 更晚）→ B 同步。
+    // 本轮快照（previous）里 n1 仍是 active，本地当前位置 = 快照位置（本地没动生命周期）
+    // ⇒ 生命周期差异只可能来自远端（位置赢家=远端），不得被「本地 updatedAt 更晚」的
+    //   lifecycleRace 挡住（否则删除永不传播、两端长期不一致，AGENTS §3#24 位置与内容正交）。
+    const files = memoryFiles({ "bodies/n1.lake": new TextEncoder().encode("local-v2b") });
+    const platform = memoryPlatform({
+      folders: [],
+      notes: [{ id: "n1", title: "N1", parentId: null, sortOrder: 0, updatedAt: "T9", contentHash: H("b"), kind: "doc", icon: null, isEditLocked: false, editLockedAt: null, isConflict: false, trashedAt: null, deletedFromParentId: null }],
+    });
+    const staged = new Map<string, Uint8Array>([["n1", new TextEncoder().encode("remote-v2")]]);
+    const meta = metaOf(platform, files, staged);
+    const previous: DeviceState = {
+      lake: { v: 3, space: "lake", notes: [{ id: "n1", title: "N1", parentId: null, sortOrder: 0, updatedAt: "T0", contentHash: H("a") }], folders: [] },
+      quickNotes: { v: 3, space: "quickNotes", items: [], tags: [] },
+      folders: [], intents: [], pending: [], remotePurged: [], restorePending: [],
+    };
+    const state: DeviceState = {
+      lake: { v: 3, space: "lake", notes: [{ id: "n1", title: "N1", parentId: null, sortOrder: 0, updatedAt: "T3", contentHash: H("c"), trashedAt: "T3", deletedFromParentId: "nb1" }], folders: [] },
+      quickNotes: { v: 3, space: "quickNotes", items: [], tags: [] },
+      folders: [], intents: [], pending: [], remotePurged: [], restorePending: [],
+    };
+    await meta.saveState(state, previous);
+    // 生命周期落地：远端 trashed ⇒ 本机进回收站
+    expect(platform.calls).toContain("deleteNote:n1");
+    // 元数据/updatedAt 对齐远端（避免下一轮又被判「本地更新」形成永久守卫）
+    expect(platform.calls).toContain("applyRemoteNoteMeta:n1");
+    expect(platform.importedNotes.get("n1")?.trashedAt).toBe("T3");
+  });
+
+  it("P1-2 有 previous 时保护不倒退：本地在窗口内自己移入回收站 ⇒ 不覆写生命周期/元数据", async () => {
+    const files = memoryFiles({ "bodies/n1.lake": new TextEncoder().encode("body") });
+    const platform = memoryPlatform({
+      folders: [],
+      notes: [{ id: "n1", title: "N1", parentId: "trash", sortOrder: 0, updatedAt: "T9", contentHash: H("a"), kind: "doc", icon: null, isEditLocked: false, editLockedAt: null, isConflict: false, trashedAt: "T9", deletedFromParentId: null }],
+    });
+    const meta = metaOf(platform, files);
+    // 快照在窗口开始还是 active（T1）；用户在窗口内把它移进回收站（cur.trashedAt=T9）
+    const previous: DeviceState = {
+      lake: { v: 3, space: "lake", notes: [{ id: "n1", title: "N1", parentId: null, sortOrder: 0, updatedAt: "T1", contentHash: H("a") }], folders: [] },
+      quickNotes: { v: 3, space: "quickNotes", items: [], tags: [] },
+      folders: [], intents: [], pending: [], remotePurged: [], restorePending: [],
+    };
+    const state: DeviceState = {
+      lake: { v: 3, space: "lake", notes: [{ id: "n1", title: "N1", parentId: null, sortOrder: 0, updatedAt: "T1", contentHash: H("a") }], folders: [] },
+      quickNotes: { v: 3, space: "quickNotes", items: [], tags: [] },
+      folders: [], intents: [], pending: [], remotePurged: [], restorePending: [],
+    };
+    await meta.saveState(state, previous);
+    expect(platform.calls).not.toContain("deleteNote:n1");
+    expect(platform.calls).not.toContain("restoreTrashItem:n1");
+    expect(platform.calls).not.toContain("applyRemoteNoteMeta:n1");
+  });
+
   it("对照：远端墓碑正常传播（本地没有更新）⇒ 仍走 deleteNote", async () => {
     const files = memoryFiles({ "bodies/n1.lake": new TextEncoder().encode("body") });
     const platform = memoryPlatform({

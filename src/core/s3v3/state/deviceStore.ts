@@ -606,7 +606,19 @@ export function createDeviceStoreMeta(deps: DeviceStoreMetaDeps): DeviceStoreMet
           }
           // 同步窗口守卫（P1-2）：本地行比本轮快照更新且生命周期相反 ⇒ 用户在图同步期间移入/移出回收站，
           // 本轮不得覆写生命周期（否则删除/恢复被静默回滚），留到下一轮按新状态合并（I2「未变才应用」）。
+          //
+          // H73-G1（261112，AGENTS §3#24 位置与内容正交）：该守卫**只应保护「本地在同步窗口内自己改了生命周期」**，
+          // 不能因为「本地内容更新更晚」就永远挡住远端位置变更（否则：A 改 v2→A 删除→同步；B 未同步改 v2B→同步，
+          // B 只应用了正文却永远留在活跃树 = 删除不传播，且 apply-position 不推进 updatedAt ⇒ 守卫永久生效）。
+          // 判据 = 本轮快照（previous）里该条的位置：本地当前生命周期与快照一致 ⇒ 本地没动生命周期 ⇒
+          // 生命周期差异只可能来自远端（位置赢家=远端）⇒ 必须落地；只有「本地与快照不一致」才按 P1-2 保护。
+          // previous 缺失（旧调用/单测直接调 saveState）⇒ 保守沿用旧守卫，行为不倒退。
+          const prevNote = previous?.lake.notes.find((entry) => entry.id === n.id);
+          const prevTrashedAt = prevNote?.trashedAt ?? null;
+          const localLifecycleChangedSinceSnapshot = !!prevNote
+            && ((cur.trashedAt ?? null) !== prevTrashedAt);
           const lifecycleRace = (!!n.trashedAt !== !!cur.trashedAt)
+            && (!prevNote || localLifecycleChangedSinceSnapshot)
             && !!cur.updatedAt && !!n.updatedAt && cur.updatedAt > n.updatedAt;
           if (lifecycleRace) {
             // 只跳过生命周期/元数据覆写；正文/图标/锁等独立字段仍按正常路径处理。
