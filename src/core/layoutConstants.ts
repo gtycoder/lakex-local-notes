@@ -12,7 +12,7 @@ export const OUTLINE_SIDEBAR_DEFAULT_WIDTH = 280;
 export const OUTLINE_SIDEBAR_MIN_WIDTH = 200;
 export const OUTLINE_SIDEBAR_MAX_WIDTH = 420;
 
-/** 左侧资料库侧栏宽（261103 P10：从 desktopTypes 下沉，components→desktop 违规清零）。 */
+/** 左侧知识库侧栏宽（261103 P10：从 desktopTypes 下沉，components→desktop 违规清零）。 */
 export const SIDEBAR_DEFAULT_WIDTH = 224;
 export const SIDEBAR_MIN_WIDTH = 160;
 export const SIDEBAR_MAX_WIDTH = 420;

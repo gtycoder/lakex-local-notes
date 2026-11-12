@@ -648,6 +648,7 @@
 - **`npx cap sync` 会改写 `android/capacitor.settings.gradle`**（`../../lakex-local-notes/node_modules` → `../node_modules`，两者对本机等价）⇒ 每次 android 构建后、提交前 `git checkout -- android/capacitor.settings.gradle`，生成文件不要纳入提交。
 - **并行会话共用工作树（261110 实测）**：同一 checkout 里可能有另一 DSH 会话在改别的功能（本轮 = AI 助手固定/复制）。提交前必须 `git status` 分辨；只 stage 本批文件；**共享基线文件**（如 `src/styles/cssLayers.test.ts`）被双方各改几行时，用 `git hash-object -w` + `git update-index --cacheinfo` 只提交本批版本，对方增量留在工作树；**绝不用 `git add -A`**。
 - **门禁预算现状**：`check:bundle` 的 mobile-entry 在 HEAD 已超目标，脚本冻结的是「现状值」；不要把它当绿，也不要把冻结值当目标。
+- **全量 vitest 的 `electron/s3v3/perf.integration.test.ts` 在「3 台模拟器 + 构建」并行时会因宿主负载误报**（261112 实测：全量跑 1 例红、单独重跑通过；该用例是 500/2000 文档的阶段耗时门禁）。⇒ 见它红先看宿主负载/单跑，别先怀疑代码。
 - **历史文档已删除**：261109 起一批研究/审计/回归/旧发布说明已删（git 可查）；旧文档/代码注释里的「HANDOFF §3#N / §4」是历史编号，**不对应本文**，待办只看 §3（本节不编号）。README / 其它文档中若仍有指向已删文档或旧编号的引用，以 git 与现存文档为准（本批不改其它文件）。
 - **发布链路**：Gitee 单附件 100MB / 仓库 1GB 上限（mac/Windows 包只能走 GitHub）；GitHub 慢速上传需依赖 workflow 的 50 分钟步骤超时，不要缩短。
 
@@ -676,7 +677,7 @@
 - **小记快路径后续优化（非必须）**：请求已 13→11；重复点首次 `push-state` 约 1455ms（SQLite/原生桥多次调用，第二次 25ms）⇒ 若要再快，可把 baseline+单条行+标记合并成一次窄端口调用；**不要再省写后 pointer 读回**（「已同步」可信度）；要再省 ~5 次往返只能上条件写替代锁（协议级，另立项）。
 - **发版前补一次快捷 capture 冷启动真机**（本次只测热启动；同一代码路径，请求数相同）。
 - **便携包真实 3GB 数据验证**；**更新中心设备验收**（Android 下载→校验→系统安装器）；**桌面 3 项实机复核 + 平板复验**；261104 三项裁决残余验证；小记→文档标签携带待定；导入/导出/键盘真机冒烟债；依赖补丁 4 处升级复核。
-- **死 CSS 审计复核（261111）**：桌面候选 `.diary-split-handle` 是 `SplitPane` 的 `${className}-handle` 动态拼接、移动端 `.lv1–3` 是大纲层级动态类 ⇒ **均为假阳性，不删**；`docs/audit-261027/` 4 份**保留**（`TROUBLESHOOTING` / `SYNC-PROTOCOL` / 源码注释仍引用，删了会断出处）。旧「资料库」注释残留：**261112 已统一** `shell.css` / `app/base.css` / `app/editor.css` / `kit.css` / `features/outline/outline.css`（仅注释、零行为；ui-metrics / cssLayers / diff-check 均绿）；TS/TSX 里仍有约 30 处同义注释（`App.tsx` / `noteRef` / `diaryTree` / `outline` 等）⇒ 下次碰这些文件时顺手改，不单独开批。
+- **死 CSS 审计复核（261111）**：桌面候选 `.diary-split-handle` 是 `SplitPane` 的 `${className}-handle` 动态拼接、移动端 `.lv1–3` 是大纲层级动态类 ⇒ **均为假阳性，不删**；`docs/audit-261027/` 4 份**保留**（`TROUBLESHOOTING` / `SYNC-PROTOCOL` / 源码注释仍引用，删了会断出处）。旧「资料库」注释残留：**261112 已统一** `shell.css` / `app/base.css` / `app/editor.css` / `kit.css` / `features/outline/outline.css`（仅注释、零行为；ui-metrics / cssLayers / diff-check 均绿）；**261112 已全仓统一**（`src` 里 0 处；顺带修了一处用户可见文案 `noteRef` 菜单「目标文档在资料库里的全路径」→「知识库」），只改注释/文案、零逻辑。
 - **首篇编辑器 fallback 的最终解法（需用户裁决）**：① 拆内核 chunk（大改，需 RFC）；② 改「启动自动打开文档」语义（恢复标签为空时不自动开 / 先画列表再开）。当前预热只覆盖「用户中途点文档」，自动开首篇仍会看到 200–300ms fallback。
 - **编辑器同构骨架 fallback（可选，观感最好）**：替换「正在加载编辑器…」文字为轻骨架；需新增 editor CSS + `cssLayers` 基线，等并行会话释放后做。
 

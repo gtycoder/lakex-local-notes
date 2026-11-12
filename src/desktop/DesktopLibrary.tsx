@@ -1,5 +1,5 @@
 /**
- * 桌面资料库主区（§20 Phase B：从 src/App.tsx 拆出）。
+ * 桌面知识库主区（§20 Phase B：从 src/App.tsx 拆出）。
  * 渲染 MultiTabEditor + 思源式面包屑 + 空态。所有状态/回调由 App 注入，本组件不持有业务状态。
  */
 import { useRef, type ReactNode, type RefObject } from "react";
@@ -20,7 +20,7 @@ export interface DesktopLibraryProps {
   editorPrefs: { fontSize: number; showToolbar?: boolean; floatingToolbar?: boolean; blockHandle?: boolean };
   /** 每个文档 tab 的笔记本名（面包屑首段）：透传给 EditorTab，由它自渲染面包屑。 */
   notePathTitle: (noteId: string) => string | null;
-  /** 工作区级可见性（keep-alive：小记模式隐藏资料库但不卸载，切回时避免重建全部 Lake 编辑器） */
+  /** 工作区级可见性（keep-alive：小记模式隐藏知识库但不卸载，切回时避免重建全部 Lake 编辑器） */
   visible?: boolean;
   moreMenuWrapRef: RefObject<HTMLDivElement>;
   onToggleMoreMenu: () => void;

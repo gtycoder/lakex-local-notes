@@ -56,8 +56,8 @@ export interface NoteRefHost {
   listNotes(): NoteSummary[];
   openNote(noteId: string): void;
   /**
-   * 目标文档在**资料库树里的全路径**（`笔记本/分组/…/文档`）——「复制引用」复制的就是它
-   * （用户 261008 定稿：不再复制只有本应用认识的 `lake-note://<id>`；一度改成"本机绝对路径"，用户最终定回资料库路径）。
+   * 目标文档在**知识库树里的全路径**（`笔记本/分组/…/文档`）——「复制引用」复制的就是它
+   * （用户 261008 定稿：不再复制只有本应用认识的 `lake-note://<id>`；一度改成"本机绝对路径"，用户最终定回知识库路径）。
    * 取不到（树里没有该节点）时返回 null，调用方回落标题。签名允许同步或异步，调用方统一 `await`。
    */
   pathOf?(noteId: string): Promise<string | null> | string | null;

@@ -5,7 +5,7 @@
  * **悬停文字出动作条**（与内核链接一致），四个动作：
  * - 访问 = 打开引用的文档标签页（**点击文字也直接访问**，同一文档只有一个标签：已打开则激活）；
  * - 编辑 = 锚定小浮层改「文本（展示名）」与「链接（目标文档）」；
- * - 复制 = 把目标文档的**资料库全路径**（`笔记本/分组/文档`）写入剪贴板；
+ * - 复制 = 把目标文档的**知识库全路径**（`笔记本/分组/文档`）写入剪贴板；
  * - 取消链接 = **把卡片换成一段正文文本**（内核命令 insertAtPosition + deleteCard，见 `unlinkCardToText`）。
  *
  * **完整创建流程（261008 八改定稿）**：插入面板建卡 → 本卡**自动打开编辑浮层**（判据见下方注释）→ 点「链接」选文档 →
@@ -291,10 +291,10 @@ function NoteRefCard({ value, update, mode, editor }: { value: NoteRefValue | nu
   };
 
   /**
-   * 复制引用 = 复制目标文档的**资料库全路径**（`笔记本/分组/文档`；用户 261008 定稿）。
-   * `pathOf` 由宿主注入、签名允许同步/异步（统一 `await`），只在**点击那一刻**取 —— 资料库路径要走一遍树，
+   * 复制引用 = 复制目标文档的**知识库全路径**（`笔记本/分组/文档`；用户 261008 定稿）。
+   * `pathOf` 由宿主注入、签名允许同步/异步（统一 `await`），只在**点击那一刻**取 —— 知识库路径要走一遍树，
    * 放渲染期会随卡片数量白烧。
-   * 回退顺序：资料库路径 → 展示名 → `lake-note://<id>`（任何情况下都不会复制空串）。
+   * 回退顺序：知识库路径 → 展示名 → `lake-note://<id>`（任何情况下都不会复制空串）。
    */
   const copyRef = async () => {
     if (!noteId) return;
@@ -335,7 +335,7 @@ function NoteRefCard({ value, update, mode, editor }: { value: NoteRefValue | nu
         </NoteRefActionItem>
       )}
       {noteId && (
-        <NoteRefActionItem label="复制引用路径（目标文档在资料库里的全路径）" onClick={() => void copyRef()}>
+        <NoteRefActionItem label="复制引用路径（目标文档在知识库里的全路径）" onClick={() => void copyRef()}>
           {copied ? <Check size={16} /> : <Copy size={16} />}
         </NoteRefActionItem>
       )}

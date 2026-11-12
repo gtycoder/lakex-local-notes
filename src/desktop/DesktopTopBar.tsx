@@ -27,7 +27,7 @@ export interface DesktopTopBarLeadingProps {
 }
 
 const SPACE_META: Record<DesktopWorkspace, { label: string; Icon: typeof Files }> = {
-  // 261110 用户定稿：桌面一级空间「文档」改名「知识库」，与移动端第 2 格同名（原文案「资料库」→「文档」→「知识库」）。
+  // 261110 用户定稿：桌面一级空间「文档」改名「知识库」，与移动端第 2 格同名（原文案「知识库」→「文档」→「知识库」）。
   library: { label: "知识库", Icon: Files },
   "quick-notes": { label: "小记", Icon: Feather },
   "ai-writing": { label: "AI 写作", Icon: Sparkles },

@@ -53,7 +53,7 @@ export function diaryEntryViews(nodes: readonly TreeNode[]): DiaryEntryView[] {
   });
 }
 
-/** 日记条目**文档 id** 集合：给「搜索命中按日记过滤」「资料库同篇去重」用。 */
+/** 日记条目**文档 id** 集合：给「搜索命中按日记过滤」「知识库同篇去重」用。 */
 export function diaryEntryIds(nodes: readonly TreeNode[]): Set<string> {
   return new Set(diaryEntryViews(nodes).map((entry) => entry.documentId));
 }

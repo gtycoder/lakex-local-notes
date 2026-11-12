@@ -11,7 +11,7 @@
  * 261017 B：**4px 死区**（对齐 open-claude-ui 的指针微抖死区）——按下后移动不足 4px 不进入拖拽，
  * 松手也不落盘；越过阈值时把起点重定到当前点，避免"一进入就跳 4px"。双击复位不受影响。
  *
- * 261022 D1：资料库侧栏 / 大纲栏也复用本实现。两边的差异只用可选 props 表达
+ * 261022 D1：知识库侧栏 / 大纲栏也复用本实现。两边的差异只用可选 props 表达
  * （定位类、右栏左缘方向、橡皮筋、键盘步长、冒泡、松手坐标），**不许再写第二套 pointer resize**。
  */
 import { useRef, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type RefObject } from "react";

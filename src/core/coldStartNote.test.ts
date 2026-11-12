@@ -25,7 +25,7 @@ describe("冷启动落点（261022：Lake 文档优先，其次多维表）", ()
     expect(chooseColdStartNoteId(notes, null)).toBe("s2");
   });
 
-  it("空资料库 ⇒ null", () => {
+  it("空知识库 ⇒ null", () => {
     expect(chooseColdStartNoteId([], "x")).toBeNull();
   });
 });

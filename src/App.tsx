@@ -301,7 +301,7 @@ export function App() {
     setNoteRefHost({
       listNotes: () => notes,
       openNote,
-      /** 资料库全路径（`笔记本/分组/文档`）：「复制引用」复制的就是它（见 noteRef.ts 的 host 注释）。 */
+      /** 知识库全路径（`笔记本/分组/文档`）：「复制引用」复制的就是它（见 noteRef.ts 的 host 注释）。 */
       pathOf: (noteId) => {
         const path = treeNodePath(treeNodes, noteId);
         return path.length > 0 ? path.map((node) => node.title || "无标题").join("/") : null;
@@ -552,7 +552,7 @@ export function App() {
   // ===== 日记空间（261109，片B：桌面空间 UI）=====
   /** 文档空间目录树 = 全树 − 日记笔记本（表现层过滤，存储不动：DIARY.md 硬规则 5）。 */
   const sidebarTreeNodes = useMemo(() => documentTreeWithoutDiary(treeNodes), [treeNodes]);
-  /** 日记条目 id 集合：资料库同篇去重（见 libraryTabs）与「打开某天」判定共用。 */
+  /** 日记条目 id 集合：知识库同篇去重（见 libraryTabs）与「打开某天」判定共用。 */
   const diaryNoteIds = useMemo(() => diaryEntryIds(treeNodes), [treeNodes]);
   const diaryNotebook = useMemo(() => diaryNotebookOf(treeNodes), [treeNodes]);
 
@@ -647,7 +647,7 @@ export function App() {
    *  范围收窄 = 面板的 `scopeNoteIds`（下面搜索面板处传入 `diaryNoteIds`），纯显示层过滤。 */
   const handleDiaryOpenSearch = useCallback(() => { sidebarOpenSearch(); }, [sidebarOpenSearch]);
 
-  /** 资料库空态「新建文档」= 统一新建弹窗（261105 用户验收：所有需要写名字的新建都弹窗）。 */
+  /** 知识库空态「新建文档」= 统一新建弹窗（261105 用户验收：所有需要写名字的新建都弹窗）。 */
   const [newNoteOpen, setNewNoteOpen] = useState(false);
   const [newNoteBusy, setNewNoteBusy] = useState(false);
   const [newNoteError, setNewNoteError] = useState<string | null>(null);
@@ -822,7 +822,7 @@ export function App() {
   }, [hideEdgeHandle]);
 
   // 把手是 10px 边缘热区的「召唤物」，不是持久 UI。窗口失焦/页面隐藏之外，快速划出左缘、
-  // 首次进入资料库时指针已经停在热区里、或热区因布局重建吞掉 pointerleave，都可能留下
+  // 首次进入知识库时指针已经停在热区里、或热区因布局重建吞掉 pointerleave，都可能留下
   // `.is-active`。这里用全局 pointermove 做真实位置兜底：指针一旦明确离开热区/目录栏就收把手。
   useEffect(() => {
     if (sidebarRenderMode !== "collapsed") hideEdgeHandle();
@@ -902,9 +902,9 @@ export function App() {
     sidebarWidth, sidebarMode, narrowOverlay, outlineSidebarWidth,
   });
   /**
-   * 日记空间打开某篇日记时，**资料库视图不再挂同一篇**：EditorTab 每篇只能有一个实例
+   * 日记空间打开某篇日记时，**知识库视图不再挂同一篇**：EditorTab 每篇只能有一个实例
    * （内核实例按 noteId 注册到 editorsRef，capture 会互相覆盖 ⇒ 保存丢字）。
-   * 资料库视图此时是 display:none（keep-alive），少挂这一篇用户看不见；离开日记空间立即恢复。
+   * 知识库视图此时是 display:none（keep-alive），少挂这一篇用户看不见；离开日记空间立即恢复。
    *
    * 注意：这里**不用 useMemo** —— 该行位于 `if (!workspace) return` 之后，加 hook 会让
    * 「首次渲染提前 return、随后渲染多跑一个 hook」触发 hooks 顺序错误；过滤本身是 O(标签数)。
@@ -967,7 +967,7 @@ export function App() {
       <AttachmentPreview />
       {/* 261006：全局把原生 title 提示换成自绘 .ln-tip（一处实现覆盖全仓 168 处）。 */}
       <NativeTitleTips />
-      {/* 整边触发（左）：隐形 8px 热区 + 跟手把手 —— 资料库空间（260922） */}
+      {/* 整边触发（左）：隐形 8px 热区 + 跟手把手 —— 知识库空间（260922） */}
       {desktopWorkspace === "library" && (
         <div
           ref={edgeHotzoneRef}
@@ -1076,7 +1076,7 @@ export function App() {
             onOpenSettings={() => { setSettingsCategory("ai"); setSettingsOpen(true); }}
             onNotice={(text, action) => { if (action) showNoticeWithAction(text, action); else showNotice(text); }}
             onOpenNote={(noteId) => {
-              // 新建的文档要先进树，否则切回资料库时侧栏没有它（tab 能开、目录缺席）。
+              // 新建的文档要先进树，否则切回知识库时侧栏没有它（tab 能开、目录缺席）。
               void refreshTree().then(() => { void switchDesktopWorkspace("library"); void openNote(noteId); }).catch(() => { void switchDesktopWorkspace("library"); void openNote(noteId); });
             }}
           />
@@ -1418,7 +1418,7 @@ export function App() {
       <AiAssistantHost />
       {/* 大表格粘贴护栏（A+B，261008）：超阈值不粘进文档，改为明确提示 + 一键「存为表格文档」 */}
       <TablePasteGuardDialog parentId={notes.find((n) => n.id === activeNoteId)?.parentId ?? null} />
-      {/* 资料库空态「新建文档」：与目录栏新建同一套弹窗（预填默认名，可改或直接确认） */}
+      {/* 知识库空态「新建文档」：与目录栏新建同一套弹窗（预填默认名，可改或直接确认） */}
       <NamePromptDialog
         open={newNoteOpen}
         title="新建文档"

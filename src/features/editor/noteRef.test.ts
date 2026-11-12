@@ -143,7 +143,7 @@ describe("文档引用卡：接线护栏", () => {
     expect(CARD).toContain("value?.title || note?.title");
   });
 
-  it("取消链接 = 转为正文（261008 九改）；复制引用 = 资料库全路径（261008 十改）", () => {
+  it("取消链接 = 转为正文（261008 九改）；复制引用 = 知识库全路径（261008 十改）", () => {
     // ① 转正文：先 insertAtPosition 再 deleteCard（顺序反了落点会变末位），文本走 text/html 且必须转义
     expect(CARD).toContain('ed.execCommand("focusCard", cardId)');   // 用内核自己的命令把选区落到卡上（自建 BFS 找模型节点实测失败）
     expect(CARD).toContain("positionAfterModelRange(captureModelRange(editor))");
@@ -154,7 +154,7 @@ describe("文档引用卡：接线护栏", () => {
     expect(CARD).toContain("escapeHtml(text)");
     // 卡片自己的 editor 由内核 editorComponent props 传入（转正文要用它跑命令）
     expect(CARD).toContain("editor={props.editor}");
-    // ② 复制引用：优先**资料库全路径**（宿主注入 pathOf = treeNodePath 拼 笔记本/分组/文档），回退 展示名 → lake-note://<id>
+    // ② 复制引用：优先**知识库全路径**（宿主注入 pathOf = treeNodePath 拼 笔记本/分组/文档），回退 展示名 → lake-note://<id>
     expect(CARD).toContain("await noteRefHost()?.pathOf?.(noteId)");
     expect(CARD).toContain("path || title || noteRefUrl(noteId)");
     expect(APP).toContain("pathOf: (noteId)");

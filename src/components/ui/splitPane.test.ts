@@ -76,7 +76,7 @@ describe("左右分栏（可拖动）", () => {
     expect(HANDLE).toContain("if (drag?.engaged) onCommit(drag.current);");
   });
 
-  it("资料库侧栏 / 大纲栏的 resize 也走 SplitHandle，不再各写一套 pointer 实现（261022 D1）", () => {
+  it("知识库侧栏 / 大纲栏的 resize 也走 SplitHandle，不再各写一套 pointer 实现（261022 D1）", () => {
     expect(SIDEBAR).toContain("<SplitHandle");
     expect(OUTLINE).toContain("<SplitHandle");
     // 视觉基线仍来自 kit，站点只叠加自己的定位类（CSS 不动）
