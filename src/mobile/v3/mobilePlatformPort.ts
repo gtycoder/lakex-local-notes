@@ -12,6 +12,7 @@ import {
   writeNoteBodiesBatch, writeNoteBody, writeQuickNoteBody,
 } from "../data/noteBodies.js";
 import { loadV3State } from "../data/v3StateRepository.js";
+import { persistedStateProjection } from "./v3StateSnapshot.js";
 import { MAX_QUICK_NOTE_TAGS } from "../../core/quickNoteTags.js";
 import { TRASH_NOTEBOOK_ID } from "../../core/syncDecisions.js";
 import {
@@ -51,6 +52,12 @@ export interface MobilePlatformPortContext {
   remoteTrashedAt: Map<string, string>;
   /** 本轮新打标的小记副本（投影时并入 = 旧实现 purgedFinal 同一口径）。 */
   newlyCloudDeletedQuick: Set<string>;
+  /**
+   * 单条快路径合并读的 raw 快照（261112 task-83）：返回 null = 没有快照（走自己的 SELECT）。
+   * 由 MobileDeviceStore.loadQuickPushSnapshot 在读取 baseline/轻量状态期间临时提供，
+   * 目的只是让 assetsHashOf 复用同一份「已读出的 sync_v3_state 行」，语义不变。
+   */
+  readStateSnapshot?: () => { raw: unknown } | null;
 }
 
 /** 文档行快照（saveState 内的「当前行」视图；与旧实现内存 map 同口径，避免逐条回查 SQL）。 */
@@ -92,13 +99,18 @@ export function createMobilePlatformPort(db: MobileDb, ctxIn?: Partial<MobilePla
     remotePurged: ctxIn?.remotePurged ?? new Set<string>(),
     remoteTrashedAt: ctxIn?.remoteTrashedAt ?? new Map<string, string>(),
     newlyCloudDeletedQuick: ctxIn?.newlyCloudDeletedQuick ?? new Set<string>(),
+    ...(ctxIn?.readStateSnapshot ? { readStateSnapshot: ctxIn.readStateSnapshot } : {}),
   };
   /** 资产 hash 兜底（信封 assets + baseline 里的声明版本），一次调用内缓存。 */
   let assetsHashMap: Promise<Map<string, string>> | null = null;
   const assetsHashOf = (): Promise<Map<string, string>> => {
     if (!assetsHashMap) {
       assetsHashMap = (async () => {
-        const side = await loadV3State(db);
+        // task-83：合并读快照存在时复用同一份 raw（省掉第三次 SELECT 整行 JSON）。
+        const snapshot = ctx.readStateSnapshot?.() ?? null;
+        const side = snapshot
+          ? (persistedStateProjection(snapshot.raw) ?? { baseline: null, assetsHash: {} })
+          : await loadV3State(db);
         const map = new Map<string, string>();
         for (const n of side.baseline?.lake.notes ?? []) if (n.assetsHash) map.set(n.id, n.assetsHash);
         for (const q of side.baseline?.quickNotes.items ?? []) if (q.assetsHash) map.set(q.id, q.assetsHash);

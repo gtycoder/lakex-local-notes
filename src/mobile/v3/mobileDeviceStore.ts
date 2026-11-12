@@ -1,4 +1,5 @@
 import { HISTORY_SNAPSHOT_PROTECT_DAYS, type DeviceBaseline, type DeviceState, type S3v3DeviceStore } from "../../core/s3v3DeviceStore.js";
+import type { QuickPushSnapshot } from "../../core/s3v3/quickPush/types.js";
 import { normalizeNoteKind, type NoteKind } from "../../core/noteKind.js";
 import type { MobileDb } from "../data/sqliteDb.js";
 import {
@@ -10,6 +11,7 @@ import { ensureV3StateTable, loadV3State, readRawV3State, savePersistedV3State, 
 import { createDeviceStoreMeta, createFileBackedAssetIo, type AssetIoPort, type DeviceStoreMeta } from "../../core/s3v3/state/deviceStore.js";
 import { createCapacitorAssetFileDriver } from "./capacitorAssetFileDriver.js";
 import { createMobilePlatformPort, createMobileBodyFileDriver, type MobilePlatformPortContext } from "./mobilePlatformPort.js";
+import { persistedStateProjection } from "./v3StateSnapshot.js";
 import { listQuickNoteAssetKeysFs, loadAssetBytesFs, removeAssetBytesFs, saveAssetBytesFs } from "../native/assetFs.js";
 import { NativeAssetSync, nativeAssetSyncSupported } from "../native/nativeAssetSync.js";
 import * as historyRepository from "../data/historyRepository.js";
@@ -53,6 +55,11 @@ export class MobileDeviceStore implements S3v3DeviceStore {
 
   /** E2-4 phase C：端口写批上下文（本轮标记 + staging id；saveState 入口重置，端口写侧读取）。 */
   private readonly portCtx: MobilePlatformPortContext;
+  /**
+   * task-83：单条快路径合并读期间临时持有的 sync_v3_state 原始行（一次读、多处派生）。
+   * 只由 loadQuickPushSnapshot 设置并在 finally 清空；其它路径永远 null（行为与旧实现一致）。
+   */
+  private pendingStateSnapshot: { raw: unknown } | null = null;
 
   /** E2-4：资产 IO 已是 core 的单一实现；这里只给「资产键空间驱动 + 缓存失效」钩子。 */
   private readonly assetIo: AssetIoPort;
@@ -67,6 +74,8 @@ export class MobileDeviceStore implements S3v3DeviceStore {
       remotePurged: new Set<string>(),
       remoteTrashedAt: new Map<string, string>(),
       newlyCloudDeletedQuick: new Set<string>(),
+      // 仅在 loadQuickPushSnapshot 期间非 null：让 assetsHashOf 复用同一次读出的行。
+      readStateSnapshot: () => this.pendingStateSnapshot,
     };
     this.assetIo = createFileBackedAssetIo({
       files: createCapacitorAssetFileDriver({
@@ -83,7 +92,11 @@ export class MobileDeviceStore implements S3v3DeviceStore {
       files: createMobileBodyFileDriver(db, { stagedQuickBodies: () => this.stagedQuickBodies }),
       assets: this.assetIo,
       state: {
-        read: () => readRawV3State(db),
+        read: () => {
+          // task-83：合并读期间直接复用已读出的行（不再过桥读第二遍）。
+          const snapshot = this.pendingStateSnapshot;
+          return snapshot ? Promise.resolve(snapshot.raw) : readRawV3State(db);
+        },
         // baseline 与本行同 JSON 是既有约定（E3-1「baseline 不动」）：core 只生成信封，落盘归本端。
         write: async (persisted) => {
           const side = await loadV3State(db);
@@ -137,6 +150,24 @@ export class MobileDeviceStore implements S3v3DeviceStore {
   async loadState(): Promise<DeviceState | null> { return await this.meta.loadState(); }
   /** 单条推送轻量状态（261110）：不重建世界。 */
   async loadQuickPushState(id: string) { return await this.meta.loadQuickPushState(id); }
+
+  /**
+   * task-83：单条快路径的合并读取 —— 一次 `SELECT json FROM sync_v3_state` 同时给出
+   * baseline 与轻量状态（单行 + cloud_deleted 标记 + 恢复标记 + purge 标记 + 资产 hash 兜底）。
+   * 逐字段等价于 `loadBaseline()` + `loadQuickPushState(id)`（护栏 quickPushSnapshot.test.ts）；
+   * 只减少读取次数（大库实测整行 JSON 过桥 ~130ms/次），不改任何判据。
+   */
+  async loadQuickPushSnapshot(id: string): Promise<QuickPushSnapshot> {
+    const raw = await readRawV3State(this.db);
+    const baseline = persistedStateProjection(raw)?.baseline ?? null;
+    this.pendingStateSnapshot = { raw };
+    try {
+      const light = await this.meta.loadQuickPushState(id);
+      return { baseline, light };
+    } finally {
+      this.pendingStateSnapshot = null;
+    }
+  }
 
   /**
    * E2-4 phase C-3b-2：saveState 已上收到 core 单一编排（createDeviceStoreMeta.saveState）。

@@ -272,8 +272,10 @@ async function runQuickPushOnce(deps: QuickPushDeps, id: string): Promise<QuickP
   const iso = () => now().toISOString();
   const phase = phaseTracker(deps);
 
-  const baseline = await deps.device.loadBaseline();
-  const light = await loadLightState(deps, id);
+  // 状态读取：端口有合并读（移动端）就一次取齐 baseline + 单行 + 标记；否则保持两段读。
+  const snapshot = deps.device.loadQuickPushSnapshot ? await deps.device.loadQuickPushSnapshot(id) : null;
+  const baseline = snapshot ? snapshot.baseline : await deps.device.loadBaseline();
+  const light = snapshot ? snapshot.light : await loadLightState(deps, id);
   const local = light?.quickNote ?? null;
   if (!local) return { status: "not-found" };
   phase("push-state");

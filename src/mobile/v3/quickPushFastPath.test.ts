@@ -27,7 +27,8 @@ import type { RemoteObjectInfo, S3v3Remote } from "../../core/s3v3Ports.js";
 /**
  * 移动端「保存并同步」快路径（261110）：
  *  · 与桌面同一套最短链判据（指针/索引/正文 PUT 数固定，不读 lake 索引/别的小记正文）；
- *  · 轻量状态：不跑 MobileDeviceStore.loadState（不重建世界），只跑 loadQuickPushState；
+ *  · 轻量状态：不跑 MobileDeviceStore.loadState（不重建世界）；单条快路径走合并读
+ *    loadQuickPushSnapshot（task-83：一次读 sync_v3_state 同时给出 baseline + 单行 + 标记）；
  *  · 基线只更新本条；重复点零上传。
  */
 const dec = (b: Uint8Array) => new TextDecoder().decode(b);
@@ -46,8 +47,10 @@ const SETTINGS = { endpoint: "https://example.com", region: "cn-north-1", bucket
 class SpyDevice extends MobileDeviceStore {
   loadStateCalls = 0;
   quickStateCalls = 0;
+  snapshotCalls = 0;
   override async loadState() { this.loadStateCalls += 1; return await super.loadState(); }
   override async loadQuickPushState(id: string) { this.quickStateCalls += 1; return await super.loadQuickPushState(id); }
+  override async loadQuickPushSnapshot(id: string) { this.snapshotCalls += 1; return await super.loadQuickPushSnapshot(id); }
 }
 
 const pointerOf = async (remote: MemoryRemote) => JSON.parse(dec((await remote.get("meta/pointer.json"))!)) as { generation: number; lake: { commit: string } };
@@ -85,7 +88,9 @@ describe("移动端单条推送最短链（261110）", () => {
     expect(keysWithPrefix(stats.putKeys, "quick-notes/meta/index/")).toHaveLength(1);
     expect(stats.putKeys.filter((k) => k === "meta/pointer.json")).toHaveLength(1);
     expect(spy.loadStateCalls).toBe(0);
-    expect(spy.quickStateCalls).toBe(1);
+    // task-83：合并读一次取齐（不再分别走 loadBaseline + loadQuickPushState）。
+    expect(spy.snapshotCalls).toBe(1);
+    expect(spy.quickStateCalls).toBe(0);
 
     // 基线：lake 原样、只更新这条、generation +1；本行已标 synced。
     const after = (await loadV3State(db)).baseline as typeof before;

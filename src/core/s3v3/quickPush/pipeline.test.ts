@@ -223,3 +223,58 @@ describe("单条推送独立管线：回退四条件（各自 full-sync + 已释
     expect(result.status).toBe("pushed");
   });
 });
+
+describe("单条推送状态读取：合并读端口（261112 task-83）", () => {
+  it("设备提供合并读：只调一次，不再分别 loadBaseline/loadQuickPushState，结果与两段读一致", async () => {
+    const plain = fixture();
+    const expected = await runQuickPush(plain.deps, "q1");
+
+    const f = fixture();
+    const inner = f.device;
+    let snapshotCalls = 0;
+    let baselineCalls = 0;
+    let stateCalls = 0;
+    const mergedDevice: QuickPushDevice = {
+      loadBaseline: async () => { baselineCalls += 1; return inner.loadBaseline(); },
+      loadQuickPushState: async () => { stateCalls += 1; return inner.loadQuickPushState(); },
+      loadQuickPushSnapshot: async () => {
+        snapshotCalls += 1;
+        return { baseline: await inner.loadBaseline(), light: await inner.loadQuickPushState() };
+      },
+      readQuickBody: () => inner.readQuickBody(),
+      markQuickNoteSynced: (id, hash) => inner.markQuickNoteSynced(id, hash),
+      saveBaseline: (b) => inner.saveBaseline(b),
+      persistSyncMarkers: (m) => inner.persistSyncMarkers(m),
+      listQuickAssets: (id) => inner.listQuickAssets(id),
+      readQuickAsset: (id, filename) => inner.readQuickAsset(id, filename),
+    };
+    const result = await runQuickPush({ ...f.deps, device: mergedDevice }, "q1");
+    expect(result).toEqual(expected);
+    expect(snapshotCalls).toBe(1);
+    expect(baselineCalls).toBe(0);
+    expect(stateCalls).toBe(0);
+  });
+
+  it("合并读返回 null（没有能力/拿不到）：回退两段读取，结果不变", async () => {
+    const expected = await runQuickPush(fixture().deps, "q1");
+    const f = fixture();
+    const inner = f.device;
+    let baselineCalls = 0;
+    let stateCalls = 0;
+    const device: QuickPushDevice = {
+      loadBaseline: async () => { baselineCalls += 1; return inner.loadBaseline(); },
+      loadQuickPushState: async () => { stateCalls += 1; return inner.loadQuickPushState(); },
+      loadQuickPushSnapshot: async () => null,
+      readQuickBody: () => inner.readQuickBody(),
+      markQuickNoteSynced: (id, hash) => inner.markQuickNoteSynced(id, hash),
+      saveBaseline: (b) => inner.saveBaseline(b),
+      persistSyncMarkers: (m) => inner.persistSyncMarkers(m),
+      listQuickAssets: (id) => inner.listQuickAssets(id),
+      readQuickAsset: (id, filename) => inner.readQuickAsset(id, filename),
+    };
+    const result = await runQuickPush({ ...f.deps, device }, "q1");
+    expect(result).toEqual(expected);
+    expect(baselineCalls).toBe(1);
+    expect(stateCalls).toBe(1);
+  });
+});

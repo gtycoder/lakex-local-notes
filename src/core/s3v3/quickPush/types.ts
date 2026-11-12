@@ -21,11 +21,26 @@ export interface QuickPushRemote {
   putFromFile?(key: string, localPath: string, opts?: { gzip?: boolean }): Promise<boolean>;
 }
 
+/**
+ * 合并读取快照（261112 task-83）：一次读取同时给出 baseline 与轻量状态。
+ * 移动端 `sync_v3_state` 一行的 JSON 就同时装着两者，分两次读等于把同一份大 JSON
+ * 过两次原生桥（大库实测每次 ~130ms）。
+ */
+export interface QuickPushSnapshot {
+  baseline: DeviceBaseline | null;
+  light: QuickPushState | null;
+}
+
 /** 单条推送需要的设备最小面。 */
 export interface QuickPushDevice {
   loadBaseline(): Promise<DeviceBaseline | null>;
   /** 轻量状态（只读本条小记 + 标记）。缺失/抛错时回退 `loadState`。 */
   loadQuickPushState?(id: string): Promise<QuickPushState | null>;
+  /**
+   * 合并读（可选）：一次取齐 baseline + 单行 + 标记。返回 null = 没有合并能力/拿不到，
+   * 管线回退「loadBaseline + loadQuickPushState」两段读取（语义完全相同，只是多一次读）。
+   */
+  loadQuickPushSnapshot?(id: string): Promise<QuickPushSnapshot | null>;
   /** 回退用（端口没有 loadQuickPushState 时）。 */
   loadState?(): Promise<import("../../s3v3DeviceStore.js").DeviceState | null>;
   readQuickBody(id: string): Promise<Uint8Array | null>;
