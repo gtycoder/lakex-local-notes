@@ -15,6 +15,7 @@ import {
   type InkTool,
 } from "../../core/inkDoc.js";
 import { canonicalDocBody } from "../../core/docBaseline.js";
+import { captureInkBody, createInkDiskBaseline, createInkSavePipeline } from "./inkPadModel.js";
 import { readInkNavPage, writeInkNavPage } from "./inkNav.js";
 import { hitTestStroke, strokeToSvgPath } from "./inkGeometry.js";
 import { inkStrokeStyle } from "./inkStrokeStyle.js";
@@ -111,7 +112,6 @@ export interface InkPadProps {
   }) => ReactNode;
 }
 
-const SAVE_DEBOUNCE_MS = 500;
 const ZOOM_STEP = 0.25;
 const ZOOM_MIN = 0.5;
 const ZOOM_MAX = 3;
@@ -280,7 +280,6 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
   // 撤销/重做只存页级补丁；整篇正文序列化只用于保存。
   const undoRef = useRef<InkHistoryEntry[]>([]);
   const redoRef = useRef<InkHistoryEntry[]>([]);
-  const saveTimerRef = useRef<number | null>(null);
   /** P5：正文是否还有未落盘的改动（序列化已移出热路径，保存时才现算）。 */
   const dirtyRef = useRef(false);
   const activePointerRef = useRef<{ id: number; type: string } | null>(null);
@@ -315,8 +314,8 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
 
   /** 打开时的磁盘原文（CORE-03 基线）：保存/捕获在「与磁盘等价」时原样返回它，不写盘。 */
   const diskBodyRef = useRef(content);
-  /** 磁盘原文的规范形态：惰性算一次。 */
-  const diskCanonicalRef = useRef<string | null | undefined>(undefined);
+  /** 磁盘基线的规范形态缓存（CORE-03/CORE-07：惰性算一次，见 inkPadModel.createInkDiskBaseline）。 */
+  const diskBaselineRef = useRef<ReturnType<typeof createInkDiskBaseline> | null>(null);
   /**
    * 当前正文与磁盘原文是否等价（CORE-03：打开后未动 / 撤销回原样）。
    * body 一律由 inkToBody 产出（同一规范形态）⇒ 与磁盘原文的规范形态逐字节相等即 core 判据的结论；
@@ -324,10 +323,8 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
    * 缓存磁盘侧的规范形态：正文可达 10 MiB，不能每次保存都把两侧整篇解析一遍（CORE-07）。
    */
   const sameAsDisk = useCallback((body: string): boolean => {
-    if (diskCanonicalRef.current === undefined) {
-      diskCanonicalRef.current = canonicalDocBody("ink", diskBodyRef.current);
-    }
-    return diskCanonicalRef.current !== null && diskCanonicalRef.current === body;
+    diskBaselineRef.current ??= createInkDiskBaseline(diskBodyRef.current, (raw) => canonicalDocBody("ink", raw));
+    return diskBaselineRef.current.isSameAsDisk(body);
   }, []);
 
   /** 宿主注入的瞬时提示通道（移动端 = toast）；用 ref 保证回调身份变化不牵动下面一堆 useCallback 依赖。 */
@@ -490,36 +487,23 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
     }
   }, []);
 
-  /** 真正落一次保存：与磁盘等价 ⇒ 不写；序列化失败保留 dirty（下次编辑/退出再试，正文不丢）。 */
-  const savePending = useCallback(() => {
-    if (!dirtyRef.current) return;
-    const body = serializeDoc();
-    if (body === null) return;
-    dirtyRef.current = false;
-    if (sameAsDisk(body)) return;
-    onChangeRef.current?.(body);
-  }, [sameAsDisk, serializeDoc]);
-
-  /** 标脏 + 500ms 防抖保存（所有正文改动都走这里；序列化只在保存时发生）。 */
-  const scheduleSave = useCallback(() => {
-    if (!dirtyRef.current) {
-      dirtyRef.current = true;
-      onDirtyRef.current?.();
-    }
-    if (saveTimerRef.current !== null) window.clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = window.setTimeout(() => {
-      saveTimerRef.current = null;
-      savePending();
-    }, SAVE_DEBOUNCE_MS);
-  }, [savePending]);
-
-  const flushSave = useCallback(() => {
-    if (saveTimerRef.current !== null) {
-      window.clearTimeout(saveTimerRef.current);
-      saveTimerRef.current = null;
-    }
-    savePending();
-  }, [savePending]);
+  /**
+   * 保存管线（P5 + CORE-03）：标脏 → 500ms 防抖 → 现算序列化 → 与磁盘等价则丢弃 → 交父层保存。
+   * 逻辑本体在 inkPadModel.createInkSavePipeline（纯闭包、可行为测试）；这里只注入 refs/回调与 window 定时器。
+   */
+  const inkSavePipeline = useMemo(() => createInkSavePipeline({
+    io: {
+      setTimeout: (fn, ms) => window.setTimeout(fn, ms),
+      clearTimeout: (id) => window.clearTimeout(id),
+    },
+    isDirty: () => dirtyRef.current,
+    markDirty: () => { dirtyRef.current = true; onDirtyRef.current?.(); },
+    clearDirty: () => { dirtyRef.current = false; },
+    serialize: serializeDoc,
+    isSameAsDisk: sameAsDisk,
+    emit: (body) => { onChangeRef.current?.(body); },
+  }), [serializeDoc, sameAsDisk]);
+  const { scheduleSave, flushSave } = inkSavePipeline;
 
   /** patch=null 表示这次改动不进入撤销栈（没有历史语义）。 */
   const commit = useCallback((next: InkDoc, patch: InkPatch | null) => {
@@ -563,11 +547,14 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
       // 阅读态一律交父层最新正文（阅读态下 = 盘上正文）：只读翻页/页面管理切换后 activePageId
       // 变的是本地视图，不是正文改动。（桌面锁定/已删除文档同样会被保存管线 capture，这条判据
       // 保证不会因此写盘；也不能交挂载时的 diskBodyRef —— 那是「打开时」的旧原文，会覆盖刚保存的正文。）
-      if (readOnlyRef.current) return latestContentRef.current;
-      const body = serializeDoc();
-      if (body === null) return null;
-      // CORE-03：与磁盘原文等价 ⇒ 返回磁盘原文（打开后没动 / 改过又改回原样都不产生写盘）。
-      return sameAsDisk(body) ? diskBodyRef.current : body;
+      // 决策矩阵（只读 / 序列化失败 / 等价 / 有改动）在 inkPadModel.captureInkBody，行为测试见 inkPadModel.test.ts。
+      return captureInkBody({
+        readOnly: readOnlyRef.current,
+        latestContent: latestContentRef.current,
+        serialize: serializeDoc,
+        isSameAsDisk: sameAsDisk,
+        diskBody: diskBodyRef.current,
+      });
     });
     return () => {
       onEditorCaptureRef.current?.(null);

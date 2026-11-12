@@ -273,7 +273,7 @@ describe("手写板正式端到端接线", () => {
     // 序列化函数只在 savePending / capture 里被调用一次
     expect(INK_PAD).toMatch(/const serializeDoc = useCallback\(\(\): string \| null => \{/);
     expect(INK_PAD).not.toContain("const nextBody = serializeDoc(next);");
-    expect(INK_PAD).toContain("const savePending = useCallback(() => {");
+    expect(INK_PAD).toContain("createInkSavePipeline(");
     expect(INK_PAD).toContain("dirtyRef.current = true;");
     // 笔迹轮廓缓存：新笔画只算一条
     expect(INK_PAD).toContain("renderedStrokesForPage(page, strokePathCacheRef.current)");
@@ -489,7 +489,9 @@ describe("手写板正式端到端接线", () => {
   });
 
   it("只读态 capture 交父层最新正文（桌面锁定文档不会被只读翻页写盘）", () => {
-    expect(INK_PAD).toContain("if (readOnlyRef.current) return latestContentRef.current;");
+    // R2-S10 阶段①：矩阵在 inkPadModel.captureInkBody（行为测试 inkPadModel.test.ts），InkPad 只接线。
+    expect(INK_PAD).toContain("readOnly: readOnlyRef.current,");
+    expect(INK_PAD).toContain("latestContent: latestContentRef.current,");
   });
 
   it("移动端完成编辑前现取手写板正文（与 board/usheet 同一条写边界，绕过 500ms 防抖）", () => {

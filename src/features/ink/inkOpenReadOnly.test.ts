@@ -20,17 +20,17 @@ import { createInkDoc, inkToBody } from "../../core/inkDoc.js";
 const INK_PAD = readFileSync(new URL("./InkPad.tsx", import.meta.url), "utf8");
 
 describe("手写板打开只读（CORE-03）", () => {
-  it("保存前判等价：等价则不标脏、不排保存；flush 落盘前再判一次（P5：序列化只在保存时）", () => {
+  it("保存前判等价：等价则不写盘（判定已搬入 inkPadModel；InkPad 只做接线）", () => {
+    // R2-S10 阶段①：等价判定/防抖/捕获的**行为**由 inkPadModel.test.ts 覆盖（不再 grep 实现文本）。
     expect(INK_PAD).toContain('canonicalDocBody("ink"');
-    // P5：标脏走 scheduleSave（500ms 防抖），落盘时才 serializeDoc 并判等价
+    expect(INK_PAD).toContain("createInkSavePipeline(");
     expect(INK_PAD).toContain("onDirtyRef.current?.();");
-    expect(INK_PAD).toMatch(/const body = serializeDoc\(\);\n\s*if \(body === null\) return;\n\s*dirtyRef\.current = false;\n\s*if \(sameAsDisk\(body\)\) return;/);
-    expect(INK_PAD).toMatch(/const flushSave = useCallback\(\(\) => \{[\s\S]*?savePending\(\);\n\s*\}, \[savePending\]\);/);
   });
 
-  it("capture：等价返回磁盘原文（不为格式差异写盘），不等价返回当前正文（笔迹不丢）", () => {
+  it("capture：等价返回磁盘原文，不等价返回当前正文（现算矩阵在 inkPadModel；InkPad 只接线）", () => {
     expect(INK_PAD).toMatch(/const diskBodyRef = useRef\(content\);/);
-    expect(INK_PAD).toMatch(/return sameAsDisk\(body\) \? diskBodyRef\.current : body;/);
+    expect(INK_PAD).toContain("return captureInkBody({");
+    expect(INK_PAD).toContain("diskBody: diskBodyRef.current,");
     // 判据必须限定在「整篇正文」上，而不是笔画计数之类的近似量
     expect(INK_PAD).toMatch(/const sameAsDisk = useCallback\(\(body: string\): boolean => \{/);
   });
