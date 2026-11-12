@@ -7,6 +7,13 @@
 
 ## 0. 最新交接（最近 3 个批次；更早的见 git）
 
+### 261112 · R2/C2 拆分收口 + 设备验收（已本地提交，未推送）
+
+- **拆分 6–10（Q19=C2）**：Sidebar 1857→1498（7 内部组件到 sidebar/）；SettingsPanel 1447→89（11 个 sections + useSettingsPanelScope 722 行）；electron/main.ts 1306→1100（boot/paths.ts + boot/ipcWiring.ts 281 行，21 依赖显式传递、单例留 main）；lakeRuntime 1699→538（6 个 kernel 模块，lazy 边界/模块级单例/__disposeExtras 时序保持）；InkPad **只做阶段 ①**：抽 inkPadModel（保存/捕获纯逻辑）+ 11 例行为测试，结构拆分（组合根 + 4 hook + 2 子组件）**留发布后**（127 条文本护栏与依赖网需先迁护栏 + 设备验证）。
+- **设备验收（真机 + 模拟器）**：R1 APK 已 --sync --install 到真机 Xiaomi 2109119BC（Android 14）与 5554 模拟器；**Q04 通过**（回收站文档 = 只读预览 + 横幅「编辑与保存会被拦截」，CDP 断言 + 截图）；**Q22 通过**（SecureStore→SecretBox：set/get → force-stop 重启 → get 仍为原值 → remove 清空，真机 Keystore 冒烟）；首页/Dock 正常、logcat 无 FATAL。记录与截图：[docs/audit-261112/12-device-check.md](audit-261112/12-device-check.md)。
+- **门禁（R2 实测）**：tsc 0；全量 vitest **883 文件（872 passed / 11 skipped）/ 5571 passed / 12 skipped / 0 failed**；ui-metrics 66/21；check:core 172/0；check:mobileui 通过；双 build + bundle/arch PASS（desktop 首屏 567,576/600,000、app-js 196,184/307,200；mobile 349,054/360,000、entry 60,766/61,440、css 140,383/141,312）；diff-check 0。
+- **待验/未做**：Q03 历史预览、Q07 preview 档、Q05 字号的设备级点按（单测已绿）；桌面 42 态 / 手机+平板 10 态 / 23 屏（R1/R2 改了预览、回收站、历史、设置面板结构，旧基线已过期，需夹具 AVD 重烤）；移动小记画廊 video/audio 混入（P1）；剩余 21 条 shadowed 声明 + mobile.css 域归位；docs 侧机器路径。
+
 ### 261112 · 发布前全仓审计 + R0/R1 收口批（已本地提交，未推送）
 
 - **审计**：6 域并行只读审计 + Lead 交叉复核 ⇒ `docs/audit-261112/`：`00-MASTER-PLAN.md`（总方案 + A–Q 分项 + R0/R1/R2 路线 + Q01–Q27 裁决）+ 分册 02 预览 / 03 桌面 UI 样式 / 04 移动 / 05 core+electron / 06 特性域 / 07 文档清理。代码域 P0 = 0。
@@ -31,34 +38,27 @@
 - **实测**：同一篇（736KB、107 张 image 卡）修复前「2 / 8」→ 修复后「2 / 107」（锁定态同样 2 / 107），双击到 Lightbox 105ms。
 - **护栏**：`src/features/editor/imagePreviewAttach.render.test.tsx`（source：EditorTab 必须传 resolver；行为：正文全量、索引按 DOM 子序列对齐、回退、tap/click 语义）。
 
-### 261112 · 移动端图片「点击看大图、双击编辑」（用户定稿）
-
-- **语义**：移动端**单击 = 大图预览**，**双击 = 编辑**；范围 = 小记卡片（封面 + 预览内图 + 标签详情富预览）+ 文档（阅读态与编辑态）。桌面仍双击看图（单击留给选中/改尺寸）。
-- **实现要点（判据别再换）**：`attachImagePreviewClick` 加 `{ tap?: boolean }`；判定必须挂 **`pointerdown` + 300ms 时间窗 + 位置差 ≤28px**（WebView click 延迟 ~150ms、两击间隔实测 251ms、内核点按后会重渲染图片卡 ⇒ 不挂 click、不比元素身份），移动 >12px 或滚动即取消；首页卡片在 `QuickNoteCard.handleImageTap` 内自实现同一套，写作卡（独立内核实例）单独接线。
-- **实测**：5554 CDP 真实触摸——单击封面 ⇒「1 / 1」；双击封面 ⇒ 无 Lightbox、进编辑；编辑态单击 ⇒「1 / 1」。
-- **代价**：单击预览要等一个判定窗（~300ms），触屏区分单击/双击的必然成本。
-
 ## 1. 当前基线（唯一状态来源）
 
-> 数值 = 最近一次实测（261112 R1 批）。**任何状态判断以本节 + `git status` / `git log -1` 为准**。
+> 数值 = 最近一次实测（261112 R2 批）。**任何状态判断以本节 + `git status` / `git log -1` 为准**。
 
 **版本与仓库**
 
-- 主分支 `master`；**HEAD 以 `git log -1` 为准**（本批产品代码笔 = `e87016bd`；其后为 R1 回写 docs 笔）；R1 批次 7 笔（基础层 `7e385373` / electron 拆分 `5acd0bec` / 小记拆分 `4c1e56c5` / Kotlin `f7c1abce` / 清理 `2487b733` / docs `832802a9` / 预览宿主 `9384ae30` + `b3f2fb47` / bitable 拆分 `2a67d902` / 复核 `e87016bd`）；**产品代码基线 = `8e20a6a3`（R0）/ `e87016bd`（R1）**。
+- 主分支 `master`；**HEAD 以 `git log -1` 为准**；R2 已提交 6 笔拆分/设备记录（`a23631f6` sidebar / `fd268432` settings / `231fe845` electron boot / `c00d3a60` lakeRuntime / `4a9b965c` ink 测试 / `e352e2cb` 设备记录）；**产品代码基线 = `8e20a6a3`（R0）/ `e87016bd`（R1）/ `e352e2cb`（R2）**。
 - **未 push**：`origin/master` 仍为 `8cc65e06`（本地领先若干提交，数量以 `git rev-list --count 8cc65e06..HEAD` 为准）；`github/master` = `2e512c48`。需要推送时按 AGENTS §2 双远端流程。
 - `package.json` = **1.1.0**；Android `versionName 1.1.0` / `versionCode 11100`（从根 package.json 派生：`1000 + major*10000 + minor*100 + patch`，只增不减）。
 - tag：`v1.0.0`–`v1.0.5`、**`v1.1.0`**（`075272b2` = AI 写作 + 日记两个新空间）；已发布 tag 不再移动。发布说明 = [docs/RELEASE-NOTES.md](RELEASE-NOTES.md)（v1.1.0 → v1.0.0 倒序；v1.1.0 段 = CI 生成 GitHub Release 正文的来源）。
 - 分支/远端：`master` 唯一长期分支；`origin` = Gitee（SSH，第二 pushurl = GitHub HTTPS）⇒ `git push origin <branch>` 一次推两边；GitHub 只在推 tag 时构建。remote 不入库 ⇒ 新 clone 跑 `npm run setup:remotes`。
-- **工作树**：R1 已全部本地提交，`git status` clean；后续批次继续按「只 stage 本批文件」规则，**绝不用 `git add -A`**。
+- **工作树**：R2 已全部本地提交，`git status` clean；后续批次继续按「只 stage 本批文件」规则，**绝不用 `git add -A`**。
 - 261110 一次性历史清理（`.ai-writing-recon/` 用 `git filter-repo` 从全部历史移除，重写 v1.1.0 之后的提交；tag 未变）⇒ 旧 clone 需 `git fetch --force --prune && git reset --hard origin/master`。
 
 **门禁基线（261112 R1 批实测；分层口径见 AGENTS §3#21）**
 
 - `npx tsc --noEmit` = **0**。
-- 全量 vitest = **882 文件（871 passed / 11 skipped）/ 5559 passed / 12 skipped / 0 failed**。
+- 全量 vitest = **883 文件（872 passed / 11 skipped）/ 5571 passed / 12 skipped / 0 failed**。
 - `node scripts/ui-metrics.mjs`：颜色 0 / 字号 0 / `!important` 9 = 允许清单 / `crossFileDupGroups` 66 / `shadowedDecls` 21（只降）/ 未定义令牌 0。
 - `check:core` 172 文件 0 违规；`check:mobileui` 通过。
-- `check:bundle` + `check:arch` PASS：desktop 首屏 566,116 / 600,000、app-js 194,724 / 307,200；mobile 首屏 349,051 / 360,000、entry 60,763 / 61,440、CSS 140,383 / 141,312、preload 6。
+- `check:bundle` + `check:arch` PASS：desktop 首屏 567,576 / 600,000、app-js 196,184 / 307,200；mobile 首屏 349,054 / 360,000、entry 60,766 / 61,440、CSS 140,383 / 141,312、preload 6。
 - `git diff --check` = **0**。
 - 设备/视觉（最近记录）：手机 **10 态** + 平板 **10 态** 基线重烤并连跑两轮 0 差异；23 屏走查 23/23；`edit-surface-invariants` quicknote 11 + document 11 ALL PASS；capture 入口装置 10/10。**桌面 `check:stylesnap` 42 态仍未跑**（无夹具缓存，见 §3）。
 
@@ -67,6 +67,7 @@
 - Node **v24.18.0**（`$HOME/.nvm/versions/node/v24.18.0/bin`，必须 24）；JDK **21**（`/Library/Java/JavaVirtualMachines/jdk-21.jdk`）；Android SDK `/opt/homebrew/share/android-commandlinetools`。
 - AVD：`lake_mobile`（开发）/ `lake_gate`（门禁固定夹具，**勿改其数据**）/ `lake_tab`（平板与窗口矩阵）；移动 CDP **9335 开发 / 9336 门禁 / 9340 平板**（桌面 dev 9222；serial 以 `adb devices` 为准）。
 - 数据：开发 `~/Library/Application Support/lakex-local-notes-dev`；正式 `.../lakex-local-notes`（**禁止触碰**）；日志在对应目录 `logs/`。
+- **261112 R1 设备验收**：真机 Xiaomi 2109119BC（Android 14，serial 50950385）+ 5554 模拟器已装 R1 APK；Q04 回收站文档只读预览、Q22 SecureStore→SecretBox 跨重启真机通过；Q03/Q07/Q05 设备点按与快照矩阵待补（证据 [docs/audit-261112/12-device-check.md](audit-261112/12-device-check.md)）。
 
 **发布与推送事实**
 
@@ -106,7 +107,8 @@
 - **删文档/审计产物前先消引用**：例 = `audit-261027/` 4 份（5 处源码注释 + 4 处文档引用）：先把结论搬进 `RESILIENCE`/`SYNC-PROTOCOL` 并改注释再删（261112 Q16 做法），否则出处断链、后续会话只能去 git 里捞。
 - **日期显示口径已变（261112 Q9）**：`8/4` → `08-04`、带秒 → 去秒；快照/截图里的旧格式属预期差异。
 - **`DocumentEditor` 现 import `mobile/bridge/assets`**（OpenFile 去重）⇒ 移动分包已过 `check:arch`，后续动移动懒加载先跑 bundle/arch。
-- **261112 R1 的三个待设备验证面**：① 移动预览的 Sheet/全屏层几何（历史 Sheet 50dvh、回收站全屏层与键盘/SafeArea、返回键逐层收）；② `SecureStore→SecretBox` 只做了 JVM 单测（Keystore 真机路径未验，ALIAS/PREFS 与密文格式逐字不变 ⇒ 旧密钥可解）；③ 移动小记画廊仍可能把 video/audio 放进 Lightbox（261112 审计线索，未修）。
+- **261112 R1/R2 设备面现状**：Q04（回收站只读预览）与 Q22（SecureStore→SecretBox 跨重启）已真机通过；**Q03 历史预览 / Q07 preview 档 / Q05 预览字号**仍只有单测，需设备点按；移动小记画廊仍可能把 video/audio 放进 Lightbox（审计线索，未修）；设置面板/Sidebar/lakeRuntime 刚拆分，**桌面 42 态与移动快照基线均已过期**（改了 DOM/结构），必须先重烤再跑。
+- **InkPad 结构拆分（Q19-10）未做**：仅抽了 `inkPadModel` 纯逻辑 + 11 例行为测试；组合根 + 4 hook + 2 子组件拆分因 127 条文本护栏与 10 useState/45 useCallback 依赖网，留发布后按「先迁护栏 → 再抽 hook → 最后设备门禁」执行。
 - **发布链路**：Gitee 单附件 100MB / 仓库 1GB 上限（mac/Windows 包只能走 GitHub）；GitHub 慢速上传依赖 workflow 的 50 分钟步骤超时，不要缩短。
 - **历史编号与旧批次已失效**：旧文档/代码注释里的「HANDOFF §3#N / §4 / §7.x」是历史编号，**不对应本文**；更早的 §0 批次条目（如「第十四批」）也已删除，**只在 git 历史可查**。待办只看 §3（本节与 §3 都不编号）。
 
@@ -116,7 +118,8 @@
 
 **P0（不做就卡住主线）**
 
-- **R1 设备验收（261112 R1 代码已全部本地提交，未 push；门禁已绿）**：① 移动预览：回收站只读打开（应用级全屏层叠放/返回键/恢复后刷新）、历史 Sheet 预览（doc 只读 LakeEditor + 非 doc 结构化摘要，50dvh 几何）、`LakeEditor interaction="preview"`（无卡片菜单但可看图/开附件）、预览档字号；② 桌面预览：回收站/历史/属性**双击图片放大**（画廊取正文全量、先档位图后原图）；③ `SecureStore→SecretBox` 真机读回（写/读/删 S3 密钥、杀进程重开）；④ 移动预览改动需装包（`android-build.sh --sync --install`）后逐项点收。
+- **R1/R2 设备点收（已完成 2 项，余下待补）**：已过 = Q04 回收站只读预览（真机/模拟器 CDP + 截图）、Q22 SecureStore 跨重启读回；待补 = Q03 历史 Sheet 预览、Q07 `LakeEditor interaction="preview"`（长按无菜单/单击可看图）、Q05 预览字号、桌面预览双击放大观感；移动改动已装包（真机 + 5554），可直接点收。
+- **快照矩阵重烤**：R1/R2 改了移动预览/回收站/历史 UI 与桌面设置面板/Sidebar 结构，**旧 10 态/42 态基线全部过期**；必须先 `--from <warm> --write-baseline` 重烤再跑，否则必假红。
 - **发布前设备/视觉矩阵**：桌面 42 态（需夹具机）、手机 + 平板 10 态、23 屏走查、windowsweep（R1 只跑了 tsc/全量 vitest/双 build/bundle/arch，设备类未跑）。
 - **下一版发布**（流程 [docs/RELEASE.md](RELEASE.md)）：发布说明写清 ① inkDoc v4 旧端只读 / 手机需重装；② 标签顺序仅设备本地；③ 标签删除 = 缺席（两端都要升级）；④ 发版前全量矩阵。
 - **每批收尾固定动作**：更新 §1 基线与门禁计数 + §3 + §0 批次抬头；提交后立刻回写。
@@ -125,7 +128,7 @@
 
 - **R1 样式/移动余量**：剩余 21 条 shadowed 声明（`feature.css` 3 / `misc.css` 4 / 共享规则 14）；移动 `mobile.css` 域归位（bitable/board/editor 约 300 行，需设备 2–3 态）。
 - **移动小记画廊混入视频/音频**（261112 审计发现）：`HomePage`/`TagQuickNotePreview` 的 `previewAssets` 把非图片资源也放进 Lightbox 画廊，左右切会切到 video（img 显示失败）；建议复用同一 resolver 只筛 image mime，属行为变更 + 需设备验证。
-- **拆分 6–10（Q19=C2 的发布后部分）**：`Sidebar`(1857) / `SettingsPanel`(1447) / `lakeRuntime`(1699) / `InkPad`(1907) / `main.ts`(1306)；`InkPad` 拆分前必须先补「落笔→防抖→保存」纯逻辑测试。
+- **拆分 6–10 状态**：`Sidebar`(1857→1498) / `SettingsPanel`(1447→89+settings) / `main.ts`(1306→1100) / `lakeRuntime`(1699→538) 已完成；`InkPad`(1907) 只完成阶段 ①（`inkPadModel` 纯逻辑 + 11 例），阶段 ② 留发布后（先迁 127 条文本护栏再拆 hook）。
 - **图片缩略残余（261111 收口后）**：① XHR 失败/旧包/超 12MP 的 webp·avif 回退 canvas，可能写显示尺寸；② 复制多张大图时同步阻塞（剪贴板 API 限制）；③ 会话内放行依赖「待上传卡计数 = 1」，多图并发时当会话不缩（重开按正文 origin 缩，安全降级）；④ 桌面文档编辑器（Retina 优先）与平板未启用同类缩略。
 - **移动性能基线**：lake_gate 录制 + `--compare` 已通过（冷启 1586 / capture 893 / 写作卡热开 332 / 文档打开 4ms）；⚠️ **键盘两项该 AVD 采不到**，键盘长任务口径仍以 5554 历史记录为准（775→72ms）；换 AVD / 换包 / 改视口必须 `--record` 重烤。
 - **日记「取消标记」残余验收**：跨端 wire 传播（一端取消 → 另一端知识库出现该本、日记空间消失）需**真机 + 配 S3**；取消是单向的（无回标入口，回标另立项）。

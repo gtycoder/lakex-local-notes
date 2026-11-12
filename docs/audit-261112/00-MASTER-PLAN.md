@@ -801,3 +801,12 @@ rg -n 'const DEFAULT_TRANSFER_CONCURRENCY' src/core
 **门禁（R1 实测）**：tsc 0；全量 vitest 882 文件（871 passed / 11 skipped）/ 5559 passed / 12 skipped / 0 failed；ui-metrics 66/21；check:core 172/0；双 build + bundle/arch PASS（数字见 HANDOFF §1）；gradlew testDebugUnitTest 31 tests；git diff --check 0。
 
 **未完成/待验**：设备矩阵（42 态 / 手机+平板 10 态 / 23 屏 / windowsweep）；移动预览 Sheet 几何 + SecureStore 真机读回；移动小记画廊 video/audio 混入；拆分 6–10（Q19=C2 发布后部分）；剩余 21 条 shadowed 声明与 mobile.css 域归位。
+## 附录 G · R2 执行状态（261112，已本地提交）
+
+**拆分 6–10（Q19=C2）**：Sidebar 1857→1498（7 内部组件）；SettingsPanel 1447→89（11 sections + useSettingsPanelScope 722 行）；electron/main.ts 1306→1100（boot/paths + boot/ipcWiring 281 行）；lakeRuntime 1699→538（6 kernel 模块）；InkPad 仅阶段 ①（inkPadModel + 11 例行为测试，结构拆分留发布后）。
+
+**设备验收**：真机 Xiaomi 2109119BC（Android 14）+ 5554 模拟器已装 R1 APK；Q04 回收站只读预览通过（CDP DOM 断言 + 截图）；Q22 SecureStore→SecretBox 跨 force-stop 重启读回通过；记录 docs/audit-261112/12-device-check.md。
+
+**门禁（R2 实测）**：tsc 0；全量 vitest 883 文件（872 passed / 11 skipped）/ 5571 passed / 12 skipped / 0 failed；ui-metrics 66/21；check:core 172/0；双 build + bundle/arch PASS（desktop 567,576/600,000、app-js 196,184/307,200；mobile 349,054/360,000、entry 60,766/61,440）；diff-check 0。
+
+**未完成/待验**：Q03/Q07/Q05 设备点按；快照矩阵（42 态 / 手机+平板 10 态 / 23 屏）需重烤基线后跑；InkPad 阶段 ②；移动小记画廊 video/audio 混入；剩余 21 条 shadowed 声明 + mobile.css 域归位；docs 侧机器路径。
