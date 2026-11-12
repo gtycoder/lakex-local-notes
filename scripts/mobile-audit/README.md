@@ -42,6 +42,8 @@ node scripts/cdp-eval.mjs 9336 @scripts/mobile-audit/gate-fixture.mjs
 node scripts/mobile-audit/check-mobile-snap.mjs --port 9336
 ```
 
+**261112 起 10 态**：新增 `home-create-sheet`（首页「＋」→ 新建面板，覆盖 `.mb-sheet` 浮层原语）——此前 9 态**无一态打开底部 Sheet**，浮层几何从未进过快照。基线 `mobile-snap.json` 已重烤（新态 1971 els）并连跑两轮 0 差异。
+
 **夹具口径**（`gate-fixture.mjs`）：默认笔记本「个人笔记」下 **5 篇文档** + **4 条小记**。
 5 篇是**走查**的下限（它要 doc-0..doc-4 五行；3 篇时 doc-3/doc-4 会 ERR "not found: doc row #3/#4"，261013 实测）。
 文档必须挂在**默认笔记本**上 —— 门禁的 `home-doc` 态是"点书架第一张卡"进的，另建笔记本会让第一张卡是空的默认本、抽屉里没有文档行（261013 实测）。
@@ -53,7 +55,7 @@ node scripts/mobile-audit/check-mobile-snap.mjs --port 9336 --tag gate-warm     
 node scripts/mobile-audit/check-mobile-snap.mjs --port 9336 --from .css-audit/snap/gate-warm<N>.json --write-baseline
 node scripts/mobile-audit/check-mobile-snap.mjs --port 9336                       # 连跑两次应 0 差异
 ```
-⚠️ **基线绑定"专用实例 + 该夹具"**：拿它去比"用户的真实数据"必然 9/9 态红，那是预期，不是回归。
+⚠️ **基线绑定"专用实例 + 该夹具"**：拿它去比"用户的真实数据"必然 10/10 态红，那是预期，不是回归。
 ⚠️ **261016 实测到的确切成因**：`home-doc` 的指纹 row key 里带**文档节点 id**（形如 `ne-p$<uuid>-body#0`）⇒ 每次 `pm clear` + 重灌夹具都会生成**新 id**，
 即使元素数完全相同，指纹也会变（本次实测 `1880 → 1880` 但指纹不同，逐行对拍只差这一条）⇒ **重灌夹具后必须重烤**；只盯元素数会误判成"没变"。
 
@@ -135,7 +137,7 @@ node scripts/css-audit/drive.mjs 9335 scripts/mobile-audit/insert-panel-geometry
 **G4 零截断** · **G5 命中区 ≥44** · **G6 方块形态**（`flex-direction: column` + 居中 + 有圆角与底色 ⇒ 不是"图标左文字右"的行）。
 失败 exit 1 并逐条打印取样值。
 
-> ⚠️ **整页快照（9 态）与走查 23 屏都不覆盖这个面板** —— 别拿"门禁绿了"代替它。
+> ⚠️ **整页快照（10 态）与走查 23 屏都不覆盖这个面板** —— 别拿"门禁绿了"代替它。
 >
 > ⚠️ **设备截图裁切必须算状态栏**：页面 CSS `y=0` ↔ 设备 **`y=128`**（本机 1080×2400 / 412×842，dpr 2.625）⇒
 > `ffmpeg crop` 的 y = `CSS_y × 2.625 + 128`。261015 实测：直接按 CSS 值裁会把面板最后一行切掉，**看起来像"产品裁切"，其实是裁切窗口短了 47px**（差点误判）。

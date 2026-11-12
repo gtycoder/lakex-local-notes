@@ -102,7 +102,7 @@ node scripts/cdp-eval.mjs 9336 @scripts/mobile-audit/gate-fixture.mjs
 node scripts/mobile-audit/check-mobile-snap.mjs --port 9336
 ```
 
-- 9 态（261110 起）：`home-library` / `home-quicknotes` / `home-library-list` / `home-doc` / `settings` / `settings-appearance` / `settings-s3` / `settings-backup` / `settings-about`；`--states a,b` 只跑受影响态（改动只涉及一屏时优先用它）。
+- 10 态（261112 起新增 `home-create-sheet`，覆盖 `.mb-sheet` 浮层原语）：`home-library` / `home-quicknotes` / `home-create-sheet` / `home-library-list` / `home-doc` / `settings` / `settings-appearance` / `settings-s3` / `settings-backup` / `settings-about`；`--states a,b` 只跑受影响态（改动只涉及一屏时优先用它）。
 - 首次比对有差异会自动重跑一遍（去抖），两轮都差异才 exit 1；CDP 不通 exit 2。
 
 ### 5.3 重烤基线（只在专用实例 + 该夹具上做）
@@ -137,7 +137,7 @@ node scripts/css-audit/drive.mjs 9336 scripts/css-audit/mobile-walkthrough.mjs
 | 长文档 DOM 探针 | `node scripts/mobile-audit/long-doc-dom.mjs 9336` | 动文档编辑面 / 查找；**会造数据 ⇒ 跑后重烤基线**，别在配了 S3 的机器上跑 |
 | 多维表专项快照（表单 / 内容表格 / 内容卡片） | `npm run check:bitablesnap`（默认 9336） | 动移动端多维表视图/布局/表单；**夹具自建自删**，不污染 6 态与走查 |
 | 窗口矩阵（折叠/分屏/横竖屏形态 + resize 状态保持） | `npm run check:windowsweep`（默认 CDP 9340） | 改形态判据 / 外壳 / 胶囊 / 侧栏时；7 个窗口尺寸，断言 formFactor 与 `body.lake-tablet` 同源 + 切窗不丢 tab/滚动 |
-| 平板专项快照（9 态，视口钉 1280×800） | `npm run check:tabletsnap -- --port 9340`（基线 `baseline/mobile-snap-tablet.json`） | 动平板外壳（顶栏页签 / 悬浮目录与大纲 / 平板工具栏）；与手机基线互不影响，详见 `scripts/mobile-audit/README.md` |
+| 平板专项快照（10 态，视口钉 1280×800；**基线仍 9 态，待 261112 后补烤**） | `npm run check:tabletsnap -- --port 9340`（基线 `baseline/mobile-snap-tablet.json`） | 动平板外壳（顶栏页签 / 悬浮目录与大纲 / 平板工具栏）；与手机基线互不影响，详见 `scripts/mobile-audit/README.md` |
 
 （前三项前置都是 `bash scripts/emu-cdp.sh 9335`；口径与判据细节见 `scripts/mobile-audit/README.md` 与 `docs/MOBILE-LONG-DOC-PROBE.md`。）
 
@@ -198,5 +198,5 @@ node scripts/css-audit/drive.mjs 9336 scripts/css-audit/mobile-walkthrough.mjs
 ## 10. 与桌面判据的边界
 
 - 移动端有**自己的样式层**（`src/mobile/**` 的 `mb-*` + 移动 theme），**不引桌面样式层**；`AGENTS.md` §3#14 那套（`--lake-*` / `ln-*` / `@layer`）**只约束桌面**。
-- 门禁互不替代：移动端 = `check:mobilesnap`（9 态）+ 走查（23 屏）+ §5.5 装置；桌面 = `check:stylesnap`（42 态）。**改移动样式层不要求桌面重烤**，反之亦然；只有共享的 `src/core/**` 才两端同验。
+- 门禁互不替代：移动端 = `check:mobilesnap`（10 态）+ 走查（23 屏）+ §5.5 装置；桌面 = `check:stylesnap`（42 态）。**改移动样式层不要求桌面重烤**，反之亦然；只有共享的 `src/core/**` 才两端同验。
 - 静态门禁（CI 级，不需要设备）：`npm run check:mobileui`（移动独立性/样式层/kernel 样式）、`npm run check:core`（`src/core` 零平台依赖）。分层口径见 `AGENTS.md` §3#21。

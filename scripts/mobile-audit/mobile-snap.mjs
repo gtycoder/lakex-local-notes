@@ -32,6 +32,17 @@ export const STATES = [
     await expectOn(page, "!!document.querySelector('.nb-shelf')", "知识库 · 书架视图");
   } },
   { name: "home-quicknotes", nav: async (page) => { await clickText(page, ".mb-home-dock__item", "小记"); await expectOn(page, "(function(){var e=document.querySelector('.mb-home-dock__item.is-active');return !!e && e.textContent.indexOf('小记')>=0;})()", "首页 · 小记 tab"); } },
+  // 261112（P0 盲区）：此前 9 态**无一态打开底部 Sheet**（.mb-sheet 是浮层原语：新建面板 / 筛选 / 管理…
+  // 全走它）⇒ 这一整类浮层的几何与元素从没进过快照。本态用首页「＋」打开新建面板（CreateSheet），
+  // 覆盖 MobileSheet 原语 + scrim + grab/head/body 结构。
+  { name: "home-create-sheet", nav: async (page) => {
+    await clickText(page, ".mb-home-dock__item", "小记");
+    await page.sleep(700);
+    // aria-label = 「新建（长按上滑可速记）」、无文字内容 ⇒ 只能按唯一元素点（tapSel）。
+    if (!(await tapSel(page, ".mb-home-fab", 900))) throw new Error("home-create-sheet: 首页 ＋ 找不到（.mb-home-fab）");
+    await page.sleep(500);
+    await expectOn(page, "!!document.querySelector('.mb-sheet')", "底部 Sheet（.mb-sheet）");
+  } },
   { name: "home-library-list", view: "shelf", nav: async (page) => {
     await clickText(page, ".mb-home-dock__item", "知识库");
     if (!(await tapByLabel(page, ".toolbar__button", "切换到列表", 800))) throw new Error("home-library-list: 顶栏右上角没有「切换到列表」按钮");

@@ -115,7 +115,7 @@ components:
 
 ### 0.5 落地顺序与验收
 
-1. theme 令牌 → 2. kit/浮层 → 3. 三屏（首页/文档/设置）→ 4. 交互（滚动/转场）→ 5. 门禁 + 真机截图 → 6. 回写本文与 HANDOFF、重烤快照基线（9 态 + 23 屏）。
+1. theme 令牌 → 2. kit/浮层 → 3. 三屏（首页/文档/设置）→ 4. 交互（滚动/转场）→ 5. 门禁 + 真机截图 → 6. 回写本文与 HANDOFF、重烤快照基线（10 态 + 23 屏）。
 一次性完成后再动其它屏（表格/多维表/画板/手写板只跟随令牌，不单独改版）。
 ## Overview
 
@@ -374,7 +374,7 @@ Toast        .mb-toast-host > .mb-toast[--error] > (.mb-toast__text, .mb-toast__
 
 ```bash
 npm run check:mobileui     # 独立性 + 层护栏 + 内核样式护栏 + ui-metrics，一条命令
-npm run check:mobilesnap   # 设备级：9 态整页计算值快照（0 差异）
+npm run check:mobilesnap   # 设备级：10 态整页计算值快照（0 差异）
 node scripts/css-audit/drive.mjs 9335 scripts/css-audit/mobile-walkthrough.mjs   # 设备级：23 屏截图 + 五类探针
 ```
 

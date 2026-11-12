@@ -65,7 +65,7 @@
 20. **云同步只有一套状态判据（`src/core/cloudState.ts`，两端共用）**：`cloudStateOf()` → `unconfigured|offline|manual|auto`；`canTouchNetwork()` 是「能不能出网」的**唯一**判据，`isCloudActive()` 是 UI 判据。**关闭云同步 = 完全没配置**（任何路径不出网）；离线文案统一 `cloudStateHint()`；恢复**不等网络**。「启用云同步」默认值 = 是否已配置 S3（桌面 `settingsRepository.getSyncSettings()` 的 `hasS3Settings()` 与移动 `context.readSyncSettings()` 同口径）。护栏：`electron/settingsRepository.test.ts`、`electron/syncDualAB.test.ts`、`src/mobile/bridgeCloudState.test.ts`。
 21. **门禁分层（两端各自对应）**：
     ① **每次改动都跑**（≈31–36s，最新计数见 HANDOFF §1）：`npx tsc --noEmit` + 相关 `vitest` + `git diff --check`；改样式加 `ui-metrics` 与对应侧层围栏。
-    ② **只有动了视觉/设备那一层才跑样式/设备装置，且只跑受影响的 1~2 个态/屏**：桌面 `check-stylesnap.mjs --states`；移动 `check-mobile-snap.mjs --states`；多维表 `npm run check:bitablesnap`（3 态，夹具自建自删）。**全量**（桌面 42 态 / 手机 9 态 + 平板 9 态 + 23 屏）只在换夹具、改装置、发版前跑。
+    ② **只有动了视觉/设备那一层才跑样式/设备装置，且只跑受影响的 1~2 个态/屏**：桌面 `check-stylesnap.mjs --states`；移动 `check-mobile-snap.mjs --states`；多维表 `npm run check:bitablesnap`（3 态，夹具自建自删）。**全量**（桌面 42 态 / 手机 10 态 + 平板 10 态 + 23 屏）只在换夹具、改装置、发版前跑。
     ③ **动了外壳几何/构成，或重灌夹具 ⇒ 必须先重烤基线**（`--from <warm>.json --write-baseline`），否则下次全量必红。
     ④ **移动端改动 ⇒ 先装包再交付**（261110 用户定）：动过 `src/mobile/**`、`android/**` 或影响移动端渲染，交付时先 `bash scripts/android-build.sh --sync --install`（装 `lake_mobile`）让用户当场验收。
     顺序恒定：**先本地 → 再定点 → 最后全量**。
@@ -171,7 +171,7 @@ node scripts/s3-ls.mjs --count | --note <id> | --prefix <prefix>   # 云端对�
 12. `KeyedAsyncQueue` **无重入** ⇒ 同域嵌套会永久挂起（按 I3 自查）。
 
 ### 移动端
-13. **移动端改动要过设备装置**：`check:mobilesnap`（9 态）+ 走查（`drive.mjs 9336 mobile-walkthrough.mjs`）；**验收一律设备级截图**（CDP `Page.captureScreenshot` 抓不到 GPU canvas）；keep-alive 隐藏视图仍在 DOM ⇒ 导航必须带命中测试。
+13. **移动端改动要过设备装置**：`check:mobilesnap`（10 态）+ 走查（`drive.mjs 9336 mobile-walkthrough.mjs`）；**验收一律设备级截图**（CDP `Page.captureScreenshot` 抓不到 GPU canvas）；keep-alive 隐藏视图仍在 DOM ⇒ 导航必须带命中测试。
 14. 快照门禁**依赖设备里的数据**（随手记一条小记 ⇒ 该态 +17 元素、假红）⇒ 只在**专用 AVD `lake_gate`**（CDP 9336）+ 固定夹具（5 文档 + 4 小记，`scripts/mobile-audit/gate-fixture.mjs`）上跑；**重灌夹具或建过数据 ⇒ 先重烤基线**；`.css-audit/snap/` 中间快照会被同名 tag 覆盖（别当对拍）。
 15. **移动端懒加载入口若会挂内核，必须自带内核样式**（`@dlient/lakex-doc-react/style.css`），护栏 `kernelStyleBootstrap.test.ts`。⚠️ **桌面禁止照抄**（261021 事故）：桌面样式全在 `@layer` 里，JS import 的 CSS 无法分层 ⇒ 懒 chunk 再 import 内核 CSS 会把 antd base 以未分层身份塞进来（实测设置面板偏移、字体变系统栈）。桌面入口已用 `@import ... layer(legacy)` 引入；护栏 `cssLayers.test.ts` + `audit-vendor-css.mjs`（挂 `check:bundle`）。
 16. **内核「+」插入面板在手机上要夹进视口并归位**（面板 ~1294px 高、内核可能翻到 caret 上方，实测 `top=-558`）：`max-height` + `overflow-y:auto` + 改锚点（内核写行内样式，只能 `!important`），落点 `src/mobile/mobile.css`，作用域 `body.lake-mobile`。
