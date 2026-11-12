@@ -126,6 +126,7 @@ node scripts/css-audit/check-stylesnap.mjs --from .css-audit/snap/base.json --wr
   （一开始按"夹具换代"归因是**错的**：那处改动解释不了 19 个元素。判据：**恒定增量 = 全局**，先怀疑代码；**只有落在少数态上**才怀疑那部分数据。）
   这中间一直没人发现，是因为 261012 的重构把表达式改名成 `SNAP_EXPR` 却**漏改调用点**（`stylesnap.mjs:339` 仍读 `SNAP`）⇒ 装置一跑就 `ReferenceError`，
   **"陈旧"被崩溃盖住了**（已修）。
+- **261112 复核：装置在本机是可跑的** —— `make-fixture` 现场重建合成夹具（空 userData → 造数据 → 删缺失资产 → `sqlite3 .backup` 冻结到 `~/Library/Caches/lakex-local-notes-css-audit/fixture`）成功，单轮 42 态采集 ≈5 分钟；**夹具缓存已留在本机** ⇒ 下次只需起实例 + 烤。唯一阻塞是上面那条「并行会话改代码」，不是装置缺夹具。
 - **坑 A：`--states` 绝不能和 `--write-baseline` 连用**。`--states` 只采集指定的几个态，`--write-baseline` 会把这份**只含这几个态的 compact 直接覆盖成整份基线**
   （42 态 → N 态，**静默毁掉**其余态）。只修单态的正确姿势：先用 `drive.mjs <port> stylesnap.mjs after` 采一份**完整 42 态**，
   确认它与你另采的一轮**逐态相同**，再 `check-stylesnap.mjs --from .css-audit/snap/after.json --write-baseline`。
@@ -146,6 +147,7 @@ node scripts/css-audit/check-stylesnap.mjs --from .css-audit/snap/base.json --wr
   ⏱️ 单轮完整 42 态实测 **≈294s（4.9 min）**；单态自包含检查仍走「快照重烤的快速路径」（秒级）。
 - **另一个真坑：模型/会话并发起实例会互相踩**。实测两个 agent 同时跑桌面门禁 ⇒ `bind() failed: Address already in use (48)`（devtools 端口被占、实例等于没有 CDP），
   而且门禁会**连到别人的实例**上（现象：CDP 超时 + 元素数莫名其妙，比如 settings 态从 2482 变 2353）。起实例前先 `lsof -nP -iTCP:<port> -sTCP:LISTEN` 确认端口空闲。
+- **烤基线期间不能有别的会话在改代码/重建 `dist`**（261112 实测）：门禁每态都 `Page.reload`，实例会加载**磁盘上的最新 `dist`** —— 烤制过程中并行的另一会话补了一版 UI（每态 +4 元素）⇒ 刚烤好的基线下一次比对「42 态全红」。判定：**元素数每态恒定增量 = 全局外壳变了**，先 `git status` 确认没有并行构建；烤制窗口必须独占代码树。
 - **实例寿命**：连跑 3 轮完整 42 态（≈20 分钟）后该实例会卡死（实测 `CDP 调用超时 90000ms：Input.dispatchKeyEvent`，采集到一半就废），
   这时**必须换全新实例**（照 §「数据目录」的活着检查 + 上面 ①②③④），别在被反复 reload 的实例上硬跑。
 
