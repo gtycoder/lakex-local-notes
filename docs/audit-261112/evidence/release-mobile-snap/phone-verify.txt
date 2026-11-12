@@ -1,0 +1,16 @@
+  [msnap] home-library: 1909 els
+  [msnap] home-quicknotes: 1909 els
+  [msnap] home-create-sheet: 1971 els
+  [msnap] home-library-list: 1914 els
+  [msnap] home-doc: 2085 els
+  [msnap] settings: 2042 els
+  [msnap] settings-appearance: 1943 els
+  [msnap] settings-s3: 2035 els
+  [msnap] settings-backup: 1961 els
+  [msnap] settings-about: 1963 els
+{
+  "tag": "rel-verify",
+  "states": 10,
+  "file": "/Users/admin/file/local-lake/lakex-local-notes/.css-audit/snap/rel-verify.json"
+}
+[mgate] 10 态整页计算值 0 差异（对比 scripts/mobile-audit/baseline/mobile-snap.json）

@@ -9,7 +9,7 @@
 | --- | --- |
 | 手机 10 态（首跑，校验不写基线） | **1/10 态差异**：`home-doc` 元素数 **2085 → 2085（相同）**，指纹 `14tutej → a7cy7p`，两轮一致 |
 | 手机差异定性 | **数据依赖，非回归**：对「两次独立重灌夹具」的 home-doc 做行级对拍，差异恒为 **6 行** = `ne-p$<docId>-body` 一进一出（hash 相同）+ 4 条 `span.qn-card__date`（小记日期标签宽度随生成时刻变），**其余 2079 行完全一致**（见 `evidence/release-mobile-snap/phone-seed-diff.txt`）。与 AGENTS §7#14 / mobile-audit README 记录的两条数据依赖一致。 |
-| 手机处置 | 按 §3#21③ **重烤手机 10 态基线**（warm = `.css-audit/snap/rel-warm.json`，`--from … --write-baseline`）；重烤后**现场复核 10/10 域 0 差异**（`phone-verify.log`）⇒ **无需再次重烤**。基线 `scripts/mobile-audit/baseline/mobile-snap.json` 已更新（仅 home-doc 一行 hash 变更，**未 commit**，见 §4）。 |
+| 手机处置 | 按 §3#21③ **重烤手机 10 态基线**（warm = `.css-audit/snap/rel-warm.json`，`--from … --write-baseline`）；重烤后**现场复核 10/10 域 0 差异**（`phone-verify.txt`）⇒ **无需再次重烤**。基线 `scripts/mobile-audit/baseline/mobile-snap.json` 已更新（仅 home-doc 一行 hash 变更，**未 commit**，见 §4）。 |
 | 平板 10 态（lake_tab，`check-mobile-snap-tablet.mjs`） | **1/10 态差异**：`home-doc` 元素 **2106 → 2106（相同）**，指纹 `1v9vqy3 → psm1vm`；同样用两次重灌夹具做行级对拍，差异同为 **6 行**（prose id + 4 日期标签）⇒ **数据依赖，非回归**（`tablet-seed-diff.txt`）。 |
 | 平板处置 | 按任务要求「**不重烤平板基线除非确实有回归**」⇒ **未重烤** `baseline/mobile-snap-tablet.json`。若发版要求平板门禁常绿，需在重灌夹具后按同一配方重烤一次（建议与手机同批执行）。 |
 | 23 屏走查 | **可选，未跑**（本轮已完成手机 10 态 + 平板 10 态的核对；如需补跑：`node scripts/css-audit/drive.mjs 9336 scripts/css-audit/mobile-walkthrough.mjs`）。 |
@@ -27,7 +27,7 @@
 5. 重烤 + 复核：
    - `node scripts/css-audit/drive.mjs 9336 scripts/mobile-audit/mobile-snap.mjs rel-warm`（当前 seed 的 10 态暖快照）；
    - `node scripts/mobile-audit/check-mobile-snap.mjs --port 9336 --from .css-audit/snap/rel-warm.json --write-baseline` → 基线写入；
-   - `node scripts/mobile-audit/check-mobile-snap.mjs --port 9336 --tag rel-verify` → **`[mgate] 10 态整页计算值 0 差异`**（`phone-verify.log`）。
+   - `node scripts/mobile-audit/check-mobile-snap.mjs --port 9336 --tag rel-verify` → **`[mgate] 10 态整页计算值 0 差异`**（`phone-verify.txt`）。
 
 ## 2. 平板 10 态执行记录（lake_tab / 9340）
 
@@ -54,10 +54,10 @@
 
 | 文件 | 内容 |
 | --- | --- |
-| `phone-check.log` | 手机首跑校验：1/10 差异（home-doc 2085→2085，14tutej→a7cy7p） |
+| `phone-check.txt` | 手机首跑校验：1/10 差异（home-doc 2085→2085，14tutej→a7cy7p） |
 | `phone-seed-diff.txt` | 手机两次重灌夹具的 home-doc 行级对拍：**6 行**（prose id + 4 日期标签） |
-| `phone-verify.log` | 重烤手机基线后复核：**10 态 0 差异** |
-| `tablet-check.log` | 平板校验：1/10 差异（home-doc 2106→2106，1v9vqy3→psm1vm） |
+| `phone-verify.txt` | 重烤手机基线后复核：**10 态 0 差异** |
+| `tablet-check.txt` | 平板校验：1/10 差异（home-doc 2106→2106，1v9vqy3→psm1vm） |
 | `tablet-seed-diff.txt` | 平板两次重灌夹具行级对拍：**6 行**（同型数据依赖） |
 
 ## 6. 收尾
