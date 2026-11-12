@@ -28,7 +28,7 @@ vi.mock("../lib/diaryWarnLog.js", () => diaryWarn);
 
 import { SqlJsAsyncDb, SqlJsDb } from "../data/sqliteDb.js";
 import { applyMobileSchema, MOBILE_SCHEMA_VERSION, readMobileSchemaVersion } from "../data/schema.js";
-import { clearDiaryNotebookMark, ensureDiaryNote, DIARY_NOTEBOOK_TITLE } from "./diaryRepository.js";
+import { ensureDiaryNote, DIARY_NOTEBOOK_TITLE } from "./diaryRepository.js";
 import { readNote } from "../data/noteRepository.js";
 import { emptyLakeBody } from "../../core/lakeDocForm.js";
 
@@ -225,65 +225,6 @@ describe("移动端 schema 版本门（日记 space 列）", () => {
     const row = await db.prepare("SELECT title, space FROM folders WHERE id=?").get("nb-old") as { title: string; space: string | null };
     expect(row.title).toBe("老笔记本");
     expect(row.space).toBeNull();
-    await db.close();
-  });
-});
-
-describe("取消日记标记（整本；261110 收尾）", () => {
-  it("只把日记本 space 置 NULL：文档仍在原笔记本子树、日记空间不再包含它", async () => {
-    const db = await freshDb();
-    const opened = await ensureDiaryNote(db, "2026-11-09");
-    const month = (await folderRows(db)).find((row) => row.title === "11")!;
-
-    expect(await clearDiaryNotebookMark(db, opened.notebookId)).toEqual({ cleared: true });
-
-    const folders = await folderRows(db);
-    const notebook = folders.find((row) => row.id === opened.notebookId)!;
-    expect(notebook.space).toBeNull();
-    // 年/月分组与层级原样保留（没有删任何行）
-    expect(folders.filter((row) => row.space === "diary")).toEqual([]);
-    expect(folders.find((row) => row.title === "2026")!.parent_id).toBe(opened.notebookId);
-    expect(folders.find((row) => row.title === "11")!.parent_id).toBe(folders.find((row) => row.title === "2026")!.id);
-    // 文档仍在原月分组下、标题/正文不变（取消标记不是删数据）
-    const note = await readNote(db, opened.noteId);
-    expect(note!.title).toBe("2026-11-09");
-    expect(note!.parentId).toBe(month.id);
-    expect(note!.content).toBe(emptyLakeBody(opened.noteId));
-    // 必须标脏（否则 space 变更不上传，wire 上看不到「取消日记标记」）
-    const dirty = await db.prepare("SELECT is_dirty FROM folders WHERE id=?").get(opened.notebookId) as { is_dirty: number };
-    expect(dirty.is_dirty).toBe(1);
-    await db.close();
-  });
-
-  it("连点幂等：第二次 cleared=false（不报错、行数不变）；普通笔记本同样 cleared=false", async () => {
-    const db = await freshDb();
-    const opened = await ensureDiaryNote(db, "2026-11-09");
-    expect(await clearDiaryNotebookMark(db, opened.notebookId)).toEqual({ cleared: true });
-    const foldersBefore = await folderRows(db);
-    const notesBefore = await db.prepare("SELECT COUNT(*) AS c FROM notes").get() as { c: number };
-    expect(await clearDiaryNotebookMark(db, opened.notebookId)).toEqual({ cleared: false });
-    expect(await folderRows(db)).toEqual(foldersBefore);
-    expect(await db.prepare("SELECT COUNT(*) AS c FROM notes").get()).toEqual(notesBefore);
-    // 普通笔记本 / 不存在的 id：不动数据
-    await db.prepare("INSERT INTO folders (id,title,parent_id,sort_order,node_type,icon,updated_at,is_dirty) VALUES ('nb-plain','工作',NULL,0,'notebook',NULL,?,0)").run(T);
-    expect(await clearDiaryNotebookMark(db, "nb-plain")).toEqual({ cleared: false });
-    expect(await clearDiaryNotebookMark(db, "nb-missing")).toEqual({ cleared: false });
-    const plain = await db.prepare("SELECT space FROM folders WHERE id='nb-plain'").get() as { space: string | null };
-    expect(plain.space).toBeNull();
-    await db.close();
-  });
-
-  it("取消时 bump updated_at（wire 靠目录 updatedAt 传播 space 变更）", async () => {
-    const db = await freshDb();
-    const opened = await ensureDiaryNote(db, "2026-11-09");
-    const before = (await db.prepare("SELECT updated_at FROM folders WHERE id=?").get(opened.notebookId) as { updated_at: string }).updated_at;
-    expect(await clearDiaryNotebookMark(db, opened.notebookId)).toEqual({ cleared: true });
-    const after = (await db.prepare("SELECT updated_at FROM folders WHERE id=?").get(opened.notebookId) as { updated_at: string }).updated_at;
-    expect(Date.parse(after)).toBeGreaterThanOrEqual(Date.parse(before));
-    // 只改 space/updated_at/is_dirty：标题与父级不变
-    const row = await db.prepare("SELECT title, parent_id FROM folders WHERE id=?").get(opened.notebookId) as { title: string; parent_id: string | null };
-    expect(row.title).toBe(DIARY_NOTEBOOK_TITLE);
-    expect(row.parent_id).toBeNull();
     await db.close();
   });
 });

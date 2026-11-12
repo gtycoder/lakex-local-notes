@@ -1,7 +1,7 @@
 /**
  * 日记空间标记（261109）在移动端同步端口上的往返：
  *  · 发布方向：`listFoldersForSync` 必须把本机 `folders.space` 带出去，**非日记显式 null**
- *    （否则「取消日记标记」在 wire 上不可见，两端互刷 —— docs/DIARY.md 硬规则 1）；
+ *    （否则非日记（space=null）在 wire 上不可见，两端互刷 —— docs/DIARY.md 硬规则 1）；
  *  · 应用方向：`importRemoteFolder` / `applyRemoteFolderMeta` 必须把远端 `space` 落库（含 null 覆盖）。
  * 判据本身在 core/diary（normalizeFolderSpace），本文件只卡端口的落库/投影形状。
  */
@@ -48,7 +48,7 @@ describe("日记 space 随目录行同步（移动端端口）", () => {
     const rows = await port.listFoldersForSync() as Array<SyncFolderRow & { space?: string | null }>;
     const byId = new Map(rows.map((row) => [row.id, row]));
     expect(byId.get("nb-diary")?.space).toBe("diary");
-    // 显式 null（不是缺字段）：wire 上「取消日记标记」必须可见。
+    // 显式 null（不是缺字段）：wire 上非日记（space=null）必须可见。
     expect(byId.get("nb-normal")).toHaveProperty("space", null);
     expect(byId.get("g-year")).toHaveProperty("space", null);
     await db.close();

@@ -19,7 +19,6 @@ import {
   parseDiaryDateKey,
   planDiaryCreate,
   planDiaryOpen,
-  planDiaryUnmark,
   type DiaryTreeNode,
 } from "../../core/diary.js";
 import { emptyLakeBody } from "../../core/lakeDocForm.js";
@@ -49,11 +48,6 @@ export interface DiaryOpenResult {
   notebookId: string;
   /** 同名重复文档（历史脏数据）：只告警，不自动删除。 */
   duplicates: string[];
-}
-
-/** `clearDiaryMark` 的返回：cleared=false = 本来就不是日记本（连点第二次幂等，不是错误）。 */
-export interface DiaryUnmarkResult {
-  cleared: boolean;
 }
 
 interface FolderRow {
@@ -193,28 +187,4 @@ export async function ensureDiaryNote(d: MobileDb, dateKey: string, mode: DiaryO
     });
     return { noteId, created: true, notebookId, duplicates: plan.duplicateNoteIds };
   });
-}
-
-/**
- * 「取消日记标记」（整本；261110 收尾，桌面 `diary_unmark` 的移动等价物）。
- *
- * 语义：只把**日记笔记本这一行**的 `space` 置 NULL（笔记本 + 年/月分组 + 文档原样保留），
- * 之后它回到知识库、日记时间线不再包含它（`diaryEntries` 只扫 `space="diary"` 的子树）。
- *
- * 口径与桌面 `DiaryStore.unmarkNotebook` 一致：
- * 1. 判据来自 core `planDiaryUnmark`（只认 notebook + space=diary，不看标题）；
- * 2. 写入是**单条原子 UPDATE**（`WHERE id=? AND space='diary'` 自带乐观守卫，不需要批量事务）；
- *    `updated_at` 必须 bump —— 目录元数据（含 space）的同步传播判据就是 updatedAt
- *    （见 src/core/s3v3/plan/planFolderSpace.test.ts）；
- * 3. **幂等**：已经取消 / 不是日记本 ⇒ `cleared:false`，不抛错（连点第二次不是失败）。
- */
-export async function clearDiaryNotebookMark(d: MobileDb, notebookId: string): Promise<DiaryUnmarkResult> {
-  const folderRows = await d.prepare(LIST_FOLDERS_SQL).all() as unknown as FolderRow[];
-  const plan = planDiaryUnmark(folderRows.map(folderToDiaryNode), notebookId);
-  if (!plan.ok) return { cleared: false };
-  const now = new Date().toISOString();
-  const result = await d.prepare(
-    "UPDATE folders SET space=NULL, updated_at=?, is_dirty=1 WHERE id=? AND node_type='notebook' AND space=? AND trashed_at IS NULL",
-  ).run(now, plan.notebookId, DIARY_FOLDER_SPACE);
-  return { cleared: result.changes > 0 };
 }

@@ -5,7 +5,6 @@
  *  · ② 冷启动落点 = 设置项「默认空间」（settings/defaultSpace）；
  *  · ③ 从日记打开的文档，关闭/返回后回「日记」页签（页面返回与安卓返回键都收敛到
  *     useRouteTransition 的 onClosed ⇒ 来源只记一处）；
- *  · ④ 「取消日记标记（整本）」：写路径只在 data 层（bridge.clearDiaryMark → runWrite），页面只做确认。
  */
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -70,16 +69,13 @@ describe("从日记打开文档：返回回日记页签（261110）", () => {
   });
 });
 
-describe("取消日记标记（整本）= 数据层单一写路径（261110 收尾）", () => {
-  it("bridge.clearDiaryMark 走写域；页面 ⋯ 菜单调它（不自己写 SQL）", () => {
-    expect(BRIDGE).toContain("clearDiaryMark");
-    expect(BRIDGE).toContain('runWrite("clearDiaryMark"');
-    expect(PAGE).toContain("bridge.clearDiaryMark(");
-    // 整本动作必须二次确认（数据保留，但结构变化）
-    expect(PAGE).toContain("取消日记标记（整本）");
-    expect(PAGE).toContain("confirmMobile");
-    // 判据/写入在 data 层，页面不拼 SQL
-    expect(PAGE).not.toContain("UPDATE folders");
+describe("用户 261112 裁决：整本「取消日记标记」已移除（移动端）", () => {
+  it("页面 ⋯ 菜单与 bridge 都不再提供整本取消入口；space 的读取/同步规则不动", () => {
+    expect(PAGE).not.toContain("clearDiaryMark");
+    expect(PAGE).not.toContain("取消日记标记");
+    expect(BRIDGE).not.toContain("clearDiaryMark");
+    // 保留：日记域仍提供打开/新建（space 读取与同步在 v3 端口里，不在本桥）
+    expect(BRIDGE).toContain("diaryOpenDate");
   });
 });
 

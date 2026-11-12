@@ -19,7 +19,6 @@ const mocks = vi.hoisted(() => ({
   diaryOpenDate: vi.fn(async (_dateKey: string, _mode?: "open" | "new") => ({ noteId: "new-note", created: true, notebookId: "nb-diary", duplicates: [] as string[] })),
   getWorkspaceSnapshot: vi.fn(async (_notebookId: string) => ({ notebook: null, tree: [] as Array<{ id: string; parentId: string | null; sortOrder: number; title: string; kind: "group" | "note"; icon: null }> })),
   moveTreeNodeOrdered: vi.fn(async (_id: string, _parentId: string | null, _orderedIds: string[]) => ({})),
-  clearDiaryMark: vi.fn(async (_notebookId: string) => ({ cleared: true })),
   confirmMobile: vi.fn(async (_options: { title: string; body?: string; confirmText?: string; danger?: boolean }) => true),
   showToast: vi.fn(),
 }));
@@ -28,7 +27,6 @@ vi.mock("../bridge", () => ({
     diaryOpenDate: mocks.diaryOpenDate,
     getWorkspaceSnapshot: mocks.getWorkspaceSnapshot,
     moveTreeNodeOrdered: mocks.moveTreeNodeOrdered,
-    clearDiaryMark: mocks.clearDiaryMark,
   },
 }));
 vi.mock("../ui/toastBus", () => ({ showToast: mocks.showToast }));
@@ -87,7 +85,6 @@ beforeEach(() => {
   mocks.diaryOpenDate.mockClear();
   mocks.getWorkspaceSnapshot.mockClear();
   mocks.moveTreeNodeOrdered.mockClear();
-  mocks.clearDiaryMark.mockClear();
   mocks.confirmMobile.mockClear();
   mocks.getWorkspaceSnapshot.mockResolvedValue({
     notebook: null,
@@ -253,34 +250,6 @@ describe("日记页（移动端 v1）", () => {
     expect(mocks.moveTreeNodeOrdered).toHaveBeenCalledWith("d1231", "nb-work", ["work-child", "d1231"]);
     expect(mocks.showToast).toHaveBeenCalledWith("已转为文档：《工作》");
     expect(onChanged).toHaveBeenCalled();
-  });
-
-  it("条目 ⋯ →「取消日记标记（整本）」：先确认（说明保留文档）⇒ bridge.clearDiaryMark(日记本) + 刷新", async () => {
-    await render();
-    await click(button("日记操作 2025-12-31")!);
-    const item = [...document.body.querySelectorAll<HTMLButtonElement>(".mb-menusheet__item")]
-      .find((el) => (el.textContent ?? "").includes("取消日记标记（整本）"));
-    expect(item, "菜单里必须有整本「取消日记标记（整本）」").toBeTruthy();
-    await click(item!);
-    // 整本动作必须二次确认，且说明"文档会保留"（防止误以为删数据）。
-    expect(mocks.confirmMobile).toHaveBeenCalledTimes(1);
-    const options = mocks.confirmMobile.mock.calls[0][0] as { title: string; body?: string };
-    expect(options.title).toContain("取消日记标记");
-    expect(options.body ?? "").toContain("保留");
-    expect(mocks.clearDiaryMark).toHaveBeenCalledWith("nb-diary");
-    expect(mocks.showToast).toHaveBeenCalledWith("已取消日记标记，笔记本已回到知识库");
-    expect(onChanged).toHaveBeenCalled();
-  });
-
-  it("取消日记标记确认框里点「取消」⇒ 不调用写路径", async () => {
-    mocks.confirmMobile.mockResolvedValueOnce(false);
-    await render();
-    await click(button("日记操作 2025-12-31")!);
-    const item = [...document.body.querySelectorAll<HTMLButtonElement>(".mb-menusheet__item")]
-      .find((el) => (el.textContent ?? "").includes("取消日记标记（整本）"));
-    await click(item!);
-    expect(mocks.confirmMobile).toHaveBeenCalledTimes(1);
-    expect(mocks.clearDiaryMark).not.toHaveBeenCalled();
   });
 
   it("目标列表不含日记本、不含分组（判据 = core.diaryConvertTargets）", async () => {

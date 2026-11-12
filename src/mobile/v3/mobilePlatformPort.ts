@@ -169,7 +169,7 @@ export function createMobilePlatformPort(db: MobileDb, ctxIn?: Partial<MobilePla
         trashedAt: r.trashed_at ? String(r.trashed_at) : null,
         deletedFromParentId: r.deleted_from_parent_id ? String(r.deleted_from_parent_id) : null,
         ...(Number(r.cloud_deleted) === 1 ? { cloudDeleted: true } : {}),
-        // 日记本标记：**显式写 null**（非日记也写），否则「取消日记标记」在 wire 上不可见（docs/DIARY.md 硬规则 1）。
+        // 日记本标记：**显式写 null**（非日记也写），否则「space 置 null」在 wire 上不可见（docs/DIARY.md 硬规则 1）。
         space: normalizeFolderSpace(r.space),
       }));
     },
