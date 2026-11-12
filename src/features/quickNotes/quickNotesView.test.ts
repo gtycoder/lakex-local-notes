@@ -328,3 +328,22 @@ describe("按钮原语第二批（261110）：小记工作区", () => {
     expect(css).toMatch(/^\.quick-note-index-main \{/m);
   });
 });
+describe("小记首屏正文预热（261112 闪屏回归）", () => {
+  const PREWARM_SRC = read("../../core/quickNoteDetailPrewarm.ts");
+  it("列表刷新必须在 setItems 之前预热首屏正文（否则首帧只能画纯文本、下一帧才换富预览）", () => {
+    const prewarmAt = WORKSPACE_SRC.indexOf("quickNotePrewarmIds(");
+    const setItemsAt = WORKSPACE_SRC.indexOf("setItems(result);");
+    expect(prewarmAt).toBeGreaterThan(0);
+    expect(setItemsAt).toBeGreaterThan(prewarmAt);
+    // 预热读回的是卡片同一份 detailCache（不是第二套缓存）
+    expect(WORKSPACE_SRC).toContain("detailCacheRef.current.set(document.id, document)");
+    expect(WORKSPACE_SRC).toContain("await Promise.all(prewarmIds.map");
+  });
+
+  it("预热判据单一来源 = core/quickNoteDetailPrewarm，上限取一屏条数而不是虚拟窗口 24", () => {
+    expect(PREWARM_SRC).toContain("export const QUICK_NOTE_DETAIL_PREWARM_LIMIT = 8;");
+    expect(PREWARM_SRC).toContain("export function quickNotePrewarmIds(");
+    // 命中缓存（contentHash 相同）必须跳过：切空间/切回来不该重复 IPC
+    expect(PREWARM_SRC).toMatch(/cachedHashes\.get\(item\.id\) === item\.contentHash/);
+  });
+});

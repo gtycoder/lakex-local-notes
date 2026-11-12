@@ -10,6 +10,7 @@ import { QUICK_NOTE_VERSION } from "../../core/quickNoteModel";
 import { QUICK_NOTE_SORT_OPTIONS, quickNoteSortTime, sortQuickNotes, type QuickNoteSort } from "../../core/quickNoteSort";
 // 本机读写单独一层（core 禁 DOM）：与移动端同一份
 import { readQuickNoteSort, writeQuickNoteSort } from "../../lib/quickNoteSortPref";
+import { quickNotePrewarmIds } from "../../core/quickNoteDetailPrewarm";
 import type { NoteDocument, QuickNoteDocument, QuickNoteImage, QuickNoteListSummary, QuickNoteTag, TreeNode } from "../../lib/types";
 import { getNativeErrorMessage, reportNativeActionError } from "../../lib/nativeErrors";
 import { uploadLakeResource } from "../../features/editor/resourceUpload";
@@ -89,6 +90,10 @@ const listSummaryOf = (doc: QuickNoteDocument): QuickNoteListSummary => ({
 /**
  * 列表投影 → 卡片可渲染的文档占位（正文/资源尚未按需读回时）。
  * body 为空 ⇒ QuickNotePreview 回落到 previewText（纯文本），详情到达后原地换成富预览。
+ *
+ * 261112：**首屏**这层占位不再被看到 —— 列表面板在 setItems 前预热一屏正文（见 refreshItems 与
+ * `core/quickNoteDetailPrewarm`），否则首帧是纯文本、下一帧才换富预览（用户报「小记第一打开闪屏」）。
+ * 本占位只剩两个用途：滚动进入视口的新卡片、以及预热/读取失败时的降级（纯文本总比空白好）。
  */
 const placeholderDocument = (item: QuickNoteListSummary): QuickNoteDocument => ({
   ...item,
@@ -263,6 +268,21 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
         for (const [id, document] of detailCacheRef.current) {
           const summary = fresh.get(id);
           if (!summary || summary.contentHash !== document.contentHash) detailCacheRef.current.delete(id);
+        }
+        // 首屏正文预热（261112 用户报「小记第一打开闪屏」）：判据与条数上限见 core/quickNoteDetailPrewarm。
+        // 列表投影不带正文（DT-05）⇒ 卡片首帧只能画 previewText 纯文本（无标题/加粗），而正文靠
+        // IntersectionObserver 懒读（回调必然晚于首帧）⇒ 下一帧才换成富预览 = 肉眼可见的闪。
+        // 这里在 setItems **之前**把「一屏条数内」的正文并发读回（进同一份 detailCache，卡片照旧走
+        // onNeedDetail 兜底）⇒ 首帧即富预览；命中缓存时零 IPC。
+        const prewarmIds = quickNotePrewarmIds(
+          result,
+          new Map([...detailCacheRef.current].map(([id, document]) => [id, document.contentHash] as const)),
+        );
+        if (prewarmIds.length > 0) {
+          const warmed = await Promise.all(prewarmIds.map((id) => native.readQuickNote(id).catch(() => null)));
+          if (listVersionRef.current.isCurrent(version)) {
+            for (const document of warmed) if (document) detailCacheRef.current.set(document.id, document);
+          }
         }
         setItems(result);
       }
