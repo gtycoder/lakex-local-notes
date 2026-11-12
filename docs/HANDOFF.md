@@ -14,10 +14,12 @@
 - **设备门禁矩阵（R2 代码重装后）**：手机 10 态（lake_gate / 9336）与平板 10 态（lake_tab / 9340）均按夹具重烤后**连跑两轮 0 差异**；多维表 3 态重烤后两轮 0 差异；**23 屏走查 23/23 ok**；窗口矩阵 `pass: true`。基线三份（mobile-snap / tablet / bitable）已随本批更新。**桌面 42 态也已重烤**：合成夹具 + 隔离实例，42/42 态采集、34 严格态连跑两轮 0 差异（8 窄窗按既有 UNSTABLE 跳过）；基线 `scripts/css-audit/baseline/stylesnap.json` 已更新。
 - **门禁（R2 收尾实测）**：tsc 0；全量 vitest **886 文件（875 passed / 11 skipped）/ 5597 用例（5585 passed / 12 skipped）/ 0 failed**；ui-metrics **shadowed 0 / 跨文件重复 45** / !important 9=清单；check:core 172/0；check:mobileui 通过；双 build + bundle/arch PASS（desktop 首屏 567,551/600,000、app-js 196,192/307,200；mobile 348,211/360,000、entry 60,803/61,440、css 139,503/141,312）；diff-check 0。
 - **待验/未做**：Q03 历史预览、Q07 preview 档、Q05 字号的设备级点按（单测已绿）；~~移动小记画廊 video/audio 混入~~（已修 task-32）；~~剩余 21 条 shadowed 声明~~（已清零 task-34）+ ~~mobile.css 域归位~~（已完成 task-33）；~~docs 侧机器路径~~（已清零 task-35）。**设备矩阵（手机/平板 10 态 + 多维表 3 态 + 23 屏 + 窗口 + 桌面 42 态）已全部重烤并两轮 0 差异**。
-- **S3 真实桶验收（三端 20/20）**：三桌面隔离实例 + 七牛真实桶（**唯一测试前缀**，结束只 DELPREFIX 本前缀）⇒ **20/20 场景 PASS、前缀 0 残留**；记录与矩阵见 [13 写路径越界扫查](audit-261112/13-write-guard-sweep.md) · [14 S3 场景矩阵（74 场景 / 有 33 · 部分 29 · 真空 12）](audit-261112/14-s3-scenario-matrix.md)。**B 档 13 条真实桶子集待 task-58**。
+- **S3 真实桶验收（A 档 20/20 + B 档 57/57）**：三桌面隔离实例 + 七牛真实桶（**唯一测试前缀**，结束只 DELPREFIX 本前缀）⇒ **A 档 20/20 场景 PASS**；**B 档 13 条 57/57 PASS**（task-58 完成；含 S72 修复后复跑），前缀 **0 残留**。记录：[13 写路径越界扫查](audit-261112/13-write-guard-sweep.md) · [14 S3 场景矩阵（收口 45 有 / 28 部分 / 1 真空）](audit-261112/14-s3-scenario-matrix.md) · [19 B 档 13 条验收](audit-261112/19-s3-real-bucket-subset.md) · [21 移动多端 A–F](audit-261112/21-s3-multi-end-mobile.md)。
 - **同步语义收口（`3fad8821`，task-44 落地）**：位置三件套独立三方合并（`src/core/s3v3/plan/positionMerge.ts`）+ 纯移动轮也发布（`apply-position`）；同步专用写路径（`saveSynced`/`saveSyncedNote`，桌面+移动同口径）；单篇 apply 异常降级为 warning+continue（不再整轮卡死）；P1-a engineBridge 改读 `meta.nodeType` 根治；P1-b 目录 local-purge 置 indexChanged。锁字段独立合并与发布 = **task-47 已落地**（基线+lockedAt LWW，见 §2）。语义要点见 §2。
 - **品牌启动图（`8a131acd` / `6c5e52b1`）**：启动标记改**透明双绿折纸雀**、启动底走**主题窗色**（去掉白底/薄荷圆）；启动动画改 CSS 后删除已无引用的 APNG/poster（约 −1MB）。
-- **文档批次**：主计划 K–P 重复段去重（`a2caf0ba`，821→698 行 / −123，无内容丢失）；本轮只读审计新增编号分册 [13](audit-261112/13-write-guard-sweep.md) 写路径生命周期守卫越界扫查 · [14](audit-261112/14-s3-scenario-matrix.md) S3 全场景矩阵 · [15](audit-261112/15-readonly-gates-warning.md) 只读门禁与同步 warning 通路 · [16](audit-261112/16-mobile-lifecycle.md) 移动端生命周期语义等价性 · [17](audit-261112/17-lock-trash-ui.md) 只读/回收站/云端已删除/保存被拒 UI 一致性。
+- **文档批次**：主计划 K–P 重复段去重（`a2caf0ba`，821→698 行 / −123，无内容丢失）；本轮只读审计分册 [13](audit-261112/13-write-guard-sweep.md) 写路径守卫越界扫查 · [14](audit-261112/14-s3-scenario-matrix.md) S3 全场景矩阵 · [15](audit-261112/15-readonly-gates-warning.md) 只读门禁与同步 warning 通路 · [16](audit-261112/16-mobile-lifecycle.md) 移动端生命周期等价性 · [17](audit-261112/17-lock-trash-ui.md) 只读/回收站/云端已删除/保存被拒 UI 一致性 · [18](audit-261112/18-evidence-lifecycle.md) 生命周期实测 · [19](audit-261112/19-s3-real-bucket-subset.md) 真实桶 B 档 · [20](audit-261112/20-independent-review-batch2.md) 独立复核 batch2 · [21](audit-261112/21-s3-multi-end-mobile.md) 移动多端 A–F。
+- **S3 语义修复第二波（261112 晚，均已本地提交）**：① **S72** 被远端移入回收站 + 本地有未同步编辑 ⇒ **强制留历史快照**（`903a47aa`）；② **F-01b** 目录 purge 后云端索引残留（4 处叠加根因）已修（`fa2fbdad`）+ 矩阵附录 D 回写（`dc882945`）；③ **H73-G1** 位置赢家为远端时生命周期变更不再被 `lifecycleRace` 永久挡住（`4db266e9`）；④ apply 跳过改**独立 kind `apply_skipped`** + 诊断逐项 + P0 回归护栏（`1db5dea6`）；⑤ `positionMerge` / `mergeNoteLock` 表驱动 **32 例**（`811df501`）；⑥ 矩阵收口（覆盖 **45 有 / 28 部分 / 1 真空**、新增 S08）（`18019c1f`）。**task-46/47/52–58 全部关闭**；本波门禁见 §1。
+- **AGENTS 新红线（`68e90df4`）**：§3#23 写路径守卫分层（用户策略只在入口/同步专用写路径，声明 U/S/I/R/M 调用方分类）+ §3#24 位置与内容正交（位置基线三方合并、恢复历史=内容动作、purge 整棵子树、**不加位置 wire 时间戳**）——内容以 AGENTS 为准，本文不复述。
 
 ### 261112 · 发布前全仓审计 + R0/R1 收口批（已本地提交，未推送）
 
@@ -57,15 +59,16 @@
 - **工作树**：R2 收尾已本地提交（HEAD 以 `git log -1` 为准；**本次 HANDOFF 回写批未提交**）；并行批在途 = 移动恢复守卫（task-53）等，提交前按 `git status` 分辨；后续继续「只 stage 本批文件」，**绝不用 `git add -A`**。
 - 261110 一次性历史清理（`.ai-writing-recon/` 用 `git filter-repo` 从全部历史移除，重写 v1.1.0 之后的提交；tag 未变）⇒ 旧 clone 需 `git fetch --force --prune && git reset --hard origin/master`。
 
-**门禁基线（261112 R2 收尾批实测；分层口径见 AGENTS §3#21）**
+**门禁基线（261112 晚最新一次实测；分层口径见 AGENTS §3#21）**
 
 - `npx tsc --noEmit` = **0**。
-- 全量 vitest = **886 文件（875 passed / 11 skipped）/ 5597 用例（5585 passed / 12 skipped）/ 0 failed**。
+- 全量 vitest（低负载串行门禁，HEAD 含 `d8ff18fc`）：**文件 = 总 905（894 passed / 11 skipped）**；**用例 = 总 5705（5693 passed / 12 skipped）/ 0 failed**。
+- ⚠️ `electron/s3v3/perf.integration.test.ts`：**低负载串行本次无抖动（通过）**；满载/并发构建时偶发（单跑 PASS），门禁判定以单跑/低负载为准（同 §2 既有口径）。
 - `node scripts/ui-metrics.mjs`：颜色 0 / 字号 0 / `!important` 9 = 允许清单 / `crossFileDupGroups` 45 / `shadowedDecls` **0**（task-34 已清零，门禁只降）/ 未定义令牌 0。
 - `check:core` 172 文件 0 违规；`check:mobileui` 通过。
 - `check:bundle` + `check:arch` PASS：desktop 首屏 567,551 / 600,000、app-js 196,192 / 307,200；mobile 首屏 348,211 / 360,000、entry 60,803 / 61,440、CSS 139,503 / 141,312、preload 6。
 - `git diff --check` = **0**。
-- **真实 S3 桶验收（R2 收尾）**：三桌面隔离实例 + 七牛真实桶（唯一测试前缀）**20/20 场景 PASS、前缀 0 残留**（证据 `3fad8821` 提交说明；矩阵 [audit-261112/14](audit-261112/14-s3-scenario-matrix.md)）；**B 档 13 条子集待 task-58**。
+- **真实 S3 桶验收**：A 档三桌面隔离实例 **20/20 PASS**（`3fad8821`）；**B 档 13 条 57/57 PASS**（task-58，含 S72 修复后复跑），唯一测试前缀 **0 残留**（[19](audit-261112/19-s3-real-bucket-subset.md)）。**移动多端 A–F 见 [21 号报告](audit-261112/21-s3-multi-end-mobile.md)（D 号真缺陷 = task-74 修复中；G–K 未跑）**。
 - 设备/视觉（最近记录）：手机 **10 态** + 平板 **10 态** 基线重烤并连跑两轮 0 差异；23 屏走查 23/23；`edit-surface-invariants` quicknote 11 + document 11 ALL PASS；capture 入口装置 10/10。**桌面 `check:stylesnap` 42 态已重烤**（34 严格态两轮 0 差异，8 窄窗按 UNSTABLE 跳过；基线已更新，见 §3）。
 
 **设备与环境（本机实测）**
@@ -121,6 +124,9 @@
   - **编辑锁独立合并**：`isLocked/lockedAt` 按云端基线 + `lockedAt` LWW 独立合并（task-47）：本地锁变化即 `indexChanged` 发布（他端持续编辑正文期间也发得出去）；锁不是合并屏障——他端正文照常应用、A 的锁保留；解锁是否传播靠基线变更检测（不依赖"解锁必须带时间戳"）。
   - **同步专用写路径**：`saveSynced`（`electron/store.ts` `saveSyncedNote` / `electron/noteContentRepository.ts:61` / 端口 `saveSyncedNote`；移动 `applySyncedBody` 同口径）允许 **trashed 行**接收正文、保留 trashed、**purged 永拒** ⇒ **用户保存守卫（`assertNodeWritable` 等）不得下沉到同步/镜像路径**（否则新设备首拉/他端编辑整轮失败；F04 同类事故，task-52/53 在修）。
   - **单篇 apply 失败降级**：单篇异常记 warning 后 `continue`（桌面 `SyncResult.warnings` / 移动 `warningDetails`），**不再整轮 syncNow 抛错导致设备永久卡死**。
+  - **被远端移入回收站 + 本地有未发布编辑 ⇒ 强制留档**（S72，`903a47aa`）：判据 = 位置赢家为**远端 trashed** + 本地相对基线有变化 + 内容赢家为**本地** ⇒ `archive-local` 写历史快照（两份都改时只留一份）；不静默丢弃本地编辑。
+  - **位置赢家=远端时不受 `lifecycleRace` 保护**（H73-G1，`4db266e9`）：该保护只覆盖「本地窗口内自己移入/移出」；远端 win 的生命周期类变更必须落地，不得被永久挡住。
+  - **目录 purge 意图在设备本地 `intents`**（F-01b，`fa2fbdad`/`dc882945`）：**不新造 wire 墓碑**；回收站副本**永不 upload**、发布排除 remote-purged-trash、`fieldChanged` 不上传已删正文；显式恢复让位（远端 `updatedAt > purgedAt` 时以远端删除为准）。
   - **移动端已知缺口（task-55/56 在修）**：回收站容器 id 不落 `notes.parent_id`（N1）；`applyRemoteNoteMeta` 对 trashed 行跳过 title/parent（N3）；移动锁未生效（N4/M3）。
 - **InkPad 结构拆分（Q19-10）未做**：仅抽了 `inkPadModel` 纯逻辑 + 11 例行为测试；组合根 + 4 hook + 2 子组件拆分因 127 条文本护栏与 10 useState/45 useCallback 依赖网，留发布后按「先迁护栏 → 再抽 hook → 最后设备门禁」执行。
 - **发布链路**：Gitee 单附件 100MB / 仓库 1GB 上限（mac/Windows 包只能走 GitHub）；GitHub 慢速上传依赖 workflow 的 50 分钟步骤超时，不要缩短。
@@ -130,17 +136,14 @@
 
 > 规则：只有「真问题 / 不做有代价 / 收益大于复杂度」才进本节（AGENTS §3#17）；完成后**直接删行**，历史留 git。
 
-**当前批次（R2 收尾）编号待办（task-46/47/52/53/54/55/56/57/58）**
+**当前批次（S3 语义第二波 + 多端验收）待办（2026-11-12 晚）**
 
-- **task-46（P0，pending）S3 全场景覆盖矩阵**：内存档穷举 + 真实桶子集，证明常规操作在多端不异常/不丢数据/不卡死；矩阵已出 74 场景（有 33 / 部分 29 / 真空 12，见 [14](audit-261112/14-s3-scenario-matrix.md)），装置与两档待补。
-- **task-47（P0，in_progress）锁字段独立合并与发布**：A 加锁 + B 未感知编辑同步；锁 = 本机只读保护标记（非租约/非合并屏障），B 的正文必须正常应用、A 的锁保留；`isLocked`/`lockedAt` 按 lockedAt LWW 独立发布（含连续编辑回归）。
-- **task-52（P1，in_progress）G3 同类越界修复**：同步 apply 首见远端行调 `setNodeIcon` 撞 `assertNodeWritable` ⇒ 新设备首拉「带图标的回收站条目」整轮失败；开同步专用写路径，用户策略不下沉镜像路径。
-- **task-53（P1，in_progress）移动恢复缺口**：`restoreSyncConflict`/`restoreHistory` 复用用户保存守卫 ⇒ 目标已 trashed 时恢复失败（桌面可恢复）；恢复走恢复专用写。
-- **task-54（P1，in_progress）桌面 UI P0 文案/档位统一**：回收站/云端已删除/被拦 = 琥珀（pending），红色只留失败/冲突；`云端已删除·仅本地` → `云端已删除（仅本地）`（去中点「·」）；tab 徽标与横幅同档；只读原因单一来源。
-- **task-55（P1，pending）移动端生命周期正确性**：parent 不落 `notebook-trash` + 软删写 `deleted_from_parent_id` + 日记入口 gone 判据 + 小记不静默复活（N1/N2/M1/M2）。
-- **task-56（P1，pending）移动端编辑锁生效**：真实锁态透出 + 只读态 + 顶部横幅（含锁定时间）+ 保存拦截明说（N3/N4/N5）。
-- **task-57（P1，in_progress）只读审计复核**：把 M1 日记绕过 gone / M2 小记静默复活 / M3 移动锁失效从「推断」做成实测证据（只读复现，不改代码）。
-- **task-58（P1，pending）S3 B 档真实桶子集**：13 条场景（S03/S05/S13/S21/S25/S28/S43/S50/S55/S58/S59/S62/S72）在七牛真实桶跑通：唯一前缀 / 只 DELPREFIX / 0 残留 / 不碰正式数据。
+- **已完成并关闭（本批）**：task-46（全场景矩阵 → 收口 45 有 / 28 部分 / 1 真空 + 新增 S08）· task-47（锁字段独立合并与发布）· task-52（G3 图标守卫越界）· task-53（移动恢复守卫）· task-54（桌面 UI 文案/档位）· task-55（移动生命周期）· task-56（移动编辑锁）· task-57（M1/M2/M3 实测证据）· task-58（真实桶 B 档 13 条 **57/57**）——证据见 §0 与 [19](audit-261112/19-s3-real-bucket-subset.md)/[21](audit-261112/21-s3-multi-end-mobile.md)。
+- **task-72（P0，in_progress）S3 多端混合验收**：2 个移动模拟器 + 桌面（真实桶 / 唯一前缀 / 10 条混合场景）；**A–F 已跑**（见 [21](audit-261112/21-s3-multi-end-mobile.md)），**D 号真缺陷 → task-74 修复中**；**G–K 与快照门禁未跑**。
+- **task-74（P0，in_progress）R-D 修复**：远端 purge 后移动端把行**物理删除** ⇒ 未保留「云端已删除（仅本地）」回收站副本；修完复跑 A–F 的 D 场景。
+- **task-67（P1，in_progress，Lead）移动端同步 warning 持久化**：重启不丢 + apply 跳过 kind 对齐（与桌面 `apply_skipped` 同口径）。
+- **S19（目录重建）**：矩阵收口后仍待补/待跑（目录重建后的索引/位置/资产一致性），随 task-72 G–K 或单独补齐。
+- **F-01b 后续：无**（`fa2fbdad` 4 处叠加根因已修 + `dc882945` 矩阵回写；无遗留）。
 
 **P0（不做就卡住主线）**
 
