@@ -14,6 +14,16 @@ const MOBILE_PANES = read("../../mobile/notebook/NotePaneHost.tsx");
 const MOBILE_SESSION = read("../../mobile/notebook/useWorkspaceSession.ts");
 const MOBILE_BRIDGE = read("../../mobile/bridge/notes.ts");
 const INK_PAD = read("./InkPad.tsx");
+/** 261112 R2-S10 阶段② 第一步：按组件文件取文本。
+ *  `InkCanvas.tsx` / `InkToolbarDesktop.tsx` 是**后续步骤**才抽出的组件文件 —— 抽出前回退 `INK_PAD` 全文，
+ *  因此现在与原来逐字等价；抽出后只改这里的读取源，本文件的断言一字不动。 */
+const readIfPresent = (path: string): string => {
+  try { return read(path); } catch { return ""; }
+};
+const INK_CANVAS = readIfPresent("./InkCanvas.tsx") || INK_PAD;
+const INK_TOOLBAR_DESKTOP = readIfPresent("./InkToolbarDesktop.tsx") || INK_PAD;
+/** 261112 R2-S10 阶段② 第二步：正文状态 + 保存管线抽到 `useInkDocState.ts`（纯搬移）——文本护栏改指向它。 */
+const INK_DOC_STATE = read("./useInkDocState.ts");
 const DESKTOP_INK = read("./DesktopInkPad.tsx");
 const INK_PAPER = read("./InkPaper.tsx");
 const DESKTOP_INK_CSS = read("./inkPad.desktop.css");
@@ -64,8 +74,8 @@ describe("手写板正式端到端接线", () => {
   });
 
   it("静态笔迹层 memo 化，避免正在书写时重渲染全部历史路径", () => {
-    expect(INK_PAD).toContain("const StaticStrokeLayer = memo(");
-    expect(INK_PAD).toContain("<StaticStrokeLayer strokes={renderedStrokes} />");
+    expect(INK_CANVAS).toContain("const StaticStrokeLayer = memo(");
+    expect(INK_CANVAS).toContain("<StaticStrokeLayer strokes={renderedStrokes} />");
   });
 
   it("撤销栈只存页级补丁，不再把整篇正文压栈", () => {
@@ -84,13 +94,13 @@ describe("手写板正式端到端接线", () => {
 
   /** 桌面分支的 JSX 片段（顶部工具条 + 底部 footer）：用来钉「桌面结构零变化」。 */
   const desktopBranch = (): string => {
-    const toolbarStart = INK_PAD.indexOf('{variant === "desktop" ? (');
-    const toolbarEnd = INK_PAD.indexOf(') : (', toolbarStart);
+    const toolbarStart = INK_TOOLBAR_DESKTOP.indexOf('{variant === "desktop" ? (');
+    const toolbarEnd = INK_TOOLBAR_DESKTOP.indexOf(') : (', toolbarStart);
     // footer 用 className 定位再回溯三元开头：「页面」面板挂载也是 variant==="desktop" 三元，不能按字符串先后猜
-    const footerDiv = INK_PAD.indexOf('<div className="ink-footer">');
-    const footerStart = INK_PAD.lastIndexOf('{variant === "desktop" ? (', footerDiv);
-    const footerEnd = INK_PAD.indexOf(') : !readOnly ? (', footerDiv);
-    return INK_PAD.slice(toolbarStart, toolbarEnd) + INK_PAD.slice(footerStart, footerEnd);
+    const footerDiv = INK_TOOLBAR_DESKTOP.indexOf('<div className="ink-footer">');
+    const footerStart = INK_TOOLBAR_DESKTOP.lastIndexOf('{variant === "desktop" ? (', footerDiv);
+    const footerEnd = INK_TOOLBAR_DESKTOP.indexOf(') : !readOnly ? (', footerDiv);
+    return INK_TOOLBAR_DESKTOP.slice(toolbarStart, toolbarEnd) + INK_TOOLBAR_DESKTOP.slice(footerStart, footerEnd);
   };
 
   /** 移动端底部工具坞的 JSX 片段（到 `) : null}` 为止；里面含色板/笔宽两个悬浮面板）。 */
@@ -271,10 +281,10 @@ describe("手写板正式端到端接线", () => {
 
   it("P5 热路径不序列化整篇：commit/undo/redo 只标脏，落盘时才现算", () => {
     // 序列化函数只在 savePending / capture 里被调用一次
-    expect(INK_PAD).toMatch(/const serializeDoc = useCallback\(\(\): string \| null => \{/);
+    expect(INK_DOC_STATE).toMatch(/const serializeDoc = useCallback\(\(\): string \| null => \{/);
     expect(INK_PAD).not.toContain("const nextBody = serializeDoc(next);");
-    expect(INK_PAD).toContain("createInkSavePipeline(");
-    expect(INK_PAD).toContain("dirtyRef.current = true;");
+    expect(INK_DOC_STATE).toContain("createInkSavePipeline(");
+    expect(INK_DOC_STATE).toContain("dirtyRef.current = true;");
     // 笔迹轮廓缓存：新笔画只算一条
     expect(INK_PAD).toContain("renderedStrokesForPage(page, strokePathCacheRef.current)");
     // 擦除被 pointercancel 打断 ⇒ 回滚该页（不回滚就是「笔迹没了还不能撤销」）
@@ -401,7 +411,7 @@ describe("手写板正式端到端接线", () => {
   });
 
   it("v3 当前页 = 设备本地导航（core/inkNav），翻页不写正文；坏页给可见告警", () => {
-    expect(INK_PAD).toContain("readInkNavPage(noteId)");
+    expect(INK_DOC_STATE).toContain("readInkNavPage(noteId)");
     expect(INK_PAD).toContain("writeInkNavPage(noteId, doc.activePageId)");
     expect(INK_PAD).toContain("有 {doc.droppedPages} 页数据无法解析");
     expect(DESKTOP_INK).toContain("noteId={noteId}");
@@ -409,9 +419,9 @@ describe("手写板正式端到端接线", () => {
   });
 
   it("图片页渲染：image 层在笔迹下、pointer-events:none、无图不渲染；缩略图走 ?w=256 低清档", () => {
-    expect(INK_PAD).toContain("page.backgroundImage ?");
-    expect(INK_PAD).toContain('pointerEvents="none"');
-    expect(INK_PAD).toContain("backgroundImageAspect(page.backgroundImage)");
+    expect(INK_CANVAS).toContain("page.backgroundImage ?");
+    expect(INK_CANVAS).toContain('pointerEvents="none"');
+    expect(INK_CANVAS).toContain("backgroundImageAspect(page.backgroundImage)");
     expect(PAGE_STRIP).toContain("inkThumbUrl(page.backgroundImage.url)");
     expect(PAGE_STRIP).toContain('pointerEvents="none"');
   });

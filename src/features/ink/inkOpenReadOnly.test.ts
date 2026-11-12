@@ -18,21 +18,23 @@ import { createInkDoc, inkToBody } from "../../core/inkDoc.js";
  * 源码断言沿用 usheetOpenReadOnly.test.ts 的先例；判据本身的行为由 core/docBaseline.test.ts 覆盖。
  */
 const INK_PAD = readFileSync(new URL("./InkPad.tsx", import.meta.url), "utf8");
+/** 261112 R2-S10 阶段② 第二步：正文状态 + 保存管线抽到 `useInkDocState.ts`（纯搬移）——相关断言改指向它。 */
+const INK_DOC_STATE = readFileSync(new URL("./useInkDocState.ts", import.meta.url), "utf8");
 
 describe("手写板打开只读（CORE-03）", () => {
   it("保存前判等价：等价则不写盘（判定已搬入 inkPadModel；InkPad 只做接线）", () => {
     // R2-S10 阶段①：等价判定/防抖/捕获的**行为**由 inkPadModel.test.ts 覆盖（不再 grep 实现文本）。
-    expect(INK_PAD).toContain('canonicalDocBody("ink"');
-    expect(INK_PAD).toContain("createInkSavePipeline(");
-    expect(INK_PAD).toContain("onDirtyRef.current?.();");
+    expect(INK_DOC_STATE).toContain('canonicalDocBody("ink"');
+    expect(INK_DOC_STATE).toContain("createInkSavePipeline(");
+    expect(INK_DOC_STATE).toContain("onDirtyRef.current?.();");
   });
 
   it("capture：等价返回磁盘原文，不等价返回当前正文（现算矩阵在 inkPadModel；InkPad 只接线）", () => {
-    expect(INK_PAD).toMatch(/const diskBodyRef = useRef\(content\);/);
+    expect(INK_DOC_STATE).toMatch(/const diskBodyRef = useRef\(content\);/);
     expect(INK_PAD).toContain("return captureInkBody({");
     expect(INK_PAD).toContain("diskBody: diskBodyRef.current,");
     // 判据必须限定在「整篇正文」上，而不是笔画计数之类的近似量
-    expect(INK_PAD).toMatch(/const sameAsDisk = useCallback\(\(body: string\): boolean => \{/);
+    expect(INK_DOC_STATE).toMatch(/const sameAsDisk = useCallback\(\(body: string\): boolean => \{/);
   });
 
   it("真实改动（新增笔迹）与磁盘不等价 ⇒ 仍会落盘", () => {

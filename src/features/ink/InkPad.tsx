@@ -4,8 +4,6 @@ import { ChevronLeft, ChevronRight, Eraser, Highlighter, LayoutGrid, Minus, Pen,
 import { INK_DEFAULT_COLOR, INK_STROKE_COLORS } from "./inkPalette.js";
 import {
   createInkPage,
-  inkToBody,
-  parseInkBody,
   type InkBackground,
   type InkBackgroundImage,
   type InkDoc,
@@ -14,9 +12,9 @@ import {
   type InkStroke,
   type InkTool,
 } from "../../core/inkDoc.js";
-import { canonicalDocBody } from "../../core/docBaseline.js";
-import { captureInkBody, createInkDiskBaseline, createInkSavePipeline } from "./inkPadModel.js";
-import { readInkNavPage, writeInkNavPage } from "./inkNav.js";
+import { captureInkBody } from "./inkPadModel.js";
+import { useInkDocState } from "./useInkDocState";
+import { writeInkNavPage } from "./inkNav.js";
 import { hitTestStroke, strokeToSvgPath } from "./inkGeometry.js";
 import { inkStrokeStyle } from "./inkStrokeStyle.js";
 import { InkExportMenu, type InkPageExportFormat } from "./InkExportMenu.js";
@@ -29,7 +27,7 @@ import { InkPageTextEditor } from "./InkPageTextEditor.js";
 import { InkTextSelectionControls } from "./InkTextSelectionControls.js";
 import { INK_TEXT_DEFAULT_FONT_SIZE, INK_TEXT_LINE_HEIGHT, bumpPageTextFontSize, hitTestPageText, inkTextBaselineOffset, inkTextHeight, movePageText, placeInkPageText, removePageText, resizePageText, updatePageText, wrapInkTextLines } from "./inkPageTexts.js";
 import { InkBackgroundSourceButtons } from "./InkBackgroundSourceButtons.js";
-import { inkPerfDebugEnabled, installInkPerfHooks, recordInkPerf } from "./inkPerfStats";
+import { installInkPerfHooks } from "./inkPerfStats";
 import { inkImageImportNotice, inkPdfImportNotice } from "./inkImportNotice";
 import { installInkInputDiagnostics, installPointerInputDebugHooks } from "../board/boardInputDiagnostics";
 import { createStrokePathCache, renderedStrokesForPage, type RenderedStrokePath } from "./inkRenderCache.js";
@@ -207,32 +205,12 @@ const StaticStrokeLayer = memo(function StaticStrokeLayer({ strokes }: { strokes
 });
 
 export function InkPad({ content, readOnly = false, variant, noteId, active, paneVisible, pane, onChange, onDirty, onEditorCapture, onImportImages, onImportPdf, onExportPage, onInsertPageImage, onTransientMessage, renderPageTab }: InkPadProps) {
-  // 正文只在挂载时解析；父层保存会更新 content，但编辑器不应因此反复解析整份大 JSON。
-  // 外部真正需要换正文时由宿主 bump reloadKey 重挂载。
-  // v3：当前页是设备本地视图（core/inkNav.ts），优先用它；没有记录才回退 v1/v2 正文里的旧 activePageId。
-  const [doc, setDoc] = useState<InkDoc | null>(() => {
-    // 261103 十一批：量一下「打开大文档」的解析成本（默认只记数，debug 才打日志）。
-    const parseStartedAt = typeof performance !== "undefined" ? performance.now() : 0;
-    const parsed = parseInkBody(content);
-    if (!parsed) return null;
-    if (typeof performance !== "undefined") {
-      recordInkPerf({
-        kind: "load",
-        ms: performance.now() - parseStartedAt,
-        bytes: typeof content === "string" ? content.length : 0,
-        pages: parsed.pages.length,
-        ...(inkPerfDebugEnabled()
-          ? { strokes: parsed.pages.reduce((n, p) => n + p.strokes.length, 0), points: 0 }
-          : {}),
-      });
-    }
-    const savedPageId = readInkNavPage(noteId);
-    if (savedPageId && parsed.pages.some((page) => page.id === savedPageId)) {
-      return { ...parsed, activePageId: savedPageId };
-    }
-    return parsed;
-  });
-  const docRef = useRef<InkDoc | null>(doc);
+  // 正文状态 + 保存管线（261112 R2-S10 阶段②：已搬到 useInkDocState，纯搬移）
+  const {
+    doc, setDoc, docRef, page,
+    latestContentRef, diskBodyRef, sameAsDisk, serializeDoc,
+    scheduleSave, flushSave, saveError,
+  } = useInkDocState({ content, noteId, onChange, onDirty });
   const [mode, setMode] = useState<InkPadMode>("pen");
   const [color, setColor] = useState(INK_DEFAULT_COLOR);
   const [penWidth, setPenWidth] = useState<number>(PEN_WIDTHS[1]);
@@ -264,7 +242,6 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
   const [fitSize, setFitSize] = useState<{ width: number; height: number } | null>(null);
   const [activeStroke, setActiveStroke] = useState<InkStroke | null>(null);
   const [historyVersion, setHistoryVersion] = useState(0);
-  const [saveError, setSaveError] = useState<string | null>(null);
   // v2 图片页导入：进行中标记 + 可见错误（失败/超限要能看见）
   const [importing, setImporting] = useState(false);
   const [pdfImporting, setPdfImporting] = useState(false);
@@ -280,8 +257,6 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
   // 撤销/重做只存页级补丁；整篇正文序列化只用于保存。
   const undoRef = useRef<InkHistoryEntry[]>([]);
   const redoRef = useRef<InkHistoryEntry[]>([]);
-  /** P5：正文是否还有未落盘的改动（序列化已移出热路径，保存时才现算）。 */
-  const dirtyRef = useRef(false);
   const activePointerRef = useRef<{ id: number; type: string } | null>(null);
   /** 阅读态左右滑动翻页：记录单指起点（不参与绘制）。 */
   const swipeStartRef = useRef<{ x: number; y: number; id: number } | null>(null);
@@ -292,10 +267,6 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
   const eraseBeforeRef = useRef<InkPage | null>(null);
   const erasedIdsRef = useRef<Set<string>>(new Set());
   const lastPointRef = useRef<InkPoint | null>(null);
-  const onChangeRef = useRef(onChange);
-  onChangeRef.current = onChange;
-  const onDirtyRef = useRef(onDirty);
-  onDirtyRef.current = onDirty;
   const onEditorCaptureRef = useRef(onEditorCapture);
   onEditorCaptureRef.current = onEditorCapture;
   const onImportImagesRef = useRef(onImportImages);
@@ -305,27 +276,6 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
   /** 阅读态：翻页/缩放只改本地视图，capture 绝不可交出可写正文（桌面锁定文档的保存管线会按需 capture）。 */
   const readOnlyRef = useRef(readOnly);
   readOnlyRef.current = readOnly;
-  /**
-   * 父层最新的正文（= 阅读态下盘上正文）。阅读态 capture 交它，而不是挂载时的 diskBodyRef：
-   * 编辑过一轮再点「完成」后 diskBodyRef 还是**打开时**的旧原文，交出去会把刚保存的正文覆盖回旧版。
-   */
-  const latestContentRef = useRef(content);
-  latestContentRef.current = content;
-
-  /** 打开时的磁盘原文（CORE-03 基线）：保存/捕获在「与磁盘等价」时原样返回它，不写盘。 */
-  const diskBodyRef = useRef(content);
-  /** 磁盘基线的规范形态缓存（CORE-03/CORE-07：惰性算一次，见 inkPadModel.createInkDiskBaseline）。 */
-  const diskBaselineRef = useRef<ReturnType<typeof createInkDiskBaseline> | null>(null);
-  /**
-   * 当前正文与磁盘原文是否等价（CORE-03：打开后未动 / 撤销回原样）。
-   * body 一律由 inkToBody 产出（同一规范形态）⇒ 与磁盘原文的规范形态逐字节相等即 core 判据的结论；
-   * 盘上原文非规范（缺 activePageId / 坐标被 clamp 过）时同样判等价，不为一处格式差异写盘。
-   * 缓存磁盘侧的规范形态：正文可达 10 MiB，不能每次保存都把两侧整篇解析一遍（CORE-07）。
-   */
-  const sameAsDisk = useCallback((body: string): boolean => {
-    diskBaselineRef.current ??= createInkDiskBaseline(diskBodyRef.current, (raw) => canonicalDocBody("ink", raw));
-    return diskBaselineRef.current.isSameAsDisk(body);
-  }, []);
 
   /** 宿主注入的瞬时提示通道（移动端 = toast）；用 ref 保证回调身份变化不牵动下面一堆 useCallback 依赖。 */
   const transientMessageRef = useRef(onTransientMessage);
@@ -355,10 +305,6 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
   useEffect(() => () => {
     if (importNoticeTimerRef.current !== null) window.clearTimeout(importNoticeTimerRef.current);
   }, []);
-  const page = useMemo(() => {
-    if (!doc) return null;
-    return doc.pages.find((item) => item.id === doc.activePageId) ?? doc.pages[0] ?? null;
-  }, [doc]);
   // 261103 十三批：相邻页背景图「预解码」已实测否决（A/B：未预取 30.4ms vs 预取后 32.0ms 翻页，
   // 说明 30ms 级成本在 SVG/React 重渲染而不是图片 decode）⇒ 不留这段代码，避免无收益的复杂度。
   // 翻页/建页/删页/导入都会改内存 activePageId：同步到设备本地导航（不写正文、不标脏、不进 S3）。
@@ -453,57 +399,6 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
     return () => document.removeEventListener("pointerdown", onPointerDown, true);
   }, [pagesOpen, variant]);
 
-  /**
-   * 现算整篇正文：**只在保存 / capture 时调用**。
-   * 热路径（落笔、擦除、翻页、撤销）不再序列化整篇 —— 实测 300 页批注文档一次 inkToBody 26.7ms，
-   * 每落一笔都会撞一帧预算（P5）。序列化失败（容量上限）时保留内存正文，只给可见横幅。
-   */
-  const serializeDoc = useCallback((): string | null => {
-    const current = docRef.current;
-    if (!current) return null;
-    try {
-      // 261103 十一批：保存路径耗时/字节观测（判断是否该做页粒度增量保存）。
-      const startedAt = typeof performance !== "undefined" ? performance.now() : 0;
-      const body = inkToBody(current);
-      if (typeof performance !== "undefined") {
-        recordInkPerf({
-          kind: "save",
-          ms: performance.now() - startedAt,
-          bytes: body.length,
-          pages: current.pages.length,
-          ...(inkPerfDebugEnabled()
-            ? {
-                strokes: current.pages.reduce((n, p) => n + p.strokes.length, 0),
-                points: current.pages.reduce((n, p) => n + p.strokes.reduce((m, s) => m + s.points.length, 0), 0),
-              }
-            : {}),
-        });
-      }
-      setSaveError(null);
-      return body;
-    } catch (error) {
-      setSaveError(error instanceof Error ? error.message : "手写板正文无法保存");
-      return null;
-    }
-  }, []);
-
-  /**
-   * 保存管线（P5 + CORE-03）：标脏 → 500ms 防抖 → 现算序列化 → 与磁盘等价则丢弃 → 交父层保存。
-   * 逻辑本体在 inkPadModel.createInkSavePipeline（纯闭包、可行为测试）；这里只注入 refs/回调与 window 定时器。
-   */
-  const inkSavePipeline = useMemo(() => createInkSavePipeline({
-    io: {
-      setTimeout: (fn, ms) => window.setTimeout(fn, ms),
-      clearTimeout: (id) => window.clearTimeout(id),
-    },
-    isDirty: () => dirtyRef.current,
-    markDirty: () => { dirtyRef.current = true; onDirtyRef.current?.(); },
-    clearDirty: () => { dirtyRef.current = false; },
-    serialize: serializeDoc,
-    isSameAsDisk: sameAsDisk,
-    emit: (body) => { onChangeRef.current?.(body); },
-  }), [serializeDoc, sameAsDisk]);
-  const { scheduleSave, flushSave } = inkSavePipeline;
 
   /** patch=null 表示这次改动不进入撤销栈（没有历史语义）。 */
   const commit = useCallback((next: InkDoc, patch: InkPatch | null) => {
