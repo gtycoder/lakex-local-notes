@@ -132,6 +132,7 @@ node scripts/css-audit/drive.mjs 9336 scripts/css-audit/mobile-walkthrough.mjs
 | 装置 | 命令 | 何时跑 |
 | --- | --- | --- |
 | 编辑面不变量 I1–I5 | `node scripts/css-audit/drive.mjs 9335 scripts/mobile-audit/edit-surface-invariants.mjs` | 动 dock / 输入法 / 键盘适配 |
+| 速记 capture 入口（长按+上滑） | `node scripts/css-audit/drive.mjs 9335 scripts/mobile-audit/capture-entry.mjs` | 动首页 ＋ / `ui/createPress` / 写作卡入口（is-revealed → is-armed → 打开+聚焦 → 取消回首页且不新建） |
 | 插入面板几何 G1–G6 | 同上换 `insert-panel-geometry.mjs` | 动插入面板排布 |
 | 键盘开合 K1–K3 | 同上换 `keyboard-toggle.mjs` | 动 ⌨ / `viewportShell` / 外壳高 |
 | 长文档 DOM 探针 | `node scripts/mobile-audit/long-doc-dom.mjs 9336` | 动文档编辑面 / 查找；**会造数据 ⇒ 跑后重烤基线**，别在配了 S3 的机器上跑 |

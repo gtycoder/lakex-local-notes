@@ -23,7 +23,7 @@
 - **9 态复核（lake_gate / 5556 / CDP 9336，当前包 HEAD `fd14b4c6`）**：未 pm clear（检测到既有夹具 notes=5/tree=1/qn=4），按 `--states` 只跑 9 态、**连跑两轮 0 差异**（元素数 1909/1909/1914/2085/2042/1943/2035/1961/1963 与基线一致）；**23 屏走查 23/23 ok**（单独冷启动后跑），无 clipped / contrast / pageOverflowX 新项；`escape:1` ×10 屏 = 隐藏首页层 dock 的既有可观测量（261019 起），与 image/w=1024 无关。
 - **新增 `home-create-sheet` 态**（P0 盲区：9 态无一态打开底部 Sheet）：首页「＋」→ 新建面板，覆盖 `.mb-sheet` / scrim / grab-head-body 原语；元素数 **1971**。基线 `scripts/mobile-audit/baseline/mobile-snap.json` 已重烤为 **10 态**，连跑两轮 0 差异。
 - **装置细节**：`.mb-home-fab` aria-label 是「新建（长按上滑可速记）」且无文字内容 ⇒ 该态只能用 `tapSel` 点唯一元素（`tapByLabel`/`tapByText` 都匹配不到）。
-- **后续**：平板 10 态已补烤（两轮 0 差异）；键盘开合由 `edit-surface-invariants` 覆盖并 ALL PASS；**capture 长按/fab 上滑入口仍无装置**（见 §3 P0）。
+- **后续**：平板 10 态已补烤（两轮 0 差异）；键盘开合 = `edit-surface-invariants` ALL PASS；**capture 长按/fab 上滑入口** = 新装置 `scripts/mobile-audit/capture-entry.mjs` **10 条 ALL PASS**（is-revealed / is-armed / 打开+聚焦 / 取消回首页且列表条数不变）⇒ 本条目收口。
 ### 261111 · 图片缩略三边界收口：会话内新插图 / 剪贴板保真 / 移动文档编辑器（task-26 二段）
 
 - **A（会话内新插图即缩略）**：新增 `editor/imageThumbUploadTracker`，lakeRuntime 在 `image.createUploadPromise` resolve 时调用；判据 = 正文里**待上传（src 空）image 卡总数恰好 1**（身份可证）**且**该卡已有正数 origin ⇒ 立刻把该资产并进活 allowlist；并发/失败遗留（计数≥2）、带 width 属性（origin 缺）时退回退避重试（0/150/600ms 读正文，等 src 回填后按 origin 放行），**绝不凭请求类型乐观放行**。设备实测：文档编辑态插入 3000×2000 → **500ms 起** `img.ne-image` src 带 `w=1024`、`getDocument` 该卡 origin=**3000×2000**（未写 1024）。
@@ -659,7 +659,7 @@
 **P0（不做就卡住主线）**
 
 - **编辑面不变量 261112 重标定为绿（用户选 A：只改装置、不动观感）**：原装置首跑 quicknote **10 条**、document **5 条**红，全部落在「键盘→面板 / 键盘→收回」；定性为**预期过期**而非几何回退——I1 的「键盘⇄面板三态逐项相同」前提写于 261014（当时面板与键盘同高、键盘收起⇒内容区等量缩短），261110/261111 改**全屏写作卡 + 覆盖式面板**后不再成立；I3 截图复核（`/tmp/caret-keyboard.png`、`/tmp/caret-panel.png`）光标在面板顶下 74px，但该行与光标仍在面板圆角之上可见，不是明显遮挡。**新语义**：I1 = ①面板态自身稳定（+1.2s 内 ch/st/firstY 不变）+ ②收回后**内容区高度严格回原值**、滚动/首块位移 ≤120px（实测 26px / 74px；74px 来自文档编辑态外壳 chrome 在收键盘时的重排）；I3 = 只在**键盘态与收回后**严格断言（覆盖式面板态不再要求光标在面板上方）；I2/I4/I5 不变。重跑 **quicknote 11 条 + document 11 条 ALL PASS**（lake_gate / 9336，新包）；CONTRACT §5.38/§5.38.1 的 I1 描述同步。
-- **写作卡全屏后的设备门禁**：23 屏走查 261112 已跑 23/23（`quicknote-editor` 覆盖**正常入口**）；仍缺 **长按/fab 上滑 capture 入口**（无装置）；**键盘开合**已由 `edit-surface-invariants.mjs` 覆盖并 **ALL PASS**（261112 重标定后，quicknote 11 + document 11 条）⇒ 只剩 capture 入口待补。
+- **写作卡两条入口 / 键盘（261112 已闭合）**：正常新建 = 23 屏走查 23/23；长按/fab 上滑速记 = 新装置 `scripts/mobile-audit/capture-entry.mjs`（10 条 ALL PASS）；键盘开合 = `edit-surface-invariants` quicknote 11 + document 11 条 ALL PASS。后续改 ＋/createPress/写作卡入口或键盘适配时**三件一起重跑**。
 - **桌面 `check:stylesnap` 42 态**：本机无合成夹具缓存，已连续三批未跑（按钮梯队 / 空间改名 / 按钮第二批）。下次有夹具的机器全量跑并重烤；**重点看本批视觉 delta**（清单见 §0）；同时确认是否新增「日记空间」态。**261111 追加**：① 文档版式引擎改成撑满可视区（内容区几何变）；② 阅读态大纲底边上收 `--statusbar-reserve`（大纲态/文档态可能变）——两者都要在重烤时一起看。
 - **移动端本批设备点收**：`bash scripts/android-build.sh --sync --install`（lake_mobile）后看：① 设置各子页按钮（`--outlined` 与旧 `--settings` 应 0 变化）；② AI 页操作键形状（自绘胶囊→L3 中性框）；③ 基座/ghost 字色略浅的屏；④ 日记「取消日记标记」/ 转文档文案；⑤ **10 态**快照（261112 起含 `home-create-sheet`）与 23 屏走查（均已跑：0 diff / 23/23 ok）；⑥ 首屏懒 chunk 冒烟：开文档后粘贴、小记 composer、分享导入 MD/PDF、更新中心、图标/表情选择器；⑦ 冷启动首页（已验）；⑧ **图片缩略**：已实跑确认（手机/平板 10 态 0 diff、23 屏 23/23）；仍需人工点收的是 ①–④⑥ 的观感项（设置按钮/AI 页操作键/基座字色/日记文案/懒 chunk 冒烟）。
 - **每批收尾固定动作**：更新 §1 基线与门禁计数 + §3 + §0 批次抬头；提交后立刻回写。
@@ -704,6 +704,7 @@
 - 手机快照盲区`.mb-sheet`打开态 → 261112 新增第 10 态 `home-create-sheet`（覆盖 CreateSheet / MobileSheet 原语）并重烤基线、两轮 0 差异。
 - 平板 9 态快照（P1）→ 261112 在 lake_tab 重烤为 10 态、两轮 0 差异（顺带覆盖新态）。
 - 编辑面不变量过期预期（I1/I3）→ 261112 重标定后 quicknote 11 + document 11 条 ALL PASS。
+- 写作卡两条入口（正常新建 / 长按+上滑速记）+ 键盘开合 → 261112 均由装置覆盖并 ALL PASS（23 屏 / `capture-entry` / `edit-surface-invariants`）。
 - 桌面冷启动预热三条触发已上（261111）；首篇 fallback 是内核 chunk 地板，未消除（解法见 §3）。
 - 单条小记推送请求数 13→11（独立管线，261111）。
 - 二轮/实机修复批「未跑 6 态」、胶囊固定底部 / 平移画布开关、P9–P12 候选、平板内核工具栏两条例外 → 均已闭合/撤回。
