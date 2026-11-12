@@ -53,9 +53,9 @@ describe("SyncConflictsPanel（同步记录页）", () => {
     expect(document.body.querySelectorAll(".sync-conflicts__row.is-unread")).toHaveLength(3);
   });
 
-  it("空态：最近没有同步覆盖；全部标记已读在无未读时禁用", () => {
+  it("空态：最近没有同步记录；全部标记已读在无未读时禁用", () => {
     render({ items: [] });
-    expect(document.body.textContent).toContain("最近没有同步覆盖");
+    expect(document.body.textContent).toContain("最近没有同步记录");
     render({ items: [row({ ackedAt: "2026-11-05T02:00:00.000Z" })] });
     const ack = [...document.body.querySelectorAll<HTMLButtonElement>("button")].find((btn) => (btn.textContent ?? "").includes("全部标记已读"))!;
     expect(ack.disabled).toBe(true);

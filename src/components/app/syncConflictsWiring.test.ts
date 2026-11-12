@@ -36,7 +36,7 @@ describe("同步记录 UI 接线（P1 第 4 项）", () => {
     expect(POPOVER).toContain("<SyncConflictsPanel");
     expect(PANEL).toContain("useConfirm");
     expect(PANEL).toContain("按本机版本重新上传");
-    expect(PANEL).toContain("最近没有同步覆盖");
+    expect(PANEL).toContain("最近没有同步记录");
     expect(PANEL).toContain("全部标记已读");
     // 只对可恢复类型给恢复按钮（save_external_changed 是审计事件）
     expect(PANEL).toContain("canRestoreSyncConflict(row)");

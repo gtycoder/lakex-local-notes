@@ -43,6 +43,7 @@ export const REPOSITORY_CAPABILITIES: readonly RepositoryCapability[] = [
   // ── 文档（mobile/data/noteRepository.ts）──
   { capability: "新建文档", mobile: { file: "mobile/data/noteRepository.ts", fn: "createNote" }, desktop: "createNote", note: "移动端多一个 parentId 参数；桌面另有 createNoteIn 指定父级" },
   { capability: "保存文档", mobile: { file: "mobile/data/noteRepository.ts", fn: "saveNote" }, desktop: "saveNote", note: "参数表不同：移动端 (d,id,title,content,parentId,plain)，桌面 (id,title,content,caches?)" },
+  { capability: "恢复写回正文（内容动作不改生命周期）", mobile: { file: "mobile/data/noteRepository.ts", fn: "saveRestoredNoteContent" }, desktop: null, note: "桌面等价能力 = NoteContentRepository.save(..., {allowTrashed}) / saveSynced（261112 task-53：恢复历史版本只写正文/标题/缓存，不动 trashed_at/parent_id/restore_pending；桌面无同名公开方法，故 desktop=null）" },
   { capability: "读取文档", mobile: { file: "mobile/data/noteRepository.ts", fn: "readNote" }, desktop: "readNote", note: "返回类型不同：移动端 LocalNote|null，桌面 NoteDocument（缺失直抛）" },
   { capability: "文档列表", mobile: { file: "mobile/data/noteRepository.ts", fn: "listNotes" }, desktop: "listNoteSummaries", note: "名称不同（桌面叫 summary）；桌面另有 listNoteIdsWithHistory / listNotesForSync" },
   { capability: "搜索", mobile: { file: "mobile/data/noteRepository.ts", fn: "searchNotes" }, desktop: "searchNotes", note: "桌面多 limit 参数（默认 30）" },

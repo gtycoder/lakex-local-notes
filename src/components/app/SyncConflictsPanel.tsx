@@ -22,7 +22,7 @@ import "./syncConflictsPanel.css";
  * - 打开笔记、查看历史；
  * - 「恢复本地被覆盖版」只对 remote_wins / remote_purged 且未处理的行提供（二次确认：会覆盖云端远端版本、恢复后按本机版本重传）；
  * - save_external_changed 是审计事件，没有可恢复版本 ⇒ 只给「打开文档处理」出口。
- * 空态：「最近没有同步覆盖」。顶部「全部标记已读」只清角标，不删数据。
+ * 空态：「最近没有同步记录」。顶部「全部标记已读」只清角标，不删数据。
  */
 export interface SyncConflictsPanelProps {
   open: boolean;
@@ -78,7 +78,7 @@ export function SyncConflictsPanel({
         {error && <p className="sync-conflicts__error" role="status">{error}</p>}
         {statusText && <p className="sync-conflicts__status" role="status">{statusText}</p>}
         {rows.length === 0 ? (
-          <p className="sync-conflicts__empty" role="status">最近没有同步覆盖。</p>
+          <p className="sync-conflicts__empty" role="status">最近没有同步记录。</p>
         ) : (
           <ul className="sync-conflicts__list">
             {rows.map((row) => {

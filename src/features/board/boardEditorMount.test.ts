@@ -138,7 +138,8 @@ describe("画板编辑器护栏", () => {
     expect(MOBILE_PANES).toMatch(/t\.kind === "board" \? \(/);
     // 261020 P1：视口记忆按笔记 id 索引 ⇒ 宿主必须把 noteId 传给查看器（参数顺序不钉死）
     expect(MOBILE_PANES).toMatch(/<MobileBoardViewer[\s\S]{0,240}noteId=\{t\.id\}/);
-    expect(MOBILE_PANES).toMatch(/<MobileBoardViewer[\s\S]{0,240}editing=\{t\.editing\}/);
+    // 261112 task-56：编辑态还要过编辑锁（锁 = 只读保护，会传播）⇒ 移动端画板 editing 必须同时受 editLocked 约束
+    expect(MOBILE_PANES).toMatch(/<MobileBoardViewer[\s\S]{0,240}editing=\{t\.editing && !t\.editLocked\}/);
     // 查看器：editing（且正文可读）才可写 + 无记忆才自适应 + 懒加载同一份引擎分包；正文永远不交给 Lake 编辑器
     // CORE-02：坏正文时 canEdit=false ⇒ readOnly=true（下方 boardCorruptBody.test.ts 锁这条）。
     expect(MOBILE_VIEWER).toMatch(/readOnly=\{!canEdit\}/);

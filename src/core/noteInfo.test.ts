@@ -44,9 +44,9 @@ describe("文档属性共享清单（C1-7）", () => {
 
   it("状态：冲突与锁定以逗号叠加，未知状态原样回显", () => {
     const status = (patch: Partial<NoteInfo>) => Object.fromEntries(noteInfoRows(info(patch)))["状态"];
-    expect(status({ isConflict: true })).toBe("已同步，有冲突副本");
+    expect(status({ isConflict: true })).toBe("已同步，有内容冲突");
     expect(status({ isEditLocked: true })).toBe("已同步，已锁定");
-    expect(status({ isConflict: true, isEditLocked: true })).toBe("已同步，有冲突副本，已锁定");
+    expect(status({ isConflict: true, isEditLocked: true })).toBe("已同步，有内容冲突，已锁定");
   });
 
   it("时间口径：空 → 破折号；非法值原样回显；本地时区格式化", () => {

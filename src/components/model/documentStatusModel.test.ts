@@ -7,10 +7,16 @@ describe("current document status", () => {
     expect(getDocumentStatus({ ...base, cloudEnabled: false })).toMatchObject({ kind: "local-only", label: "仅本地" });
     expect(getDocumentStatus({ ...base, isDirty: true })).toMatchObject({ kind: "pending", label: "待同步" });
     expect(getDocumentStatus(base)).toMatchObject({ kind: "synced", label: "已同步" });
-    expect(getDocumentStatus({ ...base, isConflict: true })).toMatchObject({ kind: "conflict", label: "有冲突" });
+    expect(getDocumentStatus({ ...base, isConflict: true })).toMatchObject({ kind: "conflict", label: "内容冲突" });
   });
   it("highlights a remote overwrite as synced history", () => {
     expect(getDocumentStatus({ ...base, historyCount: 1 })).toMatchObject({ kind: "synced-history", label: "已同步，历史 1" });
+  });
+  it("261112：内容冲突优先于「历史 N」的绿色档（冲突是需处理状态）", () => {
+    expect(getDocumentStatus({ ...base, isConflict: true, historyCount: 1 })).toMatchObject({ kind: "conflict", label: "内容冲突（历史 1）" });
+    expect(getDocumentStatus({ ...base, isConflict: true, historyCount: 0 })).toMatchObject({ kind: "conflict", label: "内容冲突" });
+    // 无冲突时历史才走绿色档
+    expect(getDocumentStatus({ ...base, isConflict: false, historyCount: 2 })).toMatchObject({ kind: "synced-history", label: "已同步，历史 2" });
   });
   it("prioritizes local save safety over cloud state", () => {
     expect(getDocumentStatus({ ...base, saveState: "saving" })).toMatchObject({ kind: "saving", label: "保存中" });

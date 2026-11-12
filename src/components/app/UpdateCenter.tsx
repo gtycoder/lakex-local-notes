@@ -97,7 +97,7 @@ export function UpdateCenterSection() {
         <Item
           itemId="update-check"
           name="当前版本"
-          desc={"v" + (state?.currentVersion ?? "—") + " · 上次检查：" + (state?.lastCheckAt ? formatDateTime(new Date(state.lastCheckAt)) : "从未")}
+          desc={"v" + (state?.currentVersion ?? "—") + "；上次检查：" + (state?.lastCheckAt ? formatDateTime(new Date(state.lastCheckAt)) : "从未")}
         >
           <button type="button" className="ln-btn ln-btn--outlined" disabled={busy || checking} onClick={check}>
             {checking ? "检查中…" : "检查更新"}
@@ -111,7 +111,7 @@ export function UpdateCenterSection() {
           <Item
             itemId="update-available"
             name={"新版本 v" + manifest.version}
-            desc={"发布于 " + publishedText + " · 安装包 " + formatBytes(asset.size) + (ignored ? " · 已忽略此版本" : "")}
+            desc={"发布于 " + publishedText + "；安装包 " + formatBytes(asset.size) + (ignored ? "；已忽略此版本" : "")}
           >
             <span className="config-item__ctl">
               {downloaded ? (

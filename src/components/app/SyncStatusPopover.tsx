@@ -14,6 +14,7 @@ import { SyncConflictBadge } from "./SyncConflictBadge";
 import { SyncConflictsPanel } from "./SyncConflictsPanel";
 import { useSyncConflicts } from "./useSyncConflicts";
 import { syncConflictsSummary } from "./syncConflicts";
+import { syncWarningCopy, syncWarningRows, syncWarningSummary, syncWarningSummaryText, syncWarningTitle } from "../../core/syncWarningText";
 
 export interface SyncStatusPopoverProps {
   buttonRef?: RefObject<HTMLButtonElement>;
@@ -247,15 +248,55 @@ export function SyncStatusPopover({
             </section>
           )}
           {conflictsEntry}
-          {stats?.warnings && stats.warnings.length > 0 && (
-            <section className="sync-status-history-note" role="status">
-              <TriangleAlert size={14} aria-hidden="true" />
-              <div>
-                <strong>同步有 {stats.warnings.length} 项被跳过</strong>
-                <span>本地内容未改动，下次同步会重试；逐项原因见「设置 → 同步诊断」。</span>
-              </div>
-            </section>
-          )}
+          {stats?.warnings && stats.warnings.length > 0 && (() => {
+            // 261112 UI 审计 17 P1：warning 不再只给计数——摘要 + ≤5 行可点列表（需处理在前）+ 其余去诊断。
+            // 文案/重试语义单一来源 = core/syncWarningText（retryable=false 的三类不写「下次同步会重试」）。
+            const warnings = stats.warnings;
+            const summary = syncWarningSummary(warnings);
+            const rows = syncWarningRows(warnings);
+            const shown = rows.slice(0, 5);
+            const rest = warnings.length - shown.length;
+            return (
+              <section className="sync-status-history-note sync-status-warnings" role="status">
+                <TriangleAlert size={14} aria-hidden="true" />
+                <div>
+                  <strong>{syncWarningSummaryText(summary)}</strong>
+                  <ul className="sync-status-warning-list">
+                    {shown.map((warning, index) => {
+                      const copy = syncWarningCopy(warning.kind);
+                      const title = syncWarningTitle(warning);
+                      const canOpen = Boolean(warning.noteId && onOpenNote);
+                      const content = (
+                        <>
+                          <span className="sync-status-warning-title ln-ellipsis">{title}</span>
+                          <span className="sync-status-warning-label">{copy.label}</span>
+                        </>
+                      );
+                      return (
+                        <li className="sync-status-warning-row" key={(warning.noteId ?? warning.filename ?? "w") + index} title={copy.hint}>
+                          {canOpen ? (
+                            <button
+                              type="button"
+                              className="sync-status-warning-open"
+                              onClick={() => { setOpen(false); onOpenNote?.(warning.noteId!); }}
+                            >{content}</button>
+                          ) : (
+                            <span className="sync-status-warning-static">{content}</span>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  <span>{rest > 0 ? `另 ${rest} 条见「设置 → 同步诊断」。` : "逐项原因见「设置 → 同步诊断」。"}</span>
+                  <button
+                    type="button"
+                    className="ln-btn ln-btn--secondary sync-status-inline-action"
+                    onClick={() => { setOpen(false); onOpenSettings(); }}
+                  >查看同步诊断</button>
+                </div>
+              </section>
+            );
+          })()}
           <footer className="sync-status-actions">
             {/* 「上次同步」已在上方明细行里（含耗时）；页脚不再重复，只留入口。 */}
             <button type="button" className="ln-btn ln-btn--secondary sync-status-action" onClick={() => { setOpen(false); onOpenSettings(); }}><Settings2 size={14} />同步设置</button>

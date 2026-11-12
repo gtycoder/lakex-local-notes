@@ -29,6 +29,12 @@
 
 @starting-style { .context-menu { opacity: 0; transform: scale(0.96); } }
 
+/* 保存冲突对话框（Batch4-D）：表面/三段式复用 .ln-dialog（overlay.css 单一来源），这里只定宽度与文件名行。
+ * 261112 UI 审计 17 I-9：原先 .save-conflict-dialog__head/__actions 全仓无样式 ⇒ 段落走浏览器默认；现已改用
+ * ln-dialog__head/__body/__actions，只留这两条本处专属（宽度 + 文件名行颜色/断行）。 */
+.save-conflict-dialog { width: min(520px, calc(100vw - 32px)); }
+.save-conflict-dialog__file { margin: var(--lake-space-md) 0 0; color: var(--lake-text-3); overflow-wrap: anywhere; }
+
 /* 删除确认对话框：表面/圆角/阴影/内距均来自 .ln-dialog（overlay.css 单一来源），这里只定宽度与入场。
  * 260926：迁到 Overlay 原语（三段式 ln-dialog__head/body/actions）。 */
 .confirm-dialog { width: min(420px, 100%); transition: transform var(--lake-motion-panel) var(--lake-ease-standard), opacity var(--lake-motion-panel) var(--lake-ease-standard); }
@@ -49,8 +55,9 @@
   flex: none;
   padding: 0 4px;
   border-radius: var(--lake-radius-2xs);
-  background: var(--lake-status-error-soft);
-  color: var(--lake-status-error);
+  /* 261112 UI 审计 17：回收站/云端已删除 = 可恢复态 ⇒ 与横幅/状态栏同用 pending 档；红只给失败/冲突。 */
+  background: var(--lake-status-pending-soft);
+  color: var(--lake-status-pending);
   font-size: var(--lake-font-size-nano);
   line-height: 1.5;
 }

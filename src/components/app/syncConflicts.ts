@@ -23,7 +23,7 @@ export const SYNC_CONFLICT_KIND_LABEL: Record<SyncConflictKind, string> = {
 export function syncConflictKindHint(kind: SyncConflictKind): string {
   switch (kind) {
     case "remote_wins": return "本地版本已存入历史；可恢复本地被覆盖版（恢复后按本机版本重新上传）。";
-    case "remote_purged": return "该文档已被其它设备彻底删除；本机副本保留在回收站（云端已删除·仅本地）。";
+    case "remote_purged": return "该文档已被其它设备彻底删除；本机副本保留在回收站，并标记为「云端已删除（仅本地）」；恢复后会重新上传。";
     case "save_external_changed": return "保存时磁盘正文已被外部改过，本次未写盘；请打开文档处理（另存副本/覆盖/载入磁盘版）。";
     default: return "";
   }
@@ -52,7 +52,7 @@ export function syncConflictsSummary(rows: readonly SyncConflictRow[]): string {
   const counts = new Map<SyncConflictKind, number>();
   for (const row of unacked) counts.set(row.kind, (counts.get(row.kind) ?? 0) + 1);
   const parts = Array.from(counts.entries()).map(([kind, n]) => (n > 1 ? SYNC_CONFLICT_KIND_LABEL[kind] + " " + n + " 条" : SYNC_CONFLICT_KIND_LABEL[kind]));
-  return "最近有 " + unacked.length + " 条记录（" + parts.join("，") + "）";
+  return "最近有 " + unacked.length + " 条同步记录（" + parts.join("，") + "）";
 }
 
 /** 时间倒序（主进程已排好；UI 再兜一次，防脏数据打乱顺序）。 */

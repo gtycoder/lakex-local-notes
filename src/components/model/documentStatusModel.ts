@@ -28,9 +28,10 @@ export function getDocumentStatus(input: DocumentStatusInput): DocumentStatusMod
   // 云端已彻底删除、本机仅保留回收站副本：不限制恢复，恢复并重新上传成功后该标记会自动消失。
   if (input.isCloudDeleted) return { kind: "cloud-deleted", label: "云端已删除（仅本地）", historyCount };
   if (!input.cloudEnabled) return { kind: "local-only", label: "仅本地", historyCount };
+  // 261112 UI 审计 17 I-6：**内容冲突是需处理状态，优先于「历史 N」的绿色档**——历史计数降为副信息。
+  // 此前 historyCount>0 会把冲突显示成绿色「已同步，历史 N」，是"健康色盖住需处理"的真回归。
   if (input.isConflict) {
-    if (historyCount > 0) return { kind: "synced-history", label: `已同步，历史 ${historyCount}`, historyCount };
-    return { kind: "conflict", label: "有冲突", historyCount };
+    return { kind: "conflict", label: historyCount > 0 ? `内容冲突（历史 ${historyCount}）` : "内容冲突", historyCount };
   }
   if (input.isDirty) return { kind: "pending", label: "待同步", historyCount };
   return { kind: historyCount > 0 ? "synced-history" : "synced", label: historyCount > 0 ? `已同步，历史 ${historyCount}` : "已同步", historyCount };

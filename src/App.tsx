@@ -1032,6 +1032,7 @@ export function App() {
             moreMenuWrapRef={moreMenuWrapRef}
             onToggleMoreMenu={() => { setTopMenuOpen((o) => !o); setWorkspaceMenuOpen(false); }}
             lockedNoteIds={lockedNoteIds}
+            cloudDeletedNoteIds={cloudDeletedNoteIds}
             onToggleNoteLock={() => { void toggleNoteLock(); }}
             onExportBitableCsv={(noteId) => { void exportNoteById(noteId, "csv"); }}
             onOpenTrash={() => void switchDesktopWorkspace("trash")}

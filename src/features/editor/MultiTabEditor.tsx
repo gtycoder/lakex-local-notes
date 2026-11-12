@@ -29,6 +29,7 @@ const DesktopInkPad = lazy(() => import("../ink/DesktopInkPad").then((m) => ({ d
 import type { LakeEditorPrefs } from "./lakeRuntime";
 import type { EditorCaptureRegistrar } from "../../core/editorCapture";
 import type { NoteKind } from "../../core/noteKind";
+import { readonlyReasonCopy, readonlyReasonOf } from "../../core/capabilities/readonlyReason";
 
 const EMPTY_PINNED: ReadonlySet<string> = new Set();
 
@@ -60,6 +61,8 @@ interface MultiTabEditorProps {
   onTabClose: (noteId: string) => void;
   /** 拖拽排序：给出新的 noteId 顺序 */
   onTabsReorder?: (noteIds: string[]) => void;
+  /** 「云端已删除（仅本地）」副本的 noteId 集合：只读原因横幅据此区分 S3 与普通回收站。 */
+  cloudDeletedNoteIds?: ReadonlySet<string>;
   /** 只读锁的 noteId 集合（驱动 EditorTab viewer 重建） */
   lockedNoteIds?: ReadonlySet<string>;
   /** 锁定/解锁当前活动文档（多维表右上角菜单用；由上层处理持久化与状态）。 */
@@ -124,7 +127,7 @@ function MissingBodyPanel({ tab, onOpenHistory, onRetryBody, onTabClose }: {
     <section className="empty-workspace" role="alert" aria-label="正文文件缺失">
       <span className="empty-workspace-icon" aria-hidden="true"><File size={24} /></span>
       <h2>《{tab.title || "无标题"}》的正文文件已丢失</h2>
-      <p className="empty-workspace-hint">可能是在磁盘上手动删除了对应文件。该文档已按只读处理：不会覆盖磁盘上的任何数据，也不会把空正文上传到云端。</p>
+      <p className="empty-workspace-hint">{readonlyReasonCopy("body-missing").releaseHint}</p>
       <p className="empty-workspace-hint">云端有副本时，下次同步会自动把正文拉回来（拉回后点「重新读取」）；也可以从历史版本恢复，或在左侧目录右键删除这篇文档。设置 →「文档与历史」→「数据体检（只读诊断）」可列出所有缺失项。</p>
       <button type="button" className="ln-btn ln-btn--secondary" onClick={() => onOpenHistory?.(tab.noteId)} disabled={!onOpenHistory}>打开历史版本</button>
       <button type="button" className="ln-btn ln-btn--secondary" onClick={() => onRetryBody?.(tab.noteId)} disabled={!onRetryBody}>重新读取</button>
@@ -142,6 +145,7 @@ export function MultiTabEditor({
   onTabClose,
   onTabsReorder,
   lockedNoteIds,
+  cloudDeletedNoteIds,
   onToggleNoteLock,
   onExportBitableCsv,
   pinnedNoteIds,
@@ -328,8 +332,16 @@ export function MultiTabEditor({
   // FLIP：顺序变化时让标签从旧位置滑到新位置（deps 用 memo 化的 orderKey，
   // tabs 引用不变时跳过拼接与比较）
   const tabOrderKey = useMemo(() => tabs.map((t) => t.noteId).join("|"), [tabs]);
-  // 活动标签是否"已在回收站/被他端 purge"：只读 + 顶部横幅（tab.deleted 由 openNote/同步刷新判定）
-  const activeTabGone = tabs.some((t) => t.noteId === activeNoteId && t.deleted === true);
+  // 活动标签的只读原因（261112 UI 审计 17 P1）：判据/文案单一来源 = core/capabilities/readonlyReason。
+  // 注意：正文缺失（bodyMissing）由 MissingBodyPanel 整块接管，横幅不重复；面板文案也取自同一来源。
+  const activeTab = tabs.find((t) => t.noteId === activeNoteId) ?? null;
+  const activeReadonlyReason = activeTab
+    ? readonlyReasonOf({
+        locked: lockedNoteIds?.has(activeTab.noteId) ?? false,
+        trashed: activeTab.deleted === true,
+        cloudDeleted: activeTab.deleted === true && (cloudDeletedNoteIds?.has(activeTab.noteId) ?? false),
+      })
+    : null;
   useLayoutEffect(() => {
     const strip = tabItemsRef.current;
     if (!strip) return;
@@ -650,11 +662,16 @@ export function MultiTabEditor({
         )}
         {topbarTrailing && <div className="tabbar-trailing">{topbarTrailing}</div>}
       </div>
-      {activeTabGone && (
+      {activeReadonlyReason && (
         <div className="tab-gone-banner" role="status">
           <TriangleAlert size={14} aria-hidden="true" />
-          <span>该文档在回收站中：只读、编辑不会保存。需要继续写请先恢复。</span>
-          {onOpenTrash && <button type="button" onClick={onOpenTrash}>打开回收站</button>}
+          <span>{activeReadonlyReason.title}。{activeReadonlyReason.releaseHint}</span>
+          {activeReadonlyReason.action === "unlock" && onToggleNoteLock && (
+            <button type="button" onClick={() => onToggleNoteLock()}>解锁</button>
+          )}
+          {activeReadonlyReason.action === "open-trash" && onOpenTrash && (
+            <button type="button" onClick={onOpenTrash}>打开回收站</button>
+          )}
         </div>
       )}
       <div

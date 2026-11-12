@@ -28,25 +28,27 @@ export function SaveConflictDialog({ open, fileName, busy = false, onSaveAsCopy,
   if (!open) return null;
   return (
     <Dialog open={open} onDismiss={onDismiss ?? (() => { /* 必须显式选择：不处理就等于保持挂起 */ })} label="保存冲突" className="save-conflict-dialog">
+      {/* 261112 UI 审计 17 I-9：改用 overlay 的 .ln-dialog 三段式（head/body/actions 单一来源），
+          只保留表面类 .save-conflict-dialog（宽度）与文件名行（颜色/断行）两条本处专属样式。 */}
+      <div className="ln-dialog__head">
+        <span className="ln-dialog__title">这篇文档在别处被改过</span>
+      </div>
       <div className="ln-dialog__body">
-        <header className="save-conflict-dialog__head">
-          <h3>这篇文档在别处被改过</h3>
-        </header>
         <p>{SAVE_CONFLICT_MESSAGE}</p>
         <p className="save-conflict-dialog__file">
           文档：<strong>{fileName || "无标题"}</strong>
         </p>
-        <footer className="save-conflict-dialog__actions">
-          <button type="button" className="ln-btn ln-btn--primary" disabled={busy} onClick={onSaveAsCopy} autoFocus>
-            <FilePlus2 size={14} aria-hidden="true" />另存为副本（推荐）
-          </button>
-          <button type="button" className="ln-btn ln-btn--secondary" disabled={busy} onClick={onOverwrite}>
-            <Save size={14} aria-hidden="true" />覆盖磁盘
-          </button>
-          <button type="button" className="ln-btn ln-btn--ghost" disabled={busy} onClick={onDiscardAndReload}>
-            <Undo2 size={14} aria-hidden="true" />放弃本次修改并载入磁盘版
-          </button>
-        </footer>
+      </div>
+      <div className="ln-dialog__actions">
+        <button type="button" className="ln-btn ln-btn--primary" disabled={busy} onClick={onSaveAsCopy} autoFocus>
+          <FilePlus2 size={14} aria-hidden="true" />另存为副本（推荐）
+        </button>
+        <button type="button" className="ln-btn ln-btn--secondary" disabled={busy} onClick={onOverwrite}>
+          <Save size={14} aria-hidden="true" />覆盖磁盘
+        </button>
+        <button type="button" className="ln-btn ln-btn--ghost" disabled={busy} onClick={onDiscardAndReload}>
+          <Undo2 size={14} aria-hidden="true" />放弃本次修改并载入磁盘版
+        </button>
       </div>
     </Dialog>
   );

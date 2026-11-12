@@ -338,7 +338,7 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
                   )}
                   {protectedUntil !== null && (
                     <span className="badge badge--warn" title="被远端覆盖时自动保留，保护期内不被自动清理（可手动删除）">
-                      冲突保留，剩余 {Math.max(1, Math.ceil((protectedUntil - Date.now()) / (24 * 3600 * 1000)))} 天
+                      快照保留，剩余 {Math.max(1, Math.ceil((protectedUntil - Date.now()) / (24 * 3600 * 1000)))} 天
                     </span>
                   )}
                   <span className="ln-spacer" />

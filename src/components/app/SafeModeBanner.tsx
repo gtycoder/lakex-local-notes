@@ -30,7 +30,7 @@ export function SafeModeBanner() {
     state.reason,
     typeof state.occurrences === "number" && state.occurrences > 0 ? "累计 " + state.occurrences + " 次异常" : "",
     state.crashTime ? "崩溃于 " + state.crashTime : "",
-  ].filter(Boolean).join(" · ");
+  ].filter(Boolean).join("；");
 
   const copyDiagnostics = async () => {
     setBusy(true);

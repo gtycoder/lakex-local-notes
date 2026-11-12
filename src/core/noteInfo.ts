@@ -20,7 +20,9 @@ import type { NoteInfo } from "./sharedTypes.js";
 import { formatDateTime } from "./dateFormat.js";
 
 /** 同步状态 → 文案（两端共用；未知状态原样回显）。 */
-export const SYNC_STATE_LABEL: Record<string, string> = { local: "未同步", synced: "已同步", conflict: "冲突" };
+// 「冲突」一词三义（261112 UI 审计 17 I-6 收口）：文档内容冲突 = 「内容冲突」；同步记录账本 = 「同步记录」；
+// 冲突副本/留档 = 「历史快照」。三者措辞不得混用。
+export const SYNC_STATE_LABEL: Record<string, string> = { local: "未同步", synced: "已同步", conflict: "内容冲突" };
 
 /** 属性面板的绝对时间：`YYYY-MM-DD HH:mm`；空 → 「—」，非法值原样回显。 */
 export function formatNoteInfoTime(iso: string | null): string {
@@ -54,6 +56,6 @@ export function noteInfoRows(info: NoteInfo): Array<[string, string]> {
     ["大小", formatNoteInfoSize(info.sizeBytes)],
     // cloudDeleted 优先于 isDirty：这类文档云端已没有，标「云端已删除 · 仅本地」比「待同步」准确；
     // 恢复并重新上传成功后标记与 dirty 都会清掉，自动回到「已同步」。
-    ["状态", `${info.cloudDeleted ? "云端已删除（仅本地）" : info.isPurged ? "已彻底删除" : info.isDirty ? "待同步" : "已同步"}${info.isConflict ? "，有冲突副本" : ""}${info.isEditLocked ? "，已锁定" : ""}`],
+    ["状态", `${info.cloudDeleted ? "云端已删除（仅本地）" : info.isPurged ? "已彻底删除" : info.isDirty ? "待同步" : "已同步"}${info.isConflict ? "，有内容冲突" : ""}${info.isEditLocked ? "，已锁定" : ""}`],
   ];
 }

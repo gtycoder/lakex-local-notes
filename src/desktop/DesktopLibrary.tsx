@@ -25,6 +25,8 @@ export interface DesktopLibraryProps {
   moreMenuWrapRef: RefObject<HTMLDivElement>;
   onToggleMoreMenu: () => void;
   lockedNoteIds: ReadonlySet<string>;
+  /** 「云端已删除（仅本地）」副本 id：只读原因横幅据此区分云端已删除与普通回收站（261112）。 */
+  cloudDeletedNoteIds?: ReadonlySet<string>;
   /** 锁定/解锁活动文档（透传给多维表右上角菜单）。 */
   onToggleNoteLock?: () => void;
   /** 多维表导出 CSV（透传给多维表右上角菜单）。 */
@@ -68,7 +70,7 @@ export function DesktopLibrary(props: DesktopLibraryProps) {
     tabs, activeNoteId, tocEnabled, outlineEnhance, topbarLeading, topbarTrailing,
     wideMode, editorPrefs,
     moreMenuWrapRef, onToggleMoreMenu, notePathTitle,
-    lockedNoteIds, onToggleNoteLock, onExportBitableCsv, pinnedNoteIds,
+    lockedNoteIds, cloudDeletedNoteIds, onToggleNoteLock, onExportBitableCsv, pinnedNoteIds,
     onTabChange, onTabClose, onTabsReorder, onTogglePin, onContentChange,
     splitPair, onActivateSplit, onCloseSplit, onExitSplit, onSwapSplit,
     onEditorReady,
@@ -104,6 +106,7 @@ export function DesktopLibrary(props: DesktopLibraryProps) {
         onSwapSplit={onSwapSplit}
         onTabsReorder={onTabsReorder}
         lockedNoteIds={lockedNoteIds}
+        cloudDeletedNoteIds={cloudDeletedNoteIds}
         onToggleNoteLock={onToggleNoteLock}
         onExportBitableCsv={onExportBitableCsv}
         onOpenTrash={onOpenTrash}
