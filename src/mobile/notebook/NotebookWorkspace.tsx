@@ -10,6 +10,7 @@ import { MobileNodeIconGlyph } from "../ui/NodeIconGlyph";
 import { bridge } from "../bridge";
 import type { LakeEditorInstance } from "../../features/editor/lakeRuntime";
 import { showToast } from "../ui/toastBus";
+import { mobileReadonlyText } from "../lib/readonlyText";
 import { useNotebookTabs } from "./useNotebookTabs";
 import { useNotebookTreeData } from "./useNotebookTreeData";
 import { useNotebookTreeActions } from "./useNotebookTreeActions";
@@ -144,7 +145,8 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     onMissing: reportReadMissing,
     onDrop: dropTabResources,
     // 261112 task-56（N4）：桌面端锁定的文档在移动端只读；用户点编辑 ⇒ 可见提示（不静默）。
-    onLockedEdit: () => showToast("文档已在桌面端锁定（只读），不能编辑；请先在桌面端解锁", { type: "info" }),
+    // task-67：文案取 core/capabilities/readonlyReason（移动端只覆盖解除动作措辞）。
+    onLockedEdit: () => showToast(mobileReadonlyText({ locked: true }) ?? "文档已锁定（只读）", { type: "info" }),
   });
 
   /**

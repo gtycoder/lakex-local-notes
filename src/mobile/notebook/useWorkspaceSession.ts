@@ -7,6 +7,7 @@ import { successFeedback } from "../ui/haptics";
 import type { NotebookTab } from "./useNotebookTabs";
 import { toastActionError } from "../lib/actionError";
 import { showToast } from "../ui/toastBus";
+import { mobileReadonlyText } from "../lib/readonlyText";
 
 /**
  * 工作区「会话与保存屏障」逻辑（261103 P10-①，原 NotebookWorkspace 内联代码逐字搬移，未改行为）：
@@ -152,8 +153,9 @@ export function useWorkspaceSession(options: UseWorkspaceSessionOptions) {
   const toggleEdit = useCallback(async () => {
     if (!active?.loaded) return;
     // 261112 task-56（N4）：编辑锁 = 只读（桌面端锁定）。入口统一拦在这里，文案明说怎么解锁。
+    // task-67：文案取 core/capabilities/readonlyReason（移动端只覆盖解除动作措辞）。
     if (active.editLocked) {
-      showToast("文档已在桌面端锁定（只读），不能编辑；请先在桌面端解锁", { type: "info" });
+      showToast(mobileReadonlyText({ locked: true }) ?? "文档已锁定（只读）", { type: "info" });
       return;
     }
     // usheet / board / ink 的正文在实例里；完成时同步 capture，不能只读父级 state

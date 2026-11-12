@@ -5,6 +5,7 @@ import { MobileBoardViewer } from "../board/MobileBoardViewer";
 import type { LakeEditorInstance } from "../../features/editor/lakeRuntime";
 import type { NotebookTab } from "./useNotebookTabs";
 import { EmptyState } from "../ui/EmptyState";
+import { mobileReadonlyText } from "../lib/readonlyText";
 
 /** 表格 / 多维表视图按需加载：只有真的打开这类文档才进分包（首屏不含它们）。 */
 const MobileBitableViewer = lazy(() => import("../bitable/MobileBitableViewer").then((m) => ({ default: m.MobileBitableViewer })));
@@ -51,10 +52,11 @@ export function NotePaneHost(props: NotePaneHostProps) {
     {tabs.map((t) => (!mountedIds.has(t.id) ? null : (
       <div key={t.id} className={"doc-pane" + (t.id === activeId ? " active" : "") + (t.id === freshId ? " doc-pane--fresh" : "")}>
         <>
-        {/* 261112 task-56（N4）：编辑锁 = 只读横幅（桌面端锁定的文档在移动端也必须可见、可理解）。 */}
+        {/* 261112 task-56（N4）：编辑锁 = 只读横幅（桌面端锁定的文档在移动端也必须可见、可理解）。
+            task-67：文案单一来源 = core/capabilities/readonlyReason（本端只换成「桌面端解锁」的动作措辞）。 */}
         {t.editLocked && (
           <div className="mobile-status-msg" role="status">
-            该文档已在桌面端锁定（只读）：可以阅读，不能编辑或保存。在桌面端解锁后回到这里即可编辑。
+            {mobileReadonlyText({ locked: true })}
           </div>
         )}
         {/* 标题只在顶栏（思源 #toolbarName 口径）；正文区不再重复一个标题输入框 */}

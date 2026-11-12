@@ -30,7 +30,10 @@ describe("编辑锁在移动端真正生效（task-56 N4）", () => {
   });
 
   it("面板宿主：只读横幅 + 所有 kind 的 editing 都强制 && !t.editLocked（含手写板 readOnly）", () => {
-    expect(PANES).toContain("该文档已在桌面端锁定（只读）");
+    // task-67：横幅文案不再手写，统一消费 core 的只读原因（本端只覆盖解除动作措辞）。
+    expect(PANES).toContain("mobileReadonlyText(");
+    expect(PANES).toContain('from "../lib/readonlyText"');
+    expect(PANES).not.toContain("该文档已在桌面端锁定（只读）：可以阅读");
     const forced = PANES.match(/editing=\{t\.editing && !t\.editLocked\}/g) ?? [];
     // bitable 多一个「只有活动页可编辑」条件，单独断言；合计 5 个宿主（doc/board/ink/usheet/bitable）。
     expect(forced.length).toBeGreaterThanOrEqual(3);
@@ -41,9 +44,10 @@ describe("编辑锁在移动端真正生效（task-56 N4）", () => {
   it("双保险拦截：编辑入口（toggleEdit）+ 保存入口（bridge.saveNote）都给明确文案", () => {
     expect(SESSION).toContain("if (active.editLocked)");
     expect(BRIDGE).toContain("SELECT is_locked FROM notes WHERE id=?");
-    expect(BRIDGE).toContain("文档已锁定（只读），保存被拒绝");
+    expect(BRIDGE).toContain("mobileReadonlyReason({ locked: true })");
+    expect(BRIDGE).toContain("保存被拒绝");
     expect(WORKSPACE).toContain("onLockedEdit:");
-    expect(SESSION).toContain("已在桌面端锁定（只读）");
+    expect(SESSION).toContain("mobileReadonlyText({ locked: true })");
   });
 
   it("getNoteInfo 不再硬编码 isEditLocked:false（锁字段透出）", () => {

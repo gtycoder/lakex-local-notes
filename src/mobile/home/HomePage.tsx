@@ -40,6 +40,7 @@ import { escapeId } from "../../lib/cssEscape";
 import { useTabPager } from "./useTabPager";
 // 小记排序：**两端共用的单一来源**（档位/文案/比较器/本机持久化都在这里；261015 用户要求桌面与移动统一）
 import { quickNoteSortTime, type QuickNoteSort } from "../../core/quickNoteSort";
+import { syncWarningSummary, syncWarningSummaryText } from "../../core/syncWarningText";
 import { formatDiaryDateKey } from "../../core/diary";
 import { localAssetHttpUrl } from "../../core/assetUrl.js";
 import { imageBoxAttrs, quickNoteImageUrl, quickNotePreviewAssetUrl } from "./quickNoteImage";
@@ -509,8 +510,9 @@ export function HomePage(props: HomePageProps) {
       const r = await bridge.syncNow();
       // 同步可能改了远端小记/目录：刷新首页数据，否则列表停留在旧快照。
       await Promise.all([onQuickNotesChanged(), onTreeChanged()]);
-      const w = r.warnings?.length ?? 0;
-      showToast((r.message || "已同步") + (w > 0 ? `，${w} 项被跳过` : ""));
+      // task-67：跳过项计数/分组单一来源 = core/syncWarningText（不再手写「N 项被跳过」）。
+      const summaryText = syncWarningSummaryText(syncWarningSummary(r.warnings ?? []));
+      showToast((r.message || "已同步") + (summaryText ? `，${summaryText}` : ""));
     } catch (e) { toastActionError("同步", e); }
   };
   const toggleView = (): void => {

@@ -12,7 +12,8 @@ const DEFAULT_SYNC_SETTINGS: SyncSettings = { enabled: true, autoMode: "manual",
 export function useSyncSettingsForm(open: boolean, onRefresh: () => Promise<void>) {
   const [syncSettings, setSyncSettings] = useState<SyncSettings | null>(null);
   const [syncMsg, setSyncMsg] = useState("");
-  const [warnings, setWarnings] = useState<SyncWarning[]>([]);
+  // task-67：跳过项摘要随「上次同步」落盘 ⇒ 冷启动/重启先显示上次留下的摘要（最多 20 条）。
+  const [warnings, setWarnings] = useState<SyncWarning[]>(() => readSyncStatus()?.warnings ?? []);
   const [supersededNotes, setSupersededNotes] = useState<Array<{ id: string; title: string }>>([]);
   const [lastSync, setLastSync] = useState<MobileSyncStatus | null>(() => readSyncStatus());
   const [syncProgress, setSyncProgress] = useState<SyncProgressSnapshot | null>(() => readSyncProgress());
@@ -42,7 +43,13 @@ export function useSyncSettingsForm(open: boolean, onRefresh: () => Promise<void
   }, [open]);
 
   // 自动同步也会产生记录 ⇒ 每轮结束（状态写入）后刷新未读数（一次小查询，不阻塞界面）。
-  useEffect(() => subscribeSyncStatus(() => { setLastSync(readSyncStatus()); void reloadConflicts(); }), [reloadConflicts]);
+  useEffect(() => subscribeSyncStatus(() => {
+    void reloadConflicts();
+    const status = readSyncStatus();
+    setLastSync(status);
+    // task-67：自动同步/本轮落盘的跳过项摘要同步到 UI（重启后也从这里恢复）。
+    if (status?.warnings) setWarnings(status.warnings);
+  }), [reloadConflicts]);
   useEffect(() => subscribeSyncProgress(() => setSyncProgress(readSyncProgress())), []);
 
   const updateSyncSettings = useCallback((patch: Partial<SyncSettings>) => {
@@ -76,6 +83,8 @@ export function useSyncSettingsForm(open: boolean, onRefresh: () => Promise<void
     syncMsg,
     syncProgressText: describeSyncProgress(syncProgress),
     warnings,
+    /** 完整列表算出的分组计数（列表被截断到 20 条时摘要行仍如实）。 */
+    warningSummary: lastSync?.warningSummary ?? null,
     supersededNotes,
     lastSync,
     lastSyncText: lastSync ? describeSyncStatus(lastSync) : "本机还没有同步记录",

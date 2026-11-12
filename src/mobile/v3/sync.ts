@@ -63,10 +63,11 @@ export async function runMobileV3Sync(db: MobileDb, settings: S3v3Settings, opts
     } catch { /* 设备本地调试开关读不到 ⇒ 按默认 upload（不参与同步数据） */ }
   }
   const report = await engine.sync({ ...(mode === "throw" ? {} : { onEmptyCloud: mode }), ...(opts.deferAssets ? { deferAssets: true } : {}) });
-  // task-44：单篇 apply 失败（已跳过、下一轮重试）并入结构化警告（复用既有 warningDetails 结构）。
+  // task-44 / task-66：单篇 apply 失败 = 「本地这篇本轮没落地」，独立 kind apply_skipped（内部类型，非 wire）。
+  // 不得复用 remote_incomplete（那是「远端内容不全」，文案会误导用户）；桌面端 desktopSync 同口径。
   const applyWarnings = store.drainApplyWarnings();
   for (const w of applyWarnings) {
-    report.warningDetails.push({ kind: "remote_incomplete", noteId: w.id, title: w.title, message: w.detail ?? "" });
+    report.warningDetails.push({ kind: "apply_skipped", noteId: w.id, title: w.title, message: w.detail ?? "" });
     report.warnings.push("apply 跳过 " + w.id + "：" + (w.detail ?? ""));
   }
   return report;

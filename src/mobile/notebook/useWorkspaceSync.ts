@@ -6,6 +6,7 @@ import { SELF_REGISTERED_OVERLAY_KINDS, type WorkspaceOverlayKind } from "./useW
 import type { NotebookTab } from "./useNotebookTabs";
 import type { NotebookTreeItem } from "./useNotebookTreeData";
 import { toastActionError } from "../lib/actionError";
+import { syncWarningSummary, syncWarningSummaryText } from "../../core/syncWarningText";
 
 /**
  * 工作区「返回栈 + 同步」逻辑（261103 P11-②，原 NotebookWorkspace 内联代码逐字搬移，未改行为）：
@@ -50,8 +51,9 @@ export function useWorkspaceSync(options: UseWorkspaceSyncOptions) {
       await loadTree();
       const activeTab = tabsRef.current.find((t) => t.id === activeId);
       if (activeTab && !activeTab.editing) await loadTabBody(activeTab.id, true);
-      const w = r.warnings?.length ?? 0;
-      showToast((r.message || "已同步") + (w > 0 ? `，${w} 项被跳过` : ""));
+      // task-67：跳过项计数/分组单一来源 = core/syncWarningText（不再手写「N 项被跳过」）。
+      const summaryText = syncWarningSummaryText(syncWarningSummary(r.warnings ?? []));
+      showToast((r.message || "已同步") + (summaryText ? `，${summaryText}` : ""));
     } catch (e) { toastActionError("同步", e); }
   }, [loadTree, openTab, activeId]);
 

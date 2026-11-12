@@ -23,6 +23,7 @@ import * as noteTagLinksRepository from "../data/noteTagLinksRepository.js";
 import { assertQuickNoteTagsExist } from "../data/quickNoteTagsRepository.js";
 import { noteBodyPath } from "../data/noteBodies.js";
 import { applyRestoredNoteBody, scanMissingBodies, type MissingBodiesSnapshot } from "../data/missingBodies.js";
+import { mobileReadonlyReason } from "../lib/readonlyText.js";
 import type { LocalNote } from "../data/noteRepository.js";
 import type { MobileDb } from "../data/sqliteDb.js";
 import * as trashRepository from "../data/trashRepository.js";
@@ -118,7 +119,11 @@ export const notesDomain = {
       }
       // 261112 task-56（N4）：编辑锁 = 只读。用户保存入口必须明确拒绝（同步专用写/显式恢复不经此守卫）。
       const lock = await d.prepare("SELECT is_locked FROM notes WHERE id=?").get(id) as { is_locked: number } | undefined;
-      if (lock?.is_locked === 1) throw new Error("文档已锁定（只读），保存被拒绝；请先在桌面端解锁后再编辑");
+      if (lock?.is_locked === 1) {
+        // task-67：原因文案单一来源 = core/capabilities/readonlyReason（移动端只覆盖解除动作措辞）。
+        const readonly = mobileReadonlyReason({ locked: true });
+        throw new Error(`${readonly?.title ?? "文档已锁定（只读）"}，保存被拒绝；${readonly?.releaseHint ?? "请先在桌面端解锁后再编辑"}`);
+      }
       await noteRepository.saveNote(d, id, title, content, parentId, assets, plain);
     });
   },

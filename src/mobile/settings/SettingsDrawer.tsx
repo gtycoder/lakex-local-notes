@@ -110,6 +110,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
     syncProgressText,
     lastSyncBreakdown,
     warnings: syncWarnings,
+    warningSummary: syncWarningDigest,
     supersededNotes: syncSuperseded,
     lastSyncText,
     syncReports,
@@ -522,7 +523,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                   {syncWarnings.length > 0 && (
                     <div className="mb-set-block">
                       {/* 261112 task-56：文案/重试语义单一来源 = core/syncWarningText（不再手写一份）。 */}
-                      <div className="mb-set-block__name">{syncWarningSummaryText(syncWarningSummary(syncWarnings))}</div>
+                      <div className="mb-set-block__name">{syncWarningSummaryText(syncWarningDigest ?? syncWarningSummary(syncWarnings))}</div>
                       <div className="mb-list" role="list">
                         {syncWarningRows(syncWarnings).map((w, i) => {
                           // 只有「正文缺失」类警告才给「去恢复」入口；资源类（asset_missing / asset_kept_remote /

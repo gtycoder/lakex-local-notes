@@ -460,9 +460,9 @@ export const syncDomain = {
           uploadedBytes: v3.uploadedBytes ?? 0,
           downloadedBytes: v3.downloadedBytes ?? 0,
         };
-        const message = v3.warningDetails.length > 0
-          ? `v3 同步完成：↑${v3.uploadedNotes} ↓${v3.downloadedNotes}（${v3.warningDetails.length} 项被跳过）`
-          : `v3 同步完成：↑${v3.uploadedNotes} ↓${v3.downloadedNotes}`;
+        // task-67：跳过项的「N 项被跳过（需处理/可重试）」统一由调用方用 core/syncWarningText 摘要，
+        // 状态行只留计数（避免同一句话在 toast 里出现两遍）。
+        const message = `v3 同步完成：↑${v3.uploadedNotes} ↓${v3.downloadedNotes}`;
         return {
           message, quickNotes: null,
           ...(v3.warningDetails.length > 0 ? { warnings: v3.warningDetails } : {}),
@@ -482,6 +482,8 @@ export const syncDomain = {
           uploadedQuickNotes: summary.uploadedQuickNotes, downloadedQuickNotes: summary.downloadedQuickNotes,
           uploadedFolders: summary.uploadedFolders, downloadedFolders: summary.downloadedFolders,
           uploadedBytes: summary.uploadedBytes, downloadedBytes: summary.downloadedBytes,
+          // task-67：跳过项摘要随「上次同步」落盘（精简到 20 条 + 完整列表的分组计数），重启不丢。
+          ...(summary.warnings.length > 0 ? { warnings: summary.warnings } : {}),
         });
       }
       // 诊断落盘失败绝不影响同步结果（设置页只少一行可复制的记录）。
