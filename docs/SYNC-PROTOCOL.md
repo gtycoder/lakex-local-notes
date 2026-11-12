@@ -237,6 +237,7 @@ retryPendingAssets（上轮失败附件先补）
 - 上传失败的笔记**不进本轮新索引**：回退远端旧条目（或移出），下轮重试；避免索引引用未落盘正文/声明。
 - 正文只在 `plan.remote.contentHash !== hash` 时 PUT（锁/图标等元数据变更不重传正文）。
 - 上传前本地正文缺失：先按远端同条目 contentHash 拉回（校验一致才落盘）；两边都没有 ⇒ warn + 跳过，**绝不上传空正文**。
+- **单篇 apply 失败 = warning + continue**（不整轮失败；下一轮重试并汇入 `SyncResult.warnings`），见 §9.7。
 
 ### 8.4 初始化上传 `initialUpload`
 
@@ -247,7 +248,7 @@ retryPendingAssets（上轮失败附件先补）
 ### 8.5 阶段/进度/并发/内存
 
 - `S3v3SyncReport`：`downloadedNotes / uploadedNotes / deletedObjects / published / generation / warnings / warningDetails / supersededNotes`。
-- 结构化 warning kinds（`src/lib/types.ts`）：`remote_incomplete`、`asset_missing`、`local_body_missing`、`local_body_restored`、`asset_kept_remote`。
+- 结构化 warning kinds（定义 `src/core/sharedTypes.ts`，`src/lib/types.ts` re-export）：`remote_incomplete`、`asset_missing`、`local_body_missing`、`local_body_restored`、`asset_kept_remote`、`body_suspicious_external_change`、`asset_invalid_name`。
 - `onPhase(phase, ms)` 阶段名（实测发出）：`load-state`、`read-index`、`merge`、`bodies`、`declarations`、`assets`、`apply`、`downloads`、`uploads`、`publish-save-state`、`publish-lock`、`publish-index`、`publish-pointer`、`publish-finalize`、`pending`、`total`（pullAll / initialUpload 另有 `save`、`upload`、`publish`）。
 - `onProgress`：阶段 + done/total + bytesDone/bytesTotal（`metadata/bodies/declarations/assets/apply/uploads/finalize`）。
 - 并发：上传 `DEFAULT_TRANSFER_CONCURRENCY = 12`（可配，clamp 1..32）、下载 `DEFAULT_DOWNLOAD_CONCURRENCY = 20`（clamp 1..32）；清理/声明并发 ≤8。
@@ -271,6 +272,7 @@ retryPendingAssets（上轮失败附件先补）
 ## 9. 合并决策（三方 base × local × remote）
 
 纯逻辑：`s3v3Decision.decideItem` + `s3v3Merge.planLakeMerge / planQuickNotesMerge`。
+位置字段（`parentId` / `trashedAt` / `deletedFromParentId`）不参与下面的内容判定，走 §9.5 独立三方合并。
 
 ### 9.1 单条顺序（文档）
 
@@ -282,7 +284,7 @@ retryPendingAssets（上轮失败附件先补）
 
 ### 9.2 文档/目录的补充规则
 
-- 元数据（title/parentId/sortOrder/icon）：内容一致时按 `updatedAt` 后写胜；锁字段独立按 `lockedAt` 字符串 LWW（锁变更不 bump updatedAt）。
+- 元数据（title/sortOrder/icon）：内容一致时按 `updatedAt` 后写胜；**`parentId`/`trashedAt`/`deletedFromParentId` 走 §9.5 独立合并**；锁字段独立按 `lockedAt` 字符串 LWW（锁变更不 bump updatedAt）。
 - 环检测（`isRemoteDescendant`）：本地新父在远端树中位于本节点之下 ⇒ 跟随远端断开（避免两端成环）。
 - 目录：无独立对象；删除意图 + 远端存在 → local-purge；本地有远端无且「基线存在 + 本地不在回收站 + updatedAt 晚于基线」→ 视为显式恢复重新发布（D4），否则跟随进回收站。
 - 父节点非法/缺失由**适配器**回落兜底笔记本（懒建「未分类」），合并层不做父集合闸门。
@@ -298,6 +300,48 @@ retryPendingAssets（上轮失败附件先补）
 - 条目标签关系 `tagIds/tagsUpdatedAt`（集合 + 关系版本）仍按较新一侧胜出；顺序是设备本地视图，不传播。
 - 待删集合只在设备本地（不上传）；远端索引确认不含该 id 后结算，同名标签可重建。
 
+### 9.5 位置字段的三方合并（261112）
+
+内容（正文/标题/标签）与**位置**是两个正交维度。位置三件套 = `parentId` / `trashedAt` / `deletedFromParentId`（`undefined` 与 `null` 同义）。
+判据单一来源 = `src/core/s3v3/plan/positionMerge.ts`（纯函数；plan 用于合成索引条目，deviceStore 用于决定是否保留本地位置）。
+
+| 本地相对 base | 远端相对 base | 位置赢家 | 效果 |
+|---|---|---|---|
+| 变了 | 没变 | **本地** | 必须发布本地位置（`indexChanged = true`，**纯移动/纯移入回收站轮也要发布**）；同轮内容赢家是远端时，应用远端内容但位置取本地（不被内容判定回滚） |
+| 没变 | 变了 | **远端** | 应用远端位置：写操作 `apply-position`（只改位置三件套，正文与 `contentHash` 不动），或随 `apply-remote` 的 meta 一起应用 |
+| 都变了 | 都变了 | `updatedAt` LWW | 条目 `updatedAt` 字符串比较：`local >= remote` 取本地，否则取远端（**相等取本地**，确定性 tie-break） |
+| 任一边缺席（无 base / 新增 / 删除） | — | 不判（`same`） | 沿用 §9.1 的内容/缺席判定，不对协议做无根据推断 |
+
+- **与内容判定正交**：内容赢家仍按 §9.1/§9.2。内容赢家是远端（`download` / `remote-wins-history`）时**不得上传本地旧字节**——apply 先下载后上传，本地正文此时已是远端字节，上传必然 `hash-mismatch` 并把索引条目的位置回退成远端（纯移动轮被抹掉）；元数据仍由位置赢家 + `indexChanged` 发布。
+- **发布条目按位置赢家组装**：内容取内容判定赢家，位置三件套取位置合并赢家（本地赢/远端赢都投影进发布条目）；这是「纯移动轮 / 回收站轮也能把位置发出去」的关键。
+- **回收站也走这条路径**：移入回收站 = 位置三件套变化（§10.3），因此「A 删除、B 编辑正文」不会互相回滚。
+- **已知近似（不新增 wire 字段的代价）**：wire 没有独立的位置时间/版本字段，两边都动时复用条目 `updatedAt`（内容时间）做 LWW ⇒
+  ① 移动与正文编辑共用同一时间戳，无法独立排序；
+  ② 两端在同一毫秒各改位置时「相等取本地」会让本轮各自保留本地一版（无独立时钟，后续某方 `updatedAt` 严格更新才收敛）；
+  ③ 若要严格收敛，只能新增位置版本字段（协议变更，另行评审）——**不要**在 `updatedAt` 上打补丁。
+
+### 9.6 同步专用写路径（写路径分层，261112）
+
+**原则**：同步镜像是「内容/字段应用」，不是用户保存。用户语义（回收站/purged 拒写、保存版本守卫、需显式恢复）服务**用户入口**；把这类守卫下沉到两端共用的底层写函数会误伤同步——F04 事故：本地回收站行接收他端正文时被用户守卫拒绝 ⇒ 整轮 `syncNow` 抛错 ⇒ 设备永久卡死。
+
+| 字段/动作 | 用户入口（带用户策略守卫） | 同步专用写（镜像） |
+|---|---|---|
+| 正文/标题/派生缓存 | `noteContentRepository.save()`：`trashed_at` / `is_purged` 拒写 + `baseHash` 保存版本守卫 | `saveSynced()`：`allowTrashed`（不改 `trashed_at` / `parent_id`），**purged 仍拒** → `Store.saveSyncedNote` → `PlatformDataPort.saveSyncedNote?`（可选端口；缺省 core 回落 `saveNote`） |
+| 节点图标 | `noteMetadataRepository.setNodeIcon()`：`assertNodeWritable`（回收站/purged 拒） | `applyRemoteNodeIcon()`：只写 `tree_nodes.icon`；允许回收站行，purged 仍拒；**不动** `updated_at`/`is_dirty`（镜像元数据由 `applyRemoteNoteMeta` 负责） |
+| 编辑锁 / 元数据 | 用户入口（锁定/改名/移动）走各自守卫 | `applyRemoteEditLock` / `applyRemoteNoteMeta`（镜像写，不经用户入口） |
+
+- **选择逻辑**：`deviceStore.saveState` 只在「新行导入（`importRemoteNote`）」与「回收站行接收正文（`cur.trashedAt !== null` → `saveSyncedNote`）」分叉；其余仍 `saveNote`。端口 `setNodeIcon` 只被同步 apply 使用 ⇒ 实现走镜像写（桌面 `noteMetadataRepository.applyRemoteNodeIcon`；移动端 `setNodeIcon` 端口只写 `notes.icon`，purged 行已物理删除 ⇒ UPDATE 0 行不抛错）。
+- **红线**：面向用户的策略守卫**不得下沉到两端共用的底层写函数**（被 U/S/I/R/M 多方调用的 `save` / `move` / `setNodeIcon` / `saveNote` 一类）。守卫只放在**入口层**或**专用路径**。
+- **新增写守卫必须声明调用方分类**：**用户（U）/ 同步（S）/ 导入（I）/ 恢复（R）/ 维护（M）**；在守卫注释与契约里写清哪类允许、哪类拒绝、哪类必须走专用路径。逐条越界审计与 G1–G18 判定见 `docs/audit-261112/13-write-guard-sweep.md` §2（真越界 G1 正文、G3 图标已修；其余 15 处为必要守卫）。
+
+### 9.7 单篇 apply 失败 = warning + continue（261112）
+
+- 落点：`src/core/s3v3/state/deviceStore.ts` 的 `saveState` 逐条应用循环。单篇应用抛错**不再** `throw new Error("saveState 失败(id)")`。
+- 行为：记日志 + `onApplyWarning({ code: "remote_incomplete", space: "lake", id, title, detail })` + **继续下一篇**；该篇不标 synced、不推进基线 ⇒ 下一轮重新计划（**可重试的跳过，不是丢数据**）。
+- 汇总：适配器队列 `drainApplyWarnings()`（桌面 `DesktopStoreDevice` / 移动 `MobileDeviceStore`）→ 桌面 `syncWithV3` 并入 `SyncResult.warnings`、移动并入 `report.warningDetails`，结构统一为 `{ kind: "remote_incomplete", noteId, title, message: detail }`；UI（状态栏 SyncStatusPopover / 同步诊断）复用既有 warning 展示。
+- **边界**：只降级「单篇应用」阶段；批量提交/文件系统整体失败（如 `executeSet`、`rename`）仍在循环外 ⇒ 整轮失败。与 §17「单对象失败不炸整轮」同一口径。
+- 结构单一来源：`SyncWarning` / `SyncWarningKind` 在 `src/core/sharedTypes.ts`（`src/lib/types.ts` re-export）；kinds 见 §8.5。
+
 ## 10. 删除 = 缺席
 
 ### 10.1 本地彻底删除（purge）
@@ -312,12 +356,14 @@ retryPendingAssets（上轮失败附件先补）
 - `remotePurged` 失效三态（`resolveRemotePurged`）：显式恢复；远端同 id 复活（revived，跟随远端下载、本地陈旧副本作废）；本地把该副本也彻底删除（标记作废）。
 - 本地编辑过再遇到他端删除：Lake 强制留历史快照；小记不备份（随记语义）。
 
-### 10.3 回收站 ≠ 墓碑
+### 10.3 回收站 = 特殊笔记本（删除 = 移动；261112 定稿）
 
-- 移入回收站 = 软删除：索引条目保留 `trashedAt/deletedFromParentId`，正文/附件不删，**不写墓碑**。
-- 彻底删除 = 缺席：索引条目消失 + 对象清理。
-- 回收站自动过期（`trashAutoPurgeDays`，默认 90 天）到点 purge；`cloud_deleted`（仅本地）副本**不豁免**。
-- 被动收到的删除（他端）≠ 本端主动删除：副本只读、可恢复、不参与 S3，唯一例外是显式恢复。
+- **删除 = 移动**：移入回收站是**位置变更**，不是内容删除——索引保留条目并写 `trashedAt`（进入回收站时间）+ `deletedFromParentId`（删除前父，恢复位置）；正文/附件/历史不删，**不写墓碑**。
+- **`trashedAt` 是唯一权威标记**：`parentId` 在 trashed 条目上**不承载树父语义**（可能是本地容器 id，也可能是原父）。消费方必须按 `trashedAt` 判回收站、恢复位置只看 `deletedFromParentId`；**不得**依据 trashed 条目的 `parentId` 做树遍历/父校验/恢复。
+- **本地容器 id `notebook-trash`**（单一来源 `src/core/syncDecisions.ts`）：**不进 wire 的 `folders[]`**（两端发布都排除），也不作为对外 parent 语义。两端本地表示当前不同：桌面 `notes.parent_id` 历史实现指向该容器（原父记在 `deleted_from_parent_id`）；移动端不写该 id（保留原父 + `trashed_at` + `deleted_from_parent_id`）。**新代码不得依赖该 id 的 parent 语义**（只允许作为本地容器判据：目录排除/回收站列表等）。
+- **收件端（261112 P0）**：本地已在回收站 + 远端 active 编辑 ⇒ 应用内容/标题/图标等字段，**保留本地回收站、不隐式恢复**；唯二恢复例外 = 云端基线本身是 trashed 条目（他端显式恢复已传播）或本机 `restorePending`（§11）。丢弃「远端 active 就恢复」的旧实现。
+- **purge = 缺席**：彻底删除 = 索引条目消失 + 前缀清理（`objects/{id}-`、`assets/{id}/`、`meta/assets/{id}/`）；Lake 没有墓碑对象可传播（小记另有 `purged[]`，§10.4）。
+- 回收站自动过期（`trashAutoPurgeDays`，默认 90 天）到点 purge；`cloud_deleted`（仅本地）副本**不豁免**。被动收到的删除（他端）≠ 本端主动删除：副本只读、可恢复、不参与 S3，唯一例外是显式恢复。
 
 ### 10.4 小记 `purged` 的差异
 
@@ -469,6 +515,8 @@ S3v3DeviceStore: init / loadState / saveState / loadBaseline / saveBaseline
 桌面落 `<storeRoot>/sync-v3/baseline.json.gz`（gzip level 1），移动落 `sync_v3_state` 单行 JSON。
 state sidecar：桌面 `<storeRoot>/sync-v3/state.json`；移动同表 `sync_v3_state`。基线丢失 ⇒ 走 `no-baseline`（pullAll），**不是**删除。
 
+**状态应用是「镜像写」而非用户保存**（261112）：正文/图标走 §9.6 的同步专用写路径；单篇应用失败按 §9.7 降级为 warning + continue（不整轮失败）。位置三件套的应用见 §9.5（`apply-position`）。
+
 **断代（Q23，261112 用户裁决 B：删除 v1/v2 迁移）**：state 信封（`src/core/s3v3/state/intentLogState.ts`）只认 v3，形状变更**不做双写过渡、不写旧字段兼容**。读到 v1/v2 旧信封（或无 version 的旧 sidecar）⇒ **账本重置**（records 置空 + 一条可读 warning，不阻断同步）；只**抢救保留**资产投影与 hashCache（丢掉资产投影会把「未下载」误判成「删光附件」→ 云端误 GC；丢掉 hashCache 要全库重算 sha256）。基线独立于信封（桌面 `baseline.json.gz` / 移动同 JSON 的 `baseline` 字段），重置账本**不丢基线**。
 
 ## 16. 双端能力矩阵
@@ -523,6 +571,7 @@ state sidecar：桌面 `<storeRoot>/sync-v3/state.json`；移动同表 `sync_v3_
 失败语义：
 
 - **单对象失败不炸整轮**：warn + 继续；受影响条目跳过并保留下轮重试意图。
+- **单篇 apply 失败 = warning + continue**（§9.7）：不标 synced、不推进基线 ⇒ 下轮重试；并汇入 `SyncResult.warnings`（桌面）/ `report.warningDetails`（移动）。
 - 发布成功后清理失败 → warning，不报失败（SD-05）。
 - 上传失败笔记不进新索引（回退远端旧条目）。
 - 正文下载失败但本地已有 ⇒ 保留本地条目；本地也没有 ⇒ 保留远端条目（不得把「对象暂时缺失」变成永久删除）。
@@ -545,16 +594,20 @@ state sidecar：桌面 `<storeRoot>/sync-v3/state.json`；移动同表 `sync_v3_
 | 小记 `purged` 保留窗口（SD-09） | `src/core/s3v3QuickPurgeWindow.test.ts` |
 | 同步诊断报告（SD-13） | `src/core/s3v3Report.test.ts`、`electron/store.test.ts`（环形落盘） |
 | 全量重拉不得删本地（I0） | `electron/s3v3/pullAllSafety.test.ts` |
-| 空跑轮零发布/零写 | `electron/s3v3/idlePublishRegression.test.ts`、`perfPipeline.test.ts` |
+| 空跑轮零发布/零写 | `electron/s3v3/idlePublishRegression.test.ts`、`electron/s3v3/perf.integration.test.ts` |
 | 缺正文/缺附件（不覆盖本地、不上传空正文） | `electron/s3v3/missingBody.test.ts`、`src/core/s3v3AssetLossGuard.test.ts`、`s3v3DeferAssets.test.ts` |
 | 待删门禁/清理 | `electron/s3v3/deepCleanupWindow.test.ts`、`src/core/s3v3/commit/executePending.test.ts` |
 | 双端一致性 | 单实现契约 `src/mobile/v3/deviceConformance.mobile.test.ts`（21 it）+ 跨端混合 `electron/s3v3/deviceConformance.mixed.test.ts`（3 it）+ `parity.test.ts` |
 | 单条小记推送/标记落盘 | `electron/s3v3/quickPushSingle.test.ts`、`markerPersist.test.ts`、`src/mobile/v3/remParity.test.ts` |
 | 「保存并同步」快路径（独立管线/最短链/轻量状态/高优先域） | `src/core/s3v3/quickPush/pipeline.test.ts`（请求序列/回退/别端变更）、`pipeline.parity.test.ts`（与旧实现逐字节对拍）、`electron/s3v3/quickPushFastPath.test.ts`、`src/mobile/v3/quickPushFastPath.test.ts`、`electron/quickNotePushPriority.test.ts` |
 | 传输端口护栏（key/gzip/404/客户端单例） | `src/mobile/native/s3PortGuards.test.ts` |
+| 位置字段独立合并 / 回收站位置传播（261112） | `electron/s3v3/trashRemoteDivergence.test.ts`、`electron/s3v3/deviceConformance.mixed.test.ts`（回收站位置必须传播）、`src/core/s3v3/state/deviceStoreMeta.test.ts` |
+| 同步专用写路径（回收站行接收正文/图标，用户入口守卫不放宽） | `electron/noteContentRepository.test.ts`（F04）、`electron/s3v3/remoteIconWrite.test.ts`、`electron/s3v3/deviceConformance.mixed.test.ts` |
+| 单篇 apply 失败降级（warning + continue） | `src/core/s3v3/state/deviceStoreMeta.test.ts`、`electron/s3v3/deviceConformance.mixed.test.ts` |
 
 ## 20. 变更记录
 
+- **2026-11-12**：位置字段（`parentId`/`trashedAt`/`deletedFromParentId`）独立三方合并（§9.5，纯移动轮 `indexChanged`、`apply-position` 写、内容赢家是远端时不上传旧字节）；同步专用写路径与写守卫分层红线（§9.6：`saveSynced`/`saveSyncedNote`/`applyRemoteNodeIcon`，用户守卫不下沉）；回收站 = 特殊笔记本（§10.3：删除 = 移动、`trashedAt` 权威、`notebook-trash` 不进 wire/不作为对外 parent 语义、收件端不隐式恢复）；单篇 apply 失败 = warning + continue 并汇入 `SyncResult.warnings`（§9.7）。
 - **2026-11-10**：「保存并同步」快路径（261110）：桌面改走高优先门（不再排维护队列/不等整轮）；
   单条推送加 `loadQuickPushState` 轻量状态（不重建世界）、内容寻址去重 PUT、remote/client 缓存、
   请求数与分段耗时 [perf] 证据；回退条件与基线口径见 §12.3。

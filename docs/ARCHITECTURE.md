@@ -95,7 +95,10 @@ userData/
 
 - **发布**：写索引 → 取锁 → 读回 pointer → 写 pointer（无 CAS，靠锁 + 读回 + generation 单调 + 重试）；零变更轮只读 pointer。
 - **删除 = 缺席**：purge 清 `objects/{id}-`、`assets/{id}/`、`meta/assets/{id}/`；他端据本地基线 + 持久删除意图判定「云端已删」，副本留回收站并标「云端已删除·仅本地」。唯一类墓碑 = 小记索引的 `purged[]`（只存 id + 90 天窗口）。
+- **位置字段独立合并（261112）**：`parentId`/`trashedAt`/`deletedFromParentId` 与内容正交，按云端基线做三方合并（本地动→本地赢并发布；远端动→`apply-position`；两边都动→`updatedAt` LWW + 相等取本地；无基线不判），判据单一来源 `src/core/s3v3/plan/positionMerge.ts`——见 `SYNC-PROTOCOL.md` §9.5。**回收站 = 特殊笔记本（删除 = 移动）**：trashed 条目 `parentId` 不承载树父语义，恢复位置只看 `deletedFromParentId`（§10.3）。
 - **合并 = 三方**（base × local × remote）：恢复标记 → 本地删除意图 → 缺席/新增 → contentHash；云端已发布版本胜出，被覆盖版本先写历史快照。
+- **写路径分层（261112）**：同步镜像是「字段应用」，不是用户保存。用户守卫（回收站/purged 拒写、保存版本守卫）只在用户入口或同步专用写路径上生效——正文走 `saveSynced`/`saveSyncedNote`、图标走 `applyRemoteNodeIcon`；**面向用户的策略守卫不得下沉到两端共用的底层写函数**（F04 事故），新增守卫必须声明调用方分类（用户/同步/导入/恢复/维护）。见 `SYNC-PROTOCOL.md` §9.6。
+- **单篇 apply 失败 = warning + continue（261112）**：跳过该篇（不标 synced、不推进基线，下轮重试），汇入 `SyncResult.warnings`，不整轮失败（§9.7）。
 - **资产 = 每篇声明差集**：上传只 PUT 声明缺失项、声明永远全量；下载按 size+sha256 差集；禁止逐对象 HEAD/GET 当存在性判据。
 - **小记「保存并同步」= 单条快路径**（`src/core/s3v3/quickPush/pipeline.ts`）：只推当前一条、只更新本条基线、失败不写基线；回退整轮仅限指针/基线/代际不符等既定条件。
 - 旧 `manifests/latest.json` 属 V2 遗留孤儿：**不读、不迁移、不删除**（深度清理按保留窗口当不可达对象回收）。
