@@ -1,6 +1,6 @@
 # 14 · S3 全场景矩阵（阶段①：清单 + 覆盖盘点）
 
-> 只读盘点 + 文档（未改任何生产代码）· 2026-11-12 · 阶段①写作基线 = HEAD `2d79f78f`；**阶段②收口复核 = HEAD `8fe1124f`**（task-44 / task-62 已提交；`electron/s3v3/scenarioMatrix.test.ts` 与 `src/mobile/v3/scenarioMatrix.mobile.test.ts` 为本任务新增用例，尚未提交）。
+> 只读盘点 + 文档（未改任何生产代码）· 2026-11-12 · 阶段①写作基线 = HEAD `2d79f78f`；**覆盖计数复核 = HEAD `903a47aa`**（task-44 / task-47 / task-62 / task-66 / task-73 已提交；`electron/s3v3/scenarioMatrix.test.ts` 与 `src/mobile/v3/scenarioMatrix.mobile.test.ts` 已随提交入库）。
 > 目标：同步验收不能只靠「三个已知缺陷修好」，要用**场景矩阵**证明常规使用下多端不异常 / 不丢数据 / 不卡死。本文 = 阶段①（场景清单 + 已有覆盖盘点），阶段②按本表补装置与用例。
 > **档位**：**A** = MemoryRemote / 双端 conformance harness（`npx vitest` 可跑，CI 档）；**B** = 真实七牛桶子集（唯一前缀 `audit-261112-scn-<stamp>`，三桌面实例，只 DELPREFIX 清理，0 残留）。
 > **覆盖状态**：**已有** = 现有测试直接覆盖该断言；**部分** = 有相邻用例/纯逻辑测试，但缺该场景的端到端断言；**真空** = 无任何用例。
@@ -9,8 +9,8 @@
 ## 0. 总览（写作后自动统计）
 
 - 场景总数：**74**（A 档 58 / B 档 1 / A+B 15）。
-- 覆盖：**已有 42 / 部分 28 / 真空 4 / 失败 0**（阶段②首批 + task-62 修复 + 本批 S46/S74 补齐；见 §0.3 与附录 D）。
-- 剩余真空 4 条：S08 purge×他端编辑、S19 目录重建同 id、S50 锁×他端连续编辑、S53 锁×移入回收站（S50/S53 已由**在途未提交**的 `electron/s3v3/lockPropagation.test.ts` 覆盖，提交后转为「已有」）。
+- 覆盖：**已有 45 / 部分 28 / 真空 1 / 失败 0**（按 HEAD `903a47aa` 重算；阶段②首批 + task-62/66/73 修复 + task-76 收口，见 §0.3–§0.5 与附录 D）。
+- 剩余真空 **1 条**：S19 目录重建同 id（需目录显式 id 重建入口，非本批优先级）。S08 / S50 / S53 / S05 / S13 已在 §0.5 收口为「已有」。
 - 阶段②发现并已修：**F-01 S17 purge group**（task-62，P0）。新登记未修：**F-01b** 云端 folders[] 残留已 purge 目录（需 core 侧目录删除意图，另开任务，见附录 D）。
 - 现有可复用的「跨端契约」底座：`electron/s3v3/deviceConformance.ts` 的 `defineDeviceContract`（19 条共享场景，桌面 = `deviceConformance.mixed.test.ts`，移动 = `src/mobile/v3/deviceConformance.mobile.test.ts`）；`electron/s3v3/syncEngine.test.ts`（16 条协议/引擎）、`src/core/s3v3/plan/plan.test.ts`（21 条决策）、`src/core/s3v3/state/deviceStoreMeta.test.ts`（17 条应用层）、`src/core/s3v3/quickPush/*`（10+5 条快路径）、`src/core/s3v3LockContention.test.ts`（4 条锁竞争）。
 - **真空集中在四类**：① 生命周期×编辑并发（本地 trash×他端编辑 / purge×编辑 / 恢复×删除同时）；② 结构×移动并发与深层目录（移动不被编辑回滚、深 3 层、group purge/重建、附件随正文迁移）；③ 锁×编辑/锁×回收站；④ 时钟偏差与三端含删除的收敛。
@@ -31,12 +31,23 @@
 ### 0.4 阶段②收口（本批补齐，2026-11-12，基线 HEAD `8fe1124f`）
 
 - **本批新增**：S46 附件随正文迁移（移动文档到另一笔记本后，附件字节/云端声明仍随该文档、对端可读，再跑一轮稳定）；S74 三端 × 标签/锁交错（三端 tagIds 集合一致、lockedAt 字段一致、正文一致且不抖动）。两者均实跑 PASS，落点 `electron/s3v3/scenarioMatrix.test.ts`。
-- **S17 / S72 状态**：S17 已由 task-62 修复并转为正常断言（本批实跑 PASS，F-01 收口）；S72 A 档实跑 PASS，**B 档（真实桶子集）仍待跑**。
-- **剩余真空 4 条**：S08 purge×他端编辑、S19 目录重建同 id、S50 锁×他端连续编辑、S53 锁×移入回收站。其中 **S50/S53 已由在途未提交的 `electron/s3v3/lockPropagation.test.ts`（task-47）覆盖**——该文件提交后可直接转「已有」；S08/S19 仍真空（S19 需目录显式 id 重建入口，非本批优先级）。
+- **S17 / S72 状态**：S17 已由 task-62 修复并转为正常断言（本批实跑 PASS，F-01 收口；S17b/c/d 后续同文件补齐，见 §0.5）；S72 A 档实跑 PASS，B 档真实桶首跑 56/57（缺口 = 被删侧无历史快照），已由 task-73 修复并复核 **57/57**。
+- **剩余真空（当时 4 条）**：S08 purge×他端编辑、S19 目录重建同 id、S50 锁×他端连续编辑、S53 锁×移入回收站。S08/S50/S53 已在 §0.5 收口（S50/S53 = `electron/s3v3/lockPropagation.test.ts` L2/L5，task-47 已提交）；仅 S19 仍真空（需目录显式 id 重建入口，非本批优先级）。
 - **B 档未执行**：真实七牛桶子集（附录 A 的 12 条）需隔离桌面实例 + 唯一前缀，本轮未跑（不碰真实桶/正式数据目录）；A 档全绿是本轮通过口径。
 - **护栏口径提醒**：新增场景只依赖内存远程与临时 userData，不触发真实网络；断言均为「两端/三端最终一致 + 云端索引状态 + 无整轮抛错」。
 
-task-62（P0，F-01 修复）：electron/trashLifecycle.ts（deleteTreeNode 级联为每个子树节点记 deleted_from_parent_id；purgeTrashItem 后代集合改用 parent_id ∪ deleted_from_parent_id+trashed 的递归 CTE）、electron/store.ts（importRemoteFolder/applyRemoteFolderMeta 对已 purge 目录拒绝回魂）、src/mobile/data/trashRepository.ts（collectSubtree 补原始父链边，移动端同口径）。S17 已从 it.fails 改为正常断言 + 「purge 后他端同步不复活」；新增 src/mobile/data/trashRepository.purgeSubtree.test.ts。**完整 vitest 已在本任务收尾时跑**（结果见汇报）。S50/S53/S54 等 `electron/s3v3/lockPropagation.test.ts`（task-47）在工作树未提交，提交后可直接转为「已有」。
+task-62（P0，F-01 修复）：electron/trashLifecycle.ts（deleteTreeNode 级联为每个子树节点记 deleted_from_parent_id；purgeTrashItem 后代集合改用 parent_id ∪ deleted_from_parent_id+trashed 的递归 CTE）、electron/store.ts（importRemoteFolder/applyRemoteFolderMeta 对已 purge 目录拒绝回魂）、src/mobile/data/trashRepository.ts（collectSubtree 补原始父链边，移动端同口径）。S17 已从 it.fails 改为正常断言 + 「purge 后他端同步不复活」；新增 src/mobile/data/trashRepository.purgeSubtree.test.ts。**完整 vitest 已在本任务收尾时跑**（结果见汇报）。S50/S53/S54 等 `electron/s3v3/lockPropagation.test.ts`（task-47）已随 `20a066eb` 提交，S50/S53 直接转「已有」。
+
+### 0.5 收口复核（task-76，2026-11-12，基线 HEAD `903a47aa`）
+
+- **覆盖计数（按本表逐行重算，不看历史快照）**：**已有 45 / 部分 28 / 真空 1 / 失败 0**（总数 74）。剩余真空仅 **S19**（目录重建同 id，需目录显式 id 重建入口）。
+- **本批转为「已有」**：
+  - S05 本地 trash×他端编辑 / S13 移动×他端编辑 ⇒ `electron/s3v3/trashRemoteDivergence.test.ts` P0 / P0-b（task-44，已提交）。
+  - S50 锁×他端连续编辑 / S53 锁×移入回收站 ⇒ `electron/s3v3/lockPropagation.test.ts` L2 / L5（task-47，已提交）。
+  - S08 purge×他端编辑 ⇒ 本任务新增 `electron/s3v3/scenarioMatrix.test.ts`「S08」：被删侧编辑留历史快照（快照=被删侧编辑版本）、单轮同步不抛错、云端索引无条目、A 侧副本只留本地回收站、再跑一轮不复活。
+- **S17 行补引（同文件，随 task-62 修复提交 `20a066eb`）**：S17b 清空回收站（同步扁平化后的子树不抛错、逐节点墓碑、云端清空）/ S17c 恢复扁平化组（子文档随根回原父）/ S17d 自动过期（逐根幂等跳过、不抛错）。
+- **S72**：A 档用例实跑 PASS；B 档真实桶首跑 56/57（见 `docs/audit-261112/19-s3-real-bucket-subset.md`），唯一缺口「被删侧未同步编辑无历史快照」由 **task-73** 修复（`electron/s3v3/historySnapshotOnRemoteTrash.test.ts`，提交 `903a47aa`），修复后真实桶复核 **57/57** ⇒ 记「已有（task-73 已修，真实桶 57/57）」。
+- **实跑**：`npx tsc --noEmit`（0 error）+ `npx vitest run electron/s3v3/scenarioMatrix.test.ts`（**11 pass**，含 S08 与 S17b/c/d）。
 
 ---
 
@@ -48,10 +59,10 @@ task-62（P0，F-01 修复）：electron/trashLifecycle.ts（deleteTreeNode 级�
 | S02 | 回收站恢复 → 对端跟随 | S01 后 | A `restoreTrashItem(n1)` → A 同步 → B 同步 | 两端均活跃、原位置或兜底父一致、restore_pending 清除 | 双端 | A | 已有 · conformance 同条后半 |
 | S03 | 本地 purge → 云端删除 + 对端留副本 | A 有 n1；B 已持有 | A 移入回收站→purge→同步；B 同步 | 云端索引/对象无 n1；B 保留回收站副本+正文+「云端已删除·仅本地」；B 不回传 | 双端 | A+B | 已有 · conformance「云端彻底删除 → 对端保留回收站副本」/ syncEngine「彻底删除零痕迹」 |
 | S04 | purge 后同 id 不复活 | S03 后两轮 | A、B 各同步两轮 | 任一端都不得用旧 state/旧索引把 n1 重建；B 的副本不参与 S3 | 双端 | A | 已有 · syncEngine「彻底删除零痕迹…」+ plan「本地 purge 意图」 |
-| S05 | **本地 trash × 他端编辑**（P0 同类） | A 删 n1（未同步）；B 编辑并已发布 | A trash → B 编辑+同步 → A 同步两轮 | **A 整轮不抛错**；正文为他端版；n1 仍在回收站（不隐式恢复）；下一轮仍稳定；显式恢复后才活跃 | 双端 | A+B | 真空（HEAD）· 工作树 task-44 新增 conformance 用例（未提交） |
+| S05 | **本地 trash × 他端编辑**（P0 同类） | A 删 n1（未同步）；B 编辑并已发布 | A trash → B 编辑+同步 → A 同步两轮 | **A 整轮不抛错**；正文为他端版；n1 仍在回收站（不隐式恢复）；下一轮仍稳定；显式恢复后才活跃 | 双端 | A+B | 已有 · `electron/s3v3/trashRemoteDivergence.test.ts` P0（task-44，已提交：应用内容、保留回收站、单轮不抛错） |
 | S06 | 他端 trash × 本地编辑 | A 编辑 n1 未同步；B 已 trash 并发布 | B trash→同步；A 保存(n1)→A 同步 | 删除压编辑：A 的编辑先落历史快照、不上传覆盖；两端最终都回收站；A 不因保存抛错/不永久卡死 | 双端 | A | 部分 · deviceStoreMeta「P1-2 轮内移入回收站：不覆写生命周期」/「远端墓碑正常传播」+ plan「删除压编辑」 |
 | S07 | 恢复 × 他端删除同时 | A 已 trash n1；B 也在删除/已 purge | A 恢复（写 restore_pending）→ 两端各同步两轮 | 恢复是唯一 local-wins 例外：A 活跃且上传覆盖；B 收到复活；标记在 markSynced 后清除（残留=墓碑永胜失效） | 双端 | A | 部分 · syncEngine「显式恢复是唯一例外」+ plan「显式恢复（无基线）」 |
-| S08 | purge × 他端编辑 | A 编辑 n1；B purge 已发布 | B purge→同步；A 保存→同步；A 再同步 | A：编辑保留历史快照、不整轮失败、n1 进回收站/打 cloud_deleted；不得把 n1 重新发布复活 | 双端 | A | 真空 |
+| S08 | purge × 他端编辑 | A 编辑 n1；B purge 已发布 | B purge→同步；A 保存→同步；A 再同步 | A：编辑保留历史快照、不整轮失败、n1 进回收站/打 cloud_deleted；不得把 n1 重新发布复活 | 双端 | A | 已有 · `electron/s3v3/scenarioMatrix.test.ts`「S08」（task-76 新增：快照=被删侧编辑版、单轮不抛错、云端无条目、A 侧副本只留回收站、不复活） |
 | S09 | 回收站自动过期不清 cloud_deleted 副本 | B 持有 cloud_deleted 副本；开启自动过期 | 过期清理跑一轮 | cloud_deleted 副本不豁免清理但也不产生墓碑/不上传；清理后索引/云端无新增 | 桌面 | A | 部分 · cloudDeleted/trash 状态测试（无跨端断言） |
 | S10 | 三端：建→改→删→两轮收敛 | D1 建 n1 并同步；D2/D3 已拉取 | D2 改 → D3 删 → 三方各同步两轮 | 三方一致=回收站/删除压编辑；无端卡死；历史快照在编辑端存在；索引无活跃 n1 | 三端 | A | 部分 · conformance「三端交错编辑」（不含删除） |
 
@@ -61,11 +72,11 @@ task-62（P0，F-01 修复）：electron/trashLifecycle.ts（deleteTreeNode 级�
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | S11 | 新建 / 重命名 / 换图标 | A、B 已同步基线 | A 新建 n2 + 改名 + 换 icon → 同步 → B 同步 | B 同 id/title/icon；顺序=sortOrder；不重复上传正文 | 双端 | A | 部分 · desktopStoreAdapter「远端首拉：先建目录再建子文档并落图标」+ plan 改名 |
 | S12 | 移动到另一笔记本 | A 有 n1 于 nb1 | A 移动 n1→nb2 → 同步 → B 同步 | B parent=nb2、活跃树位置正确；索引 parentId 一致 | 双端 | A | 部分 · plan 目录/父级合并（无端到端移动断言） |
-| S13 | **移动 + 他端编辑同时**（位置不被回滚） | A 移动 n1 未同步；B 编辑 n1 | A move→保存→同步；B 先同步 | 合并后：正文=B 版、位置=A 移动后位置（两字段独立，位置不被编辑/元数据覆盖回滚）；无端卡死 | 双端 | A+B | 部分 · deviceStoreMeta「P1-2」+ plan 元数据按 updatedAt 后写胜（无该组合端到端用例） |
+| S13 | **移动 + 他端编辑同时**（位置不被回滚） | A 移动 n1 未同步；B 编辑 n1 | A move→保存→同步；B 先同步 | 合并后：正文=B 版、位置=A 移动后位置（两字段独立，位置不被编辑/元数据覆盖回滚）；无端卡死 | 双端 | A+B | 已有 · `electron/s3v3/trashRemoteDivergence.test.ts` P0-b「本地移动 vs 他端内容编辑」（task-44，已提交：移动不被内容回滚，云端/对端都是移动后位置） |
 | S14 | 嵌套 group 深 3 层同轮到达 | 空 B | A 建 nb/3 层 group + 文档，一轮上传；B 同步 | B 目录层级完整、文档落最深层、无悬空父 | 双端 | A | 已有 · `electron/s3v3/scenarioMatrix.test.ts`「S14」（实跑 PASS） |
 | S15 | 移动 group 带子树 | A 有 nb1/group(3 层) | A 移动 group→nb2 → 同步 → B 同步 | B 整棵子树随父移动、子文档 parent 链正确、无孤儿 | 双端 | A | 已有 · `electron/s3v3/scenarioMatrix.test.ts`「S15」（实跑 PASS） |
 | S16 | 删除 group 带子树 | A/B 有 group 子树 | A 删除 group（进回收站）→ 同步 → B 同步 | 两端子树进回收站、正文保留、活跃树无悬空；文档可读 | 双端 | A | 已有 · conformance「删除含文档的目录：两端不丢数据」 |
-| S17 | purge group（目录） | S16 后 | A 清空回收站（purge）→同步→B 同步 | 云端索引不含目录+子树；B 保留回收站副本；同 id 不复活 | 双端 | A | 已有 · `electron/s3v3/scenarioMatrix.test.ts`「S17 purge group…」+ task-62 修复（子树原父链遍历 / 每篇 note 墓碑 / 对端不复活） |
+| S17 | purge group（目录） | S16 后 | A 清空回收站（purge）→同步→B 同步 | 云端索引不含目录+子树；B 保留回收站副本；同 id 不复活 | 双端 | A | 已有 · `electron/s3v3/scenarioMatrix.test.ts`「S17 purge group…」+ task-62 修复（子树原父链遍历 / 每篇 note 墓碑 / 对端不复活）；同文件 S17b 清空回收站（扁平化子树不抛错、逐节点墓碑）/ S17c 恢复扁平化组（子文档回原父）/ S17d 自动过期（逐根幂等、不抛错） |
 | S18 | 目录 purge 后索引不含 | A purge 目录并发布 | A 同步→检查索引；B 同步 | 发布的 folders[] 不含该 id（无墓碑字段）；B 不重建 | 双端 | A | 部分 · plan「本地 purge 意图」/executePending 待删门禁 |
 | S19 | 目录重建同 id | A purge 目录后新建同 id（导入/恢复） | A 同步 → B 同步 | 新目录正常传播（generation 更高时旧墓碑不压制）；B 显示新目录 | 双端 | A | 真空 |
 | S20 | 恢复时原父已删 → 兜底笔记本 | A 回收站有 n1，原父已被删 | A 恢复 → 同步 → B 同步 | 两端同父（兜底「未分类」，惰性创建）、n1 活跃、无悬空 | 双端 | A | 已有 · conformance「恢复文档时原父已删 → 落兜底笔记本」 |
@@ -114,7 +125,7 @@ task-62（P0，F-01 修复）：electron/trashLifecycle.ts（deleteTreeNode 级�
 | S43 | 新增图片上传 + 声明 | A 文档插入图 | A 保存→同步→B 同步 | 先对象后声明；B 拉到同字节；声明=该文档在用集（全量） | 双端 | A+B | 已有 · conformance「带附件文档：A 上传声明+附件字节 → B 拉取到同字节」 |
 | S44 | 他端已有（差集跳过） | 两端已有同一资产 | A 再同步 | 声明差集为空 ⇒ 0 PUT；不逐对象 HEAD/GET | 双端 | A | 已有 · assetDownloadDiff / assetReuse |
 | S45 | 远端资产缺失回拉 | B 本地资产被删、声明仍在 | B 打开文档/同步 | 按声明差集补拉成功；失败给 warning 不整轮失败 | 双端 | A | 部分 · trashAssetBackfill / onDemandAssetsWiring / s3v3AssetBackfill（无 conformance 用例） |
-| S46 | 附件随正文迁移 | n1 有附件，A 移动 n1 | A 移动→同步→B 同步 | 附件仍在 n1 名下、B 可读；声明不因移动丢 | 双端 | A | **已有（本批补齐）** · `electron/s3v3/scenarioMatrix.test.ts`「S46」（实跑 PASS：移动后 B 仍读到同字节、云端 `meta/assets/s46-n1/` 声明仍在、再跑一轮稳定） |
+| S46 | 附件随正文迁移 | n1 有附件，A 移动 n1 | A 移动→同步→B 同步 | 附件仍在 n1 名下、B 可读；声明不因移动丢 | 双端 | A | 已有 · `electron/s3v3/scenarioMatrix.test.ts`「S46」（实跑 PASS：移动后 B 仍读到同字节、云端 `meta/assets/s46-n1/` 声明仍在、再跑一轮稳定） |
 | S47 | 声明文件不可变 | 已有声明对象 | 本地附件未落地时上传正文 | 不清空声明、不自删云端附件；新声明为新 declHash 对象 | 双端 | A | 部分 · conformance「声明保留：本地附件未落地时上传正文不得清空声明」 |
 | S48 | 资产字节不一致 → 重拉 | 本地资产 size/hash 不符 | 同步 | 按 sha256 判差集重拉；active→trash 复用仅在实读正文 sha256 相等时 | 双端 | A | 部分 · nativeAssetTransfer / assetDownloadDiff |
 
@@ -123,10 +134,10 @@ task-62（P0，F-01 修复）：electron/trashLifecycle.ts（deleteTreeNode 级�
 | 编号 | 场景 | 前置状态 | 操作序列 | 判定断言 | 覆盖端 | 档位 | 现有覆盖 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | S49 | 加锁 / 解锁基础传播 | A、B 有 n1 | A 加锁→同步→B 同步；A 解锁→同步→B 同步 | B 只读态随 locked/lockedAt 变化；锁变更不 bump updatedAt | 双端 | A | 已有 · conformance「【场景 5】锁传播」+ parity「编辑锁跨端传播」 |
-| S50 | **A 锁 + B 未感知编辑 + B 连续多轮编辑 → 锁必须传播** | A 加锁未同步；B 仍在编辑（未感知锁） | A 加锁同步；B 连续 2 轮编辑+同步；双方再同步两轮 | 最终两端一致只读=锁生效；B 的编辑不因锁被静默丢弃（留历史/冲突口径明确）；锁不被编辑覆盖（lockedAt 字段级 LWW） | 双端 | A+B | 真空 |
+| S50 | **A 锁 + B 未感知编辑 + B 连续多轮编辑 → 锁必须传播** | A 加锁未同步；B 仍在编辑（未感知锁） | A 加锁同步；B 连续 2 轮编辑+同步；双方再同步两轮 | 最终两端一致只读=锁生效；B 的编辑不因锁被静默丢弃（留历史/冲突口径明确）；锁不被编辑覆盖（lockedAt 字段级 LWW） | 双端 | A+B | 已有 · `electron/s3v3/lockPropagation.test.ts` L2（B 连续两轮编辑后仍收到 A 的锁；task-47，已提交） |
 | S51 | 解锁传播 | S50 后 A 解锁 | A 解锁→同步→B 同步 | 两端恢复可编辑；解锁不被旧锁覆盖（lockedAt 后写胜）；不触发正文重传 | 双端 | A | 部分 · conformance 场景 5（纯锁变更，无并发编辑） |
 | S52 | 锁着时本机保存被拒 | A 的 n1 锁定 | A 试图保存 n1 | 保存被拦且文案明确（只读/锁定）；不写盘、不标脏、不上传；不整轮失败（用户动作） | 桌面 | A | 部分 · 渲染层只读拦截（useSavePipeline/readOnly），无跨端用例 |
-| S53 | 锁 × 移入回收站 | A 锁定 n1 | A/B 任一端 trash n1 → 双端同步 | 回收站状态与锁字段不互斥冲突；恢复后锁状态按 lockedAt LWW 保留；无卡死 | 双端 | A | 真空 |
+| S53 | 锁 × 移入回收站 | A 锁定 n1 | A/B 任一端 trash n1 → 双端同步 | 回收站状态与锁字段不互斥冲突；恢复后锁状态按 lockedAt LWW 保留；无卡死 | 双端 | A | 已有 · `electron/s3v3/lockPropagation.test.ts` L5（锁 × 移入回收站/恢复，正文与锁状态各自 LWW 收敛、不炸；task-47，已提交） |
 | S54 | 锁字段 LWW（时间戳顺序） | A 锁 t1，B 锁 t2（t2>t1） | 双端各同步 | 后锁者胜（字符串 LWW）；锁的中间态不产生正文/索引抖动 | 双端 | A | 部分 · parity 编辑锁传播（两两冲突未覆盖） |
 
 ## 8. 引擎 / 协议（E）
@@ -155,9 +166,9 @@ task-62（P0，F-01 修复）：electron/trashLifecycle.ts（deleteTreeNode 级�
 | 编号 | 场景 | 前置状态 | 操作序列 | 判定断言 | 覆盖端 | 档位 | 现有覆盖 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | S71 | 三端交错编辑收敛 | D1 建并同步；D2/D3 已拉取 | D1/D2/D3 各改→按不同顺序各同步两轮 | 三方最终同正文/同元数据；无人卡死；被覆盖方有历史快照 | 三端 | A | 已有 · conformance「三端交错编辑：最终收敛且不互相覆盖」 |
-| S72 | D1 建 → D2 改 → D3 删 → 两轮三方一致 | 同上 | D2 改、D3 删；三方各两轮 | 最终三方都回收站/删除压编辑；历史快照在 D2；索引无活跃 | 三端 | A+B | 已有（A 档）· `electron/s3v3/scenarioMatrix.test.ts`「S72」（实跑 PASS；B 档真实桶子集仍待跑） |
+| S72 | D1 建 → D2 改 → D3 删 → 两轮三方一致 | 同上 | D2 改、D3 删；三方各两轮 | 最终三方都回收站/删除压编辑；历史快照在 D2；索引无活跃 | 三端 | A+B | 已有（task-73 已修，真实桶 57/57）· `electron/s3v3/scenarioMatrix.test.ts`「S72」A 档实跑 PASS；B 档缺口「被删侧未同步编辑无历史快照」由 task-73 修复（`electron/s3v3/historySnapshotOnRemoteTrash.test.ts`） |
 | S73 | 三端 × 指针竞争 | 三端同时有待发布 | 同时发布多轮 | 锁竞争收敛到同一份索引；无 fork；迟到覆盖不发生 | 三端 | A | 部分 · lockContention（6 端，非三端场景断言） |
-| S74 | 三端 × 标签/锁交错 | 三端各改标签/锁 | 交错同步 | 集合 LWW + lockedAt LWW 收敛；正文不抖动 | 三端 | A | **已有（本批补齐）** · `electron/s3v3/scenarioMatrix.test.ts`「S74」（实跑 PASS：三端 tagIds 集合一致、lockedAt 字段一致、正文一致且再跑一轮稳定） |
+| S74 | 三端 × 标签/锁交错 | 三端各改标签/锁 | 交错同步 | 集合 LWW + lockedAt LWW 收敛；正文不抖动 | 三端 | A | 已有 · `electron/s3v3/scenarioMatrix.test.ts`「S74」（实跑 PASS：三端 tagIds 集合一致、lockedAt 字段一致、正文一致且再跑一轮稳定） |
 
 ---
 
@@ -171,8 +182,10 @@ S03 purge、S05 本地 trash×他端编辑、S13 移动×他端编辑、S21 双�
 
 ## 附录 C · 阶段①的局限
 - 覆盖盘点基于 HEAD 的测试名/文件静态核对（`git ls-tree` + `it("…")` 提取），未逐条跑；"部分"表示有相邻纯逻辑测试但缺该场景的端到端断言。
-- 工作树 task-44 在途新增的 `electron/s3v3/trashRemoteDivergence.test.ts` 与 conformance「本地已进回收站 + 他端编辑并发布」用例**可在阶段②并入 S05**（提交后从真空转为已有）。
-- 未覆盖：多实例资源端口/夹具冲突（B 档需隔离 userData，见 `docs/MOBILE-OPS.md` 同款纪律）、真实桶延迟/限流（只在 B 档观测，不设数值断言）## 附录 D · 阶段②失败清单
+- task-44 的 `electron/s3v3/trashRemoteDivergence.test.ts`（P0 / P0-b）与 conformance「本地已进回收站 + 他端编辑并发布」用例已提交，S05/S13 已转「已有」；锁相关 S50/S53 由 task-47 的 `electron/s3v3/lockPropagation.test.ts` L2/L5 覆盖。
+- 未覆盖：多实例资源端口/夹具冲突（B 档需隔离 userData，见 `docs/MOBILE-OPS.md` 同款纪律）、真实桶延迟/限流（只在 B 档观测，不设数值断言）
+
+## 附录 D · 阶段②失败清单
 
 ### F-01（P0，已修 task-62；**回归已绿**：本批复核 `scenarioMatrix.test.ts` S17 实跑 PASS）purge 分组后子文档未被彻底删除、云端索引残留
 - 场景：矩阵 S17。A 删除「分组（含子文档）」→ 同步 → purge 该分组 → 双方各自同步。
@@ -180,6 +193,7 @@ S03 purge、S05 本地 trash×他端编辑、S13 移动×他端编辑、S21 双�
 - 根因（两处叠加）：① electron/trashLifecycle.ts deleteTreeNode 只给根节点记 deleted_from_parent_id，子树节点只标 trashed_at；同步侧会把 trashed 条目的 parent 归一成回收站容器（src/core/s3v3/commit/engineBridge.ts:74）⇒ 子树原始父链在本机丢失；② purgeTrashItem 只用 parent_id 找后代（descendantIdsIncludingDeleted）⇒ 归一后子文档不再是分组后代。
 - 修复：① deleteTreeNode 级联时对每个子树节点（tree_nodes + notes）补 deleted_from_parent_id=COALESCE(…, parent_id)；② purgeTrashItem 后代集合改为 parent_id ∪（deleted_from_parent_id 且 trashed_at 非空）的递归 CTE（UNION 去重防环、过滤 deleted_at）；每个后代文档都写 note 墓碑并清行/正文/历史/附件目录/搜索（云端对象前缀删除沿用既有 purged 意图）；③ electron/store.ts 的 importRemoteFolder / applyRemoteFolderMeta 对「本机已 purge 的目录」直接忽略（对端回收站副本不能再把它拉回来）。
 - 回归：electron/s3v3/scenarioMatrix.test.ts S17（正常断言）+ 新增 src/mobile/data/trashRepository.purgeSubtree.test.ts（移动端同口径：已扁平化子文档也整棵删、每篇有 note 墓碑）。
+- 回归扩展（task-76）：同文件 S17b 清空回收站（扁平化子树不抛错、逐节点墓碑）/ S17c 恢复扁平化组（子文档回原父）/ S17d 自动过期（逐根幂等）已补齐；S08 purge×他端编辑（留历史快照、单轮不抛错、不复活）同批实跑 PASS。
 
 ### F-01b（P1，登记未修，需 core 侧改动）云端 folders[] 仍残留已 purge 的目录（对端把回收站副本当普通目录发布）
 - 现象：F-01 修复后 S17 实测云端 lake 索引 folders[] 仍有该组（parentId=notebook-trash、trashedAt 非空）—— 由对端 B 在下一轮把它作为「回收站目录」发布；A 端已用 purged 墓碑拒绝回魂（本机不重建），但云端仍残留。

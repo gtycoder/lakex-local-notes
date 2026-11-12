@@ -3,7 +3,9 @@
  *
  * 矩阵见 docs/audit-261112/14-s3-scenario-matrix.md；本文件覆盖其中此前为「真空」的结构/时钟/三端场景：
  *   S14 嵌套 group 深 3 层同轮到达 · S15 移动 group 带子树 · S17 purge group（云端索引不含）
+ *   S17b/c/d 清空回收站 / 恢复扁平化组 / 自动过期（同步归一后的子树）
  *   S63 时钟偏差（updatedAt 未来，不改生产时钟：只在本机 DB 里模拟偏斜）· S72 三端含删除收敛
+ *   S46 附件随正文迁移 · S74 三端 × 标签/锁 · S08 purge × 他端编辑（task-76）
  * 断言口径（每条）= 两端最终一致 + 云端索引状态 + 无人卡死；真缺陷只在矩阵文档登记，不改生产代码。
  */
 import { promises as fs } from "node:fs";
@@ -384,6 +386,48 @@ describe("S3 场景矩阵 A 档 · 桌面（MemoryRemote）", () => {
     db.prepare("UPDATE tree_nodes SET trashed_at=? WHERE trashed_at IS NOT NULL AND deleted_at IS NULL").run(past);
     expect(() => a.store.autoPurgeExpiredTrash(1)).not.toThrow();
     expect(db.prepare("SELECT id FROM tree_nodes WHERE trashed_at IS NOT NULL AND deleted_at IS NULL").all().length).toBe(0);
+  }, 150_000);
+
+  // ===== task-76：S08（矩阵剩余真空收口）——purge × 他端编辑 =====
+  // 删除 = 缺席：B 先 trash 再 purge 并发布，A 手里有未同步编辑。A 必须「删除压编辑」：
+  // 编辑先落历史快照、本地副本留在回收站、不整轮抛错、绝不把 n1 重新发布复活。
+  it("S08 purge × 他端编辑：被删侧编辑留历史快照、单轮不抛错、不复活，云端无条目", async () => {
+    const remote = new MemoryRemote();
+    const a = await desktop("S08A", remote);
+    const nb = a.store.createNotebook("NB");
+    a.store.createNoteInAtTopWithContent(nb.id, "Doc", "<p>v1</p>", [], "s08-n1");
+    await a.engine.sync({ onEmptyCloud: "upload" });
+    const b = await desktop("S08B", remote);
+    await b.engine.sync();
+
+    // A 本地编辑（尚未同步）⇒ 这份编辑是稍后必须留档的内容
+    a.store.saveNote("s08-n1", "Doc", "<p>A-edit</p>");
+
+    // B 删除（进回收站）→ 同步 → purge → 同步：把「云端缺席」发布出去
+    b.store.deleteTreeNode("s08-n1");
+    for (let i = 0; i < 2; i += 1) await b.engine.sync();
+    b.store.purgeTrashItem("s08-n1");
+    for (let i = 0; i < 2; i += 1) await b.engine.sync();
+
+    // A 同步：整轮不得失败；删除压编辑 ⇒ 本地编辑进历史快照
+    const ra = await a.engine.sync();
+    expect(ra).toBeTruthy();
+    const hist = a.store.listNoteHistory("s08-n1");
+    expect(hist.length, "被删侧本地编辑必须留历史快照").toBeGreaterThanOrEqual(1);
+    expect(a.store.previewHistorySnapshot(hist[0].id)?.html ?? "").toContain("A-edit");
+    // A 的副本只允许留在本地回收站（云端已删除·仅本地），不参与 S3
+    expect(a.store.listTrash().some((t) => t.id === "s08-n1")).toBe(true);
+
+    // 云端：purge = 缺席，索引不得再有该条目；A 不得重新发布复活
+    expect((await remoteLakeNotes(remote)).some((n) => n.id === "s08-n1")).toBe(false);
+    // B（发起 purge 侧）：回收站无条目
+    expect(b.store.listTrash().some((t) => t.id === "s08-n1")).toBe(false);
+
+    // 再各跑一轮仍稳定：不复活、不来回抖动
+    await a.engine.sync();
+    await b.engine.sync();
+    expect((await remoteLakeNotes(remote)).some((n) => n.id === "s08-n1")).toBe(false);
+    expect(a.store.listTrash().some((t) => t.id === "s08-n1")).toBe(true);
   }, 150_000);
 
 });
