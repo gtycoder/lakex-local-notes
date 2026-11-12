@@ -25,18 +25,13 @@ import java.util.concurrent.Executors
  *   lake 资产 = `note-assets/<id>/<file>`；小记图片 = `quick-notes/assets/<id>/<file>`。
  * 只允许落在两个资产根的 canonical 子树内；拒绝绝对路径、.. 与软链逃逸。
  * （旧版只认 note-assets 根 + 不含前缀的 `<id>/<file>`，小记图片因此没有原生上传/下载通道。）
+ *
+ * 261112 R1（Q21A）：校验实现**下沉到 [AssetPaths]** —— 与 AssetServer 共用同一份根清单/段过滤/
+ * canonical 前缀校验，避免「HTTP 服务允许 staging、原生同步不允许」这类静默分叉。
+ * 本函数保留名字与签名，既有调用点与单测无需改动；原生同步面不允许 staging（WRITE 语义）。
  */
-internal fun resolveLocalAssetFile(filesRoot: File, localKey: String): File {
-    require(localKey.isNotBlank() && !File(localKey).isAbsolute) { "invalid localKey: $localKey" }
-    require(localKey.startsWith("note-assets/") || localKey.startsWith("quick-notes/assets/")) { "invalid localKey: $localKey" }
-    val root = filesRoot.canonicalFile
-    val target = File(root, localKey).canonicalFile
-    require(target.path.startsWith(root.path + File.separator)) { "invalid localKey: $localKey" }
-    val lakeRoot = File(root, "note-assets").canonicalFile.path + File.separator
-    val quickRoot = File(root, "quick-notes/assets").canonicalFile.path + File.separator
-    require(target.path.startsWith(lakeRoot) || target.path.startsWith(quickRoot)) { "invalid localKey: $localKey" }
-    return target
-}
+internal fun resolveLocalAssetFile(filesRoot: File, localKey: String): File =
+    AssetPaths.resolveAsset(filesRoot, localKey, AssetPaths.Mode.WRITE)
 
 /**
  * 原生资产同步插件：S3 流式 GET/PUT + 本地文件读写，字节不过 WebView 桥。
@@ -395,17 +390,15 @@ class AssetSyncPlugin : Plugin() {
     /**
      * 本地资产文件读写/删除/列目录（261026）：把移动端资产文件操作从 @capacitor/filesystem 全原生化。
      * path 只接受 note-assets/... 或 quick-notes/assets/...（与 resolveLocalAssetFile 同口径）；data 为 base64。
+     * 261112 R1：校验统一在 [AssetPaths]（本方法只做「非法 ⇒ null」的适配）。
      */
     private fun resolveAssetFsPath(relative: String?): File? {
         if (relative.isNullOrBlank()) return null
-        if (relative.startsWith("/") || relative.contains('\u0000')) return null
-        if (relative.split('/').any { it == ".." || it == "." || it.isEmpty() }) return null
-        if (!relative.startsWith("note-assets/") && !relative.startsWith("quick-notes/assets/")) return null
         return try {
-            val root = getContext().filesDir.canonicalFile
-            val target = File(root, relative).canonicalFile
-            if (target.path.startsWith(root.path + File.separator)) target else null
-        } catch (e: Exception) { null }
+            AssetPaths.resolveAsset(getContext().filesDir, relative, AssetPaths.Mode.WRITE)
+        } catch (e: Exception) {
+            null
+        }
     }
 
     private fun atomicWriteBytes(target: File, bytes: ByteArray) {

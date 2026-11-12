@@ -96,15 +96,16 @@ class AssetServerTest {
         assertNull(AssetServer.thumbWidthFor(URI("/n/a.png?w=")))
     }
 
-    /** GIF（多帧会被压成首帧）与 SVG（矢量）必须跳过；Android 侧其它格式编解码支持不一，也不碰。 */
+    /** GIF（多帧会被压成首帧）与 SVG（矢量）必须跳过；Android 侧其它格式编解码支持不一，也不碰。
+     *  webp 自 261111（c8bc5777，图片缩略三边界收口）起纳入缩略（解码后统一重编码 JPEG/PNG）。 */
     @Test
     fun thumbOnlyResizesSafeRasterFormats() {
         assertTrue(AssetServer.isThumbResizable("pic.png"))
         assertTrue(AssetServer.isThumbResizable("PIC.JPG"))
         assertTrue(AssetServer.isThumbResizable("pic.jpeg"))
+        assertTrue(AssetServer.isThumbResizable("PIC.WEBP"))
         assertFalse(AssetServer.isThumbResizable("anim.gif"))
         assertFalse(AssetServer.isThumbResizable("icon.svg"))
-        assertFalse(AssetServer.isThumbResizable("pic.webp"))
         assertFalse(AssetServer.isThumbResizable("noext"))
     }
 

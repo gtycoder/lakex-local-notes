@@ -1,19 +1,10 @@
 package com.lakexlocalnotes.android
 
-import android.content.Context
-import android.security.keystore.KeyGenParameterSpec
-import android.security.keystore.KeyProperties
-import android.util.Base64
 import com.getcapacitor.JSObject
 import com.getcapacitor.Plugin
 import com.getcapacitor.PluginCall
 import com.getcapacitor.PluginMethod
 import com.getcapacitor.annotation.CapacitorPlugin
-import java.security.KeyStore
-import javax.crypto.Cipher
-import javax.crypto.KeyGenerator
-import javax.crypto.SecretKey
-import javax.crypto.spec.GCMParameterSpec
 
 /**
  * S3 密钥等 secret 的 **Android Keystore** 存储（261010）。
@@ -28,38 +19,22 @@ import javax.crypto.spec.GCMParameterSpec
  * 接口与 core 的 `SecretStore` 端口一对一（get/set/remove），JS 侧见 src/mobile/native/keystoreSecretStore.ts。
  * 失败语义：解密失败（换锁屏 / 恢复出厂 / 数据损坏）⇒ **清掉该键并返回空**，让用户重填 ——
  * 对齐桌面 safeStorage 密钥丢失的语义（绝不返回错误密钥去签名）。
+ *
+ * 261112 R1（Q22A）：加解密实现统一到 [SecretBox]（AES-256-GCM + Keystore 生成/保管 + 失败清键），
+ * 本插件只保留「别名/prefs 名 + JS 契约」。ALIAS/PREFS 两个值**不可改**：改了等于换密钥库，
+ * 已保存的 S3 密钥会全部解不开（用户需重填）。
  */
 @CapacitorPlugin(name = "SecureStore")
 class SecureStorePlugin : Plugin() {
     companion object {
-        private const val KEYSTORE = "AndroidKeyStore"
+        /** 加密密钥在 AndroidKeyStore 里的别名（历史值，不可改）。 */
         private const val ALIAS = "lakex-local-notes-mobile.secret.v1"
+
+        /** 密文落盘位置（应用私有 SharedPreferences，历史值不可改）。 */
         private const val PREFS = "lakex-local-notes-secure"
-        private const val TRANSFORM = "AES/GCM/NoPadding"
-        private const val TAG_BITS = 128
     }
 
-    private fun prefs() = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-
-    /** 取（或首次生成）Keystore 里的 AES 密钥。别名已存在但类型不符时清掉重建。 */
-    private fun secretKey(): SecretKey {
-        val ks = KeyStore.getInstance(KEYSTORE).apply { load(null) }
-        val entry = try { ks.getEntry(ALIAS, null) } catch (e: Exception) { null }
-        if (entry is KeyStore.SecretKeyEntry) return entry.secretKey
-        if (ks.containsAlias(ALIAS)) {
-            // 残留但不可用（例如旧算法/被系统失效）：删掉重建，避免每次调用都抛。
-            try { ks.deleteEntry(ALIAS) } catch (e: Exception) { /* ignore */ }
-        }
-        val gen = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, KEYSTORE)
-        gen.init(
-            KeyGenParameterSpec.Builder(ALIAS, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
-                .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
-                .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
-                .setKeySize(256)
-                .build()
-        )
-        return gen.generateKey()
-    }
+    private val box = SecretBox(ALIAS, PREFS)
 
     @PluginMethod
     fun set(call: PluginCall) {
@@ -67,12 +42,7 @@ class SecureStorePlugin : Plugin() {
         val value = call.getString("value")
         if (key.isNullOrEmpty() || value == null) { call.reject("key/value 必填"); return }
         try {
-            val cipher = Cipher.getInstance(TRANSFORM)
-            cipher.init(Cipher.ENCRYPT_MODE, secretKey())
-            val ct = cipher.doFinal(value.toByteArray(Charsets.UTF_8))
-            val packed = Base64.encodeToString(cipher.iv, Base64.NO_WRAP) + ":" +
-                Base64.encodeToString(ct, Base64.NO_WRAP)
-            prefs().edit().putString(key, packed).apply()
+            box.put(context, key, value)
             call.resolve()
         } catch (e: Exception) {
             // 写失败必须让调用方知道（"看起来保存成功"是最坏结果）
@@ -84,29 +54,18 @@ class SecureStorePlugin : Plugin() {
     fun get(call: PluginCall) {
         val key = call.getString("key")
         if (key.isNullOrEmpty()) { call.reject("key 必填"); return }
-        val packed = prefs().getString(key, null)
+        // SecretBox.get：不存在/解密失败都返回 null；解密失败时已把该键清掉（让用户重填）。
+        val value = box.get(context, key)
         val out = JSObject()
-        if (packed == null) { call.resolve(out); return }  // 未写过：不给 value（JS 侧 ?? null）
-        try {
-            val parts = packed.split(":")
-            val iv = Base64.decode(parts[0], Base64.NO_WRAP)
-            val ct = Base64.decode(parts[1], Base64.NO_WRAP)
-            val cipher = Cipher.getInstance(TRANSFORM)
-            cipher.init(Cipher.DECRYPT_MODE, secretKey(), GCMParameterSpec(TAG_BITS, iv))
-            out.put("value", String(cipher.doFinal(ct), Charsets.UTF_8))
-            call.resolve(out)
-        } catch (e: Exception) {
-            // 密钥失效/数据损坏 ⇒ 清掉当未配置（让用户重填），而不是拿坏密钥去签名。
-            prefs().edit().remove(key).apply()
-            call.resolve(out)
-        }
+        if (value != null) out.put("value", value)
+        call.resolve(out)
     }
 
     @PluginMethod
     fun remove(call: PluginCall) {
         val key = call.getString("key")
         if (key.isNullOrEmpty()) { call.reject("key 必填"); return }
-        prefs().edit().remove(key).apply()
+        box.remove(context, key)
         call.resolve()
     }
 }

@@ -167,22 +167,19 @@ object AssetServer {
                     return
                 }
 
-                // 物理目录与桌面布局对齐：
+                // URL 路径 → 物理资产 key（布局与桌面一致）：
                 //   /quick-notes/{id}/{file}          → quick-notes/assets/{id}/{file}
                 //   /quick-notes/staging/{draft}/{f}  → quick-notes/staging/{draft}/{f}
                 //   /{noteId}/{file}                  → note-assets/{noteId}/{file}
-                val (root, relativeUnderRoot) = when {
-                    rel.startsWith("quick-notes/staging/") ->
-                        File(appContext.filesDir, "quick-notes") to rel.removePrefix("quick-notes/")
-                    rel.startsWith("quick-notes/") ->
-                        File(appContext.filesDir, "quick-notes/assets") to rel.removePrefix("quick-notes/")
-                    else -> File(appContext.filesDir, "note-assets") to rel
+                val physicalKey = when {
+                    rel.startsWith(AssetPaths.QUICK_STAGING_ROOT + "/") -> rel
+                    rel.startsWith("quick-notes/") -> AssetPaths.QUICK_ASSETS_ROOT + "/" + rel.removePrefix("quick-notes/")
+                    else -> AssetPaths.LAKE_ROOT + "/" + rel
                 }
-                val file = File(root, relativeUnderRoot)
-                val rootCanonical = root.canonicalPath
-                val fileCanonical = file.canonicalPath
-                // 目录穿越防护：解析后的路径必须位于对应根目录下
-                if (!fileCanonical.startsWith(rootCanonical + File.separator)) {
+                // 目录穿越/越界防护 = 单一来源 AssetPaths（staging 仅读取面放行；解码只在本行之前做一次）。
+                val file = try {
+                    AssetPaths.resolveServed(appContext.filesDir, physicalKey)
+                } catch (e: IllegalArgumentException) {
                     writeError(out, 403, "forbidden")
                     return
                 }
