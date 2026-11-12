@@ -227,8 +227,11 @@ export function planLakeMerge(base: LakeIndex | null, local: LakeIndex, remote: 
       // - 基线存在且本地在本轮被恢复/编辑过（updatedAt 晚于基线、且已不在回收站）→ 显式恢复传播：
       //   远端「缺席」让位，按 upload 重新发布（D4：否则恢复下一轮又被判 remote-purged-trash 打回）；
       // - 其余 = 远端已彻底删除 → 本地跟随进回收站（删除权威）。
-      if (!b) folders.push({ id, kind: "upload", applyRemote: false, uploadLocal: true, local: l, remote: undefined });
-      else if (!l.trashedAt && l.updatedAt > b.updatedAt) folders.push({ id, kind: "upload", applyRemote: false, uploadLocal: true, local: l, remote: undefined });
+      // F-01b（task-77）：**本地是回收站副本（trashed）且无基线 ⇒ 不是本地新建**。对端 purge 目录后，
+      // 基线会被纯拉取轮推进到「不含该目录」的远端索引，上一版会在这里退化成 upload ⇒ 对端每轮把
+      // 已 purge 的目录重新发布回云端 folders[]。回收站副本永远不参与上传（删除权威）。
+      if (!b && !l.trashedAt) folders.push({ id, kind: "upload", applyRemote: false, uploadLocal: true, local: l, remote: undefined });
+      else if (b && !l.trashedAt && l.updatedAt > b.updatedAt) folders.push({ id, kind: "upload", applyRemote: false, uploadLocal: true, local: l, remote: undefined });
       else folders.push({ id, kind: "remote-purged-trash", applyRemote: true, uploadLocal: false, local: l, remote: undefined });
       continue;
     }

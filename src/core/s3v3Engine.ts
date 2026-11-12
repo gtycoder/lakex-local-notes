@@ -400,10 +400,18 @@ export class S3v3SyncEngine {
       try {
         const remoteNow = (await this.readIndex("lake", pointer.lake.commit)) as LakeIndex;
         const byId = new Map(remoteNow.notes.map((n) => [n.id, n] as const));
+        // F-01b（task-77）：**目录也走同一「显式恢复让位」判据**——目录 purge 墓碑与文档墓碑共用
+        // state.intents；若远端同 id 目录的 updatedAt 晚于本地 purgedAt，说明对端显式恢复了目录
+        //（restoreTrashItem 会 bump updatedAt），此时目录删除意图必须让位，否则 plan 会把它当
+        // local-purge 再删一次（两端永久不一致）。
+        const folderById = new Map(remoteNow.folders.map((f) => [f.id, f] as const));
         state.intents = state.intents.filter((i) => {
-          const e = byId.get(i.noteId);
-          if (!e || !i.purgedAt) return true;
-          return !(e.updatedAt > i.purgedAt);
+          if (!i.purgedAt) return true;
+          const n = byId.get(i.noteId);
+          if (n) return !(n.updatedAt > i.purgedAt);
+          const f = folderById.get(i.noteId);
+          if (f) return !(f.updatedAt > i.purgedAt);
+          return true;
         });
       } catch { /* 读失败保持原状，下一轮再判 */ }
     }

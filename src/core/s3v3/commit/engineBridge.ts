@@ -34,7 +34,11 @@ export function planStateOf(state: DeviceState): PlanState {
   return {
     restorePending: state.restorePending ?? [],
     purgeIntents: state.intents.map((i) => i.noteId),
-    folderPurgeIntents: [],
+    // F-01b：目录没有独立墓碑表，但 purge 目录会写 deleted_notes（node_type=folder）⇒
+    // loadState 已把本地 purge 墓碑投影成 state.intents（含目录 id）。这里必须一并交给 plan，
+    // 否则「本地已 purge + 远端 folders[] 仍有它」只会退化成 local-delete（无基线时甚至变成 download），
+    // 索引条目永远清不干净（task-77）。
+    folderPurgeIntents: state.intents.map((i) => i.noteId),
     quickDeletes: state.quickDeletes ?? [],
     purgedQuickIds: state.quickPurges ?? [],
     // 本机待删标签：非空才带（保持既有 toEqual 断言不变）。

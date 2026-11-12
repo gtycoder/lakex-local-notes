@@ -74,6 +74,7 @@ const mobileFactory: ContractHarnessFactory = async (remote) => {
     listFolderIds: () => use(async () => { const rows = await db.prepare("SELECT id FROM folders WHERE trashed_at IS NULL ORDER BY id").all() as Array<{ id: string }>; return rows.map((r) => r.id); }),
     noteParentId: (id) => use(async () => { const row = await db.prepare("SELECT parent_id FROM notes WHERE id=?").get(id) as { parent_id: string | null } | undefined; return row?.parent_id ?? null; }),
     deleteFolder: (id) => use(() => trashTreeItem(db, id, "folder")),
+    purgeFolder: (id) => use(async () => { await purgeTreeItem(db, id, "folder"); }),
     seedAsset: (id, filename, bytes) => use(() => device.writeAsset(id, filename, bytes)),
     readAsset: (id, filename) => use(() => device.readAsset(id, filename)),
     editNote: (id, title, body) => use(async () => { await saveNote(db, id, title, body, null, new Map()); }),

@@ -65,6 +65,44 @@ describe("planSync（v4 E1-2 决策层）", () => {
     expect(plan.publish?.lake.notes).toHaveLength(0);
   });
 
+  // ===== task-77（F-01b）：目录 purge / 对端已 purge 目录的发布与上传口径 =====
+  it("F-01b：目录 purge 意图（folderPurgeIntents）⇒ local-purge，发布不含该目录、也不回下载", () => {
+    const base = world([], [folder("f1")]);
+    const local = world([], []);
+    const remote = world([], [folder("f1")]);
+    const plan = planSync({ local, base, remote, state: state({ folderPurgeIntents: ["f1"] }) });
+    expect(plan.publish).not.toBeNull();
+    expect(plan.publish?.lake.folders.map((f) => f.id) ?? []).not.toContain("f1");
+    expect(plan.writes.some((w) => w.kind === "apply-remote-folder")).toBe(false);
+  });
+
+  it("F-01b：远端已 purge 目录 + 本地回收站副本（无基线）⇒ 不发布/不上传（回收站副本不参与 S3）", () => {
+    const local = world([], [folder("f1", { trashedAt: "2026-01-02T00:00:00.000Z" })]);
+    const plan = planSync({ local, base: null, remote: world([], []), state: state() });
+    expect(plan.transfers).toHaveLength(0);
+    expect(plan.publish).toBeNull(); // 不发布 = 不把副本重新复活到云端
+    expect(plan.writes.some((w) => w.kind === "remove-folder" && w.id === "f1")).toBe(true);
+  });
+
+  it("F-01b：远端已 purge 的目录即使本轮因别处变更发布，也不进索引 folders[]", () => {
+    const base = world([note("n1", "h1")], [folder("f1")]);
+    const local = world([note("n1", "h2")], [folder("f1", { trashedAt: "2026-01-02T00:00:00.000Z" })]);
+    const remote = world([note("n1", "h1")], []);
+    const plan = planSync({ local, base, remote, state: state() });
+    expect(plan.publish).not.toBeNull();
+    expect(plan.publish?.lake.notes.map((n) => n.id)).toContain("n1");
+    expect(plan.publish?.lake.folders.map((f) => f.id) ?? []).not.toContain("f1");
+  });
+
+  it("F-01b：远端已 purge 的文档副本走 fieldChanged 也不上传正文（不回传孤儿正文）", () => {
+    const base = world([note("n1", "h1")]);
+    const local = world([note("n1", "h1", { trashedAt: "2026-01-02T00:00:00.000Z" })]);
+    const plan = planSync({ local, base, remote: world([]), state: state({ fieldChangedIds: ["n1"] }) });
+    expect(plan.transfers).toHaveLength(0);
+    expect(plan.publish).toBeNull();
+    expect(plan.writes.some((w) => w.kind === "set-lifecycle" && w.id === "n1")).toBe(true);
+  });
+
   it("显式恢复（无基线）：upload + PUT 正文", () => {
     const local = world([note("a", "h1")]);
     const plan = planSync({ local, base: null, remote: world([]), state: state({ restorePending: ["a"] }) });

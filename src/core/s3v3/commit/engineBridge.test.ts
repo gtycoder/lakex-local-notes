@@ -32,8 +32,10 @@ describe("E2-3 engineBridge：规划输入映射", () => {
     const w = planWorldOf(s);
     expect(w.lake).toEqual(s.lake);
     expect(w.quickNotes).toEqual(s.quickNotes);
+    // F-01b（task-77）：目录 purge 墓碑（deleted_notes node_type=folder）与文档墓碑一样投影进 state.intents；
+    // plan 的 folderPurgeIntents 必须收到同一集合（硬编码 [] ⇒ 本地 purge 的目录在远端有残留时清不掉）。
     expect(planStateOf(s)).toEqual({
-      restorePending: [], purgeIntents: ["a"], folderPurgeIntents: [], quickDeletes: ["qd"], purgedQuickIds: ["qp"],
+      restorePending: [], purgeIntents: ["a"], folderPurgeIntents: ["a"], quickDeletes: ["qd"], purgedQuickIds: ["qp"],
     });
     expect(intentLogOf(s).intents.map((i) => i.noteId)).toEqual(["a"]);
   });

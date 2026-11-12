@@ -137,6 +137,9 @@ export interface ContractHarness {
   noteParentId(id: string): Promise<string | null>;
   /** 用户行为：删除目录（真实平台 API，子树随删）。 */
   deleteFolder(id: string): Promise<void>;
+  /** 用户行为：彻底删除回收站里的目录（真实平台 API，子树随删；F-01b 回归需要）。
+   *  可选：未实现时不跑「purge 目录」契约（桌面 harness 不传也不影响其它场景）。 */
+  purgeFolder?(id: string): Promise<void>;
   seedAsset(id: string, filename: string, bytes: Uint8Array): Promise<void>;
   readAsset(id: string, filename: string): Promise<Uint8Array | null>;
   editNote(id: string, title: string, body: string): Promise<void>;
@@ -696,6 +699,49 @@ export function defineDeviceContract(name: string, make: ContractHarnessFactory)
         expect(remote.puts).toBe(0);
         expect(keysUnder(remote, "objects/n1-")).toHaveLength(0);
         expect(keysUnder(remote, "assets/n1/")).toHaveLength(0);
+      } finally { await a.close(); await b.close(); }
+    }, 180_000);
+
+    it("【场景 7b】F-01b：purge 目录 → 云端 folders[] 不含、对端不重建、多轮零变更", async () => {
+      const remote = new MemoryRemote();
+      const a = await newDevice(make, remote);
+      const b = await newDevice(make, remote);
+      try {
+        await a.seedFolder("f1", "待彻底删除的目录");
+        await a.seedNote("n1", "子文档", "<p>子</p>", "f1");
+        await a.sync({ onEmptyCloud: "upload" });
+        await b.sync();
+
+        // A 删除目录（进回收站）→ 同步 → B 拿到回收站目录
+        await a.deleteFolder("f1");
+        await a.sync();
+        await b.sync();
+
+        // A 彻底删除目录（真实平台 API，子树随删）→ 首轮同步后云端 folders[] 不得再有它
+        expect(a.purgeFolder, "harness 必须实现 purgeFolder（F-01b 契约）").toBeTypeOf("function");
+        await a.purgeFolder!("f1");
+        const first = await a.sync();
+        expect(first.published).toBe(true);
+        const afterPurge = await readCloudLakeIndex(remote);
+        expect(afterPurge.index.folders.map((f) => f.id)).not.toContain("f1");
+        const gen = afterPurge.generation;
+
+        // B 同步：不得把「对端已 purge 目录」的回收站副本重新发布（旧缺陷：每轮复活），
+        // 也不得重建活跃目录；A 再同步是零变更轮（pointer 不动）。
+        for (let round = 0; round < 2; round += 1) {
+          const rb = await b.sync();
+          expect(rb.published).toBe(false);
+          expect((await readCloudLakeIndex(remote)).index.folders.map((f) => f.id)).not.toContain("f1");
+          const ra = await a.sync();
+          expect(ra.published).toBe(false);
+          const stable = await readCloudLakeIndex(remote);
+          expect(stable.generation).toBe(gen);
+          expect(stable.index.folders.map((f) => f.id)).not.toContain("f1");
+        }
+        // 对端：目录不在活跃树；子文档只保留回收站副本（删除权威），不回传。
+        expect(await b.listFolderIds()).not.toContain("f1");
+        expect(await b.listActiveIds()).not.toContain("n1");
+        expect(await b.listTrashIds()).toContain("n1");
       } finally { await a.close(); await b.close(); }
     }, 180_000);
 

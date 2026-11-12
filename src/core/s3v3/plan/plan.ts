@@ -175,11 +175,16 @@ export function planSync(input: PlanInput): SyncPlan {
     const needBody = p.applyRemote && !!r && (!l || l.contentHash !== r.contentHash || p.kind === "download" || p.kind === "remote-wins-history");
     // 声明只在「要应用远端条目」或「要上传本地条目」时才读：零变更/纯无关条目**不产生声明 GET**。
     const willApply = !!(p.applyRemote && r);
-    const willUpload = !!(l && (p.uploadLocal || fieldChanged.has(p.id)));
+    // F-01b（task-77）：**远端已 purge 的本地副本**（remote-purged-trash）/本地 purge 的条目只剩回收站副本，
+    // 即使字段级 diff（回收站 parent 归一等）把它算进 fieldChanged，也绝不能上传正文——否则已验证缺席的
+    // 正文对象被重新 PUT 回云端（孤儿复活，违反「彻底删除 = 零痕迹」）。
+    const purgedCopy = p.kind === "remote-purged-trash" || p.kind === "local-purge";
+    const forcedUpload = fieldChanged.has(p.id) && !purgedCopy;
+    const willUpload = !!(l && (p.uploadLocal || forcedUpload));
     const lakeDecl = r?.assetsHash && (willApply || willUpload) ? r.assetsHash : undefined;
     addRead(reads, "lake", p.id, lakeDecl, needBody, r?.contentHash ?? null);
     // P1-4：可疑篇不上传（远端更新仍走下面的 apply-remote 修复本地）。
-    if (!suspiciousBody && (p.uploadLocal || fieldChanged.has(p.id)) && l) {
+    if (!suspiciousBody && (p.uploadLocal || forcedUpload) && l) {
       const bodyChanged = !r || r.contentHash !== l.contentHash;
       // 261112 task-44：**内容赢家是远端时不得上传本地旧字节**。字段级变更（移动/回收站/改名等）会进
       // fieldChanged 分支，但这一轮内容判定可能是 download —— applyPlan 先下载后上传，本地正文此时已是
@@ -440,7 +445,9 @@ export function planSync(input: PlanInput): SyncPlan {
       // 发布时标签关系一律排序成集合（顺序不跨端传播）。
       .map((q) => (q.tagIds?.length ? { ...q, tagIds: [...q.tagIds].sort() } : q));
     const folders = lakePlan.folders
-      .filter((f) => f.kind !== "local-purge" && f.kind !== "local-delete")
+      // F-01b：remote-purged-trash 与文档同口径——对端已 purge 的目录只剩本地回收站副本，
+      // 绝不重新发布（旧实现把它当普通条目 publish 回去 ⇒ 云端 folders[] 永久残留 + 两端互刷）。
+      .filter((f) => f.kind !== "local-purge" && f.kind !== "local-delete" && f.kind !== "remote-purged-trash")
       .map((f) => (f.applyRemote && f.remote ? f.remote : f.local ?? f.remote))
       .filter((f): f is NonNullable<typeof f> => !!f)
       // 日记标记（261109）：发布时**必须显式写** space —— 非日记写 null（不是省略字段），
