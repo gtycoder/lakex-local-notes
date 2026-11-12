@@ -150,7 +150,8 @@
 
 
 
-.quick-note-composer, .quick-note-entry { border: 0.5px solid var(--lake-border-2); border-radius: var(--lake-radius-md); }
+/* 261112 Q1：.quick-note-entry 的 border/border-radius 已被 feature 层（styles/feature.css）压死 ⇒ 只留 composer。 */
+.quick-note-composer { border: 0.5px solid var(--lake-border-2); border-radius: var(--lake-radius-md); }
 
 .quick-note-composer { display: flex; flex-direction: column; padding: 10px 12px 12px; }
 
@@ -385,8 +386,9 @@
  * 且经选择器比对**无中间文件重叠** ⇒ 层叠等价；同名文件对 4 → 3）。 ── */
 /* Quick Notes keeps its independent workspace identity while sharing shell semantics. */
 .quick-notes-pane { background: var(--lake-bg-window); }
-.quick-note-composer,
-.quick-note-entry { border-color: var(--lake-border-1); background: var(--lake-bg-panel); box-shadow: var(--lake-shadow-card); }
+.quick-note-composer { border-color: var(--lake-border-1); background: var(--lake-bg-panel); box-shadow: var(--lake-shadow-card); }
+/* 261112 Q1：.quick-note-entry 的 border/border-radius/background/box-shadow/border-color 全部由 styles/feature.css
+   的 `.quick-note-entry { border: …; background: …; box-shadow: … }`（更高层）压死 ⇒ 本文件不再重复。 */
 .quick-note-composer textarea,
 .quick-note-entry p { color: var(--lake-text-1); }
 .quick-note-entry time { color: var(--lake-text-3); }

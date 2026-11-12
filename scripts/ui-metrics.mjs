@@ -184,12 +184,12 @@ const BASELINE = {
   // 261103：统计口径修正（逗号选择器按**单个选择器**拆分后比较，见 splitSelectorList）——
   // 旧口径下「a, b { x }」与「a { x }」不算重复，pad.css ↔ mobile.css 的 9 组双归属全部漏检。
   // 修正后实测 116 组；同日把平板通用几何整体迁进 pad.css（A4 单一归属）后 **105**；此后只许降。
-  crossFileDupGroups: 66,      // 261112：删 35 条被上层压掉的 legacy 声明后实测 103 → 66（只许降）。口径 = **同一端内**同一 (选择器,属性) 出现在 ≥2 个文件（真正的"层层套"）；跨端重复不计（设计允许 + C4-5 要求两端都写）
+  crossFileDupGroups: 45,      // 261112 Q1：再删 21 条被上层压死的 legacy 声明后实测 66 → 45（每条被压声明恰好消灭一个跨文件重复组）。口径 = **同一端内**同一 (选择器,属性) 出现在 ≥2 个文件（真正的"层层套"）；跨端重复不计（设计允许 + C4-5 要求两端都写）
   // 261112 Q1：被更高层压掉的 legacy 声明数（同 at-rule 上下文 + 同选择器 + 同属性）。
   // 261112 删 35 条后实测 21（原 58）：feature.css 3（未分层的 bitableEditor/boardEditor 压 feature 层）
   //        + misc.css 4（a11y 已接管 reduced-motion，legacy 副本可下批删）
   //        + 14 条"共享规则里只有部分选择器被压"（同一条规则还有生效的兄弟选择器 ⇒ 不能整条删，只能等重构）。只许降。
-  shadowedDecls: 21,
+  shadowedDecls: 0,             // 261112 Q1：21 → 0（feature.css 3 / misc.css 4 / quick-notes.css 4 / shell.css 10 的 legacy 侧全部删除；只删被上层压死的声明，胜者不动）
 };
 
 // ── !important 允许清单（Q2，261016；用户定："确实有必要用 !important 可以保留，不是一点不能用"）──

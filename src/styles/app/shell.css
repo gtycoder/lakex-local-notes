@@ -51,7 +51,8 @@
 
 /* 目录行内动作钮的 22px 约束见 shell 层的 chrome.css（本文件在 legacy 层，压不过 kit）。 */
 
-.tree-row:hover .tree-row-actions, .tree-row-actions:has(:focus-visible) { display: inline-flex; }
+/* 261112 Q1：`.tree-row-actions:has(:focus-visible)` 的 display 已被 chrome 层（flex）压死 ⇒ 只留 hover 那条。 */
+.tree-row:hover .tree-row-actions { display: inline-flex; }
 
 .tree-row { cursor: pointer; user-select: none; touch-action: pan-y; }
 
@@ -235,10 +236,10 @@
  * 本文件不再涉及大纲；壳层连续材质只作用于 .app-shell / .sidebar / 正文卡。 */
 /* 桌面壳层使用一块连续材质：不再把顶栏、知识库和正文画成三张卡片。
  * （原先在 `@media (min-width: 761px)` 里 ⇒ 窄窗侧栏会掉回基础样式的 1px 右边框。） */
+/* 261112 Q1：`.sidebar.sidebar-floating` 的 border 已由 chrome 层（浮卡 0.5px + border-left:0）压死 ⇒ 从本组移除。 */
 .activity-rail,
 .sidebar,
-.sidebar.sidebar-docked,
-.sidebar.sidebar-floating {
+.sidebar.sidebar-docked {
   border: 0;
 }
 
@@ -248,8 +249,8 @@
   border-color: var(--lake-neutral-veil-1);
 }
 
-.create-menu > button:hover,
-.context-menu > button:hover { background: var(--lake-neutral-veil-2); }
+/* 261112 Q1：`.context-menu > button:hover` 的 background 已被 kit 层（--lake-bg-selected）压死 ⇒ 只留 create-menu。 */
+.create-menu > button:hover { background: var(--lake-neutral-veil-2); }
 
 /* ===== 工作区 keep-alive：小记/知识库两个视图常驻 DOM（display:contents 让子节点直接参与
    .workspace 网格），切换工作区时用 display:none 隐藏而非卸载——避免重建全部 tab 的 Lake
@@ -471,12 +472,17 @@
   border-color: var(--lake-border-1);
 }
 
+/* 261112 Q1：.floating-dialog / .settings-panel / .search-panel 的 background 已由 overlay 层压死 ⇒ 只留
+   .sidebar / .document-pane；color 仍由本文件统一给全部五个表面。 */
+.sidebar,
+.document-pane {
+  background: var(--lake-bg-panel);
+}
 .sidebar,
 .document-pane,
 .floating-dialog,
 .settings-panel,
 .search-panel {
-  background: var(--lake-bg-panel);
   color: var(--lake-text-1);
 }
 
@@ -848,10 +854,8 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
 
 /* 紧凑控件（工具条 / 页签 / 图标按钮 / 树行）统一 sm 圆角：拖拽态必须同值，
    否则行在拖动时圆角会从 6px 跳成 8px（外部 `.tree-row.dragging` 的 8px 就是被这条压住的）。 */
-.toolbar__item,
-.tab-item,
+/* 261112 Q1：.toolbar__item / .tab-item / .note-row 的圆角已由 chrome 层同值声明压死 ⇒ 只留 icon-button 两条。 */
 .icon-button,
-.note-row,
 .list-heading .icon-button {
   border-radius: var(--lake-radius-sm);
 }
@@ -868,7 +872,7 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
  * 注意 .floating-dialog 仍走自己的 floating-dialog-enter —— 它靠 translate(-50%,-50%) 居中，
  * 位移类 keyframes 会在入场期吃掉居中偏移（见 app/misc.css）。 */
 
-.tree-row:active,
-.note-row:active {
+/* 261112 Q1：`.note-row:active` 的 filter 已由 chrome 层（filter: none）压死 ⇒ 只留 tree-row。 */
+.tree-row:active {
   filter: brightness(.95);
 }

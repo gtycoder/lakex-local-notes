@@ -100,13 +100,18 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  /* 261112 Q1：.app-shell / .sidebar / .tab-item / .seg__item 的 animation:none 单一来源在 a11y 层
+     （已被其压死，此处不再重复）；下面三个 a11y 层未覆盖，保留。 */
+  .tab-switcher,
+  .tab-switcher-menu,
+  .tree-children { animation: none; }
   .app-shell,
   .sidebar,
   .tab-item,
   .tab-switcher,
   .tab-switcher-menu,
   .tree-children,
-  .seg__item { animation: none; transition-duration: 1ms; }
+  .seg__item { transition-duration: 1ms; }
 }
 
 @media (min-width: 761px) {

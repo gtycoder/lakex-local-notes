@@ -162,8 +162,12 @@ pre {
 .board-editor {
   border: 0.5px solid var(--lake-border-1);
   border-radius: var(--lake-radius-md);
+}
+
+/* 261112 Q1：.bitable-editor 的 background / 两个宿主的 overflow 已由各自 feature 层文件（bitableEditor.css /
+   boardEditor.css）声明并压死本处 legacy 副本 ⇒ 删除。.board-editor 的 background 仍只有这一处声明，保留。 */
+.board-editor {
   background: var(--lake-bg-canvas);
-  overflow: hidden;
 }
 
 /* ── 内核（lakex）编辑器跟随 App 主题 ────────────────────────────────────────
