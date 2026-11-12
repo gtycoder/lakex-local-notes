@@ -6,7 +6,7 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { PublishDocDialog } from "./PublishDocDialog";
+import { PublishDocDialog } from "../../components/app/PublishDocDialog";
 import { SaveQuickNoteDialog } from "./SaveQuickNoteDialog";
 
 /** 弹窗正文改走内核只读视图（lazy）：测试里换掉它，避免在 jsdom 里拉起真内核；MarkdownView 兜底仍可见。 */
@@ -36,7 +36,7 @@ describe("AI 写作弹窗（浮动窗 + 原语 + 可缩放）", () => {
   it("生成文档：默认 780×460、浮动窗类、标题栏可拖、8 向缩放手柄齐全", () => {
     render(<PublishDocDialog open title="AI 生成文档" notebooks={[notebook]} busy={false} error={null} onConfirm={() => {}} onClose={() => {}} />);
     const el = section();
-    expect(el.className).toContain("aiw-publish");
+    expect(el.className).toContain("publish-doc");
     expect(el.style.width).toBe("780px");
     expect(el.style.height).toBe("460px");
     expect(el.querySelector(".floating-dialog-header")).toBeTruthy();

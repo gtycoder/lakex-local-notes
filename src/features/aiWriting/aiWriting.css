@@ -158,18 +158,11 @@
 .aiw-gate__title { margin: 0; color: var(--lake-text-1); font-size: var(--lake-font-size-title); font-weight: var(--lake-font-weight-semibold); }
 .aiw-gate__desc { margin: 0; max-width: 420px; color: var(--lake-text-3); font-size: var(--lake-font-size-body); line-height: var(--lake-line-height-normal); }
 
-/* ---------------- 生成文档 / 保存小记 弹窗 ---------------- */
-/* 261110 用户定稿：两个弹窗都升级为**浮动窗**（useFloatingDialog：标题栏可拖、8 向缩放、尺寸设备本地记忆），
-   内容区走 ln-* 原语；.ln-dialog__body 的 padding 由 overlay.css 单一来源，这里只排自己的一列。 */
-.aiw-publish__body { display: flex; flex-direction: column; gap: var(--lake-space-xl); }
-.aiw-publish__desc, .aiw-publish__empty { margin: 0; color: var(--lake-text-3); font-size: var(--lake-font-size-body); }
-/* 表单行 = .ln-form__row，标签 = .ln-form__label；这里只留固定标签列宽与控件吃满。 */
-.aiw-publish__row { margin: 0; }
-.aiw-publish__label { flex: 0 0 64px; }
-.aiw-publish__select { flex: 1 1 auto; }
-/* 标题输入（261110 用户点单：生成文档前可改标题）：与知识库选择器共用 ln-text-field 外观，只是撑满行。 */
-.aiw-publish__title { flex: 1 1 auto; min-width: 0; }
-.aiw-publish__error, .aiw-quicknote__error { margin: 0; color: var(--lake-status-error, var(--lake-text-1)); font-size: var(--lake-font-size-body); }
+/* ---------------- 保存小记弹窗 ---------------- */
+/* 261110 用户定稿：浮动窗（useFloatingDialog：标题栏可拖、8 向缩放、尺寸设备本地记忆），内容区走 ln-* 原语。
+ * 261112 task-91：「生成文档」弹窗已提升为桌面共享实现（components/app/PublishDocDialog，AI 写作与日记
+ * 「转为文档」共用）⇒ 它的样式在 styles/app/dialogs.css 的 .publish-doc*，这里只留小记弹窗自己的。 */
+.aiw-quicknote__error { margin: 0; color: var(--lake-status-error, var(--lake-text-1)); font-size: var(--lake-font-size-body); }
 /* 小记正文吃满窗体高度（浮动窗可缩放 ⇒ textarea 自身不再手动 resize）。 */
 .aiw-quicknote__body { display: flex; flex-direction: column; gap: var(--lake-space-md); height: 100%; min-height: 0; }
 /* 正文预览（261110 用户点单）：用内核只读视图渲染，滚动交给这个盒子；内距与文档正文一致。 */

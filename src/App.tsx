@@ -47,6 +47,7 @@ import { NativeTitleTips } from "./components/ui/NativeTitleTips";
 import { native } from "./lib/native";
 import { getNativeErrorMessage } from "./lib/nativeErrors";
 import { composeDiaryQuickNote } from "./features/diary/diaryQuickNote";
+import { convertDiaryEntryToDocument } from "./features/diary/diaryConvert";
 import type { TreeNode } from "./lib/types";
 /** P12：回收站/单据属性弹窗都挂 Lake 内核（HistorySnapshotPreview → useHistorySnapshotViewer），
  *  只在真正打开时才需要 ⇒ 懒加载，避免内核重新进入首屏静态图。 */
@@ -570,15 +571,26 @@ export function App() {
     await openNote(outcome.result.noteId);
   }, [treeNodes, openNote, refreshTree, showNotice]);
 
-  /** 「转为文档」：把日记条目移到目标笔记本（**移动**，同一 note；正文/历史/回收站都跟着走）。
-   *  判据（是否日记条目、目标是否合法）由 core.planDiaryConvert 给，这里只执行 + 反馈。 */
-  const handleDiaryConvertEntry = useCallback((nodeId: string, targetNotebookId: string) => {
+  /** 「转为文档」：把日记条目移到目标笔记本（**移动**，同一 note；正文/历史/回收站都跟着走）+ 落标题。
+   *  判据（是否日记条目、目标是否合法）由 core.planDiaryConvert 给；动作顺序与失败可见由
+   *  features/diary/diaryConvert 的单一实现负责（先 move 再 rename —— 日记条目不接受改名）。
+   *  排序：追加到目标笔记本末尾（这不是排序动作，之后仍可在目录里拖）。 */
+  const handleDiaryConvertEntry = useCallback((nodeId: string, targetNotebookId: string, title: string) => {
     const plan = planDiaryConvert(treeNodes, nodeId, targetNotebookId);
-    if (!plan.ok) return;
-    const targetTitle = treeNodes.find((node) => node.id === plan.targetId)?.title ?? "笔记本";
-    sidebarMove(nodeId, plan.targetId, "inside");
-    showNotice("已转为文档：" + targetTitle);
-  }, [treeNodes, sidebarMove, showNotice]);
+    if (!plan.ok) { setError("转为文档失败：目标位置或这篇日记已失效，请刷新后重试"); return; }
+    void convertDiaryEntryToDocument({
+      move: async (id, targetId) => {
+        const nextOrder = treeNodes
+          .filter((node) => node.parentId === targetId && node.id !== id)
+          .reduce((max, node) => Math.max(max, node.sortOrder), -1) + 1;
+        await native.moveTreeNode(id, targetId, nextOrder);
+      },
+      rename: async (id, nextTitle) => { await native.renameTreeNode(id, nextTitle); },
+      refresh: refreshTree,
+      notice: showNotice,
+      error: setError,
+    }, { nodeId, targetNotebookId, title, previousTitle: plan.entry.title });
+  }, [treeNodes, refreshTree, showNotice, setError]);
   /** 新建某天的日记（261109：一天允许多篇）：走 IPC `mode:"new"`，建完刷新树并按**日记空间**打开。 */
   const handleDiaryCreateEntry = useCallback(async (dateKey: string) => {
     try {

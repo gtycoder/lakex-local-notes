@@ -67,6 +67,19 @@
   border-color: var(--lake-neutral-veil-1);
 }
 
+/* ── 「保存为文档」目标弹窗（261112 task-91：AI 写作「生成文档」与日记「转为文档」共用的中性段）──
+ * 表面/三段式/内距来自 overlay.css 的 .ln-dialog（单一来源），这里只排「知识库 + 标题」两行表单。
+ * 候选只到笔记本这一层（分组/日记本由调用方用 core 判据过滤，弹窗不再二次过滤）。 */
+.publish-doc__body { display: flex; flex-direction: column; gap: var(--lake-space-xl); }
+.publish-doc__desc, .publish-doc__empty { margin: 0; color: var(--lake-text-3); font-size: var(--lake-font-size-body); }
+/* 表单行 = .ln-form__row，标签 = .ln-form__label；这里只留固定标签列宽与控件吃满。 */
+.publish-doc__row { margin: 0; }
+.publish-doc__label { flex: 0 0 64px; }
+.publish-doc__select { flex: 1 1 auto; }
+/* 标题输入：与知识库选择器共用 ln-text-field 外观，只是撑满行。 */
+.publish-doc__title { flex: 1 1 auto; min-width: 0; }
+.publish-doc__error { margin: 0; color: var(--lake-status-error, var(--lake-text-1)); font-size: var(--lake-font-size-body); }
+
 /* 261006：去掉单侧 3px 色条（craft floor 禁止的图案）；状态由 1px 主色描边 + 主色动作按钮表达。 */
 .quick-notes-toast { position: fixed; z-index: 760; top: calc(var(--topbar-height) + 12px); right: 24px; display: flex; align-items: center; gap: 12px; min-height: 40px; padding: 10px 12px; border: 0.5px solid color-mix(in srgb, var(--lake-accent) 28%, var(--lake-border-2)); border-radius: var(--lake-radius-md); color: var(--lake-text-1); box-shadow: 0 14px 34px var(--lake-shadow-color-4), 0 2px 8px var(--lake-shadow-color-3); font-size: var(--lake-font-size-tiny); }
 

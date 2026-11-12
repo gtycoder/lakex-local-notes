@@ -173,4 +173,24 @@ describe("日记空间接线", () => {
     expect(css).not.toContain("!important");
     expect(WORKSPACE).not.toContain("style={{");
   });
+
+  it("⑦ 「转为文档」改用 AI 写作同款共享弹窗：不用目录树；候选 = moveTargetCandidates 只留笔记本；侧栏「移动到…」不动", () => {
+    expect(WORKSPACE).toContain("PublishDocDialog");
+    expect(WORKSPACE).not.toContain("MoveTargetTreeDialog");
+    expect(WORKSPACE).not.toContain("diaryConvertTargets");
+    // 候选判据来自 core.moveTargetCandidates（261112 §3#25 日记本不作移动目标）+ 只留 notebook
+    expect(WORKSPACE).toContain("moveTargetCandidates(treeNodes)");
+    expect(WORKSPACE).toContain('nodeType === "notebook"');
+    // 共享实现只在 components/app：AI 写作与日记都从那里引，不再各留一份
+    expect(WORKSPACE).toContain('from "../../components/app/PublishDocDialog"');
+    expect(read("../aiWriting/AiWritingWorkspace.tsx")).toContain('from "../../components/app/PublishDocDialog"');
+    // 目录树弹窗仍是侧栏「移动到…」的实现（本次改动不许连带改掉）
+    expect(read("../../components/app/Sidebar.tsx")).toContain("MoveTargetTreeDialog");
+    // 执行序收口在 features/diary/diaryConvert（先 move 再 rename —— 日记条目不接受改名）
+    expect(APP).toContain("convertDiaryEntryToDocument");
+    // App 注入的两个动作就是「移动 + 改名」本身（不是再走一遍侧栏的乐观移动/静默失败）
+    expect(APP).toContain("await native.moveTreeNode(id, targetId, nextOrder)");
+    expect(APP).toContain("await native.renameTreeNode(id, nextTitle)");
+    expect(APP).toContain("previousTitle: plan.entry.title");
+  });
 });

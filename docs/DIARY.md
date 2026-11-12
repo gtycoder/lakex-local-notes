@@ -103,10 +103,11 @@ renderer: list_tree_nodes（含 space）
 
 - **语义 = 移动**（同一个 note id 换父节点）：正文、历史快照、回收站、标签关系、S3 索引全都跟着走，**不复制、不改格式**（日记本来就是 Lake 文档，没有"格式转换"这回事）。
 - 移出后自然从日记时间线消失（`diaryEntries` 只扫日记本子树）；**移出后不会自动变回日记**——日记本不是移动目标，普通文档无法移入（想继续写日记，用日记空间的「写今天 / ＋」新建）。
-- 判据单一来源：`core.diaryConvertTargets()`（可承接的容器 = 根层笔记本，**排除日记本**；不含分组）+ `core.planDiaryConvert()`（校验条目确实是日记、目标合法）。UI 与写入路径都先问 core，不另写一套。
-- 入口：桌面条目**右键菜单**两项（「转为文档…」= `Menu` + `usePopoverPosition`；「转为小记」）；移动端条目行 ⋯（`MobileSheetMenu`）当前只有「转为文档…」→ 目标选择复用已有的「移动目标」选择器（桌面 `MoveTargetTreeDialog` / 移动 `MoveTargetTreeSheet`）。
+- 判据单一来源：`core.moveTargetCandidates()` 先剔掉日记子树（261112 日记本不作移动目标），桌面再 `.filter(nodeType === "notebook")` ⇒ **只到知识库（笔记本）这一层，不出分组、不出日记本**；移动端仍用 `core.diaryConvertTargets()`（根层笔记本、排除日记本）。两端都再经 `core.planDiaryConvert()` 校验条目确实是日记、目标合法。UI 与写入路径都先问 core，不另写一套。
+- 入口：桌面条目**右键菜单**两项（「转为文档…」= `Menu` + `usePopoverPosition`；「转为小记」）；移动端条目行 ⋯（`MobileSheetMenu`）当前只有「转为文档…」。
+- **桌面「转为文档」弹窗 = 与 AI 写作「生成文档」同一个共享实现**（261112 task-91 用户裁决）：`src/components/app/PublishDocDialog.tsx`（浮动窗、样式 `styles/app/dialogs.css` 的 `.publish-doc*`）。只选知识库（笔记本）、**标题默认日期键但可改**；确认后先 `move` 再 `rename`（日记条目不接受改名，AGENTS §3#25），失败一律可见（移动失败不动标题；改名失败明说「已移出、但改名失败」），随后刷新目录树。移动端目标选择仍用 `MoveTargetTreeSheet`。
 - **转为小记的实现口径**：组合纯函数 = `src/features/diary/diaryQuickNote.ts` 的 `composeDiaryQuickNote`（日期标题→小记第一行 + 正文，媒体卡剥离并给 `droppedMedia`）+ core 的 `lakeBodyForQuickNoteFromDiary`；落库 = 既有 `createQuickNote`，随后 `deleteTreeNode` 把日记软删进回收站。**已知限制：图片 / 附件不搬运**，提示文案 = 「已转为小记（图片 / 附件未搬运）；日记已移入回收站，可恢复」。
-- **目标选择器支持调用点文案**（261110）：`title` / `confirmLabel` / `description` 可选参数；转文档传「转为文档 / 转为文档 / 选择目标笔记本」，普通移动仍用默认「移动到… / 移动到此处」（两个 render 测试锁默认值不回归）。
+- **目标选择器支持调用点文案**：261110 给移动目标树加了 `title` / `confirmLabel` / `description` 可选参数（普通移动仍用默认「移动到… / 移动到此处」，render 测试锁默认值不回归）；261112 起桌面转文档改用共享 `PublishDocDialog`，传 `heading="转为文档"` / `confirmLabel="转为文档"` / 自己的 `description`，AI 写作「生成文档」用默认口径。
 - **不做**：不自动清理搬空后的年/月分组（空分组无害，清理由用户或以后统一做）；不提供「转回日记」的专用动作（见上：日记本不是移动目标，无法移入）。
 
 ## 搜索

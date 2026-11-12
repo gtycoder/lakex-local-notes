@@ -15,9 +15,9 @@ import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 import { CalendarDays, ChevronRight, Feather, FileText, NotebookPen, Plus, Search, Trash2 } from "lucide-react";
 import { NodeIconGlyph } from "../../components/ui/NodeIconGlyph";
 import {
-  diaryConvertTargets,
   formatDiaryDateKey,
   groupDiaryEntries,
+  moveTargetCandidates,
   planDiaryConvert,
 } from "../../core/diary";
 import { formatHm } from "../../core/dateFormat";
@@ -25,7 +25,7 @@ import { Menu } from "../../components/ui/Overlay";
 import { CalendarPanel } from "../../components/ui/CalendarPanel";
 import { SplitPane } from "../../components/ui/SplitPane";
 import { usePopoverPosition } from "../../hooks/usePopoverPosition";
-import { MoveTargetTreeDialog } from "../../components/app/MoveTargetTreeDialog";
+import { PublishDocDialog } from "../../components/app/PublishDocDialog";
 import type { LakeEditorInstance } from "../editor/lakeRuntime";
 import type { TreeNode } from "../../lib/types";
 import { diaryEntryViews, diaryNotebookOf, type DiaryEntryView } from "./diaryTree";
@@ -62,8 +62,9 @@ export interface DiaryWorkspaceProps {
   onCreateEntry: (dateKey: string) => void;
   /** 打开现有全局搜索面板（v1 全库范围，日记已进 FTS）。 */
   onOpenSearch: () => void;
-  /** 「转为文档」：把该日记条目移到目标笔记本（换父节点 = 移动，不复制正文/历史）。 */
-  onConvertEntry: (nodeId: string, targetNotebookId: string) => void;
+  /** 「转为文档」：把该日记条目移到目标笔记本（换父节点 = 移动，不复制正文/历史）+ 落标题。
+   *  title = 弹窗里用户确认的标题（默认是日期键，可改；空/未改由宿主决定是否跳过改名）。 */
+  onConvertEntry: (nodeId: string, targetNotebookId: string, title: string) => void;
   /** 「转为小记」：日期标题写入小记第一行 + 正文接在后面；成功后勤日记移入回收站。 */
   onConvertToQuickNote: (nodeId: string) => void;
   /** 「删除」：移入回收站（软删，可恢复）。走既有删除确认与 deleteTreeNode，不新造删除路径。 */
@@ -137,11 +138,12 @@ export function DiaryWorkspace(props: DiaryWorkspaceProps) {
     open: Boolean(entryMenu),
     at: entryMenu ? { x: entryMenu.x, y: entryMenu.y } : null,
   });
-  /** 「转为文档」目标 = 文档空间的笔记本（判据在 core.diaryConvertTargets，排除日记本）。 */
-  const convertTargets = useMemo(() => {
-    const ids = new Set(diaryConvertTargets(treeNodes).map((target) => target.id));
-    return treeNodes.filter((node) => ids.has(node.id));
-  }, [treeNodes]);
+  /** 「转为文档」目标 = **只到知识库（笔记本）这一层**：core.moveTargetCandidates 先剔掉日记子树
+   *  （261112 §3#25 日记本不作移动目标），再只留 notebook ⇒ 分组与日记本都不会出现在候选里。 */
+  const convertTargets = useMemo(
+    () => moveTargetCandidates(treeNodes).filter((node) => node.nodeType === "notebook").map((node) => ({ id: node.id, title: node.title })),
+    [treeNodes],
+  );
   /** 正在挑选目标的条目：null = 不在转换流程里。 */
   const [convertEntry, setConvertEntry] = useState<DiaryEntryView | null>(null);
   /** 「选日期新建」浮层（加号 = 今天，这里 = 任意日期）。
@@ -396,21 +398,21 @@ export function DiaryWorkspace(props: DiaryWorkspaceProps) {
         </Menu>
       )}
 
-      {/* 转为文档 = 移到目标笔记本（同一个 note，不复制；正文/历史/回收站都跟着走）。 */}
+      {/* 转为文档 = 移到目标笔记本（同一个 note，不复制；正文/历史/回收站都跟着走）。
+          弹窗与 AI 写作「生成文档」共用同一实现（261112 task-91）：只选知识库（笔记本）、标题默认日期可改。 */}
       {convertEntry && (
-        <MoveTargetTreeDialog
+        <PublishDocDialog
           open
-          title="转为文档"
+          heading="转为文档"
+          title={convertEntry.title}
+          notebooks={convertTargets}
+          description="把这篇日记移出日记本、存成知识库里的普通文档（还是同一篇文档，正文与历史都跟着走）。标题默认是日期，可以改。"
           confirmLabel="转为文档"
-          description="选择目标笔记本"
-          nodes={convertTargets}
-          movingIds={[convertEntry.nodeId]}
-          currentParentId={convertEntry.parentId}
-          onConfirm={(targetNotebookId) => {
+          onConfirm={(targetNotebookId, nextTitle) => {
             const plan = planDiaryConvert(treeNodes, convertEntry.nodeId, targetNotebookId);
             setConvertEntry(null);
             if (!plan.ok) return;
-            onConvertEntry(plan.entry.noteId, plan.targetId);
+            onConvertEntry(plan.entry.noteId, plan.targetId, nextTitle);
           }}
           onClose={() => setConvertEntry(null)}
         />

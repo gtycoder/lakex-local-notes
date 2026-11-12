@@ -142,7 +142,7 @@ describe("日记空间（桌面）", () => {
     expect(onOpenEntry.mock.calls.length).toBe(callsBeforeCollapse);
   });
 
-  it("右键条目 →「转为文档…」：目标只列文档空间的笔记本（不含日记本），确认后交给宿主执行移动", () => {
+  it("右键条目 →「转为文档…」：与 AI「生成文档」共用弹窗，只列笔记本（无分组/日记本），标题默认日期可改，确认交出 (条目, 笔记本, 标题)", () => {
     const onConvertEntry = vi.fn();
     render({ treeNodes: tree(true), onConvertEntry });
     const entry = [...document.body.querySelectorAll<HTMLElement>(".diary-entry")]
@@ -157,25 +157,34 @@ describe("日记空间（桌面）", () => {
     expect(menuItem).toBeTruthy();
     act(() => menuItem!.click());
 
-    // 目标树：只有「知识库」这一本（日记本已被 core.diaryConvertTargets 排除）
-    const targetTree = document.body.querySelector<HTMLElement>("[role='tree'][aria-label='目标位置']");
-    expect(targetTree).toBeTruthy();
-    expect(targetTree!.textContent).toContain("知识库");
-    expect(targetTree!.textContent).not.toContain("日记");
-
-    const targetRow = [...targetTree!.querySelectorAll<HTMLElement>("button")]
-      .find((el) => (el.textContent ?? "").includes("知识库"));
-    expect(targetRow).toBeTruthy();
-    act(() => targetRow!.click());
-
-    // 转文档文案 = 调用方传的 title/description/confirmLabel（不再显示「移动到…/移动到此处」）。
+    // 共享弹窗（不是目录树弹窗）：浮窗 + 两行表单，标题头 = 转为文档
+    const dialog = document.body.querySelector<HTMLElement>(".floating-dialog.publish-doc");
+    expect(dialog, "转为文档 = 与 AI 写作「生成文档」同一弹窗").toBeTruthy();
+    // 目录树弹窗（MoveTargetTreeDialog）不再出现：没有「目标位置」树，也没有它的浮层类
+    expect(document.body.querySelector('[role="tree"][aria-label="目标位置"]')).toBeNull();
+    expect(document.body.querySelector(".move-target-tree-dialog")).toBeNull();
     expect(document.body.querySelector(".ln-dialog__title")?.textContent).toBe("转为文档");
-    expect(document.body.textContent).toContain("选择目标笔记本");
-    const confirm = [...document.body.querySelectorAll<HTMLButtonElement>(".ln-dialog__actions button")]
+
+    // 候选只到知识库（笔记本）这一层：只有「知识库」，没有分组、没有日记本
+    act(() => { dialog!.querySelector<HTMLButtonElement>('[aria-label="选择知识库"]')!.click(); });
+    const options = [...document.querySelectorAll('[role="listbox"] [role="option"]')]
+      .map((el) => (el.textContent ?? "").trim());
+    expect(options).toEqual(["知识库"]);
+
+    // 标题默认 = 日期键，可改
+    const titleInput = dialog!.querySelector<HTMLInputElement>('[aria-label="文档标题"]')!;
+    expect(titleInput.value).toBe("2025-12-31");
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+    act(() => {
+      setter.call(titleInput, "去年总结");
+      titleInput.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+
+    const confirm = [...dialog!.querySelectorAll<HTMLButtonElement>(".ln-dialog__actions button")]
       .find((el) => (el.textContent ?? "").trim() === "转为文档");
     expect(confirm, "确认按钮 = 转为文档，不是「移动到此处」").toBeTruthy();
     act(() => confirm!.click());
-    expect(onConvertEntry).toHaveBeenCalledWith("e-old", "nb-doc");
+    expect(onConvertEntry).toHaveBeenCalledWith("e-old", "nb-doc", "去年总结");
   });
 
   it("加号 = 今天新建；日历 = 选任意日期新建（一天多篇，走 mode:new）", () => {

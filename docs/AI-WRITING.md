@@ -69,7 +69,8 @@ ai_writing_messages(id TEXT PK, conversation_id TEXT, role TEXT, content TEXT,
 | 转换 | `src/features/aiWriting/convertAiMarkdown.ts` | Markdown→Lake（仅 render-timeout 重建重试一次，其它错误不重试；可见性等待 + 可取消） |
 | 答案渲染 | `AiAnswerViewer.tsx` + `aiAnswerViewer.css` | **lazy 边界**：只读 viewer + `setDocument("text/markdown")`（内核原生解析）；懒挂载、单实例复用、pending→rich 切换 |
 | 状态 | `src/features/aiWriting/useAiWriting.ts` | 列表/当前会话/输入卡/发送/停止/重新生成（只做编排，不写网络） |
-| 视图 | `AiWritingSidebar / AiComposer / AiPromptLibrary / AiDocPicker / AiMessageView / PublishDocDialog / SaveQuickNoteDialog / AiWritingWorkspace` | 语雀同款交互；样式 `aiWriting.css`（`layer(feature)`，只用令牌） |
+| 视图 | `AiWritingSidebar / AiComposer / AiPromptLibrary / AiDocPicker / AiMessageView / SaveQuickNoteDialog / AiWritingWorkspace` | 语雀同款交互；样式 `aiWriting.css`（`layer(feature)`，只用令牌） |
+| 共享弹窗 | `src/components/app/PublishDocDialog.tsx` + `styles/app/dialogs.css` 的 `.publish-doc*` | 「保存为文档」目标选择（浮窗：只选笔记本 + 标题可改）；与日记「转为文档」共用（261112 task-91，候选由调用方按 core 判据过滤：AI 用 `selectableNotebooks`） |
 | 壳层 | `desktopTypes` / `DesktopTopBar` / `useDesktopLifecycle` / `App` | 新空间 `ai-writing`（⌘4，空间菜单第 4 项；隐藏目录栏） |
 
 ### 为什么这样分

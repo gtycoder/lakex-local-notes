@@ -19,7 +19,8 @@ import { aiWritingTitleFrom } from "../../core/aiWriting";
 import { AiWritingSidebar } from "./AiWritingSidebar";
 import { AiComposer } from "./AiComposer";
 import { AiMessageView } from "./AiMessageView";
-import { PublishDocDialog } from "./PublishDocDialog";
+import { PublishDocDialog } from "../../components/app/PublishDocDialog";
+import { selectableNotebooks } from "./aiWritingDocs";
 import { SaveQuickNoteDialog } from "./SaveQuickNoteDialog";
 import { AI_WRITING_SUGGESTIONS, aiWritingChatTitle, aiWritingDocsTitle } from "./aiWritingPrompts";
 import { useAiWriting } from "./useAiWriting";
@@ -276,8 +277,9 @@ export function AiWritingWorkspace({ active, treeNodes, topbarLeading, onOpenSet
       <PublishDocDialog
         open={publish.open}
         title={publishTitleOf(publish.content)}
-        notebooks={treeNodes}
+        notebooks={selectableNotebooks(treeNodes)}
         busy={publish.busy}
+        busyLabel="生成中…"
         error={publish.error}
         onConfirm={(notebookId, nextTitle) => { void publishDoc(notebookId, nextTitle); }}
         onClose={closePublish}
