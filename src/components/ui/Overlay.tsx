@@ -21,6 +21,18 @@ export type OverlayKind = "dialog" | "menu" | "popover" | "drawer";
 const FOCUSABLE =
   'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
 
+/**
+ * 嵌套浮层保护（单一判据）：`[data-context-menu]` 表面内的按下不算「点了外面」。
+ * 悬停子菜单（`<Submenu>`，如「导出 ▸」）是**独立 portal 表面**，与父菜单不是父子 DOM；
+ * 各处的「外点关闭」都必须用本判据放行，否则父菜单会在子项 click 之前被卸载
+ * （表现为「二级菜单点了没反应」——261112 用户报「文档右上角导出不能用」）。
+ */
+export function isInsideOverlaySurface(target: EventTarget | null): boolean {
+  if (!(target instanceof Node)) return false;
+  const node = target instanceof Element ? target : target.parentElement;
+  return Boolean(node?.closest("[data-context-menu]"));
+}
+
 let overlaySeq = 0;
 /** 当前打开的浮层栈（后开者在栈顶）。Esc 只关栈顶，避免「对话框内开着下拉时把对话框一起关掉」。 */
 const openOverlayStack: { id: number; ancestors: readonly number[]; surface: HTMLElement | null }[] = [];
@@ -112,8 +124,7 @@ export function Overlay({ open = true, kind, onDismiss, label, className, style,
       if (ignoreOutside?.(target)) return;
       if (el && !el.contains(target)) {
         // 嵌套浮层（悬停子菜单）：点在另一层浮层表面时不关闭本层，交给那层处理。
-        const node = target instanceof Element ? target : target.parentElement;
-        if (node?.closest("[data-context-menu]") && !closeOnNestedOverlay) return;
+        if (!closeOnNestedOverlay && isInsideOverlaySurface(target)) return;
         onDismiss();
       }
     };
