@@ -1,0 +1,35 @@
+M1 证据：桌面删日记 → 手机日记页「点该天」是否可编辑/有横幅
+设备：emulator-5556；构建 HEAD 3fad8821
+（本机不配 S3 ⇒ 用"同字段的本地状态"等价复现：sync 落地删除写入的是 notes.trashed_at，与产品 API trashNote 同列）
+
+准备（产品 API，非手改正文）：
+  createNotebook({title:'日记审计'}) → nb=5cdd9880-7612-47b8-8f39-ba94ff8b1364
+  createNote('2026-11-12', nb) → note=922d3fc2-0c86-46c9-a5a1-f1c264b8c1b5
+  trashNote(note)                       → 等价于"桌面删除并同步到本机"的结果状态
+  离线标日记本（移动端无标记 API，字段 = folders.space）：
+  UPDATE folders SET space='diary' WHERE id='<nb>'   → 5cdd9880-...|日记审计|diary
+  DB 该篇：922d3fc2-...|2026-11-12|trashed_at=2026-11-12T09:31:03.304Z|parent=5cdd9880-...
+
+实测 1（日记页是否列出已删条目）：点「日记」dock
+  → 页面文案「日记 0 篇 … 还没有日记。点上面「写今天」写下第一篇。」
+  → 已删的 2026-11-12 条目**没有出现在列表**（entries 来自 active 子树：
+     src/mobile/diary/diaryRepository.ts:155 的 SELECT 带 trashed_at IS NULL）
+  截图：shots/M1-01-diary-page.png
+
+实测 2（点「写今天」会怎样）：点「写今天」
+  → 新建了一篇**活跃**的 2026-11-12（notes.id=4392cfc5-c86d-4a66-8f59-835802296103，
+     parent=月分组 b6bcd0dc-…），并打开它的编辑器（标题可编辑 / 正文可输入，属正常新文档）
+  → 已删的 922d3fc2 仍在回收站（trashed_at 未变），没有被打开
+  → 日记页随后显示「日记 1 篇 / 今天 已写 1 篇，可继续写」
+  DB 对照：SELECT id,title,trashed_at FROM notes WHERE title='2026-11-12'
+    922d3fc2-…|2026-11-12|2026-11-12T09:31:03.304Z   ← 仍 trashed
+    4392cfc5-…|2026-11-12|                            ← 新建活跃
+  截图：shots/M1-03-diary-after-write-today.png
+
+结论（实测，修正 15 号报告的原抽样复现路径）：
+- **日记页不存在「打开已删日记」的入口**：列表 SQL 过滤 trashed（diaryRepository.ts:155），
+  ensureDiaryNote 的 plan 也只看 active 节点（:158-168）⇒ 点该天/写今天都会**新建**，不会打开回收站里的那篇。
+- 因此"桌面删日记 → 手机日记页点该天 → 可编辑无横幅"**不可复现**（15 号报告的 M1 应降级为"防御性建议"，
+  不是现存 P1）；残余风险仅是：移动端 openDiaryEntry 自身无 gone 判据，日后若列表/入口改成包含回收站条目会立刻回归。
+- 附带的实测副作用（非本审计目标）：同一日期已有"已删日记"时，写今天会再建一篇同日活跃文档
+  （产品口径"一天允许多篇"，属预期；但若桌面看到的是被删的那篇，会显得"日记丢了又出现一篇新的"）。

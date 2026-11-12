@@ -1,0 +1,38 @@
+task-44「单篇 apply 失败降级」的 UI 通达核查（代码级，未配 S3 无法制造真实 apply 失败）
+
+基线口径：
+- HEAD = 8fe1124f（含 task-44 3fad8821）。
+- 工作树另有未提交的 task-56（新文件 src/core/syncWarningText.ts + 改 SettingsDrawer/SyncStatusPopover 等），下文分别标注。
+
+A. warning 的产生与出口（HEAD 已提交部分）
+1) core：单篇 apply 失败不再抛整轮，记 warning 后 continue：
+   src/core/s3v3/state/deviceStore.ts:673-681（deps.onApplyWarning?.({code:"remote_incomplete", space:"lake", id, title, detail})）
+2) 桌面收集并并入 SyncResult：
+   electron/s3v3/desktopStoreAdapter.ts:88-96（this.applyWarnings.push）
+   electron/s3v3/desktopSync.ts:193-201（result.warnings = [...r.warningDetails, ...applyWarnings.map(kind:"remote_incomplete")]）
+   持久化：electron/main.ts:205 recordSyncResult(JSON.stringify(result)) → device_state.last_sync_result
+3) 移动并入报告：
+   src/mobile/v3/mobileDeviceStore.ts:107-115；src/mobile/v3/sync.ts:66-71（report.warningDetails.push(kind:"remote_incomplete")）
+
+B. UI 展示面（HEAD 8fe1124f）
+1) 桌面 SyncStatusPopover.tsx:250-257：只显示「同步有 N 项被跳过」+「逐项原因见设置→同步诊断」⇒ 只到计数。
+2) 桌面「设置 → 同步诊断」= 最近 3 轮 sync_v3_reports：desktopSync.ts:203-214 的 report.warnings 仍只取 r.warningDetails
+   ⇒ 不含 applyWarnings，应用失败的那条在桌面没有逐项可见出处（只能翻主进程日志 :178 或 last_sync_result 原文）。
+3) 移动：bridge.syncNow 返回 warnings（mobile/bridge/sync.ts:452,468）→ useSyncSettingsForm.ts:15,62 存内存 →
+   SettingsDrawer.tsx:521-545 逐项列表 ⇒ 当次会话能逐项；但「上次同步」syncStatusStore 无 warnings 字段（14-30）⇒ 重启即丢。
+4) 文案语义：apply 失败复用 remote_incomplete（core/sharedTypes.ts:30-42 无 apply 类）。工作树 task-56 的
+   core/syncWarningText.ts 把 remote_incomplete 写成 label「远端内容不完整」/ hint「已跳过这篇；本地内容未改动，
+   下次同步会重试。」⇒ 对本地写失败而言因果写反。
+
+C. 工作树 task-56（未提交）已把桌面浮层升级为逐项（SyncStatusPopover.tsx:251-301：摘要+最多 5 行+另 N 条+查看诊断），
+   但诊断报告仍不含 applyWarnings ⇒ 超过 5 条的 apply 失败仍无逐项出口。
+
+D. 护栏测试：HEAD 的 electron/s3v3/trashRemoteDivergence.test.ts 中 grep -c warning = 0；
+   现有测试覆盖的是别的 warning 类别，没有一条断言「单篇 apply 失败 → 不抛整轮 + onApplyWarning 被调用 +
+   进入 SyncResult.warnings」⇒ task-44 的 P0 修复目前无回归护栏。
+
+实测命令（只读）：
+  cd "$(git rev-parse --show-toplevel)"
+  /usr/bin/git show HEAD:src/components/app/SyncStatusPopover.tsx | sed -n '250,257p'
+  /usr/bin/git show HEAD:electron/s3v3/desktopSync.ts | sed -n '203,214p'
+  npx vitest run electron/s3v3/trashRemoteDivergence.test.ts    # 7 passed（不含 apply warning 断言）

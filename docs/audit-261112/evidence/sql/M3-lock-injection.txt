@@ -1,0 +1,33 @@
+M3 证据：桌面锁定（is_locked=1）在移动端可编辑、可保存、无只读标识
+设备：emulator-5556；构建 HEAD 3fad8821（task-44 已提交）
+文档：notes.id = 7b6b59ef-e238-44d5-ac7c-5082381dc734（标题 M3锁定测试，挂 notebook-personal）
+
+为什么用 DB 注入锁状态：本机不配置 S3（不碰真实桶）⇒ 无法跨端同步。移动端同步落地锁的写入就是
+UPDATE notes SET is_locked=?, locked_at=?（src/mobile/v3/mobilePlatformPort.ts:374-379），
+与本次注入同一字段/同值；桌面侧产生该状态的是 setNoteEditLocked → is_locked=1（electron 元数据写）。
+步骤（App 先 force-stop，离线写，再启动，等价于"同步落地后首次打开"）：
+  adb shell am force-stop com.lakexlocalnotes.android
+  adb shell 'run-as com.lakexlocalnotes.android sqlite3 databases/lakex-local-notes-mobileSQLite.db \
+    "UPDATE notes SET is_locked=1, locked_at=2026-11-12T09:25:00.000Z WHERE id=<id>; ..."'
+  → SELECT ... → 7b6b59ef-...|1|2026-11-12T09:25:00.000Z
+  adb shell am start -n com.lakexlocalnotes.android/.MainActivity
+  → 重启后再查仍为 is_locked=1（App 未复位）
+
+UI 实测（CDP 真点按）：
+1) 打开该文档（工作区 → 文档树胶囊 → 行「M3锁定测试」）：
+   - 标题 input 为只读态（class toolbar__title--readonly）
+   - 可见 DOM 中**没有任何「锁定/只读」标识**（hit-test 过滤后 lockSrc=[]）
+   截图：shots/M3-01-locked-doc-opened.png
+2) 顶栏点「编辑」→ 进入编辑：标题变可编辑（readonly=false）、出现 contenteditable .ne-engine、
+   顶栏按钮变「完成」；随后点入正文并 Input.insertText " [M3审计编辑]"，正文确实变化
+   截图：shots/M3-02-editing-locked-doc.png
+3) 点「完成」→ 退出编辑（触发保存）：
+   - 截图：shots/M3-03-after-save.png
+   - DB：SELECT is_locked,locked_at,updated_at,content_hash FROM notes WHERE id=<id>;
+     → 1|2026-11-12T09:25:00.000Z|2026-11-12T09:29:03|031795a87ab1...（updated_at 推进 = 已写）
+   - API readNote → content 含 "M3审计编辑"（hasMark=true, len=173）⇒ **保存成功**
+   - is_locked 仍为 1（移动端既未读也未改写锁状态）
+
+结论（实测）：锁定态在移动端**不生效**：无标识、可进编辑、可保存；锁标志未被破坏（因为没有代码读写它）。
+代码证据：isEditLocked 在 src/mobile 仅出现于 v3/bridge 数据层（v3/mobilePlatformPort.ts:187,374-379；
+bridge/notes.ts:155），MobileApp/notebook/editor/ui 0 处消费。

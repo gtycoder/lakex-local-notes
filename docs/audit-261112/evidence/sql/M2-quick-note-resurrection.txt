@@ -1,0 +1,32 @@
+M2 证据：移动端陈旧编辑器保存「已删小记」→ 静默复活
+设备：emulator-5556（AVD lake_gate 体系；App 私有沙箱，非正式数据）
+构建：HEAD 3fad8821（task-44 已提交）上 --sync --install 的 debug 包，v1.1.0
+笔记：quick_notes.id = 7c145fc0-9466-4010-b44d-c5f752cac19f（夹具小记 3）
+
+DB 文件：/data/data/com.lakexlocalnotes.android/databases/lakex-local-notes-mobileSQLite.db
+（注意字段：hyphen 版 lakex-local-notes-... 才是真库；同目录 lakexlocal-... 是我误建的空库，已删）
+
+步骤与读数（全部通过 run-as sqlite3 只读查询）：
+1) 打开编辑器后（UI 真点按）删除小记：
+   API: await window.lakeNative.deleteQuickNote('<id>')
+   → getQuickNotePage().items 不含该条（listCount 3）
+   → DB: SELECT id,deleted_at,restore_pending_at FROM quick_notes WHERE id='<id>';
+       7c145fc0-...|2026-11-12T09:19:22.270Z|            ← deleted_at 已置
+   → quick_note_deleted 无该行（软删尚未写墓碑）
+   → 编辑器仍在（document.querySelectorAll('.quick-note-editor').length = 1）
+  截图：shots/M2-01-editor-open.png（打开态）、shots/M2-02-editor-open-note-deleted.png（删除后编辑器仍开）
+
+2) 在陈旧编辑器里输入 " [M2审计编辑]"（CDP Input.insertText）→ 点「保存」（Input.dispatchMouseEvent）：
+   → 编辑器关闭，首页列表重新出现该条（文本 "夹具小记 3 [M2审计编辑] 今天 17:20"），无任何"已删除"提示
+   截图：shots/M2-03-after-stale-save.png
+
+3) 保存后 DB（同一行）：
+   SELECT id,deleted_at,is_dirty,restore_pending_at FROM quick_notes WHERE id='<id>';
+   → 7c145fc0-...||1|                      ← deleted_at 被清空（NULL），is_dirty=1
+   quick_note_deleted 仍无该行（本来就没有 → 也没有墓碑需删）
+   → getQuickNotePage() 再次包含该条；readQuickNote 不可用于移动 lakeNative（未暴露），列表 + DB 已足证。
+
+结论（实测）：
+- 静默复活成立：删除后仅靠"陈旧编辑器保存"即可把 deleted_at 清空、行回到活跃列表，**用户没有看到任何"这条已被删除"的提示**，也没有走显式恢复。
+- 代码位置：src/mobile/data/quickNotesRepository.ts:240-245（persistQuickNoteContent 的 upsert 无条件 deleted_at=NULL 并 DELETE 墓碑）。
+- 跨端"撤销他端删除"未实测（本机未配置 S3、不碰真实桶）⇒ 报告中记为推断：复活行 is_dirty=1，下一轮同步会作为活跃条目发布，从而覆盖他端删除；桌面端同场景 UPDATE 不触碰 deleted_at（electron/quickNotes/savePipeline.ts:150-152），不会复活。
