@@ -10,8 +10,8 @@
  */
 import { useEffect, useState } from "react";
 import { localAssetHttpUrl } from "../../core/assetUrl.js";
+import { isQuickNoteImageMime, type StoredQuickNoteImage } from "../../core/quickNoteModel.js";
 import { quickNotePreviewAssetUrl } from "../home/quickNoteImage";
-import type { StoredQuickNoteImage } from "../../core/quickNoteModel.js";
 import { withAssetAccessToken } from "../../lib/assetPort";
 import { QuickNotePreview } from "../../features/quickNotes/QuickNotePreview";
 import { openImagePreview } from "../../features/editor/imagePreview";
@@ -62,6 +62,9 @@ export function TagQuickNotePreview({ noteId, fallbackText }: TagQuickNotePrevie
       ),
     };
   });
+  /** Lightbox 画廊只收图片（261112 R2）：清单里混有视频/音频/附件，全塞进去会切到空白大图。
+   *  assets 仍传全量（媒体卡要 URL），只有画廊用它；判据与 QuickNotePreview 渲染图片的判断（isQuickNoteImageMime）一致。 */
+  const galleryAssets = assets.filter((asset) => isQuickNoteImageMime(asset.mimeType));
   return (
     <QuickNotePreview
       body={detail.body}
@@ -70,7 +73,7 @@ export function TagQuickNotePreview({ noteId, fallbackText }: TagQuickNotePrevie
       // 图片单击看大图（261112 用户定稿「点击看图片、双击编辑」；本页行点击仍是打开小记，
       // 图片 click 在 QuickNotePreview 里已 stopPropagation ⇒ 不会误开）。
       onImageClick={(image) => {
-        const shots = assets.filter((asset) => Boolean(asset.url));
+        const shots = galleryAssets.filter((asset) => Boolean(asset.url));
         const index = Math.max(0, shots.findIndex((asset) => asset.filename === image.filename));
         openImagePreview(shots.map((asset) => ({ src: asset.url as string, originalSrc: asset.originalUrl })), index);
       }}

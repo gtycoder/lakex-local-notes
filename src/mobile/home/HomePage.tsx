@@ -17,7 +17,7 @@ import { NotebookGrid } from "./NotebookGrid";
 import { QuickNotePreview } from "../../features/quickNotes/QuickNotePreview";
 import { openImagePreview } from "../../features/editor/imagePreview";
 import { resolvePreviewAssetUrl } from "../../features/preview/previewAsset";
-import type { StoredQuickNoteImage } from "../../core/quickNoteModel.js";
+import { isQuickNoteImageMime, type StoredQuickNoteImage } from "../../core/quickNoteModel.js";
 import { MobileErrorBoundary } from "../ui/MobileErrorBoundary";
 import { MobileSheetMenu, type MobileSheetItem } from "../ui/MobileSheetMenu";
 import { MobileSheet } from "../ui/MobileSheet";
@@ -1203,6 +1203,14 @@ function QuickNoteCard({ note, revealed, dateValue, onEdit, onMore, onFilterTag,
       ),
     };
   });
+  /**
+   * Lightbox 画廊**只收图片**（261112 R2）：资源清单是「图片 + 视频/音频/附件」混合数组
+   * （core/quickNoteModel 的 StoredQuickNoteContent.images 语义），全塞进画廊会出现「左右切到视频 ⇒ 大图层空白」。
+   * 判据与 QuickNotePreview 的渲染判据一致（它用同一个 isQuickNoteImageMime 决定 <img> 还是视频/音频/文件 chip），
+   * 所以「预览里能点开大图的」与「画廊里的」是同一集合。
+   * 注意：QuickNotePreview 的 assets 仍传**全量**（视频/音频/附件卡要 URL），只有画廊用它。
+   */
+  const galleryAssets = previewAssets.filter((asset) => isQuickNoteImageMime(asset.mimeType));
   const thumbUrl = note.firstImage
     ? quickNoteImageUrl(withAssetAccessToken(localAssetHttpUrl(note.id, note.firstImage, { space: "quick-notes" })))
     : null;
@@ -1237,7 +1245,7 @@ function QuickNoteCard({ note, revealed, dateValue, onEdit, onMore, onFilterTag,
     if (imageTapTimer.current !== null) window.clearTimeout(imageTapTimer.current);
     imageTapTimer.current = window.setTimeout(() => {
       imageTapTimer.current = null;
-      const shots = previewAssets.filter((asset) => Boolean(asset.url));
+      const shots = galleryAssets.filter((asset) => Boolean(asset.url));
       const index = Math.max(0, shots.findIndex((asset) => asset.filename === image.filename));
       openImagePreview(shots.map((asset) => ({ src: asset.url as string, originalSrc: asset.originalUrl })), index);
     }, IMAGE_TAP_WINDOW_MS);
