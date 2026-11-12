@@ -1,10 +1,18 @@
-/* 14A Paper Finch 启动动画（桌面）。尺寸只影响展示，不改 APNG 文件本身。 */
+/* 14A Paper Finch 启动标记（桌面）。透明底双绿雀 + 250ms 入场；reduced-motion 静态呈现。 */
 .brand-launch { display: flex; flex-direction: column; align-items: center; gap: 10px; }
-.brand-launch__anim { display: block; width: 128px; height: 128px; }
-.brand-launch__poster { display: none; width: 128px; height: 128px; }
+.brand-launch__mark {
+  display: block;
+  width: 128px;
+  height: 128px;
+  animation: brand-launch-in var(--lake-motion-panel) var(--lake-ease-standard) both;
+}
 .brand-launch__label { color: var(--lake-text-3); font-size: var(--lake-font-size-small); }
 
+@keyframes brand-launch-in {
+  from { opacity: 0; transform: translateY(6px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .brand-launch__anim { display: none; }
-  .brand-launch__poster { display: block; }
+  .brand-launch__mark { animation: none; }
 }

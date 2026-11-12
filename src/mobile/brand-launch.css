@@ -8,11 +8,19 @@
   background: var(--lake-bg-window);
 }
 .mb-launch { display: flex; flex-direction: column; align-items: center; gap: 10px; }
-.mb-launch__anim { display: block; width: 96px; height: 96px; }
-.mb-launch__poster { display: none; width: 96px; height: 96px; }
+.mb-launch__mark {
+  display: block;
+  width: 96px;
+  height: 96px;
+  animation: mb-launch-in var(--lake-motion-panel) var(--lake-ease-standard) both;
+}
 .mb-launch__label { color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); }
 
+@keyframes mb-launch-in {
+  from { opacity: 0; transform: translateY(5px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .mb-launch__anim { display: none; }
-  .mb-launch__poster { display: block; }
+  .mb-launch__mark { animation: none; }
 }

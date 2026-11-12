@@ -307,7 +307,7 @@ function createBootWindow() {
     resizable: false,
     movable: true,
     title: "LakexLocalNotes",
-    backgroundColor: nativeTheme.shouldUseDarkColors ? "#1e2126" : "#f3f4f6",
+    backgroundColor: nativeTheme.shouldUseDarkColors ? "#1e2126" : "#E9EDF3", // 启动窗与浅色窗底令牌一致（261112：去掉白底闪屏）
     webPreferences: {
       sandbox: true,
       contextIsolation: true,
