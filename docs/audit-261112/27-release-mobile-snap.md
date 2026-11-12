@@ -11,7 +11,7 @@
 | 手机差异定性 | **数据依赖，非回归**：对「两次独立重灌夹具」的 home-doc 做行级对拍，差异恒为 **6 行** = `ne-p$<docId>-body` 一进一出（hash 相同）+ 4 条 `span.qn-card__date`（小记日期标签宽度随生成时刻变），**其余 2079 行完全一致**（见 `evidence/release-mobile-snap/phone-seed-diff.txt`）。与 AGENTS §7#14 / mobile-audit README 记录的两条数据依赖一致。 |
 | 手机处置 | 按 §3#21③ **重烤手机 10 态基线**（warm = `.css-audit/snap/rel-warm.json`，`--from … --write-baseline`）；重烤后**现场复核 10/10 域 0 差异**（`phone-verify.txt`）⇒ **无需再次重烤**。基线 `scripts/mobile-audit/baseline/mobile-snap.json` 已更新（仅 home-doc 一行 hash 变更，**未 commit**，见 §4）。 |
 | 平板 10 态（lake_tab，`check-mobile-snap-tablet.mjs`） | **1/10 态差异**：`home-doc` 元素 **2106 → 2106（相同）**，指纹 `1v9vqy3 → psm1vm`；同样用两次重灌夹具做行级对拍，差异同为 **6 行**（prose id + 4 日期标签）⇒ **数据依赖，非回归**（`tablet-seed-diff.txt`）。 |
-| 平板处置 | 按任务要求「**不重烤平板基线除非确实有回归**」⇒ **未重烤** `baseline/mobile-snap-tablet.json`。若发版要求平板门禁常绿，需在重灌夹具后按同一配方重烤一次（建议与手机同批执行）。 |
+| 平板处置 | 同型数据依赖（6 行），非回归；按 §3#21③ 重灌夹具后**已重烤** `baseline/mobile-snap-tablet.json`（home-doc hash `1v9vqy3 → yf5y0i`，元素数 2106 不变），现场复核**10/10 态 0 差异**（`tablet-verify.txt`）。 |
 | 23 屏走查 | **可选，未跑**（本轮已完成手机 10 态 + 平板 10 态的核对；如需补跑：`node scripts/css-audit/drive.mjs 9336 scripts/css-audit/mobile-walkthrough.mjs`）。 |
 
 ## 1. 手机 10 态执行记录
@@ -36,7 +36,7 @@
    - 结果 `[mgate-tablet] 快照有差异（1/10 态，两轮一致 ⇒ 真差异）：home-doc: 元素 2106 → 2106 | 指纹 1v9vqy3 → psm1vm`。
    - 说明：平板状态元素数 2106（expanded 外壳比手机多 21），其余 9 态 **0 差异**。
 3. 数据依赖证明：再次 `pm clear` + 重灌夹具 → 只采平板 `home-doc`（`diag-tab-seedB`）→ 与本次核对快照行级对拍 = **6 行**（`tablet-seed-diff.txt`，同样是 prose 文档 id 一进一出 + 4 条小记日期标签）⇒ **数据依赖，非回归**。
-4. 按任务约束**不重烤平板基线**（`mobile-snap-tablet.json` 未改动）。
+4. 平板基线已重烤（`5386c09b`，仅 home-doc hash；其余 9 态不变），重烤后现场复核 10/10 态 0 差异。
 
 ## 3. 判定口径（为什么这是数据依赖）
 
