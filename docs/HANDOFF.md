@@ -7,6 +7,13 @@
 
 ## 0. 最新交接（最近 3 个批次；更早的见 git）
 
+### 261112 · 日记本不可变 + 两出口 + 回收站预览加固（已本地提交，未推送）
+
+- **日记本固定不可变（261112 用户裁决，红线见 AGENTS §3#25）**：`199f3403` 移除「取消日记标记」并把日记本定为固定不可变笔记本（`space` 只升不降；删除/改名/图标/排序/移动守卫）；`fd58dc0a` 移动端移除入口与写路径（保留单篇出口）；`d4d03260` 移动目标候选统一剔除日记子树（core 单一判据，桌面+移动共用）。
+- **两个单篇出口**：`f965e62c`「转为文档」复用 AI 写作「生成文档」同款共享弹窗（只选知识库笔记本、标题可改、不选分组；先 move 再 rename）；`4b6a524a`「转为小记」原样承载 Lake 正文并搬运图片/附件（`/<noteId>/` → `/quick-notes/<id>/`，journal 原子/回滚/droppedKinds 明说；原稿进回收站可恢复、原资产保留）。
+- **UI 修复**：`400dcc75` 非知识库空间也能看到 `showNotice` 提示（toast 从状态栏空壳拆出，7 个空间可见）；`3cf19a29` 回收站「云端已删除（仅本地）」副本整行可点 + 标题不再被徽标挤成 0 宽（缺正文给明确提示，task-89）。
+- **文档/契约**：AGENTS §3#25、[docs/DIARY.md](DIARY.md)、[guide/16-diary.md](../guide/16-diary.md) 已同步口径；本波门禁数字见 §1。
+
 ### 261112 · R2/C2 拆分收口 + 设备验收 + S3 真实桶收口（已本地提交，未推送）
 
 - **拆分 6–10（Q19=C2）**：Sidebar 1857→1498（7 内部组件到 sidebar/）；SettingsPanel 1447→89（11 个 sections + useSettingsPanelScope 722 行）；electron/main.ts 1306→1100（boot/paths.ts + boot/ipcWiring.ts 281 行，21 依赖显式传递、单例留 main）；lakeRuntime 1699→538（6 个 kernel 模块，lazy 边界/模块级单例/__disposeExtras 时序保持）；InkPad 阶段② 完成：抽 `InkCanvas` + `InkToolbarDesktop`（InkPad 1790→1533），ink 全测 226 例绿；品牌启动（见下）改透明雀。
@@ -38,16 +45,9 @@
 - **R1 门禁（本批实测，数值见 §1）**：tsc 0；全量 vitest 882 文件 / 5559 passed / 0 failed；ui-metrics 66/21；check:core 172/0；双 build + bundle/arch PASS；diff-check 0；`gradlew testDebugUnitTest` 31 tests 全绿。
 - **R1 未做/待验**：设备矩阵未跑（桌面 42 态 / 手机+平板 10 态 / 23 屏 / windowsweep）——移动预览 Sheet 几何、SecureStore 真机读回、历史预览返回键均需设备验证；拆分 6–10（`Sidebar`/`SettingsPanel`/`lakeRuntime`/`InkPad`/`main.ts`）按 Q19=C2 留发布后；剩余 21 条 shadowed 声明与移动 `mobile.css` 域归位留 R1 后续。
 
-### 261112 · 桌面文档图片预览只数到视口内几张（107 张 → 显示 1/8）
-
-- **根因**：桌面文档编辑器是 `EditorTab`（自己 `createLakeDocument`，不走 `LakeEditor`），调 `attachImagePreviewClick(host)` 时**没传 resolver** ⇒ 走 DOM 收集；虚拟渲染 + 卡片懒加载下 DOM 只有视口内几张（实测 8 张）。历史护栏读的是 `LakeEditor.tsx`（变量还叫 `EDITOR_TAB`）⇒ 真正的桌面编辑器从未被覆盖。
-- **修法**：`EditorTab` 双击时现场 `editorRef.getDocument("text/lake")` → `extractImagesFromContent()`（含未保存的新插图）；取不到（实例重建/销毁中）返回空 ⇒ 按既有约定回退 DOM 收集。
-- **实测**：同一篇（736KB、107 张 image 卡）修复前「2 / 8」→ 修复后「2 / 107」（锁定态同样 2 / 107），双击到 Lightbox 105ms。
-- **护栏**：`src/features/editor/imagePreviewAttach.render.test.tsx`（source：EditorTab 必须传 resolver；行为：正文全量、索引按 DOM 子序列对齐、回退、tap/click 语义）。
-
 ## 1. 当前基线（唯一状态来源）
 
-> 数值 = 最近一次实测（261112 R2 批）。**任何状态判断以本节 + `git status` / `git log -1` 为准**。
+> 数值 = 最近一次实测（261112 日记收口批，低负载串行）。**任何状态判断以本节 + `git status` / `git log -1` 为准**。
 
 **版本与仓库**
 
@@ -62,13 +62,13 @@
 **门禁基线（261112 晚最新一次实测；分层口径见 AGENTS §3#21）**
 
 - `npx tsc --noEmit` = **0**。
-- 全量 vitest（低负载串行门禁，HEAD 含 `d8ff18fc`）：**文件 = 总 905（894 passed / 11 skipped）**；**用例 = 总 5705（5693 passed / 12 skipped）/ 0 failed**。
-- ⚠️ `electron/s3v3/perf.integration.test.ts`：**低负载串行本次无抖动（通过）**；满载/并发构建时偶发（单跑 PASS），门禁判定以单跑/低负载为准（同 §2 既有口径）。
+- 全量 vitest（低负载串行门禁，本批 7 笔之后）：**文件 = 总 917（906 passed / 11 skipped）**；**用例 = 总 5769（5757 passed / 12 skipped）/ 0 failed**。
+- ⚠️ `electron/s3v3/perf.integration.test.ts`：**低负载串行本轮无抖动（通过）**；满载/并发构建时偶发（单跑 PASS），门禁判定以单跑/低负载为准（同 §2 既有口径）。
 - `node scripts/ui-metrics.mjs`：颜色 0 / 字号 0 / `!important` 9 = 允许清单 / `crossFileDupGroups` 45 / `shadowedDecls` **0**（task-34 已清零，门禁只降）/ 未定义令牌 0。
 - `check:core` 172 文件 0 违规；`check:mobileui` 通过。
 - `check:bundle` + `check:arch` PASS：desktop 首屏 567,551 / 600,000、app-js 196,192 / 307,200；mobile 首屏 348,211 / 360,000、entry 60,803 / 61,440、CSS 139,503 / 141,312、preload 6。
 - `git diff --check` = **0**。
-- **真实 S3 桶验收**：A 档三桌面隔离实例 **20/20 PASS**（`3fad8821`）；**B 档 13 条 57/57 PASS**（task-58，含 S72 修复后复跑），唯一测试前缀 **0 残留**（[19](audit-261112/19-s3-real-bucket-subset.md)）。**移动多端 A–F 见 [21 号报告](audit-261112/21-s3-multi-end-mobile.md)（D 号真缺陷 = task-74 修复中；G–K 未跑）**。
+- **真实 S3 桶验收**：A 档三桌面隔离实例 **20/20 PASS**（`3fad8821`）；**B 档 13 条 57/57 PASS**（task-58，含 S72 修复后复跑），唯一测试前缀 **0 残留**（[19](audit-261112/19-s3-real-bucket-subset.md)）。**移动多端 A–K 已跑完（task-72/74 已关闭；D 场景修复后复跑 9/9、收尾 0 残留，见 [21 号报告](audit-261112/21-s3-multi-end-mobile.md)）**。
 - 设备/视觉（最近记录）：手机 **10 态** + 平板 **10 态** 基线重烤并连跑两轮 0 差异；23 屏走查 23/23；`edit-surface-invariants` quicknote 11 + document 11 ALL PASS；capture 入口装置 10/10。**桌面 `check:stylesnap` 42 态已重烤**（34 严格态两轮 0 差异，8 窄窗按 UNSTABLE 跳过；基线已更新，见 §3）。
 
 **设备与环境（本机实测）**
@@ -120,7 +120,7 @@
 - **真实 S3 多端验收（261112，唯一前缀）**：抓到 3 个同步缺陷并已全部修复（**`3fad8821`，task-44**；P0 回收站/删除语义、P1-a 嵌套 folder parentId、P1-b 目录 purge 未清云端索引），复跑真实桶 **20/20 PASS、前缀 0 残留**、deviceConformance 绿。**S3 同步语义要点（以后按这些判，别再重新推演）：**
 
   - **回收站 = 特殊笔记本；删除 = 移动（且会传播）**：移入回收站 = 「移到 `notebook-trash`」的软删（正文/附件不删、**不写墓碑**），位置三元组随索引同步；purge 才是不可恢复；**恢复是唯一显式例外**（恢复标记 → local-wins）。
-  - **日记本 = 带 `space` 标记的特殊笔记本；不可取消标记**（261112 用户裁决）：跨空间只允许**单篇文档移动**（只支持单篇日记「转为文档」**移出**到普通笔记本；**不支持移入日记本**——日记本不作为移动目标、也不在知识库树里显示；正文/历史跟随）；**没有整本转换入口**。
+  - **日记本 = 固定不可变的特殊笔记本**（261112 用户裁决；契约 AGENTS §3#25）：不可取消/删除/改名/换图标/排序/作移动目标，`space` 只升不降；两个单篇出口见下（转为文档 / 转为小记）。
   - **位置三件套独立合并**：`parentId` / `trashedAt` / `deletedFromParentId` 与内容**分开**做三方合并（`src/core/s3v3/plan/positionMerge.ts`）：本地动则本地赢并发布（纯移动轮也 `indexChanged`，新增 `apply-position` 写），远端动则应用远端，两边都动按 `updatedAt` LWW；**内容赢家 ≠ 位置赢家**（内容赢家是远端时不要再上传本地旧字节）。**wire 上 trashed 条目 `parentId` 恒为 `null`**（本地容器 id `notebook-trash` 不进 wire，task-61；原始父只在 `deletedFromParentId`）。
   - **编辑锁独立合并**：`isLocked/lockedAt` 按云端基线 + `lockedAt` LWW 独立合并（task-47）：本地锁变化即 `indexChanged` 发布（他端持续编辑正文期间也发得出去）；锁不是合并屏障——他端正文照常应用、A 的锁保留；解锁是否传播靠基线变更检测（不依赖"解锁必须带时间戳"）。
   - **同步专用写路径**：`saveSynced`（`electron/store.ts` `saveSyncedNote` / `electron/noteContentRepository.ts:61` / 端口 `saveSyncedNote`；移动 `applySyncedBody` 同口径）允许 **trashed 行**接收正文、保留 trashed、**purged 永拒** ⇒ **用户保存守卫（`assertNodeWritable` 等）不得下沉到同步/镜像路径**（否则新设备首拉/他端编辑整轮失败；F04 同类事故，task-52/53 在修）。
@@ -129,6 +129,14 @@
   - **位置赢家=远端时不受 `lifecycleRace` 保护**（H73-G1，`4db266e9`）：该保护只覆盖「本地窗口内自己移入/移出」；远端 win 的生命周期类变更必须落地，不得被永久挡住。
   - **目录 purge 意图在设备本地 `intents`**（F-01b，`fa2fbdad`/`dc882945`）：**不新造 wire 墓碑**；回收站副本**永不 upload**、发布排除 remote-purged-trash、`fieldChanged` 不上传已删正文；显式恢复让位（远端 `updatedAt > purgedAt` 时以远端删除为准）。
   - **移动端已知缺口（task-55/56 在修）**：回收站容器 id 不落 `notes.parent_id`（N1）；`applyRemoteNoteMeta` 对 trashed 行跳过 title/parent（N3）；移动锁未生效（N4/M3）。
+
+- **日记本不可变与两个单篇出口（261112 用户裁决，契约 AGENTS §3#25）**：
+  - **固定不可变**：日记本 = 像回收站一样的**特殊笔记本**，**不可取消标记/不可删除/不可改名/不可换图标/不可排序/不作为移动目标**；`space` 只允许 `null → diary` **单调升级**，禁止 `diary → null`（发布/导入/恢复同样拒绝）；底层通用排序/改名/图标 IPC 若可达日记子树必须拒绝。
+  - **转为文档 = 同一 note 移动 + 可改名**：把这篇日记**移动到**知识库其他笔记本（正文/历史/回收站/索引跟随，不删除）；共享弹窗只选笔记本、标题默认日期可改、**先 move 再 rename**、失败可见。
+  - **转为小记 = 原 Lake 正文 + 媒体复制搬运**：用该日记的**原正文**创建一条小记（**复制**，新 id），图片/附件搬到小记资产作用域（`/<noteId>/` → `/quick-notes/<id>/`；**原资产保留**），随后日记原文**移入回收站**（软删、可恢复、不是 purge）；承载不了的卡片（`droppedKinds`）必须剥掉并**明说**，非 doc 类型（表格/多维表/画板/手写板）整篇拒绝。
+  - **回收站「云端已删除（仅本地）」副本必须可只读预览**：整行可点、标题不被徽标挤成 0 宽、缺正文给明确提示（task-89）。
+  - **`showNotice` 在全部 7 个空间可见**（`NoticeToast`；桌面状态栏只是宿主之一，task-93）。
+  - **已知限制（明确记录）**：① 同步镜像 apply 仍会应用远端的日记子树 `title`/`icon`（**入口层禁止、非 UI 暴露，不做字段冻结**）；② **移动端暂无「转为小记」入口**（仅桌面；「转为文档」两端都有）。
 - **InkPad 结构拆分（Q19-10）未做**：仅抽了 `inkPadModel` 纯逻辑 + 11 例行为测试；组合根 + 4 hook + 2 子组件拆分因 127 条文本护栏与 10 useState/45 useCallback 依赖网，留发布后按「先迁护栏 → 再抽 hook → 最后设备门禁」执行。
 - **发布链路**：Gitee 单附件 100MB / 仓库 1GB 上限（mac/Windows 包只能走 GitHub）；GitHub 慢速上传依赖 workflow 的 50 分钟步骤超时，不要缩短。
 - **历史编号与旧批次已失效**：旧文档/代码注释里的「HANDOFF §3#N / §4 / §7.x」是历史编号，**不对应本文**；更早的 §0 批次条目（如「第十四批」）也已删除，**只在 git 历史可查**。待办只看 §3（本节与 §3 都不编号）。
@@ -137,32 +145,23 @@
 
 > 规则：只有「真问题 / 不做有代价 / 收益大于复杂度」才进本节（AGENTS §3#17）；完成后**直接删行**，历史留 git。
 
-**当前批次（S3 语义第二波 + 多端验收）待办（2026-11-12 晚）**
+**当前批次（日记收口批）待办**
 
-- **已完成并关闭（本批）**：task-46（全场景矩阵 → 收口 45 有 / 28 部分 / 1 真空 + 新增 S08）· task-47（锁字段独立合并与发布）· task-52（G3 图标守卫越界）· task-53（移动恢复守卫）· task-54（桌面 UI 文案/档位）· task-55（移动生命周期）· task-56（移动编辑锁）· task-57（M1/M2/M3 实测证据）· task-58（真实桶 B 档 13 条 **57/57**）——证据见 §0 与 [19](audit-261112/19-s3-real-bucket-subset.md)/[21](audit-261112/21-s3-multi-end-mobile.md)。
-- **task-72（P0，in_progress）S3 多端混合验收**：2 个移动模拟器 + 桌面（真实桶 / 唯一前缀 / 10 条混合场景）；**A–F 已跑**（见 [21](audit-261112/21-s3-multi-end-mobile.md)），**D 号真缺陷 → task-74 修复中**；**G–K 与快照门禁未跑**。
-- **task-74（P0，in_progress）R-D 修复**：远端 purge 后移动端把行**物理删除** ⇒ 未保留「云端已删除（仅本地）」回收站副本；修完复跑 A–F 的 D 场景。
-- **task-67（P1，in_progress，Lead）移动端同步 warning 持久化**：重启不丢 + apply 跳过 kind 对齐（与桌面 `apply_skipped` 同口径）。
-- **S19（目录重建）**：矩阵收口后仍待补/待跑（目录重建后的索引/位置/资产一致性），随 task-72 G–K 或单独补齐。
-- **F-01b 后续：无**（`fa2fbdad` 4 处叠加根因已修 + `dc882945` 矩阵回写；无遗留）。
+- **task-67（P1，in_progress）移动端同步 warning 持久化**：代码已落（`1a014cb7`：摘要落盘上限 20 + 完整计数 + `apply_skipped` 对齐 + 只读/计数文案单一来源）；**剩余 = 装包后设备复核**。
+- **S19（目录重建）：不计划**（显式 id 重建不是用户流程；矩阵登记即可）。
+- 其余真剩余见下方 P0/P1/P2（设备点收 / 发版 / 已知欠账）。
 
 **P0（不做就卡住主线）**
 
-- **真实 S3 P0 修复（task-40/41/42 → 已由 `3fad8821`/task-44 落地，真实桶复跑 20/20）**：回收站=特殊笔记本/删除=移动 ⇒ 本地移入回收站后收到远端内容编辑，应**应用内容 + 保持回收站（不隐式恢复）**；仅 purge 不可复活；**单篇 apply 异常必须 warning+继续，不得让整轮 syncNow 抛错**。连同 P1-a（嵌套 folder parentId）/ P1-b（目录 purge 清云端索引）一起修，补 deviceConformance 并复跑真实桶。
 - **R1/R2 设备点收（门禁矩阵已全过，观感项待人工）**：已过 = Q04 / Q22、手机/平板 10 态 + 多维表 3 态 + 23 屏 + 窗口矩阵 + **桌面 42 态**（两轮 0 差异）；待人工 = Q03 历史 Sheet、Q07 preview 档、Q05 字号、桌面双击放大观感；真机 50950385 已装最新 APK。
-- **快照矩阵重烤**：移动 10 态 / 平板 10 态 / 多维表 3 态 / **桌面 42 态**均已重烤并两轮 0 差异（桌面 8 窄窗按既有 UNSTABLE 跳过）。
-- **发布前设备/视觉矩阵**：桌面 42 态、手机 + 平板 10 态、23 屏、windowsweep 已完成（两轮 0 差异）；换夹具/改外壳时按 §3#21 重烤。
 - **下一版发布**（流程 [docs/RELEASE.md](RELEASE.md)）：发布说明写清 ① inkDoc v4 旧端只读 / 手机需重装；② 标签顺序仅设备本地；③ 标签删除 = 缺席（两端都要升级）；④ 发版前全量矩阵。
 - **每批收尾固定动作**：更新 §1 基线与门禁计数 + §3 + §0 批次抬头；提交后立刻回写。
 
 **P1（该做但可排期）**
 
-- **R1 样式/移动余量（R2 已闭合）**：21 条 shadowed 声明已清零（task-34，门禁只降）；移动 `mobile.css` 域归位已完成（task-33）。
 - ~~**移动小记画廊混入视频/音频**~~（已修，task-32：`previewAssets` 只筛 image mime；设备验证已随 10 态矩阵）。
-- **拆分 6–10 状态（全部完成）**：`Sidebar`(1857→1498) / `SettingsPanel`(1447→89+settings) / `main.ts`(1306→1100) / `lakeRuntime`(1699→538) / `InkPad` 阶段②（抽 `InkCanvas` + `InkToolbarDesktop`，1790→1533）均已在 R2 落地。
 - **图片缩略残余（261111 收口后）**：① XHR 失败/旧包/超 12MP 的 webp·avif 回退 canvas，可能写显示尺寸；② 复制多张大图时同步阻塞（剪贴板 API 限制）；③ 会话内放行依赖「待上传卡计数 = 1」，多图并发时当会话不缩（重开按正文 origin 缩，安全降级）；④ 桌面文档编辑器（Retina 优先）与平板未启用同类缩略。
 - **移动性能基线**：lake_gate 录制 + `--compare` 已通过（冷启 1586 / capture 893 / 写作卡热开 332 / 文档打开 4ms）；⚠️ **键盘两项该 AVD 采不到**，键盘长任务口径仍以 5554 历史记录为准（775→72ms）；换 AVD / 换包 / 改视口必须 `--record` 重烤。
-- ~~**日记「取消标记」残余验收**~~（**已裁决不做**，261112：日记本不可取消标记，跨空间仅允许单篇文档移动；代码由 task-84/85 移除，原残余验收关闭）。
 - **小记快路径后续（非必须）**：请求已 13→11；重复点首次 `push-state` 约 1455ms（SQLite/原生桥多次调用，第二次 25ms）⇒ 可把 baseline + 单条行 + 标记合并成一次窄端口调用；**不要省写后 pointer 读回**（「已同步」可信度）。
 - **首篇编辑器 fallback 的最终解法（需用户裁决）**：① 拆内核 chunk（大改，需 RFC）；② 改「启动自动打开文档」语义（恢复标签为空时不自动开 / 先画列表再开）。当前预热只抢几十 ms。
 - **设备类欠账**：便携包真实 3GB 数据验证；更新中心设备验收（Android 下载→校验→系统安装器）；桌面 3 项实机复核 + 平板复验；导入/导出/键盘真机冒烟；依赖补丁 4 处升级复核。
@@ -177,4 +176,5 @@
 
 **已闭合（别重复做；细节见 git）**
 
+- **261112 日记收口批**：日记本固定不可变 + 取消标记已移除（task-84/85/87/88）· 移动目标剔除日记子树（task-90）· 转文档共享弹窗（task-91）· 转小记媒体搬运（task-92）· 回收站仅本地副本预览加固（task-89）· showNotice 全空间可见（task-93）· S3 多端 A–K 与 R-D（task-72/74）· 移动同步 warning 持久化 + apply_skipped 对齐代码（task-67）。
 - 空间命名两端「知识库」；桌面按钮梯队 + 移动 `mb-btn`；AGENTS 预算（≤64KB 内）；首屏瘦身（entry 60KB / preload 6）；小记写作卡全屏 + 键盘长任务 775→72ms；单条小记推 13→11；手机/平板各 10 态快照 + 23 屏 + `edit-surface-invariants` 重标定 + capture 入口装置；图片缩略三边界 + 小记封面/预览去重；桌面/移动图片预览语义（双击 vs 单击预览双击编辑）。
