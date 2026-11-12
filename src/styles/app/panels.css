@@ -48,6 +48,22 @@
 /* 回收站 / 历史版本的行：把 .ln-list-item 的 8px 统一间距收到 4px（一行 6 个间隙 ⇒ 省 24px），
  * 让「文档 · 时间」和「N 天后清除」徽标在默认宽度下都放得下（用户 261006：默认要能看到时间）。 */
 .history-list .ln-list-item { gap: 4px; }
+/* 回收站行整行可点（261112 task-89）：标题被「云端已删除（仅本地）」等徽标挤窄时，点行内任意位置都能预览。 */
+.trash-tree-node > .ln-list-item { cursor: pointer; }
+/* task-89 真根因（活实例 9237 实测 rowW=287.5 / textW=0）：badge（flex:none）与动作钮都不可收缩，
+ * 两个徽标（云端已删除 + N 天后清除）把 flex:1 1 auto 的文本挤成 0 宽 ⇒ 视觉上没标题。
+ * ① 文本保底宽度：标题/时间至少保留一截（行内点按与可读性都靠它）。
+ *    不能用 min-width —— 文本带着 kit 的 .ln-ellipsis（kit 层 min-width:0），legacy 层的 min-width 永远被压掉；
+ *    改锁 flex-shrink:0 + basis 96px（与 .ln-list-item__text 的 flex:1 1 auto 同层，后声明胜出，宽栏仍会增长）。 */
+.trash-tree-node .ln-list-item__text { flex: 1 0 96px; }
+/* ② 徽标在窄行下让位给标题：允许收缩并省略，不改造行几何（徽标本身仍是行内 flex 项）。 */
+.trash-tree-node .ln-list-item .badge {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 .history-preview-text { width: 100%; margin: 0; font-size: var(--lake-font-size-small); line-height: 1.7; color: var(--lake-text-1); white-space: pre-wrap; word-break: break-word; font-family: inherit; }
 

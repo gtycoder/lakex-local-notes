@@ -23,6 +23,37 @@ function buildTrashTree(items: TrashItem[]): TrashItem[] {
   return items.filter(isRoot);
 }
 
+/** 行的类型名（标题/时间兜底共用，单一来源）。 */
+function trashItemKindLabel(item: TrashItem): string {
+  return item.nodeType === "note" ? "文档" : "目录";
+}
+
+/** 标题兜底（task-89）：无标题文档/目录显示类型名，不留空白行。 */
+function trashItemTitle(item: TrashItem): string {
+  return item.title.trim() || trashItemKindLabel(item);
+}
+
+/** 时间兜底（task-89）：无 deletedAt 不留悬空分隔符；无标题时不再重复类型名（只显示「文档」）。 */
+function trashItemMeta(item: TrashItem): string {
+  const titled = item.title.trim().length > 0;
+  const kind = trashItemKindLabel(item);
+  // 时间不可解析时 formatDateTime 回空串：别拼出悬空的「文档，」。
+  const when = item.deletedAt ? formatDateTime(item.deletedAt) : "";
+  if (!when) return titled ? kind : "";
+  return titled ? `${kind}，${when}` : when;
+}
+
+/** 正文文件不在本机（readNote.bodyMissing / hasFile=false）：回收站预览只给可操作说明，不挂空 viewer。 */
+const TRASH_BODY_MISSING_HINT = "正文文件不在本机，无法预览；恢复后可从云端补回（若云端也没有，只能依靠本机历史快照）。";
+
+/** 不可预览的可操作提示（task-89）：目录 / 缺正文引用绝不留空白占位。 */
+function trashPreviewHint(item: TrashItem): string | null {
+  if (item.nodeType !== "note") return "目录没有正文可预览；展开左侧查看子项，或恢复后回到原位置查看。";
+  if (!item.noteFileId) return "这条记录缺少正文文件引用，无法预览；可先恢复再打开，或彻底删除。";
+  if (!item.hasFile) return TRASH_BODY_MISSING_HINT;
+  return null;
+}
+
 function TrashTreeRow({ item, items, selectedId, onSelect, onRestore, onPurge, trashAutoPurgeDays }: {
   item: TrashItem;
   items: TrashItem[];
@@ -37,28 +68,41 @@ function TrashTreeRow({ item, items, selectedId, onSelect, onRestore, onPurge, t
   const [open, setOpen] = useState(false);
   const fileMissing = item.nodeType === "note" && !(item.noteFileId && item.hasFile);
   const days = item.deletedAt ? trashDaysUntilPurge(item.deletedAt, trashAutoPurgeDays ?? 0) : null;
+  const title = trashItemTitle(item);
+  const meta = trashItemMeta(item);
 
   return (
     <div className="trash-tree-node">
-      <div className={`ln-list-item ln-list-item--hide-action ln-row2${selectedId === item.id ? " ln-list-item--focus" : ""}`}>
+      {/* 整行可点（task-89）：标题被徽标挤窄时，点行内任意位置都进预览；键盘 Enter/空格同一条路径。 */}
+      <div
+        className={`ln-list-item ln-list-item--hide-action ln-row2${selectedId === item.id ? " ln-list-item--focus" : ""}`}
+        role="button"
+        tabIndex={0}
+        aria-current={selectedId === item.id ? "true" : undefined}
+        aria-label={item.nodeType === "note" ? `预览「${title}」` : `「${title}」（目录，无正文预览）`}
+        title={item.nodeType === "note" ? "点击预览内容" : undefined}
+        onClick={() => onSelect(item)}
+        onKeyDown={(event) => {
+          // 只认行自身：行内展开箭头/恢复/彻底删除是独立控件，不能连带选中。
+          if (event.target !== event.currentTarget) return;
+          if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelect(item); }
+        }}
+      >
         <span
           className={`ln-list-item__toggle${children.length > 0 ? "" : " is-empty"}`}
           role="button"
           tabIndex={children.length > 0 ? 0 : -1}
           aria-label={open ? "折叠子项" : "展开子项"}
           aria-expanded={children.length > 0 ? open : undefined}
-          onClick={() => children.length > 0 && setOpen((v) => !v)}
-          onKeyDown={(e) => { if (children.length > 0 && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); setOpen((v) => !v); } }}
+          onClick={(event) => { event.stopPropagation(); if (children.length > 0) setOpen((v) => !v); }}
+          onKeyDown={(event) => { if (children.length > 0 && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); event.stopPropagation(); setOpen((v) => !v); } }}
         >
           {children.length > 0 ? <ChevronRight size={13} className={open ? "trash-caret-open" : ""} /> : null}
         </span>
         <span className="ln-list-item__graphic">{item.nodeType === "note" ? <File size={14} /> : <Folder size={14} />}</span>
-        <div className="ln-list-item__text ln-row2__main ln-ellipsis" onClick={() => onSelect(item)} title={item.nodeType === "note" ? "点击预览内容" : ""}>
-          <span className="ln-row2__title">{item.title || "无标题"}</span>
-          <span className="ln-row2__meta">
-            {item.nodeType === "note" ? "文档" : "目录"}
-            {item.deletedAt ? `，${formatDateTime(item.deletedAt)}` : ""}
-          </span>
+        <div className="ln-list-item__text ln-row2__main ln-ellipsis">
+          <span className="ln-row2__title">{title}</span>
+          {meta ? <span className="ln-row2__meta">{meta}</span> : null}
         </div>
         {item.fromDiary && <span className="badge badge--muted" title="来源是日记本；原位置若已不在，恢复后回到日记空间">日记</span>}
         {item.purged && <span className="badge badge--warn" title="其他设备已彻底删除；本机仍保留可恢复副本，恢复后会重新上传">已被他端删除</span>}
@@ -69,13 +113,13 @@ function TrashTreeRow({ item, items, selectedId, onSelect, onRestore, onPurge, t
         )}
         <span className="ln-spacer" />
         {isRoot && (
-          <button className="ln-list-item__action" title="恢复（含全部内容）" aria-label="恢复（含全部内容）" onClick={() => onRestore(item.id)}><RotateCcw size={14} /></button>
+          <button className="ln-list-item__action" title="恢复（含全部内容）" aria-label="恢复（含全部内容）" onClick={(event) => { event.stopPropagation(); onRestore(item.id); }}><RotateCcw size={14} /></button>
         )}
         <button
           className="ln-list-item__action ln-list-item__action--warning"
           title={isRoot ? "彻底删除（含全部内容）" : "彻底删除（含子项）"}
           aria-label={isRoot ? "彻底删除（含全部内容）" : "彻底删除（含子项）"}
-          onClick={() => onPurge(item.id)}
+          onClick={(event) => { event.stopPropagation(); onPurge(item.id); }}
         >
           <Trash size={14} />
         </button>
@@ -107,7 +151,8 @@ export function TrashPanel({ open, embed = false, onClose, onChanged, onRestored
   const [tab, setTab] = useState<"docs" | "quick">("docs");
   const [items, setItems] = useState<TrashItem[]>([]);
   const [quickItems, setQuickItems] = useState<Array<{ id: string; createdAt: string; updatedAt: string; deletedAt: string; cloudDeleted?: boolean }>>([]);
-  const [selected, setSelected] = useState<{ id: string; title: string; noteId: string | null; html: string; kind?: NoteKind } | null>(null);
+  /** hint = 不可预览时的可操作说明（task-89：目录 / 缺正文引用 / 正文文件不在本机，绝不留空白占位）。 */
+  const [selected, setSelected] = useState<{ id: string; title: string; noteId: string | null; html: string; kind?: NoteKind; hint?: string } | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   /** 恢复后的资源告警（恢复成功但有的资源没拉回来）——内联提示：回收站空间里状态栏是隐藏的，
@@ -173,8 +218,11 @@ export function TrashPanel({ open, embed = false, onClose, onChanged, onRestored
   }, [open, onClose, floating.interactionRef]);
 
   const preview = async (item: TrashItem) => {
-    if (item.nodeType !== "note" || !item.noteFileId) { setSelected({ id: item.id, title: item.title || "无标题", noteId: null, html: "" }); return; }
+    const title = trashItemTitle(item);
+    const blocked = trashPreviewHint(item);
+    if (blocked) { setSelected({ id: item.id, title, noteId: null, html: "", hint: blocked }); return; }
     const noteFileId = item.noteFileId;
+    if (!noteFileId) return; // trashPreviewHint 已挡掉空引用，这里只为收窄类型
     const version = previewVersionRef.current.next();
     setSelected(null); // 清空旧预览（销毁旧 viewer），避免加载期间显示上一篇内容
     setPreviewing(true);
@@ -183,10 +231,12 @@ export function TrashPanel({ open, embed = false, onClose, onChanged, onRestored
       await native.ensureTrashNoteAssets(noteFileId).catch((error) => reportNativeActionError("预览回收站附件", error));
       const doc = await native.readNote(noteFileId);
       if (!previewVersionRef.current.isCurrent(version)) return;
-      setSelected({ id: item.id, title: item.title || "无标题", noteId: noteFileId, html: doc.content, kind: (doc.kind ?? "doc") as NoteKind });
+      // 正文文件被手动删除（readNote 不抛错，回 bodyMissing + 空正文）：不挂空 viewer，给可操作说明。
+      if (doc.bodyMissing) { setSelected({ id: item.id, title, noteId: null, html: "", hint: TRASH_BODY_MISSING_HINT }); return; }
+      setSelected({ id: item.id, title, noteId: noteFileId, html: doc.content, kind: (doc.kind ?? "doc") as NoteKind });
     } catch (e) {
       if (!previewVersionRef.current.isCurrent(version)) return;
-      setSelected({ id: item.id, title: item.title || "无标题", noteId: null, html: "" });
+      setSelected({ id: item.id, title, noteId: null, html: "", hint: "读取正文失败，无法预览；可稍后重试，或先恢复该文档再打开。" });
       setError(getNativeErrorMessage(e));
     } finally {
       if (previewVersionRef.current.isCurrent(version)) setPreviewing(false);
@@ -350,7 +400,7 @@ export function TrashPanel({ open, embed = false, onClose, onChanged, onRestored
                   <NoteDocPreview noteId={selected.noteId ?? ""} body={selected.html} className="trash-preview-viewer" policyKey="trash" onError={setError} />
                 )
               ) : (
-                <div className="ln-empty">该节点无可预览内容（目录或正文已删）</div>
+                <div className="ln-empty" role="status">{selected.hint ?? "该节点无可预览内容（目录或正文已删）"}</div>
               )}
             </>
           ) : (
