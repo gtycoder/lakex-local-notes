@@ -231,7 +231,7 @@
 .outline-sidebar__resize-handle:hover::after,
 .outline-sidebar__resize-handle:focus-visible::after { background: var(--lake-accent); }
 .outline-sidebar__resize-handle:focus-visible { outline: none; }
-/* 收起且未悬停时父内容已不可命中；悬停预览时保留把手，行为与左侧浮层资料库一致。 */
+/* 收起且未悬停时父内容已不可命中；悬停预览时保留把手，行为与左侧浮层知识库一致。 */
 
 /* 移动端不显示右侧栏 */
 

@@ -178,7 +178,7 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 /* 阅读态大纲是内核的 fixed 浮层（.ne-viewer-toc-sidebar：position:fixed / bottom:0 / z-index:412），
    bottom:0 会一直铺到视口底、压住底部文档状态栏（z 180，261111 用户截图：弹出/固定/收起三态都盖住）。
    编辑态不冲突——内核把编辑态大纲挂在 .ne-editor-body 里（absolute / z 1），状态栏本来就画在它上面。
-   这里在「状态栏实际存在」时（:has，仅资料库文档页）把浮层底边上收到状态栏之上；其他空间没有状态栏也就不留空。 */
+   这里在「状态栏实际存在」时（:has，仅知识库文档页）把浮层底边上收到状态栏之上；其他空间没有状态栏也就不留空。 */
 .app-shell:has(.document-statusbar) .lake-editor-tab .ne-viewer-toc-sidebar {
   bottom: var(--statusbar-reserve);
 }

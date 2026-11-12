@@ -676,7 +676,7 @@
 - **小记快路径后续优化（非必须）**：请求已 13→11；重复点首次 `push-state` 约 1455ms（SQLite/原生桥多次调用，第二次 25ms）⇒ 若要再快，可把 baseline+单条行+标记合并成一次窄端口调用；**不要再省写后 pointer 读回**（「已同步」可信度）；要再省 ~5 次往返只能上条件写替代锁（协议级，另立项）。
 - **发版前补一次快捷 capture 冷启动真机**（本次只测热启动；同一代码路径，请求数相同）。
 - **便携包真实 3GB 数据验证**；**更新中心设备验收**（Android 下载→校验→系统安装器）；**桌面 3 项实机复核 + 平板复验**；261104 三项裁决残余验证；小记→文档标签携带待定；导入/导出/键盘真机冒烟债；依赖补丁 4 处升级复核。
-- **死 CSS 审计复核（261111）**：桌面候选 `.diary-split-handle` 是 `SplitPane` 的 `${className}-handle` 动态拼接、移动端 `.lv1–3` 是大纲层级动态类 ⇒ **均为假阳性，不删**；`docs/audit-261027/` 4 份**保留**（`TROUBLESHOOTING` / `SYNC-PROTOCOL` / 源码注释仍引用，删了会断出处）。旧「资料库」注释残留：`shell.css` / `app/base.css` 待并行会话收尾后统一，`kit.css` 1 处因该文件在别人写作用域暂不动。
+- **死 CSS 审计复核（261111）**：桌面候选 `.diary-split-handle` 是 `SplitPane` 的 `${className}-handle` 动态拼接、移动端 `.lv1–3` 是大纲层级动态类 ⇒ **均为假阳性，不删**；`docs/audit-261027/` 4 份**保留**（`TROUBLESHOOTING` / `SYNC-PROTOCOL` / 源码注释仍引用，删了会断出处）。旧「资料库」注释残留：**261112 已统一** `shell.css` / `app/base.css` / `app/editor.css` / `kit.css` / `features/outline/outline.css`（仅注释、零行为；ui-metrics / cssLayers / diff-check 均绿）；TS/TSX 里仍有约 30 处同义注释（`App.tsx` / `noteRef` / `diaryTree` / `outline` 等）⇒ 下次碰这些文件时顺手改，不单独开批。
 - **首篇编辑器 fallback 的最终解法（需用户裁决）**：① 拆内核 chunk（大改，需 RFC）；② 改「启动自动打开文档」语义（恢复标签为空时不自动开 / 先画列表再开）。当前预热只覆盖「用户中途点文档」，自动开首篇仍会看到 200–300ms fallback。
 - **编辑器同构骨架 fallback（可选，观感最好）**：替换「正在加载编辑器…」文字为轻骨架；需新增 editor CSS + `cssLayers` 基线，等并行会话释放后做。
 

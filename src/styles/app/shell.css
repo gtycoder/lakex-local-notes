@@ -234,7 +234,7 @@
  * 原先这里（以及下方媒体查询里）有一组 `.outline-sidebar*` 材质规则，与 outline.css 同选择器互相压，
  * 是"三栏三边框"时代的遗留。现在大纲的「面 / 边 / 影 / 圆角」只在 outline.css 里按状态定义一次，
  * 本文件不再涉及大纲；壳层连续材质只作用于 .app-shell / .sidebar / 正文卡。 */
-/* 桌面壳层使用一块连续材质：不再把顶栏、资料库和正文画成三张卡片。
+/* 桌面壳层使用一块连续材质：不再把顶栏、知识库和正文画成三张卡片。
  * （原先在 `@media (min-width: 761px)` 里 ⇒ 窄窗侧栏会掉回基础样式的 1px 右边框。） */
 .activity-rail,
 .sidebar,
@@ -252,7 +252,7 @@
 .create-menu > button:hover,
 .context-menu > button:hover { background: var(--lake-neutral-veil-2); }
 
-/* ===== 工作区 keep-alive：小记/资料库两个视图常驻 DOM（display:contents 让子节点直接参与
+/* ===== 工作区 keep-alive：小记/知识库两个视图常驻 DOM（display:contents 让子节点直接参与
    .workspace 网格），切换工作区时用 display:none 隐藏而非卸载——避免重建全部 tab 的 Lake
    编辑器（每个 setDocument 解析整篇文档）与目录树，切回笔记即点即显。 ===== */
 .workspace-view { display: contents; }
@@ -420,7 +420,7 @@
  * 底部还多出 4px 灰缝（实测 761/760 两侧白卡与 padding 全不一致）。 */
 .app-shell.quick-notes-active .activity-rail {
   background: transparent;
-  /* P5：原 `border: 0` 已删 —— 小记页与资料库页保持一致（保留 1px 右描边）。 */
+  /* P5：原 `border: 0` 已删 —— 小记页与知识库页保持一致（保留 1px 右描边）。 */
 }
 
 .app-shell.quick-notes-active .workspace {
