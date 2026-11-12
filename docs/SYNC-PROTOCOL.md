@@ -316,6 +316,7 @@ retryPendingAssets（上轮失败附件先补）
 - **发布条目按位置赢家组装**：内容取内容判定赢家，位置三件套取位置合并赢家（本地赢/远端赢都投影进发布条目）；这是「纯移动轮 / 回收站轮也能把位置发出去」的关键。
 - **回收站也走这条路径**：移入回收站 = 位置三件套变化（§10.3），因此「A 删除、B 编辑正文」不会互相回滚。
 - **wire 位置投影口径（261112 task-61；不改字段、只归一值）**：`positionOf` 对 `trashedAt` 非空的条目把 `parentId` 视作 `null`（比较与发布同口径）。桌面本地 trashed 行的 `notes.parent_id` 指向本地容器 `notebook-trash`，该 id 不在云端 `folders[]`（带出去就是悬空父）；归一后「本地容器 id vs 基线 null vs 移动端保留原父」三种表示不再被判成位置变化，避免每轮误发布。位置只由 `trashedAt` 表达，原始父在 `deletedFromParentId`。
+- **本机窗口内生命周期守卫（H73-G1，261112）**：`saveState` 的 `lifecycleRace` **只保护「本地在同步窗口内自己移入/移出回收站」**——判据 = 本轮快照 `previous` 里该条的位置与当前本地不同（本地生命周期在本轮变过）且 `cur.updatedAt > n.updatedAt`；满足时本轮不覆写生命周期（留到下一轮按新状态合并，I2「未变才应用」）。**位置赢家是远端时生命周期必须落地**（远端 trashed → `deleteNote`；远端 active → 按 §10.3 的恢复例外处理），不能因为「本地内容 updatedAt 更晚」永久挡住删除传播（`apply-position` 不推进 `updatedAt`，旧判据会每轮自锁 ⇒ 删除永不传播）。`previous` 缺失（旧调用/单测直调 `saveState`）⇒ **保守沿用旧守卫**，行为不倒退。回归：`src/core/s3v3/state/deviceStoreMeta.test.ts`（H73-G1 落地 + P1-2 保护两向）、`electron/s3v3/trashRemoteDivergence.test.ts`。
 - **已知近似（不新增 wire 字段的代价）**：wire 没有独立的位置时间/版本字段，两边都动时复用条目 `updatedAt`（内容时间）做 LWW ⇒
   ① 移动与正文编辑共用同一时间戳，无法独立排序；
   ② 两端在同一毫秒各改位置时「相等取本地」会让本轮各自保留本地一版（无独立时钟，后续某方 `updatedAt` 严格更新才收敛）；
@@ -361,6 +362,16 @@ retryPendingAssets（上轮失败附件先补）
 - **解锁传播**：靠「本地 vs 基线」变更检测（`isLocked` 变了解锁即算锁变化），**不依赖"解锁必须写 lockedAt"**——缺时间戳的解锁也能赢；两边都动时才退回 `lockedAt` LWW。
 - 回归：`electron/s3v3/lockPropagation.test.ts` L1–L5（含 L2「B 连续两轮编辑时锁仍传播」）。
 
+### 9.9 被远端删除时强制留档（S72-F1，261112）
+
+**判据（五要素同时满足）⇒ plan 强制生成 `archive-local`（reason `remote-wins`）**：位置赢家 = **远端** + 远端条目 `trashedAt` 非空 + 本地尚未 `trashedAt` + 本地内容相对云端基线有变化 + 内容赢家 = **本地**。
+
+- 为什么需要：v3 的「移入回收站」是**位置变化**、条目仍在索引里（不是缺席），内容判定仍可走 upload；若不留档，本地未发布编辑会被上传成 trashed 条目、之后在回收站/历史里都找不回（违反 AGENTS §3#3「被删侧本地编辑强制留历史快照」；真实桶 S72 实测 history=0）。
+- **快照先于正文写入**：`applyPlan` 固定先执行 `archives` 段（`archive-local`），再进入 `reads/bodies` 覆盖正文 ⇒ 快照内容 = **覆盖前的本地编辑版本**（`archiveLocal` 归档当前本地正文）。
+- **两端共用同一 plan**：判据在 core 的 `planSync`（桌面/移动共享），移动端同口径。
+- 不重复/不误伤：远端**缺席**仍由 merge 给 `archiveLocal`；本地本来就在回收站（不是本轮被删）不在此列；两边都改由 `remote-wins-history` 留档；可疑正文（P1-4，warning `body_suspicious_external_change`）只留 suspicious 一份。
+- 回归：`electron/s3v3/historySnapshotOnRemoteTrash.test.ts`（快照 = 本地编辑版本；远端缺席 / 本地在回收站 / 两边都改三类不误伤）。
+
 ## 10. 删除 = 缺席
 
 ### 10.1 本地彻底删除（purge）
@@ -383,6 +394,15 @@ retryPendingAssets（上轮失败附件先补）
 - **收件端（261112 P0）**：本地已在回收站 + 远端 active 编辑 ⇒ 应用内容/标题/图标等字段，**保留本地回收站、不隐式恢复**；唯二恢复例外 = 云端基线本身是 trashed 条目（他端显式恢复已传播）或本机 `restorePending`（§11）。丢弃「远端 active 就恢复」的旧实现。
 - **purge = 缺席**：彻底删除 = 索引条目消失 + 前缀清理（`objects/{id}-`、`assets/{id}/`、`meta/assets/{id}/`）；Lake 没有墓碑对象可传播（小记另有 `purged[]`，§10.4）。
 - 回收站自动过期（`trashAutoPurgeDays`，默认 90 天）到点 purge；`cloud_deleted`（仅本地）副本**不豁免**。被动收到的删除（他端）≠ 本端主动删除：副本只读、可恢复、不参与 S3，唯一例外是显式恢复。
+
+**目录 purge（261112 task-77 / F-01b）**：目录（notebook/group）没有正文，purge 语义与文档共用「设备本地意图、无 wire 墓碑」：
+
+- **意图存储 = 设备本地 `state.intents`**（桌面持久化 `deleted_notes.node_type='folder'`，`loadState` 投影进 intents；`planStateOf` 必须映射为 `folderPurgeIntents`——**不得硬编码成空**，否则云端 `folders[]` 永久残留）。wire 无目录墓碑/无 deleted 标记：目录**缺席即删除**（发布时直接不写该 folder）。
+- **发布排除**：`local-purge` / `local-delete` / `remote-purged-trash` 三类目录都不进发布 `folders[]`（文档 notes 同口径：排除 `local-purge` / `remote-purged-trash`）；否则对端会把「已 purge 目录的本地回收站副本」publish 回去 ⇒ 云端永久残留 + 两端互刷。
+- **回收站副本永不 upload（含无基线）**：本地带 `trashedAt` 的目录副本即使「无基线」（基线被纯拉取轮推进到不含它）也**不得**当新建上传，一律按 `remote-purged-trash` 处理。文档同理：`local-purge` / `remote-purged-trash` 即使字段 diff 触发 `fieldChanged` 也**不强制上传正文**（避免已验证缺席的正文对象被重新 PUT ⇒ 孤儿复活）。
+- **显式恢复让位**：他端显式恢复 = 远端同 id 条目 `updatedAt > intent.purgedAt` ⇒ 丢弃本地删除意图（**目录与文档同一判据**，`s3v3Engine` 事件驱动、只读索引、读失败下一轮再判）；目录本地恢复后按 D4「`updatedAt` 晚于基线且不在回收站」重新发布（§11 第 5 条）。
+- **意图清除唯一**（§10.1）：显式恢复；或更高 generation 且索引明确不含该 id；发布成功本身不清除。
+- 回归：`electron/s3v3/folderPurgeCloud.test.ts`（4 处叠加根因：意图未映射 / `remote-purged-trash` 未排除 / 无基线 trashed 当 upload / fieldChanged 强制上传；断言首轮云端无残留、对端不重建不回传、多轮 pointer 不动）+ `electron/s3v3/deviceConformance.ts`【场景 7b】。
 
 ### 10.4 小记 `purged` 的差异
 
@@ -623,9 +643,13 @@ state sidecar：桌面 `<storeRoot>/sync-v3/state.json`；移动同表 `sync_v3_
 | 位置字段独立合并 / 回收站位置传播（261112） | `electron/s3v3/trashRemoteDivergence.test.ts`、`electron/s3v3/deviceConformance.mixed.test.ts`（回收站位置必须传播）、`src/core/s3v3/state/deviceStoreMeta.test.ts` |
 | 同步专用写路径（回收站行接收正文/图标，用户入口守卫不放宽） | `electron/noteContentRepository.test.ts`（F04）、`electron/s3v3/remoteIconWrite.test.ts`、`electron/s3v3/deviceConformance.mixed.test.ts` |
 | 单篇 apply 失败降级（warning + continue） | `src/core/s3v3/state/deviceStoreMeta.test.ts`、`electron/s3v3/deviceConformance.mixed.test.ts` |
+| 被远端删除时本地编辑强制留档（S72-F1） | `electron/s3v3/historySnapshotOnRemoteTrash.test.ts` |
+| 目录 purge 意图/云端不残留（F-01b） | `electron/s3v3/folderPurgeCloud.test.ts`、`electron/s3v3/deviceConformance.ts`【场景 7b】、`electron/s3v3/remFolderParent.test.ts`（D4 不回归） |
+| 生命周期守卫不挡远端删除（H73-G1） | `src/core/s3v3/state/deviceStoreMeta.test.ts`（落地 + P1-2 两向）、`electron/s3v3/trashRemoteDivergence.test.ts` |
 
 ## 20. 变更记录
 
+- **2026-11-12（二）**：被远端移入回收站且本地有未发布编辑 ⇒ 强制 `archive-local`（S72-F1，快照先于正文写入、= 本地编辑版本、两端共用 plan，§9.9）；目录 purge = 设备本地 intents（`deleted_notes.node_type=folder`）、无 wire 墓碑，配套「发布排除三类 / 回收站副本永不 upload（含无基线）/ fieldChanged 不强制上传已删正文 / 显式恢复让位 `updatedAt > purgedAt`」（F-01b，§10.3）；`lifecycleRace` 只保护本机窗口内自己移入/移出回收站，位置赢家为远端时生命周期必须落地（H73-G1，§9.5）。
 - **2026-11-12**：位置字段（`parentId`/`trashedAt`/`deletedFromParentId`）独立三方合并（§9.5，纯移动轮 `indexChanged`、`apply-position` 写、内容赢家是远端时不上传旧字节）；同步专用写路径与写守卫分层红线（§9.6：`saveSynced`/`saveSyncedNote`/`applyRemoteNodeIcon`，用户守卫不下沉）；回收站 = 特殊笔记本（§10.3：删除 = 移动、`trashedAt` 权威、`notebook-trash` 不进 wire/不作为对外 parent 语义、收件端不隐式恢复）；单篇 apply 失败 = warning + continue 并汇入 `SyncResult.warnings`（§9.7）。
 - **2026-11-10**：「保存并同步」快路径（261110）：桌面改走高优先门（不再排维护队列/不等整轮）；
   单条推送加 `loadQuickPushState` 轻量状态（不重建世界）、内容寻址去重 PUT、remote/client 缓存、
