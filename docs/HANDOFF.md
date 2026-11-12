@@ -10,7 +10,7 @@
 
 > **顺序标注**：261109 各批次里写的「日记 ⌘4 / AI 写作 ⌘3」是**当时**的顺序；**261110 起改为 日记 ⌘3 / AI 写作 ⌘4**（另有标签 ⌘5）。旧批次不再改，以本行 + §1 为准。
 
-### 261112 · 发布前全仓审计 + R0 收口批（**未提交**；待用户验收/裁决）
+### 261112 · 发布前全仓审计 + R0 收口批（**已本地提交，未推送**；待用户验收/裁决）
 
 - **审计**：6 域并行只读审计 + Lead 交叉复核，产出 `docs/audit-261112/`：`00-MASTER-PLAN.md`（总方案：架构审查 + 分项 A–Q + R0/R1/R2 路线 + 27 项裁决 Q01–Q27）+ 分册 02 预览 / 03 桌面 UI 样式 / 04 移动 / 05 core+electron / 06 特性域 / 07 文档清理 + 09/10 独立复核。代码域 P0 = 0；docs 侧两条 P0（guide 落后两个版本 / `.gitignore` 与内核入库矛盾）已在本批修掉。
 - **R0 已落地（已验证，未提交）**：
@@ -19,7 +19,7 @@
   - 代码：小记「保存并同步」4 理由透传 + 两端共用文案（F-04）；AI 作用域 5 宿主 `data-note-id` + 选择器/存活判据单源（F-03）；日期格式化 7 处收口 + lint 测试；`NoteKind` 私抄 14 文件清零 + 触点护栏；长按第 3 份改用 `longPressTimer`；`AI_DIALOG_GAP` 单源；`native.ts` IPC 第四面 parity；设置注释 fail-closed 纠偏；死 env 开关（`LAKE_SYNC_PROTOCOL` / `LAKE_S3V3_QUICK_NOTES`）删除。
   - 样式：桌面删 35 条被压死声明（+ kit 32 声明 `.ln-modal/.ln-drawer`）；新增 `shadowedDecls` 门禁（基线 21 只降）；移动 `--mb-radius-xl` 悬空、`mobile.html` 双 theme-color、`OpenFile` 双注册、`lakeNativeContract` 计数 4 项修正。
 - **门禁（本批实测）**：`npx tsc --noEmit` = 0；全量 vitest **874 文件（863 passed / 11 skipped）/ 5512 passed / 12 skipped / 0 failed**；`node scripts/ui-metrics.mjs`：颜色 0 / 字号 0 / `!important` 9=清单 / `crossFileDupGroups` 66 / `shadowedDecls` 21 / 未定义令牌 0；`check:core` 163 文件 0 违规；`check:mobileui` 通过；双 build 通过；`check:bundle`+`check:arch` PASS（desktop 首屏 565,129/600,000、app-js 193,737/307,200；mobile 首屏 348,731/360,000、entry 60,298/61,440、css 140,383/141,312、preload 6）；`git diff --check` = 0。
-- **未做 / 待裁决**：审计方案 §6 的 Q01–Q27 仍未拍板（预览 Phase2、手机原图、移动历史预览、拆分范围、HANDOFF 压缩 Q17、`audit-261027` Q16 等）；剩余 21 条 shadowed 声明（feature.css / misc.css / 共享规则）与移动 `mobile.css` 域归位留 R1；桌面 42 态 / 手机+平板 10 态 / 23 屏 / windowsweep **本批未跑**（需夹具机/设备）。本批**未 commit**。
+- **未做 / 待裁决**：审计方案 §6 的 Q01–Q27 仍未拍板（预览 Phase2、手机原图、移动历史预览、拆分范围、HANDOFF 压缩 Q17、`audit-261027` Q16 等）；剩余 21 条 shadowed 声明（feature.css / misc.css / 共享规则）与移动 `mobile.css` 域归位留 R1；桌面 42 态 / 手机+平板 10 态 / 23 屏 / windowsweep **本批未跑**（需夹具机/设备）。本批已本地提交三笔：`996b4d6e` docs / `fab629dc` chore / `8e20a6a3` fix，**未 push**。
 
 ### 261112 · 桌面文档图片预览只数到视口内几张（107 张 → 显示 1/8；用户报「预览数量不对，应该是虚拟加载的问题」）
 
@@ -632,7 +632,7 @@
 - **261110 历史清理（一次性）**：`.ai-writing-recon/`（走查截图 / 页面快照 / 探针脚本，59 文件 ≈15MB）已用 `git filter-repo --invert-paths` 从**全部历史**移除；被重写的是 **v1.1.0 之后的 23 个提交**（hash 以 `git log` 为准），**v1.0.x / v1.1.0 的 tag 与其提交 hash 未变**（不含该目录）⇒ 已发布 Release 与 CI 产物不受影响。重写前快照：`/Users/admin/file/local-lake/lakex-local-notes-backup-<stamp>/all.bundle`（62MB，含全部 refs）。**旧 clone / worktree 需 `git fetch --force --prune` + `git reset --hard origin/master` 或重新 clone**（旧 hash 已不可达）；本机原 `lakex-local-notes-diary` worktree 已删除（其分支是 master 祖先，无内容丢失）。
 
 - **worktree（261109 发版时）**：`lakex-local-notes` = `master`（发版主工作树）；`lakex-local-notes-diary` = `feat/diary-space`（本批开发用，已合并 master 并合回 master）。AI 写作与日记**都已进 master**，两个空间共存（⌘3 / ⌘4）。
-- 主分支 `master`，HEAD = **`e19fa3da`**（261112 编辑面不变量重标定）；前序 = `e03736b7`（小记封面/预览首图去重）、`d02298d4`（快照第 10 态 + 门禁复核）、`c8bc5777`（图片缩略三边界收口）、`b83f53ca`（写作卡图片缩略 + 回写）、`87c5ceb1`（内核图片显示缩略）及并行会话提交。**双远端（Gitee `origin` / GitHub `github`）均已到 `e19fa3da`，本地与之同步**（`git push origin master` 双推）。
+- 主分支 `master`，HEAD = **`8e20a6a3`**（261112 R0 代码笔）；本批三笔 = `996b4d6e` docs / `fab629dc` chore / `8e20a6a3` fix；上一笔 `8cc65e06`（261112 预览/小记批）。**双远端（Gitee `origin` / GitHub `github`）仍停在 `8cc65e06`（本批未 push）**；需要推送时按 README/AGENTS 双远端流程。
 - `package.json` = **1.1.0**；Android `versionName 1.1.0` / `versionCode 11100`（从根 `package.json` 派生，版本号单一来源：`1000 + major*10000 + minor*100 + patch`）。
 - tag：`v1.0.0`–`v1.0.5`、**`v1.1.0`**（另有旧 `v0.0.1` / `v0.0.2`）；已发布 tag 不再移动。`v1.1.0` = AI 写作 + 日记两个新空间。
 - `v1.0.5` 是**发在 AI 写作合并之前**的：AI 写作第一次随本版发布，别在旧发布说明里找它。
@@ -653,7 +653,7 @@
 
 **门禁基线（261109 发版前：AI 写作 + 日记合并后实测）**
 
-- **261112 R0 批（未提交；见 §0）**：`npx tsc --noEmit` = **0**；全量 vitest **874 文件（863 passed / 11 skipped）/ 5512 passed / 12 skipped / 0 failed**；`ui-metrics` 颜色 0 / 字号 0 / `!important` 9=清单 / `crossFileDupGroups` 66 / `shadowedDecls` 21；`check:core` 163/0；`check:mobileui` 通过；`check:bundle`+`check:arch` PASS（desktop 565,129/600,000 + app-js 193,737/307,200；mobile 348,731/360,000 + entry 60,298/61,440 + css 140,383/141,312 + preload 6）；`git diff --check` = 0。
+- **261112 R0 批（已本地提交；见 §0）**：`npx tsc --noEmit` = **0**；全量 vitest **874 文件（863 passed / 11 skipped）/ 5512 passed / 12 skipped / 0 failed**；`ui-metrics` 颜色 0 / 字号 0 / `!important` 9=清单 / `crossFileDupGroups` 66 / `shadowedDecls` 21；`check:core` 163/0；`check:mobileui` 通过；`check:bundle`+`check:arch` PASS（desktop 565,129/600,000 + app-js 193,737/307,200；mobile 348,731/360,000 + entry 60,298/61,440 + css 140,383/141,312 + preload 6）；`git diff --check` = 0。
 - **261112 图片预览批**（桌面画廊取正文全量 + 移动端「点击看图片、双击编辑」；见 §0）：`npx tsc --noEmit` = 0；全量 vitest **871 文件（860 passed / 11 skipped）/ 5488 passed / 12 skipped / 0 failed**（新增 `imagePreviewAttach.render.test.tsx` 8 例：正文全量画廊 / 索引对齐 / 回退 / 单击预览 / 双击取消 / 元素被重渲染仍算双击 / 移动取消 / 桌面不变；本轮 `electron/s3v3/perf.integration` 通过）；`check:mobileui` / `check:core`（164 文件 0 违规）通过；`git diff --check` = 0；APK 已装 `lake_mobile` 并做设备点按四步验收（见 §0）。
 - **261112 小记首屏预热批**（小记第一打开闪屏；见 §0，含上一批「导出」修复）：`npx tsc --noEmit` = 0；全量 vitest **870 文件（859 passed / 11 skipped）/ 5480 passed / 12 skipped / 0 failed**（新增 `quickNoteDetailPrewarm.test.ts` 5 例 + `quickNotesView.test.ts` +2 例；`electron/s3v3/perf.integration` 本轮通过）；`git diff --check` = 0。
 - **261112 导出修复批**（顶栏「更多 → 导出」全部无效；见 §0）：`npx tsc --noEmit` = 0；全量 vitest **869 文件（858 passed / 11 skipped）/ 5473 passed / 12 skipped / 0 failed**（含新增 `useTopMenus.render.test.tsx` 3 例）；`git diff --check` = 0。第一轮全量时 `electron/s3v3/perf.integration` 因宿主负载误报、隔一轮全量自发通过（与 §2 既有口径一致）。
@@ -677,7 +677,7 @@
 - macOS = x64 + arm64 分开打包，ad-hoc 签名未公证（首次打开走「仍要打开」）；免提示需 Apple Developer ID + 公证。
 - **GitHub 推送：优先走 SSH remote `github`**（261109 实测：HTTPS 到 github.com **完全不通**（443 连接超时/HTTP2 framing），SSH 22 **可用** ⇒ `git push github master`；`origin` 的 HTTPS pushurl 会失败）。**VPN 开启时 GitHub 一律不通（含发版 tag 推送）**，发版前确认 VPN 已关。HTTPS 可用时期的老办法：`git -c http.version=HTTP/1.1 push <url> <branch>`。曾用 `http.curloptResolve` 仅对单次 git 命令覆盖 DNS 解决（不改全局 DNS/代理/TLS，不固化 IP）。
 - **v1.1.0 发版（261109 20:03 CST）**：master = `075272b2`（已推 Gitee + GitHub），注解 tag **`v1.1.0`** 已推两处并触发 GitHub `Release` workflow（macOS x64+arm64 / Windows / Android / publish）；tag 指向 `075272b2`，**不可移动**。发版前 review 修掉三项 P1（AI 写作排除日记子树与日记本、槽位上移消除 features→desktop 违规、AI 写作改 lazy 回收首屏余量）。
-- **本机 stash 已清空**（原 a11y WIP 已合并进 master，261110）。**261112 R0 批工作树未提交**：`git status` 有大量改动（docs/guide + 代码 + 测试，见 §0 该批），HEAD 仍为 `8cc65e06`；提交时按 §3 的文件隔离规则分批 stage，**不要 `git add -A`**。
+- **本机 stash 已清空**（原 a11y WIP 已合并进 master，261110）。**261112 R0 批已本地提交三笔**（`996b4d6e` / `fab629dc` / `8e20a6a3`），工作树 clean，**未 push**；后续改动继续按 §3 的文件隔离规则分批 stage，**不要 `git add -A`**。
 - 发版流程见 [docs/RELEASE.md](RELEASE.md)；用户手册见 [guide/README.md](../guide/README.md)。
 
 **文档地图（现存；已删文档不要再链）**
@@ -717,7 +717,7 @@
 
 **P0（不做就卡住主线）**
 
-- **261112 R0 批待用户验收/提交**（见 §0）：本批只做「不需要裁决」的项；`git status` 仍是未提交状态。验收后按文件隔离分批提交；**不要**把 `docs/audit-261112/` 的分册当产品改动。
+- **261112 R0 批待用户验收/推送**（见 §0）：本批只做「不需要裁决」的项，已本地提交三笔（未 push）。验收后决定是否推送；**不要**把 `docs/audit-261112/` 的分册当产品改动。
 - **发布前设备/视觉矩阵**：桌面 42 态、手机/平板 10 态、23 屏走查、windowsweep、双 build + 全量 vitest（本批已跑 tsc/全量 vitest/双 build/bundle+arch/ui-metrics/core/mobileui/diff-check，**设备类未跑**）。
 - **编辑面不变量 261112 重标定为绿（用户选 A：只改装置、不动观感）**：原装置首跑 quicknote **10 条**、document **5 条**红，全部落在「键盘→面板 / 键盘→收回」；定性为**预期过期**而非几何回退——I1 的「键盘⇄面板三态逐项相同」前提写于 261014（当时面板与键盘同高、键盘收起⇒内容区等量缩短），261110/261111 改**全屏写作卡 + 覆盖式面板**后不再成立；I3 截图复核（`/tmp/caret-keyboard.png`、`/tmp/caret-panel.png`）光标在面板顶下 74px，但该行与光标仍在面板圆角之上可见，不是明显遮挡。**新语义**：I1 = ①面板态自身稳定（+1.2s 内 ch/st/firstY 不变）+ ②收回后**内容区高度严格回原值**、滚动/首块位移 ≤120px（实测 26px / 74px；74px 来自文档编辑态外壳 chrome 在收键盘时的重排）；I3 = 只在**键盘态与收回后**严格断言（覆盖式面板态不再要求光标在面板上方）；I2/I4/I5 不变。重跑 **quicknote 11 条 + document 11 条 ALL PASS**（lake_gate / 9336，新包）；CONTRACT §5.38/§5.38.1 的 I1 描述同步。
 - **写作卡两条入口 / 键盘（261112 已闭合）**：正常新建 = 23 屏走查 23/23；长按/fab 上滑速记 = 新装置 `scripts/mobile-audit/capture-entry.mjs`（10 条 ALL PASS）；键盘开合 = `edit-surface-invariants` quicknote 11 + document 11 条 ALL PASS。后续改 ＋/createPress/写作卡入口或键盘适配时**三件一起重跑**。
