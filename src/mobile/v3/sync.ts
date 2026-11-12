@@ -8,6 +8,7 @@ import { createMobileS3v3Remote, getMobileS3v3RemoteCached, invalidateMobileS3v3
 import { countRemoteOps, remoteOpSummary } from "../../core/s3v3/remoteStats.js";
 import { runQuickPush } from "../../core/s3v3/quickPush/pipeline.js";
 import { rlog } from "../../lib/log";
+import { mergeSyncWarnings } from "../../core/syncWarningMerge.js";
 
 /**
  * 移动端 v3 同步编排（feature flag 下由 bridge.syncNow 调用）。
@@ -66,10 +67,17 @@ export async function runMobileV3Sync(db: MobileDb, settings: S3v3Settings, opts
   // task-44 / task-66：单篇 apply 失败 = 「本地这篇本轮没落地」，独立 kind apply_skipped（内部类型，非 wire）。
   // 不得复用 remote_incomplete（那是「远端内容不全」，文案会误导用户）；桌面端 desktopSync 同口径。
   const applyWarnings = store.drainApplyWarnings();
-  for (const w of applyWarnings) {
-    report.warningDetails.push({ kind: "apply_skipped", noteId: w.id, title: w.title, message: w.detail ?? "" });
-    report.warnings.push("apply 跳过 " + w.id + "：" + (w.detail ?? ""));
-  }
+  const applyDetails = applyWarnings.map((w) => ({
+    kind: "apply_skipped" as const,
+    noteId: w.id,
+    title: w.title,
+    message: w.detail ?? "",
+  }));
+  for (const w of applyDetails) report.warnings.push("apply 跳过 " + (w.noteId ?? "") + "：" + w.message);
+  // W4（261112）：一行式 warning 补成结构化项（无结构化明细者），与已有项去重；两端同一来源。
+  const mergedWarnings = mergeSyncWarnings({ structured: report.warningDetails, extra: applyDetails, logLines: report.warnings });
+  report.warningDetails.length = 0;
+  report.warningDetails.push(...mergedWarnings);
   return report;
 }
 /**

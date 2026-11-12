@@ -13,6 +13,7 @@ import { buildS3v3DiagnosticReport, createS3v3PhaseCollector, type S3v3Diagnosti
 import { countRemoteOps, remoteOpSummary } from "../../src/core/s3v3/remoteStats.js";
 import { runQuickPush } from "../../src/core/s3v3/quickPush/pipeline.js";
 import { perfMessage } from "../../src/core/logFormat.js";
+import { mergeSyncWarnings } from "../../src/core/syncWarningMerge.js";
 
 /**
  * 桌面 v3 同步入口（**唯一**协议；旧 quick-notes 通道与 LAKE_SYNC_PROTOCOL 开关均已删除）。
@@ -184,6 +185,13 @@ export async function syncWithV3(
       title: w.title ?? "",
       message: w.detail ?? "",
     }));
+    // W4（261112）：plan/引擎的一行式 warning（不少没有结构化明细）过去只进日志 ⇒ 浮层/诊断看不见。
+    // 合并去重后统一进 SyncResult.warnings 与诊断报告（apply_skipped 保持自己的 kind，不归到 remote_incomplete）。
+    const mergedWarnings = mergeSyncWarnings({
+      structured: r.warningDetails,
+      extra: applyWarningDetails,
+      logLines: r.warnings,
+    });
     const result: SyncResult = {
       uploaded: r.uploadedNotes, downloaded: r.downloadedNotes, conflicts: r.supersededNotes.length,
       manifestId: "v3-g" + r.generation, completedAt: new Date().toISOString(),
@@ -198,9 +206,7 @@ export async function syncWithV3(
       uploadedBytes: r.uploadedBytes ?? 0,
       downloadedBytes: r.downloadedBytes ?? 0,
       // 旧协议有的结构化警告（UI SyncStatusPopover 读取 warnings；只增不减）。
-      ...(r.warningDetails.length + applyWarningDetails.length > 0
-        ? { warnings: [...r.warningDetails, ...applyWarningDetails] }
-        : {}),
+      ...(mergedWarnings.length > 0 ? { warnings: mergedWarnings } : {}),
     };
     store.logScopes.sync.info("[v3] sync done " + JSON.stringify({ published: r.published, gen: r.generation, warnings: r.warnings.length, ms: result.durationMs }));
     recordV3Diagnostic(store, buildS3v3DiagnosticReport({
@@ -213,8 +219,8 @@ export async function syncWithV3(
       downloaded: r.downloadedNotes,
       deleted: r.deletedObjects,
       conflicts: r.supersededNotes.length,
-      // task-66：诊断报告也并入 apply 跳过项（逐项带 id/title/message，设置页「同步诊断」可定位）。
-      warnings: [...r.warningDetails, ...applyWarningDetails],
+      // task-66/W4：诊断报告用同一份合并结果（apply 跳过逐项可定位；一行式 warning 也进清单）。
+      warnings: mergedWarnings,
       phases: diag.snapshot(),
     }));
     return result;

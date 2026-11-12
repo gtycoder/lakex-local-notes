@@ -222,15 +222,6 @@ export class SyncReconciliation {
     ).run(note.id, note.title, note.parentId, note.sortOrder, note.updatedAt, deletedAt, "note");
   }
 
-  /** v5：记录"从云端学到的 folder 删除"（本设备从未持有该目录）——node_type='folder' 墓碑防复活。
-   * 不写 purged_at（S3 对象前缀由发起端清理）；Del-6：不再写 published_at（水线判据，见上）。 */
-  rememberFolderDeleted(folder: { id: string; title: string; parentId: string | null; sortOrder: number; updatedAt?: string }, deletedAt: string): void {
-    this.ctx.db.prepare(
-      "INSERT INTO deleted_notes(id,title,parent_id,sort_order,updated_at,deleted_at,node_type) VALUES(?,?,?,?,?,?,?) " +
-      "ON CONFLICT(id) DO UPDATE SET title=excluded.title, parent_id=excluded.parent_id, sort_order=excluded.sort_order, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, node_type=excluded.node_type"
-    ).run(folder.id, folder.title, folder.parentId, folder.sortOrder, folder.updatedAt ?? deletedAt, deletedAt, "folder");
-  }
-
   /** v5：收到他端 folder 墓碑（deleted:true）且本地有活跃副本 → folder 子树移入回收站标 purged
    * （行保留可恢复、不上传），子 notes 对齐 applyRemotePurge 语义（副本可从回收站恢复）。 */
   applyRemoteFolderDelete(id: string, deletedAt: string): void {

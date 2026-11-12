@@ -22,7 +22,7 @@
 - `configure-s3.mjs <port>`：用 env 的 S3_* 给该端 `saveS3Settings`（凭证不打印）
 - `eval.mjs <port> <expr>`：在某端执行 JS 表达式
 - `probe5.mjs`：5 端连通性/清单
-- `run5.mjs`：套件1 核心协议（kind 传播/多写端/编辑 LWW/删除/恢复/冲突/小记/manifest/收敛/幂等）
+- ~~`run5.mjs`~~：**已删除（261112）**——v2 时代演练（读 `manifests/latest.json`），v3 无清单链，脚本自述「不要运行」。现行协议验收见下方 `run58.sh`/`scenario58.mjs`。
 - `run5b.mjs`：套件2 边界资产（非 doc 正文逐字节/小记图片/purge 幽灵/目录传播/删除压编辑）
 - `run5c.mjs`：套件3 目录/图标/排序/移动/duplicate/删除恢复purge/S3 操作 smoke
 - `run5d.mjs`：压力测试（1000 笔记 + 100 目录 + 2MB 文档，输出各端耗时）
