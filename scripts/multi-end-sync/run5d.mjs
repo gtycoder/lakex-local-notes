@@ -1,7 +1,9 @@
 import { connect } from './cdpclient.mjs';
 import { execSync } from 'node:child_process';
 import { createRequire } from 'node:module';
-const require = createRequire('/Users/admin/file/local-lake/lakex-local-notes/package.json');
+import { fileURLToPath } from "node:url";
+import path from "node:path";
+const require = createRequire(path.join(path.dirname(fileURLToPath(import.meta.url)), "../../package.json"));
 const Database = require('better-sqlite3');
 const ADB = '/opt/homebrew/share/android-commandlinetools/platform-tools/adb';
 const ENDS = [

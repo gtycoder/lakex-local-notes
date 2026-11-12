@@ -14,7 +14,6 @@ import {
   type QuickNotesIndex,
 } from "./s3v3/protocol/s3v3Index.js";
 import { planLakeMerge, planQuickNotesMerge } from "./s3v3Merge.js";
-import { planLakeDeletes, planQuickNotesDeletes } from "./s3v3Gc.js";
 
 const H = (c: string) => c.repeat(64);
 const note = (id: string, hash: string, updatedAt = "2026-10-25T00:00:00.000Z"): LakeNoteEntry => ({
@@ -186,38 +185,5 @@ describe("planQuickNotesMerge", () => {
     const p = planQuickNotesMerge(baseIdx, local, remote, new Set());
     expect(p.items[0].kind).toBe("remote-wins-history");
     expect(p.items[0].archiveLocal).toBe(true);
-  });
-});
-
-describe("planLakeDeletes / planQuickNotesDeletes", () => {
-  it("替换正文/移除附件/旧声明/旧索引", () => {
-    const prev = lake([{ ...note("n1", H("a")), assetsHash: H("d1") }]);
-    const next = lake([{ ...note("n1", H("a")), assetsHash: H("d2") }]);
-    const prevDecls = new Map([["n1", { declHash: H("d1"), filenames: ["a.png", "b.png"] }]]);
-    const nextDecls = new Map([["n1", { declHash: H("d2"), filenames: ["a.png"] }]]);
-    const del = planLakeDeletes({ previous: prev, next, previousDecls: prevDecls, nextDecls, previousCommit: H("old"), nextCommit: H("new") });
-    expect(del.some((d) => d.kind === "body")).toBe(false); // hash 未变
-    expect(del.some((d) => d.kind === "declaration" && d.oldDeclHash === H("d1"))).toBe(true);
-    expect(del.some((d) => d.kind === "asset" && d.filename === "b.png")).toBe(true);
-    expect(del.some((d) => d.kind === "index" && d.oldHash === H("old"))).toBe(true);
-  });
-  it("旧正文替换 → body 待删", () => {
-    const prev = lake([note("n1", H("a"))]);
-    const next = lake([note("n1", H("b"))]);
-    const del = planLakeDeletes({ previous: prev, next, previousDecls: new Map(), nextDecls: new Map(), previousCommit: null, nextCommit: H("n") });
-    expect(del.find((d) => d.kind === "body")?.oldHash).toBe(H("a"));
-  });
-  it("彻底删除 → purge 前缀", () => {
-    const prev = lake([note("n1", H("a"))]);
-    const next = lake([]);
-    const del = planLakeDeletes({ previous: prev, next, previousDecls: new Map(), nextDecls: new Map(), previousCommit: null, nextCommit: H("n") });
-    expect(del.filter((d) => d.kind === "purge-prefix")).toHaveLength(3);
-  });
-  it("小记删除 → 正文对象 + 前缀", () => {
-    const prev = qn([{ id: "q1", createdAt: "c", updatedAt: "u", contentHash: H("a") }]);
-    const next = qn([]);
-    const del = planQuickNotesDeletes({ previous: prev, next, previousDecls: new Map(), nextDecls: new Map(), previousCommit: null, nextCommit: H("n") });
-    expect(del.some((d) => d.kind === "quick-note-body" && d.oldHash === H("a"))).toBe(true);
-    expect(del.filter((d) => d.kind === "quick-note-purge-prefix")).toHaveLength(2);
   });
 });

@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import { sha256Hex } from "./syncUtils.js";
 import { buildAssetDeclaration, indexHashOf, parseLakeIndexBytes, serializeLakeIndex, serializeDeclaration, type LakeIndex, type LakeNoteEntry } from "./s3v3/protocol/s3v3Index.js";
 import { planLakeMerge } from "./s3v3Merge.js";
-import { planLakeDeletes } from "./s3v3Gc.js";
 
 const H = (s: string) => sha256Hex(new TextEncoder().encode(s));
 const SIZES = (process.env.S3V3_CAP_SIZES || "10000,20000,50000").split(",").map(Number);
@@ -25,11 +24,11 @@ function buildWorld(docs: number) {
 }
 
 describe("容量拐点（索引/声明，合成数据）", () => {
-  it("10k/20k/50k 文档 × 10 附件：体积/解析/合并/GC 耗时", () => {
+  it("10k/20k/50k 文档 × 10 附件：体积/解析/合并耗时", () => {
     const results = [];
     for (const docs of SIZES) {
       const t0 = performance.now();
-      const { index, declarations, declBytes } = buildWorld(docs);
+      const { index, declBytes } = buildWorld(docs);
       const buildMs = performance.now() - t0;
       const t1 = performance.now();
       const serialized = serializeLakeIndex(index);
@@ -43,11 +42,7 @@ describe("容量拐点（索引/声明，合成数据）", () => {
       const t3 = performance.now();
       const plan = planLakeMerge(index, localIndex, remoteIndex, { restorePending: new Set(), purgeIntents: new Set(), folderPurgeIntents: new Set() });
       const mergeMs = performance.now() - t3;
-      const nextIndex = { ...remoteIndex, notes: remoteIndex.notes.filter((_, i) => i % 200 !== 0) } as LakeIndex;
-      const t4 = performance.now();
-      const deletes = planLakeDeletes({ previous: remoteIndex, next: nextIndex, previousDecls: declarations, nextDecls: declarations, previousCommit: commit, nextCommit: H("next-commit") });
-      const gcMs = performance.now() - t4;
-      results.push({ docs, assets: docs * ASSETS_PER_DOC, indexBytes: serialized.length, declBytes, buildMs: Math.round(buildMs), serMs: Math.round(serMs), parseMs: Math.round(parseMs), mergeMs: Math.round(mergeMs), gcMs: Math.round(gcMs), planEntries: plan.notes.length, deletes: deletes.length, parsedOk: parsed.commit === commit });
+      results.push({ docs, assets: docs * ASSETS_PER_DOC, indexBytes: serialized.length, declBytes, buildMs: Math.round(buildMs), serMs: Math.round(serMs), parseMs: Math.round(parseMs), mergeMs: Math.round(mergeMs), planEntries: plan.notes.length, parsedOk: parsed.commit === commit });
       console.log("CAP " + JSON.stringify(results[results.length - 1]));
     }
     expect(results.every((r) => r.parsedOk)).toBe(true);

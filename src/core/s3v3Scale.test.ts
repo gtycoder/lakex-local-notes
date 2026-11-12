@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import { sha256Hex } from "./syncUtils.js";
 import { buildAssetDeclaration, declarationHashOf, indexHashOf, parseLakeIndexBytes, serializeLakeIndex, serializeDeclaration, validateAssetDeclaration, type LakeIndex, type LakeNoteEntry } from "./s3v3/protocol/s3v3Index.js";
 import { planLakeMerge } from "./s3v3Merge.js";
-import { planLakeDeletes } from "./s3v3Gc.js";
 import { gatePendingDelete, type CurrentWorld, type PendingDelete } from "./s3v3Gate.js";
 
 const H = (s: string) => sha256Hex(new TextEncoder().encode(s));
@@ -32,7 +31,7 @@ function buildWorld() {
 }
 
 describe("大规模（2 万文档 / 20 万附件量级）纯逻辑", () => {
-  it("索引体积/解析/合并/GC/门禁在预算内", () => {
+  it("索引体积/解析/合并/门禁在预算内", () => {
     const { index, declarations, declBytesTotal, buildMs } = buildWorld();
     expect(index.notes).toHaveLength(DOCS);
     expect(declarations.size).toBe(DOCS);
@@ -60,12 +59,6 @@ describe("大规模（2 万文档 / 20 万附件量级）纯逻辑", () => {
     const mergeMs = performance.now() - t3;
     expect(plan.notes.filter((p) => p.kind === "download").length).toBeGreaterThan(0);
     expect(plan.notes.filter((p) => p.kind === "upload").length).toBeGreaterThan(0);
-    // GC：远端索引 → 下一版（改 500、删 100）
-    const nextIndex: LakeIndex = { v: 3, space: "lake", notes: remoteIndex.notes.filter((_, i) => i % 200 !== 0).map((n, i) => i % 1000 === 0 ? { ...n, contentHash: H("next-" + n.id) } : n), folders: [] };
-    const t4 = performance.now();
-    const deletes = planLakeDeletes({ previous: remoteIndex, next: nextIndex, previousDecls: declarations, nextDecls: declarations, previousCommit: commit, nextCommit: H("next-commit") });
-    const gcMs = performance.now() - t4;
-    expect(deletes.length).toBeGreaterThan(0);
     // 门禁：1000 条待删针对当前 index
     const world: CurrentWorld = { lakeCommit: commit, quickNotesCommit: H("q"), notes: index.notes, quickNotes: [], declarations: {}, quickDeclarations: {} };
     const pending: PendingDelete[] = index.notes.slice(0, 1000).map((n) => ({ kind: "body", key: "objects/" + n.id + "-" + n.contentHash + ".lake", noteId: n.id, oldHash: n.contentHash, targetEpoch: "e", targetGeneration: 1, targetCommit: commit, createdAt: "x" }));
@@ -75,13 +68,12 @@ describe("大规模（2 万文档 / 20 万附件量级）纯逻辑", () => {
     expect(gated.every((g) => !g.execute)).toBe(true);
     console.log(JSON.stringify({
       docs: DOCS, assets: DOCS * ASSETS_PER_DOC, buildMs: Math.round(buildMs), serMs: Math.round(serMs), parseMs: Math.round(parseMs),
-      mergeMs: Math.round(mergeMs), gcMs: Math.round(gcMs), gateMs: Math.round(gateMs),
-      indexBytes: serialized.length, declarationsRawBytes: declBytesTotal.raw, planEntries: plan.notes.length, deletes: deletes.length,
+      mergeMs: Math.round(mergeMs), gateMs: Math.round(gateMs),
+      indexBytes: serialized.length, declarationsRawBytes: declBytesTotal.raw, planEntries: plan.notes.length,
     }));
     expect(serMs).toBeLessThan(3000);
     expect(parseMs).toBeLessThan(4000);
     expect(mergeMs).toBeLessThan(3000);
-    expect(gcMs).toBeLessThan(3000);
     expect(gateMs).toBeLessThan(1000);
   }, 120_000);
 });

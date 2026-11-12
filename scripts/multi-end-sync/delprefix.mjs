@@ -1,5 +1,5 @@
 import { createRequire } from 'node:module';
-const require = createRequire("/Users/admin/file/local-lake/lakex-local-notes/package.json");
+const require = createRequire(path.join(path.dirname(fileURLToPath(import.meta.url)), "../../package.json"));
 const { S3Client, ListObjectsV2Command, DeleteObjectsCommand } = require('@aws-sdk/client-s3');
 const client = new S3Client({ endpoint: process.env.S3_ENDPOINT, region: process.env.S3_REGION, credentials: { accessKeyId: process.env.S3_AK, secretAccessKey: process.env.S3_SK }, forcePathStyle: false });
 const prefix = process.env.DELPREFIX;

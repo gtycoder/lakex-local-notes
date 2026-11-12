@@ -1,7 +1,7 @@
 import { createRequire } from 'node:module';
 import fs from 'node:fs';
 import { execSync } from 'node:child_process';
-const req = createRequire("/Users/admin/file/local-lake/lakex-local-notes/package.json");
+const req = createRequire(path.join(path.dirname(fileURLToPath(import.meta.url)), "../../package.json"));
 const Database = req('better-sqlite3');
 const ADB = '/opt/homebrew/share/android-commandlinetools/platform-tools/adb';
 const dir = '/tmp/lake5/db-perf'; fs.mkdirSync(dir, { recursive: true });
