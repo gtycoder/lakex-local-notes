@@ -63,7 +63,10 @@ export interface PlanInput {
 
 export interface PlanResult extends SyncPlan {}
 
-/** 位置字段投影进索引条目/写操作（null 显式写，便于两端比较；wire 字段沿用既有 parentId/trashedAt/deletedFromParentId）。 */
+/** 位置字段投影进索引条目/写操作（null 显式写，便于两端比较；wire 字段沿用既有 parentId/trashedAt/deletedFromParentId）。
+ * 261112 发版复核 F-01：**必须显式写 null**（不能只在真值时展开）——位置赢家=本地（例如本地已从回收站恢复）
+ * 而远端条目仍带 trashedAt/deletedFromParentId 时，缺字段会让 apply-remote/发布条目保留远端回收站位置，
+ * 落库后把本地恢复又回滚（位置与内容两套判据打架）。 */
 function withPosition<T extends { parentId?: string | null; trashedAt?: string | null; deletedFromParentId?: string | null }>(
   entry: T,
   pos: { parentId: string | null; trashedAt: string | null; deletedFromParentId: string | null },
@@ -71,8 +74,8 @@ function withPosition<T extends { parentId?: string | null; trashedAt?: string |
   return {
     ...entry,
     parentId: pos.parentId,
-    ...(pos.trashedAt ? { trashedAt: pos.trashedAt } : {}),
-    ...(pos.deletedFromParentId ? { deletedFromParentId: pos.deletedFromParentId } : {}),
+    trashedAt: pos.trashedAt,
+    deletedFromParentId: pos.deletedFromParentId,
   };
 }
 

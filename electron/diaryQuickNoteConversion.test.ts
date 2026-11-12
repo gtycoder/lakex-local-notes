@@ -142,6 +142,23 @@ describe("日记 → 小记（正文原样承载 + 媒体搬运）", () => {
     expect(store.listTreeNodes().some((node) => node.id === opened.noteId)).toBe(true);
   });
 
+
+  it("创建失败（如 promote 失败）也回滚：不留下会被重启补出来的半成品（261112 F-03）", () => {
+    const opened = store.openDiaryDate("2026-11-09");
+    fs.writeFileSync(bodyPath(opened.noteId), lakeTextParagraph("p1", "t1", "创建失败用"), "utf8");
+    const spy = vi.spyOn(quickNotes, "createQuickNoteFromContent").mockImplementation(() => { throw new Error("模拟 promote 失败"); });
+    try {
+      expect(() => convertDiaryNoteToQuickNote(quickNotes, store, opened.noteId)).toThrow(/模拟 promote 失败/);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(quickNotes.countQuickNotes()).toBe(0);
+    expect(store.listTreeNodes().some((node) => node.id === opened.noteId)).toBe(true);
+    // journal/staging 已清：不再有残留操作记录会被 recoverImports 补做
+    const staging = path.join(root, "quick-notes", "staging");
+    expect(fs.existsSync(staging) ? fs.readdirSync(staging).filter((f) => !f.startsWith(".")) : []).toEqual([]);
+  });
+
   it("非 doc 类型（表格/多维表/画板/手写板）明确拒绝，不产生任何变更", () => {
     const opened = store.openDiaryDate("2026-11-09");
     const notebookId = store.listTreeNodes().find((node) => node.space === "diary")!.id;

@@ -351,17 +351,25 @@ export class NoteMetadataRepository {
     if (folder.id === this.trashNotebookId) return;
     const trashedAt = folder.parentId === this.trashNotebookId ? (folder.trashedAt ?? null) : null;
     const deletedFrom = folder.parentId === this.trashNotebookId ? (folder.deletedFromParentId ?? null) : null;
-    const existing = this.db.prepare("SELECT id, parent_id, space FROM tree_nodes WHERE id=?").get(folder.id) as { id: string; parent_id: string | null; space: string | null } | undefined;
+    const existing = this.db.prepare("SELECT id, parent_id, space, trashed_at, deleted_from_parent_id FROM tree_nodes WHERE id=?").get(folder.id) as
+      { id: string; parent_id: string | null; space: string | null; trashed_at: string | null; deleted_from_parent_id: string | null } | undefined;
     if (!existing) {
       this.importRemoteFolder(folder);
       return;
     }
+    // 261112 发版复核 F-02：日记本**固定不可变**——同步 apply 也不得移动/回收它（旧端/脏索引绕过 §3#25）。
+    // 本地已是 diary 的目录：远端 parentId / trashedAt / deletedFromParentId 一律以本地为准（内容字段照常应用）。
+    const keepDiaryPlacement = existing.space === "diary";
     // P1-6：合并层已拒绝远端环；这里再兜一次并发/坏库场景，命中则**保持原父**并告警。
-    const parentId = this.wouldCreateParentCycle(folder.id, folder.parentId) ? existing.parent_id : folder.parentId;
-    if (parentId !== folder.parentId) console.warn("[sync] 拒绝成环的远端父关系（applyRemoteFolderMeta）:", folder.id, folder.parentId);
+    const parentId = keepDiaryPlacement
+      ? existing.parent_id
+      : this.wouldCreateParentCycle(folder.id, folder.parentId) ? existing.parent_id : folder.parentId;
+    if (parentId !== folder.parentId) console.warn("[sync] 拒绝成环/固定日记本的远端父关系（applyRemoteFolderMeta）:", folder.id, folder.parentId);
+    const effectiveTrashedAt = keepDiaryPlacement ? existing.trashed_at : trashedAt;
+    const effectiveDeletedFrom = keepDiaryPlacement ? existing.deleted_from_parent_id : deletedFrom;
     this.db.prepare(
       "UPDATE tree_nodes SET title=?, parent_id=?, sort_order=?, node_type=?, icon=?, updated_at=?, is_dirty=0, trashed_at=?, deleted_from_parent_id=?, space=? WHERE id=?"
-    ).run(folder.title, parentId, folder.sortOrder, folder.nodeType, folder.icon ?? null, folder.updatedAt, trashedAt, deletedFrom,
+    ).run(folder.title, parentId, folder.sortOrder, folder.nodeType, folder.icon ?? null, folder.updatedAt, effectiveTrashedAt, effectiveDeletedFrom,
       this.diarySafeFolderSpace(folder.id, existing.space, folder.space), folder.id);
   }
 

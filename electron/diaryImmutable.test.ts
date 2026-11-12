@@ -151,6 +151,14 @@ describe("落库侧 space 单调（只升不降）", () => {
     expect(spaceOf(notebook.id)).toBe("diary");
   });
 
+  it("applyRemoteFolderMeta：日记本的位置字段固定——远端 parent/trashedAt 不得移动或回收它（261112 F-02）", () => {
+    const { notebook } = openDiaryEntry();
+    store.applyRemoteFolderMeta(syncFolderOf(notebook, { parentId: "remote-nb", trashedAt: "T9", deletedFromParentId: "remote-nb", updatedAt: later() }));
+    const after = store.listFoldersForSync().find((row) => row.id === notebook.id)!;
+    expect(after.parentId).toBeNull();
+    expect(after.trashedAt ?? null).toBeNull();
+  });
+
   it("importRemoteFolder（同步下载/从云端恢复共用）：远端 null + 更新时间更晚也不降级", () => {
     const { notebook } = openDiaryEntry();
     store.importRemoteFolder(syncFolderOf(notebook, { space: null, updatedAt: later() }));

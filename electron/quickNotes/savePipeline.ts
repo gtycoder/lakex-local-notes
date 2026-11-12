@@ -324,6 +324,13 @@ export function createQuickNoteFromContent(
 export function removeUnsyncedQuickNote(deps: QuickNoteSaveDeps, id: string): void {
   if (!isSafeSegment(id)) return;
   const row = deps.db.prepare("SELECT is_dirty FROM quick_notes WHERE id=?").get(id) as { is_dirty: number } | undefined;
+  // 261112 发版复核 F-03：即使行没写全（创建中途失败），也要清掉该 id 的 journal 与 staging，
+  // 否则重启 recoverImports 会按 db_committed 把半成品 promote 成一条小记（转换报错却留下副本）。
+  const ops = deps.db.prepare("SELECT id, staging_key FROM quick_note_file_ops WHERE quick_note_id=?").all(id) as Array<{ id: number; staging_key: string | null }>;
+  for (const op of ops) {
+    if (op.staging_key) { try { fs.rmSync(path.join(deps.paths.stagingDir, op.staging_key), { force: true, recursive: true }); } catch { /* best effort */ } }
+    try { deps.db.prepare("DELETE FROM quick_note_file_ops WHERE id=?").run(op.id); } catch { /* best effort */ }
+  }
   if (!row) return;
   const tx = deps.db.transaction(() => {
     deps.db.prepare("DELETE FROM quick_note_assets WHERE quick_note_id=?").run(id);

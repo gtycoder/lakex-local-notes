@@ -127,7 +127,13 @@ export function convertDiaryNoteToQuickNote(
   const content = normalizeQuickNoteContent(text, carriedBody.trim() ? carriedBody : "", images);
 
   // ③ 先建小记（journal 原子：失败不留行/文件），成功后再软删日记。
-  quickNotes.createQuickNoteFromContent({ id: quickNoteId, content, assets: files });
+  // 261112 发版复核 F-03：创建本身失败（例如 promote 失败）也必须回滚，否则重启 recoverImports 会把半成品补出来。
+  try {
+    quickNotes.createQuickNoteFromContent({ id: quickNoteId, content, assets: files });
+  } catch (error) {
+    try { quickNotes.removeUnsyncedQuickNote(quickNoteId); } catch { /* best effort */ }
+    throw error;
+  }
   try {
     notes.deleteTreeNode(noteId);
   } catch (error) {
