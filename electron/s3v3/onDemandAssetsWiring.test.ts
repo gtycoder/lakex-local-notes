@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-const PANEL = readFileSync(new URL("../../src/components/app/SettingsPanel.tsx", import.meta.url), "utf8");
+// 261112 R2-S7：设置分组 JSX 已拆到 app/settings/sections/*；「按需下载附件」在「云端与同步」分组。
+const PANEL = readFileSync(new URL("../../src/components/app/settings/sections/SyncSection.tsx", import.meta.url), "utf8");
 const SYNC = readFileSync(new URL("./desktopSync.ts", import.meta.url), "utf8");
 const NOTES = readFileSync(new URL("../ipc/registerNotes.ts", import.meta.url), "utf8");
 const REPO = readFileSync(new URL("../settingsRepository.ts", import.meta.url), "utf8");

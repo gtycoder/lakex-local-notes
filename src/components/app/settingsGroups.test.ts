@@ -6,15 +6,26 @@ import { SETTING_ITEMS } from "../model/settingsSearch";
  * 设置页分组归属（261105 用户验收重组）：每个 itemId 必须落在期望分类下，
  * 不允许再出现「备份混杂在云端与同步里」或「数据体检挂在文档历史页」。
  */
-const SRC = readFileSync(new URL("./SettingsPanel.tsx", import.meta.url), "utf8");
-
-/** 取某个分类分支的源码片段（从 {category === "x" && ( 到下一个分类分支/结尾）。 */
+/** 261112 R2-S7：分组 JSX 已从 SettingsPanel.tsx 拆到 settings/sections/*；导航仍在状态/布局侧。 */
+/** 分类 → 分组文件（nav 仍从 SettingsPanel 解析；设置项扫描面 = 对应分组文件整份）。 */
+const SECTION_FILES: Record<string, string> = {
+  editor: "EditorSection.tsx",
+  appearance: "AppearanceSection.tsx",
+  shortcuts: "ShortcutsSection.tsx",
+  sync: "SyncSection.tsx",
+  backup: "BackupSection.tsx",
+  history: "HistorySection.tsx",
+  maintenance: "MaintenanceSection.tsx",
+  browser: "BrowserSection.tsx",
+  ai: "AiSection.tsx",
+  update: "UpdateSection.tsx",
+  about: "AboutSection.tsx",
+};
+/** 取某个分类的源码片段：拆分后 = 该分类的分组文件整份（原来 = SettingsPanel 里的分类分支）。 */
 function blockOf(category: string): string {
-  const start = SRC.indexOf('{category === "' + category + '" && (');
-  if (start < 0) throw new Error("分类分支不存在：" + category);
-  const rest = SRC.slice(start + 1);
-  const next = rest.search(/\{category === "/);
-  return next < 0 ? rest : rest.slice(0, next);
+  const file = SECTION_FILES[category];
+  if (!file) throw new Error("分类分支不存在：" + category);
+  return readFileSync(new URL("./settings/sections/" + file, import.meta.url), "utf8");
 }
 const itemIds = (category: string): string[] => [...blockOf(category).matchAll(/itemId="([^"]+)"/g)].map((m) => m[1]);
 
@@ -59,8 +70,10 @@ describe("设置页分组归属（重组后）", () => {
   });
 
   it("导航顺序与名称（按使用频率；备份与恢复独立入口）", () => {
-    const navStart = SRC.indexOf("const nav = [");
-    const nav = SRC.slice(navStart, SRC.indexOf("];", navStart));
+    // 261112 R2-S7：nav 数组随状态层搬到 useSettingsPanelScope（面板只消费它），解析目标随之调整。
+    const STATE_SRC = readFileSync(new URL("./settings/useSettingsPanelScope.tsx", import.meta.url), "utf8");
+    const navStart = STATE_SRC.indexOf("const nav = [");
+    const nav = STATE_SRC.slice(navStart, STATE_SRC.indexOf("];", navStart));
     const order = [...nav.matchAll(/id: "(\w+)" as const, label: "([^"]+)"/g)].map((m) => m[1] + ":" + m[2]);
     expect(order).toEqual([
       "editor:常规", "appearance:外观", "shortcuts:快捷键", "sync:云端与同步",

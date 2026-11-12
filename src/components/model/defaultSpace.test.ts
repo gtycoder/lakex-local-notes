@@ -13,7 +13,8 @@ import { SETTING_ITEMS } from "./settingsSearch";
  */
 const read = (rel: string) => readFileSync(new URL(rel, import.meta.url), "utf8");
 const SHELL = read("../../desktop/useDesktopShell.ts");
-const PANEL = read("../app/SettingsPanel.tsx");
+// 261112 R2-S7：设置分组 JSX 已拆到 app/settings/sections/*；「常规页」= EditorSection。
+const PANEL = read("../app/settings/sections/EditorSection.tsx");
 const SETTINGS_LIB = read("../../lib/settings.ts");
 
 describe("默认空间（设备本地偏好）", () => {

@@ -1,0 +1,11 @@
+export { EditorSection } from "./EditorSection";
+export { AppearanceSection } from "./AppearanceSection";
+export { ShortcutsSection } from "./ShortcutsSection";
+export { SyncSection } from "./SyncSection";
+export { BackupSection } from "./BackupSection";
+export { HistorySection } from "./HistorySection";
+export { MaintenanceSection } from "./MaintenanceSection";
+export { BrowserSection } from "./BrowserSection";
+export { AiSection } from "./AiSection";
+export { UpdateSection } from "./UpdateSection";
+export { AboutSection } from "./AboutSection";

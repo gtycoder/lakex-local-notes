@@ -2,6 +2,21 @@ import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import { filterSettingsNav, SETTING_ITEMS, searchSettingItems } from "./settingsSearch";
 
+/**
+ * 261112 R2-S7：设置分组 JSX 已从 app/SettingsPanel.tsx 拆到 app/settings/sections/*.tsx。
+ * itemId 扫描面 = 面板本身（导航/搜索/布局）+ 全部分组文件（拼接后统一抓 itemId，断言语义不变）。
+ */
+const SETTINGS_SECTIONS_DIR = new URL("../app/settings/sections/", import.meta.url);
+function readSettingsItemSources(): string {
+  return [
+    fs.readFileSync(new URL("../app/SettingsPanel.tsx", import.meta.url), "utf8"),
+    ...fs.readdirSync(SETTINGS_SECTIONS_DIR)
+      .filter((file) => file.endsWith(".tsx"))
+      .sort()
+      .map((file) => fs.readFileSync(new URL(file, SETTINGS_SECTIONS_DIR), "utf8")),
+  ].join("\n");
+}
+
 describe("settings search", () => {
   it("matches labels and semantic keywords", () => {
     const items = [{ id: "editor" as const, label: "编辑器", keywords: "字号 大纲 工具栏" }, { id: "sync" as const, label: "云端与同步", keywords: "S3 上传" }];
@@ -28,7 +43,7 @@ describe("条目级设置搜索", () => {
   });
 
   it("注册表与 SettingsPanel 的 itemId 不漂移（改名/删行必须同步这里）", () => {
-    const src = fs.readFileSync(new URL("../app/SettingsPanel.tsx", import.meta.url), "utf8");
+    const src = readSettingsItemSources();
     const inJsx = new Set([...src.matchAll(/itemId="([^"]+)"/g)].map((m) => m[1]));
     const inRegistry = new Set(SETTING_ITEMS.map((item) => item.id));
     expect([...inRegistry].filter((id) => !inJsx.has(id))).toEqual([]);
