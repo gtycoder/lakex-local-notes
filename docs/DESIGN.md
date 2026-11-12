@@ -342,6 +342,7 @@ components:
 ### Rows / Menu Items
 - **Shape:** 通用行/菜单高27px；**桌面目录行**用14px标题（`--lake-font-size-body`，与内核原生大纲同档）、上下2px内距、左右8px，**实测普通行27px / 笔记本行29px**（笔记本行有独立 `min-height` 下限）。**目录字号不要再单独抬档**（15px / 14.5px 实测均偏大）。行圆角8px、菜单项圆角4px（与菜单表面 10 − 内距 6 同心，见 Shapes）。
 - **States:** hover = `--lake-bg-hover`；active = `--lake-bg-press`；selected = `--lake-bg-selected` + `--lake-fg-selected` + 600（选中再 hover 用 `--lake-bg-selected-hover`）；disabled = `.45` 透明。
+- **面板两行密排档 `.ln-row2`（261112 登记，Q11B）**：回收站 / 历史 / 搜索 / 草稿恢复 4 处共用的「标题 + 元信息」两行条目。**不设固定行高**（高度由内容决定）；内外距 = `--lake-space-xs` / `--lake-space-sm`；内层 `.ln-row2__main` 为 `gap: 2px` + `padding: 3px 0` + `--lake-line-height-snug`；`__title` = `--lake-font-size-small`、`__meta` = `--lake-font-size-tiny` + `--lake-text-3`。定义在 `kit.css`，**是既有共享件而非新原语家族**：不要为某个面板另写一套密排行（消费者清单：`HistoryPanel` / `SearchPanel` / `TrashPanel` / `DraftRecoveryDialog`）。
 
 ### Selection & Hover Surfaces（261017 用户定稿）
 
