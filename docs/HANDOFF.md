@@ -12,7 +12,7 @@
 - **拆分 6–10（Q19=C2）**：Sidebar 1857→1498（7 内部组件到 sidebar/）；SettingsPanel 1447→89（11 个 sections + useSettingsPanelScope 722 行）；electron/main.ts 1306→1100（boot/paths.ts + boot/ipcWiring.ts 281 行，21 依赖显式传递、单例留 main）；lakeRuntime 1699→538（6 个 kernel 模块，lazy 边界/模块级单例/__disposeExtras 时序保持）；InkPad **只做阶段 ①**：抽 inkPadModel（保存/捕获纯逻辑）+ 11 例行为测试，结构拆分（组合根 + 4 hook + 2 子组件）**留发布后**（127 条文本护栏与依赖网需先迁护栏 + 设备验证）。
 - **设备验收（真机 + 模拟器）**：R1 APK 已 --sync --install 到真机 Xiaomi 2109119BC（Android 14）与 5554 模拟器；**Q04 通过**（回收站文档 = 只读预览 + 横幅「编辑与保存会被拦截」，CDP 断言 + 截图）；**Q22 通过**（SecureStore→SecretBox：set/get → force-stop 重启 → get 仍为原值 → remove 清空，真机 Keystore 冒烟）；首页/Dock 正常、logcat 无 FATAL。记录与截图：[docs/audit-261112/12-device-check.md](audit-261112/12-device-check.md)。
 - **设备门禁矩阵（R2 代码重装后）**：手机 10 态（lake_gate / 9336）与平板 10 态（lake_tab / 9340）均按夹具重烤后**连跑两轮 0 差异**；多维表 3 态重烤后两轮 0 差异；**23 屏走查 23/23 ok**；窗口矩阵 `pass: true`。基线三份（mobile-snap / tablet / bitable）已随本批更新。桌面 42 态未跑（需夹具机）。
-- **门禁（R2 实测）**：tsc 0；全量 vitest **883 文件（872 passed / 11 skipped）/ 5571 passed / 12 skipped / 0 failed**；ui-metrics 66/21；check:core 172/0；check:mobileui 通过；双 build + bundle/arch PASS（desktop 首屏 567,576/600,000、app-js 196,184/307,200；mobile 349,054/360,000、entry 60,766/61,440、css 140,383/141,312）；diff-check 0。
+- **门禁（R2 收尾实测）**：tsc 0；全量 vitest **885 文件（874 passed / 11 skipped）/ 5575 passed / 12 skipped / 0 failed**；ui-metrics **shadowed 0 / 跨文件重复 45** / !important 9=清单；check:core 172/0；check:mobileui 通过；双 build + bundle/arch PASS（desktop 首屏 567,551/600,000、app-js 196,192/307,200；mobile 348,211/360,000、entry 60,803/61,440、css 139,503/141,312）；diff-check 0。
 - **待验/未做**：Q03 历史预览、Q07 preview 档、Q05 字号的设备级点按（单测已绿）；桌面 42 态 / 手机+平板 10 态 / 23 屏（R1/R2 改了预览、回收站、历史、设置面板结构，旧基线已过期，需夹具 AVD 重烤）；移动小记画廊 video/audio 混入（P1）；剩余 21 条 shadowed 声明 + mobile.css 域归位；docs 侧机器路径。
 
 ### 261112 · 发布前全仓审计 + R0/R1 收口批（已本地提交，未推送）
@@ -56,10 +56,10 @@
 **门禁基线（261112 R1 批实测；分层口径见 AGENTS §3#21）**
 
 - `npx tsc --noEmit` = **0**。
-- 全量 vitest = **883 文件（872 passed / 11 skipped）/ 5571 passed / 12 skipped / 0 failed**。
+- 全量 vitest = **885 文件（874 passed / 11 skipped）/ 5575 passed / 12 skipped / 0 failed**。
 - `node scripts/ui-metrics.mjs`：颜色 0 / 字号 0 / `!important` 9 = 允许清单 / `crossFileDupGroups` 66 / `shadowedDecls` 21（只降）/ 未定义令牌 0。
 - `check:core` 172 文件 0 违规；`check:mobileui` 通过。
-- `check:bundle` + `check:arch` PASS：desktop 首屏 567,576 / 600,000、app-js 196,184 / 307,200；mobile 首屏 349,054 / 360,000、entry 60,766 / 61,440、CSS 140,383 / 141,312、preload 6。
+- `check:bundle` + `check:arch` PASS：desktop 首屏 567,551 / 600,000、app-js 196,192 / 307,200；mobile 首屏 348,211 / 360,000、entry 60,803 / 61,440、CSS 139,503 / 141,312、preload 6。
 - `git diff --check` = **0**。
 - 设备/视觉（最近记录）：手机 **10 态** + 平板 **10 态** 基线重烤并连跑两轮 0 差异；23 屏走查 23/23；`edit-surface-invariants` quicknote 11 + document 11 ALL PASS；capture 入口装置 10/10。**桌面 `check:stylesnap` 42 态仍未跑**（无夹具缓存，见 §3）。
 
