@@ -137,7 +137,7 @@ node scripts/css-audit/drive.mjs 9336 scripts/css-audit/mobile-walkthrough.mjs
 | 长文档 DOM 探针 | `node scripts/mobile-audit/long-doc-dom.mjs 9336` | 动文档编辑面 / 查找；**会造数据 ⇒ 跑后重烤基线**，别在配了 S3 的机器上跑 |
 | 多维表专项快照（表单 / 内容表格 / 内容卡片） | `npm run check:bitablesnap`（默认 9336） | 动移动端多维表视图/布局/表单；**夹具自建自删**，不污染 6 态与走查 |
 | 窗口矩阵（折叠/分屏/横竖屏形态 + resize 状态保持） | `npm run check:windowsweep`（默认 CDP 9340） | 改形态判据 / 外壳 / 胶囊 / 侧栏时；7 个窗口尺寸，断言 formFactor 与 `body.lake-tablet` 同源 + 切窗不丢 tab/滚动 |
-| 平板专项快照（10 态，视口钉 1280×800；**基线仍 9 态，待 261112 后补烤**） | `npm run check:tabletsnap -- --port 9340`（基线 `baseline/mobile-snap-tablet.json`） | 动平板外壳（顶栏页签 / 悬浮目录与大纲 / 平板工具栏）；与手机基线互不影响，详见 `scripts/mobile-audit/README.md` |
+| 平板专项快照（10 态，视口钉 1280×800；基线已重烤、两轮 0 差异） | `npm run check:tabletsnap -- --port 9340`（基线 `baseline/mobile-snap-tablet.json`） | 动平板外壳（顶栏页签 / 悬浮目录与大纲 / 平板工具栏）；与手机基线互不影响，详见 `scripts/mobile-audit/README.md` |
 
 （前三项前置都是 `bash scripts/emu-cdp.sh 9335`；口径与判据细节见 `scripts/mobile-audit/README.md` 与 `docs/MOBILE-LONG-DOC-PROBE.md`。）
 

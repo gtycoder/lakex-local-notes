@@ -143,7 +143,7 @@
    内核几何（按视口 or 按桌面写死的高度/上限/限宽）**只有一份收口**：`editor/edit-surface-kernel.css`，
    宿主契约 = 编辑面容器挂 `data-mb-edit-host` + `data-mb-kernel="note|doc"`（新增编辑面挂上即继承）。
    **判据装置**：`node scripts/css-audit/drive.mjs <port> scripts/mobile-audit/edit-surface-invariants.mjs` ——
-   两条编辑器各跑 I1 几何恒定 / I2 光标存在 / I3 光标在工具栏上方 / I4 面板不自关·无闪 /
+   两条编辑器各跑 I1 面板态稳定 + 收回后内容区高度回原值（滚动/首块位移 ≤120px，261112 重标定：261014 的「三态几何逐项相同」前提已被全屏写作卡 + 覆盖式面板取代）/ I2 光标存在 / I3 光标在工具栏上方（键盘态与收回后）/ I4 面板不自关·无闪 /
   I5 面板贴视口底（`panel.bottom === innerHeight` 且 `toolbar.bottom === panel.top`）。
 8. **移动端 Univer 必须用移动 UI 插件族**（261019 实测定稿）：`UniverSheetsCorePreset` 自带的是桌面
    `UniverUIPlugin` / `UniverSheetsUIPlugin`，其 selection service 会把单指横拖当成多选范围（实测选成

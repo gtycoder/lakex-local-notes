@@ -23,7 +23,7 @@
 - **9 态复核（lake_gate / 5556 / CDP 9336，当前包 HEAD `fd14b4c6`）**：未 pm clear（检测到既有夹具 notes=5/tree=1/qn=4），按 `--states` 只跑 9 态、**连跑两轮 0 差异**（元素数 1909/1909/1914/2085/2042/1943/2035/1961/1963 与基线一致）；**23 屏走查 23/23 ok**（单独冷启动后跑），无 clipped / contrast / pageOverflowX 新项；`escape:1` ×10 屏 = 隐藏首页层 dock 的既有可观测量（261019 起），与 image/w=1024 无关。
 - **新增 `home-create-sheet` 态**（P0 盲区：9 态无一态打开底部 Sheet）：首页「＋」→ 新建面板，覆盖 `.mb-sheet` / scrim / grab-head-body 原语；元素数 **1971**。基线 `scripts/mobile-audit/baseline/mobile-snap.json` 已重烤为 **10 态**，连跑两轮 0 差异。
 - **装置细节**：`.mb-home-fab` aria-label 是「新建（长按上滑可速记）」且无文字内容 ⇒ 该态只能用 `tapSel` 点唯一元素（`tapByLabel`/`tapByText` 都匹配不到）。
-- **未做**：平板基线仍 9 态（需 `lake_tab` 补烤 10 态，见 §3 P1）；capture 长按入口 + 键盘开合仍无装置（见 §3 P0）。
+- **后续**：平板 10 态已补烤（两轮 0 差异）；键盘开合由 `edit-surface-invariants` 覆盖并 ALL PASS；**capture 长按/fab 上滑入口仍无装置**（见 §3 P0）。
 ### 261111 · 图片缩略三边界收口：会话内新插图 / 剪贴板保真 / 移动文档编辑器（task-26 二段）
 
 - **A（会话内新插图即缩略）**：新增 `editor/imageThumbUploadTracker`，lakeRuntime 在 `image.createUploadPromise` resolve 时调用；判据 = 正文里**待上传（src 空）image 卡总数恰好 1**（身份可证）**且**该卡已有正数 origin ⇒ 立刻把该资产并进活 allowlist；并发/失败遗留（计数≥2）、带 width 属性（origin 缺）时退回退避重试（0/150/600ms 读正文，等 src 回填后按 origin 放行），**绝不凭请求类型乐观放行**。设备实测：文档编辑态插入 3000×2000 → **500ms 起** `img.ne-image` src 带 `w=1024`、`getDocument` 该卡 origin=**3000×2000**（未写 1024）。
@@ -583,7 +583,7 @@
 - **261110 历史清理（一次性）**：`.ai-writing-recon/`（走查截图 / 页面快照 / 探针脚本，59 文件 ≈15MB）已用 `git filter-repo --invert-paths` 从**全部历史**移除；被重写的是 **v1.1.0 之后的 23 个提交**（hash 以 `git log` 为准），**v1.0.x / v1.1.0 的 tag 与其提交 hash 未变**（不含该目录）⇒ 已发布 Release 与 CI 产物不受影响。重写前快照：`/Users/admin/file/local-lake/lakex-local-notes-backup-<stamp>/all.bundle`（62MB，含全部 refs）。**旧 clone / worktree 需 `git fetch --force --prune` + `git reset --hard origin/master` 或重新 clone**（旧 hash 已不可达）；本机原 `lakex-local-notes-diary` worktree 已删除（其分支是 master 祖先，无内容丢失）。
 
 - **worktree（261109 发版时）**：`lakex-local-notes` = `master`（发版主工作树）；`lakex-local-notes-diary` = `feat/diary-space`（本批开发用，已合并 master 并合回 master）。AI 写作与日记**都已进 master**，两个空间共存（⌘3 / ⌘4）。
-- 主分支 `master`，HEAD = **`c8bc5777`**（261111 图片缩略三边界收口 + 文档回写）；前序 = `b83f53ca`（写作卡图片缩略 + 回写）、`87c5ceb1`（内核图片显示缩略）、`f30da7bb`（锁定态大纲让开底部状态栏）、`562b738e`（分帧渲染 review 补齐）、`793f246c`（阅读态分帧渲染 + 两套大纲兜底）、`dbc96ccd`（引擎撑满可视区）、`191ff7f8`（抖动/图片二步/脚本修复）及并行会话提交。**双远端（Gitee `origin` / GitHub `github`）均已到 `c8bc5777`，本地与之同步**（`git push origin master` 双推）。
+- 主分支 `master`，HEAD = **`e19fa3da`**（261112 编辑面不变量重标定）；前序 = `e03736b7`（小记封面/预览首图去重）、`d02298d4`（快照第 10 态 + 门禁复核）、`c8bc5777`（图片缩略三边界收口）、`b83f53ca`（写作卡图片缩略 + 回写）、`87c5ceb1`（内核图片显示缩略）及并行会话提交。**双远端（Gitee `origin` / GitHub `github`）均已到 `e19fa3da`，本地与之同步**（`git push origin master` 双推）。
 - `package.json` = **1.1.0**；Android `versionName 1.1.0` / `versionCode 11100`（从根 `package.json` 派生，版本号单一来源：`1000 + major*10000 + minor*100 + patch`）。
 - tag：`v1.0.0`–`v1.0.5`、**`v1.1.0`**（另有旧 `v0.0.1` / `v0.0.2`）；已发布 tag 不再移动。`v1.1.0` = AI 写作 + 日记两个新空间。
 - `v1.0.5` 是**发在 AI 写作合并之前**的：AI 写作第一次随本版发布，别在旧发布说明里找它。
@@ -605,11 +605,11 @@
 **门禁基线（261109 发版前：AI 写作 + 日记合并后实测）**
 
 - `npx tsc --noEmit` = **0 错**。
-- `npx vitest run` = **856 文件（856 passed / 11 skipped）/ 5466 passed / 12 skipped / 0 failed**（261111 图片缩略三边界批提交前实测；本批新增 tracker 12 / copy 桥 4 / 核心解析 13 / clipboard 35 等）。
+- `npx vitest run` = **857 文件（857 passed / 11 skipped）/ 5470 passed / 12 skipped / 0 failed**（261112 封面去重批实测；新增 `quickNotePreview.hiddenMedia.render` 4 例；累计新增 tracker 12 / copy 桥 4 / 核心解析 13 / clipboard 35）。
 - **261110 AI 助手 / 小记批（本批实测，含「钉住=每作用域挂起」「标题可改」「弹窗走内核渲染」「时间线自适应」）**：`npx tsc --noEmit` 0；全量 vitest **855 文件（844 passed / 11 skipped）/ 5357 passed / 12 skipped / 0 failed**（本批新增：`aiAssistantSession` 4 例 / `AiMessageView.render` 5 例 / `aiLakeKernelRegistry` 4 例 / `AiWritingDialogs.render` +2 例）；`ui-metrics` 颜色 0 / !important 9=清单 / 跨文件重复 103≤105；`git diff --check` 0；`cssLayers` 基线 `app/tabs.css` 188→189、`ai/aiDialogParts.css` 87→91、`app/quick-notes.css` 667→674（均写明理由）。
 - `git diff --check` = **0**。
-- `check:bundle` / `check:arch`：**已转绿**（261110 首屏瘦身）。mobile-entry = **59,968 gz / 6 链接**、首屏 348,112 / 360,000（余量 11.9KB）、entry CSS 140,381 / 141,312；desktop app-js 191,950 / 307,200、首屏 564,664 / 600,000（余量 35.3KB）。预算已按目标收紧（`check-bundle-budget.mjs` 12 条 / 60KB、`check-arch.mjs` 360KB），不再有「已知红」。**注意**：preload 条数只防「静态依赖回入口」，字节由 `check-arch` 守 —— 不要为了压低条数把懒加载改回静态。运行前需先有 `dist` / `dist-mobile` 构建产物。
-- 其它样式/边界/设备门禁按改动范围跑（分层口径见 AGENTS §3#21）；最近一次移动设备记录 = **261110（移动收口批）**：手机 **9 态重烤基线 + 两轮 0 差异**、**平板 9 态补烤 + 两轮 0 差异**、**多维表 3 态重烤**、**23 屏 23/23 ok**（`lake_gate` / `lake_tab`，详见 §0 收口批）；桌面 `check:stylesnap` 42 态仍未跑（本机无合成夹具缓存，见 §3）。 **261112 追加**：手机门禁复核（9 态两轮 0 差异 + 23 屏 23/23）+ 新增第 10 态 `home-create-sheet`（1971 els）并重烤基线（`mobile-snap.json` 现 10 态，连跑两轮 0 差异）；**平板基线仍是 9 态、未补烤**（见 §3）。**261111 追加**：图片缩略三边界批只做 5554 定点设备验证（写作卡/文档编辑器的插入-缩略-origin、`?base64=1` 端点、含图选区复制、双击预览取原图），**未跑 9 态/平板/23 屏**（见 §3 P0）。
+- `check:bundle` / `check:arch`：**已转绿**（261110 首屏瘦身）。mobile-entry = **60,058 gz / 6 链接**、首屏 348,202 / 360,000（余量 11.8KB）、entry CSS 140,381 / 141,312；desktop app-js 192,028 / 307,200、首屏 564,742 / 600,000（余量 35.3KB）。预算已按目标收紧（`check-bundle-budget.mjs` 12 条 / 60KB、`check-arch.mjs` 360KB），不再有「已知红」。**注意**：preload 条数只防「静态依赖回入口」，字节由 `check-arch` 守 —— 不要为了压低条数把懒加载改回静态。运行前需先有 `dist` / `dist-mobile` 构建产物。
+- 其它样式/边界/设备门禁按改动范围跑（分层口径见 AGENTS §3#21）；最近一次移动设备记录 = **261110（移动收口批）**：手机 **9 态重烤基线 + 两轮 0 差异**、**平板 9 态补烤 + 两轮 0 差异**、**多维表 3 态重烤**、**23 屏 23/23 ok**（`lake_gate` / `lake_tab`，详见 §0 收口批）；桌面 `check:stylesnap` 42 态仍未跑（本机无合成夹具缓存，见 §3）。 **261112 追加**：手机 **10 态**（新增 `home-create-sheet` 1971 els）与**平板 10 态**基线均重烤并连跑两轮 **0 差异**；9 态复核 + 23 屏走查 **23/23 ok**；`edit-surface-invariants` 重标定后 **quicknote 11 + document 11 条 ALL PASS**（键盘开合覆盖）；capture 冷启动 **3/3 成功（p50 2036ms）**；小记封面/预览首图去重已设备验证。**261111 追加**：图片缩略三边界批只做 5554 定点设备验证（写作卡/文档编辑器的插入-缩略-origin、`?base64=1` 端点、含图选区复制、双击预览取原图），**未跑 9 态/平板/23 屏**（见 §3 P0）。
 
 **设备与环境（本机实测）**
 
@@ -661,13 +661,13 @@
 - **编辑面不变量 261112 重标定为绿（用户选 A：只改装置、不动观感）**：原装置首跑 quicknote **10 条**、document **5 条**红，全部落在「键盘→面板 / 键盘→收回」；定性为**预期过期**而非几何回退——I1 的「键盘⇄面板三态逐项相同」前提写于 261014（当时面板与键盘同高、键盘收起⇒内容区等量缩短），261110/261111 改**全屏写作卡 + 覆盖式面板**后不再成立；I3 截图复核（`/tmp/caret-keyboard.png`、`/tmp/caret-panel.png`）光标在面板顶下 74px，但该行与光标仍在面板圆角之上可见，不是明显遮挡。**新语义**：I1 = ①面板态自身稳定（+1.2s 内 ch/st/firstY 不变）+ ②收回后**内容区高度严格回原值**、滚动/首块位移 ≤120px（实测 26px / 74px；74px 来自文档编辑态外壳 chrome 在收键盘时的重排）；I3 = 只在**键盘态与收回后**严格断言（覆盖式面板态不再要求光标在面板上方）；I2/I4/I5 不变。重跑 **quicknote 11 条 + document 11 条 ALL PASS**（lake_gate / 9336，新包）；CONTRACT §5.38/§5.38.1 的 I1 描述同步。
 - **写作卡全屏后的设备门禁**：23 屏走查 261112 已跑 23/23（`quicknote-editor` 覆盖**正常入口**）；仍缺 **长按/fab 上滑 capture 入口**（无装置）；**键盘开合**已由 `edit-surface-invariants.mjs` 覆盖并 **ALL PASS**（261112 重标定后，quicknote 11 + document 11 条）⇒ 只剩 capture 入口待补。
 - **桌面 `check:stylesnap` 42 态**：本机无合成夹具缓存，已连续三批未跑（按钮梯队 / 空间改名 / 按钮第二批）。下次有夹具的机器全量跑并重烤；**重点看本批视觉 delta**（清单见 §0）；同时确认是否新增「日记空间」态。**261111 追加**：① 文档版式引擎改成撑满可视区（内容区几何变）；② 阅读态大纲底边上收 `--statusbar-reserve`（大纲态/文档态可能变）——两者都要在重烤时一起看。
-- **移动端本批设备点收**：`bash scripts/android-build.sh --sync --install`（lake_mobile）后看：① 设置各子页按钮（`--outlined` 与旧 `--settings` 应 0 变化）；② AI 页操作键形状（自绘胶囊→L3 中性框）；③ 基座/ghost 字色略浅的屏；④ 日记「取消日记标记」/ 转文档文案；⑤ 9 态快照（DOM 未变，预期 0 diff）与 23 屏走查；⑥ 首屏懒 chunk 冒烟：开文档后粘贴、小记 composer、分享导入 MD/PDF、更新中心、图标/表情选择器；⑦ 冷启动首页（已验）与 9 态/23 屏；⑧ **本批图片缩略**：9 态 DOM 结构未变（`src` 属性不在快照口径内）预期 0 diff，但**必须实跑确认**；23 屏走查补「文档编辑态含图」与「写作卡含图」两屏。
+- **移动端本批设备点收**：`bash scripts/android-build.sh --sync --install`（lake_mobile）后看：① 设置各子页按钮（`--outlined` 与旧 `--settings` 应 0 变化）；② AI 页操作键形状（自绘胶囊→L3 中性框）；③ 基座/ghost 字色略浅的屏；④ 日记「取消日记标记」/ 转文档文案；⑤ **10 态**快照（261112 起含 `home-create-sheet`）与 23 屏走查（均已跑：0 diff / 23/23 ok）；⑥ 首屏懒 chunk 冒烟：开文档后粘贴、小记 composer、分享导入 MD/PDF、更新中心、图标/表情选择器；⑦ 冷启动首页（已验）；⑧ **图片缩略**：已实跑确认（手机/平板 10 态 0 diff、23 屏 23/23）；仍需人工点收的是 ①–④⑥ 的观感项（设置按钮/AI 页操作键/基座字色/日记文案/懒 chunk 冒烟）。
 - **每批收尾固定动作**：更新 §1 基线与门禁计数 + §3 + §0 批次抬头；提交后立刻回写。
-- **下一版发布**（流程 `docs/RELEASE.md`）：发布说明写清 ① inkDoc v4 旧端只读/手机需重装；② 标签顺序仅设备本地；③ 标签删除=缺席两端都要升级；④ 发版前全量门禁矩阵（手机 9 + 平板 9 + 多维表 3 + 23 屏 + windowsweep + 桌面 42）。
+- **下一版发布**（流程 `docs/RELEASE.md`）：发布说明写清 ① inkDoc v4 旧端只读/手机需重装；② 标签顺序仅设备本地；③ 标签删除=缺席两端都要升级；④ 发版前全量门禁矩阵（手机 10 + 平板 10 + 多维表 3 + 23 屏 + windowsweep + 桌面 42）。
 
 **P1（该做但可排期）**
 
-- **平板 9 态快照**：本轮只烤手机/多维表；平板需另起 `lake_tab` + 重烤，发版前补（写作卡全屏/图片缩略后平板可能漂）。
+- **平板 10 态快照**：261112 已在 `lake_tab` 重烤（9→10 态）并连跑两轮 0 差异；后续换夹具/外壳改动时按 §3#21③ 重烤。
 - **移动性能基线**：脚本冷启动竞态已修、5554 上 3/3 采样通过；待在有夹具的 lake_gate 录一份稳定基线并纳入本地门禁（换设备/包/视口必须重烤）。
 - **图片缩略残余（261111 收口后）**：① XHR 失败/旧包/超 12MP 的 webp·avif 回退 canvas，可能写显示尺寸；② 复制多张大图中同步阻塞（剪贴板 API 限制）；③ 会话内放行依赖「待上传卡计数=1」，多图并发时当会话不缩（重开按正文 origin 缩，安全降级）；④ 桌面文档编辑器（Retina 优先）与平板未启用同类缩略。
 - **内核 `miniToolbarPreOption is not a function` 噪声**：本轮设备操作中出现一次（无 image/缩略/clipboard 栈）；kernel 把 image 的 `miniToolbar` 数组直接当函数调用（lakex.js 228292），触发条件未定位 ⇒ 下次碰迷你工具条时查，别当本批回归。
@@ -696,12 +696,14 @@
 - 移动端首屏瘦身 → entry-js 59.7KB / preload 6 / 首屏 347.9KB（261110，预算已收紧）。
 - 移动端两条创建入口的「保存并同步」= 同一单条快路径，已真机真 S3 实测（261110）。
 - 小记写作卡卡顿（长按创建 / 键盘开合）→ 全屏 + 长任务 775→72ms（261111）。
-- 桌面编辑器 fallback 骨架 / capture 首帧预取 / 列表图片缩略 / 手机 9 态+多维表 3 态重烤+23 屏（261111）。
+- 桌面编辑器 fallback 骨架 / capture 首帧预取 / 列表图片缩略 / 手机 9 态+多维表 3 态重烤+23 屏（261111）→ 261112 扩到手机/平板各 10 态并重烤、走查 23/23。
 - 小记卡片勾选抖动 / 标签详情图片缩略 / 性能脚本冷启动采集（261111）。
 - 写作卡内核内图片显示缩略（?w=1024 + original allowlist，桌面零变化；261111）。
 - 图片缩略三边界（A 会话内新插图 / B 剪贴板保真 / C 移动文档编辑器）→ 已收口（261111，见 §0）。
 - 小记卡片封面/预览重复首图（用户报）→ 已修（261112，`QuickNotePreview.hiddenMediaNames`，见 §0）。
 - 手机快照盲区`.mb-sheet`打开态 → 261112 新增第 10 态 `home-create-sheet`（覆盖 CreateSheet / MobileSheet 原语）并重烤基线、两轮 0 差异。
+- 平板 9 态快照（P1）→ 261112 在 lake_tab 重烤为 10 态、两轮 0 差异（顺带覆盖新态）。
+- 编辑面不变量过期预期（I1/I3）→ 261112 重标定后 quicknote 11 + document 11 条 ALL PASS。
 - 桌面冷启动预热三条触发已上（261111）；首篇 fallback 是内核 chunk 地板，未消除（解法见 §3）。
 - 单条小记推送请求数 13→11（独立管线，261111）。
 - 二轮/实机修复批「未跑 6 态」、胶囊固定底部 / 平移画布开关、P9–P12 候选、平板内核工具栏两条例外 → 均已闭合/撤回。
