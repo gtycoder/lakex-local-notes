@@ -6,7 +6,8 @@
 import fs from "node:fs";
 import path from "node:path";
 
-const OUT = "/Users/admin/file/local-lake/yuque-developer-docs";
+// 输出到仓外同级目录（第三方文档不进仓库）；可用 YUQUE_DOCS_OUT 覆盖。
+const OUT = process.env.YUQUE_DOCS_OUT ?? path.resolve(import.meta.dirname, "../../../yuque-developer-docs");
 const BOOK = "https://www.yuque.com/yuque/developer";
 const SEED = BOOK + "/api";
 const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Safari/537.36";

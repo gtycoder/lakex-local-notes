@@ -1139,7 +1139,7 @@ PY
 4. **反编译定位的标准姿势**（PROGRESS 方法论）：CDP/页面内实测复现 → 在 `vendor/lakex-doc-react/src/components/lakex/lakex.js`（内核 ESM 转换产物，类名/路径/文案可搜；`doc.umd.js` 为原始 UMD）用字符串 grep 定位→ 对照断言里的源码路径 → 得出结论再改代码。
 5. **不要做**：不要给 vendor 内核打补丁（除既有最小 hack 模式，且需注释 + 记录）；不要复制大段 bundle 源码进仓库；不要在本文件写易过期事实（版本号/计数/分支放 HANDOFF §0）。
 6. **资料检索顺序（260916 用户立规，与 AGENTS §2 一致）**：涉及调用内核 API/配置项/命令时按三级走 ——
-   ① **官方出处** `/Users/admin/file/local-lake/yuque-developer-docs/`（语雀开发者文档本地副本：`65 - 大纲（toc)`、
+   ① **官方出处**：语雀开发者文档本地副本（仓外，形如 `<repo>/../yuque-developer-docs/`）（语雀开发者文档本地副本：`65 - 大纲（toc)`、
    `47 - 通用配置`、`07 - API与事件`、`08 - 命令列表` 等）**先确认官方有没有该能力及其语义，官方有就用官方途径**；
    ② **本文件**（已核实契约 + 实测坑，新观测必须回填）；
    ③ **源码字典对照** `lake-editor-main/`（VSCode yuque-editor 插件）、`lake-main/`（开源 lakelib，仅机制字典、

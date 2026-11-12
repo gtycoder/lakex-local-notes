@@ -184,7 +184,7 @@
 
 ```bash
 export PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH"
-cd /Users/admin/file/local-lake/lakex-local-notes
+cd "$(git rev-parse --show-toplevel)"
 
 # 1) 链接 + 仓内路径存在性（138 篇 md；跳过已删除的 INK-DEVICE-CHECK）
 R=$PWD node /tmp/doclint.mjs     # 脚本见附录 A；输出 brokenLinks / missing / guide chain

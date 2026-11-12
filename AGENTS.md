@@ -8,7 +8,7 @@
 
 本地优先笔记应用：Electron 44.9 + React 18.3 + better-sqlite3 13 + 语雀 Lakex 内核 v1.99.0（vendored，已 pin）+ S3 同步（七牛 Kodo）。**本地是真相，S3 只是镜像。**
 
-- 目录 `/Users/admin/file/local/lakex-local-notes`；两端 = 桌面（macOS 优先）+ Android（Capacitor 8）；共享 `src/core`，UI 层独立（桌面 `ln-*` / 移动 `mb-*`）。
+- 目录：仓库根（各 clone 位置不同；命令里用 `$(git rev-parse --show-toplevel)` 定位）；两端 = 桌面（macOS 优先）+ Android（Capacitor 8）；共享 `src/core`，UI 层独立（桌面 `ln-*` / 移动 `mb-*`）。
 - 身份：productName `LakexLocalNotes`；npm `lakex-local-notes`；包名 `com.lakexlocalnotes.desktop` / `com.lakexlocalnotes.android`（iOS 预留 `...ios`）；数据目录 `lakex-local-notes-dev` / `lakex-local-notes`；私有协议 `lakexlocalnotes://app`；日志 `lakex-local-notes.log`。**保留不动**：`LAKE_*` 开发变量、`--lake-*` 设计令牌、`lakex` 内核名与 `.lake` 格式。
 - Node **必须 24**（`$HOME/.nvm/versions/node/v24.18.0/bin`）；移动端另需 JDK 21 + Android SDK。
 - 目标量级 **2 万文档 / 20 万附件**（性能与同步决策按此验证，别用「小库正常」下结论）；索引硬上限 10 万文档（`S3V3_MAX_LAKE_NOTES`）/ 2 万小记；超过 2 万文档的下一步是按篇增量索引，**不分片**。
@@ -139,7 +139,7 @@
 
 ```bash
 export PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH"
-cd /Users/admin/file/local-lake/lakex-local-notes
+cd "$(git rev-parse --show-toplevel)"    # 仓库根（在各 clone 里直接跑即可）
 npm run setup:remotes    # 首次/新 clone：配 Gitee+GitHub 双推
 npm run setup:lakex      # 首次/新 clone：恢复闭源内核（缺归档会报错并给指引）
 npx tsc --noEmit && npx vitest run && git diff --check   # 日常门禁（31–36s）

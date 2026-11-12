@@ -195,7 +195,7 @@ type BitableRecordLayout = {
 ## 9. 样机（请直接打开）
 
 ```bash
-open /Users/admin/file/local-lake/lakex-local-notes/docs/mockups/mobile-bitable.html
+open "$(git rev-parse --show-toplevel)/docs/mockups/mobile-bitable.html"
 ```
 - 左侧是评审说明 + 状态跳转；右侧是 390 级手机框（数据为**演示样例**，不含真实笔记）。
 - 可点：视图页签 / 内容里的行与卡片 / 工具栏筛选·视图配置 / 视图列表 / 详情翻页 / 表单选择·输入·上传（模拟）·提交（会真的往样机样例里加一条）。

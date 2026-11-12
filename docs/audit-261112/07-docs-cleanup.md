@@ -46,7 +46,7 @@
 | 文档 | 体积/最后改动 | 结论 | 证据（file:line / 实测） |
 | --- | --- | --- | --- |
 | `HANDOFF.md` | 176,557B / 753 行，261112 | **部分过期（需压缩）** | §0「最新交接」标题写 261109（`docs/HANDOFF.md:9`）但内容已含 3 条 261112 批次；§0 占 **146,529B / 605 行 / 75 个 `###` 批次**＝全文 83%；§1 写「HEAD = `e19fa3da`」，实际 `git log -1` = `8cc65e06`，`git rev-list --count e19fa3da..HEAD` = **10** |
-| `LAKEX-CONTRACT.md` | 269,120B / 2171 行，261112 | **现行（体量失控）** | 单一来源（AGENTS §2 检索顺序②），但无目录/分区索引，已 269KB；引用里夹带仓外绝对路径 `:1142` `/Users/admin/file/local-lake/yuque-developer-docs/` |
+| `LAKEX-CONTRACT.md` | 269,120B / 2171 行，261112 | **现行（体量失控）** | 单一来源（AGENTS §2 检索顺序②），但无目录/分区索引，已 269KB；引用里夹带仓外绝对路径 `:1142`（`<repo>/../yuque-developer-docs/`） |
 | `ARCHITECTURE.md` | 12,133B，261110 | **严重过期** | 文件索引里 `electron/quickNotesSync.ts`、`electron/s3Maintenance.ts`、`src/features/editor/BoardCard.tsx` **三个路径已不存在**（逐个 `test -e` 验证）；§4.2 表把 `sync_base`/`deleted_notes` 描述为现行同步基线，而 `electron/schemaInit.ts:90` 注释写明 `sync_base` 是「v2 hash 账本；v3 基线在 `sync-v3/baseline.json.gz`」；§四/§五 为 Manifest V2 时代（文档自己在 `:3`、`:131-136` 已承认，但正文仍在） |
 | `SYNC-PROTOCOL.md` | 43,170B，261111 | **现行** | 协议唯一来源（AGENTS §4 多处以它为契约）；文中 V2 字样是「v2 不读不迁移」的正确口径，非过期 |
 | `RESILIENCE.md` | 17,681B，261106 | **现行** | AGENTS §4 指定「容错与自愈契约 = docs/RESILIENCE.md」 |
@@ -79,7 +79,7 @@
 | `INK-DEVICE-CHECK.md` | 3,517B，261104 | **应删** | 全仓 **0 引用**（`git grep -l INK-DEVICE-CHECK` 除自身外为空）；一次性设备验收清单，已由 `MOBILE-OPS.md` + 装置脚本取代 |
 | `USHEET-UPGRADE.md` | 31,751B，261103 | **现行** | AGENTS §2 指定「升级只走 docs/USHEET-UPGRADE.md playbook」 |
 | `LAKE-CONTENT-WRITING.md` | 6,983B，2026-09-28 | **应归档（最旧）** | 最后改动 9/28，是「语雀写作规范」外部笔记；被 `quickNoteConversion.ts` 等 9 处引用但都是「参考语义」；语雀官方原文已在 `docs/lakexEditor-developer-docs/` |
-| `CODEX-GUIDE.md` | 6,833B，261029 | **现行（开发辅助）** | CDP 驱动指南；含 3 处硬编码 `/Users/admin/...`（`:39`、`:56`、`:58`） |
+| `CODEX-GUIDE.md` | 6,833B，261029 | **现行（开发辅助）** | CDP 驱动指南；含 3 处硬编码本机绝对路径（`/Users/<you>/...`；R2 已清零）（`:39`、`:56`、`:58`） |
 | `DEVELOPMENT.md` | 7,815B，261108 | **现行（开发辅助）** | 环境/命令；含 1 处硬编码绝对路径（`:21`） |
 | `PRODUCT.md` | 9,317B，261109 | **现行** | 产品定位；引 `TAG-SYSTEM-DESIGN` |
 
@@ -349,7 +349,7 @@ git grep -nE 'Manifest V2|manifests/latest' -- docs
 | --- | --- | --- |
 | 大文件 | 均为内核/字体产物（`lakex.js` 9.3MB、`dist/index.es.js` 6.6MB、`public/vendor/cdn/**/CodeMirror.js` 1.5MB、`apng` 0.67MB）；**禁止清理**（§3#18） | `git ls-files -z \| xargs -0 ls -l \| sort -k5 -rn` |
 | 构建产物 | `dist/`、`dist-electron/`、`dist-mobile/`、`release/` 全部 ignored（`.gitignore:2-5`）；`git status` clean | 已核实 |
-| 硬编码本机绝对路径 | **21 个 tracked 文件**含 `/Users/admin/...`（AGENTS/DEVELOPMENT/CODEX-GUIDE/MOBILE-OPS/LAKEX-CONTRACT/MOBILE-DESIGN/MOBILE-AI/MOBILE-BITABLE-DINGTALK/audit-261027×2/多端与移动脚本） | `git grep -c '/Users/admin/'\|wc -l` = 21；对开源友好度有影响，建议脚本侧改 `process.cwd()`/`import.meta.url` 派生（尤其 `scripts/multi-end-sync/{delprefix,run5,run5b,run5c}.mjs` 里 `createRequire("/Users/admin/.../package.json")` 在别人机器上必崩） |
+| 硬编码本机绝对路径 | **21 个 tracked 文件**含本机绝对路径（`/Users/<you>/...`）（AGENTS/DEVELOPMENT/CODEX-GUIDE/MOBILE-OPS/LAKEX-CONTRACT/MOBILE-DESIGN/MOBILE-AI/MOBILE-BITABLE-DINGTALK/audit-261027×2/多端与移动脚本） | `git grep -c '/Users/'\|wc -l` = 21；对开源友好度有影响，建议脚本侧改 `process.cwd()`/`import.meta.url` 派生（尤其 `scripts/multi-end-sync/{delprefix,run5,run5b,run5c}.mjs` 里 `createRequire("/Users/<you>/.../package.json")` 在别人机器上必崩） |
 | 双远端 | ✅ 与 README/AGENTS 一致：`origin` = Gitee（+GitHub HTTPS pushurl）、`github` = GitHub SSH；`npm run setup:remotes` 补齐（remote 不入库） | `git remote -v` 实测 |
 | CI 健康 | ✅ 三个 workflow 全部把 action **钉到 commit SHA**；`pr.yml` 无 secrets、只跑 tsc/vitest/双 build/check:core/ui-metrics/check:bundle/check:arch；`release.yml` 仅 tag 触发、macOS+Windows+Android+publish、Android keystore 走 secret 且校验缺失即失败；设备/视觉门禁不进 CI（与 AGENTS §3#21 一致） | `.github/workflows/{pr,release,packaged-smoke}.yml` |
 | CI 小缺口（存疑，未定罪） | `pr.yml` 未跑 `npm run check:mobileui`（AGENTS §6 把 `check:mobileui` 列进日常门禁） | 需作者确认是否故意（该脚本可能依赖 `dist-mobile` 之外的环境） |
@@ -402,13 +402,13 @@ git grep -nE 'Manifest V2|manifests/latest' -- docs
 2. **文档 §编号漂移（全仓）**：`HANDOFF §3#N` 旧编号仍有 **7 处**（MOBILE-AI、TROUBLESHOOTING、mobile-f16-acceptance、audit-261027/09 等），`AGENTS §7.2x/3x` 旧编号 **11 处**（脚本注释、InkPad、clipboardHtml、QuickNoteComposer、nativeKeyboard 等）。HANDOFF §3 P2 已登记「下次碰时统一」，属**顺手可清**的低风险项。
 3. **移动端首页改版未回填到任何用户文档**（本报告 §4 已覆盖 guide 侧）；设计侧 `MOBILE-DESIGN.md` 是否同步了「五格 Dock」未核。
 4. **`public/brand/14a-paper-finch-loading-256.apng` 672KB** 为品牌动画资源，是否仍被引用未核（不在本任务清理范围，但开源前值得确认一次）。
-5. **`docs/lakexEditor-developer-docs/fetch-yuque-developer-docs.mjs` 硬编码输出到 `/Users/admin/file/local-lake/yuque-developer-docs`**（仓外路径），别人复跑会落到自己机器任意位置或失败。
+5. **`docs/lakexEditor-developer-docs/fetch-yuque-developer-docs.mjs` 硬编码输出到本机仓外目录（R2 已改为 `<repo>/../yuque-developer-docs`，可用 `YUQUE_DOCS_OUT` 覆盖）**（仓外路径），别人复跑会落到自己机器任意位置或失败。
 
 ## 附录 C：本报告的复现命令集
 
 ```bash
 export PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH"
-cd /Users/admin/file/local-lake/lakex-local-notes
+cd "$(git rev-parse --show-toplevel)"
 
 # 计数
 git ls-files | wc -l; git ls-files docs | wc -l; git ls-files guide | wc -l; git ls-files scripts | wc -l
@@ -423,7 +423,7 @@ git check-ignore --no-index -v vendor/lakex-doc-react/NEW.js public/vendor/lakex
 # 敏感信息
 git grep -nE 'AKIA[0-9A-Z]{16}|LTAI[0-9A-Za-z]{12,}|sk-[A-Za-z0-9]{20,}|BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY' -- .
 # 硬编码本机路径
-git grep -c '/Users/admin/' -- '*.md' '*.ts' '*.mjs' '*.json' | wc -l
+git grep -c '/Users/' -- '*.md' '*.ts' '*.mjs' '*.json' | wc -l
 # 手册与产品脱节（应为 0，实测 0）
 grep -l '日记\|便携包\|更新中心\|AI 写作' guide/*.md | wc -l
 ```

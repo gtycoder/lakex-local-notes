@@ -12,7 +12,7 @@
 ### 0.1 做了什么（可复现）
 
 ```bash
-cd /Users/admin/file/local-lake/lakex-local-notes
+cd "$(git rev-parse --show-toplevel)"
 git log -1 --format='%h %s'                      # 基线
 find src/mobile -name '*.ts' -o -name '*.tsx' | wc -l        # 640（含测试）
 find src/mobile -name '*.test.ts' -o -name '*.test.tsx' | wc -l  # 302

@@ -63,7 +63,7 @@
 
 **发布前必修（R0，3–5 天）**
 1. **文档/手册**：guide 新增 4 章（日记 / AI 写作 / 便携包与换机 / 更新中心）+ 全量改名与语义纠偏；README 文档地图与 HANDOFF 合并为单一来源；`ARCHITECTURE.md` 重写（3 个路径已不存在、仍是 Manifest V2 时代）。
-2. **仓库卫生**：`.gitignore:28-31` 三行（内核已 vendored 却仍被忽略，升级新增文件会静默丢失）；21 处硬编码 `/Users/admin/`（`multi-end-sync/*.mjs` 在他人机器必崩）；`ARCHITECTURE §4.5` 真实桶名脱敏。
+2. **仓库卫生**：`.gitignore:28-31` 三行（内核已 vendored 却仍被忽略，升级新增文件会静默丢失）；21 处硬编码本机绝对路径（`/Users/<you>/`）（`multi-end-sync/*.mjs` 在他人机器必崩）；`ARCHITECTURE §4.5` 真实桶名脱敏。
 3. **死代码/死脚本**：`src/core/s3v3Gc.ts`（98 行，产品 0 引者却被 3 个测试当护栏）+ 23 个零引用脚本 + `docs/INK-DEVICE-CHECK.md`。
 4. **零风险文案/注释纠错**：小记「保存并同步」失败文案错误（F-04）、AI 作用域 4 宿主缺 `data-note-id`（F-03，小修）、`settingsRepository` 安全反向注释、preview 头注释、`TagPreviewBody` 死分支、`lakeNativeContract` 计数注释、移动 `--mb-radius-xl` 悬空、`mobile.html` 双 theme-color、`OpenFile` 重复注册。
 5. **护栏补齐**：`shadowedDecls`（桌面样式）、`kindTouchpoints`（kind 触点）、`native.ts` 第四面 parity、预览策略常量断言、小记同步理由映射。
@@ -410,7 +410,7 @@ SPACE_CAPABILITIES = {
 
 **O1 仓库卫生（R0）**
 - `.gitignore:28-31` 删除三行 + 改注释（内核已 vendored；`git check-ignore --no-index` 复现"升级新增文件被静默忽略"）。
-- 21 个 tracked 文件含 `/Users/admin/`：**脚本侧必须改**（`scripts/multi-end-sync/*.mjs` 的 `createRequire` 在他人机器必崩）；文档侧替换为示例路径。
+- 21 个 tracked 文件含本机绝对路径（`/Users/<you>/`）：**脚本侧必须改**（`scripts/multi-end-sync/*.mjs` 的 `createRequire` 在他人机器必崩）；文档侧替换为示例路径。
 - `ARCHITECTURE §4.5` 删除真实账号下 5 个桶名（保留示例配置）。
 - `.DS_Store` 未入库（本机清理即可）；`dist*` 均 ignored。
 
@@ -533,7 +533,7 @@ SPACE_CAPABILITIES = {
 
 **O1 仓库卫生（R0）**
 - `.gitignore:28-31` 删除三行 + 改注释（内核已 vendored；`git check-ignore --no-index` 复现"升级新增文件被静默忽略"）。
-- 21 个 tracked 文件含 `/Users/admin/`：**脚本侧必须改**（`scripts/multi-end-sync/*.mjs` 的 `createRequire` 在他人机器必崩）；文档侧替换为示例路径。
+- 21 个 tracked 文件含本机绝对路径（`/Users/<you>/`）：**脚本侧必须改**（`scripts/multi-end-sync/*.mjs` 的 `createRequire` 在他人机器必崩）；文档侧替换为示例路径。
 - `ARCHITECTURE §4.5` 删除真实账号下 5 个桶名（保留示例配置）。
 - `.DS_Store` 未入库（本机清理即可）；`dist*` 均 ignored。
 
@@ -711,7 +711,7 @@ SPACE_CAPABILITIES = {
 
 - 各分册均含"可复现命令"与 file:line。总入口命令：
 ```bash
-cd /Users/admin/file/local-lake/lakex-local-notes
+cd "$(git rev-parse --show-toplevel)"
 node scripts/ui-metrics.mjs          # 样式硬指标
 node scripts/check-core-boundaries.mjs
 node scripts/check-mobile-ui.mjs

@@ -366,7 +366,7 @@ src/core/s3v3/engine/deepCleanup.ts  深清（keep 集/保留窗口/dryRun）
 ## 附录 C · 复现命令
 
 ```bash
-cd /Users/admin/file/local-lake/lakex-local-notes
+cd "$(git rev-parse --show-toplevel)"
 
 # 1) 分层纯净
 rg -c 'from "node:' src/core -g '!*.test.ts'                       # 期望 0

@@ -18,7 +18,7 @@
 ## 二、开发（`npm run dev` 打不开时先看这里）
 
 ```bash
-cd /Users/admin/file/local-lake/lakex-local-notes   # 一定要在正库，不要在 private/ 的旧副本里
+cd "$(git rev-parse --show-toplevel)"   # 在仓库根执行（不要在 private/ 的旧副本里）
 export PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH"   # 必须 Node 24
 npm run dev
 ```

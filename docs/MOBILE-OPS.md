@@ -21,7 +21,7 @@
 
 ```bash
 export PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH"
-cd /Users/admin/file/local-lake/lakex-local-notes
+cd "$(git rev-parse --show-toplevel)"
 export ANDROID_SERIAL=emulator-5554    # 单设备可省略；多设备改成 adb devices 里要操作的那台
 ```
 

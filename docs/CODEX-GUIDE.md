@@ -36,7 +36,8 @@
 
 // 1) 静态服务器 serve dist/（常驻 node_repl）
 const http = await import("node:http"), fs = await import("node:fs"), path = await import("node:path");
-const DIST = "/Users/admin/file/local-lake/lakex-local-notes/dist";
+const REPO = process.env.LAKE_REPO ?? process.cwd();   // 在仓库根起 node；或用 LAKE_REPO 指定仓库
+const DIST = path.join(REPO, "dist");
 const MIME = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".json": "application/json", ".png": "image/png", ".svg": "image/svg+xml", ".woff2": "font/woff2" };
 globalThis.staticServer = http.createServer((req, res) => {
   try {
@@ -53,9 +54,9 @@ await new Promise(r => staticServer.listen(1421, "127.0.0.1", r));
 // 2) 启动应用
 const { _electron } = await import("playwright");
 globalThis.app = await _electron.launch({
-  executablePath: "/Users/admin/file/local-lake/lakex-local-notes/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron",
+  executablePath: path.join(REPO, "node_modules/electron/dist/Electron.app/Contents/MacOS/Electron"),
   args: ["."],
-  cwd: "/Users/admin/file/local-lake/lakex-local-notes",
+  cwd: REPO,
   timeout: 60000,
 });
 const win = await app.firstWindow();

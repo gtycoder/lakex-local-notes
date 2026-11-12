@@ -19,7 +19,7 @@
 - **审计**：6 域并行只读审计 + Lead 交叉复核 ⇒ `docs/audit-261112/`：`00-MASTER-PLAN.md`（总方案 + A–Q 分项 + R0/R1/R2 路线 + Q01–Q27 裁决）+ 分册 02 预览 / 03 桌面 UI 样式 / 04 移动 / 05 core+electron / 06 特性域 / 07 文档清理。代码域 P0 = 0。
 - **R0 已落地（产品代码笔 `8e20a6a3`；另 `996b4d6e` docs / `fab629dc` chore）**：
   - 文档：guide 19 章（新增 16 日记 / 17 AI 写作 / 18 换机便携包 / 19 更新中心；目录、平台差异、⌘1–5、设置分类全部对齐）；README 文档表收为入口并指向本文件 §1；ARCHITECTURE 按 v3 重写；STORAGE-LAYERS v3；TAG-SYSTEM-DESIGN / MOBILE-AI / TROUBLESHOOTING / SYNC-DEVICE-CONTRACT / MOBILE-DESIGN 回填。
-  - 卫生：`.gitignore` 删三处 vendor/public 忽略；删 23 个零引用脚本 + `INK-DEVICE-CHECK.md` + `src/core/s3v3Gc.ts`；脚本侧 `/Users/admin` 清零。
+  - 卫生：`.gitignore` 删三处 vendor/public 忽略；删 23 个零引用脚本 + `INK-DEVICE-CHECK.md` + `src/core/s3v3Gc.ts`；脚本侧机器绝对路径清零。
   - 代码：小记「保存并同步」4 理由透传 + 两端同文案（F-04）；AI 作用域 `data-note-id` 单源（F-03）；日期格式化收口 `core/dateFormat` + lint；`NoteKind` 私抄清零 + 触点护栏；长按单源；`AI_DIALOG_GAP` 单源；`native.ts` IPC 第四面 parity；死 env 开关（`LAKE_SYNC_PROTOCOL` / `LAKE_S3V3_QUICK_NOTES`）删除。
   - 样式：删 35 条被压死声明 + `.ln-modal/.ln-drawer`；新增 `shadowedDecls` 门禁（基线只降）；移动 4 项小修（radius / theme-color / OpenFile 去重 / 契约计数）。
 - **门禁（本批实测，数值见 §1）**：tsc 0；全量 vitest 874 文件 / 5512 passed / 0 failed；ui-metrics / check:core / check:mobileui / 双 build / bundle+arch / diff-check 全绿。
@@ -138,7 +138,7 @@
 
 **P2（体验缺口 / 长期）**
 
-- **docs 侧硬编码机器路径**：脚本侧已清零（R0），仍有约 18 个 tracked 文件含 `/Users/admin/...`（AGENTS / DEVELOPMENT / CODEX-GUIDE / MOBILE-OPS / 契约文档 / audit 存档）；开源前统一替换为示例路径（代码块用 `$(git rev-parse --show-toplevel)`，正文用 `<repo>`）。
+- **docs 侧硬编码机器路径（R2 task-35 已清零）**：脚本侧 R0 清零；AGENTS / DEVELOPMENT / CODEX-GUIDE / MOBILE-OPS / 契约文档 / audit 存档里的本机绝对路径统一改成 `<repo>` 或 `$(git rev-parse --show-toplevel)`（示例统一写 `/Users/<you>/...`）；本机绝对路径已 0 命中（仅测试夹具里保留通用示例 `/Users/x`）。
 - **audit-261112 分册**：作为本轮方案留档；若有仍有效但未进上述落点的结论，按需搬进对应文档（不留在 HANDOFF）。
 - 大库与**真实 Android 物理机验收从未做过**；移动云清理无 UI 入口、目录恢复后 `deleted_notes` 残留；缺正文/缺小记三条恢复路径只有单测 mock。
 - 移动端文本格式未接入口（unlink / replace / style→code·quote / 表格块级命令族）；顶栏 44→52 需另开需求；平板「点空白落光标」待用户裁决。
