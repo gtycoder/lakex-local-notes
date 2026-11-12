@@ -17,7 +17,11 @@ const APP = readFileSync(new URL("../../App.tsx", import.meta.url), "utf8");
 const MOBILE_APP = readFileSync(new URL("../../mobile/MobileApp.tsx", import.meta.url), "utf8");
 const TABS = readFileSync(new URL("../editor/MultiTabEditor.tsx", import.meta.url), "utf8");
 const EDITOR_TAB = readFileSync(new URL("../editor/LakeEditor.tsx", import.meta.url), "utf8");
-const DOC = readFileSync(new URL("../../core/bitableDoc.ts", import.meta.url), "utf8");
+/** 261112 R1-S1：`core/bitableDoc.ts` 已按域拆到 `core/bitable/*`（门面只剩 re-export）。
+ *  本文件的护栏继续在「实现文本」上断言 ⇒ 读拆出的 9 个模块（拼一起 = 原来的实现文本）。 */
+const DOC = ["types", "values", "filter", "fill", "sortGroup", "views", "relations", "ai", "body"]
+  .map((name) => readFileSync(new URL("../../core/bitable/" + name + ".ts", import.meta.url), "utf8"))
+  .join("\n");
 const MUTATIONS = readFileSync(new URL("../../core/bitableMutations.ts", import.meta.url), "utf8");
 const CARDS = readFileSync(new URL("./bitableCells.tsx", import.meta.url), "utf8");
 // 261008：统一选色盘（组件 + 样式）移到了共用位置，逐条断言跟着改指向

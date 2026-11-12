@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { extractAssetRefs } from "./assetNaming.js";
 import { COLOR_BOARD_GROUPS } from "./colorPalette.js";
@@ -1498,5 +1499,80 @@ describe("AI 字段（261003 · 单一类型 · 命令在字段里）", () => {
     expect(evaluateFilter(aiField, aiValue, { fieldId: aiField.id, operator: "contains", value: "旧值" })).toBe(true);
     expect(evaluateFilter(aiField, aiValue, { fieldId: aiField.id, operator: "contains", value: "不存在的值" })).toBe(false);
     expect(evaluateFilter(aiField, aiValue, { fieldId: aiField.id, operator: "endsWith", value: "新鲜值" })).toBe(false);
+  });
+});
+
+/**
+ * 导出符号表（261112 R1-S1 拆分护栏）：core/bitableDoc.ts 拆成 ./bitable/* 后，门面必须**原样** re-export 拆分前的全部符号。
+ *
+ * 为什么钉死：拆分是纯搬移，唯一的验收判据就是「导出名一个不多一个不少、行为不变」（行为由上面的 77 个用例负责）。
+ * 这层断言同时防两件事：① 搬模块时漏 export（调用方在运行时才炸）；② 顺手把内部共享 helper（如 nowIso / fieldById /
+ * normalizeFilters）从门面漏出去，把私有面变成公开 API。
+ *
+ * 新增/删除导出 = 必须同时改这里（说明是产品 API 变更），不要在搬移过程中静默漂移。
+ */
+const BEFORE_SPLIT_VALUE_EXPORTS = [
+  "AI_FIELD_MAX_DOCUMENTS", "AI_FIELD_MAX_IMAGES", "ATTACHMENT_GRID", "BITABLE_AI_MAX_CHARS",
+  "BITABLE_AI_SYSTEM_PROMPT", "BITABLE_DATE_FILTER_MODE_LABEL", "BITABLE_DATE_FORMAT_OPTIONS", "BITABLE_DEFAULT_OPTION_COLOR",
+  "BITABLE_DOC_KIND", "BITABLE_DOC_VERSION", "BITABLE_FIELD_TYPES", "BITABLE_FIELD_TYPE_LABEL",
+  "BITABLE_FILL_MAX_RULES", "BITABLE_FILL_MODE_LABEL", "BITABLE_FILL_NO_COLOR", "BITABLE_FILTER_MAX_GROUP_DEPTH",
+  "BITABLE_FILTER_OPERATOR_LABEL", "BITABLE_IMPLEMENTED_VIEW_TYPES", "BITABLE_NUMBER_FORMAT_OPTIONS", "BITABLE_OPTION_COLORS",
+  "BITABLE_OPTION_PALETTE", "BITABLE_PROGRESS_MAX", "BITABLE_RATING_MAX", "BITABLE_RELATION_DEFAULT",
+  "BITABLE_ROW_HEIGHT_OPTIONS", "BITABLE_SORT_MODE_LABEL", "BITABLE_STAT_LABEL", "BITABLE_VIEW_TYPES",
+  "BITABLE_VIEW_TYPE_LABEL", "aiPromptFieldNames", "applyRelationMirror", "applySortMode",
+  "applyViewToRecords", "attachmentGridColumns", "bitableAttachmentFields", "bitableAttachments",
+  "bitableDateFields", "bitableDisplayValue", "bitableFieldText", "bitableFieldValue",
+  "bitableFillBackgroundTokens", "bitableFilterRuleCount", "bitableRawDisplayValue", "bitableRecordTitle",
+  "bitableRowHeightPx", "bitableSelectFields", "bitableToSearchText", "bitableViewNeedsClock",
+  "bitablesToBody", "buildAiFieldMessages", "buildBitableFillProjection", "calendarColorField",
+  "calendarEndField", "calendarEvents", "calendarEventsByDay", "calendarMonthDays",
+  "calendarMovePatch", "calendarStartField", "calendarTitleField", "canonicalBitableNav",
+  "changeSortField", "computeColumnStat", "createBitableField", "createBitableFieldOptions",
+  "createBitableFillRule", "createBitableFilterGroup", "createBitableFilterRule", "createBitableRecord",
+  "createBitableView", "createDefaultBitableTable", "createRelationPair", "dateFilterModesFor",
+  "dateFilterRangeFor", "defaultFilterValueFor", "defaultGridView", "defaultRecordValues",
+  "defaultViewName", "duplicateValues", "emptyBitableBody", "evaluateFilter",
+  "evaluateFilterGroup", "evaluateFilterNode", "fieldSupportsFormat", "filterOperatorLabel",
+  "filterOperatorsFor", "filterValueKindFor", "formatBitableDate", "formatBitableNumber",
+  "galleryCardFieldCandidates", "galleryCardFields", "galleryCoverField", "galleryCoverImage",
+  "groupRecords", "isAiFieldType", "isAttachmentLikeField", "isBitableFilterGroup",
+  "isBitableFilterRuleConfigured", "isImplementedViewType", "isKnownFieldType", "isKnownViewType",
+  "isNumericFieldType", "isRelationFieldType", "isSystemTimeField", "kanbanCardFieldCandidates",
+  "kanbanCardFields", "kanbanColumns", "kanbanGroupField", "localDateDiff",
+  "localDateString", "localDateTimeString", "localMonthDiff", "newBitableId",
+  "optionChipStyle", "optionColorHex", "orderedAllTableFields", "orderedTableFields",
+  "parseBitableBody", "relationCandidateRecords", "relationPickerFields", "relationRecordIds",
+  "relationReverseFieldName", "relationTargetRecords", "relationTargetTable", "relationTargetView",
+  "removeBitableAttachment", "renameBitableAttachment", "reorderBitableAttachments", "shiftLocalDate",
+  "sortModeLabel", "sortModeOf", "sortModesForField", "statDisplayText",
+  "statForField", "statsForField", "stripFillRulesForField", "toggleRelationDraft",
+  "unpairRelationFields", "viewTypeLabel",
+  ] as const;
+const BEFORE_SPLIT_TYPE_EXPORTS = [
+  "BitableAiConfig", "BitableAiMessagesResult", "BitableAttachment", "BitableCalendarEvent",
+  "BitableDateFilterMode", "BitableDisplayContext", "BitableDoc", "BitableField",
+  "BitableFieldOption", "BitableFieldType", "BitableFillMatch", "BitableFillMode",
+  "BitableFillProjection", "BitableFillRule", "BitableFilterGroup", "BitableFilterJoin",
+  "BitableFilterNode", "BitableFilterOperator", "BitableFilterRule", "BitableFilterValue",
+  "BitableFilterValueKind", "BitableGroupRule", "BitableKanbanColumn", "BitableRecord",
+  "BitableRelation", "BitableRelationFieldType", "BitableRowHeight", "BitableSortMode",
+  "BitableSortRule", "BitableStatType", "BitableTable", "BitableView",
+  "BitableViewType", "BuildAiFieldOptions",
+  ] as const;
+
+describe("导出符号表（拆分门面不变量）", () => {
+  it("运行时导出 = 拆分前的 138 个值导出（多一个/少一个都红）", async () => {
+    const module = await import("./bitableDoc.js");
+    expect(Object.keys(module).sort()).toEqual([...BEFORE_SPLIT_VALUE_EXPORTS].sort());
+  });
+
+  it("源码层类型导出 = 拆分前的 34 个 type 导出（类型无法运行时断言，读门面文本）", () => {
+    const source = readFileSync(new URL("./bitableDoc.ts", import.meta.url), "utf8");
+    const exported = new Set();
+    for (const line of source.split("\n")) {
+      const match = line.match(/^export type \{ (.*) \} from/);
+      if (match) match[1].split(", ").forEach((name) => exported.add(name));
+    }
+    expect([...exported].sort()).toEqual([...BEFORE_SPLIT_TYPE_EXPORTS].sort());
   });
 });
