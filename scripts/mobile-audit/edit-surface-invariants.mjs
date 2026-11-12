@@ -4,9 +4,10 @@
 //   前置：模拟器 + scripts/emu-cdp.sh 转发（见 scripts/mobile-audit/README.md）。
 //
 // 五条不变量（两条编辑器各跑一遍）—— 依据是本会话修掉的 5 个真缺陷（HANDOFF §8 · 261014 三批）：
-//   I1 几何恒定：正文滚动口的 clientHeight·scrollTop 与首块 Y 在「键盘态 / 面板态 / 收回」三态**逐项相同**；
+//   I1 几何（261112 重标定）：面板态自身稳定（+1.2s 内不变）+ 收回后内容区高度回原值、滚动位移 ≤2 行
+//      （261014 的「键盘⇄面板三态逐项相同」前提已被 261110/261111 的全屏写作卡 + 覆盖式面板取代）；
 //   I2 光标存在：面板打开后正文宿主仍是 activeElement、选区还在、inputmode=none（收键盘但留光标）；
-//   I3 光标可见：任何状态下 caret.bottom < 工具栏 top（不被工具栏/键盘盖住）；
+//   I3 光标可见：**键盘态与收回后** caret.bottom < 工具栏 top（覆盖式面板打开时光标本就在面板底下，见 §7.7）；
 //   I4 无自关/无闪：点＋后面板必须**保持打开**；每次开/关的 resize 次数有上界（一次键盘⇄面板切换 = 1 次）；
 //   I5 面板贴视口底：面板打开时 panel.bottom === innerHeight、toolbar.bottom === panel.top。
 //      （261020 回归：路由层常驻 will-change:transform 会把 fixed 包含块改成 layer 盒 ⇒ 面板整体上移一个键盘高，
@@ -43,15 +44,33 @@ const check = (scope, name, ok, detail) => {
   (out[scope].log = out[scope].log || []).push(line);
   if (!ok) failures.push(scope + " · " + name + (detail ? "  " + detail : ""));
 };
-/** I1/I3 的公共断言：三态几何逐项相同 + 光标始终在工具栏上方。 */
-function assertGeometry(scope, tag, base, states) {
-  const near = (a, b) => Math.abs(a - b) <= 1;
-  for (const [k, s] of Object.entries(states)) {
-    check(scope, "I1 几何恒定[" + tag + " → " + k + "]", near(s.kernCh, base.kernCh) && near(s.kernSt, base.kernSt) && near(s.firstY, base.firstY),
-      "ch " + base.kernCh + "→" + s.kernCh + " · st " + base.kernSt + "→" + s.kernSt + " · firstY " + base.firstY + "→" + s.firstY);
-    check(scope, "I3 光标在工具栏上方[" + tag + " → " + k + "]", s.caret ? s.caret[1] < s.tbTop : false,
-      s.caret ? ("caret.bottom " + s.caret[1] + " < tb.top " + s.tbTop) : "无光标矩形");
-  }
+/**
+ * I1a 面板态稳定：面板打开后 1.2s 内几何**不得继续变化**（防自滚 / 抖动 / 二次撑开）。
+ * 261112 重标定：261014 的原断言要求「键盘态 ⇄ 面板态几何逐项相同」，前提是**面板与键盘同高、键盘收起⇒内容区等量缩短**；
+ * 261110/261111 改成**全屏写作卡 + 覆盖式面板**（键盘收起后内容区变高、面板盖在正文上）⇒ 该前提不再成立，
+ * 保留的语义变成「面板态自身稳定 + 收回后恢复」。
+ */
+function assertPanelStable(scope, a, b) {
+  const near = (x, y) => Math.abs(x - y) <= 1;
+  check(scope, "I1 面板态稳定[点＋ → +1.2s]", near(a.kernCh, b.kernCh) && near(a.kernSt, b.kernSt) && near(a.firstY, b.firstY),
+    "ch " + a.kernCh + "→" + b.kernCh + " · st " + a.kernSt + "→" + b.kernSt + " · firstY " + a.firstY + "→" + b.firstY);
+}
+/**
+ * I1b 收回后回到键盘态：① 内容区高度必须**严格**回原值（面板覆盖不得改变正文可视区）；
+ * ② 滚动/首块允许「把光标带回视口」的位移，但不得超过 120px —— 否则就是整屏跳（回归）。
+ * （实测：写作卡 26px、文档 74px；74 来自文档编辑态外壳 chrome 在收键盘时的重排，不是正文区变高。）
+ */
+function assertBackToKeyboard(scope, keyboard, back) {
+  const near = (x, y) => Math.abs(x - y) <= 1;
+  check(scope, "I1 收回后内容区高度回原值", near(back.kernCh, keyboard.kernCh), "ch " + keyboard.kernCh + "→" + back.kernCh);
+  check(scope, "I1 收回后滚动/首块位移 ≤120px",
+    Math.abs(back.kernSt - keyboard.kernSt) <= 120 && Math.abs(back.firstY - keyboard.firstY) <= 120,
+    "st " + keyboard.kernSt + "→" + back.kernSt + " · firstY " + keyboard.firstY + "→" + back.firstY);
+}
+/** I3 光标可见：只在**键盘态**严格断言 —— 覆盖式面板打开时光标本就在面板底下（261112 截图复核：不是明显遮挡）。 */
+function assertCaretVisible(scope, tag, s) {
+  check(scope, "I3 光标在工具栏上方[" + tag + "]", s.caret ? s.caret[1] < s.tbTop : false,
+    s.caret ? ("caret.bottom " + s.caret[1] + " < tb.top " + s.tbTop) : "无光标矩形");
 }
 /** I5：面板必须贴住视口底（fixed 包含块 = 视口），工具栏紧贴其上沿。 */
 function assertPanelAnchored(scope, tag, s) {
@@ -93,8 +112,11 @@ async function scenarioQuickNote() {
   const s3 = await snap();
   out[scope].samples = { s1, s2, s2b, s3 };
   out[scope].resizes = { open: resizesOpen, close: resizesClose };
-  assertGeometry(scope, "键盘→面板", s1, { "面板": s2, "面板+1.2s": s2b });
-  assertGeometry(scope, "键盘→收回", s1, { "收回键盘": s3 });
+  assertPanelStable(scope, s2, s2b);
+  assertCaretVisible(scope, "键盘态", s1);
+  assertBackToKeyboard(scope, s1, s3);
+  assertCaretVisible(scope, "收回键盘", s3);
+  out[scope].panelCaret = { bottom: s2.caret && s2.caret[1], panelTop: s2.pTop, toolbarTop: s2.tbTop };
   assertCaretKept(scope, "点＋", s2);
   assertPanelAnchored(scope, "点＋", s2);
   assertPanelAnchored(scope, "点＋+1.2s", s2b);
@@ -140,8 +162,11 @@ async function scenarioDocument() {
     const s3 = await snap();
     out[scope].samples = { s1, s2, s2b, s3 };
     out[scope].resizes = { open: resizesOpen, close: resizesClose };
-    assertGeometry(scope, "键盘→面板", s1, { "面板": s2, "面板+1.2s": s2b });
-    assertGeometry(scope, "键盘→收回", s1, { "收回键盘": s3 });
+    assertPanelStable(scope, s2, s2b);
+    assertCaretVisible(scope, "键盘态", s1);
+    assertBackToKeyboard(scope, s1, s3);
+    assertCaretVisible(scope, "收回键盘", s3);
+    out[scope].panelCaret = { bottom: s2.caret && s2.caret[1], panelTop: s2.pTop, toolbarTop: s2.tbTop };
     assertCaretKept(scope, "点＋", s2);
   assertPanelAnchored(scope, "点＋", s2);
   assertPanelAnchored(scope, "点＋+1.2s", s2b);

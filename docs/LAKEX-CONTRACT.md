@@ -1849,7 +1849,7 @@ body.lake-mobile .quick-note-editor .ne-editor-wrap-content { height: 100%; min-
    用模块级 `inSetback` 标志包住（本仓已加，落点 `src/mobile/editor/useEditSurface.ts` 的 `suppressImeNow`）。
    P2/P3 之后这三件事（外壳高度 / 面板状态机 / 输入法抑制与焦点守卫）**只有 useEditSurface 一个实现**，
    几何算术在 `editSurfaceModel.ts`（纯函数 + 单测），内核几何收口在 `edit-surface-kernel.css`（doc/note 共用 marker）；
-   行为由 `scripts/mobile-audit/edit-surface-invariants.mjs` 的四条不变量卡住。
+   行为由 `scripts/mobile-audit/edit-surface-invariants.mjs` 的五条不变量卡住（261112 重标定：I1 改为「面板态稳定 + 收回后恢复」，见 §5.38.1）。
 ③ 收面板要收敛成**一个出口**（`closePanel()`：× / 再点 ＋ / 用户点正文三处共用）：`setPanel(null) → focusEditor()`
    （后者负责清抑制 + 重新聚焦把键盘放回来）→ 等键盘真回来再清占位（§5.36 的口径）。
 
@@ -1870,7 +1870,7 @@ body.lake-mobile .quick-note-editor .ne-editor-wrap-content { height: 100%; min-
    **修法**：`noteViewport(innerHeight, visualViewport.height)` —— **只在两通道一致（差 ≤8px）时才抬高基准**；
    两通道在 adjustResize 下恒等、edge-to-edge 下只差键盘高，正好拿来做一致性校验（不引入新机制）。
    **判据**：`scripts/mobile-audit/keyboard-toggle.mjs`（K1 收+留光标 / K2 弹+摘属性 / K3 可反复开合）
-   **必须与 `edit-surface-invariants.mjs` 联跑**（稳定外壳高是它的地基：I1 三态几何逐项相同）。
+   **必须与 `edit-surface-invariants.mjs` 联跑**（稳定外壳高是它的地基：I1 自 261112 重标定为「面板态稳定 + 收回后内容区高度严格回原值 / 滚动位移 ≤120px」——261014 的「三态逐项相同」前提已被全屏写作卡 + 覆盖式面板取代）。
 3. **面板开着时 ⌨ 不能走「只收键盘」那条路**（261015 用户报「点了 ＋/T 再点键盘 ⇒ 一块空白」）：
    `closePanel("hide")` 的设计语义是"**无面板时**只收键盘、留住光标"；面板开着用它 ⇒ 面板虽然关了，
    但**占位要等 2.5s 兜底才释放、且键盘不回来** ⇒ 用户看到的正是那块空白
