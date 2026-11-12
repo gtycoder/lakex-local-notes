@@ -2,13 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import { AlertTriangle, CheckCircle2, CloudOff, History, LoaderCircle, Lock, Save, Upload, WifiOff } from "lucide-react";
 import type { DocumentStatusModel } from "../model/documentStatusModel";
 import { Popover } from "../ui/Overlay";
+import { NoticeToast, type StatusBarNotice } from "./NoticeToast";
 import { usePopoverPosition } from "../../hooks/usePopoverPosition";
 import type { NoteKind } from "../../core/noteKind";
 
-export interface StatusBarNotice {
-  text: string;
-  action?: { label: string; onClick: () => void };
-}
+export type { StatusBarNotice } from "./NoticeToast";
 
 export interface DesktopStatusBarProps {
   showDocumentStats: boolean;
@@ -49,7 +47,9 @@ export function DesktopStatusBar({ showDocumentStats, docKind = "doc", wordCount
   const unlockPos = usePopoverPosition({ open: unlockOpen, anchor: lockRef.current, width: 232, align: "start" });
   // 解锁后（或切到未锁定文档）关掉浮层
   useEffect(() => { if (!locked) setUnlockOpen(false); }, [locked]);
-  if (!showDocumentStats) return null;
+  // 非知识库空间（日记 / 小记 / AI 写作 / 标签 / 回收站 / 资源）没有状态栏，但操作提示要在
+  // （261112 task-93）：只渲染共享的 NoticeToast，不渲染底栏空壳；无提示时返回 null（DOM 与以前完全一致）。
+  if (!showDocumentStats) return <NoticeToast notice={notice} />;
   return (
     <>
       <footer
@@ -107,12 +107,8 @@ export function DesktopStatusBar({ showDocumentStats, docKind = "doc", wordCount
           </div>
         </Popover>
       )}
-      {notice && (
-        <div className="document-notice-toast" role="status" aria-live="polite">
-          <span>{notice.text}</span>
-          {notice.action && <button type="button" className="ln-btn ln-btn--link ln-btn--compact" onClick={notice.action.onClick}>{notice.action.label}</button>}
-        </div>
-      )}
+      {/* 提示 toast 与其它空间共用同一实现（此处是知识库空间的挂载点；位置/视觉不变）。 */}
+      <NoticeToast notice={notice} />
     </>
   );
 }
