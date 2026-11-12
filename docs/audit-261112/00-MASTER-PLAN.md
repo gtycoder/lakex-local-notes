@@ -61,23 +61,9 @@
 
 ### 1.3 优先级总览
 
-**发布前必修（R0，3–5 天）**
-1. **文档/手册**：guide 新增 4 章（日记 / AI 写作 / 便携包与换机 / 更新中心）+ 全量改名与语义纠偏；README 文档地图与 HANDOFF 合并为单一来源；`ARCHITECTURE.md` 重写（3 个路径已不存在、仍是 Manifest V2 时代）。
-2. **仓库卫生**：`.gitignore:28-31` 三行（内核已 vendored 却仍被忽略，升级新增文件会静默丢失）；21 处硬编码本机绝对路径（`/Users/<you>/`）（`multi-end-sync/*.mjs` 在他人机器必崩）；`ARCHITECTURE §4.5` 真实桶名脱敏。
-3. **死代码/死脚本**：`src/core/s3v3Gc.ts`（98 行，产品 0 引者却被 3 个测试当护栏）+ 23 个零引用脚本 + `docs/INK-DEVICE-CHECK.md`。
-4. **零风险文案/注释纠错**：小记「保存并同步」失败文案错误（F-04）、AI 作用域 4 宿主缺 `data-note-id`（F-03，小修）、`settingsRepository` 安全反向注释、preview 头注释、`TagPreviewBody` 死分支、`lakeNativeContract` 计数注释、移动 `--mb-radius-xl` 悬空、`mobile.html` 双 theme-color、`OpenFile` 重复注册。
-5. **护栏补齐**：`shadowedDecls`（桌面样式）、`kindTouchpoints`（kind 触点）、`native.ts` 第四面 parity、预览策略常量断言、小记同步理由映射。
-6. **发布验证**：桌面 42 态（需夹具机）、手机/平板 10 态 + 23 屏、windowsweep、双 build/预算、全量 vitest。
-
-**开源后第一批（R1，2–3 周）**
-- 预览能力收口（4→1 hook / 策略对象 / 档位 / tap）；
-- 只读状态与空间能力矩阵；
-- 公共函数抽提 14 项；
-- 巨型文件拆分第一批（`core/bitableDoc` → `BitableEditor`）；
-- 桌面死声明删除 + 移动 `mobile.css` 域归位；
-- 文档删/归档/压缩第二轮；脚本索引；Kotlin 测试与 Keystore 统一。
-
-**长期（R2）**：`InkPad`/`lakeRuntime` 拆分、双端契约 conformance 套件、AI 会话模型统一、移动 CSS `@layer`（独立项目）、性能基线常态化、大库/真机验收。
+> **状态（261112 第三轮，最终）**：**R0 / R1 / R2 收尾均已完成**（发布前必修、开源后第一批、长期项里的拆分与 S3 多端语义收尾全部落地）。逐笔证据见 §5、附录 F–I 与 [HANDOFF §0](../HANDOFF.md)；**门禁数字以 [HANDOFF §1](../HANDOFF.md) 为准，本文件不抄**。
+>
+> **剩余待办只看 [HANDOFF §3](../HANDOFF.md)**。本节**不再列已关闭项**（历史分级与逐项执行状态见 §5、附录 D/F/G/H/I 与 git）；后续重排路线图以 HANDOFF §3 + 本文件 §5 的新状态行为准。
 
 ### 1.4 需要你裁决的事项
 
@@ -485,7 +471,9 @@ SPACE_CAPABILITIES = {
 
 ## 5. 路线图（建议执行顺序）
 
-### R0 · 发布前（3–5 天，只做低风险 + 文档）
+> **状态（261112 第三轮，最终）：R2 收尾已完成**——R0/R1/R2 的实际执行与验收见附录 D/F/G/H/I。**剩余待办只看 [HANDOFF §3](../HANDOFF.md)**；下表保留历史执行顺序（各批次均已关闭），不再作为待办清单；门禁数字以 [HANDOFF §1](../HANDOFF.md) 为准。
+
+### R0 · 发布前（3–5 天，只做低风险 + 文档）（已完成）
 
 | 批次 | 内容 | 依赖 | 必跑门禁 |
 | --- | --- | --- | --- |
@@ -496,11 +484,11 @@ SPACE_CAPABILITIES = {
 | R0-5 样式 | M1 删 58 条死声明 + 删 ln-modal/drawer + shadowed gate；M2 `mobile.css` 归位可延后到 R1 | Q1 | `ui-metrics` + `cssLayers` + 受影响快照 |
 | R0-6 发布验证 | 桌面 42 态（夹具机）+ 手机/平板 10 态 + 23 屏 + windowsweep + 双 build + 全量 vitest + 预算 | 全部 | AGENTS §3#21 全量 |
 
-### R1 · 开源后第一批（2–3 周）
+### R1 · 开源后第一批（2–3 周）（已完成）
 
 能力层（A1–A5、B、C、I 矩阵）→ 公共函数（K1/K2 完整/K4/K6/K7）→ 拆分（bitableDoc → BitableEditor → quickNotes → webApiServer → QuickNotesWorkspace → Sidebar/SettingsPanel）→ 移动端（N1/N2/N3、mobile.css 归位）→ 文档第二轮（归档 6、audit-261027、脚本索引）→ 契约层 conformance 套件。
 
-### R2 · 长期
+### R2 · 长期（收尾已完成）
 
 `lakeRuntime`/`InkPad` 拆分、AI 会话模型统一、移动 `@layer` 迁移（独立项目）、性能基线常态化、大库/真机验收、双端契约扩展。
 
@@ -537,6 +525,8 @@ SPACE_CAPABILITIES = {
 | Q25 | 是否新增 `CONTRIBUTING/SECURITY` | A 加 / B 不加 | **A**（开源推广前） |
 | Q26 | AGENTS "5 个 lazy 边界"数字更新 | A 改数字+指向测试 / B 展开清单 | **A**（预算有限） |
 | Q27 | 是否执行 `ARCHITECTURE` 重写 vs 只修索引 | A 重写（推荐）/ B 只修失效路径 | **A**（它已是外部读者第一手事实源） |
+
+> **已定稿语义补充（261112 第三轮）**：**回收站 = 特殊笔记本（`notebook-trash`）；删除 = 移动**（软删：正文/附件不删、**不写 wire 墓碑**、位置三元组随索引传播）；**purge 才是不可恢复**（被 purge 的端永久缺席，远端 purge 后本端保留「云端已删除（仅本地）」只读副本）。本条为最终语义（AGENTS §3#5/#15、[SYNC-PROTOCOL §10](../SYNC-PROTOCOL.md)），**取代 §4.C 与本节 Q04/Q10 等历史讨论里的旧表述**；§6 全体「推荐」以附录 E 为准。
 
 ## 7. 明确不做（汇总，避免下一轮重复讨论）
 
@@ -696,3 +686,38 @@ rg -n 'const DEFAULT_TRANSFER_CONCURRENCY' src/core
 - 真机 50950385 已装最新 APK（Q04 / Q22 已验）；桌面 42 态未跑（需夹具机）。
 
 基线更新：scripts/mobile-audit/baseline/{mobile-snap,mobile-snap-tablet,bitable-snap}.json 随本批提交。
+
+## 附录 I · R2 收尾（261112 第三轮）
+
+> 本轮 = 真实桶多端验收暴露的 S3 语义缺口收口 + UI 一致性 + 门禁收口。**门禁数字不在此抄**（见 [HANDOFF §1](../HANDOFF.md)）；分册 13–21 同目录。
+
+**A. 语义修复（均已本地提交）**
+
+| # | 项 | commit | 要点 |
+| --- | --- | --- | --- |
+| 1 | **位置三件套独立合并** | `3fad8821` | `parentId`/`trashedAt`/`deletedFromParentId` 与内容**正交**三方合并（`src/core/s3v3/plan/positionMerge.ts`）：本地动→本地赢且必须发布（纯移动轮 `indexChanged` + `apply-position`）；远端动→应用远端；两边都动→`updatedAt` LWW；**内容赢家 ≠ 位置赢家** |
+| 2 | **锁字段独立合并** | `20a066eb` | `isLocked`/`lockedAt` 按云端基线 + `lockedAt` LWW 独立合并/发布；锁 = 本机只读保护标记（非租约/非合并屏障），他端正文照常应用 |
+| 3 | **wire 去 `notebook-trash`** | `20a066eb` | trashed 条目 `parentId` 恒为 `null`（本地容器 id 不进 wire）；原始父只在 `deletedFromParentId` |
+| 4 | **F-01 purge 整棵子树** | `20a066eb` + 复核补 3 个边角 | purge 彻底删整棵子树（`parent_id` ∪ `deleted_from_parent_id+trashed_at` 两路边集合）；对端不重建、不回传、不复活 |
+| 5 | **S72 远端 trash 强制留档** | `903a47aa` | 判据 = 位置赢家为**远端 trashed** + 本地相对基线有变化 + 内容赢家为**本地** ⇒ `archive-local` 写历史快照（两份都改只留一份），不静默丢弃本地编辑 |
+| 6 | **F-01b 目录 purge 云端残留** | `fa2fbdad`（矩阵回写 `dc882945`） | 目录 purge 后云端索引不再残留（4 处叠加根因）；意图留在设备本地 `intents`，**不新造 wire 墓碑**；回收站副本永不 upload、发布排除 remote-purged-trash、`fieldChanged` 不上传已删正文、显式恢复让位（远端 `updatedAt > purgedAt`） |
+| 7 | **H73-G1 生命周期落地** | `4db266e9` | 位置赢家 = 远端时，生命周期类变更**不再被 `lifecycleRace` 永久挡住**（该保护只覆盖本地窗口内自移入/移出） |
+| 8 | **移动端远端 purge 保副本** | `d8ff18fc` | 远端 purge 后移动端保留「云端已删除（仅本地）」回收站副本（不物理删除；只读、可恢复、不参与 S3） |
+| 9 | **UI 一致性** | `e06eaf99` | 回收站/云端已删除/被拦统一**琥珀（pending）**档（红色只留失败/冲突）；文案去中点「·」（`云端已删除（仅本地）`）；0.5px 红线；只读原因单一来源 `readonlyReason`；`syncWarningText`；冲突优先 |
+| 10 | **apply 跳过独立 kind** | `1db5dea6` | 单篇 apply 失败改用独立 kind **`apply_skipped`** + 诊断逐项 + P0 回归护栏（不再整轮 syncNow 抛错） |
+
+**契约与红线回填**：`99c17951`（[SYNC-PROTOCOL](../SYNC-PROTOCOL.md) §9.5/§9.6：位置三方合并 + 同步专用写路径与守卫红线 + 单篇 apply 降级）· `68e90df4`（AGENTS §3#23 写路径守卫分层 U/S/I/R/M、§3#24 位置与内容正交）· HANDOFF 回写 `4a2092db`（数值一律以 HANDOFF §1 为准）。
+
+**B. 覆盖矩阵结论（261112 第三轮）**
+
+- **A 档（内存远程穷举，双端同一批场景）**：74 场景 → **已有 45 / 部分 28 / 真空 1 / 失败 0**（[14 分册](14-s3-scenario-matrix.md)：收口 45/28/1、新增 S08）。**S19 登记为「不计划」**：显式 id 重建不是用户流程（[HANDOFF §3](../HANDOFF.md) 同步登记）。
+- **B 档（真实七牛桶 13 条子集）**：**57/57 断言 PASS**、唯一前缀、只 DELPREFIX、**0 残留**（脚本 `scripts/multi-end-sync/run58.sh` + `scenario58.mjs`；[19 分册](19-s3-real-bucket-subset.md)）。
+- **移动多端混合（移动↔桌面，A–K）**：**全 PASS**；D 场景（远端 purge 后移动端保副本）修复后 **9/9**（[21 分册](21-s3-multi-end-mobile.md)；G–K 见 [HANDOFF §3](../HANDOFF.md)）。
+
+**C. 引用分册（同目录）**
+
+[13 写路径生命周期守卫越界扫查](13-write-guard-sweep.md) · [14 S3 全场景矩阵](14-s3-scenario-matrix.md) · [15 只读门禁与同步 warning 通路](15-readonly-gates-warning.md) · [16 移动端生命周期语义等价性](16-mobile-lifecycle.md) · [17 只读/回收站/云端已删除/保存被拒 UI 一致性](17-lock-trash-ui.md) · [18 生命周期实测证据](18-evidence-lifecycle.md) · [19 真实桶 B 档 13 条](19-s3-real-bucket-subset.md) · [20 独立复核 batch2](20-independent-review-batch2.md) · [21 S3 多端混合 A–F](21-s3-multi-end-mobile.md)。
+
+**D. 状态**
+
+**R2 收尾已完成**；剩余待办 = task-72（G–K + 快照门禁）、task-74（R-D 收尾）、task-67（移动 warning 持久化）、S19（登记不计划），**只看 [HANDOFF §3](../HANDOFF.md)**。门禁执行（tsc / 全量 vitest / ui-metrics / 真实桶）数字以 [HANDOFF §1](../HANDOFF.md) 为准；本轮低负载串行门禁无 perf 抖动，满载时 `perf.integration` 偶发（单跑 PASS）。
