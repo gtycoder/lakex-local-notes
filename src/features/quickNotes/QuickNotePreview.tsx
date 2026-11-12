@@ -91,11 +91,13 @@ function Media({ filename, cardName, label, assets, onImageClick, ellipsisClassN
   </span>;
 }
 
-function Nodes({ nodes, assets, onImageClick, onToggleTask, ellipsisClassName }: {
+function Nodes({ nodes, assets, onImageClick, onToggleTask, ellipsisClassName, hiddenMediaNames }: {
   nodes: QuickNotePreviewNode[]; assets: Asset[]; onImageClick(image: Asset): void;
   /** 待办勾选（预览里点复选框就能完成/取消，用户 260919 要求：只做这一个交互）。 */
   onToggleTask?(checkboxIndex: number, checked: boolean): void;
   ellipsisClassName: string;
+  /** 已经在上方**封面**里展示过的图片（磁盘名）：预览里不再重复渲染（261112 用户报「插一张图展两张」）。 */
+  hiddenMediaNames?: ReadonlySet<string>;
 }) {
   return <>{nodes.map((node, index) => {
     switch (node.kind) {
@@ -125,10 +127,12 @@ function Nodes({ nodes, assets, onImageClick, onToggleTask, ellipsisClassName }:
         </ListTag>;
       }
       case "quote":
-        return <blockquote key={index} className="quick-note-preview-quote"><Nodes nodes={node.nodes} assets={assets} onImageClick={onImageClick} onToggleTask={onToggleTask} ellipsisClassName={ellipsisClassName} /></blockquote>;
+        return <blockquote key={index} className="quick-note-preview-quote"><Nodes nodes={node.nodes} assets={assets} onImageClick={onImageClick} onToggleTask={onToggleTask} ellipsisClassName={ellipsisClassName} hiddenMediaNames={hiddenMediaNames} /></blockquote>;
       case "divider":
         return <hr key={index} className="quick-note-preview-divider" />;
       case "media":
+        // 封面已经展示了这张图 ⇒ 预览里跳过（只跳 image；附件/音视频没有封面语义，照常显示）。
+        if (node.cardName === "image" && node.filename && hiddenMediaNames?.has(node.filename)) return null;
         return <Media key={index} filename={node.filename} cardName={node.cardName} label={node.label} assets={assets} onImageClick={onImageClick} ellipsisClassName={ellipsisClassName} />;
       default:
         return <span key={index} className="quick-note-preview-unsupported" title="该块不支持在卡片里预览，请在编辑态查看">{node.label}</span>;
@@ -151,10 +155,21 @@ interface QuickNotePreviewProps {
   /** 单行省略的工具类（默认桌面 .ln-ellipsis；移动端传自有 .mb-ellipsis）——
    *  两端各自拥有样式，组件只发**调用方给的那个类名**，满足「不共享样式、只共享逻辑」。 */
   ellipsisClassName?: string;
+  /**
+   * 已在卡片**封面**里展示过的图片（磁盘名）⇒ 预览里跳过，避免同一张图出现两次
+   * （261112 用户报「只插了一张图片，预览里展示 2 张」：封面 + 预览各画一遍）。
+   * 只影响 image 卡；附件/音视频卡没有封面语义，照常渲染。
+   */
+  hiddenMediaNames?: ReadonlySet<string>;
 }
 
-export function QuickNotePreview({ body, noteId, assets, onImageClick, fallbackText, onToggleTask, ellipsisClassName = "ln-ellipsis" }: QuickNotePreviewProps) {
+export function QuickNotePreview({ body, noteId, assets, onImageClick, fallbackText, onToggleTask, ellipsisClassName = "ln-ellipsis", hiddenMediaNames }: QuickNotePreviewProps) {
   const nodes = useMemo(() => parseQuickNotePreview(body), [body]);
+  /** 封面已展示的图不重复画 ⇒ 只剩这些节点时整块预览就不占位（否则卡片中间留一片空白）。 */
+  const visibleNodes = useMemo(
+    () => nodes.filter((node) => !(node.kind === "media" && node.cardName === "image" && node.filename && hiddenMediaNames?.has(node.filename))),
+    [nodes, hiddenMediaNames],
+  );
   /** 快路径还原不了 ⇒ 整条卡片交给内核（判据 = 解析器自己的 unsupported 节点，不另立清单）。 */
   const kernelFallback = useMemo(() => hasUnsupportedNodes(nodes), [nodes]);
   const hostRef = useRef<HTMLDivElement>(null);
@@ -172,7 +187,7 @@ export function QuickNotePreview({ body, noteId, assets, onImageClick, fallbackT
     return () => observer?.disconnect();
   }, [body, kernelFallback]);
   useEffect(() => { setExpanded(false); }, [body]);
-  if (!kernelFallback && nodes.length === 0) {
+  if (!kernelFallback && visibleNodes.length === 0) {
     return fallbackText ? <p className="quick-note-preview-paragraph">{fallbackText}</p> : null;
   }
   const collapsed = overflowing && !expanded;
@@ -183,10 +198,11 @@ export function QuickNotePreview({ body, noteId, assets, onImageClick, fallbackT
       style={collapsed ? { maxHeight: COLLAPSED_MAX_PX } : undefined}
     >
       {kernelFallback && noteId
-        ? <Suspense fallback={<Nodes nodes={nodes} assets={assets} onImageClick={onImageClick} onToggleTask={onToggleTask} ellipsisClassName={ellipsisClassName} />}>
+        ? <Suspense fallback={<Nodes nodes={nodes} assets={assets} onImageClick={onImageClick} onToggleTask={onToggleTask} ellipsisClassName={ellipsisClassName} hiddenMediaNames={hiddenMediaNames} />}>
+            {/* 内核只读兜底无法摘掉首图（它按正文自己渲染）⇒ 这条路径仍可能与封面重复；只在快路径里去重。 */}
             <QuickNoteKernelPreview body={body} noteId={noteId} />
           </Suspense>
-        : <Nodes nodes={nodes} assets={assets} onImageClick={onImageClick} onToggleTask={onToggleTask} ellipsisClassName={ellipsisClassName} />}
+        : <Nodes nodes={visibleNodes} assets={assets} onImageClick={onImageClick} onToggleTask={onToggleTask} ellipsisClassName={ellipsisClassName} hiddenMediaNames={hiddenMediaNames} />}
     </div>
     {overflowing && <button
       className="quick-note-preview-toggle"

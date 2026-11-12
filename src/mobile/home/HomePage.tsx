@@ -1231,6 +1231,8 @@ function QuickNoteCard({ note, revealed, dateValue, onEdit, onMore, onFilterTag,
             // 卡片是「打开编辑」的入口：预览里的图片不抢点击（否则点图上只会弹放大预览、进不去编辑），
             // 需要放大看图时进编辑态点图（内核/浅色预览层在编辑态仍可用）。
             onImageClick={() => undefined}
+            // 封面上方已经画过第一张图 ⇒ 预览不再重复（261112 用户报「插一张图预览里出现两张」）。
+            hiddenMediaNames={thumbUrl && note.firstImage ? new Set([note.firstImage]) : undefined}
             // 勾选框可点（与桌面卡片预览同能力）；组件内部已 stopPropagation ⇒ 不会顺带进编辑态。
             onToggleTask={onToggleTask}
           />
