@@ -44,7 +44,7 @@
 
 **版本与仓库**
 
-- 主分支 `master`；HEAD = **`b042e2ce`**（261112 R1 回写笔；产品代码笔 = `e87016bd`）；R1 批次 7 笔（基础层 `7e385373` / electron 拆分 `5acd0bec` / 小记拆分 `4c1e56c5` / Kotlin `f7c1abce` / 清理 `2487b733` / docs `832802a9` / 预览宿主 `9384ae30` + `b3f2fb47` / bitable 拆分 `2a67d902` / 复核 `e87016bd`）；**产品代码基线 = `8e20a6a3`（R0）/ `e87016bd`（R1）**。
+- 主分支 `master`；**HEAD 以 `git log -1` 为准**（本批产品代码笔 = `e87016bd`；其后为 R1 回写 docs 笔）；R1 批次 7 笔（基础层 `7e385373` / electron 拆分 `5acd0bec` / 小记拆分 `4c1e56c5` / Kotlin `f7c1abce` / 清理 `2487b733` / docs `832802a9` / 预览宿主 `9384ae30` + `b3f2fb47` / bitable 拆分 `2a67d902` / 复核 `e87016bd`）；**产品代码基线 = `8e20a6a3`（R0）/ `e87016bd`（R1）**。
 - **未 push**：`origin/master` 仍为 `8cc65e06`（本地领先若干提交，数量以 `git rev-list --count 8cc65e06..HEAD` 为准）；`github/master` = `2e512c48`。需要推送时按 AGENTS §2 双远端流程。
 - `package.json` = **1.1.0**；Android `versionName 1.1.0` / `versionCode 11100`（从根 package.json 派生：`1000 + major*10000 + minor*100 + patch`，只增不减）。
 - tag：`v1.0.0`–`v1.0.5`、**`v1.1.0`**（`075272b2` = AI 写作 + 日记两个新空间）；已发布 tag 不再移动。发布说明 = [docs/RELEASE-NOTES.md](RELEASE-NOTES.md)（v1.1.0 → v1.0.0 倒序；v1.1.0 段 = CI 生成 GitHub Release 正文的来源）。
