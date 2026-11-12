@@ -790,3 +790,14 @@ rg -n 'const DEFAULT_TRANSFER_CONCURRENCY' src/core
 | Q27 | **A ARCHITECTURE 重写** | R0 已执行 |
 
 **执行窗口**：Q19=C2 ⇒ 发布前完成拆分 1–5（bitableDoc / 下一波 BitableEditor / quickNotes / webApiServer / QuickNotesWorkspace）；6–10 留发布后。
+
+## 附录 F · R1 执行状态（261112，已本地提交）
+
+**已完成（7 笔提交，HEAD 见 HANDOFF §1）**
+- 预览：基础层（types/policy/previewAsset/useReadOnlyKernelViewer）→ Q02 原图档位 + Q06 桌面放大 + PREVIEW_POLICY 接线 → Q04 移动只读打开 + Q07 LakeEditor preview 档 + Q03 移动历史预览 + Q05 字号。
+- 拆分（Q19=C2 前 5）：core/bitableDoc → 9 模块；electron/quickNotes → 9 模块；electron/webApiServer → 5 模块；BitableEditor → 1496 + 6 hook；QuickNotesWorkspace → 735 + 3 hook 并搬进 features/quickNotes（Q20A）。
+- 清理/原生/文档：Q16 删 audit-261027（结论收编）、Q23 删 v1/v2 账本迁移、Q24 文案、Q21 AssetPaths 单源 + 10 例对抗、Q22 SecureStore→SecretBox、Q17 HANDOFF 压缩、Q25 CONTRIBUTING/SECURITY、Q26 AGENTS、Q11 DESIGN、Q12 AI 助手对话不保存。
+
+**门禁（R1 实测）**：tsc 0；全量 vitest 882 文件（871 passed / 11 skipped）/ 5559 passed / 12 skipped / 0 failed；ui-metrics 66/21；check:core 172/0；双 build + bundle/arch PASS（数字见 HANDOFF §1）；gradlew testDebugUnitTest 31 tests；git diff --check 0。
+
+**未完成/待验**：设备矩阵（42 态 / 手机+平板 10 态 / 23 屏 / windowsweep）；移动预览 Sheet 几何 + SecureStore 真机读回；移动小记画廊 video/audio 混入；拆分 6–10（Q19=C2 发布后部分）；剩余 21 条 shadowed 声明与 mobile.css 域归位。

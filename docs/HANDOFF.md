@@ -7,7 +7,7 @@
 
 ## 0. 最新交接（最近 3 个批次；更早的见 git）
 
-### 261112 · 发布前全仓审计 + R0 收口批（已本地提交；R1 第二轮裁决后开工）
+### 261112 · 发布前全仓审计 + R0/R1 收口批（已本地提交，未推送）
 
 - **审计**：6 域并行只读审计 + Lead 交叉复核 ⇒ `docs/audit-261112/`：`00-MASTER-PLAN.md`（总方案 + A–Q 分项 + R0/R1/R2 路线 + Q01–Q27 裁决）+ 分册 02 预览 / 03 桌面 UI 样式 / 04 移动 / 05 core+electron / 06 特性域 / 07 文档清理。代码域 P0 = 0。
 - **R0 已落地（产品代码笔 `8e20a6a3`；另 `996b4d6e` docs / `fab629dc` chore）**：
@@ -17,6 +17,12 @@
   - 样式：删 35 条被压死声明 + `.ln-modal/.ln-drawer`；新增 `shadowedDecls` 门禁（基线只降）；移动 4 项小修（radius / theme-color / OpenFile 去重 / 契约计数）。
 - **门禁（本批实测，数值见 §1）**：tsc 0；全量 vitest 874 文件 / 5512 passed / 0 failed；ui-metrics / check:core / check:mobileui / 双 build / bundle+arch / diff-check 全绿。
 - **未做**：设备类矩阵（桌面 42 态 / 手机+平板 10 态 / 23 屏 / windowsweep）本批未跑；剩余 21 条 shadowed 声明与移动 `mobile.css` 域归位留 R1。
+- **R1 已落地（261112 第二轮裁决 Q01–Q27；产品代码笔 `e87016bd` 等 7 笔）**：
+  - 预览：`features/preview/` 基础层（types/policy/previewAsset/useReadOnlyKernelViewer，4 份 viewer 包装 → 1 个 hook）；Q02 原图档位（Lightbox 先显示档后换原图）、Q06 桌面回收站/历史/属性双击放大、PREVIEW_POLICY 接线；Q04 移动打开回收站文档=只读预览+横幅、Q07 LakeEditor `interaction:"preview"`、Q03 移动历史快照预览（doc 只读 / 非 doc 结构化摘要）、Q05 预览档字号。
+  - 拆分 Q19=C2 前 5 项：`core/bitableDoc` 2419→9 模块；`electron/quickNotes` 1451→9 模块；`electron/webApiServer` 988→5 模块；`BitableEditor` 2112→1496+6 hook；`QuickNotesWorkspace` 1320→735+3 hook 并搬进 `features/quickNotes/`（Q20A）。
+  - 清理/原生/文档：Q16 删 `docs/audit-261027/`（结论收编 RESILIENCE §9–§10 / SYNC-PROTOCOL §15）；Q23 删 v1/v2 同步账本迁移；Q24 文案；Q21 `AssetPaths.kt` 单源+10 例对抗测试；Q22 `SecureStore→SecretBox`（ALIAS/PREFS 不变）；Q17 HANDOFF 183KB→21KB；Q25 CONTRIBUTING/SECURITY；Q26 AGENTS lazy 边界；Q11 DESIGN `.ln-row2`；Q12 guide 写明「AI 助手对话不保存」。
+- **R1 门禁（本批实测，数值见 §1）**：tsc 0；全量 vitest 882 文件 / 5559 passed / 0 failed；ui-metrics 66/21；check:core 172/0；双 build + bundle/arch PASS；diff-check 0；`gradlew testDebugUnitTest` 31 tests 全绿。
+- **R1 未做/待验**：设备矩阵未跑（桌面 42 态 / 手机+平板 10 态 / 23 屏 / windowsweep）——移动预览 Sheet 几何、SecureStore 真机读回、历史预览返回键均需设备验证；拆分 6–10（`Sidebar`/`SettingsPanel`/`lakeRuntime`/`InkPad`/`main.ts`）按 Q19=C2 留发布后；剩余 21 条 shadowed 声明与移动 `mobile.css` 域归位留 R1 后续。
 
 ### 261112 · 桌面文档图片预览只数到视口内几张（107 张 → 显示 1/8）
 
@@ -34,25 +40,25 @@
 
 ## 1. 当前基线（唯一状态来源）
 
-> 数值 = 最近一次实测（261112 R0 批）。**任何状态判断以本节 + `git status` / `git log -1` 为准**；R1 批次落地后回写本节。
+> 数值 = 最近一次实测（261112 R1 批）。**任何状态判断以本节 + `git status` / `git log -1` 为准**。
 
 **版本与仓库**
 
-- 主分支 `master`；HEAD = **`aa713d7a`**（261112 审计裁决记录）。R0 之后至今都是 docs 提交（`6c365ddb` / `d7d65978` / `db7d3712` / `aa713d7a`），**产品代码笔 = `8e20a6a3`**。
-- **未 push**：`origin/master` = `8cc65e06`（本地 ahead 9）、`github/master` = `2e512c48`。需要推送时按 AGENTS §2 双远端流程。
+- 主分支 `master`；HEAD = **`e87016bd`**（261112 R1 复核修复笔）；R1 批次 7 笔（基础层 `7e385373` / electron 拆分 `5acd0bec` / 小记拆分 `4c1e56c5` / Kotlin `f7c1abce` / 清理 `2487b733` / docs `832802a9` / 预览宿主 `9384ae30` + `b3f2fb47` / bitable 拆分 `2a67d902` / 复核 `e87016bd`）；**产品代码基线 = `8e20a6a3`（R0）/ `e87016bd`（R1）**。
+- **未 push**：`origin/master` 仍为 `8cc65e06`（本地 ahead 16+）；`github/master` = `2e512c48`。需要推送时按 AGENTS §2 双远端流程。
 - `package.json` = **1.1.0**；Android `versionName 1.1.0` / `versionCode 11100`（从根 package.json 派生：`1000 + major*10000 + minor*100 + patch`，只增不减）。
 - tag：`v1.0.0`–`v1.0.5`、**`v1.1.0`**（`075272b2` = AI 写作 + 日记两个新空间）；已发布 tag 不再移动。发布说明 = [docs/RELEASE-NOTES.md](RELEASE-NOTES.md)（v1.1.0 → v1.0.0 倒序；v1.1.0 段 = CI 生成 GitHub Release 正文的来源）。
 - 分支/远端：`master` 唯一长期分支；`origin` = Gitee（SSH，第二 pushurl = GitHub HTTPS）⇒ `git push origin <branch>` 一次推两边；GitHub 只在推 tag 时构建。remote 不入库 ⇒ 新 clone 跑 `npm run setup:remotes`。
-- **工作树**：R1 批次在途（Q16/Q17/Q19/Q20/Q21/Q22/Q23/Q24/Q25/Q26），多人并行改不同文件；提交前 `git status` 分辨，只 stage 本批文件，**绝不用 `git add -A`**。
+- **工作树**：R1 已全部本地提交，`git status` clean；后续批次继续按「只 stage 本批文件」规则，**绝不用 `git add -A`**。
 - 261110 一次性历史清理（`.ai-writing-recon/` 用 `git filter-repo` 从全部历史移除，重写 v1.1.0 之后的提交；tag 未变）⇒ 旧 clone 需 `git fetch --force --prune && git reset --hard origin/master`。
 
-**门禁基线（261112 R0 批实测；分层口径见 AGENTS §3#21）**
+**门禁基线（261112 R1 批实测；分层口径见 AGENTS §3#21）**
 
 - `npx tsc --noEmit` = **0**。
-- 全量 vitest = **874 文件（863 passed / 11 skipped）/ 5512 passed / 12 skipped / 0 failed**。
+- 全量 vitest = **882 文件（871 passed / 11 skipped）/ 5559 passed / 12 skipped / 0 failed**。
 - `node scripts/ui-metrics.mjs`：颜色 0 / 字号 0 / `!important` 9 = 允许清单 / `crossFileDupGroups` 66 / `shadowedDecls` 21（只降）/ 未定义令牌 0。
-- `check:core` 163 文件 0 违规；`check:mobileui` 通过。
-- `check:bundle` + `check:arch` PASS：desktop 首屏 565,129 / 600,000、app-js 193,737 / 307,200；mobile 首屏 348,731 / 360,000、entry 60,298 / 61,440、CSS 140,383 / 141,312、preload 6。
+- `check:core` 172 文件 0 违规；`check:mobileui` 通过。
+- `check:bundle` + `check:arch` PASS：desktop 首屏 566,116 / 600,000、app-js 194,724 / 307,200；mobile 首屏 349,051 / 360,000、entry 60,763 / 61,440、CSS 140,383 / 141,312、preload 6。
 - `git diff --check` = **0**。
 - 设备/视觉（最近记录）：手机 **10 态** + 平板 **10 态** 基线重烤并连跑两轮 0 差异；23 屏走查 23/23；`edit-surface-invariants` quicknote 11 + document 11 ALL PASS；capture 入口装置 10/10。**桌面 `check:stylesnap` 42 态仍未跑**（无夹具缓存，见 §3）。
 
@@ -100,6 +106,7 @@
 - **删文档/审计产物前先消引用**：例 = `audit-261027/` 4 份（5 处源码注释 + 4 处文档引用）：先把结论搬进 `RESILIENCE`/`SYNC-PROTOCOL` 并改注释再删（261112 Q16 做法），否则出处断链、后续会话只能去 git 里捞。
 - **日期显示口径已变（261112 Q9）**：`8/4` → `08-04`、带秒 → 去秒；快照/截图里的旧格式属预期差异。
 - **`DocumentEditor` 现 import `mobile/bridge/assets`**（OpenFile 去重）⇒ 移动分包已过 `check:arch`，后续动移动懒加载先跑 bundle/arch。
+- **261112 R1 的三个待设备验证面**：① 移动预览的 Sheet/全屏层几何（历史 Sheet 50dvh、回收站全屏层与键盘/SafeArea、返回键逐层收）；② `SecureStore→SecretBox` 只做了 JVM 单测（Keystore 真机路径未验，ALIAS/PREFS 与密文格式逐字不变 ⇒ 旧密钥可解）；③ 移动小记画廊仍可能把 video/audio 放进 Lightbox（261112 审计线索，未修）。
 - **发布链路**：Gitee 单附件 100MB / 仓库 1GB 上限（mac/Windows 包只能走 GitHub）；GitHub 慢速上传依赖 workflow 的 50 分钟步骤超时，不要缩短。
 - **历史编号与旧批次已失效**：旧文档/代码注释里的「HANDOFF §3#N / §4 / §7.x」是历史编号，**不对应本文**；更早的 §0 批次条目（如「第十四批」）也已删除，**只在 git 历史可查**。待办只看 §3（本节与 §3 都不编号）。
 
@@ -109,15 +116,16 @@
 
 **P0（不做就卡住主线）**
 
-- **R1 批次（261112 第二轮裁决，见 [附录 E](audit-261112/00-MASTER-PLAN.md)）**：**在途** = 拆分 1/3/4/5（`core/bitableDoc` / `electron/quickNotes` / `electron/webApiServer` / `QuickNotesWorkspace` → `features/quickNotes/`）+ Kotlin `AssetPaths` 单源与 `SecureStore→SecretBox`（需 `gradlew test` + 真机）+ 清理（Q16 `audit-261027` 消引用后删 / Q23 删 v1·v2 同步账本迁移 / Q24 小记文案）；**本批已完成** = 文档（Q17 本文件压缩 / Q25 [CONTRIBUTING](../CONTRIBUTING.md)+[SECURITY](../SECURITY.md) / Q26 AGENTS lazy 边界 / Q11 DESIGN `.ln-row2`）。**每批收尾回写 §1/§3/§0**。
-- **R1 预览批次（Q01–Q07 已拍板）**：`useReadOnlyKernelViewer` + `PreviewPolicy`（5 预设）+ `previewAsset` 图片档位；移动**历史快照与回收站都要预览**（Q03 仅 doc；Q04 回收站文档 = 只读 + 横幅，不拒绝打开）；桌面回收站/历史加图片放大（Q06）；`LakeEditor` 加 `interaction:"preview"`（Q07，默认值回退）；手机大图打开后换原图（Q02，需实测 RSS）。
-- **发布前设备/视觉矩阵**：桌面 42 态（需夹具机）、手机 + 平板 10 态、23 屏走查、windowsweep、双 build + 全量 vitest + tsc（R1 落地后统一跑）。
+- **R1 设备验收（261112 R1 代码已全部本地提交，未 push；门禁已绿）**：① 移动预览：回收站只读打开（应用级全屏层叠放/返回键/恢复后刷新）、历史 Sheet 预览（doc 只读 LakeEditor + 非 doc 结构化摘要，50dvh 几何）、`LakeEditor interaction="preview"`（无卡片菜单但可看图/开附件）、预览档字号；② 桌面预览：回收站/历史/属性**双击图片放大**（画廊取正文全量、先档位图后原图）；③ `SecureStore→SecretBox` 真机读回（写/读/删 S3 密钥、杀进程重开）；④ 移动预览改动需装包（`android-build.sh --sync --install`）后逐项点收。
+- **发布前设备/视觉矩阵**：桌面 42 态（需夹具机）、手机 + 平板 10 态、23 屏走查、windowsweep（R1 只跑了 tsc/全量 vitest/双 build/bundle/arch，设备类未跑）。
 - **下一版发布**（流程 [docs/RELEASE.md](RELEASE.md)）：发布说明写清 ① inkDoc v4 旧端只读 / 手机需重装；② 标签顺序仅设备本地；③ 标签删除 = 缺席（两端都要升级）；④ 发版前全量矩阵。
 - **每批收尾固定动作**：更新 §1 基线与门禁计数 + §3 + §0 批次抬头；提交后立刻回写。
 
 **P1（该做但可排期）**
 
 - **R1 样式/移动余量**：剩余 21 条 shadowed 声明（`feature.css` 3 / `misc.css` 4 / 共享规则 14）；移动 `mobile.css` 域归位（bitable/board/editor 约 300 行，需设备 2–3 态）。
+- **移动小记画廊混入视频/音频**（261112 审计发现）：`HomePage`/`TagQuickNotePreview` 的 `previewAssets` 把非图片资源也放进 Lightbox 画廊，左右切会切到 video（img 显示失败）；建议复用同一 resolver 只筛 image mime，属行为变更 + 需设备验证。
+- **拆分 6–10（Q19=C2 的发布后部分）**：`Sidebar`(1857) / `SettingsPanel`(1447) / `lakeRuntime`(1699) / `InkPad`(1907) / `main.ts`(1306)；`InkPad` 拆分前必须先补「落笔→防抖→保存」纯逻辑测试。
 - **图片缩略残余（261111 收口后）**：① XHR 失败/旧包/超 12MP 的 webp·avif 回退 canvas，可能写显示尺寸；② 复制多张大图时同步阻塞（剪贴板 API 限制）；③ 会话内放行依赖「待上传卡计数 = 1」，多图并发时当会话不缩（重开按正文 origin 缩，安全降级）；④ 桌面文档编辑器（Retina 优先）与平板未启用同类缩略。
 - **移动性能基线**：lake_gate 录制 + `--compare` 已通过（冷启 1586 / capture 893 / 写作卡热开 332 / 文档打开 4ms）；⚠️ **键盘两项该 AVD 采不到**，键盘长任务口径仍以 5554 历史记录为准（775→72ms）；换 AVD / 换包 / 改视口必须 `--record` 重烤。
 - **日记「取消标记」残余验收**：跨端 wire 传播（一端取消 → 另一端知识库出现该本、日记空间消失）需**真机 + 配 S3**；取消是单向的（无回标入口，回标另立项）。
