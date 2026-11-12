@@ -140,7 +140,6 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
 .mobile-icon-btn > svg { width: 20px; height: 20px; }
 .mobile-icon-btn:active, .mobile-icon-btn:focus-visible { background: var(--lake-bg-hover); }
 
-
 /* 261014：首页/小记这一层原先**没有规则**（普通 block、自动高度）⇒ 里面的 `.mobile-tab-stage/.mobile-scroll`（都是 flex:1）
    在一个 auto 高度的父里退化成"内容多高就多高、永远不滚"（实测 scroller 的 scrollHeight == clientHeight），
    于是**文字一多，光标就贴着内容一路跑出屏幕**（用户报的"光标不能被工具栏/键盘盖住"在小记上就是这么坏的）。
@@ -199,8 +198,6 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
 .mobile-scroll { padding-left: var(--mobile-left-safe-area); padding-right: var(--mobile-right-safe-area); }
 .mobile-scroll::-webkit-scrollbar { display: none; }
 /* （261013 A 批：空态统一到 .mb-empty，见 kit.css。） */
-
-
 
 /* 小记写作 = **全屏编辑会话**（261111 用户点单；两条入口同一容器 .mobile-qn-screen）：
    区域 = 外壳高（--mb-app-h，键盘/面板已扣掉）− 顶部状态栏安全区；去掉浮卡外距/圆角/阴影造成的死区。
@@ -342,9 +339,6 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
 .nb-row:nth-child(6n+5) { --nb-accent: var(--mb-nb-accent-5); }
 .nb-row:nth-child(6n+6) { --nb-accent: var(--mb-nb-accent-6); }
 
-
-
-
 /* 笔记本页文档行 */
 /* v2：列表行按卡片语言（圆角 16 + 卡阴影 + 卡面实色），去掉行间发丝线，改用 8px 间距分隔；
    行高/内距/命中区（min-height 44）全部不变。 */
@@ -368,8 +362,6 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
 .mobile-doc-body NE-CARD[data-card-name="video"] video,
 .mobile-doc-body .attachment-preview video { background: var(--lake-bg-window); }
 /* （大播放三角优化暂缓：用户后续用多模态模型处理——保留原生 controls） */
-
-
 
 /* 笔记本切换下拉（锚定右上角按钮，跟手弹出） */
 
@@ -417,9 +409,6 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
 
 /* 设置抽屉 */
 
-
-
-
 /* 回收站 */
 
 .mobile-status-msg { padding: 6px var(--mb-page-pad); font-size: var(--lake-font-size-nano); color: var(--lake-text-2); background: var(--lake-bg-window); border-bottom: .5px solid var(--lake-border-1); }
@@ -431,11 +420,6 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
 .mobile-trash-danger { color: var(--lake-status-error); }
 
 /* 缓存统计 */
-
-
-
-
-
 
 /* ===== M5 动效（GPU 友好：仅 transform/opacity；reduced-motion 兜底） ===== */
 @keyframes mobile-fade-in { from { opacity: 0; } to { opacity: 1; } }
@@ -533,7 +517,6 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
 /* v2（261107）：目录树多选复选框**覆盖在行左侧留白上**（不参与 flex 布局）⇒ 进出选择态目录零位移。 */
 .side-panel-body .side-panel-row { position: relative; }
 .nb-sel-cb { position: absolute; left: 0; top: 0; bottom: 0; width: var(--mb-tap-min); display: flex; align-items: center; justify-content: center; pointer-events: none; }
-
 
 /* v2（261107）：共享元素转场的浮起克隆（小记卡→写作卡 / 置顶文档卡→文档页）。
    只由 HomePage.morphCardToRect 挂载/移除；保留原卡片类名，另外叠这一层几何。 */
@@ -662,7 +645,6 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
 .mobile-bottom-bar__item:first-child { border-top-left-radius: calc(var(--mobile-bottom-bar-height) / 2); border-bottom-left-radius: calc(var(--mobile-bottom-bar-height) / 2); }
 .mobile-bottom-bar__item:last-child { border-top-right-radius: calc(var(--mobile-bottom-bar-height) / 2); border-bottom-right-radius: calc(var(--mobile-bottom-bar-height) / 2); }
 
-
 /* 计数 = 思源 .toolbar__tabs-count：描边小方框，不是实心圆点 */
 .bottom-bar-count {
   position: absolute; top: 5px; right: 6px; box-sizing: border-box;
@@ -779,8 +761,6 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
 
 /* ===== B5 第一层（小记 / 知识库）：思源列表语言 + 底部胶囊栏留白 ===== */
 
-
-
 .mobile-htab {
   /* min-width 是 44 Rule 的兜底：语雀式文字 tab 的宽度由字数决定，单字标签会掉到 44 以下（261013 实测「小记」36px）。 */
   display: inline-flex; align-items: center; justify-content: center; min-width: var(--mb-tab-w, var(--mb-tap-min)); min-height: var(--mb-tap-min); padding: 0 2px; white-space: nowrap; flex-shrink: 0;
@@ -835,314 +815,6 @@ body.nb-drag-active .side-panel-body { overscroll-behavior: none; }
 .side-panel-body,
 .side-panel-body .side-panel-row,
 .side-panel-body .side-panel-row__title { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
-/* 画板查看器（kind=board，移动端只读）：占满文档层，去掉卡片态边框/圆角，隐藏编辑工具条。 */
-.mobile-board-viewer {
-  height: 100%;
-  width: 100%;
-  min-height: 0;
-  overflow: hidden;
-  position: relative;
-  z-index: 0;
-  isolation: isolate;
-}
-.mobile-board-viewer .lakex-drawnix-core {
-  height: 100%;
-  min-height: 0;
-  border: none;
-  border-radius: 0;
-}
-/* 只读查看不该出现「能点但点不动」的工具条（readonly 只挡编辑、不隐藏工具条）。 */
-.mobile-board-viewer .draw-toolbar {
-  display: none;
-}
-/* 编辑态恢复 Drawnix 自己的绘制工具条（垂直创建轨，vendor 已做移动端定位）。 */
-.mobile-board-viewer.is-editing .draw-toolbar {
-  display: flex;
-}
-.mobile-board-loading {
-  height: 100%;
-}
-/* 261029 FIX-M2：空画板空态（只读/编辑共用）。空态是 .mobile-board-viewer 的兄弟节点
- * （画布 vendor z-index 2022，同上下文内压不住，靠 isolate 边界隔开），壳层只负责定位；
- * pointer-events:none 不挡画布平移/绘制，有元素后条件渲染移除。 */
-.mobile-board-shell { position: relative; height: 100%; }
-.mobile-board-empty {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  pointer-events: none;
-}
-
-/* 多维表只读视图（kind=bitable）：表名/视图元信息 + 横向滚动网格 + 选项色块 + 附件缩略图。 */
-.mobile-bitable {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  min-height: 0;
-  /* 261030：多维表内容区左右内距跟页面内距对齐（原来 10 太贴边，卡片/表格贴着边框）。 */
-  padding: var(--lake-space-md) var(--mb-page-pad) 0;
-  overflow: hidden;
-}
-/* 261103 六批 A2：旧的元信息行（.mbt-meta*）与编辑态工具行（.mbt-toolbar）已随「3 行 → 1 行/2 行」头部收口删除，
- * 仓内 0 引用（只剩测试断言它们不存在）。**不要加回来**；头部唯一来源 = mobile/bitable/mobileBitable.css 的 .mbt-header。
- * 注意 .mbt-readonly 仍被记录详情页使用，必须留。 */
-.mbt-readonly {
-  margin-left: auto;
-  padding: 1px 8px;
-  border-radius: var(--lake-radius-pill);
-  background: var(--lake-border-2);
-}
-.mbt-view-notice {
-  margin: 0 0 8px;
-  padding: 6px 10px;
-  border: .5px solid var(--lake-border-1);
-  border-radius: var(--mb-radius);
-  background: var(--lake-bg-hover);
-  color: var(--lake-text-2);
-  font-size: var(--lake-font-size-nano);
-}
-.mbt-grid-wrap {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
-  border: .5px solid var(--lake-border-1);
-  border-radius: var(--mb-radius) var(--mb-radius) 0 0;
-}
-.mbt-grid {
-  border-collapse: separate;
-  border-spacing: 0;
-  font-size: var(--lake-font-size-micro);
-  table-layout: fixed;
-}
-.mbt-grid th,
-.mbt-grid td {
-  max-width: 240px;
-  padding: 7px 10px;
-  border-right: .5px solid var(--lake-border-1);
-  border-bottom: .5px solid var(--lake-border-1);
-  overflow: hidden;
-  text-align: left;
-  text-overflow: ellipsis;
-  vertical-align: top;
-  white-space: nowrap;
-}
-.mbt-grid th {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  background: var(--lake-border-2);
-  font-weight: 600;
-}
-.mbt-grid tr[data-fill-side] td:first-child { position: relative; }
-.mbt-grid tr[data-fill-side] td:first-child::before {
-  content: "";
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 6px;
-  background: var(--mbt-fill-side);
-  pointer-events: none;
-}
-.mbt-cell-empty {
-  color: var(--lake-text-3);
-}
-.mbt-bool {
-  width: 18px;
-  height: 18px;
-  margin: 0;
-  accent-color: var(--lake-accent);
-}
-.mbt-link {
-  color: var(--lake-accent-text);
-  text-decoration: underline;
-  word-break: break-all;
-}
-.mbt-rating {
-  display: inline-flex;
-  gap: 1px;
-}
-.mbt-star {
-  color: var(--lake-border-strong);
-  font-size: var(--lake-font-size-tiny);
-  line-height: 1;
-}
-.mbt-star.is-on {
-  color: var(--lake-rating-star);
-}
-.mbt-progress {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 90px;
-}
-.mbt-progress-track {
-  flex: 1;
-  min-width: 40px;
-  height: 6px;
-  border-radius: var(--lake-radius-pill);
-  background: var(--lake-bg-hover);
-  overflow: hidden;
-}
-.mbt-progress-bar {
-  display: block;
-  height: 100%;
-  border-radius: var(--lake-radius-pill);
-  background: var(--lake-accent);
-}
-.mbt-progress-value {
-  font-size: var(--lake-font-size-nano);
-  color: var(--lake-text-3);
-}
-.mbt-relation {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-.mbt-relation-chip {
-  max-width: 160px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  padding: 1px 8px;
-  border-radius: var(--mb-radius-sm);
-  font-size: var(--lake-font-size-nano);
-  background: var(--lake-bg-hover);
-  color: var(--lake-text-2);
-}
-.mbt-attachments {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-.mbt-attachment {
-  width: 34px;
-  height: 34px;
-  border-radius: var(--lake-radius-2xs);
-  object-fit: cover;
-}
-.mbt-attachment-file {
-  max-width: 160px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  border: 0;
-  padding: 2px 8px;
-  border-radius: var(--mb-radius-sm);
-  font-size: var(--lake-font-size-nano);
-  font-family: inherit;
-  background: var(--lake-bg-hover);
-  color: var(--lake-text-2);
-  cursor: pointer;
-  text-align: left;
-}
-.mbt-attachment-file:active { opacity: .7; }
-/* 附件字段（260930 用户：移动端也换成文档类型图标）：图标 + 名称同排——触屏没有 hover，
-   名称不能像桌面那样收进气泡，所以图标给类型、名字给内容（图标配色走 --lake-file-*，见 bitableFileIcon.css）。 */
-.mbt-attachment-file.is-kind { display: inline-flex; align-items: center; gap: 4px; max-width: 170px; }
-/* .mbt-attachment-name：截断走 kit 的 .ln-ellipsis（JSX 已挂） */
-.mbt-empty {
-  color: var(--lake-text-3);
-  text-align: center;
-}
-
-/* ===== 多维表编辑态（261020 P0）=====
- * 只加「编辑时才出现」的部件；只读呈现的既有规则一条不动（同一套类名，编辑态多挂按钮/面板）。
- * 单元格 = 撑满格子的透明按钮（不改表格几何，触屏热区靠 td 内距 + min-height）；
- * 记录/字段面板复用 .mb-sheet / .mb-set-item / .mb-input / .mb-btn 原语，这里只补它们没有的排版。 */
-.mbt-cell-btn {
-  display: block;
-  width: 100%;
-  min-height: 24px;
-  margin: -2px 0;
-  padding: 2px 0;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-}
-.mbt-cell-btn:active {
-  background: var(--lake-bg-press);
-}
-.mbt-grid td.mbt-add-row {
-  padding: 0;
-}
-.mbt-add-row__btn,
-.mbt-load-more {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  width: 100%;
-  min-height: var(--mb-ctl-h-sm);
-  border: 0;
-  background: transparent;
-  color: var(--lake-text-2);
-  font-family: inherit;
-  font-size: var(--lake-font-size-tiny);
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-}
-.mbt-load-more {
-  color: var(--lake-accent-text);
-}
-.mbt-add-row__btn:active,
-.mbt-load-more:active {
-  background: var(--lake-bg-press);
-}
-/* 面板内控件排版（记录 / 字段两个面板共用） */
-.mbt-record-readonly {
-  color: var(--lake-text-2);
-  word-break: break-word;
-}
-.mbt-record-actions {
-  margin-top: 16px;
-}
-.mbt-option-add {
-  min-height: var(--mb-ctl-h-sm);
-  padding: 0 8px;
-  width: 148px;
-}
-.mbt-rating-btn {
-  padding: 2px 1px;
-  border: 0;
-  background: transparent;
-  line-height: 1;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-}
-.mbt-progress-edit {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-}
-.mbt-progress-edit input[type="range"] {
-  flex: 1 1 auto;
-  accent-color: var(--lake-accent);
-}
-.mbt-field-add {
-  margin-top: 12px;
-}
-.mbt-field-add__form {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.mbt-type-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-.mbt-field-add__actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
 /* 小记写作的**全屏容器**（261111）：两条入口共用（capture 独立路由 / 首页新建），单一来源。
    状态栏安全区以下起、外壳底部（键盘上方）止；卡片本体在它里面 flex 撑满 ⇒ 不再有 8px 浮卡外距。 */
 .mobile-qn-screen {
@@ -1249,13 +921,6 @@ body.lake-mobile .ne-ui-boundary-popover:has(.ne-ui-search-card-menu) { top: 120
    （用户报「工具栏展开跑到键盘上边」）。settled 后层不再位移 ⇒ 撤掉；进场/出场仍保留 transform
    （转场与抽屉裁切都依赖它），关闭时 is-open 移除即恢复 translateX(100%) 播出场。 */
 .mobile-route-stage.is-open .mobile-route-layer--workspace.is-settled { transform: none; will-change: auto; }
-
-/* ===== 按压反馈（261019；261029 收敛）=====
- * 不再做底色/颜色过渡（触屏按下即生效）；只有紧凑条目保留一次即时 scale(.98)，
- * 整行列表（目录行/设置行）不缩放 —— 整行缩放会显得"抖"，不采用。 */
-.med-btn:active, .med-ins-item:active, .med-f-btn:active, .med-outline-item:active, .med-doc-item:active {
-  transform: scale(.98);
-}
 
 /* ===== 文档骨架 / 正文淡入（261019，对齐语雀「转场先骨架、内容再淡入」） =====
  * 触发点只有两处：① 工作区首次挂载时的 Suspense 兜底；② 点了文档但正文还在异步读回（active 尚未进 tabs）。

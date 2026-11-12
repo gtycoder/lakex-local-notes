@@ -14,6 +14,48 @@
  * （桌面 `features/board/BoardEditor.tsx` 走自己的 chrome，不命中本文件）。
  * ≤720px 的手机竖屏保持 vendor 的横轨（实测量过：可横滑露出最右的「导出」）。
  */
+/* 261112 R2 域归位（04 报告 P1-1）：画板只读/空态规则从 mobile.css 原样迁入（只搬不写）。
+   放在本文件 @media 之前：原顺序是「mobile.css 在前、board.css 在后」，这里保持搬入规则早于本文件自身规则。 */
+/* 画板查看器（kind=board，移动端只读）：占满文档层，去掉卡片态边框/圆角，隐藏编辑工具条。 */
+.mobile-board-viewer {
+  height: 100%;
+  width: 100%;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+  z-index: 0;
+  isolation: isolate;
+}
+.mobile-board-viewer .lakex-drawnix-core {
+  height: 100%;
+  min-height: 0;
+  border: none;
+  border-radius: 0;
+}
+/* 只读查看不该出现「能点但点不动」的工具条（readonly 只挡编辑、不隐藏工具条）。 */
+.mobile-board-viewer .draw-toolbar {
+  display: none;
+}
+/* 编辑态恢复 Drawnix 自己的绘制工具条（垂直创建轨，vendor 已做移动端定位）。 */
+.mobile-board-viewer.is-editing .draw-toolbar {
+  display: flex;
+}
+.mobile-board-loading {
+  height: 100%;
+}
+/* 261029 FIX-M2：空画板空态（只读/编辑共用）。空态是 .mobile-board-viewer 的兄弟节点
+ * （画布 vendor z-index 2022，同上下文内压不住，靠 isolate 边界隔开），壳层只负责定位；
+ * pointer-events:none 不挡画布平移/绘制，有元素后条件渲染移除。 */
+.mobile-board-shell { position: relative; height: 100%; }
+.mobile-board-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
 @media (min-width: 721px) {
   .mobile-board-viewer.is-editing .lakex-drawnix-core .draw-toolbar {
     top: 12px;

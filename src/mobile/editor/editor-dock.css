@@ -349,3 +349,12 @@
 @media (prefers-reduced-motion: reduce) {
   .med-toolbar, .med-panel, .med-btn, .med-ins-item, .med-f-btn { animation: none; transition: none; }
 }
+
+/* 261112 R2 域归位（04 报告 P1-1）：编辑 dock 的按压反馈从 mobile.css 原样迁入（只搬不写）。
+   属性为 transform，与本文件既有 :active 底色规则不冲突。 */
+/* ===== 按压反馈（261019；261029 收敛）=====
+ * 不再做底色/颜色过渡（触屏按下即生效）；只有紧凑条目保留一次即时 scale(.98)，
+ * 整行列表（目录行/设置行）不缩放 —— 整行缩放会显得"抖"，不采用。 */
+.med-btn:active, .med-ins-item:active, .med-f-btn:active, .med-outline-item:active, .med-doc-item:active {
+  transform: scale(.98);
+}
