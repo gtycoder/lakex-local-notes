@@ -69,12 +69,16 @@ task-63 的 b/c/e 已在本套设备同一包上验证（见 `docs/audit-261112/
 - **I 的语义备注（不是缺陷）**：移动端 `deferAssets=true`（按需下载附件）⇒ 普通轮不预拉资产，打开/预览/显式 `ensureNoteAssets(ids: string[])` 才拉。首轮核对时我误传单字符串导致 `e.filter is not a function`；用正确签名后两端目录均齐全。**教训**：移动端"资产已传输"的验收必须在 `ensureNoteAssets([id])` 之后断言（或先关 deferAssets）。
 - H 的桌面侧建小记接口是 `createQuickNote({text, draftId, stagedImageIds})`（不是 text 字符串）；移动侧是 `createQuickNote(text)`。本报告 H 的跨端删除/复活用 **M1 建** 避开两端签名差异（结论不受影响）。
 
-## 6. d（同步 warning 逐项可见）设备取证：**PARTIAL / 未复现**
+## 6. d（同步 warning 逐项可见）设备取证：**PASS（故障注入复现）**
 
-- 目标：制造一次 apply 跳过（`local_body_missing` 类），在设置页「上次同步」看到逐项 label/hint，且不可重试项不得写「下次会重试」。
-- 尝试（3 次，均在 M1）：`run-as ... sqlite3` 确认 `files/notes/<id>.lake` 后删除该正文文件 → 打开设置 →「云端与同步」→ 点「立即同步」→ 等待 12s → 检查 DOM。
-- 结果：**未出现 `本机正文文件缺失` / 跳过条目**（设置页只有「同步有 4 处覆盖/删除 →」的冲突快照入口）。原因未定：该实例为「完全手动」模式，或缺失正文的 note 在计划阶段未进入 apply 警告路径（需脏 note 且引擎实际尝试上传才会触发 `local_body_missing`）；无法在本次窗口内稳定复现。
-- 已有证据：截图 `evidence/mobile-20261112-173013/shots/task72-d-warning-itemized-mobile.png`（仅为设置页现场，**不构成 PASS 证据**）；单元/接线层已由 `src/core/syncWarningText.test.ts` 与移动设置页接线测试覆盖。**建议**随访任务用故障注入/注入 apply warning 的装置补设备证据，不要凭截图判 PASS。
+- 首版结论是 PARTIAL/未复现（删正文文件碰运气 3 次未命中）⇒ 按 lead 指示改用**故障注入**，不再靠删文件。
+- 装置（task-67 ⑤）：2 台模拟器（`emulator-5554` lake_mobile = 发布端，`emulator-5558` lake_tab = 接收端）+ 真实桶前缀 `audit-261112-d2-191416`（发布端 5 文档 + 4 小记；接收端全新空库拉取）。
+- 注入方式（**不改产品代码**）：① 发布端 `run-as + sqlite3` 写一条**合法格式**的文档标签关系（`t_aaaaaaaaaaaaaaaa`）后同步；② 接收端同法建触发器 `audit261112_tag_fail`（`BEFORE INSERT ON tag_links`，命中目标 note id 时 `RAISE(ABORT,'audit261112 tag fault injection')`）⇒ 单篇 apply 的标签写失败，走 core 的「单篇 apply 失败降级」路径。
+- 结果：整轮同步**成功**（回执 `v3 同步完成：↑0 ↓0`），`warnings` 含 1 条 `kind=apply_skipped`、`noteId=c8d1bf7e…`、`title=夹具文档 1`、`message=应用远端更新失败（已跳过，下一轮重试）：Run: audit261112 tag fault injection (code 1811)`。
+- 设置页（设备截图）：摘要 `同步有 1 项被跳过（可重试 1）`；逐项 `夹具文档 1` + label `本篇本轮未应用` + hint `已跳过这篇（本地内容未改动），下次同步会重试；其它文档照常同步。`
+- 重启保持：`am force-stop` + `am start` 后重开设置页，同一 warning/摘要仍在（`localStorage lastSync.warnings = [apply_skipped:夹具文档 1]`、`warningSummary={total:1,needsAction:0,retryable:1}`）。
+- 证据：`evidence/mobile-20261112-173013/shots/task67-d-apply-skipped-1.png`（注入后）、`task67-d-apply-skipped-2-restart.png`（重启后）。
+- 收尾：触发器与假标签已删（`type='trigger'` 0 条、`tags` 0 行、`tag_links` 0 行）；前缀删 **15** 对象、ListObjectsV2 **残留 0**；5554 已关、5554/5558 `pm clear`。截图已滚到「跳过项」区块（S3 凭证字段滚出视口，不入库）。
 
 ## 7. task-74 修复 + 场景 D 复跑（移动端保留「云端已删除（仅本地）」副本）
 
@@ -89,10 +93,16 @@ task-63 的 b/c/e 已在本套设备同一包上验证（见 `docs/audit-261112/
 
 ## 8. 移动快照门禁（10 态）
 
-- 口径：本批**无 CSS 改动**（只有移动 TS 逻辑）⇒ 先在 M1 `pm clear` + 重灌 `gate-fixture`（5 文档 + 4 小记）+ `emu-cdp.sh 9336`，再跑 `node scripts/mobile-audit/check-mobile-snap.mjs --port 9336`（两轮去抖）。
-- 结果：**9/10 态 0 差异；1 态差异**：home-doc：元素数 **2085 → 2085（相同）**，指纹 1x55dog → 1yn5hoz，**两轮一致 ⇒ 非装置抖动**。
-- 判定：本批没有改任何 CSS/几何，元素数也完全一致 ⇒ 差异来自计算值（某个样式/属性值），不是布局回归的典型形态；但**基线（scripts/mobile-audit/baseline/mobile-snap.json，今日 15:04 生成）早于今日移动端多批行为/样式提交**，未重烤过。**未重烤基线**（避免把潜在回归烤掉）；建议 lead 决定：确认 home-doc 差异属于今日已提交批次（20361880 / e06eaf99 等）的预期变化后，按 AGENTS §3#21③ 用 --from <warm>.json --write-baseline 重烤该态，或分配回归排查。
-- 产物：.css-audit/snap/mob-after2.json（临时、gitignored）、日志 /tmp/snap-72b.out。
+- 口径：本批**无 CSS 改动**（只有移动 TS 逻辑）⇒ 在 M1 `pm clear` + 重灌 `gate-fixture`（5 文档 + 4 小记）+ `emu-cdp.sh 9336`，再跑 `node scripts/mobile-audit/check-mobile-snap.mjs --port 9336`（两轮去抖）。
+- 首跑结果：**9/10 态 0 差异；1 态差异**：home-doc：元素数 **2085 → 2085（相同）**，指纹 1x55dog → 1yn5hoz，**两轮一致**。
+- **节点级 diff（基线 warm 快照 `.css-audit/snap/gate-warm2.json` × 本次 mob-after.json，含 rows）只有 6 行，两类数据漂移**：
+  1. `ne-p$<docId>-body` **一进一出**（hash 相同）：内核段落宿主 id = 文档 id，`pm clear` + 重灌夹具后文档是新 id；
+  2. `span.qn-card__date#0..#3` 4 条：夹具小记的日期标签按**生成当日 HH:mm** 写；把 4 个标签临时改回基线那批的「今天 14:09」，4 条指纹可**逐条复现基线**、其余 2079 行 0 差异 ⇒ 唯一变量是日期文本宽度（该离屏分页走 MiSans、`tabular-nums` 不生效）。
+- 判定：**数据依赖，非视觉回归**（无 CSS/几何/元素集合变化；同日 home-quicknotes 可见态 0 差异）。符合 AGENTS §3#21③「重灌夹具 ⇒ 必须先重烤基线」。
+- 处置：以重灌后的暖态 `mob-warm` 按 `--from <warm>.json --write-baseline` **重烤移动 10 态基线**（原因：夹具重灌 + 小记日期标签/内核 prose id 属数据依赖）；重烤后**现场重跑一遍：10/10 态 0 差异**。
+- 装置说明：在 `scripts/mobile-audit/README.md` 的就近条目补记两条数据依赖（原只记了 prose id），避免下次误判回归。
+- 产物：临时快照（`.css-audit/snap/mob-warm.json` / `mob-verify.json` / `mob-post67.json`，gitignored，已清理）；基线 `scripts/mobile-audit/baseline/mobile-snap.json` 已更新（待 lead 提交）。
+- 复核（task-67 改动装包后）：新 APK 装到 lake_gate 后重跑一次，**10/10 态 0 差异**（本批 warning/只读文案改动不进这 10 态）。
 
 ## 9. 收尾清理（已执行）
 
@@ -100,3 +110,14 @@ task-63 的 b/c/e 已在本套设备同一包上验证（见 `docs/audit-261112/
 - 桌面实例按 CDP 端口 PID 关：9237 PID 75066 → kill；两台模拟器 `pm clear com.lakexlocalnotes.android` 均 Success；`rm -rf /tmp/lake5/m72` 成功（保留 `/tmp/lake5/creds.env`）。
 - CDP 未 stub `input[type=file]`（全程未用文件选择桩）；未在画布作画（无合成笔迹需清理）。
 - 临时证据（未入库）：清理输出、快照日志 /tmp/snap-72b.out；本目录截图是唯一入库证据。
+
+## 10. task-67（本批代码改动，未 commit；lead 复核后提交）
+
+**目标**：同步 warning 摘要重启不丢 + apply 跳过 kind 对齐桌面 + 三处「N 项被跳过」与三处手写只读文案收口到 core 单一来源。
+
+1. **持久化精简摘要**（`src/mobile/sync/syncStatusStore.ts`）：`MobileSyncStatus` 增 `warnings?`（**上限 20 条**，字段精简、message 截 200 字、未知 kind 丢弃）与 `warningSummary`（按**完整列表**算的 total/needsAction/retryable，保证截断后摘要不撒谎）；`bridge.syncNow()` 成功写状态时带上本轮 warningDetails；设置页（`useSyncSettingsForm` / `SettingsDrawer`）冷启动先读落盘摘要，摘要行优先用落盘的完整分组计数。
+2. **apply 跳过 kind 对齐**（`src/mobile/v3/sync.ts`）：applyWarnings 映射由 `remote_incomplete` 改为 `apply_skipped`（桌面 task-66 同口径，非 wire 字段）。
+3. **三处手写「N 项被跳过」改 core 摘要**：`HomePage.tsx` / `useWorkspaceSync.ts` 的 toast 追加 `syncWarningSummaryText(syncWarningSummary(warnings))`；`bridge/sync.ts` 状态行不再拼手写计数（摘要由 toast / 设置页统一生成，避免同一句出现两遍）。
+4. **三处手写只读文案改 core 判据**：新增移动薄封装 `src/mobile/lib/readonlyText.ts`（原因/标题取 `core/capabilities/readonlyReason`，仅把「解除动作」换成移动端可执行措辞——移动端不提供解锁，锁只能桌面端解除）；接线到 `NotePaneHost.tsx`（只读横幅）、`NotebookWorkspace.tsx` / `useWorkspaceSession.ts`（点编辑的提示）、`bridge/notes.ts`（保存被拒）。
+
+**回归/门禁**：`npx tsc --noEmit` 0 error；`src/mobile/sync/syncStatusStore.test.ts`（新增 3 例：上限 20 + 完整计数 + message 截断 / 重新解析容错 / 失败轮不残留）、`src/mobile/sync/syncWarningWiring.test.ts`（新增 4 例接线）、`lockedNoteWiring.test.ts` 更新后全绿；移动子集（notebook/settings/sync/home/bridge/v3/lib）**115 文件 553 例全绿**；lead 串行全量门禁 **906 文件 / 5712 用例 0 failed**。新 APK 装到 lake_gate 后移动快照 **10/10 态 0 差异**。d 设备证据见 §6。
