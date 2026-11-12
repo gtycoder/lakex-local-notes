@@ -747,7 +747,7 @@
 
 **P2（体验缺口 / 长期）**
 
-- **审计裁决 Q01–Q27 未拍板**（`docs/audit-261112/00-MASTER-PLAN.md` §6）：预览 Phase2、手机大图原图、移动历史预览、桌面 42 态、HANDOFF 压缩 Q17、`audit-261027` Q16、拆分范围 Q19、AI 会话持久化 Q12 等。未定的项**不要自行扩范围**。
+- **docs 侧硬编码机器路径**：脚本侧已清零（R0），但仍有约 18 个 tracked 文件含 `/Users/admin/...`（AGENTS / DEVELOPMENT / CODEX-GUIDE / MOBILE-OPS / 契约文档 / audit 存档）；开源前统一替换为示例路径（代码块用 `$(git rev-parse --show-toplevel)`，正文用 `<repo>`），不影响运行。\n- **审计裁决 Q01–Q27 未拍板**（`docs/audit-261112/00-MASTER-PLAN.md` §6）：预览 Phase2、手机大图原图、移动历史预览、桌面 42 态、HANDOFF 压缩 Q17、`audit-261027` Q16、拆分范围 Q19、AI 会话持久化 Q12 等。未定的项**不要自行扩范围**。
 - 大库与**真实 Android 物理机验收从未做过**；墓碑 payload 老化；移动云清理无 UI 入口、目录恢复后 `deleted_notes` 残留；缺正文/缺小记三条恢复路径只有单测 mock。
 - 移动端文本格式未接入口（unlink / replace / style→code·quote / 表格块级命令族）；顶栏 44→52 需另开需求；平板「点空白落光标」待用户裁决。
 - **脚本/源码注释里的旧 `§7.x` 引用**（`§7.25/27/28/30/31`，与 AGENTS 现编号 21–24 不符；历史遗留）⇒ 下次碰时统一，不单独开批。
