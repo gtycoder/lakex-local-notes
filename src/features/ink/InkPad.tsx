@@ -1,11 +1,10 @@
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode, type TouchEvent as ReactTouchEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode, type TouchEvent as ReactTouchEvent } from "react";
 import type { EditorCaptureHandler } from "../../core/editorCapture";
 import { ChevronLeft, ChevronRight, Eraser, Highlighter, LayoutGrid, Minus, Pen, Plus, Redo2, SquarePlus, Sticker, Type, Undo2 } from "lucide-react";
 import { INK_DEFAULT_COLOR, INK_STROKE_COLORS } from "./inkPalette.js";
 import {
   createInkPage,
   type InkBackground,
-  type InkBackgroundImage,
   type InkDoc,
   type InkPage,
   type InkPoint,
@@ -16,16 +15,13 @@ import { captureInkBody } from "./inkPadModel.js";
 import { useInkDocState } from "./useInkDocState";
 import { writeInkNavPage } from "./inkNav.js";
 import { hitTestStroke, strokeToSvgPath } from "./inkGeometry.js";
-import { inkStrokeStyle } from "./inkStrokeStyle.js";
-import { InkExportMenu, type InkPageExportFormat } from "./InkExportMenu.js";
+import { InkFooterDesktop, InkToolbarDesktop } from "./InkToolbarDesktop";
+import { InkCanvas } from "./InkCanvas";
 import { InkPagesPanel, type InkPagesView } from "./InkPagesPanel.js";
-import { InkPageTabButton } from "./InkPageTabButton.js";
-import { tabPageIds } from "./inkOutline.js";
 import { INK_IMAGE_MIN_EDGE, hitTestPageImage, movePageImage, placeInkPageImage, removePageImage, resizePageImage } from "./inkPageImages.js";
-import { InkImageRemoveButton, InkImageResizeHandle, InkSelectionRect } from "./InkImageSelection.js";
-import { InkPageTextEditor } from "./InkPageTextEditor.js";
-import { InkTextSelectionControls } from "./InkTextSelectionControls.js";
-import { INK_TEXT_DEFAULT_FONT_SIZE, INK_TEXT_LINE_HEIGHT, bumpPageTextFontSize, hitTestPageText, inkTextBaselineOffset, inkTextHeight, movePageText, placeInkPageText, removePageText, resizePageText, updatePageText, wrapInkTextLines } from "./inkPageTexts.js";
+import type { InkPageExportFormat } from "./InkExportMenu.js";
+import { tabPageIds } from "./inkOutline.js";
+import { INK_TEXT_DEFAULT_FONT_SIZE, bumpPageTextFontSize, hitTestPageText, movePageText, placeInkPageText, removePageText, resizePageText, updatePageText } from "./inkPageTexts.js";
 import { InkBackgroundSourceButtons } from "./InkBackgroundSourceButtons.js";
 import { installInkPerfHooks } from "./inkPerfStats";
 import { inkImageImportNotice, inkPdfImportNotice } from "./inkImportNotice";
@@ -40,7 +36,6 @@ import {
   type InkHistoryEntry,
   type InkPatch,
 } from "./history.js";
-import { InkPaper } from "./InkPaper.js";
 import InkPageStrip from "./InkPageStrip.js";
 import { newInkId } from "./ids.js";
 import type { InkImageImportOutcome } from "./inkImageImport.js";
@@ -162,12 +157,6 @@ function pdfProgressText(progress: { raster: number; uploaded: number; total: nu
   return (writing ? "正在写入页面：第 " : "正在导入 PDF：第 ") + done + " / " + total + " 页";
 }
 
-/** 背景图片 → SVG preserveAspectRatio（contain 整图可见 / cover 裁切铺满 / stretch 拉伸）。 */
-function backgroundImageAspect(image: InkBackgroundImage): string {
-  if (image.fit === "cover") return "xMidYMid slice";
-  if (image.fit === "stretch") return "none";
-  return "xMidYMid meet";
-}
 
 function pointFromClient(clientX: number, clientY: number, pointerType: string, pressure: number, rect: DOMRect, page: InkPage): InkPoint {
   const x = rect.width > 0 ? ((clientX - rect.left) / rect.width) * page.width : 0;
@@ -184,25 +173,6 @@ function replacePage(doc: InkDoc, page: InkPage): InkDoc {
   return { ...doc, pages: doc.pages.map((item) => (item.id === page.id ? page : item)) };
 }
 
-/** 静态笔迹层：只在页面内容变化时重渲染；正在书写时不会 reconcile 全部历史路径。 */
-const StaticStrokeLayer = memo(function StaticStrokeLayer({ strokes }: { strokes: RenderedStrokePath[] }) {
-  return (
-    <>
-      {strokes.map((stroke) => {
-        const style = inkStrokeStyle(stroke.highlighter ? "highlighter" : "pen");
-        return (
-          <path
-            key={stroke.id}
-            d={stroke.d}
-            fill={stroke.color}
-            opacity={style.opacity}
-            style={style.blend ? { mixBlendMode: style.blend } : undefined}
-          />
-        );
-      })}
-    </>
-  );
-});
 
 export function InkPad({ content, readOnly = false, variant, noteId, active, paneVisible, pane, onChange, onDirty, onEditorCapture, onImportImages, onImportPdf, onExportPage, onInsertPageImage, onTransientMessage, renderPageTab }: InkPadProps) {
   // 正文状态 + 保存管线（261112 R2-S10 阶段②：已搬到 useInkDocState，纯搬移）
@@ -1329,65 +1299,14 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
       data-pane={pane ?? undefined}
     >
       {variant === "desktop" ? (
-        <div className="ink-toolbar" role="toolbar" aria-label="手写工具">
-          <button className={["ink-tool", mode === "pen" ? "is-active" : ""].join(" ")} onClick={() => setMode("pen")} aria-label="画笔" title="画笔" disabled={readOnly}><Pen size={16} /></button>
-          <button className={["ink-tool", mode === "highlighter" ? "is-active" : ""].join(" ")} onClick={() => setMode("highlighter")} aria-label="高亮笔" title="高亮笔" disabled={readOnly}><Highlighter size={16} /></button>
-          <button className={["ink-tool", mode === "eraser" ? "is-active" : ""].join(" ")} onClick={() => setMode("eraser")} aria-label="整笔橡皮" title="整笔橡皮" disabled={readOnly}><Eraser size={16} /></button>
-          <span className="ink-toolbar__sep" />
-          {INK_STROKE_COLORS.map((value) => (
-            <button
-              key={value}
-              className={["ink-color", color === value ? "is-active" : ""].join(" ")}
-              style={{ backgroundColor: value }}
-              onClick={() => { setColor(value); if (mode === "eraser") setMode("pen"); }}
-              aria-label={`颜色 ${value}`}
-              title={`颜色 ${value}`}
-              disabled={readOnly}
-            />
-          ))}
-          <span className="ink-toolbar__sep" />
-          {widthPresets(mode).map((value) => (
-            <button
-              key={value}
-              className={["ink-width", activeWidth === value ? "is-active" : ""].join(" ")}
-              onClick={() => mode === "highlighter" ? setHighlighterWidth(value) : setPenWidth(value)}
-              aria-label={`笔宽 ${value}`}
-              title={`笔宽 ${value}`}
-              disabled={readOnly}
-            ><span style={{ width: widthDotSize(value, mode), height: widthDotSize(value, mode) }} /></button>
-          ))}
-          <span className="ink-toolbar__sep" />
-          <button className="ink-tool" onClick={undo} aria-label="撤销" title="撤销" disabled={readOnly || !canUndo}><Undo2 size={16} /></button>
-          <button className="ink-tool" onClick={redo} aria-label="重做" title="重做" disabled={readOnly || !canRedo}><Redo2 size={16} /></button>
-          <span className="ink-toolbar__sep" />
-          {/* 贴图（宿主注入才有）与文字块（两端都有）放在画笔旁边：它们是「往页面上放内容」 */}
-          {onInsertPageImage && (
-            <button
-              className="ink-tool"
-              onClick={() => void insertPageImage()}
-              disabled={readOnly}
-              aria-label="插入贴图"
-              title="插入贴图（贴在当前页上，可拖动/缩放）"
-            ><Sticker size={16} /></button>
-          )}
-          <button
-            className="ink-tool"
-            onClick={insertPageText}
-            disabled={readOnly}
-            aria-label="插入文字"
-            title="插入文字块（双击编辑，可拖动）"
-          ><Type size={16} /></button>
-          {variant === "desktop" && (
-            <>
-              <span className="ink-toolbar__sep" />
-              <div className="ink-zoom" role="group" aria-label="缩放">
-                <button onClick={zoomOut} disabled={zoom <= ZOOM_MIN} aria-label="缩小"><Minus size={16} /></button>
-                <button className="ink-zoom__value" onClick={() => setZoom(1)} title="恢复为适应页面" aria-label="恢复为适应页面">{Math.round(zoom * 100)}%</button>
-                <button onClick={zoomIn} disabled={zoom >= ZOOM_MAX} aria-label="放大"><Plus size={16} /></button>
-              </div>
-            </>
-          )}
-        </div>
+        <InkToolbarDesktop
+          mode={mode} setMode={setMode} color={color} setColor={setColor} setHighlighterWidth={setHighlighterWidth} setPenWidth={setPenWidth} variant={variant} readOnly={readOnly} activeWidth={activeWidth}
+          onInsertPageImage={onInsertPageImage} insertPageImage={insertPageImage} insertPageText={insertPageText}
+          undo={undo} redo={redo} canUndo={canUndo} canRedo={canRedo}
+          zoom={zoom} setZoom={setZoom} zoomIn={zoomIn} zoomOut={zoomOut}
+          strokeColors={INK_STROKE_COLORS} widthPresets={widthPresets} widthDotSize={widthDotSize}
+          zoomMin={ZOOM_MIN} zoomMax={ZOOM_MAX}
+        />
       ) : (
         // 移动端顶部固定条（阅读态 + 编辑态同一条）：翻页 | 缩放 | 全局预览。
         // 三者都是纯视图操作，阅读态也可用；纸张是正文数据，只出现在编辑态底部工具坞。
@@ -1482,203 +1401,27 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
         </div>
       ) : null}
 
-      <div
-        className="ink-page-stage"
-        ref={stageRef}
-        onTouchStart={onStageTouchStart}
-        onTouchEnd={onStageTouchEnd}
-        onTouchCancel={clearStageSwipe}
-      >
-        <div
-          className="ink-page-frame"
-          data-background={page.background}
-          style={fitSize ? ({ width: fitSize.width * zoom, height: fitSize.height * zoom } as CSSProperties) : undefined}
-        >
-          <svg
-            className="ink-page-svg"
-            viewBox={`0 0 ${page.width} ${page.height}`}
-            preserveAspectRatio="xMidYMid meet"
-            onPointerDown={onPointerDown}
-            onPointerMove={onPointerMove}
-            onPointerUp={finishPointer}
-            onPointerCancel={cancelPointer}
-            onLostPointerCapture={cancelPointer}
-            onDoubleClick={(event) => {
-              if (!page || readOnly) return;
-              const rect = event.currentTarget.getBoundingClientRect();
-              const point = pointFromClient(event.clientX, event.clientY, "mouse", 0.5, rect, page);
-              const hitTextId = hitTestPageText(page, point);
-              if (hitTextId) startTextEditing(hitTextId);
-            }}
-            aria-label={`手写板第 ${pageIndex + 1} 页`}
-          >
-            {/* 纸张底纹永远在最底层：纯矢量页直接可见；图片页在图片未铺满整页时从留白处透出
-                （261103 十五批：此前「有图就不画底纹」⇒ 用户切网格/点阵毫无反应，图片页只能永远是白纸）。 */}
-            <InkPaper width={page.width} height={page.height} background={page.background} />
-            {/* v2 图片页：背景图按页面逻辑坐标铺在笔迹层下面 */}
-            {page.backgroundImage ? (
-              <image
-                href={page.backgroundImage.url}
-                x={0}
-                y={0}
-                width={page.width}
-                height={page.height}
-                preserveAspectRatio={backgroundImageAspect(page.backgroundImage)}
-                opacity={page.backgroundImage.opacity ?? 1}
-                pointerEvents="none"
-              />
-            ) : null}
-            {/* v4 页内贴图：按页逻辑坐标画（rotation 绕自身中心）；笔迹永远在最上层 */}
-            {(page.images ?? []).map((image) => (
-              <image
-                key={image.id}
-                data-page-image={image.id}
-                href={image.url}
-                x={image.x}
-                y={image.y}
-                width={image.width}
-                height={image.height}
-                transform={image.rotation
-                  ? `rotate(${image.rotation} ${image.x + image.width / 2} ${image.y + image.height / 2})`
-                  : undefined}
-              />
-            ))}
-            {/* v4 页内文字块：逐行 <tspan>（换行用 inkPageTexts 的同一份估算，导出与屏幕一致） */}
-            {(page.texts ?? []).map((item) => {
-              // 正在编辑的这一块由输入框接管（同一几何 = 不叠字、提交瞬间不跳）
-              if (textEditing?.id === item.id) return null;
-              const lines = wrapInkTextLines(item.text, item.width, item.fontSize);
-              if (lines.length === 0) return null;
-              const lineHeight = item.fontSize * INK_TEXT_LINE_HEIGHT;
-              const anchor = item.align === "center" ? "middle" : item.align === "right" ? "end" : "start";
-              const x = item.align === "center" ? item.x + item.width / 2 : item.align === "right" ? item.x + item.width : item.x;
-              return (
-                <text
-                  key={item.id}
-                  data-page-text={item.id}
-                  x={x}
-                  y={item.y + inkTextBaselineOffset(item.fontSize)}
-                  fill={item.color}
-                  fontSize={item.fontSize}
-                  textAnchor={anchor}
-                  xmlSpace="preserve"
-                >
-                  {lines.map((line, index) => (
-                    <tspan key={index} x={x} dy={index === 0 ? 0 : lineHeight}>{line || " "}</tspan>
-                  ))}
-                </text>
-              );
-            })}
-            {/* 选中的文字块才画虚线框（用户澄清：选中时出现，失去焦点就消失）；编辑中同一条框 = 输入区边界 */}
-            {!readOnly && (selectedTextId || textEditing) && (page.texts ?? []).some((item) => item.id === (selectedTextId ?? textEditing?.id)) ? (() => {
-              const item = (page.texts ?? []).find((entry) => entry.id === (selectedTextId ?? textEditing?.id))!;
-              return <InkSelectionRect image={{ x: item.x, y: item.y, width: item.width, height: Math.max(item.fontSize * INK_TEXT_LINE_HEIGHT, inkTextHeight(item)) }} />;
-            })() : null}
-            {/* 选中贴图：虚线框（pointer-events:none，不挡画线；点图本身负责选中） */}
-            {selectedImageId && (page.images ?? []).some((image) => image.id === selectedImageId) ? (
-              <InkSelectionRect image={(page.images ?? []).find((image) => image.id === selectedImageId)!} />
-            ) : null}
-            <StaticStrokeLayer strokes={renderedStrokes} />
-            {activeStroke && activePath && (
-              <path
-                d={activePath}
-                fill={activeStroke.color}
-                opacity={inkStrokeStyle(activeStroke.tool).opacity}
-                style={inkStrokeStyle(activeStroke.tool).blend ? { mixBlendMode: inkStrokeStyle(activeStroke.tool).blend } : undefined}
-              />
-            )}
-          </svg>
-          {/* 选中贴图的删除按钮：HTML 浮层（在 SVG 之上，只有按钮接事件），避免抢画布 pointerdown */}
-          {textEditing ? (() => {
-            const item = (page.texts ?? []).find((entry) => entry.id === textEditing.id);
-            if (!item) return null;
-            const frameWidth = (fitSize?.width ?? page.width) * zoom;
-            return (
-              <InkPageTextEditor
-                text={item}
-                scale={frameWidth / page.width}
-                value={textEditing.draft}
-                onChange={(value) => setTextEditing((current) => (current ? { ...current, draft: value } : current))}
-                onCommit={commitPageText}
-                onCancel={() => setTextEditing(null)}
-              />
-            );
-          })() : null}
-          {!readOnly && selectedTextId && (page.texts ?? []).some((item) => item.id === selectedTextId) ? (() => {
-            const item = (page.texts ?? []).find((entry) => entry.id === selectedTextId)!;
-            return (
-              <InkTextSelectionControls
-                text={item}
-                page={page}
-                onResizeStart={(event) => startTextResize(event, item.id)}
-                onBumpFontSize={(delta) => bumpTextFontSize(item.id, delta)}
-                onRemove={() => removeText(item.id)}
-              />
-            );
-          })() : null}
-          {!readOnly && selectedImageId && (page.images ?? []).some((image) => image.id === selectedImageId) ? (
-            <>
-              <InkImageRemoveButton
-                image={(page.images ?? []).find((image) => image.id === selectedImageId)!}
-                page={page}
-                onRemove={deleteSelectedImage}
-              />
-              <InkImageResizeHandle
-                image={(page.images ?? []).find((image) => image.id === selectedImageId)!}
-                page={page}
-                onStart={startImageResize}
-              />
-            </>
-          ) : null}
-        </div>
-      </div>
+      <InkCanvas
+        page={page} pageIndex={pageIndex} readOnly={readOnly} zoom={zoom} fitSize={fitSize} stageRef={stageRef}
+        onStageTouchStart={onStageTouchStart} onStageTouchEnd={onStageTouchEnd} clearStageSwipe={clearStageSwipe}
+        onPointerDown={onPointerDown} onPointerMove={onPointerMove} finishPointer={finishPointer} cancelPointer={cancelPointer}
+        textEditing={textEditing} setTextEditing={setTextEditing} selectedTextId={selectedTextId} selectedImageId={selectedImageId}
+        renderedStrokes={renderedStrokes} activeStroke={activeStroke} activePath={activePath} pointFromClient={pointFromClient}
+        startTextEditing={startTextEditing} commitPageText={commitPageText} startTextResize={startTextResize}
+        bumpTextFontSize={bumpTextFontSize} removeText={removeText} deleteSelectedImage={deleteSelectedImage} startImageResize={startImageResize}
+      />
 
       {variant === "desktop" ? (
-        <div className="ink-footer">
-          <div className="ink-pages">
-            <button onClick={() => switchPage(-1)} disabled={pageIndex <= 0} aria-label="上一页"><ChevronLeft size={16} /></button>
-            <span>第 {pageIndex + 1} / {doc.pages.length} 页</span>
-            <button onClick={() => switchPage(1)} disabled={pageIndex >= doc.pages.length - 1} aria-label="下一页"><ChevronRight size={16} /></button>
-            <button onClick={addPage} disabled={readOnly} aria-label="新建页"><Plus size={16} /></button>
-            {/* 单一入口（261104 定稿）：「大纲」与「页面管理」合并成这一枚，打开右侧悬浮面板（缩略图 / 大纲） */}
-            <button
-              className={["ink-tool", pagesOpen ? "is-active" : ""].join(" ")}
-              onClick={() => { setPagesOpen((open) => !open); setPendingDeletePageId(null); closeSwatches(); }}
-              aria-label="页面"
-              title="页面：缩略图 / 大纲"
-              aria-expanded={pagesOpen}
-            ><LayoutGrid size={16} /></button>
-            {/* 页签 = 底栏独立入口（打标记 / 一句话说明 / 清除），不塞进页面面板（用户 261104 定稿） */}
-            <InkPageTabButton
-              page={page}
-              pageNumber={pageIndex + 1}
-              readOnly={readOnly}
-              onSave={savePageNote}
-              onClear={clearPageNote}
-            />
-          </div>
-          <div className="ink-footer__right">
-            {/* 只放一个按钮：点开再选格式（用户定稿：不要三个按钮占满工具条）；菜单本体在 InkExportMenu（桌面专用） */}
-            {onExportPage && (
-              <InkExportMenu
-                open={exportOpen}
-                onToggle={() => { setExportOpen((open) => !open); closeSwatches(); }}
-                onPick={(format) => void runExportPage(format)}
-              />
-            )}
-            <div className="ink-backgrounds">
-              {BACKGROUNDS.map((item) => (
-                <button key={item.value} className={page.background === item.value ? "is-active" : ""} onClick={() => setBackground(item.value)} disabled={readOnly || isPdfPageBackground(page)} title={isPdfPageBackground(page) ? "PDF 页已铺满整页，纸张不可见" : undefined}>{item.label}</button>
-              ))}
-            </div>
-            {/* 背景来源：导入图片/PDF 都是「给本页加背景」，排在纸张后面（用户 261104 定稿） */}
-            <InkBackgroundSourceButtons
-              disabled={readOnly || importing || pdfImporting}
-              onImportImages={onImportImages ? () => void importImages() : undefined}
-              onImportPdf={onImportPdf ? () => void importPdf() : undefined}
-            />
-          </div>
-        </div>
+        <InkFooterDesktop
+          doc={doc} page={page} pageIndex={pageIndex} readOnly={readOnly}
+          pagesOpen={pagesOpen} setPagesOpen={setPagesOpen} setPendingDeletePageId={setPendingDeletePageId}
+          closeSwatches={closeSwatches} switchPage={switchPage} addPage={addPage}
+          savePageNote={savePageNote} clearPageNote={clearPageNote}
+          onExportPage={onExportPage} exportOpen={exportOpen} setExportOpen={setExportOpen} runExportPage={runExportPage}
+          backgrounds={BACKGROUNDS} setBackground={setBackground} isPdfPageBackground={isPdfPageBackground}
+          importing={importing} pdfImporting={pdfImporting}
+          onImportImages={onImportImages} importImages={importImages} onImportPdf={onImportPdf} importPdf={importPdf}
+        />
       ) : !readOnly ? (
         // 移动端底部工具坞（仅编辑态）：上排画笔工具（横向滚动，含颜色/笔宽/撤销重做），
         // 下排纸张 + 背景来源（背景图片 / 背景 PDF）。编辑态工作区胶囊已由工作区隐藏，工具坞贴底并自己接系统安全区。

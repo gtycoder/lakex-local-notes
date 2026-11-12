@@ -22,7 +22,8 @@ describe("笔迹样式单一来源", () => {
   });
 
   it("画布静态层 / 在写笔 / 缩略图 / 导出四处都走同一来源，不再各自写字面量", () => {
-    for (const file of ["./InkPad.tsx", "./InkPageStrip.tsx", "../../../electron/noteExport.ts"]) {
+    // 261112 R2-S10 阶段②：画布静态层/在写笔的渲染已抽到 InkCanvas.tsx（纯搬移）——断言文案不变，只换扫描文件。
+    for (const file of ["./InkCanvas.tsx", "./InkPageStrip.tsx", "../../../electron/noteExport.ts"]) {
       const source = read(file);
       expect(source, file).toContain("inkStrokeStyle");
       expect(source, file).not.toContain("? 0.3 :");

@@ -20,6 +20,8 @@ import { createInkDoc, inkToBody } from "../../core/inkDoc.js";
 const INK_PAD = readFileSync(new URL("./InkPad.tsx", import.meta.url), "utf8");
 /** 261112 R2-S10 阶段② 第二步：正文状态 + 保存管线抽到 `useInkDocState.ts`（纯搬移）——相关断言改指向它。 */
 const INK_DOC_STATE = readFileSync(new URL("./useInkDocState.ts", import.meta.url), "utf8");
+/** 261112 R2-S10 阶段②：图片页渲染已抽到 InkCanvas.tsx（纯搬移）——断言文案不变，只换读取源。 */
+const INK_CANVAS = readFileSync(new URL("./InkCanvas.tsx", import.meta.url), "utf8");
 
 describe("手写板打开只读（CORE-03）", () => {
   it("保存前判等价：等价则不写盘（判定已搬入 inkPadModel；InkPad 只做接线）", () => {
@@ -68,8 +70,8 @@ describe("手写板打开只读（CORE-03）", () => {
     const disk = inkToBody(doc);
     expect(canonicalDocBody("ink", disk)).toBe(disk); // 新字段进 canonical ⇒ 打开不会被误判为「有改动」
     // 背景图必须在渲染层出现（否则图片页打开是空白，用户会去动正文）
-    expect(INK_PAD).toContain("page.backgroundImage ?");
-    expect(INK_PAD).toContain('pointerEvents="none"');
+    expect(INK_CANVAS).toContain("page.backgroundImage ?");
+    expect(INK_CANVAS).toContain('pointerEvents="none"');
   });
 
   it("v1 正文可读：规范形态 = 读入后写回的 v2 形态（不写迁移脚本，但仍不写盘）", () => {

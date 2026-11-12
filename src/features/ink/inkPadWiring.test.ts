@@ -14,14 +14,9 @@ const MOBILE_PANES = read("../../mobile/notebook/NotePaneHost.tsx");
 const MOBILE_SESSION = read("../../mobile/notebook/useWorkspaceSession.ts");
 const MOBILE_BRIDGE = read("../../mobile/bridge/notes.ts");
 const INK_PAD = read("./InkPad.tsx");
-/** 261112 R2-S10 阶段② 第一步：按组件文件取文本。
- *  `InkCanvas.tsx` / `InkToolbarDesktop.tsx` 是**后续步骤**才抽出的组件文件 —— 抽出前回退 `INK_PAD` 全文，
- *  因此现在与原来逐字等价；抽出后只改这里的读取源，本文件的断言一字不动。 */
-const readIfPresent = (path: string): string => {
-  try { return read(path); } catch { return ""; }
-};
-const INK_CANVAS = readIfPresent("./InkCanvas.tsx") || INK_PAD;
-const INK_TOOLBAR_DESKTOP = readIfPresent("./InkToolbarDesktop.tsx") || INK_PAD;
+/** 261112 R2-S10 阶段②：画布 / 桌面外壳已抽成组件文件（纯搬移）——护栏直接读组件文件，断言文案不变。 */
+const INK_CANVAS = read("./InkCanvas.tsx");
+const INK_TOOLBAR_DESKTOP = read("./InkToolbarDesktop.tsx");
 /** 261112 R2-S10 阶段② 第二步：正文状态 + 保存管线抽到 `useInkDocState.ts`（纯搬移）——文本护栏改指向它。 */
 const INK_DOC_STATE = read("./useInkDocState.ts");
 const DESKTOP_INK = read("./DesktopInkPad.tsx");
@@ -60,8 +55,8 @@ describe("手写板正式端到端接线", () => {
     expect(INK_PAD).toContain('aria-label="放大"');
     expect(INK_PAD).toContain('aria-label="缩小"');
     expect(INK_PAD).toContain('aria-label="恢复为适应页面"');
-    expect(INK_PAD).toContain("fitSize.width * zoom");
-    expect(INK_PAD).toContain("fitSize.height * zoom");
+    expect(INK_CANVAS).toContain("fitSize.width * zoom");
+    expect(INK_CANVAS).toContain("fitSize.height * zoom");
   });
 
   it("页面管理：缩略图、前移/后移、删除页二次确认", () => {
@@ -87,21 +82,14 @@ describe("手写板正式端到端接线", () => {
   });
 
   it("纸张底纹使用 SVG 逻辑坐标，缩放页面时密度不漂移", () => {
-    expect(INK_PAD).toContain("InkPaper");
+    expect(INK_CANVAS).toContain("InkPaper");
     expect(INK_PAPER).toContain("patternUnits=\"userSpaceOnUse\"");
     expect(INK_PAPER).toContain("width={width}");
   });
 
-  /** 桌面分支的 JSX 片段（顶部工具条 + 底部 footer）：用来钉「桌面结构零变化」。 */
-  const desktopBranch = (): string => {
-    const toolbarStart = INK_TOOLBAR_DESKTOP.indexOf('{variant === "desktop" ? (');
-    const toolbarEnd = INK_TOOLBAR_DESKTOP.indexOf(') : (', toolbarStart);
-    // footer 用 className 定位再回溯三元开头：「页面」面板挂载也是 variant==="desktop" 三元，不能按字符串先后猜
-    const footerDiv = INK_TOOLBAR_DESKTOP.indexOf('<div className="ink-footer">');
-    const footerStart = INK_TOOLBAR_DESKTOP.lastIndexOf('{variant === "desktop" ? (', footerDiv);
-    const footerEnd = INK_TOOLBAR_DESKTOP.indexOf(') : !readOnly ? (', footerDiv);
-    return INK_TOOLBAR_DESKTOP.slice(toolbarStart, toolbarEnd) + INK_TOOLBAR_DESKTOP.slice(footerStart, footerEnd);
-  };
+  /** 桌面分支的 JSX（顶部工具条 + 底部 footer）：已抽成 InkToolbarDesktop.tsx（纯搬移）——
+   *  现在组件文件本身就是这两段 ⇒ 直接读整文件，断言文案不变。 */
+  const desktopBranch = (): string => INK_TOOLBAR_DESKTOP;
 
   /** 移动端底部工具坞的 JSX 片段（到 `) : null}` 为止；里面含色板/笔宽两个悬浮面板）。 */
   const mobileDock = (): string => {
@@ -328,7 +316,7 @@ describe("手写板正式端到端接线", () => {
     expect(PAGES_PANEL).toMatch(/ink-pages-panel__head-right[\s\S]*?PageJump/);
     // 页签编辑 = 底栏独立入口（不在面板里）
     expect(PAGES_PANEL).not.toContain("onSaveNote");
-    expect(INK_PAD).toContain("<InkPageTabButton");
+    expect(INK_TOOLBAR_DESKTOP).toContain("<InkPageTabButton");
     expect(PAGE_TAB_BUTTON).toContain('aria-label="页签"');
     expect(PAGE_TAB_FORM).toContain('title={canSave ? (draftText ? "保存页签（Enter）" : "保存为纯标记（Enter）")');
     expect(PAGE_TAB_BUTTON).toContain('hasTab ? "这一页有页签" : "给这一页加页签"');
@@ -380,7 +368,7 @@ describe("手写板正式端到端接线", () => {
     // 261104 十七批：单页导出入口 = **一个**按钮 + 悬浮格式菜单（用户明确不要三个按钮）。
     // 菜单本体在桌面专用组件 InkExportMenu（跨端样式护栏要求共享组件类名两端都有样式 ⇒ 桌面专属控件不进 InkPad）。
     expect(branch).toContain("<InkExportMenu");
-    expect(INK_PAD).toContain("onExportPage &&");
+    expect(INK_TOOLBAR_DESKTOP).toContain("onExportPage &&");
     const menuSrc = read("./InkExportMenu.tsx");
     expect(menuSrc).toContain("EXPORT_FORMATS.map");
     expect(menuSrc.match(/aria-label="导出"/g)?.length).toBe(1);
@@ -533,7 +521,7 @@ describe("手写板正式端到端接线", () => {
     expect(INK_PAD).toContain("finalizeInterrupted");
     expect(INK_PAD).toContain("已按已完成部分提交");
     expect(INK_PAD).toContain("stroke.points.length >= 2");
-    expect(INK_PAD).toContain("onLostPointerCapture={cancelPointer}");
+    expect(INK_CANVAS).toContain("onLostPointerCapture={cancelPointer}");
     // 上一次 up 丢失时 activePointer 会残留：下一次 pointerdown 先收口残留那笔，不让整块画布从此画不上。
     expect(INK_PAD).toContain('finalizeInterruptedRef.current("missing-pointerup")');
     // 按批渲染：一次 pointermove 只 setActiveStroke 一次 / 一批擦除只 setDoc 一次（防 N 次重渲染把快画压垮）。
