@@ -67,6 +67,36 @@ export class TrashLifecycle {
     return result;
   }
 
+  /**
+   * purge 的后代集合（F-01，P0 修复）：**不能只按 parent_id 找后代**。
+   *
+   * 背景：删除分组进回收站后，wire 侧会把所有 trashed 条目的 parent 归一成回收站容器
+   * （`s3v3/commit/engineBridge.ts:74`），再被 apply 写回本机 ⇒ 子文档的 parent_id 不再是分组，
+   * 而原始父链保留在 `deleted_from_parent_id`。只按 parent_id 遍历会只拿到分组自身 ⇒ 子文档漏 purge、
+   * 继续以 trashed 条目发布、云端索引残留（违反 AGENTS §3#15 删除传播红线）。
+   * 判据 = 两条边取并集：① parent_id（未扁平化的常规子树）；② deleted_from_parent_id + trashed_at
+   * （被同步扁平化的回收站子树）。UNION 去重 + deleted_at 过滤可防环、防重复。
+   */
+  /**
+   * 子树集合（**purge 与 restore 共用**，261112 task-62 复核补）：两条边取并集后，既覆盖常规 parent 链，
+   * 也覆盖「被同步扁平化成回收站容器」的 trashed 后代（原始父在 deleted_from_parent_id）。
+   * UNION 去重 ⇒ 环上节点各纳入一次、递归必然收敛（无队列/次数上限问题）。
+   */
+  private flattenedSubtreeIds(rootId: string): string[] {
+    const rows = this.ctx.db.prepare(
+      `WITH RECURSIVE subtree(id) AS (
+         SELECT ?
+         UNION
+         SELECT t.id FROM tree_nodes t JOIN subtree s
+           ON t.parent_id = s.id
+           OR (t.deleted_from_parent_id = s.id AND t.trashed_at IS NOT NULL)
+         WHERE t.deleted_at IS NULL
+       )
+       SELECT id FROM subtree`
+    ).all(rootId) as Array<{ id: string }>;
+    return rows.map((row) => row.id);
+  }
+
   /** 该节点子树内全部 note_file_id（含自身；含已删除节点，purge 用）。 */
   private descendantNoteFileIds(id: string): string[] {
     const ids = this.descendantIdsIncludingDeleted(id);
@@ -109,13 +139,19 @@ export class TrashLifecycle {
         const subNotes: Array<{ note_file_id: string }> = [];
         for (const batch of sqlParameterBatches(subtreeIds)) {
           const ph = batch.map(() => "?").join(",");
-          this.ctx.db.prepare(`UPDATE tree_nodes SET trashed_at=?,updated_at=?,is_dirty=1 WHERE id IN (${ph}) AND deleted_at IS NULL`).run(now, now, ...batch);
+          // F-01（P0）：子树每个节点都要记「删除前原始父」。只记根节点会让同步把子文档 parent 扁平化后
+          // **原始父链彻底丢失** ⇒ purge 无法按 deleted_from_parent_id 找到后代（子文档漏删、云端索引残留）。
+          this.ctx.db.prepare(
+            `UPDATE tree_nodes SET trashed_at=?,updated_at=?,is_dirty=1,deleted_from_parent_id=COALESCE(deleted_from_parent_id,parent_id) WHERE id IN (${ph}) AND deleted_at IS NULL`,
+          ).run(now, now, ...batch);
           subNotes.push(...this.ctx.db.prepare(`SELECT note_file_id FROM tree_nodes WHERE id IN (${ph}) AND note_file_id IS NOT NULL AND deleted_at IS NULL`).all(...batch) as Array<{ note_file_id: string }>);
         }
         const subNoteIds = subNotes.map((s) => s.note_file_id);
         for (const batch of sqlParameterBatches(subNoteIds)) {
           const nph = batch.map(() => "?").join(",");
-          this.ctx.db.prepare(`UPDATE notes SET trashed_at=?,updated_at=?,is_dirty=1,restore_pending_at=NULL WHERE id IN (${nph}) AND deleted_at IS NULL`).run(now, now, ...batch);
+          this.ctx.db.prepare(
+            `UPDATE notes SET trashed_at=?,updated_at=?,is_dirty=1,restore_pending_at=NULL,deleted_from_parent_id=COALESCE(deleted_from_parent_id,parent_id) WHERE id IN (${nph}) AND deleted_at IS NULL`,
+          ).run(now, now, ...batch);
         }
       }
       // 回收站条目不出现在搜索（子树整体移出 FTS 账本，恢复时重建）
@@ -131,7 +167,12 @@ export class TrashLifecycle {
     const rows = this.ctx.db.prepare(
       "SELECT id FROM tree_nodes WHERE parent_id=? AND deleted_at IS NULL AND trashed_at IS NOT NULL AND trashed_at < ? ORDER BY trashed_at"
     ).all(this.ctx.trashNotebookId, cutoff) as Array<{ id: string }>;
-    for (const r of rows) this.purgeTrashItem(r.id);
+    for (const r of rows) {
+      try { this.purgeTrashItem(r.id); }
+      // F-01 复核（task-62）：候选列表是事务外读的；前一个根 purge 时按 deleted_from_parent_id 可能已把
+      // 同组的其他「回收站根」一起删掉（同步扁平化后常见）⇒ NotFound 幂等跳过，后台任务不得半途抛错。
+      catch (error) { if (!(error instanceof AppError && error.kind === "NotFound")) throw error; }
+    }
     return rows.length;
   }
 
@@ -190,19 +231,27 @@ export class TrashLifecycle {
       this.ctx.db.prepare(
         "UPDATE tree_nodes SET parent_id=?,trashed_at=NULL,deleted_from_parent_id=NULL,updated_at=?,is_dirty=1,is_purged=0 WHERE id=?"
       ).run(parentId, now, id);
-      // 级联：子树（跟随根进回收站的嵌套分组/笔记）随根恢复——清 trashed_at（父位置不变）。
-      const subtreeIds = this.descendantIdsIncludingDeleted(id).filter((sid) => sid !== id);
+      // 级联：子树（跟随根进回收站的嵌套分组/笔记）随根恢复。
+      // F-01 复核（task-62）：子树集合与 purge 同口径（parent 链 ∪ 被同步扁平化的 trashed 后代的 dfp 链）；
+      // 扁平化子节点的 parent 已被归一到回收站容器，恢复时必须回到 deleted_from_parent_id（原始的组内父），
+      // 否则会出现「active 但 parent=回收站容器」的悬空树。非扁平化子节点 COALESCE 保持原父，行为不变。
+      const subtreeIds = this.flattenedSubtreeIds(id).filter((sid) => sid !== id);
       if (subtreeIds.length > 0) {
         const subNotes: Array<{ note_file_id: string }> = [];
         for (const batch of sqlParameterBatches(subtreeIds)) {
           const ph = batch.map(() => "?").join(",");
-          this.ctx.db.prepare(`UPDATE tree_nodes SET trashed_at=NULL,updated_at=?,is_dirty=1 WHERE id IN (${ph}) AND deleted_at IS NULL`).run(now, ...batch);
+          this.ctx.db.prepare(
+            `UPDATE tree_nodes SET parent_id=COALESCE(deleted_from_parent_id,parent_id),trashed_at=NULL,deleted_from_parent_id=NULL,updated_at=?,is_dirty=1 WHERE id IN (${ph}) AND deleted_at IS NULL`,
+          ).run(now, ...batch);
           subNotes.push(...this.ctx.db.prepare(`SELECT note_file_id FROM tree_nodes WHERE id IN (${ph}) AND note_file_id IS NOT NULL AND deleted_at IS NULL`).all(...batch) as Array<{ note_file_id: string }>);
         }
         const subNoteIds = subNotes.map((s) => s.note_file_id);
         for (const batch of sqlParameterBatches(subNoteIds)) {
           const nph = batch.map(() => "?").join(",");
-          this.ctx.db.prepare(`UPDATE notes SET trashed_at=NULL,updated_at=?,is_dirty=1 WHERE id IN (${nph}) AND deleted_at IS NULL`).run(now, ...batch);
+          // F-01 复核：notes 行同样回原父（扁平化子文档）。非扁平化行 COALESCE 保持原父，行为不变。
+          this.ctx.db.prepare(
+            `UPDATE notes SET parent_id=COALESCE(deleted_from_parent_id,parent_id),trashed_at=NULL,deleted_from_parent_id=NULL,updated_at=?,is_dirty=1 WHERE id IN (${nph}) AND deleted_at IS NULL`,
+          ).run(now, ...batch);
         }
       }
     });
@@ -241,14 +290,15 @@ export class TrashLifecycle {
     // 校验：节点必须在回收站笔记本子树内（根 = parent_id=trash，子树 = 祖先链含 trash）。
     const node = this.ctx.db.prepare(
       `WITH RECURSIVE trash_ancestors(id) AS (
-         SELECT ? UNION ALL
+         SELECT ? UNION
          SELECT t.parent_id FROM tree_nodes t JOIN trash_ancestors ta ON t.id=ta.id
        )
        SELECT t.id,t.note_file_id FROM tree_nodes t
        WHERE t.id=? AND t.deleted_at IS NULL AND (SELECT COUNT(*) FROM trash_ancestors WHERE id=?)>0`
     ).get(id, id, this.ctx.trashNotebookId) as { id: string; note_file_id: string | null } | undefined;
     if (!node) throw new AppError("NotFound", `回收站节点不存在: ${id}`);
-    const ids = this.descendantIdsIncludingDeleted(id);
+    // F-01：子树必须覆盖「被同步扁平化成回收站容器的子文档」（按 deleted_from_parent_id 原始父链）。
+    const ids = this.flattenedSubtreeIds(id);
     const filesToRemove: Array<{ path: string; recursive: boolean }> = [];
     const now = nowIso();
     const tx = this.ctx.db.transaction(() => {
@@ -310,6 +360,11 @@ export class TrashLifecycle {
     const items = this.ctx.db.prepare(
       "SELECT id FROM tree_nodes WHERE parent_id=? AND deleted_at IS NULL"
     ).all(this.ctx.trashNotebookId) as Array<{ id: string }>;
-    for (const item of items) this.purgeTrashItem(item.id);
+    for (const item of items) {
+      try { this.purgeTrashItem(item.id); }
+      // 同 autoPurgeExpiredTrash：扁平化回收站子树里「组 + 组内子文档」都是根，前一个根的 purge 会连带
+      // 删除其余（deleted_from_parent_id 链），后续根已不存在 ⇒ 幂等跳过，用户点「清空回收站」不得报错。
+      catch (error) { if (!(error instanceof AppError && error.kind === "NotFound")) throw error; }
+    }
   }
 }

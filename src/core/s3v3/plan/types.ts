@@ -59,6 +59,8 @@ export type WriteOp =
       id: string;
       position: { parentId: string | null; trashedAt: string | null; deletedFromParentId: string | null };
     }
+  /** 编辑锁字段（isLocked/lockedAt）以远端为准：**只改锁**（不碰正文/位置），用于「远端锁更新 + 本地内容赢」的一轮。 */
+  | { kind: "apply-lock"; space: "lake"; id: string; locked: boolean; lockedAt: string | null }
   /** 目录元数据以远端为准（下载/回收站传播）；目录没有正文。 */
   | { kind: "apply-remote-folder"; space: "lake"; id: string; meta: EntryMeta }
   /** 目录在远端已缺席（仅本地副本进回收站/跟随删除）。 */

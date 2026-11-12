@@ -35,6 +35,20 @@ async function readCloudIndex(remote: MemoryRemote): Promise<LakeIndex> {
   return parseLakeIndexBytes(indexBytes).index;
 }
 
+
+async function readCloudPointer(remote: MemoryRemote): Promise<{ lakeCommit: string; generation: number }> {
+  const bytes = await remote.get(S3V3_POINTER_KEY);
+  if (!bytes) throw new Error("缺少 v3 pointer");
+  const p = JSON.parse(new TextDecoder().decode(bytes)) as { lake: { commit: string }; generation: number };
+  return { lakeCommit: p.lake.commit, generation: p.generation };
+}
+async function readCloudIndexRaw(remote: MemoryRemote): Promise<string> {
+  const ptr = await readCloudPointer(remote);
+  const bytes = await remote.get(indexKey("lake", ptr.lakeCommit));
+  if (!bytes) throw new Error("缺少 lake 索引");
+  return new TextDecoder().decode(bytes);
+}
+
 describe("同步分歧收口（261112 真实 S3 回归）", () => {
   it("P0：本地回收站 + 他端编辑 → 应用内容、保留回收站、单轮不抛错", async () => {
     const remote = new MemoryRemote();
@@ -184,6 +198,58 @@ describe("同步分歧收口（261112 真实 S3 回归）", () => {
       a.store.close();
       b.store.close();
     }
+  }, 180_000);
+
+
+  it("P2（task-61）：wire 不携带本地回收站容器 id（发布 parentId=null / 多轮不抖 / 恢复回原父）", async () => {
+    const remote = new MemoryRemote();
+    const a = await mkDevice();
+    const b = await mkDevice();
+    try {
+      const nb = a.store.createNotebook("T61");
+      a.store.createNoteInAtTopWithContent(nb.id, "Doc", "<p>v1</p>", [], "t61");
+      await new S3v3SyncEngine({ remote, device: a.device, deviceId: "A" }).sync({ onEmptyCloud: "upload" });
+      await new S3v3SyncEngine({ remote, device: b.device, deviceId: "B" }).sync();
+
+      // A 移入回收站（本地 notes.parent_id 指向本地容器 notebook-trash）
+      a.store.deleteNote("t61");
+      await new S3v3SyncEngine({ remote, device: a.device, deviceId: "A" }).sync();
+      const idx = await readCloudIndex(remote);
+      const entry = idx.notes.find((n) => n.id === "t61")!;
+      expect(entry).toBeTruthy();
+      expect(entry.trashedAt ?? null).not.toBe(null);
+      expect(entry.parentId ?? null).toBe(null);            // ① trashed 条目 parentId=null
+      expect(entry.deletedFromParentId ?? null).toBe(nb.id); // 原始父仍可恢复
+      const raw = await readCloudIndexRaw(remote);
+      expect(raw).not.toContain("notebook-trash");           // ① 全文无本地容器 id
+      expect(idx.folders.some((f) => f.id === "notebook-trash")).toBe(false);
+
+      // ② 双端多轮往返：位置赢家稳定，不产生新的 index 发布（不抖动）
+      // 说明：收件端把「远端 tombstone → 本地回收站」按同轮本地动作优先（lifecycleRace 守卫）落自己的 trashedAt，
+      // 下一轮会用本机 trashedAt 归一一次（这是既有守卫，不是每轮抖动）⇒ 先跑两轮收敛，再测稳定。
+      await new S3v3SyncEngine({ remote, device: b.device, deviceId: "B" }).sync();
+      expect(b.store.listTrash().some((t) => t.id === "t61")).toBe(true);
+      await new S3v3SyncEngine({ remote, device: a.device, deviceId: "A" }).sync();
+      await new S3v3SyncEngine({ remote, device: b.device, deviceId: "B" }).sync();
+      const before = await readCloudPointer(remote);
+      await new S3v3SyncEngine({ remote, device: a.device, deviceId: "A" }).sync();
+      await new S3v3SyncEngine({ remote, device: b.device, deviceId: "B" }).sync();
+      await new S3v3SyncEngine({ remote, device: a.device, deviceId: "A" }).sync();
+      const after = await readCloudPointer(remote);
+      expect(after.lakeCommit).toBe(before.lakeCommit);      // 多轮不抖动（无每轮 indexChanged）
+      // 归一后云端 trashedAt 仍是同一值（不被本地容器 id / 时间戳来回改写）
+      expect((await readCloudIndex(remote)).notes.find((n) => n.id === "t61")!.parentId ?? null).toBe(null);
+
+      // ③ 恢复回原父（deletedFromParentId 生效 + 发布 parentId 回到原父）
+      a.store.restoreTrashItem("t61");
+      expect(a.store.listTreeNodes().find((n) => n.id === "t61")!.parentId).toBe(nb.id);
+      await new S3v3SyncEngine({ remote, device: a.device, deviceId: "A" }).sync();
+      const restored = (await readCloudIndex(remote)).notes.find((n) => n.id === "t61")!;
+      expect(restored.trashedAt ?? null).toBe(null);
+      expect(restored.parentId).toBe(nb.id);
+      await new S3v3SyncEngine({ remote, device: b.device, deviceId: "B" }).sync();
+      expect(b.store.listTreeNodes().find((n) => n.id === "t61")!.parentId).toBe(nb.id);
+    } finally { a.store.close(); b.store.close(); }
   }, 180_000);
 
   it("P1-b：本地 purge 目录后，新发布的云端索引不含该目录", async () => {

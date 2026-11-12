@@ -117,6 +117,30 @@ export class NoteMetadataRepository {
     return this.deps.readTreeNode(id);
   }
 
+  /**
+   * 同步镜像写（261112 G3，与 noteContentRepository.saveSynced 同类）：只写 icon 列。
+   *
+   * 为什么单独成方法：`setNodeIcon` 是**用户入口**，带 `assertNodeWritable`（回收站/purged 一律拒写）；
+   * 但同步 apply 在「新设备首次见到远端行」时会调端口 `setNodeIcon`（`deviceStore.ts:584`）——
+   * 若远端条目已在回收站且带图标，镜像写入会撞用户守卫 ⇒ 整轮 syncNow 抛错、设备永久卡死。
+   * 镜像路径允许回收站行（icon 是独立字段，不得因此整轮失败）；`purged` / 已删仍拒绝（不可复活）。
+   * 不动 updated_at / is_dirty（镜像元数据由 applyRemoteNoteMeta 负责，写本方法不算本地改动）。
+   */
+  applyRemoteNodeIcon(id: string, icon: string | null): void {
+    if (icon !== null && (typeof icon !== "string" || icon.length > 16)) {
+      throw new AppError("InvalidInput", "无效的图标");
+    }
+    const row = this.db.prepare(
+      "SELECT t.deleted_at AS deleted_at, t.is_purged AS node_purged, n.is_purged AS note_purged " +
+      "FROM tree_nodes t LEFT JOIN notes n ON n.id = t.note_file_id WHERE t.id = ?"
+    ).get(id) as { deleted_at: string | null; node_purged: number | null; note_purged: number | null } | undefined;
+    if (!row) throw new AppError("NotFound", `节点不存在: ${id}`);
+    if (row.node_purged === 1 || row.note_purged === 1) {
+      throw new AppError("InvalidInput", `节点已被彻底删除（不可恢复），不能修改: ${id}`);
+    }
+    this.db.prepare("UPDATE tree_nodes SET icon=? WHERE id=?").run(icon, id);
+  }
+
   moveTreeNode(id: string, parentId: string | null, sortOrder: number): TreeNode {
     const moving = this.deps.readTreeNode(id);
     if (parentId) {

@@ -123,7 +123,8 @@ export function createDesktopPlatformPort(store: Store, quickNotes?: QuickNotesS
       store.applyRemoteEditLock(noteId, locked, editLockedAt);
     },
     async setNodeIcon(noteId: string, icon: string): Promise<void> {
-      store.setNodeIcon(noteId, icon);
+      // 261112 G3：端口只被同步 apply 使用 ⇒ 走镜像专用写（允许回收站行；用户入口守卫不动）。
+      store.applyRemoteNodeIcon(noteId, icon);
     },
     async deleteNote(noteId: string): Promise<void> {
       store.deleteNote(noteId);

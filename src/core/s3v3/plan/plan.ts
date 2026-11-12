@@ -11,7 +11,7 @@
 import type { LakeIndex, QuickNotesIndex } from "../protocol/index.js";
 import { lakeBodyKey, quickNoteBodyKey } from "../protocol/index.js";
 import { planLakeMerge, planQuickNotesMerge } from "../../s3v3Merge.js";
-import { mergeNotePosition, positionFields, positionOf } from "./positionMerge.js";
+import { lockStateOf, mergeNoteLock, mergeNotePosition, positionFields, positionOf } from "./positionMerge.js";
 import { compareQuickNoteTagVersion, mergeQuickNoteTags } from "../../quickNoteTags.js";
 import { folderSpaceForWire } from "../../diary.js";
 import type {
@@ -139,6 +139,25 @@ export function planSync(input: PlanInput): SyncPlan {
       remoteUpdatedAt: r?.updatedAt ?? "",
     });
     if (posMerge.winner === "local") indexChanged = true;
+    // task-47：**编辑锁字段独立合并**（与 tagIds 同一层，脱离内容判定；判据 = 云端基线 + lockedAt LWW）。
+    // 锁不是分布式租约/合并屏障；它不 bump updatedAt，所以只按内容判定永远发不出去。
+    //  - 锁赢家=本地 ⇒ 必须发布（indexChanged + publishedLakeIds），与他端是否正在编辑正文无关；
+    //  - 锁赢家=远端 ⇒ 应用远端锁（本轮无 apply-remote 时用 apply-lock 写回本地世界）；
+    //  - 无变化（同版本）⇒ 不动，避免两端互刷。
+    const lockMerge = mergeNoteLock({
+      base: lockStateOf(baseNotesById.get(p.id)),
+      local: lockStateOf(l),
+      remote: lockStateOf(r),
+    });
+    const lockLocalWins = lockMerge.winner === "local";
+    const lockRemoteWins = lockMerge.winner === "remote";
+    if (lockLocalWins) {
+      indexChanged = true;
+      publishedLakeIds.add(p.id);
+    }
+    if (lockRemoteWins && lockMerge.state && !(p.applyRemote && r)) {
+      writes.push({ kind: "apply-lock", space: "lake", id: p.id, locked: lockMerge.state.locked, lockedAt: lockMerge.state.lockedAt });
+    }
     // P1-4 正文突变保护：可疑篇**不上传、不发布本地内容**，先留档历史 + warning。
     // 注意：仍允许「远端更新」路径把云端版本写回（那是修复本地损坏，不是上传）；
     // 发布索引里可疑篇只用远端版本（远端没有 ⇒ 整条不发布 = 不拿可疑内容覆盖云端）。
@@ -179,7 +198,11 @@ export function planSync(input: PlanInput): SyncPlan {
     if (p.applyRemote && r) {
       // task-44：应用远端内容时**位置取位置合并赢家**（本地赢 ⇒ 保留本地 parentId/trashedAt/deletedFromParentId，
       // 于是「B 编辑正文」不会回滚「A 的移动/移入回收站」）。
-      const meta = posMerge.winner === "local" && l ? withPosition({ ...r }, positionFields(posMerge.position!)) : { ...r };
+      const baseMeta = posMerge.winner === "local" && l ? withPosition({ ...r }, positionFields(posMerge.position!)) : { ...r };
+      // task-47：内容应用时**锁取锁合并赢家**——本地锁变化（他端正文更新）时不得用远端旧锁覆盖本地新锁。
+      const meta = lockLocalWins && lockMerge.state
+        ? { ...baseMeta, isLocked: lockMerge.state.locked, lockedAt: lockMerge.state.lockedAt }
+        : baseMeta;
       writes.push({ kind: "apply-remote", space: "lake", id: p.id, meta, bodyHash: r.contentHash });
       if (p.kind === "remote-wins-history") warnings.push({ code: "conflict_kept_history", space: "lake", id: p.id, title: r.title });
     }
@@ -345,6 +368,18 @@ export function planSync(input: PlanInput): SyncPlan {
             picked = withPosition({ ...picked }, positionFields(posMerge.position)) as typeof picked;
           }
         }
+        // task-47：**编辑锁字段按锁合并赢家单独合成**（与 tagIds 同一层，脱离内容判定）。
+        // 缺口回归：他端正文更新（download）时若不在发布条目里写本地锁，锁永远发不出去。
+        {
+          const lockMerge = mergeNoteLock({
+            base: lockStateOf(baseNotesById.get(p.id)),
+            local: lockStateOf(p.local),
+            remote: lockStateOf(p.remote),
+          });
+          if (lockMerge.state && (lockMerge.winner === "local" || lockMerge.winner === "remote")) {
+            picked = { ...picked, isLocked: lockMerge.state.locked, lockedAt: lockMerge.state.lockedAt } as typeof picked;
+          }
+        }
         // 261105 P1 复核（Review-A P1-1/P1-2）：标签字段按**关系 LWW 胜者单独合成**，与内容判定解耦。
         // 否则「远端标签更新 + 本地内容要发布」这一轮会用本地旧标签覆盖远端（published 分支还会丢弃 plan.writes）。
         const localTags = p.local?.tagIds;
@@ -370,6 +405,9 @@ export function planSync(input: PlanInput): SyncPlan {
             tagsUpdatedAt = lt || rt;
           }
         }
+        // task-61：**wire 不携带本地回收站容器 id**（`notebook-trash` 不在云端 folders[]，带出去就是悬空父）。
+        // trashed 条目的位置只由 trashedAt 表达，原始父在 deletedFromParentId；收件端按 trashedAt 落本地回收站容器。
+        if (picked.trashedAt) picked = { ...picked, parentId: null } as typeof picked;
         return {
           ...picked,
           // P0：有标签字段/版本时必须显式发布 tagIds（空集合也写 `[]`），否则「删光标签」在 wire 上不可见。

@@ -215,7 +215,7 @@ readPointer + loadState + loadBaseline → classifyCloudState
 ### 8.2 全量拉取 `pullAll`
 
 1. 并行取 lake/quick 两份索引；`archiveLocal` 时把**内容将被他端覆盖**的本地正文先写历史（hash 相同的不读不写）。
-2. 收敛「本机有、云上没有」：软删进回收站（Lake 文档设 `trashedAt/deletedFromParentId/parentId=回收站`）+ 记入 `remotePurged`；正文/附件/历史保留、不上传。小记同理由适配器进小记回收站。**绝不物理删除**（I0）。
+2. 收敛「本机有、云上没有」：软删进回收站（Lake 文档本地设 `trashedAt/deletedFromParentId/parentId=本地回收站容器`；**wire 上 trashed 条目 parentId 恒为 null**，见 §10.3）+ 记入 `remotePurged`；正文/附件/历史保留、不上传。小记同理由适配器进小记回收站。**绝不物理删除**（I0）。
 3. 本地内容复用：状态里的 contentHash 与远端一致 + 原生 stat 存在 ⇒ 不重下；否则批量读本地按 sha256 比对。
 4. 正文按 `BODY_CHUNK = 100` 分块下载并**分块 saveState**（文档边下边可打开）；小记正文先下、等图片声明/资源就绪后再落库。
 5. 资产：先并发取声明，再按全局流水线只补缺失/损坏字节；`deferAssets=true` 时本轮不搬媒体（打开/预览时由 `backfillV3Assets` 补拉）。
@@ -284,7 +284,7 @@ retryPendingAssets（上轮失败附件先补）
 
 ### 9.2 文档/目录的补充规则
 
-- 元数据（title/sortOrder/icon）：内容一致时按 `updatedAt` 后写胜；**`parentId`/`trashedAt`/`deletedFromParentId` 走 §9.5 独立合并**；锁字段独立按 `lockedAt` 字符串 LWW（锁变更不 bump updatedAt）。
+- 元数据（title/sortOrder/icon）：内容一致时按 `updatedAt` 后写胜；**`parentId`/`trashedAt`/`deletedFromParentId` 走 §9.5 独立合并**；**编辑锁 `isLocked`/`lockedAt` 走 §9.8 独立合并**（锁变更不 bump updatedAt）。
 - 环检测（`isRemoteDescendant`）：本地新父在远端树中位于本节点之下 ⇒ 跟随远端断开（避免两端成环）。
 - 目录：无独立对象；删除意图 + 远端存在 → local-purge；本地有远端无且「基线存在 + 本地不在回收站 + updatedAt 晚于基线」→ 视为显式恢复重新发布（D4），否则跟随进回收站。
 - 父节点非法/缺失由**适配器**回落兜底笔记本（懒建「未分类」），合并层不做父集合闸门。
@@ -315,6 +315,7 @@ retryPendingAssets（上轮失败附件先补）
 - **与内容判定正交**：内容赢家仍按 §9.1/§9.2。内容赢家是远端（`download` / `remote-wins-history`）时**不得上传本地旧字节**——apply 先下载后上传，本地正文此时已是远端字节，上传必然 `hash-mismatch` 并把索引条目的位置回退成远端（纯移动轮被抹掉）；元数据仍由位置赢家 + `indexChanged` 发布。
 - **发布条目按位置赢家组装**：内容取内容判定赢家，位置三件套取位置合并赢家（本地赢/远端赢都投影进发布条目）；这是「纯移动轮 / 回收站轮也能把位置发出去」的关键。
 - **回收站也走这条路径**：移入回收站 = 位置三件套变化（§10.3），因此「A 删除、B 编辑正文」不会互相回滚。
+- **wire 位置投影口径（261112 task-61；不改字段、只归一值）**：`positionOf` 对 `trashedAt` 非空的条目把 `parentId` 视作 `null`（比较与发布同口径）。桌面本地 trashed 行的 `notes.parent_id` 指向本地容器 `notebook-trash`，该 id 不在云端 `folders[]`（带出去就是悬空父）；归一后「本地容器 id vs 基线 null vs 移动端保留原父」三种表示不再被判成位置变化，避免每轮误发布。位置只由 `trashedAt` 表达，原始父在 `deletedFromParentId`。
 - **已知近似（不新增 wire 字段的代价）**：wire 没有独立的位置时间/版本字段，两边都动时复用条目 `updatedAt`（内容时间）做 LWW ⇒
   ① 移动与正文编辑共用同一时间戳，无法独立排序；
   ② 两端在同一毫秒各改位置时「相等取本地」会让本轮各自保留本地一版（无独立时钟，后续某方 `updatedAt` 严格更新才收敛）；
@@ -342,6 +343,24 @@ retryPendingAssets（上轮失败附件先补）
 - **边界**：只降级「单篇应用」阶段；批量提交/文件系统整体失败（如 `executeSet`、`rename`）仍在循环外 ⇒ 整轮失败。与 §17「单对象失败不炸整轮」同一口径。
 - 结构单一来源：`SyncWarning` / `SyncWarningKind` 在 `src/core/sharedTypes.ts`（`src/lib/types.ts` re-export）；kinds 见 §8.5。
 
+### 9.8 编辑锁字段的独立合并（261112 task-47）
+
+**语义**：锁 = **本机只读保护标记**，不是分布式租约、也不是合并屏障。他端已发布的正文必须正常应用（内容合并不因锁失败），A 的锁保留；A 端自己的编辑入口仍按只读态拒绝（§3#16 / §9.6 入口层守卫）。
+
+**判据单一来源 = `src/core/s3v3/plan/positionMerge.ts` 的 `mergeNoteLock`（纯函数）**：
+
+| 本地相对 base | 远端相对 base | 锁赢家 | 效果 |
+|---|---|---|---|
+| 变了 | 没变 | **本地** | `indexChanged = true` + `publishedLakeIds.add(id)`（与内容赢家无关；**他端持续编辑正文期间也能发出去**） |
+| 没变 | 变了 | **远端** | 应用远端锁：随 `apply-remote` meta，或独立写操作 `apply-lock`（只改 `isLocked/lockedAt`） |
+| 都变了 | 都变了 | `lockedAt` LWW | 时间戳相等/都空时**加锁优先**（确定性 tie-break，两端同选） |
+| 无基线 | — | `lockedAt` LWW | 同上兜底 |
+
+- **为什么必须独立**：锁变更不 bump `updatedAt`，若只在内容判定（`decideItem` 的 `none` 分支）里比较锁，`download` 轮永远不会发布本地锁 ⇒ B 端在没感知锁的情况下可持续写。
+- **发布条目按锁赢家组装**：内容取内容赢家、位置取位置赢家、锁取锁赢家（三者相互正交）。
+- **解锁传播**：靠「本地 vs 基线」变更检测（`isLocked` 变了解锁即算锁变化），**不依赖"解锁必须写 lockedAt"**——缺时间戳的解锁也能赢；两边都动时才退回 `lockedAt` LWW。
+- 回归：`electron/s3v3/lockPropagation.test.ts` L1–L5（含 L2「B 连续两轮编辑时锁仍传播」）。
+
 ## 10. 删除 = 缺席
 
 ### 10.1 本地彻底删除（purge）
@@ -360,7 +379,7 @@ retryPendingAssets（上轮失败附件先补）
 
 - **删除 = 移动**：移入回收站是**位置变更**，不是内容删除——索引保留条目并写 `trashedAt`（进入回收站时间）+ `deletedFromParentId`（删除前父，恢复位置）；正文/附件/历史不删，**不写墓碑**。
 - **`trashedAt` 是唯一权威标记**：`parentId` 在 trashed 条目上**不承载树父语义**（可能是本地容器 id，也可能是原父）。消费方必须按 `trashedAt` 判回收站、恢复位置只看 `deletedFromParentId`；**不得**依据 trashed 条目的 `parentId` 做树遍历/父校验/恢复。
-- **本地容器 id `notebook-trash`**（单一来源 `src/core/syncDecisions.ts`）：**不进 wire 的 `folders[]`**（两端发布都排除），也不作为对外 parent 语义。两端本地表示当前不同：桌面 `notes.parent_id` 历史实现指向该容器（原父记在 `deleted_from_parent_id`）；移动端不写该 id（保留原父 + `trashed_at` + `deleted_from_parent_id`）。**新代码不得依赖该 id 的 parent 语义**（只允许作为本地容器判据：目录排除/回收站列表等）。
+- **本地容器 id `notebook-trash`**（单一来源 `src/core/syncDecisions.ts`）：**不进 wire 的 `folders[]`**（两端发布都排除），也不作为对外 parent 语义。**wire 上 trashed 条目的 `parentId` 恒为 `null`**（261112 task-61 归一：`positionMerge.positionOf` 投影；位置只由 `trashedAt` 表达，原始父在 `deletedFromParentId`；收件端仍按 `trashedAt` 落本地回收站容器）。两端**本地**表示仍可不同：桌面 `notes.parent_id` 历史实现指向该容器（原父记在 `deleted_from_parent_id`）；移动端不写该 id（保留原父 + `trashed_at` + `deleted_from_parent_id`）——**这只影响本机存储，不影响 wire**。**新代码不得依赖该 id 的 parent 语义**（只允许作为本地容器判据：目录排除/回收站列表等）。
 - **收件端（261112 P0）**：本地已在回收站 + 远端 active 编辑 ⇒ 应用内容/标题/图标等字段，**保留本地回收站、不隐式恢复**；唯二恢复例外 = 云端基线本身是 trashed 条目（他端显式恢复已传播）或本机 `restorePending`（§11）。丢弃「远端 active 就恢复」的旧实现。
 - **purge = 缺席**：彻底删除 = 索引条目消失 + 前缀清理（`objects/{id}-`、`assets/{id}/`、`meta/assets/{id}/`）；Lake 没有墓碑对象可传播（小记另有 `purged[]`，§10.4）。
 - 回收站自动过期（`trashAutoPurgeDays`，默认 90 天）到点 purge；`cloud_deleted`（仅本地）副本**不豁免**。被动收到的删除（他端）≠ 本端主动删除：副本只读、可恢复、不参与 S3，唯一例外是显式恢复。

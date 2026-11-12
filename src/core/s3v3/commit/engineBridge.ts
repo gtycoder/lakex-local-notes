@@ -186,7 +186,7 @@ export function mergeRoundIntoState(state: DeviceState, round: RoundResult, opts
   }
   // 未发布（纯拉取/零变更）：先把 apply-remote 写回本地索引（漏掉 = 正文落盘但标题/锁/图标不变）。
   // **快路径**：本轮没有任何 apply-remote / 位置写 ⇒ 索引原样复用（不回 O(n) 复制、也不排序）。
-  if (!round.plan.writes.some((w) => w.kind === "apply-remote" || w.kind === "apply-position") && folderWrites.length === 0) {
+  if (!round.plan.writes.some((w) => w.kind === "apply-remote" || w.kind === "apply-position" || w.kind === "apply-lock") && folderWrites.length === 0) {
     return { ...sd, pending: round.commit.status === "retry" ? state.pending : round.remainingPending, intents: round.intents.intents, restorePending: round.intents.restorePending };
   }
   const lakeById = new Map(sd.lake.notes.map((n) => [n.id, n] as const));
@@ -199,6 +199,13 @@ export function mergeRoundIntoState(state: DeviceState, round: RoundResult, opts
     if (w.position.trashedAt) next.trashedAt = w.position.trashedAt; else delete next.trashedAt;
     if (w.position.deletedFromParentId) next.deletedFromParentId = w.position.deletedFromParentId; else delete next.deletedFromParentId;
     lakeById.set(w.id, next);
+  }
+  // task-47：纯锁写（远端锁更新而本地内容是赢家）——只改 isLocked/lockedAt，正文/位置不动。
+  for (const w of round.plan.writes) {
+    if (w.kind !== "apply-lock" || w.space !== "lake") continue;
+    const prev = lakeById.get(w.id);
+    if (!prev) continue;
+    lakeById.set(w.id, { ...prev, isLocked: w.locked, lockedAt: w.lockedAt ?? null } as typeof prev);
   }
   const quickById = new Map(sd.quickNotes.items.map((q) => [q.id, q] as const));
   for (const w of round.plan.writes) {

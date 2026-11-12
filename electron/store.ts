@@ -1467,9 +1467,14 @@ export class Store {
     this.trashLifecycle.emptyTrash();
   }
 
-  /** M1.6：设置/清除文档或分组的自定义图标（emoji，本地化） */
+  /** M1.6：设置/清除文档或分组的自定义图标（emoji，本地化）。**用户入口**：回收站/purged 拒写。 */
   setNodeIcon(id: string, icon: string | null): TreeNode {
     return this.noteMetadata.setNodeIcon(id, icon);
+  }
+
+  /** 同步镜像写：只写 icon、允许回收站行（purged 仍拒）；与用户入口 `setNodeIcon` 分开（261112 G3）。 */
+  applyRemoteNodeIcon(id: string, icon: string | null): void {
+    this.noteMetadata.applyRemoteNodeIcon(id, icon);
   }
 
   moveTreeNode(id: string, parentId: string | null, sortOrder: number): TreeNode {
@@ -1952,11 +1957,19 @@ export class Store {
 
   /** 导入远端 notebook/group 节点。 */
   importRemoteFolder(folder: SyncFolder): void {
+    // F-01（P0，261112 task-62）：本机已彻底删除的目录**不接受它的回收站副本再被导进来**。
+    // 场景：A purge 分组后，B 仍持有该分组的回收站副本并在下一轮把它作为 trashed 目录发布 ⇒
+    // A 拉取时若照常 importRemoteFolder，会在本机重建一个已 purge 的目录（= 删除不传播）。
+    // **只拦 trashed 副本**：远端若是 active（trashedAt 空）= 他端**显式恢复**（AGENTS §3#4 的唯一
+    // 例外，恢复会重新上传并传播），必须放行，否则两端永久不一致且每轮重试都失败。
+    if (folder.trashedAt && this.isFolderPurged(folder.id)) return;
     this.noteMetadata.importRemoteFolder(folder);
   }
 
   /** v3：把合并结果里的目录元数据原样落库（含 updatedAt；不按新旧做条件）。 */
   applyRemoteFolderMeta(folder: SyncFolder): void {
+    // 同 importRemoteFolder：只拦「已 purge 目录的 trashed 副本」；远端 active = 他端显式恢复，放行。
+    if (folder.trashedAt && this.isFolderPurged(folder.id)) return;
     this.noteMetadata.applyRemoteFolderMeta(folder);
   }
 
