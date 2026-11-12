@@ -1,4 +1,6 @@
 import { createRequire } from 'node:module';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
 import { execSync } from 'node:child_process';
 const req = createRequire(path.join(path.dirname(fileURLToPath(import.meta.url)), "../../package.json"));

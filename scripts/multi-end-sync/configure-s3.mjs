@@ -1,13 +1,17 @@
-// 给 Android 端配置 S3（凭证从 env 读，不进命令行/不打印）
-const port = process.argv[2];
+// 给一端或多端配置 S3（凭证从 env 读，不进命令行/不打印）。
+// 261112：支持 `configure-s3.mjs 9232 9233 9234`（此前只读 argv[2]，多端口时后两个静默未配置）。
+const PORTS = process.argv.slice(2);
+if (PORTS.length === 0) { console.error("usage: configure-s3.mjs <port> [port...]"); process.exit(1); }
 const cfg = {
   endpoint: process.env.S3_ENDPOINT, region: process.env.S3_REGION, bucket: process.env.S3_BUCKET,
   prefix: process.env.PREFIX, accessKeyId: process.env.S3_AK, secretAccessKey: process.env.S3_SK,
   forcePathStyle: false,
 };
+async function configureOne(port) {
 async function target() {
   const list = await (await fetch("http://127.0.0.1:" + port + "/json/list")).json();
-  return list.find((t) => t.type === "page");
+  // 冷启动时有 boot 遮罩页（无 lakeNative 桥）⇒ 只认应用页。
+  return list.find((t) => t.type === "page" && !/boot\.html/.test(t.url || "")) || null;
 }
 async function evalExpr(page, expr) {
   const ws = new WebSocket(page.webSocketDebuggerUrl);
@@ -36,3 +40,5 @@ const expr = "window.lakeNative.saveS3Settings(" + JSON.stringify(cfg) + ").then
 const out = await evalExpr(page, expr);
 if (out && out.exceptionDetails) { console.error("EXC", JSON.stringify(out.exceptionDetails)); process.exit(3); }
 console.log("port " + port + " -> " + JSON.stringify(out.result && out.result.value));
+}
+for (const port of PORTS) await configureOne(port);

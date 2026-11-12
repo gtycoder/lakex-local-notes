@@ -14,7 +14,13 @@ const ENDS = [
   { id: 'R', type: 'android', port: 9235, serial: '50950385' },
   { id: 'E', type: 'android', port: 9236, serial: 'emulator-5554' }
 ];
-const C = {}; for (const e of ENDS) C[e.id] = await connect(e.port);
+// 261112：允许只起部分端（缺 CDP 就 SKIP，不硬失败）；桌面 dev 三端即可跑完 F1–F6。
+const C = {}; const ACTIVE = [];
+for (const e of ENDS) {
+  try { C[e.id] = await connect(e.port, { waitMs: 5000 }); ACTIVE.push(e); }
+  catch (err) { console.log('SKIP ' + e.id + ' (no CDP on ' + e.port + '): ' + (err && err.message)); }
+}
+ENDS.length = 0; ENDS.push(...ACTIVE);
 const results = [];
 function check(name, ok, detail) { results.push({ name, ok }); console.log('  ' + (ok ? 'PASS' : 'FAIL') + ' ' + name + (detail ? ' | ' + detail : '')); }
 function find(id) { return ENDS.find(function (e) { return e.id === id; }); }
@@ -22,7 +28,7 @@ function ev(id, expr) { return C[id].ev(expr); }
 const IDS = ENDS.map(function (e) { return e.id; });
 async function sync(id) { return ev(id, 'window.lakeNative.syncNow()'); }
 async function syncAll(creator) { for (const id of [creator].concat(IDS.filter(function (x) { return x !== creator; }))) await sync(id); }
-async function tree(id) { return ev(id, 'window.lakeNative.getHomeSnapshot().then(function(s){return s.treeNodes;}).then(function(t){return t.map(function(n){return {id:n.id,title:n.title,type:n.nodeType,parentId:n.parentId,sortOrder:n.sortOrder,icon:n.icon||null};});})'); }
+async function tree(id) { return ev(id, 'window.lakeNative.listTreeNodes().then(function(t){return t.map(function(n){return {id:n.id,title:n.title,type:n.nodeType,parentId:n.parentId,sortOrder:n.sortOrder,icon:n.icon||null};});})'); }
 function pullMobile(e) {
   const dir = '/tmp/lake5/db-' + e.serial; fs.mkdirSync(dir, { recursive: true });
   for (const f of ['lakex-local-notes-mobileSQLite.db', 'lakex-local-notes-mobileSQLite.db-wal']) { try { const b = execSync(ADB + ' -s ' + e.serial + ' exec-out run-as com.lakexlocalnotes.android cat databases/' + f, { maxBuffer: 200 * 1024 * 1024 }); fs.writeFileSync(dir + '/' + f, b); } catch (err) {} }

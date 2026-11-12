@@ -18,7 +18,7 @@ const ENDS = [
 ];
 const C = {}; const ACTIVE = [];
 for (const e of ENDS) {
-  try { C[e.id] = await connect(e.port); ACTIVE.push(e); }
+  try { C[e.id] = await connect(e.port, { waitMs: 5000 }); ACTIVE.push(e); }
   catch (err) { console.log('SKIP ' + e.id + ' (no CDP on ' + e.port + '): ' + (err && err.message)); }
 }
 ENDS.length = 0; ENDS.push(...ACTIVE);
@@ -42,7 +42,7 @@ async function mobileActive(id) { return ev(id, 'window.lakeNative.getHomeSnapsh
 async function mobileTrash(id) { return ev(id, 'window.lakeNative.listTrashTree().then(function(t){return t.filter(function(x){return x.kind==="note";}).map(function(x){return {id:x.id,title:x.title};});})'); }
 async function notes(id) {
   const e = find(id);
-  if (e.type === 'desktop') return ev(id, 'window.lakeNative.getHomeSnapshot().then(function(s){return s.treeNodes;}).then(function(t){return t.filter(function(n){return n.nodeType==="note";}).map(function(n){return {id:n.id,title:n.title,kind:n.kind||"doc"};});})');
+  if (e.type === 'desktop') return ev(id, 'window.lakeNative.listTreeNodes().then(function(t){return t.filter(function(n){return n.nodeType==="note";}).map(function(n){return {id:n.id,title:n.title,kind:n.kind||"doc"};});})');
   const live = await mobileActive(id); const db = pullMobile(e); const km = {}; db.forEach(function (n) { km[n.id] = n.kind; });
   return live.map(function (n) { return { id: n.id, title: n.title, kind: km[n.id] || 'doc' }; });
 }
@@ -56,13 +56,18 @@ async function contentOf(id, noteId) {
   if (e.type === 'desktop') return ev(id, 'window.lakeNative.readNote(' + JSON.stringify(noteId) + ').then(function(n){return n.content;})');
   const row = pullMobile(e).find(function (n) { return n.id === noteId; }); return row ? row.content : '';
 }
-async function quickInv(id) { return ev(id, 'window.lakeNative.getQuickNotePage().then(function(p){return p.items;}).then(function(q){return q.map(function(x){return {id:x.id,text:x.previewText,images:x.imageCount};});})'); }
-async function treeOf(id) { return ev(id, 'window.lakeNative.getHomeSnapshot().then(function(s){return s.treeNodes;}).then(function(t){return t.map(function(n){return {id:n.id,title:n.title,type:n.nodeType};});})'); }
+async function quickInv(id) {
+  const e = find(id);
+  // 261112：桌面端旧 API getQuickNotePage 已改为 listQuickNotes（移动 WebView 仍是旧名）。
+  if (e.type === 'desktop') return ev(id, 'window.lakeNative.listQuickNotes().then(function(q){return q.map(function(x){return {id:x.id,text:x.previewText,images:x.imageCount};});})');
+  return ev(id, 'window.lakeNative.getQuickNotePage().then(function(p){return p.items;}).then(function(q){return q.map(function(x){return {id:x.id,text:x.previewText,images:x.imageCount};});})');
+}
+async function treeOf(id) { return ev(id, 'window.lakeNative.listTreeNodes().then(function(t){return t.map(function(n){return {id:n.id,title:n.title,type:n.nodeType,parentId:n.parentId,sortOrder:n.sortOrder,icon:n.icon||null};});})'); }
 const s3 = new S3Client({ endpoint: process.env.S3_ENDPOINT, region: process.env.S3_REGION, credentials: { accessKeyId: process.env.S3_AK, secretAccessKey: process.env.S3_SK }, forcePathStyle: false });
 async function s3list(p) { const o = []; let token; do { const r = await s3.send(new ListObjectsV2Command({ Bucket: process.env.S3_BUCKET, Prefix: p, ContinuationToken: token })); (r.Contents || []).forEach(function (x) { o.push(x.Key); }); token = r.IsTruncated ? r.NextContinuationToken : undefined; } while (token); return o; }
 const prefix = process.env.PREFIX;
 const sfx = String(Date.now()).slice(-6);
-const nbId = ((await ev('D1', 'window.lakeNative.getHomeSnapshot().then(function(s){return s.treeNodes;})')).find(function (n) { return n.nodeType === 'notebook'; }) || {}).id || null;
+const nbId = ((await ev('D1', 'window.lakeNative.listTreeNodes()')).find(function (n) { return n.nodeType === 'notebook'; }) || {}).id || null;
 
 console.log('== Phase 11: non-doc content byte-equality across ends ==');
 const usheet = await ev('D1', 'window.lakeNative.createUsheetIn(' + JSON.stringify(nbId) + ', "p11-usheet-' + sfx + '")');
@@ -76,11 +81,14 @@ for (const c of [{ n: usheet, k: 'usheet' }, { n: bitable, k: 'bitable' }, { n: 
   if (allEq) check('all ends ' + c.k + ' content bytes equal', true, 'len=' + ref.length);
 }
 
-console.log('== Phase 12: quick-note image/asset propagation (E creates image) ==');
-const qid = await ev('E', 'window.lakeNative.createQuickNote("p12-asset-' + sfx + '")');
+console.log('== Phase 12: quick-note image/asset propagation (D1 creates image) ==');
+// 261112：改为桌面端执行（旧脚本用 Android E）；API 也从 saveQuickNoteWithImages 改为 stageQuickNoteImage + createQuickNote。
+const qdraft = 'p12-' + sfx;
 const pngB64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
-await ev('E', '(function(){var b=atob("' + pngB64 + '");var a=new Uint8Array(b.length);for(var i=0;i<b.length;i++)a[i]=b.charCodeAt(i);return window.lakeNative.saveQuickNoteWithImages(' + JSON.stringify(qid) + ', "p12-asset-' + sfx + '", [{filename:"p12.png",mimeType:"image/png",width:1,height:1,bytes:a}]);})()');
-await syncAll('E');
+const staged = await ev('D1', '(function(){var b=atob("' + pngB64 + '");var a=new Uint8Array(b.length);for(var i=0;i<b.length;i++)a[i]=b.charCodeAt(i);return window.lakeNative.stageQuickNoteImage(' + JSON.stringify(qdraft) + ', {bytes:a, filename:"p12.png"});})()');
+const qCreated = await ev('D1', 'window.lakeNative.createQuickNote({text:"p12-asset-' + sfx + '", draftId:' + JSON.stringify(qdraft) + ', stagedImageIds:[' + JSON.stringify(staged.id) + ']})');
+const qid = qCreated.id;
+await syncAll('D1');
 for (const id of IDS) { const row = (await quickInv(id)).find(function (q) { return q.id === qid; }); check(id + ' quick imageCount>=1', !!row && row.images >= 1, row ? 'images=' + row.images : 'missing'); }
 const assetKeys = await s3list(prefix + '/quick-notes/assets/' + qid + '/');
 check('cloud has quick note asset', assetKeys.some(function (k) { return k.indexOf('/quick-notes/assets/' + qid + '/') >= 0 && k.slice(-4) === '.png'; }), JSON.stringify(assetKeys));
