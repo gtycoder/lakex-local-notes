@@ -63,6 +63,7 @@
 - 后果 A（推断）：移动端删除的文档发布后 wire 上无 `deletedFromParentId`；桌面应用远端元数据时 `deletedFrom = note.deletedFromParentId ?? null`（`electron/syncReconciliation.ts:127-128`）⇒ 桌面 `restoreTrashItem` 失去原父，恢复会落兜底/根。
 - 后果 B（已核实语义）：移动端自身恢复依赖 `COALESCE(deleted_from_parent_id, parent_id)`，一旦 `parent_id` 被 N1 污染就直接丢位置；补 `deleted_from_parent_id` 可让恢复对 N1 免疫。
 - 修法：移动端软删（单篇 + 批量/子树）补 `deleted_from_parent_id = COALESCE(deleted_from_parent_id, parent_id)`；恢复后清空；发布侧 `listNotesSyncMeta` 已带该列（`:187`）无需改 wire。
+- **口径补充（261112 用户裁决，task-53 修正）**：**「恢复历史版本」= 内容动作，不改变生命周期**；只有回收站里显式「恢复」才动 `trashed_at/parent_id`。桌面 `NoteContentRepository.restoreHistory`（直接写正文、行留在回收站）是正确口径。**移动端已对齐桌面**：`saveRestoredSnapshot → noteRepository.saveRestoredNoteContent`（等价 `saveSynced/allowTrashed`：只写正文/标题/缓存，不动 trashed_at/parent_id/restore_pending_at；purged/墓碑仍拒绝「不可恢复」）；`restoreSyncConflict(remote_wins)` 同口径。**不要**在恢复历史的路径上调 `restoreTreeItem`（会让文档离开回收站 = 改变用户显式生命周期）。
 
 ### N3【P2 · 已核实】`applyRemoteNoteMeta` 对 trashed 行整体跳过元数据（桌面全写）
 - 证据：`mobilePlatformPort.ts:402-431` 两段都被 `if (!note.trashedAt && !locallyEdited)` 挡住；桌面 `syncReconciliation.ts:123-158` 无条件写 title/parent/sort/updated_at/trashed_at/deleted_from（仅 `expectedLocalUpdatedAt` 守卫）。
