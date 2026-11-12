@@ -39,6 +39,7 @@ sleep 18
 echo "配置 S3（唯一前缀）…"
 node scripts/multi-end-sync/configure-s3.mjs 9232 9233 9234 2>&1 | tail -3
 
+export SCN_USERDATA_ROOT=/tmp/lake5
 echo "== 跑 13 条 B 档场景 $(date +%T) =="
 node scripts/multi-end-sync/scenario58.mjs > /tmp/lake5/scn58.out 2>&1
 SCN_EXIT=$?

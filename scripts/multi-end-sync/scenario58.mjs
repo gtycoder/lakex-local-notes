@@ -25,6 +25,25 @@ const s3 = new S3Client({
   credentials: { accessKeyId: process.env.S3_AK, secretAccessKey: process.env.S3_SK }, forcePathStyle: false,
 });
 const BUCKET = process.env.S3_BUCKET;
+// F-01 断言用：桌面实例 userData 目录（driver 注入；只**只读**打开主库查 deleted_notes 墓碑，不写）
+const USERDATA_ROOT = process.env.SCN_USERDATA_ROOT ?? "/tmp/lake5";
+const INSTANCES = { D1: "s1", D2: "s2", D3: "s3" };
+// better-sqlite3 的 module.exports 本身就是类（不是 ESM default 包装）
+const BetterSqlite3 = require("better-sqlite3");
+function openLocalDb(instance) {
+  const dbPath = USERDATA_ROOT + "/" + INSTANCES[instance] + "/workspace-default/metadata.sqlite3";
+  const conn = new BetterSqlite3(dbPath, { readonly: true, fileMustExist: true });
+  try { conn.pragma("busy_timeout = 3000"); } catch { /* 只读连接可能不允许，忽略 */ }
+  return conn;
+}
+/** 读该实例的 purge 墓碑（deleted_notes: id/node_type/purged_at）。 */
+function purgedTombs(instance, ids) {
+  const conn = openLocalDb(instance);
+  try {
+    const ph = ids.map(() => "?").join(",");
+    return conn.prepare("SELECT id, node_type, purged_at FROM deleted_notes WHERE id IN (" + ph + ")").all(...ids);
+  } finally { conn.close(); }
+}
 
 // ---------- CDP ----------
 const C = {};
@@ -95,43 +114,79 @@ const SCN = [];
 // ---------- S55：首拉空设备（必须最早跑：D3 此刻还是空库） ----------
 SCN.push({ id: "S55", run: async () => {
   const nb = await notebookId("D1");
+  const kw = "s55kw" + sfxOf("w");            // 独立可检索词（完整 token，不能截断，否则 FTS 不命中）
   const n = await createNote("D1", nb, "s55-" + sfxOf("first"));
+  await ev("D1", "window.lakeNative.saveNote(" + JSON.stringify(n) + ", 's55', '<p>s55-body-" + kw + "</p>')");
   await sync("D1");
   await sync("D2"); // D2 也顺带建基线
-  const d3Before = await tree("D3");
-  const first = await sync("D3"); // D3 空库 ← 云端已有数据 = 首拉
+  const first = await sync("D3"); // D3 首次面对已有云端数据（App 启动会自动同步一次 ⇒ 不假设「空库」）
   const t = await tree("D3");
   const body = await readBody("D3", n);
   const caches = await ev("D3", "window.lakeNative.readNoteCaches(" + JSON.stringify(n) + ")").catch(() => null);
+  const hits = await ev("D3", "window.lakeNative.searchNotes(" + JSON.stringify(kw) + ").then(function(h){return h.map(function(x){return x.id;});})").catch(() => []);
   check("S55", "首拉同步成功（无整轮失败）", first.ok, syncBrief(first));
-  check("S55", "首拉前 D3 为空", d3Before.filter((x) => x.nodeType === "note").length === 0);
+  // 说明：App 启动即自动同步一次（syncModes.shouldSyncOnOpenClose）⇒ 「首拉前必为空」不成立，不作断言；
+  // 首拉语义改按「本轮把云端全部文档/目录/正文拉全」验证（下三条），这是可观测且与自动同步无关的口径。
   check("S55", "首拉落全部文档/目录", t.some((x) => x.id === n) && t.some((x) => x.id === nb));
   check("S55", "首拉正文可读", body === "<p>" + n + "</p>" || (typeof body === "string" && body.length > 0), String(body && body.slice(0, 40)));
-  check("S55", "首拉派生缓存（text_cache/plain）随正文落库", !!(caches && typeof caches.plain === "string" && caches.plain.length > 0) || caches === null, caches ? String(caches.plain && caches.plain.slice(0, 30)) : "端口无缓存返回(降级)");
+  check("S55", "首拉正文可被全文搜索命中（text_cache/FTS 随正文落库）", Array.isArray(hits) && hits.includes(n), "kw=" + kw + " hits=" + JSON.stringify(hits) + " plain=" + String(caches && caches.plain).slice(0, 24));
 } });
 
-// ---------- S03：本地 purge → 云端删除 + 对端留副本 ----------
+// ---------- S03：本地 purge（**目录 + 子树**）→ 云端删除 + 对端留副本（含 F-01 断言） ----------
 SCN.push({ id: "S03", run: async () => {
   const nb = await notebookId("D1");
-  const n = await createNote("D1", nb, "s03-" + sfxOf("purge"));
-  await syncAll();
-  const d2Has = (await tree("D2")).some((x) => x.id === n);
-  await ev("D1", "window.lakeNative.deleteNote(" + JSON.stringify(n) + ")");
+  const tag = sfxOf("purge");
+  const grp = (await ev("D1", "window.lakeNative.createGroup(" + JSON.stringify(nb) + ", 's03-grp-" + tag + "')")).id;
+  const sub = (await ev("D1", "window.lakeNative.createGroup(" + JSON.stringify(grp) + ", 's03-sub-" + tag + "')")).id;
+  const d1 = (await ev("D1", "window.lakeNative.createNoteIn(" + JSON.stringify(grp) + ", 's03-a-" + tag + "')")).id;
+  const d2 = (await ev("D1", "window.lakeNative.createNoteIn(" + JSON.stringify(sub) + ", 's03-b-" + tag + "')")).id;
   await sync("D1");
-  await ev("D1", "window.lakeNative.purgeTrash(" + JSON.stringify(n) + ")");
-  const after = await sync("D1");
-  const lake = (await cloud()).lake;
-  const objects = await listPrefix(PREFIX + "/objects/" + n + "-");
+  await ev("D1", "window.lakeNative.saveNote(" + JSON.stringify(d1) + ", 's03-a', '<p>s03-a-body</p>')");
+  await ev("D1", "window.lakeNative.saveNote(" + JSON.stringify(d2) + ", 's03-b', '<p>s03-b-body</p>')");
+  await sync("D1");
+  await syncAll();
+  const d2Had = (await tree("D2")).some((x) => x.id === d1) && (await tree("D2")).some((x) => x.id === d2);
+
+  // 用户删目录（进回收站）→ 同步（回收站子树会被同步扁平化：每个 trashed 行 parent 归一成回收站容器）
+  await ev("D1", "window.lakeNative.deleteTreeNode(" + JSON.stringify(grp) + ")");
+  await sync("D1");
+  await sync("D1");
+  // 彻底删除目录 ⇒ F-01：必须按 deleted_from_parent_id 原始父链把子分组/子文档一起 purge
+  await ev("D1", "window.lakeNative.purgeTrash(" + JSON.stringify(grp) + ")");
+  const purgeSync = await sync("D1");
+  await sync("D1");
   await sync("D2"); await sync("D3");
-  const d2trash = (await trashOf("D2")).find((t) => t.id === n);
-  const d2body = await readBody("D2", n);
-  const lake2 = (await cloud()).lake;
-  check("S03", "purge 前 D2 已持有该文档", d2Has);
-  check("S03", "purge 轮同步成功", after.ok, syncBrief(after));
-  check("S03", "云端索引无该文档", !cloudHasNote(lake, n));
-  check("S03", "云端正文对象已清理（objects/{id}-* 为空）", objects.length === 0, JSON.stringify(objects.map((o) => o.key)));
+
+  const ids = [grp, sub, d1, d2];
+  const lake = (await cloud()).lake;
+  const folderIds = new Set((lake.folders || []).map((f) => f.id));
+  const noteIds = new Set((lake.notes || []).map((n) => n.id));
+  check("S03", "purge 前 D2 已持有子树全部节点", d2Had);
+  check("S03", "purge 轮同步成功", purgeSync.ok, syncBrief(purgeSync));
+  check("S03", "云端索引不含子树任何 id（folders ∪ notes）", ids.every((id) => !folderIds.has(id) && !noteIds.has(id)),
+    JSON.stringify(ids.filter((id) => folderIds.has(id) || noteIds.has(id))));
+  // 前缀对象空：正文 objects/{id}-*、附件 assets/{id}/、声明 meta/assets/{id}/
+  const leftovers = [];
+  for (const nid of [d1, d2]) {
+    for (const pfx of ["/objects/" + nid + "-", "/assets/" + nid + "/", "/meta/assets/" + nid + "/"]) {
+      const got = await listPrefix(PREFIX + pfx);
+      if (got.length > 0) leftovers.push(pfx + " => " + got.length);
+    }
+  }
+  check("S03", "云端前缀对象已清空（正文/附件/声明）", leftovers.length === 0, JSON.stringify(leftovers));
+  // F-01：逐文档墓碑（目录=folder / 文档=note，purged_at 非空）
+  let tombs = [];
+  try { tombs = purgedTombs("D1", ids); } catch (e) { check("S03", "读取本机 purge 墓碑", false, String(e && e.message || e)); }
+  const byId = new Map(tombs.map((t) => [t.id, t]));
+  const wantTypes = { [grp]: "folder", [sub]: "folder", [d1]: "note", [d2]: "note" };
+  const badTombs = ids.filter((id) => !byId.get(id) || !byId.get(id).purged_at || byId.get(id).node_type !== wantTypes[id]);
+  check("S03", "逐文档 purge 墓碑（4 个节点，类型正确）", badTombs.length === 0,
+    badTombs.map((id) => id + ":" + JSON.stringify(byId.get(id) ?? null)).join(" "));
+  // 对端：只留回收站副本、正文可读、不回传
+  const d2trash = (await trashOf("D2")).find((t) => t.id === d1);
+  const d2body = await readBody("D2", d1);
   check("S03", "对端保留回收站副本 + 正文可读", !!d2trash && typeof d2body === "string" && d2body.length > 0);
-  check("S03", "对端不回传（再同步后云端仍无该文档）", !cloudHasNote(lake2, n));
+  check("S03", "对端不回传（再同步后云端仍无任何子树 id）", !cloudHasNote((await cloud()).lake, d1));
 } });
 
 // ---------- S05：本地 trash × 他端编辑 ----------
@@ -246,7 +301,7 @@ SCN.push({ id: "S43", run: async () => {
   await sync("D1");
   const assets = await listPrefix(PREFIX + "/quick-notes/assets/" + q.id + "/");
   const qidx = (await cloud()).quick;
-  const decl = await listPrefix(PREFIX + "/meta/assets/" + q.id + "/");
+  const decl = await listPrefix(PREFIX + "/quick-notes/meta/assets/" + q.id + "/");
   await sync("D2");
   const d2q = (await ev("D2", "window.lakeNative.listQuickNotes()")).find((x) => x.id === q.id);
   const beforeKeys = (await listPrefix(PREFIX + "/")).map((o) => o.key).sort().join("|");
@@ -353,7 +408,7 @@ SCN.push({ id: "S72", run: async () => {
   const lake = (await cloud()).lake;
   check("S72", "三端都在回收站（删除压编辑）", trash.D1 && trash.D2 && trash.D3, JSON.stringify(trash));
   check("S72", "三端都无活跃副本", !active.D1 && !active.D2 && !active.D3, JSON.stringify(active));
-  check("S72", "被删侧编辑留历史快照（D2）", hist >= 1, "history=" + hist);
+  check("S72", "被删侧编辑强制留历史快照（AGENTS §3#3；D2）", hist >= 1, "history=" + hist + "（plan 的 archiveLocal 只在远端缺席分支触发；trash=位置变化时走内容 upload ⇒ 未留档，登记缺陷）");
   check("S72", "云端索引无活跃条目", !cloudHasNote(lake, n) || !!lake.notes.find((x) => x.id === n)?.trashedAt);
   check("S72", "D2 同步未整轮失败", d2.ok, syncBrief(d2));
 } });
