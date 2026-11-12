@@ -184,7 +184,12 @@ const BASELINE = {
   // 261103：统计口径修正（逗号选择器按**单个选择器**拆分后比较，见 splitSelectorList）——
   // 旧口径下「a, b { x }」与「a { x }」不算重复，pad.css ↔ mobile.css 的 9 组双归属全部漏检。
   // 修正后实测 116 组；同日把平板通用几何整体迁进 pad.css（A4 单一归属）后 **105**；此后只许降。
-  crossFileDupGroups: 105,     // **同一端内**同一 (选择器,属性) 出现在 ≥2 个文件（真正的"层层套"）；跨端重复不计（设计允许 + C4-5 要求两端都写）
+  crossFileDupGroups: 66,      // 261112：删 35 条被上层压掉的 legacy 声明后实测 103 → 66（只许降）。口径 = **同一端内**同一 (选择器,属性) 出现在 ≥2 个文件（真正的"层层套"）；跨端重复不计（设计允许 + C4-5 要求两端都写）
+  // 261112 Q1：被更高层压掉的 legacy 声明数（同 at-rule 上下文 + 同选择器 + 同属性）。
+  // 261112 删 35 条后实测 21（原 58）：feature.css 3（未分层的 bitableEditor/boardEditor 压 feature 层）
+  //        + misc.css 4（a11y 已接管 reduced-motion，legacy 副本可下批删）
+  //        + 14 条"共享规则里只有部分选择器被压"（同一条规则还有生效的兄弟选择器 ⇒ 不能整条删，只能等重构）。只许降。
+  shadowedDecls: 21,
 };
 
 // ── !important 允许清单（Q2，261016；用户定："确实有必要用 !important 可以保留，不是一点不能用"）──
@@ -299,6 +304,95 @@ const crossFileDupTop = sameEndDups
   .map(([key, e]) => [key, e.desktop.size + e.mobile.size, [...e.desktop, ...e.mobile]])
   .sort((a, b) => (b[1] - a[1]) || a[0].localeCompare(b[0]));
 
+// ── ⑤ 被上层压掉的 legacy 声明（Q1，261112）──────────────────────────────────
+// 判据：同一 (at-rule 上下文, 单个选择器, 属性) 被**更高层**文件再声明过 ⇒ 低层那份永远不生效
+// （@layer 里层序即优先级，与特异性无关；未分层 > 任何层）。
+// 层序取自 src/styles/index.css 的 @import ... layer(X)；组件内 JS import 的 CSS 未分层 = 最高。
+// 排除：低层声明带 !important（会赢）；只看桌面 CSS（跨端重复是设计允许）。
+// 这条护栏把「改错文件」——本轮 03 报告 P1-1 的根因——变成机器可拦，而不是靠 review。
+const LAYER_RANK = { vendor: 0, legacy: 1, tokens: 2, kit: 3, shell: 4, feature: 5, overlay: 6, a11y: 7, unlayered: 9 };
+function layerRankMap() {
+  const map = new Map();
+  const entrySrc = readFileSync(join(ROOT, 'src/styles/index.css'), 'utf8');
+  for (const m of entrySrc.matchAll(/@import\s+"([^"]+)"\s+layer\(([a-z]+)\)/g)) {
+    if (m[1].startsWith('.')) map.set(resolve(join(ROOT, 'src/styles', m[1])), LAYER_RANK[m[2]] ?? 9);
+  }
+  for (const m of entrySrc.matchAll(/@import\s+"([^"]+)"\s*;/g)) {
+    if (m[1].startsWith('.')) map.set(resolve(join(ROOT, 'src/styles', m[1])), 9);   // 未分层入口（kernel-theme / 字体）
+  }
+  return map;
+}
+/** 带 at-rule 上下文的声明提取：(ctx, 单选择器, 属性, 值, 是否 !important)。 */
+function declsWithContext(css) {
+  const rules = [];
+  const stack = [];
+  let buf = '';
+  const atCtx = () => stack.filter((s) => s.at).map((s) => s.at).join('|');
+  for (let i = 0; i < css.length; i += 1) {
+    const ch = css[i];
+    if (ch === '{') {
+      const prelude = buf.trim().replace(/\s+/g, ' ');
+      buf = '';
+      if (/^@(keyframes|font-face|page)/i.test(prelude)) { stack.push({ skip: true }); continue; }
+      if (prelude.startsWith('@')) { stack.push({ at: prelude }); continue; }
+      if (stack.some((s) => s.skip)) { stack.push({ skip: true }); continue; }
+      stack.push({ sel: prelude, body: '', ctx: atCtx() });
+      continue;
+    }
+    if (ch === '}') { const top = stack.pop(); if (top && top.sel !== undefined) rules.push(top); buf = ''; continue; }
+    if (stack.some((s) => s.skip)) continue;
+    const top = stack[stack.length - 1];
+    if (top && top.sel !== undefined) top.body += ch; else buf += ch;
+  }
+  const out = [];
+  for (const rule of rules) {
+    const sels = splitSelectorList(rule.sel);
+    const body = [];
+    let depth = 0;
+    let seg = '';
+    for (const ch of rule.body) {
+      if (ch === '(') depth += 1;
+      if (ch === ')') depth = Math.max(0, depth - 1);
+      if (ch === ';' && depth === 0) { body.push(seg); seg = ''; } else seg += ch;
+    }
+    if (seg.trim()) body.push(seg);
+    for (const decl of body) {
+      const idx = decl.indexOf(':');
+      if (idx < 0) continue;
+      const prop = decl.slice(0, idx).trim();
+      if (!prop || prop.startsWith('--')) continue;
+      const value = decl.slice(idx + 1).trim();
+      const important = value.includes('!important');
+      for (const sel of sels) out.push({ ctx: rule.ctx, sel, prop, value, important });
+    }
+  }
+  return out;
+}
+const layerRanks = layerRankMap();
+const declIndex = new Map();
+for (const p of fontScope) {
+  const rank = layerRanks.has(resolve(p)) ? layerRanks.get(resolve(p)) : 9;
+  const file = relative(ROOT, p).replace(/^src\//, '');
+  const src = readFileSync(p, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  for (const decl of declsWithContext(src)) {
+    const key = decl.ctx + ' || ' + decl.sel + ' || ' + decl.prop;
+    if (!declIndex.has(key)) declIndex.set(key, []);
+    declIndex.get(key).push({ file, rank, value: decl.value, important: decl.important, sel: decl.sel, prop: decl.prop });
+  }
+}
+const shadowedSites = [];
+for (const [, list] of declIndex) {
+  const ranks = [...new Set(list.map((x) => x.rank))];
+  if (ranks.length < 2) continue;
+  const maxRank = Math.max(...ranks);
+  const winner = list.find((x) => x.rank === maxRank);
+  for (const x of list) {
+    if (x.rank >= maxRank || x.important) continue;
+    shadowedSites.push({ file: x.file, rank: x.rank, sel: x.sel, prop: x.prop, layerValue: x.value, winnerFile: winner.file, winnerValue: winner.value });
+  }
+}
+const shadowedDecls = shadowedSites.length;
+
 // ⑤ !important：桌面按**允许清单**逐条核对；移动端走棘轮
 const desktopImportantSites = [];
 for (const p of fontScope) for (const site of collectImportant(p)) desktopImportantSites.push({ file: relative(ROOT, p).replace(/^src\//, ''), ...site });
@@ -325,6 +419,8 @@ r.complianceGuard = {
   crossEndDupGroups: crossEndDups.length,
   crossFilePairTotal: dupOwners.size,
   crossFileDupTop: crossFileDupTop.slice(0, 10),
+  shadowedDecls,
+  shadowedSites,
   baseline: BASELINE,
 };
 
@@ -335,6 +431,7 @@ if (mobileImportant > BASELINE.mobileImportant) process.exitCode = 1;
 if (mobileColorLiterals > BASELINE.mobileColorLiterals) process.exitCode = 1;
 if (accentTextMisuse > BASELINE.accentTextMisuse) process.exitCode = 1;
 if (sameEndDups.length > BASELINE.crossFileDupGroups) process.exitCode = 1;
+if (shadowedDecls > BASELINE.shadowedDecls) process.exitCode = 1;   // Q1：往 legacy 写会被上层压掉的声明：直接失败
 if (aliasHits || undefHits) process.exitCode = 1;
 if (fontSizeLiterals) process.exitCode = 1;
 if (mobileFontLiterals > MOBILE_FONT_LITERAL_BASELINE) process.exitCode = 1;
@@ -373,4 +470,6 @@ else {
   console.log('     top:', g.accentTextTop.slice(0, 6).map(([f, n]) => f + '(' + n + ')').join('  ') || '（无）');
   console.log('  跨文件重复(选择器,属性)', g.crossFileDupGroups, ' / 基线', g.baseline.crossFileDupGroups, '（全部对', g.crossFilePairTotal + '）');
   console.log('     top:', g.crossFileDupTop.slice(0, 4).map(([k, n]) => k + ' ×' + n).join('  ') || '（无）');
+  console.log('  被上层压掉的声明  ', g.shadowedDecls, ' / 基线', g.baseline.shadowedDecls, '（只许降；新增直接失败）');
+  if (g.shadowedDecls > g.baseline.shadowedDecls) console.log('     ✗ 超基线的被压声明:', g.shadowedSites.slice(0, 8).map((x) => x.file + ' ' + x.sel + ' {' + x.prop + '} ← ' + x.winnerFile).join('  '));
 }

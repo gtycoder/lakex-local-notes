@@ -1,10 +1,12 @@
 /**
- * 图片放大预览控制器（Lake envAdapter.previewImgs → 共享 Lightbox）。
+ * 图片放大预览控制器（**正文解析 + 宿主挂载** → 共享 Lightbox）。
  *
- * Lake 图片卡片点击时（allowClickToMaximize）派发 previewImgs 事件，
- * payload 为文档内全部图片数组 + 当前索引（天然画廊）。本控制器是模块级
- * 单例 pub/sub：lakeRuntime 的 envAdapter 调 open()，ImageLightbox 订阅渲染，
- * 无需经过 React props 层层传递（桌面/移动端共用同一套）。
+ * 数据来源：图片列表必须由宿主从**正文**解析后传入（`extractImagesFromContent`）——
+ * 内核本构建的 `allowClickToMaximize` / `previewImgs` 回调**实测无效**（见下方 attach 注释：
+ * 「该构建拿不到 previewImgs 回调，正文才是权威列表」），不能等内核派发画廊。
+ * 本控制器只是模块级单例 pub/sub：宿主（EditorTab / LakeEditor / QuickNoteEditor / 小记卡片）
+ * 调 `openImagePreview()`，`ImageLightbox` 订阅渲染，无需经过 React props 层层传递
+ * （桌面/移动端共用同一套）。
  */
 
 import { trackImmersivePreview } from "../../lib/immersivePreview";

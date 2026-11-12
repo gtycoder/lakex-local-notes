@@ -3,6 +3,7 @@ import { AlertTriangle, CheckCircle2, CloudOff, History, LoaderCircle, Lock, Sav
 import type { DocumentStatusModel } from "../model/documentStatusModel";
 import { Popover } from "../ui/Overlay";
 import { usePopoverPosition } from "../../hooks/usePopoverPosition";
+import type { NoteKind } from "../../core/noteKind";
 
 export interface StatusBarNotice {
   text: string;
@@ -12,7 +13,7 @@ export interface StatusBarNotice {
 export interface DesktopStatusBarProps {
   showDocumentStats: boolean;
   /** 当前文档类型：非 doc 时「字数/图片」口径不适用（正文不是 Lake 文本），改为显示类型标签。 */
-  docKind?: "doc" | "usheet" | "bitable" | "board" | "ink";
+  docKind?: NoteKind;
   wordCount: number;
   imageCount: number;
   notice: StatusBarNotice | null;

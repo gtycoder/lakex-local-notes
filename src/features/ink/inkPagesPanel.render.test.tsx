@@ -158,6 +158,43 @@ describe("手写板「页面」面板", () => {
     await view.unmount();
   });
 
+  it("长按到点后随后的 click 被吞掉（进入拖拽，不跳页）", async () => {
+    const onJump = vi.fn();
+    const view = await mount({ onJump });
+    const cell = view.container.querySelector('.ink-pages-panel__cell[data-page-id="p1"]') as HTMLElement;
+    await act(async () => {
+      cell.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, clientX: 120, clientY: 160 }));
+    });
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 340)); });
+    expect(view.container.querySelector(".ink-pages-panel__cell.is-dragging")).not.toBeNull();
+    // 长按触发后浏览器仍会派发一次 click（手指抬起）⇒ 必须被吞掉，不能跳页
+    await act(async () => {
+      view.container.querySelector('[aria-label="打开第 1 页"]')!.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    });
+    expect(onJump).not.toHaveBeenCalled();
+    await act(async () => { window.dispatchEvent(new MouseEvent("pointerup", { bubbles: true })); });
+    await view.unmount();
+  });
+
+  it("长按未到点前移动 > 8px ⇒ 取消（不进拖拽，随后的 click 照常跳页）", async () => {
+    const onJump = vi.fn();
+    const view = await mount({ onJump });
+    const cell = view.container.querySelector('.ink-pages-panel__cell[data-page-id="p2"]') as HTMLElement;
+    await act(async () => {
+      cell.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, clientX: 120, clientY: 160 }));
+    });
+    await act(async () => {
+      window.dispatchEvent(new MouseEvent("pointermove", { bubbles: true, clientX: 150, clientY: 160 }));
+    });
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 340)); });
+    expect(view.container.querySelector(".ink-pages-panel__cell.is-dragging")).toBeNull();
+    await act(async () => {
+      view.container.querySelector('[aria-label="打开第 2 页"]')!.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    });
+    expect(onJump).toHaveBeenCalledWith("p2");
+    await view.unmount();
+  });
+
   it("面板有右侧拖宽手柄；宽度落成内联 style", async () => {
     const view = await mount();
     const handle = byLabel(view.container, "拖动调整页面面板宽度");

@@ -27,7 +27,7 @@ import {
 } from "./imageIcons";
 import { KCheckbox, KEmbedIcon, KIcon, KLinkEditor, KSwitch, KToolbarButton, kernelHotkey, useHoverTip } from "./kernelUiAtoms";
 import { AiTagIcon } from "../../ai/AiTagIcon";
-import { AI_DIALOG_GAP } from "../../ai/AiAssistantDialog";
+import { AI_DIALOG_GAP } from "../../ai/aiLayout";
 import { closeAiAssistant, openAiAssistant } from "../../ai/aiAssistantSession";
 import type { AiAssistantRequest } from "../../ai/aiAssistantRequest";
 import { captureModelRange, modelRangeForNodeId, type CapturedModelRange } from "./aiModelSelection";

@@ -26,14 +26,10 @@ import { imageThumbAllowFiles, MOBILE_IMAGE_THUMB_WIDTH } from "../../core/quick
 // 261111 首屏瘦身：粘贴拦截器（含表情数据表等，≈20KB gz）只在真会挂内核的懒 chunk 里安装 ——
 // 本模块由 NotePaneHost 静态引入，只有工作区分包加载时才评测 ⇒ 天然满足「编辑器创建前安装」，且不进首屏静态图。
 import { installPasteInterceptor } from "../../features/editor/clipboardHtml";
-import { registerPlugin } from "@capacitor/core";
-import { Filesystem, Directory } from "@capacitor/filesystem";
+import { openLocalAssetFile } from "../bridge/assets";
 import type { LocalNote } from "../data/noteRepository";
 
 installPasteInterceptor();
-
-/** 原生 OpenFile 插件（android/.../OpenFilePlugin.java）：系统默认应用打开本地文件。 */
-const OpenFile = registerPlugin<{ open: (opts: { path: string }) => Promise<void> }>("OpenFile");
 
 /** 从 lakex 实例取纯文本（编辑器未就绪/getDocument 不可用时返回 undefined，保存侧回退 lakeHtmlToPlain）。 */
 function plainFromEditor(editor: unknown): string | undefined {
@@ -97,12 +93,11 @@ export function DocumentEditor(props: DocumentEditorProps) {
       if (!ref && typeof item.src === "string") ref = parseLocalAssetUrl(item.src);
       if (!ref) { showToast("附件未同步到本机", { type: "error" }); return; }
       try {
-        const uri = await Filesystem.getUri({ path: `note-assets/${ref.noteId}/${ref.filename}`, directory: Directory.Data });
         if (!isSafeShellOpenFilename(ref.filename)) {
           showToast("该附件类型不允许用系统应用打开");
           return;
         }
-        await OpenFile.open({ path: uri.uri.replace(/^file:\/\//, "") });
+        await openLocalAssetFile(ref.noteId, ref.filename);
       } catch {
         showToast("没有可打开此文件的应用", { type: "error" });
       }

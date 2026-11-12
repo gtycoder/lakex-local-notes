@@ -6,6 +6,8 @@ import { QuickNotesVirtualList } from "./QuickNotesVirtualList";
 import { createRequestVersion } from "../../core/requestVersion";
 import { formatListTime } from "../../core/dateFormat";
 import { QUICK_NOTE_VERSION } from "../../core/quickNoteModel";
+// 「保存并同步」回退整轮的 4 个理由 → 文案（两端共用单一来源，F-04）
+import { QUICK_NOTE_FULL_SYNC_TEXT } from "../../core/quickNoteSyncTypes";
 // 小记排序：**两端共用的单一来源**（档位/文案/比较器/本机持久化都在这里；261015 用户要求桌面与移动统一）
 import { QUICK_NOTE_SORT_OPTIONS, quickNoteSortTime, sortQuickNotes, type QuickNoteSort } from "../../core/quickNoteSort";
 // 本机读写单独一层（core 禁 DOM）：与移动端同一份
@@ -537,7 +539,9 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
   }
 
   /**
-   * 「保存并同步」（用户 261013）：v3 起不再有单条推送实现，改为整轮 v3 同步兜底（旧 core/quickNotePush 已删除）。
+   * 「保存并同步」（用户 261013 / 261110 定稿）：走 v3 **单条快路径**（core/s3v3/quickPush，只推这一条）；
+   * 只有 4 类情况（无 pointer / 无基线 / 云端索引已变 / 远端墓碑且本机无恢复标记）才回退整轮，
+   * 且**如实回传理由**（不折叠，见 core/quickNoteSyncTypes 的 QUICK_NOTE_FULL_SYNC_TEXT）。
    * 失败不静默：本地已经存住了 ⇒ 提示「已保存到本机，同步失败：…」，用户可再点一次（幂等）。
    */
   async function pushOneNote(id: string) {
@@ -548,11 +552,10 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
         setError("这条小记不在本机（可能已被删除或恢复过）");
       } else if (outcome.status === "pushed") {
         setViewHint(outcome.unchanged ? "已是最新，无需上传" : "已同步到云端");
-      } else if (outcome.reason === "no-remote-manifest") {
-        setViewHint("云端还没有小记数据，已改为执行一次完整同步");
-      } else {
-        setViewHint("这条小记已在其他设备删除，已按删除处理");
-        setEditingId(null); setEditingDraft(null);
+      } else if (outcome.status === "full-sync") {
+        // 4 个理由各有准确文案（单一来源；不折叠，见 F-04）。remote-deleted 还要收起编辑态。
+        setViewHint(QUICK_NOTE_FULL_SYNC_TEXT[outcome.reason]);
+        if (outcome.reason === "remote-deleted") { setEditingId(null); setEditingDraft(null); }
       }
       await refreshItems(); // refreshItems 自己会 bump 版本号（不必先 invalidate）
     } catch (reason) {

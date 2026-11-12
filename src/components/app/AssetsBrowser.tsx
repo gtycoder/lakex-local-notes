@@ -24,6 +24,7 @@ import { localAssetHttpUrl, withAssetWidth } from "../../core/assetUrl";
 import type { MissingBodyDoc, MissingQuickNoteDoc } from "../../core/missingBody";
 import { ASSET_PORT, withAssetAccessToken } from "../../lib/assetPort";
 import { fileKindOf, type AssetFileKind } from "../../core/assetNaming";
+import { formatYmd } from "../../core/dateFormat";
 import { FileKindIcon } from "../../features/bitable/FileKindIcon";
 import { Dialog } from "../ui/Overlay";
 import { SplitPane } from "../ui/SplitPane";
@@ -541,7 +542,7 @@ export function AssetsBrowser({ active, onDataChanged }: { active: boolean; onDa
                       <span className="ln-row__icon asset-browser__thumb"><StickyNote size={18} /></span>
                       <span className="ln-row__title" title={doc.previewText}>{doc.previewText || "小记"}</span>
                       <span className={"badge " + QUICK_RECOVERY_BADGE[doc.recovery]}>{QUICK_RECOVERY_LABEL[doc.recovery]}</span>
-                      <span className="asset-browser__size">{doc.imageCount > 0 ? doc.imageCount + " 张图， " : ""}{doc.updatedAt ? new Date(doc.updatedAt).toLocaleDateString("zh-CN") : ""}</span>
+                      <span className="asset-browser__size">{doc.imageCount > 0 ? doc.imageCount + " 张图， " : ""}{doc.updatedAt ? formatYmd(new Date(doc.updatedAt)) : ""}</span>
                       <span className="ln-row__actions asset-browser__acts">
                         <button type="button" className="ln-iconbtn ln-iconbtn--compact" aria-label="从云端恢复" title={doc.recovery === "cloud" ? "从云端拉回这条小记（需联网）" : "没有可用的云端依据（未配置/未同步过）"} disabled={doc.recovery !== "cloud" || quickBusy === doc.id} onClick={() => void restoreQuickFromCloud(doc)}><CloudDownload size={13} /></button>
                         <button type="button" className="ln-iconbtn ln-iconbtn--compact" aria-label="用缓存重建纯文本" title={doc.hasTextCache ? "用搜索缓存重建全文纯文本（图片/格式会丢）" : "没有搜索缓存"} disabled={!doc.hasTextCache || quickBusy === doc.id} onClick={() => void restoreQuickFromText(doc)}><FileText size={13} /></button>
@@ -576,7 +577,7 @@ export function AssetsBrowser({ active, onDataChanged }: { active: boolean; onDa
                       <span className="ln-row__icon asset-browser__thumb"><FileText size={18} /></span>
                       <span className="ln-row__title" title={doc.title}>{doc.title}</span>
                       <span className={"badge " + BODY_RECOVERY_BADGE[doc.recovery]}>{BODY_RECOVERY_LABEL[doc.recovery]}{doc.historyCount > 0 ? "（历史 " + doc.historyCount + " 份）" : ""}</span>
-                      <span className="asset-browser__size">{doc.updatedAt ? new Date(doc.updatedAt).toLocaleDateString("zh-CN") : ""}</span>
+                      <span className="asset-browser__size">{doc.updatedAt ? formatYmd(new Date(doc.updatedAt)) : ""}</span>
                       <span className="ln-row__actions asset-browser__acts">
                         <button type="button" className="ln-iconbtn ln-iconbtn--compact" aria-label="从云端恢复" title={doc.recovery === "cloud" ? "从云端拉回正文（需联网）" : "没有可用的云端依据（未配置/未同步过）"} disabled={doc.recovery !== "cloud" || bodyBusy === doc.id} onClick={() => void restoreBodyFromCloud(doc)}><CloudDownload size={13} /></button>
                         <button type="button" className="ln-iconbtn ln-iconbtn--compact" aria-label="恢复最新历史" title={doc.historyCount > 0 ? "从最新历史版本恢复（" + doc.historyCount + " 个快照）" : "没有历史快照"} disabled={doc.historyCount === 0 || bodyBusy === doc.id} onClick={() => void restoreBodyLatestHistory(doc)}><History size={13} /></button>

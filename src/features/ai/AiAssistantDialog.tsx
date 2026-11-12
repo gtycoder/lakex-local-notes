@@ -6,10 +6,11 @@ import { usePopoverPosition } from "../../hooks/usePopoverPosition";
 import { activeEditorMount } from "../editor/activeEditor";
 import { AiMessageBody } from "./AiMessageBody";
 import { copyMarkdownAsLake, type LakePayloadKernel } from "./aiLakeClipboard";
-import { aiScopeNoteId, readAiScope } from "./aiAssistantSession";
+import { aiScopeNoteId, isNoteHostAlive, readAiScope } from "./aiAssistantSession";
 import { editorInstanceAt } from "../editor/editorRegistry";
 import { AI_PROMPT_CUSTOM_ID, AI_PROMPT_CUSTOM_LABEL, type AiPromptPreset } from "./aiPrompts";
 import { aiDocumentNoteId, aiOutputLabel, aiSelectionText, type AiAssistantRequest } from "./aiAssistantRequest";
+import { AI_DIALOG_GAP } from "./aiLayout";
 import { useAiConversation } from "./useAiConversation";
 import "./aiDialogParts.css";
 
@@ -31,8 +32,7 @@ const MIN_WIDTH = 360;
 
 interface EditorColumn { mount: HTMLElement; left: number; width: number; top: number; bottom: number }
 
-/** 与 usePopoverPosition 的 gap/margin 同值（夹取与补空间必须用同一口径）。 */
-export const AI_DIALOG_GAP = 8;
+/** 与 usePopoverPosition 的 gap/margin 同值（夹取与补空间必须用同一口径）；GAP 的唯一来源 = aiLayout.ts。 */
 export const AI_DIALOG_MARGIN = 8;
 /** 右下角拖动把手可缩到的最小高度（保住输入条 + 按钮行）。 */
 export const AI_DIALOG_RESIZE_MIN = 140;
@@ -157,9 +157,9 @@ export function AiAssistantDialog({ open, request, scope, onClose }: {
     const sync = () => {
       setInScope(readAiScope() === scope);
       if (!noteId) return;
-      const alive = [...document.querySelectorAll<HTMLElement>(".lake-editor-tab[data-note-id]")]
-        .some((el) => el.getAttribute("data-note-id") === noteId);
-      if (!alive) onCloseRef.current();
+      // F-03：5 个宿主统一按 data-note-id 判定（表/多维表/画板/手写板也算「文档还活着」），
+      // 清单唯一来源 = aiAssistantSession 的 EDITOR_HOST_SELECTOR。
+      if (!isNoteHostAlive(noteId)) onCloseRef.current();
     };
     sync();
     if (typeof MutationObserver === "undefined") return;

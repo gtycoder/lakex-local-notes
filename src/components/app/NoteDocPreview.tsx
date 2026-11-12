@@ -34,7 +34,9 @@ export interface NoteDocPreviewProps {
 export function NoteDocPreview({ noteId, body, onError, className }: NoteDocPreviewProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // 移动端借道桌面「文档属性」弹窗时会走到这里：没有内部滚动容器 ⇒ 必须禁用虚拟渲染，否则正文渲染不全
+  // 移动端分支（261112 审计核实：**当前移动端不 import 本组件**，MobileApp 走 NoteInfoSheet/
+  // TrashPreviewPage 自有实现 ⇒ 这条只在"移动端借道桌面弹窗"的历史路径/未来复用时生效）。
+  // 语义：移动端没有内部滚动容器 ⇒ 必须禁用虚拟渲染，否则正文渲染不全。
   const mobile = isMobileEnvironment();
 
   useHistorySnapshotViewer({

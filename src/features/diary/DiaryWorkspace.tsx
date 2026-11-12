@@ -20,6 +20,7 @@ import {
   groupDiaryEntries,
   planDiaryConvert,
 } from "../../core/diary";
+import { formatHm } from "../../core/dateFormat";
 import { Dialog, Menu } from "../../components/ui/Overlay";
 import { CalendarPanel } from "../../components/ui/CalendarPanel";
 import { SplitPane } from "../../components/ui/SplitPane";
@@ -89,7 +90,7 @@ interface YearNode {
 function diaryClock(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false });
+  return formatHm(date);
 }
 
 export function DiaryWorkspace(props: DiaryWorkspaceProps) {

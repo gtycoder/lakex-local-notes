@@ -15,11 +15,22 @@ import { assets, assertResourceBytes, ensureDb, runWrite } from "./context";
 import * as orphanAssetRepository from "../data/orphanAssetRepository";
 import { readAssetUsage } from "../native/assetUsage";
 
-/** 系统默认应用打开本地文件（与 DocumentEditor 同插件）。 */
-const OpenFile = registerPlugin<{
+/** 原生 OpenFile 插件（android/.../OpenFilePlugin.java）：系统默认应用打开/另存本地文件。
+ *  **全仓唯一注册点**：DocumentEditor 也从这里 import（261112 N4：此前它在 editor/ 里又 registerPlugin 一次）。 */
+export const OpenFile = registerPlugin<{
   open: (opts: { path: string }) => Promise<void>;
   saveAs: (opts: { path: string; name: string; mime?: string }) => Promise<void>;
 }>("OpenFile");
+
+/** 系统默认应用打开 Data 目录下的本地附件：安全检查 + file:// 剥壳的唯一实现。 */
+export async function openLocalAssetFile(noteId: string, filename: string): Promise<void> {
+  // 与桌面 open_attachment 对齐：禁止 shell/ACTION_VIEW 打开可执行类附件
+  if (!isSafeShellOpenFilename(filename)) {
+    throw new Error("该附件类型不允许用系统应用打开（疑似可执行文件）");
+  }
+  const uri = await Filesystem.getUri({ path: `note-assets/${noteId}/${filename}`, directory: Directory.Data });
+  await OpenFile.open({ path: uri.uri.replace(/^file:\/\//, "") });
+}
 
 export const assetsDomain = {
   async readAssetPreview(noteId: string, filename: string) {
@@ -30,14 +41,9 @@ export const assetsDomain = {
     return { filename, mimeType, supported: true, dataUrl: `data:${mimeType};base64,${bytesToBase64(bytes)}` };
   },
 
-  /** 系统默认应用打开本地附件（OpenFile 原生插件）。 */
+  /** 系统默认应用打开本地附件（OpenFile 原生插件；实现见 openLocalAssetFile 单一来源）。 */
   async openAttachment(noteId: string, filename: string) {
-    // 与桌面 open_attachment 对齐：禁止 shell/ACTION_VIEW 打开可执行类附件
-    if (!isSafeShellOpenFilename(filename)) {
-      throw new Error("该附件类型不允许用系统应用打开（疑似可执行文件）");
-    }
-    const uri = await Filesystem.getUri({ path: `note-assets/${noteId}/${filename}`, directory: Directory.Data });
-    await OpenFile.open({ path: uri.uri.replace(/^file:\/\//, "") });
+    await openLocalAssetFile(noteId, filename);
     return { ok: true };
   },
 

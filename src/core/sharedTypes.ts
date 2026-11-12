@@ -10,6 +10,8 @@
  * ⚠️ 本文件只放类型定义，不放运行时值（避免类型模块变成隐形的运行时代码依赖）。
  */
 
+import type { NoteKind } from "./noteKind.js";
+
 /**
  * 云同步设置（桌面 settings 表 / 移动 localStorage 同形）。
  * 归一判据单一来源 = `src/core/syncSettings.ts` 的 normalizeSyncSettings。
@@ -108,7 +110,7 @@ export interface TreeNode {
   description?: string | null;
   summary?: string | null;
   /** 文档类型（doc | usheet | bitable | board | ink；缺省 doc）：宿主据此对非 doc 隐藏导出/大纲等。 */
-  kind?: "doc" | "usheet" | "bitable" | "board" | "ink";
+  kind?: NoteKind;
   /**
    * 空间标记（261109）：日记笔记本 = "diary"，wire 上镜像 lake 索引 `folders[].space`。
    * 与 `kind`（文档类型）是两件事，**不要合并**。只有 nodeType === "notebook" 时有意义。

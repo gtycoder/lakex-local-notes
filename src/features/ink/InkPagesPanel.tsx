@@ -17,6 +17,7 @@ import { LayoutGrid, ListTree, Plus, Trash2, X } from "lucide-react";
 import type { InkPage } from "../../core/inkDoc.js";
 import { PageThumb } from "./InkPageStrip.js";
 import { INK_OUTLINE_MODES, INK_OUTLINE_MODE_LABELS, buildInkOutline, filterInkOutline, inkOutlineSummary, type InkOutlineMode } from "./inkOutline.js";
+import { createLongPressTimer, type LongPressTimer } from "../../lib/longPressTimer";
 
 export type InkPagesView = "thumbs" | "list";
 
@@ -118,8 +119,20 @@ export function InkPagesPanel(props: InkPagesPanelProps) {
   const [width, setWidth] = useState<number>(() => readPagesPanelWidth());
   const [query, setQuery] = useState("");
   const [drag, setDrag] = useState<{ id: string; from: number; slot: number } | null>(null);
-  const pressRef = useRef<{ x: number; y: number; timer: number } | null>(null);
-  const suppressClickRef = useRef(false);
+  /** 本格子所属页（长按到点后据此进入拖拽；计时本身交给唯一实现 lib/longPressTimer）。 */
+  const pressMetaRef = useRef<{ pageId: string; index: number } | null>(null);
+  const pressTimerRef = useRef<LongPressTimer | null>(null);
+  const firePress = useCallback(() => {
+    const meta = pressMetaRef.current;
+    pressMetaRef.current = null;
+    if (!meta) return;
+    setDrag({ id: meta.pageId, from: meta.index, slot: meta.index });
+  }, []);
+  /** 300ms / 8px 与旧手写实现参数一致；到点只置拖拽态，随后的一次 click 由 consumeClickSuppression 吞掉。 */
+  const pressTimer = useCallback(
+    () => (pressTimerRef.current ??= createLongPressTimer({ ms: 300, moveCancelPx: 8, onFire: firePress })),
+    [firePress],
+  );
   const listRef = useRef<HTMLDivElement | null>(null);
   const gridRef = useRef<HTMLDivElement | null>(null);
 
@@ -131,45 +144,34 @@ export function InkPagesPanel(props: InkPagesPanelProps) {
   })), [pages]);
   const entries = useMemo(() => filterInkOutline(buildInkOutline(outlinePages, mode), query), [outlinePages, mode, query]);
   const summary = useMemo(() => inkOutlineSummary(outlinePages), [outlinePages]);
-  /** 取消长按（提前移动/抬手/卸载）。 */
-  const cancelPress = useCallback(() => {
-    const press = pressRef.current;
-    if (!press) return;
-    window.clearTimeout(press.timer);
-    pressRef.current = null;
-  }, []);
 
-  /** 缩略图长按 300ms 进入拖拽（移动 8px 内取消，避免和点击跳页打架）。 */
+  /** 缩略图长按 300ms 进入拖拽（移动 8px 内取消，避免和点击跳页打架；取消/抬手/卸载由 lib/longPressTimer 收口）。 */
   const onCellPointerDown = useCallback((event: ReactPointerEvent<HTMLElement>, pageId: string, index: number) => {
     if (readOnly) return;
     if ((event.target as Element | null)?.closest?.('.ink-pages-panel__cell-del')) return;
-    cancelPress();
-    const press = { x: event.clientX, y: event.clientY, timer: 0 };
-    press.timer = window.setTimeout(() => {
-      pressRef.current = null;
-      suppressClickRef.current = true;
-      setDrag({ id: pageId, from: index, slot: index });
-    }, 300);
-    pressRef.current = press;
-  }, [cancelPress, readOnly]);
+    pressMetaRef.current = { pageId, index };
+    pressTimer().start({ clientX: event.clientX, clientY: event.clientY }, event.target);
+  }, [pressTimer, readOnly]);
 
   useEffect(() => {
-    const onMove = (event: PointerEvent) => {
-      const press = pressRef.current;
-      if (!press) return;
-      if (Math.abs(event.clientX - press.x) > 8 || Math.abs(event.clientY - press.y) > 8) cancelPress();
-    };
-    const onUp = () => cancelPress();
+    const onMove = (event: PointerEvent) => pressTimer().move({ clientX: event.clientX, clientY: event.clientY });
+    const onUp = () => pressTimer().end();
+    const onCancel = () => pressTimer().cancel();
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
-    window.addEventListener('pointercancel', onUp);
+    window.addEventListener('pointercancel', onCancel);
     return () => {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
-      window.removeEventListener('pointercancel', onUp);
-      cancelPress();
+      window.removeEventListener('pointercancel', onCancel);
     };
-  }, [cancelPress]);
+  }, [pressTimer]);
+
+  /** 卸载即 dispose（长按计时器不跨实例复用）。 */
+  useEffect(() => () => {
+    pressTimerRef.current?.dispose();
+    pressTimerRef.current = null;
+  }, []);
 
   // 拖拽中：跟着指针找悬停格，算出插入槽位；松手提交一次（不进正文之外的状态）。 */
   useEffect(() => {
@@ -193,9 +195,11 @@ export function InkPagesPanel(props: InkPagesPanelProps) {
         }
         return null;
       });
-      window.setTimeout(() => { suppressClickRef.current = false; }, 0);
+      // 没被 click 消费掉的「已触发」标记在下一轮事件后清掉（与旧实现同时序）；
+      // 用 ref 直取：卸载后这个 0ms 回调仍可能跑，不能在此重新创建计时器。
+      window.setTimeout(() => { pressTimerRef.current?.consumeClickSuppression(); }, 0);
     };
-    const onCancel = () => { setDrag(null); suppressClickRef.current = false; };
+    const onCancel = () => { setDrag(null); pressTimer().consumeClickSuppression(); };
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
     window.addEventListener('pointercancel', onCancel);
@@ -204,7 +208,7 @@ export function InkPagesPanel(props: InkPagesPanelProps) {
       window.removeEventListener('pointerup', onUp);
       window.removeEventListener('pointercancel', onCancel);
     };
-  }, [drag, onReorder, pages, view]);
+  }, [drag, onReorder, pages, pressTimer, view]);
 
   const dropIndex = drag ? dropTargetIndex(drag.from, drag.slot, pages.length) : -1;
   const pendingIndex = pendingDeleteId ? pages.findIndex((page) => page.id === pendingDeleteId) : -1;
@@ -341,7 +345,7 @@ export function InkPagesPanel(props: InkPagesPanelProps) {
       )}
 
       {view === "thumbs" && (
-        <div className="ink-pages-panel__grid" ref={gridRef} data-dragging={drag ? "true" : undefined} onClickCapture={(event) => { if (!suppressClickRef.current) return; suppressClickRef.current = false; event.preventDefault(); event.stopPropagation(); }}>
+        <div className="ink-pages-panel__grid" ref={gridRef} data-dragging={drag ? "true" : undefined} onClickCapture={(event) => { if (!pressTimer().consumeClickSuppression()) return; event.preventDefault(); event.stopPropagation(); }}>
           {pages.map((page, index) => {
             const tab = page.note !== undefined;
             return (

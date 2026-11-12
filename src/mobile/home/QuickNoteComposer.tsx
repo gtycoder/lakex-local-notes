@@ -50,6 +50,7 @@ import { sha256Sync } from "../../core/sha256Sync.js";
 import { isQuickNoteImageMime, quickNoteBodyFromTextAndImages, type StoredQuickNoteImage } from "../../core/quickNoteModel.js";
 import { addQuickNoteTagId, removeQuickNoteTagId, type QuickNoteTagSummary } from "../../core/quickNoteTags.js";
 import { MOBILE_IMAGE_THUMB_WIDTH } from "../../core/quickNoteImageThumb.js";
+import { QUICK_NOTE_FULL_SYNC_TEXT } from "../../core/quickNoteSyncTypes.js";
 import { MobileQuickNoteTagSheet } from "./MobileQuickNoteTagSheet";
 import { toastActionError } from "../lib/actionError";
 
@@ -355,8 +356,10 @@ export function QuickNoteComposer({ editNote, tagOptions, onCreateTag, onSaved, 
           const outcome = await bridge.syncQuickNote(noteId);
           if (outcome.status === "not-found") showToast("这条小记不在本机（可能已被删除）", { type: "error" });
           else if (outcome.status === "pushed") showToast(outcome.unchanged ? "已是最新，无需上传" : "已同步到云端");
-          else if (outcome.reason === "no-remote-manifest") showToast("云端还没有小记清单，已执行一次完整同步");
-          else showToast("这条小记已在其他设备删除，已按删除处理", { type: "error" });
+          else if (outcome.status === "full-sync") {
+            // 4 个理由各有准确文案（与桌面同一来源）；远端墓碑按删除处理 ⇒ 用 error 档提示。
+            showToast(QUICK_NOTE_FULL_SYNC_TEXT[outcome.reason], outcome.reason === "remote-deleted" ? { type: "error" } : undefined);
+          }
         } catch (reason) {
           toastActionError("已保存到本机，同步", reason);
         } finally {

@@ -1,4 +1,5 @@
 import type { NoteDocument } from "../lib/types";
+import type { NoteKind } from "../core/noteKind";
 
 /**
  * 「保存冲突 → 另存为副本」的纯编排（Batch4-D）：把用户当前编辑器里的正文写成**一篇独立新文档**
@@ -7,7 +8,7 @@ import type { NoteDocument } from "../lib/types";
  * 为什么不直接用 createNoteIn：多维表/表格/画板/手写板的 kind 必须跟着原文档走，否则副本会被当成
  * Lake 文档打开（正文是 JSON，一打开就毁）。这里是 kind → 创建函数映射的**单一来源**。
  */
-export type ConflictCopyKind = "doc" | "usheet" | "bitable" | "board" | "ink";
+export type ConflictCopyKind = NoteKind;
 
 export interface ConflictCopyPorts {
   createNote(parentId: string | null, title: string): Promise<NoteDocument>;

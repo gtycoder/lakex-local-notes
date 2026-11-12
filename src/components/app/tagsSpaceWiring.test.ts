@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 /**
  * 标签空间的**接线**护栏（P1）：数据层在 main/preload（task-33），这里钉渲染层四件事：
  * ① 一级入口「标签」在空间类型/顶栏菜单/App 视图里真的接上了；
- * ② App 用 lazy 挂载 TagsWorkspace（内核预览在组件内再懒一层 ⇒ 不破桌面内核边界）；
+ * ② App 用 lazy 挂载 TagsWorkspace（小记预览在组件内再懒一层 ⇒ 不破桌面内核边界）；
  * ③ 侧栏按标签筛选接到 Sidebar（visibleIds 只收窄显示，不参与拖拽兄弟集合）；
  * ④ 属性面板挂上标签编辑行。
  */
@@ -32,15 +32,16 @@ describe("标签空间接线（P1）", () => {
     expect(APP).toContain('workspace="tags"');
   });
 
-  it("App 用 lazy 挂载标签空间；内核只读预览在组件内再懒一层（P12 内核边界）", () => {
+  it("App 用 lazy 挂载标签空间；小记预览在组件内再懒一层（P12 内核边界）", () => {
     expect(APP).toContain('lazy(() => import("./features/tags/TagsWorkspace")');
     expect(WORKSPACE).toContain('lazy(() => import("./TagPreviewBody"))');
-    // 261106：doc 预览统一走 NoteDocPreview（回收站/历史/属性弹窗同一实现、同一排版字号）；
-    // 非 doc 四族仍 HistorySnapshotPreview，小记仍 QuickNotePreview
-    expect(PREVIEW).toContain("NoteDocPreview");
-    expect(PREVIEW).toContain("HistorySnapshotPreview");
-    expect(PREVIEW).toContain("QuickNotePreview");
-    expect(PREVIEW).not.toContain("QuickNoteKernelPreview");
+    // 261112 审计 A7：标签空间的 doc 预览 = TagsWorkspace 的「信息卡 + 点击打开」，不走 TagPreviewBody
+    // ⇒ 该组件只承担小记预览；doc/非 doc 分支不可达已删除（若恢复内嵌预览，复用 NoteDocPreview/
+    // HistorySnapshotPreview，不要在这里另写一套）。
+    expect(PREVIEW).toContain('from "../quickNotes/QuickNotePreview"');
+    expect(PREVIEW).not.toContain('import("./QuickNoteKernelPreview")');
+    expect(PREVIEW).not.toContain('from "../../components/app/NoteDocPreview"');
+    expect(PREVIEW).not.toContain('from "../../components/app/HistorySnapshotPreview"');
     // 预览组件本身不得被 App 静态 import
     expect(APP).not.toContain('import { TagPreviewBody }');
   });
@@ -146,11 +147,18 @@ describe("标签空间接线（P1）", () => {
     expect(APP).toContain("const removeTagFromItem = useCallback");
     expect(APP).toContain("await native.setNoteTags(item.id, current.filter((id) => id !== tagId));");
     expect(APP).toContain("await native.setQuickNoteTags(item.id, (quick?.tagIds ?? []).filter((id) => id !== tagId));");
-    // 预览：doc 走共享 NoteDocPreview（HistorySnapshotPreview 对 doc 只出结构化兜底 ⇒ 曾整块空白）；
-    // 行内自建内核宿主的自定义大字号样式已删
-    expect(read("../../features/tags/TagPreviewBody.tsx")).toContain("NoteDocPreview");
-    expect(read("../../features/tags/TagPreviewBody.tsx")).toContain("HistorySnapshotPreview");
-    expect(read("../../features/tags/TagPreviewBody.tsx")).not.toContain("QuickNoteKernelPreview");
+    // 261106 三改定稿：右栏 doc 预览 = 少量信息 + 整卡点击打开（TagsWorkspace 的
+    // `.tags-preview__open-doc`），**不再内嵌整篇正文** ⇒ TagPreviewBody 只剩小记一支；
+    // 261112 审计 A7：其 doc/非 doc 分支（曾复用 NoteDocPreview / HistorySnapshotPreview）不可达已删除。
+    // 恢复内嵌预览时复用那两个共用件，不要在这里另写一套。
+    const PREVIEW_SRC = read("../../features/tags/TagPreviewBody.tsx");
+    expect(TAGS_WORKSPACE).toContain('className="tags-preview__open-doc"');
+    // 断言「没有引用」而不是「没有出现字样」——文件头注释会提到这两个共用件（说明为什么删的）
+    expect(PREVIEW_SRC).not.toContain('from "../../components/app/NoteDocPreview"');
+    expect(PREVIEW_SRC).not.toContain('from "../../components/app/HistorySnapshotPreview"');
+    // 内核兜底由 QuickNotePreview 自己懒加载，本组件不得直接引用
+    expect(PREVIEW_SRC).not.toContain('import("./QuickNoteKernelPreview")');
+    expect(PREVIEW_SRC).toContain('from "../quickNotes/QuickNotePreview"');
     // 261106 二批：手写板预览不在这里另写一套——非 doc 四族统一交给 HistorySnapshotPreview，
     // 它的 ink 分支再懒加载 InkPreview（只读画布）⇒ 标签空间与历史面板同一实现、同一容器
     const HSP = read("../../components/app/HistorySnapshotPreview.tsx");

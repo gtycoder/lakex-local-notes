@@ -8,6 +8,7 @@ import type { MobileSheetItem } from "../ui/MobileSheetMenu";
 import type { NotebookTreeItem } from "./useNotebookTreeData";
 import type { WorkspaceOverlay, WorkspaceOverlayKind } from "./useWorkspaceOverlays";
 import { toastActionError } from "../lib/actionError";
+import type { NoteKind } from "../../core/noteKind";
 
 /**
  * 工作区「目录动作与菜单组装」逻辑（261103 P11-②，原 NotebookWorkspace 内联代码逐字搬移，未改行为）：
@@ -42,7 +43,7 @@ export interface UseWorkspaceActionsOptions {
 }
 
 /** 「新建」清单 id → 文档 kind（清单与创建通道的唯一对应表；group 不走这里）。 */
-const CREATE_MENU_KINDS: Record<string, "doc" | "usheet" | "bitable" | "board" | "ink"> = {
+const CREATE_MENU_KINDS: Record<string, NoteKind> = {
   note: "doc",
   usheet: "usheet",
   bitable: "bitable",
@@ -90,7 +91,7 @@ export function useWorkspaceActions(options: UseWorkspaceActionsOptions) {
    * 文档/手写板建完停在阅读态；表格/数据表/画板建完直接进编辑态。
    * createParent 理论上总是当前节点；空串兜底回当前笔记本，避免建出 parent_id="" 的孤儿。
    */
-  const createChildDocument = useCallback(async (kind: "doc" | "usheet" | "bitable" | "board" | "ink", parentId: string, title?: string) => {
+  const createChildDocument = useCallback(async (kind: NoteKind, parentId: string, title?: string) => {
     try {
       const pid = parentId || notebookId;
       const n = kind === "doc" ? await bridge.createNote(title || "无标题文档", pid)
@@ -208,7 +209,7 @@ export function useWorkspaceActions(options: UseWorkspaceActionsOptions) {
     if (!draft) return;
     setCreateDraft(null);
     if (draft.kind === "group") { void createChildGroup(draft.parentId, title); return; }
-    void createChildDocument(draft.kind as "doc" | "usheet" | "bitable" | "board" | "ink", draft.parentId, title);
+    void createChildDocument(draft.kind as NoteKind, draft.parentId, title);
   }, [createDraft, createChildDocument, createChildGroup]);
   const createNameSheet = {
     open: createDraft !== null,

@@ -11,6 +11,7 @@ import { stripAssetAccessToken } from "../lib/assetPort";
 import type { NoteDocument, NoteSummary, TreeNode } from "../lib/types";
 import type { SidebarMode } from "../components/app/Sidebar";
 import { OUTLINE_SIDEBAR_DEFAULT_WIDTH, OUTLINE_SIDEBAR_MAX_WIDTH, OUTLINE_SIDEBAR_MIN_WIDTH, SIDEBAR_DEFAULT_WIDTH, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH } from "../core/layoutConstants";
+import type { NoteKind } from "../core/noteKind";
 
 export const SIDEBAR_HOVER_HIDE_DELAY_MS = 220;
 
@@ -46,7 +47,7 @@ export interface OpenTab {
   /** 上次同步后记录的轻量状态摘要（title+updatedAt），用于跳过未变化的全量重载。 */
   lastDigest?: { title: string; updatedAt: string } | null;
   /** 文档类型（doc | usheet | bitable | board | ink；缺省 doc）：宿主据此选择编辑器。 */
-  kind?: "doc" | "usheet" | "bitable" | "board" | "ink";
+  kind?: NoteKind;
   /**
    * 打开/上次保存时的正文 sha256（Batch4-D 保存版本守卫）：保存时带给主进程，
    * 磁盘已变（外部/他端写）⇒ 不写盘并弹冲突确认。缺省 = 不启用守卫（草稿恢复等场景）。

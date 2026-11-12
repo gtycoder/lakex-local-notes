@@ -28,6 +28,7 @@ const BoardEditor = lazy(() => import("../board/BoardEditor").then((m) => ({ def
 const DesktopInkPad = lazy(() => import("../ink/DesktopInkPad").then((m) => ({ default: m.DesktopInkPad })));
 import type { LakeEditorPrefs } from "./lakeRuntime";
 import type { EditorCaptureRegistrar } from "../../core/editorCapture";
+import type { NoteKind } from "../../core/noteKind";
 
 const EMPTY_PINNED: ReadonlySet<string> = new Set();
 
@@ -43,7 +44,7 @@ export interface TabInfo {
   /** 远端已删除（软删/墓碑/purge）：tab 显示"已删除"标记，正文保留供复制/恢复。 */
   deleted?: boolean;
   /** 文档类型（doc | usheet | bitable | board | ink；缺省 doc）。 */
-  kind?: "doc" | "usheet" | "bitable" | "board" | "ink";
+  kind?: NoteKind;
   /** 正文文件缺失（被手动删除等）：渲染专用面板（只读、不挂编辑器、不弹 ENOENT）。 */
   bodyMissing?: boolean;
   /** 标签归属空间（261109）：`"diary"` 只出现在日记空间 tab 条；缺省 = 文档空间。 */

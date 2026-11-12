@@ -1439,6 +1439,7 @@ export function InkPad({ content, readOnly = false, variant, noteId, active, pan
     <div
       ref={inkRootRef}
       className={"ink-pad ink-pad--" + variant}
+      data-note-id={noteId}
       data-readonly={readOnly ? "true" : undefined}
       data-prevent-swipe
       data-active={active ? "true" : undefined}

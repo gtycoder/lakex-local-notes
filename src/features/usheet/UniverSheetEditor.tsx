@@ -653,6 +653,7 @@ export function UniverSheetEditor({ noteId, content, visible, readOnly: readOnly
     <div
       ref={hostRef}
       className={"sheet-editor usheet-editor" + (ribbonCollapsed ? " is-ribbon-collapsed" : "")}
+      data-note-id={noteId}
       data-active={(focused ?? visible) ? "true" : undefined}
       data-pane-visible={visible ? "true" : undefined}
       data-pane={pane ?? undefined}

@@ -15,8 +15,8 @@ import { runQuickPush } from "../../src/core/s3v3/quickPush/pipeline.js";
 import { perfMessage } from "../../src/core/logFormat.js";
 
 /**
- * 桌面 v3 同步入口（feature flag: LAKE_SYNC_PROTOCOL=v3）。
- * 真实数据 = Store；云端 = S3；协议 = v3。小记暂不在 v3 内同步（由原 quick-notes 通道继续）。
+ * 桌面 v3 同步入口（**唯一**协议；旧 quick-notes 通道与 LAKE_SYNC_PROTOCOL 开关均已删除）。
+ * 真实数据 = Store；云端 = S3；协议 = v3。小记也走 v3（同一轮或单条快路径 runQuickPush）。
  */
 /**
  * 本机历史快照引用的云端资产键（`assets/<noteId>/<filename>`）。
@@ -84,12 +84,12 @@ export async function syncWithV3(
     accessKeyId: settings!.accessKeyId, secretAccessKey: settings!.secretAccessKey,
     prefix: settings!.prefix, forcePathStyle: settings!.forcePathStyle,
   });
-  // 转正默认：v3 文档通道下小记也默认走 v3（旧 quick-notes 通道只在 legacy 或显式 0 时使用）。
-  const quickV3 = process.env.LAKE_SYNC_PROTOCOL !== "legacy" && process.env.LAKE_S3V3_QUICK_NOTES !== "0";
+  // v3 是**唯一**协议：旧 quick-notes 通道的实现在 261026 转正时已删，配套的
+  // LAKE_SYNC_PROTOCOL=legacy / LAKE_S3V3_QUICK_NOTES=0 死开关于 261112 一并删除（开不出旧世界，只留半轮）。
   // Batch3-A：小记库降级时**整轮不跑**。没有小记存储时 local 小记世界为空，plan 会把远端小记判成
   // 待下载（远端有/本地缺失），落盘又因 quickNotes 未注入失败——半轮状态比明确失败更危险。
-  assertQuickNotesSyncAvailable(quickV3);
-  const quickNotes = quickV3 ? getQuickNotesStoreForV3() : null;
+  assertQuickNotesSyncAvailable(true);
+  const quickNotes = getQuickNotesStoreForV3();
   const device = new DesktopStoreDevice(store, store.rootPath, { skipQuickNotesGuard: true, ...(quickNotes ? { quickNotes } : {}) });
   await device.init();
   const deviceId = deps.deviceId ?? process.env.LAKE_S3V3_DEVICE_ID ?? desktopDeviceId(store);
@@ -287,7 +287,8 @@ export async function pushQuickNoteWithV3(
       : await syncWithV3(store, undefined, { ...(deps.remote ? { remote: deps.remote } : {}), ...(deps.deviceId ? { deviceId: deps.deviceId } : {}) });
     return {
       status: "full-sync",
-      reason: result.reason === "remote-deleted" ? "remote-deleted" : "no-remote-manifest",
+      // F-04：4 个理由原样透传给 UI（不折叠）。折叠会把「云端索引已变/缺基线」谎报成「云端还没有小记数据」。
+      reason: result.reason,
       result: {
         uploaded: full.uploaded, downloaded: full.downloaded, conflicts: full.conflicts,
         manifestId: full.manifestId, completedAt: full.completedAt,

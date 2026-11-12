@@ -265,26 +265,10 @@
 .ln-menu__sub { position: relative; }
 .ln-menu__submenu { position: absolute; top: -6px; left: calc(100% + 4px); }
 
-/* ── 05 对话框 / 抽屉 ──────────────────────────────────────── */
-.ln-modal {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  width: min(560px, calc(100vw - 32px));
-  max-height: 80vh;
-  border: 0.5px solid var(--lake-border-1);
-  border-radius: var(--lake-radius-lg);
-  background: var(--lake-bg-panel);
-  box-shadow: var(--lake-shadow-dialog);
-  z-index: var(--lake-z-dialog);
-}
-.ln-modal__head { display: flex; align-items: center; gap: 8px; padding: 14px 16px 0; }
-.ln-modal__title { flex: 1 1 auto; min-width: 0; color: var(--lake-text-1); font-size: var(--lake-font-size-bodyLg); font-weight: var(--lake-font-weight-semibold); }
-.ln-modal__body { padding: 12px 16px 16px; overflow: auto; color: var(--lake-text-2); font-size: var(--lake-font-size-small); }
-.ln-modal__actions { display: flex; justify-content: flex-end; gap: 8px; padding: 0 16px 12px; }
-.ln-drawer { position: fixed; top: 0; bottom: 0; width: 320px; border-radius: 0; }
-.ln-drawer--left { left: 0; }
-.ln-drawer--right { right: 0; }
+/* ── 05 对话框 / 抽屉 ────────────────────────────────────────
+ * 261112 Q1（审计 03 P2-a）：本层曾定义 .ln-modal*（5 条）与 .ln-drawer*（3 条）——**全仓零调用**，
+ * 且与浮层单一来源重复（对话框 = overlay.css 的 .ln-dialog + Overlay.tsx；Design 只写 .ln-dialog）。
+ * 按 261006 删 .ln-toast 的同一条判据删除（需要时从 git 历史取回）；新增对话框请用 .ln-dialog。 */
 
 /* ── 06 提示条 ───────────────────────────────────────────────
  * 261006 Phase 2.2：`.ln-toast` 全仓**零调用**（同步提示走 .sync-toast、删除撤销走 .quick-notes-toast、

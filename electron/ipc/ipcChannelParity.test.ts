@@ -13,6 +13,13 @@
  * ③ **HTTP 侧**：`electron/webApiServer.ts` 的 `WEB_METHODS`（Web 客户端复用同一批 handler）
  *
  * ②↔③ 已有 `electron/webApiServer.test.ts` 断言（方法名与通道名逐条相等）；**本文件补上缺失的 ①↔② 与 ①↔③**。
+ *
+ * ## 第四面：渲染层包装侧（K14，261112 审计 R0）
+ * ④ `src/lib/native.ts` 的 `native` 对象（`api().<method>()` / `host.<method>()`）：渲染层唯一入口。
+ * 它不在前三面里 ⇒ 漏改只在运行时炸（`api().foo is not a function`）。261016 同类事故的翻版。
+ * 判据：**preload 暴露的方法必须都有包装**（否则死面/漏接），**包装的方法必须都在 preload 里**
+ * （否则运行时 TypeError），唯二例外 = 走 `on(...)` 订阅的事件方法（不是 IPC 通道，逐个登记在
+ * `PRELOAD_EVENT_SUBSCRIPTIONS` 里，新增必须显式进来）。
  * 缺口的后果：只在 preload 暴露却忘了注册 ⇒ 运行时报 "No handler registered for ..."（用户点下去才知道）；
  * 只注册不暴露 ⇒ 死通道。**261016 实际发生过同类事故**：并发会话给 preload 加了 `find_in_document`
  * 却漏了 `WEB_METHODS`，被 ②↔③ 那条测试当场抓住 —— 那时 ①↔② 仍无人守。
@@ -53,6 +60,34 @@ function preloadChannels(): Map<string, string> {
   return out;
 }
 
+/**
+ * ④ 渲染层包装侧：`src/lib/native.ts` 里通过 `api().<method>()` 或 `host.<method>()` 调到的桥方法名。
+ * 只扫"真的会调用桥"的形态（`api().capabilities` 这种属性读取不算方法）。
+ */
+function nativeWrapperMethods(): Set<string> {
+  const src = fs.readFileSync(path.join(ELECTRON, "..", "src", "lib", "native.ts"), "utf8");
+  const out = new Set<string>();
+  for (const m of src.matchAll(/(?:api\(\)|host)\.(\w+)\(/g)) out.add(m[1]);
+  return out;
+}
+
+/**
+ * preload 用 `on(channel)` 订阅、在主进程侧走 `send` 的事件方法（不是 IPC 通道 ⇒ 不在 187 里）。
+ * 新增订阅**必须**登记到这里（否则第四面会红：包装了 preload 却没有）。
+ */
+const PRELOAD_EVENT_SUBSCRIPTIONS = [
+  "onAiStream",
+  "onDuplicateProgress",
+  "onLibraryChanged",
+  "onNoteBodyChanged",
+  "onOpenSettings",
+  "onPendingSummaryChanged",
+  "onPortableExportProgress",
+  "onSyncProgress",
+  "onUpdateState",
+  "onWindowFullscreen",
+];
+
 const sorted = (values: Iterable<string>) => [...values].sort();
 
 describe("IPC 通道三方一致性（C2-2）", () => {
@@ -80,6 +115,22 @@ describe("IPC 通道三方一致性（C2-2）", () => {
         "  注册了但表里没有 = " + (missingInWeb.join(" ") || "（无）") + "\n" +
         "  表里有但未注册 = " + (unknownInWeb.join(" ") || "（无）"),
     ).toEqual({ 注册了但WEB_METHODS缺: [], WEB_METHODS有但未注册: [] });
+  });
+
+  it("④↔②：渲染层 native 包装与 preload 暴露完全一致（漏改只在运行时报\"不是函数\"）", () => {
+    const preload = new Set(preloadChannels().keys());
+    const wrapper = nativeWrapperMethods();
+    const events = new Set(PRELOAD_EVENT_SUBSCRIPTIONS);
+    const missingWrapper = sorted([...preload].filter((n) => !wrapper.has(n)));
+    const unknownBridge = sorted([...wrapper].filter((n) => !preload.has(n) && !events.has(n)));
+    const missingEvent = sorted([...events].filter((n) => !wrapper.has(n)));
+    expect(
+      { preload暴露但native未包装: missingWrapper, native包装了但preload没有: unknownBridge, 事件订阅未接线: missingEvent },
+      "渲染层包装（src/lib/native.ts）与 preload 暴露不一致：\n" +
+        "  preload 有、native 没包装 = " + (missingWrapper.join(" ") || "（无）") + "\n" +
+        "  native 包装了、preload 没有（事件订阅请登记 PRELOAD_EVENT_SUBSCRIPTIONS）= " + (unknownBridge.join(" ") || "（无）") + "\n" +
+        "  事件订阅在 native.ts 里找不到 = " + (missingEvent.join(" ") || "（无）"),
+    ).toEqual({ preload暴露但native未包装: [], native包装了但preload没有: [], 事件订阅未接线: [] });
   });
 
   it("规模钉死（防止无声增删通道）", () => {

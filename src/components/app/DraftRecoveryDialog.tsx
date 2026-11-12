@@ -1,5 +1,6 @@
 import { History, RotateCcw, Trash, X } from "lucide-react";
 import type { DraftJournalEntry } from "../../lib/types";
+import { formatDateTime } from "../../core/dateFormat";
 import { Dialog } from "../ui/Overlay";
 
 export function DraftRecoveryDialog({ entries, onRestore, onDiscard, onClose }: {
@@ -24,7 +25,7 @@ export function DraftRecoveryDialog({ entries, onRestore, onDiscard, onClose }: 
             <div className="ln-list-item draft-recovery-row" key={entry.noteId}>
               <div className="ln-list-item__text ln-row2__main ln-ellipsis">
                 <span className="ln-row2__title">{entry.title || "无标题"}</span>
-                <span className="ln-row2__meta">{new Date(entry.updatedAt).toLocaleString("zh-CN", { hour12: false })}</span>
+                <span className="ln-row2__meta">{formatDateTime(new Date(entry.updatedAt))}</span>
               </div>
               <button type="button" className="ln-list-item__action draft-recovery-restore" title="恢复这份草稿" aria-label="恢复这份草稿" onClick={() => onRestore(entry)}><RotateCcw size={14} /></button>
               <button type="button" className="ln-list-item__action ln-list-item__action--warning draft-recovery-discard" title="丢弃这份草稿" aria-label="丢弃这份草稿" onClick={() => onDiscard(entry.noteId)}><Trash size={14} /></button>

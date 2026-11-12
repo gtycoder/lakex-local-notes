@@ -62,7 +62,8 @@ export class SettingsRepository {
   }
 
   saveS3Settings(settings: S3Settings): void {
-    // 密钥用 Electron safeStorage（macOS Keychain）加密落盘；不可用时退回明文
+    // 密钥用 Electron safeStorage（macOS Keychain）加密落盘；**不可用时 fail-closed 抛错，绝不退回明文**
+    // （实现见 electron/secretCipher.ts 的 encrypt()：safeStorage 不可用/后端 basic_text 一律拒绝保存）
     const stored = { ...settings, secretAccessKey: this.encryptSecret(settings.secretAccessKey) };
     this.db.prepare("INSERT INTO settings(key,value) VALUES('s3_settings',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
       .run(JSON.stringify(stored));

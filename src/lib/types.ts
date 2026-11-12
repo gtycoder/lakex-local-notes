@@ -6,6 +6,7 @@
  * 渲染层/外壳专属类型（NoteSummary、SyncResult、SyncProgress、S3 设置、诊断报告…）仍定义在本文件。
  */
 import type { S3v3DiagnosticReport } from "../core/s3v3Report";
+import type { NoteKind } from "../core/noteKind";
 import type { QuickNoteSummary, SyncWarning } from "../core/sharedTypes";
 
 export type {
@@ -38,7 +39,7 @@ export interface NoteSummary {
   isEditLocked?: boolean;
   editLockedAt?: string | null;
   /** 文档类型（doc | usheet | bitable | board | ink；缺省 doc）。渲染层据此选择编辑器。 */
-  kind?: "doc" | "usheet" | "bitable" | "board" | "ink";
+  kind?: NoteKind;
 }
 
 export interface NoteDocument extends NoteSummary {

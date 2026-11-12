@@ -103,15 +103,16 @@ describe("AI 弹窗定位护栏（261004）", () => {
 
   it("钉住**不跨**作用域：切走挂起隐藏、切回原样恢复；未钉住切走即关；文档关掉即丢弃（用户 261110 定稿）", () => {
     // 作用域读取/判据来自 session 单一来源，这里不再写第二份
-    expect(DIALOG).toContain('import { aiScopeNoteId, readAiScope } from "./aiAssistantSession";');
+    expect(DIALOG).toContain('import { aiScopeNoteId, isNoteHostAlive, readAiScope } from "./aiAssistantSession";');
     expect(DIALOG).toContain("const [inScope, setInScope] = useState(() =>");
     // 切走 = 不渲染（组件不卸载 ⇒ 对话/输入/钉住态都保留），切回重建 Popover 按当时几何落位
     expect(DIALOG).toContain("if (!open || !inScope) return null;");
     // 未钉住 ⇒ 切走就关闭（挂起只属于钉住的面板）
     expect(DIALOG).toContain("if (open && !inScope && !pinned) onCloseRef.current();");
-    // 自己的文档 / tab 被关掉 ⇒ 丢弃（判据 = 该 data-note-id 的编辑器宿主已不在）
-    expect(DIALOG).toContain('.some((el) => el.getAttribute("data-note-id") === noteId)');
-    expect(DIALOG).toContain("if (!alive) onCloseRef.current();");
+    // 自己的文档 / tab 被关掉 ⇒ 丢弃（判据 = 该 data-note-id 的编辑器宿主已不在）：
+    // 5 个宿主的清单收敛到 session 单一来源（F-03），对话框不再自己写第二份选择器
+    expect(DIALOG).toContain("if (!isNoteHostAlive(noteId)) onCloseRef.current();");
+    expect(DIALOG).not.toContain('".lake-editor-tab[data-note-id]"');
     // 观察点：属性（class/data-active）+ 标签条 childList；不轮询、不读几何
     expect(DIALOG).toContain('attributeFilter: ["class", "data-active"]');
     expect(DIALOG).toContain('document.querySelector(".tab-items")');

@@ -14,9 +14,9 @@
 /* ＋ 快捷创建：与行内 ⋯ 同一套着重色（hover/展开时 accent） */
 .create-btn:hover, .create-btn.is-active { background: var(--lake-accent-tint); color: var(--lake-accent-text); }
 
-.create-menu { display: flex; position: absolute; top: 36px; right: 0; z-index: 1000; flex-direction: column; width: 150px; max-width: calc(100vw - 16px); transform-origin: top right; transition: transform var(--lake-motion-fast) var(--lake-ease-standard), opacity var(--lake-motion-fast) var(--lake-ease-standard); }
+.create-menu { display: flex; position: absolute; top: 36px; right: 0; flex-direction: column; width: 150px; max-width: calc(100vw - 16px); transform-origin: top right; transition: transform var(--lake-motion-fast) var(--lake-ease-standard), opacity var(--lake-motion-fast) var(--lake-ease-standard); }
 
-.create-menu > button { display: grid; grid-template-columns: 20px minmax(0, 1fr); align-items: center; gap: 8px; width: 100%; min-height: 32px; padding: 4px 8px; border: 0; color: var(--lake-text-2); background: transparent; text-align: left; }
+.create-menu > button { grid-template-columns: 20px minmax(0, 1fr); width: 100%; }
 
 .create-menu > button > span { display: flex; flex-direction: column; min-width: 0; }
 
@@ -211,13 +211,12 @@
 
 /* 收起态 = 悬停预览（本体固定、藏在左轨里）；浮动带尺寸统一由 styles/shell.css 出。 */
 .sidebar.sidebar-floating,
-.sidebar.sidebar-collapsed {  position: fixed;
+.sidebar.sidebar-collapsed {
   padding-top: 0;
 }
 
 .sidebar.sidebar-collapsed {
   pointer-events: none;
-  box-shadow: none;
   transition-duration: var(--lake-motion-panel);
 }
 
@@ -560,9 +559,7 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
  * Match the outline's bounded floating dock. The previous full-height fixed
  * sidebar made the panel appear to grow when it was leaving. */
 .sidebar.sidebar-floating,
-.sidebar.sidebar-collapsed {  /* 必须给显式高度：固定定位 + height:auto 在 Chromium 下不会按 top/bottom 撑满，
-     内容会把盒子顶到视口外（实测 y=0/h=957）。旧的"半幅"也是显式 calc。 */
-  height: calc(100vh - var(--lake-floating-panel-top) - var(--lake-floating-panel-bottom));
+.sidebar.sidebar-collapsed {
   overflow: hidden;
   transition: opacity var(--lake-motion-panel) var(--lake-ease-standard), transform var(--lake-motion-panel) var(--lake-ease-standard);
 }

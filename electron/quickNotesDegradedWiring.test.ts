@@ -37,8 +37,10 @@ describe("小记库降级接线（main.ts 静态锁）", () => {
     expect(main).toMatch(/autoSyncAllowed\s*&&\s*canTouchNetwork\(/);
     const quitGuard = main.indexOf('if (getQuickNotesAvailability().mode === "degraded") return;', main.indexOf('app.on("before-quit"'));
     expect(quitGuard).toBeGreaterThan(0);
-    expect(desktopSync).toContain("assertQuickNotesSyncAvailable(quickV3)");
-    expect(desktopSync).toContain("assertQuickNotesSyncAvailable(true)");
+    // 261112：旧 quick-notes 通道与 LAKE_SYNC_PROTOCOL / LAKE_S3V3_QUICK_NOTES 死开关已删，
+    // 生产调用恒为 true（小记库降级时仍必须拦截整轮同步）。
+    expect(desktopSync).not.toContain("quickV3");
+    expect(desktopSync.match(/assertQuickNotesSyncAvailable\(true\)/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
   });
 
   it("设置→同步诊断可见：get_sync_status 最前面插一条降级报告（复用既有通道）", () => {

@@ -57,7 +57,8 @@ export function getQuickNotesAvailability(): QuickNotesAvailability {
 
 /**
  * 同步前置断言（desktopSync 两个入口调用）：小记库降级时抛**可读错误**并整轮不跑。
- * 只有 quick-notes 通道启用时才拦（显式 `LAKE_S3V3_QUICK_NOTES=0` 的调试/无小记场景不在此列）。
+ * 参数 quickNotesChannelEnabled 保留为兼容旧调用点；v4 起旧 quick-notes 通道与相关 env 开关均已删除，
+ * 生产调用恒为 true（小记降级时仍必须拦截，避免把空的小记世界误判为云端删除）。
  */
 export function assertQuickNotesSyncAvailable(quickNotesChannelEnabled: boolean): void {
   const availability = current;

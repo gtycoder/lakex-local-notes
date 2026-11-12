@@ -8,6 +8,7 @@
  */
 import type { NoteSummary, QuickNoteListSummary, QuickNoteTag } from "../../lib/types";
 import { compareTagUpdatedAtDesc, countTagRefs, tagFallbackTitle } from "../../core/tagAggregate";
+import type { NoteKind } from "../../core/noteKind";
 
 /** 目录行（展示用）：引用计数 = 文档数 / 小记数（同一篇文档重复引用只算一次）。 */
 export interface TagDirectoryEntry {
@@ -83,7 +84,7 @@ export interface TagAggregateItem {
   /** 小记预览文本（文档没有；文档标题来自 summary）。 */
   previewText?: string;
   /** 文档类型（仅 kind==="doc" 时有）：只读预览据此选内核视图 / 结构化只读视图。 */
-  docKind?: "doc" | "usheet" | "bitable" | "board" | "ink";
+  docKind?: NoteKind;
 }
 
 /** 只看文档 / 只看小记 / 两者都要。 */

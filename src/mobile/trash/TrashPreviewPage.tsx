@@ -11,6 +11,7 @@ import { LakeEditor } from "../../features/editor/LakeEditor";
 import "@dlient/lakex-doc-react/style.css";
 import "../../styles/fonts/font-overrides.css";
 import { loadSettings } from "../../lib/settings";
+import type { NoteKind } from "../../core/noteKind";
 
 export interface TrashPreviewPageProps {
   noteId: string;
@@ -22,7 +23,7 @@ export function TrashPreviewPage({ noteId, onBack, onRestored }: TrashPreviewPag
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   // 非 doc（表格/多维表/画板/手写板）正文不是 Lake 格式 → 预览一律挡住，不挂 Lake 编辑器。
-  const [kind, setKind] = useState<"doc" | "usheet" | "bitable" | "board" | "ink">("doc");
+  const [kind, setKind] = useState<NoteKind>("doc");
   // 261026：远端已彻底删除、本机仅保留这份回收站副本 → 顶部说明「云端已删除 · 仅本地」（仍可恢复）。
   const [cloudDeleted, setCloudDeleted] = useState(false);
   const [loading, setLoading] = useState(true);

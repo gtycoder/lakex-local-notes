@@ -543,6 +543,7 @@ export function BoardEditor({ noteId, content, visible, readOnly: readOnlyProp, 
     <div
       ref={hostRef}
       className={`board-editor${viewReady ? "" : " board-editor--restoring"}`}
+      data-note-id={noteId}
       data-active={(focused ?? visible) ? "true" : undefined}
       data-pane-visible={visible ? "true" : undefined}
       data-pane={pane ?? undefined}

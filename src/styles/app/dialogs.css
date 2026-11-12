@@ -9,11 +9,11 @@
 
 /* 入场动效：仅 transform/opacity，通过 @starting-style 实现，无需 JS 状态机。 */
 /* 右键上下文菜单：复用 create-menu 的视觉语言 */
-.context-menu { display: flex; position: fixed; z-index: 600; flex-direction: column; width: 220px; transform-origin: top left; transition: transform var(--lake-motion-fast) var(--lake-ease-standard), opacity var(--lake-motion-fast) var(--lake-ease-standard); }
+.context-menu { display: flex; position: fixed; flex-direction: column; width: 220px; transform-origin: top left; transition: transform var(--lake-motion-fast) var(--lake-ease-standard), opacity var(--lake-motion-fast) var(--lake-ease-standard); }
 
-.context-menu > button { display: grid; grid-template-columns: 18px minmax(0, 1fr); align-items: center; gap: 9px; width: 100%; border: 0; background: transparent; text-align: left; font-size: var(--lake-font-size-tiny); }
+.context-menu > button { grid-template-columns: 18px minmax(0, 1fr); width: 100%; }
 
-.context-menu-item { display: flex; align-items: center; justify-content: space-between; width: 100%; cursor: pointer; font-size: var(--lake-font-size-tiny); position: relative; box-sizing: border-box; }
+.context-menu-item { justify-content: space-between; width: 100%; position: relative; box-sizing: border-box; }
 
 .context-menu-item-label { display: grid; grid-template-columns: 18px minmax(0, 1fr); align-items: center; gap: 9px; }
 
@@ -23,7 +23,7 @@
 .context-menu-sep { margin: 5px 8px; border-top: 0.5px solid var(--lake-border-1); }
 .context-menu-submenu { width: 230px; max-height: calc(100vh - 16px); overflow-y: auto; }
 
-.context-menu-submenu > button { display: block; width: 100%; border: 0; background: transparent; text-align: left; font-size: var(--lake-font-size-tiny); white-space: nowrap; }
+.context-menu-submenu > button { width: 100%; white-space: nowrap; }
 
 .context-menu { opacity: 1; transform: scale(1); }
 

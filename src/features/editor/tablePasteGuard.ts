@@ -14,6 +14,7 @@
  * `TablePasteGuardDialog.tsx`。
  */
 import { usheetToBody, type UsheetWorkbook } from "../../core/usheetDoc";
+import { formatDateTime } from "../../core/dateFormat";
 import { NOTE_REF_CARD_NAME, type NoteRefValue } from "./noteRef";
 
 /**
@@ -101,7 +102,7 @@ export function parseHtmlTableToUsheetBody(html: string): string | null {
 
 /** 新表格文档的标题：带来源与规模，便于在树里认出来。 */
 export function usheetDocTitle(shape: TableShape, at: number): string {
-  return `粘贴的表格 ${shape.rows} 行 × ${shape.cells} 格（${new Date(at).toLocaleString("zh-CN")}）`;
+  return `粘贴的表格 ${shape.rows} 行 × ${shape.cells} 格（${formatDateTime(new Date(at))}）`;
 }
 
 /** 「文档引用」卡的粘贴 HTML 形态（内核认 `ne-custom-card` + `data-custom-name`；见 LAKEX-CONTRACT §5.23）。 */

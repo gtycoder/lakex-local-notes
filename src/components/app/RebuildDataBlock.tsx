@@ -10,6 +10,7 @@
  */
 import { useState } from "react";
 import type { RebuildResultShape, RebuildScanResultShape } from "../../lib/types";
+import { formatDateTime } from "../../core/dateFormat";
 
 export interface RebuildConfirmOptions {
   title: string;
@@ -31,7 +32,8 @@ function formatSize(bytes: number): string {
 }
 
 function formatTime(ms: number): string {
-  try { return new Date(ms).toLocaleString("zh-CN", { hour12: false }); } catch { return String(ms); }
+  const date = new Date(ms);
+  return Number.isNaN(date.getTime()) ? String(ms) : formatDateTime(date);
 }
 
 const STATUS_LABEL: Record<string, string> = {

@@ -21,8 +21,34 @@ export interface AiAssistantSession {
   dismiss(): void;
 }
 
-/** 活动编辑器宿主（与 features/editor/activeEditor.ts 同口径：只认 EXPLICIT 的 data-active）。 */
-const SCOPE_EDITOR_SELECTOR = '.lake-editor-tab[data-active="true"]';
+/**
+ * 活动编辑器宿主（与 features/editor/activeEditor.ts **同一判据族**：只认显式的 data-active）。
+ * F-03（261112 审计）：原来只认 `.lake-editor-tab`（doc）⇒ 表格/多维表/画板/手写板上的 AI 面板
+ * 拿不到文档维度（作用域退化成空间级，切文档不换会话）。现在 5 个宿主根节点都带 data-note-id，
+ * 选择器按「同族属性」取，不再按 doc 的类名取。
+ */
+const SCOPE_EDITOR_SELECTOR = '[data-active="true"][data-note-id]';
+
+/**
+ * 五个编辑器宿主根节点（doc / usheet / bitable / board / ink）的**唯一清单**。
+ * 与 data-active 同一契约族（features/editor/activeEditor.ts），但这里要「任意可见性」的全集
+ * （后台标签也可能持有 AI 会话），所以按宿主类名显式列出；四个非 doc 宿主与 doc 一样必须带
+ * data-note-id —— 由 aiAssistantScope.test.ts 对源码逐文件断言，漏一个就红。
+ */
+const EDITOR_HOST_SELECTOR = [
+  ".lake-editor-tab[data-note-id]",
+  ".usheet-editor[data-note-id]",
+  ".bitable-editor[data-note-id]",
+  ".board-editor[data-note-id]",
+  ".ink-pad[data-note-id]",
+].join(",");
+
+/** 该笔记的编辑器宿主是否还在 DOM 里（tab/文档被关掉 ⇒ false；keep-alive 隐藏仍算在）。 */
+export function isNoteHostAlive(noteId: string): boolean {
+  if (typeof document === "undefined") return true;
+  return [...document.querySelectorAll<HTMLElement>(EDITOR_HOST_SELECTOR)]
+    .some((el) => el.getAttribute("data-note-id") === noteId);
+}
 
 /** 一级空间在壳层上的状态类（与 src/App.tsx 的 workspace-view 类同源）。 */
 const SPACE_CLASSES = /(ai-writing-active|quick-notes-active|diary-space-active|tags-space-active|trash-space-active|resources-space-active)/;

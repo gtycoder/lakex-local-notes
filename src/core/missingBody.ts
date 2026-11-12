@@ -10,12 +10,14 @@
  * 注意 cloud 只是"可尝试"：云端对象可能已被 GC / 清单已不含该文档，真正结果由拉取时判定
  *（失败会明确回报，不静默）。
  */
+import type { NoteKind } from "./noteKind.js";
+
 export type MissingBodyRecovery = "cloud" | "history" | "none";
 
 export interface MissingBodyDoc {
   id: string;
   title: string;
-  kind: "doc" | "usheet" | "bitable" | "board" | "ink";
+  kind: NoteKind;
   updatedAt: string;
   parentId: string | null;
   /** 历史快照数量。 */

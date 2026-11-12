@@ -210,7 +210,8 @@ export async function pushSingleQuickNote(id: string, deps: { cfg?: S3Settings }
     const full = await runMobileV3Sync(d, cfg);
     return {
       status: "full-sync",
-      reason: result.reason === "remote-deleted" ? "remote-deleted" : "no-remote-manifest",
+      // F-04：4 个理由原样透传（不折叠）；文案单一来源 core/quickNoteSyncTypes 的 QUICK_NOTE_FULL_SYNC_TEXT。
+      reason: result.reason,
       result: {
         uploaded: full.uploadedNotes, downloaded: full.downloadedNotes, conflicts: 0,
         manifestId: "v3-g" + full.generation, completedAt: new Date().toISOString(),

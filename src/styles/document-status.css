@@ -19,7 +19,7 @@
   font-variant-numeric: tabular-nums;
 }
 .document-statusbar-stats,
-.document-statusbar-state { min-width: 0; display: flex; align-items: center; gap: 7px; }
+.document-statusbar-state { min-width: 0; display: flex; align-items: center; }
 /* 状态栏仅展示、不加任何点击交互；但允许选中复制文字（容器仍穿透，不挡编辑器点击） */
 .document-statusbar-stats,
 .document-statusbar-state { pointer-events: auto; -webkit-user-select: text; user-select: text; }
@@ -29,8 +29,6 @@
 
 .document-statusbar-state.synced-history {  padding: 2px 7px;
   border-radius: var(--lake-radius-pill);
-  color: var(--lake-accent-text);   /* B2/261016：文字色一律 accent-text；原 var(--lake-accent, var(--lake-accent)) 是自我兜底（fallback 与主值同令牌）*/
-  background: color-mix(in srgb, var(--lake-accent) 10%, transparent);
 }
 .document-notice-toast {  position: absolute;
   z-index: var(--lake-z-statusbar-popover);

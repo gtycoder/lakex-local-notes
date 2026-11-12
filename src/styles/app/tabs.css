@@ -179,9 +179,9 @@
 
 .tab-switcher-menu {
   /* portal 渲染到 document.body，脱离 .tab-bar（sticky+z-index:200）层叠上下文；
-     fixed + z-index:500 保证弹窗始终在大纲 rail（z-index:250）之上。 */
+     层序由 overlay.css 的 .ln-overlay-surface 统一给出（--lake-z-overlay-menu），
+     恒高于大纲 rail（--lake-z-outline）。这里只留定位。 */
   position: fixed;
-  z-index: 500;
   max-width: calc(100vw - 24px);
   display: flex;
   flex-direction: column;

@@ -551,7 +551,7 @@ let verifiedS3Fingerprint: string | null = null;
       `笔记 ${st.notes}，笔记本 ${st.notebooks}，分组 ${st.groups}，小记 ${sysInfo.quickNotes}`,
       `资源 ${st.assetFiles} 个 / ${formatBytes(st.assetBytes)}，历史快照 ${st.historySnapshots} 份 / ${formatBytes(st.historyBytes)}`,
       `回收站节点 ${st.trashedNodes}，删除标记 ${st.tombstones}，未归属记录 ${st.orphanRows}，库文件 ${formatBytes(st.dbBytes)}`,
-      `生成于 ${new Date().toLocaleString()}`,
+      `生成于 ${formatDateTime(new Date())}`,
     ];
     try {
       await navigator.clipboard.writeText(lines.join("\n"));

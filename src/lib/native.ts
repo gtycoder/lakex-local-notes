@@ -1,5 +1,6 @@
 import type { CleanOrphanResult, DataHealthReport, DeepCleanupResult, DocumentTagLinks, DraftJournalEntry, LastHistoryCleanup, NoteDigest, NoteDocument, NoteInfo, OrphanAsset, QuickNoteDocument, QuickNoteImage, QuickNoteListSummary, QuickNoteTag, QuickNoteTrashItem, ResourceUploadInput, ResourceUploadOutput, S3GcLogItem, S3GcSettings, S3Settings, RestoreSyncConflictResult, SaveNoteResult, SaveQuickNoteInput, SyncConflictsSnapshot, SyncProgress, SyncResult, SyncSettings, SyncStatusInfo, TreeNode, WorkspaceSnapshot } from "./types";
 import type { TrashItem } from "../core/trashPolicy";
+import type { NoteKind } from "../core/noteKind";
 import type { MissingBodyDoc, MissingQuickNoteDoc } from "../core/missingBody";
 import type { AiChatMessage, AiChatResult, AiListModelsResult, AiProviderPatch, AiSettingsPatch, AiSettingsView, AiStreamEvent, AiTestResult } from "../core/aiProviders";
 import type {
@@ -37,7 +38,7 @@ export interface NoteHistoryEntry {
   filePath: string;
   protectedUntil: string | null;
   /** 文档类型（同篇快照同类型）：渲染层据此预热预览分包。 */
-  kind: "doc" | "usheet" | "bitable" | "board" | "ink";
+  kind: NoteKind;
 }
 
 /** 安全模式状态快照（IPC get_safe_mode_state；主进程 electron/safeMode.ts 的同名快照）。 */
@@ -268,7 +269,7 @@ export interface LakeNative {
   listNoteOrphans(noteId: string): Promise<Array<{ filename: string; size: number; mimeType: string; protectedByHistory: boolean }>>;
   previewHistorySnapshot(historyId: number): Promise<{
     /** 文档类型：doc 的 html 是 Lake 正文（viewer 渲染）；非 doc 是内部 JSON（结构化预览）。 */
-    kind: "doc" | "usheet" | "bitable" | "board" | "ink";
+    kind: NoteKind;
     plain: string;
     html: string;
     createdAt: string;

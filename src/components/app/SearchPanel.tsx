@@ -5,6 +5,7 @@ import { native } from "../../lib/native";
 import { getNativeErrorMessage } from "../../lib/nativeErrors";
 import { writeLocalStorage } from "../../lib/localStorageSafe";
 import { createRequestVersion } from "../../core/requestVersion";
+import { formatMd } from "../../core/dateFormat";
 import { initialSearchIndex, nextSearchIndex } from "../model/searchNavigation";
 import { prefetchEditorKernelNow } from "../../features/editor/kernelPrefetch";
 import {
@@ -28,7 +29,7 @@ import { filterDiarySearchHits } from "../../features/diary/diarySearch";
 function formatUpdatedAt(value?: string): string {
   if (!value) return "";
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "" : date.toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" });
+  return Number.isNaN(date.getTime()) ? "" : formatMd(date);
 }
 
 /** 范围是设备本地视图：读存储失败/坏值一律回落到「全部」。 */

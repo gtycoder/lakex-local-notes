@@ -122,6 +122,8 @@ export function HistorySnapshotPreview({ kind, noteId, body, snapshotId }: Histo
   // 移动端**绝不挂桌面编辑器**（261009）：下面这三个编辑器都绑桌面侧的东西（资源端口 / IPC / 桌面外壳），
   // 移动端借道桌面的「文档属性」弹窗时会走到这里 ⇒ 与移动端 `TrashPreviewPage` 同口径，给明确提示即可。
   // 桌面行为不受影响（isMobileEnvironment() 在桌面恒为 false）。
+  // 261112 审计核实：**当前移动端不 import 本组件**（移动端属性抽屉 = `mobile/ui/NoteInfoSheet`，
+  // 历史 = `WorkspaceOverlayHost` 的只读列表）⇒ 该分支保留为历史路径/未来复用的 fail-safe，不是死代码保护目标。
   if (isMobileEnvironment() && kind !== "doc") {
     return (
       <div className="history-snapshot">

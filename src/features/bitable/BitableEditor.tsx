@@ -1057,6 +1057,7 @@ export function BitableEditor({ noteId, content, visible, readOnly: readOnlyProp
     <div
       ref={rootRef}
       className="bitable-editor"
+      data-note-id={noteId}
       data-active={(focused ?? visible) ? "true" : undefined}
       data-pane-visible={visible ? "true" : undefined}
       data-pane={pane ?? undefined}
