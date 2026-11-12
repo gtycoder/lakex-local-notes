@@ -21,7 +21,10 @@ const QUICK_NOTES = read("../../components/app/QuickNoteComposer.tsx");
 const AI_MESSAGE = read("../aiWriting/AiMessageView.tsx");
 const AI_VIEWER = read("../aiWriting/AiAnswerViewer.tsx");
 const AI_WORKSPACE = read("../aiWriting/AiWritingWorkspace.tsx");
-const SIDEBAR = read("../../components/app/Sidebar.tsx");
+// 261112 R2 S6：意图预取（hover/pointerdown）随 TreeRowFace 搬到 ./sidebar/ ⇒ 聚合读。
+const SIDEBAR = read("../../components/app/Sidebar.tsx")
+  + "\n" + read("../../components/app/sidebar/TreeRowFace.tsx")
+  + "\n" + read("../../components/app/sidebar/TreeRow.tsx");
 const SEARCH_PANEL = read("../../components/app/SearchPanel.tsx");
 
 describe("P12 桌面内核 lazy 边界（静态契约）", () => {

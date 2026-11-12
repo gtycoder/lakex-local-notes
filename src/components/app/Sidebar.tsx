@@ -1,23 +1,19 @@
 import { Suspense, lazy, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Book, ChevronRight, ChevronsDownUp, Copy, Download, FolderInput, FilePlus, Filter, Focus, FolderPlus, History, Info, Lock, LockOpen, MoreVertical, Pencil, PenLine, Pin, Plus, RefreshCw, Tag as TagIcon, Trash } from "lucide-react";
+import { Book, ChevronsDownUp, Filter, Focus, Pin, Plus, RefreshCw } from "lucide-react";
 import { DockFilterRow, useDockFilter } from "../ui/DockFilterBar";
 import { escapeId } from "../../lib/cssEscape";
 import type { TreeNode } from "../../lib/types";
 import { buildTreeIndex, type TreeIndex } from "../../core/treeIndex";
 import { computeDropPosition, createDragGhost, isValidTreeDrop, moveDragGhost, removeDragGhost, type DragGhost } from "../model/treeDrag";
-import { Database, PenTool, Table } from "lucide-react";
 import { getCreateMenuPosition, type CreateMenuPosition } from "../model/createMenuPosition";
-import { ExportSubmenuItem, type ExportFormat } from "../ui/ExportSubmenuItem";
 import { SIDEBAR_DEFAULT_WIDTH } from "../../core/layoutConstants";
-import { Dialog, Menu, Submenu } from "../ui/Overlay";
+import { Menu } from "../ui/Overlay";
+import type { ExportFormat } from "../ui/ExportSubmenuItem";
 import { rubberBandWidth, SplitHandle } from "../ui/SplitHandle";
-import { usePopoverPosition } from "../../hooks/usePopoverPosition";
-import { prefetchEditorKernelNow } from "../../features/editor/kernelPrefetch";
 
 /** 261107：图标选择器 + 表情源表按需加载（入口不再静态背约 41KB gzip）。 */
 const NodeIconPicker = lazy(() => import("./NodeIconPicker").then((m) => ({ default: m.NodeIconPicker })));
 // 行内重命名的 Enter/Esc/空名口径统一走共用原语（DT-12；目录这里保留「弹窗 + 空名不提交」的现状）
-import { InlineRenameInput } from "../ui/InlineRenameInput";
 import { SidebarTagFilter } from "./SidebarTagFilter";
 import { NoteTagDialog } from "./NoteTagDialog";
 import { NamePromptDialog } from "./NamePromptDialog";
@@ -35,7 +31,6 @@ import { MoveTargetTreeDialog } from "./MoveTargetTreeDialog";
 import { BatchTagDialog } from "./BatchTagDialog";
 import { TreeSelectionContextMenu } from "./TreeSelectionContextMenu";
 import { SidebarPinnedSection } from "./SidebarPinnedSection";
-import { nodeIcon } from "./treeIcons";
 import {
   readPinnedOpen,
   readPinnedTreeIds,
@@ -67,8 +62,16 @@ import { renderBoardSnapshotBytes } from "../../features/board/boardSnapshot";
 import { isTagSelectionActive, type TagSelection } from "../../features/tags/tagsModel";
 import type { QuickNoteTagSummary } from "../../core/quickNoteTags";
 
+// 261112 R2 S6：目录行的 7 个内部组件搬到 ./sidebar/（纯搬移，不改 props/行为）。
+import { TreeRow } from "./sidebar/TreeRow";
+import { TreeRenameDialog } from "./sidebar/TreeRenameDialog";
+import { CreateMenu } from "./sidebar/CreateMenu";
+import { ContextMenu } from "./sidebar/ContextMenu";
+import type { DropPosition } from "./sidebar/treeRowProps";
+/** 兼容导出：DesktopOverlays 仍从 Sidebar 取它（组件本体在 ./sidebar/ConfirmDelete，单一实现）。 */
+export { ConfirmDelete } from "./sidebar/ConfirmDelete";
+
 type CreateKind = "notebook" | "group" | "note" | "usheet" | "bitable" | "board" | "ink";
-type DropPosition = "before" | "inside" | "after";
 export type SidebarMode = "docked" | "floating" | "collapsed";
 
 /** 定位时的上下余量：不把选中行正好贴在可视边界上 —— 目录栏一"变矮"（停靠↔浮动）就会立刻又掉出去。 */
@@ -283,7 +286,6 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [selection.ids.length]);
-
 
   /** 目录刷新（右上角刷新按钮）：重读整棵树，进行中把图标转起来并禁用，避免连点。 */
   const refreshTree = useCallback(async () => {
@@ -697,8 +699,6 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
     openCreateDialog(kind, parentId);
   };
 
-
-
   // ---- Markdown 导入（261106 task-85）----
   const byIdRef = useMemo(() => new Map(props.nodes.map((node) => [node.id, node])), [props.nodes]);
   /** 目标父级 = 触发/当前节点最近的「笔记本或分组」容器（根级文档沿祖先链找）；找不到 ⇒ null（禁用并提示）。 */
@@ -880,7 +880,6 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
   }, [releaseState]);
 
   const draggedNode = draggingId ? props.nodes.find((node) => node.id === draggingId) ?? null : null;
-
 
   const dropNode = dropTarget ? props.nodes.find((node) => node.id === dropTarget.id) ?? null : null;
   const dropParentId = dropTarget && dropNode
@@ -1427,166 +1426,6 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
   );
 });
 
-interface TreeRowProps {
-  node: TreeNode;
-  depth: number;
-  treeIndex: TreeIndex;
-  query: string;
-  activeId: string | null;
-  contextId: string | null;
-  expanded: Set<string>;
-  draggingId: string | null;
-  dropParentId: string | null;
-  draggedParentId: string | null;
-  releasingId: string | null;
-  dropTarget: { id: string; position: DropPosition } | null;
-  editingId: string | null;
-  onBeginRename: (node: TreeNode) => void;
-  onPointerDown: (event: React.PointerEvent, id: string) => void;
-  consumeSuppressedClick: () => boolean;
-  onContext: (id: string) => void;
-  onContextMenu: (event: React.MouseEvent, node: TreeNode) => void;
-  /** 目录行「＋」：弹「新建子项」快捷菜单 */
-  onCreateMenu: (event: React.MouseEvent, node: TreeNode) => void;
-  onToggle: (id: string) => void;
-  onSelect: (id: string) => void;
-  onIconClick?: (node: TreeNode, event: React.MouseEvent<HTMLElement>) => void;
-  /** 已锁定（只读）的文档 id 集（行尾显示小锁） */
-  lockedNoteIds: ReadonlySet<string>;
-  /** 多选集合（行显示最小选中态；笔记本永远不会在里面）。 */
-  selectedIds: ReadonlySet<string>;
-  /** 行点击（⌘/Shift 语义与普通点击都在 Sidebar 的 handleRowClick 里）。 */
-  onRowClick: (event: React.MouseEvent, node: TreeNode) => void;
-}
-
-const TreeRow = memo(function TreeRow(props: TreeRowProps) {
-  const children = (props.treeIndex.childrenByParent.get(props.node.id) ?? []).filter((node) => props.treeIndex.visibleIds.has(node.id));
-  const expandable = children.length > 0 || props.node.nodeType !== "note";
-  const open = props.expanded.has(props.node.id) || Boolean(props.query);
-
-  const dropPosition = props.dropTarget?.id === props.node.id ? props.dropTarget.position : null;
-  const isDragging = props.draggingId === props.node.id;
-  // 只有“放入”才标记目标父项蓝框；before/after 永远表示最终插入线，
-  // 即使跨级把子项拖到父项同级，也要把线画在父项实际目标边缘。
-  const isDropParent = dropPosition === "inside" && props.dropParentId === props.node.id;
-  const sameLevelLine = Boolean(dropPosition && dropPosition !== "inside");
-
-  return <div className="tree-item">
-    <TreeRowFace
-      node={props.node} open={open} expandable={expandable}
-      active={props.node.id === props.activeId}
-      selected={props.selectedIds.has(props.node.id)}
-      context={props.node.id === props.contextId && props.editingId !== props.node.id}
-      dragging={isDragging} releasing={props.releasingId === props.node.id}
-      dropParent={isDropParent} sameLevelLine={sameLevelLine} dropPosition={dropPosition}
-      locked={Boolean(props.node.nodeType === "note" && props.node.noteFileId && props.lockedNoteIds.has(props.node.noteFileId))}
-      onPointerDown={props.onPointerDown} onContextMenu={props.onContextMenu}
-      onCreateMenu={props.onCreateMenu} onToggle={props.onToggle} onSelect={props.onSelect}
-      onRowClick={props.onRowClick}
-      onIconClick={props.onIconClick} onContext={props.onContext}
-      consumeSuppressedClick={props.consumeSuppressedClick}
-    />
-    {open && <div className="tree-children">
-      {children.map((child) => <TreeRow key={child.id} {...props} node={child} depth={props.depth + 1} />)}
-    </div>}
-  </div>;
-});
-
-/** 行内容只接本行状态，缓存图标/按钮等重型子树；递归分支仍传播全局状态，不能跳过子孙更新。
- * 默认浅比较保留 node/回调更新语义，不用会忽略新回调或后代选中的自定义比较器。 */
-interface TreeRowFaceProps {
-  node: TreeNode;
-  open: boolean;
-  expandable: boolean;
-  active: boolean;
-  /** 多选选中态（与单选 active 分开；图标/背景更轻） */
-  selected: boolean;
-  context: boolean;
-  dragging: boolean;
-  releasing: boolean;
-  dropParent: boolean;
-  sameLevelLine: boolean;
-  dropPosition: DropPosition | null;
-  locked: boolean;
-  onPointerDown: TreeRowProps["onPointerDown"];
-  onContextMenu: TreeRowProps["onContextMenu"];
-  onCreateMenu: TreeRowProps["onCreateMenu"];
-  onToggle: TreeRowProps["onToggle"];
-  onSelect: TreeRowProps["onSelect"];
-  onRowClick: TreeRowProps["onRowClick"];
-  onIconClick: TreeRowProps["onIconClick"];
-  onContext: TreeRowProps["onContext"];
-  consumeSuppressedClick: TreeRowProps["consumeSuppressedClick"];
-}
-const TreeRowFace = memo(function TreeRowFace(props: TreeRowFaceProps) {
-  const icon = nodeIcon(props.node.nodeType, props.open, props.node.icon, props.node.kind ?? "doc");
-  return (
-    <div
-      role="treeitem"
-      tabIndex={0}
-      data-tree-node-id={props.node.id}
-      className={`note-row tree-row type-${props.node.nodeType} ${props.active ? "active" : ""} ${props.selected ? "is-multi-selected" : ""} ${props.context ? "context" : ""} ${props.dragging ? "dragging" : ""} ${props.releasing ? "releasing" : ""} ${props.dropParent ? "drop-parent" : ""} ${props.sameLevelLine ? `drop-line-${props.dropPosition}` : ""}`}
-      aria-selected={props.selected || undefined}
-      onClick={(event) => {
-        if (props.consumeSuppressedClick()) return;
-        props.onRowClick(event, props.node);
-      }}
-      onKeyDown={(event) => {
-        if (event.key === "Enter") {
-          // 261111 意图预取：键盘打开文档也先开始加载内核 chunk（与 hover/pointerdown 同一入口）。
-          if (props.node.nodeType === "note") prefetchEditorKernelNow();
-          props.node.nodeType === "note" ? props.onSelect(props.node.id) : props.onToggle(props.node.id);
-        }
-      }}
-      // 261111 意图预取：文档行 hover / 按下即开始加载内核 chunk（不拦截事件、不改冒泡）。
-      // 不用 onFocus（目录栏的 onFocus 属于「重命名输入全选」单一实现，见 namePromptWiring 护栏）。
-      onMouseEnter={props.node.nodeType === "note" ? prefetchEditorKernelNow : undefined}
-      onPointerDown={(event) => {
-        if (props.node.nodeType === "note") prefetchEditorKernelNow();
-        props.onPointerDown(event, props.node.id);
-      }}
-      onContextMenu={(event) => props.onContextMenu(event, props.node)}
-    >
-      <button type="button" className={`tree-chevron ${props.open && props.expandable ? "open" : ""}`} disabled={!props.expandable} onClick={(event) => { event.stopPropagation(); if (props.expandable) props.onToggle(props.node.id); }} aria-label={props.open ? "收起" : "展开"}>{props.expandable ? <ChevronRight size={14} /> : null}</button>
-      <span className="tree-row-icon" title="设置图标" onClick={(event) => { event.stopPropagation(); props.onIconClick?.(props.node, event); }}>{icon}</span>
-      <span className="note-row-copy">
-        <strong>{props.node.title}</strong>
-      </span>
-      {/* 锁标识格**每行都在**（未锁时为空）：否则 grid 的行内条目数与列数不一致时，"⋯"会掉到下一行（用户报的换行） */}
-      {props.locked
-        ? <span className="tree-row-lock" title="已锁定（只读）" aria-label="已锁定"><Lock size={12} /></span>
-        : <span className="tree-row-lock" aria-hidden="true" />}
-      {/* 行内悬浮动作（对齐思源：⋯ = more-root 弹右键菜单，＋ = new 新建子文档）。
-          悬浮才显形（选中态不常驻）；标题恒单行、列宽处直接裁切，不打省略号。 */}
-      <span className="tree-row-actions">
-        {/* ⋯ = 完整右键菜单；＋ = 新建子项（对齐思源 new-root）；用户 261006：＋ 放最右 */}
-        <button
-          type="button"
-          className="tree-row-action ln-iconbtn ln-iconbtn--compact"
-          aria-label="更多操作"
-          title="更多"
-          onPointerDown={(event) => event.stopPropagation()}
-          onClick={(event) => { event.stopPropagation(); props.onContextMenu(event, props.node); }}
-        >
-          <MoreVertical size={15} />
-        </button>
-        <button
-          type="button"
-          className="tree-row-action ln-iconbtn ln-iconbtn--compact"
-          aria-label="新建子项"
-          title="新建"
-          onPointerDown={(event) => event.stopPropagation()}
-          onClick={(event) => { event.stopPropagation(); props.onCreateMenu(event, props.node); }}
-        >
-          <Plus size={15} />
-        </button>
-      </span>
-    </div>
-  );
-});
-
-
-
 function toggleSet(current: Set<string>, id: string): Set<string> {
   const next = new Set(current);
   next.has(id) ? next.delete(id) : next.add(id);
@@ -1624,72 +1463,6 @@ function expandAncestorChain(current: Set<string>, nodes: TreeNode[], targetId: 
   return next;
 }
 
-interface ContextMenuProps {
-  node: TreeNode;
-  x: number;
-  y: number;
-  onRename: () => void;
-  /** 261106 task-90：单条「移动…」与多选共用同一个树形弹窗。 */
-  onMove: () => void;
-  onDelete: () => void;
-  onCopyMarkdown: () => void;
-  onExportAs: (format: ExportFormat) => void;
-  onCopyPaths: () => void;
-  onShowInfo: () => void;
-  onOpenHistory: () => void;
-  /** 该文档当前是否已锁定（只读） */
-  locked: boolean;
-  onToggleLock: () => void;
-  /** 只对 note 行出现：「打标签…」打开复用属性面板标签行的弹层（P1 三修）。 */
-  onAddTags: () => void;
-  /** 只对 note 行出现：「创建副本」（261106；与多选右键共用 duplicate_notes）。 */
-  onDuplicate: () => void;
-  /** 「置顶」入口（261107，设备本地）：文档/分组/笔记本都可置顶；不改变原目录。 */
-  pinned: boolean;
-  onTogglePin: () => void;
-  /** 批量操作进行中：创建副本禁用（IPC 并发复制没有意义）。 */
-  busy: boolean;
-  onClose: () => void;
-}
-
-/** 目录节点重命名弹窗（用户 261006：原内联输入改成弹窗；打开期间目录栏保持展开）。 */
-function TreeRenameDialog({ initial, onCancel, onConfirm }: { initial: string; onCancel: () => void; onConfirm: (title: string) => void }) {
-  const [value, setValue] = useState(initial);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const trimmed = value.trim();
-  // 新建文档会先落默认标题再打开本弹窗；接受默认名也必须能确认。
-  // 非空是唯一门槛：改成同名是无副作用的确认，不应把按钮置灰。
-  const canConfirm = trimmed.length > 0;
-  return (
-    <Dialog open onDismiss={onCancel} label="重命名" className="rename-dialog" initialFocus={inputRef}>
-      <div className="ln-dialog__head"><span className="ln-dialog__title">重命名</span></div>
-      <div className="ln-dialog__body">
-        <span className="ln-input">
-          {/* 空名策略 = fallback：回车不提交、保持原名（与「确定」按钮的 disabled={!canConfirm} 同一条口径）。 */}
-          <InlineRenameInput
-            inputRef={inputRef}
-            className="ln-input__field"
-            ariaLabel="节点名称"
-            value={value}
-            autoFocus
-            selectOnFocus
-            emptyPolicy="fallback"
-            onChange={setValue}
-            onCommit={onConfirm}
-            onCancel={onCancel}
-          />
-        </span>
-      </div>
-      <div className="ln-dialog__actions">
-        <button className="ln-btn ln-btn--ghost" onClick={onCancel}>取消</button>
-        <button className="ln-btn ln-btn--primary" disabled={!canConfirm} onClick={() => { if (canConfirm) onConfirm(trimmed); }}>确定</button>
-      </div>
-    </Dialog>
-  );
-}
-
-type CreateChildKind = Exclude<CreateKind, "notebook">;
-
 /**
  * 「需要写名字」的新建 kind → 弹窗预设（标题 / 输入框 aria / 预填默认名）。
  * notebook 不预填（用户自己起名）；其余六个 kind 预填默认名，可改或直接确认。
@@ -1703,141 +1476,6 @@ const CREATE_DIALOG_PRESETS: Record<CreateKind, { title: string; inputLabel: str
   board: { title: "新建画板", inputLabel: "画板名称", defaultName: "无标题画板" },
   ink: { title: "新建手写板", inputLabel: "手写板名称", defaultName: "无标题手写板" },
 };
-
-/** 「新建子项」五个动作（单一来源：右键菜单「新建」子菜单 + 目录行「＋」快捷菜单共用）。 */
-const CREATE_CHILD_ITEMS: ReadonlyArray<{ kind: CreateChildKind; label: string; icon: React.ReactNode }> = [
-  { kind: "note", label: "新建文档", icon: <FilePlus size={15} /> },
-  { kind: "usheet", label: "新建表格", icon: <Table size={15} /> },
-  { kind: "bitable", label: "新建多维表", icon: <Database size={15} /> },
-  { kind: "board", label: "新建画板", icon: <PenTool size={15} /> },
-  { kind: "ink", label: "新建手写板", icon: <PenLine size={15} /> },
-  { kind: "group", label: "新建分组", icon: <FolderPlus size={15} /> },
-];
-
-function CreateChildItems({ onNewChild, onClose }: { onNewChild: (kind: CreateChildKind) => void; onClose: () => void }) {
-  return (
-    <>
-      {CREATE_CHILD_ITEMS.map((item) => (
-        <button className="ln-menu__item" key={item.kind} role="menuitem" onClick={() => { onNewChild(item.kind); onClose(); }}>
-          {item.icon}<span>{item.label}</span>
-        </button>
-      ))}
-    </>
-  );
-}
-
-/** 目录行「＋」的快捷「新建」菜单：锚在该行按钮上，定位走 usePopoverPosition（贴底翻转）。
- *  261106：末尾加「导入」子菜单（Markdown 多选），目标 = 触发 + 的笔记本/分组。
- *  261106 task-91：「Markdown 文件夹…」入口已删除（多选文件已覆盖，目录入口冗余）。 */
-function CreateMenu({ anchor, onNewChild, importTarget, onImport, onClose }: {
-  anchor: HTMLElement;
-  onNewChild: (kind: CreateChildKind) => void;
-  /** 导入目标父级（最近容器）；null = 根级且没有所属笔记本 ⇒ 禁用并提示。 */
-  importTarget: string | null;
-  onImport: (targetId: string, kind: ImportPickerKind) => void;
-  onClose: () => void;
-}) {
-  const { surfaceRef, style } = usePopoverPosition({ open: true, anchor, gap: 4, margin: 8 });
-  return (
-    <Menu surfaceClassName="context-menu" onDismiss={onClose} surfaceRef={surfaceRef} style={style ?? { visibility: "hidden" }}>
-      <CreateChildItems onNewChild={onNewChild} onClose={onClose} />
-      <div className="context-menu-sep" role="separator" />
-      {importTarget ? (
-        <Submenu label={<><Download size={15} aria-hidden="true" /><span>导入</span></>}>
-          <button className="ln-menu__item" role="menuitem" onClick={() => { onImport(importTarget, "markdown"); onClose(); }}><FilePlus size={15} aria-hidden="true" /><span>Markdown…</span></button>
-          <button className="ln-menu__item" role="menuitem" onClick={() => { onImport(importTarget, "docx"); onClose(); }}><FilePlus size={15} aria-hidden="true" /><span>Word（.docx）…</span></button>
-          <div className="context-menu-sep" role="separator" />
-          <button className="ln-menu__item" role="menuitem" onClick={() => { onImport(importTarget, "xlsx"); onClose(); }}><FilePlus size={15} aria-hidden="true" /><span>Excel（.xlsx）…</span></button>
-          <button className="ln-menu__item" role="menuitem" onClick={() => { onImport(importTarget, "csv"); onClose(); }}><FilePlus size={15} aria-hidden="true" /><span>CSV（.csv）…</span></button>
-        </Submenu>
-      ) : (
-        <button className="ln-menu__item" role="menuitem" disabled title="先选择一个笔记本或分组"><Download size={15} aria-hidden="true" /><span>导入（先选择笔记本）</span></button>
-      )}
-    </Menu>
-  );
-}
-
-const ContextMenu = ({ node, x, y, onRename, onMove, onDelete, onCopyMarkdown, onExportAs, onCopyPaths, onShowInfo, onOpenHistory, locked, onToggleLock, onAddTags, onDuplicate, pinned, onTogglePin, busy, onClose }: ContextMenuProps) => {
-  const menuRef = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
-  // 视口边缘翻转：按光标先挂载，量出菜单真实尺寸后再定位——下方放不下就向上展开，保证整张菜单可点。
-  useLayoutEffect(() => {
-    const el = menuRef.current;
-    if (!el) return;
-    const margin = 8;
-    const w = el.offsetWidth;
-    const h = el.offsetHeight;
-    let left = x;
-    if (left + w + margin > window.innerWidth) left = window.innerWidth - w - margin;
-    left = Math.max(margin, left);
-    let top = y;
-    if (top + h + margin > window.innerHeight) {
-      const above = y - h;
-      top = above >= margin ? above : Math.max(margin, window.innerHeight - h - margin);
-    }
-    top = Math.max(margin, top);
-    setPos({ left, top });
-  }, [x, y]);
-  // Portal 到 body：侧边栏带 transform（含 translateX(0)）时，position: fixed 会退化为
-  // 相对侧边栏定位，导致菜单偏离光标右下；挂到 body 后恢复真正的视口固定定位。
-  return (
-    <Menu surfaceClassName="context-menu" onDismiss={onClose} surfaceRef={menuRef} style={pos ? { left: pos.left, top: pos.top } : { left: x, top: y, visibility: "hidden" }}>
-      {/* 261106 用户验收：右键菜单**不再提供「新建」**（行内/头部的「＋」已是唯一入口，
-          同一组创建动作只保留一处，菜单更短）。创建动作仍走 CREATE_CHILD_ITEMS 单一来源。 */}
-      {node.nodeType === "note" ? (
-        <>
-          {/* 分组 1：行本身的命名与固定 */}
-          <button className="ln-menu__item" role="menuitem" onClick={() => { onRename(); onClose(); }}><Pencil size={15} /><span>重命名</span></button>
-          <button className="ln-menu__item" role="menuitem" onClick={() => { onTogglePin(); onClose(); }}><Pin size={15} /><span>{pinned ? "取消置顶" : "置顶"}</span></button>
-          <div className="context-menu-sep" role="separator" />
-          {/* 分组 2：树结构 / 内容复制 */}
-          <button className="ln-menu__item" role="menuitem" disabled={busy} title={busy ? "正在执行其他操作，请稍候" : undefined}
-            onClick={() => { onDuplicate(); onClose(); }}><Copy size={15} /><span>创建副本</span></button>
-          <button className="ln-menu__item" role="menuitem" onClick={() => { onMove(); onClose(); }}><FolderInput size={15} /><span>移动…</span></button>
-          <div className="context-menu-sep" role="separator" />
-          {/* 分组 3：内容信息（版本/分类/元数据） */}
-          <button className="ln-menu__item" role="menuitem" onClick={() => { onOpenHistory(); onClose(); }}><History size={15} /><span>历史版本</span></button>
-          <button className="ln-menu__item" role="menuitem" onClick={() => { onAddTags(); onClose(); }}><TagIcon size={15} /><span>标签…</span></button>
-          <button className="ln-menu__item" role="menuitem" onClick={() => { onShowInfo(); onClose(); }}><Info size={15} /><span>属性</span></button>
-          <div className="context-menu-sep" role="separator" />
-          {/* 分组 4：状态与输出 */}
-          <button className="ln-menu__item" role="menuitem" onClick={() => { onToggleLock(); onClose(); }}>
-            {locked ? <LockOpen size={15} /> : <Lock size={15} />}<span>{locked ? "解锁" : "锁定（只读）"}</span>
-          </button>
-          {/* 按文档类型给各自的导出菜单（doc/sheet/bitable/board 不混用）；见 ExportSubmenuItem */}
-          <ExportSubmenuItem kind={node.kind ?? "doc"} onExportAs={onExportAs} onCopyMarkdown={onCopyMarkdown} onCopyPaths={onCopyPaths} onClose={onClose} />
-        </>
-      ) : node.nodeType === "group" ? (
-        <>
-          <button className="ln-menu__item" role="menuitem" onClick={() => { onRename(); onClose(); }}><Pencil size={15} /><span>重命名</span></button>
-          <button className="ln-menu__item" role="menuitem" onClick={() => { onTogglePin(); onClose(); }}><Pin size={15} /><span>{pinned ? "取消置顶" : "置顶"}</span></button>
-          <button className="ln-menu__item" role="menuitem" onClick={() => { onMove(); onClose(); }}><FolderInput size={15} /><span>移动…</span></button>
-        </>
-      ) : (
-        <button className="ln-menu__item" role="menuitem" onClick={() => { onRename(); onClose(); }}><Pencil size={15} /><span>重命名</span></button>
-      )}
-      <div className="context-menu-sep" role="separator" />
-      <button role="menuitem" className="danger" onClick={() => { onDelete(); onClose(); }}><Trash size={15} /><span>删除</span></button>
-    </Menu>
-  );
-};
-
-interface ConfirmDeleteProps {
-  node: TreeNode;
-  onConfirm: () => void;
-  onCancel: () => void;
-}
-
-export const ConfirmDelete = ({ node, onConfirm, onCancel }: ConfirmDeleteProps) => (
-  <Dialog open onDismiss={onCancel} label={"删除“" + node.title + "”？"} className="confirm-dialog">
-    <div className="ln-dialog__head"><span className="ln-dialog__title">删除“{node.title}”？</span></div>
-    <div className="ln-dialog__body">将删除该节点及其所有子项，移入本地回收站（可在回收站中恢复或彻底删除）。</div>
-    <div className="ln-dialog__actions">
-      <button className="ln-btn ln-btn--ghost" onClick={onCancel}>取消</button>
-      <button className="ln-btn ln-btn--secondary ln-btn--danger-text" onClick={onConfirm}>删除</button>
-    </div>
-  </Dialog>
-);
 
 /** M1.6：目录节点（笔记本/分组/文档）自定义图标选择器 —— **自有面板，不复用内核表情面板的类**（261014）。
  *

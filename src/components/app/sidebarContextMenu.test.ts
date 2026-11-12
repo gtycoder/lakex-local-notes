@@ -1,7 +1,10 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-const SRC = readFileSync(new URL("./Sidebar.tsx", import.meta.url), "utf8");
+// 261112 R2 S6：Sidebar 的 7 个内部组件已搬到 ./sidebar/ ⇒ 源码级护栏按「组件 + 子件」聚合读
+// （顺序有讲究：下面的 slice 断言依赖 ContextMenu → ConfirmDelete → TreeRow* → TreeRenameDialog → 创建件）。
+const SIDEBAR_PARTS = ["./sidebar/ContextMenu.tsx", "./sidebar/ConfirmDelete.tsx", "./sidebar/TreeRow.tsx", "./sidebar/TreeRowFace.tsx", "./sidebar/TreeRenameDialog.tsx", "./sidebar/CreateChildItems.tsx", "./sidebar/CreateMenu.tsx", "./Sidebar.tsx"];
+const SRC = SIDEBAR_PARTS.map((rel) => readFileSync(new URL(rel, import.meta.url), "utf8")).join("\n");
 const APP = readFileSync(new URL("../../App.tsx", import.meta.url), "utf8");
 const SHELL = readFileSync(new URL("../../desktop/useDesktopShell.ts", import.meta.url), "utf8");
 

@@ -10,7 +10,8 @@ import { describe, expect, it } from "vitest";
  */
 const read = (rel: string) => readFileSync(new URL(rel, import.meta.url), "utf8");
 const APP = read("../../App.tsx");
-const SIDEBAR = read("./Sidebar.tsx");
+// 261112 R2 S6：内部组件搬到 ./sidebar/ ⇒ 按「组件 + 子件」聚合读（源码级护栏不因搬家变假红）。
+const SIDEBAR = ["./sidebar/ContextMenu.tsx", "./sidebar/TreeRowFace.tsx", "./sidebar/TreeRow.tsx", "./Sidebar.tsx"].map(read).join("\n");
 const INFO = read("./NoteInfoDialog.tsx");
 const TYPES = read("../../desktop/desktopTypes.ts");
 const TOPBAR = read("../../desktop/DesktopTopBar.tsx");
