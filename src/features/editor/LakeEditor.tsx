@@ -15,10 +15,22 @@ import { attachLongPress } from "./longPress";
 import { installMediaCardCategoryRouter } from "./mediaCardRouting";
 import { isDesktop, native } from "../../lib/native";
 
+/** 预览宿主固定阅读档字号（Q05B）：移动回收站/历史/桌面 NoteDocPreview 同语义同值。
+ *  权威比较由 src/features/editor/lakeEditorInteraction.test.ts 钉住（两边都是字面量，测试防漂移）。 */
+export const LAKE_PREVIEW_FONT_SIZE = 16;
+
+/** 宿主交互档（Q07A）：
+ *  - "editor"（默认，= 现状）：卡片长按菜单 + copy/cut 接管 + 图片预览 + file 卡打开；
+ *  - "preview"：只读预览宿主 —— 跳过卡片长按菜单（重命名/剪切/另存）与 copy/cut 接管，
+ *    保留 tap 图片预览与 file 卡打开（移动回收站/历史快照用）。 */
+export type LakeEditorInteraction = "editor" | "preview";
+
 interface LakeEditorProps {
   noteId: string;
   content: string;
   mode?: "viewer" | "editor";
+  /** 交互档；缺省 "editor"（默认值回退，见 Q07A）。 */
+  interaction?: LakeEditorInteraction;
   tocEnabled: boolean;
   onChange: (content: string) => void;
   prefs?: LakeEditorPrefs;
@@ -29,7 +41,8 @@ interface LakeEditorProps {
   onEditorReady?: (noteId: string, editor: LakeEditorInstance | null) => void;
 }
 
-export function LakeEditor({ noteId, content, mode = "editor", tocEnabled, onChange, prefs, scrollNode, onEditorReady, hostClassName }: LakeEditorProps) {
+export function LakeEditor({ noteId, content, mode = "editor", interaction = "editor", tocEnabled, onChange, prefs, scrollNode, onEditorReady, hostClassName }: LakeEditorProps) {
+  const previewOnly = interaction === "preview";
   const hostRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<LakeEditorInstance | null>(null);
   const latestDocumentRef = useRef("");
@@ -42,23 +55,25 @@ export function LakeEditor({ noteId, content, mode = "editor", tocEnabled, onCha
   onEditorReadyRef.current = onEditorReady;
 
   // 移动端：长按卡片 → 卡片菜单（触屏没有右键；桌面此处由 EditorTab 的右键处理）。
+  // preview 档（Q07A）：只读宿主不提供菜单（重命名/剪切/另存都是写操作）。
   useEffect(() => {
     const host = hostRef.current;
-    if (!host) return;
+    if (!host || previewOnly) return;
     return attachLongPress(host, (x, y, target) => {
       const el = target as HTMLElement;
       const item = resolveCardAsset(el);
       const card = el.closest?.("ne-card") as HTMLElement | null;
       if (item && card) setCardMenu({ x, y, item, el: card });
     });
-  }, []);
+  }, [previewOnly]);
 
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
 
     // 复制/剪切 = 应用侧统一管线（图片来源见 selectionClipboard.ts 文件头；单一来源，别在这里再写一份）。
-    const detachSelectionClipboard = attachSelectionClipboard(host);
+    // preview 档（Q07A）：只读预览不接管 copy/cut（内核原生只读选区行为保留）。
+    const detachSelectionClipboard = previewOnly ? () => undefined : attachSelectionClipboard(host);
     const pasteHandler = (event: ClipboardEvent) => {
       const dt = event.clipboardData;
       if (!dt) return;
@@ -167,7 +182,7 @@ export function LakeEditor({ noteId, content, mode = "editor", tocEnabled, onCha
       editorRef.current = null;
       host.replaceChildren();
     };
-  }, [noteId, mode, tocEnabled, prefs?.fontSize, prefs?.showToolbar]);
+  }, [noteId, mode, previewOnly, tocEnabled, prefs?.fontSize, prefs?.showToolbar]);
 
   if (error) {
     return <div className="editor-error"><AlertCircle size={18} /><span>{error}</span></div>;

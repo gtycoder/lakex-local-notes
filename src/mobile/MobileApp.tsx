@@ -80,6 +80,7 @@ const bootDebugModules = Promise.all([import("./native/lakeNativeContract"), imp
 
 /** 第二层工作区（内含 Lake 内核编辑器）：**按需加载**。
  * 冷启动不需要内核；静态引入会把整个内核打进入口 chunk（实测 6.7MB），拖慢所有启动路径。 */
+import { EmptyState } from "./ui/EmptyState";
 import { PanelLoading } from "./ui/PanelLoading";
 import { consumeBack, pushBackHandler } from "./ui/backStack";
 import { DeferredPanel } from "./ui/DeferredPanel";
@@ -92,6 +93,9 @@ const SearchSheet = lazy(() => import("./settings/SearchSheet").then((m) => ({ d
 /** 设置抽屉按需加载（261103 P10）：它是入口图里最后一块大依赖（含 core/s3v3Report 诊断格式化、S3 表单等），
  *  打开设置才需要；懒加载后首屏不用付这份解析成本。Suspense 由渲染处兜底（短暂空抽屉）。 */
 const SettingsDrawer = lazy(() => import("./settings/SettingsDrawer").then((m) => ({ default: m.SettingsDrawer })));
+/** 回收站文档只读打开（Q04B，261112 第二轮）：复用设置里那条预览页（自带内核样式 + 懒加载边界，
+ *  与 SettingsDrawer → TrashPreviewPage 同一个分包；入口 chunk 不新增内核字节）。 */
+const TrashPreviewPage = lazy(() => import("./trash/TrashPreviewPage").then((m) => ({ default: m.TrashPreviewPage })));
 
 /**
  * 退出 App（Android：结束任务）。
@@ -150,6 +154,13 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
     workspaceOriginTabRef.current = null;
     setRoute({ kind: "home", tab: origin ?? "library" });
   });
+  /** 回收站文档只读预览（Q04B）：非 null = 全屏预览页打开（打开已进回收站/被他端 purge 的文档时进入）。 */
+  const [trashPreviewId, setTrashPreviewId] = useState<string | null>(null);
+  /** Q04B：回收站只读预览是应用级全屏页 ⇒ 返回键先关它（与 AI 空间同一套返回栈机制）。 */
+  useEffect(() => {
+    if (!trashPreviewId) return;
+    return pushBackHandler(() => { setTrashPreviewId(null); return true; });
+  }, [trashPreviewId]);
   /** 小记（长按桌面图标的快捷方式）：独立入口，不等启动完成即可输入。
    *  261022：冷启动由原生同步 hint 在首帧前给出判定 ⇒ 首帧直接进 capture，不再先画首页骨架。 */
   const [captureOpen, setCaptureOpen] = useState(initialCapture);
@@ -696,7 +707,9 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
     const st = await bridge.noteGoneState(id);
     if (!st) { showToast("文档不存在", { type: "error" }); return; }
     if (isGoneNote({ parentId: st.parentId, syncState: st.syncState })) {
-      showToast("该文档已在回收站，请到「设置 → 回收站」查看", { type: "error" });
+      // Q04B（261112 第二轮裁决）：**不拒绝打开**。已进回收站/被他端 purge 的文档一律进只读预览页
+      // （横幅明说「编辑与保存会被拦」+ 显式「恢复」）——对齐 AGENTS §3#16，绝不静默丢弃编辑。
+      setTrashPreviewId(id);
       return;
     }
     const parentOfNote = new Map(notes.map((n) => [n.id, n.parentId] as const));
@@ -889,6 +902,20 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
         </div>
       )}
       </div>
+      {/* Q04B：回收站文档只读预览（全屏层，层序沿用设置里同一个预览容器） */}
+      {trashPreviewId && (
+        <div className="mobile-settings-preview">
+          <Suspense fallback={<EmptyState>正在加载预览…</EmptyState>}>
+            <MobileErrorBoundary scope="trash-preview" title="回收站预览加载失败">
+              <TrashPreviewPage
+                noteId={trashPreviewId}
+                onBack={() => setTrashPreviewId(null)}
+                onRestored={() => { setTrashPreviewId(null); void refreshAll().catch(() => undefined); }}
+              />
+            </MobileErrorBoundary>
+          </Suspense>
+        </div>
+      )}
       <CreateNotebookSheet
         open={createNbOpen}
         onClose={() => setCreateNbOpen(false)}

@@ -4,13 +4,12 @@ import { useCallback, useEffect, useState } from "react";
 import { reportNativeActionError } from "../../lib/nativeErrors";
 import { ArrowLeft, LoaderCircle } from "lucide-react";
 import { bridge } from "../bridge";
-import { LakeEditor } from "../../features/editor/LakeEditor";
+import { LAKE_PREVIEW_FONT_SIZE, LakeEditor } from "../../features/editor/LakeEditor";
 // 内核样式必须由**本懒加载入口自己**带（261010 护栏）：冷启动直接从「设置 → 回收站 → 预览」进来时，
 // 这条路径是第一个内核消费者 —— 缺样式会渲染成大图标 + 原生控件（261009 在小记上踩过同款）。
 // 顺序与 DocumentEditor 一致：内核 style.css 在前，字体覆盖在后（移动端无 @layer，靠顺序生效）。
 import "@dlient/lakex-doc-react/style.css";
 import "../../styles/fonts/font-overrides.css";
-import { loadSettings } from "../../lib/settings";
 import type { NoteKind } from "../../core/noteKind";
 
 export interface TrashPreviewPageProps {
@@ -71,6 +70,11 @@ export function TrashPreviewPage({ noteId, onBack, onRestored }: TrashPreviewPag
       </header>
       {msg && <div className="mobile-status-msg">{msg}</div>}
       {cloudDeleted && <div className="mobile-status-msg">云端已删除（仅本地），恢复并同步成功后会重新上传</div>}
+      {/* Q04B：回收站文档**只读打开**（不再拒绝）——横幅明说「编辑/保存会被拦」，避免用户以为能改而丢编辑。
+          本页永远不再挂可写宿主：LakeEditor 走 interaction="preview"（无卡片菜单 / 无 copy-cut 接管）。 */}
+      <div className="mobile-status-msg">
+        只读预览：该文档在回收站，编辑与保存会被拦截；点右上角「恢复」后可继续编辑。
+      </div>
       <section className="mobile-doc-body">
         {loading ? (
           <div className="poc-center"><LoaderCircle className="spin" /><span>正在加载资源…</span></div>
@@ -83,10 +87,12 @@ export function TrashPreviewPage({ noteId, onBack, onRestored }: TrashPreviewPag
             noteId={noteId}
             content={content}
             mode="viewer"
+            interaction="preview"
             hostClassName="mb-kernel-host"
             tocEnabled={false}
             onChange={() => undefined}
-            prefs={{ fontSize: loadSettings().fontSize, showToolbar: false, disableVirtualRendering: true }}
+            // Q05B：预览固定阅读档（不跟用户正文字号设置走）；禁用虚拟渲染（本页无内部滚动容器）。
+            prefs={{ fontSize: LAKE_PREVIEW_FONT_SIZE, showToolbar: false, disableVirtualRendering: true, disableNativeToc: true }}
           />
         )}
       </section>

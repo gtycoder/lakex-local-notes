@@ -1,4 +1,11 @@
-import { Database, FilePlus, FolderOpen, FolderPlus, PenLine, PenTool, Plus, Table, X } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Database, FilePlus, FolderOpen, FolderPlus, PenLine, PenTool, Plus, RotateCcw, Table, X } from "lucide-react";
+import { bridge } from "../bridge";
+import { LAKE_PREVIEW_FONT_SIZE, LakeEditor } from "../../features/editor/LakeEditor";
+import { snapshotPreview } from "../../core/historyPreview";
+import type { NoteKind } from "../../core/noteKind";
+import { getNativeErrorMessage } from "../../lib/nativeErrors";
+import { showToast } from "../ui/toastBus";
 import type { TreeNode } from "../../lib/types";
 import { MobileNodeIconGlyph } from "../ui/NodeIconGlyph";
 import { MobileNodeIconPicker } from "../ui/NodeIconPicker";
@@ -73,6 +80,27 @@ export interface WorkspaceOverlayHostProps {
 
 export function WorkspaceOverlayHost(props: WorkspaceOverlayHostProps) {
   const { createOpen, tabsOpen, tabs, activeId, notebookSwitchOpen, notebooks, notebookId, menuFor, infoFor, iconFor, historyFor, historyList } = props;
+  /**
+   * 历史快照预览（Q03，261112 第二轮）：移动端不再「盲恢复」。
+   * 列表行点击 = 看快照（与桌面 HistoryPanel 同语义：行=预览、恢复/删除=显式动作）；
+   * 预览是**叠在列表之上的第二个 Sheet**（同一 MobileSheet 原语，层序/返回栈/滚动锁都由它保证）。
+   * 只有 doc 走只读 LakeEditor（interaction=preview）；其余 kind 给结构化摘要
+   * （core/historyPreview 与桌面同一份解析，移动不 import 桌面编辑器）。
+   */
+  const [historyPreview, setHistoryPreview] = useState<{ id: number; title: string; createdAt: string; kind: NoteKind; body: string } | null>(null);
+  const openHistoryPreview = async (id: number) => {
+    if (!historyFor) return;
+    try {
+      // kind 只用于选渲染器（doc=只读内核 / 其它=结构化摘要）；文档所有版本的 kind 恒定，
+      // 所以按当前 note 取一次即可（历史快照行本身不带 kind）。
+      const [snapshot, note] = await Promise.all([bridge.previewHistorySnapshot(id), bridge.readNote(historyFor.id)]);
+      if (!snapshot || !note) { showToast("快照预览失败（文件可能已删除）", { type: "error" }); return; }
+      const row = historyList.find((h) => h.id === id);
+      setHistoryPreview({ id, title: row?.title || "无标题", createdAt: row?.createdAt ?? "", kind: note.kind, body: snapshot.html });
+    } catch (error) {
+      showToast("快照预览失败：" + getNativeErrorMessage(error), { type: "error" });
+    }
+  };
   return (
     <>
       {/* 目录抽屉「新建」（261014 用户点单）：**清单与桌面 Sidebar 的 CREATE_CHILD_ITEMS 同款同序**
@@ -166,14 +194,86 @@ export function WorkspaceOverlayHost(props: WorkspaceOverlayHostProps) {
         <MobileSheet open title="历史版本" bodyClassName="mb-list" onClose={props.onCloseHistory}>
           {historyList.length === 0 && <EmptyState inset>暂无历史版本</EmptyState>}
           {historyList.map((h) => (
-            <div key={h.id} className="mb-row" onClick={() => props.onRestoreHistory(h.id)}>
+            <div key={h.id} className="mb-row" onClick={() => void openHistoryPreview(h.id)} title="点击预览快照">
               <span className="mb-row__title">{h.title || "无标题"}</span>
               <span className="mb-row__meta">{new Date(h.createdAt).toLocaleString("zh-CN")}</span>
+              <button className="mb-iconbtn mb-row__action" onClick={(e) => { e.stopPropagation(); props.onRestoreHistory(h.id); }} aria-label="恢复此版本" title="恢复此版本"><RotateCcw size={16} /></button>
               <button className="mb-iconbtn mb-row__action" onClick={(e) => { e.stopPropagation(); props.onDeleteHistory(h.id); }} aria-label="删除"><X size={16} /></button>
             </div>
           ))}
         </MobileSheet>
       )}
+      {/* 历史快照预览（Q03）：叠在历史列表之上的第二个 Sheet；返回键先关它。 */}
+      {historyFor && historyPreview && (
+        <MobileSheet open title="历史版本预览" bodyClassName="mb-list" onClose={() => setHistoryPreview(null)}>
+          <div className="mb-row">
+            <span className="mb-row__title">{historyPreview.title}</span>
+            <span className="mb-row__meta">{historyPreview.createdAt ? new Date(historyPreview.createdAt).toLocaleString("zh-CN") : ""}</span>
+            <button type="button" className="mb-btn mb-btn--secondary mb-btn--compact" onClick={() => props.onRestoreHistory(historyPreview.id)}>恢复</button>
+          </div>
+          {historyPreview.kind === "doc" ? (
+            <LakeEditor
+              noteId={historyFor.id}
+              content={historyPreview.body}
+              mode="viewer"
+              interaction="preview"
+              hostClassName="mb-kernel-host"
+              tocEnabled={false}
+              onChange={() => undefined}
+              // Q05B：预览固定阅读档；禁用虚拟渲染（Sheet body 是唯一滚动容器）。
+              prefs={{ fontSize: LAKE_PREVIEW_FONT_SIZE, showToolbar: false, disableVirtualRendering: true, disableNativeToc: true }}
+            />
+          ) : (
+            <HistorySnapshotBlocks kind={historyPreview.kind} body={historyPreview.body} />
+          )}
+        </MobileSheet>
+      )}
     </>
+  );
+}
+
+/**
+ * 非 doc 历史快照的结构化摘要（Q03）：与桌面同一份 core/historyPreview.snapshotPreview 模型，
+ * 这里只用移动端既有原语（mb-set-group / mb-row / mb-form__desc）逐块画，不新造样式、不挂第三方编辑器。
+ */
+function HistorySnapshotBlocks({ kind, body }: { kind: NoteKind; body: string }) {
+  const blocks = useMemo(() => snapshotPreview(kind, body), [kind, body]);
+  return (
+    <div className="mobile-settings-content">
+      {blocks.map((block, index) => {
+        if (block.type === "facts") {
+          return (
+            <div className="mb-set-group" key={"f" + index}>
+              {block.items.map(([label, value]) => (
+                <div className="mb-row" key={label + value}>
+                  <span className="mb-row__title">{label}</span>
+                  <span className="mb-row__meta">{value}</span>
+                </div>
+              ))}
+            </div>
+          );
+        }
+        if (block.type === "table") {
+          return (
+            <div className="mb-set-group" key={"t" + index}>
+              <div className="mb-set-title">{block.title}</div>
+              {block.rows.map((row, rowIndex) => (
+                <div className="mb-row" key={"r" + rowIndex}><span className="mb-row__sub">{row.join("  ")}</span></div>
+              ))}
+              {block.more && <p className="mb-form__desc">{block.more}</p>}
+            </div>
+          );
+        }
+        if (block.type === "text") {
+          return (
+            <div className="mb-set-group" key={"x" + index}>
+              <div className="mb-set-title">{block.title}</div>
+              <p className="mb-form__desc">{block.text}</p>
+            </div>
+          );
+        }
+        return <p className="mb-form__desc" key={"e" + index}>{block.text}</p>;
+      })}
+    </div>
   );
 }
