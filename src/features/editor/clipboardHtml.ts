@@ -1,4 +1,5 @@
 import { sniffImageFormat } from "./imageFormat";
+import { imageSizeFromDataUrl } from "../../core/editor/imageDimensions";
 import { assetToken, LOCAL_ASSET_PREFIX } from "../../lib/assetPort";
 import { rlog } from "../../lib/log";
 
@@ -214,23 +215,40 @@ function normalizeImage(image: HTMLImageElement, document: Document): HTMLImageE
   // 桌面没有 canvas 兜底 ⇒ 与既有行为一致：取不到就丢弃该图（不写半截内容）。
   /** XHR/canvas 拿到的 data URL 还要按真实格式修正 MIME（避免 data:image/jpeg 里塞 PNG 头）。 */
   let needsFormatFix = false;
+  /**
+   * task-82：写进剪贴板的 width/height 必须是**原图像素尺寸**，不是浏览器里的显示尺寸。
+   * 取不到原图尺寸时**省略**这两个属性（宁可不写，也不写卡片宽度/缩略档位让接收方按错误原尺寸排版）。
+   */
+  let dimensions: { width: number; height: number } | null = null;
   if (source.startsWith(LOCAL_ASSET_PREFIX)) {
     const converted = assetUrlToDataUrlSync(source);
-    if (converted) { source = converted; needsFormatFix = true; }
-    else if (isMobileEnvironment() && image.complete && image.naturalWidth > 0) {
+    if (converted) {
+      // ?base64=1 拿到的是**原图字节** ⇒ 从头部解析真实像素尺寸。
+      source = converted; needsFormatFix = true;
+      dimensions = imageSizeFromDataUrl(converted);
+    } else if (isMobileEnvironment() && image.complete && image.naturalWidth > 0) {
+      // canvas 兜底画的是**当前显示图**（写作卡里就是 ?w=1024 缩略图）⇒ 尺寸不是原图，
+      // 取不到原图尺寸 ⇒ 省略 width/height，绝不把缩略/显示尺寸写进剪贴板。
       const canvasPng = imageToPngDataUrl(image);
       if (!canvasPng) return null;
       source = canvasPng; needsFormatFix = true;
+      dimensions = null;
     } else return null;
   } else if (source.startsWith("blob:")) {
     if (!isMobileEnvironment() || !image.complete || image.naturalWidth <= 0) return null;
     const canvasPng = imageToPngDataUrl(image);
     if (!canvasPng) return null;
+    // blob = 待上传的原文件（未套 ?w= 缩略档），naturalWidth/Height 即原图尺寸。
     source = canvasPng; needsFormatFix = true;
+    dimensions = { width: image.naturalWidth, height: image.naturalHeight };
   } else {
     const normalized = normalizeImageDataUrl(source);
     if (!normalized || (!normalized.startsWith("data:image/") && !/^https?:\/\//i.test(normalized))) return null;
     source = normalized;
+    // data URL = 原图字节（可直接解析头）；外部 http 图用 naturalWidth（= 原图像素；未加载则省略）。
+    dimensions = normalized.startsWith("data:")
+      ? imageSizeFromDataUrl(normalized)
+      : (image.naturalWidth > 0 && image.naturalHeight > 0 ? { width: image.naturalWidth, height: image.naturalHeight } : null);
   }
   if (needsFormatFix && source.startsWith("data:")) {
     const normalized = normalizeImageDataUrl(source);
@@ -240,8 +258,11 @@ function normalizeImage(image: HTMLImageElement, document: Document): HTMLImageE
   const output = document.createElement("img");
   output.src = source;
   if (image.alt) output.alt = image.alt;
-  if (image.width > 0) output.width = image.width;
-  if (image.height > 0) output.height = image.height;
+  // task-82：只写**原图尺寸**；取不到就省略（此前写的是 image.width/height = 渲染/显示尺寸）。
+  if (dimensions && dimensions.width > 0 && dimensions.height > 0) {
+    output.width = dimensions.width;
+    output.height = dimensions.height;
+  }
   return output;
 }
 

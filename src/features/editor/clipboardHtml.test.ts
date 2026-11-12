@@ -158,7 +158,8 @@ describe("normalizeClipboardHtml", () => {
       fragmentFromHtml(`<img src="data:image/jpeg;base64,${PNG_1PX}">`),
       document
     );
-    expect(html).toBe(`<img src="data:image/png;base64,${PNG_1PX}">`);
+    // task-82：原图尺寸（1×1）显式写入；取不到原图尺寸才省略（display 尺寸永不写）
+    expect(html).toBe(`<img src="data:image/png;base64,${PNG_1PX}" width="1" height="1">`);
   });
 
 
@@ -342,5 +343,83 @@ describe("buildClipboardPayload（⌘C 与块菜单「复制」共用同一份�
     const { range, host } = rangeAcross('<p>a<br>b</p><div class="ne-card-toolbar">工具</div><p>c\u200Bd</p>');
     expect(buildClipboardPayload(range, document).plain).toBe("a\nb\ncd");
     host.remove();
+  });
+});
+/** 从输出 HTML 里取出第一个 <img ...> 标签（属性断言用）。 */
+function firstImgTag(html: string): string {
+  const match = /<img\b[^>]*>/.exec(html);
+  return match ? match[0] : "";
+}
+
+describe("复制物化图片的尺寸 = 原图尺寸（task-82 / HANDOFF P1 缩略残余①）", () => {
+  const RealXhr = globalThis.XMLHttpRequest;
+  class SizeXhr {
+    static lastUrl = "";
+    static status = 200;
+    static body = "";
+    open(_method: string, url: string): void { SizeXhr.lastUrl = url; }
+    send(): void { /* 同步桩 */ }
+    get status(): number { return SizeXhr.status; }
+    get responseText(): string { return SizeXhr.body; }
+  }
+  beforeAll(() => { (globalThis as unknown as { XMLHttpRequest: unknown }).XMLHttpRequest = SizeXhr; });
+  afterAll(() => { (globalThis as unknown as { XMLHttpRequest: unknown }).XMLHttpRequest = RealXhr; });
+  afterEach(() => {
+    SizeXhr.lastUrl = ""; SizeXhr.status = 200; SizeXhr.body = "";
+    delete (window as unknown as { Capacitor?: unknown }).Capacitor;
+  });
+
+  /** 走 XHR 原图路径的 PNG：按给定宽高改 IHDR（不重算 CRC；本测试只断言属性，不渲染）。 */
+  function pngOfSize(width: number, height: number): string {
+    const bytes = Array.from(Uint8Array.from(atob(PNG_1PX), (c) => c.charCodeAt(0)));
+    bytes[16] = (width >>> 24) & 0xff; bytes[17] = (width >>> 16) & 0xff; bytes[18] = (width >>> 8) & 0xff; bytes[19] = width & 0xff;
+    bytes[20] = (height >>> 24) & 0xff; bytes[21] = (height >>> 16) & 0xff; bytes[22] = (height >>> 8) & 0xff; bytes[23] = height & 0xff;
+    return `data:image/png;base64,${btoa(String.fromCharCode(...(bytes as number[])))}`;
+  }
+
+  it("取回原图（?base64=1）⇒ 写原图像素尺寸，不写显示尺寸", () => {
+    (window as unknown as { Capacitor?: unknown }).Capacitor = { isNativePlatform: () => true };
+    (window as unknown as { lakeAssetToken?: unknown }).lakeAssetToken = { getToken: () => "T" };
+    SizeXhr.body = pngOfSize(1600, 1200);
+    const frag = fragmentFromHtml('<img src="http://127.0.0.1:19876/n1/a.png?w=1024" width="320" height="240">');
+    const html = normalizeClipboardHtml(frag, document);
+    const tag = firstImgTag(html);
+    expect(tag).toContain('width="1600"');
+    expect(tag).toContain('height="1200"');
+    expect(tag).not.toContain('width="320"');
+    expect(tag).not.toContain('height="240"');
+  });
+
+  it("canvas 兜底（原图取不到）⇒ 省略 width/height，绝不写卡片显示尺寸", () => {
+    (window as unknown as { Capacitor?: unknown }).Capacitor = { isNativePlatform: () => true };
+    SizeXhr.status = 500;   // XHR 原图失败 ⇒ 移动端退回 canvas（画的是 ?w=1024 显示图）
+    const frag = fragmentFromHtml('<img src="http://127.0.0.1:19876/n1/a.jpg?w=1024" width="320" height="240">');
+    const imgEl = frag.querySelector("img")!;
+    // 显示图已解码：naturalWidth = 1024（缩略档）不是原图尺寸
+    Object.defineProperty(imgEl, "naturalWidth", { value: 1024, configurable: true });
+    Object.defineProperty(imgEl, "naturalHeight", { value: 768, configurable: true });
+    Object.defineProperty(imgEl, "complete", { value: true, configurable: true });
+    const html = normalizeClipboardHtml(frag, document);
+    const tag = firstImgTag(html);
+    expect(tag).toContain("src=\"data:image/png;base64,");
+    expect(tag).not.toContain("width=");
+    expect(tag).not.toContain("height=");
+  });
+
+  it("外部 http 图：已加载时写 natural 原图尺寸；未加载则省略（不写显示尺寸）", () => {
+    const loaded = fragmentFromHtml('<img src="https://example.com/a.png" width="320" height="240">');
+    const loadedEl = loaded.querySelector("img")!;
+    Object.defineProperty(loadedEl, "naturalWidth", { value: 800, configurable: true });
+    Object.defineProperty(loadedEl, "naturalHeight", { value: 600, configurable: true });
+    const loadedTag = firstImgTag(normalizeClipboardHtml(loaded, document));
+    expect(loadedTag).toContain('width="800"');
+    expect(loadedTag).toContain('height="600"');
+    expect(loadedTag).not.toContain('width="320"');
+
+    const unloaded = fragmentFromHtml('<img src="https://example.com/b.png" width="320" height="240">');
+    const unloadedTag = firstImgTag(normalizeClipboardHtml(unloaded, document));
+    expect(unloadedTag).toContain('src="https://example.com/b.png"');
+    expect(unloadedTag).not.toContain("width=");
+    expect(unloadedTag).not.toContain("height=");
   });
 });
