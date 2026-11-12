@@ -68,6 +68,7 @@ const TOUCHPOINTS: Record<string, number> = {
   "src/mobile/notebook/useWorkspaceActions.ts": 7,
   "src/mobile/notebook/useWorkspaceChrome.ts": 2,
   "src/mobile/notebook/useWorkspaceSession.ts": 3,
+  "src/mobile/notebook/WorkspaceOverlayHost.tsx": 1,
   "src/mobile/tags/TagsHomeTab.tsx": 3,
   "src/mobile/trash/TrashPreviewPage.tsx": 3,
   "src/mobile/v3/mobilePlatformPort.ts": 1,
