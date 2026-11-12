@@ -10,6 +10,44 @@
 
 > **顺序标注**：261109 各批次里写的「日记 ⌘4 / AI 写作 ⌘3」是**当时**的顺序；**261110 起改为 日记 ⌘3 / AI 写作 ⌘4**（另有标签 ⌘5）。旧批次不再改，以本行 + §1 为准。
 
+### 261112 · 桌面文档图片预览只数到视口内几张（107 张 → 显示 1/8；用户报「预览数量不对，应该是虚拟加载的问题」）
+
+- **现象/根因**：文档 107 张图，双击图片后 Lightbox 显示「2 / 8」——只能切到视口附近的图。根因 = **桌面文档编辑器是 `EditorTab`（自己 createLakeDocument，不走 `LakeEditor` 组件）**，它调 `attachImagePreviewClick(host)` 时**没传 resolver** ⇒ 走 DOM 收集；而编辑态开了虚拟渲染 + 卡片懒加载，DOM 里只有视口那几张（实测 8 张）。历史护栏读的是 `LakeEditor.tsx`（变量还叫 `EDITOR_TAB`，名不副实）⇒ 真正的桌面文档编辑器从未被覆盖。
+- **修法**：`EditorTab` 传 resolver —— 双击时现场 `editorRef.current.getDocument("text/lake")` → `extractImagesFromContent()`（含**未保存**的新插图）；取不到（实例重建/销毁中）返回空 ⇒ `attachImagePreviewClick` 按既有约定回退 DOM 收集。
+- **实测（隔离实例 1431 / CDP 9223 / 用户真实数据副本 + 清空 S3 配置；用户 1421/9222 未动）**：同一篇（`152e3612…`，736KB、107 张 image 卡）修复前「2 / 8」→ 修复后**「2 / 107」**，锁定（viewer）态同样 **2 / 107**；双击到 Lightbox 出现 **105ms**（含 736KB 整篇一次序列化，单次用户动作可接受）。
+- **护栏**：新增 `src/features/editor/imagePreviewAttach.render.test.tsx` 5 例（source：EditorTab 必须传 resolver 且不许裸调用；行为：resolver 全量=正文条数、索引按 DOM 子序列对齐、resolver 空回退 DOM、tap 模式只认 click、不传 resolver 保持旧行为）。
+- **同类**：`LakeEditor`（移动端文档编辑器 / 回收站预览）本来就有 resolver，这轮只补了桌面 `EditorTab`。
+- **门禁**：tsc 0；全量 vitest 见 §1；`git diff --check` 0。
+
+### 261112 · 移动端图片「点击看大图、双击编辑」（用户定稿；小记卡片 + 文档）
+
+- **定稿语义**（用户原话「点击看图片。双击编辑。这样的逻辑吧」）：移动端**单击图片 = 大图预览**，**双击 = 编辑**。范围 = 小记卡片（首页卡片的封面 + 预览内图、标签详情富预览）+ 文档（阅读态与编辑态都单击预览）。
+- **实现**：`attachImagePreviewClick` 增加 `{ tap?: boolean }`（桌面默认 `dblclick` 不变）；移动端（`LakeEditor`：`!isDesktop()`，与阅读/编辑态无关）传 `tap` ⇒ 单击延迟一个判定窗开预览、**同一张图窗口内第二击 = 双击 ⇒ 取消预览、交给内核做编辑**。首页卡片在 `HomePage.QuickNoteCard` 内自实现同一套判定（`handleImageTap`，封面 `qn-card__img` 与预览图共用），双击回落到卡片默认动作（进编辑 / 选择态切勾选）；标签详情富预览单击直接开大图（行点击仍是打开小记）。
+- **判定必须挂在 `pointerdown` 上（click 不可用）**：Android WebView 的 `click` 要等 ~150ms 才派发、还要再等系统双击判定，实测两次点按的 click 间隔可达 **251ms**；而且内核第一次点按后会**重渲染图片卡**（元素被换掉）。前两版都因此失败：250ms 窗口（双击失效）→ 320ms + 按元素身份比（写作卡里双击仍弹图）。最终实现 = **`pointerdown` + 300ms 时间窗 + 位置差 ≤28px**（不依赖元素身份；开预览时按坐标找回当前挂载的 `img`），按下后**移动 >12px 或容器滚动即取消**（滚动时不误弹）。
+- **覆盖面**：小记卡片封面（`qn-card__img`）/ 卡片预览内图（`HomePage.QuickNoteCard.handleImageTap`）、标签详情富预览、文档（`LakeEditor`，阅读+编辑态）、**小记写作卡**（`QuickNoteEditor` 是独立内核实例，单独接线）。桌面端仍是双击看图（单击留给选中/改尺寸）。
+- **实测（lake_mobile / 5554，CDP `Input.dispatchTouchEvent` 真实触摸，设备级）**：单击封面 ⇒ Lightbox「1 / 1」；双击封面 ⇒ **无 Lightbox、小记编辑器打开**；编辑态里单击图片 ⇒ Lightbox「1 / 1」。验后已点「取消」退出编辑、回到首页 9 张卡（设备无残留）。
+- **代价**：单击预览要等一个判定窗（~300ms）才出图 —— 触屏区分单击/双击的必然成本；桌面不受影响（双击即时）。
+- **验收**：新包已 `--sync --install` 到 `lake_mobile`；护栏 `imagePreviewAttach.render.test.tsx` 6 例（含 tap 单击开预览、窗口内第二击取消）。
+- **门禁**：tsc 0；`check:mobileui` 通过；`check:core` 164 文件 0 违规；全量 vitest 见 §1。
+
+### 261112 · 小记第一次打开「闪一下」（首帧纯文本、无标题/加粗，用户报「感觉是默认加载无样式」）
+
+- **现象/根因**（不是样式没加载，是**两段式渲染**）：小记列表投影**不带正文**（DT-05：`listQuickNotes` 只回摘要）⇒ 卡片首帧用 `placeholderDocument`（`body: ""`）渲染，`QuickNotePreview` 回落到 `previewText` 的**纯文本段落**（没有标题/列表/加粗）；正文由卡片 `IntersectionObserver` 懒读（`readQuickNote`），而**观察者回调必然晚于首帧** ⇒ 下一帧才换成富预览 = 用户看到的「颜色很浅、没渲染标题和加粗，然后闪一下」。
+- **修法**：新增判据 `core/quickNoteDetailPrewarm`（`quickNotePrewarmIds()` + `QUICK_NOTE_DETAIL_PREWARM_LIMIT = 8`，上限 = 一屏条数，**不是**虚拟窗口 24 —— 实测有 660KB/条的小记，不能把整个窗口搬进 IPC）；`QuickNotesWorkspace.refreshItems` 在 `setItems()` **之前**并发预热首屏正文（进同一份 `detailCache`，卡片原 `onNeedDetail` 仍作兜底），命中缓存 = 零 IPC。预热在启动时（小记页 keep-alive 常驻）就跑完 ⇒ 用户切到小记时首帧即富预览。
+- **实测（隔离实例 1431 / CDP 9223 / 独立 userData + 资源端口 19879；用户 1421/9222 未动）**：`Page.startScreencast` 逐帧抓「reload → ⌘2 切小记」：**修复前**首帧卡片 = `标题一 加粗 普通文字`（纯文本、无标题/加粗）→ 约 50ms 后换成富预览；**修复后**首帧（44ms）卡片直接是富预览（标题档 + 列表项目符号 + 加粗），列表比修复前还早出现（缓存已热）。
+- **残余（未处理，已知）**：需要**内核兜底**的卡片（快路径还原不了的块，如表格/卡片）仍会先空一下再出内容 —— 内核实例化约 80–100ms 是地板（LAKEX-CONTRACT §5.51 同源），与本次的纯文本闪屏不是同一回事。
+- **护栏**：`src/core/quickNoteDetailPrewarm.test.ts` 5 例（保序/命中跳过/hash 变化重预热/上限严格/limit≤0 与空表）；`quickNotesView.test.ts` 31 例不动。
+- **门禁**：tsc 0；全量 vitest 见 §1；`git diff --check` 0；纯 TS 改动（无 CSS）⇒ 不跑样式/设备装置。
+
+### 261112 · 桌面「更多 → 导出」六项全部点了没反应（用户报「文档右上角的按钮，导出功能不能用了」）
+
+- **现象/根因**：顶栏「更多」（`.protyle-breadcrumb__more-btn`）里「导出 ▸」的六项**全部无效**（菜单关掉、无对话框、无提示），而目录树右键的「导出」正常。`useTopMenus` 自带的 document `pointerdown`（capture）外点关闭只认 trigger / menu 两个 ref，而 `<Submenu>` 的二级菜单是 `HoverPopover` 的**独立 portal 表面** ⇒ pointerdown 先把父菜单卸载，子项的 `click` 永远到不了 `onClick`（`read_note_caches` / `pick_export_dir` 一次都不发）。
+- **修法（判据单一来源）**：`components/ui/Overlay.tsx` 新增导出判据 `isInsideOverlaySurface()`（`[data-context-menu]` 表面内 = 不算「点了外面」），Overlay 自身的外点关闭与 `useTopMenus` 共用同一判据；`useTopMenus` 命中即 return。**未动** `<Submenu>` / `ExportSubmenuItem` / 菜单视觉，也未改导出管线。
+- **实测（隔离实例 1431 / CDP 9223 / 独立 userData + 资源端口 19879；用户 1421/9222 全程未动）**：修复前 CDP 真实鼠标命中子项（`elementFromPoint` = BUTTON）⇒ mousePressed 后父/子菜单同时消失、click 无 target、相关 IPC 0 次；修复后同一点按 ⇒ `read_note_caches 5ms`、剪贴板写入正文 Markdown、气泡「已复制 Markdown」；「导出为 Markdown 资料包」⇒ `pick_export_dir` 如实到达主进程（取消则不出网不入盘）。
+- **护栏**：新增 `src/hooks/useTopMenus.render.test.tsx` 3 例（二级菜单独立表面内按下不关父菜单且 click 触达 / 菜单外仍关闭 / 触发钮与菜单表面不关闭）。**自证**：临时移除判据后该用例必红、另两条仍绿（已跑）。
+- **同类收口**：目录树右键（`Sidebar`）与页签右键（`MultiTabEditor`）本来就按 `[data-context-menu]` 放行；`CardContextMenu` 只走 Overlay 的外点逻辑 ⇒ 带二级菜单的入口现已全部覆盖。
+- **门禁**：tsc 0；`git diff --check` 0；纯 TS/TSX 改动（无 CSS / 无几何）⇒ 不跑样式与设备装置；全量 vitest 计数见 §1。
+
 ### 261112 · 小记卡片封面与预览重复渲染同一张首图（用户报「只插一张图，预览里出现两张」）
 
 - **现象/根因**：卡片用 `note.firstImage` 渲染封面（`qn-card__img`），下方 `QuickNotePreview` 又把正文里同一张 image 卡画了一遍（`quick-note-preview-image`）⇒ 视觉 2 张；正文其实只有 1 张（实测 note `6b8e638b`：正文 image 卡 ×1 + 文字 Yyhh，origin 1080×2400）。
@@ -604,6 +642,9 @@
 
 **门禁基线（261109 发版前：AI 写作 + 日记合并后实测）**
 
+- **261112 图片预览批**（桌面画廊取正文全量 + 移动端「点击看图片、双击编辑」；见 §0）：`npx tsc --noEmit` = 0；全量 vitest **871 文件（860 passed / 11 skipped）/ 5488 passed / 12 skipped / 0 failed**（新增 `imagePreviewAttach.render.test.tsx` 8 例：正文全量画廊 / 索引对齐 / 回退 / 单击预览 / 双击取消 / 元素被重渲染仍算双击 / 移动取消 / 桌面不变；本轮 `electron/s3v3/perf.integration` 通过）；`check:mobileui` / `check:core`（164 文件 0 违规）通过；`git diff --check` = 0；APK 已装 `lake_mobile` 并做设备点按四步验收（见 §0）。
+- **261112 小记首屏预热批**（小记第一打开闪屏；见 §0，含上一批「导出」修复）：`npx tsc --noEmit` = 0；全量 vitest **870 文件（859 passed / 11 skipped）/ 5480 passed / 12 skipped / 0 failed**（新增 `quickNoteDetailPrewarm.test.ts` 5 例 + `quickNotesView.test.ts` +2 例；`electron/s3v3/perf.integration` 本轮通过）；`git diff --check` = 0。
+- **261112 导出修复批**（顶栏「更多 → 导出」全部无效；见 §0）：`npx tsc --noEmit` = 0；全量 vitest **869 文件（858 passed / 11 skipped）/ 5473 passed / 12 skipped / 0 failed**（含新增 `useTopMenus.render.test.tsx` 3 例）；`git diff --check` = 0。第一轮全量时 `electron/s3v3/perf.integration` 因宿主负载误报、隔一轮全量自发通过（与 §2 既有口径一致）。
 - `npx tsc --noEmit` = **0 错**。
 - `npx vitest run` = **857 文件（857 passed / 11 skipped）/ 5470 passed / 12 skipped / 0 failed**（261112 封面去重批实测；新增 `quickNotePreview.hiddenMedia.render` 4 例；累计新增 tracker 12 / copy 桥 4 / 核心解析 13 / clipboard 35）。
 - **261110 AI 助手 / 小记批（本批实测，含「钉住=每作用域挂起」「标题可改」「弹窗走内核渲染」「时间线自适应」）**：`npx tsc --noEmit` 0；全量 vitest **855 文件（844 passed / 11 skipped）/ 5357 passed / 12 skipped / 0 failed**（本批新增：`aiAssistantSession` 4 例 / `AiMessageView.render` 5 例 / `aiLakeKernelRegistry` 4 例 / `AiWritingDialogs.render` +2 例）；`ui-metrics` 颜色 0 / !important 9=清单 / 跨文件重复 103≤105；`git diff --check` 0；`cssLayers` 基线 `app/tabs.css` 188→189、`ai/aiDialogParts.css` 87→91、`app/quick-notes.css` 667→674（均写明理由）。
