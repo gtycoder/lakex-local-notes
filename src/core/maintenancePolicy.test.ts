@@ -28,8 +28,7 @@ describe("互斥域判据（F16 红线化）", () => {
     // 261105 晚 +setNoteTags（文档标签关系：移动端单库写 tag_links(kind='note') + bump 关系版本）。
     // 261106 +batchNotes（批量操作：一份 IPC 改多条本地行 move/trash/tag-*；删除=移入回收站，无 purge）。
     // 261109 +diaryOpenDate（日记「打开某天」：单事务建本/建组/建文档，与目录写同域串行）。
-    // 261110 +clearDiaryMark（取消整本日记标记：改 folders.space + updated_at，纯本地目录写）。
-    expect(WRITE_OPS.length).toBe(45);
+    expect(WRITE_OPS.length).toBe(44);
     // 261026 +ensureSearchIndex（派生索引后台补建；按需资产补拉复用 ensureTrashNoteAssets）。
     expect(MAINTENANCE_OPS.length).toBe(4);
     // 261013：syncQuickNote（小记单条推送）；261027：+ensureNoteAssets / +ensureQuickNoteAssets（占位图点击补拉）。
@@ -44,7 +43,7 @@ describe("互斥域判据（F16 红线化）", () => {
     // 261105 P1 第 4 项：+listSyncConflicts（只读列表）+restoreSyncConflict（委托型写：内部走 notesDomain.saveNote 取锁）。
     // 261105 晚 +listNoteTagLinks（文档标签关系只读：目录行「打标签…」预选）。
     expect(NONE_OPS.length).toBe(47);
-    expect(ALL.length).toBe(101); // 45 写 + 4 维护 + 5 高优 + 47 none（261110 +clearDiaryMark）
+    expect(ALL.length).toBe(100); // 44 写 + 4 维护 + 5 高优 + 47 none（261112 移除日记本取消的写操作）
   });
 
   it("I1（F16）：写域与维护域必须是不同互斥域", () => {

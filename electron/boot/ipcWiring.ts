@@ -185,7 +185,6 @@ export function registerIpc(deps: IpcWiringDeps): ReadonlyMap<string, (args: unk
   // 261109 日记：幂等打开某天（判据/单事务在 electron/diaryStore.ts；通道见 docs/DIARY.md）。
   registerDiaryIpc(ipc, {
     openDate: (dateKey, options) => store.openDiaryDate(dateKey, options),
-    unmark: (notebookId) => store.unmarkDiaryNotebook(notebookId),
   });
   registerHistoryIpc(ipc, store, () => deps.restartHistoryTimers());
   registerAiIpc(ipc, store);

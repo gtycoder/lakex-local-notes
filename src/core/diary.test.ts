@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   DIARY_FOLDER_SPACE, diaryEntries, diaryGroupTitles, diaryNotebookId, diaryNotebooks,
   folderSpaceForWire, formatDiaryDateKey, groupDiaryEntries, isDiaryGroupTitle, normalizeFolderSpace,
-  diaryConvertTargets, diarySubtreeIds, parseDiaryDateKey, planDiaryConvert, planDiaryOpen, planDiaryUnmark, recentDiaryDays, withoutDiaryNotebook,
+  diaryConvertTargets, diarySubtreeIds, isDiaryNotebookNode, mergeFolderSpace, parseDiaryDateKey, planDiaryConvert, planDiaryOpen, recentDiaryDays, withoutDiaryNotebook,
   type DiaryTreeNode,
 } from "./diary.js";
 
@@ -260,34 +260,19 @@ describe("diarySubtreeIds（其它空间排除日记内容用，261109）", () =
   });
 });
 
-describe("取消日记标记（整本；261110 收尾）", () => {
-  const nodes: DiaryTreeNode[] = [
-    notebook(),
-    node({ id: "y", title: "2026", nodeType: "group", parentId: "nb-diary" }),
-    node({ id: "d", title: "2026-11-09", parentId: "y" }),
-    node({ id: "nb-work", title: "工作", nodeType: "notebook", parentId: null }),
-    node({ id: "grp", title: "分组", nodeType: "group", parentId: "nb-work" }),
-  ];
-
-  it("只接受 nodeType=notebook 且 space=diary（判据不看标题）", () => {
-    expect(planDiaryUnmark(nodes, "nb-diary")).toEqual({ ok: true, notebookId: "nb-diary", title: "日记" });
-    // 普通笔记本 / 分组 / 文档 / 不存在 / 空参数 ⇒ 拒绝，且原因区分"不是日记本"与"找不到节点"。
-    expect(planDiaryUnmark(nodes, "nb-work")).toEqual({ ok: false, reason: "not-diary-notebook" });
-    expect(planDiaryUnmark(nodes, "grp")).toEqual({ ok: false, reason: "not-diary-notebook" });
-    expect(planDiaryUnmark(nodes, "d")).toEqual({ ok: false, reason: "not-diary-notebook" });
-    expect(planDiaryUnmark(nodes, "nb-missing")).toEqual({ ok: false, reason: "missing-notebook" });
-    expect(planDiaryUnmark(nodes, null)).toEqual({ ok: false, reason: "missing-notebook" });
-    // 标题叫「日记」但没标记 ⇒ 不是日记本（标题不参与判据）。
-    const titleOnly = node({ id: "nb-title", title: "日记", nodeType: "notebook", space: null });
-    expect(planDiaryUnmark([titleOnly], "nb-title")).toEqual({ ok: false, reason: "not-diary-notebook" });
+describe("日记本单调性判据（261112 §3#25：space 只允许 null→diary）", () => {
+  it("任一侧 diary ⇒ 合并结果是 diary，绝不降级", () => {
+    expect(mergeFolderSpace(null, "diary")).toBe("diary");
+    expect(mergeFolderSpace("diary", null)).toBe("diary");
+    expect(mergeFolderSpace("diary", "diary")).toBe("diary");
+    expect(mergeFolderSpace(null, null)).toBeNull();
+    expect(mergeFolderSpace("album", undefined)).toBeNull(); // 未知值当非日记（读侧容错不变）
   });
 
-  it("子树原样保留：取消只换笔记本那一行的标记，年/月/文档仍在（判据纯函数，不动树）", () => {
-    const before = nodes.map((item) => ({ ...item }));
-    const plan = planDiaryUnmark(nodes, "nb-diary");
-    expect(plan.ok).toBe(true);
-    // 函数是只读判据：没有改写入参（树保留 = 写入路径只 UPDATE 笔记本行 space）。
-    expect(nodes).toEqual(before);
-    expect(nodes.find((item) => item.id === "d")?.parentId).toBe("y");
+  it("isDiaryNotebookNode 只认 notebook + space=diary（不看标题）", () => {
+    expect(isDiaryNotebookNode({ nodeType: "notebook", space: "diary" })).toBe(true);
+    expect(isDiaryNotebookNode({ nodeType: "notebook", space: null })).toBe(false);
+    expect(isDiaryNotebookNode({ nodeType: "group", space: "diary" })).toBe(false); // space 只属于笔记本
+    expect(isDiaryNotebookNode(null)).toBe(false);
   });
 });

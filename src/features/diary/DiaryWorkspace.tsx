@@ -6,13 +6,13 @@
  *   组件里不得再算年/月（护栏见 diaryWorkspace.test.ts）。
  * - 主区：打开当天那篇，**复用 `EditorTab`**（不新写编辑器；内核仍走 React.lazy 边界）。
  * - 空态：一个「写今天」主按钮（懒建：只有用户点才走 IPC，不在进入空间时静默建文档）。
- * - 左下：日记本设置（改名 / 换图标，复用既有 `NamePromptDialog` + `NodeIconPicker`）。
+ * - 左下：日记本状态（只读：图标 + 名字）。日记本固定不可变（261112 用户裁决）——不改名、不换图标、不排序。
  * - 搜索：入口只负责打开**现有全局搜索面板**（日记 = 文档，天然进 FTS；不新增索引）。
  *
  * **不做月历**（v1 明确不做：会与多维表月历撞「同一交互语义只有一套视觉」）。
  */
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
-import { BookX, CalendarDays, ChevronRight, Feather, FileText, NotebookPen, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { CalendarDays, ChevronRight, Feather, FileText, NotebookPen, Plus, Search, Trash2 } from "lucide-react";
 import { NodeIconGlyph } from "../../components/ui/NodeIconGlyph";
 import {
   diaryConvertTargets,
@@ -21,11 +21,10 @@ import {
   planDiaryConvert,
 } from "../../core/diary";
 import { formatHm } from "../../core/dateFormat";
-import { Dialog, Menu } from "../../components/ui/Overlay";
+import { Menu } from "../../components/ui/Overlay";
 import { CalendarPanel } from "../../components/ui/CalendarPanel";
 import { SplitPane } from "../../components/ui/SplitPane";
 import { usePopoverPosition } from "../../hooks/usePopoverPosition";
-import { NamePromptDialog } from "../../components/app/NamePromptDialog";
 import { MoveTargetTreeDialog } from "../../components/app/MoveTargetTreeDialog";
 import type { LakeEditorInstance } from "../editor/lakeRuntime";
 import type { TreeNode } from "../../lib/types";
@@ -34,8 +33,6 @@ import "./diary.css";
 
 /** 内核（Lake）边界：EditorTab 只能懒加载（P12 静态契约，见 features/editor/desktopKernelLazy.test.ts）。 */
 const EditorTab = lazy(() => import("../editor/EditorTab").then((m) => ({ default: m.EditorTab })));
-/** 图标/表情源表约 41KB gzip：与 Sidebar 同款，点到才加载。 */
-const NodeIconPicker = lazy(() => import("../../components/app/NodeIconPicker").then((m) => ({ default: m.NodeIconPicker })));
 
 /** 主区需要的标签最小形状（App 的 `TabInfo` 结构兼容，不 import 宿主避免把 kernel 拖进类型图）。 */
 export interface DiaryEditorTabLike {
@@ -71,10 +68,6 @@ export interface DiaryWorkspaceProps {
   onConvertToQuickNote: (nodeId: string) => void;
   /** 「删除」：移入回收站（软删，可恢复）。走既有删除确认与 deleteTreeNode，不新造删除路径。 */
   onDeleteEntry: (nodeId: string) => void;
-  /** 「取消日记标记」（整本）：笔记本 space 置 NULL，笔记本与文档原样保留（只回到知识库）。 */
-  onUnmarkNotebook: () => void;
-  onRenameNotebook: (title: string) => void;
-  onSetNotebookIcon: (icon: string | null) => void;
   onContentChange: (noteId: string, content?: string) => void;
   onEditorReady: (noteId: string, editor: LakeEditorInstance | null) => void;
   onReloadNote: (noteId: string) => void;
@@ -96,7 +89,7 @@ function diaryClock(iso: string): string {
 export function DiaryWorkspace(props: DiaryWorkspaceProps) {
   const {
     active, treeNodes, activeNoteId, tabs, lockedNoteIds, tocEnabled, outlineEnhance, editorPrefs,
-    onOpenEntry, onWriteToday, onCreateEntry, onOpenSearch, onConvertEntry, onConvertToQuickNote, onDeleteEntry, onUnmarkNotebook, onRenameNotebook, onSetNotebookIcon,
+    onOpenEntry, onWriteToday, onCreateEntry, onOpenSearch, onConvertEntry, onConvertToQuickNote, onDeleteEntry,
     onContentChange, onEditorReady, onReloadNote,
   } = props;
 
@@ -123,11 +116,7 @@ export function DiaryWorkspace(props: DiaryWorkspaceProps) {
 
   const [collapsedYears, setCollapsedYears] = useState<Set<string>>(() => new Set());
   const [collapsedMonths, setCollapsedMonths] = useState<Set<string>>(() => new Set());
-  const [renameOpen, setRenameOpen] = useState(false);
-  /** 「取消日记标记」确认（整本；破坏结构但不是删数据 ⇒ 必须说清"文档会保留"）。 */
-  const [unmarkOpen, setUnmarkOpen] = useState(false);
-  const [iconAnchor, setIconAnchor] = useState<HTMLElement | null>(null);
-  const iconBtnRef = useRef<HTMLButtonElement>(null);
+  /** 日记本图标按钮的 ref 已随「换图标入口」一起删除（261112：日记本固定不可变）。 */
 
   /** 进入空间时**自动打开今天那篇（仅当它已存在）**：不存在就停在空态，等用户点「写今天」。
    *  为什么不自动建：进入空间不是用户要写的表达，静默建文档会污染目录（DIARY.md 未授权该行为）。
@@ -294,31 +283,13 @@ export function DiaryWorkspace(props: DiaryWorkspaceProps) {
           })}
         </div>
         <div className="diary-dir__foot">
-          {/* 261109 用户定稿：日记本名字前就是**笔记本图标**（默认图标兜底），点它直接换图标。 */}
-          <button
-            ref={iconBtnRef}
-            type="button"
-            className="ln-iconbtn ln-iconbtn--compact diary-dir__icon"
-            aria-label="更换日记本图标"
-            title="更换日记本图标"
-            disabled={!notebook}
-            onClick={() => setIconAnchor(iconBtnRef.current)}
-          >
+          {/* 261112 用户裁决：日记本固定不可变（像回收站），**只读**展示图标与名字；不提供改名/换图标入口。 */}
+          <span className="diary-dir__icon" aria-hidden="true">
             {notebook?.icon ? <NodeIconGlyph value={notebook.icon} /> : <NotebookPen size={14} aria-hidden="true" />}
-          </button>
+          </span>
           <span className="diary-dir__book ln-ellipsis" title={notebook?.title ?? "日记本"}>
             {notebook?.title ?? "日记本"}
           </span>
-          <button
-            type="button"
-            className="ln-iconbtn ln-iconbtn--compact"
-            aria-label="重命名日记本"
-            title="重命名日记本"
-            disabled={!notebook}
-            onClick={() => setRenameOpen(true)}
-          >
-            <Pencil size={13} />
-          </button>
         </div>
       </aside>
 
@@ -383,16 +354,6 @@ export function DiaryWorkspace(props: DiaryWorkspaceProps) {
             <Feather size={15} aria-hidden="true" />
             <span>转为小记</span>
           </button>
-          {/* 整本动作放在条目菜单末尾：文案必须写清"整本"，否则会被当成只对这条生效。 */}
-          <button
-            type="button"
-            role="menuitem"
-            className="ln-menu__item"
-            onClick={() => { setUnmarkOpen(true); setEntryMenu(null); }}
-          >
-            <BookX size={15} aria-hidden="true" />
-            <span>取消日记标记（整本）</span>
-          </button>
           <div className="context-menu-sep" />
           <button
             type="button"
@@ -455,53 +416,6 @@ export function DiaryWorkspace(props: DiaryWorkspaceProps) {
         />
       )}
 
-      {/* 取消日记标记（整本）：先确认，且必须说清"笔记本与文档会保留"。 */}
-      {unmarkOpen && (
-        <Dialog
-          open
-          onDismiss={() => setUnmarkOpen(false)}
-          label={"取消「" + (notebook?.title ?? "日记本") + "」的日记标记？"}
-          className="confirm-dialog"
-        >
-          <div className="ln-dialog__head">
-            <span className="ln-dialog__title">取消「{notebook?.title ?? "日记本"}」的日记标记？</span>
-          </div>
-          <div className="ln-dialog__body">
-            笔记本与其中的文档都会保留，只是不再归入日记空间（会回到知识库）。取消后写今天会新建一个日记本。
-          </div>
-          <div className="ln-dialog__actions">
-            <button type="button" className="ln-btn ln-btn--ghost" onClick={() => setUnmarkOpen(false)}>取消</button>
-            <button
-              type="button"
-              className="ln-btn ln-btn--secondary ln-btn--danger-text"
-              onClick={() => { setUnmarkOpen(false); onUnmarkNotebook(); }}
-            >
-              取消日记标记
-            </button>
-          </div>
-        </Dialog>
-      )}
-
-      <NamePromptDialog
-        open={renameOpen}
-        title="重命名日记本"
-        inputLabel="日记本名称"
-        initialValue={notebook?.title ?? "日记"}
-        submitText="保存"
-        onSubmit={(name) => { onRenameNotebook(name); setRenameOpen(false); }}
-        onClose={() => setRenameOpen(false)}
-      />
-      {iconAnchor && (
-        <Suspense fallback={null}>
-          <NodeIconPicker
-            anchor={iconAnchor}
-            nodeType="notebook"
-            value={notebook?.icon ?? null}
-            onPick={(icon) => { onSetNotebookIcon(icon); setIconAnchor(null); }}
-            onClose={() => setIconAnchor(null)}
-          />
-        </Suspense>
-      )}
     </div>
   );
 }

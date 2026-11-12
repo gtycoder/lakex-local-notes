@@ -1,3 +1,4 @@
+import { isDiaryNotebookNode } from "./diary.js";
 import { decideItem } from "./s3v3Decision.js";
 import type { LakeFolderEntry, LakeIndex, LakeNoteEntry, QuickNoteEntry, QuickNotesIndex } from "./s3v3/protocol/s3v3Index.js";
 import type { PlanWarning } from "./s3v3/plan/types.js";
@@ -254,8 +255,32 @@ export function planLakeMerge(base: LakeIndex | null, local: LakeIndex, remote: 
       else folders.push({ id, kind: "download", applyRemote: true, uploadLocal: false, local: l, remote: r });
     } else folders.push({ id, kind: "none", applyRemote: false, uploadLocal: false, local: l, remote: r });
   }
-  if (cycleWarnings.length > 0) return { notes, folders, warnings: cycleWarnings };
-  return { notes, folders };
+  const normalizedFolders = enforceDiarySpaceMonotone(folders);
+  if (cycleWarnings.length > 0) return { notes, folders: normalizedFolders, warnings: cycleWarnings };
+  return { notes, folders: normalizedFolders };
+}
+
+/**
+ * 日记本单调性（261112 用户裁决，AGENTS §3#25）：`folders[].space` 只允许 `null → "diary"`，
+ * **禁止 `"diary" → null`**。他端旧包/脏数据把日记本发成 null（或整条缺席）时：
+ *  · 本地已是 diary ⇒ 本地权威，按 upload 重新发布 diary（云端被改回普通笔记本也会被纠正）；
+ *  · 仅远端是 diary、本地不是 ⇒ 从远端取回（download），只升不降。
+ * 纯函数：只改合并计划条目，不改 wire 字段/表结构（发布侧仍显式写 space）。
+ */
+function enforceDiarySpaceMonotone(folders: LakeFolderPlan[]): LakeFolderPlan[] {
+  return folders.map((f) => {
+    const localDiary = isDiaryNotebookNode(f.local);
+    const remoteDiary = isDiaryNotebookNode(f.remote);
+    if (localDiary && !remoteDiary) {
+      // 远端不是日记（null/缺席）⇒ 绝不 applyRemote（否则本地被降级成普通笔记本），改为重发布本地。
+      return { ...f, kind: "upload", applyRemote: false, uploadLocal: true };
+    }
+    if (!localDiary && remoteDiary) {
+      // 本地行丢了日记标记（换机/旧包/脏数据）⇒ 以远端为准取回；本机没有这本时就是首次下载。
+      return { ...f, kind: "download", applyRemote: true, uploadLocal: false };
+    }
+    return f;
+  });
 }
 
 export type QuickNoteActionKind = "upload" | "download" | "remote-wins-history" | "local-delete" | "local-purge" | "none";

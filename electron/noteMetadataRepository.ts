@@ -1,7 +1,7 @@
 import type { DbLike } from "./dbLike.js";
 import { AppError } from "../src/core/storeErrors.js";
 import { assertTreeNodeTitle } from "../src/core/treeRules.js";
-import { normalizeFolderSpace, type DiaryFolderSpace } from "../src/core/diary.js";
+import { DIARY_FOLDER_SPACE, mergeFolderSpace, normalizeFolderSpace, type DiaryFolderSpace } from "../src/core/diary.js";
 import type { SyncFolder, TreeNode } from "./noteQueries.js";
 
 interface MetadataRepositoryDeps {
@@ -29,6 +29,7 @@ interface ExistingFolderRow {
   node_type: string;
   icon: string | null;
   updated_at: string;
+  space: string | null;
 }
 
 /** Metadata writes only; note content, assets, history, and sync content stay in Store. */
@@ -56,6 +57,57 @@ export class NoteMetadataRepository {
     if (!row) throw new AppError("NotFound", `节点不存在: ${id}`);
     if (row.parent_id === this.trashNotebookId || row.trashed_at != null || row.node_purged === 1 || row.note_purged === 1) {
       throw new AppError("InvalidInput", `节点已在回收站或已被删除，不能修改；请先显式恢复: ${id}`);
+    }
+  }
+
+  /**
+   * 节点身份（日记守卫用；缺失返回 undefined）。`space` 只对 notebook 有意义。
+   */
+  private nodeIdentity(id: string): { node_type: string; space: string | null; parent_id: string | null } | undefined {
+    return this.db.prepare("SELECT node_type, space, parent_id FROM tree_nodes WHERE id=?").get(id) as
+      { node_type: string; space: string | null; parent_id: string | null } | undefined;
+  }
+
+  /**
+   * 日记子树归属（261112 用户裁决，AGENTS §3#25）：沿 parent 链向上找 `space='diary'` 的笔记本。
+   * 返回日记本 id；null = 不在日记子树（节点不存在也返回 null，交给调用方的 NotFound 判据）。
+   * visited 防环（坏库/并发写入不能让守卫死循环）。
+   */
+  private diaryNotebookOf(id: string): string | null {
+    const visited = new Set<string>();
+    let cur: string | null = id;
+    while (cur !== null && !visited.has(cur)) {
+      visited.add(cur);
+      const row = this.nodeIdentity(cur);
+      if (!row) return null;
+      if (row.node_type === "notebook" && normalizeFolderSpace(row.space) === DIARY_FOLDER_SPACE) return cur;
+      cur = row.parent_id;
+    }
+    return null;
+  }
+
+  /** 日记本、年/月组、日记条目都不可改名/换图标/排序（261112 §3#25）：通用 IPC 一律拒绝。 */
+  private assertNotDiarySubtree(id: string, action: string): void {
+    if (this.diaryNotebookOf(id) !== null) {
+      throw new AppError("InvalidInput", `日记本是固定特殊笔记本，不能${action}（只允许把单篇日记转成文档移出）: ${id}`);
+    }
+  }
+
+  /** 移动守卫：日记本不能移走、不能作为移动目标；日记子树内只允许「单篇文档整篇移出」。 */
+  private assertDiaryMove(id: string, parentId: string | null, moving: TreeNode): void {
+    const movingDiary = this.diaryNotebookOf(id);
+    const targetDiary = parentId === null ? null : this.diaryNotebookOf(parentId);
+    if (movingDiary === id) {
+      throw new AppError("InvalidInput", `日记本是固定特殊笔记本，不能移动；只允许把里面的单篇日记转成文档移出: ${id}`);
+    }
+    if (movingDiary !== null && moving.nodeType !== "note") {
+      throw new AppError("InvalidInput", `日记里的分组不能移动；只允许把单篇日记转成文档移出: ${id}`);
+    }
+    if (movingDiary !== null && targetDiary !== null) {
+      throw new AppError("InvalidInput", `日记内容顺序是派生的，不能调整位置/排序: ${id}`);
+    }
+    if (targetDiary !== null) {
+      throw new AppError("InvalidInput", `日记本不能作为移动目标（不支持把文档移入日记空间）: ${parentId}`);
     }
   }
 
@@ -90,6 +142,7 @@ export class NoteMetadataRepository {
     const trimmed = title.trim();
     if (!trimmed) throw new AppError("InvalidInput", "名称不能为空");
     this.assertNodeWritable(id);
+    this.assertNotDiarySubtree(id, "改名");
     const now = this.deps.nowIso();
     const transaction = this.db.transaction(() => {
       const changed = this.db.prepare("UPDATE tree_nodes SET title=?,updated_at=?,is_dirty=1 WHERE id=? AND deleted_at IS NULL").run(trimmed, now, id).changes;
@@ -108,6 +161,7 @@ export class NoteMetadataRepository {
     }
     const now = this.deps.nowIso();
     this.assertNodeWritable(id);
+    this.assertNotDiarySubtree(id, "换图标");
     const transaction = this.db.transaction(() => {
       this.db.prepare("UPDATE tree_nodes SET icon=?, updated_at=?, is_dirty=1 WHERE id=?").run(icon, now, id);
       this.db.prepare("UPDATE notes SET updated_at=?, is_dirty=1 WHERE id=(SELECT note_file_id FROM tree_nodes WHERE id=?) AND deleted_at IS NULL")
@@ -143,6 +197,7 @@ export class NoteMetadataRepository {
 
   moveTreeNode(id: string, parentId: string | null, sortOrder: number): TreeNode {
     const moving = this.deps.readTreeNode(id);
+    this.assertDiaryMove(id, parentId, moving);
     if (parentId) {
       if (parentId === id) throw new AppError("InvalidInput", "不能移动到自身");
       if (new Set(this.deps.descendantIds(id)).has(parentId)) throw new AppError("InvalidInput", "不能移动到子节点");
@@ -164,6 +219,7 @@ export class NoteMetadataRepository {
 
   moveTreeNodeOrdered(id: string, parentId: string | null, orderedIds: string[]): TreeNode {
     const moving = this.deps.readTreeNode(id);
+    this.assertDiaryMove(id, parentId, moving);
     if (parentId) {
       if (parentId === id) throw new AppError("InvalidInput", "不能移动到自身");
       if (new Set(this.deps.descendantIds(id)).has(parentId)) throw new AppError("InvalidInput", "不能移动到子节点");
@@ -190,6 +246,13 @@ export class NoteMetadataRepository {
   }
 
   reorderTreeNodes(parentId: string | null, orderedIds: string[]): void {
+    // 日记内容的顺序是 core 派生（年→月→日期），sort_order 不可由用户改（261112 §3#25）。
+    if (parentId !== null) this.assertNotDiarySubtree(parentId, "排序");
+    for (const id of orderedIds) {
+      if (this.diaryNotebookOf(id) === id) {
+        throw new AppError("InvalidInput", `日记本是固定特殊笔记本，不能参与排序: ${id}`);
+      }
+    }
     const children = this.childrenOf(parentId);
     this.validateOrder(orderedIds, children);
     const now = this.deps.nowIso();
@@ -239,7 +302,7 @@ export class NoteMetadataRepository {
 
   importRemoteFolder(folder: SyncFolder): void {
     if (folder.id === this.trashNotebookId) return;
-    const existing = this.db.prepare("SELECT title,parent_id,sort_order,node_type,icon,updated_at FROM tree_nodes WHERE id=?").get(folder.id) as ExistingFolderRow | undefined;
+    const existing = this.db.prepare("SELECT title,parent_id,sort_order,node_type,icon,updated_at,space FROM tree_nodes WHERE id=?").get(folder.id) as ExistingFolderRow | undefined;
     if (!existing) {
       // 新行不可能与已落库树成环（自身尚未入表），只有自指需要挡；其余交给读侧 visited。
       const parentId = this.wouldCreateParentCycle(folder.id, folder.parentId) ? null : folder.parentId;
@@ -261,9 +324,21 @@ export class NoteMetadataRepository {
       ).run(parentId, folder.title, folder.sortOrder, folder.updatedAt, folder.icon ?? null, folder.nodeType,
         parentId === this.trashNotebookId ? (folder.trashedAt ?? null) : null,
         parentId === this.trashNotebookId ? (folder.deletedFromParentId ?? null) : null,
-        normalizeFolderSpace(folder.space),
+        this.diarySafeFolderSpace(folder.id, existing.space, folder.space),
         folder.id);
     }
+  }
+
+  /**
+   * 落库侧最后一道 space 单调闸（261112 §3#25）：本地已是 diary 就绝不再写 null。
+   * 合并层（s3v3Merge.enforceDiarySpaceMonotone）已首选重发布；这里兜「脏计划/旧包/直接从云端恢复」。
+   */
+  private diarySafeFolderSpace(id: string, existingSpace: string | null, remoteSpace: unknown): DiaryFolderSpace | null {
+    const space = mergeFolderSpace(existingSpace, remoteSpace);
+    if (normalizeFolderSpace(existingSpace) === DIARY_FOLDER_SPACE && normalizeFolderSpace(remoteSpace) !== DIARY_FOLDER_SPACE) {
+      console.warn("[sync] 拒绝把日记本降级为普通笔记本（space 只允许 null→diary）:", id);
+    }
+    return space;
   }
 
   /**
@@ -276,7 +351,7 @@ export class NoteMetadataRepository {
     if (folder.id === this.trashNotebookId) return;
     const trashedAt = folder.parentId === this.trashNotebookId ? (folder.trashedAt ?? null) : null;
     const deletedFrom = folder.parentId === this.trashNotebookId ? (folder.deletedFromParentId ?? null) : null;
-    const existing = this.db.prepare("SELECT id, parent_id FROM tree_nodes WHERE id=?").get(folder.id) as { id: string; parent_id: string | null } | undefined;
+    const existing = this.db.prepare("SELECT id, parent_id, space FROM tree_nodes WHERE id=?").get(folder.id) as { id: string; parent_id: string | null; space: string | null } | undefined;
     if (!existing) {
       this.importRemoteFolder(folder);
       return;
@@ -287,7 +362,7 @@ export class NoteMetadataRepository {
     this.db.prepare(
       "UPDATE tree_nodes SET title=?, parent_id=?, sort_order=?, node_type=?, icon=?, updated_at=?, is_dirty=0, trashed_at=?, deleted_from_parent_id=?, space=? WHERE id=?"
     ).run(folder.title, parentId, folder.sortOrder, folder.nodeType, folder.icon ?? null, folder.updatedAt, trashedAt, deletedFrom,
-      normalizeFolderSpace(folder.space), folder.id);
+      this.diarySafeFolderSpace(folder.id, existing.space, folder.space), folder.id);
   }
 
   hasTreeNode(id: string): boolean {

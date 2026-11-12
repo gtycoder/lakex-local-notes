@@ -70,7 +70,7 @@ import { BrandLaunchMark } from "./components/app/BrandLaunchMark";
 const TrashPanel = lazy(() => import("./components/app/TrashPanel").then((m) => ({ default: m.TrashPanel })));
 /** 日记空间（docs/DIARY.md）：左栏年月 + 主区复用 EditorTab；组件内部再懒一层内核边界。 */
 const DiaryWorkspace = lazy(() => import("./features/diary/DiaryWorkspace").then((m) => ({ default: m.DiaryWorkspace })));
-import { documentTreeWithoutDiary, diaryEntryIds, diaryNotebookOf, documentIdOfTreeNode } from "./features/diary/diaryTree";
+import { documentTreeWithoutDiary, diaryEntryIds, documentIdOfTreeNode } from "./features/diary/diaryTree";
 import { diaryOpenErrorMessage, requestDiaryOpenDate } from "./features/diary/diaryOpen";
 import { formatDiaryDateKey, planDiaryConvert, planDiaryOpen } from "./core/diary";
 /** P1 标签空间（一级入口「标签」）：只读聚合 + 就地元数据管理；预览正文由组件内部再懒加载（内核边界）。 */
@@ -554,7 +554,6 @@ export function App() {
   const sidebarTreeNodes = useMemo(() => documentTreeWithoutDiary(treeNodes), [treeNodes]);
   /** 日记条目 id 集合：知识库同篇去重（见 libraryTabs）与「打开某天」判定共用。 */
   const diaryNoteIds = useMemo(() => diaryEntryIds(treeNodes), [treeNodes]);
-  const diaryNotebook = useMemo(() => diaryNotebookOf(treeNodes), [treeNodes]);
 
   /** 写「今天」：已存在就直接打开；否则走主进程 `diary_open_date`（单事务 ensure，连点只产生一篇）。
    *  IPC 未接线时**明确出声**，绝不静默失败、也不在渲染层自己建文档。 */
@@ -571,12 +570,6 @@ export function App() {
     await openNote(outcome.result.noteId);
   }, [treeNodes, openNote, refreshTree, showNotice]);
 
-  const handleDiaryRenameNotebook = useCallback((title: string) => {
-    if (diaryNotebook) sidebarRename(diaryNotebook.id, title);
-  }, [diaryNotebook, sidebarRename]);
-  const handleDiarySetNotebookIcon = useCallback((icon: string | null) => {
-    if (diaryNotebook) sidebarSetIcon(diaryNotebook, icon);
-  }, [diaryNotebook, sidebarSetIcon]);
   /** 「转为文档」：把日记条目移到目标笔记本（**移动**，同一 note；正文/历史/回收站都跟着走）。
    *  判据（是否日记条目、目标是否合法）由 core.planDiaryConvert 给，这里只执行 + 反馈。 */
   const handleDiaryConvertEntry = useCallback((nodeId: string, targetNotebookId: string) => {
@@ -602,26 +595,6 @@ export function App() {
     const node = treeNodes.find((item) => item.id === nodeId);
     if (node) sidebarRequestDelete(node);
   }, [treeNodes, sidebarRequestDelete]);
-
-  /** 「取消日记标记」（整本；261110 收尾）：笔记本 space 置 NULL，笔记本与整棵子树原样保留（只回到知识库）。
-   *  成功后三件事：① 重读树（日记左栏年/月树立即不再出现）；② 已打开的日记 tab 改回文档空间
-   *  （不关闭用户正在看的文档，否则 tab 被分流隐藏 ⇒ activeNoteId 悬空、编辑区空白）；
-   *  ③ 当前在日记空间则切回知识库（那里已经没有日记本了）。 */
-  const handleDiaryUnmarkNotebook = useCallback(async () => {
-    const notebook = diaryNotebook;
-    if (!notebook) return;
-    try {
-      const result = await native.diaryUnmark(notebook.id);
-      await refreshTree();
-      setOpenTabs((tabs) => tabs.map((tab) => (tab.space === "diary" ? { ...tab, space: "library" as const } : tab)));
-      if (desktopWorkspace === "diary") await switchDesktopWorkspace("library");
-      showNotice(result.cleared
-        ? "已取消「" + notebook.title + "」的日记标记，笔记本与文档仍在知识库"
-        : "「" + notebook.title + "」已经不是日记本了");
-    } catch (reason) {
-      setError(getNativeErrorMessage(reason));
-    }
-  }, [diaryNotebook, refreshTree, setOpenTabs, desktopWorkspace, switchDesktopWorkspace, showNotice, setError]);
 
   /** 「转为小记」（261109）：日期标题写入小记第一行，正文接在后面；成功后把日记移入回收站（软删可恢复）。
    *  媒体卡片不搬运（小记资源是另一套作用域）——`droppedMedia` 为真时**明说**，不静默丢内容。 */
@@ -1294,9 +1267,6 @@ export function App() {
                 onConvertEntry={handleDiaryConvertEntry}
                 onConvertToQuickNote={(nodeId) => { void handleDiaryToQuickNote(nodeId); }}
                 onDeleteEntry={handleDiaryDeleteEntry}
-                onUnmarkNotebook={() => { void handleDiaryUnmarkNotebook(); }}
-                onRenameNotebook={handleDiaryRenameNotebook}
-                onSetNotebookIcon={handleDiarySetNotebookIcon}
                 onContentChange={handleContentChange}
                 onEditorReady={handleEditorReady}
                 onReloadNote={reloadNoteTab}

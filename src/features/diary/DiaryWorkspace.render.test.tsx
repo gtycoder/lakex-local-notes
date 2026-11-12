@@ -66,13 +66,10 @@ function props(overrides: Partial<DiaryWorkspaceProps> = {}): DiaryWorkspaceProp
     onConvertEntry: vi.fn(),
     onConvertToQuickNote: vi.fn(),
     onDeleteEntry: vi.fn(),
-    onUnmarkNotebook: vi.fn(),
     onCreateEntry: vi.fn(),
     onOpenEntry: vi.fn(),
     onWriteToday: vi.fn(),
     onOpenSearch: vi.fn(),
-    onRenameNotebook: vi.fn(),
-    onSetNotebookIcon: vi.fn(),
     onContentChange: vi.fn(),
     onEditorReady: vi.fn(),
     onReloadNote: vi.fn(),
@@ -181,36 +178,6 @@ describe("日记空间（桌面）", () => {
     expect(onConvertEntry).toHaveBeenCalledWith("e-old", "nb-doc");
   });
 
-  it("右键「取消日记标记（整本）」：二次确认说明文档会保留，确认后才交给宿主（取消则不动）", () => {
-    const onUnmarkNotebook = vi.fn();
-    render({ treeNodes: tree(true), onUnmarkNotebook });
-    const entry = [...document.body.querySelectorAll<HTMLElement>(".diary-entry")]
-      .find((el) => (el.textContent ?? "").includes("2025-12-31"));
-    act(() => { entry!.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 20, clientY: 20 })); });
-    const item = [...document.body.querySelectorAll<HTMLElement>("[role='menuitem']")]
-      .find((el) => (el.textContent ?? "").trim() === "取消日记标记（整本）");
-    expect(item, "菜单项要写清是整本（否则会被当成只对这条生效）").toBeTruthy();
-    act(() => item!.click());
-
-    const dialog = document.body.querySelector<HTMLElement>(".confirm-dialog");
-    expect(dialog).toBeTruthy();
-    expect(dialog!.textContent).toContain("笔记本与其中的文档都会保留");
-    // 先点「取消」：不触发动作
-    const cancel = [...dialog!.querySelectorAll<HTMLButtonElement>("button")].find((el) => (el.textContent ?? "").trim() === "取消")!;
-    act(() => cancel.click());
-    expect(onUnmarkNotebook).not.toHaveBeenCalled();
-    expect(document.body.querySelector(".confirm-dialog")).toBeNull();
-
-    // 再次打开并确认
-    act(() => { entry!.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 20, clientY: 20 })); });
-    act(() => ([...document.body.querySelectorAll<HTMLElement>("[role='menuitem']")]
-      .find((el) => (el.textContent ?? "").trim() === "取消日记标记（整本）")!).click());
-    const confirmDialog = document.body.querySelector<HTMLElement>(".confirm-dialog")!;
-    const confirm = [...confirmDialog.querySelectorAll<HTMLButtonElement>("button")].find((el) => (el.textContent ?? "").trim() === "取消日记标记")!;
-    act(() => confirm.click());
-    expect(onUnmarkNotebook).toHaveBeenCalledTimes(1);
-  });
-
   it("加号 = 今天新建；日历 = 选任意日期新建（一天多篇，走 mode:new）", () => {
     const onCreateEntry = vi.fn();
     render({ treeNodes: tree(true), onCreateEntry });
@@ -260,26 +227,17 @@ describe("日记空间（桌面）", () => {
     expect(merged.onOpenSearch).toHaveBeenCalledTimes(1);
   });
 
-  it("日记本设置：重命名走既有 NamePromptDialog；换图标先摆出图标入口（未点不加载表情源）", () => {
-    const merged = render({ treeNodes: tree(true) });
+  it("日记本固定不可变（261112 用户裁决）：不提供重命名/换图标/排序入口，只读展示名字", () => {
+    render({ treeNodes: tree(true) });
+    // 名字仍在（只读文本），但不是可点击的改名/换图标按钮。
     expect(allText()).toContain("日记");
-    const rename = byAria("重命名日记本");
-    expect(rename).toBeTruthy();
-    act(() => rename!.click());
-    const input = document.body.querySelector<HTMLInputElement>("input[aria-label=\"日记本名称\"]");
-    expect(input).toBeTruthy();
-    // React 受控输入：必须走原生 value setter + input 事件（直接赋 value 不会触发 onChange）
-    act(() => {
-      const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
-      setValue.call(input, "每日记录");
-      input!.dispatchEvent(new Event("input", { bubbles: true }));
-    });
-    const submit = [...document.body.querySelectorAll<HTMLElement>("button")].find((el) => (el.textContent ?? "").trim() === "保存");
-    expect(submit).toBeTruthy();
-    act(() => submit!.click());
-    expect(merged.onRenameNotebook).toHaveBeenCalledWith("每日记录");
-    // 261109 用户定稿：日记本图标就摆在名字前，点它 = 换图标（复用笔记本那套 NodeIconPicker）。
-    expect(byAria("更换日记本图标")).toBeTruthy();
+    expect(byAria("重命名日记本")).toBeNull();
+    expect(byAria("更换日记本图标")).toBeNull();
+    expect(document.body.querySelector('input[aria-label="日记本名称"]')).toBeNull();
+    // 页头里也不得出现任何排序入口。
+    const labels = [...document.body.querySelectorAll<HTMLElement>("button")]
+      .map((el) => (el.getAttribute("aria-label") ?? "") + (el.textContent ?? ""));
+    expect(labels.some((text) => text.includes("排序"))).toBe(false);
   });
 
   it("活动笔记是日记条目但标签还没打开 ⇒ 仍显示空态（不渲染无正文的编辑器）", () => {
@@ -287,11 +245,11 @@ describe("日记空间（桌面）", () => {
     expect(allText()).toContain("今天还没有写");
   });
 
-  it("取消日记标记后（树里不再有 space=diary）⇒ 左栏年/月树立即清空，落到「还没有日记本」", () => {
+  it("树里没有 space=diary 的日记本（如同步回来的普通目录）⇒ 左栏年/月树立即清空，落到「还没有日记本」", () => {
     const merged = render({ treeNodes: tree(true) });
     expect(allText()).toContain(todayYear);
     expect(allText()).toContain("12 月");
-    // 同一组件、只换树（模拟取消标记后 refreshTree 回来的数据）：左栏必须立刻没有年/月与条目。
+    // 同一组件、只换树（模拟 refreshTree 回来的没有日记本的目录）：左栏必须立刻没有年/月与条目。
     act(() => { root.render(createElement(DiaryWorkspace, { ...merged, treeNodes: tree(false, false) })); });
     expect(allText()).not.toContain(todayYear);
     expect(allText()).not.toContain("12 月");

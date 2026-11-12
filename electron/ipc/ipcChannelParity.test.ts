@@ -162,9 +162,9 @@ describe("IPC 通道三方一致性（C2-2）", () => {
     // → 176（261109 便携包导出：portable_export_{status,pick_dir,run}；portable-export-progress 进度事件不计通道）。
     // → 186 = 185（261109 AI 写作：会话/消息等）+ 1（261109 日记：diary_open_date —— 幂等打开某天；
     // 日记列表仍走既有 list_tree_nodes，不新增列表通道）。
-    // → 187（261110 日记收尾：diary_unmark —— 取消整本日记标记；space=NULL 的写路径）。
-    expect(registrarChannels().size, "通道数变了 ⇒ 请确认是有意的并在 commit 里说明").toBe(187);
-    expect(preloadChannels().size).toBe(187);
-    expect(Object.keys(WEB_METHODS).length).toBe(187);
+    // 261112 用户裁决：日记本不可取消 ⇒ 通道数 187 → 186。
+    expect(registrarChannels().size, "通道数变了 ⇒ 请确认是有意的并在 commit 里说明").toBe(186);
+    expect(preloadChannels().size).toBe(186);
+    expect(Object.keys(WEB_METHODS).length).toBe(186);
   });
 });

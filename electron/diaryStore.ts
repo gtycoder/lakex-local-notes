@@ -24,7 +24,6 @@ import {
   parseDiaryDateKey,
   planDiaryCreate,
   planDiaryOpen,
-  planDiaryUnmark,
   type DiaryTreeNode,
 } from "../src/core/diary.js";
 
@@ -39,11 +38,6 @@ export interface DiaryOpenResult {
   notebookId: string;
   /** 同名重复文档（历史脏数据）：只告警，绝不自动删除。 */
   duplicates: string[];
-}
-
-/** `diary_unmark` 的返回：cleared=false = 本来就不是日记本（连点第二次幂等，不是错误）。 */
-export interface DiaryUnmarkResult {
-  cleared: boolean;
 }
 
 export interface DiaryStoreDeps {
@@ -132,30 +126,6 @@ export class DiaryStore {
     try { this.deps.upsertSearch?.(id, dateKey, ""); } catch { /* 索引失败不阻断创建 */ }
     // 261109 起一天允许多篇（mode:"new"），当天其它条目是正常数据，不再当"重复文档"告警。
     return { noteId: id, created: true, notebookId, duplicates: [] };
-  }
-
-  /**
-   * 「取消日记标记」（整本；261110 收尾，docs/DIARY.md 硬规则 1 的反向动作）。
-   *
-   * 语义：只把**日记笔记本这一行**的 `space` 置 NULL（文档/分组/整棵子树原样保留），
-   * 之后它回到知识库、日记时间线不再包含它（`diaryEntries` 只扫 `space="diary"` 的子树）。
-   *
-   * 三条口径与 openDate 同源：
-   * 1. 判据来自 core `planDiaryUnmark`（只认 notebook + space=diary，不看标题）；
-   * 2. 写入是**单条原子 UPDATE**（`WHERE id=? AND space='diary'` 自带乐观守卫，不需要多语句事务）；
-   *    `updated_at` 必须 bump —— 目录元数据（含 space）的同步传播判据就是 updatedAt
-   *    （见 src/core/s3v3/plan/planFolderSpace.test.ts）；
-   * 3. **幂等**：已经取消 / 不是日记本 ⇒ `cleared:false`，不抛错（连点第二次不是失败）。
-   */
-  unmarkNotebook(rawNotebookId: string): DiaryUnmarkResult {
-    const notebookId = String(rawNotebookId ?? "");
-    const plan = planDiaryUnmark(this.deps.listTreeNodes(), notebookId);
-    if (!plan.ok) return { cleared: false };
-    const now = this.deps.nowIso();
-    const changed = this.deps.db.prepare(
-      "UPDATE tree_nodes SET space=NULL, updated_at=?, is_dirty=1 WHERE id=? AND workspace_id=? AND node_type='notebook' AND space=? AND deleted_at IS NULL",
-    ).run(now, plan.notebookId, this.deps.workspaceId, DIARY_FOLDER_SPACE).changes;
-    return { cleared: changed > 0 };
   }
 
   /** 日记笔记本的行（只读；诊断/测试用）。 */

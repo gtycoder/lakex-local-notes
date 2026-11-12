@@ -3,6 +3,7 @@ import path from "node:path";
 import type { DbLike } from "./dbLike.js";
 import { ensureDiaryGroupsForRestore, isNotebookAvailable, resolveDiaryOriginNotebookId } from "./trashDiaryOrigin.js";
 import { AppError } from "../src/core/storeErrors.js";
+import { DIARY_FOLDER_SPACE, normalizeFolderSpace } from "../src/core/diary.js";
 import { isSafePathSegment } from "../src/core/storeUtils.js";
 import { sqlParameterBatches } from "../src/core/sqlParameterBatch.js";
 import type { LoggerScopes } from "../src/core/logger.js";
@@ -47,6 +48,18 @@ export class TrashLifecycle {
 
   constructor(ctx: TrashLifecycleContext) {
     this.ctx = ctx;
+  }
+
+  /**
+   * 日记本不可删除（261112 用户裁决，AGENTS §3#25）：日记本是固定特殊笔记本，
+   * 软删/彻底删除/清空回收站一律拒绝，只允许把里面的单篇日记转成文档移出。
+   */
+  private assertNotDiaryNotebook(id: string, action: string): void {
+    const row = this.ctx.db.prepare("SELECT node_type, space FROM tree_nodes WHERE id=?").get(id) as
+      { node_type: string; space: string | null } | undefined;
+    if (row && row.node_type === "notebook" && normalizeFolderSpace(row.space) === DIARY_FOLDER_SPACE) {
+      throw new AppError("InvalidInput", `日记本是固定特殊笔记本，不能${action}；只允许把里面的单篇日记转成文档移出: ${id}`);
+    }
   }
 
   /** 包含已删除节点的后代（用于彻底删除回收站子树） */
@@ -118,6 +131,7 @@ export class TrashLifecycle {
     if (id === this.ctx.trashNotebookId) {
       throw new AppError("InvalidInput", "不能删除回收站笔记本");
     }
+    this.assertNotDiaryNotebook(id, "删除");
     const node = this.ctx.readTreeNode(id);
     if (node.parentId === this.ctx.trashNotebookId) return; // 已在回收站
     const now = nowIso();
@@ -168,6 +182,13 @@ export class TrashLifecycle {
       "SELECT id FROM tree_nodes WHERE parent_id=? AND deleted_at IS NULL AND trashed_at IS NOT NULL AND trashed_at < ? ORDER BY trashed_at"
     ).all(this.ctx.trashNotebookId, cutoff) as Array<{ id: string }>;
     for (const r of rows) {
+      // 日记本不可删除（261112 §3#25）：历史脏数据让它进了回收站也不得被过期清理 purge（后台任务不得抛错）。
+      const row = this.ctx.db.prepare("SELECT node_type, space FROM tree_nodes WHERE id=?").get(r.id) as
+        { node_type: string; space: string | null } | undefined;
+      if (row && row.node_type === "notebook" && normalizeFolderSpace(row.space) === DIARY_FOLDER_SPACE) {
+        this.ctx.logScopes.store.warn("[trash] 跳过日记本的过期清理（不可删除）:", r.id);
+        continue;
+      }
       try { this.purgeTrashItem(r.id); }
       // F-01 复核（task-62）：候选列表是事务外读的；前一个根 purge 时按 deleted_from_parent_id 可能已把
       // 同组的其他「回收站根」一起删掉（同步扁平化后常见）⇒ NotFound 幂等跳过，后台任务不得半途抛错。
@@ -297,6 +318,7 @@ export class TrashLifecycle {
        WHERE t.id=? AND t.deleted_at IS NULL AND (SELECT COUNT(*) FROM trash_ancestors WHERE id=?)>0`
     ).get(id, id, this.ctx.trashNotebookId) as { id: string; note_file_id: string | null } | undefined;
     if (!node) throw new AppError("NotFound", `回收站节点不存在: ${id}`);
+    this.assertNotDiaryNotebook(id, "彻底删除");
     // F-01：子树必须覆盖「被同步扁平化成回收站容器的子文档」（按 deleted_from_parent_id 原始父链）。
     const ids = this.flattenedSubtreeIds(id);
     const filesToRemove: Array<{ path: string; recursive: boolean }> = [];
@@ -361,6 +383,14 @@ export class TrashLifecycle {
       "SELECT id FROM tree_nodes WHERE parent_id=? AND deleted_at IS NULL"
     ).all(this.ctx.trashNotebookId) as Array<{ id: string }>;
     for (const item of items) {
+      // 日记本不允许被删除：历史脏数据（旧包取消过标记/手工塞进回收站）可能让它出现在回收站里。
+      // 单个条目按理进不了回收站（deleteTreeNode 已拒）；这里跳过而不是让整个「清空回收站」失败。
+      const row = this.ctx.db.prepare("SELECT node_type, space FROM tree_nodes WHERE id=?").get(item.id) as
+        { node_type: string; space: string | null } | undefined;
+      if (row && row.node_type === "notebook" && normalizeFolderSpace(row.space) === DIARY_FOLDER_SPACE) {
+        this.ctx.logScopes.store.warn("[trash] 跳过日记本（不可删除）:", item.id);
+        continue;
+      }
       try { this.purgeTrashItem(item.id); }
       // 同 autoPurgeExpiredTrash：扁平化回收站子树里「组 + 组内子文档」都是根，前一个根的 purge 会连带
       // 删除其余（deleted_from_parent_id 链），后续根已不存在 ⇒ 幂等跳过，用户点「清空回收站」不得报错。

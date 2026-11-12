@@ -82,9 +82,26 @@ export function normalizeFolderSpace(value: unknown): DiaryFolderSpace | null {
 }
 
 /**
+ * 日记本单调性（261112 用户裁决，AGENTS §3#25）：`space` **只允许 `null → "diary"`**。
+ *
+ * 日记本 = 像回收站一样的固定特殊笔记本，禁止被降级回普通笔记本（旧包/脏数据也不行）。
+ * 合并/发布/落库共用这一条判据：任一侧是 diary ⇒ 结果就是 diary（diary 胜 null）。
+ */
+export function mergeFolderSpace(local: unknown, remote: unknown): DiaryFolderSpace | null {
+  return normalizeFolderSpace(local) === DIARY_FOLDER_SPACE || normalizeFolderSpace(remote) === DIARY_FOLDER_SPACE
+    ? DIARY_FOLDER_SPACE
+    : null;
+}
+
+/** 节点是否日记本（只认 notebook + space=diary，不看标题；与 `diaryNotebooks` 同口径）。 */
+export function isDiaryNotebookNode(node: { nodeType?: string | null; space?: unknown } | null | undefined): boolean {
+  return !!node && node.nodeType === "notebook" && normalizeFolderSpace(node.space) === DIARY_FOLDER_SPACE;
+}
+
+/**
  * wire 写入：**必须显式写**。
- * 非日记写 `null`（而不是省略字段）—— 否则"取消日记标记"在 wire 上不可见、两端会互刷
- * （同标签 `tagIds` 空集合必须写 `[]` 的教训，AGENTS §4）。
+ * 非日记写 `null`（而不是省略字段）—— 否则「日记本 ↔ 普通笔记本」的归属变更在 wire 上不可见、
+ * 两端会互刷（同标签 `tagIds` 空集合必须写 `[]` 的教训，AGENTS §4）。
  */
 export function folderSpaceForWire(kind: string | null | undefined): DiaryFolderSpace | null {
   return kind === DIARY_FOLDER_SPACE ? DIARY_FOLDER_SPACE : null;
@@ -359,32 +376,6 @@ export function planDiaryConvert(
   if (!target) return { ok: false, reason: "target-missing" };
   if (target.nodeType !== "notebook") return { ok: false, reason: "target-not-notebook" };
   return { ok: true, entry, targetId: targetNotebookId };
-}
-
-/**
- * 「取消日记标记」的判据（261110 收尾；docs/DIARY.md 硬规则 1 的反向动作）。
- *
- * 语义定稿：**整本取消**，只改笔记本这一行的 `space`（置 NULL）；
- * 笔记本与整棵子树（年/月分组、文档）**原样保留**，只是不再归入日记空间。
- * 判据只认 `nodeType === "notebook" && space === "diary"`（不看标题）：
- *  · 已经是普通笔记本（含连点第二次）⇒ `not-diary-notebook`，调用方按「无事发生」处理（幂等，不报错）；
- *  · 节点不存在 / 不是笔记本 ⇒ `missing-notebook`。
- * UI 与两端写入路径都先问这里，不要各自再判一遍。
- */
-export type DiaryUnmarkRejection = "missing-notebook" | "not-diary-notebook";
-
-export function planDiaryUnmark(
-  nodes: readonly DiaryTreeNode[],
-  notebookId: string | null,
-): { ok: true; notebookId: string; title: string } | { ok: false; reason: DiaryUnmarkRejection } {
-  if (!notebookId) return { ok: false, reason: "missing-notebook" };
-  const target = nodes.find((node) => node.id === notebookId);
-  if (!target) return { ok: false, reason: "missing-notebook" };
-  // 节点在、但不是「带日记标记的笔记本」（普通笔记本/分组/文档/已取消）⇒ 同一个"不是日记本"原因。
-  if (!isNotebook(target) || normalizeFolderSpace(target.space) !== DIARY_FOLDER_SPACE) {
-    return { ok: false, reason: "not-diary-notebook" };
-  }
-  return { ok: true, notebookId: target.id, title: target.title };
 }
 
 /**

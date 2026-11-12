@@ -4,7 +4,8 @@
  * 覆盖 docs/DIARY.md 硬规则 1/2 的**集成**形态（单测已散在 diary.test / s3v3Index.space / planFolderSpace）：
  *  - `folders[].space` 三种往返（有值 / 缺字段 / null）+ 未知值读取容错；
  *  - **发布显式写**：非日记是 own property `space: null`，不是省略字段；
- *  - **取消标记可见**：base/remote 都是 diary、本地改回 null 且 bump updatedAt ⇒ 发布 null；
+ *  - **日记本单调**（261112 §3#25）：space 只允许 null→diary；远端 null 而本地 diary ⇒ 重发布 diary；
+ *    本地丢标记而远端 diary ⇒ 取回 diary（不发布 null）；
  *  - 零变更轮短路：本地丢 space 但无其它变更时 publish=null（不会把 null 反推上云端）；
  *  - 整库备份/便携包所搬运的**线格式**（索引 JSON）往返后 space 不丢。
  *
@@ -97,14 +98,16 @@ describe("发布侧硬规则：space 显式写 + 取消标记可见", () => {
     expect(text).toContain('"space":"diary"');
   });
 
-  it("取消日记标记：base/remote=diary，本地改回 null 且 bump updatedAt ⇒ 发布的是 null（不是沿用旧值）", () => {
+  it("日记本不可降级：远端把 space 发成 null 时，本地 diary 重发布 diary（不是 null）", () => {
     const base = world([folder("nb1", { space: "diary" })]);
-    const local = world([folder("nb1", { space: null, updatedAt: "2026-11-10T00:00:00.000Z" })]);
-    const plan = planSync({ local, base, remote: base, state: state() });
+    const remote = world([folder("nb1", { space: null, updatedAt: "2026-11-10T00:00:00.000Z" })]);
+    const plan = planSync({ local: base, base, remote, state: state() });
     expect(plan.publish).not.toBeNull();
     const entry = plan.publish!.lake.folders.find((f) => f.id === "nb1")!;
     expect(Object.prototype.hasOwnProperty.call(entry, "space")).toBe(true);
-    expect(entry.space).toBeNull();
+    expect(entry.space).toBe("diary");
+    // wire 文本级证据：发布的是 "space":"diary"
+    expect(serializeLakeIndex(plan.publish!.lake)).toContain('"space":"diary"');
   });
 
   it("本地丢 space 但无其它变更 ⇒ 零变更轮 publish=null（不会把 space:null 反推上云端）", () => {
@@ -115,6 +118,10 @@ describe("发布侧硬规则：space 显式写 + 取消标记可见", () => {
     const local = world([folder("nb-diary", { space: null })]);   // 本地丢标记
     const plan = planSync({ local, base, remote: base, state: state() });
     expect(plan.publish).toBeNull();
+    // 单调守卫：本地丢标记时按远端取回 diary（只升不降），仍不发布 null。
+    const repair = plan.writes.find((w) => w.kind === "apply-remote-folder" && w.id === "nb-diary") as
+      { meta: { space?: string | null } } | undefined;
+    expect(repair?.meta.space).toBe("diary");
   });
 });
 

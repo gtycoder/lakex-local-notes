@@ -60,11 +60,6 @@ export type SafeModeExitResult =
   | { ok: true; state: { active: boolean; exitedAt?: string } }
   | { ok: false; reason: string; state?: { active: boolean; exitedAt?: string } };
 
-/** 取消日记标记的结果（整本语义见 docs/DIARY.md；cleared=false = 本来就不是日记本，幂等）。 */
-export interface DiaryUnmarkResultShape {
-  cleared: boolean;
-}
-
 /** 日记打开结果（与主进程 electron/diaryStore.ts 的 DiaryOpenResult 同形，跨片契约）。 */
 export interface DiaryOpenResultShape {
   noteId: string;
@@ -234,8 +229,6 @@ export interface LakeNative {
    */
   /** `mode`：省略 = 当天已有就开最新、没有就建；`"new"` = 永远新建一篇（一天多篇）。 */
   diaryOpenDate(dateKey: string, mode?: "open" | "new"): Promise<DiaryOpenResultShape>;
-  /** 取消**整本**日记标记（261110 收尾）：笔记本 space 置 NULL，笔记本与文档原样保留；幂等。 */
-  diaryUnmark(notebookId: string): Promise<DiaryUnmarkResultShape>;
   createGroup(parentId: string, title: string): Promise<TreeNode>;
   renameTreeNode(id: string, title: string): Promise<TreeNode>;
   createNoteIn(parentId: string | null, title: string): Promise<NoteDocument>;
@@ -512,7 +505,6 @@ export const native = {
   listNoteSummaries: () => api().listNoteSummaries(),
   createNotebook: (title: string, space?: "diary" | null) => api().createNotebook(title, space),
   diaryOpenDate: (dateKey: string, mode?: "open" | "new") => api().diaryOpenDate(dateKey, mode),
-  diaryUnmark: (notebookId: string) => api().diaryUnmark(notebookId),
   createGroup: (parentId: string, title: string) => api().createGroup(parentId, title),
   renameTreeNode: (id: string, title: string) => api().renameTreeNode(id, title),
   createNoteIn: (parentId: string | null, title: string) => api().createNoteIn(parentId, title),

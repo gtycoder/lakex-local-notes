@@ -65,8 +65,8 @@ export interface LakeFolderEntry {
   updatedAt: string;
   /**
    * 日记本标记（261109，docs/DIARY.md）。
-   * **发布时必须显式写**：非日记写 `null`（不是省略字段）——否则「取消日记标记」在 wire 上不可见、
-   * 两端会互刷（同 tagIds 空集合必须写 `[]` 的教训）。
+   * **发布时必须显式写**：非日记写 `null`（不是省略字段）——否则「日记本 ↔ 普通笔记本」的归属变更
+   * 在 wire 上不可见、两端会互刷（同 tagIds 空集合必须写 `[]` 的教训）。
    * 读取容错：未知值/缺字段一律当非日记（`normalizeFolderSpace`）。
    */
   space?: DiaryFolderSpace | null;

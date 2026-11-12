@@ -451,7 +451,7 @@ export function planSync(input: PlanInput): SyncPlan {
       .map((f) => (f.applyRemote && f.remote ? f.remote : f.local ?? f.remote))
       .filter((f): f is NonNullable<typeof f> => !!f)
       // 日记标记（261109）：发布时**必须显式写** space —— 非日记写 null（不是省略字段），
-      // 否则「取消日记标记」在 wire 上不可见、两端会互刷（docs/DIARY.md 硬规则 1）。
+      // 否则「日记本 ↔ 普通笔记本」的归属变更在 wire 上不可见、两端会互刷（docs/DIARY.md 硬规则 1）。
       .map((f) => ({ ...f, space: folderSpaceForWire(f.space) }));
     publish = {
       lake: { v: 3, space: "lake", notes: lakeNotes, folders },
