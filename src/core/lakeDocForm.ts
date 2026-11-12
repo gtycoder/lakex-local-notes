@@ -147,22 +147,3 @@ export function lakeBodyToPlainText(body: string): string {
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
-
-/**
- * 日记条目 → 小记内容（261109）：**日期标题写入小记第一行**，其余正文原样接在后面。
- *
- * 媒体卡片（`<card …></card>`：图片/附件）**不搬运**（小记资源是另一套作用域，跨空间复制文件属于
- * 主进程能力）；这里把它们剥掉并返回 `droppedMedia` 让调用方**明说**，绝不静默丢内容。
- */
-export function lakeBodyForQuickNoteFromDiary(
-  body: string,
-  title: string,
-  ids: { paragraphId: string; textId: string },
-): { body: string; text: string; droppedMedia: boolean } {
-  const hasMedia = /<card[\s>]/i.test(body);
-  const withoutCards = body.replace(/<card[^>]*>[\s\S]*?<\/card>/gi, "").replace(/<card[^>]*\/>/gi, "");
-  const titleParagraph = lakeTextParagraph(ids.paragraphId, ids.textId, title);
-  const merged = titleParagraph + withoutCards;
-  const text = lakeBodyToPlainText(merged);
-  return { body: merged, text, droppedMedia: hasMedia };
-}

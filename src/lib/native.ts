@@ -60,6 +60,13 @@ export type SafeModeExitResult =
   | { ok: true; state: { active: boolean; exitedAt?: string } }
   | { ok: false; reason: string; state?: { active: boolean; exitedAt?: string } };
 
+/** 日记转为小记的结果（与主进程 electron/diaryQuickNoteConversion.ts 同形，跨片契约）。 */
+export interface DiaryToQuickNoteResultShape {
+  quickNoteId: string;
+  /** 小记承载不了、被明确剥掉的卡片类型（去重；空 = 全部搬运）。 */
+  droppedKinds: string[];
+}
+
 /** 日记打开结果（与主进程 electron/diaryStore.ts 的 DiaryOpenResult 同形，跨片契约）。 */
 export interface DiaryOpenResultShape {
   noteId: string;
@@ -229,6 +236,8 @@ export interface LakeNative {
    */
   /** `mode`：省略 = 当天已有就开最新、没有就建；`"new"` = 永远新建一篇（一天多篇）。 */
   diaryOpenDate(dateKey: string, mode?: "open" | "new"): Promise<DiaryOpenResultShape>;
+  /** 日记转为小记（261112 task-92）：正文/媒体原样搬运，成功后日记进回收站（可恢复）。 */
+  diaryToQuickNote(noteId: string): Promise<DiaryToQuickNoteResultShape>;
   createGroup(parentId: string, title: string): Promise<TreeNode>;
   renameTreeNode(id: string, title: string): Promise<TreeNode>;
   createNoteIn(parentId: string | null, title: string): Promise<NoteDocument>;
@@ -505,6 +514,7 @@ export const native = {
   listNoteSummaries: () => api().listNoteSummaries(),
   createNotebook: (title: string, space?: "diary" | null) => api().createNotebook(title, space),
   diaryOpenDate: (dateKey: string, mode?: "open" | "new") => api().diaryOpenDate(dateKey, mode),
+  diaryToQuickNote: (noteId: string) => api().diaryToQuickNote(noteId),
   createGroup: (parentId: string, title: string) => api().createGroup(parentId, title),
   renameTreeNode: (id: string, title: string) => api().renameTreeNode(id, title),
   createNoteIn: (parentId: string | null, title: string) => api().createNoteIn(parentId, title),

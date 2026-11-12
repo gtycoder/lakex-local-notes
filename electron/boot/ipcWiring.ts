@@ -32,6 +32,8 @@ import { registerDuplicateNotesIpc } from "../ipc/registerDuplicateNotes.js";
 import { registerBatchNotesIpc } from "../ipc/registerBatchNotes.js";
 import { registerNotesIpc } from "../ipc/registerNotes.js";
 import { registerDiaryIpc } from "../ipc/registerDiary.js";
+import { convertDiaryNoteToQuickNote } from "../diaryQuickNoteConversion.js";
+import { AppError } from "../../src/core/storeErrors.js";
 import { registerHistoryIpc } from "../ipc/registerHistory.js";
 import { registerAiIpc } from "../ipc/registerAi.js";
 import { registerAiWritingIpc } from "../ipc/registerAiWriting.js";
@@ -185,6 +187,11 @@ export function registerIpc(deps: IpcWiringDeps): ReadonlyMap<string, (args: unk
   // 261109 日记：幂等打开某天（判据/单事务在 electron/diaryStore.ts；通道见 docs/DIARY.md）。
   registerDiaryIpc(ipc, {
     openDate: (dateKey, options) => store.openDiaryDate(dateKey, options),
+    convertToQuickNote: (noteId) => {
+      // 小记库降级（损坏/打开失败）时明确拒绝，而不是抛底层空指针。
+      if (getQuickNotesAvailability().mode !== "ok") throw new AppError("InvalidInput", "小记库当前不可用，无法转为小记");
+      return convertDiaryNoteToQuickNote(quickNotes, store, noteId);
+    },
   });
   registerHistoryIpc(ipc, store, () => deps.restartHistoryTimers());
   registerAiIpc(ipc, store);

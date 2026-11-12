@@ -1,23 +1,23 @@
 /**
- * 日记 → 小记（261109）的**渲染层组合**（纯函数）：日期标题写入小记第一行，正文原样接在后面。
+ * 日记「转为小记」的**提示文案**（261112 task-92 起）。
  *
- * 媒体卡片不搬运（小记资源是 /quick-notes/<id>/ 作用域），由 `droppedMedia` 让调用方明说。
- * 真正的落库仍走既有 IPC：`createQuickNote`（小记）+ 把日记移入回收站（软删，可恢复）。
+ * 真正的转换在主进程（electron/diaryQuickNoteConversion.ts：正文原样承载 + 媒体搬到小记作用域 + 原文软删）；
+ * 渲染层只负责把 `droppedKinds` 变成人话，**不静默丢内容**。
  */
-import { lakeBodyForQuickNoteFromDiary } from "../../core/lakeDocForm";
 
-export interface ComposedDiaryQuickNote {
-  text: string;
-  body: string;
-  /** 正文里有图片/附件卡片（已剥离，未搬运）。 */
-  droppedMedia: boolean;
-}
+/** 卡片类型 → 中文名（未列出的原样展示，宁可露出内部名也不要吞掉）。 */
+const CARD_KIND_LABELS: Record<string, string> = {
+  board: "画板",
+  customBlock: "自定义块",
+  toc: "大纲",
+  materialLibrary: "素材库",
+};
 
-export function composeDiaryQuickNote(doc: { title: string; content?: string | null }): ComposedDiaryQuickNote {
-  const suffix = crypto.randomUUID();
-  const { text, body, droppedMedia } = lakeBodyForQuickNoteFromDiary(doc.content ?? "", doc.title, {
-    paragraphId: "qn-title-" + suffix,
-    textId: "qn-title-text-" + suffix,
-  });
-  return { text, body, droppedMedia };
+/** 日记→小记完成提示：基础文案 + 未搬运类型明说（去重、保持出现顺序）。 */
+export function diaryToQuickNoteNotice(droppedKinds: readonly string[]): string {
+  const base = "已转为小记（含图片/附件）；日记已移入回收站，可恢复";
+  const kinds = [...new Set(droppedKinds)].filter(Boolean);
+  if (kinds.length === 0) return base;
+  const labels = kinds.map((kind) => CARD_KIND_LABELS[kind] ?? kind);
+  return base + "；" + labels.join("、") + "未搬运（日记原稿仍在回收站，可恢复）";
 }

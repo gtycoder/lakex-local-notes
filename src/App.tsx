@@ -46,7 +46,7 @@ import { AttachmentPreview } from "./features/attachment/AttachmentPreview";
 import { NativeTitleTips } from "./components/ui/NativeTitleTips";
 import { native } from "./lib/native";
 import { getNativeErrorMessage } from "./lib/nativeErrors";
-import { composeDiaryQuickNote } from "./features/diary/diaryQuickNote";
+import { diaryToQuickNoteNotice } from "./features/diary/diaryQuickNote";
 import { convertDiaryEntryToDocument } from "./features/diary/diaryConvert";
 import type { TreeNode } from "./lib/types";
 /** P12：回收站/单据属性弹窗都挂 Lake 内核（HistorySnapshotPreview → useHistorySnapshotViewer），
@@ -608,20 +608,13 @@ export function App() {
     if (node) sidebarRequestDelete(node);
   }, [treeNodes, sidebarRequestDelete]);
 
-  /** 「转为小记」（261109）：日期标题写入小记第一行，正文接在后面；成功后把日记移入回收站（软删可恢复）。
-   *  媒体卡片不搬运（小记资源是另一套作用域）——`droppedMedia` 为真时**明说**，不静默丢内容。 */
+  /** 「转为小记」（261112 task-92 起）：主进程用**原 Lake 正文**创建小记（图片/附件搬到小记资产作用域），
+   *  成功后把日记移入回收站（软删可恢复）。小记承载不了的卡片类型由 `droppedKinds` **明说**，不静默丢。 */
   const handleDiaryToQuickNote = useCallback(async (nodeId: string) => {
     try {
-      const doc = await native.readNote(nodeId);
-      const composed = composeDiaryQuickNote({ title: doc.title, content: doc.content });
-      await native.createQuickNote({
-        text: composed.text,
-        body: composed.body,
-        draftId: crypto.randomUUID(),
-        stagedImageIds: [],
-      });
-      await native.deleteTreeNode(nodeId);
-      showNotice((composed.droppedMedia ? "已转为小记（图片 / 附件未搬运）" : "已转为小记") + "；日记已移入回收站，可恢复");
+      // 转换在主进程（正文原样承载 + 媒体搬到小记作用域 + 原文软删）；渲染层只显示结果。
+      const result = await native.diaryToQuickNote(nodeId);
+      showNotice(diaryToQuickNoteNotice(result.droppedKinds));
       await refreshTree();
     } catch (reason) {
       setError(getNativeErrorMessage(reason));

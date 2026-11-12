@@ -26,6 +26,7 @@ import {
   sameQuickNoteContent,
   serializeQuickNoteContent,
   parseQuickNoteContent,
+  type StoredQuickNoteContent,
 } from "../quickNoteModel.js";
 import type { QuickNoteDocument, QuickNoteImage, SaveQuickNoteInput } from "../quickNoteTypes.js";
 import type { QuickNotesQueries } from "../quickNotesQueries.js";
@@ -46,7 +47,7 @@ import {
   type QuickNotePaths,
 } from "./context.js";
 import { readAllStagedMetadata, readStagedMetadata } from "./staging.js";
-import { reindexQuickNoteFromDisk, type QuickNoteSearchDeps } from "./searchIndex.js";
+import { reindexQuickNoteFromDisk, removeQuickNoteSearchIndex, type QuickNoteSearchDeps } from "./searchIndex.js";
 
 export interface QuickNoteSaveDeps {
   readonly db: DbLike;
@@ -220,6 +221,52 @@ export function recoverStagedSaves(deps: QuickNoteSaveDeps): void {
   }
 }
 
+/** 一条小记内容 + 资源文件的原子写入（journal 4 态：prepared → db_committed → files_promoted）。 */
+function writeQuickNoteFromContent(
+  deps: QuickNoteSaveDeps,
+  item: { id: string; createdAt: string; updatedAt: string; isConflict: boolean },
+  parsed: StoredQuickNoteContent,
+  contentBytes: Buffer,
+  assets: { filename: string; bytes: Buffer }[],
+  options: { operationType: string; dirty: 0 | 1 },
+): void {
+  const assetDir = assetDirOf(deps.paths, item.id);
+  const itemPath = itemPathOf(deps.paths, item.id);
+  const contentHash = sha256Hex(contentBytes);
+  const opId = uuid();
+  const stagingKey = `${options.operationType}-${opId}`;
+  const temporary = path.join(deps.paths.stagingDir, stagingKey);
+  const oldAssetsBackup = `${assetDir}.bak-${opId}`;
+  fs.mkdirSync(temporary, { recursive: true });
+  for (const asset of assets) {
+    atomicWriteFile(path.join(temporary, asset.filename), asset.bytes);
+  }
+  atomicWriteFile(path.join(temporary, SAVE_BODY_FILE), contentBytes);
+  const now = nowIso();
+  const journalId = Number(deps.db.prepare(
+    "INSERT INTO quick_note_file_ops(operation_type,quick_note_id,old_content_path,new_content_path,old_assets_path,new_assets_path,staging_key,content_hash,state,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)"
+  ).run(options.operationType, item.id, itemPath, path.join(temporary, SAVE_BODY_FILE), oldAssetsBackup, assetDir, stagingKey, contentHash, "prepared", now, now).lastInsertRowid);
+  try {
+    const tx = deps.db.transaction(() => {
+      deps.db.prepare("INSERT INTO quick_notes(id,created_at,updated_at,preview_text,image_count,content_hash,is_dirty,is_conflict) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET created_at=excluded.created_at,updated_at=excluded.updated_at,preview_text=excluded.preview_text,image_count=excluded.image_count,content_hash=excluded.content_hash,is_dirty=excluded.is_dirty,is_conflict=excluded.is_conflict,cloud_deleted=0")
+        .run(item.id, item.createdAt, item.updatedAt, previewQuickNote(parsed.text, parsed.images.length), parsed.images.length, contentHash, options.dirty, item.isConflict ? 1 : 0);
+      deps.db.prepare("DELETE FROM quick_note_assets WHERE quick_note_id=?").run(item.id);
+      // 他端恢复/显式恢复：远端 active 条目回来时清掉本地 purged 墓碑（否则每轮又会被当成删除）。
+      deps.db.prepare("DELETE FROM quick_note_deleted WHERE id=?").run(item.id);
+      const insert = deps.db.prepare("INSERT INTO quick_note_assets(id,quick_note_id,filename,mime_type,width,height,size,content_hash) VALUES(?,?,?,?,?,?,?,?)");
+      for (const image of parsed.images) insert.run(image.id, item.id, image.filename, image.mimeType, image.width, image.height, image.size, image.hash);
+      deps.db.prepare("UPDATE quick_note_file_ops SET state=?, updated_at=? WHERE id=?").run("db_committed", now, journalId);
+    });
+    tx();
+  } catch (error) {
+    deps.db.prepare("DELETE FROM quick_note_file_ops WHERE id=?").run(journalId);
+    try { fs.rmSync(temporary, { force: true, recursive: true }); } catch { /* best effort */ }
+    throw error;
+  }
+  promoteImport(deps, temporary, itemPath, assetDir, oldAssetsBackup, journalId, now);
+  reindexQuickNoteFromDisk(deps.search, item.id);
+}
+
 /** 远端小记导入（V5 §5.4：4 态 journal 驱动）。 */
 export function importRemoteQuickNote(
   deps: QuickNoteSaveDeps,
@@ -237,40 +284,56 @@ export function importRemoteQuickNote(
   for (const asset of assets) {
     if (!isSafeSegment(asset.filename)) throw new AppError("InvalidInput", "远端图片文件名无效");
   }
-  const assetDir = assetDirOf(deps.paths, item.id);
-  const itemPath = itemPathOf(deps.paths, item.id);
-  const opId = uuid();
-  const stagingKey = `import-${opId}`;
-  const temporary = path.join(deps.paths.stagingDir, stagingKey);
-  const oldAssetsBackup = `${assetDir}.bak-${opId}`;
-  fs.mkdirSync(temporary, { recursive: true });
-  for (const asset of assets) {
-    atomicWriteFile(path.join(temporary, asset.filename), asset.bytes);
+  writeQuickNoteFromContent(deps, item, parsed, contentBytes, assets, { operationType: "import_remote", dirty: 0 });
+}
+
+/**
+ * 本地「日记 → 小记」转换用：用**已构造好的内容 + 资产字节**创建一条小记。
+ * 与远端导入共用同一套 journal/promote（失败不产生半成品；`is_dirty=1` 等下一轮同步上传）。
+ */
+export function createQuickNoteFromContent(
+  deps: QuickNoteSaveDeps,
+  input: { id: string; content: StoredQuickNoteContent; assets: { filename: string; bytes: Buffer }[] },
+): void {
+  if (!isSafeSegment(input.id)) throw new AppError("InvalidInput", "小记 ID 无效");
+  for (const asset of input.assets) {
+    if (!isSafeSegment(asset.filename)) throw new AppError("InvalidInput", "资源文件名无效");
   }
-  atomicWriteFile(path.join(temporary, SAVE_BODY_FILE), contentBytes);
+  for (const image of input.content.images) {
+    const asset = input.assets.find((candidate) => candidate.filename === image.filename);
+    if (!asset || asset.bytes.length !== image.size || sha256Hex(asset.bytes) !== image.hash) {
+      throw new AppError("InvalidInput", `资源不完整: ${image.filename}`);
+    }
+  }
+  const contentBytes = Buffer.from(serializeQuickNoteContent(input.content), "utf8");
   const now = nowIso();
-  const journalId = Number(deps.db.prepare(
-    "INSERT INTO quick_note_file_ops(operation_type,quick_note_id,old_content_path,new_content_path,old_assets_path,new_assets_path,staging_key,content_hash,state,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)"
-  ).run("import_remote", item.id, itemPath, path.join(temporary, SAVE_BODY_FILE), oldAssetsBackup, assetDir, stagingKey, item.contentHash, "prepared", now, now).lastInsertRowid);
-  try {
-    const tx = deps.db.transaction(() => {
-      deps.db.prepare("INSERT INTO quick_notes(id,created_at,updated_at,preview_text,image_count,content_hash,is_dirty,is_conflict) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET created_at=excluded.created_at,updated_at=excluded.updated_at,preview_text=excluded.preview_text,image_count=excluded.image_count,content_hash=excluded.content_hash,is_dirty=0,is_conflict=excluded.is_conflict,cloud_deleted=0")
-        .run(item.id, item.createdAt, item.updatedAt, previewQuickNote(parsed.text, parsed.images.length), parsed.images.length, item.contentHash, 0, item.isConflict ? 1 : 0);
-      deps.db.prepare("DELETE FROM quick_note_assets WHERE quick_note_id=?").run(item.id);
-      // 他端恢复/显式恢复：远端 active 条目回来时清掉本地 purged 墓碑（否则每轮又会被当成删除）。
-      deps.db.prepare("DELETE FROM quick_note_deleted WHERE id=?").run(item.id);
-      const insert = deps.db.prepare("INSERT INTO quick_note_assets(id,quick_note_id,filename,mime_type,width,height,size,content_hash) VALUES(?,?,?,?,?,?,?,?)");
-      for (const image of parsed.images) insert.run(image.id, item.id, image.filename, image.mimeType, image.width, image.height, image.size, image.hash);
-      deps.db.prepare("UPDATE quick_note_file_ops SET state=?, updated_at=? WHERE id=?").run("db_committed", now, journalId);
-    });
-    tx();
-  } catch (error) {
-    deps.db.prepare("DELETE FROM quick_note_file_ops WHERE id=?").run(journalId);
-    try { fs.rmSync(temporary, { force: true, recursive: true }); } catch { /* best effort */ }
-    throw error;
-  }
-  promoteImport(deps, temporary, itemPath, assetDir, oldAssetsBackup, journalId, now);
-  reindexQuickNoteFromDisk(deps.search, item.id);
+  writeQuickNoteFromContent(
+    deps,
+    { id: input.id, createdAt: now, updatedAt: now, isConflict: false },
+    input.content,
+    contentBytes,
+    input.assets,
+    { operationType: "local_convert", dirty: 1 },
+  );
+}
+
+/**
+ * **仅转换失败回滚用**：删除一条「本次刚创建、尚未同步」的小记（行/内容/资产/搜索索引）。
+ * 不写墓碑——这条从未发布到云端，写墓碑会让同步传播一条不存在的删除。
+ */
+export function removeUnsyncedQuickNote(deps: QuickNoteSaveDeps, id: string): void {
+  if (!isSafeSegment(id)) return;
+  const row = deps.db.prepare("SELECT is_dirty FROM quick_notes WHERE id=?").get(id) as { is_dirty: number } | undefined;
+  if (!row) return;
+  const tx = deps.db.transaction(() => {
+    deps.db.prepare("DELETE FROM quick_note_assets WHERE quick_note_id=?").run(id);
+    deps.db.prepare("DELETE FROM quick_notes WHERE id=?").run(id);
+    deps.db.prepare("DELETE FROM quick_note_deleted WHERE id=?").run(id);
+  });
+  tx();
+  try { fs.rmSync(itemPathOf(deps.paths, id), { force: true }); } catch { /* best effort */ }
+  try { fs.rmSync(assetDirOf(deps.paths, id), { force: true, recursive: true }); } catch { /* best effort */ }
+  removeQuickNoteSearchIndex(deps.search, [id]);
 }
 
 /** V5 §5.4 promote：正文 rename 原子；目录替换带幂等判断。 */

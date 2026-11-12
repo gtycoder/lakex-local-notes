@@ -42,7 +42,7 @@ import {
   type QuickNoteSearchDeps,
 } from "./searchIndex.js";
 import { discardDraft, discardStagedImage, stageFile, stageImage } from "./staging.js";
-import { createQuickNote, importRemoteQuickNote, recoverImports, recoverStagedSaves, updateQuickNote, type QuickNoteSaveDeps } from "./savePipeline.js";
+import { createQuickNote, createQuickNoteFromContent, importRemoteQuickNote, recoverImports, recoverStagedSaves, removeUnsyncedQuickNote, updateQuickNote, type QuickNoteSaveDeps } from "./savePipeline.js";
 import {
   archiveLocalToTrash,
   beginConversion,
@@ -305,6 +305,13 @@ export class QuickNotesStore {
   ): void {
     importRemoteQuickNote(this.saveDeps, item, contentBytes, assets);
   }
+  /** 本地转换（日记→小记）：用已构造内容 + 资产字节创建一条待上传小记（journal 原子）。 */
+  createQuickNoteFromContent(input: { id: string; content: import("../quickNoteModel.js").StoredQuickNoteContent; assets: { filename: string; bytes: Buffer }[] }): QuickNoteDocument {
+    createQuickNoteFromContent(this.saveDeps, input);
+    return this.readQuickNote(input.id);
+  }
+  /** 仅转换回滚用：删除刚创建、尚未同步的小记（不写墓碑）。 */
+  removeUnsyncedQuickNote(id: string): void { removeUnsyncedQuickNote(this.saveDeps, id); }
 
   // ===== 删除/回收站/转换（委托 trashLifecycle） =====
 

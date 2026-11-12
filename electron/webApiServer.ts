@@ -117,6 +117,7 @@ export const WEB_METHODS: Record<string, string> = {
   aiWritingDeleteLastAssistant: "ai_writing_delete_last_assistant",
   listTreeNodes: "list_tree_nodes",
   diaryOpenDate: "diary_open_date",
+  diaryToQuickNote: "diary_to_quick_note",
   listNoteSummaries: "list_note_summaries",
   createNotebook: "create_notebook",
   createGroup: "create_group",

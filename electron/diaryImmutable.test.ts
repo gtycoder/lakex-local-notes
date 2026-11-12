@@ -19,7 +19,7 @@ import Database from "better-sqlite3";
 import { Store } from "./store.js";
 import { QuickNotesStore } from "./quickNotes.js";
 import { TRASH_NOTEBOOK_ID } from "../src/core/syncDecisions.js";
-import { composeDiaryQuickNote } from "../src/features/diary/diaryQuickNote.js";
+import { convertDiaryNoteToQuickNote } from "./diaryQuickNoteConversion.js";
 import type { SyncFolder, TreeNode } from "./noteQueries.js";
 
 /**
@@ -191,18 +191,10 @@ describe("两个单篇出口（回归，别误伤）", () => {
 
   it("出口②转为小记：日期标题进小记第一行，原文软删进回收站（可恢复、不写墓碑、不 purge）", () => {
     const { opened, month, notebook } = openDiaryEntry();
-    const doc = store.readNote(opened.noteId);
-    const composed = composeDiaryQuickNote({ title: doc.title, content: doc.content });
-    const quick = quickNotes.createQuickNote({
-      text: composed.text,
-      body: composed.body,
-      draftId: crypto.randomUUID(),
-      stagedImageIds: [],
-    });
+    // 出口② = 主进程转换（正文原样 + 原文软删；task-92 起不再在渲染层手拼小记）
+    const converted = convertDiaryNoteToQuickNote(quickNotes, store, opened.noteId);
+    const quick = quickNotes.readQuickNote(converted.quickNoteId);
     expect(quick.previewText.startsWith("2026-11-09")).toBe(true);
-
-    // 原文软删（App 的处理函数在创建小记之后走 deleteTreeNode，不 purge）
-    store.deleteTreeNode(opened.noteId);
     expect(store.listTrash().some((item) => item.id === opened.noteId)).toBe(true);
     const db = new Database(dbPath(), { readonly: true });
     try {

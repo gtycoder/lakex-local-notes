@@ -743,6 +743,33 @@ export class Store {
   }
 
   /** 源笔记 note-assets/{id}/ 下的现存文件（复制副本用；目录不存在 = 无资源）。 */
+  /**
+   * 日记→小记转换用读口（261112 task-92）：只读正文文件 + 标题 + 资产清单，**不写 last_opened_note_id**
+   * （`readNote` 会顺手记 last_opened，转换不该污染「继续上次打开」）。
+   */
+  readNoteBodyForConversion(id: string): string {
+    const file = this.bodyPathFor(id, this.kindOf(id) ?? "doc");
+    try {
+      return fs.readFileSync(file, "utf8");
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") throw new AppError("NotFound", `正文文件缺失，无法转换: ${id}`);
+      throw error;
+    }
+  }
+
+  /** 笔记类型（null = 行不存在/已 purge）；转换据此拒绝表格/多维表/画板/手写板。 */
+  noteKindOf(id: string): NoteKind | null { return this.kindOf(id); }
+
+  /** 笔记标题（转换时写进小记正文镜像/文案）。 */
+  noteTitleOf(id: string): string {
+    const row = this.db.prepare("SELECT title FROM notes WHERE id=?").get(id) as { title: string } | undefined;
+    if (!row) throw new AppError("NotFound", `笔记不存在: ${id}`);
+    return row.title;
+  }
+
+  /** 转换用：列出笔记资产（filename + 绝对路径；目录不存在返回空）。 */
+  listNoteAssetsForConversion(noteId: string): ImportedNoteAsset[] { return this.collectNoteAssets(noteId); }
+
   private collectNoteAssets(sourceId: string): ImportedNoteAsset[] {
     const dir = this.noteAssetsDirFor(sourceId);
     if (!fs.existsSync(dir)) return [];
