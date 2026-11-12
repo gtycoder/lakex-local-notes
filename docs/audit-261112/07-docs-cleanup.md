@@ -401,7 +401,7 @@ git grep -nE 'Manifest V2|manifests/latest' -- docs
 1. **设置搜索漏项（设置域）**：`src/components/app/SettingsPanel.tsx:583` 有 `update` 分类（label「更新」），但 `src/components/model/settingsSearch.ts` 的 `SETTING_ITEMS`（`:25-94`）**没有任何 update 条目** ⇒ 在设置里搜「更新」搜不到更新中心。AGENTS §3#14 要求「每加/改一行设置必须同步 SETTING_ITEMS」，此条疑似漏登记；需确认 `settingsSearch.test.ts` 是否只做单向校验（有 item ⇒ 有行）。
 2. **文档 §编号漂移（全仓）**：`HANDOFF §3#N` 旧编号仍有 **7 处**（MOBILE-AI、TROUBLESHOOTING、mobile-f16-acceptance、audit-261027/09 等），`AGENTS §7.2x/3x` 旧编号 **11 处**（脚本注释、InkPad、clipboardHtml、QuickNoteComposer、nativeKeyboard 等）。HANDOFF §3 P2 已登记「下次碰时统一」，属**顺手可清**的低风险项。
 3. **移动端首页改版未回填到任何用户文档**（本报告 §4 已覆盖 guide 侧）；设计侧 `MOBILE-DESIGN.md` 是否同步了「五格 Dock」未核。
-4. **`public/brand/14a-paper-finch-loading-256.apng` 672KB** 为品牌动画资源，是否仍被引用未核（不在本任务清理范围，但开源前值得确认一次）。
+4. ~~**`public/brand/14a-paper-finch-loading-256.apng` 672KB** 为品牌动画资源，是否仍被引用未核（不在本任务清理范围，但开源前值得确认一次）。~~ 261112 已核：启动动画改为 CSS 入场（`styles/brand-launch.css` / `mobile/brand-launch.css`）后 **APNG 与 poster 均无引用**，已删除（git 历史可查）；`public/brand/` 只留 `14a-paper-finch-mark.png`。
 5. **`docs/lakexEditor-developer-docs/fetch-yuque-developer-docs.mjs` 硬编码输出到本机仓外目录（R2 已改为 `<repo>/../yuque-developer-docs`，可用 `YUQUE_DOCS_OUT` 覆盖）**（仓外路径），别人复跑会落到自己机器任意位置或失败。
 
 ## 附录 C：本报告的复现命令集
