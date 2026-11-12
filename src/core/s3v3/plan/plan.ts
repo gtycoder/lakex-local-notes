@@ -193,6 +193,23 @@ export function planSync(input: PlanInput): SyncPlan {
       indexChanged = true;
       publishedLakeIds.add(p.id);
     }
+    // task-73（P1，S72-F1）：**被远端删除**（远端 trashed = 删除传播为位置变化）+ 本地有未同步编辑
+    // ⇒ 必须先留历史快照（AGENTS §3#3「删除压编辑：被删侧本地编辑强制留历史快照」）。
+    // 缺口成因：archive-local 原先只在「远端**缺席**」分支由 merge 给出；v3 移入回收站是位置变化、条目仍在索引，
+    // 内容判定可走 upload ⇒ 本地编辑被上传成 trashed 条目后再也找不回（真实桶 S72 实测 history=0）。
+    // 判据 = 位置赢家=远端且远端 trashed（本轮把本地带进回收站）、本地尚未 trashed、本地内容相对基线有变化、
+    // 且内容赢家=本地（download / remote-wins-history 已由 merge 的 archiveLocal 覆盖，不重复留档）。
+    // 说明：本地**本来就在**回收站（l.trashedAt 非空）不在此列——那不是本轮被删，且其内容已被算作既有版本；
+    // 如将来要求「删除侧也留档」属新语义，另立项（本批只补「被删侧本地编辑」）。
+    {
+      const baseEntry = baseNotesById.get(p.id);
+      const localContentChanged = !!l && !!baseEntry && l.contentHash !== baseEntry.contentHash;
+      const remoteTrashWinsPosition = posMerge.winner === "remote" && !!r?.trashedAt;
+      const contentWinsLocal = !(p.kind === "download" || p.kind === "remote-wins-history");
+      if (!suspiciousBody && !p.archiveLocal && remoteTrashWinsPosition && !l?.trashedAt && localContentChanged && contentWinsLocal) {
+        writes.push({ kind: "archive-local", space: "lake", id: p.id, reason: "remote-wins" });
+      }
+    }
     // 可疑篇的归档已按 suspicious 理由生成，避免同内容两份历史快照。
     if (p.archiveLocal && !suspiciousBody) writes.push({ kind: "archive-local", space: "lake", id: p.id, reason: p.kind === "remote-purged-trash" ? "cloud-absent" : "remote-wins" });
     if (p.applyRemote && r) {
