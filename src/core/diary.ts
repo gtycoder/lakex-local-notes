@@ -379,6 +379,34 @@ export function planDiaryConvert(
 }
 
 /**
+ * 移动目标候选过滤（261112 用户裁决，AGENTS §3#25）：**日记本不作移动目标**。
+ *
+ * 日记本 = 固定特殊笔记本，跨空间只支持「单篇条目移出」，不支持任何东西移入日记空间。
+ * 判据（哪些是日记子树）就一条：`space='diary'` 的笔记本 + 其全部后代（年/月组、条目树节点）。
+ * 桌面「移动到…」弹窗与移动端批量移动共用本函数（单一来源，别在两端各写一份过滤）。
+ *
+ * @param nodes 候选节点（至少 id/parentId/nodeType/space；顺序保持）
+ */
+export function moveTargetCandidates<T extends { id: string; parentId: string | null; nodeType?: string | null; space?: unknown }>(
+  nodes: readonly T[],
+): T[] {
+  const diaryRoots = new Set(diaryNotebooks(nodes as unknown as DiaryTreeNode[]).map((node) => node.id));
+  if (diaryRoots.size === 0) return [...nodes];
+  const byId = new Map(nodes.map((node) => [node.id, node] as const));
+  const inDiarySubtree = (start: T): boolean => {
+    const visited = new Set<string>();
+    let cursor: T | undefined = start;
+    while (cursor && !visited.has(cursor.id)) {
+      visited.add(cursor.id);
+      if (diaryRoots.has(cursor.id)) return true;
+      cursor = cursor.parentId ? byId.get(cursor.parentId) : undefined;
+    }
+    return false;
+  };
+  return nodes.filter((node) => !inDiarySubtree(node));
+}
+
+/**
  * 日记子树（日记笔记本 + 全部后代）的节点 id 集合。
  *
  * 用途：**其它空间不要把日记内容当普通资料混进来**（AI 写作的资料选择/快捷组/发布目标）。

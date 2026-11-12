@@ -17,6 +17,7 @@ import { Dialog } from "../ui/Overlay";
 import { Book, ChevronRight, Folder, Search } from "lucide-react";
 import type { TreeNode } from "../../lib/types";
 import { buildMoveTreeRows, initialMoveTreeExpanded, visibleMoveTreeRows, type MoveTreeRow } from "../../core/moveTreeModel";
+import { moveTargetCandidates } from "../../core/diary";
 
 export interface MoveTargetTreeDialogProps {
   open: boolean;
@@ -60,7 +61,9 @@ export function MoveTargetTreeDialog({
 }: MoveTargetTreeDialogProps) {
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
-  const [expanded, setExpanded] = useState<Set<string>>(() => initialMoveTreeExpanded(nodes, currentParentId));
+  /** 日记本不作移动目标（261112 §3#25）：判据在 core，弹窗这里统一过滤，调用方不用各自记得。 */
+  const targetNodes = useMemo(() => moveTargetCandidates(nodes), [nodes]);
+  const [expanded, setExpanded] = useState<Set<string>>(() => initialMoveTreeExpanded(targetNodes, currentParentId));
   const treeRef = useRef<HTMLDivElement | null>(null);
 
   // 每次打开重置：搜索清空、未选目标、默认展开当前路径（让「当前位置」直接可见）
@@ -68,12 +71,12 @@ export function MoveTargetTreeDialog({
     if (!open) return;
     setQuery("");
     setSelected(null);
-    setExpanded(initialMoveTreeExpanded(nodes, currentParentId));
-  }, [open, nodes, currentParentId]);
+    setExpanded(initialMoveTreeExpanded(targetNodes, currentParentId));
+  }, [open, targetNodes, currentParentId]);
 
   const result = useMemo(
-    () => buildMoveTreeRows({ nodes, movingIds, currentParentId, expanded, query }),
-    [nodes, movingIds, currentParentId, expanded, query],
+    () => buildMoveTreeRows({ nodes: targetNodes, movingIds, currentParentId, expanded, query }),
+    [targetNodes, movingIds, currentParentId, expanded, query],
   );
   const rows = useMemo<MoveTreeRow[]>(
     () => (query.trim() ? result.rows : visibleMoveTreeRows(result.rows)),

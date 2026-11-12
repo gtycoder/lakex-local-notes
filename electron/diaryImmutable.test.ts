@@ -136,6 +136,9 @@ describe("日记本固定不可变：通用 IPC 的 title/icon/sort_order 一律
     expect(() => store.moveTreeNode(notebook.id, other.id, 0)).toThrow(/日记本.*不能移动/);
     expect(() => store.moveTreeNode(year.id, other.id, 0)).toThrow(/日记.*分组.*不能移动/);
     expect(() => store.moveTreeNode(other.id, notebook.id, 0)).toThrow(/日记本不能作为移动目标/);
+    // 批量/有序移动同一条守卫（直接调用防回归）：普通文档移入日记空间也拒绝
+    const plain = store.createNoteIn(other.id, "普通文档");
+    expect(() => store.moveTreeNodeOrdered(plain.id, notebook.id, [plain.id])).toThrow(/日记本不能作为移动目标/);
     // 日记条目在日记内部换组 = 改位置/排序，同样拒绝（不能只靠「它还是 note」放行）
     expect(() => store.moveTreeNode(opened.noteId, year.id, 0)).toThrow(/日记内容顺序是派生的/);
   });

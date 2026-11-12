@@ -10,6 +10,7 @@
  */
 import { bridge } from "../bridge";
 import type { BatchNotesResult } from "../../core/batchNotes";
+import { moveTargetCandidates } from "../../core/diary";
 import type { QuickNoteTag, QuickNoteTagSummary } from "../../core/quickNoteTags";
 import { confirmMobile } from "./ConfirmDialog";
 import { summarizeBatchResult } from "./batchNotesResult";
@@ -41,9 +42,10 @@ export async function runDocBatch(
   };
 }
 
-/** 移动目标 = 快照里的容器节点（组件只展示笔记本；分组仍保留在数据里，由组件过滤）。 */
+/** 移动目标 = 快照里的容器节点（组件只展示笔记本；分组仍保留在数据里，由组件过滤）。
+ *  日记本不作移动目标（261112 §3#25）：过滤日记子树（日记本 + 年/月组），判据单一来源 = core。 */
 export function moveTargetsFromSnapshot(snapshot: Snapshot): MoveTargetNode[] {
-  return snapshot.treeNodes
+  return moveTargetCandidates(snapshot.treeNodes)
     .filter((node) => node.nodeType === "notebook" || node.nodeType === "group")
     .map((node) => ({ id: node.id, title: node.title || "未命名", parentId: node.parentId, nodeType: node.nodeType }));
 }

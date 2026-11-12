@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   DIARY_FOLDER_SPACE, diaryEntries, diaryGroupTitles, diaryNotebookId, diaryNotebooks,
   folderSpaceForWire, formatDiaryDateKey, groupDiaryEntries, isDiaryGroupTitle, normalizeFolderSpace,
-  diaryConvertTargets, diarySubtreeIds, isDiaryNotebookNode, mergeFolderSpace, parseDiaryDateKey, planDiaryConvert, planDiaryOpen, recentDiaryDays, withoutDiaryNotebook,
+  diaryConvertTargets, diarySubtreeIds, isDiaryNotebookNode, mergeFolderSpace, moveTargetCandidates, parseDiaryDateKey, planDiaryConvert, planDiaryOpen, recentDiaryDays, withoutDiaryNotebook,
   type DiaryTreeNode,
 } from "./diary.js";
 
@@ -257,6 +257,27 @@ describe("diarySubtreeIds（其它空间排除日记内容用，261109）", () =
 
   it("没有日记本时为空集合", () => {
     expect(diarySubtreeIds([node({ id: "x", title: "文档" })]).size).toBe(0);
+  });
+});
+
+describe("移动目标候选过滤（261112 §3#25：日记本不作移动目标）", () => {
+  const nodes: DiaryTreeNode[] = [
+    notebook(),                                                   // nb-diary（space=diary）
+    node({ id: "y", title: "2026", nodeType: "group", parentId: "nb-diary" }),
+    node({ id: "m", title: "11", nodeType: "group", parentId: "y" }),
+    node({ id: "d", title: "2026-11-09", parentId: "m" }),
+    node({ id: "nb-work", title: "工作", nodeType: "notebook", parentId: null }),
+    node({ id: "g", title: "分组", nodeType: "group", parentId: "nb-work" }),
+  ];
+
+  it("剔除日记本及其全部后代（年/月组、条目树节点），普通笔记本/分组原样保留且顺序不变", () => {
+    const picked = moveTargetCandidates(nodes).map((item) => item.id);
+    expect(picked).toEqual(["nb-work", "g"]);
+  });
+
+  it("没有日记本时原样返回（不误伤普通树）", () => {
+    const plain = nodes.filter((item) => item.id !== "nb-diary" && item.parentId !== "nb-diary" && item.parentId !== "y" && item.parentId !== "m");
+    expect(moveTargetCandidates(plain).map((item) => item.id)).toEqual(plain.map((item) => item.id));
   });
 });
 

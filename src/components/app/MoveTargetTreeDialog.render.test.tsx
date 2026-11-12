@@ -62,6 +62,24 @@ const search = (value: string) => act(() => {
 });
 
 describe("移动目标树弹窗", () => {
+  it("日记本不作移动目标（261112 §3#25）：日记本/年/月组不出现，搜索命中也过滤；普通笔记本仍可选", () => {
+    const withDiary: TreeNode[] = [
+      ...NODES,
+      { ...node("nb-diary", "notebook", null, 2, "日记"), space: "diary" } as TreeNode,
+      node("y2026", "group", "nb-diary", 0, "2026"),
+      node("m11", "group", "y2026", 0, "11"),
+    ];
+    render({ nodes: withDiary, currentParentId: null, movingIds: ["n1"] });
+    expect(rowOf("日记")).toBeUndefined();
+    expect(rowOf("2026")).toBeUndefined();
+    expect(rowOf("11")).toBeUndefined();
+    // 普通笔记本/分组仍可作为目标
+    expect(rowOf("笔记本二")).toBeTruthy();
+    // 按名字搜「日记」也不能把它搜出来
+    search("日记");
+    expect(rowOf("日记")).toBeUndefined();
+  });
+
   it("默认展开当前路径，当前父级标「当前位置」；只列容器", () => {
     render();
     expect(document.querySelector('[role="tree"]')).not.toBeNull();
