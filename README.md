@@ -8,7 +8,7 @@
 
 ## 📖 使用说明（用户手册）
 
-> **第一次用？先看用户手册 → [guide/README.md](guide/README.md)**（5 分钟上手 · 界面总览 · 文档/表格/多维表/画板/小记/日记/AI 助手与 AI 写作/云同步/换机与便携包/更新中心/设置逐条 · 常见问题，含桌面与 Android 分步截图）。
+> **第一次用？先看用户手册 → [guide/README.md](guide/README.md)**（5 分钟上手 · 界面总览 · 文档/表格/多维表/画板/小记/日记/AI 助手与 AI 写作/云同步（含**多端同步的正确表现**）/换机与便携包/更新中心/设置逐条 · 常见问题，含桌面与 Android 分步截图）。
 
 - 在线阅读（GitHub）：<https://github.com/gtycoder/lakex-local-notes/blob/master/guide/README.md>
 - 在线阅读（Gitee）：<https://gitee.com/gtycoder/lakex-local-notes/blob/master/guide/README.md>（镜像仓库；若是私有库需先登录）
