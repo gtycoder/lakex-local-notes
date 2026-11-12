@@ -46,3 +46,18 @@ adb -s 50950385 shell am start -n com.lakexlocalnotes.android/.MainActivity
 adb -s 50950385 exec-out screencap -p > home.png
 # CDP：forward webview_devtools_remote_<pid> → drive.mjs 驱动 DOM 断言
 ```
+
+## 5. R2 收尾后的设备门禁矩阵（261112 15:0x）
+
+- **构建**：R2 全部代码落地后重新 scripts/android-build.sh --sync（APK 42,304,515 B），安装到 emulator-5556（lake_gate）、emulator-5558（lake_tab）与真机 50950385；5554 已断开未装。
+- **手机 10 态整页快照**（9336 / lake_gate）：按夹具流程 pm clear -> 启动 -> gate-fixture（5 文档 + 4 小记）-> 重烤基线，随后**连跑两轮 0 差异**。基线 scripts/mobile-audit/baseline/mobile-snap.json 已更新（R1/R2 改了预览/回收站/历史 UI，home-doc 等指纹变化属预期）。
+- **平板 10 态整页快照**（9340 / lake_tab）：同夹具重烤后**连跑两轮 0 差异**；基线 mobile-snap-tablet.json 已更新。
+- **多维表 3 态快照**（9336，夹具自建自删）：元素数不变（2194/2160/2172），但指纹在 mobile.css 域归位后变化（CSS 文件归属/加载顺序调整的预期结果）-> 重烤后**连跑两轮 0 差异**；基线 bitable-snap.json 已更新。
+- **23 屏走查**（9336 / lake_gate，ANDROID_SERIAL=emulator-5556）：**23/23 ok**；截图在 .css-audit/mobile-walk/。escape/smallTap 计数为既有可观测量（隐藏首页层等），无新增溢出/对比度项。
+- **窗口矩阵**（npm run check:windowsweep / 9340）：pass: true，7 个窗口形态与 tabs/滚动保持均通过。
+- **桌面 42 态**：未跑（需专用夹具机/全新实例；本机无夹具缓存）。
+
+## 6. 结论
+
+- R2 收尾后设备门禁（手机 10 态 / 平板 10 态 / 多维表 3 态 / 23 屏 / 窗口矩阵）全部通过，基线已按新 UI 重烤。
+- 真机 50950385 已装最新 APK，用户可直接点收 Q03 历史预览、Q07 preview 档、Q05 字号等观感项。

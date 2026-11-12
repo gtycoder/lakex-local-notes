@@ -810,3 +810,12 @@ rg -n 'const DEFAULT_TRANSFER_CONCURRENCY' src/core
 **门禁（R2 实测）**：tsc 0；全量 vitest 883 文件（872 passed / 11 skipped）/ 5571 passed / 12 skipped / 0 failed；ui-metrics 66/21；check:core 172/0；双 build + bundle/arch PASS（desktop 567,576/600,000、app-js 196,184/307,200；mobile 349,054/360,000、entry 60,766/61,440）；diff-check 0。
 
 **未完成/待验**：Q03/Q07/Q05 设备点按；快照矩阵（42 态 / 手机+平板 10 态 / 23 屏）需重烤基线后跑；InkPad 阶段 ②；移动小记画廊 video/audio 混入；剩余 21 条 shadowed 声明 + mobile.css 域归位；docs 侧机器路径。
+## 附录 H · R2 收尾设备门禁（261112）
+
+- 手机 10 态（lake_gate / 9336）：夹具重灌后重烤基线，连跑两轮 0 差异。
+- 平板 10 态（lake_tab / 9340）：同夹具重烤，两轮 0 差异。
+- 多维表 3 态（9336，夹具自建自删）：重烤后两轮 0 差异（元素数 2194/2160/2172 不变，指纹随 CSS 归位更新）。
+- 23 屏走查：23/23 ok；窗口矩阵：pass。
+- 真机 50950385 已装最新 APK（Q04 / Q22 已验）；桌面 42 态未跑（需夹具机）。
+
+基线更新：scripts/mobile-audit/baseline/{mobile-snap,mobile-snap-tablet,bitable-snap}.json 随本批提交。

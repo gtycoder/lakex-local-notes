@@ -11,6 +11,7 @@
 
 - **拆分 6–10（Q19=C2）**：Sidebar 1857→1498（7 内部组件到 sidebar/）；SettingsPanel 1447→89（11 个 sections + useSettingsPanelScope 722 行）；electron/main.ts 1306→1100（boot/paths.ts + boot/ipcWiring.ts 281 行，21 依赖显式传递、单例留 main）；lakeRuntime 1699→538（6 个 kernel 模块，lazy 边界/模块级单例/__disposeExtras 时序保持）；InkPad **只做阶段 ①**：抽 inkPadModel（保存/捕获纯逻辑）+ 11 例行为测试，结构拆分（组合根 + 4 hook + 2 子组件）**留发布后**（127 条文本护栏与依赖网需先迁护栏 + 设备验证）。
 - **设备验收（真机 + 模拟器）**：R1 APK 已 --sync --install 到真机 Xiaomi 2109119BC（Android 14）与 5554 模拟器；**Q04 通过**（回收站文档 = 只读预览 + 横幅「编辑与保存会被拦截」，CDP 断言 + 截图）；**Q22 通过**（SecureStore→SecretBox：set/get → force-stop 重启 → get 仍为原值 → remove 清空，真机 Keystore 冒烟）；首页/Dock 正常、logcat 无 FATAL。记录与截图：[docs/audit-261112/12-device-check.md](audit-261112/12-device-check.md)。
+- **设备门禁矩阵（R2 代码重装后）**：手机 10 态（lake_gate / 9336）与平板 10 态（lake_tab / 9340）均按夹具重烤后**连跑两轮 0 差异**；多维表 3 态重烤后两轮 0 差异；**23 屏走查 23/23 ok**；窗口矩阵 `pass: true`。基线三份（mobile-snap / tablet / bitable）已随本批更新。桌面 42 态未跑（需夹具机）。
 - **门禁（R2 实测）**：tsc 0；全量 vitest **883 文件（872 passed / 11 skipped）/ 5571 passed / 12 skipped / 0 failed**；ui-metrics 66/21；check:core 172/0；check:mobileui 通过；双 build + bundle/arch PASS（desktop 首屏 567,576/600,000、app-js 196,184/307,200；mobile 349,054/360,000、entry 60,766/61,440、css 140,383/141,312）；diff-check 0。
 - **待验/未做**：Q03 历史预览、Q07 preview 档、Q05 字号的设备级点按（单测已绿）；桌面 42 态 / 手机+平板 10 态 / 23 屏（R1/R2 改了预览、回收站、历史、设置面板结构，旧基线已过期，需夹具 AVD 重烤）；移动小记画廊 video/audio 混入（P1）；剩余 21 条 shadowed 声明 + mobile.css 域归位；docs 侧机器路径。
 
@@ -67,7 +68,7 @@
 - Node **v24.18.0**（`$HOME/.nvm/versions/node/v24.18.0/bin`，必须 24）；JDK **21**（`/Library/Java/JavaVirtualMachines/jdk-21.jdk`）；Android SDK `/opt/homebrew/share/android-commandlinetools`。
 - AVD：`lake_mobile`（开发）/ `lake_gate`（门禁固定夹具，**勿改其数据**）/ `lake_tab`（平板与窗口矩阵）；移动 CDP **9335 开发 / 9336 门禁 / 9340 平板**（桌面 dev 9222；serial 以 `adb devices` 为准）。
 - 数据：开发 `~/Library/Application Support/lakex-local-notes-dev`；正式 `.../lakex-local-notes`（**禁止触碰**）；日志在对应目录 `logs/`。
-- **261112 R1 设备验收**：真机 Xiaomi 2109119BC（Android 14，serial 50950385）+ 5554 模拟器已装 R1 APK；Q04 回收站文档只读预览、Q22 SecureStore→SecretBox 跨重启真机通过；Q03/Q07/Q05 设备点按与快照矩阵待补（证据 [docs/audit-261112/12-device-check.md](audit-261112/12-device-check.md)）。
+- **261112 R1 设备验收**：真机 Xiaomi 2109119BC（Android 14，serial 50950385）+ 5554 模拟器已装 R1 APK；Q04 回收站文档只读预览、Q22 SecureStore→SecretBox 跨重启真机通过；快照矩阵（手机 10 态 / 平板 10 态 / 多维表 3 态 / 23 屏 / 窗口矩阵）已重烤并两轮 0 差异；Q03/Q07/Q05 观感项与桌面 42 态仍待人工点收（证据 [docs/audit-261112/12-device-check.md](audit-261112/12-device-check.md)）。
 
 **发布与推送事实**
 
@@ -118,8 +119,8 @@
 
 **P0（不做就卡住主线）**
 
-- **R1/R2 设备点收（已完成 2 项，余下待补）**：已过 = Q04 回收站只读预览（真机/模拟器 CDP + 截图）、Q22 SecureStore 跨重启读回；待补 = Q03 历史 Sheet 预览、Q07 `LakeEditor interaction="preview"`（长按无菜单/单击可看图）、Q05 预览字号、桌面预览双击放大观感；移动改动已装包（真机 + 5554），可直接点收。
-- **快照矩阵重烤**：R1/R2 改了移动预览/回收站/历史 UI 与桌面设置面板/Sidebar 结构，**旧 10 态/42 态基线全部过期**；必须先 `--from <warm> --write-baseline` 重烤再跑，否则必假红。
+- **R1/R2 设备点收（门禁矩阵已全过，观感项待人工）**：已过 = Q04 回收站只读预览、Q22 SecureStore 跨重启、手机/平板 10 态 + 多维表 3 态 + 23 屏 + 窗口矩阵（两轮 0 差异）；待人工 = Q03 历史 Sheet、Q07 preview 档、Q05 字号、桌面双击放大观感；真机 50950385 已装最新 APK。
+- **快照矩阵重烤**：移动 10 态 / 平板 10 态 / 多维表 3 态已重烤并两轮 0 差异（R2 收尾批）；**桌面 42 态仍未重烤**（需夹具机）——R1/R2 改了设置面板/Sidebar/样式，桌面基线同样过期。
 - **发布前设备/视觉矩阵**：桌面 42 态（需夹具机）、手机 + 平板 10 态、23 屏走查、windowsweep（R1 只跑了 tsc/全量 vitest/双 build/bundle/arch，设备类未跑）。
 - **下一版发布**（流程 [docs/RELEASE.md](RELEASE.md)）：发布说明写清 ① inkDoc v4 旧端只读 / 手机需重装；② 标签顺序仅设备本地；③ 标签删除 = 缺席（两端都要升级）；④ 发版前全量矩阵。
 - **每批收尾固定动作**：更新 §1 基线与门禁计数 + §3 + §0 批次抬头；提交后立刻回写。
