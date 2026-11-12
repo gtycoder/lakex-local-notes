@@ -11,7 +11,7 @@ import { describe, expect, it } from "vitest";
 const read = (p: string) => readFileSync(new URL(p, import.meta.url), "utf8");
 const FILES = [
   "../desktop/DesktopOverlays.tsx",
-  "../components/app/QuickNotesWorkspace.tsx",
+  "../features/quickNotes/QuickNotesWorkspace.tsx",
   "../features/outline/OutlineSidebar.tsx",
   "../components/app/SyncStatusPopover.tsx",
 ];

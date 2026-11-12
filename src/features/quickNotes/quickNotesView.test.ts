@@ -13,13 +13,17 @@ import { describe, expect, it } from "vitest";
 
 const read = (rel: string) => readFileSync(new URL(rel, import.meta.url), "utf8");
 
-const WORKSPACE_SRC = ["../../components/app/QuickNotesWorkspace.tsx", "../../components/app/QuickNoteComposer.tsx", "../../components/app/QuickNoteCard.tsx", "../../components/model/quickNoteDraft.ts"].map(read).join("\n");
+// 261112 R1 Q19-5：workspace 拆成 3 个域 hook（列表 / 筛选 / 保存）⇒ 源码级护栏按「组件 + hooks」聚合读，
+// 否则断言会随着代码搬家变成假红（判据仍然只认单一来源，见各用例说明）。
+const WORKSPACE_SRC = ["./QuickNotesWorkspace.tsx", "./useQuickNoteList.ts", "./useQuickNoteFilters.ts", "./useQuickNoteDraftSave.ts", "../../components/app/QuickNoteComposer.tsx", "../../components/app/QuickNoteCard.tsx", "../../components/model/quickNoteDraft.ts"].map(read).join("\n");
 const EDITOR_SRC = read("./QuickNoteEditor.tsx");
 const RUNTIME_SRC = read("../editor/lakeRuntime.ts");
 const PREVIEW_SRC = read("./QuickNotePreview.tsx");
 const MODEL_SRC = read("../../core/quickNoteModel.ts");
 const UPLOAD_SRC = read("../editor/resourceUpload.ts");
-const MAIN_SRC = read("../../../electron/quickNotes.ts");
+// 261112 R1 Q19-3：主进程小记库拆成门面 + electron/quickNotes/ 模块 ⇒ 源码级断言按「门面 + 相关模块」聚合读
+// （stageFile 仍是 QuickNotesStore 方法、上限/宽高在 staging 模块；判据不变，只是落点搬家）。
+const MAIN_SRC = ["../../../electron/quickNotes.ts", "../../../electron/quickNotes/index.ts", "../../../electron/quickNotes/staging.ts", "../../../electron/quickNotes/savePipeline.ts", "../../../electron/quickNotes/context.ts"].map(read).join("\n");
 const MOBILE_HOME_SRC = read("../../mobile/home/HomePage.tsx");
 const MOBILE_LIST_MODEL_SRC = read("../../mobile/home/useQuickNoteListModel.ts");
 const MOBILE_COMPOSER_SRC = read("../../mobile/home/QuickNoteComposer.tsx");
@@ -275,7 +279,9 @@ describe("列表视图三件套（261021，对齐语雀 list view）", () => {
     // 列表视图标题/版式切换/新建小记在左栏头；条数/类型筛选/排序只在卡片视图页头
     expect(WORKSPACE_SRC).toContain("quick-notes-list-head");
     expect(WORKSPACE_SRC).toMatch(/viewMode === "note" && <header className="quick-notes-header">/);
-    expect(WORKSPACE_SRC).toMatch(/setSortBy\(option\.id\); writeQuickNoteSort\(option\.id\);/);
+    // 261112 R1：排序的「状态 + 本机持久化」收进 useQuickNoteFilters.setSortBy（调用点只写一次）
+    expect(WORKSPACE_SRC).toMatch(/setSortBy\(option\.id\);/);
+    expect(read("./useQuickNoteFilters.ts")).toMatch(/writeQuickNoteSort\(next\)/);
   });
 
   it("搜索：输入框只在列表视图；Enter 应用 / Esc 收起；查询走 core 纯函数", () => {

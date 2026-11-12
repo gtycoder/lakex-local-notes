@@ -78,12 +78,12 @@ describe("接线与令牌", () => {
     const hook = read("./useScrollFade.ts");
     expect(hook).not.toContain("requestAnimationFrame");
     expect(read("../components/ui/Select.tsx")).toContain("useScrollFade(listRef, open)");
-    expect(read("../components/app/QuickNotesWorkspace.tsx")).toContain("useScrollFade(indexListRef, viewMode)");
+    expect(read("../features/quickNotes/QuickNotesWorkspace.tsx")).toContain("useScrollFade(indexListRef, viewMode)");
     // 261022 用户点单：目录栏上下边缘不再模糊（摘掉 hook 与选择器，别加回）
     expect(read("../components/app/Sidebar.tsx")).not.toContain("useScrollFade");
     expect(read("../components/app/Sidebar.tsx")).not.toContain("ln-scroll-fade");
     // 类名会进 stylesnap 的 key ⇒ 刻意不加工具类，样式靠上面的选择器组
     expect(read("../components/ui/Select.tsx")).not.toContain("ln-scroll-fade");
-    expect(read("../components/app/QuickNotesWorkspace.tsx")).not.toContain("ln-scroll-fade");
+    expect(read("../features/quickNotes/QuickNotesWorkspace.tsx")).not.toContain("ln-scroll-fade");
   });
 });

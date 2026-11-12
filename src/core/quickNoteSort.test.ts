@@ -106,7 +106,8 @@ describe("小记排序：两端同一份（源码级护栏）", () => {
     const mobile = read("src/mobile/home/HomePage.tsx");
     // 261022 移动端重构：排序偏好的读写移到 useQuickNoteListModel（仍是同一份 lib/quickNoteSortPref）
     const mobileModel = read("src/mobile/home/useQuickNoteListModel.ts");
-    const desktop = read("src/components/app/QuickNotesWorkspace.tsx");
+    // 261112 R1 Q19-5：排序/筛选偏好收进域 hook ⇒ 桌面侧护栏按「组件 + useQuickNoteFilters」聚合读。
+    const desktop = read("src/features/quickNotes/QuickNotesWorkspace.tsx") + "\n" + read("src/features/quickNotes/useQuickNoteFilters.ts");
     expect(mobile, "移动端用共享档位（语义）").toContain('from "../../core/quickNoteSort"');
     expect(desktop, "桌面端用共享档位（语义）").toContain('from "../../core/quickNoteSort"');
     expect(mobileModel, "移动端用共享本机读写").toContain('from "../../lib/quickNoteSortPref"');
