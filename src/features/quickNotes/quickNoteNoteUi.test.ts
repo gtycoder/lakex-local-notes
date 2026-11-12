@@ -18,7 +18,11 @@ const read = (rel: string) => readFileSync(new URL(rel, import.meta.url), "utf8"
 /** 去注释后再断言（注释里会提到旧实现/钩子名，不算代码里还在用）。 */
 const stripComments = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
 
-const RUNTIME_SRC = read("../editor/lakeRuntime.ts");
+/** 261112 R2-S9：`lakeRuntime.ts` 已按域拆到 `../editor/kernel*.ts`（纯搬移、导出名/行为不变）。
+ *  本护栏继续在「实现文本」上断言 ⇒ 拼读拆出的全部文件（= 原来的单文件实现文本）。 */
+const RUNTIME_SRC = ["lakeRuntime", "kernelConfig", "kernelBookmarkDegrade", "kernelImageThumb", "kernelCardHydration", "kernelToolbarBridge", "kernelTocSidebar"]
+  .map((name) => read("../editor/" + name + ".ts"))
+  .join("\n");
 const EDITOR_SRC = read("./QuickNoteEditor.tsx");
 
 describe("小记编辑器：文档外观 + 受限格式（只影响小记）", () => {

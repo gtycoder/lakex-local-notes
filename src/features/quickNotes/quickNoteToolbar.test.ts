@@ -25,7 +25,11 @@ import {
 } from "./quickNoteToolbarWidgets";
 
 const read = (rel: string) => readFileSync(new URL(rel, import.meta.url), "utf8");
-const RUNTIME = read("../editor/lakeRuntime.ts");
+/** 261112 R2-S9：`lakeRuntime.ts` 已按域拆到 `../editor/kernel*.ts`（纯搬移、导出名/行为不变）。
+ *  本护栏继续在「实现文本」上断言 ⇒ 拼读拆出的全部文件（= 原来的单文件实现文本）。 */
+const RUNTIME = ["lakeRuntime", "kernelConfig", "kernelBookmarkDegrade", "kernelImageThumb", "kernelCardHydration", "kernelToolbarBridge", "kernelTocSidebar"]
+  .map((name) => read("../editor/" + name + ".ts"))
+  .join("\n");
 const COMPOSER = read("../../mobile/home/QuickNoteComposer.tsx");
 /** 去注释后再断言（注释里可能提到旧清单，不算「页面写死清单」）。 */
 const stripComments = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\*.*$/gm, "").replace(/^\s*\/\/.*$/gm, "");
