@@ -39,7 +39,6 @@
 | `s3v3Engine.ts` | `S3v3SyncEngine`（`sync` / `pullAll` / `incrementalSync` / `initialUpload` / `pushQuickNote` / `deepCleanup` / `resetFromCloud`）、`S3v3SyncReport` / `S3v3Progress` / `S3v3DeepCleanupResult` / `S3v3SyncError` / `classifyS3v3Error` | §8 / §12 / §14 / §17 |
 | `s3v3Merge.ts` | `planLakeMerge` / `planQuickNotesMerge` / `isRemoteDescendant` / `LakeNotePlan` / `QuickNotePlan` | §9 |
 | `s3v3Decision.ts` | `decideItem` / `ItemAction` | §9.1 |
-| `s3v3Gc.ts` | `planLakeDeletes` / `planQuickNotesDeletes` / `PlannedDelete` | §13 |
 | `s3v3Gate.ts` | `gatePendingDelete` / `CurrentWorld` / `PendingDelete` | §13 |
 | `s3v3Intent.ts` | `DeletionIntent` / `shouldClearDeletionIntent` | §10.1 |
 | `s3v3DeviceStore.ts` | `DeviceState` / `DeviceBaseline` / `S3v3DeviceStore` / `PendingAssetRetry` | §15 |
@@ -60,7 +59,7 @@
 
 ## 3. 对象布局
 
-前缀由 S3 设置 `prefix` 决定（空 = 桶根）；下表是**相对 key**，单一来源 = `src/core/s3v3Keys.ts`。
+前缀由 S3 设置 `prefix` 决定（空 = 桶根）；下表是**相对 key**，单一来源 = `src/core/s3v3/protocol/s3v3Keys.ts`。
 
 | 对象 | key | 可变性 | 说明 |
 |---|---|---|---|
@@ -303,7 +302,7 @@ retryPendingAssets（上轮失败附件先补）
 
 - 写**持久删除意图** `intents`（`DeletionIntent`：targetEpoch/targetGeneration/purgedAt?），清本地索引条目/正文/附件。
 - 意图清除条件唯一（`shouldClearDeletionIntent`）：显式恢复；或看到**更高 generation** 且该 id 明确不在索引里。发布成功本身不清除（`bumpIntentsAfterPublish` 只把 generation 钉到本轮），防迟到覆盖。
-- 删除意图未发布前，本端发布索引时该 id 缺席；发布后 `planLakeDeletes` 生成待删（§13）清理旧对象。
+- 删除意图未发布前，本端发布索引时该 id 缺席；旧对象不可达后由 §14 `deepCleanup` 列举差集兜底清理（v4 起不再生成新的待删计划，见 §13）。
 
 ### 10.2 他端判定缺席（I3）
 
@@ -405,10 +404,9 @@ baseline 与 pointer 不同代（epoch·generation·lakeCommit）/ 远端 quick 
 - `publish-conflict`（重试超限）与 `lock-busy` 都是 retryable；UI 可自动重试。
 - 首轮并发首传竞态（pointer 还没写、对象已在云端）→ 无基线时最多重试 2 次；有基线时视为真损坏（`pointer-corrupt`）。
 
-## 13. 待删队列与执行门禁（`s3v3Gc.ts` / `s3v3Gate.ts`）
+## 13. 待删队列与执行门禁（`s3v3Gate.ts` / `s3v3/commit/executePending.ts`）
 
-- 计划：`planLakeDeletes` / `planQuickNotesDeletes` 按「旧世界 vs 新世界」差集生成：
-  正文换 hash、旧声明版本、从声明移除的附件、被 purge 的前缀、被替换的旧索引。
+- 计划：**v4 起不再生成新的待删计划**（原 `s3v3Gc` 规划器已在 `03ef3fb3` 收口时删除）。设备状态里可能残留历史 `pending` 队列，按本节日志门禁逐轮消费；新产生的不可达对象（正文换 hash、旧声明版本、从声明移除的附件、被 purge 的前缀、被替换的旧索引）由 §14 `deepCleanup` 列举差集清理。
 - 类型（`PlannedDelete.kind` → `PendingDelete.kind`）：`body`、`asset`、`declaration`、`purge-prefix`、`index`，以及小记对应的 `quick-note-*`。
 - 执行门禁 `gatePendingDelete(item, world)`：**仍被当前世界引用就跳过并出队**（宁可不删，不可误删）：
   - 正文：条目不存在 → 删；当前索引仍引用同 hash → 保留。
@@ -545,7 +543,7 @@ state sidecar：桌面 `<storeRoot>/sync-v3/state.json`；移动同表 `sync_v3_
 | 全量重拉不得删本地（I0） | `electron/s3v3/pullAllSafety.test.ts` |
 | 空跑轮零发布/零写 | `electron/s3v3/idlePublishRegression.test.ts`、`perfPipeline.test.ts` |
 | 缺正文/缺附件（不覆盖本地、不上传空正文） | `electron/s3v3/missingBody.test.ts`、`src/core/s3v3AssetLossGuard.test.ts`、`s3v3DeferAssets.test.ts` |
-| 待删门禁/清理 | `electron/s3v3/deepCleanupWindow.test.ts`、`src/core/s3v3Gc`（经 core 测试） |
+| 待删门禁/清理 | `electron/s3v3/deepCleanupWindow.test.ts`、`src/core/s3v3/commit/executePending.test.ts` |
 | 双端一致性 | 单实现契约 `src/mobile/v3/deviceConformance.mobile.test.ts`（21 it）+ 跨端混合 `electron/s3v3/deviceConformance.mixed.test.ts`（3 it）+ `parity.test.ts` |
 | 单条小记推送/标记落盘 | `electron/s3v3/quickPushSingle.test.ts`、`markerPersist.test.ts`、`src/mobile/v3/remParity.test.ts` |
 | 「保存并同步」快路径（独立管线/最短链/轻量状态/高优先域） | `src/core/s3v3/quickPush/pipeline.test.ts`（请求序列/回退/别端变更）、`pipeline.parity.test.ts`（与旧实现逐字节对拍）、`electron/s3v3/quickPushFastPath.test.ts`、`src/mobile/v3/quickPushFastPath.test.ts`、`electron/quickNotePushPriority.test.ts` |

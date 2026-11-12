@@ -1,6 +1,7 @@
-# 标签子系统（现状契约，261025 起；261105 修订 / 261105 二次修订：删除=缺席）
+# 标签子系统（现状契约，261025 起；261105 删除=缺席；261107 标签存储统一）
 
-> 本文记录**当前实现**（不是提案）。历史提案（独立 tags pointer、文档标签同步、置顶）未落地或已撤销；待办见 HANDOFF §3。
+> 本文记录**当前实现**（不是提案）。历史提案（独立 tags pointer、置顶）未落地或已撤销；待办见 HANDOFF §3。
+> **261107 标签存储统一**：标签域（目录 + 所有关系 + 版本）单一归属**小记库**（桌面 `quick-notes/metadata.sqlite3` / 移动主库），桌面文档标签关系也一并在内；主库旧 `tag_links/tag_link_versions` 仅作迁移失败回退保留一版，成功后不再读写。
 
 ## 1. 数据模型（两端共用 `src/core/quickNoteTags.ts`）
 
@@ -14,11 +15,13 @@ tag_link_versions(target_kind, target_id, links_updated_at)  PK(kind,target)
 > `target_kind=note` 的文档标签关联）。**云端 `tags[]` 只出现 active 标签**——不允许墓碑进 S3 列表
 > （「S3 列表表不得出现永久存在的条目」）。冲突按**删除压编辑**（与文档 purge 同口径）。
 > 旧库若残留 `deleted_at` 行，启动时一次性迁移：先把 id 写进本机待删，再物理删行，然后置 `device_state.tag_absent_migrated=1`。
+> **禁止再引入标签墓碑 / `deletedAt`**（代码默认不读不写 `tags.deleted_at`；新代码加回即违反本条）。
 
 - **正文不存标签名**；目录与关联是唯一事实，搜索索引里的标签名只是派生缓存（可重建）。
 - 标签 ID = `t_` + sha256(归一化名称) 前 16 hex；名称 NFC/trim/空白压缩，≤32 字符；每条 ≤20 个标签；同名 active 唯一（应用层校验）。
-- 小记用 `target_kind="quickNote"`；文档用 `target_kind="note"`（关系在主库；**目录只在小记标签库**，文档只同步关系 `tagIds/tagsUpdatedAt`，261105 P1 已实现）。
-- 桌面小记标签库在 `quick-notes/metadata.sqlite3`；移动端在主库；**顺序字段只是本机视图**。
+- 小记用 `target_kind="quickNote"`，文档用 `target_kind="note"`；两者同库（261107 起桌面都在 `quick-notes/metadata.sqlite3`，移动端在主库）。**目录只有一份**（小记库），文档关系不再有第二份目录。
+- 同步：小记关系随 quick-notes 索引条目 `tagIds`（排序集合）+ `tagsUpdatedAt`（LWW）；文档关系随 lake 索引条目同名字段。**目录只随 quick-notes 索引的可选 `tags[]` 发布**。
+- **顺序字段只是本机视图**；桌面/移动都在本端持久化，不跨端传播。
 
 ## 2. 顺序（261105 用户定稿：设备本地，不参与同步）
 
@@ -42,13 +45,13 @@ tag_link_versions(target_kind, target_id, links_updated_at)  PK(kind,target)
 
 ## 5. 实现位置
 
-- 纯逻辑：`src/core/quickNoteTags.ts`（归一化/ID/LWW/确定性 tie-break/筛选/本机拖拽换算）。
-- 桌面：`electron/quickNoteTagsStore.ts`、`quickNoteTagLinksStore.ts`、`quickNoteTagService.ts`、`documentTags.ts`（文档标签预留）；UI `QuickNoteTagManager`（拖拽排序）。
-- 移动：`src/mobile/data/quickNoteTagsRepository.ts`、`quickNoteTagLinksRepository.ts`、`quickNoteTagService.ts`；UI `MobileQuickNoteTagManager`（管理入口 + 长按拖拽）。
+- 纯逻辑：`src/core/quickNoteTags.ts`（归一化/ID/LWW/确定性 tie-break/筛选/本机拖拽换算）、`src/core/tagAggregate.ts`（聚合行，两端共用；移动 `src/mobile/tags/tagAggregate.ts` 只是薄扩展）。
+- 桌面：`electron/quickNoteTagsStore.ts`、`quickNoteTagLinksStore.ts`、`quickNoteTagService.ts`、`electron/tagStorage.ts`（261107 一次性迁移）、`electron/documentTags.ts`（文档关系服务，迁移成功后挂小记库）；UI `src/features/quickNotes/QuickNoteTagManager.tsx`（拖拽排序）。
+- 移动：`src/mobile/data/quickNoteTagsRepository.ts`、`quickNoteTagLinksRepository.ts`、`quickNoteTagService.ts`；UI `src/mobile/tags/TagsHomeTab.tsx`（管理入口 + 长按拖拽）。
 - 同步端口：`electron/s3v3/desktopPlatformPort.ts`、`src/mobile/v3/mobilePlatformPort.ts`；计划/引擎 `src/core/s3v3/**`。
 
 ## 6. 未做 / 待立项
 
-- **文档标签（261105 P1 已实现）**：关系随 lake 索引 `tagIds`（排序集合）+ `tagsUpdatedAt`（版本 LWW）同步；目录只在小记标签库；删除/改名跨库协调 + 启动清孤儿；发布时**有版本必须显式写 `tagIds`**（空集合也写 `[]`）。UI = 桌面标签空间（只读聚合 + 就地元数据管理）+ 属性面板编辑 + 侧栏筛选；移动端只读展示 + 筛选。
+- **文档标签（261105 P1 实现；261107 关系迁入小记库）**：关系随 lake 索引 `tagIds`（排序集合）+ `tagsUpdatedAt`（版本 LWW）同步；目录只在小记标签库（唯一来源）；删除/改名跨库协调 + 启动清孤儿（目录 = 小记库 active 标签）；发布时**有版本必须显式写 `tagIds`**（空集合也写 `[]`）。UI = 桌面标签空间（只读聚合 + 就地元数据管理）+ 属性面板编辑 + 侧栏筛选；移动端只读展示 + 筛选。
 - 小记→文档转换**继承标签**（261105 P1 已实现）。
 - 不做：置顶、跨端顺序一致、标签颜色/层级（用户 261105 定稿）。

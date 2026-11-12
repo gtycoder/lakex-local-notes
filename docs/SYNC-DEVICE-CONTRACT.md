@@ -137,8 +137,7 @@ E2-4 切换后**只有一份状态编排**，因此契约测试只有一份、�
 | `electron/s3v3/deviceConformance.mixed.test.ts`（3 it） | 桌面 × 移动接同一 `MemoryRemote` 的并发收敛 | 首次并发首传、并发改不同文档、同时改同一篇 |
 | `electron/s3v3/desktopStoreAdapter.test.ts` / `electron/store.test.ts` | 桌面薄壳 + Store 端口语义 | 桌面端口（hashCache、延迟删资产目录、锁往返、小记库护栏） |
 
-**已删除**：`electron/s3v3/deviceConformance.desktop.test.ts`（旧「双端对拍」的第二份运行 —— 同一共享实现重复跑；
-桌面端口已由 mixed + 上表两个文件覆盖）。端口差异不再用 `capabilities` 钉住。
+**已删除**：旧「双端对拍」的第二份运行（同一共享实现重复跑；桌面端口已由 mixed + 上表两个文件覆盖，不再保留独立文件）。端口差异不再用 `capabilities` 钉住。
 
 场景矩阵（10 个语义场景，编号与任务/报告一致）：
 

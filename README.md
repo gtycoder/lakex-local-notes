@@ -8,7 +8,7 @@
 
 ## 📖 使用说明（用户手册）
 
-> **第一次用？先看用户手册 → [guide/README.md](guide/README.md)**（5 分钟上手 · 界面总览 · 文档/表格/多维表/画板/小记/AI/云同步/设置逐条 · 常见问题，含桌面与 Android 分步截图）。
+> **第一次用？先看用户手册 → [guide/README.md](guide/README.md)**（5 分钟上手 · 界面总览 · 文档/表格/多维表/画板/小记/日记/AI 助手与 AI 写作/云同步/换机与便携包/更新中心/设置逐条 · 常见问题，含桌面与 Android 分步截图）。
 
 - 在线阅读（GitHub）：<https://github.com/gtycoder/lakex-local-notes/blob/master/guide/README.md>
 - 在线阅读（Gitee）：<https://gitee.com/gtycoder/lakex-local-notes/blob/master/guide/README.md>（镜像仓库；若是私有库需先登录）
@@ -17,6 +17,8 @@
 ## 项目简介
 
 Local Lakex Notes 是一个自持数据的个人笔记应用：笔记、表格、多维表、画板、小记全部保存在本地（SQLite + 文件），S3（七牛 Kodo / S3 兼容）只用于多端备份与同步。不存在账号体系、团队协作或云端依赖；没有网络也能完整写作与检索。
+
+**五个一级空间**（两端同名，桌面 `⌘1`–`⌘5` 切换）：知识库、小记、日记、AI 写作、标签。
 
 - 桌面端：Electron 44 + React 18，macOS 优先
 - 移动端：Vite + Capacitor，Android 为正式端之一
@@ -101,16 +103,22 @@ Local Lakex Notes 是一个自持数据的个人笔记应用：笔记、表格�
 
 **数据安全**
 
-- 自动备份：默认每天一份（可改每周）、保留 7 份 / 300MB 上限，`VACUUM INTO` + `quick_check` 校验，入口在 设置 → 数据与存储
+- 自动备份：默认每天一份（可改每周）、保留 7 份 / 300MB 上限，`VACUUM INTO` + `quick_check` 校验，入口在 设置 → 备份与恢复（只备份数据库，不含正文与资源）
 - 从备份恢复：校验备份 → 原库隔离（不删除）→ 替换 → 重启；启动恢复页在坏库时提供「备份后重试 / 云端恢复 / 从备份恢复 / 打开目录」
 - 保存版本守卫：磁盘正文被外部改过时**不写盘**，弹窗三选（另存副本 / 覆盖 / 载入磁盘版）
 - 崩溃循环 → 安全模式（跳过自动同步与标签恢复）；数据体检可查一致性 + 手动「重建数据」（只读扫描 → 确认重建）
 
 **S3 同步**
 
-- 对象前缀默认 `lakex-local-notes`；清单为单文件 manifest，资产按清单声明的差集同步
+- 对象前缀默认 `lakex-local-notes`；索引为不可变内容寻址文件，资产按每篇文档的声明差集同步
 - 同步顺序：先拉远端（带冲突判定）→ 再推合并后的本地
 - 关闭云同步 = 完全没配置（任何路径不出网）
+
+**换机两条路**
+
+- **便携包**（离线全量）：桌面「设置 → 备份与恢复 → 导出便携包」得到一个 `.zip.lln`（≤4GiB，不含历史快照），手机「从便携包导入（覆盖本机）」，之后 S3 只做增量；没配 S3 也能用
+- **S3 同步**（增量）：两端配置同一个私有桶，新设备打开云同步拉取；库损坏时用「从云端恢复」（不会上传本机数据）
+- 怎么选、各自的边界与失败面：[guide/18 换机、便携包与迁移](guide/18-portable-and-migrate.md) · 规格 [docs/PORTABLE-TRANSFER.md](docs/PORTABLE-TRANSFER.md)
 
 ## 环境要求
 
@@ -199,31 +207,19 @@ CI 发版产出 `assembleRelease` 的**正式 release keystore 签名** APK（v1
 - 也可本地打包：`npx vite build && npx electron-builder --mac`（Windows 包建议交给 CI 的 `windows-latest`；Linux target 尚未配置）
 - ⚠️ 构建产物**包含闭源 Lakex 内核**（仓库已 vendored）；公开分发（Release 附件）前请确认你接受相应风险，详见 `NOTICE`
 - CI 发版产出的 macOS 包为 **ad-hoc 签名、未公证**（`mac.identity=-`）；首次打开需右键 → 打开；Windows 会弹 SmartScreen，需「更多信息 → 仍要运行」
-- 签名/公证流程与 Actions 发版指南见 `docs/RELEASE.md`；内置更新中心（检查更新 / 更新日志 / 自动下载；仅稳定版，不做静默安装，下载后由用户打开安装包）
+- 签名/公证流程与 Actions 发版指南见 `docs/RELEASE.md`；发布说明与更新日志同源 [docs/RELEASE-NOTES.md](docs/RELEASE-NOTES.md)（**v1.1.0 → v1.0.0** 倒序合集）
+- 内置更新中心（检查更新 / 更新日志 / 自动检查与自动下载；仅稳定版，**不做静默安装**，下载后由用户打开安装包；下载校验 sha256，Android 另验签名）
 
 ## 文档
 
-| 文档 | 内容 |
+| 入口 | 内容 |
 | --- | --- |
-| [docs/HANDOFF.md](docs/HANDOFF.md) | **唯一交接文档**：当前状态 / 待办 / 踩坑 |
+| [README.md](README.md) | 项目概览（本文件） |
+| [docs/HANDOFF.md](docs/HANDOFF.md) | **唯一交接文档**：当前状态 / 基线 / 待办 / 踩坑 |
 | [AGENTS.md](AGENTS.md) | **长期红线与机制**（会话启动必读） |
-| [docs/PRODUCT.md](docs/PRODUCT.md) · [docs/DESIGN.md](docs/DESIGN.md) | 产品定位 / 设计系统（令牌、层序、组件规范） |
-| [docs/AI-WRITING.md](docs/AI-WRITING.md) | **AI 写作空间**（桌面 v1：会话/多文档/生成文档/小记；分层与门禁） |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 进程结构、关键文件、数据流 |
-| [docs/SYNC-PROTOCOL.md](docs/SYNC-PROTOCOL.md) · [docs/STORAGE-LAYERS.md](docs/STORAGE-LAYERS.md) | 同步协议（含 GC / 保留链 §13–§14）/ 存储分层 |
-| [docs/LAKEX-CONTRACT.md](docs/LAKEX-CONTRACT.md) | 闭源 Lakex 内核已核实行为 + 调试速查 |
-| [docs/DIARY.md](docs/DIARY.md) | 日记空间（文档形态 + space 标记 + 标题即日期）契约与实现落点 |
-| [docs/lakexEditor-developer-docs/](docs/lakexEditor-developer-docs/) | Lakex 内核官方开发者文档离线镜像（API/事件/命令/工具栏/上传，导出自语雀） |
-| [docs/USHEET-UPGRADE.md](docs/USHEET-UPGRADE.md) | Univer 表格触点、升级 playbook、能力路线 |
-| [docs/RELEASE-NOTES.md](docs/RELEASE-NOTES.md) | 发布说明合集（v1.0.4 → v1.0.0；原五份独立说明已合并） |
-| [docs/UPDATE-CENTER.md](docs/UPDATE-CENTER.md) | 应用内更新中心规格（检查 / 下载 / 更新日志 / 校验；不做静默安装） |
-| [docs/PORTABLE-TRANSFER.md](docs/PORTABLE-TRANSFER.md) | 桌面 → 手机 一次性全量搬运（zip ≤4GiB，不含历史；手机覆盖导入） |
-| [docs/MOBILE-BITABLE-DINGTALK.md](docs/MOBILE-BITABLE-DINGTALK.md) | 移动端多维表：钉钉实机实测 + 复刻方案与实施记录（含可点的 [样机](docs/mockups/mobile-bitable.html)） |
-| [docs/MOBILE-TECH-STACK.md](docs/MOBILE-TECH-STACK.md) · [docs/MOBILE-DESIGN.md](docs/MOBILE-DESIGN.md) | 移动端架构与设计 |
-| [docs/MOBILE-OPS.md](docs/MOBILE-OPS.md) | **Android 构建 / 安装 / AVD / CDP / 门禁 / 点按口径**（唯一运维手册） |
-| [docs/MOBILE-AI.md](docs/MOBILE-AI.md) | 移动端 AI 设计与实施契约（资料集 / 预算 / 原生通道 / 分期） |
-| [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) · [docs/CODEX-GUIDE.md](docs/CODEX-GUIDE.md) · [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | 环境/命令 / CDP 驱动指南 / 排错 |
-| [guide/README.md](guide/README.md) | **中文用户使用手册**（15 篇 + 截图，按桌面/Android 分步说明） |
+| [guide/README.md](guide/README.md) | **中文用户使用手册**（按桌面与 Android 分步说明，含截图） |
+
+> **文档索引只有一份**：全部说明文档（架构 / 同步 / 存储 / 内核 / 表格 / 移动端 / 发布 / 更新中心 / 便携包 / 日记 / AI 写作 / 排错…）统一登记在 [docs/HANDOFF.md §1 文档地图](docs/HANDOFF.md)。新文档先登记到那张地图，不要在这里再维护第二份列表。
 
 ## 数据与隐私
 

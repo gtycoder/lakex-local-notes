@@ -6,9 +6,20 @@
 > **当前状态以 §1（基线）/ §2（风险）/ §3（待办）为准**；§0 的批次抬头保留当时的「已发布 / 已提交 / 待验收」口径，**不要据此判断今天是否已推送**。
 > 移动端（Android）的构建 / 安装 / AVD / CDP / 门禁 / 点按口径 = [docs/MOBILE-OPS.md](MOBILE-OPS.md)；桌面会话不要改它，移动端会话不要改桌面文件。
 
-## 0. 最新交接（261109）
+## 0. 最新交接（261112）
 
 > **顺序标注**：261109 各批次里写的「日记 ⌘4 / AI 写作 ⌘3」是**当时**的顺序；**261110 起改为 日记 ⌘3 / AI 写作 ⌘4**（另有标签 ⌘5）。旧批次不再改，以本行 + §1 为准。
+
+### 261112 · 发布前全仓审计 + R0 收口批（**未提交**；待用户验收/裁决）
+
+- **审计**：6 域并行只读审计 + Lead 交叉复核，产出 `docs/audit-261112/`：`00-MASTER-PLAN.md`（总方案：架构审查 + 分项 A–Q + R0/R1/R2 路线 + 27 项裁决 Q01–Q27）+ 分册 02 预览 / 03 桌面 UI 样式 / 04 移动 / 05 core+electron / 06 特性域 / 07 文档清理 + 09/10 独立复核。代码域 P0 = 0；docs 侧两条 P0（guide 落后两个版本 / `.gitignore` 与内核入库矛盾）已在本批修掉。
+- **R0 已落地（已验证，未提交）**：
+  - 文档：guide 新增 16 日记 / 17 AI 写作 / 18 换机便携包 / 19 更新中心（19 章；目录、平台差异、⌘1–5、设置分类全部对齐）；README 文档表收为入口并指向本文件 §1；ARCHITECTURE 重写（v3 现状 + 模块归属判据 + 移动端索引，失效路径/真实桶名/V2 现行描述清零）；STORAGE-LAYERS 按 v3 重写；TAG-SYSTEM-DESIGN / MOBILE-AI / TROUBLESHOOTING / SYNC-DEVICE-CONTRACT / MOBILE-DESIGN 回填；SYNC-PROTOCOL 删 `s3v3Gc` 死引用；DIARY 修正「移动端只做 open」过期口径。
+  - 卫生：`.gitignore` 删三处 vendor/public 忽略（`git check-ignore --no-index` 复核 rc=1）；删 23 个零引用脚本 + `docs/INK-DEVICE-CHECK.md` + `src/core/s3v3Gc.ts`（含 6 处假护栏断言）；`scripts/multi-end-sync/*.mjs` 硬编码 `/Users/admin` 清零；HANDOFF 真实桶名占位。
+  - 代码：小记「保存并同步」4 理由透传 + 两端共用文案（F-04）；AI 作用域 5 宿主 `data-note-id` + 选择器/存活判据单源（F-03）；日期格式化 7 处收口 + lint 测试；`NoteKind` 私抄 14 文件清零 + 触点护栏；长按第 3 份改用 `longPressTimer`；`AI_DIALOG_GAP` 单源；`native.ts` IPC 第四面 parity；设置注释 fail-closed 纠偏；死 env 开关（`LAKE_SYNC_PROTOCOL` / `LAKE_S3V3_QUICK_NOTES`）删除。
+  - 样式：桌面删 35 条被压死声明（+ kit 32 声明 `.ln-modal/.ln-drawer`）；新增 `shadowedDecls` 门禁（基线 21 只降）；移动 `--mb-radius-xl` 悬空、`mobile.html` 双 theme-color、`OpenFile` 双注册、`lakeNativeContract` 计数 4 项修正。
+- **门禁（本批实测）**：`npx tsc --noEmit` = 0；全量 vitest **874 文件（863 passed / 11 skipped）/ 5512 passed / 12 skipped / 0 failed**；`node scripts/ui-metrics.mjs`：颜色 0 / 字号 0 / `!important` 9=清单 / `crossFileDupGroups` 66 / `shadowedDecls` 21 / 未定义令牌 0；`check:core` 163 文件 0 违规；`check:mobileui` 通过；双 build 通过；`check:bundle`+`check:arch` PASS（desktop 首屏 565,129/600,000、app-js 193,737/307,200；mobile 首屏 348,731/360,000、entry 60,298/61,440、css 140,383/141,312、preload 6）；`git diff --check` = 0。
+- **未做 / 待裁决**：审计方案 §6 的 Q01–Q27 仍未拍板（预览 Phase2、手机原图、移动历史预览、拆分范围、HANDOFF 压缩 Q17、`audit-261027` Q16 等）；剩余 21 条 shadowed 声明（feature.css / misc.css / 共享规则）与移动 `mobile.css` 域归位留 R1；桌面 42 态 / 手机+平板 10 态 / 23 屏 / windowsweep **本批未跑**（需夹具机/设备）。本批**未 commit**。
 
 ### 261112 · 桌面文档图片预览只数到视口内几张（107 张 → 显示 1/8；用户报「预览数量不对，应该是虚拟加载的问题」）
 
@@ -508,7 +519,7 @@
 - 门禁：tsc 0；vitest **783 files / 4993 passed / 12 skipped / 0 failed**（含 perf 集成偶发，重跑通过）；check:core / check:mobileui / diff-check 通过；Kotlin 离线编译通过。
 
 ### 261109 · 真实 S3 端到端验收（便携包 → 手机 → 增量同步）
-- 真实七牛桶（Endpoint s3.cn-north-1.qiniucs.com / Region cn-north-1 / Bucket local-lake-hebei），测试前缀 **lakex-notes-dev3-portabletest2**（保留：98 对象 / 约 5.1MB，供复测；旧 ...portabletest 已删）。
+- 真实七牛桶（Endpoint s3.cn-north-1.qiniucs.com / Region cn-north-1 / Bucket `<私有桶>`），测试前缀 **lakex-notes-dev3-portabletest2**（保留：98 对象 / 约 5.1MB，供复测；旧 ...portabletest 已删）。
 - 桌面（隔离 userData，真实 dev 数据 14 文档 / 3 小记 / 75 资产）：首传 17 篇 + 92 对象、pending 0；导出便携包 5.6MB（baseline epoch 8cb91383、gen 1）。
 - 手机：覆盖导入包成功（14 文档 / 5 目录 / 3 小记 / 4 标签 / 92 文件）；用桌面导出的迁移码导入 S3 配置；首次同步 **↑0 ↓0**，云端 pointer **仍为 generation 1**、commits 与包 baseline 完全一致（未发布新索引）；手机 baseline = 14 notes / 4 folders。
 - 真机发现并修复：① 桌面同步成功后未清 folders.is_dirty ⇒ 待同步目录常驻、便携包导出被挡；已在 desktopSync 成功后按 updatedAt 条件 markFolderSynced。② 移动端 listFoldersForSync 把固定「回收站」笔记本也发布 ⇒ 首轮同步平白多发一代并把 notebook-trash 写进云端；已排除 TRASH_NOTEBOOK_ID（与桌面同口径）。
@@ -612,7 +623,7 @@
 - **设备验收口径**：三套快照（手机 6 态 / 平板 6 态 / 多维表 3 态）必须以**重装后的新 APK** 重烤并连跑两轮 0 差异；旧 APK 上的绿灯不算数（261107 踩过）。
 - 已知遗留：设置子页图标块未全铺（按用户要求先留）；移动端 `@layer` 未做（CSS 仍靠 import 顺序）。
 
-## 1. 当前基线（唯一状态来源，261109）
+## 1. 当前基线（唯一状态来源，261112）
 
 > 本节按 261109 实测重写。**任何状态判断以本节 + `git status` / `git log -1` 为准**；§0 的抬头状态只作批次历史。
 
@@ -642,6 +653,7 @@
 
 **门禁基线（261109 发版前：AI 写作 + 日记合并后实测）**
 
+- **261112 R0 批（未提交；见 §0）**：`npx tsc --noEmit` = **0**；全量 vitest **874 文件（863 passed / 11 skipped）/ 5512 passed / 12 skipped / 0 failed**；`ui-metrics` 颜色 0 / 字号 0 / `!important` 9=清单 / `crossFileDupGroups` 66 / `shadowedDecls` 21；`check:core` 163/0；`check:mobileui` 通过；`check:bundle`+`check:arch` PASS（desktop 565,129/600,000 + app-js 193,737/307,200；mobile 348,731/360,000 + entry 60,298/61,440 + css 140,383/141,312 + preload 6）；`git diff --check` = 0。
 - **261112 图片预览批**（桌面画廊取正文全量 + 移动端「点击看图片、双击编辑」；见 §0）：`npx tsc --noEmit` = 0；全量 vitest **871 文件（860 passed / 11 skipped）/ 5488 passed / 12 skipped / 0 failed**（新增 `imagePreviewAttach.render.test.tsx` 8 例：正文全量画廊 / 索引对齐 / 回退 / 单击预览 / 双击取消 / 元素被重渲染仍算双击 / 移动取消 / 桌面不变；本轮 `electron/s3v3/perf.integration` 通过）；`check:mobileui` / `check:core`（164 文件 0 违规）通过；`git diff --check` = 0；APK 已装 `lake_mobile` 并做设备点按四步验收（见 §0）。
 - **261112 小记首屏预热批**（小记第一打开闪屏；见 §0，含上一批「导出」修复）：`npx tsc --noEmit` = 0；全量 vitest **870 文件（859 passed / 11 skipped）/ 5480 passed / 12 skipped / 0 failed**（新增 `quickNoteDetailPrewarm.test.ts` 5 例 + `quickNotesView.test.ts` +2 例；`electron/s3v3/perf.integration` 本轮通过）；`git diff --check` = 0。
 - **261112 导出修复批**（顶栏「更多 → 导出」全部无效；见 §0）：`npx tsc --noEmit` = 0；全量 vitest **869 文件（858 passed / 11 skipped）/ 5473 passed / 12 skipped / 0 failed**（含新增 `useTopMenus.render.test.tsx` 3 例）；`git diff --check` = 0。第一轮全量时 `electron/s3v3/perf.integration` 因宿主负载误报、隔一轮全量自发通过（与 §2 既有口径一致）。
@@ -665,7 +677,7 @@
 - macOS = x64 + arm64 分开打包，ad-hoc 签名未公证（首次打开走「仍要打开」）；免提示需 Apple Developer ID + 公证。
 - **GitHub 推送：优先走 SSH remote `github`**（261109 实测：HTTPS 到 github.com **完全不通**（443 连接超时/HTTP2 framing），SSH 22 **可用** ⇒ `git push github master`；`origin` 的 HTTPS pushurl 会失败）。**VPN 开启时 GitHub 一律不通（含发版 tag 推送）**，发版前确认 VPN 已关。HTTPS 可用时期的老办法：`git -c http.version=HTTP/1.1 push <url> <branch>`。曾用 `http.curloptResolve` 仅对单次 git 命令覆盖 DNS 解决（不改全局 DNS/代理/TLS，不固化 IP）。
 - **v1.1.0 发版（261109 20:03 CST）**：master = `075272b2`（已推 Gitee + GitHub），注解 tag **`v1.1.0`** 已推两处并触发 GitHub `Release` workflow（macOS x64+arm64 / Windows / Android / publish）；tag 指向 `075272b2`，**不可移动**。发版前 review 修掉三项 P1（AI 写作排除日记子树与日记本、槽位上移消除 features→desktop 违规、AI 写作改 lazy 回收首屏余量）。
-- **本机 stash 已清空**（原 a11y WIP 已合并进 master，261110）；`git status` 应为 clean。
+- **本机 stash 已清空**（原 a11y WIP 已合并进 master，261110）。**261112 R0 批工作树未提交**：`git status` 有大量改动（docs/guide + 代码 + 测试，见 §0 该批），HEAD 仍为 `8cc65e06`；提交时按 §3 的文件隔离规则分批 stage，**不要 `git add -A`**。
 - 发版流程见 [docs/RELEASE.md](RELEASE.md)；用户手册见 [guide/README.md](../guide/README.md)。
 
 **文档地图（现存；已删文档不要再链）**
@@ -673,6 +685,10 @@
 - 概览 / 红线：[README.md](../README.md) · 本文件 · [AGENTS.md](../AGENTS.md)
 - 架构：[docs/ARCHITECTURE.md](ARCHITECTURE.md) · 产品 / 设计：[docs/PRODUCT.md](PRODUCT.md) · [docs/DESIGN.md](DESIGN.md) · [docs/MOBILE-DESIGN.md](MOBILE-DESIGN.md) · [docs/PAD-ADAPTATION.md](PAD-ADAPTATION.md)
 - 同步 / 存储 / 容错：[docs/SYNC-PROTOCOL.md](SYNC-PROTOCOL.md) · [docs/STORAGE-LAYERS.md](STORAGE-LAYERS.md) · [docs/RESILIENCE.md](RESILIENCE.md) · [docs/SYNC-DEVICE-CONTRACT.md](SYNC-DEVICE-CONTRACT.md) · [docs/SYNC-STATE-CONVERGENCE.md](SYNC-STATE-CONVERGENCE.md)
+- 产品 / 空间契约：[docs/DIARY.md](DIARY.md) · [docs/AI-WRITING.md](AI-WRITING.md) · [docs/TAG-SYSTEM-DESIGN.md](TAG-SYSTEM-DESIGN.md) · [docs/PANEL-CONTRACT.md](PANEL-CONTRACT.md)
+- 发布 / 更新 / 换机：[docs/RELEASE-NOTES.md](RELEASE-NOTES.md) · [docs/UPDATE-CENTER.md](UPDATE-CENTER.md) · [docs/PORTABLE-TRANSFER.md](PORTABLE-TRANSFER.md) · [docs/RELEASE.md](RELEASE.md)
+- 使用手册：[guide/README.md](../guide/README.md)（19 篇，含日记 / AI 写作 / 便携包 / 更新中心）
+- 本轮审计（261112）：[docs/audit-261112/00-MASTER-PLAN.md](audit-261112/00-MASTER-PLAN.md)（方案；§6 含 Q01–Q27 待裁决）
 - 内核 / 表格 / 多维表 / 手写板：[docs/LAKEX-CONTRACT.md](LAKEX-CONTRACT.md) · [docs/lakexEditor-developer-docs/](lakexEditor-developer-docs/) · [docs/USHEET-UPGRADE.md](USHEET-UPGRADE.md) · [docs/INK-PAD.md](INK-PAD.md) · [docs/BITABLE-VIEWPORT.md](BITABLE-VIEWPORT.md)
 - 移动端：[docs/MOBILE-OPS.md](MOBILE-OPS.md) · [docs/MOBILE-TECH-STACK.md](MOBILE-TECH-STACK.md) · [docs/MOBILE-AI.md](MOBILE-AI.md) · [docs/MOBILE-BITABLE-DINGTALK.md](MOBILE-BITABLE-DINGTALK.md) · [docs/MOBILE-USHEET-YUQUE-PARITY.md](MOBILE-USHEET-YUQUE-PARITY.md)
 - 工程 / 排错：[docs/DEVELOPMENT.md](DEVELOPMENT.md) · [docs/CODEX-GUIDE.md](CODEX-GUIDE.md) · [docs/TROUBLESHOOTING.md](TROUBLESHOOTING.md) · [docs/LOGGING.md](LOGGING.md) · [docs/RELEASE.md](RELEASE.md) · [docs/UPDATE-CENTER.md](UPDATE-CENTER.md) · [docs/PORTABLE-TRANSFER.md](PORTABLE-TRANSFER.md)
@@ -691,6 +707,7 @@
 - **门禁预算现状**：`check:bundle` 的 mobile-entry 在 HEAD 已超目标，脚本冻结的是「现状值」；不要把它当绿，也不要把冻结值当目标。
 - **全量 vitest 的 `electron/s3v3/perf.integration.test.ts` 在「3 台模拟器 + 构建」并行时会因宿主负载误报**（261112 实测：全量跑 1 例红、单独重跑通过；该用例是 500/2000 文档的阶段耗时门禁）。⇒ 见它红先看宿主负载/单跑，别先怀疑代码。
 - **历史文档已删除**：261109 起一批研究/审计/回归/旧发布说明已删（git 可查）；旧文档/代码注释里的「HANDOFF §3#N / §4」是历史编号，**不对应本文**，待办只看 §3（本节不编号）。README / 其它文档中若仍有指向已删文档或旧编号的引用，以 git 与现存文档为准（本批不改其它文件）。
+- **261112 R0 后的两个新风险**：①日期显示已统一为 `core/dateFormat` 口径（`08-04`、去秒），快照/截图若含旧格式属预期变化；②`DocumentEditor` 现在 import `mobile/bridge/assets`（OpenFile 去重），移动分包已过 `check:arch`（首屏 348.7KB/360KB），后续动移动懒加载时先跑 bundle/arch。
 - **发布链路**：Gitee 单附件 100MB / 仓库 1GB 上限（mac/Windows 包只能走 GitHub）；GitHub 慢速上传需依赖 workflow 的 50 分钟步骤超时，不要缩短。
 
 ## 3. 待办（唯一待办清单）
@@ -700,6 +717,8 @@
 
 **P0（不做就卡住主线）**
 
+- **261112 R0 批待用户验收/提交**（见 §0）：本批只做「不需要裁决」的项；`git status` 仍是未提交状态。验收后按文件隔离分批提交；**不要**把 `docs/audit-261112/` 的分册当产品改动。
+- **发布前设备/视觉矩阵**：桌面 42 态、手机/平板 10 态、23 屏走查、windowsweep、双 build + 全量 vitest（本批已跑 tsc/全量 vitest/双 build/bundle+arch/ui-metrics/core/mobileui/diff-check，**设备类未跑**）。
 - **编辑面不变量 261112 重标定为绿（用户选 A：只改装置、不动观感）**：原装置首跑 quicknote **10 条**、document **5 条**红，全部落在「键盘→面板 / 键盘→收回」；定性为**预期过期**而非几何回退——I1 的「键盘⇄面板三态逐项相同」前提写于 261014（当时面板与键盘同高、键盘收起⇒内容区等量缩短），261110/261111 改**全屏写作卡 + 覆盖式面板**后不再成立；I3 截图复核（`/tmp/caret-keyboard.png`、`/tmp/caret-panel.png`）光标在面板顶下 74px，但该行与光标仍在面板圆角之上可见，不是明显遮挡。**新语义**：I1 = ①面板态自身稳定（+1.2s 内 ch/st/firstY 不变）+ ②收回后**内容区高度严格回原值**、滚动/首块位移 ≤120px（实测 26px / 74px；74px 来自文档编辑态外壳 chrome 在收键盘时的重排）；I3 = 只在**键盘态与收回后**严格断言（覆盖式面板态不再要求光标在面板上方）；I2/I4/I5 不变。重跑 **quicknote 11 条 + document 11 条 ALL PASS**（lake_gate / 9336，新包）；CONTRACT §5.38/§5.38.1 的 I1 描述同步。
 - **写作卡两条入口 / 键盘（261112 已闭合）**：正常新建 = 23 屏走查 23/23；长按/fab 上滑速记 = 新装置 `scripts/mobile-audit/capture-entry.mjs`（10 条 ALL PASS）；键盘开合 = `edit-surface-invariants` quicknote 11 + document 11 条 ALL PASS。后续改 ＋/createPress/写作卡入口或键盘适配时**三件一起重跑**。
 - **桌面 `check:stylesnap` 42 态**：本机无合成夹具缓存，已连续三批未跑（按钮梯队 / 空间改名 / 按钮第二批）。下次有夹具的机器全量跑并重烤；**重点看本批视觉 delta**（清单见 §0）；同时确认是否新增「日记空间」态。**261111 追加**：① 文档版式引擎改成撑满可视区（内容区几何变）；② 阅读态大纲底边上收 `--statusbar-reserve`（大纲态/文档态可能变）——两者都要在重烤时一起看。
@@ -709,6 +728,10 @@
 
 **P1（该做但可排期）**
 
+- **R1 能力层（审计方案 `docs/audit-261112/00-MASTER-PLAN.md` §4 A/B/I）**：预览 4 份内核只读包装收 `useReadOnlyKernelViewer` + `PreviewPolicy` + 图片档位 `previewAsset`；只读状态 `readOnlyState`；空间能力矩阵 + kind 触点扩展。**先做 A1/A2 再加行为**。
+- **R1 公共函数与拆分**：K1 剪贴板 helper 完整版、K4 hash 单源、预览 Phase2/3、`core/bitableDoc` → 8 模块、`BitableEditor` → 容器 + 6 hook、`QuickNotesWorkspace` 3 hook；按 §4 L2 顺序、每批纯搬移。
+- **R1 样式/移动余量**：剩余 21 条 shadowed 声明（`feature.css` 3 / `misc.css` 4 / 共享规则 14）；移动 `mobile.css` 域归位（bitable/board/editor 约 300 行，需设备 2–3 态）；`.ln-row2` 档位（Q11）。
+- **日期显示口径已变**：日期从 `8/4` 变 `08-04`、`2026/11/12 09:05:00` 变 `2026-11-12 09:05`（Q9 落地）；若产品要保留旧观感需回滚 R0 对应调用点。
 - **平板 10 态快照**：261112 已在 `lake_tab` 重烤（9→10 态）并连跑两轮 0 差异；后续换夹具/外壳改动时按 §3#21③ 重烤。
 - **移动性能基线（261112 已录）**：lake_gate（5556 / 9336 / 412×842@2.625 / 当前包）`--record --rounds 3 --with-doc-open` 写入 `.css-audit/perf/mobile-perf.json`（**gitignored、设备本地**，不提交）；随后 `--compare` **全部通过**：冷启动 p50 **1586ms**（预算 2393）、capture→可输入 p50 **893ms**（1702）、写作卡热开 p50 **332ms**（722）、文档打开 p50 **4ms**。⚠️ **键盘两项在该 AVD 采不到**（「点按后键盘未弹起」⇒ 0 样本；软化键盘设置已试无效），键盘长任务口径仍以 5554 历史记录为准（775→72ms）；换 AVD / 换包 / 改视口必须 `--record` 重烤。
 - **图片缩略残余（261111 收口后）**：① XHR 失败/旧包/超 12MP 的 webp·avif 回退 canvas，可能写显示尺寸；② 复制多张大图中同步阻塞（剪贴板 API 限制）；③ 会话内放行依赖「待上传卡计数=1」，多图并发时当会话不缩（重开按正文 origin 缩，安全降级）；④ 桌面文档编辑器（Retina 优先）与平板未启用同类缩略。
@@ -724,6 +747,7 @@
 
 **P2（体验缺口 / 长期）**
 
+- **审计裁决 Q01–Q27 未拍板**（`docs/audit-261112/00-MASTER-PLAN.md` §6）：预览 Phase2、手机大图原图、移动历史预览、桌面 42 态、HANDOFF 压缩 Q17、`audit-261027` Q16、拆分范围 Q19、AI 会话持久化 Q12 等。未定的项**不要自行扩范围**。
 - 大库与**真实 Android 物理机验收从未做过**；墓碑 payload 老化；移动云清理无 UI 入口、目录恢复后 `deleted_notes` 残留；缺正文/缺小记三条恢复路径只有单测 mock。
 - 移动端文本格式未接入口（unlink / replace / style→code·quote / 表格块级命令族）；顶栏 44→52 需另开需求；平板「点空白落光标」待用户裁决。
 - **脚本/源码注释里的旧 `§7.x` 引用**（`§7.25/27/28/30/31`，与 AGENTS 现编号 21–24 不符；历史遗留）⇒ 下次碰时统一，不单独开批。

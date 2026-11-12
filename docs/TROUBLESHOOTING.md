@@ -13,8 +13,8 @@
 3. **产物目录必须独立**：输出目录用 `dist/` 会把上一轮的 dmg/zip/.app 递归打进 asar（曾膨胀到 1GB）。必须 `directories.output: "release"`。
 4. **vite 8（rolldown）需要 Node ≥ 20.12**：系统 node 18 报 `styleText` 缺失；用 nvm v24。
 5. **asar CLI extract-file 会剥离目录**：`asar extract-file app.asar dist/index.html` 会把文件写到**当前目录**（不是 dist/），曾覆盖根 index.html → `git checkout -- index.html` 恢复。
-6. **防御性配置（实测可用，暂勿回退）**：`webPreferences.sandbox: false`（contextIsolation 仍开）+ `asarUnpack: ["electron/preload.cjs"]` + 打包版 preload 直接指向 `path.join(__dirname, "../../app.asar.unpacked/electron/preload.cjs")`。
-7. **打包版必须用相对路径加载 vendor**：`file://` 下 `/vendor/...` 会指向系统根目录。`index.html` 与 `lakeRuntime.ts` 用 `./vendor/...`（dev 下等价）。
+6. **防御性配置（实测可用，暂勿回退）**：`webPreferences.sandbox: false`（contextIsolation 仍开）+ `asarUnpack: ["electron/preload.cjs"]` + 打包版 preload 直接指向 `path.join(__dirname, "…/app.asar.unpacked/electron/preload.cjs")`。
+7. **打包版必须用相对路径加载 vendor**：`file://` 下 `/vendor/...` 会指向系统根目录。`index.html` 与 `lakeRuntime.ts` 用 `./vendor/…`（dev 下等价）。
 
 ## B. 资源本地化（CDN）
 
@@ -59,7 +59,7 @@
     - 判定"是否被重写"的口径：`.lake` 的 **mtime 不变** + 标签无脏点 + 无新增历史快照 + 正文里 `status%22%3A%22error%22` 为 0。
 
 57. **壳层底部一条很窄的灰缝（260917）**：文档页最底露出约 4px 的 `.app-shell` 灰底（`rgb(235,236,240)`）。根因 = `src/styles/app/shell.css` 的 `.workspace { margin: calc(var(--topbar-height) + 4px) 0 4px 0 }` 底部那个 `4px`：`.app-shell` 是单行网格（852px），工作区被底部 margin 收到 848 → 最底 4px 露灰。**这是"同一几何只修了一处视图"的漂移**：小记视图早已单独覆盖 `margin: … 0 0` 去掉这 4px（注释："让工作面直接贴到窗口底"），基础 `.workspace` 漏改。修法 = 基础层底部改 `0`（顶部那 4px 是固定 `.tab-bar` 的拼接缝，保留）+ 收掉小记里已**逐字等价**的 margin 覆盖。**不要**用"给 `.app-shell` 加白底/加高度"这类叠层补丁绕开——根在 `margin`。实测：底部 dy=1..4 命中从 `.app-shell`（灰）变为白色 `.ne-editor`（bottom=852）；文档/小记两视图都齐底。
-58. **审计装置会随 UI 批次漂移（260917）**：`scripts/css-audit/css-audit.mjs` 的 `nav.search` 一直在左上角下拉里找"全文搜索"菜单项，而 260917 该入口已搬到文档页右上角 → 跑 `ab2` 全矩阵时 `search-empty` 状态**在装置准备阶段直接抛 `no 全文搜索`**（崩的是状态准备、不是比对结果，容易误读成"清理导致回归"）。修法 = 按 `title/aria` 找右上角搜索按钮。**两个连带坑**：① 跑审计装置前先确认它跟得上最近的 UI 搬位；② `ab2` 的 `only` 过滤是**状态全名精确匹配**（传 `search-empty` 匹配不到 `search-empty:1315:light`，会被**静默跳过**）。另外 `ab2 plan` 模式**测不了 `app/*.css`**（被 Vite 内联进 `src/styles.css` 那张表）——必须用 `SPEC` 注入整份内联内容，否则给假 PASS（见 `scripts/css-audit/README.md` §七）。
+58. **审计装置会随 UI 批次漂移（260917）**：`scripts/css-audit/css-audit.mjs` 的 `nav.search` 一直在左上角下拉里找"全文搜索"菜单项，而 260917 该入口已搬到文档页右上角 → 跑 `ab2` 全矩阵时 `search-empty` 状态**在装置准备阶段直接抛 `no 全文搜索`**（崩的是状态准备、不是比对结果，容易误读成"清理导致回归"）。修法 = 按 `title/aria` 找右上角搜索按钮。**两个连带坑**：① 跑审计装置前先确认它跟得上最近的 UI 搬位；② `ab2` 的 `only` 过滤是**状态全名精确匹配**（传 `search-empty` 匹配不到 `search-empty:1315:light`，会被**静默跳过**）。另外 `ab2 plan` 模式**测不了 `app/*.css`**（`src/styles/app/*.css` 由样式单入口 `src/styles/index.css` 的 `@import … layer(legacy)` 链引入，Vite 打成同一个 CSS 产物）——必须用 `SPEC` 注入整份内联内容，否则给假 PASS（见 `scripts/css-audit/README.md` §七）。
 
 59. **浏览器端 = 本机附属窗口，不是伺服（260917）**：`electron/webApiServer.ts` 起的 HTTP 服务（默认端口 19880）把桌面渲染层交给**本机**浏览器：`POST /api/<channel>` 复用同一批 IPC handler、静态服务 `dist/`、`/__native.js` 注入 `window.lakeNative` 的 HTTP shim；**只绑 127.0.0.1**。用户 260917 明确**不做伺服**（不监听局域网、不对外开放）。开关在「设置 → 浏览器端」：**不落盘**（内存态，每次启动默认关闭）、**打开/关闭即时起停、无需重启**（`createWebServerController`）。「打开浏览器」按钮走 IPC `open_web_client` → 主进程 `shell.openExternal(url)`；**URL 由主进程按固定端口构造、渲染层不传 URL**（防开放重定向）。已知缺口（本批未做）：推送缺失（shim 里 `onSyncProgress`/`onPendingSummaryChanged` 是 no-op）、`dialog`/`shell`/`clipboard` 类通道在浏览器里语义错（会操作桌面机）、`/api/*` 只校验 `x-lake-token`（复用 assetToken、不校验 Origin）、`/__native.js` 不校验 token。
 
@@ -77,7 +77,7 @@
 ## F. S3 / 七牛
 
 40. **七牛报 `UnknownError` = Bucket 名不存在**（404 的字面 message）。先 `ListBuckets` 确认真实空间名，再排查网络。
-41. **Endpoint 必须是区域级地址**：bucket 专用虚拟主机地址（`local-lake-hebei.s3.cn-north-1.qiniucs.com`）+ path-style 会 404，不勾 path-style 会拼出双 bucket 域名导致 TLS 失败。用 `https://s3.cn-north-1.qiniucs.com` + path-style。
+41. **Endpoint 必须是区域级地址**：bucket 专用虚拟主机地址（`<bucket>.s3.<region>.qiniucs.com`）+ path-style 会 404，不勾 path-style 会拼出双 bucket 域名导致 TLS 失败。用 `https://s3.cn-north-1.qiniucs.com` + path-style。
 42. **Region 填 `cn-north-1`**，不是空间名。
 43. **单实例锁（audit 新增）**：dev 与打包版共用 userData/SingletonLock，不能同时运行；开发前先退出打包版。
 44. **S3 配置校验**：`s3Store.ts` / `syncUtils.ts` 的配置校验要求 endpoint/bucket/accessKeyId/secretAccessKey 非空（trim），否则抛「Endpoint、Bucket 和访问密钥均不能为空」；`testConnection`/`syncNow` 未保存配置时抛「请先保存 S3 配置」。
@@ -115,7 +115,7 @@
 ## I. 2026-08-03 中文斜体失效（font-synthesis）
 
 - **现象**：编辑器里斜体（Cmd+I / 工具栏 / em 标签）对中文不生效，英文正常。
-- **根因**：`styles.css` 的 `:root { font-synthesis: none }` 禁止浏览器合成缺失的字体样式。
+- **根因**：`src/styles/app/base.css` 的 `:root { font-synthesis: none }` 禁止浏览器合成缺失的字体样式（该规则现已改为 `font-synthesis: style weight`）。
   中文字体（PingFang SC / Microsoft YaHei 等）没有 italic 变体，`none` 会禁止合成斜体 →
   中文 `font-style: italic` 完全不倾斜；英文有斜体变体所以正常。
 - **修复**：`font-synthesis: style weight`（允许合成斜体 + 粗体）。
@@ -184,8 +184,7 @@
     —— 阈值（≥3 次 / 墙钟 ≥1.5s / 有失败）才落，用来区分"卡"是 CPU 还是 I/O。
 - **若稳定复现（不是偶发）再往下查**：CDP 采 `PerformanceObserver('longtask')` + `Profiler`，看热点是在
   内核 HTML→块模型转换（闭源，只能靠减少粘贴内容规避）还是图片解码/重排；**不要**先怀疑 logger。
-- **不要混淆**：大表格粘贴（≥1000 行 / ≥5000 格）走的是另一条护栏（`features/editor/tablePasteGuard.ts`，
-  HANDOFF §3#16），与本次现象无关。
+- **不要混淆**：大表格粘贴（≥1000 行 / ≥5000 格）走的是另一条护栏（`src/features/editor/tablePasteGuard.ts`），与本次现象无关。
 
 ## O. 导入 / 导出 / 批量多选（261106 起）
 

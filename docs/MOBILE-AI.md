@@ -1,6 +1,6 @@
 # 移动端 AI（Android）设计与实施契约
 
-> 状态：**P0 + P1 首版已实现（261023）**，待设备验收（P0 五项探针 + P1 八条验收见 §13）。设计部分仍是评审基线；实现偏差记录在 §17。
+> 状态：**P0 + P1 + P1.5/P1.6/P1.7 + P2（多模态）已实现**（设备实测见 §17）。设计部分仍是评审基线；实现偏差记录在 §17。**261112 文档校正**：入口已从「全屏路由」改为「首页第 4 格分页内嵌」，文件路径按现行实现核对（§17 是唯一实现清单）。
 > 归属：移动端（src/mobile/** + android/**）；**不改桌面 AI 行为**（共享的只是 core 纯函数）。
 > 相关：[MOBILE-TECH-STACK.md](./MOBILE-TECH-STACK.md)（架构/互斥域）· [MOBILE-DESIGN.md](./MOBILE-DESIGN.md)（视觉/浮层/44 Rule）· [LAKEX-CONTRACT.md](./LAKEX-CONTRACT.md)（内核命令）· [HANDOFF.md](./HANDOFF.md)（当前状态）。
 
@@ -52,16 +52,16 @@
 
 ## 4. 入口与信息架构
 
-- **唯一入口**：首页底部胶囊「AI」（已是定稿三格之一；HomePage.tsx:743 目前点出的是「尚未接入」toast，P1 换成打开 AI 页）。
-- **不新增入口**：工作区胶囊是定稿四格；工作区菜单不许放搜索/设置；工作区顶栏右上是「编辑/完成 + 同步」。**文档内入口 = 不做**（D9）。
+- **唯一入口**：首页底部**五格 Dock 的第 4 格「AI」**（261110 改版；`src/mobile/home/HomePage.tsx` 以 `embedded` 模式内嵌 `MobileAiPage`，不是独立全屏路由）。
+- **不新增入口**：工作区胶囊 = 文档树 · 标签页 · 大纲 · 切换笔记本；工作区菜单不许放搜索/设置；工作区顶栏右上是「编辑/完成 + 同步」。**文档内入口 = 不做**（D9）。
 - **系统分享（P2）**：已有 ACTION_SEND（text/plain、image/*，AndroidManifest.xml）→ 打开 AI 页并预填文本/图片。
-- **不占胶囊格**：AI 页是**全屏功能页**，从首页盖上去，关闭回首页。
+- **不占胶囊格**：AI 是首页第 4 格**分页**（`HOME_TABS` 之一），不新增工作区胶囊格；进入/写作/多选态隐藏 Dock 与＋，返回回到上一个非 AI 空间。
 
 ### 4.1 路由与层（不改 route 状态机）
 
 - AI 页**不入 route.kind**，不改 useRouteTransition 的两层状态机（261019/261020 两次因 transform 包含块踩坑）。
-- 实现：MobileApp 里 aiOpen 状态 → 条件挂载 MobileAiPage；类名 .mobile-ai-page，position:fixed;inset:0；层序用新令牌 --mobile-z-page: 30（低于 drawer 40、高于 dock 7；在 theme/tokens.css 新增并注释「全屏功能页」）。
-- 进场 = **挂载淡入 120ms**（--lake-motion-fast；符合 DESIGN「挂载出现用 animation」），不做 push 位移；硬件返回注册 pushBackHandler（ui/backStack.ts）。
+- 实现：首页第 4 格分页内嵌（`HOME_TABS` 驱动，`MobileAiPage` 带 `open embedded`）；层序令牌 `--mobile-z-page: 30`（低于 drawer、高于 dock；定义在 `src/mobile/theme/tokens.css`）。
+- **写作/多选态隐藏 Dock 与＋**；返回键回到上一个非 AI 空间（`MobileApp` 的 `lastNonAiTabRef` + `ui/backStack.ts`）。进场按移动端动效契约（挂载淡入），不做 push 位移。
 
 ---
 
@@ -103,7 +103,7 @@
 | 颜色 | 只用 --lake-* 令牌；不新增颜色字面量 | ui-metrics |
 | 图标 | lucide（Sparkles / Camera / Image / Paperclip / FileText / ArrowUp / Square），描边 1.75 | AGENTS §3#14 |
 
-**44 Rule**：chip、顶栏图标钮、输入栏内按钮、资源网格项、资料 chip 的 ×，全部用 ::after 把命中区补到 --mb-tap-min（44），并**登记进 src/mobile/mobile.css 的「触达补足注册表」**（mobile.css:429）。不要靠放大视觉尺寸达标。
+**44 Rule**：chip、顶栏图标钮、输入栏内按钮、资源网格项、资料 chip 的 ×，全部用 ::after 把命中区补到 --mb-tap-min（44），并**登记进移动端命中区补足清单**（`src/mobile/mobile.css` 的「触达补足注册表」段）。不要靠放大视觉尺寸达标。
 
 ### 5.2 状态
 
@@ -164,8 +164,8 @@
 
 资源选择器：
 - 范围 = **会话资料集（A+B）的资源并集**，**与「本轮发送清单」无关**：例如资料 = A+B、本轮只发 A 的正文，仍可挑 B 里的图片；按文档分组（组头 = 文档标题）。
-- 数据源：AssetSyncPlugin.listAssets({noteId})（AssetSyncPlugin.kt:222）只取 filename/size；**不要在这里算 sha256**（现有实现会算，附件多的文档会卡；P1 加一个 listAssetsLite 或按目录读）。
-- 缩略图：readAssetPreview(noteId, filename)（bridge/assets.ts:21）返回 dataUrl，**只用于画缩略图**。
+- 数据源：AssetSyncPlugin.listAssets({noteId})（`android/app/src/main/java/com/lakexlocalnotes/android/AssetSyncPlugin.kt`）只取 filename/size；**不要在这里算 sha256**（现有实现会算，附件多的文档会卡；P1 加一个 listAssetsLite 或按目录读）。
+- 缩略图：readAssetPreview(noteId, filename)（`src/mobile/bridge/assets.ts`）返回 dataUrl，**只用于画缩略图**。
 - 只允许图片（image/*），其它置灰 + 理由「暂只支持图片」。
 - 多选 ≤10 张；选中项在输入栏上方显示缩略图 ×（可删）。
 
@@ -178,18 +178,23 @@
 
 ## 8. 预算模型
 
-### 8.1 常量（新文件 src/mobile/ai/aiLimits.ts，单一来源）
+### 8.1 常量（单一来源：`src/mobile/ai/aiSession.ts` + `src/mobile/ai/aiImages.ts` + `src/core/aiChatMessages.ts`）
 
 ```ts
+// src/mobile/ai/aiSession.ts
 export const AI_CORPUS_MAX_DOCS = 5;          // 对齐桌面 AI_MAX_DOCUMENTS
 export const AI_CORPUS_MAX_CHARS = 60_000;    // 资料总字数（约 4 万 token，128k 上下文留余量）
 export const AI_CORPUS_MIN_CHARS = 200;       // 低于此值视为空文档，不收录并提示
 export const AI_HISTORY_MAX_TURNS = 12;       // 移动端只留最近 12 轮（24 条）
+// src/mobile/ai/aiImages.ts
 export const AI_IMAGES_MAX = 10;              // 对齐桌面 AI_MAX_IMAGES
 export const AI_IMAGE_MAX_EDGE = 1600;
 export const AI_IMAGE_MAX_BYTES = 1024 * 1024;
-export const AI_TOTAL_MAX_CHARS = 200_000;    // 上游总护栏（含历史 + 资料），与桌面同值
+// src/core/aiChatMessages.ts
+export const AI_MAX_TOTAL_CHARS = 200_000;    // 上游总护栏（含历史 + 资料），与桌面同值
 ```
+
+> 会话持久化上限（50 条 / 30 天 / 单份 2MiB）与图片存档上限（单会话 20MiB）在 `src/mobile/ai/aiConversationPersist.ts`，不在本组常量内。
 
 ### 8.2 收录算法（纯函数 buildCorpus()，可单测）
 
@@ -202,7 +207,7 @@ export const AI_TOTAL_MAX_CHARS = 200_000;    // 上游总护栏（含历史 + �
 
 **绝不静默**：任何 truncated/excluded 都必须在资料条徽标 + 发送前提示行 + 对话首条分隔行三处可见（三处文案同源）。
 
-### 8.3 文案口径（单一来源 aiCopy.ts）
+### 8.3 文案口径（现状：分散在 `AiSendSheet.tsx` / `MobileAiPage.tsx` / `aiChatStore.ts`；**没有 aiCopy.ts**——这是已知偏差，未立项）
 
 - 资料条：资料 · 2 篇；清单里被关掉的 chip 显示灰点。
 - 提示行：本轮发送：2 篇 · 15,617 字 ▾；清单为空：本轮不带资料 · 选择发送内容。
@@ -215,7 +220,7 @@ export const AI_TOTAL_MAX_CHARS = 200_000;    // 上游总护栏（含历史 + �
 
 > 结论先行：**无状态 API 下，“只发一次”不是不发，而是“发的内容逐字节不变、位置不变”**——供应商前缀缓存会把它按约 1/10 计价。要做到这一点，资料必须**会话级冻结**并放在历史最前，历史只能**追加**。
 
-### 9.1 先看 DSH 怎么做的（只读调研；源码 = `/Users/admin/file/local-lake/deepseek-harness-master`）
+### 9.1 先看 DSH 怎么做的（只读调研；源码 = 外部参考仓 `/Users/admin/file/local-lake/deepseek-harness-master`，**不在本仓**）
 
 | 关注点 | DSH 的做法 | 出处 |
 |---|---|---|
@@ -227,7 +232,7 @@ export const AI_TOTAL_MAX_CHARS = 200_000;    // 上游总护栏（含历史 + �
 | @文件 | 只是 prompt 文本，不附带内容，模型必须自己调 read 工具 | `packages/context/file-reference/README.md` |
 | 压缩 | 显式 replace，**从第一个被替换的消息起缓存失效**，代价被接受 | `packages/compaction/compaction-image-offload/README.md` |
 | 可观测 | token 用量分四个不重叠桶（input / output / cacheRead / cacheWrite），界面显示 cache 命中率 | `.agents/notes/archived/feature/2026-07-21-tui-footer-cache-hit-rate.md` |
-| 文档习惯 | 每个包 README 固定三段：What the model sees / Token effect / **KV Cache effect** | `docs/cookbook/adding-a-package.md` |
+| 文档习惯 | 每个包 README 固定三段：What the model sees / Token effect / **KV Cache effect** | DSH 仓库的 adding-a-package 指南 |
 
 ### 9.2 我们的简化映射（不照搬复杂度）
 
@@ -308,7 +313,7 @@ export const AI_TOTAL_MAX_CHARS = 200_000;    // 上游总护栏（含历史 + �
 
 ### 10.1 读正文（资料）
 
-readNoteBody(kind,id)（src/mobile/data/noteBodies.ts）→ lakeHtmlToPlain()（bridge/notes.ts:123）→ 纯文本。
+readNoteBody(kind,id)（`src/mobile/data/noteBodies.ts`）→ lakeHtmlToPlain()（`src/mobile/bridge/notes.ts` 的 readNoteBody 分支）→ 纯文本。
 
 - 缓存：Map<noteId, {hash, text}>，key 用 notes.content_hash；hash 不变不重读。
 - 统计字数：countChars(plain)（同文件既有函数），选择器与预算条共用。
@@ -351,7 +356,7 @@ readNoteBody(kind,id)（src/mobile/data/noteBodies.ts）→ lakeHtmlToPlain()（
 ### 10.6 隐私与密钥
 
 - Key 只在原生：写入时 JS 传一次明文到原生（aiSaveSettings({apiKey})），读取只回 keyTail（sk-****1234）。
-- 存 Android Keystore（AES-GCM）+ SharedPreferences：复用 SecureStorePlugin.kt 的模式，**把加解密抽成 SecretBox.kt 单一实现**，两个插件共用；新别名 lakex-local-notes.ai.v1、prefs lakex-local-notes-ai。
+- 存 Android Keystore（AES-GCM）+ SharedPreferences：AI 配置走 `SecretBox`（`android/app/src/main/java/com/lakexlocalnotes/android/SecretBox.kt`，别名 lakex-local-notes.ai.v1 / prefs lakex-local-notes-ai）；**SecureStorePlugin 与 SecretBox 目前是两处实现**（S3 密钥走 SecureStorePlugin，AI 走 SecretBox）。「合并成单一实现」是已登记的计划，**尚未执行**（改前要同时回归两边的别名/迁移与 Keystore 失败路径）。
 - 日志：请求/响应只记长度与状态码，**不记 key、不记正文**。
 - 资料外发提示：发送前提示行 + 首次使用一次性说明（设置页文案，不做弹窗）。
 - 退出即清：内存会话 + 临时文件全清（cacheDir/ai-*）。
@@ -360,7 +365,7 @@ readNoteBody(kind,id)（src/mobile/data/noteBodies.ts）→ lakeHtmlToPlain()（
 
 ## 11. 原生通道（P0 核心）
 
-### 11.1 插件接口（android/app/src/main/java/com/lakexlocalnotes/mobile/AiChatPlugin.kt）
+### 11.1 插件接口（`android/app/src/main/java/com/lakexlocalnotes/android/AiChatPlugin.kt`）
 
 Capacitor 插件名 AiChat，注册进 MainActivity 的插件列表。
 
@@ -399,7 +404,7 @@ Capacitor 插件名 AiChat，注册进 MainActivity 的插件列表。
 | src/core/aiProviders.ts（供应商/设置/消息块类型） | **直接共用** |
 | src/core/aiErrors.ts | 共用；P0 增 aiErrorTextFromCode() |
 | src/features/ai/aiPrompts.ts（预设动作 + 系统提示 + 文档标记） | **只共用纯数据/纯函数**（AI_PROMPT_PRESETS、AI_SYSTEM_PROMPT、AI_DOCUMENT_MAX_CHARS）；UI 不复用 |
-| electron/ai/aiChatMessages.ts 护栏 | **上收为 src/core/aiChatMessages.ts**（纯函数、无 node: 导入），桌面 main 改为 re-export；移动端共用（约 120 行，属必要重构） |
+| electron/ai/aiChatMessages.ts | **已上收为 `src/core/aiChatMessages.ts`**（纯函数、无 node: 导入），桌面侧保留 re-export；移动端共用 |
 | electron/ai/aiClient.ts | 桌面专用（OpenAI SDK），移动端不用 |
 | 桌面 UI（AiAssistantDialog / AiMessageBody / MarkdownView） | **不复用**（两端 UI 不共享）；移动端自写 src/mobile/ai/* |
 | Markdown | **解析器共用** `src/core/markdown.ts`（261023 从桌面抽出：块/行内 token + **GFM 表格**；纯数据、不碰 React/DOM）；**渲染各端自绘**：桌面 `MarkdownView.tsx`（`.md-preview` + `window.open`）、移动端 `AiMarkdown.tsx`（`.ai-md` + `<a target=_blank>`）。都只渲染 React 节点、禁止 dangerouslySetInnerHTML，链接只放行 http(s) |
@@ -424,7 +429,7 @@ Capacitor 插件名 AiChat，注册进 MainActivity 的插件列表。
 ### P1 · AI 页 MVP
 
 范围：
-- 首页 AI 键 → AI 页（全屏、淡入、硬件返回）。
+- 首页 AI 键 → AI 页（P1 立项时为全屏路由；**261110 起改为首页第 4 格分页内嵌**，见 §4.1）。
 - 空态 / 输入栏 / 流式 / 停止 / 错误重试。
 - 资料条 + 资料选择器（搜索、多选、预算条、仅 doc）。
 - 资料块组装（固定前缀 + pin 裁剪 + hash 缓存）。
@@ -433,25 +438,28 @@ Capacitor 插件名 AiChat，注册进 MainActivity 的插件列表。
 - 结果动作：复制 / 存为新文档 / 存为小记。
 - 发送前提示行；关闭即清；超预算提示开新对话（不压缩历史）。
 
-新增文件（建议）：
+实施清单（立项时建议；**实际落地文件以下方及 §17 为准**，261112 核对）：
 
 ```
-src/mobile/ai/MobileAiPage.tsx     页面外壳（顶栏/资料条/内容/输入栏）
-src/mobile/ai/AiConversation.tsx   会话状态机（发送/停止/重试/资料变更）
-src/mobile/ai/AiMessageList.tsx    气泡 + 分隔行 + 自动跟底
-src/mobile/ai/AiComposer.tsx       输入栏 + ＋ ActionSheet + 待发送图片条
-src/mobile/ai/AiCorpusBar.tsx      资料条
-src/mobile/ai/AiSendSheet.tsx      本轮发送清单（每篇开关 / 全部发送 / 全部不发）
-src/mobile/ai/AiCorpusSheet.tsx    资料选择器
-src/mobile/ai/AiResourceSheet.tsx  （P2）资源选择器
-src/mobile/ai/AiMarkdown.tsx       最小 Markdown 渲染
-src/mobile/ai/aiSession.ts         会话内存模型（纯逻辑 + 单测）
-src/mobile/ai/aiLimits.ts / aiCopy.ts / aiSuggestions.ts
-src/mobile/ai/ai.css               （登记 mobileLayers 基线，必须由组件 import）
-src/core/aiCorpus.ts               资料块/系统提示/标记（纯函数）
-src/core/aiChatMessages.ts         从 electron 上收
-src/core/aiNetwork.ts              出网判据
-src/mobile/settings/AiSettingsSheet.tsx（或设置子页）
+src/mobile/ai/MobileAiPage.tsx       页面外壳（顶部/资料条/内容/输入栏；261110 起支持 embedded）
+src/mobile/ai/AiHistoryPage.tsx      历史会话页（列表/搜索/删除/继续）
+src/mobile/ai/AiCorpusSheet.tsx      资料选择器
+src/mobile/ai/AiSendSheet.tsx        本轮发送清单（每篇开关 / 全部发送 / 全部不发）
+src/mobile/ai/AiImageSheet.tsx       资源图片选择器
+src/mobile/ai/AiMessageImages.tsx    消息内图片网格
+src/mobile/ai/AiMarkdown.tsx         最小 Markdown 渲染
+src/mobile/ai/aiSession.ts           会话纯逻辑（预算/装配/建议 chips）
+src/mobile/ai/aiChatStore.ts         模块级会话状态（发送/停止/资料/历史）
+src/mobile/ai/aiConversationPersist.ts 历史持久化（50 条 / 30 天 / 2MiB）
+src/mobile/ai/aiImages.ts            图片压缩与上限；aiImageStore.ts 图片存档
+src/mobile/ai/aiSettings.ts          AI 开关与设置读写
+src/mobile/ai/ai.css                 （登记 mobileLayers 基线，必须由组件 import）
+src/core/aiCorpus.ts                 资料块/系统提示/标记（纯函数）
+src/core/aiChatMessages.ts           从 electron 上收
+src/core/aiNetwork.ts                出网判据
+src/mobile/settings/AiSettingsSection.tsx + useAiSettingsForm.ts  设置页 AI 子页
+src/mobile/native/aiChat.ts + src/mobile/bridge/ai.ts            插件封装与域方法
+android/app/src/main/java/com/lakexlocalnotes/android/AiChatPlugin.kt + SecretBox.kt  原生通道/密钥
 ```
 
 **P1 验收**：
@@ -460,10 +468,10 @@ src/mobile/settings/AiSettingsSheet.tsx（或设置子页）
 3. 发送：原生流式可见、可停止、错误可读、重试可用。
 4. 结果：复制 / 存为新文档（正文与回答一致、无覆盖）/ 存为小记。
 5. 组合场景：资料 = A+B 固定，本轮只发 A，从 B 挑图发送；下一轮继承「只发 A」；再打开 B ⇒ 资料块变化、缓存重建一次。
-6. 关闭页面再进：资料与历史为空（不持久化）。
-6. 关闭 AI 开关：任何路径不出网（抓包/日志双证）。
-7. 设备截图（adb exec-out screencap -p）+ 走查新增 1 屏 ai-home（23→24 屏，只跑该屏）。
-8. 门禁：tsc / vitest / 双端构建 / check:mobileui / ui-metrics / mobileLayers 基线只许按新增文件登记。
+6. 关闭页面再进：资料集清空；**历史按 P1.6 从本机恢复**（设备本地保存，不上云）。
+7. 关闭 AI 开关：任何路径不出网（抓包/日志双证）。
+8. 设备截图（adb exec-out screencap -p）+ 走查新增 1 屏 ai-home（23→24 屏，只跑该屏）。
+9. 门禁：tsc / vitest / 双端构建 / check:mobileui / ui-metrics / mobileLayers 基线只许按新增文件登记。
 
 ### P2 · 多模态
 
@@ -487,9 +495,9 @@ src/mobile/settings/AiSettingsSheet.tsx（或设置子页）
 
 | 类型 | 项 |
 |---|---|
-| 单测 | aiSession（发送/停止/资料增删/清空）· aiLimits+buildCorpus（顺序/截断/段落边界/未收录）· aiCorpus（块格式/markers/图片占位/清单为空不加块）· aiSendList（默认继承/关闭不移除/× 才移除）· aiCacheShape（资料块字节稳定、历史只追加、清单变化只影响本轮）· aiChatMessages（pin + 40 条 + system 保护）· aiNetwork（AI 开关 × 网络 × 云同步互不影响）· aiErrorText（码表）· AiMarkdown（不渲染 HTML、链接只放行 http(s)）· aiSuggestions |
-| 静态护栏 | mobileLayers.test.ts（新 css 登记基线）· mobileIndependence.test.ts（不 import 桌面样式/UI）· mobileStructure.test.ts（新文件放 src/mobile/ai/）· ui-metrics（无颜色/字号字面量）· lakeNativeContract/contractSurface（5 个方法登记）· CSP 测试不变（**不放开外网**） |
-| 设备门禁 | 走查 +1 屏 ai-home；check:mobilesnap 不含 AI 页（避免再动 6 态基线；6 态基线本来就陈旧待重烤） |
+| 单测（现状文件） | `src/mobile/ai/aiSession.test.ts`（预算/装配/建议）· `aiImages.test.ts` / `aiImageStore.test.ts`（压缩/存档）· `aiConversationPersist.test.ts`（50 条/30 天/2MiB）· `AiMarkdown.test.ts`（不渲染 HTML、链接只放行 http(s)）· `src/core/aiCorpus.test.ts`（块格式/markers/图片占位/清单为空）· `electron/ai/aiChatMessages.test.ts`（预算与 system 保护）· `src/core/aiNetwork.test.ts`（AI 开关 × 网络 × 云同步互不影响）· `src/core/aiErrors.test.ts` / `aiErrorCode.test.ts`（码表） |
+| 静态护栏 | `src/mobile/mobileLayers.test.ts`（新 css 登记基线）· `src/mobile/mobileIndependence.test.ts`（不 import 桌面样式/UI）· `src/mobile/mobileStructure.test.ts`（新文件放 src/mobile/ai/）· `scripts/ui-metrics.mjs`（无颜色/字号字面量）· `src/mobile/native/lakeNativeContract.test.ts` / `src/mobile/contractSurface.test.ts`（桥方法登记）· CSP 测试不变（**不放开外网**） |
+| 设备门禁 | 走查 +1 屏 ai-home；check:mobilesnap 不含 AI 页（避免再动设备快照基线；基线本来就陈旧待重烤） |
 | 手工 | 断网/弱网/后台切换/取消/超长文档/空文档/损坏正文/关闭开关/首次配置 |
 | 日志 | 只记 requestId、耗时、字符数、状态码；不记 key 与正文 |
 
@@ -508,7 +516,7 @@ src/mobile/settings/AiSettingsSheet.tsx（或设置子页）
 | R5 | Markdown 渲染工作量 | 只做最小子集；代码块用等宽字体不引入高亮库 |
 | R6 | 资料变更语义 | 采用「追加新前缀 + 分隔行」；若实测模型混淆，退回「改资料即新会话」 |
 | R7 | 结果落点争议 | P1 = 新建文档/小记；恢复文档内入口后再补 insertAtPosition |
-| R8 | 6 态基线陈旧 | 与本设计无关（HANDOFF §3#23），但动 AI 页别顺手改基线 |
+| R8 | 设备快照基线陈旧 | 与本设计无关（见 HANDOFF §3 的基线待办），但动 AI 页别顺手改基线 |
 
 ---
 
@@ -518,22 +526,23 @@ src/mobile/settings/AiSettingsSheet.tsx（或设置子页）
 - 261023：新增 D13「每轮发送清单」，§9 首版为“每轮重建 + 历史剥离资料”。
 - 261023（二修，参照 DSH）：改为**资料集会话级冻结 + 固定前缀 + append-only 历史**；发送清单默认继承；图片留在历史；P1 不做压缩。附 DSH 出处与 KV Cache 影响表。
 - 261023（三修，用户定稿）：资料集冻结但**逐篇发送开关保留**（支持“资料 A+B、仅发 A、用 B 的图片”）；资源范围 = 会话资料集，与发送清单无关；会话内不再提供资料增删入口。
+- 261112（文档校正）：入口改为首页第 4 格内嵌；文件路径按现行实现核对（去掉未创建的 AiComposer / aiLimits / AiSettingsSheet 等）；SecretBox 表述改为「SecureStorePlugin 与 SecretBox 两处、AI 用 SecretBox、统一计划未执行」。
 
 ---
 
-## 17. 实现状态（261023）
+## 17. 实现状态（261023；261112 按现行实现核对路径/入口）
 
 ### 已落地（可编译、门禁绿）
 
 | 层 | 文件 | 说明 |
 |---|---|---|
-| 原生通道 | `android/.../AiChatPlugin.kt` · `SecretBox.kt` | Keystore 存配置；HttpURLConnection + SSE；ai:delta / ai:error / ai:done；aiChat / aiCancel / aiTestConnection / get·saveSettings；内容块解析（text / image_url，资源图按 `{noteId,filename}` 读文件） |
+| 原生通道 | `android/app/src/main/java/com/lakexlocalnotes/android/AiChatPlugin.kt` · `android/app/src/main/java/com/lakexlocalnotes/android/SecretBox.kt` | Keystore 存配置；HttpURLConnection + SSE；ai:delta / ai:error / ai:done；aiChat / aiCancel / aiTestConnection / get·saveSettings；内容块解析（text / image_url，资源图按 `{noteId,filename}` 读文件） |
 | 桥接 | `src/mobile/native/aiChat.ts` · `src/mobile/bridge/ai.ts` | 插件封装 + 域方法（`aiReadDocText` / `aiListNoteImages`）；调试契约 +5（55/56） |
 | core | `aiCorpus.ts` · `aiNetwork.ts` · `aiChatMessages.ts`（从 electron 上收） · `aiErrors.aiErrorInfoFromCode` · `core/markdown.ts`（与桌面共用解析器，含 GFM 表格） | 资料块 / 出网判据 / 统一预算 / 错误码 / Markdown 解析 |
 | 会话与历史 | `aiChatStore.ts` · `aiConversationPersist.ts` · `data/aiConversationRepository.ts`（schema v4 `ai_conversations`） | 模块级会话（关页不丢、后台继续）；每会话文件 `ai/conversations/{id}.json`；启动恢复最近一次；50 条 / 30 天 / 单份 2MiB；v1 单文件迁移 |
-| UI | `src/mobile/ai/`（MobileAiPage / AiHistoryPage / AiCorpusSheet / AiSendSheet / AiImageSheet / AiMarkdown / aiImages / aiSession / aiSettings / ai.css） | 全屏页、资料条与清单、历史（列表 + 详情 + 搜索 + 删除/清空）、图片（拍照/相册压缩 + 资料图片引用）、流式跟底可暂停、结果三动作 |
-| 接线 | `MobileApp.tsx`（lazy + aiOpen） · `HomePage.tsx`（AI 键） · `SettingsDrawer.tsx`（AI 子页：开关/端点/模型/Key/温度/连通性/清 Key/清历史） · `main.tsx`（ai.css） · `tokens.css`（--mobile-z-page） | 入口/设置/层序 |
-| 门禁 | tsc · vitest（379 文件 / 2616 例） · `check:core` · `check:mobileui` · `mobileLayers`（ai.css 329/1） · `git diff --check` | 全绿（并行桌面会话在途改动期间曾短暂红，与本模块无关） |
+| UI | `src/mobile/ai/`（MobileAiPage / AiHistoryPage / AiCorpusSheet / AiSendSheet / AiImageSheet / AiMessageImages / AiMarkdown / aiImages / aiImageStore / aiSession / aiChatStore / aiSettings / aiConversationPersist / ai.css） | 首页第 4 格分页内嵌（原为全屏页）、资料条与清单、历史（列表 + 详情 + 搜索 + 删除/清空）、图片（拍照/相册压缩 + 资料图片引用）、流式跟底可暂停、结果三动作 |
+| 接线 | `HomePage.tsx`（第 4 格 `lazy` 内嵌 MobileAiPage） · `MobileApp.tsx`（AI 分页返回 / 写作与多选态隐藏 Dock） · `SettingsDrawer.tsx` + `settings/AiSettingsSection.tsx` + `useAiSettingsForm.ts`（开关/端点/模型/Key/温度/连通性/清 Key/清历史） · `main.tsx`（ai.css） · `theme/tokens.css`（--mobile-z-page） | 入口/设置/层序 |
+| 门禁 | tsc · 定向 vitest（AI 相关文件；全量计数见 HANDOFF §1） · `check:core` · `check:mobileui` · `mobileLayers` · `git diff --check` | 当时全绿（并行桌面会话在途改动期间曾短暂红，与本模块无关） |
 
 ### 设备实测（emulator-5554 + 小米 MiMo `mimo-v2.6-flash`）
 
@@ -549,7 +558,7 @@ src/mobile/settings/AiSettingsSheet.tsx（或设置子页）
 | 跟底 | 流式中上滑 1.8s **不回弹**、出现「回到底部」，点击后回底 |
 | 后台/关页 | 切后台或关 AI 页后流继续；再进页面能看到完整回答 |
 
-截图（本地预览件 `docs/preview/`，未入库）：`ai-device-*.png`（空态、资料、对话、流式、停止、错误、设置、历史列表/详情、图片待发送/回答、跟底暂停/回底）。
+截图（本机预览目录 `preview/`，未入库）：`ai-device-*.png`（空态、资料、对话、流式、停止、错误、设置、历史列表/详情、图片待发送/回答、跟底暂停/回底）。
 
 ### 已修问题（探针期间发现）
 

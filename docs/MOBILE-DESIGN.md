@@ -96,9 +96,9 @@ components:
 ### 0.3 外壳与组件新口径
 
 - **顶栏**：贴边、高 **52**、初始 `background: transparent`（与光场完全融合、无发丝线）；滚动 >6px 后浮出 `--mb-glass-bg-bar` + 底部 0.5px 线 + 下方 14px 渐隐；首页 tab 收起、居中显示当前页小标题（16/600）。文档页**阅读态**：下滚 >60px 整条 `translateY(-100%)` 隐藏，上滚回来。
-- **首页 tab**：纯文字（16/500，选中 600 + `--lake-text-1`），间距 20，无底色/无下划线。
+- **首页入口**（261110 改版）：底部**五格 Dock**（小记 / 知识库 / 日记 / AI / 标签）+ 中央悬浮「＋」；原「首页文字 tab」已废弃。顶栏只留 设置 | 空间标题 | 排序/视图 + 搜索 + 云同步。
 - **卡片**：圆角 16、`--mb-shadow-card`、内距 16；小记卡标题 16/600，摘要 14/1.62，元信息 12（AA）。
-- **底部胶囊**：形态/尺寸/命中不变（56 高、r28、3 格），底色改玻璃 + `--mb-shadow-float`；编辑态 above-dock 逻辑不变。
+- **工作区胶囊**（注意不是首页 Dock）：文档树 / 标签页 / 大纲 / 切换笔记本四段，形态/尺寸/命中不变，底色玻璃 + `--mb-shadow-float`；编辑态 above-dock 逻辑不变。首页 Dock 见上条。
 - **编辑 dock**：浮动圆角 26、玻璃 + `--mb-shadow-float`、内容底距重算；**图标分组不做**（用户 261107 明确）。键盘 `--kb-offset` 契约不变。
 - **Sheet**：顶角 28、头部玻璃；body/结构/关闭方式不变。
 - **设置**：分组卡 r16 + 行高 60 + 组内距 18；每行左侧 34 彩色图标块（`--c` 主色 + 渐变浅底）、右侧可显示当前值（14/`--lake-text-3`）；页面大标题 28/700。
@@ -379,8 +379,9 @@ npm run check:mobilesnap   # 设备级：10 态整页计算值快照（0 差异�
 node scripts/css-audit/drive.mjs 9335 scripts/css-audit/mobile-walkthrough.mjs   # 设备级：23 屏截图 + 五类探针
 ```
 
-**基线只许降**的账本：桌面样式 import 白名单（现状 4 条：quick-notes + 2 feature CSS + 字体资源）·
-桌面类名 token（**0**，不允许回涨）· 反向耦合（**0**）· 各样式文件声明数/重复组（`mobileLayers.test.ts`）·
+**基线只许降**的账本（261112 核对；唯一账本是对应测试的常量表）：桌面样式 import 白名单（`mobileIndependence.test.ts`：3 个文件 / 4 条，**全部是 `styles/fonts/**` 字体资源**；桌面 CSS 已清零）·
+桌面/共享组件 import 白名单（同文件：1 条 `components/model/treeDrag`）·
+桌面类名 token（**0**，不允许回涨）· 反向耦合（**0**）· 各样式文件声明数/重复组（`mobileLayers.test.ts` 的 `BASELINE`）·
 `!important`（现状 **19**，新增须写明理由；都是压「内核行内样式 / 未分层内核 CSS」的必需项 ——
 未分层的普通声明会压过我们 @layer 里的普通声明，只有「分层里的 !important」才强于「未分层的 !important」，
 即 CSS Cascade 5 的 important 层序反转；261013 的 +2 来自压内核桌面引擎几何 `min-height:1024` 与 90px 底内距）·
@@ -422,8 +423,7 @@ node scripts/css-audit/drive.mjs 9335 scripts/css-audit/mobile-walkthrough.mjs  
 - **CSS 分层现状 = 未分层**：`theme/index.css` 只有 `@layer mtokens, mkit, mshell, mfeature, moverlay, ma11y;` 声明，
   base/tokens/light/dark 是裸 `@import`，其余 20 个 CSS 由 JS import ⇒ **规则全部未分层，顺序靠 import 顺序**。
   给单个文件加 `@layer{}` 会被未分层规则全量压过（观感回归）；全端 @layer 迁移是独立项目，**不要分批做**。
-- **预算 = `src/mobile/mobileLayers.test.ts` 逐文件声明数 + dupGroups 棘轮**（只许降）。kit/quick-notes/mobile 已在本轮收紧：
-  kit 596→**588**、quick-notes 281→**255**、mobile 1665→**1609**。新增规则前先在同一文件删等量，或说明为什么不删。
+- **预算 = `src/mobile/mobileLayers.test.ts` 逐文件声明数 + dupGroups 棘轮**（只许降）。**数字唯一账本 = 该文件 `BASELINE`**；261112 核对现值：kit **626**、quick-notes **269**、mobile **1678**（dupGroups 7）、floating **314**、bitable **893**。新增规则前先在同一文件删等量，或说明为什么不删。
 - **颜色/literals 只在 theme/**；pad 几何只在 `pad/pad.css`；`ink/inkPad.shared.css` 是桌面副本（契约，不是重复）。
 
 ### TS 原语台账（本轮新增）
@@ -438,7 +438,7 @@ node scripts/css-audit/drive.mjs 9335 scripts/css-audit/mobile-walkthrough.mjs  
 
 ### CSS 审计结论（本轮已删死规则）
 
-- 全端 23 个样式文件 / 1519 条规则 / 6394 条声明；**完全相同声明块 142 组**，但绝大多数是「同一视觉语义的不同状态选择器」（disabled/selected/active），属有意重复，**不做跨语义大合并**。
+- 全端 23 个样式文件（261112 现为 25 个）/ 1519 条规则 / 6394 条声明；**完全相同声明块 142 组**，但绝大多数是「同一视觉语义的不同状态选择器」（disabled/selected/active），属有意重复，**不做跨语义大合并**。
 - 本轮删除**已验证 0 引用**的死规则 21 条 / 90 声明：quick-notes 的 `.quick-note-emoji-panel*`（已被 ui/EmojiPanel 取代）与 4 个 `qn-tag-manager__*` 死件、mobile 的 `.mbt-tables/.mbt-table-tab*` 与 `.mobile-qn-textarea/images/add`、kit 的 `.mb-spacer/.mb-btn--lg/.mb-row__actions/.mb-tag--ok/error`；同时把 `.mbt-table-tab` 从命中区注册表移除。
 - **不做的合并**：两种卡面材质（`.mb-card` vs `.mbt-card` 细边白面）、行首图标槽 4 套、med-* dock vs mb-usheet-* dock、nodeIcon 表情页 vs 输入态 `.mb-emoji-*`、pad.css 几何回流、两套 z 阶梯/时长族/圆角族（词表保留）、动态拼接类名、第三方 `.ne-*/.univer-*/.draw-*`。
 
@@ -450,5 +450,8 @@ node scripts/css-audit/drive.mjs 9335 scripts/css-audit/mobile-walkthrough.mjs  
 4. **P2 `.mb-row` 吸收 `.mb-list-item` 已完成（261107）**：kit 588→575（含 glass +4）；list-item 仅保留 `gap:10px` 覆盖，active/meta 合并。
 5. **P2 `.mb-glass` / `.mb-surface` 已完成（261107）**：glass = kit +4 条声明替换 5 条稳定玻璃规则的重复 blur（mobile 1609→1603、floating −2、dock −2；顶栏滚动态因瞬态类保留）；surface = bitable 10 组细边白面的 border/radius/background 并成选择器组（bitable 957→**939**）。**`.mb-empty--compact` / `.mb-iconbtn--xs` 复核后不做**：bitable 空态有 3 套内距/对比度语义（text-3/text-4、xxl/giant），28px 方钮有 4 套几何（toast 关闭/树行动作/文件×/色板），强行归一会改变观感且收益仅为数字，按「一个语义一套」原则保留各自实现。
 5b. **P2 a11y 行激活部分完成（261107）**：`ui/rowActivation.ts` 接入首页小记卡 + 知识库书架/列表卡；目录行内 ⋯/＋ 在行 button 内（嵌套 button 非法），保留由行语义承载。
-6. **P2 大文件拆分（两处完成 261107）**：SettingsDrawer 785→**755**（菜单模型 → `settings/settingsMenu.ts`）；TagsHomeTab 608→**546**（长按拖拽排序 → `tags/useTagDragSort.ts`，行为/判据不变）。剩余（后续独立批次）：SettingsDrawer 子页渲染、HomePage 1116、MobileApp 965、EditorDock 844、MobileUsheetViewer 998。
+6. **P2 大文件拆分（两处完成 261107）**：SettingsDrawer 785→**755**（菜单模型 → `settings/settingsMenu.ts`；261112 实测 **774**）；TagsHomeTab 608→**546**（长按拖拽排序 → `tags/useTagDragSort.ts`，行为/判据不变）。剩余（后续独立批次，261112 `wc -l` 实测）：SettingsDrawer 子页渲染、HomePage **1312**、MobileApp **1076**、EditorDock **844**、MobileUsheetViewer **999**。
+
+> 第 4、5 条里的声明数为**当时实测**；当前基线以 `mobileLayers.test.ts` 的 `BASELINE` 为准（261112 核对值见 §Gates 与「分层事实」）。
 7. **P2 a11y 已完成（261107）**：`rowActivation` 接入首页小记卡 + 知识库书架/列表；`TopBarIconButton` 把 4 处非嵌套 `span role=button` 改真 button；目录行内 ⋯/＋ 因嵌套 button 非法保持行语义（已记录）。
+8. **P2 `mobile.css` 域归位（未做，261112 登记）**：移动端 `mobile.css` 仍混入 **bitable / board / editor** 三域规则（约 300 行级；规模以 `docs/audit-261112/04-mobile.md` 为准）。它不是「外壳」职责：应按 `mobileLayers.test.ts` 的逐文件账本迁到 `src/mobile/bitable/mobileBitable.css` / `src/mobile/board/board.css` / `src/mobile/editor/**` 对应文件，迁一域跑一次 `check:mobileui` + 设备 10 态；**不要一次性全搬**（观感回归面大，且与 v2 视觉基线同文件叠改）。

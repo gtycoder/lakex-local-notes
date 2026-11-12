@@ -1,167 +1,150 @@
 # STORAGE-LAYERS.md — 存储分层与「设备本地」契约（单一来源）
 
-> **目的**：把「哪些数据进 S3 镜像 / 哪些是本地真源与账本 / 哪些纯本机派生」收敛到这一处，避免再次出现"注释说本地、代码其实同步"的漂移。
-> **权威待办**仍看 `HANDOFF.md §3`；同步协议细节看 `docs/SYNC-PROTOCOL.md`；本文只回答"某个持久化属于哪一层"。
-> 参考实现：`electron/schemaInit.ts`、`src/mobile/data/schema.ts`、`src/core/manifestTypes.ts`、`electron/store.ts`、`src/mobile/bridge.ts`。
+> **目的**：把「哪些数据是本地真相 / 哪些进 S3 镜像 / 哪些属于保留链 / 哪些是纯本机派生」收敛到这一处，避免再出现「注释说本地、代码其实同步」的漂移。
+> 协议细节看 [`SYNC-PROTOCOL.md`](SYNC-PROTOCOL.md)；端口差异看 [`SYNC-DEVICE-CONTRACT.md`](SYNC-DEVICE-CONTRACT.md)；降级/自愈看 [`RESILIENCE.md`](RESILIENCE.md)；待办看 [`HANDOFF.md`](HANDOFF.md) §3。
+> **261112 重写**：按 S3 v3（指针 + 不可变索引 + 每篇资产声明，无墓碑 / 无 manifest 链）重写；删除 V2 布局、`manifestTypes` 与已删除模块的引用。
 
----
+## 0. 三条铁律
 
-## 0. 铁律（新增任何持久化前先读）
-
-1. **镜像层字段必须"三处同改"**：`src/core/manifestTypes.ts`（类型） + 两端 `build*Entry`/`applyRemote*`（桌面 `electron/syncAdapters.ts`/`syncReconciliation.ts`，移动 `src/core/syncDecisions.ts` 等共享核心） + `docs/SYNC-PROTOCOL.md`（协议）。漏一处 = 跨端不一致。
-2. **设备本地态禁止进 manifest**：本机 UI、游标、基线账本、密钥一律不进清单。
-3. **派生数据可重建**：索引/缓存类允许随时 DROP 重建（AGENTS §3 #7/#10）。
-4. 改动后按第 6 节检查清单过一遍。
-
----
+1. **本地是真相，S3 只是镜像**（AGENTS §3#1）：数据不丢由本地保证（正文、回收站、历史快照），云端丢/坏可由本地重推。
+2. **进 S3 的只有协议白名单**：pointer / 索引 / 每篇资产声明 / 内容寻址正文 / 附件。**设备本地态一律不进**（基线、删除意图、游标、UI 偏好、密钥、历史、回收站状态、同步账本）。
+3. **派生数据可重建，正文/资产不可重建**：`text_cache`、FTS、markdown 缓存随时可 DROP 重建；正文/附件/历史属于「删了就没了」的一侧，改动必须走保留链。
 
 ## 1. 三层定义
 
-| 层 | 语义 | 云端 | 冲突语义 |
-|---|---|---|---|
-| **L1 镜像层** | 跨端需要的数据；本地是真相，S3 只是镜像 | 进 manifest 或对象 | 先同步者胜 + 墓碑权威 + 恢复例外 |
-| **L2 本地真源/账本层** | 同步引擎/恢复所需的本地状态，跨端无意义或必须每端独立 | 不进 | 每端独立，互不影响 |
-| **L3 纯本机/派生层** | UI 状态、历史、孤儿、GC 状态、可重建索引、日志 | 不进 | 每端独立 |
+| 层 | 语义 | 位置 | 冲突 / 恢复语义 |
+| --- | --- | --- | --- |
+| **L1 本地真相** | 用户数据的权威副本：正文（五种 kind）、附件、小记、目录/元数据、标签关系 | 每端本地：SQLite 元数据 + 文件正文 | 本地编辑为准；同步只做镜像收敛，不反向「以云端为准」覆盖本地真相（显式恢复除外） |
+| **L2 S3 镜像** | 跨端同步所需的云端投影：pointer + 两个不可变索引 + 每篇资产声明 + 内容寻址正文/附件 | S3 桶内（key 见 §3） | 单写者 + 发布锁 + 读回；远端已发布版本胜出，被覆盖版本先写历史快照 |
+| **L3 保留链** | 删除/覆盖后的可恢复副本与恢复账本：回收站软删、历史快照、「云端已删除·仅本地」副本、小记 `purged` 窗口、待补资产账本 | 几乎全在本地；仅小记 `purged[]` 进索引且带 90 天窗口 | 恢复是唯一显式例外（写恢复标记 → local-wins → 重新发布）；窗口到期后不可恢复 |
 
----
+> 记住三条判据：**「删了能重建」→ 不写兼容（AGENTS §3#7）**；**「云端没有」= 删除（缺席），不是「还没传」**（AGENTS §3#3/#15）；**回收站 ≠ 墓碑**（软删不写墓碑，purge 才是永久删除，AGENTS §3#5）。
 
-## 2. 桌面磁盘布局
+## 2. L1 · 本地真相
 
-工作区根 = `app.getPath("userData")/workspace-default`（`electron/main.ts:161`）；开发版 userData = `lakex-local-notes-dev`。
+### 2.1 桌面磁盘（工作区）
 
+工作区根 = `app.getPath("userData")/workspace-default`（开发版 userData = `lakex-local-notes-dev`；正文路径单一来源 `src/core/noteBodyPaths.ts`）。
+
+```text
+userData/
+├── logs/lakex-local-notes.log       # 日志（不属于工作区）
+├── sync-v3/baseline.json.gz         # 设备同步基线（每篇 contentHash）—— L3 账本，绝不上传
+├── sync-v3/state.json               # 设备同步状态（删除意图/恢复标记/待补资产）—— L3 账本
+└── workspace-default/
+    ├── metadata.sqlite3             # 主库（WAL）：元数据 + 本地账本（见 §2.2）
+    ├── notes/{noteId}.lake          # 正文 kind=doc（L1，S3 对象 objects/…）
+    ├── usheets/{noteId}.usheet.json # 正文 kind=usheet（Univer IWorkbookData）
+    ├── bitables/{noteId}.bitable.json # 正文 kind=bitable（自研 record JSON）
+    ├── boards/{noteId}.board.json   # 正文 kind=board（Drawnix/Plait 场景）
+    ├── inks/{noteId}.ink.json       # 正文 kind=ink（inkDoc v4）
+    ├── note-assets/{noteId}/{filename} # 附件/图片（L1，S3 assets/…）
+    ├── history/{noteId}/*.body.gz   # 历史快照（L3 本地，不进 S3）
+    └── quick-notes/                 # 小记空间（与 Lake 空间完全隔离）
+        ├── metadata.sqlite3         # 小记库 + 标签域（261107 起）
+        ├── items/{quickNoteId}.qnote    # 小记正文（L1，S3 quick-notes/objects/…）
+        ├── assets/{quickNoteId}/{filename} # 小记图片（L1，S3 quick-notes/assets/…）
+        └── staging/{draftId}/{filename}    # 未保存草稿图片（纯本机）
 ```
-~/Library/Application Support/lakex-local-notes-dev/
-├─ logs/lakex-local-notes.log                 # 日志（不属于工作区）
-└─ workspace-default/                   # 工作区根
-   ├─ metadata.sqlite3 (+ -wal/-shm)    # 主库
-   ├─ notes/{noteId}.lake               # 文档正文（kind=doc）        L1（对象）
-   ├─ usheets/{noteId}.usheet.json       # 表格正文（kind=usheet，Univer v1）L1（对象）
-   ├─ bitables/{noteId}.bitable.json     # 多维表正文（kind=bitable，自研 v1）L1（对象）
-   ├─ boards/{noteId}.board.json         # 画板正文（kind=board，Drawnix/Plait 场景）L1（对象）
-   ├─ inks/{noteId}.ink.json            # 手写板正文（kind=ink，矢量墨迹 JSON）L1（对象）
-   ├─ note-assets/{noteId}/{filename}   # 附件/图片                    L1（assets/）
-   ├─ quick-notes/
-   │  ├─ metadata.sqlite3              # 小记独立库
-   │  ├─ assets/{quickNoteId}/{file}   # 小记图片                    L1（quick-notes/）
-   │  └─ staging/{draftId}/{file}      # 未保存草稿图片              L3
-   ├─ history/{noteId}/*.body.gz        # 历史快照（note_history.file_path）L3（261019 前为 *.lake.gz，旧文件按 file_path 仍可读）
-   ├─ draft-journal/                    # 草稿恢复日志                L3
-   └─ .s3-restore-seed.json             # A2 云恢复临时凭据 seed（0600，重启即删）L3
-（云恢复时旧工作区被隔离为 ../workspace-pre-restore-<ts>/）
-```
 
----
+### 2.2 桌面主库（只存元数据/账本/派生）
 
-> **表格文档（`kind="usheet"`，Univer）**：正文落 `usheets/{noteId}.usheet.json`，路径由 `notes.kind` 决定（`store.bodyPathFor`）。
-> 正文格式 = **v1 Univer IWorkbookData 快照**（`{kind:"usheet",version:1,workbook:{…}}`）。搜索文本由 `usheetToSearchText`（遍历 `cellData`）派生，**不进 Lake HTML 解析器**。见 `src/core/usheetDoc.ts`。
-> **图片 = 资产引用**：workbook 里 drawing 的 `source` 存**资产 filename**（文件在 `note-assets/{noteId}/`），
-> **正文不存 base64、不存 URL**；渲染由 `localAssetHttpUrl` 拼本实例 URL，落盘由 `mapUsheetImageSources` 换回 filename（`src/features/usheet/UniverSheetEditor.tsx`）。
-> 声明/GC/同步/历史全复用现有资产管线（清单声明是**磁盘实扫** `listLocalAssets`；GC 保护靠 `extractAssetRefs` 命中 JSON 里的 filename）。
-> 已废弃的旧表格 `kind="sheet"` 正文不再识别（AGENTS §3#7：不做迁移 / 兼容）。
->
-> **261107 标签存储统一**：文档标签关系（`tag_links`/`tag_link_versions` 的 `target_kind='note'`）已迁入 `quick-notes/metadata.sqlite3`，标签域（目录 + 所有关系 + 版本）单一归属小记库；主库旧表仅保留一版回退、不再读写。**备份/恢复必须同时覆盖两库**（`workspaceRestoreFromBackup` 已支持；旧备份无小记库时仅恢复主库并保留当前小记库）。
->
-> **多维表文档（`kind="bitable"`，260920 实现 v1）**：正文落 `bitables/{noteId}.bitable.json`，路径同样由 `notes.kind` 决定（`store.bodyPathFor`）。
-> 正文格式 = **自研 record-based JSON**（`{kind:"bitable",version:1,tables[],activeTableId}`；一个文档可含多张数据表，为后期多表联合预留）。搜索文本由 `bitableToSearchText`（表名 + 各字段展示值）派生，**不进 Lake HTML 解析器**。附件字段存 filename，复用 `assets/{noteId}/{filename}` 资产管线。产品口径见 `docs/STORAGE-LAYERS.md`。
-> **手写板文档（`kind="ink"`，261020 正式 v1）**：正文落 `inks/{noteId}.ink.json`，格式 = `{kind:"ink",version:1,pages[],activePageId}`；页面为固定 A4 逻辑尺寸，笔迹只存矢量点和压力，**不存 PNG**。详见 `docs/INK-PAD.md`。
-> **画板文档（`kind="board"`，260920 引入）**：正文落 `boards/{noteId}.board.json`，路径同样由 `notes.kind` 决定（`store.bodyPathFor`）。
-> 正文格式 = **Drawnix/Plait 场景 JSON**（`{kind:"board",version:1,engine:"drawnix",preset,elements[],viewport?}`）；`elements` 就是文档内画板卡的 `plaitValue`，两者可无损互搬。
-> **不挂 Lake 内核**（编辑器直接挂 `DrawnixBoardCore`，零内核实例）；**不写卡片专用的 `previewImage`/`cardHeight`**（那张整幅 PNG 实测占带画板文档体积 90%+）。
-> 搜索文本由 `boardToSearchText`（形状文字/文本块/思维导图节点/连线标签）派生，**不进 Lake HTML 解析器**。画板内的图片由引擎内联成 data URL，**不进 `manifest.assets`**。见 `docs/STORAGE-LAYERS.md`。
+| 表 | 层 | 说明 |
+| --- | --- | --- |
+| `notes` / `tree_nodes` | L1 元数据 | 文档与目录元数据（正文在文件）；`sync_state`、`is_conflict`、`deleted_at` 等字段是本端状态 |
+| `settings` | 本地配置 | S3/同步/GC/历史/备份/AI 设置；S3 与 AI 密钥经 `secretCipher` 加密（**fail-closed**） |
+| `device_state` | L3 账本 | 本机键值：上次打开/同步时间、同步结果、安全模式等 |
+| `deleted_notes` | L3 账本 | 本地删除意图/墓碑账本（purge 写 `purged_at` 永久保留，防「重建复活」；**不向云端写墓碑**，v3 用基线 + 意图判「云端缺席」） |
+| `note_history` / `history_fallback_state` | L3 保留链 | 历史快照索引与降级状态 |
+| `orphan_assets` | L3 派生 | 未引用资源记录（可重算） |
+| `s3_gc_log` | L3 派生 | GC 审计日志 |
+| `ai_writing_conversations` / `ai_writing_messages` | L1（仅本端） | AI 写作会话（**只存本机，不进同步/搜索/目录树**） |
 
-## 3. 移动端磁盘布局
+派生缓存（`text_cache` / `md_cache` / FTS 索引）不属于任何层，重建即可。
 
-App 沙盒 `com.lakexlocalnotes.android`；`Directory.Data` = `/data/data/com.lakexlocalnotes.android/files`。
+### 2.3 小记库（桌面 `quick-notes/metadata.sqlite3`）
 
-```
+`quick_notes` / `quick_note_assets` / `quick_note_sync_base` / `quick_note_deleted` / `quick_note_conversions` / `quick_note_file_ops`，
+以及 **标签域**：`tags` / `tag_links` / `tag_link_versions` / `device_state`。
+
+- **标签目录 + 所有关系（含桌面文档标签 `target_kind='note'`）+ 版本 单一归属小记库**（261107 迁移，见 `TAG-SYSTEM-DESIGN.md`）。
+- 标签顺序与拖拽记忆是**设备本地视图**，不进 S3（置顶已删除，不要恢复）；标签删除 = 物理删行 = 缺席（**禁止墓碑**）。
+- 备份/恢复必须**同时覆盖两库**（`workspaceRestoreFromBackup` 已支持；旧备份无小记库时只恢复主库）。
+
+### 2.4 移动端（App 私有 `Directory.Data`）
+
+```text
 files/
-├─ notes/{noteId}.lake                   # 文档正文（kind=doc）        L1（文件）
-├─ usheets/{noteId}.usheet.json          # 表格正文（kind=usheet）
-├─ bitables/{noteId}.bitable.json        # 多维表正文（kind=bitable）
-├─ boards/{noteId}.board.json            # 画板正文（kind=board）
-├─ quick-notes/
-│  ├─ items/{quickNoteId}.qnote          # 小记正文                   L1（文件）
-│  └─ assets/{quickNoteId}/{filename}    # 小记图片（261019 起与桌面同构）
-├─ note-assets/{noteId}/{filename}       # 文档附件/图片               L1（assets/）
-├─ history/{noteId}/*.body.gz            # 历史快照（gzip 文件）        L3（本地）
-├─ draft-journal/{id}.json               # 未提交草稿（纯本机）         L3
-databases/lakex-local-notes-mobile              # 主库（Capacitor SQLite, WAL；只存元数据/账本/派生缓存）
+├── notes/ usheets/ bitables/ boards/           # 正文（kind 同上，路径同源 noteBodyPaths）
+├── note-assets/{noteId}/{filename}             # 文档附件/图片
+├── history/{noteId}/*.body.gz                  # 历史快照（L3）
+├── quick-notes/items/{id}.qnote                # 小记正文
+├── quick-notes/assets/{id}/{filename}          # 小记图片
+└── databases/lakex-local-notes-mobile          # Capacitor SQLite：元数据/账本/派生 text_cache+FTS
 ```
 
-> **261019 起移动端正文与桌面同构**：正文/小记/历史全部落文件（相对路径由 `src/core/noteBodyPaths.ts` 单一来源给出），
-> 物理读写由原生 **BodyStore** 插件完成（临时文件 + fsync + rename 原子写；快照 gzip 在原生做）。
-> SQLite 只保留元数据、`content_hash`、同步账本与**派生** `text_cache` / FTS 索引——与桌面的分层归属一致。
->
-> 两端仍有的差异（非正文归属）：桌面小记使用**独立数据库** `quick-notes/metadata.sqlite3`，移动端小记与主库同库（沿用既有 qn_* 表）；
-> 移动端旧库（正文在 `notes.content`）升级时**整库重置一次**（开发阶段数据可删，用户 261019 定稿，不做逐篇迁移）。
+- **正文/快照 = 文件**，由原生 `BodyStore` 原子写（临时文件 + fsync + rename；gzip 在原生做）；SQLite 只存元数据/账本/派生。
+- 小记与主库同库（沿用 `qn_*` 表），与桌面「小记独立库」的差异**只是存储表示**，语义一致。
+- 旧库（正文在 `notes.content`）升级时**整库重置一次**（AGENTS §3#7），不写兼容读取。
+- 移动端 schema 是版本门 + 批量 DDL（`PRAGMA user_version`）；改表/索引必须 +1 版本号。
 
----
+### 2.5 绝对不进 S3 的设备本地态
 
-## 4. S3 对象布局（L1）
+| 类别 | 例子（非穷举） |
+| --- | --- |
+| 同步账本 | `sync-v3/baseline.json.gz`、`sync-v3/state.json`（删除意图/恢复标记/待补资产/小记待删） |
+| UI / 视图偏好 | localStorage：`lakex-local-notes-v3.dialog-states`、`…sidebar-width`、`…bitable-nav.<noteId>`、`…quick-notes-sort`、`lakex-local-notes-mobile.pad-panels` 等（完整清单 grep `lakex-local-notes`） |
+| 历史 / 回收站状态 | `history/`、`note_history`、`deleted_notes`、回收站父/时间戳等本端表示 |
+| 密钥 | S3/AI 密钥（桌面 safeStorage 密文；移动 Keystore 密文）——**永不进 S3、永不导出明文** |
+| 同步审计 | 同步记录账本（本机表，500 条 / 90 天轮转） |
 
-```
-{prefix}/
-  objects/{noteId}-{contentHash}.lake          # 正文（内容寻址，幂等）
-  assets/{noteId}/{filename}                    # 附件
-  manifests/latest.json                         # 可变指针（单写者）
-  manifests/{commitId}.json                     # 不可变 commit 链（保留 8 层）
-  quick-notes/manifests/latest.json
-  quick-notes/objects/{contentHash}.qnote
-  quick-notes/assets/{quickNoteId}/{filename}
-```
+## 3. L2 · S3 镜像（v3 对象布局）
 
-manifest 字段（`src/core/manifestTypes.ts`）：
-- `ManifestNote`：id/title/parentId/**sortOrder**/updatedAt/contentHash/isConflict/isEditLocked/editLockedAt/**icon**/**kind**（doc|usheet|bitable|board，缺省 doc 不写）/assets[]/墓碑
-  - 锁字段是**内存名**（锁编辑，≠ 加密）；线上 JSON 键冻结为 `isLocked`/`lockedAt`，映射只在 `src/core/syncUtils.ts` 的解析/写出边界（护栏 `manifestLockWire.test.ts`）。
-- `ManifestFolder`：id/title/parentId/**sortOrder**/nodeType/**icon**/updatedAt/墓碑
+单一来源 = `src/core/s3v3/protocol/s3v3Keys.ts`；协议见 `SYNC-PROTOCOL.md` §3–§7。
 
----
+| 对象 | key（相对前缀） | 可变性 |
+| --- | --- | --- |
+| 指针 | `meta/pointer.json` | 可变（无条件覆盖；唯一读入口） |
+| Lake 索引 | `meta/index/{commit}.json` | 不可变（内容寻址） |
+| 小记索引 | `quick-notes/meta/index/{commit}.json` | 不可变 |
+| Lake 资产声明 | `meta/assets/{noteId}/{declHash}.json` | 不可变（该文档云端在用集全量快照） |
+| 小记资产声明 | `quick-notes/meta/assets/{quickNoteId}/{declHash}.json` | 不可变 |
+| Lake 正文 | `objects/{noteId}-{contentHash}.lake` | 不可变（同 hash 幂等） |
+| Lake 附件 | `assets/{noteId}/{filename}` | 覆盖写（同名 = 同内容） |
+| 小记正文 | `quick-notes/objects/{contentHash}.qnote` | 不可变（跨小记去重） |
+| 小记附件 | `quick-notes/assets/{quickNoteId}/{filename}` | 覆盖写 |
+| 发布锁 | `meta/lock.json` | 短暂可变 |
 
-## 5. 表 / 键清单（按层）
+- 索引条目只带「文档/小记/标签」的元数据与 `contentHash`/`assetsHash`；**正文和元数据都不再上传独立对象**。
+- **删除 = 对象缺席**：purge 按前缀清 `objects/{id}-`、`assets/{id}/`、`meta/assets/{id}/`；无墓碑对象。
+- **资产 = 每篇声明差集**：声明永远全量；上传只 PUT 缺失项，下载按 size+sha256 差集（禁止逐对象 HEAD/GET 当存在性判据）。
+- **旧 `manifests/latest.json` 是 V2 遗留孤儿**：不读、不迁移、不删除（深清按保留窗口回收）。
+- gzip 只用于 `meta/` 与 `quick-notes/meta/` 下的元数据对象（按 key 判定，不看魔数）。
 
-### L1 镜像层（喂 manifest，不带前缀的本地真源表）
-- `notes`（桌面只存元数据，正文在 .lake；移动含 content）、`tree_nodes`（含 sort_order/icon；移动为 `notes`+`folders`）、`deleted_notes`（本地墓碑表）
+## 4. L3 · 保留链
 
-### L2 本地真源/账本层
-- `sync_base`（content_hash 基线 / last_synced_meta_at / last_uploaded_hash）
-- `declared_assets`（"远端清单已声明"的本地镜像；上传跳过与 GC 依据）
-- `device_state`（last_seen_commit_id / last_tombstone_sig / last_synced_at / seed 等）
-- `settings`（S3/同步/GC/历史配置；S3 密钥经 SecretCipher/Keychain 加密）——**每端独立，不跨端**
+| 机制 | 语义 | 落点 | 有效期 |
+| --- | --- | --- | --- |
+| 回收站（软删） | 文档移入回收站（`trashedAt`），正文/附件不删、**不写墓碑** | 本地（桌面 `deleted_notes`/回收站父；移动 `deleted_at + deleted_from_parent_id`） | 默认 90 天自动过期（`trashAutoPurgeDays`；cloud_deleted 副本不豁免） |
+| 历史快照 | 远端覆盖本地/删除前留档；小记**没有**历史快照（产品定稿） | `history/{noteId}/*.body.gz` + `note_history` | 按历史保留设置 |
+| 「云端已删除·仅本地」 | 他端 purge 后本机保留的只读副本（只读、可恢复、不参与 S3，唯一例外是显式恢复） | 本地回收站 + `cloud_deleted` 投影 | 直到用户 purge / 显式恢复 / 云端同 id 复活 |
+| 小记 `purged[]` | 唯一类墓碑：只存 id，表示「不可恢复删除」 | 小记索引（**90 天窗口** `pruneQuickPurgedIds`） | 90 天（缺失/非法时间保守保留） |
+| 待补资产账本 | 附件下载失败重试账本 | `state.pendingAssets`（本机） | 下一轮重试；`attempts>3` 丢弃、上限 500 |
+| 深清 | 对比 pointer/索引/声明回收不可达对象 | `deepCleanup`（手动/定时，串行维护队列） | 保留窗口内不删 |
 
-### L3 纯本机/派生层
-- `note_history` + `history/`（文档历史）
-- `orphan_assets`（未引用资源）
-- `s3_gc_pending` / `s3_gc_log`（GC 状态与审计）
-- `notes_fts` / `search_index`（派生索引，可重建）
-- `notes.md_cache` / `notes.text_cache`（正文派生缓存：doc=Markdown/纯文本，usheet/bitable/board=按 kind 派生的纯文本；可重建，**不是正文真相**）
-- `quick_note_*`（小记同步 journal / 转换 / 文件操作）
-- localStorage（桌面+移动）：`lakex-local-notes-v3.dialog-states`、`lakex-local-notes-v3.sidebar-width`、`lakex-local-notes-v3.outline-sidebar-width`、`lakex-local-notes-v3.tab-switcher-width`、`lakex-local-notes-v3.board-views`（画板视图位置 = 平移滚动量 + 缩放；**本机**记忆，见 260926 决定）、`lakex-local-notes-v3.bitable-nav.<noteId>` / `lakex-local-notes-v3.bitable-tables-width` / `lakex-local-notes-v3.bitable-tables-collapsed` / `lakex-local-notes-v3.bitable-drawer-width` / `lakex-local-notes-v3.bitable-expand-size`（多维表**设备本地**导航与面板几何：导航恒不写正文、切表/切视图不标脏；261019 补登）、`lakex-local-notes-v1.sidebar`、`lakex-local-notes-mobile.tabs.*`、`libraryView`、`lakex-local-notes-v3.emoji-recents` + `lakex-local-notes-v3.emoji-recents.input`（「最近使用」的**两个分桶**：`icon` = 设置图标面板 / `input` = 输入态表情面板；按入口分桶见 AGENTS §3#14；**本机**记忆，261013 加；见 `src/lib/emojiRecents.ts`）、`lakex-local-notes-mobile.s3`（密钥另经 `src/mobile/native/secretStore.ts` AES-GCM）、
-  **`lakex-local-notes-v3.quick-notes-sort`**（小记排序偏好：**桌面与移动同一键、同一份四档**（最近/最早 × 更新/创建）；
-  纯展示偏好、只影响本端顺序，**不进 S3 / 不进 manifest**；单一来源 `src/core/quickNoteSort.ts`。
-  261015 用户要求"两端统一 + 仅本地持久化"；旧两值 `updated`/`created` 读到时映射到 `recent`/`createdNew`，用户既有偏好不丢）
-- 移动历史快照表 `note_history`（与桌面同表名，语义一致）
+**恢复路径**：回收站恢复 → 写恢复标记（`notes.restore_pending_at` / `quick_notes.restore_pending_at`）→ local-wins 重新发布并清标记；云端已删副本只能本机恢复；历史快照用于「被远端覆盖」的找回；**从未持有过副本的设备无法恢复**（用户已接受）。
 
----
+## 5. 新增持久化检查清单
 
-## 6. 新增持久化检查清单
+- [ ] **要跨端吗？** 要 → 进 L2，但只能改协议（`src/core/s3v3/protocol/` + 索引/声明 + `SYNC-PROTOCOL.md`），并想清冲突（LWW/删除=缺席/恢复例外）与上限。
+- [ ] **同步/恢复需要但跨端无意义？** → L3 账本（本机表/文件），**不进索引**。
+- [ ] **只是本机 UI/缓存/历史？** → 纯本机；派生类必须可重建。
+- [ ] 是否触碰红线？AGENTS §3#3/#4/#5/#11/#15/#16（删除压编辑=缺席 / 恢复例外 / 回收站≠墓碑 / 资产声明差集 / purge 永久判定 / 打开入口判回收站）。
+- [ ] 有没有把「每端独立」误做成「跨端同步」（或反之）？设置类默认每端独立。
+- [ ] 移动端加表/索引是否 +1 schema 版本、是否只改 `baseSchemaStatements`/`collectSchemaStatements`？
 
-- [ ] **需要跨端吗？** 需要 → L1。改 `manifestTypes.ts` + 两端 build/apply + `SYNC-PROTOCOL.md`；想清冲突（updatedAt LWW）、墓碑、恢复例外。
-- [ ] **同步/恢复需要但跨端无意义？** → L2。本地表即可，**不进 manifest**。
-- [ ] **只是本机 UI / 缓存 / 历史？** → L3。禁止进 manifest；派生类要能重建。
-- [ ] 是否触碰红线？`AGENTS.md §3 #11`（资产差集，禁逐对象 HEAD/本机缓存）、#12（兜底笔记本惰性）、#15（purge 永久判定）、#16（打开入口判定回收站）。
-- [ ] 有没有把"每端独立"误做成"跨端同步"（或反之）？设置类默认每端独立。
+## 6. 已知漂移教训（防再犯）
 
----
-
-## 7. 与 SiYuan 的对照（一句话）
-
-SiYuan 按**目录**分层：同步 = 整个 `data/`（内含 `assets/`、每库 `.siyuan/sort.json`/`conf.json`、文档 IAL `icon`），`conf/`（配置）、`history/`、`repo/`（本地快照仓库）、`temp/` 仅本地，并用 `.siyuan/syncignore` + 内置忽略清单排除设备本地文件（`storage/local.json` 等）。
-我们按**介质 + 表/字段**分层：L1 = manifest 声明字段 + 对象；L2/L3 = 本地库表/文件/localStorage（默认不上云，比"整树+忽略清单"更保守）。
-两边结论一致：附件/排序/图标同步；历史/孤儿/GC/配置仅本地。
-
----
-
-## 8. 已知漂移教训（防再犯）
-
-- `electron/schemaInit.ts` 曾把文档/分组图标注释成"本地化，不进 manifest"，实际 `manifestTypes.ts` + `syncDecisions` 一直在同步 —— **注释会漂移，故本文作为单一来源**。
-- `historyLifecycle.ts` 曾把"恢复前留档"注释成 `force=true`，实际调用是 `force=false`（走 24h 同 hash 防抖）。
+- 注释曾把文档/分组图标写成「本地化，不进 manifest」，实际一直在同步 —— **注释会漂移，故本文作为单一来源**。
+- 曾把「恢复前留档」注释成 `force=true`，实际 `force=false`（24h 同 hash 防抖）。
+- V2 时代的 `manifests/latest.json`、`manifestTypes`、`deleted_notes = 同步墓碑` 等描述已全部过期；**遇到旧文档/旧注释按 v3 判据核对**（云端无墓碑，删除 = 缺席）。
