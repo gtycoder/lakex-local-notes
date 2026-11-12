@@ -127,6 +127,9 @@ node scripts/css-audit/check-stylesnap.mjs --from .css-audit/snap/base.json --wr
   这中间一直没人发现，是因为 261012 的重构把表达式改名成 `SNAP_EXPR` 却**漏改调用点**（`stylesnap.mjs:339` 仍读 `SNAP`）⇒ 装置一跑就 `ReferenceError`，
   **"陈旧"被崩溃盖住了**（已修）。
 - **261112 复核：装置在本机是可跑的** —— `make-fixture` 现场重建合成夹具（空 userData → 造数据 → 删缺失资产 → `sqlite3 .backup` 冻结到 `~/Library/Caches/lakex-local-notes-css-audit/fixture`）成功，单轮 42 态采集 ≈5 分钟；**夹具缓存已留在本机** ⇒ 下次只需起实例 + 烤。唯一阻塞是上面那条「并行会话改代码」，不是装置缺夹具。
+- **261112 R2 重烤复盘（两条实操要点，下次直接照做）**：
+  - **dev 实例必须有 vite dev server**：未打包时 `electron .` 加载 `http://127.0.0.1:1421/`；单独起 electron 会 `ERR_CONNECTION_REFUSED`、CDP 页面停在 `boot.html`（跑 42 态会在第一个 `Runtime.evaluate` 超时）。正确姿势：用 `env -u ELECTRON_RUN_AS_NODE LAKE_USER_DATA=<RUN> LAKE_ASSET_PORT=19811 LAKE_CDP_PORT=9231 npx vite` 让 `vite-plugin-electron` 的 `onstart` 起同源实例（fixture 段里「另起 electron」只在 dev server 已常驻时成立）。
+  - **每一轮（烤基线 / 第 1 轮 / 第 2 轮）都必须用 fresh 夹具副本 + fresh 实例**：同一实例连跑多轮会在 `note-info` 态累积历史快照（实测 2596 → 2605，+9 元素），而 `settings-about` 这类态在重跑里会出现「元素数相同、指纹不同」的抖动 ⇒ 第一轮假红。判据：**整轮里只有少数态变、且变的是数据依赖态 ⇒ 先怀疑实例数据漂移，不是 CSS**。实例跑过 ~2 轮完整 42 态就可能 CDP 超时（`LK_CDP_TIMEOUT_MS=180000` 只延长等待、不解决寿命）⇒ 换新实例重跑该轮。
 - **坑 A：`--states` 绝不能和 `--write-baseline` 连用**。`--states` 只采集指定的几个态，`--write-baseline` 会把这份**只含这几个态的 compact 直接覆盖成整份基线**
   （42 态 → N 态，**静默毁掉**其余态）。只修单态的正确姿势：先用 `drive.mjs <port> stylesnap.mjs after` 采一份**完整 42 态**，
   确认它与你另采的一轮**逐态相同**，再 `check-stylesnap.mjs --from .css-audit/snap/after.json --write-baseline`。
