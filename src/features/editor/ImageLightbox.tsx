@@ -4,6 +4,10 @@
  * - 交互：滚轮缩放（以光标为中心）、拖拽平移（缩放 >1 时）、←/→ 画廊切换、
  *   Esc / 点击背景 / 关闭按钮退出；右上角缩放与重置按钮。
  * - 图片用 <img src> 直接渲染（桌面/移动端统一 canonical URL）。
+ * - 原图档位（用户裁决 Q02）：调用方可以给原图 src（PreviewImage.originalSrc）。打开时**先渲染
+ *   档位图**（通常已在列表缓存里，首帧即出），在隐藏的 Image 里预加载原图，加载完成再替换 ——
+ *   既不白屏、也不让用户停在糊图；原图失败（权限/文件缺失/网络）保持档位图，不报错。
+ *   只传 src 的旧调用点行为完全不变。
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { lockPageScroll } from "../../lib/pageScrollLock";
@@ -22,6 +26,8 @@ export function ImageLightbox() {
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const dragRef = useRef<{ startX: number; startY: number; panX: number; panY: number; moved: boolean } | null>(null);
   const wheelLockRef = useRef(false);
+  /** 已预加载完成的原图（按画廊索引记录）：就绪后替换档位图，切换图片/关闭即失效。 */
+  const [originalReady, setOriginalReady] = useState<{ index: number; src: string } | null>(null);
 
   useEffect(() => subscribeImagePreview((s) => {
     setState(s);
@@ -30,6 +36,26 @@ export function ImageLightbox() {
   }), []);
 
   const resetView = useCallback(() => { setScale(1); setPan({ x: 0, y: 0 }); }, []);
+
+  // 原图档位（Q02）：档位图先上屏，原图在后台预加载，完成后再替换。
+  // 不阻塞打开、失败静默保持档位图；切换画廊时用 index 对齐，避免把上一张的原图错配到当前张。
+  useEffect(() => {
+    if (!state) return;
+    const { index, images } = state;
+    const image = images[index];
+    const original = typeof image?.originalSrc === "string" ? image.originalSrc : "";
+    if (!original || original === image.src) return;
+    let alive = true;
+    const preload = new Image();
+    preload.onload = () => { if (alive) setOriginalReady({ index, src: original }); };
+    preload.onerror = () => { /* 原图取不到（权限/文件缺失/弱网）：保持档位图，不打扰用户 */ };
+    preload.src = original;
+    return () => {
+      alive = false;
+      preload.onload = null;
+      preload.onerror = null;
+    };
+  }, [state]);
 
   useEffect(() => {
     if (!state) return;
@@ -51,6 +77,8 @@ export function ImageLightbox() {
 
   if (!state) return null;
   const image = state.images[state.index];
+  /** 当前展示的 src：原图就绪且索引仍是当前张 ⇒ 用原图，否则用调用方给的档位图。 */
+  const shownSrc = originalReady && originalReady.index === state.index ? originalReady.src : image.src;
 
   const onWheel = (e: React.WheelEvent) => {
     if (wheelLockRef.current) return;
@@ -108,7 +136,7 @@ export function ImageLightbox() {
       }}
       onWheel={onWheel}>
       <div className="image-lightbox__stage" onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp}>
-        <img src={image.src} alt="" draggable={false} style={imgStyle}
+        <img src={shownSrc} alt="" draggable={false} style={imgStyle}
           onClick={() => { if (scale > 1) resetView(); }} />
       </div>
       <div className="image-lightbox__toolbar">

@@ -347,7 +347,7 @@ export function TrashPanel({ open, embed = false, onClose, onChanged, onRestored
                 selected.kind && selected.kind !== "doc" ? (
                   <HistorySnapshotPreview kind={selected.kind} noteId={selected.noteId ?? ""} body={selected.html} snapshotId={selected.id} />
                 ) : (
-                  <NoteDocPreview noteId={selected.noteId ?? ""} body={selected.html} className="trash-preview-viewer" onError={setError} />
+                  <NoteDocPreview noteId={selected.noteId ?? ""} body={selected.html} className="trash-preview-viewer" policyKey="trash" onError={setError} />
                 )
               ) : (
                 <div className="ln-empty">该节点无可预览内容（目录或正文已删）</div>

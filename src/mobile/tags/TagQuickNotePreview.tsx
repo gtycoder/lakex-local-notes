@@ -15,6 +15,7 @@ import type { StoredQuickNoteImage } from "../../core/quickNoteModel.js";
 import { withAssetAccessToken } from "../../lib/assetPort";
 import { QuickNotePreview } from "../../features/quickNotes/QuickNotePreview";
 import { openImagePreview } from "../../features/editor/imagePreview";
+import { resolvePreviewAssetUrl } from "../../features/preview/previewAsset";
 import { bridge } from "../bridge";
 
 export interface TagQuickNotePreviewProps {
@@ -51,7 +52,15 @@ export function TagQuickNotePreview({ noteId, fallbackText }: TagQuickNotePrevie
   // 标签详情是列表式富预览，原图直出会在多行卡片里把 WebView 内存顶穿。
   const assets = detail.images.map((image) => {
     const withToken = withAssetAccessToken(localAssetHttpUrl(noteId, image.filename, { space: "quick-notes" }));
-    return { ...image, url: quickNotePreviewAssetUrl(withToken, image.mimeType) };
+    return {
+      ...image,
+      url: quickNotePreviewAssetUrl(withToken, image.mimeType),
+      // Q02：点开大图后换原图（与首页卡片同一 intent / 同一实现，避免第二套档位逻辑）。
+      originalUrl: resolvePreviewAssetUrl(
+        { noteId, filename: image.filename, src: withToken, mimeType: image.mimeType },
+        "original",
+      ),
+    };
   });
   return (
     <QuickNotePreview
@@ -63,7 +72,7 @@ export function TagQuickNotePreview({ noteId, fallbackText }: TagQuickNotePrevie
       onImageClick={(image) => {
         const shots = assets.filter((asset) => Boolean(asset.url));
         const index = Math.max(0, shots.findIndex((asset) => asset.filename === image.filename));
-        openImagePreview(shots.map((asset) => ({ src: asset.url as string })), index);
+        openImagePreview(shots.map((asset) => ({ src: asset.url as string, originalSrc: asset.originalUrl })), index);
       }}
       ellipsisClassName="mb-ellipsis"
     />

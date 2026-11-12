@@ -16,6 +16,7 @@ import type { LocalNoteSummary } from "../data/noteRepository";
 import { NotebookGrid } from "./NotebookGrid";
 import { QuickNotePreview } from "../../features/quickNotes/QuickNotePreview";
 import { openImagePreview } from "../../features/editor/imagePreview";
+import { resolvePreviewAssetUrl } from "../../features/preview/previewAsset";
 import type { StoredQuickNoteImage } from "../../core/quickNoteModel.js";
 import { MobileErrorBoundary } from "../ui/MobileErrorBoundary";
 import { MobileSheetMenu, type MobileSheetItem } from "../ui/MobileSheetMenu";
@@ -1192,7 +1193,15 @@ function QuickNoteCard({ note, revealed, dateValue, onEdit, onMore, onFilterTag,
    */
   const previewAssets = (note.images ?? []).map((image) => {
     const withToken = withAssetAccessToken(localAssetHttpUrl(note.id, image.filename, { space: "quick-notes" }));
-    return { ...image, url: quickNotePreviewAssetUrl(withToken, image.mimeType) };
+    return {
+      ...image,
+      url: quickNotePreviewAssetUrl(withToken, image.mimeType),
+      // Q02：点开大图后换原图（去显示档 w/date、保留 token）；Lightbox 先显示档位图再替换。
+      originalUrl: resolvePreviewAssetUrl(
+        { noteId: note.id, filename: image.filename, src: withToken, mimeType: image.mimeType },
+        "original",
+      ),
+    };
   });
   const thumbUrl = note.firstImage
     ? quickNoteImageUrl(withAssetAccessToken(localAssetHttpUrl(note.id, note.firstImage, { space: "quick-notes" })))
@@ -1230,7 +1239,7 @@ function QuickNoteCard({ note, revealed, dateValue, onEdit, onMore, onFilterTag,
       imageTapTimer.current = null;
       const shots = previewAssets.filter((asset) => Boolean(asset.url));
       const index = Math.max(0, shots.findIndex((asset) => asset.filename === image.filename));
-      openImagePreview(shots.map((asset) => ({ src: asset.url as string })), index);
+      openImagePreview(shots.map((asset) => ({ src: asset.url as string, originalSrc: asset.originalUrl })), index);
     }, IMAGE_TAP_WINDOW_MS);
   };
   /** 触摸点击 / 外接键盘 Enter·Space 共用同一激活语义（选择态 = 切换勾选，否则进编辑）。 */

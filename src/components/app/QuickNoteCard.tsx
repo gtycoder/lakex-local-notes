@@ -58,6 +58,7 @@ export function QuickNoteCard({ item, onNeedDetail, revealed, deletePending, sel
       noteId={item.id}
       assets={assets}
       fallbackText={item.content.text}
+      // 桌面小记卡直接用正文里的原始 URL（没有移动端 ?w=1024 显示档）⇒ 放大即原图，不需要 originalSrc。
       onImageClick={(image) => openImagePreview(imagesOnly.map((it) => ({ src: it.url })), imagesOnly.findIndex((it) => it.id === image.id))}
       onToggleTask={onToggleTask}
     />

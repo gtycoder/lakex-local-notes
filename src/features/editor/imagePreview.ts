@@ -15,6 +15,15 @@ import { parseLocalAssetUrl } from "../../core/assetUrl.js";
 export interface PreviewImage {
   /** 显示用 src（桌面/移动端 canonical URL，均可直接 <img>） */
   src: string;
+  /**
+   * 放大用原图 src（可选，用户裁决 Q02：打开大图后换原图）。
+   * - 列表/卡片里的 src 常是资产服务离散档位（?w=1024）⇒ 直接放大仍是缩略；
+   * - 这里给"去 w/date、保留 token"的原图 URL（单一来源 = features/preview/previewAsset 的
+   *   resolvePreviewAssetUrl(ref, "original")）；ImageLightbox **先渲染 src，原图预加载完成再替换**，
+   *   既不白屏也不让用户停在糊图。
+   * - 缺省/与 src 相同 = 不替换（旧调用点只传 src 的行为完全不变）。
+   */
+  originalSrc?: string;
   /** 预览小图（Lake payload 提供，非必需） */
   msrc?: string;
   w?: number;

@@ -150,6 +150,8 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
           // 共享 Lightbox 控制器按需加载：静态 import 会把「features/editor」拉进设置页懒 chunk，
           // 触发 kernelStyleBootstrap 的内核样式启发式（该模块只做 pub/sub，不是内核）；点开时才需要它。
           const { openImagePreview } = await import("../../features/editor/imagePreview");
+          // Q02 的"放大换原图"在这里天然成立：native.readAssetPreview 读回的是**原文件**的 data URL
+          // （不是资产服务的 ?w=1024 显示档）⇒ 无需 originalSrc，也不需要再走 previewAsset 档位。
           openImagePreview([{ src: preview.dataUrl }], 0);
           return;
         }

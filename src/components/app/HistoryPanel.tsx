@@ -366,7 +366,7 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
                 <>
                   <div className="history-preview-inline-title">{inline.title}{inline.size !== undefined ? `，${(inline.size / 1024).toFixed(1)} KB` : ""}</div>
                   {inline.kind === "doc"
-                    ? <NoteDocPreview noteId={noteId} body={inline.html} className="history-preview-viewer" onError={(message) => setError(message || "快照预览失败")} />
+                    ? <NoteDocPreview noteId={noteId} body={inline.html} className="history-preview-viewer" policyKey="history" onError={(message) => setError(message || "快照预览失败")} />
                     : <HistorySnapshotPreview kind={inline.kind} noteId={noteId} body={inline.html} snapshotId={inline.id} />}
                 </>
               ) : (

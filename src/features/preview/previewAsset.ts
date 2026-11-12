@@ -16,7 +16,6 @@
  */
 import { localAssetHttpUrl, parseLocalAssetUrl } from "../../core/assetUrl.js";
 import { withLocalImageThumb } from "../../lib/assetPort.js";
-import { canonicalAssetUrlForCopy } from "../editor/clipboardHtml";
 import type { PreviewAssetIntent, PreviewAssetRef } from "./types";
 
 /** 列表/卡片显示档位：与封面同一档（资产服务只有 128/256/512/1024 四档）。 */
@@ -45,10 +44,15 @@ export function resolvePreviewAssetUrl(ref: PreviewAssetRef, intent: PreviewAsse
   return withMaterializedParam(original);
 }
 
-/** 去掉显示用参数（w/date），保留 token 等其它 query。http 本地形态与复制路径共用同一实现。 */
+/**
+ * 去掉显示用参数（w/date），保留 token 等其它 query。
+ *
+ * 为什么这里自己写而不 import features/editor/clipboardHtml 的 canonicalAssetUrlForCopy：
+ * 预览层依赖剪贴板模块会让任何 mock 了 clipboardHtml 的 render 测试把这里带崩（本批实测踩到），
+ * 而且语义上"预览档位"不该依赖"复制路径"。两边逻辑一致（都是删 w/date），
+ * 后续若要上收，落点应是 core/assetUrl.ts（单一来源），不是本文件。
+ */
 function stripDisplayParams(raw: string): string {
-  if (/^https?:/i.test(raw)) return canonicalAssetUrlForCopy(raw);
-  // lake-asset:// 等非 http 本地形态：canonicalAssetUrlForCopy 只处理资产服务前缀 ⇒ 按同一语义就地处理。
   try {
     const parsed = new URL(raw);
     parsed.searchParams.delete("w");

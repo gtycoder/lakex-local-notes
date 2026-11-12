@@ -12,8 +12,14 @@
  *  3. 滚动交给**调用方容器**（`.trash-preview-viewer` / `.history-preview-viewer` / …）——
  *     宿主本身不抢滚动，避免「外滚 + 内滚」两条。
  */
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { parseLocalAssetUrl } from "../../core/assetUrl.js";
 import { isMobileEnvironment } from "../../features/editor/clipboardHtml";
+import { attachImagePreviewClick, extractImagesFromContent } from "../../features/editor/imagePreview";
+import { PREVIEW_POLICY } from "../../features/preview/policy";
+import type { PreviewPolicyKey } from "../../features/preview/types";
+import { resolvePreviewAssetUrl } from "../../features/preview/previewAsset";
+import { withAssetAccessToken } from "../../lib/assetPort";
 import { useHistorySnapshotViewer } from "../hooks/useHistorySnapshotViewer";
 import "./noteDocPreview.css";
 
@@ -29,9 +35,12 @@ export interface NoteDocPreviewProps {
   onError?: (message: string) => void;
   /** 调用方既有容器类（保留各处的滚动/边框/高度规则，如 `trash-preview-viewer`）。 */
   className?: string;
+  /** 预览策略预设（Q04/Q06/Q09 的单一来源）：回收站 `trash`、历史/属性 `history`。 */
+  policyKey?: PreviewPolicyKey;
 }
 
-export function NoteDocPreview({ noteId, body, onError, className }: NoteDocPreviewProps) {
+export function NoteDocPreview({ noteId, body, onError, className, policyKey = "history" }: NoteDocPreviewProps) {
+  const policy = PREVIEW_POLICY[policyKey];
   const hostRef = useRef<HTMLDivElement | null>(null);
   const [error, setError] = useState<string | null>(null);
   // 移动端分支（261112 审计核实：**当前移动端不 import 本组件**，MobileApp 走 NoteInfoSheet/
@@ -51,6 +60,30 @@ export function NoteDocPreview({ noteId, body, onError, className }: NoteDocPrev
       onError?.(message);
     },
   });
+
+  /**
+   * 261112 R1（裁决 Q06）：桌面回收站 / 历史面板 / 文档属性预览支持**双击图片放大**。
+   * - 画廊列表必须来自**正文**（内核 viewer 下 DOM 只有已渲染的部分，数不全）；
+   *   DOM 只用来定位"双击的是哪一张"（attachImagePreviewClick 内部按序列对齐）。
+   * - 放大用原图档位（Q02：去显示档 w/date、保留 token），Lightbox 先显示档位图再换原图。
+   * - 本组件**不挂编辑器交互**（只读 viewer 没有编辑能力面）：只装这一层图片事件。
+   */
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host || !body || policy.zoomImage === false) return;
+    const intent = policy.zoomImage.intent;
+    return attachImagePreviewClick(host, () => {
+      return extractImagesFromContent(body).map((image) => {
+        const displaySrc = withAssetAccessToken(image.src);
+        const ref = parseLocalAssetUrl(image.src);
+        if (!ref) return { src: displaySrc };
+        const originalSrc = withAssetAccessToken(
+          resolvePreviewAssetUrl({ noteId: ref.noteId, filename: ref.filename, src: image.src }, intent),
+        );
+        return { src: displaySrc, originalSrc };
+      });
+    });
+  }, [body, policy]);
 
   return (
     <div className={className ? `note-doc-preview ${className}` : "note-doc-preview"}>

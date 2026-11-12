@@ -7,6 +7,9 @@
  * 用法：宿主按自己的语义选一个预设（例如回收站预览 = PREVIEW_POLICY.trash），
  * 再把它传给渲染层/交互接线；**不要再在入口里逐个 if 决定**能不能放大图/开附件。
  * 具体视觉与几何仍由两端各自实现（AGENTS §3#14：不共享样式）。
+ *
+ * 当前消费方（261112 R1）：NoteDocPreview（trash/history 的 zoomImage → 双击看图与档位）。
+ * docPane / tagSpace / quickNoteCard 是已裁决的预设记录（供后续宿主接线），**不要当死配置删除**。
  */
 import type { PreviewPolicy, PreviewPolicyKey } from "./types";
 

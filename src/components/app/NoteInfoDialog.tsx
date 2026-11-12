@@ -234,7 +234,7 @@ export function NoteInfoDialog({ note, onClose, onRevealNoteFile, onOpenAssetsDi
               )}
               {histPreview && (
                 histPreview.kind === "doc"
-                  ? <NoteDocPreview noteId={note.noteFileId ?? ""} body={histPreview.html} className="note-info-history-viewer" />
+                  ? <NoteDocPreview noteId={note.noteFileId ?? ""} body={histPreview.html} className="note-info-history-viewer" policyKey="history" />
                   : <HistorySnapshotPreview kind={histPreview.kind} noteId={note.noteFileId ?? ""} body={histPreview.html} snapshotId={histPreview.id} />
               )}
             </div>
