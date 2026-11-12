@@ -39,7 +39,10 @@ export type SyncWarningKind =
   /** 本地附件未落地/读不出（不是用户删除）⇒ 保留云端声明，避免误删云端附件。 */
   | "asset_kept_remote"
   /** 资产文件名非法（空格/中文/超长等，无法进 S3 key）⇒ 跳过该文件、本轮继续（P1-7）。 */
-  | "asset_invalid_name";
+  | "asset_invalid_name"
+  /** 内部 kind（**不进 wire 协议**，task-66）：单篇 apply（把远端落本地）失败被跳过，下一轮重试。
+   *  与 remote_incomplete 的区别：那是"远端内容不全"，这是"本地写失败/未落地"——文案不得混用。 */
+  | "apply_skipped";
 export interface SyncWarning {
   kind: SyncWarningKind;
   /** 受影响文档 id（能定位时）。 */

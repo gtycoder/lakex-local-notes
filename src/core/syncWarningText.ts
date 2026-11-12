@@ -1,5 +1,5 @@
 /**
- * 同步 warning 的**文案单一来源**（261112 UI 审计 17 / P1）：7 个 SyncWarningKind 的
+ * 同步 warning 的**文案单一来源**（261112 UI 审计 17 / P1）：8 个 SyncWarningKind 的
  * 人话 label / 处理提示 / 是否可重试。
  *
  * 为什么在 core：判据字段由 core 直接产出（SyncWarning，见 sharedTypes），文案必须与判据同源；
@@ -53,6 +53,12 @@ export const SYNC_WARNING_COPY: Record<SyncWarningKind, SyncWarningCopy> = {
     label: "文件名不合法",
     hint: "已跳过该文件；改名后下次同步会上传。",
     retryable: false,
+  },
+  // task-66：单篇 apply（远端落本地）失败被跳过—— truthful：不是"远端内容不全"，是"本地这篇本轮没落地"。
+  apply_skipped: {
+    label: "本篇本轮未应用",
+    hint: "已跳过这篇（本地内容未改动），下次同步会重试；其它文档照常同步。",
+    retryable: true,
   },
 };
 

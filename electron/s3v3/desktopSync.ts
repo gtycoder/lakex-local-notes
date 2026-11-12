@@ -176,6 +176,14 @@ export async function syncWithV3(
     // task-44：单篇 apply 失败（已跳过、下一轮重试）并入结构化警告，不再只留在日志里。
     const applyWarnings = device.drainApplyWarnings();
     for (const w of applyWarnings) store.logScopes.sync.warn("[v3][apply] " + w.id + " " + (w.detail ?? ""));
+    // task-66：单篇 apply 失败 = 「本地这篇本轮没落地」，独立 kind apply_skipped（内部类型，非 wire）。
+    // 不得复用 remote_incomplete（那是「远端内容不全」，文案会误导用户）。
+    const applyWarningDetails = applyWarnings.map((w) => ({
+      kind: "apply_skipped" as const,
+      noteId: w.id,
+      title: w.title ?? "",
+      message: w.detail ?? "",
+    }));
     const result: SyncResult = {
       uploaded: r.uploadedNotes, downloaded: r.downloadedNotes, conflicts: r.supersededNotes.length,
       manifestId: "v3-g" + r.generation, completedAt: new Date().toISOString(),
@@ -190,13 +198,8 @@ export async function syncWithV3(
       uploadedBytes: r.uploadedBytes ?? 0,
       downloadedBytes: r.downloadedBytes ?? 0,
       // 旧协议有的结构化警告（UI SyncStatusPopover 读取 warnings；只增不减）。
-      ...(r.warningDetails.length + applyWarnings.length > 0
-        ? {
-            warnings: [
-              ...r.warningDetails,
-              ...applyWarnings.map((w) => ({ kind: "remote_incomplete" as const, noteId: w.id, title: w.title, message: w.detail ?? "" })),
-            ],
-          }
+      ...(r.warningDetails.length + applyWarningDetails.length > 0
+        ? { warnings: [...r.warningDetails, ...applyWarningDetails] }
         : {}),
     };
     store.logScopes.sync.info("[v3] sync done " + JSON.stringify({ published: r.published, gen: r.generation, warnings: r.warnings.length, ms: result.durationMs }));
@@ -210,7 +213,8 @@ export async function syncWithV3(
       downloaded: r.downloadedNotes,
       deleted: r.deletedObjects,
       conflicts: r.supersededNotes.length,
-      warnings: r.warningDetails,
+      // task-66：诊断报告也并入 apply 跳过项（逐项带 id/title/message，设置页「同步诊断」可定位）。
+      warnings: [...r.warningDetails, ...applyWarningDetails],
       phases: diag.snapshot(),
     }));
     return result;
