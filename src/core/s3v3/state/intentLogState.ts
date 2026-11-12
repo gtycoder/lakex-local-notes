@@ -6,10 +6,13 @@
  * 落盘 = `{ version:3, records, assets, hashCache? }`；load 时投影回 DeviceState 的 9 个字段
  * （**引擎一行不改**，仍消费 DeviceState），save 时摊平。基线不在此文件（桌面 baseline.json.gz / 移动同 JSON 的 baseline 字段）。
  *
- * 断代门（用户已裁）：v3 客户端只写 v3；
- * - v3 直读；
- * - v2 信封与 v1 旧格式（无 version 的 sidecar / MobileV3State）**单向迁移**到 v3（只此一次）；
- * - 未知 version → null（适配器按空账本/重来）；未知 record kind → 丢弃该条并收 warning（不崩）。
+ * 断代门（用户 261028 / **261112 二次裁决 B：删除 v1/v2 迁移**）：
+ * - v3 直读；未知 record kind → 丢弃该条并收 warning（不崩）。
+ * - **v1/v2 信封与无 version 的旧 sidecar（含 MobileV3State）不再迁移**：读到旧形状 ⇒ **账本重置**为空 records，
+ *   并收一次可读 warning（不崩、不阻断同步）。
+ * - 重置时**保留资产投影与 hashCache**（见下「不走账本」一节）：把它们一起丢会让「未下载」被误判成
+ *   「删光附件」⇒ 云端误 GC；hashCache 丢失则要全库重算 sha256。这不是兼容读取，只是同 JSON 里的安全投影。
+ * - 非账本形状（null / 字符串 / 空对象）→ null（适配器按空账本处理）。
  *
  * 不走账本、但必须随信封持久化的两类数据：
  * - `assets`：最后一次声明过的资产 hash 投影（丢了会把「未下载」误判为「删光附件」→ 云端误 GC）；
@@ -70,10 +73,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function strings(value: unknown): string[] {
-  return Array.isArray(value) ? value.filter((x): x is string => typeof x === "string") : [];
-}
-
 function recordOfStrings(value: unknown): Record<string, string> {
   if (!isRecord(value)) return {};
   const out: Record<string, string> = {};
@@ -114,7 +113,7 @@ export function toPersistedState(state: DeviceState): IntentLogStateV3 {
   }
   for (const payload of state.pending ?? []) records.push({ kind: "pending-delete", payload });
   for (const id of state.quickDeletes ?? []) records.push({ kind: "quick-delete", id });
-  // purges ∪ purgeTimes 的 id 并集：与 v2→v3 迁移同口径（旧信封只有时间表，单看 quickPurges 会丢时间戳）。
+  // purges ∪ purgeTimes 的 id 并集：旧信封只有时间表，单看 quickPurges 会丢时间戳。
   const purgeTimes = state.quickPurgeTimes ?? {};
   for (const id of new Set([...(state.quickPurges ?? []), ...Object.keys(purgeTimes)])) {
     records.push({ kind: "quick-purge", id, ...(purgeTimes[id] ? { at: purgeTimes[id] } : {}) });
@@ -130,57 +129,26 @@ export function toPersistedState(state: DeviceState): IntentLogStateV3 {
   };
 }
 
-/** v2 信封（phase1 形状）→ records。 */
-function recordsFromV2(raw: Record<string, unknown>, onWarning?: (message: string) => void): IntentRecord[] {
-  const records: IntentRecord[] = [];
-  const quick = isRecord(raw.quick) ? raw.quick : {};
-  const restore = isRecord(raw.restore) ? raw.restore : {};
-  const cloudDeleted = isRecord(raw.cloudDeleted) ? raw.cloudDeleted : {};
-  const recovery = isRecord(raw.recovery) ? raw.recovery : {};
-  if (Array.isArray(raw.intents)) {
-    for (const value of raw.intents) {
-      const it = isRecord(value) ? value : null;
-      if (!it || typeof it.noteId !== "string") { onWarning?.("v3 迁移：丢弃非法 delete-intent"); continue; }
-      records.push({
-        kind: "delete-intent", noteId: it.noteId,
-        targetEpoch: typeof it.targetEpoch === "string" ? it.targetEpoch : "",
-        targetGeneration: typeof it.targetGeneration === "number" ? it.targetGeneration : 0,
-        ...(typeof it.purgedAt === "string" ? { purgedAt: it.purgedAt } : {}),
-      });
-    }
-  }
-  if (Array.isArray(raw.pending)) for (const value of raw.pending) if (isRecord(value)) records.push({ kind: "pending-delete", payload: value as unknown as PendingDelete });
-  const purgeTimes = recordOfStrings(quick.purgeTimes);
-  for (const id of strings(quick.deletes)) records.push({ kind: "quick-delete", id });
-  // purges ∪ purgeTimes 的 id 并集：保住 v1/v2 里独立记录的清理时间戳（旧桌面 quickPurges 是 DB 派生，信封只有时间表）。
-  for (const id of new Set([...strings(quick.purges), ...Object.keys(purgeTimes)])) {
-    records.push({ kind: "quick-purge", id, ...(purgeTimes[id] ? { at: purgeTimes[id] } : {}) });
-  }
-  for (const id of strings(cloudDeleted.ids)) records.push({ kind: "cloud-deleted", id });
-  for (const noteId of strings(restore.pending)) records.push({ kind: "restore", noteId });
-  for (const id of strings(recovery.bodyPending)) records.push({ kind: "body-recovery", id });
-  if (Array.isArray(recovery.assetRetries)) for (const value of recovery.assetRetries) if (isRecord(value)) records.push({ kind: "asset-retry", payload: value as unknown as PendingAssetRetry });
-  return records;
+/**
+ * 旧信封（v1/v2）里**必须抢救**的资产投影（Q23 重置账本时保留）：丢了会把「未下载」误判成
+ * 「删光附件」⇒ 云端误 GC（见文件头）。v1 形状 = 合并的 assetsHash / quickAssetsHash；
+ * v2 形状 = 按空间的 assets.lake / quickNotes。这不是兼容迁移，只取安全投影。
+ */
+function salvagedAssetsOf(raw: Record<string, unknown>): { lake: Record<string, string>; quickNotes: Record<string, string> } {
+  if (isRecord(raw.assets)) return assetsOf(raw.assets);
+  return { lake: recordOfStrings(raw.assetsHash), quickNotes: recordOfStrings(raw.quickAssetsHash) };
 }
 
-/** v1 旧格式（无 version 的 sidecar / MobileV3State）→ v2 形状（phase1 迁移规则原样复用）。 */
-function legacyToV2(raw: Record<string, unknown>): Record<string, unknown> {
-  return {
-    version: 2,
-    intents: raw.intents,
-    pending: raw.pending,
-    quick: { deletes: raw.quickDeletes, purges: raw.quickPurges, purgeTimes: raw.quickPurgeTimes },
-    restore: { pending: raw.restorePending },
-    cloudDeleted: { ids: raw.remotePurged },
-    recovery: { bodyPending: raw.bodyRecoveryPending, assetRetries: raw.pendingAssets },
-    assets: { lake: raw.assetsHash, quickNotes: raw.quickAssetsHash },
-    hashCache: raw.hashCache,
-  };
-}
+/** 是否「像一本同步账本」——用于区分「旧格式要重置」与「无关/损坏 JSON（→ null）」。 */
+const LEDGER_KEYS = [
+  "records", "intents", "pending", "quick", "restore", "cloudDeleted", "recovery",
+  "assets", "hashCache", "quickDeletes", "quickPurges", "quickPurgeTimes", "remotePurged",
+  "restorePending", "quickAssetsHash", "assetsHash", "pendingAssets",
+] as const;
 
-function isLegacyShape(raw: Record<string, unknown>): boolean {
-  return ["intents", "pending", "remotePurged", "restorePending", "quickPurgeTimes", "pendingAssets", "assetsHash", "quickAssetsHash", "baseline"]
-    .some((key) => key in raw);
+function looksLikeLedger(raw: Record<string, unknown>): boolean {
+  if (typeof raw.version === "number") return true;
+  return LEDGER_KEYS.some((key) => key in raw);
 }
 
 /** v3 records 校验/归一：未知 kind 丢弃 + warning（断代门：不猜测旧 kind）。 */
@@ -235,35 +203,33 @@ function normalizeRecords(value: unknown, onWarning?: (message: string) => void)
 }
 
 /**
- * 任意落盘 JSON → v3 信封（v2/v1 单向迁移；未知 version/损坏 → null；未知 record kind 丢弃+warning）。
- * 迁移只发生一次：返回 v3 后由 fromPersistedState 标记 migrated，适配器下一轮 save 落 v3。
+ * 任意落盘 JSON → v3 信封。
+ * - **v3**：归一后直读（未知 record kind 丢弃 + warning，不崩）。
+ * - **旧格式（v1/v2）或未知版本**：Q23（261112 用户裁决 B）起**不再迁移** ⇒ 账本重置（records 空），
+ *   收一次可读 warning；资产投影与 hashCache 抢救保留（理由见文件头，避免云端误 GC / 全库重算）。
+ * - **非账本形状**（null / 字符串 / 数字 / 空对象）：null（适配器按空账本处理）。
  */
 export function migratePersisted(raw: unknown, onWarning?: (message: string) => void): IntentLogStateV3 | null {
   if (!isRecord(raw)) return null;
   if (raw.version === DEVICE_STATE_VERSION) {
+    const hashCache = hashCacheOf(raw.hashCache);
     return {
       version: DEVICE_STATE_VERSION,
       records: normalizeRecords(raw.records, onWarning),
       assets: assetsOf(raw.assets),
-      ...(hashCacheOf(raw.hashCache) ? { hashCache: hashCacheOf(raw.hashCache) } : {}),
+      ...(hashCache ? { hashCache } : {}),
     };
   }
-  if (typeof raw.version === "number") {
-    if (raw.version !== 2) return null; // 未知版本（含未来 4）：不猜、不降级
-    return {
-      version: DEVICE_STATE_VERSION,
-      records: recordsFromV2(raw, onWarning),
-      assets: assetsOf(raw.assets),
-      ...(hashCacheOf(raw.hashCache) ? { hashCache: hashCacheOf(raw.hashCache) } : {}),
-    };
-  }
-  if (!isLegacyShape(raw)) return null;
-  const v2 = legacyToV2(raw);
+  if (!looksLikeLedger(raw)) return null;
+  onWarning?.(
+    "同步账本为旧格式（v1/v2）或未知版本：已按裁决重置为空账本（不再迁移；资产投影与 hash 缓存保留）",
+  );
+  const hashCache = hashCacheOf(raw.hashCache);
   return {
     version: DEVICE_STATE_VERSION,
-    records: recordsFromV2(v2, onWarning),
-    assets: { lake: recordOfStrings(raw.assetsHash), quickNotes: recordOfStrings(raw.quickAssetsHash) },
-    ...(hashCacheOf(raw.hashCache) ? { hashCache: hashCacheOf(raw.hashCache) } : {}),
+    records: [],
+    assets: salvagedAssetsOf(raw),
+    ...(hashCache ? { hashCache } : {}),
   };
 }
 
@@ -296,15 +262,20 @@ export function ledgerOf(persisted: IntentLogStateV3): DeviceLedger {
   return state;
 }
 
-/** 落盘 JSON 是否是旧格式（v1/v2）：v3 客户端直读，其余走单向迁移。 */
-export function persistedNeedsMigration(raw: unknown): boolean {
-  return !(isRecord(raw) && raw.version === DEVICE_STATE_VERSION);
+/**
+ * Q23（261112 裁决 B）：v1/v2 迁移已删除 ⇒ 已不存在「需要迁移」的落盘。
+ * 保留导出只为既有调用点（`deviceStore.loadState` 的日志分支）不被打断，**恒 false**；新代码不要用。
+ * 旧账本现在由 `migratePersisted` 直接重置（并给一条 warning），不再有「迁移一次」这回事。
+ */
+export function persistedNeedsMigration(_raw?: unknown): boolean {
+  return false;
 }
 
 /** records → 9 本账（引擎继续消费 DeviceState；不动引擎）。 */
 export function fromPersistedState(raw: unknown, onWarning?: (message: string) => void): { state: DeviceLedger; migrated: boolean } | null {
   const persisted = migratePersisted(raw, onWarning);
   if (!persisted) return null;
+  // Q23：迁移已删 —— 「migrated」恒 false（字段保留只为既有调用点签名不变）。
   return { state: ledgerOf(persisted), migrated: persistedNeedsMigration(raw) };
 }
 

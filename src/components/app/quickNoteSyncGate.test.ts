@@ -63,6 +63,9 @@ describe("「保存并同步」回退整轮：4 个理由 → 准确文案（F-0
     const entries = Object.entries(QUICK_NOTE_FULL_SYNC_TEXT);
     expect(entries).toHaveLength(4);
     expect(new Set(entries.map(([, text]) => text)).size, "4 句必须互不相同（否则等于没分理由）").toBe(4);
+    // Q24（261112 裁决）：no-baseline 不能说成「缺基线」（用户看不懂），必须说「本机还没有这条小记的同步记录」
+    expect(QUICK_NOTE_FULL_SYNC_TEXT["no-baseline"]).toContain("本机还没有这条小记的同步记录");
+    expect(QUICK_NOTE_FULL_SYNC_TEXT["no-baseline"]).not.toContain("缺少同步基线");
     for (const [reason, text] of entries) {
       if (reason === "remote-deleted") {
         expect(text, "远端墓碑 = 按删除处理，且已跑过整轮").toMatch(/其他设备删除/);
@@ -74,7 +77,9 @@ describe("「保存并同步」回退整轮：4 个理由 → 准确文案（F-0
   });
 
   it("两端 UI 都从同一来源取文案（不再按单个理由手写字符串）", () => {
-    const ws = code(read("./QuickNotesWorkspace.tsx"));
+    // 261112 R1 Q19-5：保存管线在域 hook 里 ⇒ 桌面侧按「组件 + useQuickNoteDraftSave」聚合读。
+    const ws = code(read("../../features/quickNotes/QuickNotesWorkspace.tsx"))
+      + "\n" + code(read("../../features/quickNotes/useQuickNoteDraftSave.ts"));
     const composer = code(read("../../mobile/home/QuickNoteComposer.tsx"));
     for (const [name, src] of [["桌面 QuickNotesWorkspace", ws], ["移动 QuickNoteComposer", composer]] as const) {
       expect(src, `${name} 必须用 QUICK_NOTE_FULL_SYNC_TEXT[outcome.reason]`).toMatch(/QUICK_NOTE_FULL_SYNC_TEXT\[outcome\.reason\]/);

@@ -1,7 +1,7 @@
 /**
  * 「打开 = 只读」的 core 单一判据（CORE-03）。
  *
- * 背景（docs/audit-261027/09-core-data-models.md §CORE-03）：桌面 usheet 自己拼了
+ * 背景（CORE-03，261028 审计；契约登记见 docs/RESILIENCE.md §10「I-RO」）：桌面 usheet 自己拼了
  * normalizedBodyOf / baselineSettled / contentInput / canonicalBody 四件套，移动端 usheet 只有
  * 裸 save()，board / ink 各写一套。宿主一多就重演「打开文档自己写盘 → contentHash 变 → 同步上传」。
  *

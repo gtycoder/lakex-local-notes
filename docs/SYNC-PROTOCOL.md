@@ -2,9 +2,11 @@
 
 > 日期：2026-10-28 ｜ 协议版本：`S3V3_POINTER_VERSION = 3` ｜ 代码基线：`src/core/s3v3*.ts`（纯逻辑）+ `electron/s3v3/*`（桌面）+ `src/mobile/v3/*`（移动）
 >
-> **版本口径（261029 澄清）**：文件标题里的「v3」是 **wire/pointer 协议版本**（pointer 的 `v=3`、索引/声明/对象布局）；**同步内核是 v4**（四相 `plan → apply → commit → finalize`，见 `docs/audit-261027/07-rfc-convergence-kernel-v4.md`）。v4 的定义就是「**协议不变、只重写编排层**」，因此两者不冲突：不存在「S3 协议 v4」这回事，设备间仍按 v3 wire format 互通。
+> **版本口径（261029 澄清）**：文件标题里的「v3」是 **wire/pointer 协议版本**（pointer 的 `v=3`、索引/声明/对象布局）；**同步内核是 v4**（四相 `plan → apply → commit → finalize`；编排层现状见 `docs/ARCHITECTURE.md` §3，本文 §13–§15 是它消费的协议面）。v4 的定义就是「**协议不变、只重写编排层**」，因此两者不冲突：不存在「S3 协议 v4」这回事，设备间仍按 v3 wire format 互通。
 >
 > **本文是同步协议的唯一现行口径**（替代已失效的 Manifest V2 全文）。设计理由与审计处置原在过程文档（`S3-REDESIGN` / `S3-GC-DESIGN` / `S3-MANIFEST-SCALE-RESEARCH` / `S3-V3-*`），**已按 SD-11（Del-9）物理删除**——需要历史时用 git 查，**不要再据此改代码**。
+>
+> 同理 `docs/audit-261027/`（安全审计 / 核心数据模型补审 / v4 RFC / 浏览器端计划）已于 261112 按用户裁决（Q16）删除；仍生效的结论已收编：内核断代与旧账本重置 → 本文 §15；正文层「打开=只读」与坏正文单一判据、安全/分发面裁决、浏览器端去留 → `docs/RESILIENCE.md` §9–§10。
 >
 > 每节都标注对应的代码符号；符号与本文冲突时，以代码 + 其护栏测试为准（§19）。
 
@@ -466,6 +468,8 @@ S3v3DeviceStore: init / loadState / saveState / loadBaseline / saveBaseline
 基线 `DeviceBaseline` = `{ epoch, generation, lakeCommit, quickNotesCommit, lake, quickNotes }`：
 桌面落 `<storeRoot>/sync-v3/baseline.json.gz`（gzip level 1），移动落 `sync_v3_state` 单行 JSON。
 state sidecar：桌面 `<storeRoot>/sync-v3/state.json`；移动同表 `sync_v3_state`。基线丢失 ⇒ 走 `no-baseline`（pullAll），**不是**删除。
+
+**断代（Q23，261112 用户裁决 B：删除 v1/v2 迁移）**：state 信封（`src/core/s3v3/state/intentLogState.ts`）只认 v3，形状变更**不做双写过渡、不写旧字段兼容**。读到 v1/v2 旧信封（或无 version 的旧 sidecar）⇒ **账本重置**（records 置空 + 一条可读 warning，不阻断同步）；只**抢救保留**资产投影与 hashCache（丢掉资产投影会把「未下载」误判成「删光附件」→ 云端误 GC；丢掉 hashCache 要全库重算 sha256）。基线独立于信封（桌面 `baseline.json.gz` / 移动同 JSON 的 `baseline` 字段），重置账本**不丢基线**。
 
 ## 16. 双端能力矩阵
 

@@ -7,7 +7,7 @@ import { createInkDoc, inkToBody } from "../../core/inkDoc.js";
 /**
  * 手写板「打开 = 只读」结构护栏（CORE-03，261028）。
  *
- * 背景（docs/audit-261027/09-core-data-models.md §CORE-03）：InkPad 原来**没有基线** ——
+ * 背景（CORE-03，261028 审计；契约见 docs/RESILIENCE.md §10「I-RO」）：InkPad 原来**没有基线** ——
  * `capture` 直接返回 `inkToBody(doc)`，保存也会无条件 onChange。于是「打开后直接关闭」或
  * 「撤销回原样」都会把 parse 的 clamp / 补字段（activePageId 等）写回盘，多产生一次 contentHash。
  *

@@ -3,7 +3,7 @@
 > 261029（E2-4 phase C-3c 收口）。范围：`src/core/s3v3DeviceStore.ts` 的**必需/可选端口**、缺失时的退化行为、
 > **共享编排 + 端口差异**矩阵（§5），以及单实现 conformance 契约（§6）。
 > 不涉及：协议对象布局（见 `docs/SYNC-PROTOCOL.md`）、发布锁/重试（见 `docs/SYNC-PROTOCOL.md` §12.1）、
-> 迁移 v4 单实现（`docs/audit-261027/07-rfc-convergence-kernel-v4.md`）。
+> v4 单实现（编排层现状 = `docs/ARCHITECTURE.md` §3「S3 v3 协议摘要」+ `docs/SYNC-PROTOCOL.md` §13–§15）。
 
 引擎（`src/core/s3v3Engine.ts`）只依赖 `S3v3DeviceStore`；**状态编排只有一份** =
 `src/core/s3v3/state/deviceStore.ts` 的 `createDeviceStoreMeta`（loadState/saveState/saveFolders/saveQuickNotes

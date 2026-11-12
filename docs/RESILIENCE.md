@@ -142,3 +142,37 @@
 - 移动端键盘稳定：标签弹窗/批量打标签/搜索/新建/默认笔记本在真机软键盘下未逐屏验收（当前为 jsdom 与 hook 单测）。
 - 移动端「两次返回退出」仅 adb keyevent 冒烟（已验两次返回回桌面），未在真实按键节奏/快速连按下复验。
 - 批量多选：桌面 Shift 区间跨大量节点（>500 上限提示、混选笔记本跳过）与移动端长按/滚动手势共存未真机走查。
+
+## 9. 安全与分发面已裁决（261112 收编自原 `audit-261027/02`；**勿重提**）
+
+> 口径（用户 261029 定）：**不为无法出现的场景写防御代码** —— 判断 = ①威胁在本产品真实使用里能不能出现 → ②出现后现有防线能不能兜住 → ③成本与收益是否成比例。
+> **要保住的正面资产**（重构时不得削掉）：IPC 来源双重判定（webContents 白名单 + 页面 URL）、路径段校验下沉到路径构造本身（全走 `bodyPathFor`）、SSRF 连接层钉死（DNS rebinding 已修）、prod CSP 的 `script-src` 无 `unsafe-inline/eval`、桌面 S3/AI Key `safeStorage` fail-closed、移动 Keystore AES-256-GCM、云端不可信 filename 三层校验。
+
+| 事项 | 结论 | 依据（为什么不做） |
+| --- | --- | --- |
+| 资产服务 token 只对带 Origin 的请求生效（SEC-04） | 不做 | 桌面：同机进程要读附件直接读数据目录即可，token 只挡网页；Android：其它 App 需先知道 UUID + 文件名（服务端无目录枚举、路径段已校验），而能读 App 数据的路子本来绕开这层 |
+| session 权限收敛（SEC-06） | 不做（「全拒」有害） | 我们**依赖默认放行**的 `navigator.clipboard.readText()`（S3 配置从剪贴板导入、粘贴导入）；相机/麦克风/定位/通知全仓 0 调用方 |
+| Android 全局 cleartext / MIXED_CONTENT_ALWAYS_ALLOW（SEC-08） | 不做（只修注释） | 页面 scheme 是 `http://localhost`（Capacitor 特意如此，否则音视频本地资源被混合内容拒）；出网面被 CSP 限死，全局 cleartext 无可达目标 |
+| WebView JS 桥全生命周期可用 + `data:/blob:` 导航（SEC-09） | 不做 | 前提是「WebView 里跑起非本应用脚本」：CSP `script-src 'self'`+hash、`object-src 'none'`、外链交系统浏览器 ⇒ 当前无触发路径；HTML 附件已按「外部浏览器打开」落地 |
+| PDF 走 PDFium（SEC-11） | 接受并登记 | 内联预览是用户真实在用功能；PDFium 修复随 Electron 升级带走，渲染进程 sandbox 限制后果 |
+| 固定派生密钥进 APK（SEC-13b） | 不做 | 真机路径不可达（`keystoreAvailable()` 恒真）；能读 WebView localStorage 的人本来就能读明文 SQLite/正文 |
+| 日志 redact token（SEC-13e） | 不做 | 日志里只有每次启动随机、仅本机当次有效的资产 token；S3 secret / AI key 从不进日志 |
+| 只回 keyTail 末 4 位（SEC-13c） | 保留（有意） | 识别「我配的是哪把钥匙」；不是安全收益问题 |
+
+**已做（不重复立项）**：SEC-01（AI 连通测试/拉模型不得复用已存 Key 打渲染层指定的任意 baseUrl）、SEC-02（`save_s3_settings` 的目标校验）、SEC-03 的产物口径（Android release keystore 签名已落地；桌面/Windows 不签名不公证 = 用户既定）、SEC-12（CI action 全钉不可变 commit SHA）、浏览器端 P0 安全收口（SSE 鉴权、`/__native.js` 去 token、`/api` 与 `/__events` 统一鉴权、`GET /download` 白名单）。
+
+**已定不做、勿重提**（出处见 AGENTS §3/§4、`docs/RELEASE.md`、`NOTICE`）：
+- `LLN1.` 迁移码用固定种子，仅防误读、**不是安全边界**（怀疑泄露就轮换 S3 密钥）；
+- macOS 不签名/不公证、Windows 不签名；
+- 闭源 Lakex 内核以 vendored 形式随仓库分发、未取得授权（见 `NOTICE`）；
+- 移动端 S3 密钥必须可被 JS 读出（签名在 JS），Keystore 只保静态。
+
+**浏览器端去留（用户 261028 裁决：保留）**：仅桌面端提供（浏览器里分屏读笔记），只服务本机 `127.0.0.1:19880`、**不做伺服/局域网开放**；分屏交给浏览器自身，**不做**深链路由/多窗口会话/窗口间独立标签；移动端不做浏览器端。开关不落盘（每次启动默认关）。
+
+## 10. 正文层不变量与单一判据（261112 收编自原 `audit-261027/09`；与 §1/§2 同一契约）
+
+1. **I-RO（读路径不得产生写）**：打开文档不得因序列化/规范化差异写盘、标脏或触发同步 —— 与 I0「云端胜出不得删除本地」同构，都是「某个非用户动作不得产生副作用」。单一判据 = `src/core/docBaseline.ts`；宿主（桌面 usheet / board / ink、移动 usheet）只做 IO。护栏：`usheetOpenReadOnly.test.ts`、`src/features/ink/inkOpenReadOnly.test.ts`、`src/features/board/boardOpenReadOnly.test.ts`。
+2. **坏正文 = 单一判据**：`src/core/docBodySafety.ts` 覆盖 usheet / board / ink / bitable 四族；非空但解析失败 ⇒ **只读 + 横幅 + 禁止保存**，绝不把坏内容当空文档写回（§1 原则 3 的落点）。
+3. **幂等只对「本端写出的规范正文」成立**：规范化会改写非规范正文（ink 补 `activePageId`、board 丢未知键、bitable 补 `createdAt`）⇒ **读路径必须保真、写路径必须规范**；「打开后直接关闭」不得产生一次 contentHash 变化（即 I-RO）。
+4. **跨端同字节**：桌面写盘前 `applyFontPolicy`（读 `getComputedStyle`），移动端不 normalize / 不 applyFontPolicy ⇒ 同一表格两端各存一次会互判「有编辑」。**已知缺口，登记不修**（要动移动端 Univer 实例层，收益只有「少一次假编辑」）。
+5. **正向样本不要拆**：多维表条件求值单一来源（`applyViewToRecords` / `evaluateFilterNode` / `buildBitableFillProjection`，AGENTS §3#19）已做到 grep 无第二套 —— 改多维表时不得绕过。

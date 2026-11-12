@@ -1,6 +1,7 @@
 /**
  * E3-1 phase2a：v3 类型化 IntentLog 信封（records 判别联合）单测。
- * 覆盖：每类 record round-trip、v2→v3 / v1→v3 逐字段等价、时间戳/顺序保真、未知 kind 丢弃+warning、损坏→null、版本门。
+ * 覆盖：每类 record round-trip、时间戳/顺序保真、未知 kind 丢弃+warning、损坏→null、版本门。
+ * Q23（261112 裁决 B）：v1/v2 迁移已**删除** —— 旧形状 ⇒ 账本重置（records 空）+ 一次 warning，资产投影/hashCache 保留。
  */
 import { describe, expect, it } from "vitest";
 import type { DeviceState } from "../../s3v3DeviceStore.js";
@@ -121,7 +122,7 @@ describe("账本⇄records 穷尽性（新增 DeviceState 账本字段必须能�
   });
 });
 
-describe("迁移（v2/v1 → v3 单向）", () => {
+describe("旧格式（v1/v2）⇒ 账本重置（Q23，261112 裁决 B：不迁移）", () => {
   const v2 = {
     version: 2,
     intents: [{ noteId: "n1", targetEpoch: "e1", targetGeneration: 2, purgedAt: "T9" }],
@@ -134,21 +135,22 @@ describe("迁移（v2/v1 → v3 单向）", () => {
     hashCache: { n1: { mtimeMs: 1, size: 2, hash: H("a") } },
   };
 
-  it("v2 信封 → v3 records：9 字段逐字段等价 + assets/hashCache 保留 + migrated=true", () => {
-    const migrated = migratePersisted(v2);
+  it("v2 信封 → 空账本 + 一次 warning；资产投影与 hashCache 仍保留（防云端误 GC / 全库重算）", () => {
+    const warnings: string[] = [];
+    const migrated = migratePersisted(v2, (m) => warnings.push(m));
     expect(migrated?.version).toBe(3);
-    expect(migrated?.records.map((r) => r.kind)).toEqual(["delete-intent", "pending-delete", "quick-delete", "quick-purge", "cloud-deleted", "restore", "body-recovery", "asset-retry"]);
-    expect(migrated?.records[3]).toEqual({ kind: "quick-purge", id: "q3", at: "2026-10-03T00:00:00.000Z" });
+    expect(migrated?.records, "旧账本不再迁移：所有意图重置").toEqual([]);
     expect(migrated?.assets).toEqual(v2.assets);
     expect(migrated?.hashCache).toEqual(v2.hashCache);
+    expect(warnings, "重置必须留一条可读日志（只一次）").toHaveLength(1);
+    expect(warnings[0]).toContain("重置");
     const projected = fromPersistedState(v2);
-    expect(projected?.migrated).toBe(true);
-    expect(projected?.state.remotePurged).toEqual(["n2"]);
-    expect(projected?.state.quickPurgeTimes).toEqual({ q3: "2026-10-03T00:00:00.000Z" });
-    expect(projected?.state.pendingAssets).toHaveLength(1);
+    expect(projected?.migrated, "迁移已删除 ⇒ 不再有 migrated").toBe(false);
+    expect(projected?.state.remotePurged).toEqual([]);
+    expect(projected?.state.pendingAssets).toEqual([]);
   });
 
-  it("v1 旧格式（无 version，桌面 sidecar）→ v3：字段逐项落位，migrated=true", () => {
+  it("v1 旧格式（无 version 的桌面 sidecar）→ 空账本；assetsHash/quickAssetsHash 抢救保留", () => {
     const legacy = {
       intents: [], pending: [], quickPurgeTimes: { q3: "T9" },
       remotePurged: ["n2"], restorePending: ["n3"],
@@ -156,28 +158,31 @@ describe("迁移（v2/v1 → v3 单向）", () => {
       assetsHash: { n1: H("b") }, quickAssetsHash: { q1: H("d") },
       hashCache: { n1: { mtimeMs: 1, size: 2, hash: H("a") } },
     };
-    const migrated = migratePersisted(legacy);
-    expect(migrated?.records).toContainEqual({ kind: "cloud-deleted", id: "n2" });
-    expect(migrated?.records).toContainEqual({ kind: "restore", noteId: "n3" });
-    expect(migrated?.records).toContainEqual({ kind: "quick-purge", id: "q3", at: "T9" });
+    const warnings: string[] = [];
+    const migrated = migratePersisted(legacy, (m) => warnings.push(m));
+    expect(migrated?.records).toEqual([]);
     expect(migrated?.assets).toEqual({ lake: { n1: H("b") }, quickNotes: { q1: H("d") } });
-    expect(fromPersistedState(legacy)?.migrated).toBe(true);
+    expect(migrated?.hashCache).toEqual(legacy.hashCache);
+    expect(warnings).toHaveLength(1);
+    expect(fromPersistedState(legacy)?.state.restorePending).toEqual([]);
   });
 
-  it("v1 旧移动格式（合并 assetsHash + baseline 同 JSON，baseline 不属于信封）", () => {
+  it("v1 旧移动格式（合并 assetsHash + baseline 同 JSON）：baseline 不属于信封，只抢救资产投影", () => {
     const migrated = migratePersisted({
       baseline: { epoch: "e1" }, intents: [], pending: [], remotePurged: [], restorePending: [],
       assetsHash: { n1: H("b"), q1: H("d") }, quickPurgeTimes: {}, pendingAssets: [],
     });
+    expect(migrated?.records).toEqual([]);
     expect(migrated?.assets.lake).toEqual({ n1: H("b"), q1: H("d") });
     expect(migrated?.assets.quickNotes).toEqual({});
   });
 });
 
 describe("断代门 / 容错", () => {
-  it("v3 客户端只读 v3：未知版本（含未来 4）→ null，不做降级", () => {
-    expect(migratePersisted({ version: 4, records: [] })).toBeNull();
-    expect(migratePersisted({ version: 1, records: [] })).toBeNull();
+  it("版本门：v3 直读；未知版本（含未来 4 / 数字 1）按「旧账本重置」处理（不猜、不降级、不留半迁移）", () => {
+    const future = migratePersisted({ version: 4, records: [{ kind: "cloud-deleted", id: "n1" }] });
+    expect(future?.records, "未知版本不猜语义 ⇒ 重置").toEqual([]);
+    expect(migratePersisted({ version: 1, records: [] })?.records).toEqual([]);
   });
 
   it("未知 record kind 丢弃并收集 warning，合法记录保留（不崩）", () => {
@@ -201,7 +206,8 @@ describe("断代门 / 容错", () => {
     expect(migratePersisted("oops")).toBeNull();
     expect(migratePersisted([1, 2])).toBeNull();
     expect(migratePersisted({})).toBeNull();
-    expect(fromPersistedState({ version: 4 })).toBeNull();
+    // {version:4} 不是「无关 JSON」而是「未来账本」⇒ 走重置（有 warning），不是 null
+    expect(fromPersistedState({ version: 4 })?.state.remotePurged).toEqual([]);
   });
 
   it("mergeSyncMarkers 在 v3 records 上替换两类标记（其余记录不动）", () => {

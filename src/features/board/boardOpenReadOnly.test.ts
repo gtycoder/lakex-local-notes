@@ -6,7 +6,7 @@ import { docBaselineSettled } from "../../core/docBaseline.js";
 /**
  * 画板「打开 = 只读」结构护栏（CORE-03，261028）。
  *
- * 背景（docs/audit-261027/09-core-data-models.md §CORE-03）：BoardEditor 的基线由
+ * 背景（CORE-03，261028 审计；契约见 docs/RESILIENCE.md §10「I-RO」）：BoardEditor 的基线由
  * `boardToBody(initialDoc)` 播种、flush 逐字比对，但这些都只挡「与基线规范化后相同」；
  * capture 曾**无条件返回规范化正文** ⇒ 外层按字节比较时，非规范正文（键序不同 / 带未知键 /
  * 老 `plaitValue` 方言）会被当成一次编辑写回盘，多产生一次 contentHash 与同步上传。

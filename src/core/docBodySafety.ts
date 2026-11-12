@@ -1,7 +1,7 @@
 /**
  * 坏正文安全判定（CORE-02）：usheet / board / ink / bitable 四族共用**单一判据**。
  *
- * 背景（docs/audit-261027/09-core-data-models.md §CORE-02）：同一句「正文损坏」在四族里曾有四种行为——
+ * 背景（CORE-02，261028 审计；契约登记见 docs/RESILIENCE.md §10）：同一句「正文损坏」在四族里曾有四种行为——
  * ink 只读 + 横幅；bitable 宿主各写一套（桌面 parse===null、移动 null 落成「还没有数据表」）；
  * usheet 解析失败被当成空表（可编辑）⇒ 用户改一格就把原文覆盖；
  * board 的解析器没有失败态 ⇒ 坏正文静默变成空白画板，画一笔就落盘「空白 + 新元素」。

@@ -1,7 +1,7 @@
 /**
  * v4 SyncPlan 契约（纯类型；Reconciler 层的输出）。
  *
- * 设计（docs/audit-261027/07-rfc-convergence-kernel-v4.md §6.2）：
+ * 设计（v4 四相契约；见 docs/ARCHITECTURE.md §3 与 docs/SYNC-PROTOCOL.md §13–§15）：
  *  - plan 只依赖输入快照（本地/基线/远端/意图），**零 IO**、可序列化、可 dry-run；
  *  - apply 只消费 plan；commit 只消费 publish；finalize 只写基线/意图。
  *  - 本文件先落类型与不变量注释，逐步把引擎的决策/调度搬进来（E1-2/E2）。

@@ -63,7 +63,7 @@
 
 59. **浏览器端 = 本机附属窗口，不是伺服（260917）**：`electron/webApiServer.ts` 起的 HTTP 服务（默认端口 19880）把桌面渲染层交给**本机**浏览器：`POST /api/<channel>` 复用同一批 IPC handler、静态服务 `dist/`、`/__native.js` 注入 `window.lakeNative` 的 HTTP shim；**只绑 127.0.0.1**。用户 260917 明确**不做伺服**（不监听局域网、不对外开放）。开关在「设置 → 浏览器端」：**不落盘**（内存态，每次启动默认关闭）、**打开/关闭即时起停、无需重启**（`createWebServerController`）。「打开浏览器」按钮走 IPC `open_web_client` → 主进程 `shell.openExternal(url)`；**URL 由主进程按固定端口构造、渲染层不传 URL**（防开放重定向）。已知缺口（本批未做）：推送缺失（shim 里 `onSyncProgress`/`onPendingSummaryChanged` 是 no-op）、`dialog`/`shell`/`clipboard` 类通道在浏览器里语义错（会操作桌面机）、`/api/*` 只校验 `x-lake-token`（复用 assetToken、不校验 Origin）、`/__native.js` 不校验 token。
 
-> **261028 更新**：上述缺口已处理——SSE 推送已实现（含 `ai:stream`）；`/__native.js` 不再含 token（HttpOnly cookie + Origin 校验）；`/api` 与 `/__events` 统一鉴权；新增 `GET /download` 白名单下载（导出）。**浏览器端按用户裁决保留**（桌面端分屏读笔记；移动端不做），不再按"待删"处理。见 `docs/audit-261027/11-browser-end-plan.md`。
+> **261028 更新**：上述缺口已处理——SSE 推送已实现（含 `ai:stream`）；`/__native.js` 不再含 token（HttpOnly cookie + Origin 校验）；`/api` 与 `/__events` 统一鉴权；新增 `GET /download` 白名单下载（导出）。**浏览器端按用户裁决保留**（桌面端分屏读笔记；移动端不做），不再按"待删"处理。裁决与边界见 `docs/RESILIENCE.md` §9。
 60. **改 `electron/preload.cjs` 在 dev 不会热重启（260917）**：vite-plugin-electron 只 watch 入口 `electron/main.ts`，而 dev 下 preload 是**直接读源文件** `../electron/preload.cjs`（不是 `dist-electron/` 里的构建产物）。改完 preload 必须**手动重启 Electron**（或 `touch electron/main.ts` 触发重建）才生效；否则渲染层还是旧方法，症状是 `window.lakeNative.xxx is not a function`。
 
 ## E. 环境与工具

@@ -25,7 +25,7 @@ export type QuickNoteFullSyncReason = "no-cloud" | "no-baseline" | "cloud-change
  */
 export const QUICK_NOTE_FULL_SYNC_TEXT: Record<QuickNoteFullSyncReason, string> = {
   "no-cloud": "云端还没有小记数据，已改为执行一次完整同步",
-  "no-baseline": "本机缺少同步基线，已改为执行一次完整同步",
+  "no-baseline": "本机还没有这条小记的同步记录，已改为执行一次完整同步",
   "cloud-changed": "云端小记索引已变化，已改为执行一次完整同步",
   "remote-deleted": "这条小记已在其他设备删除，已改为执行一次完整同步并按删除处理",
 };
