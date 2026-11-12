@@ -268,7 +268,7 @@ export async function restoreTreeItem(
     const row = await d.prepare("SELECT COALESCE(deleted_from_parent_id, parent_id) AS pid, title FROM notes WHERE id=?").get(id) as { pid?: string | null; title?: string } | undefined;
     const parentId = await resolveRestoreParent(d, row?.pid ?? null, new Set(folderIds), row?.title ?? "");
     await d.prepare(
-      "UPDATE notes SET parent_id=?, trashed_at=NULL, restore_pending_at=?, is_dirty=1, updated_at=?, deleted_from_parent_id=NULL WHERE id=?"
+      "UPDATE notes SET parent_id=?, trashed_at=NULL, restore_pending_at=?, is_dirty=1, updated_at=?, deleted_from_parent_id=NULL, cloud_deleted=0 WHERE id=?"
     ).run(parentId, now, now, id);
     return;
   }
@@ -291,7 +291,7 @@ export async function restoreTreeItem(
     for (const nid of restoreNoteIds) {
       // 子树内 notes：applyRemoteFolderDelete 会把子笔记 parent 移到 TRASH 容器 → 恢复时一并移回原父
       statements.push({
-        statement: "UPDATE notes SET parent_id=COALESCE(deleted_from_parent_id, parent_id), trashed_at=NULL, restore_pending_at=?, is_dirty=1, updated_at=?, deleted_from_parent_id=NULL WHERE id=?",
+        statement: "UPDATE notes SET parent_id=COALESCE(deleted_from_parent_id, parent_id), trashed_at=NULL, restore_pending_at=?, is_dirty=1, updated_at=?, deleted_from_parent_id=NULL, cloud_deleted=0 WHERE id=?",
         values: [now, now, nid],
       });
     }

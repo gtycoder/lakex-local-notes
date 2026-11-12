@@ -470,18 +470,21 @@ export function createMobilePlatformPort(db: MobileDb, ctxIn?: Partial<MobilePla
       const snap = snapshot.get(noteId);
       if (snap) snap.trashed_at = trashedAt;
     },
-    /** 收敛删除（移动旧语义）：写 deleted_notes 墓碑（purged_at=now，删除传播）+ 删行 + 删正文。 */
+    /**
+     * 收敛删除（端口可选能力；core 只在「本机有、本轮状态没有」时调用 = **远端驱动删除**；
+     * 本机用户显式 purge 在 UI 层已删行 + 写墓碑，不会走到这里）。
+     * 261112 task-74：**软删保副本** —— 进回收站并打「云端已删除（仅本地）」投影
+     * （保留正文/父级、可恢复、不参与 S3）；不再写 deleted_notes 墓碑、不再物理删行/正文。
+     * 对齐桌面端口：桌面不实现本方法 ⇒ core 回落 deleteNote（软删）；本实现额外补 cloud_deleted 标记。
+     */
     async purgeLocalNote(noteId: string): Promise<void> {
       const now = nowIso();
-      const cur = await db.prepare("SELECT title,parent_id,sort_order,updated_at FROM notes WHERE id=?").get(noteId) as
-        { title: string; parent_id: string | null; sort_order: number; updated_at: string } | undefined;
-      if (!cur) return;
-      await db.prepare(
-        "INSERT INTO deleted_notes (id,title,parent_id,sort_order,updated_at,deleted_at,node_type,purged_at) VALUES (?,?,?,?,?,?,'note',?) ON CONFLICT(id) DO UPDATE SET purged_at=excluded.purged_at"
-      ).run(noteId, cur.title, cur.parent_id, cur.sort_order, cur.updated_at, now, now);
-      await db.prepare("DELETE FROM notes WHERE id=?").run(noteId);
-      await deleteNoteBodies(noteId);
-      snapshot.delete(noteId);
+      await write(
+        "UPDATE notes SET trashed_at=COALESCE(trashed_at, ?), deleted_from_parent_id=COALESCE(deleted_from_parent_id, parent_id), cloud_deleted=1, is_dirty=0, restore_pending_at=NULL WHERE id=?",
+        [now, noteId],
+      );
+      const snap = snapshot.get(noteId);
+      if (snap) snap.trashed_at = snap.trashed_at ?? now;
     },
     async restoreTrashItem(noteId: string): Promise<void> {
       await write("UPDATE notes SET trashed_at=NULL, is_dirty=1 WHERE id=?", [noteId]);
