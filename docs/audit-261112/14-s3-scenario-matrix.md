@@ -11,7 +11,7 @@
 - 场景总数：**74**（A 档 58 / B 档 1 / A+B 15）。
 - 覆盖：**已有 45 / 部分 28 / 真空 1 / 失败 0**（按 HEAD `903a47aa` 重算；阶段②首批 + task-62/66/73 修复 + task-76 收口，见 §0.3–§0.5 与附录 D）。
 - 剩余真空 **1 条**：S19 目录重建同 id（需目录显式 id 重建入口，非本批优先级）。S08 / S50 / S53 / S05 / S13 已在 §0.5 收口为「已有」。
-- 阶段②发现并已修：**F-01 S17 purge group**（task-62，P0）。新登记未修：**F-01b** 云端 folders[] 残留已 purge 目录（需 core 侧目录删除意图，另开任务，见附录 D）。
+- 阶段②发现并已修：**F-01 S17 purge group**（task-62，P0）、**F-01b** 云端 folders[] 残留已 purge 目录（task-77，`fa2fbdad`，见附录 D）。
 - 现有可复用的「跨端契约」底座：`electron/s3v3/deviceConformance.ts` 的 `defineDeviceContract`（19 条共享场景，桌面 = `deviceConformance.mixed.test.ts`，移动 = `src/mobile/v3/deviceConformance.mobile.test.ts`）；`electron/s3v3/syncEngine.test.ts`（16 条协议/引擎）、`src/core/s3v3/plan/plan.test.ts`（21 条决策）、`src/core/s3v3/state/deviceStoreMeta.test.ts`（17 条应用层）、`src/core/s3v3/quickPush/*`（10+5 条快路径）、`src/core/s3v3LockContention.test.ts`（4 条锁竞争）。
 - **真空集中在四类**：① 生命周期×编辑并发（本地 trash×他端编辑 / purge×编辑 / 恢复×删除同时）；② 结构×移动并发与深层目录（移动不被编辑回滚、深 3 层、group purge/重建、附件随正文迁移）；③ 锁×编辑/锁×回收站；④ 时钟偏差与三端含删除的收敛。
 
@@ -195,7 +195,7 @@ S03 purge、S05 本地 trash×他端编辑、S13 移动×他端编辑、S21 双�
 - 回归：electron/s3v3/scenarioMatrix.test.ts S17（正常断言）+ 新增 src/mobile/data/trashRepository.purgeSubtree.test.ts（移动端同口径：已扁平化子文档也整棵删、每篇有 note 墓碑）。
 - 回归扩展（task-76）：同文件 S17b 清空回收站（扁平化子树不抛错、逐节点墓碑）/ S17c 恢复扁平化组（子文档回原父）/ S17d 自动过期（逐根幂等）已补齐；S08 purge×他端编辑（留历史快照、单轮不抛错、不复活）同批实跑 PASS。
 
-### F-01b（P1，登记未修，需 core 侧改动）云端 folders[] 仍残留已 purge 的目录（对端把回收站副本当普通目录发布）
+### F-01b（P1，已修 `fa2fbdad`/task-77）云端 folders[] 残留已 purge 目录（4 处叠加根因：intents 未交给 plan / 发布未排除 remote-purged-trash / 无基线时副本被当 upload / fieldChanged 重传已删正文；回归 `folderPurgeCloud.test.ts` + conformance 场景 7b）
 - 现象：F-01 修复后 S17 实测云端 lake 索引 folders[] 仍有该组（parentId=notebook-trash、trashedAt 非空）—— 由对端 B 在下一轮把它作为「回收站目录」发布；A 端已用 purged 墓碑拒绝回魂（本机不重建），但云端仍残留。
 - 判定：违反 AGENTS §3#15「已彻底删除的判定必须永久」在目录上的同一条红线；不在 task-62 写作用域（plan.ts / deviceStore.ts / engineBridge.ts 归 audit-core），只登记。
 - 建议：单开任务，把「目录删除 = 缺席 / 本机 purge 的目录不得再发布」做成 core 单一判据（含 folders[] 删除意图 / 对端 remotePurged 目录），并补 S17 的 folders 断言。
