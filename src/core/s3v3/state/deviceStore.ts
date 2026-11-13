@@ -652,6 +652,7 @@ export function createDeviceStoreMeta(deps: DeviceStoreMetaDeps): DeviceStoreMet
           const prevTrashedAt = prevNote?.trashedAt ?? null;
           const localLifecycleChangedSinceSnapshot = !!prevNote
             && ((cur.trashedAt ?? null) !== prevTrashedAt);
+          let restoredDuringRound = false;
           const lifecycleRace = (!!n.trashedAt !== !!cur.trashedAt)
             && (!prevNote || localLifecycleChangedSinceSnapshot)
             && !!cur.updatedAt && !!n.updatedAt && cur.updatedAt > n.updatedAt;
@@ -663,7 +664,17 @@ export function createDeviceStoreMeta(deps: DeviceStoreMetaDeps): DeviceStoreMet
           } else if (!n.trashedAt && cur.trashedAt) {
             // P0：只有「基线 trashed → 远端 active」或显式 restore_pending 才恢复（见 keepLocalTrash）；
             // 其余情况保留本地回收站：远端内容仍会按上面的正文/元数据路径应用。
-            if (!keepLocalTrash) await p.restoreTrashItem(n.id);
+            if (!keepLocalTrash) {
+              await p.restoreTrashItem(n.id);
+              // 261113（真实桶 R5）：恢复端口是**用户入口**，它会把 updated_at 写成「本机 now」
+              // （恢复传播要 bump，否则他端墓碑压回）。但同步镜像这条路上，本机 now 往往**晚于**
+              // 云端发布值 ⇒ 下一轮三方合并把本地 stale 正文误判成「本地更新」⇒ 他端旧副本上传覆盖
+              // 掉刚编辑的新内容（首次编辑丢失、第二次才正常）。
+              // 因此本轮引擎自己写过生命周期 ⇒ 后面的元数据应用必须**不带 expected updatedAt 守卫**
+              // 把 updatedAt 对齐到云端值（与 contentChanged 的既有理由相同：DB 里的时间是引擎写的，
+              // 不是用户窗口内编辑）。
+              restoredDuringRound = true;
+            }
           }
           // P1（v3 空发布抖动根因）：本轮合并结果的元数据必须原样落库，尤其 updatedAt。
           // P0：keepLocalTrash 时把生命周期字段固定为**本地回收站值**（position 归本地、内容归远端），
@@ -687,7 +698,7 @@ export function createDeviceStoreMeta(deps: DeviceStoreMetaDeps): DeviceStoreMet
             const localSnapshot = previous?.lake.notes.find((entry) => entry.id === n.id);
             // 引擎本轮自己写了正文（下载/恢复）时，DB 的 updated_at 是引擎写的、不是用户窗口内编辑 ⇒
             // 必须无条件应用远端元数据把 updatedAt 对齐，否则下一轮会误判本地更新再发布。
-            await p.applyRemoteNoteMeta(metaNote, contentChanged ? undefined : localSnapshot?.updatedAt);
+            await p.applyRemoteNoteMeta(metaNote, (contentChanged || restoredDuringRound) ? undefined : localSnapshot?.updatedAt);
           }
           if (!!cur.isEditLocked !== !!n.isLocked || (cur.editLockedAt ?? null) !== (n.lockedAt ?? null)) {
             await p.applyRemoteEditLock(n.id, !!n.isLocked, n.lockedAt ?? null);

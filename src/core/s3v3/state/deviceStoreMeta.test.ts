@@ -47,6 +47,8 @@ function memoryPlatform(world: Partial<{ folders: any[]; notes: any[]; quickNote
     restoreNotes: world.restoreNotes ?? [], restoreQuick: world.restoreQuick ?? [], recovery: world.recovery ?? [],
   };
   const importedNotes = new Map<string, SyncNoteWrite>();
+  /** applyRemoteNoteMeta 的 expectedLocalUpdatedAt 实参（null = 不带守卫）。 */
+  const metaApplies: Array<{ id: string; expected: string | null }> = [];
   const port: PlatformDataPort = {
     async listFoldersForSync() { return w.folders; },
     async listNotesSyncMeta() { return w.notes; },
@@ -66,7 +68,7 @@ function memoryPlatform(world: Partial<{ folders: any[]; notes: any[]; quickNote
     async importRemoteNote(note) { calls.push("importRemoteNote:" + note.id); importedNotes.set(note.id, note); },
     async saveNote(id) { calls.push("saveNote:" + id); },
     async saveSyncedNote(id) { calls.push("saveSyncedNote:" + id); },
-    async applyRemoteNoteMeta(note) { calls.push("applyRemoteNoteMeta:" + note.id); importedNotes.set(note.id, note); },
+    async applyRemoteNoteMeta(note, expected) { calls.push("applyRemoteNoteMeta:" + note.id); metaApplies.push({ id: note.id, expected: expected ?? null }); importedNotes.set(note.id, note); },
     async applyRemoteEditLock(id) { calls.push("applyRemoteEditLock:" + id); },
     async setNodeIcon(id) { calls.push("setNodeIcon:" + id); },
     async deleteNote(id) { calls.push("deleteNote:" + id); },
@@ -101,7 +103,7 @@ function memoryPlatform(world: Partial<{ folders: any[]; notes: any[]; quickNote
       },
     } : {}),
   };
-  return { port, calls, world: w, importedNotes };
+  return { port, calls, world: w, importedNotes, metaApplies };
 }
 
 function makeStore(files: FileDriver, platform: PlatformDataPort, persisted: unknown, opts: { hashCache?: Map<string, { mtimeMs: number; size: number; hash: string }> } = {}) {
@@ -292,6 +294,48 @@ describe("createDeviceStoreMeta.saveState（只经端口落库）", () => {
     expect(platform.calls).toContain("restoreTrashItem:n2");
     expect(platform.calls).toContain("deleteTreeNode:old");
     expect(platform.calls).not.toContain("deleteTreeNode:trash");
+  });
+
+  it("261113 R5：引擎恢复后必须把 updatedAt 对齐云端（否则首次编辑被他端旧副本覆盖）", async () => {
+    const files = memoryFiles({ "bodies/n2.lake": new TextEncoder().encode("body-b") });
+    const platform = memoryPlatform({
+      folders: [
+        { id: "trash", title: "回收站", parentId: null, sortOrder: 9, nodeType: "notebook", icon: null, updatedAt: "T0" },
+        { id: "nb", title: "NB", parentId: null, sortOrder: 0, nodeType: "notebook", icon: null, updatedAt: "T0" },
+      ],
+      // 本地 DB：恢复前的回收站行（updatedAt=T1）；恢复端口会把它改成「本机 now」（T9）
+      notes: [{ id: "n2", title: "N2", parentId: "trash", sortOrder: 0, updatedAt: "T1", contentHash: H("b"), kind: "doc", icon: null, isEditLocked: false, editLockedAt: null, isConflict: false, trashedAt: "T1", deletedFromParentId: "nb" }],
+    });
+    const meta = createDeviceStoreMeta({
+      platform: platform.port,
+      files,
+      assets: createFileBackedAssetIo({ files, assetDirFor: (id) => "assets/" + id }),
+      state: { read: async () => null, write: async () => {} },
+      baseline: {
+        load: async () => ({
+          epoch: "e1", generation: 1, lakeCommit: "c1", quickNotesCommit: "q1",
+          lake: { v: 3, space: "lake", folders: [], notes: [{ id: "n2", title: "N2", parentId: "trash", sortOrder: 0, updatedAt: "T1", contentHash: H("b"), trashedAt: "T1" }] },
+          quickNotes: { v: 3, space: "quickNotes", items: [], tags: [] },
+        }),
+      },
+      stagedBodies: new Map(),
+    });
+    const state: DeviceState = {
+      lake: { v: 3, space: "lake", notes: [{ id: "n2", title: "N2", parentId: "nb", sortOrder: 0, updatedAt: "T2", contentHash: H("b") }], folders: [] },
+      quickNotes: { v: 3, space: "quickNotes", items: [], tags: [] },
+      folders: [
+        { id: "trash", title: "回收站", parentId: null, sortOrder: 9, nodeType: "notebook", icon: null, updatedAt: "T0" },
+        { id: "nb", title: "NB", parentId: null, sortOrder: 0, nodeType: "notebook", icon: null, updatedAt: "T0" },
+      ],
+      intents: [], pending: [], remotePurged: [], restorePending: [],
+    };
+    await meta.saveState(state);
+    // 引擎走了恢复端口
+    expect(platform.calls).toContain("restoreTrashItem:n2");
+    // 恢复后必须**不带 expected updatedAt 守卫**应用远端元数据（否则对齐不上云端值）
+    const apply = platform.metaApplies.find((a) => a.id === "n2");
+    expect(apply).toBeTruthy();
+    expect(apply!.expected).toBeNull();
   });
 
   it("P0（261112 task-44）：基线 active + 远端 active + 本地回收站 ⇒ 不隐式恢复、正文走 saveSyncedNote、位置保留回收站", async () => {
