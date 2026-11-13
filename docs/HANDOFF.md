@@ -7,6 +7,14 @@
 
 ## 0. 最新交接（最近 3 个批次；更早的见 git）
 
+### 261114 · v1.1.3（移动端删除 review 收口 + 级联/关标签详细矩阵 + 发版）
+
+- **用户点单**：① 移动端删除也做 review（笔记本/分组/文档 × 子级/多级子级都要详细测试），删除后**关闭已打开标签、行为与桌面一致**；② 完成后推远程、打 tag 发版。
+- **独立 review（trash-reviewer，只读）**确认数据层级联/恢复/purge/幂等/环/dfp/keep-alive 设计已对齐桌面，但抓到 3 个真缺口 + 2 个低风险：G1 批量删除未先落盘（随后 cancelAutoSave 丢最后输入）；G2 单条恢复「原父是活跃文档」被错误回落到笔记本根；G3 purge/自动过期/缺正文彻底删除不关闭已打开标签；G4 purge 残留 orphan_assets 行；G5 purge 无「必须在回收站」守卫。
+- **修复（`c3b17bf9`）**：G1 批量 trash 前 flush（失败中止不删）；G2 resolveRestoreParent 补活跃 note 父查询；G3 purge 返回 `noteIds` + 统一 `tabDismissal.dismissNoteTabs` 通道（手动 purge/自动过期/缺正文都收标签）；G4 purge 事务内清 orphan_assets；G5 purge 加回收站守卫 + kind 由 DB 派生（`{purged,noteIds}` 返回）。**设备实测额外 bug**：批量关标签循环 `removeTab` 读旧 `tabsRef` 互相覆盖 ⇒ 父标签残留；新增 `removeTabs(ids)` 一次 setState。矩阵测试：移动 `trashCascade.test.ts` 15 例覆盖 笔记本/分组/文档 × 3~4 层 × 删除/恢复/彻底删除 + 批量顺序 + 幂等 + G2/G4/G5；桌面 `trashCascade.test.ts` 8 例补 笔记本根（多级分组+多级文档）/purge 文档子树；`src/core/tree.test.ts` 2 例（桌面关标签集合子树/环）。
+- **设备验收（AVD lake_mobile，CDP 9335，最终构建）**：A 删多级分组（G1>G2>G3>GDOC，打开 GDOC 后删 G1）→ tabCount=0、toast、可回首页；B 删深层层级文档（PARENT>CHILD>GRAND，打开 GRAND 后删 PARENT）→ 无 ghost tab；C 首页长按删笔记本（含多级子文档）→ 标签存档清空、恢复整棵后重进可正常打开；另实测活跃笔记本 purge 返回 false（G5）。证据 `.css-audit/mobile-gone/del-*.png`（gitignore）。
+- **门禁**：tsc 0；全量 vitest **939 文件 / 5983 例（5971 passed / 12 skipped）/ 0 failed**；`vite build`（桌面）+ `vite build -c vite.mobile.config.ts`（移动）均成功；`check:bundle`（含 vendor CSS/架构预算：desktop 首屏 577.0/600.0KB、mobile 首屏 342.2/350.0KB、mobile entry 48,994/51,200B）、`check:core` 178/0、`check:mobileui`、`ui-metrics`、`git diff --check` 全过。
+- **发版**：`package.json` = **1.1.3**（Android versionName 1.1.3 / versionCode 11103，由 package.json 派生）；注解 tag **`v1.1.3`**；发布说明 = [RELEASE-NOTES](RELEASE-NOTES.md) 顶部段落。
 ### 261114 · 用户第二轮点单（回收站动作浮动 / 启动不硬开 / 保存被拒可退出 / 移动端同型修复）
 
 - **① 回收站行动作浮动化**（用户截图：两个按钮占标题空间）：`TrashPanel` 文档行与小记行的「恢复 / 彻底删除」包进 `.trash-row-actions` 绝对定位覆盖层（不参与 flex 宽；hover / 选中 / focus-within 显形；行加本地类 `trash-row`、去掉 `ln-list-item--hide-action` 以避开原语跨所有权门禁）。`styles/app/panels.css` +9 声明（基线 112→121）、`cssLayers`/`primitives`/`ui-metrics` 全过。隔离实测：行宽 301.5 时标题可用宽 165.7、浮层 left 243.5 / right 8 / 宽 50（= 改前会占掉的 2×22+gap）、行高不变；hover 时右侧倒计时徽标让位不叠字；文档行/小记行同套类。
@@ -163,16 +171,16 @@
 
 - 主分支 `master`；**HEAD 以 `git log -1` 为准**；R2 已提交 6 笔拆分/设备记录（`a23631f6` sidebar / `fd268432` settings / `231fe845` electron boot / `c00d3a60` lakeRuntime / `4a9b965c` ink 测试 / `e352e2cb` 设备记录）；**产品代码基线 = `8e20a6a3`（R0）/ `e87016bd`（R1）/ `e352e2cb`（R2）/ `3fad8821`（R2 收尾：位置合并 + 同步专用写路径 + 单篇降级）**；**日记收口批产品笔 = `199f3403`（不可变守卫）/ `fd58dc0a`（移动移除取消标记）/ `d4d03260`（移动目标剔除日记子树）/ `f965e62c`（转文档共享弹窗）/ `4b6a524a`（转小记媒体搬运）/ `400dcc75`（showNotice 全空间可见）**；**261113 批 = `839c7a93`（发版复核 P2/P3）/ `a57cf3cf`（移动端「转为小记」+ 22 号报告 §11 + RELEASE.md Secrets 节）**（详见 §0）。
 - **未 push**（261114 实测，已 fetch 核对）：`origin/master` = `github/master` = `608eb8d2` = 本地 HEAD；**0 提交待推**（双远端同步）——以后以 `git rev-list --count origin/master..HEAD` 为准。
-- `package.json` = **1.1.2**；Android `versionName 1.1.2` / `versionCode 11102`（从根 package.json 派生：`1000 + major*10000 + minor*100 + patch`，只增不减；**不手改 build.gradle**）。
+- `package.json` = **1.1.3**；Android `versionName 1.1.3` / `versionCode 11103`（从根 package.json 派生：`1000 + major*10000 + minor*100 + patch`，只增不减；**不手改 build.gradle**）。
 - tag：`v1.0.0`–`v1.0.5`、`v1.1.0`、`v1.1.1`（261112 已发）、**`v1.1.2`（261114 已打 tag 并双推；CI 由 tag 触发打包 → GitHub Release 8 资产 + latest.json；发布说明段落 = RELEASE-NOTES 顶部 `# LakexLocalNotes v1.1.2`）**；已发布 tag 不再移动。发布说明 = [docs/RELEASE-NOTES.md](RELEASE-NOTES.md)（**v1.1.2 → v1.0.0** 倒序；当前 tag 段落 = CI 生成 GitHub Release 正文的来源）。
 - 分支/远端：`master` 唯一长期分支；`origin` = Gitee（SSH，第二 pushurl = GitHub HTTPS）⇒ `git push origin <branch>` 一次推两边；GitHub 只在推 tag 时构建。remote 不入库 ⇒ 新 clone 跑 `npm run setup:remotes`。
-- **工作树**：261114 第二轮点单 = `b676440f`（回收站浮动动作 / 启动不硬开 / 保存被拒可退出 / 移动端同型修复）+ 追加级联修复 commit（见 `git log -1`）；前一批「回收站幽灵文档修复」= `f3a0e60c`。历史上并行会话共用工作树时一律「只 stage 本批文件」，**绝不用 `git add -A`**。
+- **工作树**：261114 批 = `f3a0e60c`（幽灵文档）→ `b676440f`（回收站浮动动作/启动不硬开/保存被拒可退出/移动 gone）→ `bbeddc3f`（级联删除）→ `c3b17bf9`（移动删除 review 收口）→ 发版 commit（1.1.3，见 `git log`）；历史上并行会话共用工作树时一律「只 stage 本批文件」，**绝不用 `git add -A`**。
 - 261110 一次性历史清理（`.ai-writing-recon/` 用 `git filter-repo` 从全部历史移除，重写 v1.1.0 之后的提交；tag 未变）⇒ 旧 clone 需 `git fetch --force --prune && git reset --hard origin/master`。
 
 **门禁基线（261114 回收站幽灵文档修复批实测 2026-11-13 16:58；分层口径见 AGENTS §3#21）**
 
 - `npx tsc --noEmit` = **0**。
-- 全量 vitest（低负载串行门禁）：**文件 = 总 936（925 passed / 11 skipped）**；**用例 = 总 5935（5923 passed / 12 skipped）/ 0 failed**（63.5s）。偶发 `perf.integration` 满载抖动口径见下条（单跑复验通过）。本批动了回收站行样式 ⇒ 跑了 `cssLayers`/`uiPrimitives`/`ui-metrics`（均 PASS；无该行的样式快照态，未跑 stylesnap）；移动端改动已装 APK 并设备级验收；`npx vite build` 成功（隔离验证用构建）。
+- 全量 vitest（低负载串行门禁）：**文件 = 总 939（928 passed / 11 skipped）**；**用例 = 总 5983（5971 passed / 12 skipped）/ 0 failed**（71.2s）。偶发 `perf.integration` 满载抖动口径见下条（单跑复验通过）。本批动了回收站行样式 ⇒ 跑了 `cssLayers`/`uiPrimitives`/`ui-metrics`（均 PASS；无该行的样式快照态，未跑 stylesnap）；移动端改动已装 APK 并设备级验收；`npx vite build` 成功（隔离验证用构建）。
 - ⚠️ `electron/s3v3/perf.integration.test.ts`：**低负载串行本轮无抖动（通过）**；满载/并发构建时偶发（单跑 PASS），门禁判定以单跑/低负载为准（同 §2 既有口径）。
 - `node scripts/ui-metrics.mjs`：颜色 0 / 字号 0 / `!important` 9 = 允许清单 / `crossFileDupGroups` 45 / `shadowedDecls` **0**（task-34 已清零，门禁只降）/ 未定义令牌 0。
 - `check:core` **178** 文件 0 违规；`check:mobileui` 通过。
