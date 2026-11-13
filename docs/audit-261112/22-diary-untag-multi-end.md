@@ -66,3 +66,31 @@
 
 - 移动端移除：`npx tsc --noEmit` 0；相关 vitest（diary/移动接线/maintenancePolicy/folderSpace）7 文件 55 例全绿；`git diff --check` 0。
 - 只 commit 本目录文档 + 证据；`src/mobile/**` 等代码改动**未 commit**（等 lead 复核）。
+
+## 11. task-106：移动端「转为小记」入口（261113，验收中）
+
+**实现（`src/mobile/**` + 必要 `src/core/**`；未 commit）**
+
+- 新增 `src/mobile/diary/diaryToQuickNote.ts`：移动端对齐桌面 `electron/diaryQuickNoteConversion.ts` —— 读日记 note（非 doc 拒绝）→ 列 note-assets 资产并校验正文引用是否缺失（缺失明确报错）→ `rewriteQuickNoteAssetScope` 把 `/<noteId>/` 改写为 `/quick-notes/<newId>/`（同时处理卡片 `data:` 里的 URL-encoded 形态）→ `stripUnsupportedCards` 剥掉小记承载不了的卡片并上报 `droppedKinds` → 只搬运正文真正引用的资产（原资产保留）→ 生成 images 清单（id/filename/mime/尺寸/size/sha256）→ 写入 `quick-notes/<newId>/<filename>` → `saveQuickNoteContent` 写 `.qnote` + 行 → **成功之后**才 `trashTreeItem` 软删原文；任一步失败 `removeUnsyncedQuickNote` 回滚（行/正文/标签关系/资产目录全清，原文不动）。
+- `src/mobile/data/quickNotesRepository.ts`：新增 `removeUnsyncedQuickNote`（硬删、无墓碑，与桌面同口径；best-effort 且**不套外层事务**——`removeQuickNoteLinks` 自带事务，移动端 SQLite 不支持嵌套 BEGIN）。
+- `src/mobile/bridge/diary.ts`：新增 `diaryToQuickNote(noteId)`，`runWrite("diaryToQuickNote")` 取写域，注入 assetFs 四件套 + `reconcileIndex`。
+- `src/mobile/diary/diaryQuickNoteNotice.ts`：与桌面 `features/diary/diaryQuickNote.ts` 逐字同文案（渲染层独立，移动端不 import 桌面 features；测试卡 base 文案 + droppedKinds 拼接）。
+- `src/mobile/diary/DiaryPage.tsx`：⋯ 菜单加「转为小记」（图标 Feather，与转为文档…/删除同组）+ 二次确认（说明「图片/附件会一起复制到小记；原日记会移入回收站（可恢复）」）+ 在途守卫 `quickNoteBusy` + 成功 toast（droppedKinds 明说未搬运类型）+ 失败 `toastActionError("转为小记")`。
+- `src/core/maintenancePolicy.ts`（+test）：登记 `diaryToQuickNote` 写域（45 写 / ALL 101）。
+
+**测试**
+- `src/mobile/diary/diaryToQuickNote.test.ts`（5 例）：完整搬运（作用域改写 / images 清单与文件一致 / 文本=标题+正文 / 原文软删且 `is_purged=0` 可恢复）、正文引用资产缺失拒绝、非 doc（usheet）拒绝、保存失败回滚（无小记行/无小记资产/原文未删）、软删失败回滚（硬删无墓碑）。
+- `diaryPage.render.test.tsx`（+3 例）：菜单项/确认文案/bridge 调用/提示；droppedKinds 明说；失败可见且不误刷新。
+- `mobileDiaryWiring.test.ts`（+3 组）：页面接线、bridge 写域 + 数据层复用（`rewriteQuickNoteAssetScope`/`removeUnsyncedQuickNote`/两处同步注释）、文案同源字段。
+- 门禁：`tsc --noEmit` **0 error**；`vitest run src/mobile` **317 files / 1588 例全绿**；**完整 vitest 908 files / 5789 例 0 failed**；`git diff --check` 干净（本次未 commit，代码+报告+证据都在工作树）。
+
+**设备验收（5556，当前代码装包；UI 走通 + 数据级断言）**
+- 造数：pm clear → 启动 → CDP 9336 → `window.lakeNative` 建日记本(space=diary) + 条目「2026-11-13」，正文含 image 卡（真实 canonical 形态 `http://127.0.0.1:19876/<noteId>/img.png`）+ 64×64 PNG 资产（179B）；重启 App。
+- UI：日记页 ⋯ → 菜单 = `转为文档… / 转为小记 / 删除` → 点「转为小记」→ 确认弹窗（含「图片/附件会一起复制…回收站（可恢复）」）→ toast `已转为小记（含图片/附件）；日记已移入回收站，可恢复`；日记页变 **0 篇**。
+- 数据：`listTrashed` 含原日记（`cloudDeleted=false`）；`getQuickNotePage` 出现新小记（`previewText=2026-11-13 日记正文：今天记一笔`、`imageCount=1`、`firstImage=img.png`）；`.qnote` JSON：正文 `src` 已改写为 `http://127.0.0.1:19876/quick-notes/<newId>/img.png`，`images` 清单 = filename/img.png、mime/png、64×64、size=179、sha256 与源字节一致；`quick-notes/assets/<newId>/img.png` 实际落盘 179B（清单与文件一致）。
+- droppedKinds（设备）：再造一篇含 `name="board"` 卡的日记→转为小记，toast 追加 `画板未搬运（日记原稿仍在回收站，可恢复）`。
+- 可恢复：`restoreTreeItem` 后条目回到日记本子树；重启后日记页显示 `日记 1 篇 / 11 月 13 日 / 写于 09:17`。
+- 证据（`docs/audit-261112/evidence/diary-to-quicknote-mobile/`）：`1-quick-note-with-image.png`（小记列表含图）、`2-diary-restored.png`（恢复后日记空间）、`3-quick-note-real-url-image.png`（canonical URL 形态的小记含图）。
+- 备注：首轮造数用了 **path-only** `/noteId/img.png`（非真实正文形态），小记的内核兜底预览因解析不了相对路径显示「该卡片暂时无法显示」；改用真实 canonical `http://127.0.0.1:19876/...` 形态后正常渲染 —— 该现象属造数不当，不是转换缺陷（转换对两种形态都做作用域改写）。
+
+**清理**：5556 已 `pm clear`；临时脚本已删；**代码/报告/证据均未 commit**（按 lead 要求先给摘要）。

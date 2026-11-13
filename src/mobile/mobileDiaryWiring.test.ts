@@ -18,6 +18,9 @@ const APP = code(read("src/mobile/MobileApp.tsx"));
 const LIBRARY = code(read("src/mobile/notebook/libraryNotebooks.ts"));
 const BRIDGE = code(read("src/mobile/bridge/diary.ts"));
 const PAGE = code(read("src/mobile/diary/DiaryPage.tsx"));
+const CONVERT = code(read("src/mobile/diary/diaryToQuickNote.ts"));
+const CONVERT_RAW = read("src/mobile/diary/diaryToQuickNote.ts");
+const NOTICE = code(read("src/mobile/diary/diaryQuickNoteNotice.ts"));
 
 describe("知识库不显示回收站/日记本（261110；261109 收尾抽成纯函数）", () => {
   it("MobileApp 调纯函数 libraryNotebooks，不在组件里重写过滤判据", () => {
@@ -100,5 +103,37 @@ describe("日记入口过 gone 判据（261112 task-55 M1）", () => {
     expect(APP).toContain("setTrashPreviewId(input.noteId)");
     // 条目已不存在（被 purge 且无墓碑可判）也要给明确提示，不静默。
     expect(APP).toContain("日记不存在（可能已被删除）");
+  });
+});
+
+describe("日记「转为小记」接线（261113 task-106，与桌面同语义）", () => {
+  it("页面 ⋯ 菜单有「转为小记」+ 确认说明复制/可恢复；失败可见", () => {
+    expect(PAGE).toContain("转为小记");
+    expect(PAGE).toContain("bridge.diaryToQuickNote(");
+    expect(PAGE).toContain("diaryToQuickNoteNotice(");
+    expect(PAGE).toContain("confirmMobile(");
+    expect(PAGE).toContain("回收站");
+    expect(PAGE).toContain("可恢复");
+    // 在途守卫（复制媒体跨多次桥往返，连点会建两条）
+    expect(PAGE).toContain("quickNoteBusy");
+  });
+
+  it("bridge 走写域；数据层复用 core 作用域改写 + 硬删回滚；bridge 不做资产/软删判断", () => {
+    expect(BRIDGE).toContain("diaryToQuickNote");
+    expect(BRIDGE).toContain('runWrite("diaryToQuickNote"');
+    expect(BRIDGE).toContain("convertDiaryToQuickNote(");
+    expect(CONVERT).toContain("rewriteQuickNoteAssetScope(");
+    expect(CONVERT).toContain("removeUnsyncedQuickNote(");
+    expect(CONVERT).toContain("trashRepository.trashTreeItem(");
+    expect(CONVERT).toContain("droppedKinds");
+    expect(CONVERT).toContain("CARRYABLE_CARD_NAMES");
+    // 桌面私有 strip 逻辑未抽 core；移动端复制必须带「两处同步」注释（防止静默漂移）
+    expect(CONVERT_RAW).toContain("两处必须同步改");
+  });
+
+  it("提示文案与桌面同源字段（base 文案 + 卡片中文名 + 未搬运说明）", () => {
+    expect(NOTICE).toContain("已转为小记（含图片/附件）；日记已移入回收站，可恢复");
+    expect(NOTICE).toContain("未搬运");
+    expect(NOTICE).toContain("画板");
   });
 });

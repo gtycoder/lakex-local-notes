@@ -22,7 +22,7 @@
  * 白卡分组（.mb-set-section / .mb-item 原语）；行 = 名称 + 时刻 + 行尾 ⋯。**零新增视觉语言**，不新写页面骨架。
  */
 import { useCallback, useMemo, useRef, useState } from "react";
-import { CalendarDays, FileText, MoreVertical, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { CalendarDays, Feather, FileText, MoreVertical, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import {
   diaryConvertTargets,
   diaryEntries,
@@ -44,6 +44,7 @@ import { MoveTargetTreeSheet } from "../ui/MoveTargetTreeSheet";
 import { toastActionError } from "../lib/actionError";
 import { showToast } from "../ui/toastBus";
 import { confirmMobile } from "../ui/ConfirmDialog";
+import { diaryToQuickNoteNotice } from "./diaryQuickNoteNotice";
 import { formatRelativeTime } from "../lib/listTime";
 
 export interface DiaryPageProps {
@@ -163,6 +164,8 @@ export function DiaryPage({ nodes, onOpenEntry, onOpenSearch, onChanged }: Diary
   const [convertFor, setConvertFor] = useState<DiaryEntry | null>(null);
   const [converting, setConverting] = useState(false);
   const [convertError, setConvertError] = useState<string | null>(null);
+  /** 「转为小记」在途守卫（复制媒体可能跨多次桥往返，连点会建两条）。 */
+  const [quickNoteBusy, setQuickNoteBusy] = useState(false);
 
   const closeConvert = useCallback((): void => {
     if (converting) return;
@@ -307,6 +310,7 @@ export function DiaryPage({ nodes, onOpenEntry, onOpenSearch, onChanged }: Diary
         open={menuFor !== null}
         items={[
           { id: "convert", label: "转为文档…", icon: FileText },
+          { id: "toQuickNote", label: "转为小记", icon: Feather },
           { id: "delete", label: "删除", icon: Trash2 },
         ]}
         onClose={() => setMenuFor(null)}
@@ -315,6 +319,29 @@ export function DiaryPage({ nodes, onOpenEntry, onOpenSearch, onChanged }: Diary
           setMenuFor(null);
           if (!entry) return;
           if (item.id === "convert") { setConvertError(null); setConvertFor(entry); }
+          if (item.id === "toQuickNote") {
+            // 「转为小记」（261113 task-106，与桌面同语义）：正文+图片/附件复制到小记作用域、原资产保留；
+            // 成功后原文软删进回收站（可恢复，不是 purge）。失败由数据层回滚，绝不在没建好小记时删原文。
+            void (async () => {
+              if (quickNoteBusy) return;
+              const ok = await confirmMobile({
+                title: "转为小记？",
+                body: "图片/附件会一起复制到小记；原日记会移入回收站（可恢复）。",
+                confirmText: "转为小记",
+              });
+              if (!ok) return;
+              setQuickNoteBusy(true);
+              try {
+                const result = await bridge.diaryToQuickNote(entry.noteId);
+                showToast(diaryToQuickNoteNotice(result.droppedKinds));
+                await onChanged();
+              } catch (error) {
+                toastActionError("转为小记", error);
+              } finally {
+                setQuickNoteBusy(false);
+              }
+            })();
+          }
           if (item.id === "delete") {
             // 移入回收站（软删，可恢复；恢复会回日记空间，见 core/trash 判据）。
             void (async () => {

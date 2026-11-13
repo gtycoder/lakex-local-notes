@@ -321,6 +321,24 @@ export async function saveQuickNoteContent(
   return id;
 }
 
+/**
+ * 未同步小记的**硬删除**（转换失败回滚 / 未提交半成品）：不写墓碑、不进同步；
+ * 行 + 正文 + 标签关系 + 资源目录全清（与桌面 removeUnsyncedQuickNote 同口径）。
+ */
+export async function removeUnsyncedQuickNote(
+  d: MobileDb,
+  id: string,
+  removeAssetsDir: (quickNoteId: string) => Promise<void>,
+): Promise<void> {
+  // 回滚路径必须 best-effort：任何一步失败都不能留下半成品（尤其是小记资产目录）。
+  // 注意：removeQuickNoteLinks 自带事务 ⇒ 这里**不再套**外层事务（移动端 SQLite 不支持嵌套 BEGIN）。
+  try { await d.prepare("DELETE FROM quick_notes WHERE id=?").run(id); } catch { /* best effort */ }
+  try { await removeQuickNoteLinks(d, id); } catch { /* best effort */ }
+  try { await d.prepare("DELETE FROM quick_note_deleted WHERE id=?").run(id); } catch { /* best effort */ }
+  await deleteQuickNoteBody(id).catch(() => undefined);
+  await removeAssetsDir(id).catch(() => undefined);
+}
+
 export async function deleteQuickNote(d: MobileDb, id: string): Promise<void> {
   await d.prepare("UPDATE quick_notes SET deleted_at=?, restore_pending_at=NULL, is_dirty=1, ready_to_sync=1 WHERE id=?").run(new Date().toISOString(), id);
 }

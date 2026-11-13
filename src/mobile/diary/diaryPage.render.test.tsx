@@ -19,6 +19,8 @@ const mocks = vi.hoisted(() => ({
   diaryOpenDate: vi.fn(async (_dateKey: string, _mode?: "open" | "new") => ({ noteId: "new-note", created: true, notebookId: "nb-diary", duplicates: [] as string[] })),
   getWorkspaceSnapshot: vi.fn(async (_notebookId: string) => ({ notebook: null, tree: [] as Array<{ id: string; parentId: string | null; sortOrder: number; title: string; kind: "group" | "note"; icon: null }> })),
   moveTreeNodeOrdered: vi.fn(async (_id: string, _parentId: string | null, _orderedIds: string[]) => ({})),
+  // 261113 task-106：「转为小记」桥（复制正文/媒体到小记作用域 + 原文软删；droppedKinds 由数据层上报）。
+  diaryToQuickNote: vi.fn(async (_noteId: string) => ({ quickNoteId: "qn-new", droppedKinds: [] as string[] })),
   confirmMobile: vi.fn(async (_options: { title: string; body?: string; confirmText?: string; danger?: boolean }) => true),
   showToast: vi.fn(),
 }));
@@ -27,6 +29,7 @@ vi.mock("../bridge", () => ({
     diaryOpenDate: mocks.diaryOpenDate,
     getWorkspaceSnapshot: mocks.getWorkspaceSnapshot,
     moveTreeNodeOrdered: mocks.moveTreeNodeOrdered,
+    diaryToQuickNote: mocks.diaryToQuickNote,
   },
 }));
 vi.mock("../ui/toastBus", () => ({ showToast: mocks.showToast }));
@@ -85,6 +88,8 @@ beforeEach(() => {
   mocks.diaryOpenDate.mockClear();
   mocks.getWorkspaceSnapshot.mockClear();
   mocks.moveTreeNodeOrdered.mockClear();
+  mocks.diaryToQuickNote.mockClear();
+  mocks.diaryToQuickNote.mockResolvedValue({ quickNoteId: "qn-new", droppedKinds: [] });
   mocks.confirmMobile.mockClear();
   mocks.getWorkspaceSnapshot.mockResolvedValue({
     notebook: null,
@@ -263,5 +268,43 @@ describe("日记页（移动端 v1）", () => {
     expect(rows.some((row) => row.includes("日记")), "日记本不能出现在目标列表").toBe(false);
     // 分组（2025 / 12）也不在目标里
     expect(rows.some((row) => row.includes("2025"))).toBe(false);
+  });
+
+  it("条目 ⋯ →「转为小记」：先确认（说明复制+可恢复）⇒ bridge.diaryToQuickNote + 同源提示 + 刷新", async () => {
+    await render();
+    await click(button("日记操作 2025-12-31")!);
+    const item = [...document.body.querySelectorAll<HTMLButtonElement>(".mb-menusheet__item")]
+      .find((el) => (el.textContent ?? "").includes("转为小记"));
+    expect(item, "菜单里必须有「转为小记」").toBeTruthy();
+    await click(item!);
+    expect(mocks.confirmMobile).toHaveBeenCalledTimes(1);
+    const options = mocks.confirmMobile.mock.calls[0][0] as { title: string; body?: string; confirmText?: string };
+    expect(options.title).toContain("转为小记");
+    expect(options.body ?? "").toContain("回收站");
+    expect(options.body ?? "").toContain("可恢复");
+    expect(mocks.diaryToQuickNote).toHaveBeenCalledWith("d1231");
+    expect(mocks.showToast).toHaveBeenCalledWith("已转为小记（含图片/附件）；日记已移入回收站，可恢复");
+    expect(onChanged).toHaveBeenCalled();
+  });
+
+  it("「转为小记」droppedKinds 明说未搬运类型（不静默丢）", async () => {
+    mocks.diaryToQuickNote.mockResolvedValueOnce({ quickNoteId: "qn-x", droppedKinds: ["board"] });
+    await render();
+    await click(button("日记操作 2025-12-30")!);
+    const item = [...document.body.querySelectorAll<HTMLButtonElement>(".mb-menusheet__item")]
+      .find((el) => (el.textContent ?? "").includes("转为小记"));
+    await click(item!);
+    expect(mocks.showToast).toHaveBeenCalledWith("已转为小记（含图片/附件）；日记已移入回收站，可恢复；画板未搬运（日记原稿仍在回收站，可恢复）");
+  });
+
+  it("「转为小记」失败可见：错误 toast，且不刷新目录/不误报成功", async () => {
+    mocks.diaryToQuickNote.mockRejectedValueOnce(new Error("磁盘已满"));
+    await render();
+    await click(button("日记操作 2025-12-31")!);
+    const item = [...document.body.querySelectorAll<HTMLButtonElement>(".mb-menusheet__item")]
+      .find((el) => (el.textContent ?? "").includes("转为小记"));
+    await click(item!);
+    expect(mocks.showToast).toHaveBeenCalledWith("转为小记失败：磁盘已满", { type: "error" });
+    expect(onChanged).not.toHaveBeenCalled();
   });
 });

@@ -155,7 +155,7 @@ codesign -dv --verbose=4 "release/mac-arm64/LakexLocalNotes.app"
 
 ---
 
-## 七、GitHub Actions 发版指南（含 Windows / Gitee 同步 / 未签名说明）
+## 七、GitHub Actions 发版指南（含 Windows / Secrets / Gitee 同步 / 未签名说明）
 
 > 日常发版推荐走 Actions；本地打包只用于调试或需要 Apple 签名/公证时。
 
@@ -205,7 +205,30 @@ git push origin master v0.1.2
 > **段落标题格式（发版必核）**：`docs/RELEASE-NOTES.md` 里当前 tag 的段落标题必须逐字为 **`# LakexLocalNotes vX.Y.Z`**（例：tag `v1.1.1` ⇒ 标题 `# LakexLocalNotes v1.1.1`）。`generate-update-manifest.mjs` 按它抽取正文与更新日志，**找不到会直接失败**；段落到下一个 `# LakexLocalNotes` 标题为止。
 > **Android 版本号不手改 `build.gradle`**：`versionName` = 根 `package.json` 版本，`versionCode` = `1000 + major×10000 + minor×100 + patch`（只增不减；例：1.1.1 ⇒ 11101）。
 
-### 4. Gitee 发行版同步（可选）
+### 4. GitHub Actions Secrets（发版前必配）
+
+> 只推 tag 才打包；**secret 缺失会在半路直接红**（不会静默降级）。GitHub 仓库 → Settings → Secrets and variables → Actions 里按下面的名字**逐字**新建。
+
+**Android release 签名（4 个，缺一即红）**
+
+| Secret | 值 |
+| --- | --- |
+| `ANDROID_KEYSTORE_BASE64` | release keystore 文件内容的 base64（单行） |
+| `ANDROID_KEYSTORE_PASSWORD` | keystore 口令 |
+| `ANDROID_KEY_ALIAS` | key 别名 |
+| `ANDROID_KEY_PASSWORD` | key 口令 |
+
+- 生成 BASE64：`base64 -i release.keystore | tr -d '\n'`（macOS；Linux 用 `base64 -w 0 release.keystore`），整串粘进 secret。
+- 缺 `ANDROID_KEYSTORE_BASE64` ⇒ 「Decode Android release keystore」步骤直接 `::error::缺少 ANDROID_KEYSTORE_BASE64 secret` 失败（**不构建、不出 APK**）。
+- 缺后三个任一个 ⇒ `android/app/build.gradle` 判定「无完整 release 签名」回退 debug keystore ⇒ 「Verify APK is release-signed」按 `Android Debug` 证书拦红 ⇒ Android job 红、该次 GitHub Release **没有 APK**（macOS/Windows 产物照发）。
+- `ANDROID_KEYSTORE_PATH` 是 workflow 解码后**派生的 job 内变量**，不是 secret 名；本地出正式包才直接注入「路径 + 三个口令」这组环境变量。
+- `npm run check:android-release` 只做静态配置校验（workflow/gradle 文本），**不能**替代「secrets 是否真的配好」。
+
+**Gitee 镜像（可选，1 个）**
+
+- `GITEE_TOKEN`：Gitee 私人令牌（勾 `projects`）；不配则 Publish job 跳过 Gitee 同步，Gitee 只留代码 + tag 镜像（见 §5）。
+
+### 5. Gitee 发行版同步（可选）
 
 > **Gitee 侧不跑 CI**（Gitee Go 收费，用户 261029 定：CI 只在 GitHub）。这里说的「同步」= **GitHub Actions 里调 Gitee API 上传产物**，不占 Gitee CI、不额外收费；不配 secret 就跳过（Gitee 只保留代码+tag 镜像）。
 
@@ -214,15 +237,15 @@ git push origin master v0.1.2
 - 配置后 Publish job 会调 Gitee API 创建发行版，**只上传 Android APK**
 - Gitee 单附件上限 100MB（GVP 200MB）、仓库附件总量 1GB；mac dmg/zip 约 190–205MB、Windows exe 约 165MB 均超限，因此只镜像 APK，mac/Windows 继续走 GitHub Release；发行版说明里附 GitHub 链接
 
-### 5. 未签名说明
+### 6. 未签名说明
 
 - **macOS**：CI 用 `mac.identity=- + hardenedRuntime=false` 做 ad-hoc 签名，未公证；
   首次打开走「系统设置 → 隐私与安全性 → 仍要打开」，或右键 → 打开
 - **Windows**：未签名，SmartScreen 提示「Windows 已保护你的电脑」→ 更多信息 → 仍要运行
-- **Android**：产物 = `assembleRelease` 的 release 变体，CI 从 GitHub Secrets 解码 release keystore 并签名；`debuggable=false`，`apksigner` 校验非 debug key。
+- **Android**：产物 = `assembleRelease` 的 release 变体，CI 从 GitHub Secrets 解码 release keystore 并签名（4 个 secret 名见 §4）；`debuggable=false`，`apksigner` 校验非 debug key。
 - 要正式分发：按本文一~三节配置 Apple 签名/公证，并在 CI 中加对应 secrets
 
-### 6. 已知坑
+### 7. 已知坑
 
 - **tag 发布后不可移动**：Release 一旦创建，GitHub 会拒绝改 tag ⇒ 发错就 bump 版本号发新 tag
 - Android CI 曾因 `maven.aliyun.com` 对 `j2objc-annotations:1.3` 返回 502 失败 ⇒
