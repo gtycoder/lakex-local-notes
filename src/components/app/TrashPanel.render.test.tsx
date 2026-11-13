@@ -194,11 +194,13 @@ describe("panels.css：回收站行可读性（task-89）", () => {
   it("P3-6：窄分栏（≤290px，task-89 实测 rowW 287.5）用容器查询隐藏倒计时徽标；默认行宽不触发", () => {
     // 容器 = 行包裹（.trash-tree-node）；隐藏目标 = 倒计时徽标专属类（不能误伤「云端已删除」等告警徽标）
     expect(CSS).toMatch(/\.trash-tree-node \{ container-type: inline-size; \}/);
-    expect(CSS).toMatch(/@container \(max-width: 290px\)/);
-    expect(CSS).toMatch(/\.trash-tree-node \.trash-row-days \{ display: none; \}/);
-    // 阈值必须贴着实测窄行宽（287.5）：比它略大一点才只命中「真正被挤」的态；默认 314 侧栏（行≈296）不能命中
-    expect(290).toBeGreaterThan(287.5);
-    expect(290).toBeLessThan(296);
+    expect(CSS).toMatch(/@container \(max-width: 340px\)/);
+    // 只在「还有别的徽标抢位」时隐藏（只有倒计时一个徽标时保留）
+    expect(CSS).toMatch(/\.trash-tree-node:has\(\.badge:not\(\.trash-row-days\)\) \.trash-row-days \{ display: none; \}/);
+    // 阈值来历（261113 第 4 轮真实截图）：行宽 303.5 时倒计时已被截成「90…」（无信息量）⇒ 必须覆盖它；
+    // 宽浮层面板（≥400）不能触发。
+    expect(340).toBeGreaterThan(303.5);
+    expect(340).toBeLessThan(400);
   });
 
   it("窄行下徽标让位给标题：可收缩 + 省略号（flex:0 1 auto / min-width:0 / overflow hidden / ellipsis / nowrap）", () => {
