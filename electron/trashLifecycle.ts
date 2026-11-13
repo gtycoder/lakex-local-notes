@@ -271,6 +271,15 @@ export class TrashLifecycle {
           subNotes.push(...this.ctx.db.prepare(`SELECT note_file_id FROM tree_nodes WHERE id IN (${ph}) AND note_file_id IS NOT NULL AND deleted_at IS NULL`).all(...batch) as Array<{ note_file_id: string }>);
         }
         const subNoteIds = subNotes.map((s) => s.note_file_id);
+        // F-10/D4（261113）：恢复 = 撤销本地删除 ⇒ 退役子树里「未结算」的墓碑（purged_at IS NULL）。
+        // 墓碑只对本地不存在的 id 有意义；留着会让「他端再次删除」被 isFolderPurged / isPurgedNoteId
+        // 静默丢弃（删除不传播、被删的复活）。purged_at 非空的行必须保留：S3 前缀还没删完，
+        // 由 markPurgeSynced 结算（结算时若本地已活跃会自行退役）。
+        const reviveIds = [id, ...subtreeIds, ...subNoteIds.filter((nid): nid is string => !!nid)];
+        for (const batch of sqlParameterBatches(reviveIds)) {
+          const rph = batch.map(() => "?").join(",");
+          this.ctx.db.prepare("DELETE FROM deleted_notes WHERE purged_at IS NULL AND id IN (" + rph + ")").run(...batch);
+        }
         for (const batch of sqlParameterBatches(subNoteIds)) {
           const nph = batch.map(() => "?").join(",");
           // F-01 复核：notes 行同样回原父（扁平化子文档）。非扁平化行 COALESCE 保持原父，行为不变。
@@ -279,29 +288,6 @@ export class TrashLifecycle {
           ).run(now, ...batch);
         }
       }
-    });
-    tx();
-  }
-
-  /**
-   * 撤销本地删除（sync 下载分支在"远端恢复较新"时调用）：清 purge 墓碑；
-   * 若本地有"收到他端 purge 后保留的回收站副本（purged）"，解除抑制（后续由下载/对账对齐）。
-   * 与 restoreTrashItem 不同：不强制标 local——远端为权威，随后由下载/对账流程对齐并 markSynced。
-   */
-  revokeLocalDeletion(id: string): void {
-    const now = nowIso();
-    const tx = this.ctx.db.transaction(() => {
-      this.ctx.db.prepare("DELETE FROM deleted_notes WHERE id=?").run(id);
-      this.ctx.db.prepare("UPDATE notes SET is_dirty=1,is_purged=0,cloud_deleted=0 WHERE id=? AND (is_purged=1, is_dirty=0 OR is_purged=1)").run(id);
-      this.ctx.db.prepare("UPDATE tree_nodes SET is_dirty=1,is_purged=0,cloud_deleted=0 WHERE note_file_id=? AND (is_purged=1, is_dirty=0 OR is_purged=1)").run(id);
-      const titleRow = this.ctx.db.prepare("SELECT title FROM notes WHERE id=?").get(id) as { title: string } | undefined;
-      // 容错：本端已 purge（行被彻底删除）时跳过缓存/FTS——行将由下载分支 importRemoteNote 重建，
-      // 避免 readNoteCaches 对不存在的行抛"笔记不存在"导致同步中断（远端恢复传播场景）。
-      if (titleRow) {
-        const caches = this.ctx.readNoteCaches(id);
-        this.ctx.upsertSearch(id, titleRow.title, caches.plain ?? null);
-      }
-      this.ctx.db.prepare("UPDATE tree_nodes SET updated_at=? WHERE note_file_id=?").run(now, id);
     });
     tx();
   }

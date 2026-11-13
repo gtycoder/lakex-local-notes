@@ -126,6 +126,9 @@ export class SyncReconciliation {
       const inTrash = note.parentId === this.ctx.trashNotebookId;
       const trashedAt = inTrash ? (note.trashedAt ?? new Date().toISOString()) : null;
       const deletedFrom = inTrash ? (note.deletedFromParentId ?? null) : null;
+      // F-10/D4（261113）：远端把它作为 active 发布（= 他端显式恢复，AGENTS §3#4）⇒ 本地墓碑退役。
+      // 只清 purged_at IS NULL 的行（前缀未结算的删除意图必须保留）。
+      if (!trashedAt) this.reviveTombstone(note.id);
       // 261107（数据安全）：只覆盖同步窗口内没有本地改动的行。本地 is_dirty=1 的行留给下一轮三方合并，
       // 否则「同步计划基于 T0 快照 → 窗口内用户改名 → 这里写回旧元数据 → saveBaseline 清 dirty」会丢改名。
       const noteWhere = expectedLocalUpdatedAt ? "id=? AND updated_at=?" : "id=?";
@@ -173,6 +176,8 @@ export class SyncReconciliation {
   /** 远端恢复该笔记（移出回收站传播）：本地 trash 条目 → 移回原位置 + 清回收站字段，标 local 待下载分支对齐。 */
   applyRemoteRestore(id: string, parentId: string | null, updatedAt: string): void {
     const tx = this.ctx.db.transaction(() => {
+      // F-10/D4：远端恢复 = 唯一显式例外 ⇒ 本地墓碑退役（否则后续删除不传播）。
+      this.reviveTombstone(id);
       this.ctx.db.prepare(
         "UPDATE notes SET parent_id=?,trashed_at=NULL,deleted_from_parent_id=NULL,updated_at=?,is_dirty=1,is_purged=0,cloud_deleted=0,restore_pending_at=NULL WHERE id=? AND deleted_at IS NULL"
       ).run(parentId, updatedAt, id);
@@ -255,6 +260,19 @@ export class SyncReconciliation {
   /** purge 前缀删除成功后，清除 purged_at（保留墓碑，避免下次同步重复删前缀）。 */
   markPurgeSynced(id: string): void {
     this.ctx.db.prepare("UPDATE deleted_notes SET purged_at=NULL WHERE id=?").run(id);
+    // F-10/D4（261113）：前缀已删完 ⇒ purged_at 清空后只剩「永久保护」。若该 id 本地**已重新活跃**
+    // （他端显式恢复后又同步回来），这条墓碑只会挡住后续删除传播 ⇒ 就地退役。
+    const active = this.ctx.db.prepare("SELECT 1 FROM tree_nodes WHERE id=? AND deleted_at IS NULL").get(id)
+      ?? this.ctx.db.prepare("SELECT 1 FROM notes WHERE id=? AND deleted_at IS NULL").get(id);
+    if (active) this.reviveTombstone(id);
+  }
+
+  /** 退役本地删除墓碑（F-10/D4，261113）：墓碑只对**本地不存在的 id** 有意义。
+   *  远端已把该 id 作为 active 发布（= 显式恢复，AGENTS §3#4 的唯一例外）时若仍留墓碑，
+   *  之后他端「再次删除」会被 isFolderPurged / isPurgedNoteId 静默丢弃 ⇒ 删除不传播、被删的复活。
+   *  **只清 purged_at IS NULL 的行**：purged_at 非空 = S3 前缀还没删完，必须留着按删除意图结算。 */
+  reviveTombstone(id: string): void {
+    this.ctx.db.prepare("DELETE FROM deleted_notes WHERE id=? AND purged_at IS NULL").run(id);
   }
 
   listDeletedNotesForSync(): Array<{ id: string; title: string; parentId: string | null; sortOrder: number; updatedAt: string; deletedAt: string; nodeType: string }> {

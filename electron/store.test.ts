@@ -613,6 +613,47 @@ describe("目录树操作", () => {
     expect(row.trashedAt).not.toBeNull();
   });
 
+  it("F-10/D4：purge 已同步后他端显式恢复 ⇒ 本地墓碑退役，之后他端再次删除能落库", () => {
+    const nb = store.createNotebook("复活册");
+    const note = store.createNoteIn(nb.id, "子笔记");
+    store.saveNote(note.id, "子笔记", "<p>x</p>");
+    // A 彻底删除整册（写墓碑 + 物理删）→ 同步侧结算前缀删除（purged_at 清空，墓碑作永久保护）
+    store.deleteTreeNode(nb.id);
+    store.purgeTrashItem(nb.id);
+    expect(store.isFolderPurged(nb.id)).toBe(true);
+    store.markPurgeSynced(nb.id);
+    expect(store.isFolderPurged(nb.id)).toBe(true);
+
+    // B 端显式恢复并发布 active ⇒ A 拉取落库（261113 修复点：墓碑必须退役）
+    store.importRemoteFolder({
+      id: nb.id, title: "复活册", parentId: null, sortOrder: 0, nodeType: "notebook",
+      icon: null, updatedAt: new Date().toISOString(), trashedAt: null, deletedFromParentId: null,
+    });
+    expect(store.isFolderPurged(nb.id)).toBe(false);
+
+    // 之后 B 再删一次必须能传播（旧行为：applyRemoteFolderMeta 被 isFolderPurged 丢弃 ⇒ A 保持活跃 ⇒ 复活）
+    const t2 = new Date(Date.now() + 1000).toISOString();
+    store.applyRemoteFolderMeta({
+      id: nb.id, title: "复活册", parentId: "notebook-trash", sortOrder: 0, nodeType: "notebook",
+      icon: null, updatedAt: t2, trashedAt: t2, deletedFromParentId: null,
+    });
+    const row = store.listFoldersForSync().find((f) => f.id === nb.id)!;
+    expect(row.trashedAt).toBeTruthy();
+    expect(row.parentId).toBe("notebook-trash");
+  });
+
+  it("F-10/D4 守卫：purged_at 非空（S3 前缀未删完）时 active 落库不清墓碑", () => {
+    const nb = store.createNotebook("未结算册");
+    store.deleteTreeNode(nb.id);
+    store.purgeTrashItem(nb.id);
+    // 不调 markPurgeSynced ⇒ 删除意图仍待结算
+    store.importRemoteFolder({
+      id: nb.id, title: "未结算册", parentId: null, sortOrder: 0, nodeType: "notebook",
+      icon: null, updatedAt: new Date().toISOString(), trashedAt: null, deletedFromParentId: null,
+    });
+    expect(store.listPurgedNotesForSync().some((t) => t.id === nb.id)).toBe(true);
+  });
+
   it("审计 F-10：子项先单独删除、父随后删除，恢复父 ⇒ 子一并回到原位（子树恢复语义钉死）", () => {
     const nb = store.createNotebook("F10 册");
     const group = store.createGroup(nb.id, "分组");

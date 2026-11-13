@@ -1513,14 +1513,6 @@ export class Store {
     this.trashLifecycle.restoreTrashItem(id);
   }
 
-  /**
-   * 撤销本地删除（sync 下载分支在"远端恢复较新"时调用）：清 purge 墓碑。
-   * 语义详见 trashLifecycle（不强制标 local——远端为权威，随后由下载/对账流程对齐并 markSynced）。
-   */
-  revokeLocalDeletion(id: string): void {
-    this.trashLifecycle.revokeLocalDeletion(id);
-  }
-
   /** 彻底删除回收站节点（不可恢复）：物理删子树 + 写 purge 墓碑（deleted_notes，带 purged_at）。 */
   purgeTrashItem(id: string): void {
     this.trashLifecycle.purgeTrashItem(id);
@@ -2027,6 +2019,9 @@ export class Store {
     // **只拦 trashed 副本**：远端若是 active（trashedAt 空）= 他端**显式恢复**（AGENTS §3#4 的唯一
     // 例外，恢复会重新上传并传播），必须放行，否则两端永久不一致且每轮重试都失败。
     if (folder.trashedAt && this.isFolderPurged(folder.id)) return;
+    // F-10/D4（261113）：远端 active = 他端显式恢复（AGENTS §3#4 唯一例外）⇒ 本地墓碑退役，
+    // 否则之后他端再删除会被上面的 isFolderPurged 永久丢弃（删除不传播、被删的复活）。
+    if (!folder.trashedAt) this.syncReconciliation.reviveTombstone(folder.id);
     this.noteMetadata.importRemoteFolder(folder);
   }
 
@@ -2034,6 +2029,7 @@ export class Store {
   applyRemoteFolderMeta(folder: SyncFolder): void {
     // 同 importRemoteFolder：只拦「已 purge 目录的 trashed 副本」；远端 active = 他端显式恢复，放行。
     if (folder.trashedAt && this.isFolderPurged(folder.id)) return;
+    if (!folder.trashedAt) this.syncReconciliation.reviveTombstone(folder.id);
     this.noteMetadata.applyRemoteFolderMeta(folder);
   }
 
@@ -2170,6 +2166,8 @@ export class Store {
 
   /** 导入远程笔记：写 .lake + note-assets 资源 + upsert DB 记录。 */
   importRemoteNote(note: SyncNote, content: Buffer, assets: Array<{ filename: string; bytes: Buffer }>): void {
+    // F-10/D4（261113）：远端 active（非回收站）= 他端显式恢复 ⇒ 本地该 id 的墓碑退役（见 reviveTombstone）。
+    if (!note.trashedAt) this.syncReconciliation.reviveTombstone(note.id);
     this.remoteImport.importNote(note, content, assets);
   }
 
