@@ -19,6 +19,7 @@ import { saveQuickNote } from "../data/quickNotesRepository.js";
 import { readQuickNoteBody, writeQuickNoteBody } from "../data/noteBodies.js";
 import { loadV3State, saveV3State } from "../data/v3StateRepository.js";
 import { MobileDeviceStore } from "./mobileDeviceStore.js";
+import { setBaselineFileForDbForTest } from "../data/v3BaselineFile.js";
 import { runMobileV3DeepCleanup, runMobileV3Sync } from "./sync.js";
 import type { DeviceState } from "../../core/s3v3DeviceStore.js";
 import type { RemoteObjectInfo, S3v3Remote } from "../../core/s3v3Ports.js";
@@ -34,7 +35,10 @@ class MemoryRemote implements S3v3Remote {
   add(key: string, text: string, mtime?: number) { this.objects.set(key, { bytes: enc(text), gzip: false, ...(mtime !== undefined ? { mtime } : {}) }); }
 }
 const SETTINGS = { endpoint: "https://s3.example.com", region: "r", bucket: "b", accessKeyId: "k", secretAccessKey: "s", prefix: "p" };
-async function fresh() { const db = new SqlJsAsyncDb(await SqlJsDb.open()); await applyMobileSchema(db); const store = new MobileDeviceStore(db); await store.init(); return { db, store }; }
+// 261113 D1-C：baseline 落文件（测试内存后端是模块级共享）⇒ 每台设备用独立路径，避免两库串基线。
+let deviceSeq = 0;
+async function fresh() { const db = new SqlJsAsyncDb(await SqlJsDb.open()); await applyMobileSchema(db); setBaselineFileForDbForTest(db, "sync-v3/baseline-dev" + (++deviceSeq) + ".json.gz.b64");
+  const store = new MobileDeviceStore(db); await store.init(); return { db, store }; }
 
 describe("移动端 v3 云清理（parity：旧 manifest 路径恒 0）", () => {
   it("按 pointer/索引/声明算 keep 集：窗口内保留、窗口外删、历史引用保留", async () => {

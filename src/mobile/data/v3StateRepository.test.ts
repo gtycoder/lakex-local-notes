@@ -6,6 +6,7 @@ vi.mock("sql.js/dist/sql-wasm.wasm?url", () => ({ default: path.join(process.cwd
 import { SqlJsAsyncDb, SqlJsDb } from "./sqliteDb.js";
 import { applyMobileSchema } from "./schema.js";
 import { EMPTY_MOBILE_V3_STATE, clearV3State, ensureV3StateTable, loadV3State, saveV3State, type MobileV3State } from "./v3StateRepository.js";
+import { readBaselineFile } from "./v3BaselineFile.js";
 
 async function freshDb() {
   const db = new SqlJsAsyncDb(await SqlJsDb.open());
@@ -51,7 +52,7 @@ describe("移动端 v3 同步账本", () => {
     await db.close();
   });
 
-  it("落盘 = v3 类型化 records + baseline 同 JSON（旧 9 组字段不再是持久化形状）", async () => {
+  it("落盘 = v3 类型化 records 信封（baseline 落独立文件，不再内嵌行——261113 D1-C）", async () => {
     const db = await freshDb();
     await saveV3State(db, {
       ...EMPTY_MOBILE_V3_STATE,
@@ -64,7 +65,11 @@ describe("移动端 v3 同步账本", () => {
       assets?: { lake?: Record<string, string> };
     };
     expect(raw.version).toBe(3);
-    expect(raw.baseline?.epoch).toBe("e1"); // baseline 不动：仍随本行持久化
+    // 行里只剩信封：baseline 走文件（体积从整份 2.28MB 降到「信封」量级）。
+    expect(raw).not.toHaveProperty("baseline");
+    const baselineFile = await readBaselineFile();
+    expect(baselineFile.status).toBe("ok");
+    if (baselineFile.status === "ok") expect(baselineFile.baseline.epoch).toBe("e1");
     expect(raw).not.toHaveProperty("remotePurged");
     expect(raw).not.toHaveProperty("restorePending");
     expect(raw).not.toHaveProperty("assetsHash");

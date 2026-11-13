@@ -7,11 +7,14 @@ import {
   readNoteBody, readNoteBodiesBatch, readQuickNoteBody, removeBodyStaging, statBodyStagingMany, statNoteBodiesBatch,
   statQuickNoteBodiesBatch, writeBodyStaging, writeQuickNoteBody,
 } from "../data/noteBodies.js";
-import { ensureV3StateTable, loadV3State, loadV3StateWithRaw, readRawV3State, savePersistedV3State, saveV3State, type MobileV3Baseline } from "../data/v3StateRepository.js";
+import {
+  ensureV3StateTable, loadSyncBaseline, loadV3State, readPersistedBaseline, readRawV3State, savePersistedV3State, saveV3State, SyncBaselineLostError,
+  type MobileV3Baseline,
+} from "../data/v3StateRepository.js";
+import { baselineFileForDb, MOBILE_BASELINE_FILE_PATH, writeBaselineFile } from "../data/v3BaselineFile.js";
 import { createDeviceStoreMeta, createFileBackedAssetIo, type AssetIoPort, type DeviceStoreMeta } from "../../core/s3v3/state/deviceStore.js";
 import { createCapacitorAssetFileDriver } from "./capacitorAssetFileDriver.js";
 import { createMobilePlatformPort, createMobileBodyFileDriver, type MobilePlatformPortContext } from "./mobilePlatformPort.js";
-import { persistedStateProjection } from "./v3StateSnapshot.js";
 import { listQuickNoteAssetKeysFs, loadAssetBytesFs, removeAssetBytesFs, saveAssetBytesFs } from "../native/assetFs.js";
 import { NativeAssetSync, nativeAssetSyncSupported } from "../native/nativeAssetSync.js";
 import * as historyRepository from "../data/historyRepository.js";
@@ -23,7 +26,7 @@ import type { PlanWarning } from "../../core/s3v3/plan/types.js";
  * 移动端 S3v3DeviceStore（E2-4 phase C）：**只做端口装配与正文 staging**，
  * loadState/saveState 的决策/映射/落库顺序全部在 core 单一编排（createDeviceStoreMeta）。
  * - 元数据/正文：notes 表 + BodyStore；正文下载先落 staging 文件，saveState 时由端口钩子搬到最终路径；
- * - 同步账本：sync_v3_state（v2 信封 + baseline）；
+ * - 同步账本：sync_v3_state（v2 信封；baseline 独立落 sync-v3/baseline.json.gz.b64，261113 D1-C）；
  * - 「云端已删除·仅本地」：state.remotePurged ↔ notes/folders/quick_notes.cloud_deleted（DB 投影，UI 徽标读它）；
  *   小记副本保留在 quick 回收站（deleted_at 非空、正文/图片/标签不删），恢复并上传成功后清空标记；
  * - 写侧细节（批量 executeSet 窗口、legacy 正文批写、移动旧口径回收站/小记删除）在 mobilePlatformPort。
@@ -57,17 +60,25 @@ export class MobileDeviceStore implements S3v3DeviceStore {
   private readonly portCtx: MobilePlatformPortContext;
   /**
    * task-83：单条快路径合并读期间临时持有的 sync_v3_state 原始行（一次读、多处派生）。
+   * 261113 D1-C：同时带上「已从文件读到的 baseline」，供 assetsHashOf 的 baseline 资产投影复用。
    * 只由 loadQuickPushSnapshot 设置并在 finally 清空；其它路径永远 null（行为与旧实现一致）。
    */
-  private pendingStateSnapshot: { raw: unknown } | null = null;
+  private pendingStateSnapshot: { raw: unknown; baseline: MobileV3Baseline | null } | null = null;
 
+  /**
+   * baseline 文件路径（相对 BodyStore 根）。生产固定 = MOBILE_BASELINE_FILE_PATH；
+   * 测试里同进程多设备可注入不同路径，避免共享内存后端时两库互相覆盖基线。
+   */
+  private readonly baselineFile: string;
   /** E2-4：资产 IO 已是 core 的单一实现；这里只给「资产键空间驱动 + 缓存失效」钩子。 */
   private readonly assetIo: AssetIoPort;
   /** E2-4 phase C：loadState/saveState 的共享编排（本类只提供窄端口）。 */
   private readonly meta: DeviceStoreMeta;
 
-  constructor(db: MobileDb) {
+  constructor(db: MobileDb, opts: { baselineFile?: string } = {}) {
     this.db = db;
+    // 生产固定路径；测试可用构造参数或 setBaselineFileForDbForTest(db, …) 隔离同进程多设备。
+    this.baselineFile = opts.baselineFile ?? baselineFileForDb(db) ?? MOBILE_BASELINE_FILE_PATH;
     this.portCtx = {
       stagedBodyIds: this.stagedBodyIds,
       stagedBodies: this.stagedBodies,
@@ -97,13 +108,13 @@ export class MobileDeviceStore implements S3v3DeviceStore {
           const snapshot = this.pendingStateSnapshot;
           return snapshot ? Promise.resolve(snapshot.raw) : readRawV3State(db);
         },
-        // baseline 与本行同 JSON 是既有约定（E3-1「baseline 不动」）：core 只生成信封，落盘归本端。
-        write: async (persisted) => {
-          const side = await loadV3State(db);
-          await savePersistedV3State(db, persisted, side.baseline ?? null);
-        },
+        // 261113 D1-C：行里只写信封（baseline 已落独立文件，不再随行过桥）。
+        write: async (persisted) => { await savePersistedV3State(db, persisted); },
       },
-      baseline: { load: async () => (await loadV3State(db)).baseline },
+      // 共享编排的 baseline 端口（loadState/saveState 内部用）：按「文件 → 旧行 → 一次性迁移」取值，
+      // 丢失时返回 null（UI/账本投影不因此中断）；**引擎入口的 loadBaseline() 才是硬失败判据**
+      // （SyncBaselineLostError），保证基线丢失时绝不进入 pull-all。
+      baseline: { load: async () => (await readPersistedBaseline(db, { baselineFile: this.baselineFile })).baseline },
       // 正文 staging 在文件（stagedBodyIds），旧内存 map 仅兼容；saveState 消费后整份清空（与旧实现一致）。
       stagedBodies: {
         get: (id) => this.stagedBodies.get(id),
@@ -159,8 +170,12 @@ export class MobileDeviceStore implements S3v3DeviceStore {
    */
   async loadQuickPushSnapshot(id: string): Promise<QuickPushSnapshot> {
     const raw = await readRawV3State(this.db);
-    const baseline = persistedStateProjection(raw)?.baseline ?? null;
-    this.pendingStateSnapshot = { raw };
+    // 261113 D1-C：baseline 从文件读（稳态 0 次行读）；旧行内嵌值一次性迁移。
+    const persistedBaseline = await readPersistedBaseline(this.db, { raw, baselineFile: this.baselineFile });
+    // 基线丢失（曾同步过但文件坏了/没了）⇒ 快路径硬失败，绝不回退整轮 pull-all（会物理丢弃未同步小记）。
+    if (persistedBaseline.status === "lost") throw new SyncBaselineLostError();
+    const baseline = persistedBaseline.baseline as QuickPushSnapshot["baseline"];
+    this.pendingStateSnapshot = { raw, baseline: persistedBaseline.baseline };
     try {
       const light = await this.meta.loadQuickPushState(id);
       return { baseline, light };
@@ -188,13 +203,13 @@ export class MobileDeviceStore implements S3v3DeviceStore {
   }
 
   async loadBaseline(): Promise<DeviceBaseline | null> {
-    const s = await loadV3State(this.db);
-    return (s.baseline as DeviceBaseline | null) ?? null;
+    // 同步路径专用：文件正常 ⇒ 只读文件（不再读整行）；文件丢失/损坏 ⇒ 抛 SyncBaselineLostError。
+    return (await loadSyncBaseline(this.db, this.baselineFile)) as DeviceBaseline | null;
   }
   async saveBaseline(baseline: DeviceBaseline): Promise<void> {
-    // 261113（D1）：一次读出来的 raw 传给 saveV3State 复用，省掉它内部的第二次整行读（实测 129–207ms/次）。
-    const loaded = await loadV3StateWithRaw(this.db);
-    const s = loaded.state;
+    // 261113（D1-C）：baseline 落文件（gzip + BodyStore 原子写），sync_v3_state 行不再内嵌基线。
+    // 先写文件、再守卫式归位：写失败 ⇒ 不标 synced（旧文件仍在，下一轮重试）；成功 ⇒ 过桥只剩压缩字节。
+    await writeBaselineFile(baseline as MobileV3Baseline, this.baselineFile);
     // 发布成功后才写 baseline；但必须**守卫式**归位（261107 数据安全）：
     // 只清「本地 updated_at 仍等于基线快照」的行；同步窗口内改名/移动/恢复的行保持 dirty 与
     // restore_pending_at，留给下一轮重传。旧实现无条件清是「窗口内编辑被标 synced 后永远不传」的根因。
@@ -228,7 +243,7 @@ export class MobileDeviceStore implements S3v3DeviceStore {
       // quick_notes 没有 is_purged 列（墓碑用 purged_at/deleted_at）；沿用旧实现不过滤。
       await markUnchanged("quick_notes", baseline.quickNotes.items.map((q) => ({ id: q.id, updatedAt: q.updatedAt })), true, false);
     });
-    await saveV3State(this.db, { ...s, baseline: baseline as MobileV3Baseline }, loaded.raw);
+    // 行里已不再内嵌基线 ⇒ 这里不再读/写信封行（信封由 saveState 的 savePersistedV3State 写）。
   }
 
   async readBody(id: string): Promise<Uint8Array | null> {
@@ -413,7 +428,7 @@ export class MobileDeviceStore implements S3v3DeviceStore {
 
   /** 轻量落盘同步标记：不跑整轮 saveState（不碰正文/脏标记），只清 v3_state 标记 + DB cloud_deleted 投影。 */
   async persistSyncMarkers(markers: { remotePurged: string[]; restorePending: string[] }): Promise<void> {
-    const side = await loadV3State(this.db);
+    const side = await loadV3State(this.db, this.baselineFile);
     await this.db.transaction(async () => {
       await this.db.prepare("UPDATE notes SET cloud_deleted=0 WHERE cloud_deleted=1").run();
       await this.db.prepare("UPDATE folders SET cloud_deleted=0 WHERE cloud_deleted=1").run();
@@ -427,7 +442,7 @@ export class MobileDeviceStore implements S3v3DeviceStore {
         await this.db.prepare("UPDATE quick_notes SET cloud_deleted=1 WHERE id IN (" + ph + ")").run(...part);
       }
     });
-    await saveV3State(this.db, { ...side, remotePurged: markers.remotePurged, restorePending: markers.restorePending });
+    await saveV3State(this.db, { ...side, remotePurged: markers.remotePurged, restorePending: markers.restorePending }, undefined, this.baselineFile);
   }
 
   /**

@@ -14,6 +14,7 @@ vi.mock("../native/assetFs", () => ({
 import { SqlJsAsyncDb, SqlJsDb, type MobileDb } from "../data/sqliteDb.js";
 import { applyMobileSchema } from "../data/schema.js";
 import { ensureV3StateTable, savePersistedV3State } from "../data/v3StateRepository.js";
+import { writeBaselineFile } from "../data/v3BaselineFile.js";
 import { MobileDeviceStore } from "./mobileDeviceStore.js";
 import type { DeviceBaseline } from "../../core/s3v3DeviceStore.js";
 
@@ -62,7 +63,7 @@ const baseline: DeviceBaseline = {
   },
 };
 
-/** 真实落盘形状：信封 records（cloud-deleted/restore/quick-purge）+ baseline + 两空间 assets。 */
+/** 真实落盘形状（261113 D1-C）：信封 records（cloud-deleted/restore/quick-purge）+ 两空间 assets；baseline 落独立文件。 */
 async function seeded(): Promise<{ db: MobileDb; stateReads: () => number; reset: () => void }> {
   const raw = new SqlJsAsyncDb(await SqlJsDb.open());
   await applyMobileSchema(raw);
@@ -90,7 +91,9 @@ async function seeded(): Promise<{ db: MobileDb; stateReads: () => number; reset
       { kind: "quick-purge", id: "qp-1", at: ISO },
     ],
     assets: { lake: { "doc-1": "doc-asset-hash" }, quickNotes: { "q-1": "quick-envelope-asset-hash" } },
-  }, baseline);
+  });
+  // baseline 已搬出 sync_v3_state 行（261113 D1-C）：落文件，读侧优先文件。
+  await writeBaselineFile(baseline);
   const c = countingDb(raw);
   return { db: c.db, stateReads: c.stateReads, reset: c.reset };
 }
@@ -110,12 +113,14 @@ describe("单条快路径合并读（task-83）：字段与逐次读取一致 + 
     expect(merged.light?.restorePending?.slice().sort()).toEqual(["doc-rp", "q-rp"]);
     expect(merged.light?.quickPurges).toEqual(["qp-1"]);
 
-    // 对照组（同一份落盘、独立 store 实例）：逐次读取 = loadBaseline 1 次 + loadQuickPushState 2 次
+    // 对照组（同一份落盘、独立 store 实例）：
+    //   261113 D1-C 起 loadBaseline = 只读 baseline 文件（0 次行读）；
+    //   loadQuickPushState 自己仍要 2 次行读（信封 + 资产 hash 兜底）⇒ 合计 2。
     const { db: db2, stateReads: reads2 } = await seeded();
     const store = new MobileDeviceStore(db2);
     const baselineAgain = await store.loadBaseline();
     const lightAgain = await store.loadQuickPushState("q-1");
-    expect(reads2()).toBe(3);
+    expect(reads2()).toBe(2);
     expect(baselineAgain).toEqual(merged.baseline);
     expect(lightAgain).toEqual(merged.light);
   });

@@ -22,6 +22,7 @@ import { sha256Sync } from "../../core/sha256Sync.js";
 import { S3v3SyncEngine } from "../../core/s3v3Engine.js";
 import type { RemoteObjectInfo, S3v3Remote } from "../../core/s3v3Ports.js";
 import { MobileDeviceStore } from "./mobileDeviceStore.js";
+import { setBaselineFileForDbForTest } from "../data/v3BaselineFile.js";
 
 class MemoryRemote implements S3v3Remote {
   objects = new Map<string, { bytes: Uint8Array; gzip: boolean }>();
@@ -32,9 +33,12 @@ class MemoryRemote implements S3v3Remote {
   async deleteByPrefix(prefix: string) { const ks = [...this.objects.keys()].filter((k) => k.startsWith(prefix)); for (const k of ks) this.objects.delete(k); return ks.length; }
 }
 
+// 261113 D1-C：baseline 落文件（测试内存后端是模块级共享）⇒ 每台设备用独立路径，避免两库串基线。
+let deviceSeq = 0;
 async function freshDevice() {
   const db = new SqlJsAsyncDb(await SqlJsDb.open());
   await applyMobileSchema(db);
+  setBaselineFileForDbForTest(db, "sync-v3/baseline-dev" + (++deviceSeq) + ".json.gz.b64");
   const store = new MobileDeviceStore(db);
   await store.init();
   return { db, store };

@@ -2,6 +2,7 @@ import { normalizeNoteKind, type NoteKind } from "../../core/noteKind.js";
 import { previewQuickNote, validateQuickNoteContent } from "../../core/quickNoteModel.js";
 import { sha256Sync } from "../../core/sha256Sync.js";
 import type { FileDriver } from "../../core/s3v3/state/ports.js";
+import type { DeviceBaseline } from "../../core/s3v3DeviceStore.js";
 import type {
   NoteSearchCaches, PlatformDataPort, PurgedTombstoneRow, QuickAssetWrite, QuickDeletedRow, QuickNoteSyncRow,
   QuickNoteWrite, QuickPurgeRow, QuickTagRow, SyncFolderRow, SyncNoteMetaRow, SyncNoteWrite,
@@ -55,9 +56,9 @@ export interface MobilePlatformPortContext {
   /**
    * 单条快路径合并读的 raw 快照（261112 task-83）：返回 null = 没有快照（走自己的 SELECT）。
    * 由 MobileDeviceStore.loadQuickPushSnapshot 在读取 baseline/轻量状态期间临时提供，
-   * 目的只是让 assetsHashOf 复用同一份「已读出的 sync_v3_state 行」，语义不变。
+   * 目的只是让 assetsHashOf 复用同一份「已读出的 sync_v3_state 行 + 已读出的 baseline 文件值」，语义不变。
    */
-  readStateSnapshot?: () => { raw: unknown } | null;
+  readStateSnapshot?: () => { raw: unknown; baseline: DeviceBaseline | null } | null;
 }
 
 /** 文档行快照（saveState 内的「当前行」视图；与旧实现内存 map 同口径，避免逐条回查 SQL）。 */
@@ -109,7 +110,7 @@ export function createMobilePlatformPort(db: MobileDb, ctxIn?: Partial<MobilePla
         // task-83：合并读快照存在时复用同一份 raw（省掉第三次 SELECT 整行 JSON）。
         const snapshot = ctx.readStateSnapshot?.() ?? null;
         const side = snapshot
-          ? (persistedStateProjection(snapshot.raw) ?? { baseline: null, assetsHash: {} })
+          ? (persistedStateProjection(snapshot.raw, snapshot.baseline) ?? { baseline: null, assetsHash: {} })
           : await loadV3State(db);
         const map = new Map<string, string>();
         for (const n of side.baseline?.lake.notes ?? []) if (n.assetsHash) map.set(n.id, n.assetsHash);
