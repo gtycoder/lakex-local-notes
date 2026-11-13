@@ -14,7 +14,7 @@
 - **修复**：文档编辑器 image 插件改自实现 `createUploadTask`（`features/editor/imageUploadTask.ts`，taskId 同步进卡片，任务自持、编辑器销毁后仍跑完）+ 持久日志 `uploadJournal`（taskId→URL/资产结果，7 天/200 条）+ 纯函数 `uploadCardRepair`（挂载时按 taskId 回填 done/error）+ `EditorTab` 订阅晚到结果触发一次重建 + `resumePendingDocumentImageUploads` 重启后重下 pending。**关键坑**：vendor 默认 image 配置带直通 URL 的 `createUploadPromise` 桩且优先级高于 createUploadTask ⇒ 必须显式 `createUploadPromise: undefined`，否则远程图变「src=原 URL/size0/done」假成功卡（实测踩到）；任务必须实现 WY 同款 `on/off` 与 `isError` 等（缺则 render assert/TypeError）。下载预算收窄为 15s×2（IPC `download_remote_resource` 新增 limits，夹 [1s,60s]×[1,3]），该路径渲染层不再叠重试。
 - **运行时验证（隔离 `LAKE_USER_DATA` + `LAKE_RENDERER=scheme` + CDP 9222，未碰正式数据）**：A 粘贴远程图 → 日志 done、DOM `img.ne-image` 指向本地资产、无 renderer 错误；B 离线把正文卡改成 `src:""/status:error/unknown error`（保留 taskId）→ 重启打开 → 自动回填 src/status/size 并落盘（磁盘 body 已 done、orphan 清空）；C 日志置 pending + 正文同 taskId broken → 重启 → 自动重下并回填（磁盘 body done）。
 - **门禁**：tsc 0；全量 vitest **944 文件 / 6005 例（5993 passed / 12 skipped）/ 0 failed**；`vite build` 成功；`git diff --check` clean。护栏：`uploadJournal.test.ts`（5）、`imageUploadTask.test.ts`（5）、`uploadCardRepair.test.ts`（6）、`uploadRecoveryWiring.test.ts`（3）、`electron/resourceRepository.downloadLimits.test.ts`（3）。
-- **文档**：`LAKEX-CONTRACT.md` §5.53（内核扩展点/生命周期/unknown error 链路 + 复验法）、`RESILIENCE.md` §3.6、AGENTS §4「图片上传必须可恢复」、HANDOFF 本节/§1。**未 bump 版本、未打 tag**（等用户决定是否发 v1.1.4）。
+- **文档**：`LAKEX-CONTRACT.md` §5.53（内核扩展点/生命周期/unknown error 链路 + 复验法）、`RESILIENCE.md` §3.6、AGENTS §4「图片上传必须可恢复」、HANDOFF 本节/§1。**已双推 master（`a6b77249`），未 bump 版本、未打 tag**（用户 261114 决定：先推远程不发版；等需要装机验收再发 v1.1.4）。
 ### 261114 · v1.1.3（移动端删除 review 收口 + 级联/关标签详细矩阵 + 发版）
 
 - **用户点单**：① 移动端删除也做 review（笔记本/分组/文档 × 子级/多级子级都要详细测试），删除后**关闭已打开标签、行为与桌面一致**；② 完成后推远程、打 tag 发版。
@@ -178,7 +178,7 @@
 **版本与仓库**
 
 - 主分支 `master`；**HEAD 以 `git log -1` 为准**；R2 已提交 6 笔拆分/设备记录（`a23631f6` sidebar / `fd268432` settings / `231fe845` electron boot / `c00d3a60` lakeRuntime / `4a9b965c` ink 测试 / `e352e2cb` 设备记录）；**产品代码基线 = `8e20a6a3`（R0）/ `e87016bd`（R1）/ `e352e2cb`（R2）/ `3fad8821`（R2 收尾：位置合并 + 同步专用写路径 + 单篇降级）**；**日记收口批产品笔 = `199f3403`（不可变守卫）/ `fd58dc0a`（移动移除取消标记）/ `d4d03260`（移动目标剔除日记子树）/ `f965e62c`（转文档共享弹窗）/ `4b6a524a`（转小记媒体搬运）/ `400dcc75`（showNotice 全空间可见）**；**261113 批 = `839c7a93`（发版复核 P2/P3）/ `a57cf3cf`（移动端「转为小记」+ 22 号报告 §11 + RELEASE.md Secrets 节）**（详见 §0）。
-- **推送**：v1.1.3 发版 commit `12b5f7d3` 与注解 tag `v1.1.3` 已双推（Gitee `origin` + GitHub `github`，tag ref `a3f47335` → commit `12b5f7d3`）；随后 docs 收尾提交会再推一次 master ——以后以 `git rev-list --count origin/master..HEAD` 为准。
+- **推送**：`master` 已追平 `a6b77249`（图片上传失联修复，双推 Gitee/GitHub，**未打新 tag**）；最新 release 仍是 `v1.1.3`（tag ref `a3f47335` → commit `12b5f7d3`，产物 8 资产）。以后以 `git rev-list --count origin/master..HEAD` 为准。
 - `package.json` = **1.1.3**；Android `versionName 1.1.3` / `versionCode 11103`（从根 package.json 派生：`1000 + major*10000 + minor*100 + patch`，只增不减；**不手改 build.gradle**）。
 - tag：`v1.0.0`–`v1.0.5`、`v1.1.0`、`v1.1.1`（261112 已发）、`v1.1.2`（261114 已发）、**`v1.1.3`（261114 已打 tag 并双推；Release workflow run `43405437257` 由 tag 触发；发布说明段落 = RELEASE-NOTES 顶部 `# LakexLocalNotes v1.1.3`）**；已发布 tag 不再移动。发布说明 = [docs/RELEASE-NOTES.md](RELEASE-NOTES.md)（**v1.1.3 → v1.0.0** 倒序；当前 tag 段落 = CI 生成 GitHub Release 正文的来源）。
 - 分支/远端：`master` 唯一长期分支；`origin` = Gitee（SSH，第二 pushurl = GitHub HTTPS）⇒ `git push origin <branch>` 一次推两边；GitHub 只在推 tag 时构建。remote 不入库 ⇒ 新 clone 跑 `npm run setup:remotes`。
