@@ -29,6 +29,19 @@ describe("mergeSyncWarnings（W4：一行式 warning 不能只进日志）", () 
     expect(out[0].kind).toBe("apply_skipped");
   });
 
+  it("结构化项 message 为空时按 noteId/title 与日志去重（F-11）", () => {
+    const structured = [w("remote_incomplete", "", { noteId: "n1", title: "文档1" })];
+    const out = mergeSyncWarnings({ structured, logLines: ["上传失败，保持 local 下轮重试: n1 timeout"] });
+    expect(out).toHaveLength(1);
+    expect(out[0].title).toBe("文档1");
+  });
+
+  it("structured 与 extra 同键（kind+noteId）只留一条（F-11）", () => {
+    const dup = w("apply_skipped", "x", { noteId: "n1" });
+    const out = mergeSyncWarnings({ structured: [dup], extra: [{ ...dup }], logLines: [] });
+    expect(out).toHaveLength(1);
+  });
+
   it("空行被忽略、顺序稳定（structured → extra → logLines）", () => {
     const out = mergeSyncWarnings({ structured: [w("asset_missing", "a")], extra: [], logLines: ["", "  ", "b"] });
     expect(out.map((x) => x.message)).toEqual(["a", "b"]);

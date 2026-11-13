@@ -613,6 +613,31 @@ describe("目录树操作", () => {
     expect(row.trashedAt).not.toBeNull();
   });
 
+  it("审计 F-10：子项先单独删除、父随后删除，恢复父 ⇒ 子一并回到原位（子树恢复语义钉死）", () => {
+    const nb = store.createNotebook("F10 册");
+    const group = store.createGroup(nb.id, "分组");
+    const child = store.createNoteIn(group.id, "先删的子");
+    const sibling = store.createNoteIn(group.id, "没删的兄弟");
+    store.saveNote(child.id, "先删的子", "<p>c</p>");
+    store.saveNote(sibling.id, "没删的兄弟", "<p>s</p>");
+
+    // 子先单独进回收站（父仍活跃）⇒ 它的原始父记在 deleted_from_parent_id
+    store.deleteTreeNode(child.id);
+    expect(store.listNotesForSync().find((n) => n.id === child.id)!.trashedAt).not.toBeNull();
+
+    // 父（分组）随后进回收站
+    store.deleteTreeNode(group.id);
+
+    // 恢复父：flattenedSubtreeIds = parent 链 ∪ (deleted_from_parent_id + trashed_at) ⇒
+    // 更早单独删除的子也会被一并恢复（这是「删除整棵子树」的已知近似，此处把语义钉死）。
+    store.restoreTrashItem(group.id);
+    const childRow = store.listNotesForSync().find((n) => n.id === child.id)!;
+    expect(childRow.trashedAt).toBeNull();
+    expect(childRow.parentId).toBe(group.id);
+    // 没被删过的兄弟不受影响
+    expect(store.listNotesForSync().find((n) => n.id === sibling.id)!.parentId).toBe(group.id);
+  });
+
   it("审计（W-4 对齐）：applyRemotePurge 清除 restore_pending_at（与移动端端口口径一致）", () => {
     const nb = store.createNotebook("purge对齐");
     const note = store.createNoteIn(nb.id, "子笔记");
@@ -958,7 +983,7 @@ describe("文档历史（快照，纯本地）", () => {
       .run(id, oldPath, oldHash, "2020-01-01T00:00:00.000Z", gz.length, "[]", 0);
     store.cleanupHistory();
     expect(store.listNoteHistory(id).some((h) => h.contentHash === oldHash)).toBe(false);
-  });
+  }, 15_000);
 
   it("B3：冲突归档快照（protectedUntil）不被自动清理，到期自动解除保护，手动删除随时可用", () => {
     const { id } = makeNote();

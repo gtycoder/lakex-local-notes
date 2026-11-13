@@ -239,6 +239,9 @@ function normalizeImage(image: HTMLImageElement, document: Document): HTMLImageE
     const canvasPng = imageToPngDataUrl(image);
     if (!canvasPng) return null;
     // blob = 待上传的原文件（未套 ?w= 缩略档），naturalWidth/Height 即原图尺寸。
+    // F-14（已知边界，261113 登记）：这里**假定** blob URL 指向原文件。若哪天有人把「显示缩略」
+    // 的 blob 放进 img.src（例如给待上传图套 w= 预览），这段会把显示尺寸写成原尺寸 ——
+    // 判据是 blob 只由「待上传原文件预览」产生（见 editor/imageThumbUploadTracker）；改这条链时先核。
     source = canvasPng; needsFormatFix = true;
     dimensions = { width: image.naturalWidth, height: image.naturalHeight };
   } else {

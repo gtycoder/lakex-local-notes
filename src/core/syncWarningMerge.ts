@@ -28,6 +28,11 @@ function overlaps(a: string, b: string): boolean {
   return x === y || x.includes(y) || y.includes(x);
 }
 
+/** 结构化项去重键（261113 F-11）：kind + 归属；同键只留第一条（引擎/plan 可能重复产出）。 */
+function dedupeKey(w: SyncWarning): string {
+  return [w.kind, w.noteId ?? "", w.filename ?? "", w.title ?? ""].join("\u0000");
+}
+
 /**
  * 单篇 apply 失败的**唯一映射**（261112 task-104 F-07）：`PlanWarning` → `SyncWarning`。
  * core 现在直接产出 `apply_skipped`；这里只做字段搬运，不再把 kind 改写成 remote_incomplete
@@ -45,11 +50,23 @@ export function syncWarningOfApplyFailure(warning: PlanWarning): SyncWarning {
 }
 
 export function mergeSyncWarnings(input: MergeSyncWarningsInput): SyncWarning[] {
-  const out: SyncWarning[] = [...input.structured, ...(input.extra ?? [])];
+  const out: SyncWarning[] = [];
+  const seen = new Set<string>();
+  for (const warning of [...input.structured, ...(input.extra ?? [])]) {
+    const key = dedupeKey(warning);
+    if (seen.has(key)) continue; // F-11：同键只留一条，避免浮层里数两遍
+    seen.add(key);
+    out.push(warning);
+  }
   for (const line of input.logLines) {
     const text = line.trim();
     if (!text) continue;
     if (out.some((w) => overlaps(w.message, text))) continue;
+    // F-11：部分 PlanWarning 只有 id/kind（message 为空）⇒ 文本包含判重失效，会变成
+    // 「一条结构化 + 一条一行式日志」两项。这里按归属（noteId/title/filename）再判一次。
+    if (out.some((w) => (!!w.noteId && text.includes(w.noteId))
+      || (!!w.title && text.includes(w.title))
+      || (!!w.filename && text.includes(w.filename)))) continue;
     out.push({ kind: "remote_incomplete", message: text });
   }
   return out;
