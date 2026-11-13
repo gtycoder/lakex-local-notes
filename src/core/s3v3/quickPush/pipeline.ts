@@ -286,6 +286,10 @@ async function runQuickPushOnce(deps: QuickPushDeps, id: string): Promise<QuickP
   }
   const restore = new Set(light?.restorePending ?? []);
   const purgedLocal = new Set(light?.remotePurged ?? []);
+  // 261113（P2 #12）：本机这条是「云端已删除·仅本地」副本时，**没有显式恢复意图就绝不能推**
+  // （推上去等于复活他端已彻底删除的条目，撤销删除）。旧的快路径只在 likelyUnchanged 里看 remotePurged，
+  // 内容一变就绕过去 ⇒ 陈旧写作卡点「保存并同步」可以复活已删小记。这里直接退整轮，由整轮按删除意图处理。
+  if (purgedLocal.has(id) && !restore.has(id)) return { status: "full-sync", reason: "remote-deleted" };
 
   // ---- 重复点快探测：本地相对 baseline 完全没变 + 云端仍停在 baseline 那一代 ⇒ 不取锁、不读索引、零上传。
   const baseEntry = baseline.quickNotes.items.find((q) => q.id === id) ?? null;

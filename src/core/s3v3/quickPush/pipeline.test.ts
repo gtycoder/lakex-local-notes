@@ -109,6 +109,20 @@ const summary = (ops: Op[]) => ops.map((o) => o.op + " " + o.key);
 const quickBodyKey = (hash: string) => quickNoteBodyKey(hash);
 
 describe("单条推送独立管线：请求序列（261110 剥离 + 提速）", () => {
+  it("本机副本是「云端已删除·仅本地」且无恢复意图 ⇒ 退整轮（绝不复活他端删除）", async () => {
+    const f = fixture({ remotePurgedState: ["q1"] });
+    const out = await runQuickPush(f.deps, "q1");
+    expect(out).toEqual({ status: "full-sync", reason: "remote-deleted" });
+    // 零请求（连 pointer 都不读：守卫在最前面）
+    expect(f.remote.ops).toHaveLength(0);
+  });
+
+  it("同一副本但有显式恢复意图 ⇒ 允许推（恢复是唯一例外）", async () => {
+    const f = fixture({ remotePurgedState: ["q1"], restorePending: ["q1"] });
+    const out = await runQuickPush(f.deps, "q1");
+    expect(out.status).toBe("pushed");
+  });
+
   it("发布索引里的 tagIds 排序（顺序不跨端传播，与整轮同口径）", async () => {
     const f = fixture({ local: localEntry("q1", "hello", { tagIds: ["t-b", "t-a"], tagsUpdatedAt: "2026-01-02T00:00:00.000Z" }) });
     const out = await runQuickPush(f.deps, "q1");

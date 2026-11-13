@@ -6,7 +6,7 @@
  * 语义与旧 initial publish 对齐：先对象后索引、再 pointer；被抢先 ⇒ retry。
  */
 import type { LakeIndex, QuickNotesIndex, S3v3Pointer } from "../protocol/index.js";
-import { planSync, type PlanWorld } from "../plan/plan.js";
+import { planSync, type PlanState, type PlanWorld } from "../plan/plan.js";
 import type { SyncPlan } from "../plan/types.js";
 import { applyPlan, type ApplyResult } from "../apply/applyPlan.js";
 import { applyAssets, type ApplyAssetsResult } from "../apply/applyAssets.js";
@@ -30,7 +30,15 @@ const EMPTY_WORLD: PlanWorld = {
 
 /** 空桶首传：本地就是真相，全部上传后发布 generation 1。 */
 export async function initialRound(
-  input: { local: PlanWorld; deviceId: string; deferAssets?: boolean; progress?: (p: { phase: "archives" | "reads" | "uploads" | "deletes" | "asset-put" | "asset-get"; done: number; total: number; bytesDone: number }) => void },
+  input: {
+    local: PlanWorld;
+    deviceId: string;
+    deferAssets?: boolean;
+    /** 261113（P2 #11）：本地意图（purge / 恢复 / 小记 purged 墓碑）。首传也必须按它们裁剪索引，
+     *  旧实现固定传空 PlanState ⇒ 首传索引不带本地 purged、下一轮才补发（白多一次 generation）。 */
+    state?: PlanState;
+    progress?: (p: { phase: "archives" | "reads" | "uploads" | "deletes" | "asset-put" | "asset-get"; done: number; total: number; bytesDone: number }) => void;
+  },
   ports: RoundPorts,
   commitOptions: CommitOptions = {},
 ): Promise<InitialRoundResult> {
@@ -38,7 +46,7 @@ export async function initialRound(
     local: input.local,
     base: null,
     remote: { lake: EMPTY_WORLD.lake as LakeIndex, quickNotes: EMPTY_WORLD.quickNotes as QuickNotesIndex, folders: [] },
-    state: { restorePending: [], purgeIntents: [], folderPurgeIntents: [] },
+    state: input.state ?? { restorePending: [], purgeIntents: [], folderPurgeIntents: [] },
     deferAssets: input.deferAssets,
   });
   const apply = await applyPlan(plan, ports, {

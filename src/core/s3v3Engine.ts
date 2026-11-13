@@ -710,6 +710,8 @@ export class S3v3SyncEngine {
       savePending: async (pending) => { state.pending = pending; } });
     const round = await initialRound({
       local: planWorldOf(state), deviceId: this.deviceId, deferAssets: opts.deferAssets === true,
+      // 261113（P2 #11）：首传也带本地意图（purge/恢复/小记 purged 墓碑），索引当轮就裁剪干净。
+      state: planStateOf(state),
       progress: (p: { phase: string; done: number; total: number; bytesDone: number }) => {
         const phase = p.phase === "reads" || p.phase === "asset-get" ? "bodies" : p.phase === "uploads" || p.phase === "asset-put" ? "uploads" : "apply";
         this.emitProgress({ phase, done: p.done, total: p.total, bytesDone: p.bytesDone });

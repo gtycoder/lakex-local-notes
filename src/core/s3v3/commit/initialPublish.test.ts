@@ -79,6 +79,24 @@ describe("E2-3 首传金标准", () => {
     expect(new TextDecoder().decode(remote.objects.get(indexKey("lake", pointer.lake.commit))!)).toBe(serializeLakeIndex(lake(local)));
   });
 
+  it("P2 #11：首传按本地小记 purged 墓碑裁剪索引（旧实现传空 PlanState ⇒ 下一轮才补发）", async () => {
+    const remote = new MemRemote();
+    const st: DeviceState = {
+      ...stateOf([]),
+      quickNotes: { v: 3, space: "quickNotes", items: [{ id: "q1", createdAt: ISO, updatedAt: ISO, contentHash: H("quick-body") }], tags: [] },
+      quickPurges: ["q1"], quickPurgeTimes: { q1: ISO },
+    };
+    const dev = new MemDevice(st, null);
+    await new S3v3SyncEngine({ remote, device: dev, deviceId: "e" }).sync({ onEmptyCloud: "upload" });
+    const pointer = JSON.parse(new TextDecoder().decode(remote.objects.get("meta/pointer.json")!)) as S3v3Pointer;
+    const quickIndex = JSON.parse(new TextDecoder().decode(remote.objects.get(indexKey("quickNotes", pointer.quickNotes.commit))!)) as {
+      items: Array<{ id: string }>; purged?: string[];
+    };
+    // 首传索引就该裁剪干净：不出现该条、且带 purged 墓碑（否则下一轮才补发 = 白多一次 generation）
+    expect(quickIndex.items.map((q) => q.id)).not.toContain("q1");
+    expect(quickIndex.purged ?? []).toContain("q1");
+  });
+
   it("引擎首轮（内核）与金标准一致：gen1 + 基线写入", async () => {
     const local = [doc("a", "v1")];
     const remote = new MemRemote();
