@@ -39,7 +39,9 @@ function dedupeKey(w: SyncWarning): string {
  * （两端消费方都直接用本函数的结果，禁止二次映射）。
  */
 export function syncWarningOfApplyFailure(warning: PlanWarning): SyncWarning {
-  const kind: SyncWarningKind = warning.code === "apply_skipped" ? "apply_skipped" : "remote_incomplete";
+  const kind: SyncWarningKind = warning.code === "apply_skipped" ? "apply_skipped"
+    : warning.code === "conflict_kept_history" ? "conflict_kept_history"
+      : "remote_incomplete";
   return {
     kind,
     ...(warning.id ? { noteId: warning.id } : {}),

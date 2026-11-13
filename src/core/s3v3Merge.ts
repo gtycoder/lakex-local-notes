@@ -325,6 +325,13 @@ export function planQuickNotesMerge(base: QuickNotesIndex | null, local: QuickNo
       continue;
     }
     if (!ll && rr && bb && localDeletes.has(id)) {
+      // 261113（C1 真实桶实测）：删除压编辑只压「基线那一版」。远端条目比基线新 ⇒ 他端显式恢复
+      // （恢复会 bump updatedAt）⇒ 必须让远端赢；否则本地旧墓碑会永久压过恢复、并把缺席反复
+      // 发布回云端（删除回弹、恢复永远不生效）。同型 Lake 文档早就按 updatedAt/trashedAt 判，小记漏了。
+      if ((rr.updatedAt ?? "") > (bb.updatedAt ?? "")) {
+        items.push({ id, kind: "download", applyRemote: true, uploadLocal: false, archiveLocal: false, local: undefined, remote: rr });
+        continue;
+      }
       items.push({ id, kind: "local-delete", applyRemote: false, uploadLocal: false, archiveLocal: false, local: undefined, remote: rr });
       continue;
     }

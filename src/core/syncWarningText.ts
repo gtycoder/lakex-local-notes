@@ -54,6 +54,12 @@ export const SYNC_WARNING_COPY: Record<SyncWarningKind, SyncWarningCopy> = {
     hint: "已跳过该文件；改名后下次同步会上传。",
     retryable: false,
   },
+  // 261113（C4）：冲突按「先提交者胜」处理并保留本地历史——不能再说「远端内容不完整、下次重试」。
+  conflict_kept_history: {
+    label: "已保留本地历史版本",
+    hint: "这篇两端都改过；已保留你的版本（历史快照），当前显示云端版本。",
+    retryable: false,
+  },
   // task-66：单篇 apply（远端落本地）失败被跳过—— truthful：不是"远端内容不全"，是"本地这篇本轮没落地"。
   apply_skipped: {
     label: "本篇本轮未应用",

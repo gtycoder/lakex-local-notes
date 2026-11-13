@@ -499,6 +499,41 @@ describe("createDeviceStoreMeta.saveState：同步窗口守卫", () => {
   });
 });
 
+describe("createDeviceStoreMeta.saveState 小记墓碑 LWW（261113 C1）", () => {
+  const quickState = (updatedAt: string): DeviceState => ({
+    lake: { v: 3, space: "lake", notes: [], folders: [] },
+    quickNotes: { v: 3, space: "quickNotes", items: [{ id: "q1", createdAt: "T0", updatedAt, contentHash: H("q"), isConflict: false } as never], tags: [] },
+    folders: [], intents: [], pending: [], remotePurged: [], restorePending: [],
+  });
+  const storeOf2 = (platform: ReturnType<typeof memoryPlatform>, files = memoryFiles({ "quick/q1.qnote": new TextEncoder().encode("body-q1") })) =>
+    createDeviceStoreMeta({
+      platform: platform.port,
+      files,
+      assets: createFileBackedAssetIo({ files, assetDirFor: (id) => "assets/" + id, quickAssetDirFor: (id) => "quick-assets/" + id }),
+      state: { read: async () => null, write: async () => {} },
+      baseline: { load: async () => null },
+      stagedBodies: new Map(),
+    });
+
+  it("墓碑比远端条目旧（他端恢复更新）⇒ 正常导入（旧实现下载后丢弃）", async () => {
+    const platform = memoryPlatform({ quickNotes: [], quickDeleted: [{ id: "q1", purgedAt: null, deletedAt: "T1" }] });
+    await storeOf2(platform).saveState(quickState("T2"));
+    expect(platform.calls).toContain("importRemoteQuickNote:q1");
+  });
+
+  it("墓碑比远端条目新（本地新删除）⇒ 不复活、不导入", async () => {
+    const platform = memoryPlatform({ quickNotes: [], quickDeleted: [{ id: "q1", purgedAt: null, deletedAt: "T9" }] });
+    await storeOf2(platform).saveState(quickState("T2"));
+    expect(platform.calls).not.toContain("importRemoteQuickNote:q1");
+  });
+
+  it("墓碑缺时间戳 ⇒ 保守按墓碑优先（不复活）", async () => {
+    const platform = memoryPlatform({ quickNotes: [], quickDeleted: [{ id: "q1", purgedAt: null }] });
+    await storeOf2(platform).saveState(quickState("T2"));
+    expect(platform.calls).not.toContain("importRemoteQuickNote:q1");
+  });
+});
+
 describe("createDeviceStoreMeta.saveState 文档标签关系（P2-E 批量版本读）", () => {
   const noteRow = (id: string) => ({
     id, title: id, parentId: null, sortOrder: 0, updatedAt: "T0", contentHash: H("a"), kind: "doc", icon: null,

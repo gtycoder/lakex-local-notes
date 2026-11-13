@@ -42,7 +42,11 @@ export type SyncWarningKind =
   | "asset_invalid_name"
   /** 内部 kind（**不进 wire 协议**，task-66）：单篇 apply（把远端落本地）失败被跳过，下一轮重试。
    *  与 remote_incomplete 的区别：那是"远端内容不全"，这是"本地写失败/未落地"——文案不得混用。 */
-  | "apply_skipped";
+  | "apply_skipped"
+  /** 261113（C4 真实桶实测）：冲突已按「先提交者胜」处理并**保留了本地历史快照**。
+   *  旧实现把它归到 remote_incomplete ⇒ UI 说「远端内容不完整、本地未改动、下次重试」，
+   *  与事实（本地已被覆盖、历史可找回）完全相反。 */
+  | "conflict_kept_history";
 export interface SyncWarning {
   kind: SyncWarningKind;
   /** 受影响文档 id（能定位时）。 */

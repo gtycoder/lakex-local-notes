@@ -275,9 +275,9 @@ export function createMobilePlatformPort(db: MobileDb, ctxIn?: Partial<MobilePla
     },
     /** 移动旧口径：quickDeletes 只收「可恢复」行（软删行 + purged_at 为空的墓碑），purged 行走 listQuickPurges。 */
     async listQuickDeleted(): Promise<QuickDeletedRow[]> {
-      const softRows = await db.prepare("SELECT id FROM quick_notes WHERE deleted_at IS NOT NULL AND cloud_deleted=0").all() as Array<{ id: string }>;
-      const softTombRows = await db.prepare("SELECT id FROM quick_note_deleted WHERE purged_at IS NULL").all() as Array<{ id: string }>;
-      return [...softRows.map((r) => ({ id: r.id, purgedAt: null })), ...softTombRows.map((r) => ({ id: r.id, purgedAt: null }))]
+      const softRows = await db.prepare("SELECT id, deleted_at FROM quick_notes WHERE deleted_at IS NOT NULL AND cloud_deleted=0").all() as Array<{ id: string; deleted_at: string | null }>;
+      const softTombRows = await db.prepare("SELECT id, deleted_at FROM quick_note_deleted WHERE purged_at IS NULL").all() as Array<{ id: string; deleted_at: string | null }>;
+      return [...softRows.map((r) => ({ id: r.id, purgedAt: null, deletedAt: r.deleted_at ?? "" })), ...softTombRows.map((r) => ({ id: r.id, purgedAt: null, deletedAt: r.deleted_at ?? "" }))]
         .sort((a, b) => a.id.localeCompare(b.id));
     },
     async listQuickPurges(): Promise<QuickPurgeRow[]> {

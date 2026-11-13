@@ -82,7 +82,13 @@ export interface QuickTagRow {
   updatedAt: string;
 }
 
-export interface QuickDeletedRow { id: string; purgedAt?: string | null }
+export interface QuickDeletedRow {
+  id: string;
+  purgedAt?: string | null;
+  /** 软删时刻（261113 C1）：用于「墓碑 vs 远端恢复」LWW —— 远端条目比墓碑新 ⇒ 恢复赢，不能压。
+   *  平台拿不到时留空：core 按旧行为（墓碑优先）保守处理，绝不因为缺时间戳去复活。 */
+  deletedAt?: string;
+}
 /** 小记本地彻底删除墓碑（purged_at 非空）：与 quickDeletes 分开取，两端口径差异由平台实现决定。 */
 export interface QuickPurgeRow { id: string; purgedAt: string }
 export interface PurgedTombstoneRow { id: string; purgedAt?: string | null }

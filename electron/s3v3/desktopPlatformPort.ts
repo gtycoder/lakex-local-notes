@@ -61,7 +61,7 @@ export function createDesktopPlatformPort(store: Store, quickNotes?: QuickNotesS
     /** 桌面旧口径：quickDeletes 含已 purge 行（保持迁移前行为，由引擎用 quickPurges 区分不可恢复）。 */
     async listQuickDeleted(): Promise<QuickDeletedRow[]> {
       if (!qn) return [];
-      return qn.listAllDeleted().map((d) => ({ id: d.id, purgedAt: d.purgedAt ?? null }));
+      return qn.listAllDeleted().map((d) => ({ id: d.id, purgedAt: d.purgedAt ?? null, deletedAt: d.deletedAt ?? "" }));
     },
     async listQuickPurges(): Promise<QuickPurgeRow[]> {
       if (!qn) return [];

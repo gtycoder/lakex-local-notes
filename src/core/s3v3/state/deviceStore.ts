@@ -454,7 +454,10 @@ export function createDeviceStoreMeta(deps: DeviceStoreMetaDeps): DeviceStoreMet
     // 同步窗口守卫（261105 容错批，P1-1）：本轮 plan 快照之后用户又删掉/彻底删掉的小记，
     // 不能因为 state 里还留着就被重新导入——`importRemoteQuickNote` 会清墓碑，等于把删除永久丢掉。
     // 判据：行不在 fresh current（已被删）但 id 出现在墓碑表里 ⇒ 本地新删除优先，下一轮再发布缺席。
-    const quickDeletedNow = new Set((await p.listQuickDeleted()).map((d) => d.id));
+    // 261113（C1 实测）：墓碑必须带软删时刻——远端条目比墓碑新 = 他端显式恢复（恢复会 bump updatedAt），
+    // 这时要正常导入（旧实现只看「墓碑是否存在」⇒ 任何历史墓碑都会把远端恢复的条目在下载后丢弃，
+    // 并让本端把缺席反复发布回去 ⇒ 恢复永远不生效、删除回弹）。
+    const quickDeletedNow = new Map((await p.listQuickDeleted()).map((d) => [d.id, d.deletedAt ?? ""] as const));
     // purge 墓碑带时间：用于区分「轮内 purge」与「他端恢复后重新发布」（后者要正常导入）。
     const quickPurgedNow = new Map((await p.listQuickPurges()).map((d) => [d.id, d.purgedAt ?? ""] as const));
     // 显式恢复（restorePending）与远端复活都是例外：恢复动作本身就要把条目重新拉起，不受墓碑守卫压制。
@@ -476,7 +479,11 @@ export function createDeviceStoreMeta(deps: DeviceStoreMetaDeps): DeviceStoreMet
       // 轮内被删（软删或 purge）：以本地新动作为准，本轮不重建、不清墓碑（显式恢复 / 远端复活除外）。
       const purgedAtQuick = quickPurgedNow.get(item.id);
       const purgedDuringRound = purgedAtQuick !== undefined && !restoring.has(item.id) && (item.updatedAt ?? "") <= purgedAtQuick;
-      const softDeletedDuringRound = quickDeletedNow.has(item.id) && purgedAtQuick === undefined && !restoring.has(item.id);
+      // 软删墓碑同理按时间比较：墓碑 ≥ 远端条目 ⇒ 本地新删除优先（不复活）；
+      // 远端条目更新 ⇒ 他端恢复赢，正常导入。时间戳缺失时按旧行为（墓碑优先，保守）。
+      const deletedAtQuick = quickDeletedNow.get(item.id);
+      const tombstoneWinsOverRemote = deletedAtQuick === undefined ? false : (deletedAtQuick === "" || deletedAtQuick >= (item.updatedAt ?? ""));
+      const softDeletedDuringRound = deletedAtQuick !== undefined && purgedAtQuick === undefined && !restoring.has(item.id) && tombstoneWinsOverRemote;
       if (!cur && (purgedDuringRound || softDeletedDuringRound)) continue;
       try {
         if (!cur || cur.contentHash !== item.contentHash) {

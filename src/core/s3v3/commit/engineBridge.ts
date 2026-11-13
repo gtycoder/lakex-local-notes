@@ -246,8 +246,10 @@ export function mergeRoundIntoState(state: DeviceState, round: RoundResult, opts
       quickById.set(w.id, {
         ...prev,
         id: w.id,
-        createdAt: prev?.createdAt ?? new Date(0).toISOString(),
-        updatedAt: prev?.updatedAt ?? new Date(0).toISOString(),
+        // 261113（C2 真实桶实测）：远端条目带 createdAt/updatedAt，必须用它们——旧实现只取 prev、
+        // 回落 new Date(0) ⇒ 纯拉取轮拉下来的小记时间戳变 1970，列表按时间倒序错乱。
+        createdAt: meta.createdAt ?? prev?.createdAt ?? new Date(0).toISOString(),
+        updatedAt: meta.updatedAt ?? prev?.updatedAt ?? new Date(0).toISOString(),
         contentHash: w.bodyHash ?? prev?.contentHash ?? "",
         // 标签关系与冲突标记随远端条目一起写回（漏掉 = 跨端标签丢失/冲突角标丢失）。
         ...(meta.tagIds !== undefined ? { tagIds: meta.tagIds } : {}),
