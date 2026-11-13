@@ -7,7 +7,7 @@ import {
   readNoteBody, readNoteBodiesBatch, readQuickNoteBody, removeBodyStaging, statBodyStagingMany, statNoteBodiesBatch,
   statQuickNoteBodiesBatch, writeBodyStaging, writeQuickNoteBody,
 } from "../data/noteBodies.js";
-import { ensureV3StateTable, loadV3State, readRawV3State, savePersistedV3State, saveV3State, type MobileV3Baseline } from "../data/v3StateRepository.js";
+import { ensureV3StateTable, loadV3State, loadV3StateWithRaw, readRawV3State, savePersistedV3State, saveV3State, type MobileV3Baseline } from "../data/v3StateRepository.js";
 import { createDeviceStoreMeta, createFileBackedAssetIo, type AssetIoPort, type DeviceStoreMeta } from "../../core/s3v3/state/deviceStore.js";
 import { createCapacitorAssetFileDriver } from "./capacitorAssetFileDriver.js";
 import { createMobilePlatformPort, createMobileBodyFileDriver, type MobilePlatformPortContext } from "./mobilePlatformPort.js";
@@ -192,7 +192,9 @@ export class MobileDeviceStore implements S3v3DeviceStore {
     return (s.baseline as DeviceBaseline | null) ?? null;
   }
   async saveBaseline(baseline: DeviceBaseline): Promise<void> {
-    const s = await loadV3State(this.db);
+    // 261113（D1）：一次读出来的 raw 传给 saveV3State 复用，省掉它内部的第二次整行读（实测 129–207ms/次）。
+    const loaded = await loadV3StateWithRaw(this.db);
+    const s = loaded.state;
     // 发布成功后才写 baseline；但必须**守卫式**归位（261107 数据安全）：
     // 只清「本地 updated_at 仍等于基线快照」的行；同步窗口内改名/移动/恢复的行保持 dirty 与
     // restore_pending_at，留给下一轮重传。旧实现无条件清是「窗口内编辑被标 synced 后永远不传」的根因。
@@ -203,19 +205,21 @@ export class MobileDeviceStore implements S3v3DeviceStore {
       notPurged = true,
     ): Promise<void> => {
       const expected = new Map(entries.map((entry) => [entry.id, entry.updatedAt] as const));
-      const ids = [...expected.keys()];
-      for (let i = 0; i < ids.length; i += 400) {
-        const batch = ids.slice(i, i + 400);
-        if (batch.length === 0) continue;
-        const ph = batch.map(() => "?").join(",");
-        const purgeFilter = notPurged ? " AND is_purged=0" : "";
-        const rows = await this.db.prepare("SELECT id, updated_at FROM " + table + " WHERE id IN (" + ph + ")" + purgeFilter).all(...batch) as Array<{ id: string; updated_at: string }>;
-        const current = new Map(rows.map((row) => [row.id, row.updated_at] as const));
-        const good = batch.filter((id) => current.get(id) === expected.get(id));
-        if (good.length === 0) continue;
-        const goodPh = good.map(() => "?").join(",");
-        const setRestore = clearRestorePending ? ", restore_pending_at=NULL" : "";
-        await this.db.prepare("UPDATE " + table + " SET is_dirty=0" + setRestore + " WHERE id IN (" + goodPh + ")" + purgeFilter).run(...good);
+      // 261113（D1 性能）：先**只捞还欠归位的行**（单条查询、无 IN 分批），再与基线 expected 求交。
+      // 旧实现把全部基线行按 400 分批 SELECT + UPDATE；clean 行上的 `SET is_dirty=0` 本是 no-op
+      // （5000 文档=13 批、小记上限 2 万=50 批）⇒ 语义等价、查询数从 N 批降到 1 条。
+      const pendingWhere = (table === "folders" ? "is_dirty=1"
+        : "(is_dirty=1 OR restore_pending_at IS NOT NULL)")
+        + (notPurged ? " AND is_purged=0" : "");
+      const pendingRows = await this.db.prepare("SELECT id, updated_at FROM " + table + " WHERE " + pendingWhere).all() as Array<{ id: string; updated_at: string }>;
+      const current = new Map(pendingRows.map((row) => [row.id, row.updated_at] as const));
+      const good = [...expected.keys()].filter((id) => current.get(id) === expected.get(id));
+      const purgeFilter = notPurged ? " AND is_purged=0" : "";
+      const setRestore = clearRestorePending ? ", restore_pending_at=NULL" : "";
+      for (let i = 0; i < good.length; i += 400) {
+        const batch = good.slice(i, i + 400);
+        const goodPh = batch.map(() => "?").join(",");
+        await this.db.prepare("UPDATE " + table + " SET is_dirty=0" + setRestore + " WHERE id IN (" + goodPh + ")" + purgeFilter).run(...batch);
       }
     };
     await this.db.transaction(async () => {
@@ -224,7 +228,7 @@ export class MobileDeviceStore implements S3v3DeviceStore {
       // quick_notes 没有 is_purged 列（墓碑用 purged_at/deleted_at）；沿用旧实现不过滤。
       await markUnchanged("quick_notes", baseline.quickNotes.items.map((q) => ({ id: q.id, updatedAt: q.updatedAt })), true, false);
     });
-    await saveV3State(this.db, { ...s, baseline: baseline as MobileV3Baseline });
+    await saveV3State(this.db, { ...s, baseline: baseline as MobileV3Baseline }, loaded.raw);
   }
 
   async readBody(id: string): Promise<Uint8Array | null> {

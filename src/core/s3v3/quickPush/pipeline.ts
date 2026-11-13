@@ -311,8 +311,10 @@ async function runQuickPushOnce(deps: QuickPushDeps, id: string): Promise<QuickP
       // 云端已变：本机这条没变也仍需按整轮语义处理（旧实现直接 full-sync；保持不静默合并）。
       return { status: "full-sync", reason: "cloud-changed" };
     }
+    // 261113（D1）：重复点 = 内容/资产/元数据与云端全未变 ⇒ 写出来的基线字节与落盘完全一致，**不重写**。
+    // 旧实现每次都重写整份 baseline（移动端实测 129–207ms/次、桌面 3–5ms）+ markUnchanged 全表归位；
+    // 这里本行 dirty 已由上一行按内容 hash 清掉，跳过还顺带消掉「并发整轮已推进基线被本快照覆盖」的窗口。
     if (deps.device.markQuickNoteSynced) await deps.device.markQuickNoteSynced(id, local.contentHash);
-    await deps.device.saveBaseline(baseline);
     await persistMarkersIfStale(deps, light as QuickPushState, id);
     phase("push-baseline");
     return { status: "pushed", uploadedContent: false, uploadedAssets: 0, unchanged: true, generation: pointer.generation };

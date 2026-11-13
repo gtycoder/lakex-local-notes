@@ -47,6 +47,20 @@ describe("移动端 saveBaseline 守卫式归位（261107 数据安全）", () =
     expect(row.updated_at).toBe(later);
   });
 
+  it("is_dirty=0 但 restore_pending_at 非空 ⇒ 仍被归位清除（261113 D1 新过滤条件不漏）", async () => {
+    const db = await setup();
+    const store = new MobileDeviceStore(db);
+    await store.init();
+    const before = (await noteRow(db)).updated_at;
+    // 只标「待恢复」（dirty 已清）：旧实现靠「全表 IN 扫描 + updated_at 相等」才会清 restore_pending，
+    // 新实现先按 (is_dirty=1 OR restore_pending_at IS NOT NULL) 捞行 ⇒ 必须仍在候选里。
+    await db.prepare("UPDATE notes SET is_dirty=0, restore_pending_at=? WHERE id=?").run(before, "n1");
+    await store.saveBaseline(baselineWith(before));
+    const row = await noteRow(db);
+    expect(row.restore_pending_at).toBeNull();
+    expect(row.is_dirty).toBe(0);
+  });
+
   it("窗口内恢复（restore_pending_at）不被旧基线清掉", async () => {
     const db = await setup();
     const store = new MobileDeviceStore(db);

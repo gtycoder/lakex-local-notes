@@ -497,7 +497,14 @@ export function createDeviceStoreMeta(deps: DeviceStoreMetaDeps): DeviceStoreMet
           // 本地上传成功：仅当同步期间未被编辑才标 synced（I2 守卫）。
           await p.markQuickNoteSyncedIfUnchanged(item.id, item.contentHash);
         }
-        await p.applyQuickNoteTagLinks(item.id, item.tagIds ?? [], item.tagsUpdatedAt ?? "");
+        // 261113（D7 修复）：无标签且无版本的小记**不落关系**。移动端口在 tagsUpdatedAt 缺失时会用
+        // quick_notes.updated_at 兜底合成版本 ⇒ 一轮整轮 saveState 就给每条无标签小记新建了「本端自造」
+        // 的版本行；下一轮 plan 的标签 LWW 见 lt > rt("") 判成「本地关系更新」⇒ 0 正文变更却多发布一轮
+        // quick-notes 索引（gen+1）。远端清空标签仍会带更新的 tagsUpdatedAt（版本非空）⇒ 照常应用，语义不变。
+        const remoteQuickTagIds = item.tagIds ?? [];
+        if (remoteQuickTagIds.length > 0 || item.tagsUpdatedAt) {
+          await p.applyQuickNoteTagLinks(item.id, remoteQuickTagIds, item.tagsUpdatedAt ?? "");
+        }
       } catch (err) {
         throw new Error("saveQuickNotes 失败(" + item.id + "): " + (err as Error).message);
       }

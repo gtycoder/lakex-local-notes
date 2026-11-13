@@ -49,27 +49,38 @@ export async function readRawV3State(db: MobileDb): Promise<unknown> {
 }
 
 export async function loadV3State(db: MobileDb): Promise<MobileV3State> {
+  return (await loadV3StateWithRaw(db)).state;
+}
+
+/**
+ * 同 loadV3State，但同时回传落盘原始信封（261113 D1）：saveBaseline 一路要「读信封 → 写信封」，
+ * 复用这一份 raw 可省掉 saveV3State 内部的第二次整行读（2.28MB/5000 文档实测 129–207ms/次）。
+ */
+export async function loadV3StateWithRaw(db: MobileDb): Promise<{ state: MobileV3State; raw: unknown }> {
   const raw = await readRawV3State(db);
-  if (raw === null) return { ...EMPTY_MOBILE_V3_STATE };
+  if (raw === null) return { state: { ...EMPTY_MOBILE_V3_STATE }, raw: null };
   const persisted = migratePersisted(raw);
   const ledger = fromPersistedState(raw);
   if (!persisted || !ledger) {
     // 未知版本/损坏的账本不应让同步中断（与旧口径一致：视为空账本；baseline 丢失由引擎按保守合并处理）。
-    return { ...EMPTY_MOBILE_V3_STATE };
+    return { state: { ...EMPTY_MOBILE_V3_STATE }, raw };
   }
   const baseline = (raw && typeof raw === "object" && "baseline" in raw)
     ? ((raw as { baseline?: MobileV3Baseline | null }).baseline ?? null)
     : null;
   return {
-    baseline,
-    intents: ledger.state.intents,
-    pending: ledger.state.pending,
-    remotePurged: ledger.state.remotePurged ?? [],
-    restorePending: ledger.state.restorePending ?? [],
-    quickPurgeTimes: ledger.state.quickPurgeTimes ?? {},
-    // 旧移动端把两空间合并存一个 Map；v2 信封按空间分开 ⇒ 加载侧合并读，行为不变。
-    assetsHash: { ...persisted.assets.lake, ...persisted.assets.quickNotes },
-    pendingAssets: ledger.state.pendingAssets ?? [],
+    raw,
+    state: {
+      baseline,
+      intents: ledger.state.intents,
+      pending: ledger.state.pending,
+      remotePurged: ledger.state.remotePurged ?? [],
+      restorePending: ledger.state.restorePending ?? [],
+      quickPurgeTimes: ledger.state.quickPurgeTimes ?? {},
+      // 旧移动端把两空间合并存一个 Map；v2 信封按空间分开 ⇒ 加载侧合并读，行为不变。
+      assetsHash: { ...persisted.assets.lake, ...persisted.assets.quickNotes },
+      pendingAssets: ledger.state.pendingAssets ?? [],
+    },
   };
 }
 
@@ -87,8 +98,9 @@ export async function savePersistedV3State(db: MobileDb, persisted: IntentLogSta
  * 信封里不在内存视图中的字段（quick.deletes / quick.purges / recovery.bodyPending / 小记资产投影）
  * 从现有落盘信封保留，避免「只为标 baseline 顺手把明细清空」。
  */
-export async function saveV3State(db: MobileDb, state: MobileV3State): Promise<void> {
-  const current = migratePersisted(await readRawV3State(db));
+export async function saveV3State(db: MobileDb, state: MobileV3State, currentRaw?: unknown): Promise<void> {
+  // 261113（D1）：调用方已读过落盘信封时传 currentRaw，省掉这次整行读（未传则按旧行为自读）。
+  const current = migratePersisted(currentRaw === undefined ? await readRawV3State(db) : currentRaw);
   // 内存视图里没有的明细（quick-delete / quick-purge / body-recovery）从现有 v3 信封原样保留。
   const carried = (current?.records ?? []).filter((r) => r.kind === "quick-delete" || r.kind === "quick-purge" || r.kind === "body-recovery");
   const records: IntentRecord[] = [

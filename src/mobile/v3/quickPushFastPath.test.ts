@@ -48,9 +48,14 @@ class SpyDevice extends MobileDeviceStore {
   loadStateCalls = 0;
   quickStateCalls = 0;
   snapshotCalls = 0;
+  saveBaselineCalls = 0;
   override async loadState() { this.loadStateCalls += 1; return await super.loadState(); }
   override async loadQuickPushState(id: string) { this.quickStateCalls += 1; return await super.loadQuickPushState(id); }
   override async loadQuickPushSnapshot(id: string) { this.snapshotCalls += 1; return await super.loadQuickPushSnapshot(id); }
+  override async saveBaseline(baseline: Parameters<MobileDeviceStore["saveBaseline"]>[0]) {
+    this.saveBaselineCalls += 1;
+    return await super.saveBaseline(baseline);
+  }
 }
 
 const pointerOf = async (remote: MemoryRemote) => JSON.parse(dec((await remote.get("meta/pointer.json"))!)) as { generation: number; lake: { commit: string } };
@@ -100,17 +105,21 @@ describe("移动端单条推送最短链（261110）", () => {
     expect(await isDirty(db, "q1")).toBe(0);
 
     // 后续整轮：基线已跟上 ⇒ 这条被当已同步，不重传、不发布。
-    // 整轮同步不再重传这条（基线正确）。注意：移动端初始发布后首轮可能因 tag 版本元数据做一次
-    // 「只有元数据」的再发布（261110 之前就存在，与本快路径无关）⇒ 这里只钉"不重传这条"。
-    const nextRound = await runMobileV3Sync(db, SETTINGS, { remote, deviceId: "M" });
+    // 261113（D7 修好）：无标签小记不再被端口合成 tag 版本 ⇒ 这里必须**零发布**（此前会多一轮
+    // 「只含元数据」的再发布：gen+1、只 PUT 一份 quick-notes 索引）。
+    const countedNext = countRemoteOps(remote);
+    const nextRound = await runMobileV3Sync(db, SETTINGS, { remote: countedNext.remote, deviceId: "M" });
     expect(nextRound.uploadedQuickNotes).toBe(0);
     expect(nextRound.uploadedNotes).toBe(0);
+    expect(keysWithPrefix(countedNext.stats.putKeys, "quick-notes/meta/index/")).toHaveLength(0);
+    expect(keysWithPrefix(countedNext.stats.putKeys, "meta/index/")).toHaveLength(0);
     const genAfterFullRound = ((await loadV3State(db)).baseline as { generation: number }).generation;
-    expect(genAfterFullRound).toBeGreaterThanOrEqual(after.generation);
+    expect(genAfterFullRound).toBe(after.generation);
 
-    // 重复点：零上传，不涨 generation。
+    // 重复点：零上传，不涨 generation，且**不重写基线**（D1：字节不变就没必要整份归位）。
     const counted2 = countRemoteOps(remote);
-    const out2 = await runMobileV3PushQuickNote(db, SETTINGS, "q1", { remote: counted2.remote, deviceId: "M" });
+    const spy2 = new SpyDevice(db);
+    const out2 = await runMobileV3PushQuickNote(db, SETTINGS, "q1", { remote: counted2.remote, deviceId: "M", device: spy2 });
     expect(out2.status).toBe("pushed");
     if (out2.status !== "pushed") throw new Error("unreachable");
     expect(out2.unchanged).toBe(true);
@@ -118,6 +127,7 @@ describe("移动端单条推送最短链（261110）", () => {
     expect(counted2.stats.total).toBe(1);
     expect(counted2.stats.getKeys).toEqual(["meta/pointer.json"]);
     expect((await pointerOf(remote)).generation).toBe(genAfterFullRound);
+    expect(spy2.saveBaselineCalls).toBe(0);
     void phases;
     await db.close();
   }, 30_000);

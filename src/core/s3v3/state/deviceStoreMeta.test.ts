@@ -558,6 +558,30 @@ describe("createDeviceStoreMeta.saveState 文档标签关系（P2-E 批量版本
     expect(tagApplyCalls(platform)).toEqual(["applyNoteTagLinks:n1@T1:t1"]);
   });
 
+  it("小记零标签零版本 ⇒ 不落关系（261113 D7：移动端口会兜底合成版本，曾多发布一轮）", async () => {
+    const platform = memoryPlatform({
+      quickNotes: [{ id: "q1", createdAt: "T0", updatedAt: "T0", contentHash: H("c"), isConflict: false }],
+    });
+    await storeOf(platform).saveState({
+      lake: { v: 3, space: "lake", notes: [], folders: [] },
+      quickNotes: { v: 3, space: "quickNotes", items: [{ id: "q1", createdAt: "T0", updatedAt: "T0", contentHash: H("c"), isConflict: false } as never], tags: [] },
+      folders: [], intents: [], pending: [], remotePurged: [], restorePending: [],
+    });
+    expect(platform.calls.filter((c) => c.startsWith("applyQuickNoteTagLinks:"))).toHaveLength(0);
+  });
+
+  it("小记远端清空标签（空 tagIds + 新版本）⇒ 仍应用（否则清空不可见）", async () => {
+    const platform = memoryPlatform({
+      quickNotes: [{ id: "q1", createdAt: "T0", updatedAt: "T0", contentHash: H("c"), isConflict: false }],
+    });
+    await storeOf(platform).saveState({
+      lake: { v: 3, space: "lake", notes: [], folders: [] },
+      quickNotes: { v: 3, space: "quickNotes", items: [{ id: "q1", createdAt: "T0", updatedAt: "T0", contentHash: H("c"), isConflict: false, tagIds: [], tagsUpdatedAt: "T9" } as never], tags: [] },
+      folders: [], intents: [], pending: [], remotePurged: [], restorePending: [],
+    });
+    expect(platform.calls.filter((c) => c.startsWith("applyQuickNoteTagLinks:"))).toEqual(["applyQuickNoteTagLinks:q1"]);
+  });
+
   it("批量可用且该篇零标签零版本 ⇒ 既不读逐篇也不应用", async () => {
     const platform = memoryPlatform({ notes: [noteRow("n1")] }, false, { apply: true, batch: true, versions: [] });
     await storeOf(platform).saveState(stateWith({}));
