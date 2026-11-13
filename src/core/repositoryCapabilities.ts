@@ -62,6 +62,7 @@ export const REPOSITORY_CAPABILITIES: readonly RepositoryCapability[] = [
   { capability: "重命名节点", mobile: { file: "mobile/data/treeRepository.ts", fn: "renameTreeNode" }, desktop: "renameTreeNode", note: "同名" },
   { capability: "同级重排", mobile: { file: "mobile/data/treeRepository.ts", fn: "reorderSiblings" }, desktop: "reorderTreeNodes", note: "名称不同" },
   { capability: "设置节点图标", mobile: { file: "mobile/data/treeRepository.ts", fn: "setNodeIcon" }, desktop: "setNodeIcon", note: "同名" },
+  { capability: "日记子树归属（日记本本身 vs 子树：改名/图标/移动/排序/删除的唯一判据）", mobile: { file: "mobile/data/treeRepository.ts", fn: "diaryNotebookOf" }, desktop: null, core: "core/diary.ts", note: "桌面同判据 = NoteMetadataRepository 的私有 diaryNotebookOf（诊断面另有 Store.diaryNotebookOfTreeNode），无同名公开方法；两端都以 space='diary' + parent 链为唯一判据（core/diary）" },
   // ── 回收站（mobile/data/trashRepository.ts）──
   { capability: "回收站树", mobile: { file: "mobile/data/trashRepository.ts", fn: "listTrashTree" }, desktop: "listTrash", note: "形态不同：移动端返回树（抽屉按层展开），桌面返回列表" },
   { capability: "彻底删除", mobile: { file: "mobile/data/trashRepository.ts", fn: "purgeTreeItem" }, desktop: "purgeTrashItem", note: "名称不同（桌面另有 emptyTrash 清空）" },

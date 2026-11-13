@@ -30,6 +30,8 @@ import * as noteTagLinksRepository from "../data/noteTagLinksRepository.js";
 import * as quickNoteTagLinksRepository from "../data/quickNoteTagLinksRepository.js";
 import { deleteQuickNote } from "../data/quickNotesRepository.js";
 import { listQuickNoteTags } from "../data/quickNoteTagsRepository.js";
+import { diaryNotebookOf } from "../data/treeRepository.js";
+import { DIARY_FOLDER_SPACE, normalizeFolderSpace } from "../../core/diary.js";
 
 /** 父链保护上限（与 core/桌面一致，防环）。 */
 const MAX_PARENT_HOPS = 64;
@@ -40,6 +42,8 @@ interface LakeMeta {
   kind: BatchNotesNodeKind;
   trashed: boolean;
   parentId: string | null;
+  /** 目录行的空间标记（只有 notebook 可能为 "diary"；缺省/null = 非日记，见 core/diary.normalizeFolderSpace）。 */
+  space?: string | null;
 }
 
 interface BatchSnapshot {
@@ -47,6 +51,11 @@ interface BatchSnapshot {
   quick: Map<string, boolean>;
   /** move 目标父级的祖先链（含父级自身）；null 父级 = 根。 */
   ancestors: Set<string>;
+  /**
+   * move 目标父级是否落在日记子树（含日记本本身）；261113 用户裁决（AGENTS §3#25②）：
+   * 日记空间不是移动目标（顺序由日期派生，且不支持反向移入）。
+   */
+  parentInDiary: boolean;
   activeTagIds: ReadonlySet<string> | null;
 }
 
@@ -58,19 +67,25 @@ function chunk<T>(items: readonly T[], size = SQL_CHUNK): T[][] {
 
 const placeholders = (count: number): string => Array.from({ length: count }, () => "?").join(",");
 
-/** 读 lake 空间（notes / folders）的元数据；额外把 move 目标父级的祖先链补齐（环检测用）。 */
-async function loadLakeMeta(d: MobileDb, ids: readonly string[], parentRoot: string | null): Promise<{ lake: Map<string, LakeMeta>; ancestors: Set<string> }> {
+/**
+ * 读 lake 空间（notes / folders）的元数据；额外把 move 目标父级的祖先链补齐（环检测用），
+ * 并顺带判定「目标父级是否在日记子树」（判据 = 链上出现 space='diary' 的笔记本，与数据层 diaryNotebookOf 同口径）。
+ */
+async function loadLakeMeta(d: MobileDb, ids: readonly string[], parentRoot: string | null): Promise<{ lake: Map<string, LakeMeta>; ancestors: Set<string>; parentInDiary: boolean }> {
   const lake = new Map<string, LakeMeta>();
+  let parentInDiary = false;
+  const noteDiary = (meta: LakeMeta): boolean => meta.kind === "notebook" && normalizeFolderSpace(meta.space) === DIARY_FOLDER_SPACE;
   for (const part of chunk([...new Set(ids)])) {
     if (part.length === 0) continue;
     const notes = await d.prepare("SELECT id, parent_id, deleted_at FROM notes WHERE id IN (" + placeholders(part.length) + ")").all(...part) as Array<{ id: string; parent_id: string | null; deleted_at: string | null }>;
     for (const row of notes) lake.set(String(row.id), { kind: "note", trashed: row.deleted_at != null, parentId: row.parent_id ?? null });
-    const folders = await d.prepare("SELECT id, parent_id, node_type, trashed_at FROM folders WHERE id IN (" + placeholders(part.length) + ")").all(...part) as Array<{ id: string; parent_id: string | null; node_type: string; trashed_at: string | null }>;
+    const folders = await d.prepare("SELECT id, parent_id, node_type, trashed_at, space FROM folders WHERE id IN (" + placeholders(part.length) + ")").all(...part) as Array<{ id: string; parent_id: string | null; node_type: string; trashed_at: string | null; space: string | null }>;
     for (const row of folders) {
       lake.set(String(row.id), {
         kind: row.node_type === "notebook" ? "notebook" : "folder",
         trashed: row.trashed_at != null,
         parentId: row.parent_id ?? null,
+        space: row.space ?? null,
       });
     }
   }
@@ -81,23 +96,26 @@ async function loadLakeMeta(d: MobileDb, ids: readonly string[], parentRoot: str
   for (let hops = 0; cursor && hops < MAX_PARENT_HOPS; hops += 1) {
     ancestors.add(cursor);
     const known = lake.get(cursor);
-    if (known) { cursor = known.parentId; continue; }
+    if (known) { if (noteDiary(known)) parentInDiary = true; cursor = known.parentId; continue; }
     const note = await d.prepare("SELECT parent_id FROM notes WHERE id=?").get(cursor) as { parent_id: string | null } | undefined;
     if (note) {
       lake.set(cursor, { kind: "note", trashed: false, parentId: note.parent_id ?? null });
       cursor = note.parent_id ?? null;
       continue;
     }
-    const folder = await d.prepare("SELECT parent_id, node_type, trashed_at FROM folders WHERE id=?").get(cursor) as { parent_id: string | null; node_type: string; trashed_at: string | null } | undefined;
+    const folder = await d.prepare("SELECT parent_id, node_type, trashed_at, space FROM folders WHERE id=?").get(cursor) as { parent_id: string | null; node_type: string; trashed_at: string | null; space: string | null } | undefined;
     if (!folder) break;
-    lake.set(cursor, {
+    const meta: LakeMeta = {
       kind: folder.node_type === "notebook" ? "notebook" : "folder",
       trashed: folder.trashed_at != null,
       parentId: folder.parent_id ?? null,
-    });
+      space: folder.space ?? null,
+    };
+    lake.set(cursor, meta);
+    if (noteDiary(meta)) parentInDiary = true;
     cursor = folder.parent_id ?? null;
   }
-  return { lake, ancestors };
+  return { lake, ancestors, parentInDiary };
 }
 
 /** 小记空间：quick_notes 行（purged 的已不在本表 ⇒ 自然按 not-found）。 */
@@ -142,14 +160,20 @@ async function nextSortOrder(d: MobileDb, parentId: string | null): Promise<numb
   return Number(row?.m ?? -1) + 1;
 }
 
-/** 单个事务里逐条落地（抛错 = 整批回滚，由调用方转成 failed 结果）。 */
-async function applyBatchItems(d: MobileDb, items: readonly BatchNotesItem[]): Promise<void> {
+/** 单个事务里逐条落地（抛错 = 整批回滚，由调用方转成 failed 结果）。
+ * 导出仅供单测直接验证第二道闸（正常入口先过 core 校验；这里防的是绕过 core 的直接调用）。 */
+export async function applyBatchItems(d: MobileDb, items: readonly BatchNotesItem[]): Promise<void> {
   await d.transaction(async () => {
     const now = new Date().toISOString();
     /** 同一目标父级的多条移动要依次追加，不能共用同一个 sortOrder。 */
     const nextOrder = new Map<string | null, number>();
     for (const item of items) {
       if (item.action === "move") {
+        // 第二道闸（core 校验阶段的 describeParent 已整批拒绝；这里防"直接调 apply"的路径）：
+        // 目标父级在日记子树 ⇒ 整批失败并回滚（日记空间不支持移入，顺序由日期派生）。
+        if (item.parentId !== null && await diaryNotebookOf(d, item.parentId) !== null) {
+          throw new Error("日记本不能作为移动目标（不支持把文档移入日记空间）: " + item.parentId);
+        }
         const order = nextOrder.get(item.parentId) ?? await nextSortOrder(d, item.parentId);
         nextOrder.set(item.parentId, order + 1);
         // 文档与分组分表：按是否存在 notes 行判断（describe 已校验过存在性，这里只决定写入哪张表）。
@@ -213,6 +237,9 @@ export function createMobileBatchExecutor(snapshot: BatchSnapshot, onExecute: (i
       const meta = snapshot.lake.get(parentId);
       if (!meta) return "not-found";
       if (meta.trashed) return "in-trash";
+      // 日记本 / 日记子树不是移动目标（261113 §3#25②；与桌面 noteMetadataRepository.assertDiaryMove 同一判据）。
+      // 契约取值只有四个，这里按「不是容器」拒绝：日记的顺序由日期派生，放不进普通文档。
+      if (snapshot.parentInDiary) return "not-a-container";
       return meta.kind === "notebook" || meta.kind === "folder" ? "ok" : "not-a-container";
     },
     wouldCreateCycle(id: string, parentId: string | null): boolean {
@@ -242,7 +269,7 @@ export async function runMobileBatchNotes(d: MobileDb, input: BatchNotesInput): 
 
   let pending: Promise<void> | null = null;
   const executor = createMobileBatchExecutor(
-    { lake: lakeData.lake, quick, ancestors: lakeData.ancestors, activeTagIds },
+    { lake: lakeData.lake, quick, ancestors: lakeData.ancestors, parentInDiary: lakeData.parentInDiary, activeTagIds },
     (items) => { pending = applyBatchItems(d, items); },
   );
   const result = runBatchNotes(input, executor);

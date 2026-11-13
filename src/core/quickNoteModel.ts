@@ -131,14 +131,26 @@ export function quickNoteBodyFromTextAndImages(
 
 /**
  * 正文里的资源作用域改写：`/quick-notes/staging/<draftId>/` → `/quick-notes/<noteId>/`（保存时），
- * 或 `/quick-notes/<quickNoteId>/` → `/<noteId>/`（转换为正式文档时，见 convertQuickNoteScope）。
- * 同时处理卡片值里 URL-encoded 的形态（内核把卡片 value 编码进 `data:` 载荷）。
+ * 或 `/quick-notes/<quickNoteId>/` → `/<noteId>/`（转换为正式文档时，见 convertQuickNoteScope），
+ * 以及日记「转为小记」移动时的 `/<noteId>/` → `/quick-notes/<id>/`。
+ *
+ * **三层形态**：卡片 value 是 `data:` + encodeURIComponent(JSON)，内核可能把 URL 再编码一次
+ * ⇒ 正文里会出现原样 / 单编码 / 双编码三种写法；只换一层会留下旧作用域（卡片指向不存在的资产）。
+ * 与桌面 `electron/diaryQuickNoteConversion.ts` 的 encodeDepth 循环同口径，两端共用这一份。
  */
 export function rewriteQuickNoteAssetScope(body: string, fromScope: string, toScope: string): string {
-  const encodedFrom = encodeURIComponent(fromScope);
-  const encodedTo = encodeURIComponent(toScope);
-  // 卡片 value 是 `data:` + encodeURIComponent(JSON) ⇒ 正文里两种形态都可能出现，两种都要换。
-  return body.split(fromScope).join(toScope).split(encodedFrom).join(encodedTo);
+  let out = body;
+  for (let depth = 0; depth <= 2; depth += 1) {
+    out = out.split(encodeDepth(fromScope, depth)).join(encodeDepth(toScope, depth));
+  }
+  return out;
+}
+
+/** 第 depth 层 URL 编码（0 = 原样）。 */
+function encodeDepth(value: string, depth: number): string {
+  let out = value;
+  for (let i = 0; i < depth; i += 1) out = encodeURIComponent(out);
+  return out;
 }
 
 /**

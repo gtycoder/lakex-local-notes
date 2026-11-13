@@ -204,7 +204,7 @@ describe("日记空间（桌面）", () => {
     expect(onCreateEntry).toHaveBeenCalledWith(formatDiaryDateKey());
   });
 
-  it("右键「转为小记」：把该条目的树节点 id 交给宿主（组合/落库在 App + 主进程）", () => {
+  it("右键「转为小记」：先二次确认（不可恢复），确认后把树节点 id 交给宿主", async () => {
     const onConvertToQuickNote = vi.fn();
     render({ treeNodes: tree(true), onConvertToQuickNote });
     const entry = [...document.body.querySelectorAll<HTMLElement>(".diary-entry")]
@@ -215,6 +215,12 @@ describe("日记空间（桌面）", () => {
       .find((el) => (el.textContent ?? "").trim() === "转为小记");
     expect(item).toBeTruthy();
     act(() => item!.click());
+    // 261113 用户裁决：转为小记 = 不可逆移动（无副本）⇒ 菜单点击后先弹确认，确认才交给宿主。
+    const confirmButton = [...document.body.querySelectorAll<HTMLButtonElement>(".confirm-dialog button")]
+      .find((el) => (el.textContent ?? "").trim() === "转为小记");
+    expect(confirmButton, "转为小记必须先二次确认（不可恢复）").toBeTruthy();
+    expect(onConvertToQuickNote).not.toHaveBeenCalled();
+    await act(async () => { confirmButton!.click(); await Promise.resolve(); });
     expect(onConvertToQuickNote).toHaveBeenCalledWith("e-old");
   });
 

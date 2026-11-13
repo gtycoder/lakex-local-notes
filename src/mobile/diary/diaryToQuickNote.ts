@@ -1,18 +1,22 @@
 /**
- * 日记条目 → 小记（261113 task-106）：移动端对齐桌面 `electron/diaryQuickNoteConversion.ts`。
+ * 日记条目 → 小记 = **移动**（261113 用户裁决，覆盖 261113 task-106 的「复制 + 原文进回收站」）。
+ * 移动端对齐桌面 `electron/diaryQuickNoteConversion.ts`。
  *
- * 语义（AGENTS §3#25 / docs/DIARY.md）：
- *  · 用日记条目的**原 Lake 正文**创建一条小记（复制新 id），图片/附件卡片搬到小记资产作用域
- *    （`/<noteId>/` → `/quick-notes/<newId>/`），**原资产保留**（回收站恢复日记时仍完整）；
- *  · 原文随后**软删进回收站**（可恢复，不 purge、不写墓碑）；
- *  · 小记承载不了的卡片整段剥掉并在 `droppedKinds` 如实上报（不静默丢）；
- *  · 非 doc 类型（表格/多维表/画板/手写板）整篇拒绝；
- *  · **失败回滚**：小记没建好/资源没搬完就不删日记；软删失败也把小记回滚干净（不留半成品）。
+ * 语义：
+ *  · **同一篇内容**换空间：正文原样（同一内核 Lake 标记），**不剥任何卡片**；
+ *  · 资产目录 note-assets/{noteId}/ → quick-notes/assets/{id}/ **整目录移动**（源不保留副本）；
+ *  · id 新建（不沿用 note id）：删除意图/「云端已删除」标记按 id 跨空间共享，同 id 会让其他端复活、
+ *    并把以后普通软删小记判成不可恢复 purge ⇒ 换新 id + 零复制改名移动（仍是移动，不是复制）；
+ *  · 正文只改写资产 URL 作用域 `/{noteId}/` → `/quick-notes/{id}/`（原样/单编码/双编码三层，core 单一来源）；
+ *  · 随后 Lake 侧原稿**物理移除**（notes 行 + 正文 + 资产目录 + 历史快照），**不进回收站**。
  *
- * 复用：作用域改写 = core `rewriteQuickNoteAssetScope`；内容校验 = core `normalizeQuickNoteContent`；
- * 写库 = 移动 `saveQuickNoteContent`（.qnote 正文 + quick_notes 行）；软删 = 移动 `trashTreeItem`。
- * ⚠️ 桌面侧 `stripUnsupportedCards` / `referencedAssetNames` 仍私有在 electron 文件里（本次不改桌面）；
- * 本文件按**同口径**复制，两处必须同步改（护栏 = 本文件测试 + 桌面 diaryQuickNoteConversion 测试）。
+ * ⚠️ 后果（如实记录）：**没有可恢复副本**（旧「复制 + 回收站可恢复」作废）；小记没有历史快照 ⇒
+ * 原文档 history 快照**删除**（不迁移：迁移后没有任何入口能读）。
+ * 同步侧仍由 `purgeTreeItem` 写 `deleted_notes` 删除意图 —— 那是「本地删除」的传播判据（否则 v3 会把
+ * 本地缺失当云端恢复把文档拉回来），**不是可恢复副本**。
+ *
+ * 失败回滚：小记没建好/资产没搬完 ⇒ 原文原样保留；Lake 侧移除失败 ⇒ 资产移回 + 删小记行/正文，
+ * 不留半成品。顺序 = 写小记正文+行 → 搬资产 → 删原文（跨两个库 + 文件系统，无全局事务）。
  */
 import { mimeTypeForFilename } from "../../core/assetNaming.js";
 import { readImageDimensions } from "../../core/imageUtils.js";
@@ -28,58 +32,73 @@ import { readNote } from "../data/noteRepository.js";
 import { removeUnsyncedQuickNote, saveQuickNoteContent } from "../data/quickNotesRepository.js";
 import * as trashRepository from "../data/trashRepository.js";
 
-/** 资产读写依赖（生产 = native/assetFs 三件套；测试注入内存实现）。 */
+/** 资产读写/移动依赖（生产 = native/assetFs 四件套；测试注入内存实现）。 */
 export interface DiaryToQuickNoteAssetDeps {
   /** 该文档作用域下的资产键（形如 `<noteId>/<filename>`）。 */
   listNoteAssetKeys: (noteId: string) => Promise<string[]>;
-  /** 读资产字节；文件缺失返回 null。 */
+  /** 读资产字节；文件缺失返回 null（用于算 hash/尺寸，不用于复制）。 */
   loadAssetBytes: (key: string) => Promise<Uint8Array | null>;
-  /** 写小记作用域资产（键 `quick-notes/<quickNoteId>/<filename>`）。 */
-  saveAssetFile: (key: string, bytes: Uint8Array) => Promise<void>;
-  /** 回滚时整目录清理小记资产（`quick-notes/assets/<id>/`）。 */
-  removeQuickNoteAssetsDir: (quickNoteId: string) => Promise<void>;
+  /** 把 note-assets/{noteId}/ **移动**到 quick-notes/assets/{quickNoteId}/，返回移动文件数。 */
+  moveNoteAssetsToQuickNote: (noteId: string, quickNoteId: string) => Promise<number>;
+  /** 回滚：把 quick-notes/assets/{quickNoteId}/ **移回** note-assets/{noteId}/（不删字节）。 */
+  moveQuickNoteAssetsBackToNote: (quickNoteId: string, noteId: string) => Promise<void>;
 }
 
 export interface ConvertDiaryToQuickNoteDeps extends DiaryToQuickNoteAssetDeps {
-  /** 软删原文（缺省 = 移动 trashRepository.trashTreeItem 的 note 分支）。测试可注入失败以验回滚。 */
-  trashNote?: (d: MobileDb, noteId: string) => Promise<void>;
-  /** 软删后刷新 FTS（与 bridge.trashTreeItem 同口径；不传则跳过）。 */
+  /** Lake 侧移除（缺省 = purgeTreeItem：写删除意图 + 物理删行/正文/历史；不进回收站）。测试可注入失败验回滚。 */
+  removeSourceNote?: (d: MobileDb, noteId: string) => Promise<void>;
+  /** 移除后刷新 FTS（与 bridge.trashTreeItem 同口径；不传则跳过）。 */
   reconcileIndex?: (d: MobileDb) => Promise<void>;
-  /** 确定性 id（测试用；缺省 crypto.randomUUID）。 */
-  newId?: () => string;
 }
 
 export interface ConvertDiaryToQuickNoteResult {
+  /** 新小记 id（不是原 note id；原因见文件头）。 */
   quickNoteId: string;
-  /** 未能搬运的卡片类型（去重、字典序；空 = 全部承载）。 */
-  droppedKinds: string[];
+  /** 随正文移动到小记作用域的媒体数（图片 + 附件；0 = 本篇没有媒体）。 */
+  movedMediaCount: number;
+  /** 被删除的原文档历史快照数（小记没有历史快照 ⇒ 不迁移）。 */
+  removedHistoryCount: number;
 }
 
-/** 小记正文能承载的卡片名（与桌面 CARRYABLE_CARD_NAMES 逐字一致）。 */
-const CARRYABLE_CARD_NAMES = new Set([
-  "image", "file", "attachment", "audio", "video",
-  "date", "dateCard", "unicodeEmoji", "emoji", "hr", "codeblock", "checkbox", "taskList", "viewport",
-]);
+function encodeDepth(value: string, depth: number): string {
+  let out = value;
+  for (let i = 0; i < depth; i += 1) out = encodeURIComponent(out);
+  return out;
+}
 
-/** 段落块切分（Lake 正文的块都是顶层 `<p>`；卡片一定在 `<p>` 里）。 */
-const PARAGRAPH_PATTERN = /<p\b[^>]*>[\s\S]*?<\/p>/g;
-const CARD_NAME_PATTERN = /<card\b[^>]*\bname="([^"]+)"/;
+function decodeChain(value: string): string[] {
+  const out: string[] = [];
+  let current = value;
+  for (let i = 0; i < 3; i += 1) {
+    try {
+      const next = decodeURIComponent(current);
+      if (next === current) break;
+      current = next;
+      out.push(next);
+    } catch { break; }
+  }
+  return out;
+}
 
-function stripUnsupportedCards(body: string): { body: string; droppedKinds: string[] } {
-  const dropped = new Set<string>();
-  const stripped = body.replace(PARAGRAPH_PATTERN, (paragraph) => {
-    const match = CARD_NAME_PATTERN.exec(paragraph);
-    if (!match) return paragraph;
-    const name = match[1];
-    if (CARRYABLE_CARD_NAMES.has(name)) return paragraph;
-    dropped.add(name);
-    return "";
-  });
-  return { body: stripped, droppedKinds: [...dropped].sort() };
+/** 资产文件名的多形态（原样 / 单编码 / 双编码，含先解码的历史名）。 */
+function assetReferenceForms(filename: string): string[] {
+  const bases = [filename, ...decodeChain(filename)];
+  const forms = new Set<string>();
+  for (const base of bases) for (let depth = 0; depth <= 2; depth += 1) forms.add(encodeDepth(base, depth));
+  return [...forms];
 }
 
 function bodyReferencesAsset(body: string, filename: string): boolean {
-  return body.includes(filename) || body.includes(encodeURIComponent(filename));
+  return assetReferenceForms(filename).some((form) => body.includes(form));
+}
+
+/** 改写后是否仍残留源作用域：先剔除目标作用域（可能包含源串），再按三层形态查找。 */
+function hasResidualScope(body: string, sourceId: string, targetId: string): boolean {
+  let rest = body;
+  for (let depth = 0; depth <= 2; depth += 1) {
+    rest = rest.split(encodeDepth(`/quick-notes/${targetId}/`, depth)).join("");
+  }
+  return [0, 1, 2].some((depth) => rest.includes(encodeDepth(`/${sourceId}/`, depth)));
 }
 
 function escapeRegExp(value: string): string {
@@ -89,31 +108,27 @@ function escapeRegExp(value: string): string {
 /** 正文里引用到本笔记作用域下的资产文件名（原样 + URL-encoded 两种写法）。 */
 function referencedAssetNames(body: string, noteId: string): string[] {
   const names = new Set<string>();
-  const encodedScope = encodeURIComponent(`/${noteId}/`);
-  const patterns = [
-    new RegExp(`/${escapeRegExp(noteId)}/([A-Za-z0-9._-]+)`, "g"),
-    new RegExp(`${escapeRegExp(encodedScope)}([A-Za-z0-9._-]+)`, "g"),
-  ];
-  for (const pattern of patterns) {
-    for (const match of body.matchAll(pattern)) names.add(match[1]);
+  const scopes = [`/${noteId}/`, encodeURIComponent(`/${noteId}/`)];
+  for (const scope of scopes) {
+    const pattern = new RegExp(`${escapeRegExp(scope)}([^"<>\\s)#&]+)`, "g");
+    for (const match of body.matchAll(pattern)) {
+      const raw = match[1].split("%22")[0].split("%2522")[0].replace(/[.,;:!?]+$/, "");
+      if (!raw) continue;
+      const decoded = decodeChain(raw);
+      names.add(decoded.length ? decoded[decoded.length - 1] : raw);
+    }
   }
   return [...names];
 }
 
-/** 正文里的小记承载不了的卡片类型（供 UI 预判提示；真正剥离以转换结果为准）。 */
-export function droppedKindsOf(body: string): string[] {
-  return stripUnsupportedCards(body).droppedKinds;
-}
-
 /**
- * 日记条目 → 小记。抛错即代表**没有产生半成品**（小记未建或已回滚，原文未被软删）。
+ * 日记条目 → 小记（移动语义）。抛错即代表**没有产生半成品**：小记未建/已回滚，原文未被移除。
  */
 export async function convertDiaryToQuickNote(
   d: MobileDb,
   noteId: string,
   deps: ConvertDiaryToQuickNoteDeps,
 ): Promise<ConvertDiaryToQuickNoteResult> {
-  const newId = deps.newId ?? (() => crypto.randomUUID());
   const note = await readNote(d, noteId);
   if (!note) throw new Error(`笔记不存在或已彻底删除: ${noteId}`);
   if (note.kind !== "doc") {
@@ -121,6 +136,14 @@ export async function convertDiaryToQuickNote(
   }
   const sourceBody = note.content;
   const title = note.title;
+  // id 新建（不沿用 note id）：v3 删除意图 /「云端已删除」标记按 id **跨空间共享**（桌面 engineBridge.planWorldOf
+  // 同时过滤 lake/quickNotes；planStateOf 把 lake purgeIntents 也交给小记合并）⇒ 同 id 会让其他端的回收站副本
+  // 被重新上传复活，也会让本端以后**普通软删**小记被判成不可恢复 purge。
+  // 任务书 §6 允许的最小替代 = 换新 id + 正文/资产零复制改名移动（仍是移动，不是复制），协议不动。
+  const quickNoteId = crypto.randomUUID();
+  // 新 id 理论上不会撞；仍显式拒绝活动行/墓碑，避免覆盖或复活一条已删小记。
+  if (await d.prepare("SELECT 1 FROM quick_notes WHERE id=?").get(quickNoteId)) throw new Error(`小记已存在: ${quickNoteId}`);
+  if (await d.prepare("SELECT 1 FROM quick_note_deleted WHERE id=?").get(quickNoteId)) throw new Error(`该 id 有已删除小记记录，不能复用: ${quickNoteId}`);
 
   // 该文档作用域下的实际资产文件名（键 = `<noteId>/<filename>`）。
   const existingFilenames = new Set(
@@ -134,51 +157,73 @@ export async function convertDiaryToQuickNote(
     throw new Error(`资源文件缺失，无法转换：${missing.slice(0, 3).join(", ")}${missing.length > 3 ? " 等 " + missing.length + " 个" : ""}`);
   }
 
-  const quickNoteId = newId();
-  // 只搬运正文真正引用的资产（未被引用的留在原日记目录，回收站恢复时仍完整）。
+  // 作用域改写（原样/单编码/双编码三层，core 单一来源）；残留旧作用域 = 安全失败。
   const rewriteBody = rewriteQuickNoteAssetScope(sourceBody, `/${noteId}/`, `/quick-notes/${quickNoteId}/`);
-  const { body: carriedBody, droppedKinds } = stripUnsupportedCards(rewriteBody);
-  const carriedFilenames = [...existingFilenames].filter((filename) => bodyReferencesAsset(carriedBody, filename));
+  // 目标作用域字符串可能包含源作用域：先剔除目标串，再按三层形态查残留（否则可能误报）。
+  const residual = hasResidualScope(rewriteBody, noteId, quickNoteId);
+  if (residual) throw new Error("正文仍引用未搬运的日记资源作用域，转换已中止（未产生小记）");
 
+  // 资源清单 = 正文真正引用的资产（目录整体移动；未引用残留文件一起走但不进同步清单）。
+  const carriedFilenames = [...existingFilenames].filter((filename) => bodyReferencesAsset(rewriteBody, filename));
   const images: StoredQuickNoteImage[] = [];
-  try {
-    for (const filename of carriedFilenames) {
-      const bytes = await deps.loadAssetBytes(`${noteId}/${filename}`);
-      if (!bytes) throw new Error(`资产文件缺失，无法转换：${filename}`);
-      const mimeType = mimeTypeForFilename(filename);
-      const isImage = mimeType.startsWith("image/");
-      const dimensions = isImage ? readImageDimensions(bytes) : null;
-      images.push({
-        id: newId(),
-        filename,
-        mimeType,
-        width: dimensions?.width ?? null,
-        height: dimensions?.height ?? null,
-        size: bytes.length,
-        hash: sha256Sync(bytes),
-      });
-      await deps.saveAssetFile(`quick-notes/${quickNoteId}/${filename}`, bytes);
-    }
+  for (const filename of carriedFilenames) {
+    const bytes = await deps.loadAssetBytes(`${noteId}/${filename}`);
+    if (!bytes) throw new Error(`资产文件缺失，无法转换：${filename}`);
+    const mimeType = mimeTypeForFilename(filename);
+    const isImage = mimeType.startsWith("image/");
+    const dimensions = isImage ? readImageDimensions(bytes) : null;
+    images.push({
+      id: crypto.randomUUID(),
+      filename,
+      mimeType,
+      width: dimensions?.width ?? null,
+      height: dimensions?.height ?? null,
+      size: bytes.length,
+      hash: sha256Sync(bytes),
+    });
+  }
 
-    // 纯文本镜像（预览/搜索/降级显示）：标题 + 原正文纯文本。
-    const plain = lakeBodyToPlainText(sourceBody);
-    const text = [title.trim(), plain].map((part) => part.trim()).filter(Boolean).join("\n");
-    const content = normalizeQuickNoteContent(text, carriedBody.trim() ? carriedBody : "", images);
-    await saveQuickNoteContent(d, quickNoteId, { text: content.text, body: content.body, images: content.images });
+  // 纯文本镜像（预览/搜索/降级显示）：标题 + 原正文纯文本。
+  const plain = lakeBodyToPlainText(sourceBody);
+  const text = [title.trim(), plain].map((part) => part.trim()).filter(Boolean).join("\n");
+  // 正文/标题/时间/大小限制照旧校验（4MB 正文上限在 normalizeQuickNoteContent 内）。
+  const content = normalizeQuickNoteContent(text, rewriteBody.trim() ? rewriteBody : "", images);
+  const times = await d.prepare("SELECT updated_at, created_at FROM notes WHERE id=?").get(noteId) as
+    { updated_at: string; created_at?: string | null } | undefined;
+  const removedHistoryCount = Number((await d.prepare("SELECT COUNT(*) AS c FROM note_history WHERE note_id=?").get(noteId) as { c: number }).c ?? 0);
+
+  // ① 先写小记（正文 + 行；失败内部回滚，原文未动）。
+  await saveQuickNoteContent(d, quickNoteId, { text: content.text, body: content.body, images: content.images }, {
+    timestamps: {
+      createdAt: times?.created_at || times?.updated_at || new Date().toISOString(),
+      updatedAt: times?.updated_at || new Date().toISOString(),
+    },
+  }).catch(async (error) => {
+    // 小记未建成 ⇒ 确保没有半成品行/正文；原文与资产不动。
+    await removeUnsyncedQuickNote(d, quickNoteId, async () => undefined).catch(() => undefined);
+    throw error;
+  });
+
+  // ② 资产目录整体移动（失败 ⇒ 删小记行/正文；源目录由资产层保证完整）。
+  try {
+    await deps.moveNoteAssetsToQuickNote(noteId, quickNoteId);
   } catch (error) {
-    // 小记未建成 ⇒ 把已写文件/可能的行清掉；原文不动。
-    await removeUnsyncedQuickNote(d, quickNoteId, deps.removeQuickNoteAssetsDir).catch(() => { /* best effort */ });
+    await removeUnsyncedQuickNote(d, quickNoteId, async () => undefined).catch(() => undefined);
     throw error;
   }
 
+  // ③ Lake 侧移除（物理删行/正文/历史 + 删除意图）；失败 ⇒ 资产移回 + 删小记。
   try {
-    if (deps.trashNote) await deps.trashNote(d, noteId);
-    else await trashRepository.trashTreeItem(d, noteId, "note");
+    if (deps.removeSourceNote) await deps.removeSourceNote(d, noteId);
+    else await trashRepository.purgeTreeItem(d, noteId, "note");
     if (deps.reconcileIndex) await deps.reconcileIndex(d);
   } catch (error) {
-    // 软删失败 ⇒ 回滚刚建的小记（从未同步：硬删、不写墓碑），原文不动。
-    await removeUnsyncedQuickNote(d, quickNoteId, deps.removeQuickNoteAssetsDir).catch(() => { /* best effort */ });
+    // 顺序：先把资产移回（原稿重新完整），成功后才删小记行/正文。
+    // 移回失败 ⇒ **保留小记**（内容仍在），绝不为了「删干净」丢掉唯一资产副本。
+    const restored = await deps.moveQuickNoteAssetsBackToNote(quickNoteId, noteId).then(() => true).catch(() => false);
+    if (restored) await removeUnsyncedQuickNote(d, quickNoteId, async () => undefined).catch(() => undefined);
+    else console.warn("[diary→quick] 回滚时资产移回失败，保留小记以免丢字节:", quickNoteId);
     throw error;
   }
-  return { quickNoteId, droppedKinds };
+  return { quickNoteId, movedMediaCount: carriedFilenames.length, removedHistoryCount };
 }

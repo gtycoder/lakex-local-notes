@@ -72,15 +72,25 @@ describe("日记 space 随目录行同步（移动端端口）", () => {
     await db.close();
   });
 
-  it("应用远端元数据：space 可被改成 diary，也可被清回 null（取消标记）", async () => {
+  it("应用远端元数据：space 只允许 null → diary；远端写回 null 绝不降级（261113 用户裁决）", async () => {
     const db = await freshDb();
     await insertFolder(db, "nb-1", "notebook", null);
     const port = createMobilePlatformPort(db);
     const base: SyncFolderRow = { id: "nb-1", title: "笔记本", parentId: null, sortOrder: 0, nodeType: "notebook", icon: null, updatedAt: T };
     await port.applyRemoteFolderMeta({ ...base, space: "diary" } as SyncFolderRow & { space: "diary" });
     expect((await db.prepare("SELECT space FROM folders WHERE id=?").get("nb-1") as { space: string | null }).space).toBe("diary");
+    // 落库侧单调闸（与桌面 diarySafeFolderSpace 同口径）：脏计划/旧包/直接恢复写 null 也不降级。
     await port.applyRemoteFolderMeta({ ...base, space: null } as SyncFolderRow & { space: null });
-    expect((await db.prepare("SELECT space FROM folders WHERE id=?").get("nb-1") as { space: string | null }).space).toBeNull();
+    expect((await db.prepare("SELECT space FROM folders WHERE id=?").get("nb-1") as { space: string | null }).space).toBe("diary");
+    // 未知值同样按「非日记」但不得覆盖已有 diary
+    await port.applyRemoteFolderMeta({ ...base, space: "unknown" } as unknown as SyncFolderRow);
+    expect((await db.prepare("SELECT space FROM folders WHERE id=?").get("nb-1") as { space: string | null }).space).toBe("diary");
+    // 但普通笔记本（space=null）不受影响：别的字段照常应用
+    await insertFolder(db, "nb-2", "notebook", null);
+    await port.applyRemoteFolderMeta({ ...base, id: "nb-2", title: "改名了" });
+    const row2 = await db.prepare("SELECT title, space FROM folders WHERE id=?").get("nb-2") as { title: string; space: string | null };
+    expect(row2.title).toBe("改名了");
+    expect(row2.space).toBeNull();
     await db.close();
   });
 });

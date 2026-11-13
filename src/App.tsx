@@ -608,11 +608,12 @@ export function App() {
     if (node) sidebarRequestDelete(node);
   }, [treeNodes, sidebarRequestDelete]);
 
-  /** 「转为小记」（261112 task-92 起）：主进程用**原 Lake 正文**创建小记（图片/附件搬到小记资产作用域），
-   *  成功后把日记移入回收站（软删可恢复）。小记承载不了的卡片类型由 `droppedKinds` **明说**，不静默丢。 */
+  /** 「转为小记」（261112 task-92 起；261113 用户裁决 = **移动**）：主进程把同一篇日记的正文/资产
+   *  移到小记空间（新小记 id、正文/资产零复制地改名移动、卡片零剥离、作用域改写），随后 Lake 侧原稿物理移除。
+   *  **没有可恢复副本**（不进回收站、不留 history），提示文案必须如实说明。 */
   const handleDiaryToQuickNote = useCallback(async (nodeId: string) => {
     try {
-      // 转换在主进程（正文原样承载 + 媒体搬到小记作用域 + 原文软删）；渲染层只显示结果。
+      // 转换在主进程（同一份正文/资产移动 + 作用域改写 + Lake 侧移除）；渲染层只显示结果。
       const result = await native.diaryToQuickNote(nodeId);
       showNotice(diaryToQuickNoteNotice(result));
       await refreshTree();

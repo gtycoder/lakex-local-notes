@@ -86,7 +86,9 @@ describe("领域仓储能力矩阵（C2-3）", () => {
   it("⑥ 矩阵规模钉死（防止无声增删）", () => {
     // 261112：35 = 34 + 「恢复写回正文（内容动作不改生命周期）」saveRestoredNoteContent（桌面等价能力在
     // NoteContentRepository.save(allowTrashed)，无同名公开方法 ⇒ desktop=null，故 withDesktop 仍 28）。
-    expect(REPOSITORY_CAPABILITIES.length, "交集行数变了 ⇒ 请确认是有意的并在 commit 里说明").toBe(35);
+    // 261113：36 = 35 + 「日记子树归属」diaryNotebookOf（移动端数据层新增的日记唯一判据；
+    // 桌面同判据是私有方法 ⇒ desktop=null，故 withDesktop 仍 28）。
+    expect(REPOSITORY_CAPABILITIES.length, "交集行数变了 ⇒ 请确认是有意的并在 commit 里说明").toBe(36);
     const withDesktop = REPOSITORY_CAPABILITIES.filter((row) => row.desktop !== null).length;
     expect(withDesktop, "桌面有对应实现的行数（当前 28；其余是桌面无同类方法或判据在 core）").toBe(28);
   });

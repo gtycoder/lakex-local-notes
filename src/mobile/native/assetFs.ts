@@ -108,25 +108,108 @@ export async function saveAssetBytesFs(key: string, bytes: Uint8Array): Promise<
 }
 
 /**
- * 原生整目录拷贝（261107，创建副本）：一次桥调用完成 note-assets/{源}/ → note-assets/{副本}/。
+ * 原生整目录拷贝（261107，创建副本）：一次桥调用完成两个资产目录 key 之间的复制。
  * 返回复制的文件数；原生不可用（web 预览/旧 APK）返回 null ⇒ 调用方回退 JS 逐文件复制。
  * 后端 = AssetSyncPlugin.copyAssetDir（IO 在原生 ioPool，字节不过 WebView 桥）。
+ * 目录 key 形如 `note-assets/<id>` / `quick-notes/assets/<id>`（由原生侧做越界校验）。
  */
-export async function copyNoteAssetsDirNativeFs(sourceNoteId: string, targetNoteId: string): Promise<number | null> {
-  if (!isSafePathSegment(sourceNoteId) || !isSafePathSegment(targetNoteId) || sourceNoteId === targetNoteId) return null;
+export async function copyAssetDirNativeFs(sourceDirKey: string, targetDirKey: string): Promise<number | null> {
+  if (sourceDirKey === targetDirKey) return null;
   try {
     const plugin = NativeAssetSync as unknown as {
       copyAssetDir?: (options: { sourceDir: string; targetDir: string }) => Promise<{ copied?: number }>;
     };
     if (!nativeAssetSyncSupported() || typeof plugin.copyAssetDir !== "function") return null;
-    const result = await plugin.copyAssetDir({
-      sourceDir: ROOT + "/" + sourceNoteId,
-      targetDir: ROOT + "/" + targetNoteId,
-    });
+    const result = await plugin.copyAssetDir({ sourceDir: sourceDirKey, targetDir: targetDirKey });
     return typeof result?.copied === "number" ? result.copied : 0;
   } catch {
     return null;
   }
+}
+
+export async function copyNoteAssetsDirNativeFs(sourceNoteId: string, targetNoteId: string): Promise<number | null> {
+  if (!isSafePathSegment(sourceNoteId) || !isSafePathSegment(targetNoteId) || sourceNoteId === targetNoteId) return null;
+  return copyAssetDirNativeFs(ROOT + "/" + sourceNoteId, ROOT + "/" + targetNoteId);
+}
+
+/** 删空目录（不存在/非空时静默忽略）。Filesystem.rmdir 不递归（递归删除走 removeAssetDirFs）。 */
+async function removeEmptyDirFs(path: string): Promise<void> {
+  await Filesystem.rmdir({ path, directory: Directory.Data }).catch(() => undefined);
+}
+
+/**
+ * 「日记 → 小记」**移动**资产（261113）：note-assets/{noteId}/ → quick-notes/assets/{quickNoteId}/。
+ * 语义 = 移动（源目录不保留副本）：原生一次 copyAssetDir 后删源；原生不可用时 JS 逐文件「先全量复制、成功后删源」。
+ * 失败保证：目标只写一半时清掉目标、源保持完整（不会出现「资产两边都不全」）。返回移动的文件数。
+ */
+export async function moveNoteAssetsDirToQuickNoteFs(noteId: string, quickNoteId: string): Promise<number> {
+  // id 可以相同（移动语义沿用 note id）；两个根不同（note-assets vs quick-notes/assets）才保证目标不覆盖源。
+  if (!isSafePathSegment(noteId) || !isSafePathSegment(quickNoteId)) {
+    throw new Error(`非法资产移动: ${noteId} → ${quickNoteId}`);
+  }
+  // 目标必须不存在/为空（同 id 复用时若已有同 id 小记资产，调用方应先拒绝转换）。
+  if ((await listQuickNoteAssetKeysFs(quickNoteId)).length > 0) throw new Error(`小记资产目录已存在: ${quickNoteId}`);
+  const sourceDirKey = ROOT + "/" + noteId;
+  const targetDirKey = QUICK_ROOT + "/" + quickNoteId;
+  const copied = await copyAssetDirNativeFs(sourceDirKey, targetDirKey);
+  if (copied !== null) {
+    // 原生复制成功 ⇒ 删源（逐个文件 + 尽量删空目录）；删源失败只留重复文件，不丢字节。
+    for (const key of await listNoteAssetKeysFs(noteId)) await removeAssetBytesFs(key).catch(() => undefined);
+    await removeEmptyDirFs(sourceDirKey);
+    return copied;
+  }
+  const keys = await listNoteAssetKeysFs(noteId);
+  const written: string[] = [];
+  try {
+    for (const key of keys) {
+      const filename = key.slice(noteId.length + 1);
+      const bytes = await loadAssetBytesFs(key);
+      if (!bytes) continue; // 并发删除/损坏：按现有资产集合继续
+      const targetKey = `quick-notes/${quickNoteId}/${filename}`;
+      await saveAssetBytesFs(targetKey, bytes);
+      written.push(targetKey);
+    }
+  } catch (error) {
+    for (const key of written) await removeAssetBytesFs(key).catch(() => undefined);
+    await removeQuickNoteAssetsDirFs(quickNoteId).catch(() => undefined);
+    throw error;
+  }
+  for (const key of keys) await removeAssetBytesFs(key).catch(() => undefined);
+  await removeEmptyDirFs(sourceDirKey);
+  return written.length;
+}
+
+/**
+ * 移动失败回滚：把已移到小记作用域的资产目录**移回** note-assets/{noteId}/（不删字节）。
+ * 用于「小记已建好、Lake 侧移除失败」的回滚；目标已有文件时拒绝（避免混目录）。
+ */
+export async function moveQuickNoteAssetsDirToNoteFs(quickNoteId: string, noteId: string): Promise<void> {
+  if (!isSafePathSegment(noteId) || !isSafePathSegment(quickNoteId)) return;
+  if ((await listNoteAssetKeysFs(noteId)).length > 0) throw new Error(`目标日记资产目录已存在: ${noteId}`);
+  const sourceDirKey = QUICK_ROOT + "/" + quickNoteId;
+  const targetDirKey = ROOT + "/" + noteId;
+  const copied = await copyAssetDirNativeFs(sourceDirKey, targetDirKey);
+  if (copied !== null) {
+    for (const key of await listQuickNoteAssetKeysFs(quickNoteId)) await removeAssetBytesFs(key).catch(() => undefined);
+    await removeEmptyDirFs(sourceDirKey);
+    return;
+  }
+  const keys = await listQuickNoteAssetKeysFs(quickNoteId);
+  const written: string[] = [];
+  try {
+    for (const key of keys) {
+      const filename = key.slice("quick-notes/".length + quickNoteId.length + 1);
+      const bytes = await loadAssetBytesFs(key);
+      if (!bytes) continue;
+      await saveAssetBytesFs(noteId + "/" + filename, bytes);
+      written.push(key);
+    }
+  } catch (error) {
+    for (const key of written) await removeAssetBytesFs(key).catch(() => undefined);
+    throw error;
+  }
+  for (const key of keys) await removeAssetBytesFs(key).catch(() => undefined);
+  await removeEmptyDirFs(sourceDirKey);
 }
 
 export async function loadAssetBytesFs(key: string): Promise<Uint8Array | null> {

@@ -343,6 +343,139 @@ export function removeUnsyncedQuickNote(deps: QuickNoteSaveDeps, id: string): vo
   removeQuickNoteSearchIndex(deps.search, [id]);
 }
 
+/**
+ * 日记「转为小记」= **移动**（261113 用户裁决，覆盖旧的「复制 + 原稿进回收站」）：
+ * 把已经改写好作用域的正文 + 已搬到小记资产目录（或即将搬）的**同一批资产**登记成一条小记。
+ *
+ * 与 `createQuickNoteFromContent` 的区别：不再读/写资产字节副本，也不再 strip 卡片 ——
+ * 正文原样（只改资源 URL 作用域），资产**目录整体迁移**（`note-assets/{id}/` → `quick-notes/assets/{id}/`）。
+ *
+ * 顺序（跨两个 SQLite + 文件系统，无全局事务）：
+ *  ① 校验（正文/清单/资源字节 hash）→ ② 写小记正文（原子）→ ③ 小记库事务插行/资源行
+ *  → ④ 资产目录迁移 → ⑤ 搜索索引。③ 之后任一步失败都在本函数内回滚，调用方只需保证
+ *  「Lake 侧删除失败时调 `rollbackAdoptedQuickNote` 把资产移回」。
+ *
+ * **无副本语义**：迁移完成后 Lake 侧原稿由调用方物理移除（不写可恢复副本、不进回收站）；
+ * 小记没有历史快照 ⇒ 原文档 history 快照也由调用方删除并明说（见 electron/diaryQuickNoteConversion.ts）。
+ */
+export function adoptMovedNoteAsQuickNote(
+  deps: QuickNoteSaveDeps,
+  input: {
+    id: string;
+    content: StoredQuickNoteContent;
+    createdAt: string;
+    updatedAt: string;
+    /** 源文档资产目录（note-assets/{noteId}/，绝对路径）。不存在 = 本篇没有资产。 */
+    sourceAssetsDir: string;
+  },
+): void {
+  const { id } = input;
+  if (!isSafeSegment(id)) throw new AppError("InvalidInput", "小记 ID 无效");
+  // id 沿用 Lake note id（减少接线）：已有同 id 小记/墓碑时必须拒绝，否则会覆盖或复活一条已删小记。
+  if (deps.db.prepare("SELECT 1 FROM quick_notes WHERE id=?").get(id)) throw new AppError("InvalidInput", `小记已存在: ${id}`);
+  if (deps.db.prepare("SELECT 1 FROM quick_note_deleted WHERE id=?").get(id)) throw new AppError("InvalidInput", `该 id 有已删除小记记录，不能复用: ${id}`);
+  const content = validateStoredContent(input.content);
+  // 资源清单必须与源目录里的**实际字节**一致（移动前校验，避免把小记指向不存在的文件）。
+  for (const image of content.images) {
+    const file = path.join(input.sourceAssetsDir, image.filename);
+    let bytes: Buffer;
+    try { bytes = fs.readFileSync(file); }
+    catch { throw new AppError("InvalidInput", `小记资源缺失: ${image.filename}`); }
+    if (bytes.length !== image.size || sha256Hex(bytes) !== image.hash) {
+      throw new AppError("InvalidInput", `小记资源内容不一致: ${image.filename}`);
+    }
+  }
+  const encoded = Buffer.from(serializeQuickNoteContent(content), "utf8");
+  const contentHash = sha256Hex(encoded);
+  const itemPath = itemPathOf(deps.paths, id);
+  const assetDir = assetDirOf(deps.paths, id);
+  atomicWriteFile(itemPath, encoded);
+  try {
+    const tx = deps.db.transaction(() => {
+      deps.db.prepare("INSERT INTO quick_notes(id,created_at,updated_at,preview_text,image_count,content_hash,is_dirty,is_conflict) VALUES(?,?,?,?,?,?,1,0)")
+        .run(id, input.createdAt, input.updatedAt, previewQuickNote(content.text, content.images.length), content.images.length, contentHash);
+      const insert = deps.db.prepare("INSERT INTO quick_note_assets(id,quick_note_id,filename,mime_type,width,height,size,content_hash) VALUES(?,?,?,?,?,?,?,?)");
+      for (const image of content.images) insert.run(image.id, id, image.filename, image.mimeType, image.width, image.height, image.size, image.hash);
+    });
+    tx();
+  } catch (error) {
+    try { fs.rmSync(itemPath, { force: true }); } catch { /* best effort */ }
+    throw error;
+  }
+  try {
+    // 整个目录搬走（含正文未引用的残留文件）：不留下「原资产副本」，符合移动语义。
+    moveAssetDirectorySync(input.sourceAssetsDir, assetDir);
+  } catch (error) {
+    try {
+      deps.db.transaction(() => {
+        deps.db.prepare("DELETE FROM quick_note_assets WHERE quick_note_id=?").run(id);
+        deps.db.prepare("DELETE FROM quick_notes WHERE id=?").run(id);
+      })();
+    } catch { /* best effort */ }
+    try { fs.rmSync(itemPath, { force: true }); } catch { /* best effort */ }
+    throw error;
+  }
+  reindexQuickNoteFromDisk(deps.search, id);
+}
+
+/**
+ * **仅「移动到小记」失败回滚用**：删小记行/正文/索引，并把资产目录**移回**原 Lake 资产目录
+ * （不删字节 —— 这一步发生在 Lake 原稿还在的时候，删了就是数据丢失）。
+ * 资产移回失败只告警并**保留小记**（行/正文/资产都还在）：宁可留一条可手删的小记，也不丢唯一资产副本。
+ */
+export function rollbackAdoptedQuickNote(deps: QuickNoteSaveDeps, id: string, restoreAssetsToDir: string): void {
+  if (!isSafeSegment(id)) return;
+  // 顺序：**先把资产移回 Lake 目录**（原稿重新完整），成功后才删小记行/正文。
+  // 若移回失败（极端：目标被占用/跨盘拷不动），**保留小记**不删 —— 内容仍在，绝不为了「删干净」丢掉唯一的资产副本。
+  try { moveAssetDirectorySync(assetDirOf(deps.paths, id), restoreAssetsToDir); }
+  catch (error) {
+    console.warn("[quick][move] 回滚时资产目录移回失败，保留小记以免丢字节:", id, String(error));
+    return;
+  }
+  try {
+    deps.db.transaction(() => {
+      deps.db.prepare("DELETE FROM quick_note_assets WHERE quick_note_id=?").run(id);
+      deps.db.prepare("DELETE FROM quick_note_sync_base WHERE quick_note_id=?").run(id);
+      deps.db.prepare("DELETE FROM quick_notes WHERE id=?").run(id);
+    })();
+  } catch { /* best effort */ }
+  try { fs.rmSync(itemPathOf(deps.paths, id), { force: true }); } catch { /* best effort */ }
+  removeQuickNoteSearchIndex(deps.search, [id]);
+}
+
+/**
+ * 目录迁移（移动语义）：同盘 = `rename`（原子）；跨盘 = 先全量复制、成功后再删源（破坏性最小）。
+ * 目标已存在且非空 ⇒ 明确失败（避免把两篇文档的资产混在一个目录里）。
+ * 源目录不存在 = 本篇没有资产（no-op）。
+ */
+export function moveAssetDirectorySync(sourceDir: string, targetDir: string): void {
+  if (!fs.existsSync(sourceDir)) return;
+  if (fs.existsSync(targetDir)) {
+    if (fs.readdirSync(targetDir).length > 0) throw new AppError("Internal", `目标资产目录已存在且非空: ${targetDir}`);
+    fs.rmSync(targetDir, { recursive: true, force: true });
+  }
+  fs.mkdirSync(path.dirname(targetDir), { recursive: true });
+  try {
+    fs.renameSync(sourceDir, targetDir);
+    return;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "EXDEV") throw error;
+  }
+  // 跨盘回退：复制全部文件 → 校验数量 → 删源（中途失败清掉目标，源保持完整）。
+  fs.mkdirSync(targetDir, { recursive: true });
+  try {
+    const entries = fs.readdirSync(sourceDir, { withFileTypes: true }).filter((entry) => entry.isFile());
+    for (const entry of entries) {
+      fs.copyFileSync(path.join(sourceDir, entry.name), path.join(targetDir, entry.name));
+    }
+    if (fs.readdirSync(targetDir).length !== entries.length) throw new AppError("Internal", "资产目录复制不完整");
+  } catch (error) {
+    try { fs.rmSync(targetDir, { recursive: true, force: true }); } catch { /* best effort */ }
+    throw error;
+  }
+  fs.rmSync(sourceDir, { recursive: true, force: true });
+}
+
 /** V5 §5.4 promote：正文 rename 原子；目录替换带幂等判断。 */
 function promoteImport(deps: QuickNoteSaveDeps, temporary: string, itemPath: string, assetDir: string, oldAssetsBackup: string, journalId: number, now: string): void {
   try {

@@ -1,24 +1,16 @@
 /**
- * 日记「转为小记」的**提示文案**（261112 task-92 起）。
+ * 日记「转为小记」的**提示文案**（261112 task-92 起；261113 改为移动语义）。
  *
- * 真正的转换在主进程（electron/diaryQuickNoteConversion.ts：正文原样承载 + 媒体搬到小记作用域 + 原文软删）；
- * 渲染层只负责把 `droppedKinds` 变成人话，**不静默丢内容**。
+ * 真正的转换在主进程（electron/diaryQuickNoteConversion.ts：同一份正文/资产**移动**到小记空间 +
+ * 作用域改写 + Lake 侧行/正文/历史移除）。渲染层只负责如实说明后果：
+ * **没有可恢复副本**（原「复制 + 原稿进回收站可恢复」口径已作废），也不再有「未搬运的卡片类型」；
+ * 原文档历史快照被删除（小记没有历史快照，迁移后也没有入口能读）——有删除时在文案里明说。
  */
 
-/** 卡片类型 → 中文名（未列出的原样展示，宁可露出内部名也不要吞掉）。 */
-const CARD_KIND_LABELS: Record<string, string> = {
-  board: "画板",
-  customBlock: "自定义块",
-  toc: "大纲",
-  materialLibrary: "素材库",
-};
-
-/** 日记→小记完成提示：按**实际搬运**说媒体 + 未搬运类型明说（去重、保持出现顺序）。 */
-export function diaryToQuickNoteNotice(result: { droppedKinds: readonly string[]; carriedMediaCount: number }): string {
-  // 本篇没有媒体就别说「含图片/附件」（task-105 P3-8：文案与事实一致）。
-  const base = (result.carriedMediaCount > 0 ? "已转为小记（含图片/附件）" : "已转为小记") + "；日记已移入回收站，可恢复";
-  const kinds = [...new Set(result.droppedKinds)].filter(Boolean);
-  if (kinds.length === 0) return base;
-  const labels = kinds.map((kind) => CARD_KIND_LABELS[kind] ?? kind);
-  return base + "；" + labels.join("、") + "未搬运（日记原稿仍在回收站，可恢复）";
+/** 日记→小记完成提示：按**实际移动**说媒体 + 明确无副本不可恢复（+ 历史已删）。 */
+export function diaryToQuickNoteNotice(result: { movedMediaCount: number; removedHistoryCount?: number }): string {
+  // 本篇没有媒体就别说「含图片/附件」（文案与事实一致）。
+  const base = result.movedMediaCount > 0 ? "已转为小记（含图片/附件）" : "已转为小记";
+  const history = (result.removedHistoryCount ?? 0) > 0 ? "（原文档历史快照已删除）" : "";
+  return base + "；原日记已移出日记本，无副本、不可恢复" + history;
 }

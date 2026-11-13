@@ -58,11 +58,12 @@ const calls = {
   flushSaves: vi.fn(async () => undefined),
 };
 
-function Harness({ menuFor, padTwoPane = false }: { menuFor: NotebookTreeItem | null; padTwoPane?: boolean }): null {
+function Harness({ menuFor, padTwoPane = false, notebookSpace = null }: { menuFor: NotebookTreeItem | null; padTwoPane?: boolean; notebookSpace?: string | null }): null {
   api = useWorkspaceActions({
     tree: TREE,
     title: "笔记本",
     notebookId: "nb1",
+    notebookSpace,
     padTwoPane,
     createParent: "nb1",
     menuFor,

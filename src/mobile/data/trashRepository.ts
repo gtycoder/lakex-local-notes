@@ -3,6 +3,24 @@ import { executeBatchInTransaction, type MobileBatchStatement, type MobileDb } f
 import { deleteNoteBodies, deleteHistorySnapshot } from "./noteBodies.js";
 import { removeNoteAssetsDirFs } from "../native/assetFs";
 import { TRASH_NOTEBOOK_ID } from "../../core/syncDecisions.js";
+import { DIARY_FOLDER_SPACE, normalizeFolderSpace } from "../../core/diary.js";
+
+/**
+ * 日记本本身不可删除（261113 用户裁决，AGENTS §3#25②；与桌面 `trashLifecycle.assertNotDiaryNotebook` 同口径）：
+ * 只拦**日记本节点**（node_type='notebook' + space='diary'）。
+ * 日记条目与年/月分组照常可删 —— 那是软删进回收站、可恢复（「删除这篇日记」是既有能力，别误伤）。
+ */
+async function isDiaryNotebookRow(d: MobileDb, id: string): Promise<boolean> {
+  const row = await d.prepare("SELECT node_type, space FROM folders WHERE id=?").get(id) as
+    { node_type?: string; space?: string | null } | undefined;
+  return !!row && row.node_type === "notebook" && normalizeFolderSpace(row.space) === DIARY_FOLDER_SPACE;
+}
+
+async function assertNotDiaryNotebook(d: MobileDb, id: string, action: string): Promise<void> {
+  if (await isDiaryNotebookRow(d, id)) {
+    throw new Error("日记本是固定特殊笔记本，不能" + action + "；只允许把里面的单篇日记转成文档移出: " + id);
+  }
+}
 
 interface ParentedNode {
   id: string;
@@ -73,6 +91,8 @@ function collectSubtree(folders: ParentedNode[], notes: ParentedNode[], rootId: 
 }
 
 export async function trashTreeItem(d: MobileDb, id: string, kind: "folder" | "note"): Promise<void> {
+  // 日记本不可删除（只拦日记本节点；条目/分组照常软删，可恢复）。
+  if (kind === "folder") await assertNotDiaryNotebook(d, id, "删除");
   await d.transaction(async () => {
     const now = new Date().toISOString();
     if (kind === "note") {
@@ -368,6 +388,9 @@ export async function purgeTreeItem(
       return true;
     }
 
+    // 日记本不可彻底删除（261113；同桌面 purge 守卫）：**返回 false 而不是抛错** ——
+    // 自动过期候选是事务外读的，后台任务不得因脏数据整轮抛错（桌面按 skipped 计数跳过）。
+    if (kind === "folder" && await isDiaryNotebookRow(d, id)) return false;
     const allFolders = await d.prepare("SELECT id, parent_id, deleted_from_parent_id, trashed_at FROM folders").all() as Array<{ id: string; parent_id: string | null }>;
     const allNotes = await d.prepare("SELECT id, parent_id, deleted_from_parent_id, trashed_at FROM notes").all() as Array<{ id: string; parent_id: string | null }>;
     const subtree = collectSubtree(allFolders, allNotes, id);

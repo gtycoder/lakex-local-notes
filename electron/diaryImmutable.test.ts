@@ -113,17 +113,42 @@ describe("日记本固定不可变：删除守卫", () => {
   });
 });
 
-describe("日记本固定不可变：通用 IPC 的 title/icon/sort_order 一律拒绝", () => {
-  it("日记本与年/月组都不能改名、换图标", () => {
-    const { notebook, year, month } = openDiaryEntry();
-    for (const id of [notebook.id, year.id, month.id]) {
-      expect(() => store.renameTreeNode(id, "改名"), "不能改名: " + id).toThrow(/日记本.*不能改名/);
-      expect(() => store.setNodeIcon(id, "X"), "不能换图标: " + id).toThrow(/日记本.*不能换图标/);
+describe("日记本：改名 / 换图标放行（261113 用户裁决），子树仍拒绝", () => {
+  it("日记本节点本身可以改名、换图标（落库、空间不变、层级不变）", () => {
+    const { notebook } = openDiaryEntry();
+    const renamed = store.renameTreeNode(notebook.id, "我的日记");
+    expect(renamed.title).toBe("我的日记");
+    const iconed = store.setNodeIcon(notebook.id, "📔");
+    expect(iconed.icon).toBe("📔");
+    const after = store.listTreeNodes().find((n) => n.id === notebook.id)!;
+    expect(after.title).toBe("我的日记");
+    expect(after.icon).toBe("📔");
+    // 身份与位置不变：space 仍是 diary、仍在根层（改名/图标不改「固定特殊笔记本」语义）
+    expect(spaceOf(notebook.id)).toBe("diary");
+    expect(after.parentId).toBeNull();
+    // 仍是日记本：日记仍能正常打开（判据 = space，不是标题）
+    const opened = store.openDiaryDate("2026-11-10");
+    expect(opened.notebookId).toBe(notebook.id);
+  });
+
+  it("日记子树（年/月分组）仍不能改名、换图标", () => {
+    const { year, month } = openDiaryEntry();
+    for (const id of [year.id, month.id]) {
+      expect(() => store.renameTreeNode(id, "改名"), "不能改名: " + id).toThrow(/日记.*不能改名/);
+      expect(() => store.setNodeIcon(id, "X"), "不能换图标: " + id).toThrow(/日记.*不能换图标/);
     }
     const after = store.listTreeNodes();
-    expect(after.find((n) => n.id === notebook.id)!.title).toBe(notebook.title);
     expect(after.find((n) => n.id === year.id)!.title).toBe(year.title);
-    expect(spaceOf(notebook.id)).toBe("diary");
+    expect(after.find((n) => n.id === month.id)!.title).toBe(month.title);
+  });
+
+  it("日记条目标题仍只能是日期；条目也不能换图标", () => {
+    const { opened } = openDiaryEntry();
+    expect(() => store.renameTreeNode(opened.noteId, "随笔")).toThrow(/日记.*不能改名/);
+    expect(() => store.setNodeIcon(opened.noteId, "X")).toThrow(/日记.*不能换图标/);
+    const after = store.listTreeNodes().find((n) => n.id === opened.noteId)!;
+    expect(after.title).toBe("2026-11-09");
+    expect(after.icon).toBeNull();
   });
 
   it("排序：日记子树内部排序、根层把日记本排进去都被拒", () => {
@@ -201,27 +226,31 @@ describe("两个单篇出口（回归，别误伤）", () => {
     expect(store.listTreeNodes().some((n) => n.id === month.id)).toBe(true);
   });
 
-  it("出口②转为小记：日期标题进小记第一行，原文软删进回收站（可恢复、不写墓碑、不 purge）", () => {
-    const { opened, month, notebook } = openDiaryEntry();
-    // 出口② = 主进程转换（正文原样 + 原文软删；task-92 起不再在渲染层手拼小记）
+  it("出口②转为小记：同一篇移动成小记（新 id、无副本、不进回收站、不可恢复）", () => {
+    const { opened, notebook } = openDiaryEntry();
+    // 出口② = 主进程转换（261113 用户裁决 = 移动：同一份正文/资产；旧「复制 + 原文进回收站可恢复」作废）。
     const converted = convertDiaryNoteToQuickNote(quickNotes, store, opened.noteId);
     const quick = quickNotes.readQuickNote(converted.quickNoteId);
+    // 新 id（同步状态按 id 跨空间共享，同 id 会让其他端复活/软删判成 purge；见转换文件注释）。
+    expect(converted.quickNoteId).not.toBe(opened.noteId);
     expect(quick.previewText.startsWith("2026-11-09")).toBe(true);
-    expect(store.listTrash().some((item) => item.id === opened.noteId)).toBe(true);
+    // 原稿不在回收站（不进回收站、没有可恢复副本）。
+    expect(store.listTrash().some((item) => item.id === opened.noteId)).toBe(false);
     const db = new Database(dbPath(), { readonly: true });
     try {
-      const row = db.prepare("SELECT trashed_at FROM tree_nodes WHERE id=?").get(opened.noteId) as { trashed_at: string | null };
-      expect(row.trashed_at).toBeTruthy();
-      // 软删不写墓碑
-      expect((db.prepare("SELECT COUNT(*) AS c FROM deleted_notes WHERE id=?").get(opened.noteId) as { c: number }).c).toBe(0);
+      // Lake 侧行已物理移除。
+      expect((db.prepare("SELECT COUNT(*) AS c FROM tree_nodes WHERE id=?").get(opened.noteId) as { c: number }).c).toBe(0);
+      expect((db.prepare("SELECT COUNT(*) AS c FROM notes WHERE id=?").get(opened.noteId) as { c: number }).c).toBe(0);
+      // 写的是**删除意图**（同步传播必需），不是可恢复副本：purged_at 非空且没有正文/历史保留。
+      const tomb = db.prepare("SELECT purged_at FROM deleted_notes WHERE id=?").get(opened.noteId) as { purged_at: string | null } | undefined;
+      expect(tomb?.purged_at).toBeTruthy();
+      expect((db.prepare("SELECT COUNT(*) AS c FROM note_history WHERE note_id=?").get(opened.noteId) as { c: number }).c).toBe(0);
     } finally { db.close(); }
+    // 不可恢复：回收站恢复入口对它无效（行已不存在）。
+    expect(() => store.restoreTrashItem(opened.noteId)).toThrow();
 
-    // 可恢复：恢复后回到日记空间（年/月组原样），日记本仍是 diary
-    store.restoreTrashItem(opened.noteId);
-    const restored = store.listTreeNodes().find((n) => n.id === opened.noteId)!;
-    expect(restored.parentId).toBe(month.id);
+    // 日记本仍是 diary（只移动了单篇内容）
     expect(spaceOf(notebook.id)).toBe("diary");
-    expect(store.readNote(opened.noteId).content).toContain("ne-p");
   });
 });
 

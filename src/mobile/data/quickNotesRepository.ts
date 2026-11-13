@@ -218,11 +218,18 @@ async function readQuickNoteWriteBase(id: string): Promise<{ raw: string | null;
   catch { return { raw, parsed: null }; }
 }
 
+/** 新插入行的时间戳（移动转换用：保留原日记的创建/更新时间，小记时间线不重置为“今天”）。 */
+export interface QuickNoteTimestamps {
+  createdAt: string;
+  updatedAt: string;
+}
+
 async function persistQuickNoteContent(
   d: MobileDb,
   id: string,
   draft: { text: string; body: string; images: StoredQuickNoteImage[] },
   previous: { raw: string | null; parsed: StoredQuickNoteContent | null },
+  timestamps?: QuickNoteTimestamps,
 ): Promise<void> {
   // 261112 task-55（M2，用户裁决 B）：陈旧编辑器保存**已删小记**必须拒绝并明说 —— 不得静默复活。
   // 场景：编辑器打开后该小记在别处被删除/被他端同步删除（deleted_at 非空）或已彻底删除（墓碑），
@@ -241,7 +248,9 @@ async function persistQuickNoteContent(
   const previousRow = await d.prepare("SELECT updated_at FROM quick_notes WHERE id=?").get(id) as { updated_at: string } | undefined;
   const effectiveUpdatedAt = previous.parsed && previousRow && sameQuickNoteContent(previous.parsed, content)
     ? previousRow.updated_at
-    : now;
+    : (timestamps?.updatedAt ?? now);
+  // 新插入行沿用调用方时间（移动语义：原日记日期），已有行/常规保存仍用 now。
+  const createdAt = previousRow ? now : (timestamps?.createdAt ?? now);
   await writeQuickNoteBody(id, serialized);
   try {
     await d.transaction(async () => {
@@ -249,7 +258,7 @@ async function persistQuickNoteContent(
         `INSERT INTO quick_notes (id, created_at, updated_at, preview_text, image_count, content_hash, is_dirty, is_conflict, restore_pending_at, ready_to_sync, first_image, list_metadata_version)
          VALUES (?,?,?,?,?,?,1,0,NULL,1,?,1)
          ON CONFLICT(id) DO UPDATE SET updated_at=excluded.updated_at, preview_text=excluded.preview_text, image_count=excluded.image_count, content_hash=excluded.content_hash, is_dirty=1, deleted_at=NULL, restore_pending_at=NULL, ready_to_sync=1, first_image=excluded.first_image, list_metadata_version=1`
-      ).run(id, now, effectiveUpdatedAt, preview, content.images.length, contentHash, content.images[0]?.filename ?? null);
+      ).run(id, createdAt, effectiveUpdatedAt, preview, content.images.length, contentHash, content.images[0]?.filename ?? null);
       // 活跃写入统一清删除墓碑，避免“活跃行 + 墓碑”二义性。
       await d.prepare("DELETE FROM quick_note_deleted WHERE id=?").run(id);
     });
@@ -315,9 +324,10 @@ export async function saveQuickNoteContent(
   d: MobileDb,
   id: string,
   payload: { text: string; body: string; images: StoredQuickNoteImage[] },
+  options: { timestamps?: QuickNoteTimestamps } = {},
 ): Promise<string> {
   const previous = await readQuickNoteWriteBase(id);
-  await persistQuickNoteContent(d, id, payload, previous);
+  await persistQuickNoteContent(d, id, payload, previous, options.timestamps);
   return id;
 }
 

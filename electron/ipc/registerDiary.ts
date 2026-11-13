@@ -18,7 +18,7 @@ import type { ConvertDiaryToQuickNoteResult } from "../diaryQuickNoteConversion.
 export interface DiaryIpcDeps {
   /** 实现 = Store.openDiaryDate（判据/事务全在 electron/diaryStore.ts）。 */
   openDate: (dateKey: string, options?: { mode?: "open" | "new" }) => DiaryOpenResult;
-  /** 实现 = convertDiaryNoteToQuickNote（正文原样承载 + 资产搬到小记作用域；electron/diaryQuickNoteConversion.ts）。 */
+  /** 实现 = convertDiaryNoteToQuickNote（同一篇正文/资产**移动**到小记；electron/diaryQuickNoteConversion.ts）。 */
   convertToQuickNote: (noteId: string) => ConvertDiaryToQuickNoteResult;
 }
 
@@ -26,7 +26,7 @@ export function registerDiaryIpc(ipc: IpcRegistrar, deps: DiaryIpcDeps): void {
   // mode 省略 = "open"（当天最新/没有就建）；"new" = 一天多篇（加号 / 选日期建新的）。
   ipc.handle("diary_open_date", (dateKey: string, mode?: unknown): DiaryOpenResult =>
     deps.openDate(dateKey, { mode: mode === "new" ? "new" : "open" }));
-  // 转为小记（261112 task-92）：用原 Lake 正文创建小记 + 打包资产 + 改写引用；成功后日记软删进回收站（可恢复）。
+  // 转为小记（261113 用户裁决 = 移动）：同一 id / 正文 / 资产搬到小记空间 + 作用域改写；原稿物理移除（无副本）。
   ipc.handle("diary_to_quick_note", (noteId: unknown): ConvertDiaryToQuickNoteResult =>
     deps.convertToQuickNote(String(noteId ?? "")));
 }

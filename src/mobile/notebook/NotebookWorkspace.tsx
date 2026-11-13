@@ -74,9 +74,6 @@ export interface NotebookWorkspaceProps {
 
 export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   const { notebookId, initialNoteId, initialMode, onBack, notebooks, onSwitchNotebook, onActiveNoteChange, onRegisterBackHandler } = props;
-  /** 261110：日记本（space="diary"）里的文档标题只能是日期 ⇒ 顶栏标题只读 + 改名拦截。
-   *  判据用「当前笔记本的 space」，与桌面 core.isDiaryEntryNode 同一契约。 */
-  const isDiaryNotebook = notebooks.some((nb) => nb.id === notebookId && nb.space === "diary");
   const {
     tree,
     setTree,
@@ -92,6 +89,11 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     loadTree,
     notebookSpace,
   } = useNotebookTreeData(notebookId);
+  /** 261110/261113：日记本（space="diary"）里的文档标题只能是日期 ⇒ 顶栏标题只读 + 改名拦截。
+   *  判据单一来源 = 工作区自己的 space（useNotebookTreeData 的 notebookSpace，与数据层 diaryNotebookOf 同口径）。
+   *  261113 修正：此前用 `notebooks.some(...)`，而传入的 notebooks 是**已过滤掉日记本**的列表
+   *  （libraryNotebooks）⇒ 恒 false，日记条目标题顶栏可改且真落库。 */
+  const isDiaryNotebook = notebookSpace === "diary";
   /**
    * 文档树多选模式（261106 task-8）：**唯一入口 = 抽屉页头的「选择」按钮**（长按文档行仍是拖拽排序，
    * 不能为批量入口抢走既有能力）。状态 + 批量动作（创建副本 / 移动… / 移入回收站）全在 hook 里；
@@ -322,6 +324,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     tree,
     title,
     notebookId,
+    notebookSpace,
     padTwoPane,
     createParent,
     menuFor,

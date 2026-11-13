@@ -41,6 +41,8 @@ import { MobileSheet } from "../ui/MobileSheet";
 import { MonthCalendar } from "../ui/MonthCalendar";
 import { MobileSheetMenu } from "../ui/MobileSheetMenu";
 import { MoveTargetTreeSheet } from "../ui/MoveTargetTreeSheet";
+import { NameSheet } from "../ui/NameSheet";
+import { MobileNodeIconPicker } from "../ui/NodeIconPicker";
 import { toastActionError } from "../lib/actionError";
 import { showToast } from "../ui/toastBus";
 import { confirmMobile } from "../ui/ConfirmDialog";
@@ -164,8 +166,46 @@ export function DiaryPage({ nodes, onOpenEntry, onOpenSearch, onChanged }: Diary
   const [convertFor, setConvertFor] = useState<DiaryEntry | null>(null);
   const [converting, setConverting] = useState(false);
   const [convertError, setConvertError] = useState<string | null>(null);
-  /** 「转为小记」在途守卫（复制媒体可能跨多次桥往返，连点会建两条）。 */
+  /** 「转为小记」在途守卫（移动资产可能跨多次桥往返，连点会重复触发）。 */
   const [quickNoteBusy, setQuickNoteBusy] = useState(false);
+  /** 日记本设置（261113 用户裁决：**只开放改名与换图标**，其余仍由数据层拒绝）：
+   *  入口 = 页头 ⋯（日记本没有其它可视化行：首页「知识库」按 libraryNotebooks 过滤掉它、
+   *  工作区抽屉页头按 261014 裁决不放 ⋮）。 */
+  const [notebookMenuOpen, setNotebookMenuOpen] = useState(false);
+  const [notebookRenameOpen, setNotebookRenameOpen] = useState(false);
+  const [notebookIconOpen, setNotebookIconOpen] = useState(false);
+  const [notebookBusy, setNotebookBusy] = useState(false);
+  const diaryNotebook = useMemo(() => {
+    const id = diaryNotebookId(nodes);
+    return id ? nodes.find((node) => node.id === id) ?? null : null;
+  }, [nodes]);
+  const renameDiaryNotebook = useCallback(async (title: string): Promise<void> => {
+    if (!diaryNotebook) return;
+    setNotebookBusy(true);
+    try {
+      await bridge.renameTreeNode(diaryNotebook.id, title);
+      setNotebookRenameOpen(false);
+      showToast("已重命名日记本");
+      await onChanged();
+    } catch (error) {
+      toastActionError("重命名日记本", error);
+    } finally {
+      setNotebookBusy(false);
+    }
+  }, [diaryNotebook, onChanged]);
+  const setDiaryNotebookIcon = useCallback(async (icon: string | null): Promise<void> => {
+    if (!diaryNotebook) return;
+    setNotebookBusy(true);
+    try {
+      await bridge.setNodeIcon(diaryNotebook.id, icon);
+      setNotebookIconOpen(false);
+      await onChanged();
+    } catch (error) {
+      toastActionError("设置日记本图标", error);
+    } finally {
+      setNotebookBusy(false);
+    }
+  }, [diaryNotebook, onChanged]);
 
   const closeConvert = useCallback((): void => {
     if (converting) return;
@@ -211,6 +251,13 @@ export function DiaryPage({ nodes, onOpenEntry, onOpenSearch, onChanged }: Diary
           <span className="mb-row__meta"> {entries.length} 篇</span>
         </div>
         <div className="mb-set-item__ctl">
+          {/* 261113：日记本设置只在**日记本已存在**时出现（一条日记都没写过时没有笔记本可改名/换图标，
+              否则会弹出一个空名字的重命名框）。 */}
+          {diaryNotebook && (
+            <button type="button" className="mb-iconbtn" aria-label="日记本设置" onClick={() => setNotebookMenuOpen(true)}>
+              <MoreVertical size={18} />
+            </button>
+          )}
           <button type="button" className="mb-iconbtn" aria-label="搜索日记" onClick={onOpenSearch}>
             <Search size={18} />
           </button>
@@ -320,20 +367,21 @@ export function DiaryPage({ nodes, onOpenEntry, onOpenSearch, onChanged }: Diary
           if (!entry) return;
           if (item.id === "convert") { setConvertError(null); setConvertFor(entry); }
           if (item.id === "toQuickNote") {
-            // 「转为小记」（261113 task-106，与桌面同语义）：正文+图片/附件复制到小记作用域、原资产保留；
-            // 成功后原文软删进回收站（可恢复，不是 purge）。失败由数据层回滚，绝不在没建好小记时删原文。
+            // 「转为小记」（261113 task-106；261113 用户裁决 = 移动）：同一份正文/资产移到小记空间，
+            // 随后 Lake 侧原稿物理移除（**无副本、不可恢复**；小记没有历史快照 ⇒ 原文档历史也删除）。
+            // 失败由数据层回滚，绝不在没建好小记时删原文。
             void (async () => {
               if (quickNoteBusy) return;
               const ok = await confirmMobile({
                 title: "转为小记？",
-                body: "图片/附件会一起复制到小记；原日记会移入回收站（可恢复）。",
+                body: "同一份正文与图片/附件会移动到小记；原日记会从日记本移除，无副本、不可恢复（原文档历史快照也会删除）。",
                 confirmText: "转为小记",
               });
               if (!ok) return;
               setQuickNoteBusy(true);
               try {
                 const result = await bridge.diaryToQuickNote(entry.noteId);
-                showToast(diaryToQuickNoteNotice(result.droppedKinds));
+                showToast(diaryToQuickNoteNotice(result));
                 await onChanged();
               } catch (error) {
                 toastActionError("转为小记", error);
@@ -358,6 +406,31 @@ export function DiaryPage({ nodes, onOpenEntry, onOpenSearch, onChanged }: Diary
           }
         }}
       />
+      {/* 日记本设置（261113 用户裁决）：只开放「重命名 / 设置图标」两项；删除/排序/移动/space 降级仍由数据层拒绝。 */}
+      <MobileSheet open={notebookMenuOpen} title="日记本" onClose={() => setNotebookMenuOpen(false)}>
+        <button type="button" className="mb-list-item" onClick={() => { setNotebookMenuOpen(false); setNotebookRenameOpen(true); }}>
+          <span className="mb-list-item__text">重命名</span>
+          <span className="mb-list-item__meta mb-ellipsis">{diaryNotebook?.title || ""}</span>
+        </button>
+        <button type="button" className="mb-list-item" onClick={() => { setNotebookMenuOpen(false); setNotebookIconOpen(true); }}>
+          <span className="mb-list-item__text">设置图标</span>
+        </button>
+      </MobileSheet>
+      <NameSheet
+        open={notebookRenameOpen}
+        title="重命名日记本"
+        initialValue={diaryNotebook?.title ?? ""}
+        busy={notebookBusy}
+        onClose={() => setNotebookRenameOpen(false)}
+        onSubmit={(value) => void renameDiaryNotebook(value)}
+      />
+      <MobileSheet open={notebookIconOpen} title="设置图标" bodyClassName="mb-sheet__body--form" onClose={() => setNotebookIconOpen(false)}>
+        <MobileNodeIconPicker
+          nodeType="notebook"
+          value={diaryNotebook?.icon ?? null}
+          onPick={(value) => void setDiaryNotebookIcon(value)}
+        />
+      </MobileSheet>
       {/* 目标笔记本选择：复用既有 MoveTargetTreeSheet（只列笔记本；本列表来自 core.diary.diaryConvertTargets）。 */}
       {convertFor && (
         <MoveTargetTreeSheet

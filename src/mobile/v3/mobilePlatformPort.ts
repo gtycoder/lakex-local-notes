@@ -24,7 +24,7 @@ import {
 import { reindexQuickNotesByIds, reindexQuickNotesForTags } from "../data/quickNoteTagService.js";
 import { applyRemoteNoteTags, cleanupOrphanNoteTagLinks, listAllNoteTagIds, listAllNoteTagsUpdatedAt } from "../data/noteTagLinksRepository.js";
 import { listQuickNoteAssetKeysFs, removeAssetBytesFs } from "../native/assetFs.js";
-import { normalizeFolderSpace } from "../../core/diary.js";
+import { DIARY_FOLDER_SPACE, mergeFolderSpace, normalizeFolderSpace } from "../../core/diary.js";
 
 /**
  * 移动端 PlatformDataPort（E2-4 phase C）：把移动仓库/DB 的既有读取/写入语义映射成窄端口。
@@ -521,9 +521,17 @@ export function createMobilePlatformPort(db: MobileDb, ctxIn?: Partial<MobilePla
       ).run(folder.id, folder.title, folder.parentId, folder.sortOrder, folder.nodeType, folder.icon ?? null, folder.updatedAt, folder.trashedAt ?? null, folder.deletedFromParentId ?? null, normalizeFolderSpace(folder.space));
     },
     async applyRemoteFolderMeta(folder: SyncFolderRow): Promise<void> {
+      // 落库侧 space 单调闸（261113；与桌面 noteMetadataRepository.diarySafeFolderSpace 同口径）：
+      // 本地已是 diary ⇒ 远端写 null 也绝不降级（space 只允许 null → diary，AGENTS §3#25①）。
+      // 合并层（core s3v3Merge.enforceDiarySpaceMonotone）已首选重发布；这里兜脏计划/旧包/直接恢复。
+      const existing = await db.prepare("SELECT space FROM folders WHERE id=?").get(folder.id) as { space: string | null } | undefined;
+      const space = mergeFolderSpace(existing?.space ?? null, folder.space);
+      if (normalizeFolderSpace(existing?.space) === DIARY_FOLDER_SPACE && normalizeFolderSpace(folder.space) !== DIARY_FOLDER_SPACE) {
+        console.warn("[sync] 拒绝把日记本降级为普通笔记本（space 只允许 null→diary）:", folder.id);
+      }
       await db.prepare(
         "UPDATE folders SET title=?,parent_id=?,sort_order=?,node_type=?,icon=?,updated_at=?,trashed_at=?,deleted_from_parent_id=?,is_dirty=1,space=? WHERE id=?"
-      ).run(folder.title, folder.parentId, folder.sortOrder, folder.nodeType, folder.icon ?? null, folder.updatedAt, folder.trashedAt ?? null, folder.deletedFromParentId ?? null, normalizeFolderSpace(folder.space), folder.id);
+      ).run(folder.title, folder.parentId, folder.sortOrder, folder.nodeType, folder.icon ?? null, folder.updatedAt, folder.trashedAt ?? null, folder.deletedFromParentId ?? null, space, folder.id);
     },
     async deleteTreeNode(nodeId: string): Promise<void> {
       await db.prepare("DELETE FROM folders WHERE id=?").run(nodeId);

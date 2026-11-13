@@ -810,6 +810,59 @@ export class Store {
   /** 转换用：列出笔记资产（filename + 绝对路径；目录不存在返回空）。 */
   listNoteAssetsForConversion(noteId: string): ImportedNoteAsset[] { return this.collectNoteAssets(noteId); }
 
+  /** 「转为小记」移动用：源文档资产目录（note-assets/{id}/，绝对路径；目录不存在也可返回路径）。 */
+  noteAssetsDirForConversion(noteId: string): string { return this.noteAssetsDirFor(noteId); }
+
+  /** 「转为小记」移动用：源文档的创建/更新时间（小记时间线：移动后保留原日记日期，不重置为“今天”）。 */
+  noteTimesForConversion(noteId: string): { createdAt: string; updatedAt: string } {
+    const row = this.db.prepare(
+      "SELECT n.updated_at AS updated_at, t.created_at AS created_at FROM notes n LEFT JOIN tree_nodes t ON t.note_file_id=n.id WHERE n.id=? LIMIT 1"
+    ).get(noteId) as { updated_at: string; created_at: string | null } | undefined;
+    if (!row) throw new AppError("NotFound", `笔记不存在: ${noteId}`);
+    return { createdAt: row.created_at ?? row.updated_at, updatedAt: row.updated_at };
+  }
+
+  /**
+   * 「日记 → 小记」**移动**的 Lake 侧收尾（261113 用户裁决，覆盖旧的「复制 + 原稿进回收站」）：
+   * 物理移除 notes/tree_nodes 行 + 正文 + 附件目录 + **历史快照**，并写**删除意图**（deleted_notes 墓碑）。
+   *
+   * 为什么必须有墓碑：v3 协议「本地缺失 + 基线存在」= 云端恢复（decideItem 的 download 分支），
+   * 不写删除意图的话下一次同步会把文档重新拉回来、移动白做。墓碑只是**同步删除意图**，
+   * **不是可恢复副本**（没有正文/附件/历史保留，也不能 restore）——这与用户「无副本、不可恢复」一致。
+   *
+   * 无副本后果（如实记录）：不存在任何本机回滚入口；小记没有历史快照 ⇒ 原文档 history 一并删除
+   * （返回删除的快照行数，调用方写进报告/日志），不迁移（迁移后也没有任何入口能读）。
+   */
+  removeNoteForQuickNoteMove(noteId: string): { removedHistory: number } {
+    if (!isSafePathSegment(noteId)) throw new AppError("InvalidInput", `无效的笔记 ID: ${noteId}`);
+    const note = this.db.prepare("SELECT id,title,parent_id,sort_order,updated_at,trashed_at FROM notes WHERE id=?").get(noteId) as
+      { id: string; title: string; parent_id: string | null; sort_order: number; updated_at: string; trashed_at: string | null } | undefined;
+    const node = this.db.prepare("SELECT id,note_file_id FROM tree_nodes WHERE (id=? OR note_file_id=?) AND deleted_at IS NULL LIMIT 1").get(noteId, noteId) as
+      { id: string; note_file_id: string | null } | undefined;
+    if (!node) throw new AppError("NotFound", `笔记不存在或已彻底删除: ${noteId}`);
+    if (note?.trashed_at) throw new AppError("InvalidInput", `日记条目已在回收站，不能转为小记: ${noteId}`);
+    const now = new Date().toISOString();
+    let removedHistory = 0;
+    const tx = this.db.transaction(() => {
+      // 删除意图：id = 原 note id（小记用新 id，两个空间不撞）。deleted_at/purged_at 同 purge 口径。
+      this.db.prepare(
+        "INSERT INTO deleted_notes(id,title,parent_id,sort_order,updated_at,deleted_at,purged_at,node_type) VALUES(?,?,?,?,?,?,?, 'note') " +
+        "ON CONFLICT(id) DO UPDATE SET deleted_at=excluded.deleted_at, purged_at=excluded.purged_at"
+      ).run(noteId, note?.title ?? noteId, note?.parent_id ?? null, note?.sort_order ?? 0, note?.updated_at ?? now, now, now);
+      removedHistory = (this.db.prepare("DELETE FROM note_history WHERE note_id=?").run(noteId) as { changes?: number }).changes ?? 0;
+      this.db.prepare("DELETE FROM orphan_assets WHERE note_id=?").run(noteId);
+      this.db.prepare("DELETE FROM notes WHERE id=?").run(noteId);
+      this.db.prepare("DELETE FROM tree_nodes WHERE id=? OR note_file_id=?").run(node.id, noteId);
+      this.searchRepository.remove([noteId]);
+    });
+    tx();
+    // 文件删除放事务后：失败只留孤儿文件，不改变「已移出 Lake」的 DB 判定（与 purge 同口径）。
+    try { fs.rmSync(this.notePath(noteId), { force: true }); } catch { /* 孤儿文件 */ }
+    try { fs.rmSync(this.noteAssetsDirFor(noteId), { force: true, recursive: true }); } catch { /* 孤儿文件 */ }
+    try { fs.rmSync(this.historyLifecycle.historyNoteDir(noteId), { force: true, recursive: true }); } catch { /* 孤儿文件 */ }
+    return { removedHistory };
+  }
+
   /** 源笔记 note-assets/{id}/ 下的现存文件（复制副本用；目录不存在 = 无资源）。 */
   private collectNoteAssets(sourceId: string): ImportedNoteAsset[] {
     const dir = this.noteAssetsDirFor(sourceId);

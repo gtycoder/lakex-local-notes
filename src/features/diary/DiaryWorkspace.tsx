@@ -25,6 +25,7 @@ import { Menu } from "../../components/ui/Overlay";
 import { CalendarPanel } from "../../components/ui/CalendarPanel";
 import { SplitPane } from "../../components/ui/SplitPane";
 import { usePopoverPosition } from "../../hooks/usePopoverPosition";
+import { useConfirm } from "../../hooks/useConfirm";
 import { PublishDocDialog } from "../../components/app/PublishDocDialog";
 import type { LakeEditorInstance } from "../editor/lakeRuntime";
 import type { TreeNode } from "../../lib/types";
@@ -65,7 +66,8 @@ export interface DiaryWorkspaceProps {
   /** 「转为文档」：把该日记条目移到目标笔记本（换父节点 = 移动，不复制正文/历史）+ 落标题。
    *  title = 弹窗里用户确认的标题（默认是日期键，可改；空/未改由宿主决定是否跳过改名）。 */
   onConvertEntry: (nodeId: string, targetNotebookId: string, title: string) => void;
-  /** 「转为小记」：日期标题写入小记第一行 + 正文接在后面；成功后勤日记移入回收站。 */
+  /** 「转为小记」= 把这篇日记**移动**成小记条目（新小记 id、正文/资产零复制地改名移动；
+   *  **无副本、不可恢复**，原文档历史快照一并删除 —— 入口必须先确认，见 useConfirm）。 */
   onConvertToQuickNote: (nodeId: string) => void;
   /** 「删除」：移入回收站（软删，可恢复）。走既有删除确认与 deleteTreeNode，不新造删除路径。 */
   onDeleteEntry: (nodeId: string) => void;
@@ -96,6 +98,8 @@ export function DiaryWorkspace(props: DiaryWorkspaceProps) {
 
   /** 左栏数据：条目来自 core，分组也来自 core（`groupDiaryEntries`）——组件里没有任何年/月换算。
    *  打开/选中一律用 `documentId`（= noteFileId）：core 的 `noteId` 是树节点 id，不能拿去 openNote。 */
+  /** 确认浮层（DT-02）：「转为小记」= 不可逆移动（无副本、历史快照一并删除）⇒ 必须二次确认。 */
+  const { confirm, confirmElement } = useConfirm();
   const entries = useMemo(() => diaryEntryViews(treeNodes), [treeNodes]);
   const years: YearNode[] = useMemo(() => groupDiaryEntries(entries) as unknown as YearNode[], [entries]);
   const entryDocIds = useMemo(() => new Set(entries.map((entry) => entry.documentId)), [entries]);
@@ -352,7 +356,17 @@ export function DiaryWorkspace(props: DiaryWorkspaceProps) {
             type="button"
             role="menuitem"
             className="ln-menu__item"
-            onClick={() => { onConvertToQuickNote(entryMenu.entry.nodeId); setEntryMenu(null); }}
+            onClick={() => {
+              const nodeId = entryMenu.entry.nodeId;
+              setEntryMenu(null);
+              // 261113 用户裁决：转为小记 = **移动**（无副本、不可恢复）⇒ 先确认再动。
+              void confirm({
+                title: "转为小记？",
+                body: "同一份正文与图片/附件会移动到小记；原日记会从日记本移除，没有副本、不可恢复（原文档的历史快照也会删除）。",
+                confirmText: "转为小记",
+                danger: true,
+              }).then((ok) => { if (ok) onConvertToQuickNote(nodeId); });
+            }}
           >
             <Feather size={15} aria-hidden="true" />
             <span>转为小记</span>
@@ -419,6 +433,7 @@ export function DiaryWorkspace(props: DiaryWorkspaceProps) {
         />
       )}
 
+      {confirmElement}
     </div>
   );
 }

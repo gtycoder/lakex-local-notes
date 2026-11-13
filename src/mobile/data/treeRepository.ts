@@ -8,7 +8,7 @@ import {
   assertTreeNodeTitle,
   nextSortOrder,
 } from "../../core/treeRules.js";
-import { normalizeFolderSpace, type DiaryFolderSpace } from "../../core/diary.js";
+import { DIARY_FOLDER_SPACE, normalizeFolderSpace, type DiaryFolderSpace } from "../../core/diary.js";
 
 function noteRowToTreeNode(
   row: Record<string, unknown>,
@@ -95,33 +95,51 @@ export async function createGroup(d: MobileDb, parentId: string, title: string):
   return folderRowToTreeNode(row, { title: trimmed, updatedAt: now });
 }
 
-/** 261110：该 note 是否在日记本子树（标题锁的判据）——沿 folders 父链只认 `space="diary"`，不看标题。 */
-async function isNoteInDiaryNotebook(d: MobileDb, noteId: string): Promise<boolean> {
-  const note = await d.prepare("SELECT parent_id FROM notes WHERE id=?").get(noteId) as { parent_id?: string | null } | undefined;
-  let current = note?.parent_id ?? null;
+/**
+ * 日记子树归属（261113 用户裁决，AGENTS §3#25②；与桌面 `noteMetadataRepository.diaryNotebookOf` 同口径）：
+ * 沿 parent 链（folders ∪ notes —— 移动端文档也能作父）向上找 `space="diary"` 的笔记本，只认 space 不看标题。
+ * 返回日记本 id；null = 不在日记子树（节点不存在也返回 null，交给调用方的 NotFound 判据）。visited 防坏库成环。
+ *
+ * **判据只有一个**（调用方不要另写）：
+ *  · `diaryNotebookOf(id) === id` ⇒ 日记本**本身**：改名 / 换图标放行；
+ *  · `diaryNotebookOf(id) !== null && !== id` ⇒ 日记子树（年/月分组、日记条目）：改名/图标/移动/排序/删除全部拒绝。
+ */
+export async function diaryNotebookOf(d: MobileDb, id: string): Promise<string | null> {
   const seen = new Set<string>();
+  let current: string | null = id;
   while (current && !seen.has(current)) {
     seen.add(current);
-    const row = await d.prepare("SELECT node_type, space, parent_id FROM folders WHERE id=?").get(current) as
+    const folder = await d.prepare("SELECT node_type, space, parent_id FROM folders WHERE id=?").get(current) as
       { node_type?: string; space?: string | null; parent_id?: string | null } | undefined;
-    if (!row) return false;
-    if (row.node_type === "notebook" && row.space === "diary") return true;
-    current = row.parent_id ?? null;
+    if (folder) {
+      if (folder.node_type === "notebook" && normalizeFolderSpace(folder.space) === DIARY_FOLDER_SPACE) return current;
+      current = folder.parent_id ?? null;
+      continue;
+    }
+    const note = await d.prepare("SELECT parent_id FROM notes WHERE id=?").get(current) as { parent_id?: string | null } | undefined;
+    if (!note) return null;
+    current = note.parent_id ?? null;
   }
-  return false;
+  return null;
 }
 
 export async function renameTreeNode(d: MobileDb, id: string, title: string): Promise<TreeNode> {
   const trimmed = assertTreeNodeTitle(title);
   const now = new Date().toISOString();
-  const changedFolder = (await d.prepare("UPDATE folders SET title=?, updated_at=?, is_dirty=1 WHERE id=?").run(trimmed, now, id)).changes;
-  if (changedFolder) {
+  const diaryNotebookId = await diaryNotebookOf(d, id);
+  const folderRow = await d.prepare("SELECT id FROM folders WHERE id=?").get(id);
+  if (folderRow) {
+    // 261113 用户裁决：日记本**本身**可以改名；年/月分组仍拒绝（顺序与标题都由日期派生）。
+    if (diaryNotebookId !== null && diaryNotebookId !== id) {
+      throw new Error("日记里的分组不能改名（只有日记本本身可以）");
+    }
+    await d.prepare("UPDATE folders SET title=?, updated_at=?, is_dirty=1 WHERE id=?").run(trimmed, now, id);
     const row = await d.prepare("SELECT id, title, parent_id, sort_order, node_type, icon, updated_at FROM folders WHERE id=?").get(id) as Record<string, unknown>;
     return folderRowToTreeNode(row, { title: trimmed, updatedAt: now });
   }
   // 文档（notes）也是目录树节点：移动端长按重命名 / 顶栏改名都走这里；与桌面 renameTreeNode 语义对齐。
   // 261110 标题锁：日记条目标题只能是日期（与桌面 core.isDiaryEntryNode 同一契约，数据层最后一道闸）。
-  if (await isNoteInDiaryNotebook(d, id)) {
+  if (diaryNotebookId !== null) {
     throw new Error("日记标题就是日期，不能改");
   }
   const changedNote = (await d.prepare("UPDATE notes SET title=?, updated_at=?, is_dirty=1 WHERE id=? AND trashed_at IS NULL").run(trimmed, now, id)).changes;
@@ -136,13 +154,20 @@ export async function setNodeIcon(d: MobileDb, id: string, icon: string | null):
   assertNodeIcon(icon);
   const now = new Date().toISOString();
   const folder = await d.prepare("SELECT id, title, parent_id, sort_order, node_type, icon, updated_at FROM folders WHERE id=?").get(id) as Record<string, unknown> | undefined;
+  const diaryNotebookId = await diaryNotebookOf(d, id);
   if (folder) {
+    // 261113 用户裁决：日记本本身可以换图标；年/月分组仍拒绝（与桌面 setNodeIcon 同口径）。
+    if (diaryNotebookId !== null && diaryNotebookId !== id) {
+      throw new Error("日记里的分组不能换图标（只有日记本本身可以）");
+    }
     await d.prepare("UPDATE folders SET icon=?, updated_at=?, is_dirty=1 WHERE id=?").run(icon, now, id);
     const row = { ...folder, icon, updated_at: now };
     return folderRowToTreeNode(row, { icon, updatedAt: now });
   }
   const note = await d.prepare("SELECT id, title, parent_id, sort_order, icon, updated_at, is_dirty, is_conflict FROM notes WHERE id=? AND trashed_at IS NULL").get(id) as Record<string, unknown> | undefined;
   if (!note) throw new Error("节点不存在: " + id);
+  // 日记条目同样属于日记子树（标题/图标都由日期派生；桌面 setNodeIcon 也拒绝）。
+  if (diaryNotebookId !== null) throw new Error("日记条目不能换图标");
   await d.prepare("UPDATE notes SET icon=?, updated_at=?, is_dirty=1 WHERE id=?").run(icon, now, id);
   const row = { ...note, icon, updated_at: now };
   return noteRowToTreeNode(row, { icon, updatedAt: now });
@@ -156,6 +181,15 @@ export async function moveTreeNodeOrdered(d: MobileDb, id: string, parentId: str
   const movingNote = movingFolder ? undefined : await d.prepare("SELECT id FROM notes WHERE id = ? AND trashed_at IS NULL").get(id) as { id: string } | undefined;
   if (!movingFolder && !movingNote) throw new Error("节点不存在: " + id);
   const nodeType = movingFolder ? movingFolder.node_type : "note";
+  // 日记守卫（261113；与桌面 noteMetadataRepository.assertDiaryMove 同口径，判据只用 diaryNotebookOf）：
+  // 日记本本身不可移、日记子树里的分组不可移、日记内部不可调位置、日记空间不可作为移动目标。
+  // 唯一放行 = 「单篇日记整篇移出到普通笔记本」（= 出口①「转为文档」）。
+  const movingDiary = await diaryNotebookOf(d, id);
+  const targetDiary = parentId === null ? null : await diaryNotebookOf(d, parentId);
+  if (movingDiary === id) throw new Error("日记本是固定特殊笔记本，不能移动；只允许把里面的单篇日记转成文档移出: " + id);
+  if (movingDiary !== null && nodeType !== "note") throw new Error("日记里的分组不能移动；只允许把单篇日记转成文档移出: " + id);
+  if (movingDiary !== null && targetDiary !== null) throw new Error("日记内容顺序是派生的，不能调整位置/排序: " + id);
+  if (targetDiary !== null) throw new Error("日记本不能作为移动目标（不支持把文档移入日记空间）: " + parentId);
   assertRootConstraint(nodeType, parentId);
 
   const folderRows = await d.prepare("SELECT id, parent_id FROM folders WHERE trashed_at IS NULL").all() as Array<{ id: string; parent_id: string | null }>;
@@ -201,6 +235,15 @@ export async function moveTreeNodeOrdered(d: MobileDb, id: string, parentId: str
 }
 
 export async function reorderSiblings(d: MobileDb, parentId: string | null, orderedIds: string[]): Promise<void> {
+  // 日记内容的顺序是 core 派生（年→月→日期），sort_order 不可由用户改（261113；与桌面 reorderTreeNodes 同口径）。
+  // 父级在日记子树（含日记本本身）⇒ 整批拒绝；日记本本身也不得参与任何父级下的排序。
+  if (parentId !== null) {
+    const parentDiary = await diaryNotebookOf(d, parentId);
+    if (parentDiary !== null) throw new Error("日记内容顺序是派生的，不能排序: " + parentId);
+  }
+  for (const id of orderedIds) {
+    if (await diaryNotebookOf(d, id) === id) throw new Error("日记本是固定特殊笔记本，不能参与排序: " + id);
+  }
   const now = new Date().toISOString();
   // 同级列表是 folders + notes 混合（listNotebookTree 混合排序）——必须按 id 归属写回各自表，
   // 否则文档的 sort_order 永远不动（与"移动"同一个坑）。

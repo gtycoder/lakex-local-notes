@@ -86,10 +86,22 @@ export class NoteMetadataRepository {
     return null;
   }
 
-  /** 日记本、年/月组、日记条目都不可改名/换图标/排序（261112 §3#25）：通用 IPC 一律拒绝。 */
+  /** 日记子树（年/月组、日记条目）不可改名/换图标/排序（261112 §3#25）：通用 IPC 一律拒绝。 */
   private assertNotDiarySubtree(id: string, action: string): void {
     if (this.diaryNotebookOf(id) !== null) {
       throw new AppError("InvalidInput", `日记本是固定特殊笔记本，不能${action}（只允许把单篇日记转成文档移出）: ${id}`);
+    }
+  }
+
+  /**
+   * 改名 / 换图标守卫（261113 用户裁决）：**只**拒绝日记子树（年/月分组、日记条目），
+   * 日记本**节点本身**放行（`diaryNotebookOf(id) === id`）。
+   * 其余约束不变：日记本仍不可删除/移动/排序/被当作移动目标，条目标题仍只能是日期。
+   */
+  private assertNotDiaryContent(id: string, action: string): void {
+    const diaryNotebookId = this.diaryNotebookOf(id);
+    if (diaryNotebookId !== null && diaryNotebookId !== id) {
+      throw new AppError("InvalidInput", `日记里的分组与日记条目不能${action}（只有日记本本身可以）: ${id}`);
     }
   }
 
@@ -142,7 +154,7 @@ export class NoteMetadataRepository {
     const trimmed = title.trim();
     if (!trimmed) throw new AppError("InvalidInput", "名称不能为空");
     this.assertNodeWritable(id);
-    this.assertNotDiarySubtree(id, "改名");
+    this.assertNotDiaryContent(id, "改名");
     const now = this.deps.nowIso();
     const transaction = this.db.transaction(() => {
       const changed = this.db.prepare("UPDATE tree_nodes SET title=?,updated_at=?,is_dirty=1 WHERE id=? AND deleted_at IS NULL").run(trimmed, now, id).changes;
@@ -161,7 +173,7 @@ export class NoteMetadataRepository {
     }
     const now = this.deps.nowIso();
     this.assertNodeWritable(id);
-    this.assertNotDiarySubtree(id, "换图标");
+    this.assertNotDiaryContent(id, "换图标");
     const transaction = this.db.transaction(() => {
       this.db.prepare("UPDATE tree_nodes SET icon=?, updated_at=?, is_dirty=1 WHERE id=?").run(icon, now, id);
       this.db.prepare("UPDATE notes SET updated_at=?, is_dirty=1 WHERE id=(SELECT note_file_id FROM tree_nodes WHERE id=?) AND deleted_at IS NULL")

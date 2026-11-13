@@ -19,6 +19,11 @@ export interface UseWorkspaceActionsOptions {
   tree: NotebookTreeItem[];
   title: string;
   notebookId: string;
+  /**
+   * 当前工作区的空间标记（`useNotebookTreeData` 的 notebookSpace）："diary" = 日记空间。
+   * 行菜单的日记收敛只认这一条（与数据层 `diaryNotebookOf` 同口径：只认 space，不看标题）——不要另写判据。
+   */
+  notebookSpace: string | null;
   padTwoPane: boolean;
   /** 目录「新建」建到哪个节点下（overlay create 载荷）。 */
   createParent: string;
@@ -56,6 +61,7 @@ export function useWorkspaceActions(options: UseWorkspaceActionsOptions) {
     tree,
     title,
     notebookId,
+    notebookSpace,
     padTwoPane,
     createParent,
     menuFor,
@@ -136,8 +142,36 @@ export function useWorkspaceActions(options: UseWorkspaceActionsOptions) {
     } catch { showToast("新建失败", { type: "error" }); }
   }, [loadTree, notebookId, expandGroup]);
 
+  /**
+   * 日记空间的行菜单（261113 用户裁决，AGENTS §3#25②）：
+   *  · 日记本**节点本身**（id === notebookId）⇒ 只开放「重命名 / 设置图标」（其余约束照旧）；
+   *  · 日记子树（年/月分组、日记条目）⇒ 只保留只读项，绝不出现重命名/图标/移动/删除。
+   * 判据单一来源 = 工作区自己的 notebookSpace（与数据层 diaryNotebookOf 同口径），null 时返回 null 走原菜单。
+   * 数据层另有硬闸（改名/图标/移动/排序/删除），这里只收敛用户能点到的入口。
+   */
+  const diaryMenuItems = (node: NotebookTreeItem): MobileSheetItem[] | null => {
+    if (notebookSpace !== "diary") return null;
+    if (node.id === notebookId) {
+      return [
+        { id: "rename", label: "重命名", icon: Pencil },
+        { id: "icon", label: "设置图标", icon: SmilePlus },
+      ];
+    }
+    if (node.kind === "note") {
+      // 条目：只读（历史版本 / 属性）。标题=日期、图标/移动/删除都不提供（删除/转文档在「日记」页的条目 ⋯ 里）。
+      return [
+        { id: "history", label: "历史版本", icon: History },
+        { id: "info", label: "属性", icon: Info },
+      ];
+    }
+    // 年/月分组：没有任何可写动作；给一条只读说明，避免空菜单（顺序由日期派生）。
+    return [{ id: "diary-structure", label: "日记的年/月分组由日期自动生成", icon: Info, disabled: true }];
+  };
+
   /** 目录树长按菜单（思源 .b3-menu--sheet 口径）：移动到… 用子层下钻，删除走危险项 + 确认框 */
   const treeMenuItems = (node: NotebookTreeItem): MobileSheetItem[] => {
+    const diaryItems = diaryMenuItems(node);
+    if (diaryItems) return diaryItems;
     const groups = tree.filter((x) => x.kind === "group" && x.id !== node.id);
     return [
       // 261019 用户点单：**菜单里不再放「新建文档 / 新建分组」** —— 行内 ＋（新建子项）与抽屉工具栏「新建」
