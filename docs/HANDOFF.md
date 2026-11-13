@@ -25,7 +25,8 @@
 - **验证**：tsc 0；定向 vitest（registry/hook/settingsSearch/settingsGroups）绿；`check:bundle` / `check:arch` PASS；隔离实例（临时 `LAKE_USER_DATA` + CDP 9232，结束时清进程与目录）实测：⌘P/⌘K 搜索、⌘N 弹窗、F9 同步理由提示、Esc 关闭、⇧⌘[ / ⇧⌘] 切标签、⌘W 关标签（2→1）、无标签 ⌘W no-op。
 - **P2（可修改）未做（用户 261114 裁决）**：调研坑 = 菜单 accelerator 双轨 / 平台归一 / 内核保留键 / 录制 UX / 设置项搜索结果；触发条件 = 命令数 15+ 或常用键不顺手。
 - **第二批（`eaf5ab9f`，用户 261114「继续推进第二批」）**：标签切换增加 `⌃⇥ / ⌃⇧⇥` 通道（与 `⇧⌘] / ⇧⌘[` 并列）；新增 `⇧⌘G` 锁定/解锁当前文档（编辑器 contenteditable 实测 true→null→true）、`⌥H` 打开当前文档历史；设置页/搜索随注册表自动加两行。实测隔离实例通过；全量门禁随本批转绿（见 §1）。
-- ⚠️ **全量 vitest 本轮未作判据**：并行会话的 S3 WIP 未提交，其 4 个 S3 用例（folderPurgeCloud / remFolderParent / scenarioMatrix S17* / planQuickBodyRefs）正红；本批只 stage 自己的 10 个文件，未触碰其文件。
+- **全量 vitest（`eaf5ab9f` 之后）= 0 failed**（928 文件 / 5885 用例；并行会话的 S3 WIP 已落地，红不再出现）。
+- **261114 追加（用户点单）**：移动端「云端与同步」把「第三方 S3 服务说明」**移到页首**（先讲计费/隐私，再填连接信息）；`settings-s3` 快照重烤（元素数 2045 不变、指纹更新；`--states settings-s3 --write-baseline` 合并写回，其余 9 态保留），APK 已 `--sync --install` 到 lake_mobile（5554，可点击窗口）与 lake_gate（5556）。
 
 ### 261113 · S3 真实桶实测 + 流程缺陷修复批（D1-C / D3 / D4 / C1-C2-C4 / P1）
 
