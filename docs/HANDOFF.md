@@ -66,7 +66,7 @@
 ### 261113 · S3 真实桶实测 + 流程缺陷修复批（D1-C / D3 / D4 / C1-C2-C4 / P1）
 
 - **真实桶端到端矩阵**（双桌面隔离实例 + 真实桶，3 轮 **272 断言**，脚本与证据在 `/tmp/lake-e2e`）：笔记本/嵌套目录/改名移动/软删恢复/purge+重建×5、文档双向改与冲突、小记快路径连点、资产差集与 GC、缺正文从云端恢复（含重启）、「云端已删除·仅本地」双遍 —— 大部分 PASS；抓到 5 个稳定问题（C1 高 / C2、C3 中 / C4 低-中 / C5 低）。
-- **修掉的**：**C1** 小记「他端删除→本端恢复」跨端失效 + 删除回弹（merge 的 local-delete 缺时间戳比较 + saveQuickNotes 只看墓碑存在性 ⇒ 改为「远端 updatedAt vs 基线/墓碑」LWW）；**C2** 纯拉取轮小记时间戳 1970（engineBridge 优先用远端 meta 时间）；**C4** 冲突文案误标（新增 `conflict_kept_history` kind：「已保留本地历史版本」）。**待修**：C3 锁只在渲染层（主进程保存/同步不校验 isLocked）、C5 `runS3DeepCleanup` 的 ignoreRetention 形参被忽略。
+- **修掉的**：**C1** 小记「他端删除→本端恢复」跨端失效 + 删除回弹（merge 的 local-delete 缺时间戳比较 + saveQuickNotes 只看墓碑存在性 ⇒ 改为「远端 updatedAt vs 基线/墓碑」LWW）；**C2** 纯拉取轮小记时间戳 1970（engineBridge 优先用远端 meta 时间）；**C4** 冲突文案误标（新增 `conflict_kept_history` kind：「已保留本地历史版本」）；**C5** 手动「立即清理」被保留窗口挡住（`ignoreRetention` 透传成 `retentionDays=0`）。**C3 定案 = 不是缺陷**：锁只在渲染层是设计（只锁本地编辑、不拦同步，守卫不得下沉共用写函数，AGENTS §4 已记）；真实桶 UI 路径已验证（编辑器当场翻只读、UI 打字不落 DOM、解锁恢复）。
 - **静态审查 12 条**（`docs/SYNC-PROTOCOL` 逐段对代码）：已修 **P1 小记共享正文对象被按 hash 误删**（删一条毁另一条云端正文，两处删除路径都加引用检查）；**P1 剩余**：附件 PUT 失败仍写新声明（声明在/对象缺、永不重试）、发布轮丢「云端已删除」副本的回收站落库；**P2 待修**：目录缺位置三件套合并、小记标签发布侧 LWW、快路径不排序 tagIds、小记 purge 漏删 `meta/assets` 前缀。
 - **D4 墓碑退役**：恢复过的目录/叶子不再背永久墓碑（他端删除不再被静默丢弃、不再复活）；删掉零调用且 SQL 坏掉的 `revokeLocalDeletion`；复查补「叶子恢复」漏洞。**D1-C**：移动 baseline 搬出 `sync_v3_state` 整行 → `sync-v3/baseline.json.gz.b64`（5000 文档行 1.11MB→247B、文件 426KB、过桥约 -82%），文件损坏/丢失 = 同步硬失败（绝不把缺基线当「云端缺席=删除」）。**D3**：移动云清理补「预览 + dryRun」，候选数与已删数分开、无预览不能删。
 - 门禁：tsc 0；core/s3v3 + electron/s3v3 107 文件 / 580 例、mobile 71 文件 / 287 例、全量 mobile 326 文件 / 1632 例全过；diff-check 干净。
@@ -128,21 +128,21 @@
 **版本与仓库**
 
 - 主分支 `master`；**HEAD 以 `git log -1` 为准**；R2 已提交 6 笔拆分/设备记录（`a23631f6` sidebar / `fd268432` settings / `231fe845` electron boot / `c00d3a60` lakeRuntime / `4a9b965c` ink 测试 / `e352e2cb` 设备记录）；**产品代码基线 = `8e20a6a3`（R0）/ `e87016bd`（R1）/ `e352e2cb`（R2）/ `3fad8821`（R2 收尾：位置合并 + 同步专用写路径 + 单篇降级）**；**日记收口批产品笔 = `199f3403`（不可变守卫）/ `fd58dc0a`（移动移除取消标记）/ `d4d03260`（移动目标剔除日记子树）/ `f965e62c`（转文档共享弹窗）/ `4b6a524a`（转小记媒体搬运）/ `400dcc75`（showNotice 全空间可见）**；**261113 批 = `839c7a93`（发版复核 P2/P3）/ `a57cf3cf`（移动端「转为小记」+ 22 号报告 §11 + RELEASE.md Secrets 节）**（详见 §0）。
-- **未 push**（261113 10:17 实测）：`origin/master` = `github/master` = `bbc39bc4`；本地**领先 2 个提交**（`de244d3a` 移动设置批 / `2084e1bd` HANDOFF 批），数量以 `git rev-list --count origin/master..HEAD` 为准。需要推送时按 AGENTS §2 双远端流程。
+- **未 push**（261114 实测，已 fetch 核对）：`origin/master` = `github/master` = `608eb8d2` = 本地 HEAD；**0 提交待推**（双远端同步）——以后以 `git rev-list --count origin/master..HEAD` 为准。
 - `package.json` = **1.1.1**；Android `versionName 1.1.1` / `versionCode 11101`（从根 package.json 派生：`1000 + major*10000 + minor*100 + patch`，只增不减；**不手改 build.gradle**）。
 - tag：`v1.0.0`–`v1.0.5`、`v1.1.0`、**`v1.1.1`（261112 已发：GitHub Release 已创建，8 个资产 = Android APK / macOS arm64+dmg+zip / Windows exe / latest.json / release-body；Release workflow run 43232450665；本地 packaged smoke 通过）**；已发布 tag 不再移动。发布说明 = [docs/RELEASE-NOTES.md](RELEASE-NOTES.md)（**v1.1.1 → v1.0.0** 倒序；当前 tag 段落 = CI 生成 GitHub Release 正文的来源）。
 - 分支/远端：`master` 唯一长期分支；`origin` = Gitee（SSH，第二 pushurl = GitHub HTTPS）⇒ `git push origin <branch>` 一次推两边；GitHub 只在推 tag 时构建。remote 不入库 ⇒ 新 clone 跑 `npm run setup:remotes`。
-- **工作树**：截至 261113 批已提交（HEAD 以 `git log -1` 为准）；**并行会话的 `src/mobile/settings/**` WIP 未纳入本批**；本批文档收口（AGENTS/DIARY/guide16/HANDOFF/README/MOBILE-OPS）以「只 stage 本批文件」提交，**绝不用 `git add -A`**。
+- **工作树**：261114 实测**干净**（并行会话的移动 AI / 云同步开启闸门 / S3 说明等 WIP 均已由各自会话提交并双推）；历史上并行会话共用工作树时一律「只 stage 本批文件」，**绝不用 `git add -A`**。
 - 261110 一次性历史清理（`.ai-writing-recon/` 用 `git filter-repo` 从全部历史移除，重写 v1.1.0 之后的提交；tag 未变）⇒ 旧 clone 需 `git fetch --force --prune && git reset --hard origin/master`。
 
-**门禁基线（261113 最新一次实测；分层口径见 AGENTS §3#21）**
+**门禁基线（261114 全量实测 @ `608eb8d2`；分层口径见 AGENTS §3#21）**
 
 - `npx tsc --noEmit` = **0**。
-- 全量 vitest（低负载串行门禁，261114 快捷键第二批 `eaf5ab9f` 之后）：**文件 = 总 928（917 passed / 11 skipped）**；**用例 = 总 5885（5873 passed / 12 skipped）/ 0 failed**。偶发 `perf.integration` 满载抖动口径见下条（单跑复验通过）。
+- 全量 vitest（低负载串行门禁）：**文件 = 总 931（920 passed / 11 skipped）**；**用例 = 总 5901（5889 passed / 12 skipped）/ 0 failed**。偶发 `perf.integration` 满载抖动口径见下条（单跑复验通过）。
 - ⚠️ `electron/s3v3/perf.integration.test.ts`：**低负载串行本轮无抖动（通过）**；满载/并发构建时偶发（单跑 PASS），门禁判定以单跑/低负载为准（同 §2 既有口径）。
 - `node scripts/ui-metrics.mjs`：颜色 0 / 字号 0 / `!important` 9 = 允许清单 / `crossFileDupGroups` 45 / `shadowedDecls` **0**（task-34 已清零，门禁只降）/ 未定义令牌 0。
-- `check:core` 172 文件 0 违规；`check:mobileui` 通过。
-- `check:bundle` + `check:arch` PASS：desktop 首屏 567,551 / 600,000、app-js 196,192 / 307,200；mobile 首屏 348,211 / 360,000、entry 60,803 / 61,440、CSS 139,503 / 141,312、preload 6。
+- `check:core` **178** 文件 0 违规；`check:mobileui` 通过。
+- `check:bundle` + `check:arch` PASS：desktop 首屏 571,442 / 600,000（余量 28.6KB）、app-js 197,537 / 307,200；mobile 首屏 353,397 / 360,000（余量 6.6KB）、entry 61,006 / 61,440（余量 434B，**贴预算**）、CSS 139,532 / 141,312、preload 7；vendor CSS 分层审计 OK。
 - `git diff --check` = **0**。
 - **真实 S3 桶验收**：A 档三桌面隔离实例 **20/20 PASS**（`3fad8821`）；**B 档 13 条 57/57 PASS**（task-58，含 S72 修复后复跑），唯一测试前缀 **0 残留**（[19](audit-261112/19-s3-real-bucket-subset.md)）。**移动多端 A–K 已跑完（task-72/74 已关闭；D 场景修复后复跑 9/9、收尾 0 残留，见 [21 号报告](audit-261112/21-s3-multi-end-mobile.md)）**。
 - 设备/视觉（最近记录）：手机 **10 态** + 平板 **10 态** 基线重烤并连跑两轮 0 差异；23 屏走查 23/23；`edit-surface-invariants` quicknote 11 + document 11 ALL PASS；capture 入口装置 10/10。**桌面 `check:stylesnap` 42 态已重烤**（34 严格态两轮 0 差异，8 窄窗按 UNSTABLE 跳过；基线已更新，见 §3）。
