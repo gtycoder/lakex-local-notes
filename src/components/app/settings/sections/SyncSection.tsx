@@ -66,9 +66,12 @@ export function SyncSection({ c }: { c: SettingsPanelContext }) {
                       <Switch
                         itemId="sync-enabled"
                         name="启用云同步"
-                        desc={enableGate.allowed || syncCfg.enabled ? "关闭后按纯本地空间工作：不连 S3、不自动同步，也不会从云端补拉缺失资源；重新开启后下一次同步会自动补拉。S3 配置与同步策略只保存在本机。" : enableGate.message}
+                        desc="关闭后按纯本地空间工作：不连 S3、不自动同步，也不会从云端补拉缺失资源；重新开启后下一次同步会自动补拉。S3 配置与同步策略只保存在本机。"
                         note={<><span className="ln-tag ln-tag--pending">{CLOUD_PRIVACY_NOTICE.badge}</span>{" "}{CLOUD_PRIVACY_NOTICE.text}</>}
-                        alert={syncGateAlert}
+                        // 261114 用户点单：闸门提醒用**红字**（错误色单一来源 .config-item__error），且只出现一处（不再与 desc 重复）。
+                        alert={syncGateAlert
+                          ? <span className="config-item__error">{syncGateAlert}</span>
+                          : enableGate.allowed ? undefined : <span className="config-item__error">{enableGate.message}</span>}
                         checked={syncCfg.enabled}
                         onChange={(checked) => {
                           // 261114：没有配置 / 没有通过连接测试 ⇒ 不能开启；点击给出可见提示，状态保持关闭。

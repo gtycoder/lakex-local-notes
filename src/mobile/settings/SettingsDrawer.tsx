@@ -495,9 +495,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
               <Group title="同步策略" icon={<RefreshCw size={16} />}>
                   <Switch
                     name="启用云同步"
-                    desc={syncEnableGate.allowed || syncCfg?.enabled === true
-                      ? "关闭后本机按纯本地空间工作：不连 S3、不自动同步，回收站恢复/预览也不会去云端补拉缺失资源；重新开启后下次同步会自动补拉。"
-                      : (syncEnableGateMessage ?? "")}
+                    desc="关闭后本机按纯本地空间工作：不连 S3、不自动同步，回收站恢复/预览也不会去云端补拉缺失资源；重新开启后下次同步会自动补拉。"
                     note={<><span className="mb-tag mb-tag--pending">{CLOUD_PRIVACY_NOTICE.badge}</span>{" "}{CLOUD_PRIVACY_NOTICE.text}</>}
                     checked={syncCfg?.enabled === true}
                     onChange={(next) => {
@@ -511,7 +509,13 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                       updateSyncSettings({ enabled: next });
                     }}
                   />
-                  {syncEnableHint && <div className="mb-set-item__desc mb-set-item__desc--warn" role="status">{syncEnableHint}</div>}
+                  {/* 261114 用户点单：闸门提醒用**红字**（.mb-form__desc--error 单一来源），且只出现一处（desc 保持正常说明）。
+                      边界：提醒必须落在分组卡**内部的行/块**里（Block 自带 18px 横向内距），不能作为裸 div 贴在卡外缘。 */}
+                  {(syncEnableHint || syncEnableGateMessage) && (
+                    <Block>
+                      <div className="mb-form__desc mb-form__desc--error" role="status">{syncEnableHint || syncEnableGateMessage}</div>
+                    </Block>
+                  )}
                   {syncCfg?.enabled !== false && (
                     <>
                       {/* 261113 用户点单：说明长 + 选项值长（「仅在开启/关闭时同步」）⇒ 上下两段，不挤一行。 */}
