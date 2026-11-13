@@ -23,6 +23,25 @@ const state = (over: Partial<PlanState> = {}): PlanState => ({
   restorePending: [], purgeIntents: [], folderPurgeIntents: [], ...over,
 });
 
+describe("小记标签关系发布侧 LWW 与 purge 前缀（261113 P2）", () => {
+  it("他端关系更新 + 本端要发布正文 ⇒ 发布索引带**远端** tagIds（不被本地旧值覆盖）", () => {
+    const base = world([quick("q1", { contentHash: "h1", tagIds: ["t-a"], tagsUpdatedAt: "T1" })]);
+    const local = world([quick("q1", { contentHash: "h2", tagIds: ["t-a"], tagsUpdatedAt: "T1" })]);
+    const remote = world([quick("q1", { contentHash: "h1", tagIds: ["t-b"], tagsUpdatedAt: "T2" })]);
+    const plan = planSync({ local, base, remote, state: state() });
+    const item = plan.publish!.quickNotes.items.find((q) => q.id === "q1")!;
+    expect(item.tagIds).toEqual(["t-b"]);
+    expect(item.tagsUpdatedAt).toBe("T2");
+  });
+
+  it("小记 purge 前缀含 meta/assets（与 s3v3Keys 单一来源一致，避免云端孤儿声明）", () => {
+    const base = world([quick("q1", { contentHash: "only" })]);
+    const plan = planSync({ local: base, base, remote: base, state: state({ purgedQuickIds: ["q1"] }) });
+    const del = plan.deletes.find((d) => d.space === "quickNotes")!;
+    expect(del.prefixes).toEqual(["quick-notes/assets/q1/", "quick-notes/meta/assets/q1/"]);
+  });
+});
+
 describe("小记 purge 的正文对象引用检查（261113 P1）", () => {
   it("另一条小记共用同一 contentHash ⇒ 不删正文对象", () => {
     const base = world([quick("q1", { contentHash: "shared" }), quick("q2", { contentHash: "shared" })]);

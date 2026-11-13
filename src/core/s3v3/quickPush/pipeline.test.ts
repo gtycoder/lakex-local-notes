@@ -109,6 +109,15 @@ const summary = (ops: Op[]) => ops.map((o) => o.op + " " + o.key);
 const quickBodyKey = (hash: string) => quickNoteBodyKey(hash);
 
 describe("单条推送独立管线：请求序列（261110 剥离 + 提速）", () => {
+  it("发布索引里的 tagIds 排序（顺序不跨端传播，与整轮同口径）", async () => {
+    const f = fixture({ local: localEntry("q1", "hello", { tagIds: ["t-b", "t-a"], tagsUpdatedAt: "2026-01-02T00:00:00.000Z" }) });
+    const out = await runQuickPush(f.deps, "q1");
+    expect(out.status).toBe("pushed");
+    const saved = f.device.savedBaselines.at(-1) as { quickNotes: QuickNotesIndex };
+    const entry = saved.quickNotes.items.find((q) => q.id === "q1")!;
+    expect(entry.tagIds).toEqual(["t-a", "t-b"]);
+  });
+
   it("成功推一条 = 11 次请求，固定顺序；锁内只读一次 pointer（无入口读），释放锁不查 owner", async () => {
     const f = fixture();
     const result = await runQuickPush(f.deps, "q1");

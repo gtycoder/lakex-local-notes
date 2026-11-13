@@ -9,7 +9,7 @@
  *    但契约已占位；dry-run 对拍（E1-3）先比合并决策与读写集合。
  */
 import type { LakeIndex, QuickNotesIndex } from "../protocol/index.js";
-import { lakeBodyKey, quickNoteBodyKey } from "../protocol/index.js";
+import { lakeBodyKey, quickNoteBodyKey, quickNotePurgePrefixes } from "../protocol/index.js";
 import { planLakeMerge, planQuickNotesMerge } from "../../s3v3Merge.js";
 import { lockStateOf, mergeNoteLock, mergeNotePosition, positionFields, positionOf } from "./positionMerge.js";
 import { compareQuickNoteTagVersion, mergeQuickNoteTags } from "../../quickNoteTags.js";
@@ -128,6 +128,7 @@ export function planSync(input: PlanInput): SyncPlan {
   const suspiciousBodyIds = new Set(input.state.suspiciousBodyIds ?? []);
 
   const baseNotesById = new Map((base?.lake.notes ?? []).map((n) => [n.id, n] as const));
+  const baseFoldersById = new Map((base?.lake.folders ?? []).map((f) => [f.id, f] as const));
   for (const p of lakePlan.notes) {
     const l = p.local;
     const r = p.remote;
@@ -278,9 +279,24 @@ export function planSync(input: PlanInput): SyncPlan {
   // 若本轮没有别的变更就会走「零变更短路」不发布，云端索引 folders[] 永久保留已删目录（对端会重新导入）。
   for (const f of lakePlan.folders) {
     if (f.uploadLocal || f.kind === "local-delete" || f.kind === "local-purge") indexChanged = true;
+    // 261113（P2 #4 真实桶实测）：目录的**位置三件套同样独立三方合并**（与文档同口径）。
+    // 他端改名会把 updatedAt 抬高，若只按 updatedAt 判，本地「移入/移出回收站」这一动作永远不会
+    // 发布（删除不传播，对端一直可用）；恢复方向同理。位置本地赢 ⇒ 必须发布；远端赢 ⇒ 应用远端位置。
+    const fPos = mergeNotePosition({
+      base: positionOf(baseFoldersById.get(f.id)),
+      local: positionOf(f.local),
+      remote: positionOf(f.remote),
+      localUpdatedAt: f.local?.updatedAt ?? "",
+      remoteUpdatedAt: f.remote?.updatedAt ?? "",
+    });
+    const folderPosLocalWins = fPos.winner === "local";
+    if (folderPosLocalWins) indexChanged = true;
     // 目录元数据也要真正落到本地状态（否则对端永远显示活跃：回收站/父级变更传不过去）。
-    if (f.applyRemote && f.remote) writes.push({ kind: "apply-remote-folder", space: "lake", id: f.id, meta: { ...f.remote } });
-    else if (f.kind === "remote-purged-trash") writes.push({ kind: "remove-folder", id: f.id });
+    // 本地位置赢时把本地位置塞进 meta，避免远端后台元数据把本地「已进回收站」又拉回活跃。
+    if (f.applyRemote && f.remote) {
+      const meta = folderPosLocalWins && fPos.position ? withPosition({ ...f.remote }, positionFields(fPos.position)) : { ...f.remote };
+      writes.push({ kind: "apply-remote-folder", space: "lake", id: f.id, meta });
+    } else if (f.kind === "remote-purged-trash") writes.push({ kind: "remove-folder", id: f.id });
   }
 
   for (const p of quickPlan.items) {
@@ -337,7 +353,9 @@ export function planSync(input: PlanInput): SyncPlan {
       const stillReferenced = [...local.quickNotes.items, ...remote.quickNotes.items]
         .some((q) => q.id !== p.id && q.contentHash === l?.contentHash);
       const bodyKeys = l && !stillReferenced ? [quickNoteBodyKey(l.contentHash)] : [];
-      deletes.push({ space: "quickNotes", id: p.id, reason: "user-purge", prefixes: [`quick-notes/assets/${p.id}/`], ...(bodyKeys.length > 0 ? { keys: bodyKeys } : {}) });
+      // 261113（P2）：前缀用 s3v3Keys.quickNotePurgePrefixes 单一来源（旧实现手写只剩 assets/，
+      // 漏了 meta/assets/{id}/ ⇒ 云端孤儿声明堆到 GC；两边口径曾经分叉）。
+      deletes.push({ space: "quickNotes", id: p.id, reason: "user-purge", prefixes: quickNotePurgePrefixes(p.id), ...(bodyKeys.length > 0 ? { keys: bodyKeys } : {}) });
       indexChanged = true;
     }
   }
@@ -450,15 +468,57 @@ export function planSync(input: PlanInput): SyncPlan {
       .filter((n): n is NonNullable<typeof n> => !!n);
     const quickItems = quickPlan.items
       .filter((p) => p.kind !== "local-purge" && p.kind !== "local-delete")
-      .map((p) => (p.applyRemote && p.remote ? p.remote : p.local ?? p.remote))
-      .filter((q): q is NonNullable<typeof q> => !!q)
-      // 发布时标签关系一律排序成集合（顺序不跨端传播）。
-      .map((q) => (q.tagIds?.length ? { ...q, tagIds: [...q.tagIds].sort() } : q));
+      .map((p) => {
+        const baseItem = p.applyRemote && p.remote ? p.remote : p.local ?? p.remote;
+        if (!baseItem) return null;
+        // 261113（P2）：小记标签关系**发布侧 LWW 合成**（与 lake 文档同口径，plan.ts 上方已修）。
+        // 否则「他端改了标签 + 本端要发布正文」这一轮会用本地旧 tagIds 覆盖远端，且基线随发布固化
+        // ⇒ 他端的标签改动静默回滚、无自愈。正文来源不变，只按关系版本单独挑标签字段。
+        const l = p.local;
+        const r = p.remote;
+        const lt = l?.tagsUpdatedAt ?? "";
+        const rt = r?.tagsUpdatedAt ?? "";
+        let tagIds = baseItem.tagIds;
+        let tagsUpdatedAt = baseItem.tagsUpdatedAt;
+        if (l && r) {
+          const ltags = [...(l.tagIds ?? [])].sort().join("\u0000");
+          const rtags = [...(r.tagIds ?? [])].sort().join("\u0000");
+          if (rt > lt) { tagIds = r.tagIds ?? []; tagsUpdatedAt = rt; }
+          else if (lt > rt) { tagIds = l.tagIds ?? []; tagsUpdatedAt = lt; }
+          else if (lt || ltags || rtags) {
+            // 同版本：确定性 tie-break（排序后集合串字典序，两端选同一赢家）
+            tagIds = ltags >= rtags ? (l.tagIds ?? []) : (r.tagIds ?? []);
+            tagsUpdatedAt = lt || rt;
+          }
+        }
+        return {
+          ...baseItem,
+          // 发布时标签关系一律排序成集合（顺序不跨端传播；空集合不写，保持既有 wire 形状）。
+          ...(tagIds?.length ? { tagIds: [...tagIds].sort() } : {}),
+          ...(tagsUpdatedAt ? { tagsUpdatedAt } : {}),
+        };
+      })
+      .filter((q): q is NonNullable<typeof q> => !!q);
     const folders = lakePlan.folders
       // F-01b：remote-purged-trash 与文档同口径——对端已 purge 的目录只剩本地回收站副本，
       // 绝不重新发布（旧实现把它当普通条目 publish 回去 ⇒ 云端 folders[] 永久残留 + 两端互刷）。
       .filter((f) => f.kind !== "local-purge" && f.kind !== "local-delete" && f.kind !== "remote-purged-trash")
-      .map((f) => (f.applyRemote && f.remote ? f.remote : f.local ?? f.remote))
+      .map((f) => {
+        const baseItem = f.applyRemote && f.remote ? f.remote : f.local ?? f.remote;
+        if (!baseItem) return null;
+        // 261113（P2 #4）：位置三件套独立合成（与文档同口径）——元数据可以是远端赢（改名更晚），
+        // 但位置必须按位置赢家写，否则本地「进/出回收站」永远发不出去（删除不传播）。
+        const fPos = mergeNotePosition({
+          base: positionOf(baseFoldersById.get(f.id)),
+          local: positionOf(f.local),
+          remote: positionOf(f.remote),
+          localUpdatedAt: f.local?.updatedAt ?? "",
+          remoteUpdatedAt: f.remote?.updatedAt ?? "",
+        });
+        if (fPos.winner === "local" && fPos.position) return withPosition(baseItem, positionFields(fPos.position));
+        if (fPos.winner === "remote" && fPos.position) return withPosition(baseItem, positionFields(fPos.position));
+        return baseItem;
+      })
       .filter((f): f is NonNullable<typeof f> => !!f)
       // 日记标记（261109）：发布时**必须显式写** space —— 非日记写 null（不是省略字段），
       // 否则「日记本 ↔ 普通笔记本」的归属变更在 wire 上不可见、两端会互刷（docs/DIARY.md 硬规则 1）。

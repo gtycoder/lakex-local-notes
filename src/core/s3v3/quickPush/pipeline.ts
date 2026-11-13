@@ -383,7 +383,14 @@ async function runQuickPushOnce(deps: QuickPushDeps, id: string): Promise<QuickP
     phase("push-upload");
     uploadedContent = remoteEntry?.contentHash !== contentHash;
 
-    const entry: QuickNoteEntry = { ...local, contentHash, ...(decl ? { assetsHash: decl.declHash } : {}) };
+    // 261113（P2）：顺序是设备本地视图，wire 上 tagIds 只当**集合** —— 整轮发布早就排序，快路径漏了，
+    // 同一集合因顺序不同会算出不同 commit ⇒ 云端索引抖动、他端把顺序写回本地。这里与整轮同口径。
+    const entry: QuickNoteEntry = {
+      ...local,
+      contentHash,
+      ...(decl ? { assetsHash: decl.declHash } : {}),
+      ...(local.tagIds?.length ? { tagIds: [...local.tagIds].sort() } : {}),
+    };
     if (!decl) delete (entry as { assetsHash?: string }).assetsHash;
     const items = [...remoteIndex.items.filter((q) => q.id !== id), entry].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
     // SD-09：单条推送也是一次发布，同样按保留窗口裁剪（否则会把旧墓碑重新带回云端）。

@@ -210,6 +210,11 @@ export function createDeviceStoreMeta(deps: DeviceStoreMetaDeps): DeviceStoreMet
 
   /** 目录 version：笔记本只能根层（回收站除外）；分组的父按文档同一套兜底。 */
   async function resolveRemoteFolderParent(folder: LakeFolderEntry): Promise<string | null> {
+    // 261113（P2 #4）：wire 上 trashed 条目的 parentId 一律投影成 null（与文档同口径，见 positionOf），
+    // 落库时必须按 trashedAt 归到本地回收站容器；否则会把「已进回收站」的目录误判成根层、
+    // 再经 applyRemoteFolderMeta（它按 parentId===回收站 推导 trashed）把 trashed_at 清成 null ⇒
+    // 本地目录被同步「复活」，之后 purge/删除全部失效。
+    if (folder.trashedAt) return TRASH_NOTEBOOK_ID;
     if (folder.parentId === TRASH_NOTEBOOK_ID) return TRASH_NOTEBOOK_ID;
     if (folder.nodeType === "notebook") return null;
     return resolveRemoteParent(folder.parentId);

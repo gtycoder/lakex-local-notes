@@ -65,6 +65,22 @@ describe("planSync（v4 E1-2 决策层）", () => {
     expect(plan.publish?.lake.notes).toHaveLength(0);
   });
 
+  it("P2 #4（261113）：他端改名（updatedAt 更晚）+ 本地移入回收站 ⇒ 位置本地赢并发布（删除不被吞）", () => {
+    const base = world([], [folder("f1")]);
+    const trashed = { ...folder("f1"), updatedAt: "T1", trashedAt: "T1", deletedFromParentId: null };
+    const local = world([], [trashed]);
+    const remote = world([], [{ ...folder("f1"), title: "他端改名", updatedAt: "T2" }]);
+    const plan = planSync({ local, base, remote, state: state() });
+    const pub = plan.publish!.lake.folders.find((f) => f.id === "f1")!;
+    // 位置（进回收站）必须按本地写进索引 —— 否则对端永远看不到这次删除
+    expect(pub.trashedAt).toBe("T1");
+    // 元数据仍按远端赢（改名要落到本地），且不能让远端后台元数据把本地状态拉回活跃
+    const folderWrite = plan.writes.find((w) => w.kind === "apply-remote-folder" && w.id === "f1");
+    expect(folderWrite).toBeTruthy();
+    expect((folderWrite as { meta: { title?: string; trashedAt?: string | null } }).meta.title).toBe("他端改名");
+    expect((folderWrite as { meta: { trashedAt?: string | null } }).meta.trashedAt).toBe("T1");
+  });
+
   // ===== task-77（F-01b）：目录 purge / 对端已 purge 目录的发布与上传口径 =====
   it("F-01b：目录 purge 意图（folderPurgeIntents）⇒ local-purge，发布不含该目录、也不回下载", () => {
     const base = world([], [folder("f1")]);
