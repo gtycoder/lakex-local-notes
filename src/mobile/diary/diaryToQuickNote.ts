@@ -1,18 +1,16 @@
 /**
  * 日记条目 → 小记（261113 task-106）：移动端对齐桌面 `electron/diaryQuickNoteConversion.ts`。
  *
- * 语义（AGENTS §3#25 / docs/DIARY.md）：
- *  · 用日记条目的**原 Lake 正文**创建一条小记（复制新 id），图片/附件卡片搬到小记资产作用域
+ * 语义（AGENTS §3#25 / docs/DIARY.md；261113 用户裁决 = **复制 + 原稿进回收站**）：
+ *  · 用日记条目的**原 Lake 正文**创建一条小记（复制新 id），图片/附件卡片**复制**到小记资产作用域
  *    （`/<noteId>/` → `/quick-notes/<newId>/`），**原资产保留**（回收站恢复日记时仍完整）；
  *  · 原文随后**软删进回收站**（可恢复，不 purge、不写墓碑）；
- *  · 小记承载不了的卡片整段剥掉并在 `droppedKinds` 如实上报（不静默丢）；
+ *  · **卡片零剥离**：同一内核 Lake 正文原样承载（画板/自定义块/公式全部保留；`droppedKinds` 字段保留但恒空）；
  *  · 非 doc 类型（表格/多维表/画板/手写板）整篇拒绝；
  *  · **失败回滚**：小记没建好/资源没搬完就不删日记；软删失败也把小记回滚干净（不留半成品）。
  *
  * 复用：作用域改写 = core `rewriteQuickNoteAssetScope`；内容校验 = core `normalizeQuickNoteContent`；
  * 写库 = 移动 `saveQuickNoteContent`（.qnote 正文 + quick_notes 行）；软删 = 移动 `trashTreeItem`。
- * ⚠️ 桌面侧 `stripUnsupportedCards` / `referencedAssetNames` 仍私有在 electron 文件里（本次不改桌面）；
- * 本文件按**同口径**复制，两处必须同步改（护栏 = 本文件测试 + 桌面 diaryQuickNoteConversion 测试）。
  */
 import { mimeTypeForFilename } from "../../core/assetNaming.js";
 import { readImageDimensions } from "../../core/imageUtils.js";

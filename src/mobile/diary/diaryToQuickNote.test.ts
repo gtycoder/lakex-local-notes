@@ -1,7 +1,7 @@
 /**
  * 日记 → 小记（移动端 261113 task-106）：与桌面 electron/diaryQuickNoteConversion 同口径的行为覆盖。
  * 覆盖：完整搬运（作用域改写 / 图片+附件清单与文件一致）、纯文本镜像、原文软删可恢复、
- * 缺失资产拒绝、非 doc 拒绝、droppedKinds 剥离、失败回滚（保存失败 / 软删失败都不留半成品）。
+ * 缺失资产拒绝、非 doc 拒绝、卡片零剥离（droppedKinds 恒空）、失败回滚（保存失败 / 软删失败都不留半成品）。
  */
 import { describe, expect, it, vi } from "vitest";
 import path from "node:path";

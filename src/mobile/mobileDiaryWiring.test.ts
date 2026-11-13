@@ -131,9 +131,9 @@ describe("日记「转为小记」接线（261113 task-106，与桌面同语义�
     expect(CONVERT).toContain("droppedKinds");
   });
 
-  it("提示文案与桌面同源字段（base 文案 + 卡片中文名 + 未搬运说明）", () => {
+  it("提示文案与桌面同源（零剥离后只有基础文案，不再有「未搬运」分支）", () => {
     expect(NOTICE).toContain("已转为小记（含图片/附件）；日记已移入回收站，可恢复");
-    expect(NOTICE).toContain("未搬运");
-    expect(NOTICE).toContain("画板");
+    expect(NOTICE).not.toContain("未搬运");
+    expect(NOTICE).not.toContain("CARD_KIND_LABELS");
   });
 });

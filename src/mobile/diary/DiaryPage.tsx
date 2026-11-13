@@ -381,8 +381,8 @@ export function DiaryPage({ nodes, onOpenEntry, onOpenSearch, onChanged }: Diary
               if (!ok) return;
               setQuickNoteBusy(true);
               try {
-                const result = await bridge.diaryToQuickNote(entry.noteId);
-                showToast(diaryToQuickNoteNotice(result.droppedKinds));
+                await bridge.diaryToQuickNote(entry.noteId);
+                showToast(diaryToQuickNoteNotice());
                 await onChanged();
               } catch (error) {
                 toastActionError("转为小记", error);
