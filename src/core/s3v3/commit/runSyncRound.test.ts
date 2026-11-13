@@ -54,6 +54,31 @@ async function seeded(base: PlanWorld) {
 }
 
 describe("E2-3 runSyncRound（四相编排）", () => {
+  it("P2 #10：user-purge 的对象删除在**发布成功之后**执行（先发布后清理）", async () => {
+    const base = world([doc("a", "v1")]);
+    const { ports, pointer } = await seeded(base);
+    const ops: string[] = [];
+    const origPut = ports.putRemote.bind(ports);
+    ports.putRemote = async (k: string, b: Uint8Array) => { ops.push("put:" + k); return origPut(k, b); };
+    const origDel = ports.deleteRemotePrefix.bind(ports);
+    ports.deleteRemotePrefix = async (p: string) => { ops.push("del:" + p); return origDel(p); };
+    const local = world([]); // 本地已彻底删除
+    const out = await runSyncRound({
+      local, base, remote: base, basePointer: pointer, deviceId: "me",
+      state: { restorePending: [], purgeIntents: ["a"], folderPurgeIntents: [] },
+    }, ports);
+    expect(out.commit.status).toBe("published");
+    expect(out.deleted).toBeGreaterThan(0);
+    // 对象确实被删；且删除发生在「写索引 / 写 pointer」之后（旧实现是 commit 前删）
+    const firstDelete = ops.findIndex((o) => o.startsWith("del:"));
+    const indexPut = ops.findIndex((o) => o.startsWith("put:meta/index/"));
+    const pointerPut = ops.findIndex((o) => o === "put:meta/pointer.json");
+    expect(firstDelete).toBeGreaterThan(-1);
+    expect(indexPut).toBeGreaterThan(-1);
+    expect(firstDelete).toBeGreaterThan(indexPut);
+    expect(firstDelete).toBeGreaterThan(pointerPut);
+  });
+
   it("本地更新 ⇒ 发布新一代：正文上传、索引更新、意图与待删队列保持干净", async () => {
     const base = world([doc("a", "v1")]);
     const { ports, pointer } = await seeded(base);

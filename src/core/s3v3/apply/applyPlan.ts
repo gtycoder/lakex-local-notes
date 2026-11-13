@@ -38,6 +38,8 @@ export interface ApplyOptions {
   verifyDownloadHashes?: boolean;
   /** 首拉 lazy 档：跳过声明读取（连声明的 GET 都不该有）。 */
   deferDeclarations?: boolean;
+  /** 261113（P2 #10）：把 plan.deletes 的执行推迟到「发布成功之后」（增量轮用，见下方 §5 注释）。 */
+  deferUserPurgeDeletes?: boolean;
   onProgress?: (p: { phase: ApplyPhase; done: number; total: number; bytes: number }) => void;
 }
 
@@ -150,6 +152,10 @@ export async function applyPlan(plan: SyncPlan, ports: ApplyPorts, opts: ApplyOp
   }
 
   // 5) 对象删除：只有 plan 明确的用户语义（user-purge）才删远端/本地。
+  // 261113（P2 #10）：默认在 Apply 段执行；**增量轮**传 deferUserPurgeDeletes=true 改到发布成功之后
+  // （AGENTS §12.2「先发布后清理」）：旧顺序在 commit 前就删对象 ⇒ 发布重试/失败时云端索引仍引用已删对象
+  // （小记共享 hash 时后果更重）。首传（initialRound）不涉及 user-purge，保持旧顺序。
+  if (opts.deferUserPurgeDeletes) return result;
   const prefixes = plan.deletes.flatMap((d) => d.prefixes ?? []);
   const keys = plan.deletes.flatMap((d) => d.keys ?? []);
   try {

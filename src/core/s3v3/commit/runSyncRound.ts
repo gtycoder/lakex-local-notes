@@ -63,6 +63,8 @@ export async function runSyncRound(input: RoundInput, ports: RoundPorts): Promis
   const plan = planSync({ local: input.local, base: input.base, remote: input.remote, state: input.state ?? { restorePending: [], purgeIntents: [], folderPurgeIntents: [] }, deferAssets: input.deferAssets });
 
   const apply = await applyPlan(plan, ports, {
+    // 261113（P2 #10）：user-purge 的对象删除推迟到发布成功之后（先发布后清理）。
+    deferUserPurgeDeletes: true,
     ...(input.deferAssets ? { deferDeclarations: true } : {}),
     ...(input.progress ? { onProgress: (p) => input.progress!({ phase: p.phase, done: p.done, total: p.total, bytesDone: p.bytes }) } : {}),
   });
@@ -102,6 +104,27 @@ export async function runSyncRound(input: RoundInput, ports: RoundPorts): Promis
     if (d.space === "lake") world.declarations[d.id] = { declHash: d.declHash, filenames: d.assets.map((a) => a.filename) };
     else world.quickDeclarations[d.id] = { declHash: d.declHash, filenames: d.assets.map((a) => a.filename) };
   }
+  // 261113（P2 #10）：**发布成功后**才执行 user-purge 对象删除（applyPlan 已按 apply 选项跳过这一段）。
+  // 发布失败/重试时对象与索引保持一致，不会出现「索引仍引用已删对象」；删除失败降级为 warning，下轮由
+  // 删除意图重试（intent 仍在）。retry 分支在上面已提前返回，这里只处理 published/unchanged/skipped。
+  let purgeDeleted = 0;
+  if (commit.status === "published" && plan.deletes.length > 0) {
+    try {
+      for (const d of plan.deletes) {
+        for (const prefix of d.prefixes ?? []) purgeDeleted += await ports.deleteRemotePrefix(prefix);
+        if (d.keys && d.keys.length > 0) {
+          await ports.deleteRemoteKeys(d.keys);
+          purgeDeleted += d.keys.length;
+        }
+      }
+    } catch (error) {
+      warnings.push({ code: "remote_incomplete", space: "lake", detail: "删除云端对象失败（下轮按删除意图重试）: " + (error instanceof Error ? error.message : String(error)) });
+    }
+    for (const d of plan.deletes) {
+      try { await ports.deleteLocalBody(d.space, d.id); } catch { /* 本地正文删除失败不影响发布会话；资源页可再清 */ }
+    }
+  }
+
   const pending = await ports.loadPending();
   const cleanup = await executePendingDeletes(pending, world, ports);
   warnings.push(...cleanup.warnings);
@@ -116,5 +139,5 @@ export async function runSyncRound(input: RoundInput, ports: RoundPorts): Promis
     : settleUnpublished(log, { epoch: nextPointer.epoch, generation: nextPointer.generation, indexIds: [...nextLake.notes.map((n) => n.id), ...nextQuick.items.map((q) => q.id)], restoredIds });
   await ports.saveIntentLog(intents);
 
-  return { plan, apply, assets, publish, commit, deleted: cleanup.deletedObjects, remainingPending: cleanup.remaining, intents, nextPointer, warnings };
+  return { plan, apply, assets, publish, commit, deleted: cleanup.deletedObjects + purgeDeleted, remainingPending: cleanup.remaining, intents, nextPointer, warnings };
 }
