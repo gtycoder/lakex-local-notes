@@ -198,7 +198,7 @@
 
 **发布与推送事实**
 
-- **v1.1.3 已发**（261114）：tag `v1.1.3`（注解，commit `12b5f7d3`）→ Release workflow run **43405437257**（tag 推送即触发；产物/Release 资产以 CI 结果为准，见 Actions 页）。
+- **v1.1.3 已发**（261114）：tag `v1.1.3`（注解，commit `12b5f7d3`）→ Release workflow run **43405437257**；macOS/Android/Windows 三个构建 job 全 success，GitHub Release **已发布**（2026-11-13T10:04:40Z）含 8 资产：`LakexLocalNotes-1.1.3-arm64.dmg` / `-x64.dmg` / `-arm64.zip` / `-x64.zip` / `LakexLocalNotes.Setup.1.1.3.exe` / `LakexLocalNotes-1.1.3-android-release.apk` / `latest.json` / `release-body.md`；`Publish Release` 收尾 job 当时仍 in_progress（Gitee 镜像/收尾），不影响 GitHub 产物。
 - **v1.1.2 已发**（261114）：tag `v1.1.2`（注解）→ Release workflow run **43384377793**；产物 8 资产见上（§0 本批）；Android job 的 release 签名校验通过（4 个 secrets 齐备）。
 - Android 签名 = release keystore（证书 SHA-256 见 git 历史 v1.0.2 批次）；**keystore 必须离线备份**，丢失后无法覆盖升级。
 - macOS = x64 + arm64 分开打包，ad-hoc 签名未公证（首次打开走「仍要打开」）。
