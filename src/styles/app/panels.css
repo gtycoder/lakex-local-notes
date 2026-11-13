@@ -87,6 +87,34 @@
   cursor: pointer;
 }
 
+/* 261114 用户点单：回收站行的「恢复 / 彻底删除」改为**浮在行右侧的覆盖层**，不参与 flex 布局
+   （原来两个 22px 按钮 + 间距常驻占宽，标题/时间被挤到没地方）。行本身已 position: relative（compat 基础类），
+   这里只负责浮层几何与显隐：默认隐藏，hover / 选中（.is-selected）/ 键盘 focus-within 时显形。
+   `trash-row` 是回收站行的本地类：本文件不引用 kit 原语类（原语变体门禁 primitives.test.ts 要求只通过本地类叠加），
+   `ln-list-item--hide-action` 已从回收站行移除（显隐由容器 display 控制，不再靠 action opacity）。
+   浮层底垫一层面板底色，避免盖住右侧徽标时两段文字叠在一起；底色随行状态走同一套令牌。 */
+.trash-row-actions {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  z-index: 1;
+  display: none;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--lake-radius-sm);
+  background: var(--lake-bg-block);
+  transform: translateY(-50%);
+}
+.trash-row:hover > .trash-row-actions,
+.trash-row.is-selected > .trash-row-actions,
+.trash-row:focus-within > .trash-row-actions { display: flex; }
+.trash-row:hover > .trash-row-actions { background: var(--lake-bg-hover); }
+.trash-row.is-selected > .trash-row-actions { background: var(--lake-accent-tint); }
+/* hover/选中时右侧倒计时徽标让位：否则浮层会把它盖成半截字（其它徽标本来就在更左侧）。 */
+.trash-row:hover .trash-row-days,
+.trash-row.is-selected .trash-row-days { visibility: hidden; }
+
 .history-preview-text { width: 100%; margin: 0; font-size: var(--lake-font-size-small); line-height: 1.7; color: var(--lake-text-1); white-space: pre-wrap; word-break: break-word; font-family: inherit; }
 
 /* 历史弹窗 v2：放大 + 左目录右预览 */

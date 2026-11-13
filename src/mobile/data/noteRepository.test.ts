@@ -19,7 +19,8 @@ vi.mock("../native/assetFs", () => ({
 import { SqlJsAsyncDb, SqlJsDb } from "./sqliteDb.js";
 import { applyMobileSchema } from "./schema.js";
 import { loadAssetBytesFs, listNoteAssetKeysFs, statNoteAssetSizesFs } from "../native/assetFs";
-import { createNote, detectOrphans, isTombstoned, noteWriteState, readNote, saveNote, trashNote } from "./noteRepository.js";
+import { createNote, detectOrphans, isTombstoned, noteGoneState, noteWriteState, readNote, saveNote, trashNote } from "./noteRepository.js";
+import { isGoneNote } from "../../core/syncDecisions.js";
 
 async function freshDb() {
   const db = new SqlJsAsyncDb(await SqlJsDb.open());
@@ -79,6 +80,24 @@ describe("mobile noteRepository 保存写边界（审计 F06）", () => {
     await db.prepare("UPDATE notes SET trashed_at=NULL, restore_pending_at=?, is_dirty=1 WHERE id=?").run("2026-10-01T00:00:00.000Z", "r1");
     await expect(saveNote(db, "r1", "标题", "<p>恢复后编辑版</p>", null, new Map())).resolves.toBe(true);
     expect((await readNote(db, "r1"))!.content).toBe("<p>恢复后编辑版</p>");
+    await db.close();
+  });
+
+  it("noteGoneState 带 trashedAt：删笔记本级联只标 trashed_at（parent_id 不变）也能判 gone（AGENTS §3#16）", async () => {
+    const db = await freshDb();
+    await createNote(db, "child", "子文档", "<p>正文</p>", "nb1", new Map());
+    // 级联软删：只有根节点换父；子文档 parent_id 保持 nb1，仅 trashed_at 被标。
+    await db.prepare("UPDATE notes SET trashed_at=?, is_dirty=1 WHERE id=?").run("2026-11-13T08:43:44.205Z", "child");
+    const state = await noteGoneState(db, "child");
+    expect(state).toMatchObject({ parentId: "nb1", trashedAt: "2026-11-13T08:43:44.205Z" });
+    expect(isGoneNote({ parentId: state!.parentId, syncState: state!.syncState, trashedAt: state!.trashedAt })).toBe(true);
+    // 活跃文档：parent 正常 + trashedAt 为空 ⇒ 不是 gone（不能把正常文档误关）。
+    await createNote(db, "active", "活跃", "<p>正文</p>", "nb1", new Map());
+    const active = await noteGoneState(db, "active");
+    expect(active).toMatchObject({ parentId: "nb1", trashedAt: null });
+    expect(isGoneNote({ parentId: active!.parentId, syncState: active!.syncState, trashedAt: active!.trashedAt })).toBe(false);
+    // 不存在的行 ⇒ null（调用方按"已消失"处理）。
+    expect(await noteGoneState(db, "missing")).toBeNull();
     await db.close();
   });
 

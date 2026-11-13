@@ -98,7 +98,7 @@ describe("日记入口过 gone 判据（261112 task-55 M1）", () => {
   it("openDiaryEntry：先查 noteGoneState + isGoneNote；已删条目进只读预览（不静默打开）", () => {
     // 打开日记条目 = 打开文档入口 ⇒ AGENTS §3#16 的 gone 判据（本机回收站 / 他端 purge）必须先过。
     expect(APP).toContain("bridge.noteGoneState(input.noteId)");
-    expect(APP).toContain("isGoneNote({ parentId: state.parentId, syncState: state.syncState })");
+    expect(APP).toContain("isGoneNote({ parentId: state.parentId, syncState: state.syncState, trashedAt: state.trashedAt })");
     // 命中 gone ⇒ 与首页/搜索同一处置：只读预览页（横幅 + 显式恢复），而不是把陈旧条目塞进工作区。
     expect(APP).toContain("setTrashPreviewId(input.noteId)");
     // 条目已不存在（被 purge 且无墓碑可判）也要给明确提示，不静默。

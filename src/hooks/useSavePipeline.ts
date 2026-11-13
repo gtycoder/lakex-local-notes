@@ -66,6 +66,9 @@ export function useSavePipeline(options: SavePipelineOptions) {
    * 表现为当前文档底栏在「保存中 ⇄ 待保存」之间闪）。状态栏只读活动文档那一条。
    */
   const [saveStates, setSaveStates] = useState<Record<string, SaveState>>({});
+  /** 保存**真的被拒绝**（catch 里的 path）的文档集合：退出闸据此允许丢弃未保存内容（261114 用户裁决）。
+   *  只记「请求失败」；外部改动冲突（saveConflicts）是等用户决策的拦截，不在此列（仍阻塞退出）。 */
+  const failedSavesRef = useRef<Set<string>>(new Set());
   const saveTimers = useRef<Map<string, number>>(new Map());
   const draftTimers = useRef<Map<string, number>>(new Map());
   /**
@@ -131,6 +134,7 @@ export function useSavePipeline(options: SavePipelineOptions) {
           );
           return { ok: false, externalChanged: { diskHash: saved.diskHash } };
         }
+        failedSavesRef.current.delete(snapshot.noteId);
         onNoteSaved(saved);
         // 261110：baseHash 刷新**不受 revision 门控**——磁盘基线变了就是变了，与"有没有新编辑"无关。
         onBaseHashRefreshed?.(saved);
@@ -148,6 +152,7 @@ export function useSavePipeline(options: SavePipelineOptions) {
         }
         return { ok: true };
       } catch (reason) {
+        failedSavesRef.current.add(snapshot.noteId);
         // 审计 F01：显式 save/flush 必须返回明确失败（不再把错误吞成 fulfilled 的成功）。
         // NotFound / 磁盘满 / DB 失败一视同仁：调用者据 ok:false 停下并提示真实原因。
         markSaveState(snapshot.noteId, "error"); onError(getNativeErrorMessage(reason));
@@ -196,6 +201,7 @@ export function useSavePipeline(options: SavePipelineOptions) {
 
   /** 关闭/删除笔记：取消挂起保存定时器、清理 revision 与该文档的未处理冲突。 */
   const clearNote = useCallback((noteId: string) => {
+    failedSavesRef.current.delete(noteId);
     const timer = saveTimers.current.get(noteId);
     if (timer) { window.clearTimeout(timer); saveTimers.current.delete(noteId); }
     core.clear(noteId);
@@ -223,6 +229,8 @@ export function useSavePipeline(options: SavePipelineOptions) {
     persistTab, scheduleSave, scheduleDraftJournal,
     bumpRevision, resetRevision, clearNote, flushTimers,
     saveTimers, draftTimers,
+    /** 保存被拒（catch）的文档集合；退出闸用它允许丢弃（不阻塞退出）。 */
+    failedSavesRef,
     /** Batch4-D：按文档挂起的外部改动冲突（UI 据此弹三选项；存在期间自动保存已暂停）。 */
     saveConflicts,
     /** 用户已处理冲突：解除暂停（之后的下一次编辑重新自动保存）。 */

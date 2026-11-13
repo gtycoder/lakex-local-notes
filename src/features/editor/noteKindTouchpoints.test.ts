@@ -48,7 +48,6 @@ const TOUCHPOINTS: Record<string, number> = {
   "src/components/app/syncConflicts.ts": 1,
   "src/components/app/treeIcons.tsx": 4,
   "src/components/ui/ExportSubmenuItem.tsx": 4,
-  "src/core/coldStartNote.ts": 1,
   "src/core/docBaseline.ts": 3,
   "src/core/docBodySafety.ts": 6,
   "src/core/historyPreview.ts": 4,

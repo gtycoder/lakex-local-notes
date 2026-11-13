@@ -74,13 +74,15 @@ describe("P12 桌面内核 lazy 边界（静态契约）", () => {
     expect(PREFETCH).toContain("clearTimeout");
   });
 
-  it("261111 冷启动预热：恢复标签 / 冷启动首篇 / 安全模式判据 / 目录与搜索结果意图都触发立即预取", () => {
+  it("261111 预热：恢复标签 / 安全模式判据 / 目录与搜索结果意图都触发立即预取（261114 起不再冷启动硬开文档）", () => {
     expect(APP).toContain("prefetchEditorKernelNow");
     expect(APP).toMatch(/if \(safeModeStatus === "inactive"\) prefetchEditorKernelNow\(\);/);
     const BOOTSTRAP = read("../../hooks/useBootstrap.ts");
     expect(BOOTSTRAP).toContain("prefetchEditorKernelNow");
-    // 恢复标签计划确定后、冷启动落点确定后各一次（都在真正的正文读取/挂载之前）。
-    expect(BOOTSTRAP.match(/prefetchEditorKernelNow\(\);/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
+    // 261114 用户裁决：没有可恢复标签就保持空态、不再冷启动硬开文档 ⇒ 只剩「恢复标签计划确定后」这一次
+    // （仍在真正的正文读取/挂载之前）。冷启动落点（chooseColdStartNoteId）已删除，不得复活。
+    expect(BOOTSTRAP.match(/prefetchEditorKernelNow\(\);/g)?.length ?? 0).toBeGreaterThanOrEqual(1);
+    expect(BOOTSTRAP).not.toContain("chooseColdStartNoteId");
     expect(SIDEBAR).toContain("prefetchEditorKernelNow");
     expect(SIDEBAR).toMatch(/onMouseEnter=\{props\.node\.nodeType === "note" \? prefetchEditorKernelNow : undefined\}/);
     expect(SEARCH_PANEL).toContain("prefetchEditorKernelNow");

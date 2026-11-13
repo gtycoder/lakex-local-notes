@@ -8,6 +8,10 @@ import type { NotebookTab } from "./useNotebookTabs";
 import { toastActionError } from "../lib/actionError";
 import { showToast } from "../ui/toastBus";
 import { mobileReadonlyText } from "../lib/readonlyText";
+import { isGoneNote } from "../../core/syncDecisions";
+
+/** 保存屏障遇到 gone 文档时的可见说明（AGENTS §3#16：保存被拦要明说，不静默丢弃）。 */
+const GONE_TAB_DISCARDED = "文档已在回收站或已被删除，已关闭标签；可在回收站中恢复";
 
 /**
  * 工作区「会话与保存屏障」逻辑（261103 P10-①，原 NotebookWorkspace 内联代码逐字搬移，未改行为）：
@@ -56,20 +60,63 @@ export function useWorkspaceSession(options: UseWorkspaceSessionOptions) {
     await bridge.saveNote(id, title, content, null, plain);
   }, { onError: reportAutoSaveError });
 
-  /** 现取 usheet/board/ink 最新正文并等待保存完成；成功前不释放实例 capture，也不关闭界面。 */
-  const captureAndSaveTab = useCallback(async (tab: NotebookTab): Promise<void> => {
+  /**
+   * 标签对应的文档是否已 gone（本机回收站 / 他端 purge）。
+   * 判据与打开入口同一份 core.isGoneNote；**trashedAt 必须传**：删笔记本/分组的级联只标 trashed_at、
+   * 子文档 parent_id 不变 ⇒ 只看 parentId 会把回收站文档当活跃文档，保存屏障会被写边界永久拒绝（tab 关不掉）。
+   */
+  const tabIsGone = useCallback(async (id: string): Promise<boolean> => {
+    try {
+      const state = await bridge.noteGoneState(id);
+      // 行已不存在（purge 后物理删除）= 同样不能再走保存（会撞墓碑判定），按 gone 丢弃。
+      if (!state) return true;
+      return isGoneNote({ parentId: state.parentId, syncState: state.syncState, trashedAt: state.trashedAt });
+    } catch {
+      // 判定失败不阻断关闭：仍走原保存路径，失败由 onError 给出可见原因。
+      return false;
+    }
+  }, []);
+
+  /** 丢弃一个标签：先取消待保存快照（否则全量 flush 仍会去写被拒的行、保存屏障继续失败）。 */
+  const discardTab = useCallback((id: string) => {
+    cancelAutoSave(id);
+    removeTab(id);
+  }, [cancelAutoSave, removeTab]);
+
+  const discardGoneTab = useCallback((id: string) => {
+    discardTab(id);
+    showToast(GONE_TAB_DISCARDED, { type: "info" });
+  }, [discardTab]);
+
+  /** 现取 usheet/board/ink 最新正文并等待保存完成；成功前不释放实例 capture，也不关闭界面。
+   *  写盘前先过 gone 判定：已进回收站/被他端 purge 的文档不再尝试保存（写边界必拒），交调用方走 discardTab。 */
+  const captureAndSaveTab = useCallback(async (tab: NotebookTab): Promise<"saved" | "gone"> => {
+    if (await tabIsGone(tab.id)) return "gone";
     const captured = liveBodyCapturesRef.current.get(tab.id)?.();
     if (captured && captured !== tab.content) {
       scheduleAutoSave(tab.id, tab.title, captured);
     }
     await flushAutoSave(tab.id);
-  }, [flushAutoSave, scheduleAutoSave]);
+    return "saved";
+  }, [flushAutoSave, scheduleAutoSave, tabIsGone]);
 
-  /** 返回首页 / 切换笔记本 / 关闭全部前的统一保存屏障。 */
+  /** 返回首页 / 切换笔记本 / 关闭全部前的统一保存屏障。
+   *  gone 标签先丢弃（并取消其待保存），否则全量 flush 仍会去写被拒的行、屏障永远失败（关不掉/退不出）。 */
   const flushAllTabs = useCallback(async (): Promise<void> => {
-    await Promise.all(tabsRef.current.map((tab) => captureAndSaveTab(tab)));
+    const outcomes = await Promise.allSettled(tabsRef.current.map((tab) => captureAndSaveTab(tab)));
+    let discarded = 0;
+    let failure: unknown;
+    outcomes.forEach((outcome, index) => {
+      if (outcome.status === "rejected") { failure = outcome.reason; return; }
+      if (outcome.value !== "gone") return;
+      discardTab(tabsRef.current[index].id);
+      discarded += 1;
+    });
+    if (discarded > 0) showToast(GONE_TAB_DISCARDED, { type: "info" });
+    // 其它标签的保存失败仍要冒泡（调用方保留界面供重试），不能因 gone 处理被吞掉。
+    if (failure !== undefined) throw failure;
     await flushAutoSave();
-  }, [captureAndSaveTab, flushAutoSave]);
+  }, [captureAndSaveTab, discardTab, flushAutoSave]);
 
   /** 关闭全部标签：任一保存失败都不清空界面，避免 UI 先假装成功。 */
   const closeAllTabs = useCallback(async () => {
@@ -91,18 +138,16 @@ export function useWorkspaceSession(options: UseWorkspaceSessionOptions) {
     if (!closing) return;
     closingRef.current = true;
     try {
-      await captureAndSaveTab(closing);
+      if ((await captureAndSaveTab(closing)) === "gone") {
+        discardGoneTab(id);
+        return;
+      }
       removeTab(id);
     } catch (error) { /* 保留当前 tab 与编辑器，允许重试 */
       reportMobileActionError("关闭标签", error);
     }
     finally { closingRef.current = false; }
-  }, [captureAndSaveTab, removeTab]);
-
-  /** 文档已进回收站后的关闭：不能再保存（写边界会正确拒绝），直接丢弃本地 tab。 */
-  const discardTab = useCallback((id: string) => {
-    removeTab(id);
-  }, [removeTab]);
+  }, [captureAndSaveTab, discardGoneTab, removeTab]);
 
   /** 返回首页：等待所有正文与文档保存落盘后才交给路由转场；失败留在当前界面。 */
   const handleBack = useCallback(async () => {
@@ -165,6 +210,11 @@ export function useWorkspaceSession(options: UseWorkspaceSessionOptions) {
       : null;
     const nextContent = captured ?? active.content;
     if (active.editing) {
+      // 文档已进回收站/被他端 purge：显式保存必被写边界拒绝 ⇒ 与关闭同口径丢弃标签并明说（不静默丢编辑）。
+      if (await tabIsGone(active.id)) {
+        discardGoneTab(active.id);
+        return;
+      }
       cancelAutoSave(active.id); // 旧 timer 里的 content 可能落后于 captured
       // 再等**在途**的自动保存落完，避免旧快照后落盘覆盖下面的新内容（261030 review）。
       try { await flushAutoSave(active.id); } catch { /* 旧快照失败已 toast；继续显式保存最新 */ }
@@ -177,7 +227,7 @@ export function useWorkspaceSession(options: UseWorkspaceSessionOptions) {
       successFeedback(); // 只有真正落盘后才提示完成
     }
     updateTab(active.id, { content: nextContent, editing: !active.editing });
-  }, [active, cancelAutoSave, updateTab]);
+  }, [active, cancelAutoSave, discardGoneTab, tabIsGone, updateTab]);
 
   // ---- pane 接线（P9-5b 的回调化，原为 NotebookWorkspace 内联箭头）----
   const handlePaneBodyChange = useCallback((tab: NotebookTab, content: string, plain?: string) => {

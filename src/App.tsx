@@ -235,7 +235,7 @@ export function App() {
     saveStates, setSaveState,
     persistTab, scheduleSave, scheduleDraftJournal,
     bumpRevision, resetRevision, clearNote, flushTimers,
-    saveTimers, draftTimers,
+    saveTimers, draftTimers, failedSavesRef,
     saveConflicts, clearSaveConflict,
   } = useSavePipeline({
     onNoteSaved: handleNoteSaved,
@@ -362,7 +362,7 @@ export function App() {
 
   useBootstrap({
     setWorkspace, setNotes, setSync, setCloudEnabled, setS3Settings, setCloudConfigured,
-    setConflictSnapshotNotice, setPendingSummary, setDraftEntries, setTreeNodes, setError, openNote, restoreTabs, showNotice,
+    setConflictSnapshotNotice, setPendingSummary, setDraftEntries, setTreeNodes, setError, openNote, restoreTabs,
   });
 
   // 桌面标签会话（device-local）：标签/活动页变化即落盘；开启「退出时关闭全部标签」时清掉、不恢复。
@@ -382,7 +382,7 @@ export function App() {
   const safeModeCheckedRef = useRef(false);
 
   // 261111 冷启动预热：安全模式判据（启动最早的 IPC 之一）一到就**立即**预取内核 chunk。
-  // 启动时必然马上打开一篇文档（恢复标签 / lastOpenedNoteId），EditorTab 在几百 ms 内就挂载；
+  // 恢复标签时 EditorTab 在几百 ms 内就挂载（261114 用户裁决：没有可恢复标签就保持空态、不硬开文档）；
   // 等 workspace 再排空闲已经错过这段窗口（旧实现 3s ⇒ 首篇必看「正在加载编辑器…」）。
   // 安全模式仍不预热（Batch3-B 契约）；幂等，判据未知/active 时什么也不做。
   useEffect(() => {
@@ -411,6 +411,10 @@ export function App() {
 
 
 
+  // 261114 用户裁决：保存**真的被拒绝**时允许丢弃未保存内容、保证能正常退出。
+  // 只认 failedSavesRef（保存请求 catch 的失败）；外部改动冲突是等用户决策的拦截，仍阻塞退出。
+  const isSaveFailed = useCallback((noteId: string) => failedSavesRef.current.has(noteId), [failedSavesRef]);
+
   // bootstrap 首拉 + 主进程广播订阅（写操作后的刷新由 pending-summary-changed 事件驱动，单点更新）
   const { handleTogglePin } = useDesktopLifecycle({
     onSwitchDesktopWorkspace: (w) => void switchDesktopWorkspace(w),
@@ -418,7 +422,7 @@ export function App() {
     conflictSnapshotCount: conflictSnapshotNotice.length, historyOpen, setActiveHistoryCount,
     openTabs, setPinnedNoteIds, theme: settings.theme, setSettings,
     setSearchPanelQuery, setSearchPanelOpen, flushTimers, openTabsRef, draftTimers, saveTimers,
-    layoutWidthsRef, quickNotesDirty, persistTab,
+    layoutWidthsRef, quickNotesDirty, persistTab, isSaveFailed,
   });
 
   useOutlineSync({

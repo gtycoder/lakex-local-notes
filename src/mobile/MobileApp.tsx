@@ -707,7 +707,8 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
   const openNote = useCallback(async (id: string, mode: "viewer" | "editor" = "viewer") => {
     const st = await bridge.noteGoneState(id);
     if (!st) { showToast("文档不存在", { type: "error" }); return; }
-    if (isGoneNote({ parentId: st.parentId, syncState: st.syncState })) {
+    // AGENTS §3#16：trashedAt 必传（删笔记本的级联只标 trashed_at，子文档 parent_id 不变）。
+    if (isGoneNote({ parentId: st.parentId, syncState: st.syncState, trashedAt: st.trashedAt })) {
       // Q04B（261112 第二轮裁决）：**不拒绝打开**。已进回收站/被他端 purge 的文档一律进只读预览页
       // （横幅明说「编辑与保存会被拦」+ 显式「恢复」）——对齐 AGENTS §3#16，绝不静默丢弃编辑。
       setTrashPreviewId(id);
@@ -750,7 +751,7 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
       void refreshAll().catch(() => undefined);
       return;
     }
-    if (isGoneNote({ parentId: state.parentId, syncState: state.syncState })) {
+    if (isGoneNote({ parentId: state.parentId, syncState: state.syncState, trashedAt: state.trashedAt })) {
       setTrashPreviewId(input.noteId);
       return;
     }

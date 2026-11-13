@@ -3,7 +3,7 @@
  * DT-15 行为护栏：useBootstrap 恢复标签会话的**计划**阶段。
  * 锁：① 恢复前按 maxOpenTabs 截断（只恢复最近 N 个，不再全开再淘汰）；
  *     ② 注入了 restoreTabs 时只调用一次（批量），不再逐篇 openNote；
- *     ③ 未注入时保持旧的逐篇行为（兼容）；全部恢复失败才回落冷启动落点。
+ *     ③ 未注入时保持旧的逐篇行为（兼容）；全部恢复失败/没有可恢复标签时**保持空态**（261114 用户裁决，不再冷启动落点）。
  */
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
@@ -55,7 +55,6 @@ function Harness({ restoreTabs, openNote }: HarnessProps) {
     setError: () => undefined,
     openNote,
     restoreTabs,
-    showNotice: () => undefined,
   });
   return null;
 }
@@ -121,15 +120,16 @@ describe("useBootstrap 标签会话恢复（DT-15）", () => {
     expect(openNote).not.toHaveBeenCalled();
   });
 
-  it("restoreTabs 一篇都没恢复时才回落冷启动落点（上次打开的文档）", async () => {
+  it("restoreTabs 一篇都没恢复时保持空态，不再回落冷启动落点（261114 用户裁决）", async () => {
     const restoreTabs = vi.fn(async (_ids: string[], _activeId: string | null) => 0);
     const openNote = vi.fn(async (_id: string) => true);
     await render({ restoreTabs, openNote });
-    await waitFor(() => openNote.mock.calls.length > 0, "冷启动落点打开文档");
+    await waitFor(() => restoreTabs.mock.calls.length > 0, "批量恢复被调用");
     await flush();
 
     expect(restoreTabs).toHaveBeenCalledTimes(1);
-    expect(openNote).toHaveBeenCalledWith("n5");
+    // 关键：没有可恢复标签 = 空态（不再用 lastOpenedNoteId=n5 硬开一篇）。
+    expect(openNote).not.toHaveBeenCalled();
   });
 
   it("安全模式：不恢复上次标签页（restoreTabs 不被调用，直接落冷启动落点）", async () => {
@@ -137,10 +137,11 @@ describe("useBootstrap 标签会话恢复（DT-15）", () => {
     const restoreTabs = vi.fn(async (_ids: string[], _activeId: string | null) => 3);
     const openNote = vi.fn(async (_id: string) => true);
     await render({ restoreTabs, openNote });
+    await waitFor(() => nativeMock.getSafeModeState.mock.calls.length > 0, "安全模式判据已读");
     await flush();
-    await waitFor(() => openNote.mock.calls.length > 0, "冷启动落点打开文档");
     expect(restoreTabs).not.toHaveBeenCalled();
-    expect(openNote.mock.calls.map((call) => call[0])).not.toContain("n8");
+    // 261114：不恢复标签 = 空态，也不再冷启动硬开文档（openNote 一次都不该被调用）。
+    expect(openNote).not.toHaveBeenCalled();
     // Batch4-D：安全模式「读」这一步也不得动会话文件——原会话要留到下次正常启动恢复
     //（写入门在 useTabSessionPersistence；见 useTabSessionPersistence.render.test.tsx）。
     expect(localStorage.getItem(TAB_SESSION_KEY)).toBe(JSON.stringify({ ids: NOTES.map((note) => note.id), activeId: "n2" }));
@@ -153,9 +154,10 @@ describe("useBootstrap 标签会话恢复（DT-15）", () => {
     const restoreTabs = vi.fn(async (_ids: string[], _activeId: string | null) => 3);
     const openNote = vi.fn(async (_id: string) => true);
     await render({ restoreTabs, openNote });
+    await waitFor(() => nativeMock.getSafeModeState.mock.calls.length > 0, "安全模式判据已读");
     await flush();
-    await waitFor(() => openNote.mock.calls.length > 0, "冷启动落点打开文档");
     expect(restoreTabs).not.toHaveBeenCalled();
+    expect(openNote).not.toHaveBeenCalled();
     // 关键：unknown 时既不清（clearTabsOnExit=true 也不清）也不覆盖，用户原会话要留到下次正常启动
     expect(localStorage.getItem(TAB_SESSION_KEY)).toBe(JSON.stringify({ ids: NOTES.map((note) => note.id), activeId: "n2" }));
   });
@@ -166,9 +168,10 @@ describe("useBootstrap 标签会话恢复（DT-15）", () => {
     const restoreTabs = vi.fn(async (_ids: string[], _activeId: string | null) => 3);
     const openNote = vi.fn(async (_id: string) => true);
     await render({ restoreTabs, openNote });
+    await waitFor(() => nativeMock.getSafeModeState.mock.calls.length > 0, "安全模式判据已读");
     await flush();
-    await waitFor(() => openNote.mock.calls.length > 0, "冷启动落点打开文档");
     expect(restoreTabs).not.toHaveBeenCalled();
+    expect(openNote).not.toHaveBeenCalled();
     expect(localStorage.getItem(TAB_SESSION_KEY)).toBeNull();
   });
 
@@ -181,8 +184,8 @@ describe("useBootstrap 标签会话恢复（DT-15）", () => {
     expect(openNote.mock.calls.map((call) => call[0])).toEqual(["n8", "n9", "n10", "n10"]);
   });
 
-  // 261114：删光知识库后启动，日记条目不得被当成冷启动落点拉进知识库标签（只认目录判据，不认标题）。
-  it("冷启动候选剔除日记条目：bootstrap notes 只含日记条目时不自动打开", async () => {
+  // 261114 用户裁决：启动没有可恢复标签就保持空态 —— bootstrap notes 里只有日记条目时同样不打开任何文档。
+  it("启动不自动打开任何文档：bootstrap notes 只含日记条目时保持空态", async () => {
     localStorage.clear();
     const at = "2026-11-13T00:00:00Z";
     nativeMock.listTreeNodes.mockResolvedValue([

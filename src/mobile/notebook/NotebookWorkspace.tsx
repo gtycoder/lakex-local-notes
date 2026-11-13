@@ -296,7 +296,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     loadHistory,
     restoreHistory: restoreHistoryVersion,
     deleteHistory,
-  } = useNotebookTreeActions({ tree, loadTree, discardTab });
+  } = useNotebookTreeActions({ tree, loadTree, discardTab, flushSaves: flushAllTabs });
 
   /**
    * 「关闭行菜单后抽屉仍在」（用户 261105 验收）：菜单是抽屉之上的临时层，dismiss 后回到目录树本身。

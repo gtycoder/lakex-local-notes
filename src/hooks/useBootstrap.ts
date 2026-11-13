@@ -5,7 +5,6 @@ import { getNativeErrorMessage } from "../lib/nativeErrors";
 import { reportNativeActionError } from "../lib/nativeErrors";
 import type { NoteSummary, S3Settings, SyncPendingSummary, SyncStatus, TreeNode, WorkspaceSnapshot } from "../lib/types";
 import type { DraftJournalEntry } from "../lib/types";
-import { chooseColdStartNoteId } from "../core/coldStartNote.js";
 import { isDiaryEntryNode } from "../core/diary.js";
 import { loadSettings } from "../lib/settings";
 import { clearTabSession, readTabSession, restoreTabSessionForLimit, sanitizeTabSession } from "../desktop/tabSession";
@@ -30,14 +29,12 @@ export interface UseBootstrapOptions {
    * 缺省（未注入）时退回逐篇 openNote 的旧行为。
    */
   restoreTabs?: (ids: string[], activeId: string | null) => Promise<number>;
-  /** 一次性提示（缺正文文档跳过等；不阻塞启动）。 */
-  showNotice: (text: string) => void;
 }
 
-/** 启动 bootstrap（从 App.tsx 抽出，逐字搬移）：初始化工作区/同步/S3/草稿/树 → 打开 lastOpenedNoteId（含 fallback）。 */
+/** 启动 bootstrap（从 App.tsx 抽出）：初始化工作区/同步/S3/草稿/树 → 恢复上次标签；**没有标签就保持空态**（261114 用户裁决，不再冷启动硬开文档）。 */
 export function useBootstrap({
   setWorkspace, setNotes, setSync, setCloudEnabled, setS3Settings, setCloudConfigured,
-  setConflictSnapshotNotice, setPendingSummary, setDraftEntries, setTreeNodes, setError, openNote, restoreTabs, showNotice,
+  setConflictSnapshotNotice, setPendingSummary, setDraftEntries, setTreeNodes, setError, openNote, restoreTabs,
 }: UseBootstrapOptions) {
   useEffect(() => {
     // 标签会话必须在任何异步/渲染落盘之前同步读走：App 的会话写入 effect 可能在恢复完成前先把 [] 写回去。
@@ -101,30 +98,8 @@ export function useBootstrap({
           }
         }
       }
-      // 冷启动落点：Lake 文档优先、其次多维表（用户 261022 定）——别把首开成本高的表格/画板钉在启动交互上。
-      // 261110 同口径：日记空间的 tab 不自动打开 ⇒ 冷启动候选也剔除日记条目（只认目录判据，不认标题）。
-      // 否则「删光知识库后启动」会把一篇日记条目拉进知识库标签（用户现场：以为还在打开被删文档）。
-      const coldStartNotes = snapshot.notes.filter((note) => !isDiaryEntryNode(treeNodes, note.id));
-      const id = chooseColdStartNoteId(coldStartNotes, snapshot.lastOpenedNoteId);
-      if (id) {
-        // 261111：冷启动落点也必然挂 EditorTab（缺正文时会换候选，但首篇成功即用同一 chunk）⇒ 先预取。
-        // 安全模式仍不预热（Batch3-B：崩溃排查时少一个后台重活）；判据已在上面拿到，这里只认 inactive。
-        if (safeModeStatus === "inactive") prefetchEditorKernelNow();
-        // 手动删过正文文件时不要一启动就弹 ENOENT：跳过缺正文的文档（最多试 8 个候选），
-        // 汇总成一次提示；都打不开则保持空态，不停在错误页。
-        const recent = coldStartNotes
-          .map((note) => note.id)
-          .filter((noteId) => noteId !== id)
-          .slice(0, 8);
-        let opened = false;
-        let missing = 0;
-        for (const candidate of [id, ...recent]) {
-          const isMissing = await native.noteBodyMissing(candidate).catch(() => false);
-          if (isMissing) { missing += 1; continue; }
-          if (await openNote(candidate)) { opened = true; break; }
-        }
-        if (!opened) setError(null);
-        if (missing > 0) showNotice(`有 ${missing} 篇文档的正文文件缺失，已跳过；可在目录中删除或从历史恢复。`);
-      }
+      // 261114 用户裁决：**没有可恢复的标签就保持空态，不硬开一篇文档**（原「冷启动落点」= lastOpenedNoteId /
+      // 最近更新文档 / 多维表兜底，已删除）。理由：① 启动不该替用户决定看哪篇；② 落点判断在回收站/孤儿行/
+      // 缺正文等边界上很容易打开一篇「不该打开」的文档（261113 现场）；③ 首篇编辑器 chunk 预热按需进行。
     }).catch((reason) => setError(getNativeErrorMessage(reason)));  }, []);
 }

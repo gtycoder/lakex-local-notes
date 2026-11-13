@@ -77,7 +77,7 @@ function TrashTreeRow({ item, items, selectedId, onSelect, onRestore, onPurge, t
           （ARIA 规定 role=button 的后代呈 presentational，读屏会丢子控件语义）。
           指针对整行可点（task-89 不回归）；键盘/读屏的「打开预览」= 文本区那个独立原生 <button>。 */}
       <div
-        className={`ln-list-item ln-list-item--hide-action ln-row2${selectedId === item.id ? " ln-list-item--focus" : ""}`}
+        className={`ln-list-item ln-row2 trash-row${selectedId === item.id ? " ln-list-item--focus is-selected" : ""}`}
         role="group"
         aria-label={item.nodeType === "note" ? `${title}，文档` : `${title}，目录`}
         onClick={() => onSelect(item)}
@@ -114,17 +114,20 @@ function TrashTreeRow({ item, items, selectedId, onSelect, onRestore, onPurge, t
           <span className={`badge trash-row-days ${days <= 7 ? "badge--warn" : "badge--muted"}`} title="自动过期彻底删除倒计时（含云端）">{days} 天后清除</span>
         )}
         <span className="ln-spacer" />
-        {isRoot && (
-          <button className="ln-list-item__action" title="恢复（含全部内容）" aria-label="恢复（含全部内容）" onClick={(event) => { event.stopPropagation(); onRestore(item.id); }}><RotateCcw size={14} /></button>
-        )}
-        <button
-          className="ln-list-item__action ln-list-item__action--warning"
-          title={isRoot ? "彻底删除（含全部内容）" : "彻底删除（含子项）"}
-          aria-label={isRoot ? "彻底删除（含全部内容）" : "彻底删除（含子项）"}
-          onClick={(event) => { event.stopPropagation(); onPurge(item.id); }}
-        >
-          <Trash size={14} />
-        </button>
+        {/* 261114 用户点单：动作浮在行右侧的覆盖层里，不占标题/时间的布局宽度。 */}
+        <span className="trash-row-actions">
+          {isRoot && (
+            <button className="ln-list-item__action" title="恢复（含全部内容）" aria-label="恢复（含全部内容）" onClick={(event) => { event.stopPropagation(); onRestore(item.id); }}><RotateCcw size={14} /></button>
+          )}
+          <button
+            className="ln-list-item__action ln-list-item__action--warning"
+            title={isRoot ? "彻底删除（含全部内容）" : "彻底删除（含子项）"}
+            aria-label={isRoot ? "彻底删除（含全部内容）" : "彻底删除（含子项）"}
+            onClick={(event) => { event.stopPropagation(); onPurge(item.id); }}
+          >
+            <Trash size={14} />
+          </button>
+        </span>
       </div>
       {open && children.length > 0 && (
         <div className="trash-tree-children">
@@ -414,7 +417,7 @@ export function TrashPanel({ open, embed = false, onClose, onChanged, onRestored
         <div className="history-list ln-list-panel ln-list-panel--background">
           {quickItems.length === 0 && <div className="ln-empty">回收站是空的</div>}
           {quickItems.map((item) => (
-            <div className="ln-list-item ln-list-item--hide-action ln-row2" key={item.id}>
+            <div className="ln-list-item ln-row2 trash-row" key={item.id}>
               <span className="ln-list-item__graphic"><File size={14} /></span>
               <div className="ln-list-item__text ln-row2__main ln-ellipsis">
                 <span className="ln-row2__title">小记</span>
@@ -422,8 +425,10 @@ export function TrashPanel({ open, embed = false, onClose, onChanged, onRestored
               </div>
               {item.cloudDeleted && <span className="badge badge--warn" title="云端已彻底删除，本机仅保留这份可恢复副本；恢复后会重新上传">云端已删除（仅本地）</span>}
               <span className="ln-spacer" />
-              <button className="ln-list-item__action" title="恢复" aria-label="恢复" onClick={() => void restoreQuick(item.id)}><RotateCcw size={14} /></button>
-              <button className="ln-list-item__action ln-list-item__action--warning" title="彻底删除" aria-label="彻底删除" onClick={() => void purgeQuick(item.id)}><Trash size={14} /></button>
+              <span className="trash-row-actions">
+                <button className="ln-list-item__action" title="恢复" aria-label="恢复" onClick={() => void restoreQuick(item.id)}><RotateCcw size={14} /></button>
+                <button className="ln-list-item__action ln-list-item__action--warning" title="彻底删除" aria-label="彻底删除" onClick={() => void purgeQuick(item.id)}><Trash size={14} /></button>
+              </span>
             </div>
           ))}
         </div>

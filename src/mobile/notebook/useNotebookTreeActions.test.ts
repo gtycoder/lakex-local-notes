@@ -47,12 +47,14 @@ let root: ReturnType<typeof createRoot>;
 let api: Api;
 let loadTree: ReturnType<typeof vi.fn>;
 let discardTab: ReturnType<typeof vi.fn>;
+let flushSaves: ReturnType<typeof vi.fn>;
 
 function Harness({ tree }: { tree: NotebookTreeItem[] }) {
   api = useNotebookTreeActions({
     tree,
     loadTree: loadTree as () => Promise<NotebookTreeItem[]>,
     discardTab: discardTab as (id: string) => void,
+    flushSaves: flushSaves as () => Promise<void>,
   });
   return null;
 }
@@ -66,6 +68,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   loadTree = vi.fn(async () => []);
   discardTab = vi.fn();
+  flushSaves = vi.fn(async () => {});
   mocks.confirmMobile.mockResolvedValue(true);
   mocks.listNoteHistory.mockResolvedValue([{ id: 1, title: "快照", createdAt: "2026-10-22T00:00:00.000Z" }]);
   host = document.createElement("div");
@@ -97,13 +100,37 @@ describe("useNotebookTreeActions", () => {
     expect(loadTree).toHaveBeenCalledTimes(1);
   });
 
-  it("删除文档会移入回收站、刷新目录并丢弃对应标签", async () => {
+  it("删除文档会移入回收站、刷新目录并丢弃对应标签（删除前先落盘在途编辑）", async () => {
     const note = node("n1", "note");
     render([note]);
     await act(async () => { await api.applyDelete(note); });
     expect(mocks.trashTreeItem).toHaveBeenCalledWith("n1", "note");
     expect(loadTree).toHaveBeenCalledTimes(1);
     expect(discardTab).toHaveBeenCalledWith("n1");
+    expect(flushSaves).toHaveBeenCalledTimes(1);
+    expect(flushSaves.mock.invocationCallOrder[0]).toBeLessThan(mocks.trashTreeItem.mock.invocationCallOrder[0]);
+  });
+
+  it("删分组/笔记本：级联软删的子树文档标签全部丢弃（parent_id 不变、只标 trashed_at）", async () => {
+    // g1 下有文档 a、嵌套分组 g2（其下文档 b）；g1 子树外的 c 不能被误丢。
+    const g1 = node("g1", "group");
+    const tree = [g1, node("a", "note", "g1"), node("g2", "group", "g1"), node("b", "note", "g2"), node("c", "note")];
+    render(tree);
+    await act(async () => { await api.applyDelete(g1); });
+    expect(mocks.trashTreeItem).toHaveBeenCalledWith("g1", "folder");
+    expect(discardTab.mock.calls.map((call) => call[0]).sort()).toEqual(["a", "b"]);
+    expect(flushSaves).toHaveBeenCalledTimes(1);
+  });
+
+  it("保存屏障失败时不删除（不丢在途编辑）", async () => {
+    const g1 = node("g1", "group");
+    const tree = [g1, node("a", "note", "g1")];
+    render(tree);
+    flushSaves.mockRejectedValueOnce(new Error("磁盘已满"));
+    await act(async () => { await api.applyDelete(g1); });
+    expect(mocks.trashTreeItem).not.toHaveBeenCalled();
+    expect(discardTab).not.toHaveBeenCalled();
+    expect(mocks.showToast).toHaveBeenCalledWith("删除失败", { type: "error" });
   });
 
   it("设置图标：成功返回落库值（调用方据此刷新图标面板），失败返回 null", async () => {

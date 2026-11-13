@@ -138,10 +138,26 @@ export async function readNote(d: MobileDb, id: string): Promise<LocalNote | nul
   return rowToNote(row, content);
 }
 
-/** 打开文档前的"是否已消失"判定原料（AGENTS §3 #16）。 */
-export async function noteGoneState(d: MobileDb, id: string): Promise<{ parentId: string | null; syncState: string } | null> {
-  const row = await d.prepare("SELECT parent_id, is_dirty, is_purged FROM notes WHERE id = ?").get(id) as { parent_id: string | null; is_dirty: number; is_purged: number } | undefined;
-  return row ? { parentId: row.parent_id, syncState: row.is_purged === 1 ? "purged" : row.is_dirty === 1 ? "local" : "synced" } : null;
+/** 打开文档前的"是否已消失"判定原料（AGENTS §3 #16）。
+ *  **trashedAt 必须是判定原料**：删笔记本/分组时只有根节点的 parent_id 变化，子文档 parent_id 不变、只标
+ *  trashed_at（trashLifecycle.deleteTreeNode 级联）⇒ 只按 parentId 判会漏掉整棵子树的回收站文档。 */
+export interface NoteGoneState {
+  parentId: string | null;
+  syncState: string;
+  trashedAt: string | null;
+}
+
+export async function noteGoneState(d: MobileDb, id: string): Promise<NoteGoneState | null> {
+  const row = await d.prepare("SELECT parent_id, trashed_at, is_dirty, is_purged FROM notes WHERE id = ?").get(id) as
+    | { parent_id: string | null; trashed_at: string | null; is_dirty: number; is_purged: number }
+    | undefined;
+  return row
+    ? {
+        parentId: row.parent_id,
+        trashedAt: row.trashed_at,
+        syncState: row.is_purged === 1 ? "purged" : row.is_dirty === 1 ? "local" : "synced",
+      }
+    : null;
 }
 
 /**

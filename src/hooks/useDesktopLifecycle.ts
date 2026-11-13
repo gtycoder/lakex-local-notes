@@ -7,6 +7,7 @@ import { applyTheme } from "../lib/theme";
 import { subscribeSettings, type AppSettings, type ThemeMode } from "../lib/settings";
 import { OUTLINE_SIDEBAR_MAX_WIDTH, OUTLINE_SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH, type OpenTab } from "../desktop/desktopTypes";
 import type { PersistOutcome } from "./useSavePipeline";
+import { blockingDirtyTabs } from "../core/unloadGuard";
 
 export interface UseDesktopLifecycleOptions {
   syncToast: unknown;
@@ -29,6 +30,9 @@ export interface UseDesktopLifecycleOptions {
   layoutWidthsRef: MutableRefObject<{ sidebar: number; outline: number }>;
   quickNotesDirty: boolean;
   persistTab: (noteId: string, title?: string, content?: string) => Promise<PersistOutcome>;
+  /** 该文档最近一次保存是否已被拒绝（saveStates = "error"）。为 true 时内容已经明确存不进去，
+   *  退出闸允许丢弃（261114 用户裁决：保存被拒时也要能正常退出）。 */
+  isSaveFailed?: (noteId: string) => boolean;
   /** ⌘1–4 切空间（S1+A；261109 收敛为一张表）；不传则不注册 */
   onSwitchDesktopWorkspace?: (workspace: "library" | "quick-notes" | "diary" | "ai-writing" | "tags") => void;
 }
@@ -38,7 +42,7 @@ export function useDesktopLifecycle({
   syncToast, syncBtnRef, setSyncAnchorRect, activeNoteId, conflictSnapshotCount, historyOpen,
   setActiveHistoryCount, openTabs, setPinnedNoteIds, theme, setSettings,
   setSearchPanelQuery, setSearchPanelOpen, flushTimers, openTabsRef, draftTimers, saveTimers,
-  layoutWidthsRef, quickNotesDirty, persistTab, onSwitchDesktopWorkspace,
+  layoutWidthsRef, quickNotesDirty, persistTab, isSaveFailed, onSwitchDesktopWorkspace,
 }: UseDesktopLifecycleOptions) {
   useEffect(() => {
     if (!syncToast) { setSyncAnchorRect(null); return; }
@@ -131,15 +135,17 @@ export function useDesktopLifecycle({
   }, [setSearchPanelQuery, setSearchPanelOpen, onSwitchDesktopWorkspace]);
 
   useEffect(() => {
-    // 审计 #23：窗口/应用关闭时若有未保存草稿，阻止关闭并提示（Electron 显示原生对话框）；
-    // 同时立即触发一次保存，尽量在用户留下期间落盘
+    // 审计 #23：窗口/应用关闭时若有**还能保存**的未落盘内容，阻止关闭并尽量落盘；
+    // 261114 用户裁决：回收站/已 purge、以及「保存已被拒绝（error）」的标签允许丢弃内容、**不得卡退出**
+    // （否则一个永远存不进去的标签会把 ⌘Q/关窗/关机永久拦住）。判据单一来源 = core/unloadGuard。
+    const isFailed = isSaveFailed ?? (() => false);
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
-      // 261114：**已删除/已 purge 的标签不算脏**——它的保存被守卫拦死（永远写不进去），
-      // 旧判据会永久 preventDefault ⇒ ⌘Q/关窗/关机都退不出（用户 261113 现场实测）。
-      const hasDirty = openTabsRef.current.some((tab) => tab.dirty && !tab.deleted) || quickNotesDirty;
-      if (!hasDirty) return;
-      for (const tab of openTabsRef.current) {
-        if (!tab.dirty || tab.deleted) continue;
+      const dirtyTabs = openTabsRef.current.filter((tab) => tab.dirty);
+      const blocking = blockingDirtyTabs(dirtyTabs, isFailed);
+      const hasDirty = blocking.length > 0 || quickNotesDirty;
+      if (dirtyTabs.length === 0 && !hasDirty) return;
+      for (const tab of dirtyTabs) {
+        // 草稿兜底：三类脏标签都写（保存失败/已删除也不例外，下次打开还能看到本机草稿）。
         const pendingTimer = saveTimers.current.get(tab.noteId);
         if (pendingTimer !== undefined) {
           window.clearTimeout(pendingTimer);
@@ -151,14 +157,16 @@ export function useDesktopLifecycle({
           draftTimers.current.delete(tab.noteId);
         }
         void native.saveDraftJournal({ noteId: tab.noteId, title: tab.title, content: tab.content, updatedAt: new Date().toISOString() }).catch((error) => reportNativeActionError("保存退出草稿", error));
-        void persistTab(tab.noteId);
       }
+      // 只有「还能保存」的脏标签才触发保存并阻止退出；其余允许丢弃。
+      for (const tab of blocking) void persistTab(tab.noteId);
+      if (!hasDirty) return;
       event.preventDefault();
       event.returnValue = "";
     };
     window.addEventListener("beforeunload", onBeforeUnload);
     return () => { window.removeEventListener("beforeunload", onBeforeUnload); };
-  }, [persistTab, quickNotesDirty, openTabsRef, saveTimers, draftTimers]);
+  }, [persistTab, quickNotesDirty, openTabsRef, saveTimers, draftTimers, isSaveFailed]);
 
   return { handleTogglePin };
 }

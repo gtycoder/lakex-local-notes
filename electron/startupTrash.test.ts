@@ -17,7 +17,6 @@ import os from "node:os";
 import path from "node:path";
 import Database from "better-sqlite3";
 import { AppError, Store } from "./store.js";
-import { chooseColdStartNoteId } from "../src/core/coldStartNote.js";
 import { TRASH_NOTEBOOK_ID, isGoneNote } from "../src/core/syncDecisions.js";
 
 // Store 模块加载链会 import electron/secretCipher（safeStorage）——与 electron/store.test.ts 同口径。
@@ -85,7 +84,6 @@ describe("261114 回归：回收站文档不得进入启动快照", () => {
       const boot = restarted.bootstrap();
       expect(boot.lastOpenedNoteId).toBe(active.id);
       expect(boot.notes.map((note) => note.id)).toContain(active.id);
-      expect(chooseColdStartNoteId(boot.notes, boot.lastOpenedNoteId)).toBe(active.id);
       const read = restarted.readNote(active.id);
       expect(read.trashedAt ?? null).toBeNull();
       expect(isGoneNote(read)).toBe(false);
@@ -110,7 +108,6 @@ describe("261114 回归：回收站文档不得进入启动快照", () => {
     try {
       const boot = restarted.bootstrap();
       expect(boot.notes).toEqual([]);
-      expect(chooseColdStartNoteId(boot.notes, boot.lastOpenedNoteId)).toBeNull();
 
       for (const noteId of [rootDoc.id, nestedDoc.id]) {
         const read = restarted.readNote(noteId);
@@ -228,8 +225,6 @@ describe("261114 回归：回收站文档不得进入启动快照", () => {
     try {
       const boot = restarted.bootstrap();
       expect(boot.notes.map((note) => note.id)).not.toContain(orphan.id);
-      // 冷启动也不能落到它（lastOpened 命中也不认）
-      expect(chooseColdStartNoteId(boot.notes, orphan.id)).not.toBe(orphan.id);
       // bootstrap 是防御性过滤，不删数据：行仍在（避免误伤用户数据）
       expect(restarted.listNoteSummaries().map((note) => note.id)).toContain(orphan.id);
     } finally {

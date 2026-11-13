@@ -70,7 +70,8 @@ export const notesDomain = {
     return note;
   },
 
-  async noteGoneState(id: string): Promise<{ parentId: string | null; syncState: string } | null> {
+  /** 打开文档/保存屏障共用的 gone 判定原料（AGENTS §3#16）：trashedAt 必传，级联删除只标它、parent_id 不变。 */
+  async noteGoneState(id: string): Promise<noteRepository.NoteGoneState | null> {
     const d = await ensureDb();
     return await noteRepository.noteGoneState(d, id);
   },
