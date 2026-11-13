@@ -66,6 +66,8 @@ function props(overrides: Partial<DiaryWorkspaceProps> = {}): DiaryWorkspaceProp
     onConvertEntry: vi.fn(),
     onConvertToQuickNote: vi.fn(),
     onDeleteEntry: vi.fn(),
+    onRenameNotebook: vi.fn(async () => undefined),
+    onSetNotebookIcon: vi.fn(async () => undefined),
     onCreateEntry: vi.fn(),
     onOpenEntry: vi.fn(),
     onWriteToday: vi.fn(),
@@ -222,6 +224,35 @@ describe("日记空间（桌面）", () => {
     expect(onConvertToQuickNote).not.toHaveBeenCalled();
     await act(async () => { confirmButton!.click(); await Promise.resolve(); });
     expect(onConvertToQuickNote).toHaveBeenCalledWith("e-old");
+  });
+
+  it("日记本设置（261113）：页头 ⋯ → 只有「重命名 / 设置图标」，重命名走 onRenameNotebook", async () => {
+    const onRenameNotebook = vi.fn(async () => undefined);
+    render({ onRenameNotebook });
+    const head = document.body.querySelector<HTMLElement>(".diary-dir__head");
+    expect(head, "日记左栏头必须存在").toBeTruthy();
+    const more = head!.querySelector<HTMLButtonElement>('button[aria-label="日记本设置"]');
+    expect(more, "日记本改名/换图标入口 = 左栏头 ⋯（与 Android 日记页对称）").toBeTruthy();
+    act(() => { more!.click(); });
+    const items = [...document.body.querySelectorAll<HTMLElement>("[role='menuitem']")].map((el) => (el.textContent ?? "").trim());
+    expect(items).toContain("重命名");
+    expect(items).toContain("设置图标");
+    expect(items).not.toContain("删除");
+    const rename = [...document.body.querySelectorAll<HTMLElement>("[role='menuitem']")]
+      .find((el) => (el.textContent ?? "").trim() === "重命名")!;
+    act(() => { rename.click(); });
+    const input = document.body.querySelector<HTMLInputElement>('input[aria-label="日记本名称"]');
+    expect(input, "重命名 = 既有「输入名字」弹窗（NamePromptDialog 原语）").toBeTruthy();
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+    act(() => {
+      setter.call(input!, "我的日记");
+      input!.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    const submit = [...document.body.querySelectorAll<HTMLButtonElement>(".name-prompt-dialog button")]
+      .find((el) => (el.textContent ?? "").trim() === "重命名")!;
+    expect(submit).toBeTruthy();
+    await act(async () => { submit.click(); await Promise.resolve(); });
+    expect(onRenameNotebook).toHaveBeenCalledWith("nb-diary", "我的日记");
   });
 
   it("头部按钮 DOM 顺序 = 搜索、日历、＋（261110 用户点单；语义不变）", () => {

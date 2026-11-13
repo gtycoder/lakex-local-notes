@@ -608,6 +608,24 @@ export function App() {
     if (node) sidebarRequestDelete(node);
   }, [treeNodes, sidebarRequestDelete]);
 
+  /** 日记本设置（261113 用户裁决：只开放改名/换图标）。守卫在 store：非日记本本身一律拒绝。 */
+  const handleDiaryRenameNotebook = useCallback(async (notebookId: string, title: string) => {
+    try {
+      await native.renameTreeNode(notebookId, title);
+      await refreshTree();
+    } catch (reason) {
+      setError(getNativeErrorMessage(reason));
+    }
+  }, [refreshTree, setError]);
+  const handleDiarySetNotebookIcon = useCallback(async (notebookId: string, icon: string | null) => {
+    try {
+      await native.setNodeIcon(notebookId, icon);
+      await refreshTree();
+    } catch (reason) {
+      setError(getNativeErrorMessage(reason));
+    }
+  }, [refreshTree, setError]);
+
   /** 「转为小记」（261112 task-92 起；261113 用户裁决 = **移动**）：主进程把同一篇日记的正文/资产
    *  移到小记空间（新小记 id、正文/资产零复制地改名移动、卡片零剥离、作用域改写），随后 Lake 侧原稿物理移除。
    *  **没有可恢复副本**（不进回收站、不留 history），提示文案必须如实说明。 */
@@ -1273,6 +1291,8 @@ export function App() {
                 onConvertEntry={handleDiaryConvertEntry}
                 onConvertToQuickNote={(nodeId) => { void handleDiaryToQuickNote(nodeId); }}
                 onDeleteEntry={handleDiaryDeleteEntry}
+                onRenameNotebook={handleDiaryRenameNotebook}
+                onSetNotebookIcon={handleDiarySetNotebookIcon}
                 onContentChange={handleContentChange}
                 onEditorReady={handleEditorReady}
                 onReloadNote={reloadNoteTab}

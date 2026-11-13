@@ -12,7 +12,7 @@
  * **不做月历**（v1 明确不做：会与多维表月历撞「同一交互语义只有一套视觉」）。
  */
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
-import { CalendarDays, ChevronRight, Feather, FileText, NotebookPen, Plus, Search, Trash2 } from "lucide-react";
+import { CalendarDays, ChevronRight, Feather, FileText, MoreVertical, NotebookPen, Pencil, Plus, Search, SmilePlus, Trash2 } from "lucide-react";
 import { NodeIconGlyph } from "../../components/ui/NodeIconGlyph";
 import {
   formatDiaryDateKey,
@@ -27,6 +27,10 @@ import { SplitPane } from "../../components/ui/SplitPane";
 import { usePopoverPosition } from "../../hooks/usePopoverPosition";
 import { useConfirm } from "../../hooks/useConfirm";
 import { PublishDocDialog } from "../../components/app/PublishDocDialog";
+import { NamePromptDialog } from "../../components/app/NamePromptDialog";
+
+/** 图标选择器（261113 桌面日记本设置）：与侧栏同一个懒加载边界（不把图标资源并进日记空间首屏）。 */
+const NodeIconPicker = lazy(() => import("../../components/app/NodeIconPicker").then((m) => ({ default: m.NodeIconPicker })));
 import type { LakeEditorInstance } from "../editor/lakeRuntime";
 import type { TreeNode } from "../../lib/types";
 import { diaryEntryViews, diaryNotebookOf, type DiaryEntryView } from "./diaryTree";
@@ -71,6 +75,9 @@ export interface DiaryWorkspaceProps {
   onConvertToQuickNote: (nodeId: string) => void;
   /** 「删除」：移入回收站（软删，可恢复）。走既有删除确认与 deleteTreeNode，不新造删除路径。 */
   onDeleteEntry: (nodeId: string) => void;
+  /** 日记本设置（261113 用户裁决：**只开放改名/换图标**；其它守卫在 store/数据层拒绝）。 */
+  onRenameNotebook: (notebookId: string, title: string) => Promise<void>;
+  onSetNotebookIcon: (notebookId: string, icon: string | null) => Promise<void>;
   onContentChange: (noteId: string, content?: string) => void;
   onEditorReady: (noteId: string, editor: LakeEditorInstance | null) => void;
   onReloadNote: (noteId: string) => void;
@@ -93,13 +100,24 @@ export function DiaryWorkspace(props: DiaryWorkspaceProps) {
   const {
     active, treeNodes, activeNoteId, tabs, lockedNoteIds, tocEnabled, outlineEnhance, editorPrefs,
     onOpenEntry, onWriteToday, onCreateEntry, onOpenSearch, onConvertEntry, onConvertToQuickNote, onDeleteEntry,
-    onContentChange, onEditorReady, onReloadNote,
+    onRenameNotebook, onSetNotebookIcon, onContentChange, onEditorReady, onReloadNote,
   } = props;
 
   /** 左栏数据：条目来自 core，分组也来自 core（`groupDiaryEntries`）——组件里没有任何年/月换算。
    *  打开/选中一律用 `documentId`（= noteFileId）：core 的 `noteId` 是树节点 id，不能拿去 openNote。 */
   /** 确认浮层（DT-02）：「转为小记」= 不可逆移动（无副本、历史快照一并删除）⇒ 必须二次确认。 */
   const { confirm, confirmElement } = useConfirm();
+  /** 日记本设置（261113 用户裁决：只开放改名/换图标）：菜单 + 行内改名 + 图标选择器。
+   *  判据与守卫都在数据层（noteMetadataRepository.assertNotDiaryContent），UI 只做入口。 */
+  const notebookButtonRef = useRef<HTMLButtonElement | null>(null);
+  const [notebookMenu, setNotebookMenu] = useState<{ x: number; y: number } | null>(null);
+  const notebookMenuPos = usePopoverPosition({
+    open: Boolean(notebookMenu),
+    at: notebookMenu ? { x: notebookMenu.x, y: notebookMenu.y } : null,
+  });
+  /** 改名走既有「输入名字」弹窗（NamePromptDialog，与目录重命名/新建同一原语），不在页头塞输入框。 */
+  const [renamingNotebook, setRenamingNotebook] = useState(false);
+  const [iconPickerOpen, setIconPickerOpen] = useState(false);
   const entries = useMemo(() => diaryEntryViews(treeNodes), [treeNodes]);
   const years: YearNode[] = useMemo(() => groupDiaryEntries(entries) as unknown as YearNode[], [entries]);
   const entryDocIds = useMemo(() => new Set(entries.map((entry) => entry.documentId)), [entries]);
@@ -190,8 +208,28 @@ export function DiaryWorkspace(props: DiaryWorkspaceProps) {
       >
       <aside className="diary-dir" aria-label="日记目录">
         <div className="diary-dir__head">
-          <h2 className="diary-dir__title"><NotebookPen size={15} aria-hidden="true" />日记</h2>
+          <h2 className="diary-dir__title">
+            <NotebookPen size={15} aria-hidden="true" />
+            {notebook?.icon ? <NodeIconGlyph value={notebook.icon} /> : null}
+            {notebook?.title ?? "日记"}
+          </h2>
           <span className="diary-dir__count" title="日记篇数">{entries.length}</span>
+          {/* 261113 用户裁决：日记本只开放「重命名 / 设置图标」（入口与 Android 日记页 ⋯ 对称）。 */}
+          {notebook && (
+            <button
+              ref={notebookButtonRef}
+              type="button"
+              className="ln-iconbtn ln-iconbtn--compact"
+              aria-label="日记本设置"
+              title="日记本设置"
+              onClick={(event) => {
+                const rect = event.currentTarget.getBoundingClientRect();
+                setNotebookMenu({ x: rect.left, y: rect.bottom + 4 });
+              }}
+            >
+              <MoreVertical size={14} />
+            </button>
+          )}
           {/* 261110 用户点单定稿：头部按钮左→右 = 搜索、日历、＋（＋始终最右）；
               语义不变——搜索 = 打开既有全局搜索面板，日历 = 选日期新建，＋ = 今天新建。 */}
           <button
@@ -382,6 +420,66 @@ export function DiaryWorkspace(props: DiaryWorkspaceProps) {
             <span>删除</span>
           </button>
         </Menu>
+      )}
+
+      {/* 日记本设置菜单（261113 用户裁决）：只有「重命名 / 设置图标」两项。 */}
+      {notebookMenu && notebook && (
+        <Menu
+          surfaceRef={notebookMenuPos.surfaceRef}
+          style={notebookMenuPos.style ?? undefined}
+          onDismiss={() => setNotebookMenu(null)}
+          aria-label="日记本设置"
+        >
+          <button
+            type="button"
+            role="menuitem"
+            className="ln-menu__item"
+            onClick={() => {
+              setNotebookMenu(null);
+              setRenamingNotebook(true);
+            }}
+          >
+            <Pencil size={15} aria-hidden="true" />
+            <span>重命名</span>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="ln-menu__item"
+            onClick={() => { setNotebookMenu(null); setIconPickerOpen(true); }}
+          >
+            <SmilePlus size={15} aria-hidden="true" />
+            <span>设置图标</span>
+          </button>
+        </Menu>
+      )}
+      {/* 改名：复用「输入名字」弹窗原语（与目录重命名/新建同一套键盘与空名口径）。 */}
+      {renamingNotebook && notebook && (
+        <NamePromptDialog
+          open
+          title="重命名日记本"
+          inputLabel="日记本名称"
+          initialValue={notebook.title}
+          submitText="重命名"
+          onSubmit={async (name) => {
+            if (name === notebook.title) { setRenamingNotebook(false); return; }
+            await onRenameNotebook(notebook.id, name);
+            setRenamingNotebook(false);
+          }}
+          onClose={() => setRenamingNotebook(false)}
+        />
+      )}
+      {iconPickerOpen && notebook && notebookButtonRef.current && (
+        <Suspense fallback={null}>
+          <NodeIconPicker
+            key={notebook.id}
+            anchor={notebookButtonRef.current}
+            nodeType="notebook"
+            value={notebook.icon ?? null}
+            onPick={(icon) => { setIconPickerOpen(false); void onSetNotebookIcon(notebook.id, icon); }}
+            onClose={() => setIconPickerOpen(false)}
+          />
+        </Suspense>
       )}
 
       {/* 选日期新建（261109）：加号 = 今天；这里 = 任意日期，永远新建一篇。 */}
