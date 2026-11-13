@@ -9,6 +9,7 @@ import { countRemoteOps, remoteOpSummary } from "../../core/s3v3/remoteStats.js"
 import { runQuickPush } from "../../core/s3v3/quickPush/pipeline.js";
 import { rlog } from "../../lib/log";
 import { mergeSyncWarnings } from "../../core/syncWarningMerge.js";
+import { MOBILE_GC_RETENTION_DAYS } from "../sync/gcPolicy";
 
 /**
  * 移动端 v3 同步编排（feature flag 下由 bridge.syncNow 调用）。
@@ -127,20 +128,70 @@ export async function runMobileV3PushQuickNote(
     throw error;
   }
 }
+/** 云清理结果 + 本轮可清理对象的总体积（引擎只回 key；字节在 list 回包里顺带收集，零额外请求）。 */
+export interface MobileDeepCleanupResult extends S3v3DeepCleanupResult {
+  /** 可清理对象总字节；任一条拿不到 size 时为 null（绝不瞎猜）。 */
+  bytes: number | null;
+}
+
+/**
+ * 包一层 remote，把 deepCleanup 内部 list 回包里的对象体积留下来。
+ * 为什么不在 bridge 再 list 一遍：deepCleanup 本身已按 7 个前缀全量 list，重复列一遍等于把
+ * 大库（2 万文档/20 万附件）的请求数翻倍；这里只是转发 + 记 Map，零额外网络。
+ * deepCleanup 只用 get/list/deleteMany（readPointer/getDeclaration 走 get），可选流式方法无需转发。
+ */
+function withObjectSizes(remote: S3v3Remote): {
+  remote: S3v3Remote;
+  bytesOf: (keys: readonly string[]) => number | null;
+} {
+  const sizes = new Map<string, number>();
+  const tracked: S3v3Remote = {
+    get: (key) => remote.get(key),
+    put: (key, bytes, putOpts) => remote.put(key, bytes, putOpts),
+    list: async (prefix) => {
+      const items = await remote.list(prefix);
+      for (const item of items) sizes.set(item.key, item.size);
+      return items;
+    },
+    deleteMany: (keys) => remote.deleteMany(keys),
+    deleteByPrefix: (prefix) => remote.deleteByPrefix(prefix),
+  };
+  return {
+    remote: tracked,
+    bytesOf: (keys) => {
+      let total = 0;
+      for (const key of keys) {
+        const size = sizes.get(key);
+        if (size === undefined) return null;
+        total += size;
+      }
+      return total;
+    },
+  };
+}
+
 /**
  * 移动端云清理（v3 原生，parity：旧实现读 v3 永不写的 manifests/latest.json ⇒ 恒 0）：
- * pointer → 索引/声明算 keep 集 → 引擎 deepCleanup（保留窗口默认 7 天 + 本机历史引用保护）。
+ * pointer → 索引/声明算 keep 集 → 引擎 deepCleanup（保留窗口 + 本机历史引用保护）。
  * 与桌面 `runV3DeepCleanup` 同语义；删除明细由 bridge 写 s3_gc_log。
+ *
+ * `dryRun: true` = 只统计不删（引擎 dryRun 分支不调 deleteMany、不写 device state）；
+ * 设置页「预览」走这条，数字与真删同源，避免预览和实删两套口径。
  */
 export async function runMobileV3DeepCleanup(
   db: MobileDb,
   settings: S3v3Settings,
   opts: { dryRun?: boolean; retentionDays?: number; remote?: S3v3Remote; deviceId?: string } = {},
-): Promise<S3v3DeepCleanupResult> {
+): Promise<MobileDeepCleanupResult> {
   const store = new MobileDeviceStore(db);
   await store.init();
-  const remote = opts.remote ?? createMobileS3v3Remote(settings);
+  const { remote, bytesOf } = withObjectSizes(opts.remote ?? createMobileS3v3Remote(settings));
   const engine = new S3v3SyncEngine({ remote, device: store, deviceId: opts.deviceId ?? mobileDeviceId() });
   const extraKeep = await historyRepository.historyAssetRefs(db).catch(() => new Set<string>());
-  return engine.deepCleanup({ dryRun: opts.dryRun, extraKeep, retentionDays: opts.retentionDays ?? 7 });
+  const result = await engine.deepCleanup({
+    dryRun: opts.dryRun,
+    extraKeep,
+    retentionDays: opts.retentionDays ?? MOBILE_GC_RETENTION_DAYS,
+  });
+  return { ...result, bytes: bytesOf(result.deleted) };
 }

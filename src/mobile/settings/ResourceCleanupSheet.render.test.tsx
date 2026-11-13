@@ -89,22 +89,56 @@ describe("ResourceCleanupSheet", () => {
     } finally { await m.unmount(); }
   });
 
-  it("云端清理：不可用时有原因且按钮禁用；可用时点击回调", async () => {
+  it("云端清理：未预览只能点「预览」，不能真删", async () => {
+    const onPreviewCloud = vi.fn();
     const onCleanCloud = vi.fn();
-    const disabled = await mount({ mode: "cloudGc", cloudReady: false, cloudHint: "未配置云同步：按纯本地空间处理，不能清理云端。", onCleanCloud });
+    const m = await mount({ mode: "cloudGc", gcMessage: "已清理 3 个对象", onPreviewCloud, onCleanCloud });
     try {
-      const btn = buttonByText(disabled.container, "清理云端");
-      expect(btn?.disabled).toBe(true);
-      expect(disabled.container.textContent).toContain("未配置云同步");
-    } finally { await disabled.unmount(); }
-    const ready = await mount({ mode: "cloudGc", cloudReady: true, gcMessage: "已清理 3 个对象", onCleanCloud });
+      // 保留窗口与「先预览」口径对用户可见
+      expect(m.container.textContent).toContain("超过 7 天");
+      expect(m.container.textContent).toContain("已清理 3 个对象");
+      const previewBtn = buttonByText(m.container, "预览");
+      expect(previewBtn?.disabled).toBe(false);
+      const cleanBtn = buttonByText(m.container, "清理云端");
+      expect(cleanBtn?.disabled).toBe(true);
+      await act(async () => previewBtn!.click());
+      expect(onPreviewCloud).toHaveBeenCalledTimes(1);
+      expect(onCleanCloud).not.toHaveBeenCalled();
+    } finally { await m.unmount(); }
+  });
+
+  it("云端清理：预览后显示将删数量/字节与保留窗口，按钮才可点", async () => {
+    const onCleanCloud = vi.fn();
+    const m = await mount({ mode: "cloudGc", gcPreview: { count: 3, bytes: 2048 }, onCleanCloud });
     try {
-      expect(ready.container.textContent).toContain("已清理 3 个对象");
-      const btn = buttonByText(ready.container, "清理云端");
-      expect(btn?.disabled).toBe(false);
-      await act(async () => btn!.click());
+      expect(m.container.textContent).toContain("将删除 3 个对象");
+      expect(m.container.textContent).toContain("2.0 KB");
+      expect(m.container.textContent).toContain("保留窗口 7 天");
+      const cleanBtn = buttonByText(m.container, "清理 3 个对象");
+      expect(cleanBtn?.disabled).toBe(false);
+      await act(async () => cleanBtn!.click());
       expect(onCleanCloud).toHaveBeenCalledTimes(1);
-    } finally { await ready.unmount(); }
+    } finally { await m.unmount(); }
+  });
+
+  it("云端清理：预览为 0 / 不可用 / 进行中时真删都禁用", async () => {
+    const empty = await mount({ mode: "cloudGc", gcPreview: { count: 0, bytes: 0 } });
+    try {
+      expect(empty.container.textContent).toContain("没有可清理的云端文件");
+      expect(buttonByText(empty.container, "清理云端")?.disabled).toBe(true);
+      expect(buttonByText(empty.container, "预览")?.disabled).toBe(false);
+    } finally { await empty.unmount(); }
+    const disabled = await mount({ mode: "cloudGc", cloudReady: false, cloudHint: "未配置云同步：按纯本地空间处理，不能清理云端。", gcPreview: { count: 3, bytes: 1 } });
+    try {
+      expect(disabled.container.textContent).toContain("未配置云同步");
+      expect(buttonByText(disabled.container, "预览")?.disabled).toBe(true);
+      expect(buttonByText(disabled.container, "清理 3 个对象")?.disabled).toBe(true);
+    } finally { await disabled.unmount(); }
+    const busy = await mount({ mode: "cloudGc", cloudBusy: true, gcPreview: { count: 2, bytes: 1 } });
+    try {
+      expect(buttonByText(busy.container, "预览")?.disabled).toBe(true);
+      expect(buttonByText(busy.container, "处理中…")?.disabled).toBe(true);
+    } finally { await busy.unmount(); }
   });
 
   it("清理中禁用删除入口", async () => {

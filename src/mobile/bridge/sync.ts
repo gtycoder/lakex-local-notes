@@ -269,6 +269,24 @@ function withSyncFailureHint(error: unknown, message: string): unknown {
   return next;
 }
 
+/** 云端清理结果（预览/真删共用；candidateCount ≠ deletedCount）。 */
+export interface MobileGcCleanupResult {
+  dryRun: boolean;
+  /** 本轮命中「可清理」的对象数（dryRun 下 = 将删数量）。 */
+  candidateCount: number;
+  /** 真正已删除的对象数（dryRun 恒 0）。 */
+  deletedCount: number;
+  /** 命中对象总体积；任一对象 size 未知则为 null。 */
+  bytes: number | null;
+  keys: string[];
+  /** keep 集大小（诊断口径，与桌面 S3v3DeepCleanupResult 同名）。 */
+  kept: number;
+  /** 仍在保留窗口内、本轮保留的对象数（等于 0 时说明没有「最近被替换」的对象）。 */
+  skippedRecent: number;
+  /** provider 没回 lastModified、保守保留的对象数。 */
+  ageUnknown: number;
+}
+
 export const syncDomain = {
   async addS3GcPending(key: string): Promise<void> {
     await runWrite("addS3GcPending", async () => {
@@ -369,13 +387,24 @@ export const syncDomain = {
     }
   },
 
-  async gcDeepCleanup(): Promise<{ candidateCount: number; deletedCount: number; keys: string[] }> {
+  /**
+   * 云端深度清理。
+   *
+   * `dryRun: true` = 只统计不删除（预览）；默认 = 真删。两条走同一段引擎实现，避免「预览说 3 个、
+   * 真删删 5 个」两套口径。只有真删才写 s3_gc_log（预览不算删除记录）。
+   */
+  async gcDeepCleanup(opts: { dryRun?: boolean } = {}): Promise<MobileGcCleanupResult> {
+    const dryRun = opts.dryRun === true;
+    const empty = (): MobileGcCleanupResult => ({
+      dryRun, candidateCount: 0, deletedCount: 0, bytes: 0, keys: [],
+      kept: 0, skippedRecent: 0, ageUnknown: 0,
+    });
     // 快路径：关闭云同步/未配置时连维护队列都不排队、零网络请求；入锁后再判一次，防止等待期间状态变化。
-    if (!canTouchNetwork(await mobileCloudState())) return { candidateCount: 0, deletedCount: 0, keys: [] };
+    if (!canTouchNetwork(await mobileCloudState())) return empty();
     return runMaintenance("gcDeepCleanup", async () => {
-      if (!canTouchNetwork(await mobileCloudState())) return { candidateCount: 0, deletedCount: 0, keys: [] };
+      if (!canTouchNetwork(await mobileCloudState())) return empty();
       const cfg = await syncDomain.getS3Settings();
-      if (!cfg) return { candidateCount: 0, deletedCount: 0, keys: [] };
+      if (!cfg) return empty();
       assertS3Credentials(cfg);
       const d = await ensureDb();
       const { runMobileV3DeepCleanup } = await import("../v3/sync.js");
@@ -384,11 +413,23 @@ export const syncDomain = {
       const result = await runMobileV3DeepCleanup(d, {
         endpoint: cfg.endpoint, region: cfg.region, bucket: cfg.bucket,
         accessKeyId: cfg.accessKeyId, secretAccessKey: cfg.secretAccessKey, prefix: cfg.prefix,
-      });
-      for (const key of result.deleted) {
-        try { await gcRepository.recordS3GcLog(d, "delete", key, "deep-clean", true); } catch { /* 日志失败不阻断 */ }
+      }, { dryRun });
+      if (!dryRun) {
+        for (const key of result.deleted) {
+          try { await gcRepository.recordS3GcLog(d, "delete", key, "deep-clean", true); } catch { /* 日志失败不阻断 */ }
+        }
       }
-      return { candidateCount: result.deleted.length, deletedCount: result.deleted.length, keys: result.deleted };
+      return {
+        dryRun,
+        // 命中数（dryRun 下 = 将删数量）；deletedCount 只表示「真的删掉了」。
+        candidateCount: result.deleted.length,
+        deletedCount: dryRun ? 0 : result.deleted.length,
+        bytes: result.bytes,
+        keys: result.deleted,
+        kept: result.kept,
+        skippedRecent: result.skippedRecent,
+        ageUnknown: result.ageUnknown,
+      };
     });
   },
 

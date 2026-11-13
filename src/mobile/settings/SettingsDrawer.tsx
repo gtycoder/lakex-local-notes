@@ -89,7 +89,11 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
     gcMsg,
     cleanOrphans,
     deleteOrphan,
+    gcPreview,
+    gcBusy,
+    previewCloud,
     cleanCloud,
+    clearGcPreview,
     cacheMsg,
     cacheSummary,
     clearCache,
@@ -166,12 +170,20 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
       }
     })();
   };
-  /** 云端清理保留二次确认（删的是云端对象，不可撤销）。 */
+  /**
+   * 云端清理保留二次确认（删的是云端对象，不可撤销）。
+   * 只有「预览」过且有命中时才会走到这里（面板按钮本身也是这么门控的）；确认文案复用预览数字，
+   * 让用户看到的数量和真删的目标一致。
+   */
   const requestCleanCloud = () => {
+    const preview = gcPreview;
+    if (!preview || preview.count === 0) return;
     void confirmMobile({
       title: "清理云端未引用文件？",
-      body: "将删除云端 7 天以上、没有任何文档或历史版本引用的文件，删除后无法撤销。本机笔记与附件不受影响。",
-      confirmText: "清理云端",
+      body: "将删除云端 " + preview.count + " 个对象" +
+        (preview.bytes === null ? "" : "（共 " + formatBytes(preview.bytes) + "）") +
+        "：超过 7 天、没有任何文档或历史版本引用的文件，删除后无法撤销。本机笔记与附件不受影响。",
+      confirmText: "清理",
       danger: true,
     }).then((ok) => { if (ok) void cleanCloud(); });
   };
@@ -763,13 +775,16 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
         mode={cleanupSheet ?? "orphans"}
         orphans={orphans}
         busy={orphanBusy}
+        cloudBusy={gcBusy}
         cloudReady={canTouchNetwork(cloudState)}
         cloudHint={cloudBlockReason ?? undefined}
         gcMessage={gcMsg}
-        onClose={() => setCleanupSheet(null)}
+        gcPreview={gcPreview}
+        onClose={() => { setCleanupSheet(null); clearGcPreview(); }}
         onPreviewOrphan={previewOrphan}
         onDeleteOrphan={(id) => void deleteOrphan(id)}
         onCleanOrphans={() => void cleanOrphans()}
+        onPreviewCloud={() => void previewCloud()}
         onCleanCloud={requestCleanCloud}
       />
 

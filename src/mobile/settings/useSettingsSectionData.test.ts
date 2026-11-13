@@ -85,7 +85,7 @@ beforeEach(() => {
   mocks.listOrphanAssets.mockResolvedValue([orphan]);
   mocks.cleanOrphanAssets.mockResolvedValue(undefined);
   mocks.deleteOrphanAsset.mockResolvedValue(undefined);
-  mocks.gcDeepCleanup.mockResolvedValue({ deletedCount: 2, candidateCount: 4, keys: ["a", "b"] });
+  mocks.gcDeepCleanup.mockResolvedValue({ dryRun: false, candidateCount: 2, deletedCount: 2, bytes: 1024, keys: ["a", "b"], kept: 3, skippedRecent: 0, ageUnknown: 0 });
   mocks.getDiagnostics.mockResolvedValue(diagnostics);
   mocks.getAssetUsage.mockResolvedValue({ files: 12, bytes: 2048 });
   mocks.getAppInfo.mockResolvedValue({ name: "LakexLocalNotes", version: "1", build: "1", protocolVersion: 1, platform: "android" });
@@ -157,12 +157,45 @@ describe("useSettingsSectionData", () => {
     expect(data.orphanBusy).toBe(false);
   });
 
-  it("云端清理和缓存清理更新结果文案并防止 busy 泄漏", async () => {
+  it("云端清理：未预览时拒绝删除，不触达 bridge", async () => {
     await render();
     await act(async () => { await data.cleanCloud(); });
-    expect(data.gcMsg).toContain("已清理 2 个对象");
-    expect(data.orphanBusy).toBe(false);
+    expect(mocks.gcDeepCleanup).not.toHaveBeenCalled();
+    expect(data.gcMsg).toContain("请先点「预览」");
+    expect(data.gcPreview).toBeNull();
+  });
 
+  it("云端清理：先预览（dryRun 只统计）再真删，候选与已删口径分开", async () => {
+    await render();
+    mocks.gcDeepCleanup.mockResolvedValueOnce({ dryRun: true, candidateCount: 4, deletedCount: 0, bytes: 2048, keys: ["a", "b", "c", "d"], kept: 1, skippedRecent: 2, ageUnknown: 0 });
+    await act(async () => { await data.previewCloud(); });
+    expect(mocks.gcDeepCleanup).toHaveBeenLastCalledWith({ dryRun: true });
+    expect(data.gcPreview).toEqual({ count: 4, bytes: 2048 });
+    // 预览成功不写「已清理」结果行（候选 ≠ 已删），数字只在预览块里
+    expect(data.gcMsg).toBe("");
+    expect(data.gcBusy).toBe(false);
+
+    mocks.gcDeepCleanup.mockResolvedValueOnce({ dryRun: false, candidateCount: 4, deletedCount: 4, bytes: 2048, keys: ["a", "b", "c", "d"], kept: 1, skippedRecent: 0, ageUnknown: 0 });
+    await act(async () => { await data.cleanCloud(); });
+    expect(mocks.gcDeepCleanup).toHaveBeenLastCalledWith({ dryRun: false });
+    expect(data.gcMsg).toContain("已清理 4 个对象");
+    expect(data.gcMsg).toContain("2.0 KB");
+    expect(data.gcPreview).toBeNull();
+    expect(data.gcBusy).toBe(false);
+  });
+
+  it("云端清理：预览为 0 时真删不触达 bridge", async () => {
+    await render();
+    mocks.gcDeepCleanup.mockResolvedValueOnce({ dryRun: true, candidateCount: 0, deletedCount: 0, bytes: 0, keys: [], kept: 1, skippedRecent: 0, ageUnknown: 0 });
+    await act(async () => { await data.previewCloud(); });
+    expect(data.gcPreview).toEqual({ count: 0, bytes: 0 });
+    await act(async () => { await data.cleanCloud(); });
+    expect(mocks.gcDeepCleanup).toHaveBeenCalledTimes(1);
+    expect(data.gcMsg).toContain("没有可清理");
+  });
+
+  it("缓存清理更新结果文案并防止 busy 泄漏", async () => {
+    await render();
     await act(async () => { await data.clearCache(); });
     expect(data.cacheMsg).toContain("已清理派生搜索缓存 7 条");
     expect(mocks.getCacheSummary).toHaveBeenCalled();
