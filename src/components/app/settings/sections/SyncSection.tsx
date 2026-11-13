@@ -4,12 +4,15 @@ import { Group, Field, TextField, Switch, Block, Item, NumField } from "../../..
 import { Cloud, TriangleAlert, Trash, Terminal } from "lucide-react";
 import { isQiniuEndpoint } from "../../../../lib/s3FormState";
 import { CLOUD_PRIVACY_NOTICE, cloudStateHint } from "../../../../core/cloudState";
+import { cloudSyncEnableGate } from "../../../../core/cloudSyncGate";
 import { SYNC_OPEN_CLOSE_NOTE, SYNC_AUTO_MODE_OPTIONS } from "../../../../core/syncModes";
 import { Select } from "../../../ui/Select";
 import type { SyncSettings } from "../../../../lib/types";
 
 export function SyncSection({ c }: { c: SettingsPanelContext }) {
-  const { cloudOffline, cloudState, copySyncDiagnostics, exportS3ConfigFile, gcCfg, gcLog, gcRun, importS3ConfigFile, runGcAction, s3, s3Verified, saveGcCfg, saveS3, saveSyncCfg, setS3Field, setS3ImportOpen, setSyncGateAlert, setSyncMsg, syncCfg, syncDiagMsg, syncDiagText, syncGateAlert, testS3 } = c;
+  const { cloudConfigured, cloudOffline, cloudState, copySyncDiagnostics, exportS3ConfigFile, gcCfg, gcLog, gcRun, importS3ConfigFile, runGcAction, s3, s3Verified, saveGcCfg, saveS3, saveSyncCfg, setS3Field, setS3ImportOpen, setSyncGateAlert, setSyncMsg, syncCfg, syncDiagMsg, syncDiagText, syncGateAlert, testS3 } = c;
+  /** 261114 用户裁决：没有配置或没通过连接测试 ⇒ 不能开启（两端同一判据/文案，见 core/cloudSyncGate）。 */
+  const enableGate = cloudSyncEnableGate({ configured: cloudConfigured, verified: s3Verified });
   return (
     <>
               <>
@@ -63,15 +66,15 @@ export function SyncSection({ c }: { c: SettingsPanelContext }) {
                       <Switch
                         itemId="sync-enabled"
                         name="启用云同步"
-                        desc={s3Verified || syncCfg.enabled ? "关闭后按纯本地空间工作：不连 S3、不自动同步，也不会从云端补拉缺失资源；重新开启后下一次同步会自动补拉。S3 配置与同步策略只保存在本机。" : "先在上方「S3 对象存储」完成配置并点「测试连接」通过，才能开启云同步。"}
+                        desc={enableGate.allowed || syncCfg.enabled ? "关闭后按纯本地空间工作：不连 S3、不自动同步，也不会从云端补拉缺失资源；重新开启后下一次同步会自动补拉。S3 配置与同步策略只保存在本机。" : enableGate.message}
                         note={<><span className="ln-tag ln-tag--pending">{CLOUD_PRIVACY_NOTICE.badge}</span>{" "}{CLOUD_PRIVACY_NOTICE.text}</>}
                         alert={syncGateAlert}
                         checked={syncCfg.enabled}
                         onChange={(checked) => {
-                          // 保留「未测通不能开」的实质，但不再禁用开关：点击给出可见提示，状态保持关闭。
-                          if (checked && !syncCfg.enabled && !s3Verified) {
-                            setSyncGateAlert("还没有通过连接测试：请先在上面填好 S3 配置并点「测试连接」。通过之前云同步保持关闭。");
-                            setSyncMsg("云同步未开启：S3 连接尚未验证。请先点「测试连接」。");
+                          // 261114：没有配置 / 没有通过连接测试 ⇒ 不能开启；点击给出可见提示，状态保持关闭。
+                          if (checked && !syncCfg.enabled && !enableGate.allowed) {
+                            setSyncGateAlert(enableGate.message);
+                            setSyncMsg(enableGate.message);
                             return;
                           }
                           setSyncGateAlert(null);

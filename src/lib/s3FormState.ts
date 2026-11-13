@@ -5,11 +5,9 @@
  */
 import type { S3Settings } from "./types.js";
 
-/** 只包含“连接相关”字段（不含 Secret 明文：保存后主进程会回 masked，导致指纹抖动）。 */
-export function s3ConfigFingerprint(s3: Pick<S3Settings, "endpoint" | "region" | "bucket" | "prefix" | "accessKeyId">): string {
-  const trim = (v: string | undefined) => (v ?? "").trim();
-  return [trim(s3.endpoint), trim(s3.region), trim(s3.bucket), trim(s3.prefix), trim(s3.accessKeyId)].join("\u0000");
-}
+/** 只包含“连接相关”字段（不含 Secret 明文：保存后主进程会回 masked，导致指纹抖动）。
+ *  单一来源已收编到 core（移动端与「开启闸门」共用同一口径）；这里保留 re-export 兼容既有导入点。 */
+export { s3ConfigFingerprint } from "../core/cloudSyncGate";
 
 /** 七牛 Kodo（qiniucs.com / qiniu 域名）：必须关闭 Path-style。 */
 export function isQiniuEndpoint(endpoint: string | undefined): boolean {

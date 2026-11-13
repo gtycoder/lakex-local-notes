@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { S3Settings } from "../../lib/types";
 import { decodeS3ConfigTransfer, decodeS3ConfigTransferFile, encodeS3ConfigTransfer } from "../../core/s3ConfigTransfer";
+import { s3ConfigFingerprint } from "../../core/cloudSyncGate";
 import { getNativeErrorMessage, reportNativeActionError } from "../../lib/nativeErrors";
 import { bridge } from "../bridge";
 import { pickLocalFile } from "../ui/pickFile";
@@ -41,25 +42,42 @@ function formFromSettings(settings: S3Settings): S3FormValues {
   };
 }
 
+/** 连接测试通过记下的配置指纹（模块级：设置页关闭再打开仍保留；改连接字段即失效）。
+ *  与桌面 verifiedS3Fingerprint 同口径 —— 也是「开启云同步闸门」的唯一依据（core/cloudSyncGate）。 */
+let verifiedS3Fingerprint: string | null = null;
+
 /** 设置页 S3 表单状态：持久化配置、草稿字段、掩码 Secret、测试与迁移码。 */
 export function useS3SettingsForm(open: boolean) {
   const [settings, setSettings] = useState<S3Settings | null>(null);
+  /** 设置读取是否已完成（「没配置」与「还在读」不能混为一谈：闸门/自动关闭要用）。 */
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [form, setForm] = useState<S3FormValues>(EMPTY_FORM);
   const [testText, setTestText] = useState("");
+  const [s3VerifiedFp, setS3VerifiedFp] = useState<string | null>(verifiedS3Fingerprint);
+  /** 当前草稿配置是否测试通过过（按指纹；Secret 不入指纹）。 */
+  const s3Verified = s3VerifiedFp !== null && s3VerifiedFp === s3ConfigFingerprint(form);
   const [exportState, setExportState] = useState<{ code: string; msg: string } | null>(null);
   const transferRef = useRef<HTMLTextAreaElement | null>(null);
 
   const updateForm = useCallback((patch: Partial<S3FormValues>) => {
     setForm((prev) => ({ ...prev, ...patch }));
+    // 改了连接字段 ⇒ 上一次「测试通过」失效（与桌面 setS3Field 的 invalidateS3Verified 同口径）。
+    verifiedS3Fingerprint = null;
+    setS3VerifiedFp(null);
   }, []);
 
   useEffect(() => {
     if (!open) return;
+    setSettingsLoaded(false);
     void bridge.getS3Settings().then((cfg) => {
       setSettings(cfg);
       // 没有配置 ⇒ 表单保持 EMPTY_FORM（Secret 为空）；有配置才回填（Secret 只回掩码）。
       setForm(cfg ? formFromSettings(cfg) : EMPTY_FORM);
-    }).catch((error) => reportNativeActionError("读取 S3 设置", error));
+      setSettingsLoaded(true);
+    }).catch((error) => {
+      reportNativeActionError("读取 S3 设置", error);
+      setSettingsLoaded(true);
+    });
   }, [open]);
 
   const save = useCallback(async (): Promise<boolean> => {
@@ -98,11 +116,23 @@ export function useS3SettingsForm(open: boolean) {
     if (!(await save())) return;
     setTestText("测试中…");
     try {
-      setTestText(await bridge.testS3Connection());
+      const text = await bridge.testS3Connection();
+      setTestText(text);
+      // bridge 约定：成功返回 "OK（…）"，失败返回 "FAIL: …"（不抛错）⇒ 只有 OK 才记「已验证」。
+      if (text.startsWith("OK")) {
+        const saved = await bridge.getS3Settings();
+        verifiedS3Fingerprint = s3ConfigFingerprint(saved ?? form);
+        setS3VerifiedFp(verifiedS3Fingerprint);
+      } else {
+        verifiedS3Fingerprint = null;
+        setS3VerifiedFp(null);
+      }
     } catch (error) {
+      verifiedS3Fingerprint = null;
+      setS3VerifiedFp(null);
       setTestText("测试失败：" + (error as Error).message);
     }
-  }, [save]);
+  }, [save, form]);
 
   const openExport = useCallback(async () => {
     setTestText("");
@@ -185,6 +215,8 @@ export function useS3SettingsForm(open: boolean) {
 
   return {
     settings,
+    settingsLoaded,
+    s3Verified,
     form,
     updateForm,
     testText,

@@ -19,6 +19,7 @@ import { TrashList } from "./TrashList";
 import { formatBytes } from "../../lib/formatBytes";
 import { probePinShortcut, requestPinQuickNoteShortcut } from "../native/quickNoteShortcut";
 import { CLOUD_PRIVACY_NOTICE, canTouchNetwork, cloudStateOf } from "../../core/cloudState";
+import { CLOUD_SYNC_ENABLE_NEED_UNCONFIGURED, cloudSyncEnableGate } from "../../core/cloudSyncGate";
 import { AppearanceSettingsSection, HistorySettingsSection, AboutSettingsSection } from "./BasicSettingsSections";
 import { UpdateCenterSection } from "./UpdateCenterSection";
 import { useAiSettingsForm } from "./useAiSettingsForm";
@@ -66,6 +67,8 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
   const [listKey, setListKey] = useState(0);
   const {
     settings: s3,
+    settingsLoaded: s3SettingsLoaded,
+    s3Verified,
     form: s3Form,
     updateForm: updateS3Form,
     testText: s3Test,
@@ -227,6 +230,20 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
     await reloadSyncReports();
   };
   const cloudState = cloudStateOf(Boolean(s3), syncCfg);
+  /** 261114 用户裁决（两端统一）：没有配置 / 没有通过连接测试 ⇒ 不能开启云同步；文案单源 core/cloudSyncGate。 */
+  const syncEnableGate = cloudSyncEnableGate({ configured: Boolean(s3), verified: s3Verified });
+  const syncEnableGateMessage = syncEnableGate.allowed ? null : syncEnableGate.message;
+  /** 旧版本遗留「未配置却已开启」：读到设置后自动关掉一次并说明原因（新逻辑下不会再产生）。 */
+  const syncAutoOffRef = useRef(false);
+  useEffect(() => {
+    if (!open) { syncAutoOffRef.current = false; return; }
+    if (!syncCfg || !s3SettingsLoaded || syncAutoOffRef.current) return;
+    if (!syncCfg.enabled || s3) return;
+    syncAutoOffRef.current = true;
+    updateSyncSettings({ enabled: false });
+    setSyncEnableHint(CLOUD_SYNC_ENABLE_NEED_UNCONFIGURED);
+  }, [open, syncCfg, s3SettingsLoaded, s3, updateSyncSettings]);
+  useEffect(() => { if (syncEnableGate.allowed) setSyncEnableHint(""); }, [syncEnableGate.allowed]);
   /** 261029 FIX-M：「启用云同步」点击开启但本机还没有 S3 配置时，行内给一条可见提示；不改「关=不出网」判据。 */
   const [syncEnableHint, setSyncEnableHint] = useState("");
   // 一旦补上 S3 配置（手填保存 / 从文件或迁移码导入），提示自动消失，不留过时信息。
@@ -478,14 +495,18 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
               <Group title="同步策略" icon={<RefreshCw size={16} />}>
                   <Switch
                     name="启用云同步"
-                    desc="关闭后本机按纯本地空间工作：不连 S3、不自动同步，回收站恢复/预览也不会去云端补拉缺失资源；重新开启后下次同步会自动补拉。"
+                    desc={syncEnableGate.allowed || syncCfg?.enabled === true
+                      ? "关闭后本机按纯本地空间工作：不连 S3、不自动同步，回收站恢复/预览也不会去云端补拉缺失资源；重新开启后下次同步会自动补拉。"
+                      : (syncEnableGateMessage ?? "")}
                     note={<><span className="mb-tag mb-tag--pending">{CLOUD_PRIVACY_NOTICE.badge}</span>{" "}{CLOUD_PRIVACY_NOTICE.text}</>}
-                    checked={syncCfg?.enabled !== false}
+                    checked={syncCfg?.enabled === true}
                     onChange={(next) => {
-                      // 261029 FIX-M：开启前先判「本机是否有 S3 配置」——没有就只给可见提示（仍然允许开，但不会出网）。
-                      setSyncEnableHint(next && cloudState === "unconfigured"
-                        ? "还没有配置 S3：开启后也不会同步。请先在上方填写连接信息，并点「测试连接」。"
-                        : "");
+                      // 261114 用户裁决：没有配置 / 没有通过连接测试 ⇒ 不能开启（点击只给提示，状态保持关闭）。
+                      if (next && !syncCfg?.enabled && !syncEnableGate.allowed) {
+                        setSyncEnableHint(syncEnableGateMessage ?? "");
+                        return;
+                      }
+                      setSyncEnableHint("");
                       // 单一写入口：同步策略改了 → 自动同步定时器立刻重挂（useAutoSync）
                       updateSyncSettings({ enabled: next });
                     }}

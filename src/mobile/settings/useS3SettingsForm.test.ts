@@ -147,6 +147,26 @@ describe("useS3SettingsForm", () => {
     expect(mocks.showToast).toHaveBeenCalledWith("S3 配置已导入");
   });
 
+  it("测试连接 OK ⇒ 记下「已验证」；改连接字段立即失效", async () => {
+    await render();
+    act(() => form.updateForm({})); // 复位模块级验证状态（同文件其它用例可能已经标记过）
+    expect(form.s3Verified).toBe(false);
+    await act(async () => { await form.testConnection(); });
+    expect(mocks.testS3Connection).toHaveBeenCalled();
+    expect(form.s3Verified).toBe(true);
+    act(() => form.updateForm({ endpoint: "https://changed.example.com" }));
+    expect(form.s3Verified).toBe(false);
+  });
+
+  it("测试连接 FAIL ⇒ 不记「已验证」（不能开启云同步）", async () => {
+    await render();
+    act(() => form.updateForm({}));
+    mocks.testS3Connection.mockResolvedValueOnce("FAIL: InvalidAccessKeyId");
+    await act(async () => { await form.testConnection(); });
+    expect(form.s3Verified).toBe(false);
+    expect(form.testText).toContain("FAIL");
+  });
+
   it("粘贴迁移码导入后强制虚拟托管，并用保存后的配置回填全部字段", async () => {
     await render();
     mocks.decodeCode.mockResolvedValue({ ...saved, endpoint: "https://pasted.example.com", forcePathStyle: true });

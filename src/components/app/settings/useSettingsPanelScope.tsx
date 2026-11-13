@@ -22,6 +22,7 @@ import { backupUsageView, backupResultView } from "../settingsBackupObservabilit
 import { formatDateTime } from "../../../core/dateFormat";
 import type { SettingsCategory, SettingsPanelProps } from "./settingsPanelTypes";
 import { S3_DEFAULTS, LAKE_KERNEL_VERSION, LAKE_WRAPPER_VERSION, depVersion, fieldErrorFor } from "./settingsPanelTypes";
+import { cloudSyncEnableGate } from "../../../core/cloudSyncGate";
 
 export type SettingsPanelContext = ReturnType<typeof useSettingsPanelScope>;
 
@@ -618,17 +619,13 @@ let verifiedS3Fingerprint: string | null = null;
     const next = { ...syncCfg, ...patch };
     await syncCfgRun.run(async () => {
       try {
-        // 只有 S3 配置可保存且连通测试通过，才允许开启云同步；测试失败则保持关闭、不写 enabled。
+        // 261114 用户裁决：没有配置 / 没有通过连接测试 ⇒ 不能开启（判据与文案单一来源 core/cloudSyncGate）。
+        // 不再「点开启时自动测一次」——必须由用户先点「测试连接」通过，避免隐式联网与不一致的两端行为。
         if (patch.enabled === true) {
-          setSyncMsg("正在测试 S3 连接...");
-          try {
-            await native.saveS3Settings(effectiveS3Settings(s3));
-            onS3SettingsChanged?.(s3);
-            setSyncMsg(await native.testS3Connection());
-            markS3Verified();
-          } catch (e) {
-            invalidateS3Verified();
-            setSyncMsg(getNativeErrorMessage(e) + "（未通过测试，云同步保持关闭）");
+          const gate = cloudSyncEnableGate({ configured: cloudConfigured, verified: s3Verified });
+          if (!gate.allowed) {
+            setSyncGateAlert(gate.message);
+            setSyncMsg(gate.message);
             return;
           }
         }
