@@ -7,6 +7,12 @@
 
 ## 0. 最新交接（最近 3 个批次；更早的见 git）
 
+### 261114 · v1.1.2 发版（62 笔提交：S3 数据安全修复 + 移动首屏/同步性能 + 云同步闸门）
+
+- **发版**：`npm version patch` → 1.1.2（Android versionName 1.1.2 / versionCode 11102）；注解 tag **`v1.1.2`**；master 与 tag 双推（Gitee `origin` + GitHub `github`）⇒ GitHub Actions 由 tag 触发打包（macOS x64/arm64 + Windows + Android release APK + latest.json；Gitee 发行版同步 APK 取决于 `GITEE_TOKEN`）。
+- **内容**：见 [docs/RELEASE-NOTES.md](RELEASE-NOTES.md) 顶部段落（同步数据安全：恢复后编辑被覆盖 / 附件声明一致性 / 小记共享正文 / 目录位置合并 / 小记恢复回弹 / 兜底未分类固定 id / 云同步开启闸门；移动端：入口瘦身 61,006→48,759B、基线落 gzip、云清理预览、AI 供应商；桌面：快捷键、回收站窄分栏、无障碍基线）。
+- **发版前门禁**（@ 1.1.2 提交）：tsc 0；全量 vitest 931 文件 / 5901 例 0 failed；ui-metrics、check:core 178/0、check:mobileui、check:bundle/arch（mobile entry 48,759/51,200、首屏 341,652/350,000）全过；diff-check 干净。设备：lake_mobile 三屏正常、lake_gate 10 态基线按该构建重烤并两轮 0 差异。
+
 ### 261114 · 移动首屏瘦身第二批（入口 −12.2KB，预算收紧）
 
 - **盘点**：入口 chunk 133 模块 / 486KB 源码，其中「点击才出现」的浮层与非首 tab 页面被静态打进入口。
@@ -140,8 +146,8 @@
 
 - 主分支 `master`；**HEAD 以 `git log -1` 为准**；R2 已提交 6 笔拆分/设备记录（`a23631f6` sidebar / `fd268432` settings / `231fe845` electron boot / `c00d3a60` lakeRuntime / `4a9b965c` ink 测试 / `e352e2cb` 设备记录）；**产品代码基线 = `8e20a6a3`（R0）/ `e87016bd`（R1）/ `e352e2cb`（R2）/ `3fad8821`（R2 收尾：位置合并 + 同步专用写路径 + 单篇降级）**；**日记收口批产品笔 = `199f3403`（不可变守卫）/ `fd58dc0a`（移动移除取消标记）/ `d4d03260`（移动目标剔除日记子树）/ `f965e62c`（转文档共享弹窗）/ `4b6a524a`（转小记媒体搬运）/ `400dcc75`（showNotice 全空间可见）**；**261113 批 = `839c7a93`（发版复核 P2/P3）/ `a57cf3cf`（移动端「转为小记」+ 22 号报告 §11 + RELEASE.md Secrets 节）**（详见 §0）。
 - **未 push**（261114 实测，已 fetch 核对）：`origin/master` = `github/master` = `608eb8d2` = 本地 HEAD；**0 提交待推**（双远端同步）——以后以 `git rev-list --count origin/master..HEAD` 为准。
-- `package.json` = **1.1.1**；Android `versionName 1.1.1` / `versionCode 11101`（从根 package.json 派生：`1000 + major*10000 + minor*100 + patch`，只增不减；**不手改 build.gradle**）。
-- tag：`v1.0.0`–`v1.0.5`、`v1.1.0`、**`v1.1.1`（261112 已发：GitHub Release 已创建，8 个资产 = Android APK / macOS arm64+dmg+zip / Windows exe / latest.json / release-body；Release workflow run 43232450665；本地 packaged smoke 通过）**；已发布 tag 不再移动。发布说明 = [docs/RELEASE-NOTES.md](RELEASE-NOTES.md)（**v1.1.1 → v1.0.0** 倒序；当前 tag 段落 = CI 生成 GitHub Release 正文的来源）。
+- `package.json` = **1.1.2**；Android `versionName 1.1.2` / `versionCode 11102`（从根 package.json 派生：`1000 + major*10000 + minor*100 + patch`，只增不减；**不手改 build.gradle**）。
+- tag：`v1.0.0`–`v1.0.5`、`v1.1.0`、`v1.1.1`（261112 已发）、**`v1.1.2`（261114 已打 tag 并双推；CI 由 tag 触发打包 → GitHub Release 8 资产 + latest.json；发布说明段落 = RELEASE-NOTES 顶部 `# LakexLocalNotes v1.1.2`）**；已发布 tag 不再移动。发布说明 = [docs/RELEASE-NOTES.md](RELEASE-NOTES.md)（**v1.1.2 → v1.0.0** 倒序；当前 tag 段落 = CI 生成 GitHub Release 正文的来源）。
 - 分支/远端：`master` 唯一长期分支；`origin` = Gitee（SSH，第二 pushurl = GitHub HTTPS）⇒ `git push origin <branch>` 一次推两边；GitHub 只在推 tag 时构建。remote 不入库 ⇒ 新 clone 跑 `npm run setup:remotes`。
 - **工作树**：261114 实测**干净**（并行会话的移动 AI / 云同步开启闸门 / S3 说明等 WIP 均已由各自会话提交并双推）；历史上并行会话共用工作树时一律「只 stage 本批文件」，**绝不用 `git add -A`**。
 - 261110 一次性历史清理（`.ai-writing-recon/` 用 `git filter-repo` 从全部历史移除，重写 v1.1.0 之后的提交；tag 未变）⇒ 旧 clone 需 `git fetch --force --prune && git reset --hard origin/master`。
