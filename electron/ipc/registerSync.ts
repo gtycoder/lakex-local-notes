@@ -199,13 +199,16 @@ export function registerSyncIpc(ipc: IpcRegistrar, deps: SyncIpcDeps): void {
     return { ...store.getSyncSettings(), alignWarning };
   });
   ipc.handle("list_s3_gc_log", () => store.listS3GcLog());
-  ipc.handle("run_s3_deep_cleanup", (dryRun: boolean, _ignoreRetention = false) => {
+  ipc.handle("run_s3_deep_cleanup", (dryRun: boolean, ignoreRetention = false) => {
     requireCloud();
     return enqueueMaintenance(async () => {
       const settings = store.getS3Settings();
       if (!settings) throw new AppError("NotConfigured", "请先保存 S3 配置");
-      // v3 统一深度清理（文档 + 小记）；ignoreRetention 由 v3 自身 pending 门禁负责，不再使用旧窗口。
-      const result = await runV3DeepCleanup(store, { dryRun: !!dryRun });
+      // v3 统一深度清理（文档 + 小记）。261113（C5 实测）：渲染层的「立即清理」一律传
+      // ignoreRetention=true，但旧实现把这个形参丢了 ⇒ 手动清理仍受 gcRetentionDays（默认 7 天）
+      // 窗口限制，看着像「清理没生效」。这里把它翻译成 retentionDays=0（只靠 v3 自身的
+      // pending/声明引用门禁兜底），预览与真删同参，避免「预览 N 个、真删 0 个」。
+      const result = await runV3DeepCleanup(store, { dryRun: !!dryRun, ...(ignoreRetention ? { retentionDays: 0 } : {}) });
       return { dryRun: !!dryRun, deleted: result.deleted, kept: result.kept };
     });
   });
