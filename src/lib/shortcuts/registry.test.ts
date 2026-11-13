@@ -52,6 +52,18 @@ describe("快捷键注册表（261114）", () => {
     expect(matchShellCommand({ key: "w", code: "KeyW", metaKey: true }, "other")).toBeNull();
   });
 
+  it("第二批：⌃⇥ / ⌃⇧⇥ 切标签、⇧⌘G 锁文档、⌥H 历史", () => {
+    expect(matchShellCommand({ key: "Tab", code: "Tab", ctrlKey: true }, "mac")).toBe("next-tab");
+    expect(matchShellCommand({ key: "Tab", code: "Tab", ctrlKey: true, shiftKey: true }, "mac")).toBe("prev-tab");
+    expect(matchShellCommand({ key: "Tab", code: "Tab", ctrlKey: true }, "other")).toBe("next-tab");
+    expect(matchShellCommand({ key: "h", code: "KeyH", altKey: true }, "mac")).toBe("history");
+    expect(matchShellCommand({ key: "g", code: "KeyG", metaKey: true, shiftKey: true }, "mac")).toBe("lock-doc");
+    const next = SHELL_COMMANDS.find((command) => command.id === "next-tab")!;
+    expect(formatCommandKeys(next, "mac")).toBe("⇧⌘] / ⌃⇥");
+    expect(formatChord("Mod+Shift+KeyG", "mac")).toBe("⇧⌘G");
+    expect(formatChord("Alt+KeyH", "mac")).toBe("⌥H");
+  });
+
   it("未注册组合返回 null（不抢内核/系统键）", () => {
     expect(matchShellCommand({ key: "s", code: "KeyS", metaKey: true }, "mac")).toBeNull();
     expect(matchShellCommand({ key: "f", code: "KeyF", metaKey: true }, "mac")).toBeNull();

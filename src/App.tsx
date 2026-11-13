@@ -676,6 +676,12 @@ export function App() {
     setNewNoteError(null);
     setNewNoteOpen(true);
   }, [desktopWorkspace, handleDiaryCreateEntry, setNewNoteError, setNewNoteOpen, switchDesktopWorkspace]);
+  /** 壳层快捷键 ⌥H（注册表 history）：打开**当前文档**的历史版本面板（无活动文档 no-op）。 */
+  const handleShortcutHistory = useCallback(() => {
+    if (!activeNoteId) return;
+    const node = treeNodes.find((item) => item.noteFileId === activeNoteId);
+    if (node) void sidebarOpenHistory(node);
+  }, [activeNoteId, sidebarOpenHistory, treeNodes]);
 
   /** 保存冲突三选项（Batch4-D）。每个分支都先记审计日志（渲染层 console 由主进程统一落盘）。 */
   const resolveSaveConflict = useCallback(async (choice: "copy" | "overwrite" | "discard") => {
@@ -913,6 +919,8 @@ export function App() {
       "next-tab": () => cycleTab(1),
       "sync": () => { void runSync(); },
       "new-document": () => handleShortcutNewDocument(),
+      "lock-doc": () => { if (activeNoteId) void toggleNoteLock(); },
+      "history": () => handleShortcutHistory(),
     },
   });
 

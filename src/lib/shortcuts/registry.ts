@@ -22,6 +22,8 @@ export type ShellCommandId =
   | "prev-tab"
   | "next-tab"
   | "sync"
+  | "lock-doc"
+  | "history"
   | "focus-mode"
   | "toggle-sidebar";
 
@@ -43,9 +45,14 @@ export const SHELL_COMMANDS: readonly ShellCommandDef[] = [
   { id: "global-search", settingId: "shortcut-search", label: "打开全局搜索（标题和正文）", chords: ["Mod+KeyP", "Mod+KeyK"] },
   { id: "new-document", settingId: "shortcut-new-document", label: "新建文档（知识库=弹窗新建，日记=今天新建）", chords: ["Mod+KeyN"] },
   { id: "close-tab", settingId: "shortcut-close-tab", label: "关闭当前标签", chords: ["Mod+KeyW"] },
-  { id: "prev-tab", settingId: "shortcut-prev-tab", label: "上一个标签", chords: ["Mod+Shift+BracketLeft"] },
-  { id: "next-tab", settingId: "shortcut-next-tab", label: "下一个标签", chords: ["Mod+Shift+BracketRight"] },
+  // 标签切换两条通道并存：⇧⌘[ / ⇧⌘]（思源 goToTabPrev/Next）+ ⌃⇥ / ⌃⇧⇥（思源 goToEditTabNext/Prev）。
+  { id: "prev-tab", settingId: "shortcut-prev-tab", label: "上一个标签", chords: ["Mod+Shift+BracketLeft", "Ctrl+Shift+Tab"] },
+  { id: "next-tab", settingId: "shortcut-next-tab", label: "下一个标签", chords: ["Mod+Shift+BracketRight", "Ctrl+Tab"] },
   { id: "sync", settingId: "shortcut-sync", label: "立即同步（未配置/已关闭会给理由）", chords: ["F9"] },
+  // ⇧⌘G = 思源「编辑/只读切换」的对应物（我们只有编辑锁/只读）。若未来实测内核占用 ⌘G/⇧⌘G（查找下一个/上一个），
+  // 再换 ⌥⌘L；改键位只需改这里（注册表单一来源）。
+  { id: "lock-doc", settingId: "shortcut-lock-doc", label: "锁定 / 解锁当前文档（只读）", chords: ["Mod+Shift+KeyG"] },
+  { id: "history", settingId: "shortcut-history", label: "打开当前文档的历史版本", chords: ["Alt+KeyH"] },
   { id: "focus-mode", settingId: "shortcut-focus", label: "进入或退出专注模式", chords: ["Mod+Shift+Enter"] },
   { id: "toggle-sidebar", settingId: "shortcut-sidebar", label: "收起或固定目录栏", chords: ["Mod+BracketRight"] },
 ];
@@ -193,7 +200,7 @@ function keyLabel(code: string): string {
 /** 显示文案：mac = ⇧⌘] / ⌘P；其它平台 = Ctrl+Shift+] / Ctrl+P。 */
 export function formatChord(chord: string, platform: ShortcutPlatform): string {
   const p = parseChord(chord);
-  const key = keyLabel(p.code);
+  const key = p.code === "Tab" && platform === "mac" ? "⇥" : keyLabel(p.code);
   if (platform === "mac") {
     const prefix = (p.ctrl ? "⌃" : "") + (p.alt ? "⌥" : "") + (p.shift ? "⇧" : "") + (p.mod ? "⌘" : "");
     return prefix + key;

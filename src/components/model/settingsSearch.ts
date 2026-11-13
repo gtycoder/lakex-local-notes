@@ -39,6 +39,8 @@ export const SETTING_ITEMS: SettingItemEntry[] = [
   { id: "shortcut-prev-tab", category: "shortcuts", label: "上一个标签", keywords: "上一个 标签 切换 ⇧⌘[ 快捷键" },
   { id: "shortcut-next-tab", category: "shortcuts", label: "下一个标签", keywords: "下一个 标签 切换 ⇧⌘] 快捷键" },
   { id: "shortcut-sync", category: "shortcuts", label: "立即同步（未配置/已关闭会给理由）", keywords: "同步 立即 F9 快捷键 手动同步" },
+  { id: "shortcut-lock-doc", category: "shortcuts", label: "锁定 / 解锁当前文档（只读）", keywords: "锁定 解锁 只读 编辑锁 ⇧⌘G 快捷键" },
+  { id: "shortcut-history", category: "shortcuts", label: "打开当前文档的历史版本", keywords: "历史 版本 快照 ⌥H 快捷键" },
   { id: "shortcut-focus", category: "shortcuts", label: "进入或退出专注模式", keywords: "专注模式 全屏写作" },
   { id: "shortcut-sidebar", category: "shortcuts", label: "收起或固定目录栏", keywords: "目录 面板 侧栏 收起 固定 ⌘] 快捷键" },
   { id: "shortcut-move", category: "shortcuts", label: "在搜索结果中移动", keywords: "上下 选择" },
