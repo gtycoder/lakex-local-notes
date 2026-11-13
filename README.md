@@ -199,7 +199,7 @@ bash scripts/android-build.sh --sync           # 构建 debug APK
 bash scripts/android-build.sh --sync --install # 构建并安装到已连接设备
 ```
 
-CI 发版产出 `assembleRelease` 的**正式 release keystore 签名** APK（v1.0.2 起：GitHub Secrets 注入 `ANDROID_KEYSTORE_PATH` / `ANDROID_KEYSTORE_PASSWORD` / `ANDROID_KEY_ALIAS` / `ANDROID_KEY_PASSWORD`）；本地注入同一组环境变量后，`assembleRelease` 也能出正式包，未注入时回退 debug 签名。`debug` 变体仍为 `debuggable=true`（供 WebView 调试）。
+CI 发版产出 `assembleRelease` 的**正式 release keystore 签名** APK（v1.0.2 起）：GitHub Secrets 需配 `ANDROID_KEYSTORE_BASE64`（keystore 的 base64；CI 解码后由 workflow 派生 `ANDROID_KEYSTORE_PATH` 再交给 gradle，PATH 本身不是 secret 名）/ `ANDROID_KEYSTORE_PASSWORD` / `ANDROID_KEY_ALIAS` / `ANDROID_KEY_PASSWORD`，缺任一会回退 debug keystore 并被 CI 的签名校验拦红；本地出正式包则直接注入「`ANDROID_KEYSTORE_PATH` + 三个口令」这组环境变量（未注入时回退 debug 签名）。`debug` 变体仍为 `debuggable=true`（供 WebView 调试）。
 
 ## 打包与发布
 

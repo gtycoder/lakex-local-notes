@@ -94,7 +94,7 @@ renderer: list_tree_nodes（含 space）
 
 ## 转为文档 / 转为小记（261109）
 
-日记条目右键有**两个单篇出口**（移动端条目 ⋯ 当前只有「转为文档…」；「转为小记」未在移动端提供）：
+日记条目有**两个单篇出口**（桌面条目**右键**、移动端条目 **⋯** 都有，同名同语义）：
 
 **①「转为文档…」= 移动**：共享弹窗里只选**知识库（笔记本）**这一层（**不选分组、不出现日记本**）、标题默认日期键但可改；确认后**先 move 再 rename**（日记条目不接受改名），失败一律可见 → 该条落到目标笔记本末尾、成为普通文档（同一 note，不复制、不删）。
 **②「转为小记」= 原样复制正文 + 搬运媒体，原文进回收站**：主进程用**原 Lake 正文**创建一条小记（新 id；`/<noteId>/` → `/quick-notes/<id>/` 作用域改写 + 正文引用到的图片/附件复制到小记资产目录），随后把**日记原文移入回收站**（软删、**可恢复**，不是 purge）。小记是**另一条数据**；**原资产保留在原日记目录**，从回收站恢复后原稿完整。
@@ -104,7 +104,7 @@ renderer: list_tree_nodes（含 space）
 - **「转为文档」语义 = 移动**（同一个 note id 换父节点）：正文、历史快照、回收站、标签关系、S3 索引全都跟着走，**不复制、不改格式、不删**（日记本来就是 Lake 文档，没有「格式转换」这回事）；「转为小记」则是**复制**（见下条）。
 - 移出后自然从日记时间线消失（`diaryEntries` 只扫日记本子树）；**移出后不会自动变回日记**——日记本不是移动目标，普通文档无法移入（想继续写日记，用日记空间的「写今天 / ＋」新建）。
 - 判据单一来源：`core.moveTargetCandidates()` 先剔掉日记子树（261112 日记本不作移动目标），桌面再 `.filter(nodeType === "notebook")` ⇒ **只到知识库（笔记本）这一层，不出分组、不出日记本**；移动端仍用 `core.diaryConvertTargets()`（根层笔记本、排除日记本）。两端都再经 `core.planDiaryConvert()` 校验条目确实是日记、目标合法。UI 与写入路径都先问 core，不另写一套。
-- 入口：桌面条目**右键菜单**两项（「转为文档…」= `Menu` + `usePopoverPosition`；「转为小记」）；移动端条目行 ⋯（`MobileSheetMenu`）当前只有「转为文档…」。
+- 入口：桌面条目**右键菜单**两项（「转为文档…」= `Menu` + `usePopoverPosition`；「转为小记」）；移动端条目行 ⋯（`MobileSheetMenu`）**同一组两项**（261113 task-106 补齐「转为小记」）。
 - **桌面「转为文档」弹窗 = 与 AI 写作「生成文档」同一个共享实现**（261112 task-91 用户裁决）：`src/components/app/PublishDocDialog.tsx`（浮动窗、样式 `styles/app/dialogs.css` 的 `.publish-doc*`）。只选知识库（笔记本）这一层、**不选分组、不出现日记本**、**标题默认日期键但可改**；确认后先 `move` 再 `rename`（日记条目不接受改名，AGENTS §3#25），失败一律可见（移动失败不动标题；改名失败明说「已移出、但改名失败」），随后刷新目录树。移动端目标选择仍用 `MoveTargetTreeSheet`。
 - **「转为小记」实现口径**（主进程，261112 task-92）：`electron/diaryQuickNoteConversion.ts` 的 `convertDiaryNoteToQuickNote` ——
   1. **类型门**：`kind !== "doc"` 直接拒绝（`InvalidInput`：表格/多维表/画板/手写板正文不是 Lake 文本，请先转为文档）；
@@ -113,6 +113,7 @@ renderer: list_tree_nodes（含 space）
   4. **原子落库**：`quickNotes.createQuickNoteFromContent`（journal 4 态，失败不留半成品）→ 成功后才 `deleteTreeNode` 软删日记；软删失败回滚刚建的小记；
   5. **正文引用但资产文件缺失 ⇒ 明确失败**（不产生指向不存在文件的半成品；原文与其它资产原样保留）；
   6. **提示文案**：`src/features/diary/diaryQuickNote.ts` 的 `diaryToQuickNoteNotice(droppedKinds)` →「已转为小记（含图片/附件）；日记已移入回收站，可恢复」，有剥离时追加「X、Y 未搬运（日记原稿仍在回收站，可恢复）」；纯文本镜像 = 标题 + 正文纯文本（预览/搜索/降级显示）。
+- **「转为小记」移动端实现口径**（261113 task-106，与桌面同语义）：`src/mobile/diary/diaryToQuickNote.ts` 的 `convertDiaryToQuickNote` —— ① 类型门：非 doc 直接拒绝（提示「不能转为小记；请先转为文档」）；② 校验正文引用的资产齐全（缺文件明确失败，不产生指向不存在文件的半成品）；③ `rewriteQuickNoteAssetScope` 改写 `/<noteId>/` → `/quick-notes/<newId>/`（含卡片 `data:` 里的 URL-encoded 形态）；④ `stripUnsupportedCards` 剥掉不可承载卡片并上报 `droppedKinds`；⑤ 只搬**正文真正引用**的资产（原资产保留）→ 生成 images 清单（尺寸/size/sha256）→ `saveQuickNoteContent` 写 `.qnote` 正文 + 行；⑥ **成功之后**才 `trashTreeItem` 软删原文；任一步失败 `removeUnsyncedQuickNote` 回滚（行/正文/标签关系/资产目录全清，原文不动、不留半成品）。桥 = `bridge/diary.diaryToQuickNote`（写域 + assetFs 注入）；文案 `src/mobile/diary/diaryQuickNoteNotice.ts` 与桌面逐字一致（含 droppedKinds 追加句）；UI = 条目 ⋯「转为小记」→ 二次确认（「图片/附件会一起复制到小记；原日记会移入回收站（可恢复）」）→ toast，在途守卫防连点。设备验收见 [22 号报告 §11](audit-261112/22-diary-untag-multi-end.md)（5556：含图小记 / board 卡明说未搬运 / 回收站恢复；证据 `audit-261112/evidence/diary-to-quicknote-mobile/`）。
 - **目标选择器支持调用点文案**：261110 给移动目标树加了 `title` / `confirmLabel` / `description` 可选参数（普通移动仍用默认「移动到… / 移动到此处」，render 测试锁默认值不回归）；261112 起桌面转文档改用共享 `PublishDocDialog`，传 `heading="转为文档"` / `confirmLabel="转为文档"` / 自己的 `description`，AI 写作「生成文档」用默认口径。
 - **不做**：不自动清理搬空后的年/月分组（空分组无害，清理由用户或以后统一做）；不提供「转回日记」的专用动作（见上：日记本不是移动目标，无法移入）。
 

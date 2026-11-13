@@ -7,6 +7,14 @@
 
 ## 0. 最新交接（最近 3 个批次；更早的见 git）
 
+### 261113 · 移动端「转为小记」+ 发版复核 P2/P3 + v1.1.1 发布（已本地提交）
+
+- **移动端补「转为小记」（task-106，`a57cf3cf`）**：日记条目 ⋯ 新增「转为小记」，与桌面同语义 —— 原 Lake 正文复制成新小记、图片/附件搬到 `/quick-notes/<id>/`（**原资产保留**）、原文软删进回收站（可恢复）；数据层 `src/mobile/diary/diaryToQuickNote.ts`（非 doc 拒绝 / 已引用资产缺失明确失败 / 不可承载卡片剥掉并 `droppedKinds` 明说 / 任一步失败 `removeUnsyncedQuickNote` 回滚不留半成品）+ `bridge/diary.diaryToQuickNote`（写域）+ 文案与桌面逐字一致 + ⋯ 二次确认与 toast。**至此两端都有两个单篇出口**。设备验收（5556：含图小记 / board 卡明说未搬运 / 回收站恢复）见 [22 号报告 §11](audit-261112/22-diary-untag-multi-end.md)，证据 `audit-261112/evidence/diary-to-quicknote-mobile/`。
+- **发版复核 P2/P3（task-105，`839c7a93`）**：core/electron + 桌面 UI —— 转换守卫、资产匹配、kind 单一来源、目录告警、计数、可访问性、toast×dock。
+- **v1.1.1 已发布**：tag `v1.1.1`（GitHub Release 8 个资产 = APK / macOS arm64 dmg+zip / Windows exe / latest.json / release-body；run id 见 §1），本地 packaged smoke 通过；发布说明 = [RELEASE-NOTES](RELEASE-NOTES.md) 顶部段落。
+- **文档收口（261113）**：AGENTS §3#25③ 明确「两端都有、同名同语义」；[DIARY](DIARY.md) / [guide 16](../guide/16-diary.md) 补移动端入口与行为（⋯ 菜单、媒体复制、原稿可恢复、droppedKinds、非 doc 拒绝）；[RELEASE.md](RELEASE.md) 新增 GitHub Secrets 节（Android 4 个名字 + 缺失后果 + `GITEE_TOKEN`）；[README](../README.md) / [MOBILE-OPS](MOBILE-OPS.md) 的 Android secret 名改为 `ANDROID_KEYSTORE_BASE64`（`ANDROID_KEYSTORE_PATH` 是 workflow 派生变量）。
+- 本波门禁见 §1。
+
 ### 261112 · 日记本不可变 + 两出口 + 回收站预览加固（已本地提交，未推送）
 
 - **日记本固定不可变（261112 用户裁决，红线见 AGENTS §3#25）**：`199f3403` 移除「取消日记标记」并把日记本定为固定不可变笔记本（`space` 只升不降；删除 / 改名 / 图标 / 排序 / 移动**均设守卫拒绝**）；`fd58dc0a` 移动端移除入口与写路径（保留单篇出口）；`d4d03260` 移动目标候选统一剔除日记子树（core 单一判据，桌面+移动共用）。
@@ -30,41 +38,24 @@
 - **S3 语义修复第二波（261112 晚，均已本地提交）**：① **S72** 被远端移入回收站 + 本地有未同步编辑 ⇒ **强制留历史快照**（`903a47aa`）；② **F-01b** 目录 purge 后云端索引残留（4 处叠加根因）已修（`fa2fbdad`）+ 矩阵附录 D 回写（`dc882945`）；③ **H73-G1** 位置赢家为远端时生命周期变更不再被 `lifecycleRace` 永久挡住（`4db266e9`）；④ apply 跳过改**独立 kind `apply_skipped`** + 诊断逐项 + P0 回归护栏（`1db5dea6`）；⑤ `positionMerge` / `mergeNoteLock` 表驱动 **32 例**（`811df501`）；⑥ 矩阵收口（覆盖 **45 有 / 28 部分 / 1 真空**、新增 S08）（`18019c1f`）。**task-46/47/52–58 全部关闭**；本波门禁见 §1。
 - **AGENTS 新红线（`68e90df4`）**：§3#23 写路径守卫分层（用户策略只在入口/同步专用写路径，声明 U/S/I/R/M 调用方分类）+ §3#24 位置与内容正交（位置基线三方合并、恢复历史=内容动作、purge 整棵子树、**不加位置 wire 时间戳**）——内容以 AGENTS 为准，本文不复述。
 
-### 261112 · 发布前全仓审计 + R0/R1 收口批（已本地提交，未推送）
-
-- **审计**：6 域并行只读审计 + Lead 交叉复核 ⇒ `docs/audit-261112/`：`00-MASTER-PLAN.md`（总方案 + A–Q 分项 + R0/R1/R2 路线 + Q01–Q27 裁决）+ 分册 02 预览 / 03 桌面 UI 样式 / 04 移动 / 05 core+electron / 06 特性域 / 07 文档清理。代码域 P0 = 0。
-- **R0 已落地（产品代码笔 `8e20a6a3`；另 `996b4d6e` docs / `fab629dc` chore）**：
-  - 文档：guide 19 章（新增 16 日记 / 17 AI 写作 / 18 换机便携包 / 19 更新中心；目录、平台差异、⌘1–5、设置分类全部对齐）；README 文档表收为入口并指向本文件 §1；ARCHITECTURE 按 v3 重写；STORAGE-LAYERS v3；TAG-SYSTEM-DESIGN / MOBILE-AI / TROUBLESHOOTING / SYNC-DEVICE-CONTRACT / MOBILE-DESIGN 回填。
-  - 卫生：`.gitignore` 删三处 vendor/public 忽略；删 23 个零引用脚本 + `INK-DEVICE-CHECK.md` + `src/core/s3v3Gc.ts`；脚本侧机器绝对路径清零。
-  - 代码：小记「保存并同步」4 理由透传 + 两端同文案（F-04）；AI 作用域 `data-note-id` 单源（F-03）；日期格式化收口 `core/dateFormat` + lint；`NoteKind` 私抄清零 + 触点护栏；长按单源；`AI_DIALOG_GAP` 单源；`native.ts` IPC 第四面 parity；死 env 开关（`LAKE_SYNC_PROTOCOL` / `LAKE_S3V3_QUICK_NOTES`）删除。
-  - 样式：删 35 条被压死声明 + `.ln-modal/.ln-drawer`；新增 `shadowedDecls` 门禁（基线只降）；移动 4 项小修（radius / theme-color / OpenFile 去重 / 契约计数）。
-- **门禁（本批实测，数值见 §1）**：tsc 0；全量 vitest 874 文件 / 5512 passed / 0 failed；ui-metrics / check:core / check:mobileui / 双 build / bundle+arch / diff-check 全绿。
-- **未做**：设备类矩阵（桌面 42 态 / 手机+平板 10 态 / 23 屏 / windowsweep）本批未跑；剩余 21 条 shadowed 声明与移动 `mobile.css` 域归位留 R1。
-- **R1 已落地（261112 第二轮裁决 Q01–Q27；产品代码笔 `e87016bd` 等 7 笔）**：
-  - 预览：`features/preview/` 基础层（types/policy/previewAsset/useReadOnlyKernelViewer，4 份 viewer 包装 → 1 个 hook）；Q02 原图档位（Lightbox 先显示档后换原图）、Q06 桌面回收站/历史/属性双击放大、PREVIEW_POLICY 接线；Q04 移动打开回收站文档=只读预览+横幅、Q07 LakeEditor `interaction:"preview"`、Q03 移动历史快照预览（doc 只读 / 非 doc 结构化摘要）、Q05 预览档字号。
-  - 拆分 Q19=C2 前 5 项：`core/bitableDoc` 2419→9 模块；`electron/quickNotes` 1451→9 模块；`electron/webApiServer` 988→5 模块；`BitableEditor` 2112→1496+6 hook；`QuickNotesWorkspace` 1320→735+3 hook 并搬进 `features/quickNotes/`（Q20A）。
-  - 清理/原生/文档：Q16 删 `docs/audit-261027/`（结论收编 RESILIENCE §9–§10 / SYNC-PROTOCOL §15）；Q23 删 v1/v2 同步账本迁移；Q24 文案；Q21 `AssetPaths.kt` 单源+10 例对抗测试；Q22 `SecureStore→SecretBox`（ALIAS/PREFS 不变）；Q17 HANDOFF 183KB→21KB；Q25 CONTRIBUTING/SECURITY；Q26 AGENTS lazy 边界；Q11 DESIGN `.ln-row2`；Q12 guide 写明「AI 助手对话不保存」。
-- **R1 门禁（本批实测，数值见 §1）**：tsc 0；全量 vitest 882 文件 / 5559 passed / 0 failed；ui-metrics 66/21；check:core 172/0；双 build + bundle/arch PASS；diff-check 0；`gradlew testDebugUnitTest` 31 tests 全绿。
-- **R1 未做/待验**：设备矩阵未跑（桌面 42 态 / 手机+平板 10 态 / 23 屏 / windowsweep）——移动预览 Sheet 几何、SecureStore 真机读回、历史预览返回键均需设备验证；拆分 6–10（`Sidebar`/`SettingsPanel`/`lakeRuntime`/`InkPad`/`main.ts`）按 Q19=C2 留发布后；剩余 21 条 shadowed 声明与移动 `mobile.css` 域归位留 R1 后续。
-
 ## 1. 当前基线（唯一状态来源）
 
-> 数值 = 最近一次实测（261112 日记收口批，低负载串行）。**任何状态判断以本节 + `git status` / `git log -1` 为准**。
+> 数值 = 最近一次实测（261113 批，低负载串行）。**任何状态判断以本节 + `git status` / `git log -1` 为准**。
 
 **版本与仓库**
 
-- 主分支 `master`；**HEAD 以 `git log -1` 为准**；R2 已提交 6 笔拆分/设备记录（`a23631f6` sidebar / `fd268432` settings / `231fe845` electron boot / `c00d3a60` lakeRuntime / `4a9b965c` ink 测试 / `e352e2cb` 设备记录）；**产品代码基线 = `8e20a6a3`（R0）/ `e87016bd`（R1）/ `e352e2cb`（R2）/ `3fad8821`（R2 收尾：位置合并 + 同步专用写路径 + 单篇降级）**；**日记收口批产品笔 = `199f3403`（不可变守卫）/ `fd58dc0a`（移动移除取消标记）/ `d4d03260`（移动目标剔除日记子树）/ `f965e62c`（转文档共享弹窗）/ `4b6a524a`（转小记媒体搬运）/ `400dcc75`（showNotice 全空间可见）**（详见 §0）。
+- 主分支 `master`；**HEAD 以 `git log -1` 为准**；R2 已提交 6 笔拆分/设备记录（`a23631f6` sidebar / `fd268432` settings / `231fe845` electron boot / `c00d3a60` lakeRuntime / `4a9b965c` ink 测试 / `e352e2cb` 设备记录）；**产品代码基线 = `8e20a6a3`（R0）/ `e87016bd`（R1）/ `e352e2cb`（R2）/ `3fad8821`（R2 收尾：位置合并 + 同步专用写路径 + 单篇降级）**；**日记收口批产品笔 = `199f3403`（不可变守卫）/ `fd58dc0a`（移动移除取消标记）/ `d4d03260`（移动目标剔除日记子树）/ `f965e62c`（转文档共享弹窗）/ `4b6a524a`（转小记媒体搬运）/ `400dcc75`（showNotice 全空间可见）**；**261113 批 = `839c7a93`（发版复核 P2/P3）/ `a57cf3cf`（移动端「转为小记」+ 22 号报告 §11 + RELEASE.md Secrets 节）**（详见 §0）。
 - **未 push**：`origin/master` 仍为 `8cc65e06`（本地领先若干提交，数量以 `git rev-list --count 8cc65e06..HEAD` 为准）；`github/master` = `2e512c48`。需要推送时按 AGENTS §2 双远端流程。
 - `package.json` = **1.1.1**；Android `versionName 1.1.1` / `versionCode 11101`（从根 package.json 派生：`1000 + major*10000 + minor*100 + patch`，只增不减；**不手改 build.gradle**）。
 - tag：`v1.0.0`–`v1.0.5`、`v1.1.0`、**`v1.1.1`（261112 已发：GitHub Release 已创建，8 个资产 = Android APK / macOS arm64+dmg+zip / Windows exe / latest.json / release-body；Release workflow run 43232450665；本地 packaged smoke 通过）**；已发布 tag 不再移动。发布说明 = [docs/RELEASE-NOTES.md](RELEASE-NOTES.md)（**v1.1.1 → v1.0.0** 倒序；当前 tag 段落 = CI 生成 GitHub Release 正文的来源）。
 - 分支/远端：`master` 唯一长期分支；`origin` = Gitee（SSH，第二 pushurl = GitHub HTTPS）⇒ `git push origin <branch>` 一次推两边；GitHub 只在推 tag 时构建。remote 不入库 ⇒ 新 clone 跑 `npm run setup:remotes`。
-- **工作树**：截至日记收口批 clean（HEAD 以 `git log -1` 为准；HANDOFF 回写批已提交 `99df5f86`，发版文档收口 `0c7175cf`/`de684e98`/`7a62d349`）；**本次文档一致性批（task-101）改动未提交**；并行批在途以 `git status` 分辨；提交时「只 stage 本批文件」，**绝不用 `git add -A`**。
+- **工作树**：截至 261113 批已提交（HEAD 以 `git log -1` 为准）；**并行会话的 `src/mobile/settings/**` WIP 未纳入本批**；本批文档收口（AGENTS/DIARY/guide16/HANDOFF/README/MOBILE-OPS）以「只 stage 本批文件」提交，**绝不用 `git add -A`**。
 - 261110 一次性历史清理（`.ai-writing-recon/` 用 `git filter-repo` 从全部历史移除，重写 v1.1.0 之后的提交；tag 未变）⇒ 旧 clone 需 `git fetch --force --prune && git reset --hard origin/master`。
 
-**门禁基线（261112 晚最新一次实测；分层口径见 AGENTS §3#21）**
+**门禁基线（261113 最新一次实测；分层口径见 AGENTS §3#21）**
 
 - `npx tsc --noEmit` = **0**。
-- 全量 vitest（低负载串行门禁，发版复核三处修复 `142244cd` 之后）：**文件 = 总 918（907 passed / 11 skipped）**；**用例 = 总 5772（5760 passed / 12 skipped）/ 0 failed**。偶发 `perf.integration` 满载抖动口径见下条（单跑复验通过）。
+- 全量 vitest（低负载串行门禁，261113 移动端转小记 `a57cf3cf` 之后）：**文件 = 总 919（908 passed / 11 skipped）**；**用例 = 总 5801（5789 passed / 12 skipped）/ 0 failed**。偶发 `perf.integration` 满载抖动口径见下条（单跑复验通过）。
 - ⚠️ `electron/s3v3/perf.integration.test.ts`：**低负载串行本轮无抖动（通过）**；满载/并发构建时偶发（单跑 PASS），门禁判定以单跑/低负载为准（同 §2 既有口径）。
 - `node scripts/ui-metrics.mjs`：颜色 0 / 字号 0 / `!important` 9 = 允许清单 / `crossFileDupGroups` 45 / `shadowedDecls` **0**（task-34 已清零，门禁只降）/ 未定义令牌 0。
 - `check:core` 172 文件 0 违规；`check:mobileui` 通过。
@@ -138,7 +129,7 @@
   - **转为小记 = 原 Lake 正文 + 媒体复制搬运**：用该日记的**原正文**创建一条小记（**复制**，新 id），图片/附件搬到小记资产作用域（`/<noteId>/` → `/quick-notes/<id>/`；**原资产保留**），随后日记原文**移入回收站**（软删、可恢复、不是 purge）；承载不了的卡片（`droppedKinds`）必须剥掉并**明说**，非 doc 类型（表格/多维表/画板/手写板）整篇拒绝。
   - **回收站「云端已删除（仅本地）」副本必须可只读预览**：整行可点、标题不被徽标挤成 0 宽、缺正文给明确提示（task-89）。
   - **`showNotice` 在全部 7 个空间可见**（`NoticeToast`；桌面状态栏只是宿主之一，task-93）。
-  - **已知限制（明确记录）**：① 同步镜像 apply 仍会应用远端的日记子树 `title`/`icon`（**入口层禁止、非 UI 暴露，不做字段冻结**）；② **移动端暂无「转为小记」入口**（仅桌面；「转为文档」两端都有）。
+  - **已知限制（明确记录）**：同步镜像 apply 仍会应用远端的日记子树 `title`/`icon`（**入口层禁止、非 UI 暴露，不做字段冻结**）。**两个单篇出口两端都有**（261113 移动端补齐「转为小记」，`a57cf3cf`）。
 - **InkPad 结构拆分（Q19-10）未做**：仅抽了 `inkPadModel` 纯逻辑 + 11 例行为测试；组合根 + 4 hook + 2 子组件拆分因 127 条文本护栏与 10 useState/45 useCallback 依赖网，留发布后按「先迁护栏 → 再抽 hook → 最后设备门禁」执行。
 - **发布链路**：Gitee 单附件 100MB / 仓库 1GB 上限（mac/Windows 包只能走 GitHub）；GitHub 慢速上传依赖 workflow 的 50 分钟步骤超时，不要缩短。
 - **历史编号与旧批次已失效**：旧文档/代码注释里的「HANDOFF §3#N / §4 / §7.x」是历史编号，**不对应本文**；更早的 §0 批次条目（如「第十四批」）也已删除，**只在 git 历史可查**。待办只看 §3（本节与 §3 都不编号）。
@@ -147,16 +138,16 @@
 
 > 规则：只有「真问题 / 不做有代价 / 收益大于复杂度」才进本节（AGENTS §3#17）；完成后**直接删行**，历史留 git。
 
-**当前批次（日记收口批）待办**
+**当前批次（261113 转小记 + 发版复核批）待办**
 
-- **本批代码待办已清零**（task-67 已闭合：移动同步 warning 持久化 + `apply_skipped` 对齐，见「已闭合」）；剩余只有设备点收与发版（P0）。
+- **本批代码待办已清零**（task-105/106 已闭合：发版复核 P2/P3 + 移动端「转为小记」）；剩余只有设备点收与下一版发布（P0）。
 - **S19（目录重建）：不计划**（显式 id 重建不是用户流程；矩阵登记即可）。
 - 其余真剩余见下方 P0/P1/P2（设备点收 / 发版 / 已知欠账）。
 
 **P0（不做就卡住主线）**
 
 - **R1/R2 设备点收（门禁矩阵已全过，观感项待人工）**：已过 = Q04 / Q22、手机/平板 10 态 + 多维表 3 态 + 23 屏 + 窗口矩阵 + **桌面 42 态**（两轮 0 差异）；待人工 = Q03 历史 Sheet、Q07 preview 档、Q05 字号、桌面双击放大观感；真机 50950385 已装最新 APK。
-- **下一版发布**（流程 [docs/RELEASE.md](RELEASE.md)）：发布说明写清 ① inkDoc v4 旧端只读 / 手机需重装；② 标签顺序仅设备本地；③ 标签删除 = 缺席（两端都要升级）；④ 发版前全量矩阵。
+- **下一版发布（v1.1.1 已发，下一版待定）**（流程 [docs/RELEASE.md](RELEASE.md)）：发布说明写清 ① inkDoc v4 旧端只读 / 手机需重装；② 标签顺序仅设备本地；③ 标签删除 = 缺席（两端都要升级）；④ 发版前全量矩阵；⑤ 发版前按 RELEASE.md §七.4 核对 Secrets（Android 4 个 + `GITEE_TOKEN`）。
 - **每批收尾固定动作**：更新 §1 基线与门禁计数 + §3 + §0 批次抬头；提交后立刻回写。
 
 **P1（该做但可排期）**
@@ -178,5 +169,6 @@
 
 **已闭合（别重复做；细节见 git）**
 
+- **261113 批**：移动端「转为小记」（task-106，`a57cf3cf`）· 发版复核 P2/P3（task-105，`839c7a93`）· v1.1.1 发布（8 个 Release 资产 + 本地 packaged smoke）· 文档收口（AGENTS/DIARY/guide16/README/MOBILE-OPS）。
 - **261112 日记收口批**：日记本固定不可变 + 取消标记已移除（task-84/85/87/88）· 移动目标剔除日记子树（task-90）· 转文档共享弹窗（task-91）· 转小记媒体搬运（task-92）· 回收站仅本地副本预览加固（task-89）· showNotice 全空间可见（task-93）· S3 多端 A–K 与 R-D（task-72/74）· 移动同步 warning 持久化 + apply_skipped 对齐代码（task-67）。
 - 空间命名两端「知识库」；桌面按钮梯队 + 移动 `mb-btn`；AGENTS 预算（≤64KB 内）；首屏瘦身（entry 60KB / preload 6）；小记写作卡全屏 + 键盘长任务 775→72ms；单条小记推 13→11；手机/平板各 10 态快照 + 23 屏 + `edit-surface-invariants` 重标定 + capture 入口装置；图片缩略三边界 + 小记封面/预览去重；桌面/移动图片预览语义（双击 vs 单击预览双击编辑）。
