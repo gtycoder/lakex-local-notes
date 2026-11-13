@@ -85,7 +85,7 @@ export async function importSharedMarkdown(input: MarkdownShareImportInput): Pro
     convert: input.deps?.convert ?? ((markdown) => convertMarkdownToLake({ markdown, createKernel: createMobileMarkdownKernel })),
     createNote: input.deps?.createNote ?? (async (title, notebookId) => bridge.createNote(title, notebookId)),
     saveNote: input.deps?.saveNote ?? (async (id, title, body, notebookId) => bridge.saveNote(id, title, body, notebookId)),
-    trashNote: input.deps?.trashNote ?? (async (id) => bridge.trashNote(id)),
+    trashNote: input.deps?.trashNote ?? (async (id) => { await bridge.trashNote(id); }),
   };
   const summary: MarkdownShareImportSummary = { imported: [], failed: [], warnings: [] };
   const total = input.files.length;

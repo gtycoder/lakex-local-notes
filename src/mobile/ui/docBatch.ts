@@ -9,7 +9,7 @@
  * 也不统一两者的成功副作用（树刷新目录、列表就地增删行）——那些是入口语义差异，不是重复。
  */
 import { bridge } from "../bridge";
-import type { BatchNotesResult } from "../../core/batchNotes";
+import type { MobileBatchNotesResult } from "../bridge/batchNotes";
 import { moveTargetCandidates } from "../../core/diary";
 import type { QuickNoteTag, QuickNoteTagSummary } from "../../core/quickNoteTags";
 import { confirmMobile } from "./ConfirmDialog";
@@ -32,7 +32,7 @@ export function docBatchVerb(action: DocBatchPayload["action"]): string {
 export async function runDocBatch(
   ids: readonly string[],
   payload: DocBatchPayload,
-): Promise<{ result: BatchNotesResult; text: string; detail: string; failed: number }> {
+): Promise<{ result: MobileBatchNotesResult; text: string; detail: string; failed: number }> {
   const result = await bridge.batchNotes({ ...payload, ids: [...ids], space: "lake" });
   return {
     result,

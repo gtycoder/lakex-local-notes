@@ -177,6 +177,83 @@ describe("261114 级联软删：带子级/多级子级的删除", () => {
     });
   });
 
+  it("删笔记本：多级分组 + 多级文档（含孙文档）整棵进回收站，恢复回根层", () => {
+    const f = buildNestedFixture();
+    const { store } = f;
+    const allNodes = [f.nb, f.groupA, f.groupB, f.docRoot, f.childDoc, f.grandDoc, f.sibling];
+    const allNotes = [f.docRoot, f.childDoc, f.grandDoc, f.sibling];
+    store.deleteTreeNode(f.nb);
+    withRawDb((db) => {
+      expect(nodeRow(db, f.nb).parent_id).toBe(TRASH_NOTEBOOK_ID);
+      expect(nodeRow(db, f.groupA).parent_id).toBe(f.nb);
+      expect(nodeRow(db, f.groupB).parent_id).toBe(f.groupA);
+      expect(nodeRow(db, f.docRoot).parent_id).toBe(f.groupB);
+      expect(nodeRow(db, f.childDoc).parent_id).toBe(f.docRoot);
+      expect(nodeRow(db, f.grandDoc).parent_id).toBe(f.childDoc);
+      for (const id of allNodes) expect(nodeRow(db, id).trashed_at).toBeTruthy();
+      for (const id of allNotes) expect(noteRow(db, id)?.trashed_at).toBeTruthy();
+    });
+    // 启动快照：被删子树全部不出现；旁观（本 fixture 全在 NB 下 ⇒ 全部被删）
+    expect(store.bootstrap().notes.map((n) => n.id)).not.toEqual(expect.arrayContaining(allNotes));
+    // 回收站树：根是笔记本（parent=回收站），多级 parent 链保持
+    const trash = new Map(store.listTrash().map((item) => [item.id, item]));
+    expect(trash.get(f.nb)?.parentId).toBe(TRASH_NOTEBOOK_ID);
+    expect(trash.get(f.groupA)?.parentId).toBe(f.nb);
+    expect(trash.get(f.docRoot)?.parentId).toBe(f.groupB);
+    expect(trash.get(f.grandDoc)?.parentId).toBe(f.childDoc);
+    // 恢复：笔记本回根层、整棵父子与 trashed 状态还原
+    store.restoreTrashItem(f.nb);
+    withRawDb((db) => {
+      expect(nodeRow(db, f.nb).parent_id).toBeNull();
+      expect(nodeRow(db, f.groupA).parent_id).toBe(f.nb);
+      expect(nodeRow(db, f.grandDoc).parent_id).toBe(f.childDoc);
+      for (const id of allNodes) expect(nodeRow(db, id).trashed_at ?? null).toBeNull();
+      for (const id of allNotes) expect(noteRow(db, id)?.trashed_at ?? null).toBeNull();
+    });
+    expect(store.bootstrap().notes.map((n) => n.id)).toEqual(expect.arrayContaining(allNotes));
+    expect(store.listTrash()).toHaveLength(0);
+  });
+
+  it("彻底删除整本笔记本：多级子树全部物理清空（行+文件+逐条墓碑）", () => {
+    const f = buildNestedFixture();
+    const { store } = f;
+    store.deleteTreeNode(f.nb);
+    store.purgeTrashItem(f.nb);
+    withRawDb((db) => {
+      for (const id of [f.nb, f.groupA, f.groupB, f.docRoot, f.childDoc, f.grandDoc, f.sibling]) {
+        expect(db.prepare("SELECT id FROM tree_nodes WHERE id=?").get(id)).toBeUndefined();
+      }
+      for (const id of [f.docRoot, f.childDoc, f.grandDoc, f.sibling]) {
+        expect(db.prepare("SELECT id FROM notes WHERE id=?").get(id)).toBeUndefined();
+      }
+      const tomb = db.prepare("SELECT id,node_type FROM deleted_notes WHERE id IN (?,?,?,?,?,?)").all(f.nb, f.groupA, f.groupB, f.docRoot, f.childDoc, f.grandDoc) as Array<{ id: string; node_type: string }>;
+      expect(tomb).toHaveLength(6);
+      expect(tomb.find((t) => t.id === f.nb)?.node_type).toBe("folder");
+      expect(tomb.filter((t) => t.node_type === "note").map((t) => t.id).sort()).toEqual([f.docRoot, f.childDoc, f.grandDoc].sort());
+    });
+    for (const id of [f.docRoot, f.childDoc, f.grandDoc, f.sibling]) expect(fs.existsSync(bodyPath(id))).toBe(false);
+    expect(store.listTrash()).toHaveLength(0);
+  });
+
+  it("彻底删除回收站里的文档子树：只清该文档与其子文档，分组保留", () => {
+    const f = buildNestedFixture();
+    const { store } = f;
+    store.deleteTreeNode(f.docRoot);
+    store.purgeTrashItem(f.docRoot);
+    withRawDb((db) => {
+      for (const id of [f.docRoot, f.childDoc, f.grandDoc]) {
+        expect(db.prepare("SELECT id FROM notes WHERE id=?").get(id)).toBeUndefined();
+      }
+      expect(nodeRow(db, f.groupB).trashed_at ?? null).toBeNull();
+      expect(nodeRow(db, f.groupA).trashed_at ?? null).toBeNull();
+      expect(nodeRow(db, f.sibling).trashed_at ?? null).toBeNull();
+      const tomb = db.prepare("SELECT id FROM deleted_notes WHERE id IN (?,?,?)").all(f.docRoot, f.childDoc, f.grandDoc) as Array<{ id: string }>;
+      expect(tomb.map((t) => t.id).sort()).toEqual([f.docRoot, f.childDoc, f.grandDoc].sort());
+    });
+    for (const id of [f.docRoot, f.childDoc, f.grandDoc]) expect(fs.existsSync(bodyPath(id))).toBe(false);
+    expect(fs.existsSync(bodyPath(f.sibling))).toBe(true);
+  });
+
   it("彻底删除回收站里的中间分组：只清该子树（行+正文文件），兄弟节点保留", () => {
     const f = buildNestedFixture();
     const { store } = f;

@@ -84,7 +84,7 @@ async function rowsOf(db: SqlJsAsyncDb, sql: string, ...values: unknown[]): Prom
 function runPurge(db: SqlJsAsyncDb, overrides: Partial<ScheduledTrashPurgeDeps<MobileTrashTreeItem>> = {}) {
   return runScheduledTrashPurge({
     listTrash: () => listTrashTree(db),
-    purge: (root, expiredBefore) => purgeTreeItem(db, root.id, root.kind, { expiredBefore }),
+    purge: async (root, expiredBefore) => (await purgeTreeItem(db, root.id, root.kind, { expiredBefore })).purged,
     now: () => NOW,
     yieldToUi: async () => {},
     ...overrides,

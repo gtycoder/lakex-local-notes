@@ -10,8 +10,8 @@ import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  trashNote: vi.fn(async () => {}),
-  purgeTreeItem: vi.fn(async () => {}),
+  trashNote: vi.fn(async () => [] as string[]),
+  purgeTreeItem: vi.fn(async () => ({ purged: true, noteIds: [] as string[] })),
   restoreHistory: vi.fn(async () => {}),
   restoreMissingNoteBody: vi.fn(async (_id: string): Promise<{ ok: boolean; title?: string; reason?: string }> => ({ ok: true, title: "恢复的标题" })),
   restoreMissingQuickNoteFromCloud: vi.fn(async (_id: string): Promise<{ ok: boolean; reason?: string }> => ({ ok: true })),
@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   purgeQuickNote: vi.fn(async () => {}),
   confirmMobile: vi.fn(async () => true),
   showToast: vi.fn(),
+  dismissNoteTabs: vi.fn(),
 }));
 
 vi.mock("../bridge", () => ({
@@ -33,6 +34,7 @@ vi.mock("../bridge", () => ({
   },
 }));
 vi.mock("../ui/ConfirmDialog", () => ({ confirmMobile: mocks.confirmMobile }));
+vi.mock("../notebook/tabDismissal", () => ({ dismissNoteTabs: mocks.dismissNoteTabs }));
 vi.mock("../ui/toastBus", () => ({ showToast: mocks.showToast }));
 
 import { MissingBodiesList } from "./MissingBodiesSheet";
@@ -116,6 +118,8 @@ describe("缺正文列表（文档）", () => {
     expect(mocks.confirmMobile).toHaveBeenCalledTimes(1);
     expect(mocks.trashNote).toHaveBeenCalledWith("n1");
     expect(mocks.purgeTreeItem).toHaveBeenCalledWith("n1", "note");
+    // G3：两步返回的 ids 都交给关标签通道（缺正文文档通常没打开，防御性关闭）
+    expect(mocks.dismissNoteTabs).toHaveBeenCalled();
     expect(changed).toHaveBeenCalledTimes(1);
     expect(mocks.showToast).toHaveBeenCalledWith("已彻底删除");
   });

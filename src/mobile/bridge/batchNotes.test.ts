@@ -70,7 +70,43 @@ describe("bridge.batchNotes（移动端批量：软删 + 标签 append/remove + 
     } finally { await db.close(); }
   });
 
-  it("trash(quickNotes)：小记软删进小记回收站（quick_notes.deleted_at，行还在）", async () => {
+  it("trash(lake)「父 + 子」同时选：返回整棵级联 ids（关标签用），顺序无关、恢复根回原父", async () => {
+    for (const ids of [["p", "c"], ["c", "p"]] as const) {
+      const db = await freshDb();
+      try {
+        await insertFolder(db, "nb1", "notebook");
+        await insertNote(db, "p", "nb1");
+        await insertNote(db, "c", "p");
+        await insertNote(db, "gc", "c");
+        await insertNote(db, "sib", "nb1");
+        const result = await runMobileBatchNotes(db, { action: "trash", ids: [...ids], space: "lake" });
+        expect(result.ok).toBe(true);
+        // 结果是**本次真正被软删的整棵子树 ids**（含孙文档），与选择顺序无关；去重后集合一致。
+        expect(new Set(result.trashedNoteIds)).toEqual(new Set(["p", "c", "gc"]));
+        for (const id of ["p", "c", "gc"]) {
+          const row = await db.prepare("SELECT trashed_at, parent_id FROM notes WHERE id=?").get(id) as { trashed_at: string | null; parent_id: string | null };
+          expect(row.trashed_at).toBeTruthy();
+        }
+        expect((await db.prepare("SELECT trashed_at FROM notes WHERE id='sib'").get() as { trashed_at: string | null }).trashed_at).toBeNull();
+        expect((await db.prepare("SELECT parent_id FROM notes WHERE id='c'").get() as { parent_id: string }).parent_id).toBe("p");
+      } finally { await db.close(); }
+    }
+  });
+
+  it("trash 校验失败（混入不存在 id）：整批不执行、trashedNoteIds 为空（不假装成功）", async () => {
+    const db = await freshDb();
+    try {
+      await insertFolder(db, "nb1", "notebook");
+      await insertNote(db, "n1", "nb1");
+      const result = await runMobileBatchNotes(db, { action: "trash", ids: ["n1", "missing"], space: "lake" });
+      expect(result.ok).toBe(false);
+      expect(result.trashedNoteIds).toEqual([]);
+      const row = await db.prepare("SELECT trashed_at FROM notes WHERE id='n1'").get() as { trashed_at: string | null };
+      expect(row.trashed_at).toBeNull();
+    } finally { await db.close(); }
+  });
+
+  it("trash(quickNotes)：小记软删进小记回收站（quick_notes.deleted_at，行还在），trashedNoteIds 为空（无文档标签）", async () => {
     const db = await freshDb();
     try {
       await insertQuick(db, "q1");
@@ -79,6 +115,7 @@ describe("bridge.batchNotes（移动端批量：软删 + 标签 append/remove + 
       const row = await db.prepare("SELECT deleted_at FROM quick_notes WHERE id=?").get("q1") as { deleted_at: string | null };
       expect(row).toBeTruthy();
       expect(row.deleted_at).not.toBeNull();
+      expect(result.trashedNoteIds).toEqual([]);
     } finally { await db.close(); }
   });
 

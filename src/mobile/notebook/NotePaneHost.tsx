@@ -39,6 +39,8 @@ export interface NotePaneHostProps {
   onFullscreenChange: (fullscreen: boolean) => void;
   /** DocumentEditor 的查找条关闭（父层收 overlay）。 */
   onCloseFind: () => void;
+  /** 工作区统一保存屏障（文档列表批量删除前落盘，G1）。 */
+  flushSaves?: () => Promise<void>;
 }
 
 export function NotePaneHost(props: NotePaneHostProps) {
@@ -125,6 +127,7 @@ export function NotePaneHost(props: NotePaneHostProps) {
           hidePanels
           findOpen={findOpen && t.id === activeId}
           onCloseFind={props.onCloseFind}
+          flushSaves={props.flushSaves}
           onEditorInstance={(ed) => {
             // DS 复核 A2：卸载时 onEditorReady(noteId, null) —— 必须 delete，不能 set(null)
             // （否则 closeTab 里 delete 后又会被 set 写回键）。get(activeId) ?? null 已兼容 undefined。

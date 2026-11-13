@@ -65,13 +65,15 @@ export interface DocumentEditorProps {
   /** 文档内查找条（入口在工作区顶栏右上角） */
   findOpen?: boolean;
   onCloseFind?: () => void;
+  /** 文档列表批量「移入回收站」前的统一保存屏障（G1；工作区传 flushAllTabs）。 */
+  flushSaves?: () => Promise<void>;
 }
 
 export function DocumentEditor(props: DocumentEditorProps) {
   const {
     note, content, editing, onContentChange, onOpenDocument, documents,
     outlineOpen: outlineOpenProp, onToggleOutline, docListOpen: docListOpenProp, onToggleDocList,
-    hidePanels, onEditorInstance, findOpen = false, onCloseFind,
+    hidePanels, onEditorInstance, findOpen = false, onCloseFind, flushSaves,
   } = props;
   // 十四批（用户口径：桌面式工具栏不适合触屏）：平板**与手机完全一致** —— 编辑态走底部 dock，
   // 不再开内核固定工具栏（pad 只保留外壳层的宽度/侧栏差异）。
@@ -236,6 +238,7 @@ export function DocumentEditor(props: DocumentEditorProps) {
             activeId={note.id}
             onPick={(id) => { toggleDocList(); onOpenDocument?.(id); }}
             onClose={toggleDocList}
+            flushSaves={flushSaves}
           />
         </>
       )}

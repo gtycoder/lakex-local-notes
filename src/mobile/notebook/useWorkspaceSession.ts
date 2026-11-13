@@ -9,6 +9,7 @@ import { toastActionError } from "../lib/actionError";
 import { showToast } from "../ui/toastBus";
 import { mobileReadonlyText } from "../lib/readonlyText";
 import { isGoneNote } from "../../core/syncDecisions";
+import { registerNoteTabDismisser } from "./tabDismissal";
 
 /** 保存屏障遇到 gone 文档时的可见说明（AGENTS §3#16：保存被拦要明说，不静默丢弃）。 */
 const GONE_TAB_DISCARDED = "文档已在回收站或已被删除，已关闭标签；可在回收站中恢复";
@@ -25,6 +26,8 @@ export interface UseWorkspaceSessionOptions {
   active: NotebookTab | null;
   updateTab: (id: string, patch: Partial<Omit<NotebookTab, "id">>) => void;
   removeTab: (id: string) => void;
+  /** 批量移除（删除级联一次关多张标签；不能循环 removeTab，见 useNotebookTabs.removeTabs）。 */
+  removeTabs: (ids: readonly string[]) => void;
   clearTabs: () => void;
   closeOverlay: (kind: "tabs") => void;
   onBack: () => void;
@@ -41,6 +44,7 @@ export function useWorkspaceSession(options: UseWorkspaceSessionOptions) {
     active,
     updateTab,
     removeTab,
+    removeTabs,
     clearTabs,
     closeOverlay,
     onBack,
@@ -87,6 +91,15 @@ export function useWorkspaceSession(options: UseWorkspaceSessionOptions) {
     discardTab(id);
     showToast(GONE_TAB_DISCARDED, { type: "info" });
   }, [discardTab]);
+
+  // 删除入口（首页删笔记本/日记页删条目/目录树/批量多选/缺正文彻底删除）通过模块通道报告
+  // **数据层真正软删的 note id**（261114 task-8，对齐桌面 deleteTreeNode 先收标签再删）：
+  // 这里统一 discardTab（取消待保存 + 移出标签；编辑器实例由 useNotebookTabs.onDrop 释放）。
+  // 工作区未挂载时通道没人接 = no-op（此时没有内存标签）。
+  useEffect(() => registerNoteTabDismisser((noteIds) => {
+    for (const id of noteIds) cancelAutoSave(id); // 先取消失效待保存，再一次性移出（批量 API，避免旧快照互相覆盖）
+    removeTabs(noteIds);
+  }), [cancelAutoSave, removeTabs]);
 
   /** 现取 usheet/board/ink 最新正文并等待保存完成；成功前不释放实例 capture，也不关闭界面。
    *  写盘前先过 gone 判定：已进回收站/被他端 purge 的文档不再尝试保存（写边界必拒），交调用方走 discardTab。 */

@@ -51,6 +51,8 @@ export interface ConvertDiaryToQuickNoteResult {
   quickNoteId: string;
   /** 保留字段（IPC/文案兼容）：261113 起**恒为空数组**（卡片零剥离）。 */
   droppedKinds: string[];
+  /** 原文被软删的 note id 列表（含级联子文档），供 UI 关闭已打开标签（261114 task-8）。 */
+  trashedNoteIds: string[];
 }
 
 function bodyReferencesAsset(body: string, filename: string): boolean {
@@ -142,14 +144,16 @@ export async function convertDiaryToQuickNote(
     throw error;
   }
 
+  let trashedNoteIds: string[] = [noteId];
   try {
+    // 注入路径（测试）只返回 void ⇒ 至少把根条目报给 UI；生产默认路径拿得到整棵级联子树。
     if (deps.trashNote) await deps.trashNote(d, noteId);
-    else await trashRepository.trashTreeItem(d, noteId, "note");
+    else trashedNoteIds = await trashRepository.trashTreeItem(d, noteId, "note");
     if (deps.reconcileIndex) await deps.reconcileIndex(d);
   } catch (error) {
     // 软删失败 ⇒ 回滚刚建的小记（从未同步：硬删、不写墓碑），原文不动。
     await removeUnsyncedQuickNote(d, quickNoteId, deps.removeQuickNoteAssetsDir).catch(() => { /* best effort */ });
     throw error;
   }
-  return { quickNoteId, droppedKinds: [] as string[] };
+  return { quickNoteId, droppedKinds: [] as string[], trashedNoteIds };
 }

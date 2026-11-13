@@ -27,6 +27,7 @@ import { hasInterruptedSync } from "../sync/syncResumeMarker";
 import { runScheduledHistoryCleanup } from "../sync/historyCleanupScheduler";
 import { runScheduledTrashPurge, TRASH_AUTO_PURGE_DAYS } from "../sync/trashAutoPurge";
 import { ensureDb } from "../bridge/context";
+import { dismissNoteTabs } from "../notebook/tabDismissal";
 
 /**
  * @param ready 应用是否已就绪（MobileApp 的 `phase` 离开 booting，即 bridge.init + refreshAll 之后）。
@@ -105,7 +106,12 @@ export function useAutoSync(ready = true): void {
     const runTrashPurgeOnce = () => {
       void runScheduledTrashPurge({
         listTrash: () => bridge.listTrashTree(),
-        purge: (root, expiredBefore) => bridge.purgeTreeItem(root.id, root.kind, { expiredBefore }),
+        // 自动过期/远端删除后的彻底删除也可能让「仍开着的回收站标签」失效 ⇒ 按返回的 ids 收掉（G3）。
+        purge: async (root, expiredBefore) => {
+          const result = await bridge.purgeTreeItem(root.id, root.kind, { expiredBefore });
+          dismissNoteTabs(result.noteIds);
+          return result.purged;
+        },
       })
         .then((result) => {
           if (result.purged > 0) console.info(`[trash] 自动过期 purge ${result.purged} 项（>${TRASH_AUTO_PURGE_DAYS} 天）`);

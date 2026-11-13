@@ -1,4 +1,10 @@
 // @vitest-environment jsdom
+/**
+ * 目录行数据动作（261114 task-8 删除 review）：
+ *  · 删除必须用**数据层返回的整棵 subtree note ids** 关闭已打开标签 —— 不依赖当前 tree 是否加载全
+ *    （首页入口/未展开子树/未加载的兄弟分支都会漏）；
+ *  · 删除前先过统一保存屏障（不丢最后一次输入）；屏障/删除失败都不假装成功。
+ */
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -13,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   deleteHistory: vi.fn(),
   confirmMobile: vi.fn(),
   showToast: vi.fn(),
+  dismissNoteTabs: vi.fn(),
 }));
 
 vi.mock("../bridge", () => ({
@@ -28,6 +35,10 @@ vi.mock("../bridge", () => ({
 }));
 vi.mock("../ui/ConfirmDialog", () => ({ confirmMobile: mocks.confirmMobile }));
 vi.mock("../ui/toastBus", () => ({ showToast: mocks.showToast }));
+vi.mock("./tabDismissal", () => ({
+  dismissNoteTabs: mocks.dismissNoteTabs,
+  registerNoteTabDismisser: vi.fn(() => () => {}),
+}));
 
 import type { NotebookTreeItem } from "../data/notebookTreeRepository";
 import { useNotebookTreeActions } from "./useNotebookTreeActions";
@@ -46,14 +57,12 @@ let host: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
 let api: Api;
 let loadTree: ReturnType<typeof vi.fn>;
-let discardTab: ReturnType<typeof vi.fn>;
 let flushSaves: ReturnType<typeof vi.fn>;
 
 function Harness({ tree }: { tree: NotebookTreeItem[] }) {
   api = useNotebookTreeActions({
     tree,
     loadTree: loadTree as () => Promise<NotebookTreeItem[]>,
-    discardTab: discardTab as (id: string) => void,
     flushSaves: flushSaves as () => Promise<void>,
   });
   return null;
@@ -67,9 +76,9 @@ beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   vi.clearAllMocks();
   loadTree = vi.fn(async () => []);
-  discardTab = vi.fn();
   flushSaves = vi.fn(async () => {});
   mocks.confirmMobile.mockResolvedValue(true);
+  mocks.trashTreeItem.mockResolvedValue([]);
   mocks.listNoteHistory.mockResolvedValue([{ id: 1, title: "快照", createdAt: "2026-10-22T00:00:00.000Z" }]);
   host = document.createElement("div");
   document.body.append(host);
@@ -100,36 +109,50 @@ describe("useNotebookTreeActions", () => {
     expect(loadTree).toHaveBeenCalledTimes(1);
   });
 
-  it("删除文档会移入回收站、刷新目录并丢弃对应标签（删除前先落盘在途编辑）", async () => {
+  it("删文档：用数据层返回的 ids 关标签（含未在本机 tree 里的级联子文档），删除前先落盘", async () => {
     const note = node("n1", "note");
+    // 数据层级联返回：根文档 + 子文档 + 孙文档；其中子/孙文档不在当前 tree（模拟树未加载全）。
+    mocks.trashTreeItem.mockResolvedValue(["n1", "n-child", "n-grand"]);
     render([note]);
     await act(async () => { await api.applyDelete(note); });
     expect(mocks.trashTreeItem).toHaveBeenCalledWith("n1", "note");
     expect(loadTree).toHaveBeenCalledTimes(1);
-    expect(discardTab).toHaveBeenCalledWith("n1");
+    expect(mocks.dismissNoteTabs).toHaveBeenCalledWith(["n1", "n-child", "n-grand"]);
     expect(flushSaves).toHaveBeenCalledTimes(1);
     expect(flushSaves.mock.invocationCallOrder[0]).toBeLessThan(mocks.trashTreeItem.mock.invocationCallOrder[0]);
+    expect(mocks.showToast).toHaveBeenCalledWith("已移入回收站");
   });
 
-  it("删分组/笔记本：级联软删的子树文档标签全部丢弃（parent_id 不变、只标 trashed_at）", async () => {
-    // g1 下有文档 a、嵌套分组 g2（其下文档 b）；g1 子树外的 c 不能被误丢。
+  it("删分组：子树标签按数据层 ids 关闭（不依赖当前 tree 是否加载全）", async () => {
+    // 本机 tree 只有 g1 + a；数据层返回 g1 子树里未加载的 b/deep 也一起关。
     const g1 = node("g1", "group");
-    const tree = [g1, node("a", "note", "g1"), node("g2", "group", "g1"), node("b", "note", "g2"), node("c", "note")];
+    const tree = [g1, node("a", "note", "g1")];
+    mocks.trashTreeItem.mockResolvedValue(["a", "b", "deep"]);
     render(tree);
     await act(async () => { await api.applyDelete(g1); });
     expect(mocks.trashTreeItem).toHaveBeenCalledWith("g1", "folder");
-    expect(discardTab.mock.calls.map((call) => call[0]).sort()).toEqual(["a", "b"]);
+    expect(mocks.dismissNoteTabs).toHaveBeenCalledWith(["a", "b", "deep"]);
     expect(flushSaves).toHaveBeenCalledTimes(1);
   });
 
-  it("保存屏障失败时不删除（不丢在途编辑）", async () => {
+  it("保存屏障失败时不删除（不丢在途编辑、不关标签、不假装成功）", async () => {
     const g1 = node("g1", "group");
-    const tree = [g1, node("a", "note", "g1")];
-    render(tree);
+    render([g1, node("a", "note", "g1")]);
     flushSaves.mockRejectedValueOnce(new Error("磁盘已满"));
     await act(async () => { await api.applyDelete(g1); });
     expect(mocks.trashTreeItem).not.toHaveBeenCalled();
-    expect(discardTab).not.toHaveBeenCalled();
+    expect(mocks.dismissNoteTabs).not.toHaveBeenCalled();
+    expect(loadTree).not.toHaveBeenCalled();
+    expect(mocks.showToast).toHaveBeenCalledWith("删除失败", { type: "error" });
+  });
+
+  it("软删失败：不关标签、不刷新目录、给出失败提示", async () => {
+    const g1 = node("g1", "group");
+    render([g1]);
+    mocks.trashTreeItem.mockRejectedValueOnce(new Error("db locked"));
+    await act(async () => { await api.applyDelete(g1); });
+    expect(mocks.dismissNoteTabs).not.toHaveBeenCalled();
+    expect(loadTree).not.toHaveBeenCalled();
     expect(mocks.showToast).toHaveBeenCalledWith("删除失败", { type: "error" });
   });
 
@@ -152,7 +175,6 @@ describe("useNotebookTreeActions", () => {
   it("历史版本：读快照 / 恢复返回结果 / 单条删除；面板归属不在这里（MOB-02）", async () => {
     const note = node("n1", "note");
     render([note]);
-    // 面板"看哪个节点"由 useWorkspaceOverlays 拥有 ⇒ 本 hook 只接节点、不存目标
     expect(api).not.toHaveProperty("historyFor");
     expect(api).not.toHaveProperty("openHistory");
 
@@ -165,7 +187,6 @@ describe("useNotebookTreeActions", () => {
     expect(mocks.restoreHistory).toHaveBeenCalledWith(1);
     expect(restored).toBe(true);
 
-    // 用户取消确认框 ⇒ false（调用方据此决定不收面板）
     mocks.confirmMobile.mockResolvedValueOnce(false);
     let cancelled = true;
     await act(async () => { cancelled = await api.restoreHistory(1); });

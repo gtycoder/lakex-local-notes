@@ -4,6 +4,7 @@ import type { NotebookTreeItem } from "../data/notebookTreeRepository";
 import { confirmMobile } from "../ui/ConfirmDialog";
 import { showToast } from "../ui/toastBus";
 import { reportMobileActionError } from "../lib/reportMobileActionError";
+import { dismissNoteTabs } from "./tabDismissal";
 
 /**
  * 目录行的**数据动作**（重命名 / 图标 / 移动 / 删除 / 历史版本）。
@@ -15,11 +16,10 @@ import { reportMobileActionError } from "../lib/reportMobileActionError";
 export function useNotebookTreeActions(opts: {
   tree: readonly NotebookTreeItem[];
   loadTree: () => Promise<NotebookTreeItem[]>;
-  discardTab: (id: string) => void;
   /** 删除前先落盘在途编辑（级联删除会丢弃子树标签，不能丢最后一次输入）。 */
   flushSaves?: () => Promise<void>;
 }) {
-  const { tree, loadTree, discardTab, flushSaves } = opts;
+  const { tree, loadTree, flushSaves } = opts;
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [historyList, setHistoryList] = useState<Array<{ id: number; title: string; createdAt: string }>>([]);
@@ -63,18 +63,18 @@ export function useNotebookTreeActions(opts: {
     try {
       // 级联软删会丢弃子树里已打开的标签 ⇒ 先把在途编辑落盘，避免删分组时丢最后一次输入。
       await flushSaves?.();
-      await bridge.trashTreeItem(node.id, node.kind === "note" ? "note" : "folder");
+      // 返回的是**数据层真正软删的整棵 subtree note ids**（不依赖当前 tree 是否加载全：首页入口/未展开子树也不漏）。
+      const removedNoteIds = await bridge.trashTreeItem(node.id, node.kind === "note" ? "note" : "folder");
       await loadTree();
-      // 已打开的标签必须一起关掉：否则回收站文档仍留在 tab 里可继续编辑（保存被写边界拒绝 ⇒ tab 关不掉）。
-      // 删分组/笔记本时子文档 parent_id 不变、只标 trashed_at ⇒ 必须按子树收集，不能只看被点的节点。
-      const tabIds = node.kind === "note" ? [node.id] : descendantNoteTabIds(tree, node.id);
-      for (const id of tabIds) discardTab(id);
+      // 已打开的标签必须一起关掉（与桌面 deleteTreeNode 同语义）：否则回收站文档仍留在 tab 里可继续编辑
+      //（保存被写边界拒绝 ⇒ tab 关不掉）。未打开的是 no-op。
+      dismissNoteTabs(removedNoteIds);
       showToast("已移入回收站");
     } catch (error) {
       reportMobileActionError("删除目录项", error);
       showToast("删除失败", { type: "error" });
     }
-  }, [discardTab, flushSaves, loadTree, tree]);
+  }, [flushSaves, loadTree]);
 
   const applyMove = useCallback(async (node: NotebookTreeItem, targetParentId: string) => {
     if (node.parentId === targetParentId || node.id === targetParentId) return;
@@ -144,32 +144,4 @@ export function useNotebookTreeActions(opts: {
     restoreHistory,
     deleteHistory,
   };
-}
-
-/**
- * 被删节点子树里的**文档** id（不含根节点自身）。
- * 删分组/笔记本 = 级联软删整棵子树：子文档 parent_id 不变、只标 trashed_at
- * （AGENTS §3#16）⇒ 已打开的标签必须按子树收集，只看被点的节点会漏。
- */
-export function descendantNoteTabIds(tree: readonly NotebookTreeItem[], rootId: string): string[] {
-  const childrenByParent = new Map<string, NotebookTreeItem[]>();
-  for (const item of tree) {
-    if (!item.parentId) continue;
-    const siblings = childrenByParent.get(item.parentId);
-    if (siblings) siblings.push(item);
-    else childrenByParent.set(item.parentId, [item]);
-  }
-  const noteIds: string[] = [];
-  const seen = new Set<string>([rootId]);
-  const queue = [rootId];
-  while (queue.length > 0) {
-    const parentId = queue.shift() as string;
-    for (const child of childrenByParent.get(parentId) ?? []) {
-      if (seen.has(child.id)) continue;
-      seen.add(child.id);
-      if (child.kind === "note") noteIds.push(child.id);
-      queue.push(child.id);
-    }
-  }
-  return noteIds;
 }

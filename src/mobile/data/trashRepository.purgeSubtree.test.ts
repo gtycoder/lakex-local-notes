@@ -40,7 +40,8 @@ describe("purge 回收站子树（F-01 移动口径）", () => {
 
     await trashTreeItem(db, "f1", "folder");
     const purged = await purgeTreeItem(db, "f1", "folder");
-    expect(purged).toBe(true);
+    expect(purged.purged).toBe(true);
+    expect(new Set(purged.noteIds)).toEqual(new Set(["n1", "n2"])); // G3：返回被物理删除 note ids（关标签用）
 
     const notes = await db.prepare("SELECT id FROM notes WHERE id IN ('n1','n2')").all() as Array<{ id: string }>;
     expect(notes).toHaveLength(0);

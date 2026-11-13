@@ -104,8 +104,12 @@ describe("mobile purge 删除传播", () => {
     const group = await bridge.createGroup(nb.id, "子分组");
     const NID = "purge-folder-note-1";
     await bridge.saveNote(NID, "子文档", "<p>内容</p>", group.id);
+    // G5：只有回收站行可被彻底删除（活跃目录 purge 会返回 false）⇒ 先软删。
+    await bridge.trashTreeItem(nb.id, "folder");
 
-    await bridge.purgeTreeItem(nb.id, "folder");
+    const purged = await bridge.purgeTreeItem(nb.id, "folder");
+    expect(purged.purged).toBe(true);
+    expect(purged.noteIds).toEqual([NID]);
 
     // 物理删除
     expect((await (await bridge.getWorkspaceSnapshot(nb.id)).tree).length).toBe(0);
@@ -124,8 +128,9 @@ describe("mobile purge 删除传播", () => {
     const grp = await bridge.createGroup(nbRow.id, "内层分组");
     const nid = "trash-note-sub-" + Date.now();
     await bridge.saveNote(nid, "子笔记", "<p>内容</p>", grp.id);
-    // 删整棵 notebook
-    await bridge.trashTreeItem(nbRow.id, "folder");
+    // 删整棵 notebook：返回被软删的整棵 subtree note ids（UI 关闭已打开标签用；不依赖前端树是否加载全）
+    const removedNoteIds = await bridge.trashTreeItem(nbRow.id, "folder");
+    expect(removedNoteIds).toEqual([nid]);
     const trash = await bridge.listTrashTree();
     expect(trash.some((t) => t.id === nbRow.id && t.kind === "folder")).toBe(true);
     // 子树 folders 级联进回收站
@@ -166,15 +171,28 @@ describe("mobile purge 删除传播", () => {
     }
   });
 
-  it("trashTreeItem(note)：单条进回收站，不连累其它笔记", async () => {
+  it("trashTreeItem(note)：单条进回收站，不连累其它笔记；返回 ids = 整棵子文档", async () => {
     const A = "trash-note-a";
     const B = "trash-note-b";
     await bridge.saveNote(A, "A", "<p>a</p>", "notebook-personal");
     await bridge.saveNote(B, "B", "<p>b</p>", "notebook-personal");
-    await bridge.trashTreeItem(A, "note");
+    const removed = await bridge.trashTreeItem(A, "note");
+    expect(removed).toEqual([A]);
     const trash = await bridge.listTrashTree();
     expect(trash.some((t) => t.id === A && t.kind === "note")).toBe(true);
     expect(trash.some((t) => t.id === B)).toBe(false);
+  });
+
+  it("trashNote：级联子文档也返回（批量/回滚入口用同一份 ids）", async () => {
+    const pid = "trash-note-parent-cascade";
+    const cid = "trash-note-child-cascade";
+    await bridge.saveNote(pid, "父", "<p>p</p>", "notebook-personal");
+    await bridge.saveNote(cid, "子", "<p>c</p>", pid);
+    const removed = await bridge.trashNote(pid);
+    expect(new Set(removed)).toEqual(new Set([pid, cid]));
+    const trash = await bridge.listTrashTree();
+    expect(trash.some((t) => t.id === pid)).toBe(true);
+    expect(trash.some((t) => t.id === cid)).toBe(true);
   });
 
   it("purge folder 为嵌套文档写墓碑并物理删除", async () => {
@@ -225,12 +243,37 @@ describe("mobile purge 删除传播", () => {
     vi.mocked(removeNoteAssetsDirFs).mockRejectedValueOnce(new Error("EACCES"));
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     try {
-      // 返回 true = 本次真的删了（自动过期守卫用 false 表示「已恢复/未到期，跳过」）
-      await expect(bridge.purgeTreeItem(NID, "note")).resolves.toBe(true);
+      // purged=true = 本次真的删了（自动过期守卫用 false 表示「已恢复/未到期，跳过」）
+      await expect(bridge.purgeTreeItem(NID, "note")).resolves.toMatchObject({ purged: true, noteIds: [NID] });
       expect(warn).toHaveBeenCalled();
       expect((await bridge.listDeletedNotesForSync()).some((t) => t.id === NID)).toBe(true);
       expect((await bridge.listTrashTree()).some((t) => t.id === NID)).toBe(false);
     } finally { warn.mockRestore(); }
+  });
+
+  it("G5：活跃文档/活跃目录不可被 purge（返回 false、行与正文都不动）", async () => {
+    const NID = "purge-active-guard";
+    await bridge.saveNote(NID, "活跃文档", "<p>alive</p>", null);
+    const before = await bridge.readNote(NID);
+    const purged = await bridge.purgeTreeItem(NID, "note");
+    expect(purged).toEqual({ purged: false, noteIds: [] });
+    expect((await bridge.readNote(NID))?.content).toBe(before?.content);
+    expect((await bridge.listTrashTree()).some((t) => t.id === NID)).toBe(false);
+
+    const nb = await bridge.createNotebook({ title: "活跃目录守卫", icon: null });
+    await bridge.saveNote("purge-active-child", "子文档", "<p>x</p>", nb.id);
+    const purgedFolder = await bridge.purgeTreeItem(nb.id, "folder");
+    expect(purgedFolder).toEqual({ purged: false, noteIds: [] });
+    expect((await bridge.getWorkspaceSnapshot(nb.id)).tree.length).toBe(1);
+  });
+
+  it("G5：kind 与 DB 行不一致时拒绝（防 bridge 误用）", async () => {
+    const NID = "purge-kind-mismatch";
+    await bridge.saveNote(NID, "文档", "<p>x</p>", null);
+    await bridge.trashNote(NID);
+    // 真实行是 note，却按 folder 彻底删除 ⇒ 拒绝
+    expect((await bridge.purgeTreeItem(NID, "folder")).purged).toBe(false);
+    expect((await bridge.listTrashTree()).some((t) => t.id === NID)).toBe(true);
   });
 
   it("审计 F06：purge 后晚到保存不复活文档（墓碑守卫），也不做 upsert 自愈", async () => {

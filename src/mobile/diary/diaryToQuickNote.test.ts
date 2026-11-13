@@ -55,6 +55,15 @@ async function quickNoteCount(db: SqlJsAsyncDb): Promise<number> {
 }
 
 describe("日记条目 → 小记（task-106）", () => {
+  it("原文带子文档：软删返回整棵级联 ids（关标签不漏子文档）", async () => {
+    const db = await freshDb();
+    const { deps } = memoryAssets();
+    await createNote(db, NOTE, "2026-11-13", "<p>无资产引用</p>", null, new Map());
+    await createNote(db, NOTE + "-child", "子文档", "<p>child</p>", NOTE, new Map());
+    const result = await convertDiaryToQuickNote(db, NOTE, deps);
+    expect(new Set(result.trashedNoteIds)).toEqual(new Set([NOTE, NOTE + "-child"]));
+  });
+
   it("完整搬运：作用域改写 + 图片/附件清单与文件一致 + 文本含标题 + 原文软删可恢复", async () => {
     const db = await freshDb();
     const { map, deps } = memoryAssets();
@@ -65,6 +74,8 @@ describe("日记条目 → 小记（task-106）", () => {
     const result = await convertDiaryToQuickNote(db, NOTE, deps);
     // 261113 用户裁决：卡片零剥离（字段保留但恒为空）。
     expect(result.droppedKinds).toEqual([]);
+    // 261114 task-8：原文软删返回的 note ids 交给 UI 关标签（默认产物路径 = 级联子树）。
+    expect(result.trashedNoteIds).toEqual([NOTE]);
 
     const qn = await readQuickNote(db, result.quickNoteId);
     expect(qn).not.toBeNull();

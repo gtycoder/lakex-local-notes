@@ -4,6 +4,10 @@ import type { NoteKind } from "../../core/noteKind";
 import { loadSettings } from "../../lib/settings";
 import { writeLocalStorage } from "../../lib/localStorageSafe";
 import type { LocalNote } from "../data/noteRepository";
+// 标签存档键的单一来源 = tabSessionCleanup（冷启动/删笔记本清理共用同一份键格式）；
+// 这里 re-export 保既有调用方（tabRestore 测试等）不变。
+import { notebookTabsActiveStorageKey, notebookTabsStorageKey } from "./tabSessionCleanup";
+export { notebookTabsActiveStorageKey, notebookTabsStorageKey };
 
 export interface NotebookTab {
   id: string;
@@ -21,19 +25,6 @@ export interface OpenNotebookTabOptions {
   activate?: boolean;
   enterEditor?: boolean;
   load?: boolean;
-}
-
-export function notebookTabsStorageKey(notebookId: string): string {
-  return "lakex-local-notes-mobile.tabs." + notebookId;
-}
-
-/**
- * 活动页 companion key（261102）：除 ids 数组外**单独**记「退出时停在哪个标签」。
- * 旧版本只写 ids ⇒ 读不到 active 时回落「列表最后一个」（与旧行为逐字一致，向后兼容）。
- * ⚠️ 必须挂在 tabs 前缀下：冷启动清理 clearPersistedNotebookTabs() 按前缀整棵删，两个 key 一起清。
- */
-export function notebookTabsActiveStorageKey(notebookId: string): string {
-  return notebookTabsStorageKey(notebookId) + ".active";
 }
 
 /** 读上次保存的标签 id（**只读**；损坏/无存储 ⇒ []）。恢复顺序由 workspace 过滤后交给 restore()。 */
@@ -243,6 +234,31 @@ export function useNotebookTabs(opts: UseNotebookTabsOptions) {
   }, []);
 
   /**
+   * 批量移除标签（261114 task-8）：删除一篇文档会级联软删整棵子树 ⇒ 一次要关多个标签。
+   * ⚠️ 不能循环调 removeTab：它读的 tabsRef 在重渲染前不变，同一次事件里多次调用会用同一份旧快照
+   * 互相覆盖（实测：删 PARENT>CHILD>GRAND 后，被删文档的标签反而留在 tab 条上）。
+   * 这里只做一次 setTabs + 一次 setActiveId（活动页被删时按"原位置之后的第一张"回落，与单张关闭一致）。
+   */
+  const removeTabs = useCallback((ids: readonly string[]) => {
+    const drop = new Set(ids);
+    if (drop.size === 0) return;
+    const current = tabsRef.current;
+    if (!current.some((tab) => drop.has(tab.id))) return;
+    const activeId = activeIdRef.current;
+    const activeIndex = activeId ? current.findIndex((tab) => tab.id === activeId) : -1;
+    const next = current.filter((tab) => !drop.has(tab.id));
+    for (const id of drop) pendingIdsRef.current.delete(id);
+    setTabs(next);
+    if (activeId && drop.has(activeId)) {
+      // 与单张关闭同语义：落在被删活动页原位置之后的第一个保留标签（越界取最后一个；全删为 null）。
+      const keptBefore = activeIndex < 0 ? 0 : current.slice(0, activeIndex).filter((tab) => !drop.has(tab.id)).length;
+      const nextActive = next.length ? next[Math.min(keptBefore, next.length - 1)].id : null;
+      activeIdRef.current = nextActive;
+      setActiveId(nextActive);
+    }
+  }, []);
+
+  /**
    * 恢复一份标签会话（**一次 setTabs + 一次 setActiveId**，不再逐个 openTab ⇒ 不会出现中间态顺序）：
    * workspace 负责按目录已知 id 过滤，hook 负责顺序/去重/上限/激活页。
    * 只建占位（不读正文）：活动页由既有的「活动页未加载则补读」effect 懒加载，其它页切到时再读。
@@ -344,6 +360,7 @@ export function useNotebookTabs(opts: UseNotebookTabsOptions) {
     restore,
     loadTabBody,
     removeTab,
+    removeTabs,
     clearTabs,
     updateTab,
   };

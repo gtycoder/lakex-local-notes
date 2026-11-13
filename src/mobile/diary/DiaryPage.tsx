@@ -36,6 +36,7 @@ import {
 import { formatHm } from "../../core/dateFormat.js";
 import type { TreeNode } from "../../lib/types";
 import { bridge, type DiaryOpenMode } from "../bridge";
+import { dismissNoteTabs } from "../notebook/tabDismissal";
 import { EmptyState } from "../ui/EmptyState";
 import { MobileSheet } from "../ui/MobileSheet";
 import { MonthCalendar } from "../ui/MonthCalendar";
@@ -381,7 +382,9 @@ export function DiaryPage({ nodes, onOpenEntry, onOpenSearch, onChanged }: Diary
               if (!ok) return;
               setQuickNoteBusy(true);
               try {
-                await bridge.diaryToQuickNote(entry.noteId);
+                const result = await bridge.diaryToQuickNote(entry.noteId);
+                // 原文（含级联子文档）已软删进回收站 ⇒ 关闭已打开标签（与桌面删除同语义）。
+                dismissNoteTabs(result.trashedNoteIds);
                 showToast(diaryToQuickNoteNotice());
                 await onChanged();
               } catch (error) {
@@ -397,7 +400,8 @@ export function DiaryPage({ nodes, onOpenEntry, onOpenSearch, onChanged }: Diary
               const ok = await confirmMobile({ title: "删除这篇日记？", body: "会移入回收站，可恢复。", confirmText: "删除", danger: true });
               if (!ok) return;
               try {
-                await bridge.trashTreeItem(entry.noteId, "note");
+                const removedNoteIds = await bridge.trashTreeItem(entry.noteId, "note");
+                dismissNoteTabs(removedNoteIds);
                 showToast("已移入回收站");
                 onChanged();
               } catch (error) {

@@ -375,10 +375,11 @@ export const notesDomain = {
     return { id, title, content, updatedAt: now, parentId: pid, kind: "bitable" };
   },
 
-  async trashNote(id: string): Promise<void> {
+  /** 软删单篇（级联子树）；返回被软删的 note id 列表（UI 关闭已打开标签用）。 */
+  async trashNote(id: string): Promise<string[]> {
     return runWrite("trashNote", async () => {
       const d = await ensureDb();
-      await noteRepository.trashNote(d, id);
+      return await noteRepository.trashNote(d, id);
     });
   },
 
@@ -414,11 +415,13 @@ export const notesDomain = {
     return await noteRepository.listTrashed(d);
   },
 
-  async trashTreeItem(id: string, kind: "folder" | "note"): Promise<void> {
+  /** 软删树项（notebook/分组/文档，级联整棵子树）；返回被软删的 note id 列表（UI 关闭已打开标签用）。 */
+  async trashTreeItem(id: string, kind: "folder" | "note"): Promise<string[]> {
     return runWrite("trashTreeItem", async () => {
       const d = await ensureDb();
-      await trashRepository.trashTreeItem(d, id, kind);
+      const trashedNoteIds = await trashRepository.trashTreeItem(d, id, kind);
       await reconcileIndex(d);
+      return trashedNoteIds;
     });
   },
 
@@ -450,13 +453,13 @@ export const notesDomain = {
     id: string,
     kind: "folder" | "note",
     options?: { expiredBefore?: string },
-  ): Promise<boolean> {
+  ): Promise<trashRepository.PurgeTreeItemResult> {
     return runWrite("purgeTreeItem", async () => {
       const d = await ensureDb();
-      const purged = await trashRepository.purgeTreeItem(d, id, kind, options);
+      const result = await trashRepository.purgeTreeItem(d, id, kind, options);
       // 守卫跳过时没有行变化，不必重算派生索引（省一次全库 diff）。
-      if (purged) await reconcileIndex(d);
-      return purged;
+      if (result.purged) await reconcileIndex(d);
+      return result;
     });
   },
 

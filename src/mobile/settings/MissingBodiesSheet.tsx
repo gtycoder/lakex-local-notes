@@ -18,6 +18,7 @@ import { showToast } from "../ui/toastBus";
 import { getNativeErrorMessage } from "../../lib/nativeErrors";
 import type { MissingNoteBody, MissingQuickNote } from "../data/missingBodies";
 import { EmptyState } from "../ui/EmptyState";
+import { dismissNoteTabs } from "../notebook/tabDismissal";
 import {
   docRecoveryLabel,
   missingRecoveryFailureText,
@@ -101,8 +102,10 @@ export function MissingBodiesList(props: MissingBodiesListProps) {
       danger: true,
     });
     if (!ok) return;
-    await bridge.trashNote(doc.id);
-    await bridge.purgeTreeItem(doc.id, "note");
+    // 先软删（返回整棵级联 ids）再彻底删除（返回被物理删除 ids）：两步都用来关闭可能仍打开的标签（G3 防御）。
+    const removedNoteIds = await bridge.trashNote(doc.id);
+    const purged = await bridge.purgeTreeItem(doc.id, "note");
+    dismissNoteTabs([...removedNoteIds, ...purged.noteIds]);
     reportSuccess("已彻底删除");
     await onChanged();
   });

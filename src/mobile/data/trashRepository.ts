@@ -24,30 +24,34 @@ async function assertNotDiaryNotebook(d: MobileDb, id: string, action: string): 
 
 import { collectSubtree, loadParentedNodes, trashSubtree } from "./trashSubtree.js";
 
-export async function trashTreeItem(d: MobileDb, id: string, kind: "folder" | "note"): Promise<void> {
+/** 软删树项（note/folder 都级联整棵子树）。
+ *  **返回子树里被软删的 note id 列表**（261114 task-8）：删除入口据此关闭已打开标签，
+ *  不依赖 UI 当前树是否加载全（首页入口只有全库快照、工作区只有当前笔记本子树）。 */
+export async function trashTreeItem(d: MobileDb, id: string, kind: "folder" | "note"): Promise<string[]> {
   // 日记本不可删除（只拦日记本节点；条目/分组照常软删，可恢复）。
   if (kind === "folder") await assertNotDiaryNotebook(d, id, "删除");
-  await d.transaction(async () => {
+  return await d.transaction(async () => {
     const now = new Date().toISOString();
     if (kind === "note") {
       // 261114 用户追问：文档下可能还有子文档/子分组（note 也可作父节点）⇒ **必须整棵子树一起软删**，
       // 只标根会让子文档变成 trashed_at=NULL 的悬空行（树里不可见、搜索里还在）。
-      await trashSubtree(d, id, now);
-      return;
+      return await trashSubtree(d, id, now);
     }
 
     const allFolders = await d.prepare("SELECT id, parent_id, deleted_from_parent_id, trashed_at FROM folders").all() as Array<{ id: string; parent_id: string | null }>;
     const allNotes = await d.prepare("SELECT id, parent_id, deleted_from_parent_id, trashed_at FROM notes").all() as Array<{ id: string; parent_id: string | null }>;
     const subtree = collectSubtree(allFolders, allNotes, id);
     const folderIdList = Array.from(subtree.folderIds);
-    if (folderIdList.length === 0) return;
+    if (folderIdList.length === 0) return [];
 
     const statements: MobileBatchStatement[] = [];
     const noteRows: Array<{ id: string }> = [];
     for (const batch of sqlParameterBatches(folderIdList)) {
       const ph = batch.map(() => "?").join(",");
       statements.push({
-        statement: "UPDATE folders SET trashed_at=?, is_dirty=1, updated_at=? WHERE id IN (" + ph + ") AND trashed_at IS NULL",
+        // 261114 task-8：folder 子树同样记「删除前父」（与 trashSubtree/note 分支同口径）——
+        // 同步把子树扁平化/改父后，恢复要靠 deleted_from_parent_id + trashed_at 这条边回到原父。
+        statement: "UPDATE folders SET trashed_at=?, is_dirty=1, updated_at=?, deleted_from_parent_id=COALESCE(deleted_from_parent_id, parent_id) WHERE id IN (" + ph + ") AND trashed_at IS NULL",
         values: [now, now, ...batch],
       });
     }
@@ -63,6 +67,7 @@ export async function trashTreeItem(d: MobileDb, id: string, kind: "folder" | "n
       });
     }
     await executeBatchInTransaction(d, statements);
+    return Array.from(subtree.noteIds);
   });
 }
 
@@ -169,6 +174,10 @@ async function resolveRestoreParent(
     if (restoringFolderIds.has(preferred)) return preferred;
     const parent = await d.prepare("SELECT id FROM folders WHERE id=? AND trashed_at IS NULL").get(preferred) as { id?: string } | undefined;
     if (parent?.id) return preferred;
+    // G2：移动端 note 也可作父节点（文档下建子文档/子分组）⇒ 原父是**活跃文档**时也必须原样回原位，
+    // 否则恢复子文档/子分组会被错误落到首个笔记本根（树结构断裂）。
+    const parentNote = await d.prepare("SELECT id FROM notes WHERE id=? AND trashed_at IS NULL").get(preferred) as { id?: string } | undefined;
+    if (parentNote?.id) return preferred;
   }
   // 261110：原位置不可用时，**日记条目必须先回日记本**（否则会落进默认笔记本 = 文档空间）。
   const diaryNotebookId = await resolveDiaryOriginNotebook(d, preferred);
@@ -295,17 +304,25 @@ function isTrashedBefore(trashedAt: string | null, cutoff: string): boolean {
 }
 
 /**
- * 彻底删除回收站条目（含子树）。返回是否真的删了：
- * - true = 本次写了墓碑并物理删行（文件清理在事务外，失败只告警）；
- * - false = 传了 expiredBefore 且守卫不满足（已恢复 / 未到期 / 行已不存在）。
- * 手动「彻底删除」不传 options ⇒ 与旧行为一致（用户点了就删，不看 trashed_at）。
+ * 彻底删除回收站条目（含子树）。
+ * - `purged=true` = 本次写了墓碑并物理删行（文件清理在事务外，失败只告警）；
+ * - `purged=false` = 守卫不满足（非回收站行 / 已被恢复 / 未到期 / 行不存在 / kind 不符）；
+ * - `noteIds` = 本次被物理删除的 note id（供 UI 关闭可能仍打开的标签，261114 task-8 G3）。
+ *
+ * **守卫（G5）**：只有**回收站行**能被彻底删除（kind 以 DB 行派生，防 bridge 被误用物理删活跃文档）；
+ * 另有 expiredBefore 自动过期守卫（事务内按最新 trashed_at 重判，不越过用户恢复）。
  */
+export interface PurgeTreeItemResult {
+  purged: boolean;
+  noteIds: string[];
+}
+
 export async function purgeTreeItem(
   d: MobileDb,
   id: string,
   kind: "folder" | "note",
   options: PurgeTreeItemOptions = {},
-): Promise<boolean> {
+): Promise<PurgeTreeItemResult> {
   /** 事务外删除的正文/历史文件（事务内只删 DB 行；文件删除幂等、失败不阻断）。 */
   const purgedNoteIds: string[] = [];
   const historyFiles: string[] = [];
@@ -314,6 +331,13 @@ export async function purgeTreeItem(
     for (const row of rows) historyFiles.push(row.file_path);
   };
   const purged = await d.transaction(async () => {
+    // G5 守卫（事务内读最新行）：只有**回收站行**可被彻底删除，且 kind 必须与 DB 行一致 ——
+    // 防 bridge 被误用（把活跃文档/目录直接物理删）；用户语义是「回收站里才能彻底删除」。
+    const folderRow = await d.prepare("SELECT trashed_at FROM folders WHERE id=?").get(id) as { trashed_at: string | null } | undefined;
+    const noteRow = folderRow ? undefined : await d.prepare("SELECT trashed_at FROM notes WHERE id=?").get(id) as { trashed_at: string | null } | undefined;
+    const rootRow = folderRow ?? noteRow;
+    const derivedKind: "folder" | "note" | null = folderRow ? "folder" : noteRow ? "note" : null;
+    if (!rootRow || derivedKind !== kind || rootRow.trashed_at == null) return false;
     // 自动过期守卫：必须在**事务内**按最新 trashed_at 重判（候选列表是事务外读的，其间可能已被恢复）。
     if (options.expiredBefore !== undefined && !isTrashedBefore(await readTrashedAt(d, id), options.expiredBefore)) return false;
     const now = new Date().toISOString();
@@ -343,6 +367,8 @@ export async function purgeTreeItem(
           purgedNoteIds.push(n.id);
           statements.push({ statement: "DELETE FROM notes WHERE id=?", values: [n.id] });
           statements.push({ statement: "DELETE FROM note_history WHERE note_id=?", values: [n.id] });
+          // G4（桌面同口径）：purge 后孤儿资源行不得残留（附件目录在事务外删，行先清）。
+          statements.push({ statement: "DELETE FROM orphan_assets WHERE note_id=?", values: [n.id] });
         }
       }
       await executeBatchInTransaction(d, statements);
@@ -372,12 +398,14 @@ export async function purgeTreeItem(
       purgedNoteIds.push(n.id);
       statements.push({ statement: "DELETE FROM notes WHERE id=?", values: [n.id] });
       statements.push({ statement: "DELETE FROM note_history WHERE note_id=?", values: [n.id] });
+      // G4（桌面同口径）：purge 后孤儿资源行不得残留。
+      statements.push({ statement: "DELETE FROM orphan_assets WHERE note_id=?", values: [n.id] });
     }
     await executeBatchInTransaction(d, statements);
     return true;
   });
-  // 守卫不满足（已恢复/未到期）⇒ 一行未动，也**不删文件**（用户恢复的条目必须完整）。
-  if (!purged) return false;
+  // 守卫不满足（非回收站行/已恢复/未到期/kind 不符）⇒ 一行未动，也**不删文件**（用户恢复的条目必须完整）。
+  if (!purged) return { purged: false, noteIds: [] };
   // 文件删除放在事务外：失败只留孤儿文件，不影响"已彻底删除"的 DB 判定。
   for (const noteId of purgedNoteIds) {
     await deleteNoteBodies(noteId).catch(() => undefined);
@@ -389,5 +417,5 @@ export async function purgeTreeItem(
     });
   }
   for (const filePath of historyFiles) await deleteHistorySnapshot(filePath).catch(() => undefined);
-  return true;
+  return { purged: true, noteIds: purgedNoteIds };
 }

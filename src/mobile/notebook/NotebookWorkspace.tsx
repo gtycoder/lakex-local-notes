@@ -136,6 +136,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     restore,
     loadTabBody,
     removeTab,
+    removeTabs,
     clearTabs,
     updateTab,
   } = useNotebookTabs({
@@ -260,7 +261,6 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     switchNotebook,
     closeTab,
     closeAllTabs,
-    discardTab,
     handlePaneBodyChange,
     persistBitableNow,
     handlePaneCapture,
@@ -271,6 +271,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     active,
     updateTab,
     removeTab,
+    removeTabs,
     clearTabs,
     closeOverlay,
     onBack,
@@ -296,7 +297,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     loadHistory,
     restoreHistory: restoreHistoryVersion,
     deleteHistory,
-  } = useNotebookTreeActions({ tree, loadTree, discardTab, flushSaves: flushAllTabs });
+  } = useNotebookTreeActions({ tree, loadTree, flushSaves: flushAllTabs });
 
   /**
    * 「关闭行菜单后抽屉仍在」（用户 261105 验收）：菜单是抽屉之上的临时层，dismiss 后回到目录树本身。
@@ -509,6 +510,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
           onEditorInstance={handleEditorInstance}
           onFullscreenChange={setSubpageFullscreen}
           onCloseFind={() => closeOverlay("find")}
+          flushSaves={flushAllTabs}
         />
         </section>
 

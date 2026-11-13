@@ -26,6 +26,7 @@ import { MoveTargetTreeSheet, type MoveTargetNode } from "../ui/MoveTargetTreeSh
 import type { QuickNoteTagSummary } from "../../core/quickNoteTags";
 import { toastActionError } from "../lib/actionError";
 import { EmptyState } from "../ui/EmptyState";
+import { dismissNoteTabs } from "../notebook/tabDismissal";
 
 export interface DocListItem {
   id: string;
@@ -38,6 +39,8 @@ export interface DocListSheetProps {
   activeId: string | null;
   onPick: (id: string) => void;
   onClose: () => void;
+  /** 批量「移入回收站」前先落盘在途编辑（G1；与单条删除/目录树批量同一保存屏障）。 */
+  flushSaves?: () => Promise<void>;
 }
 
 /**
@@ -57,7 +60,7 @@ const DOC_SELECTION_ACTIONS: SelectionAction[] = [
   { id: "tag", label: "打标签", icon: Tag },
 ];
 
-export function DocListSheet({ open, documents, activeId, onPick, onClose }: DocListSheetProps) {
+export function DocListSheet({ open, documents, activeId, onPick, onClose, flushSaves }: DocListSheetProps) {
   /** 当前列表的 tagIds（一次桥往返；列表可能上百篇，走批量读）。 */
   const [docTagIds, setDocTagIds] = useState<Record<string, string[]>>({});
   /** 大列表虚拟化的滚动容器（.mb-sheet__body；由 MobileSheet 的 bodyRef 注入）。 */
@@ -155,11 +158,22 @@ export function DocListSheet({ open, documents, activeId, onPick, onClose }: Doc
   const [moveExcludedIds, setMoveExcludedIds] = useState<string[]>([]);
   const applyBatch = async (payload: DocBatchPayload): Promise<void> => {
     if (selection.count === 0) { showToast("请先选择文档"); return; }
+    // G1：批量移入回收站后要关标签并取消自动保存 ⇒ 先落盘，避免丢掉 ≤1s 防抖窗口里的编辑。
+    if (payload.action === "trash") {
+      try {
+        await flushSaves?.();
+      } catch (error) {
+        showToast("保存失败，未移入回收站：" + getNativeErrorMessage(error), { type: "error" });
+        return;
+      }
+    }
     setBatchBusy(true);
     setBatchError(null);
     const ids = [...selection.ids];
     try {
-      const { text, detail, failed } = await runDocBatch(ids, payload);
+      const { result, text, detail, failed } = await runDocBatch(ids, payload);
+      // 批量「移入回收站」后关闭已打开标签（ids 来自数据层，含文档下的级联子树）。
+      if (payload.action === "trash") dismissNoteTabs(result.trashedNoteIds);
       if (failed > 0) showToast(text, { type: "error" });
       else showToast(text);
       if (failed > 0) { setBatchError(detail); return; }

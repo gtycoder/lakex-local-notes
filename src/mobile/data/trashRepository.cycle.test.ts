@@ -44,7 +44,7 @@ describe("P1-6 移动端父环防护", () => {
       const t1 = Date.now();
       const purged = await purgeTreeItem(db, "f1", "folder");
       expect(Date.now() - t1).toBeLessThan(5_000);
-      expect(purged).toBe(true);
+      expect(purged.purged).toBe(true);
       const left = await db.prepare("SELECT COUNT(*) AS c FROM folders WHERE id IN ('f1','f2')").get() as { c: number };
       expect(left.c).toBe(0);
     } finally {

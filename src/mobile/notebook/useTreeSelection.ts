@@ -27,6 +27,7 @@ import { showToast } from "../ui/toastBus";
 import type { MoveTargetNode } from "../ui/MoveTargetTreeSheet";
 import type { QuickNoteTagSummary } from "../../core/quickNoteTags";
 import { toastActionError } from "../lib/actionError";
+import { dismissNoteTabs } from "./tabDismissal";
 
 export interface TreeSelectionMoveSheet {
   open: boolean;
@@ -166,8 +167,18 @@ export function useTreeSelection(options: UseTreeSelectionOptions) {
 
   const applyTrash = useCallback(() => withBusy(async () => {
     if (selectedIds.length === 0) return;
+    // G1（与单条删除同口径）：删除后要关闭已打开标签并取消自动保存 ⇒ 先把在途编辑落盘，
+    // 否则 ≤1s 防抖窗口里的最后一次输入会被 cancelAutoSave 丢掉。保存失败则不删（不丢数据）。
     try {
-      const { text, failed } = await runDocBatch(selectedIds, { action: "trash" });
+      await options.flushSaves?.();
+    } catch (err) {
+      showToast("保存失败，未移入回收站：" + getNativeErrorMessage(err), { type: "error" });
+      return;
+    }
+    try {
+      const { result, text, failed } = await runDocBatch(selectedIds, { action: "trash" });
+      // 删除后关闭已打开标签（与桌面 deleteTreeNode 同语义）：ids 来自数据层（含级联子树、不依赖当前树加载全）。
+      dismissNoteTabs(result.trashedNoteIds);
       if (failed > 0) {
         showToast(text, { type: "error" });
         return;
@@ -178,7 +189,7 @@ export function useTreeSelection(options: UseTreeSelectionOptions) {
     } catch (err) {
       toastActionError("移入回收站", err);
     }
-  }), [withBusy, selectedIds, selection.exit, loadTree]);
+  }), [withBusy, selectedIds, selection.exit, loadTree, options.flushSaves]);
 
   /** 底部条动作分发（底部条只认 id，具体动作/确认都在这里）。 */
   const runAction = useCallback((actionId: string): void => {

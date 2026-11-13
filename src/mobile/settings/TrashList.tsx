@@ -9,6 +9,7 @@ import { bridge } from "../bridge";
 import { confirmMobile } from "../ui/ConfirmDialog";
 import { showToast } from "../ui/toastBus";
 import { toastActionError } from "../lib/actionError";
+import { dismissNoteTabs } from "../notebook/tabDismissal";
 
 export interface TrashRow {
   key: string;
@@ -65,7 +66,12 @@ export function TrashList({ title, onChanged, onPreview }: TrashListProps) {
     if (!ok) return;
     try {
       if (row.kind === "quick") await bridge.purgeQuickNote(row.id);
-      else await bridge.purgeTreeItem(row.id, row.kind === "folder" ? "folder" : "note");
+      else {
+        // 彻底删除回收站树项：返回被物理删除的 note ids ⇒ 若对应标签还开着（他端删除传播/keep-alive），
+        // 这里一并收掉（G3；正常删除入口已在软删时关闭标签，这是防御）。
+        const result = await bridge.purgeTreeItem(row.id, row.kind === "folder" ? "folder" : "note");
+        dismissNoteTabs(result.noteIds);
+      }
       showToast("已彻底删除");
       await load();
       await onChanged();

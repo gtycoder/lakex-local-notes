@@ -216,7 +216,7 @@ function defaultDeps(): SharedPdfImportDeps {
     },
     createInk: (title, parentId) => bridge.createInk(title, parentId),
     importIntoNote: importPdfIntoInkNote,
-    trashNote: (id) => bridge.trashNote(id),
+    trashNote: async (id) => { await bridge.trashNote(id); },
   };
 }
 

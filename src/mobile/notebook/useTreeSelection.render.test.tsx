@@ -18,6 +18,8 @@ const toastMock = vi.hoisted(() => ({ showToast: vi.fn() }));
 vi.mock("../ui/toastBus", () => toastMock);
 const confirmMock = vi.hoisted(() => ({ confirmMobile: vi.fn() }));
 vi.mock("../ui/ConfirmDialog", () => confirmMock);
+const dismissMock = vi.hoisted(() => ({ dismissNoteTabs: vi.fn() }));
+vi.mock("./tabDismissal", () => dismissMock);
 
 import type { NotebookTreeItem } from "../data/notebookTreeRepository";
 import { buildNotebookTreeIndex, flattenVisibleRows } from "./notebookTreeIndex";
@@ -63,6 +65,7 @@ beforeEach(() => {
   bridgeMock.getHomeSnapshot.mockReset();
   toastMock.showToast.mockReset();
   confirmMock.confirmMobile.mockReset().mockResolvedValue(true);
+  dismissMock.dismissNoteTabs.mockReset();
   loadTree = vi.fn(async () => TREE);
   flushSaves = vi.fn(async () => undefined);
 });
@@ -162,10 +165,11 @@ describe("文档树多选：创建副本", () => {
 });
 
 describe("文档树多选：移动… / 移入回收站（复用 bridge.batchNotes）", () => {
-  const okBatch = (ids: string[]) => ({ ok: true, results: ids.map((id) => ({ id, ok: true })), summary: { total: ids.length, done: ids.length, failed: 0 } });
+  const okBatch = (ids: string[], trashedNoteIds: string[] = ids) => ({ ok: true, results: ids.map((id) => ({ id, ok: true })), summary: { total: ids.length, done: ids.length, failed: 0 }, trashedNoteIds });
 
-  it("移入回收站：二次确认后 batchNotes(trash lake) ⇒ toast + 刷新目录 + 退出选择", async () => {
-    bridgeMock.batchNotes.mockResolvedValue(okBatch(["n1", "n2"]));
+  it("移入回收站：二次确认后 batchNotes(trash lake) ⇒ 关闭已打开标签 + toast + 刷新目录 + 退出选择", async () => {
+    // 数据层返回级联 ids（含未在当前树里展开的子文档）⇒ 必须原样交给关标签通道。
+    bridgeMock.batchNotes.mockResolvedValue(okBatch(["n1", "n2"], ["n1", "n2", "n1-child"]));
     await mount();
     await act(async () => { api.selection.enter(); });
     await act(async () => { api.selection.toggleAll(); });
@@ -175,9 +179,51 @@ describe("文档树多选：移动… / 移入回收站（复用 bridge.batchNot
     expect(confirmMock.confirmMobile).toHaveBeenCalledTimes(1);
     expect((confirmMock.confirmMobile.mock.calls[0]?.[0] as { title?: string }).title).toBe("移入回收站？");
     expect(bridgeMock.batchNotes).toHaveBeenCalledWith({ action: "trash", ids: ["n1", "n2"], space: "lake" });
+    expect(dismissMock.dismissNoteTabs).toHaveBeenCalledWith(["n1", "n2", "n1-child"]);
     expect(toastMock.showToast).toHaveBeenCalledWith("已移入回收站 2 项");
     expect(loadTree).toHaveBeenCalledTimes(1);
     expect(api.selection.active).toBe(false);
+  });
+
+  it("G1：批量移入回收站前先落盘（flush 先于 batchNotes），不丢 ≤1s 编辑", async () => {
+    bridgeMock.batchNotes.mockResolvedValue(okBatch(["n1"]));
+    await mount();
+    await act(async () => { api.selection.enter(); });
+    await act(async () => { api.selection.toggle("n1"); });
+    await act(async () => { api.runAction("trash"); });
+    await flush();
+    expect(flushSaves).toHaveBeenCalledTimes(1);
+    expect(flushSaves.mock.invocationCallOrder[0]).toBeLessThan(bridgeMock.batchNotes.mock.invocationCallOrder[0]);
+  });
+
+  it("G1：落盘失败则不删（提示保存失败、不调 batchNotes、不关标签）", async () => {
+    flushSaves.mockRejectedValueOnce(new Error("磁盘已满"));
+    await mount();
+    await act(async () => { api.selection.enter(); });
+    await act(async () => { api.selection.toggle("n1"); });
+    await act(async () => { api.runAction("trash"); });
+    await flush();
+    expect(bridgeMock.batchNotes).not.toHaveBeenCalled();
+    expect(dismissMock.dismissNoteTabs).not.toHaveBeenCalled();
+    expect(toastMock.showToast).toHaveBeenCalledWith(expect.stringContaining("保存失败"), { type: "error" });
+  });
+
+  it("移入回收站失败（校验失败/整批未执行）：不关标签、不刷目录、不假装成功、保留选择", async () => {
+    bridgeMock.batchNotes.mockResolvedValue({
+      ok: false,
+      results: [{ id: "n1", ok: false, reason: "not-found" }],
+      summary: { total: 1, done: 0, failed: 1 },
+      trashedNoteIds: [],
+    });
+    await mount();
+    await act(async () => { api.selection.enter(); });
+    await act(async () => { api.selection.toggle("n1"); });
+    await act(async () => { api.runAction("trash"); });
+    await flush();
+    expect(toastMock.showToast).toHaveBeenCalledWith(expect.stringContaining("失败"), { type: "error" });
+    expect(dismissMock.dismissNoteTabs).toHaveBeenCalledWith([]); // 没有真正软删 ⇒ 不产生关标签动作
+    expect(loadTree).not.toHaveBeenCalled();
+    expect(api.selection.active).toBe(true);
   });
 
   it("移动…：弹目录树（只列容器）→ 确认后 batchNotes(move parentId)", async () => {

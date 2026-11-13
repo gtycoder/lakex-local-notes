@@ -55,10 +55,10 @@ describe("日记本不可删除（移动端 data/trashRepository）", () => {
 
   it("彻底删除日记本被拒：返回 false（后台过期任务不抛错），行仍在", async () => {
     const db = await setup();
-    expect(await purgeTreeItem(db, "nb-diary", "folder")).toBe(false);
+    expect((await purgeTreeItem(db, "nb-diary", "folder")).purged).toBe(false);
     expect(await exists(db, "nb-diary")).toBe(true);
     // 自动过期守卫路径同样跳过
-    expect(await purgeTreeItem(db, "nb-diary", "folder", { expiredBefore: "2099-01-01T00:00:00.000Z" })).toBe(false);
+    expect((await purgeTreeItem(db, "nb-diary", "folder", { expiredBefore: "2099-01-01T00:00:00.000Z" })).purged).toBe(false);
     expect(await exists(db, "nb-diary")).toBe(true);
     await db.close();
   });

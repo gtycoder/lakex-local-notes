@@ -35,6 +35,8 @@ import { reportMobileActionError } from "../lib/reportMobileActionError";
 // 待办勾选 = 与桌面同一实现（纯函数改写正文里那一个 checkbox 卡值）。
 import { toggleTaskInBody } from "../../features/quickNotes/quickNotePreviewParser";
 import { bridge } from "../bridge";
+import { dismissNoteTabs } from "../notebook/tabDismissal";
+import { clearPersistedNotebookTabsFor } from "../notebook/tabSessionCleanup";
 import { describeSyncProgress, readSyncProgress, subscribeSyncProgress, type SyncProgressSnapshot } from "../sync/syncProgressStore";
 import { escapeId } from "../../lib/cssEscape";
 import { useTabPager } from "./useTabPager";
@@ -692,7 +694,10 @@ export function HomePage(props: HomePageProps) {
     }
     catch { showToast("设置图标失败", { type: "error" }); }
   };
-  /** 删除笔记本 = 整棵移入回收站（可恢复，与桌面笔记本右键同语义）。 */
+  /** 删除笔记本 = 整棵移入回收站（可恢复，与桌面笔记本右键同语义）。
+   *  删除后必须关闭该笔记本子树里已打开的标签（与桌面 deleteTreeNode 一致）：ids 来自数据层
+   *  （级联整棵子树），用模块通道通知可能仍挂载的工作区；并清掉该笔记本的标签存档 ——
+   *  否则以后从回收站恢复笔记本时旧标签会重新出现（桌面删除后不恢复标签）。 */
   const deleteNotebook = async (nb: TreeNode): Promise<void> => {
     const ok = await confirmMobile({
       title: "删除笔记本？",
@@ -700,8 +705,13 @@ export function HomePage(props: HomePageProps) {
       confirmText: "删除", danger: true,
     });
     if (!ok) return;
-    try { await bridge.trashTreeItem(nb.id, "folder"); await onTreeChanged(); showToast("已移入回收站"); }
-    catch { showToast("删除失败", { type: "error" }); }
+    try {
+      const removedNoteIds = await bridge.trashTreeItem(nb.id, "folder");
+      dismissNoteTabs(removedNoteIds);
+      clearPersistedNotebookTabsFor(nb.id);
+      await onTreeChanged();
+      showToast("已移入回收站");
+    } catch { showToast("删除失败", { type: "error" }); }
   };
 
   const viewIcon = libraryView === "shelf" ? <LayoutGrid size={20} /> : <List size={20} />;

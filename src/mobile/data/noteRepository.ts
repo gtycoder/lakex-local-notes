@@ -326,14 +326,16 @@ export async function saveRestoredNoteContent(d: MobileDb, id: string, title: st
   }
 }
 
-/** 本地软删（入回收站）：同步时上传墓碑（删除压编辑）。 */
-export async function trashNote(d: MobileDb, id: string): Promise<void> {
+/** 本地软删（入回收站）：同步时上传墓碑（删除压编辑）。
+ *  返回**被软删的整棵子树的 note id**（供 UI 关闭已打开标签，261114 task-8；不依赖当前树是否加载全）。 */
+export async function trashNote(d: MobileDb, id: string): Promise<string[]> {
   // 261114：文档下可能还有子文档/子分组（note 也可作父节点）⇒ **必须整棵子树一起软删**（与桌面级联同口径）。
   // 旧实现只标根：子文档会变成 trashed_at=NULL 的悬空行（树里不可见、搜索里还在）。
   // 细节（bump updated_at、记删除前父、防环上限）统一在 trashSubtree 里，避免多处实现漂移。
   const trashedNoteIds = await trashSubtree(d, id);
   if (trashedNoteIds.length === 0) await removeNoteFromIndex(d, id);
   else for (const noteId of trashedNoteIds) await removeNoteFromIndex(d, noteId);
+  return trashedNoteIds;
 }
 
 export async function listTrashed(d: MobileDb): Promise<LocalNote[]> {

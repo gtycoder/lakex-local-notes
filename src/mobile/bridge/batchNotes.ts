@@ -161,8 +161,10 @@ async function nextSortOrder(d: MobileDb, parentId: string | null): Promise<numb
 }
 
 /** 单个事务里逐条落地（抛错 = 整批回滚，由调用方转成 failed 结果）。
- * 导出仅供单测直接验证第二道闸（正常入口先过 core 校验；这里防的是绕过 core 的直接调用）。 */
-export async function applyBatchItems(d: MobileDb, items: readonly BatchNotesItem[]): Promise<void> {
+ *  返回本次真正被软删的 note id（含级联子树），供 UI 关闭已打开标签（261114 task-8）。
+ *  导出仅供单测直接验证第二道闸（正常入口先过 core 校验；这里防的是绕过 core 的直接调用）。 */
+export async function applyBatchItems(d: MobileDb, items: readonly BatchNotesItem[]): Promise<string[]> {
+  const trashedNoteIds: string[] = [];
   await d.transaction(async () => {
     const now = new Date().toISOString();
     /** 同一目标父级的多条移动要依次追加，不能共用同一个 sortOrder。 */
@@ -187,7 +189,7 @@ export async function applyBatchItems(d: MobileDb, items: readonly BatchNotesIte
       }
       if (item.action === "trash") {
         if (item.space === "quickNotes") await deleteQuickNote(d, item.id);
-        else await noteRepository.trashNote(d, item.id);
+        else trashedNoteIds.push(...await noteRepository.trashNote(d, item.id));
         continue;
       }
       if (item.action === "tag-add") {
@@ -218,6 +220,7 @@ export async function applyBatchItems(d: MobileDb, items: readonly BatchNotesIte
       }
     }
   });
+  return trashedNoteIds;
 }
 
 /** 组装同步 executor（对外导出便于单测直接跑 core 编排）。 */
@@ -251,11 +254,14 @@ export function createMobileBatchExecutor(snapshot: BatchSnapshot, onExecute: (i
   };
 }
 
+/** 移动端批量结果：在 core 契约上追加「真正被软删的 note id」（关标签用；quickNotes 空间为空）。 */
+export type MobileBatchNotesResult = BatchNotesResult & { trashedNoteIds: string[] };
+
 /**
  * 移动端批量操作入口（bridge.batchNotes 的实现主体）。
  * 同步校验跑在预取快照上；全部通过后再把落地动作放进异步事务。事务失败 ⇒ 整批 failed（已回滚）。
  */
-export async function runMobileBatchNotes(d: MobileDb, input: BatchNotesInput): Promise<BatchNotesResult> {
+export async function runMobileBatchNotes(d: MobileDb, input: BatchNotesInput): Promise<MobileBatchNotesResult> {
   const raw = input as BatchNotesInput & { ids?: unknown };
   const ids = Array.isArray(raw.ids) ? raw.ids.filter((id): id is string => typeof id === "string") : [];
   const space: BatchNotesSpace = raw.space === "quickNotes" ? "quickNotes" : "lake";
@@ -267,17 +273,17 @@ export async function runMobileBatchNotes(d: MobileDb, input: BatchNotesInput): 
     loadActiveTagIds(d),
   ]);
 
-  let pending: Promise<void> | null = null;
+  let pending: Promise<string[]> | null = null;
   const executor = createMobileBatchExecutor(
     { lake: lakeData.lake, quick, ancestors: lakeData.ancestors, parentInDiary: lakeData.parentInDiary, activeTagIds },
     (items) => { pending = applyBatchItems(d, items); },
   );
   const result = runBatchNotes(input, executor);
-  const work = pending as Promise<void> | null;
-  if (!result.ok || !work) return result;
+  const work = pending as Promise<string[]> | null;
+  if (!result.ok || !work) return { ...result, trashedNoteIds: [] };
   try {
-    await work;
-    return result;
+    const trashedNoteIds = await work;
+    return { ...result, trashedNoteIds };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return {
@@ -286,13 +292,14 @@ export async function runMobileBatchNotes(d: MobileDb, input: BatchNotesInput): 
       summary: { total: result.results.length, done: 0, failed: result.results.length },
       reason: "failed",
       message: "批量操作失败（已回滚）：" + message,
+      trashedNoteIds: [],
     };
   }
 }
 
 export const batchNotesDomain = {
   /** 批量操作（移动端唯一入口；写域：纯本地写、不出网）。 */
-  async batchNotes(input: BatchNotesInput): Promise<BatchNotesResult> {
+  async batchNotes(input: BatchNotesInput): Promise<MobileBatchNotesResult> {
     return runWrite("batchNotes", async () => {
       const d = await ensureDb();
       return await runMobileBatchNotes(d, input);

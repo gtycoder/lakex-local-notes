@@ -26,6 +26,7 @@ vi.mock("../ui/haptics", () => ({ successFeedback: vi.fn() }));
 
 import { useWorkspaceSession } from "./useWorkspaceSession";
 import type { NotebookTab } from "./useNotebookTabs";
+import { dismissNoteTabs } from "./tabDismissal";
 
 const GONE = { parentId: "nb1", syncState: "local", trashedAt: "2026-11-13T08:43:44.205Z" };
 const ACTIVE = { parentId: "nb1", syncState: "local", trashedAt: null };
@@ -61,6 +62,7 @@ function Harness({ initialTabs }: { initialTabs: NotebookTab[] }) {
     active: tabs.find((t) => t.id === activeId) ?? tabs[0] ?? null,
     updateTab: (id, patch) => setTabs((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t))),
     removeTab: (id) => setTabs((prev) => prev.filter((t) => t.id !== id)),
+    removeTabs: (ids) => setTabs((prev) => prev.filter((t) => !ids.includes(t.id))),
     clearTabs: () => setTabs([]),
     closeOverlay: vi.fn(),
     onBack: onBack as unknown as () => void,
@@ -147,6 +149,31 @@ describe("useWorkspaceSession 保存屏障的 gone 处置", () => {
     await act(async () => { await api.closeTab("n1"); });
     expect(latestTabs.map((t) => t.id)).toEqual(["n1"]);
     expect(mocks.report).toHaveBeenCalled();
+  });
+
+  it("删除入口广播被软删 ids ⇒ 已打开标签全部丢弃且取消待保存（261114 task-8，与桌面 deleteTreeNode 同语义）", async () => {
+    render([tab("n1"), tab("n2"), tab("n3")]);
+    // 删除 n1/n3（其子树 ids 由数据层返回）；n2 不在里面 ⇒ 保留。
+    act(() => { api.scheduleAutoSave("n1", "n1", "<p>dirty</p>"); });
+    act(() => { dismissNoteTabs(["n1", "n3"]); });
+    expect(latestTabs.map((t) => t.id)).toEqual(["n2"]);
+    // 待保存快照已取消：不会被 1s 防抖再拿去写已删行。
+    await act(async () => { await api.flushAllTabs(); });
+    expect(mocks.saveNote).not.toHaveBeenCalled();
+    expect(mocks.report).not.toHaveBeenCalled();
+  });
+
+  it("删除级联一次关多张标签（批量移除，不因旧快照互相覆盖而残留被删 tab）", async () => {
+    render([tab("p"), tab("c"), tab("g"), tab("sib")]);
+    act(() => { dismissNoteTabs(["p", "c", "g"]); });
+    // 一次广播关整棵子树：只剩旁观文档（旧实现循环 removeTab 会用同一份旧 tabsRef 覆盖，残留 p/c）
+    expect(latestTabs.map((t) => t.id)).toEqual(["sib"]);
+  });
+
+  it("删除入口广播只命中已打开标签（未打开的 id 不影响其它 tab）", async () => {
+    render([tab("n1")]);
+    act(() => { dismissNoteTabs(["n-other"]); });
+    expect(latestTabs.map((t) => t.id)).toEqual(["n1"]);
   });
 
   it("完成编辑（toggleEdit）：gone 文档不再尝试显式保存，直接丢弃标签并明说", async () => {

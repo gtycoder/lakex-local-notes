@@ -66,6 +66,33 @@ describe("回收站恢复：原父缺失回落兜底笔记本（261027）", () =
     } finally { await db.close(); }
   });
 
+  it("G2：原父是**活跃文档**（note 可作父）→ 恢复子文档保持原父，不回落笔记本根", async () => {
+    try {
+      await insertFolder(db, "nb1", "notebook");
+      await createNote(db, "parent-note", "父文档", "<p>p</p>", "nb1", new Map());
+      await seedTrashedNote(db, "child", "parent-note");
+      await restoreTreeItem(db, "child", "note", async () => undefined);
+      const row = await db.prepare("SELECT parent_id, trashed_at FROM notes WHERE id='child'").get() as { parent_id: string | null; trashed_at: string | null };
+      expect(row.trashed_at).toBeNull();
+      expect(row.parent_id).toBe("parent-note");
+    } finally { await db.close(); }
+  });
+
+  it("G2：原父是**活跃文档** → 恢复子分组保持原父（group 不挂错到笔记本根）", async () => {
+    try {
+      await insertFolder(db, "nb1", "notebook");
+      await createNote(db, "parent-note", "父文档", "<p>p</p>", "nb1", new Map());
+      // 模拟「从远端学到的删除」：子分组行 parent 被归一成 TRASH 容器、原父记在 deleted_from_parent_id。
+      await db.prepare(
+        "INSERT INTO folders (id,title,parent_id,sort_order,node_type,icon,updated_at,trashed_at,deleted_from_parent_id,is_dirty) VALUES (?,?,?,0,?,NULL,?,?,?,1)",
+      ).run("g-child", "子分组", "trash-container", "group", NOW, NOW, "parent-note");
+      await restoreTreeItem(db, "g-child", "folder", async () => undefined);
+      const restored = await db.prepare("SELECT parent_id, trashed_at FROM folders WHERE id='g-child'").get() as { parent_id: string | null; trashed_at: string | null };
+      expect(restored.trashed_at).toBeNull();
+      expect(restored.parent_id).toBe("parent-note");
+    } finally { await db.close(); }
+  });
+
   it("分组恢复：原父已删同样回落，笔记本恢复回根层", async () => {
     try {
       await insertFolder(db, "nb1", "notebook");

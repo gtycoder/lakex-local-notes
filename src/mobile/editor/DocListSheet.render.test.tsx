@@ -26,6 +26,8 @@ vi.mock("../ui/MobileSheet", () => ({
 }));
 const toastMock = vi.hoisted(() => ({ showToast: vi.fn() }));
 vi.mock("../ui/toastBus", () => toastMock);
+const dismissMock = vi.hoisted(() => ({ dismissNoteTabs: vi.fn() }));
+vi.mock("../notebook/tabDismissal", () => dismissMock);
 
 import { consumeBack } from "../ui/backStack";
 import { DocListSheet } from "./DocListSheet";
@@ -37,13 +39,14 @@ const TAGS = { n1: ["t_work"], n2: ["t_idea", "t_work"], n3: [] };
 let host: HTMLDivElement;
 let root: ReturnType<typeof createRoot> | null = null;
 const picked: string[] = [];
+let flushSaves: ReturnType<typeof vi.fn>;
 
 async function render(docs = DOCS): Promise<void> {
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
   await act(async () => {
-    root!.render(<DocListSheet open documents={docs} activeId="n1" onPick={(id) => picked.push(id)} onClose={() => undefined} />);
+    root!.render(<DocListSheet open documents={docs} activeId="n1" onPick={(id) => picked.push(id)} onClose={() => undefined} flushSaves={flushSaves as () => Promise<void>} />);
   });
   await act(async () => { await Promise.resolve(); await Promise.resolve(); });
 }
@@ -64,7 +67,9 @@ beforeEach(() => {
   picked.length = 0;
   tagReadsMock.loadNoteTagIdsForNotes.mockReset().mockResolvedValue({ byNoteId: TAGS, truncated: false, requested: 3, loaded: 3 });
   bridgeMock.listQuickNoteTags.mockReset().mockResolvedValue(DIR);
-  bridgeMock.batchNotes.mockReset().mockResolvedValue({ ok: true, results: [{ id: "n1", ok: true }], summary: { total: 1, done: 1, failed: 0 } });
+  bridgeMock.batchNotes.mockReset().mockResolvedValue({ ok: true, results: [{ id: "n1", ok: true }], summary: { total: 1, done: 1, failed: 0 }, trashedNoteIds: ["n1", "n1-child"] });
+  dismissMock.dismissNoteTabs.mockReset();
+  flushSaves = vi.fn(async () => undefined);
   bridgeMock.duplicateNotes.mockReset().mockResolvedValue({ ok: true, results: [{ id: "n1", ok: true, newId: "n1copy" }], summary: { total: 1, done: 1, failed: 0 } });
   bridgeMock.getHomeSnapshot.mockReset().mockResolvedValue({
     treeNodes: [
@@ -162,9 +167,53 @@ describe("DocListSheet 多选模式（261106 task-82）", () => {
     expect(options.title).toContain("移入回收站");
     expect(options.confirmText).toBe("移入回收站");
     expect(bridgeMock.batchNotes).toHaveBeenCalledWith({ action: "trash", ids: ["n1"], space: "lake" });
+    expect(dismissMock.dismissNoteTabs).toHaveBeenCalledWith(["n1", "n1-child"]); // 含级联子文档 ⇒ 关已打开标签
     expect(docTitles()).not.toContain("周报");                       // 本地先隐藏
     expect(host.querySelector('[role="toolbar"][aria-label="多选操作"]')).toBeNull(); // 退出选择
     expect(toastMock.showToast).toHaveBeenCalledWith("已移入回收站 1 项");
+  });
+
+  it("G1：批量移入回收站前先落盘（flush 先于 batchNotes）", async () => {
+    await render();
+    await enterByButton();
+    await act(async () => { rowByTitle("周报").click(); await Promise.resolve(); });
+    const trashButton = [...host.querySelectorAll<HTMLButtonElement>('[role="group"][aria-label="批量操作"] button')]
+      .find((b) => (b.textContent ?? "").trim() === "移入回收站")!;
+    await act(async () => { trashButton.click(); await new Promise((r) => setTimeout(r, 0)); });
+    expect(flushSaves).toHaveBeenCalledTimes(1);
+    expect(flushSaves.mock.invocationCallOrder[0]).toBeLessThan(bridgeMock.batchNotes.mock.invocationCallOrder[0]);
+  });
+
+  it("G1：落盘失败则不删（不调 batchNotes/不关标签/不隐藏行）", async () => {
+    flushSaves.mockRejectedValueOnce(new Error("磁盘已满"));
+    await render();
+    await enterByButton();
+    await act(async () => { rowByTitle("周报").click(); await Promise.resolve(); });
+    const trashButton = [...host.querySelectorAll<HTMLButtonElement>('[role="group"][aria-label="批量操作"] button')]
+      .find((b) => (b.textContent ?? "").trim() === "移入回收站")!;
+    await act(async () => { trashButton.click(); await new Promise((r) => setTimeout(r, 0)); });
+    expect(bridgeMock.batchNotes).not.toHaveBeenCalled();
+    expect(dismissMock.dismissNoteTabs).not.toHaveBeenCalled();
+    expect(docTitles()).toContain("周报");
+    expect(toastMock.showToast).toHaveBeenCalledWith(expect.stringContaining("保存失败"), { type: "error" });
+  });
+
+  it("移入回收站失败：不关标签、不隐藏行、不假装成功", async () => {
+    bridgeMock.batchNotes.mockResolvedValue({
+      ok: false,
+      results: [{ id: "n1", ok: false, reason: "failed" }],
+      summary: { total: 1, done: 0, failed: 1 },
+      trashedNoteIds: [],
+    });
+    await render();
+    await enterByButton();
+    await act(async () => { rowByTitle("周报").click(); await Promise.resolve(); });
+    const trashButton = [...host.querySelectorAll<HTMLButtonElement>('[role="group"][aria-label="批量操作"] button')]
+      .find((b) => (b.textContent ?? "").trim() === "移入回收站")!;
+    await act(async () => { trashButton.click(); await new Promise((r) => setTimeout(r, 0)); });
+    expect(dismissMock.dismissNoteTabs).toHaveBeenCalledWith([]);
+    expect(docTitles()).toContain("周报");                            // 行还在（没假装成功）
+    expect(toastMock.showToast).toHaveBeenCalledWith(expect.stringContaining("失败"), { type: "error" });
   });
 
   it("打标签：弹选择器（搜索/多选），确认按钮显示影响条数，提交 tag-add", async () => {
