@@ -41,7 +41,7 @@
 8. KISS/DRY；不引入未经验证的抽象、不加无谓依赖（见 17）。
 9. **多表写必须事务**（`db.transaction`）。
 11. **资产存在性 = 远端声明差集（v3：每篇文档一份不可变声明）**：`meta/assets/{noteId}/{declHash}.json` 是「该文档云端在用集」的权威快照（先对象后声明），索引 `assetsHash` 指向它；**禁止逐对象 HEAD/GET、禁止「本机记过 = 已上传」的持久缓存**；上传只对声明缺失资产 PUT，声明**永远全量**；下载同样走差集（本地实扫 size+sha256 跳过），`active→trash` 仅在**实读正文 sha256 相等**时复用。恢复/预览补拉走 `core/s3v3AssetBackfill.ts`。
-12. **兜底「未分类」笔记本只惰性创建**（真正回落时才建）。
+12. **兜底「未分类」笔记本 = 固定 id + 惰性创建**：id 单一来源 `core/syncDecisions.FALLBACK_NOTEBOOK_ID`（`notebook-uncategorized`），跨端必须同一本（旧实现每端 uuid() ⇒ 云端累积同名分组、孤儿文档父关系来回翻）；只在「真正回落」时创建；老数据「唯一一本且标题=未分类」会被一次性收编（多本时绝不收编，用户自建同名本不动）。护栏 `electron/fallbackNotebook.test.ts`。
 13. **S3 并发上限 = 12**：传输池默认 `DEFAULT_TRANSFER_CONCURRENCY=12`（硬夹 32）、`deleteMany` 并发 12；**不得**为吞吐调到 16+（provider 限流 / 移动端内存）。
 14. **桌面 UI = 自有设计系统**（规格 `docs/DESIGN.md` + `.impeccable/design.json`）：
     - **令牌唯一来源**：颜色/圆角/间距/字号/动效只用 `--lake-*`，定义在 `src/styles/themes/*`；**颜色字面量只允许出现在 themes/**；字号用 `--lake-font-size-*`（离档向上取档）。令牌数值以 themes 为准，**本文不抄**。
