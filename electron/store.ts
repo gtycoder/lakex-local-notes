@@ -2188,8 +2188,8 @@ export class Store {
     return this.resourceRepository.upload(input, noteId);
   }
 
-  async downloadRemoteResource(url: string, noteId: string): Promise<ResourceUploadOutput> {
-    return this.resourceRepository.downloadRemote(url, noteId);
+  async downloadRemoteResource(url: string, noteId: string, limits?: { timeoutMs?: number; maxAttempts?: number }): Promise<ResourceUploadOutput> {
+    return this.resourceRepository.downloadRemote(url, noteId, limits);
   }
 
   /** AI 写作空间仓库（桌面本地；表结构见 schemaInit，形状见 src/core/aiWriting）。 */

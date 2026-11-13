@@ -327,7 +327,7 @@ export function registerNotesIpc(
     if (bytes.length > MAX_ATTACHMENT_BYTES) throw new Error(`资源超过 ${MAX_ATTACHMENT_BYTES / 1024 / 1024} MiB 协议上限`);
     return store.uploadResource({ ...input, bytes }, noteId);
   });
-  ipc.handle("download_remote_resource", (url: string, noteId: string) => store.downloadRemoteResource(url, noteId));
+  ipc.handle("download_remote_resource", (url: string, noteId: string, limits?: { timeoutMs?: number; maxAttempts?: number }) => store.downloadRemoteResource(url, noteId, limits));
   ipc.handle("list_orphan_assets", () => store.listOrphanAssets());
   ipc.handle("clean_orphan_assets", () => store.cleanOrphanAssets());
   ipc.handle("delete_orphan_asset", (id: number) => store.deleteOrphanAsset(Number(id)));

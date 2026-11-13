@@ -7,6 +7,14 @@
 
 ## 0. 最新交接（最近 3 个批次；更早的见 git）
 
+### 261114 · 图片上传失联修复（正式数据【IO】现场；v1.1.4 候选，未发版）
+
+- **现场**：正式数据【IO】最后一张远程图（语雀 CDN，原图 826,557B/1080×613）粘贴后显示「图片上传失败」，但 note-assets 里文件完整（orphan）。日志：18:15 粘贴 33 张，主进程下载最坏 3×30s（≈91s）后才失败、卡片已 error；18:16:33 编辑器实例重建，新实例对 loading 卡建 virtual task，3s 超时后内核把字符串 `"failed to upload"` 当 Error 取 `.message` ⇒ `errorMessage:"unknown error"`；晚到的下载成功只更新旧实例/旧卡，正文不更新 ⇒ 字节成 orphan。
+- **根因（4 层）**：① 卡片上传任务与编辑器实例同生命周期（实例一重建任务就失联）；② 原 URL 在上传开始时被 pre-reader `delete src`（正文里无处重试）；③ 内核超时分支错误信息丢失（传字符串）；④ 下载/重试预算过长（主进程 3×30s + 渲染层 2 次），足够让卡片先失败。
+- **修复**：文档编辑器 image 插件改自实现 `createUploadTask`（`features/editor/imageUploadTask.ts`，taskId 同步进卡片，任务自持、编辑器销毁后仍跑完）+ 持久日志 `uploadJournal`（taskId→URL/资产结果，7 天/200 条）+ 纯函数 `uploadCardRepair`（挂载时按 taskId 回填 done/error）+ `EditorTab` 订阅晚到结果触发一次重建 + `resumePendingDocumentImageUploads` 重启后重下 pending。**关键坑**：vendor 默认 image 配置带直通 URL 的 `createUploadPromise` 桩且优先级高于 createUploadTask ⇒ 必须显式 `createUploadPromise: undefined`，否则远程图变「src=原 URL/size0/done」假成功卡（实测踩到）；任务必须实现 WY 同款 `on/off` 与 `isError` 等（缺则 render assert/TypeError）。下载预算收窄为 15s×2（IPC `download_remote_resource` 新增 limits，夹 [1s,60s]×[1,3]），该路径渲染层不再叠重试。
+- **运行时验证（隔离 `LAKE_USER_DATA` + `LAKE_RENDERER=scheme` + CDP 9222，未碰正式数据）**：A 粘贴远程图 → 日志 done、DOM `img.ne-image` 指向本地资产、无 renderer 错误；B 离线把正文卡改成 `src:""/status:error/unknown error`（保留 taskId）→ 重启打开 → 自动回填 src/status/size 并落盘（磁盘 body 已 done、orphan 清空）；C 日志置 pending + 正文同 taskId broken → 重启 → 自动重下并回填（磁盘 body done）。
+- **门禁**：tsc 0；全量 vitest **944 文件 / 6005 例（5993 passed / 12 skipped）/ 0 failed**；`vite build` 成功；`git diff --check` clean。护栏：`uploadJournal.test.ts`（5）、`imageUploadTask.test.ts`（5）、`uploadCardRepair.test.ts`（6）、`uploadRecoveryWiring.test.ts`（3）、`electron/resourceRepository.downloadLimits.test.ts`（3）。
+- **文档**：`LAKEX-CONTRACT.md` §5.53（内核扩展点/生命周期/unknown error 链路 + 复验法）、`RESILIENCE.md` §3.6、AGENTS §4「图片上传必须可恢复」、HANDOFF 本节/§1。**未 bump 版本、未打 tag**（等用户决定是否发 v1.1.4）。
 ### 261114 · v1.1.3（移动端删除 review 收口 + 级联/关标签详细矩阵 + 发版）
 
 - **用户点单**：① 移动端删除也做 review（笔记本/分组/文档 × 子级/多级子级都要详细测试），删除后**关闭已打开标签、行为与桌面一致**；② 完成后推远程、打 tag 发版。
@@ -177,10 +185,10 @@
 - **工作树**：261114 批 = `f3a0e60c`（幽灵文档）→ `b676440f`（回收站浮动动作/启动不硬开/保存被拒可退出/移动 gone）→ `bbeddc3f`（级联删除）→ `c3b17bf9`（移动删除 review 收口）→ 发版 commit（1.1.3，见 `git log`）；历史上并行会话共用工作树时一律「只 stage 本批文件」，**绝不用 `git add -A`**。
 - 261110 一次性历史清理（`.ai-writing-recon/` 用 `git filter-repo` 从全部历史移除，重写 v1.1.0 之后的提交；tag 未变）⇒ 旧 clone 需 `git fetch --force --prune && git reset --hard origin/master`。
 
-**门禁基线（v1.1.3 发版批实测 2026-11-13 17:56；分层口径见 AGENTS §3#21）**
+**门禁基线（261114 图片上传失联修复批实测 2026-11-13 18:52；分层口径见 AGENTS §3#21）**
 
 - `npx tsc --noEmit` = **0**。
-- 全量 vitest（低负载串行门禁）：**文件 = 总 939（928 passed / 11 skipped）**；**用例 = 总 5983（5971 passed / 12 skipped）/ 0 failed**（71.2s）。偶发 `perf.integration` 满载抖动口径见下条（单跑复验通过）。本批动了回收站行样式 ⇒ 跑了 `cssLayers`/`uiPrimitives`/`ui-metrics`（均 PASS；无该行的样式快照态，未跑 stylesnap）；移动端改动已装 APK 并设备级验收；`npx vite build` 成功（隔离验证用构建）。
+- 全量 vitest（低负载串行门禁）：**文件 = 总 944（933 passed / 11 skipped）**；**用例 = 总 6005（5993 passed / 12 skipped）/ 0 failed**（69.6s）。偶发 `perf.integration` 满载抖动口径见下条（单跑复验通过）。本批动了回收站行样式 ⇒ 跑了 `cssLayers`/`uiPrimitives`/`ui-metrics`（均 PASS；无该行的样式快照态，未跑 stylesnap）；移动端改动已装 APK 并设备级验收；`npx vite build` 成功（隔离验证用构建）。
 - ⚠️ `electron/s3v3/perf.integration.test.ts`：**低负载串行本轮无抖动（通过）**；满载/并发构建时偶发（单跑 PASS），门禁判定以单跑/低负载为准（同 §2 既有口径）。
 - `node scripts/ui-metrics.mjs`：颜色 0 / 字号 0 / `!important` 9 = 允许清单 / `crossFileDupGroups` 45 / `shadowedDecls` **0**（task-34 已清零，门禁只降）/ 未定义令牌 0。
 - `check:core` **178** 文件 0 违规；`check:mobileui` 通过。

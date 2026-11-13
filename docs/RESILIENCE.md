@@ -76,6 +76,16 @@
 
 护栏：`electron/startupTrash.test.ts`、`src/core/syncDecisions.test.ts`；契约口径见 AGENTS §3#16 与 §7#13。
 
+## 3.6 261114 图片上传任务失联（新失败面：粘贴远程图）
+
+| 失败面 | 判据 / 降级 | 取证 |
+| --- | --- | --- |
+| 远程图下载成功但卡片永久「图片上传失败」 | 任务与卡片用 **taskId** 绑定：文档编辑器 image 插件改为自实现 `createUploadTask`（`features/editor/imageUploadTask.ts`），taskId 落盘进卡片；结果写 `uploadJournal`（localStorage，7 天/200 条）。`EditorTab` 挂载时 `repairUploadCards` 按 taskId 回填；晚到结果触发一次重建；日志仍 pending 的 URL 由 `resumePendingDocumentImageUploads` 重下 | 现场 `unknown error` + note-assets 里有完整 orphan；修复后同一卡片自动回填（隔离实例 A/B 实测：伪造 broken 卡/重启恢复均 PASS） |
+| 内核扩展点被默认桩顶掉（假成功卡） | `image` 插件解析顺序 = `createUploadPromise` 优先；vendor 默认配置的桩对 url 直接返回原 URL/size 0/done ⇒ 文档编辑器必须显式 `createUploadPromise: undefined` 才能走 `createUploadTask`。护栏 `uploadRecoveryWiring.test.ts` | 隔离实例实测：不置 undefined 时卡片 src=原 URL、size 0、无下载 |
+| 任务对象接口缺方法 | 必须实现 WY 同款：`on/off`（缺 off 触发 `bind-event-for-react-component` assert）、`isError/isPending/isRunning/isSuccess/isAborted/isTimeout/isCompleted`（缺则 render TypeError）、`run/getStatus/destroy/getResourceURL/abort`；`run()` 错误不 reject（用 status/event 表达） | 隔离实例 render 报错栈 + 修复后 img.ne-image 正常加载 |
+| 慢下载把错误卡窗口拉长 | 交互式远程图预算收窄为 **15s × 2**（`DOCUMENT_IMAGE_DOWNLOAD_LIMITS`），主进程 `download_remote_resource` 接收 limits 并夹在 [1s,60s]×[1,3]；渲染层对该类不再叠 `withRetry`。失败信息透传真实原因（不再 unknown error） | 正式日志：主进程 3×30s ≈91s 后才失败、卡片已 error；护栏 `electron/resourceRepository.downloadLimits.test.ts` |
+
+护栏：`uploadJournal.test.ts`、`imageUploadTask.test.ts`、`uploadCardRepair.test.ts`、`uploadRecoveryWiring.test.ts`、`electron/resourceRepository.downloadLimits.test.ts`；内核契约见 `docs/LAKEX-CONTRACT.md` §5.53。
 ## 4. 已知缺口（261105 收口后的真待办）
 
 **已修（261105 Batch 2）**

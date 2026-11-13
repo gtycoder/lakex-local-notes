@@ -136,7 +136,7 @@ contextBridge.exposeInMainWorld("lakeNative", {
   previewNoteOrphan: (noteId, filename) => invoke("preview_note_orphan", noteId, filename),
   cleanNoteOrphans: (noteId, filenames) => invoke("clean_note_orphans", noteId, filenames),
   uploadResource: (input, noteId) => invoke("upload_resource", input, noteId),
-  downloadRemoteResource: (url, noteId) => invoke("download_remote_resource", url, noteId),
+  downloadRemoteResource: (url, noteId, limits) => invoke("download_remote_resource", url, noteId, limits),
   listOrphanAssets: () => invoke("list_orphan_assets"),
   cleanOrphanAssets: () => invoke("clean_orphan_assets"),
   deleteOrphanAsset: (id) => invoke("delete_orphan_asset", id),

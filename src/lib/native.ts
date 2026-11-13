@@ -283,7 +283,7 @@ export interface LakeNative {
   previewNoteOrphan(noteId: string, filename: string): Promise<{ kind: "image" | "text"; data: string; size: number } | null>;
   cleanNoteOrphans(noteId: string, filenames?: string[]): Promise<{ count: number; freedBytes: number }>;
   uploadResource(input: ResourceUploadInput, noteId: string): Promise<ResourceUploadOutput>;
-  downloadRemoteResource(url: string, noteId: string): Promise<ResourceUploadOutput>;
+  downloadRemoteResource(url: string, noteId: string, limits?: { timeoutMs?: number; maxAttempts?: number }): Promise<ResourceUploadOutput>;
   listOrphanAssets(): Promise<OrphanAsset[]>;
   cleanOrphanAssets(): Promise<CleanOrphanResult>;
   deleteOrphanAsset(id: number): Promise<{ deleted: boolean; freedBytes: number }>;
@@ -548,7 +548,7 @@ export const native = {
   previewNoteOrphan: (noteId: string, filename: string) => api().previewNoteOrphan(noteId, filename),
   cleanNoteOrphans: (noteId: string, filenames?: string[]) => api().cleanNoteOrphans(noteId, filenames),
   uploadResource: (input: ResourceUploadInput, noteId: string) => api().uploadResource(input, noteId),
-  downloadRemoteResource: (url: string, noteId: string) => api().downloadRemoteResource(url, noteId),
+  downloadRemoteResource: (url: string, noteId: string, limits?: { timeoutMs?: number; maxAttempts?: number }) => api().downloadRemoteResource(url, noteId, limits),
   listOrphanAssets: () => api().listOrphanAssets(),
   cleanOrphanAssets: () => api().cleanOrphanAssets(),
   deleteOrphanAsset: (id: number) => api().deleteOrphanAsset(id),

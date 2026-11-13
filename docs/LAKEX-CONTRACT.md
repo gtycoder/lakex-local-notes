@@ -1131,6 +1131,20 @@ PY
 
 ---
 
+### 5.53 图片上传任务的生命周期与扩展点契约（261114 正式数据【IO】现场 + 隔离实例实测）
+
+**症状**：粘贴整页网页后，某张远程图最终显示「图片上传失败」，但 `note-assets/<noteId>/` 里文件完整（字节数/尺寸正确，登记为 orphan）；重新打开文档仍是 error。
+
+**内核事实（读 `lakex.js` + 隔离实例实测）**：
+
+1. `image` 插件解析 HTML/卡片时用 `option.image.createUploadTask(type, data, …)` 建任务，并把 `task.id` 写进卡片 `taskId`；`uploadManager` 随后调 `task.run()`。任务对象必须同时实现 WY 同款接口：`id / run() / getStatus() / on / off / destroy / getResourceURL / abort / isPending / isRunning / isSuccess / isError / isAborted / isTimeout / isCompleted`。**缺 `off` 会在卡片 render 里 assert（`bind-event-for-react-component.ts:23`），缺 `isError` 等会 TypeError。**
+2. **扩展点优先级**：`createUploadPromise` 优先于 `createUploadTask`（`lakex.js` 153296 附近：`if (a) return new ef6(a, e, t)`）。vendor 默认 `image` 配置合并进来时带一个**直通 URL 的 `createUploadPromise` 桩**（`type==="url"` ⇒ `{url: data, size: 0, filename: "image.png"}`）⇒ 只加 `createUploadTask` 不置 `createUploadPromise: undefined`，远程图会变成「src=原 URL / size 0 / status done」的**假成功卡**，根本不会下载（实测踩到）。
+3. 卡片进入上传中时，pre-reader 会 `delete card.src`、置 `status=UPLOADING`、写 `clientId=kernel.id`；**原 URL 不落正文**。
+4. 编辑器实例重建后，新实例对 `status=UPLOADING` 且带 `taskId/clientId` 的卡建 **virtual task**（`W0`）；若没有 alive checker，约 3×1s 后 `emit("timeout")` ⇒ image 卡 `_handleUploadError("failed to upload")`，而 `setUploadError(e)` 取的是 `e?.message`（字符串没有 `.message`）⇒ 卡片落成 `status:"error", errorMessage:"unknown error", src:""`。此时旧实例的上传 Promise 若稍后成功，回调只属于旧卡/旧实例，正文不会更新 ⇒ 字节留在 note-assets 成为 orphan，UI 永久失败。
+5. 因此宿主必须在**应用层**接管远程图片上传：任务对象自持（编辑器销毁后仍跑完）、taskId 可持久化（localStorage 日志）、打开文档时按 taskId 回填正文、晚到结果触发一次重建。实现 = `src/features/editor/imageUploadTask.ts` + `uploadJournal.ts` + `uploadCardRepair.ts`（契约/红线见 AGENTS §4「图片上传可恢复」）。
+
+**复验脚本（本地）**：隔离 `LAKE_USER_DATA` + `LAKE_RENDERER=scheme` 起 Electron（CDP 9222）；合成 paste HTML 含远程图 → 校验 localStorage 日志 done + DOM `img.ne-image` 为本地资产；再离线把正文卡改为 `src:""/status:error/errorMessage:"unknown error"`（保留 taskId）→ 重启 → 打开文档应自动回填并保存；把日志改成 pending + 卡片同 taskId → 重启 → 自动重下并回填。
+
 ## 6. 使用守则（所有会话遵守）
 
 1. **动手前查**：改 `src/features/editor/**`、移动端 `src/mobile/editor/**`、或涉及编辑器内核行为前，先读 §2/§4/§5。

@@ -8,10 +8,13 @@ import {
   lakeBridge,
   refreshTocSidebar,
   resolveScrollNode,
+  resumePendingDocumentImageUploads,
   type LakeEditorInstance,
   type LakeEditorPrefs,
 } from "./lakeRuntime";
 import { buildClipboardPayload, upgradePastedHtml } from "./clipboardHtml";
+import { hasUnresolvedImageTask, repairUploadCards } from "./uploadCardRepair";
+import { subscribeUploadJournal } from "./uploadJournal";
 import { addAssetAccessToken, stripAssetAccessToken } from "../../lib/assetPort";
 import { registerOutlineTab, unregisterOutlineTab } from "../outline/registry";
 import { useOutline } from "../outline/useOutline";
@@ -110,6 +113,18 @@ export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance
   });
   const [editorState, setEditorState] = useState<LakeEditorInstance | null>(null);
   const [rebuildTick, setRebuildTick] = useState(0);
+
+  /**
+   * 上传晚到的自愈（261114）：编辑器挂载时若正文里还是「加载中/unknown error」的图卡，
+   * 等 uploadJournal 记下真实结果后重建一次编辑器，让 uploadCardRepair 把资产/真实原因回填。
+   * 正常上传（挂载时正文里还没有该 taskId）不会触发重建。
+   */
+  useEffect(() => subscribeUploadJournal((entry) => {
+    if (entry.noteId !== noteId || entry.status === "pending") return;
+    const stale = latestDocumentRef.current;
+    if (!hasUnresolvedImageTask(stale, entry.taskId)) return;
+    setRebuildTick((tick) => tick + 1);
+  }), [noteId]);
   const [cardMenu, setCardMenu] = useState<{ x: number; y: number; item: AttachmentPreviewItem; el: HTMLElement } | null>(null);
   const [textMenu, setTextMenu] = useState<{ x: number; y: number } | null>(null);
   const [renameItem, setRenameItem] = useState<{ item: AttachmentPreviewItem; el: HTMLElement } | null>(null);
@@ -480,9 +495,17 @@ export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance
         // 不再把它挪到自建宿主（挪出去会丢内核主题变量 → 底色/边框全没）。
         { ...(prefs ?? {}), collapseNativeToc: outlineEnhance }
       );
+      // 261114：上传期间编辑器被重建/应用重启时，正文里的图卡可能还是空 src + unknown error。
+      // 按 taskId 从 uploadJournal 回填真实资产/真实失败原因；done 卡幂等跳过。
+      const uploadedRepair = mode === "editor"
+        ? repairUploadCards(latestDocumentRef.current, noteId)
+        : { content: latestDocumentRef.current, changed: false, repairedTaskIds: [] };
+      if (uploadedRepair.changed) latestDocumentRef.current = uploadedRepair.content;
       // 自愈重建时优先使用当前实例最后一次回调拿到的文档，避免 React prop
       // 尚未回流时把刚输入的内容覆盖掉；切换 noteId 时该 ref 已在上面重置。
       editor.setDocument("text/lake", addAssetAccessToken(latestDocumentRef.current));
+      // 跨重启/崩溃恢复：日志里仍 pending 的远程图重新下载一次（不阻塞创建，结果晚到走上面的订阅重建）。
+      if (mode === "editor") resumePendingDocumentImageUploads(noteId);
       // 原生大纲：Lake 侧栏以空 toc 创建，若 ready 先于内核 tocChange，侧栏会一直为空
       // （关闭重开尤其明显）。setDocument 后补一次数据（refreshTocSidebar，带收敛重试），
       // 销毁时清理定时器。原生侧栏始终创建（「大纲增强」开启时仅被隐藏），故这里照常填充，
@@ -507,6 +530,8 @@ export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance
       // 确保锁定态首次加载的画板不会只在空文档布局阶段执行水合。
       editor.requestCardHydration?.();
       setting = false;
+      // 回填了失联图片：显式标脏一次，让正常保存管线把修好的正文落盘（saveNote 的孤儿对账会撤销 orphan 登记）。
+      if (uploadedRepair.changed && !retired) onChangeRef.current();
       // 虚拟渲染/卡片水合会异步改变布局，同步设置 scrollTop 会被后续渲染冲掉。
       // 在多个稳定窗口恢复，锁定 Viewer 与编辑态之间都保持阅读位置。
       // ① 主路径：按锚点节点 id 定位（两态同用视口中心块，见 scrollAnchorRef 注释）。锚点是在

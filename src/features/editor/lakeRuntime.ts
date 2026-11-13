@@ -5,7 +5,9 @@ import { errorFields } from "../../core/logFormat";
 import { mountBlockHoverHandle } from "./blockHandleMount";
 import { mountSelectionToolbar } from "./selectionToolbar/mountSelectionToolbar";
 import { registerEditorInstance } from "./editorRegistry";
-import { uploadLakeResource } from "./resourceUpload";
+import { DOCUMENT_IMAGE_DOWNLOAD_LIMITS, uploadLakeResource } from "./resourceUpload";
+import { createImageUploadTask, resumePendingImageUploads, type ImageUploadPerform } from "./imageUploadTask";
+import { pendingUploadsForNote } from "./uploadJournal";
 import { registerNoteRefCard, withNoteRefSlashItem } from "./noteRefCard";
 import { registerLockedTextCard, withLockedTextSlashItem } from "./lockedTextCard";
 import { registerAiAssistantCard, withAiAssistantSlashItem } from "./aiAssistantCard";
@@ -144,6 +146,17 @@ export function createLakeDocument(
       })
     : null;
 
+  /**
+   * 261114：文档编辑器启用「可恢复图片上传」（createUploadTask + uploadJournal）。
+   * 小记写作卡/导入临时内核有各自的资产落盘目标或一次性会话，不走持久日志/自愈。
+   */
+  const journalImageUploads = mode === "editor"
+    && !uploadResource
+    && noteId !== "markdown-import"
+    && noteId !== "kernel-prewarm";
+  const performDocumentImageUpload: ImageUploadPerform = (request) =>
+    uploadLakeResource(request, noteId, { downloadLimits: DOCUMENT_IMAGE_DOWNLOAD_LIMITS });
+
   const mount = document.createElement("div");
   // 小记走内核 note 版式（小卡片外观 + 展开按钮）；`.ne-doc-note-editor` 是小记版式的挂载点前缀
   // （内核 fullscreen 把 `.ne-ui-fullscreen` 加到 editorNode 的父节点 = 本 mount，小记的展开整窗规则
@@ -264,15 +277,38 @@ export function createLakeDocument(
       KaTexURL: [LAKE_KATEX_SCRIPT, LAKE_MHCHEM_SCRIPT],
     },
     image: {
-      // 边界 A：上传完成后登记本条资产（tracker 在 promise resolve 时确认 origin 已正确，再并进活 allowlist）。
-      createUploadPromise: (request: unknown) => {
-        const upload = (uploadResource ?? ((req: unknown) => uploadLakeResource(req, noteId)))(request);
-        if (!imageThumbTracker) return upload;
-        return Promise.resolve(upload).then((output) => {
-          imageThumbTracker.onUploaded(output as { url?: unknown });
-          return output;
-        });
-      },
+      // 261114：文档编辑器用自实现的可恢复任务（taskId → uploadJournal → 正文回填）；
+      // 小记/导入等自定义落盘目标仍走 createUploadPromise（不写持久日志，避免把 staging 资产
+      // 记到文档 noteId 下）。
+      ...(journalImageUploads
+        ? {
+            // 必须显式清掉默认 createUploadPromise：内核 createUploadTask 解析顺序是
+            // 「createUploadPromise 优先 → createUploadTask」，vendor 默认配置带一个直通 URL 的
+            // createUploadPromise 桩（url 原样返回、size 0）⇒ 不清掉的话 createUploadTask 永远不执行，
+            // 远程图会变成「src=原 URL/status done」的假成功卡（本 bug 的另一半）。
+            createUploadPromise: undefined,
+            createUploadTask: (request: { type?: unknown; data?: unknown }) => {
+              return createImageUploadTask({
+              noteId,
+              type: request.type === "file" || request.type === "base64" ? request.type : "url",
+              data: request.data,
+              perform: performDocumentImageUpload,
+              journal: true,
+              onOutput: (output) => imageThumbTracker?.onUploaded(output as { url?: unknown }),
+              });
+            },
+          }
+        : {
+            // 边界 A：上传完成后登记本条资产（tracker 在 promise resolve 时确认 origin 已正确，再并进活 allowlist）。
+            createUploadPromise: (request: unknown) => {
+              const upload = (uploadResource ?? ((req: unknown) => uploadLakeResource(req, noteId)))(request);
+              if (!imageThumbTracker) return upload;
+              return Promise.resolve(upload).then((output) => {
+                imageThumbTracker.onUploaded(output as { url?: unknown });
+                return output;
+              });
+            },
+          }),
       // 本地资源服务器 URL 必须排除，否则 Lake 每次 setDocument 都会重新下载并上传本地图片
       isCaptureImageURL: (url: string) => !url.startsWith("data:") && !url.startsWith("blob:") && !url.startsWith(`${ASSET_ORIGIN}/`),
       // 【task-26，仅移动端小记写作卡】只改显示 src（内核 toDisplaySrc 出口），模型/保存不受影响。
@@ -512,6 +548,22 @@ export function createLakeDocument(
   return editor;
 }
 
+
+/**
+ * 打开文档时恢复日志里仍 pending 的图片下载（261114：跨重启/崩溃/上传期间退出）。
+ * 结果写回 uploadJournal；EditorTab 的日志订阅会触发一次正文回填（不阻塞编辑器创建）。
+ * 只处理文档编辑器（导入临时内核/预取实例没有持久正文）。
+ */
+export function resumePendingDocumentImageUploads(noteId: string): void {
+  if (!noteId || noteId === "markdown-import" || noteId === "kernel-prewarm") return;
+  const entries = pendingUploadsForNote(noteId);
+  if (entries.length === 0) return;
+  resumePendingImageUploads(
+    noteId,
+    (request) => uploadLakeResource(request, noteId, { downloadLimits: DOCUMENT_IMAGE_DOWNLOAD_LIMITS }),
+    entries.map((entry) => ({ taskId: entry.taskId, url: entry.url, type: entry.type, status: entry.status })),
+  );
+}
 
 export function destroyLakeEditor(editor: LakeEditorInstance | null): void {
   try {

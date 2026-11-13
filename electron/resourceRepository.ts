@@ -53,7 +53,11 @@ export class ResourceRepository {
     return output;
   }
 
-  async downloadRemote(url: string, noteId: string): Promise<ResourceUploadOutput> {
+  async downloadRemote(url: string, noteId: string, limits?: { timeoutMs?: number; maxAttempts?: number }): Promise<ResourceUploadOutput> {
+    // 261114：交互式粘贴图片允许调用方收窄下载预算（默认仍 30s × 3）。
+    // 上限刻意不放开：单图下载拖到数分钟只会制造「卡片早已失败、字节才落地」的孤儿资源窗口。
+    const timeoutMs = Math.min(60_000, Math.max(1_000, Math.round(limits?.timeoutMs ?? DOWNLOAD_TIMEOUT_MS)));
+    const maxAttempts = Math.min(DOWNLOAD_MAX_ATTEMPTS, Math.max(1, Math.round(limits?.maxAttempts ?? DOWNLOAD_MAX_ATTEMPTS)));
     const assetsDir = this.deps.noteAssetsDirFor(noteId);
     const normalized = url.startsWith("//") ? `https:${url}` : url;
     const parsed = new URL(normalized);
@@ -62,10 +66,10 @@ export class ResourceRepository {
     }
 
     let lastError: unknown = null;
-    for (let attempt = 1; attempt <= DOWNLOAD_MAX_ATTEMPTS; attempt++) {
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
         const response = await this.fetcher.fetch(normalized, {
-          timeoutMs: DOWNLOAD_TIMEOUT_MS,
+          timeoutMs,
           maxRedirects: DOWNLOAD_MAX_REDIRECTS,
           userAgent: DOWNLOAD_USER_AGENT,
           referer: normalized,
@@ -103,10 +107,10 @@ export class ResourceRepository {
         if (error instanceof AppError && error.kind === "InvalidInput") throw error;
         if (error instanceof SsrfError) throw new AppError("InvalidInput", error.message);
         lastError = error instanceof Error && error.name === "AbortError"
-          ? new AppError("Internal", `下载超时（${DOWNLOAD_TIMEOUT_MS / 1000}s）`)
+          ? new AppError("Internal", `下载超时（${timeoutMs / 1000}s）`)
           : new AppError("Internal", `网络错误: ${error instanceof Error ? error.message : String(error)}`);
       }
-      if (attempt < DOWNLOAD_MAX_ATTEMPTS) await sleep(attempt * 500);
+      if (attempt < maxAttempts) await sleep(attempt * 500);
     }
     throw lastError instanceof AppError ? lastError : new AppError("Internal", `下载失败: ${String(lastError)}`);
   }

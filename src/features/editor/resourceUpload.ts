@@ -54,21 +54,39 @@ function decodedBase64Length(encoded: string): number {
   return Math.floor(len / 4) * 3 + (len % 4 === 2 ? 1 : len % 4 === 3 ? 2 : 0);
 }
 
+export interface RemoteImageDownloadLimits {
+  /** 单次主进程下载超时（ms）；缺省 = 主进程默认 30s。 */
+  timeoutMs?: number;
+  /** 主进程下载最大尝试次数（含首次）；缺省 = 3。 */
+  maxAttempts?: number;
+}
+
 export interface ResourceUploadOptions {
   /** 覆盖默认落盘（默认 = `native.uploadResource(input, noteId)`）。小记用它把图片写进 quick-notes 空间。 */
   saveResource?: (input: ResourceUploadInput) => Promise<ResourceUploadOutput>;
   /** 是否允许「网络图片 URL」走主进程下载。小记 v1 关闭（避免写进文档资源空间）。默认 true。 */
   allowRemoteDownload?: boolean;
+  /**
+   * 交互式「粘贴/插入网络图片」的下载预算（261114）：收窄到 15s × 2 次。
+   * 原默认 30s × 3（≈91s）叠加渲染层 withRetry，最坏可拖到数分钟——远长于内核卡片等待窗口，
+   * 编辑器一重建就变成「下载成功但卡片 error」。文档编辑器传本值；其它调用方不传 = 保持原默认。
+   */
+  downloadLimits?: RemoteImageDownloadLimits;
 }
+
+/** 文档编辑器图片上传的下载预算（15s × 2 = 最坏 ~31s，仍给慢 CDN 一次重试机会）。 */
+export const DOCUMENT_IMAGE_DOWNLOAD_LIMITS: RemoteImageDownloadLimits = { timeoutMs: 15_000, maxAttempts: 2 };
 
 export async function uploadLakeResource(request: unknown, noteId: string, options: ResourceUploadOptions = {}): Promise<ResourceUploadOutput> {
   const kind = uploadKindOf(request);
   const startedAt = nowMs();
   let retries = 0;
+  // 远程 URL 的主进程下载自己会重试；渲染层再叠 2 次会把最坏耗时放大 3 倍（且放大错误卡窗口）。
+  const maxRetries = kind === "url" && options.downloadLimits ? 0 : 2;
   try {
     const output = await uploadQueue.add(() =>
       withRetry(() => performUpload(request, noteId, options), {
-        maxRetries: 2,
+        maxRetries,
         delayMs: 1000,
         backoffMultiplier: 2,
         onRetry: () => { retries += 1; },
@@ -162,7 +180,7 @@ async function performUpload(request: unknown, noteId: string, options: Resource
       throw new Error("这里暂不支持直接插入网络图片，请先把图片保存到本地再拖入或粘贴");
     }
     if (isDesktop()) {
-      return native.downloadRemoteResource(payload, noteId);
+      return native.downloadRemoteResource(payload, noteId, options.downloadLimits);
     }
     const downloaded = await downloadRemoteBytes(payload);
     if (hasNativeBridge()) {
