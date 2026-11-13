@@ -555,6 +555,20 @@ describe("目录树操作", () => {
     expect(store.readNote(note.id).content).toContain("恢复后编辑版");
   });
 
+  it("C3（真实桶复验）：已锁定的文档拒绝用户保存；解锁后可继续保存（同步镜像写不受影响）", () => {
+    const nb = store.createNotebook("锁册");
+    const note = store.createNoteIn(nb.id, "锁定文档");
+    store.saveNote(note.id, "锁定文档", "<p>v1</p>");
+    // 模拟远端锁到达（field-level LWW 落库后的状态）
+    store.setNoteEditLocked(note.id, true);
+    expect(() => store.saveNote(note.id, "锁定文档", "<p>v2-被锁后编辑</p>")).toThrow(/锁定|只读/);
+    expect(store.readNote(note.id).content).toContain("v1"); // 磁盘没被覆盖
+    // 解锁（用户主动解除）后恢复可写
+    store.setNoteEditLocked(note.id, false);
+    store.saveNote(note.id, "锁定文档", "<p>v3</p>");
+    expect(store.readNote(note.id).content).toContain("v3");
+  });
+
   it("审计 F04（元数据尾）：回收站/purged 节点的重命名/图标/锁定被拒绝，显式恢复后可写", () => {
     const nb = store.createNotebook("元数据边界册");
     const note = store.createNoteIn(nb.id, "原标题");

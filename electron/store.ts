@@ -12,6 +12,7 @@ import { SAVE_CONFLICT_CODE, type SaveNoteConflict, type SaveNoteResult } from "
 import { noteBodyHash } from "./noteBodyHash.js";
 import { extractAssetRefs, isSafePathSegment } from "../src/core/storeUtils.js";
 import { readNoteDigest, type NoteDigest } from "./storeQueries.js";
+import { readonlyReasonCopy } from "../src/core/capabilities/readonlyReason.js";
 import { emptyLakeBody } from "../src/core/lakeDocForm.js";
 import { type NoteKind, normalizeNoteKind } from "../src/core/noteKind.js";
 import { noteBodyCandidatePaths, noteBodyRelativePath } from "../src/core/noteBodyPaths.js";
@@ -1015,6 +1016,16 @@ export class Store {
    */
   saveNoteVersioned(id: string, title: string, content: string, caches?: NoteCacheInput, baseHash?: string): SaveNoteResult {
     const startedAt = Date.now();
+    // 261113（C3 真实桶复验）：编辑锁 = **只读**（只锁本地编辑，不影响同步；锁本身随同步上传，
+    // 他端随之只读）。远端锁可能在本篇编辑途中才到达，渲染层来不及翻只读 ⇒ 用户保存必须在此拒绝，
+    // 否则「已锁定的文档」会被编辑并覆盖上传（会覆盖另一端的改动且无冲突提示）。
+    // 分类：U 用户入口守卫；同步镜像写走 saveSynced / saveSyncedNote，不经本函数（AGENTS §3#23）。
+    // 文案单一来源 = core/capabilities/readonlyReason（与只读横幅逐字一致）。
+    const lockRow = this.db.prepare("SELECT is_locked FROM notes WHERE id=? AND deleted_at IS NULL").get(id) as { is_locked: number } | undefined;
+    if (lockRow?.is_locked === 1) {
+      const copy = readonlyReasonCopy("locked");
+      throw new Error(`${copy.title}，保存被拒绝；${copy.releaseHint}`);
+    }
     // 非文档类型的正文不是 Lake HTML：缓存**只能**由主进程按类型派生；doc 仍沿用渲染层从内核带来的缓存（不改旧行为）。
     // 261019 review 实测：渲染层在没有 Lake 实例时也会传 { markdown:null, plain:null }（而非 undefined），
     // 若直接采用会把 text_cache / FTS 正文清空 ⇒ 多维表/表格/画板保存后正文搜不到。故非 doc 一律忽略入参。
