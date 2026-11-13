@@ -7,6 +7,22 @@
 
 ## 0. 最新交接（最近 3 个批次；更早的见 git）
 
+### 261114 · 移动端 AI 获取模型列表（`ee7aeea5`）
+
+- Kotlin `AiChatPlugin.listModels`：GET {baseUrl}/models（草稿 baseUrl/Key 优先，保存前也能拉）；解析 data[].id / models[]；
+  错误走既有 codeForStatus/errorResult。JS 契约 `AiModelsResult/AiModelsOptions` + bridge.aiListModels（浏览器预览 unavailable）。
+- 设置页模型行加「获取模型列表」：成功展示候选并自动填第一个空模型；失败显示供应商原因；无 Key 明确提示不发请求；
+  切换供应商/重开页面清空候选。guide/10 同步。
+
+### 261114 · 两端统一「云同步开启闸门」（`c808ce0c`）
+
+- **用户裁决**：移动端与桌面端统一逻辑 —— **没配置 S3 或没通过连接测试，都不能开启云同步**；点击只提示「先测试通过才能开启」，状态保持关闭。
+- 单一来源 `core/cloudSyncGate`：`cloudSyncEnableGate(configured, verified)` + `s3ConfigFingerprint`（连接字段、不含 Secret）；`lib/s3FormState` 保留 re-export。
+- 桌面：开关 desc/onChange/alert 走闸门；`saveSyncCfg` **删除「点开启时自动测试再开」**——必须先由用户点「测试连接」通过才写 enabled。
+- 移动端：`useS3SettingsForm` 记「测试通过指纹」（返回值以 OK 开头才算；改连接字段即失效）；SettingsDrawer 开关走闸门；
+  「未配置却已开启」旧状态在读到设置后自动关一次并说明原因；开关显示改严格 `enabled === true`（默认关 = 是否已配置 S3）。
+- 护栏：core 闸门单测 + 移动端测试 OK/FAIL/改字段失效用例；settings-s3 快照重烤（0 差异）；设备实测未测通时点开关保持关闭并给提示。
+
 ### 261113 · 设备验收批（lake_mobile 真机环节 + 门禁态）
 
 - **A1 门禁态**：`lake_gate`（5556）上 `check-mobile-snap` **10 态 0 差异**（基线 14:00 已按当前安装包重烤，无需再烤）；**下次装新移动包后仍需重烤**（基线绑构建）。
