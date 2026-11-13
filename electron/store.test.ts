@@ -642,6 +642,20 @@ describe("目录树操作", () => {
     expect(row.parentId).toBe("notebook-trash");
   });
 
+  it("F-10/D4 复查 #9：恢复**叶子**节点（无子树）也必须退役墓碑", () => {
+    const nb = store.createNotebook("叶子册");
+    const note = store.createNoteIn(nb.id, "叶子");
+    store.saveNote(note.id, "叶子", "<p>x</p>");
+    store.deleteTreeNode(note.id);
+    // 构造「已结算」的删除墓碑（purged_at NULL，行仍留着）：历史上他端 purge 后本地学到的删除。
+    const ts = new Date().toISOString();
+    (store as any).db.prepare(
+      "INSERT INTO deleted_notes(id,title,parent_id,sort_order,updated_at,deleted_at,node_type,purged_at) VALUES(?,?,?,?,?,?,?,NULL)"
+    ).run(note.id, "叶子", null, 0, ts, ts, "note");
+    store.restoreTrashItem(note.id);
+    expect((store as any).db.prepare("SELECT 1 FROM deleted_notes WHERE id=?").get(note.id)).toBeUndefined();
+  });
+
   it("F-10/D4 守卫：purged_at 非空（S3 前缀未删完）时 active 落库不清墓碑", () => {
     const nb = store.createNotebook("未结算册");
     store.deleteTreeNode(nb.id);

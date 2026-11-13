@@ -330,7 +330,14 @@ export function planSync(input: PlanInput): SyncPlan {
       }
     }
     if (p.kind === "local-purge") {
-      deletes.push({ space: "quickNotes", id: p.id, reason: "user-purge", prefixes: [`quick-notes/assets/${p.id}/`], ...(l ? { keys: [quickNoteBodyKey(l.contentHash)] } : {}) });
+      // 261113（P1）：小记正文对象按 **contentHash 内容寻址**，多条小记可能共用同一个对象
+      // （同文本/冲突留档复制必然同 hash，协议 §3 的「跨小记去重」是特性）⇒ 删除前必须查引用：
+      // 还有别的条目引用同一 hash 时**不删对象**（云端正文字节仍被需要），交给 deepCleanup 在
+      // 真正无人引用后再回收。旧实现无条件按 hash 删 ⇒ 删一条毁另一条的云端正文（小记无历史快照）。
+      const stillReferenced = [...local.quickNotes.items, ...remote.quickNotes.items]
+        .some((q) => q.id !== p.id && q.contentHash === l?.contentHash);
+      const bodyKeys = l && !stillReferenced ? [quickNoteBodyKey(l.contentHash)] : [];
+      deletes.push({ space: "quickNotes", id: p.id, reason: "user-purge", prefixes: [`quick-notes/assets/${p.id}/`], ...(bodyKeys.length > 0 ? { keys: bodyKeys } : {}) });
       indexChanged = true;
     }
   }

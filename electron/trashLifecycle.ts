@@ -261,6 +261,7 @@ export class TrashLifecycle {
       // 扁平化子节点的 parent 已被归一到回收站容器，恢复时必须回到 deleted_from_parent_id（原始的组内父），
       // 否则会出现「active 但 parent=回收站容器」的悬空树。非扁平化子节点 COALESCE 保持原父，行为不变。
       const subtreeIds = this.flattenedSubtreeIds(id).filter((sid) => sid !== id);
+      const subNoteIds: string[] = [];
       if (subtreeIds.length > 0) {
         const subNotes: Array<{ note_file_id: string }> = [];
         for (const batch of sqlParameterBatches(subtreeIds)) {
@@ -270,16 +271,7 @@ export class TrashLifecycle {
           ).run(now, ...batch);
           subNotes.push(...this.ctx.db.prepare(`SELECT note_file_id FROM tree_nodes WHERE id IN (${ph}) AND note_file_id IS NOT NULL AND deleted_at IS NULL`).all(...batch) as Array<{ note_file_id: string }>);
         }
-        const subNoteIds = subNotes.map((s) => s.note_file_id);
-        // F-10/D4（261113）：恢复 = 撤销本地删除 ⇒ 退役子树里「未结算」的墓碑（purged_at IS NULL）。
-        // 墓碑只对本地不存在的 id 有意义；留着会让「他端再次删除」被 isFolderPurged / isPurgedNoteId
-        // 静默丢弃（删除不传播、被删的复活）。purged_at 非空的行必须保留：S3 前缀还没删完，
-        // 由 markPurgeSynced 结算（结算时若本地已活跃会自行退役）。
-        const reviveIds = [id, ...subtreeIds, ...subNoteIds.filter((nid): nid is string => !!nid)];
-        for (const batch of sqlParameterBatches(reviveIds)) {
-          const rph = batch.map(() => "?").join(",");
-          this.ctx.db.prepare("DELETE FROM deleted_notes WHERE purged_at IS NULL AND id IN (" + rph + ")").run(...batch);
-        }
+        subNoteIds.push(...subNotes.map((s) => s.note_file_id).filter((nid): nid is string => !!nid));
         for (const batch of sqlParameterBatches(subNoteIds)) {
           const nph = batch.map(() => "?").join(",");
           // F-01 复核：notes 行同样回原父（扁平化子文档）。非扁平化行 COALESCE 保持原父，行为不变。
@@ -287,6 +279,22 @@ export class TrashLifecycle {
             `UPDATE notes SET parent_id=COALESCE(deleted_from_parent_id,parent_id),trashed_at=NULL,deleted_from_parent_id=NULL,updated_at=?,is_dirty=1 WHERE id IN (${nph}) AND deleted_at IS NULL`,
           ).run(now, ...batch);
         }
+      }
+      // F-10/D4（261113）：恢复 = 撤销本地删除 ⇒ 退役本次恢复涉及的「未结算」墓碑（purged_at IS NULL）。
+      // 墓碑只对本地不存在的 id 有意义；留着会让「他端再次删除」被 isFolderPurged / isPurgedNoteId
+      // 静默丢弃（删除不传播、被删的复活）。purged_at 非空的行必须保留：S3 前缀还没删完，
+      // 由 markPurgeSynced 结算（结算时若本地已活跃会自行退役）。
+      // ⚠️ 必须在 if 外面：恢复**叶子节点**没有子树，old 代码把这段放进 if ⇒ 叶子恢复不清墓碑（复查 #9）。
+      // 集合必须含 notes id（墓碑按 note id 记；tree_nodes id 与 note id 是两个键）。
+      const reviveIds = [...new Set([
+        id,
+        ...(node.note_file_id ? [node.note_file_id] : []),
+        ...subtreeIds,
+        ...subNoteIds,
+      ])];
+      for (const batch of sqlParameterBatches(reviveIds)) {
+        const rph = batch.map(() => "?").join(",");
+        this.ctx.db.prepare("DELETE FROM deleted_notes WHERE purged_at IS NULL AND id IN (" + rph + ")").run(...batch);
       }
     });
     tx();

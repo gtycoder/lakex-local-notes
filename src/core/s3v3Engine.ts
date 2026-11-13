@@ -573,9 +573,14 @@ export class S3v3SyncEngine {
             const nx = nextLakeById.get(n.id);
             if (!nx || nx.contentHash !== n.contentHash) stale.push(lakeBodyKey(n.id, n.contentHash));
           }
+          // 261113（P1）：小记正文对象按 contentHash 寻址、可被多条共用 ⇒ 只能删「已发布索引里
+          // 无人引用」的 hash（旧实现按「这条没了/变了」就删对象 ⇒ 删一条毁另一条云端正文）。
+          const liveQuickHashes = new Set(round.publish.quickNotes.items.map((q) => q.contentHash));
           for (const q of lastRemoteQuick.items) {
             const nx = nextQuickById.get(q.id);
-            if (!nx || nx.contentHash !== q.contentHash) stale.push(quickNoteBodyKey(q.contentHash));
+            if ((!nx || nx.contentHash !== q.contentHash) && !liveQuickHashes.has(q.contentHash)) {
+              stale.push(quickNoteBodyKey(q.contentHash));
+            }
           }
           if (stale.length > 0) await this.remote.deleteMany(stale);
         } catch (e) {
