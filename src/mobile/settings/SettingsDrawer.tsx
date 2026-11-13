@@ -4,7 +4,7 @@
  * （settingsSearch.ts 的 SETTING_ITEMS 继续生效）。
  * 注意：全部 App 设置为竖向（无横向 tab）；「回收站」并入总回收站（见 TrashList）。 */
 import { Suspense, lazy, useEffect, useRef, useState, type CSSProperties } from "react";
-import { Archive, ArrowLeft, ChevronRight, Cloud, Download, HardDrive, Images, List, Pencil, RefreshCw, TriangleAlert, X } from "lucide-react";
+import { Archive, ArrowLeft, ChevronRight, Cloud, Download, HardDrive, Images, List, Pencil, RefreshCw, Terminal, TriangleAlert, X } from "lucide-react";
 import { loadSettings, saveSettings, fontSizeOptions, MAX_ATTACHMENT_MB_OPTIONS_SETTINGS, MAX_OPEN_TAB_OPTIONS, type AppSettings } from "../../lib/settings";
 import { Group, Item, Block, Switch, TextField, Field } from "../ui/settingsPrimitives";
 import { bridge } from "../bridge";
@@ -286,7 +286,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                   onChange={(v) => update({ fontSize: v })}
                 />
               </Item>
-              <Item itemId="editor-max-open-tabs" name="最大同时打开标签数" desc="每个空间（文档、日记）各自独立计算，超过上限自动关闭该空间最旧的标签；最多 16 个。">
+              <Item itemId="editor-max-open-tabs" name="最大同时打开标签数" desc="每个空间（文档、日记）各自独立计算，超过上限自动关闭该空间最旧的标签；最多 16 个。" stacked>
                 <PickerSheet
                   label="最大同时打开标签数"
                   value={settings.maxOpenTabs}
@@ -295,21 +295,22 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                 />
               </Item>
               <Switch itemId="editor-clear-tabs-on-exit" name="退出时关闭全部标签" desc="开启后下次启动不恢复上次打开的标签；关闭（默认）则恢复。仅本机偏好，不同步。" checked={settings.clearTabsOnExit} onChange={(checked) => update({ clearTabsOnExit: checked })} />
-              {/* 261110：默认空间 = 打开 App 落在哪个一级页（小记 / 知识库 / 日记 / 标签）。仅本机，不进 S3。 */}
-              <Item itemId="editor-default-space" name="默认空间" desc="打开 App 时落在哪个一级页。仅本机设置，不参与同步。">
-                <PickerSheet
-                  label="默认空间"
-                  value={defaultHomeTab}
-                  options={DEFAULT_SPACE_OPTIONS}
-                  onChange={(next) => { writeDefaultHomeTab(next); setDefaultHomeTab(next); showToast("已设为默认空间：" + (DEFAULT_SPACE_OPTIONS.find((o) => o.value === next)?.label ?? "")); }}
-                />
-              </Item>
+              {/* 261113 用户点单：常规页顺序对齐桌面 EditorSection（… 标签页 → 附件 → 启动/默认空间）。 */}
               <Item itemId="editor-max-attachment" name="附件大小上限" desc="仅影响本机上传校验。">
                 <PickerSheet
                   label="附件大小上限"
                   value={Math.round(settings.maxAttachmentBytes / (1024 * 1024))}
                   options={MAX_ATTACHMENT_MB_OPTIONS_SETTINGS.map((mb) => ({ value: mb, label: mb + " MiB" }))}
                   onChange={(v) => update({ maxAttachmentBytes: v * 1024 * 1024 })}
+                />
+              </Item>
+              {/* 261110：默认空间 = 打开 App 落在哪个一级页（小记 / 知识库 / 日记 / 标签）。仅本机，不进 S3。 */}
+              <Item itemId="editor-default-space" name="默认空间" desc="打开 App 时落在哪个一级页。仅本机设置，不参与同步。" stacked>
+                <PickerSheet
+                  label="默认空间"
+                  value={defaultHomeTab}
+                  options={DEFAULT_SPACE_OPTIONS}
+                  onChange={(next) => { writeDefaultHomeTab(next); setDefaultHomeTab(next); showToast("已设为默认空间：" + (DEFAULT_SPACE_OPTIONS.find((o) => o.value === next)?.label ?? "")); }}
                 />
               </Item>
               {pinState?.available && !pinState.pinned && (
@@ -395,32 +396,57 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
 
           {view === "s3" && (
             <>
-              <Group title="连接信息" icon={<Cloud size={16} />}>
+              <Group title="S3 对象存储" icon={<Cloud size={16} />}>
                   {/* 261102 用户点单 3b：S3 连接信息是内容输入类 ⇒ 一律 Field（标签在上、输入框占满下一行），
                       与桌面设置页同一形态；此前是裸 .mb-set-item + <input class="mb-input">（第二套输入外观，
                       且窄屏上输入框被标签挤到只剩几十像素，Endpoint/AK/SK 长值看不全）。
-                      data-set-id 与桌面 settingsSearch 的 SETTING_ITEMS 对齐（s3-endpoint…s3-secret-key）。 */}
+                      data-set-id 与桌面 settingsSearch 的 SETTING_ITEMS 对齐（s3-endpoint…s3-secret-key）。
+                      261113 用户点单：字段顺序对齐桌面 SyncSection —— Endpoint → Access Key → Secret Key
+                      → Bucket → Region → 对象前缀（凭据紧跟 Endpoint，不再垫在最后）。 */}
                   <Field itemId="s3-endpoint" name="Endpoint">
                     <TextField label="Endpoint" value={s3Form.endpoint} onSave={(v) => updateS3Form({ endpoint: v })} />
-                  </Field>
-                  <Field itemId="s3-region" name="Region">
-                    <TextField label="Region" value={s3Form.region} onSave={(v) => updateS3Form({ region: v })} />
-                  </Field>
-                  <Field itemId="s3-bucket" name="Bucket">
-                    <TextField label="Bucket" value={s3Form.bucket} onSave={(v) => updateS3Form({ bucket: v })} />
-                  </Field>
-                  <Field itemId="s3-prefix" name="Object prefix">
-                    <TextField label="Object prefix" value={s3Form.prefix} onSave={(v) => updateS3Form({ prefix: v })} />
                   </Field>
                   <Field itemId="s3-access-key" name="Access Key">
                     <TextField label="Access Key" value={s3Form.accessKeyId} onSave={(v) => updateS3Form({ accessKeyId: v })} />
                   </Field>
-                  <Field itemId="s3-secret-key" name="Secret Key">
+                  <Field itemId="s3-secret-key" name="Secret Key" desc="只保存在本机；已保存时显示 ********，不改即沿用原密钥。">
                     <TextField label="Secret Key" type="password" value={s3Form.secretAccessKey} onSave={(v) => updateS3Form({ secretAccessKey: v })} />
                   </Field>
+                  <Field itemId="s3-bucket" name="Bucket">
+                    <TextField label="Bucket" value={s3Form.bucket} onSave={(v) => updateS3Form({ bucket: v })} />
+                  </Field>
+                  <Field itemId="s3-region" name="Region">
+                    <TextField label="Region" value={s3Form.region} onSave={(v) => updateS3Form({ region: v })} />
+                  </Field>
+                  <Field itemId="s3-prefix" name="Object prefix">
+                    <TextField label="Object prefix" value={s3Form.prefix} onSave={(v) => updateS3Form({ prefix: v })} />
+                  </Field>
+                  {/* 桌面「连接」块在 S3 对象存储分组内（保存 / 测试连接）；移动端另挂「立即同步」。 */}
+                  <Block itemId="s3-connection" name="连接" desc="配置保存在本机；S3 只用于同步。">
+                    <div className="mb-set-block__actions">
+                      <button className="mb-btn mb-btn--outlined" onClick={() => { void saveS3().then((ok) => { if (ok) setSyncEnableHint(""); }); }}>保存</button>
+                      <button className="mb-btn mb-btn--outlined" onClick={() => void testS3()}>测试连接</button>
+                      <button className="mb-btn mb-btn--outlined" disabled={syncCfg?.enabled === false} title={syncCfg?.enabled === false ? "云同步已关闭：不会联网" : undefined} onClick={() => void runSync()}><RefreshCw size={14} />立即同步</button>
+                    </div>
+                    {s3Test && <div className="mb-set-item__desc">{s3Test}</div>}
+                    {syncMsg && <div className="mb-set-item__desc">{syncMsg}</div>}
+                    {syncProgressText && <div className="mb-set-item__desc" aria-live="polite">{syncProgressText}</div>}
+                  </Block>
               </Group>
 
-              <Group title="连接与同步" icon={<RefreshCw size={16} />}>
+              <Group title="配置迁移" icon={<Download size={16} />}>
+                  <Block itemId="s3-transfer" name="导入 / 导出迁移码" desc="在桌面端「设置 → 云端与同步 → S3 对象存储 → 配置迁移 → 导出到文件…」生成 .json 文件，发到手机后在这里导入；也可以粘贴另一台设备的迁移码（LLN1. 开头）。迁移码含 S3 密钥（已加密封装），请只在自己的设备间传递。">
+                    <div className="mb-set-block__actions">
+                      <button className="mb-btn mb-btn--outlined" onClick={() => void importS3ConfigFromFile()}>从文件导入</button>
+                      <button className="mb-btn mb-btn--outlined" onClick={() => setS3ImportOpen(true)}>粘贴迁移码</button>
+                      <button className="mb-btn mb-btn--outlined" onClick={() => void openS3Export()}>导出迁移码</button>
+                    </div>
+                  </Block>
+              </Group>
+
+              {/* 261113 用户点单：顺序对齐桌面 SyncSection —— 同步策略（启用 → 自动同步模式 → 间隔 → 按需下载），
+                  上次同步与诊断另起「同步诊断」分组（桌面同名分组），保存/测试连接已上移到 S3 对象存储的分组内。 */}
+              <Group title="同步策略" icon={<RefreshCw size={16} />}>
                   <Switch
                     name="启用云同步"
                     desc="关闭后本机按纯本地空间工作：不连 S3、不自动同步，回收站恢复/预览也不会去云端补拉缺失资源；重新开启后下次同步会自动补拉。"
@@ -436,29 +462,10 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                     }}
                   />
                   {syncEnableHint && <div className="mb-set-item__desc mb-set-item__desc--warn" role="status">{syncEnableHint}</div>}
-                  <div className="mb-set-block">
-                    <div className="mb-set-block__name">保存并测试连接</div>
-                    <div className="mb-set-item__desc">配置保存在本机；S3 只用于同步。</div>
-                    <div className="mb-set-block__actions">
-                      <button className="mb-btn mb-btn--outlined" onClick={() => { void saveS3().then((ok) => { if (ok) setSyncEnableHint(""); }); }}>保存</button>
-                      <button className="mb-btn mb-btn--outlined" onClick={() => void testS3()}>测试连接</button>
-                      <button className="mb-btn mb-btn--outlined" disabled={syncCfg?.enabled === false} title={syncCfg?.enabled === false ? "云同步已关闭：不会联网" : undefined} onClick={() => void runSync()}><RefreshCw size={14} />立即同步</button>
-                    </div>
-                    {s3Test && <div className="mb-set-item__desc">{s3Test}</div>}
-                    {syncMsg && <div className="mb-set-item__desc">{syncMsg}</div>}
-                    {syncProgressText && <div className="mb-set-item__desc" aria-live="polite">{syncProgressText}</div>}
-                    {/* 常驻：上次同步的时间/结果/失败原因（自动同步的失败也在这里看得到；云同步关闭时另加一句说明） */}
-                    <div className="mb-set-item__desc">
-                      上次同步：{lastSyncText}
-                      {syncCfg?.enabled === false ? "（云同步当前已关闭，不会联网）" : ""}
-                    </div>
-                    {lastSyncBreakdown && <div className="mb-set-item__desc">{lastSyncBreakdown}</div>}
-                    {/* 261105 P1 第 4 项：有未读同步记录（覆盖/删除）时给列表入口；没有就不占位。 */}
-                    <SyncConflictsEntry count={conflictUnacked} onOpen={() => setConflictsOpen(true)} />
-                  </div>
                   {syncCfg?.enabled !== false && (
                     <>
-                      <Item itemId="sync-auto-mode" name="自动同步模式" desc={`${SYNC_OPEN_CLOSE_NOTE}移动端可能被系统直接结束，关闭时来不及同步，因此改为回到前台时同步（冷启动和回到前台各一次）。`}>
+                      {/* 261113 用户点单：说明长 + 选项值长（「仅在开启/关闭时同步」）⇒ 上下两段，不挤一行。 */}
+                      <Item itemId="sync-auto-mode" name="自动同步模式" stacked desc={`${SYNC_OPEN_CLOSE_NOTE}移动端可能被系统直接结束，关闭时来不及同步，因此改为回到前台时同步（冷启动和回到前台各一次）。`}>
                         <PickerSheet
                           label="自动同步模式"
                           value={syncCfg?.autoMode ?? "manual"}
@@ -468,14 +475,8 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                           }}
                         />
                       </Item>
-                      <Switch
-                        name="按需下载附件"
-                        desc="开启后首次同步只下载文档和附件列表，图片与附件在打开或预览时再下载（更快、省流量）；关闭则首次同步全部下载（离线更完整）。新设备默认开启。"
-                        checked={syncCfg?.deferAssets === true}
-                        onChange={(next) => updateSyncSettings({ deferAssets: next })}
-                      />
                       {syncCfg?.autoMode === "interval" && (
-                        <Item itemId="sync-auto-interval" name="自动同步间隔" desc="按固定间隔自动同步，到点触发一次；离线或未配置时不会联网。App 没在运行时不会触发，下次打开或回到前台会补一次。">
+                        <Item itemId="sync-auto-interval" name="自动同步间隔" stacked desc="按固定间隔自动同步，到点触发一次；离线或未配置时不会联网。App 没在运行时不会触发，下次打开或回到前台会补一次。">
                           <PickerSheet
                             label="自动同步间隔"
                             value={syncCfg?.autoIntervalMinutes ?? 15}
@@ -486,13 +487,32 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                           />
                         </Item>
                       )}
+                      <Switch
+                        name="按需下载附件"
+                        desc="开启后首次同步只下载文档和附件列表，图片与附件在打开或预览时再下载（更快、省流量）；关闭则首次同步全部下载（离线更完整）。新设备默认开启。"
+                        checked={syncCfg?.deferAssets === true}
+                        onChange={(next) => updateSyncSettings({ deferAssets: next })}
+                      />
                     </>
                   )}
+              </Group>
+
+              <Group title="同步诊断" icon={<Terminal size={16} />}>
+                  {/* 常驻：上次同步的时间/结果/失败原因（自动同步的失败也在这里看得到；云同步关闭时另加一句说明） */}
+                  <Block itemId="sync-last" name="上次同步">
+                    <div className="mb-set-item__desc">
+                      上次同步：{lastSyncText}
+                      {syncCfg?.enabled === false ? "（云同步当前已关闭，不会联网）" : ""}
+                    </div>
+                    {lastSyncBreakdown && <div className="mb-set-item__desc">{lastSyncBreakdown}</div>}
+                    {/* 261105 P1 第 4 项：有未读同步记录（覆盖/删除）时给列表入口；没有就不占位。 */}
+                    <SyncConflictsEntry count={conflictUnacked} onOpen={() => setConflictsOpen(true)} />
+                  </Block>
                   {/* 261105 晚：恢复动作迁到独立的「备份与恢复」子页（与桌面分组对齐）；
                       本页只保留联网配置与同步本身。 */}
                   {/* SD-13：同步诊断（最近 3 轮；阶段耗时/对象数/字节/失败对象），可一键复制 */}
                   <div className="mb-set-block">
-                    <div className="mb-set-block__name">同步诊断</div>
+                    <div className="mb-set-block__name">最近 3 轮同步</div>
                     <div className="mb-set-item__desc">最近 3 轮同步的耗时、文件数量与失败项（只存本机，不上传）。同步变慢或失败时复制给维护者。</div>
                     {syncDiagText ? (
                       <div className="mb-input mb-input--multiline">
@@ -560,16 +580,6 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                       </div>
                     </div>
                   )}
-              </Group>
-
-              <Group title="配置迁移" icon={<Download size={16} />}>
-                  <Block itemId="s3-transfer" name="导入 / 导出迁移码" desc="在桌面端「设置 → 云端与同步 → S3 对象存储 → 配置迁移 → 导出到文件…」生成 .json 文件，发到手机后在这里导入；也可以粘贴另一台设备的迁移码（LLN1. 开头）。迁移码含 S3 密钥（已加密封装），请只在自己的设备间传递。">
-                    <div className="mb-set-block__actions">
-                      <button className="mb-btn mb-btn--outlined" onClick={() => void importS3ConfigFromFile()}>从文件导入</button>
-                      <button className="mb-btn mb-btn--outlined" onClick={() => setS3ImportOpen(true)}>粘贴迁移码</button>
-                      <button className="mb-btn mb-btn--outlined" onClick={() => void openS3Export()}>导出迁移码</button>
-                    </div>
-                  </Block>
               </Group>
 
               <Group title="服务说明" icon={<TriangleAlert size={16} />}>

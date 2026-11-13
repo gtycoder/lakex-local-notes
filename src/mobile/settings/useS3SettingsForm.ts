@@ -18,13 +18,15 @@ export interface S3FormValues {
   secretAccessKey: string;
 }
 
+// 261113 用户报「没配置过 S3，Secret Key 却显示一串圆点」：掩码只在**本机确实存有密钥**时显示。
+// 桌面同口径（settingsPanelTypes.S3_DEFAULTS.secretAccessKey = ""）⇒ 未配置就是空输入框。
 const EMPTY_FORM: S3FormValues = {
   endpoint: "https://s3.cn-north-1.qiniucs.com",
   region: "cn-north-1",
   bucket: "",
   prefix: "lakex-local-notes",
   accessKeyId: "",
-  secretAccessKey: S3_SECRET_MASK,
+  secretAccessKey: "",
 };
 
 function formFromSettings(settings: S3Settings): S3FormValues {
@@ -34,7 +36,8 @@ function formFromSettings(settings: S3Settings): S3FormValues {
     bucket: settings.bucket,
     prefix: settings.prefix,
     accessKeyId: settings.accessKeyId,
-    secretAccessKey: S3_SECRET_MASK,
+    // 已保存过密钥 ⇒ 只回掩码（明文不出主进程）；没有密钥 ⇒ 空，绝不显示无意义的掩码。
+    secretAccessKey: settings.secretAccessKey ? S3_SECRET_MASK : "",
   };
 }
 
@@ -54,7 +57,8 @@ export function useS3SettingsForm(open: boolean) {
     if (!open) return;
     void bridge.getS3Settings().then((cfg) => {
       setSettings(cfg);
-      if (cfg) setForm(formFromSettings(cfg));
+      // 没有配置 ⇒ 表单保持 EMPTY_FORM（Secret 为空）；有配置才回填（Secret 只回掩码）。
+      setForm(cfg ? formFromSettings(cfg) : EMPTY_FORM);
     }).catch((error) => reportNativeActionError("读取 S3 设置", error));
   }, [open]);
 

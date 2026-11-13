@@ -6,25 +6,50 @@ import { clearAllConversations } from "../ai/aiChatStore";
 import { confirmMobile } from "../ui/ConfirmDialog";
 import type { useAiSettingsForm } from "./useAiSettingsForm";
 
+/**
+ * AI 助手设置（移动端）。
+ *
+ * 261113 用户点单：设置项顺序按桌面 AiSection 走 —— 服务（接口地址）→ 凭据（API Key，清除紧跟其后）
+ * → 模型与参数（模型 → 温度）→ 连通性（保存/测试 → AI 助手开关）→ 本机历史。
+ * 桌面同序依据：src/components/app/settings/sections/AiSection.tsx（服务 / 凭据 / 模型与参数 / 连通性）。
+ * 行语义仍按 261102 3b：内容输入类一律 Field（标签在上、控件占满下一行）。
+ */
 export function AiSettingsSection({ form }: { form: ReturnType<typeof useAiSettingsForm> }) {
   const { aiEnabled, setAiEnabled, aiMeta, setAiMeta, aiForm, setAiForm, aiMsg, setAiMsg, aiVerified, saveAiSettingsForm, testAiConnection } = form;
   return (
             <Group title="AI 助手" icon={<Sparkles size={16} />}>
-              {/* 261102 用户点单 3b：内容输入类设置行一律 Field（标签+说明在上、控件占满下一行）。
-                  输入框挤在标签右侧时，窄屏只剩一百多像素，URL / Key 这种长值看不全；与 S3 连接信息同一形态。
-                  选择器 / 开关 / 分段控件这类本来适合同行的行仍用 Item / Switch / Seg。 */}
+              {/* 服务 */}
               <Field itemId="ai-base-url" name="接口地址" desc="OpenAI 兼容端点（默认 DeepSeek）。">
                 <TextField label="接口地址" value={aiForm.baseUrl} placeholder="https://api.deepseek.com/v1" onSave={(v) => setAiForm((form) => ({ ...form, baseUrl: v }))} />
               </Field>
-              <Field itemId="ai-model" name="模型">
-                <TextField label="模型" value={aiForm.model} placeholder="deepseek-chat" onSave={(v) => setAiForm((form) => ({ ...form, model: v }))} />
-              </Field>
+              {/* 凭据：Key 与「清除」紧邻（与桌面 AiSection 的凭据段同构） */}
               <Field itemId="ai-api-key" name="API Key" desc="只保存在本机安全存储，页面里看不到明文；这里只显示尾号。">
                 <TextField label="API Key" type="password" value={aiForm.apiKey} placeholder={aiMeta?.hasKey ? aiMeta.keyTail + "（留空＝不改）" : "sk-…"} onSave={(v) => setAiForm((form) => ({ ...form, apiKey: v }))} />
+              </Field>
+              <Block itemId="ai-key-clear" name="清除 API Key" desc={aiMeta?.hasKey ? "当前已配置（" + aiMeta.keyTail + "）；清除后需要重新填写才能使用。" : "尚未配置，无需清除。"}>
+                <div className="ai-settings__actions">
+                  <button type="button" className="mb-btn mb-btn--secondary mb-btn--danger-text" disabled={!aiMeta?.hasKey} onClick={() => {
+                    void confirmMobile({ title: "清除 API Key？", body: "清除后 AI 将无法联网，直到重新填写。", confirmText: "清除", danger: true })
+                      .then(async (ok) => {
+                        if (!ok) return;
+                        try {
+                          await bridge.aiSaveSettings({ apiKey: "" });
+                          const settings = await bridge.aiGetSettings();
+                          setAiMeta(settings);
+                          setAiMsg("已清除 API Key");
+                        } catch (error) { setAiMsg("清除失败：" + (error as Error).message); }
+                      });
+                  }}>清除 API Key</button>
+                </div>
+              </Block>
+              {/* 模型与参数 */}
+              <Field itemId="ai-model" name="模型">
+                <TextField label="模型" value={aiForm.model} placeholder="deepseek-chat" onSave={(v) => setAiForm((form) => ({ ...form, model: v }))} />
               </Field>
               <Field itemId="ai-temperature" name="温度">
                 <TextField label="温度" value={aiForm.temperature} placeholder="0.7" onSave={(v) => setAiForm((form) => ({ ...form, temperature: v }))} />
               </Field>
+              {/* 连通性 */}
               <Block itemId="ai-actions" name="保存与连通性">
                 <div className="ai-settings__actions">
                   <button type="button" className="mb-btn mb-btn--primary" onClick={() => void saveAiSettingsForm()}>保存</button>
@@ -53,28 +78,13 @@ export function AiSettingsSection({ form }: { form: ReturnType<typeof useAiSetti
                   setAiMsg("");
                 }}
               />
+              {/* 本机对话（移动端独有；桌面无此项 ⇒ 排在最后，不打断配置段的桌面顺序） */}
               <Block itemId="ai-history" name="已保存的对话" desc="最多保留 50 条、30 天；保存在本机，含资料快照，不含 API Key，也不参与云同步。">
                 <div className="ai-settings__actions">
                   <button type="button" className="mb-btn mb-btn--secondary" onClick={() => {
                     void confirmMobile({ title: "清空全部历史对话？", body: "只影响本机保存的 AI 对话，不影响笔记与同步。", confirmText: "清空", danger: true })
                       .then((ok) => { if (!ok) return; void clearAllConversations().then(() => setAiMsg("已清空本机保存的 AI 历史对话")); });
                   }}>清空全部对话</button>
-                </div>
-              </Block>
-              <Block itemId="ai-key-clear" name="API Key" desc={aiMeta?.hasKey ? "当前已配置（" + aiMeta.keyTail + "）；清除后需要重新填写才能使用。" : "尚未配置。"}>
-                <div className="ai-settings__actions">
-                  <button type="button" className="mb-btn mb-btn--secondary mb-btn--danger-text" disabled={!aiMeta?.hasKey} onClick={() => {
-                    void confirmMobile({ title: "清除 API Key？", body: "清除后 AI 将无法联网，直到重新填写。", confirmText: "清除", danger: true })
-                      .then(async (ok) => {
-                        if (!ok) return;
-                        try {
-                          await bridge.aiSaveSettings({ apiKey: "" });
-                          const settings = await bridge.aiGetSettings();
-                          setAiMeta(settings);
-                          setAiMsg("已清除 API Key");
-                        } catch (error) { setAiMsg("清除失败：" + (error as Error).message); }
-                      });
-                  }}>清除 API Key</button>
                 </div>
               </Block>
             </Group>

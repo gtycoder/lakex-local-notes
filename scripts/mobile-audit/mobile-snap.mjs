@@ -93,7 +93,7 @@ export const STATES = [
   // 再点「设置」会把它关掉 ⇒ 先判已开则不点；底部行先滚到菜单底部再点。
   { name: "settings-s3", nav: async (page) => {
     if (!(await openSettingsItem(page, "云端与同步"))) throw new Error("settings-s3: 设置菜单找不到「云端与同步」");
-    await expectOn(page, "document.body.innerText.includes('连接信息')", "设置 · 云端与同步");
+    await expectOn(page, "document.body.innerText.includes('S3 对象存储')", "设置 · 云端与同步");
   } },
   { name: "settings-backup", nav: async (page) => {
     if (!(await openSettingsItem(page, "备份与恢复"))) throw new Error("settings-backup: 设置菜单找不到「备份与恢复」");

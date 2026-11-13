@@ -36,15 +36,17 @@ afterEach(() => {
 
 /** 设置页里所有内容输入行（S3 连接信息 + AI 接入）；顺序与 SettingsDrawer 一致。 */
 const INPUT_ROW_IDS = [
+  // 261113：S3 字段顺序对齐桌面（Endpoint → AK → SK → Bucket → Region → 前缀）
   "s3-endpoint",
-  "s3-region",
-  "s3-bucket",
-  "s3-prefix",
   "s3-access-key",
   "s3-secret-key",
+  "s3-bucket",
+  "s3-region",
+  "s3-prefix",
+  // 261113：AI 顺序对齐桌面（接口地址 → API Key → 模型 → 温度）
   "ai-base-url",
-  "ai-model",
   "ai-api-key",
+  "ai-model",
   "ai-temperature",
 ];
 

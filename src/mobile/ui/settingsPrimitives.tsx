@@ -39,7 +39,7 @@ export function Section({ title, children }: { title?: string; children: ReactNo
 }
 
 /** 标准行：左标题(+说明)，右控件。 */
-export function Item({ itemId, name, desc, pathDesc, icon, tone, value, children }: {
+export function Item({ itemId, name, desc, pathDesc, icon, tone, value, stacked, children }: {
   itemId?: string; name: ReactNode; desc?: ReactNode; pathDesc?: boolean; children?: ReactNode;
   /** v2（261107）：行首彩色图标块（预览稿 .set-ico 的等价物）；tone 缺省回落动态主色。 */
   icon?: ReactNode;
@@ -47,6 +47,10 @@ export function Item({ itemId, name, desc, pathDesc, icon, tone, value, children
   tone?: string;
   /** 右侧当前值（选择器/开关旁的只读摘要；控件本身已显示值时可省略）。 */
   value?: ReactNode;
+  /** 261113 用户点单：说明很长、或选择器当前值很长时改为上下两段（名称+说明在上、控件占满下一行）。
+   *  几何**复用内容输入行（--field）那一套**（kit.css：ctl flex 1 1 100% + 选择器吃满宽），
+   *  不新增第二套上下布局声明（移动端层围栏 mobileLayers.test 只许降，禁止再长一套几何）。 */
+  stacked?: boolean;
 }) {
   const id = useId();
   const nameId = `${id}-name`, descId = `${id}-desc`;
@@ -54,7 +58,7 @@ export function Item({ itemId, name, desc, pathDesc, icon, tone, value, children
   const accessibility = { "aria-labelledby": nameId, "aria-describedby": describedBy, "aria-invalid": false };
   return (
     <SettingFieldContext.Provider value={accessibility}>
-    <div className={"mb-set-item" + (pathDesc ? " mb-set-item--path" : "")} data-set-id={itemId} role="group" {...accessibility}>
+    <div className={"mb-set-item" + (pathDesc ? " mb-set-item--path" : "") + (stacked ? " mb-set-item--field" : "")} data-set-id={itemId} role="group" {...accessibility}>
       {icon && <span className="mb-set-item__icon" style={{ "--c": tone ?? "var(--mb-accent)" } as CSSProperties}>{icon}</span>}
       <div className="mb-set-item__main">
         <div id={nameId} className="mb-set-name mobile-settings-name">{name}</div>

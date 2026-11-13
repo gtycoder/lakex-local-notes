@@ -34,11 +34,12 @@ export function HistorySettingsSection({ hist, updateHist }: { hist: HistoryMobi
               <Item itemId="history-retention-days" name="保留天数" desc="超过该天数的快照会被清理。">
                 <NumField label="保留天数" value={hist.retentionDays} min={1} max={365} floor={1} fallback={30} onSave={(n) => updateHist({ retentionDays: n })} />
               </Item>
-              <Item itemId="history-snapshot-interval" name="自动快照间隔（分钟）" desc="0 = 关闭定时自动快照。">
-                <NumField label="自动快照间隔" value={hist.snapshotIntervalMinutes} min={0} max={1440} floor={0} fallback={HISTORY_SETTINGS_DEFAULTS.snapshotIntervalMinutes} onSave={(n) => updateHist({ snapshotIntervalMinutes: n })} />
-              </Item>
+              {/* 261113 用户点单：顺序对齐桌面 HistorySection（每文档上限 → 保留天数 → 定期清理 → 自动快照）。 */}
               <Item itemId="history-cleanup-interval" name="定期清理间隔（小时）" desc="0 = 关闭定期巡检清理。">
                 <NumField label="定期清理间隔" value={hist.cleanupIntervalHours} min={0} max={168} floor={0} fallback={24} onSave={(n) => updateHist({ cleanupIntervalHours: n })} />
+              </Item>
+              <Item itemId="history-snapshot-interval" name="自动快照间隔（分钟）" desc="0 = 关闭定时自动快照。">
+                <NumField label="自动快照间隔" value={hist.snapshotIntervalMinutes} min={0} max={1440} floor={0} fallback={HISTORY_SETTINGS_DEFAULTS.snapshotIntervalMinutes} onSave={(n) => updateHist({ snapshotIntervalMinutes: n })} />
               </Item>
             </Group>
   );

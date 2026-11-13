@@ -91,6 +91,21 @@ describe("useS3SettingsForm", () => {
     });
   });
 
+  it("本机没有配置时 Secret 为空（不显示无意义掩码）", async () => {
+    // 261113 用户报：没配置过 S3，页面 Secret Key 却显示一串圆点 ⇒ 未配置就必须是空输入框。
+    mocks.getS3Settings.mockResolvedValue(null);
+    await render();
+    expect(form.form.secretAccessKey).toBe("");
+    expect(form.form.bucket).toBe("");
+  });
+
+  it("已配置但密钥为空时同样不回掩码", async () => {
+    mocks.getS3Settings.mockResolvedValue({ ...saved, secretAccessKey: "" });
+    await render();
+    expect(form.form.secretAccessKey).toBe("");
+    expect(form.form.endpoint).toBe(saved.endpoint);
+  });
+
   it("Secret 未修改时保留旧值，修改后按新值保存", async () => {
     await render();
     await act(async () => { await form.save(); });
