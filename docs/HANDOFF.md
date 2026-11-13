@@ -55,7 +55,7 @@
 **版本与仓库**
 
 - 主分支 `master`；**HEAD 以 `git log -1` 为准**；R2 已提交 6 笔拆分/设备记录（`a23631f6` sidebar / `fd268432` settings / `231fe845` electron boot / `c00d3a60` lakeRuntime / `4a9b965c` ink 测试 / `e352e2cb` 设备记录）；**产品代码基线 = `8e20a6a3`（R0）/ `e87016bd`（R1）/ `e352e2cb`（R2）/ `3fad8821`（R2 收尾：位置合并 + 同步专用写路径 + 单篇降级）**；**日记收口批产品笔 = `199f3403`（不可变守卫）/ `fd58dc0a`（移动移除取消标记）/ `d4d03260`（移动目标剔除日记子树）/ `f965e62c`（转文档共享弹窗）/ `4b6a524a`（转小记媒体搬运）/ `400dcc75`（showNotice 全空间可见）**；**261113 批 = `839c7a93`（发版复核 P2/P3）/ `a57cf3cf`（移动端「转为小记」+ 22 号报告 §11 + RELEASE.md Secrets 节）**（详见 §0）。
-- **未 push**：`origin/master` 仍为 `8cc65e06`（本地领先若干提交，数量以 `git rev-list --count 8cc65e06..HEAD` 为准）；`github/master` = `2e512c48`。需要推送时按 AGENTS §2 双远端流程。
+- **未 push**（261113 10:17 实测）：`origin/master` = `github/master` = `bbc39bc4`；本地**领先 2 个提交**（`de244d3a` 移动设置批 / `2084e1bd` HANDOFF 批），数量以 `git rev-list --count origin/master..HEAD` 为准。需要推送时按 AGENTS §2 双远端流程。
 - `package.json` = **1.1.1**；Android `versionName 1.1.1` / `versionCode 11101`（从根 package.json 派生：`1000 + major*10000 + minor*100 + patch`，只增不减；**不手改 build.gradle**）。
 - tag：`v1.0.0`–`v1.0.5`、`v1.1.0`、**`v1.1.1`（261112 已发：GitHub Release 已创建，8 个资产 = Android APK / macOS arm64+dmg+zip / Windows exe / latest.json / release-body；Release workflow run 43232450665；本地 packaged smoke 通过）**；已发布 tag 不再移动。发布说明 = [docs/RELEASE-NOTES.md](RELEASE-NOTES.md)（**v1.1.1 → v1.0.0** 倒序；当前 tag 段落 = CI 生成 GitHub Release 正文的来源）。
 - 分支/远端：`master` 唯一长期分支；`origin` = Gitee（SSH，第二 pushurl = GitHub HTTPS）⇒ `git push origin <branch>` 一次推两边；GitHub 只在推 tag 时构建。remote 不入库 ⇒ 新 clone 跑 `npm run setup:remotes`。
@@ -154,7 +154,7 @@
 - **S19（目录重建）：不计划**（显式 id 重建不是用户流程；矩阵登记即可）。
 - 其余真剩余见下方 P0/P1/P2（设备点收 / 发版 / 已知欠账）。
 - **接手清单（261113 会话收尾，给下一会话）**：当前 master `2c997420`（已双推）、v1.1.1 已发布、任务板 0 未完成；下列事项按「需裁决 / 设备 / 代码欠账 / 外部 WIP」分组，开工前先读本文件 §0–§2 与对应报告。
-  - **① 需用户裁决**：(a) **下一版发版**——v1.1.1 之后已有「移动端转为小记 + 发版复核 P2/P3」批（`839c7a93`/`a57cf3cf`/`06ec7f12`/`2c997420`），用户当前决定「先不发」，要发时选 **v1.1.2（patch）** 或 **v1.2.0（minor，把移动端转小记当新特性）**；流程 = RELEASE-NOTES 补段 → `npm version …--no-git-tag-version` → 提交 → 注解 tag → 双推 tag（只有 tag 触发 CI，打包+Release+latest.json；发前按 `docs/RELEASE.md` §七.4 核 Android 4 个 secrets + `GITEE_TOKEN`）。(b) 首篇编辑器 fallback 最终解法（拆内核 chunk 需 RFC vs 改「启动自动打开」语义）。(c) 观感点收 Q03 历史 Sheet / Q07 preview 档 / Q05 字号 / 桌面双击放大 / 平板「点空白落光标」；移动顶栏 44→52 需另立需求。
+  - **① 用户裁决（261113 10:20，已定，别再问）**：(a) **下一版发版暂不做**——保持 1.1.1；要发时流程 = RELEASE-NOTES 补段 → `npm version …--no-git-tag-version` → 提交 → 注解 tag → 双推 tag（只有 tag 触发 CI；发前按 `docs/RELEASE.md` §七.4 核 Android 4 个 secrets + `GITEE_TOKEN`）。(b) **首篇编辑器 fallback 不做**（不拆内核 chunk、不改「启动自动打开」语义）。(c) **观感点收由用户自己验**（Q03 历史 Sheet / Q07 preview 档 / Q05 字号 / 桌面双击放大 / 平板「点空白落光标」）。(d) **移动顶栏 44→52 不做**。
   - **② 设备类欠账（需真机/构建）**：便携包真实 3GB 数据验证；更新中心设备验收（Android 下载→校验→系统安装器）；桌面 3 项实机 + 平板复验；导入/导出/键盘真机冒烟；依赖补丁 4 处升级复核；23 屏走查（本轮未跑，命令见 `24-release-review-ui.md`/`27-release-mobile-snap.md`）。
   - **③ 代码级欠账（可排期）**：`push-baseline` 548–795ms 是下一个同步性能大头（saveBaseline 2 次整行过桥 + 5000 行批量 IN）；复制多张大图同步阻塞（剪贴板 API 限制）；大库 2 万文档/20 万附件与真实 Android 物理机验收从未做过；移动云清理无 UI 入口、目录恢复后 `deleted_notes` 残留；缺正文/缺小记三条恢复路径仅单测 mock；移动端文本格式入口未接。复核报告明确保留不修项：P3-4/5/6、F-10/11/14/16/17（理由见 `23/24-release-review-*.md`）。
   - **④ 外部并行 WIP（先确认归属，勿盲提交）**：工作树可能有其它会话的 `src/mobile/settings/**`、`scripts/mobile-audit/mobile-snap.mjs` 等未提交改动（261113 为移动设置页顺序对齐），与 §3 本批无关；提交前 `git status` 核对并只 add 自己路径。
