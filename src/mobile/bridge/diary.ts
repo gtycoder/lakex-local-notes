@@ -11,7 +11,7 @@
  * · `"new"` = 永远新建一篇（日记页右上角 ＋ = 今天新建、日历 = 选任意日期新建；一天允许多篇）。
  *
  * 互斥域：`diaryOpenDate` / `diaryToQuickNote` 都在 `src/core/maintenancePolicy.ts` 的 `WRITE_OPS` 登记
- * （前者产生目录行、后者把原稿移到小记空间，都是本地写，必须与其它目录写串行），
+ * （前者产生目录行、后者建小记+软删原文，都是本地写，必须与其它目录写串行），
  * 并由 `maintenancePolicyCoverage.test.ts` 纳入一致性检查。
  */
 import { ensureDb, runWrite } from "./context";
@@ -21,7 +21,7 @@ import {
   type DiaryOpenResult,
 } from "../diary/diaryRepository.js";
 import { convertDiaryToQuickNote, type ConvertDiaryToQuickNoteResult } from "../diary/diaryToQuickNote.js";
-import { listNoteAssetKeysFs, loadAssetBytesFs, moveNoteAssetsDirToQuickNoteFs, moveQuickNoteAssetsDirToNoteFs } from "../native/assetFs";
+import { listNoteAssetKeysFs, loadAssetBytesFs, removeQuickNoteAssetsDirFs, saveAssetBytesFs } from "../native/assetFs";
 import { reconcileIndex } from "../data/searchIndex.js";
 
 export type { DiaryOpenMode };
@@ -38,8 +38,8 @@ export const diaryDomain = {
     });
   },
   /**
-   * 日记条目 → 小记 = **移动**（同一 id/正文/资产换空间；原文物理移除、无副本、不可恢复；失败回滚不留半成品）。
-   * 判据/写库/删原文全在 data 层（`src/mobile/diary/diaryToQuickNote.ts`），桥只负责取写域 + 开库 + 注入资产 IO。
+   * 日记条目 → 小记（复制正文/媒体到小记作用域，原文软删进回收站可恢复；失败回滚不留半成品）。
+   * 判据/写库/软删全在 data 层（`src/mobile/diary/diaryToQuickNote.ts`），桥只负责取写域 + 开库 + 注入资产 IO。
    */
   async diaryToQuickNote(noteId: string): Promise<ConvertDiaryToQuickNoteResult> {
     return runWrite("diaryToQuickNote", async () => {
@@ -47,8 +47,8 @@ export const diaryDomain = {
       return await convertDiaryToQuickNote(d, noteId, {
         listNoteAssetKeys: listNoteAssetKeysFs,
         loadAssetBytes: loadAssetBytesFs,
-        moveNoteAssetsToQuickNote: moveNoteAssetsDirToQuickNoteFs,
-        moveQuickNoteAssetsBackToNote: moveQuickNoteAssetsDirToNoteFs,
+        saveAssetFile: saveAssetBytesFs,
+        removeQuickNoteAssetsDir: removeQuickNoteAssetsDirFs,
         reconcileIndex,
       });
     });

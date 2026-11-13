@@ -226,31 +226,27 @@ describe("两个单篇出口（回归，别误伤）", () => {
     expect(store.listTreeNodes().some((n) => n.id === month.id)).toBe(true);
   });
 
-  it("出口②转为小记：同一篇移动成小记（新 id、无副本、不进回收站、不可恢复）", () => {
-    const { opened, notebook } = openDiaryEntry();
-    // 出口② = 主进程转换（261113 用户裁决 = 移动：同一份正文/资产；旧「复制 + 原文进回收站可恢复」作废）。
+  it("出口②转为小记：日期标题进小记第一行，原文软删进回收站（可恢复、不写墓碑、不 purge）", () => {
+    const { opened, month, notebook } = openDiaryEntry();
+    // 出口② = 主进程转换（261113 用户裁决 = **复制 + 原稿进回收站**；卡片零剥离）。
     const converted = convertDiaryNoteToQuickNote(quickNotes, store, opened.noteId);
     const quick = quickNotes.readQuickNote(converted.quickNoteId);
-    // 新 id（同步状态按 id 跨空间共享，同 id 会让其他端复活/软删判成 purge；见转换文件注释）。
-    expect(converted.quickNoteId).not.toBe(opened.noteId);
     expect(quick.previewText.startsWith("2026-11-09")).toBe(true);
-    // 原稿不在回收站（不进回收站、没有可恢复副本）。
-    expect(store.listTrash().some((item) => item.id === opened.noteId)).toBe(false);
+    expect(store.listTrash().some((item) => item.id === opened.noteId)).toBe(true);
     const db = new Database(dbPath(), { readonly: true });
     try {
-      // Lake 侧行已物理移除。
-      expect((db.prepare("SELECT COUNT(*) AS c FROM tree_nodes WHERE id=?").get(opened.noteId) as { c: number }).c).toBe(0);
-      expect((db.prepare("SELECT COUNT(*) AS c FROM notes WHERE id=?").get(opened.noteId) as { c: number }).c).toBe(0);
-      // 写的是**删除意图**（同步传播必需），不是可恢复副本：purged_at 非空且没有正文/历史保留。
-      const tomb = db.prepare("SELECT purged_at FROM deleted_notes WHERE id=?").get(opened.noteId) as { purged_at: string | null } | undefined;
-      expect(tomb?.purged_at).toBeTruthy();
-      expect((db.prepare("SELECT COUNT(*) AS c FROM note_history WHERE note_id=?").get(opened.noteId) as { c: number }).c).toBe(0);
+      const row = db.prepare("SELECT trashed_at FROM tree_nodes WHERE id=?").get(opened.noteId) as { trashed_at: string | null };
+      expect(row.trashed_at).toBeTruthy();
+      // 软删不写墓碑
+      expect((db.prepare("SELECT COUNT(*) AS c FROM deleted_notes WHERE id=?").get(opened.noteId) as { c: number }).c).toBe(0);
     } finally { db.close(); }
-    // 不可恢复：回收站恢复入口对它无效（行已不存在）。
-    expect(() => store.restoreTrashItem(opened.noteId)).toThrow();
 
-    // 日记本仍是 diary（只移动了单篇内容）
+    // 可恢复：恢复后回到日记空间（年/月组原样），日记本仍是 diary
+    store.restoreTrashItem(opened.noteId);
+    const restored = store.listTreeNodes().find((n) => n.id === opened.noteId)!;
+    expect(restored.parentId).toBe(month.id);
     expect(spaceOf(notebook.id)).toBe("diary");
+    expect(store.readNote(opened.noteId).content).toContain("ne-p");
   });
 });
 

@@ -367,21 +367,22 @@ export function DiaryPage({ nodes, onOpenEntry, onOpenSearch, onChanged }: Diary
           if (!entry) return;
           if (item.id === "convert") { setConvertError(null); setConvertFor(entry); }
           if (item.id === "toQuickNote") {
-            // 「转为小记」（261113 task-106；261113 用户裁决 = 移动）：同一份正文/资产移到小记空间，
-            // 随后 Lake 侧原稿物理移除（**无副本、不可恢复**；小记没有历史快照 ⇒ 原文档历史也删除）。
+            // 「转为小记」（261113 用户裁决 = **复制 + 原稿进回收站**，可恢复；261113 修正 = 卡片零剥离）。
+            // 小记 = 同一份 Lake 正文 + 媒体复制到小记作用域；随后原日记软删进回收站（可恢复，资产保留）。
             // 失败由数据层回滚，绝不在没建好小记时删原文。
             void (async () => {
               if (quickNoteBusy) return;
               const ok = await confirmMobile({
                 title: "转为小记？",
-                body: "同一份正文与图片/附件会移动到小记；原日记会从日记本移除，无副本、不可恢复（原文档历史快照也会删除）。",
+                body: "正文与图片/附件会复制一份到小记（卡片原样保留）；原日记会移入回收站，可恢复。",
                 confirmText: "转为小记",
+                danger: false,
               });
               if (!ok) return;
               setQuickNoteBusy(true);
               try {
                 const result = await bridge.diaryToQuickNote(entry.noteId);
-                showToast(diaryToQuickNoteNotice(result));
+                showToast(diaryToQuickNoteNotice(result.droppedKinds));
                 await onChanged();
               } catch (error) {
                 toastActionError("转为小记", error);

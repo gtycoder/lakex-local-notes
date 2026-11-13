@@ -42,7 +42,7 @@ import {
   type QuickNoteSearchDeps,
 } from "./searchIndex.js";
 import { discardDraft, discardStagedImage, stageFile, stageImage } from "./staging.js";
-import { adoptMovedNoteAsQuickNote, createQuickNote, createQuickNoteFromContent, importRemoteQuickNote, recoverImports, recoverStagedSaves, removeUnsyncedQuickNote, rollbackAdoptedQuickNote, updateQuickNote, type QuickNoteSaveDeps } from "./savePipeline.js";
+import { createQuickNote, createQuickNoteFromContent, importRemoteQuickNote, recoverImports, recoverStagedSaves, removeUnsyncedQuickNote, updateQuickNote, type QuickNoteSaveDeps } from "./savePipeline.js";
 import {
   archiveLocalToTrash,
   beginConversion,
@@ -312,15 +312,6 @@ export class QuickNotesStore {
   }
   /** 仅转换回滚用：删除刚创建、尚未同步的小记（不写墓碑）。 */
   removeUnsyncedQuickNote(id: string): void { removeUnsyncedQuickNote(this.saveDeps, id); }
-  /** 日记「转为小记」= 移动：登记已改写正文 + 把资产目录整体搬到小记作用域（无副本）。 */
-  adoptMovedNoteAsQuickNote(input: { id: string; content: import("../quickNoteModel.js").StoredQuickNoteContent; createdAt: string; updatedAt: string; sourceAssetsDir: string }): QuickNoteDocument {
-    adoptMovedNoteAsQuickNote(this.saveDeps, input);
-    return this.readQuickNote(input.id);
-  }
-  /** 仅「移动」失败回滚用：删小记行/正文，并把资产目录移回原 Lake 资产目录（不删字节）。 */
-  rollbackAdoptedQuickNote(id: string, restoreAssetsToDir: string): void {
-    rollbackAdoptedQuickNote(this.saveDeps, id, restoreAssetsToDir);
-  }
 
   // ===== 删除/回收站/转换（委托 trashLifecycle） =====
 

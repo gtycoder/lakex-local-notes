@@ -62,12 +62,11 @@ export type SafeModeExitResult =
 
 /** 日记转为小记的结果（与主进程 electron/diaryQuickNoteConversion.ts 同形，跨片契约）。 */
 export interface DiaryToQuickNoteResultShape {
-  /** 新小记 id（不沿用原日记 note id：同步状态按 id 跨空间共享，见转换实现注释）。 */
   quickNoteId: string;
-  /** 随正文移到小记资产作用域的媒体数（图片 + 附件）；0 = 本篇没有媒体（提示文案据此决定是否说「含图片/附件」）。 */
-  movedMediaCount: number;
-  /** 被删除的原文档历史快照数（小记没有历史快照 ⇒ 不迁移）。 */
-  removedHistoryCount: number;
+  /** 小记承载不了、被明确剥掉的卡片类型（去重；空 = 全部搬运）。 */
+  droppedKinds: string[];
+  /** 实际搬到小记资产作用域的媒体数（图片 + 附件）；0 = 本篇没有媒体（提示文案据此决定是否说「含图片/附件」）。 */
+  carriedMediaCount: number;
 }
 
 /** 日记打开结果（与主进程 electron/diaryStore.ts 的 DiaryOpenResult 同形，跨片契约）。 */
@@ -239,7 +238,7 @@ export interface LakeNative {
    */
   /** `mode`：省略 = 当天已有就开最新、没有就建；`"new"` = 永远新建一篇（一天多篇）。 */
   diaryOpenDate(dateKey: string, mode?: "open" | "new"): Promise<DiaryOpenResultShape>;
-  /** 日记转为小记（261113 移动语义）：同一 id/正文/资产换空间，原稿物理移除（无副本、不可恢复）。 */
+  /** 日记转为小记（261112 task-92）：正文/媒体原样搬运，成功后日记进回收站（可恢复）。 */
   diaryToQuickNote(noteId: string): Promise<DiaryToQuickNoteResultShape>;
   createGroup(parentId: string, title: string): Promise<TreeNode>;
   renameTreeNode(id: string, title: string): Promise<TreeNode>;

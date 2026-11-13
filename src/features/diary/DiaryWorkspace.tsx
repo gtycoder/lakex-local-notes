@@ -70,8 +70,8 @@ export interface DiaryWorkspaceProps {
   /** 「转为文档」：把该日记条目移到目标笔记本（换父节点 = 移动，不复制正文/历史）+ 落标题。
    *  title = 弹窗里用户确认的标题（默认是日期键，可改；空/未改由宿主决定是否跳过改名）。 */
   onConvertEntry: (nodeId: string, targetNotebookId: string, title: string) => void;
-  /** 「转为小记」= 把这篇日记**移动**成小记条目（新小记 id、正文/资产零复制地改名移动；
-   *  **无副本、不可恢复**，原文档历史快照一并删除 —— 入口必须先确认，见 useConfirm）。 */
+  /** 「转为小记」= 把这篇日记的 Lake 正文**复制**成一条小记（媒体复制到小记作用域，
+   *  卡片零剥离）；原日记移入**回收站**（可恢复，资产保留）—— 入口先确认，见 useConfirm。 */
   onConvertToQuickNote: (nodeId: string) => void;
   /** 「删除」：移入回收站（软删，可恢复）。走既有删除确认与 deleteTreeNode，不新造删除路径。 */
   onDeleteEntry: (nodeId: string) => void;
@@ -105,7 +105,7 @@ export function DiaryWorkspace(props: DiaryWorkspaceProps) {
 
   /** 左栏数据：条目来自 core，分组也来自 core（`groupDiaryEntries`）——组件里没有任何年/月换算。
    *  打开/选中一律用 `documentId`（= noteFileId）：core 的 `noteId` 是树节点 id，不能拿去 openNote。 */
-  /** 确认浮层（DT-02）：「转为小记」= 不可逆移动（无副本、历史快照一并删除）⇒ 必须二次确认。 */
+  /** 确认浮层（DT-02）：「转为小记」= 复制 + 原稿进回收站（可恢复）⇒ 仍给二次确认，说清原稿去向。 */
   const { confirm, confirmElement } = useConfirm();
   /** 日记本设置（261113 用户裁决：只开放改名/换图标）：菜单 + 行内改名 + 图标选择器。
    *  判据与守卫都在数据层（noteMetadataRepository.assertNotDiaryContent），UI 只做入口。 */
@@ -397,12 +397,11 @@ export function DiaryWorkspace(props: DiaryWorkspaceProps) {
             onClick={() => {
               const nodeId = entryMenu.entry.nodeId;
               setEntryMenu(null);
-              // 261113 用户裁决：转为小记 = **移动**（无副本、不可恢复）⇒ 先确认再动。
+              // 261113 用户裁决：转为小记 = **复制**到小记 + 原稿进回收站（可恢复）；卡片零剥离。
               void confirm({
                 title: "转为小记？",
-                body: "同一份正文与图片/附件会移动到小记；原日记会从日记本移除，没有副本、不可恢复（原文档的历史快照也会删除）。",
+                body: "正文与图片/附件会复制一份到小记（卡片原样保留）；原日记会移入回收站，可恢复。",
                 confirmText: "转为小记",
-                danger: true,
               }).then((ok) => { if (ok) onConvertToQuickNote(nodeId); });
             }}
           >

@@ -19,7 +19,7 @@ const LIBRARY = code(read("src/mobile/notebook/libraryNotebooks.ts"));
 const BRIDGE = code(read("src/mobile/bridge/diary.ts"));
 const PAGE = code(read("src/mobile/diary/DiaryPage.tsx"));
 const CONVERT = code(read("src/mobile/diary/diaryToQuickNote.ts"));
-const CONVERT_RAW = read("src/mobile/diary/diaryToQuickNote.ts");
+
 const NOTICE = code(read("src/mobile/diary/diaryQuickNoteNotice.ts"));
 
 describe("知识库不显示回收站/日记本（261110；261109 收尾抽成纯函数）", () => {
@@ -106,36 +106,34 @@ describe("日记入口过 gone 判据（261112 task-55 M1）", () => {
   });
 });
 
-describe("日记「转为小记」接线（261113 移动语义，与桌面同语义）", () => {
-  it("页面 ⋯ 菜单有「转为小记」+ 确认说明移动/无副本不可恢复；失败可见", () => {
+describe("日记「转为小记」接线（261113 task-106，与桌面同语义）", () => {
+  it("页面 ⋯ 菜单有「转为小记」+ 确认说明复制/可恢复；失败可见", () => {
     expect(PAGE).toContain("转为小记");
     expect(PAGE).toContain("bridge.diaryToQuickNote(");
     expect(PAGE).toContain("diaryToQuickNoteNotice(");
     expect(PAGE).toContain("confirmMobile(");
-    expect(PAGE).toContain("无副本、不可恢复");
-    // 在途守卫（移动资产跨多次桥往返，连点会重复触发）
+    expect(PAGE).toContain("回收站");
+    expect(PAGE).toContain("可恢复");
+    // 在途守卫（复制媒体跨多次桥往返，连点会建两条）
     expect(PAGE).toContain("quickNoteBusy");
   });
 
-  it("bridge 走写域；数据层复用 core 作用域改写 + 移动资产 + 物理移除原稿；bridge 不做资产/删原文判断", () => {
+  it("bridge 走写域；数据层复用 core 作用域改写 + 硬删回滚；bridge 不做资产/软删判断", () => {
     expect(BRIDGE).toContain("diaryToQuickNote");
     expect(BRIDGE).toContain('runWrite("diaryToQuickNote"');
     expect(BRIDGE).toContain("convertDiaryToQuickNote(");
-    expect(BRIDGE).toContain("moveNoteAssetsDirToQuickNoteFs");
     expect(CONVERT).toContain("rewriteQuickNoteAssetScope(");
-    expect(CONVERT).toContain("moveNoteAssetsToQuickNote(");
     expect(CONVERT).toContain("removeUnsyncedQuickNote(");
-    expect(CONVERT).toContain("trashRepository.purgeTreeItem(");
-    // 移动语义：不再有卡片白名单/剥离（旧 CARRYABLE_CARD_NAMES 已删）
+    expect(CONVERT).toContain("trashRepository.trashTreeItem(");
+    // 261113 用户裁决：卡片零剥离 ⇒ 不再有白名单/剥离函数（droppedKinds 字段只为 IPC 形状保留）。
     expect(CONVERT).not.toContain("CARRYABLE_CARD_NAMES");
-    expect(CONVERT).not.toContain("droppedKinds");
-    // 桌面/移动同一份语义：源稿无副本、不可恢复的说明必须写在数据层
-    expect(CONVERT_RAW).toContain("没有可恢复副本");
+    expect(CONVERT).not.toContain("stripUnsupportedCards");
+    expect(CONVERT).toContain("droppedKinds");
   });
 
-  it("提示文案与桌面逐字一致（含图片/附件 + 无副本不可恢复）", () => {
-    expect(NOTICE).toContain("已转为小记（含图片/附件）");
-    expect(NOTICE).toContain("原日记已移出日记本，无副本、不可恢复");
-    expect(NOTICE).not.toContain("未搬运");
+  it("提示文案与桌面同源字段（base 文案 + 卡片中文名 + 未搬运说明）", () => {
+    expect(NOTICE).toContain("已转为小记（含图片/附件）；日记已移入回收站，可恢复");
+    expect(NOTICE).toContain("未搬运");
+    expect(NOTICE).toContain("画板");
   });
 });
