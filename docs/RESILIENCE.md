@@ -71,6 +71,7 @@
 | 「已 purge 又被 seed 复活」的幽灵行 | `schemaInit.seed()` 只在「notes 空 + 无墓碑 + 默认笔记本在位」三者同时成立时种欢迎笔记；启动自愈 `removeResurrectedAfterPurge()` 只清「活跃 + 有墓碑 + （id=welcome-note 或父节点已不在位）」的行（墓碑保留 = 彻底删除语义，幂等） | 启动日志 `[store] removed N resurrected-after-purge ghost note(s)` |
 | gone 标签卡住退出 | 标记 deleted 时同步清 dirty；beforeunload 只拦「脏且未删除且未保存失败」（判据单一来源 core/unloadGuard.blockingDirtyTabs，保存失败的标签允许丢弃并正常退出）；本机 purge 后按 digest 收掉已打开标签 | 日志 [ui] 窗口无响应 + before-quit 无 will-quit |
 | 移动端同型：gone 判定只按 parentId | noteGoneState 必须返回 trashedAt，isGoneNote 全入口传入；保存屏障（关闭/返回/关闭全部/完成编辑）命中 gone 走 discardTab + cancelAutoSave 并 toast 明说「可在回收站恢复」；删分组/笔记本按子树收集已打开标签（descendantNoteTabIds），删除前先 flush 落盘在途编辑 | 移动端 tab 关不掉/退回首页失败；护栏 useWorkspaceSession.test.ts、mobileGoneWiring.test.ts、useNotebookTreeActions.test.ts |
+| 删除只动根、子文档漏级联（移动端 note 分支） | 删除 = 整棵子树一起软删：桌面 `deleteTreeNode` 级联（含文档下的多级子文档）；移动 `trashNote`/`trashTreeItem(note)` 走 `trashSubtree`（parent ∪ deleted_from 两路边、防环上限），restore/purge 同集合；已 trashed 节点重复删除幂等（不改 parent，批量顺序不拆根） | 子文档变 `trashed_at=NULL` 悬空行（树里不可见、搜索里还在）、purge 漏删、恢复父项子项不跟随；护栏 `electron/trashCascade.test.ts`、`src/mobile/data/trashCascade.test.ts` |
 | 启动硬开文档 | 261114 用户裁决：只恢复上次标签；没有可恢复标签就保持空态（已删 core/coldStartNote 冷启动落点）。恢复候选只收活跃文档（回收站/已 purge/父节点不存在/日记条目都不恢复） | 启动自动打开回收站/孤儿文档；护栏 useBootstrap.render.test.tsx |
 
 护栏：`electron/startupTrash.test.ts`、`src/core/syncDecisions.test.ts`；契约口径见 AGENTS §3#16 与 §7#13。

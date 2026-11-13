@@ -22,73 +22,7 @@ async function assertNotDiaryNotebook(d: MobileDb, id: string, action: string): 
   }
 }
 
-interface ParentedNode {
-  id: string;
-  parent_id: string | null;
-  /** 删除前原始父（回收站平铺后仍保留）：purge/restore 收集塌陷子树时与 parent 一起作为边。 */
-  deleted_from_parent_id?: string | null;
-  trashed_at?: string | null;
-}
-
-interface SubtreeIds {
-  folderIds: Set<string>;
-  noteIds: Set<string>;
-  allIds: Set<string>;
-}
-
-/** P1-6 父环防护：坏库/注入数据下 visited 已保证收敛，这里再加硬上限防算法外异常（内存/耗时兜底）。 */
-const MAX_SUBTREE_NODES = 200_000;
-
-/** 收集 folder + note 子树（含自身）：note 也可作为父节点，供删除/恢复/purge 复用。
- *  visited = subtree.allIds：tree_nodes 成环时也不会无限展开（环上节点各纳入一次）。 */
-function collectSubtree(folders: ParentedNode[], notes: ParentedNode[], rootId: string): SubtreeIds {
-  const children = new Map<string, Array<{ id: string; kind: "folder" | "note" }>>();
-  const addChild = (parentId: string, id: string, kind: "folder" | "note") => {
-    const list = children.get(parentId) ?? [];
-    list.push({ id, kind });
-    children.set(parentId, list);
-  };
-  for (const folder of folders) {
-    if (folder.parent_id) addChild(folder.parent_id, folder.id, "folder");
-  }
-  for (const note of notes) {
-    if (note.parent_id) addChild(note.parent_id, note.id, "note");
-  }
-  // F-01 同类防护（261112 P0，与桌面 trashLifecycle.purgeSubtreeIds 同口径）：回收站子树可能被同步
-  // 「扁平化」——子文档 parent 归一成回收站容器/空，原始父只剩 deleted_from_parent_id。只按 parent_id
-  // 遍历会漏掉这些后代 ⇒ purge 只删根、子文档残留并继续以 trashed 条目发布。这里把原始父链也当作一条边
-  // （仅对 trashed 行；visited 去重 + MAX_SUBTREE_NODES 上限保证收敛）。
-  for (const folder of folders) {
-    if (folder.trashed_at && folder.deleted_from_parent_id) addChild(folder.deleted_from_parent_id, folder.id, "folder");
-  }
-  for (const note of notes) {
-    if (note.trashed_at && note.deleted_from_parent_id) addChild(note.deleted_from_parent_id, note.id, "note");
-  }
-
-  const rootNode = folders.find((node) => node.id === rootId) ?? notes.find((node) => node.id === rootId);
-  const subtree: SubtreeIds = { folderIds: new Set(), noteIds: new Set(), allIds: new Set() };
-  if (!rootNode) return subtree;
-
-  const queue: Array<{ id: string; kind: "folder" | "note" }> = [];
-  const visit = (id: string, kind: "folder" | "note") => {
-    if (subtree.allIds.has(id)) return;
-    subtree.allIds.add(id);
-    if (kind === "folder") subtree.folderIds.add(id);
-    else subtree.noteIds.add(id);
-    queue.push({ id, kind });
-  };
-  visit(rootNode.id, folders.some((node) => node.id === rootId) ? "folder" : "note");
-
-  while (queue.length > 0) {
-    if (subtree.allIds.size >= MAX_SUBTREE_NODES) {
-      console.warn("[trash] 子树节点数超过防御上限，已截断收集:", rootId, subtree.allIds.size);
-      break;
-    }
-    const parent = queue.shift()!;
-    for (const child of children.get(parent.id) ?? []) visit(child.id, child.kind);
-  }
-  return subtree;
-}
+import { collectSubtree, loadParentedNodes, trashSubtree } from "./trashSubtree.js";
 
 export async function trashTreeItem(d: MobileDb, id: string, kind: "folder" | "note"): Promise<void> {
   // 日记本不可删除（只拦日记本节点；条目/分组照常软删，可恢复）。
@@ -96,10 +30,9 @@ export async function trashTreeItem(d: MobileDb, id: string, kind: "folder" | "n
   await d.transaction(async () => {
     const now = new Date().toISOString();
     if (kind === "note") {
-      // 261112 task-55（N2）：记「删除前父」（恢复原路返回 / 跨端恢复位置都依赖它）。
-      await d.prepare(
-        "UPDATE notes SET trashed_at=?, is_dirty=1, restore_pending_at=NULL, deleted_from_parent_id=COALESCE(deleted_from_parent_id, parent_id) WHERE id=?",
-      ).run(now, id);
+      // 261114 用户追问：文档下可能还有子文档/子分组（note 也可作父节点）⇒ **必须整棵子树一起软删**，
+      // 只标根会让子文档变成 trashed_at=NULL 的悬空行（树里不可见、搜索里还在）。
+      await trashSubtree(d, id, now);
       return;
     }
 
@@ -261,18 +194,13 @@ export async function restoreTreeItem(
 ): Promise<void> {
   let folderIds: string[] = [];
   let restoreNoteIds: string[] = [];
-  if (kind === "note") {
-    restoreNoteIds = [id];
-  } else {
-    const allFolders = await d.prepare("SELECT id, parent_id, deleted_from_parent_id, trashed_at FROM folders").all() as Array<{ id: string; parent_id: string | null }>;
-    const allNotes = await d.prepare("SELECT id, parent_id, deleted_from_parent_id, trashed_at FROM notes").all() as Array<{ id: string; parent_id: string | null }>;
-    const subtree = collectSubtree(allFolders, allNotes, id);
-    folderIds = Array.from(subtree.folderIds);
-    restoreNoteIds = [];
-    for (const batch of sqlParameterBatches(Array.from(subtree.noteIds))) {
-      const rows = await d.prepare("SELECT id FROM notes WHERE id IN (" + batch.map(() => "?").join(",") + ") AND trashed_at IS NOT NULL").all(...batch) as Array<{ id: string }>;
-      restoreNoteIds.push(...rows.map((n) => n.id));
-    }
+  // 261114：恢复与删除同口径 —— 计算整棵子树；folder 与 note 都可作根（note 可作父节点）。
+  const { folders: allFolders, notes: allNotes } = await loadParentedNodes(d);
+  const subtree = collectSubtree(allFolders, allNotes, id);
+  folderIds = Array.from(subtree.folderIds);
+  for (const batch of sqlParameterBatches(Array.from(subtree.noteIds))) {
+    const rows = await d.prepare("SELECT id FROM notes WHERE id IN (" + batch.map(() => "?").join(",") + ") AND trashed_at IS NOT NULL").all(...batch) as Array<{ id: string }>;
+    restoreNoteIds.push(...rows.map((n) => n.id));
   }
   await downloadAssets(restoreNoteIds);
 
@@ -287,9 +215,28 @@ export async function restoreTreeItem(
     // 261027：原父已被删（或不在活跃目录里）⇒ 回落兜底笔记本，绝不恢复成悬空文档。
     const row = await d.prepare("SELECT COALESCE(deleted_from_parent_id, parent_id) AS pid, title FROM notes WHERE id=?").get(id) as { pid?: string | null; title?: string } | undefined;
     const parentId = await resolveRestoreParent(d, row?.pid ?? null, new Set(folderIds), row?.title ?? "");
-    await d.prepare(
-      "UPDATE notes SET parent_id=?, trashed_at=NULL, restore_pending_at=?, is_dirty=1, updated_at=?, deleted_from_parent_id=NULL, cloud_deleted=0 WHERE id=?"
-    ).run(parentId, now, now, id);
+    // 261114：恢复根文档时，**随它一起进回收站的子文档/子分组一起恢复**（否则它们继续留在回收站）。
+    await d.transaction(async () => {
+      const statements: MobileBatchStatement[] = [];
+      statements.push({
+        statement: "UPDATE notes SET parent_id=?, trashed_at=NULL, restore_pending_at=?, is_dirty=1, updated_at=?, deleted_from_parent_id=NULL, cloud_deleted=0 WHERE id=?",
+        values: [parentId, now, now, id],
+      });
+      for (const nid of restoreNoteIds) {
+        if (nid === id) continue;
+        statements.push({
+          statement: "UPDATE notes SET parent_id=COALESCE(deleted_from_parent_id, parent_id), trashed_at=NULL, restore_pending_at=?, is_dirty=1, updated_at=?, deleted_from_parent_id=NULL, cloud_deleted=0 WHERE id=?",
+          values: [now, now, nid],
+        });
+      }
+      for (const fid of folderIds) {
+        statements.push({
+          statement: "UPDATE folders SET parent_id=COALESCE(deleted_from_parent_id, parent_id), trashed_at=NULL, updated_at=?, is_dirty=1 WHERE id=?",
+          values: [now, fid],
+        });
+      }
+      await executeBatchInTransaction(d, statements);
+    });
     return;
   }
 
@@ -378,12 +325,26 @@ export async function purgeTreeItem(
       });
     };
     if (kind === "note") {
-      const row = await d.prepare("SELECT id, title, parent_id, sort_order, updated_at FROM notes WHERE id=?").get(id) as { id: string; title: string; parent_id: string | null; sort_order: number; updated_at: string } | undefined;
-      if (row) tombstone(row.id, row.title, row.parent_id, row.sort_order, row.updated_at, "note");
-      await collectHistory(id);
-      purgedNoteIds.push(id);
-      statements.push({ statement: "DELETE FROM notes WHERE id=?", values: [id] });
-      statements.push({ statement: "DELETE FROM note_history WHERE note_id=?", values: [id] });
+      // 261114：回收站里彻底删除一篇「有子文档」的文档时，必须整棵子树一起物理删除
+      // （与删除/恢复同口径；旧实现只删根 ⇒ 子文档以悬空/墓碑不一致状态残留）。
+      const { folders: noteFolders, notes: noteNodes } = await loadParentedNodes(d);
+      const noteSubtree = collectSubtree(noteFolders, noteNodes, id);
+      if (noteSubtree.allIds.size === 0) return false;
+      for (const fid of noteSubtree.folderIds) {
+        const folderRow = await d.prepare("SELECT title, parent_id, sort_order, updated_at FROM folders WHERE id=?").get(fid) as { title: string; parent_id: string | null; sort_order: number; updated_at: string } | undefined;
+        if (folderRow) tombstone(fid, folderRow.title, folderRow.parent_id, folderRow.sort_order, folderRow.updated_at, "folder");
+        statements.push({ statement: "DELETE FROM folders WHERE id=?", values: [fid] });
+      }
+      for (const batch of sqlParameterBatches(Array.from(noteSubtree.noteIds))) {
+        const rows = await d.prepare("SELECT id, title, parent_id, sort_order, updated_at FROM notes WHERE id IN (" + batch.map(() => "?").join(",") + ")").all(...batch) as Array<{ id: string; title: string; parent_id: string | null; sort_order: number; updated_at: string }>;
+        for (const n of rows) {
+          tombstone(n.id, n.title, n.parent_id, n.sort_order, n.updated_at, "note");
+          await collectHistory(n.id);
+          purgedNoteIds.push(n.id);
+          statements.push({ statement: "DELETE FROM notes WHERE id=?", values: [n.id] });
+          statements.push({ statement: "DELETE FROM note_history WHERE note_id=?", values: [n.id] });
+        }
+      }
       await executeBatchInTransaction(d, statements);
       return true;
     }

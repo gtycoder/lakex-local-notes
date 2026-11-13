@@ -10,6 +10,7 @@ import { normalizeNoteKind, type NoteKind } from "../../core/noteKind.js";
 import { loadAssetBytesFs, listNoteAssetKeysFs, statNoteAssetSizesFs } from "../native/assetFs";
 import type { MobileDb } from "./sqliteDb";
 import { deleteNoteBodies, readNoteBody, writeNoteBody } from "./noteBodies.js";
+import { trashSubtree } from "./trashSubtree.js";
 
 /**
  * 移动端笔记仓储。
@@ -327,14 +328,12 @@ export async function saveRestoredNoteContent(d: MobileDb, id: string, title: st
 
 /** 本地软删（入回收站）：同步时上传墓碑（删除压编辑）。 */
 export async function trashNote(d: MobileDb, id: string): Promise<void> {
-  // 261026：软删必须 bump updated_at —— v3 索引的 trashedAt/恢复靠 updatedAt 做 LWW 传播；
-  // 不 bump 时对端看到的 updatedAt 没变，回收站状态永远同步不过去（conformance 抓到）。
-  const now = new Date().toISOString();
-  // 261112 task-55（N2）：软删必须记「删除前父」——恢复原路返回、跨端恢复位置都依赖它（桌面同语义）。
-  await d.prepare(
-    "UPDATE notes SET trashed_at=?, updated_at=?, is_dirty=1, restore_pending_at=NULL, deleted_from_parent_id=COALESCE(deleted_from_parent_id, parent_id) WHERE id=?",
-  ).run(now, now, id);
-  await removeNoteFromIndex(d, id);
+  // 261114：文档下可能还有子文档/子分组（note 也可作父节点）⇒ **必须整棵子树一起软删**（与桌面级联同口径）。
+  // 旧实现只标根：子文档会变成 trashed_at=NULL 的悬空行（树里不可见、搜索里还在）。
+  // 细节（bump updated_at、记删除前父、防环上限）统一在 trashSubtree 里，避免多处实现漂移。
+  const trashedNoteIds = await trashSubtree(d, id);
+  if (trashedNoteIds.length === 0) await removeNoteFromIndex(d, id);
+  else for (const noteId of trashedNoteIds) await removeNoteFromIndex(d, noteId);
 }
 
 export async function listTrashed(d: MobileDb): Promise<LocalNote[]> {

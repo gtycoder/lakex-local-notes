@@ -134,6 +134,10 @@ export class TrashLifecycle {
     this.assertNotDiaryNotebook(id, "删除");
     const node = this.ctx.readTreeNode(id);
     if (node.parentId === this.ctx.trashNotebookId) return; // 已在回收站
+    // 261114：幂等 + 保持层级。批量删除里若「子项先处理、父项后处理」，子项此时已进回收站（trashed_at 非空）
+    // ⇒ 不能再把它改成回收站根（parent=回收站），否则父项子树被拆成多个根、恢复父项时子项不跟随。
+    const alreadyTrashedAt = (this.ctx.db.prepare("SELECT trashed_at FROM tree_nodes WHERE id=?").get(id) as { trashed_at: string | null } | undefined)?.trashed_at;
+    if (alreadyTrashedAt) return;
     const now = nowIso();
     const tx = this.ctx.db.transaction(() => {
       if (node.noteFileId) {
@@ -146,9 +150,11 @@ export class TrashLifecycle {
       this.ctx.db.prepare(
         "UPDATE tree_nodes SET parent_id=?,trashed_at=?,deleted_from_parent_id=?,updated_at=?,is_dirty=1 WHERE id=? AND deleted_at IS NULL"
       ).run(this.ctx.trashNotebookId, now, node.parentId, now, id);
-      // 级联：子树所有节点（嵌套分组 + 笔记）跟随根进回收站——trashed_at 必须标上，
+      // 级联：子树所有节点（嵌套分组 + 笔记/文档下的多级子文档）跟随根进回收站——trashed_at 必须标上，
       // 否则同步发布时子树按"正常"传播，其他端不跟随删除（内容"没删掉"、根恢复/删除语义不一致）。
-      const subtreeIds = this.descendantIdsIncludingDeleted(id).filter((sid) => sid !== id);
+      // 261114：集合用 flattenedSubtreeIds（parent 边 ∪ deleted_from_parent+trashed 边）——
+      // 覆盖「子树某节点此前已被单独/同步扁平化进回收站」的情形，否则级联会漏掉它。
+      const subtreeIds = this.flattenedSubtreeIds(id).filter((sid) => sid !== id);
       if (subtreeIds.length > 0) {
         const subNotes: Array<{ note_file_id: string }> = [];
         for (const batch of sqlParameterBatches(subtreeIds)) {

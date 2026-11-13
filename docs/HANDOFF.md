@@ -14,7 +14,8 @@
 - **③ 保存被拒也能正常退出**（用户裁决：保存已拒绝时未保存内容允许丢）：新增 `core/unloadGuard.blockingDirtyTabs`（`dirty && !deleted && !isSaveFailed`）；`useSavePipeline` 新增 `failedSavesRef`（只记 catch 的真实保存失败；外部改动冲突仍需用户决策、不在此列）；`App` 以 ref 传给 `useDesktopLifecycle`，beforeunload 只对「还能保存」的脏标签 preventDefault；失败/已删标签仍写 draft journal 兜底、允许丢弃。护栏 `unloadGuard.test.ts`。
 - **④ 移动端同型修复**（用户要求检查）：确认缺陷 = `noteGoneState` 只看 parentId，删笔记本/分组级联（子文档 parent 不变、只标 `trashed_at`）后打开中的 tab 仍按 active 走保存屏障 ⇒ 关闭/返回/退回首页失败卡住；修复 = noteGoneState 回传 `trashedAt` + `isGoneNote` 全入口传；保存屏障（closeTab / 返回 / 关闭全部 / 完成编辑）命中 gone 走 `discardTab + cancelAutoSave` 并 toast「已在回收站或已删除，已关闭标签；可在回收站恢复」；删分组/笔记本按 `descendantNoteTabIds` 丢弃整棵子树标签、删除前先 flush 在途编辑。**否证**：移动无启动泄漏（listNotes / 工作区树都过滤 trashed_at、无 beforeunload、欢迎小记有 initialized 标记不复活）。残余（P2）：移动无桌面同款「tab 标记 gone + 只读横幅」，旧内容显示到关闭。
 - **验证**：tsc 0；全量 vitest **923 passed / 5924 例（5912 passed / 12 skipped）/ 0 failed**（75.4s）；`cssLayers` / `uiPrimitives` / `ui-metrics` / `check:mobileui` PASS；`npx vite build` 成功。隔离实例（新构建、CDP 只读取证，夹具 C 全新库 + D 软删回放）：**C1** 全新库冷启动无 tab/空态且树里仍有 welcome-note（数据在只是不硬开，editor.init=0）；**C2** CDP 点击目录手动打开成功；**C3** 删正文→输入→日志 `save_note 失败 笔记不存在`→`Browser.close` 后 **203ms 正常退出**（≤10s，before-quit+will-quit 都有，草稿兜底落盘成功）；**C4** 浮动动作 position=absolute/right:8px、hover 宽 50 不溢出、标题宽度 idle=hover delta=0。证据 `/tmp/lakex-verify/evidence/SUMMARY-ROUND2.md`（不入库）。移动端：AVD lake_mobile 装最终 APK，设备级两场景（删文档后「完成」/Android 返回）PASS，证据 `.css-audit/mobile-gone/*.png`。
-- **文档**：AGENTS §3#16（移动端同源）/ §4 启动 bullet / §7#12b（unloadGuard + failedSavesRef）、`docs/RESILIENCE.md` §3.5 +3 行、本文件 §1/§3 已同步；本批 commit 见 `git log -1`。
+- **追加（用户追问「带子级 / 多级子级的删除」）**：审计结论 = **桌面一直有级联**（`trashLifecycle.deleteTreeNode`：多级分组、文档下多级子文档、回收站中间节点 purge、整棵恢复全部 PASS）；真正缺的是**移动端 note 分支**：`trashNote` 与 `trashTreeItem(note)` 只动根 ⇒ 子文档变 `trashed_at=NULL` 悬空行（树里不可见、搜索里还在）、purge/restore 也只处理根。已修：抽 `src/mobile/data/trashSubtree.ts`（`parent_id` ∪ `deleted_from_parent_id+trashed_at` 两路边集合）统一 `trashSubtree`；`noteRepository.trashNote` / `trashTreeItem(note)` / `restoreTreeItem(note)` / `purgeTreeItem(note)` 全部按子树处理。桌面 `deleteTreeNode` 同时补两点：已 trashed 节点重复删除**幂等**（不改 parent，避免批量顺序把子树拆成多个回收站根）、级联集合改用 `flattenedSubtreeIds`（覆盖被同步扁平化的后代）。护栏：`electron/trashCascade.test.ts`（5 例：多级分组删除/删除带子文档的文档/嵌套 purge/整棵恢复/批量先子后父幂等）、`src/mobile/data/trashCascade.test.ts`（6 例：note 删除/trashNote/恢复/彻底删除/批量顺序/分组嵌套）。
+- **文档**：AGENTS §3#5（级联/幂等）与 §3#16（移动端同源）/ §4 启动 bullet / §7#12b、`docs/RESILIENCE.md` §3.5 +4 行、本文件 §1/§3 已同步；本批 commit 见 `git log -1`。
 ### 261114 · 回收站幽灵文档修复（启动自动打开已删除文档 + 清空回收站后关不掉退不出）
 
 - **用户现场**（正式库 + 开发库都复现）：删光笔记本后重启仍自动打开回收站里的欢迎文档；它以可编辑标签出现（编辑器无只读横幅），保存被主进程守卫拒（`笔记已在回收站或已被删除，保存被拒绝；请先显式恢复: welcome-note`）；⌘Q/关窗被 `beforeunload` 永久拦住（日志 `[ui] 窗口无响应` + 只有 before-quit 没有 will-quit，最后靠 60s 超时/强杀）。用户清空回收站后旧 `seed` 又把 `welcome-note` 复活成孤儿行（父笔记本已 purge、侧栏看不到）⇒ 再启动继续打开它，再次「关不掉退不出」。
@@ -165,13 +166,13 @@
 - `package.json` = **1.1.2**；Android `versionName 1.1.2` / `versionCode 11102`（从根 package.json 派生：`1000 + major*10000 + minor*100 + patch`，只增不减；**不手改 build.gradle**）。
 - tag：`v1.0.0`–`v1.0.5`、`v1.1.0`、`v1.1.1`（261112 已发）、**`v1.1.2`（261114 已打 tag 并双推；CI 由 tag 触发打包 → GitHub Release 8 资产 + latest.json；发布说明段落 = RELEASE-NOTES 顶部 `# LakexLocalNotes v1.1.2`）**；已发布 tag 不再移动。发布说明 = [docs/RELEASE-NOTES.md](RELEASE-NOTES.md)（**v1.1.2 → v1.0.0** 倒序；当前 tag 段落 = CI 生成 GitHub Release 正文的来源）。
 - 分支/远端：`master` 唯一长期分支；`origin` = Gitee（SSH，第二 pushurl = GitHub HTTPS）⇒ `git push origin <branch>` 一次推两边；GitHub 只在推 tag 时构建。remote 不入库 ⇒ 新 clone 跑 `npm run setup:remotes`。
-- **工作树**：本批（261114 第二轮点单：回收站浮动动作 / 启动不硬开 / 保存被拒可退出 / 移动端同型修复）改动已提交（commit 见 `git log -1`）；前一批「回收站幽灵文档修复」= `f3a0e60c`。历史上并行会话共用工作树时一律「只 stage 本批文件」，**绝不用 `git add -A`**。
+- **工作树**：261114 第二轮点单 = `b676440f`（回收站浮动动作 / 启动不硬开 / 保存被拒可退出 / 移动端同型修复）+ 追加级联修复 commit（见 `git log -1`）；前一批「回收站幽灵文档修复」= `f3a0e60c`。历史上并行会话共用工作树时一律「只 stage 本批文件」，**绝不用 `git add -A`**。
 - 261110 一次性历史清理（`.ai-writing-recon/` 用 `git filter-repo` 从全部历史移除，重写 v1.1.0 之后的提交；tag 未变）⇒ 旧 clone 需 `git fetch --force --prune && git reset --hard origin/master`。
 
 **门禁基线（261114 回收站幽灵文档修复批实测 2026-11-13 16:58；分层口径见 AGENTS §3#21）**
 
 - `npx tsc --noEmit` = **0**。
-- 全量 vitest（低负载串行门禁）：**文件 = 总 934（923 passed / 11 skipped）**；**用例 = 总 5924（5912 passed / 12 skipped）/ 0 failed**（75.4s）。偶发 `perf.integration` 满载抖动口径见下条（单跑复验通过）。本批动了回收站行样式 ⇒ 跑了 `cssLayers`/`uiPrimitives`/`ui-metrics`（均 PASS；无该行的样式快照态，未跑 stylesnap）；移动端改动已装 APK 并设备级验收；`npx vite build` 成功（隔离验证用构建）。
+- 全量 vitest（低负载串行门禁）：**文件 = 总 936（925 passed / 11 skipped）**；**用例 = 总 5935（5923 passed / 12 skipped）/ 0 failed**（63.5s）。偶发 `perf.integration` 满载抖动口径见下条（单跑复验通过）。本批动了回收站行样式 ⇒ 跑了 `cssLayers`/`uiPrimitives`/`ui-metrics`（均 PASS；无该行的样式快照态，未跑 stylesnap）；移动端改动已装 APK 并设备级验收；`npx vite build` 成功（隔离验证用构建）。
 - ⚠️ `electron/s3v3/perf.integration.test.ts`：**低负载串行本轮无抖动（通过）**；满载/并发构建时偶发（单跑 PASS），门禁判定以单跑/低负载为准（同 §2 既有口径）。
 - `node scripts/ui-metrics.mjs`：颜色 0 / 字号 0 / `!important` 9 = 允许清单 / `crossFileDupGroups` 45 / `shadowedDecls` **0**（task-34 已清零，门禁只降）/ 未定义令牌 0。
 - `check:core` **178** 文件 0 违规；`check:mobileui` 通过。
