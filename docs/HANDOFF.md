@@ -143,6 +143,12 @@
 - **本批代码待办已清零**（task-105/106 已闭合：发版复核 P2/P3 + 移动端「转为小记」）；剩余只有设备点收与下一版发布（P0）。
 - **S19（目录重建）：不计划**（显式 id 重建不是用户流程；矩阵登记即可）。
 - 其余真剩余见下方 P0/P1/P2（设备点收 / 发版 / 已知欠账）。
+- **接手清单（261113 会话收尾，给下一会话）**：当前 master `2c997420`（已双推）、v1.1.1 已发布、任务板 0 未完成；下列事项按「需裁决 / 设备 / 代码欠账 / 外部 WIP」分组，开工前先读本文件 §0–§2 与对应报告。
+  - **① 需用户裁决**：(a) **下一版发版**——v1.1.1 之后已有「移动端转为小记 + 发版复核 P2/P3」批（`839c7a93`/`a57cf3cf`/`06ec7f12`/`2c997420`），用户当前决定「先不发」，要发时选 **v1.1.2（patch）** 或 **v1.2.0（minor，把移动端转小记当新特性）**；流程 = RELEASE-NOTES 补段 → `npm version …--no-git-tag-version` → 提交 → 注解 tag → 双推 tag（只有 tag 触发 CI，打包+Release+latest.json；发前按 `docs/RELEASE.md` §七.4 核 Android 4 个 secrets + `GITEE_TOKEN`）。(b) 首篇编辑器 fallback 最终解法（拆内核 chunk 需 RFC vs 改「启动自动打开」语义）。(c) 观感点收 Q03 历史 Sheet / Q07 preview 档 / Q05 字号 / 桌面双击放大 / 平板「点空白落光标」；移动顶栏 44→52 需另立需求。
+  - **② 设备类欠账（需真机/构建）**：便携包真实 3GB 数据验证；更新中心设备验收（Android 下载→校验→系统安装器）；桌面 3 项实机 + 平板复验；导入/导出/键盘真机冒烟；依赖补丁 4 处升级复核；23 屏走查（本轮未跑，命令见 `24-release-review-ui.md`/`27-release-mobile-snap.md`）。
+  - **③ 代码级欠账（可排期）**：`push-baseline` 548–795ms 是下一个同步性能大头（saveBaseline 2 次整行过桥 + 5000 行批量 IN）；复制多张大图同步阻塞（剪贴板 API 限制）；大库 2 万文档/20 万附件与真实 Android 物理机验收从未做过；移动云清理无 UI 入口、目录恢复后 `deleted_notes` 残留；缺正文/缺小记三条恢复路径仅单测 mock；移动端文本格式入口未接。复核报告明确保留不修项：P3-4/5/6、F-10/11/14/16/17（理由见 `23/24-release-review-*.md`）。
+  - **④ 外部并行 WIP（先确认归属，勿盲提交）**：工作树可能有其它会话的 `src/mobile/settings/**`、`scripts/mobile-audit/mobile-snap.mjs` 等未提交改动（261113 为移动设置页顺序对齐），与 §3 本批无关；提交前 `git status` 核对并只 add 自己路径。
+  - **⑤ 参考**：发版复核 `23-release-review-core` / `24-release-review-ui` / `25-release-review-mobile` / `26-release-readiness`（NO-GO 唯一阻塞=版本未 bump，已解决）/ `27-release-mobile-snap`；真实桶与多端 `19`/`21`；日记语义 `AGENTS §3#25` + `docs/DIARY.md`。
 
 **P0（不做就卡住主线）**
 
