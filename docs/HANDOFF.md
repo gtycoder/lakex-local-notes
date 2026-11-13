@@ -7,6 +7,16 @@
 
 ## 0. 最新交接（最近 3 个批次；更早的见 git）
 
+### 261114 · 移动首屏瘦身第二批（入口 −12.2KB，预算收紧）
+
+- **盘点**：入口 chunk 133 模块 / 486KB 源码，其中「点击才出现」的浮层与非首 tab 页面被静态打进入口。
+- **改**：`ImageLightbox` / `AttachmentPreview` / `CreateNotebookSheet` / `DefaultNotebookPickerSheet` + `TagsHomeTab` / `NotebookGrid` 全部改 `lazy()` + `Suspense(null)`（与既有 `DiaryPage`/`MobileAiPage` 同一模式）。
+- **实测**：入口 JS **61,006 → 48,759B gz（−12.2KB）**；首屏资源图 **353,397 → 341,652B（−11.7KB）**；preload 7 → 10（预算 12）；视觉零变化（只拆包）。
+- **预算随目标收紧**：`check-bundle` mobile-entry-js 60KB → **50KB**（余 2,441B）；`check-arch` mobile 首屏 360,000 → **350,000B**（余 8,348B）。以后再涨就红，别再靠「冻结现状值」。
+- **顺带修两条护栏的误判**：`kernelStyleBootstrap` 判「懒入口会挂内核」改为**先去注释**再匹配（`imagePreview` 注释里提到 LakeEditor，纯图片预览被误判）；`crossEndClassCoverage` 的「移动端在用」**把动态 import 也算上**（改 lazy 后只认 `from` 会把共享浮层误判成僵尸清单）。
+- 门禁：tsc 0；全量 vitest 931 文件 / 5901 例 0 failed；ui-metrics、check:core 178/0、check:mobileui、check:bundle/arch（新预算）全过；diff-check 干净。
+- **设备验收**（新 APK 已装 lake_mobile 5554 与 lake_gate 5556）：lake_mobile 上小记首屏 / 知识库（书架卡）/ 标签（空态）三屏均正常渲染（lazy chunk 正常拉取、无白屏/无 ChunkLoadError）；**lake_gate 已按新构建重烤 10 态基线并连跑两轮 0 差异**（baseline 已提交）。
+
 ### 261114 · 移动端 AI 获取模型列表（`ee7aeea5`）
 
 - Kotlin `AiChatPlugin.listModels`：GET {baseUrl}/models（草稿 baseUrl/Key 优先，保存前也能拉）；解析 data[].id / models[]；
@@ -143,7 +153,7 @@
 - ⚠️ `electron/s3v3/perf.integration.test.ts`：**低负载串行本轮无抖动（通过）**；满载/并发构建时偶发（单跑 PASS），门禁判定以单跑/低负载为准（同 §2 既有口径）。
 - `node scripts/ui-metrics.mjs`：颜色 0 / 字号 0 / `!important` 9 = 允许清单 / `crossFileDupGroups` 45 / `shadowedDecls` **0**（task-34 已清零，门禁只降）/ 未定义令牌 0。
 - `check:core` **178** 文件 0 违规；`check:mobileui` 通过。
-- `check:bundle` + `check:arch` PASS：desktop 首屏 571,442 / 600,000（余量 28.6KB）、app-js 197,537 / 307,200；mobile 首屏 353,397 / 360,000（余量 6.6KB）、entry 61,006 / 61,440（余量 434B，**贴预算**）、CSS 139,532 / 141,312、preload 7；vendor CSS 分层审计 OK。
+- `check:bundle` + `check:arch` PASS：desktop 首屏 571,442 / 600,000（余量 28.6KB）、app-js 197,537 / 307,200；mobile 首屏 **341,652 / 350,000**（余量 8.3KB，261114 已收紧）、entry **48,759 / 51,200（50KB）**（余量 2.4KB）、CSS 139,210 / 141,312、preload 10 / 12；vendor CSS 分层审计 OK。移动入口从「434B 余量」恢复到可加 2.4KB 的健康区。
 - `git diff --check` = **0**。
 - **真实 S3 桶验收**：A 档三桌面隔离实例 **20/20 PASS**（`3fad8821`）；**B 档 13 条 57/57 PASS**（task-58，含 S72 修复后复跑），唯一测试前缀 **0 残留**（[19](audit-261112/19-s3-real-bucket-subset.md)）。**移动多端 A–K 已跑完（task-72/74 已关闭；D 场景修复后复跑 9/9、收尾 0 残留，见 [21 号报告](audit-261112/21-s3-multi-end-mobile.md)）**。
 - 设备/视觉（最近记录）：手机 **10 态** + 平板 **10 态** 基线重烤并连跑两轮 0 差异；23 屏走查 23/23；`edit-surface-invariants` quicknote 11 + document 11 ALL PASS；capture 入口装置 10/10。**桌面 `check:stylesnap` 42 态已重烤**（34 严格态两轮 0 差异，8 窄窗按 UNSTABLE 跳过；基线已更新，见 §3）。
