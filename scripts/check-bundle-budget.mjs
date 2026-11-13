@@ -65,7 +65,11 @@ for (const budget of budgets) {
 const MOBILE_ENTRY_PRELOAD_BUDGET = 12;
 // 261103 P10：设置抽屉改按需后入口 79,032 → 53,496B gz ⇒ 预算从 80KB 收紧到 60KB。
 // 261111：达标后维持 60KB 目标值（实测 59,638B）。
-const MOBILE_ENTRY_JS_GZIP_BUDGET = 60 * 1024;
+// 261114（入口瘦身第二批）：把「点击才出现」的四个浮层（ImageLightbox / AttachmentPreview /
+// CreateNotebookSheet / DefaultNotebookPickerSheet）+ 非首 tab 的标签页与知识库网格（TagsHomeTab /
+// NotebookGrid）改成 lazy；实测入口 61,006 → **48,759B gz**（首屏 353,397 → 341,652）⇒ 按目标收口到
+// 50KB，留 2,441B 余量（preload 10 / 预算 12；入口 CSS 139,210 / 138KB 上限不变）。
+const MOBILE_ENTRY_JS_GZIP_BUDGET = 50 * 1024;
 // 入口 CSS 不在本轮目标内（首屏 ≤360KB 由 check-arch 守）；维持 261103 的现状冻结值。
 const MOBILE_ENTRY_CSS_GZIP_BUDGET = 138 * 1024;
 

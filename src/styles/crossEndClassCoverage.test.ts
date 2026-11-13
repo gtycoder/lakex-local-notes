@@ -73,7 +73,9 @@ function mobileImportedUi(): string[] {
   const out = new Set<string>();
   const files = walk(path.join(SRC, "mobile"), [".ts", ".tsx"]).filter((f) => !f.endsWith(".test.ts"));
   for (const f of files) {
-    for (const m of readFileSync(f, "utf8").matchAll(/from\s+["']([^"']+)["']/g)) {
+    // 静态 import 与 **动态 import** 都算「移动端在用」：入口瘦身后共享浮层/页面改走
+    // `lazy(() => import("..."))`，只认 `from "..."` 会把它们误判成僵尸清单。
+    for (const m of readFileSync(f, "utf8").matchAll(/(?:from\s+|import\(\s*)["']([^"']+)["']/g)) {
       const spec = m[1];
       if (!spec.startsWith(".")) continue;
       const base = path.normalize(path.join(path.dirname(f), spec));

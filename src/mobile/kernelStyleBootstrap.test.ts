@@ -66,8 +66,11 @@ function importClosure(entry: string): string[] {
 
 const MOUNT_MARKERS = ["LakeEditor", "lakeRuntime", "createOpenEditor", "createLakeDocument"];
 const CSS_MARKER = "@dlient/lakex-doc-react/style.css";
+/** 去掉注释再判「是否挂内核」：注释里提到 LakeEditor/编辑器宿主是常见写法（例：imagePreview 的模块注释），
+ *  只按源码文本匹配会把纯图片预览这类**不挂内核**的懒入口误判成「会挂内核」。 */
+const stripComments = (src: string): string => src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
 const mentions = (file: string, markers: string[]): boolean => {
-  const src = read(file);
+  const src = stripComments(read(file));
   return markers.some((m) => src.includes(m));
 };
 

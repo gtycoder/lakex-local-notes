@@ -13,7 +13,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { ChevronDown, ChevronRight, CloudUpload, List, LayoutGrid, ArrowUpDown, BookMarked, Feather, ListFilter, MoreHorizontal, NotebookPen, Pencil, Plus, Search, Settings, Settings2, SmilePlus, Sparkles, Tag, Trash } from "lucide-react";
 import type { TreeNode } from "../../lib/types";
 import type { LocalNoteSummary } from "../data/noteRepository";
-import { NotebookGrid } from "./NotebookGrid";
+const NotebookGrid = lazy(() => import("./NotebookGrid").then((m) => ({ default: m.NotebookGrid })));
 import { QuickNotePreview } from "../../features/quickNotes/QuickNotePreview";
 import { openImagePreview } from "../../features/editor/imagePreview";
 import { resolvePreviewAssetUrl } from "../../features/preview/previewAsset";
@@ -58,7 +58,7 @@ import { summarizeBatchResult } from "../ui/batchNotesResult";
 import { readFavoriteIds, readFavoritesOpen, subscribeFavorites, writeFavoritesOpen } from "../data/favorites";
 import { QuickNoteComposerLazy } from "./quickNoteComposerLazy";
 import { MobileQuickNoteTagSheet } from "./MobileQuickNoteTagSheet";
-import { TagsHomeTab } from "../tags/TagsHomeTab";
+const TagsHomeTab = lazy(() => import("../tags/TagsHomeTab").then((m) => ({ default: m.TagsHomeTab })));
 // 日记页按需加载（261109）：它把 core/diary + 自己的列表/搜索接线带进分包，
 // 静态引入会直接抬高移动端 entry 预算（check:bundle 的 mobile-entry-js/preload 是硬门禁）。
 const DiaryPage = lazy(() => import("../diary/DiaryPage").then((m) => ({ default: m.DiaryPage })));
@@ -904,6 +904,7 @@ export function HomePage(props: HomePageProps) {
             <div className="home-section__head">
               <span className="home-section__title">笔记本</span>
             </div>
+            <Suspense fallback={null}>
             <NotebookGrid
               notebooks={notebooks}
               docCounts={docCounts}
@@ -911,6 +912,7 @@ export function HomePage(props: HomePageProps) {
               onOpenNotebook={onOpenNotebook}
               onLongPressNotebook={(nb) => setNbMenuFor(nb)}
             />
+            </Suspense>
           </section>
         </div>
         </section>
@@ -938,6 +940,7 @@ export function HomePage(props: HomePageProps) {
         </section>
         {/* 一级「标签」页（261106）：标签即入口 → 点进去看文档/小记 → 管理动作收在「管理」里。 */}
         <section ref={tagsPaneRef} className="mobile-tab-pane">
+          <Suspense fallback={null}>
           <TagsHomeTab
             tags={tagDirectory}
             notes={notes}
@@ -947,6 +950,7 @@ export function HomePage(props: HomePageProps) {
             onOpenQuickNote={onOpenQuickNote ?? (() => showToast("小记入口暂不可用", { type: "error" }))}
             onChanged={applyTagsTabChanged}
           />
+          </Suspense>
         </section>
       </div>
 

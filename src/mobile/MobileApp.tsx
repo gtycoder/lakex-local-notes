@@ -19,7 +19,8 @@ import type { HomeTab } from "./home/tabPager";
 import { consumeSharedContent, readSharedContentBytes, sharedContentKind, sharedContentToSeed, sharedContentUnsupportedHint, sharedMarkdownFiles, subscribeSharedContent, type QuickNoteSeed, type SharedContent, type SharedMarkdownFile } from "./native/sharedContent";
 import { readImportDefaultNotebook, writeImportDefaultNotebook } from "./settings/importSettings";
 import { readDefaultHomeTab } from "./settings/defaultSpace";
-import { DefaultNotebookPickerSheet, type DefaultNotebookOption } from "./settings/DefaultNotebookPickerSheet";
+import type { DefaultNotebookOption } from "./settings/DefaultNotebookPickerSheet";
+const DefaultNotebookPickerSheet = lazy(() => import("./settings/DefaultNotebookPickerSheet").then((m) => ({ default: m.DefaultNotebookPickerSheet })));
 import { SHARE_QUEUE_FULL_HINT, ShareQueue } from "./ink/shareQueue";
 import { sha256Sync } from "../core/sha256Sync.js";
 import { scheduleComposerPrewarm, scheduleKernelPrewarm } from "./native/kernelPrewarm";
@@ -39,7 +40,7 @@ import { usePadShortcuts } from "./pad/usePadShortcuts";
  * 懒加载保持入口 chunk 不含内核。
  */
 // 小记编辑器 = 按需加载壳（预取过则同步渲染；未预取先骨架）——见 home/quickNoteComposerLazy.tsx
-import { CreateNotebookSheet } from "./settings/CreateNotebookSheet";
+const CreateNotebookSheet = lazy(() => import("./settings/CreateNotebookSheet").then((m) => ({ default: m.CreateNotebookSheet })));
 import { useBackHandler } from "./hooks/useBackHandler";
 import { useDoubleBackExit } from "./hooks/useDoubleBackExit";
 import { useRouteTransition } from "./hooks/useRouteTransition";
@@ -47,8 +48,8 @@ import { useAutoSync } from "./hooks/useAutoSync";
 import { useUpdateAutoCheck } from "./hooks/useUpdateAutoCheck";
 import { readSyncProgress, subscribeSyncProgress } from "./sync/syncProgressStore";
 import { Toasts } from "./ui/Toasts";
-import { AttachmentPreview } from "../features/attachment/AttachmentPreview";
-import { ImageLightbox } from "../features/editor/ImageLightbox";
+const AttachmentPreview = lazy(() => import("../features/attachment/AttachmentPreview").then((m) => ({ default: m.AttachmentPreview })));
+const ImageLightbox = lazy(() => import("../features/editor/ImageLightbox").then((m) => ({ default: m.ImageLightbox })));
 import { MobileBrandLaunchMark } from "./ui/BrandLaunchMark";
 import { subscribeQuickNoteShortcut } from "./native/quickNoteShortcut";
 import { ConfirmHost, confirmMobile } from "./ui/ConfirmDialog";
@@ -928,7 +929,7 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
           </Suspense>
         </div>
       )}
-      <CreateNotebookSheet
+      <Suspense fallback={null}><CreateNotebookSheet
         open={createNbOpen}
         onClose={() => setCreateNbOpen(false)}
         onCreate={async (input) => {
@@ -939,7 +940,7 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
             showToast("已新建知识库");
           } catch { showToast("新建失败", { type: "error" }); warnFeedback(); }
         }}
-      />
+      /></Suspense>
       <DeferredPanel open={searchOpen} fallback={<PanelLoading kind="search" title="搜索" onClose={() => setSearchOpen(false)} />}>
         <MobileErrorBoundary scope="search" title="搜索面板加载失败">
           <SearchSheet
@@ -954,7 +955,7 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
         </MobileErrorBoundary>
       </DeferredPanel>
       {/* 首次分享 Markdown 且未设置默认笔记本：弹一次选择器，选完记住并继续导入。 */}
-      <DefaultNotebookPickerSheet
+      <Suspense fallback={null}><DefaultNotebookPickerSheet
         open={mdImportFiles !== null}
         notebooks={notebookOptions}
         currentId={readImportDefaultNotebook()}
@@ -966,13 +967,15 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
           writeImportDefaultNotebook(notebookId);
           if (files) void runMarkdownShareImport(files, notebookId);
         }}
-      />
+      /></Suspense>
 
       <Toasts />
       <ConfirmHost />
       {/* 共享图片预览浮层（桌面/移动同一套控制器）：小记卡片、文档内图片点开都是它。 */}
-      <ImageLightbox />
-      <AttachmentPreview />
+      <Suspense fallback={null}>
+        <ImageLightbox />
+        <AttachmentPreview />
+      </Suspense>
     </div>
   );
 
