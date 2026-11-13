@@ -53,6 +53,9 @@ export interface ApplyAssetsOptions {
 
 export interface ApplyAssetsResult {
   uploaded: { files: number; bytes: number };
+  /** 261113（P1）：本条目有附件没传上去 ⇒ 本轮不写新声明、索引条目回退远端旧版本（下轮重试）。
+   *  与 applyPlan.failedUploads 同形，供 buildPublishIndex 的「绝不引用未落盘字节」规则消费。 */
+  failedUploads: Array<{ space: Space; id: string }>;
   downloaded: { files: number; bytes: number };
   /** 声明 hash 落到索引条目的结果（Commit 消费）；本机无资产且云端有声明时不出现（保留远端 hash）。 */
   assetsHashes: Array<{ space: Space; id: string; assetsHash: string | undefined }>;
@@ -101,7 +104,7 @@ export async function applyAssets(
 ): Promise<ApplyAssetsResult> {
   const result: ApplyAssetsResult = {
     uploaded: { files: 0, bytes: 0 }, downloaded: { files: 0, bytes: 0 },
-    assetsHashes: [], warnings: [], errors: [], failedDownloads: [],
+    assetsHashes: [], warnings: [], errors: [], failedDownloads: [], failedUploads: [],
   };
   const rawConcurrency = opts.concurrency ?? DEFAULT_CONCURRENCY;
   const concurrency = Number.isSafeInteger(rawConcurrency) && rawConcurrency >= 1 ? rawConcurrency : DEFAULT_CONCURRENCY;
@@ -111,6 +114,10 @@ export async function applyAssets(
     warn({ code: "asset_invalid_name", space, ...(id ? { id } : {}), filename, detail });
   };
   const declOf = (space: Space, id: string) => ctx.declarations.find((d) => d.space === space && d.id === id);
+  /** 每条目「计划上传 / 成功」计数（space:id）。成功数 < 计划数 ⇒ 该条目不得写新声明（261113 P1）。 */
+  const plannedByItem = new Map<string, number>();
+  const okByItem = new Map<string, number>();
+  const bumpOk = (space: Space, id: string) => { const k = space + ":" + id; okByItem.set(k, (okByItem.get(k) ?? 0) + 1); };
 
   // ---- 上传侧：plan.publishes（含 metadata-only 轮次，正文没变也要走声明） ----
   const putTasks: Array<{ space: Space; id: string; asset: AssetDeclEntry }> = [];
@@ -185,7 +192,10 @@ export async function applyAssets(
         }
         // local 已剔除非法文件名 ⇒ 新声明只引用真实可上传的对象（P1-7 契约：跳过但不引用）。
         const built = buildAssetDeclaration(local);
-        for (const asset of missingOnRemote(local, remote?.assets)) putTasks.push({ space, id, asset });
+        for (const asset of missingOnRemote(local, remote?.assets)) {
+          putTasks.push({ space, id, asset });
+          plannedByItem.set(space + ":" + id, (plannedByItem.get(space + ":" + id) ?? 0) + 1);
+        }
         declPuts.push({ space, id, key: declarationKey(space, id, built.declHash), bytes: new TextEncoder().encode(built.serialized), declHash: built.declHash });
         result.assetsHashes.push({ space, id, assetsHash: built.declHash });
       } catch (error) { result.errors.push({ op: "asset-plan-put", detail: space + ":" + id, error }); }
@@ -232,6 +242,7 @@ export async function applyAssets(
         if (await ports.putRemoteFromFile(key, nativePath)) {
           result.uploaded.files += 1;
           result.uploaded.bytes += t.asset.size;
+          bumpOk(t.space, t.id);
           return t.asset.size;
         }
       } catch { /* 回退字节路径 */ }
@@ -246,6 +257,7 @@ export async function applyAssets(
     await ports.putRemote(key, bytes);
     result.uploaded.files += 1;
     result.uploaded.bytes += bytes.length;
+    bumpOk(t.space, t.id);
     return bytes.length;
   }, { phase: "uploads", onProgress: (p) => opts.onProgress?.({ phase: "asset-put", done: p.done, total: p.total, bytes: p.bytesDone }) });
   for (const e of putRun.errors) {
@@ -253,7 +265,26 @@ export async function applyAssets(
     result.errors.push({ op: "asset-put", detail: item ? item.space + ":" + item.id + "/" + item.asset.filename : undefined, error: e.error });
   }
 
+  // 261113（P1 静态审查 #3）：附件没全部落盘 ⇒ **不写新声明**（声明只能引用真实存在的对象），
+  // 并让索引条目回退远端旧版本（经 failedUploads 交给 buildPublishIndex）。旧实现无条件下发声明 ⇒
+  // 云端「声明在、对象缺」：下一轮按文件名判「已有」不再重传，对端重试 3 次后丢账 ⇒ 附件永久缺失且 UI 静默。
+  const failedDeclItems = new Set<string>();
+  for (const [key, planned] of plannedByItem) {
+    if ((okByItem.get(key) ?? 0) < planned) failedDeclItems.add(key);
+  }
   for (const d of declPuts) {
+    const itemKey = d.space + ":" + d.id;
+    if (failedDeclItems.has(itemKey)) {
+      result.failedUploads.push({ space: d.space, id: d.id });
+      result.assetsHashes = result.assetsHashes.filter((hash) => !(hash.space === d.space && hash.id === d.id));
+      // 已有具体原因（hash_mismatch / 读不出 / 单文件缺失）就不再补一条泛化警告，避免同一件事两条。
+      const alreadyWarned = result.warnings.some((w) => w.space === d.space && w.id === d.id
+        && (w.code === "hash_mismatch" || w.code === "asset_missing" || w.code === "asset_invalid_name"));
+      if (!alreadyWarned) {
+        warn({ code: "asset_missing", space: d.space, id: d.id, detail: "附件上传未全部成功，未写入新声明（保持远端旧版本，下次同步重试）" });
+      }
+      continue;
+    }
     try {
       await ports.putRemote(d.key, d.bytes);
       // 内容寻址自校验：落盘前确认 key 与自己序列化的 hash 一致（防声明 key/内容错配）。

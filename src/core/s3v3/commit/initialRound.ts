@@ -50,7 +50,7 @@ export async function initialRound(
     ...(input.progress ? { onProgress: (p) => input.progress!({ phase: p.phase, done: p.done, total: p.total, bytesDone: p.bytes }) } : {}),
   });
   // 首传没有「远端旧版本」可回退：失败条目直接不进索引（空世界 ⇒ 被移除）。
-  const publish = buildPublishIndex(plan, { lake: EMPTY_WORLD.lake, quickNotes: EMPTY_WORLD.quickNotes }, { failedUploads: apply.failedUploads, assetsHashes: assets.assetsHashes });
+  const publish = buildPublishIndex(plan, { lake: EMPTY_WORLD.lake, quickNotes: EMPTY_WORLD.quickNotes }, { failedUploads: [...apply.failedUploads, ...assets.failedUploads], assetsHashes: assets.assetsHashes });
   const commit = await commitPlan({ plan, next: publish, base: null, deviceId: input.deviceId }, ports, commitOptions);
   return { plan, apply, assets, publish, commit };
 }

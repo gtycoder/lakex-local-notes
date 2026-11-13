@@ -17,7 +17,7 @@ const state = (over: Partial<DeviceState> = {}): DeviceState => {
 const round = (over: Partial<RoundResult> = {}): RoundResult => ({
   plan: { version: 4, reads: [], writes: [], transfers: [], deletes: [], publishes: { lake: [], quickNotes: [] }, publish: null, intentChanges: [], warnings: [], total: { ops: 0, bytes: 0 } },
   apply: { entries: [], declarations: [], uploaded: { documents: 0, quickNotes: 0, bytes: 0 }, downloaded: { documents: 0, quickNotes: 0, bytes: 0 }, deletedObjects: 0, warnings: [], failedUploads: [], errors: [] },
-  assets: { uploaded: { files: 0, bytes: 0 }, downloaded: { files: 0, bytes: 0 }, assetsHashes: [], warnings: [], errors: [], failedDownloads: [] },
+  assets: { uploaded: { files: 0, bytes: 0 }, downloaded: { files: 0, bytes: 0 }, assetsHashes: [], warnings: [], errors: [], failedDownloads: [], failedUploads: [] },
   publish: null,
   commit: { status: "skipped", reason: "no-publish-plan" },
   deleted: 0, remainingPending: [], intents: { intents: [], restorePending: [] },

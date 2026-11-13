@@ -76,7 +76,7 @@ export async function runSyncRound(input: RoundInput, ports: RoundPorts): Promis
     plan,
     // 失败回退的「旧版本」必须取**远端**世界（取本地 = 自己回退到自己，索引必然变化 ⇒ 引用未落盘正文）。
     { lake: input.remote.lake, quickNotes: input.remote.quickNotes },
-    { failedUploads: apply.failedUploads, assetsHashes: assets.assetsHashes },
+    { failedUploads: [...apply.failedUploads, ...assets.failedUploads], assetsHashes: assets.assetsHashes },
   );
   const commit = await commitPlan({ plan, next: publish, base: basePointer, deviceId: input.deviceId }, ports, input.commitOptions ?? {});
 

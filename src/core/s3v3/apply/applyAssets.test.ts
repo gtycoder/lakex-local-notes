@@ -45,6 +45,30 @@ const plan = (over: Partial<SyncPlan> = {}): SyncPlan => ({
 });
 
 describe("E2-1b 资产段：上传差集与声明", () => {
+  it("附件 PUT 失败 ⇒ 不写新声明 + 条目回退（failedUploads），绝不让声明引用缺失对象", async () => {
+    class FailingPut extends FakeAssets {
+      failKeys = new Set<string>();
+      override async putRemote(key: string, bytes: Uint8Array) {
+        if (this.failKeys.has(key)) throw new Error("模拟 PUT 失败");
+        return super.putRemote(key, bytes);
+      }
+    }
+    const ports = new FailingPut();
+    ports.setLocal("lake", "a", [{ filename: "a.png", body: "AAA" }, { filename: "b.png", body: "BBB" }]);
+    ports.failKeys.add(assetKey("a", "a.png"));
+    const r = await applyAssets(
+      plan({ publishes: { lake: ["a"], quickNotes: [] } }),
+      { declarations: [] },
+      ports,
+    );
+    // 整条回退：旧声明（这里本来没有）保持不变、不写新声明、索引条目交给 buildPublishIndex 回退
+    expect(r.failedUploads).toEqual([{ space: "lake", id: "a" }]);
+    expect(r.assetsHashes).toHaveLength(0);
+    expect(ports.puts.some((k) => k.startsWith("meta/assets/"))).toBe(false);
+    // 仍要有可诊断的结构化 warning（不是静默失败）
+    expect(r.warnings.some((w) => w.code === "asset_missing")).toBe(true);
+  });
+
   it("只 PUT 云端声明里没有的资产；声明永远全量（filename 升序）", async () => {
     const ports = new FakeAssets();
     ports.setLocal("lake", "a", [{ filename: "a.png", body: "AAA" }, { filename: "z.png", body: "ZZZ" }]);
