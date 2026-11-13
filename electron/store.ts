@@ -65,7 +65,7 @@ import { RemoteImportRepository } from "./remoteImportRepository.js";
 import type { ResourceUploadOutput, HistorySettings, HistoryCleanupResult, S3Settings, SyncSettings, S3GcSettings, FileScanSettings, FileReconcileState, AutoBackupSettings, AutoBackupState } from "./storeTypes.js";
 import type { UpdateSettings } from "../src/core/update/updateTypes.js";
 import { fileKindOf, renameFileCardDisplay, scanAssetCards } from "../src/core/fileCard.js";
-import { TRASH_NOTEBOOK_ID } from "../src/core/syncDecisions.js";
+import { FALLBACK_NOTEBOOK_ID, FALLBACK_NOTEBOOK_TITLE, TRASH_NOTEBOOK_ID } from "../src/core/syncDecisions.js";
 import { saveExternalChangedEvent, type SyncConflictEvent } from "../src/core/syncConflictLog.js";
 import { SyncConflictsRepository, type SyncConflictRow } from "./syncConflictsRepository.js";
 import { RECOVERED_NOTEBOOK_ID, RECOVERED_NOTEBOOK_TITLE, type RecoveredNoteInsert } from "./recoveredNotes.js";
@@ -917,8 +917,9 @@ export class Store {
   }
 
   /** 新建笔记本；`space`（261109）= 日记本标记（"diary" | null，其余归一成 null）。 */
-  createNotebook(title: string, space?: DiaryFolderSpace | null): TreeNode {
-    return this.noteMetadata.createNotebook(title, space);
+  /** @param id 显式 id（仅「兜底未分类」用固定 id；其它调用方不要传）。 */
+  createNotebook(title: string, space?: DiaryFolderSpace | null, id?: string): TreeNode {
+    return this.noteMetadata.createNotebook(title, space, id);
   }
 
   /**
@@ -1475,11 +1476,28 @@ export class Store {
     // 根层笔记本 parent_id 为 NULL：parent_id != ? 对 NULL 恒不成立（SQL 三值逻辑），必须显式允许 NULL
     // 261112 task-104（F-05）：日记本是固定特殊笔记本（对知识库不可见）——兜底落点绝不能选到它，
     // 否则 create_note / 无父导入会把普通文档直接建进日记空间（绕过 move 守卫）。
-    const any = this.db.prepare(
-      "SELECT id FROM tree_nodes WHERE node_type='notebook' AND deleted_at IS NULL AND id != ? AND (parent_id IS NULL OR parent_id != ?) AND (space IS NULL OR space != ?) ORDER BY sort_order LIMIT 1"
-    ).get(TRASH_NOTEBOOK_ID, TRASH_NOTEBOOK_ID, DIARY_FOLDER_SPACE) as { id: string } | undefined;
-    if (any) return any.id;
-    const created = this.createNotebook("未分类");
+    // 261113（#8）：兜底「未分类」用**固定 id**（跨端同一本）；旧设备上「唯一一本且就叫未分类」的随机 id
+    // 在下面一次性收编（只认这一种空壳，绝不碰用户自建的同名笔记本）。
+    const fixed = this.db.prepare("SELECT id FROM tree_nodes WHERE id=? AND deleted_at IS NULL").get(FALLBACK_NOTEBOOK_ID) as { id: string } | undefined;
+    if (fixed) return fixed.id;
+    const candidates = this.db.prepare(
+      "SELECT id,title FROM tree_nodes WHERE node_type='notebook' AND deleted_at IS NULL AND id != ? AND (parent_id IS NULL OR parent_id != ?) AND (space IS NULL OR space != ?) ORDER BY sort_order"
+    ).all(TRASH_NOTEBOOK_ID, TRASH_NOTEBOOK_ID, DIARY_FOLDER_SPACE) as Array<{ id: string; title: string }>;
+    if (candidates.length === 1 && candidates[0].title === FALLBACK_NOTEBOOK_TITLE) {
+      // 一次性收编：把旧随机 id 的「未分类」换成固定 id（子树/文档只是改父指针，正文不动）。
+      const oldId = candidates[0].id;
+      const created = this.createNotebook(FALLBACK_NOTEBOOK_TITLE, null, FALLBACK_NOTEBOOK_ID);
+      const now = new Date().toISOString();
+      this.db.transaction(() => {
+        this.db.prepare("UPDATE tree_nodes SET parent_id=?, is_dirty=1, updated_at=? WHERE parent_id=?").run(FALLBACK_NOTEBOOK_ID, now, oldId);
+        this.db.prepare("UPDATE notes SET parent_id=?, is_dirty=1, updated_at=? WHERE parent_id=?").run(FALLBACK_NOTEBOOK_ID, now, oldId);
+        this.db.prepare("DELETE FROM tree_nodes WHERE id=?").run(oldId);
+      })();
+      this.logScopes.store.info("[store] 兜底「未分类」收编为固定 id: " + oldId + " -> " + FALLBACK_NOTEBOOK_ID);
+      return created.id;
+    }
+    if (candidates.length > 0) return candidates[0].id;
+    const created = this.createNotebook(FALLBACK_NOTEBOOK_TITLE, null, FALLBACK_NOTEBOOK_ID);
     try { this.setNodeIcon(created.id, "X"); } catch { /* 图标设置失败不影响兜底 */ }
     return created.id;
   }

@@ -124,16 +124,17 @@ export class NoteMetadataRepository {
   }
 
   /** 新建笔记本。`space`（261109）= 日记本标记；只有 "diary" 会被落库，其余归一成 NULL（非日记）。 */
-  createNotebook(title: string, space?: DiaryFolderSpace | null): TreeNode {
+  /** @param id 显式 id（只有「兜底未分类」用固定 id；其余调用方一律走 uuid，别传）。 */
+  createNotebook(title: string, space?: DiaryFolderSpace | null, id?: string): TreeNode {
     let trimmed: string;
     try { trimmed = assertTreeNodeTitle(title); }
     catch { throw new AppError("InvalidInput", "名称不能为空"); }
-    const id = this.deps.uuid();
+    const nodeId = id ?? this.deps.uuid();
     const now = this.deps.nowIso();
     const sortOrder = this.deps.nextSortOrder(null);
     this.db.prepare("INSERT INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,is_dirty,is_conflict,space) VALUES(?,?,NULL,'notebook',?,NULL,?,?,?,1,0,?)")
-      .run(id, this.workspaceId, trimmed, sortOrder, now, now, normalizeFolderSpace(space));
-    return this.deps.readTreeNode(id);
+      .run(nodeId, this.workspaceId, trimmed, sortOrder, now, now, normalizeFolderSpace(space));
+    return this.deps.readTreeNode(nodeId);
   }
 
   createGroup(parentId: string, title: string): TreeNode {

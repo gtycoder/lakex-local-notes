@@ -15,7 +15,7 @@ import {
 import { loadV3State } from "../data/v3StateRepository.js";
 import { persistedStateProjection } from "./v3StateSnapshot.js";
 import { MAX_QUICK_NOTE_TAGS } from "../../core/quickNoteTags.js";
-import { TRASH_NOTEBOOK_ID } from "../../core/syncDecisions.js";
+import { FALLBACK_NOTEBOOK_ID, FALLBACK_NOTEBOOK_TITLE, TRASH_NOTEBOOK_ID } from "../../core/syncDecisions.js";
 import {
   addPendingTagDeletes as appendPendingTagDeletes,
   applyQuickTagDirectory,
@@ -326,11 +326,13 @@ export function createMobilePlatformPort(db: MobileDb, ctxIn?: Partial<MobilePla
       return Boolean(await db.prepare("SELECT 1 FROM folders WHERE id=?").get(nodeId));
     },
     async defaultNotebookId(): Promise<string> {
+      // 261113（#8）：兜底「未分类」= 固定 id（与桌面同源），跨端必须是同一本。
+      const fixed = await db.prepare("SELECT id FROM folders WHERE id=? AND trashed_at IS NULL").get(FALLBACK_NOTEBOOK_ID) as { id?: string } | undefined;
+      if (fixed?.id) return fixed.id;
       const row = await db.prepare("SELECT id FROM folders WHERE node_type='notebook' AND trashed_at IS NULL ORDER BY sort_order LIMIT 1").get() as { id?: string } | undefined;
       if (row?.id) return row.id;
-      const id = "notebook-" + globalThis.crypto.randomUUID();
-      await db.prepare("INSERT INTO folders (id,title,parent_id,sort_order,node_type,icon,updated_at,is_dirty) VALUES (?,?,NULL,0,'notebook',NULL,?,1)").run(id, "未分类", nowIso());
-      return id;
+      await db.prepare("INSERT INTO folders (id,title,parent_id,sort_order,node_type,icon,updated_at,is_dirty) VALUES (?,?,NULL,0,'notebook',NULL,?,1)").run(FALLBACK_NOTEBOOK_ID, FALLBACK_NOTEBOOK_TITLE, nowIso());
+      return FALLBACK_NOTEBOOK_ID;
     },
 
     // ===== 批量/生命周期钩子（C-3b-2）=====

@@ -13,6 +13,15 @@ import { normalizeNoteKind, type NoteKind } from "./noteKind.js";
  * ⚠️ 这个字面量是持久化契约（历史 SQLite 行与云端索引都按它判定）⇒ 改它等于数据迁移。 */
 export const TRASH_NOTEBOOK_ID = "notebook-trash";
 
+/** 兜底「未分类」笔记本 ID —— **单一来源**（261113）：它跨端必须是**同一本**。
+ *  旧实现每端各自 uuid() 建一本「未分类」并当普通笔记本同步 ⇒ 云端累积同名分组、孤儿文档父关系
+ *  在两端之间来回翻（#8）。新建一律用这个 id；老设备上「唯一一本且就叫未分类」的旧随机 id 会在
+ *  electron/store.resolveParentNotebook 里一次性收编（只认这种空壳，绝不碰用户自建同名本）。 */
+export const FALLBACK_NOTEBOOK_ID = "notebook-uncategorized";
+
+/** 兜底笔记本标题（收编判据的一部分：标题必须是它，且本地只有这一本笔记本）。 */
+export const FALLBACK_NOTEBOOK_TITLE = "未分类";
+
 /** 决策函数输入的本地状态快照（普通对象；桌面从 Store 行映射，移动端从 native SQLite 行映射）。 */
 export interface LocalNoteState {
   id: string; title: string; parentId: string | null; sortOrder: number;
