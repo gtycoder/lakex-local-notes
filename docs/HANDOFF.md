@@ -7,6 +7,15 @@
 
 ## 0. 最新交接（最近 3 个批次；更早的见 git）
 
+### 261113 · 设备验收批（lake_mobile 真机环节 + 门禁态）
+
+- **A1 门禁态**：`lake_gate`（5556）上 `check-mobile-snap` **10 态 0 差异**（基线 14:00 已按当前安装包重烤，无需再烤）；**下次装新移动包后仍需重烤**（基线绑构建）。
+- **A2 D1-C（移动 baseline 落文件）设备实测**（lake_mobile 5554，真实桶临时前缀，已删净）：`files/sync-v3/baseline.json.gz.b64` 存在（856B，小库）⇒ 基线确实搬出 SQLite 整行。
+  - **重复点**（内容未变，`requests=1 get=1 put=0`）：总 247–486ms，`push-state 113–268` / `push-pointer 102–122` / **`push-baseline 8–32ms`**（D1-A「重复点不重写基线」生效；旧实现每点都整份归位）。
+  - **变更路径**（`requests=11`）：`push-state 142–203` / `push-pointer 648–1111` / `push-body 5–33` / `push-index 107–301` / `push-upload 19–36` / `push-publish 443–783` / `push-baseline 368–542`；总 1.9–2.8s。⚠️ 本机到七牛网络的 pointer/publish 往返占大头；**push-baseline 变更路径仍 370–540ms（当前库极小）**，与历史 5000 文档 548–795ms 不可直接比较，待大数据集复测。
+- **A2 D3（移动云清理预览/dryRun）**：`gcDeepCleanup({dryRun:true})` 与真删返回同形 `{dryRun,candidateCount,deletedCount,bytes,keys,kept,skippedRecent,ageUnknown}`，本次无可清理对象（`candidateCount=0,kept=9,skippedRecent=6`）；候选/已删两字段分离、dryRun 不删已验证。无法造 7 天前对象 ⇒ 「有候选时预览不删、确认才删」的设备级验证留待有真实孤儿时补。
+- **收尾**：lake_mobile `pm clear` 重置、临时桶前缀 14 对象删净（residual 0）、`/tmp` 凭据与探针脚本已删。
+
 ### 261114 · 移动端 AI 助手接入「服务供应商」配置（`bbe84434`）
 
 - **用户点单**：移动端设置也像桌面一样先选服务供应商，配置项与桌面 AiSection 对齐。
