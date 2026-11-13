@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import type { DbLike } from "./dbLike.js";
 import { WELCOME_NOTE_BODY, WELCOME_TITLE } from "../src/core/lakeDocForm.js";
 import {
@@ -238,9 +239,52 @@ export class SchemaInit {
     }
   }
 
+  /**
+   * bug 残留自愈（261114）：旧 seed 在「清空回收站后 notes 表为空」时把固定 id 的 welcome-note 复活，
+   * 而它的父笔记本已被 purge ⇒ 留下「活跃 + 父不存在」的幽灵文档：启动快照/冷启动会打开它，
+   * 同步还会把「已彻底删除的 id」当新文档上传。只清 bug 产物、不动用户数据，判据三条同时成立：
+   *   ① 行当前活跃（trashed_at 为空、未 purged）；② 该 id 有墓碑（= 曾被彻底删除，永久语义）；
+   *   ③ 或 id 是固定欢迎笔记（只有 seed 会造它），或父节点已不存在/已进回收站（不可导航）。
+   * 真·软删副本在回收站里（trashed_at 非空）不动；被远端恢复的活跃文档父节点在位，也不动。
+   */
+  private removeResurrectedAfterPurge(): number {
+    const rows = this.ctx.db.prepare(
+      "SELECT n.id FROM notes n WHERE n.trashed_at IS NULL AND n.is_purged=0 " +
+      "AND EXISTS (SELECT 1 FROM deleted_notes d WHERE d.id=n.id) " +
+      "AND (n.id=? OR NOT EXISTS (SELECT 1 FROM tree_nodes p WHERE p.id=n.parent_id AND p.deleted_at IS NULL AND p.trashed_at IS NULL))",
+    ).all("welcome-note") as Array<{ id: string }>;
+    if (rows.length === 0) return 0;
+    const tx = this.ctx.db.transaction(() => {
+      for (const row of rows) {
+        this.ctx.db.prepare("DELETE FROM notes WHERE id=?").run(row.id);
+        this.ctx.db.prepare("DELETE FROM tree_nodes WHERE note_file_id=?").run(row.id);
+        this.ctx.db.prepare("DELETE FROM tree_nodes WHERE id=?").run(row.id);
+        this.ctx.db.prepare("DELETE FROM note_history WHERE note_id=?").run(row.id);
+        this.ctx.db.prepare("DELETE FROM orphan_assets WHERE note_id=?").run(row.id);
+      }
+    });
+    tx();
+    for (const row of rows) {
+      try { fs.rmSync(this.ctx.notePathFor(row.id), { force: true }); } catch { /* 文件清理失败不阻断启动 */ }
+    }
+    // 启动日志：正式环境无终端，留证据（这是 bug 残留清理，不是正常数据变动）。
+    console.warn(`[store] removed ${rows.length} resurrected-after-purge ghost note(s)`);
+    return rows.length;
+  }
+
   seed() {
+    this.removeResurrectedAfterPurge();
     const count = this.ctx.db.prepare("SELECT COUNT(*) AS c FROM notes").get() as { c: number };
-    if (count.c === 0) {
+    // 261114 修复：欢迎笔记只给**全新库**种一次。旧条件只看 notes 是否为空 ⇒ 用户清空回收站
+    // （purge 物理删行）后，每次启动都会把 welcome-note 复活到一个已不存在的默认笔记本下
+    // （孤儿文档：树里看不到，却会被启动快照/冷启动打开，再次造成「关不掉退不出」）。
+    // 判据：① 没有任何 notes 行；② 没有任何墓碑（deleted_notes 非空 = 用户删过东西，不是全新库，
+    //        复活已 purge 的文档违反「彻底删除」语义）；③ 默认笔记本仍在位（未删/未进回收站）。
+    const hasTombstone = this.ctx.db.prepare("SELECT 1 AS x FROM deleted_notes LIMIT 1").get() as { x: number } | undefined;
+    const defaultNotebook = this.ctx.db.prepare(
+      "SELECT 1 AS x FROM tree_nodes WHERE id=? AND deleted_at IS NULL AND trashed_at IS NULL"
+    ).get(this.ctx.defaultNotebookId) as { x: number } | undefined;
+    if (count.c === 0 && !hasTombstone && defaultNotebook) {
       // 欢迎笔记用固定 id：全设备一致，S3 同步时不会产生重复
       const id = "welcome-note";
       const parent = this.ctx.defaultNotebookId;

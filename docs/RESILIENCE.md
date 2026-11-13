@@ -63,6 +63,16 @@
 | 批量导出 | 只读不写源；目录必须来自本次选择框（pickedExportDir）；画板缺字节 ⇒ skipped（不产坏文件）；逐条失败不影响其它 | electron/batchExport.test.ts、registerBatchExport.test.ts |
 | 画板快照（未打开） | 离屏可测量容器（800×600、visibility 隐藏非 display:none）、8s 超时、无论成功/失败都 unmount + 移除；解析失败 ⇒ skipped | src/features/board/boardSnapshot.render.test.tsx |
 | 键盘稳定 Sheet | focus 记录几何 → 键盘弹出钉住 top/height → 键盘覆盖列表 → 收起还原；无键盘/无焦点/未打开零副作用 | src/mobile/hooks/useKeyboardStableSheet、keyboardSheetAudit.test.ts |
+## 3.5 261114 回收站幽灵文档（新失败面）
+
+| 失败面 | 判据 / 降级 | 取证 |
+| --- | --- | --- |
+| 回收站子文档被当成活跃文档 | 删笔记本时只有根节点 `parent_id` 进回收站、子文档只标 `trashed_at` ⇒ **唯一判据 = `trashed_at`**：`store.bootstrap()` 只收 `trashed_at IS NULL AND is_purged=0` 且父节点在位的行；`readNote`/`getNoteDigest`/`isGoneNote({trashedAt})` 同口径；渲染层 gone ⇒ 只读 + 横幅，保存被拦只提示不静默 | 日志 save_note 拒写「请先显式恢复」；启动快照/标签会话泄漏 |
+| 「已 purge 又被 seed 复活」的幽灵行 | `schemaInit.seed()` 只在「notes 空 + 无墓碑 + 默认笔记本在位」三者同时成立时种欢迎笔记；启动自愈 `removeResurrectedAfterPurge()` 只清「活跃 + 有墓碑 + （id=welcome-note 或父节点已不在位）」的行（墓碑保留 = 彻底删除语义，幂等） | 启动日志 `[store] removed N resurrected-after-purge ghost note(s)` |
+| gone 标签卡住退出 | 标记 deleted 时同步清 `dirty`；`beforeunload` 只拦「脏且未删除」；本机 purge 后按 digest 收掉已打开标签 | 日志 `[ui] 窗口无响应` + before-quit 无 will-quit |
+
+护栏：`electron/startupTrash.test.ts`、`src/core/syncDecisions.test.ts`；契约口径见 AGENTS §3#16 与 §7#13。
+
 ## 4. 已知缺口（261105 收口后的真待办）
 
 **已修（261105 Batch 2）**

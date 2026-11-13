@@ -77,7 +77,8 @@ export function isNoteRefGone(noteId: string | null): boolean {
   if (!noteId) return false;
   const note = findNoteRef(noteId);
   if (!note) return true;
-  return isGoneNote({ parentId: note.parentId, isPurged: note.isPurged });
+  // 261114：删笔记本后子文档 parentId 不变、只靠 trashedAt 标记，判据必须一起传。
+  return isGoneNote({ parentId: note.parentId, isPurged: note.isPurged, trashedAt: note.trashedAt });
 }
 
 /** 目标文档类型的中文名（只做展示）。 */

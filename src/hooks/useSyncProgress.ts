@@ -176,7 +176,9 @@ export function useSyncProgress({
           rlog.perf("sync-tab.refresh", performance.now() - tabRefreshStart, { open: openTabsRef.current.length, reloaded, deleted: deletedIds.length, skipped });
           if (deletedIds.length > 0) {
             const deletedSet = new Set(deletedIds);
-            setOpenTabs((tabs) => tabs.map((t) => deletedSet.has(t.noteId) ? { ...t, deleted: true } : t));
+            // 261114：标记「已删除」时**必须同时清 dirty**——这类文档保存会被主进程拦下（永远存不进去），
+            // 留着 dirty 会让 beforeunload 的「有脏标签就拦退出」永久 preventDefault（⌘Q/关窗退不出）。
+            setOpenTabs((tabs) => tabs.map((t) => deletedSet.has(t.noteId) ? { ...t, deleted: true, dirty: false } : t));
           }
           // 合并提示：冲突覆盖 → 点击查看历史；仅远端删除 → 点击查看回收站。
           if (supersededList.length > 0 || deletedIds.length > 0) {

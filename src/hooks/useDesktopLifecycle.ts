@@ -134,10 +134,12 @@ export function useDesktopLifecycle({
     // 审计 #23：窗口/应用关闭时若有未保存草稿，阻止关闭并提示（Electron 显示原生对话框）；
     // 同时立即触发一次保存，尽量在用户留下期间落盘
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
-      const hasDirty = openTabsRef.current.some((tab) => tab.dirty) || quickNotesDirty;
+      // 261114：**已删除/已 purge 的标签不算脏**——它的保存被守卫拦死（永远写不进去），
+      // 旧判据会永久 preventDefault ⇒ ⌘Q/关窗/关机都退不出（用户 261113 现场实测）。
+      const hasDirty = openTabsRef.current.some((tab) => tab.dirty && !tab.deleted) || quickNotesDirty;
       if (!hasDirty) return;
       for (const tab of openTabsRef.current) {
-        if (!tab.dirty) continue;
+        if (!tab.dirty || tab.deleted) continue;
         const pendingTimer = saveTimers.current.get(tab.noteId);
         if (pendingTimer !== undefined) {
           window.clearTimeout(pendingTimer);

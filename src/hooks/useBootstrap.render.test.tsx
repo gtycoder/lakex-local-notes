@@ -180,4 +180,28 @@ describe("useBootstrap 标签会话恢复（DT-15）", () => {
 
     expect(openNote.mock.calls.map((call) => call[0])).toEqual(["n8", "n9", "n10", "n10"]);
   });
+
+  // 261114：删光知识库后启动，日记条目不得被当成冷启动落点拉进知识库标签（只认目录判据，不认标题）。
+  it("冷启动候选剔除日记条目：bootstrap notes 只含日记条目时不自动打开", async () => {
+    localStorage.clear();
+    const at = "2026-11-13T00:00:00Z";
+    nativeMock.listTreeNodes.mockResolvedValue([
+      { id: "diary-nb", parentId: null, nodeType: "notebook", title: "日记", space: "diary", sortOrder: 0, updatedAt: at },
+      { id: "diary-year", parentId: "diary-nb", nodeType: "group", title: "2026", space: null, sortOrder: 0, updatedAt: at },
+      { id: "diary-month", parentId: "diary-year", nodeType: "group", title: "11", space: null, sortOrder: 0, updatedAt: at },
+      { id: "diary-entry", parentId: "diary-month", nodeType: "note", title: "2026-11-13", noteFileId: "diary-entry", space: null, sortOrder: 0, updatedAt: at },
+    ]);
+    nativeMock.bootstrap.mockResolvedValue({
+      notes: [{ id: "diary-entry", title: "2026-11-13", updatedAt: at, kind: "doc" }],
+      sync: {},
+      lastOpenedNoteId: "diary-entry",
+    });
+    const restoreTabs = vi.fn(async (_ids: string[], _activeId: string | null) => 3);
+    const openNote = vi.fn(async (_id: string) => true);
+    await render({ restoreTabs, openNote });
+    for (let i = 0; i < 6; i += 1) await flush();
+
+    expect(openNote).not.toHaveBeenCalled();
+    expect(restoreTabs).not.toHaveBeenCalled();
+  });
 });

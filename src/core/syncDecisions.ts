@@ -74,7 +74,10 @@ export function decidePurge(local: LocalNoteState | null, isRestorePending: bool
 
 /** 文档是否"已进回收站 / 已被他端彻底删除"：这类文档不得再被编辑保存。
  * 打开（含启动恢复最后文档）与同步刷新共用同一判定——此前只有同步路径标记，
- * 于是重启后自动重开的回收站文档会以正常可编辑标签出现（2026-09-04 实数据踩到）。 */
-export function isGoneNote(note: { parentId: string | null; syncState?: string; isPurged?: boolean }): boolean {
-  return note.parentId === TRASH_NOTEBOOK_ID || note.isPurged === true || note.syncState === "purged";
+ * 于是重启后自动重开的回收站文档会以正常可编辑标签出现（2026-09-04 实数据踩到）。
+ * 261114：**必须同时看 trashedAt**——删除笔记本时子文档的 parentId 不发，只有 trashed_at 标记；
+ * 旧判据漏掉它们 ⇒ 回收站段落里的子文档能被当成正常文档打开（用户 261113 现场：删光笔记本后
+ * 重启自动打开回收站里的欢迎文档，能编辑但保存被拒、关不掉退不出）。 */
+export function isGoneNote(note: { parentId: string | null; syncState?: string; isPurged?: boolean; trashedAt?: string | null }): boolean {
+  return note.trashedAt != null || note.parentId === TRASH_NOTEBOOK_ID || note.isPurged === true || note.syncState === "purged";
 }

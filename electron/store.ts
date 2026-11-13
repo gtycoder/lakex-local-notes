@@ -582,8 +582,15 @@ export class Store {
   }
 
   bootstrap() {
+    // 261114 修复（用户现场：删光笔记本后重启仍自动打开回收站文档、且关不掉退不出）：
+    // 删除笔记本时**只有根节点**的 parent_id 移进回收站，子文档 parent_id 保持原父、只标 trashed_at
+    // （trashLifecycle.deleteTreeNode 的级联）。旧条件只看 parent_id ⇒ 回收站子文档被当成活跃文档
+    // 塞进启动快照：tab session 的 liveIds 认为它活着 → 恢复标签；lastOpenedNoteId 命中它 → 冷启动打开。
+    // 判据必须以 DB 列为准：trashed_at 非空 = 已进回收站（软删 / 他端 purge 副本），都不算活跃文档。
     const notes = this.db.prepare(
-      "SELECT id,title,parent_id,sort_order,updated_at,is_dirty,is_conflict,is_locked,locked_at,cloud_deleted,kind FROM notes WHERE deleted_at IS NULL AND parent_id != ? ORDER BY sort_order"
+      "SELECT id,title,parent_id,sort_order,updated_at,is_dirty,is_conflict,is_locked,locked_at,cloud_deleted,is_purged,trashed_at,kind FROM notes WHERE deleted_at IS NULL AND trashed_at IS NULL AND is_purged = 0 AND parent_id != ? " +
+      // 防御第二层：父节点必须存在（孤儿行不可导航，打开只会得到一篇「树里找不到」的幽灵文档）。
+      "AND EXISTS (SELECT 1 FROM tree_nodes p WHERE p.id = notes.parent_id AND p.deleted_at IS NULL AND p.trashed_at IS NULL) ORDER BY sort_order"
     ).all(TRASH_NOTEBOOK_ID).map((r) => this.noteQueries.mapSummary(r as SummaryRow));
     const last = this.db.prepare("SELECT value FROM device_state WHERE key='last_opened_note_id'").get() as { value: string } | undefined;
     return {
@@ -631,7 +638,7 @@ export class Store {
 
   readNote(id: string): NoteDocument {
     const row = this.db.prepare(
-      "SELECT id,title,parent_id,sort_order,updated_at,is_dirty,is_conflict,is_locked,locked_at,cloud_deleted,kind FROM notes WHERE id=? AND deleted_at IS NULL"
+      "SELECT id,title,parent_id,sort_order,updated_at,is_dirty,is_conflict,is_locked,locked_at,cloud_deleted,is_purged,trashed_at,kind FROM notes WHERE id=? AND deleted_at IS NULL"
     ).get(id);
     if (!row) throw new AppError("NotFound", `笔记不存在: ${id}`);
     // 261023：正文文件被手动删除（ENOENT）不是"打开失败"——按「缺正文」只读打开，

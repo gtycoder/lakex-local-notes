@@ -86,4 +86,12 @@ describe("isGoneNote（打开与同步共用的「已删除」判定）", () => 
     expect(isGoneNote(mk("notebook-a", "local"))).toBe(false);
     expect(isGoneNote(mk(null, "local"))).toBe(false);
   });
+  // 261114：删除笔记本时子文档 parentId 不变、只有 trashed_at 标记 ⇒ 判据必须读 trashedAt。
+  it("回收站子文档：parentId 非回收站但 trashedAt 非空 = 已删除", () => {
+    expect(isGoneNote({ parentId: "notebook-personal", trashedAt: "2026-11-13T08:43:44.205Z" })).toBe(true);
+  });
+  it("trashedAt 为 null（活跃文档）不改变既有判定", () => {
+    expect(isGoneNote({ parentId: "notebook-personal", trashedAt: null })).toBe(false);
+    expect(isGoneNote({ parentId: TRASH_NOTEBOOK_ID, trashedAt: null })).toBe(true);
+  });
 });

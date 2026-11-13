@@ -102,14 +102,17 @@ export function useBootstrap({
         }
       }
       // 冷启动落点：Lake 文档优先、其次多维表（用户 261022 定）——别把首开成本高的表格/画板钉在启动交互上。
-      const id = chooseColdStartNoteId(snapshot.notes, snapshot.lastOpenedNoteId);
+      // 261110 同口径：日记空间的 tab 不自动打开 ⇒ 冷启动候选也剔除日记条目（只认目录判据，不认标题）。
+      // 否则「删光知识库后启动」会把一篇日记条目拉进知识库标签（用户现场：以为还在打开被删文档）。
+      const coldStartNotes = snapshot.notes.filter((note) => !isDiaryEntryNode(treeNodes, note.id));
+      const id = chooseColdStartNoteId(coldStartNotes, snapshot.lastOpenedNoteId);
       if (id) {
         // 261111：冷启动落点也必然挂 EditorTab（缺正文时会换候选，但首篇成功即用同一 chunk）⇒ 先预取。
         // 安全模式仍不预热（Batch3-B：崩溃排查时少一个后台重活）；判据已在上面拿到，这里只认 inactive。
         if (safeModeStatus === "inactive") prefetchEditorKernelNow();
         // 手动删过正文文件时不要一启动就弹 ENOENT：跳过缺正文的文档（最多试 8 个候选），
         // 汇总成一次提示；都打不开则保持空态，不停在错误页。
-        const recent = snapshot.notes
+        const recent = coldStartNotes
           .map((note) => note.id)
           .filter((noteId) => noteId !== id)
           .slice(0, 8);

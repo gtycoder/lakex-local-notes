@@ -7,6 +7,14 @@
 
 ## 0. 最新交接（最近 3 个批次；更早的见 git）
 
+### 261114 · 回收站幽灵文档修复（启动自动打开已删除文档 + 清空回收站后关不掉退不出）
+
+- **用户现场**（正式库 + 开发库都复现）：删光笔记本后重启仍自动打开回收站里的欢迎文档；它以可编辑标签出现（编辑器无只读横幅），保存被主进程守卫拒（`笔记已在回收站或已被删除，保存被拒绝；请先显式恢复: welcome-note`）；⌘Q/关窗被 `beforeunload` 永久拦住（日志 `[ui] 窗口无响应` + 只有 before-quit 没有 will-quit，最后靠 60s 超时/强杀）。用户清空回收站后旧 `seed` 又把 `welcome-note` 复活成孤儿行（父笔记本已 purge、侧栏看不到）⇒ 再启动继续打开它，再次「关不掉退不出」。
+- **根因**：① 删除笔记本时**只有根节点** `parent_id` 移进回收站，子文档 `parent_id` 不变、只标 `trashed_at`（`trashLifecycle.deleteTreeNode` 级联）；`store.bootstrap()` 只按 `parent_id != 回收站` 过滤 ⇒ 回收站子文档泄漏进启动快照（tab session 的 `liveIds` 认为它活、`lastOpenedNoteId` 命中它 ⇒ 冷启动/恢复标签打开它）。② `readNote`/`getNoteDigest`/`isGoneNote` 都不读 `trashed_at` ⇒ 标签不标 deleted/只读；同时 `beforeunload` 只要「有脏标签」就 preventDefault，而 gone 文档保存永远被拒 ⇒ 脏标记永不清除、退出永久被拦。③ 旧 `schemaInit.seed()` 只看 notes 表是否为空 ⇒ 清空回收站（purge 物理删行）后把固定 id 的欢迎笔记复活到已不存在的默认笔记本下（幽灵孤儿，还会被同步当新文档上传）。
+- **修复**：`bootstrap()` 只收「`trashed_at IS NULL` + `is_purged=0` + 父节点在位且不在回收站」；`NoteSummary.trashedAt` 回传（两份声明：`src/lib/types.ts` 与 `electron/noteQueries.ts` 镜像类型）+ `readNote` SELECT 补列；`readNoteDigest.deleted` 用 `trashed_at`；`isGoneNote({parentId, trashedAt, …})` 新判据 + `noteRef.isNoteRefGone` 同步；`seed()` 仅全新库（无 notes、无墓碑、默认笔记本在位）种欢迎笔记，启动自愈 `removeResurrectedAfterPurge()` 清「已 purge 又复活」的幽灵行（墓碑保留、幂等）；渲染层 gone ⇒ `dirty:false`（`useSyncProgress` / `App.handleBlockedSave`），`beforeunload` 只拦「脏且未 deleted」，`App.handleTrashChanged` 在 purge/清空后按 `getNoteDigest` 收掉已打开标签；冷启动剔除日记条目（261110 同口径）。
+- **验证**：单测新增 `electron/startupTrash.test.ts`（7 例：删笔记本泄漏/删单篇/清空不复活血缘/幽灵自愈/父节点防御）+ `syncDecisions.test.ts` trashedAt 2 例 + `useBootstrap.render.test.tsx` 日记冷启动 1 例（相关 13 文件 217 例全过）。隔离实例（新构建 + 正式数据副本、仅 CDP 只读取证）：**A 套**（当前正式库真实状态）两次冷启动都无 tab/空态/无保存失败，幽灵行被自愈删除（`removed 1 resurrected-after-purge ghost note(s)`）、墓碑保留、二次启动不复活；**B 套**（合成回放删笔记本软删现场）无 tab/空态，`welcome-note` 仍在回收站可恢复（回收站 UI 显示「个人笔记」），宿主数据零改动；证据 `/tmp/lakex-verify/evidence/`（不入库）。开发版窗口实测：修复后启动为「开始写第一篇笔记」空态、无 tab、无错误。
+- **门禁**：tsc 0；全量 vitest 见 §1；`git diff --check` 0；`npx vite build` 成功。
+- **文档**：AGENTS §3#16 / §4 启动 bullet / §7#12b、`docs/RESILIENCE.md` §3.5 已同步。
 ### 261114 · v1.1.2 发版（62 笔提交：S3 数据安全修复 + 移动首屏/同步性能 + 云同步闸门）
 
 - **发版**：`npm version patch` → 1.1.2（Android versionName 1.1.2 / versionCode 11102）；注解 tag **`v1.1.2`**；master 与 tag 双推（Gitee `origin` + GitHub `github`）⇒ **Release workflow run 43384377793 已跑通**（macOS x64/arm64 dmg+zip / Windows NSIS / **Android release APK 三项 build 全 success**），GitHub Release `v1.1.2` 已发布 **8 个资产**：Android APK（33.6MB）/ arm64 dmg+zip / x64 dmg+zip / Windows exe / `latest.json` / `release-body.md`；Gitee 发行版同步取决于 `GITEE_TOKEN`（不配只留代码+tag 镜像）。
@@ -149,13 +157,13 @@
 - `package.json` = **1.1.2**；Android `versionName 1.1.2` / `versionCode 11102`（从根 package.json 派生：`1000 + major*10000 + minor*100 + patch`，只增不减；**不手改 build.gradle**）。
 - tag：`v1.0.0`–`v1.0.5`、`v1.1.0`、`v1.1.1`（261112 已发）、**`v1.1.2`（261114 已打 tag 并双推；CI 由 tag 触发打包 → GitHub Release 8 资产 + latest.json；发布说明段落 = RELEASE-NOTES 顶部 `# LakexLocalNotes v1.1.2`）**；已发布 tag 不再移动。发布说明 = [docs/RELEASE-NOTES.md](RELEASE-NOTES.md)（**v1.1.2 → v1.0.0** 倒序；当前 tag 段落 = CI 生成 GitHub Release 正文的来源）。
 - 分支/远端：`master` 唯一长期分支；`origin` = Gitee（SSH，第二 pushurl = GitHub HTTPS）⇒ `git push origin <branch>` 一次推两边；GitHub 只在推 tag 时构建。remote 不入库 ⇒ 新 clone 跑 `npm run setup:remotes`。
-- **工作树**：261114 实测**干净**（并行会话的移动 AI / 云同步开启闸门 / S3 说明等 WIP 均已由各自会话提交并双推）；历史上并行会话共用工作树时一律「只 stage 本批文件」，**绝不用 `git add -A`**。
+- **工作树**：本批（回收站幽灵文档修复）改动已提交（commit 见 `git log -1`，14 改 + 1 新测试）；更早 261114 实测干净（并行会话 WIP 均已提交并双推）。历史上并行会话共用工作树时一律「只 stage 本批文件」，**绝不用 `git add -A`**。
 - 261110 一次性历史清理（`.ai-writing-recon/` 用 `git filter-repo` 从全部历史移除，重写 v1.1.0 之后的提交；tag 未变）⇒ 旧 clone 需 `git fetch --force --prune && git reset --hard origin/master`。
 
-**门禁基线（261114 全量实测 @ `608eb8d2`；分层口径见 AGENTS §3#21）**
+**门禁基线（261114 回收站幽灵文档修复批实测 2026-11-13 16:58；分层口径见 AGENTS §3#21）**
 
 - `npx tsc --noEmit` = **0**。
-- 全量 vitest（低负载串行门禁）：**文件 = 总 931（920 passed / 11 skipped）**；**用例 = 总 5901（5889 passed / 12 skipped）/ 0 failed**。偶发 `perf.integration` 满载抖动口径见下条（单跑复验通过）。
+- 全量 vitest（低负载串行门禁）：**文件 = 总 932（921 passed / 11 skipped）**；**用例 = 总 5911（5899 passed / 12 skipped）/ 0 failed**（76.6s）。偶发 `perf.integration` 满载抖动口径见下条（单跑复验通过）。本批未动样式/视觉/移动端层 ⇒ 样式与设备矩阵按 §3#21 分层未重跑；`npx vite build` 成功（隔离验证用构建）。
 - ⚠️ `electron/s3v3/perf.integration.test.ts`：**低负载串行本轮无抖动（通过）**；满载/并发构建时偶发（单跑 PASS），门禁判定以单跑/低负载为准（同 §2 既有口径）。
 - `node scripts/ui-metrics.mjs`：颜色 0 / 字号 0 / `!important` 9 = 允许清单 / `crossFileDupGroups` 45 / `shadowedDecls` **0**（task-34 已清零，门禁只降）/ 未定义令牌 0。
 - `check:core` **178** 文件 0 违规；`check:mobileui` 通过。
@@ -239,7 +247,11 @@
 
 > 规则：只有「真问题 / 不做有代价 / 收益大于复杂度」才进本节（AGENTS §3#17）；完成后**直接删行**，历史留 git。
 
-**当前批次（261113 转小记 + 发版复核批）待办**
+**当前批次（261114 回收站幽灵文档修复）待办**
+
+- **本批代码待办已清零**（修复 + 回归测试 + 隔离实例 A/B 全 PASS，见 §0）；剩余 = **发版**（正式包 1.1.2 仍含此缺陷，用户升级需新版本）。
+
+**上一批次（261113 转小记 + 发版复核批）待办**
 
 - **本批代码待办已清零**（task-105/106 已闭合：发版复核 P2/P3 + 移动端「转为小记」）；剩余只有设备点收与下一版发布（P0）。
 - **S19（目录重建）：不计划**（显式 id 重建不是用户流程；矩阵登记即可）。

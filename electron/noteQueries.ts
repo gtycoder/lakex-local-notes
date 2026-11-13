@@ -19,6 +19,8 @@ export interface NoteSummary {
   /** 文档类型（doc | usheet | bitable | board | ink；缺省 doc）。 */
   kind?: "doc" | "usheet" | "bitable" | "board" | "ink";
   editLockedAt?: string | null;
+  /** 回收站标记（DB trashed_at）：删笔记本时子文档 parent_id 不变、只靠它标回站（isGoneNote 判据）。 */
+  trashedAt?: string | null;
 }
 
 export interface TreeNode {
@@ -88,6 +90,8 @@ export interface SummaryRow {
   is_dirty?: number;
   cloud_deleted?: number;
   kind?: string | null;
+  /** 回收站标记：删笔记本时子文档 parent_id 不变、只靠它标记（isGoneNote 判据之一）。 */
+  trashed_at?: string | null;
 }
 
 export interface TreeNodeRow {
@@ -164,6 +168,8 @@ export class NoteQueries {
       ...(row.is_purged ? { isPurged: true } : {}),
       ...(row.is_dirty ? { isDirty: true } : {}),
       ...(row.cloud_deleted ? { cloudDeleted: true } : {}),
+      // 回收站标记必须回传：删笔记本时子文档 parent_id 不变，渲染层的 gone 判定不能只看 parentId。
+      ...(row.trashed_at ? { trashedAt: row.trashed_at } : {}),
       // SQLite 列名冻结：is_locked / locked_at（不改 schema、不迁移）；内存字段叫 isEditLocked / editLockedAt。
       isEditLocked: !!row.is_locked,
       editLockedAt: row.locked_at ?? null,

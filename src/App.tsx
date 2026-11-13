@@ -223,7 +223,13 @@ export function App() {
   });
 
   // 稳定保存失败回调：否则 persistTab → openNote → sidebarSelect 每次渲染都换引用，整树行缓存失效。
-  const handleBlockedSave = useCallback(() => showNotice("文档已在回收站中，编辑不会保存；恢复后才能继续写。"), [showNotice]);
+  // 261114：保存被「回收站 / 已 purge」拦下 = 这篇内容永远写不进去（不是临时失败）。必须同时：
+  // ① 把标签置 deleted（编辑器当场只读，不再反复自动保存）；② 清 dirty —— beforeunload 的
+  // 「有脏标签就拦退出」只对可保存内容成立，否则这个标签会永久卡住 ⌘Q / 关窗（用户现场实测）。
+  const handleBlockedSave = useCallback((noteId: string) => {
+    setOpenTabs((tabs) => tabs.map((tab) => (tab.noteId === noteId ? { ...tab, deleted: true, dirty: false } : tab)));
+    showNotice("文档已在回收站或已被彻底删除，编辑不会保存；恢复后才能继续写。");
+  }, [setOpenTabs, showNotice]);
 
   const {
     saveStates, setSaveState,
@@ -422,6 +428,30 @@ export function App() {
   const { refreshDraftEntries, handleTrashRestored, handleHistoryRestored, reloadNoteTab } = useSyncRefresh({
     setPendingSummary, setDraftEntries, setTreeNodes, setNotes, setOpenTabs, noteReloadGuardRef, openTabsRef, bumpRevision,
   });
+
+  /**
+   * 回收站发生变化（彻底删除 / 清空）后的本机对账（261114）：本机 purge 不会通知已打开的标签，
+   * 旧实现会让一篇已被物理删除的文档继续挂在编辑器里（自动保存报「笔记不存在」、关标签被保存失败挡住、
+   * 脏标签还会卡住退出）。判据 = getNoteDigest 返回 null（DB 行不存在 = 已 purge）；
+   * 仍在回收站（可恢复）的条目 digest.deleted 为 true，不收标签——那是只读态，用户可恢复。
+   */
+  const handleTrashChanged = useCallback(() => {
+    void refreshDraftEntries();
+    void (async () => {
+      const purgedIds: string[] = [];
+      for (const tab of openTabsRef.current) {
+        const digest = await native.getNoteDigest(tab.noteId).catch(() => null);
+        if (!digest) purgedIds.push(tab.noteId);
+      }
+      if (purgedIds.length === 0) return;
+      const removed = new Set(purgedIds);
+      for (const id of purgedIds) clearNote(id);
+      const next = openTabsRef.current.filter((tab) => !removed.has(tab.noteId));
+      setOpenTabs(next);
+      setActiveNoteId((current) => (current && removed.has(current) ? next[next.length - 1]?.noteId ?? null : current));
+      showNotice(`${purgedIds.length} 篇已彻底删除的文档已从标签栏移除`);
+    })();
+  }, [refreshDraftEntries, clearNote, openTabsRef, setOpenTabs, setActiveNoteId, showNotice]);
 
   // 保存管线已收拢到 useSavePipeline（persistTab 由 hook 提供）
   /** 创建副本前把涉及的 dirty 标签先落盘（同一份 persistTab，含版本守卫/冲突处理）。 */
@@ -1148,7 +1178,7 @@ export function App() {
                 open
                 embed
                 onClose={() => void switchDesktopWorkspace("library")}
-                onChanged={() => void refreshDraftEntries()}
+                onChanged={handleTrashChanged}
                 onRestored={handleTrashRestored}
               />
             </Suspense>
@@ -1432,7 +1462,7 @@ export function App() {
         trashOpen={desktopWorkspace === "trash"}
         trashEmbed
         onCloseTrash={() => void switchDesktopWorkspace("library")}
-        onTrashChanged={() => void refreshDraftEntries()}
+        onTrashChanged={handleTrashChanged}
         onTrashRestored={handleTrashRestored}
         historyOpen={historyOpen}
         historyNoteId={historyNoteId}

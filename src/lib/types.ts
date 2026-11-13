@@ -40,6 +40,12 @@ export interface NoteSummary {
   editLockedAt?: string | null;
   /** 文档类型（doc | usheet | bitable | board | ink；缺省 doc）。渲染层据此选择编辑器。 */
   kind?: NoteKind;
+  /**
+   * 回收站标记（DB 列 trashed_at）。**判定在不在回收站不能只看 parentId**：删除笔记本时只有根节点
+   * 的 parent_id 改成回收站，子文档保留原 parent_id、只标 trashed_at（见 trashLifecycle.deleteTreeNode）
+   * ⇒ 打开文档/恢复标签/冷启动的 gone 判定必须读它（AGENTS §3#16）。
+   */
+  trashedAt?: string | null;
 }
 
 export interface NoteDocument extends NoteSummary {
