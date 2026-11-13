@@ -13,7 +13,7 @@ import { buildS3v3DiagnosticReport, createS3v3PhaseCollector, type S3v3Diagnosti
 import { countRemoteOps, remoteOpSummary } from "../../src/core/s3v3/remoteStats.js";
 import { runQuickPush } from "../../src/core/s3v3/quickPush/pipeline.js";
 import { perfMessage } from "../../src/core/logFormat.js";
-import { mergeSyncWarnings } from "../../src/core/syncWarningMerge.js";
+import { mergeSyncWarnings, syncWarningOfApplyFailure } from "../../src/core/syncWarningMerge.js";
 
 /**
  * 桌面 v3 同步入口（**唯一**协议；旧 quick-notes 通道与 LAKE_SYNC_PROTOCOL 开关均已删除）。
@@ -177,14 +177,9 @@ export async function syncWithV3(
     // task-44：单篇 apply 失败（已跳过、下一轮重试）并入结构化警告，不再只留在日志里。
     const applyWarnings = device.drainApplyWarnings();
     for (const w of applyWarnings) store.logScopes.sync.warn("[v3][apply] " + w.id + " " + (w.detail ?? ""));
-    // task-66：单篇 apply 失败 = 「本地这篇本轮没落地」，独立 kind apply_skipped（内部类型，非 wire）。
-    // 不得复用 remote_incomplete（那是「远端内容不全」，文案会误导用户）。
-    const applyWarningDetails = applyWarnings.map((w) => ({
-      kind: "apply_skipped" as const,
-      noteId: w.id,
-      title: w.title ?? "",
-      message: w.detail ?? "",
-    }));
+    // task-66 / task-104：单篇 apply 失败 = 「本地这篇本轮没落地」，kind=apply_skipped 由 **core 唯一映射**
+    // （syncWarningOfApplyFailure），这里不再二次改写（否则又多一处判据来源）。
+    const applyWarningDetails = applyWarnings.map(syncWarningOfApplyFailure);
     // W4（261112）：plan/引擎的一行式 warning（不少没有结构化明细）过去只进日志 ⇒ 浮层/诊断看不见。
     // 合并去重后统一进 SyncResult.warnings 与诊断报告（apply_skipped 保持自己的 kind，不归到 remote_incomplete）。
     const mergedWarnings = mergeSyncWarnings({

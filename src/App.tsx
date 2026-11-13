@@ -614,7 +614,7 @@ export function App() {
     try {
       // 转换在主进程（正文原样承载 + 媒体搬到小记作用域 + 原文软删）；渲染层只显示结果。
       const result = await native.diaryToQuickNote(nodeId);
-      showNotice(diaryToQuickNoteNotice(result.droppedKinds));
+      showNotice(diaryToQuickNoteNotice(result));
       await refreshTree();
     } catch (reason) {
       setError(getNativeErrorMessage(reason));

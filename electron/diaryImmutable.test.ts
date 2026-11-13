@@ -20,6 +20,7 @@ import { Store } from "./store.js";
 import { QuickNotesStore } from "./quickNotes.js";
 import { TRASH_NOTEBOOK_ID } from "../src/core/syncDecisions.js";
 import { convertDiaryNoteToQuickNote } from "./diaryQuickNoteConversion.js";
+import { runDesktopDuplicateNotes } from "./ipc/registerDuplicateNotes.js";
 import type { SyncFolder, TreeNode } from "./noteQueries.js";
 
 /**
@@ -97,14 +98,17 @@ describe("日记本固定不可变：删除守卫", () => {
     const db = new Database(dbPath());
     try {
       db.prepare("UPDATE tree_nodes SET parent_id=?, trashed_at=?, deleted_from_parent_id=NULL WHERE id=?")
-        .run(TRASH_NOTEBOOK_ID, later(0), notebook.id);
+        .run(TRASH_NOTEBOOK_ID, new Date(Date.now() - 61 * 24 * 3600 * 1000).toISOString(), notebook.id);
     } finally { db.close(); }
     expect(() => store.purgeTrashItem(notebook.id)).toThrow(/日记本.*不能彻底删除/);
     expect(store.listTrash().some((item) => item.id === notebook.id)).toBe(true);
-    // 清空回收站：日记本被跳过（其它条目照常），不抛错；过期自动清理同样跳过。
-    expect(() => store.emptyTrash()).not.toThrow();
+    // 清空回收站：日记本被跳过（其它条目照常），不抛错；计数区分「删除 / 跳过」。
+    const cleared = store.emptyTrash();
+    expect(cleared).toEqual({ purged: 0, skipped: 1 });
     expect(store.listTrash().some((item) => item.id === notebook.id)).toBe(true);
-    expect(store.autoPurgeExpiredTrash(1)).toBeGreaterThanOrEqual(0);
+    const expiry = store.autoPurgeExpiredTrash(1);
+    expect(expiry.skipped).toBe(1); // 日记本被跳过（不并入 purged）
+    expect(expiry.purged).toBe(0);
     expect(store.listTrash().some((item) => item.id === notebook.id)).toBe(true);
   });
 });
@@ -218,5 +222,45 @@ describe("两个单篇出口（回归，别误伤）", () => {
     expect(restored.parentId).toBe(month.id);
     expect(spaceOf(notebook.id)).toBe("diary");
     expect(store.readNote(opened.noteId).content).toContain("ne-p");
+  });
+});
+
+describe("日记空间入口守卫（task-104 F-05：create / duplicate / import）", () => {
+  it("create 系列（新建文档/表格/多维表/画板/手写板/分组）以日记子树为目标一律拒绝", () => {
+    const { notebook, month, opened } = openDiaryEntry();
+    for (const target of [notebook.id, month.id]) {
+      expect(() => store.createNoteIn(target, "x"), "create_note_in " + target).toThrow(/日记本空间不能新建文档/);
+      expect(() => store.createUsheetIn(target, "x")).toThrow(/日记本空间不能新建表格/);
+      expect(() => store.createBitableIn(target, "x")).toThrow(/日记本空间不能新建多维表/);
+      expect(() => store.createBoardIn(target, "x")).toThrow(/日记本空间不能新建画板/);
+      expect(() => store.createInkIn(target, "x")).toThrow(/日记本空间不能新建手写板/);
+      expect(() => store.createGroup(target, "g")).toThrow(/日记本空间不能新建分组/);
+    }
+    // 日记条目本身也不能再被当成「父级」建新内容（它不是容器，且换父=改日记结构）。
+    expect(() => store.createNoteIn(opened.noteId, "x")).toThrow(/日记本空间不能新建文档/);
+  });
+
+  it("create_note 的兜底笔记本不会选到日记本（无父新建不落进日记空间）", () => {
+    const { notebook } = openDiaryEntry();
+    const doc = store.createNote("无父新建");
+    const node = store.listTreeNodes().find((item) => item.noteFileId === doc.id)!;
+    expect(node.parentId).not.toBe(notebook.id);
+    expect(store.diaryNotebookOfTreeNode(node.parentId)).toBeNull();
+  });
+
+  it("duplicate_notes：日记条目不可创建副本（入口层拒绝，reason=unsupported）", async () => {
+    const { opened } = openDiaryEntry();
+    const result = await runDesktopDuplicateNotes({ ids: [opened.noteId] }, { store });
+    expect(result.ok).toBe(false);
+    expect(result.results).toHaveLength(1);
+    expect(result.results[0]).toMatchObject({ id: opened.noteId, ok: false, reason: "unsupported" });
+  });
+
+  it("import 共用入口：导入按 createGroup/createNoteIn 落库 ⇒ 日记目标同样被拒", () => {
+    const { notebook } = openDiaryEntry();
+    // Markdown/文件导入的 host 就是 native.createGroup + native.createNoteIn（见 markdownImportDesktop）；
+    // 两者都在 Store 入口守卫内，因此「导入到日记本」必然被拒（不产生半批行）。
+    expect(() => store.createGroup(notebook.id, "2026")).toThrow(/日记本空间不能新建分组/);
+    expect(() => store.createNoteIn(notebook.id, "导入文档")).toThrow(/日记本空间不能新建文档/);
   });
 });

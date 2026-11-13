@@ -94,7 +94,7 @@ async function activate(el: Element | null) {
 }
 
 describe("回收站预览（task-89）：整行可点 + 缺正文提示 + 标题兜底", () => {
-  it("cloudDeleted 副本：点行内徽标（不是标题文字）也触发 readNote，正文交给 NoteDocPreview(policyKey=trash)；键盘 Enter 同路径", async () => {
+  it("cloudDeleted 副本：点行内徽标（不是标题文字）也触发 readNote，正文交给 NoteDocPreview(policyKey=trash)", async () => {
     await renderPanel([trashItem()]);
     // 之前只有标题文字 div 有 onClick，点徽标/行内空白无反应 ⇒ 右侧一直是占位文案。
     const badge = [...container.querySelectorAll(".badge")].find((el) => el.textContent?.includes("云端已删除（仅本地）"));
@@ -105,12 +105,20 @@ describe("回收站预览（task-89）：整行可点 + 缺正文提示 + 标题
     expect(previewCalls[0]).toMatchObject({ noteId: "n1", body: "<p>正文</p>", policyKey: "trash" });
     expect(container.querySelector(".history-preview-inline-title")?.textContent).toBe("会议纪要");
     expect(container.textContent).not.toContain("选择左侧文档查看内容");
+  });
 
-    await act(async () => {
-      row()?.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    });
-    expect(nativeMock.readNote).toHaveBeenCalledTimes(2);
+  it("行结构（task-105）：行 = role=group（不再是 role=button），预览 = 文本区独立原生按键（Enter/空格由浏览器默认语义）", async () => {
+    await renderPanel([trashItem()]);
+    const first = row()!;
+    expect(first.getAttribute("role")).toBe("group");
+    expect(first.hasAttribute("tabindex")).toBe(false);
+    expect(first.querySelectorAll('button[aria-label="恢复（含全部内容）"], button[aria-label="彻底删除（含全部内容）"]').length).toBeGreaterThan(0);
+    // 文本区是真正的 <button>：读屏可按「按钮」播报，键盘 Enter/空格原生产生 click。
+    const text = first.querySelector<HTMLButtonElement>("button.trash-row-text")!;
+    expect(text.tagName).toBe("BUTTON");
+    expect(text.getAttribute("aria-label")).toContain("预览「会议纪要」");
+    await activate(text);
+    expect(nativeMock.readNote).toHaveBeenCalledWith("n1");
   });
 
   it("行内「彻底删除」是独立控件：点它不触发预览", async () => {
@@ -175,6 +183,12 @@ describe("panels.css：回收站行可读性（task-89）", () => {
     expect(CSS).not.toMatch(/\.trash-tree-node \.ln-list-item__text \{[^}]*min-width/);
     // 手型光标与整行可点一起生效，缺一个都会让用户以为「点了没反应」
     expect(CSS).toMatch(/\.trash-tree-node > \.ln-list-item \{ cursor: pointer; \}/);
+    // task-105：文本区是原生 button，必须复位浏览器按钮外观（否则边框/底色/居中把行排版打乱）
+    const reset = CSS.match(/\.trash-tree-node button\.trash-row-text \{([^}]*)\}/);
+    expect(reset).toBeTruthy();
+    for (const decl of ["border: 0;", "background: transparent;", "color: inherit;", "font: inherit;", "text-align: left;", "cursor: pointer;"]) {
+      expect(reset?.[1]).toContain(decl);
+    }
   });
 
   it("窄行下徽标让位给标题：可收缩 + 省略号（flex:0 1 auto / min-width:0 / overflow hidden / ellipsis / nowrap）", () => {

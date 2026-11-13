@@ -744,7 +744,7 @@ describe("目录树操作", () => {
     const old = new Date(Date.now() - 61 * 24 * 3600 * 1000).toISOString();
     (store as any).db.prepare("UPDATE tree_nodes SET trashed_at=? WHERE id=?").run(old, nb.id);
     const purged = store.autoPurgeExpiredTrash(60);
-    expect(purged).toBe(1);
+    expect(purged).toEqual({ purged: 1, skipped: 0 });
     expect(store.listTrash().length).toBe(0);
     // purge 后写墓碑（防复活 + M4 删云端前缀）
     expect(store.listDeletedNotesForSync().some((d) => d.id === note.id)).toBe(true);
@@ -755,7 +755,7 @@ describe("目录树操作", () => {
     store.deleteTreeNode(nb2.id);
     const recent = new Date(Date.now() - 59 * 24 * 3600 * 1000).toISOString();
     (store as any).db.prepare("UPDATE tree_nodes SET trashed_at=? WHERE id=?").run(recent, nb2.id);
-    expect(store.autoPurgeExpiredTrash(60)).toBe(0);
+    expect(store.autoPurgeExpiredTrash(60)).toEqual({ purged: 0, skipped: 0 });
     // 未过期根 + 其子笔记（树形回收站列出整棵子树）
     expect(store.listTrash().length).toBe(2);
   });

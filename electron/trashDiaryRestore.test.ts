@@ -39,10 +39,11 @@ function parentOf(id: string): string | null {
 
 describe("回收站恢复：日记条目回日记空间（261110）", () => {
   it("原父（月分组）也进回收站时，恢复回到日记本而不是默认笔记本", () => {
-    const diary = store.createNotebook("日记", "diary");
-    const year = store.createGroup(diary.id, "2026");
-    const month = store.createGroup(year.id, "11");
-    const note = store.createNoteIn(month.id, "2026-11-09");
+    // 日记空间内部创建只允许走 diary_open_date（task-104 F-05 起 create_group/create_note_in 对日记目标闭门）。
+    const opened = store.openDiaryDate("2026-11-09");
+    const diary = { id: opened.notebookId };
+    const month = store.listTreeNodes().find((n) => n.id === store.listTreeNodes().find((x) => x.id === opened.noteId)?.parentId)!;
+    const note = { id: opened.noteId };
     // 先删文档（回收站根），再删它所在的分组（月分组也进回收站）⇒ 原父不可用
     store.deleteTreeNode(note.id);
     store.deleteTreeNode(month.id);
@@ -72,8 +73,8 @@ describe("回收站恢复：日记条目回日记空间（261110）", () => {
   });
 
   it("回收站列表给日记条目打 fromDiary，普通日期标题文档不打（不看标题）", () => {
-    const diary = store.createNotebook("日记", "diary");
-    const diaryNote = store.createNoteIn(diary.id, "2026-11-09");
+    const opened = store.openDiaryDate("2026-11-09");
+    const diaryNote = { id: opened.noteId };
     const work = store.createNotebook("工作");
     const fakeDateDoc = store.createNoteIn(work.id, "2026-11-10");
     store.deleteTreeNode(diaryNote.id);

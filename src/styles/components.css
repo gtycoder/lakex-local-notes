@@ -28,13 +28,13 @@
 .sync-status-history-note .sync-status-inline-action { justify-self: start; margin-top: 4px; }
 /* 261112 UI 审计 17 P1：同步 warning 改为「摘要 + ≤5 行可点列表」。行 = 标题 + 人话 label；
    可点行（带 noteId）打开对应文档；不可点行同排版只读。 */
-.sync-status-warning-list { display: grid; gap: 2px; margin: 4px 0 0; padding: 0; list-style: none; }
+.sync-status-warning-list { display: grid; gap: var(--lake-space-xxs); margin: var(--lake-space-xs) 0 0; padding: 0; list-style: none; }
 .sync-status-warning-row { display: flex; min-width: 0; }
-.sync-status-warning-open { display: flex; align-items: center; gap: 6px; width: 100%; min-width: 0; padding: 2px 4px; border: 0; border-radius: var(--lake-radius-2xs); background: transparent; color: var(--lake-text-1); font: inherit; font-size: var(--lake-font-size-tiny); text-align: left; cursor: pointer; }
+.sync-status-warning-open { display: flex; align-items: center; gap: var(--lake-space-sm); width: 100%; min-width: 0; padding: var(--lake-space-xxs) var(--lake-space-xs); border: 0; border-radius: var(--lake-radius-2xs); background: transparent; color: var(--lake-text-1); font: inherit; font-size: var(--lake-font-size-tiny); text-align: left; cursor: pointer; }
 .sync-status-warning-open:hover { background: var(--lake-bg-hover); }
 .sync-status-warning-title { flex: 0 1 auto; min-width: 0; }
 .sync-status-warning-label { flex: 0 0 auto; color: var(--lake-text-3); }
-.sync-status-warning-static { display: flex; align-items: center; gap: 6px; width: 100%; min-width: 0; padding: 2px 4px; font-size: var(--lake-font-size-tiny); }
+.sync-status-warning-static { display: flex; align-items: center; gap: var(--lake-space-sm); width: 100%; min-width: 0; padding: var(--lake-space-xxs) var(--lake-space-xs); font-size: var(--lake-font-size-tiny); }
 .sync-status-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--lake-space-md); margin-top: var(--lake-space-lg); padding-top: var(--lake-space-lg); border-top: 0.5px solid var(--lake-border-1); }
 /* 261013：动作行的按钮是**固定区，不可被压缩** —— 同步中 footer 文案会变长（「· 未同步 N 项」），
  * 按钮作为可收缩的 flex 子项会被挤窄 ⇒ 标签折两行、行盒错乱（设备复现：121px/1 行 → 109px/2 行 → 修后回 1 行）。

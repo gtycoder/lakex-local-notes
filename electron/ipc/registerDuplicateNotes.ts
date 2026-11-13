@@ -111,6 +111,8 @@ async function runBatch(raw: unknown, deps: DuplicateNotesIpcDeps): Promise<Dupl
     for (let index = 0; index < normalized.ids.length; index += 1) {
       if (canceled()) { markCanceledFrom(normalized.ids, index); break; }
       const id = normalized.ids[index];
+      // 261112 task-104（F-05）：日记本空间不支持创建副本（副本会落在日记子树内，绕过「只支持单篇移出」）。
+      if (deps.store.diaryNotebookOfTreeNode(id)) { resultById.set(id, { id, ok: false, reason: "unsupported" }); await yieldNow(); continue; }
       try {
         const created = duplicateOne(id);
         resultById.set(id, { id, ok: true, newId: created.id });
@@ -128,6 +130,8 @@ async function runBatch(raw: unknown, deps: DuplicateNotesIpcDeps): Promise<Dupl
   for (let index = 0; index < normalized.ids.length; index += 1) {
     if (canceled()) { markCanceledFrom(normalized.ids, index); break; }
     const id = normalized.ids[index];
+    // 261112 task-104（F-05）：日记本空间不支持创建副本（同 duplicateOne 分支口径，入口层统一拒绝）。
+    if (deps.store.diaryNotebookOfTreeNode(id)) { resultById.set(id, { id, ok: false, reason: "unsupported" }); continue; }
     try {
       preparedItems.push(deps.store.prepareDuplicate(id));
     } catch (error) {

@@ -56,7 +56,7 @@ import type { NoteSummary, SummaryRow, SyncFolder, SyncNote, TreeNode } from "./
 import { NoteMetadataRepository } from "./noteMetadataRepository.js";
 import { NoteContentRepository, type NoteCacheInput } from "./noteContentRepository.js";
 import { createPlaintextSecretCipher, type SecretCipher } from "../src/core/secretCipher.js";
-import type { DiaryFolderSpace } from "../src/core/diary.js";
+import { DIARY_FOLDER_SPACE, type DiaryFolderSpace } from "../src/core/diary.js";
 import { DiaryStore, type DiaryOpenResult } from "./diaryStore.js";
 import type { DbLike } from "./dbLike.js";
 import { ResourceRepository } from "./resourceRepository.js";
@@ -454,6 +454,42 @@ export class Store {
     return kind;
   }
 
+  /**
+   * 261112 task-104（F-04/F-05）：节点是否在**日记子树**内（含自身）；返回命中它的日记本 id，否则 null。
+   * 入口层守卫共用这一条判据（沿 parent 链向上找 space='diary' 的笔记本；递归 CTE 防环）。
+   */
+  diaryNotebookOfTreeNode(id: string | null): string | null {
+    if (!id) return null;
+    const row = this.db.prepare(
+      `WITH RECURSIVE chain(id,parent_id,node_type,space) AS (
+         SELECT id,parent_id,node_type,space FROM tree_nodes WHERE id=? AND deleted_at IS NULL
+         UNION
+         SELECT t.id,t.parent_id,t.node_type,t.space FROM tree_nodes t JOIN chain c ON t.id=c.parent_id
+       )
+       SELECT id FROM chain WHERE node_type='notebook' AND space=? LIMIT 1`
+    ).get(id, DIARY_FOLDER_SPACE) as { id: string } | undefined;
+    return row?.id ?? null;
+  }
+
+  /** 笔记（notes 行 id）是否属于日记子树（F-04 转换前置判据）。 */
+  diaryNotebookOfNote(noteId: string): string | null {
+    const row = this.db.prepare("SELECT id FROM tree_nodes WHERE (note_file_id=? OR id=?) AND deleted_at IS NULL LIMIT 1").get(noteId, noteId) as
+      { id: string } | undefined;
+    return row ? this.diaryNotebookOfTreeNode(row.id) : null;
+  }
+
+  /**
+   * F-05 入口守卫（261112 task-104）：日记本空间不可作为新建/导入/复制的目标。
+   * 调用方分类（AGENTS §3#23）：只挂在 **U（用户新建）/ I（导入/复制）** 的 Store 入口
+   * （createNoteIn/createGroup/...）；R（回收站恢复）与 S（同步镜像）走 noteMetadata/裸 SQL，不经过这里。
+   */
+  assertNotDiaryCreateTarget(parentId: string | null, action: string): void {
+    if (!parentId) return;
+    if (this.diaryNotebookOfTreeNode(parentId)) {
+      throw new AppError("InvalidInput", `日记本空间不能${action}（只支持把单篇日记转成文档/小记移出）: ${parentId}`);
+    }
+  }
+
   /** 按类型构造正文路径（唯一出口：37 处 notePathFor 调用点全部经此）。 */
   private bodyPathFor(id: string, kind: NoteKind): string {
     // 审计 #3/#17：校验下沉到路径构造本身——manifest（sync 导入）与 IPC（save/read）
@@ -631,12 +667,14 @@ export class Store {
   }
 
   createNoteIn(parentId: string | null, title: string): NoteDocument {
+    this.assertNotDiaryCreateTarget(parentId, "新建文档");
     const id = uuid();
     return this.createNoteInWithContent({ parentId, title, content: emptyLakeBody(id), assets: [], id, position: "bottom" });
   }
 
   /** 新建 Univer 表格文档（kind="usheet"）：正文是 usheets/{id}.usheet.json（Univer IWorkbookData 快照）。 */
   createUsheetIn(parentId: string | null, title: string): NoteDocument {
+    this.assertNotDiaryCreateTarget(parentId, "新建表格");
     const id = uuid();
     return this.createNoteInWithContent({ parentId, title, content: emptyUsheetBody(), assets: [], id, position: "bottom", kind: "usheet" });
   }
@@ -646,6 +684,7 @@ export class Store {
    * 其余全部复用文档管线（目录/回收站/历史/同步/GC）。v1 默认 = 1 张数据表（3 字段 + 表格视图）。
    */
   createBitableIn(parentId: string | null, title: string): NoteDocument {
+    this.assertNotDiaryCreateTarget(parentId, "新建多维表");
     const id = uuid();
     return this.createNoteInWithContent({ parentId, title, content: emptyBitableBody(), assets: [], id, position: "bottom", kind: "bitable" });
   }
@@ -655,12 +694,14 @@ export class Store {
    * 其余全部复用文档管线（目录/回收站/历史/同步/GC）。v1 默认 = 空白画布（preset=drawing）。
    */
   createBoardIn(parentId: string | null, title: string): NoteDocument {
+    this.assertNotDiaryCreateTarget(parentId, "新建画板");
     const id = uuid();
     return this.createNoteInWithContent({ parentId, title, content: emptyBoardBody(), assets: [], id, position: "bottom", kind: "board" });
   }
 
   /** 新建手写板文档（kind="ink"）：正文是矢量墨迹 JSON（inks/{id}.ink.json）。 */
   createInkIn(parentId: string | null, title: string): NoteDocument {
+    this.assertNotDiaryCreateTarget(parentId, "新建手写板");
     const id = uuid();
     return this.createNoteInWithContent({ parentId, title, content: emptyInkBody(), assets: [], id, position: "bottom", kind: "ink" });
   }
@@ -742,7 +783,6 @@ export class Store {
     return this.commitPreparedDuplicate(prepared);
   }
 
-  /** 源笔记 note-assets/{id}/ 下的现存文件（复制副本用；目录不存在 = 无资源）。 */
   /**
    * 日记→小记转换用读口（261112 task-92）：只读正文文件 + 标题 + 资产清单，**不写 last_opened_note_id**
    * （`readNote` 会顺手记 last_opened，转换不该污染「继续上次打开」）。
@@ -770,6 +810,7 @@ export class Store {
   /** 转换用：列出笔记资产（filename + 绝对路径；目录不存在返回空）。 */
   listNoteAssetsForConversion(noteId: string): ImportedNoteAsset[] { return this.collectNoteAssets(noteId); }
 
+  /** 源笔记 note-assets/{id}/ 下的现存文件（复制副本用；目录不存在 = 无资源）。 */
   private collectNoteAssets(sourceId: string): ImportedNoteAsset[] {
     const dir = this.noteAssetsDirFor(sourceId);
     if (!fs.existsSync(dir)) return [];
@@ -944,6 +985,7 @@ export class Store {
   }
 
   createGroup(parentId: string, title: string): TreeNode {
+    this.assertNotDiaryCreateTarget(parentId, "新建分组");
     return this.noteMetadata.createGroup(parentId, title);
   }
 
@@ -1431,9 +1473,11 @@ export class Store {
   private resolveParentNotebook(): string {
     // 回收站容器（notebook-trash）本身也是根层 notebook，必须显式排除；
     // 根层笔记本 parent_id 为 NULL：parent_id != ? 对 NULL 恒不成立（SQL 三值逻辑），必须显式允许 NULL
+    // 261112 task-104（F-05）：日记本是固定特殊笔记本（对知识库不可见）——兜底落点绝不能选到它，
+    // 否则 create_note / 无父导入会把普通文档直接建进日记空间（绕过 move 守卫）。
     const any = this.db.prepare(
-      "SELECT id FROM tree_nodes WHERE node_type='notebook' AND deleted_at IS NULL AND id != ? AND (parent_id IS NULL OR parent_id != ?) ORDER BY sort_order LIMIT 1"
-    ).get(TRASH_NOTEBOOK_ID, TRASH_NOTEBOOK_ID) as { id: string } | undefined;
+      "SELECT id FROM tree_nodes WHERE node_type='notebook' AND deleted_at IS NULL AND id != ? AND (parent_id IS NULL OR parent_id != ?) AND (space IS NULL OR space != ?) ORDER BY sort_order LIMIT 1"
+    ).get(TRASH_NOTEBOOK_ID, TRASH_NOTEBOOK_ID, DIARY_FOLDER_SPACE) as { id: string } | undefined;
     if (any) return any.id;
     const created = this.createNotebook("未分类");
     try { this.setNodeIcon(created.id, "X"); } catch { /* 图标设置失败不影响兜底 */ }
@@ -1458,8 +1502,9 @@ export class Store {
     return this.trashRepository.listReminder(days);
   }
 
-  /** 回收站自动过期（TRASH-NOTEBOOK）：trashed_at 超过 N 天的 trash 顶级条目自动 purge。返回 purge 数。 */
-  autoPurgeExpiredTrash(days: number): number {
+  /** 回收站自动过期（TRASH-NOTEBOOK）：trashed_at 超过 N 天的 trash 顶级条目自动 purge。
+   *  返回区分「实际删除」与「跳过」（日记本不可删除）。 */
+  autoPurgeExpiredTrash(days: number): { purged: number; skipped: number } {
     return this.trashLifecycle.autoPurgeExpiredTrash(days);
   }
 
@@ -1482,8 +1527,8 @@ export class Store {
   }
 
   /** 清空回收站：彻底删除 trash 笔记本的全部根节点（各 purge 连带子树，写 purge 墓碑）。 */
-  emptyTrash(): void {
-    this.trashLifecycle.emptyTrash();
+  emptyTrash(): { purged: number; skipped: number } {
+    return this.trashLifecycle.emptyTrash();
   }
 
   /** M1.6：设置/清除文档或分组的自定义图标（emoji，本地化）。**用户入口**：回收站/purged 拒写。 */

@@ -58,7 +58,16 @@ export function PublishDocDialog({
   const [notebookId, setNotebookId] = useState(options[0]?.value ?? "");
   /** 文档标题：默认值由调用方给（AI = 回答摘要首行；日记 = 日期键），**可编辑**。 */
   const [docTitle, setDocTitle] = useState(title);
-  useEffect(() => { if (open) { setNotebookId(options[0]?.value ?? ""); setDocTitle(title); } }, [open, title, options[0]?.value]);
+  /** 只在「打开那一刻」重置表单（task-105 P3-7）：目录树刷新会让 notebooks 引用/首本 id 变化，
+   *  若无条件跟随就会把用户已经改好的标题清回默认值。 */
+  const openedRef = useRef(false);
+  useEffect(() => {
+    if (!open) { openedRef.current = false; return; }
+    if (openedRef.current) return;
+    openedRef.current = true;
+    setNotebookId(options[0]?.value ?? "");
+    setDocTitle(title);
+  }, [open, title, options]);
   const canConfirm = Boolean(notebookId) && docTitle.trim().length > 0 && !busy;
   return (
     <Dialog

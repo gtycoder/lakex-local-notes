@@ -74,6 +74,10 @@ describe("同步分歧收口（261112 真实 S3 回归）", () => {
       expect(a.store.listTreeNodes().some((n) => n.id === "n1" && n.nodeType === "note")).toBe(false);
       // 内容已应用（内容与位置独立）
       expect(a.store.readNote("n1").content).toBe("<p>他端改过</p>");
+      // task-104 F-15：回收站行接收同步正文后 dirty 必须清掉（否则下一轮会把回收站内容当本地改动上传）。
+      const dirtyRow = (a.store as unknown as { db: { prepare: (sql: string) => { get: (...args: unknown[]) => unknown } } }).db
+        .prepare("SELECT is_dirty FROM notes WHERE id=?").get("n1") as { is_dirty: number } | undefined;
+      expect(dirtyRow?.is_dirty).toBe(0);
       // 再跑一轮稳定（不反复失败）
       await new S3v3SyncEngine({ remote, device: a.device, deviceId: "A" }).sync();
       expect(a.store.listTrash().some((t) => t.id === "n1")).toBe(true);

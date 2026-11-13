@@ -110,4 +110,24 @@ describe("PublishDocDialog（桌面共享：AI 生成文档 / 日记转为文档
     expect(busy.disabled).toBe(true);
     expect(document.querySelector('[role="alert"]')?.textContent).toBe("生成文档失败");
   });
+
+  it("打开期间目录树刷新（列表/首项变化）不重置用户已改标题；关闭再打开才回到默认（task-105 P3-7）", () => {
+    const props = (open: boolean, title: string, notebooks: Array<{ id: string; title: string }>) => ({
+      open, title, notebooks, busy: false, error: null, onConfirm: () => {}, onClose: () => {},
+    });
+    render({ title: "2025-12-31" });
+    const input = () => dialogEl().querySelector<HTMLInputElement>('[aria-label="文档标题"]')!;
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+    act(() => { setter.call(input(), "去年总结"); input().dispatchEvent(new Event("input", { bubbles: true })); });
+
+    // 目录树刷新：notebooks 换新数组且首项 id 变化（父级重渲染）
+    act(() => { root.render(createElement(PublishDocDialog, props(true, "2025-12-31", [{ id: "nb-new", title: "新知识库" }]))); });
+    expect(input().value).toBe("去年总结");
+
+    // 关闭再打开 ⇒ 回到新的默认标题/目标
+    act(() => { root.render(createElement(PublishDocDialog, props(false, "2025-12-31", [{ id: "nb-new", title: "新知识库" }]))); });
+    act(() => { root.render(createElement(PublishDocDialog, props(true, "2026-01-01", [{ id: "nb-new", title: "新知识库" }]))); });
+    expect(input().value).toBe("2026-01-01");
+    expect(dialogEl().querySelector('[aria-label="选择知识库"]')?.textContent).toContain("新知识库");
+  });
 });

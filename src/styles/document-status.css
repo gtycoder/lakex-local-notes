@@ -41,7 +41,9 @@
   min-height: 30px;
   padding: 5px 8px 5px 11px;
   transform: translateX(50%);
-  pointer-events: auto;
+  /* 261112 task-105：提示条**不再拦截点击** —— 非知识库空间里它可能悬浮在可交互区域（AI composer /
+   * 小记面板）上方，2.2s/8s 内挡住用户点击不可接受；仅动作按钮例外（chrome.css 里改为 auto）。 */
+  pointer-events: none;
 }
 .document-notice-toast > span {
   overflow: hidden;

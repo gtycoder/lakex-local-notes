@@ -1039,8 +1039,10 @@ if (!app.requestSingleInstanceLock()) {
       if (cfg.trashAutoPurgeDays <= 0) return;
       const run = () => {
         try {
-          const n = store.autoPurgeExpiredTrash(cfg.trashAutoPurgeDays);
-          if (n > 0) log.trash.info(`[trash] 自动过期 purge ${n} 项（>${cfg.trashAutoPurgeDays} 天）`);
+          const { purged, skipped } = store.autoPurgeExpiredTrash(cfg.trashAutoPurgeDays);
+          if (purged > 0 || skipped > 0) {
+            log.trash.info(`[trash] 自动过期 purge ${purged} 项（>${cfg.trashAutoPurgeDays} 天）` + (skipped > 0 ? `，跳过 ${skipped} 项（日记本不可删除）` : ""));
+          }
         } catch (error) { console.warn("[trash] 自动过期失败:", error); }
       };
       run();

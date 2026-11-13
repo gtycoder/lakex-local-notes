@@ -243,6 +243,8 @@ describe("日记空间（桌面）", () => {
     expect(byAria("重命名日记本")).toBeNull();
     expect(byAria("更换日记本图标")).toBeNull();
     expect(document.body.querySelector('input[aria-label="日记本名称"]')).toBeNull();
+    // 图标格不再挂死类名（task-105 P3-1：无任何 CSS 的 .diary-dir__icon 已删）
+    expect(document.body.querySelector(".diary-dir__icon")).toBeNull();
     // 页头里也不得出现任何排序入口。
     const labels = [...document.body.querySelectorAll<HTMLElement>("button")]
       .map((el) => (el.getAttribute("aria-label") ?? "") + (el.textContent ?? ""));

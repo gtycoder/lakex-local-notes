@@ -13,10 +13,11 @@ const CARD_KIND_LABELS: Record<string, string> = {
   materialLibrary: "素材库",
 };
 
-/** 日记→小记完成提示：基础文案 + 未搬运类型明说（去重、保持出现顺序）。 */
-export function diaryToQuickNoteNotice(droppedKinds: readonly string[]): string {
-  const base = "已转为小记（含图片/附件）；日记已移入回收站，可恢复";
-  const kinds = [...new Set(droppedKinds)].filter(Boolean);
+/** 日记→小记完成提示：按**实际搬运**说媒体 + 未搬运类型明说（去重、保持出现顺序）。 */
+export function diaryToQuickNoteNotice(result: { droppedKinds: readonly string[]; carriedMediaCount: number }): string {
+  // 本篇没有媒体就别说「含图片/附件」（task-105 P3-8：文案与事实一致）。
+  const base = (result.carriedMediaCount > 0 ? "已转为小记（含图片/附件）" : "已转为小记") + "；日记已移入回收站，可恢复";
+  const kinds = [...new Set(result.droppedKinds)].filter(Boolean);
   if (kinds.length === 0) return base;
   const labels = kinds.map((kind) => CARD_KIND_LABELS[kind] ?? kind);
   return base + "；" + labels.join("、") + "未搬运（日记原稿仍在回收站，可恢复）";

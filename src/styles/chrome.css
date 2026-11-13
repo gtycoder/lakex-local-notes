@@ -83,7 +83,8 @@
   color: var(--lake-text-2);
   font-size: var(--lake-font-size-tiny);
 }
-.document-notice-toast button { border-radius: var(--lake-radius-xs); color: var(--lake-accent-text); }
+/* 提示条容器本身穿透点击（document-status.css 的 pointer-events: none），只有动作按钮重新接收事件。 */
+.document-notice-toast button { border-radius: var(--lake-radius-xs); color: var(--lake-accent-text); pointer-events: auto; }
 .document-notice-toast button:hover { background: var(--lake-accent-tint); }
 @media (prefers-reduced-motion: reduce) {
   .document-statusbar, .document-notice-toast { backdrop-filter: none; }

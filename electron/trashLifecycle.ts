@@ -174,27 +174,31 @@ export class TrashLifecycle {
     tx();
   }
 
-  /** 回收站自动过期（TRASH-NOTEBOOK）：trashed_at 超过 N 天的 trash 顶级条目自动 purge。返回 purge 数。 */
-  autoPurgeExpiredTrash(days: number): number {
-    if (!Number.isFinite(days) || days <= 0) return 0;
+  /** 回收站自动过期（TRASH-NOTEBOOK）：trashed_at 超过 N 天的 trash 顶级条目自动 purge。
+   *  返回区分「实际删除」与「跳过」（日记本不可删除；skipped 不并入 purged，避免 UI 计数夸大）。 */
+  autoPurgeExpiredTrash(days: number): { purged: number; skipped: number } {
+    if (!Number.isFinite(days) || days <= 0) return { purged: 0, skipped: 0 };
     const cutoff = new Date(Date.now() - days * 24 * 3600 * 1000).toISOString();
     const rows = this.ctx.db.prepare(
       "SELECT id FROM tree_nodes WHERE parent_id=? AND deleted_at IS NULL AND trashed_at IS NOT NULL AND trashed_at < ? ORDER BY trashed_at"
     ).all(this.ctx.trashNotebookId, cutoff) as Array<{ id: string }>;
+    let purged = 0;
+    let skipped = 0;
     for (const r of rows) {
       // 日记本不可删除（261112 §3#25）：历史脏数据让它进了回收站也不得被过期清理 purge（后台任务不得抛错）。
       const row = this.ctx.db.prepare("SELECT node_type, space FROM tree_nodes WHERE id=?").get(r.id) as
         { node_type: string; space: string | null } | undefined;
       if (row && row.node_type === "notebook" && normalizeFolderSpace(row.space) === DIARY_FOLDER_SPACE) {
         this.ctx.logScopes.store.warn("[trash] 跳过日记本的过期清理（不可删除）:", r.id);
+        skipped += 1;
         continue;
       }
-      try { this.purgeTrashItem(r.id); }
+      try { this.purgeTrashItem(r.id); purged += 1; }
       // F-01 复核（task-62）：候选列表是事务外读的；前一个根 purge 时按 deleted_from_parent_id 可能已把
       // 同组的其他「回收站根」一起删掉（同步扁平化后常见）⇒ NotFound 幂等跳过，后台任务不得半途抛错。
       catch (error) { if (!(error instanceof AppError && error.kind === "NotFound")) throw error; }
     }
-    return rows.length;
+    return { purged, skipped };
   }
 
   /** 恢复回收站节点：移回原位置（deleted_from_parent_id）；原父不存在/已被删/在回收站 → 默认笔记本。
@@ -378,10 +382,12 @@ export class TrashLifecycle {
 
   /** 清空回收站：彻底删除 trash 笔记本的全部根节点（各 purge 连带子树，写 purge 墓碑）。
    * 只遍历根（parent_id=trash），避免整棵子树重复 purge。 */
-  emptyTrash(): void {
+  emptyTrash(): { purged: number; skipped: number } {
     const items = this.ctx.db.prepare(
       "SELECT id FROM tree_nodes WHERE parent_id=? AND deleted_at IS NULL"
     ).all(this.ctx.trashNotebookId) as Array<{ id: string }>;
+    let purged = 0;
+    let skipped = 0;
     for (const item of items) {
       // 日记本不允许被删除：历史脏数据（旧包取消过标记/手工塞进回收站）可能让它出现在回收站里。
       // 单个条目按理进不了回收站（deleteTreeNode 已拒）；这里跳过而不是让整个「清空回收站」失败。
@@ -389,12 +395,14 @@ export class TrashLifecycle {
         { node_type: string; space: string | null } | undefined;
       if (row && row.node_type === "notebook" && normalizeFolderSpace(row.space) === DIARY_FOLDER_SPACE) {
         this.ctx.logScopes.store.warn("[trash] 跳过日记本（不可删除）:", item.id);
+        skipped += 1;
         continue;
       }
-      try { this.purgeTrashItem(item.id); }
+      try { this.purgeTrashItem(item.id); purged += 1; }
       // 同 autoPurgeExpiredTrash：扁平化回收站子树里「组 + 组内子文档」都是根，前一个根的 purge 会连带
       // 删除其余（deleted_from_parent_id 链），后续根已不存在 ⇒ 幂等跳过，用户点「清空回收站」不得报错。
       catch (error) { if (!(error instanceof AppError && error.kind === "NotFound")) throw error; }
     }
+    return { purged, skipped };
   }
 }

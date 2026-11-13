@@ -73,20 +73,14 @@ function TrashTreeRow({ item, items, selectedId, onSelect, onRestore, onPurge, t
 
   return (
     <div className="trash-tree-node">
-      {/* 整行可点（task-89）：标题被徽标挤窄时，点行内任意位置都进预览；键盘 Enter/空格同一条路径。 */}
+      {/* 行 = 分组（task-105）：行内既有「恢复/彻底删除/展开」等真按钮 ⇒ 行本身不能再是 role="button"
+          （ARIA 规定 role=button 的后代呈 presentational，读屏会丢子控件语义）。
+          指针对整行可点（task-89 不回归）；键盘/读屏的「打开预览」= 文本区那个独立原生 <button>。 */}
       <div
         className={`ln-list-item ln-list-item--hide-action ln-row2${selectedId === item.id ? " ln-list-item--focus" : ""}`}
-        role="button"
-        tabIndex={0}
-        aria-current={selectedId === item.id ? "true" : undefined}
-        aria-label={item.nodeType === "note" ? `预览「${title}」` : `「${title}」（目录，无正文预览）`}
-        title={item.nodeType === "note" ? "点击预览内容" : undefined}
+        role="group"
+        aria-label={item.nodeType === "note" ? `${title}，文档` : `${title}，目录`}
         onClick={() => onSelect(item)}
-        onKeyDown={(event) => {
-          // 只认行自身：行内展开箭头/恢复/彻底删除是独立控件，不能连带选中。
-          if (event.target !== event.currentTarget) return;
-          if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelect(item); }
-        }}
       >
         <span
           className={`ln-list-item__toggle${children.length > 0 ? "" : " is-empty"}`}
@@ -100,10 +94,18 @@ function TrashTreeRow({ item, items, selectedId, onSelect, onRestore, onPurge, t
           {children.length > 0 ? <ChevronRight size={13} className={open ? "trash-caret-open" : ""} /> : null}
         </span>
         <span className="ln-list-item__graphic">{item.nodeType === "note" ? <File size={14} /> : <Folder size={14} />}</span>
-        <div className="ln-list-item__text ln-row2__main ln-ellipsis">
+        {/* 文本区 = 独立可点按键（原生 button ⇒ Enter/空格/读屏点击全走浏览器默认语义）。 */}
+        <button
+          type="button"
+          className="ln-list-item__text ln-row2__main ln-ellipsis trash-row-text"
+          aria-current={selectedId === item.id ? "true" : undefined}
+          aria-label={item.nodeType === "note" ? `预览「${title}」` : `「${title}」（目录，无正文预览）`}
+          title={item.nodeType === "note" ? "点击预览内容" : undefined}
+          onClick={(event) => { event.stopPropagation(); onSelect(item); }}
+        >
           <span className="ln-row2__title">{title}</span>
           {meta ? <span className="ln-row2__meta">{meta}</span> : null}
-        </div>
+        </button>
         {item.fromDiary && <span className="badge badge--muted" title="来源是日记本；原位置若已不在，恢复后回到日记空间">日记</span>}
         {item.purged && <span className="badge badge--warn" title="其他设备已彻底删除；本机仍保留可恢复副本，恢复后会重新上传">已被他端删除</span>}
         {item.cloudDeleted && <span className="badge badge--warn" title="云端已彻底删除，本机仅保留这份可恢复副本；恢复后会重新上传">云端已删除（仅本地）</span>}

@@ -64,6 +64,16 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* ③ 文本区 = 独立原生按键（261112 task-105：行改 role=group，不再用 role=button 包住子按钮）。
+   只做按钮复位；排版继续沿用 .ln-list-item__text / .ln-row2__main。 */
+.trash-tree-node button.trash-row-text {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
 
 .history-preview-text { width: 100%; margin: 0; font-size: var(--lake-font-size-small); line-height: 1.7; color: var(--lake-text-1); white-space: pre-wrap; word-break: break-word; font-family: inherit; }
 

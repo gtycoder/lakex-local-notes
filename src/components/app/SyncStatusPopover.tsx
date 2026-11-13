@@ -266,6 +266,8 @@ export function SyncStatusPopover({
                       const copy = syncWarningCopy(warning.kind);
                       const title = syncWarningTitle(warning);
                       const canOpen = Boolean(warning.noteId && onOpenNote);
+                      // 处理提示不只挂 title（读屏不稳）：行内给一个视觉隐藏说明，按钮/静态行用 aria-describedby 关联。
+                      const hintId = "sync-warning-hint-" + index;
                       const content = (
                         <>
                           <span className="sync-status-warning-title ln-ellipsis">{title}</span>
@@ -278,11 +280,13 @@ export function SyncStatusPopover({
                             <button
                               type="button"
                               className="sync-status-warning-open"
+                              aria-describedby={hintId}
                               onClick={() => { setOpen(false); onOpenNote?.(warning.noteId!); }}
                             >{content}</button>
                           ) : (
-                            <span className="sync-status-warning-static">{content}</span>
+                            <span className="sync-status-warning-static" aria-describedby={hintId}>{content}</span>
                           )}
+                          <span id={hintId} className="a11y-visually-hidden">{copy.hint}</span>
                         </li>
                       );
                     })}

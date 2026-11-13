@@ -65,6 +65,8 @@ export interface DiaryToQuickNoteResultShape {
   quickNoteId: string;
   /** 小记承载不了、被明确剥掉的卡片类型（去重；空 = 全部搬运）。 */
   droppedKinds: string[];
+  /** 实际搬到小记资产作用域的媒体数（图片 + 附件）；0 = 本篇没有媒体（提示文案据此决定是否说「含图片/附件」）。 */
+  carriedMediaCount: number;
 }
 
 /** 日记打开结果（与主进程 electron/diaryStore.ts 的 DiaryOpenResult 同形，跨片契约）。 */
@@ -258,7 +260,8 @@ export interface LakeNative {
   /** 回收站预览：按需补拉该笔记本地缺失的资源（不恢复）。返回 warnings（best-effort）。 */
   ensureTrashNoteAssets(id: string): Promise<{ warnings: string[]; skipped: "unconfigured" | "offline" | null }>;
   purgeTrash(id: string): Promise<void>;
-  emptyTrash(): Promise<void>;
+  /** 清空回收站；返回值区分「实际删除 / 跳过」（日记本不可删除，跳过项不并入 purged）。 */
+  emptyTrash(): Promise<{ purged: number; skipped: number }>;
   createHistorySnapshot(noteId: string, content?: string, force?: boolean): Promise<number | null>;
   listNoteHistory(noteId: string): Promise<NoteHistoryEntry[]>;
   restoreHistory(historyId: number): Promise<void>;

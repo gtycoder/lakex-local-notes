@@ -6,7 +6,7 @@
  */
 import type { QuickNoteListSummary, TreeNode } from "../../lib/types";
 import { TRASH_NOTEBOOK_ID } from "../../core/syncDecisions";
-import { diaryNotebooks, diarySubtreeIds } from "../../core/diary";
+import { diarySubtreeIds, moveTargetCandidates } from "../../core/diary";
 import type { AiWritingDocRef } from "../../core/aiWriting";
 
 export type AiWritingQuickGroupId =
@@ -64,8 +64,9 @@ export function selectableDocuments(treeNodes: readonly TreeNode[]): TreeNode[] 
  * 而日记本又被文档空间目录树隐藏 ⇒ 用户点完就再也找不到它（与「转为文档」禁止日记本作目标同口径）。
  */
 export function selectableNotebooks(treeNodes: readonly TreeNode[]): TreeNode[] {
-  const diaryIds = new Set(diaryNotebooks(treeNodes).map((node) => node.id));
-  return treeNodes.filter((node) => node.nodeType === "notebook" && node.id !== TRASH_NOTEBOOK_ID && !node.isPurged && !diaryIds.has(node.id));
+  // 261112 task-104（F-12）：判据单一来源 = core.moveTargetCandidates（剔除日记子树），这里只收窄到 notebook。
+  return moveTargetCandidates(treeNodes)
+    .filter((node) => node.nodeType === "notebook" && node.id !== TRASH_NOTEBOOK_ID && !node.isPurged);
 }
 
 /** 快捷组 → 具体引用（按 updatedAt 倒序，最多 50 篇，避免一次挂太多资料）。 */

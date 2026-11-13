@@ -56,6 +56,8 @@ export const WRITE_OPS = [
   // 261109 日记：幂等打开某天 = 建本/建组/建文档（单事务，纯本地写，不出网）⇒ 归写域。
   // 它和 createNote 一样会产生 tree_nodes 行，必须与其它目录写串行，否则并发建组会撞 sortOrder。
   "diaryOpenDate",
+  // 261113 task-106：日记条目「转为小记」= 建小记（行/正文/资源作用域改写）+ 软删原文，纯本地写 ⇒ 写域。
+  "diaryToQuickNote",
   // 历史快照
   "deleteHistory", "saveHistorySettings", "snapshotNote", "cleanupHistory",
   // 孤儿资产（P7：PDF 导入失败/取消按 filename 定向清理本轮已上传页图）

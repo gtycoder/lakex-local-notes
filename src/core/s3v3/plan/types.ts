@@ -100,7 +100,10 @@ export type Intent =
 export interface PlanWarning {
   code: "remote_incomplete" | "local_body_missing" | "asset_missing" | "asset_invalid_name" | "conflict_kept_history" | "cleanup_failed" | "hash_mismatch"
     /** P1-4：本地正文与基线不一致但行未改动，且内容像损坏（空/二进制）⇒ 跳过上传并留档（不覆盖云端）。 */
-    | "body_suspicious_external_change";
+    | "body_suspicious_external_change"
+    /** 261112 task-104（F-07）：单篇 apply（远端落本地）失败被跳过、下一轮重试。**核心出这个 code**，
+     *  两端不再各自把 remote_incomplete 改写成 apply_skipped。 */
+    | "apply_skipped";
   space: Space;
   id?: string;
   title?: string;

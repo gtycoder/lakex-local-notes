@@ -14,6 +14,7 @@ const TYPES = read("../../lib/types.ts");
 const NATIVE = read("../../lib/native.ts");
 const PRELOAD = read("../../../electron/preload.cjs");
 const WEB = read("../../../electron/webApiServer.ts");
+const CSS = read("../../styles/components.css");
 
 describe("同步记录 UI 接线（P1 第 4 项）", () => {
   it("角标：同步按钮上有未读小圆点 + 隐藏文案（a11y）；只有可见那份顶栏拉账本", () => {
@@ -40,6 +41,20 @@ describe("同步记录 UI 接线（P1 第 4 项）", () => {
     expect(PANEL).toContain("全部标记已读");
     // 只对可恢复类型给恢复按钮（save_external_changed 是审计事件）
     expect(PANEL).toContain("canRestoreSyncConflict(row)");
+  });
+
+  it("同步 warning 列表（261112 审计 17 P1 + task-105）：≤5 行、可点行打开文档、hint 走视觉隐藏+aria-describedby、间距全令牌", () => {
+    expect(POPOVER).toContain("syncWarningRows(warnings)");
+    expect(POPOVER).toContain("rows.slice(0, 5)");
+    expect(POPOVER).toContain("条见「设置 → 同步诊断」");
+    // task-105：处理提示不只挂 title（读屏不稳）⇒ 视觉隐藏文本 + aria-describedby
+    expect(POPOVER).toContain("aria-describedby={hintId}");
+    expect(POPOVER).toContain('className="a11y-visually-hidden"');
+    expect(POPOVER).toContain("onOpenNote?.(warning.noteId!)");
+    // task-105 P3-3：行内间距走令牌（2/4/6px 都有同值档）
+    expect(CSS).toContain(".sync-status-warning-list { display: grid; gap: var(--lake-space-xxs); margin: var(--lake-space-xs) 0 0;");
+    expect(CSS).toMatch(/\.sync-status-warning-open \{[^}]*gap: var\(--lake-space-sm\);[^}]*padding: var\(--lake-space-xxs\) var\(--lake-space-xs\);/s);
+    expect(CSS).not.toMatch(/\.sync-status-warning[^{]*\{[^}]*\b[246]px\b/);
   });
 
   it("类型与通道单一来源：SyncConflictRow/Snapshot + 三个 IPC 封装", () => {

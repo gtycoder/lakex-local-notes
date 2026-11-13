@@ -3,7 +3,7 @@ import fs from "node:fs";
 import { mimeTypeForFilename } from "../src/core/assetNaming.js";
 import { readImageDimensions } from "../src/core/imageUtils.js";
 import { lakeBodyToPlainText } from "../src/core/lakeDocForm.js";
-import { normalizeQuickNoteContent, rewriteQuickNoteAssetScope, type StoredQuickNoteContent } from "../src/core/quickNoteModel.js";
+import { normalizeQuickNoteContent, type StoredQuickNoteContent } from "../src/core/quickNoteModel.js";
 import { sha256Sync } from "../src/core/sha256Sync.js";
 import { AppError } from "../src/core/storeErrors.js";
 import type { QuickNotesStore } from "./quickNotes.js";
@@ -26,6 +26,8 @@ export interface ConvertDiaryToQuickNoteResult {
   quickNoteId: string;
   /** 未能搬运的卡片类型（去重；空 = 全部承载）。 */
   droppedKinds: string[];
+  /** 实际搬到小记资产作用域的媒体数（图片 + 附件；0 = 本篇没有媒体）——渲染层提示文案据此说「含图片/附件」。 */
+  carriedMediaCount: number;
 }
 
 /** 小记正文能承载的卡片名（资产管理 + 内核可渲染）。其它 card 一律剥离并上报。 */
@@ -53,25 +55,65 @@ function stripUnsupportedCards(body: string): { body: string; droppedKinds: stri
   return { body: stripped, droppedKinds: [...dropped].sort() };
 }
 
-/** 资产文件名在正文里的两种形态：原样 / 卡片 value 里 encodeURIComponent 后的形态。 */
-function bodyReferencesAsset(body: string, filename: string): boolean {
-  return body.includes(filename) || body.includes(encodeURIComponent(filename));
+/**
+ * 资产文件名在正文里的**双形态**（参考 rewriteQuickNoteAssetScope）：
+ * 原样 / encodeURIComponent 后；再补「百分号解码后」与「解码后再编码」两形态，
+ * 覆盖中文、空格、含 `%` 等历史文件名（卡片 value 是 encodeURIComponent(JSON) 时会多一层编码）。
+ */
+function encodeDepth(value: string, depth: number): string {
+  let out = value;
+  for (let i = 0; i < depth; i += 1) out = encodeURIComponent(out);
+  return out;
 }
+
+function decodeChain(value: string): string[] {
+  const out: string[] = [];
+  let current = value;
+  for (let i = 0; i < 3; i += 1) {
+    try {
+      const next = decodeURIComponent(current);
+      if (next === current) break;
+      current = next;
+      out.push(next);
+    } catch { break; }
+  }
+  return out;
+}
+
+function assetReferenceForms(filename: string): string[] {
+  // 多形态：原样 / 单编码 / 双编码（卡片 value 是 encodeURIComponent(JSON)，内核可能先编码过 URL），
+  // 以及把文件名先百分号解码后再做同样三种编码（历史中文/空格名在 URL 里通常已是编码态）。
+  const bases = [filename, ...decodeChain(filename)];
+  const forms = new Set<string>();
+  for (const base of bases) for (let depth = 0; depth <= 2; depth += 1) forms.add(encodeDepth(base, depth));
+  return [...forms];
+}
+
+function bodyReferencesAsset(body: string, filename: string): boolean {
+  return assetReferenceForms(filename).some((form) => body.includes(form));
+}
+
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-/** 正文里引用到本笔记作用域下的资产文件名（原样 + URL-encoded 两种写法；文件名白名单字符集）。 */
+/**
+ * 正文里引用到本笔记作用域下的资产文件名：作用域同样双形态（原样 / URL-encoded）；
+ * 文件名截取到「引号/空白/括号等分隔符」为止，再按 URL 解码（中文/空格文件名能正确匹配）。
+ */
 function referencedAssetNames(body: string, noteId: string): string[] {
   const names = new Set<string>();
-  const encodedScope = encodeURIComponent(`/${noteId}/`);
-  const patterns = [
-    new RegExp(`/${escapeRegExp(noteId)}/([A-Za-z0-9._-]+)`, "g"),
-    new RegExp(`${escapeRegExp(encodedScope)}([A-Za-z0-9._-]+)`, "g"),
-  ];
-  for (const pattern of patterns) {
-    for (const match of body.matchAll(pattern)) names.add(match[1]);
+  const scopes = [`/${noteId}/`, encodeURIComponent(`/${noteId}/`)];
+  for (const scope of scopes) {
+    const pattern = new RegExp(`${escapeRegExp(scope)}([^"<>\\s)#&]+)`, "g");
+    for (const match of body.matchAll(pattern)) {
+      // 编码态里文件名后面紧跟 %22（JSON 引号）⇒ 先截断再解码。
+      const raw = match[1].split("%22")[0].split("%2522")[0].replace(/[.,;:!?]+$/, "");
+      if (!raw) continue;
+      const decoded = decodeChain(raw);
+      names.add(decoded.length ? decoded[decoded.length - 1] : raw);
+    }
   }
   return [...names];
 }
@@ -86,6 +128,11 @@ export function convertDiaryNoteToQuickNote(
   if (kind !== "doc") {
     throw new AppError("InvalidInput", `该日记是 ${kind} 文档（表格/多维表/画板/手写板），正文不是 Lake 文本，不能转为小记；请先转为文档`);
   }
+  // 261112 task-104（F-04）：只允许「日记空间里的条目」——否则 webApi/自动化可对任意普通文档调用，
+  // 成功后把原文软删进回收站（从知识库树里消失），超出产品语义。
+  if (!notes.diaryNotebookOfNote(noteId)) {
+    throw new AppError("InvalidInput", "只能把日记条目转为小记（该文档不在日记空间中）");
+  }
   const sourceBody = notes.readNoteBodyForConversion(noteId);
   const title = notes.noteTitleOf(noteId);
   const sourceAssets = notes.listNoteAssetsForConversion(noteId);
@@ -98,9 +145,20 @@ export function convertDiaryNoteToQuickNote(
   }
 
   // ① 只搬运正文真正引用的资产（未被引用的留在原日记目录，回收站恢复时仍完整）。
-  const rewriteBody = rewriteQuickNoteAssetScope(sourceBody, `/${noteId}/`, `/quick-notes/${quickNoteId}/`);
+  // 作用域改写覆盖「原样 / 单编码 / 双编码」三种形态（卡片 value 常是 encodeURIComponent(JSON)，
+  // 若内核把 URL 里文件名也编码过，就会多一层转义；只改单层会留下旧 scope）。
+  let rewriteBody = sourceBody;
+  for (let depth = 0; depth <= 2; depth += 1) {
+    rewriteBody = rewriteBody.split(encodeDepth(`/${noteId}/`, depth)).join(encodeDepth(`/quick-notes/${quickNoteId}/`, depth));
+  }
   const { body: carriedBody, droppedKinds } = stripUnsupportedCards(rewriteBody);
   const carried = sourceAssets.filter((asset) => bodyReferencesAsset(carriedBody, asset.filename));
+  const bodyForQuick = carriedBody;
+  // 兜底：改写后仍残留原日记作用域（原样/单/双编码任一形态）= 有引用没被识别（安全失败，不产半成品）。
+  const residual = [0, 1, 2].map((depth) => encodeDepth(`/${noteId}/`, depth)).find((scope) => bodyForQuick.includes(scope));
+  if (residual !== undefined) {
+    throw new AppError("InvalidInput", "正文仍引用未搬运的日记资源作用域，转换已中止（未产生小记）");
+  }
   const images: StoredQuickNoteContent["images"] = [];
   const files: Array<{ filename: string; bytes: Buffer }> = [];
   for (const asset of carried) {
@@ -124,7 +182,7 @@ export function convertDiaryNoteToQuickNote(
   // 优先用已建好的 text_cache（与搜索同源）；没有再退化到正文纯文本抽取。
   const plain = (() => { try { return notes.readNoteCaches(noteId).plain ?? lakeBodyToPlainText(sourceBody); } catch { return lakeBodyToPlainText(sourceBody); } })();
   const text = [title, plain].map((part) => part.trim()).filter(Boolean).join("\n");
-  const content = normalizeQuickNoteContent(text, carriedBody.trim() ? carriedBody : "", images);
+  const content = normalizeQuickNoteContent(text, bodyForQuick.trim() ? bodyForQuick : "", images);
 
   // ③ 先建小记（journal 原子：失败不留行/文件），成功后再软删日记。
   // 261112 发版复核 F-03：创建本身失败（例如 promote 失败）也必须回滚，否则重启 recoverImports 会把半成品补出来。
@@ -141,5 +199,5 @@ export function convertDiaryNoteToQuickNote(
     try { quickNotes.removeUnsyncedQuickNote(quickNoteId); } catch { /* best effort：最多留一条可手删的小记 */ }
     throw error;
   }
-  return { quickNoteId, droppedKinds };
+  return { quickNoteId, droppedKinds, carriedMediaCount: carried.length };
 }

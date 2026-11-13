@@ -285,8 +285,9 @@ export function DiaryWorkspace(props: DiaryWorkspaceProps) {
           })}
         </div>
         <div className="diary-dir__foot">
-          {/* 261112 用户裁决：日记本固定不可变（像回收站），**只读**展示图标与名字；不提供改名/换图标入口。 */}
-          <span className="diary-dir__icon" aria-hidden="true">
+          {/* 261112 用户裁决：日记本固定不可变（像回收站），**只读**展示图标与名字；不提供改名/换图标入口。
+              图标格无自有样式（task-105 收掉死类名）：尺寸由节点图标/lucide 自身决定，排版交给 .diary-dir__foot。 */}
+          <span aria-hidden="true">
             {notebook?.icon ? <NodeIconGlyph value={notebook.icon} /> : <NotebookPen size={14} aria-hidden="true" />}
           </span>
           <span className="diary-dir__book ln-ellipsis" title={notebook?.title ?? "日记本"}>

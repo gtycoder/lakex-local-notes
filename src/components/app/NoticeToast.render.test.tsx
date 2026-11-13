@@ -82,6 +82,20 @@ describe("非知识库空间的提示可见性（task-93）", () => {
     expect(host.querySelector(".document-notice-toast")?.textContent).toContain("已复制 Markdown");
   });
 
+  it("提示条不拦截点击；动作按钮才接收事件；AI 写作空间抬到 composer dock 之上（task-105，全令牌）", () => {
+    const STATUS = readFileSync(path.resolve("src/styles/document-status.css"), "utf8");
+    const CHROME = readFileSync(path.resolve("src/styles/chrome.css"), "utf8");
+    const SHELL = readFileSync(path.resolve("src/styles/app/shell.css"), "utf8");
+    // 容器穿透（否则会挡住下方可交互区域）；动作按钮单独恢复
+    expect(STATUS).toMatch(/\.document-notice-toast \{[^}]*pointer-events: none;/s);
+    expect(CHROME).toMatch(/\.document-notice-toast button \{[^}]*pointer-events: auto;/s);
+    // AI 空间：抬到 dock 之上，且底部偏移只用 --lake-space-* 令牌（不写字面 px）
+    const lift = SHELL.match(/\.app-shell\.ai-writing-active \.document-notice-toast \{([^}]*)\}/);
+    expect(lift).toBeTruthy();
+    expect(lift?.[1]).toContain("bottom: calc(var(--lake-space-giant) * 2 + var(--lake-space-huge) + var(--lake-space-xxxl));");
+    expect(lift?.[1]).not.toMatch(/\d+px/);
+  });
+
   it("接线护栏：App 始终渲染 DesktopStatusBar（只是统计内容按空间收敛），提示标记只有一份", () => {
     const APP = readFileSync(path.resolve("src/App.tsx"), "utf8");
     const BAR = readFileSync(path.resolve("src/components/app/DesktopStatusBar.tsx"), "utf8");

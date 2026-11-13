@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import Database from "better-sqlite3";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -68,6 +69,8 @@ describe("日记 → 小记（正文原样承载 + 媒体搬运）", () => {
 
     const result = convertDiaryNoteToQuickNote(quickNotes, store, noteId);
     expect(result.droppedKinds).toEqual([]);
+    // task-105 P3-8：提示文案按实际搬运 —— 本篇带了图片 + 附件 ⇒ 计数 2
+    expect(result.carriedMediaCount).toBe(2);
     const quick = quickNotes.readQuickNote(result.quickNoteId);
     // 资源清单：图片 + 附件混在同一数组；附件没有像素尺寸。
     const byName = new Map(quick.content.images.map((image) => [image.filename, image]));
@@ -106,6 +109,8 @@ describe("日记 → 小记（正文原样承载 + 媒体搬运）", () => {
 
     const result = convertDiaryNoteToQuickNote(quickNotes, store, opened.noteId);
     expect(result.droppedKinds).toEqual(["board"]);
+    // 没有媒体 ⇒ 计数 0（UI 不说「含图片/附件」）
+    expect(result.carriedMediaCount).toBe(0);
     const quick = quickNotes.readQuickNote(result.quickNoteId);
     expect(quick.content.body).toContain("保留这段文字");
     expect(quick.content.body).toContain("后面这段也在");
@@ -161,10 +166,68 @@ describe("日记 → 小记（正文原样承载 + 媒体搬运）", () => {
 
   it("非 doc 类型（表格/多维表/画板/手写板）明确拒绝，不产生任何变更", () => {
     const opened = store.openDiaryDate("2026-11-09");
-    const notebookId = store.listTreeNodes().find((node) => node.space === "diary")!.id;
     void opened;
-    const sheet = store.createUsheetIn(notebookId, "2026-11-10");
+    const nodes = store.listTreeNodes();
+    const diaryNotebookId = nodes.find((node) => node.space === "diary")!.id;
+    const personalNotebookId = nodes.find((node) => node.nodeType === "notebook" && node.space !== "diary")!.id;
+    // F-05 起公开 API 已禁止在日记空间新建非日记文档（store.assertNotDiaryCreateTarget）；
+    // 这里先在普通笔记本建表格、再直接改库模拟**旧脏数据**（该守卫只拦入口，不拦已存在的行）。
+    const sheet = store.createUsheetIn(personalNotebookId, "2026-11-10");
+    const db = new Database(store.databasePath);
+    try {
+      db.prepare("UPDATE tree_nodes SET parent_id=? WHERE id=?").run(diaryNotebookId, sheet.id);
+    } finally { db.close(); }
     expect(() => convertDiaryNoteToQuickNote(quickNotes, store, sheet.id)).toThrow(/不能转为小记/);
     expect(quickNotes.countQuickNotes()).toBe(0);
+  });
+});
+
+describe("转换入口守卫与资产文件名（task-104）", () => {
+  it("F-04：普通文档（不在日记子树）调用被明确拒绝，不产生小记", () => {
+    const nb = store.createNotebook("普通本");
+    const doc = store.createNoteIn(nb.id, "普通文档");
+    expect(() => convertDiaryNoteToQuickNote(quickNotes, store, doc.id)).toThrow(/只能把日记条目转为小记/);
+    expect(quickNotes.countQuickNotes()).toBe(0);
+  });
+
+  it("F-06：中文/空格文件名资产能被识别并改名搬运（正文引用同步改写）", () => {
+    const opened = store.openDiaryDate("2026-11-09");
+    const noteId = opened.noteId;
+    const filename = "图片 一.png";
+    fs.mkdirSync(assetDir(noteId), { recursive: true });
+    fs.writeFileSync(path.join(assetDir(noteId), filename), PNG);
+    const src = `http://127.0.0.1:19876/${noteId}/` + encodeURIComponent(filename);
+    const body = lakeImageCardParagraph("p2", buildLakeImageCardValue({
+      src, cardId: "c1", taskId: "t2", clientId: "c2", name: filename, size: PNG.length, from: "doc",
+    }));
+    fs.writeFileSync(bodyPath(noteId), body, "utf8");
+
+    const result = convertDiaryNoteToQuickNote(quickNotes, store, noteId);
+    expect(result.carriedMediaCount).toBe(1);
+    const quick = quickNotes.readQuickNote(result.quickNoteId);
+    const image = quick.content.images[0];
+    // 中文/空格文件名本身是合法路径片段（quick note 校验允许）；关键是资产被搬运且正文引用被改写。
+    expect(image.filename).toBe(filename);
+    expect(image.mimeType).toBe("image/png");
+    expect(fs.existsSync(path.join(quickNotes.quickNoteAssetsPathFor(result.quickNoteId), image.filename))).toBe(true);
+    let decoded = quick.content.body;
+    for (let i = 0; i < 3; i += 1) decoded = decodeURIComponent(decoded);
+    expect(decoded).toContain(`/quick-notes/${result.quickNoteId}/${image.filename}`);
+    expect(decoded).not.toContain(`/${noteId}/`);
+  });
+
+  it("F-06：中文名资产缺失时明确报错（不产半成品）", () => {
+    const opened = store.openDiaryDate("2026-11-09");
+    const noteId = opened.noteId;
+    const filename = "图片 缺失.png";
+    fs.mkdirSync(assetDir(noteId), { recursive: true });
+    const src = `http://127.0.0.1:19876/${noteId}/` + encodeURIComponent(filename);
+    const body = lakeImageCardParagraph("p2", buildLakeImageCardValue({
+      src, cardId: "c1", taskId: "t2", clientId: "c2", name: filename, size: 10, from: "doc",
+    }));
+    fs.writeFileSync(bodyPath(noteId), body, "utf8");
+    expect(() => convertDiaryNoteToQuickNote(quickNotes, store, noteId)).toThrow(/资源文件缺失/);
+    expect(quickNotes.countQuickNotes()).toBe(0);
+    expect(store.listTrash()).toEqual([]);
   });
 });

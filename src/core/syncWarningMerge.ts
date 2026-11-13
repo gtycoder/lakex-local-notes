@@ -9,7 +9,8 @@
  *
  * 注意：**apply_skipped 必须由调用方单独传 extra**（那是"本地写失败"，不能归到 remote_incomplete）。
  */
-import type { SyncWarning } from "./sharedTypes.js";
+import type { PlanWarning } from "./s3v3/plan/types.js";
+import type { SyncWarning, SyncWarningKind } from "./sharedTypes.js";
 
 export interface MergeSyncWarningsInput {
   /** 引擎/plan 给出的结构化警告。 */
@@ -25,6 +26,22 @@ function overlaps(a: string, b: string): boolean {
   const y = b.trim();
   if (!x || !y) return false;
   return x === y || x.includes(y) || y.includes(x);
+}
+
+/**
+ * 单篇 apply 失败的**唯一映射**（261112 task-104 F-07）：`PlanWarning` → `SyncWarning`。
+ * core 现在直接产出 `apply_skipped`；这里只做字段搬运，不再把 kind 改写成 remote_incomplete
+ * （两端消费方都直接用本函数的结果，禁止二次映射）。
+ */
+export function syncWarningOfApplyFailure(warning: PlanWarning): SyncWarning {
+  const kind: SyncWarningKind = warning.code === "apply_skipped" ? "apply_skipped" : "remote_incomplete";
+  return {
+    kind,
+    ...(warning.id ? { noteId: warning.id } : {}),
+    ...(warning.title ? { title: warning.title } : {}),
+    ...(warning.filename ? { filename: warning.filename } : {}),
+    message: warning.detail ?? "",
+  };
 }
 
 export function mergeSyncWarnings(input: MergeSyncWarningsInput): SyncWarning[] {

@@ -373,18 +373,30 @@ export function createDeviceStoreMeta(deps: DeviceStoreMetaDeps): DeviceStoreMet
    * 只在本列表内定序；父不在本列表（已存在/远端孤儿）时保持原样交给 resolveRemoteFolderParent 兜底。
    */
   function foldersParentsFirst(list: readonly LakeFolderEntry[]): LakeFolderEntry[] {
+    const MAX_PARENT_DEPTH = 64;
     const byId = new Map(list.map((f) => [f.id, f] as const));
-    const out: LakeFolderEntry[] = [];
-    const seen = new Set<string>();
-    const visit = (f: LakeFolderEntry, depth = 0): void => {
-      if (seen.has(f.id) || depth > 64) return;
-      seen.add(f.id);
-      const parent = f.parentId ? byId.get(f.parentId) : undefined;
-      if (parent) visit(parent, depth + 1);
-      out.push(f);
+    /** 父链深度（只在**本列表内**计；父不在列表 = 0，交给 resolveRemoteFolderParent 兜底）。 */
+    const depthMemo = new Map<string, number>();
+    const depthOf = (id: string, path: Set<string>): number => {
+      const cached = depthMemo.get(id);
+      if (cached !== undefined) return cached;
+      if (path.has(id)) return 0; // 坏环：按根处理，避免死循环
+      const node = byId.get(id);
+      const parent = node?.parentId ? byId.get(node.parentId) : undefined;
+      if (!node || !parent) { depthMemo.set(id, 0); return 0; }
+      path.add(id);
+      const depth = 1 + depthOf(parent.id, path);
+      path.delete(id);
+      depthMemo.set(id, depth);
+      return depth;
     };
-    for (const f of list) visit(f);
-    return out;
+    const maxDepth = list.reduce((max, f) => Math.max(max, depthOf(f.id, new Set())), 0);
+    if (maxDepth > MAX_PARENT_DEPTH) {
+      // task-104 F-08：深链不再静默；按真实深度排序（父先子后对所有深度都成立），只告警一次。
+      deps.log?.("[sync][folder] 目录父链超过 " + MAX_PARENT_DEPTH + " 层（" + maxDepth + "），按深度排序仍保证父先子后: " + list[0]?.id);
+    }
+    // 稳定排序：同深度保持输入顺序；父深度 < 子深度 ⇒ 父一定先落库。
+    return [...list].sort((a, b) => depthOf(a.id, new Set()) - depthOf(b.id, new Set()));
   }
 
   /** 目录落库：先 import/更新（deleteMissing=false），再在 saveState 收尾删缺失（true）。 */
@@ -394,8 +406,12 @@ export function createDeviceStoreMeta(deps: DeviceStoreMetaDeps): DeviceStoreMet
       // P1-a 兜底（261112 真实 S3）：**notebook 只能根层**。带 parent 却标 notebook 的条目 =
       // 远端类型在合并层丢了（engineBridge.applyFolders 读 meta.kind，而计划的 meta 只有 nodeType）
       // ⇒ 按 group 落库，否则 resolveRemoteFolderParent 会把父强行置 null，跨端目录结构永久不一致。
+      // F-08（task-104）：类型兜底改成**显式告警**（仍保留兜底，避免整轮失败/树结构错乱）。
       const f = raw.nodeType === "notebook" && raw.parentId && raw.parentId !== TRASH_NOTEBOOK_ID
-        ? { ...raw, nodeType: "group" as const }
+        ? (() => {
+            deps.log?.("[sync][folder] 远端 directory 标记为 notebook 但带父目录 ⇒ 按 group 落库（上游类型丢失）: " + raw.id + " parent=" + raw.parentId);
+            return { ...raw, nodeType: "group" as const };
+          })()
         : raw;
       const c = current.get(f.id);
       try {
@@ -686,7 +702,7 @@ export function createDeviceStoreMeta(deps: DeviceStoreMetaDeps): DeviceStoreMet
         // 下一轮会重新计划该篇（未标 synced/未推进基线），因此这里是可重试的跳过而不是丢数据。
         const detail = "应用远端更新失败（已跳过，下一轮重试）：" + (e as Error).message;
         deps.log?.("[sync][apply][warn] 跳过本篇 " + n.id + " " + detail);
-        deps.onApplyWarning?.({ code: "remote_incomplete", space: "lake", id: n.id, title: n.title, detail });
+        deps.onApplyWarning?.({ code: "apply_skipped", space: "lake", id: n.id, title: n.title, detail });
         continue;
       }
     }

@@ -270,6 +270,10 @@
 .app-shell.ai-writing-active .sidebar { display: none; }
 .app-shell.ai-writing-active { grid-template-columns: var(--activity-rail-width) 0 minmax(0, 1fr); }
 .app-shell.ai-writing-active .workspace { grid-template-rows: minmax(0, 1fr); }
+/* 提示条抬到 AI 写作的 composer dock 之上（261112 task-105）：dock 底距 12 + composer 最小高
+ * （输入 52 + 操作行 ≈ 39）≈ 103，单行文档 chip 再加 ≈ 30 ⇒ 取 136 = 40×2 + 32 + 24（全令牌）。
+ * 只调位置，不改提示条视觉；容器穿透点击见 document-status.css。 */
+.app-shell.ai-writing-active .document-notice-toast { bottom: calc(var(--lake-space-giant) * 2 + var(--lake-space-huge) + var(--lake-space-xxxl)); }
 
 /* ===== 目录/大纲面板层级：与常驻 activity rail 做明显区分 ===== */
 @media (min-width: 761px) {

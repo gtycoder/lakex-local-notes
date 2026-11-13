@@ -564,3 +564,41 @@ describe("createDeviceStoreMeta.saveState 文档标签关系（P2-E 批量版本
     expect(tagApplyCalls(platform)).toHaveLength(0);
   });
 });
+describe("目录落库告警与深链保序（task-104 F-08）", () => {
+  it("notebook 带父 ⇒ 按 group 落库并显式告警；父链超 64 层告警一次但全部落库且父先子后", async () => {
+    const logs: string[] = [];
+    const platform = memoryPlatform({ folders: [] });
+    const files = memoryFiles();
+    const meta = createDeviceStoreMeta({
+      platform: platform.port,
+      files,
+      assets: createFileBackedAssetIo({ files, assetDirFor: (id) => "assets/" + id, quickAssetDirFor: (id) => "quick-assets/" + id }),
+      state: { read: async () => null, write: async () => undefined },
+      baseline: { load: async () => null },
+      stagedBodies: new Map<string, Uint8Array>() as never,
+      log: (message) => logs.push(message),
+    });
+    const folders: Array<{ id: string; title: string; parentId: string | null; sortOrder: number; nodeType: "notebook" | "group"; icon: string | null; updatedAt: string }> = [
+      { id: "deep-root", title: "root", parentId: null, sortOrder: 0, nodeType: "notebook", icon: null, updatedAt: "T" },
+      { id: "bad-notebook", title: "NB", parentId: "deep-root", sortOrder: 1, nodeType: "notebook", icon: null, updatedAt: "T" },
+    ];
+    for (let i = 0; i < 70; i += 1) {
+      folders.push({ id: "g" + i, title: "g" + i, parentId: i === 0 ? "deep-root" : "g" + (i - 1), sortOrder: i + 2, nodeType: "group", icon: null, updatedAt: "T" });
+    }
+    const state: DeviceState = {
+      lake: { v: 3, space: "lake", notes: [], folders },
+      quickNotes: { v: 3, space: "quickNotes", items: [], tags: [] },
+      folders,
+      intents: [], pending: [], remotePurged: [], restorePending: [],
+    };
+    await meta.saveState(state);
+    expect(logs.some((line) => line.includes("按 group 落库"))).toBe(true);
+    expect(logs.some((line) => line.includes("父链超过"))).toBe(true);
+    // saveState 对目录跑两遍（先 import/更新，再收尾删缺失）⇒ 按首次出现顺序去重。
+    const imported = [...new Set(platform.calls.filter((call) => call.startsWith("importRemoteFolder:")).map((call) => call.slice("importRemoteFolder:".length)))];
+    expect(imported).toHaveLength(folders.length);
+    const indexOf = (id: string): number => imported.indexOf(id);
+    expect(indexOf("g0")).toBeGreaterThan(indexOf("deep-root"));
+    for (let i = 1; i < 70; i += 1) expect(indexOf("g" + i)).toBeGreaterThan(indexOf("g" + (i - 1)));
+  });
+});
