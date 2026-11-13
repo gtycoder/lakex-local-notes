@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { SETTING_ITEMS } from "../model/settingsSearch";
+import { DISPLAY_ONLY_SHORTCUTS, SHELL_COMMANDS } from "../../lib/shortcuts/registry";
 
 /**
  * 设置页分组归属（261105 用户验收重组）：每个 itemId 必须落在期望分类下，
@@ -83,9 +84,15 @@ describe("设置页分组归属（重组后）", () => {
 
   it("每个 itemId 只属于一个分类，且注册表分类都能在面板找到分支", () => {
     const categories = ["editor", "appearance", "shortcuts", "history", "maintenance", "sync", "backup", "ai", "browser", "update", "about"];
+    // 261114：快捷键行由 src/lib/shortcuts/registry.ts 生成（itemId={settingId}），静态扫不到 ⇒ 并入。
+    const shortcutIds = [
+      ...SHELL_COMMANDS.map((command) => command.settingId),
+      ...DISPLAY_ONLY_SHORTCUTS.map((row) => row.settingId),
+    ];
     const seen = new Map<string, string>();
     for (const category of categories) {
-      for (const id of itemIds(category)) {
+      const ids = category === "shortcuts" ? [...itemIds(category), ...shortcutIds] : itemIds(category);
+      for (const id of ids) {
         expect(seen.has(id), "重复归属：" + id).toBe(false);
         seen.set(id, category);
       }

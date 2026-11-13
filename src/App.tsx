@@ -164,13 +164,6 @@ export function App() {
   useEffect(() => {
     if (desktopWorkspace === "tags") void tagSpace.reload();
   }, [desktopWorkspace, tagSpace.reload]);
-  // 快捷键注册放在 shell 之后：⌘] 需要 toggleSidebarDock —— 目录栏此前只有鼠标入口（260923）。
-  useWindowShortcuts({
-    onOpenSearch: () => { setSearchPanelQuery(""); setSearchPanelOpen(true); closeMenus(); },
-    onToggleFocus: () => { setFocusMode((value) => !value); closeMenus(); },
-    onToggleSidebarDock: () => { toggleSidebarDock(); closeMenus(); },
-    onEscape: closeMenus,
-  });
   const layoutWidthsRef = useRef({ sidebar: sidebarWidth, outline: outlineSidebarWidth });
   layoutWidthsRef.current = { sidebar: sidebarWidth, outline: outlineSidebarWidth };
   // V5 Phase 4：保存管线（串行队列 + 防抖定时器 + revision 竞态保护）收拢到 useSavePipeline。
@@ -517,6 +510,19 @@ export function App() {
     void closeTabBase(noteId);
   }, [splitPair, setSplitPair, closeTabBase]);
 
+  /** 壳层快捷键 ⇧⌘[ / ⇧⌘]（注册表 prev-tab / next-tab）：在本空间标签间循环。
+   *  单标签/无标签 no-op（不跨空间、不新建）；顺序 = 打开顺序（与标签条一致）。 */
+  const cycleTab = useCallback((delta: 1 | -1) => {
+    if (desktopWorkspace !== "library" && desktopWorkspace !== "diary") return;
+    const ids = openTabs
+      .filter((tab) => (tab.space ?? "library") === desktopWorkspace)
+      .map((tab) => tab.noteId);
+    if (ids.length < 2) return;
+    const index = activeNoteId ? ids.indexOf(activeNoteId) : -1;
+    const next = ids[(index + delta + ids.length) % ids.length];
+    if (next) handleTabChangeBase(next);
+  }, [activeNoteId, desktopWorkspace, handleTabChangeBase, openTabs]);
+
   // 云同步 toast 壳已收拢到 useSyncShell（busy 常驻，ok/error/其他自动消失）
   const runSync = useSyncController({
     setSync,
@@ -662,6 +668,14 @@ export function App() {
       setNewNoteBusy(false);
     }
   }, [treeNodes, createNoteIn]);
+  /** 壳层快捷键 ⌘N（注册表 new-document）：知识库 = 复用「新建文档」弹窗（261105 用户验收：要写名字的都弹窗）；
+   *  日记 = 今天新建（一天可多篇，无名字可写）；其它空间先回知识库再弹窗。 */
+  const handleShortcutNewDocument = useCallback(() => {
+    if (desktopWorkspace === "diary") { void handleDiaryCreateEntry(formatDiaryDateKey()); return; }
+    if (desktopWorkspace !== "library") void switchDesktopWorkspace("library");
+    setNewNoteError(null);
+    setNewNoteOpen(true);
+  }, [desktopWorkspace, handleDiaryCreateEntry, setNewNoteError, setNewNoteOpen, switchDesktopWorkspace]);
 
   /** 保存冲突三选项（Batch4-D）。每个分支都先记审计日志（渲染层 console 由主进程统一落盘）。 */
   const resolveSaveConflict = useCallback(async (choice: "copy" | "overwrite" | "discard") => {
@@ -883,6 +897,23 @@ export function App() {
   const diaryTabMenuPos = usePopoverPosition({
     open: Boolean(diaryTabMenu),
     at: diaryTabMenu,
+  });
+
+  // 壳层快捷键（261114）：键位/展示单一来源 = src/lib/shortcuts/registry.ts（思源口径，暂不支持自定义）。
+  // 放在所有被引用动作（closeTab / cycleTab / runSync / handleShortcutNewDocument）之后、早期 return 之前：
+  // 全部是已初始化的绑定，无 TDZ 风险；匹配/保留键规则见 registry 与其单测。
+  useWindowShortcuts({
+    onEscape: closeMenus,
+    run: {
+      "global-search": () => { setSearchPanelQuery(""); setSearchPanelOpen(true); closeMenus(); },
+      "focus-mode": () => { setFocusMode((value) => !value); closeMenus(); },
+      "toggle-sidebar": () => { toggleSidebarDock(); closeMenus(); },
+      "close-tab": () => { if (activeNoteId) closeTab(activeNoteId); },
+      "prev-tab": () => cycleTab(-1),
+      "next-tab": () => cycleTab(1),
+      "sync": () => { void runSync(); },
+      "new-document": () => handleShortcutNewDocument(),
+    },
   });
 
   if (!workspace) return <main className="loading-screen"><BrandLaunchMark label="正在打开本地知识库" />{error && <small>{error}</small>}</main>;

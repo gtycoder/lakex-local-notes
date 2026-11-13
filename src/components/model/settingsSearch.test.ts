@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import { filterSettingsNav, SETTING_ITEMS, searchSettingItems } from "./settingsSearch";
+import { DISPLAY_ONLY_SHORTCUTS, SHELL_COMMANDS } from "../../lib/shortcuts/registry";
 
 /**
  * 261112 R2-S7：设置分组 JSX 已从 app/SettingsPanel.tsx 拆到 app/settings/sections/*.tsx。
@@ -45,7 +46,15 @@ describe("条目级设置搜索", () => {
   it("注册表与 SettingsPanel 的 itemId 不漂移（改名/删行必须同步这里）", () => {
     const src = readSettingsItemSources();
     const inJsx = new Set([...src.matchAll(/itemId="([^"]+)"/g)].map((m) => m[1]));
+    // 261114：快捷键行由 src/lib/shortcuts/registry.ts 生成（itemId={settingId}），
+    // 静态 itemId="…" 扫不到 ⇒ 把注册表里的设置行 id 并入扫描面；并反向断言它们已登记。
+    const registryShortcutIds = new Set([
+      ...SHELL_COMMANDS.map((command) => command.settingId),
+      ...DISPLAY_ONLY_SHORTCUTS.map((row) => row.settingId),
+    ]);
+    for (const id of registryShortcutIds) inJsx.add(id);
     const inRegistry = new Set(SETTING_ITEMS.map((item) => item.id));
+    expect([...registryShortcutIds].filter((id) => !inRegistry.has(id))).toEqual([]);
     expect([...inRegistry].filter((id) => !inJsx.has(id))).toEqual([]);
     expect([...inJsx].filter((id) => !inRegistry.has(id))).toEqual([]);
     expect(inRegistry.size).toBe(SETTING_ITEMS.length); // id 唯一
