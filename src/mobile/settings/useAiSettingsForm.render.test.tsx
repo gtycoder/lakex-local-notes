@@ -2,14 +2,14 @@
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-const mocks = vi.hoisted(() => ({ read: vi.fn(), save: vi.fn(), test: vi.fn() }));
-vi.mock("../bridge", () => ({ bridge: { aiGetSettings: mocks.read, aiSaveSettings: mocks.save, aiTestConnection: mocks.test } }));
+const mocks = vi.hoisted(() => ({ read: vi.fn(), save: vi.fn(), test: vi.fn(), list: vi.fn() }));
+vi.mock("../bridge", () => ({ bridge: { aiGetSettings: mocks.read, aiSaveSettings: mocks.save, aiTestConnection: mocks.test, aiListModels: mocks.list } }));
 import { useAiSettingsForm } from "./useAiSettingsForm";
 let host: HTMLDivElement, root: Root, form: ReturnType<typeof useAiSettingsForm>;
 function Harness({ active }: { active: boolean }) { form = useAiSettingsForm(active); return null; }
 const settings = (model: string) => ({ baseUrl: "https://example.test/v1", model, hasKey: false, keyTail: "", temperature: .7, reasoningEffort: null, thinking: null });
 beforeEach(() => {
-  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true); localStorage.clear(); mocks.read.mockReset(); mocks.save.mockReset(); mocks.test.mockReset();
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true); localStorage.clear(); mocks.read.mockReset(); mocks.save.mockReset(); mocks.test.mockReset(); mocks.list.mockReset();
   host = document.createElement("div"); document.body.append(host); root = createRoot(host);
 });
 afterEach(() => { act(() => root.unmount()); host.remove(); vi.unstubAllGlobals(); });
@@ -58,6 +58,33 @@ it("保存按供应商发送思考参数：支持家送 effort/thinking，不支
   await act(async () => { await form.saveAiSettingsForm(); });
   // 不支持思考参数的供应商：显式 null，清掉上一次切换残留。
   expect(mocks.save).toHaveBeenLastCalledWith(expect.objectContaining({ reasoningEffort: null, thinking: null, model: "qwen-plus" }));
+});
+
+it("获取模型列表：成功则展示候选，模型为空时自动填第一个", async () => {
+  mocks.read.mockResolvedValue({ ...settings(""), baseUrl: "https://api.deepseek.com/v1" });
+  mocks.list.mockResolvedValue({ ok: true, models: ["deepseek-flash", "deepseek-chat"] });
+  await render(true);
+  act(() => form.setAiForm((f) => ({ ...f, apiKey: "sk-draft" })));
+  await act(async () => { await form.fetchAiModels(); });
+  expect(mocks.list).toHaveBeenCalledWith({ baseUrl: "https://api.deepseek.com/v1", apiKey: "sk-draft" });
+  expect(form.aiModels).toEqual(["deepseek-flash", "deepseek-chat"]);
+  expect(form.aiForm.model).toBe("deepseek-flash");
+  expect(form.aiMsg).toContain("已获取模型列表");
+});
+
+it("获取模型列表：失败原样给出原因；没有 Key 时不发请求", async () => {
+  mocks.read.mockResolvedValue({ ...settings("模型") });
+  await render(true);
+  // 没有已存 Key、也没有草稿 Key ⇒ 先提示，绝不发注定失败的请求
+  await act(async () => { await form.fetchAiModels(); });
+  expect(mocks.list).not.toHaveBeenCalled();
+  expect(form.aiMsg).toContain("请先填写 API Key");
+  // 有草稿 Key ⇒ 请求失败时把供应商给的原因展示出来
+  act(() => form.setAiForm((f) => ({ ...f, apiKey: "sk-draft" })));
+  mocks.list.mockResolvedValue({ ok: false, code: "auth", status: 401, detail: "Invalid API key" });
+  await act(async () => { await form.fetchAiModels(); });
+  expect(form.aiModels).toBeNull();
+  expect(form.aiMsg).toContain("Invalid API key");
 });
 
 it("原生测试通道拒绝时显示可重试的失败，结束测试状态", async () => {

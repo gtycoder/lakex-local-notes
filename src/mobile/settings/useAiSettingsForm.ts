@@ -52,6 +52,9 @@ export function useAiSettingsForm(active: boolean) {
   const [aiForm, setAiForm] = useState<AiSettingsFormValues>(EMPTY_FORM);
   /** 当前供应商（本机偏好，打开时按已保存 baseUrl 反推优先）。 */
   const [aiProviderId, setAiProviderId] = useState<string>(() => readAiProviderId() ?? DEFAULT_AI_PROVIDER_ID);
+  /** 模型候选（「获取模型列表」）：不落库；切换供应商/重开页面即清空。 */
+  const [aiModels, setAiModels] = useState<string[] | null>(null);
+  const [aiModelsBusy, setAiModelsBusy] = useState(false);
   const initialized = useRef(false);
   const [aiMsg, setAiMsg] = useState("");
   /** 防御开启（261029）：只有**当前已保存的 AI 连接配置**测试通过过，才允许把开关打开。 */
@@ -86,6 +89,7 @@ export function useAiSettingsForm(active: boolean) {
       const providerId = inferAiProviderId(settings.baseUrl) ?? readAiProviderId() ?? DEFAULT_AI_PROVIDER_ID;
       setAiProviderId(providerId);
       writeAiProviderId(providerId);
+      setAiModels(null);
       setAiMeta(settings as AiSettingsMeta);
       if (!initialized.current) {
         initialized.current = true;
@@ -101,9 +105,43 @@ export function useAiSettingsForm(active: boolean) {
     setAiProviderId(id);
     writeAiProviderId(id);
     setAiForm((current) => ({ ...current, ...aiProviderPreset(id), apiKey: "" }));
+    setAiModels(null);
     invalidateAiConnectionVerified();
     setAiVerifiedFp(null);
     setAiMsg("");
+  };
+
+  /**
+   * 「获取模型列表」（与桌面同能力）：GET {baseUrl}/models。
+   * 草稿 baseUrl/Key 优先（保存前也能拉，与桌面用 aiPending 拉列表同口径）；没有 Key 就明确提示，不发注定失败的请求。
+   */
+  const fetchAiModels = async (): Promise<void> => {
+    if (aiModelsBusy) return;
+    const draftKey = aiForm.apiKey.trim();
+    if (!draftKey && !aiMeta?.hasKey) {
+      setAiMsg("请先填写 API Key（可先保存，或直接填写后再点「获取模型列表」）。");
+      return;
+    }
+    setAiModelsBusy(true);
+    setAiMsg("正在获取模型列表…");
+    try {
+      const result = await bridge.aiListModels({ baseUrl: aiForm.baseUrl.trim(), apiKey: draftKey || undefined });
+      if (!result.ok) {
+        setAiModels(null);
+        setAiMsg("获取模型列表失败：" + (result.detail || result.code || "未知错误"));
+        return;
+      }
+      const models = result.models ?? [];
+      setAiModels(models);
+      // 还没填模型（如「自定义」默认模型为空）⇒ 自动选第一个，省得对着空输入框。
+      if (!aiForm.model.trim() && models.length > 0) setAiForm((current) => ({ ...current, model: models[0] }));
+      setAiMsg(models.length > 0 ? "已获取模型列表：" + models.length + " 个" : "供应商没有返回任何模型（可手填模型名）");
+    } catch (error) {
+      setAiModels(null);
+      setAiMsg("获取模型列表失败：" + getNativeErrorMessage(error));
+    } finally {
+      setAiModelsBusy(false);
+    }
   };
 
   const saveAiSettingsForm = async (): Promise<void> => {
@@ -165,6 +203,7 @@ export function useAiSettingsForm(active: boolean) {
   return {
     aiEnabled, setAiEnabled, aiMeta, setAiMeta, aiForm, setAiForm, aiMsg, setAiMsg, aiVerified,
     aiProviderId, switchProvider, activeProviderDef: aiProviderDef(aiProviderId),
+    aiModels, aiModelsBusy, fetchAiModels,
     saveAiSettingsForm, testAiConnection,
   };
 }

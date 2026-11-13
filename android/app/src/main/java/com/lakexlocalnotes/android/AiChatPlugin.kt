@@ -148,6 +148,72 @@ class AiChatPlugin : Plugin() {
         }.start()
     }
 
+    // ---- 模型列表 ----
+
+    /**
+     * 拉取供应商的模型列表（261114 用户点单：移动端也要支持「获取模型列表」）。
+     *
+     * GET {baseUrl}/models（OpenAI 兼容）；Key 优先用**本次草稿**（与桌面 aiListModels 的 draft 语义一致，
+     * 设置页可以在保存前先验证/拉列表），没有草稿才用已存 Key。只返回候选列表，不落库、不改设置。
+     */
+    @PluginMethod
+    fun listModels(call: PluginCall) {
+        call.setKeepAlive(true)
+        Thread {
+            val stored = loadConfig()
+            val baseUrl = (call.getString("baseUrl") ?: "").trim().trimEnd('/').ifEmpty { stored.baseUrl }
+            val apiKey = (call.getString("apiKey") ?: "").trim().ifEmpty { stored.apiKey }
+            if (apiKey.isEmpty()) {
+                call.resolve(errorResult("not_configured", null, "未配置 API Key"))
+                return@Thread
+            }
+            var conn: HttpURLConnection? = null
+            try {
+                conn = URL(baseUrl + "/models").openConnection() as HttpURLConnection
+                conn.requestMethod = "GET"
+                conn.connectTimeout = CONNECT_TIMEOUT_MS
+                conn.readTimeout = READ_TIMEOUT_MS
+                conn.setRequestProperty("Authorization", "Bearer " + apiKey)
+                conn.setRequestProperty("Accept", "application/json")
+                val status = conn.responseCode
+                if (status !in 200..299) {
+                    call.resolve(errorResult(codeForStatus(status), status, readError(conn)))
+                    return@Thread
+                }
+                val raw = BufferedReader(InputStreamReader(conn.inputStream, Charsets.UTF_8)).use { it.readText() }
+                val models = ArrayList<String>()
+                try {
+                    val root = JSONObject(raw)
+                    // OpenAI 兼容：{"data":[{"id":"..."}]}；少数实现直接给 {"models":["..."]}
+                    val data = root.optJSONArray("data")
+                    if (data != null) for (i in 0 until data.length()) {
+                        val id = data.optJSONObject(i)?.optString("id", "") ?: ""
+                        if (id.isNotEmpty()) models.add(id)
+                    }
+                    if (models.isEmpty()) {
+                        val alt = root.optJSONArray("models")
+                        if (alt != null) for (i in 0 until alt.length()) {
+                            val value = alt.opt(i)
+                            if (value is String && value.isNotEmpty()) models.add(value)
+                        }
+                    }
+                } catch (e: Exception) { /* 非 JSON 错误体/空体 ⇒ 返回空列表，由 UI 明说 */ }
+                val out = JSObject()
+                out.put("ok", true)
+                out.put("models", JSONArray(models.distinct().sorted()))
+                call.resolve(out)
+            } catch (e: UnknownHostException) {
+                call.resolve(errorResult("network", null, "无法连接服务器（请检查网络或地址）"))
+            } catch (e: SocketTimeoutException) {
+                call.resolve(errorResult("timeout", null, "请求超时"))
+            } catch (e: Exception) {
+                call.resolve(errorResult(codeForException(e), null, e.message ?: e.javaClass.simpleName))
+            } finally {
+                try { conn?.disconnect() } catch (e: Exception) { /* ignore */ }
+            }
+        }.start()
+    }
+
     // ---- 对话（SSE） ----
 
     @PluginMethod

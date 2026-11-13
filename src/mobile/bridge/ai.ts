@@ -11,6 +11,8 @@ import {
   type AiChatResult,
   type AiChatSettingsPatch,
   type AiChatSettingsView,
+  type AiModelsOptions,
+  type AiModelsResult,
   type AiTestResult,
 } from "../native/aiChat";
 import { ensureDb } from "./context";
@@ -54,6 +56,12 @@ export const aiDomain = {
   async aiTestConnection(): Promise<AiTestResult> {
     if (!aiChatSupported()) return { ok: false, code: "unavailable", detail: "当前平台不支持 AI 通道" };
     return AiChat.testConnection();
+  },
+
+  /** 获取模型列表（桌面同能力）：GET {baseUrl}/models，草稿 baseUrl/Key 优先（保存前也能拉）。 */
+  async aiListModels(options?: AiModelsOptions): Promise<AiModelsResult> {
+    if (!aiChatSupported()) return { ok: false, code: "unavailable", detail: "当前平台不支持 AI 通道（需 Android 真机/模拟器）" };
+    return AiChat.listModels(options);
   },
 
   /** 读一篇文档的纯文本（资料集用；只允许 Lake 文档，其它类型返回 null）。 */

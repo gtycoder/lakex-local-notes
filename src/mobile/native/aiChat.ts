@@ -68,10 +68,27 @@ export interface AiDoneEvent { requestId: string; finishReason?: string }
 
 export interface AiTestResult { ok: boolean; code?: string; status?: number; detail?: string }
 
+/** 「获取模型列表」结果（GET {baseUrl}/models；只返回候选，不落库）。 */
+export interface AiModelsResult {
+  ok: boolean;
+  models?: string[];
+  code?: string;
+  status?: number;
+  detail?: string;
+}
+
+export interface AiModelsOptions {
+  /** 草稿 baseUrl（设置页保存前也能拉；缺省 = 已存配置）。 */
+  baseUrl?: string;
+  /** 草稿 Key（缺省 = 已存 Key；JS 永不持有已存明文）。 */
+  apiKey?: string;
+}
+
 interface AiChatPluginApi {
   getSettings(): Promise<AiChatSettingsView>;
   saveSettings(patch: AiChatSettingsPatch): Promise<{ ok: boolean }>;
   testConnection(): Promise<AiTestResult>;
+  listModels(options?: AiModelsOptions): Promise<AiModelsResult>;
   chat(request: AiChatRequest): Promise<AiChatResult>;
   cancel(requestId: string): Promise<{ ok: boolean }>;
   addListener(eventName: "ai:delta", listener: (event: AiStreamEvent) => void): Promise<{ remove(): Promise<void> }>;

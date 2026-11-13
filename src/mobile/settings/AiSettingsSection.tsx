@@ -20,7 +20,8 @@ import type { useAiSettingsForm } from "./useAiSettingsForm";
 export function AiSettingsSection({ form }: { form: ReturnType<typeof useAiSettingsForm> }) {
   const {
     aiEnabled, setAiEnabled, aiMeta, setAiMeta, aiForm, setAiForm, aiMsg, setAiMsg, aiVerified,
-    aiProviderId, switchProvider, activeProviderDef, saveAiSettingsForm, testAiConnection,
+    aiProviderId, switchProvider, activeProviderDef, aiModels, aiModelsBusy, fetchAiModels,
+    saveAiSettingsForm, testAiConnection,
   } = form;
   const supportsThinking = activeProviderDef?.supportsThinking === true;
   const showTemperature = !supportsThinking || aiForm.thinking !== "enabled";
@@ -59,8 +60,21 @@ export function AiSettingsSection({ form }: { form: ReturnType<typeof useAiSetti
                 </div>
               </Block>
               {/* 模型与参数（思考强度 / 思考模式只在该家支持时出现；温度在思考模式开启时隐藏） */}
-              <Field itemId="ai-model" name="模型">
+              <Field itemId="ai-model" name="模型" desc="可手填模型名，也可以从供应商拉取候选（需要先填 API Key）。">
                 <TextField label="模型" value={aiForm.model} placeholder={activeProviderDef?.defaultModel || "模型名"} onSave={(v) => setAiForm((form) => ({ ...form, model: v }))} />
+                <div className="ai-settings__actions">
+                  <button type="button" className="mb-btn mb-btn--outlined" disabled={aiModelsBusy} onClick={() => void fetchAiModels()}>
+                    {aiModelsBusy ? "获取中…" : "获取模型列表"}
+                  </button>
+                  {aiModels && aiModels.length > 0 && (
+                    <PickerSheet
+                      label="从列表选模型"
+                      value={aiForm.model}
+                      options={aiModels.map((model) => ({ value: model, label: model }))}
+                      onChange={(value) => setAiForm((form) => ({ ...form, model: value }))}
+                    />
+                  )}
+                </div>
               </Field>
               {activeProviderDef?.supportsReasoning && (
                 <Item itemId="ai-reasoning" name="思考强度" desc="推理强度：越高思考越深入、耗时越长（默认 high）。">
