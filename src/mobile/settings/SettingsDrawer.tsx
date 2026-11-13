@@ -408,6 +408,23 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
 
           {view === "s3" && (
             <>
+              {/* 261114 用户点单：第三方 S3 服务说明**放在最开始**（先说明计费/隐私，再让填连接信息）。 */}
+              <Group title="服务说明" icon={<TriangleAlert size={16} />}>
+                  <div className="mb-s3-notice" role="note">
+                    <div className="mb-s3-notice__title">第三方 S3 服务说明</div>
+                    <p>当前使用的是 Amazon S3 协议兼容的第三方云端存储服务（如七牛云 Kodo、阿里云 OSS、Cloudflare R2）。</p>
+                    <p>S3 的存储空间、流量与接口请求由服务商单独计费；本应用不收取费用、也不包含任何存储套餐，请自行确认计费项目与价格。</p>
+                    <p>使用前请注意第三方服务的技术限制、计费与条款：</p>
+                    <ul>
+                      <li>接口调用频率、带宽等技术限制；</li>
+                      <li>存储空间、流量、请求次数等计费项目；</li>
+                      <li>服务条款、可用性保障与数据安全责任。</li>
+                    </ul>
+                    <p className="mb-s3-notice__warn"><TriangleAlert size={14} aria-hidden="true" /><span>注意：笔记正文与附件会按原样上传到你的 S3，云端不做加密；请务必确认该桶为私有、未开放公开读。</span></p>
+                    <p className="mb-s3-notice__disclaimer">免责声明：本应用仅通过公开的 S3 兼容 API 访问你自己配置的桶，不对第三方服务的可用性、计费或数据安全负责；请确认桶为私有，且凭据只由你保管。</p>
+                  </div>
+              </Group>
+
               <Group title="S3 对象存储" icon={<Cloud size={16} />}>
                   {/* 261102 用户点单 3b：S3 连接信息是内容输入类 ⇒ 一律 Field（标签在上、输入框占满下一行），
                       与桌面设置页同一形态；此前是裸 .mb-set-item + <input class="mb-input">（第二套输入外观，
@@ -594,21 +611,6 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                   )}
               </Group>
 
-              <Group title="服务说明" icon={<TriangleAlert size={16} />}>
-                  <div className="mb-s3-notice" role="note">
-                    <div className="mb-s3-notice__title">第三方 S3 服务说明</div>
-                    <p>当前使用的是 Amazon S3 协议兼容的第三方云端存储服务（如七牛云 Kodo、阿里云 OSS、Cloudflare R2）。</p>
-                    <p>S3 的存储空间、流量与接口请求由服务商单独计费；本应用不收取费用、也不包含任何存储套餐，请自行确认计费项目与价格。</p>
-                    <p>使用前请注意第三方服务的技术限制、计费与条款：</p>
-                    <ul>
-                      <li>接口调用频率、带宽等技术限制；</li>
-                      <li>存储空间、流量、请求次数等计费项目；</li>
-                      <li>服务条款、可用性保障与数据安全责任。</li>
-                    </ul>
-                    <p className="mb-s3-notice__warn"><TriangleAlert size={14} aria-hidden="true" /><span>注意：笔记正文与附件会按原样上传到你的 S3，云端不做加密；请务必确认该桶为私有、未开放公开读。</span></p>
-                    <p className="mb-s3-notice__disclaimer">免责声明：本应用仅通过公开的 S3 兼容 API 访问你自己配置的桶，不对第三方服务的可用性、计费或数据安全负责；请确认桶为私有，且凭据只由你保管。</p>
-                  </div>
-              </Group>
               {s3Export && (
                 <Group title="导出配置迁移码" icon={<Cloud size={16} />}>
                     <div className="mb-set-item">
