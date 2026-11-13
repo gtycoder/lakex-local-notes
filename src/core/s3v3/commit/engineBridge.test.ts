@@ -26,6 +26,34 @@ const round = (over: Partial<RoundResult> = {}): RoundResult => ({
   ...over,
 });
 
+describe("E2-3 engineBridge：回合结果并回设备世界", () => {
+  it("P1 #2：发布轮同时发现他端 purge ⇒ 本地副本仍进回收站（不被发布世界覆盖抹掉）", () => {
+    const s = state({ lake: { v: 3, space: "lake", notes: [note("a"), note("b")], folders: [] }, remotePurged: [] });
+    const publish = { lake: { v: 3 as const, space: "lake" as const, notes: [note("b")], folders: [] }, quickNotes: s.quickNotes };
+    const base = round();
+    const r = round({
+      publish,
+      commit: {
+        status: "published",
+        pointer: {
+          v: 3, epoch: "11111111-1111-4111-8111-111111111111", generation: 2,
+          lake: { commit: "x2" }, quickNotes: { commit: "y2" }, createdAt: ISO,
+        },
+        generation: 2, lakeCommit: "x2", quickNotesCommit: "y2", wroteLake: true, wroteQuick: false,
+      } as RoundResult["commit"],
+      plan: { ...base.plan, writes: [{ kind: "set-lifecycle", space: "lake", id: "a", lifecycle: "cloud-deleted" }] } as RoundResult["plan"],
+    });
+    const out = mergeRoundIntoState(s, r);
+    const a = out.lake.notes.find((n) => n.id === "a");
+    expect(a).toBeTruthy();
+    expect(a!.trashedAt).toBeTruthy();
+    expect(a!.parentId).toBe("notebook-trash");
+    expect(out.remotePurged).toContain("a");
+    // 发布内容（b）照旧落地，没有被副本合并弄丢
+    expect(out.lake.notes.find((n) => n.id === "b")).toBeTruthy();
+  });
+});
+
 describe("E2-3 engineBridge：规划输入映射", () => {
   it("本地世界/标记逐个字段映射（漏传会导致已删条目复活或意图失效）", () => {
     const s = state({ intents: [{ noteId: "a", targetEpoch: "e", targetGeneration: 3 }] });

@@ -178,11 +178,24 @@ export function mergeRoundIntoState(state: DeviceState, round: RoundResult, opts
   };
   const published = round.commit.status === "published" && round.publish !== null;
   if (published) {
+    // 261113（P1 #2 真实桶实测）：同一轮里既发布、又发现他端 purge 了别的条目时，被 purge 的本地副本
+    // 已被 applyCloudDeleted 软删进回收站（sd.lake.notes 里已带 trashedAt/父=回收站），而发布索引按设计
+    // **排除**它们（remotePurged 不进计划世界）⇒ 旧实现整份覆盖会把这份「云端已删除·仅本地」副本从本地
+    // 世界抹掉；下一轮 plan 也看不到它（planWorldOf 过滤 remotePurged）⇒ 文档永久卡在活跃树：
+    // 只读、带标、不进回收站、不可恢复、也不再参与同步。
+    // 修法：以发布世界为准，再把本轮 cloud-deleted 的本地副本并回去（它们已在 remotePurged，不会被再发布）。
+    const publishedLake = round.publish!.lake;
+    let lakeNotes = publishedLake.notes;
+    if (cloudDeleted.size > 0) {
+      const byId = new Map(lakeNotes.map((n) => [n.id, n] as const));
+      for (const n of sd.lake.notes) if (cloudDeleted.has(n.id) && !byId.has(n.id)) byId.set(n.id, n);
+      lakeNotes = [...byId.values()];
+    }
     return {
       ...sd,
-      lake: round.publish!.lake,
+      lake: { ...publishedLake, notes: lakeNotes },
       quickNotes: round.publish!.quickNotes,
-      folders: round.publish!.lake.folders,
+      folders: publishedLake.folders,
       pending: round.commit.status === "retry" ? state.pending : round.remainingPending,
       intents: round.intents.intents,
       restorePending: round.intents.restorePending,
