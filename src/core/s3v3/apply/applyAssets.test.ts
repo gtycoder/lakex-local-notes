@@ -45,6 +45,33 @@ const plan = (over: Partial<SyncPlan> = {}): SyncPlan => ({
 });
 
 describe("E2-1b 资产段：上传差集与声明", () => {
+  it("文件在清单里但字节读不出 ⇒ 整条回退 + 告警（不能静默丢弃该附件）", async () => {
+    class Unreadable extends NamesAssets {
+      unreadable = new Set<string>();
+      override async readLocalAsset(space: string, id: string, filename: string) {
+        if (this.unreadable.has(filename)) return null;
+        return super.readLocalAsset(space, id, filename);
+      }
+    }
+    const ports = new Unreadable();
+    ports.setLocal("lake", "a", [{ filename: "old.png", body: "OLD" }]);
+    // 远端声明已有 old.png（走 known 快路径），新增 img2.png 但读不出字节
+    const remoteDecl = buildAssetDeclaration([asset("old.png", "OLD")]);
+    ports.decls.set("lake:a", [asset("old.png", "OLD"), asset("img2.png", "IMG2")]);
+    ports.names.set("lake:a", ["old.png", "img2.png"]);
+    ports.unreadable.add("img2.png");
+    ports.remote.set(declarationKey("lake", "a", remoteDecl.declHash), enc(remoteDecl.serialized));
+    const r = await applyAssets(
+      plan({ publishes: { lake: ["a"], quickNotes: [] } }),
+      { declarations: [{ space: "lake", id: "a", declHash: remoteDecl.declHash, assets: remoteDecl.declaration.assets }] },
+      ports,
+    );
+    expect(r.failedUploads).toEqual([{ space: "lake", id: "a" }]);
+    expect(r.assetsHashes).toHaveLength(0); // 不把新声明写进索引（索引条目回退远端旧版本）
+    expect(ports.puts.some((k) => k.startsWith("meta/assets/"))).toBe(false);
+    expect(r.warnings.some((w) => w.code === "asset_missing" && w.filename === "img2.png")).toBe(true);
+  });
+
   it("附件 PUT 失败 ⇒ 不写新声明 + 条目回退（failedUploads），绝不让声明引用缺失对象", async () => {
     class FailingPut extends FakeAssets {
       failKeys = new Set<string>();

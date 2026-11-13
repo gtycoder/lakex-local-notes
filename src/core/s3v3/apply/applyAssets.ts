@@ -118,6 +118,9 @@ export async function applyAssets(
   const plannedByItem = new Map<string, number>();
   const okByItem = new Map<string, number>();
   const bumpOk = (space: Space, id: string) => { const k = space + ":" + id; okByItem.set(k, (okByItem.get(k) ?? 0) + 1); };
+  /** 261113（真实桶 R5 复验）：**文件在清单里但读不出字节**的条目 —— 必须整条判失败，
+   *  不能当成「本机没这个附件」静默丢弃（否则声明缺它、正文照传 ⇒ 云端「正文引用/声明缺/对象缺」）。 */
+  const failedUploadItems = new Set<string>();
 
   // ---- 上传侧：plan.publishes（含 metadata-only 轮次，正文没变也要走声明） ----
   const putTasks: Array<{ space: Space; id: string; asset: AssetDeclEntry }> = [];
@@ -159,7 +162,13 @@ export async function applyAssets(
             const known = remoteByName.get(filename);
             if (known) { local.push(known); continue; }
             const bytes = await ports.readLocalAsset(space, id, filename);
-            if (!bytes) continue;
+            if (!bytes) {
+              // 261113（R5）：清单里有、字节读不出 ⇒ 整条回退（不写新声明、索引留远端旧版本、下轮重试）。
+              // 旧实现 continue 静默丢弃 ⇒ 声明漏该文件、正文却照传 ⇒ 他端拿到「正文引用、附件缺失」。
+              failedUploadItems.add(space + ":" + id);
+              warn({ code: "asset_missing", space, id, filename, detail: "本机资产文件存在但读不出字节，本轮不上传（保持远端旧声明，下次同步重试）" });
+              continue;
+            }
             plannedBytes.set(space + ":" + id + "/" + filename, bytes);
             local.push({ filename, size: bytes.length, hash: sha256Hex(bytes) });
           }
@@ -268,7 +277,7 @@ export async function applyAssets(
   // 261113（P1 静态审查 #3）：附件没全部落盘 ⇒ **不写新声明**（声明只能引用真实存在的对象），
   // 并让索引条目回退远端旧版本（经 failedUploads 交给 buildPublishIndex）。旧实现无条件下发声明 ⇒
   // 云端「声明在、对象缺」：下一轮按文件名判「已有」不再重传，对端重试 3 次后丢账 ⇒ 附件永久缺失且 UI 静默。
-  const failedDeclItems = new Set<string>();
+  const failedDeclItems = new Set<string>(failedUploadItems);
   for (const [key, planned] of plannedByItem) {
     if ((okByItem.get(key) ?? 0) < planned) failedDeclItems.add(key);
   }
