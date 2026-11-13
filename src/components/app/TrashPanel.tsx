@@ -111,7 +111,7 @@ function TrashTreeRow({ item, items, selectedId, onSelect, onRestore, onPurge, t
         {item.cloudDeleted && <span className="badge badge--warn" title="云端已彻底删除，本机仅保留这份可恢复副本；恢复后会重新上传">云端已删除（仅本地）</span>}
         {fileMissing && <span className="badge badge--muted" title="正文文件已不在本机">正文已删</span>}
         {days !== null && (
-          <span className={`badge ${days <= 7 ? "badge--warn" : "badge--muted"}`} title="自动过期彻底删除倒计时（含云端）">{days} 天后清除</span>
+          <span className={`badge trash-row-days ${days <= 7 ? "badge--warn" : "badge--muted"}`} title="自动过期彻底删除倒计时（含云端）">{days} 天后清除</span>
         )}
         <span className="ln-spacer" />
         {isRoot && (

@@ -50,6 +50,15 @@
 .history-list .ln-list-item { gap: 4px; }
 /* 回收站行整行可点（261112 task-89）：标题被「云端已删除（仅本地）」等徽标挤窄时，点行内任意位置都能预览。 */
 .trash-tree-node > .ln-list-item { cursor: pointer; }
+/* P3-6（261113）：回收站**窄分栏**下「N 天后清除」被挤成省略号 —— 用容器查询按行的真实宽度隐藏它。
+ * 为什么不是 @media：回收站面板的宽度由侧栏拖宽 / 浮层面板决定，与视口宽度无关（窗口很宽、面板可能很窄）。
+ * 阈值 290 = 261112 task-89 活实例实测的窄分栏行宽（rowW 287.5，两个徽标把标题挤成 0 宽）；
+ * 默认侧栏 314 时行宽 ≈296 > 290 ⇒ 徽标照常显示，只有真正拖窄才隐藏（信息仍可从行剩余徽标/标题判断，
+ * 且倒计时可在恢复后的属性页看到）。旧浏览器忽略 @container ⇒ 退化成现有的「收缩 + 省略 + title 兜底」。 */
+.trash-tree-node { container-type: inline-size; }
+@container (max-width: 290px) {
+  .trash-tree-node .trash-row-days { display: none; }
+}
 /* task-89 真根因（活实例 9237 实测 rowW=287.5 / textW=0）：badge（flex:none）与动作钮都不可收缩，
  * 两个徽标（云端已删除 + N 天后清除）把 flex:1 1 auto 的文本挤成 0 宽 ⇒ 视觉上没标题。
  * ① 文本保底宽度：标题/时间至少保留一截（行内点按与可读性都靠它）。
