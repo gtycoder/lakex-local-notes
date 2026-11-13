@@ -97,5 +97,20 @@ Electron 桌面（macOS 优先）+ Android（Capacitor WebView）
 
 ## Accessibility & Inclusion
 
-- 已有专门的无障碍层 `src/styles/a11y.css`（层序最高，含 `prefers-reduced-motion` 契约）；移动端有安全区/系统栏适配（`src/mobile/native/systemBars.ts`）。
-- 已有工程护栏：桌面/移动走查探针按 WCAG 对比度（正文 4.5:1、大字 3:1）检查自有文字，`a11y.css` 统一兜底 `prefers-reduced-motion`；但**没有成文的 WCAG 等级承诺** —— 记为开放项，待用户确认。
+**结论（261113 用户裁决）：不声明 WCAG 等级，改写成文「无障碍基线」。** 理由：内核正文、Univer 表格、Drawnix 画板不在我们控制范围内，声明 AA 就必须长期解释排除范围；「部分符合」也不是本项目的目标。
+
+### 基线（5 条，做得到的）
+1. **对比度**：自有文字正文 ≥ **4.5:1**、大字（≥18.66px 或 ≥14px 且粗体）≥ **3:1**。`--lake-text-4` 是**有意的 3:1 档**（元信息/占位），不追 4.5。判据 = 走查探针 `scripts/css-audit/walkthrough.mjs` / `mobile-walkthrough.mjs`（排除内核 `ne-*` 与 univer/drawnix）。
+2. **reduced-motion**：`prefers-reduced-motion: reduce` 下动画压到 1ms + 位移白名单，由 `src/styles/a11y.css`（层序最高、**不用 `!important`**）统一兜底，组件不写自己的 reduce 分支。
+3. **焦点可见**：自有控件有 `:focus-visible` 焦点环（2px 主题色）；第三方编辑器宿主（内核 / Univer / 画板）由 `src/styles/vendor-focus.css` 收口；dev 下 `window.__vendorFocusProbe()` 空数组才算干净。
+4. **触控命中**：移动端可点目标 ≥ **44×44**；视觉小于 44 的用 `::after` 扩命中区（**不放大盒子**），判据 = 走查 `smallTap`。
+5. **键盘可达**：浮层 Esc 关闭并锁焦点、子菜单方向键/Home/End、分隔条可键盘调整；新增交互必须给键盘路径。
+
+### 已知未覆盖（不承诺，也不假装达标）
+- **读屏实测**（VoiceOver / TalkBack）从未做过；
+- **非文本对比度**（控件边界 3:1）没有自动检查；
+- **缩放与重排**（200%/400%）没有验证；
+- 内核正文、Univer 表格、Drawnix 画板的键盘/对比度**不在我们控制范围**。
+
+### 范围
+以上只约束**自有 UI 层**（桌面 + 移动壳层），不适用于第三方内核渲染的内容区与用户生成内容。将来若要对外声明 WCAG 2.1 AA，必须先按官方的「部分符合（partially conformant）」逐条判定并记录未符合项 —— 现在不声明。移动端另有安全区/系统栏适配（`src/mobile/native/systemBars.ts`）。
