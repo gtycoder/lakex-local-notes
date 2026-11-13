@@ -7,6 +7,14 @@
 
 ## 0. 最新交接（最近 3 个批次；更早的见 git）
 
+### 261113 · 日记本开放改名/换图标 + 转小记改为移动（`1457bc1d`）
+
+- **用户裁决①（替代 261112 §3#25② 的一半）**：日记本**只开放改名与换图标**；删除/移动/排序/作移动目标/space 降级仍拒绝；日记条目与年/月分组仍不可改名/图标。桌面 = `noteMetadataRepository` 新增 `assertNotDiaryContent`（仅日记子树拒绝，本体放行）；移动端 = `treeRepository.diaryNotebookOf`（与桌面同判据）+ 改名/图标/移动/排序/删除守卫、`batchNotes` 目标剔除、`mobilePlatformPort` 单调闸。**移动端入口 = 日记页页头 ⋯（日记本已存在才显示）→ 只给「重命名 / 设置图标」**；桌面不新造入口（数据层放行，等待专门入口设计）。`NotebookWorkspace` 标题锁判据改用 `notebookSpace`（原用过滤后列表 ⇒ 恒 false，日记条目顶栏可改）。
+- **用户裁决②（替代 §3#25③ 的「复制+回收站」）**：「转为小记」= **移动**，不再复制、不再剥卡。新小记 id（v3 删除意图/云端已删除标记按 id 跨空间共享 ⇒ 不沿用）+ 正文除 `/<noteId>/`→`/quick-notes/<id>/` 作用域外零改写 + 资产目录整体移动（桌面 rename / 移动端 copyAssetDir+删源，失败回滚先把资产移回）+ Lake 侧原稿物理移除（含 history 快照；写 `deleted_notes` 删除意图防止下一轮被云端拉回）。**无副本、不可恢复** ⇒ 两端入口都二次确认。
+- **文档**：AGENTS §3#25②③、[DIARY](DIARY.md)、[guide 16](../guide/16-diary.md) 同步新口径（含「卡片零剥离 / 无 droppedKinds / 历史随原稿删除」）。
+- **门禁**：tsc 0；vitest **923 文件（912 passed / 11 skipped）/ 5835 用例（5823 passed / 12 skipped）/ 0 failed**；check:mobileui 通过；check:core 177/0；diff-check 0；APK `--sync --install`（lake_gate 5556）；日记页 ⋯ 菜单/重命名/设置图标 设备级截图核对，空态不显示入口。
+- **待用户裁决/欠账**：① 桌面端「日记本改名/换图标」暂无 UI 入口（数据层已放行）；② 同 id 方案需同步状态按空间拆分（协议改动，未做）；③ 转换后无副本 —— 现有唯一兜底是本机备份/便携包/云端历史。
+
 ### 261113 · 移动端设置项对齐桌面 + 长说明行上下布局 + 选择器/Secret 修正（`de244d3a`）
 
 - **设置项顺序对齐桌面**：云端与同步（字段序 Endpoint → AK → SK → Bucket → Region → 前缀；「连接」并入 S3 对象存储；配置迁移前置；同步策略/同步诊断拆组）；AI 助手（接口地址 → API Key（清除紧邻）→ 模型 → 温度 → 保存/测试 → 开关）；常规（附件 → 默认空间）；历史（定期清理 → 自动快照）。依据 = 桌面 SyncSection/AiSection/EditorSection/HistorySection。
