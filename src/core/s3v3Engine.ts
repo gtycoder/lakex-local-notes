@@ -613,7 +613,10 @@ export class S3v3SyncEngine {
     report.warnings = this.warnings;
     for (const w of round.warnings) {
       const assetKept = w.code === "asset_missing" && (w.detail ?? "").includes("保留云端声明");
-      const kind = assetKept ? "asset_kept_remote" : w.code === "hash_mismatch" || w.code === "conflict_kept_history" || w.code === "cleanup_failed" ? "remote_incomplete" : w.code;
+      // 261113（C4 复验）：conflict_kept_history 必须**原样保留** kind —— 它会写进 warningDetails，
+      // 再经 mergeSyncWarnings 交给 UI 按 kind 取文案。降级成 remote_incomplete 会让 UI 说
+      // 「远端内容不完整、本地未改动、下次重试」，与事实（本地被覆盖、历史已留）完全相反。
+      const kind = assetKept ? "asset_kept_remote" : w.code === "hash_mismatch" || w.code === "cleanup_failed" ? "remote_incomplete" : w.code;
       this.warn(w.code + (w.detail ? " " + w.detail : "") + (w.id ? " [" + w.id + "]" : ""), { kind, ...(w.id ? { noteId: w.id } : {}), ...(w.filename ? { filename: w.filename } : {}) });
     }
     // 冲突留档清单：既有路径在 pull 循环里 push，内核用 plan 的 conflict_kept_history 回填（UI 冲突清单/角标依赖）。
@@ -682,7 +685,7 @@ export class S3v3SyncEngine {
     report.downloadedFolders = remote.lake.folders.length;
     for (const w of out.warnings) {
       const assetKept = w.code === "asset_missing" && (w.detail ?? "").includes("保留云端声明");
-      const kind = assetKept ? "asset_kept_remote" : w.code === "hash_mismatch" || w.code === "cleanup_failed" || w.code === "conflict_kept_history" ? "remote_incomplete" : w.code;
+      const kind = assetKept ? "asset_kept_remote" : w.code === "hash_mismatch" || w.code === "cleanup_failed" ? "remote_incomplete" : w.code;
       this.warn(w.code + (w.detail ? " " + w.detail : "") + (w.id ? " [" + w.id + "]" : ""), { kind, ...(w.id ? { noteId: w.id } : {}), ...(w.filename ? { filename: w.filename } : {}) });
     }
     report.warnings = this.warnings;

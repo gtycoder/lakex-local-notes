@@ -39,6 +39,13 @@ describe("v3 与旧协议对齐（261026 parity：进度/冲突留档/警告/缺
     const r = await syncWithV3(b.store, (p) => { phases.add(p.phase); messages.push(p.message); }, { remote, deviceId: "B" });
     expect(r.conflicts).toBeGreaterThan(0);
     expect(r.supersededNotes.map((x) => x.id)).toContain("n1");
+    // 261113（C4 真实桶复验）：结构化 warning 的 kind 必须是 conflict_kept_history ——
+    // 引擎曾把它降级成 remote_incomplete ⇒ UI 按 kind 取文案时显示「远端内容不完整、下次重试」，
+    // 与事实（本地被覆盖、历史已留）相反。这里钉住「引擎不再降级」这一环。
+    const keptHistory = (r.warnings ?? []).filter((w) => w.kind === "conflict_kept_history");
+    expect(keptHistory.length).toBeGreaterThan(0);
+    expect(keptHistory[0].noteId).toBe("n1");
+    expect((r.warnings ?? []).some((w) => w.kind === "remote_incomplete" && w.message.includes("conflict_kept_history"))).toBe(false);
     expect(phases.has("download")).toBe(true);
     expect(phases.has("manifest")).toBe(true);
     // B 本地版本已强制写入历史
