@@ -86,6 +86,8 @@ Node/Electron 版本），失败时打印路径。`--logs-dir` 可指定。
 
 ### 移动端（本轮未纳入入口）
 
+**261114 真实桶手机↔桌面手工冒烟 PASS**（未固化进本入口）：模拟器 `pm clear` → 移动端 `saveS3Settings/saveSyncSettings(manual, deferAssets=false)` 配真实桶唯一前缀 → 建文档 + 上传 1×1 PNG（66B）并 `syncNow`；隔离桌面同前缀 `syncNow` 拉到正文 + 资产（落盘/预览可读）；桌面改正文同步 → 移动端同步拉回；前缀 9 对象收尾 residual=0，移动端凭据用后 `pm clear`。
+
 - 移动端/真机步骤（AVD、`adb forward`、APK 安装、`pm clear` 备份还原）仍按 `docs/audit-261112/21-s3-multi-end-mobile.md` 手工执行；
 - `--with-mobile` 目前会**明确报「未实现」并退出 2**（不会静默降级），避免误以为跑过移动端；
 - 桌面 A–K 场景已覆盖同一批同步一致性断言；「移动端特有」的部分（WebView 桥、deferAssets 按需资产、UI 只读横幅）仍需设备级验收。
