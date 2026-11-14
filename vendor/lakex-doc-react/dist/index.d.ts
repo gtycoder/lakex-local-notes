@@ -1,5 +1,7 @@
 export { default as Doc } from "./components/lakex/lakex";
 export { LakexEditor } from "./components/lakex/LakexEditor";
+export { BookmarkToolbar } from "./components/plugin/bookmark/BookmarkToolbar";
+export type { BookmarkToolbarProps } from "./components/plugin/bookmark/BookmarkToolbar";
 export type { LakexEditorProps, LakexEditorConfig, LakexEditorContent, LakexEditorContentType, LakexEditorPlaceholder, LakexEditorLanguage, EnvAdapter, ImageConfig, InputConfig, LayoutConfig, HeadingConfig, VideoConfig, FileConfig, MentionConfig, MentionUserData, MentionContentData, MentionResponse, DateCardConfig, CalendarConfig, TocConfig, TocEditingConfig, TocReadingConfig, MathConfig, SlashConfig, ICardSelectOptionConfig, ICardSelectGroupConfig, CodeblockConfig, AudioConfig, AudioUploadResponse, AudioCardData, LinkConfig, VLinkMiniToolbarItem, HtmlDataSourceConfig, FallbackcardConfig, KernelAssistantConfig, DefaultFontsizeConfig, ToolbarConfig, ToolbarItemSpec, ToolbarModeConfig, ToolbarAgentConfig, DrawingBoardAIConfig, DrawingBoardAILocale, DrawingBoardAIRequest, DrawingBoardAIResponse, } from "./components/lakex/types";
 export { default as CardResizer } from "./components/CardResizer/CardResizer";
 export { default as findCardId } from './cards/utils';
@@ -10,6 +12,7 @@ export { drawingBoardCard, flowchartBoardCard, umlBoardCard, mindmapBoardCard, D
 export type { DrawingBoardPreset, IDrawingBoardCardValue } from "./cards/DrawingBoard";
 export declare function loadDrawnixBoardCore(): Promise<typeof import("./cards/DrawingBoard/DrawnixBoardCore")>;
 export type { DrawnixBoardCoreProps } from "./cards/DrawingBoard/DrawnixBoardCore";
+export type { BoardMaterialLibraryEntry, MaterialLibraryStorage } from "./cards/DrawingBoard/LakexMaterialLibrary";
 export { default as GetDefaultEditorConfig } from './configs/editor';
 export { default as GetDefaultSlashConfig } from "./configs/slash";
 export { default as DefaultAudioConfig } from "./configs/audio";

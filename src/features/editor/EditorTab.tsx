@@ -8,6 +8,7 @@ import {
   lakeBridge,
   refreshTocSidebar,
   resolveScrollNode,
+  retryFailedDocumentImageUploads,
   resumePendingDocumentImageUploads,
   type LakeEditorInstance,
   type LakeEditorPrefs,
@@ -15,11 +16,16 @@ import {
 import { buildClipboardPayload, upgradePastedHtml } from "./clipboardHtml";
 import { hasUnresolvedImageTask, repairUploadCards } from "./uploadCardRepair";
 import { subscribeUploadJournal } from "./uploadJournal";
+import { uploadRetryDelayForEntry } from "./uploadRetryScheduler";
 import { addAssetAccessToken, stripAssetAccessToken } from "../../lib/assetPort";
 import { registerOutlineTab, unregisterOutlineTab } from "../outline/registry";
 import { useOutline } from "../outline/useOutline";
 import { flushViewerTiles, scrollIntoViewByNodeId } from "./lakeTileRender";
 import { native } from "../../lib/native";
+// 书签卡浮动工具条由 vendor 包装层提供（内核本版无原生 getCardToolbarConfig）；我们不用 LakexEditor
+// 包装层，所以必须自己挂载，否则 bookmark 卡就是「没有菜单、无法转换回链接/标题」的死卡。
+import { BookmarkToolbar } from "@dlient/lakex-doc-react";
+import { useKernelDarkTheme } from "./useKernelDarkTheme";
 import { attachImagePreviewClick, extractImagesFromContent } from "./imagePreview";
 import { attachFileCardClick, createCardHoverResidueCleaner, resolveCardAsset, findCardData, type AttachmentPreviewItem } from "../attachment/attachmentPreviewController";
 import { openAssetEntry } from "../attachment/openAssetEntry";
@@ -112,19 +118,44 @@ export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance
     stopped: false,
   });
   const [editorState, setEditorState] = useState<LakeEditorInstance | null>(null);
+  const kernelDark = useKernelDarkTheme();
   const [rebuildTick, setRebuildTick] = useState(0);
 
+  /** 失败图的自动补拉定时器（随组件卸载清理；判据见 uploadRetryScheduler）。 */
+  const retryTimersRef = useRef<Set<number>>(new Set());
+
   /**
-   * 上传晚到的自愈（261114）：编辑器挂载时若正文里还是「加载中/unknown error」的图卡，
-   * 等 uploadJournal 记下真实结果后重建一次编辑器，让 uploadCardRepair 把资产/真实原因回填。
-   * 正常上传（挂载时正文里还没有该 taskId）不会触发重建。
+   * 上传晚到的自愈（261114）+ 失败自动补拉（261114 二批）：
+   * - 编辑器挂载时若正文里还是「加载中/unknown error」的图卡，等 uploadJournal 记下真实结果后重建一次，
+   *   让 uploadCardRepair 把资产/真实原因回填；正常上传（挂载时正文里还没有该 taskId）不会触发重建。
+   * - error 条目按退避（3s/10s/30s/2min/10min，上限 5 轮）后台重下；attempts 由 journal 累计，
+   *   超预算才真正判失败。点失败卡（ne-image-error）由 lakeRuntime 的点击监听立即重试。
    */
-  useEffect(() => subscribeUploadJournal((entry) => {
-    if (entry.noteId !== noteId || entry.status === "pending") return;
-    const stale = latestDocumentRef.current;
-    if (!hasUnresolvedImageTask(stale, entry.taskId)) return;
-    setRebuildTick((tick) => tick + 1);
-  }), [noteId]);
+  useEffect(() => {
+    const timers = retryTimersRef.current;
+    const off = subscribeUploadJournal((entry) => {
+      if (entry.noteId !== noteId) return;
+      if (entry.status === "error") {
+        const delay = uploadRetryDelayForEntry(entry);
+        if (delay != null) {
+          const timer = window.setTimeout(() => {
+            timers.delete(timer);
+            retryFailedDocumentImageUploads(noteId);
+          }, delay);
+          timers.add(timer);
+        }
+      }
+      if (entry.status === "pending") return;
+      const stale = latestDocumentRef.current;
+      if (!hasUnresolvedImageTask(stale, entry.taskId)) return;
+      setRebuildTick((tick) => tick + 1);
+    });
+    return () => {
+      off();
+      for (const timer of timers) window.clearTimeout(timer);
+      timers.clear();
+    };
+  }, [noteId]);
   const [cardMenu, setCardMenu] = useState<{ x: number; y: number; item: AttachmentPreviewItem; el: HTMLElement } | null>(null);
   const [textMenu, setTextMenu] = useState<{ x: number; y: number } | null>(null);
   const [renameItem, setRenameItem] = useState<{ item: AttachmentPreviewItem; el: HTMLElement } | null>(null);
@@ -1087,6 +1118,10 @@ export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance
         </nav>
       )}
       <div ref={editorMountRef} className="lake-editor-main" />
+      {/* 语雀链接卡浮动工具条：转为链接/标题/卡片、打开链接、编辑标题（hover/选中时出现在卡上方）。 */}
+      {editorState && (
+        <BookmarkToolbar containerRef={hostRef} editor={editorState} language="zh-cn" dark={kernelDark} />
+      )}
       {cardMenu && (
         <CardContextMenu
           x={cardMenu.x}

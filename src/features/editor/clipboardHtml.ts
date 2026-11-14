@@ -336,6 +336,9 @@ function assetUrlToDataUrlSync(url: string): string | null {
  * 找不到真实 URL 的占位图保留原样（避免内容丢失）。
  */
 export function upgradePastedHtml(html: string): string {
+  // 语雀剪贴板：先把 INode 载荷里的行内链接卡改写成内核能识别的 yuqueInline（见下方注释）。
+  const yuqueNormalized = normalizeYuqueClipboardCards(html);
+  html = yuqueNormalized;
   if (!html.includes("data:image/svg+xml")) return html;
   let parsed: Document;
   try {
@@ -355,6 +358,47 @@ export function upgradePastedHtml(html: string): string {
     }
   }
   return changed ? parsed.body.innerHTML : html;
+}
+
+/**
+ * 语雀剪贴板卡片修复（261114 四批）：Yuque 复制整页时，`ne-clipboard` 载荷里的行内链接卡
+ * 名字是 `bookmarkInline`（value = { mode:'title', src, text, detail }）。内核的 **INode 读取器**
+ * 只给 `bookmarkInline` 注册了 lake 格式读取器（`registerLakeCardReader`），INode 格式没有对应读取器
+ * ⇒ 落到 `*` 兜底卡（fallbackCard），最终只渲染成一个**普通 link 文本**（丢图标/站点名/卡片外观）。
+ * 内核自己有一个专吃这种载荷的 INode 读取器：`yuqueInline`（仅在 `bookmark.recognizeYuque && 无 yuque 插件`
+ * 时注册，读取 value.mode/src 后同样创建 `bookmarkInline` 卡）。所以粘贴前把载荷里的卡片名改写成
+ * `yuqueInline`，配合 lakeRuntime 的 `bookmark.recognizeYuque: true`，就能得到真正的行内链接卡。
+ * 只改卡片名；不认识的/缺 src 的卡原样保留，绝不丢内容。
+ */
+const NE_CLIPBOARD_HTML_RE = /^(<meta[^>]*>)?(<ne-clipboard\b[^>]*\bdata=")([^"]*)("[^>]*>)([\s\S]*)$/;
+
+export function normalizeYuqueClipboardCards(html: string): string {
+  const match = NE_CLIPBOARD_HTML_RE.exec(html);
+  if (!match) return html;
+  let doc: unknown;
+  try {
+    doc = JSON.parse(decodeURIComponent(match[3]));
+  } catch {
+    return html;
+  }
+  let changed = false;
+  const walk = (node: unknown): void => {
+    if (!node || typeof node !== "object") return;
+    const card = node as { type?: string; name?: string; children?: unknown[]; attrs?: { value?: { mode?: unknown; src?: unknown } } };
+    if (card.type === "card" && card.name === "bookmarkInline") {
+      const value = card.attrs?.value;
+      // 只改写能确定是行内链接卡的（mode=title + 非空 src）；其它形态保持原样，避免误伤。
+      if (value && value.mode === "title" && typeof value.src === "string" && value.src.length > 0) {
+        card.name = "yuqueInline";
+        changed = true;
+      }
+    }
+    if (Array.isArray(card.children)) card.children.forEach(walk);
+  };
+  walk(doc);
+  if (!changed) return html;
+  const encoded = encodeURIComponent(JSON.stringify(doc));
+  return match[1] + match[2] + encoded + match[4] + match[5];
 }
 
 function isBlankSvgPlaceholder(src: string): boolean {

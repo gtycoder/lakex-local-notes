@@ -37,8 +37,22 @@ export interface UploadJournalEntry {
   url?: string;
   createdAt: number;
   status: UploadJournalStatus;
+  /** 已记录的失败次数（后台自动补拉的预算；成功时保留，便于诊断）。 */
+  attempts?: number;
   output?: UploadJournalOutput;
   error?: string;
+}
+
+/** 后台自动补拉次数上限：失败 1 次 + 最多再补拉 5 次（每次补拉内部还有主进程 3 次尝试）。 */
+export const MAX_UPLOAD_AUTO_RETRIES = 5;
+
+/** 第 N 次失败后等多久再补拉（末项对更后面的尝试复用）。 */
+const RETRY_DELAYS_MS = [3_000, 10_000, 30_000, 120_000, 600_000];
+
+/** 自动补拉退避（attempts = 已失败次数，≥1）。 */
+export function uploadRetryDelayMs(attempts: number): number {
+  const index = Math.max(0, Math.min(RETRY_DELAYS_MS.length - 1, Math.floor(attempts) - 1));
+  return RETRY_DELAYS_MS[index];
 }
 
 const STORAGE_KEY = "lakex-local-notes.image-upload-journal.v1";
@@ -55,7 +69,8 @@ function isEntry(value: unknown): value is UploadJournalEntry {
     && typeof entry.noteId === "string"
     && typeof entry.createdAt === "number"
     && (entry.type === "url" || entry.type === "file" || entry.type === "base64")
-    && (entry.status === "pending" || entry.status === "done" || entry.status === "error");
+    && (entry.status === "pending" || entry.status === "done" || entry.status === "error")
+    && (entry.attempts === undefined || typeof entry.attempts === "number");
 }
 
 function prune(entries: UploadJournalEntry[], now = Date.now()): UploadJournalEntry[] {
@@ -103,12 +118,15 @@ export function recordUploadPending(input: {
   url?: string;
   now?: number;
 }): UploadJournalEntry {
+  const previous = getUploadEntry(input.taskId);
   const entry: UploadJournalEntry = {
     taskId: input.taskId,
     noteId: input.noteId,
     type: input.type,
-    createdAt: input.now ?? Date.now(),
+    createdAt: previous?.createdAt ?? input.now ?? Date.now(),
     status: "pending",
+    // 重试时保留已失败次数：后台补拉预算跨「失败 → 重试 → 失败」累计，不会每轮清零。
+    ...(previous?.attempts !== undefined ? { attempts: previous.attempts } : {}),
     ...(input.type === "url" && input.url ? { url: input.url } : {}),
   };
   upsert(entry);
@@ -131,7 +149,7 @@ export function recordUploadDone(taskId: string, output: UploadJournalOutput): v
 export function recordUploadError(taskId: string, error: string): void {
   const current = getUploadEntry(taskId);
   if (!current) return;
-  upsert({ ...current, status: "error", error: error || "图片下载失败" });
+  upsert({ ...current, status: "error", error: error || "图片下载失败", attempts: (current.attempts ?? 0) + 1 });
 }
 
 export function getUploadEntry(taskId: string): UploadJournalEntry | undefined {
@@ -150,6 +168,20 @@ export function pendingUploadsForNote(noteId: string): UploadJournalEntry[] {
 
 export function uploadsForNote(noteId: string): UploadJournalEntry[] {
   return load().filter((entry) => entry.noteId === noteId);
+}
+
+/**
+ * 可自动补拉的失败项（打开文档 / 后台定时 / 点击重试共用同一判据）：
+ * 有原 URL、状态 error、已失败次数未超预算、仍在 7 天窗口内。
+ * 超预算的失败保留日志与真实原因，不再无限重试（用户仍可重新粘贴）。
+ */
+export function retryableUploadsForNote(noteId: string, now = Date.now()): UploadJournalEntry[] {
+  return load().filter((entry) => entry.noteId === noteId
+    && entry.type === "url"
+    && entry.status === "error"
+    && !!entry.url
+    && (entry.attempts ?? 1) <= MAX_UPLOAD_AUTO_RETRIES
+    && now - entry.createdAt <= TTL_MS);
 }
 
 /** 订阅日志变更（返回退订函数）；用于上传晚到后触发对应编辑器自愈。 */

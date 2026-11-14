@@ -19,6 +19,7 @@ import type { HomeTab } from "./home/tabPager";
 import { consumeSharedContent, readSharedContentBytes, sharedContentKind, sharedContentToSeed, sharedContentUnsupportedHint, sharedMarkdownFiles, subscribeSharedContent, type QuickNoteSeed, type SharedContent, type SharedMarkdownFile } from "./native/sharedContent";
 import { readImportDefaultNotebook, writeImportDefaultNotebook } from "./settings/importSettings";
 import { readDefaultHomeTab } from "./settings/defaultSpace";
+import { useHiddenHomeTabs } from "./settings/useHiddenHomeTabs";
 import type { DefaultNotebookOption } from "./settings/DefaultNotebookPickerSheet";
 const DefaultNotebookPickerSheet = lazy(() => import("./settings/DefaultNotebookPickerSheet").then((m) => ({ default: m.DefaultNotebookPickerSheet })));
 import { SHARE_QUEUE_FULL_HINT, ShareQueue } from "./ink/shareQueue";
@@ -117,7 +118,13 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
    * 只读设备本地偏好（settings/defaultSpace，前缀 lakex-local-notes-mobile.，不进 S3）；
    * 快捷 capture 那条入口不受影响（它本来也落在小记）。
    */
+  // 261114：设置里关闭的首页空间（仅日记/AI 可关）要同时影响 Dock 与分页器。
+  const { tabs: visibleHomeTabs, isVisible: isHomeTabVisible } = useHiddenHomeTabs();
   const [route, setRoute] = useState<Route>(() => ({ kind: "home", tab: readDefaultHomeTab() }));
+  // 关闭「当前所在空间」⇒ 回落到第一个可见 tab（小记），不把用户留在已隐藏的页。
+  useEffect(() => {
+    setRoute((prev) => (prev.kind === "home" && !isHomeTabVisible(prev.tab) ? { ...prev, tab: visibleHomeTabs[0] ?? "quick" } : prev));
+  }, [visibleHomeTabs, isHomeTabVisible]);
   /**
    * 工作区打开来源的一级页（261110）：**从日记打开 ⇒ 关闭/返回时回「日记」**，其余保持既有「知识库」落点。
    * 两条返回路径（页面返回 = closeWorkspace；安卓返回键 = requestWorkspaceBack → 工作区 handler → closeWorkspace）
@@ -859,6 +866,7 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
         <MobileErrorBoundary scope="home" title="首页加载失败">
         <HomePage
           tab={homeTab}
+          tabs={visibleHomeTabs}
           notebooks={notebooks}
           notes={notes}
           quickNotes={quickNotes}

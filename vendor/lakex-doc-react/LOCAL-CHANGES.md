@@ -63,3 +63,18 @@
 - 构建产物：`npm run build:vendor`（根目录）或 `npm --prefix vendor/lakex-doc-react run build`
   → 产出 `dist/index.es.js` / `index.cjs.js` / `index.d.ts` / `style.css`（**已提交进仓库**）；因移除 `inlineDynamicImports`，还会按需产出懒加载 chunk（`DrawnixBoardCore-*.js` / `katex-*.js` / `MindMap*.js` / `icons-*.js` 等），**同样必须提交**。
 - 升级流程：保留上游 commit → 把新快照覆盖到本目录 → 按上表逐条 rebase 本地改动 → 重建产物 → 跑门禁（`tsc` / `vitest` / 桌面+移动 build）。
+
+## 四、261114 本地补丁：书签卡（bookmark）工具条与 INode 读取器
+
+> 用户 261114 定稿：语雀链接卡要像语雀一样「保留成卡片 + 有浮动工具条」，可转链接/标题/卡片。
+> 应用侧改动（`src/features/editor/**`）不在此列，见 `docs/LAKEX-CONTRACT.md` §5.54。
+
+| # | 文件 | 改动 | 类型 | 原因 / 维护方式 |
+|---|------|------|------|------|
+| 30 | `src/index.ts` | 导出 `BookmarkToolbar` / `BookmarkToolbarProps` | **功能新增** | 内核 v1.99.0 的 bookmark 卡没有原生 `getCardToolbarConfig`（`lakex.js:69407` 仅当非 null 才初始化 hover 工具条），包装层自实现了 `BookmarkToolbar` 但只在 `LakexEditor` 里挂载；本项目直接用 `Doc.createOpenEditor`（包装层不运行）⇒ 导出后由宿主 `EditorTab` / `LakeEditor` 各自挂载（护栏 `src/features/editor/bookmarkCardToolbar.test.ts`） |
+| 31 | `src/components/plugin/bookmark/BookmarkToolbar.tsx` | 图标 id 修正：`ne-t-link` → `icon-editor-link`、`ne-o-visit-link` → `icon-o-visit-link` | 兼容修复 | 这两个 icon 名在本应用的内核 icon sprite 里不存在（实测 `document.getElementById` 均 false，按钮显示空白）；换成同语义且存在的符号。其余 `icon-tb-card-view` / `icon-tb-title-view` / `icon-o-edit` 本来存在 |
+| 32 | `src/components/lakex/lakex.js`（**转换产物**） | `Gh` / `Gv` 两个 INode 卡读取器从「空 read（继承 `_D` 恒 true）」补成真正实现：`value.src` 有效时 `createCard('bookmark'\|'bookmarkInline', GA.fromLake(value, {type: Gy\|Gb}), id)` | **内核行为补丁（例外，需重放）** | 语雀剪贴板 INode 载荷里的 `bookmark`（展开态）/`bookmarkInline` 卡原来被空 reader 吞掉、退化成普通链接；lake 格式的 `GC`/`GN` 才有完整读取器。⚠️ **本项违反「不要手改内核产物」的默认规则**，原因：INode 读取器只能在插件 `afterInit` 内注册，宿主没有公开服务 id（`C$`）可拿；`convert-lakex.js` 产物是未格式化 UMD、且无法在不改生成器的情况下注入。**维护要求**：升级/重新转换 `lakex.js` 后按本行描述重放两处 `read`（锚点 = 两个 `return ((0, nF.A)(t, e), (0, nT.A)(t));` 后接 `})(_D);`；`src/features/editor/bookmarkCardToolbar.test.ts` 会红），或把补丁沉淀进 `scripts/convert-lakex.js` 的格式化后处理步骤再做 |
+
+| 33 | `src/cards/DrawingBoard/LakexMaterialLibrary.tsx` + `DrawnixBoardCore.tsx` + `index.ts` + `DrawnixBoardCore.css` | 自定义素材持久化端口 `MaterialLibraryStorage`（宿主传 load/save/remove/openFolder；不传 = localStorage 旧行为）；面板增加「打开素材文件夹」入口与提示；`DrawnixBoardCoreProps` 透传 `materialStorage` | **功能新增（261114 用户点单：素材存可打开的文件夹）** | 宿主实现 = `electron/boardMaterials.ts`（`<数据目录>/materials/*.board.json`，兼容手动放入的画板文档）+ IPC 单通道 `board_materials`（list/save/delete/open）；桌面 `BoardEditor` 注入，移动端暂不接（Android 无「打开文件夹」语义，仍 localStorage）。**重建 = `npm --prefix vendor/lakex-doc-react run build`**（整体重排 dist chunk 哈希属正常）。 |
+
+**重新构建**：`npm --prefix vendor/lakex-doc-react run build`（会整体重排 `dist/**` 的 chunk 哈希，属正常）。本次已重建并提交 `dist/`（`index.es.js` / `index.cjs.js` / `index.d.ts` / `style.css` / 懒加载 chunk）。

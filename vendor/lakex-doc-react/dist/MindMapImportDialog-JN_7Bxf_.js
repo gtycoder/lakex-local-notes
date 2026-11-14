@@ -1,8 +1,8 @@
-import { d as e, m as t } from "./tree-ops-CMYWEuJm.js";
-import { a as n } from "./icons-Cp9Z20_6.js";
+import { d as e, m as t } from "./tree-ops-Dn9xab1H.js";
+import { a as n } from "./icons-DK8kOgUK.js";
 import { useMemo as r, useRef as i, useState as a } from "react";
 import { jsx as o, jsxs as s } from "react/jsx-runtime";
-//#region ../../node_modules/@xiangfa/mindmap/dist/esm/utils/import.js
+// ../../node_modules/@xiangfa/mindmap/dist/esm/utils/import.js
 function c(e) {
 	return typeof e == "object" && !!e && !Array.isArray(e);
 }
@@ -43,20 +43,12 @@ function d(e, n, r) {
 		theme: a.theme
 	};
 }
-//#endregion
-//#region ../../node_modules/@xiangfa/mindmap/dist/esm/components/MindMapImportDialog.js
+// ../../node_modules/@xiangfa/mindmap/dist/esm/components/MindMapImportDialog.js
 var f = [
 	"auto",
 	"markdown",
 	"json"
-], p = [
-	"button:not([disabled])",
-	"textarea:not([disabled])",
-	"input:not([disabled])",
-	"select:not([disabled])",
-	"a[href]",
-	"[tabindex]:not([tabindex=\"-1\"])"
-].join(",");
+], p = "button:not([disabled]),textarea:not([disabled]),input:not([disabled]),select:not([disabled]),a[href],[tabindex]:not([tabindex=\"-1\"])";
 function m(e, t) {
 	return e === "auto" ? t.importAuto : e === "markdown" ? t.importMarkdown : t.importJSON;
 }
@@ -64,14 +56,10 @@ function h({ messages: e, plugins: t, onImport: c, onClose: l }) {
 	let [u, h] = a("auto"), [g, _] = a(""), [v, y] = a(null), b = i(null), x = "mindmap-import-panel", S = r(() => v ? v === "empty" ? e.importEmpty : v === "invalid-json" ? e.importInvalidJSON : e.importInvalidData : null, [v, e]);
 	function C() {
 		let e = d(g, u, t);
-		if (!e.ok) {
-			y(e.reason);
-			return;
-		}
-		c(e.data, e.source, {
+		e.ok ? c(e.data, e.source, {
 			direction: e.direction,
 			theme: e.theme
-		});
+		}) : y(e.reason);
 	}
 	function w(e) {
 		h(e), y(null);
@@ -191,5 +179,4 @@ function h({ messages: e, plugins: t, onImport: c, onClose: l }) {
 		})
 	});
 }
-//#endregion
 export { h as MindMapImportDialog };

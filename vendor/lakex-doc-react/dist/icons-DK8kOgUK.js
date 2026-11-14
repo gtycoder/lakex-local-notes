@@ -1,5 +1,5 @@
 import { jsx as e, jsxs as t } from "react/jsx-runtime";
-//#region ../../node_modules/@xiangfa/mindmap/dist/esm/components/icons.js
+// ../../node_modules/@xiangfa/mindmap/dist/esm/components/icons.js
 function n({ size: n = 24, className: r }) {
 	return /* @__PURE__ */ t("svg", {
 		width: n,
@@ -192,5 +192,4 @@ function p({ size: t = 24, className: n }) {
 		children: /* @__PURE__ */ e("path", { d: "m9 18 6-6-6-6" })
 	});
 }
-//#endregion
 export { i as a, o as c, s as d, u as f, f as i, p as l, c as n, l as o, d as r, n as s, a as t, r as u };

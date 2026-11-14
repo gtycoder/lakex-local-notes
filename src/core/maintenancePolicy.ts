@@ -151,7 +151,9 @@ export const NONE_OPS = [
   // 设置写入（device_state / 密钥，同步不触碰同表）
   "saveSyncSettings", "saveS3Settings",
   // 单发网络（见 MAINTENANCE_OPS 注释）
-  "testS3Connection", "uploadResource",
+  // 261114 三批：downloadRemoteAsset = 移动端原生远程图下载（单次请求 + 写一个资产文件，与 uploadResource 同型，
+  // 且资产是内容无关的随机命名、不与整轮同步写同一文件；串进维护域会让「插一张远程图」等满一轮同步）。
+  "testS3Connection", "uploadResource", "downloadRemoteAsset",
   // 文件系统 / 系统能力（只碰文件/系统能力，不写库行）
   "openAttachment", "saveAssetAs", "stageQuickNoteAsset",
 ] as const;

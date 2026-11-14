@@ -6,8 +6,8 @@ import { mountBlockHoverHandle } from "./blockHandleMount";
 import { mountSelectionToolbar } from "./selectionToolbar/mountSelectionToolbar";
 import { registerEditorInstance } from "./editorRegistry";
 import { DOCUMENT_IMAGE_DOWNLOAD_LIMITS, uploadLakeResource } from "./resourceUpload";
-import { createImageUploadTask, resumePendingImageUploads, type ImageUploadPerform } from "./imageUploadTask";
-import { pendingUploadsForNote } from "./uploadJournal";
+import { createImageUploadTask, forceRetryImageUploadTask, getActiveImageUploadTask, resumePendingImageUploads, type ImageUploadPerform } from "./imageUploadTask";
+import { pendingUploadsForNote, retryableUploadsForNote } from "./uploadJournal";
 import { registerNoteRefCard, withNoteRefSlashItem } from "./noteRefCard";
 import { registerLockedTextCard, withLockedTextSlashItem } from "./lockedTextCard";
 import { registerAiAssistantCard, withAiAssistantSlashItem } from "./aiAssistantCard";
@@ -21,7 +21,7 @@ import { subscribeDocInitPerf } from "./lakePerfSubscription";
 import { setupViewerTocClickAssist } from "./lakeTileRender";
 import { VIRTUAL_RENDERING, appendDisposeExtras, lakeBridge, deepMerge, ensureCustomCardIcons, ensureLakeLongTaskObserver, lakeMark, lakeMeasure, prepareCustomCards, recordLakeDocInitPerf, resolveScrollNode, QUICK_NOTE_TOOLBAR_ITEMS, QUICK_NOTE_FULL_TOOLBAR_ITEMS } from "./kernelConfig";
 import type { LakeEditorPrefs } from "./kernelConfig";
-import { hardenDestroyedHotKeyLookup, installBookmarkCardDegrade } from "./kernelBookmarkDegrade";
+import { hardenDestroyedHotKeyLookup } from "./kernelBookmarkDegrade";
 import { imageThumbDisplaySrc } from "./kernelImageThumb";
 import { setupInsertedCardAutoOpen, setupVisibleCardHydration } from "./kernelCardHydration";
 import { setupCardToolbarHoverBridge } from "./kernelToolbarBridge";
@@ -66,8 +66,6 @@ export interface LakeEditorInstance {
   renderer?: LakeRendererBus;
   /** 应用侧挂载的「额外清理」清单（见 appendDisposeExtras；内核实例不带，由本文件附加）。 */
   __disposeExtras?: () => void;
-  /** bookmark 卡降级补丁的清理函数（见 installBookmarkCardDegrade）。 */
-  __disposeBookmarkDegrade?: () => void;
   /** 内核插件集合（数组 / Map / 普通对象三种形态都可能出现，见 findNativeTocSidebar）。 */
   _plugins?: unknown;
 }
@@ -154,8 +152,9 @@ export function createLakeDocument(
     && !uploadResource
     && noteId !== "markdown-import"
     && noteId !== "kernel-prewarm";
+  // skipQueue：下载由 imageUploadTask 的预取池（并发 8）统一调度，不再叠加共享上传队列（6）。
   const performDocumentImageUpload: ImageUploadPerform = (request) =>
-    uploadLakeResource(request, noteId, { downloadLimits: DOCUMENT_IMAGE_DOWNLOAD_LIMITS });
+    uploadLakeResource(request, noteId, { downloadLimits: DOCUMENT_IMAGE_DOWNLOAD_LIMITS, skipQueue: true });
 
   const mount = document.createElement("div");
   // 小记走内核 note 版式（小卡片外观 + 展开按钮）；`.ne-doc-note-editor` 是小记版式的挂载点前缀
@@ -202,6 +201,11 @@ export function createLakeDocument(
     // null 直接崩溃）。已有 detail 的剪贴板卡不会走到该 handler；真正缺少 detail 的
     // 纯 URL 粘贴时才被调用，这里返回基于 url 的最小结构、不出网。
     bookmark: {
+      // 261114 四批：开启内核自己的「语雀剪贴板卡」INode 读取器（yuqueInline）。Yuque 复制整页时
+      // 行内链接卡的载荷名是 bookmarkInline，INode 读取器只覆盖 yuqueInline ⇒ 不开启时会被兜底成
+      // 普通 link 文本（丢图标/站点/卡片外观）。粘贴前 clipboardHtml.normalizeYuqueClipboardCards
+      // 会把可确定的 bookmarkInline 卡名改写成 yuqueInline（内核读取后同样生成 bookmarkInline 卡）。
+      recognizeYuque: true,
       fetchDetailHandler: (src: unknown) => {
         const url = typeof src === "string" ? src : String((src as { url?: unknown })?.url ?? "");
         return Promise.resolve({
@@ -439,10 +443,8 @@ export function createLakeDocument(
   if (mode === "editor") {
     editor.on("contentchange", onChange);
   }
-  // 语雀 bookmark 卡本地降级为普通超链接（ne-link），见 installBookmarkCardDegrade。
-  if (mode === "editor") {
-    try { editor.__disposeBookmarkDegrade = installBookmarkCardDegrade(mount, editor); } catch { /* 忽略 */ }
-  }
+  // 语雀 bookmark 卡保留为卡片（261114 用户改判，撤销 126e906f 的粘贴降级）；
+  // 卡片的「转为链接/标题/卡片」等操作由宿主挂载的 vendor BookmarkToolbar 提供。
   // 仅编辑态启用 virtualRendering + cardLazyInit，因此可见卡片水合只挂在编辑器实例；
   // 锁定态 Viewer 明确关闭虚拟渲染，避免自定义卡片停留在 hole 空壳。
   if (mode === "editor" && VIRTUAL_RENDERING.enabled && VIRTUAL_RENDERING.cardLazyInit) {
@@ -526,6 +528,9 @@ export function createLakeDocument(
   // 设置播放器（audio 元素 src=canonical，应用内嵌播放）。卡渲染完成后调用才生效——持续重试
   // （最长 ~20s）直到播放器出现；DT-07：重试计时器与清理都收进 lakeAudioCardRetry.ts。
   appendDisposeExtras(editor, setupAudioCardRetry(mount));
+  // 261114 二批：点失败图卡（ne-image-error）→ 立刻重试本篇所有可重试的失败图；
+  // 后台定时补拉在 EditorTab（桌面）与 LakeEditor(journalRecovery)（移动）里调度。
+  if (journalImageUploads) appendDisposeExtras(editor, attachImageErrorRetryClick(mount, noteId));
   // 块悬浮手柄 + 块操作菜单（桌面编辑态 opt-in；见 blockHandleMount 的安全边界说明）
   if (mode === "editor" && prefs?.blockHandle) {
     const disposeHandle = mountBlockHoverHandle(element, mount, editor, noteId);
@@ -549,20 +554,74 @@ export function createLakeDocument(
 }
 
 
+/** 文档编辑器图片下载的 perform（与 createLakeDocument 内同口径：收窄预算 + 跳过共享队列）。 */
+function documentImagePerform(noteId: string): ImageUploadPerform {
+  return (request) => uploadLakeResource(request, noteId, {
+    downloadLimits: DOCUMENT_IMAGE_DOWNLOAD_LIMITS,
+    skipQueue: true,
+  });
+}
+
+function isDocumentEditorNote(noteId: string): boolean {
+  return !!noteId && noteId !== "markdown-import" && noteId !== "kernel-prewarm";
+}
+
 /**
- * 打开文档时恢复日志里仍 pending 的图片下载（261114：跨重启/崩溃/上传期间退出）。
- * 结果写回 uploadJournal；EditorTab 的日志订阅会触发一次正文回填（不阻塞编辑器创建）。
+ * 打开文档时恢复日志里的图片下载（261114：跨重启/崩溃/上传期间退出；二批：失败也不再判死刑）。
+ * - pending：重启后重下；
+ * - error 且未超补拉预算：再给几次机会（attempts 累加，超预算才停）。
+ * 结果写回 uploadJournal；EditorTab / LakeEditor(journalRecovery) 的日志订阅会触发一次正文回填。
  * 只处理文档编辑器（导入临时内核/预取实例没有持久正文）。
  */
 export function resumePendingDocumentImageUploads(noteId: string): void {
-  if (!noteId || noteId === "markdown-import" || noteId === "kernel-prewarm") return;
+  if (!isDocumentEditorNote(noteId)) return;
+  const perform = documentImagePerform(noteId);
   const entries = pendingUploadsForNote(noteId);
-  if (entries.length === 0) return;
-  resumePendingImageUploads(
-    noteId,
-    (request) => uploadLakeResource(request, noteId, { downloadLimits: DOCUMENT_IMAGE_DOWNLOAD_LIMITS }),
-    entries.map((entry) => ({ taskId: entry.taskId, url: entry.url, type: entry.type, status: entry.status })),
-  );
+  if (entries.length > 0) {
+    resumePendingImageUploads(
+      noteId,
+      perform,
+      entries.map((entry) => ({ taskId: entry.taskId, url: entry.url, type: entry.type, status: entry.status })),
+    );
+  }
+  retryFailedDocumentImageUploads(noteId, perform);
+}
+
+/**
+ * 失败图片的后台补拉 / 点击重试：按 journal 里「可重试」的失败项复建任务（同一 taskId，attempts 累计）。
+ * 返回真正发起重试的数量（0 = 没有可重试项）。
+ */
+export function retryFailedDocumentImageUploads(noteId: string, perform = documentImagePerform(noteId)): number {
+  if (!isDocumentEditorNote(noteId)) return 0;
+  const entries = retryableUploadsForNote(noteId);
+  let started = 0;
+  for (const entry of entries) {
+    const active = getActiveImageUploadTask(entry.taskId);
+    if (active && !active.isTerminal()) continue;
+    const task = forceRetryImageUploadTask({
+      taskId: entry.taskId,
+      noteId,
+      type: "url",
+      data: entry.url,
+      perform,
+      journal: true,
+    });
+    void task.run();
+    started += 1;
+  }
+  return started;
+}
+
+/** 点失败图卡（内核 ne-image-error 占位）→ 立刻重试本篇所有可重试的失败图。 */
+function attachImageErrorRetryClick(mount: HTMLElement, noteId: string): () => void {
+  const onClick = (event: MouseEvent): void => {
+    const target = event.target as Element | null;
+    if (!target || typeof target.closest !== "function") return;
+    if (!target.closest(".ne-image-error")) return;
+    retryFailedDocumentImageUploads(noteId);
+  };
+  mount.addEventListener("click", onClick, true);
+  return () => mount.removeEventListener("click", onClick, true);
 }
 
 export function destroyLakeEditor(editor: LakeEditorInstance | null): void {
@@ -571,9 +630,6 @@ export function destroyLakeEditor(editor: LakeEditorInstance | null): void {
   } catch (error) {
     rlog.warn("editor", "Lake editor extras cleanup failed", { ...errorFields(error) });
   }
-  try {
-    editor?.__disposeBookmarkDegrade?.();
-  } catch { /* 忽略 */ }
   try {
     editor?.destroy?.();
     if (!editor?.destroy) editor?.destory?.();

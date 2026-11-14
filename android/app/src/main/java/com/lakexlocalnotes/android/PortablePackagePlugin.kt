@@ -42,7 +42,12 @@ class PortablePackagePlugin : Plugin() {
         /** 只接受最新后缀；旧 .zip 不再兼容（用户 261110 定稿：不为历史数据做兼容）。 */
         private const val PORTABLE_EXTENSION = ".zip.lln"
         private const val PORTABLE_LIMIT_BYTES = 4L * 1024 * 1024 * 1024
-        private const val MAX_ENTRIES = 100_000
+        /**
+         * 条目上限：10k 文档 + 100k 附件的真实大库实测便携包 = 110,005 条，旧的 100k 上限会让
+         * 目标规模包在手机上直接报「zip 条目过多」。放宽到 250k（≈2× 余量）；zip bomb 仍由
+         * 4GiB 包体上限、逐条路径/越界校验、解压总量与落盘空间共同兜底。
+         */
+        private const val MAX_ENTRIES = 250_000
         private const val MAX_MANIFEST_BYTES = 2 * 1024 * 1024
         private const val PAGE_SIZE_MAX = 1000
 

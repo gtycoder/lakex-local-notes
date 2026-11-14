@@ -39,3 +39,26 @@ body.lake-mobile [data-mb-edit-host][data-mb-kernel="doc"] .ne-layout-mode-fixed
 body.lake-mobile [data-mb-edit-host][data-mb-kernel="doc"] .ne-layout-mode-fixed .ne-editor-extra-box,
 body.lake-mobile [data-mb-edit-host][data-mb-kernel="doc"] .ne-layout-mode-fixed .ne-editor-footer-box { max-width: 100% !important; padding-left: 0 !important; padding-right: 0 !important; }
 body.lake-mobile [data-mb-edit-host][data-mb-kernel="doc"] .lake-editor { padding-left: var(--mb-reader-pad); padding-right: var(--mb-reader-pad); }
+
+/* ⑤ 文档内嵌画板卡（Drawnix）的工具条：固定为卡内左侧竖向轨（261114 用户图1「工具栏错位」）
+ * 成因：移动端没有 @layer ⇒ 依赖包 lakex-drawnix 的 `.drawnix .draw-toolbar{top:36px;left:50%;
+ * transform:translate(-50%)}` 与内核 style.css 同特异性、且**后加载**（内核样式在 DocumentEditor chunk，
+ * drawnix 样式在画板懒 chunk）⇒ 卡片里的创建栏被切成「卡顶横轨」；卡片只有 ~370px 宽，11 项横排到
+ * ~590px 被卡边裁掉（用户报「错位」）。独立画板文件有 board.css 的宿主修复所以正常。
+ * 这里按独立画板同一口径钉回卡内：竖向轨 + 卡内纵向滚动；`.tool-icon>input` 的视觉隐藏同 board.css。
+ * ⚠️ 选择器必须用 `ne-card[data-card-name]`：卡片是自定义元素，没有 `.ne-card` 类。 */
+body.lake-mobile [data-mb-edit-host][data-mb-kernel="doc"] ne-card[data-card-name] .lakex-drawnix-core .draw-toolbar { top: 50%; left: 18px; right: auto; transform: translateY(-50%); max-width: none; max-height: calc(100% - 24px); overflow-x: hidden; overflow-y: auto; }
+body.lake-mobile [data-mb-edit-host][data-mb-kernel="doc"] ne-card[data-card-name] .lakex-drawnix-core .draw-toolbar .stack_horizontal { grid-auto-flow: row; grid-template-columns: auto; grid-template-rows: none; }
+body.lake-mobile [data-mb-edit-host][data-mb-kernel="doc"] ne-card[data-card-name] .lakex-drawnix-core .draw-toolbar .tool-icon { position: relative; }
+body.lake-mobile [data-mb-edit-host][data-mb-kernel="doc"] ne-card[data-card-name] .lakex-drawnix-core .draw-toolbar .tool-icon > input { position: absolute; left: 0; top: 0; width: 1px; height: 1px; margin: 0; padding: 0; opacity: 0; pointer-events: none; }
+
+
+/* ⑥ 文本绘图卡（text-to-diagram）移动端自适应（261114 解禁入口后设备实测）
+ * 桌面是「代码｜预览」左右分栏 + 不换行工具栏；在 370px 宽卡片里会撑破右边缘（用户图：代码/预览被裁）。
+ * 改为工具栏换行、上下分栏；只作用于移动端文档编辑面的该卡，桌面/独立预览不受影响。 */
+body.lake-mobile [data-mb-edit-host][data-mb-kernel="doc"] .text-to-diagram-toolbar { flex-wrap: wrap; row-gap: 6px; padding: 6px 8px; }
+body.lake-mobile [data-mb-edit-host][data-mb-kernel="doc"] .text-to-diagram-tools { flex-wrap: wrap; }
+body.lake-mobile [data-mb-edit-host][data-mb-kernel="doc"] .text-to-diagram-toolbar select { max-width: 120px; }
+body.lake-mobile [data-mb-edit-host][data-mb-kernel="doc"] .text-to-diagram-panels { flex-direction: column; }
+body.lake-mobile [data-mb-edit-host][data-mb-kernel="doc"] .text-to-diagram-editor-panel { flex: 0 0 auto; height: 50%; border-right: none; border-bottom: 1px solid var(--lake-border-1); }
+body.lake-mobile [data-mb-edit-host][data-mb-kernel="doc"] .text-to-diagram-preview-panel { flex: 1 1 auto; }

@@ -7,6 +7,46 @@
 
 ## 0. 最新交接（最近 3 个批次；更早的见 git）
 
+### 261114 · 收口验收（设备点收 / 10k+100k 大库 / 2GB 便携包 / S3 多端回归脚本）
+
+- **设备点验收（P0-1）**：① 移动端书签卡工具条：合成语雀 `ne-clipboard` 注入 `bookmarkInline` 卡 → 触摸点按卡片弹出工具条（转为链接/卡片/打开链接/编辑链接）→ 触摸点按「转为链接」后卡 0/`ne-link` 1 = **PASS**（证据 `/tmp/lakex-verify/evidence/bookmark-toolbar-mobile-261114.png`）；② 桌面画板自定义素材文件夹：保存→`materials/*.board.json`、自定义页显示「打开素材文件夹」+ 从文件夹载入卡片、删除同步删文件 = **PASS**；③ 空间关闭/新顺序桌面+移动复验 = PASS；④ **链接→卡片方向未覆盖**：移动文档编辑器无 link toolbar，桌面依赖内核 link toolbar 扩展，保持 `LAKEX-CONTRACT §5.54` 已知限制（不是本批回归）。
+- **大库验收（10k 文档 + 100k 附件，用户确认规模）**：隔离 seed `/tmp/lake-scale-seed-full` = 10,001 笔记 / 10,022 树节点 / 100,000 附件 / 2,052,500,000B（2.0GiB），种子 223.8s。冷/热两轮：首屏 **1284/200ms**；树全量 **433/262ms**（10,022 行真实 DOM，约 20.1 万节点，renderer heap 313–317MB，主进程 RSS 48MB）；搜索 **445/1928ms**（命中）；打开文档 **369/388ms**（正文/10 file 卡正确），再开一篇 **565/544ms**；资源统计（10 万资产）**891/782ms**；资源页 535/606ms、设置 127ms；两轮硬判据/预算 PASS、无残留进程/端口。⚠️ 桌面目录树未虚拟化，10k 行进 DOM 是后续观察项；热轮搜索 1.9s 为一次抖动，报告保留原始值。
+- **2GB 便携包**：从同 seed 导出 **2,144,250,965B / 110,005 条**（ZIP64、store-only），导出 39.6s（快照 37ms+遍历 978ms+写 38.5s）；自研流式结构校验 166ms 全过（manifest/counts/白名单/路径安全/抽样 CRC），系统 `unzip -t` 全部条目通过（12.2s）。**发现并修复**：Android `PortablePackagePlugin.MAX_ENTRIES` 100,000 < 110,005 ⇒ 目标规模手机导入会被拒；已提高到 **250,000**（261114 修复，仍由 4GiB/路径/解压量兜底），重跑 `mobileCompat.verdict=pass`。**真机端到端 2GB 导入未执行**（系统文件选择器无法在 CDP 自动化；staging+payload 需约 4GiB 可用空间）——发版前建议人工在真机走一次「设置→备份与恢复→便携包导入」。
+- **S3 多端回归固化为可重复脚本**：新增 `scripts/multi-end-sync/regression.mjs`（统一入口、唯一前缀、2–3 个隔离桌面实例、A–K 场景、强制清理 + ListObjectsV2 残留复核、report.json、退出码）+ `loopback-s3.mjs`（127.0.0.1 内存 S3 冒烟）+ README；`--list/--dry-run` 通过；**loopback 全场景 = 94/94 断言 PASS、39 对象删除、residual=0**；本机独立复跑 A,B = **21/21 PASS residual=0**；**真实七牛桶未跑**（本机无 S3 凭据，命令/凭据来源已写 README，`--with-mobile` 明确未实现）。
+- **门禁**：tsc 0；全量 vitest 见 §1；桌面/移动 build、`check:core`（已修 `hiddenSpacesStore` 移出 core）、`check:bundle`、`check:arch`、`ui-metrics`、`git diff --check`；Android `assembleDebug` + `--sync --install`（含 MAX_ENTRIES 修复）成功并启动。
+- **文档**：`scripts/scale-acceptance/README.md`（命令/耗时/限制）、`docs/audit-261112/21-s3-multi-end-mobile.md §11`、`docs/PORTABLE-TRANSFER.md` 限制说明、本文件。
+
+### 261114 · 图片批量下载提速 / 提成功率（用户点单：33 图必须下载成功；v1.1.4 候选，未发版）
+
+- **用户点单**：「图片必须要下载成功。我记得并发不止 5 个，我记得 8 还是几来着，有没有更快的解决方案？增加成功率以及下载速度，参考思源的下载逻辑。」
+- **核实并发口径**：粘贴成图走的是**内核 upload thread**，硬编码 `{parallel: 5}`（`vendor/lakex-doc-react/src/components/lakex/lakex.js` 111252 / `dist/index.es.js` 84908；插件 `new WZ()` 不传 options，改不了）；`addTask` 后 100ms 才 `_checkFinish`、且每次只启动一个、纯完成驱动 ⇒ 墙钟 ≈ `ceil(N/5) × 单张下载`。**8/12 是 S3 传输域**（`s3v3Pool` 默认 8、quickPush 资产 12 / AGENTS §3#13），不是图片上传。已回填 `docs/LAKEX-CONTRACT.md` §5.53 第 6 条。
+- **基线实测（真实语雀「开发/IO」文档，Edge 复制 → 隔离实例粘贴，33 张 = 10,006,080B）**：`paste.html 1ms chars=431376`；33 张下载墙钟 **546ms**、单次 26–301ms、0 重试 0 失败；首图 **≈194ms**、最后一张下载完 **≈742ms**、正文保存 27ms；「下载完成 → 图片可见」**0–25ms/张**，0 次编辑器重建。对照同 CDN 的 30 张混批：多数 2.2s 内完成，但出现过 4.2s / 8.6s / 15.9s 的单张尾巴与 1 张 `15s×2≈30.5s` 超时 ⇒ **慢在下载侧（CDN 抖动/单条边半挂），不在文档渲染**。
+- **改法（4 处，参考思源 `NetAssets2LocalAssets` 的「自定义 TLS/浏览器头 + 失败重试 + 可读失败原因」思路）**：
+  1. `imageUploadTask`：文档编辑器 URL 图在**构造时**就进自管预取池（8 并发、同 note 同 URL 去重）；`run()` 复用同一次下载。内核 5 槽位只决定卡片何时翻成功，不再决定字节何时开始下载。
+  2. `resourceUpload` 新增 `skipQueue`（文档图片预取用），避免再叠共享上传队列（6）把实际并发压回 6；`lakeRuntime` 文档图片路径传 `skipQueue: true`。
+  3. `electron/httpFetcher.ts`：同一域名多地址逐个尝试（单地址 6s、最多 3 个、记住上次成功地址 5min、坏地址即忘）+ keepAlive Agent（`maxSockets 8`，省每张图一次 TLS 握手）+ 浏览器 Accept/Accept-Language 头。**SSRF/钉 IP 语义不变**，仍每跳解析一次并校验全部地址。
+  4. `electron/resourceRepository.ts`：不再把图片 URL 当 Referer（自引用无意义、部分图床会拒）；响应 `content-type: text/html`（防盗链/登录墙）立刻给可读错误且不落盘（原来会把 HTML 当图片写坏资产）。
+- **护栏**：`electron/httpFetcher.test.ts` +1（首选地址 ECONNRESET → 自动换下一个已校验地址、DNS 仍只解析一次）；`electron/resourceRepository.downloadLimits.test.ts` +1（HTML 响应 → 明确失败且不落盘）；`src/features/editor/imageUploadTask.test.ts` +2（构造即预取且 run() 不重复下载 / 同 URL 只下一次）。原 22 例既有护栏全绿。
+- **门禁**：tsc 0；全量 vitest **933 文件（933 passed / 11 skipped）/ 6009 例（5997 passed / 12 skipped）/ 0 failed**；`git diff --check` 干净。**未 bumped 版本、未发版**。
+- **改后复测（隔离实例 + 同一份 Edge 剪贴板 HTML）**：33/33 done、0 失败；首张完成 **374→231ms**、最后一张 **742→431ms**；下载墙钟 **546→416ms（−24%）**、单次最长 **301→238ms**，首轮 8 条连接握手后其余单张降到 **28–95ms**（keepAlive 复用生效，日志 22:53:19 首波 164–230ms → 后续 28–95ms）；`paste.html 1ms`、保存 33ms、仍 0 次编辑器重建，只有粘贴瞬间一次 172ms 抖动。
+- **二批（用户追问：不到迫不得已不能直接失败，要多试几次；移动端也要处理）**：
+  1. 主进程交互预算 **15s×3**（原 ×2）；HTTP 状态分类：403/408/425/429/5xx 可重试，其余 4xx（404/410/413…）永久失败给可读原因、不空转；`text/html` 反盗链页仍立刻失败且不落盘。
+  2. `uploadJournal` 新增 `attempts`（失败次数，跨重启/重试保留）+ `retryableUploadsForNote`（预算 `MAX_UPLOAD_AUTO_RETRIES=5`）+ 退避 3s/10s/30s/2min/10min；`resumePendingDocumentImageUploads` 打开文档时**pending + 可重试失败**都恢复；`EditorTab` / `LakeEditor(journalRecovery)` 订阅 error 后按退避后台补拉；点内核失败图卡 `ne-image-error` 立即重试（`lakeRuntime.attachImageErrorRetryClick`）。
+  3. 渲染层 `withRetry` 新增 `shouldRetry` 谓词：永久失败（404/防盗链网页/超限）不再叠加重试，避免 3×3 空转。
+  4. 实测（隔离实例，合成 3 图：正常/404/httpbin 503）：正常图 done；404 报可读原因且 attempts 1→2→3→5 后按预算停止（16s 内），503 同样补拉至预算；点失败卡后对应条目立刻回到 pending 重试；均无无限重试。
+- **三批（用户：移动端「不过桥，使用原生方法做」）**：
+  1. Android `AssetSyncPlugin.downloadRemoteAsset`（新）：原生 HTTP 把远程图**直接落盘**为资产，字节完全不过 WebView 桥（只回 filename/size/mimeType）。逐跳 SSRF（本机/私网/链路本地/唯一本地 IPv6/组播 或解析失败一律拒）、5 跳重定向、25MiB、`text/html` 拒、魔数嗅探 PNG/JPEG/GIF/WebP/AVIF、命名与桌面 `buildAssetFilename` 同格式（`{13位ms}_{4hex}.{ext}`）、默认 3 次尝试（5xx/408/425/429/403 才重试）。纯规则抽 `RemoteAssetRules.kt` + JVM 单测 5 例。
+  2. JS 接线：`window.lakeNative.downloadRemoteAsset(url, noteId, limits)`（bridge `assetsDomain` + `lakeNativeContract`，契约方法 68）；`resourceUpload` 移动端**优先原生**，旧 APK 才回退渲染层 fetch（CORS/CSP 兜底）；`LakeEditor` 新增 `journalRecovery`，移动端文档编辑器接 repair/resume/晚到重建/后台补拉（与桌面 EditorTab 同判据）。**删掉了过渡的 CapacitorHttp(base64 过桥) 方案**——用户明确不过桥。
+  3. 设备验证（AVD `lake_mobile`，`--sync --install` 已装）：`downloadRemoteAsset` 下载百度 logo **193ms**，设备落盘 `files/note-assets/perf-native-download/1794584751284_6ed1.png` = 6,617B（与源一致）；私网地址 3ms 拒、HTML 页 57ms 拒、404 78ms 拒（均给可读原因）；App 启动无 FATAL。
+- **HTTP/2 结论（用户问「h2 能否加快」）**：**不引入**。实测 33 图/并发 8/热边缘缓存：h1 keepAlive 墙钟 228–360ms，h2 单连接默认窗口 **4430–7618ms（慢约 7–20×）**；即便把流控窗口调大仍慢 1.3–4.2×（单 TCP 拥塞窗口上限 ~10–14MB/s vs h1 热 44MB/s）；h2 省下的握手只有 20–130ms。CDN 支持 h2（ALPN h2、`maxConcurrentStreams=128`）但不改变结论；keepAlive 已拿到连接复用收益。完整数据 `/tmp/lakex-perf/h2bench/report.md`（不入库）。
+- **七批门禁（含前六批）**：tsc 0；全量 vitest **954 文件（943 passed / 11 skipped）/ 6061 例（6049 passed / 12 skipped）/ 0 failed**；Android JVM 单测 + `assembleDebug` + `--sync --install` 成功（`lake_mobile` 已装空间关闭版本并启动）；桌面/移动 `vite build` 与 `check:bundle` / `check:arch` PASS；`git diff --check` 干净。书签卡工具条**移动端未做设备级点按验收**（无现成 bookmark 卡夹具）。
+- **四批（用户点单：语雀书签卡导入 + 卡片工具条，261114）**：① **导入**：语雀剪贴板的 bookmark 卡是 `ne-clipboard` 里的 `bookmarkInline`（行内）/`bookmark`（展开）卡；内核 INode 读取器只给 `yuqueInline` 有效实现、`bookmark/bookmarkInline` 是空 reader ⇒ 粘贴后只剩 `ne-link` 文本。修法 = `lakeRuntime` `bookmark.recognizeYuque: true` + `clipboardHtml.normalizeYuqueClipboardCards`（可确定的 bookmarkInline 改名 yuqueInline，桌面/移动共用 paste 预处理）+ vendor 侧把 `Gh`/`Gv` 的 INode `read` 补成真卡片（见 vendored LOCAL-CHANGES，重转内核需重放）。② **撤销粘贴降级**：261112 的「bookmark 卡自动降级为链接」（126e906f）删除，`kernelBookmarkDegrade.ts` 只留热键兜底。③ **卡工具条**：内核本版无原生卡工具条（`getCardToolbarConfig` 为 null），vendor 包装层自实现的 `BookmarkToolbar` 原来只挂在 `LakexEditor`；我们不用包装层 ⇒ 现在由 vendor 导出、`EditorTab` 与 `LakeEditor` 各自挂载（转为链接/标题/卡片/打开/编辑；图标 id 已改成本应用 sprite 里存在的）。实测（隔离实例 + 真实【IO】剪贴板 + 合成块卡）：行内卡落 `<card type=inline name=bookmarkInline>`；块卡落 `ne-card[data-card-name=bookmark][data-card-type=block]` 且带缩略图/标题/描述；hover/click 工具条出现，点「转为链接」卡→`ne-link`，点「标题」block→inline 均通过。④ **vendor dist 已重建**（含 wrapper 导出/图标修正 + 内核 2 处 reader 补丁，chunk 哈希整体变化）。护栏 `bookmarkCardToolbar.test.ts`（3 条：两宿主挂载/无降级/vendor 导出与 reader 存在）+ `clipboardHtml.test.ts` +3。契约 `docs/LAKEX-CONTRACT.md` §5.54。**未验收**：链接→卡片方向（依赖内核 link toolbar 扩展按钮）。
+- **恢复提示收口（261114 用户问询后修）**：从回收站恢复后弹「云同步已关闭：按纯本地空间处理，没有去云端补拉」原来是**无条件**的——恢复流程（261006 B 方案：恢复立刻生效、不等网络）随后调 `ensure_trash_note_assets` 后台补拉，`ensureTrashNoteAssets` 在云同步关闭/未配置时直接回 `skipped`，`TrashPanel` 就用 `cloudStateHint` 弹提示。即使文档根本没有资源缺口也照弹（纯噪音）。现在 `electron/syncEngineController.ensureTrashNoteAssets` 在阻塞出网前先算**本地资产差集**（`store.getCurrentContentRefs` vs `note-assets/{id}/` 实文件，`missingLocalNoteAssets`）：没有缺口不返回 `skipped`（不弹），真有缺口才提示。护栏 `electron/s3v3/trashAssetBackfill.test.ts` +2（有/无缺口）。恢复语义本身不变（恢复永远是墓碑唯一显式例外、不等网络、恢复后 local-wins 上传）。
+- **五批（261114 用户图1：文档内插画板工具条错位 + 移动端文本绘图）**：① **画板卡工具条**：移动端无 @layer ⇒ 依赖包 `.drawnix .draw-toolbar` 的横轨规则与内核同特异性且后加载（内核在 DocumentEditor chunk、drawnix 在画板懒 chunk）⇒ 卡内创建栏变卡顶横轨、370px 卡里被裁；独立画板文件有 board.css 宿主修复所以正常。修法 = `mobile/editor/edit-surface-kernel.css` ⑤ + `styles/feature.css` 显式钉成卡内左侧竖轨（含 radio 视觉隐藏），选择器用 `ne-card[data-card-name]`（不是 `.ne-card` 类）。设备实测 toolbar 46×446、11 项全可见；桌面同口径。② **移动端文本绘图解禁**：dock「更多 → 画图族」接 `customBlock` 正式入口（`$name:'text-to-diagram'` + initValue），并按移动端加自适应（工具栏换行 + 上下分栏，`edit-surface-kernel.css` ⑥）；设备实测卡宽 368、无横向溢出、Mermaid 预览正常。③ **移动端「替换」未做**（用户点单 #2 的另一半）：内核 `replaceText/replaceAll` 需要**模型 ranges**（`{start:{id,offset},end:{id,offset}}`），而公开的 `ISearchService` 只给 count/jumpTo，没有命中定位 API ⇒ 要做必须走私有 search context，单独 spike 后再动（HANDOFF §3 待办）。护栏 `mobileBoardInsert.test.ts`（文本绘图入口/自适应 CSS + 画板卡竖轨 CSS）。
+- **七批（261114 用户点单：画板自定义素材改用可打开的文件夹）**：桌面数据目录下 `materials/`，每个素材一个 `<name>.board.json`（画板文档正文 + `material` 元数据；与普通画板文档同格式，用户可自行拷贝/放置）；素材面板自定义页加「打开素材文件夹」+ 提示，保存/删除直接写/删文件，打开面板时重新列目录（手动放入的画板文档也识别）。实现：vendor 新增 `MaterialLibraryStorage` 端口（`DrainixBoardCoreProps.materialStorage`；不传 = localStorage 旧行为）+ 素材库改造；宿主 `electron/boardMaterials.ts`（列表/保存/删除/唯一命名/64MiB 上限/路径穿越校验）+ IPC 单通道 `board_materials`（list/save/delete/open）+ preload/web/native 包装；桌面 `BoardEditor` 注入，移动端暂不接（Android 无「打开文件夹」语义，仍 localStorage）。验收（桌面隔离实例）：IPC save 生成 `materials/测试素材.board.json`；打开画板素材库 → 自定义页显示「打开素材文件夹」+ 提示 + 从文件夹载入的「测试素材」卡片；点卡片删除 → 文件消失、卡片消失；`node scripts` 文件回读 `kind:"board"` + `material` 元数据。护栏 `core/boardMaterialFile.test.ts` / `electron/boardMaterials.test.ts` / `features/board/boardMaterialFolder.test.ts`；IPC 通道计数 188。
+- **六批（261114 用户点单：空间关闭，仅日记 / AI 写作可关）**：知识库 / 小记 / 标签固定显示；关闭 = **隐藏一级入口**（桌面空间菜单 + ⌘4/⌘5 + 默认空间选项；移动端 Dock + 分页页 + 默认空间选项），**不删数据、不阻断内部跳转**（搜索打开日记仍能进日记空间）。实现：`core/hiddenSpaces`（sanitize/visible/resolve 纯函数）+ `lib/hiddenSpacesStore`（设备本地 localStorage 键 + useSyncExternalStore 订阅，不进 S3）；桌面 `desktop/spaceVisibility` + `useHiddenDesktopSpaces`（菜单过滤、快捷键按存储读判、启动落点 resolve、关闭当前空间回落知识库、默认空间被关回知识库）；移动 `mobile/settings/spaceVisibility` + `useHiddenHomeTabs`（Dock/分页器按可见 tab，`tabPager` 全量改成接受 tabs 子集 + 新增 `tabs` 事件，隐藏 pane `[hidden]` 整页收掉；默认落点 resolve 回小记）。设置 UI：桌面「编辑器 → 空间」两个开关 + 默认空间下拉只列可见项；移动「常规」两个开关 + 默认空间 Picker 只列可见项。实测（桌面隔离实例 + `lake_mobile` 设备）：桌面 hidden=[ai-writing,diary] 时菜单只剩 知识库/小记/标签、⌘5（日记）无效、默认空间=diary 时启动落知识库；设备关闭两项后 Dock=3 格、分页 3 页、隐藏页 display:none、默认空间=diary 时冷启动落小记；重新开启两项后 Dock=5 格、hidden 键清空。**重排复验**：桌面菜单顺序 = 知识库/小记/标签/AI 写作/日记（⌘1–⌘5），实测 ⌘3→标签、⌘5→日记；设备 Dock 同序，隐藏 AI+日记后只剩 知识库/小记/标签 三格、分页 3 页。护栏 `core/hiddenSpaces.test.ts` + `desktop/spaceVisibility.test.ts` + `desktop/hiddenSpacesWiring.test.ts` + `mobile/settings/spaceVisibility.test.ts` + `home/tabPager.test.ts`（动态 tabs 两例）+ `home/homeCreateFlow` 单源断言更新。**261114 追加（用户点单）**：空间顺序改为 **知识库 / 小记 / 标签 / AI 写作 / 日记**（两端同序），快捷键随之变成 ⌘1 知识库 / ⌘2 小记 / ⌘3 标签 / ⌘4 AI 写作 / ⌘5 日记（可关闭项排最后 ⇒ 关掉后 1–3 连续）；默认空间选项、设置页两个开关顺序同步。
+- **待办**：① 失败图预算耗尽后只留真实原因（可重新粘贴或点卡再试一次）；② 移动端原生下载的 DNS rebinding TOCTOU 残余风险已接受（HttpURLConnection 无钉 IP 公开接口，文档写在 `RemoteAssetRules` 注释）；③ 若以后 iOS 端建立，原生下载需同样实现（当前仅 Android 插件）。
+
 ### 261114 · 图片上传失联修复（正式数据【IO】现场；v1.1.4 候选，未发版）
 
 - **现场**：正式数据【IO】最后一张远程图（语雀 CDN，原图 826,557B/1080×613）粘贴后显示「图片上传失败」，但 note-assets 里文件完整（orphan）。日志：18:15 粘贴 33 张，主进程下载最坏 3×30s（≈91s）后才失败、卡片已 error；18:16:33 编辑器实例重建，新实例对 loading 卡建 virtual task，3s 超时后内核把字符串 `"failed to upload"` 当 Error 取 `.message` ⇒ `errorMessage:"unknown error"`；晚到的下载成功只更新旧实例/旧卡，正文不更新 ⇒ 字节成 orphan。
@@ -178,21 +218,21 @@
 **版本与仓库**
 
 - 主分支 `master`；**HEAD 以 `git log -1` 为准**；R2 已提交 6 笔拆分/设备记录（`a23631f6` sidebar / `fd268432` settings / `231fe845` electron boot / `c00d3a60` lakeRuntime / `4a9b965c` ink 测试 / `e352e2cb` 设备记录）；**产品代码基线 = `8e20a6a3`（R0）/ `e87016bd`（R1）/ `e352e2cb`（R2）/ `3fad8821`（R2 收尾：位置合并 + 同步专用写路径 + 单篇降级）**；**日记收口批产品笔 = `199f3403`（不可变守卫）/ `fd58dc0a`（移动移除取消标记）/ `d4d03260`（移动目标剔除日记子树）/ `f965e62c`（转文档共享弹窗）/ `4b6a524a`（转小记媒体搬运）/ `400dcc75`（showNotice 全空间可见）**；**261113 批 = `839c7a93`（发版复核 P2/P3）/ `a57cf3cf`（移动端「转为小记」+ 22 号报告 §11 + RELEASE.md Secrets 节）**（详见 §0）。
-- **推送**：`master` 已追平 `a6b77249`（图片上传失联修复，双推 Gitee/GitHub，**未打新 tag**）；最新 release 仍是 `v1.1.3`（tag ref `a3f47335` → commit `12b5f7d3`，产物 8 资产）。以后以 `git rev-list --count origin/master..HEAD` 为准。
-- `package.json` = **1.1.3**；Android `versionName 1.1.3` / `versionCode 11103`（从根 package.json 派生：`1000 + major*10000 + minor*100 + patch`，只增不减；**不手改 build.gradle**）。
-- tag：`v1.0.0`–`v1.0.5`、`v1.1.0`、`v1.1.1`（261112 已发）、`v1.1.2`（261114 已发）、**`v1.1.3`（261114 已打 tag 并双推；Release workflow run `43405437257` 由 tag 触发；发布说明段落 = RELEASE-NOTES 顶部 `# LakexLocalNotes v1.1.3`）**；已发布 tag 不再移动。发布说明 = [docs/RELEASE-NOTES.md](RELEASE-NOTES.md)（**v1.1.3 → v1.0.0** 倒序；当前 tag 段落 = CI 生成 GitHub Release 正文的来源）。
+- **推送/发布**：本批收口提交 + tag **v1.1.4** 后双推 Gitee/GitHub（tag 触发 release workflow，见 §1 发布事实）；上一个 release = `v1.1.3`（tag ref `a3f47335` → commit `12b5f7d3`）。以后以 `git rev-list --count origin/master..HEAD` 与 `git log -1` 为准。
+- `package.json` = **1.1.4**；Android `versionName 1.1.4` / `versionCode 11104`（从根 package.json 派生：`1000 + major*10000 + minor*100 + patch`，只增不减；**不手改 build.gradle**）。
+- tag：`v1.0.0`–`v1.0.5`、`v1.1.0`、`v1.1.1`（261112 已发）、`v1.1.2`（261114 已发）、`v1.1.3`（261114）、**`v1.1.4`（本批收口，tag 触发 release workflow；发布说明段落 = RELEASE-NOTES 顶部 `# LakexLocalNotes v1.1.4`）**；已发布 tag 不再移动。发布说明 = [docs/RELEASE-NOTES.md](RELEASE-NOTES.md)（**v1.1.3 → v1.0.0** 倒序；当前 tag 段落 = CI 生成 GitHub Release 正文的来源）。
 - 分支/远端：`master` 唯一长期分支；`origin` = Gitee（SSH，第二 pushurl = GitHub HTTPS）⇒ `git push origin <branch>` 一次推两边；GitHub 只在推 tag 时构建。remote 不入库 ⇒ 新 clone 跑 `npm run setup:remotes`。
 - **工作树**：261114 批 = `f3a0e60c`（幽灵文档）→ `b676440f`（回收站浮动动作/启动不硬开/保存被拒可退出/移动 gone）→ `bbeddc3f`（级联删除）→ `c3b17bf9`（移动删除 review 收口）→ 发版 commit（1.1.3，见 `git log`）；历史上并行会话共用工作树时一律「只 stage 本批文件」，**绝不用 `git add -A`**。
 - 261110 一次性历史清理（`.ai-writing-recon/` 用 `git filter-repo` 从全部历史移除，重写 v1.1.0 之后的提交；tag 未变）⇒ 旧 clone 需 `git fetch --force --prune && git reset --hard origin/master`。
 
-**门禁基线（261114 图片上传失联修复批实测 2026-11-13 18:52；分层口径见 AGENTS §3#21）**
+**门禁基线（261114 收口批实测 2026-11-14 14:0x；分层口径见 AGENTS §3#21）**
 
 - `npx tsc --noEmit` = **0**。
-- 全量 vitest（低负载串行门禁）：**文件 = 总 944（933 passed / 11 skipped）**；**用例 = 总 6005（5993 passed / 12 skipped）/ 0 failed**（69.6s）。偶发 `perf.integration` 满载抖动口径见下条（单跑复验通过）。本批动了回收站行样式 ⇒ 跑了 `cssLayers`/`uiPrimitives`/`ui-metrics`（均 PASS；无该行的样式快照态，未跑 stylesnap）；移动端改动已装 APK 并设备级验收；`npx vite build` 成功（隔离验证用构建）。
+- 全量 vitest（低负载串行门禁）：**文件 = 总 956（943 passed / 13 skipped）**；**用例 = 总 6063（6049 passed / 14 skipped）/ 0 failed**。偶发 `perf.integration` 满载抖动口径见下条（单跑复验通过）。本批动了回收站行样式 ⇒ 跑了 `cssLayers`/`uiPrimitives`/`ui-metrics`（均 PASS；无该行的样式快照态，未跑 stylesnap）；移动端改动已装 APK 并设备级验收；`npx vite build` 成功（隔离验证用构建）。
 - ⚠️ `electron/s3v3/perf.integration.test.ts`：**低负载串行本轮无抖动（通过）**；满载/并发构建时偶发（单跑 PASS），门禁判定以单跑/低负载为准（同 §2 既有口径）。
 - `node scripts/ui-metrics.mjs`：颜色 0 / 字号 0 / `!important` 9 = 允许清单 / `crossFileDupGroups` 45 / `shadowedDecls` **0**（task-34 已清零，门禁只降）/ 未定义令牌 0。
-- `check:core` **178** 文件 0 违规；`check:mobileui` 通过。
-- `check:bundle` + `check:arch` PASS：desktop 首屏 571,442 / 600,000（余量 28.6KB）、app-js 197,537 / 307,200；mobile 首屏 **341,652 / 350,000**（余量 8.3KB，261114 已收紧）、entry **48,759 / 51,200（50KB）**（余量 2.4KB）、CSS 139,210 / 141,312、preload 10 / 12；vendor CSS 分层审计 OK。移动入口从「434B 余量」恢复到可加 2.4KB 的健康区。
+- `check:core` **180** 文件 0 违规（`hiddenSpacesStore` 已移出 core 到 `src/lib`）；`check:mobileui` 通过。
+- `check:bundle` + `check:arch` PASS：desktop 首屏 **579,135 / 600,000**（余量 20.9KB）；mobile 首屏 **343,402 / 350,000**（余量 6.6KB）、entry **49,762 / 51,200**（余量 1.4KB）、CSS 139,440 / 141,312、preload 10 / 12；vendor CSS 分层审计 OK。移动入口从「434B 余量」恢复到可加 2.4KB 的健康区。
 - `git diff --check` = **0**。
 - **真实 S3 桶验收**：A 档三桌面隔离实例 **20/20 PASS**（`3fad8821`）；**B 档 13 条 57/57 PASS**（task-58，含 S72 修复后复跑），唯一测试前缀 **0 残留**（[19](audit-261112/19-s3-real-bucket-subset.md)）。**移动多端 A–K 已跑完（task-72/74 已关闭；D 场景修复后复跑 9/9、收尾 0 残留，见 [21 号报告](audit-261112/21-s3-multi-end-mobile.md)）**。
 - 设备/视觉（最近记录）：手机 **10 态** + 平板 **10 态** 基线重烤并连跑两轮 0 差异；23 屏走查 23/23；`edit-surface-invariants` quicknote 11 + document 11 ALL PASS；capture 入口装置 10/10。**桌面 `check:stylesnap` 42 态已重烤**（34 严格态两轮 0 差异，8 窄窗按 UNSTABLE 跳过；基线已更新，见 §3）。
@@ -273,9 +313,12 @@
 
 > 规则：只有「真问题 / 不做有代价 / 收益大于复杂度」才进本节（AGENTS §3#17）；完成后**直接删行**，历史留 git。
 
-**当前批次（261114 第二轮点单）待办**
+**当前批次（261114 收口：设备 / 10k+100k 大库 / 2GB 便携包 / S3 多端回归）待办**
 
-- **本批代码待办已清零**（4 条点单全部落地 + 回归测试 + 隔离实例 C1–C4 全 PASS + 移动设备级两场景 PASS，见 §0）；剩余 = **发版**（正式包 1.1.2 仍含旧缺陷，用户升级需新版本）。
+- **发版 v1.1.4**：收口提交 + 注解 tag + 双推后确认 release workflow（产物/更新清单）；发版前按 RELEASE.md §七.4 核 secrets。
+- **真机 2GB 便携包端到端导入未执行**：本批已验证导出/结构/Android 上限兼容（MAX_ENTRIES 250k，110,005 条 pass），但系统文件选择器无法在 CDP 自动化；需人工在设备走「设置→备份与恢复→便携包导入」，并确认 staging+payload 磁盘（约 4GiB 可用）。
+- **S3 真实桶多端回归未执行**：本机无 S3 凭据；有凭据方运行 `S3_ENV_FILE=<creds> node scripts/multi-end-sync/regression.mjs --scenarios all --instances 3` 并记录；`--with-mobile` 明确未实现，移动端仍按 [21 号报告](audit-261112/21-s3-multi-end-mobile.md) 手工。
+- **大库观察项**：桌面目录树 10k 行未虚拟化（约 20.1 万 DOM、renderer heap 313–317MB）本次仍可用，但继续增长需虚拟化/分页；热轮搜索曾出现 1.9s（冷轮 445ms），重跑确认是否抖动。
 - **移动端「tab 标记 gone + 只读横幅」缺失（261114 审计残余，P2）**：打开中被删后旧内容仍显示，自动保存 1s 后明说「保存被拒绝」，关闭/返回/完成会丢弃标签并 toast；未做只读横幅（不在本次最小修复范围）。
 
 **上一批次（261113 转小记 + 发版复核批）待办**
@@ -285,8 +328,8 @@
 - 其余真剩余见下方 P0/P1/P2（设备点收 / 发版 / 已知欠账）。
 - **接手清单（261113 会话收尾，给下一会话）**：当前 master `2c997420`（已双推）、v1.1.1 已发布、任务板 0 未完成；下列事项按「需裁决 / 设备 / 代码欠账 / 外部 WIP」分组，开工前先读本文件 §0–§2 与对应报告。
   - **① 用户裁决（261113 10:20，已定，别再问）**：(a) **下一版发版暂不做**——保持 1.1.1；要发时流程 = RELEASE-NOTES 补段 → `npm version …--no-git-tag-version` → 提交 → 注解 tag → 双推 tag（只有 tag 触发 CI；发前按 `docs/RELEASE.md` §七.4 核 Android 4 个 secrets + `GITEE_TOKEN`）。(b) **首篇编辑器 fallback 不做**（不拆内核 chunk、不改「启动自动打开」语义）。(c) **观感点收由用户自己验**（Q03 历史 Sheet / Q07 preview 档 / Q05 字号 / 桌面双击放大 / 平板「点空白落光标」）。(d) **移动顶栏 44→52 不做**。
-  - **② 设备类欠账（需真机/构建）**：便携包真实 3GB 数据验证；更新中心设备验收（Android 下载→校验→系统安装器）；桌面 3 项实机 + 平板复验；导入/导出/键盘真机冒烟；依赖补丁 4 处升级复核；23 屏走查（本轮未跑，命令见 `24-release-review-ui.md`/`27-release-mobile-snap.md`）。
-  - **③ 代码级欠账（可排期）**：复制多张大图同步阻塞（剪贴板 API 限制）；大库 2 万文档/20 万附件与真实 Android 物理机验收从未做过；缺正文/缺小记三条恢复路径仅单测 mock；移动端表格块级命令入口未接。**S3 流程审查剩余（低优）**：~~#10/#11/#12~~ 已修（261113 第二批）。~~#8 孤儿父各端各建随机「未分类」~~ **已修**：兜底新建改用固定 id `notebook-uncategorized`（单一来源，跨端同一本）；**认 id 不认名字** —— 用户自建的同名「未分类」一律不动，旧随机 id 不迁移（多一本同名无害）。复核报告保留不修：P3-4/5（**P3-6 已于 261113 修复并三态复验**）、F-10/11/14/16/17（理由见 `23/24-release-review-*.md`）。
+  - **② 设备类欠账（需真机/构建）**：便携包 2GB 真机端到端导入（导出/格式/Android 兼容已 PASS）；更新中心设备验收（Android 下载→校验→系统安装器）；桌面 3 项实机 + 平板复验；导入/导出/键盘真机冒烟；依赖补丁 4 处升级复核；23 屏走查（本轮未跑，命令见 `24-release-review-ui.md`/`27-release-mobile-snap.md`）。
+  - **③ 代码级欠账（可排期）**：复制多张大图同步阻塞（剪贴板 API 限制）；10k 文档/100k 附件桌面验收已 PASS（scripts/scale-acceptance），2 万文档/20 万附件与真实 Android 物理机验收仍从未做过；缺正文/缺小记三条恢复路径仅单测 mock；移动端表格块级命令入口未接。**S3 流程审查剩余（低优）**：~~#10/#11/#12~~ 已修（261113 第二批）。~~#8 孤儿父各端各建随机「未分类」~~ **已修**：兜底新建改用固定 id `notebook-uncategorized`（单一来源，跨端同一本）；**认 id 不认名字** —— 用户自建的同名「未分类」一律不动，旧随机 id 不迁移（多一本同名无害）。复核报告保留不修：P3-4/5（**P3-6 已于 261113 修复并三态复验**）、F-10/11/14/16/17（理由见 `23/24-release-review-*.md`）。
   - **④ 外部并行 WIP（先确认归属，勿盲提交）**：工作树可能有其它会话的 `src/mobile/settings/**`、`scripts/mobile-audit/mobile-snap.mjs` 等未提交改动（261113 为移动设置页顺序对齐），与 §3 本批无关；提交前 `git status` 核对并只 add 自己路径。
   - **⑤ 参考**：发版复核 `23-release-review-core` / `24-release-review-ui` / `25-release-review-mobile` / `26-release-readiness`（NO-GO 唯一阻塞=版本未 bump，已解决）/ `27-release-mobile-snap`；真实桶与多端 `19`/`21`；日记语义 `AGENTS §3#25` + `docs/DIARY.md`。
 

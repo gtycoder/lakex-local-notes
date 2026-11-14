@@ -38,6 +38,18 @@ export interface AssetSyncNativePlugin {
    * 字节不过桥。旧 APK 无此方法 ⇒ 调用方回退 JS 逐文件复制。
    */
   copyAssetDir?(options: { sourceDir: string; targetDir: string }): Promise<{ copied: number; bytes?: number }>;
+  /**
+   * 远程图片「原生长下载」（261114 三批）：原生把 URL 直接落盘成资产文件，**字节不过 WebView 桥**。
+   * 只返回 filename/size/mimeType；canonical URL 由 JS 拼（路径规则两端同源）。
+   * 旧 APK 无此方法 ⇒ 调用方回退渲染层 fetch（会受 CORS/CSP 限制，仅作兜底）。
+   */
+  downloadRemoteAsset?(options: {
+    url: string;
+    noteId: string;
+    space?: "note" | "quick-notes";
+    timeoutMs?: number;
+    maxAttempts?: number;
+  }): Promise<{ filename: string; size: number; mimeType: string }>;
 }
 
 export const NativeAssetSync = registerPlugin<AssetSyncNativePlugin>("AssetSync");

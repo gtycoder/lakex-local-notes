@@ -1,4 +1,4 @@
-//#region ../../node_modules/katex/dist/katex.mjs
+// ../../node_modules/katex/dist/katex.mjs
 var e = class e extends Error {
 	constructor(t, n) {
 		var r = "KaTeX parse error: " + t, i, a, o = n && n.loc;
@@ -15774,18 +15774,17 @@ var sn = function(e) {
 	r && e.push(r);
 	for (var a = 0; a < e.length; a++) {
 		var o = e[a], s = mn(o);
-		if (s) {
-			pn(s.children, t, n, null, i);
-			continue;
+		if (s) pn(s.children, t, n, null, i);
+		else {
+			var c = !o.hasClass("mspace");
+			if (c) {
+				var l = t(o, n.node);
+				l && (n.insertAfter ? n.insertAfter(l) : (e.unshift(l), a++));
+			}
+			c ? n.node = o : i && o.hasClass("newline") && (n.node = U(["leftmost"])), n.insertAfter = ((t) => (n) => {
+				e.splice(t + 1, 0, n), a++;
+			})(a);
 		}
-		var c = !o.hasClass("mspace");
-		if (c) {
-			var l = t(o, n.node);
-			l && (n.insertAfter ? n.insertAfter(l) : (e.unshift(l), a++));
-		}
-		c ? n.node = o : i && o.hasClass("newline") && (n.node = U(["leftmost"])), n.insertAfter = ((t) => (n) => {
-			e.splice(t + 1, 0, n), a++;
-		})(a);
 	}
 	r && e.pop();
 }, mn = function(e) {
@@ -15958,15 +15957,7 @@ var kn = function(e, t, n) {
 	for (var i = [], a, o = 0; o < e.length; o++) {
 		var s = Z(e[o], t);
 		if (s instanceof Y && a instanceof Y) {
-			if (s.type === "mtext" && a.type === "mtext" && s.getAttribute("mathvariant") === a.getAttribute("mathvariant")) {
-				a.children.push(...s.children);
-				continue;
-			}
-			if (s.type === "mn" && a.type === "mn") {
-				a.children.push(...s.children);
-				continue;
-			}
-			if (On(s) && a.type === "mn") {
+			if (s.type === "mtext" && a.type === "mtext" && s.getAttribute("mathvariant") === a.getAttribute("mathvariant") || s.type === "mn" && a.type === "mn" || On(s) && a.type === "mn") {
 				a.children.push(...s.children);
 				continue;
 			}
@@ -21973,5 +21964,4 @@ var xa = function(e, t) {
 	__defineMacro: $,
 	__domTree: Da
 };
-//#endregion
 export { e as ParseError, u as SETTINGS_SCHEMA, K as __defineFunction, $ as __defineMacro, A as __defineSymbol, Da as __domTree, Sa as __parse, wa as __renderToDomTree, Ta as __renderToHTMLTree, qe as __setFontMetrics, Oa as default, ba as render, xa as renderToString, Ea as version };

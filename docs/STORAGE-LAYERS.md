@@ -39,6 +39,7 @@ userData/
     ├── boards/{noteId}.board.json   # 正文 kind=board（Drawnix/Plait 场景）
     ├── inks/{noteId}.ink.json       # 正文 kind=ink（inkDoc v4）
     ├── note-assets/{noteId}/{filename} # 附件/图片（L1，S3 assets/…）
+    ├── materials/*.board.json       # 画板自定义素材（**设备本地，不进 S3**；桌面可在素材面板「打开素材文件夹」后自行拷贝/放置画板文档；移动端暂存 localStorage）
     ├── history/{noteId}/*.body.gz   # 历史快照（L3 本地，不进 S3）
     └── quick-notes/                 # 小记空间（与 Lake 空间完全隔离）
         ├── metadata.sqlite3         # 小记库 + 标签域（261107 起）

@@ -31,13 +31,28 @@ import {
 type Locale = "zh-CN" | "en-US";
 type LibraryTab = "recommended" | "custom";
 
-interface StoredMaterial {
+/** 自定义素材条目（261114：可由宿主存到**可打开的文件夹**；字段与旧 localStorage 结构兼容）。 */
+export interface BoardMaterialLibraryEntry {
   id: string;
   name: string;
   createdAt: number;
   elements: PlaitElement[];
   width?: number;
   height?: number;
+}
+
+type StoredMaterial = BoardMaterialLibraryEntry;
+
+/**
+ * 素材持久化端口（LOCAL-CHANGE #27）。
+ * 不传 = 沿用 localStorage（旧行为；移动端暂用）；桌面传「素材文件夹」实现。
+ */
+export interface MaterialLibraryStorage {
+  load(): Promise<BoardMaterialLibraryEntry[]>;
+  save(input: { name: string; elements: PlaitElement[]; width?: number; height?: number }): Promise<BoardMaterialLibraryEntry>;
+  remove(id: string): Promise<void>;
+  /** 打开素材文件夹（桌面文件夹模式）；不传 = 不显示该入口。 */
+  openFolder?(): void;
 }
 
 interface SelectionSnapshot {
@@ -52,6 +67,8 @@ interface Props {
   dark: boolean;
   toolbarHost: HTMLElement | null;
   onOpen?: () => void;
+  /** 素材持久化端口；缺省 = localStorage（移动端/旧行为）。 */
+  materialStorage?: MaterialLibraryStorage;
 }
 
 export interface LakexMaterialLibraryHandle {
@@ -260,13 +277,47 @@ const loadStoredMaterials = (): StoredMaterial[] => {
   }
 };
 
+const writeStoredMaterials = (materials: StoredMaterial[]): void => {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(materials));
+  } catch {
+    // Storage can be disabled by the host; the in-memory library still works.
+  }
+};
+
+/** 缺省端口 = 旧 localStorage（移动端暂用；桌面由宿主传文件夹实现）。 */
+const localStorageMaterialStorage: MaterialLibraryStorage = {
+  async load() {
+    return loadStoredMaterials();
+  },
+  async save({ name, elements, width, height }) {
+    const existing = loadStoredMaterials();
+    const material: StoredMaterial = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      name,
+      createdAt: Date.now(),
+      elements,
+      ...(width !== undefined ? { width } : {}),
+      ...(height !== undefined ? { height } : {}),
+    };
+    writeStoredMaterials([material, ...existing]);
+    return material;
+  },
+  async remove(id) {
+    writeStoredMaterials(loadStoredMaterials().filter((item) => item.id !== id));
+  },
+};
+
 const LakexMaterialLibrary = React.forwardRef<LakexMaterialLibraryHandle, Props>(function LakexMaterialLibrary({
   board,
   locale,
   dark,
   toolbarHost,
   onOpen,
+  materialStorage,
 }, ref) {
+  const storage = materialStorage ?? localStorageMaterialStorage;
   const [open, setOpen] = React.useState(false);
   const [activeTab, setActiveTab] = React.useState<LibraryTab>("recommended");
   const [activeCategory, setActiveCategory] =
@@ -301,6 +352,8 @@ const LakexMaterialLibrary = React.forwardRef<LakexMaterialLibraryHandle, Props>
         saved: "已添加到自定义素材库",
         selectionMissing: "请先选择要添加的图形",
         saveFailed: "素材保存失败，请重试",
+        openFolder: "打开素材文件夹",
+        folderHint: "素材保存在本机文件夹，可自行拷贝/放置画板文档",
         nameDialogTitle: "添加到素材库",
         nameDialogHint: "为这个自定义素材命名",
         namePlaceholder: "请输入素材名称",
@@ -321,6 +374,8 @@ const LakexMaterialLibrary = React.forwardRef<LakexMaterialLibraryHandle, Props>
         saved: "Added to custom materials",
         selectionMissing: "Select shapes to add first",
         saveFailed: "Could not save the material. Please try again.",
+        openFolder: "Open materials folder",
+        folderHint: "Materials live in a local folder you can copy or drop board documents into",
         nameDialogTitle: "Add to material library",
         nameDialogHint: "Name this custom material",
         namePlaceholder: "Enter a material name",
@@ -373,12 +428,24 @@ const LakexMaterialLibrary = React.forwardRef<LakexMaterialLibraryHandle, Props>
     }, 2200);
   };
 
-  const persistStoredMaterials = (next: StoredMaterial[]) => {
-    setStoredMaterials(next);
+  // 每次打开面板重新列一遍（用户在文件夹里手动放/删的文件，下次打开可见）。
+  React.useEffect(() => {
+    if (!open) return;
+    let alive = true;
+    void storage.load().then((list) => {
+      if (alive) setStoredMaterials(list);
+    }).catch(() => {
+      // 读失败保持当前列表（不把已显示素材清空）。
+    });
+    return () => { alive = false; };
+  }, [open, storage]);
+
+  const removeStoredMaterial = async (id: string) => {
     try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      await storage.remove(id);
+      setStoredMaterials((prev) => prev.filter((item) => item.id !== id));
     } catch {
-      // Storage can be disabled by the host; the in-memory library still works.
+      showNotice(labels.saveFailed);
     }
   };
 
@@ -476,40 +543,29 @@ const LakexMaterialLibrary = React.forwardRef<LakexMaterialLibraryHandle, Props>
       showNotice(labels.selectionMissing);
       return false;
     }
-    const existingMaterials = loadStoredMaterials();
+    const count = storedMaterials.length;
     setMaterialName(
       isZh
-        ? `自定义素材 ${existingMaterials.length + 1}`
-        : `Custom material ${existingMaterials.length + 1}`,
+        ? `自定义素材 ${count + 1}`
+        : `Custom material ${count + 1}`,
     );
     setPendingMaterial(snapshot);
     return true;
   };
 
-  const savePendingMaterial = () => {
+  const savePendingMaterial = async () => {
     if (!pendingMaterial) return;
     try {
-      const existingMaterials = loadStoredMaterials();
       const name = materialName.trim() || (isZh
-        ? `自定义素材 ${existingMaterials.length + 1}`
-        : `Custom material ${existingMaterials.length + 1}`);
-      const material: StoredMaterial = {
-        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        ? `自定义素材 ${storedMaterials.length + 1}`
+        : `Custom material ${storedMaterials.length + 1}`);
+      const material = await storage.save({
         name,
-        createdAt: Date.now(),
         elements: cloneElements(pendingMaterial.elements),
-        width: pendingMaterial.width,
-        height: pendingMaterial.height,
-      };
-      const next = [material, ...existingMaterials];
-      persistStoredMaterials(next);
-      // The state update is the immediate source of truth. Then read the
-      // persisted copy back only when it contains the item just written, so
-      // blocked localStorage never erases the visible in-memory material.
-      const reloaded = loadStoredMaterials();
-      setStoredMaterials(
-        reloaded.some((item) => item.id === material.id) ? reloaded : next,
-      );
+        ...(pendingMaterial.width !== undefined ? { width: pendingMaterial.width } : {}),
+        ...(pendingMaterial.height !== undefined ? { height: pendingMaterial.height } : {}),
+      });
+      setStoredMaterials((prev) => [material, ...prev.filter((item) => item.id !== material.id)]);
       setActiveTab("custom");
       onOpen?.();
       setOpen(true);
@@ -816,6 +872,18 @@ const LakexMaterialLibrary = React.forwardRef<LakexMaterialLibraryHandle, Props>
               </div>
             ) : (
               <div className="lakex-material-library__custom">
+                {storage.openFolder && (
+                  <div className="lakex-material-library__folder-row">
+                    <button
+                      type="button"
+                      className="lakex-material-library__folder-open"
+                      onClick={() => storage.openFolder?.()}
+                    >
+                      {labels.openFolder}
+                    </button>
+                    <span className="lakex-material-library__folder-hint">{labels.folderHint}</span>
+                  </div>
+                )}
                 {storedMaterials.length ? (
                   <div className="lakex-material-library__grid">
                     {storedMaterials.map((material) =>
@@ -823,12 +891,7 @@ const LakexMaterialLibrary = React.forwardRef<LakexMaterialLibraryHandle, Props>
                         material.id,
                         material.name,
                         material.elements,
-                        () =>
-                          persistStoredMaterials(
-                            storedMaterials.filter(
-                              (item) => item.id !== material.id,
-                            ),
-                          ),
+                        () => void removeStoredMaterial(material.id),
                         material.width && material.height
                           ? {
                               width: material.width,

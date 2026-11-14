@@ -11,7 +11,7 @@
  */
 import { useCallback, useEffect, useRef } from "react";
 import type { RefObject } from "react";
-import { initialPagerState, reducePager, type HomeTab, type PagerEvent, type PagerState } from "./tabPager";
+import { HOME_TABS, initialPagerState, reducePager, type HomeTab, type PagerEvent, type PagerState } from "./tabPager";
 
 /** 没有 scrollend 时的兜底：要长于一次平滑吸附（实测约 300–500ms），又不能把程序化态拖太久。 */
 const SETTLE_FALLBACK_MS = 600;
@@ -27,6 +27,8 @@ function prefersReducedMotion(): boolean {
 export interface TabPagerOptions {
   /** 父级/路由当前的 tab（点击顶部 tab 也会走到这里）。 */
   tab: HomeTab;
+  /** 当前可见 tab（顺序 = 渲染顺序；关闭日记/AI 后是 HOME_TABS 的子集）。 */
+  tabs?: readonly HomeTab[];
   /** 滚动过半时回写 tab 的唯一出口。 */
   onTabChange: (tab: HomeTab) => void;
 }
@@ -36,10 +38,10 @@ export interface TabPagerApi {
   stageRef: RefObject<HTMLDivElement>;
 }
 
-export function useTabPager({ tab, onTabChange }: TabPagerOptions): TabPagerApi {
+export function useTabPager({ tab, tabs = HOME_TABS, onTabChange }: TabPagerOptions): TabPagerApi {
   const stageRef = useRef<HTMLDivElement>(null);
   /** 状态只有这一份（不再有 interacting/commitByScroll/programmatic 三份镜像 ref）。 */
-  const stateRef = useRef<PagerState>(initialPagerState(tab));
+  const stateRef = useRef<PagerState>(initialPagerState(tab, 0, tabs));
   const onTabChangeRef = useRef(onTabChange);
   onTabChangeRef.current = onTabChange;
   const fallbackTimerRef = useRef(0);
@@ -74,6 +76,13 @@ export function useTabPager({ tab, onTabChange }: TabPagerOptions): TabPagerApi 
     if (!el) return;
     dispatch({ type: "tab-click", tab, scrollLeft: el.scrollLeft, width: el.clientWidth });
   }, [tab, dispatch]);
+
+  // 可见 tab 集合变化（261114 关闭/开启日记/AI）：夹紧当前 tab 并按新的页序重新对齐。
+  useEffect(() => {
+    const el = stageRef.current;
+    if (!el) return;
+    dispatch({ type: "tabs", tabs, scrollLeft: el.scrollLeft, width: el.clientWidth });
+  }, [tabs, dispatch]);
 
   // 原生事件接线：只挂一次（监听里用 ref 读最新状态）。
   useEffect(() => {

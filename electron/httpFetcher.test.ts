@@ -171,6 +171,27 @@ describe("createPinnedHttpFetcher TOCTOU 修复（连接层钉死已校验地址
       .rejects.toMatchObject({ name: "AbortError" });
   });
 
+  it("首选地址不可用（连接层错误）→ 自动换下一个已校验地址；DNS 仍只解析一次", async () => {
+    const IP_A = "93.184.216.34";
+    const IP_B = "93.184.216.35";
+    const lookup = vi.fn(async () => [{ address: IP_A, family: 4 }, { address: IP_B, family: 4 }]);
+    const seen: string[] = [];
+    const request = vi.fn((options: Record<string, unknown>) => {
+      const fake = makeFakeRequest();
+      seen.push(String(options.hostname));
+      setTimeout(() => {
+        if (String(options.hostname) === IP_A) fake.emitError(new Error("ECONNRESET"));
+        else fake.emitResponse(makeFakeResponse(200, { "content-length": "3" }, [new Uint8Array([1, 2, 3])]));
+      }, 0);
+      return fake;
+    });
+    const fetcher = createPinnedHttpFetcher({ lookup: lookup as unknown as HttpFetcherDeps["lookup"], request: request as unknown as HttpFetcherDeps["request"] });
+    const response = await fetcher.fetch("https://cdn.example.test/a.png", { timeoutMs: 5000, maxRedirects: 5, userAgent: "UA-1" });
+    expect(response.status).toBe(200);
+    expect(seen).toEqual([IP_A, IP_B]);
+    expect(lookup).toHaveBeenCalledTimes(1);
+  });
+
   it("响应头到达后 body 停滞仍受整体 deadline 截止（审计 F11）", async () => {
     const lookup = vi.fn(async () => [{ address: PUBLIC_IP, family: 4 }]);
     let failBody: ((err: Error) => void) | null = null;

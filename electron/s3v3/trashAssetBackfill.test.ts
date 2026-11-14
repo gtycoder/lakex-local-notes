@@ -52,4 +52,28 @@ describe("回收站附件惰性补拉（v3 parity B6：不再空操作）", () =
     expect(result.warnings).toEqual([]);
     expect(await fs.readFile(path.join(assetsDir, "a.png"), "utf8")).toBe("PNG-A");
   }, 60_000);
+
+  it("云同步未配置且正文引用的资产都在本地 → 不再返回 skipped（恢复后不弹无意义提示）", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "s3v3-backfill-gap-"));
+    const store = new Store(root);
+    store.bootstrap();
+    const nb = store.createNotebook("NB");
+    store.createNoteInAtTopWithContent(nb.id, "Doc", "<p><img src=\"asset://1700000000000_deadbeef.png\"></p>", [], "n1");
+    const assetsDir = store.getNotePaths("n1").assetsDir;
+    await fs.mkdir(assetsDir, { recursive: true });
+    await fs.writeFile(path.join(assetsDir, "1700000000000_deadbeef.png"), Buffer.from("PNG"));
+    const result = await ensureTrashNoteAssets(store, "n1");
+    expect(result.skipped).toBeUndefined();
+    expect(result.warnings).toEqual([]);
+  }, 30_000);
+
+  it("云同步未配置但正文引用的资产缺失 → 仍回 skipped=unconfigured（该提示要保留）", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "s3v3-backfill-gap2-"));
+    const store = new Store(root);
+    store.bootstrap();
+    const nb = store.createNotebook("NB");
+    store.createNoteInAtTopWithContent(nb.id, "Doc", "<p><img src=\"asset://1700000000000_deadbeef.png\"></p>", [], "n1");
+    const result = await ensureTrashNoteAssets(store, "n1");
+    expect(result.skipped).toBe("unconfigured");
+  }, 30_000);
 });

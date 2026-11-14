@@ -9,6 +9,11 @@ export interface RetryOptions {
   maxDelayMs: number;
   /** 每次即将重试前回调（261023：资源上传统计重试次数用；不影响重试语义）。 */
   onRetry?: (attempt: number, error: Error) => void;
+  /**
+   * 是否值得重试（261114 二批）：返回 false 时立即抛出该错误，不再消耗剩余重试。
+   * 用于「永久失败」（404/防盗链网页/超限）——重试只会让用户多等，且可能叠成 9 次尝试。
+   */
+  shouldRetry?: (error: Error) => boolean;
 }
 
 const DEFAULT_OPTIONS: RetryOptions = {
@@ -37,7 +42,8 @@ export async function withRetry<T>(
       return await fn();
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
-      
+      if (config.shouldRetry && !config.shouldRetry(lastError)) throw lastError;
+
       if (attempt < config.maxRetries) {
         config.onRetry?.(attempt + 1, lastError);
         await sleep(delay);

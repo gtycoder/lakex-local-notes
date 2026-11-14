@@ -48,6 +48,7 @@ import { registerBackupIpc } from "../ipc/registerBackupIpc.js";
 import { registerSyncConflictIpc } from "../ipc/registerSyncConflictIpc.js";
 import { registerUpdateIpc } from "../ipc/registerUpdate.js";
 import { registerPortableIpc } from "../ipc/registerPortable.js";
+import { registerBoardMaterialsIpc } from "../ipc/registerBoardMaterials.js";
 import { logFilePath } from "./paths.js";
 
 /**
@@ -210,6 +211,8 @@ export function registerIpc(deps: IpcWiringDeps): ReadonlyMap<string, (args: unk
   });
   registerQuickNotesIpc(ipc, quickNotes, store, deps.enqueueMaintenance);
   registerLogIpc(ipc);
+  // 261114：画板自定义素材文件夹（设备本地；桌面可打开文件夹管理）。
+  registerBoardMaterialsIpc(ipc, { store });
   registerSystemInfoIpc(ipc, { store, quickNotes, workspaceRoot: deps.workspaceRoot });
   // Batch3-B：安全模式三件事（读状态 / 复制诊断 / 显式退出）。通道登记见 electron/ipc/ipcChannelParity.test.ts。
   registerSafeModeIpc(ipc, {

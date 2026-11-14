@@ -1,4 +1,5 @@
 import { type Viewport } from "@plait/core";
+import { type MaterialLibraryStorage } from "./LakexMaterialLibrary";
 import type { DrawingBoardAIConfig } from "../../components/lakex/types";
 import type { IDrawingBoardCardValue } from "./types";
 type Locale = "zh-CN" | "en-US";
@@ -22,6 +23,8 @@ export interface DrawnixBoardCoreProps {
      * 默认 false = 与卡片/桌面独立画板一致（用宿主给的 viewport 或默认视口）。
      */
     fitOnInit?: boolean;
+    /** 261114 本地改动：自定义素材持久化端口；缺省 = localStorage（移动端/旧行为）。 */
+    materialStorage?: MaterialLibraryStorage;
 }
-export default function DrawnixBoardCore({ value, readOnly, locale, theme, ai, onChange, onViewportPersist, fitOnInit, }: DrawnixBoardCoreProps): import("react/jsx-runtime").JSX.Element;
+export default function DrawnixBoardCore({ value, readOnly, locale, theme, ai, onChange, onViewportPersist, fitOnInit, materialStorage, }: DrawnixBoardCoreProps): import("react/jsx-runtime").JSX.Element;
 export {};

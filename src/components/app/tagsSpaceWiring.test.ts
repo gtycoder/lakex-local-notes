@@ -27,7 +27,7 @@ describe("标签空间接线（P1）", () => {
     expect(TYPES).toContain('"tags"');
     expect(TOPBAR).toContain('tags: { label: "标签", Icon: Tag }');
     // 261109 用户定稿：标签也进快捷键表（⌘5）
-    expect(TOPBAR).toContain('{ id: "tags", label: "标签", Icon: Tag, hint: "⌘5" }');
+    expect(TOPBAR).toContain('{ id: "tags", label: "标签", Icon: Tag, hint: "⌘3" }');
     expect(APP).toContain('desktopWorkspace === "tags"');
     expect(APP).toContain("<TagsWorkspace");
     expect(APP).toContain('workspace="tags"');

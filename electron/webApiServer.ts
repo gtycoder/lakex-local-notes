@@ -206,6 +206,7 @@ export const WEB_METHODS: Record<string, string> = {
   readAppLog: "read_app_log",
   getSystemInfo: "get_system_info",
   revealDataFolder: "reveal_data_folder",
+  boardMaterials: "board_materials",
   // 261109 更新中心（桌面）；状态推送走 SSE 事件 update-state，不在 HTTP 方法表里。
   updateGetState: "update_get_state",
   updateCheck: "update_check",

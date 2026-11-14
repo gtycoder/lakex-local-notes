@@ -691,14 +691,14 @@ describe("首页三 tab（小记 / 知识库 / 标签）", () => {
 
   it("五个一级空间（底部 Dock）与切页回调；标签页 panes 常驻 + inert", async () => {
     await renderHome("quick");
-    expect([...host.querySelectorAll(".mb-home-dock__label")].map((el) => el.textContent)).toEqual(["小记", "知识库", "日记", "AI", "标签"]);
+    expect([...host.querySelectorAll(".mb-home-dock__label")].map((el) => el.textContent)).toEqual(["知识库", "小记", "标签", "AI", "日记"]);
     await click(tabButton("标签"));
     expect(onTabChange).toHaveBeenCalledWith("tags");
     await renderHome("tags");
     expect(host.textContent).toContain("1 篇文档、1 条小记");
     const panes = [...host.querySelectorAll<HTMLElement>(".mobile-tab-pane")];
     expect(panes.length).toBe(5);
-    // pane 顺序 = HOME_TABS（小记 / 知识库 / 日记 / AI / 标签）；只有当前页不是 inert。
+    // pane 顺序 = HOME_TABS（知识库 / 小记 / 标签 / AI / 日记）；只有当前页不是 inert。
     expect(panes[0].hasAttribute("inert")).toBe(true);
     expect(panes[2].hasAttribute("inert")).toBe(true);
     expect(panes[3].hasAttribute("inert")).toBe(true);

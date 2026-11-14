@@ -28,7 +28,8 @@ describe("LakeEditor interaction=preview（Q07A）", () => {
     expect(LAKE_EDITOR).toMatch(/const detachSelectionClipboard = previewOnly \? \(\) => undefined : attachSelectionClipboard\(host\);/);
     // 两个 effect 都要把 interaction 纳入依赖（切档必须重挂监听）
     expect(LAKE_EDITOR).toContain("}, [previewOnly]);");
-    expect(LAKE_EDITOR).toContain("}, [noteId, mode, previewOnly, tocEnabled, prefs?.fontSize, prefs?.showToolbar]);");
+    // 261114 二批：journalRecovery / recoveryTick 也进依赖（移动端可恢复图片上传要能触发重建）
+    expect(LAKE_EDITOR).toContain("}, [noteId, mode, previewOnly, tocEnabled, prefs?.fontSize, prefs?.showToolbar, journalRecovery, recoveryTick]);");
   });
 
   it("preview 档保留 tap 图片预览与 file 卡打开", () => {

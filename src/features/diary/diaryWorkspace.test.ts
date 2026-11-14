@@ -23,7 +23,7 @@ describe("日记空间接线", () => {
   it("① 空间注册：类型联合 + 顶栏空间菜单（日记 / ⌘3 / NotebookPen）", () => {
     expect(TYPES).toContain('"diary"');
     expect(TOPBAR).toContain('diary: { label: "日记", Icon: NotebookPen }');
-    expect(TOPBAR).toContain('{ id: "diary", label: "日记", Icon: NotebookPen, hint: "⌘3" }');
+    expect(TOPBAR).toContain('{ id: "diary", label: "日记", Icon: NotebookPen, hint: "⌘5" }');
     expect(TOPBAR).toContain("NotebookPen");
   });
 
@@ -37,9 +37,9 @@ describe("日记空间接线", () => {
     expect(APP).toContain("<DiaryWorkspace");
     // 快捷键**单一来源** = useDesktopLifecycle 的映射表（261109 收敛；App 里不得再自注册 keydown）。
     const LIFECYCLE = read("../../hooks/useDesktopLifecycle.ts");
-    expect(LIFECYCLE).toContain('"3": "diary"');
+    expect(LIFECYCLE).toContain('"5": "diary"');
     expect(LIFECYCLE).toContain('"4": "ai-writing"');
-    expect(LIFECYCLE).toContain('"5": "tags"');
+    expect(LIFECYCLE).toContain('"3": "tags"');
     expect(APP, "App 不应再自注册 ⌘4/⌘5 监听").not.toMatch(/event\.key !== "[45]"/);
   });
 

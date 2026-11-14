@@ -1,4 +1,4 @@
-import { hasNativeBridge, isDesktop, native } from "../../lib/native";
+import { canDownloadRemoteAsset, hasNativeBridge, isCapacitorNativePlatform, isDesktop, native } from "../../lib/native";
 import type { ResourceUploadInput, ResourceUploadOutput } from "../../lib/types";
 import { MAX_IMAGE_BYTES, MAX_ATTACHMENT_BYTES } from "../../core/storeLimits";
 import { loadSettings } from "../../lib/settings";
@@ -64,6 +64,11 @@ export interface RemoteImageDownloadLimits {
 export interface ResourceUploadOptions {
   /** 覆盖默认落盘（默认 = `native.uploadResource(input, noteId)`）。小记用它把图片写进 quick-notes 空间。 */
   saveResource?: (input: ResourceUploadInput) => Promise<ResourceUploadOutput>;
+  /**
+   * 跳过本模块的共享上传队列（并发 6）。只给「文档编辑器图片预取」用：预取已有自己的
+   * 并发池（8），再叠一层 6 会让实际并发被压回 6，白白浪费。其它上传路径不要传。
+   */
+  skipQueue?: boolean;
   /** 是否允许「网络图片 URL」走主进程下载。小记 v1 关闭（避免写进文档资源空间）。默认 true。 */
   allowRemoteDownload?: boolean;
   /**
@@ -74,8 +79,13 @@ export interface ResourceUploadOptions {
   downloadLimits?: RemoteImageDownloadLimits;
 }
 
-/** 文档编辑器图片上传的下载预算（15s × 2 = 最坏 ~31s，仍给慢 CDN 一次重试机会）。 */
-export const DOCUMENT_IMAGE_DOWNLOAD_LIMITS: RemoteImageDownloadLimits = { timeoutMs: 15_000, maxAttempts: 2 };
+/**
+ * 文档编辑器交互式图片下载预算（261114 二批：3 次尝试）。
+ * 失败不再立即判死刑：主进程 3 次 × 每次内部还做多地址故障转移；仍未成功时，
+ * uploadJournal 记 attempts，桌面/移动的日志订阅会按退避再补拉最多 5 轮（总尝试更多）。
+ * 最坏墙钟 ~46s/张——只在地址真的反复超时时才走到，比「一次失败就永久 error」更符合用户口径。
+ */
+export const DOCUMENT_IMAGE_DOWNLOAD_LIMITS: RemoteImageDownloadLimits = { timeoutMs: 15_000, maxAttempts: 3 };
 
 export async function uploadLakeResource(request: unknown, noteId: string, options: ResourceUploadOptions = {}): Promise<ResourceUploadOutput> {
   const kind = uploadKindOf(request);
@@ -84,14 +94,16 @@ export async function uploadLakeResource(request: unknown, noteId: string, optio
   // 远程 URL 的主进程下载自己会重试；渲染层再叠 2 次会把最坏耗时放大 3 倍（且放大错误卡窗口）。
   const maxRetries = kind === "url" && options.downloadLimits ? 0 : 2;
   try {
-    const output = await uploadQueue.add(() =>
+    const runUpload = () =>
       withRetry(() => performUpload(request, noteId, options), {
         maxRetries,
         delayMs: 1000,
         backoffMultiplier: 2,
         onRetry: () => { retries += 1; },
-      })
-    );
+        // 永久失败（地址不可用 / 防盗链网页 / 超限）立即抛，不再叠加重试（移动端内层已试 3 次）。
+        shouldRetry: (error) => !(error instanceof PermanentRemoteError),
+      });
+    const output = await (options.skipQueue ? runUpload() : uploadQueue.add(runUpload));
     uploadStats.record({ kind, startedAt, endedAt: nowMs(), ok: true, retries });
     return output;
   } catch (error) {
@@ -182,6 +194,11 @@ async function performUpload(request: unknown, noteId: string, options: Resource
     if (isDesktop()) {
       return native.downloadRemoteResource(payload, noteId, options.downloadLimits);
     }
+    // 移动端（261114 三批）：原生直接下载落盘，字节完全不过 WebView 桥（不受 CORS/CSP 限制，
+    // 也不做大图 base64 编解码）。旧 APK 没有该通道 ⇒ 回退下面的渲染层 fetch（仅兜底）。
+    if (isCapacitorNativePlatform() && canDownloadRemoteAsset()) {
+      return native.downloadRemoteAsset(payload, noteId, options.downloadLimits);
+    }
     const downloaded = await downloadRemoteBytes(payload);
     if (hasNativeBridge()) {
       return native.uploadResource(
@@ -250,52 +267,98 @@ interface DownloadedRemote {
   filename: string;
 }
 
-/** 渲染层下载（移动端 / 浏览器演示共用）：逐跳校验（协议 + 字面 host），流式限量 25 MiB。
- * 只负责取回原始字节；落盘（移动端 native.uploadResource）还是内嵌（纯 web）由调用方决定。 */
-async function downloadRemoteBytes(initialUrl: string): Promise<DownloadedRemote> {
+/** 永久失败（重试无意义）：地址不可用 / 反盗链网页 / 超限。 */
+class PermanentRemoteError extends Error {}
+
+/** 单次远程下载超时（移动端原生 HTTP 的 readTimeout 与渲染层 fetch 兜底共用）。 */
+const REMOTE_FETCH_TIMEOUT_MS = 15_000;
+/** 下载尝试次数：与桌面主进程 3 次对齐；再失败还有 uploadJournal 的后台补拉。 */
+const REMOTE_FETCH_ATTEMPTS = 3;
+
+function isRetryableRemoteStatus(status: number): boolean {
+  return status === 403 || status === 408 || status === 425 || status === 429 || status >= 500;
+}
+
+
+/** 渲染层 fetch 下载一次（移动端兜底 / 浏览器演示）：逐跳校验（协议 + 字面 host），流式限量 25 MiB。 */
+async function fetchRemoteOnce(initialUrl: string): Promise<DownloadedRemote> {
   let current = initialUrl;
   for (let hop = 0; ; hop++) {
     let parsed: URL;
-    try { parsed = new URL(current); } catch { throw new Error("资源地址无效"); }
-    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") throw new Error("图片地址仅支持 HTTP 或 HTTPS");
-    if (isBlockedLiteralHost(parsed.hostname)) throw new Error("不允许下载本机或私网地址");
-    const resp = await fetch(current, { redirect: "manual" });
-    let next: string | null = null;
-    if (resp.type === "opaqueredirect") {
-      next = resp.url && resp.url !== current ? resp.url : null;
-    } else if (resp.status >= 300 && resp.status < 400) {
-      const location = resp.headers.get("location");
-      if (location) next = new URL(location, current).href;
-    }
-    if (next) {
-      if (hop >= MAX_BROWSER_REDIRECTS) throw new Error("重定向次数过多");
-      current = next;
-      continue;
-    }
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    const contentType = resp.headers.get("content-type") || "";
-    const declaredLength = Number(resp.headers.get("content-length") || 0);
-    if (declaredLength > MAX_IMAGE_BYTES) throw new Error("资源超过 25 MiB");
-    const reader = resp.body?.getReader();
-    if (!reader) throw new Error("响应无内容");
-    const chunks: Uint8Array[] = [];
-    let total = 0;
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      total += value.byteLength;
-      if (total > MAX_IMAGE_BYTES) {
-        await reader.cancel().catch(() => undefined);
-        throw new Error("资源超过 25 MiB");
+    try { parsed = new URL(current); } catch { throw new PermanentRemoteError("资源地址无效"); }
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") throw new PermanentRemoteError("图片地址仅支持 HTTP 或 HTTPS");
+    if (isBlockedLiteralHost(parsed.hostname)) throw new PermanentRemoteError("不允许下载本机或私网地址");
+    const controller = typeof AbortController === "function" ? new AbortController() : null;
+    const timer = controller ? setTimeout(() => controller.abort(), REMOTE_FETCH_TIMEOUT_MS) : 0;
+    try {
+      let resp: Response;
+      try {
+        resp = await fetch(current, controller ? { redirect: "manual", signal: controller.signal } : { redirect: "manual" });
+      } catch (error) {
+        if (controller?.signal.aborted) throw new Error("下载超时（15s）");
+        throw error instanceof Error ? error : new Error("下载失败");
       }
-      chunks.push(value);
+      let next: string | null = null;
+      if (resp.type === "opaqueredirect") {
+        next = resp.url && resp.url !== current ? resp.url : null;
+      } else if (resp.status >= 300 && resp.status < 400) {
+        const location = resp.headers.get("location");
+        if (location) next = new URL(location, current).href;
+      }
+      if (next) {
+        if (hop >= MAX_BROWSER_REDIRECTS) throw new PermanentRemoteError("重定向次数过多");
+        current = next;
+        continue;
+      }
+      const contentType = resp.headers.get("content-type") || "";
+      if (contentType.toLowerCase().includes("text/html")) throw new PermanentRemoteError("目标地址返回的是网页而不是图片（可能被防盗链拦截或需要登录）");
+      if (!resp.ok) {
+        if (isRetryableRemoteStatus(resp.status)) throw new Error("HTTP " + resp.status);
+        throw new PermanentRemoteError("HTTP " + resp.status);
+      }
+      const declaredLength = Number(resp.headers.get("content-length") || 0);
+      if (declaredLength > MAX_IMAGE_BYTES) throw new PermanentRemoteError("资源超过 25 MiB");
+      const reader = resp.body?.getReader();
+      if (!reader) throw new Error("响应无内容");
+      const chunks: Uint8Array[] = [];
+      let total = 0;
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        total += value.byteLength;
+        if (total > MAX_IMAGE_BYTES) {
+          await reader.cancel().catch(() => undefined);
+          throw new PermanentRemoteError("资源超过 25 MiB");
+        }
+        chunks.push(value);
+      }
+      const merged = new Uint8Array(total);
+      let offset = 0;
+      for (const chunk of chunks) { merged.set(chunk, offset); offset += chunk.byteLength; }
+      const filename = new URL(initialUrl).pathname.split("/").pop() || "file";
+      return { bytes: merged, mime: contentType.split(";")[0] || "application/octet-stream", filename };
+    } finally {
+      if (timer) clearTimeout(timer);
     }
-    const merged = new Uint8Array(total);
-    let offset = 0;
-    for (const chunk of chunks) { merged.set(chunk, offset); offset += chunk.byteLength; }
-    const filename = new URL(initialUrl).pathname.split("/").pop() || "file";
-    return { bytes: merged, mime: contentType.split(";")[0] || "application/octet-stream", filename };
   }
+}
+
+/**
+ * 渲染层 fetch 兜底下载（原生平台只有旧 APK 走这里；浏览器演示也走这里）：失败重试 3 次，永久失败立刻抛。
+ * 移动端新 APK 走 native.downloadRemoteAsset（原生直接落盘，字节不过桥），不进入本函数。
+ */
+async function downloadRemoteBytes(initialUrl: string): Promise<DownloadedRemote> {
+  let lastError: unknown = null;
+  for (let attempt = 1; attempt <= REMOTE_FETCH_ATTEMPTS; attempt++) {
+    try {
+      return await fetchRemoteOnce(initialUrl);
+    } catch (error) {
+      if (error instanceof PermanentRemoteError) throw error;
+      lastError = error;
+      if (attempt < REMOTE_FETCH_ATTEMPTS) await new Promise((resolve) => setTimeout(resolve, attempt * 500));
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error("下载失败");
 }
 
 /** 纯浏览器演示（无原生桥）：图片校验格式后内嵌，非图片按 base64 内嵌，都不落盘。 */

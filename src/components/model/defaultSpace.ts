@@ -4,7 +4,7 @@
  * - **只存本机**：localStorage 独立键 `lakex-local-notes-v3.default-space`（与 ai.enabled /
  *   sidebar-width 同范式：设备本地偏好走独立键），**不进 S3 索引与 wire、不参与同步**——两端可以有不同默认。
  * - **默认 = 文档**（`library`）：全新安装/没存过/存的值非法都回落它，行为与加这个开关之前一致。
- * - 取值 = 空间菜单里带 ⌘1–5 的**五个空间**（文档 / 小记 / 日记 / AI 写作 / 标签）；
+ * - 取值 = 空间菜单里带 ⌘1–5 的**五个空间**（知识库 / 小记 / 标签 / AI 写作 / 日记）；
  *   回收站、资源页是工具页，不作为"默认空间"（它们本来就不是一级入口）。
  *
  * 判据单一来源：选项表、默认值、键与读写都在本文件；设置页只渲染它，启动只读它。
@@ -18,9 +18,9 @@ export type DefaultSpace = "library" | "quick-notes" | "diary" | "ai-writing" | 
 export const DEFAULT_SPACE_OPTIONS: Array<{ value: DefaultSpace; label: string }> = [
   { value: "library", label: "知识库" },
   { value: "quick-notes", label: "小记" },
-  { value: "diary", label: "日记" },
-  { value: "ai-writing", label: "AI 写作" },
   { value: "tags", label: "标签" },
+  { value: "ai-writing", label: "AI 写作" },
+  { value: "diary", label: "日记" },
 ];
 
 /** 默认值 = 文档（保持加开关之前的启动行为）。 */

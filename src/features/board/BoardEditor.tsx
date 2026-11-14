@@ -14,7 +14,7 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { EditorHostProps } from "../editor/editorHost";
 import { loadDrawnixBoardCore } from "@dlient/lakex-doc-react";
-import type { DrawingBoardAIConfig, DrawnixBoardCoreProps } from "@dlient/lakex-doc-react";
+import type { DrawingBoardAIConfig, DrawnixBoardCoreProps, MaterialLibraryStorage } from "@dlient/lakex-doc-react";
 import "./boardEditor.css";
 import { uploadLakeResource } from "../editor/resourceUpload";
 import { native } from "../../lib/native";
@@ -28,6 +28,7 @@ import { readBoardView, writeBoardView } from "./boardViewStore.js";
 import { dataUrlToBytes, registerBoardBytes, registerBoardExport, triggerBoardExport } from "./boardExport";
 import { createBoardValueCoalescer } from "./boardValueCoalescer";
 import { installBoardInputDebugHooks, installBoardInputDiagnostics } from "./boardInputDiagnostics";
+import type { BoardMaterialSaveResult, BoardMaterialsListResult } from "../../core/boardMaterialFile.js";
 
 /** 自动保存防抖：画布每次操作都会回调，必须合并（与 sheet/bitable 同口径）。 */
 const AUTOSAVE_DEBOUNCE_MS = 800;
@@ -539,6 +540,36 @@ export function BoardEditor({ noteId, content, visible, readOnly: readOnlyProp, 
     [readOnly, aiGenerate],
   );
 
+  /**
+   * 261114 用户点单：自定义素材存**本机可打开的文件夹**（`<数据目录>/materials/`，每个素材一个画板文档 JSON），
+   * 不再只塞 localStorage。主进程通道 `board_materials` 负责 list/save/delete/open；
+   * 素材文件可被用户自行拷贝/放置（手动放进来的画板文档也识别）。移动端未接（仍用 localStorage 兜底）。
+   */
+  const materialStorage = useMemo<MaterialLibraryStorage>(() => ({
+    async load() {
+      const result = await native.boardMaterials<BoardMaterialsListResult>({ op: "list" });
+      return result.materials.map((material) => ({ ...material, elements: material.elements as never }));
+    },
+    async save(input) {
+      const result = await native.boardMaterials<BoardMaterialSaveResult>({
+        op: "save",
+        name: input.name,
+        elements: input.elements as unknown[],
+        ...(input.width !== undefined ? { width: input.width } : {}),
+        ...(input.height !== undefined ? { height: input.height } : {}),
+      });
+      return { ...result.material, elements: result.material.elements as never };
+    },
+    async remove(id) {
+      await native.boardMaterials({ op: "delete", file: id });
+    },
+    openFolder() {
+      void native.boardMaterials({ op: "open" }).catch((error: unknown) => {
+        console.warn("[board] 打开素材文件夹失败", error);
+      });
+    },
+  }), []);
+
   return (
     <div
       ref={hostRef}
@@ -563,6 +594,7 @@ export function BoardEditor({ noteId, content, visible, readOnly: readOnlyProp, 
             readOnly={readOnly}
             ai={aiConfig}
             onChange={handleCoreChange}
+            materialStorage={materialStorage}
             onViewportPersist={(next) => {
               const viewport = { x: next.x, y: next.y, zoom: next.zoom };
               viewportRef.current = viewport;

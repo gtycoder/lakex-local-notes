@@ -14,6 +14,13 @@ export { default as Doc } from "./components/lakex/lakex";
 
 // React editor component.
 export { LakexEditor } from "./components/lakex/LakexEditor";
+
+// 261114 本地新增：书签卡片浮动工具条（转链接/标题/卡片/打开/改标题）。
+// 背景：本构建的内核 bookmark 卡没有原生 getCardToolbarConfig，工具条由包装层
+// BookmarkToolbar 自实现，只在 LakexEditor 里挂载；宿主若直接用 Doc.createOpenEditor
+// （本仓库就是），包装层不运行 ⇒ 书签卡必然没有菜单。导出后由宿主自行挂载。
+export { BookmarkToolbar } from "./components/plugin/bookmark/BookmarkToolbar";
+export type { BookmarkToolbarProps } from "./components/plugin/bookmark/BookmarkToolbar";
 export type {
   LakexEditorProps,
   LakexEditorConfig,
@@ -93,6 +100,8 @@ export function loadDrawnixBoardCore(): Promise<typeof import("./cards/DrawingBo
   return import("./cards/DrawingBoard/DrawnixBoardCore");
 }
 export type { DrawnixBoardCoreProps } from "./cards/DrawingBoard/DrawnixBoardCore";
+// LOCAL-CHANGE #27：素材库持久化端口类型（宿主传自己的文件夹实现）。
+export type { BoardMaterialLibraryEntry, MaterialLibraryStorage } from "./cards/DrawingBoard/LakexMaterialLibrary";
 
 // export default config
 export { default as GetDefaultEditorConfig} from './configs/editor'

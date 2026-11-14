@@ -6,6 +6,8 @@ import { reportNativeActionError } from "../lib/nativeErrors";
 import { applyTheme } from "../lib/theme";
 import { subscribeSettings, type AppSettings, type ThemeMode } from "../lib/settings";
 import { OUTLINE_SIDEBAR_MAX_WIDTH, OUTLINE_SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH, type OpenTab } from "../desktop/desktopTypes";
+import { getHiddenSpaces } from "../lib/hiddenSpacesStore";
+import { DESKTOP_HIDEABLE_SPACES, DESKTOP_HIDDEN_SPACES_KEY, isDesktopHideableSpace } from "../desktop/spaceVisibility";
 import type { PersistOutcome } from "./useSavePipeline";
 import { blockingDirtyTabs } from "../core/unloadGuard";
 
@@ -116,17 +118,19 @@ export function useDesktopLifecycle({
       if (!onSwitchDesktopWorkspace) return;
       if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) return;
       // 用户 261006：只有上半「空间」有快捷键；回收站/资源/偏好设置都不给。
-      // 261109 用户定稿：⌘1 文档 / ⌘2 小记 / ⌘3 日记 / ⌘4 AI 写作 / ⌘5 标签
-      // （**单一来源**，别在别处再注册 keydown）。
-      const map: Record<string, "library" | "quick-notes" | "diary" | "ai-writing" | "tags"> = {
+      // 261114 用户点单：⌘1 知识库 / ⌘2 小记 / ⌘3 标签 / ⌘4 AI 写作 / ⌘5 日记
+      // （可关闭的 AI/日记 放最后，关掉后 1–3 连续；**单一来源**，别在别处再注册 keydown）。
+      const map: Record<string, "library" | "quick-notes" | "tags" | "ai-writing" | "diary"> = {
         "1": "library",
         "2": "quick-notes",
-        "3": "diary",
+        "3": "tags",
         "4": "ai-writing",
-        "5": "tags",
+        "5": "diary",
       };
       const next = map[event.key];
       if (!next) return;
+      // 261114：已关闭的空间不响应快捷键（提示也不在菜单里显示）。
+      if (isDesktopHideableSpace(next) && getHiddenSpaces(DESKTOP_HIDDEN_SPACES_KEY, DESKTOP_HIDEABLE_SPACES).includes(next)) return;
       event.preventDefault();
       onSwitchDesktopWorkspace(next);
     };

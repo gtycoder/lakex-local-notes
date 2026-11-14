@@ -35,6 +35,8 @@ describe("设置页分组归属（重组后）", () => {
     expect(itemIds("editor").sort()).toEqual([
       "editor-clear-tabs-on-exit", "editor-default-space", "editor-floating-toolbar", "editor-font-size",
       "editor-max-attachment", "editor-max-open-tabs", "editor-outline-enhance", "editor-toolbar",
+      // 261114：空间关闭（仅日记 / AI 写作可关；sort 后 space-ai-writing 在 space-diary 前）
+      "space-ai-writing", "space-diary",
     ]);
   });
 

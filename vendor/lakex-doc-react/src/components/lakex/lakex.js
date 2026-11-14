@@ -118091,7 +118091,19 @@ const __lakexFactory = (e, t) =>
               (0, nB.A)(this, Gf() ? Reflect.construct(e, n || [], (0, nM.A)(this).constructor) : e.apply(this, n))
             );
           }
-          return ((0, nF.A)(t, e), (0, nT.A)(t));
+          return ((0, nF.A)(t, e), (0, nT.A)(t, [
+            {
+              // 本地补丁（261114）：原实现是空 reader（继承 _D 的恒 true），语雀剪贴板里的块级
+              // bookmark 卡会被吞掉、最终退化成普通链接。这里按 lake 读取器 GC 同口径还原成
+              // 真正的 block bookmark 卡（value.mode='card' 时卡片带图/标题/描述）。
+              key: 'read',
+              value: function (e, t) {
+                var n = t && t.attrs ? t.attrs.value : null;
+                if (!n || 'string' != typeof n.src || !n.src) return !0;
+                return (e.setNode(on.createCard('bookmark', GA.fromLake(n, { type: Gy }), t.id)), !0);
+              },
+            },
+          ]));
         })(_D);
         function Gp() {
           try {
@@ -118113,7 +118125,18 @@ const __lakexFactory = (e, t) =>
               (0, nB.A)(this, Gp() ? Reflect.construct(e, n || [], (0, nM.A)(this).constructor) : e.apply(this, n))
             );
           }
-          return ((0, nF.A)(t, e), (0, nT.A)(t));
+          return ((0, nF.A)(t, e), (0, nT.A)(t, [
+            {
+              // 本地补丁（261114）：行内 bookmark 卡（语雀剪贴板 type=inline、mode='title'）还原为
+              // bookmarkInline 卡；否则会落到 * 兜底或退化成链接，丢卡片外观与工具条。
+              key: 'read',
+              value: function (e, t) {
+                var n = t && t.attrs ? t.attrs.value : null;
+                if (!n || 'string' != typeof n.src || !n.src) return !0;
+                return (e.setNode(on.createCard('bookmarkInline', GA.fromLake(n, { type: Gb }), t.id)), !0);
+              },
+            },
+          ]));
         })(_D);
         Object.defineProperty(Gv, 'CardName', {
           enumerable: !0,

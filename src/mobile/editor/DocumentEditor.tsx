@@ -200,6 +200,9 @@ export function DocumentEditor(props: DocumentEditorProps) {
           noteId={note.id}
           content={content}
           mode={editing ? "editor" : "viewer"}
+          // 移动端文档编辑器接可恢复图片上传（journalRecovery）：挂载回填 + 失败补拉 + 晚到重建。
+          // 与桌面 EditorTab 同源判据（uploadJournal / uploadCardRepair / uploadRetryScheduler）。
+          journalRecovery
           tocEnabled={false}
           // 内核虚拟渲染/大纲定位要真实滚动容器；bodyRef 首帧才有值 ⇒ 传 getter（resolveScrollNode 每次测量时调用）。
           scrollNode={() => bodyRef.current}

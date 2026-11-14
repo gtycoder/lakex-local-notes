@@ -6,6 +6,7 @@
 import { Filesystem, Directory } from "@capacitor/filesystem";
 import { registerPlugin } from "@capacitor/core";
 import { loadAssetBytesFs, removeAssetBytesFs, saveAssetBytesFs, bytesToBase64 } from "../native/assetFs";
+import { NativeAssetSync, nativeAssetSyncSupported } from "../native/nativeAssetSync";
 import { buildAssetFilename, extractAssetRefs, isSafeShellOpenFilename, mimeTypeForFilename } from "../../core/assetNaming.js";
 import { isSafePathSegment } from "../../core/storeUtils.js";
 import { localAssetHttpUrl } from "../../core/assetUrl.js";
@@ -110,6 +111,32 @@ export const assetsDomain = {
     // filename 字段 = 原始文件名（Lake file 卡片展示名；磁盘名/同步用 URL 里的生成名，与桌面一致）
     const displayName = input.filename.replace(/[\\/:*?"<>|\u0000-\u001f]/g, "_").trim() || "附件";
     return { url, resourceRef: url, filename: displayName, mimeType, size: bytes.length };
+  },
+
+  /**
+   * 远程图片「原生长下载」（261114 三批）：URL 交给原生 OkHttp/HttpURLConnection 直接落盘，
+   * 字节完全不过桥（只回 filename/size/mimeType），再用共享路径规则拼 canonical URL。
+   * 旧 APK 没有该方法 ⇒ 明确抛错，由调用方回退渲染层 fetch（CORS/CSP 兜底，失败有原因）。
+   */
+  async downloadRemoteAsset(
+    url: string,
+    noteId: string,
+    limits?: { timeoutMs?: number; maxAttempts?: number },
+  ): Promise<{ url: string; resourceRef: string; filename: string; mimeType: string; size: number }> {
+    const download = NativeAssetSync.downloadRemoteAsset;
+    if (!nativeAssetSyncSupported() || typeof download !== "function") {
+      throw new Error("当前安装包不支持原生远程图片下载（请更新 App）");
+    }
+    const meta = await download.call(NativeAssetSync, {
+      url,
+      noteId,
+      space: "note",
+      timeoutMs: limits?.timeoutMs,
+      maxAttempts: limits?.maxAttempts,
+    });
+    const canonicalUrl = localAssetHttpUrl(noteId, meta.filename);
+    const mimeType = meta.mimeType || mimeTypeForFilename(meta.filename);
+    return { url: canonicalUrl, resourceRef: canonicalUrl, filename: meta.filename, mimeType, size: meta.size };
   },
 
   /**

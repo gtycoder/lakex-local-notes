@@ -15,6 +15,7 @@
  * `destroy()`（manager 在完成后 10s 调用）/ `getResourceURL()` / `abort()`。
  */
 import type { ResourceUploadOutput } from "../../lib/types";
+import { createConcurrencyQueue } from "../../core/concurrency";
 import {
   getUploadEntry,
   recordUploadDone,
@@ -43,6 +44,17 @@ type Listener = (payload?: unknown) => void;
 const activeTasks = new Map<string, ImageUploadTask>();
 const MAX_ACTIVE_TASKS = 400;
 
+/**
+ * 下载预取池（261114 提速）：内核上传管理器固定并发 5（vendor `{parallel:5}`，改不了），
+ * 粘贴 30+ 张图时第 N 张要等前面 5 张各完成一轮才开始下载。文档编辑器的 URL 图片任务在
+ * **构造时**就把下载丢进这个池（8 并发、同 note 同 URL 去重），内核槽位只决定「卡片何时翻成
+ * 成功」，不再决定「字节何时开始下载」⇒ 墙钟从 ceil(N/5)×单张 变成 ceil(N/8)×单张。
+ */
+const PREFETCH_CONCURRENCY = 8;
+const prefetchQueue = createConcurrencyQueue(PREFETCH_CONCURRENCY);
+/** 同一篇文档里重复出现的同一张远程图只下载一次（键含 noteId：资产落在各自文档目录）。 */
+const inflightByKey = new Map<string, Promise<ResourceUploadOutput>>();
+
 function newTaskId(): string {
   const cryptoObject = globalThis.crypto as { randomUUID?: () => string } | undefined;
   if (typeof cryptoObject?.randomUUID === "function") return "u" + cryptoObject.randomUUID();
@@ -61,6 +73,8 @@ export class ImageUploadTask {
   private result: ResourceUploadOutput | null = null;
   private failure: Error | null = null;
   private job: Promise<ResourceUploadOutput | { error: Error }> | null = null;
+  /** 构造时即启动的下载（仅文档编辑器的 URL 图）；run() 复用它，不再重复下载。 */
+  private networkJob: Promise<ResourceUploadOutput> | null = null;
   private readonly listeners = new Map<string, Set<Listener>>();
   private objectUrl: string | null = null;
 
@@ -81,6 +95,9 @@ export class ImageUploadTask {
       });
     }
     activeTasks.set(this.id, this);
+    // 预取：URL 图在解析阶段就开始下载（不等内核 uploadManager 的 5 个槽位）。
+    // 非 URL（file/base64）无法预取（字节来自剪贴板/选择器，已在本机）。
+    if (this.journalEnabled) this.networkJob = this.startNetwork();
     if (activeTasks.size > MAX_ACTIVE_TASKS) {
       for (const [id, task] of activeTasks) {
         if (activeTasks.size <= MAX_ACTIVE_TASKS) break;
@@ -115,6 +132,23 @@ export class ImageUploadTask {
     return "";
   }
 
+  /**
+   * 启动物理下载（预取池 + 同 note 同 URL 去重）。构造时调用一次，run() 再调也只复用同一 promise。
+   * 失败不在这里落状态：状态/日志/事件统一由 run() 的 settle 分支处理，保证内核契约不变。
+   */
+  private startNetwork(): Promise<ResourceUploadOutput> {
+    const key = this.noteId + "|" + (typeof this.data === "string" ? this.data : this.id);
+    const existing = inflightByKey.get(key);
+    if (existing) return existing;
+    const network = prefetchQueue.add(() => this.perform({ type: this.type, data: this.data }));
+    inflightByKey.set(key, network);
+    const clear = () => {
+      if (inflightByKey.get(key) === network) inflightByKey.delete(key);
+    };
+    void network.then(clear, clear);
+    return network;
+  }
+
   /** 内核 manager 入口；重复调用（新编辑器把同一任务重新加进 manager）不会重复下载。 */
   run(): Promise<ResourceUploadOutput | { error: Error }> {
     if (this.statusValue === "success" && this.result) return Promise.resolve(this.result);
@@ -123,7 +157,7 @@ export class ImageUploadTask {
 
     this.statusValue = "running";
     this.emit("start");
-    this.job = this.perform({ type: this.type, data: this.data }).then(
+    this.job = (this.networkJob ?? this.startNetwork()).then(
       (output) => {
         this.result = output;
         this.statusValue = "success";
@@ -213,6 +247,22 @@ export function getActiveImageUploadTask(taskId: string): ImageUploadTask | unde
 }
 
 /**
+ * 强制重试一个已结束（error/aborted）的 URL 任务：同一 taskId 复建任务对象并重新下载。
+ * 用于「后台自动补拉」与「点失败卡重试」——普通 createImageUploadTask 对同名 taskId 返回旧对象，
+ * 旧对象 status 已是 error，run() 会直接返回旧错误，重试必须换新实例。
+ */
+export function forceRetryImageUploadTask(
+  options: Omit<ImageUploadTaskOptions, "taskId"> & { taskId: string },
+): ImageUploadTask {
+  const existing = activeTasks.get(options.taskId);
+  if (existing) {
+    existing.destroy();
+    activeTasks.delete(options.taskId);
+  }
+  return createImageUploadTask(options);
+}
+
+/**
  * 重启后恢复：对日志里仍是 pending、且当前没有活任务的 URL 上传重新下载一次。
  * 结果（成功/失败）写回日志；EditorTab 的日志订阅会据此触发一次正文回填。
  */
@@ -244,6 +294,7 @@ export function resumePendingImageUploads(
 export function __resetImageUploadTasksForTests(): void {
   for (const task of activeTasks.values()) task.destroy();
   activeTasks.clear();
+  inflightByKey.clear();
 }
 
 /** 仅日志读取入口，供 EditorTab 决定是否恢复。 */

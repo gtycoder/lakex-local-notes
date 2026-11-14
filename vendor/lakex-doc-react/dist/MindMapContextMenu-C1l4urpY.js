@@ -1,6 +1,6 @@
 import { useEffect as e, useRef as t, useState as n } from "react";
 import { Fragment as r, jsx as i, jsxs as a } from "react/jsx-runtime";
-//#region ../../node_modules/@xiangfa/mindmap/dist/esm/components/MindMapContextMenu.js
+// ../../node_modules/@xiangfa/mindmap/dist/esm/components/MindMapContextMenu.js
 function o({ position: o, messages: s, readonly: c, nodeId: l, canPaste: u, onNewRootNode: d, onImport: f, onExportSVG: p, onExportPNG: m, onExportMarkdown: h, onDirectionChange: g, onAddChildNode: _, onEditNode: v, onDeleteNode: y, onCopyNode: b, onCutNode: x, onPasteNode: S, onClose: C }) {
 	let w = t(null), [T, E] = n(!1), [D, O] = n(!1);
 	function k(e, t) {
@@ -227,5 +227,4 @@ function o({ position: o, messages: s, readonly: c, nodeId: l, canPaste: u, onNe
 		]
 	});
 }
-//#endregion
 export { o as MindMapContextMenu };

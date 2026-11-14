@@ -62,6 +62,7 @@ import LakexShapeCatalog from "./LakexShapeCatalog";
 import LakexExportMenu from "./LakexExportMenu";
 import LakexMaterialLibrary, {
   type LakexMaterialLibraryHandle,
+  type MaterialLibraryStorage,
 } from "./LakexMaterialLibrary";
 import LakexBoardContextMenu from "./LakexBoardContextMenu";
 import LakexAIBoardAssistant, {
@@ -397,6 +398,8 @@ export interface DrawnixBoardCoreProps {
    * 默认 false = 与卡片/桌面独立画板一致（用宿主给的 viewport 或默认视口）。
    */
   fitOnInit?: boolean;
+  /** 261114 本地改动：自定义素材持久化端口；缺省 = localStorage（移动端/旧行为）。 */
+  materialStorage?: MaterialLibraryStorage;
 }
 
 function useSystemDark(enabled: boolean) {
@@ -427,6 +430,7 @@ export default function DrawnixBoardCore({
   onChange,
   onViewportPersist,
   fitOnInit,
+  materialStorage,
 }: DrawnixBoardCoreProps) {
   const rootRef = React.useRef<HTMLDivElement | null>(null);
   const boardRef = React.useRef<PlaitBoard | null>(null);
@@ -1370,6 +1374,7 @@ export default function DrawnixBoardCore({
               ".draw-toolbar .stack_horizontal",
             ) ?? null}
             onOpen={() => setShapeCatalogOpen(false)}
+            materialStorage={materialStorage}
           />
           <LakexAIBoardAssistant
             ai={ai}

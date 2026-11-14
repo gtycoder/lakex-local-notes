@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { AlertCircle } from "lucide-react";
-import { createLakeDocument, destroyLakeEditor, refreshTocSidebar, type LakeEditorInstance, type LakeEditorPrefs } from "./lakeRuntime";
+import { createLakeDocument, destroyLakeEditor, refreshTocSidebar, retryFailedDocumentImageUploads, resumePendingDocumentImageUploads, type LakeEditorInstance, type LakeEditorPrefs } from "./lakeRuntime";
+import { hasUnresolvedImageTask, repairUploadCards } from "./uploadCardRepair";
+import { subscribeUploadJournal } from "./uploadJournal";
+import { uploadRetryDelayForEntry } from "./uploadRetryScheduler";
 import { upgradePastedHtml } from "./clipboardHtml";
 import { attachSelectionClipboard } from "./selectionClipboard";
 import { addAssetAccessToken, stripAssetAccessToken } from "../../lib/assetPort";
@@ -14,6 +17,9 @@ import { AssetRenameDialog } from "./AssetRenameDialog";
 import { attachLongPress } from "./longPress";
 import { installMediaCardCategoryRouter } from "./mediaCardRouting";
 import { isDesktop, native } from "../../lib/native";
+// 书签卡浮动工具条：vendor 包装层实现，内核本版无原生卡工具条；宿主不挂载就是无菜单死卡。
+import { BookmarkToolbar } from "@dlient/lakex-doc-react";
+import { useKernelDarkTheme } from "./useKernelDarkTheme";
 
 /** 预览宿主固定阅读档字号（Q05B）：移动回收站/历史/桌面 NoteDocPreview 同语义同值。
  *  权威比较由 src/features/editor/lakeEditorInteraction.test.ts 钉住（两边都是字面量，测试防漂移）。 */
@@ -38,10 +44,16 @@ interface LakeEditorProps {
   scrollNode?: HTMLElement | (() => HTMLElement | null) | null;
   /** 宿主元素的额外类名：两端各自的外观由**各端自己的样式**定义（移动端传自有前缀，见 MOBILE-TECH-STACK §一）。 */
   hostClassName?: string;
+  /**
+   * 可恢复图片上传（261114 二批，移动端文档编辑器开启）：
+   * 挂载时按 uploadJournal 回填失败/待上传图卡、重下 pending/可重试失败项，并订阅晚到结果重建一次。
+   * 桌面文档编辑器走 EditorTab 的同款三件套，不传本开关。
+   */
+  journalRecovery?: boolean;
   onEditorReady?: (noteId: string, editor: LakeEditorInstance | null) => void;
 }
 
-export function LakeEditor({ noteId, content, mode = "editor", interaction = "editor", tocEnabled, onChange, prefs, scrollNode, onEditorReady, hostClassName }: LakeEditorProps) {
+export function LakeEditor({ noteId, content, mode = "editor", interaction = "editor", tocEnabled, onChange, prefs, scrollNode, onEditorReady, hostClassName, journalRecovery = false }: LakeEditorProps) {
   const previewOnly = interaction === "preview";
   const hostRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<LakeEditorInstance | null>(null);
@@ -51,11 +63,48 @@ export function LakeEditor({ noteId, content, mode = "editor", interaction = "ed
   const [error, setError] = useState<string | null>(null);
   const [cardMenu, setCardMenu] = useState<{ x: number; y: number; item: AttachmentPreviewItem; el: HTMLElement } | null>(null);
   const [renameItem, setRenameItem] = useState<{ item: AttachmentPreviewItem; el: HTMLElement } | null>(null);
+  /** journalRecovery 下「晚到/补拉结果需要重建一次」的 tick（与 EditorTab 同判据）。 */
+  const [recoveryTick, setRecoveryTick] = useState(0);
+  // 书签卡工具条需要编辑器实例（ref 变化不触发渲染，所以额外存一份 state）。
+  const [editorInstance, setEditorInstance] = useState<LakeEditorInstance | null>(null);
+  const kernelDark = useKernelDarkTheme();
+  const retryTimersRef = useRef<Set<number>>(new Set());
   onChangeRef.current = onChange;
   onEditorReadyRef.current = onEditorReady;
 
   // 移动端：长按卡片 → 卡片菜单（触屏没有右键；桌面此处由 EditorTab 的右键处理）。
   // preview 档（Q07A）：只读宿主不提供菜单（重命名/剪切/另存都是写操作）。
+  /**
+   * 可恢复图片上传（261114 二批，移动端文档编辑器 journalRecovery=true）：
+   * 晚到的下载结果 → 正文仍存在同一 taskId 的未解决图卡时重建一次；失败项按退避后台补拉。
+   * 判据与桌面 EditorTab 完全同源，避免两端对「什么时候自愈」有两套口径。
+   */
+  useEffect(() => {
+    if (!journalRecovery || mode !== "editor") return;
+    const timers = retryTimersRef.current;
+    const off = subscribeUploadJournal((entry) => {
+      if (entry.noteId !== noteId) return;
+      if (entry.status === "error") {
+        const delay = uploadRetryDelayForEntry(entry);
+        if (delay != null) {
+          const timer = window.setTimeout(() => {
+            timers.delete(timer);
+            retryFailedDocumentImageUploads(noteId);
+          }, delay);
+          timers.add(timer);
+        }
+      }
+      if (entry.status === "pending") return;
+      if (!hasUnresolvedImageTask(latestDocumentRef.current, entry.taskId)) return;
+      setRecoveryTick((tick) => tick + 1);
+    });
+    return () => {
+      off();
+      for (const timer of timers) window.clearTimeout(timer);
+      timers.clear();
+    };
+  }, [journalRecovery, mode, noteId]);
+
   useEffect(() => {
     const host = hostRef.current;
     if (!host || previewOnly) return;
@@ -152,15 +201,29 @@ export function LakeEditor({ noteId, content, mode = "editor", interaction = "ed
         latestDocumentRef.current = next;
         onChangeRef.current(next);
       }, tocEnabled, noteId, scrollNode ?? undefined, prefs);
-      latestDocumentRef.current = stripAssetAccessToken(content);
-      editor.setDocument("text/lake", addAssetAccessToken(content));
+      // 可恢复图片上传：挂载时先按 journal 回填「空 src 的未完成图卡」，再交给内核渲染。
+      let nextDocument = content;
+      let repairedChanged = false;
+      if (journalRecovery && mode === "editor") {
+        const repaired = repairUploadCards(stripAssetAccessToken(content), noteId);
+        if (repaired.changed) {
+          nextDocument = repaired.content;
+          repairedChanged = true;
+        }
+      }
+      latestDocumentRef.current = stripAssetAccessToken(nextDocument);
+      editor.setDocument("text/lake", addAssetAccessToken(nextDocument));
+      if (journalRecovery && mode === "editor") resumePendingDocumentImageUploads(noteId);
       // 修复：Lake TOC 侧边栏创建时用空 toc 渲染，setDocument 后补一次数据同步。
       // 该补偿有重试定时器，必须跟随实例一起清理。
       tocRefreshTimer = window.setTimeout(() => {
         disposeTocRefresh = refreshTocSidebar(editor);
       }, 0);
       setting = false;
+      // 回填了失联图片：标脏一次，让正常保存管线把修好的正文落盘（与 EditorTab 同口径）。
+      if (repairedChanged) onChangeRef.current(stripAssetAccessToken(nextDocument));
       editorRef.current = editor;
+      setEditorInstance(editor);
       if (mode === "editor") detachMediaCardRouter = installMediaCardCategoryRouter(editor);
       onEditorReadyRef.current?.(noteId, editor);
       setError(null);
@@ -180,9 +243,10 @@ export function LakeEditor({ noteId, content, mode = "editor", interaction = "ed
       detachMediaCardRouter?.();
       destroyLakeEditor(editor);
       editorRef.current = null;
+      setEditorInstance(null);
       host.replaceChildren();
     };
-  }, [noteId, mode, previewOnly, tocEnabled, prefs?.fontSize, prefs?.showToolbar]);
+  }, [noteId, mode, previewOnly, tocEnabled, prefs?.fontSize, prefs?.showToolbar, journalRecovery, recoveryTick]);
 
   if (error) {
     return <div className="editor-error"><AlertCircle size={18} /><span>{error}</span></div>;
@@ -198,6 +262,9 @@ export function LakeEditor({ noteId, content, mode = "editor", interaction = "ed
   return (
     <>
       <div className={"lake-editor lake-" + mode + (hostClassName ? " " + hostClassName : "")} ref={hostRef} />
+      {editorInstance && (
+        <BookmarkToolbar containerRef={hostRef} editor={editorInstance} language="zh-cn" dark={kernelDark} />
+      )}
       {cardMenu && (
         <CardContextMenu
           x={cardMenu.x}

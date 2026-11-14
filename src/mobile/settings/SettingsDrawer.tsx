@@ -36,7 +36,8 @@ import type { OrphanAsset } from "./useSettingsSectionData";
 import { showToast } from "../ui/toastBus";
 import { formatS3v3Diagnostics } from "../../core/s3v3Report";
 import { readImportDefaultNotebook, writeImportDefaultNotebook } from "./importSettings";
-import { DEFAULT_SPACE_OPTIONS, readDefaultHomeTab, writeDefaultHomeTab } from "./defaultSpace";
+import { DEFAULT_HOME_TAB, DEFAULT_SPACE_OPTIONS, readDefaultHomeTab, writeDefaultHomeTab } from "./defaultSpace";
+import { useHiddenHomeTabs } from "./useHiddenHomeTabs";
 import type { HomeTab } from "../home/tabPager";
 import { DefaultNotebookPickerSheet, type DefaultNotebookOption } from "./DefaultNotebookPickerSheet";
 import { EmptyState } from "../ui/EmptyState";
@@ -257,6 +258,14 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
   const update = (patch: Partial<AppSettings>) => setSettings(saveSettings(patch));
   /** 默认空间（261110）：设备本地偏好，决定**下次冷启动**落在哪个一级页；只存 localStorage，不进 S3。 */
   const [defaultHomeTab, setDefaultHomeTab] = useState<HomeTab>(() => readDefaultHomeTab());
+  // 261114 用户点单：仅日记 / AI 可关闭（隐藏底部 Dock 入口与默认空间选项；数据保留）。
+  const { hidden: hiddenHomeTabs, tabs: visibleHomeTabs, toggle: toggleHomeTab } = useHiddenHomeTabs();
+  useEffect(() => {
+    if (visibleHomeTabs.includes(defaultHomeTab)) return;
+    // 默认空间被关闭 ⇒ 落点回小记，避免下次冷启动指向不可进入的页。
+    writeDefaultHomeTab(DEFAULT_HOME_TAB);
+    setDefaultHomeTab(DEFAULT_HOME_TAB);
+  }, [visibleHomeTabs, defaultHomeTab]);
 
   const aiFormState = useAiSettingsForm(open && view === "ai");
 
@@ -338,10 +347,12 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                 <PickerSheet
                   label="默认空间"
                   value={defaultHomeTab}
-                  options={DEFAULT_SPACE_OPTIONS}
+                  options={DEFAULT_SPACE_OPTIONS.filter((option) => visibleHomeTabs.includes(option.value))}
                   onChange={(next) => { writeDefaultHomeTab(next); setDefaultHomeTab(next); showToast("已设为默认空间：" + (DEFAULT_SPACE_OPTIONS.find((o) => o.value === next)?.label ?? "")); }}
                 />
               </Item>
+              <Switch itemId="space-ai" name="AI 空间" desc="关闭后底部 Dock 与「默认空间」选项里隐藏；AI 会话保留，可随时重新开启。" checked={!hiddenHomeTabs.includes("ai")} onChange={(checked) => toggleHomeTab("ai", checked)} />
+              <Switch itemId="space-diary" name="日记空间" desc="关闭后底部 Dock 与「默认空间」选项里隐藏；日记数据保留，可随时重新开启。小记 / 知识库 / 标签固定显示。" checked={!hiddenHomeTabs.includes("diary")} onChange={(checked) => toggleHomeTab("diary", checked)} />
               {pinState?.available && !pinState.pinned && (
                 <Item itemId="editor-pin-quick-note" name="新建小记" desc="添加到桌面。">
                   <button

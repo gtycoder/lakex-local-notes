@@ -25,13 +25,13 @@ describe("默认空间（设备本地偏好）", () => {
     expect(loadDefaultSpace()).toBe("library");
   });
 
-  it("选项 = 文档 / 小记 / 日记 / AI 写作 / 标签（顺序与 ⌘1–5 对应）", () => {
+  it("选项 = 知识库 / 小记 / 标签 / AI 写作 / 日记（顺序与 ⌘1–5 对应）", () => {
     expect(DEFAULT_SPACE_OPTIONS).toEqual([
       { value: "library", label: "知识库" },
       { value: "quick-notes", label: "小记" },
-      { value: "diary", label: "日记" },
-      { value: "ai-writing", label: "AI 写作" },
       { value: "tags", label: "标签" },
+      { value: "ai-writing", label: "AI 写作" },
+      { value: "diary", label: "日记" },
     ]);
   });
 
@@ -69,7 +69,8 @@ describe("默认空间（设备本地偏好）", () => {
   it("接线①：设置页常规页用既有 Field/Select 原语渲染这一行", () => {
     expect(PANEL).toContain('itemId="editor-default-space"');
     expect(PANEL).toContain('name="默认空间"');
-    expect(PANEL).toContain("options={DEFAULT_SPACE_OPTIONS}");
+    // 261114：空间可关闭（仅日记/AI）⇒ 下拉只列可见空间（不再直接铺全量选项）。
+    expect(PANEL).toContain("options={visibleDefaultOptions}");
     expect(PANEL).toContain("saveDefaultSpace(v)");
   });
 
@@ -82,6 +83,7 @@ describe("默认空间（设备本地偏好）", () => {
 
   it("接线③：桌面壳的启动空间初值取自本偏好（不是写死 library）", () => {
     expect(SHELL).toContain('from "../components/model/defaultSpace"');
-    expect(SHELL).toContain("useState<DesktopWorkspace>(() => loadDefaultSpace())");
+    // 261114：启动落点还要按「已关闭空间」回落（默认空间被关 ⇒ 知识库）。
+    expect(SHELL).toContain("resolveVisibleSpace(loadDefaultSpace(), DESKTOP_PRIMARY_SPACES, hidden)");
   });
 });

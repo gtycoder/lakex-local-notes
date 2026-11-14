@@ -6,6 +6,8 @@ import { Menu } from "../components/ui/Overlay";
 import { usePopoverPosition } from "../hooks/usePopoverPosition";
 import { SyncStatusPopover } from "../components/app/SyncStatusPopover";
 import { topBarLeadingSlotView, useDesktopWorkspaceSlot } from "./desktopWorkspaceSlot";
+import { useHiddenDesktopSpaces } from "../hooks/useHiddenDesktopSpaces";
+import { isDesktopHideableSpace } from "./spaceVisibility";
 import type { DesktopWorkspace } from "./desktopTypes";
 import type { SyncStatus, SyncPendingSummary } from "../lib/types";
 
@@ -90,18 +92,19 @@ export interface DesktopWorkspaceMenuProps {
 
 /** 合一菜单条目（空间 ⊕ 工作空间）；由 DesktopOverlays 的 top-menu 渲染。 */
 export function DesktopWorkspaceMenuItems({ desktopWorkspace, onSwitchWorkspace, onOpenSettings }: DesktopWorkspaceMenuProps) {
+  // 261114：设置里关闭的日记 / AI 写作空间从菜单隐藏（⌘3/⌘4 同步失效；知识库/小记/标签恒显示）。
+  const { isVisible: isSpaceShown } = useHiddenDesktopSpaces();
   // 用户 261006：上半「空间」只剩文档/小记（带 ⌘1/⌘2）；回收站与资源下沉到「工作空间」，
   // 与偏好设置并列、且**都不再给快捷键**（⌘3 的绑定与提示一并去掉）。
   const spaces: Array<{ id: DesktopWorkspace; label: string; Icon: typeof Files; hint?: string }> = [
     { id: "library", label: "知识库", Icon: Files, hint: "⌘1" },
     { id: "quick-notes", label: "小记", Icon: Feather, hint: "⌘2" },
-    // 261109 用户定稿：日记第 3 项（⌘3）、AI 写作第 4 项（⌘4）。
-    { id: "diary", label: "日记", Icon: NotebookPen, hint: "⌘3" },
+    // P1 一级入口：标签空间 = 只读聚合视图 + 就地元数据管理（不是新数据空间）。
+    { id: "tags", label: "标签", Icon: Tag, hint: "⌘3" },
     // 261109：AI 写作空间（桌面本地会话；不进 S3）
     { id: "ai-writing", label: "AI 写作", Icon: Sparkles, hint: "⌘4" },
-    // P1 一级入口：标签空间 = 只读聚合视图 + 就地元数据管理（不是新数据空间）。
-    // 261109 用户定稿：标签也进快捷键表（⌘5）。
-    { id: "tags", label: "标签", Icon: Tag, hint: "⌘5" },
+    // 261114 用户点单：可关闭的两项（AI 写作 / 日记）排到最后 ⇒ 关掉后 1–3 连续。
+    { id: "diary", label: "日记", Icon: NotebookPen, hint: "⌘5" },
   ];
   const tools: Array<{ id: DesktopWorkspace; label: string; Icon: typeof Files }> = [
     { id: "trash", label: "回收站", Icon: Trash },
@@ -117,7 +120,7 @@ export function DesktopWorkspaceMenuItems({ desktopWorkspace, onSwitchWorkspace,
   return (
     <>
       <div className="top-menu__label" role="presentation">空间</div>
-      {spaces.map(renderItem)}
+      {spaces.filter((space) => !isDesktopHideableSpace(space.id) || isSpaceShown(space.id)).map(renderItem)}
       <div className="top-menu__sep" role="separator" />
       <div className="top-menu__label" role="presentation">工作空间</div>
       {tools.map(renderItem)}

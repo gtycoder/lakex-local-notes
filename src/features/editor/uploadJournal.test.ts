@@ -7,8 +7,11 @@ import {
   recordUploadDone,
   recordUploadError,
   recordUploadPending,
+  retryableUploadsForNote,
   subscribeUploadJournal,
+  uploadRetryDelayMs,
   uploadsForNote,
+  MAX_UPLOAD_AUTO_RETRIES,
 } from "./uploadJournal";
 
 const storageKey = "lakex-local-notes.image-upload-journal.v1";
@@ -73,5 +76,43 @@ describe("uploadJournal", () => {
     localStorage.setItem(storageKey, JSON.stringify([{ taskId: "old", noteId: "n1", type: "url", url: "https://x/a.png", createdAt: old, status: "pending" }]));
     __resetUploadJournalCacheForTests();
     expect(pendingUploadsForNote("n1")).toEqual([]);
+  });
+});
+
+describe("失败补拉预算（261114 二批：不到迫不得已不能直接判失败）", () => {
+  it("recordUploadError 累计 attempts；重新记 pending（重试）时保留 attempts", () => {
+    recordUploadPending({ taskId: "r1", noteId: "n1", type: "url", url: "https://x/a.png" });
+    recordUploadError("r1", "下载超时");
+    expect(getUploadEntry("r1")?.attempts).toBe(1);
+    recordUploadError("r1", "下载超时");
+    expect(getUploadEntry("r1")?.attempts).toBe(2);
+    recordUploadPending({ taskId: "r1", noteId: "n1", type: "url", url: "https://x/a.png" });
+    expect(getUploadEntry("r1")?.status).toBe("pending");
+    expect(getUploadEntry("r1")?.attempts).toBe(2);
+  });
+
+  it("可重试失败项 = 带 URL + error + 未超预算 + 7 天窗口内", () => {
+    recordUploadPending({ taskId: "r1", noteId: "n1", type: "url", url: "https://x/a.png" });
+    recordUploadError("r1", "网络错误");
+    recordUploadPending({ taskId: "r2", noteId: "n1", type: "file" });
+    recordUploadError("r2", "本地失败"); // 无 URL（file 类型）⇒ 不可补拉
+    expect(retryableUploadsForNote("n1").map((entry) => entry.taskId)).toEqual(["r1"]);
+    const old = Date.now() - 8 * 24 * 60 * 60 * 1000;
+    localStorage.setItem(storageKey, JSON.stringify([
+      { taskId: "old", noteId: "n1", type: "url", url: "https://x/b.png", createdAt: old, status: "error", attempts: 1 },
+    ]));
+    __resetUploadJournalCacheForTests();
+    expect(retryableUploadsForNote("n1")).toEqual([]);
+  });
+
+  it("失败次数超预算后不再自动补拉（保留真实原因，等用户重新粘贴/点击）", () => {
+    recordUploadPending({ taskId: "r9", noteId: "n1", type: "url", url: "https://x/c.png" });
+    for (let i = 0; i < MAX_UPLOAD_AUTO_RETRIES + 1; i += 1) recordUploadError("r9", "下载超时");
+    expect(getUploadEntry("r9")?.attempts).toBe(MAX_UPLOAD_AUTO_RETRIES + 1);
+    expect(retryableUploadsForNote("n1")).toEqual([]);
+  });
+
+  it("退避序列：3s / 10s / 30s / 2min / 10min，超出复用末项", () => {
+    expect([1, 2, 3, 4, 5, 6, 99].map(uploadRetryDelayMs)).toEqual([3_000, 10_000, 30_000, 120_000, 600_000, 600_000, 600_000]);
   });
 });

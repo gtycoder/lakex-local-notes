@@ -100,6 +100,8 @@ export type LibraryView = "shelf" | "list";
 
 export interface HomePageProps {
   tab: HomeTab;
+  /** 可见 tab（顺序 = 分页/Dock 顺序；缺省 HOME_TABS = 全部显示，兼容渲染测试）。 */
+  tabs?: readonly HomeTab[];
   notebooks: TreeNode[];
   /** 全部笔记（解析「置顶」文档的标题/时间用） */
   notes: LocalNoteSummary[];
@@ -167,11 +169,12 @@ const HOME_TAB_META: Record<HomeTab, { label: string; Icon: typeof Feather }> = 
 
 export function HomePage(props: HomePageProps) {
   const {
-    tab, notebooks, notes, quickNotes, tagDirectory, docCounts, onTabChange, onOpenNotebook,
+    tab, tabs, notebooks, notes, quickNotes, tagDirectory, docCounts, onTabChange, onOpenNotebook,
     onOpenNote, onOpenQuickNote, onTagsChanged, onOpenDrawer, onOpenSearch, onAiChanged, onCreateNotebook, onCreateNote, onTreeChanged, onQuickNotesChanged, onQuickNoteTagsChanged,
     pendingQuickNoteId, onPendingQuickNoteConsumed,
     diaryNodes, onOpenDiaryEntry, onOpenDiarySearch,
   } = props;
+  const visibleTabs = tabs && tabs.length > 0 ? tabs : HOME_TABS;
   const [composer, setComposer] = useState<ComposerState>(null);
   const [editNote, setEditNote] = useState<{ id: string; text: string; body?: string; images: import("../../core/quickNoteModel.js").StoredQuickNoteImage[]; tagIds: string[] } | null>(null);
   const [revealedQuickNoteId, setRevealedQuickNoteId] = useState<string | null>(null);
@@ -217,7 +220,7 @@ export function HomePage(props: HomePageProps) {
    * ① tab → 滚动位置对齐（点 tab / 路由变化 / 横竖屏宽度变化）；② 滚动过半把页码回写成 tab；
    * ③ 非活动页 inert；④ 写作会话中锁横滑（否则父级 [tab] effect 会清掉草稿）。
    */
-  const { stageRef } = useTabPager({ tab, onTabChange });
+  const { stageRef } = useTabPager({ tab, tabs: visibleTabs, onTabChange });
   // v2（261107）：顶栏滚动状态用 class 直接切（滚动里 setState 会整页重渲染）。
   const topbarRef = useRef<HTMLElement | null>(null);
   const quickPaneRef = useRef<HTMLElement | null>(null);
@@ -927,7 +930,7 @@ export function HomePage(props: HomePageProps) {
         </div>
         </section>
         {/* 一级「日记」页（261109 v1）：列表 + 写今天 + 搜索入口；正文编辑仍进现有工作区（不新造输入面）。 */}
-        <section ref={diaryPaneRef} className="mobile-tab-pane">
+        <section ref={diaryPaneRef} className="mobile-tab-pane" hidden={!visibleTabs.includes("diary")}>
           {/* 分包未就绪时不画空白：给一个同构骨架（面在惰性 tab 里，用户切过来时通常已加载完）。 */}
           <Suspense fallback={<div className="mb-diary-skeleton" aria-hidden="true" />}>
             <DiaryPage
@@ -939,7 +942,7 @@ export function HomePage(props: HomePageProps) {
           </Suspense>
         </section>
         {/* 一级「AI」页（261110 底部 Dock 第四格）：内嵌嵌入式 AI 页；懒挂载，切走保留 DOM。 */}
-        <section ref={aiPaneRef} className="mobile-tab-pane mobile-tab-pane--ai">
+        <section ref={aiPaneRef} className="mobile-tab-pane mobile-tab-pane--ai" hidden={!visibleTabs.includes("ai")}>
           {aiMounted ? (
             <Suspense fallback={<div className="mb-ai-pane-skeleton" aria-hidden="true" />}>
               <MobileErrorBoundary scope="ai" title="AI 面板加载失败">
@@ -972,8 +975,13 @@ export function HomePage(props: HomePageProps) {
           · 写作会话 / 多选态期间不渲染（底部让给文档编辑 dock，避免两条贴底打架）。 */}
       {composer === null && !selection.active && (
         <div className="mb-home-dockwrap" data-prevent-swipe>
-          <nav className="mb-home-dock" aria-label="空间">
-            {HOME_TABS.map((id) => {
+          <nav
+            className="mb-home-dock"
+            aria-label="空间"
+            // 261114：关闭日记/AI 后 Dock 只剩 3–5 格；列数跟着可见 tab 走（默认 CSS 仍是 5 列）。
+            style={visibleTabs.length === 5 ? undefined : { gridTemplateColumns: `repeat(${visibleTabs.length}, minmax(0, 1fr))` }}
+          >
+            {visibleTabs.map((id) => {
               const meta = HOME_TAB_META[id];
               const active = tab === id;
               return (

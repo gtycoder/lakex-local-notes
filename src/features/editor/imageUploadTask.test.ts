@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   __resetImageUploadTasksForTests,
   createImageUploadTask,
+  forceRetryImageUploadTask,
   getActiveImageUploadTask,
   resumePendingImageUploads,
 } from "./imageUploadTask";
@@ -115,5 +116,77 @@ describe("ImageUploadTask（内核 createUploadTask 契约）", () => {
     await resumed[0].run();
     expect(perform).toHaveBeenCalledTimes(1);
     expect(getUploadEntry("u5")?.status).toBe("done");
+  });
+
+  it("文档编辑器 URL 图：构造即预取下载，run() 复用同一次（不受内核 5 槽位限制）", async () => {
+    let finish: ((value: typeof pngOutput) => void) | null = null;
+    const perform = vi.fn(() => new Promise<typeof pngOutput>((resolve) => { finish = resolve; }));
+    const task = createImageUploadTask({
+      taskId: "u6",
+      noteId: "n1",
+      type: "url",
+      data: "https://cdn.example/e.png",
+      perform,
+      journal: true,
+    });
+    // 内核契约不变：run() 之前状态仍是 pending（卡片 UI 不会提前看到 success）。
+    expect(task.getStatus()).toBe("pending");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(perform).toHaveBeenCalledTimes(1);
+    finish!(pngOutput);
+    const output = await task.run();
+    expect(output).toEqual(pngOutput);
+    expect(perform).toHaveBeenCalledTimes(1);
+    expect(task.getStatus()).toBe("success");
+  });
+
+  it("同一篇文档里同一 URL 的两张卡只下载一次（资产复用，不重复占带宽）", async () => {
+    let finish: ((value: typeof pngOutput) => void) | null = null;
+    const perform = vi.fn(() => new Promise<typeof pngOutput>((resolve) => { finish = resolve; }));
+    const make = (taskId: string) => createImageUploadTask({
+      taskId,
+      noteId: "n1",
+      type: "url",
+      data: "https://cdn.example/same.png",
+      perform,
+      journal: true,
+    });
+    const first = make("u7");
+    const second = make("u8");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(perform).toHaveBeenCalledTimes(1);
+    finish!(pngOutput);
+    expect(await first.run()).toEqual(pngOutput);
+    expect(await second.run()).toEqual(pngOutput);
+    expect(perform).toHaveBeenCalledTimes(1);
+  });
+
+  it("forceRetryImageUploadTask：同一 taskId 换新任务重下（旧 error 任务不阻塞补拉），日志 attempts 保留", async () => {
+    const perform = vi.fn(async (): Promise<typeof pngOutput> => { throw new Error("第一次失败"); });
+    const first = createImageUploadTask({
+      taskId: "u9",
+      noteId: "n1",
+      type: "url",
+      data: "https://cdn.example/f.png",
+      perform,
+      journal: true,
+    });
+    await first.run();
+    expect(first.getStatus()).toBe("error");
+    expect(getUploadEntry("u9")?.attempts).toBe(1);
+    perform.mockImplementation(async () => pngOutput);
+    const second = forceRetryImageUploadTask({
+      taskId: "u9",
+      noteId: "n1",
+      type: "url",
+      data: "https://cdn.example/f.png",
+      perform,
+      journal: true,
+    });
+    expect(second).not.toBe(first);
+    expect(await second.run()).toEqual(pngOutput);
+    expect(perform).toHaveBeenCalledTimes(2);
+    expect(getUploadEntry("u9")?.status).toBe("done");
+    expect(getUploadEntry("u9")?.attempts).toBe(1);
   });
 });

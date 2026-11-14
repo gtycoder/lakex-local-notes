@@ -1,4 +1,4 @@
-//#region ../../node_modules/@xiangfa/mindmap/dist/esm/plugins/runner.js
+// ../../node_modules/@xiangfa/mindmap/dist/esm/plugins/runner.js
 function e(e, t, n) {
 	for (let r of e) r.preParseMarkdown && (t = r.preParseMarkdown(t, n));
 	return t;
@@ -124,8 +124,7 @@ function v(e, t, n, r) {
 	for (let a of e) a.exportOverlay && (i += a.exportOverlay(t, n, r));
 	return i;
 }
-//#endregion
-//#region ../../node_modules/@xiangfa/mindmap/dist/esm/utils/markdown.js
+// ../../node_modules/@xiangfa/mindmap/dist/esm/utils/markdown.js
 function y(e) {
 	let t = e.match(/^\[([ x-])\]\s+(.*)/);
 	if (!t) return { text: e };
@@ -223,23 +222,23 @@ function b(a, o) {
 				remarkLines: [],
 				placeholder: !0
 			}), m++;
-			continue;
-		}
-		if (f === null && d.length === 0) {
-			let t = e.trim();
-			if (t) {
-				f = t;
-				let e = m + 1;
-				for (; e < u.length;) {
-					let t = u[e].match(/^(\s*)>\s?(.*)$/);
-					if (t) p.push(t[2]), e++;
-					else break;
+		} else {
+			if (f === null && d.length === 0) {
+				let t = e.trim();
+				if (t) {
+					f = t;
+					let e = m + 1;
+					for (; e < u.length;) {
+						let t = u[e].match(/^(\s*)>\s?(.*)$/);
+						if (t) p.push(t[2]), e++;
+						else break;
+					}
+					m = e;
+					continue;
 				}
-				m = e;
-				continue;
 			}
+			m++;
 		}
-		m++;
 	}
 	if (d.length === 0 && f === null) return {
 		id: "md-0",
@@ -431,8 +430,7 @@ function E(t, n) {
 		frontMatter: r.frontMatter
 	};
 }
-//#endregion
-//#region ../../node_modules/@xiangfa/mindmap/dist/esm/utils/input.js
+// ../../node_modules/@xiangfa/mindmap/dist/esm/utils/input.js
 function D(e) {
 	return e === "left" || e === "right" || e === "both" ? e : void 0;
 }
@@ -453,8 +451,7 @@ function k(e, t) {
 function A(e, t, n) {
 	return e || t === void 0 ? null : k(t, n);
 }
-//#endregion
-//#region ../../node_modules/@xiangfa/mindmap/dist/esm/utils/tree-ops.js
+// ../../node_modules/@xiangfa/mindmap/dist/esm/utils/tree-ops.js
 function j() {
 	return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 }
@@ -611,5 +608,4 @@ function J(e, t, n, r) {
 		newSplitIndex: o + 1
 	});
 }
-//#endregion
 export { p as C, m as S, v as T, d as _, U as a, h as b, B as c, M as d, V as f, _ as g, T as h, j as i, G as l, k as m, z as n, q as o, A as p, H as r, K as s, J as t, W as u, f as v, u as w, l as x, g as y };

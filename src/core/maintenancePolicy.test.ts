@@ -42,8 +42,8 @@ describe("互斥域判据（F16 红线化）", () => {
     // 261103 十四批 +getAssetUsage（本地资源占用统计：只读遍历文件系统，不写库、不出网）。
     // 261105 P1 第 4 项：+listSyncConflicts（只读列表）+restoreSyncConflict（委托型写：内部走 notesDomain.saveNote 取锁）。
     // 261105 晚 +listNoteTagLinks（文档标签关系只读：目录行「打标签…」预选）。
-    expect(NONE_OPS.length).toBe(47);
-    expect(ALL.length).toBe(101); // 45 写 + 4 维护 + 5 高优 + 47 none（261113 + diaryToQuickNote）
+    expect(NONE_OPS.length).toBe(48); // 261114 +downloadRemoteAsset（移动端原生远程图下载，单发网络型）
+    expect(ALL.length).toBe(102); // 45 写 + 4 维护 + 5 高优 + 48 none（261113 + diaryToQuickNote；261114 + downloadRemoteAsset）
   });
 
   it("I1（F16）：写域与维护域必须是不同互斥域", () => {

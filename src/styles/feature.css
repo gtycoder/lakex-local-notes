@@ -257,3 +257,12 @@ pre {
 .settings-panel .s3-service-notice__warn { display: flex; align-items: flex-start; gap: 6px; color: var(--lake-status-pending); font-weight: var(--lake-font-weight-medium); }
 .settings-panel .s3-service-notice__warn svg { flex: 0 0 auto; margin-top: 1px; }
 .settings-panel .s3-service-notice__disclaimer { color: var(--lake-text-3); }
+
+/* 文档内嵌画板卡（Drawnix）的工具条几何（261114 用户图1）：独立画板文件（features/board/boardEditor.css）
+ * 与移动端（mobile/editor/edit-surface-kernel.css ⑤）都已钉死为「卡内左侧竖向轨」；这里补桌面文档编辑器的
+ * 同一份口径 —— 视口 ≤720px 时依赖包会把创建栏切成卡顶横轨、在窄文档里被裁；显式给回竖向轨 + 卡内纵向滚动。
+ * ⚠️ 选择器必须用 `ne-card[data-card-name]`（卡片是自定义元素，没有 .ne-card 类）。 */
+.lake-editor-tab ne-card[data-card-name] .lakex-drawnix-core .draw-toolbar { top: 50%; left: 18px; right: auto; transform: translateY(-50%); max-width: none; max-height: calc(100% - 24px); overflow-x: hidden; overflow-y: auto; }
+.lake-editor-tab ne-card[data-card-name] .lakex-drawnix-core .draw-toolbar .stack_horizontal { grid-auto-flow: row; grid-template-columns: auto; grid-template-rows: none; }
+.lake-editor-tab ne-card[data-card-name] .lakex-drawnix-core .draw-toolbar .tool-icon { position: relative; }
+.lake-editor-tab ne-card[data-card-name] .lakex-drawnix-core .draw-toolbar .tool-icon > input { position: absolute; left: 0; top: 0; width: 1px; height: 1px; margin: 0; padding: 0; opacity: 0; pointer-events: none; }

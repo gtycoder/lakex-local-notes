@@ -541,6 +541,127 @@ class AssetSyncPlugin : Plugin() {
         }
     }
 
+    /**
+     * 远程图片「原生长下载」（261114 三批）：URL → 直接落盘为 assets 文件，**字节完全不过 WebView 桥**。
+     *
+     * 为什么不做 CapacitorHttp/fetch 再 uploadResource：WebView fetch 受 CORS + 页面 CSP 限制（Android CSP
+     * 只放行 localhost/S3），CapacitorHttp 又会把整张图 base64 过一次桥（大图内存/耗时都差）。
+     * 与桌面主进程下载同口径：逐跳 SSRF 校验、5 跳重定向、25MiB 上限、text/html 拒绝、魔数嗅探、
+     * 临时文件 + rename 原子落盘、默认 3 次尝试（5xx/408/425/429/403 才重试，4xx 永久失败）。
+     * 返回只含 filename/size/mimeType；canonical URL 由 JS 侧按同一路径规则拼。
+     */
+    @PluginMethod
+    fun downloadRemoteAsset(call: PluginCall) {
+        val url = call.getString("url")
+        val noteId = call.getString("noteId")
+        if (url.isNullOrEmpty() || noteId.isNullOrEmpty()) {
+            call.reject("url/noteId required")
+            return
+        }
+        val space = call.getString("space") ?: "note"
+        val timeoutMs = (call.getInt("timeoutMs") ?: 15_000).coerceIn(1_000, 60_000)
+        val maxAttempts = (call.getInt("maxAttempts") ?: 3).coerceIn(1, 5)
+        ioPool.execute { performRemoteDownload(call, url, noteId, space, timeoutMs, maxAttempts) }
+    }
+
+/** 永久失败：地址不可用 / 反盗链网页 / 超限 / 非图片，重试没有意义。 */
+    private class PermanentFetchException(message: String) : Exception(message)
+
+    private fun performRemoteDownload(call: PluginCall, url: String, noteId: String, space: String, timeoutMs: Int, maxAttempts: Int) {
+        var lastError: String? = null
+        for (attempt in 1..maxAttempts) {
+            try {
+                call.resolve(fetchRemoteAssetToDisk(url, noteId, space, timeoutMs))
+                return
+            } catch (e: PermanentFetchException) {
+                call.reject(e.message ?: "下载失败")
+                return
+            } catch (e: Exception) {
+                lastError = e.message ?: "网络错误"
+                Log.w(TAG, "downloadRemoteAsset attempt " + attempt + " failed: " + lastError)
+                if (attempt < maxAttempts) {
+                    try { Thread.sleep(attempt * 500L) } catch (_: InterruptedException) { Thread.currentThread().interrupt() }
+                }
+            }
+        }
+        call.reject(lastError ?: "下载失败")
+    }
+
+    private fun fetchRemoteAssetToDisk(url: String, noteId: String, space: String, timeoutMs: Int): JSObject {
+        var current = url
+        for (hop in 0..RemoteAssetRules.MAX_REDIRECTS) {
+            val uri = try { URI(current) } catch (_: Exception) { throw PermanentFetchException("资源地址无效") }
+            val scheme = uri.scheme?.lowercase()
+            if (scheme != "http" && scheme != "https") throw PermanentFetchException("图片地址仅支持 HTTP 或 HTTPS")
+            val host = uri.host ?: throw PermanentFetchException("资源地址无效")
+            if (RemoteAssetRules.isForbiddenHost(host)) throw PermanentFetchException("不允许下载本机或私网地址")
+            val conn = URL(current).openConnection() as HttpURLConnection
+            try {
+                conn.instanceFollowRedirects = false
+                conn.connectTimeout = timeoutMs
+                conn.readTimeout = timeoutMs
+                conn.requestMethod = "GET"
+                conn.setRequestProperty("User-Agent", REMOTE_DOWNLOAD_USER_AGENT)
+                conn.setRequestProperty("Accept", "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8")
+                conn.setRequestProperty("Accept-Language", "zh-CN,zh;q=0.9")
+                val status = conn.responseCode
+                if (RemoteAssetRules.isRedirect(status)) {
+                    val location = conn.getHeaderField("Location")
+                    if (location.isNullOrEmpty()) throw PermanentFetchException("重定向缺少目标地址")
+                    current = URL(URL(current), location).toString()
+                    continue
+                }
+                if (status !in 200..299) {
+                    if (RemoteAssetRules.isRetryableStatus(status)) throw Exception("HTTP " + status)
+                    throw PermanentFetchException("下载失败: HTTP " + status + "（该地址不可用，不再重试）")
+                }
+                val contentType = (conn.contentType ?: "").lowercase()
+                if (RemoteAssetRules.isHtmlContentType(contentType)) {
+                    throw PermanentFetchException("目标地址返回的是网页而不是图片（可能被防盗链拦截或需要登录）")
+                }
+                if (conn.contentLengthLong > RemoteAssetRules.MAX_BYTES) throw PermanentFetchException("图片超过 25 MiB")
+                val dirKey = if (space == "quick-notes") AssetPaths.QUICK_ASSETS_ROOT + "/" + noteId else AssetPaths.LAKE_ROOT + "/" + noteId
+                val dir = AssetPaths.resolveAsset(getContext().filesDir, dirKey + "/__probe__", AssetPaths.Mode.WRITE).parentFile
+                    ?: throw Exception("资产目录无效")
+                if (!dir.exists() && !dir.mkdirs()) throw Exception("资产目录创建失败")
+                val temp = File(dir, ".tmp-download-" + java.util.UUID.randomUUID())
+                try {
+                    var total = 0L
+                    conn.inputStream.use { input ->
+                        FileOutputStream(temp).use { output ->
+                            val buf = ByteArray(64 * 1024)
+                            var n = input.read(buf)
+                            while (n > 0) {
+                                total += n
+                                if (total > RemoteAssetRules.MAX_BYTES) throw PermanentFetchException("图片超过 25 MiB")
+                                output.write(buf, 0, n)
+                                n = input.read(buf)
+                            }
+                        }
+                    }
+                    if (total <= 0L) throw Exception("响应无内容")
+                    val head = ByteArray(16)
+                    FileInputStream(temp).use { it.read(head) }
+                    val sniffed = RemoteAssetRules.sniffMagic(head)
+                        ?: throw PermanentFetchException("仅支持 PNG、JPEG、GIF、WebP 和 AVIF 图片")
+                    val filename = RemoteAssetRules.assetFilename(sniffed.extension, RemoteAssetRules.randomHex4())
+                    val target = AssetPaths.resolveAsset(getContext().filesDir, dirKey + "/" + filename, AssetPaths.Mode.WRITE)
+                    if (!temp.renameTo(target)) {
+                        temp.copyTo(target, overwrite = true)
+                        temp.delete()
+                    }
+                    return JSObject().put("filename", filename).put("size", total).put("mimeType", sniffed.mimeType)
+                } catch (e: Exception) {
+                    temp.delete()
+                    throw e
+                }
+            } finally {
+                conn.disconnect()
+            }
+        }
+        throw PermanentFetchException("重定向次数过多")
+    }
+
     private data class SignedRequest(val url: String, val path: String, val signHost: String)
 
     private fun buildRequest(cfg: Config, key: String): SignedRequest {
@@ -597,5 +718,6 @@ class AssetSyncPlugin : Plugin() {
     private companion object {
         const val TAG = "LakeAssetSync"
         const val EMPTY_PAYLOAD_SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        const val REMOTE_DOWNLOAD_USER_AGENT = "Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
     }
 }

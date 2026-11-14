@@ -121,3 +121,16 @@ task-63 的 b/c/e 已在本套设备同一包上验证（见 `docs/audit-261112/
 4. **三处手写只读文案改 core 判据**：新增移动薄封装 `src/mobile/lib/readonlyText.ts`（原因/标题取 `core/capabilities/readonlyReason`，仅把「解除动作」换成移动端可执行措辞——移动端不提供解锁，锁只能桌面端解除）；接线到 `NotePaneHost.tsx`（只读横幅）、`NotebookWorkspace.tsx` / `useWorkspaceSession.ts`（点编辑的提示）、`bridge/notes.ts`（保存被拒）。
 
 **回归/门禁**：`npx tsc --noEmit` 0 error；`src/mobile/sync/syncStatusStore.test.ts`（新增 3 例：上限 20 + 完整计数 + message 截断 / 重新解析容错 / 失败轮不残留）、`src/mobile/sync/syncWarningWiring.test.ts`（新增 4 例接线）、`lockedNoteWiring.test.ts` 更新后全绿；移动子集（notebook/settings/sync/home/bridge/v3/lib）**115 文件 553 例全绿**；lead 串行全量门禁 **906 文件 / 5712 用例 0 failed**。新 APK 装到 lake_gate 后移动快照 **10/10 态 0 差异**。d 设备证据见 §6。
+
+## 11. 复跑入口（261114 固化）
+
+本文仍是**真实桶 + 移动端**的一次性手工证据与方法来源；A–K 的桌面等价断言已收敛成可重复脚本
+`scripts/multi-end-sync/regression.mjs`（用法/场景矩阵/清理与排障见 `scripts/multi-end-sync/README.md`）。
+
+- 默认跑桌面 A,B 两实例；`--scenarios all` 覆盖 A,B,C,D,E,F,I,J（K 需 `--instances 3`）；
+- 无真实凭据时 `--loopback` 用 `scripts/multi-end-sync/loopback-s3.mjs`（仅 127.0.0.1 内存 S3）验证脚本，
+  其结果**不能替代**本文的真实桶结论；
+- 移动端/真机（本节 §0 的 AVD、`adb forward`、APK、`pm clear` 备份还原）仍按本文手工执行，入口的
+  `--with-mobile` 明确报未实现；
+- 与本文的差异：F 只自动断言锁传播与云端字段（UI 保存拦截由 `electron/s3v3/lockPropagation.test.ts` 覆盖），
+  I 用桌面默认全量资产路径（不需要移动端 `ensureNoteAssets` 的按需拉取步骤）。

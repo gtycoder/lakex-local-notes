@@ -189,6 +189,8 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
   display: flex; flex-direction: column;
   scroll-snap-align: start; scroll-snap-stop: always;
 }
+/* 261114：关闭的首页空间（日记/AI）整页隐藏 —— display:flex 会压过 UA 的 [hidden]，必须显式收掉。 */
+.mobile-tab-pane[hidden] { display: none; }
 
 /* ⚠️ 只收纵向 overscroll（`overscroll-behavior-y`），**不能写两轴的 `contain`**：
    否则首层横向分页的"手指左滑 → 翻到下一页"会被内层竖滚容器吃掉（261019 实测：

@@ -83,7 +83,7 @@ const TOOLBAR_ITEMS: ToolbarEntry[] = [
   {
     name: "toLink",
     title: "",
-    icon: "ne-t-link",
+    icon: "icon-editor-link",
     tip: "bookmark.toLink",
     customAction: (_editor, cardUI) => {
       try {
@@ -123,7 +123,7 @@ const TOOLBAR_ITEMS: ToolbarEntry[] = [
   {
     name: "openLink",
     title: "",
-    icon: "ne-o-visit-link",
+    icon: "icon-o-visit-link",
     tip: "bookmark.openLink",
     customAction: (_editor, cardUI) => {
       _editor.emitEvent("openBookmarkLink", cardUI.value.src);

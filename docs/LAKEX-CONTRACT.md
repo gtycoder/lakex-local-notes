@@ -1142,9 +1142,33 @@ PY
 3. 卡片进入上传中时，pre-reader 会 `delete card.src`、置 `status=UPLOADING`、写 `clientId=kernel.id`；**原 URL 不落正文**。
 4. 编辑器实例重建后，新实例对 `status=UPLOADING` 且带 `taskId/clientId` 的卡建 **virtual task**（`W0`）；若没有 alive checker，约 3×1s 后 `emit("timeout")` ⇒ image 卡 `_handleUploadError("failed to upload")`，而 `setUploadError(e)` 取的是 `e?.message`（字符串没有 `.message`）⇒ 卡片落成 `status:"error", errorMessage:"unknown error", src:""`。此时旧实例的上传 Promise 若稍后成功，回调只属于旧卡/旧实例，正文不会更新 ⇒ 字节留在 note-assets 成为 orphan，UI 永久失败。
 5. 因此宿主必须在**应用层**接管远程图片上传：任务对象自持（编辑器销毁后仍跑完）、taskId 可持久化（localStorage 日志）、打开文档时按 taskId 回填正文、晚到结果触发一次重建。实现 = `src/features/editor/imageUploadTask.ts` + `uploadJournal.ts` + `uploadCardRepair.ts`（契约/红线见 AGENTS §4「图片上传可恢复」）。
+6. **上传线程并发固定 5（261114 实测补记）**：内核 upload thread 默认 `{ parallel: 5 }`（`lakex.js` 111252 / `dist/index.es.js` 84908，插件 `new WZ()` 不传 options ⇒ 改不了）。`addTask` 只入队并 `setTimeout(_checkFinish, 100)`（111325-111335），`_checkFinish` 每次只启动一个、纯完成驱动（111337-111344）⇒ 粘贴 N 张图的墙钟 ≈ `ceil(N/5) × 单张下载耗时`，慢图会占住槽位堵住队尾。**结论：客户端的下载并发要自己管**——`imageUploadTask` 现在在**构造时**就把 URL 图丢进自管预取池（8 并发、同 note 同 URL 去重），内核的 5 个槽位只决定「卡片何时翻成成功」，不再决定「字节何时开始下载」。
 
 **复验脚本（本地）**：隔离 `LAKE_USER_DATA` + `LAKE_RENDERER=scheme` 起 Electron（CDP 9222）；合成 paste HTML 含远程图 → 校验 localStorage 日志 done + DOM `img.ne-image` 为本地资产；再离线把正文卡改为 `src:""/status:error/errorMessage:"unknown error"`（保留 taskId）→ 重启 → 打开文档应自动回填并保存；把日志改成 pending + 卡片同 taskId → 重启 → 自动重下并回填。
 
+### 5.54 Yuque 书签卡（bookmarkInline / bookmark）导入 + 卡片工具条（261114 实测）
+
+**症状**：① 从语雀复制整篇文档粘贴，行内链接卡只剩**普通文本**（`ne-link`，无图标/卡片外观）；② 卡片拿到手后**没有菜单**，无法像语雀那样「转为链接/标题/卡片」；③ 块级链接卡（语雀里展开的卡片）粘贴后也退化。
+
+**根因（bundle grep + 隔离实例 CDP 实测）**：
+1. 语雀剪贴板 `ne-clipboard` 的链接卡节点带 `{ mode:'title'|'card', src, text, detail }`。内核 bookmark 插件在 `afterInit` 只给 **lake 格式**注册读取器（`registerLakeCardReader('bookmarkInline', new GN())` / `('bookmarklink', new GC())`）；**INode 格式**（粘贴走的 `C$` 服务）只有 `yuqueInline` 有效读取器（`Gj`/`GF`，`bookmark.recognizeYuque && 无 yuque 插件` 时注册），而 `bookmark`/`bookmarkInline` 两个 INode 读取器 `Gh`/`Gv` 是**空实现**（继承 `_D.read` 恒 true）⇒ 卡被吞掉，落到兜底/链接文本。
+2. **卡工具条**：内核 v1.99.0 的 bookmark 卡没实现原生 `getCardToolbarConfig`（`lakex.js:69407` 仅当非 null 才初始化 hover 工具条）；vendored 包装层为此自实现了 `BookmarkToolbar`（转链接/标题/卡片/打开/编辑），但它只挂在 `LakexEditor` 组件里——**我们直接 `Doc.createOpenEditor`，包装层不运行** ⇒ 卡永远没有菜单。
+3. 261112 曾因「卡是死卡」加了 `installBookmarkCardDegrade`：粘贴后把所有 bookmark 卡 `cardToLink` 降级成普通链接（commit 126e906f）。这正是「导入后只剩链接文本」的直接原因。
+
+**修法（261114，应用层 + vendor 最小补丁）**：
+- **导入**：`lakeRuntime` 的 `bookmark` 配置 `recognizeYuque: true`；粘贴预处理 `clipboardHtml.normalizeYuqueClipboardCards`（挂在 `upgradePastedHtml`）把可确定的 `bookmarkInline`（mode=title+src）改名为 `yuqueInline`；块级/行内 `bookmark`/`bookmarkInline` 的 INode 读取器在 vendor 侧补上（`page` 见下一行，`Gh`/`Gv` 的 `read` 按 lake 读取器同口径 `createCard(..., GA.fromLake(value, {type}))`）。
+- **卡工具条**：vendor 包装层导出 `BookmarkToolbar`（`src/index.ts`），宿主 `EditorTab` / `LakeEditor` 各自挂载（`containerRef` + 编辑器实例 + `useKernelDarkTheme()` 的 dark）。
+- **撤销降级**：删除 `installBookmarkCardDegrade` 的安装/清理（保留同文件的热键兜底 `hardenDestroyedHotKeyLookup`）。
+
+**实测（隔离实例 + 真实语雀【IO】剪贴板 / 合成块卡）**：
+- 行内卡：正文 `<card type="inline" name="bookmarkInline" value="data:...">`；DOM `ne-card[data-card-name="bookmarkInline"][data-card-type="inline"]` + `ne-card-bookmark-title-view`。
+- 块卡：`ne-card[data-card-name="bookmark"][data-card-type="block"]` + `ne-card-bookmark-card-view`（缩略图/标题/描述/站点），与语雀展开态一致。
+- 工具条（trusted hover/click 后出现在卡上方）：行内卡 = 转为链接 / 卡片 / 打开链接 / 编辑链接；块卡 = 转为链接 / 标题 / 打开链接 / 编辑链接。点「转为链接」→ 卡消失、`ne-link` 出现；点「标题」→ block 卡变 inline 卡（实测 block 0 / inline 1）。
+- 工具条图标：组件原用 `ne-t-link`/`ne-o-visit-link`，本应用图标 sprite 里没有 ⇒ 改成存在的 `icon-editor-link`/`icon-o-visit-link`（`icon-tb-card-view`/`icon-tb-title-view`/`icon-o-edit` 本来就有）。
+
+**已知限制 / 注意**：① 链接→卡片方向依赖内核 link toolbar 的扩展按钮（`bookmark` 插件 `_extendLinkHandler`），本应用未逐一验收；卡→链接/标题/卡片三个方向已验收。② 没有 `detail` 的卡（手输 URL 新建）用 `fetchDetailHandler` 兜底成「标题=URL」的最小 detail，工具条仍可用。③ 护栏：`src/features/editor/bookmarkCardToolbar.test.ts`（两个宿主都挂载工具条、无降级、vendor 导出 + `Gh/Gv` 读取器仍在）、`clipboardHtml.test.ts`（卡片改名/不误伤）。
+
+---
 ## 6. 使用守则（所有会话遵守）
 
 1. **动手前查**：改 `src/features/editor/**`、移动端 `src/mobile/editor/**`、或涉及编辑器内核行为前，先读 §2/§4/§5。
@@ -1593,11 +1617,12 @@ unicodeEmoji = `{emoji}`（`insertCardNode(t,n,'unicodeEmoji',{})`，`:121559`�
   `insertCard('customBlock', { $name: '<卡片注册名>', $htmlStr: '', ...cardValue }, true)`；随后 `focusCard(cardId)`。
   `cardValue` 由 `core/boardDoc.ts` 的 `cardValueFromBoardDoc(createBoardDoc(preset))` 生成；flowchart/UML/mindmap 的预设模板由
   `DrawnixBoardCore.afterInit` 自动落地。
-- **文本绘图仍不在这批**：它是独立的 `TextToDiagram` 卡片（Mermaid/PlantUML/Graphviz 等），不是 Drawnix 场景，继续保持置灰，待单独验收。
+- **文本绘图（261114 解禁）**：它是独立的 `TextToDiagram` 卡片（Mermaid/Flowchart/PlantUML/Graphviz），不是 Drawnix 场景。移动端 dock「更多 → 画图族」已接正式入口：`insertCard('customBlock', { $name:'text-to-diagram', $htmlStr:'', code, type:'mermaid', cardHeight:500, showEditor:true, showPreview:true })`（卡注册名 = vendor customCard 的 `name`，**不是** slash 的 `custom-text-to-diagram`）。桌面布局是「代码｜预览」左右分栏 + 不换行工具栏，在 370px 卡里会撑破右边缘 ⇒ 移动端由 `mobile/editor/edit-surface-kernel.css` ⑥ 改工具栏换行 + 上下分栏（设备实测卡宽 368、panels flex-direction: column、文档无横向溢出）。
 - **落盘实测**：4 张卡在正文中分别保存为
   `<card type="block" name="customBlock" customName="drawing-board|flowchart-board|uml-board|drawing-mindmap-board" value="data:...">`，
   value 解码后含 `$name` 与 `plaitValue`；流程图/UML/思维导图首开分别生成 31 / 36 / 26 个场景 `<g>`（含连线/节点），不是空卡。
-- **仍未做**：CardResizer 的高度拖动目前仍是鼠标事件（移动端触控暂不保证可调高）；文本绘图、AI 画板助手移动端入口不在 P0。
+- **仍未做**：CardResizer 的高度拖动目前仍是鼠标事件（移动端触控暂不保证可调高）。
+- **文档内嵌画板卡的工具条几何（261114 用户图1「工具栏错位」）**：移动端没有 `@layer` ⇒ 依赖包 lakex-drawnix 的 `.drawnix .draw-toolbar{top:36px;left:50%;transform:translate(-50%)}` 与内核 `style.css` **同特异性且后加载**（内核样式在 DocumentEditor chunk、drawnix 样式在画板懒 chunk）⇒ 卡内创建栏被切成卡顶横轨，370px 卡里 11 项撑到 ~590px 被卡边裁掉（独立画板文件有 `mobile/board/board.css` 的宿主修复所以正常）。修法 = `mobile/editor/edit-surface-kernel.css` ⑤ + `styles/feature.css` 各一组高特异性规则，把卡内工具条钉成左侧竖向轨（`top:50%`、`left:18px`、`transform:translateY(-50%)`、卡内纵向滚动、`.stack_horizontal` row flow、隐藏 radio 的流内占位）；选择器必须用 `ne-card[data-card-name]`（卡片是自定义元素，没有 `.ne-card` 类，写错会静默不生效）。设备实测：toolbar 46×446 位于卡内、11 项全部可见；桌面同口径（现网本来就是竖轨，属显式兜底）。护栏 `mobile/editor/mobileBoardInsert.test.ts`。
 
 ### 5.32 移动端「文本增强」五项命令实测：能干活，但**内核对选区的认账有时序**（261012 设备实测）
 

@@ -599,6 +599,38 @@ ne-card-root:has(.lakex-material-library__backdrop) {
   flex-direction: column;
 }
 
+/* LOCAL-CHANGE #27：素材文件夹入口（桌面自定义素材存本机文件夹）。 */
+.lakex-material-library__folder-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px 0;
+}
+.lakex-material-library__folder-open {
+  flex: 0 0 auto;
+  padding: 5px 10px;
+  border: 1px solid var(--color-gray-30, #98a2b3);
+  border-radius: 8px;
+  background: var(--island-bg-color, #fff);
+  color: var(--color-gray-80, #3f4854);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.2;
+}
+.lakex-material-library__folder-open:hover,
+.lakex-material-library__folder-open:focus-visible {
+  border-color: #00a968;
+  color: #00a968;
+  outline: none;
+}
+.lakex-material-library__folder-hint {
+  min-width: 0;
+  color: var(--color-gray-60, #626973);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
 .lakex-material-library__empty {
   display: flex;
   flex: 1;

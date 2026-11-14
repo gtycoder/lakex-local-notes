@@ -77,6 +77,15 @@ const COMMAND_ICONS: Record<string, typeof Bold> = {
  *  取值全部来自内核档位，不新增字号。要再少/再多只改这一处。 */
 const MOBILE_FONT_SIZES: readonly number[] = FONT_SIZE_OPTIONS.slice(2, -2);
 
+/** 文本绘图卡的默认 initValue（与 vendor src/cards/TextToDiagram/index.ts 的 initValue 同形；照抄最小 mnermaid 示例）。 */
+const MERMAID_DEFAULT_VALUE: Record<string, unknown> = {
+  code: "flowchart TD\n    A[Start] --> B[Decision]\n    B -->|Yes| C[End]",
+  type: "mermaid",
+  cardHeight: 500,
+  showEditor: true,
+  showPreview: true,
+};
+
 /** 分栏数量（261104：内核 columns 命令接数量，设备实测 3 栏生效）。 */
 const COLUMN_CHOICES: ReadonlyArray<{ value: number; label: string }> = [
   { value: 2, label: "两栏" },
@@ -573,7 +582,9 @@ export function EditorDock({ editor, editing, undoBackend = "kernel", undoLimits
       { label: "流程图", run: () => insertBoardCard("flowchart-board", "flowchart") },
       { label: "UML 图", run: () => insertBoardCard("uml-board", "uml") },
       { label: "思维导图", run: () => insertBoardCard("drawing-mindmap-board", "mindmap") },
-      { label: "文本绘图", disabled: true },
+      // 261114（用户点单「移动端可以做」）：文本绘图解禁。卡注册名 = vendor customCard 的 `name`（不是 slash 的 `custom-text-to-diagram`）；
+      // 走 customBlock 正式入口（与画板族同一条 insertCard 路径），initValue 必须带 code/type/cardHeight/showEditor/showPreview。
+      { label: "文本绘图", run: () => runPanel("insertCard", "customBlock", { $name: "text-to-diagram", $htmlStr: "", ...MERMAID_DEFAULT_VALUE }, true) },
     ] },
   ];
   // 工具栏“收起/展开键盘”按钮：无面板 = 按键盘开合切换；有面板 = 收起面板（键盘此前已收起）

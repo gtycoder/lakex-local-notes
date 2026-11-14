@@ -120,6 +120,26 @@ export async function pushQuickNoteViaEngine(
  * 现在：pointer → lake 索引 → 该篇 assetsHash → 声明对象 → 本地差集（同名+同 size+同 sha256 跳过）
  * → 按需 GET + size/sha256 校验后落盘。best-effort：无配置/关云同步/网络失败一律只回 warnings。
  */
+/**
+ * 本地资产缺口：正文引用、但 note-assets/{id}/ 里没有的文件（`.tmp` 不算）。
+ *
+ * 用途（261114 用户反馈）：回收站恢复后的「后台补拉」在云同步关闭/未配置时会返回 skipped，
+ * 渲染层据此弹「没有去云端补拉」的提示；但很多文档根本没有资源缺口（图片/附件都在本地），
+ * 这条提示就是纯噪音。所以阻塞出网时先用本地差集判一次：没有缺口 = 不报 skipped。
+ */
+function missingLocalNoteAssets(store: Store, noteId: string): string[] {
+  try {
+    const refs = store.getCurrentContentRefs(noteId);
+    if (refs.size === 0) return [];
+    let disk: Set<string>;
+    try { disk = new Set(fs.readdirSync(store.noteAssetsPathFor(noteId)).filter((f) => !f.includes(".tmp"))); }
+    catch { disk = new Set(); }
+    return [...refs].filter((filename) => !disk.has(filename));
+  } catch {
+    // 读不到正文/目录时按「没有缺口」处理：宁可少一条提示，也不误报缺数据。
+    return [];
+  }
+}
 export async function ensureTrashNoteAssets(
   store: Store,
   id: string,
@@ -128,10 +148,13 @@ export async function ensureTrashNoteAssets(
   const warnings: string[] = [];
   const settings = store.getS3Settings();
   if (!deps.remote) {
-    if (!settings) return { warnings, skipped: "unconfigured" };
+    // 261114：阻塞出网时只有**本地真有缺口**才回 skipped（渲染层据此提示「没有去云端补拉」），
+    // 否则恢复后的提示是纯噪音（用户实测：云同步关闭状态下每次恢复都弹）。
+    const gap = () => missingLocalNoteAssets(store, id).length > 0;
+    if (!settings) return { warnings, skipped: gap() ? "unconfigured" : undefined };
     // 单一判据：没配置 或 关了云同步 ⇒ 一律不出网（用户 261006：关闭云同步 = 纯离线本地空间）。
     const state = cloudStateOf(true, store.getSyncSettings());
-    if (!canTouchNetwork(state)) return { warnings, skipped: state };
+    if (!canTouchNetwork(state)) return { warnings, skipped: gap() ? state : undefined };
     validateS3Settings(settings);
   }
   const remote = deps.remote ?? new S3v3S3Remote({

@@ -283,6 +283,12 @@ export interface LakeNative {
   previewNoteOrphan(noteId: string, filename: string): Promise<{ kind: "image" | "text"; data: string; size: number } | null>;
   cleanNoteOrphans(noteId: string, filenames?: string[]): Promise<{ count: number; freedBytes: number }>;
   uploadResource(input: ResourceUploadInput, noteId: string): Promise<ResourceUploadOutput>;
+  /**
+   * 远程图片「原生长下载」（仅移动端，261114 三批）：原生把 URL 直接落盘成资产，字节不过桥。
+   * 桌面没有该方法（桌面走 downloadRemoteResource 主进程下载）；旧 APK 也没有 ⇒ 调用方先判
+   * nativeBridgeCanDownloadRemoteAsset() 再调，否则回退渲染层 fetch。
+   */
+  downloadRemoteAsset?(url: string, noteId: string, limits?: { timeoutMs?: number; maxAttempts?: number }): Promise<ResourceUploadOutput>;
   downloadRemoteResource(url: string, noteId: string, limits?: { timeoutMs?: number; maxAttempts?: number }): Promise<ResourceUploadOutput>;
   listOrphanAssets(): Promise<OrphanAsset[]>;
   cleanOrphanAssets(): Promise<CleanOrphanResult>;
@@ -374,6 +380,8 @@ export interface LakeNative {
   onPortableExportProgress(callback: (progress: PortableExportProgress) => void): () => void;
   /** 关于页：在文件管理器中显示白名单目录（kind 由主进程解析，绝不传路径）。 */
   revealDataFolder(kind: import("./types").DataFolderKind): Promise<{ ok: boolean; path: string }>;
+  /** 画板自定义素材文件夹（设备本地；list/save/delete/open 单入口）。 */
+  boardMaterials(request: import("../core/boardMaterialFile").BoardMaterialsRequest): Promise<unknown>;
   runS3DeepCleanup(dryRun: boolean, ignoreRetention?: boolean): Promise<DeepCleanupResult>;
   getTrashReminder(): Promise<Array<{ id: string; title: string; deletedAt: string }>>;
   /** 安全模式（Batch3-B）：本次启动是否处于安全模式 + 崩溃摘要。 */
@@ -416,9 +424,14 @@ declare global {
 /** 是否存在原生桥：桌面 Electron 与移动 Capacitor **都**注入 window.lakeNative。 */
 export const hasNativeBridge = () => typeof window.lakeNative !== "undefined";
 
+/** 移动端原生「远程图片直接落盘」是否可用（261114 三批；旧 APK 没有该方法）。 */
+export const canDownloadRemoteAsset = (): boolean =>
+  typeof window.lakeNative?.downloadRemoteAsset === "function";
+
 /** Capacitor 原生平台（Android/iOS）判定；桌面 Electron 的 Capacitor.isNativePlatform() 实测为 false，web 为 "web"。 */
-const isCapacitorNative = () =>
+export const isCapacitorNativePlatform = () =>
   (window as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor?.isNativePlatform?.() === true;
+const isCapacitorNative = isCapacitorNativePlatform;
 
 /**
  * 是否桌面（Electron）壳。
@@ -549,6 +562,8 @@ export const native = {
   cleanNoteOrphans: (noteId: string, filenames?: string[]) => api().cleanNoteOrphans(noteId, filenames),
   uploadResource: (input: ResourceUploadInput, noteId: string) => api().uploadResource(input, noteId),
   downloadRemoteResource: (url: string, noteId: string, limits?: { timeoutMs?: number; maxAttempts?: number }) => api().downloadRemoteResource(url, noteId, limits),
+  /** 移动端原生远程下载（旧 APK 没有 → 调用前先 canDownloadRemoteAsset）。 */
+  downloadRemoteAsset: (url: string, noteId: string, limits?: { timeoutMs?: number; maxAttempts?: number }) => api().downloadRemoteAsset!(url, noteId, limits),
   listOrphanAssets: () => api().listOrphanAssets(),
   cleanOrphanAssets: () => api().cleanOrphanAssets(),
   deleteOrphanAsset: (id: number) => api().deleteOrphanAsset(id),
@@ -618,6 +633,7 @@ export const native = {
   portableExportRun: () => api().portableExportRun(),
   onPortableExportProgress: (callback: (progress: PortableExportProgress) => void) => api().onPortableExportProgress(callback),
   revealDataFolder: (kind: import("./types").DataFolderKind) => api().revealDataFolder(kind),
+  boardMaterials: <T = unknown>(request: import("../core/boardMaterialFile").BoardMaterialsRequest): Promise<T> => api().boardMaterials(request) as Promise<T>,
   runS3DeepCleanup: (dryRun: boolean, ignoreRetention = false) => api().runS3DeepCleanup(dryRun, ignoreRetention),
   getTrashReminder: () => api().getTrashReminder(),
   listSyncConflicts: () => api().listSyncConflicts(),

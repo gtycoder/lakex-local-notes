@@ -72,12 +72,22 @@ export class ResourceRepository {
           timeoutMs,
           maxRedirects: DOWNLOAD_MAX_REDIRECTS,
           userAgent: DOWNLOAD_USER_AGENT,
-          referer: normalized,
         });
         try {
           if (response.status < 200 || response.status >= 300) {
             response.abort();
+            // 4xx 里只有 408/429 值得重试；其余（404/410/413…）是地址本身不可用，立刻给可读原因。
+            if (!isRetryableStatus(response.status)) {
+              throw new AppError("InvalidInput", `下载失败: HTTP ${response.status}（该地址不可用，不再重试）`);
+            }
             throw new AppError("Internal", `下载失败: HTTP ${response.status}`);
+          }
+          // 反盗链/登录墙会把图片地址重定向或直接返回一个网页：这不是可重试的网络抖动，
+          // 立刻给出可读原因，别把 HTML 当图片写盘（否则卡片显示坏图且资产被污染）。
+          const contentType = String(response.headers["content-type"] ?? "").toLowerCase();
+          if (contentType.includes("text/html")) {
+            response.abort();
+            throw new AppError("InvalidInput", "目标地址返回的是网页而不是图片（可能被防盗链拦截或需要登录）");
           }
           const declared = response.headers["content-length"];
           const declaredLength = Number(Array.isArray(declared) ? declared[0] : declared || 0);
@@ -118,6 +128,11 @@ export class ResourceRepository {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** 可重试的 HTTP 状态：服务端临时问题（5xx / 408 / 425 / 429）与可能被防盗链临时拦的 403。 */
+export function isRetryableStatus(status: number): boolean {
+  return status === 403 || status === 408 || status === 425 || status === 429 || status >= 500;
 }
 
 function assertImageDimensions(bytes: Buffer): void {

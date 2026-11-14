@@ -12,6 +12,10 @@ import { getOutlineTabsVersion, subscribeOutlineTabs } from "../features/outline
 import type { SidebarMode } from "../components/app/Sidebar";
 import type { SettingsCategory } from "../components/app/SettingsPanel";
 import { loadDefaultSpace } from "../components/model/defaultSpace";
+import { useHiddenDesktopSpaces } from "../hooks/useHiddenDesktopSpaces";
+import { getHiddenSpaces } from "../lib/hiddenSpacesStore";
+import { resolveVisibleSpace } from "../core/hiddenSpaces";
+import { DESKTOP_HIDEABLE_SPACES, DESKTOP_HIDDEN_SPACES_KEY, DESKTOP_PRIMARY_SPACES, isDesktopHideableSpace } from "./spaceVisibility";
 import type { TreeNode } from "../lib/types";
 import { initialOutlineMode, initialOutlineSidebarWidth, initialSidebarMode, initialSidebarWidth, OUTLINE_SIDEBAR_MAX_WIDTH, OUTLINE_SIDEBAR_MIN_WIDTH, SIDEBAR_HOVER_HIDE_DELAY_MS, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH, type DesktopWorkspace, type NoticeState } from "./desktopTypes";
 import { shouldCollapseSidebarOnHoverLeave, shouldKeepSidebarPreviewOpen } from "../components/model/sidebarInteraction";
@@ -63,7 +67,12 @@ export function useDesktopShell(options: UseDesktopShellOptions) {
   // ---- 工作区切换 ----
   /** 启动进入的默认空间 = 设备本地偏好（设置 → 常规 → 默认空间；默认「知识库」）。
    *  取值 = ⌘1–5 那五个一级空间；只是**初始值**，之后仍由用户随时切换（不改既有切换语义）。 */
-  const [desktopWorkspace, setDesktopWorkspace] = useState<DesktopWorkspace>(() => loadDefaultSpace());
+  const hiddenSpacesApi = useHiddenDesktopSpaces();
+  const [desktopWorkspace, setDesktopWorkspace] = useState<DesktopWorkspace>(() => {
+    // 261114：启动落点若指向已关闭空间，回落到第一个可见空间（知识库）。
+    const hidden = getHiddenSpaces(DESKTOP_HIDDEN_SPACES_KEY, DESKTOP_HIDEABLE_SPACES);
+    return resolveVisibleSpace(loadDefaultSpace(), DESKTOP_PRIMARY_SPACES, hidden);
+  });
 
   // ---- 面板与杂项 ----
   const [focusMode, setFocusMode] = useState(false);
@@ -145,6 +154,8 @@ export function useDesktopShell(options: UseDesktopShellOptions) {
   // 工作区切换（原语义：先判同值；离开小记工作区前 confirmLeave）
   const desktopWorkspaceRef = useRef<DesktopWorkspace>("library");
   desktopWorkspaceRef.current = desktopWorkspace;
+  // 261114：关闭 = 只隐藏**入口**，不阻断内部跳转（例如全局搜索打开一篇日记时仍要能进日记空间看它）。
+  // 入口级过滤在菜单/⌘ 快捷键/默认空间/启动落点四处；这里保持原切换语义。
   const switchDesktopWorkspace = useCallback(async (next: DesktopWorkspace) => {
     if (next === desktopWorkspaceRef.current) return;
     if (desktopWorkspaceRef.current === "quick-notes") {
@@ -153,6 +164,14 @@ export function useDesktopShell(options: UseDesktopShellOptions) {
     }
     setDesktopWorkspace(next);
   }, [quickNotesRef]);
+
+  // 261114：设置页里**关闭当前所在空间**时立即回落到知识库。
+  // 只在「隐藏集合变化」时判定（不跟随 desktopWorkspace）：内部跳转仍可进入已隐藏空间（如从搜索打开日记）。
+  useEffect(() => {
+    const current = desktopWorkspaceRef.current;
+    if (!(DESKTOP_PRIMARY_SPACES as readonly string[]).includes(current)) return;
+    if (isDesktopHideableSpace(current) && hiddenSpacesApi.hidden.includes(current)) void switchDesktopWorkspace("library");
+  }, [hiddenSpacesApi.hidden, switchDesktopWorkspace]);
 
   const showNotice = useCallback((text: string) => {
     setNotice({ text });

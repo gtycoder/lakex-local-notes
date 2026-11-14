@@ -7,11 +7,11 @@
  * DOM 侧（事件、inert、滚动对齐）在 `HomePage`，不在这里。
  */
 /**
- * 首层 tab（261109 二改；261110 底部 Dock 五格）。顺序 = 小记 / 知识库 / 日记 / **AI / 标签** ——
- * 桌面五空间（文档/小记/日记/AI 写作/标签）在移动端 1:1 映射（移动的 AI = 助手，已有完整会话历史）；
+ * 首层 tab（261109 二改；261110 底部 Dock 五格）。顺序 = **知识库 / 小记 / 标签 / AI / 日记** ——
+ * 桌面五空间（知识库/小记/标签/AI 写作/日记）在移动端 1:1 映射（移动的 AI = 助手，已有完整会话历史）；
  * DOM 顺序、分页下标、底部 Dock 三处必须同源。
  */
-export const HOME_TABS = ["quick", "library", "diary", "ai", "tags"] as const;
+export const HOME_TABS = ["library", "quick", "tags", "ai", "diary"] as const;
 export type HomeTab = (typeof HOME_TABS)[number];
 
 function clampIndex(index: number, count: number): number {
@@ -19,30 +19,30 @@ function clampIndex(index: number, count: number): number {
   return Math.min(count - 1, Math.max(0, Math.trunc(index)));
 }
 
-/** tab → 分页下标（未知值回落到第一页）。 */
-export function tabIndex(tab: HomeTab): number {
-  const i = HOME_TABS.indexOf(tab);
+/** tab → 分页下标（未知值回落到第一页；`tabs` = 当前可见 tab，261114 可关闭空间后不再恒为 HOME_TABS）。 */
+export function tabIndex(tab: HomeTab, tabs: readonly HomeTab[] = HOME_TABS): number {
+  const i = tabs.indexOf(tab);
   return i < 0 ? 0 : i;
 }
 
 /** 分页下标 → tab（越界夹紧；用于"滚到哪一页就切哪个 tab"）。 */
-export function tabAt(index: number, count: number = HOME_TABS.length): HomeTab {
-  return HOME_TABS[clampIndex(index, Math.min(count, HOME_TABS.length))] ?? HOME_TABS[0];
+export function tabAt(index: number, tabs: readonly HomeTab[] = HOME_TABS): HomeTab {
+  return tabs[clampIndex(index, tabs.length)] ?? HOME_TABS[0];
 }
 
 /** 第 index 页对应的滚动位置（px）；宽度非法时归 0（首帧还没量到宽，不要算出一个假位置）。 */
-export function pagerScrollLeft(index: number, width: number, count: number = HOME_TABS.length): number {
+export function pagerScrollLeft(index: number, width: number, tabs: readonly HomeTab[] = HOME_TABS): number {
   if (!(width > 0) || !Number.isFinite(width)) return 0;
-  return clampIndex(index, Math.min(count, HOME_TABS.length)) * width;
+  return clampIndex(index, tabs.length) * width;
 }
 
 /**
  * 当前滚动位置落在哪一页（吸附完成后用；`scrollLeft` 在回弹/超额时可能是负数或越界 ⇒ 夹紧）。
  * 取整口径 = 四舍五入：过半即视为下一页（与原生吸附的判定方向一致）。
  */
-export function settledIndex(scrollLeft: number, width: number, count: number = HOME_TABS.length): number {
+export function settledIndex(scrollLeft: number, width: number, tabs: readonly HomeTab[] = HOME_TABS): number {
   if (!(width > 0) || !Number.isFinite(width) || !Number.isFinite(scrollLeft)) return 0;
-  return clampIndex(Math.round(scrollLeft / width), Math.min(count, HOME_TABS.length));
+  return clampIndex(Math.round(scrollLeft / width), tabs.length);
 }
 
 
@@ -66,10 +66,13 @@ export interface PagerState {
   interacting: boolean;
   /** 本次 tab 变化由「滚动过半」回写而来 ⇒ 不要再程序化滚一次（会打断惯性/吸附）。 */
   commitByScroll: boolean;
+  /** 当前可见 tab（顺序 = 渲染顺序）。默认 HOME_TABS；关闭日记/AI 后由上层传入子集。 */
+  tabs: readonly HomeTab[];
 }
 
-export function initialPagerState(tab: HomeTab, width = 0): PagerState {
-  return { tab, width, programmatic: false, interacting: false, commitByScroll: false };
+export function initialPagerState(tab: HomeTab, width = 0, tabs: readonly HomeTab[] = HOME_TABS): PagerState {
+  const safeTabs = tabs.length > 0 ? tabs : HOME_TABS;
+  return { tab: safeTabs.includes(tab) ? tab : safeTabs[0], width, programmatic: false, interacting: false, commitByScroll: false, tabs: safeTabs };
 }
 
 /**
@@ -91,7 +94,9 @@ export type PagerEvent =
   /** 顶部 tab 点击或父级路由改 tab（同一 tab 也走这里，用于抑制"自己回写的那一次"）。 */
   | { type: "tab-click"; tab: HomeTab; scrollLeft: number; width: number }
   /** 宽度变化（横竖屏 / 窗口变化）：立即重新对齐；高度变化（键盘）不动横向位置。 */
-  | { type: "resize"; scrollLeft: number; width: number };
+  | { type: "resize"; scrollLeft: number; width: number }
+  /** 可见 tab 集合变化（261114 关闭/开启空间）：夹紧当前 tab 并重新对齐。 */
+  | { type: "tabs"; tabs: readonly HomeTab[]; scrollLeft: number; width: number };
 
 /** DOM 侧唯一的动作（"DOM 只负责 scrollTo"）。 */
 export interface PagerScrollEffect {
@@ -108,14 +113,14 @@ export interface PagerTransition {
 }
 
 /** 对齐目标（宽度非法时 0）；与 pagerScrollLeft 同口径。 */
-function alignTarget(tab: HomeTab, width: number): number {
-  return pagerScrollLeft(tabIndex(tab), width, HOME_TABS.length);
+function alignTarget(tab: HomeTab, width: number, tabs: readonly HomeTab[]): number {
+  return pagerScrollLeft(tabIndex(tab, tabs), width, tabs);
 }
 
 /** scroll → tab 回写：只有"过半且与当前 tab 不同"才提交（避免自触发循环）。 */
 function commitFromScroll(state: PagerState, scrollLeft: number): PagerTransition {
   if (!(state.width > 0)) return { state };
-  const next = tabAt(settledIndex(scrollLeft, state.width, HOME_TABS.length), HOME_TABS.length);
+  const next = tabAt(settledIndex(scrollLeft, state.width, state.tabs), state.tabs);
   if (next === state.tab) return { state };
   return { state: { ...state, tab: next, commitByScroll: true }, commitTab: next };
 }
@@ -124,7 +129,7 @@ export function reducePager(state: PagerState, event: PagerEvent): PagerTransiti
   switch (event.type) {
     case "resize": {
       const next = { ...state, width: event.width };
-      const target = alignTarget(state.tab, event.width);
+      const target = alignTarget(state.tab, event.width, state.tabs);
       // 手指按着时只记宽度，不抢滚动；高度变化（键盘）不改 scrollLeft ⇒ 这条通常直接对齐判定为 no-op。
       // 程序化态由 DOM 执行 scrollTo 后补发 programmatic-start（状态机不假设 DOM 已经照做）。
       if (state.interacting || Math.abs(event.scrollLeft - target) <= 1) return { state: next };
@@ -136,9 +141,17 @@ export function reducePager(state: PagerState, event: PagerEvent): PagerTransiti
       const wasScrollCommit = state.commitByScroll && event.tab === state.tab;
       const next = { ...state, tab: event.tab, width, commitByScroll: false };
       if (wasScrollCommit) return { state: next };
-      const target = alignTarget(event.tab, width);
+      const target = alignTarget(event.tab, width, state.tabs);
       if (state.interacting || Math.abs(event.scrollLeft - target) <= 1) return { state: next };
       return { state: next, effect: { scrollLeft: target, behavior: "smooth" } };
+    }
+    case "tabs": {
+      const tabs = event.tabs.length > 0 ? event.tabs : HOME_TABS;
+      const tab = tabs.includes(state.tab) ? state.tab : tabs[0];
+      const next = { ...state, tabs, tab, width: event.width };
+      const target = alignTarget(tab, event.width, tabs);
+      if (state.interacting || Math.abs(event.scrollLeft - target) <= 1) return { state: next };
+      return { state: next, effect: { scrollLeft: target, behavior: "auto" } };
     }
     case "programmatic-start":
       // DOM 已执行 scrollTo：其后的 scroll 事件只代表这次程序化滚动，不回写 tab。

@@ -18,7 +18,7 @@ describe("默认空间（设备本地偏好）", () => {
     expect(DEFAULT_HOME_TAB).toBe("quick");
     expect(readDefaultHomeTab()).toBe("quick");
     expect(DEFAULT_SPACE_OPTIONS.map((o) => o.value)).toEqual([...HOME_TABS]);
-    expect(DEFAULT_SPACE_OPTIONS.map((o) => o.label)).toEqual(["小记", "知识库", "日记", "AI", "标签"]);
+    expect(DEFAULT_SPACE_OPTIONS.map((o) => o.label)).toEqual(["知识库", "小记", "标签", "AI", "日记"]);
   });
 
   it("写/读往返：四个 tab 都能存住；写回默认值 = 清掉键（不留无意义行）", () => {

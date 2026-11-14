@@ -423,3 +423,43 @@ describe("复制物化图片的尺寸 = 原图尺寸（task-82 / HANDOFF P1 缩�
     expect(unloadedTag).not.toContain("height=");
   });
 });
+
+describe("语雀剪贴板行内链接卡（261114 四批：bookmarkInline → yuqueInline）", () => {
+  const encodeYuqueClipboard = (doc: unknown) =>
+    '<meta charset=\'utf-8\'><ne-clipboard data="' + encodeURIComponent(JSON.stringify(doc)) + '"></ne-clipboard>';
+  const cardDoc = (value: Record<string, unknown>) => ({
+    type: "fragment", name: "#fragment", children: [
+      { type: "element", id: "p1", name: "p", attrs: {}, children: [
+        { type: "card", id: "c1", name: "bookmarkInline", attrs: { value, cardType: "inline" }, cardType: "inline" },
+      ] },
+    ],
+  });
+  const decodePayload = (html: string): { children: Array<{ children: Array<{ name: string; attrs?: { value?: Record<string, unknown> } }> }> } => {
+    const match = /<ne-clipboard[^>]*data="([^"]*)"/.exec(html);
+    expect(match).not.toBeNull();
+    return JSON.parse(decodeURIComponent(match![1]));
+  };
+
+  it("mode=title + src 的行内链接卡 → 改写为内核可识别的 yuqueInline（内容/URL/detail 全保留）", () => {
+    const value = { mode: "title", src: "https://mp.weixin.qq.com/s?x=1", text: "聊聊Netty", detail: { icon: "https://a/icon.ico", title: "聊聊Netty", belong: "微信公众平台" } };
+    const out = upgradePastedHtml(encodeYuqueClipboard(cardDoc(value)));
+    expect(out).not.toContain("bookmarkInline");
+    const payload = decodePayload(out);
+    const card = payload.children[0].children[0];
+    expect(card.name).toBe("yuqueInline");
+    expect(card.attrs?.value).toEqual(value);
+    expect(/^(<meta[^>]*>)?<ne-clipboard data="(.+?)"[^>]*><\/ne-clipboard>/.test(out)).toBe(true);
+  });
+
+  it("缺 mode/src 的 bookmarkInline（无法确定是链接卡）保持原样，不误伤", () => {
+    const html = encodeYuqueClipboard(cardDoc({ text: "纯文本卡" }));
+    expect(upgradePastedHtml(html)).toBe(html);
+  });
+
+  it("非语雀剪贴板 / 坏 JSON 原样返回", () => {
+    const plain = '<p><a href="https://example.com">x</a></p>';
+    expect(upgradePastedHtml(plain)).toBe(plain);
+    const broken = '<meta charset=\'utf-8\'><ne-clipboard data="%7Bnot-json"></ne-clipboard>';
+    expect(upgradePastedHtml(broken)).toBe(broken);
+  });
+});

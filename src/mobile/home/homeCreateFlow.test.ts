@@ -52,7 +52,8 @@ describe("首页新建流（261014）", () => {
   it("底部 Dock = 五格空间（HOME_TABS 单一来源）；＋ 是 Dock 外的中央悬浮按钮", () => {
     const dock = HOME.slice(HOME.indexOf('aria-label="空间"'), HOME.indexOf("</nav>"));
     expect(dock.length).toBeGreaterThan(0);
-    expect(HOME).toContain("HOME_TABS.map((id)");
+    // 261114：Dock 改为按**可见 tab**渲染（关闭日记/AI 后只剩 3–5 格）。
+    expect(HOME).toContain("visibleTabs.map((id)");
     expect(HOME).toContain("HOME_TAB_META[id]");
     // 搜索 / ＋ / 同步都不在 Dock 格子里（分别去了顶栏与悬浮按钮）
     expect(dock).not.toContain("<Search");
@@ -85,9 +86,9 @@ describe("首页新建流（261014）", () => {
     expect(header).toContain("toggleView");
   });
 
-  it("空间顺序单一来源：HOME_TABS = 小记 / 知识库 / 日记 / AI / 标签（Dock 与分页同源）", () => {
-    expect(TAB_PAGER).toContain('export const HOME_TABS = ["quick", "library", "diary", "ai", "tags"] as const;');
-    expect(HOME).toContain("HOME_TABS.map((id)");
+  it("空间顺序单一来源：HOME_TABS = 知识库 / 小记 / 标签 / AI / 日记（261114 与桌面同序，Dock 与分页同源）", () => {
+    expect(TAB_PAGER).toContain('export const HOME_TABS = ["library", "quick", "tags", "ai", "diary"] as const;');
+    expect(HOME).toContain("visibleTabs.map((id)");
   });
 
   it("Dock 几何：五列等分 + 标签 nowrap/省略 + FAB 圆形", () => {
@@ -166,7 +167,7 @@ describe("首页新建流（261014）", () => {
     // HomePage 只接线；四份 ref 镜像（interacting/commitByScroll/programmatic/timer）与 alignStage 已删除。
     expect(TAB_PAGER).toContain("export function reducePager");
     expect(PAGER).toContain("reducePager(");
-    expect(HOME).toContain("useTabPager({ tab, onTabChange })");
+    expect(HOME).toContain("useTabPager({ tab, tabs: visibleTabs, onTabChange })");
     for (const dead of ["interactingRef", "commitByScrollRef", "programmaticRef", "programmaticTimerRef", "alignStage", "settledIndex(", "pagerScrollLeft("]) {
       expect(HOME, "HomePage 不再自己做分页判据：" + dead).not.toContain(dead);
     }

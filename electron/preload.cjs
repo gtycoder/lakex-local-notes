@@ -193,6 +193,7 @@ contextBridge.exposeInMainWorld("lakeNative", {
   readAppLog: (opts) => invoke("read_app_log", opts),
   getSystemInfo: () => invoke("get_system_info"),
   revealDataFolder: (kind) => invoke("reveal_data_folder", kind),
+  boardMaterials: (request) => invoke("board_materials", request),
   // 261109 更新中心（桌面）：状态/检查/下载/打开安装包/打开下载页/设置/忽略版本；进度与状态走 update-state 事件。
   updateGetState: () => invoke("update_get_state"),
   updateCheck: () => invoke("update_check"),
