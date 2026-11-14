@@ -58,6 +58,7 @@ const USAGE = [
   "  --scenarios A,B           选择场景（默认 A,B；all = 全部 2 端场景 + K 需 --instances 3）",
   "  --instances 2|3           桌面实例数（默认 2；K 需要 3）",
   "  --prefix <p>              覆盖唯一前缀（默认 audit-<UTC时间>-<随机>；非 audit- 前缀需 --allow-unsafe-prefix）",
+  "  --base-prefix <p>         对象根前缀（如 lakex-notes-dev3；会拼成 <base>/<prefix>，清理只动本前缀）",
   "  --loopback                用本机内存 S3（scripts/multi-end-sync/loopback-s3.mjs）跑冒烟，不需要真实凭据",
   "  --env-file <path>         从 env 文件读 S3_*（也可用 S3_ENV_FILE；文件不得入库）",
   "  --cdp-base <n>            桌面 CDP 起始端口（默认 9242，实例依次 +1）",
@@ -104,6 +105,7 @@ function parseArgs(argv) {
     scenarios: "A,B",
     instances: 2,
     prefix: null,
+    basePrefix: null,
     envFile: null,
     cdpBase: DEFAULT_CDP_BASE,
     assetBase: DEFAULT_ASSET_BASE,
@@ -132,6 +134,7 @@ function parseArgs(argv) {
       case "--scenarios": opts.scenarios = takeValue(i, "--scenarios"); i++; break;
       case "--instances": opts.instances = Number(takeValue(i, "--instances")); i++; break;
       case "--prefix": opts.prefix = takeValue(i, "--prefix"); i++; break;
+      case "--base-prefix": opts.basePrefix = takeValue(i, "--base-prefix"); i++; break;
       case "--env-file": opts.envFile = takeValue(i, "--env-file"); i++; break;
       case "--cdp-base": opts.cdpBase = Number(takeValue(i, "--cdp-base")); i++; break;
       case "--asset-base": opts.assetBase = Number(takeValue(i, "--asset-base")); i++; break;
@@ -198,13 +201,25 @@ function resolveCreds(opts) {
   };
 }
 
-function validatePrefix(opts) {
-  const prefix = opts.prefix || "audit-" + stampOf() + "-" + Math.random().toString(36).slice(2, 6);
-  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,100}$/.test(prefix)) throw new Error("前缀非法（只允许字母/数字/._-，≤101 字符）: " + prefix);
-  if (!prefix.startsWith("audit-") && !opts.allowUnsafePrefix) {
-    throw new Error("拒绝清理非 audit- 前缀: " + prefix + "（确实要删这个前缀请加 --allow-unsafe-prefix）");
+function normalizeBasePrefix(raw) {
+  const value = String(raw || "").trim().replace(/^\/+|\/+$/g, "");
+  if (!value) return "";
+  if (!/^[A-Za-z0-9][A-Za-z0-9._/-]{0,300}$/.test(value)) throw new Error("base-prefix 非法（只允许字母/数字/._- 与 /）: " + value);
+  const segments = value.split("/");
+  if (segments.some((segment) => !segment || segment === "." || segment === "..")) {
+    throw new Error("base-prefix 含空段或 . / ..: " + value);
   }
-  return prefix;
+  return value;
+}
+
+function validatePrefix(opts) {
+  const leaf = opts.prefix || "audit-" + stampOf() + "-" + Math.random().toString(36).slice(2, 6);
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,100}$/.test(leaf)) throw new Error("前缀非法（只允许字母/数字/._-，≤101 字符）: " + leaf);
+  if (!leaf.startsWith("audit-") && !opts.allowUnsafePrefix) {
+    throw new Error("拒绝清理非 audit- 前缀: " + leaf + "（确实要删这个前缀请加 --allow-unsafe-prefix）");
+  }
+  const base = normalizeBasePrefix(opts.basePrefix || process.env.S3_BASE_PREFIX || "");
+  return base ? base + "/" + leaf : leaf;
 }
 
 // ---------------------------------------------------------------------------

@@ -52,7 +52,10 @@ S3_ENV_FILE=/tmp/lake5/creds.env node scripts/multi-end-sync/regression.mjs --sc
 
 # 5) 真实桶全量（2 端场景）+ 3 实例的 K
 S3_ENV_FILE=/tmp/lake5/creds.env node scripts/multi-end-sync/regression.mjs --scenarios all
-S3_ENV_FILE=/tmp/lake5/creds.env node scripts/multi-end-sync/regression.mjs --scenarios all --instances 3
+S3_ENV_FILE=/tmp/lake5/creds.env node scripts/multi-end-sync/regression.mjs --scenarios K --instances 3
+
+# 6) 指定对象根前缀（例如用户桶里的项目前缀；清理只动 <base>/<唯一前缀>）
+S3_ENV_FILE=/tmp/lake5/creds.env node scripts/multi-end-sync/regression.mjs --scenarios all --base-prefix lakex-notes-dev3
 
 # 6) 指定前缀 / 保留现场排障
 node scripts/multi-end-sync/regression.mjs --loopback --prefix audit-my-check-001 --keep
@@ -128,22 +131,23 @@ Node/Electron 版本），失败时打印路径。`--logs-dir` 可指定。
 本入口需要任意唯一前缀 + 完整 PUT/GET/List/Delete，因此另写了 `loopback-s3.mjs`（通用内存 S3 子集）。
 两者的用途都只是「本机冒烟」；正式验收仍必须真实桶。
 
-## 本机验证状态（261114，未跑真实桶）
+## 本机验证状态（261114）
 
 - `node --check scripts/multi-end-sync/regression.mjs` / `loopback-s3.mjs`：通过；
 - `--list`、`--dry-run`（含 `--scenarios all --instances 3 --loopback`）：通过（exit 0；无凭据只报 warn）；
-- `--loopback` 冒烟（当时 dev server 1421 复用）：
-  - `--scenarios A,B` → PASS，21/21 断言，前缀 12 对象删除后 residual=0；
-  - `--scenarios C,D,E,F,I,J` → PASS，73/73 断言，residual=0；
-  - `--scenarios all`（A,B,C,D,E,F,I,J 一次跑完）→ PASS，94/94 断言，39 对象删除后 residual=0；
-  - `--scenarios K --instances 3` → PASS，14/14 断言，residual=0；
+- `--loopback` 冒烟（dev server 1421 复用）：A,B 21/21、其余 73/73、全量 94/94、K 14/14，全部 residual=0；
 - 失败路径实测：占用 9242 → exit 2、清理 residual=0；SIGINT 中断 → exit 130、清理 residual=0；
-- **真实桶未执行**（本机无 S3 凭据）。真实桶执行命令见上文「命令」第 4/5 条，结论需补在本文件或交接记录里。
+- **真实七牛桶（261114 实测，PASS）**：endpoint `https://s3.cn-north-1.qiniucs.com` / region `cn-north-1` / bucket `local-lake-hebei`，对象根前缀 `lakex-notes-dev3`：
+  - `--scenarios A,B --base-prefix lakex-notes-dev3` → **21/21 PASS**，前缀 12 对象删除后 residual=0；
+  - `--scenarios all --base-prefix lakex-notes-dev3` → **94/94 PASS**（A–F/I/J），39 对象删除后 residual=0；
+  - `--scenarios K --instances 3 --base-prefix lakex-notes-dev3` → **14/14 PASS**，9 对象删除后 residual=0；
+  - 收尾对整个 `lakex-notes-dev3/` ListObjectsV2 = **0 对象**（凭据用后删除，不落仓库）；
+  - 结果：真实桶桌面多实例 A–K 全部通过；**移动端/真机仍不在本入口**（`--with-mobile` 明确未实现）。
 
 ## 数据安全（务必遵守）
 
 - 测试前**不要**动两个数据目录：正式 `~/Library/Application Support/lakex-local-notes`、开发 `...-dev`；
   本入口只用 `--userdata-root`（默认 /tmp）下新建的隔离目录。
 - kill Electron **只 kill 本脚本 spawn 的 PID**；禁 `pkill -f Electron` / `killall`（会误伤其它应用与 DSH 宿主）。
-- 真实桶只操作本脚本唯一前缀；结束必须 0 残留。真机测试前备份/测试后还原（见 21 号文档 §0）。
+- 真实桶只操作本脚本唯一前缀（可加 `--base-prefix` 限定对象根，如 `lakex-notes-dev3`）；结束必须 0 残留。真机测试前备份/测试后还原（见 21 号文档 §0）。
 - 本目录脚本不写仓库文件、不提交；凭据永不入库。
