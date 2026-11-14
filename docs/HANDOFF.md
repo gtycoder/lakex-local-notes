@@ -244,6 +244,8 @@
 - 数据：开发 `~/Library/Application Support/lakex-local-notes-dev`；正式 `.../lakex-local-notes`（**禁止触碰**）；日志在对应目录 `logs/`。
 - **261112 R1 设备验收**：真机 Xiaomi 2109119BC（Android 14，serial 50950385）+ 5554 模拟器已装 R1 APK；Q04 回收站文档只读预览、Q22 SecureStore→SecretBox 跨重启真机通过；快照矩阵（手机 10 态 / 平板 10 态 / 多维表 3 态 / 23 屏 / 窗口矩阵）已重烤并两轮 0 差异；Q03/Q07/Q05 观感项仍待人工点收；桌面 42 态已重烤（证据 [docs/audit-261112/12-device-check.md](audit-261112/12-device-check.md)）。
 
+**v1.1.4 已发**（261114）：tag `v1.1.4`（注解，tag object `de37abe6` → commit `f2c44c1b`）已双推 Gitee/GitHub；release workflow run **43564917249** 由 tag 触发：Windows/Android/macOS 三个构建 job **全 success**；GitHub Release **v1.1.4** 已发布（2026-11-14T06:15:35Z），8 资产：`LakexLocalNotes-1.1.4-android-release.apk` / `-arm64.dmg` / `-x64.dmg` / `-arm64.zip` / `-x64.zip` / `LakexLocalNotes.Setup.1.1.4.exe` / `latest.json` / `release-body.md`；`latest.json.version = 1.1.4`。`Publish Release` job 在 GitHub Release 发布后仍进行（Gitee 镜像/收尾，可能耗时），不影响 GitHub 产物。Android 本机 debug APK 已装 `lake_mobile`（versionName 1.1.4 / versionCode 11104）并启动。
+
 **发布与推送事实**
 
 - **v1.1.3 已发**（261114）：tag `v1.1.3`（注解，commit `12b5f7d3`）→ Release workflow run **43405437257**；macOS/Android/Windows 三个构建 job 全 success，GitHub Release **已发布**（2026-11-13T10:04:40Z）含 8 资产：`LakexLocalNotes-1.1.3-arm64.dmg` / `-x64.dmg` / `-arm64.zip` / `-x64.zip` / `LakexLocalNotes.Setup.1.1.3.exe` / `LakexLocalNotes-1.1.3-android-release.apk` / `latest.json` / `release-body.md`；`Publish Release` 收尾 job 当时仍 in_progress（Gitee 镜像/收尾），不影响 GitHub 产物。
@@ -315,7 +317,7 @@
 
 **当前批次（261114 收口：设备 / 10k+100k 大库 / 2GB 便携包 / S3 多端回归）待办**
 
-- **发版 v1.1.4**：收口提交 + 注解 tag + 双推后确认 release workflow（产物/更新清单）；发版前按 RELEASE.md §七.4 核 secrets。
+- **发版 v1.1.4 已完成**（tag/commit/workflow/资产见 §1「发布与推送事实」）；剩余只需等 Publish job 的 Gitee 镜像收尾并核对（GitHub Release 已发布）。
 - **真机 2GB 便携包端到端导入未执行**：本批已验证导出/结构/Android 上限兼容（MAX_ENTRIES 250k，110,005 条 pass），但系统文件选择器无法在 CDP 自动化；需人工在设备走「设置→备份与恢复→便携包导入」，并确认 staging+payload 磁盘（约 4GiB 可用）。
 - **S3 真实桶多端回归未执行**：本机无 S3 凭据；有凭据方运行 `S3_ENV_FILE=<creds> node scripts/multi-end-sync/regression.mjs --scenarios all --instances 3` 并记录；`--with-mobile` 明确未实现，移动端仍按 [21 号报告](audit-261112/21-s3-multi-end-mobile.md) 手工。
 - **大库观察项**：桌面目录树 10k 行未虚拟化（约 20.1 万 DOM、renderer heap 313–317MB）本次仍可用，但继续增长需虚拟化/分页；热轮搜索曾出现 1.9s（冷轮 445ms），重跑确认是否抖动。
