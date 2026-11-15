@@ -1,0 +1,32 @@
+/* 清爽（浅色）· 261116 用户点单「试试 DeepSeek 网页版那种观感」。
+ *
+ * 定位：**只换表面与边界**的浅色主题，不覆盖几何（控件高/圆角档/0.5px 边一律沿用 base.css）。
+ * 取值方向 = 冷调中性面（偏蓝的灰）+ 更柔的两层阴影；主色仍是本仓的墨蓝 --lake-accent，
+ * 不引入任何第三方品牌色。默认（light）继续是 :root 的 canon，本主题只在 [data-theme="chat"] 下生效。
+ */
+[data-theme="chat"] {
+  color-scheme: light;
+  /* 表面：窗底更浅更冷，面板保持纯白 */
+  --lake-bg-window: #eef1f6;
+  --lake-bg-panel: #ffffff;
+  --lake-bg-canvas: #ffffff;
+  --lake-bg-block: #f2f5f9;
+  --lake-bg-raised: #ffffff;
+  --lake-bg-sunken: #eef1f6;
+  --lake-bg-subtle: #f8fafc;
+  --lake-bg-hover: #e9eef6;
+  --lake-bg-press: #dee6f1;
+  /* 文字：比 light 略冷半档 */
+  --lake-text-1: #1b1f27;
+  --lake-text-2: #47515f;
+  --lake-text-3: #5b6573;
+  --lake-text-4: #8f97a5;
+  /* 边界：比 light 更浅、更冷（0.5px 发丝线在这个底上更像一道细缝） */
+  --lake-border-1: #dde3ec;
+  --lake-border-2: #ecf0f5;
+  --lake-border-strong: #c2cbd9;
+  /* 阴影：靠「远层更大更淡」代替描边（对话面观感的关键） */
+  --lake-shadow-card: 0 1px 2px rgba(16, 24, 40, .05), 0 8px 24px -12px rgba(16, 24, 40, .12);
+  --lake-shadow-popover: 0 4px 14px -4px rgba(16, 24, 40, .12), 0 16px 36px -16px rgba(16, 24, 40, .18);
+  --lake-shadow-dialog: 0 10px 24px -10px rgba(16, 24, 40, .16), 0 24px 56px -24px rgba(16, 24, 40, .20);
+}

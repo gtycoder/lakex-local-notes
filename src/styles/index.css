@@ -27,6 +27,7 @@
 @import "./themes/light.css" layer(tokens);
 @import "./themes/dark.css" layer(tokens);
 @import "./themes/warm.css" layer(tokens);
+@import "./themes/chat.css" layer(tokens);
 
 /* ---- 第三方（内核正文 130 万字符 + 画板） ---- */
 @import "@dlient/lakex-doc-react/style.css" layer(legacy);

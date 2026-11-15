@@ -1,5 +1,5 @@
 /** 主题 id 窄类型（新增主题时同步这里与 LAKE_THEMES） */
-export type LakeThemeId = "light" | "dark" | "warm";
+export type LakeThemeId = "light" | "dark" | "warm" | "chat";
 
 /** 主题注册表（主题即数据）：新增主题 = 加一个 CSS 文件 + 这里加一项，不改任何组件代码。 */
 export interface LakeTheme {
@@ -16,6 +16,8 @@ export const LAKE_THEMES: LakeTheme[] = [
   { id: "light", label: "中性（浅色）", colorScheme: "light", preview: { bg: "#f4f5f7", panel: "#ffffff", accent: "#5b6f96", text: "#17191c" } },
   { id: "dark", label: "深色", colorScheme: "dark", preview: { bg: "#1a1b1e", panel: "#25262b", accent: "#a6b4d3", text: "#e3e4e6" } },
   { id: "warm", label: "暖色（浅色）", colorScheme: "light", preview: { bg: "#f6f7f8", panel: "#ffffff", accent: "#5b6f96", text: "#1a1d21" } },
+  // 261116 用户点单：冷调中性面 + 更柔的远层阴影（对话面观感的来源）；主色仍是本仓墨蓝。
+  { id: "chat", label: "清爽（浅色）", colorScheme: "light", preview: { bg: "#eef1f6", panel: "#ffffff", accent: "#3f5fa0", text: "#1b1f27" } },
 ];
 
 export const DEFAULT_THEME_ID: LakeThemeId = "light";
