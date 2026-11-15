@@ -20,7 +20,7 @@ import { listSummaryOf, useQuickNoteList } from "./useQuickNoteList";
 import { useQuickNoteFilters, type QuickNotesView } from "./useQuickNoteFilters";
 import { useQuickNoteDraftSave } from "./useQuickNoteDraftSave";
 import { useConfirm } from "../../hooks/useConfirm";
-import { Dialog } from "../../components/ui/Overlay";
+import { NativeDialog } from "../../components/ui/Overlay";
 import { QuickNoteComposer } from "../../components/app/QuickNoteComposer";
 import { QuickNoteCard } from "../../components/app/QuickNoteCard";
 import { isImeConfirming } from "../../core/ime";
@@ -720,7 +720,7 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
     />
     {confirmElement}
     {convertItems && convertItems.length > 0 && (
-      <Dialog onDismiss={() => { if (!saving) setConvertItems(null); }} label={convertItems.length > 1 ? `转为正式文档（${convertItems.length} 篇）` : "转为正式笔记"} className="quick-note-convert-dialog">
+      <NativeDialog onDismiss={() => { if (!saving) setConvertItems(null); }} label={convertItems.length > 1 ? `转为正式文档（${convertItems.length} 篇）` : "转为正式笔记"} className="quick-note-convert-dialog">
         <div className="ln-dialog__body">
           <h3>{convertItems.length > 1 ? `转为正式文档（${convertItems.length} 篇）` : "转为正式笔记"}</h3>
           <p>选择一个笔记本。{convertItems.length > 1 ? `${convertItems.length} 篇小记将依次插入该笔记本的最顶部；` : "新文档将插入其中的最顶部；"}转化完成后，小记将从时间线移除。</p>
@@ -730,7 +730,7 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
           </div>
           <footer><button className="ln-btn ln-btn--ghost quick-note-convert-cancel" disabled={saving} onClick={() => setConvertItems(null)}>取消</button></footer>
         </div>
-      </Dialog>
+      </NativeDialog>
     )}
   </section>;
 });

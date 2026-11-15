@@ -5,7 +5,7 @@
  */
 import { useRef, useState } from "react";
 import { Pencil, X } from "lucide-react";
-import { Dialog } from "../../components/ui/Overlay";
+import { NativeDialog } from "../../components/ui/Overlay";
 import { isImeConfirming } from "../../core/ime";
 
 function splitExt(name: string): { base: string; ext: string } {
@@ -25,7 +25,7 @@ export function AssetRenameDialog({ initial, onCancel, onConfirm }: {
   const inputRef = useRef<HTMLInputElement>(null);
 
   return (
-    <Dialog open onDismiss={onCancel} label="重命名附件" className="asset-rename-dialog" initialFocus={inputRef}>
+    <NativeDialog open onDismiss={onCancel} label="重命名附件" className="asset-rename-dialog" initialFocus={inputRef}>
         <header className="ln-dialog__head">
           <Pencil size={15} />
           <h3 className="ln-dialog__title">重命名附件</h3>
@@ -50,6 +50,6 @@ export function AssetRenameDialog({ initial, onCancel, onConfirm }: {
             <button className="ln-btn ln-btn--primary" disabled={!canConfirm} onClick={() => canConfirm && onConfirm(trimmed + ext)}>确定</button>
           </footer>
         </div>
-    </Dialog>
+    </NativeDialog>
   );
 }

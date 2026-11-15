@@ -13,7 +13,7 @@
  * 键盘：↑/↓ 在可选行间移动选中（自动滚进视野）、Enter 确认、Tab 可到展开箭头。
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Dialog } from "../ui/Overlay";
+import { NativeDialog } from "../ui/Overlay";
 import { Book, ChevronRight, Folder, Search } from "lucide-react";
 import type { TreeNode } from "../../lib/types";
 import { buildMoveTreeRows, initialMoveTreeExpanded, visibleMoveTreeRows, type MoveTreeRow } from "../../core/moveTreeModel";
@@ -126,7 +126,7 @@ export function MoveTargetTreeDialog({
   };
 
   return (
-    <Dialog open onDismiss={() => { if (!busy) onClose(); }} label={title} className="move-target-tree-dialog">
+    <NativeDialog open onDismiss={() => { if (!busy) onClose(); }} label={title} className="move-target-tree-dialog">
       <div className="ln-dialog__head"><span className="ln-dialog__title">{title}</span></div>
       <div className="ln-dialog__body" onKeyDown={onBodyKeyDown}>
         {description && <p className="move-target-tree-dialog__hint">{description}</p>}
@@ -193,6 +193,6 @@ export function MoveTargetTreeDialog({
           {busy ? "处理中…" : confirmLabel}
         </button>
       </div>
-    </Dialog>
+    </NativeDialog>
   );
 }

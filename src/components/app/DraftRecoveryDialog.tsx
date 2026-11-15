@@ -1,7 +1,7 @@
 import { History, RotateCcw, Trash, X } from "lucide-react";
 import type { DraftJournalEntry } from "../../lib/types";
 import { formatDateTime } from "../../core/dateFormat";
-import { Dialog } from "../ui/Overlay";
+import { NativeDialog } from "../ui/Overlay";
 
 export function DraftRecoveryDialog({ entries, onRestore, onDiscard, onClose }: {
   entries: DraftJournalEntry[];
@@ -12,7 +12,7 @@ export function DraftRecoveryDialog({ entries, onRestore, onDiscard, onClose }: 
   if (entries.length === 0) return null;
   // 浮层统一走标准 <Dialog>（.ln-scrim + .ln-dialog 表面 + 外点/Esc/焦点），不再手写遮罩。
   return (
-    <Dialog onDismiss={onClose} label="发现未保存草稿" className="draft-recovery-dialog">
+    <NativeDialog onDismiss={onClose} label="发现未保存草稿" className="draft-recovery-dialog">
       <header className="ln-dialog__head">
         <History size={16} />
         <h2 className="ln-dialog__title">发现未保存草稿</h2>
@@ -34,6 +34,6 @@ export function DraftRecoveryDialog({ entries, onRestore, onDiscard, onClose }: 
         </div>
         {entries.length > 5 && <p className="draft-recovery-more">还有 {entries.length - 5} 个草稿待处理</p>}
       </div>
-    </Dialog>
+    </NativeDialog>
   );
 }

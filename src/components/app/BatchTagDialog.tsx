@@ -6,7 +6,7 @@
  */
 import { useMemo, useState } from "react";
 import { Plus, Tag as TagIcon } from "lucide-react";
-import { Dialog } from "../ui/Overlay";
+import { NativeDialog } from "../ui/Overlay";
 import type { QuickNoteTag } from "../../lib/types";
 import { getNativeErrorMessage } from "../../lib/nativeErrors";
 import { isValidBatchTagName, normalizeBatchTagName, toggleBatchTagSelection } from "../../core/batchTagging";
@@ -56,7 +56,7 @@ export function BatchTagDialog({ open, count, tags, loading = false, error = nul
   };
 
   return (
-    <Dialog open onDismiss={() => { if (!busy) onClose(); }} label={"给 " + count + " 项添加标签"} className="batch-tag-dialog">
+    <NativeDialog open onDismiss={() => { if (!busy) onClose(); }} label={"给 " + count + " 项添加标签"} className="batch-tag-dialog">
       <div className="ln-dialog__head">
         <span className="ln-dialog__title">给 {count} 项添加标签</span>
       </div>
@@ -95,6 +95,6 @@ export function BatchTagDialog({ open, count, tags, loading = false, error = nul
         <button type="button" className="ln-btn ln-btn--primary" disabled={busy || selected.length === 0}
           onClick={() => onConfirm(selected)}>{busy ? "处理中…" : "添加"}</button>
       </div>
-    </Dialog>
+    </NativeDialog>
   );
 }

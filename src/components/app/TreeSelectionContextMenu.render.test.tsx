@@ -7,6 +7,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../ui/Overlay", () => ({
   Menu: ({ children }: { children: ReactNode }) => createElement("div", { role: "menu" }, children),
+  Dialog: ({ children }: { children: ReactNode }) => createElement("div", { role: "dialog" }, children),
+  NativeDialog: ({ children }: { children: ReactNode }) => createElement("div", { role: "dialog" }, children),
 }));
 
 import { TreeSelectionContextMenu } from "./TreeSelectionContextMenu";

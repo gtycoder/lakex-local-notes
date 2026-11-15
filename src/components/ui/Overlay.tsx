@@ -338,7 +338,14 @@ export function NativeDialog({ open = true, onDismiss, label, className, surface
       const i = openOverlayStack.findIndex((item) => item.id === overlayId);
       if (i >= 0) openOverlayStack.splice(i, 1);
       unlock();
-      if (el?.open) el.close();
+      if (el?.open) {
+        // jsdom 30 没有 HTMLDialogElement.close（实测），老 WebView 也可能缺 ⇒ 退化成摘 open 属性。
+        if (typeof el.close === "function") {
+          try { el.close(); } catch { /* 已不可关闭 */ }
+        } else {
+          el.removeAttribute("open");
+        }
+      }
       const previous = restoreFocusRef.current;
       if (previous?.isConnected) previous.focus({ preventScroll: true });
     };
@@ -351,9 +358,20 @@ export function NativeDialog({ open = true, onDismiss, label, className, surface
     const onPointerDown = (event: PointerEvent) => { if (event.target === el) onDismiss(); };
     el.addEventListener("cancel", onCancel);
     el.addEventListener("pointerdown", onPointerDown);
+    // 老 WebView（无 showModal）不会发 cancel ⇒ 补一条 document Esc 兜底，保持「Esc 能关」的旧语义。
+    const needsEscFallback = typeof el.showModal !== "function";
+    const onEsc = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented || event.isComposing) return;
+      event.preventDefault();
+      onDismiss();
+    };
+    // 必须挂**冒泡**（不是 capture）：输入框自己的 Esc 处理器会先 preventDefault（如行内重命名 = 取消改名），
+    // capture 阶段跑在我们前面会看到未 preventDefault 的事件 ⇒ 同一次 Esc 既取消改名又关弹窗（双触发）。
+    if (needsEscFallback) document.addEventListener("keydown", onEsc);
     return () => {
       el.removeEventListener("cancel", onCancel);
       el.removeEventListener("pointerdown", onPointerDown);
+      if (needsEscFallback) document.removeEventListener("keydown", onEsc);
     };
   }, [open, onDismiss]);
 

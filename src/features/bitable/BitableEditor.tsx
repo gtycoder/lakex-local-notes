@@ -15,7 +15,7 @@ import type { CSSProperties, DragEvent, KeyboardEvent as ReactKeyboardEvent, Poi
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { EditorHostProps } from "../editor/editorHost";
 import { writeLocalStorage } from "../../lib/localStorageSafe";
-import { Dialog, Menu } from "../../components/ui/Overlay";
+import { Menu, NativeDialog } from "../../components/ui/Overlay";
 import { ArrowUpDown, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronsRight, Copy, Download, Eye, EyeOff, FileUp, GripVertical, ListFilter, Lock, LockOpen, MoreHorizontal, PaintBucket, Pencil, Plus, Rows2, Rows3, Rows4, Search, Settings2, Sparkles, Trash2, TriangleAlert, X } from "lucide-react";
 import type { BitableAttachment, BitableField, BitableFieldType, BitableFilterJoin, BitableFilterNode, BitableGroupRule, BitableRecord, BitableSortMode, BitableStatType, BitableTable, BitableView } from "../../core/bitableDoc.js";
 import { BITABLE_OPTION_COLORS, BITABLE_PROGRESS_MAX, BITABLE_RATING_MAX, BITABLE_ROW_HEIGHT_OPTIONS, BITABLE_STAT_LABEL, applySortMode, applyViewToRecords, bitableDisplayValue, bitableFieldText, bitableFieldValue, bitableFillBackgroundTokens, bitableFilterRuleCount, bitableRowHeightPx, bitableViewNeedsClock, buildBitableFillProjection, changeSortField, createBitableField, createRelationPair, defaultRecordValues, duplicateValues, groupRecords, isImplementedViewType, isKnownFieldType, isRelationFieldType, kanbanGroupField, newBitableId, orderedAllTableFields, orderedTableFields, sortModeLabel, sortModeOf, sortModesForField, statDisplayText, statForField, statsForField, unpairRelationFields } from "../../core/bitableDoc.js";
@@ -1428,7 +1428,7 @@ export function BitableEditor({ noteId, content, visible, readOnly: readOnlyProp
       })()}
 
       {viewEditor && (
-        <Dialog open onDismiss={() => setViewEditor(null)} label="重命名视图" className="bt-dialog">
+        <NativeDialog open onDismiss={() => setViewEditor(null)} label="重命名视图" className="bt-dialog">
           <header className="ln-dialog__head"><h3 className="ln-dialog__title">重命名视图</h3></header>
           <div className="ln-dialog__body">
             <input ref={viewNameRef} autoFocus className="bt-input" readOnly={readOnly} defaultValue={activeTable.views.find((v) => v.id === viewEditor)?.name ?? ""}
@@ -1442,7 +1442,7 @@ export function BitableEditor({ noteId, content, visible, readOnly: readOnlyProp
               renameView(viewEditor, viewNameRef.current?.value ?? "");
             }}>确定</button>
           </div>
-        </Dialog>
+        </NativeDialog>
       )}
 
       {rowCtx && (

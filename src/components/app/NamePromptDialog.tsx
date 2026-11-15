@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Dialog } from "../ui/Overlay";
+import { NativeDialog } from "../ui/Overlay";
 import { InlineRenameInput } from "../ui/InlineRenameInput";
 
 /**
@@ -46,7 +46,7 @@ export function NamePromptDialog({
     void onSubmit(trimmed);
   };
   return (
-    <Dialog open={open} onDismiss={() => { if (!busy) onClose(); }} label={title} className="name-prompt-dialog" initialFocus={inputRef}>
+    <NativeDialog open={open} onDismiss={() => { if (!busy) onClose(); }} label={title} className="name-prompt-dialog" initialFocus={inputRef}>
       <div className="ln-dialog__head"><span className="ln-dialog__title">{title}</span></div>
       <div className="ln-dialog__body">
         <span className="ln-input">
@@ -71,6 +71,6 @@ export function NamePromptDialog({
           {busy ? "创建中…" : submitText}
         </button>
       </div>
-    </Dialog>
+    </NativeDialog>
   );
 }

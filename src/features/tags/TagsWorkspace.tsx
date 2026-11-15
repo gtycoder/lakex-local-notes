@@ -1,6 +1,6 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Check, FileText, GripVertical, MoreVertical, Merge, Pencil, Plus, RefreshCw, StickyNote, Tag as TagIcon, Trash, X } from "lucide-react";
-import { Dialog, Menu } from "../../components/ui/Overlay";
+import { Menu, NativeDialog } from "../../components/ui/Overlay";
 import { InlineRenameInput } from "../../components/ui/InlineRenameInput";
 import { NamePromptDialog } from "../../components/app/NamePromptDialog";
 import { usePopoverPosition } from "../../hooks/usePopoverPosition";
@@ -631,7 +631,7 @@ export function TagsWorkspace(props: TagsWorkspaceProps) {
         </Menu>
       )}
       {mergeSource && (
-        <Dialog open onDismiss={() => setMergeSource(null)} label="合并标签" className="tags-merge-dialog">
+        <NativeDialog open onDismiss={() => setMergeSource(null)} label="合并标签" className="tags-merge-dialog">
           <div className="ln-dialog__body">
             <h3>把「{mergeSource.name}」合并到…</h3>
             <p className="tags-merge-dialog__hint">合并后源标签消失；文档与小记会保留，引用改到目标标签。</p>
@@ -647,7 +647,7 @@ export function TagsWorkspace(props: TagsWorkspaceProps) {
               <button type="button" className="ln-btn ln-btn--ghost" onClick={() => setMergeSource(null)}>取消</button>
             </footer>
           </div>
-        </Dialog>
+        </NativeDialog>
       )}
       {confirmElement}
     </section>

@@ -79,7 +79,9 @@ describe("NamePromptDialog", () => {
   it("Esc / 取消按钮 ⇒ onClose，不创建", () => {
     const props = render();
     typeInto(input(), "草稿");
-    act(() => { input().dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); });
+    // 真实 Esc 的 keydown 是 cancelable 的：行内输入会先 preventDefault（取消改名），
+    // 原生对话框的 Esc 兜底据此放行（少了 cancelable 就会双触发，jsdom 默认 false）。
+    act(() => { input().dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })); });
     expect(props.onClose).toHaveBeenCalledTimes(1);
     expect(props.onSubmit).not.toHaveBeenCalled();
     const props2 = render();

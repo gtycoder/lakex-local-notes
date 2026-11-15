@@ -9,7 +9,11 @@ const chat = vi.hoisted(() => ({ run: vi.fn(), cancel: vi.fn() }));
 vi.mock("../../lib/ai", () => ({ newAiRequestId: () => "doc-test", runAiChat: chat.run, cancelAiChat: chat.cancel }));
 vi.mock("../../lib/native", () => ({ native: nativeMock }));
 // 只隔离浮层定位与 IPC；面板状态、开关、输入与发送全部跑真实组件。
-vi.mock("../../components/ui/Overlay", () => ({ Popover: ({ open, children }: { open: boolean; children: ReactNode }) => open ? children : null }));
+vi.mock("../../components/ui/Overlay", () => ({
+  Popover: ({ open, children }: { open: boolean; children: ReactNode }) => open ? children : null,
+  Dialog: ({ open, children }: { open?: boolean; children: ReactNode }) => open === false ? null : children,
+  NativeDialog: ({ open, children }: { open?: boolean; children: ReactNode }) => open === false ? null : children,
+}));
 vi.mock("../../hooks/usePopoverPosition", () => ({ usePopoverPosition: () => ({ surfaceRef: () => {}, style: {}, placed: true }) }));
 import { AiAssistantDialog } from "./AiAssistantDialog";
 

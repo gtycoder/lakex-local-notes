@@ -7,7 +7,11 @@ import type { AiChatResult } from "../../core/aiProviders";
 const chat = vi.hoisted(() => ({ run: vi.fn(), cancel: vi.fn() }));
 vi.mock("../../lib/ai", () => ({ newAiRequestId: () => "progress-test", runAiChat: chat.run, cancelAiChat: chat.cancel }));
 // 只隔离浮层定位与 IPC；面板状态、输入、增量渲染和停止逻辑均运行真实组件。
-vi.mock("../../components/ui/Overlay", () => ({ Popover: ({ open, children }: { open: boolean; children: ReactNode }) => open ? children : null }));
+vi.mock("../../components/ui/Overlay", () => ({
+  Popover: ({ open, children }: { open: boolean; children: ReactNode }) => open ? children : null,
+  Dialog: ({ open, children }: { open?: boolean; children: ReactNode }) => open === false ? null : children,
+  NativeDialog: ({ open, children }: { open?: boolean; children: ReactNode }) => open === false ? null : children,
+}));
 vi.mock("../../hooks/usePopoverPosition", () => ({ usePopoverPosition: () => ({ surfaceRef: () => {}, style: {}, placed: true }) }));
 import { AiAssistantDialog } from "./AiAssistantDialog";
 

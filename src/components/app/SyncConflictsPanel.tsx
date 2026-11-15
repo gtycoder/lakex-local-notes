@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { CheckCheck, Clock, ExternalLink, History, RotateCcw, TriangleAlert, X } from "lucide-react";
-import { Dialog } from "../ui/Overlay";
+import { NativeDialog } from "../ui/Overlay";
 import { useConfirm } from "../../hooks/useConfirm";
 import { formatDateTime } from "../../core/dateFormat";
 import type { SyncConflictRow } from "../../lib/types";
@@ -66,7 +66,7 @@ export function SyncConflictsPanel({
   };
 
   return (
-    <Dialog open={open} onDismiss={onClose} label="同步记录" className="sync-conflicts-dialog">
+    <NativeDialog open={open} onDismiss={onClose} label="同步记录" className="sync-conflicts-dialog">
       <div className="ln-dialog__body">
         <header className="sync-conflicts__head">
           <h3><Clock size={15} aria-hidden="true" />同步记录</h3>
@@ -132,6 +132,6 @@ export function SyncConflictsPanel({
         )}
       </div>
       {confirmElement}
-    </Dialog>
+    </NativeDialog>
   );
 }

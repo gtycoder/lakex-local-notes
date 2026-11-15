@@ -24,6 +24,8 @@ vi.mock("../ui/Overlay", () => ({
   Popover: ({ children }: { children: ReactNode }) => children,
   Dialog: ({ children }: { children: ReactNode }) =>
     createElement("div", { role: "dialog" }, children),
+  NativeDialog: ({ children }: { children: ReactNode }) =>
+    createElement("div", { role: "dialog" }, children),
   Submenu: ({ children }: { children: ReactNode }) => children,
 }));
 import { Sidebar } from "./Sidebar";

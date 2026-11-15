@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Check, GripVertical, Merge, Pencil, Search, Trash, X } from "lucide-react";
-import { Dialog } from "../../components/ui/Overlay";
+import { NativeDialog } from "../../components/ui/Overlay";
 // 行内重命名的 Enter/Esc/空名口径统一走共用原语（DT-12；标签这里保持「空名不提交」的现状）
 import { InlineRenameInput } from "../../components/ui/InlineRenameInput";
 import { useConfirm } from "../../hooks/useConfirm";
@@ -97,7 +97,7 @@ export function QuickNoteTagManager({ open, tags, onClose, onChanged, onError }:
   }
 
   return (
-    <Dialog open={open} onDismiss={onClose} label="标签管理" className="quick-note-tag-manager">
+    <NativeDialog open={open} onDismiss={onClose} label="标签管理" className="quick-note-tag-manager">
       <div className="ln-dialog__body">
         <header className="quick-note-tag-manager__head">
           <h3>标签管理</h3>
@@ -180,6 +180,6 @@ export function QuickNoteTagManager({ open, tags, onClose, onChanged, onError }:
         )}
       </div>
       {confirmElement}
-    </Dialog>
+    </NativeDialog>
   );
 }

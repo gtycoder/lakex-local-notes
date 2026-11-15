@@ -3,7 +3,7 @@
  * Markdown 导入结果汇总（261106 task-85）：成功 / 跳过（不支持类型、超 20MB）/ 失败（逐条原因）/ warnings 可展开。
  * 跳过与失败都带文件名，warnings 用 <details> 折叠（远程图片未下载、frontmatter 丢弃、脚注降级等）。
  */
-import { Dialog } from "../ui/Overlay";
+import { NativeDialog } from "../ui/Overlay";
 
 export interface ImportResultItem {
   name: string;
@@ -23,7 +23,7 @@ export function ImportResultDialog({ open, success, skipped, failed, warnings, o
   if (!open) return null;
   const summary = "成功 " + success + " 篇" + (skipped.length > 0 ? "，跳过 " + skipped.length + " 个" : "") + (failed.length > 0 ? "，失败 " + failed.length + " 篇" : "");
   return (
-    <Dialog open onDismiss={onClose} label="导入完成" className="import-result-dialog">
+    <NativeDialog open onDismiss={onClose} label="导入完成" className="import-result-dialog">
       <div className="ln-dialog__head"><span className="ln-dialog__title">导入完成</span></div>
       <div className="ln-dialog__body">
         <p className="import-result-dialog__summary" role="status">{summary}</p>
@@ -59,6 +59,6 @@ export function ImportResultDialog({ open, success, skipped, failed, warnings, o
       <div className="ln-dialog__actions">
         <button type="button" className="ln-btn ln-btn--primary" onClick={onClose}>完成</button>
       </div>
-    </Dialog>
+    </NativeDialog>
   );
 }

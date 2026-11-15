@@ -4,7 +4,7 @@
  */
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useEffect, useRef, useState } from "react";
-import { Dialog } from "../../components/ui/Overlay";
+import { NativeDialog } from "../../components/ui/Overlay";
 import { ChevronDown, GripVertical, Plus, Trash2 } from "lucide-react";
 import type { BitableAiConfig, BitableField, BitableFieldType, BitableRelation, BitableTable } from "../../core/bitableDoc.js";
 import { BITABLE_DATE_FORMAT_OPTIONS, BITABLE_DEFAULT_OPTION_COLOR, BITABLE_FIELD_TYPE_LABEL, BITABLE_NUMBER_FORMAT_OPTIONS, BITABLE_OPTION_COLORS, BITABLE_PROGRESS_MAX, BITABLE_RATING_MAX, aiPromptFieldNames, isKnownFieldType, isRelationFieldType, newBitableId, optionColorHex } from "../../core/bitableDoc.js";
@@ -147,7 +147,7 @@ export function FieldEditorModal({ field, readOnly, tables, tableId, onClose, on
     onSave({ name: name.trim() || field!.name, type, required, defaultValue: nextDefault, dateAutoFill, progressColor: nextColor, relation: isRelation ? relation : undefined, ai, format: nextFormat }, nextOptions);
   };
   return (
-    <Dialog open onDismiss={onClose} label={isNew ? "新增字段" : "编辑字段"} className="bt-dialog">
+    <NativeDialog open onDismiss={onClose} label={isNew ? "新增字段" : "编辑字段"} className="bt-dialog">
       <header className="ln-dialog__head"><h3 className="ln-dialog__title">{isNew ? "新增字段" : "编辑字段"}</h3></header>
       <div className="ln-dialog__body">
         <label className="bt-field-label"><span>字段名称</span>
@@ -330,6 +330,6 @@ export function FieldEditorModal({ field, readOnly, tables, tableId, onClose, on
         <button type="button" className="bt-secondary" onClick={onClose}>取消</button>
         <button type="button" className="bt-primary" disabled={readOnly} onClick={save}>确定</button>
       </div>
-    </Dialog>
+    </NativeDialog>
   );
 }

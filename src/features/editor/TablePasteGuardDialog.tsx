@@ -5,7 +5,7 @@
  * B：一键「存为表格文档」= 建一篇表格文档写入数据 + 在光标所在块之后插入指向它的「文档引用」卡。
  */
 import { useEffect, useState } from "react";
-import { Dialog } from "../../components/ui/Overlay";
+import { NativeDialog } from "../../components/ui/Overlay";
 import { native } from "../../lib/native";
 import { activeEditorMount } from "./activeEditor";
 import { editorInstanceAt } from "./editorRegistry";
@@ -52,7 +52,7 @@ export function TablePasteGuardDialog({ parentId }: { parentId: string | null })
 
   if (!pending && !saved) return null;
   return (
-    <Dialog open onDismiss={() => { setPending(null); setSaved(null); }} label="粘贴的表格过大">
+    <NativeDialog open onDismiss={() => { setPending(null); setSaved(null); }} label="粘贴的表格过大">
       <header className="ln-dialog__head"><h3 className="ln-dialog__title">粘贴的表格过大</h3></header>
       <div className="ln-dialog__body">
         {pending && (
@@ -77,6 +77,6 @@ export function TablePasteGuardDialog({ parentId }: { parentId: string | null })
         {pending && <button type="button" className="ln-btn" disabled={busy} onClick={() => void saveAsUsheet()}>{busy ? "处理中…" : "存为表格文档"}</button>}
         <button type="button" className="ln-btn" onClick={() => { setPending(null); setSaved(null); }}>{saved ? "知道了" : "取消"}</button>
       </div>
-    </Dialog>
+    </NativeDialog>
   );
 }

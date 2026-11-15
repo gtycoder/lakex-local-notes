@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Check, X } from "lucide-react";
-import { Dialog } from "../../components/ui/Overlay";
+import { NativeDialog } from "../../components/ui/Overlay";
 import {
   QUICK_NOTE_TIME_OPTIONS,
   type QuickNoteTimeFilter,
@@ -74,7 +74,7 @@ export function QuickNoteFilterDialog({ open, tags, value, onApply, onClose }: Q
   }
 
   return (
-    <Dialog open={open} onDismiss={onClose} label="筛选小记" className="quick-note-filter-dialog">
+    <NativeDialog open={open} onDismiss={onClose} label="筛选小记" className="quick-note-filter-dialog">
       <div className="ln-dialog__body">
         <header className="quick-note-filter-dialog__head">
           <h3>筛选小记</h3>
@@ -153,6 +153,6 @@ export function QuickNoteFilterDialog({ open, tags, value, onApply, onClose }: Q
           <button type="button" className="ln-btn ln-btn--primary" onClick={apply}>应用</button>
         </footer>
       </div>
-    </Dialog>
+    </NativeDialog>
   );
 }

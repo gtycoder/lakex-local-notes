@@ -15,7 +15,7 @@
  * 同一时刻只保留一个请求（后到者让前一个按「取消」收尾），与移动端 ConfirmHost 同口径。
  */
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { Dialog } from "../components/ui/Overlay";
+import { NativeDialog } from "../components/ui/Overlay";
 
 export interface ConfirmOptions {
   /** 标题（同时作对话框 aria-label）。 */
@@ -79,7 +79,7 @@ export function useConfirm(): ConfirmController {
   }, [open]);
 
   const confirmElement = pending ? (
-    <Dialog
+    <NativeDialog
       open
       onDismiss={() => settle(pending.kind === "notice")}
       label={pending.options.title}
@@ -101,7 +101,7 @@ export function useConfirm(): ConfirmController {
           {pending.options.confirmText ?? (pending.kind === "notice" ? "知道了" : "确定")}
         </button>
       </div>
-    </Dialog>
+    </NativeDialog>
   ) : null;
 
   return { confirm, notice, confirmElement };

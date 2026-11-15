@@ -6,7 +6,7 @@
  * 生成中不允许关闭对话框（避免进度不可见）；取消后已完成的格保留。
  */
 import { useEffect, useState } from "react";
-import { Dialog } from "../../components/ui/Overlay";
+import { NativeDialog } from "../../components/ui/Overlay";
 import type { BitableField, BitableTable } from "../../core/bitableDoc.js";
 import type { AiBatchState } from "./useAiFieldGeneration.js";
 
@@ -36,7 +36,7 @@ export function BitableAiGenerateDialog({ open, field, table, batch, onStart, on
   const running = batch?.running ?? false;
   const targetCount = mode === "empty" ? emptyCount : table.records.length;
   return (
-    <Dialog open onDismiss={() => { if (!running) onClose(); }} label="AI 生成整列" className="bt-dialog">
+    <NativeDialog open onDismiss={() => { if (!running) onClose(); }} label="AI 生成整列" className="bt-dialog">
       <header className="ln-dialog__head"><h3 className="ln-dialog__title">AI 生成整列：{field.name}</h3></header>
       <div className="ln-dialog__body">
         {!batch && (
@@ -75,6 +75,6 @@ export function BitableAiGenerateDialog({ open, field, table, batch, onStart, on
           </>
         )}
       </div>
-    </Dialog>
+    </NativeDialog>
   );
 }

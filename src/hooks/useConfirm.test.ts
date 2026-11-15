@@ -74,7 +74,7 @@ describe("useConfirm：确认浮层（替代 window.confirm）", () => {
   it("Esc = 取消", async () => {
     const box = openConfirm();
     await act(async () => {
-      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+      act(() => { document.querySelector("dialog.ln-native-dialog")!.dispatchEvent(new Event("cancel", { cancelable: true })); });
     });
     expect(box.value).toBe(false);
     expect(document.querySelector(".ln-dialog")).toBeNull();
@@ -82,10 +82,12 @@ describe("useConfirm：确认浮层（替代 window.confirm）", () => {
 
   it("点遮罩 = 取消", async () => {
     const box = openConfirm();
-    const scrim = document.querySelector(".ln-scrim");
-    expect(scrim).not.toBeNull();
+    // 261115：改用原生 <dialog>（背景就是 ::backdrop，不再有 .ln-scrim 元素）；
+    // 模态下点背板的事件目标就是 dialog 自身，所以这里直接派发到 dialog 上。
+    const dialogEl = document.querySelector("dialog.ln-native-dialog");
+    expect(dialogEl).not.toBeNull();
     await act(async () => {
-      scrim!.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+      dialogEl!.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, cancelable: true }));
     });
     expect(box.value).toBe(false);
     expect(document.querySelector(".ln-dialog")).toBeNull();
@@ -118,7 +120,7 @@ describe("useConfirm：提示浮层（替代 window.alert）", () => {
     let resolved = false;
     act(() => { void apiRef.current!.notice({ title: "提示" }).then(() => { resolved = true; }); });
     await act(async () => {
-      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+      act(() => { document.querySelector("dialog.ln-native-dialog")!.dispatchEvent(new Event("cancel", { cancelable: true })); });
     });
     expect(resolved).toBe(true);
     expect(document.querySelector(".ln-dialog")).toBeNull();

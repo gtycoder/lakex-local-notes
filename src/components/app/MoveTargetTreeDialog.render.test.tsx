@@ -8,6 +8,7 @@ import type { TreeNode } from "../../lib/types";
 
 vi.mock("../ui/Overlay", () => ({
   Dialog: ({ open, children }: { open?: boolean; children: ReactNode }) => (open === false ? null : createElement("div", { role: "dialog" }, children)),
+  NativeDialog: ({ open, children }: { open?: boolean; children: ReactNode }) => (open === false ? null : createElement("div", { role: "dialog" }, children)),
 }));
 
 import { MoveTargetTreeDialog } from "./MoveTargetTreeDialog";

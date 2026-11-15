@@ -1,5 +1,5 @@
 import { FilePlus2, Save, Undo2 } from "lucide-react";
-import { Dialog } from "../ui/Overlay";
+import { NativeDialog } from "../ui/Overlay";
 import { SAVE_CONFLICT_MESSAGE } from "../../lib/types";
 
 /**
@@ -27,7 +27,7 @@ export interface SaveConflictDialogProps {
 export function SaveConflictDialog({ open, fileName, busy = false, onSaveAsCopy, onOverwrite, onDiscardAndReload, onDismiss }: SaveConflictDialogProps) {
   if (!open) return null;
   return (
-    <Dialog open={open} onDismiss={onDismiss ?? (() => { /* 必须显式选择：不处理就等于保持挂起 */ })} label="保存冲突" className="save-conflict-dialog">
+    <NativeDialog open={open} onDismiss={onDismiss ?? (() => { /* 必须显式选择：不处理就等于保持挂起 */ })} label="保存冲突" className="save-conflict-dialog">
       {/* 261112 UI 审计 17 I-9：改用 overlay 的 .ln-dialog 三段式（head/body/actions 单一来源），
           只保留表面类 .save-conflict-dialog（宽度）与文件名行（颜色/断行）两条本处专属样式。 */}
       <div className="ln-dialog__head">
@@ -50,6 +50,6 @@ export function SaveConflictDialog({ open, fileName, busy = false, onSaveAsCopy,
           <Undo2 size={14} aria-hidden="true" />放弃本次修改并载入磁盘版
         </button>
       </div>
-    </Dialog>
+    </NativeDialog>
   );
 }

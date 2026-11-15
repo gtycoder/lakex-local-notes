@@ -31,6 +31,7 @@ vi.mock("../ui/Overlay", () => ({
   Menu: ({ children }: { children: ReactNode }) => createElement("div", { role: "menu" }, children),
   Popover: ({ children }: { children: ReactNode }) => children,
   Dialog: ({ open, children }: { open?: boolean; children: ReactNode }) => (open === false ? null : createElement("div", { role: "dialog" }, children)),
+  NativeDialog: ({ open, children }: { open?: boolean; children: ReactNode }) => (open === false ? null : createElement("div", { role: "dialog" }, children)),
   Submenu: ({ label, children }: { label: ReactNode; children: ReactNode }) => createElement("div", { "data-submenu": "" }, label, children),
 }));
 

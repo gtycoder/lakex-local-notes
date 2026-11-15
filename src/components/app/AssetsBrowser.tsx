@@ -26,7 +26,7 @@ import { ASSET_PORT, withAssetAccessToken } from "../../lib/assetPort";
 import { fileKindOf, type AssetFileKind } from "../../core/assetNaming";
 import { formatYmd } from "../../core/dateFormat";
 import { FileKindIcon } from "../../features/bitable/FileKindIcon";
-import { Dialog } from "../ui/Overlay";
+import { NativeDialog } from "../ui/Overlay";
 import { SplitPane } from "../ui/SplitPane";
 import { Select } from "../ui/Select";
 
@@ -660,7 +660,7 @@ export function AssetsBrowser({ active, onDataChanged }: { active: boolean; onDa
       )}
 
       {pendingDelete && pendingDelete.length > 0 && (
-        <Dialog open onDismiss={() => setPendingDelete(null)} label="删除未引用资源" className="asset-browser-confirm">
+        <NativeDialog open onDismiss={() => setPendingDelete(null)} label="删除未引用资源" className="asset-browser-confirm">
           <div className="ln-dialog__head"><span className="ln-dialog__title">删除 {pendingDelete.length} 个未引用资源？</span></div>
           <div className="ln-dialog__body">
             <ul className="asset-browser-confirm__list">
@@ -677,11 +677,11 @@ export function AssetsBrowser({ active, onDataChanged }: { active: boolean; onDa
             <button className="ln-btn ln-btn--ghost" onClick={() => setPendingDelete(null)}>取消</button>
             <button className="ln-btn ln-btn--secondary ln-btn--danger-text" disabled={busy} onClick={() => void confirmDelete()}>{busy ? "删除中…" : "删除"}</button>
           </div>
-        </Dialog>
+        </NativeDialog>
       )}
 
       {pendingPurge && (
-        <Dialog open onDismiss={() => setPendingPurge(null)} label="彻底删除缺正文文档" className="asset-browser-confirm">
+        <NativeDialog open onDismiss={() => setPendingPurge(null)} label="彻底删除缺正文文档" className="asset-browser-confirm">
           <div className="ln-dialog__head"><span className="ln-dialog__title">彻底删除《{pendingPurge.title}》？</span></div>
           <div className="ln-dialog__body">
             <p className="asset-browser-confirm__note">
@@ -692,11 +692,11 @@ export function AssetsBrowser({ active, onDataChanged }: { active: boolean; onDa
             <button className="ln-btn ln-btn--ghost" onClick={() => setPendingPurge(null)}>取消</button>
             <button className="ln-btn ln-btn--secondary ln-btn--danger-text" disabled={bodyBusy === pendingPurge.id} onClick={() => void confirmPurgeBody()}>{bodyBusy === pendingPurge.id ? "删除中…" : "彻底删除"}</button>
           </div>
-        </Dialog>
+        </NativeDialog>
       )}
 
       {pendingPurgeQuick && (
-        <Dialog open onDismiss={() => setPendingPurgeQuick(null)} label="彻底删除缺正文小记" className="asset-browser-confirm">
+        <NativeDialog open onDismiss={() => setPendingPurgeQuick(null)} label="彻底删除缺正文小记" className="asset-browser-confirm">
           <div className="ln-dialog__head"><span className="ln-dialog__title">彻底删除这条小记？</span></div>
           <div className="ln-dialog__body">
             <p className="asset-browser-confirm__note">{pendingPurgeQuick.previewText || "小记"}</p>
@@ -708,7 +708,7 @@ export function AssetsBrowser({ active, onDataChanged }: { active: boolean; onDa
             <button className="ln-btn ln-btn--ghost" onClick={() => setPendingPurgeQuick(null)}>取消</button>
             <button className="ln-btn ln-btn--secondary ln-btn--danger-text" disabled={quickBusy === pendingPurgeQuick.id} onClick={() => void confirmPurgeQuick()}>{quickBusy === pendingPurgeQuick.id ? "删除中…" : "彻底删除"}</button>
           </div>
-        </Dialog>
+        </NativeDialog>
       )}
     </section>
   );

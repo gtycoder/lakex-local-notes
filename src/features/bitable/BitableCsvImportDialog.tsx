@@ -1,4 +1,4 @@
-import { Dialog } from "../../components/ui/Overlay";
+import { NativeDialog } from "../../components/ui/Overlay";
 import { SelectMenu } from "./bitableCells";
 import type { BitableTable } from "../../core/bitableDoc";
 import { csvImportSummary, type CsvColumnMapping, type CsvImportResult } from "../../core/bitableCsv";
@@ -45,7 +45,7 @@ export function BitableCsvImportDialog({ fileName, table, header, rows, mapping,
   const mapped = mapping.filter((m) => m.target.kind !== "skip").length;
 
   return (
-    <Dialog open onDismiss={result ? onDone : onDismiss} label="导入 CSV" className="bt-dialog">
+    <NativeDialog open onDismiss={result ? onDone : onDismiss} label="导入 CSV" className="bt-dialog">
       <header className="ln-dialog__head"><h3 className="ln-dialog__title">导入 CSV（{fileName}）</h3></header>
       <div className="ln-dialog__body">
         {result ? (
@@ -91,6 +91,6 @@ export function BitableCsvImportDialog({ fileName, table, header, rows, mapping,
           </>
         )}
       </div>
-    </Dialog>
+    </NativeDialog>
   );
 }

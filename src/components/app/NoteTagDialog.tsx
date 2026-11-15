@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { X } from "lucide-react";
-import { Dialog } from "../ui/Overlay";
+import { NativeDialog } from "../ui/Overlay";
 import { NoteTagRow } from "./NoteTagRow";
 
 /**
@@ -26,7 +26,7 @@ export function NoteTagDialog({ open, noteId, title, onClose, onChanged }: NoteT
   const [error, setError] = useState<string | null>(null);
   if (!open) return null;
   return (
-    <Dialog open onDismiss={onClose} label={"给“" + (title || "无标题") + "”设置标签"} className="note-tag-dialog">
+    <NativeDialog open onDismiss={onClose} label={"给“" + (title || "无标题") + "”设置标签"} className="note-tag-dialog">
       <div className="ln-dialog__head note-tag-dialog__head">
         <span className="ln-dialog__title">标签</span>
         <button type="button" className="ln-iconbtn ln-iconbtn--compact" aria-label="关闭标签" onClick={onClose}><X size={14} /></button>
@@ -46,6 +46,6 @@ export function NoteTagDialog({ open, noteId, title, onClose, onChanged }: NoteT
       <div className="ln-dialog__actions">
         <button type="button" className="ln-btn ln-btn--primary" onClick={onClose}>完成</button>
       </div>
-    </Dialog>
+    </NativeDialog>
   );
 }

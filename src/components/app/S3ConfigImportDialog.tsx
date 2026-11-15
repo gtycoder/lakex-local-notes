@@ -8,7 +8,7 @@
  */
 import { useRef, useState } from "react";
 import { ClipboardPaste, X } from "lucide-react";
-import { Dialog } from "../ui/Overlay";
+import { NativeDialog } from "../ui/Overlay";
 import { getNativeErrorMessage } from "../../lib/nativeErrors";
 
 export interface S3ConfigImportDialogProps {
@@ -51,7 +51,7 @@ export function S3ConfigImportDialog({ onClose, onImport }: S3ConfigImportDialog
   };
 
   return (
-    <Dialog onDismiss={() => { if (!busy) onClose(); }} label="粘贴 S3 迁移码" className="s3-transfer-dialog" initialFocus={textareaRef}>
+    <NativeDialog onDismiss={() => { if (!busy) onClose(); }} label="粘贴 S3 迁移码" className="s3-transfer-dialog" initialFocus={textareaRef}>
       <header className="ln-dialog__head">
         <h2 className="ln-dialog__title">粘贴 S3 迁移码</h2>
         <button className="ln-close" type="button" aria-label="关闭" onClick={() => { if (!busy) onClose(); }}><X size={15} /></button>
@@ -76,6 +76,6 @@ export function S3ConfigImportDialog({ onClose, onImport }: S3ConfigImportDialog
           <button type="button" className="ln-btn ln-btn--primary" disabled={busy || !value.trim()} onClick={() => void submitImport()}>{busy ? "导入中…" : "导入配置"}</button>
         </div>
       </div>
-    </Dialog>
+    </NativeDialog>
   );
 }
