@@ -24,6 +24,7 @@ import { selectableNotebooks } from "./aiWritingDocs";
 import { SaveQuickNoteDialog } from "./SaveQuickNoteDialog";
 import { AI_WRITING_SUGGESTIONS, aiWritingChatTitle, aiWritingDocsTitle } from "./aiWritingPrompts";
 import { useAiWriting } from "./useAiWriting";
+import { useStickToBottom } from "../../hooks/useStickToBottom";
 import { loadPinnedIds, prunePinnedIds, savePinnedIds, togglePinnedId } from "./aiWritingPins";
 import { SplitPane } from "../../components/ui/SplitPane";
 
@@ -71,13 +72,19 @@ export function AiWritingWorkspace({ active, treeNodes, topbarLeading, onOpenSet
   const publishAbortRef = useRef<AbortController | null>(null);
   const quickNoteAbortRef = useRef<AbortController | null>(null);
 
-  // 流式/新消息时贴底（用户手动上翻时不强制——只在接近底部时跟随）。
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 160;
-    if (nearBottom) el.scrollTop = el.scrollHeight;
-  }, [controller.messages, controller.stream]);
+  // 流式/新消息时贴底（P2）：原来的 nearBottom 近似已删，统一复用 useStickToBottom
+  // （来源 deepseek-ai/chat-demo 的 MessageList；阈值 80px、用户上滚立即脱离、回到底部重新吸附，
+  //  监听器 passive、卸载时清 ResizeObserver/事件）。这里只提供滚动容器与内容信号。
+  const lastMessage = controller.messages[controller.messages.length - 1];
+  const stickSignal = [
+    controller.activeConversation?.id ?? "",
+    controller.messages.length,
+    lastMessage?.content.length ?? 0,
+    controller.stream?.content.length ?? 0,
+    controller.stream?.reasoning.length ?? 0,
+    controller.busy ? 1 : 0,
+  ].join(":");
+  useStickToBottom({ scrollRef, contentSignal: stickSignal, enabled: active });
 
   const title = useMemo(() => {
     if (controller.mode === "docs") return aiWritingDocsTitle(controller.docRefs);

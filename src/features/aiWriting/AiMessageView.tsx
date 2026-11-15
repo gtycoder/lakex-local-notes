@@ -8,6 +8,7 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { Check, Copy, Feather, FilePlus2, RotateCcw, Sparkles } from "lucide-react";
 import { MarkdownView } from "../../components/ui/markdown/MarkdownView";
+import { useThrottledMarkdown } from "../../components/ui/markdown/useThrottledMarkdown";
 import { AiThinkingBlock } from "./AiThinkingBlock";
 import type { AiWritingMessage } from "../../core/aiWriting";
 import type { AiWritingStream } from "./useAiWriting";
@@ -49,6 +50,12 @@ export function AiMessageView(props: AiMessageViewProps) {
   useEffect(() => () => {
     if (lakeTimerRef.current !== null) window.clearTimeout(lakeTimerRef.current);
   }, []);
+  // 流式 Markdown 节流（P1）：来源 deepseek-ai/chat-demo 的 useThrottleMarkdownRender，
+  // 改造见 components/ui/markdown/useThrottledMarkdown.ts。只在**生成中**启用；streaming 变 false
+  // 的那一帧立即透传完整 message.content，随后的内核 viewer 也拿完整正文（不会残留截断）。
+  const streaming = stream !== null && stream.messageId === message.id;
+  const streamedContent = streaming ? stream.content : message.content;
+  const content = useThrottledMarkdown(streamedContent, streaming && message.role === "assistant");
   if (message.role === "user") {
     return (
       <div className="aiw-msg aiw-msg--user">
@@ -56,10 +63,9 @@ export function AiMessageView(props: AiMessageViewProps) {
       </div>
     );
   }
-  const streaming = stream !== null && stream.messageId === message.id;
-  const content = streaming ? stream.content : message.content;
   const reasoning = streaming ? stream.reasoning : message.reasoning ?? "";
-  const thinking = streaming && !content;
+  // 「还在等正文」按原始流判断：节流延迟不应让思考块一直显示「正在思考」。
+  const thinking = streaming && !streamedContent;
   /** 空助手消息（崩溃/重启打断了流）：给一句说明，别留一个空气泡。 */
   const interrupted = !busy && !streaming && content.length === 0 && reasoning.length === 0 && !message.error && !message.stopped;
   /** 复制为 Lake：成功才显示勾（失败静默，不新增 toast 语义）。 */

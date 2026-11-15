@@ -4,7 +4,8 @@ import { AiSparkIcon } from "./AiSparkIcon";
 import { Popover } from "../../components/ui/Overlay";
 import { usePopoverPosition } from "../../hooks/usePopoverPosition";
 import { activeEditorMount } from "../editor/activeEditor";
-import { AiMessageBody } from "./AiMessageBody";
+import { AiMessageBody, AiStreamingMessageBody } from "./AiMessageBody";
+import { useStickToBottom } from "../../hooks/useStickToBottom";
 import { copyMarkdownAsLake, type LakePayloadKernel } from "./aiLakeClipboard";
 import { aiScopeNoteId, isNoteHostAlive, readAiScope } from "./aiAssistantSession";
 import { editorInstanceAt } from "../editor/editorRegistry";
@@ -258,6 +259,17 @@ export function AiAssistantDialog({ open, request, scope, onClose }: {
     : { ...(pos.style ?? {}), maxHeight: effectiveMaxHeight, height: appliedHeight };
   const placed = contentGeom ? true : pos.placed;
 
+  /**
+   * 贴底跟随（P2）：对话正文滚动容器 = `.ai-dialog__body`。
+   * 来源 deepseek-ai/chat-demo 的 MessageList（stickyRef + ResizeObserver + 用户上滚脱离），
+   * 通用化后见 hooks/useStickToBottom.ts；这里只提供内容信号与 enabled。
+   * 信号 = 轮数 + 最后一条长度 + 生成状态：流式每个 delta 都会变，用户上滚后不再强制滚。
+   */
+  const threadScrollRef = useRef<HTMLDivElement | null>(null);
+  const lastTurn = turns[turns.length - 1];
+  const stickSignal = turns.length + ":" + (lastTurn?.text.length ?? 0) + ":" + (busy ? 1 : 0) + ":" + (stopped ? 1 : 0);
+  useStickToBottom({ scrollRef: threadScrollRef, contentSignal: stickSignal, enabled: open && inScope });
+
   /** 面板表面元素：测真实高度用（拖拽起点），也交给 usePopoverPosition 定位。 */
   const setSurface = useCallback((el: HTMLElement | null) => { panelRef.current = el; pos.surfaceRef(el); }, [pos.surfaceRef]);
 
@@ -366,7 +378,7 @@ export function AiAssistantDialog({ open, request, scope, onClose }: {
           <Pin size={14} aria-hidden="true" />
         </button>
       </div>
-      <div className="ln-dialog__body ai-dialog__body">
+      <div className="ln-dialog__body ai-dialog__body" ref={threadScrollRef}>
         {turns.length > 0 && (
           <>
             <div className="ai-dialog__thread">
@@ -377,7 +389,10 @@ export function AiAssistantDialog({ open, request, scope, onClose }: {
                 if (t.role === "user") return <div key={i} className="ai-dialog__msg ai-dialog__msg--user">{t.text}</div>;
                 return (
                   <div key={i} className="ai-dialog__msg ai-dialog__msg--assistant">
-                    {t.text && <AiMessageBody text={t.text} />}
+                    {/* 流式中 = 节流版正文；生成结束换回完整正文（P1：来源 deepseek-ai/chat-demo）。 */}
+                    {t.text && (streaming
+                      ? <AiStreamingMessageBody text={t.text} />
+                      : <AiMessageBody text={t.text} />)}
                     {streaming && !stopped && (
                       <div className="ai-dialog__progress" role="status" aria-live="polite" aria-atomic="true">
                         <LoaderCircle className="spin" size={14} aria-hidden="true" />
