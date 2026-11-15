@@ -49,6 +49,7 @@ import { useAutoSync } from "./hooks/useAutoSync";
 import { useUpdateAutoCheck } from "./hooks/useUpdateAutoCheck";
 import { readSyncProgress, subscribeSyncProgress } from "./sync/syncProgressStore";
 import { Toasts } from "./ui/Toasts";
+import { MobileTitleTips } from "./ui/MobileTitleTips";
 const AttachmentPreview = lazy(() => import("../features/attachment/AttachmentPreview").then((m) => ({ default: m.AttachmentPreview })));
 const ImageLightbox = lazy(() => import("../features/editor/ImageLightbox").then((m) => ({ default: m.ImageLightbox })));
 import { MobileBrandLaunchMark } from "./ui/BrandLaunchMark";
@@ -849,6 +850,8 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
 
   return (
     <div className="mobile-app">
+      {/* 261115 A04：移动端也挂一次 title 拦截器（触屏走长按 450ms，桌面时序不变）。 */}
+      <MobileTitleTips />
       <DeferredPanel open={drawerOpen} fallback={<PanelLoading kind="settings" title="设置" onClose={() => setDrawerOpen(false)} />}>
         {/* 大面板各自一层隔离（261105）：设置崩了不连累首页/工作区。 */}
         <MobileErrorBoundary scope="settings" title="设置面板加载失败">

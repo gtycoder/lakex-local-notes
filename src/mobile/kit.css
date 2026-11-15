@@ -429,3 +429,28 @@ button.mb-set-item__main {
 .mb-btn > svg.lucide, .mb-iconbtn > svg.lucide, .mb-sheet__head > button > svg.lucide { width: 20px; height: 20px; flex-shrink: 0; }
 /* 261108：原语直属图标描边（从 mobile.css 的跨所有权组合选择器收回）。 */
 .mb-row__icon > svg.lucide, .mb-tree-icon > svg.lucide { stroke-width: 1.75; }
+
+/* ── 原生 title → 自绘气泡（261115 A04）────────────────────────────────────
+ * 移动端自有表面：不共享桌面 .ln-tip 样式，也不引入桌面 UI 组件。
+ * 位置由 lib/nativeTitleTip 实测后写 left/top；这里只锁可视表面、顶层序与「不拦触摸」。
+ * 颜色复用既有 tooltip 中性令牌（--lake-tooltip-bg / --lake-tooltip-fg），不新增语义令牌。 */
+.mb-tip {
+  position: fixed;
+  z-index: var(--lake-z-tooltip);
+  max-width: 260px;
+  padding: 6px 10px;
+  border-radius: var(--lake-radius-sm);
+  background: var(--lake-tooltip-bg);
+  color: var(--lake-tooltip-fg);
+  font-size: var(--lake-font-size-tiny);
+  line-height: var(--lake-line-height-snug);
+  pointer-events: none;
+}
+/* 长内容（Markdown/AI 字段/长文本的 title 预览）：同表面加宽 + 内部滚动，与桌面宽版同语义。 */
+.mb-tip--wide {
+  max-width: min(460px, calc(100vw - 16px));
+  max-height: 50vh;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
