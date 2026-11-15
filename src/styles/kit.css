@@ -334,6 +334,44 @@
 .ln-select__item { position: relative; width: 100%; padding-right: 26px; white-space: nowrap; }
 .ln-select__item .ln-menu__check { position: absolute; right: 8px; top: 50%; width: 14px; transform: translateY(-50%); }
 
+/* ── 08b 原生下拉试点（A13，261115 用户批准）──────────────────────
+ * 只服务 components/ui/NativeSelect.tsx（目前仅设置页「备份间隔」一处）。
+ * appearance: base-select 让弹层回到作者 CSS（::picker(select)），于是「原生弹层不可控」
+ * 这条自研理由不再成立；不支持的内核由 baseSelectSupported() 退回 .ln-select。
+ * 不写 .ln-select 前缀：那是按钮触发器（display:inline-flex + 固定高），套在 <select> 上会打架。 */
+.ln-select--native {
+  appearance: base-select;
+  min-width: 140px;
+  min-height: var(--lake-ctl-h);
+  padding: 0 8px;
+  border: 0.5px solid var(--lake-ctl-border);
+  border-radius: var(--lake-ctl-rad);
+  background: var(--lake-bg-canvas);
+  color: var(--lake-text-1);
+  font-family: inherit;
+  font-size: var(--lake-font-size-small);
+  cursor: pointer;
+}
+.ln-select--native:hover { border-color: var(--lake-border-strong); }
+.ln-select--native:focus-visible,
+.ln-select--native:open { outline: 0; border-color: var(--lake-accent); box-shadow: 0 0 0 2px var(--lake-focus-halo); }
+.ln-select--native:disabled { background: var(--lake-bg-sunken); color: var(--lake-text-4); cursor: default; }
+.ln-select--native::picker(select) {
+  margin-top: 4px;
+  padding: 4px;
+  border: 0.5px solid var(--lake-ctl-border);
+  border-radius: var(--lake-ctl-rad);
+  background: var(--lake-bg-panel);
+  box-shadow: var(--lake-shadow-popover);
+}
+.ln-select--native option {
+  padding: 6px 8px;
+  border-radius: var(--lake-radius-xs);
+  font-size: var(--lake-font-size-small);
+}
+.ln-select--native option:checked { color: var(--lake-fg-selected); background: var(--lake-bg-selected); }
+
+
 /* ── 09 开关 ───────────────────────────────────────────────── */
 .ln-switch {
   position: relative;
