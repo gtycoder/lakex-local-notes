@@ -1,5 +1,5 @@
 /**
- * 第一层（首页）：小记 / 知识库 / 标签 / 日记 四个 tab（tab 行横向分页，判据见 ./tabPager）。
+ * 第一层（首页）：知识库 / 小记 / 标签 / AI / 日记 五个空间（横向分页，判据见 ./tabPager）。
  * 布局（对齐 Yuque 官方移动端首层）：
  * - 小记 → 卡片（图在上/文在下/日期+更多「...」）；
  * - 知识库 → 「置顶」分组（顶部固定、可收起；横向卡，左右滑动找）+ 笔记本书架（3:4 彩面书卡，右上角切换 书架↔列表）；
@@ -156,7 +156,7 @@ const VIEW_KEY = "lakex-local-notes-mobile.libraryView";
 
 /**
  * 首层五空间（261110 底部 Dock）：顺序 = HOME_TABS，图标 + 文字同一个来源。
- * 与桌面五空间 1:1（文档=知识库 / 小记 / 日记 / AI（移动为助手，已有会话历史）/ 标签）。
+ * 与桌面五空间 1:1（知识库 / 小记 / 标签 / AI（移动为助手，已有会话历史）/ 日记）。
  */
 const HOME_TAB_META: Record<HomeTab, { label: string; Icon: typeof Feather }> = {
   quick: { label: "小记", Icon: Feather },
@@ -810,6 +810,55 @@ export function HomePage(props: HomePageProps) {
         aria-label="首页内容"
       >
         {/* 两页**常驻**：手指拖动时两页同时可见（语雀 pager 同形态）；非活动页由 effect 挂 inert。 */}
+        <section ref={libraryPaneRef} className="mobile-tab-pane">
+        <div className="mobile-scroll mobile-library">
+          {/* 「置顶」分组（261019 用户点单，261107 原「常用」改名）：固定在最上方，三角可收起/展开；卡片样式与首页文档卡一致，
+              多个置顶项靠**横向滑动**浏览。内容只来自设备本地入口（工作区目录菜单「置顶」）。 */}
+          {libraryView === "shelf" && favoriteNotes.length > 0 && (
+            <section className="home-section home-favorite">
+              <div className="home-section__head">
+                <button
+                  className="home-section__toggle"
+                  onClick={toggleFavoriteOpen}
+                  aria-expanded={favoriteOpen}
+                  aria-label={favoriteOpen ? "收起置顶" : "展开置顶"}
+                >
+                  <span className="home-section__title">置顶</span>
+                  {favoriteOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                </button>
+              </div>
+              {favoriteOpen && (
+                <div className="home-card-row">
+                  {favoriteNotes.map((r) => (
+                    <button key={r.id} className="doc-card" onClick={(e) => { morphCardToScreen(e.currentTarget); onOpenNote(r.id); }} aria-label={r.title || "文档"}>
+                      <span className="doc-card__paper" aria-hidden="true">
+                        <span className="doc-card__lines" />
+                      </span>
+                      <span className="doc-card__name">{r.title || "无标题"}</span>
+                      <span className="doc-card__date">{formatRelativeTime(r.updatedAt)}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
+          {/* key=view：切换书架/列表时重挂载，重放入场动效 */}
+          <section className={`home-section${libraryView === "list" ? " home-section--list" : ""}`} key={libraryView}>
+            <div className="home-section__head">
+              <span className="home-section__title">笔记本</span>
+            </div>
+            <Suspense fallback={null}>
+            <NotebookGrid
+              notebooks={notebooks}
+              docCounts={docCounts}
+              view={libraryView}
+              onOpenNotebook={onOpenNotebook}
+              onLongPressNotebook={(nb) => setNbMenuFor(nb)}
+            />
+            </Suspense>
+          </section>
+        </div>
+        </section>
         <section ref={quickPaneRef} className="mobile-tab-pane">
         {composer !== null ? (
           /* 写作 = 全屏编辑会话（261111）：与 capture 入口共用 .mobile-qn-screen；底栏/＋已让位。 */
@@ -880,77 +929,6 @@ export function HomePage(props: HomePageProps) {
           </div>
         )}
         </section>
-        <section ref={libraryPaneRef} className="mobile-tab-pane">
-        <div className="mobile-scroll mobile-library">
-          {/* 「置顶」分组（261019 用户点单，261107 原「常用」改名）：固定在最上方，三角可收起/展开；卡片样式与首页文档卡一致，
-              多个置顶项靠**横向滑动**浏览。内容只来自设备本地入口（工作区目录菜单「置顶」）。 */}
-          {libraryView === "shelf" && favoriteNotes.length > 0 && (
-            <section className="home-section home-favorite">
-              <div className="home-section__head">
-                <button
-                  className="home-section__toggle"
-                  onClick={toggleFavoriteOpen}
-                  aria-expanded={favoriteOpen}
-                  aria-label={favoriteOpen ? "收起置顶" : "展开置顶"}
-                >
-                  <span className="home-section__title">置顶</span>
-                  {favoriteOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-                </button>
-              </div>
-              {favoriteOpen && (
-                <div className="home-card-row">
-                  {favoriteNotes.map((r) => (
-                    <button key={r.id} className="doc-card" onClick={(e) => { morphCardToScreen(e.currentTarget); onOpenNote(r.id); }} aria-label={r.title || "文档"}>
-                      <span className="doc-card__paper" aria-hidden="true">
-                        <span className="doc-card__lines" />
-                      </span>
-                      <span className="doc-card__name">{r.title || "无标题"}</span>
-                      <span className="doc-card__date">{formatRelativeTime(r.updatedAt)}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </section>
-          )}
-          {/* key=view：切换书架/列表时重挂载，重放入场动效 */}
-          <section className={`home-section${libraryView === "list" ? " home-section--list" : ""}`} key={libraryView}>
-            <div className="home-section__head">
-              <span className="home-section__title">笔记本</span>
-            </div>
-            <Suspense fallback={null}>
-            <NotebookGrid
-              notebooks={notebooks}
-              docCounts={docCounts}
-              view={libraryView}
-              onOpenNotebook={onOpenNotebook}
-              onLongPressNotebook={(nb) => setNbMenuFor(nb)}
-            />
-            </Suspense>
-          </section>
-        </div>
-        </section>
-        {/* 一级「日记」页（261109 v1）：列表 + 写今天 + 搜索入口；正文编辑仍进现有工作区（不新造输入面）。 */}
-        <section ref={diaryPaneRef} className="mobile-tab-pane" hidden={!visibleTabs.includes("diary")}>
-          {/* 分包未就绪时不画空白：给一个同构骨架（面在惰性 tab 里，用户切过来时通常已加载完）。 */}
-          <Suspense fallback={<div className="mb-diary-skeleton" aria-hidden="true" />}>
-            <DiaryPage
-              nodes={diaryNodes ?? EMPTY_DIARY_NODES}
-              onOpenEntry={(input) => { onOpenDiaryEntry?.(input); }}
-              onOpenSearch={() => { onOpenDiarySearch?.(); }}
-              onChanged={onTreeChanged}
-            />
-          </Suspense>
-        </section>
-        {/* 一级「AI」页（261110 底部 Dock 第四格）：内嵌嵌入式 AI 页；懒挂载，切走保留 DOM。 */}
-        <section ref={aiPaneRef} className="mobile-tab-pane mobile-tab-pane--ai" hidden={!visibleTabs.includes("ai")}>
-          {aiMounted ? (
-            <Suspense fallback={<div className="mb-ai-pane-skeleton" aria-hidden="true" />}>
-              <MobileErrorBoundary scope="ai" title="AI 面板加载失败">
-                <MobileAiPage open embedded onClose={() => switchTab("quick")} onChanged={onAiChanged} />
-              </MobileErrorBoundary>
-            </Suspense>
-          ) : null}
-        </section>
         {/* 一级「标签」页（261106）：标签即入口 → 点进去看文档/小记 → 管理动作收在「管理」里。 */}
         <section ref={tagsPaneRef} className="mobile-tab-pane">
           <Suspense fallback={null}>
@@ -965,10 +943,33 @@ export function HomePage(props: HomePageProps) {
           />
           </Suspense>
         </section>
+        {/* 一级「AI」页（261110 底部 Dock 第四格）：内嵌嵌入式 AI 页；懒挂载，切走保留 DOM。 */}
+        <section ref={aiPaneRef} className="mobile-tab-pane mobile-tab-pane--ai" hidden={!visibleTabs.includes("ai")}>
+          {aiMounted ? (
+            <Suspense fallback={<div className="mb-ai-pane-skeleton" aria-hidden="true" />}>
+              <MobileErrorBoundary scope="ai" title="AI 面板加载失败">
+                <MobileAiPage open embedded onClose={() => switchTab("quick")} onChanged={onAiChanged} />
+              </MobileErrorBoundary>
+            </Suspense>
+          ) : null}
+        </section>
+        {/* 一级「日记」页（261109 v1）：列表 + 写今天 + 搜索入口；正文编辑仍进现有工作区（不新造输入面）。 */}
+        <section ref={diaryPaneRef} className="mobile-tab-pane" hidden={!visibleTabs.includes("diary")}>
+          {/* 分包未就绪时不画空白：给一个同构骨架（面在惰性 tab 里，用户切过来时通常已加载完）。 */}
+          <Suspense fallback={<div className="mb-diary-skeleton" aria-hidden="true" />}>
+            <DiaryPage
+              nodes={diaryNodes ?? EMPTY_DIARY_NODES}
+              onOpenEntry={(input) => { onOpenDiaryEntry?.(input); }}
+              onOpenSearch={() => { onOpenDiarySearch?.(); }}
+              onChanged={onTreeChanged}
+            />
+          </Suspense>
+        </section>
+
       </div>
 
       {/* 底部 Dock（261110 用户点单，方案 A）：五格空间 + 中央悬浮「＋」。
-          · 五个空间 = 小记 / 知识库 / 日记 / AI / 标签（与桌面五空间 1:1；左右滑动仍是同一个分页容器）；
+          · 五个空间 = 知识库 / 小记 / 标签 / AI / 日记（与桌面五空间 1:1；左右滑动仍是同一个分页容器）；
           · 「＋」悬浮在 Dock 中央上方：短按 = 新建面板（按 tab 记性）；**长按 260ms + 上滑 = 速记一条小记**
             （手势判据沿用 ui/createPress.ts，与旧胶囊同源）；
           · 云同步与搜索在顶栏右上角：**同步恒可见**（用户 261110 明确要求，不收起）；

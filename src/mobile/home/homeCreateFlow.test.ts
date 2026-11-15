@@ -91,6 +91,12 @@ describe("首页新建流（261014）", () => {
     expect(HOME).toContain("visibleTabs.map((id)");
   });
 
+  it("分页 DOM 页序必须与 HOME_TABS 一致（Dock 标签点哪个就滚到哪一页）", () => {
+    // tabPager 用「可见 tab 下标 × 页宽」定位；DOM 里的 section 顺序一错，Dock 标签就会和内容反着显示。
+    const paneRefs = [...HOME.matchAll(/ref=\{(quick|library|tags|ai|diary)PaneRef\}/g)].map((m) => m[1]);
+    expect(paneRefs).toEqual(["library", "quick", "tags", "ai", "diary"]);
+  });
+
   it("Dock 几何：五列等分 + 标签 nowrap/省略 + FAB 圆形", () => {
     expect(CSS).toMatch(/\.mb-home-dock\s*\{[^}]*grid-template-columns:\s*repeat\(5,\s*minmax\(0,\s*1fr\)\)/);
     expect(CSS).toMatch(/\.mb-home-dock__label\s*\{[^}]*white-space:\s*nowrap/);
