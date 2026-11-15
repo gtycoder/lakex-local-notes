@@ -729,7 +729,7 @@ adb shell dumpsys package com.google.android.webview | grep versionName
 | A01 | IME 回车误提交 | **已修** | `f55bc35b` | 35 处 / 27 文件（33 analyzer + 2 人工补漏）；`src/core/ime.ts` 唯一判据；`ime.test.ts` + `imeEnterWiring.test.ts` + `InlineRenameInput` 组合态例 |
 | A02 | 原生 `<dialog>` / top-layer | **推迟** | — | 依赖顺序：对话框内打开的菜单/气泡仍是 `createPortal` 到 body 的普通层，迁 top-layer 后会被 dialog 盖住（嵌套下拉不可见）⇒ 必须先迁 `popover`；且需设备级层序验收 |
 | A03 | OS 文字缩放 | **第一步已修** | `75153e8e` | `<meta text-scale>` + 桌面 11 档 / 移动 10 档字号令牌 rem 化（rem×16 = 改前 px，默认档位视觉零变化）；`textScale.test.ts` 钉等价；第二步（449 处固定高 → `min-height` + 200% 逐屏走查）待做 |
-| A04 | Tooltip 三缺口 | 见 §11.1 | — | 拦截器逻辑抽到 `src/lib/nativeTitleTip.ts`，桌面 `.ln-tip` / 移动 `.mb-tip` 各自薄壳（守「两端 UI 不共享组件/CSS」红线） |
+| A04 | Tooltip 三缺口 | **已修** | `88bd4211` | 逻辑抽到 `src/lib/nativeTitleTip.ts`；桌面 `.ln-tip` / 移动 `.mb-tip` 各自薄壳（守「两端 UI 不共享组件/CSS」红线，`mobileIndependence` 绿）；移动长按 450ms、focusin 只在「另有可访问名」时摘 title、`aria-describedby` 增删复原；24 例新护栏 |
 | A05 | 10k 树窗口化 | 推迟 | — | `content-visibility` 已在位；DOM 20 万需窗口化/分页，属 HANDOFF 大库项，需大库夹具实测 |
 | A06 | 长任务让步 / INP | 推迟 | — | `useDeferredValue` 会把「输入即筛选」的同步断言变异步，需连同测试一起改 + long-animation-frame 实测 |
 | A07 | 首帧 color-scheme | **已修** | `14dcdf15` | 两份入口加 `<meta name="color-scheme" content="light dark">`；**更正**：`:root` 本来就有 `color-scheme`（`themes/light.css` 的 `:root,[data-theme=light]`），审计 v2 原描述有误 |

@@ -7,6 +7,12 @@
 
 ## 0. 最新交接（最近 3 个批次；更早的见 git）
 
+### 261115 · 现代 Web 平台化第一批（分支 `modernize/web-platform-261115`，**未合 master**）
+- **前置**：master `7e2db298` 已双推 Gitee+GitHub 并打注解 tag **`backup/master-261115`**；本分支按用户要求**不合并回 master**（需明确同意）。
+- **落地（12 个 commit，全部行为等价/默认档位零视觉变化）**：IME 回车 35 处过组合态判据（`core/ime.ts`）；字号令牌 rem 化（rem×16 = 改前 px）+ `meta text-scale`；`boot.html` 476KB→1.9KB（图片外置）+ `color-scheme`/`light-dark()`；`field-sizing`/标准 `mask`/`text-wrap`/删 no-op 前缀；图片 `decoding=async`；`forced-colors`；对话框背景 `inert`（引用计数）；`Error cause` + `AbortSignal.timeout`；Tooltip 逻辑抽共享 + 移动端自有 `.mb-tip`。
+- **明确不做/推迟**：`toSorted`/`Promise.withResolvers`（tsconfig ES2022 + 旧 WebView，官方 rubric dropWhen）；原生 dialog/popover 迁移（菜单是 body portal，先迁 popover 才不会被盖住）；10k 树窗口化；INP 让步；可点 div 语义化；容器查询；`enterKeyHint`；`aria-modal` 逐个校准。
+- **状态表**：只看 [MODERN-WEB-AUDIT §11](MODERN-WEB-AUDIT.md)（A01–A30 逐项 + commit 号 + 下一批依赖顺序）。
+
 ### 261114 · 收口验收（设备点收 / 10k+100k 大库 / 2GB 便携包 / S3 多端回归脚本）
 
 - **设备点验收（P0-1）**：① 移动端书签卡工具条：合成语雀 `ne-clipboard` 注入 `bookmarkInline` 卡 → 触摸点按卡片弹出工具条（转为链接/卡片/打开链接/编辑链接）→ 触摸点按「转为链接」后卡 0/`ne-link` 1 = **PASS**（证据 `/tmp/lakex-verify/evidence/bookmark-toolbar-mobile-261114.png`）；② 桌面画板自定义素材文件夹：保存→`materials/*.board.json`、自定义页显示「打开素材文件夹」+ 从文件夹载入卡片、删除同步删文件 = **PASS**；③ 空间关闭/新顺序桌面+移动复验 = PASS；④ **链接→卡片方向未覆盖**：移动文档编辑器无 link toolbar，桌面依赖内核 link toolbar 扩展，保持 `LAKEX-CONTRACT §5.54` 已知限制（不是本批回归）。
@@ -237,6 +243,15 @@
 - **真实 S3 桶验收**：A 档三桌面隔离实例 **20/20 PASS**（`3fad8821`）；**B 档 13 条 57/57 PASS**（task-58，含 S72 修复后复跑），唯一测试前缀 **0 残留**（[19](audit-261112/19-s3-real-bucket-subset.md)）。**移动多端 A–K 已跑完（task-72/74 已关闭；D 场景修复后复跑 9/9、收尾 0 残留，见 [21 号报告](audit-261112/21-s3-multi-end-mobile.md)）**。
 - 设备/视觉（最近记录）：手机 **10 态** + 平板 **10 态** 基线重烤并连跑两轮 0 差异；23 屏走查 23/23；`edit-surface-invariants` quicknote 11 + document 11 ALL PASS；capture 入口装置 10/10。**桌面 `check:stylesnap` 42 态已重烤**（34 严格态两轮 0 差异，8 窄窗按 UNSTABLE 跳过；基线已更新，见 §3）。
 
+**分支批基线（261115 · `modernize/web-platform-261115`；含 12 个新护栏文件）**
+
+- `npx tsc --noEmit` = **0**；`git diff --check` = **0**。
+- 全量 vitest：**文件 965（952 passed / 13 skipped）/ 用例 6105（6091 passed / 14 skipped）/ 0 failed**（本批新增 9 个测试文件）。
+- `node scripts/ui-metrics.mjs` = 0（颜色 0 / `!important` 9 = 清单 / 字号字面量 0 / `crossFileDupGroups` **45 = 基线** / `shadowedDecls` 0）。
+- `check:core` **181** 文件 0 违规；`check:mobileui` 通过；`check:bundle` + `check:arch` PASS（desktop 首屏 580,718/600,000；mobile 343,411/350,000；mobile entry 49,771/51,200）。
+- 基线护栏随本批上调（各写明理由）：`aiDialogParts.css` 91→92、`overlay.css` 290→292、`kit.css` 674→682、`mobile/kit.css` 626→640、`mobile/usheet/usheet-chrome.css` 593→595。
+- **未做**：设备/视觉门禁（stylesnap 42 态、mobile-snap 10 态、23 屏走查、窗口矩阵）与真机验收 —— 本批代码路径未改外壳几何，但移动端新增 `.mb-tip` 与挂载点，交付设备前需在 `lake_mobile` 跑一次 `--sync --install` + 相关态。
+
 **设备与环境（本机实测）**
 
 - Node **v24.18.0**（`$HOME/.nvm/versions/node/v24.18.0/bin`，必须 24）；JDK **21**（`/Library/Java/JavaVirtualMachines/jdk-21.jdk`）；Android SDK `/opt/homebrew/share/android-commandlinetools`。
@@ -323,7 +338,7 @@
 - **大库观察项**：桌面目录树 10k 行未虚拟化（约 20.1 万 DOM、renderer heap 313–317MB）本次仍可用，但继续增长需虚拟化/分页；热轮搜索曾出现 1.9s（冷轮 445ms），重跑确认是否抖动。
 - **移动端↔桌面真实 S3 冒烟已完成（261114 手工）**：见 §0 收口验收；`--with-mobile` 仍未实现，后续可把该手工流程固化进 `regression.mjs`（需要 Android 驱动/配置注入）。
 - **移动端「tab 标记 gone + 只读横幅」缺失（261114 审计残余，P2）**：打开中被删后旧内容仍显示，自动保存 1s 后明说「保存被拒绝」，关闭/返回/完成会丢弃标签并 toast；未做只读横幅（不在本次最小修复范围）。
-- **现代 Web 写法审计（261115 · v2 全量）**：见 [MODERN-WEB-AUDIT](MODERN-WEB-AUDIT.md)。语料 = GoogleChrome modern-web-guidance **252 篇**（克隆 `5e5cd33`）；判定 **命中 13 / 部分 68 / 干净 1 / 待验证 32 / 不适用 138**；工具 108 条（发布版 35）+ 手工 30 条问题清单（A01–A30）。实测运行时 = Electron 44.9.3 / **Chromium 152.0.7977.167**（`process.versions`）。v2 新发现：`NativeTitleTips` 拦截器三缺口、`content-visibility` 已用于目录树/大纲（10k 树的问题在 DOM 不在 CSS）、`boot.html` **476KB** 内联 APNG、无 `meta color-scheme` 导致首帧闪浅色、`scheduler.yield`/`useDeferredValue` 全缺。**尚未开始改造**；P0 仍是 IME-safe Enter（33 处 + 抽共享判据），P1 起是浮层/文字缩放/`color-scheme`/Tooltip/10k 窗口化。
+- **现代 Web 写法审计（261115 · v2 全量）**：见 [MODERN-WEB-AUDIT](MODERN-WEB-AUDIT.md)。语料 = GoogleChrome modern-web-guidance **252 篇**（克隆 `5e5cd33`）；判定 **命中 13 / 部分 68 / 干净 1 / 待验证 32 / 不适用 138**；工具 108 条（发布版 35）+ 手工 30 条问题清单（A01–A30）。实测运行时 = Electron 44.9.3 / **Chromium 152.0.7977.167**（`process.versions`）。v2 新发现：`NativeTitleTips` 拦截器三缺口、`content-visibility` 已用于目录树/大纲（10k 树的问题在 DOM 不在 CSS）、`boot.html` **476KB** 内联 APNG、无 `meta color-scheme` 导致首帧闪浅色、`scheduler.yield`/`useDeferredValue` 全缺。**已开工**：分支 `modernize/web-platform-261115`（master 已备份 + `backup/master-261115`）；A01/A03(步1)/A04/A07–A09(inert)/A12/A15/A16/A18/A19/A21(部分)/A25–A27 已修，其余推迟项与依赖顺序见审计 **§11**（未合 master）。
 
 **上一批次（261113 转小记 + 发版复核批）待办**
 
