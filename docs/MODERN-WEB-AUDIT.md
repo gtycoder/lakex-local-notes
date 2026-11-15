@@ -738,11 +738,11 @@ adb shell dumpsys package com.google.android.webview | grep versionName
 | A10 | 可点 div 33 处 | **已修（复核后真缺口 3 类）** | 见 `git log --grep A10` | 33 处逐条复核：12+ 是遮罩/背板（`aria-hidden`，Esc/返回是等价出口）、5 处 `stopPropagation` 容器、2 处已带 `role=button` ⇒ **不是缺口**；真正 mouse-only 的是 ①色板全部色块 + 默认/无填充行、②历史快照/未引用列表的「点标题预览」、③移动端「打开标签」行。三处补键盘激活（`role=button`/`tabIndex`/Enter·Space，历史列表保持单 tab 停点只就地激活选中行），色板补 `:focus-visible` 环；护栏 `keyboardActivationGates.test.ts` |
 | A11 | `command`/`commandfor` | **不适用（已核实）** | — | 全仓没有「静态声明式触发」点：对话框都由 React 状态/菜单项打开（`onClick` → setState），没有可加 `commandfor` 的固定按钮-目标对子。新写的静态对话框（不经过 React 状态）再用它；已写进 `NativeDialog` 的 JSDoc |
 | A12 | `field-sizing` | **已修** | `7a0dc111` | AI 输入条改 CSS 自增高，删掉逐键 `scrollHeight` |
-| A13 | `base-select` 试点 | 推迟 | — | 需先有 A02 结论；移动端老 WebView 要 feature detect |
+| A13 | `base-select` 试点 | **调研完成，暂不做** | — | 能力对照 15 项：可替 10 项（定位/matchWidth/aria/键盘/disabled/焦点回归），**不可替 2 项**（`useScrollFade` 的按需渐隐、lucide 描边箭头/对勾只能字符）+ **1 个真风险**（闭态 ↑/↓ 直接改值并派发 `change`，而设置页全部即时保存）。按调研的退出判据停在此处：试点前置 = 设计接受字符图标 + 逐档取值可接受；否则保持自研 `Select`（`Select.tsx` 一行未改） |
 | A14 | `enterKeyHint` | **已修** | `c4b47e9b` | 搜索 = `search`（全局搜索 / 文档内查找）、命名与新建 = `done`（5 个入口）；护栏 `src/mobile/ui/enterKeyHint.test.ts` |
 | A15 | 图片解码/懒加载 | **已修** | `1d07fd60` | 9 宿主 10 处 `<img>`；资源浏览器预览**保持不 lazy**（既有护栏禁止）；`imageAttrGates.test.ts` |
 | A16 | `forced-colors` | **已修** | `ea10e334` | a11y.css 高对比度兜底（系统色关键字，正常模式零影响）；cssLayers 基线 15→23 |
-| A17 | 容器查询 | 推迟 | — | 按组件逐个来，需视觉回归 |
+| A17 | 容器查询 | **已修（首选 1 处）** | 见 `git log --grep A17` | 属性弹窗折列判据从 **视口 `@media (max-width:600px)`** 改为 **自身宽度 `@container (max-width:600px)`**：弹窗是用户可 8 向拖拽改宽的面，视口 1400 + 拖到 420 时旧判据永不触发（两列各 180px）。`container-type: inline-size` +1 声明（dialog.css 231→232），实测 720 宽 = 两列、560/500 宽 = 单列；`note-info` 快照态 0 差异。其余候选（小记面板/设置表单/编辑栏）按「改动面 × 重烤成本」推迟，编辑栏明确不做（layout containment 会改 fixed 包含块，与内核全屏浮层冲突） |
 | A18 | `text-wrap` | **已修** | `7a0dc111` | 对话框正文 `pretty`、确认框标题 `balance` |
 | A19 | `-webkit-overflow-scrolling` | **已修** | `7a0dc111` | 删 4 处 no-op |
 | A20 | `will-change` 常驻 | 核实后**不改** | — | 10 处真实使用全部绑动画/位移；`mobile.css` 已有「转场结束即撤」注释与 `is-settled` 实现，属已处理 |
@@ -772,7 +772,7 @@ adb shell dumpsys package com.google.android.webview | grep versionName
 2. **A10**：可点 div → button（33 处，逐处复位样式），一次视觉回归。
 3. **A03 第二步**：固定高 → `min-height`，200% 字号逐屏走查 + 重烤基线。
 4. **A05 + A06**：大库夹具上先量 INP，再决定窗口化与并发渲染的先后。
-5. **移动端视觉门禁**：桌面 42 态已完成（见 §11.3）；移动端已重装新包（`.mb-tip` / 标题焦点环 / `enterKeyHint` / 首页顶栏实底）⇒ **`lake_gate` 10 态基线必须按该构建重烤**（基线绑构建）。
+5. **移动端视觉门禁已完成**：`lake_gate`（5556）+ 门禁夹具 + 新构建，10 态**全部 +1 元素**（= 新增的 `MobileTitleTips` 单例）⇒ 重烤基线后连跑 0 差异；23 屏走查随后跑。
 5. **A13 / A17**：小步机会项（`base-select` 与容器查询，各需视觉回归）。
 
 ### 11.3 本批验收（实测，261115）
@@ -793,6 +793,6 @@ adb shell dumpsys package com.google.android.webview | grep versionName
 > · `search:1315:light/warm`、`search-empty:1315:light`：迁 `<dialog>` 后少 1 个包裹元素（2548→2547）；
 > · `settings-data/editor/trash` + `settings:1315:dark/warm`：新夹具的资源数据（孤儿/缺失行）与表单控件在 `color-scheme` 声明下的计算值变化（2718→2741）；
 > · `settings-about`、`note-info`：浮动面板几何/异步内容导致的**跨实例抖动**（同实例两轮同值、换实例翻面，元素数不变）——记为已知 flaky，**不据此改代码**。
-> 只重烤差异态而不是整份重烤：其余 33 态在**换夹具之后仍逐元素相同**，这是比整份重烤更强的回归证据。移动端 `mobile-snap` 10 态仍待按新构建重烤。
+> 只重烤差异态而不是整份重烤：其余 33 态在**换夹具之后仍逐元素相同**，这是比整份重烤更强的回归证据。移动端 `mobile-snap` 10 态已按新构建重烤（+1 元素 = `MobileTitleTips` 单例）并复核 0 差异。
 
 > 环境残留：桌面 smoke 用独立 profile 并已删除；CDP 只按端口 9333 定位杀进程（未用 pkill Electron）；`lake_mobile` 保持安装态供复验。

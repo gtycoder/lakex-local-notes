@@ -9,7 +9,12 @@
 /* 文档属性弹窗：表面/圆角/阴影/头体用浮层通用 .ln-dialog，这里只定默认尺寸。
    高度默认 `auto`：内容少时按内容收（用户 260914 决策），超过 max-height 才由 .ln-dialog__body 滚动；
    右下角手动拖过之后由内联 width/height 接管（NoteInfoDialog 的 size state）。 */
-.note-info-dialog { width: 720px; height: auto; min-width: 420px; min-height: 320px; max-width: 94vw; max-height: min(80vh, 640px); }
+/* 261115 A17：属性弹窗是**用户可拖拽改宽**的面（NoteInfoDialog 的 .ln-dialog__resize 把尺寸写进 size state）
+ ⇒ 折列判据必须是弹窗自己的宽度，不是视口宽度：视口 1400 + 弹窗拖到 420 时旧的 @media (max-width:600px)
+ 永不触发，两列各剩 180px（dt 标签与 dd 值互相挤）。
+ container-type 只建立 inline-size 查询上下文、不改盒尺寸；本元素已带 .ln-dialog（position: relative）
+ ⇒ 绝对定位包含块不变。旧内核忽略 @container ⇒ 退回两列（= 今天的行为）。 */
+.note-info-dialog { width: 720px; height: auto; min-width: 420px; min-height: 320px; max-width: 94vw; max-height: min(80vh, 640px); container-type: inline-size; }
 /* 第一部分：两列并排，省纵向空间；位置独占一行 */
 .note-info-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--lake-space-md) var(--lake-space-xxl); margin: var(--lake-space-xs) 0; padding: 0; }
 .note-info-cell { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
@@ -92,8 +97,11 @@
 /* 窄屏（移动端）：两列折成一列 */
 @media (max-width: 600px) {
   .note-info-dialog { width: calc(100vw - 24px); max-width: calc(100vw - 24px); height: auto; max-height: 78vh; min-width: 0; min-height: 200px; }
+}
+/* 窄弹窗折成一列：默认 720 宽不触发；拖窄（或视口 ≤600 使 94vw 变小）才触发。
+ 阈值沿用 600，不引入第二个魔法数。放在 @media 之后：同特异性下容器查询与窄屏结论一致。 */
+@container (max-width: 600px) {
   .note-info-grid { grid-template-columns: 1fr; gap: 6px; }
-  
 }
 
 /* S3 配置迁移码弹窗（261017）：只定尺寸与多行输入外观；表面/头/体/按钮都复用 .ln-dialog 与 .ln-btn 原语。 */
