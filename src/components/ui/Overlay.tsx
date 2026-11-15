@@ -27,6 +27,36 @@ const FOCUSABLE =
  * 各处的「外点关闭」都必须用本判据放行，否则父菜单会在子项 click 之前被卸载
  * （表现为「二级菜单点了没反应」——261112 用户报「文档右上角导出不能用」）。
  */
+/**
+ * 261116 修：模态 <dialog> 打开时，浮层必须挂进 dialog 内部。
+ *
+ * 原因（overlay-matrix 实测）：showModal() 让 dialog 之外的一切都处于 inert ——
+ * 包括 showPopover() 进 top layer 的菜单。菜单视觉上在 dialog 之上，但命中测试全部落到
+ * dialog 上：点重叠区不选中、点菜单伸出 dialog 的部分会被当成背板点击，把整个 dialog 关掉。
+ * 挂进 dialog 内（仍在 top layer）⇒ 不在 inert 子树里，点击与焦点都正常。
+ */
+export function resolveOverlayContainer(container?: HTMLElement | null): HTMLElement {
+  if (container) return container;
+  return findOpenModalDialog() ?? document.body;
+}
+
+function findOpenModalDialog(): HTMLElement | null {
+  if (typeof document === "undefined") return null;
+  const open = Array.from(document.querySelectorAll<HTMLDialogElement>("dialog[open]"));
+  if (open.length === 0) return null;
+  for (const dialog of open) {
+    try {
+      if (dialog.matches(":modal")) return dialog;
+    } catch {
+      // 极老内核不认 :modal：落到下面的「按已 open 处理」。
+      break;
+    }
+  }
+  // 本仓只有 showModal() 一种打开方式，且没有非模态 dialog ⇒ 最后一个 open 的就是模态。
+  // （jsdom 没有 :modal 伪类，matches 返回 false 而非抛错，所以这里必须兜底。）
+  return open[open.length - 1];
+}
+
 export function isInsideOverlaySurface(target: EventTarget | null): boolean {
   if (!(target instanceof Node)) return false;
   const node = target instanceof Element ? target : target.parentElement;
@@ -273,7 +303,7 @@ export function Overlay({ open = true, kind, onDismiss, label, className, style,
           {children}
         </section>
       </div>,
-      container ?? document.body,
+      resolveOverlayContainer(container),
     )}</OverlayScope.Provider>;
   }
 
@@ -290,7 +320,7 @@ export function Overlay({ open = true, kind, onDismiss, label, className, style,
     >
       {children}
     </div>,
-    container ?? document.body,
+    resolveOverlayContainer(container),
   )}</OverlayScope.Provider>;
 }
 
