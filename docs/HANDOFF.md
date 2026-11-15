@@ -246,7 +246,7 @@
 **分支批基线（261115 · `modernize/web-platform-261115`；含 12 个新护栏文件）**
 
 - `npx tsc --noEmit` = **0**；`git diff --check` = **0**。
-- 全量 vitest：**文件 967（954 passed / 13 skipped）/ 用例 6107（6093 passed / 14 skipped）/ 0 failed**（本批新增 11 个测试文件）。
+- 全量 vitest：**文件 968（955 passed / 13 skipped）/ 用例 6110（6096 passed / 14 skipped）/ 0 failed**（本批新增 11 个测试文件）。
 - `node scripts/ui-metrics.mjs` = 0（颜色 0 / `!important` 9 = 清单 / 字号字面量 0 / `crossFileDupGroups` **45 = 基线** / `shadowedDecls` 0）。
 - `check:core` **181** 文件 0 违规；`check:mobileui` 通过；`check:bundle` + `check:arch` PASS（desktop 首屏 580,718/600,000；mobile 343,411/350,000；mobile entry 49,771/51,200）。
 - 基线护栏随本批上调（各写明理由）：`aiDialogParts.css` 91→92、`overlay.css` 290→292、`kit.css` 674→682、`mobile/kit.css` 626→640、`mobile/usheet/usheet-chrome.css` 593→595。
