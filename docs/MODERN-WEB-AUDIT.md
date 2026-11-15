@@ -16,7 +16,7 @@
 | --- | --- | --- |
 | 官方 analyzer（发布版 1.0.0） | **35 findings / 33 guides / 35 rules** | 官方自述只覆盖语料约 20% |
 | 官方 analyzer（源码版，52 rules） | **139 findings / 38 guides / 52 rules** | 排除 31 条构建产物后 = **108 条真实源码 findings**（D67 / M28 / E8 / 脚本 5） |
-| 本轮语料覆盖判定 | **252 篇 = 命中 13 · 部分 68 · 干净 1 · 待验证 32 · 不适用 138** | 「干净」= 整篇 expectations 全部满足；口径见 §2 |
+| 本轮语料覆盖判定（**修复前快照**） | **252 篇 = 命中 13 · 部分 68 · 干净 1 · 待验证 32 · 不适用 138** | 「干净」= 整篇 expectations 全部满足；口径见 §2。**修复后复评见 §2.6：命中 13 → 0**，两个官方 analyzer 均 0 findings |
 
 **真需要动手的 6 类（按性价比排序）**：
 
@@ -233,11 +233,60 @@ node --experimental-strip-types /tmp/mwg-src/src/analyzing/cli.ts legacy-scan "$
 | 组 | 篇数 | 验证手段 |
 | --- | ---: | --- |
 | 触控命中/形态适配 | 6 | 设备 `smallTap` 走查（已有装置）+ 200%/400% 字号 reflow |
-| 键盘/读屏语序 | 6 | CDP 键盘走查 + VoiceOver/TalkBack 人工（**从未做过**，PRODUCT 已声明不承诺） |
+| 键盘/读屏语序 | 6 | **不做（用户 261116 裁决）**：本仓不对外承诺读屏一致性（PRODUCT §Accessibility 已写明「基线 5 条 + 已知未覆盖不承诺」），因此不跑 VoiceOver/TalkBack 实测。既有 `aria-*`/`inert`/焦点环**保留**——它们同时服务键盘用户、自动化与测试，删除是负收益。键盘可达性（Esc/方向键/焦点回归）仍在基线内，由 `focusRingGates`/`NativeDialog` 等护栏守 |
 | 图文/媒体优先级 | 4 | 首屏 LCP 探针（`scripts/mobile-audit/perf-baseline.mjs` 已有）。**261116 已实测**（移动端冷启动，`Page.addScriptToEvaluateOnNewDocument` + 清缓存 reload）：移动端 LCP = `88ms`（元素是启动页文字 `span.mb-launch__label`，size 2601）；桌面端 LCP = `1536ms`（元素是内核正文段落 `ne-p`，size 47318），两端都是**文字**、**不是图片** ⇒ `fetchpriority` 保持 0 处是有依据的（现无 LCP 图需要提权）；图片侧仍保留 `loading=lazy` + `decoding=async` + 比例盒 |
 | combo/筛选控件语义 | 4 | 键盘 + 读屏 + `aria-expanded/activedescendant` 实测 |
 | 长任务/INP | 4 | `PerformanceObserver` long-animation-frame + 10k 库实测（HANDOFF 已有大库装置） |
 | 浮层层序/嵌套 | 8 | 内核 portal（`.ne-overlay-container`）× 自绘 Overlay × 移动 Sheet 三层叠加实测 |
+
+### 2.6 修复后复评（261116）
+
+**方法**（避免把「重打分」说成「重读 252 篇」）：复评对象 = §2.2 逐条列出的 **56 行** + §2.4 中已被装置覆盖的组；未列出的「部分」沿用原判（本轮未逐篇复读）。每条只认**仓内可 grep 的证据**或**本轮实测数据**。
+
+**结论**：
+
+- **命中 13 → 0**（两个官方 analyzer 复跑均 0 findings：发布版 35 规则 / 源码版 52 规则）。
+- §2.2 的 56 行里：**19 行转「已满足」**、**6 行转「不适用 / 已验证」**、**5 行转「不做（用户裁决 / 有意）」**、其余判定不变（仍是「部分」，其中多数是设计选择而非缺口）。
+- 「待验证 32」里：长任务/INP（4）已实测、触控/形态（6）已由 23 屏走查 + 窗口矩阵覆盖、LCP（4）已实测、键盘/读屏（6）按用户裁决**不做**；剩浮层全组合（8）与 400% 字号未做（见 §2.4）。
+
+| guide | 修复前 | 现在 | 证据 |
+| --- | --- | --- | --- |
+| `ui-components/dialog` | 命中 | **已满足** | 26 处原生 `<dialog>`+`showModal`（`NativeDialog`）；浮动 6 处保留自绘但补 a11y |
+| `html/dialog`（总纲） | 部分 | **已满足** | 同上 |
+| `ui-behaviors/declarative-dialog-popover-control` | 命中 | **不适用** | 全仓无「静态按钮 ↔ 固定目标」对子；对话框全部由状态/菜单打开（A11 核实） |
+| `forms/ime-safe-enter-submit` | 命中 | **已满足** | 35 处 / 27 文件统一 `isImeConfirming`（`core/ime.ts`），`ime.test.ts` + `imeEnterWiring.test.ts` |
+| `forms/form-fields-automatically-fit-contents` | 命中 | **已满足** | AI 输入条 `field-sizing: content`，删逐键 `scrollHeight` |
+| `forms/branded-select-styling` | 命中 | **部分（试点）** | `NativeSelect` 仅设置页「备份间隔」1 处；`Select.tsx` 未动（A13） |
+| `visual-design/dark-mode` | 命中 | **已满足** | 两份入口 `<meta name="color-scheme" content="light dark">`；`boot.html` 用 `light-dark()` |
+| `visual-design/complex-shapes` | 命中 | **已满足** | 2 处补标准 `mask`，保留前缀 |
+| `accessibility/respect-os-text-scale` | 命中 | **部分（主体完成）** | `<meta text-scale>` + 全部字号 rem 化 + 28 条容器 `min-height`；200% 扫描自有文字零裁切 |
+| `performance/optimize-image-priority` | 命中 | **不适用（实测）** | LCP 两端均为文字（移动 88ms 启动文字 / 桌面 1536ms 内核段落）⇒ 无 LCP 图可提权 |
+| `js/js` | 命中 | **已满足** | 两个官方 analyzer 0 findings；`toSorted` 73 处、`withResolvers` 7 处 |
+| `ui-atoms/position-aware-tooltips` | 命中 | **已满足** | `usePopoverPosition` 翻转 + 自研 tooltip（hover/长按 + `aria-describedby`） |
+| `ui-behaviors/light-dismiss-a-dialog` | 部分 | **已满足** | 原生 dialog `cancel`/backdrop + Overlay `pointerdown` 起点口径 |
+| `ui-behaviors/prevent-page-scroll-under-modal-dialog` | 部分 | **已满足** | `lockPageScroll` 引用计数 + 原生 dialog 页面滚动锁 |
+| `ui-behaviors/animate-to-from-top-layer` | 部分 | **已满足** | `@starting-style` + `.ln-native-dialog` 入场动画（现在有 top-layer 可动） |
+| `ui-behaviors/move-dom-element-without-losing-state` | 部分 | **已满足** | 首页分页 keep-alive + `inert` 切换 |
+| `perf/defer-rendering-heavy-content` | 部分 | **已满足** | `content-visibility: auto` + `contain-intrinsic-size`（tree/outline/ink panel） |
+| `perf/break-up-long-tasks` | 部分 | **不适用（实测）** | LoAF 实测 0 个 >50ms 长任务；`scheduler.yield` 有意不加 |
+| `perf/identify-inp-causes` | 待验证 | **已验证** | 同上（A06 记录） |
+| `perf/schedule-tasks-by-priority` | 待验证 | **不适用（实测）** | 无长任务可排 |
+| `security/validate-origins` | 部分 | **已满足** | `isAppOriginUrl` 比 scheme+host（非特殊 scheme `origin` 恒 null） |
+| `security/secure-external-subresources` | 部分 | **不适用** | 全本地资源（无 CDN 外链），SRI 无对象 |
+| `visual-design/color` | 部分 | **已满足** | `a11y.css` 的 `forced-colors` 兜底（系统色关键字，正常模式零影响） |
+| `visual-design/typography` | 部分 | **已满足** | 字号全 rem（rem×16 = 改前 px），无 `vw` 字号 |
+| `visual-design/improve-text-layout-and-legibility` | 部分 | **已满足** | `text-wrap: pretty/balance` 9 处 |
+| `user-experience/natural-interactions` | 部分 | **已满足** | 六态齐；整卡 `:active` 缩放已按 261111 移除 |
+| `forms/autofill-sign-in-form` | 部分 | **已满足** | 密码框 `current-password/new-password`；密钥类字段 `autocomplete="off"` |
+| `accessibility/accessibility`（总纲） | 部分 | **不做（用户裁决）** | 261116：不承诺读屏一致；既有 `aria-*`/`inert`/焦点环**保留**（键盘/自动化/测试同样依赖） |
+| `accessibility/accessible-error-announcement` | 部分 | **不做（用户裁决）** | 同上；`role="alert"`/`aria-live` 保留 |
+| `accessibility/accessible-generated-content` | 部分 | **不做（用户裁决）** | 同上 |
+| `security/trusted-types` | 部分 | **不做（有意）** | 无 `eval`/动态脚本注入面；引入 TT 要重写整个 sanitize 链 |
+| `visual-design/visually-stable-font-fallbacks` | 部分 | **不做（有意）** | 系统字体栈、无自托管字体，没有 FOUT 位移对象 |
+| `forms/combobox`、`filterable-select` | 待验证 | **部分（已核对）** | 自研 Select 有 combobox 键盘模型（↑↓/Home/End/Esc/焦点回归），未用原生 combobox |
+| `js/calculate-event-differentials` | 待验证 | **部分（有意）** | `MM-DD` 是定稿格式；`Intl` 仅统计模块使用 |
+
+**仍然「部分」且已知原因**（不是漏做）：自绘原语（menu/tabs/toolbar/card/checkbox/progress/switch）· 单页壳无路由（guided-navigation）· 手写手势与拖拽 · 移动 Sheet 未迁 top-layer · 内核/第三方边界内的键盘与对比度 · 400% 字号与浮层全组合未测。
 
 ## 3. 确定性 findings（工具口径 108 条）
 
