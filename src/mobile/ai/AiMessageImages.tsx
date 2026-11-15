@@ -28,7 +28,7 @@ export function AiMessageImages({ conversationId, images }: { conversationId: st
   if (urls.length === 0) return null;
   return (
     <div className="ai-msg__images">
-      {urls.map((url, index) => <img key={index} src={url} alt="对话图片" />)}
+      {urls.map((url, index) => <img key={index} src={url} alt="对话图片" loading="lazy" decoding="async" />)}
     </div>
   );
 }

@@ -309,7 +309,7 @@ export function AttachmentChipList({ noteId, attachments, onOpen, onOpenImages, 
           onMouseEnter={(event) => tip.show(name, event.currentTarget)}
           onMouseLeave={tip.hide}>
           {imageOnly
-            ? <img src={chipUrlOf(file)} alt={name} loading="lazy" onClick={() => openByFile(file)} />
+            ? <img src={chipUrlOf(file)} alt={name} loading="lazy" decoding="async" onClick={() => openByFile(file)} />
             : (
               /* 名称不是丢了、而是挪到 hover 气泡里（`aria-label` 保可读；不再是常驻文字） */
               <button type="button" className="bt-file-chip ln-iconbtn ln-iconbtn--compact" aria-label={name} onClick={() => openByFile(file)}>
@@ -661,7 +661,7 @@ function AttachmentExpandPopover({ anchor, noteId, attachments, readOnly, imageO
                       {/* 附件字段 = 大号**类型图标**（用户 260930）；图片字段仍是缩略图（那个字段就是看图）。 */}
                       {imageOnly
                         ? (isImageExtension(extOf(file))
-                          ? <img className="ln-imgfill" src={thumbOf(file)} alt={name} loading="lazy" draggable={false} />
+                          ? <img className="ln-imgfill" src={thumbOf(file)} alt={name} loading="lazy" decoding="async" draggable={false} />
                           : <span className="bt-attach-card-ext">{(extOf(file) || "file").toUpperCase()}</span>)
                         : <span className="bt-attach-card-kind"><FileKindIcon name={name} size={46} /></span>}
                       {!readOnly && (

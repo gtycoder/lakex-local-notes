@@ -96,7 +96,7 @@ function AssetStage({ item, broken, onBroken }: { item: RemovedAsset | null; bro
   const src = assetDisplayUrl(item, preview === "image" ? 1024 : null);
   return (
     <>
-      {preview === "image" && <img src={src} alt="" onError={onBroken} />}
+      {preview === "image" && <img src={src} alt="" decoding="async" onError={onBroken} />}
       {preview === "video" && <video src={src} controls preload="metadata" onError={onBroken} />}
       {preview === "audio" && <audio src={src} controls preload="metadata" onError={onBroken} />}
       {preview === "pdf" && <iframe src={src} title={item.filename} onError={onBroken} />}

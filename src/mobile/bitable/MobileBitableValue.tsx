@@ -41,6 +41,7 @@ export function AttachmentCell({ noteId, value, imageOnly }: { noteId: string; v
               alt={name}
               title={name}
               loading="lazy"
+              decoding="async"
             />
           : (
             <button key={file} type="button" className={"mbt-attachment-file" + (imageOnly ? "" : " is-kind")}

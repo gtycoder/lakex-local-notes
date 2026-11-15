@@ -29,7 +29,7 @@ export function MobileBitableGalleryView({ noteId, table, view, records, ctx, on
             onClick={() => onOpen(record.id)}
             onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpen(record.id); } }}>
             {cover
-              ? <img className="mbt-gallery-card__cover" src={bitableAssetUrl(noteId, cover.file, 160)} alt={cover.name} loading="lazy" />
+              ? <img className="mbt-gallery-card__cover" src={bitableAssetUrl(noteId, cover.file, 160)} alt={cover.name} loading="lazy" decoding="async" />
               : <div className="mbt-gallery-card__cover mbt-gallery-card__cover--empty" aria-hidden="true" />}
             <div className="mbt-gallery-card__body">
               <div className="mbt-gallery-card__title">{bitableRecordTitle(table, record, ctx)}</div>

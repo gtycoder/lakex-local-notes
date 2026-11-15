@@ -59,7 +59,7 @@ export function BitableGalleryView({ noteId, table, view, records, onOpenRecord,
               <button type="button" className={"bt-gallery-cover" + (fit === "contain" ? " is-contain" : "")}
                 title={cover.name} aria-label={"预览 " + cover.name}
                 onClick={(event) => { event.stopPropagation(); onOpenImages(cellImages, coverIndex < 0 ? 0 : coverIndex); }}>
-                <img className="ln-imgfill" src={coverSrc(cover.file)} alt={cover.name} loading="lazy" />
+                <img className="ln-imgfill" src={coverSrc(cover.file)} alt={cover.name} loading="lazy" decoding="async" />
               </button>
             ) : (
               <div className="bt-gallery-cover">

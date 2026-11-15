@@ -202,7 +202,7 @@ export function NoteInfoDialog({ note, onClose, onRevealNoteFile, onOpenAssetsDi
                   {info.assets.slice(0, ITEM_LIMIT).map((a) => (
                     <button key={a.filename} className="note-info-asset" onClick={() => openAsset(a.filename)} title={`${a.filename}（${formatNoteInfoSize(a.size)}）`}>
                       {thumbs[a.filename]
-                        ? <img className="ln-imgfill" src={thumbs[a.filename]} alt={a.filename} loading="lazy" />
+                        ? <img className="ln-imgfill" src={thumbs[a.filename]} alt={a.filename} loading="lazy" decoding="async" />
                         : <span className="note-info-asset-glyph">{a.kind === "image" ? <ImageIcon size={16} /> : a.kind === "video" || a.kind === "audio" ? <Box size={16} /> : <Paperclip size={16} />}</span>}
                     </button>
                   ))}
