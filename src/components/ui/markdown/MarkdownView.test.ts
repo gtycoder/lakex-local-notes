@@ -24,7 +24,10 @@ describe("Markdown 轻量子集渲染（261004）", () => {
 
   it("代码块 / 引用 / 列表（含嵌套）/ 分割线", () => {
     const out = html("```\nconst a = 1;\n```\n\n> 引用一\n> 引用二\n\n- 一\n- 二\n  - 二一\n\n---\n");
-    expect(out).toContain("<pre><code>const a = 1;</code></pre>");
+    // 261116 P4：代码块改成 .md-code（行号 + 复制按钮），原文仍在 pre>code 里
+    expect(out).toContain('class="md-code"');
+    expect(out).toContain('aria-label="复制代码"');
+    expect(out).toContain('<span class="md-code__line">const a = 1;</span>');
     expect(out).toContain("<blockquote><p>引用一</p><p>引用二</p></blockquote>");
     expect(out).toContain("<li>一</li>");
     expect(out).toContain("<li>二<ul><li>二一</li></ul></li>");

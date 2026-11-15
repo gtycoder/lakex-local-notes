@@ -77,6 +77,68 @@
   padding: 0;
   background: transparent;
 }
+/* ── 代码块（261116 P4）：行号 + 复制 ────────────────────────────────
+ * 行号用 CSS 计数器渲染（span 逐行），不产生额外 DOM 文本；复制按钮写的是原文。
+ * 复制按钮默认低存在感，hover/focus-within 显现（触屏没有 hover ⇒ 常显，用 @media (hover: none) 兜底）。
+ * 不引高亮库（体积/依赖红线），只做等宽 + 分组底色。 */
+.md-code {
+  position: relative;
+  margin: 0 0 var(--lake-space-md);
+}
+.md-code pre {
+  margin: 0;
+  counter-reset: md-code-line;
+}
+.md-code__line {
+  display: block;
+  padding-left: calc(var(--lake-space-lg) + 2ch);
+  text-indent: calc(-1 * (var(--lake-space-lg) + 2ch));
+  white-space: pre;
+}
+.md-code__line::before {
+  counter-increment: md-code-line;
+  content: counter(md-code-line);
+  display: inline-block;
+  width: 2ch;
+  margin-right: var(--lake-space-lg);
+  color: var(--lake-text-4);
+  text-align: right;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.md-code__copy {
+  position: absolute;
+  top: var(--lake-space-sm);
+  right: var(--lake-space-sm);
+  padding: 2px var(--lake-space-sm);
+  border: 0.5px solid var(--lake-border-2);
+  border-radius: var(--lake-radius-xs);
+  background: var(--lake-bg-panel);
+  color: var(--lake-text-3);
+  font-family: inherit;
+  font-size: var(--lake-font-size-nano);
+  opacity: 0;
+  cursor: pointer;
+  transition: none;
+}
+.md-code:hover .md-code__copy,
+.md-code:focus-within .md-code__copy {
+  opacity: 1;
+}
+.md-code__copy:hover {
+  color: var(--lake-text-1);
+  background: var(--lake-bg-hover);
+}
+.md-code__copy:focus-visible {
+  outline: var(--lake-focus-ring-width) solid var(--lake-accent);
+  outline-offset: var(--lake-focus-ring-offset);
+}
+@media (hover: none) {
+  .md-code__copy {
+    opacity: 1;
+  }
+}
+
 .md-preview a {
   color: var(--lake-accent-text);
   text-decoration: none;
