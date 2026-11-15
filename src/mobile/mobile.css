@@ -87,6 +87,17 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
   backdrop-filter: var(--mb-blur-bar);
   box-shadow: var(--mb-shadow-bar);
 }
+/* 261115 用户点单：首页顶栏滚动后不要「玻璃灰条」——它与标签/AI 页（无滚动、顶栏透明）不一致，
+ * 看起来像顶部多了一条灰带，且内容在 44 里居中、灰带却延伸到 58（含 14px 渐隐）⇒ 视觉上偏上。
+ * 改成**与画布同色的实底**：滚动时照样压住下方内容，但整块与页面连成一片（没有 band、没有渐隐）。 */
+.mobile-topbar--home { background: transparent; }
+.mobile-topbar--home.is-scrolled {
+  background: var(--mb-canvas-1);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow: none;
+}
+.mobile-topbar--home.is-scrolled::after { display: none; }
 /* 栏下 14px 渐隐：颜色由画布令牌派生（浅/深自动跟随，不写颜色字面量）。 */
 .mobile-topbar.is-scrolled::after {
   content: ""; position: absolute; left: 0; right: 0; top: 100%; height: 14px; pointer-events: none;
