@@ -41,7 +41,7 @@ export function createDesktopPlatformPort(store: Store, quickNotes?: QuickNotesS
         id: q.id, createdAt: q.createdAt, updatedAt: q.updatedAt, contentHash: q.contentHash,
         isConflict: !!q.isConflict,
         // 关系按集合同步：排序后的 ID 列表（顺序是设备本地视图，不传播）。
-        tagIds: [...qn.listQuickNoteTagIds(q.id)].sort(),
+        tagIds: [...qn.listQuickNoteTagIds(q.id)].toSorted(),
         tagsUpdatedAt: qn.links.tagsUpdatedAt(q.id),
       }));
     },

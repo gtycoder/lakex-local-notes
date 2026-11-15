@@ -224,7 +224,7 @@ export function listBackupGroups(dir: string, onSkip?: (name: string, error: unk
     group.mtimeMs = Math.max(group.mtimeMs, Math.round(stat.mtimeMs));
     groups.set(stamp, group);
   }
-  return [...groups.values()].sort((a, b) => b.stamp.localeCompare(a.stamp)); // 新 → 旧（时间戳字符串可直接比）
+  return [...groups.values()].toSorted((a, b) => b.stamp.localeCompare(a.stamp)); // 新 → 旧（时间戳字符串可直接比）
 }
 
 /** 备份文件名里的时间戳（`2026-11-06T14-08-04`，UTC）→ ISO 串；解析不了返回 null（只影响展示）。 */

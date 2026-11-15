@@ -295,7 +295,7 @@ if (typeof window !== "undefined") {
         const total = lakeLongTasks.reduce((sum, t) => sum + t.duration, 0);
         const last = lakeLongTasks[lakeLongTasks.length - 1];
         console.group(`长任务（共 ${lakeLongTasks.length} 个，合计 ${total}ms，最后结束于 ${last ? last.start + last.duration + "ms" : "?"}）`);
-        console.table([...lakeLongTasks].sort((a, b) => a.start - b.start).map((t) => ({ start: `${t.start}ms`, duration: `${t.duration}ms` })));
+        console.table(lakeLongTasks.toSorted((a, b) => a.start - b.start).map((t) => ({ start: `${t.start}ms`, duration: `${t.duration}ms` })));
         console.groupEnd();
       } else {
         rlog.warn("editor", "未观测到长任务（可能尚未打开文档，或未在编辑器创建前启用观测）");

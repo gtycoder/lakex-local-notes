@@ -114,7 +114,7 @@ function mergeQuickTagsIntoState(
   return {
     ...state,
     quickNotes: { ...state.quickNotes, tags: merged },
-    ...(pending.size > 0 ? { pendingTagDeletes: [...pending].sort() } : { pendingTagDeletes: [] }),
+    ...(pending.size > 0 ? { pendingTagDeletes: [...pending].toSorted() } : { pendingTagDeletes: [] }),
     // 结算集合只在内存里过一手（saveState 消费后由端口从待删表移除；不落库）。
     ...(settledNow ? { tagPendingSettled: [...settled] } : {}),
   };
@@ -275,8 +275,8 @@ export function mergeRoundIntoState(state: DeviceState, round: RoundResult, opts
   return {
     ...sd,
     folders: applyFolders(sd.folders),
-    lake: { ...sd.lake, notes: [...lakeById.values()].sort((a, b) => (a.id < b.id ? -1 : 1)), folders: applyFolders(sd.lake.folders) },
-    quickNotes: { ...sd.quickNotes, items: [...quickById.values()].sort((a, b) => (a.id < b.id ? -1 : 1)) },
+    lake: { ...sd.lake, notes: [...lakeById.values()].toSorted((a, b) => (a.id < b.id ? -1 : 1)), folders: applyFolders(sd.lake.folders) },
+    quickNotes: { ...sd.quickNotes, items: [...quickById.values()].toSorted((a, b) => (a.id < b.id ? -1 : 1)) },
     pending: round.commit.status === "retry" ? state.pending : round.remainingPending,
     intents: round.intents.intents,
     restorePending: round.intents.restorePending,

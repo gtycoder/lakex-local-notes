@@ -37,7 +37,7 @@ export function selectEvictionIds(tabs: readonly TabLike[], options: EvictionOpt
   if (evictCount <= 0) return [];
 
   const removable = scoped.filter((tab) => tab.noteId !== activeNoteId);
-  const sorted = [...removable].sort((a, b) => {
+  const sorted = removable.toSorted((a, b) => {
     const pinA = pinnedNoteIds?.has(a.noteId) ? 1 : 0;
     const pinB = pinnedNoteIds?.has(b.noteId) ? 1 : 0;
     if (pinA !== pinB) return pinA - pinB;

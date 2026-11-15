@@ -360,8 +360,8 @@ export class MobileDeviceStore implements S3v3DeviceStore {
         if (!nativeAssetSyncSupported()) return out;
         try {
           const res = await NativeAssetSync.listAllAssets();
-          for (const [id, names] of Object.entries(res.notes ?? {})) out.notes.set(id, [...names].sort());
-          for (const [id, names] of Object.entries(res.quickNotes ?? {})) out.quick.set(id, [...names].sort());
+          for (const [id, names] of Object.entries(res.notes ?? {})) out.notes.set(id, names.toSorted());
+          for (const [id, names] of Object.entries(res.quickNotes ?? {})) out.quick.set(id, names.toSorted());
         } catch { /* 原生不可用/旧 APK：回退逐篇扫描 */ }
         return out;
       })();

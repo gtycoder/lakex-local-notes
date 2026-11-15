@@ -34,7 +34,7 @@ export function selectHistoryDrops(createdAtList: string[], config: HistoryReten
   const dailyWindow = 7 * 24 * 3600 * 1000;
   const weeklyWindow = 30 * 24 * 3600 * 1000;
   const cutoff = now - config.retentionDays * 24 * 3600 * 1000;
-  const sortedTimestamps = [...createdAtList].sort();
+  const sortedTimestamps = createdAtList.toSorted();
   const keep = new Set<string>();
   const latestByDay = new Map<string, string>();
   const latestByWeek = new Map<string, string>();
@@ -55,7 +55,7 @@ export function selectHistoryDrops(createdAtList: string[], config: HistoryReten
   }
 
   const cap = Math.max(1, config.maxSnapshots);
-  const finalKeep = new Set([...keep].sort().slice(-cap));
+  const finalKeep = new Set([...keep].toSorted().slice(-cap));
   return new Set(sortedTimestamps.filter((timestamp) => !finalKeep.has(timestamp) || Date.parse(timestamp) < cutoff));
 }
 

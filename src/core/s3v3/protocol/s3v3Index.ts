@@ -196,14 +196,14 @@ export function sha256Text(text: string): string {
 }
 
 export function serializeLakeIndex(index: LakeIndex): string {
-  const notes = [...index.notes].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
-  const folders = [...index.folders].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  const notes = [...index.notes].toSorted((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  const folders = [...index.folders].toSorted((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   return canonicalJson({ v: index.v, space: index.space, notes, folders });
 }
 export function serializeQuickNotesIndex(index: QuickNotesIndex): string {
-  const items = [...index.items].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
-  const tags = index.tags ? [...index.tags].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)) : undefined;
-  const purged = index.purged ? [...index.purged].sort() : undefined;
+  const items = [...index.items].toSorted((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  const tags = index.tags ? [...index.tags].toSorted((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)) : undefined;
+  const purged = index.purged ? [...index.purged].toSorted() : undefined;
   return canonicalJson({ v: index.v, space: index.space, items, tags, purged });
 }
 export function indexHashOf(serialized: string): string {
@@ -211,7 +211,7 @@ export function indexHashOf(serialized: string): string {
 }
 
 export function serializeDeclaration(decl: AssetDeclaration): string {
-  const assets = [...decl.assets].sort((a, b) => (a.filename < b.filename ? -1 : a.filename > b.filename ? 1 : 0));
+  const assets = [...decl.assets].toSorted((a, b) => (a.filename < b.filename ? -1 : a.filename > b.filename ? 1 : 0));
   return canonicalJson({ assets });
 }
 export function declarationHashOf(decl: AssetDeclaration): string {
@@ -237,7 +237,7 @@ export function pruneQuickPurgedIds(
   now: Date,
   retentionDays: number = S3V3_QUICK_PURGE_RETENTION_DAYS,
 ): string[] {
-  const unique = [...new Set(ids)].sort();
+  const unique = [...new Set(ids)].toSorted();
   if (retentionDays <= 0) return unique;
   const cutoff = now.getTime() - retentionDays * 86_400_000;
   return unique.filter((id) => {

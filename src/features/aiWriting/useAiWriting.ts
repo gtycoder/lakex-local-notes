@@ -312,7 +312,7 @@ export function useAiWriting(options: { active: boolean }): AiWritingController 
     const conversation = conversationRef.current;
     if (!conversation) return;
     const list = messagesRef.current;
-    const lastUserIndex = [...list].reverse().findIndex((message) => message.role === "user");
+    const lastUserIndex = list.toReversed().findIndex((message) => message.role === "user");
     if (lastUserIndex < 0) return;
     const index = list.length - 1 - lastUserIndex;
     const lastUser = list[index];

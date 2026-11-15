@@ -85,7 +85,7 @@ export function useAiConversation({ open, request }: { open: boolean; request: A
 
   const documentText = includeDocument ? docContext?.text : undefined;
   const firstPrompt = buildAiUserContent(instruction, selectionText, documentText);
-  const lastOutput = [...turns].reverse().find((t) => t.role === "assistant")?.text ?? "";
+  const lastOutput = turns.toReversed().find((t) => t.role === "assistant")?.text ?? "";
   const canSendFirst = Boolean(instruction.trim());
   const hasImages = (attachments?.length ?? 0) > 0;
   /** 有选区/图片上下文：区域选择用 AI 只处理这段，不提供全文开关。 */

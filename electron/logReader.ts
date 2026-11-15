@@ -40,7 +40,7 @@ export function tailLinesMatching(fullText: string, opts: LogTailOptions): LogTa
     for (let d = -context; d <= context; d++) show.add(h + d);
   }
   const filtered: Array<{ i: number; line: string }> = [];
-  for (const i of [...show].sort((a, b) => a - b)) {
+  for (const i of [...show].toSorted((a, b) => a - b)) {
     if (i >= 0 && i < lines.length) filtered.push({ i, line: lines[i] });
   }
   // 尾部优先：封顶取最后 maxLines 条

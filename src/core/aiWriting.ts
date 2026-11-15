@@ -140,7 +140,7 @@ export function groupAiWritingHistory(conversations: readonly AiWritingConversat
   const today = startOfDay(now);
   const yesterday = today - 24 * 60 * 60 * 1000;
   const buckets: Record<AiWritingHistoryGroupLabel, AiWritingConversation[]> = { 今天: [], 昨天: [], 更早: [] };
-  const sorted = [...conversations].sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : a.updatedAt > b.updatedAt ? -1 : 0));
+  const sorted = conversations.toSorted((a, b) => (a.updatedAt < b.updatedAt ? 1 : a.updatedAt > b.updatedAt ? -1 : 0));
   for (const conversation of sorted) {
     const time = Date.parse(conversation.updatedAt);
     const bucket = Number.isNaN(time) ? "更早" : time >= today ? "今天" : time >= yesterday ? "昨天" : "更早";

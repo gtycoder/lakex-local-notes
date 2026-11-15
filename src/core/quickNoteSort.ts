@@ -64,7 +64,7 @@ export function sortQuickNotes<T extends { createdAt: string; updatedAt: string 
   };
   const useCreated = isCreatedSort(sort);
   const desc = isDescSort(sort);
-  return [...items].sort((a, b) => {
+  return items.toSorted((a, b) => {
     const d = at(useCreated ? a.createdAt : a.updatedAt) - at(useCreated ? b.createdAt : b.updatedAt);
     return desc ? -d : d;
   });

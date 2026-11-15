@@ -150,7 +150,7 @@ export function groupRecords(
     if (list) list.push(record);
     else groups.set(key, [record]);
   }
-  const keys = [...groups.keys()].sort((a, b) => {
+  const keys = [...groups.keys()].toSorted((a, b) => {
     if ((a === "") !== (b === "")) return a === "" ? 1 : -1; // 空值组排最后
     const cmp = compareValues(field, bitableFieldValue(groups.get(a)![0], field), bitableFieldValue(groups.get(b)![0], field));
     return rule.desc ? -cmp : cmp;

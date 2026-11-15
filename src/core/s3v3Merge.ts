@@ -148,7 +148,7 @@ export function planLakeMerge(base: LakeIndex | null, local: LakeIndex, remote: 
   for (const n of remoteNotes.values()) remoteNoteParents.set(n.id, safeRemote(n)!.parentId);
   const ids = new Set<string>([...localNotes.keys(), ...remoteNotes.keys(), ...baseNotes.keys()]);
   const notes: LakeNotePlan[] = [];
-  for (const id of [...ids].sort()) {
+  for (const id of [...ids].toSorted()) {
     const b = baseNotes.get(id) ?? null;
     const l = localNotes.get(id) ?? null;
     const r = safeRemote(remoteNotes.get(id) ?? null);
@@ -213,7 +213,7 @@ export function planLakeMerge(base: LakeIndex | null, local: LakeIndex, remote: 
   const remoteFolders = byId(remote.folders);
   const fids = new Set<string>([...localFolders.keys(), ...remoteFolders.keys(), ...baseFolders.keys()]);
   const folders: LakeFolderPlan[] = [];
-  for (const id of [...fids].sort()) {
+  for (const id of [...fids].toSorted()) {
     const b = baseFolders.get(id) ?? null;
     const l = localFolders.get(id) ?? null;
     const r = safeRemote(remoteFolders.get(id) ?? null);
@@ -302,7 +302,7 @@ export function planQuickNotesMerge(base: QuickNotesIndex | null, local: QuickNo
   const r = byId(remote.items);
   const ids = new Set<string>([...l.keys(), ...r.keys(), ...b.keys()]);
   const items: QuickNotePlan[] = [];
-  for (const id of [...ids].sort()) {
+  for (const id of [...ids].toSorted()) {
     const bb = b.get(id) ?? null;
     const ll = l.get(id) ?? null;
     const rr = r.get(id) ?? null;

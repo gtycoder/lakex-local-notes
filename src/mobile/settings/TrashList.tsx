@@ -44,7 +44,7 @@ export function TrashList({ title, onChanged, onPreview }: TrashListProps) {
       .filter((it) => !(it.parentId && trashIds.has(it.parentId)))
       .map((it) => ({ key: "t-" + it.id, id: it.id, title: it.title, kind: it.kind === "folder" ? "folder" : "note", deletedAt: it.deletedAt ?? "", cloudDeleted: it.cloudDeleted, fromDiary: it.fromDiary }));
     const quickRows: TrashRow[] = quick.map((r) => ({ key: "q-" + r.id, id: r.id, title: r.previewText || "（空白小记）", kind: "quick", deletedAt: r.deletedAt, cloudDeleted: r.cloudDeleted }));
-    setRows([...noteRows, ...quickRows].sort((a, b) => (b.deletedAt || "").localeCompare(a.deletedAt || "")));
+    setRows([...noteRows, ...quickRows].toSorted((a, b) => (b.deletedAt || "").localeCompare(a.deletedAt || "")));
   }, []);
 
   useEffect(() => { void load(); }, [load]);

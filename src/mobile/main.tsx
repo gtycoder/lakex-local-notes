@@ -10,8 +10,12 @@ import { applySystemBarTheme } from "./native/systemBars";
 import { isQuickNoteShortcutUrl, readLaunchUrlHint } from "./native/quickNoteShortcut";
 import { loadQuickNoteComposer } from "./home/quickNoteComposerLazy";
 import { installGlobalErrorHandlers } from "./lib/globalErrorHandlers";
+// 261115 A21：老 Android WebView 没有 toSorted/toReversed/Promise.withResolvers —— 第一行先补，再跑业务。
+import { installEs2024Fallbacks } from "../lib/es2024Fallback";
 import { clearCrashLog, readCrashLog } from "./lib/crashLog";
 import { consumeNativeCrashLog } from "./native/crashLog";
+
+installEs2024Fallbacks();
 import { MobileErrorBoundary } from "./ui/MobileErrorBoundary";
 // ── W2：安卓 UI 全量重做 —— 颜色统一走**自有设计系统**（--lake-*），不再用思源调色板。
 // 思源样式层（src/b3/**）已整体删除；移动端自 P5 起连 compat.css 也不再引（P0–P7 独立性批次）——

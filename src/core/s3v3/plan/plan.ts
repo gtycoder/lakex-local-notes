@@ -461,7 +461,7 @@ export function planSync(input: PlanInput): SyncPlan {
         return {
           ...picked,
           // P0：有标签字段/版本时必须显式发布 tagIds（空集合也写 `[]`），否则「删光标签」在 wire 上不可见。
-          ...(tagIds !== undefined ? { tagIds: [...tagIds].sort() } : {}),
+          ...(tagIds !== undefined ? { tagIds: tagIds.toSorted() } : {}),
           ...(tagsUpdatedAt ? { tagsUpdatedAt } : {}),
         };
       })
@@ -494,7 +494,7 @@ export function planSync(input: PlanInput): SyncPlan {
         return {
           ...baseItem,
           // 发布时标签关系一律排序成集合（顺序不跨端传播；空集合不写，保持既有 wire 形状）。
-          ...(tagIds?.length ? { tagIds: [...tagIds].sort() } : {}),
+          ...(tagIds?.length ? { tagIds: tagIds.toSorted() } : {}),
           ...(tagsUpdatedAt ? { tagsUpdatedAt } : {}),
         };
       })

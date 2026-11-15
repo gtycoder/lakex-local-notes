@@ -124,7 +124,7 @@ export async function pullRound(
     lake: { ...remote.lake, notes: [...remote.lake.notes, ...trashedLocal] },
     quickNotes: remote.quickNotes,
     folders: remote.lake.folders,
-    remotePurged: [...purged].sort(),
+    remotePurged: [...purged].toSorted(),
   };
   return { state, apply, assets, warnings, trashed, archived };
 }

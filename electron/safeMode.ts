@@ -113,7 +113,7 @@ export function crashTimesOf(marker: CrashMarker | null): string[] {
   if (!marker) return [];
   const listed = Array.isArray(marker.recentTimes) ? marker.recentTimes : [];
   const times = [...listed, marker.time].filter((value): value is string => typeof value === "string" && Number.isFinite(Date.parse(value)));
-  return [...new Set(times)].sort();
+  return [...new Set(times)].toSorted();
 }
 
 /**

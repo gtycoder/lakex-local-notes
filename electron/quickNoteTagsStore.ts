@@ -208,7 +208,7 @@ export class QuickNoteTagsStore {
     let parsed: unknown;
     try { parsed = JSON.parse(row.value); } catch { return []; }
     if (!Array.isArray(parsed)) return [];
-    return [...new Set(parsed.filter((value): value is string => typeof value === "string" && QUICK_NOTE_TAG_ID_RE.test(value)))].sort();
+    return [...new Set(parsed.filter((value): value is string => typeof value === "string" && QUICK_NOTE_TAG_ID_RE.test(value)))].toSorted();
   }
 
   /**
@@ -238,7 +238,7 @@ export class QuickNoteTagsStore {
 
   /** 覆盖写待删集合（仅内部：迁移/重建同名标签/结算用，语义由调用方保证）。 */
   private writePendingDeletes(ids: readonly string[]): void {
-    const unique = [...new Set(ids.filter((id): id is string => typeof id === "string" && QUICK_NOTE_TAG_ID_RE.test(id)))].sort();
+    const unique = [...new Set(ids.filter((id): id is string => typeof id === "string" && QUICK_NOTE_TAG_ID_RE.test(id)))].toSorted();
     this.saveDeviceValue(PENDING_DELETES_KEY, JSON.stringify(unique));
   }
 

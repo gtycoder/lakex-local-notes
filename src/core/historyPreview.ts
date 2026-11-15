@@ -128,7 +128,7 @@ function boardPreview(body: string): SnapshotPreviewBlock[] {
     ["模板", doc.preset || "drawing"],
     ["元素", `${doc.elements.length} 个`],
   ];
-  const top = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3);
+  const top = [...counts.entries()].toSorted((a, b) => b[1] - a[1]).slice(0, 3);
   for (const [type, count] of top) items.push([LABELS[type] ?? type, `${count} 个`]);
   const text = boardToSearchText(body, TEXT_MAX);
   const blocks: SnapshotPreviewBlock[] = [{ type: "facts", items }];

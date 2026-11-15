@@ -64,7 +64,7 @@ export function conversationTitle(messages: readonly { role: string; text: strin
 /** 列表副标题/搜索用摘录：首问 + 最后一条回答（≤240 字）。 */
 export function conversationPreview(messages: readonly { role: string; text: string }[]): string {
   const firstUser = messages.find((message) => message.role === "user" && message.text.trim())?.text ?? "";
-  const lastAnswer = [...messages].reverse().find((message) => message.role === "assistant" && message.text.trim())?.text ?? "";
+  const lastAnswer = messages.toReversed().find((message) => message.role === "assistant" && message.text.trim())?.text ?? "";
   return (firstUser.replace(/\s+/g, " ").trim() + " " + lastAnswer.replace(/\s+/g, " ").trim()).trim().slice(0, 240);
 }
 

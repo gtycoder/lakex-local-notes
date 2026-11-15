@@ -176,7 +176,7 @@ export function computeColumnStat(field: BitableField, records: BitableRecord[],
     if (stat === "sum") return formatStatNumber(nums.reduce((a, b) => a + b, 0));
     if (stat === "average") return formatStatNumber(nums.reduce((a, b) => a + b, 0) / nums.length);
     if (stat === "median") {
-      const sorted = [...nums].sort((a, b) => a - b);
+      const sorted = nums.toSorted((a, b) => a - b);
       const mid = Math.floor(sorted.length / 2);
       return formatStatNumber(sorted.length % 2 === 1 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2);
     }
@@ -494,7 +494,7 @@ function orderFieldsByView(fields: readonly BitableField[], view: BitableView | 
   const order = view?.fieldOrder;
   if (!order || order.length === 0) return [...fields];
   const rank = new Map(order.map((id, index) => [id, index] as const));
-  return [...fields].sort((a, b) => {
+  return fields.toSorted((a, b) => {
     const ra = rank.get(a.id) ?? Number.MAX_SAFE_INTEGER;
     const rb = rank.get(b.id) ?? Number.MAX_SAFE_INTEGER;
     return ra - rb;

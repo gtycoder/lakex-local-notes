@@ -183,7 +183,7 @@ function quickEntryOf(q: QuickNoteSyncRow, assetsQuick: Record<string, string>):
     ...(q.isConflict ? { isConflict: true } : {}),
     ...(assetsQuick[q.id] ?? q.assetsHash ? { assetsHash: assetsQuick[q.id] ?? q.assetsHash } : {}),
     // 标签关系按集合同步：**排序后的 ID 列表**（顺序是设备本地视图，不能传播）。
-    ...(q.tagIds.length ? { tagIds: [...q.tagIds].sort() } : {}),
+    ...(q.tagIds.length ? { tagIds: [...q.tagIds].toSorted() } : {}),
     ...(q.tagsUpdatedAt ? { tagsUpdatedAt: q.tagsUpdatedAt } : {}),
   };
 }
@@ -364,7 +364,7 @@ export function createDeviceStoreMeta(deps: DeviceStoreMetaDeps): DeviceStoreMet
       folders,
       intents,
       pending: ledger?.pending ?? [],
-      remotePurged: hasDbProjection ? [...purged].sort() : [...purged],
+      remotePurged: hasDbProjection ? [...purged].toSorted() : [...purged],
       restorePending,
       pendingAssets: ledger?.pendingAssets ?? [],
       ...(bodyRecoveryPending.length > 0 ? { bodyRecoveryPending } : {}),
@@ -401,7 +401,7 @@ export function createDeviceStoreMeta(deps: DeviceStoreMetaDeps): DeviceStoreMet
       deps.log?.("[sync][folder] 目录父链超过 " + MAX_PARENT_DEPTH + " 层（" + maxDepth + "），按深度排序仍保证父先子后: " + list[0]?.id);
     }
     // 稳定排序：同深度保持输入顺序；父深度 < 子深度 ⇒ 父一定先落库。
-    return [...list].sort((a, b) => depthOf(a.id, new Set()) - depthOf(b.id, new Set()));
+    return list.toSorted((a, b) => depthOf(a.id, new Set()) - depthOf(b.id, new Set()));
   }
 
   /** 目录落库：先 import/更新（deleteMissing=false），再在 saveState 收尾删缺失（true）。 */

@@ -34,8 +34,7 @@ let v3Gate: Promise<unknown> = Promise.resolve();
  */
 let quickPushGate: Promise<unknown> = Promise.resolve();
 async function serializedQuickPush<T>(fn: () => Promise<T>): Promise<T> {
-  let release!: () => void;
-  const mine = new Promise<void>((r) => { release = r; });
+  const { promise: mine, resolve: release } = Promise.withResolvers<void>();
   const previous = quickPushGate;
   quickPushGate = mine;
   await previous.catch(() => undefined);
@@ -61,8 +60,7 @@ function pushRemoteFor(settings: S3Settings): S3v3S3Remote {
 }
 /** v3 全量同步串行化：整轮同步与“单条推送→全量 v3”不会并发写同一设备 sidecar/索引。 */
 async function serializedV3<T>(fn: () => Promise<T>): Promise<T> {
-  let release!: () => void;
-  const mine = new Promise<void>((r) => { release = r; });
+  const { promise: mine, resolve: release } = Promise.withResolvers<void>();
   const previous = v3Gate;
   v3Gate = mine;
   await previous.catch(() => undefined);

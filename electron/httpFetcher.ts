@@ -65,7 +65,7 @@ function forgetAddress(hostname: string, address: dns.LookupAddress): void {
 /** 把解析结果排成尝试顺序：上次成功地址优先，其余保持解析顺序，最多 MAX_ADDRESS_ATTEMPTS 个。 */
 function orderAddresses(hostname: string, records: dns.LookupAddress[]): dns.LookupAddress[] {
   const preferred = preferredAddressOf(hostname);
-  const ordered = preferred ? [...records].sort((a, b) => (a.address === preferred ? -1 : 0) - (b.address === preferred ? -1 : 0)) : records;
+  const ordered = preferred ? records.toSorted((a, b) => (a.address === preferred ? -1 : 0) - (b.address === preferred ? -1 : 0)) : records;
   return ordered.slice(0, MAX_ADDRESS_ATTEMPTS);
 }
 

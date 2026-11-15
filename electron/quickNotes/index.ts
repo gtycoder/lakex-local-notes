@@ -188,7 +188,7 @@ export class QuickNotesStore {
     return {
       id: row.id, createdAt: row.created_at, updatedAt: row.updated_at, contentHash: row.content_hash,
       isConflict: Number(row.is_conflict) === 1,
-      tagIds: [...this.listQuickNoteTagIds(row.id)].sort(),
+      tagIds: [...this.listQuickNoteTagIds(row.id)].toSorted(),
       tagsUpdatedAt: this.links.tagsUpdatedAt(row.id),
       ...(Number(row.cloud_deleted) === 1 ? { cloudDeleted: true } : {}),
       ...(row.deleted_at ? { deletedAt: row.deleted_at } : {}),

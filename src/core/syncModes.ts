@@ -44,7 +44,7 @@ export const SYNC_INTERVAL_PRESETS = [5, 15, 30, 60, 120, 360];
 export function syncIntervalOptions(current: number): number[] {
   const set = new Set<number>(SYNC_INTERVAL_PRESETS);
   if (Number.isFinite(current) && current >= 1) set.add(Math.floor(current));
-  return [...set].sort((a, b) => a - b);
+  return [...set].toSorted((a, b) => a - b);
 }
 
 /**

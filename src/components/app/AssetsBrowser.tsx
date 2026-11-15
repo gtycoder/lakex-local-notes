@@ -280,7 +280,7 @@ export function AssetsBrowser({ active, onDataChanged }: { active: boolean; onDa
     setBodyBusy(doc.id);
     try {
       const snapshots = await native.listNoteHistory(doc.id);
-      const newest = [...snapshots].sort((a, b) => b.id - a.id)[0];
+      const newest = snapshots.toSorted((a, b) => b.id - a.id)[0];
       if (!newest) {
         setBodyMsg("这篇文档没有可恢复的历史版本。");
       } else {
@@ -344,7 +344,7 @@ export function AssetsBrowser({ active, onDataChanged }: { active: boolean; onDa
       if (!group) { group = { key, title: item.noteTitle ?? item.noteId, state, items: [] }; map.set(key, group); }
       group.items.push(item);
     }
-    return [...map.values()].sort((a, b) => a.title.localeCompare(b.title) || a.key.localeCompare(b.key));
+    return [...map.values()].toSorted((a, b) => a.title.localeCompare(b.title) || a.key.localeCompare(b.key));
   }, [items]);
 
   // 三个分类互斥（用户 261006：去掉「全部」，只留可删 / 历史保护 / 缺失）。

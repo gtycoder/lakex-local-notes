@@ -57,7 +57,7 @@ export function syncConflictsSummary(rows: readonly SyncConflictRow[]): string {
 
 /** 时间倒序（主进程已排好；UI 再兜一次，防脏数据打乱顺序）。 */
 export function sortConflictsNewestFirst(items: readonly SyncConflictRow[]): SyncConflictRow[] {
-  return [...items].sort((a, b) => {
+  return items.toSorted((a, b) => {
     const at = (b.at || "").localeCompare(a.at || "");
     return at !== 0 ? at : (b.id || "").localeCompare(a.id || "");
   });

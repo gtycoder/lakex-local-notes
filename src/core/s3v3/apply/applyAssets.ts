@@ -146,14 +146,14 @@ export async function applyAssets(
         //（引擎不消费 ⇒ UI 静默），且会被写进声明引用一个永远传不上去的对象。这里统一跳过 + 结构化 warning。
         if (stats) {
           local = [];
-          for (const entry of [...stats].sort(byFilename)) {
+          for (const entry of stats.toSorted(byFilename)) {
             if (isUsableAssetFilename(entry.filename)) { local.push(entry); continue; }
             warnInvalidAssetName(space, id, entry.filename, "本机资源文件名不符合同步白名单（仅字母/数字/._-），已跳过");
           }
         } else if (names) {
           const remoteByName = new Map((remote?.assets ?? []).map((a) => [a.filename, a] as const));
           local = [];
-          for (const filename of [...names].sort()) {
+          for (const filename of names.toSorted()) {
             // 先判名（不读字节）：非法名平台侧 read 会被拒，也不能进声明/对象键。
             if (!isUsableAssetFilename(filename)) {
               warnInvalidAssetName(space, id, filename, "本机资源文件名不符合同步白名单（仅字母/数字/._-），已跳过");
@@ -174,7 +174,7 @@ export async function applyAssets(
           }
         } else {
           local = [];
-          for (const entry of [...(await ports.listLocalAssets(space, id))].sort(byFilename)) {
+          for (const entry of [...(await ports.listLocalAssets(space, id))].toSorted(byFilename)) {
             if (isUsableAssetFilename(entry.filename)) { local.push(entry); continue; }
             warnInvalidAssetName(space, id, entry.filename, "本机资源文件名不符合同步白名单（仅字母/数字/._-），已跳过");
           }

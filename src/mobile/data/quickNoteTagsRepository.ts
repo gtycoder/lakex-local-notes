@@ -65,7 +65,7 @@ export async function listPendingTagDeletes(d: MobileDb): Promise<string[]> {
   try {
     const parsed = JSON.parse(raw) as unknown;
     if (!Array.isArray(parsed)) return [];
-    return [...new Set(parsed.filter((id): id is string => typeof id === "string" && id.length > 0))].sort();
+    return [...new Set(parsed.filter((id): id is string => typeof id === "string" && id.length > 0))].toSorted();
   } catch {
     return [];
   }
@@ -73,7 +73,7 @@ export async function listPendingTagDeletes(d: MobileDb): Promise<string[]> {
 
 /** 覆盖写本机待删集合（空集合 = 删掉这一行，避免 device_state 留空壳）。 */
 export async function writePendingTagDeletes(d: MobileDb, ids: readonly string[]): Promise<void> {
-  const unique = [...new Set(ids.filter((id) => typeof id === "string" && id.length > 0))].sort();
+  const unique = [...new Set(ids.filter((id) => typeof id === "string" && id.length > 0))].toSorted();
   if (unique.length === 0) {
     await d.prepare("DELETE FROM device_state WHERE key=?").run(PENDING_TAG_DELETES_KEY);
     return;

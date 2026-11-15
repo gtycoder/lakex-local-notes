@@ -122,7 +122,7 @@ export function lineBoxRects(rects: readonly SelectionRect[], defaultLineHeight:
   });
   const center = (r: { top: number; height: number }) => r.top + r.height / 2;
   const groups: typeof expanded[] = [];
-  for (const r of expanded.slice().sort((a, b) => center(a) - center(b))) {
+  for (const r of expanded.toSorted((a, b) => center(a) - center(b))) {
     // 同一行：中心相差不到「两者行高的一半」；相邻行相差一个行高 ⇒ 不会串行
     const group = groups.find((g) => Math.abs(center(g[0]) - center(r)) < Math.max(r.lh, g[0].lh) * 0.5);
     if (group) group.push(r); else groups.push([r]);

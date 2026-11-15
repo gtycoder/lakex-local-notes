@@ -246,7 +246,7 @@ export function restoreMainDatabaseFromBackup(options: RestoreFromBackupOptions)
       if (currentQuickNotesDbPath) { try { ops.rmSync(currentQuickNotesDbPath + suffix, { force: true }); } catch { /* 尽力 */ } }
     }
     let rolledBack = true;
-    for (const item of [...moved].reverse()) {
+    for (const item of moved.toReversed()) {
       try { ops.renameSync(item.to, item.from); } catch { rolledBack = false; }
     }
     return {

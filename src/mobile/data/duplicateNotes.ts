@@ -102,7 +102,7 @@ export async function copyNoteAssets(sourceId: string, targetId: string): Promis
   // 原生整目录拷贝（261107）：一次桥调用、字节不过 WebView；旧 APK/web 预览回退 JS 有界并发。
   const nativeCopied = await copyNoteAssetsDirNativeFs(sourceId, targetId);
   if (nativeCopied !== null) return nativeCopied;
-  const keys = [...await listNoteAssetKeysFs(sourceId)].sort();
+  const keys = [...await listNoteAssetKeysFs(sourceId)].toSorted();
   const filenames: string[] = [];
   for (const key of keys) {
     const filename = key.slice(sourceId.length + 1);

@@ -288,8 +288,8 @@ function numericMatches(actual: unknown, expected: string, operator: BitableFilt
 
 function sameStringSet(a: string[], b: string[]): boolean {
   if (a.length !== b.length) return false;
-  const sa = [...a].sort();
-  const sb = [...b].sort();
+  const sa = a.toSorted();
+  const sb = b.toSorted();
   return sa.every((value, index) => value === sb[index]);
 }
 

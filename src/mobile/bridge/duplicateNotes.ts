@@ -52,7 +52,7 @@ async function orderIdsForDuplication(d: MobileDb, ids: readonly string[]): Prom
     ).all(...part) as Array<{ id: string; sort_order: number }>;
     for (const row of rows) sortOrder.set(String(row.id), Number(row.sort_order ?? 0));
   }
-  return [...ids].sort((a, b) => {
+  return ids.toSorted((a, b) => {
     const diff = (sortOrder.get(b) ?? Number.NEGATIVE_INFINITY) - (sortOrder.get(a) ?? Number.NEGATIVE_INFINITY);
     return diff !== 0 ? diff : a.localeCompare(b);
   });

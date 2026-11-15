@@ -165,7 +165,7 @@ async function listLocalAssets(device: QuickPushDevice, id: string): Promise<{
       stats = new Map(list.map((s) => [s.filename, { size: s.size, hash: s.hash }] as const));
     } catch { stats = null; }
   }
-  const filenames = stats ? [...stats.keys()].sort() : await device.listQuickAssets(id);
+  const filenames = stats ? [...stats.keys()].toSorted() : await device.listQuickAssets(id);
   return { filenames, stats };
 }
 
@@ -393,16 +393,16 @@ async function runQuickPushOnce(deps: QuickPushDeps, id: string): Promise<QuickP
       ...local,
       contentHash,
       ...(decl ? { assetsHash: decl.declHash } : {}),
-      ...(local.tagIds?.length ? { tagIds: [...local.tagIds].sort() } : {}),
+      ...(local.tagIds?.length ? { tagIds: [...local.tagIds].toSorted() } : {}),
     };
     if (!decl) delete (entry as { assetsHash?: string }).assetsHash;
-    const items = [...remoteIndex.items.filter((q) => q.id !== id), entry].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+    const items = [...remoteIndex.items.filter((q) => q.id !== id), entry].toSorted((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
     // SD-09：单条推送也是一次发布，同样按保留窗口裁剪（否则会把旧墓碑重新带回云端）。
     const purged = pruneQuickPurgedIds(remoteTombs.filter((x) => x !== id), light?.quickPurgeTimes ?? {}, now());
     nextIndex = {
       v: 3, space: "quickNotes", items,
       ...(remoteIndex.tags !== undefined ? { tags: remoteIndex.tags } : {}),
-      ...(purged.length ? { purged: [...purged].sort() } : {}),
+      ...(purged.length ? { purged: purged.toSorted() } : {}),
     };
     const serialized = serializeQuickNotesIndex(nextIndex);
     commit = indexHashOf(serialized);
