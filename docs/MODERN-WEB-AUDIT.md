@@ -739,7 +739,7 @@ adb shell dumpsys package com.google.android.webview | grep versionName
 | A11 | `command`/`commandfor` | 随 A02 推迟 | — | 有 `<dialog>` 才有意义 |
 | A12 | `field-sizing` | **已修** | `7a0dc111` | AI 输入条改 CSS 自增高，删掉逐键 `scrollHeight` |
 | A13 | `base-select` 试点 | 推迟 | — | 需先有 A02 结论；移动端老 WebView 要 feature detect |
-| A14 | `enterKeyHint` | 待做 | — | 搜索/重命名/新建三处，< 0.5 天 |
+| A14 | `enterKeyHint` | **已修** | `c4b47e9b` | 搜索 = `search`（全局搜索 / 文档内查找）、命名与新建 = `done`（5 个入口）；护栏 `src/mobile/ui/enterKeyHint.test.ts` |
 | A15 | 图片解码/懒加载 | **已修** | `1d07fd60` | 9 宿主 10 处 `<img>`；资源浏览器预览**保持不 lazy**（既有护栏禁止）；`imageAttrGates.test.ts` |
 | A16 | `forced-colors` | **已修** | `ea10e334` | a11y.css 高对比度兜底（系统色关键字，正常模式零影响）；cssLayers 基线 15→23 |
 | A17 | 容器查询 | 推迟 | — | 按组件逐个来，需视觉回归 |
@@ -749,7 +749,7 @@ adb shell dumpsys package com.google.android.webview | grep versionName
 | A21 | JS 现代 API | **部分** | `3d135f54` | `cause`×4 + `AbortSignal.timeout`×1（行为等价）；`toSorted` 47 处与 `withResolvers` 2 处**明确不做**：`tsconfig` target/lib = ES2022（实测 TS2550），且 `src/core` 与 Android 旧 WebView 共用 ⇒ 需项目级配置决策 + feature detect |
 | A22 | 外链 `rel` | 核实**已满足** | — | 4 处 `target="_blank"` 全带 `noreferrer`/`noopener`（`noreferrer` 隐含 noopener） |
 | A23 | anchor positioning | 随 A02 推迟 | — | 元素锚定气泡可在 popover 落地后试点；点锚菜单（右键）保留手算 |
-| A24 | `outline: none` 35 处 | 推迟 | — | 需逐条确认同规则内有自绘焦点环（`:focus-visible` 60 处说明多数有） |
+| A24 | `outline: none` 35 处 | **已修（2 处真缺口 + 33 处核实）** | `2d5f5b2d` | 补桌面目录筛选 wrapper 内嵌环、移动端标题输入框 `:focus-visible` 环；其余 33 处逐条核对为「wrapper `:focus-within` 画环 / 分隔条 `::after` 点亮 / `vendor-focus.css` 收口」；护栏 `focusRingGates.test.ts` |
 | A25 | 标准 `mask` | **已修** | `7a0dc111` | 2 处补标准属性，保留前缀 |
 | A26 | `<meta color-scheme>` | **已修** | `14dcdf15` | 同 A07 |
 | A27 | 启动页深色不跟随 | **已修** | `14dcdf15` | `boot.html` 用 `color-scheme: light dark` + `light-dark()` |
@@ -759,7 +759,7 @@ adb shell dumpsys package com.google.android.webview | grep versionName
 
 ### 11.1 本批的形状（为什么不是「一次性全改」）
 
-- 已落地 10 个 commit，全部**行为等价或默认档位零视觉变化**：IME、字号 rem（等值）、boot 外置（视觉不变）、
+- 已落地 16 个 commit，全部**行为等价或默认档位零视觉变化**：IME、字号 rem（等值）、boot 外置（视觉不变）、
   `field-sizing`（同样自增高）、`decoding=async`（只影响解码线程）、`mask` 补标准属性、`text-wrap`（单行不生效）、
   `forced-colors`（仅高对比度模式）、inert（只改可聚焦性）、Tooltip（行为补齐 + 桌面时序不变）。
 - 真正会改观感的留到设备/视觉批次：原生 dialog/popover 迁移、可点 div 换 button、容器查询、树窗口化。
@@ -770,10 +770,10 @@ adb shell dumpsys package com.google.android.webview | grep versionName
 
 1. **A02 + A11 + A23 一起**：先 `Menu`/`Popover` 迁 `popover`（top-layer / light dismiss / anchor positioning），
    再迁 `Dialog` 到 `<dialog>`；验收 = 嵌套下拉可见、Esc 栈、内核 portal 层序、移动 Sheet 返回键、42 态基线。
-2. **A10 + A24 + A29**：语义化批次（button/main/search + 焦点环复核），一次视觉回归。
+2. **A10 + A29**：语义化批次（可点 div → button、`<main>`/`<search>`），一次视觉回归。
 3. **A03 第二步**：固定高 → `min-height`，200% 字号逐屏走查 + 重烤基线。
 4. **A05 + A06**：大库夹具上先量 INP，再决定窗口化与并发渲染的先后。
-5. **A14 / A13 / A17**：小步机会项。
+5. **A13 / A17**：小步机会项（`base-select` 与容器查询，各需视觉回归）。
 
 ### 11.3 本批验收（实测，261115）
 
