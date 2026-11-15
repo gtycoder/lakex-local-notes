@@ -250,7 +250,7 @@
 - `node scripts/ui-metrics.mjs` = 0（颜色 0 / `!important` 9 = 清单 / 字号字面量 0 / `crossFileDupGroups` **45 = 基线** / `shadowedDecls` 0）。
 - `check:core` **181** 文件 0 违规；`check:mobileui` 通过；`check:bundle` + `check:arch` PASS（desktop 首屏 580,718/600,000；mobile 343,411/350,000；mobile entry 49,771/51,200）。
 - 基线护栏随本批上调（各写明理由）：`aiDialogParts.css` 91→92、`overlay.css` 290→292、`kit.css` 674→682、`mobile/kit.css` 626→640、`mobile/usheet/usheet-chrome.css` 593→595。
-- **未做**：设备/视觉门禁（stylesnap 42 态、mobile-snap 10 态、23 屏走查、窗口矩阵）与真机验收 —— 本批代码路径未改外壳几何，但移动端新增 `.mb-tip` 与挂载点，交付设备前需在 `lake_mobile` 跑一次 `--sync --install` + 相关态。
+- **未做/待重烤**：视觉门禁（`stylesnap` 42 态、`mobile-snap` 10 态、23 屏、窗口矩阵）。**移动端已重装**（`lake_mobile`，41.57MB，0 FATAL，`.mb-tip` 生效）；对话框迁 `<dialog>` 改变 `search*` 三态 DOM ⇒ 必须在**固定夹具实例**上重烤（本轮 dev 数据试跑 2548→3143 属数据差异，**未写基线**）；`mobile-snap` 基线绑构建，同样待重烤。
 
 **设备与环境（本机实测）**
 

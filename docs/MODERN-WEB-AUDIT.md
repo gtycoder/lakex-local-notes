@@ -772,7 +772,7 @@ adb shell dumpsys package com.google.android.webview | grep versionName
 2. **A10**：可点 div → button（33 处，逐处复位样式），一次视觉回归。
 3. **A03 第二步**：固定高 → `min-height`，200% 字号逐屏走查 + 重烤基线。
 4. **A05 + A06**：大库夹具上先量 INP，再决定窗口化与并发渲染的先后。
-5. **视觉门禁**：在固定夹具实例上重烤 `search*` 三态 + 跑 42 态全量；移动端改过 `MobileApp/kit.css` 需 `mobile-snap` 10 态重烤。
+5. **视觉门禁**：在固定夹具实例上重烤 `search*` 三态 + 跑 42 态全量；移动端已重装新包（`.mb-tip` / 标题焦点环 / `enterKeyHint`）⇒ **`lake_gate` 10 态基线必须按该构建重烤**（基线绑构建）。
 5. **A13 / A17**：小步机会项（`base-select` 与容器查询，各需视觉回归）。
 
 ### 11.3 本批验收（实测，261115）
@@ -784,6 +784,7 @@ adb shell dumpsys package com.google.android.webview | grep versionName
 | 桌面（第五轮，顶部对齐） | 同上 | 全文搜索（顶部对齐）：`dialog[open]` + `:modal`、top=98px（12.0%）、水平居中 0 偏差、输入框聚焦、**可信 Esc 关闭**；关联选择器（多维表）改按同一变体（源码断言已同步） |
 | 桌面（第四轮，批量迁移） | 同上 | 新建笔记本（NamePrompt，经「新建」菜单）：`dialog[open]` + `:modal`、460×158、居中 0 偏差、输入框聚焦且**全选**、取消即关；可信 Esc（`Input.dispatchKeyEvent`）关闭原生对话框 |
 | 桌面（第三轮，原生 `<dialog>`） | 同上 | ① 删除确认（⋮→删除）：`dialog[open]` + `:modal`、420×170、`centerDelta [0,0]`、无 `.ln-scrim`、取消后关闭；② 目录重命名（⋮→重命名）：460px、`:modal`、输入框聚焦且**默认全选**、**IME 组合态回车不提交**、真回车提交并关闭、目录标题变为「重命名验证」 |
+| 移动（第五轮，重装后） | `lake_mobile`（5554，API 36）`android-build.sh --sync --install`（41.57MB debug） | `.mobile-app` 挂载、4 个可见 `[title]`、`.mb-tip` 计算 `position: fixed`（样式生效）、logcat **0 FATAL**；`enterKeyHint`/标题焦点环随源码打包（未逐屏点收） |
 | 移动 | `lake_mobile`（5554，API 36）`android-build.sh --sync --install` | 安装启动成功，logcat **0 FATAL**；`.mobile-app` 挂载；4 个可见 `[title]` 元素；CDP 合成长按 700ms 后 `#lake-mobile-title-tip` 显示「设置」、底色 = `--lake-tooltip-bg`(rgb(216,221,232))、锚点写入 `aria-describedby="lake-mobile-title-tip"` |
 
 未跑（本批未改外壳几何，建议随下一批视觉改动一起做）：桌面 `stylesnap` 42 态、移动 `mobile-snap` 10 态、23 屏走查、窗口矩阵、2GB 便携包真机导入。
