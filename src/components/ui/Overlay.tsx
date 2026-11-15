@@ -34,6 +34,51 @@ export function isInsideOverlaySurface(target: EventTarget | null): boolean {
 }
 
 let overlaySeq = 0;
+
+/* ── 261115 A09：模态对话框打开时让背景不可聚焦 ─────────────────────────────
+ * `role="dialog" + aria-modal` 只是**声明**，不会像 `showModal()` 那样让背景失活：
+ * 读屏仍能逛到后面的目录/正文，Tab 也能被自绘焦点圈闭"放出去"。
+ * 这里用 `inert` 补齐这半个语义（不迁移 <dialog>、不改结构 ⇒ 零视觉变化）。
+ *
+ * 三条边界（都有现场理由）：
+ *  ① 只处理 dialog（drawer 明确不锁滚动/焦点，也不该让背景失活）；
+ *  ② 跳过我们自己的浮层表面（.ln-scrim / .ln-overlay-surface / [data-context-menu]）：
+ *     对话框里打开的菜单/气泡是**独立 body 层 portal**，inert 掉它们等于菜单点不动；
+ *  ③ 引用计数：嵌套对话框同时挂着时，内层关闭不能把外层仍需要的 inert 撤掉。
+ */
+const INERT_OWNERS = new Map<HTMLElement, number>();
+const OVERLAY_SURFACE_SELECTOR = ".ln-scrim, .ln-overlay-surface, [data-context-menu]";
+
+function applyBackgroundInert(surface: HTMLElement | null): () => void {
+  if (!surface || typeof document === "undefined") return () => {};
+  const scrim = surface.closest(OVERLAY_SURFACE_SELECTOR) ?? surface;
+  const applied: HTMLElement[] = [];
+  for (const child of Array.from(document.body.children)) {
+    if (!(child instanceof HTMLElement)) continue;
+    if (child === scrim || child.contains(scrim) || scrim.contains(child)) continue;
+    if (child.matches(OVERLAY_SURFACE_SELECTOR) || child.querySelector(OVERLAY_SURFACE_SELECTOR)) continue;
+    if (["SCRIPT", "STYLE", "LINK", "TEMPLATE"].includes(child.tagName)) continue;
+    const owners = INERT_OWNERS.get(child) ?? 0;
+    // 别人（例如移动端分页的 inert）已经加了、且不是我们加的 ⇒ 不接管，关闭时也不要摘。
+    // ⚠️ 必须按 owners 判断而不是 hasAttribute：嵌套对话框时**子层 effect 先跑**
+    //    （React 子先于父），父层此刻还看不到 inert，但它仍要参与引用计数。
+    if (owners === 0 && child.hasAttribute("inert")) continue;
+    INERT_OWNERS.set(child, owners + 1);
+    if (owners === 0) child.setAttribute("inert", "");
+    applied.push(child);
+  }
+  return () => {
+    for (const el of applied) {
+      const owners = (INERT_OWNERS.get(el) ?? 1) - 1;
+      if (owners <= 0) {
+        INERT_OWNERS.delete(el);
+        el.removeAttribute("inert");
+      } else {
+        INERT_OWNERS.set(el, owners);
+      }
+    }
+  };
+}
 /** 当前打开的浮层栈（后开者在栈顶）。Esc 只关栈顶，避免「对话框内开着下拉时把对话框一起关掉」。 */
 const openOverlayStack: { id: number; ancestors: readonly number[]; surface: HTMLElement | null }[] = [];
 const OverlayScope = createContext<{ ancestors: readonly number[]; modal: boolean }>({ ancestors: [], modal: false });
@@ -141,7 +186,9 @@ export function Overlay({ open = true, kind, onDismiss, label, className, style,
       first.focus({ preventScroll: true });
     }
     const unlock = lockPageScroll();
+    const restoreInert = applyBackgroundInert(innerRef.current);
     return () => {
+      restoreInert();
       unlock();
       const previous = restoreFocusRef.current;
       const top = openOverlayStack.at(-1);

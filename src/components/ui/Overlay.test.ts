@@ -3,7 +3,7 @@ import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { flushSync } from "react-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { Dialog, Menu, Popover } from "./Overlay";
+import { Dialog, Drawer, Menu, Popover } from "./Overlay";
 
 let host: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
@@ -99,5 +99,54 @@ describe("模态焦点与嵌套滚动锁", () => {
     act(() => draw(true)); key(document.activeElement!, "Escape");
     expect(document.querySelector('[aria-label="子层"]')).toBeNull(); expect(parentDismiss).not.toHaveBeenCalled();
     key(document.activeElement!, "Escape"); expect(parentDismiss).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("模态背景 inert（261115 A09）", () => {
+  it("对话框打开时背景（body 其它顶层子节点）惰性化，关闭后恢复", () => {
+    const app = document.createElement("div");
+    app.id = "app-root";
+    document.body.append(app);
+    const render = (open: boolean) => act(() => root.render(open
+      ? createElement(Dialog, { onDismiss: () => {}, label: "确认", children: createElement("button", null, "确定") })
+      : null));
+    render(true);
+    expect(app.hasAttribute("inert")).toBe(true);
+    render(false);
+    expect(app.hasAttribute("inert")).toBe(false);
+  });
+
+  it("不惰性化我们自己的浮层表面（对话框里的菜单是独立 body portal，否则点不动）", () => {
+    const app = document.createElement("div");
+    const menuPortal = document.createElement("div");
+    menuPortal.className = "ln-overlay-surface ln-menu";
+    document.body.append(app, menuPortal);
+    act(() => root.render(createElement(Dialog, { onDismiss: () => {}, label: "确认", children: createElement("button", null, "确定") })));
+    expect(app.hasAttribute("inert")).toBe(true);
+    expect(menuPortal.hasAttribute("inert")).toBe(false);
+    act(() => root.render(null));
+  });
+
+  it("嵌套对话框：内层关闭不撤掉外层仍需要的 inert；全部关闭才恢复", () => {
+    const app = document.createElement("div");
+    document.body.append(app);
+    const draw = (child: boolean) => root.render(createElement(Dialog, { onDismiss: () => {}, label: "父层", children: [
+      createElement("button", { key: "a" }, "父层按钮"),
+      child ? createElement(Dialog, { key: "child", onDismiss: () => {}, label: "子层", children: createElement("button", null, "子层按钮") }) : null,
+    ] }));
+    act(() => draw(true));
+    expect(app.hasAttribute("inert")).toBe(true);
+    act(() => draw(false));
+    expect(app.hasAttribute("inert")).toBe(true);
+    act(() => root.render(null));
+    expect(app.hasAttribute("inert")).toBe(false);
+  });
+
+  it("抽屉（非模态）不惰性化背景", () => {
+    const app = document.createElement("div");
+    document.body.append(app);
+    act(() => root.render(createElement(Drawer, { onDismiss: () => {}, label: "详情", children: createElement("span", null, "内容") })));
+    expect(app.hasAttribute("inert")).toBe(false);
+    act(() => root.render(null));
   });
 });
