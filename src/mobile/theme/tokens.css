@@ -109,16 +109,17 @@
      body 16 与行标题 16 **不动**（触屏正文档已达标；编辑器正文字号另有设置项，不归这条 ramp）。
      触屏正文比桌面大一档（desktop body 14 → mobile 16），令牌名不变、取值移动端自有。
      §The Token-Size Rule：要再抬一档就改这里的值，不要去改使用处。 */
-  --lake-font-size-nano: 12px;   /* 徽标数字 / 表格统计 */
-  --lake-font-size-micro: 13px;  /* 元信息 / 标签 */
-  --lake-font-size-tiny: 14px;   /* 副标题 / 计数 / 说明 */
-  --lake-font-size-small: 15px;  /* 次级正文 / 菜单项 */
-  --lake-font-size-body: 16px;   /* 正文主档（触屏） */
-  --lake-font-size-bodyMd: 16px; /* 两行列表行的标题 */
-  --lake-font-size-bodyLg: 18px;
-  --lake-font-size-title: 18px;  /* 面板/分组标题 */
-  --lake-font-size-display: 20px;/* 页面标题 */
-  --lake-font-size-h1: 24px;
+  /* 261115 A03：同上，改 rem（与桌面同口径）。取值 = 原 px ÷ 16 的精确等价 ⇒ 默认档位视觉零变化。 */
+  --lake-font-size-nano: 0.75rem;    /* 12px：徽标数字 / 表格统计 */
+  --lake-font-size-micro: 0.8125rem; /* 13px：元信息 / 标签 */
+  --lake-font-size-tiny: 0.875rem;   /* 14px：副标题 / 计数 / 说明 */
+  --lake-font-size-small: 0.9375rem; /* 15px：次级正文 / 菜单项 */
+  --lake-font-size-body: 1rem;       /* 16px：正文主档（触屏） */
+  --lake-font-size-bodyMd: 1rem;     /* 16px：两行列表行的标题 */
+  --lake-font-size-bodyLg: 1.125rem; /* 18px */
+  --lake-font-size-title: 1.125rem;  /* 18px：面板/分组标题 */
+  --lake-font-size-display: 1.25rem; /* 20px：页面标题 */
+  --lake-font-size-h1: 1.5rem;       /* 24px */
   /* 表情面板（261013 微信样式）两档字号：分类条上的图标 / 格子里的大表情。
    * 261014：分类条末尾新增动作键（输入态=返回 / 选图标态=清除）⇒ 10 格，字号收一档（24→22）。
    * 行高单独给令牌：视觉压到 36（命中区仍靠 ::after 补到 --mb-tap-min，见 mobile.css 注册表）。 */

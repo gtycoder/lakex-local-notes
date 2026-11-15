@@ -92,18 +92,22 @@
   --lake-z-overlay-dialog: 710;    /* 对话框 */
   --lake-z-overlay-menu-raised: 715; /* 对话框内打开的菜单/气泡：须高于 dialog、低于 lightbox（记录详情/字段弹窗里的嵌套下拉） */
   --lake-z-overlay-lightbox: 720;  /* 图片 / 附件预览 */
-  /* 字号/字重/行高 */
-  --lake-font-size-nano: 10px;  /* 最小一档：表格统计 / 徽标数字（261006 补；11.5 与 11 合并为 11） */
-  --lake-font-size-micro: 11px;
-  --lake-font-size-tiny: 12px;
-  --lake-font-size-small: 13px;
-  --lake-font-size-body: 14px;
-  --lake-font-size-bodyMd: 15px;  /* 展开预览档（261008 用户：比表正文大 1px，先用 15 试） */
-  --lake-font-size-bodyLg: 15.5px;
-  --lake-font-size-preview: 16px;  /* 阅读态正文预览基准（261106 用户：14 略小 → 16；回收站/标签空间/历史/属性共用 NoteDocPreview） */
-  --lake-font-size-title: 18px;
-  --lake-font-size-display: 20px;  /* 显示档：面板大标题 / 预览标题（261006 补，位于 title 与 h1 之间） */
-  --lake-font-size-h1: 24px;
+  /* 字号/字重/行高
+   * 261115 A03：字号档改 **rem**（跟随 OS/浏览器文字缩放；modern-web-guidance respect-os-text-scale）。
+   * 取值 = 原 px ÷ 16 的精确等价（10/11/12/13/14/15/15.5/16/18/20/24），根字号仍是 16px ⇒
+   * **默认档位的计算值与改前逐字节相同**（视觉零变化），只有用户放大文字时才跟着变大。
+   * 不要再改回 px；新增档位一律 rem。 */
+  --lake-font-size-nano: 0.625rem;   /* 10px：表格统计 / 徽标数字 */
+  --lake-font-size-micro: 0.6875rem; /* 11px */
+  --lake-font-size-tiny: 0.75rem;    /* 12px */
+  --lake-font-size-small: 0.8125rem; /* 13px */
+  --lake-font-size-body: 0.875rem;   /* 14px */
+  --lake-font-size-bodyMd: 0.9375rem; /* 15px：展开预览档（261008 用户：比表正文大 1px） */
+  --lake-font-size-bodyLg: 0.96875rem; /* 15.5px */
+  --lake-font-size-preview: 1rem;    /* 16px：阅读态正文预览基准（回收站/标签空间/历史/属性共用 NoteDocPreview） */
+  --lake-font-size-title: 1.125rem;  /* 18px */
+  --lake-font-size-display: 1.25rem; /* 20px：面板大标题 / 预览标题 */
+  --lake-font-size-h1: 1.5rem;       /* 24px */
   --lake-font-weight-regular: 400;
   --lake-font-weight-medium: 500;
   --lake-font-weight-semibold: 600;

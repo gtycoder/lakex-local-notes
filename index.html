@@ -6,6 +6,8 @@
     <meta name="theme-color" content="#f5f6f8" />
     <!-- 261115：声明支持明/暗（UA 自绘表面按 color-scheme 走；主题仍由 main.tsx 首帧前应用） -->
     <meta name="color-scheme" content="light dark" />
+    <!-- 261115 A03：声明跟随 OS/浏览器文字缩放（字号令牌已改 rem；旧内核忽略该 meta 时行为不变） -->
+    <meta name="text-scale" content="scale" />
     <!-- V5 §5.6：dev/prod 双 CSP，由 vite 插件 lakexAlipayLocal.transformIndexHtml 按 mode 注入（无 .env 依赖）；全部资源本地化 -->
     <meta http-equiv="Content-Security-Policy" content="%VITE_CSP%" />
     <title>LakexLocalNotes</title>
