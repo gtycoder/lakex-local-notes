@@ -2,7 +2,7 @@
 import type { SettingsPanelContext } from "../useSettingsPanelScope";
 import { Group, Section, Field, Item, NumField, Block, Switch } from "../../../ui/settingsPrimitives";
 import { Sparkles, EyeOff, Eye } from "lucide-react";
-import { Select } from "../../../ui/Select";
+import { AdaptiveSelect } from "../../../ui/AdaptiveSelect";
 import { AI_PROVIDERS, AI_REASONING_EFFORTS, AI_THINKING_MODES, type AiReasoningEffort, type AiThinkingMode } from "../../../../core/aiProviders";
 import { saveAiEnabled } from "../../../../lib/aiEnabled";
 
@@ -14,7 +14,8 @@ export function AiSection({ c }: { c: SettingsPanelContext }) {
                 <Group title="AI 助手" icon={<Sparkles size={16} />}>
                   <Section title="服务">
                     <Field itemId="ai-provider" name="供应商" desc="支持 OpenAI 兼容接口：内置 OpenAI、DeepSeek、通义千问、智谱、小米 MiMo，也可选「自定义」指向任意兼容端点（如 Ollama、vLLM）。切换供应商会重置为该家默认值。">
-                      <Select label="AI 供应商" value={aiProviderId} onChange={(v) => void switchAiProvider(v)} options={AI_PROVIDERS.map((p) => ({ value: p.id, label: p.label }))} />
+                      {/* 261116 用户裁决「做吧，都做」：闭态方向键会逐档触发写盘，属该设置项既有语义（切换供应商会重置默认值）。 */}
+                      <AdaptiveSelect label="AI 供应商" value={aiProviderId} onChange={(v) => void switchAiProvider(v)} options={AI_PROVIDERS.map((p) => ({ value: p.id, label: p.label }))} />
                     </Field>
                     <Field itemId="ai-base-url" name="Base URL" desc={"留空即用该家默认；可改成任意 OpenAI 兼容端点，例如 " + activeDef.defaultBaseUrl + "。"} error={aiErr.baseUrl}>
                       <span className="ln-input settings-input"><input className="ln-input__field" value={aiPending.baseUrl} placeholder={activeDef.defaultBaseUrl} spellCheck={false} onChange={(e) => setAiDraft((d) => ({ ...d, baseUrl: e.target.value }))} aria-label="Base URL" /></span>
@@ -57,8 +58,9 @@ export function AiSection({ c }: { c: SettingsPanelContext }) {
 
                   <Section title="模型与参数">
                     <Field itemId="ai-model" name="模型" desc="从供应商拉取候选会同时验证连通性；端点不实现 /models 时可手填。" error={aiErr.model}>
+                      {/* 动态候选 + `__manual__` 哨兵原样保留：选到「手填…」必须切手动输入，不写草稿模型。 */}
                       {aiModels && aiModels.length > 0 && !aiManualModel ? (
-                        <Select label="AI 模型" value={aiPending.model} onChange={(v) => { if (v === "__manual__") { setAiManualModel(true); return; } setAiDraft((d) => ({ ...d, model: v })); }} options={[
+                        <AdaptiveSelect label="AI 模型" value={aiPending.model} onChange={(v) => { if (v === "__manual__") { setAiManualModel(true); return; } setAiDraft((d) => ({ ...d, model: v })); }} options={[
                           ...aiModels.map((m) => ({ value: m, label: m })),
                           ...(aiPending.model && aiModels.indexOf(aiPending.model) < 0 ? [{ value: aiPending.model, label: aiPending.model }] : []),
                           { value: "__manual__", label: "手填…" },
@@ -73,12 +75,12 @@ export function AiSection({ c }: { c: SettingsPanelContext }) {
                     </Field>
                     {activeDef.supportsReasoning && (
                       <Item itemId="ai-reasoning" name="思考强度" desc="推理强度：越高思考越深入、耗时越长（默认 high）。思考模式下温度不生效。">
-                        <Select label="思考强度" className="ln-w-200" value={aiPending.reasoningEffort ?? activeDef.defaultReasoningEffort ?? "high"} onChange={(v) => setAiDraft((d) => ({ ...d, reasoningEffort: v as AiReasoningEffort }))} options={AI_REASONING_EFFORTS.map((v) => ({ value: v, label: v }))} />
+                        <AdaptiveSelect label="思考强度" className="ln-w-200" value={aiPending.reasoningEffort ?? activeDef.defaultReasoningEffort ?? "high"} onChange={(v) => setAiDraft((d) => ({ ...d, reasoningEffort: v as AiReasoningEffort }))} options={AI_REASONING_EFFORTS.map((v) => ({ value: v, label: v }))} />
                       </Item>
                     )}
                     {activeDef.supportsThinking && (
                       <Item itemId="ai-thinking" name="思考模式" desc="关闭可减少 token 消耗与等待时间；开启时温度不生效。">
-                        <Select label="思考模式" className="ln-w-200" value={aiPending.thinking ?? "enabled"} onChange={(v) => setAiDraft((d) => ({ ...d, thinking: v as AiThinkingMode }))} options={AI_THINKING_MODES.map((v) => ({ value: v, label: v === "enabled" ? "开启" : "关闭" }))} />
+                        <AdaptiveSelect label="思考模式" className="ln-w-200" value={aiPending.thinking ?? "enabled"} onChange={(v) => setAiDraft((d) => ({ ...d, thinking: v as AiThinkingMode }))} options={AI_THINKING_MODES.map((v) => ({ value: v, label: v === "enabled" ? "开启" : "关闭" }))} />
                       </Item>
                     )}
                     {(!activeDef.supportsThinking || aiPending.thinking === "disabled") && (

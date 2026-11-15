@@ -5,7 +5,6 @@ import { Group, Field, Switch } from "../../../ui/settingsPrimitives";
 import { Type, Files, Paperclip, Home, LayoutGrid } from "lucide-react";
 import { useHiddenDesktopSpaces } from "../../../../hooks/useHiddenDesktopSpaces";
 import { DEFAULT_SPACE } from "../../../model/defaultSpace";
-import { Select } from "../../../ui/Select";
 import { AdaptiveSelect } from "../../../ui/AdaptiveSelect";
 import { fontSizeOptions, MAX_OPEN_TAB_OPTIONS } from "../../../../lib/settings";
 import { isDefaultSpace, saveDefaultSpace, DEFAULT_SPACE_OPTIONS } from "../../../model/defaultSpace";
@@ -28,8 +27,8 @@ export function EditorSection({ c }: { c: SettingsPanelContext }) {
               <>
                 <Group title="编辑器" icon={<Type size={16} />}>
                   <Field itemId="editor-font-size" name="正文字号" desc="调整编辑器正文的字号，只影响显示，不改文档内容。">
-                    {/* 字号不推广（261116 裁决）：逐档改字号会让正文逐档重排/预览抖动。 */}
-                    <Select label="正文字号" value={String(settings.fontSize)} onChange={(v) => onChange({ fontSize: Number(v) })} options={fontSizeOptions().map((fs) => ({ value: String(fs), label: `${fs} px` }))} />
+                    {/* 261116 用户裁决「做吧，都做」：闭态方向键会逐档触发写盘，属该设置项既有语义（逐档预览重排已接受）。 */}
+                    <AdaptiveSelect label="正文字号" value={String(settings.fontSize)} onChange={(v) => onChange({ fontSize: Number(v) })} options={fontSizeOptions().map((fs) => ({ value: String(fs), label: `${fs} px` }))} />
                   </Field>
                   <Switch itemId="editor-outline-enhance" name="大纲增强" desc="开启后在桌面右栏使用增强大纲（可筛选、折叠、显示级别徽标）；关闭则使用 Lake 原生大纲。移动端始终使用应用的大纲面板。" checked={settings.outlineEnhance} onChange={(checked) => onChange({ outlineEnhance: checked })} />
                   <Switch itemId="editor-toolbar" name="显示固定工具栏" desc="编辑器顶部的固定工具栏。关闭后界面更简洁，格式操作改用浮动工具栏。" checked={settings.showToolbar} onChange={(checked) => onChange({ showToolbar: checked })} />

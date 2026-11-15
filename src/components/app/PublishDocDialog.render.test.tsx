@@ -17,6 +17,9 @@ let root: ReturnType<typeof createRoot>;
 
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  // 本文件锁的是**自研 Select 的弹层交互**（jsdom 的 CSS.supports 恒真，不钉住就会走原生 select）。
+  // 原生路径见 nativeSelectRollout.render.test.tsx。
+  vi.stubGlobal("CSS", { supports: () => false });
   vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
   host = document.createElement("div");
   document.body.append(host);

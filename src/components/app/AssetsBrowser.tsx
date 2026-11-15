@@ -28,7 +28,7 @@ import { formatYmd } from "../../core/dateFormat";
 import { FileKindIcon } from "../../features/bitable/FileKindIcon";
 import { NativeDialog } from "../ui/Overlay";
 import { SplitPane } from "../ui/SplitPane";
-import { Select } from "../ui/Select";
+import { AdaptiveSelect } from "../ui/AdaptiveSelect";
 
 /** 全局「被移除资源」条目（与主进程 listRemovedAssets 的返回一致）。 */
 export interface RemovedAsset {
@@ -479,7 +479,8 @@ export function AssetsBrowser({ active, onDataChanged }: { active: boolean; onDa
           </div>
         </div>
         <span className="ln-spacer" />
-        {status !== "body" && <Select label="资源类型" value={kind} options={KIND_OPTIONS} onChange={setKind} className="asset-browser__kind" />}
+        {/* 261116 用户裁决「做吧，都做」：闭态方向键会逐档触发写盘，属该设置项既有语义（逐档重新筛选已接受）。 */}
+        {status !== "body" && <AdaptiveSelect label="资源类型" value={kind} options={KIND_OPTIONS} onChange={setKind} className="asset-browser__kind" />}
       </div>
 
       {status === "qbody" ? (

@@ -4,7 +4,7 @@
  * 口径见 docs/UPDATE-CENTER.md：
  * - 只有稳定版（GitHub latest）；不做静默安装（下载后由用户打开安装包）；
  * - 自动检查/自动下载默认开；忽略版本只影响提示与自动下载，手动检查仍能看到；
- * - UI 只用既有原语（settingsPrimitives 的 Group/Item/Switch + ui/Select + MarkdownView）与 --lake-* 令牌，
+ * - UI 只用既有原语（settingsPrimitives 的 Group/Item/Switch + ui/AdaptiveSelect + MarkdownView）与 --lake-* 令牌，
  *   不写内联静态样式、不新增 CSS/依赖。
  */
 import { useCallback, useEffect, useState } from "react";

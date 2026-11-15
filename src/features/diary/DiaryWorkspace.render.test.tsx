@@ -45,6 +45,8 @@ let host: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  // 本用例验的是自研 Select 的弹层（jsdom 的 CSS.supports 恒真，不钉住会走原生 select）。
+  vi.stubGlobal("CSS", { supports: () => false });
   vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
   vi.stubGlobal("IntersectionObserver", class { observe() {} unobserve() {} disconnect() {} });
   host = document.createElement("div");

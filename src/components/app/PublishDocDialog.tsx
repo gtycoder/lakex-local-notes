@@ -15,7 +15,7 @@ import { X } from "lucide-react";
 import { Dialog } from "../ui/Overlay";
 import { DialogResizeHandles } from "../ui/DialogResizeHandles";
 import { useFloatingDialog } from "../hooks/useFloatingDialog";
-import { Select } from "../ui/Select";
+import { AdaptiveSelect } from "../ui/AdaptiveSelect";
 
 /** 候选知识库（只到笔记本这一层；调用方已按各自的 core 判据过滤好）。 */
 export interface PublishDocNotebook {
@@ -93,7 +93,8 @@ export function PublishDocDialog({
           ) : (
             <div className="ln-form__row publish-doc__row">
               <span className="ln-form__label publish-doc__label">知识库</span>
-              <Select value={notebookId} options={options} onChange={setNotebookId} label="选择知识库" className="publish-doc__select" />
+              {/* 261116：目标列表由调用方动态给；原生弹层由浏览器绘制，不受弹窗 inert 影响。 */}
+              <AdaptiveSelect value={notebookId} options={options} onChange={setNotebookId} label="选择知识库" className="publish-doc__select" />
             </div>
           )}
           <div className="ln-form__row publish-doc__row">
