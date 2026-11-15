@@ -234,7 +234,7 @@ node --experimental-strip-types /tmp/mwg-src/src/analyzing/cli.ts legacy-scan "$
 | --- | ---: | --- |
 | 触控命中/形态适配 | 6 | 设备 `smallTap` 走查（已有装置）+ 200%/400% 字号 reflow |
 | 键盘/读屏语序 | 6 | CDP 键盘走查 + VoiceOver/TalkBack 人工（**从未做过**，PRODUCT 已声明不承诺） |
-| 图文/媒体优先级 | 4 | 首屏 LCP 探针（`scripts/mobile-audit/perf-baseline.mjs` 已有） |
+| 图文/媒体优先级 | 4 | 首屏 LCP 探针（`scripts/mobile-audit/perf-baseline.mjs` 已有）。**261116 已实测**（移动端冷启动，`Page.addScriptToEvaluateOnNewDocument` + 清缓存 reload）：LCP = `88ms`，元素是启动页文字 `span.mb-launch__label`（size 2601），**不是图片** ⇒ `fetchpriority` 保持 0 处是有依据的（现无 LCP 图需要提权）；图片侧仍保留 `loading=lazy` + `decoding=async` + 比例盒 |
 | combo/筛选控件语义 | 4 | 键盘 + 读屏 + `aria-expanded/activedescendant` 实测 |
 | 长任务/INP | 4 | `PerformanceObserver` long-animation-frame + 10k 库实测（HANDOFF 已有大库装置） |
 | 浮层层序/嵌套 | 8 | 内核 portal（`.ne-overlay-container`）× 自绘 Overlay × 移动 Sheet 三层叠加实测 |
