@@ -131,6 +131,7 @@ export function SearchSheet(props: SearchSheetProps) {
         <Search size={17} />
         <input
           className="mobile-search-input"
+          enterKeyHint="search"
           placeholder={scopeNoteIds ? "搜索日记（标题、正文、标签）" : "搜索文档、小记与标签"}
           autoFocus
           value={query}

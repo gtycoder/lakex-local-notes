@@ -62,6 +62,7 @@ export function NameSheet({ open, title, initialValue = "", placeholder = "", co
           value={value}
           autoFocus
           placeholder={placeholder}
+          enterKeyHint="done"
           onChange={(event) => { setValue(event.target.value); setError(null); }}
           onKeyDown={(event) => { if (event.key === "Enter" && !isImeConfirming(event)) submit(); }}
         />

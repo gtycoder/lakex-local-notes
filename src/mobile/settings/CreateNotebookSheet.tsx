@@ -58,6 +58,7 @@ export function CreateNotebookSheet(props: CreateNotebookSheetProps) {
         <input
           className="create-nb-input"
           placeholder="知识库名称"
+          enterKeyHint="done"
           value={title}
           autoFocus
           onChange={(e) => { setTitle(e.target.value); setError(null); }}

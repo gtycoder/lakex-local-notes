@@ -478,6 +478,7 @@ export function TagsHomeTab({ tags, notes, quickNotes, active, onOpenNote, onOpe
             value={createName}
             autoFocus
             aria-label="新标签名称"
+            enterKeyHint="done"
             placeholder="输入标签名称"
             onChange={(event) => { setCreateName(event.target.value); setCreateError(null); }}
             onKeyDown={(event) => { if (event.key === "Enter" && !isImeConfirming(event)) { event.preventDefault(); void submitCreate(); } }}
@@ -503,6 +504,7 @@ export function TagsHomeTab({ tags, notes, quickNotes, active, onOpenNote, onOpe
             ref={renameInputRef}
             value={renameValue}
             aria-label="标签名"
+            enterKeyHint="done"
             onChange={(event) => { setRenameValue(event.target.value); setRenameError(null); }}
             onKeyDown={(event) => { if (event.key === "Enter" && !isImeConfirming(event)) { event.preventDefault(); void submitRename(); } }}
           />
