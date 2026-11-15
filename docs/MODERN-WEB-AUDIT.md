@@ -727,7 +727,7 @@ adb shell dumpsys package com.google.android.webview | grep versionName
 | ID | 问题 | 状态 | 落地 | 护栏 / 备注 |
 | --- | --- | --- | --- | --- |
 | A01 | IME 回车误提交 | **已修** | `f55bc35b` | 35 处 / 27 文件（33 analyzer + 2 人工补漏）；`src/core/ime.ts` 唯一判据；`ime.test.ts` + `imeEnterWiring.test.ts` + `InlineRenameInput` 组合态例 |
-| A02 | 原生 `<dialog>` / top-layer | **推迟** | — | 依赖顺序：对话框内打开的菜单/气泡仍是 `createPortal` 到 body 的普通层，迁 top-layer 后会被 dialog 盖住（嵌套下拉不可见）⇒ 必须先迁 `popover`；且需设备级层序验收 |
+| A02 | 原生 `<dialog>` / top-layer | **前置已落地，迁移待做** | `145d50dd` | 阻塞项（菜单在普通层）已解：模态内菜单/气泡现在带 `popover="manual"` 进 top layer 并已实测（设置对话框内下拉 `:popover-open`=true、命中测试在菜单内）。剩下 = `Dialog` → `<dialog showModal>`（scrim → `::backdrop`、拖拽/缩放浮窗与嵌套 dialog 需逐个验收） |
 | A03 | OS 文字缩放 | **第一步已修** | `75153e8e` | `<meta text-scale>` + 桌面 11 档 / 移动 10 档字号令牌 rem 化（rem×16 = 改前 px，默认档位视觉零变化）；`textScale.test.ts` 钉等价；第二步（449 处固定高 → `min-height` + 200% 逐屏走查）待做 |
 | A04 | Tooltip 三缺口 | **已修** | `88bd4211` | 逻辑抽到 `src/lib/nativeTitleTip.ts`；桌面 `.ln-tip` / 移动 `.mb-tip` 各自薄壳（守「两端 UI 不共享组件/CSS」红线，`mobileIndependence` 绿）；移动长按 450ms、focusin 只在「另有可访问名」时摘 title、`aria-describedby` 增删复原；24 例新护栏 |
 | A05 | 10k 树窗口化 | 推迟 | — | `content-visibility` 已在位；DOM 20 万需窗口化/分页，属 HANDOFF 大库项，需大库夹具实测 |
@@ -748,7 +748,7 @@ adb shell dumpsys package com.google.android.webview | grep versionName
 | A20 | `will-change` 常驻 | 核实后**不改** | — | 10 处真实使用全部绑动画/位移；`mobile.css` 已有「转场结束即撤」注释与 `is-settled` 实现，属已处理 |
 | A21 | JS 现代 API | **部分** | `3d135f54` | `cause`×4 + `AbortSignal.timeout`×1（行为等价）；`toSorted` 47 处与 `withResolvers` 2 处**明确不做**：`tsconfig` target/lib = ES2022（实测 TS2550），且 `src/core` 与 Android 旧 WebView 共用 ⇒ 需项目级配置决策 + feature detect |
 | A22 | 外链 `rel` | 核实**已满足** | — | 4 处 `target="_blank"` 全带 `noreferrer`/`noopener`（`noreferrer` 隐含 noopener） |
-| A23 | anchor positioning | 随 A02 推迟 | — | 元素锚定气泡可在 popover 落地后试点；点锚菜单（右键）保留手算 |
+| A23 | anchor positioning | **前半已修（top layer）/ 后半未采用** | `145d50dd` | 模态内菜单/气泡改 `popover="manual"` 进 top layer（这一步是 A02 的前置）；`usePopoverPosition` 手算落位保留——点锚右键菜单需要指针坐标，anchor positioning 覆盖不到 |
 | A24 | `outline: none` 35 处 | **已修（2 处真缺口 + 33 处核实）** | `2d5f5b2d` | 补桌面目录筛选 wrapper 内嵌环、移动端标题输入框 `:focus-visible` 环；其余 33 处逐条核对为「wrapper `:focus-within` 画环 / 分隔条 `::after` 点亮 / `vendor-focus.css` 收口」；护栏 `focusRingGates.test.ts` |
 | A25 | 标准 `mask` | **已修** | `7a0dc111` | 2 处补标准属性，保留前缀 |
 | A26 | `<meta color-scheme>` | **已修** | `14dcdf15` | 同 A07 |
@@ -768,8 +768,8 @@ adb shell dumpsys package com.google.android.webview | grep versionName
 
 ### 11.2 下一批入口（按依赖顺序）
 
-1. **A02 + A11 + A23 一起**：先 `Menu`/`Popover` 迁 `popover`（top-layer / light dismiss / anchor positioning），
-   再迁 `Dialog` 到 `<dialog>`；验收 = 嵌套下拉可见、Esc 栈、内核 portal 层序、移动 Sheet 返回键、42 态基线。
+1. **A02 + A11**：`Menu`/`Popover` 的 top-layer 前置已完成（`145d50dd`，模态内 `popover="manual"` + 实测）；
+   下一步只迁 `Dialog` → `<dialog showModal>`（scrim → `::backdrop`、拖拽/缩放浮窗、嵌套 dialog、移动 Sheet 返回键、42 态基线）。
 2. **A10**：可点 div → button（33 处，逐处复位样式），一次视觉回归。
 3. **A03 第二步**：固定高 → `min-height`，200% 字号逐屏走查 + 重烤基线。
 4. **A05 + A06**：大库夹具上先量 INP，再决定窗口化与并发渲染的先后。
@@ -780,6 +780,7 @@ adb shell dumpsys package com.google.android.webview | grep versionName
 | 端 | 装置 | 结果 |
 | --- | --- | --- |
 | 桌面 | 隔离 `LAKE_USER_DATA` + **`LAKE_RENDERER=scheme`**（读 dist）+ CDP 9333 | boot ready **463ms**（renderer-ready，无 ERR_CONNECTION_REFUSED）；根字号 16px；全仓计算字号档 = **10 / 11 / 12 / 13 / 14 / 15.5 / 18px**（= 令牌 rem×16，默认档位与改前等值） |
+| 桌面（第二轮） | 同上 + **重新 `vite build`**（scheme 模式读 dist，旧构建会验到旧代码） | 设置对话框内「正文字号」下拉：`popover="manual"`、`:popover-open`=true、rect 391×229、`elementFromPoint` 命中菜单项；同一时刻 `#root` 带 `inert`（A09 在真实应用生效） |
 | 移动 | `lake_mobile`（5554，API 36）`android-build.sh --sync --install` | 安装启动成功，logcat **0 FATAL**；`.mobile-app` 挂载；4 个可见 `[title]` 元素；CDP 合成长按 700ms 后 `#lake-mobile-title-tip` 显示「设置」、底色 = `--lake-tooltip-bg`(rgb(216,221,232))、锚点写入 `aria-describedby="lake-mobile-title-tip"` |
 
 未跑（本批未改外壳几何，建议随下一批视觉改动一起做）：桌面 `stylesnap` 42 态、移动 `mobile-snap` 10 态、23 屏走查、窗口矩阵、2GB 便携包真机导入。

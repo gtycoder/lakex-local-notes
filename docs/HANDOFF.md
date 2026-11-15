@@ -9,7 +9,7 @@
 
 ### 261115 · 现代 Web 平台化第一批（分支 `modernize/web-platform-261115`，**未合 master**）
 - **前置**：master `7e2db298` 已双推 Gitee+GitHub 并打注解 tag **`backup/master-261115`**；本分支按用户要求**不合并回 master**（需明确同意）。
-- **落地（12 个 commit，全部行为等价/默认档位零视觉变化）**：IME 回车 35 处过组合态判据（`core/ime.ts`）；字号令牌 rem 化（rem×16 = 改前 px）+ `meta text-scale`；`boot.html` 476KB→1.9KB（图片外置）+ `color-scheme`/`light-dark()`；`field-sizing`/标准 `mask`/`text-wrap`/删 no-op 前缀；图片 `decoding=async`；`forced-colors`；对话框背景 `inert`（引用计数）；`Error cause` + `AbortSignal.timeout`；Tooltip 逻辑抽共享 + 移动端自有 `.mb-tip`。
+- **落地（全部行为等价/默认档位零视觉变化）**：IME 回车 35 处过组合态判据（`core/ime.ts`）；字号令牌 rem 化（rem×16 = 改前 px）+ `meta text-scale`；`boot.html` 476KB→1.9KB（图片外置）+ `color-scheme`/`light-dark()`；`field-sizing`/标准 `mask`/`text-wrap`/删 no-op 前缀；图片 `decoding=async`；`forced-colors`；对话框背景 `inert`（引用计数）；`Error cause` + `AbortSignal.timeout`；Tooltip 逻辑抽共享 + 移动端自有 `.mb-tip`；移动 `enterKeyHint`；两处缺失焦点环；`role=main`/`role=search` 地标；**模态内菜单/气泡进 top layer**（`popover="manual"`，`<dialog>` 迁移的前置，已真实应用实测）。
 - **明确不做/推迟**：`toSorted`/`Promise.withResolvers`（tsconfig ES2022 + 旧 WebView，官方 rubric dropWhen）；原生 dialog/popover 迁移（菜单是 body portal，先迁 popover 才不会被盖住）；10k 树窗口化；INP 让步；可点 div 语义化；容器查询；`enterKeyHint`；`aria-modal` 逐个校准。
 - **状态表**：只看 [MODERN-WEB-AUDIT §11](MODERN-WEB-AUDIT.md)（A01–A30 逐项 + commit 号 + 下一批依赖顺序）。
 
@@ -246,7 +246,7 @@
 **分支批基线（261115 · `modernize/web-platform-261115`；含 12 个新护栏文件）**
 
 - `npx tsc --noEmit` = **0**；`git diff --check` = **0**。
-- 全量 vitest：**文件 968（955 passed / 13 skipped）/ 用例 6110（6096 passed / 14 skipped）/ 0 failed**（本批新增 12 个测试文件）。
+- 全量 vitest：**文件 968（955 passed / 13 skipped）/ 用例 6112（6098 passed / 14 skipped）/ 0 failed**（本批新增 12 个测试文件）。
 - `node scripts/ui-metrics.mjs` = 0（颜色 0 / `!important` 9 = 清单 / 字号字面量 0 / `crossFileDupGroups` **45 = 基线** / `shadowedDecls` 0）。
 - `check:core` **181** 文件 0 违规；`check:mobileui` 通过；`check:bundle` + `check:arch` PASS（desktop 首屏 580,718/600,000；mobile 343,411/350,000；mobile entry 49,771/51,200）。
 - 基线护栏随本批上调（各写明理由）：`aiDialogParts.css` 91→92、`overlay.css` 290→292、`kit.css` 674→682、`mobile/kit.css` 626→640、`mobile/usheet/usheet-chrome.css` 593→595。
