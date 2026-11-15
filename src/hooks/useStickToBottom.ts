@@ -15,7 +15,9 @@ import { useCallback, useLayoutEffect, useRef, type RefObject } from "react";
  * - 用户主动上滚的判据扩到 wheel / touchmove（按手指方向）/ 键盘（↑/PageUp/Home/Shift+Space）；
  * - 监听器全部 passive（只读事件，不 preventDefault），**不用** setPointerCapture（会吞掉子元素 click）；
  * - 卸载/禁用时清掉 ResizeObserver 与全部事件监听；
- * - 暴露 scrollToBottom()（强制贴底并重新吸附），供「发送后立即看最新」一类调用。
+ * - 暴露 scrollToBottom()（强制贴底并重新吸附），供「发送后立即看最新」一类调用；
+ * - 暴露 detach()（主动退出跟随）：切消息版本时先退出，再把滚动位置锚回原处，
+ *   避免「切到旧版本 → 内容变短 → 又被强制贴底」跳出阅读位置。
  *
  * 已知边界：jsdom 没有真实布局（scrollHeight/clientHeight 恒 0），测试用自定义属性模拟；
  * 真实滚动/惯性滚动的时序只能在 Electron 里验。
@@ -44,6 +46,8 @@ export interface StickToBottomOptions {
 export interface StickToBottom {
   /** 强制滚到底并重新吸附（不受当前跟随状态限制）。 */
   scrollToBottom: () => void;
+  /** 退出跟随态：之后内容变化不再强制贴底（切版本时保持阅读位置）。 */
+  detach: () => void;
 }
 
 export function useStickToBottom({
@@ -154,5 +158,9 @@ export function useStickToBottom({
     };
   }, [enabled, scrollRef, threshold]);
 
-  return { scrollToBottom };
+  const detach = useCallback(() => {
+    stuckRef.current = false;
+  }, []);
+
+  return { scrollToBottom, detach };
 }

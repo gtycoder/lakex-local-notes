@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { Check, Copy, CornerDownRight, LoaderCircle, Pin, RotateCcw, X } from "lucide-react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { Check, Copy, CornerDownRight, LoaderCircle, Pencil, Pin, RotateCcw, X } from "lucide-react";
 import { AiSparkIcon } from "./AiSparkIcon";
 import { Popover } from "../../components/ui/Overlay";
 import { usePopoverPosition } from "../../hooks/usePopoverPosition";
@@ -13,6 +13,8 @@ import { AI_PROMPT_CUSTOM_ID, AI_PROMPT_CUSTOM_LABEL, type AiPromptPreset } from
 import { aiDocumentNoteId, aiOutputLabel, aiSelectionText, type AiAssistantRequest } from "./aiAssistantRequest";
 import { AI_DIALOG_GAP } from "./aiLayout";
 import { useAiConversation } from "./useAiConversation";
+import { AiBranchSwitcher } from "./AiBranchSwitcher";
+import { versionsOf } from "./aiConversationTree";
 import "./aiDialogParts.css";
 
 /**
@@ -105,7 +107,8 @@ export function AiAssistantDialog({ open, request, scope, onClose }: {
   const anchor = null; // 统一走 placement（point/floating），不再有隐式 anchor 覆盖。
   const ai = useAiConversation({ open, request });
   const {
-    instruction, setInstruction, followUp, setFollowUp, turns, busy, error, stopped,
+    instruction, setInstruction, followUp, setFollowUp, turns, session, busy, error, stopped,
+    editing, beginEdit, setEditingText, cancelEdit, commitEdit, selectVersion,
     presetId, setPresetId, includeDocument, docBusy, conversationDocMode,
     lastOutput, canSendFirst, hasImages, selectionContext, presets,
     activeValue, docLocked, docHint, toggleDocument, onFieldKeyDown, run, regenerate, stop,
@@ -268,7 +271,30 @@ export function AiAssistantDialog({ open, request, scope, onClose }: {
   const threadScrollRef = useRef<HTMLDivElement | null>(null);
   const lastTurn = turns[turns.length - 1];
   const stickSignal = turns.length + ":" + (lastTurn?.text.length ?? 0) + ":" + (busy ? 1 : 0) + ":" + (stopped ? 1 : 0);
-  useStickToBottom({ scrollRef: threadScrollRef, contentSignal: stickSignal, enabled: open && inScope });
+  const stick = useStickToBottom({ scrollRef: threadScrollRef, contentSignal: stickSignal, enabled: open && inScope });
+
+  /**
+   * 切消息版本（用户 261116 裁决：切版本**不**强制贴底）：
+   * 先退出贴底跟随、记下按钮行的当前位置；可见路径换完后把同一位置锚回去
+   * （回答长短不同也不会把操作区甩出视口）。生成中禁用切换（useAiConversation 也拦一道）。
+   */
+  const versionAnchorRef = useRef<{ messageId: string; top: number } | null>(null);
+  const switchVersion = (messageId: string, anchorTop: number) => {
+    const el = threadScrollRef.current;
+    if (busy || !el) return;
+    versionAnchorRef.current = { messageId, top: anchorTop - el.getBoundingClientRect().top };
+    stick.detach();
+    selectVersion(messageId);
+  };
+  useLayoutEffect(() => {
+    const anchor = versionAnchorRef.current;
+    const el = threadScrollRef.current;
+    if (!anchor || !el) return;
+    versionAnchorRef.current = null;
+    const target = [...el.querySelectorAll<HTMLElement>("[data-ai-message-id]")]
+      .find((node) => node.getAttribute("data-ai-message-id") === anchor.messageId);
+    if (target) el.scrollTop += target.getBoundingClientRect().top - el.getBoundingClientRect().top - anchor.top;
+  }, [session]);
 
   /** 面板表面元素：测真实高度用（拖拽起点），也交给 usePopoverPosition 定位。 */
   const setSurface = useCallback((el: HTMLElement | null) => { panelRef.current = el; pos.surfaceRef(el); }, [pos.surfaceRef]);
@@ -308,6 +334,16 @@ export function AiAssistantDialog({ open, request, scope, onClose }: {
     const end = el.value.length;
     try { el.setSelectionRange(end, end); } catch { /* 个别输入类型不支持选区，忽略 */ }
   }, [open, placed]);
+
+  // 进入「编辑提问」时把光标放进输入框并落到末尾（提交即从这条提问分叉）。
+  useEffect(() => {
+    if (!editing) return;
+    const el = fieldRef.current;
+    if (!el) return;
+    el.focus({ preventScroll: true });
+    const end = el.value.length;
+    try { el.setSelectionRange(end, end); } catch { /* 忽略 */ }
+  }, [editing?.messageId]);
 
   /** 首轮预设：只把提示词填进输入框（**不发送**）；传 null = 「自定义」（清空）。 */
   const applyPreset = (preset: AiPromptPreset | null) => {
@@ -386,9 +422,32 @@ export function AiAssistantDialog({ open, request, scope, onClose }: {
                 const streaming = busy && i === turns.length - 1;
                 /** 只有最后一条回答能「重新生成」：对话模型只重跑最后一轮（useAiConversation.regenerate）。 */
                 const isLast = i === turns.length - 1;
-                if (t.role === "user") return <div key={i} className="ai-dialog__msg ai-dialog__msg--user">{t.text}</div>;
+                const versions = versionsOf(session, t.id);
+                if (t.role === "user") return (
+                  <div key={t.id} className="ai-dialog__user-row" data-ai-message-id={t.id}>
+                    <div className="ai-dialog__msg ai-dialog__msg--user">
+                      <span className="ai-dialog__user-text">{t.text}</span>
+                      {/* 编辑提问 = 从这条提问分叉（提交后新建兄弟版本，旧分支保留）。 */}
+                      <button
+                        type="button"
+                        className="ln-iconbtn ln-iconbtn--compact ai-dialog__edit"
+                        aria-label="编辑提问"
+                        disabled={busy || Boolean(editing)}
+                        onMouseEnter={(e) => copyTip.show("编辑提问", e.currentTarget)}
+                        onMouseLeave={copyTip.hide}
+                        onFocus={(e) => copyTip.show("编辑提问", e.currentTarget)}
+                        onBlur={copyTip.hide}
+                        onClick={() => beginEdit(t.id)}
+                      >
+                        <Pencil size={12} />
+                      </button>
+                    </div>
+                    {/* 编辑过的提问有兄弟版本：这里也要能切回旧分支（单版本时不渲染）。 */}
+                    <AiBranchSwitcher versions={versions} label="提问版本" disabled={busy} onSelect={switchVersion} />
+                  </div>
+                );
                 return (
-                  <div key={i} className="ai-dialog__msg ai-dialog__msg--assistant">
+                  <div key={t.id} className="ai-dialog__msg ai-dialog__msg--assistant" data-ai-message-id={t.id}>
                     {/* 261116：助手消息左侧 24px 圆形图标 + 无气泡正文（DeepSeek 网页版观感）。 */}
                     <span className="ai-dialog__avatar" aria-hidden="true"><AiSparkIcon size={14} /></span>
                     <div className="ai-dialog__msg-main">
@@ -455,6 +514,8 @@ export function AiAssistantDialog({ open, request, scope, onClose }: {
                           )}
                         </div>
                       )}
+                      {/* 版本切换放助手消息底部（◀ 1/2 ▶）：切版本不贴底、生成中禁用。 */}
+                      <AiBranchSwitcher versions={versions} label="回答版本" disabled={busy} onSelect={switchVersion} />
                     </div>
                   </div>
                 );
@@ -478,15 +539,30 @@ export function AiAssistantDialog({ open, request, scope, onClose }: {
           </span>
         </div>
       )}
+      {/* 编辑提问态（261116）：提交 = 新建这条提问的兄弟版本（后续消息走新分支，原分支保留）。 */}
+      {editing && (
+        <div className="ai-dialog__editing">
+          <span>正在编辑提问：提交后从这条提问分叉，原分支保留</span>
+          <button type="button" className="ln-btn ln-btn--ghost ai-dialog__btn" aria-label="取消编辑" onClick={cancelEdit}>取消</button>
+        </div>
+      )}
       {/* 261116：输入区改成 DeepSeek 式大卡片 —— 内部 textarea 无边框无底色；
           底部一行：左 = 清除/作用域控件，右 = 发送/停止（语义不变）。 */}
       <div className="ai-dialog__composer">
         <span className="ai-dialog__composer-icon"><AiSparkIcon size={18} /></span>
-        {turns.length === 0 ? (
-          <textarea ref={fieldRef} className="ln-input__field ai-dialog__field" rows={1} placeholder="向智能助手提问…" value={instruction} onChange={(e) => { setInstruction(e.target.value); setPresetId(AI_PROMPT_CUSTOM_ID); }} onKeyDown={onFieldKeyDown} />
-        ) : (
-          <textarea ref={fieldRef} className="ln-input__field ai-dialog__field" rows={1} placeholder="继续追问…" value={followUp} onChange={(e) => setFollowUp(e.target.value)} onKeyDown={onFieldKeyDown} />
-        )}
+        <textarea
+          ref={fieldRef}
+          className="ln-input__field ai-dialog__field"
+          rows={1}
+          placeholder={editing ? "编辑提问…" : turns.length === 0 ? "向智能助手提问…" : "继续追问…"}
+          value={editing ? editing.text : turns.length === 0 ? instruction : followUp}
+          onChange={(e) => {
+            if (editing) { setEditingText(e.target.value); return; }
+            if (turns.length === 0) { setInstruction(e.target.value); setPresetId(AI_PROMPT_CUSTOM_ID); return; }
+            setFollowUp(e.target.value);
+          }}
+          onKeyDown={onFieldKeyDown}
+        />
         <div className="ai-dialog__composer-bar">
           <div className="ai-dialog__composer-tools">
             {/* 261021 P1：附加当前文档全文（默认关）。**只给无选区入口**（顶栏）：有选区/图片/块上下文时
@@ -500,7 +576,7 @@ export function AiAssistantDialog({ open, request, scope, onClose }: {
                 <span className="ai-dialog__doc-hint">{docHint}</span>
               </div>
             )}
-            {activeValue && (
+            {!editing && activeValue && (
               <button type="button" className="ln-iconbtn ln-iconbtn--compact ai-dialog__clear" aria-label="清除内容" onClick={() => {
                 if (turns.length === 0) setInstruction(""); else setFollowUp("");
                 fieldRef.current?.focus();
@@ -511,6 +587,8 @@ export function AiAssistantDialog({ open, request, scope, onClose }: {
               不再是一个旁边的小按钮。AI 助手三个入口（选区浮栏 / 块句柄菜单 / 顶栏）共用本面板 ⇒ 一处即全覆盖。 */}
           {busy ? (
             <button type="button" className="ln-btn ln-btn--secondary ai-dialog__btn ai-dialog__send" onClick={stop}>停止</button>
+          ) : editing ? (
+            <button type="button" className="ln-btn ln-btn--primary ai-dialog__btn ai-dialog__send" disabled={!editing.text.trim()} onClick={() => void commitEdit()}>更新</button>
           ) : turns.length === 0 ? (
             <button type="button" className="ln-btn ln-btn--primary ai-dialog__btn ai-dialog__send" disabled={!canSendFirst} onClick={() => void run(true)}>生成</button>
           ) : (

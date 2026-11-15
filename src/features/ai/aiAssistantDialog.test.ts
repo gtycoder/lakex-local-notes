@@ -213,7 +213,10 @@ describe("AI 弹窗定位护栏（261004）", () => {
     // 主动停止 ≠ 报错：走 stoppedRef 判据，给中性提示而不是 error
     expect(CONV).toContain("stoppedRef.current");
     expect(DIALOG).toContain("已停止生成，已生成的内容保留");
-    expect(CONV).toContain("return last && last.role === \"assistant\" && !last.text ? prev.slice(0, -1) : prev;");
+    // 261116：turns 变成消息树后，「停止时丢弃空回答」改为删除该助手版本（父提问回落到上一版本）；
+    // 有半截正文则只标 interrupted（保留可复制、不进后续上下文）。语义不变，形态随数据模型改变。
+    expect(CONV).toContain("if (!turn.text) return removeTurn(prev, assistantId);");
+    expect(CONV).toContain("return updateTurn(prev, assistantId, { interrupted: true });");
   });
 
 });
@@ -272,5 +275,43 @@ describe("AI 文档全文上下文接线（261021 P1）", () => {
     expect(DIALOG).toContain("附加当前文档全文");
     expect(CONV).toContain("开启后，发送时会把已保存的整篇正文发给 AI 供应商");
     expect(CONV).toContain("docContext.truncated");
+  });
+});
+/**
+ * 261116：桌面 AI 助手「消息版本 / 分支」接线护栏（行为见 aiAssistantVersions.render.test.tsx，
+ * 数据模型见 aiConversationTree.test.ts）。这里只钉 UI 落点与关键接线，防止被后续改动悄悄拆掉。
+ */
+describe("消息版本 / 分支接线（261116）", () => {
+  it("重新生成 = 助手兄弟版本：切换器在助手消息底部、生成中禁用、切版本不强制贴底", () => {
+    expect(DIALOG).toContain('import { AiBranchSwitcher } from "./AiBranchSwitcher";');
+    expect(DIALOG).toContain("versionsOf(session, t.id)");
+    expect(DIALOG).toContain('label="回答版本"');
+    expect(DIALOG).toContain("disabled={busy}");
+    // 切版本时滚动锚定到该消息：先退出贴底跟随，再按 data-ai-message-id 把位置锚回去
+    expect(DIALOG).toContain("stick.detach()");
+    expect(DIALOG).toContain("versionAnchorRef");
+    expect(DIALOG).toContain("data-ai-message-id={t.id}");
+    // 生成中禁止切版本（组件禁用 + hook 再拦一道）
+    expect(CONV).toMatch(/selectSessionVersion\(prev, messageId\)/);
+  });
+
+  it("编辑提问 = 从该点分叉：回填输入框、可取消、提交新建兄弟版本（旧分支不删）", () => {
+    expect(DIALOG).toContain('aria-label="编辑提问"');
+    expect(DIALOG).toContain("beginEdit(t.id)");
+    expect(DIALOG).toContain('aria-label="取消编辑"');
+    expect(DIALOG).toContain("正在编辑提问：提交后从这条提问分叉，原分支保留");
+    expect(DIALOG).toContain("void commitEdit()");
+    expect(CONV).toContain("appendBranch(prev, parentId");
+    // 旧分支永不删除：提交编辑只 appendBranch + selectVersion
+    expect(CONV).not.toMatch(/commitEdit[\s\S]{0,800}removeTurn/);
+  });
+
+  it("本地会话格式带 schemaVersion，读取守卫对旧版本返回空（不写迁移）", () => {
+    const tree = readFileSync(new URL("./aiConversationTree.ts", import.meta.url), "utf8");
+    expect(tree).toContain("AI_CONVERSATION_SCHEMA_VERSION = 1");
+    expect(tree).toContain("parsed.schemaVersion !== AI_CONVERSATION_SCHEMA_VERSION");
+    // 不照搬 chat-demo 的 normalizeSession：旧线性格式没有 schemaVersion，直接丢弃。
+    expect(tree).not.toContain("normalizeSession");
+    expect(CONV).toContain("createAiConversationSession");
   });
 });

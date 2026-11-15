@@ -110,7 +110,7 @@
   position: absolute;
   top: var(--lake-space-sm);
   right: var(--lake-space-sm);
-  padding: 2px var(--lake-space-sm);
+  padding: 0 var(--lake-space-sm);
   border: 0.5px solid var(--lake-border-2);
   border-radius: var(--lake-radius-xs);
   background: var(--lake-bg-panel);

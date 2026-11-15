@@ -73,3 +73,17 @@
 /* 右下角拖拽把手：只改高度（用户 261004：上下可拖、左右不动）。 */
 .ai-dialog__grip { position: absolute; right: 2px; bottom: 2px; width: 12px; height: 12px; cursor: ns-resize; touch-action: none; border-right: 2px solid var(--lake-border-2); border-bottom: 2px solid var(--lake-border-2); }
 .ai-dialog__grip:hover { border-color: var(--lake-text-3); }
+/* 261116 消息版本 / 分支（对齐 chat-demo）：用户提问 + 悬停出现的「编辑提问」，
+   以及气泡下方的版本切换（◀ 1/2 ▶）。切版本不贴底、生成中禁用由组件侧负责，这里只管几何。 */
+.ai-dialog__msg--user { gap: var(--lake-space-xs); }
+.ai-dialog__msg--user .ai-dialog__edit { align-self: flex-start; flex: none; opacity: 0; }
+.ai-dialog__msg--user:hover .ai-dialog__edit,
+.ai-dialog__msg--user:focus-within .ai-dialog__edit { opacity: 1; }
+@media (hover: none) { .ai-dialog__user-row .ai-dialog__edit { opacity: 1; } }
+/* 一条用户提问 + 它自己的版本切换（只有编辑过、出现兄弟版本时才多一行）。 */
+.ai-dialog__user-row { display: flex; flex-direction: column; align-items: flex-end; gap: var(--lake-space-xxs); }
+/* 版本切换行：按钮复用 kit 的 .ln-iconbtn，计数单独一档小字。 */
+.ai-dialog__branches { display: flex; align-items: center; gap: var(--lake-space-xxs); }
+.ai-dialog__branches-count { min-width: 2.5em; color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); font-variant-numeric: tabular-nums; text-align: center; }
+/* 编辑提问态说明：贴输入卡上沿，明说「提交后从这条提问分叉、原分支保留」。 */
+.ai-dialog__editing { display: flex; align-items: center; justify-content: space-between; gap: var(--lake-space-sm); margin: 0 var(--lake-space-lg) var(--lake-space-xs); padding: 0 var(--lake-space-sm); color: var(--lake-text-3); font-size: var(--lake-font-size-small); }
