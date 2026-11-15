@@ -774,3 +774,14 @@ adb shell dumpsys package com.google.android.webview | grep versionName
 3. **A03 第二步**：固定高 → `min-height`，200% 字号逐屏走查 + 重烤基线。
 4. **A05 + A06**：大库夹具上先量 INP，再决定窗口化与并发渲染的先后。
 5. **A14 / A13 / A17**：小步机会项。
+
+### 11.3 本批验收（实测，261115）
+
+| 端 | 装置 | 结果 |
+| --- | --- | --- |
+| 桌面 | 隔离 `LAKE_USER_DATA` + **`LAKE_RENDERER=scheme`**（读 dist）+ CDP 9333 | boot ready **463ms**（renderer-ready，无 ERR_CONNECTION_REFUSED）；根字号 16px；全仓计算字号档 = **10 / 11 / 12 / 13 / 14 / 15.5 / 18px**（= 令牌 rem×16，默认档位与改前等值） |
+| 移动 | `lake_mobile`（5554，API 36）`android-build.sh --sync --install` | 安装启动成功，logcat **0 FATAL**；`.mobile-app` 挂载；4 个可见 `[title]` 元素；CDP 合成长按 700ms 后 `#lake-mobile-title-tip` 显示「设置」、底色 = `--lake-tooltip-bg`(rgb(216,221,232))、锚点写入 `aria-describedby="lake-mobile-title-tip"` |
+
+未跑（本批未改外壳几何，建议随下一批视觉改动一起做）：桌面 `stylesnap` 42 态、移动 `mobile-snap` 10 态、23 屏走查、窗口矩阵、2GB 便携包真机导入。
+
+> 环境残留：桌面 smoke 用独立 profile 并已删除；CDP 只按端口 9333 定位杀进程（未用 pkill Electron）；`lake_mobile` 保持安装态供复验。
