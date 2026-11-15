@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, type Ref } from "react";
+import { isImeConfirming } from "../../core/ime";
 
 /**
  * 行内重命名输入（DT-12，261028）：把「Enter 提交 / Esc 取消 / 失焦是否提交 / 空名怎么办」收敛成一个原语。
@@ -119,7 +120,7 @@ export function InlineRenameInput({
       onChange={(event) => onChange(event.target.value)}
       onFocus={selectOnFocus ? (event) => event.currentTarget.select() : undefined}
       onKeyDown={(event) => {
-        if (event.key === "Enter") { event.preventDefault(); settle(); }
+        if (event.key === "Enter" && !isImeConfirming(event)) { event.preventDefault(); settle(); }
         else if (event.key === "Escape") { event.preventDefault(); settledRef.current = true; onCancel(); }
       }}
       onBlur={commitOnBlur ? () => { if (!settledRef.current) settle(); } : undefined}

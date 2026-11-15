@@ -11,6 +11,7 @@ import { Copy, Pencil, Trash2 } from "lucide-react";
 import { MobileSheet } from "../ui/MobileSheet";
 import { SheetFooter } from "../ui/SheetFooter";
 import { confirmMobile } from "../ui/ConfirmDialog";
+import { isImeConfirming } from "../../core/ime";
 
 export interface MobileBitableViewActionsProps {
   open: boolean;
@@ -60,7 +61,7 @@ export function MobileBitableViewActions({ open, viewName, editable, canDelete, 
           <span className="mbt-actions-field__label">视图名称</span>
           <input className="mbt-form-input" autoFocus value={draft} aria-label="视图名称"
             onChange={(event) => setDraft(event.target.value)}
-            onKeyDown={(event) => { if (event.key === "Enter" && draft.trim()) onRename(draft); }} />
+            onKeyDown={(event) => { if (event.key === "Enter" && !isImeConfirming(event) && draft.trim()) onRename(draft); }} />
         </label>
       ) : (
         <>

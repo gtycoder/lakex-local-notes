@@ -37,6 +37,7 @@ import { appendPendingImages, compressImageFile, type AiPendingImage } from "./a
 import { answerTitle, lakeBodyFromText, suggestions, takeCorpus } from "./aiSession";
 import { pickLocalFile, pickLocalFiles } from "../ui/pickFile";
 import { toastActionError } from "../lib/actionError";
+import { isImeConfirming } from "../../core/ime";
 
 export interface MobileAiPageProps {
   open: boolean;
@@ -314,7 +315,7 @@ export function MobileAiPage({ open, onClose, onChanged, embedded = false }: Mob
             placeholder={chat.enabled ? "问点什么…" : "AI 助手已关闭"}
             disabled={!chat.enabled}
             onChange={(event) => setDraft(event.target.value)}
-            onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void sendDraft(); } }}
+            onKeyDown={(event) => { if (event.key === "Enter" && !isImeConfirming(event) && !event.shiftKey) { event.preventDefault(); void sendDraft(); } }}
           />
         </span>
         <button

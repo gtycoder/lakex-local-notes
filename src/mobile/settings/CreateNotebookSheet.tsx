@@ -3,6 +3,7 @@ import { Suspense, lazy, useState } from "react";
 import { Book } from "lucide-react";
 import { MobileNodeIconGlyph } from "../ui/NodeIconGlyph";
 import { MobileSheet } from "../ui/MobileSheet";
+import { isImeConfirming } from "../../core/ime";
 
 // 261111 首屏瘦身：表情/图标选择器懒加载（同 HomePage；表情数据表不进入口静态图）。
 const MobileNodeIconPicker = lazy(() => import("../ui/NodeIconPicker").then((m) => ({ default: m.MobileNodeIconPicker })));
@@ -60,7 +61,7 @@ export function CreateNotebookSheet(props: CreateNotebookSheetProps) {
           value={title}
           autoFocus
           onChange={(e) => { setTitle(e.target.value); setError(null); }}
-          onKeyDown={(e) => { if (e.key === "Enter") void submit(); }}
+          onKeyDown={(e) => { if (e.key === "Enter" && !isImeConfirming(e)) void submit(); }}
         />
       </div>
       {showEmoji && (

@@ -8,6 +8,7 @@
 import { useEffect, useRef, useState } from "react";
 import { MobileSheet } from "./MobileSheet";
 import { SheetFooter } from "./SheetFooter";
+import { isImeConfirming } from "../../core/ime";
 
 export interface NameSheetProps {
   open: boolean;
@@ -62,7 +63,7 @@ export function NameSheet({ open, title, initialValue = "", placeholder = "", co
           autoFocus
           placeholder={placeholder}
           onChange={(event) => { setValue(event.target.value); setError(null); }}
-          onKeyDown={(event) => { if (event.key === "Enter") submit(); }}
+          onKeyDown={(event) => { if (event.key === "Enter" && !isImeConfirming(event)) submit(); }}
         />
       </span>
       {error && <div className="qn-tag-sheet__error" role="alert">{error}</div>}

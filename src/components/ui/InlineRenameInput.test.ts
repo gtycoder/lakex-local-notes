@@ -94,6 +94,17 @@ describe("InlineRenameInput：交互", () => {
     expect(calls.cancels).toBe(0);
   });
 
+  it("IME 组合态的回车不提交，组合结束后回车才提交（261115 A01）", () => {
+    render({ initial: "原名字", policy: "fallback" });
+    act(() => {
+      input().dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true, isComposing: true }));
+    });
+    expect(calls.commits).toEqual([]);
+    expect(calls.cancels).toBe(0);
+    press("Enter");
+    expect(calls.commits).toEqual(["原名字"]);
+  });
+
   it("Esc 取消，不提交", () => {
     render({ initial: "原名字", policy: "fallback" });
     press("Escape");

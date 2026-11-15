@@ -10,6 +10,7 @@
  */
 import { useEffect, useState } from "react";
 import { MAX_PAGE_NOTE_CHARS, type InkPage } from "../../core/inkDoc.js";
+import { isImeConfirming } from "../../core/ime";
 
 export interface InkPageTabFormProps {
   page: Pick<InkPage, "note"> | undefined;
@@ -48,7 +49,7 @@ export function InkPageTabForm({ page, pageNumber, readOnly, autoFocus = false, 
         aria-label={"第 " + pageNumber + " 页页签"}
         onChange={(event) => setDraft(event.target.value)}
         onKeyDown={(event) => {
-          if (event.key === "Enter") {
+          if (event.key === "Enter" && !isImeConfirming(event)) {
             event.preventDefault();
             if (canSave) onSave(draftText);
           }

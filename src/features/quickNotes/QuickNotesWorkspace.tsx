@@ -23,6 +23,7 @@ import { useConfirm } from "../../hooks/useConfirm";
 import { Dialog } from "../../components/ui/Overlay";
 import { QuickNoteComposer } from "../../components/app/QuickNoteComposer";
 import { QuickNoteCard } from "../../components/app/QuickNoteCard";
+import { isImeConfirming } from "../../core/ime";
 
 export interface QuickNotesWorkspaceHandle {
   /** 返回 true 代表可以离开当前小记页面；false 代表用户选择继续编辑。 */
@@ -387,7 +388,7 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
           autoFocus value={searchInput} placeholder="搜索小记" aria-label="搜索小记"
           onChange={(event) => setSearchInput(event.target.value)}
           onKeyDown={(event) => {
-            if (event.key === "Enter") { event.preventDefault(); setSearchQuery(searchInput.trim()); }
+            if (event.key === "Enter" && !isImeConfirming(event)) { event.preventDefault(); setSearchQuery(searchInput.trim()); }
             if (event.key === "Escape") { event.preventDefault(); closeSearch(); }
           }}
         />

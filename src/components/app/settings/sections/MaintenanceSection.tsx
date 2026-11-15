@@ -5,6 +5,7 @@ import { Trash, Search, Image as Info, Archive, Terminal } from "lucide-react";
 import { formatDateTime } from "../../../../core/dateFormat";
 import { RebuildDataBlock } from "../../RebuildDataBlock";
 import { native } from "../../../../lib/native";
+import { isImeConfirming } from "../../../../core/ime";
 
 export function MaintenanceSection({ c }: { c: SettingsPanelContext }) {
   const { confirm, gcCfg, health, healthCheck, logKeyword, logLoad, logRows, logText, rebuildSearchIndex, runHealth, runLogLoad, saveGcCfg, saveScanInterval, scanIntervalHours, searchIndex, searchText, setLogKeyword } = c;
@@ -73,7 +74,7 @@ export function MaintenanceSection({ c }: { c: SettingsPanelContext }) {
                       type="text"
                       value={logKeyword}
                       onChange={(e) => setLogKeyword(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === "Enter") void runLogLoad(logKeyword); }}
+                      onKeyDown={(e) => { if (e.key === "Enter" && !isImeConfirming(e)) void runLogLoad(logKeyword); }}
                       placeholder="过滤（如 GC / sync / trash / purge / snapshot）"
                       aria-label="日志关键字过滤"
                     />

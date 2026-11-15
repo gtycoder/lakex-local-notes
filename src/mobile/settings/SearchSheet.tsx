@@ -29,6 +29,7 @@ import { MobileSheet } from "../ui/MobileSheet";
 import { reportMobileActionError } from "../lib/reportMobileActionError";
 import { getNativeErrorMessage } from "../../lib/nativeErrors";
 import { EmptyState } from "../ui/EmptyState";
+import { isImeConfirming } from "../../core/ime";
 
 export interface SearchSheetProps {
   open: boolean;
@@ -136,7 +137,7 @@ export function SearchSheet(props: SearchSheetProps) {
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(event) => {
             if (event.key === "Escape") { event.preventDefault(); onClose(); return; }
-            if (event.key === "Enter") {
+            if (event.key === "Enter" && !isImeConfirming(event)) {
               event.preventDefault();
               commitRecent(query);
               if (query.trim()) void run(query, scope);

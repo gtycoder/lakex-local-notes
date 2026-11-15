@@ -5,6 +5,7 @@ import { native } from "../../lib/native";
 import { getNativeErrorMessage } from "../../lib/nativeErrors";
 import { writeLocalStorage } from "../../lib/localStorageSafe";
 import { createRequestVersion } from "../../core/requestVersion";
+import { isImeConfirming } from "../../core/ime";
 import { formatMd } from "../../core/dateFormat";
 import { initialSearchIndex, nextSearchIndex } from "../model/searchNavigation";
 import { prefetchEditorKernelNow } from "../../features/editor/kernelPrefetch";
@@ -210,7 +211,7 @@ export function SearchPanel({ open, initialQuery, onOpenNote, onOpenQuickNote, o
               if (event.key === "Escape") { onClose(); return; }
               if (event.key === "ArrowDown") { event.preventDefault(); stepSelection(1); return; }
               if (event.key === "ArrowUp") { event.preventDefault(); stepSelection(-1); return; }
-              if (event.key === "Enter") { event.preventDefault(); openActive(); }
+              if (event.key === "Enter" && !isImeConfirming(event)) { event.preventDefault(); openActive(); }
             }}
             placeholder="搜索标题、正文、标签和小记（⌘K）"
             aria-describedby="search-panel-help"

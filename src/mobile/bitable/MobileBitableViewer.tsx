@@ -75,6 +75,7 @@ import {
   addMobileField, addMobileOption, addMobileRecord, deleteMobileField, deleteMobileRecord,
   isMobileEditableField, recordWindow, serializeBitableBody, setMobileCell,
 } from "./mobileBitableEdit";
+import { isImeConfirming } from "../../core/ime";
 
 /** 分页窗口大小（记录全集不动，只决定挂载多少行；与桌面行窗口契约同一目标）。 */
 export const MOBILE_BITABLE_PAGE = 100;
@@ -516,7 +517,7 @@ export function MobileBitableViewer({ noteId, content, editing = false, onChange
       <tr key={record.id} data-fill-side={side ? "" : undefined}
         style={side ? ({ "--mbt-fill-side": side } as CSSProperties) : undefined}
         onClick={() => openRecord(record.id)}
-        onKeyDown={(event) => { if (event.key === "Enter") openRecord(record.id); }}
+        onKeyDown={(event) => { if (event.key === "Enter" && !isImeConfirming(event)) openRecord(record.id); }}
         tabIndex={0} role="row" aria-label={"查看记录 " + bitableRecordTitle(table, record, displayCtx)}>
         <td className="mbt-grid__idx">{indexById.get(record.id) ?? ""}</td>
         {fields.map((field) => {

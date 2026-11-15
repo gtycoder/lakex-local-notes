@@ -27,6 +27,7 @@ import { native } from "../../lib/native.js";
 import { ATTACHMENT_GRID, BITABLE_FIELD_TYPES, BITABLE_FIELD_TYPE_LABEL, BITABLE_PROGRESS_MAX, BITABLE_RATING_MAX, BITABLE_STAT_LABEL, aiPromptFieldNames, attachmentGridColumns, bitableAttachments, bitableDisplayValue, bitableFieldText, bitableRecordTitle, computeColumnStat, isKnownFieldType, optionChipStyle, relationRecordIds, relationTargetRecords, relationTargetTable, statDisplayText, type BitableAttachment, type BitableDisplayContext, type BitableField, type BitableFieldOption, type BitableRecord, type BitableStatType } from "../../core/bitableDoc.js";
 import { readOnlyBoolean, readOnlyLink, readOnlyProgress, readOnlyRating } from "../../core/bitableReadOnly.js";
 import type { CSSProperties } from "react";
+import { isImeConfirming } from "../../core/ime";
 
 /** 图片字段只收图片：`accept` 只约束「选文件」，拖拽/粘贴必须自己拦，否则会静默写进非图片。
  *  返回「可上传的」与「被拒数量」——拒绝要有可见提示，绝不静默丢弃。 */
@@ -168,7 +169,7 @@ function OptionPicker({ field, value, multiple, disabled, onToggle, onAddOption 
             value={query}
             placeholder="搜索或新建选项"
             onChange={(event) => setQuery(event.target.value)}
-            onKeyDown={(event) => { if (event.key === "Enter") commitAdd(); }}
+            onKeyDown={(event) => { if (event.key === "Enter" && !isImeConfirming(event)) commitAdd(); }}
           />
         </div>
         <div className="bt-option-list" role="listbox" aria-multiselectable={multiple}>
@@ -680,7 +681,7 @@ function AttachmentExpandPopover({ anchor, noteId, attachments, readOnly, imageO
                               aria-label="附件名称"
                               onKeyDown={(event) => {
                                 // Enter/blur 提交：只取输入框里的主名，扩展名原样拼回（输入框里改不到格式）
-                                if (event.key === "Enter") { onRename(file, (event.currentTarget.value.trim() || base) + ext); setRenameFile(null); }
+                                if (event.key === "Enter" && !isImeConfirming(event)) { onRename(file, (event.currentTarget.value.trim() || base) + ext); setRenameFile(null); }
                                 if (event.key === "Escape") setRenameFile(null);
                               }}
                               onBlur={(event) => { onRename(file, (event.currentTarget.value.trim() || base) + ext); setRenameFile(null); }}
@@ -1067,7 +1068,7 @@ function LinkCell({ value, readOnly, onChange }: { value: unknown; readOnly: boo
           onChange={(event) => setDraft(event.target.value)}
           onBlur={commit}
           onKeyDown={(event) => {
-            if (event.key === "Enter") { event.preventDefault(); commit(); }
+            if (event.key === "Enter" && !isImeConfirming(event)) { event.preventDefault(); commit(); }
             if (event.key === "Escape") { event.stopPropagation(); setDraft(text); setEditing(false); }
           }} />
       </span>

@@ -28,6 +28,7 @@ import { MobileBitableDateField } from "./MobileBitableDateField";
 import { dismissKeyboardOnPointerDown } from "../ui/dismissKeyboard";
 import { MobileSheet } from "../ui/MobileSheet";
 import { MobileBitableAttachmentEditor } from "./MobileBitableAttachmentEditor";
+import { isImeConfirming } from "../../core/ime";
 
 export interface MobileBitableRecordSheetProps {
   noteId: string;
@@ -80,7 +81,7 @@ function DraftInputControl({ value, onChange, numeric = false }: { value: unknow
         onChange={(event) => setDraft(numeric ? event.target.value.replace(/[^0-9.\-]/g, "") : event.target.value)}
         onBlur={commit}
         onKeyDown={(event) => {
-          if (event.key === "Enter") event.currentTarget.blur();
+          if (event.key === "Enter" && !isImeConfirming(event)) event.currentTarget.blur();
           if (event.key === "Escape") { event.preventDefault(); setDraft(textInputValue(value)); }
         }}
         aria-label={numeric ? "数字值" : "文本值"}
@@ -141,7 +142,7 @@ function SelectControl({ field, value, onChange, onAddOption }: {
             value={draft}
             placeholder="新选项名称"
             onChange={(event) => setDraft(event.target.value)}
-            onKeyDown={(event) => { if (event.key === "Enter") commit(); }}
+            onKeyDown={(event) => { if (event.key === "Enter" && !isImeConfirming(event)) commit(); }}
             onBlur={commit}
             aria-label="新选项名称"
           />

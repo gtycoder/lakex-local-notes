@@ -6,6 +6,7 @@ import {
   normalizeQuickNoteTag,
   type QuickNoteTagSummary,
 } from "../../core/quickNoteTags";
+import { isImeConfirming } from "../../core/ime";
 
 export interface QuickNoteTagPickerProps {
   anchor: HTMLElement;
@@ -84,7 +85,7 @@ export function QuickNoteTagPicker({ anchor, options, selected, onAdd, onCreate,
           value={query}
           onChange={(event) => { setQuery(event.target.value); setError(null); }}
           onKeyDown={(event) => {
-            if (event.key === "Enter" && candidate && !candidateError) {
+            if (event.key === "Enter" && !isImeConfirming(event) && candidate && !candidateError) {
               event.preventDefault();
               if (existing && !selectedSet.has(existing.id)) addExisting(existing.id);
               else if (!exactExists) void create();

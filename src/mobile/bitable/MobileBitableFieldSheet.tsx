@@ -18,6 +18,7 @@ import { MOBILE_EDITABLE_FIELD_TYPES } from "./mobileBitableEdit";
 import { confirmMobile } from "../ui/ConfirmDialog";
 import { showToast } from "../ui/toastBus";
 import { MobileSheet } from "../ui/MobileSheet";
+import { isImeConfirming } from "../../core/ime";
 
 export interface MobileBitableFieldSheetProps {
   table: BitableTable;
@@ -85,7 +86,7 @@ export function MobileBitableFieldSheet({ table, fields, onEdit, onDelete, onAdd
                 placeholder={BITABLE_FIELD_TYPE_LABEL[newType]}
                 aria-label="新字段名称"
                 onChange={(event) => setNewName(event.target.value)}
-                onKeyDown={(event) => { if (event.key === "Enter") commitAdd(); }}
+                onKeyDown={(event) => { if (event.key === "Enter" && !isImeConfirming(event)) commitAdd(); }}
               />
             </label>
             <div className="mbt-type-grid" role="radiogroup" aria-label="字段类型">

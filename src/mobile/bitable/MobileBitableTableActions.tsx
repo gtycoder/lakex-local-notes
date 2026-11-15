@@ -9,6 +9,7 @@ import { Copy, Pencil, Trash2 } from "lucide-react";
 import { MobileSheet } from "../ui/MobileSheet";
 import { SheetFooter } from "../ui/SheetFooter";
 import { confirmMobile } from "../ui/ConfirmDialog";
+import { isImeConfirming } from "../../core/ime";
 
 export interface MobileBitableTableActionsProps {
   open: boolean;
@@ -59,7 +60,7 @@ export function MobileBitableTableActions({ open, tableName, recordCount, editab
           <span className="mbt-actions-field__label">数据表名称</span>
           <input className="mbt-form-input" autoFocus value={draft} aria-label="数据表名称"
             onChange={(event) => setDraft(event.target.value)}
-            onKeyDown={(event) => { if (event.key === "Enter" && draft.trim()) onRename(draft); }} />
+            onKeyDown={(event) => { if (event.key === "Enter" && !isImeConfirming(event) && draft.trim()) onRename(draft); }} />
         </label>
       ) : (
         <>

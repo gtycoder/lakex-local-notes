@@ -39,6 +39,7 @@ import { LOCKED_TEXT_ICON_ID, LockedTextIconSymbol } from "./lockedTextIcon";
 import { registerLockedTextFlush } from "./lockedTextFlush";
 import { CUSTOM_CARD_SLASH_GROUP_TITLE, appendCustomCard, withCustomCardSlashItem } from "./customCardUtils";
 import "./lockedTextCard.css";
+import { isImeConfirming } from "../../core/ime";
 
 /** 斜杠项名：官方规定必须是 `custom-${name}`（yuque-developer-docs 69）。 */
 export const LOCKED_TEXT_SLASH_ITEM = `custom-${LOCKED_TEXT_CARD_NAME}`;
@@ -262,7 +263,7 @@ function LockedTextCard({ mode, cardValue, updateCardValue }: LockedTextCardProp
       <input className="lake-locked-text__field" type="password" aria-label="再次输入密码"
         autoComplete="new-password" placeholder="再次输入密码"
         value={passwordConfirm} onChange={(event) => setPasswordConfirm(event.target.value)} disabled={busy}
-        onKeyDown={(event) => { if (event.key === "Enter") { void (changing ? changePassword() : setupPassword()); } }} />
+        onKeyDown={(event) => { if (event.key === "Enter" && !isImeConfirming(event)) { void (changing ? changePassword() : setupPassword()); } }} />
       <button type="button" className="lake-locked-text__btn lake-locked-text__btn--primary" disabled={busy}
         onClick={() => { void (changing ? changePassword() : setupPassword()); }}>
         {changing ? "确认" : "设置密码"}
@@ -278,7 +279,7 @@ function LockedTextCard({ mode, cardValue, updateCardValue }: LockedTextCardProp
       <input className="lake-locked-text__field" type="password" aria-label="请输入密码" autoComplete="current-password"
         placeholder="请输入密码" value={passwordInput} disabled={busy}
         onChange={(event) => setPasswordInput(event.target.value)}
-        onKeyDown={(event) => { if (event.key === "Enter") void unlock(); }} />
+        onKeyDown={(event) => { if (event.key === "Enter" && !isImeConfirming(event)) void unlock(); }} />
       <button type="button" className="lake-locked-text__btn lake-locked-text__btn--primary" disabled={busy} onClick={() => { void unlock(); }}>解锁</button>
     </div>
   ) : null;

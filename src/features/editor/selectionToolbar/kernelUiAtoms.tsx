@@ -12,6 +12,7 @@
  * 只在外层挂一次 onClick，避免透传+冒泡双触发。
  */
 import { createElement, useState, type ComponentType, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
+import { isImeConfirming } from "../../../core/ime";
 import { createPortal } from "react-dom";
 import { Doc } from "@dlient/lakex-doc-react";
 
@@ -131,8 +132,8 @@ export function KLinkEditor({ text, src, allowModifyText, invalid, onChangeText,
   const Input = lib.Input;
   const Button = lib.Button;
   if (!Input || !Button) return null;
-  const onKeyDown = (event: { key?: string; preventDefault?: () => void }) => {
-    if (event.key === "Enter") { event.preventDefault?.(); onConfirm(); }
+  const onKeyDown = (event: { key?: string; preventDefault?: () => void; isComposing?: boolean; keyCode?: number }) => {
+    if (event.key === "Enter" && !isImeConfirming(event)) { event.preventDefault?.(); onConfirm(); }
   };
   return createElement(
     "div",

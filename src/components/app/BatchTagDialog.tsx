@@ -10,6 +10,7 @@ import { Dialog } from "../ui/Overlay";
 import type { QuickNoteTag } from "../../lib/types";
 import { getNativeErrorMessage } from "../../lib/nativeErrors";
 import { isValidBatchTagName, normalizeBatchTagName, toggleBatchTagSelection } from "../../core/batchTagging";
+import { isImeConfirming } from "../../core/ime";
 
 export interface BatchTagDialogProps {
   open: boolean;
@@ -66,7 +67,7 @@ export function BatchTagDialog({ open, count, tags, loading = false, error = nul
             <TagIcon size={14} className="ln-input__icon" aria-hidden="true" />
             <input className="ln-input__field" value={name} placeholder="新建标签" maxLength={40} disabled={busy || creating}
               onChange={(event) => setName(event.target.value)}
-              onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void create(); } }} />
+              onKeyDown={(event) => { if (event.key === "Enter" && !isImeConfirming(event)) { event.preventDefault(); void create(); } }} />
           </span>
           <button type="button" className="ln-btn ln-btn--secondary" disabled={!isValidBatchTagName(name) || busy || creating} onClick={() => void create()}>
             <Plus size={14} aria-hidden="true" />{creating ? "新建中…" : "新建"}

@@ -12,6 +12,7 @@ import { S3ConfigImportDialog } from "./S3ConfigImportDialog";
 import { useSettingsPanelScope } from "./settings/useSettingsPanelScope";
 import { EditorSection, AppearanceSection, ShortcutsSection, SyncSection, BackupSection, HistorySection, MaintenanceSection, BrowserSection, AiSection, UpdateSection, AboutSection } from "./settings/sections";
 import type { SettingsPanelProps } from "./settings/settingsPanelTypes";
+import { isImeConfirming } from "../../core/ime";
 
 export type { SettingsPanelProps, SettingsCategory } from "./settings/settingsPanelTypes";
 export type { SettingsPanelContext } from "./settings/useSettingsPanelScope";
@@ -32,7 +33,7 @@ export function SettingsPanel(props: SettingsPanelProps) {
         </header>
         <div className="settings-layout">
           <nav className="settings-nav ln-list-panel ln-list-panel--background">
-            <label className="settings-nav-search"><Search size={14} /><input ref={navSearchRef} value={navQuery} onChange={(event) => setNavQuery(event.target.value)} onKeyDown={(event) => { if (event.key === "Escape") { navSearchRef.current?.blur(); return; } if (event.key === "Enter" && itemHits.length > 0) { event.preventDefault(); jumpToItem(itemHits[0]); } }} placeholder="搜索设置（分类与条目）" aria-label="搜索设置" /></label>
+            <label className="settings-nav-search"><Search size={14} /><input ref={navSearchRef} value={navQuery} onChange={(event) => setNavQuery(event.target.value)} onKeyDown={(event) => { if (event.key === "Escape") { navSearchRef.current?.blur(); return; } if (event.key === "Enter" && !isImeConfirming(event) && itemHits.length > 0) { event.preventDefault(); jumpToItem(itemHits[0]); } }} placeholder="搜索设置（分类与条目）" aria-label="搜索设置" /></label>
             {visibleNav.map((item) => (
               <button key={item.id} className={`ln-list-item settings-nav-item${category === item.id ? " active" : ""}`} onClick={() => setCategory(item.id)}>
                 {item.icon}<span>{item.label}</span>

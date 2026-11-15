@@ -11,6 +11,7 @@ import { ChevronDown, ChevronUp, X } from "lucide-react";
 import { MAX_FIND_MATCHES, applyFindHighlights, clearFindHighlights, collectMatchRanges, nextMatchIndex, reconcileMatchIndex, scrollRangeIntoView } from "./mobileFind";
 import { getKernelFindService, type KernelFindSession } from "./kernelFind";
 import "./mobile-find.css";
+import { isImeConfirming } from "../../core/ime";
 
 export interface MobileFindBarProps {
   /** 扫描范围（文档正文容器）；宿主未就绪时传 null。仅 DOM 降级路径使用。 */
@@ -110,7 +111,7 @@ export function MobileFindBar({ root, revision, editor, onClose }: MobileFindBar
         value={query}
         onChange={(event) => setQuery(event.target.value)}
         onKeyDown={(event) => {
-          if (event.key === "Enter") { event.preventDefault(); go(1); }
+          if (event.key === "Enter" && !isImeConfirming(event)) { event.preventDefault(); go(1); }
           else if (event.key === "Escape") { event.preventDefault(); onClose(); }
         }}
       />

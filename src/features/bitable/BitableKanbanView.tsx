@@ -18,6 +18,7 @@ import {
 } from "../../core/bitableDoc.js";
 import { ViewTypeIcon } from "./bitableViews.js";
 import "./bitableKanbanView.css";
+import { isImeConfirming } from "../../core/ime";
 
 export interface BitableKanbanViewProps {
   noteId: string;
@@ -147,7 +148,7 @@ export function BitableKanbanView({ noteId, table, view, records, readOnly, onSe
           <input autoFocus className="bt-input" value={draft} placeholder="分组名称"
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={(event) => {
-              if (event.key === "Enter") commitDraft();
+              if (event.key === "Enter" && !isImeConfirming(event)) commitDraft();
               if (event.key === "Escape") setDraft(null);
             }}
             onBlur={() => setDraft(null)} />

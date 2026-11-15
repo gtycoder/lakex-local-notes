@@ -3,6 +3,7 @@ import { ChevronRight, Lock, MoreVertical, Plus } from "lucide-react";
 import { prefetchEditorKernelNow } from "../../../features/editor/kernelPrefetch";
 import { nodeIcon } from "../treeIcons";
 import type { TreeRowFaceProps } from "./treeRowProps";
+import { isImeConfirming } from "../../../core/ime";
 
 /** 行内容只接本行状态，缓存图标/按钮等重型子树；递归分支仍传播全局状态，不能跳过子孙更新。
  * 默认浅比较保留 node/回调更新语义，不用会忽略新回调或后代选中的自定义比较器。 */
@@ -20,7 +21,7 @@ export const TreeRowFace = memo(function TreeRowFace(props: TreeRowFaceProps) {
         props.onRowClick(event, props.node);
       }}
       onKeyDown={(event) => {
-        if (event.key === "Enter") {
+        if (event.key === "Enter" && !isImeConfirming(event)) {
           // 261111 意图预取：键盘打开文档也先开始加载内核 chunk（与 hover/pointerdown 同一入口）。
           if (props.node.nodeType === "note") prefetchEditorKernelNow();
           props.node.nodeType === "note" ? props.onSelect(props.node.id) : props.onToggle(props.node.id);

@@ -56,6 +56,7 @@ import { useBitableFields } from "./useBitableFields";
 import { useBitableRecords } from "./useBitableRecords";
 import { useBitableImport } from "./useBitableImport";
 import "./bitableEditor.css";
+import { isImeConfirming } from "../../core/ime";
 
 /** DT-06：共用 prop 词表见 features/editor/editorHost.ts，这里只补宿主专有项。 */
 export interface BitableEditorProps extends EditorHostProps {
@@ -795,7 +796,7 @@ export function BitableEditor({ noteId, content, visible, readOnly: readOnlyProp
                     onChange={(event) => setTableEditor({ id: table.id, draft: event.target.value })}
                     onClick={(event) => event.stopPropagation()}
                     onBlur={() => { renameTable(table.id, tableEditor.draft); setTableEditor(null); }}
-                    onKeyDown={(event) => { if (event.key === "Enter") { renameTable(table.id, tableEditor.draft); setTableEditor(null); } if (event.key === "Escape") setTableEditor(null); }} />
+                    onKeyDown={(event) => { if (event.key === "Enter" && !isImeConfirming(event)) { renameTable(table.id, tableEditor.draft); setTableEditor(null); } if (event.key === "Escape") setTableEditor(null); }} />
                 : <span className="bt-table-name ln-ellipsis">{table.name}</span>}
               <span className="bt-table-count">{table.records.length}</span>
               <button type="button" className="bt-icon-btn bt-table-more" title="数据表操作" aria-label="数据表操作" disabled={readOnly}
@@ -1432,7 +1433,7 @@ export function BitableEditor({ noteId, content, visible, readOnly: readOnlyProp
           <div className="ln-dialog__body">
             <input ref={viewNameRef} autoFocus className="bt-input" readOnly={readOnly} defaultValue={activeTable.views.find((v) => v.id === viewEditor)?.name ?? ""}
               onKeyDown={(event) => {
-                if (event.key === "Enter" && !readOnly) renameView(viewEditor, (event.target as HTMLInputElement).value);
+                if (event.key === "Enter" && !isImeConfirming(event) && !readOnly) renameView(viewEditor, (event.target as HTMLInputElement).value);
               }} />
           </div>
           <div className="ln-dialog__actions">

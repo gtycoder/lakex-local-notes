@@ -698,10 +698,13 @@ describe("首页三 tab（小记 / 知识库 / 标签）", () => {
     expect(host.textContent).toContain("1 篇文档、1 条小记");
     const panes = [...host.querySelectorAll<HTMLElement>(".mobile-tab-pane")];
     expect(panes.length).toBe(5);
-    // pane 顺序 = HOME_TABS（知识库 / 小记 / 标签 / AI / 日记）；只有当前页不是 inert。
+    // pane 顺序 = HOME_TABS（知识库 / 小记 / 标签 / AI / 日记）；只有当前页（tags = 下标 2）不是 inert。
+    // 261115 修：fa97dd6a 把空间顺序改成与桌面同序后，本断言仍按旧顺序（quick/library/diary/ai/tags）写，
+    // 于是 panes[2]（标签）与 panes[4]（日记）判反 ⇒ 全量 vitest 长期一红。
     expect(panes[0].hasAttribute("inert")).toBe(true);
-    expect(panes[2].hasAttribute("inert")).toBe(true);
+    expect(panes[1].hasAttribute("inert")).toBe(true);
+    expect(panes[2].hasAttribute("inert")).toBe(false);
     expect(panes[3].hasAttribute("inert")).toBe(true);
-    expect(panes[4].hasAttribute("inert")).toBe(false);
+    expect(panes[4].hasAttribute("inert")).toBe(true);
   });
 });

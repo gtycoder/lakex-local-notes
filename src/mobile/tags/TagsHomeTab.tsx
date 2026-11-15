@@ -37,6 +37,7 @@ import { TagQuickNoteCard } from "./TagQuickNoteCard";
 import { MERGE_TAG_HINT, deleteTagConfirmBody } from "./tagManageCopy";
 import { toastActionError } from "../lib/actionError";
 import { EmptyState } from "../ui/EmptyState";
+import { isImeConfirming } from "../../core/ime";
 
 export interface TagsHomeTabProps {
   /** 标签目录（App 快照；顺序 = 设备本地展示顺序）。 */
@@ -479,7 +480,7 @@ export function TagsHomeTab({ tags, notes, quickNotes, active, onOpenNote, onOpe
             aria-label="新标签名称"
             placeholder="输入标签名称"
             onChange={(event) => { setCreateName(event.target.value); setCreateError(null); }}
-            onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void submitCreate(); } }}
+            onKeyDown={(event) => { if (event.key === "Enter" && !isImeConfirming(event)) { event.preventDefault(); void submitCreate(); } }}
           />
         </span>
         {createError && <div className="qn-tag-sheet__error" role="alert">{createError}</div>}
@@ -503,7 +504,7 @@ export function TagsHomeTab({ tags, notes, quickNotes, active, onOpenNote, onOpe
             value={renameValue}
             aria-label="标签名"
             onChange={(event) => { setRenameValue(event.target.value); setRenameError(null); }}
-            onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void submitRename(); } }}
+            onKeyDown={(event) => { if (event.key === "Enter" && !isImeConfirming(event)) { event.preventDefault(); void submitRename(); } }}
           />
         </span>
         {renameError && <div className="qn-tag-sheet__error" role="alert">{renameError}</div>}

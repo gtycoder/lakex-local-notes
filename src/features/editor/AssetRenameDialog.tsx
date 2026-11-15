@@ -6,6 +6,7 @@
 import { useRef, useState } from "react";
 import { Pencil, X } from "lucide-react";
 import { Dialog } from "../../components/ui/Overlay";
+import { isImeConfirming } from "../../core/ime";
 
 function splitExt(name: string): { base: string; ext: string } {
   const m = /^(.*?)(\.[^./\\]*)?$/.exec(name);
@@ -38,7 +39,7 @@ export function AssetRenameDialog({ initial, onCancel, onConfirm }: {
               value={value}
               aria-label="附件名称"
               onChange={(e) => setValue(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter" && canConfirm) onConfirm(trimmed + ext); }}
+              onKeyDown={(e) => { if (e.key === "Enter" && !isImeConfirming(e) && canConfirm) onConfirm(trimmed + ext); }}
               onFocus={(e) => e.currentTarget.select()}
             />
             {ext && <span className="asset-rename-ext" title="扩展名不可修改">{ext}</span>}

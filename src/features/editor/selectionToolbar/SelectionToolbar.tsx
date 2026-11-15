@@ -43,6 +43,7 @@ import { collectSelectionImageRefs, imageCardAssetRef } from "./selectionImages"
 import type { AiAssetRef } from "../../../core/aiProviders";
 import { firstRangeRect, useSelectionToolbar, type ImageTarget } from "./useSelectionToolbar";
 import { placePopoverBeside, placePopoverPosition } from "../../../hooks/topMenuPosition";
+import { isImeConfirming } from "../../../core/ime";
 
 /** 取真实有盒子的触发元素：内核原子件外层是 display:contents 包裹（它的 rect 恒为 0×0，量不出锚点）。 */
 function resolveTriggerEl(trigger?: HTMLElement | null): HTMLElement | null {
@@ -912,9 +913,9 @@ export function SelectionToolbar({ editor, container }: {
           <div ref={setPopoverRef} style={popoverStyle ?? OFFSCREEN} className="selection-toolbar__cardpop" data-menu="imgsize">
             <div className="selection-toolbar__inputrow">
               <span className="ne-card-toolbar-input-title">宽</span>
-              <input className="ne-card-toolbar-input" type="number" min="16" value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); applyWidth(); } }} />
+              <input className="ne-card-toolbar-input" type="number" min="16" value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !isImeConfirming(e)) { e.preventDefault(); applyWidth(); } }} />
               <span className="ne-card-toolbar-input-title">高</span>
-              <input className="ne-card-toolbar-input" type="number" min="16" value={draftH} onChange={(e) => setDraftH(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); applyHeight(); } }} />
+              <input className="ne-card-toolbar-input" type="number" min="16" value={draftH} onChange={(e) => setDraftH(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !isImeConfirming(e)) { e.preventDefault(); applyHeight(); } }} />
             </div>
             <div className="ln-segment selection-toolbar__scale">
               {[25, 50, 75, 100].map((p) => (
@@ -926,7 +927,7 @@ export function SelectionToolbar({ editor, container }: {
         {/* 链接：网址输入 + 「在当前页面打开」 */}
         {menu === "imglink" && (
           <div ref={setPopoverRef} style={popoverStyle ?? OFFSCREEN} className="selection-toolbar__cardpop" data-menu="imglink">
-            <input className="ne-card-toolbar-input selection-toolbar__urlinput" type="text" placeholder="请输入网址" value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); applyLink(); } }} />
+            <input className="ne-card-toolbar-input selection-toolbar__urlinput" type="text" placeholder="请输入网址" value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !isImeConfirming(e)) { e.preventDefault(); applyLink(); } }} />
             <label className="selection-toolbar__checkrow"><KCheckbox checked={linkSelf} onChange={setLinkSelf} />在当前页面打开</label>
           </div>
         )}
