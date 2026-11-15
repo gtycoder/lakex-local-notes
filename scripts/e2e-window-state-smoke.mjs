@@ -76,8 +76,12 @@ async function waitExit(child) {
   await new Promise((resolve) => child.once("exit", resolve));
 }
 function launch() {
+  // ⚠️ 在 DSH 等宿主里 `ELECTRON_RUN_AS_NODE=1` 会被继承：打包版 Electron 会按纯 Node 启动、
+  //    根本不开 CDP 端口（实测报「window smoke CDP 未就绪」）。这里显式摘掉，脚本可独立跑。
+  const env = { ...process.env, LAKE_USER_DATA: dataDir, LAKE_ASSET_PORT: assetPort };
+  delete env.ELECTRON_RUN_AS_NODE;
   return spawn(appPath, [`--remote-debugging-port=${port}`, "--disable-gpu"], {
-    env: { ...process.env, LAKE_USER_DATA: dataDir, LAKE_ASSET_PORT: assetPort },
+    env,
     stdio: "ignore",
   });
 }

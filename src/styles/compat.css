@@ -173,7 +173,8 @@
  * 全凭内联元素之间的空白字符，一排按钮贴在一起且宽度参差（260926 修）。 */
 .config-block__actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--lake-space-md); }
 .config-name { color: var(--lake-text-1); font-size: var(--lake-font-size-body); }
-.config-block { padding: 16px 24px; border-bottom: 0.5px solid var(--lake-border-1); line-height: 20px; }
+.config-block { padding: 16px 24px; border-bottom: 0.5px solid var(--lake-border-1); /* 261116 A03/400%：20px 写死会让 400% 字号的行盒仍只有 20 高（文字越出）。用 ratio 表达，100% 仍 = 20px。 */
+  line-height: calc(20 / 14 * 1em); }
 .config-block:last-child { border-bottom: 0; }
 .config-block__name { color: var(--lake-text-1); font-size: var(--lake-font-size-body); }
 .config-empty { padding: 24px 0; color: var(--lake-text-4); font-size: var(--lake-font-size-small); text-align: center; }
