@@ -19,6 +19,7 @@
  */
 import { useCallback, useEffect, useRef, type ReactNode, type Ref } from "react";
 import { lockPageScroll } from "../../lib/pageScrollLock";
+import { restoreFocus } from "../../lib/focusRestore";
 import { X } from "lucide-react";
 import { pushBackHandler } from "./backStack";
 import { useKeyboardStableSheet } from "../hooks/useKeyboardStableSheet";
@@ -42,10 +43,38 @@ export function useSheetModalFocus(open: boolean, surfaceRef: import("react").Re
     return () => {
       const previous = restoreFocusRef.current;
       restoreFocusRef.current = null;
-      if (previous?.isConnected) previous.focus({ preventScroll: true });
+      // 261116：触发器（卡片「更多」）常在打开 Sheet 的同一次更新里卸载 ⇒ 退到主区域，不落 body。
+      restoreFocus(previous);
     };
   }, [open]);
 
+  // 261116：模态 Sheet 打开期间让背景不可聚焦（aria-modal 只是声明）。
+  // 做法 = 沿 Sheet 的祖先链，把每一级的兄弟节点惰性化（Sheet 自身与祖先保持可用）；
+  // 遮罩 .mb-scrim 必须跳过 —— 它是关闭入口，inert 掉就点不动了。
+  // 按属性判断跳过「别人已经加的 inert」，关闭时只摘自己加的。
+  useEffect(() => {
+    if (!open) return;
+    const sheet = surfaceRef.current;
+    if (!sheet) return;
+    const applied: HTMLElement[] = [];
+    let node: HTMLElement | null = sheet;
+    while (node && node !== document.body) {
+      const parent: HTMLElement | null = node.parentElement;
+      if (!parent) break;
+      for (const sibling of Array.from(parent.children)) {
+        if (!(sibling instanceof HTMLElement) || sibling === node) continue;
+        if (sibling.matches(".mb-scrim")) continue;
+        if (["SCRIPT", "STYLE", "LINK", "TEMPLATE"].includes(sibling.tagName)) continue;
+        if (sibling.hasAttribute("inert")) continue;
+        sibling.setAttribute("inert", "");
+        applied.push(sibling);
+      }
+      node = parent;
+    }
+    return () => {
+      for (const el of applied) el.removeAttribute("inert");
+    };
+  }, [open, surfaceRef]);
 }
 
 export interface MobileSheetProps {

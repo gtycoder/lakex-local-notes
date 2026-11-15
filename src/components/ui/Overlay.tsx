@@ -14,6 +14,7 @@
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type MutableRefObject, type ReactNode, type Ref, type RefObject } from "react";
 import { lockPageScroll } from "../../lib/pageScrollLock";
 import { createPortal } from "react-dom";
+import { restoreFocus } from "../../lib/focusRestore";
 import { ChevronRight } from "lucide-react";
 
 export type OverlayKind = "dialog" | "menu" | "popover" | "drawer";
@@ -244,7 +245,9 @@ export function Overlay({ open = true, kind, onDismiss, label, className, style,
       unlock();
       const previous = restoreFocusRef.current;
       const top = openOverlayStack.at(-1);
-      if (previous?.isConnected && (!top || top.surface?.contains(previous))) previous.focus({ preventScroll: true });
+      // 261116：触发器可能在同一批更新里被卸载（顶栏菜单项 → 设置对话框）⇒ 退到主区域，
+      // 不再落 body（键盘用户会失去位置）。仍是「只有闭合时栈顶是本层」才归还。
+      if (!top || top.surface?.contains(previous ?? null) || !previous?.isConnected) restoreFocus(previous);
     };
   }, [open, kind, initialFocus, overlayId]);
 
