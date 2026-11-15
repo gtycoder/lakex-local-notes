@@ -435,7 +435,7 @@ export function createDeviceStoreMeta(deps: DeviceStoreMetaDeps): DeviceStoreMet
           if (changed) await p.applyRemoteFolderMeta({ ...folderRow(f), parentId });
         }
       } catch (e) {
-        throw new Error("saveFolders 失败(" + f.id + "): " + (e as Error).message);
+        throw new Error("saveFolders 失败(" + f.id + "): " + (e as Error).message, { cause: e });
       }
     }
     if (!deleteMissing) return;
@@ -518,7 +518,7 @@ export function createDeviceStoreMeta(deps: DeviceStoreMetaDeps): DeviceStoreMet
           await p.applyQuickNoteTagLinks(item.id, remoteQuickTagIds, item.tagsUpdatedAt ?? "");
         }
       } catch (err) {
-        throw new Error("saveQuickNotes 失败(" + item.id + "): " + (err as Error).message);
+        throw new Error("saveQuickNotes 失败(" + item.id + "): " + (err as Error).message, { cause: err });
       }
     }
     // 目录落库：upsert active 行 + 物理删掉本轮判定删除的标签（含 offline 待删），清其关联/版本。

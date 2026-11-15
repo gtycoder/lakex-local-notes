@@ -116,7 +116,7 @@ export async function encodeS3ConfigTransfer(settings: S3Settings, exportedAt: D
   try {
     validateS3Settings(normalized);
   } catch (error) {
-    throw new Error(`当前 S3 配置不合法，无法导出：${(error as Error).message}`);
+    throw new Error(`当前 S3 配置不合法，无法导出：${(error as Error).message}`, { cause: error });
   }
   const payload: S3TransferPayload = {
     app: "lakex-local-notes",
@@ -258,7 +258,7 @@ export async function decodeS3ConfigTransfer(code: string): Promise<S3Settings> 
   try {
     validateS3Settings(settings);
   } catch (error) {
-    throw new Error(`S3 迁移码校验失败：${(error as Error).message}`);
+    throw new Error(`S3 迁移码校验失败：${(error as Error).message}`, { cause: error });
   }
   return settings;
 }

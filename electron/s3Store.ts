@@ -212,14 +212,10 @@ export class ObjectStore {
    *  Get/Put 走大对象超时（W-6），其余元数据命令走短超时。 */
   private async send<T>(command: GetObjectCommand | PutObjectCommand | ListObjectsV2Command | DeleteObjectCommand | DeleteObjectsCommand): Promise<T> {
     const isTransfer = command instanceof GetObjectCommand || command instanceof PutObjectCommand;
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), isTransfer ? S3_TRANSFER_TIMEOUT_MS : S3_REQUEST_TIMEOUT_MS);
-    try {
-      // AWS SDK client.send 不接受命令联合类型（已知 TS 痛点）：调用点类型已约束，这里集中一处断言。
-      return await this.client.send(command as never, { abortSignal: controller.signal }) as T;
-    } finally {
-      clearTimeout(timer);
-    }
+    // AbortSignal.timeout 的定时器自带 unref（不拖住进程退出），无需再手动 clearTimeout。
+    const signal = AbortSignal.timeout(isTransfer ? S3_TRANSFER_TIMEOUT_MS : S3_REQUEST_TIMEOUT_MS);
+    // AWS SDK client.send 不接受命令联合类型（已知 TS 痛点）：调用点类型已约束，这里集中一处断言。
+    return await this.client.send(command as never, { abortSignal: signal }) as T;
   }
 
   private unkey(full: string): string {
