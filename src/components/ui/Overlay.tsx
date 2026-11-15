@@ -299,6 +299,73 @@ export function Dialog(props: Omit<OverlayProps, "kind">) {
   return <Overlay kind="dialog" {...props} />;
 }
 
+/**
+ * 原生模态对话框（261115 A02 试点）：`<dialog>` + `showModal()`。
+ *
+ * 与 `<Dialog>` 的区别（只在这几件上）：
+ * · 顶层 + 背景不可聚焦：由浏览器给（`showModal`），不再需要自绘 scrim / 焦点圈闭 / 手写 inert；
+ * · Esc：浏览器发 `cancel` 事件 → 我们 preventDefault 后走同一个 onDismiss（保持调用方语义）；
+ * · 背板点击：模态下点背板的事件目标就是 dialog 自身 ⇒ 判 `e.target === el` 即"点了外面"；
+ * · 焦点：关闭后由我们显式还给触发元素（不依赖浏览器对"先前焦点"的记忆）。
+ *
+ * 仍然保留：`lockPageScroll`（原生模态不锁页面滚动）、`openOverlayStack`（Esc 只关栈顶、
+ * 嵌套菜单/气泡的层级判定要它）、`OverlayScope`（内部菜单据此进 popover top layer）。
+ * 老 WebView 没有 showModal 时退回 `open` 属性（仍是 dialog，只是不置顶）——不会白屏。
+ */
+export function NativeDialog({ open = true, onDismiss, label, className, surfaceClassName, children, initialFocus }: Omit<OverlayProps, "kind" | "style" | "surfaceRef" | "ignoreOutside" | "closeOnNestedOverlay" | "container" | "raised" | "scrimClassName" | "onKeyDown">) {
+  const [overlayId] = useState(() => (overlaySeq += 1));
+  const parent = useContext(OverlayScope);
+  const scope = useMemo(() => ({ ancestors: [...parent.ancestors, overlayId], modal: true }), [parent, overlayId]);
+  const ref = useRef<HTMLDialogElement | null>(null);
+  const restoreFocusRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const el = ref.current;
+    restoreFocusRef.current = document.activeElement as HTMLElement | null;
+    openOverlayStack.push({ id: overlayId, ancestors: parent.ancestors, surface: el });
+    const unlock = lockPageScroll();
+    if (el && !el.open) {
+      if (typeof el.showModal === "function") {
+        try { el.showModal(); } catch { el.setAttribute("open", ""); }
+      } else {
+        el.setAttribute("open", "");
+      }
+    }
+    const first = initialFocus?.current ?? el?.querySelector<HTMLElement>(FOCUSABLE) ?? el;
+    first?.focus?.({ preventScroll: true });
+    return () => {
+      const i = openOverlayStack.findIndex((item) => item.id === overlayId);
+      if (i >= 0) openOverlayStack.splice(i, 1);
+      unlock();
+      if (el?.open) el.close();
+      const previous = restoreFocusRef.current;
+      if (previous?.isConnected) previous.focus({ preventScroll: true });
+    };
+  }, [open, overlayId, parent, initialFocus]);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!open || !el) return;
+    const onCancel = (event: Event) => { event.preventDefault(); onDismiss(); };
+    const onPointerDown = (event: PointerEvent) => { if (event.target === el) onDismiss(); };
+    el.addEventListener("cancel", onCancel);
+    el.addEventListener("pointerdown", onPointerDown);
+    return () => {
+      el.removeEventListener("cancel", onCancel);
+      el.removeEventListener("pointerdown", onPointerDown);
+    };
+  }, [open, onDismiss]);
+
+  if (!open) return null;
+  return <OverlayScope.Provider value={scope}>{createPortal(
+    <dialog ref={ref} className={"ln-native-dialog " + (surfaceClassName ?? "ln-dialog") + (className ? " " + className : "")} aria-label={label}>
+      {children}
+    </dialog>,
+    document.body,
+  )}</OverlayScope.Provider>;
+}
+
 /** 抽屉预设：右侧停靠、无遮罩、不锁滚动/焦点（表格仍可交互），Esc 关闭；用于记录详情。 */
 export function Drawer(props: Omit<OverlayProps, "kind">) {
   return <Overlay kind="drawer" {...props} />;
