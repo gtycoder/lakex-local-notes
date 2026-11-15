@@ -89,6 +89,8 @@
   padding: var(--lake-space-lg) var(--lake-space-xxl) var(--lake-space-xl);
   color: var(--lake-text-2);
   font-size: var(--lake-font-size-body);
+  /* 261115 A18：正文段落交给排版引擎做「最后一行不出现孤字/单字折行」。 */
+  text-wrap: pretty;
 }
 .ln-dialog__actions {
   display: flex;
@@ -102,7 +104,8 @@
 /* 261110 spike 第二批：原先这里给 5 个「管理型弹窗」单独抬到 18/14 档，其余弹窗停在 15.5/13
    ⇒ 同一类浮层出现两套字阶。现在 .ln-dialog__title/__body 直接取 18/14，本段删除：
    对话框只有一套字阶，也不再需要 --lake-dialog-* 变量（已全仓清零）。 */
-.confirm-dialog .ln-dialog__title { white-space: normal; overflow-wrap: anywhere; }
+/* 261115 A18：确认框标题允许换行后做均衡断行（单行标题不生效，行为不变）。 */
+.confirm-dialog .ln-dialog__title { white-space: normal; overflow-wrap: anywhere; text-wrap: balance; }
 .ln-dialog__resize { color: var(--lake-text-4); }
 .ln-dialog__resize:hover { color: var(--lake-text-2); }
 

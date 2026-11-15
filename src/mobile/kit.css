@@ -404,7 +404,7 @@ button.mb-set-item__main {
 .mb-emoji-cats__track {
   flex: 1 1 auto; min-width: 0; display: flex; align-items: center;
   overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain;
-  scrollbar-width: none; -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
 }
 .mb-emoji-cats__track::-webkit-scrollbar { display: none; }
 .mb-emoji-cat { flex: 0 0 var(--mb-tap-min); width: var(--mb-tap-min); display: flex; align-items: center; justify-content: center; height: var(--mb-emoji-cat-h); padding: 0; border: 0; border-radius: var(--lake-radius-sm); background: transparent; color: var(--lake-text-2); font-size: var(--mb-emoji-cat-size); line-height: 1; }

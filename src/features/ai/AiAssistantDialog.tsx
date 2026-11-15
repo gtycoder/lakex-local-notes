@@ -24,7 +24,6 @@ import "./aiDialogParts.css";
  *   回写一律用 `insertAtSelection("text/markdown", …)`，由内核把 MD 转成 Lake 节点。
  */
 /** 输入框自增高的上限（与 CSS `.ai-dialog__field` 的 max-height 同值）。 */
-const FIELD_MAX_HEIGHT = 120;
 /** 无编辑器上下文（没有可见正文）时的兜底宽度。 */
 const FALLBACK_WIDTH = 460;
 /** 面板最小宽度：再窄按钮行就放不下（正文栏更窄时按此兜底）。 */
@@ -179,13 +178,8 @@ export function AiAssistantDialog({ open, request, scope, onClose }: {
   // 无预设：进来就是自定义提问；选区只作为**上下文**附在后面（不在面板里回显原文，对齐云端）。
   // 261021 P0：原文用定界符包住（buildAiUserContent）；system 提示词在发送时前置（withAiSystemMessage）。
   // 261021 P1：开了「附加当前文档全文」时，以全文为处理对象（优先于选区；结果不回写）。
-  // 长文本框自增高：随回车换行/内容变多而变高，到 --max-height 后由 textarea 自己滚动。
-  useEffect(() => {
-    const el = fieldRef.current;
-    if (!el || !el.scrollHeight) return;
-    el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, FIELD_MAX_HEIGHT)}px`;
-  }, [activeValue, turns.length, open]);
+  // 长文本框自增高：261115 A12 起交给 CSS `field-sizing: content` + max-height（见 aiDialogParts.css），
+  // 不再逐键量 scrollHeight（原实现每次输入都要读一次布局）。
 
   // 正文文字栏几何：打开时量一次，并跟随**编辑器区域尺寸变化**（目录栏收放、窗口缩放）重算。
   const [column, setColumn] = useState<EditorColumn | null>(null);

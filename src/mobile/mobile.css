@@ -174,7 +174,7 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
   flex: 1; min-height: 0; display: flex; flex-direction: row;
   overflow-x: auto; overflow-y: hidden;
   scroll-snap-type: x mandatory; overscroll-behavior-x: contain;
-  scrollbar-width: none; -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
 }
 .mobile-tab-stage::-webkit-scrollbar { display: none; }
 /* 写作/编辑小记期间锁横滑（切走 = 父级 [tab] effect 清掉写作卡 = 丢草稿）：只留纵向滚动。
@@ -195,7 +195,7 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
 /* ⚠️ 只收纵向 overscroll（`overscroll-behavior-y`），**不能写两轴的 `contain`**：
    否则首层横向分页的"手指左滑 → 翻到下一页"会被内层竖滚容器吃掉（261019 实测：
    contain 时负向手势完全不翻页；改成 -y 后正常，纵向回弹语义不变）。 */
-.mobile-scroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior-y: contain; padding-bottom: calc(96px + var(--mobile-bottom-safe-area)); scrollbar-width: none; }
+.mobile-scroll { flex: 1; overflow-y: auto; overscroll-behavior-y: contain; padding-bottom: calc(96px + var(--mobile-bottom-safe-area)); scrollbar-width: none; }
 /* 261103 六批 A1：列表/首页内容在横屏刘海下不再压边（竖屏 inset=0，与原来完全一致；页子元素自己的 --mb-page-pad 仍生效）。 */
 .mobile-scroll { padding-left: var(--mobile-left-safe-area); padding-right: var(--mobile-right-safe-area); }
 .mobile-scroll::-webkit-scrollbar { display: none; }
@@ -746,7 +746,7 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
 }
 .toolbar__title--readonly { -webkit-user-select: none; user-select: none; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .toolbar__text { flex: 1; min-width: 0; font-size: var(--lake-font-size-title); min-height: 30px; line-height: 30px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.toolbar__scroll { flex: 1; min-width: 0; display: flex; align-items: center; overflow-x: auto; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+.toolbar__scroll { flex: 1; min-width: 0; display: flex; align-items: center; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; }
 .toolbar__scroll::-webkit-scrollbar { display: none; }
 /* 侧栏/面板头部：思源 #sidebar .toolbar 口径（图标 18 + padding 11 + margin 2，标题 15px） */
 .side-panel > .toolbar .toolbar__icon { width: 40px; height: 40px; padding: 11px; margin: 2px; }

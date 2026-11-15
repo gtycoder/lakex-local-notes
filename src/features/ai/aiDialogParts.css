@@ -36,7 +36,8 @@
 
 /* 输入条：复用 .ln-input（边框/聚焦环/占位色都由原语给），这里只把它从单行改成可自增高。 */
 .ai-dialog__composer { height: auto; min-height: calc(var(--lake-ctl-h) + 8px); align-items: flex-start; margin: 0 var(--lake-space-lg) var(--lake-space-sm); padding: 9px 10px; gap: 8px; }
-.ai-dialog__composer .ai-dialog__field { max-height: 120px; padding: 2px 0; line-height: 1.55; resize: none; }
+.ai-dialog__composer .ai-dialog__field { max-height: 120px; padding: 2px 0; line-height: 1.55; resize: none; field-sizing: content; }
+/* 261115 A12：输入条自增高改由上一行的 field-sizing: content 承担（不再 JS 量 scrollHeight）。 */
 .ai-dialog__clear { flex: 0 0 auto; margin-top: -2px; }
 
 /* 动作行：只保留一个主按钮（生成/发送），其余为 ghost；不再给整行加边框。 */
