@@ -864,7 +864,9 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
         </MobileErrorBoundary>
       </DeferredPanel>
       {/* 路由层（261019）：首页常驻 + 工作区按需挂载；push/pop 只动 transform（见 mobile.css） */}
-      <div className={"mobile-route-stage" + (wsOpen ? " is-open" : "") + (routeAnimating ? " is-animating" : "")} aria-label="页面">
+      {/* 261115 A29：移动壳此前没有 main 地标（桌面 .workspace 已是 <main>）；这里用 role=main
+          而不是换标签 —— stage 同时包住首页层与工作区层，换标签要连带改溢出/定位选择器。 */}
+      <div className={"mobile-route-stage" + (wsOpen ? " is-open" : "") + (routeAnimating ? " is-animating" : "")} role="main" aria-label="页面">
       <div className="mobile-route-layer mobile-route-layer--home" ref={routeHomeRef}>
         <MobileErrorBoundary scope="home" title="首页加载失败">
         <HomePage

@@ -754,12 +754,12 @@ adb shell dumpsys package com.google.android.webview | grep versionName
 | A26 | `<meta color-scheme>` | **已修** | `14dcdf15` | 同 A07 |
 | A27 | 启动页深色不跟随 | **已修** | `14dcdf15` | `boot.html` 用 `color-scheme: light dark` + `light-dark()` |
 | A28 | 生命周期原语统一 | **不做**（审计原判） | — | 各处语义不同（pagehide/beforeunload/App 后台），合并风险 > 收益 |
-| A29 | `<main>`/`<search>` | 推迟 | — | 壳层用 `>` 子选择器定位区域，换标签要连带改选择器 |
+| A29 | `<main>`/`<search>` | **已修（等价物）** | 见 `git log --grep A29` | 桌面工作区原本就是 `<main>`；移动壳补 **`role="main"`**（不换标签：stage 包住两层，换标签要连带改溢出/定位选择器）；两端搜索面补 **`role="search"`**（`<search>` 标签在 React 18 会打 unrecognized 告警且**不产生隐式角色**）；护栏 `landmarkGates.test.ts` |
 | A30 | 日期/时长格式化 | **不做**（审计原判） | — | `08-04` 是定稿格式 |
 
 ### 11.1 本批的形状（为什么不是「一次性全改」）
 
-- 已落地 16 个 commit，全部**行为等价或默认档位零视觉变化**：IME、字号 rem（等值）、boot 外置（视觉不变）、
+- 已落地 17 个 commit，全部**行为等价或默认档位零视觉变化**：IME、字号 rem（等值）、boot 外置（视觉不变）、
   `field-sizing`（同样自增高）、`decoding=async`（只影响解码线程）、`mask` 补标准属性、`text-wrap`（单行不生效）、
   `forced-colors`（仅高对比度模式）、inert（只改可聚焦性）、Tooltip（行为补齐 + 桌面时序不变）。
 - 真正会改观感的留到设备/视觉批次：原生 dialog/popover 迁移、可点 div 换 button、容器查询、树窗口化。
@@ -770,7 +770,7 @@ adb shell dumpsys package com.google.android.webview | grep versionName
 
 1. **A02 + A11 + A23 一起**：先 `Menu`/`Popover` 迁 `popover`（top-layer / light dismiss / anchor positioning），
    再迁 `Dialog` 到 `<dialog>`；验收 = 嵌套下拉可见、Esc 栈、内核 portal 层序、移动 Sheet 返回键、42 态基线。
-2. **A10 + A29**：语义化批次（可点 div → button、`<main>`/`<search>`），一次视觉回归。
+2. **A10**：可点 div → button（33 处，逐处复位样式），一次视觉回归。
 3. **A03 第二步**：固定高 → `min-height`，200% 字号逐屏走查 + 重烤基线。
 4. **A05 + A06**：大库夹具上先量 INP，再决定窗口化与并发渲染的先后。
 5. **A13 / A17**：小步机会项（`base-select` 与容器查询，各需视觉回归）。

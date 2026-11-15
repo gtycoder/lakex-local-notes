@@ -127,7 +127,8 @@ export function SearchSheet(props: SearchSheetProps) {
   // 类名与 DOM 结构沿用原手写版（.mb-scrim + .mb-sheet，视觉快照不变）。
   return (
     <MobileSheet open title={title ?? "搜索"} className="mb-sheet--search" onClose={onClose}>
-      <div className="mobile-search-input-row">
+      {/* 261115 A29：搜索地标（显式 role，理由同桌面 SearchPanel）。 */}
+      <div className="mobile-search-input-row" role="search">
         <Search size={17} />
         <input
           className="mobile-search-input"
