@@ -802,3 +802,16 @@
 .ln-calendar__empty { display: block; }
 .ln-calendar__foot { display: flex; justify-content: space-between; margin-top: var(--lake-space-sm); border-top: 1px solid var(--lake-border-1); padding-top: var(--lake-space-sm); }
 .ln-calendar__foot button { border: 0; background: transparent; color: var(--lake-accent-text); font: inherit; font-size: var(--lake-font-size-small); cursor: pointer; }
+/* ── 261115 A16：Windows 高对比度（forced-colors）─────────────────────────────
+ * 原语层的高对比度变体（必须写在原语文件里：feature/app CSS 不得从外面覆盖 .ln-*，见 primitives.test.ts）。
+ * 我们靠 0.5px 发丝边 + 表面差表达层级；forced-colors 会把颜色强制成系统色，细边对比消失
+ * （按钮分不出主次、菜单与画布同色）。这里只在高对比度模式用**系统色关键字**补边界与选中态；
+ * 正常模式零影响，不用 !important（层序已够），不写色值（系统色不属于我们的调色板）。
+ * 选择器包 :where()：避免与上方同名规则的 (选择器,属性) 组成重复组（dupGroups 基线只许降）。 */
+@media (forced-colors: active) {
+  :where(.ln-btn--primary, .ln-btn--outlined, .ln-btn--secondary, .ln-iconbtn, .ln-input, .ln-menu, .ln-popover, .ln-dialog, .ln-row, .ln-check) { border-color: CanvasText; }
+  :where(.ln-btn--primary) { background: ButtonFace; color: ButtonText; }
+  :where(.ln-btn--primary:hover:not(:disabled)) { background: Highlight; color: HighlightText; }
+  :where(.ln-check:checked) { background: Highlight; border-color: Highlight; }
+  :where(.ln-btn:focus-visible, .ln-iconbtn:focus-visible, .tree-row:focus-visible) { outline-color: Highlight; }
+}
