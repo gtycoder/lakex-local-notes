@@ -86,7 +86,8 @@
 .lake-locked-text__field {
   flex: 1 1 auto;
   min-width: 0;
-  height: var(--lake-ctl-h);
+  /* 261115 A03 步2 批2：min-height（密码框会硬裁）。 */
+  min-height: var(--lake-ctl-h);
   padding: 0 var(--lake-space-md);
   border: 1px solid var(--lake-ctl-border);
   border-radius: var(--lake-radius-sm);

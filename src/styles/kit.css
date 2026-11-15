@@ -375,7 +375,7 @@
   align-items: center;
   gap: 4px;
   /* 261111 厚度 review：徽标/标签 18 → 22（与紧凑按钮同一厚度档，AI 写作输入卡的文档 chip 就是它）。 */
-  height: 22px;
+  min-height: 22px;
   padding: 0 8px;
   border-radius: var(--lake-radius-pill);
   background: var(--lake-bg-block);
@@ -384,7 +384,7 @@
   font-weight: var(--lake-font-weight-medium);
   white-space: nowrap;
 }
-.ln-tag--status { height: 26px; }   /* 261111：状态徽标与紧凑按钮同档（22 → 26）。 */
+.ln-tag--status { min-height: 26px; }   /* 261111：状态徽标与紧凑按钮同档（22 → 26）。 */
 .ln-tag--sync { background: var(--lake-status-sync-soft); color: var(--lake-status-sync); }
 .ln-tag--pending { background: var(--lake-status-pending-soft); color: var(--lake-status-pending); }
 .ln-tag--ok { background: var(--lake-status-ok-soft); color: var(--lake-status-ok); }
@@ -405,7 +405,7 @@
   gap: var(--ln-chip-gap, 4px);
   min-width: 0;
   max-width: var(--ln-chip-max, 180px);
-  height: var(--ln-chip-height, 26px);   /* 261111 厚度 review：chip 24 → 26，与紧凑按钮同档。 */
+  min-height: var(--ln-chip-height, 26px);   /* 261111 厚度 review：chip 24 → 26，与紧凑按钮同档。261115 A03：改 min-height，200% 下不竖切。 */
   padding: 0 9px;
   border: 0.5px solid var(--lake-border-2);
   border-radius: var(--lake-radius-xs);
@@ -472,8 +472,11 @@
   align-items: center;
   gap: 2px;
   /* 261110 用户定稿：分段控件整体加厚一档（轨道 27-1 → 27+3，段高 22 → 27），所有用例统一生效。 */
-  height: calc(var(--lake-ctl-h) + 3px);
-  padding: 2px;
+  /* 261115 A03 步2 批2：轨道改 min-height，200% 下段高变高时外壳跟着长。
+     内距 2 → 1.5：段高 27 + 2×1.5 = 30 = 原固定高（探针实测 100% 仍 30，几何不变）；
+     若保留 2px，内容驱动高度会变成 31（+1px 真实位移）。 */
+  min-height: calc(var(--lake-ctl-h) + 3px);
+  padding: 1.5px;
   border-radius: var(--lake-ctl-rad);
   /* 261006 Phase 2.2 重绘：轨道用**下沉底**而不是块面底 —— 块面底在白面板上几乎看不见，
      控件会读成「一行浮着的文字」。下沉一档后它才像一个「可切换的控件」。 */
@@ -483,7 +486,7 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  height: var(--lake-ctl-h);
+  min-height: var(--lake-ctl-h);
   padding: 0 10px;
   border: 0;
   border-radius: var(--lake-ctl-rad-sm);
