@@ -20,7 +20,7 @@ import {
   type BitableAttachment, type BitableDisplayContext, type BitableField, type BitableFilterJoin, type BitableFilterNode, type BitableRecord,
   type BitableSortMode, type BitableSortRule, type BitableView,
 } from "../../core/bitableDoc.js";
-import { Dialog } from "../../components/ui/Overlay.js";
+import { NativeDialog } from "../../components/ui/Overlay.js";
 import { BitableVirtualBody } from "./BitableVirtualBody.js";
 import { BitableFilterEditor } from "./BitableFilterEditor.js";
 import { AttachmentChipList, CellEditor, SelectMenu } from "./bitableCells.js";
@@ -147,7 +147,7 @@ export function BitableRelationPicker({ field, value, ctx, noteId, onOpenImages,
   const scopeText = target ? (scopeView ? target.name + "（" + scopeView.name + "）" : target.name + "（全部记录）") : "";
 
   return (
-    <Dialog open onDismiss={onCancel} label="选择关联记录" className="bt-rel-picker" scrimClassName="ln-scrim--top">
+    <NativeDialog open onDismiss={onCancel} label="选择关联记录" className="bt-rel-picker" align="top">
       <header className="ln-dialog__head">
         <h3 className="ln-dialog__title">{field.name}</h3>
         <span className="bt-rel-scope" title="数据范围来自字段配置">{scopeText}</span>
@@ -280,6 +280,6 @@ export function BitableRelationPicker({ field, value, ctx, noteId, onOpenImages,
         <button type="button" className="bt-secondary" onClick={onCancel}>取消</button>
         <button type="button" className="bt-primary" onClick={() => onConfirm([...draft])}>确认</button>
       </footer>
-    </Dialog>
+    </NativeDialog>
   );
 }

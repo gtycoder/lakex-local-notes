@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
-import { Dialog } from "../ui/Overlay";
+import { NativeDialog } from "../ui/Overlay";
 import { Clock, File, Search, StickyNote, X } from "lucide-react";
 import { native } from "../../lib/native";
 import { getNativeErrorMessage } from "../../lib/nativeErrors";
@@ -200,7 +200,7 @@ export function SearchPanel({ open, initialQuery, onOpenNote, onOpenQuickNote, o
   const firstQuickIndex = visibleResults.findIndex((result) => result.kind === "quick-note");
 
   return (
-    <Dialog open onDismiss={onClose} label="搜索标题、正文和标签" surfaceClassName="search-panel search-command-panel" scrimClassName="ln-scrim--top" initialFocus={inputRef}>
+    <NativeDialog open onDismiss={onClose} label="搜索标题、正文和标签" surfaceClassName="search-panel search-command-panel" align="top" initialFocus={inputRef}>
         {/* 261115 A29：搜索地标。不用 search 标签——React 18 的已知标签表里没有它，
             会打 "unrecognized tag" 告警且**不产生隐式 role=search**；显式 role 才是等价物。 */}
         <div className="search-panel-input-row" role="search">
@@ -314,6 +314,6 @@ export function SearchPanel({ open, initialQuery, onOpenNote, onOpenQuickNote, o
             </Fragment>
           ))}
         </div>
-    </Dialog>
+    </NativeDialog>
   );
 }

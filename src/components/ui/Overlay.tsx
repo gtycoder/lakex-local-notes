@@ -312,7 +312,7 @@ export function Dialog(props: Omit<OverlayProps, "kind">) {
  * 嵌套菜单/气泡的层级判定要它）、`OverlayScope`（内部菜单据此进 popover top layer）。
  * 老 WebView 没有 showModal 时退回 `open` 属性（仍是 dialog，只是不置顶）——不会白屏。
  */
-export function NativeDialog({ open = true, onDismiss, label, className, surfaceClassName, children, initialFocus }: Omit<OverlayProps, "kind" | "style" | "surfaceRef" | "ignoreOutside" | "closeOnNestedOverlay" | "container" | "raised" | "scrimClassName" | "onKeyDown">) {
+export function NativeDialog({ open = true, onDismiss, label, className, surfaceClassName, children, initialFocus, align = "center" }: Omit<OverlayProps, "kind" | "style" | "surfaceRef" | "ignoreOutside" | "closeOnNestedOverlay" | "container" | "raised" | "scrimClassName" | "onKeyDown"> & { align?: "center" | "top" }) {
   const [overlayId] = useState(() => (overlaySeq += 1));
   const parent = useContext(OverlayScope);
   const scope = useMemo(() => ({ ancestors: [...parent.ancestors, overlayId], modal: true }), [parent, overlayId]);
@@ -377,7 +377,11 @@ export function NativeDialog({ open = true, onDismiss, label, className, surface
 
   if (!open) return null;
   return <OverlayScope.Provider value={scope}>{createPortal(
-    <dialog ref={ref} className={"ln-native-dialog " + (surfaceClassName ?? "ln-dialog") + (className ? " " + className : "")} aria-label={label}>
+    <dialog
+      ref={ref}
+      className={"ln-native-dialog" + (align === "top" ? " ln-native-dialog--top" : "") + " " + (surfaceClassName ?? "ln-dialog") + (className ? " " + className : "")}
+      aria-label={label}
+    >
       {children}
     </dialog>,
     document.body,

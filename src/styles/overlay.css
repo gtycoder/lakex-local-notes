@@ -68,6 +68,11 @@
   overflow: hidden;
   animation: ln-dialog-in var(--lake-motion-panel) var(--lake-ease-emphasized);
 }
+/* 顶部对齐（命令面板 / 搜索 / 关联选择器）：原先靠 .ln-scrim--top 的 align-start + 12vh 实现。 */
+.ln-native-dialog--top {
+  inset: 12vh 0 auto;
+  margin: 0 auto;
+}
 .ln-native-dialog::backdrop {
   background: var(--lake-scrim);
   animation: ln-scrim-in var(--lake-motion-fast) var(--lake-ease-standard);

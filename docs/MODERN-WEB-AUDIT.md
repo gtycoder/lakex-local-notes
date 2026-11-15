@@ -727,7 +727,7 @@ adb shell dumpsys package com.google.android.webview | grep versionName
 | ID | 问题 | 状态 | 落地 | 护栏 / 备注 |
 | --- | --- | --- | --- | --- |
 | A01 | IME 回车误提交 | **已修** | `f55bc35b` | 35 处 / 27 文件（33 analyzer + 2 人工补漏）；`src/core/ime.ts` 唯一判据；`ime.test.ts` + `imeEnterWiring.test.ts` + `InlineRenameInput` 组合态例 |
-| A02 | 原生 `<dialog>` / top-layer | **普通模态已全迁（24 处），浮动/顶部对齐待做** | `145d50dd` + `496744fb` + `229e78ec` + `64ef15b4` | 阻塞项（菜单在普通层）已解：模态内菜单/气泡现在带 `popover="manual"` 进 top layer 并已实测（设置对话框内下拉 `:popover-open`=true、命中测试在菜单内）。`NativeDialog`（`<dialog>` + `showModal`）已迁移 **24 处**：删除确认、目录重命名、命名/标签/附件重命名、**useConfirm 全家族（全站确认与提示）**、导入进度/结果、S3 迁移码、资源浏览器 3 处确认、粘贴表格过大、保存冲突、同步记录、草稿恢复、移动目标、小记筛选/标签管理/转化、标签合并、多维表 4 处。实测：`:modal`、居中 0 偏差、输入框全选、IME 组合态回车不提交、**可信 Esc（CDP Input）可关闭**。剩余 8 处需先给 NativeDialog 补两个能力：`style`（浮动/可拖拽：Settings/History/PublishDoc/SaveQuickNote/Trash/NoteInfo，配合 `inset: auto`）与顶部对齐变体（SearchPanel/BitableRelationPicker） |
+| A02 | 原生 `<dialog>` / top-layer | **已完成 26 处（含顶部对齐）；浮动 6 处明确定为保留** | `145d50dd` + `496744fb` + `229e78ec` + `64ef15b4` + 本轮 | 阻塞项（菜单在普通层）已解：模态内菜单/气泡现在带 `popover="manual"` 进 top layer 并已实测（设置对话框内下拉 `:popover-open`=true、命中测试在菜单内）。`NativeDialog`（`<dialog>` + `showModal`）已迁移 **24 处**：删除确认、目录重命名、命名/标签/附件重命名、**useConfirm 全家族（全站确认与提示）**、导入进度/结果、S3 迁移码、资源浏览器 3 处确认、粘贴表格过大、保存冲突、同步记录、草稿恢复、移动目标、小记筛选/标签管理/转化、标签合并、多维表 4 处。实测：`:modal`、居中 0 偏差、输入框全选、IME 组合态回车不提交、**可信 Esc（CDP Input）可关闭**。顶部对齐 2 处（SearchPanel / BitableRelationPicker）已迁：新增 `align="top"` 变体（`inset: 12vh 0 auto; margin: 0 auto`，实测 top=12.0%、水平居中、`:modal`、可信 Esc 可关）。**浮动/可拖拽 6 处（Settings/History/PublishDoc/SaveQuickNote/Trash/NoteInfo）保留自绘 Overlay**：它们靠 `transform: translate(-50%,-50%)` + `useFloatingDialog` 的拖拽/缩放/`interactionRef` 外点语义，而 a11y 缺口（背景 inert / Esc / 焦点圈闭）已由既有实现补齐 —— 换 top-layer 的收益只剩「架构统一」，风险是拖拽坐标与 transform 交互，按 §3#17 不做 |
 | A03 | OS 文字缩放 | **第一步已修** | `75153e8e` | `<meta text-scale>` + 桌面 11 档 / 移动 10 档字号令牌 rem 化（rem×16 = 改前 px，默认档位视觉零变化）；`textScale.test.ts` 钉等价；第二步（449 处固定高 → `min-height` + 200% 逐屏走查）待做 |
 | A04 | Tooltip 三缺口 | **已修** | `88bd4211` | 逻辑抽到 `src/lib/nativeTitleTip.ts`；桌面 `.ln-tip` / 移动 `.mb-tip` 各自薄壳（守「两端 UI 不共享组件/CSS」红线，`mobileIndependence` 绿）；移动长按 450ms、focusin 只在「另有可访问名」时摘 title、`aria-describedby` 增删复原；24 例新护栏 |
 | A05 | 10k 树窗口化 | 推迟 | — | `content-visibility` 已在位；DOM 20 万需窗口化/分页，属 HANDOFF 大库项，需大库夹具实测 |
@@ -736,7 +736,7 @@ adb shell dumpsys package com.google.android.webview | grep versionName
 | A08 | `boot.html` 476KB | **已修** | `14dcdf15` | 图片外置：HTML 476KB → **1.9KB**（+328KB APNG +28KB PNG 独立文件）；`build.files` 已补；`electron/bootAssets.test.ts` 5 例。**字节总量不变**（APNG 仍加载），再减需品牌决策（改 CSS 动画） |
 | A09 | 模态背景 inert | **已修（inert 部分）** | `84dc8005` | 对话框对 body 其它顶层子节点加 inert（引用计数、跳过自有浮层 portal、drawer 不动）；4 例 jsdom 护栏。`aria-modal` 与 29 处 `role=dialog` 的逐个校准仍待 |
 | A10 | 可点 div 33 处 | 推迟 | — | 每个都要换 `<button>` + 复位样式，属视觉回归批次 |
-| A11 | `command`/`commandfor` | 随 A02 推迟 | — | 有 `<dialog>` 才有意义 |
+| A11 | `command`/`commandfor` | **不适用（已核实）** | — | 全仓没有「静态声明式触发」点：对话框都由 React 状态/菜单项打开（`onClick` → setState），没有可加 `commandfor` 的固定按钮-目标对子。新写的静态对话框（不经过 React 状态）再用它；已写进 `NativeDialog` 的 JSDoc |
 | A12 | `field-sizing` | **已修** | `7a0dc111` | AI 输入条改 CSS 自增高，删掉逐键 `scrollHeight` |
 | A13 | `base-select` 试点 | 推迟 | — | 需先有 A02 结论；移动端老 WebView 要 feature detect |
 | A14 | `enterKeyHint` | **已修** | `c4b47e9b` | 搜索 = `search`（全局搜索 / 文档内查找）、命名与新建 = `done`（5 个入口）；护栏 `src/mobile/ui/enterKeyHint.test.ts` |
@@ -768,8 +768,7 @@ adb shell dumpsys package com.google.android.webview | grep versionName
 
 ### 11.2 下一批入口（按依赖顺序）
 
-1. **A02 收口 + A11**：24 处普通模态已完成（`64ef15b4`）；下一步给 `NativeDialog` 补 `style`（浮动/可拖拽，配 `inset: auto`）与顶部对齐变体，
-   再迁剩余 8 处（Settings/History/PublishDoc/SaveQuickNote/Trash/NoteInfo + SearchPanel/BitableRelationPicker），最后补 `command`/`commandfor` 声明式触发。
+1. **A02/A11 已收口**：26 处原生 `<dialog>`（普通 + 顶部对齐），浮动 6 处与 `commandfor` 都写明「为什么不做」（见上两行）。剩：设备/视觉全量门禁里补一次「对话框态」快照复核。
 2. **A10**：可点 div → button（33 处，逐处复位样式），一次视觉回归。
 3. **A03 第二步**：固定高 → `min-height`，200% 字号逐屏走查 + 重烤基线。
 4. **A05 + A06**：大库夹具上先量 INP，再决定窗口化与并发渲染的先后。
@@ -781,6 +780,7 @@ adb shell dumpsys package com.google.android.webview | grep versionName
 | --- | --- | --- |
 | 桌面 | 隔离 `LAKE_USER_DATA` + **`LAKE_RENDERER=scheme`**（读 dist）+ CDP 9333 | boot ready **463ms**（renderer-ready，无 ERR_CONNECTION_REFUSED）；根字号 16px；全仓计算字号档 = **10 / 11 / 12 / 13 / 14 / 15.5 / 18px**（= 令牌 rem×16，默认档位与改前等值） |
 | 桌面（第二轮） | 同上 + **重新 `vite build`**（scheme 模式读 dist，旧构建会验到旧代码） | 设置对话框内「正文字号」下拉：`popover="manual"`、`:popover-open`=true、rect 391×229、`elementFromPoint` 命中菜单项；同一时刻 `#root` 带 `inert`（A09 在真实应用生效） |
+| 桌面（第五轮，顶部对齐） | 同上 | 全文搜索（顶部对齐）：`dialog[open]` + `:modal`、top=98px（12.0%）、水平居中 0 偏差、输入框聚焦、**可信 Esc 关闭**；关联选择器（多维表）改按同一变体（源码断言已同步） |
 | 桌面（第四轮，批量迁移） | 同上 | 新建笔记本（NamePrompt，经「新建」菜单）：`dialog[open]` + `:modal`、460×158、居中 0 偏差、输入框聚焦且**全选**、取消即关；可信 Esc（`Input.dispatchKeyEvent`）关闭原生对话框 |
 | 桌面（第三轮，原生 `<dialog>`） | 同上 | ① 删除确认（⋮→删除）：`dialog[open]` + `:modal`、420×170、`centerDelta [0,0]`、无 `.ln-scrim`、取消后关闭；② 目录重命名（⋮→重命名）：460px、`:modal`、输入框聚焦且**默认全选**、**IME 组合态回车不提交**、真回车提交并关闭、目录标题变为「重命名验证」 |
 | 移动 | `lake_mobile`（5554，API 36）`android-build.sh --sync --install` | 安装启动成功，logcat **0 FATAL**；`.mobile-app` 挂载；4 个可见 `[title]` 元素；CDP 合成长按 700ms 后 `#lake-mobile-title-tip` 显示「设置」、底色 = `--lake-tooltip-bg`(rgb(216,221,232))、锚点写入 `aria-describedby="lake-mobile-title-tip"` |

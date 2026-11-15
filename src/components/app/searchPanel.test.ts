@@ -73,7 +73,8 @@ describe("全局搜索：范围筛选 / 最近搜索 / 空态引导", () => {
 
 describe("测试/断言与最新 UI 对齐", () => {
   it("打包冒烟的搜索无障碍名与 SearchPanel 的 Dialog label 一致", () => {
-    const label = /<Dialog[^>]*label="([^"]+)"/.exec(SRC)?.[1];
+    // 261115：SearchPanel 已迁到原生 <dialog>（NativeDialog）；匹配两者以保留原意图（label 与冒烟脚本一致）。
+    const label = /<(?:Native)?Dialog[^>]*label="([^"]+)"/.exec(SRC)?.[1];
     expect(label).toBeTruthy();
     const smoke = readFileSync(new URL("../../../scripts/e2e-electron-smoke.mjs", import.meta.url), "utf8");
     expect(smoke).toContain(`result.search.dialogLabel !== "${label}"`);

@@ -373,7 +373,8 @@ describe("多维表编辑器护栏", () => {
   it("T02B.4 关联选择器内容：两个 tab / 全局搜索 / 筛选排序 / 目标表整表 / 草稿确认", () => {
     // 全局弹窗（Overlay Dialog），不是气泡
     expect(PICKER).toMatch(/from "\.\.\/\.\.\/components\/ui\/Overlay\.js"/);
-    expect(PICKER).toMatch(/<Dialog open onDismiss=\{onCancel\} label="选择关联记录"/);
+    // 261115：关联选择器已迁到原生 <dialog>（NativeDialog），仍是全局模态（不是气泡）。
+    expect(PICKER).toMatch(/<NativeDialog open onDismiss=\{onCancel\} label="选择关联记录"/);
     // 两个 tab：所有可关联记录 + 数量 / 已选 + 数量（kit 层原语：260929 选定的「墨线 + 计数徽标」）
     expect(PICKER).toMatch(/<div className="ln-tabs">/);
     expect(PICKER).toMatch(/className=\{"ln-tabs__item" \+ \(tab === "all" \? " is-active" : ""\)\}/);
