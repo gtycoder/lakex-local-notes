@@ -718,3 +718,59 @@ adb shell dumpsys package com.google.android.webview | grep versionName
 ### v1（同日早版）
 
 - 首版：两条 analyzer 口径（35 / 108）、手工六类（浮层/tooltip/字体/表单/图片/滚动条）、Phase 0–3。
+
+## 11. 实施状态（261115 起，分支 `modernize/web-platform-261115`）
+
+> 前置：`master`（`7e2db298`）已双推 Gitee + GitHub 并打注解 tag **`backup/master-261115`**；
+> 本分支**不合并回 master**，需用户明确同意后才合。下文 commit 均指本分支。
+
+| ID | 问题 | 状态 | 落地 | 护栏 / 备注 |
+| --- | --- | --- | --- | --- |
+| A01 | IME 回车误提交 | **已修** | `f55bc35b` | 35 处 / 27 文件（33 analyzer + 2 人工补漏）；`src/core/ime.ts` 唯一判据；`ime.test.ts` + `imeEnterWiring.test.ts` + `InlineRenameInput` 组合态例 |
+| A02 | 原生 `<dialog>` / top-layer | **推迟** | — | 依赖顺序：对话框内打开的菜单/气泡仍是 `createPortal` 到 body 的普通层，迁 top-layer 后会被 dialog 盖住（嵌套下拉不可见）⇒ 必须先迁 `popover`；且需设备级层序验收 |
+| A03 | OS 文字缩放 | **第一步已修** | `75153e8e` | `<meta text-scale>` + 桌面 11 档 / 移动 10 档字号令牌 rem 化（rem×16 = 改前 px，默认档位视觉零变化）；`textScale.test.ts` 钉等价；第二步（449 处固定高 → `min-height` + 200% 逐屏走查）待做 |
+| A04 | Tooltip 三缺口 | 见 §11.1 | — | 拦截器逻辑抽到 `src/lib/nativeTitleTip.ts`，桌面 `.ln-tip` / 移动 `.mb-tip` 各自薄壳（守「两端 UI 不共享组件/CSS」红线） |
+| A05 | 10k 树窗口化 | 推迟 | — | `content-visibility` 已在位；DOM 20 万需窗口化/分页，属 HANDOFF 大库项，需大库夹具实测 |
+| A06 | 长任务让步 / INP | 推迟 | — | `useDeferredValue` 会把「输入即筛选」的同步断言变异步，需连同测试一起改 + long-animation-frame 实测 |
+| A07 | 首帧 color-scheme | **已修** | `14dcdf15` | 两份入口加 `<meta name="color-scheme" content="light dark">`；**更正**：`:root` 本来就有 `color-scheme`（`themes/light.css` 的 `:root,[data-theme=light]`），审计 v2 原描述有误 |
+| A08 | `boot.html` 476KB | **已修** | `14dcdf15` | 图片外置：HTML 476KB → **1.9KB**（+328KB APNG +28KB PNG 独立文件）；`build.files` 已补；`electron/bootAssets.test.ts` 5 例。**字节总量不变**（APNG 仍加载），再减需品牌决策（改 CSS 动画） |
+| A09 | 模态背景 inert | **已修（inert 部分）** | `84dc8005` | 对话框对 body 其它顶层子节点加 inert（引用计数、跳过自有浮层 portal、drawer 不动）；4 例 jsdom 护栏。`aria-modal` 与 29 处 `role=dialog` 的逐个校准仍待 |
+| A10 | 可点 div 33 处 | 推迟 | — | 每个都要换 `<button>` + 复位样式，属视觉回归批次 |
+| A11 | `command`/`commandfor` | 随 A02 推迟 | — | 有 `<dialog>` 才有意义 |
+| A12 | `field-sizing` | **已修** | `7a0dc111` | AI 输入条改 CSS 自增高，删掉逐键 `scrollHeight` |
+| A13 | `base-select` 试点 | 推迟 | — | 需先有 A02 结论；移动端老 WebView 要 feature detect |
+| A14 | `enterKeyHint` | 待做 | — | 搜索/重命名/新建三处，< 0.5 天 |
+| A15 | 图片解码/懒加载 | **已修** | `1d07fd60` | 9 宿主 10 处 `<img>`；资源浏览器预览**保持不 lazy**（既有护栏禁止）；`imageAttrGates.test.ts` |
+| A16 | `forced-colors` | **已修** | `ea10e334` | a11y.css 高对比度兜底（系统色关键字，正常模式零影响）；cssLayers 基线 15→23 |
+| A17 | 容器查询 | 推迟 | — | 按组件逐个来，需视觉回归 |
+| A18 | `text-wrap` | **已修** | `7a0dc111` | 对话框正文 `pretty`、确认框标题 `balance` |
+| A19 | `-webkit-overflow-scrolling` | **已修** | `7a0dc111` | 删 4 处 no-op |
+| A20 | `will-change` 常驻 | 核实后**不改** | — | 10 处真实使用全部绑动画/位移；`mobile.css` 已有「转场结束即撤」注释与 `is-settled` 实现，属已处理 |
+| A21 | JS 现代 API | **部分** | `3d135f54` | `cause`×4 + `AbortSignal.timeout`×1（行为等价）；`toSorted` 47 处与 `withResolvers` 2 处**明确不做**：`tsconfig` target/lib = ES2022（实测 TS2550），且 `src/core` 与 Android 旧 WebView 共用 ⇒ 需项目级配置决策 + feature detect |
+| A22 | 外链 `rel` | 核实**已满足** | — | 4 处 `target="_blank"` 全带 `noreferrer`/`noopener`（`noreferrer` 隐含 noopener） |
+| A23 | anchor positioning | 随 A02 推迟 | — | 元素锚定气泡可在 popover 落地后试点；点锚菜单（右键）保留手算 |
+| A24 | `outline: none` 35 处 | 推迟 | — | 需逐条确认同规则内有自绘焦点环（`:focus-visible` 60 处说明多数有） |
+| A25 | 标准 `mask` | **已修** | `7a0dc111` | 2 处补标准属性，保留前缀 |
+| A26 | `<meta color-scheme>` | **已修** | `14dcdf15` | 同 A07 |
+| A27 | 启动页深色不跟随 | **已修** | `14dcdf15` | `boot.html` 用 `color-scheme: light dark` + `light-dark()` |
+| A28 | 生命周期原语统一 | **不做**（审计原判） | — | 各处语义不同（pagehide/beforeunload/App 后台），合并风险 > 收益 |
+| A29 | `<main>`/`<search>` | 推迟 | — | 壳层用 `>` 子选择器定位区域，换标签要连带改选择器 |
+| A30 | 日期/时长格式化 | **不做**（审计原判） | — | `08-04` 是定稿格式 |
+
+### 11.1 本批的形状（为什么不是「一次性全改」）
+
+- 已落地 10 个 commit，全部**行为等价或默认档位零视觉变化**：IME、字号 rem（等值）、boot 外置（视觉不变）、
+  `field-sizing`（同样自增高）、`decoding=async`（只影响解码线程）、`mask` 补标准属性、`text-wrap`（单行不生效）、
+  `forced-colors`（仅高对比度模式）、inert（只改可聚焦性）、Tooltip（行为补齐 + 桌面时序不变）。
+- 真正会改观感的留到设备/视觉批次：原生 dialog/popover 迁移、可点 div 换 button、容器查询、树窗口化。
+- 判据仍是「不做会不会有代价」（AGENTS §3#17）：一行 CSS/属性可解且零视觉风险的，本批做完；
+  需要重烤视觉基线或设备验收的，单独立项。
+
+### 11.2 下一批入口（按依赖顺序）
+
+1. **A02 + A11 + A23 一起**：先 `Menu`/`Popover` 迁 `popover`（top-layer / light dismiss / anchor positioning），
+   再迁 `Dialog` 到 `<dialog>`；验收 = 嵌套下拉可见、Esc 栈、内核 portal 层序、移动 Sheet 返回键、42 态基线。
+2. **A10 + A24 + A29**：语义化批次（button/main/search + 焦点环复核），一次视觉回归。
+3. **A03 第二步**：固定高 → `min-height`，200% 字号逐屏走查 + 重烤基线。
+4. **A05 + A06**：大库夹具上先量 INP，再决定窗口化与并发渲染的先后。
+5. **A14 / A13 / A17**：小步机会项。
