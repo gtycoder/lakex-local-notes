@@ -111,6 +111,9 @@
 .selection-toolbar__inputrow .ne-card-toolbar-input { width: 96px; height: 30px; padding: 0 8px; border: 1px solid var(--lake-border-2); border-radius: var(--lake-radius-sm); background: var(--lake-bg-canvas); color: var(--lake-text-1); font: inherit; font-size: var(--lake-font-size-small); }
 .selection-toolbar__urlinput { width: 260px; height: 30px; padding: 0 8px; border: 1px solid var(--lake-border-2); border-radius: var(--lake-radius-sm); background: var(--lake-bg-canvas); color: var(--lake-text-1); font: inherit; font-size: var(--lake-font-size-small); }
 .selection-toolbar__urlinput:focus { outline: none; border-color: var(--lake-accent); }
+/* 261115 A10：色板此前是纯 mouse-only（span + onClick）⇒ 键盘聚焦必须有可见环。 */
+.lake-colorboard-group-item:focus-visible,
+.lake-colorboard-default:focus-visible { outline: 2px solid var(--lake-accent); outline-offset: 1px; }
 .selection-toolbar__checkrow { display: flex; align-items: center; gap: 8px; font-size: var(--lake-font-size-small); color: var(--lake-text-1); cursor: pointer; }
 .selection-toolbar__switchrow { display: flex; align-items: center; justify-content: space-between; gap: 16px; font-size: var(--lake-font-size-small); color: var(--lake-text-1); }
 .selection-toolbar__scale { align-self: flex-start; }

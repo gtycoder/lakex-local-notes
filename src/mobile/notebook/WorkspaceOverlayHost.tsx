@@ -134,7 +134,17 @@ export function WorkspaceOverlayHost(props: WorkspaceOverlayHostProps) {
             <div className="mobile-model-body">
               {tabs.length === 0 && <EmptyState>暂无打开的文档</EmptyState>}
               {tabs.map((t) => (
-                <div key={t.id} className={"mb-row mobile-model-row" + (t.id === activeId ? " is-selected" : "")} onClick={() => props.onOpenTab(t.id)}>
+                <div
+                  key={t.id}
+                  className={"mb-row mobile-model-row" + (t.id === activeId ? " is-selected" : "")}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => props.onOpenTab(t.id)}
+                  onKeyDown={(event) => {
+                    // 261115 A10：行本身是「打开标签」的唯一入口（鼠标 only 此前）⇒ 补键盘激活。
+                    if (event.key === "Enter" || event.key === " ") { event.preventDefault(); props.onOpenTab(t.id); }
+                  }}
+                >
                   {props.tabIconOf(t.id) && <span className="mb-tree-icon"><MobileNodeIconGlyph value={props.tabIconOf(t.id)} /></span>}
                   <span className="mb-row__title mobile-model-row__title">{t.title || "无标题"}</span>
                   <button className="mb-iconbtn mb-row__action mobile-model-row__action" onClick={(e) => { e.stopPropagation(); props.onCloseTab(t.id); }} aria-label="关闭"><X size={16} /></button>

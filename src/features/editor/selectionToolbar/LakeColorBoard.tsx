@@ -29,7 +29,12 @@ function Swatch({ color, active, onSelect }: { color: string; active: boolean; o
         + (special ? " lake-colorboard-group-item-border-none lake-colorboard-group-item-special" : "")
         + (active ? " lake-colorboard-group-item-active" : "")}
       title={color}
+      role="button"
+      tabIndex={0}
+      aria-label={"选择颜色 " + color}
+      aria-pressed={active}
       onClick={(e) => { e.preventDefault(); e.stopPropagation(); onSelect(color); }}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); onSelect(color); } }}
     >
       <span style={special ? undefined : { backgroundColor: color }}>
         {active ? (
@@ -49,12 +54,21 @@ export function LakeColorBoard({ value, onSelect, variant = "text" }: { value: s
   const rowActive = !v;
   return (
     <div className="lake-colorboard">
-      <div className="lake-colorboard-default" onClick={() => onSelect("")}>
+      <div
+        className="lake-colorboard-default"
+        role="button"
+        tabIndex={0}
+        aria-label={rowLabel}
+        aria-pressed={rowActive}
+        onClick={() => onSelect("")}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect(""); } }}
+      >
         <span
           className={"lake-colorboard-group-item"
             + (noFill ? " lake-colorboard-group-item-special" : " lake-colorboard-group-item-border")
             + (rowActive ? " lake-colorboard-group-item-active" : "")}
           title={rowLabel}
+          aria-hidden="true"
         >
           <span style={noFill ? undefined : { backgroundColor: "#000000" }}>
             {rowActive && !noFill ? <svg viewBox="0 0 18 18"><path fill="#FFFFFF" d="M21,7L9,19L3.5,13.5L4.91,12.09L9,16.17L19.59,5.59L21,7Z" /></svg> : null}

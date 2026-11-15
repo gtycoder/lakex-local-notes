@@ -735,7 +735,7 @@ adb shell dumpsys package com.google.android.webview | grep versionName
 | A07 | 首帧 color-scheme | **已修** | `14dcdf15` | 两份入口加 `<meta name="color-scheme" content="light dark">`；**更正**：`:root` 本来就有 `color-scheme`（`themes/light.css` 的 `:root,[data-theme=light]`），审计 v2 原描述有误 |
 | A08 | `boot.html` 476KB | **已修** | `14dcdf15` | 图片外置：HTML 476KB → **1.9KB**（+328KB APNG +28KB PNG 独立文件）；`build.files` 已补；`electron/bootAssets.test.ts` 5 例。**字节总量不变**（APNG 仍加载），再减需品牌决策（改 CSS 动画） |
 | A09 | 模态背景 inert | **已修（inert 部分）** | `84dc8005` | 对话框对 body 其它顶层子节点加 inert（引用计数、跳过自有浮层 portal、drawer 不动）；4 例 jsdom 护栏。`aria-modal` 与 29 处 `role=dialog` 的逐个校准仍待 |
-| A10 | 可点 div 33 处 | 推迟 | — | 每个都要换 `<button>` + 复位样式，属视觉回归批次 |
+| A10 | 可点 div 33 处 | **已修（复核后真缺口 3 类）** | 见 `git log --grep A10` | 33 处逐条复核：12+ 是遮罩/背板（`aria-hidden`，Esc/返回是等价出口）、5 处 `stopPropagation` 容器、2 处已带 `role=button` ⇒ **不是缺口**；真正 mouse-only 的是 ①色板全部色块 + 默认/无填充行、②历史快照/未引用列表的「点标题预览」、③移动端「打开标签」行。三处补键盘激活（`role=button`/`tabIndex`/Enter·Space，历史列表保持单 tab 停点只就地激活选中行），色板补 `:focus-visible` 环；护栏 `keyboardActivationGates.test.ts` |
 | A11 | `command`/`commandfor` | **不适用（已核实）** | — | 全仓没有「静态声明式触发」点：对话框都由 React 状态/菜单项打开（`onClick` → setState），没有可加 `commandfor` 的固定按钮-目标对子。新写的静态对话框（不经过 React 状态）再用它；已写进 `NativeDialog` 的 JSDoc |
 | A12 | `field-sizing` | **已修** | `7a0dc111` | AI 输入条改 CSS 自增高，删掉逐键 `scrollHeight` |
 | A13 | `base-select` 试点 | 推迟 | — | 需先有 A02 结论；移动端老 WebView 要 feature detect |
@@ -772,6 +772,7 @@ adb shell dumpsys package com.google.android.webview | grep versionName
 2. **A10**：可点 div → button（33 处，逐处复位样式），一次视觉回归。
 3. **A03 第二步**：固定高 → `min-height`，200% 字号逐屏走查 + 重烤基线。
 4. **A05 + A06**：大库夹具上先量 INP，再决定窗口化与并发渲染的先后。
+5. **视觉门禁**：在固定夹具实例上重烤 `search*` 三态 + 跑 42 态全量；移动端改过 `MobileApp/kit.css` 需 `mobile-snap` 10 态重烤。
 5. **A13 / A17**：小步机会项（`base-select` 与容器查询，各需视觉回归）。
 
 ### 11.3 本批验收（实测，261115）
@@ -786,5 +787,7 @@ adb shell dumpsys package com.google.android.webview | grep versionName
 | 移动 | `lake_mobile`（5554，API 36）`android-build.sh --sync --install` | 安装启动成功，logcat **0 FATAL**；`.mobile-app` 挂载；4 个可见 `[title]` 元素；CDP 合成长按 700ms 后 `#lake-mobile-title-tip` 显示「设置」、底色 = `--lake-tooltip-bg`(rgb(216,221,232))、锚点写入 `aria-describedby="lake-mobile-title-tip"` |
 
 未跑（本批未改外壳几何，建议随下一批视觉改动一起做）：桌面 `stylesnap` 42 态、移动 `mobile-snap` 10 态、23 屏走查、窗口矩阵、2GB 便携包真机导入。
+
+> **视觉门禁的前置（本轮实测的结论）**：对话框迁 `<dialog>` 后，`search:1315:light/warm`、`search-empty:1315:light` 三态的 DOM 结构变了（元素数与指纹都会变），需要在**专用夹具实例**上重烤这三态；本轮只在 dev 数据实例上试跑（元素 2548→3143 由实例数据量决定），**没有写基线**——用 dev 数据烤基线会把数据当契约。
 
 > 环境残留：桌面 smoke 用独立 profile 并已删除；CDP 只按端口 9333 定位杀进程（未用 pkill Electron）；`lake_mobile` 保持安装态供复验。

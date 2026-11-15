@@ -318,6 +318,13 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
             onKeyDown={(event) => {
               if (event.key === "ArrowDown") { event.preventDefault(); moveSelection(1); }
               else if (event.key === "ArrowUp") { event.preventDefault(); moveSelection(-1); }
+              // 261115 A10：行内的「点标题预览」原本只有鼠标能触发（span onClick）。
+              // 列表本身是单一 tab 停点（↑/↓ 选择），所以 Enter/Space 就地点当前选中行，
+              // 不把成百上千行都变成 tab 停点。
+              else if (event.key === "Enter" || event.key === " ") {
+                const focused = listRef.current?.querySelector<HTMLElement>(".ln-list-item--focus .ln-list-item__text");
+                if (focused) { event.preventDefault(); focused.click(); }
+              }
             }}
           >
             {loading && <div className="ln-empty">加载中…</div>}
