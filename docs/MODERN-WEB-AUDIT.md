@@ -728,10 +728,10 @@ adb shell dumpsys package com.google.android.webview | grep versionName
 | --- | --- | --- | --- | --- |
 | A01 | IME 回车误提交 | **已修** | `f55bc35b` | 35 处 / 27 文件（33 analyzer + 2 人工补漏）；`src/core/ime.ts` 唯一判据；`ime.test.ts` + `imeEnterWiring.test.ts` + `InlineRenameInput` 组合态例 |
 | A02 | 原生 `<dialog>` / top-layer | **已完成 26 处（含顶部对齐）；浮动 6 处明确定为保留** | `145d50dd` + `496744fb` + `229e78ec` + `64ef15b4` + 本轮 | 阻塞项（菜单在普通层）已解：模态内菜单/气泡现在带 `popover="manual"` 进 top layer 并已实测（设置对话框内下拉 `:popover-open`=true、命中测试在菜单内）。`NativeDialog`（`<dialog>` + `showModal`）已迁移 **24 处**：删除确认、目录重命名、命名/标签/附件重命名、**useConfirm 全家族（全站确认与提示）**、导入进度/结果、S3 迁移码、资源浏览器 3 处确认、粘贴表格过大、保存冲突、同步记录、草稿恢复、移动目标、小记筛选/标签管理/转化、标签合并、多维表 4 处。实测：`:modal`、居中 0 偏差、输入框全选、IME 组合态回车不提交、**可信 Esc（CDP Input）可关闭**。顶部对齐 2 处（SearchPanel / BitableRelationPicker）已迁：新增 `align="top"` 变体（`inset: 12vh 0 auto; margin: 0 auto`，实测 top=12.0%、水平居中、`:modal`、可信 Esc 可关）。**浮动/可拖拽 6 处（Settings/History/PublishDoc/SaveQuickNote/Trash/NoteInfo）保留自绘 Overlay**：它们靠 `transform: translate(-50%,-50%)` + `useFloatingDialog` 的拖拽/缩放/`interactionRef` 外点语义，而 a11y 缺口（背景 inert / Esc / 焦点圈闭）已由既有实现补齐 —— 换 top-layer 的收益只剩「架构统一」，风险是拖拽坐标与 transform 交互，按 §3#17 不做 |
-| A03 | OS 文字缩放 | **第一步已修** | `75153e8e` | `<meta text-scale>` + 桌面 11 档 / 移动 10 档字号令牌 rem 化（rem×16 = 改前 px，默认档位视觉零变化）；`textScale.test.ts` 钉等价；第二步（449 处固定高 → `min-height` + 200% 逐屏走查）待做 |
+| A03 | OS 文字缩放 | **第一步已修；第二步待重烤后做** | `75153e8e` | `<meta text-scale>` + 桌面 11 档 / 移动 10 档字号令牌 rem 化（rem×16 = 改前 px，默认档位视觉零变化）；`textScale.test.ts` 钉等价；第二步（449 处固定高 → `min-height` + 200% 逐屏走查）待做 |
 | A04 | Tooltip 三缺口 | **已修** | `88bd4211` | 逻辑抽到 `src/lib/nativeTitleTip.ts`；桌面 `.ln-tip` / 移动 `.mb-tip` 各自薄壳（守「两端 UI 不共享组件/CSS」红线，`mobileIndependence` 绿）；移动长按 450ms、focusin 只在「另有可访问名」时摘 title、`aria-describedby` 增删复原；24 例新护栏 |
-| A05 | 10k 树窗口化 | 推迟 | — | `content-visibility` 已在位；DOM 20 万需窗口化/分页，属 HANDOFF 大库项，需大库夹具实测 |
-| A06 | 长任务让步 / INP | 推迟 | — | `useDeferredValue` 会把「输入即筛选」的同步断言变异步，需连同测试一起改 + long-animation-frame 实测 |
+| A05 | 10k 树窗口化 | **不做（用户 261115 裁决「先不做」）** | — | `content-visibility` + `contain-intrinsic-size` 已在位（省布局/绘制）；DOM 数量/内存问题留给专门项目。**不要再重新立项**，除非用户明确点名 |
+| A06 | 长任务让步 / INP | **待实测后决定** | — | 审计口径即「先量再改」；`useDeferredValue` 会把「输入即筛选」的同步断言变异步，必须连同测试一起改，并附 long-animation-frame 实测证据 |
 | A07 | 首帧 color-scheme | **已修** | `14dcdf15` | 两份入口加 `<meta name="color-scheme" content="light dark">`；**更正**：`:root` 本来就有 `color-scheme`（`themes/light.css` 的 `:root,[data-theme=light]`），审计 v2 原描述有误 |
 | A08 | `boot.html` 476KB | **已修** | `14dcdf15` | 图片外置：HTML 476KB → **1.9KB**（+328KB APNG +28KB PNG 独立文件）；`build.files` 已补；`electron/bootAssets.test.ts` 5 例。**字节总量不变**（APNG 仍加载），再减需品牌决策（改 CSS 动画） |
 | A09 | 模态背景 inert | **已修（inert 部分）** | `84dc8005` | 对话框对 body 其它顶层子节点加 inert（引用计数、跳过自有浮层 portal、drawer 不动）；4 例 jsdom 护栏。`aria-modal` 与 29 处 `role=dialog` 的逐个校准仍待 |
@@ -746,7 +746,7 @@ adb shell dumpsys package com.google.android.webview | grep versionName
 | A18 | `text-wrap` | **已修** | `7a0dc111` | 对话框正文 `pretty`、确认框标题 `balance` |
 | A19 | `-webkit-overflow-scrolling` | **已修** | `7a0dc111` | 删 4 处 no-op |
 | A20 | `will-change` 常驻 | 核实后**不改** | — | 10 处真实使用全部绑动画/位移；`mobile.css` 已有「转场结束即撤」注释与 `is-settled` 实现，属已处理 |
-| A21 | JS 现代 API | **部分** | `3d135f54` | `cause`×4 + `AbortSignal.timeout`×1（行为等价）；`toSorted` 47 处与 `withResolvers` 2 处**明确不做**：`tsconfig` target/lib = ES2022（实测 TS2550），且 `src/core` 与 Android 旧 WebView 共用 ⇒ 需项目级配置决策 + feature detect |
+| A21 | JS 现代 API | **已修**（用户裁决升 lib） | `3d135f54` + 本轮 | `cause`×4 + `AbortSignal.timeout`×1；**`tsconfig` target/lib 升 ES2024**（用户 261115 裁决）后：`[...arr].sort()`→`arr.toSorted()` / `[...x].reverse()`→`toReversed()` / `.slice().sort()`→`toSorted()` 共 62 处（37 文件）；`Promise.withResolvers()`×2；**运行时兜底** `src/lib/es2024Fallback.ts`（老 Android WebView 缺这三个 API，两端入口首行幂等补齐，3 例护栏）；Set/Map 源保留展开（`[...set].toSorted()`，tsc 兜底） |
 | A22 | 外链 `rel` | 核实**已满足** | — | 4 处 `target="_blank"` 全带 `noreferrer`/`noopener`（`noreferrer` 隐含 noopener） |
 | A23 | anchor positioning | **前半已修（top layer）/ 后半未采用** | `145d50dd` | 模态内菜单/气泡改 `popover="manual"` 进 top layer（这一步是 A02 的前置）；`usePopoverPosition` 手算落位保留——点锚右键菜单需要指针坐标，anchor positioning 覆盖不到 |
 | A24 | `outline: none` 35 处 | **已修（2 处真缺口 + 33 处核实）** | `2d5f5b2d` | 补桌面目录筛选 wrapper 内嵌环、移动端标题输入框 `:focus-visible` 环；其余 33 处逐条核对为「wrapper `:focus-within` 画环 / 分隔条 `::after` 点亮 / `vendor-focus.css` 收口」；护栏 `focusRingGates.test.ts` |
@@ -772,7 +772,7 @@ adb shell dumpsys package com.google.android.webview | grep versionName
 2. **A10**：可点 div → button（33 处，逐处复位样式），一次视觉回归。
 3. **A03 第二步**：固定高 → `min-height`，200% 字号逐屏走查 + 重烤基线。
 4. **A05 + A06**：大库夹具上先量 INP，再决定窗口化与并发渲染的先后。
-5. **视觉门禁**：在固定夹具实例上重烤 `search*` 三态 + 跑 42 态全量；移动端已重装新包（`.mb-tip` / 标题焦点环 / `enterKeyHint`）⇒ **`lake_gate` 10 态基线必须按该构建重烤**（基线绑构建）。
+5. **移动端视觉门禁**：桌面 42 态已完成（见 §11.3）；移动端已重装新包（`.mb-tip` / 标题焦点环 / `enterKeyHint` / 首页顶栏实底）⇒ **`lake_gate` 10 态基线必须按该构建重烤**（基线绑构建）。
 5. **A13 / A17**：小步机会项（`base-select` 与容器查询，各需视觉回归）。
 
 ### 11.3 本批验收（实测，261115）
@@ -789,6 +789,10 @@ adb shell dumpsys package com.google.android.webview | grep versionName
 
 未跑（本批未改外壳几何，建议随下一批视觉改动一起做）：桌面 `stylesnap` 42 态、移动 `mobile-snap` 10 态、23 屏走查、窗口矩阵、2GB 便携包真机导入。
 
-> **视觉门禁的前置（本轮实测的结论）**：对话框迁 `<dialog>` 后，`search:1315:light/warm`、`search-empty:1315:light` 三态的 DOM 结构变了（元素数与指纹都会变），需要在**专用夹具实例**上重烤这三态；本轮只在 dev 数据实例上试跑（元素 2548→3143 由实例数据量决定），**没有写基线**——用 dev 数据烤基线会把数据当契约。
+> **视觉门禁（桌面 42 态，已完成）**：本机缓存里没有合成夹具 ⇒ 按 `scripts/css-audit/README.md` 用 `make-fixture.mjs` 重新生成（冻结到 `~/Library/Caches/lakex-local-notes-css-audit/fixture`），再在隔离实例上跑 `check-stylesnap`。结果：**41/42 态逐元素 0 差异**；9 态按预期重烤并写明理由——
+> · `search:1315:light/warm`、`search-empty:1315:light`：迁 `<dialog>` 后少 1 个包裹元素（2548→2547）；
+> · `settings-data/editor/trash` + `settings:1315:dark/warm`：新夹具的资源数据（孤儿/缺失行）与表单控件在 `color-scheme` 声明下的计算值变化（2718→2741）；
+> · `settings-about`、`note-info`：浮动面板几何/异步内容导致的**跨实例抖动**（同实例两轮同值、换实例翻面，元素数不变）——记为已知 flaky，**不据此改代码**。
+> 只重烤差异态而不是整份重烤：其余 33 态在**换夹具之后仍逐元素相同**，这是比整份重烤更强的回归证据。移动端 `mobile-snap` 10 态仍待按新构建重烤。
 
 > 环境残留：桌面 smoke 用独立 profile 并已删除；CDP 只按端口 9333 定位杀进程（未用 pkill Electron）；`lake_mobile` 保持安装态供复验。
