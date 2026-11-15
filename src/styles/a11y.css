@@ -47,3 +47,26 @@
   .tree-row.dragging,
   .tree-row.drop-inside { transform: none; }
 }
+/* ── 261115 A16：Windows 高对比度（forced-colors）─────────────────────────────
+ * 我们靠 0.5px 发丝边 + 表面差表达层级；forced-colors 会把颜色强制成系统色，
+ * 细边/阴影对比会消失（按钮分不出主次、菜单与画布同色）。
+ * 只在高对比度模式用**系统色关键字**补边界与选中态；正常模式零影响。
+ * 不用 !important（层序已够）；不写色值（系统色不属于我们的调色板）。 */
+@media (forced-colors: active) {
+  .ln-btn--primary,
+  .ln-btn--outlined,
+  .ln-btn--secondary,
+  .ln-iconbtn,
+  .ln-input,
+  .ln-menu,
+  .ln-popover,
+  .ln-dialog,
+  .ln-row,
+  .ln-check { border-color: CanvasText; }
+  .ln-btn--primary { background: ButtonFace; color: ButtonText; }
+  .ln-btn--primary:hover:not(:disabled) { background: Highlight; color: HighlightText; }
+  .ln-check:checked { background: Highlight; border-color: Highlight; }
+  .ln-btn:focus-visible,
+  .ln-iconbtn:focus-visible,
+  .tree-row:focus-visible { outline-color: Highlight; }
+}
