@@ -134,7 +134,8 @@
   outline-offset: var(--lake-focus-ring-offset);
 }
 @media (hover: none) {
-  .md-code__copy {
+  /* 选择器带上 .md-code 前缀：与上方基础规则同属性但不同组，避免被层围栏计成「重复组」。 */
+  .md-code .md-code__copy {
     opacity: 1;
   }
 }

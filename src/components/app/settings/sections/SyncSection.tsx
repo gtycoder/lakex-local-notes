@@ -6,7 +6,7 @@ import { isQiniuEndpoint } from "../../../../lib/s3FormState";
 import { CLOUD_PRIVACY_NOTICE, cloudStateHint } from "../../../../core/cloudState";
 import { cloudSyncEnableGate } from "../../../../core/cloudSyncGate";
 import { SYNC_OPEN_CLOSE_NOTE, SYNC_AUTO_MODE_OPTIONS } from "../../../../core/syncModes";
-import { Select } from "../../../ui/Select";
+import { AdaptiveSelect } from "../../../ui/AdaptiveSelect";
 import type { SyncSettings } from "../../../../lib/types";
 
 export function SyncSection({ c }: { c: SettingsPanelContext }) {
@@ -87,7 +87,8 @@ export function SyncSection({ c }: { c: SettingsPanelContext }) {
                       {syncCfg.enabled && (
                         <>
                           <Field itemId="sync-auto-mode" name="自动同步模式" desc={SYNC_OPEN_CLOSE_NOTE}>
-                            <Select label="自动同步模式" value={syncCfg.autoMode} onChange={(v) => void saveSyncCfg({ autoMode: v as SyncSettings["autoMode"] })} options={SYNC_AUTO_MODE_OPTIONS} />
+                            {/* 261116 推广：3 档、逐档只写同步策略（定时器按最终值重建），写盘无害。 */}
+                            <AdaptiveSelect label="自动同步模式" value={syncCfg.autoMode} onChange={(v) => void saveSyncCfg({ autoMode: v as SyncSettings["autoMode"] })} options={SYNC_AUTO_MODE_OPTIONS} />
                           </Field>
                           {syncCfg.autoMode === "interval" && (
                             <Item itemId="sync-auto-interval" name="自动同步间隔（分钟）" desc="到点触发一次；应用退出后不会在后台继续定时（下次启动时的对齐会补上）。"><NumField label="自动同步间隔（分钟）" min={1} max={1440} value={syncCfg.autoIntervalMinutes} onSave={(v) => void saveSyncCfg({ autoIntervalMinutes: v })}  floor={1} fallback={15} /></Item>

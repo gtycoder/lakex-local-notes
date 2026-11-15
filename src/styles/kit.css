@@ -307,7 +307,8 @@
   align-items: center;
   gap: 6px;
   min-width: 140px;
-  height: var(--lake-ctl-h);
+  /* 261116 A03/400%：min-height —— 400% 字号下触发器随文字长高，不再把值竖向裁掉。 */
+  min-height: var(--lake-ctl-h);
   padding: 0 8px;
   border: 0.5px solid var(--lake-ctl-border);
   border-radius: var(--lake-ctl-rad);
@@ -334,8 +335,9 @@
 .ln-select__item { position: relative; width: 100%; padding-right: 26px; white-space: nowrap; }
 .ln-select__item .ln-menu__check { position: absolute; right: 8px; top: 50%; width: 14px; transform: translateY(-50%); }
 
-/* ── 08b 原生下拉试点（A13，261115 用户批准）──────────────────────
- * 只服务 components/ui/NativeSelect.tsx（目前仅设置页「备份间隔」一处）。
+/* ── 08b 原生下拉（A13，261115 试点 / 261116 推广）──────────────────
+ * 只服务 components/ui/NativeSelect.tsx（经 AdaptiveSelect 接在 6 处设置项：
+ * 备份间隔 / 检查频率 / 默认空间 / 自动同步模式 / 附件上限 / 标签数）。
  * appearance: base-select 让弹层回到作者 CSS（::picker(select)），于是「原生弹层不可控」
  * 这条自研理由不再成立；不支持的内核由 baseSelectSupported() 退回 .ln-select。
  * 不写 .ln-select 前缀：那是按钮触发器（display:inline-flex + 固定高），套在 <select> 上会打架。 */

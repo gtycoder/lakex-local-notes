@@ -2,8 +2,7 @@
 import type { SettingsPanelContext } from "../useSettingsPanelScope";
 import { Group, Block, Switch, Item, NumField } from "../../../ui/settingsPrimitives";
 import { Archive, RotateCcw, Download, HardDrive } from "lucide-react";
-import { Select } from "../../../ui/Select";
-import { NativeSelect, baseSelectSupported } from "../../../ui/NativeSelect";
+import { AdaptiveSelect } from "../../../ui/AdaptiveSelect";
 import { hostCapabilities } from "../../../../lib/hostCapabilities";
 
 export function BackupSection({ c }: { c: SettingsPanelContext }) {
@@ -22,17 +21,11 @@ export function BackupSection({ c }: { c: SettingsPanelContext }) {
                       <>
                         <Switch itemId="auto-backup-enabled" name="启用自动备份" desc="应用就绪后每 6 小时检查一次（启动不会立刻跑）；内容未变则跳过。关闭后仍可用「立即备份数据库」。" checked={backupCfg.enabled} onChange={(checked) => saveBackupCfg({ enabled: checked })} />
                         <Item itemId="auto-backup-interval" name="备份间隔" desc="每天或每周（按上次成功备份时间计算；错过的会在下一次 6h 检查时补跑）。">
-                          {/* A13 试点（261115 用户批准）：只这一处走原生 base-select，其余仍是自研 Select。
+                          {/* A13（261115 试点 / 261116 推广）：逐档写盘无害的 2 选项；支持 base-select 用原生，否则同位置退回自研 Select。
                               ⚠️ 原生下拉在闭态按 ↑/↓ 会直接改值并派发 change（这里是「每天/每周」两档，最安全）。 */}
-                          {baseSelectSupported() ? (
-                            <NativeSelect label="备份间隔" value={String(backupCfg.intervalDays)} onChange={(v) => saveBackupCfg({ intervalDays: Number(v) })} options={[
-                              { value: "1", label: "每天" }, { value: "7", label: "每周" },
-                            ]} />
-                          ) : (
-                            <Select label="备份间隔" value={String(backupCfg.intervalDays)} onChange={(v) => saveBackupCfg({ intervalDays: Number(v) })} options={[
-                              { value: "1", label: "每天" }, { value: "7", label: "每周" },
-                            ]} />
-                          )}
+                          <AdaptiveSelect label="备份间隔" value={String(backupCfg.intervalDays)} onChange={(v) => saveBackupCfg({ intervalDays: Number(v) })} options={[
+                            { value: "1", label: "每天" }, { value: "7", label: "每周" },
+                          ]} />
                         </Item>
                         <Item itemId="auto-backup-keep" name="保留份数" desc="保留最近 N 份（超出按最旧优先删除；备份目录总大小上限 300MB，删除失败只记日志）。"><NumField label="保留份数" min={1} max={50} value={backupCfg.keepCount} onSave={(value) => saveBackupCfg({ keepCount: value })} floor={1} fallback={7} /></Item>
                         <div className="config-block__actions">

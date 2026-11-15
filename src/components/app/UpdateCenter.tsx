@@ -9,7 +9,7 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { Block, Group, Item, Switch } from "../ui/settingsPrimitives";
-import { Select } from "../ui/Select";
+import { AdaptiveSelect } from "../ui/AdaptiveSelect";
 import { native } from "../../lib/native";
 import { getNativeErrorMessage } from "../../lib/nativeErrors";
 import { formatBytes } from "../../core/update/updateManifest";
@@ -158,7 +158,8 @@ export function UpdateCenterSection() {
           onChange={(checked) => saveSettings({ autoCheck: checked })}
         />
         <Item itemId="update-check-interval" name="检查频率" desc="「关闭」= 不自动检查，仍可手动检查。">
-          <Select
+          {/* 261116 推广：4 档、逐档只改本机更新策略；disabled 由 AdaptiveSelect 原样透传。 */}
+          <AdaptiveSelect
             label="自动检查频率"
             value={String(settings?.checkIntervalHours ?? 24)}
             options={UPDATE_CHECK_INTERVAL_OPTIONS.map((hours) => ({ value: String(hours), label: INTERVAL_LABELS[hours] }))}
