@@ -744,6 +744,8 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
   font-weight: 600; /* 页面标题加重：17px/400 偏轻，600 承担「大气」的顶栏层级 */
   background-color: transparent; color: var(--lake-text-1);
 }
+/* 261115 A24：标题输入框自身 outline: none，补一个焦点环（此前键盘/读屏聚焦时毫无可见信号）。 */
+.toolbar__title:focus-visible { outline: 0; border-radius: var(--lake-radius-xs); box-shadow: 0 0 0 2px var(--lake-focus-halo); }
 .toolbar__title--readonly { -webkit-user-select: none; user-select: none; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .toolbar__text { flex: 1; min-width: 0; font-size: var(--lake-font-size-title); min-height: 30px; line-height: 30px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .toolbar__scroll { flex: 1; min-width: 0; display: flex; align-items: center; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; }

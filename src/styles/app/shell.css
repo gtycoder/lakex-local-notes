@@ -685,6 +685,7 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
   border-bottom: 0.5px solid var(--lake-border-1);
 }
 
+.dock-filter-row__inner:focus-within { box-shadow: inset 0 0 0 1px var(--lake-accent); }
 .dock-filter-input {
   flex: 1;
   min-width: 0;
