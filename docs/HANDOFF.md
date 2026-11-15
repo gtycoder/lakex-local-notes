@@ -7,6 +7,16 @@
 
 ## 0. 最新交接（最近 3 个批次；更早的见 git）
 
+### 261116 · 现代 Web 平台化第二批 + AI 对话面（分支 `modernize/web-platform-261115`，**未合 master**）
+
+- **起点**：261115 批的 A01–A30 已全部结案（见 [MODERN-WEB-AUDIT §11](MODERN-WEB-AUDIT.md)）。
+- **审计收尾**：A03 批 2–4（锁卡/手写板/tag/chip/分段/大纲/多维表/A±/移动端 5 条，共 28 条文字容器 `min-height`，探针证 100% 几何不变）；A17 容器查询（属性弹窗折列改按自身宽度）；A21 收口（**tsconfig 升 ES2024** + `toSorted`/`toReversed` 73 处 + `withResolvers` + 老 WebView 运行时兜底）；A13 试点 → **推广 6 处**（`AdaptiveSelect`，`Select.tsx` 未动）；A10 键盘激活 3 处；200%/400% 字号走查（桌面文字溢出 27→2）。
+- **浮层**：`overlay-matrix` 实测后修 2 个真问题——① 模态 `<dialog>` 内菜单/气泡改挂进 dialog（原来看得见点不到、点它关掉整个对话框）；② 关闭浮层焦点不再落 body（`lib/focusRestore` 退到主区域）+ 移动 Sheet 背景 inert。
+- **AI 对话面（用户点单，借鉴 chat-demo / MIT）**：流式 Markdown 按渲染耗时节流 + 贴底跟随（`useThrottledMarkdown` / `useStickToBottom`）；DeepSeek 网页观感重排（760 列、无气泡助手、22 圆角用户气泡、24 圆角大卡片输入区，**主色仍是我们自己的墨蓝**）；消息版本/分支（重新生成保留旧回答、编辑提问分叉可切回、切版本滚动锚定）；代码块行号 + 复制。
+- **主题**：新增第 4 个主题「清爽（浅色）」（`themes/chat.css` + 移动副本，token-only、不改几何；现有 42 态不重烤）。
+- **验证**：桌面 42 态（严格比对 34 + 跳过 8 窄窗 + 2 异步竞态）、移动 10/10、多维表 3/3、23 屏走查、平板窗口矩阵 7 档、打包版窗口状态 smoke 全部通过；详见 §1 分支基线。
+- **明确不做**：读屏（VoiceOver/TalkBack）实测（用户裁决不承诺）；A05 树窗口化；状态栏成对改高；移动端 400% 的固定高度 chrome 重构。
+- **待用户裁决**：① 合并回 master（需明确同意）；② 正式发 beta（流水线目前只认 `vX.Y.Z`，需改 tag 正则 + `prerelease`）；③ A13 是否继续扩大调用方。
 ### 261115 · 现代 Web 平台化第一批（分支 `modernize/web-platform-261115`，**未合 master**）
 - **前置**：master `7e2db298` 已双推 Gitee+GitHub 并打注解 tag **`backup/master-261115`**；本分支按用户要求**不合并回 master**（需明确同意）。
 - **落地（全部行为等价/默认档位零视觉变化）**：IME 回车 35 处过组合态判据（`core/ime.ts`）；字号令牌 rem 化（rem×16 = 改前 px）+ `meta text-scale`；`boot.html` 476KB→1.9KB（图片外置）+ `color-scheme`/`light-dark()`；`field-sizing`/标准 `mask`/`text-wrap`/删 no-op 前缀；图片 `decoding=async`；`forced-colors`；对话框背景 `inert`（引用计数）；`Error cause` + `AbortSignal.timeout`；Tooltip 逻辑抽共享 + 移动端自有 `.mb-tip`；移动 `enterKeyHint`；两处缺失焦点环；`role=main`/`role=search` 地标；**模态内菜单/气泡进 top layer**（`popover="manual"`，`<dialog>` 迁移的前置，已真实应用实测）；**`tsconfig` 升 ES2024 + `toSorted`/`toReversed`/`withResolvers` 62 处 + 老 WebView 运行时兜底**（用户裁决）；**移动端首页顶栏滚动后不再有玻璃灰条**（用户点单）；**A17 属性弹窗折列改容器查询**；**A03 第二步批 1+2**（输入容器 + 锁卡/手写板/tag/chip/分段控件，全部 height→min-height，100% 几何探针零变化）；**移动端 10 态基线按新构建重烤**（+1 元素 = `MobileTitleTips`）；**原生 `<dialog>` 迁移 24 处**（普通模态全迁，含 useConfirm 全站确认/提示；`:modal` + 居中 0 偏差 + 输入框全选 + IME 回车不提交 + 可信 Esc 关闭，均已应用内实测）；剩 8 处浮动/顶部对齐待补 `style`/变体。
@@ -221,6 +231,12 @@
 
 > 数值 = 最近一次实测（261113 批，低负载串行）。**任何状态判断以本节 + `git status` / `git log -1` 为准**。
 
+**261116 分支基线（`modernize/web-platform-261115`，未合 master）**
+
+- **分支**：58 commit / 216 文件 / +5801 −999 / 新增测试文件 26；master 仍在 `7e2db298`，备份 tag `backup/master-261115` → `0f900a1a`；双远端同步（HEAD 以 `git log -1` 为准）。
+- **门禁**：`tsc` 0；全量 vitest **文件 983（970 passed / 13 skipped）/ 用例 6175（6161 passed / 14 skipped）/ 0 failed**；`ui-metrics` 0；`check:core` / `check:mobileui` / `check:bundle`（移动 CSS gzip 139.9KB / 预算 141.3KB）/ `check:arch` 全过。
+- **视觉/设备门禁**：桌面 `stylesnap` 42 态（严格比对 34；跳过 8 窄窗 + `note-info`/`settings-about` 两个异步竞态态，已写入脚本头 `FLAKY_ASYNC` 并说明证据）；移动 `mobile-snap` 10/10；`bitablesnap` 3/3；23 屏走查 23/23；平板窗口矩阵 7 档 `pass:true`；打包版窗口状态 smoke（120,120,1000,700 持久化一致）。
+- **未跑**：真实 API Key 下的流式对话（AI 面板只用 mock DOM 验过样式与分支交互）。
 **版本与仓库**
 
 - 主分支 `master`；**HEAD 以 `git log -1` 为准**；R2 已提交 6 笔拆分/设备记录（`a23631f6` sidebar / `fd268432` settings / `231fe845` electron boot / `c00d3a60` lakeRuntime / `4a9b965c` ink 测试 / `e352e2cb` 设备记录）；**产品代码基线 = `8e20a6a3`（R0）/ `e87016bd`（R1）/ `e352e2cb`（R2）/ `3fad8821`（R2 收尾：位置合并 + 同步专用写路径 + 单篇降级）**；**日记收口批产品笔 = `199f3403`（不可变守卫）/ `fd58dc0a`（移动移除取消标记）/ `d4d03260`（移动目标剔除日记子树）/ `f965e62c`（转文档共享弹窗）/ `4b6a524a`（转小记媒体搬运）/ `400dcc75`（showNotice 全空间可见）**；**261113 批 = `839c7a93`（发版复核 P2/P3）/ `a57cf3cf`（移动端「转为小记」+ 22 号报告 §11 + RELEASE.md Secrets 节）**（详见 §0）。

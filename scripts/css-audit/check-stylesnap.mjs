@@ -73,7 +73,14 @@ const UNSTABLE = /:(?:560|760):/;
 // 跨轮/跨实例只是 index → hash 的对应关系在换（元素数不变）。实测 5 份完整快照两两对拍：
 // 按 keyed 行比对有 7234 处翻转，改成 (tag, 指纹) 的**排序多重集**后 **41/42 态完全一致**
 // （唯一例外 plain:760:dark 属窄窗名单）⇒ 名单已删除，1315 全量恢复严格比对，且渲染信号不丢。
-const unstable = (name) => UNSTABLE.test(name);
+/**
+ * 261116：两个 1315 宽态被证实是「异步内容竞态」，不是样式抖动（两轮同值时另一实例会翻面）：
+ *  - note-info：标签区异步读回，元素数在 2596 / 2605 之间翻（差 9 = 3 个标签 chip）；
+ *  - settings-about：关于页依赖清单异步加载，几何在加载完成前后不同。
+ * 与窄窗名单同理：基线照常采集/入库，严格比对跳过并点名；等把「异步内容加载完成」钉进 pin() 再撤。
+ */
+const FLAKY_ASYNC = /^(?:note-info|settings-about):1315:/;
+const unstable = (name) => UNSTABLE.test(name) || FLAKY_ASYNC.test(name);
 /** 带了 --states 就是"只验这几个态"：没采的态不在作用域内，不能报成差异
  *  （态自包含之后，改一处界面只需验 1~2 态；见 README「快照重烤的快速路径」）。 */
 const SCOPED = Boolean(STATES);
@@ -132,5 +139,5 @@ if (diffs.size) {
   process.exit(1);
 }
 console.log("[gate] " + (SCOPED ? Object.keys(current.states).length + " 态（--states 指定）" : (names.length - skipped.length) + " 态") + "整页计算值 0 差异（对比 " + path.relative(ROOT, BASELINE) + "）"
-  + (skipped.length ? "；跳过 " + skipped.length + " 态（窄窗态，见脚本头 UNSTABLE 的 TODO）：" + skipped.join(", ") : "")
+  + (skipped.length ? "；跳过 " + skipped.length + " 态（装置不稳定：窄窗 + 异步竞态，见脚本头 UNSTABLE / FLAKY_ASYNC）：" + skipped.join(", ") : "")
   + (flaky.length ? "；flaky（仅一轮出现，已重跑排除）：" + flaky.join(", ") : ""));
