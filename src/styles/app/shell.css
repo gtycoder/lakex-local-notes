@@ -689,7 +689,7 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
 .dock-filter-input {
   flex: 1;
   min-width: 0;
-  height: 22px;
+  min-height: 22px;
   padding: 0;
   border: 0;
   outline: 0;

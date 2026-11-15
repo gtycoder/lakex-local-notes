@@ -15,7 +15,7 @@
   display: flex;
   align-items: center;
   gap: var(--lake-space-sm);
-  height: 32px;
+  min-height: 32px;
   padding: 0 var(--lake-space-lg);
   border: 1px solid var(--lake-border-1);
   border-radius: var(--lake-radius-sm);

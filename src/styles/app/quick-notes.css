@@ -96,7 +96,7 @@
 .quick-notes-tag-filter-menu button > .quick-notes-tag-ellipsis { flex: 1 1 auto; min-width: 0; }
 .quick-notes-tag-filter-menu__count { margin-left: auto; color: var(--lake-text-3); font-variant-numeric: tabular-nums; }
 /* 列表视图搜索：放大镜点击后替换「标签」位（对齐语雀）；Enter 过滤、× 清空、Esc 收起 */
-.quick-notes-index-search { display: flex; flex: 1 1 auto; align-items: center; gap: 4px; min-width: 0; height: 30px; padding: 0 8px; border: 0.5px solid var(--lake-border-2); border-radius: var(--lake-radius-xs); background: var(--lake-bg-panel); }
+.quick-notes-index-search { display: flex; flex: 1 1 auto; align-items: center; gap: 4px; min-width: 0; min-height: 30px; padding: 0 8px; border: 0.5px solid var(--lake-border-2); border-radius: var(--lake-radius-xs); background: var(--lake-bg-panel); }
 .quick-notes-list-search { flex: 0 0 auto; margin-bottom: 10px; }
 .quick-notes-index-search:focus-within { border-color: var(--lake-accent); }
 .quick-notes-index-search > svg { flex: 0 0 auto; color: var(--lake-text-3); }

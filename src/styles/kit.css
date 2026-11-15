@@ -278,7 +278,8 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  height: var(--lake-ctl-h);
+  /* 261115 A03 步2：输入容器改 min-height —— 200% 字号时文字不被 27px 竖切；100% 下几何不变。 */
+  min-height: var(--lake-ctl-h);
   padding: 0 9px;
   /* 输入类用「控件静息边」：比分隔线更明确 —— 输入框在浅底上必须看得见（261006 v2 原语）。 */
   border: 0.5px solid var(--lake-ctl-border);

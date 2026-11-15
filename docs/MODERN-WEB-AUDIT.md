@@ -728,7 +728,7 @@ adb shell dumpsys package com.google.android.webview | grep versionName
 | --- | --- | --- | --- | --- |
 | A01 | IME 回车误提交 | **已修** | `f55bc35b` | 35 处 / 27 文件（33 analyzer + 2 人工补漏）；`src/core/ime.ts` 唯一判据；`ime.test.ts` + `imeEnterWiring.test.ts` + `InlineRenameInput` 组合态例 |
 | A02 | 原生 `<dialog>` / top-layer | **已完成 26 处（含顶部对齐）；浮动 6 处明确定为保留** | `145d50dd` + `496744fb` + `229e78ec` + `64ef15b4` + 本轮 | 阻塞项（菜单在普通层）已解：模态内菜单/气泡现在带 `popover="manual"` 进 top layer 并已实测（设置对话框内下拉 `:popover-open`=true、命中测试在菜单内）。`NativeDialog`（`<dialog>` + `showModal`）已迁移 **24 处**：删除确认、目录重命名、命名/标签/附件重命名、**useConfirm 全家族（全站确认与提示）**、导入进度/结果、S3 迁移码、资源浏览器 3 处确认、粘贴表格过大、保存冲突、同步记录、草稿恢复、移动目标、小记筛选/标签管理/转化、标签合并、多维表 4 处。实测：`:modal`、居中 0 偏差、输入框全选、IME 组合态回车不提交、**可信 Esc（CDP Input）可关闭**。顶部对齐 2 处（SearchPanel / BitableRelationPicker）已迁：新增 `align="top"` 变体（`inset: 12vh 0 auto; margin: 0 auto`，实测 top=12.0%、水平居中、`:modal`、可信 Esc 可关）。**浮动/可拖拽 6 处（Settings/History/PublishDoc/SaveQuickNote/Trash/NoteInfo）保留自绘 Overlay**：它们靠 `transform: translate(-50%,-50%)` + `useFloatingDialog` 的拖拽/缩放/`interactionRef` 外点语义，而 a11y 缺口（背景 inert / Esc / 焦点圈闭）已由既有实现补齐 —— 换 top-layer 的收益只剩「架构统一」，风险是拖拽坐标与 transform 交互，按 §3#17 不做 |
-| A03 | OS 文字缩放 | **第一步已修；第二步待重烤后做** | `75153e8e` | `<meta text-scale>` + 桌面 11 档 / 移动 10 档字号令牌 rem 化（rem×16 = 改前 px，默认档位视觉零变化）；`textScale.test.ts` 钉等价；第二步（449 处固定高 → `min-height` + 200% 逐屏走查）待做 |
+| A03 | OS 文字缩放 | **两步均已开工（批 1 已落地）** | `75153e8e` + 本轮 | `<meta text-scale>` + 桌面 11 档 / 移动 10 档字号令牌 rem 化（rem×16 = 改前 px，默认档位视觉零变化）；`textScale.test.ts` 钉等价；第二步已开工：**批 1 = 6 条输入容器 `height`→`min-height`**（`.ln-input` 27 / `.bt-input` 30 / `.bt-filter-input` 32 / `.bt-rel-search` 32 / `.quick-notes-index-search` 30 / `.dock-filter-input` 22），全部 1:1 替换（不是新增声明，棘轮净 0）；探针实测 `.ln-input` 27px、`.dock-filter-input` 22px、`.quick-notes-index-search` 30px **与改前逐像素相同**；多维表三条因 feature CSS 按 chunk 懒加载、当前态探针不可见，按「内容高 < min-height」算术 + 代码复核保证 100% 不变。**批 2–4 与 200% 逐屏走查**见 §11.2 |
 | A04 | Tooltip 三缺口 | **已修** | `88bd4211` | 逻辑抽到 `src/lib/nativeTitleTip.ts`；桌面 `.ln-tip` / 移动 `.mb-tip` 各自薄壳（守「两端 UI 不共享组件/CSS」红线，`mobileIndependence` 绿）；移动长按 450ms、focusin 只在「另有可访问名」时摘 title、`aria-describedby` 增删复原；24 例新护栏 |
 | A05 | 10k 树窗口化 | **不做（用户 261115 裁决「先不做」）** | — | `content-visibility` + `contain-intrinsic-size` 已在位（省布局/绘制）；DOM 数量/内存问题留给专门项目。**不要再重新立项**，除非用户明确点名 |
 | A06 | 长任务让步 / INP | **待实测后决定** | — | 审计口径即「先量再改」；`useDeferredValue` 会把「输入即筛选」的同步断言变异步，必须连同测试一起改，并附 long-animation-frame 实测证据 |
@@ -770,7 +770,7 @@ adb shell dumpsys package com.google.android.webview | grep versionName
 
 1. **A02/A11 已收口**：26 处原生 `<dialog>`（普通 + 顶部对齐），浮动 6 处与 `commandfor` 都写明「为什么不做」（见上两行）。剩：设备/视觉全量门禁里补一次「对话框态」快照复核。
 2. **A10**：可点 div → button（33 处，逐处复位样式），一次视觉回归。
-3. **A03 第二步**：固定高 → `min-height`，200% 字号逐屏走查 + 重烤基线。
+3. **A03 第二步（批 2–4）**：批 1（6 条输入容器）已完成；批 2 = `.dock-filter-input` 已含/`.lake-locked-text__field`/手写板三处/`.ln-segment__item`/`.ln-tag`/`.ln-chip`；批 3 = 大纲行、多维表分组/汇总、select-trigger、`A±`；批 4 = 状态栏成对（含 `--statusbar-reserve` 重算）+ 移动端 5 条。每批：`vitest run src/styles` → 100% 几何探针 → 受影响态重烤 → 200% 人工走查（根字号 32px）。**不动**：`.tab-item`/`.protyle-breadcrumb`（被几何测试钉死）、`--bt-row-h`/`--mbt-row-h`（用户可选行高）、`.ln-btn`（200% 下 `line-height:1` 仍放得下）、图标/轨道/画布/内核宿主。
 4. **A05 + A06**：大库夹具上先量 INP，再决定窗口化与并发渲染的先后。
 5. **移动端视觉门禁已完成**：`lake_gate`（5556）+ 门禁夹具 + 新构建，10 态**全部 +1 元素**（= 新增的 `MobileTitleTips` 单例）⇒ 重烤基线后连跑 0 差异；23 屏走查随后跑。
 5. **A13 / A17**：小步机会项（`base-select` 与容器查询，各需视觉回归）。
