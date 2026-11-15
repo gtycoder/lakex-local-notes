@@ -270,7 +270,8 @@
   display: flex;
   align-items: center;
   gap: 2px;
-  height: 25px;
+  /* 261115 A03 步2 批3：大纲行 min-height（200% 下相邻行不再互压）。 */
+  min-height: 25px;
   padding-right: var(--lake-space-md);
   cursor: pointer;
   white-space: nowrap;

@@ -22,7 +22,7 @@
 .bt-group-end > td:last-child { border-bottom-right-radius: var(--lake-radius-sm); }
 /* 分组头是**表格行**：内容必须**不进流**（绝对定位内层），否则它的长文本会参与 table-layout:auto 的
    列宽计算，把首列撑开、与记录行错位（260929 实测：表头首列 482px vs 记录行 80px）。 */
-.bt-group-cell { position: relative; height: 36px; padding: 0; font-size: var(--lake-font-size-small); color: var(--lake-text-1); cursor: pointer; }
+.bt-group-cell { position: relative; min-height: 36px; padding: 0; font-size: var(--lake-font-size-small); color: var(--lake-text-1); cursor: pointer; }
 .bt-group-inner { position: absolute; inset: 0; display: flex; align-items: center; gap: 8px; padding: 0 8px 0 14px; overflow: hidden; }
 /* 折叠钮：云端是**无边框**的裸三角（24×24 命中区 + 4px 圆角，仅 hover 有底色） */
 .bt-group-fold { display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; width: 24px; height: 24px; border: 0; border-radius: var(--lake-radius-xs); background: transparent; }
@@ -83,7 +83,7 @@
   position: sticky;
   bottom: 0;
   z-index: 1;
-  height: 24px;
+  min-height: 24px;
   padding: 0 8px;
   background: var(--lake-bg-subtle);
   font-size: var(--lake-font-size-tiny);
