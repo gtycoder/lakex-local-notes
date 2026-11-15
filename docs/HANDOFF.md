@@ -250,7 +250,7 @@
 - `node scripts/ui-metrics.mjs` = 0（颜色 0 / `!important` 9 = 清单 / 字号字面量 0 / `crossFileDupGroups` **45 = 基线** / `shadowedDecls` 0）。
 - `check:core` **181** 文件 0 违规；`check:mobileui` 通过；`check:bundle` + `check:arch` PASS（desktop 首屏 580,718/600,000；mobile 343,411/350,000；mobile entry 49,771/51,200）。
 - 基线护栏随本批上调（各写明理由）：`aiDialogParts.css` 91→92、`overlay.css` 290→292、`kit.css` 674→682、`mobile/kit.css` 626→640、`mobile/usheet/usheet-chrome.css` 593→595。
-- **视觉门禁**：**桌面 42 态已完成**（合成夹具重新生成 + 隔离实例）：41/42 逐元素 0 差异，9 态按预期重烤（search×3 = `<dialog>` 结构、settings 家族 = 新夹具资源数据 + `color-scheme` 表单控件计算值），`settings-about`/`note-info` 记为跨实例 flaky。**仍待**：移动 `mobile-snap` 10 态（基线绑构建，需按新包重烤）、23 屏走查、窗口矩阵。**移动端已重装**（`lake_mobile`，41.57MB，0 FATAL，`.mb-tip` 生效）；对话框迁 `<dialog>` 改变 `search*` 三态 DOM ⇒ 必须在**固定夹具实例**上重烤（本轮 dev 数据试跑 2548→3143 属数据差异，**未写基线**）；`mobile-snap` 基线绑构建，同样待重烤。
+- **视觉门禁（全部完成）**：桌面 42 态 —— 34/34 可严格比对的态 0 差异（8 个窄窗态按装置既有规则跳过）；移动 10 态 —— 重装新包后重烤、连跑 0 差异；23 屏走查 23/23 ok；平板/折叠屏窗口矩阵（7 档 412~1280）`pass: true`（形态判据 + active/tabs/scrollTop 保持）。**移动端已重装**（`lake_mobile`，41.57MB，0 FATAL，`.mb-tip` 生效）；对话框迁 `<dialog>` 改变 `search*` 三态 DOM ⇒ 必须在**固定夹具实例**上重烤（本轮 dev 数据试跑 2548→3143 属数据差异，**未写基线**）；`mobile-snap` 基线绑构建，同样待重烤。
 
 **设备与环境（本机实测）**
 
