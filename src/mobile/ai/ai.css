@@ -21,7 +21,7 @@
 .ai-corpusbar__lead { flex: 0 0 auto; color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); }
 .ai-chip {
   flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px; max-width: 180px;
-  height: 30px; padding: 0 10px; border: .5px solid var(--lake-border-1); border-radius: var(--lake-radius-pill);
+  min-height: 30px; padding: 0 10px; border: .5px solid var(--lake-border-1); border-radius: var(--lake-radius-pill);
   background: var(--lake-bg-panel); color: var(--lake-text-1); font-size: var(--lake-font-size-micro);
 }
 .ai-chip__title { max-width: 130px; }
@@ -67,7 +67,7 @@
 .ai-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
 
 .ai-hint {
-  flex: 0 0 auto; height: 24px; padding: 0 16px; text-align: left;
+  flex: 0 0 auto; min-height: 24px; padding: 0 16px; text-align: left;
   background: transparent; border: 0; color: var(--lake-text-4); font-size: var(--lake-font-size-nano);
 }
 .ai-hint:active { color: var(--lake-text-2); }

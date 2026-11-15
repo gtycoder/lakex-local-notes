@@ -649,7 +649,7 @@
 .mbt-tile__art--card i:first-child { flex: 0 0 26px; }
 .mbt-tile__art--table { display: grid; grid-template-columns: repeat(3, 1fr); }
 .mbt-tile__art--table i { min-height: 18px; }
-.mbt-tile__label { display: flex; align-items: center; justify-content: center; height: 34px; color: var(--lake-text-2); font-size: var(--lake-font-size-tiny); }
+.mbt-tile__label { display: flex; align-items: center; justify-content: center; min-height: 34px; color: var(--lake-text-2); font-size: var(--lake-font-size-tiny); }
 .mbt-tile.is-on .mbt-tile__label { color: var(--lake-accent-text); font-weight: var(--lake-font-weight-semibold); }
 .mbt-vcfg-row {
   display: flex;

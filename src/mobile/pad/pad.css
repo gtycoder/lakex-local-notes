@@ -187,7 +187,7 @@ html[data-form-factor="expanded"] .nb-shelf {
   align-items: center;
   flex: 0 0 auto;
   max-width: 220px;
-  height: 30px;
+  min-height: 30px;
   /* 261103 六批 A4：页签内不再有小 ×，左右内距对称（10）。 */
   padding: 0 10px;
   border-radius: var(--lake-radius-sm);

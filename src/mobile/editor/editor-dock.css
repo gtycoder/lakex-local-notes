@@ -169,7 +169,8 @@
   justify-content: center;
   gap: 3px;
   min-width: 0;
-  height: 52px;
+  /* 261115 A03 步2 批4：min-height（52 是用户定稿的方块高；200% 下面板内部可滚，末行仍可达）。 */
+  min-height: 52px;
   padding: 4px 6px;
   border: 0;
   border-radius: var(--mb-radius-card);

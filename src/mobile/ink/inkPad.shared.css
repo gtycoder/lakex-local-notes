@@ -394,7 +394,7 @@
 .ink-text-size,
 .ink-text-remove {
   min-width: 22px;
-  height: 20px;
+  min-height: 20px;
   padding: 0 4px;
   border: 0;
   border-radius: var(--lake-radius-xs);
