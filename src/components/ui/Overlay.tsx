@@ -121,12 +121,19 @@ export function Overlay({ open = true, kind, onDismiss, label, className, style,
   const scope = useMemo(() => ({ ancestors: [...parent.ancestors, overlayId], modal: parent.modal || kind === "dialog" }), [parent, overlayId, kind]);
   const innerRef = useRef<HTMLElement | null>(null);
   const restoreFocusRef = useRef<HTMLElement | null>(null);
+  /* 261115 A02/A23：**模态对话框内**的菜单/气泡改用原生 popover（top layer）。
+   * 为什么现在做：这是把 Dialog 迁到 <dialog showModal> 的前置条件——对话框进 top layer 后，
+   * 普通层（z-index 再高）的菜单一定被盖住；菜单也进 top layer 才谈得上迁移。
+   * 用 popover="manual"（不是 auto）：light dismiss / Esc / 嵌套子菜单仍由本组件既有逻辑负责，
+   * 语义与今天完全一致；只有层序变了。老 WebView 没有 showPopover ⇒ 退回普通层（现状不变）。 */
+  const topLayerMenu = kind !== "dialog" && kind !== "drawer" && parent.modal;
   // 把外部 ref（可拖拽面板）与内部 ref 都挂到同一个表面元素上
   const setSurface = useCallback((el: HTMLElement | null) => {
     innerRef.current = el;
+    if (el && topLayerMenu) el.setAttribute("popover", "manual");
     if (typeof surfaceRef === "function") surfaceRef(el);
     else if (surfaceRef) (surfaceRef as MutableRefObject<HTMLElement | null>).current = el;
-  }, [surfaceRef]);
+  }, [surfaceRef, topLayerMenu]);
 
   // 嵌套portal保留React父层关系；首次同时挂载时，子层effect先运行也不会把父层放到栈顶。
   useLayoutEffect(() => {
@@ -140,6 +147,21 @@ export function Overlay({ open = true, kind, onDismiss, label, className, style,
       if (i >= 0) openOverlayStack.splice(i, 1);
     };
   }, [open, overlayId, parent]);
+
+  // 模态内菜单进 top layer（popover="manual" 已在 setSurface 里标好；这里只负责开/关）。
+  useEffect(() => {
+    const el = innerRef.current;
+    if (!open || !topLayerMenu || !el) return;
+    if (typeof el.showPopover !== "function") return;
+    if (!el.matches(":popover-open")) {
+      try { el.showPopover(); } catch { /* 未连接或已在别处打开：保持普通层，不阻断菜单 */ }
+    }
+    return () => {
+      // 卸载时 DOM 可能已被移除（passive effect cleanup 在移除之后跑）⇒ 不能以 isConnected 为条件，
+      // 否则 popover 会留在 top layer 的"打开集合"里，下一次 showPopover 报 InvalidStateError。
+      try { el.hidePopover(); } catch { /* 已失效/未打开：忽略 */ }
+    };
+  }, [open, topLayerMenu]);
 
   // Esc 关闭（三型通用，capture 阶段，避免被下层快捷键抢先）
   useEffect(() => {

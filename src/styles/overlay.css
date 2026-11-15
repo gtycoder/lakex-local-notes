@@ -110,6 +110,11 @@
 .ln-dialog__resize:hover { color: var(--lake-text-2); }
 
 /* 原语菜单/气泡的定位与层序（不依赖具体表面类，custom surfaceClassName 也不掉层） */
+/* 261115 A02/A23：模态内的菜单/气泡带 `popover="manual"` 进 top layer（见 Overlay.tsx）。
+   UA 对 [popover] 的 `inset: 0; margin: auto` 会把 usePopoverPosition 算好的 left/top 顶掉
+   （bottom/right 从 inset:0 继承 ⇒ 元素被拉满），所以只重置这两条；表面/内距/边框仍由
+   .ln-menu / .ln-popover 提供（作者样式优先于 UA 样式，不需要在这里重写）。 */
+.ln-overlay-surface[popover] { inset: auto; margin: 0; }
 .ln-overlay-surface {
   position: fixed;
   z-index: var(--lake-z-overlay-menu);

@@ -150,3 +150,42 @@ describe("模态背景 inert（261115 A09）", () => {
     act(() => root.render(null));
   });
 });
+
+describe("模态内菜单进 top layer（261115 A02/A23）", () => {
+  it("对话框里的菜单带 popover=manual；顶层菜单不带（现状不变）", () => {
+    act(() => root.render(createElement(Dialog, { onDismiss: () => {}, label: "确认", children: [
+      createElement("button", { key: "b" }, "确定"),
+      createElement(Menu, { key: "m", open: true, onDismiss: () => {}, label: "菜单", children: createElement("button", null, "项") }),
+    ] })));
+    const menus = [...document.querySelectorAll(".ln-menu")];
+    expect(menus.length).toBe(1);
+    expect(menus[0].getAttribute("popover")).toBe("manual");
+    act(() => root.render(createElement(Menu, { open: true, onDismiss: () => {}, label: "菜单", children: createElement("button", null, "项") })));
+    expect(document.querySelector(".ln-menu")!.hasAttribute("popover")).toBe(false);
+    act(() => root.render(null));
+  });
+
+  it("支持 showPopover 时开/关各调一次；不支持时静默退回普通层", () => {
+    const proto = HTMLElement.prototype as unknown as Record<string, unknown>;
+    const open = vi.fn(function (this: HTMLElement) { this.dataset["opened"] = "1"; });
+    const close = vi.fn(function (this: HTMLElement) { delete this.dataset["opened"]; });
+    const hadShow = "showPopover" in proto, hadHide = "hidePopover" in proto;
+    Object.defineProperty(proto, "showPopover", { value: open, configurable: true });
+    Object.defineProperty(proto, "hidePopover", { value: close, configurable: true });
+    try {
+      const render = (withMenu: boolean) => act(() => root.render(createElement(Dialog, { onDismiss: () => {}, label: "确认", children: [
+        createElement("button", { key: "b" }, "确定"),
+        withMenu ? createElement(Menu, { key: "m", open: true, onDismiss: () => {}, label: "菜单", children: createElement("button", null, "项") }) : null,
+      ] })));
+      render(true);
+      expect(open).toHaveBeenCalledTimes(1);
+      expect(document.querySelector<HTMLElement>(".ln-menu")!.dataset["opened"]).toBe("1");
+      render(false);
+      expect(close).toHaveBeenCalledTimes(1);
+      act(() => root.render(null));
+    } finally {
+      if (!hadShow) delete proto["showPopover"];
+      if (!hadHide) delete proto["hidePopover"];
+    }
+  });
+});
