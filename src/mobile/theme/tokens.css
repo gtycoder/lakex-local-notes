@@ -56,6 +56,13 @@
   --lake-radius-lg: 14px;
   --lake-radius-xl: 20px;
   --lake-radius-pill: 999px;
+  /* 261116 AI 面 DeepSeek 化（用户点单）：对话消息列 / 气泡 / 输入大卡片几何（移动端自有取值，
+   * 与桌面同名同义；移动端用到气泡宽/圆角、输入卡圆角、头像与助手正文行高）。 */
+  --lake-chat-bubble-max: 78%;
+  --lake-chat-radius-bubble: 22px;
+  --lake-chat-radius-composer: 24px;
+  --lake-chat-avatar: 24px;
+  --lake-line-height-chat: 1.7;
   /* 动效（261029 收敛）：与桌面同名令牌同值 —— 入场统一 250ms、ease-out 一条曲线；
      移动端实际入场用的是 --mobile-duration-panel / --mobile-ease-panel（下面定义），
      这两个族保持同值只为「同名令牌不打架」，新代码别再二选一。 */

@@ -389,69 +389,73 @@ export function AiAssistantDialog({ open, request, scope, onClose }: {
                 if (t.role === "user") return <div key={i} className="ai-dialog__msg ai-dialog__msg--user">{t.text}</div>;
                 return (
                   <div key={i} className="ai-dialog__msg ai-dialog__msg--assistant">
-                    {/* 流式中 = 节流版正文；生成结束换回完整正文（P1：来源 deepseek-ai/chat-demo）。 */}
-                    {t.text && (streaming
-                      ? <AiStreamingMessageBody text={t.text} />
-                      : <AiMessageBody text={t.text} />)}
-                    {streaming && !stopped && (
-                      <div className="ai-dialog__progress" role="status" aria-live="polite" aria-atomic="true">
-                        <LoaderCircle className="spin" size={14} aria-hidden="true" />
-                        <span>{t.text.trim() ? "正在生成…" : "正在等待回复…"}</span>
-                      </div>
-                    )}
-                    {/*
-                      每条回答的动作行（用户 261005 / 261110）：
-                      - 「重新生成」只给**最后一条**（对话模型只能重跑最后一轮；图标与 AI 写作操作条同款）；
-                      - 「复制文字 / 复制为 Lake」每条都有。说明一律走即时 hover 气泡（无 title 延时）。
-                    */}
-                    {!streaming && (t.text || isLast) && (
-                      <div className="ai-dialog__copy-actions">
-                        {isLast && (
-                          <button
-                            type="button"
-                            className="ln-iconbtn ln-iconbtn--compact"
-                            aria-label="重新生成"
-                            disabled={busy}
-                            onMouseEnter={(e) => copyTip.show("重新生成", e.currentTarget)}
-                            onMouseLeave={copyTip.hide}
-                            onFocus={(e) => copyTip.show("重新生成", e.currentTarget)}
-                            onBlur={copyTip.hide}
-                            onClick={() => void regenerate()}
-                          >
-                            <RotateCcw size={12} />
-                          </button>
-                        )}
-                        {t.text && (
-                          <>
+                    {/* 261116：助手消息左侧 24px 圆形图标 + 无气泡正文（DeepSeek 网页版观感）。 */}
+                    <span className="ai-dialog__avatar" aria-hidden="true"><AiSparkIcon size={14} /></span>
+                    <div className="ai-dialog__msg-main">
+                      {/* 流式中 = 节流版正文；生成结束换回完整正文（P1：来源 deepseek-ai/chat-demo）。 */}
+                      {t.text && (streaming
+                        ? <AiStreamingMessageBody text={t.text} />
+                        : <AiMessageBody text={t.text} />)}
+                      {streaming && !stopped && (
+                        <div className="ai-dialog__progress" role="status" aria-live="polite" aria-atomic="true">
+                          <LoaderCircle className="spin" size={14} aria-hidden="true" />
+                          <span>{t.text.trim() ? "正在生成…" : "正在等待回复…"}</span>
+                        </div>
+                      )}
+                      {/*
+                        每条回答的动作行（用户 261005 / 261110）：
+                        - 「重新生成」只给**最后一条**（对话模型只能重跑最后一轮；图标与 AI 写作操作条同款）；
+                        - 「复制文字 / 复制为 Lake」每条都有。说明一律走即时 hover 气泡（无 title 延时）。
+                      */}
+                      {!streaming && (t.text || isLast) && (
+                        <div className="ai-dialog__copy-actions">
+                          {isLast && (
                             <button
                               type="button"
-                              className={"ln-iconbtn ln-iconbtn--compact" + (copied?.index === i && copied.mode === "plain" ? " is-selected" : "")}
-                              aria-label="复制文字"
-                              onMouseEnter={(e) => copyTip.show("复制文字", e.currentTarget)}
+                              className="ln-iconbtn ln-iconbtn--compact"
+                              aria-label="重新生成"
+                              disabled={busy}
+                              onMouseEnter={(e) => copyTip.show("重新生成", e.currentTarget)}
                               onMouseLeave={copyTip.hide}
-                              onFocus={(e) => copyTip.show("复制文字", e.currentTarget)}
+                              onFocus={(e) => copyTip.show("重新生成", e.currentTarget)}
                               onBlur={copyTip.hide}
-                              onClick={() => copyMessage(t.text, i)}
+                              onClick={() => void regenerate()}
                             >
-                              {copied?.index === i && copied.mode === "plain" ? <Check size={12} /> : <Copy size={12} />}
+                              <RotateCcw size={12} />
                             </button>
-                            <button
-                              type="button"
-                              className={"ln-iconbtn ln-iconbtn--compact" + (copied?.index === i && copied.mode === "lake" ? " is-selected" : "")}
-                              aria-label="复制为 Lake"
-                              disabled={!editorInstanceAt(container ?? activeEditorMount())?.kernel}
-                              onMouseEnter={(e) => copyTip.show("复制为 Lake", e.currentTarget)}
-                              onMouseLeave={copyTip.hide}
-                              onFocus={(e) => copyTip.show("复制为 Lake", e.currentTarget)}
-                              onBlur={copyTip.hide}
-                              onClick={() => void copyAsLake(t.text, i)}
-                            >
-                              {copied?.index === i && copied.mode === "lake" ? <Check size={12} /> : <span className="ai-dialog__lake-badge" aria-hidden="true">lake</span>}
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    )}
+                          )}
+                          {t.text && (
+                            <>
+                              <button
+                                type="button"
+                                className={"ln-iconbtn ln-iconbtn--compact" + (copied?.index === i && copied.mode === "plain" ? " is-selected" : "")}
+                                aria-label="复制文字"
+                                onMouseEnter={(e) => copyTip.show("复制文字", e.currentTarget)}
+                                onMouseLeave={copyTip.hide}
+                                onFocus={(e) => copyTip.show("复制文字", e.currentTarget)}
+                                onBlur={copyTip.hide}
+                                onClick={() => copyMessage(t.text, i)}
+                              >
+                                {copied?.index === i && copied.mode === "plain" ? <Check size={12} /> : <Copy size={12} />}
+                              </button>
+                              <button
+                                type="button"
+                                className={"ln-iconbtn ln-iconbtn--compact" + (copied?.index === i && copied.mode === "lake" ? " is-selected" : "")}
+                                aria-label="复制为 Lake"
+                                disabled={!editorInstanceAt(container ?? activeEditorMount())?.kernel}
+                                onMouseEnter={(e) => copyTip.show("复制为 Lake", e.currentTarget)}
+                                onMouseLeave={copyTip.hide}
+                                onFocus={(e) => copyTip.show("复制为 Lake", e.currentTarget)}
+                                onBlur={copyTip.hide}
+                                onClick={() => void copyAsLake(t.text, i)}
+                              >
+                                {copied?.index === i && copied.mode === "lake" ? <Check size={12} /> : <span className="ai-dialog__lake-badge" aria-hidden="true">lake</span>}
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 );
               })}
@@ -474,44 +478,49 @@ export function AiAssistantDialog({ open, request, scope, onClose }: {
           </span>
         </div>
       )}
-      {/* 261021 P1：附加当前文档全文（默认关）。**只给无选区入口**（顶栏）：有选区/图片/块上下文时
-          这一行不出现（用户 261022 点单）；开聊后锁定。 */}
-      {noteId && allowDocument && !selectionContext && (
-        <div className="ai-dialog__doc">
-          <button type="button" role="switch" aria-checked={includeDocument} aria-label="附加当前文档全文" className="ln-switch" disabled={docBusy || docLocked} onClick={() => void toggleDocument()}>
-            <span className="ln-switch__knob" />
-          </button>
-          <span className="ai-dialog__doc-label">附加当前文档全文</span>
-          <span className="ai-dialog__doc-hint">{docHint}</span>
-        </div>
-      )}
-      {/* 输入条复用 kit 的 .ln-input：多行文本只改高度/对齐，边框、聚焦环、占位色都走原语。 */}
-      <div className="ln-input ai-dialog__composer">
-        <span className="ln-input__icon"><AiSparkIcon size={18} /></span>
+      {/* 261116：输入区改成 DeepSeek 式大卡片 —— 内部 textarea 无边框无底色；
+          底部一行：左 = 清除/作用域控件，右 = 发送/停止（语义不变）。 */}
+      <div className="ai-dialog__composer">
+        <span className="ai-dialog__composer-icon"><AiSparkIcon size={18} /></span>
         {turns.length === 0 ? (
           <textarea ref={fieldRef} className="ln-input__field ai-dialog__field" rows={1} placeholder="向智能助手提问…" value={instruction} onChange={(e) => { setInstruction(e.target.value); setPresetId(AI_PROMPT_CUSTOM_ID); }} onKeyDown={onFieldKeyDown} />
         ) : (
           <textarea ref={fieldRef} className="ln-input__field ai-dialog__field" rows={1} placeholder="继续追问…" value={followUp} onChange={(e) => setFollowUp(e.target.value)} onKeyDown={onFieldKeyDown} />
         )}
-        {activeValue && (
-          <button type="button" className="ln-iconbtn ln-iconbtn--compact ln-input__clear ai-dialog__clear" aria-label="清除内容" onClick={() => {
-            if (turns.length === 0) setInstruction(""); else setFollowUp("");
-            fieldRef.current?.focus();
-          }}><X size={12} /></button>
-        )}
+        <div className="ai-dialog__composer-bar">
+          <div className="ai-dialog__composer-tools">
+            {/* 261021 P1：附加当前文档全文（默认关）。**只给无选区入口**（顶栏）：有选区/图片/块上下文时
+                这一行不出现（用户 261022 点单）；开聊后锁定。261116：收进输入大卡片左下角（作用域控件位）。 */}
+            {noteId && allowDocument && !selectionContext && (
+              <div className="ai-dialog__doc">
+                <button type="button" role="switch" aria-checked={includeDocument} aria-label="附加当前文档全文" className="ln-switch" disabled={docBusy || docLocked} onClick={() => void toggleDocument()}>
+                  <span className="ln-switch__knob" />
+                </button>
+                <span className="ai-dialog__doc-label">附加当前文档全文</span>
+                <span className="ai-dialog__doc-hint">{docHint}</span>
+              </div>
+            )}
+            {activeValue && (
+              <button type="button" className="ln-iconbtn ln-iconbtn--compact ai-dialog__clear" aria-label="清除内容" onClick={() => {
+                if (turns.length === 0) setInstruction(""); else setFollowUp("");
+                fieldRef.current?.focus();
+              }}><X size={12} /></button>
+            )}
+          </div>
+          {/* 生成中 = 「生成/发送」**原位**变「停止」（用户 261008）：中断入口就落在发送键那一格，
+              不再是一个旁边的小按钮。AI 助手三个入口（选区浮栏 / 块句柄菜单 / 顶栏）共用本面板 ⇒ 一处即全覆盖。 */}
+          {busy ? (
+            <button type="button" className="ln-btn ln-btn--secondary ai-dialog__btn ai-dialog__send" onClick={stop}>停止</button>
+          ) : turns.length === 0 ? (
+            <button type="button" className="ln-btn ln-btn--primary ai-dialog__btn ai-dialog__send" disabled={!canSendFirst} onClick={() => void run(true)}>生成</button>
+          ) : (
+            <button type="button" className="ln-btn ln-btn--primary ai-dialog__btn ai-dialog__send" disabled={!followUp.trim()} onClick={() => void run(false)}>发送</button>
+          )}
+        </div>
       </div>
 
       <div className="ln-dialog__actions ai-dialog__actions">
-        {/* 生成中 = 「生成/发送」**原位**变「停止」（用户 261008）：中断入口就落在发送键那一格，
-            不再是一个旁边的小按钮。AI 助手三个入口（选区浮栏 / 块句柄菜单 / 顶栏）共用本面板 ⇒ 一处即全覆盖。 */}
-        {busy ? (
-          <button type="button" className="ln-btn ln-btn--secondary ai-dialog__btn" onClick={stop}>停止</button>
-        ) : turns.length === 0 ? (
-          <button type="button" className="ln-btn ln-btn--primary ai-dialog__btn" disabled={!canSendFirst} onClick={() => void run(true)}>生成</button>
-        ) : (
-          <button type="button" className="ln-btn ln-btn--primary ai-dialog__btn" disabled={!followUp.trim()} onClick={() => void run(false)}>发送</button>
-        )}
-        {/* 复制 / 插入 / 替换都依赖生成结果：**没有结果就不出这些选项**，只留「生成 + 关闭」。 */}
+        {/* 复制 / 插入 / 替换都依赖生成结果：**没有结果就不出这些选项**，只留「关闭」。 */}
         {/* 全文模式的处理对象是整篇：结果不往选区写（避免"整篇改写覆盖一段"，用户 261021 P1）。 */}
         {lastOutput && !conversationDocMode && request.outputs.map((mode) => (
           <button key={mode} type="button" className="ln-btn ln-btn--ghost ai-dialog__btn"

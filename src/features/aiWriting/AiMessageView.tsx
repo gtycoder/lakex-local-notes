@@ -90,7 +90,7 @@ export function AiMessageView(props: AiMessageViewProps) {
 
   return (
     <div className="aiw-msg aiw-msg--assistant">
-      <span className="aiw-avatar" aria-hidden="true"><Sparkles size={16} /></span>
+      <span className="aiw-avatar" aria-hidden="true"><Sparkles size={14} /></span>
       <div className="aiw-msg__main">
         {/* 思考块默认折叠（261110 用户定稿）：只占一行，点开才渲染思考正文。 */}
         <AiThinkingBlock reasoning={reasoning} label={thinkingLabel} live={thinking} />

@@ -258,18 +258,21 @@ export function MobileAiPage({ open, onClose, onChanged, embedded = false }: Mob
                 )}
               </div>
             ) : (
-              <div key={message.id} className="ai-msg">
-                {message.error ? <div className="ai-error">{message.error.message}</div> : <AiMarkdown text={message.text} />}
-                {message.streaming && <span className="ai-typing" aria-label="生成中"><i /><i /><i /></span>}
-                {message.stopped && <div className="ai-stopped">已停止</div>}
-                {!message.streaming && (message.text || message.error) && (
-                  <div className="ai-actions">
-                    {message.text && <button type="button" className="mb-btn mb-btn--secondary mb-btn--sm" onClick={() => void copyAnswer(message.text)}>复制</button>}
-                    {message.text && <button type="button" className="mb-btn mb-btn--secondary mb-btn--sm" onClick={() => void saveAsDoc(message.text, questionBefore(index))}>存为新文档</button>}
-                    {message.text && <button type="button" className="mb-btn mb-btn--secondary mb-btn--sm" onClick={() => void saveAsQuickNote(message.text)}>存为小记</button>}
-                    {(message.error || message.stopped) && <button type="button" className="mb-btn mb-btn--secondary mb-btn--sm" onClick={() => void retry(questionBefore(index))}>重试</button>}
-                  </div>
-                )}
+              <div key={message.id} className="ai-msg ai-msg--assistant">
+                <span className="ai-avatar" aria-hidden="true"><Sparkles size={14} /></span>
+                <div className="ai-msg__main">
+                  {message.error ? <div className="ai-error">{message.error.message}</div> : <AiMarkdown text={message.text} />}
+                  {message.streaming && <span className="ai-typing" aria-label="生成中"><i /><i /><i /></span>}
+                  {message.stopped && <div className="ai-stopped">已停止</div>}
+                  {!message.streaming && (message.text || message.error) && (
+                    <div className="ai-actions">
+                      {message.text && <button type="button" className="mb-btn mb-btn--ghost mb-btn--sm" onClick={() => void copyAnswer(message.text)}>复制</button>}
+                      {message.text && <button type="button" className="mb-btn mb-btn--ghost mb-btn--sm" onClick={() => void saveAsDoc(message.text, questionBefore(index))}>存为新文档</button>}
+                      {message.text && <button type="button" className="mb-btn mb-btn--ghost mb-btn--sm" onClick={() => void saveAsQuickNote(message.text)}>存为小记</button>}
+                      {(message.error || message.stopped) && <button type="button" className="mb-btn mb-btn--ghost mb-btn--sm" onClick={() => void retry(questionBefore(index))}>重试</button>}
+                    </div>
+                  )}
+                </div>
               </div>
             ))}
           </>
@@ -305,9 +308,10 @@ export function MobileAiPage({ open, onClose, onChanged, embedded = false }: Mob
         })()}
       </button>
 
+      {/* 261116：输入区改成 DeepSeek 式大卡片 —— 内部输入框无边框无底色；
+          底部一行：左 = 附件，右 = 发送/停止（语义不变）。 */}
       <div className="ai-composer">
-        <button type="button" className="ai-round" onClick={() => setActionsOpen(true)} aria-label="附件"><Plus size={20} /></button>
-        <span className="mb-input ai-composer__input">
+        <span className="ai-composer__input">
           <input
             ref={inputRef}
             aria-label="向 AI 提问"
@@ -318,15 +322,18 @@ export function MobileAiPage({ open, onClose, onChanged, embedded = false }: Mob
             onKeyDown={(event) => { if (event.key === "Enter" && !isImeConfirming(event) && !event.shiftKey) { event.preventDefault(); void sendDraft(); } }}
           />
         </span>
-        <button
-          type="button"
-          className={"ai-round ai-round--primary" + (chat.busy ? " is-stop" : "")}
-          aria-label={chat.busy ? "停止" : "发送"}
-          disabled={!chat.busy && !draft.trim()}
-          onClick={() => { if (chat.busy) void stop(); else void sendDraft(); }}
-        >
-          {chat.busy ? <Square size={16} /> : <ArrowUp size={18} />}
-        </button>
+        <div className="ai-composer__bar">
+          <button type="button" className="ai-round" onClick={() => setActionsOpen(true)} aria-label="附件"><Plus size={20} /></button>
+          <button
+            type="button"
+            className={"ai-round ai-round--primary" + (chat.busy ? " is-stop" : "")}
+            aria-label={chat.busy ? "停止" : "发送"}
+            disabled={!chat.busy && !draft.trim()}
+            onClick={() => { if (chat.busy) void stop(); else void sendDraft(); }}
+          >
+            {chat.busy ? <Square size={16} /> : <ArrowUp size={18} />}
+          </button>
+        </div>
       </div>
 
       <AiHistoryPage

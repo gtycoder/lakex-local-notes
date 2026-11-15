@@ -1,3 +1,4 @@
+/* 261116 AI 面 DeepSeek 化（用户点单）：只改 AI 对话面，外壳不动；代码块圆角/内距/底色同步。 */
 /* Markdown 轻量子集渲染的**共用排版**（261005 从 bitableMarkdown.css 提出，渲染件自带）。
    作用域 `.md-preview`（中立名，bitable 与 AI 面板共用）；字号/间距/圆角/颜色一律走 --lake-* 令牌。 */
 /* 预览排版（渲染子集；无现成原语，故按令牌自建这一套） */
@@ -60,16 +61,16 @@
 .md-preview code {
   padding: 0 var(--lake-space-xs);
   border-radius: var(--lake-radius-xs);
-  background: var(--lake-bg-subtle);
+  background: var(--lake-bg-sunken);
   font-family: var(--lake-font-family-mono);
   font-size: var(--lake-font-size-tiny);
 }
 .md-preview pre {
   margin: 0 0 var(--lake-space-md);
-  padding: var(--lake-space-md) var(--lake-space-lg);
+  padding: var(--lake-space-lg);
   border: 0.5px solid var(--lake-border-2);
-  border-radius: var(--lake-radius-sm);
-  background: var(--lake-bg-subtle);
+  border-radius: var(--lake-radius-card);
+  background: var(--lake-bg-sunken);
   overflow-x: auto;
 }
 .md-preview pre code {

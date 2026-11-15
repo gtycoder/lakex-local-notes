@@ -1,4 +1,5 @@
-/* ── 移动端 AI 页（261023 P1）────────────────────────────────────────────
+/* ── 261116 AI 面 DeepSeek 化（用户点单）：只改 AI 对话面，外壳不动。 ──
+ * 移动端 AI 页（261023 P1）────────────────────────────────────────────
  * 全屏功能页（不是浮层）：z 用 tokens.css 的 --mobile-z-page。
  * 结构/控件复用 kit 原语（.mb-input / .mb-btn / .mb-row / .mb-switch / .mb-scrim / .mb-sheet /
  * .mb-actionsheet），本文件只补 AI 页自己的排版与 Markdown 观感；
@@ -35,7 +36,7 @@
 }
 .ai-banner__hint { color: var(--lake-accent-text); margin-left: 4px; }
 
-.ai-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 12px 16px 8px; display: flex; flex-direction: column; }
+.ai-body { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow-y: auto; padding: var(--lake-space-lg) var(--mb-page-pad) var(--lake-space-md); }
 .ai-empty { margin: auto; text-align: center; padding-bottom: 40px; }
 .ai-empty__logo {
   display: inline-flex; width: 44px; height: 44px; align-items: center; justify-content: center;
@@ -48,14 +49,18 @@
 .ai-empty__note { margin: 18px 0 0; color: var(--lake-text-4); font-size: var(--lake-font-size-micro); }
 
 .ai-divider { margin: 2px 0 14px; text-align: center; color: var(--lake-text-4); font-size: var(--lake-font-size-nano); }
-.ai-msg { margin-bottom: 14px; }
+.ai-msg { margin-bottom: var(--lake-space-xxl); }
 .ai-msg--user { display: flex; flex-direction: column; align-items: flex-end; }
+/* 261116：助手消息 = 24px 圆形图标 + 无气泡整段正文（DeepSeek 网页版观感）。 */
+.ai-msg--assistant { display: flex; align-items: flex-start; gap: var(--lake-space-sm); }
+.ai-avatar { flex: none; display: grid; place-items: center; width: var(--lake-chat-avatar); height: var(--lake-chat-avatar); margin-top: var(--lake-space-xxs); border-radius: 50%; background: var(--lake-accent-tint); color: var(--lake-accent-text); }
+.ai-msg__main { display: flex; flex: 1 1 auto; flex-direction: column; min-width: 0; }
 .ai-msg__images { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; max-width: 88%; margin-top: 6px; }
 .ai-msg__images img { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: var(--lake-radius-sm); border: .5px solid var(--lake-border-1); }
 .ai-bubble {
-  max-width: 88%; padding: 8px 12px; border-radius: var(--lake-radius-card);
-  background: var(--lake-accent-tint); color: var(--lake-text-1);
-  font-size: var(--lake-font-size-body); line-height: 1.6; white-space: pre-wrap; word-break: break-word;
+  max-width: var(--lake-chat-bubble-max); padding: calc(var(--lake-space-sm) + var(--lake-space-xs)) var(--lake-space-xl); border-radius: var(--lake-chat-radius-bubble);
+  background: var(--lake-bg-block); color: var(--lake-text-1);
+  font-size: var(--lake-font-size-body); line-height: var(--lake-line-height-chat); white-space: pre-wrap; word-break: break-word;
 }
 .ai-error { color: var(--lake-status-error); font-size: var(--lake-font-size-small); line-height: 1.6; }
 .ai-stopped { margin-top: 6px; color: var(--lake-text-4); font-size: var(--lake-font-size-micro); }
@@ -72,8 +77,18 @@
 }
 .ai-hint:active { color: var(--lake-text-2); }
 
-.ai-composer { flex: 0 0 auto; display: flex; align-items: flex-end; gap: 8px; padding: 0 var(--mb-page-pad) calc(12px + var(--mobile-bottom-safe-area)); }
-.ai-composer__input { flex: 1 1 auto; min-width: 0; min-height: 44px; border-radius: var(--lake-radius-pill); }
+.ai-composer {
+  flex: 0 0 auto; display: flex; flex-direction: column; gap: var(--lake-space-sm);
+  margin: 0 var(--mb-page-pad) calc(var(--lake-space-lg) + var(--mobile-bottom-safe-area));
+  padding: calc(var(--lake-space-sm) + var(--lake-space-xs)) var(--lake-space-lg);
+  border: .5px solid var(--lake-ctl-border); border-radius: var(--lake-chat-radius-composer);
+  background: var(--lake-bg-panel); box-shadow: var(--lake-shadow-card);
+}
+.ai-composer:focus-within { border-color: var(--lake-accent); box-shadow: 0 0 0 var(--lake-focus-ring-width) var(--lake-focus-halo), var(--lake-shadow-card); }
+.ai-composer__input { flex: none; display: flex; align-items: center; min-height: var(--mb-ctl-h-sm); padding: 0; border: 0; border-radius: 0; background: transparent; }
+.ai-composer__input > input { flex: 1 1 auto; min-width: 0; padding: 0; border: 0; outline: 0; background: transparent; color: var(--lake-text-1); font: inherit; }
+.ai-composer__input > input::placeholder { color: var(--lake-text-4); }
+.ai-composer__bar { display: flex; align-items: center; justify-content: space-between; gap: var(--lake-space-sm); }
 .ai-round {
   flex: 0 0 auto; width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center;
   border: .5px solid var(--lake-border-strong); border-radius: 50%;
@@ -109,16 +124,16 @@
 .ai-settings__actions { display: flex; flex-wrap: wrap; gap: 8px; }
 
 /* Markdown（AI 回复） */
-.ai-md__p { margin: 0 0 10px; font-size: var(--lake-font-size-body); line-height: 1.7; }
+.ai-md__p { margin: 0 0 10px; font-size: var(--lake-font-size-body); line-height: var(--lake-line-height-chat); }
 .ai-md__h { margin: 14px 0 8px; font-weight: 600; line-height: 1.35; }
 .ai-md__h1 { font-size: var(--lake-font-size-h1); }
 .ai-md__h2 { font-size: var(--lake-font-size-display); }
 .ai-md__h3 { font-size: var(--lake-font-size-title); }
-.ai-md__list { margin: 0 0 10px; padding-left: 20px; line-height: 1.7; }
+.ai-md__list { margin: 0 0 10px; padding-left: 20px; line-height: var(--lake-line-height-chat); }
 .ai-md__quote { margin: 0 0 10px; padding-left: 10px; border-left: 2px solid var(--lake-border-1); color: var(--lake-text-2); }
 .ai-md__pre {
-  margin: 0 0 10px; padding: 10px 12px; border-radius: var(--lake-radius-sm);
-  background: var(--lake-bg-block); overflow-x: auto;
+  margin: 0 0 10px; padding: var(--lake-space-lg); border-radius: var(--lake-radius-card);
+  background: var(--lake-bg-sunken); overflow-x: auto;
   font-family: var(--lake-font-family-mono);
   font-size: var(--lake-font-size-micro); line-height: 1.5;
 }

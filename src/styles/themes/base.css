@@ -52,6 +52,14 @@
   --lake-radius-lg: 14px;
   --lake-radius-xl: 20px;
   --lake-radius-pill: 999px;
+  /* 261116 AI 面 DeepSeek 化（用户点单）：对话消息列 / 气泡 / 输入大卡片几何。
+   * 只在 AI 对话面使用；外壳、设置页与正文排版不受影响。 */
+  --lake-chat-thread-max: 760px;      /* 桌面消息列最宽（居中） */
+  --lake-chat-bubble-max: 78%;        /* 用户气泡最大宽（相对消息列） */
+  --lake-chat-radius-bubble: 22px;    /* 用户气泡圆角 */
+  --lake-chat-radius-composer: 24px;  /* 输入大卡片圆角 */
+  --lake-chat-avatar: 24px;           /* 助手首行圆形图标 */
+  --lake-line-height-chat: 1.7;       /* 助手正文行高（DeepSeek 网页版观感） */
   /* 动效（261029 动效收敛）：状态切换一律**瞬时**，不再做 hover/颜色/背景/边框过渡；
      只保留「浮层入场」与结构展开，全部统一 **ease-out 250ms**。
      instant / press 两档只给按压物理反馈（必须跟手），不参与入场。 */

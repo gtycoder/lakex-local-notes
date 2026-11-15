@@ -1,4 +1,5 @@
 /**
+ * 261116 AI 面 DeepSeek 化（用户点单）：只改 AI 对话面，外壳不动。
  * AI 写作空间（桌面，v1）。作用域 = .aiw（整页两栏；不进 .app-shell 其它空间的样式）。
  *
  * 261110 风格统一：按钮 / 图标钮 / 行 / 菜单项 / 表单行 / 标签 一律复用 kit 的 ln-* 原语，
@@ -64,13 +65,14 @@
 .aiw-suggest__chip { height: calc(var(--lake-ctl-h) + 4px); border-radius: var(--lake-radius-pill); padding: 0 var(--lake-space-lg); }
 
 /* 会话流 */
-.aiw-thread { display: flex; flex-direction: column; gap: var(--lake-space-xxl); width: min(900px, calc(100% - 64px)); margin: 0 auto; padding: var(--lake-space-xxl) 0 var(--lake-space-huge); }
+.aiw-thread { display: flex; flex-direction: column; gap: var(--lake-space-xxl); width: min(var(--lake-chat-thread-max), calc(100% - (var(--lake-space-huge) * 2))); margin: 0 auto; padding: var(--lake-space-xxl) 0 var(--lake-space-huge); }
 .aiw-msg { display: flex; }
 .aiw-msg--user { justify-content: flex-end; }
-.aiw-bubble { max-width: 68%; padding: var(--lake-space-sm) var(--lake-space-lg); border-radius: var(--lake-radius-card); background: var(--lake-bg-block); color: var(--lake-text-1); font-size: var(--lake-font-size-body); line-height: var(--lake-line-height-normal); white-space: pre-wrap; overflow-wrap: anywhere; }
-.aiw-msg--assistant { gap: var(--lake-space-lg); align-items: flex-start; }
-.aiw-avatar { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; margin-top: var(--lake-space-xs); border-radius: 50%; background: var(--lake-accent-tint); color: var(--lake-accent-text); }
+.aiw-bubble { max-width: var(--lake-chat-bubble-max); padding: calc(var(--lake-space-sm) + var(--lake-space-xs)) var(--lake-space-xl); border-radius: var(--lake-chat-radius-bubble); background: var(--lake-bg-block); color: var(--lake-text-1); font-size: var(--lake-font-size-body); line-height: var(--lake-line-height-chat); white-space: pre-wrap; overflow-wrap: anywhere; }
+.aiw-msg--assistant { gap: var(--lake-space-md); align-items: flex-start; }
+.aiw-avatar { flex: none; display: grid; place-items: center; width: var(--lake-chat-avatar); height: var(--lake-chat-avatar); margin-top: var(--lake-space-xxs); border-radius: 50%; background: var(--lake-accent-tint); color: var(--lake-accent-text); }
 .aiw-msg__main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: var(--lake-space-md); }
+.aiw-answer .md-preview { line-height: var(--lake-line-height-chat); }
 .aiw-think { padding: var(--lake-space-sm) var(--lake-space-md); border: 0.5px solid var(--lake-border-2); border-radius: var(--lake-radius-card); background: var(--lake-bg-block); }
 .aiw-think__label { display: flex; align-items: center; gap: var(--lake-space-xs); margin: 0; color: var(--lake-text-3); font-size: var(--lake-font-size-body); }
 /* 折叠行 = 原语 ghost+compact（261110）：只保留紧凑内距与箭头旋转，其余视觉走 ln-btn。 */
@@ -86,7 +88,9 @@
 .aiw-msg__note { margin: 0; color: var(--lake-text-4); font-size: var(--lake-font-size-body); }
 .aiw-msg__error { margin: 0; color: var(--lake-status-error, var(--lake-text-1)); font-size: var(--lake-font-size-body); }
 /* 操作条：按钮本身已是 ln-btn / ln-iconbtn，这里只剩排布与分隔线。 */
-.aiw-actions { display: flex; align-items: center; gap: var(--lake-space-sm); }
+.aiw-actions { display: flex; align-items: center; gap: var(--lake-space-sm); opacity: 0; }
+.aiw-msg--assistant:hover .aiw-actions, .aiw-msg--assistant:focus-within .aiw-actions { opacity: 1; }
+@media (hover: none) { .aiw-msg--assistant .aiw-actions { opacity: 1; } }
 .aiw-actions__sep { width: 0.5px; height: 16px; margin: 0 var(--lake-space-xxs); background: var(--lake-border-2); }
 .aiw-actions__btn { gap: var(--lake-space-xs); }
 /* 「复制为 Lake」的图标 = lake 四个字母（与文档 AI 弹窗 .ai-dialog__lake-badge 同一口径；
@@ -95,20 +99,20 @@
 
 /* 底部输入区（会话态固定底） */
 .aiw-dock { flex: none; padding: 0 var(--lake-space-xxl) var(--lake-space-lg); }
-.aiw-dock .aiw-composer, .aiw-empty .aiw-composer { width: min(900px, 100%); margin: 0 auto; }
+.aiw-dock .aiw-composer, .aiw-empty .aiw-composer { width: min(var(--lake-chat-thread-max), 100%); margin: 0 auto; }
 
 /* ---------------- 输入卡 ---------------- */
-.aiw-composer { position: relative; border: 0.5px solid var(--lake-ctl-border); border-radius: var(--lake-radius-card); background: var(--lake-bg-panel); }
-.aiw-composer:focus-within { border-color: var(--lake-accent); box-shadow: 0 0 0 2px var(--lake-focus-halo, transparent); }
-.aiw-composer__chips { display: flex; flex-wrap: wrap; gap: var(--lake-space-xs); padding: var(--lake-space-sm) var(--lake-space-md) 0; }
+.aiw-composer { position: relative; padding: calc(var(--lake-space-sm) + var(--lake-space-xs)) var(--lake-space-lg); border: 0.5px solid var(--lake-ctl-border); border-radius: var(--lake-chat-radius-composer); background: var(--lake-bg-panel); box-shadow: var(--lake-shadow-card); }
+.aiw-composer:focus-within { border-color: var(--lake-accent); box-shadow: 0 0 0 var(--lake-focus-ring-width) var(--lake-focus-halo), var(--lake-shadow-card); }
+.aiw-composer__chips { display: flex; flex-wrap: wrap; gap: var(--lake-space-xs); padding: 0 0 var(--lake-space-sm); }
 /* chip = .ln-tag（标签原语），关闭钮 = .ln-iconbtn--compact；这里只留「不吃满整行」与 16px 命中盒。 */
 .aiw-chip { max-width: 340px; }
 .aiw-chip__close { flex: none; width: 16px; height: 16px; }
-.aiw-composer__input { display: block; width: 100%; min-height: 52px; padding: var(--lake-space-md) var(--lake-space-lg) 0; border: 0; background: transparent; color: var(--lake-text-1); font-family: var(--lake-font-family); font-size: var(--lake-font-size-body); line-height: var(--lake-line-height-normal); resize: none; outline: none; }
+.aiw-composer__input { display: block; width: 100%; min-height: calc(var(--lake-space-giant) + var(--lake-space-lg)); padding: var(--lake-space-sm) 0 0; border: 0; background: transparent; color: var(--lake-text-1); font-family: var(--lake-font-family); font-size: var(--lake-font-size-body); line-height: var(--lake-line-height-chat); resize: none; outline: none; }
 .aiw-composer__input::placeholder { color: var(--lake-text-4); }
 /* 容器已有 focus-within 的主色边 + 柔光环；输入框自身不再叠一圈 outline。 */
 .aiw-composer__input:focus-visible { outline: none; }
-.aiw-composer__bar { display: flex; align-items: center; justify-content: space-between; gap: var(--lake-space-sm); padding: var(--lake-space-sm) var(--lake-space-md); }
+.aiw-composer__bar { display: flex; align-items: center; justify-content: space-between; gap: var(--lake-space-sm); padding: var(--lake-space-sm) 0 0; }
 .aiw-composer__tools { display: flex; align-items: center; gap: var(--lake-space-xs); }
 /* 工具钮 = ln-btn--ghost（激活追加 ln-btn--secondary.is-selected）；这里只留紧凑档高度与内距。 */
 /* 工具钮 = ln-btn--ghost + ln-btn--compact（尺寸/内距/六态全走原语，这里只收紧图标间距）。 */
