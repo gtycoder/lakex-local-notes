@@ -10,6 +10,10 @@ vi.mock("../ui/Overlay", () => ({
   Popover: ({ children }: { children: ReactNode }) => children,
   Dialog: ({ open, children }: { open?: boolean; children: ReactNode }) =>
     open === false ? null : createElement("div", { role: "dialog" }, children),
+  // 261115：目录重命名已迁到原生 <dialog>（Overlay.NativeDialog）——mock 必须同步，
+  // 否则测试会在 import 处报 "No NativeDialog export is defined on the mock"。
+  NativeDialog: ({ open, children }: { open?: boolean; children: ReactNode }) =>
+    open === false ? null : createElement("div", { role: "dialog" }, children),
   Submenu: ({ children }: { children: ReactNode }) => children,
 }));
 import { Sidebar } from "./Sidebar";
