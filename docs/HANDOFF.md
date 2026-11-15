@@ -323,7 +323,7 @@
 - **大库观察项**：桌面目录树 10k 行未虚拟化（约 20.1 万 DOM、renderer heap 313–317MB）本次仍可用，但继续增长需虚拟化/分页；热轮搜索曾出现 1.9s（冷轮 445ms），重跑确认是否抖动。
 - **移动端↔桌面真实 S3 冒烟已完成（261114 手工）**：见 §0 收口验收；`--with-mobile` 仍未实现，后续可把该手工流程固化进 `regression.mjs`（需要 Android 驱动/配置注入）。
 - **移动端「tab 标记 gone + 只读横幅」缺失（261114 审计残余，P2）**：打开中被删后旧内容仍显示，自动保存 1s 后明说「保存被拒绝」，关闭/返回/完成会丢弃标签并 toast；未做只读横幅（不在本次最小修复范围）。
-- **现代 Web 写法审计（261115）**：见 [MODERN-WEB-AUDIT](MODERN-WEB-AUDIT.md)。官方发布版 analyzer 35 条、源码完整 analyzer 108 条（排除构建产物），另手工审计浮层/Tooltip/字体/表单/图片等工具未覆盖项；**尚未开始改造**，建议先做 P0 IME-safe Enter。
+- **现代 Web 写法审计（261115 · v2 全量）**：见 [MODERN-WEB-AUDIT](MODERN-WEB-AUDIT.md)。语料 = GoogleChrome modern-web-guidance **252 篇**（克隆 `5e5cd33`）；判定 **命中 13 / 部分 68 / 干净 1 / 待验证 32 / 不适用 138**；工具 108 条（发布版 35）+ 手工 30 条问题清单（A01–A30）。实测运行时 = Electron 44.9.3 / **Chromium 152.0.7977.167**（`process.versions`）。v2 新发现：`NativeTitleTips` 拦截器三缺口、`content-visibility` 已用于目录树/大纲（10k 树的问题在 DOM 不在 CSS）、`boot.html` **476KB** 内联 APNG、无 `meta color-scheme` 导致首帧闪浅色、`scheduler.yield`/`useDeferredValue` 全缺。**尚未开始改造**；P0 仍是 IME-safe Enter（33 处 + 抽共享判据），P1 起是浮层/文字缩放/`color-scheme`/Tooltip/10k 窗口化。
 
 **上一批次（261113 转小记 + 发版复核批）待办**
 
