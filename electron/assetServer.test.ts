@@ -304,7 +304,9 @@ describe("本机图片附件 /ai-local/<token>", () => {
     const full = await fetch(`${BASE}/ai-local/${token}`);
     expect(full.status).toBe(200);
     expect(full.headers.get("content-type")).toBe("image/png");
-    expect(full.headers.get("cache-control")).toBe("private, max-age=3600");
+    // 261116 review P2：与 note-assets 对齐 —— 粘贴图按 UUID 不可变 ⇒ 长缓存；补 nosniff 防 MIME 嗅探。
+    expect(full.headers.get("cache-control")).toBe("private, max-age=31536000, immutable");
+    expect(full.headers.get("x-content-type-options")).toBe("nosniff");
 
     const thumb = await fetch(`${BASE}/ai-local/${token}?w=128`);
     expect(thumb.status).toBe(200);

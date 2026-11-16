@@ -54,6 +54,7 @@ jobs:
         continue-on-error: true
         run: |
           npx tsc --noEmit 2>&1 | tee build.log
+          npm run typecheck:electron 2>&1 | tee -a build.log
           npx vite build 2>&1 | tee -a build.log
       - name: Report build failure
         if: steps.build.outcome == 'failure'
@@ -205,6 +206,7 @@ jobs:
       - name: Typecheck & build web
         run: |
           npx tsc --noEmit
+          npm run typecheck:electron
           npx vite build
       - name: Package Windows (unsigned)
         env:

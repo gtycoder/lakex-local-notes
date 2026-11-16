@@ -1,4 +1,4 @@
-import { app, dialog } from "electron";
+import { app, BrowserWindow, dialog } from "electron";
 import type { IpcRegistrar } from "./registrar.js";
 import { Store } from "../store.js";
 import { IpcInputError } from "../ipcLimits.js";
@@ -83,16 +83,25 @@ function readDuration(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? Math.max(0, Math.round(value)) : null;
 }
 
+/** 启动后多久做一次粘贴目录过期清理（避开 whenReady 关键路径，见 registerAiWritingIpc 注释）。 */
+export const AI_ATTACHMENTS_CLEANUP_DELAY_MS = 4_500;
+
 export function registerAiWritingIpc(ipc: IpcRegistrar, store: Store): void {
   const repo = () => store.getAiWritingRepository();
-  // 粘贴图片目录（单一来源 = <userData>/ai-attachments，设备本地、不进 S3）；启动时做一次过期清理。
+  // 粘贴图片目录（单一来源 = <userData>/ai-attachments，设备本地、不进 S3）。
   const pastedDir = pastedAttachmentDir(app.getPath("userData"));
   configurePastedImageDir(pastedDir);
-  try {
-    cleanupPastedImages(repo().listPastedAttachmentTokens());
-  } catch {
-    // 清理失败不阻断启动（只影响磁盘占用）。
-  }
+  // P1-1：过期清理**不在 whenReady 关键路径同步跑** —— 它要全表扫 ai_writing_messages 的 attach_refs
+  // 再 readdir/stat 目录，成本随 AI 历史线性增长，压在启动上会拖 boot.ready（本仓有 [perf] 指标）。
+  // 挪到就绪后 4.5s 的定时器（unref：不阻止退出）；失败只影响磁盘占用，不阻断任何流程。
+  const cleanupTimer = setTimeout(() => {
+    try {
+      cleanupPastedImages(repo().listPastedAttachmentTokens());
+    } catch {
+      // 清理失败不阻断启动（只影响磁盘占用）。
+    }
+  }, AI_ATTACHMENTS_CLEANUP_DELAY_MS);
+  cleanupTimer.unref?.();
 
   ipc.handle("ai_writing_list", () => repo().listConversations());
 
@@ -145,7 +154,10 @@ export function registerAiWritingIpc(ipc: IpcRegistrar, store: Store): void {
    * 渲染层从未接触绝对路径与字节；token 失效（重启/文件移动）由 resolver 明确报错。
    */
   ipc.handle("pick_ai_local_files", async () => {
-    const result = await dialog.showOpenDialog({
+    // 传父窗口（与 registerNotes/registerMarkdownImport 的既有约定一致）：macOS 上才会挂成 sheet，
+    // 否则对话框可能出现在主窗口背后。
+    const parent = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0] ?? null;
+    const result = await dialog.showOpenDialog(parent ?? undefined as unknown as BrowserWindow, {
       title: "选择附件（图片 / 文本 / 代码 / PDF）",
       buttonLabel: "添加附件",
       properties: ["openFile", "multiSelections"],
@@ -173,7 +185,7 @@ export function registerAiWritingIpc(ipc: IpcRegistrar, store: Store): void {
    * 主进程校验图片类型/≤10MB，写到 <userData>/ai-attachments/paste-<uuid>.<ext> 并登记 token，
    * 之后渲染层只持有 AiLocalFileRef（取消/发送/历史都只传引用）。
    */
-  ipc.handle("ai_save_pasted_image", (bytes: unknown, mimeType: unknown, name?: unknown) => {
+  ipc.handle("ai_save_pasted_image", async (bytes: unknown, mimeType: unknown, name?: unknown) => {
     const data = toUint8Array(bytes);
     if (!data || data.length === 0) throw new IpcInputError("粘贴图片数据无效");
     if (data.length > AI_PASTED_IMAGE_MAX_BYTES) {
@@ -181,7 +193,8 @@ export function registerAiWritingIpc(ipc: IpcRegistrar, store: Store): void {
     }
     const mime = readString(mimeType, "图片类型", 100);
     const displayName = name === undefined || name === null ? undefined : readString(name, "文件名", 200);
-    return savePastedImage({ bytes: Buffer.from(data), mimeType: mime, name: displayName });
+    // 写盘是异步的（fs.promises + tmp/rename）：连粘多张时不占主进程事件循环。
+    return await savePastedImage({ bytes: Buffer.from(data), mimeType: mime, name: displayName });
   });
 
   ipc.handle("ai_writing_delete", (id: unknown) => {

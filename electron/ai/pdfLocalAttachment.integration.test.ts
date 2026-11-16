@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { registerPickedLocalFile, readRegisteredLocalFile, resetLocalAttachmentRegistryForTest } from "./localAttachments.js";
+import { registerPickedLocalFile, registeredLocalFileReader, resetLocalAttachmentRegistryForTest } from "./localAttachments.js";
 import { resolveAiMessages } from "./aiContentResolver.js";
 
 /**
@@ -29,7 +29,7 @@ describe("PDF 本机附件真实链路（Phase 2）", () => {
     const out = await resolveAiMessages(
       [{ role: "user", content: [{ type: "local_file", file: picked.ref }] }],
       { readAssetBytes: () => null },
-      { readLocalFile: readRegisteredLocalFile },
+      registeredLocalFileReader,
     );
     const parts = out[0].content as Array<{ type: string; text?: string; image_url?: unknown }>;
     expect(parts).toHaveLength(1);

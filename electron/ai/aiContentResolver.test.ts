@@ -2,10 +2,12 @@ import { describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   extractPdfText: vi.fn(async () => ({ text: "PDF 正文", pages: 1, truncated: false })),
+  AI_PDF_MAX_BYTES: 32 * 1024 * 1024,
 }));
-vi.mock("./pdfText.js", () => ({ extractPdfText: mocks.extractPdfText }));
+vi.mock("./pdfText.js", () => ({ extractPdfText: mocks.extractPdfText, AI_PDF_MAX_BYTES: mocks.AI_PDF_MAX_BYTES }));
 
 const { resolveAiMessages } = await import("./aiContentResolver.js");
+const { AI_MAX_IMAGES } = await import("../../src/core/aiChatMessages.js");
 type Reader = import("./aiContentResolver.js").AiAssetReader;
 
 const PNG_1PX = Buffer.from(
@@ -64,10 +66,20 @@ describe("内容块 → 供应商消息", () => {
 
 
 describe("本机文件附件（261116 第四稿）", () => {
-  const localFiles = (files: Record<string, { bytes: Buffer; mimeType: string; name: string }>) => ({
-    readLocalFile(ref: { token: string }) {
+  /**
+   * P0-1 后的 reader 是**两步**：statLocalFile（判限额）→ readLocalFile（异步读字节）。
+   * 测试里 records.reads 用来断言「超限时**一次都没读盘**」。
+   */
+  interface FakeFile { bytes: Buffer; mimeType: string; name: string; size?: number; pdf?: { text: string; pages: number; truncated: boolean } }
+  const localFiles = (files: Record<string, FakeFile>, records?: { reads: string[] }) => ({
+    statLocalFile(ref: { token: string }) {
       const file = files[ref.token];
-      return file ? { bytes: file.bytes, mimeType: file.mimeType, name: file.name, size: file.bytes.length } : null;
+      return file ? { size: file.size ?? file.bytes.length, mimeType: file.mimeType, name: file.name, ...(file.pdf ? { pdf: file.pdf } : {}) } : null;
+    },
+    async readLocalFile(ref: { token: string }) {
+      records?.reads.push(ref.token);
+      const file = files[ref.token];
+      return file ? file.bytes : null;
     },
   });
   const textRef = (name: string) => ({ kind: "local" as const, token: name, name, size: 10, mimeType: "text/plain" });
@@ -117,11 +129,7 @@ describe("本机文件附件（261116 第四稿）", () => {
       const out = await resolveAiMessages(
         [{ role: "user", content: [{ type: "local_file", file: { kind: "local", token: "cached", name: "cached.pdf", size: 10, mimeType: "application/pdf" } }] }],
         reader({}),
-        {
-          readLocalFile: (ref: { token: string }) => ref.token === "cached"
-            ? { bytes: Buffer.from("%PDF"), size: 10, mimeType: "application/pdf", name: "cached.pdf", pdf: { text: "x".repeat(100), pages: 7, truncated: true } }
-            : null,
-        },
+        localFiles({ cached: { bytes: Buffer.from("%PDF"), mimeType: "application/pdf", name: "cached.pdf", size: 10, pdf: { text: "x".repeat(100), pages: 7, truncated: true } } }),
       );
       return out;
     };
@@ -137,11 +145,10 @@ describe("本机文件附件（261116 第四稿）", () => {
         { type: "local_file", file: { kind: "local", token: "after", name: "after.txt", size: 10, mimeType: "text/plain" } },
       ] }],
       reader({}),
-      {
-        readLocalFile: (ref: { token: string }) => ref.token === "big"
-          ? { bytes: Buffer.from("%PDF"), size: 10, mimeType: "application/pdf", name: "big.pdf", pdf: { text: big, pages: 1, truncated: false } }
-          : { bytes: Buffer.from("tail"), size: 4, mimeType: "text/plain", name: "after.txt" },
-      },
+      localFiles({
+        big: { bytes: Buffer.from("%PDF"), mimeType: "application/pdf", name: "big.pdf", size: 10, pdf: { text: big, pages: 1, truncated: false } },
+        after: { bytes: Buffer.from("tail"), mimeType: "text/plain", name: "after.txt", size: 4 },
+      }),
     )).rejects.toThrow(/附件总长度超过上限/);
   });
 
@@ -152,5 +159,42 @@ describe("本机文件附件（261116 第四稿）", () => {
       reader({}),
       localFiles({ big: { bytes: big, mimeType: "text/plain", name: "big.txt" } }),
     )).rejects.toThrow(/文本附件过大：big\.txt（上限 200KB）/);
+  });
+
+  it("P0-1：超限附件在**读盘前**被拒（图 10MB / 文本 200KB / PDF 32MB 三类都验）", async () => {
+    const records = { reads: [] as string[] };
+    const one = (token: string, name: string, mimeType: string, size: number) => (
+      [{ role: "user" as const, content: [{ type: "local_file" as const, file: { kind: "local" as const, token, name, size, mimeType } }] }]
+    );
+    await expect(resolveAiMessages(one("img", "big.png", "image/png", 10 * 1024 * 1024 + 1), reader({}),
+      localFiles({ img: { bytes: Buffer.from("x"), mimeType: "image/png", name: "big.png", size: 10 * 1024 * 1024 + 1 } }, records)))
+      .rejects.toThrow(/图片过大：big\.png（上限 10MB）/);
+    await expect(resolveAiMessages(one("txt", "big.txt", "text/plain", 200 * 1024 + 1), reader({}),
+      localFiles({ txt: { bytes: Buffer.from("x"), mimeType: "text/plain", name: "big.txt", size: 200 * 1024 + 1 } }, records)))
+      .rejects.toThrow(/文本附件过大：big\.txt（上限 200KB）/);
+    await expect(resolveAiMessages(one("pdf", "a.pdf", "application/pdf", 32 * 1024 * 1024 + 1), reader({}),
+      localFiles({ pdf: { bytes: Buffer.from("%PDF"), mimeType: "application/pdf", name: "a.pdf", size: 32 * 1024 * 1024 + 1 } }, records)))
+      .rejects.toThrow(/PDF 文件过大：a\.pdf（上限 32MB）/);
+    // 关键断言：三类超限都**没有触发 readLocalFile**（P0-1 的核心 —— 先 stat 后读）
+    expect(records.reads, "超限必须在读字节之前拒绝，否则大文件会把主进程读爆").toEqual([]);
+  });
+
+  it("P0-2：HEIC/HEIF 报「请先转换为 JPEG/PNG」，而不是笼统的「无法读取图片」", async () => {
+    await expect(resolveAiMessages(
+      [{ role: "user", content: [{ type: "local_file", file: { kind: "local", token: "h", name: "IMG_0001.HEIC", size: 10, mimeType: "image/heic" } }] }],
+      reader({}),
+      localFiles({ h: { bytes: Buffer.from("x"), mimeType: "image/heic", name: "IMG_0001.HEIC" } }),
+    )).rejects.toThrow(/HEIC\/HEIF 暂不支持（IMG_0001\.HEIC），请先转换为 JPEG 或 PNG/);
+  });
+
+  it("10 张上限用 core 的 AI_MAX_IMAGES（单一来源，不在 resolver 再写一个 10）", async () => {
+    const files: Record<string, { bytes: Buffer; mimeType: string; name: string }> = {};
+    const content = Array.from({ length: 11 }, (_, i) => {
+      const token = "i" + i;
+      files[token] = { bytes: PNG_1PX, mimeType: "image/png", name: "s" + i + ".png" };
+      return { type: "local_file" as const, file: { kind: "local" as const, token, name: "s" + i + ".png", size: PNG_1PX.length, mimeType: "image/png" } };
+    });
+    await expect(resolveAiMessages([{ role: "user", content }], reader({}), localFiles(files)))
+      .rejects.toThrow(new RegExp("一次最多发送 " + AI_MAX_IMAGES + " 个图片附件"));
   });
 });

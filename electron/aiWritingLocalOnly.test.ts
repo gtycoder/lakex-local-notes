@@ -31,6 +31,11 @@ const AI_TABLE_ALLOWED = new Set([
   "electron/aiWritingLocalOnly.test.ts",
   // preload 的通道映射（IPC 桥，不参与同步/上传）。
   "electron/preload.cjs",
+  // handler 级测试：断言对象是 IPC 参数校验，不含任何同步/上传路径（261116 review P1-3）。
+  "electron/ipc/registerAiWriting.attachments.test.ts",
+  "electron/ipc/registerAiWriting.append.test.ts",
+  // schema 迁移测试：断言 ai_writing_messages 旧库缺列 → ALTER 补齐，不参与同步/上传。
+  "electron/schemaInit.test.ts",
 ]);
 
 /** 这些文件/目录一旦出现 AI 本地数据的引用就是「可能上云」的红线面。 */

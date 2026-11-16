@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 
 // external 判据的唯一实现（vite.config.ts 用的也是它）：测试 import 同一份，避免规则两处漂移。
 import { isMainProcessExternal as isExternal } from "./buildTarget.js";
+import { stripComments } from "./testing/sourceText.js";
 
 /**
  * 主进程分层与依赖方向护栏（批次 A-1 ~ A-5，2026-11-16）。
@@ -40,7 +41,7 @@ const ROOT = path.resolve(ELECTRON_DIR, "..");
  *
  * 批次 B（窗口层外迁）落地时才加 `window`；现在提前登记会让「目录还不存在」的规则静默失效。
  */
-const REGISTERED_SUBDIRS = ["ai", "boot", "ipc", "portable", "quickNotes", "s3v3", "update", "webApi"] as const;
+const REGISTERED_SUBDIRS = ["ai", "boot", "ipc", "portable", "quickNotes", "s3v3", "testing", "update", "webApi"] as const;
 type Subdir = (typeof REGISTERED_SUBDIRS)[number];
 type Layer = "entry" | "domain" | Subdir;
 
@@ -73,6 +74,8 @@ const ALLOWED_DEPENDENCIES: Record<Layer, readonly Layer[]> = {
   // 启动装配层：负责把 IPC 注册表与各子系统接起来，所以它能依赖 ipc/ 与其他子系统；
   // 但反过来 ipc/ 不能依赖它（否则「装配」和「注册」互相咬住，启动顺序变成隐式约束）。
   boot: ["domain", "boot", "ipc", "update"],
+  // 测试专用工具层：只被 *.test.ts 引用（不进产物、不在 R5 的可达集合里，登记在 TEST_SUPPORT_FILES）。
+  testing: ["testing"],
   // 小记库：只依赖领域层（它自己的实现全在 quickNotes/ 内部）。
   quickNotes: ["domain", "quickNotes"],
   // S3 桌面适配：只依赖领域层（协议纯逻辑在 src/core/s3v3/）。
@@ -151,46 +154,21 @@ const TEST_SUPPORT_FILES: readonly TestSupportEntry[] = [
     file: "portable/zipTestReader.ts",
     reason: "便携包（.zip.lln）测试用的 zip 读取器，仅测试解包断言使用。",
   },
+  {
+    file: "testing/sourceText.ts",
+    reason: "测试专用源码工具（剥注释后再做文本断言 / 扫 import）；被 architecture、buildContract、aiThinkingIpc 三个门禁共用，不进产物。",
+  },
 ];
 
 // ---------------------------------------------------------------------------
-// import 扫描：字符级剥离注释（保留字符串），再抓静态 import/export-from 与动态 import。
-// 为什么不用逐行正则：本项目大量 import 跨行，且注释里有示例代码（`// import x from "y"`）。
+// import 扫描（注释剥离复用 electron/testing/sourceText.ts，与 buildContract/aiThinkingIpc 同一实现）
+// 覆盖三种形态：静态 import/export-from、动态 import("literal")、**副作用 import "./x.js"**
+// （最后一种原先漏扫：`import "./x.js"` 没有 from，会绕过全部方向规则）。
 // ---------------------------------------------------------------------------
-
-function stripComments(source: string): string {
-  let out = "";
-  let mode: "code" | "line" | "block" | "str" = "code";
-  let quote = "";
-  for (let i = 0; i < source.length; i += 1) {
-    const c = source[i];
-    const next = source[i + 1];
-    if (mode === "code") {
-      if (c === "/" && next === "/") { mode = "line"; out += "  "; i += 1; continue; }
-      if (c === "/" && next === "*") { mode = "block"; out += "  "; i += 1; continue; }
-      if (c === '"' || c === "'" || c === "`") { mode = "str"; quote = c; out += c; continue; }
-      out += c;
-      continue;
-    }
-    if (mode === "line") {
-      if (c === "\n") { mode = "code"; out += c; } else { out += " "; }
-      continue;
-    }
-    if (mode === "block") {
-      if (c === "*" && next === "/") { mode = "code"; out += "  "; i += 1; continue; }
-      out += c === "\n" ? "\n" : " ";
-      continue;
-    }
-    // mode === "str"
-    if (c === "\\") { out += c + (next ?? ""); i += 1; continue; }
-    if (c === quote) { mode = "code"; }
-    out += c;
-  }
-  return out;
-}
 
 const STATIC_IMPORT_RE = /\b(?:import|export)\b\s+([\s\S]*?)\s+from\s*["']([^"']+)["']/g;
 const DYNAMIC_IMPORT_RE = /\bimport\s*\(\s*["']([^"']+)["']\s*\)/g;
+const SIDE_EFFECT_IMPORT_RE = /\bimport\s*["']([^"']+)["']/g;
 
 interface ImportRef {
   readonly file: string;
@@ -226,6 +204,7 @@ function importsOf(file: string): string[] {
   const specs: string[] = [];
   for (const match of source.matchAll(STATIC_IMPORT_RE)) specs.push(match[2]);
   for (const match of source.matchAll(DYNAMIC_IMPORT_RE)) specs.push(match[1]);
+  for (const match of source.matchAll(SIDE_EFFECT_IMPORT_RE)) specs.push(match[1]);
   return specs;
 }
 
@@ -324,7 +303,7 @@ describe("R4 electron → src 只走白名单", () => {
     const violations: string[] = [];
     for (const { ref, target } of toSrc) {
       if (target.startsWith("src/core/")) continue;
-      const allowed = SRC_IMPORT_ALLOWLIST.some((entry) => (entry.target.endsWith("/") ? target.startsWith(entry.target) : target === entry.target));
+      const allowed = SRC_IMPORT_ALLOWLIST.some((entry) => target === entry.target);
       if (!allowed) violations.push(`${ref.file} → ${target}`);
     }
     expect(
@@ -343,8 +322,15 @@ describe("R4 electron → src 只走白名单", () => {
     const used = new Set(toSrc.map((entry) => entry.target));
     const stale = SRC_IMPORT_ALLOWLIST
       .map((entry) => entry.target)
-      .filter((target) => (target.endsWith("/") ? ![...used].some((u) => u.startsWith(target)) : !used.has(target)));
+      .filter((target) => !used.has(target));
     expect(stale, "以下白名单条目已无引用：删掉对应条目（否则白名单会越长越松）").toEqual([]);
+  });
+
+  it("白名单只允许精确文件：禁止目录前缀形态（一条登记会放行整棵子树）", () => {
+    // 261116 review P1-4：原实现允许 `target.endsWith("/")` 的目录前缀，等于「登记一次、以后整棵子树都放行」，
+    // 白名单会越长越松。现在只接受文件级 target；要加新依赖必须逐个文件登记。
+    const dirEntries = SRC_IMPORT_ALLOWLIST.filter((entry) => entry.target.endsWith("/")).map((entry) => entry.target);
+    expect(dirEntries, "白名单必须精确到文件，不允许目录前缀").toEqual([]);
   });
 
   it("每条白名单都必须写理由（空理由 = 未登记）", () => {

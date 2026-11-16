@@ -11,6 +11,8 @@ export const AI_MAX_TOTAL_CHARS = 200_000;
 /** 单次请求的附件块上限（图片 / 文档各自计数；与多维表 AI 字段同口径）。 */
 export const AI_MAX_IMAGES = 10;
 export const AI_MAX_DOCUMENTS = 5;
+/** 粘贴图片单张上限（review P2-5 单一来源）：主进程落盘与渲染层预检共用这一份，别再写 10MB 字面量。 */
+export const AI_PASTED_IMAGE_MAX_BYTES = 10 * 1024 * 1024;
 
 /** 校验资产引用：noteId / filename 必须是非空字符串（调用方解析时还会做路径段校验）。 */
 function normalizeAsset(raw: unknown): AiAssetRef | null {

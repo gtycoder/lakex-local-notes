@@ -9,7 +9,7 @@ const MESSAGES = readFileSync(new URL("../../src/core/aiChatMessages.ts", import
 
 describe("多模态链路护栏（261006）", () => {
   it("ai_chat 先校验再解析内容块，才发给供应商", () => {
-    expect(REGISTER).toContain("resolveAiMessages(assertMessages(messages), store, { readLocalFile: readRegisteredLocalFile })");
+    expect(REGISTER).toContain("resolveAiMessages(assertMessages(messages), store, registeredLocalFileReader)");
   });
 
   it("解析器：图片 → image_url；文档仅 PDF；附件缺失 / 超限明确报错", () => {

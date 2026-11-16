@@ -20,6 +20,7 @@ import {
   bootSplashPath,
   preloadPath,
 } from "./buildTarget.js";
+import { stripComments } from "./testing/sourceText.js";
 
 /**
  * 打包内容与产物布局契约（批次 A-8 / A-9，2026-11-16）。
@@ -46,6 +47,8 @@ interface PackageJson {
 
 const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8")) as PackageJson;
 const readSource = (rel: string): string => fs.readFileSync(path.join(ROOT, rel), "utf8");
+/** 源码断言必须剥注释：否则把实现改回去、注释留着，门禁照绿（261116 review P1-4）。 */
+const readCode = (rel: string): string => stripComments(readSource(rel));
 
 describe("产物布局契约：electron/buildTarget.ts 内部自洽", () => {
   it("main 文件 = 输出目录 + /main.js", () => {
@@ -152,7 +155,7 @@ describe("三条硬编码路径已收口到契约函数（P1/P2/P3）", () => {
 
 describe("构建配置与运行期入口都引用契约，而不是复制字面量", () => {
   it("vite.config.ts 用契约常量做 entry/outDir，并用共享 external 判据", () => {
-    const viteConfig = readSource("vite.config.ts");
+    const viteConfig = readCode("vite.config.ts");
     expect(viteConfig, "vite.config.ts 必须 import 契约模块").toMatch(/from "\.\/electron\/buildTarget"/);
     expect(viteConfig, "entry 必须来自契约").toContain("entry: ELECTRON_MAIN_ENTRY");
     expect(viteConfig, "outDir 必须来自契约").toContain("outDir: ELECTRON_OUT_DIR");
@@ -163,7 +166,7 @@ describe("构建配置与运行期入口都引用契约，而不是复制字面�
   });
 
   it("electron/main.ts 的三条路径都走契约函数（不许再出现裸相对路径）", () => {
-    const main = readSource(path.join("electron", "main.ts"));
+    const main = readCode(path.join("electron", "main.ts"));
     expect(main, "main.ts 必须 import 契约函数").toMatch(/from "\.\/buildTarget\.js"/);
     expect(main).toContain("appDirOf(BUILD_DIR)");
     expect(main).toContain("bootSplashPath(BUILD_DIR)");

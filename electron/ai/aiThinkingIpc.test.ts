@@ -23,6 +23,7 @@ import { registerAiIpc } from "../ipc/registerAi.js";
 import type { IpcRegistrar } from "../ipc/registrar.js";
 import type { Store } from "../store.js";
 import { defaultAiProviderConfig, type AiSettings } from "../../src/core/aiProviders.js";
+import { containsCode } from "../testing/sourceText.js";
 
 /**
  * IPC 接线：`ai_chat` 的第三参（AiChatRequestOptions）必须被 registerAi 解析并透传给网关。
@@ -93,19 +94,19 @@ describe("ai_chat IPC：请求级 thinking 覆盖的接线", () => {
     const path = require("node:path") as typeof import("node:path");
     const root = path.resolve(__dirname, "..", "..");
     const read = (rel: string) => fs.readFileSync(path.join(root, rel), "utf8");
+    // 断言一律走 containsCode（剥注释后再匹配）：注释里留着同名字串不能算实现（261116 review P1-4）。
+    const has = (rel: string, snippet: string) => containsCode(read(rel), snippet);
 
     // ① 渲染层 API：runAiChat 第五参 → native.aiChat 第三参
-    expect(read("src/lib/ai.ts")).toContain("native.aiChat(requestId, messages, options)");
+    expect(has("src/lib/ai.ts", "native.aiChat(requestId, messages, options)")).toBe(true);
     // ② native 封装 → preload 暴露面
-    expect(read("src/lib/native.ts")).toContain("api().aiChat(requestId, messages, options)");
+    expect(has("src/lib/native.ts", "api().aiChat(requestId, messages, options)")).toBe(true);
     // ③ preload → ipcRenderer.invoke（不传时只带两个参数，payload 与改动前一致）
-    const preload = read("electron/preload.cjs");
-    expect(preload).toContain("aiChat: (requestId, messages, options) => invoke(\"ai_chat\", requestId, messages");
-    expect(preload).toContain("...(options === undefined ? [] : [options])");
+    expect(has("electron/preload.cjs", "aiChat: (requestId, messages, options) => invoke(\"ai_chat\", requestId, messages")).toBe(true);
+    expect(has("electron/preload.cjs", "...(options === undefined ? [] : [options])")).toBe(true);
     // ④ 主进程 handler：解析第三参并交给网关
-    const registerAi = read("electron/ipc/registerAi.ts");
-    expect(registerAi).toContain("parseThinkingOverride(requestOptions");
-    expect(registerAi).toContain("thinkingOverride,");
+    expect(has("electron/ipc/registerAi.ts", "parseThinkingOverride(requestOptions")).toBe(true);
+    expect(has("electron/ipc/registerAi.ts", "thinkingOverride,")).toBe(true);
   });
 
   it("处理器仍把激活供应商原样交给网关（没有为了开关改动 provider 解析）", async () => {

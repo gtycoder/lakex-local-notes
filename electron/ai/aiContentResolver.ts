@@ -2,8 +2,9 @@ import type { AiAssetRef, AiChatMessage } from "../../src/core/aiProviders.js";
 import { AppError } from "../../src/core/storeErrors.js";
 import type { AiResolvedContentPart, AiResolvedMessage } from "./aiClient.js";
 import { toImageDataUrl } from "./aiImages.js";
-import { AI_LOCAL_TEXT_MAX_BYTES, AI_LOCAL_TEXT_TOTAL_CHARS, localAttachmentKindOf, type AiLocalFileReader } from "./localAttachments.js";
-import { extractPdfText } from "./pdfText.js";
+import { AI_MAX_IMAGES } from "../../src/core/aiChatMessages.js";
+import { AI_LOCAL_TEXT_MAX_BYTES, AI_LOCAL_TEXT_TOTAL_CHARS, heicConversionHint, localAttachmentKindOf, type AiLocalFileReader } from "./localAttachments.js";
+import { AI_PDF_MAX_BYTES, extractPdfText } from "./pdfText.js";
 
 /** 图片体积护栏（比供应商（单图 32MiB / 总额 64MiB）更保守）。 */
 export const AI_MAX_IMAGE_BYTES = 10 * 1024 * 1024;
@@ -57,7 +58,7 @@ export async function resolveAiMessages(
         if (!file) throw new AppError("NotFound", "附件文件不存在：" + label(asset));
         if (part.type === "image") {
           imageCount += 1;
-          if (imageCount > 10) throw new AppError("InvalidInput", "一次最多发送 10 张图片");
+          if (imageCount > AI_MAX_IMAGES) throw new AppError("InvalidInput", "一次最多发送 " + AI_MAX_IMAGES + " 张图片");
           if (file.size > AI_MAX_IMAGE_BYTES) throw new AppError("InvalidInput", "图片过大：" + label(asset) + "（上限 " + mb(AI_MAX_IMAGE_BYTES) + "）");
           totalImageBytes += file.size;
           if (totalImageBytes > AI_MAX_TOTAL_IMAGE_BYTES) throw new AppError("InvalidInput", "本次图片总大小超过上限 " + mb(AI_MAX_TOTAL_IMAGE_BYTES));
@@ -70,51 +71,63 @@ export async function resolveAiMessages(
         continue;
       }
       // 本机文件（261116 第四稿）：主进程按 token 读；渲染层从未接触字节。
+      // P0-1：**先 stat 判限额，再读字节** —— 超大文件绝不先整读进主进程（用户随手选个大文件就能卡死）。
       if (!localFiles) throw new AppError("InvalidInput", "本机文件附件通道未接入");
-      const local = localFiles.readLocalFile(part.file);
-      if (!local) throw new AppError("NotFound", "本机文件附件已失效：" + part.file.name + "（应用重启或文件被移动），请重新选择");
-      const kind = localAttachmentKindOf(local.name);
+      const localStat = localFiles.statLocalFile(part.file);
+      if (!localStat) throw new AppError("NotFound", "本机文件附件已失效：" + part.file.name + "（应用重启或文件被移动），请重新选择");
+      const localName = localStat.name;
+      const kind = localAttachmentKindOf(localName);
+      const readLocal = async (): Promise<Buffer> => {
+        const bytes = await localFiles.readLocalFile(part.file);
+        if (!bytes) throw new AppError("NotFound", "本机文件附件已失效：" + localName + "（文件被移动或权限变化），请重新选择");
+        return bytes;
+      };
       if (kind === "image") {
         imageCount += 1;
-        if (imageCount > 10) throw new AppError("InvalidInput", "一次最多发送 10 个图片附件");
-        if (local.size > AI_MAX_IMAGE_BYTES) throw new AppError("InvalidInput", "图片过大：" + local.name + "（上限 " + mb(AI_MAX_IMAGE_BYTES) + "）");
-        totalImageBytes += local.size;
+        if (imageCount > AI_MAX_IMAGES) throw new AppError("InvalidInput", "一次最多发送 " + AI_MAX_IMAGES + " 个图片附件");
+        if (localStat.size > AI_MAX_IMAGE_BYTES) throw new AppError("InvalidInput", "图片过大：" + localName + "（上限 " + mb(AI_MAX_IMAGE_BYTES) + "）");
+        totalImageBytes += localStat.size;
         if (totalImageBytes > AI_MAX_TOTAL_IMAGE_BYTES) throw new AppError("InvalidInput", "本次图片总大小超过上限 " + mb(AI_MAX_TOTAL_IMAGE_BYTES));
-        parts.push({ type: "image_url", image_url: { url: await toImageDataUrl(local.bytes, local.name) } });
+        parts.push({ type: "image_url", image_url: { url: await toImageDataUrl(await readLocal(), localName) } });
         continue;
       }
       if (kind === "text") {
-        if (local.size > AI_LOCAL_TEXT_MAX_BYTES) {
-          throw new AppError("InvalidInput", "文本附件过大：" + local.name + "（上限 " + Math.round(AI_LOCAL_TEXT_MAX_BYTES / 1024) + "KB）");
+        if (localStat.size > AI_LOCAL_TEXT_MAX_BYTES) {
+          throw new AppError("InvalidInput", "文本附件过大：" + localName + "（上限 " + Math.round(AI_LOCAL_TEXT_MAX_BYTES / 1024) + "KB）");
         }
-        const text = local.bytes.toString("utf8");
-        if (text.includes("\u0000")) throw new AppError("InvalidInput", "暂不支持二进制文件：" + local.name + "（当前支持图片与文本/代码文件）");
+        const text = (await readLocal()).toString("utf8");
+        if (text.includes("\u0000")) throw new AppError("InvalidInput", "暂不支持二进制文件：" + localName + "（当前支持图片与文本/代码文件）");
         const remain = AI_LOCAL_TEXT_TOTAL_CHARS - localTextChars;
         if (remain <= 0) throw new AppError("InvalidInput", "附件总长度超过上限（" + AI_LOCAL_TEXT_TOTAL_CHARS + " 字符），请减少附件");
         const clipped = text.length > remain ? text.slice(0, remain) + "\n…（已截断）" : text;
         localTextChars += Math.min(text.length, remain);
-        parts.push({ type: "text", text: "【附件：" + local.name + "】\n" + clipped });
+        parts.push({ type: "text", text: "【附件：" + localName + "】\n" + clipped });
         continue;
       }
       if (kind === "pdf") {
-        let extracted = local.pdf;
+        if (localStat.size > AI_PDF_MAX_BYTES) {
+          throw new AppError("InvalidInput", "PDF 文件过大：" + localName + "（上限 " + Math.round(AI_PDF_MAX_BYTES / 1024 / 1024) + "MB）");
+        }
+        // 选择时已解析过就直接复用（连字节都不用读）。
+        let extracted = localStat.pdf;
         if (!extracted) {
           try {
-            extracted = await extractPdfText(local.bytes, "local/" + local.name + "/" + local.size);
+            extracted = await extractPdfText(await readLocal(), "local/" + localName + "/" + localStat.size);
           } catch (error) {
             const reason = error instanceof Error ? error.message : "文件损坏或不是有效的 PDF";
-            throw new AppError("InvalidInput", "PDF 解析失败：" + local.name + "（" + reason + "）。请换用可复制文字的 PDF，或取消密码保护后重试。");
+            throw new AppError("InvalidInput", "PDF 解析失败：" + localName + "（" + reason + "）。请换用可复制文字的 PDF，或取消密码保护后重试。");
           }
         }
         const remain = AI_LOCAL_TEXT_TOTAL_CHARS - localTextChars;
         if (remain <= 0) throw new AppError("InvalidInput", "附件总长度超过上限（" + AI_LOCAL_TEXT_TOTAL_CHARS + " 字符），请减少附件");
         const clipped = extracted.text.length > remain ? extracted.text.slice(0, remain) + "\n…（已截断）" : extracted.text;
         localTextChars += Math.min(extracted.text.length, remain);
-        const head = "【附件：" + local.name + "（PDF，" + extracted.pages + " 页" + (extracted.truncated ? "，原文过长已截断" : "") + "）】\n";
+        const head = "【附件：" + localName + "（PDF，" + extracted.pages + " 页" + (extracted.truncated ? "，原文过长已截断" : "") + "）】\n";
         parts.push({ type: "text", text: head + clipped });
         continue;
       }
-      throw new AppError("InvalidInput", "暂不支持该文件类型：" + local.name + "（支持图片、文本/代码与 PDF）");
+      // HEIC/HEIF 是 macOS 最常见但主进程解不了的格式：文案必须说「先转换」而不是「不支持」。
+      throw new AppError("InvalidInput", heicConversionHint(localName) ?? ("暂不支持该文件类型：" + localName + "（支持图片、文本/代码与 PDF）"));
     }
     out.push({ role: message.role, content: parts.length ? parts : "" });
   }

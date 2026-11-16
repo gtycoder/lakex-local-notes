@@ -297,11 +297,14 @@ export function startAssetServer(noteAssetsDir: string, vendorCdnDir: string, qu
         const thumbs = width != null && source.mimeType.startsWith("image/")
           ? await thumbnailBuffer(source.path, width, stat)
           : null;
+        // 与 note-assets 对齐：nosniff 防 MIME 嗅探；粘贴图按 UUID 不可变 ⇒ 可长缓存。
+        const localSecurityHeaders: Record<string, string> = { "X-Content-Type-Options": "nosniff" };
         if (thumbs) {
           res.writeHead(200, {
             "Content-Type": source.mimeType,
             "Content-Length": String(thumbs.length),
-            "Cache-Control": "private, max-age=3600",
+            "Cache-Control": "private, max-age=31536000, immutable",
+            ...localSecurityHeaders,
             ...corsHeaders(req.headers.origin),
           });
           res.end(thumbs);
@@ -309,7 +312,8 @@ export function startAssetServer(noteAssetsDir: string, vendorCdnDir: string, qu
         }
         streamFile(res, source.path, stat, {
           "Content-Type": source.mimeType || "application/octet-stream",
-          "Cache-Control": "private, max-age=3600",
+          "Cache-Control": "private, max-age=31536000, immutable",
+          ...localSecurityHeaders,
           ...corsHeaders(req.headers.origin),
         }, req.headers.range);
         return;

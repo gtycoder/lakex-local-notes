@@ -35,6 +35,10 @@ jobs:
         run: npm ci
       - name: Typecheck
         run: npx tsc --noEmit
+      # 主进程「无 DOM」门禁（tsconfig.electron.json）：只挂在本地的 npm run build 上等于 CI 不跑，
+      # 给主进程写 document./window. 会一直绿到打包。见 docs/arch/ELECTRON-LAYERING-AUDIT.md §8。
+      - name: Typecheck (main process, no DOM)
+        run: npm run typecheck:electron
       - name: Unit tests
         run: npx vitest run
       - name: Build desktop

@@ -92,6 +92,18 @@ describe("AiWritingRepository", () => {
     expect(repo.listMessages(conversation.id)[1].attachRefs).toBeUndefined();
   });
 
+  it("attach_refs 的 pages 走 DB 往返（PDF 页数不丢，review 缺口）", () => {
+    const { repo } = makeRepo();
+    const conversation = repo.createConversation({ mode: "chat", title: "PDF" });
+    const refs = [
+      { kind: "local" as const, token: "loc-pdf", name: "报告.pdf", size: 1234, mimeType: "application/pdf", pages: 7 },
+      { noteId: "n1", filename: "a.png" },
+    ];
+    repo.appendMessage({ conversationId: conversation.id, role: "user", content: "看 PDF", attachRefs: refs });
+    expect(repo.listMessages(conversation.id)[0].attachRefs).toEqual(refs);
+    expect(repo.listMessages(conversation.id)[0].attachRefs?.[0]).toMatchObject({ pages: 7 });
+  });
+
   it("启动清理用：只收集历史里的 paste- token（资产图/普通本机文件不算）", () => {
     const { repo } = makeRepo();
     const conversation = repo.createConversation({ mode: "chat", title: "粘贴" });
