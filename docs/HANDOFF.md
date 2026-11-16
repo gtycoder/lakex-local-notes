@@ -75,7 +75,7 @@
   | CDP 调试 | 9333（冒烟脚本默认） | 9222 | `LAKE_CDP_PORT` |
 
   userData 也按形态分开（dev `lakex-local-notes-dev` / 正式 `lakex-local-notes`，`LAKE_USER_DATA` 可覆盖）⇒ **同机同时跑 dev 与打包版互不共享端口/路径**。
-- **固定端口语义（261118 定稿）**：启动时 `await` 到 listening 后写回 `process.env.LAKE_ASSET_PORT`（preload/渲染层据此构造 URL）；`currentAssetServerPort()` 是启动时解析一次的固定值，store/导出/小记都用它。占用时**明确报错**（`EADDRINUSE` → 日志含端口与原因；资源服务降级但主窗口照常启动；Web 客户端开启时抛可读错误），不再 +1..+10 回退、不再传 `--lake-asset-port`。
+- **固定端口语义（261118 定稿）**：端口在**监听之前**就固定，并把 `process.env.LAKE_ASSET_PORT` 写回（preload/渲染层据此构造 URL；即使监听失败也保持一致）；`currentAssetServerPort()` 是启动时解析一次的固定值，store/导出/小记都用它。占用时**明确报错**（`EADDRINUSE` → 日志含端口与原因；资源服务降级但主窗口照常启动；Web 客户端开启时抛可读错误），不再 +1..+10 回退、不再传 `--lake-asset-port`。
 - **错误可读性**：资源服务早期 403（token 不匹配）对**已允许 origin** 回显 ACAO ⇒ 浏览器不再把它显示成 CORS 失败；未知 origin 仍不回显（任意网站读不到）。
 - **护栏**：`electron/assetServer.port.test.ts`（首选/回退/连续占用/非 EADDRINUSE 报错/双实例/回退后导出与小记 URL/403 ACAO/接线源码断言，12 例）+ `electron/webApiServer.test.ts` 的「+1 回退并把实际端口回给设置页」；既有 `assetServer.test.ts` 覆盖安全面与 `/ai-local`。
 - **dual-instance 预期（以后照此判断）**：同机跑 dev + 打包版时，两边日志应分别出现 `[asset-server] listening on http://127.0.0.1:19877`（dev）与 `:19876`（packaged），并各有一行 `[ports] asset=… webApi=…`；若同形态实例双开/端口被占，会出现 `[asset-server] 端口 N 监听失败（已被占用…）` **error** 且图片降级 —— 这是固定端口的预期行为，关掉占用进程即可。
