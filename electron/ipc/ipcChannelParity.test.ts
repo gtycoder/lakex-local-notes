@@ -166,8 +166,10 @@ describe("IPC 通道三方一致性（C2-2）", () => {
     // → 187（261112 task-92：diary_to_quick_note —— 日记转为小记，正文/资产搬运 + 原文软删）。
     // → 188（261114：board_materials —— 画板自定义素材文件夹 list/save/delete/open）。
     // → 189（261116：list_note_image_assets —— AI 写作图片附件选择器按文档列图片；只读 filename/size，不算 sha）。
-    expect(registrarChannels().size, "通道数变了 ⇒ 请确认是有意的并在 commit 里说明").toBe(189);
-    expect(preloadChannels().size).toBe(189);
-    expect(Object.keys(WEB_METHODS).length).toBe(189);
+    // → 190（261116 第四稿：pick_ai_local_files —— 主进程 dialog 选本机文件附件，只回引用/元数据）。
+    // 261116 第四稿最终口径：对话写作按文档取附件（复用 list_note_image_assets，不新增全库枚举通道）。
+    expect(registrarChannels().size, "通道数变了 ⇒ 请确认是有意的并在 commit 里说明").toBe(190);
+    expect(preloadChannels().size).toBe(190);
+    expect(Object.keys(WEB_METHODS).length).toBe(190);
   });
 });

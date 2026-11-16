@@ -1,9 +1,13 @@
+import { dialog } from "electron";
 import type { IpcRegistrar } from "./registrar.js";
 import { Store } from "../store.js";
 import { IpcInputError } from "../ipcLimits.js";
 import {
   AI_WRITING_MAX_ATTACHMENTS,
+  aiWritingAttachmentModeError,
+  aiWritingModeCapabilities,
   normalizeAiWritingAttachments,
+  type AiWritingAttachment,
   type AiWritingComposerPatch,
   AiWritingConversationCreateInput,
   AiWritingDocRef,
@@ -11,7 +15,7 @@ import {
   AiWritingMessagePatch,
   AiWritingMode,
 } from "../../src/core/aiWriting.js";
-import type { AiAssetRef } from "../../src/core/aiProviders.js";
+import { registerPickedLocalFile, LOCAL_ATTACHMENT_IMAGE_EXTS, LOCAL_ATTACHMENT_TEXT_EXTS } from "../ai/localAttachments.js";
 
 /**
  * AI 写作空间 IPC（261109，桌面本地）：会话/消息 CRUD。
@@ -63,11 +67,11 @@ function readDocRefs(value: unknown): AiWritingDocRef[] {
  * 与渲染层/DB 共用 core 的 normalize（同一份形状判据），但 IPC 侧**不静默丢弃**：
  * 数量超限或存在坏项都直接报错（坏输入不该悄悄变成「少一张图」）。
  */
-function readAttachments(value: unknown, role: "user" | "assistant"): AiAssetRef[] | undefined {
+function readAttachments(value: unknown, role: "user" | "assistant"): AiWritingAttachment[] | undefined {
   if (value === undefined || value === null) return undefined;
   if (role !== "user") throw new IpcInputError("只有用户消息可以带附件");
   if (!Array.isArray(value)) throw new IpcInputError("attachRefs 必须是数组");
-  if (value.length > AI_WRITING_MAX_ATTACHMENTS) throw new IpcInputError("一次最多发送 " + AI_WRITING_MAX_ATTACHMENTS + " 张图片");
+  if (value.length > AI_WRITING_MAX_ATTACHMENTS) throw new IpcInputError("一次最多发送 " + AI_WRITING_MAX_ATTACHMENTS + " 个附件");
   const normalized = normalizeAiWritingAttachments(value);
   if (normalized.length !== value.length) throw new IpcInputError("attachRefs 项无效或重复");
   return normalized;
@@ -93,11 +97,13 @@ export function registerAiWritingIpc(ipc: IpcRegistrar, store: Store): void {
   ipc.handle("ai_writing_create", (input: unknown) => {
     if (!input || typeof input !== "object") throw new IpcInputError("参数无效");
     const row = input as Record<string, unknown>;
+    const mode = readMode(row.mode);
     const body: AiWritingConversationCreateInput = {
-      mode: readMode(row.mode),
+      mode,
       title: readString(row.title, "标题", MAX_TITLE),
       promptText: row.promptText === undefined || row.promptText === null ? null : readString(row.promptText, "提示词", 20_000),
-      docRefs: readDocRefs(row.docRefs),
+      // 对话写作 = 纯对话：不接受 docRefs（忽略而不是报错，旧渲染层也安全）。
+      docRefs: aiWritingModeCapabilities(mode).docs ? readDocRefs(row.docRefs) : [],
     };
     return repo().createConversation(body);
   });
@@ -109,12 +115,47 @@ export function registerAiWritingIpc(ipc: IpcRegistrar, store: Store): void {
   ipc.handle("ai_writing_composer", (id: unknown, patch: unknown) => {
     if (!patch || typeof patch !== "object") throw new IpcInputError("参数无效");
     const row = patch as Record<string, unknown>;
+    const conversationId = readString(id, "会话 id", 200);
+    const current = repo().getConversation(conversationId);
+    if (!current) return null;
+    const nextMode = row.mode === undefined ? current.mode : readMode(row.mode);
     const body: AiWritingComposerPatch = {
       promptText: row.promptText === undefined ? undefined : row.promptText === null ? null : readString(row.promptText, "提示词", 20_000),
-      docRefs: row.docRefs === undefined ? undefined : readDocRefs(row.docRefs),
-      mode: row.mode === undefined ? undefined : readMode(row.mode),
+      mode: row.mode === undefined ? undefined : nextMode,
+      // 对话写作 = 纯对话：docRefs 一律清空（切到 chat 的旧会话也在这里被收口）。
+      // 多文档模式：没给 docRefs 就不动；给了就整组替换。
+      docRefs: aiWritingModeCapabilities(nextMode).docs
+        ? (row.docRefs === undefined ? undefined : readDocRefs(row.docRefs))
+        : [],
     };
-    return repo().updateConversationComposer(readString(id, "会话 id", 200), body);
+    return repo().updateConversationComposer(conversationId, body);
+  });
+
+  /**
+   * 本机文件附件（261116 第四稿）：主进程 dialog 选文件，只回引用与元数据。
+   * 渲染层从未接触绝对路径与字节；token 失效（重启/文件移动）由 resolver 明确报错。
+   */
+  ipc.handle("pick_ai_local_files", async () => {
+    const result = await dialog.showOpenDialog({
+      title: "选择附件（图片 / 文本 / 代码）",
+      buttonLabel: "添加附件",
+      properties: ["openFile", "multiSelections"],
+      filters: [
+        { name: "图片与文本/代码", extensions: [...LOCAL_ATTACHMENT_IMAGE_EXTS, ...LOCAL_ATTACHMENT_TEXT_EXTS] },
+        { name: "所有文件", extensions: ["*"] },
+      ],
+    });
+    if (result.canceled || result.filePaths.length === 0) return [];
+    if (result.filePaths.length > AI_WRITING_MAX_ATTACHMENTS) {
+      throw new IpcInputError("一次最多添加 " + AI_WRITING_MAX_ATTACHMENTS + " 个附件");
+    }
+    const picked = [];
+    for (const filePath of result.filePaths) {
+      const item = registerPickedLocalFile(filePath);
+      if (item) picked.push(item.ref);
+    }
+    if (picked.length === 0) throw new IpcInputError("所选文件无法作为附件（空文件/目录/无权限）");
+    return picked;
   });
 
   ipc.handle("ai_writing_delete", (id: unknown) => {
@@ -127,11 +168,19 @@ export function registerAiWritingIpc(ipc: IpcRegistrar, store: Store): void {
     const row = input as Record<string, unknown>;
     const role = row.role === "assistant" ? "assistant" : row.role === "user" ? "user" : null;
     if (!role) throw new IpcInputError("role 无效");
+    const conversationId = readString(row.conversationId, "会话 id", 200);
+    const attachRefs = readAttachments(row.attachRefs, role);
+    // 模式判据（纯函数单一来源）：多文档推理只收「已选文档里的附件」，本地文件只在对话写作。
+    const conversation = repo().getConversation(conversationId);
+    if (conversation && attachRefs && attachRefs.length > 0) {
+      const modeError = aiWritingAttachmentModeError(conversation.mode, attachRefs, conversation.docRefs);
+      if (modeError) throw new IpcInputError(modeError);
+    }
     const body: AiWritingMessageAppendInput = {
-      conversationId: readString(row.conversationId, "会话 id", 200),
+      conversationId,
       role,
       content: typeof row.content === "string" ? readString(row.content, "正文", MAX_CONTENT) : "",
-      attachRefs: readAttachments(row.attachRefs, role),
+      attachRefs,
       reasoning: row.reasoning === undefined || row.reasoning === null ? null : readString(row.reasoning, "思考内容", MAX_REASONING),
       durationMs: readDuration(row.durationMs),
       stopped: row.stopped === true,

@@ -4,6 +4,7 @@ import { Store } from "../store.js";
 import { aiChat, aiListModels, aiTestProvider } from "../ai/aiClient.js";
 import { assertMessages } from "../ai/aiChatMessages.js";
 import { resolveAiMessages } from "../ai/aiContentResolver.js";
+import { readRegisteredLocalFile } from "../ai/localAttachments.js";
 import { parseThinkingOverride } from "../ai/aiThinking.js";
 import { activeAiProvider, aiBaseUrlChangeError, aiSettingsView, mergeAiSettings, validateAiBaseUrl, type AiChatRequestOptions, type AiProviderConfig, type AiProviderPatch, type AiSettings, type AiSettingsPatch } from "../../src/core/aiProviders.js";
 import { aiErrorInfo, aiErrorMessage } from "../../src/core/aiErrors.js";
@@ -88,7 +89,7 @@ export function registerAiIpc(ipc: IpcRegistrar, store: Store): void {
     const controller = new AbortController();
     inflight.set(id, controller);
     try {
-      const resolved = await resolveAiMessages(assertMessages(messages), store);
+      const resolved = await resolveAiMessages(assertMessages(messages), store, { readLocalFile: readRegisteredLocalFile });
       // 「深度思考」开关（261116 用户裁决）：只在 provider 支持 thinking 时生效，否则忽略（不伪造参数）。
       const thinkingOverride = parseThinkingOverride(requestOptions as AiChatRequestOptions | undefined);
       // 思考内容与正文同一条通道：reasoning:true 的增量只给「已深度思考」卡片（不进上下文）。

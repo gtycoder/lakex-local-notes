@@ -10,7 +10,7 @@
  * 规格：docs/AI-WRITING.md。
  */
 import { AI_MAX_IMAGES } from "./aiChatMessages";
-import type { AiAssetRef, AiChatMessage, AiContentPart } from "./aiProviders";
+import type { AiAssetRef, AiChatMessage, AiContentPart, AiLocalFileRef } from "./aiProviders";
 
 export type AiWritingMode = "chat" | "docs";
 export const AI_WRITING_MODES: readonly AiWritingMode[] = ["chat", "docs"];
@@ -21,6 +21,14 @@ export interface AiWritingDocRef {
   id: string;
   title: string;
 }
+
+/**
+ * 附件引用（261116 第四稿）：
+ * - 文档资产图片 = AiAssetRef（Phase 1 既有形状，**保持兼容**，没有 kind 字段）；
+ * - 本机文件 = AiLocalFileRef（kind:"local"，只有主进程能按 token 读到字节）。
+ * 持久化/历史只存引用与元数据；历史气泡按类型显示缩略图或文件名 chip。
+ */
+export type AiWritingAttachment = AiAssetRef | AiLocalFileRef;
 
 export interface AiWritingConversation {
   id: string;
@@ -40,8 +48,8 @@ export interface AiWritingMessage {
   role: "user" | "assistant";
   /** Markdown 原文（渲染层用 MarkdownView 渲染）。 */
   content: string;
-  /** 该条用户消息随发的图片附件（**只随当轮发送**，历史轮不重发；存引用不存字节）。 */
-  attachRefs?: AiAssetRef[];
+  /** 该条用户消息随发的附件（图片/本机文件；**只随当轮发送**，历史轮不重发；存引用不存字节）。 */
+  attachRefs?: AiWritingAttachment[];
   /** 思考内容（DeepSeek 等供应商的 reasoning_content）；null = 该供应商没有思考输出。 */
   reasoning: string | null;
   durationMs: number | null;
@@ -75,8 +83,8 @@ export interface AiWritingMessageAppendInput {
   conversationId: string;
   role: "user" | "assistant";
   content: string;
-  /** 图片附件引用（仅 user 消息允许；主进程按 AI_WRITING_MAX_ATTACHMENTS 校验）。 */
-  attachRefs?: AiAssetRef[];
+  /** 附件引用（仅 user 消息允许；主进程按 AI_WRITING_MAX_ATTACHMENTS + 模式判据校验）。 */
+  attachRefs?: AiWritingAttachment[];
   reasoning?: string | null;
   durationMs?: number | null;
   stopped?: boolean;
@@ -178,12 +186,38 @@ export interface AiWritingDocContext {
   text: string;
 }
 
-/** 带图发送失败时的可执行提示：**不维护视觉模型清单**，只提示「可能不支持图片」+ 两个出口。 */
-export function aiWritingAttachmentErrorHint(error: string | null | undefined, imageCount: number): string | null {
+/** 带附件发送失败时的可执行提示：**不维护视觉模型清单**，只提示「可能不支持附件」+ 两个出口。 */
+export function aiWritingAttachmentErrorHint(error: string | null | undefined, attachmentCount: number): string | null {
   const message = error?.trim();
-  if (!message || imageCount <= 0) return message ? message : null;
+  if (!message || attachmentCount <= 0) return message ? message : null;
   if (!/400|请求参数|bad request|unsupported|image/i.test(message)) return message;
-  return message + "（本次带了 " + imageCount + " 张图片：若当前模型不支持图片会返回 400，可换用支持视觉的模型，或移除图片后重试。）";
+  return message + "（本次带了 " + attachmentCount + " 个附件：若当前模型不支持该附件类型（例如非视觉模型收到图片）会返回 400，可换用支持视觉的模型，或移除附件后重试。）";
+}
+
+/**
+ * **模式判据（单一来源，261116 第四稿）**：UI / 请求组装 / IPC 校验都读这张表，不在各处 if。
+ * - 对话写作 = 纯对话：不选文档（docs=false）；附件两类来源都可用（docAssets + localFiles）；
+ * - 多文档推理 = 知识库问答：必须选文档（docs=true）；附件只允许「所选文档里的」（localFiles=false，
+ *   attachmentsLimitedToDocs=true）。
+ */
+export interface AiWritingModeCapabilities {
+  /** 是否显示/接受 docRefs（知识库上下文）。 */
+  docs: boolean;
+  /** 是否允许从「文档资产」选附件（图片引用，不注入正文）。 */
+  docAssets: boolean;
+  /** 是否允许从本机选文件附件（仅主进程可按 token 读字节）。 */
+  localFiles: boolean;
+  /** 附件是否必须限定在已选文档集合内。 */
+  attachmentsLimitedToDocs: boolean;
+}
+
+export const AI_WRITING_MODE_CAPABILITIES: Readonly<Record<AiWritingMode, AiWritingModeCapabilities>> = {
+  chat: { docs: false, docAssets: true, localFiles: true, attachmentsLimitedToDocs: false },
+  docs: { docs: true, docAssets: true, localFiles: false, attachmentsLimitedToDocs: true },
+};
+
+export function aiWritingModeCapabilities(mode: AiWritingMode): AiWritingModeCapabilities {
+  return AI_WRITING_MODE_CAPABILITIES[mode] ?? AI_WRITING_MODE_CAPABILITIES.chat;
 }
 
 export interface AiWritingHistoryTurn {
@@ -191,41 +225,100 @@ export interface AiWritingHistoryTurn {
   content: string;
 }
 
-/** 附件引用 → 展示名（用户可读名优先；缺省回落到磁盘文件名）。 */
-export function aiWritingAttachmentLabel(asset: AiAssetRef): string {
-  const name = asset.name?.trim();
-  return name ? name : asset.filename;
+/** 是否本机文件附件（kind:"local"；缺 kind = Phase 1 的文档资产图片，保持兼容）。 */
+export function isAiWritingLocalAttachment(ref: AiWritingAttachment): ref is AiLocalFileRef {
+  return (ref as AiLocalFileRef).kind === "local";
 }
 
-/** 附件去重键（同一篇文档的同一文件只允许一份）。 */
-export function aiWritingAttachmentKey(asset: AiAssetRef): string {
-  return asset.noteId + "/" + asset.filename;
+/** 附件引用 → 展示名（本机文件用 name；资产用 name 优先、回落磁盘名）。 */
+export function aiWritingAttachmentLabel(ref: AiWritingAttachment): string {
+  if (isAiWritingLocalAttachment(ref)) return ref.name?.trim() || "本机文件";
+  const name = ref.name?.trim();
+  return name ? name : ref.filename;
+}
+
+/** 附件去重键（本机文件按 token；资产按 noteId/filename）。 */
+export function aiWritingAttachmentKey(ref: AiWritingAttachment): string {
+  if (isAiWritingLocalAttachment(ref)) return "local:" + ref.token;
+  return ref.noteId + "/" + ref.filename;
 }
 
 /**
- * 归一图片附件引用（渲染层 / 主进程 IPC / DB 三处共用同一份形状判据）：
- * 只认非空字符串 noteId / filename；按 key 去重；按 AI_WRITING_MAX_ATTACHMENTS 截断；无效项直接丢弃。
+ * 归一附件引用（渲染层 / 主进程 IPC / DB 三处共用同一份形状判据）：
+ * - 无 kind 且 noteId/filename 非空 = Phase 1 文档资产图片（兼容旧数据）；
+ * - kind:"local" = 本机文件（token/name/mimeType 非空、size ≥ 0）；
+ * 按 key 去重、按 AI_WRITING_MAX_ATTACHMENTS 截断；无效项直接丢弃。
  * 需要「非法输入报错」的调用方（IPC）应先用原始长度比对，见 electron/ipc/registerAiWriting.ts。
  */
-export function normalizeAiWritingAttachments(raw: unknown): AiAssetRef[] {
+export function normalizeAiWritingAttachments(raw: unknown): AiWritingAttachment[] {
   if (!Array.isArray(raw)) return [];
-  const out: AiAssetRef[] = [];
+  const out: AiWritingAttachment[] = [];
   const seen = new Set<string>();
   for (const item of raw) {
     if (!item || typeof item !== "object") continue;
-    const row = item as { noteId?: unknown; filename?: unknown; name?: unknown };
-    const noteId = typeof row.noteId === "string" ? row.noteId : "";
-    const filename = typeof row.filename === "string" ? row.filename : "";
-    if (!noteId || !filename) continue;
-    const key = noteId + "/" + filename;
+    const row = item as { kind?: unknown; token?: unknown; name?: unknown; size?: unknown; mimeType?: unknown; noteId?: unknown; filename?: unknown };
+    let ref: AiWritingAttachment | null = null;
+    if (row.kind === "local") {
+      if (typeof row.token !== "string" || !row.token) continue;
+      if (typeof row.name !== "string" || !row.name) continue;
+      if (typeof row.mimeType !== "string" || !row.mimeType) continue;
+      if (typeof row.size !== "number" || !Number.isFinite(row.size) || row.size < 0) continue;
+      ref = { kind: "local", token: row.token, name: row.name, size: row.size, mimeType: row.mimeType };
+    } else {
+      const noteId = typeof row.noteId === "string" ? row.noteId : "";
+      const filename = typeof row.filename === "string" ? row.filename : "";
+      if (!noteId || !filename) continue;
+      const asset: AiAssetRef = { noteId, filename };
+      if (typeof row.name === "string" && row.name) asset.name = row.name;
+      ref = asset;
+    }
+    const key = aiWritingAttachmentKey(ref);
     if (seen.has(key)) continue;
     seen.add(key);
-    const ref: AiAssetRef = { noteId, filename };
-    if (typeof row.name === "string" && row.name) ref.name = row.name;
     out.push(ref);
     if (out.length >= AI_WRITING_MAX_ATTACHMENTS) break;
   }
   return out;
+}
+
+/**
+ * 按模式过滤附件（**请求组装 / 渲染层 prune 共用**）：
+ * - docs 模式：只留 noteId 在 docRefs 里的资产图片（本机文件与悬空资产一律剔除）；
+ * - chat 模式：允许资产图片（不限定文档）与本机文件。
+ */
+export function filterAiWritingAttachmentsForMode(
+  mode: AiWritingMode,
+  attachments: unknown,
+  docRefs: readonly AiWritingDocRef[] = [],
+): AiWritingAttachment[] {
+  const cap = aiWritingModeCapabilities(mode);
+  const allowedDocs = new Set(docRefs.map((doc) => doc.id));
+  return normalizeAiWritingAttachments(attachments).filter((ref) => {
+    if (isAiWritingLocalAttachment(ref)) return cap.localFiles;
+    if (!cap.docAssets) return false;
+    return !cap.attachmentsLimitedToDocs || allowedDocs.has(ref.noteId);
+  });
+}
+
+/** IPC 侧模式判据（返错不静默）：坏的组合给出可执行中文原因。 */
+export function aiWritingAttachmentModeError(
+  mode: AiWritingMode,
+  attachments: readonly AiWritingAttachment[],
+  docRefs: readonly AiWritingDocRef[] = [],
+): string | null {
+  const cap = aiWritingModeCapabilities(mode);
+  const allowedDocs = new Set(docRefs.map((doc) => doc.id));
+  for (const ref of attachments) {
+    if (isAiWritingLocalAttachment(ref)) {
+      if (!cap.localFiles) return "多文档推理只允许「所选文档里的附件」，不能混入本机文件";
+      continue;
+    }
+    if (!cap.docAssets) return "当前模式不允许文档资产附件";
+    if (cap.attachmentsLimitedToDocs && !allowedDocs.has(ref.noteId)) {
+      return "附件必须来自已选文档（《" + aiWritingAttachmentLabel(ref) + "》不在本次资料里）";
+    }
+  }
+  return null;
 }
 
 export interface BuildAiWritingMessagesInput {
@@ -233,10 +326,13 @@ export interface BuildAiWritingMessagesInput {
   /** 本轮用户输入（必填）。 */
   input: string;
   /**
-   * 本轮随发的图片附件（只出现在**本轮 user 消息**里；历史轮仍只送文本）。
-   * 主进程按 AI_MAX_IMAGES / 10MB·张 / 20MB·次解析成 image_url；这里不做字节读取。
+   * 本轮随发的附件（只出现在**本轮 user 消息**里；历史轮仍只送文本）。
+   * 资产图片 → image 块；本机文件 → local_file 块（主进程按 token 读，渲染层不读字节）。
+   * docs 模式只允许 noteId ∈ docRefs 的资产图片；本机文件只在 chat 模式允许（判据见 mode capabilities）。
    */
-  attachments?: readonly AiAssetRef[];
+  attachments?: readonly AiWritingAttachment[];
+  /** docs 模式的已选资料（用于过滤「附件必须来自已选文档」）。 */
+  docRefs?: readonly AiWritingDocRef[];
   /** 输入卡上的提示词（作为本轮约束追加到用户内容前）。 */
   promptText?: string | null;
   /** 多文档资料（chat 模式忽略）。 */
@@ -296,7 +392,7 @@ export function pickAiWritingHistory(history: readonly AiWritingHistoryTurn[]): 
  * 多文档模式把资料块并入本轮用户消息（与语雀「根据 N 篇文档推理分析」一致：资料属于提问）。
  */
 export function buildAiWritingMessages(input: BuildAiWritingMessagesInput): AiChatMessage[] {
-  const { mode, input: rawInput, promptText, docs = [], history = [], attachments = [] } = input;
+  const { mode, input: rawInput, promptText, docs = [], docRefs = [], history = [], attachments = [] } = input;
   const messages: AiChatMessage[] = [{ role: "system", content: AI_WRITING_SYSTEM_PROMPT }];
   for (const turn of pickAiWritingHistory(history)) {
     messages.push({ role: turn.role, content: turn.content });
@@ -311,15 +407,22 @@ export function buildAiWritingMessages(input: BuildAiWritingMessagesInput): AiCh
     if (docsBlock) parts.push("【参考资料】\n" + docsBlock);
   }
   const content = parts.join("\n\n");
-  // 图片附件**只挂在本轮 user 消息**：历史轮仍只送文本（不重发、不重复计费；主进程 10 图上限只约束一轮）。
-  const images = normalizeAiWritingAttachments(attachments);
-  if (images.length === 0) {
+  // 附件**只挂在本轮 user 消息**：历史轮仍只送文本（不重发、不重复计费）。
+  // 组装层也按模式判据过滤一次（UI 已 prune；这里是请求侧的最后一道，防坏数据/越权组合）。
+  const attachmentsForMode = filterAiWritingAttachmentsForMode(mode, attachments, docRefs);
+  if (attachmentsForMode.length === 0) {
     messages.push({ role: "user", content: content || inputText });
     return messages;
   }
   const userParts: AiContentPart[] = [];
   if (content) userParts.push({ type: "text", text: content });
-  for (const asset of images) userParts.push({ type: "image", asset });
+  for (const ref of attachmentsForMode) {
+    if (isAiWritingLocalAttachment(ref)) {
+      userParts.push({ type: "local_file", file: { kind: "local", token: ref.token, name: ref.name, size: ref.size, mimeType: ref.mimeType } });
+    } else {
+      userParts.push({ type: "image", asset: { noteId: ref.noteId, filename: ref.filename, ...(ref.name ? { name: ref.name } : {}) } });
+    }
+  }
   messages.push({ role: "user", content: userParts });
   return messages;
 }

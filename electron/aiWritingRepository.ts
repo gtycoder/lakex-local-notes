@@ -14,7 +14,7 @@ import {
   type AiWritingMessage,
   type AiWritingMode,
 } from "../src/core/aiWriting.js";
-import type { AiAssetRef } from "../src/core/aiProviders.js";
+import type { AiWritingAttachment } from "../src/core/aiWriting.js";
 
 interface ConversationRow {
   id: string;
@@ -51,7 +51,7 @@ export interface AppendMessageInput {
   conversationId: string;
   role: "user" | "assistant";
   content: string;
-  attachRefs?: readonly AiAssetRef[];
+  attachRefs?: readonly AiWritingAttachment[];
   reasoning?: string | null;
   durationMs?: number | null;
   stopped?: boolean;
@@ -114,7 +114,7 @@ function toConversation(row: ConversationRow): AiWritingConversation {
   };
 }
 
-function parseAttachRefs(value: string | null): AiAssetRef[] {
+function parseAttachRefs(value: string | null): AiWritingAttachment[] {
   if (!value) return [];
   return normalizeAiWritingAttachments(safeJsonArray(value));
 }

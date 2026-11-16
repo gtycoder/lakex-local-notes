@@ -3,15 +3,15 @@
  * AI 写作输入卡（261116 chat-demo 定稿）交互：
  * ① 提示词库点卡片直接写入输入框（261110 定稿的既有能力，不许被造型改写弄丢）；
  * ② 底部一行：深度思考药丸（默认开、可关）+ 提示词 / 请选择文档药丸；
- * ③ 添加附件是**占位 disabled**（不伪造可用）；
+ * ③ 添加附件：对话写作 = 菜单（文档资产图片 / 本机文件）；多文档 = 只开所选文档选图器；
  * ④ 生成中同格变停止（红底圆形），且忙态禁用深度思考。
  */
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const h = vi.hoisted(() => ({ listNoteImageAssets: vi.fn() }));
-vi.mock("../../lib/native", () => ({ native: { listNoteImageAssets: h.listNoteImageAssets } }));
+const h = vi.hoisted(() => ({ listNoteImageAssets: vi.fn(), listAllNoteImages: vi.fn() }));
+vi.mock("../../lib/native", () => ({ native: { listNoteImageAssets: h.listNoteImageAssets, listAllNoteImages: h.listAllNoteImages } }));
 
 import { AiComposer } from "./AiComposer";
 import { AI_WRITING_PROMPT_CARDS } from "./aiWritingPrompts";
@@ -39,10 +39,11 @@ interface RenderOptions {
   attachRefs?: Array<{ noteId: string; filename: string; name?: string }>;
   onAddAttachments?: (refs: readonly unknown[]) => void;
   onRemoveAttachment?: (asset: unknown) => void;
+  onPickLocalFiles?: () => void;
 }
 
 async function renderComposer(options: RenderOptions = {}) {
-  const { input = "", promptText = null, busy = false, thinking = true, mode = "chat", attachRefs = [], onAddAttachments = vi.fn(), onRemoveAttachment = vi.fn() } = options;
+  const { input = "", promptText = null, busy = false, thinking = true, mode = "chat", attachRefs = [], onAddAttachments = vi.fn(), onRemoveAttachment = vi.fn(), onPickLocalFiles = vi.fn() } = options;
   const onInput = vi.fn();
   const onSetPrompt = vi.fn();
   const onThinkingChange = vi.fn();
@@ -70,10 +71,11 @@ async function renderComposer(options: RenderOptions = {}) {
         onSetDocRefs={() => {}}
         onAddAttachments={onAddAttachments}
         onRemoveAttachment={onRemoveAttachment}
+        onPickLocalFiles={onPickLocalFiles}
       />,
     );
   });
-  return { onInput, onSetPrompt, onThinkingChange, onSend, onStop, onAddAttachments, onRemoveAttachment };
+  return { onInput, onSetPrompt, onThinkingChange, onSend, onStop, onAddAttachments, onRemoveAttachment, onPickLocalFiles };
 }
 
 function buttonByLabel(label: string): HTMLButtonElement | null {
@@ -135,19 +137,20 @@ describe("AiComposer · 底部一行（261116 chat-demo）", () => {
     expect([...document.querySelectorAll(".ln-pill")].some((b) => (b.textContent || "").includes("请选择文档"))).toBe(false);
   });
 
-  it("添加附件 = Phase 1 可点击入口：打开选图器（无资料文档时给明确说明，不伪造可用）", async () => {
-    await renderComposer();
+  it("对话写作的附件入口 = 菜单二选一（文档资产图片 / 本机文件），不是 disabled 占位", async () => {
+    h.listAllNoteImages.mockResolvedValue({ items: [], hasMore: false, scannedNotes: 0, totalNotes: 0 });
+    const { onPickLocalFiles } = await renderComposer();
     const attach = buttonByLabel("添加附件")!;
-    expect(attach).toBeTruthy();
     expect(attach.disabled).toBe(false);
-    expect(attach.className).toContain("aiw-attach");
     expect(attach.getAttribute("aria-expanded")).toBe("false");
-    expect(attach.textContent?.trim()).toBe("");
     act(() => { attach.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true })); });
     await flush();
     expect(attach.getAttribute("aria-expanded")).toBe("true");
-    expect(document.body.textContent).toContain("选择图片");
-    expect(document.body.textContent).toContain("先在输入卡选择资料文档");
+    expect(document.body.textContent).toContain("从文档里选附件");
+    expect(document.body.textContent).toContain("从电脑选择文件");
+    const local = [...document.querySelectorAll("button")].find((b) => (b.textContent || "").includes("从电脑选择文件"))!;
+    act(() => { local.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true })); });
+    expect(onPickLocalFiles).toHaveBeenCalledTimes(1);
   });
 
   it("已挂附件 = 缩略图 chip + 单删（删除回调带原引用）", async () => {
@@ -156,7 +159,7 @@ describe("AiComposer · 底部一行（261116 chat-demo）", () => {
     const chip = document.querySelector(".aiw-attach-chip");
     expect(chip).toBeTruthy();
     expect(chip!.querySelector("img")?.getAttribute("src")).toContain("note-1/a.png");
-    const remove = buttonByLabel("移除图片：a.png")!;
+    const remove = buttonByLabel("移除附件：a.png")!;
     act(() => { remove.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true })); });
     expect(onRemoveAttachment).toHaveBeenCalledWith(ref);
   });

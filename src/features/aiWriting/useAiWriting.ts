@@ -17,14 +17,17 @@ import {
   AI_WRITING_MAX_ATTACHMENTS,
   aiWritingAttachmentErrorHint,
   aiWritingAttachmentKey,
+  aiWritingModeCapabilities,
   aiWritingTitleFrom,
   buildAiWritingMessages,
+  filterAiWritingAttachmentsForMode,
+  isAiWritingLocalAttachment,
+  type AiWritingAttachment,
   type AiWritingConversation,
   type AiWritingDocRef,
   type AiWritingMessage,
   type AiWritingMode,
 } from "../../core/aiWriting";
-import type { AiAssetRef } from "../../core/aiProviders";
 import { getNativeErrorMessage } from "../../lib/nativeErrors";
 import { resolveAiWritingDocs, type AiWritingDocReader } from "./aiWritingContext";
 import { startAiWritingTurn, type AiWritingTurn } from "./aiWritingTurn";
@@ -53,10 +56,12 @@ export interface AiWritingController {
   docRefs: AiWritingDocRef[];
   setDocRefs: (refs: AiWritingDocRef[]) => void;
   /** 待发送的图片附件（只随下一轮 user 消息；发送后清空；不进会话 composer 状态）。 */
-  attachRefs: AiAssetRef[];
-  addAttachments: (refs: readonly AiAssetRef[]) => void;
-  removeAttachment: (asset: AiAssetRef) => void;
+  attachRefs: AiWritingAttachment[];
+  addAttachments: (refs: readonly AiWritingAttachment[]) => void;
+  removeAttachment: (asset: AiWritingAttachment) => void;
   clearAttachments: () => void;
+  /** 主进程 dialog 选本机文件（只在允许 localFiles 的模式下可用）。 */
+  pickLocalFiles: () => Promise<void>;
   /** 深度思考（261116 用户裁决：默认开、可关）。请求级覆盖 = runAiChat options.thinking。 */
   thinking: boolean;
   setThinking: (value: boolean) => void;
@@ -95,7 +100,7 @@ export function useAiWriting(options: { active: boolean }): AiWritingController 
   const [promptText, setPromptTextState] = useState<string | null>(null);
   const [docRefs, setDocRefsState] = useState<AiWritingDocRef[]>([]);
   /** 待发送图片附件（合并按 key 去重；上限 = core 的 AI_WRITING_MAX_ATTACHMENTS）。 */
-  const [attachRefs, setAttachRefs] = useState<AiAssetRef[]>([]);
+  const [attachRefs, setAttachRefs] = useState<AiWritingAttachment[]>([]);
   /** 深度思考开关：默认开（与改造前一致）；关闭 = 请求级覆盖 thinking="disabled"（见 runAssistant）。 */
   const [thinking, setThinking] = useState(true);
   const [aiEnabled, setAiEnabled] = useState(false);
@@ -126,10 +131,24 @@ export function useAiWriting(options: { active: boolean }): AiWritingController 
     void native.aiWritingComposer(conversation.id, patch).catch(() => undefined);
   }, []);
 
+  /**
+   * 模式切换 = **结束当前会话视图（新会话）+ 清空上下文**（261116 第四稿强判据）：
+   * 取消在途请求、detach 当前会话、清 docRefs/attachRefs/输入（以及提示词 chip，避免沿用上一模式的约束）。
+   * 只切 mode 本身不持久化到旧会话——旧会话保留其原本模式，切回来看到的是干净的新视图。
+   */
   const setMode = useCallback((next: AiWritingMode) => {
+    if (next === composerRef.current.mode) return;
+    turnRef.current?.stop();
     setModeState(next);
-    notifyComposer({ mode: next });
-  }, [notifyComposer]);
+    setActiveConversation(null);
+    setMessages([]);
+    setStream(null);
+    setPromptTextState(null);
+    setDocRefsState([]);
+    setAttachRefs([]);
+    setInput("");
+    setLoadError(null);
+  }, []);
 
   const setPromptText = useCallback((next: string | null) => {
     setPromptTextState(next);
@@ -138,16 +157,28 @@ export function useAiWriting(options: { active: boolean }): AiWritingController 
 
   const setDocRefs = useCallback((next: AiWritingDocRef[]) => {
     setDocRefsState(next);
+    // 换选/移除文档 ⇒ 引用这些文档的附件一并清掉（不留悬空附件）；本机文件在多文档模式本来就不允许。
+    const allowed = new Set(next.map((doc) => doc.id));
+    setAttachRefs((prev) => prev.filter((ref) => !isAiWritingLocalAttachment(ref) && allowed.has(ref.noteId)));
     notifyComposer({ docRefs: next });
   }, [notifyComposer]);
 
-  /** 加附件：合并去重 + 上限（core 单一来源）；超出的部分静默丢弃（选择器已按剩余槽位限选）。 */
-  const addAttachments = useCallback((refs: readonly AiAssetRef[]) => {
+  /**
+   * 加附件：模式判据（capabilities 表）先过滤，再合并去重 + 上限。
+   * chat：文档资产图 + 本机文件都可；docs：只收 noteId ∈ 已选文档的资产图片（本机文件直接忽略）。
+   * 超出的部分静默丢弃（选择器已按剩余槽位限选）。
+   */
+  const addAttachments = useCallback((refs: readonly AiWritingAttachment[]) => {
+    const { mode: currentMode, docRefs: currentDocs } = composerRef.current;
+    const cap = aiWritingModeCapabilities(currentMode);
+    const allowedDocs = new Set(currentDocs.map((doc) => doc.id));
     setAttachRefs((prev) => {
       const seen = new Set(prev.map(aiWritingAttachmentKey));
       const merged = [...prev];
       for (const ref of refs) {
         if (merged.length >= AI_WRITING_MAX_ATTACHMENTS) break;
+        if (isAiWritingLocalAttachment(ref) ? !cap.localFiles : !cap.docAssets) continue;
+        if (!isAiWritingLocalAttachment(ref) && cap.attachmentsLimitedToDocs && !allowedDocs.has(ref.noteId)) continue;
         const key = aiWritingAttachmentKey(ref);
         if (seen.has(key)) continue;
         seen.add(key);
@@ -157,12 +188,27 @@ export function useAiWriting(options: { active: boolean }): AiWritingController 
     });
   }, []);
 
-  const removeAttachment = useCallback((asset: AiAssetRef) => {
+  const removeAttachment = useCallback((asset: AiWritingAttachment) => {
     const key = aiWritingAttachmentKey(asset);
     setAttachRefs((prev) => prev.filter((item) => aiWritingAttachmentKey(item) !== key));
   }, []);
 
   const clearAttachments = useCallback(() => setAttachRefs([]), []);
+
+  /** 本机文件：主进程 dialog 选文件（只回引用/元数据），能力表禁止时给出可执行原因。 */
+  const pickLocalFiles = useCallback(async () => {
+    const cap = aiWritingModeCapabilities(composerRef.current.mode);
+    if (!cap.localFiles) {
+      setLoadError("多文档推理只允许「所选文档里的附件」，本机文件请切到「对话写作」。");
+      return;
+    }
+    try {
+      const refs = await native.pickAiLocalFiles();
+      if (refs.length > 0) addAttachments(refs);
+    } catch (error) {
+      setLoadError(getNativeErrorMessage(error) || "选择本机文件失败");
+    }
+  }, [addAttachments]);
 
   // ---- AI 可用性：进入空间时 + 窗口重新聚焦时刷新（用户去设置里配好回来要立刻生效） ----
   const refreshReadiness = useCallback(async () => {
@@ -211,7 +257,8 @@ export function useAiWriting(options: { active: boolean }): AiWritingController 
         setMessages(payload.messages);
         setModeState(payload.conversation.mode);
         setPromptTextState(payload.conversation.promptText);
-        setDocRefsState(payload.conversation.docRefs);
+        // 对话写作 = 纯对话：即使旧数据里存过 docRefs 也不加载（模式判据单一来源）。
+        setDocRefsState(aiWritingModeCapabilities(payload.conversation.mode).docs ? payload.conversation.docRefs : []);
         setAttachRefs([]);
         setInput("");
       })
@@ -263,8 +310,8 @@ export function useAiWriting(options: { active: boolean }): AiWritingController 
     /** 消息列表里占位前要显示的轮次（通常 = history + 本轮 user；重新生成时含 lastUser）。 */
     displayMessages?: AiWritingMessage[];
     userText: string;
-    /** 本轮随发的图片附件（重新生成时沿用最后 user 消息的 attachRefs）。 */
-    attachRefs?: readonly AiAssetRef[];
+    /** 本轮随发的附件（重新生成时沿用最后 user 消息的 attachRefs）。 */
+    attachRefs?: readonly AiWritingAttachment[];
   }) => {
     const { conversation, history, displayMessages, userText, attachRefs: turnAttachments = [] } = params;
     const { mode: currentMode, promptText: currentPrompt, docRefs: currentRefs, thinking: currentThinking } = composerRef.current;
@@ -284,6 +331,7 @@ export function useAiWriting(options: { active: boolean }): AiWritingController 
       promptText: currentPrompt,
       docs,
       attachments: turnAttachments,
+      docRefs: currentRefs,
       history: history.map((message) => ({ role: message.role, content: message.content })),
     });
     const turn = startAiWritingTurn({
@@ -326,7 +374,9 @@ export function useAiWriting(options: { active: boolean }): AiWritingController 
     const text = (override ?? input).trim();
     if (!text) return;
     sendingRef.current = true;
-    const { mode: currentMode, promptText: currentPrompt, docRefs: currentRefs, attachRefs: currentAttachments } = composerRef.current;
+    const { mode: currentMode, promptText: currentPrompt, docRefs: currentRefs, attachRefs: pendingAttachments } = composerRef.current;
+    // 请求前最后一道模式判据（UI 已 prune；防越权/脏数据）：chat 允许两类，docs 只留已选文档的资产图片。
+    const currentAttachments = filterAiWritingAttachmentsForMode(currentMode, pendingAttachments, currentRefs);
     const history = messagesRef.current;
     void (async () => {
       try {
@@ -397,14 +447,14 @@ export function useAiWriting(options: { active: boolean }): AiWritingController 
   return useMemo(() => ({
     conversations, activeConversation, messages, loading, loadError, busy, stream,
     mode, setMode, input, setInput, promptText, setPromptText, docRefs, setDocRefs,
-    attachRefs, addAttachments, removeAttachment, clearAttachments,
+    attachRefs, addAttachments, removeAttachment, clearAttachments, pickLocalFiles,
     thinking, setThinking,
     ready, aiEnabled, providerLabel: providerLabelOf(activeProviderId),
     newConversation, selectConversation, renameConversation, deleteConversation,
     send, stop, regenerate,
   }), [
     conversations, activeConversation, messages, loading, loadError, busy, stream,
-    mode, setMode, input, promptText, setPromptText, docRefs, setDocRefs, attachRefs, addAttachments, removeAttachment, clearAttachments, thinking,
+    mode, setMode, input, promptText, setPromptText, docRefs, setDocRefs, attachRefs, addAttachments, removeAttachment, clearAttachments, pickLocalFiles, thinking,
     ready, aiEnabled, activeProviderId,
     newConversation, selectConversation, renameConversation, deleteConversation, send, stop, regenerate,
   ]);

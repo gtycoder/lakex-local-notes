@@ -10,8 +10,9 @@ import { Check, Copy, Feather, FilePlus2, RotateCcw, Sparkles } from "lucide-rea
 import { MarkdownView } from "../../components/ui/markdown/MarkdownView";
 import { useThrottledMarkdown } from "../../components/ui/markdown/useThrottledMarkdown";
 import { AiThinkingBlock } from "./AiThinkingBlock";
-import { aiWritingAttachmentKey, type AiWritingMessage } from "../../core/aiWriting";
-import { aiWritingAttachmentLabel, aiWritingAttachmentUrl } from "./aiWritingAttachments";
+import { FileKindIcon } from "../bitable/FileKindIcon";
+import { aiWritingAttachmentKey, isAiWritingLocalAttachment, type AiWritingMessage } from "../../core/aiWriting";
+import { aiWritingAttachmentUrl, formatAttachmentBytes } from "./aiWritingAttachments";
 import type { AiWritingStream } from "./useAiWriting";
 
 /**
@@ -64,17 +65,25 @@ export function AiMessageView(props: AiMessageViewProps) {
         <div className="aiw-user-block">
           <div className="aiw-bubble">{message.content}</div>
           {attachRefs.length > 0 && (
-            <div className="aiw-bubble-attach" aria-label={"随发图片 " + attachRefs.length + " 张"}>
-              {attachRefs.map((asset) => (
-                <img
-                  key={aiWritingAttachmentKey(asset)}
-                  className="aiw-bubble-attach__img"
-                  src={aiWritingAttachmentUrl(asset)}
-                  alt={aiWritingAttachmentLabel(asset)}
-                  title={aiWritingAttachmentLabel(asset)}
-                  loading="lazy"
-                  decoding="async"
-                />
+            <div className="aiw-bubble-attach" aria-label={"随发附件 " + attachRefs.length + " 个"}>
+              {attachRefs.map((ref) => (
+                isAiWritingLocalAttachment(ref) ? (
+                  <span key={aiWritingAttachmentKey(ref)} className="aiw-bubble-file" title={ref.name}>
+                    <FileKindIcon name={ref.name} size={16} className="aiw-bubble-file__icon" />
+                    <span className="ln-ellipsis">{ref.name}</span>
+                    <span className="aiw-bubble-file__size">{formatAttachmentBytes(ref.size)}</span>
+                  </span>
+                ) : (
+                  <img
+                    key={aiWritingAttachmentKey(ref)}
+                    className="aiw-bubble-attach__img"
+                    src={aiWritingAttachmentUrl(ref)}
+                    alt={ref.name ?? ref.filename}
+                    title={ref.name ?? ref.filename}
+                    loading="lazy"
+                    decoding="async"
+                  />
+                )
               ))}
             </div>
           )}

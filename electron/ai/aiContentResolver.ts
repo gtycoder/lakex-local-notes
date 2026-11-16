@@ -2,6 +2,7 @@ import type { AiAssetRef, AiChatMessage } from "../../src/core/aiProviders.js";
 import { AppError } from "../../src/core/storeErrors.js";
 import type { AiResolvedContentPart, AiResolvedMessage } from "./aiClient.js";
 import { toImageDataUrl } from "./aiImages.js";
+import { AI_LOCAL_TEXT_MAX_BYTES, AI_LOCAL_TEXT_TOTAL_CHARS, localAttachmentKindOf, type AiLocalFileReader } from "./localAttachments.js";
 import { extractPdfText } from "./pdfText.js";
 
 /** 图片体积护栏（比供应商（单图 32MiB / 总额 64MiB）更保守）。 */
@@ -29,8 +30,14 @@ function mb(bytes: number): string {
  * - document → 读本地文档 → 抽取文本（当前仅 PDF）→ 文本块，带文件名标题。
  * 附件解析失败一律抛 AppError（中文原因），绝不静默降级成空内容。
  */
-export async function resolveAiMessages(messages: AiChatMessage[], reader: AiAssetReader): Promise<AiResolvedMessage[]> {
+export async function resolveAiMessages(
+  messages: AiChatMessage[],
+  reader: AiAssetReader,
+  localFiles?: AiLocalFileReader,
+): Promise<AiResolvedMessage[]> {
   let totalImageBytes = 0;
+  let imageCount = 0;
+  let localTextChars = 0;
   const out: AiResolvedMessage[] = [];
   for (const message of messages) {
     if (typeof message.content === "string") {
@@ -43,19 +50,53 @@ export async function resolveAiMessages(messages: AiChatMessage[], reader: AiAss
         if (part.text) parts.push({ type: "text", text: part.text });
         continue;
       }
-      const asset = part.asset;
-      const file = reader.readAssetBytes(asset.noteId, asset.filename);
-      if (!file) throw new AppError("NotFound", "附件文件不存在：" + label(asset));
-      if (part.type === "image") {
-        if (file.size > AI_MAX_IMAGE_BYTES) throw new AppError("InvalidInput", "图片过大：" + label(asset) + "（上限 " + mb(AI_MAX_IMAGE_BYTES) + "）");
-        totalImageBytes += file.size;
-        if (totalImageBytes > AI_MAX_TOTAL_IMAGE_BYTES) throw new AppError("InvalidInput", "本次图片总大小超过上限 " + mb(AI_MAX_TOTAL_IMAGE_BYTES));
-        parts.push({ type: "image_url", image_url: { url: await toImageDataUrl(file.bytes, label(asset)) } });
-      } else {
-        if (!isPdf(file.mimeType, asset.filename)) throw new AppError("InvalidInput", "暂不支持读取该附件类型：" + label(asset) + "（当前仅支持 PDF）");
-        const extracted = await extractPdfText(file.bytes, asset.noteId + "/" + asset.filename + "/" + file.size);
-        parts.push({ type: "text", text: "【附件：" + label(asset) + "】\n" + extracted.text });
+      // 文档资产图片 / PDF（Phase 1 链路，字节从 note-assets 读）。
+      if (part.type === "image" || part.type === "document") {
+        const asset = part.asset;
+        const file = reader.readAssetBytes(asset.noteId, asset.filename);
+        if (!file) throw new AppError("NotFound", "附件文件不存在：" + label(asset));
+        if (part.type === "image") {
+          imageCount += 1;
+          if (imageCount > 10) throw new AppError("InvalidInput", "一次最多发送 10 张图片");
+          if (file.size > AI_MAX_IMAGE_BYTES) throw new AppError("InvalidInput", "图片过大：" + label(asset) + "（上限 " + mb(AI_MAX_IMAGE_BYTES) + "）");
+          totalImageBytes += file.size;
+          if (totalImageBytes > AI_MAX_TOTAL_IMAGE_BYTES) throw new AppError("InvalidInput", "本次图片总大小超过上限 " + mb(AI_MAX_TOTAL_IMAGE_BYTES));
+          parts.push({ type: "image_url", image_url: { url: await toImageDataUrl(file.bytes, label(asset)) } });
+        } else {
+          if (!isPdf(file.mimeType, asset.filename)) throw new AppError("InvalidInput", "暂不支持读取该附件类型：" + label(asset) + "（当前仅支持 PDF）");
+          const extracted = await extractPdfText(file.bytes, asset.noteId + "/" + asset.filename + "/" + file.size);
+          parts.push({ type: "text", text: "【附件：" + label(asset) + "】\n" + extracted.text });
+        }
+        continue;
       }
+      // 本机文件（261116 第四稿）：主进程按 token 读；渲染层从未接触字节。
+      if (!localFiles) throw new AppError("InvalidInput", "本机文件附件通道未接入");
+      const local = localFiles.readLocalFile(part.file);
+      if (!local) throw new AppError("NotFound", "本机文件附件已失效：" + part.file.name + "（应用重启或文件被移动），请重新选择");
+      const kind = localAttachmentKindOf(local.name);
+      if (kind === "image") {
+        imageCount += 1;
+        if (imageCount > 10) throw new AppError("InvalidInput", "一次最多发送 10 个图片附件");
+        if (local.size > AI_MAX_IMAGE_BYTES) throw new AppError("InvalidInput", "图片过大：" + local.name + "（上限 " + mb(AI_MAX_IMAGE_BYTES) + "）");
+        totalImageBytes += local.size;
+        if (totalImageBytes > AI_MAX_TOTAL_IMAGE_BYTES) throw new AppError("InvalidInput", "本次图片总大小超过上限 " + mb(AI_MAX_TOTAL_IMAGE_BYTES));
+        parts.push({ type: "image_url", image_url: { url: await toImageDataUrl(local.bytes, local.name) } });
+        continue;
+      }
+      if (kind === "text") {
+        if (local.size > AI_LOCAL_TEXT_MAX_BYTES) {
+          throw new AppError("InvalidInput", "文本附件过大：" + local.name + "（上限 " + Math.round(AI_LOCAL_TEXT_MAX_BYTES / 1024) + "KB）");
+        }
+        const text = local.bytes.toString("utf8");
+        if (text.includes("\u0000")) throw new AppError("InvalidInput", "暂不支持二进制文件：" + local.name + "（当前支持图片与文本/代码文件）");
+        const remain = AI_LOCAL_TEXT_TOTAL_CHARS - localTextChars;
+        if (remain <= 0) throw new AppError("InvalidInput", "文本附件总长度超过上限（" + AI_LOCAL_TEXT_TOTAL_CHARS + " 字符），请减少文件");
+        const clipped = text.length > remain ? text.slice(0, remain) + "\n…（已截断）" : text;
+        localTextChars += Math.min(text.length, remain);
+        parts.push({ type: "text", text: "【附件：" + local.name + "】\n" + clipped });
+        continue;
+      }
+      throw new AppError("InvalidInput", "暂不支持该文件类型：" + local.name + "（支持图片与文本/代码文件；PDF 等二进制见 Phase 2）");
     }
     out.push({ role: message.role, content: parts.length ? parts : "" });
   }

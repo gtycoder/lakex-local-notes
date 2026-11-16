@@ -129,8 +129,21 @@
 /* 附件 chips = 缩略图 + 名称 + 单删（与提示词/文档 chip 同一行，但视觉上是「图」而不是标签）。 */
 .aiw-attach-chip { display: flex; align-items: center; gap: var(--lake-space-xs); max-width: 200px; padding: 2px var(--lake-space-sm) 2px 2px; border: 0.5px solid var(--lake-ctl-border); border-radius: var(--lake-radius-pill); background: var(--lake-bg-block); }
 .aiw-attach-chip__thumb { flex: none; width: 24px; height: 24px; border-radius: var(--lake-radius-pill); object-fit: cover; }
+.aiw-attach-chip__kind { flex: none; }
+.aiw-attach-chip__doc { flex: none; max-width: 96px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--lake-text-3); font-size: var(--lake-font-size-nano); }
 .aiw-attach-chip__name { min-width: 0; color: var(--lake-text-2); font-size: var(--lake-font-size-small); }
+.aiw-attach-chip__size { flex: none; color: var(--lake-text-3); font-size: var(--lake-font-size-nano); }
 .aiw-attach-chip__remove { flex: none; width: 16px; height: 16px; }
+/* 对话写作的附件来源菜单（文档资产图片 / 本机文件）——条目本身走 .ln-row。 */
+.aiw-attach-menu { padding: var(--lake-space-xs); }
+.aiw-attach-menu__item { width: 100%; }
+/* 历史气泡里的本机文件 = 文件名 chip（渲染层没有字节，不画缩略图）。 */
+.aiw-bubble-file { display: inline-flex; align-items: center; gap: var(--lake-space-xs); max-width: 240px; padding: 2px var(--lake-space-sm); border: 0.5px solid var(--lake-ctl-border); border-radius: var(--lake-radius-pill); background: var(--lake-bg-block); color: var(--lake-text-2); font-size: var(--lake-font-size-small); }
+.aiw-bubble-file__size { flex: none; color: var(--lake-text-3); font-size: var(--lake-font-size-nano); }
+/* 对话写作「从文档资产选图片」：先在工作区内挑一篇文档（不产生 docRefs）。 */
+.aiw-pick__doclist { display: flex; flex-direction: column; gap: 2px; }
+.aiw-pick__doc { width: 100%; }
+.aiw-pick__switch { align-self: flex-start; margin: 0 0 var(--lake-space-xs); }
 /* 历史消息里的随发图片（只读）：气泡下方一排缩略图；文件被清理后由浏览器显示破图，不加空占位。 */
 .aiw-user-block { display: flex; flex-direction: column; align-items: flex-end; gap: var(--lake-space-xs); max-width: var(--lake-chat-bubble-max); }
 .aiw-user-block .aiw-bubble { max-width: 100%; }
@@ -141,6 +154,9 @@
 .aiw-pick__head { display: flex; align-items: center; justify-content: space-between; gap: var(--lake-space-sm); padding: var(--lake-space-sm) var(--lake-space-md); border-bottom: 0.5px solid var(--lake-border-2); }
 .aiw-pick__title { display: inline-flex; align-items: center; gap: var(--lake-space-xs); color: var(--lake-text-1); font-size: var(--lake-font-size-body); font-weight: var(--lake-font-weight-medium); }
 .aiw-pick__body { max-height: min(420px, 60vh); overflow-y: auto; padding: var(--lake-space-sm) var(--lake-space-md); }
+.aiw-pick__search { display: flex; align-items: center; gap: var(--lake-space-xs); margin: 0 var(--lake-space-md); padding: var(--lake-space-xs) 0; border-bottom: 0.5px solid var(--lake-border-2); }
+.aiw-pick__search-icon { flex: none; color: var(--lake-text-4); }
+.aiw-pick__search-field { flex: 1 1 auto; min-width: 0; padding: 0; border: 0; background: transparent; color: var(--lake-text-1); font-size: var(--lake-font-size-small); outline: none; }
 .aiw-pick__empty, .aiw-pick__hint { margin: var(--lake-space-lg) 0; color: var(--lake-text-3); font-size: var(--lake-font-size-small); text-align: center; }
 .aiw-pick__hint { margin: var(--lake-space-sm) 0 0; font-size: var(--lake-font-size-tiny); }
 .aiw-pick__group + .aiw-pick__group { margin-top: var(--lake-space-md); }

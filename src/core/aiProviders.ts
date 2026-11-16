@@ -360,16 +360,32 @@ export interface AiAssetRef {
 }
 
 /**
+ * 本机文件引用（261116 第四稿）：渲染层只拿**引用与元数据**，绝对路径与字节都只存在主进程。
+ * `token` 由主进程选择文件时登记（内存注册表），发送时按 token 读文件；
+ * 应用重启后旧 token 失效 ⇒ 明确报「附件已失效，请重新选择」（历史仍按 name 展示）。
+ */
+export interface AiLocalFileRef {
+  kind: "local";
+  token: string;
+  name: string;
+  size: number;
+  mimeType: string;
+}
+
+/**
  * 多模态内容块：
  * - `text`     —— 普通文本；
  * - `image`    —— 主进程读本地图片 → OpenAI 兼容 `image_url` data URL；
- * - `document` —— 主进程读本地文档并抽取文本（当前仅 PDF）→ 文本块。
- * 图片 / 文档块**只允许出现在 `user` 消息**（供应商对 system/assistant 带图直接 400）。
+ * - `document` —— 主进程读本地文档并抽取文本（当前仅 PDF）→ 文本块；
+ * - `local_file` —— 主进程按 token 读**本机文件**：图片 → image_url；文本/代码 → 带文件名的文本块；
+ *   PDF/二进制 → 明确报错（Phase 2）。
+ * 图片 / 文档 / 本机文件块**只允许出现在 `user` 消息**（供应商对 system/assistant 带图直接 400）。
  */
 export type AiContentPart =
   | { type: "text"; text: string }
   | { type: "image"; asset: AiAssetRef }
-  | { type: "document"; asset: AiAssetRef };
+  | { type: "document"; asset: AiAssetRef }
+  | { type: "local_file"; file: AiLocalFileRef };
 
 /** 对话消息（主进程/渲染层共用）；`content` 为字符串或内容块数组。 */
 export interface AiChatMessage {

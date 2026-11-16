@@ -2,7 +2,7 @@ import type { CleanOrphanResult, DataHealthReport, DeepCleanupResult, DocumentTa
 import type { TrashItem } from "../core/trashPolicy";
 import type { NoteKind } from "../core/noteKind";
 import type { MissingBodyDoc, MissingQuickNoteDoc } from "../core/missingBody";
-import type { AiChatMessage, AiChatRequestOptions, AiChatResult, AiListModelsResult, AiProviderPatch, AiSettingsPatch, AiSettingsView, AiStreamEvent, AiTestResult } from "../core/aiProviders";
+import type { AiChatMessage, AiChatRequestOptions, AiChatResult, AiListModelsResult, AiLocalFileRef, AiProviderPatch, AiSettingsPatch, AiSettingsView, AiStreamEvent, AiTestResult } from "../core/aiProviders";
 import type {
   AiWritingComposerPatch,
   AiWritingConversation,
@@ -146,6 +146,8 @@ export interface LakeNative {
   aiWritingAppendMessage(input: AiWritingMessageAppendInput): Promise<AiWritingMessage>;
   aiWritingUpdateMessage(id: string, patch: AiWritingMessagePatch): Promise<AiWritingMessage | null>;
   aiWritingDeleteLastAssistant(conversationId: string): Promise<{ ok: true }>;
+  /** 主进程 dialog 选本机文件，只回引用/元数据（字节不进渲染层）。 */
+  pickAiLocalFiles(): Promise<AiLocalFileRef[]>;
   createNote(title: string): Promise<NoteDocument>;
   /**
    * 保存正文。`baseHash`（可选，Batch4-D 保存版本守卫）= 打开/上次保存时的正文 sha256：
@@ -297,7 +299,7 @@ export interface LakeNative {
   readOrphanPreview(id: number): Promise<{ filename: string; mimeType: string; supported: boolean; dataUrl?: string }>;
   listRemovedAssets(): Promise<Array<{ noteId: string; filename: string; status: "orphan" | "history"; orphanId?: number; size: number; mimeType: string; noteTitle?: string; noteState?: "active" | "trash" | "missing"; detectedAt?: string; fileMissing?: boolean }>>;
   readAssetPreview(noteId: string, filename: string): Promise<{ filename: string; mimeType: string; supported: boolean; dataUrl?: string }>;
-  /** 列出某篇文档 note-assets 里的图片（AI 写作附件选择器用；只回 filename/size/mimeType，不算 sha）。 */
+  /** 列出某篇文档 note-assets 里的图片（多文档推理的附件源；只回 filename/size/mimeType，不算 sha）。 */
   listNoteImageAssets(noteId: string): Promise<Array<{ filename: string; size: number; mimeType: string }>>;
   /** 附件操作（桌面本地优先）：系统默认应用打开。 */
   openAttachment(noteId: string, filename: string): Promise<{ ok: boolean; error?: string }>;
@@ -480,6 +482,7 @@ export const native = {
   aiWritingAppendMessage: (input: AiWritingMessageAppendInput) => api().aiWritingAppendMessage(input),
   aiWritingUpdateMessage: (id: string, patch: AiWritingMessagePatch) => api().aiWritingUpdateMessage(id, patch),
   aiWritingDeleteLastAssistant: (conversationId: string) => api().aiWritingDeleteLastAssistant(conversationId),
+  pickAiLocalFiles: () => api().pickAiLocalFiles(),
   createNote: (title: string) => api().createNote(title),
   saveNote: (id: string, title: string, content: string, caches?: { markdown?: string | null; plain?: string | null }, baseHash?: string) => api().saveNote(id, title, content, caches, baseHash),
   updateNoteCaches: (id: string, markdown: string | null, plain: string | null) => api().updateNoteCaches(id, markdown, plain),

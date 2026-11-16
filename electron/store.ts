@@ -2005,6 +2005,7 @@ export class Store {
     return this.noteAssetsDirFor(id);
   }
 
+
   /** 渲染层刷新用：全部笔记摘要（含锁状态）。 */
   listNoteSummaries(): NoteSummary[] {
     return this.noteQueries.listNoteSummaries();

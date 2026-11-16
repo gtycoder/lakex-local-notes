@@ -234,6 +234,7 @@ export function AiWritingWorkspace({ active, treeNodes, topbarLeading, onOpenSet
                     onSetDocRefs={controller.setDocRefs}
                     onAddAttachments={controller.addAttachments}
                     onRemoveAttachment={controller.removeAttachment}
+                    onPickLocalFiles={() => { void controller.pickLocalFiles(); }}
                   />
                   <div className="aiw-suggest">
                     <p className="aiw-suggest__label">点一点试试：</p>
@@ -283,6 +284,7 @@ export function AiWritingWorkspace({ active, treeNodes, topbarLeading, onOpenSet
                   onSetDocRefs={controller.setDocRefs}
                   onAddAttachments={controller.addAttachments}
                   onRemoveAttachment={controller.removeAttachment}
+                  onPickLocalFiles={() => { void controller.pickLocalFiles(); }}
                 />
               </div>
             )}

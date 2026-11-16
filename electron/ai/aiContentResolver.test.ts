@@ -61,3 +61,53 @@ describe("内容块 → 供应商消息", () => {
     )).rejects.toThrow(/仅支持 PDF/);
   });
 });
+
+
+describe("本机文件附件（261116 第四稿）", () => {
+  const localFiles = (files: Record<string, { bytes: Buffer; mimeType: string; name: string }>) => ({
+    readLocalFile(ref: { token: string }) {
+      const file = files[ref.token];
+      return file ? { bytes: file.bytes, mimeType: file.mimeType, name: file.name, size: file.bytes.length } : null;
+    },
+  });
+  const textRef = (name: string) => ({ kind: "local" as const, token: name, name, size: 10, mimeType: "text/plain" });
+
+  it("文本/代码 → 带文件名的 text 块；图片 → image_url；顺序保持", async () => {
+    const out = await resolveAiMessages(
+      [{ role: "user", content: [
+        { type: "text", text: "看看这些" },
+        { type: "local_file", file: textRef("main.ts") },
+        { type: "local_file", file: { kind: "local", token: "img", name: "shot.png", size: PNG_1PX.length, mimeType: "image/png" } },
+      ] }],
+      reader({}),
+      localFiles({
+        "main.ts": { bytes: Buffer.from("export const x = 1;\n"), mimeType: "text/plain", name: "main.ts" },
+        img: { bytes: PNG_1PX, mimeType: "image/png", name: "shot.png" },
+      }),
+    );
+    const parts = out[0].content as Array<{ type: string; text?: string; image_url?: { url: string } }>;
+    expect(parts[0]).toEqual({ type: "text", text: "看看这些" });
+    expect(parts[1].type).toBe("text");
+    expect(parts[1].text).toContain("【附件：main.ts】");
+    expect(parts[1].text).toContain("export const x");
+    expect(parts[2].type).toBe("image_url");
+    expect(parts[2].image_url?.url.startsWith("data:image/png;base64,")).toBe(true);
+  });
+
+  it("PDF/未知二进制 → 明确拒绝（Phase 2 文案）；失效 token → 请重新选择", async () => {
+    const pdf = [{ type: "local_file" as const, file: { kind: "local" as const, token: "pdf", name: "a.pdf", size: 10, mimeType: "application/pdf" } }];
+    await expect(resolveAiMessages([{ role: "user", content: pdf }], reader({}), localFiles({ pdf: { bytes: Buffer.from("%PDF"), mimeType: "application/pdf", name: "a.pdf" } })))
+      .rejects.toThrow(/暂不支持该文件类型：a\.pdf.*Phase 2/);
+    await expect(resolveAiMessages([{ role: "user", content: pdf }], reader({}), localFiles({})))
+      .rejects.toThrow(/本机文件附件已失效/);
+  });
+
+  it("文本附件过大 → 可执行错误（上限 200KB）", async () => {
+    const big = Buffer.alloc(200 * 1024 + 1, 97);
+    await expect(resolveAiMessages(
+      [{ role: "user", content: [{ type: "local_file", file: { kind: "local", token: "big", name: "big.txt", size: big.length, mimeType: "text/plain" } }] }],
+      reader({}),
+      localFiles({ big: { bytes: big, mimeType: "text/plain", name: "big.txt" } }),
+    )).rejects.toThrow(/文本附件过大：big\.txt（上限 200KB）/);
+  });
+});

@@ -18,11 +18,20 @@
  * 有思考输出时由消息组件显示「已深度思考」。
  */
 import { useRef, useState } from "react";
-import { ArrowUp, Brain, FileText, Paperclip, Sparkles, Square, X } from "lucide-react";
+import { ArrowUp, Brain, FileImage, FilePlus2, FileText, Paperclip, Sparkles, Square, X } from "lucide-react";
 import type { TreeNode } from "../../lib/types";
-import type { AiAssetRef } from "../../core/aiProviders";
-import { aiWritingAttachmentKey, type AiWritingDocRef, type AiWritingMode } from "../../core/aiWriting";
-import { aiWritingAttachmentLabel, aiWritingAttachmentUrl } from "./aiWritingAttachments";
+import { Popover } from "../../components/ui/Overlay";
+import { usePopoverPosition } from "../../hooks/usePopoverPosition";
+import { FileKindIcon } from "../bitable/FileKindIcon";
+import {
+  aiWritingAttachmentKey,
+  aiWritingModeCapabilities,
+  isAiWritingLocalAttachment,
+  type AiWritingAttachment,
+  type AiWritingDocRef,
+  type AiWritingMode,
+} from "../../core/aiWriting";
+import { aiWritingAttachmentLabel, aiWritingAttachmentPreviewUrl, formatAttachmentBytes } from "./aiWritingAttachments";
 import { toggleDocRef } from "./aiWritingDocs";
 import { AI_WRITING_PROMPT_CARDS, type AiWritingPromptCard } from "./aiWritingPrompts";
 import { AiPromptLibrary } from "./AiPromptLibrary";
@@ -35,8 +44,8 @@ export interface AiComposerProps {
   busy: boolean;
   promptText: string | null;
   docRefs: readonly AiWritingDocRef[];
-  /** 待发送图片附件（只随下一轮 user 消息；发送后由 controller 清空）。 */
-  attachRefs: readonly AiAssetRef[];
+  /** 待发送附件（文档资产图片 / 本机文件；只随下一轮 user 消息；发送后由 controller 清空）。 */
+  attachRefs: readonly AiWritingAttachment[];
   treeNodes: readonly TreeNode[];
   /** 深度思考开关（默认开）：请求级覆盖走 useAiWriting → runAiChat options.thinking。 */
   thinking: boolean;
@@ -47,8 +56,10 @@ export interface AiComposerProps {
   onThinkingChange: (value: boolean) => void;
   onSetPrompt: (text: string | null) => void;
   onSetDocRefs: (refs: AiWritingDocRef[]) => void;
-  onAddAttachments: (refs: readonly AiAssetRef[]) => void;
-  onRemoveAttachment: (asset: AiAssetRef) => void;
+  onAddAttachments: (refs: readonly AiWritingAttachment[]) => void;
+  onRemoveAttachment: (asset: AiWritingAttachment) => void;
+  /** 主进程 dialog 选本机文件（只在对话写作可用；docs 模式 UI 不提供入口）。 */
+  onPickLocalFiles: () => void;
 }
 
 function promptTitleOf(promptText: string): string {
@@ -58,8 +69,9 @@ function promptTitleOf(promptText: string): string {
 
 export function AiComposer({
   mode, input, busy, promptText, docRefs, attachRefs, treeNodes, thinking, placeholder = "从这里开始对话",
-  onInput, onSend, onStop, onThinkingChange, onSetPrompt, onSetDocRefs, onAddAttachments, onRemoveAttachment,
+  onInput, onSend, onStop, onThinkingChange, onSetPrompt, onSetDocRefs, onAddAttachments, onRemoveAttachment, onPickLocalFiles,
 }: AiComposerProps) {
+  const caps = aiWritingModeCapabilities(mode);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   /**
    * 气泡锚点 = **触发它的那个按钮**（用户 261111 报「提示词弹窗位置错误」：
@@ -69,6 +81,14 @@ export function AiComposer({
   const [promptAnchor, setPromptAnchor] = useState<HTMLElement | null>(null);
   const [docAnchor, setDocAnchor] = useState<HTMLElement | null>(null);
   const [attachAnchor, setAttachAnchor] = useState<HTMLElement | null>(null);
+  /** 对话写作的附件来源菜单（文档资产图 / 本机文件）；docs 模式直接开选图器，没有本机文件入口。 */
+  const [attachMenuAnchor, setAttachMenuAnchor] = useState<HTMLElement | null>(null);
+  const attachMenu = usePopoverPosition({ open: Boolean(attachMenuAnchor), anchor: attachMenuAnchor, gap: 6, margin: 10, width: 232 });
+  /** 对话写作：文档浏览面板（只寻址；选中一篇后进入它的附件列表，不产生 docRefs）。 */
+  const [assetDocAnchor, setAssetDocAnchor] = useState<HTMLElement | null>(null);
+  const [assetDoc, setAssetDoc] = useState<AiWritingDocRef | null>(null);
+  const attachBtnRef = useRef<HTMLButtonElement | null>(null);
+  const docTitleById = new Map(treeNodes.filter((node) => node.nodeType === "note").map((node) => [node.noteFileId ?? node.id, node.title]));
 
   const canSend = input.trim().length > 0 && !busy;
   /**
@@ -94,7 +114,7 @@ export function AiComposer({
 
   return (
     <div className="aiw-composer">
-      {(promptText || docRefs.length > 0 || attachRefs.length > 0) && (
+      {(promptText || (caps.docs && docRefs.length > 0) || attachRefs.length > 0) && (
         <div className="aiw-composer__chips">
           {promptText && (
             <div className="ln-tag aiw-chip">
@@ -105,7 +125,7 @@ export function AiComposer({
               </button>
             </div>
           )}
-          {docRefs.length > 0 && (
+          {caps.docs && docRefs.length > 0 && (
             <div className="ln-tag aiw-chip">
               <FileText size={13} aria-hidden="true" />
               <span className="ln-ellipsis">{docRefs.length} 篇文档</span>
@@ -114,15 +134,27 @@ export function AiComposer({
               </button>
             </div>
           )}
-          {attachRefs.map((asset) => (
-            <div key={aiWritingAttachmentKey(asset)} className="aiw-attach-chip">
-              <img className="aiw-attach-chip__thumb" src={aiWritingAttachmentUrl(asset)} alt="" loading="lazy" decoding="async" />
-              <span className="ln-ellipsis aiw-attach-chip__name">{aiWritingAttachmentLabel(asset)}</span>
-              <button type="button" className="ln-iconbtn ln-iconbtn--compact aiw-attach-chip__remove" aria-label={"移除图片：" + aiWritingAttachmentLabel(asset)} onClick={() => onRemoveAttachment(asset)}>
-                <X size={12} aria-hidden="true" />
-              </button>
-            </div>
-          ))}
+          {attachRefs.map((ref) => {
+            const label = aiWritingAttachmentLabel(ref);
+            const previewUrl = aiWritingAttachmentPreviewUrl(ref);
+            return (
+              <div key={aiWritingAttachmentKey(ref)} className="aiw-attach-chip">
+                {previewUrl ? (
+                  <img className="aiw-attach-chip__thumb" src={previewUrl} alt="" loading="lazy" decoding="async" />
+                ) : (
+                  <FileKindIcon name={isAiWritingLocalAttachment(ref) ? ref.name : "文件"} size={18} className="aiw-attach-chip__kind" />
+                )}
+                {!caps.docs && !isAiWritingLocalAttachment(ref) && docTitleById.get(ref.noteId) && (
+                  <span className="aiw-attach-chip__doc">{docTitleById.get(ref.noteId)}</span>
+                )}
+                <span className="ln-ellipsis aiw-attach-chip__name">{label}</span>
+                {isAiWritingLocalAttachment(ref) && <span className="aiw-attach-chip__size">{formatAttachmentBytes(ref.size)}</span>}
+                <button type="button" className="ln-iconbtn ln-iconbtn--compact aiw-attach-chip__remove" aria-label={"移除附件：" + label} onClick={() => onRemoveAttachment(ref)}>
+                  <X size={12} aria-hidden="true" />
+                </button>
+              </div>
+            );
+          })}
         </div>
       )}
       {/* 输入：无边框、随内容自增高（field-sizing: content，见 aiWriting.css；不再用 JS 量 scrollHeight）。 */}
@@ -177,16 +209,22 @@ export function AiComposer({
           )}
         </div>
         <div className="aiw-composer__send">
-          {/* 添加附件（261116 Phase 1）：从**已选资料文档**的图片里挑（docs/ai/ATTACHMENTS-PLAN.md）。
-              没选资料文档时也可点开——选择器会说明「先在输入卡选择资料文档」，不伪造可用状态。 */}
+          {/* 添加附件（261116 第四稿，判据 = aiWritingModeCapabilities）：
+              · 对话写作：菜单二选一「文档资产图片 / 本机文件」；
+              · 多文档推理：只允许所选文档里的图片（无本机文件入口）。 */}
           <button
             type="button"
+            ref={(node) => { attachBtnRef.current = node; }}
             className={"aiw-attach" + (attachRefs.length > 0 ? " is-on" : "")}
             aria-label="添加附件"
-            aria-expanded={Boolean(attachAnchor)}
-            title={docRefs.length > 0 ? "从已选资料文档的图片里选" : "先选择资料文档，再从文档图片里选"}
+            aria-expanded={caps.localFiles ? Boolean(attachMenuAnchor) : Boolean(attachAnchor)}
+            title={caps.localFiles ? "添加附件（文档里的附件 / 本机文件）" : "从已选文档的附件里选"}
             disabled={busy}
-            onClick={(event) => setAttachAnchor(attachAnchor ? null : event.currentTarget)}
+            onClick={(event) => {
+              attachBtnRef.current = event.currentTarget;
+              if (caps.localFiles) setAttachMenuAnchor(attachMenuAnchor ? null : event.currentTarget);
+              else setAttachAnchor(attachAnchor ? null : event.currentTarget);
+            }}
           >
             <Paperclip size={16} aria-hidden="true" />
           </button>
@@ -221,11 +259,62 @@ export function AiComposer({
       <AiImagePicker
         open={Boolean(attachAnchor)}
         anchor={attachAnchor}
-        docs={docRefs}
+        docs={caps.attachmentsLimitedToDocs ? docRefs : assetDoc ? [assetDoc] : []}
+        onBackToDocs={caps.localFiles ? () => { setAttachAnchor(null); setAssetDocAnchor(attachBtnRef.current); } : undefined}
         selected={attachRefs}
         onAdd={onAddAttachments}
         onDismiss={() => setAttachAnchor(null)}
       />
+      <AiDocPicker
+        open={Boolean(assetDocAnchor)}
+        anchor={assetDocAnchor}
+        treeNodes={treeNodes}
+        selected={assetDoc ? [assetDoc] : []}
+        onToggle={(ref) => {
+          setAssetDoc(ref);
+          setAssetDocAnchor(null);
+          setAttachAnchor(attachBtnRef.current);
+        }}
+        onReplace={(refs) => {
+          const first = refs[refs.length - 1] ?? null;
+          setAssetDoc(first);
+          setAssetDocAnchor(null);
+          if (first) setAttachAnchor(attachBtnRef.current);
+        }}
+        onDismiss={() => setAssetDocAnchor(null)}
+      />
+      <Popover
+        open={Boolean(attachMenuAnchor)}
+        onDismiss={() => setAttachMenuAnchor(null)}
+        label="添加附件"
+        className="aiw-attach-menu"
+        style={attachMenu.style ?? undefined}
+        surfaceRef={attachMenu.surfaceRef}
+      >
+        <button
+          type="button"
+          className="ln-row aiw-attach-menu__item"
+          onClick={() => {
+            setAttachMenuAnchor(null);
+            setAssetDoc(null);
+            setAssetDocAnchor(attachBtnRef.current);
+          }}
+        >
+          <FileImage size={16} className="ln-row__icon" aria-hidden="true" />
+          <span className="ln-ellipsis">从文档里选附件</span>
+        </button>
+        <button
+          type="button"
+          className="ln-row aiw-attach-menu__item"
+          onClick={() => {
+            setAttachMenuAnchor(null);
+            onPickLocalFiles();
+          }}
+        >
+          <FilePlus2 size={16} className="ln-row__icon" aria-hidden="true" />
+          <span className="ln-ellipsis">从电脑选择文件…</span>
+        </button>
+      </Popover>
     </div>
   );
 }

@@ -9,8 +9,8 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const h = vi.hoisted(() => ({ listNoteImageAssets: vi.fn() }));
-vi.mock("../../lib/native", () => ({ native: { listNoteImageAssets: h.listNoteImageAssets } }));
+const h = vi.hoisted(() => ({ listNoteImageAssets: vi.fn(), listAllNoteImages: vi.fn() }));
+vi.mock("../../lib/native", () => ({ native: { listNoteImageAssets: h.listNoteImageAssets, listAllNoteImages: h.listAllNoteImages } }));
 
 import { AiImagePicker } from "./AiImagePicker";
 import type { AiWritingDocRef } from "../../core/aiWriting";
@@ -47,7 +47,7 @@ function render(options: { docs?: AiWritingDocRef[]; selected?: Array<{ noteId: 
 
 const cell = (label: string) => [...document.querySelectorAll<HTMLButtonElement>(".aiw-pick__cell")].find((el) => el.getAttribute("aria-label") === label)!;
 
-beforeEach(() => { h.listNoteImageAssets.mockReset(); });
+beforeEach(() => { h.listNoteImageAssets.mockReset(); h.listAllNoteImages.mockReset(); });
 afterEach(() => {
   act(() => { root?.unmount(); });
   host?.remove();
@@ -59,7 +59,7 @@ describe("AiImagePicker · 源与选择", () => {
   it("没选资料文档：说明先选文档，不发请求", async () => {
     render();
     await flush();
-    expect(document.body.textContent).toContain("先在输入卡选择资料文档");
+    expect(document.body.textContent).toContain("先选择一篇文档");
     expect(h.listNoteImageAssets).not.toHaveBeenCalled();
   });
 

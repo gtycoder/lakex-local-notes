@@ -143,6 +143,15 @@ describe("AiMessageView · 用户消息的随发图片（261116 Phase 1）", () 
     expect(document.querySelector(".aiw-msg--user .aiw-bubble")?.textContent).toBe("看这两张图");
   });
 
+  it("本机文件附件 = 文件名 chip（渲染层没有字节，不画缩略图）", () => {
+    render({ message: userMessage([{ kind: "local", token: "loc-1", name: "main.ts", size: 2048, mimeType: "text/plain" }]) });
+    expect(document.querySelector(".aiw-bubble-attach__img")).toBeNull();
+    const chip = document.querySelector(".aiw-bubble-file");
+    expect(chip).toBeTruthy();
+    expect(chip!.textContent).toContain("main.ts");
+    expect(chip!.textContent).toContain("2.0 KB");
+  });
+
   it("没有附件的用户消息不渲染附件区", () => {
     render({ message: userMessage() });
     expect(document.querySelector(".aiw-bubble-attach")).toBeNull();

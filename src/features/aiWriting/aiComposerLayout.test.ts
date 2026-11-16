@@ -66,16 +66,27 @@ describe("AI 写作输入卡版式（261116 用户裁决）", () => {
     expect(composer.slice(0, docsPill)).toContain('mode === "docs"');
   });
 
-  it("添加附件 = Phase 1 可点击入口（aria-expanded + 打开选图器），不是 disabled 占位", () => {
+  it("添加附件入口按模式判据：对话写作=菜单（文档资产图片/本机文件），多文档=只开所选文档选图器", () => {
     expect(composer).toContain('className={"aiw-attach"');
     expect(composer).toContain('aria-label="添加附件"');
-    expect(composer).toContain("aria-expanded={Boolean(attachAnchor)}");
-    const attachTag = composer.slice(composer.indexOf('className={"aiw-attach"'), composer.indexOf("</button>", composer.indexOf('className={"aiw-attach"')));
-    expect(attachTag).not.toContain("disabled={true}");
+    // 入口行为读 capability 表，不靠零散 if
+    expect(composer).toContain("caps.localFiles");
+    expect(composer).toContain("attachMenuAnchor");
+    expect(src).toContain("从文档里选附件");
+    expect(src).toContain("从电脑选择文件");
+    expect(src).toContain("onPickLocalFiles");
     expect(src).toContain("<AiImagePicker");
+    expect(src).toContain("onBackToDocs={caps.localFiles");
     expect(src).toContain("onAdd={onAddAttachments}");
     expect(cssBlock).toContain(".aiw-attach:disabled");
     expect(cssBlock).toContain(".aiw-attach.is-on");
+  });
+
+  it("对话写作不显示任何文档 chip/药丸（纯对话判据 = caps.docs）", () => {
+    expect(composer).toContain("caps.docs && docRefs.length > 0");
+    // 「请选择文档」/「已选 N 篇」药丸在 mode === "docs" 分支内
+    expect(composer.indexOf('mode === "docs"')).toBeGreaterThan(0);
+    expect(composer).toContain("caps.localFiles ?");
   });
 
   it("右侧圆形发送：32px 主色；生成中**同格**变停止（红底），不再有文字「发送」按钮", () => {

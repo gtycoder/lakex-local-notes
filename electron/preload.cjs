@@ -235,6 +235,7 @@ contextBridge.exposeInMainWorld("lakeNative", {
   aiWritingAppendMessage: (input) => invoke("ai_writing_append_message", input),
   aiWritingUpdateMessage: (id, patch) => invoke("ai_writing_update_message", id, patch),
   aiWritingDeleteLastAssistant: (id) => invoke("ai_writing_delete_last_assistant", id),
+  pickAiLocalFiles: () => invoke("pick_ai_local_files"),
   onAiStream: (callback) => {
     const listener = (_event, chunk) => callback(chunk);
     ipcRenderer.on("ai:stream", listener);

@@ -111,9 +111,9 @@ export function aiWritingChatTitle(providerLabel: string): string {
   return "和 " + providerLabel + " 对话写作";
 }
 
-/** 多文档模式标题：根据 N 篇文档 推理分析 / 根据「名称」推理分析 / 请选择文档。 */
+/** 多文档模式（知识库问答）标题：在 N 篇文档里问答 / 在《名称》里问答 / 先选文档。 */
 export function aiWritingDocsTitle(docRefs: readonly { title: string }[]): string {
-  if (docRefs.length === 0) return "根据 请选择文档 推理分析";
-  if (docRefs.length === 1) return "根据 " + docRefs[0].title + " 推理分析";
-  return "根据 " + docRefs.length + " 篇文档 推理分析";
+  if (docRefs.length === 0) return "选择文档，开始知识库问答";
+  if (docRefs.length === 1) return "在《" + docRefs[0].title + "》里问答";
+  return "在 " + docRefs.length + " 篇文档里问答";
 }

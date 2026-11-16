@@ -5,8 +5,12 @@ import {
   AI_WRITING_MAX_ATTACHMENTS,
   AI_WRITING_MAX_HISTORY_TURNS,
   AI_WRITING_SYSTEM_PROMPT,
+  AI_WRITING_MODE_CAPABILITIES,
   aiWritingAttachmentErrorHint,
+  aiWritingAttachmentModeError,
+  aiWritingModeCapabilities,
   aiWritingTitleFrom,
+  filterAiWritingAttachmentsForMode,
   normalizeAiWritingAttachments,
   buildAiWritingDocsBlock,
   buildAiWritingMessages,
@@ -144,10 +148,55 @@ describe("AI 写作图片附件（261116 Phase 1）", () => {
   it("带图失败的提示：只在 400/参数类错误后追加，且不点名任何具体模型", () => {
     const hinted = aiWritingAttachmentErrorHint("请求参数有误（检查模型名与温度）：400 invalid_request_error", 2);
     expect(hinted).toContain("请求参数有误");
-    expect(hinted).toContain("本次带了 2 张图片");
+    expect(hinted).toContain("本次带了 2 个附件");
     expect(hinted).toContain("支持视觉的模型");
     expect(aiWritingAttachmentErrorHint("网络不可达：检查网络或 Base URL", 2)).toBe("网络不可达：检查网络或 Base URL");
     expect(aiWritingAttachmentErrorHint(null, 2)).toBeNull();
     expect(aiWritingAttachmentErrorHint("请求参数有误", 0)).toBe("请求参数有误");
+  });
+});
+
+describe("AI 写作模式判据表（261116 第四稿）", () => {
+  const localRef = { kind: "local" as const, token: "t1", name: "main.ts", size: 12, mimeType: "text/plain" };
+  const docA = { kind: "note" as const, id: "n1", title: "文档 A" };
+  const assetA = { noteId: "n1", filename: "a.png" };
+  const assetB = { noteId: "n2", filename: "b.png" };
+
+  it("表是单一来源：chat 不选文档、两类附件都可用；docs 必须选文档、只允许所选文档资产", () => {
+    expect(AI_WRITING_MODE_CAPABILITIES).toEqual({
+      chat: { docs: false, docAssets: true, localFiles: true, attachmentsLimitedToDocs: false },
+      docs: { docs: true, docAssets: true, localFiles: false, attachmentsLimitedToDocs: true },
+    });
+    expect(aiWritingModeCapabilities("chat").localFiles).toBe(true);
+    expect(aiWritingModeCapabilities("docs").localFiles).toBe(false);
+  });
+
+  it("请求组装按模式过滤：chat 收资产图 + 本机文件；docs 只收已选文档的资产图", () => {
+    const chat = buildAiWritingMessages({ mode: "chat", input: "看看这些", attachments: [assetA, assetB, localRef] });
+    expect(chat[chat.length - 1].content).toEqual([
+      { type: "text", text: "看看这些" },
+      { type: "image", asset: assetA },
+      { type: "image", asset: assetB },
+      { type: "local_file", file: localRef },
+    ]);
+    const docs = buildAiWritingMessages({
+      mode: "docs",
+      input: "问答",
+      docs: [{ title: "文档 A", text: "正文" }],
+      docRefs: [docA],
+      attachments: [assetA, assetB, localRef],
+    });
+    expect(docs[docs.length - 1].content).toEqual([
+      { type: "text", text: "问答\n\n【参考资料】\n【资料 1】文档 A\n正文" },
+      { type: "image", asset: assetA },
+    ]);
+  });
+
+  it("filter 与 IPC 判据一致：docs 混入本机文件给出可执行错误", () => {
+    expect(filterAiWritingAttachmentsForMode("docs", [assetB, localRef], [docA])).toEqual([]);
+    expect(filterAiWritingAttachmentsForMode("chat", [assetB, localRef], [])).toEqual([assetB, localRef]);
+    expect(aiWritingAttachmentModeError("docs", [localRef], [docA])).toContain("不能混入本机文件");
+    expect(aiWritingAttachmentModeError("docs", [assetB], [docA])).toContain("必须来自已选文档");
+    expect(aiWritingAttachmentModeError("chat", [assetB, localRef], [])).toBeNull();
   });
 });
