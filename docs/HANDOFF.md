@@ -8,6 +8,14 @@
 ## 0. 最新交接（最近 3 个批次；更早的见 git）
 
 
+### 261118 · v1.3.4 发版（资产 URL 端口归一 · 保存收口）
+
+- **发布**：`package.json 1.3.4`（Android versionCode 11304 由根 package.json 派生）；注解 tag **v1.3.4** 双远端推送。本批 = 2 commit / 8 文件。
+- **用户问题**：云端正文端口 19876、本机实例回退到 19888 时，渲染端口差异会不会把整篇文档判成变更、触发 S3 更新？**结论：修完后不会**——同一内容只换实例端口/token，落盘 sha256 不变；只有真实编辑才变 hash。
+- **修复（两道收口）**：① 渲染层 `useSavePipelineGlue.handleCaptureContent` 对**所有**正文来源做 `stripAssetAccessToken`（此前只对 Lake 编辑器 fallback 做；表格/多维表/画板/手写板的注册 capture 会漏）；② 主进程 `Store.saveNote` 作为所有用户写路径的共同收口，再调 `core/assetUrl.canonicalizeNoteAssetUrls`（本地资产 URL 归一规范端口 19876 + 去运行时 token，幂等；同步镜像 `saveSyncedNote` 保持远端字节不改）。
+- **测试**：`electron/store.assetPortCanonical.test.ts`（5 例：裸/编码形态归一、跨端口 hash 不变、真实编辑仍变 hash、非资产 URL 不动）+ `src/core/assetUrl.test.ts` +3 组 + 接线护栏 `src/hooks/saveCaptureCanonical.test.ts`（注册 capture 也 strip、saveNote 收口、saveSyncedNote 不归一）。
+- **门禁（发版前全量）**：`tsc` 0；`typecheck:electron` 0；全量 vitest **1028 文件 / 6489 用例（1015 passed / 13 skipped；6475 passed / 14 skipped / 0 failed）**；`ui-metrics` 0；`cssLayers`/`primitives`/`mobileLayers` 全绿；`check:arch` 0 违规；`git diff --check` clean。
+- **残留**：已有云端/本地旧端口正文在**下次保存该文档时**自动归一（一次性，之后稳定）；同步镜像路径故意不改远端字节。
 ### 261117 · v1.3.3 发版（新建文档位置 + S3 端口归一 + 移动端便携包可恢复）
 
 - **发布**：`package.json 1.3.3`（Android versionName 1.3.3 / versionCode **11303**，已装 lake_mobile 确认）；注解 tag **v1.3.3** 双远端推送。本批 = 4 commit / 44 文件。
@@ -330,16 +338,14 @@
 
 > 数值 = 最近一次实测（261113 批，低负载串行）。**任何状态判断以本节 + `git status` / `git log -1` 为准**。
 
-**261117 · v1.3.3 基线（新建文档位置 + S3 端口归一 + 移动端便携包可恢复，tag `v1.3.3`）**
+**261118 · v1.3.4 基线（资产 URL 端口归一 · 保存收口，tag `v1.3.4`）**
 
-- **分支**：`v1.3.2..v1.3.3` = 4 commit / 44 文件；master 与双远端同步（HEAD 以 `git log -1` 为准）；上一 release = `v1.3.2`（tag `f6b9e353`）。
-- **版本**：`package.json 1.3.3`；Android versionName 1.3.3 / versionCode **11303**（设备 dumpsys 已确认）。
-- **门禁（发版前最后一次全量）**：`tsc` 0；`typecheck:electron` 0；全量 vitest **文件 1026（1013 passed / 13 skipped）/ 用例 6479（6465 passed / 14 skipped）/ 0 failed**；`ui-metrics` 0；`cssLayers`/`primitives`/`mobileLayers` 全绿；`check:arch` 0 违规；`check:bundle` PASS（桌面首屏 593KB / 600KB、移动 345KB / 350KB）；`git diff --check` clean。
-- **打包产物（沿用 v1.3.1 瘦身结果）**：`.app` 393MB、`app.asar` 70MB、打包 `dependencies` 9 个（规则见 `docs/BUILD-SIZE.md`）。
-- **同步面验证（本批新增）**：`scripts/s3-config-zero-regression.mjs`（本地假 S3）15 项 PASS；资产 URL 契约「保存=规范端口 19876 / 渲染=实际端口」；审计见 `docs/SYNC-S3-VERIFY.md`。
-- **移动端**：便携包导出（下载目录，卸载留存）+ 整机恢复（原生 restoreSnapshot + 回滚）设备实测通过；「从便携包导入」的文件选择 UI 未自动化。
-- **待真机项**（uninstall retention）：API 29+ 勾保留→同签名重装数据在 / 不勾基线 / API 28 / `adb uninstall -k` / 签名矩阵（文档 §6.6）。
-- **视觉门禁**：本批未跑 stylesnap/mobile-snap（新建位置设置行与移动端备份块不在现有态覆盖内）。
+- **分支**：`v1.3.3..v1.3.4` = 2 commit / 8 文件；master 与双远端同步（HEAD 以 `git log -1` 为准）；上一 release = `v1.3.3`（tag `43dc1686`）。
+- **版本**：`package.json 1.3.4`；Android versionCode 11304（由根 package.json 派生）。
+- **门禁（发版前最后一次全量）**：`tsc` 0；`typecheck:electron` 0；全量 vitest **文件 1028（1015 passed / 13 skipped）/ 用例 6489（6475 passed / 14 skipped）/ 0 failed**；`ui-metrics` 0；`cssLayers`/`primitives`/`mobileLayers` 全绿；`check:arch` 0 违规；`git diff --check` clean。
+- **同步面契约（261118 收口）**：保存/上云 = 规范端口 19876 + 无运行时 token（渲染层 capture 全来源 strip；主进程 `Store.saveNote` 再调 `canonicalizeNoteAssetUrls` 兜底，幂等）；渲染 = 实际端口；同步镜像 `saveSyncedNote` 保留远端字节；导出正则端口无关。测试见 `electron/store.assetPortCanonical.test.ts` / `src/core/assetUrl.test.ts` / `src/hooks/saveCaptureCanonical.test.ts`。
+- **打包产物**：沿用 v1.3.1 瘦身结果（`.app` 393MB、`app.asar` 70MB、依赖 9 个；见 `docs/BUILD-SIZE.md`）。
+- **已知边界**：旧端口正文在下次保存时归一（一次性）；S3 假桶 E2E 仍可用 `scripts/s3-config-zero-regression.mjs` 复跑。
 
 **版本与仓库**
 
