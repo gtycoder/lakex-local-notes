@@ -29,22 +29,10 @@ const invoke = (channel, ...args) => ipcRenderer.invoke(channel, ...args).catch(
 });
 
 /**
- * 资产服务端口（261117 生产 bug）：主进程启动时可能因端口占用**回退**，回退后的实际端口经
- * webPreferences.additionalArguments 显式传进来（`--lake-asset-port=19992`）。
- *
- * 为什么不用 process.env：env 是主进程启动时的快照，回退发生在 app ready 之后 —— 在部分平台
- * renderer 从 zygote fork，拿不到主进程后来改的 env。显式 argv 才是可靠通道；
- * env 仅作兜底（用户用 LAKE_ASSET_PORT 启动时）。
+ * 资产服务端口（261118 简化）：main 在创建窗口前把固定端口写回 process.env.LAKE_ASSET_PORT
+ * （dev 19877 / packaged 19876；用户 LAKE_ASSET_PORT 优先），renderer 直接读 env 快照即可。
  */
 function lakeAssetPort() {
-  const argv = Array.isArray(process.argv) ? process.argv : [];
-  for (const arg of argv) {
-    const prefix = "--lake-asset-port=";
-    if (typeof arg === "string" && arg.startsWith(prefix)) {
-      const port = Number(arg.slice(prefix.length));
-      if (Number.isFinite(port) && port > 0 && port < 65536) return port;
-    }
-  }
   return Number(process.env.LAKE_ASSET_PORT) || 19876;
 }
 

@@ -50,7 +50,7 @@ beforeAll(async () => {
   fs.writeFileSync(path.join(noteAssetsDir, "note1", "doc.pdf"), Buffer.from("%PDF-1.4"));
   fs.writeFileSync(path.join(noteAssetsDir, "note1", "anim.mp4"), Buffer.from("mp4"));
   fs.writeFileSync(path.join(noteAssetsDir, "note1", "arch.zip"), Buffer.from("zip"));
-  // startAssetServer 现在会 await 到真正 listening（端口可能回退）后才返回
+  // startAssetServer 会 await 到真正 listening 后才返回
   server = await startAssetServer(noteAssetsDir, vendorDir, quickDir, TOKEN);
 });
 

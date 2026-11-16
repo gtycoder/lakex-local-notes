@@ -24,9 +24,6 @@ import { createEventHub } from "./events.js";
  */
 export const WEB_API_PORT = Number(process.env.LAKE_WEB_PORT) || 19880;
 
-/** 端口被占用时的回退尝试上限（+1..+10，与资源服务同口径）。 */
-export const WEB_API_PORT_FALLBACK_RANGE = 10;
-
 let preferredPort: number = WEB_API_PORT;
 
 /** 当前首选端口（设置页 fallback / 控制器默认值都读它，而不是常量）。 */
@@ -52,8 +49,6 @@ export interface WebApiServerOptions {
   assetToken: string;
   assetPort: number;
   port?: number;
-  /** 端口占用时的回退次数上限（默认 WEB_API_PORT_FALLBACK_RANGE；测试可传 0 复现「全部被占」）。 */
-  maxFallbacks?: number;
   log?: WebApiLogger;
 }
 
@@ -161,14 +156,13 @@ export interface WebServerController {
 
 export function createWebServerController(opts: WebApiServerOptions, methods: Record<string, string>): WebServerController {
   const preferredPort = opts.port ?? preferredWebApiPort();
-  const maxFallbacks = opts.maxFallbacks ?? WEB_API_PORT_FALLBACK_RANGE;
   let server: WebApiServer | null = null;
-  /** 实际绑定端口（回退后 ≠ 首选；设置页/「打开 Web 客户端」都用它）。 */
-  let boundPort = preferredPort;
-  const urlOf = (port: number): string => `http://127.0.0.1:${port}/`;
+  /** 固定端口：不做回退（dev 19881 / packaged 19880，双开时第二个实例会明确报错）。 */
+  const boundPort = preferredPort;
+  const urlOf = (port: number): string => "http://127.0.0.1:" + port + "/";
   const status = (): WebServerStatus => ({ enabled: server !== null && server.listening, port: boundPort, url: urlOf(boundPort) });
 
-  /** 在指定端口起服务并等 listening；失败 reject（保留原始 error 以便区分 EADDRINUSE）。 */
+  /** 在固定端口起服务并等 listening；失败 reject（保留原始 error 以便区分 EADDRINUSE）。 */
   const listenOnce = (port: number): Promise<WebApiServer> => new Promise((resolve, reject) => {
     const s = startWebApiServer({ ...opts, port }, methods);
     if (s.listening) { resolve(s); return; }
@@ -188,31 +182,19 @@ export function createWebServerController(opts: WebApiServerOptions, methods: Re
     async setEnabled(enabled: boolean): Promise<WebServerStatus> {
       if (enabled) {
         if (server) return status();
-        let lastError: unknown = null;
-        // 261117：与资源服务同口径 —— 首选端口被占用时顺序 +1..+10 回退，而不是直接失败。
-        for (let offset = 0; offset <= maxFallbacks; offset += 1) {
-          const candidate = preferredPort + offset;
-          try {
-            const s = await listenOnce(candidate);
-            s.once("close", () => { if (server === s) server = null; });
-            server = s;
-            const address = s.address();
-            boundPort = typeof address === "object" && address ? address.port : candidate;
-            if (boundPort !== preferredPort) {
-              opts.log?.warn(`[web-api] 首选端口 ${preferredPort} 被占用，本实例使用 ${boundPort}`);
-            }
-            return status();
-          } catch (error) {
-            lastError = error;
-            if ((error as NodeJS.ErrnoException).code !== "EADDRINUSE") break;
-          }
+        try {
+          const s = await listenOnce(preferredPort);
+          s.once("close", () => { if (server === s) server = null; });
+          server = s;
+          return status();
+        } catch (error) {
+          // 固定端口没有回退：占用就明确报错（旧实现吞 error 后 resolve 成 enabled:false，表现为开关弹回）。
+          const code = (error as NodeJS.ErrnoException | null)?.code;
+          const detail = code === "EADDRINUSE"
+            ? "端口 " + preferredPort + " 已被占用：请关闭另一个 LakexLocalNotes 实例或占用该端口的程序后重试。"
+            : "浏览器端服务启动失败：" + (error instanceof Error ? error.message : String(error));
+          throw new Error(detail);
         }
-        // 启动失败必须**抛出原因**（旧实现吞 error 后 resolve 成 enabled:false，表现为「开关打开又弹回」）。
-        const code = (lastError as NodeJS.ErrnoException | null)?.code;
-        const detail = code === "EADDRINUSE"
-          ? `端口 ${preferredPort}..${preferredPort + maxFallbacks} 全部已被占用：可能是另一个 LakexLocalNotes 实例或其它程序在用。`
-          : `浏览器端服务启动失败：${lastError instanceof Error ? lastError.message : String(lastError)}`;
-        throw new Error(detail);
       }
       if (server) { const s = server; server = null; s.close(); }
       return status();

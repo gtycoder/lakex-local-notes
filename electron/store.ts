@@ -11,7 +11,6 @@ import { formatLogFields, perfMessage } from "../src/core/logFormat.js";
 import { SAVE_CONFLICT_CODE, type SaveNoteConflict, type SaveNoteResult } from "../src/lib/types.js";
 import { noteBodyHash } from "./noteBodyHash.js";
 import { extractAssetRefs, isSafePathSegment } from "../src/core/storeUtils.js";
-import { canonicalizeNoteAssetUrls } from "../src/core/assetUrl.js";
 import { normalizeNoteInsertPosition, type NoteInsertPosition } from "../src/core/treeRules.js";
 import { nextSiblingSortOrder, shiftSiblingsAfter, shiftSiblingsForTop } from "./treeSort.js";
 import { readNoteDigest, type NoteDigest } from "./storeQueries.js";
@@ -1027,11 +1026,7 @@ export class Store {
     // 261019 review 实测：渲染层在没有 Lake 实例时也会传 { markdown:null, plain:null }（而非 undefined），
     // 若直接采用会把 text_cache / FTS 正文清空 ⇒ 多维表/表格/画板保存后正文搜不到。故非 doc 一律忽略入参。
     const kind = this.kindOf(id);
-    // 261118：用户写路径的唯一收口 —— 本地资产 URL 归一为规范端口并去掉运行时 token（幂等）。
-    // 这样「正文里存的是实例端口」的捕获路径（表格/多维表/画板/手写板 capture、导入、AI 回写等）也不会
-    // 落盘出端口相关正文 ⇒ 换端口/换设备坏图与同步 churn 一并消除；同步镜像 saveSyncedNote 保留远端字节。
-    const canonicalContent = canonicalizeNoteAssetUrls(content);
-    const conflict = this.noteContent.save(id, title, canonicalContent, kind === "doc" ? caches : this.searchTextFor(id, canonicalContent), baseHash);
+    const conflict = this.noteContent.save(id, title, content, kind === "doc" ? caches : this.searchTextFor(id, content), baseHash);
     if (conflict) {
       // 不写盘、不动 updated_at/is_dirty：磁盘版本原样保留，等用户在三选项里决定。
       this.logScopes.store.warn("[save] 外部改动拦截" + formatLogFields({ id, diskHash: conflict.diskHash.slice(0, 12) }));

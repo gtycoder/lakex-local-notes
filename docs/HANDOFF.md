@@ -8,19 +8,20 @@
 ## 0. 最新交接（最近 3 个批次；更早的见 git）
 
 
-### 261118 · v1.3.4 发版（资产 URL 端口归一 · 保存收口）
+### 261118 · v1.3.5 发版（端口方案简化：固定端口 + 测试/正式分开）
 
-- **发布**：`package.json 1.3.4`（Android versionCode 11304 由根 package.json 派生）；注解 tag **v1.3.4** 双远端推送。本批 = 2 commit / 8 文件。
-- **用户问题**：云端正文端口 19876、本机实例回退到 19888 时，渲染端口差异会不会把整篇文档判成变更、触发 S3 更新？**结论：修完后不会**——同一内容只换实例端口/token，落盘 sha256 不变；只有真实编辑才变 hash。
-- **修复（两道收口）**：① 渲染层 `useSavePipelineGlue.handleCaptureContent` 对**所有**正文来源做 `stripAssetAccessToken`（此前只对 Lake 编辑器 fallback 做；表格/多维表/画板/手写板的注册 capture 会漏）；② 主进程 `Store.saveNote` 作为所有用户写路径的共同收口，再调 `core/assetUrl.canonicalizeNoteAssetUrls`（本地资产 URL 归一规范端口 19876 + 去运行时 token，幂等；同步镜像 `saveSyncedNote` 保持远端字节不改）。
-- **测试**：`electron/store.assetPortCanonical.test.ts`（5 例：裸/编码形态归一、跨端口 hash 不变、真实编辑仍变 hash、非资产 URL 不动）+ `src/core/assetUrl.test.ts` +3 组 + 接线护栏 `src/hooks/saveCaptureCanonical.test.ts`（注册 capture 也 strip、saveNote 收口、saveSyncedNote 不归一）。
-- **门禁（发版前全量）**：`tsc` 0；`typecheck:electron` 0；全量 vitest **1028 文件 / 6489 用例（1015 passed / 13 skipped；6475 passed / 14 skipped / 0 failed）**；`ui-metrics` 0；`cssLayers`/`primitives`/`mobileLayers` 全绿；`check:arch` 0 违规；`git diff --check` clean。
-- **残留**：已有云端/本地旧端口正文在**下次保存该文档时**自动归一（一次性，之后稳定）；同步镜像路径故意不改远端字节。
+- **用户裁决**：撤销 v1.3.3/v1.3.4 的「资产 URL 端口归一化 + 自动回退」复杂化；端口固定，**正式与开发用不同端口**即可。
+- **端口表（固定，不再回退）**：资源服务 packaged **19876** / dev **19877**；Web 客户端 packaged **19880** / dev **19881**；`LAKE_ASSET_PORT` / `LAKE_WEB_PORT` 可覆盖。端口占用时**明确报错**（日志/设置页可读），不静默降级、不再 +1..+10 回退。
+- **为什么这样就够**：同一构建形态端口固定 ⇒ 正文里的资产 URL 永远指向同一端口 ⇒ 换实例/重启不改 contentHash、不触发同步更新；dev 与正式端口/数据目录都分开，互不干扰。
+- **已回退**：S3 资产 URL 归一化（`normalizeLocalAssetPorts` / `canonicalizeNoteAssetUrls` / 渲染层 strip 端口）、`--lake-asset-port` 传参、`ASSET_PORT_FALLBACK_RANGE`/`WEB_API_PORT_FALLBACK_RANGE`、自动回退测试、`scripts/fake-s3-local.mjs` 与 `scripts/s3-config-zero-regression.mjs`、`docs/SYNC-S3-VERIFY.md`。
+- **保留**：`currentAssetServerPort()`（启动时解析一次的固定值，供 store/导出/小记 URL 构造）、403 对允许 origin 回显 ACAO、资源服务安全面。
+- **护栏**：`electron/assetServer.port.test.ts`（固定端口/占用报错/非法端口/403 ACAO/接线）；`electron/webApiServer.test.ts` 端口占用抛可读错误。
+
 ### 261117 · v1.3.3 发版（新建文档位置 + S3 端口归一 + 移动端便携包可恢复）
 
 - **发布**：`package.json 1.3.3`（Android versionName 1.3.3 / versionCode **11303**，已装 lake_mobile 确认）；注解 tag **v1.3.3** 双远端推送。本批 = 4 commit / 44 文件。
 - **新建文档位置（桌面）**：常规设置新增「顶部新增 / 末尾追加」（默认末尾，旧存档/非法值兼容）；作用是**同级插入**且**子级生效**，覆盖文档/表格/多维表/画板/手写板 + 分组（目录）+ 笔记本。排序逻辑抽为单一实现 `electron/treeSort.ts`（文档 notes+tree_nodes 两表同事务；目录/笔记本只有 tree_nodes），`store`/`noteMetadataRepository` 不再各写 SQL；IPC 8 个创建通道加可选 position（不新增通道，缺省 bottom 向后兼容）。护栏：store 行为测试 / IPC 透传测试 / settings 归一 / UI render / 接线与「排序单一实现」源码断言。边界：AI 生成文档与批量导入固定末尾；移动端新建仍末尾（桌面偏好）。
-- **S3 同步后图片坏链修复（真风险）**：正文图片原为带实例端口的绝对 URL，端口隔离/回退后换实例/换设备打开会坏图，且端口变化改 contentHash ⇒ 同步 churn。契约：保存/上云 = 规范端口 **19876**；渲染 = 实际端口；裸 URL 与内核卡片百分号编码两种形态都归一且幂等；导出正则端口无关。专项验证脚本 `scripts/s3-config-zero-regression.mjs` + `scripts/fake-s3-local.mjs`（本地假 S3，12 组断言 / 15 项 PASS：配置→上传→换 userData/换端口→拉回→打开，0 个 404/403/CORS，回退端口下图片正常）；审计表/证据/残留风险见 `docs/SYNC-S3-VERIFY.md`。残留：云端历史对象可能仍是旧端口（显示已归一、导出端口无关），拟在 s3v3 上传路径做协议层归一。
+- **S3 端口归一化**：v1.3.3 曾引入「保存/上云归一规范端口 + 渲染实际端口」的复杂契约，**已在 v1.3.5 回退**（改为固定端口方案；相关脚本/文档已删）。
 - **移动端便携包导出可恢复（D 项）**：设置「关于 → 卸载与换机」新增「导出便携包到文件」（MediaStore 下载目录，**卸载后仍留存**；API29 以下回退 SAF）；重装后可「从便携包导入」**整机恢复**（原生 restoreSnapshot：校验→隔离→拷回→提交，失败回滚、崩溃 pending 兜底；快照含历史/草稿/同步基线，**不含 S3 密钥**）。修掉两个真 bug：手机快照曾被导入器当桌面包拒收、MediaStore 给 `.zip.lln` 追加 `.zip`。设备实测：导出 16.8KB → `adb uninstall`（文件仍在）→ 重装 → 恢复，DB 三表与小记正文 sha256 与快照完全一致；坏包被拒不伤数据。文档 `docs/mobile/UNINSTALL-DATA.md` §1.3。
 - **门禁（发版前全量）**：`tsc` 0；`typecheck:electron` 0；全量 vitest **1026 文件 / 6479 用例（1013 passed / 13 skipped；6465 passed / 14 skipped / 0 failed）**；`ui-metrics` 0；`cssLayers`/`primitives`/`mobileLayers` 全绿；`check:arch` 0 违规；`check:bundle` PASS（桌面首屏 593KB/600KB、移动 345KB/350KB）；`git diff --check` clean。
 - **已知边界**：新建位置为桌面偏好；S3 云端历史正文旧端口（显示/导出已兜住）；移动端「从便携包导入」的系统文件选择 UI 未自动化（原生 pickAndStage 与桌面包同一条），建议人工复验；移动快照跨大版本 schema 无迁移。
@@ -53,25 +54,23 @@
 - **功能零回归**：真打包产物实机 **14/14 PASS**（启动/文档图片+sharp 缩略/Univer 表格/多维表/画板/手写板/AI 设置/更新中心/导出 Markdown 图片提取/导入 docx/导入 xlsx/小记/回收站/同步设置）+ 官方 `scripts/e2e-packaged-smoke.mjs` exit 0；门禁 tsc/typecheck:electron/全量 vitest（1005 文件 6419 用例）/ui-metrics/cssLayers/check:core/check:arch/check:bundle 全绿。
 - **下一步可选**：`better-sqlite3/prebuilds` 里 8 个外平台 `.node` ≈14 MB（本机只用 darwin-arm64）可按平台配置再裁，属 native 面、本次按纪律未动。
 
-### 261117 · 生产 bug 修复：dev / packaged 本地端口细分 + 占用自动回退
+### 261117 · 生产 bug 修复：dev / packaged 本地端口细分（261118 简化为固定端口）
 
 - **现场（用户正式数据 v1.3.0 打包版）**：所有文档图片「图片加载失败」，日志是 CORS「No ACAO」。根因不是权限/资产丢失，而是**端口互抢**：dev 实例占着资源服务 19876，打包版 `listen 19876` **EADDRINUSE 后静默继续**（日志里没有 `[asset-server] listening`），渲染层图片仍请求 19876 ⇒ 打到 dev 进程的 assetServer ⇒ 该进程 token 与打包版注入的 token 不匹配 ⇒ 403（且 403 不带 ACAO）⇒ Chromium 报 CORS。**文件在本机、下载也没问题，纯 HTTP 层被拒。**
-- **端口表（所有本地端口按通道整体隔离；env 覆盖优先）**：
+- **端口表（所有本地端口按通道整体隔离；env 覆盖优先；固定，不自动回退）**：
 
-  | 通道 | packaged | dev | 环境变量（优先） | 占用回退 |
-  | --- | --- | --- | --- | --- |
-  | 资源服务（图片/附件） | **19876** | **19877** | `LAKE_ASSET_PORT` | +1..+10（`ASSET_PORT_FALLBACK_RANGE`） |
-  | Web 客户端（浏览器端） | **19880** | **19881** | `LAKE_WEB_PORT` | +1..+10（`WEB_API_PORT_FALLBACK_RANGE`） |
-  | vite dev server | — | 1421 | `LAKE_DEV_SERVER_URL` / `LAKE_DEV_PORT` | 不自动回退（脚本会明确报占用） |
-  | CDP 调试 | 9333（冒烟脚本默认） | 9222 | `LAKE_CDP_PORT` | — |
+  | 通道 | packaged | dev | 环境变量（优先） |
+  | --- | --- | --- | --- |
+  | 资源服务（图片/附件） | **19876** | **19877** | `LAKE_ASSET_PORT` |
+  | Web 客户端（浏览器端） | **19880** | **19881** | `LAKE_WEB_PORT` |
+  | vite dev server | — | 1421 | `LAKE_DEV_SERVER_URL` / `LAKE_DEV_PORT`（不自动回退） |
+  | CDP 调试 | 9333（冒烟脚本默认） | 9222 | `LAKE_CDP_PORT` |
 
   userData 也按形态分开（dev `lakex-local-notes-dev` / 正式 `lakex-local-notes`，`LAKE_USER_DATA` 可覆盖）⇒ **同机同时跑 dev 与打包版互不共享端口/路径**。
-- **回退语义（两条服务同一套）**：首选端口被占用 ⇒ 顺序尝试 +1..+10，**成功后才继续启动**（`await` 到 listening）；实际端口是唯一真相 —— 写回 `process.env.LAKE_ASSET_PORT`、经 webPreferences `additionalArguments`（`--lake-asset-port=<实际>`）传给 preload、并经 IPC 状态回给设置页/「打开 Web 客户端」。**非 EADDRINUSE 的错误不再静默**：`log.app.error` 记明确原因（含端口），主窗口照常启动（图片降级，其余功能可用）。
-- **为什么端口不能再用常量**：回退后若仍用常量，写入正文/导出 HTML/小记预览的资产 URL 会指向别的实例（这正是事故放大面）。现在 `assetServer` 的端口是**可变导出 + `currentAssetServerPort()`**，`store.assetUrl` / `noteExport` 的正则 / `quickNotes/context` 的 URL / main 的 webRequest 过滤器与 CDN 重定向**全部读实际值**。
+- **固定端口语义（261118 定稿）**：启动时 `await` 到 listening 后写回 `process.env.LAKE_ASSET_PORT`（preload/渲染层据此构造 URL）；`currentAssetServerPort()` 是启动时解析一次的固定值，store/导出/小记都用它。占用时**明确报错**（`EADDRINUSE` → 日志含端口与原因；资源服务降级但主窗口照常启动；Web 客户端开启时抛可读错误），不再 +1..+10 回退、不再传 `--lake-asset-port`。
 - **错误可读性**：资源服务早期 403（token 不匹配）对**已允许 origin** 回显 ACAO ⇒ 浏览器不再把它显示成 CORS 失败；未知 origin 仍不回显（任意网站读不到）。
 - **护栏**：`electron/assetServer.port.test.ts`（首选/回退/连续占用/非 EADDRINUSE 报错/双实例/回退后导出与小记 URL/403 ACAO/接线源码断言，12 例）+ `electron/webApiServer.test.ts` 的「+1 回退并把实际端口回给设置页」；既有 `assetServer.test.ts` 覆盖安全面与 `/ai-local`。
-- **dual-instance 预期（以后照此判断）**：同机跑 dev + 打包版时，两边日志应分别出现 `[asset-server] listening on http://127.0.0.1:19877`（dev）与 `:19876`（packaged），并各有一行 `[ports] asset=… webApi=…`；若某端口已被别的程序占，会出现 `端口 N 已被占用，尝试 N+1` **warn** 与 `（首选 N 被占用，已回退）` 的 info —— **没有这两行却图片失败 = 老问题复发**。
-
+- **dual-instance 预期（以后照此判断）**：同机跑 dev + 打包版时，两边日志应分别出现 `[asset-server] listening on http://127.0.0.1:19877`（dev）与 `:19876`（packaged），并各有一行 `[ports] asset=… webApi=…`；若同形态实例双开/端口被占，会出现 `[asset-server] 端口 N 监听失败（已被占用…）` **error** 且图片降级 —— 这是固定端口的预期行为，关掉占用进程即可。
 
 ### 261116 · v1.3.0 发版（AI 写作能力 + review 收口）
 
@@ -338,14 +337,15 @@
 
 > 数值 = 最近一次实测（261113 批，低负载串行）。**任何状态判断以本节 + `git status` / `git log -1` 为准**。
 
-**261118 · v1.3.4 基线（资产 URL 端口归一 · 保存收口，tag `v1.3.4`）**
+**261118 · v1.3.5 基线（端口方案简化：固定端口 + 测试/正式分开，tag `v1.3.5`）**
 
-- **分支**：`v1.3.3..v1.3.4` = 2 commit / 8 文件；master 与双远端同步（HEAD 以 `git log -1` 为准）；上一 release = `v1.3.3`（tag `43dc1686`）。
-- **版本**：`package.json 1.3.4`；Android versionCode 11304（由根 package.json 派生）。
-- **门禁（发版前最后一次全量）**：`tsc` 0；`typecheck:electron` 0；全量 vitest **文件 1028（1015 passed / 13 skipped）/ 用例 6489（6475 passed / 14 skipped）/ 0 failed**；`ui-metrics` 0；`cssLayers`/`primitives`/`mobileLayers` 全绿；`check:arch` 0 违规；`git diff --check` clean。
-- **同步面契约（261118 收口）**：保存/上云 = 规范端口 19876 + 无运行时 token（渲染层 capture 全来源 strip；主进程 `Store.saveNote` 再调 `canonicalizeNoteAssetUrls` 兜底，幂等）；渲染 = 实际端口；同步镜像 `saveSyncedNote` 保留远端字节；导出正则端口无关。测试见 `electron/store.assetPortCanonical.test.ts` / `src/core/assetUrl.test.ts` / `src/hooks/saveCaptureCanonical.test.ts`。
+- **分支**：`v1.3.3..v1.3.5`（含回退 v1.3.4）= 1 个回退+简化 commit + release；master 与双远端同步（HEAD 以 `git log -1` 为准）；上一 release = `v1.3.3`（tag `43dc1686`；v1.3.4 已发布但被本版回退）。
+- **版本**：`package.json 1.3.5`；Android versionCode 11305（由根 package.json 派生）。
+- **端口（固定，不再回退）**：资源 packaged 19876 / dev 19877；Web packaged 19880 / dev 19881；`LAKE_ASSET_PORT`/`LAKE_WEB_PORT` 可覆盖；占用时明确报错。
+- **已回退**：`normalizeLocalAssetPorts`/`canonicalizeNoteAssetUrls`/渲染层端口归一、`--lake-asset-port`、自动回退与相关测试、S3 假桶验证脚本+文档。保留：`currentAssetServerPort()` 固定值、403 ACAO、资源服务安全面。
+- **门禁（发版前最后一次全量）**：`tsc` 0；`typecheck:electron` 0；全量 vitest 见发版日志（0 failed）；`ui-metrics` 0；`cssLayers`/`primitives`/`mobileLayers` 全绿；`check:arch` 0 违规；`git diff --check` clean。
 - **打包产物**：沿用 v1.3.1 瘦身结果（`.app` 393MB、`app.asar` 70MB、依赖 9 个；见 `docs/BUILD-SIZE.md`）。
-- **已知边界**：旧端口正文在下次保存时归一（一次性）；S3 假桶 E2E 仍可用 `scripts/s3-config-zero-regression.mjs` 复跑。
+- **视觉门禁**：本批未跑 stylesnap/mobile-snap（只改端口机制/文档，无视觉变更）。
 
 **版本与仓库**
 

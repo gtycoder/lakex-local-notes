@@ -28,7 +28,7 @@ import { renderNativeShim as renderShim } from "./webApi/static.js";
  * 本文件只保留**对外导出面**与 `WEB_METHODS` 契约（单一来源；门面注入方法表给装配层，避免循环依赖）。
  */
 
-export { WEB_API_PORT, WEB_API_PORT_FALLBACK_RANGE, configurePreferredWebApiPort, preferredWebApiPort } from "./webApi/index.js";
+export { WEB_API_PORT, configurePreferredWebApiPort, preferredWebApiPort } from "./webApi/index.js";
 export type { WebApiLogger, WebApiServerOptions, WebApiServer, WebServerStatus, WebServerController } from "./webApi/index.js";
 export { DOWNLOAD_ROUTE, createDownloadRegistry, injectNativeShim } from "./webApi/static.js";
 export type { DownloadRegistry } from "./webApi/static.js";

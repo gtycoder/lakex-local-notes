@@ -37,26 +37,20 @@ function withSuffix(name: string, n: number): string {
 }
 
 /**
- * W-3：资产服务器 URL 提取正则工厂。
- *
- * 【261118】端口改为**端口无关**（\d+）：正文里的本地资产 URL 一律按规范端口 19876 落盘
- * （core/assetUrl.normalizeLocalAssetPorts），而导出发生在运行实例上（dev 可能 19877、也可能
- * 回退到 19878…）—— 按「当前端口」匹配会静默丢掉全部图片。这里只按形态提取，取文件仍走
- * URL 的路径段（noteId/filename），与端口无关。参数保留只为签名兼容，不参与匹配。
+ * W-3：资产服务器 URL 提取正则工厂。端口跟随 ASSET_PORT（LAKE_ASSET_PORT 可覆盖，
+ * 多端同机双开），此前硬编码 19876 会在端口覆盖时让导出静默丢失全部图片。
  */
-const LOCAL_ASSET_PORT_PATTERN = "\\d+";
-export function localAssetLakeSrcRe(_port?: number): RegExp {
-  return new RegExp(`^http://127\\.0\\.0\\.1:${LOCAL_ASSET_PORT_PATTERN}/([^/]+)/([^/]+)$`);
+export function localAssetLakeSrcRe(port: number): RegExp {
+  return new RegExp(`^http://127\\.0\\.0\\.1:${port}/([^/]+)/([^/]+)$`);
 }
-export function localAssetHtmlImgRe(_port?: number): RegExp {
-  return new RegExp(`<img[^>]*src="(http://127\\.0\\.0\\.1:${LOCAL_ASSET_PORT_PATTERN}/([^/]+)/([^/"\\s]+))"`, "g");
+export function localAssetHtmlImgRe(port: number): RegExp {
+  return new RegExp(`<img[^>]*src="(http://127\\.0\\.0\\.1:${port}/([^/]+)/([^/"\\s]+))"`, "g");
 }
-export function localAssetMdImgRe(_port?: number): RegExp {
-  return new RegExp(`!\\[[^\\]]*\\]\\((http://127\\.0\\.0\\.1:${LOCAL_ASSET_PORT_PATTERN}/([^/)]+)/([^/)]+))\\)`, "g");
+export function localAssetMdImgRe(port: number): RegExp {
+  return new RegExp(`!\\[[^\\]]*\\]\\((http://127\\.0\\.0\\.1:${port}/([^/)]+)/([^/)]+))\\)`, "g");
 }
 
-/**
- * 手写板 PDF 打印样式：每页一块 A4 比例画布（210mm 宽，打印时随可打印宽度收窄），页间强制分页。
+/** 手写板 PDF 打印样式：每页一块 A4 比例画布（210mm 宽，打印时随可打印宽度收窄），页间强制分页。
  *  注意 printToPDF 的 A4 页边距参数保持不变（electron/pdfRenderer.ts）⇒ 页面宽度用 max-width:100% 适配可打印区，
  *  否则 210mm 会被页边距裁掉右侧。 */
 export const INK_PDF_PRINT_CSS = [

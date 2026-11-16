@@ -25,25 +25,20 @@ function mimeForExtWith(filePath: string, ext: string): string | null {
 }
 
 /**
- * 资产服务端口（**可变**：启动时可能因端口占用回退）。
+ * 资产服务端口（固定值，261118 简化设计）。
  *
- * 为什么是 `let`：dev 与打包版默认端口已分开（dev 19877 / packaged 19876），但同机仍可能撞
- * （多份 dev 副本、崩溃残留进程、用户自定 LAKE_ASSET_PORT）⇒ 启动时按 +1..+10 回退到真正可用的端口。
- * **所有 import 方读到的都是实时值**（ESM live binding）：store 的 assetUrl、noteExport 的提取正则、
- * quickNotes/context 的 URL、main 的 webRequest 过滤器都靠它 —— 别在模块顶层把它拷成常量副本。
+ * 策略：正式版 19876 / 开发版 19877（main 启动时传入），可用 LAKE_ASSET_PORT 覆盖。
+ * **不做端口回退**：同一构建形态下端口固定 ⇒ 正文里的资产 URL 在任意时刻都是同一个端口，
+ * 换实例/重启不会改变 contentHash，也就不会触发同步更新；唯一代价是同一构建形态双开时第二个实例
+ * 的资源服务监听失败（日志明确报错，不静默降级），关掉另一个实例即可。
  *
- * 261117 生产 bug：打包版 listen 19876 失败后静默继续，图片请求打到 dev 实例的 assetServer
- * ⇒ token 不匹配 403（且无 ACAO）⇒ 浏览器报 CORS、文档图片全挂。
+ * main 在创建窗口前把实际端口写回 process.env.LAKE_ASSET_PORT，渲染层/preload 据此构造 URL。
  */
 export let ASSET_PORT = Number(process.env.LAKE_ASSET_PORT) || 19876;
 
-/** 实际生效的资产端口（回退后 = 真实端口）；渲染层经 preload 的 assetPort 拿到同一个值。 */
 export function currentAssetServerPort(): number {
   return ASSET_PORT;
 }
-
-/** 端口被占用时的回退尝试上限（+1..+10）。 */
-export const ASSET_PORT_FALLBACK_RANGE = 10;
 
 /** 资源服务的日志出口（main 注入 electron-log；单测省略则用 console）。 */
 export interface AssetServerLogger {
@@ -53,56 +48,27 @@ export interface AssetServerLogger {
 }
 
 export interface AssetServerOptions {
-  /** 首选端口（main 传 `app.isPackaged ? 19876 : 19877`）；缺省 = ASSET_PORT（env 或 19876）。 */
+  /** 固定端口（main 传 app.isPackaged ? 19876 : 19877）；缺省 = ASSET_PORT（env 或 19876）。 */
   preferredPort?: number;
-  /** 回退尝试次数上限（默认 ASSET_PORT_FALLBACK_RANGE）。 */
-  maxFallbacks?: number;
   log?: AssetServerLogger;
 }
 
-/**
- * 顺序尝试 listen，遇 EADDRINUSE 回退 +1..+maxFallbacks。
- * 返回真正监听成功的端口；**非 EADDRINUSE 的错误不吞**（记 error 并抛出，由调用方决定降级）。
- */
-async function listenWithFallback(
-  server: http.Server,
-  preferredPort: number,
-  maxFallbacks: number,
-  log: AssetServerLogger,
-): Promise<number> {
-  let lastError: unknown = null;
-  for (let offset = 0; offset <= maxFallbacks; offset += 1) {
-    const port = preferredPort + offset;
-    try {
-      await new Promise<void>((resolve, reject) => {
-        const onError = (error: Error) => {
-          server.off("listening", onListening);
-          reject(error);
-        };
-        const onListening = () => {
-          server.off("error", onError);
-          resolve();
-        };
-        server.once("error", onError);
-        server.once("listening", onListening);
-        server.listen(port, "127.0.0.1");
-      });
-      return port;
-    } catch (error) {
-      lastError = error;
-      const code = (error as NodeJS.ErrnoException).code;
-      if (code !== "EADDRINUSE") {
-        log.error("[asset-server] 监听失败（端口 " + port + "）：" + (error instanceof Error ? error.message : String(error)));
-        throw error;
-      }
-      if (offset < maxFallbacks) {
-        log.warn("[asset-server] 端口 " + port + " 已被占用，尝试 " + (port + 1));
-      }
-    }
+/** 固定端口 listen：失败（尤其 EADDRINUSE）直接抛出可读错误，由 main 记 error 并降级，不再自动回退。 */
+async function listenFixed(server: http.Server, port: number, log: AssetServerLogger): Promise<void> {
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const onError = (error: Error) => { server.off("listening", onListening); reject(error); };
+      const onListening = () => { server.off("error", onError); resolve(); };
+      server.once("error", onError);
+      server.once("listening", onListening);
+      server.listen(port, "127.0.0.1");
+    });
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    const detail = error instanceof Error ? error.message : String(error);
+    log.error("[asset-server] 端口 " + port + " 监听失败" + (code === "EADDRINUSE" ? "（已被占用：可能另一个同形态实例在运行）" : "") + "：" + detail);
+    throw error;
   }
-  const reason = lastError instanceof Error ? lastError.message : String(lastError);
-  log.error("[asset-server] " + preferredPort + ".." + (preferredPort + maxFallbacks) + " 全部被占用：" + reason);
-  throw lastError instanceof Error ? lastError : new Error("[asset-server] 无可用端口：" + reason);
 }
 
 function sniffMime(bytes: Buffer): string | null {
@@ -525,13 +491,9 @@ export async function startAssetServer(
     error: (message) => console.error(message),
   };
   const preferredPort = options.preferredPort ?? ASSET_PORT;
-  const maxFallbacks = options.maxFallbacks ?? ASSET_PORT_FALLBACK_RANGE;
-  const actualPort = await listenWithFallback(server, preferredPort, maxFallbacks, log);
-  // 实际端口是**唯一真相**：URL 构造（store/noteExport/quickNotes）与 main 的过滤器都读它。
-  ASSET_PORT = actualPort;
-  log.info(
-    "[asset-server] listening on http://127.0.0.1:" + actualPort + ", dir=" + noteAssetsDir
-      + (actualPort === preferredPort ? "" : "（首选 " + preferredPort + " 被占用，已回退）"),
-  );
+  await listenFixed(server, preferredPort, log);
+  // 固定端口即唯一真相：URL 构造（store/noteExport/quickNotes）与 main 的过滤器都读它。
+  ASSET_PORT = preferredPort;
+  log.info("[asset-server] listening on http://127.0.0.1:" + preferredPort + ", dir=" + noteAssetsDir);
   return server;
 }

@@ -376,34 +376,27 @@ describe("IPC 注册表 ↔ WEB_METHODS 一致性（A2）", () => {
 });
 
 describe("浏览器端服务启动失败必须给出原因（A3）", () => {
-  it("首选端口被占用 ⇒ 自动 +1 回退，并把**实际端口**回给设置页（261117）", async () => {
-    const blocker = http.createServer();
-    const port = await new Promise<number>((resolve) => blocker.listen(0, "127.0.0.1", () => {
-      const addr = blocker.address();
+  it("固定端口：setEnabled(true) 绑定首选端口，getStatus 回该端口（261118 简化）", async () => {
+    const distDir = fs.mkdtempSync(path.join(os.tmpdir(), "lake-webapi-fixed-"));
+    fs.writeFileSync(path.join(distDir, "index.html"), "<html></html>");
+    // 先抢一个空闲端口再释放，保证控制器拿到的是可用固定端口
+    const probe = http.createServer();
+    const port = await new Promise<number>((resolve) => probe.listen(0, "127.0.0.1", () => {
+      const addr = probe.address();
       resolve(typeof addr === "object" && addr ? addr.port : 0);
     }));
-    const distDir = fs.mkdtempSync(path.join(os.tmpdir(), "lake-webapi-fallback-"));
-    fs.writeFileSync(path.join(distDir, "index.html"), "<html></html>");
+    await new Promise<void>((resolve) => probe.close(() => resolve()));
     try {
       const ctrl = createWebServerController(makeOptions(distDir, { port }));
       const status = await ctrl.setEnabled(true);
       expect(status.enabled).toBe(true);
-      expect(status.port).toBe(port + 1);
-      expect(status.url).toBe("http://127.0.0.1:" + (port + 1) + "/");
-      // 真能服务：打 /api/echo
-      const res = await fetch(status.url + "api/echo", {
-        method: "POST",
-        headers: { "content-type": "application/json", "x-lake-token": "test-token" },
-        body: JSON.stringify({ args: ["x"] }),
-      });
-      expect(res.status).toBe(200);
+      expect(status.port).toBe(port);
+      expect(status.url).toBe("http://127.0.0.1:" + port + "/");
       await ctrl.setEnabled(false);
     } finally {
-      await new Promise<void>((resolve) => blocker.close(() => resolve()));
       fs.rmSync(distDir, { recursive: true, force: true });
     }
   });
-
   it("端口被占用时 setEnabled(true) 抛出可读错误，而不是静默返回 enabled:false", async () => {
     const blocker = http.createServer(() => {});
     const port = await new Promise<number>((resolve) => {
@@ -414,8 +407,8 @@ describe("浏览器端服务启动失败必须给出原因（A3）", () => {
     });
     const distDir = fs.mkdtempSync(path.join(os.tmpdir(), "lake-web-a3-"));
     try {
-      // 261117：默认会 +1..+10 回退；这里用 maxFallbacks:0 复现「整个范围都不可用」⇒ 仍必须抛可读错误。
-      const ctrl = createWebServerController(makeOptions(distDir, { port, maxFallbacks: 0 }));
+      // 261118 简化：固定端口没有回退 ⇒ 被占用时直接抛可读错误。
+      const ctrl = createWebServerController(makeOptions(distDir, { port }));
       await expect(ctrl.setEnabled(true)).rejects.toThrow(/已被占用/);
       expect(ctrl.getStatus().enabled).toBe(false);
     } finally {

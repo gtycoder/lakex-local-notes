@@ -50,7 +50,7 @@ export function stagingDirOf(paths: QuickNotePaths, draftId: string): string {
 }
 
 export function quickImageUrlOf(noteId: string, filename: string): string {
-  // 端口用**实际值**（可能因占用回退过）：写进正文/预览的 URL 必须指向本进程真正监听的端口。
+  // 端口用**实际值**（固定端口，启动时解析一次）：写进正文/预览的 URL 必须指向本进程真正监听的端口。
   return localAssetHttpUrl(noteId, filename, { port: currentAssetServerPort(), space: "quick-notes" });
 }
 

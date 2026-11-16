@@ -22,18 +22,6 @@ export interface LocalAssetRef {
 
 const NOTE_ASSET_SCHEME = "lake-asset";
 
-/**
- * 本地资产 URL 的**规范端口**（写盘/上云形态）。
- *
- * 为什么必须只有一个：正文里的图片是绝对 URL，端口会跟着数据走 —— 桌面 dev(19877)/
- * packaged(19876)/回退端口(19878…) 与移动端(19876) 各不相同。若按「当次运行端口」落盘，
- * 同一条正文换实例/换端口/换设备打开就会指向不存在的端口（坏图），而且端口一变
- * contentHash 就变 ⇒ 同步反复上报「内容变了」。
- * 所以：**落盘与上云一律按规范端口写**（与移动端资产服务固定端口一致），渲染时再按
- * 当前实际端口归一化（见 src/lib/assetPort.ts）。
- */
-export const CANONICAL_ASSET_PORT = 19876;
-
 /** 解析 http://127.0.0.1:{port}/{noteId}/{file} 形态（现状），支持 quick-notes 前缀与 staging 草稿段。 */
 const HTTP_ASSET_RE = /^https?:\/\/127\.0\.0\.1:\d+\/((?:quick-notes\/staging\/|quick-notes\/)?[^/]+)\/([^/?#\s]+)/;
 
@@ -82,95 +70,9 @@ export function localAssetHttpUrl(
   filename: string,
   opts: { port?: number; space?: "note" | "quick-notes" } = {},
 ): string {
-  const port = opts.port ?? CANONICAL_ASSET_PORT;
+  const port = opts.port ?? 19876;
   const prefix = (opts.space ?? "note") === "quick-notes" ? "quick-notes/" : "";
   return `http://127.0.0.1:${port}/${prefix}${noteId}/${filename}`;
-}
-
-/** noteId 是否资产所属 id（我们所有笔记/小记 id 都是 uuid；另有 quick-notes 前缀单独判）。 */
-const ASSET_NOTE_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-/**
- * 形状判定再收紧一层：`127.0.0.1:<port>/<a>/<b>` 太宽（`/api/echo` 也会被当成 noteId/filename），
- * 而用户正文里可能有指向本机其它服务的链接。判据：quick-notes 空间 / uuid 形态 noteId / 文件名带扩展名。
- * 真实资产 URL 必然满足其一（未命名的图片文件名是纯数字，但 noteId 一定是 uuid）。
- */
-function looksLikeLocalAsset(ref: LocalAssetRef): boolean {
-  if (ref.space === "quick-notes") return true;
-  if (ASSET_NOTE_ID_RE.test(ref.noteId)) return true;
-  return /\.[A-Za-z0-9]{1,6}$/.test(ref.filename);
-}
-
-/** 裸本地资产 URL（http 形态）：只匹配 127.0.0.1 上的 http(s) 地址，query/hash 一并带出。 */
-const RAW_LOCAL_URL_RE = /https?:\/\/127\.0\.0\.1:\d+\/[^\s"'<>]*/g;
-/**
- * 内核卡片 JSON 里的百分号编码形态：http%3A%2F%2F127.0.0.1%3A19876%2F{noteId}%2F{file}。
- * 卡片 JSON 的引号也被编码（%22）⇒ 不能只按裸 " 截断：遇到 %22/%27/%3C/%3E 就停，
- * 否则会把 %22%7D 一起吞进来、解码后 filename 变成 `a.png"}`（形状判定失败 ⇒ 端口改不动）。
- */
-const ENCODED_LOCAL_URL_RE = /https?%3A%2F%2F127\.0\.0\.1%3A\d+%2F(?:(?!%22|%27|%3C|%3E)[^\s"'<>])*/gi;
-
-/**
- * 【261118】把文本里**本地资产 URL 的端口**统一成 port；非资产 URL 原样返回。
- *
- * 两种形态都要覆盖（否则正文图片会漏）：
- *   ① 裸 URL —— markdown 缓存、HTML 导出、`<img src>`、日志/通知文本；
- *   ② **百分号编码的卡片 JSON** —— 内核正文里图片卡 value 是 `data:%7B%22src%22...`，
- *      URL 被编码成 `http%3A%2F%2F127.0.0.1%3A19876%2F...`。
- *
- * 判据只认 parseLocalAssetUrl（`127.0.0.1:<port>/<noteId>/<file>` / `quick-notes/...` / staging），
- * 因此 `http://127.0.0.1:19877/api/...` 这类非资产地址不会被误改。幂等。
- */
-export function normalizeLocalAssetPorts(text: string, port: number): string {
-  if (typeof text !== "string" || !text || !Number.isFinite(port) || port <= 0) return text;
-  const withRaw = text.replace(RAW_LOCAL_URL_RE, (raw) => {
-    const rawRef = parseLocalAssetUrl(raw);
-    if (!rawRef || !looksLikeLocalAsset(rawRef)) return raw;
-    const match = /^(https?:\/\/127\.0\.0\.1):\d+(\/.*)$/.exec(raw);
-    if (!match) return raw;
-    return match[1] + ":" + port + match[2];
-  });
-  return withRaw.replace(ENCODED_LOCAL_URL_RE, (raw) => {
-    let decoded: string;
-    try {
-      decoded = decodeURIComponent(raw);
-    } catch {
-      return raw;
-    }
-    const decodedRef = parseLocalAssetUrl(decoded);
-    if (!decodedRef || !looksLikeLocalAsset(decodedRef)) return raw;
-    // 只改「127.0.0.1 后面那个 %3A<端口>」，保留原有大小写与其余编码。
-    return raw.replace(/(%3[Aa])\d+/, (_whole: string, marker: string) => marker + port);
-  });
-}
-
-/**
- * 【261118】正文落盘/上云前的**唯一规范化入口**：本地资产 URL 归一为规范端口 + 去掉运行时 access token。
- *
- * 为什么要在主进程保存前再做一遍（渲染层 stripAssetAccessToken 已做一道）：
- * - 捕获正文的路径不止 Lake 编辑器一条（表格/多维表/画板/手写板的注册 capture、导入、AI 回写、
- *   粘贴守卫等）——只要有一条漏掉，磁盘/云端就会落一个「带实例端口」的正文 ⇒ 换端口/换设备坏图，
- *   且端口变化会改 contentHash ⇒ 同步反复上报「内容变了」；
- * - 主进程 saveNote 是所有用户写路径的**共同收口**，在这里兜底最划算（同步镜像 saveSyncedNote 例外：
- *   它必须保留远端字节，见 SYNC-PROTOCOL）。
- * 幂等：已规范的正文再跑一遍不会变。
- */
-export function canonicalizeNoteAssetUrls(text: string): string {
-  if (typeof text !== "string" || !text) return text;
-  const normalized = normalizeLocalAssetPorts(text, CANONICAL_ASSET_PORT);
-  return normalized.replace(RAW_LOCAL_URL_RE, (raw) => {
-    if (!raw.includes("token=")) return raw;
-    const ref = parseLocalAssetUrl(raw);
-    if (!ref || !looksLikeLocalAsset(ref)) return raw;
-    try {
-      const url = new URL(raw);
-      if (!url.searchParams.has("token")) return raw;
-      url.searchParams.delete("token");
-      return url.toString();
-    } catch {
-      return raw;
-    }
-  });
 }
 
 /**

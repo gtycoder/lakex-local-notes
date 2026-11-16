@@ -1,4 +1,4 @@
-import { assetThumbWidthFor, CANONICAL_ASSET_PORT, normalizeLocalAssetPorts, withAssetWidth } from "../core/assetUrl.js";
+import { assetThumbWidthFor, withAssetWidth } from "../core/assetUrl.js";
 
 /**
  * 本地资源服务器端口（可由主进程 LAKE_ASSET_PORT 覆盖，多端同机双开用）。
@@ -40,20 +40,13 @@ export function assetToken(): string {
   return currentAssetToken();
 }
 
-/**
- * Adds the runtime token to a direct local asset URL (quick-note thumbnails, previews).
- *
- * 【261118】先按**当前实际端口**归一化：正文里存的是规范端口 19876（或历史数据里的 dev/回退端口），
- * 而本实例可能跑在 19877/回退端口上 —— 不归一化就既不匹配 ASSET_ORIGIN（不加 token），
- * 请求还会打到别的实例/没人监听的端口（坏图）。
- */
+/** Adds the runtime token to a direct local asset URL (quick-note thumbnails, previews). */
 export function withAssetAccessToken(url: string): string {
-  const normalized = normalizeLocalAssetPorts(url, ASSET_PORT);
   const token = currentAssetToken();
-  if (!token) return normalized;
+  if (!token) return url;
   try {
-    const parsed = new URL(normalized);
-    if (parsed.origin !== ASSET_ORIGIN) return normalized;
+    const parsed = new URL(url);
+    if (parsed.origin !== ASSET_ORIGIN) return url;
     parsed.searchParams.set("token", token);
     return parsed.toString();
   } catch {
@@ -75,19 +68,11 @@ function mapLocalAssetUrls(content: string, map: (url: URL) => string): string {
   });
 }
 
-/**
- * Adds the per-process token only to the in-memory editor document.
- *
- * 【261118】同时把正文里的本地资产 URL 端口归一到**本实例实际端口**（含卡片 JSON 的百分号编码形态）：
- * 磁盘/云端存的是规范端口（19876），而本实例可能是 19877/回退端口；不归一化则内核渲染出的
- * `<img src>` 指向不存在的端口 ⇒ 坏图，且 token 注入（主进程 webRequest 按当前端口匹配）也不会命中。
- * 注意：这只影响**编辑器内存文档**，保存时由 stripAssetAccessToken 归回规范端口（不写脏正文）。
- */
+/** Adds the per-process token only to the in-memory editor document. */
 export function addAssetAccessToken(content: string): string {
-  const normalized = normalizeLocalAssetPorts(content, ASSET_PORT);
   const token = currentAssetToken();
-  if (!token) return normalized;
-  return mapLocalAssetUrls(normalized, (url) => {
+  if (!token) return content;
+  return mapLocalAssetUrls(content, (url) => {
     url.searchParams.set("token", token);
     return url.toString();
   });
@@ -104,33 +89,22 @@ const LOCAL_IMAGE_THUMB_EXT_RE = /\.(png|jpe?g|webp)$/i;
  */
 export function withLocalImageThumb(src: string, width: number): string {
   if (!Number.isFinite(width) || width <= 0) return src;
-  // 先归一到当前端口：历史/跨实例正文里可能是 19876 或别的回退端口
-  const normalized = normalizeLocalAssetPorts(src, ASSET_PORT);
-  if (!normalized.startsWith(LOCAL_ASSET_PREFIX)) return normalized;
+  if (!src.startsWith(LOCAL_ASSET_PREFIX)) return src;
   try {
-    const parsed = new URL(normalized);
-    if (!LOCAL_IMAGE_THUMB_EXT_RE.test(parsed.pathname)) return normalized;
+    const parsed = new URL(src);
+    if (!LOCAL_IMAGE_THUMB_EXT_RE.test(parsed.pathname)) return src;
   } catch {
-    return normalized;
+    return src;
   }
-  return withAssetWidth(normalized, width);
+  return withAssetWidth(src, width);
 }
 
-/**
- * Removes the transient token before a document is saved or cached.
- *
- * 【261118】并按**规范端口**归一化本地资产 URL（裸 URL + 卡片 JSON 编码形态）：
- * 落盘/上云永远写 19876 ⇒ 同一条正文在 dev(19877)/packaged(19876)/回退端口/移动端之间可移植，
- * 且端口变化不再改 contentHash（否则同步会反复上报内容变更）。
- * 顺序很重要：先在**当前端口**下摘 token，再改端口（改完就不再匹配 ASSET_ORIGIN）。
- */
+/** Removes the transient token before a document is saved or cached. */
 export function stripAssetAccessToken(content: string): string {
   const token = currentAssetToken();
-  const stripped = token
-    ? mapLocalAssetUrls(content, (url) => {
-        url.searchParams.delete("token");
-        return url.toString();
-      })
-    : content;
-  return normalizeLocalAssetPorts(stripped, CANONICAL_ASSET_PORT);
+  if (!token) return content;
+  return mapLocalAssetUrls(content, (url) => {
+    url.searchParams.delete("token");
+    return url.toString();
+  });
 }
