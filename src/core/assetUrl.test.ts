@@ -10,6 +10,7 @@ import {
   ASSET_THUMB_WIDTHS,
   CANONICAL_ASSET_PORT,
   normalizeLocalAssetPorts,
+  canonicalizeNoteAssetUrls,
 } from "./assetUrl.js";
 
 describe("AssetUrlResolver (src/core/assetUrl.ts)", () => {
@@ -171,5 +172,31 @@ describe("normalizeLocalAssetPorts（261118：端口归一化 / 同步可移植�
   it("localAssetHttpUrl 默认使用规范端口（移动端/打包版一致）", () => {
     expect(localAssetHttpUrl("n1", "a.png")).toBe("http://127.0.0.1:19876/n1/a.png");
     expect(CANONICAL_ASSET_PORT).toBe(19876);
+  });
+});
+
+describe("canonicalizeNoteAssetUrls（261118 保存收口）", () => {
+  const NOTE = "0a424bbf-6a86-4884-a70d-43bfa4c4d294";
+  const canonical = "127.0.0.1:" + CANONICAL_ASSET_PORT;
+
+  it("裸 URL：任意实例端口/ token → 规范端口且去掉 token", () => {
+    const body = '<img src="http://127.0.0.1:19888/' + NOTE + '/a.png?token=abc">';
+    expect(canonicalizeNoteAssetUrls(body)).toContain(canonical + "/" + NOTE + "/a.png");
+    expect(canonicalizeNoteAssetUrls(body)).not.toContain("19888");
+    expect(canonicalizeNoteAssetUrls(body)).not.toContain("token=");
+  });
+
+  it("编码形态：只改端口，不破坏百分号编码", () => {
+    const body = "http%3A%2F%2F127.0.0.1%3A19888%2F" + NOTE + "%2Fa.png";
+    const out = canonicalizeNoteAssetUrls(body);
+    expect(out).toContain("%3A" + CANONICAL_ASSET_PORT + "%2F");
+    expect(out).not.toContain("%3A19888%2F");
+  });
+
+  it("幂等 + 非资产本机服务 URL 不动", () => {
+    const body = '<a href="http://127.0.0.1:19888/api/echo?token=x">e</a>';
+    expect(canonicalizeNoteAssetUrls(body)).toBe(body);
+    const once = canonicalizeNoteAssetUrls('<img src="http://127.0.0.1:19888/' + NOTE + '/a.png?token=abc">');
+    expect(canonicalizeNoteAssetUrls(once)).toBe(once);
   });
 });

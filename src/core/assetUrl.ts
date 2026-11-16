@@ -145,6 +145,35 @@ export function normalizeLocalAssetPorts(text: string, port: number): string {
 }
 
 /**
+ * 【261118】正文落盘/上云前的**唯一规范化入口**：本地资产 URL 归一为规范端口 + 去掉运行时 access token。
+ *
+ * 为什么要在主进程保存前再做一遍（渲染层 stripAssetAccessToken 已做一道）：
+ * - 捕获正文的路径不止 Lake 编辑器一条（表格/多维表/画板/手写板的注册 capture、导入、AI 回写、
+ *   粘贴守卫等）——只要有一条漏掉，磁盘/云端就会落一个「带实例端口」的正文 ⇒ 换端口/换设备坏图，
+ *   且端口变化会改 contentHash ⇒ 同步反复上报「内容变了」；
+ * - 主进程 saveNote 是所有用户写路径的**共同收口**，在这里兜底最划算（同步镜像 saveSyncedNote 例外：
+ *   它必须保留远端字节，见 SYNC-PROTOCOL）。
+ * 幂等：已规范的正文再跑一遍不会变。
+ */
+export function canonicalizeNoteAssetUrls(text: string): string {
+  if (typeof text !== "string" || !text) return text;
+  const normalized = normalizeLocalAssetPorts(text, CANONICAL_ASSET_PORT);
+  return normalized.replace(RAW_LOCAL_URL_RE, (raw) => {
+    if (!raw.includes("token=")) return raw;
+    const ref = parseLocalAssetUrl(raw);
+    if (!ref || !looksLikeLocalAsset(ref)) return raw;
+    try {
+      const url = new URL(raw);
+      if (!url.searchParams.has("token")) return raw;
+      url.searchParams.delete("token");
+      return url.toString();
+    } catch {
+      return raw;
+    }
+  });
+}
+
+/**
  * 把 lake-asset 形态转成 http 形态（供复制路径同步拉取 base64 用）。
  * 非 lake-asset 输入原样返回。
  */

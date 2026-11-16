@@ -58,7 +58,12 @@ export function useSavePipelineGlue({
   const handleCaptureContent = useCallback((noteId: string): string | undefined => {
     const registered = capturesRef.current.get(noteId);
     if (registered) {
-      try { const body = registered(); if (typeof body === "string") return body; } catch { /* 回退到 Lake 实例 */ }
+      try {
+        const body = registered();
+        // 261118：注册 capture（表格/多维表/画板/手写板）同样要走规范化 —— 它们的正文也可能内嵌
+        // 本地资产 URL；漏这一处会让「带实例端口/带 token」的正文落盘，触发换端口坏图与同步 churn。
+        if (typeof body === "string") return stripAssetAccessToken(body);
+      } catch { /* 回退到 Lake 实例 */ }
     }
     const editor = editorsRef.current.get(noteId);
     if (!editor || typeof editor.getDocument !== "function") return undefined;
