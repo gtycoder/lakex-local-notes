@@ -29,7 +29,7 @@ const DesktopInkPad = lazy(() => import("../ink/DesktopInkPad").then((m) => ({ d
 import type { LakeEditorPrefs } from "./lakeRuntime";
 import type { EditorCaptureRegistrar } from "../../core/editorCapture";
 import type { NoteKind } from "../../core/noteKind";
-import { readonlyReasonCopy, readonlyReasonOf } from "../../core/capabilities/readonlyReason";
+import { readonlyBannerReason, readonlyReasonCopy, readonlyReasonOf } from "../../core/capabilities/readonlyReason";
 
 const EMPTY_PINNED: ReadonlySet<string> = new Set();
 
@@ -342,6 +342,8 @@ export function MultiTabEditor({
         cloudDeleted: activeTab.deleted === true && (cloudDeletedNoteIds?.has(activeTab.noteId) ?? false),
       })
     : null;
+  /** 横幅原因：locked 不弹（见 readonlyBannerReason）；其余照旧。 */
+  const bannerReadonlyReason = readonlyBannerReason(activeReadonlyReason);
   useLayoutEffect(() => {
     const strip = tabItemsRef.current;
     if (!strip) return;
@@ -662,14 +664,12 @@ export function MultiTabEditor({
         )}
         {topbarTrailing && <div className="tabbar-trailing">{topbarTrailing}</div>}
       </div>
-      {activeReadonlyReason && (
+      {/* 横幅只给「数据事实类」只读原因（回收站 / 云端已删除）；编辑锁是用户主动行为，不弹横幅（261116 用户裁决）。 */}
+      {bannerReadonlyReason && (
         <div className="tab-gone-banner" role="status">
           <TriangleAlert size={14} aria-hidden="true" />
-          <span>{activeReadonlyReason.title}。{activeReadonlyReason.releaseHint}</span>
-          {activeReadonlyReason.action === "unlock" && onToggleNoteLock && (
-            <button type="button" onClick={() => onToggleNoteLock()}>解锁</button>
-          )}
-          {activeReadonlyReason.action === "open-trash" && onOpenTrash && (
+          <span>{bannerReadonlyReason.title}。{bannerReadonlyReason.releaseHint}</span>
+          {bannerReadonlyReason.action === "open-trash" && onOpenTrash && (
             <button type="button" onClick={onOpenTrash}>打开回收站</button>
           )}
         </div>

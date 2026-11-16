@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { READONLY_REASON_COPY, readonlyReasonCopy, readonlyReasonOf } from "./readonlyReason";
+import { READONLY_REASON_COPY, readonlyBannerReason, readonlyReasonCopy, readonlyReasonOf } from "./readonlyReason";
 
 /**
  * 只读原因单一来源（261112 UI 审计 17 P1）：判据优先级 / 文案 / 动作。
@@ -29,6 +29,15 @@ describe("readonlyReason（只读原因单一来源）", () => {
     expect(readonlyReasonOf({ trashed: true, locked: true })?.reason).toBe("trashed");
     expect(readonlyReasonOf({ locked: true })?.reason).toBe("locked");
     expect(readonlyReasonOf({})).toBeNull();
+  });
+
+  it("横幅判据：编辑锁不弹横幅（261116 用户裁决），数据事实类照旧弹", () => {
+    // 用户主动锁定 = 已知状态，再给一条长横幅是重复提示；只读态由工具区禁用 + 状态条体现。
+    expect(readonlyBannerReason(readonlyReasonOf({ locked: true }))).toBeNull();
+    // 回收站 / 云端已删除是数据事实，不说用户会以为丢稿 ⇒ 必须继续提示。
+    expect(readonlyBannerReason(readonlyReasonOf({ trashed: true }))?.reason).toBe("trashed");
+    expect(readonlyBannerReason(readonlyReasonOf({ cloudDeleted: true }))?.reason).toBe("cloud-deleted");
+    expect(readonlyBannerReason(null)).toBeNull();
   });
 
   it("返回值已合并文案，调用方不需要再查表", () => {

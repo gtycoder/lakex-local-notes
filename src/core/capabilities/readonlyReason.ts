@@ -72,3 +72,15 @@ export function readonlyReasonOf(input: ReadonlyReasonInput): ReadonlyReason | n
 export function readonlyReasonCopy(kind: ReadonlyReasonKind): ReadonlyReasonCopy {
   return READONLY_REASON_COPY[kind];
 }
+
+/**
+ * 横幅要不要出现（261116 用户裁决：**编辑锁不弹横幅**）。
+ *
+ * 用户主动锁定 = 已知状态，再给一条横幅是重复提示；只读态本身已经由工具区禁用 + 状态条体现，
+ * 解锁入口在「更多」菜单与 ⌘⇧G。其余原因（回收站 / 云端已删除 / 正文缺失）是**数据事实**，
+ * 不说用户会以为丢稿，必须继续提示。
+ */
+export function readonlyBannerReason(reason: ReadonlyReason | null): ReadonlyReason | null {
+  if (!reason) return null;
+  return reason.reason === "locked" ? null : reason;
+}
