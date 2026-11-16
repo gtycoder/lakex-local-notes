@@ -1,7 +1,15 @@
 // 261112 R2-S7：设置页「sync」分组（纯搬移自 SettingsPanel.tsx；只改文件位置，不改任何设置项/文案）。
+// 261116 用户验收（对标新版思源）：S3 配置**全部收进「同步服务配置」弹窗**，设置页里只剩一行 +
+//   右侧竖排「设置 / 导入 / 导出」；弹窗用现成原语 `NativeDialog`（原生 <dialog>，Esc/外点/焦点回收由它负责）。
+//   handler 一律复用 SettingsPanelContext 里的既有实现（setS3Field / saveS3 / testS3 / 导入导出 / setS3ImportOpen），
+//   **不改 IPC 语义、不动 s3Verified 失效判据**（setS3Field 内部照旧 invalidateS3Verified）。
+//   注意：字段行不再带 itemId —— 进弹窗后没有常驻锚点；搜索注册表里并成一条常驻的 `s3-config`（见 settingsSearch.ts），
+//   否则 settingsSearch.test 的「id ↔ data-set-id 一致」会红。
+import { useState } from "react";
 import type { SettingsPanelContext } from "../useSettingsPanelScope";
 import { Group, Field, TextField, Switch, Block, Item, NumField } from "../../../ui/settingsPrimitives";
-import { Cloud, TriangleAlert, Trash, Terminal } from "lucide-react";
+import { NativeDialog } from "../../../ui/Overlay";
+import { Cloud, TriangleAlert, Trash, Terminal, X } from "lucide-react";
 import { isQiniuEndpoint } from "../../../../lib/s3FormState";
 import { CLOUD_PRIVACY_NOTICE, cloudStateHint } from "../../../../core/cloudState";
 import { cloudSyncEnableGate } from "../../../../core/cloudSyncGate";
@@ -10,52 +18,83 @@ import { AdaptiveSelect } from "../../../ui/AdaptiveSelect";
 import type { SyncSettings } from "../../../../lib/types";
 
 export function SyncSection({ c }: { c: SettingsPanelContext }) {
-  const { cloudConfigured, cloudOffline, cloudState, copySyncDiagnostics, exportS3ConfigFile, gcCfg, gcLog, gcRun, importS3ConfigFile, runGcAction, s3, s3Verified, saveGcCfg, saveS3, saveSyncCfg, setS3Field, setS3ImportOpen, setSyncGateAlert, setSyncMsg, syncCfg, syncDiagMsg, syncDiagText, syncGateAlert, testS3 } = c;
+  const { cloudConfigured, cloudOffline, cloudState, copySyncDiagnostics, exportS3ConfigFile, gcCfg, gcLog, gcRun, importS3ConfigFile, runGcAction, s3, s3Verified, saveGcCfg, saveS3, saveSyncCfg, setS3Field, setS3ImportOpen, setSyncGateAlert, setSyncMsg, syncCfg, syncMsg, syncDiagMsg, syncDiagText, syncGateAlert, testS3 } = c;
+  /** 261116：S3 配置弹窗开关（纯本地 UI 状态，不落盘；关掉弹窗不撤销已输入到 context 的字段值）。 */
+  const [s3Open, setS3Open] = useState(false);
+  /** 「粘贴迁移码…」开的是另一个原生模态（SettingsPanel 里的 S3ConfigImportDialog）。
+   *  261116 修复后可以直接切：外层 Overlay 的 portal host 已稳定（ui/Overlay 的 pickPortalHost），
+   *  不再出现「内层 <dialog> 卸载把外层设置面板一起带走」。这里仍先关本弹窗、同一批提交里开迁移码弹窗
+   *  （不叠两个原生模态，关掉迁移码后回到设置页，行内摘要已刷新）。 */
+  const openTransfer = () => { setS3Open(false); setS3ImportOpen(true); };
   /** 261114 用户裁决：没有配置或没通过连接测试 ⇒ 不能开启（两端同一判据/文案，见 core/cloudSyncGate）。 */
   const enableGate = cloudSyncEnableGate({ configured: cloudConfigured, verified: s3Verified });
+  const closeS3 = () => setS3Open(false);
+  /** 保存 = 既有 saveS3（主进程落库）→ 成功失败都由它写 syncMsg，然后关弹窗把结果留给设置页状态条。 */
+  const saveS3AndClose = async () => { await saveS3(); closeS3(); };
+  /** 行内说明：已配置时显示当前 Endpoint · Bucket（这是用户最常确认的两项）；未配置时给指路文案。 */
+  const s3Summary = cloudConfigured
+    ? [s3.endpoint, s3.bucket].filter(Boolean).join(" · ") || "已保存 S3 配置"
+    : "还没有配置 S3 同步服务；点右侧「设置」填写 Endpoint、密钥与 Bucket。";
   return (
     <>
               <>
                 <Group title="S3 对象存储" icon={<Cloud size={16} />}>
-                  <div className="s3-service-notice" role="note">
-                    <div className="s3-service-notice__title">第三方 S3 服务说明</div>
-                    <p>当前使用的是 Amazon S3 协议兼容的第三方云端存储服务（如七牛云 Kodo、阿里云 OSS、Cloudflare R2）。</p>
-                    <p>S3 的存储空间、流量与接口请求由服务商单独计费；本应用不收取费用、也不包含任何存储套餐，请自行确认计费项目与价格。</p>
-                    <p>使用前请注意第三方服务的技术限制、计费与条款：</p>
-                    <ul>
-                      <li>接口调用频率、带宽等技术限制；</li>
-                      <li>存储空间、流量、请求次数等计费项目；</li>
-                      <li>服务条款、可用性保障与数据安全责任。</li>
-                    </ul>
-                    <p className="s3-service-notice__warn"><TriangleAlert size={14} aria-hidden="true" /><span>注意：笔记正文与附件会按原样上传到你的 S3，云端不做加密；请务必确认该桶为私有、未开放公开读。</span></p>
-                    <p className="s3-service-notice__disclaimer">免责声明：本应用仅通过公开的 S3 兼容 API 访问你自己配置的桶，不对第三方服务的可用性、计费或数据安全负责；请确认桶为私有，且凭据只由你保管。</p>
-                  </div>
-                  <Field itemId="s3-endpoint" name="Endpoint" desc="七牛 Kodo 形如 https://s3.cn-north-1.qiniucs.com。"><TextField label="Endpoint" value={s3.endpoint} placeholder="https://s3-cn-east-1.qiniucs.com" onSave={(v) => setS3Field("endpoint", v)} /></Field>
-                  <Field itemId="s3-access-key" name="Access Key"><TextField label="Access Key" value={s3.accessKeyId} onSave={(v) => setS3Field("accessKeyId", v)} /></Field>
-                  <Field itemId="s3-secret-key" name="Secret Key" desc="留空或保持 ******** 表示沿用已保存密钥（本机加密存储）。"><TextField label="Secret Key" type="password" placeholder="留空或保持 ******** 表示沿用已保存密钥" value={s3.secretAccessKey} onSave={(v) => setS3Field("secretAccessKey", v)} /></Field>
-                  <Field itemId="s3-bucket" name="Bucket"><TextField label="Bucket" value={s3.bucket} onSave={(v) => setS3Field("bucket", v)} /></Field>
-                  <Field itemId="s3-region" name="Region"><TextField label="Region" value={s3.region} onSave={(v) => setS3Field("region", v)} /></Field>
-                  <Field itemId="s3-prefix" name="对象前缀"><TextField label="对象前缀" value={s3.prefix} onSave={(v) => setS3Field("prefix", v)} /></Field>
-                  <Switch
-                    itemId="s3-path-style"
-                    name="使用 Path-style URL"
-                    desc={isQiniuEndpoint(s3.endpoint)
-                      ? "当前 Endpoint 是七牛 Kodo，必须关闭 Path-style（保存或测试时会自动关闭，此项可忽略）。"
-                      : "自建 MinIO 等需要开启；七牛 Kodo 关闭即可。"}
-                    checked={isQiniuEndpoint(s3.endpoint) ? false : s3.forcePathStyle}
-                    disabled={isQiniuEndpoint(s3.endpoint)}
-                    onChange={(checked) => setS3Field("forcePathStyle", checked)}
-                  />
-                  {/* 261116 用户验收（图1/图2）：动作行改成两列，按钮与说明同行、右列垂直居中。 */}
-                  <Item itemId="s3-connection" name="连接" desc="测试仅探测桶可读性，不写入数据。">
-                    <button className="ln-btn ln-btn--outlined" onClick={() => void testS3()}>测试连接</button>
-                    <button className="ln-btn ln-btn--outlined" onClick={() => void saveS3()}>保存配置</button>
+                  <Item itemId="s3-config" name="同步服务配置" desc={s3Summary}>
+                    <div className="settings-ctl-col">
+                      <button type="button" className="ln-btn ln-btn--outlined" onClick={() => setS3Open(true)}>设置</button>
+                      <button type="button" className="ln-btn ln-btn--outlined" onClick={() => void importS3ConfigFile()}>导入</button>
+                      <button type="button" className="ln-btn ln-btn--outlined" onClick={() => void exportS3ConfigFile()}>导出</button>
+                    </div>
                   </Item>
-                  <Item itemId="s3-transfer" name="配置迁移" desc="导出配置文件后在手机「同步设置 → 配置迁移 → 从文件导入」选择它，免去逐项填写。只含 S3 配置，导入会覆盖本机 S3 配置；文件含密钥（已加密），请勿外传。">
-                    <button className="ln-btn ln-btn--outlined" onClick={() => void exportS3ConfigFile()}>导出到文件…</button>
-                    <button className="ln-btn ln-btn--outlined" onClick={() => void importS3ConfigFile()}>从文件导入…</button>
-                    <button className="ln-btn ln-btn--outlined" onClick={() => setS3ImportOpen(true)}>粘贴迁移码…</button>
-                  </Item>
+                  {s3Open && (
+                    <NativeDialog open onDismiss={closeS3} label="同步服务配置" className="s3-config-dialog">
+                      <header className="ln-dialog__head">
+                        <h2 className="ln-dialog__title">同步服务配置</h2>
+                        <button type="button" className="ln-close" aria-label="关闭" onClick={closeS3}><X size={15} aria-hidden="true" /></button>
+                      </header>
+                      <div className="ln-dialog__body">
+                        <div className="s3-config-dialog__body">
+                          <Field name="Endpoint" desc="七牛 Kodo 形如 https://s3.cn-north-1.qiniucs.com。"><TextField label="Endpoint" value={s3.endpoint} placeholder="https://s3-cn-east-1.qiniucs.com" onSave={(v) => setS3Field("endpoint", v)} /></Field>
+                          <Field name="Access Key"><TextField label="Access Key" value={s3.accessKeyId} onSave={(v) => setS3Field("accessKeyId", v)} /></Field>
+                          <Field name="Secret Key" desc="留空或保持 ******** 表示沿用已保存密钥（本机加密存储）。"><TextField label="Secret Key" type="password" placeholder="留空或保持 ******** 表示沿用已保存密钥" value={s3.secretAccessKey} onSave={(v) => setS3Field("secretAccessKey", v)} /></Field>
+                          <Field name="Bucket"><TextField label="Bucket" value={s3.bucket} onSave={(v) => setS3Field("bucket", v)} /></Field>
+                          <Field name="Region"><TextField label="Region" value={s3.region} onSave={(v) => setS3Field("region", v)} /></Field>
+                          <Field name="对象前缀"><TextField label="对象前缀" value={s3.prefix} onSave={(v) => setS3Field("prefix", v)} /></Field>
+                          <Switch
+                            name="使用 Path-style URL"
+                            desc={isQiniuEndpoint(s3.endpoint)
+                              ? "当前 Endpoint 是七牛 Kodo，必须关闭 Path-style（保存或测试时会自动关闭，此项可忽略）。"
+                              : "自建 MinIO 等需要开启；七牛 Kodo 关闭即可。"}
+                            checked={isQiniuEndpoint(s3.endpoint) ? false : s3.forcePathStyle}
+                            disabled={isQiniuEndpoint(s3.endpoint)}
+                            onChange={(checked) => setS3Field("forcePathStyle", checked)}
+                          />
+                          {/* 原分组里的第三方服务说明整体搬进弹窗（设置页只留一行；免责/计费/私有桶提醒仍可见）。 */}
+                          <div className="s3-service-notice" role="note">
+                            <div className="s3-service-notice__title">第三方 S3 服务说明</div>
+                            <p>当前使用的是 Amazon S3 协议兼容的第三方云端存储服务（如七牛云 Kodo、阿里云 OSS、Cloudflare R2）。</p>
+                            <p>S3 的存储空间、流量与接口请求由服务商单独计费；本应用不收取费用、也不包含任何存储套餐，请自行确认计费项目与价格。</p>
+                            <p>使用前请注意第三方服务的技术限制、计费与条款：</p>
+                            <ul>
+                              <li>接口调用频率、带宽等技术限制；</li>
+                              <li>存储空间、流量、请求次数等计费项目；</li>
+                              <li>服务条款、可用性保障与数据安全责任。</li>
+                            </ul>
+                            <p className="s3-service-notice__warn"><TriangleAlert size={14} aria-hidden="true" /><span>注意：笔记正文与附件会按原样上传到你的 S3，云端不做加密；请务必确认该桶为私有、未开放公开读。</span></p>
+                            <p className="s3-service-notice__disclaimer">免责声明：本应用仅通过公开的 S3 兼容 API 访问你自己配置的桶，不对第三方服务的可用性、计费或数据安全负责；请确认桶为私有，且凭据只由你保管。</p>
+                          </div>
+                          {syncMsg && <div className="s3-config-dialog__msg" role="status" aria-live="polite">{syncMsg}</div>}
+                        </div>
+                      </div>
+                      {/* 底部动作：粘贴迁移码（保留既有能力，靠左）｜测试连接｜取消｜保存。 */}
+                      <div className="ln-dialog__actions">
+                        <button type="button" className="ln-btn ln-btn--ghost s3-config-dialog__paste" onClick={openTransfer}>粘贴迁移码…</button>
+                        <button type="button" className="ln-btn ln-btn--outlined" onClick={() => void testS3()}>测试连接</button>
+                        <button type="button" className="ln-btn ln-btn--secondary" onClick={closeS3}>取消</button>
+                        <button type="button" className="ln-btn ln-btn--primary" onClick={() => void saveS3AndClose()}>保存</button>
+                      </div>
+                    </NativeDialog>
+                  )}
                 </Group>
                 <Group title="同步策略（仅保存在当前设备）" icon={<Cloud size={16} />}>
                   {syncCfg && (

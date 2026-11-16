@@ -42,7 +42,12 @@ describe("设置页分组归属（重组后）", () => {
 
   it("云端与同步 = S3 + 同步策略 + 云端回收 + 同步诊断（不再含备份）", () => {
     const ids = itemIds("sync");
-    for (const id of ["s3-endpoint", "s3-secret-key", "sync-enabled", "sync-auto-mode", "gc-retention-days", "sync-diagnostics"]) {
+    // 261116：S3 七个字段收进「同步服务配置」弹窗 ⇒ 页面上只剩一条常驻的 s3-config（旧 s3-* 字段 id 不再常驻）。
+    expect(ids, "s3-config").toContain("s3-config");
+    for (const id of ["s3-endpoint", "s3-access-key", "s3-secret-key", "s3-bucket", "s3-region", "s3-prefix", "s3-path-style", "s3-connection", "s3-transfer"]) {
+      expect(ids, id).not.toContain(id);
+    }
+    for (const id of ["sync-enabled", "sync-auto-mode", "gc-retention-days", "sync-diagnostics"]) {
       expect(ids, id).toContain(id);
     }
     for (const id of ["backup-export", "backup-restore", "backup-import", "auto-backup"]) {

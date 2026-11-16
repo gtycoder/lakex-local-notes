@@ -29,7 +29,12 @@ describe("settings search", () => {
 describe("条目级设置搜索", () => {
   it("标题与同义词都能命中；多词要求全部命中", () => {
     expect(searchSettingItems("回收窗口").map((h) => h.id)).toContain("gc-retention-days");
-    expect(searchSettingItems("sk").map((h) => h.id)).toContain("s3-secret-key");
+    // 261116：S3 的全部字段收进「同步服务配置」弹窗 ⇒ 注册表里只剩一条常驻条目，字段同义词并进它的 keywords。
+    expect(searchSettingItems("sk").map((h) => h.id)).toContain("s3-config");
+    expect(searchSettingItems("endpoint").map((h) => h.id)).toContain("s3-config");
+    expect(searchSettingItems("bucket").map((h) => h.id)).toContain("s3-config");
+    expect(searchSettingItems("前缀").map((h) => h.id)).toContain("s3-config");
+    expect(searchSettingItems("minio").map((h) => h.id)).toContain("s3-config");
     expect(searchSettingItems("路径").map((h) => h.id)).toContain("about-data-dir");
     expect(searchSettingItems("回收 窗口").map((h) => h.id)).toContain("gc-retention-days");
     expect(searchSettingItems("回收 不存在的词")).toEqual([]);

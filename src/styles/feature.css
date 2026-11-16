@@ -36,6 +36,7 @@ pre {
 .rename-dialog,
 .name-prompt-dialog,
 .s3-transfer-dialog,
+.s3-config-dialog,
 .note-info-actions,
 .note-info-section-title > .note-info-btn,
 .sync-status-actions {
@@ -121,6 +122,26 @@ pre {
   line-height: var(--lake-line-height-snug);
 }
 .settings-panel .config-item__error { color: var(--lake-status-error); }
+/* 261116 用户验收（云端回收/备份/维护等 9 处整块行）：统一「标题+说明在左、操作组在右（与文字块垂直居中）、
+ * 其余内容（统计/检查结果/日志）整宽铺满」。此前操作组排在说明下一行，左侧必然留一条空带；
+ * 用 :has() 只命中**带操作组的整块行**，纯说明块/内容块不受影响。
+ * 与 .config-item（真·单行）的分工：单行/短配置走 Item，含多段内容的整块走这里。 */
+.settings-panel .config-block:has(> .config-block__actions) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: var(--lake-space-xl);
+  align-items: start;
+}
+.settings-panel .config-block:has(> .config-block__actions) > .config-block__actions {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
+  justify-content: flex-end;
+  margin-top: 0;
+}
+.settings-panel .config-block:has(> .config-block__actions) > :not(.config-block__name):not(.ln-label__text):not(.config-block__actions) {
+  grid-column: 1 / -1;
+}
 
 /* 左侧分类导航 */
 .settings-panel .settings-nav-item {
@@ -258,6 +279,20 @@ pre {
 
 /* S3 第三方服务说明（261017，用户要求对齐思源 S3 设置页的提醒样式）：
    浅底 + 1px 边 + 标题 + 条款清单 + 免责声明；只在设置页 S3 分组顶部出现。 */
+/* 261116 用户验收（对标新版思源）：S3 配置收进弹窗后，设置页里只剩一行「同步服务配置」+ 右侧一列竖排按钮。
+ * 竖排由本类负责：flex 列的 align-items:stretch 让 .ln-btn 自然铺满列宽 —— **不写 .ln-btn 规则**
+ * （.ln-btn 是 kit 原语，跨所有权覆盖会被 styles/primitives.test 拦）。 */
+.settings-panel .settings-ctl-col { display: flex; flex-direction: column; gap: var(--lake-space-sm); align-items: stretch; min-width: 96px; }
+/* S3 配置弹窗（NativeDialog = 原生 <dialog> + .ln-dialog 骨架）。宽度沿用同族设置型弹窗（560），
+ * 字段在 560px 里改为上下堆叠（左右分栏会把说明挤成两行）。选择器只用自有类，不覆盖 .ln-dialog* 原语。 */
+.s3-config-dialog { width: min(560px, calc(100vw - 32px)); height: auto; max-height: min(82vh, 720px); }
+.s3-config-dialog__body { display: flex; flex-direction: column; gap: var(--lake-space-xs); }
+.s3-config-dialog .config-item--field { flex-direction: column; align-items: stretch; gap: var(--lake-space-xs); }
+.s3-config-dialog .config-item--field .config-item__ctl { flex: 1 1 auto; min-width: 0; justify-content: flex-start; }
+.s3-config-dialog .settings-text-field { width: 100%; }
+.s3-config-dialog .s3-service-notice { margin: var(--lake-space-sm) 0 0; }
+.s3-config-dialog__msg { margin-top: var(--lake-space-sm); color: var(--lake-text-2); font-size: var(--lake-font-size-tiny); line-height: var(--lake-line-height-snug); }
+.s3-config-dialog__paste { margin-right: auto; }
 .settings-panel .s3-service-notice { display: flex; flex-direction: column; gap: 6px; margin: 14px 16px 4px; padding: 12px 14px; border: 0.5px solid var(--lake-border-1); border-radius: var(--lake-radius-md); background: var(--lake-bg-block); color: var(--lake-text-2); font-size: var(--lake-font-size-tiny); line-height: var(--lake-line-height-normal); }
 .settings-panel .s3-service-notice__title { color: var(--lake-text-1); font-size: var(--lake-font-size-body); font-weight: var(--lake-font-weight-medium); }
 .settings-panel .s3-service-notice p { margin: 0; }

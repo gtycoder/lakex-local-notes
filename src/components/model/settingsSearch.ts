@@ -22,6 +22,20 @@ export interface SettingItemEntry {
   keywords?: string;
 }
 
+/** 移动端设置页自己的定位锚点（不与桌面共用）。
+ *
+ *  两端 UI 独立（AGENTS §4）：桌面把 S3 六个字段收进「同步服务配置」弹窗后，注册表只留一条常驻 s3-config；
+ *  移动端 S3 仍是逐字段输入行，锚点沿用 s3-*。这里显式登记，避免移动端「逐字段一个锚点」被误判成漂移，
+ *  同时禁止它们混进 SETTING_ITEMS（那会让桌面漂移测试要求桌面 JSX 也出现这些 id）。 */
+export const MOBILE_ONLY_SETTING_IDS = [
+  "s3-endpoint",
+  "s3-access-key",
+  "s3-secret-key",
+  "s3-bucket",
+  "s3-region",
+  "s3-prefix",
+] as const;
+
 /** 全部可搜索设置行。新增/改名设置时同步这里，否则漂移测试会红。 */
 export const SETTING_ITEMS: SettingItemEntry[] = [
   { id: "editor-font-size", category: "editor", label: "正文字号", keywords: "字体 字号 font size" },
@@ -82,15 +96,10 @@ export const SETTING_ITEMS: SettingItemEntry[] = [
   { id: "backup-last-result", category: "backup", label: "上次备份结果", keywords: "上次 备份 结果 失败 原因 部分成功 错误 重试 message" },
   { id: "data-scan-interval", category: "maintenance", label: "后台扫描间隔（小时）", keywords: "扫描 文件 元数据 对账 重建 间隔 小时 低频 只报告" },
   { id: "data-rebuild", category: "maintenance", label: "重建数据", keywords: "重建 恢复 文件 路丢 元数据 正文 恢复的笔记 扫描 候选" },
-  { id: "s3-endpoint", category: "sync", label: "Endpoint", keywords: "endpoint 接入点 地址 七牛 qiniu" },
-  { id: "s3-access-key", category: "sync", label: "Access Key", keywords: "access key ak 密钥" },
-  { id: "s3-secret-key", category: "sync", label: "Secret Key", keywords: "secret key sk 密钥 加密" },
-  { id: "s3-bucket", category: "sync", label: "Bucket", keywords: "bucket 存储空间 桶" },
-  { id: "s3-region", category: "sync", label: "Region", keywords: "region 区域 cn-north-1" },
-  { id: "s3-prefix", category: "sync", label: "对象前缀", keywords: "前缀 prefix 目录" },
-  { id: "s3-path-style", category: "sync", label: "使用 Path-style URL", keywords: "path style 路径风格 minio" },
-  { id: "s3-connection", category: "sync", label: "连接", keywords: "测试连接 保存配置 连通" },
-  { id: "s3-transfer", category: "sync", label: "配置迁移", keywords: "导入 导出 迁移 换机 手机 安卓 配置文件 迁移码 S3 配置 密钥" },
+  // 261116 用户验收（对标新版思源）：S3 的 7 个字段 + 连接/迁移动作都收进「同步服务配置」弹窗，
+  // 设置页里只剩一行常驻的入口（data-set-id="s3-config"）⇒ 搜索条目并成这一条，但 keywords 保留全部字段同义词，
+  // 否则搜 endpoint / ak / sk / bucket / 前缀 会变成「没有匹配的设置」。
+  { id: "s3-config", category: "sync", label: "同步服务配置", keywords: "s3 endpoint 接入点 ak access key sk secret key bucket 存储空间 桶 region 区域 前缀 prefix path style 路径风格 minio 七牛 qiniu 连接 测试连接 保存 导入 导出 迁移 迁移码 配置文件 服务 配置 密钥 弹窗" },
   { id: "sync-diagnostics", category: "sync", label: "最近 3 轮同步", keywords: "同步 诊断 报告 阶段 耗时 对象 字节 失败 warnings 复制" },
   { id: "gc-status", category: "sync", label: "回收状态", keywords: "GC 回收 对账 深度清理 待回收 未引用" },
   { id: "gc-retention-days", category: "sync", label: "回收窗口（天）", keywords: "回收窗口 保护期 天数 retention" },
