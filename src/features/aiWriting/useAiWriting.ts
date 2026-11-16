@@ -14,6 +14,9 @@ import { loadAiEnabled } from "../../lib/aiEnabled";
 import { native } from "../../lib/native";
 import { AI_PROVIDERS } from "../../core/aiProviders";
 import {
+  AI_WRITING_MAX_ATTACHMENTS,
+  aiWritingAttachmentErrorHint,
+  aiWritingAttachmentKey,
   aiWritingTitleFrom,
   buildAiWritingMessages,
   type AiWritingConversation,
@@ -21,6 +24,7 @@ import {
   type AiWritingMessage,
   type AiWritingMode,
 } from "../../core/aiWriting";
+import type { AiAssetRef } from "../../core/aiProviders";
 import { getNativeErrorMessage } from "../../lib/nativeErrors";
 import { resolveAiWritingDocs, type AiWritingDocReader } from "./aiWritingContext";
 import { startAiWritingTurn, type AiWritingTurn } from "./aiWritingTurn";
@@ -48,6 +52,11 @@ export interface AiWritingController {
   setPromptText: (text: string | null) => void;
   docRefs: AiWritingDocRef[];
   setDocRefs: (refs: AiWritingDocRef[]) => void;
+  /** 待发送的图片附件（只随下一轮 user 消息；发送后清空；不进会话 composer 状态）。 */
+  attachRefs: AiAssetRef[];
+  addAttachments: (refs: readonly AiAssetRef[]) => void;
+  removeAttachment: (asset: AiAssetRef) => void;
+  clearAttachments: () => void;
   /** 深度思考（261116 用户裁决：默认开、可关）。请求级覆盖 = runAiChat options.thinking。 */
   thinking: boolean;
   setThinking: (value: boolean) => void;
@@ -85,6 +94,8 @@ export function useAiWriting(options: { active: boolean }): AiWritingController 
   const [input, setInput] = useState("");
   const [promptText, setPromptTextState] = useState<string | null>(null);
   const [docRefs, setDocRefsState] = useState<AiWritingDocRef[]>([]);
+  /** 待发送图片附件（合并按 key 去重；上限 = core 的 AI_WRITING_MAX_ATTACHMENTS）。 */
+  const [attachRefs, setAttachRefs] = useState<AiAssetRef[]>([]);
   /** 深度思考开关：默认开（与改造前一致）；关闭 = 请求级覆盖 thinking="disabled"（见 runAssistant）。 */
   const [thinking, setThinking] = useState(true);
   const [aiEnabled, setAiEnabled] = useState(false);
@@ -99,8 +110,8 @@ export function useAiWriting(options: { active: boolean }): AiWritingController 
   /** 发送中的哨兵：busyRef 要等占位消息写入后才置位，连点 Enter 会在这之前重复建会话。 */
   const sendingRef = useRef(false);
   const turnRef = useRef<AiWritingTurn | null>(null);
-  const composerRef = useRef({ mode, promptText, docRefs, thinking });
-  composerRef.current = { mode, promptText, docRefs, thinking };
+  const composerRef = useRef({ mode, promptText, docRefs, thinking, attachRefs });
+  composerRef.current = { mode, promptText, docRefs, thinking, attachRefs };
 
   /** 主进程读取端口（多文档上下文）；集中一处，便于替换成移动端/Host 实现。 */
   const docReader = useMemo<AiWritingDocReader>(() => ({
@@ -129,6 +140,29 @@ export function useAiWriting(options: { active: boolean }): AiWritingController 
     setDocRefsState(next);
     notifyComposer({ docRefs: next });
   }, [notifyComposer]);
+
+  /** 加附件：合并去重 + 上限（core 单一来源）；超出的部分静默丢弃（选择器已按剩余槽位限选）。 */
+  const addAttachments = useCallback((refs: readonly AiAssetRef[]) => {
+    setAttachRefs((prev) => {
+      const seen = new Set(prev.map(aiWritingAttachmentKey));
+      const merged = [...prev];
+      for (const ref of refs) {
+        if (merged.length >= AI_WRITING_MAX_ATTACHMENTS) break;
+        const key = aiWritingAttachmentKey(ref);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        merged.push(ref);
+      }
+      return merged;
+    });
+  }, []);
+
+  const removeAttachment = useCallback((asset: AiAssetRef) => {
+    const key = aiWritingAttachmentKey(asset);
+    setAttachRefs((prev) => prev.filter((item) => aiWritingAttachmentKey(item) !== key));
+  }, []);
+
+  const clearAttachments = useCallback(() => setAttachRefs([]), []);
 
   // ---- AI 可用性：进入空间时 + 窗口重新聚焦时刷新（用户去设置里配好回来要立刻生效） ----
   const refreshReadiness = useCallback(async () => {
@@ -178,6 +212,7 @@ export function useAiWriting(options: { active: boolean }): AiWritingController 
         setModeState(payload.conversation.mode);
         setPromptTextState(payload.conversation.promptText);
         setDocRefsState(payload.conversation.docRefs);
+        setAttachRefs([]);
         setInput("");
       })
       .catch((error) => setLoadError(getNativeErrorMessage(error) || "打开会话失败"))
@@ -190,6 +225,7 @@ export function useAiWriting(options: { active: boolean }): AiWritingController 
     setMessages([]);
     setPromptTextState(null);
     setDocRefsState([]);
+    setAttachRefs([]);
     setInput("");
   }, []);
 
@@ -222,10 +258,15 @@ export function useAiWriting(options: { active: boolean }): AiWritingController 
   // ---- 一轮生成：UI 占位 → 交给 turn → 回填占位消息 ----
   const runAssistant = useCallback(async (params: {
     conversation: AiWritingConversation;
+    /** 请求上下文（**不含本轮 user**：本轮由 userText 单独组装，避免同一句问两遍）。 */
     history: AiWritingMessage[];
+    /** 消息列表里占位前要显示的轮次（通常 = history + 本轮 user；重新生成时含 lastUser）。 */
+    displayMessages?: AiWritingMessage[];
     userText: string;
+    /** 本轮随发的图片附件（重新生成时沿用最后 user 消息的 attachRefs）。 */
+    attachRefs?: readonly AiAssetRef[];
   }) => {
-    const { conversation, history, userText } = params;
+    const { conversation, history, displayMessages, userText, attachRefs: turnAttachments = [] } = params;
     const { mode: currentMode, promptText: currentPrompt, docRefs: currentRefs, thinking: currentThinking } = composerRef.current;
     busyRef.current = true;
     setBusy(true);
@@ -233,7 +274,7 @@ export function useAiWriting(options: { active: boolean }): AiWritingController 
 
     try {
     const placeholder = await native.aiWritingAppendMessage({ conversationId: conversation.id, role: "assistant", content: "" });
-    const base = [...history, placeholder];
+    const base = [...(displayMessages ?? history), placeholder];
     setMessages(base);
 
     const docs = currentMode === "docs" ? await resolveAiWritingDocs(currentRefs, docReader) : [];
@@ -242,6 +283,7 @@ export function useAiWriting(options: { active: boolean }): AiWritingController 
       input: userText,
       promptText: currentPrompt,
       docs,
+      attachments: turnAttachments,
       history: history.map((message) => ({ role: message.role, content: message.content })),
     });
     const turn = startAiWritingTurn({
@@ -261,7 +303,8 @@ export function useAiWriting(options: { active: boolean }): AiWritingController 
       reasoning: outcome.reasoning || null,
       durationMs: outcome.durationMs,
       stopped: outcome.stopped,
-      error: outcome.error,
+      // 带图失败：在 aiErrors 归类文案后补一句可执行提示（不维护视觉模型清单）。
+      error: aiWritingAttachmentErrorHint(outcome.error, turnAttachments.length),
     });
     if (saved) setMessages(base.map((message) => (message.id === placeholder.id ? saved : message)));
     } catch (error) {
@@ -283,7 +326,7 @@ export function useAiWriting(options: { active: boolean }): AiWritingController 
     const text = (override ?? input).trim();
     if (!text) return;
     sendingRef.current = true;
-    const { mode: currentMode, promptText: currentPrompt, docRefs: currentRefs } = composerRef.current;
+    const { mode: currentMode, promptText: currentPrompt, docRefs: currentRefs, attachRefs: currentAttachments } = composerRef.current;
     const history = messagesRef.current;
     void (async () => {
       try {
@@ -298,9 +341,24 @@ export function useAiWriting(options: { active: boolean }): AiWritingController 
           setActiveConversation(conversation);
           setConversations((prev) => [conversation!, ...prev]);
         }
-        const userMessage = await native.aiWritingAppendMessage({ conversationId: conversation.id, role: "user", content: text });
+        const userMessage = await native.aiWritingAppendMessage({
+          conversationId: conversation.id,
+          role: "user",
+          content: text,
+          ...(currentAttachments.length > 0 ? { attachRefs: [...currentAttachments] } : {}),
+        });
         setInput("");
-        await runAssistant({ conversation, history: [...history, userMessage], userText: text });
+        // 附件只随这一轮：发出即清空待发列表（历史通过消息 attachRefs 展示，不重发）。
+        if (currentAttachments.length > 0) setAttachRefs([]);
+        await runAssistant({
+          conversation,
+          // 请求上下文不含本轮 user（历史上这里是 [...history, userMessage] 又把本轮拼一次 ⇒ 同一句问两遍）；
+          // 显示列表单独传，气泡照常出现。
+          history,
+          displayMessages: [...history, userMessage],
+          userText: text,
+          attachRefs: currentAttachments,
+        });
       } catch (error) {
         setLoadError(getNativeErrorMessage(error) || "发送失败");
       } finally {
@@ -326,20 +384,27 @@ export function useAiWriting(options: { active: boolean }): AiWritingController 
     const history = list.slice(0, index + 1);
     void (async () => {
       await native.aiWritingDeleteLastAssistant(conversation.id);
-      await runAssistant({ conversation, history, userText: lastUser.content });
+      await runAssistant({
+        conversation,
+        history: list.slice(0, index), // 上下文不含本轮 user
+        displayMessages: history, // 列表里保留这条 user（重跑它的回答）
+        userText: lastUser.content,
+        attachRefs: lastUser.attachRefs ?? [],
+      });
     })();
   }, [runAssistant]);
 
   return useMemo(() => ({
     conversations, activeConversation, messages, loading, loadError, busy, stream,
     mode, setMode, input, setInput, promptText, setPromptText, docRefs, setDocRefs,
+    attachRefs, addAttachments, removeAttachment, clearAttachments,
     thinking, setThinking,
     ready, aiEnabled, providerLabel: providerLabelOf(activeProviderId),
     newConversation, selectConversation, renameConversation, deleteConversation,
     send, stop, regenerate,
   }), [
     conversations, activeConversation, messages, loading, loadError, busy, stream,
-    mode, setMode, input, promptText, setPromptText, docRefs, setDocRefs, thinking,
+    mode, setMode, input, promptText, setPromptText, docRefs, setDocRefs, attachRefs, addAttachments, removeAttachment, clearAttachments, thinking,
     ready, aiEnabled, activeProviderId,
     newConversation, selectConversation, renameConversation, deleteConversation, send, stop, regenerate,
   ]);

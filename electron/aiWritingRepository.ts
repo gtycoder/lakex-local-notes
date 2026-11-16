@@ -8,11 +8,13 @@ import crypto from "node:crypto";
 import type { DbLike } from "./dbLike.js";
 import {
   AI_WRITING_MODES,
+  normalizeAiWritingAttachments,
   type AiWritingConversation,
   type AiWritingDocRef,
   type AiWritingMessage,
   type AiWritingMode,
 } from "../src/core/aiWriting.js";
+import type { AiAssetRef } from "../src/core/aiProviders.js";
 
 interface ConversationRow {
   id: string;
@@ -29,6 +31,7 @@ interface MessageRow {
   conversation_id: string;
   role: string;
   content: string;
+  attach_refs: string | null;
   reasoning: string | null;
   duration_ms: number | null;
   stopped: number;
@@ -48,6 +51,7 @@ export interface AppendMessageInput {
   conversationId: string;
   role: "user" | "assistant";
   content: string;
+  attachRefs?: readonly AiAssetRef[];
   reasoning?: string | null;
   durationMs?: number | null;
   stopped?: boolean;
@@ -110,12 +114,19 @@ function toConversation(row: ConversationRow): AiWritingConversation {
   };
 }
 
+function parseAttachRefs(value: string | null): AiAssetRef[] {
+  if (!value) return [];
+  return normalizeAiWritingAttachments(safeJsonArray(value));
+}
+
 function toMessage(row: MessageRow): AiWritingMessage {
+  const attachRefs = parseAttachRefs(row.attach_refs);
   return {
     id: row.id,
     conversationId: row.conversation_id,
     role: row.role === "assistant" ? "assistant" : "user",
     content: row.content,
+    ...(attachRefs.length > 0 ? { attachRefs } : {}),
     reasoning: row.reasoning ?? null,
     durationMs: typeof row.duration_ms === "number" ? row.duration_ms : null,
     stopped: row.stopped === 1,
@@ -202,7 +213,7 @@ export class AiWritingRepository {
 
   listMessages(conversationId: string): AiWritingMessage[] {
     const rows = this.db
-      .prepare("SELECT id, conversation_id, role, content, reasoning, duration_ms, stopped, error, sort_order, created_at FROM ai_writing_messages WHERE conversation_id = ? ORDER BY sort_order ASC")
+      .prepare("SELECT id, conversation_id, role, content, attach_refs, reasoning, duration_ms, stopped, error, sort_order, created_at FROM ai_writing_messages WHERE conversation_id = ? ORDER BY sort_order ASC")
       .all(conversationId) as MessageRow[];
     return rows.map(toMessage);
   }
@@ -219,13 +230,13 @@ export class AiWritingRepository {
     this.db.transaction(() => {
       this.db
         .prepare(
-          "INSERT INTO ai_writing_messages(id, conversation_id, role, content, reasoning, duration_ms, stopped, error, sort_order, created_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
+          "INSERT INTO ai_writing_messages(id, conversation_id, role, content, attach_refs, reasoning, duration_ms, stopped, error, sort_order, created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
         )
-        .run(id, input.conversationId, input.role, input.content ?? "", input.reasoning ?? null, input.durationMs ?? null, input.stopped ? 1 : 0, input.error ?? null, sortOrder, now);
+        .run(id, input.conversationId, input.role, input.content ?? "", input.role === "user" && input.attachRefs?.length ? JSON.stringify(normalizeAiWritingAttachments(input.attachRefs)) : null, input.reasoning ?? null, input.durationMs ?? null, input.stopped ? 1 : 0, input.error ?? null, sortOrder, now);
       this.db.prepare("UPDATE ai_writing_conversations SET updated_at = ? WHERE id = ?").run(now, input.conversationId);
     })();
     const saved = this.db
-      .prepare("SELECT id, conversation_id, role, content, reasoning, duration_ms, stopped, error, sort_order, created_at FROM ai_writing_messages WHERE id = ?")
+      .prepare("SELECT id, conversation_id, role, content, attach_refs, reasoning, duration_ms, stopped, error, sort_order, created_at FROM ai_writing_messages WHERE id = ?")
       .get(id) as MessageRow | undefined;
     if (!saved) throw new Error("消息写入失败");
     return toMessage(saved);
@@ -234,7 +245,7 @@ export class AiWritingRepository {
   /** 流式结束/失败时回填内容、思考、耗时、停止与错误。 */
   updateMessage(id: string, patch: UpdateMessageInput): AiWritingMessage | null {
     const current = this.db
-      .prepare("SELECT id, conversation_id, role, content, reasoning, duration_ms, stopped, error, sort_order, created_at FROM ai_writing_messages WHERE id = ?")
+      .prepare("SELECT id, conversation_id, role, content, attach_refs, reasoning, duration_ms, stopped, error, sort_order, created_at FROM ai_writing_messages WHERE id = ?")
       .get(id) as MessageRow | undefined;
     if (!current) return null;
     const content = patch.content === undefined ? current.content : patch.content;
@@ -246,7 +257,7 @@ export class AiWritingRepository {
       .prepare("UPDATE ai_writing_messages SET content = ?, reasoning = ?, duration_ms = ?, stopped = ?, error = ? WHERE id = ?")
       .run(content, reasoning, durationMs, stopped, error, id);
     const saved = this.db
-      .prepare("SELECT id, conversation_id, role, content, reasoning, duration_ms, stopped, error, sort_order, created_at FROM ai_writing_messages WHERE id = ?")
+      .prepare("SELECT id, conversation_id, role, content, attach_refs, reasoning, duration_ms, stopped, error, sort_order, created_at FROM ai_writing_messages WHERE id = ?")
       .get(id) as MessageRow | undefined;
     return saved ? toMessage(saved) : null;
   }

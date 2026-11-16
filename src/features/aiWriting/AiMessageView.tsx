@@ -10,7 +10,8 @@ import { Check, Copy, Feather, FilePlus2, RotateCcw, Sparkles } from "lucide-rea
 import { MarkdownView } from "../../components/ui/markdown/MarkdownView";
 import { useThrottledMarkdown } from "../../components/ui/markdown/useThrottledMarkdown";
 import { AiThinkingBlock } from "./AiThinkingBlock";
-import type { AiWritingMessage } from "../../core/aiWriting";
+import { aiWritingAttachmentKey, type AiWritingMessage } from "../../core/aiWriting";
+import { aiWritingAttachmentLabel, aiWritingAttachmentUrl } from "./aiWritingAttachments";
 import type { AiWritingStream } from "./useAiWriting";
 
 /**
@@ -57,9 +58,27 @@ export function AiMessageView(props: AiMessageViewProps) {
   const streamedContent = streaming ? stream.content : message.content;
   const content = useThrottledMarkdown(streamedContent, streaming && message.role === "assistant");
   if (message.role === "user") {
+    const attachRefs = message.attachRefs ?? [];
     return (
       <div className="aiw-msg aiw-msg--user">
-        <div className="aiw-bubble">{message.content}</div>
+        <div className="aiw-user-block">
+          <div className="aiw-bubble">{message.content}</div>
+          {attachRefs.length > 0 && (
+            <div className="aiw-bubble-attach" aria-label={"随发图片 " + attachRefs.length + " 张"}>
+              {attachRefs.map((asset) => (
+                <img
+                  key={aiWritingAttachmentKey(asset)}
+                  className="aiw-bubble-attach__img"
+                  src={aiWritingAttachmentUrl(asset)}
+                  alt={aiWritingAttachmentLabel(asset)}
+                  title={aiWritingAttachmentLabel(asset)}
+                  loading="lazy"
+                  decoding="async"
+                />
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     );
   }

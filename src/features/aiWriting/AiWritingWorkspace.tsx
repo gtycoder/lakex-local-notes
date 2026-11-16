@@ -223,6 +223,7 @@ export function AiWritingWorkspace({ active, treeNodes, topbarLeading, onOpenSet
                     busy={controller.busy}
                     promptText={controller.promptText}
                     docRefs={controller.docRefs}
+                    attachRefs={controller.attachRefs}
                     treeNodes={treeNodes}
                     thinking={controller.thinking}
                     onInput={controller.setInput}
@@ -231,6 +232,8 @@ export function AiWritingWorkspace({ active, treeNodes, topbarLeading, onOpenSet
                     onStop={controller.stop}
                     onSetPrompt={controller.setPromptText}
                     onSetDocRefs={controller.setDocRefs}
+                    onAddAttachments={controller.addAttachments}
+                    onRemoveAttachment={controller.removeAttachment}
                   />
                   <div className="aiw-suggest">
                     <p className="aiw-suggest__label">点一点试试：</p>
@@ -269,6 +272,7 @@ export function AiWritingWorkspace({ active, treeNodes, topbarLeading, onOpenSet
                   busy={controller.busy}
                   promptText={controller.promptText}
                   docRefs={controller.docRefs}
+                  attachRefs={controller.attachRefs}
                   treeNodes={treeNodes}
                   thinking={controller.thinking}
                   onInput={controller.setInput}
@@ -277,6 +281,8 @@ export function AiWritingWorkspace({ active, treeNodes, topbarLeading, onOpenSet
                   onStop={controller.stop}
                   onSetPrompt={controller.setPromptText}
                   onSetDocRefs={controller.setDocRefs}
+                  onAddAttachments={controller.addAttachments}
+                  onRemoveAttachment={controller.removeAttachment}
                 />
               </div>
             )}

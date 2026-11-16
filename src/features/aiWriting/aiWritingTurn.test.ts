@@ -60,6 +60,15 @@ describe("startAiWritingTurn", () => {
     expect(cancel).toHaveBeenCalledWith("r-stop");
   });
 
+  it("主进程返回 { ok:false, error }：按失败落 error（不是空气泡/生成中断）", async () => {
+    const deps = makeDeps({ run: async (_id, _m, onDelta) => { onDelta?.("先到的半句"); return { ok: false, error: "400 Invalid content type. image_url is only supported by certain models." }; } });
+    const result = await startAiWritingTurn({ requestId: "r1", messages: MSGS, deps, now: NOW }).result;
+    expect(result.content).toBe("先到的半句");
+    expect(result.error).toContain("400");
+    expect(result.error).toContain("image_url");
+    expect(result.stopped).toBe(false);
+  });
+
   it("失败：error 落到结果，已生成片段保留", async () => {
     const deps = makeDeps({ run: async (_id, _m, onDelta) => { onDelta?.("片段"); throw new Error("网络不可达"); } });
     const result = await startAiWritingTurn({ requestId: "r1", messages: MSGS, deps, now: NOW }).result;

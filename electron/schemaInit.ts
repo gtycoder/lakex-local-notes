@@ -153,6 +153,8 @@ export class SchemaInit {
         conversation_id TEXT NOT NULL,
         role TEXT NOT NULL,
         content TEXT NOT NULL DEFAULT '',
+        -- 261116 Phase 1：该条用户消息随发的图片引用（JSON AiAssetRef[]；存引用不存字节）。
+        attach_refs TEXT,
         reasoning TEXT,
         duration_ms INTEGER,
         stopped INTEGER NOT NULL DEFAULT 0,
@@ -195,6 +197,8 @@ export class SchemaInit {
       ["tree_nodes", "cloud_deleted", "ALTER TABLE tree_nodes ADD COLUMN cloud_deleted INTEGER NOT NULL DEFAULT 0"],
       // 日记本标记（261109）：列默认 NULL = 非日记，旧库不需要回填（AGENTS §3#7 不做数据迁移）。
       ["tree_nodes", "space", "ALTER TABLE tree_nodes ADD COLUMN space TEXT"],
+      // AI 写作消息的图片附件引用（261116 Phase 1）：旧库补列，NULL = 该条没有附件。
+      ["ai_writing_messages", "attach_refs", "ALTER TABLE ai_writing_messages ADD COLUMN attach_refs TEXT"],
     ] as const) {
       const cols = this.ctx.db.prepare("PRAGMA table_info(" + table + ")").all() as Array<{ name: string }>;
       if (!cols.some((c) => c.name === column)) this.ctx.db.exec(ddl);

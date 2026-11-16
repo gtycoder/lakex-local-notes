@@ -28,12 +28,13 @@
 ai_writing_conversations(id TEXT PK, mode TEXT, title TEXT, prompt_text TEXT,
                          doc_refs TEXT, created_at TEXT, updated_at TEXT)
 ai_writing_messages(id TEXT PK, conversation_id TEXT, role TEXT, content TEXT,
-                    reasoning TEXT, duration_ms INTEGER, stopped INTEGER,
+                    attach_refs TEXT, reasoning TEXT, duration_ms INTEGER, stopped INTEGER,
                     error TEXT, sort_order INTEGER, created_at TEXT)
 ```
 
 - 标题 = 首条用户消息首行 ≤24 字；可重命名。
 - `doc_refs` = JSON `[{kind:"note"|"quick-note", id, title}]`（选择时解析成具体文档，快捷组也落成具体清单）。
+- `attach_refs` = 该条**用户消息**随发的图片引用 JSON `[{noteId, filename, name?}]`（261116 Phase 1）；**存引用不存字节**，NULL = 该条没有附件；只有 user 消息允许。
 - 流式消息：先 insert（空 content）→ 结束后 update（content/reasoning/duration/stopped）。
 - 停止 = 保留已生成片段，`stopped=1`。
 
@@ -42,10 +43,32 @@ ai_writing_messages(id TEXT PK, conversation_id TEXT, role TEXT, content TEXT,
 - 系统提示：写作助手 + **输出 Markdown**（渲染层按 Markdown 渲染）。
 - 多文档：`【资料 1】标题\n正文`，单篇 ≤ 12000 字、合计 ≤ 40000 字、最多 20 篇（超出截断并提示）。
 - 历史轮次受字符预算约束（最近若干轮）。
+- **图片附件（261116 Phase 1）**：只挂**本轮** user 消息 —— 请求 = `[{type:"text"},{type:"image",asset},…]`；
+  历史轮仍只送文本（不重发旧图、不重复计费，主进程 10 图上限只约束一轮）。上限 = `AI_WRITING_MAX_ATTACHMENTS`
+  （与主进程 `AI_MAX_IMAGES` 同一预算 = 10 张），字节护栏（10MB/张、20MB/次、4096 边长/8MB 输出）
+  全在主进程 `electron/ai/aiContentResolver.ts`；渲染层只传 `AiAssetRef`，**不转 base64、不读字节**。
+
+## 图片附件（261116 Phase 1）
+
+- 入口：输入卡右下纸夹（`.aiw-attach`，Phase 1 起**可点击**）→ 选图器 `AiImagePicker`。
+- 选图源 = **已选资料文档（docRefs）里的图片**（对齐移动端 AI 助手 AiImageSheet）；按文档分组网格，
+  多选 ≤ 剩余槽位，已添加的标灰；小记图片下一批（资源根路径语义待定）。
+- 资产枚举 IPC：`list_note_image_assets(noteId)`（主进程读 `note-assets/{noteId}`，只回 filename/size/mimeType，
+  **不算 sha**；与 Android `listImageAssets` 同口径）——通道数因此 188 → 189。
+- 展示：chips / 历史气泡缩略图都走本地资源服务器直链（`?w=128` + access token），文件被清理则显示破图；
+  发送时主进程对缺失/超大/非图片**明确报错**（不静默去图）。
+- **视觉能力不可探测**：供应商配置没有 vision 字段、模型名自由填写 ⇒ 照发；失败且错误里含 400/参数类时，
+  在 `aiErrors` 归类文案后追加一句可执行提示（换支持视觉的模型 / 移除图片重试），
+  **不维护视觉模型清单、不自动重试、不静默去图**（判据 `aiWritingAttachmentErrorHint`）。
+- 持久化：附件引用随 user 消息存 `attach_refs`；**不复制字节进会话目录、不进 S3**（AI 会话仍是设备本地数据）。
+- 失败语义：主进程把供应商错误编码成 `{ok:false, error}` ⇒ 本轮按**消息级错误**落库（保留 400 原文 + 可执行提示），
+  不再退化成「生成已中断」的空气泡（`aiWritingTurn` 对 `ok:false` 的判断由单测钉住）。
 
 ## 交互细节
 
-- 多文档「请选择文档」下拉：快捷组（今天/近一周/近一月的文档 / 小记）+「按笔记本选择」（笔记本 → 其下文档复选）。选中即落成具体 `doc_refs`，chip 显示「N 篇文档」。
+- 多文档「请选择文档」下拉：**只在文档推理（docs）模式**出现（261116 用户确认：纯对话不需要选文档）；快捷组（今天/近一周/近一月的文档 / 小记）+「按笔记本选择」（笔记本 → 其下文档复选）。选中即落成具体 `doc_refs`，chip 显示「N 篇文档」。
+- 药丸（深度思考 / 提示词 / 请选择文档）统一用 kit 原语 `.ln-pill`（261116 收口，本页不再自养三态）。
+- 输入卡**有意比 AI 助手大**（AI 写作 = 纯对话：textarea 最小 96px、卡片大内距；AI 助手 = 资料修改的轻对话：紧凑卡 max 120）——两端不合并。
 - 「生成文档」：弹窗只选笔记本 → 确认 → `convertMarkdownToLake` → `createNoteIn(notebookId, title)` + `saveNote` → toast「已生成，打开」。
 - 「保存到小记」：弹层编辑正文 → `createQuickNote` → toast「小记成功」。
 - 「重新生成」：删掉最后一条助手消息重新请求；「复制」= 复制答案 markdown，toast「复制完成」。
@@ -53,8 +76,8 @@ ai_writing_messages(id TEXT PK, conversation_id TEXT, role TEXT, content TEXT,
 
 ## 护栏
 
-- `core/aiWriting.test.ts`（标题/预算/消息组装）、`electron/aiWritingRepository.test.ts`（CRUD/排序/删除级联）、
-  `ipcChannelParity`（通道三方一致）、`aiClient`（reasoning 解析）。
+- `core/aiWriting.test.ts`（标题/预算/消息组装/**附件只在本轮 + 归一 + 失败提示**）、`electron/aiWritingRepository.test.ts`（CRUD/排序/删除级联/attach_refs 往返）、
+  `ipcChannelParity`（通道三方一致）、`aiClient`（reasoning 解析）、`AiImagePicker.render.test.tsx`（选图/上限/已添加/小记提示）。
 - 样式只用 `--lake-*` 令牌 + `ln-*` 原语，CSS 进 `layer(feature)`；门禁 `ui-metrics` / `cssLayers`。
 
 ## 分层与文件（实现）
@@ -69,7 +92,8 @@ ai_writing_messages(id TEXT PK, conversation_id TEXT, role TEXT, content TEXT,
 | 转换 | `src/features/aiWriting/convertAiMarkdown.ts` | Markdown→Lake（仅 render-timeout 重建重试一次，其它错误不重试；可见性等待 + 可取消） |
 | 答案渲染 | `AiAnswerViewer.tsx` + `aiAnswerViewer.css` | **lazy 边界**：只读 viewer + `setDocument("text/markdown")`（内核原生解析）；懒挂载、单实例复用、pending→rich 切换 |
 | 状态 | `src/features/aiWriting/useAiWriting.ts` | 列表/当前会话/输入卡/发送/停止/重新生成（只做编排，不写网络） |
-| 视图 | `AiWritingSidebar / AiComposer / AiPromptLibrary / AiDocPicker / AiMessageView / SaveQuickNoteDialog / AiWritingWorkspace` | 语雀同款交互；样式 `aiWriting.css`（`layer(feature)`，只用令牌） |
+| 视图 | `AiWritingSidebar / AiComposer / AiPromptLibrary / AiDocPicker / AiImagePicker / AiMessageView / SaveQuickNoteDialog / AiWritingWorkspace` | 语雀同款交互；样式 `aiWriting.css`（`layer(feature)`，只用令牌） |
+| 图片附件 | `AiImagePicker.tsx` + `aiWritingAttachments.ts` | 选图器（docRefs 文档里的图片）+ 引用→资源 URL 换算（`?w=128` + token；不读字节、不转 base64） |
 | 共享弹窗 | `src/components/app/PublishDocDialog.tsx` + `styles/app/dialogs.css` 的 `.publish-doc*` | 「保存为文档」目标选择（浮窗：只选笔记本 + 标题可改）；与日记「转为文档」共用（261112 task-91，候选由调用方按 core 判据过滤：AI 用 `selectableNotebooks`；日记用 `moveTargetCandidates` 后只留 notebook（不出现分组/日记本），标题默认日期键可改） |
 | 壳层 | `desktopTypes` / `DesktopTopBar` / `useDesktopLifecycle` / `App` | 新空间 `ai-writing`（⌘4，空间菜单第 4 项；隐藏目录栏） |
 
@@ -138,9 +162,15 @@ ai_writing_messages(id TEXT PK, conversation_id TEXT, role TEXT, content TEXT,
 - 单测：`core/aiWriting.test.ts`（标题/分组/预算/消息组装）、`aiWritingRepository.test.ts`（CRUD/级联/排序）、
   `aiWritingTurn.test.ts`（正常/停止/失败/结果兜底）、`aiWritingContext.test.ts`（缓存回落/跳过/截断）、
   `aiWritingDocs.test.ts`（可选集合/窗口/上限/切换）、`convertAiMarkdown.test.ts`（重试策略）。
-- 通道：`ipcChannelParity`（注册↔preload↔WEB_METHODS；本批 185，**日记批 +1 ⇒ 现 186**）。
+- 通道：`ipcChannelParity`（注册↔preload↔WEB_METHODS；现 189；261116 附件选择器 +1 = `list_note_image_assets`）。
 - 样式：`ui-metrics`（0 颜色字面量 / 0 字号字面量 / !important 不变）+ `cssLayers.test.ts`（新文件已登记基线 430）。
 - 设备/视觉：本页是桌面空间，按 AGENTS §3#21 只在改动外壳几何时跑 `check:stylesnap` 的相关态。
+
+## 附件 Phase 2（未做）
+
+- PDF/文档附件：主进程解析链已存在（PDF → 抽文本 → document part；32MiB / 6 万字符 / 扫描件明确报错），
+  桌面侧主要缺选择器过滤与 chips；移动端 v1 不接 AI 写作，且原生 `AiChatPlugin` 没有 document 支持。
+- 文档注入继续走 `doc_refs`（正文资料语义），不新增「文档附件」概念。
 
 ## v1 明确不做（用户 261109 定稿）
 

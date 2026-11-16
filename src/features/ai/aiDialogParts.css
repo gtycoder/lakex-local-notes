@@ -47,20 +47,17 @@
 /* 输入卡（261116 用户裁决，对齐 chat-demo）：一张大圆角卡片 = 上方输入 + 底部一行控制。
    左 = 深度思考开关 + 清除；右 = 圆形发送（生成中同格变停止）。AI 助手不做附件（那是 AI 写作空间的需求）。
    边框/聚焦环/圆角/阴影全部走令牌；内部 textarea 无边框无底色。 */
-.ai-dialog__composer { display: flex; flex-direction: column; gap: var(--lake-space-sm); margin: 0 var(--lake-space-lg) var(--lake-space-sm); padding: var(--lake-space-md) var(--lake-space-lg) var(--lake-space-sm); border: 0.5px solid var(--lake-ctl-border); border-radius: var(--lake-chat-radius-composer); background: var(--lake-bg-panel); box-shadow: var(--lake-shadow-card); }
+/* 两端**有意不同**（261116 用户裁决）：AI 助手 = 资料修改的轻对话（紧凑卡：小圆角 + 小内距）；
+   AI 写作 = 纯对话（大输入卡，见 features/aiWriting/aiWriting.css 的 .aiw-composer）。不要合并成同一个组件。 */
+.ai-dialog__composer { display: flex; flex-direction: column; gap: var(--lake-space-xs); margin: 0 var(--lake-space-lg) var(--lake-space-sm); padding: var(--lake-space-sm) var(--lake-space-md) var(--lake-space-xs); border: 0.5px solid var(--lake-ctl-border); border-radius: var(--lake-radius-md); background: var(--lake-bg-panel); box-shadow: var(--lake-shadow-card); }
 .ai-dialog__composer:focus-within { border-color: var(--lake-accent); box-shadow: 0 0 0 var(--lake-focus-ring-width) var(--lake-focus-halo), var(--lake-shadow-card); }
 /* 261115 A12：自增高走 field-sizing: content（不再 JS 量 scrollHeight）。 */
-.ai-dialog__composer .ai-dialog__field { max-height: 160px; padding: 2px 0; border: 0; background: transparent; line-height: 1.55; resize: none; field-sizing: content; outline: none; }
+.ai-dialog__composer .ai-dialog__field { max-height: 120px; padding: 2px 0; border: 0; background: transparent; line-height: 1.5; resize: none; field-sizing: content; outline: none; }
 .ai-dialog__field::placeholder { color: var(--lake-text-4); }
 .ai-dialog__composer-bar { display: flex; align-items: center; justify-content: space-between; gap: var(--lake-space-sm); }
 .ai-dialog__composer-tools { display: flex; align-items: center; flex-wrap: wrap; gap: var(--lake-space-xs); min-width: 0; }
 .ai-dialog__composer-right { display: flex; align-items: center; gap: var(--lake-space-xs); flex: 0 0 auto; }
-/* 深度思考 = 药丸开关（关：中性描边；开：主色字 + 淡主色底）。 */
-.ai-dialog__pill { display: inline-flex; align-items: center; gap: var(--lake-space-sm); height: 28px; padding: 0 var(--lake-space-lg); border: 0.5px solid var(--lake-ctl-border); border-radius: var(--lake-radius-pill); background: transparent; color: var(--lake-text-2); font-size: var(--lake-font-size-small); cursor: pointer; }
-.ai-dialog__pill:hover:not(:disabled) { background: var(--lake-bg-hover); }
-.ai-dialog__pill.is-on { border-color: var(--lake-accent); background: var(--lake-accent-tint); color: var(--lake-accent-text); }
-.ai-dialog__pill:disabled { opacity: var(--lake-disabled-opacity); cursor: default; }
-.ai-dialog__pill--icon { width: 28px; padding: 0; justify-content: center; }
+/* 药丸（深度思考开关 / 清除）走 kit 原语 .ln-pill（261116 收单一来源，两端共用）。 */
 .ai-dialog__send-circle { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border: 0; border-radius: var(--lake-radius-pill); background: var(--lake-accent); color: var(--lake-text-on-accent); cursor: pointer; }
 .ai-dialog__send-circle:hover:not(:disabled) { background: var(--lake-accent-ink); }
 .ai-dialog__send-circle:active:not(:disabled) { transform: scale(.96); }

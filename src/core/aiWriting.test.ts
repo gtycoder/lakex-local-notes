@@ -2,9 +2,12 @@ import { describe, expect, it } from "vitest";
 import {
   AI_WRITING_DOC_CHARS,
   AI_WRITING_MAX_DOCS,
+  AI_WRITING_MAX_ATTACHMENTS,
   AI_WRITING_MAX_HISTORY_TURNS,
   AI_WRITING_SYSTEM_PROMPT,
+  aiWritingAttachmentErrorHint,
   aiWritingTitleFrom,
+  normalizeAiWritingAttachments,
   buildAiWritingDocsBlock,
   buildAiWritingMessages,
   groupAiWritingHistory,
@@ -100,5 +103,51 @@ describe("buildAiWritingMessages", () => {
   it("对话写作模式不带资料块", () => {
     const messages = buildAiWritingMessages({ mode: "chat", input: "你好", docs: [{ title: "A", text: "B" }] });
     expect(String(messages[messages.length - 1].content)).not.toContain("【参考资料】");
+  });
+});
+
+describe("AI 写作图片附件（261116 Phase 1）", () => {
+  const ref = (filename: string, noteId = "n1") => ({ noteId, filename });
+
+  it("附件只挂本轮 user：text 在前、image 在后；历史轮仍是纯文本（不重发旧图）", () => {
+    const messages = buildAiWritingMessages({
+      mode: "chat",
+      input: "这是什么",
+      history: [{ role: "user", content: "上一轮问题" }, { role: "assistant", content: "上一轮回答" }],
+      attachments: [ref("a.png"), ref("b.jpg")],
+    });
+    const historyTurns = messages.slice(1, -1);
+    expect(historyTurns.every((message) => typeof message.content === "string")).toBe(true);
+    expect(messages[messages.length - 1].content).toEqual([
+      { type: "text", text: "这是什么" },
+      { type: "image", asset: ref("a.png") },
+      { type: "image", asset: ref("b.jpg") },
+    ]);
+  });
+
+  it("归一附件：坏项丢弃、同文档同文件去重、上限截断到 AI_MAX_IMAGES", () => {
+    const raw = [
+      { noteId: "n1", filename: "a.png" },
+      { noteId: "n1", filename: "a.png" },
+      { noteId: "", filename: "x.png" },
+      { noteId: "n2" },
+      { noteId: "n2", filename: "b.png", name: "封面" },
+    ];
+    expect(normalizeAiWritingAttachments(raw)).toEqual([
+      { noteId: "n1", filename: "a.png" },
+      { noteId: "n2", filename: "b.png", name: "封面" },
+    ]);
+    const many = Array.from({ length: AI_WRITING_MAX_ATTACHMENTS + 3 }, (_, index) => ({ noteId: "n", filename: index + ".png" }));
+    expect(normalizeAiWritingAttachments(many).length).toBe(AI_WRITING_MAX_ATTACHMENTS);
+  });
+
+  it("带图失败的提示：只在 400/参数类错误后追加，且不点名任何具体模型", () => {
+    const hinted = aiWritingAttachmentErrorHint("请求参数有误（检查模型名与温度）：400 invalid_request_error", 2);
+    expect(hinted).toContain("请求参数有误");
+    expect(hinted).toContain("本次带了 2 张图片");
+    expect(hinted).toContain("支持视觉的模型");
+    expect(aiWritingAttachmentErrorHint("网络不可达：检查网络或 Base URL", 2)).toBe("网络不可达：检查网络或 Base URL");
+    expect(aiWritingAttachmentErrorHint(null, 2)).toBeNull();
+    expect(aiWritingAttachmentErrorHint("请求参数有误", 0)).toBe("请求参数有误");
   });
 });

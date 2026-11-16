@@ -10,7 +10,7 @@ CREATE TABLE ai_writing_conversations (
 );
 CREATE TABLE ai_writing_messages (
   id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL, role TEXT NOT NULL,
-  content TEXT NOT NULL DEFAULT '', reasoning TEXT, duration_ms INTEGER,
+  content TEXT NOT NULL DEFAULT '', attach_refs TEXT, reasoning TEXT, duration_ms INTEGER,
   stopped INTEGER NOT NULL DEFAULT 0, error TEXT, sort_order INTEGER NOT NULL, created_at TEXT NOT NULL
 );
 CREATE INDEX ai_writing_messages_conversation ON ai_writing_messages(conversation_id, sort_order);
@@ -76,6 +76,20 @@ describe("AiWritingRepository", () => {
     expect(repo.getConversation(conversation.id)).toBeNull();
     const left = raw.prepare("SELECT COUNT(*) AS n FROM ai_writing_messages").get() as { n: number };
     expect(left.n).toBe(0);
+  });
+
+  it("图片附件引用随 user 消息往返（JSON）；assistant 消息不接受附件", () => {
+    const { repo } = makeRepo();
+    const conversation = repo.createConversation({ mode: "chat", title: "带图" });
+    const refs = [{ noteId: "n1", filename: "a.png", name: "封面" }, { noteId: "n2", filename: "b.jpg" }];
+    const user = repo.appendMessage({ conversationId: conversation.id, role: "user", content: "看这两张", attachRefs: refs });
+    expect(user.attachRefs).toEqual(refs);
+    expect(repo.listMessages(conversation.id)[0].attachRefs).toEqual(refs);
+
+    const assistant = repo.appendMessage({ conversationId: conversation.id, role: "assistant", content: "好", attachRefs: refs });
+    expect(assistant.attachRefs).toBeUndefined();
+    // 没有附件的消息不写 JSON（NULL，不产生空数组噪音）
+    expect(repo.listMessages(conversation.id)[1].attachRefs).toBeUndefined();
   });
 
   it("向不存在的会话追加消息 ⇒ 直接报错（不落孤儿消息）", () => {

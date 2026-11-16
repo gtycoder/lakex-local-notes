@@ -2,9 +2,12 @@
  * AI 写作 · 输入卡（261116 chat-demo 造型；对齐 AI 助手 261116 定稿）。
  *
  * 造型：**一张大圆角卡片**（--lake-chat-radius-composer / 0.5px 边 / 卡片阴影）=
- *   上方输入（无边框、`field-sizing: content` 自增高、max 160px）
+ *   上方输入（无边框、`field-sizing: content` 自增高；**min 96px** 起步，纯对话区明显更大）
  *   + 底部一行控制：左 = 药丸（深度思考开关 / 提示词 / 请选择文档），
- *     右 = 添加附件（**占位 disabled**，等 docs/ai/ATTACHMENTS-PLAN.md 的 Phase 1 管线）+ 圆形发送（生成中同格变停止）。
+ *     右 = 添加附件（Phase 1：从已选资料文档的图片里选）+ 圆形发送（生成中同格变停止）。
+ *
+ * **两端输入卡有意不同尺寸（261116 用户裁决）**：AI 写作 = 纯对话，卡片内距更大、textarea 最小 96px；
+ * AI 助手 = 资料修改的轻对话，紧凑卡（textarea max 120）。这不是待统一的偏差，**后续不要再合并**。
  * 全部走 --lake-* 令牌（禁止颜色字面量）；发送圆形 32px 主色、disabled 走 --lake-disabled-opacity。
  *
  * 提示词库（261110 用户定稿）：点卡片 = 把该卡片的完整提示词**直接写进输入框**（可继续补充上下文），
@@ -17,11 +20,14 @@
 import { useRef, useState } from "react";
 import { ArrowUp, Brain, FileText, Paperclip, Sparkles, Square, X } from "lucide-react";
 import type { TreeNode } from "../../lib/types";
-import type { AiWritingDocRef, AiWritingMode } from "../../core/aiWriting";
+import type { AiAssetRef } from "../../core/aiProviders";
+import { aiWritingAttachmentKey, type AiWritingDocRef, type AiWritingMode } from "../../core/aiWriting";
+import { aiWritingAttachmentLabel, aiWritingAttachmentUrl } from "./aiWritingAttachments";
 import { toggleDocRef } from "./aiWritingDocs";
 import { AI_WRITING_PROMPT_CARDS, type AiWritingPromptCard } from "./aiWritingPrompts";
 import { AiPromptLibrary } from "./AiPromptLibrary";
 import { AiDocPicker } from "./AiDocPicker";
+import { AiImagePicker } from "./AiImagePicker";
 
 export interface AiComposerProps {
   mode: AiWritingMode;
@@ -29,6 +35,8 @@ export interface AiComposerProps {
   busy: boolean;
   promptText: string | null;
   docRefs: readonly AiWritingDocRef[];
+  /** 待发送图片附件（只随下一轮 user 消息；发送后由 controller 清空）。 */
+  attachRefs: readonly AiAssetRef[];
   treeNodes: readonly TreeNode[];
   /** 深度思考开关（默认开）：请求级覆盖走 useAiWriting → runAiChat options.thinking。 */
   thinking: boolean;
@@ -39,6 +47,8 @@ export interface AiComposerProps {
   onThinkingChange: (value: boolean) => void;
   onSetPrompt: (text: string | null) => void;
   onSetDocRefs: (refs: AiWritingDocRef[]) => void;
+  onAddAttachments: (refs: readonly AiAssetRef[]) => void;
+  onRemoveAttachment: (asset: AiAssetRef) => void;
 }
 
 function promptTitleOf(promptText: string): string {
@@ -47,8 +57,8 @@ function promptTitleOf(promptText: string): string {
 }
 
 export function AiComposer({
-  mode, input, busy, promptText, docRefs, treeNodes, thinking, placeholder = "从这里开始对话",
-  onInput, onSend, onStop, onThinkingChange, onSetPrompt, onSetDocRefs,
+  mode, input, busy, promptText, docRefs, attachRefs, treeNodes, thinking, placeholder = "从这里开始对话",
+  onInput, onSend, onStop, onThinkingChange, onSetPrompt, onSetDocRefs, onAddAttachments, onRemoveAttachment,
 }: AiComposerProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   /**
@@ -58,6 +68,7 @@ export function AiComposer({
    */
   const [promptAnchor, setPromptAnchor] = useState<HTMLElement | null>(null);
   const [docAnchor, setDocAnchor] = useState<HTMLElement | null>(null);
+  const [attachAnchor, setAttachAnchor] = useState<HTMLElement | null>(null);
 
   const canSend = input.trim().length > 0 && !busy;
   /**
@@ -83,7 +94,7 @@ export function AiComposer({
 
   return (
     <div className="aiw-composer">
-      {(promptText || docRefs.length > 0) && (
+      {(promptText || docRefs.length > 0 || attachRefs.length > 0) && (
         <div className="aiw-composer__chips">
           {promptText && (
             <div className="ln-tag aiw-chip">
@@ -103,6 +114,15 @@ export function AiComposer({
               </button>
             </div>
           )}
+          {attachRefs.map((asset) => (
+            <div key={aiWritingAttachmentKey(asset)} className="aiw-attach-chip">
+              <img className="aiw-attach-chip__thumb" src={aiWritingAttachmentUrl(asset)} alt="" loading="lazy" decoding="async" />
+              <span className="ln-ellipsis aiw-attach-chip__name">{aiWritingAttachmentLabel(asset)}</span>
+              <button type="button" className="ln-iconbtn ln-iconbtn--compact aiw-attach-chip__remove" aria-label={"移除图片：" + aiWritingAttachmentLabel(asset)} onClick={() => onRemoveAttachment(asset)}>
+                <X size={12} aria-hidden="true" />
+              </button>
+            </div>
+          ))}
         </div>
       )}
       {/* 输入：无边框、随内容自增高（field-sizing: content，见 aiWriting.css；不再用 JS 量 scrollHeight）。 */}
@@ -125,7 +145,7 @@ export function AiComposer({
           {/* 深度思考 = 药丸开关（开：主色字 + 淡主色底；关：中性描边）。生成中禁改，避免半途换档。 */}
           <button
             type="button"
-            className={"aiw-pill" + (thinking ? " is-on" : "")}
+            className={"ln-pill" + (thinking ? " is-on" : "")}
             aria-pressed={thinking}
             aria-label="深度思考"
             title={thinking ? "深度思考：开（点击关闭）" : "深度思考：关（点击开启）"}
@@ -137,7 +157,7 @@ export function AiComposer({
           </button>
           <button
             type="button"
-            className={"aiw-pill" + (promptText ? " is-on" : "")}
+            className={"ln-pill" + (promptText ? " is-on" : "")}
             aria-expanded={Boolean(promptAnchor)}
             onClick={(event) => setPromptAnchor(promptAnchor ? null : event.currentTarget)}
           >
@@ -147,7 +167,7 @@ export function AiComposer({
           {mode === "docs" && (
             <button
               type="button"
-              className={"aiw-pill" + (docRefs.length > 0 ? " is-on" : "")}
+              className={"ln-pill" + (docRefs.length > 0 ? " is-on" : "")}
               aria-expanded={Boolean(docAnchor)}
               onClick={(event) => setDocAnchor(docAnchor ? null : event.currentTarget)}
             >
@@ -157,9 +177,17 @@ export function AiComposer({
           )}
         </div>
         <div className="aiw-composer__send">
-          {/* 添加附件 = **占位**（261116 用户点单；设计见 docs/ai/ATTACHMENTS-PLAN.md 的 Phase 1 管线）。
-              这里只放一个明确 disabled 的入口，不接任何假交互、不伪造可用状态。 */}
-          <button type="button" className="aiw-attach" aria-label="添加附件" title="从本机资产选择（下一批接入）" disabled>
+          {/* 添加附件（261116 Phase 1）：从**已选资料文档**的图片里挑（docs/ai/ATTACHMENTS-PLAN.md）。
+              没选资料文档时也可点开——选择器会说明「先在输入卡选择资料文档」，不伪造可用状态。 */}
+          <button
+            type="button"
+            className={"aiw-attach" + (attachRefs.length > 0 ? " is-on" : "")}
+            aria-label="添加附件"
+            aria-expanded={Boolean(attachAnchor)}
+            title={docRefs.length > 0 ? "从已选资料文档的图片里选" : "先选择资料文档，再从文档图片里选"}
+            disabled={busy}
+            onClick={(event) => setAttachAnchor(attachAnchor ? null : event.currentTarget)}
+          >
             <Paperclip size={16} aria-hidden="true" />
           </button>
           {busy ? (
@@ -189,6 +217,14 @@ export function AiComposer({
         onToggle={(ref) => onSetDocRefs(toggleDocRef(docRefs, ref))}
         onReplace={onSetDocRefs}
         onDismiss={() => setDocAnchor(null)}
+      />
+      <AiImagePicker
+        open={Boolean(attachAnchor)}
+        anchor={attachAnchor}
+        docs={docRefs}
+        selected={attachRefs}
+        onAdd={onAddAttachments}
+        onDismiss={() => setAttachAnchor(null)}
       />
     </div>
   );

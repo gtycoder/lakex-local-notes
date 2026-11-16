@@ -74,14 +74,27 @@ export function startAiWritingTurn(input: StartAiWritingTurnInput): AiWritingTur
     },
     input.options,
   ).then(
-    (value) => ({
-      // 供应商可能把正文放在最终结果里（流式增量缺失时兜底）：有结果值就优先用结果。
-      content: (value.text ?? "").length > 0 ? value.text! : content,
-      reasoning: value.reasoning ?? reasoning,
-      stopped,
-      error: null as string | null,
-      durationMs: Math.max(0, now() - startedAt),
-    }),
+    (value) => {
+      // 主进程把供应商错误编码成 { ok:false, error }（不 reject）——必须按失败落库，
+      // 否则消息会变成空助手气泡 + 被 UI 当成「生成中断」（真实 400 曾因此被吞掉）。
+      if (!value.ok) {
+        return {
+          content: (value.text ?? "").length > 0 ? value.text! : content,
+          reasoning: value.reasoning ?? reasoning,
+          stopped,
+          error: (value.error ?? "").trim() || "请求失败",
+          durationMs: Math.max(0, now() - startedAt),
+        };
+      }
+      return {
+        // 供应商可能把正文放在最终结果里（流式增量缺失时兜底）：有结果值就优先用结果。
+        content: (value.text ?? "").length > 0 ? value.text! : content,
+        reasoning: value.reasoning ?? reasoning,
+        stopped,
+        error: null as string | null,
+        durationMs: Math.max(0, now() - startedAt),
+      };
+    },
     (error: unknown) => ({
       content,
       reasoning,

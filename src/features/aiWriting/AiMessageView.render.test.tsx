@@ -123,3 +123,28 @@ describe("AiMessageView · 复制为 Lake", () => {
     expect(lakeButton()).toBeNull();
   });
 });
+
+describe("AiMessageView · 用户消息的随发图片（261116 Phase 1）", () => {
+  const userMessage = (attachRefs?: AiWritingMessage["attachRefs"]): AiWritingMessage => ({
+    ...MESSAGE,
+    id: "u1",
+    role: "user",
+    content: "看这两张图",
+    attachRefs,
+  });
+
+  it("用户气泡下方渲染缩略图（资源服务器直链，data 不转 base64）", () => {
+    render({ message: userMessage([{ noteId: "n1", filename: "a.png" }, { noteId: "n2", filename: "b.jpg", name: "封面" }]) });
+    const images = [...document.querySelectorAll<HTMLImageElement>(".aiw-bubble-attach__img")];
+    expect(images.length).toBe(2);
+    expect(images[0].getAttribute("src")).toContain("127.0.0.1");
+    expect(images[0].getAttribute("src")).toContain("/n1/a.png");
+    expect(images[1].getAttribute("alt")).toBe("封面");
+    expect(document.querySelector(".aiw-msg--user .aiw-bubble")?.textContent).toBe("看这两张图");
+  });
+
+  it("没有附件的用户消息不渲染附件区", () => {
+    render({ message: userMessage() });
+    expect(document.querySelector(".aiw-bubble-attach")).toBeNull();
+  });
+});

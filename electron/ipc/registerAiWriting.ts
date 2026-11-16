@@ -1,14 +1,17 @@
 import type { IpcRegistrar } from "./registrar.js";
 import { Store } from "../store.js";
 import { IpcInputError } from "../ipcLimits.js";
-import type {
-  AiWritingComposerPatch,
+import {
+  AI_WRITING_MAX_ATTACHMENTS,
+  normalizeAiWritingAttachments,
+  type AiWritingComposerPatch,
   AiWritingConversationCreateInput,
   AiWritingDocRef,
   AiWritingMessageAppendInput,
   AiWritingMessagePatch,
   AiWritingMode,
 } from "../../src/core/aiWriting.js";
+import type { AiAssetRef } from "../../src/core/aiProviders.js";
 
 /**
  * AI 写作空间 IPC（261109，桌面本地）：会话/消息 CRUD。
@@ -53,6 +56,21 @@ function readDocRefs(value: unknown): AiWritingDocRef[] {
       title: typeof row.title === "string" ? readString(row.title, "docRefs.title", 500) : "未命名",
     };
   });
+}
+
+/**
+ * 图片附件引用（261116 Phase 1）：只认 {noteId, filename, name?}；
+ * 与渲染层/DB 共用 core 的 normalize（同一份形状判据），但 IPC 侧**不静默丢弃**：
+ * 数量超限或存在坏项都直接报错（坏输入不该悄悄变成「少一张图」）。
+ */
+function readAttachments(value: unknown, role: "user" | "assistant"): AiAssetRef[] | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (role !== "user") throw new IpcInputError("只有用户消息可以带附件");
+  if (!Array.isArray(value)) throw new IpcInputError("attachRefs 必须是数组");
+  if (value.length > AI_WRITING_MAX_ATTACHMENTS) throw new IpcInputError("一次最多发送 " + AI_WRITING_MAX_ATTACHMENTS + " 张图片");
+  const normalized = normalizeAiWritingAttachments(value);
+  if (normalized.length !== value.length) throw new IpcInputError("attachRefs 项无效或重复");
+  return normalized;
 }
 
 /** 耗时：非负整数毫秒；其它（含 null）落 null。 */
@@ -113,6 +131,7 @@ export function registerAiWritingIpc(ipc: IpcRegistrar, store: Store): void {
       conversationId: readString(row.conversationId, "会话 id", 200),
       role,
       content: typeof row.content === "string" ? readString(row.content, "正文", MAX_CONTENT) : "",
+      attachRefs: readAttachments(row.attachRefs, role),
       reasoning: row.reasoning === undefined || row.reasoning === null ? null : readString(row.reasoning, "思考内容", MAX_REASONING),
       durationMs: readDuration(row.durationMs),
       stopped: row.stopped === true,

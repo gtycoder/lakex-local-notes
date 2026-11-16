@@ -24,7 +24,7 @@ describe("AI 助手输入卡版式（261116 chat-demo 定稿）", () => {
 
   it("底部一行：左侧深度思考开关（aria-pressed 可关）+ 右侧圆形发送", () => {
     expect(composer).toContain("ai-dialog__composer-tools");
-    expect(composer).toContain("ai-dialog__pill");
+    expect(composer).toContain("ln-pill");
     expect(composer).toContain('aria-pressed={thinking}');
     expect(composer).toContain("深度思考");
     expect(composer).toContain("ai-dialog__send-circle");

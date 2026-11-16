@@ -378,6 +378,33 @@
 .ln-select--native option:checked { color: var(--lake-fg-selected); background: var(--lake-bg-selected); }
 
 
+/* ── 08c 药丸开关 / 药丸操作（261116 用户裁决收原语）──────────────
+ * 单一来源：AI 助手与 AI 写作此前各写一份同几何的 pill（.ai-dialog__pill / .aiw-pill，
+ * 两个懒 chunk 独立加载）。药丸=「一排小开关/小操作」的交互语义，收进 kit 只此一份。
+ * 语义：默认中性描边；开态（aria-pressed=true 或 .is-on）= 主色字 + 淡主色底 + 主色边；
+ * 触屏/图标变体 = --icon（正方形，只放一个 14px 图标）。 */
+.ln-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--lake-space-sm);
+  height: 28px;
+  padding: 0 var(--lake-space-lg);
+  border: 0.5px solid var(--lake-ctl-border);
+  border-radius: var(--lake-radius-pill);
+  background: transparent;
+  color: var(--lake-text-2);
+  font-family: inherit;
+  font-size: var(--lake-font-size-small);
+  cursor: pointer;
+}
+.ln-pill:hover:not(:disabled) { background: var(--lake-bg-hover); }
+.ln-pill:focus-visible { outline: 0; border-color: var(--lake-accent); box-shadow: 0 0 0 2px var(--lake-focus-halo); }
+.ln-pill[aria-pressed="true"],
+.ln-pill.is-on { border-color: var(--lake-accent); background: var(--lake-accent-tint); color: var(--lake-accent-text); }
+.ln-pill:disabled { opacity: var(--lake-disabled-opacity); cursor: default; }
+.ln-pill--icon { width: 28px; padding: 0; }
+
 /* ── 09 开关 ───────────────────────────────────────────────── */
 .ln-switch {
   position: relative;

@@ -143,6 +143,7 @@ contextBridge.exposeInMainWorld("lakeNative", {
   readOrphanPreview: (id) => invoke("read_orphan_preview", id),
   listRemovedAssets: () => invoke("list_removed_assets"),
   readAssetPreview: (noteId, filename) => invoke("read_asset_preview", noteId, filename),
+  listNoteImageAssets: (noteId) => invoke("list_note_image_assets", noteId),
   openAttachment: (noteId, filename) => invoke("open_attachment", noteId, filename),
   showAttachmentInFolder: (noteId, filename) => invoke("show_attachment_in_folder", noteId, filename),
   copyAssetPath: (noteId, filename) => invoke("copy_asset_path", noteId, filename),

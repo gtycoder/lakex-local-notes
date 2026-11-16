@@ -297,6 +297,8 @@ export interface LakeNative {
   readOrphanPreview(id: number): Promise<{ filename: string; mimeType: string; supported: boolean; dataUrl?: string }>;
   listRemovedAssets(): Promise<Array<{ noteId: string; filename: string; status: "orphan" | "history"; orphanId?: number; size: number; mimeType: string; noteTitle?: string; noteState?: "active" | "trash" | "missing"; detectedAt?: string; fileMissing?: boolean }>>;
   readAssetPreview(noteId: string, filename: string): Promise<{ filename: string; mimeType: string; supported: boolean; dataUrl?: string }>;
+  /** 列出某篇文档 note-assets 里的图片（AI 写作附件选择器用；只回 filename/size/mimeType，不算 sha）。 */
+  listNoteImageAssets(noteId: string): Promise<Array<{ filename: string; size: number; mimeType: string }>>;
   /** 附件操作（桌面本地优先）：系统默认应用打开。 */
   openAttachment(noteId: string, filename: string): Promise<{ ok: boolean; error?: string }>;
   /** 附件操作：在文件管理器中显示。 */
@@ -571,6 +573,7 @@ export const native = {
   readOrphanPreview: (id: number) => api().readOrphanPreview(id),
   listRemovedAssets: () => api().listRemovedAssets(),
   readAssetPreview: (noteId: string, filename: string) => api().readAssetPreview(noteId, filename),
+  listNoteImageAssets: (noteId: string) => api().listNoteImageAssets(noteId),
   openAttachment: (noteId: string, filename: string) => api().openAttachment(noteId, filename),
   showAttachmentInFolder: (noteId: string, filename: string) => api().showAttachmentInFolder(noteId, filename),
   revealNoteFile: (id: string) => api().revealNoteFile(id),

@@ -9,6 +9,10 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+const h = vi.hoisted(() => ({ listNoteImageAssets: vi.fn() }));
+vi.mock("../../lib/native", () => ({ native: { listNoteImageAssets: h.listNoteImageAssets } }));
+
 import { AiComposer } from "./AiComposer";
 import { AI_WRITING_PROMPT_CARDS } from "./aiWritingPrompts";
 
@@ -31,10 +35,14 @@ interface RenderOptions {
   busy?: boolean;
   thinking?: boolean;
   mode?: "chat" | "docs";
+  docRefs?: never[];
+  attachRefs?: Array<{ noteId: string; filename: string; name?: string }>;
+  onAddAttachments?: (refs: readonly unknown[]) => void;
+  onRemoveAttachment?: (asset: unknown) => void;
 }
 
 async function renderComposer(options: RenderOptions = {}) {
-  const { input = "", promptText = null, busy = false, thinking = true, mode = "chat" } = options;
+  const { input = "", promptText = null, busy = false, thinking = true, mode = "chat", attachRefs = [], onAddAttachments = vi.fn(), onRemoveAttachment = vi.fn() } = options;
   const onInput = vi.fn();
   const onSetPrompt = vi.fn();
   const onThinkingChange = vi.fn();
@@ -51,6 +59,7 @@ async function renderComposer(options: RenderOptions = {}) {
         busy={busy}
         promptText={promptText}
         docRefs={[]}
+        attachRefs={attachRefs}
         treeNodes={[]}
         thinking={thinking}
         onInput={onInput}
@@ -59,10 +68,12 @@ async function renderComposer(options: RenderOptions = {}) {
         onThinkingChange={onThinkingChange}
         onSetPrompt={onSetPrompt}
         onSetDocRefs={() => {}}
+        onAddAttachments={onAddAttachments}
+        onRemoveAttachment={onRemoveAttachment}
       />,
     );
   });
-  return { onInput, onSetPrompt, onThinkingChange, onSend, onStop };
+  return { onInput, onSetPrompt, onThinkingChange, onSend, onStop, onAddAttachments, onRemoveAttachment };
 }
 
 function buttonByLabel(label: string): HTMLButtonElement | null {
@@ -92,7 +103,7 @@ describe("AiComposer · 底部一行（261116 chat-demo）", () => {
     const { onThinkingChange } = await renderComposer({ thinking: true });
     const pill = buttonByLabel("深度思考")!;
     expect(pill).toBeTruthy();
-    expect(pill.className).toContain("aiw-pill");
+    expect(pill.className).toContain("ln-pill");
     expect(pill.className).toContain("is-on");
     expect(pill.getAttribute("aria-pressed")).toBe("true");
     expect(pill.textContent).toContain("深度思考");
@@ -117,21 +128,37 @@ describe("AiComposer · 底部一行（261116 chat-demo）", () => {
 
   it("docs 模式才有「请选择文档」药丸；chat 模式没有", async () => {
     await renderComposer({ mode: "docs" });
-    expect([...document.querySelectorAll(".aiw-pill")].some((b) => (b.textContent || "").includes("请选择文档"))).toBe(true);
+    expect([...document.querySelectorAll(".ln-pill")].some((b) => (b.textContent || "").includes("请选择文档"))).toBe(true);
     act(() => { root!.unmount(); });
     host.remove();
     await renderComposer({ mode: "chat" });
-    expect([...document.querySelectorAll(".aiw-pill")].some((b) => (b.textContent || "").includes("请选择文档"))).toBe(false);
+    expect([...document.querySelectorAll(".ln-pill")].some((b) => (b.textContent || "").includes("请选择文档"))).toBe(false);
   });
 
-  it("添加附件 = 占位 disabled（aria-label + title 说明下一批接入，不伪造可用）", async () => {
+  it("添加附件 = Phase 1 可点击入口：打开选图器（无资料文档时给明确说明，不伪造可用）", async () => {
     await renderComposer();
     const attach = buttonByLabel("添加附件")!;
     expect(attach).toBeTruthy();
-    expect(attach.disabled).toBe(true);
+    expect(attach.disabled).toBe(false);
     expect(attach.className).toContain("aiw-attach");
-    expect(attach.getAttribute("title")).toContain("下一批接入");
+    expect(attach.getAttribute("aria-expanded")).toBe("false");
     expect(attach.textContent?.trim()).toBe("");
+    act(() => { attach.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true })); });
+    await flush();
+    expect(attach.getAttribute("aria-expanded")).toBe("true");
+    expect(document.body.textContent).toContain("选择图片");
+    expect(document.body.textContent).toContain("先在输入卡选择资料文档");
+  });
+
+  it("已挂附件 = 缩略图 chip + 单删（删除回调带原引用）", async () => {
+    const ref = { noteId: "note-1", filename: "a.png", name: "a.png" };
+    const { onRemoveAttachment } = await renderComposer({ attachRefs: [ref] });
+    const chip = document.querySelector(".aiw-attach-chip");
+    expect(chip).toBeTruthy();
+    expect(chip!.querySelector("img")?.getAttribute("src")).toContain("note-1/a.png");
+    const remove = buttonByLabel("移除图片：a.png")!;
+    act(() => { remove.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true })); });
+    expect(onRemoveAttachment).toHaveBeenCalledWith(ref);
   });
 
   it("发送 = 圆形主色按钮；忙态同格变停止（红底圆形），且深度思考被禁用", async () => {

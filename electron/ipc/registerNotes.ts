@@ -6,6 +6,7 @@ import type { DraftJournal } from "../draftJournal.js";
 import { Store } from "../store.js";
 import type { QuickNotesStore } from "../quickNotes.js";
 import { MAX_ATTACHMENT_BYTES } from "../../src/core/storeLimits.js";
+import { extOf, isImageExtension, mimeTypeForFilename } from "../../src/core/assetNaming.js";
 import { isSafePathSegment, isSafeShellOpenFilename, sanitizeFileName } from "../../src/core/storeUtils.js";
 import { exportBitableCsv, exportBitableZip, exportInkPageSvg, exportNote, saveInkPagePng, type ExportFormat } from "../export.js";
 import {
@@ -333,6 +334,29 @@ export function registerNotesIpc(
   ipc.handle("delete_orphan_asset", (id: number) => store.deleteOrphanAsset(Number(id)));
   ipc.handle("read_orphan_preview", (id: number) => store.readOrphanPreview(Number(id)));
   ipc.handle("list_removed_assets", () => store.listRemovedAssets());
+  /**
+   * AI 写作 Phase 1（261116）：列出某篇文档 note-assets 目录里的图片（只回 filename/size/mimeType）。
+   * 与 Android AssetSyncPlugin.listImageAssets 同口径：**不算 sha256**（附件多时选择器会卡），
+   * 只服务选图器/缩略图；noteId 单段校验，防穿越 note-assets。
+   */
+  ipc.handle("list_note_image_assets", (noteId: unknown) => {
+    const id = typeof noteId === "string" ? noteId : "";
+    if (!isSafePathSegment(id)) throw new IpcInputError("非法笔记 id");
+    const dir = store.noteAssetsPathFor(id);
+    if (!fs.existsSync(dir)) return [];
+    const out: Array<{ filename: string; size: number; mimeType: string }> = [];
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (!entry.isFile() || !isImageExtension(extOf(entry.name))) continue;
+      try {
+        const stat = fs.statSync(path.join(dir, entry.name));
+        out.push({ filename: entry.name, size: stat.size, mimeType: mimeTypeForFilename(entry.name) });
+      } catch {
+        // 单文件 stat 失败（并发清理/权限）：跳过，不阻断选择器。
+      }
+    }
+    out.sort((a, b) => a.filename.localeCompare(b.filename));
+    return out;
+  });
   ipc.handle("read_asset_preview", (noteId: string, filename: string) => store.readAssetPreview(noteId, filename));
   /** 附件操作（桌面本地优先：文件本来就在磁盘）：用系统默认应用打开 / 在文件夹中显示。
    * 路径安全：noteId + filename 双段校验（isSafePathSegment），只允许 note-assets 目录内。 */

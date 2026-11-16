@@ -9,7 +9,8 @@
  * 红线：AI Key 与网络只在主进程（见 electron/ai/aiClient.ts）；本模块只产出消息数组。
  * 规格：docs/AI-WRITING.md。
  */
-import type { AiChatMessage } from "./aiProviders";
+import { AI_MAX_IMAGES } from "./aiChatMessages";
+import type { AiAssetRef, AiChatMessage, AiContentPart } from "./aiProviders";
 
 export type AiWritingMode = "chat" | "docs";
 export const AI_WRITING_MODES: readonly AiWritingMode[] = ["chat", "docs"];
@@ -39,6 +40,8 @@ export interface AiWritingMessage {
   role: "user" | "assistant";
   /** Markdown 原文（渲染层用 MarkdownView 渲染）。 */
   content: string;
+  /** 该条用户消息随发的图片附件（**只随当轮发送**，历史轮不重发；存引用不存字节）。 */
+  attachRefs?: AiAssetRef[];
   /** 思考内容（DeepSeek 等供应商的 reasoning_content）；null = 该供应商没有思考输出。 */
   reasoning: string | null;
   durationMs: number | null;
@@ -72,6 +75,8 @@ export interface AiWritingMessageAppendInput {
   conversationId: string;
   role: "user" | "assistant";
   content: string;
+  /** 图片附件引用（仅 user 消息允许；主进程按 AI_WRITING_MAX_ATTACHMENTS 校验）。 */
+  attachRefs?: AiAssetRef[];
   reasoning?: string | null;
   durationMs?: number | null;
   stopped?: boolean;
@@ -162,10 +167,23 @@ export const AI_WRITING_TOTAL_DOC_CHARS = 40_000;
 /** 历史轮次预算：只取最近 N 轮 + 总字符上限（防止长会话把上下文打爆）。 */
 export const AI_WRITING_MAX_HISTORY_TURNS = 12;
 export const AI_WRITING_HISTORY_CHARS = 24_000;
+/**
+ * 单轮图片附件上限：**与主进程 ai_chat 同一预算**（core/aiChatMessages 的 AI_MAX_IMAGES），
+ * 不在 AI 写作侧另立第二套上限。超限在选择器里就拦住，不发出去再报错。
+ */
+export const AI_WRITING_MAX_ATTACHMENTS = AI_MAX_IMAGES;
 
 export interface AiWritingDocContext {
   title: string;
   text: string;
+}
+
+/** 带图发送失败时的可执行提示：**不维护视觉模型清单**，只提示「可能不支持图片」+ 两个出口。 */
+export function aiWritingAttachmentErrorHint(error: string | null | undefined, imageCount: number): string | null {
+  const message = error?.trim();
+  if (!message || imageCount <= 0) return message ? message : null;
+  if (!/400|请求参数|bad request|unsupported|image/i.test(message)) return message;
+  return message + "（本次带了 " + imageCount + " 张图片：若当前模型不支持图片会返回 400，可换用支持视觉的模型，或移除图片后重试。）";
 }
 
 export interface AiWritingHistoryTurn {
@@ -173,10 +191,52 @@ export interface AiWritingHistoryTurn {
   content: string;
 }
 
+/** 附件引用 → 展示名（用户可读名优先；缺省回落到磁盘文件名）。 */
+export function aiWritingAttachmentLabel(asset: AiAssetRef): string {
+  const name = asset.name?.trim();
+  return name ? name : asset.filename;
+}
+
+/** 附件去重键（同一篇文档的同一文件只允许一份）。 */
+export function aiWritingAttachmentKey(asset: AiAssetRef): string {
+  return asset.noteId + "/" + asset.filename;
+}
+
+/**
+ * 归一图片附件引用（渲染层 / 主进程 IPC / DB 三处共用同一份形状判据）：
+ * 只认非空字符串 noteId / filename；按 key 去重；按 AI_WRITING_MAX_ATTACHMENTS 截断；无效项直接丢弃。
+ * 需要「非法输入报错」的调用方（IPC）应先用原始长度比对，见 electron/ipc/registerAiWriting.ts。
+ */
+export function normalizeAiWritingAttachments(raw: unknown): AiAssetRef[] {
+  if (!Array.isArray(raw)) return [];
+  const out: AiAssetRef[] = [];
+  const seen = new Set<string>();
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const row = item as { noteId?: unknown; filename?: unknown; name?: unknown };
+    const noteId = typeof row.noteId === "string" ? row.noteId : "";
+    const filename = typeof row.filename === "string" ? row.filename : "";
+    if (!noteId || !filename) continue;
+    const key = noteId + "/" + filename;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const ref: AiAssetRef = { noteId, filename };
+    if (typeof row.name === "string" && row.name) ref.name = row.name;
+    out.push(ref);
+    if (out.length >= AI_WRITING_MAX_ATTACHMENTS) break;
+  }
+  return out;
+}
+
 export interface BuildAiWritingMessagesInput {
   mode: AiWritingMode;
   /** 本轮用户输入（必填）。 */
   input: string;
+  /**
+   * 本轮随发的图片附件（只出现在**本轮 user 消息**里；历史轮仍只送文本）。
+   * 主进程按 AI_MAX_IMAGES / 10MB·张 / 20MB·次解析成 image_url；这里不做字节读取。
+   */
+  attachments?: readonly AiAssetRef[];
   /** 输入卡上的提示词（作为本轮约束追加到用户内容前）。 */
   promptText?: string | null;
   /** 多文档资料（chat 模式忽略）。 */
@@ -236,7 +296,7 @@ export function pickAiWritingHistory(history: readonly AiWritingHistoryTurn[]): 
  * 多文档模式把资料块并入本轮用户消息（与语雀「根据 N 篇文档推理分析」一致：资料属于提问）。
  */
 export function buildAiWritingMessages(input: BuildAiWritingMessagesInput): AiChatMessage[] {
-  const { mode, input: rawInput, promptText, docs = [], history = [] } = input;
+  const { mode, input: rawInput, promptText, docs = [], history = [], attachments = [] } = input;
   const messages: AiChatMessage[] = [{ role: "system", content: AI_WRITING_SYSTEM_PROMPT }];
   for (const turn of pickAiWritingHistory(history)) {
     messages.push({ role: turn.role, content: turn.content });
@@ -251,6 +311,15 @@ export function buildAiWritingMessages(input: BuildAiWritingMessagesInput): AiCh
     if (docsBlock) parts.push("【参考资料】\n" + docsBlock);
   }
   const content = parts.join("\n\n");
-  messages.push({ role: "user", content: content || inputText });
+  // 图片附件**只挂在本轮 user 消息**：历史轮仍只送文本（不重发、不重复计费；主进程 10 图上限只约束一轮）。
+  const images = normalizeAiWritingAttachments(attachments);
+  if (images.length === 0) {
+    messages.push({ role: "user", content: content || inputText });
+    return messages;
+  }
+  const userParts: AiContentPart[] = [];
+  if (content) userParts.push({ type: "text", text: content });
+  for (const asset of images) userParts.push({ type: "image", asset });
+  messages.push({ role: "user", content: userParts });
   return messages;
 }

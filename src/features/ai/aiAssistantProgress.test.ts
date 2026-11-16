@@ -93,7 +93,7 @@ describe("AI 请求状态反馈", () => {
   });
 
   it("深度思考开关：默认开时请求带 thinking=enabled，关掉后同一处带 disabled（请求级覆盖）", () => {
-    const pill = host.querySelector<HTMLButtonElement>(".ai-dialog__pill")!;
+    const pill = host.querySelector<HTMLButtonElement>(".ln-pill")!;
     expect(pill).not.toBeNull();
     expect(pill.getAttribute("aria-pressed")).toBe("true");
     start();
@@ -101,7 +101,7 @@ describe("AI 请求状态反馈", () => {
   });
 
   it("深度思考关闭后本次请求 thinking=disabled，且不影响下一次的默认值", async () => {
-    const pill = host.querySelector<HTMLButtonElement>(".ai-dialog__pill")!;
+    const pill = host.querySelector<HTMLButtonElement>(".ln-pill")!;
     act(() => pill.click());
     expect(pill.getAttribute("aria-pressed")).toBe("false");
     start();

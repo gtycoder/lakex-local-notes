@@ -599,7 +599,7 @@ export function AiAssistantDialog({ open, request, scope, onClose }: {
           <div className="ai-dialog__composer-tools">
             <button
               type="button"
-              className={"ai-dialog__pill" + (thinking ? " is-on" : "")}
+              className={"ln-pill" + (thinking ? " is-on" : "")}
               aria-pressed={thinking}
               aria-label="深度思考"
               title={thinking ? "深度思考：开（点击关闭）" : "深度思考：关（点击开启）"}
@@ -610,7 +610,7 @@ export function AiAssistantDialog({ open, request, scope, onClose }: {
               <span>深度思考</span>
             </button>
             {!editing && activeValue && (
-              <button type="button" className="ai-dialog__pill ai-dialog__pill--icon ai-dialog__clear" aria-label="清除内容" onClick={() => {
+              <button type="button" className="ln-pill ln-pill--icon ai-dialog__clear" aria-label="清除内容" onClick={() => {
                 if (turns.length === 0) setInstruction(""); else setFollowUp("");
                 fieldRef.current?.focus();
               }}><X size={12} /></button>

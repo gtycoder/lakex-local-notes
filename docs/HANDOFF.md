@@ -14,7 +14,9 @@
 - **流式节流调参（A+B 实测驱动）**：`useThrottledMarkdown` 的 MAX_WAIT_MS **2000 → 300**、COST_RATE **2 → 1.5**（算法未改）。探针 `scripts/ai-stream-probe.mjs`（loopback 假供应商 → 主进程网关 → IPC → 真实渲染链）实测 3 次中位：dense 640KB 档 **2.3 → 3.3 fps、最大可见间隔 2516 → 1373ms（最坏 3951 → 1453）**；640KB stress 最大间隔 −36%；60KB 档无回归。方法与告警见 [docs/AI-STREAM-PROBE.md](AI-STREAM-PROBE.md)。
 - **AI 写作附件方案**：[docs/ai/ATTACHMENTS-PLAN.md](ai/ATTACHMENTS-PLAN.md)：Phase 1（图片·视觉模型）≈3–3.5 人日，堵点 = 「视觉能力不可探测」（只能发送失败后按 400 报错，不维护硬编码模型清单、不静默去图）；Phase 2（PDF/文档注入）＋1–1.5 人日。Phase 1 已建任务（task-21）排在输入卡改造之后。
 - **门禁（本批全量）**：`tsc` 0；`tsc -p tsconfig.electron.json` 0；全量 vitest **999 文件 / 6297 用例（986 passed / 13 skipped；6283 passed / 14 skipped / 0 failed）**；`ui-metrics` 0；`cssLayers`/`primitives`/`mobileLayers` 全绿（aiDialogParts 148→217、aiWriting 344→382 均按实测登记）；`check:arch`/#core 全过；`git diff --check` 0。
-- **遗留**：① `.aiw-pill` 与 `.ai-dialog__pill` 是同几何的两份拷贝（两个懒 chunk 各自独立）→ 要收单一来源需提升进 kit 原语（跨 ownership，待排期）；② AI 写作附件 Phase 1（task-21）；③ AI 助手输入卡的 `a11y-visually-hidden` 文本与图标并存，若换图标库需同步。
+- **药丸已收单一来源（261116 同批）**：新增 kit 原语 `.ln-pill` / `.ln-pill--icon`（开态支持 `aria-pressed`/`.is-on`），**两端均已迁移**（AI 写作删掉 `.aiw-pill` 三态拷贝）。**两端输入卡有意不同**：AI 助手 = 资料修改的轻对话（紧凑卡 radius md、内距 6/8/4、textarea max 120）；AI 写作 = 纯对话（大输入卡：textarea **min 96 / max 240**、内距 lg/xl/md）。判据已写进 `AiComposer.tsx` 头注释 + `docs/AI-WRITING.md`。
+- **AI 写作图片附件 Phase 1 已落地（261116 同批）**：消息协议 `AiWritingMessage.attachRefs` + `buildAiWritingMessages` **只在本轮 user 拼 image parts**（历史轮纯文本、不重发）；`ai_writing_messages.attach_refs` 列（CREATE + 旧库 ALTER）；新 IPC `list_note_image_assets(noteId)`（只回 filename/size/mimeType，不算 sha）⇒ **通道数 188 → 189**（registrar/preload/WEB_METHODS/native 四面同步）；新 `AiImagePicker`（源 = 已选 docRefs 文档里的图片、分组网格、多选 ≤10、缩略图 `?w=128`、>20MB 禁止）；输入卡附件 chips + 历史气泡只读缩略图（重启后仍在）。**视觉能力不可探测**：照发，400 时保留供应商原文并追加可执行提示（不维护模型清单、不静默去图/不自动重试）。同批修掉两个既有 bug：请求里同一句问两遍（send 把本轮 user 也塞进 history）、主进程 `{ok:false,error}` 被当作成功吞掉 400。
+- **遗留**：① AI 写作附件 Phase 1（task-21）；② AI 助手输入卡的 `a11y-visually-hidden` 文本与图标并存，若换图标库需同步。
 
 ### 261116 · v1.2.0 发版（`modernize/web-platform-261115` **已合 master 并打 tag**）
 

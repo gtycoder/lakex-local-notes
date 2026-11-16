@@ -165,8 +165,9 @@ describe("IPC 通道三方一致性（C2-2）", () => {
     // 261112 用户裁决：日记本不可取消 ⇒ 通道数 187 → 186。
     // → 187（261112 task-92：diary_to_quick_note —— 日记转为小记，正文/资产搬运 + 原文软删）。
     // → 188（261114：board_materials —— 画板自定义素材文件夹 list/save/delete/open）。
-    expect(registrarChannels().size, "通道数变了 ⇒ 请确认是有意的并在 commit 里说明").toBe(188);
-    expect(preloadChannels().size).toBe(188);
-    expect(Object.keys(WEB_METHODS).length).toBe(188);
+    // → 189（261116：list_note_image_assets —— AI 写作图片附件选择器按文档列图片；只读 filename/size，不算 sha）。
+    expect(registrarChannels().size, "通道数变了 ⇒ 请确认是有意的并在 commit 里说明").toBe(189);
+    expect(preloadChannels().size).toBe(189);
+    expect(Object.keys(WEB_METHODS).length).toBe(189);
   });
 });
