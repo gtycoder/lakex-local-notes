@@ -99,7 +99,8 @@ describe("统一新建弹窗（NamePromptDialog）", () => {
     expect(TREE_ACTIONS).toContain("return await createBitableIn(parentId, resolvedTitle);");
     expect(TREE_ACTIONS).toContain("return await createBoardIn(parentId, resolvedTitle);");
     expect(TREE_ACTIONS).toContain("return await createInkIn(parentId, resolvedTitle);");
-    expect(TREE_ACTIONS).toContain("const node = await native.createGroup(parentId, resolvedTitle);");
+    // 261117 新建位置：目录（分组）也跟随设置 ⇒ 第三个参数是 newNotePosition（不再是两参调用）
+    expect(TREE_ACTIONS).toContain("const node = await native.createGroup(parentId, resolvedTitle, newNotePosition);");
     expect(TREE_ACTIONS).toContain("throw reason;");
     // 笔记类创建器收标题 + 回传 id（useNoteLifecycle）
     expect(NOTE_LIFECYCLE).toContain("async function createNoteIn(parentId: string | null, title = ");

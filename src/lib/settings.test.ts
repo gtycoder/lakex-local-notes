@@ -64,3 +64,38 @@ describe("最大同时打开标签数（上限 16）", () => {
     expect(loadSettings().maxOpenTabs).toBe(16);
   });
 });
+
+describe("新建文档位置（261117 用户点单）", () => {
+  it("默认末尾追加；旧存档缺字段/非法值归一为 bottom", async () => {
+    localStorage.clear();
+    vi.resetModules();
+    const fresh = await import("./settings");
+    expect(fresh.DEFAULT_SETTINGS.newNotePosition).toBe("bottom");
+    expect(fresh.loadSettings().newNotePosition).toBe("bottom");
+
+    // 旧存档：没有该字段（升级前的 localStorage）
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ fontSize: 16, theme: "light", maxOpenTabs: 8 }));
+    vi.resetModules();
+    const old = await import("./settings");
+    expect(old.loadSettings().newNotePosition).toBe("bottom");
+
+    // 非法值（手改存档）也回落 bottom，不让 UI 拿到未定义值
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ newNotePosition: "middle" }));
+    vi.resetModules();
+    const bad = await import("./settings");
+    expect(bad.loadSettings().newNotePosition).toBe("bottom");
+
+    // 合法值保留
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ newNotePosition: "top" }));
+    vi.resetModules();
+    const top = await import("./settings");
+    expect(top.loadSettings().newNotePosition).toBe("top");
+  });
+
+  it("保存入口同样归一：任何调用点写非法值都落 bottom", async () => {
+    const mod = await import("./settings");
+    const next = mod.saveSettings({ newNotePosition: "weird" as unknown as "top" });
+    expect(next.newNotePosition).toBe("bottom");
+    expect(JSON.parse(localStorage.getItem(SETTINGS_KEY)!).newNotePosition).toBe("bottom");
+  });
+});

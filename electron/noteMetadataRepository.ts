@@ -1,7 +1,8 @@
 import type { DbLike } from "./dbLike.js";
 import { AppError } from "../src/core/storeErrors.js";
-import { assertTreeNodeTitle } from "../src/core/treeRules.js";
+import { assertTreeNodeTitle, normalizeNoteInsertPosition, type NoteInsertPosition } from "../src/core/treeRules.js";
 import { DIARY_FOLDER_SPACE, mergeFolderSpace, normalizeFolderSpace, type DiaryFolderSpace } from "../src/core/diary.js";
+import { nextSiblingSortOrder, shiftSiblingsForTop, type SortDb } from "./treeSort.js";
 import type { SyncFolder, TreeNode } from "./noteQueries.js";
 
 interface MetadataRepositoryDeps {
@@ -10,7 +11,6 @@ interface MetadataRepositoryDeps {
   trashNotebookId: string;
   uuid(): string;
   nowIso(): string;
-  nextSortOrder(parentId: string | null): number;
   ensureParent(parentId: string | null): void;
   assertParentCompatible(parentId: string | null, childType: string): void;
   descendantIds(id: string): string[];
@@ -123,32 +123,53 @@ export class NoteMetadataRepository {
     }
   }
 
+  /**
+   * 261117 用户点单「新建文档位置」的**单一插入实现**（笔记本与分组共用，不复制两份 SQL）：
+   * 顶部新增 = 同一事务里把同级整体后移一位再插 sort_order=0；末尾追加 = MAX(sort_order)+1。
+   * 只写 tree_nodes（分组/笔记本没有 notes 行）；文档的 top 由 store.createNoteInWithContent 处理。
+   */
+  private insertTreeNodeAtPosition(input: {
+    parentId: string | null;
+    nodeType: "notebook" | "group";
+    title: string;
+    id: string;
+    space?: DiaryFolderSpace | null;
+    position?: NoteInsertPosition;
+  }): TreeNode {
+    const { parentId, nodeType, title, id } = input;
+    const now = this.deps.nowIso();
+    const position = normalizeNoteInsertPosition(input.position);
+    // 排序语义单一实现见 electron/treeSort.ts（与文档创建共用同一套「顶部后移 / 末尾 MAX+1」）。
+    const sortOrder = position === "top" ? 0 : nextSiblingSortOrder(this.db as unknown as SortDb, this.workspaceId, parentId);
+    const tx = this.db.transaction(() => {
+      if (position === "top") {
+        // 分组/笔记本只有 tree_nodes 行 ⇒ withNotes=false（不误动 notes 表）。
+        shiftSiblingsForTop(this.db as unknown as SortDb, { workspaceId: this.workspaceId, parentId, updatedAt: now, withNotes: false });
+      }
+      this.db.prepare("INSERT INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,is_dirty,is_conflict,space) VALUES(?,?,?,?,?,NULL,?,?,?,1,0,?)")
+        .run(id, this.workspaceId, parentId, nodeType, title, sortOrder, now, now, nodeType === "notebook" ? normalizeFolderSpace(input.space ?? null) : null);
+    });
+    tx();
+    return this.deps.readTreeNode(id);
+  }
+
   /** 新建笔记本。`space`（261109）= 日记本标记；只有 "diary" 会被落库，其余归一成 NULL（非日记）。 */
   /** @param id 显式 id（只有「兜底未分类」用固定 id；其余调用方一律走 uuid，别传）。 */
-  createNotebook(title: string, space?: DiaryFolderSpace | null, id?: string): TreeNode {
+  /** @param position 261117 新建位置（顶部新增/末尾追加，缺省末尾）。 */
+  createNotebook(title: string, space?: DiaryFolderSpace | null, id?: string, position?: NoteInsertPosition): TreeNode {
     let trimmed: string;
     try { trimmed = assertTreeNodeTitle(title); }
     catch { throw new AppError("InvalidInput", "名称不能为空"); }
-    const nodeId = id ?? this.deps.uuid();
-    const now = this.deps.nowIso();
-    const sortOrder = this.deps.nextSortOrder(null);
-    this.db.prepare("INSERT INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,is_dirty,is_conflict,space) VALUES(?,?,NULL,'notebook',?,NULL,?,?,?,1,0,?)")
-      .run(nodeId, this.workspaceId, trimmed, sortOrder, now, now, normalizeFolderSpace(space));
-    return this.deps.readTreeNode(nodeId);
+    return this.insertTreeNodeAtPosition({ parentId: null, nodeType: "notebook", title: trimmed, id: id ?? this.deps.uuid(), space, position });
   }
 
-  createGroup(parentId: string, title: string): TreeNode {
+  createGroup(parentId: string, title: string, position?: NoteInsertPosition): TreeNode {
     let trimmed: string;
     try { trimmed = assertTreeNodeTitle(title); }
     catch { throw new AppError("InvalidInput", "名称不能为空"); }
     this.deps.ensureParent(parentId);
     this.deps.assertParentCompatible(parentId, "group");
-    const id = this.deps.uuid();
-    const now = this.deps.nowIso();
-    const sortOrder = this.deps.nextSortOrder(parentId);
-    this.db.prepare("INSERT INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,is_dirty,is_conflict) VALUES(?,?,?,'group',?,NULL,?,?,?,1,0)")
-      .run(id, this.workspaceId, parentId, trimmed, sortOrder, now, now);
-    return this.deps.readTreeNode(id);
+    return this.insertTreeNodeAtPosition({ parentId, nodeType: "group", title: trimmed, id: this.deps.uuid(), position });
   }
 
   renameTreeNode(id: string, title: string): TreeNode {

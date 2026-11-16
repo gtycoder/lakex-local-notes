@@ -9,6 +9,7 @@ import { subtreeIds } from "../core/tree";
 import { summaryOf } from "../desktop/desktopTypes";
 import type { DraftJournalEntry, NoteSummary, TreeNode } from "../lib/types";
 import type { OpenTab } from "../desktop/desktopTypes";
+import type { NoteInsertPosition } from "../core/treeRules";
 
 export interface UseNoteLifecycleOptions {
   bumpRevision: (noteId: string) => void;
@@ -23,6 +24,9 @@ export interface UseNoteLifecycleOptions {
   notes: NoteSummary[];
   openTabsRef: MutableRefObject<OpenTab[]>;
   settingsMaxOpenTabs: number;
+  /** 261117 用户点单「新建文档位置」：all 新建（文档/表格/多维表/画板/手写板）按此决定同级顶部或末尾；
+   * 由 App 注入 settings.newNotePosition；子级（parentId 指向分组/文档）同样生效。 */
+  newNotePosition: NoteInsertPosition;
   pinnedNoteIds: Set<string>;
   activeNoteId: string | null;
   setNotes: Dispatch<SetStateAction<NoteSummary[]>>;
@@ -38,7 +42,7 @@ export interface UseNoteLifecycleOptions {
 export function useNoteLifecycle({
   bumpRevision, resetRevision, clearNote, scheduleDraftJournal, scheduleSave,
   evictTabsForLimit, showNotice, setError, treeNodes, notes, openTabsRef,
-  settingsMaxOpenTabs, pinnedNoteIds, activeNoteId,
+  settingsMaxOpenTabs, newNotePosition, pinnedNoteIds, activeNoteId,
   setNotes, setTreeNodes, setOpenTabs, setActiveNoteId, setPinnedNoteIds, setDraftEntries,
 }: UseNoteLifecycleOptions) {
   const handleContentChange = useCallback((noteId: string, content?: string) => {
@@ -87,7 +91,8 @@ export function useNoteLifecycle({
   }
 
   async function createNoteIn(parentId: string | null, title = "无标题文档"): Promise<string> {
-    const note = parentId === null ? await native.createNote(title) : await native.createNoteIn(parentId, title);
+    // 261117：parentId=null（无父）落到默认笔记本时同样按设置落位；有父（分组/文档下）也按同一规则。
+    const note = parentId === null ? await native.createNote(title, newNotePosition) : await native.createNoteIn(parentId, title, newNotePosition);
     await openCreatedNote(note, "doc");
     return note.id;
   }
@@ -99,28 +104,28 @@ export function useNoteLifecycle({
 
   /** 新建表格文档（kind=usheet）：正文是 Univer IWorkbookData 快照 JSON；与文档同流程（进树、开 tab、可重命名）。 */
   async function createUsheetIn(parentId: string | null, title = "无标题表格"): Promise<string> {
-    const note = await native.createUsheetIn(parentId, title);
+    const note = await native.createUsheetIn(parentId, title, newNotePosition);
     await openCreatedNote(note, "usheet");
     return note.id;
   }
 
   /** 新建多维表文档（kind=bitable）：正文是自研 record-based JSON；与文档同流程（进树、开 tab、可重命名）。 */
   async function createBitableIn(parentId: string | null, title = "无标题多维表"): Promise<string> {
-    const note = await native.createBitableIn(parentId, title);
+    const note = await native.createBitableIn(parentId, title, newNotePosition);
     await openCreatedNote(note, "bitable");
     return note.id;
   }
 
   /** 新建画板文档（kind=board）：正文是 Drawnix/Plait 场景 JSON；与文档同流程（进树、开 tab、可重命名）。 */
   async function createBoardIn(parentId: string | null, title = "无标题画板"): Promise<string> {
-    const note = await native.createBoardIn(parentId, title);
+    const note = await native.createBoardIn(parentId, title, newNotePosition);
     await openCreatedNote(note, "board");
     return note.id;
   }
 
   /** 新建手写板文档（kind=ink）：正文是矢量墨迹 JSON；与文档同流程（进树、开 tab、可重命名）。 */
   async function createInkIn(parentId: string | null, title = "无标题手写板"): Promise<string> {
-    const note = await native.createInkIn(parentId, title);
+    const note = await native.createInkIn(parentId, title, newNotePosition);
     await openCreatedNote(note, "ink");
     return note.id;
   }

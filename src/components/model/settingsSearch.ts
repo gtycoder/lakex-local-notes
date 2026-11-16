@@ -41,6 +41,7 @@ export const SETTING_ITEMS: SettingItemEntry[] = [
   { id: "editor-font-size", category: "editor", label: "正文字号", keywords: "字体 字号 font size" },
   { id: "editor-outline-enhance", category: "editor", label: "大纲增强", keywords: "大纲 增强 原生 目录 TOC 侧栏" },
   { id: "editor-toolbar", category: "editor", label: "显示固定工具栏", keywords: "工具栏 固定 顶部 隐藏 显示 toolbar" },
+  { id: "editor-new-note-position", category: "editor", label: "新建文档位置", keywords: "新建 文档 位置 顶部 新增 末尾 追加 顺序 子文档 分组 目录 top bottom" },
   { id: "editor-floating-toolbar", category: "editor", label: "浮动工具栏", keywords: "浮动 工具栏 选区 气泡 浮框 文字 图片 toolbar" },
   { id: "editor-max-open-tabs", category: "editor", label: "最大同时打开标签数", keywords: "标签 页签 tab 上限 空间 独立 日记 文档" },
   { id: "editor-clear-tabs-on-exit", category: "editor", label: "退出时关闭全部标签", keywords: "标签 恢复 退出 关闭 清空 tab session 重启 下次启动" },

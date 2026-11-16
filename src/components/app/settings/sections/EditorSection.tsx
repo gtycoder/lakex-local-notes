@@ -7,6 +7,7 @@ import { useHiddenDesktopSpaces } from "../../../../hooks/useHiddenDesktopSpaces
 import { DEFAULT_SPACE } from "../../../model/defaultSpace";
 import { AdaptiveSelect } from "../../../ui/AdaptiveSelect";
 import { fontSizeOptions, MAX_OPEN_TAB_OPTIONS } from "../../../../lib/settings";
+import { normalizeNoteInsertPosition } from "../../../../core/treeRules";
 import { isDefaultSpace, saveDefaultSpace, DEFAULT_SPACE_OPTIONS } from "../../../model/defaultSpace";
 
 export function EditorSection({ c }: { c: SettingsPanelContext }) {
@@ -33,6 +34,14 @@ export function EditorSection({ c }: { c: SettingsPanelContext }) {
                   <Switch itemId="editor-outline-enhance" name="大纲增强" desc="开启后在桌面右栏使用增强大纲（可筛选、折叠、显示级别徽标）；关闭则使用 Lake 原生大纲。移动端始终使用应用的大纲面板。" checked={settings.outlineEnhance} onChange={(checked) => onChange({ outlineEnhance: checked })} />
                   <Switch itemId="editor-toolbar" name="显示固定工具栏" desc="编辑器顶部的固定工具栏。关闭后界面更简洁，格式操作改用浮动工具栏。" checked={settings.showToolbar} onChange={(checked) => onChange({ showToolbar: checked })} />
                   <Switch itemId="editor-floating-toolbar" name="浮动工具栏" desc="选中文字或图片时在选区旁弹出格式工具条；与固定工具栏互不影响。" checked={settings.floatingToolbar} onChange={(checked) => onChange({ floatingToolbar: checked })} />
+                  <Field itemId="editor-new-note-position" name="新建文档位置" desc="新建文档、表格、多维表、画板、手写板，以及新建分组/笔记本时，插到同级的顶部还是末尾；在分组或文档下新建子级同样按这个规则。">
+                    <AdaptiveSelect
+                      label="新建文档位置"
+                      value={settings.newNotePosition}
+                      onChange={(v) => onChange({ newNotePosition: normalizeNoteInsertPosition(v) })}
+                      options={[{ value: "top", label: "顶部新增" }, { value: "bottom", label: "末尾追加" }]}
+                    />
+                  </Field>
                 </Group>
                 <Group title="标签页" icon={<Files size={16} />}>
                   <Field itemId="editor-max-open-tabs" name="最大同时打开标签数" desc="每个空间（文档、日记）各自独立计算，超过上限时自动关闭该空间最旧的标签（当前编辑的标签与钉住的标签除外），未保存内容会自动保存。">

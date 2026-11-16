@@ -19,6 +19,10 @@ import {
 } from "../ipcLimits.js";
 import type { IpcRegistrar } from "./registrar.js";
 import { toUint8Array } from "./bytes.js";
+import { normalizeNoteInsertPosition, type NoteInsertPosition } from "../../src/core/treeRules.js";
+
+/** 261117 用户点单「新建文档位置」：IPC 可选 position 参数（缺省 = 末尾追加，保持向后兼容）。 */
+const insertPosition = (value: unknown): NoteInsertPosition => normalizeNoteInsertPosition(value);
 import { ensureTrashNoteAssets } from "../syncEngineController.js";
 import { prepareAttachmentOpen } from "../attachmentOpen.js";
 import { exportWorkspaceBackup, prepareCloudRestore, relaunchApp, writeS3RestoreSeed } from "../workspaceBackup.js";
@@ -96,7 +100,7 @@ export function registerNotesIpc(
   ipc.handle("list_missing_bodies", () => store.listMissingBodies());
   ipc.handle("purge_missing_body", (id: string) => store.purgeMissingBodyNote(id));
   ipc.handle("get_note_digest", (id: string) => store.getNoteDigest(id));
-  ipc.handle("create_note", (title: unknown) => store.createNote(assertTitle(title)));
+  ipc.handle("create_note", (title: unknown, position?: unknown) => store.createNote(assertTitle(title), insertPosition(position)));
   // Batch4-D 保存版本守卫：可选第 5 参 baseHash（打开/上次保存时的正文 sha256）。
   // 不传 = 旧行为（逐字节一致）；传了且磁盘已变 ⇒ 返回 { ok:false, code:"external_changed", diskHash }，不写盘。
   ipc.handle("save_note", (id: string, title: unknown, content: unknown, caches?: { markdown?: string | null; plain?: string | null }, baseHash?: unknown) => {
@@ -293,16 +297,17 @@ export function registerNotesIpc(
   ipc.handle("list_tree_nodes", () => store.listTreeNodes());
   ipc.handle("list_note_summaries", () => store.listNoteSummaries());
   // space（261109）= 日记本标记：只接受 "diary" / null，其余归一成 null（非日记）。
-  ipc.handle("create_notebook", (title: unknown, space?: unknown) => store.createNotebook(assertTitle(title), space === "diary" ? "diary" : null));
-  ipc.handle("create_group", (parentId: string, title: unknown) => store.createGroup(parentId, assertTitle(title)));
+  // 261117 用户点单「新建文档位置」：分组/笔记本也跟随（根层同级 = 笔记本之间；子级 = 分组/文档下的分组）。
+  ipc.handle("create_notebook", (title: unknown, space?: unknown, position?: unknown) => store.createNotebook(assertTitle(title), space === "diary" ? "diary" : null, undefined, insertPosition(position)));
+  ipc.handle("create_group", (parentId: string, title: unknown, position?: unknown) => store.createGroup(parentId, assertTitle(title), insertPosition(position)));
   ipc.handle("rename_tree_node", (id: string, title: unknown) => store.renameTreeNode(id, assertTitle(title)));
-  ipc.handle("create_note_in", (parentId: string | null, title: unknown) => store.createNoteIn(parentId, assertTitle(title)));
+  ipc.handle("create_note_in", (parentId: string | null, title: unknown, position?: unknown) => store.createNoteIn(parentId, assertTitle(title), insertPosition(position)));
   // v6：新建表格文档（kind=usheet）；正文落 usheets/{id}.usheet.json，其余复用文档管线
-  ipc.handle("create_usheet_in", (parentId: string | null, title: unknown) => store.createUsheetIn(parentId, assertTitle(title)));
-  ipc.handle("create_bitable_in", (parentId: string | null, title: unknown) => store.createBitableIn(parentId, assertTitle(title)));
+  ipc.handle("create_usheet_in", (parentId: string | null, title: unknown, position?: unknown) => store.createUsheetIn(parentId, assertTitle(title), insertPosition(position)));
+  ipc.handle("create_bitable_in", (parentId: string | null, title: unknown, position?: unknown) => store.createBitableIn(parentId, assertTitle(title), insertPosition(position)));
   // v7：新建画板文档（kind=board）；正文落 boards/{id}.board.json，其余复用文档管线
-  ipc.handle("create_board_in", (parentId: string | null, title: unknown) => store.createBoardIn(parentId, assertTitle(title)));
-  ipc.handle("create_ink_in", (parentId: string | null, title: unknown) => store.createInkIn(parentId, assertTitle(title)));
+  ipc.handle("create_board_in", (parentId: string | null, title: unknown, position?: unknown) => store.createBoardIn(parentId, assertTitle(title), insertPosition(position)));
+  ipc.handle("create_ink_in", (parentId: string | null, title: unknown, position?: unknown) => store.createInkIn(parentId, assertTitle(title), insertPosition(position)));
   ipc.handle("move_tree_node", (id: string, parentId: string | null, sortOrder: number) => store.moveTreeNode(id, parentId, sortOrder));
   ipc.handle("move_tree_node_ordered", (id: string, parentId: string | null, orderedIds: string[]) => store.moveTreeNodeOrdered(id, parentId, orderedIds));
   ipc.handle("reorder_tree_nodes", (parentId: string | null, orderedIds: string[]) => store.reorderTreeNodes(parentId, orderedIds));

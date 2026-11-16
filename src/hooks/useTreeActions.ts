@@ -5,6 +5,7 @@ import { getNativeErrorMessage } from "../lib/nativeErrors";
 import type { NoteSummary, TreeNode } from "../lib/types";
 import { patchNoteById, patchTabById, replaceTreeNode, type OpenTab } from "../desktop/desktopTypes";
 import { isDiaryEntryNode, type DiaryTreeNode } from "../core/diary";
+import type { NoteInsertPosition } from "../core/treeRules";
 
 export interface UseTreeActionsOptions {
   /** 六个新建 kind 都收用户输入的名字，并回传新节点 id（统一弹窗 → 选中/滚动）。 */
@@ -17,6 +18,8 @@ export interface UseTreeActionsOptions {
   createBoardIn: (parentId: string | null, title?: string) => Promise<string>;
   /** 新建手写板文档（kind=ink）。 */
   createInkIn: (parentId: string | null, title?: string) => Promise<string>;
+  /** 261117 用户点单「新建文档位置」：目录（分组/笔记本）同样跟随（根层同级 = 笔记本之间）。 */
+  newNotePosition: NoteInsertPosition;
   openNote: (id: string) => void;
   setNodeIcon: (node: TreeNode, icon: string | null) => void;
   treeNodes: TreeNode[];
@@ -34,7 +37,7 @@ export interface UseTreeActionsOptions {
 
 /** 树 CRUD 与 Sidebar 操作回调（从 App.tsx 收拢）。 */
 export function useTreeActions({
-  createNoteIn, createUsheetIn, createBitableIn, createBoardIn, createInkIn, openNote, setNodeIcon, treeNodes,
+  createNoteIn, createUsheetIn, createBitableIn, createBoardIn, createInkIn, newNotePosition, openNote, setNodeIcon, treeNodes,
   setTreeNodes, setNotes, setOpenTabs, setConfirmDelete,
   setHistoryNoteId, setHistoryOpen, setSearchPanelQuery, setSearchPanelOpen,
   setPendingRenameId, setError,
@@ -51,12 +54,12 @@ export function useTreeActions({
       if (kind === "board") return await createBoardIn(parentId, resolvedTitle);
       if (kind === "ink") return await createInkIn(parentId, resolvedTitle);
       if (kind === "notebook") {
-        const node = await native.createNotebook(resolvedTitle);
+        const node = await native.createNotebook(resolvedTitle, undefined, newNotePosition);
         setTreeNodes(await native.listTreeNodes());
         return node.id;
       }
       if (parentId) {
-        const node = await native.createGroup(parentId, resolvedTitle);
+        const node = await native.createGroup(parentId, resolvedTitle, newNotePosition);
         setTreeNodes(await native.listTreeNodes());
         return node.id;
       }
@@ -65,7 +68,7 @@ export function useTreeActions({
       // 新建弹窗要就地显示错误且不关闭 ⇒ 一律抛出（唯一的调用方是目录栏新建弹窗）。
       throw reason;
     }
-  }, [createNoteIn, createUsheetIn, createBitableIn, createBoardIn, createInkIn]);
+  }, [createNoteIn, createUsheetIn, createBitableIn, createBoardIn, createInkIn, newNotePosition]);
 
   const renameTreeNode = useCallback(async (id: string, title: string) => {
     // 261109 用户定稿：日记条目**标题只能是日期** ⇒ 拒绝任何改名（标题就是日期，改了就不再是日记）。

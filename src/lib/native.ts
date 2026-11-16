@@ -1,6 +1,7 @@
 import type { CleanOrphanResult, DataHealthReport, DeepCleanupResult, DocumentTagLinks, DraftJournalEntry, LastHistoryCleanup, NoteDigest, NoteDocument, NoteInfo, OrphanAsset, QuickNoteDocument, QuickNoteImage, QuickNoteListSummary, QuickNoteTag, QuickNoteTrashItem, ResourceUploadInput, ResourceUploadOutput, S3GcLogItem, S3GcSettings, S3Settings, RestoreSyncConflictResult, SaveNoteResult, SaveQuickNoteInput, SyncConflictsSnapshot, SyncProgress, SyncResult, SyncSettings, SyncStatusInfo, TreeNode, WorkspaceSnapshot } from "./types";
 import type { TrashItem } from "../core/trashPolicy";
 import type { NoteKind } from "../core/noteKind";
+import type { NoteInsertPosition } from "../core/treeRules";
 import type { MissingBodyDoc, MissingQuickNoteDoc } from "../core/missingBody";
 import type { AiChatMessage, AiChatRequestOptions, AiChatResult, AiListModelsResult, AiLocalFileRef, AiProviderPatch, AiSettingsPatch, AiSettingsView, AiStreamEvent, AiTestResult } from "../core/aiProviders";
 import type {
@@ -150,7 +151,7 @@ export interface LakeNative {
   pickAiLocalFiles(): Promise<AiLocalFileRef[]>;
   /** 粘贴图片：字节仅此一次进主进程，落盘后只回 AiLocalFileRef（token 可跨重启预览/发送）。 */
   aiSavePastedImage(bytes: Uint8Array, mimeType: string, name?: string): Promise<AiLocalFileRef>;
-  createNote(title: string): Promise<NoteDocument>;
+  createNote(title: string, position?: NoteInsertPosition): Promise<NoteDocument>;
   /**
    * 保存正文。`baseHash`（可选，Batch4-D 保存版本守卫）= 打开/上次保存时的正文 sha256：
    * 磁盘已变 ⇒ 不写盘，返回 `SaveNoteConflict`（`ok:false` / `code:"external_changed"` / `diskHash`）。
@@ -236,7 +237,7 @@ export interface LakeNative {
   listTreeNodes(): Promise<TreeNode[]>;
   listNoteSummaries(): Promise<import("./types").NoteSummary[]>;
   /** 新建笔记本；`space`（261109）= 日记本标记（"diary" | null，其它值按非日记处理）。 */
-  createNotebook(title: string, space?: "diary" | null): Promise<TreeNode>;
+  createNotebook(title: string, space?: "diary" | null, position?: NoteInsertPosition): Promise<TreeNode>;
   /**
    * 日记（261109，**桌面专有**；移动端有自己的日记页）：幂等打开某一天。
    * 只传 dateKey —— 主进程重新 plan，已存在直接返回（created=false），连点两次只产生一篇。
@@ -245,17 +246,18 @@ export interface LakeNative {
   diaryOpenDate(dateKey: string, mode?: "open" | "new"): Promise<DiaryOpenResultShape>;
   /** 日记转为小记（261112 task-92）：正文/媒体原样搬运，成功后日记进回收站（可恢复）。 */
   diaryToQuickNote(noteId: string): Promise<DiaryToQuickNoteResultShape>;
-  createGroup(parentId: string, title: string): Promise<TreeNode>;
+  /** @param position 261117 新建位置（顶部新增/末尾追加；缺省末尾）。 */
+  createGroup(parentId: string, title: string, position?: NoteInsertPosition): Promise<TreeNode>;
   renameTreeNode(id: string, title: string): Promise<TreeNode>;
-  createNoteIn(parentId: string | null, title: string): Promise<NoteDocument>;
+  createNoteIn(parentId: string | null, title: string, position?: NoteInsertPosition): Promise<NoteDocument>;
   /** 新建表格文档（kind=sheet，v6）。 */
-  createUsheetIn(parentId: string | null, title: string): Promise<NoteDocument>;
+  createUsheetIn(parentId: string | null, title: string, position?: NoteInsertPosition): Promise<NoteDocument>;
   /** 新建多维表文档（kind=bitable，v6）。 */
-  createBitableIn(parentId: string | null, title: string): Promise<NoteDocument>;
+  createBitableIn(parentId: string | null, title: string, position?: NoteInsertPosition): Promise<NoteDocument>;
   /** 新建画板文档（kind=board，v7）：正文是 Drawnix/Plait 场景 JSON。 */
-  createBoardIn(parentId: string | null, title: string): Promise<NoteDocument>;
+  createBoardIn(parentId: string | null, title: string, position?: NoteInsertPosition): Promise<NoteDocument>;
   /** 新建手写板文档（kind=ink）：正文是矢量墨迹 JSON。 */
-  createInkIn(parentId: string | null, title: string): Promise<NoteDocument>;
+  createInkIn(parentId: string | null, title: string, position?: NoteInsertPosition): Promise<NoteDocument>;
   moveTreeNode(id: string, parentId: string | null, sortOrder: number): Promise<TreeNode>;
   moveTreeNodeOrdered(id: string, parentId: string | null, orderedIds: string[]): Promise<TreeNode>;
   reorderTreeNodes(parentId: string | null, orderedIds: string[]): Promise<void>;
@@ -486,7 +488,7 @@ export const native = {
   aiWritingDeleteLastAssistant: (conversationId: string) => api().aiWritingDeleteLastAssistant(conversationId),
   pickAiLocalFiles: () => api().pickAiLocalFiles(),
   aiSavePastedImage: (bytes: Uint8Array, mimeType: string, name?: string) => api().aiSavePastedImage(bytes, mimeType, name),
-  createNote: (title: string) => api().createNote(title),
+  createNote: (title: string, position?: NoteInsertPosition) => api().createNote(title, position),
   saveNote: (id: string, title: string, content: string, caches?: { markdown?: string | null; plain?: string | null }, baseHash?: string) => api().saveNote(id, title, content, caches, baseHash),
   updateNoteCaches: (id: string, markdown: string | null, plain: string | null) => api().updateNoteCaches(id, markdown, plain),
   readNoteCaches: (id: string) => api().readNoteCaches(id),
@@ -537,16 +539,16 @@ export const native = {
   deleteNote: (id: string) => api().deleteNote(id),
   listTreeNodes: () => api().listTreeNodes(),
   listNoteSummaries: () => api().listNoteSummaries(),
-  createNotebook: (title: string, space?: "diary" | null) => api().createNotebook(title, space),
+  createNotebook: (title: string, space?: "diary" | null, position?: NoteInsertPosition) => api().createNotebook(title, space, position),
   diaryOpenDate: (dateKey: string, mode?: "open" | "new") => api().diaryOpenDate(dateKey, mode),
   diaryToQuickNote: (noteId: string) => api().diaryToQuickNote(noteId),
-  createGroup: (parentId: string, title: string) => api().createGroup(parentId, title),
+  createGroup: (parentId: string, title: string, position?: NoteInsertPosition) => api().createGroup(parentId, title, position),
   renameTreeNode: (id: string, title: string) => api().renameTreeNode(id, title),
-  createNoteIn: (parentId: string | null, title: string) => api().createNoteIn(parentId, title),
-  createUsheetIn: (parentId: string | null, title: string) => api().createUsheetIn(parentId, title),
-  createBitableIn: (parentId: string | null, title: string) => api().createBitableIn(parentId, title),
-  createBoardIn: (parentId: string | null, title: string) => api().createBoardIn(parentId, title),
-  createInkIn: (parentId: string | null, title: string) => api().createInkIn(parentId, title),
+  createNoteIn: (parentId: string | null, title: string, position?: NoteInsertPosition) => api().createNoteIn(parentId, title, position),
+  createUsheetIn: (parentId: string | null, title: string, position?: NoteInsertPosition) => api().createUsheetIn(parentId, title, position),
+  createBitableIn: (parentId: string | null, title: string, position?: NoteInsertPosition) => api().createBitableIn(parentId, title, position),
+  createBoardIn: (parentId: string | null, title: string, position?: NoteInsertPosition) => api().createBoardIn(parentId, title, position),
+  createInkIn: (parentId: string | null, title: string, position?: NoteInsertPosition) => api().createInkIn(parentId, title, position),
   moveTreeNode: (id: string, parentId: string | null, sortOrder: number) => api().moveTreeNode(id, parentId, sortOrder),
   moveTreeNodeOrdered: (id: string, parentId: string | null, orderedIds: string[]) => api().moveTreeNodeOrdered(id, parentId, orderedIds),
   reorderTreeNodes: (parentId: string | null, orderedIds: string[]) => api().reorderTreeNodes(parentId, orderedIds),

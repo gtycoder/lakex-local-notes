@@ -3,6 +3,7 @@
  * 参考 lake-editor-main 的配置项（defaultFontsize/toc/toolbar）+ 深色模式。
  */
 import { DEFAULT_MAX_ATTACHMENT_BYTES, MAX_ATTACHMENT_MB_OPTIONS } from "../core/storeLimits.js";
+import { normalizeNoteInsertPosition, type NoteInsertPosition } from "../core/treeRules.js";
 import { DEFAULT_THEME_ID, isLakeThemeId, type LakeThemeId } from "./themes";
 import { writeLocalStorage } from "./localStorageSafe";
 
@@ -30,6 +31,9 @@ export interface AppSettings {
   /** 退出时关闭全部标签：true = 下次启动不恢复上次打开的标签（并清掉存档）；false = 恢复。
    * 仅本机偏好（localStorage），不进正文/不参与 S3，两端各自独立。 */
   clearTabsOnExit: boolean;
+  /** 新建文档位置（261117 用户点单）：顶部新增 / 末尾追加，默认末尾追加。
+   * 作用范围 = 同级插入：文档（含表格/多维表/画板/手写板）、分组、笔记本；子级同样按此规则。 */
+  newNotePosition: NoteInsertPosition;
 }
 
 /** 「最大同时打开标签数」的**平台默认**（261116 用户点单）：桌面 8（既有口径不变）、移动端 6。 */
@@ -47,6 +51,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   showToolbar: true,
   floatingToolbar: true,
   clearTabsOnExit: false,
+  newNotePosition: "bottom",
 };
 
 /** 设置面板提供的附件大小档位（MiB）。 */
@@ -121,6 +126,8 @@ export function loadSettings(): AppSettings {
         showToolbar: parsed.showToolbar !== false,
         floatingToolbar: parsed.floatingToolbar !== false,
         clearTabsOnExit: parsed.clearTabsOnExit === true,
+        // 旧存档没有该字段 / 非法值 ⇒ 末尾追加（用户 261117 点单的默认值）。
+        newNotePosition: normalizeNoteInsertPosition(parsed.newNotePosition),
       };
       return cached;
     }
@@ -134,6 +141,8 @@ export function saveSettings(patch: Partial<AppSettings>): AppSettings {
   const next = { ...loadSettings(), ...patch };
   // 硬上限（261110）：任何入口写入都夹到 ≤16，别让「不限」再从旧调用点漏进来。
   next.maxOpenTabs = normalizeMaxOpenTabs(next.maxOpenTabs);
+  // 261117：任何入口写入都归一（手改 localStorage / 旧调用点传非法值都回"bottom"）。
+  next.newNotePosition = normalizeNoteInsertPosition(next.newNotePosition);
   cached = next;
   try { storage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch { /* 忽略 */ }
   notifySettingsChanged(next);

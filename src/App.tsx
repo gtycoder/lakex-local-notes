@@ -323,6 +323,7 @@ export function App() {
     notes,
     openTabsRef,
     settingsMaxOpenTabs: settings.maxOpenTabs,
+    newNotePosition: settings.newNotePosition,
     pinnedNoteIds,
     activeNoteId,
     setNotes,
@@ -584,7 +585,7 @@ export function App() {
     sidebarSelect, sidebarCreate, sidebarRename, sidebarMove,
     sidebarRequestDelete, sidebarSetIcon, sidebarOpenHistory, sidebarOpenSearch, sidebarPendingRenameConsumed,
   } = useTreeActions({
-    createNoteIn, createUsheetIn, createBitableIn, createBoardIn, createInkIn, openNote, setNodeIcon, treeNodes,
+    createNoteIn, createUsheetIn, createBitableIn, createBoardIn, createInkIn, newNotePosition: settings.newNotePosition, openNote, setNodeIcon, treeNodes,
     setTreeNodes, setNotes, setOpenTabs, setConfirmDelete,
     setHistoryNoteId, setHistoryOpen, setSearchPanelQuery, setSearchPanelOpen,
     setPendingRenameId, setError,

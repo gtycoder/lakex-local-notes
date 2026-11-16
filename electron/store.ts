@@ -11,6 +11,8 @@ import { formatLogFields, perfMessage } from "../src/core/logFormat.js";
 import { SAVE_CONFLICT_CODE, type SaveNoteConflict, type SaveNoteResult } from "../src/lib/types.js";
 import { noteBodyHash } from "./noteBodyHash.js";
 import { extractAssetRefs, isSafePathSegment } from "../src/core/storeUtils.js";
+import { normalizeNoteInsertPosition, type NoteInsertPosition } from "../src/core/treeRules.js";
+import { nextSiblingSortOrder, shiftSiblingsAfter, shiftSiblingsForTop } from "./treeSort.js";
 import { readNoteDigest, type NoteDigest } from "./storeQueries.js";
 import { emptyLakeBody } from "../src/core/lakeDocForm.js";
 import { type NoteKind, normalizeNoteKind } from "../src/core/noteKind.js";
@@ -306,7 +308,6 @@ export class Store {
       trashNotebookId: TRASH_NOTEBOOK_ID,
       uuid,
       nowIso,
-      nextSortOrder: (parentId) => this.nextSortOrder(parentId),
       ensureParent: (parentId) => this.ensureParent(parentId),
       assertParentCompatible: (parentId, childType) => this.assertParentCompatible(parentId, childType),
       descendantIds: (id) => this.descendantIds(id),
@@ -554,10 +555,8 @@ export class Store {
   }
 
   private nextSortOrder(parentId: string | null): number {
-    const row = this.db.prepare(
-      "SELECT COALESCE(MAX(sort_order),-1)+1 AS n FROM tree_nodes WHERE workspace_id=? AND parent_id IS ? AND deleted_at IS NULL"
-    ).get(DEFAULT_WORKSPACE_ID, parentId) as { n: number };
-    return row.n;
+    // 单一实现见 electron/treeSort.ts（与分组/笔记本共用同一套排序语义）。
+    return nextSiblingSortOrder(this.db, DEFAULT_WORKSPACE_ID, parentId);
   }
 
   private ensureParent(parentId: string | null) {
@@ -668,49 +667,54 @@ export class Store {
     return readNoteDigest(this.db, id, TRASH_NOTEBOOK_ID);
   }
 
-  createNote(title: string): NoteDocument {
+  createNote(title: string, position: NoteInsertPosition = "bottom"): NoteDocument {
     // 无默认笔记本概念：无父新建落到兜底父笔记本（任意存在的笔记本；无则自动创建"未分类"）
-    return this.createNoteIn(this.resolveParentNotebook(), title);
+    return this.createNoteIn(this.resolveParentNotebook(), title, position);
   }
 
-  createNoteIn(parentId: string | null, title: string): NoteDocument {
+  /**
+   * 新建文档（kind=doc）。`position` = 261117 用户点单「新建文档位置」：
+   * top = 同级顶部（复用 createNoteInWithContent 的 top 分支：两表同事务把同级后移再插 0），
+   * bottom = 同级末尾（历史行为，缺省保持向后兼容）。子级（parentId 指向分组/文档）同样生效。
+   */
+  createNoteIn(parentId: string | null, title: string, position?: NoteInsertPosition): NoteDocument {
     this.assertNotDiaryCreateTarget(parentId, "新建文档");
     const id = uuid();
-    return this.createNoteInWithContent({ parentId, title, content: emptyLakeBody(id), assets: [], id, position: "bottom" });
+    return this.createNoteInWithContent({ parentId, title, content: emptyLakeBody(id), assets: [], id, position: normalizeNoteInsertPosition(position) });
   }
 
   /** 新建 Univer 表格文档（kind="usheet"）：正文是 usheets/{id}.usheet.json（Univer IWorkbookData 快照）。 */
-  createUsheetIn(parentId: string | null, title: string): NoteDocument {
+  createUsheetIn(parentId: string | null, title: string, position?: NoteInsertPosition): NoteDocument {
     this.assertNotDiaryCreateTarget(parentId, "新建表格");
     const id = uuid();
-    return this.createNoteInWithContent({ parentId, title, content: emptyUsheetBody(), assets: [], id, position: "bottom", kind: "usheet" });
+    return this.createNoteInWithContent({ parentId, title, content: emptyUsheetBody(), assets: [], id, position: normalizeNoteInsertPosition(position), kind: "usheet" });
   }
 
   /**
    * 新建多维表文档（kind="bitable"）：正文是 bitables/{id}.bitable.json（自研 record-based JSON），
    * 其余全部复用文档管线（目录/回收站/历史/同步/GC）。v1 默认 = 1 张数据表（3 字段 + 表格视图）。
    */
-  createBitableIn(parentId: string | null, title: string): NoteDocument {
+  createBitableIn(parentId: string | null, title: string, position?: NoteInsertPosition): NoteDocument {
     this.assertNotDiaryCreateTarget(parentId, "新建多维表");
     const id = uuid();
-    return this.createNoteInWithContent({ parentId, title, content: emptyBitableBody(), assets: [], id, position: "bottom", kind: "bitable" });
+    return this.createNoteInWithContent({ parentId, title, content: emptyBitableBody(), assets: [], id, position: normalizeNoteInsertPosition(position), kind: "bitable" });
   }
 
   /**
    * 新建画板文档（kind="board"）：正文是 boards/{id}.board.json（Drawnix/Plait 场景 JSON），
    * 其余全部复用文档管线（目录/回收站/历史/同步/GC）。v1 默认 = 空白画布（preset=drawing）。
    */
-  createBoardIn(parentId: string | null, title: string): NoteDocument {
+  createBoardIn(parentId: string | null, title: string, position?: NoteInsertPosition): NoteDocument {
     this.assertNotDiaryCreateTarget(parentId, "新建画板");
     const id = uuid();
-    return this.createNoteInWithContent({ parentId, title, content: emptyBoardBody(), assets: [], id, position: "bottom", kind: "board" });
+    return this.createNoteInWithContent({ parentId, title, content: emptyBoardBody(), assets: [], id, position: normalizeNoteInsertPosition(position), kind: "board" });
   }
 
   /** 新建手写板文档（kind="ink"）：正文是矢量墨迹 JSON（inks/{id}.ink.json）。 */
-  createInkIn(parentId: string | null, title: string): NoteDocument {
+  createInkIn(parentId: string | null, title: string, position?: NoteInsertPosition): NoteDocument {
     this.assertNotDiaryCreateTarget(parentId, "新建手写板");
     const id = uuid();
-    return this.createNoteInWithContent({ parentId, title, content: emptyInkBody(), assets: [], id, position: "bottom", kind: "ink" });
+    return this.createNoteInWithContent({ parentId, title, content: emptyInkBody(), assets: [], id, position: normalizeNoteInsertPosition(position), kind: "ink" });
   }
 
 
@@ -852,7 +856,8 @@ export class Store {
     if (!isSafePathSegment(id)) throw new AppError("InvalidInput", `无效的笔记 ID: ${id}`);
     const normalizedTitle = title.trim() || "无标题文档";
     const updatedAt = nowIso();
-    const sortOrder = afterSortOrder !== undefined ? afterSortOrder + 1 : position === "top" ? 0 : this.nextSortOrder(parent);
+    const normalizedPosition = normalizeNoteInsertPosition(position);
+    const sortOrder = afterSortOrder !== undefined ? afterSortOrder + 1 : normalizedPosition === "top" ? 0 : this.nextSortOrder(parent);
     const targetAssetsDir = this.noteAssetsDirFor(id);
     const targetNotePath = this.bodyPathFor(id, kind);
 
@@ -874,17 +879,11 @@ export class Store {
       this.atomicWrite(targetNotePath, content);
       const tx = this.db.transaction(() => {
         if (afterSortOrder !== undefined) {
-          // 副本：只把「源之后的同级条目」整体后移一位（与 top 同款 twin 更新，保证两表排序不重叠）。
-          this.db.prepare("UPDATE tree_nodes SET sort_order=sort_order+1,updated_at=?,is_dirty=1 WHERE workspace_id=? AND parent_id=? AND sort_order>? AND deleted_at IS NULL")
-            .run(updatedAt, DEFAULT_WORKSPACE_ID, parent, afterSortOrder);
-          this.db.prepare("UPDATE notes SET sort_order=sort_order+1,updated_at=?,is_dirty=1 WHERE parent_id=? AND sort_order>? AND deleted_at IS NULL")
-            .run(updatedAt, parent, afterSortOrder);
-        } else if (position === "top") {
-          // 同一事务内挪开所有同级节点和笔记元数据，避免排序重叠与 IPC 中断窗口。
-          this.db.prepare("UPDATE tree_nodes SET sort_order=sort_order+1,updated_at=?,is_dirty=1 WHERE workspace_id=? AND parent_id=? AND deleted_at IS NULL")
-            .run(updatedAt, DEFAULT_WORKSPACE_ID, parent);
-          this.db.prepare("UPDATE notes SET sort_order=sort_order+1,updated_at=?,is_dirty=1 WHERE parent_id=? AND deleted_at IS NULL")
-            .run(updatedAt, parent);
+          // 副本：只把「源之后的同级条目」整体后移一位（与 top 同源，只是起点不同；两表同事务）。
+          shiftSiblingsAfter(this.db, { workspaceId: DEFAULT_WORKSPACE_ID, parentId: parent, afterSortOrder, updatedAt });
+        } else if (normalizedPosition === "top") {
+          // 顶部新增：同一事务内挪开所有同级节点和笔记元数据，避免排序重叠与 IPC 中断窗口。
+          shiftSiblingsForTop(this.db, { workspaceId: DEFAULT_WORKSPACE_ID, parentId: parent, updatedAt, withNotes: true });
         }
         this.db.prepare("INSERT INTO notes(id,title,parent_id,sort_order,updated_at,is_dirty,kind) VALUES(?,?,?,?,?,1,?)")
           .run(id, normalizedTitle, parent, sortOrder, updatedAt, kind);
@@ -925,8 +924,8 @@ export class Store {
 
   /** 新建笔记本；`space`（261109）= 日记本标记（"diary" | null，其余归一成 null）。 */
   /** @param id 显式 id（仅「兜底未分类」用固定 id；其它调用方不要传）。 */
-  createNotebook(title: string, space?: DiaryFolderSpace | null, id?: string): TreeNode {
-    return this.noteMetadata.createNotebook(title, space, id);
+  createNotebook(title: string, space?: DiaryFolderSpace | null, id?: string, position?: NoteInsertPosition): TreeNode {
+    return this.noteMetadata.createNotebook(title, space, id, position);
   }
 
   /**
@@ -992,9 +991,9 @@ export class Store {
     return !!this.db.prepare("SELECT 1 FROM deleted_notes WHERE id=?").get(id);
   }
 
-  createGroup(parentId: string, title: string): TreeNode {
+  createGroup(parentId: string, title: string, position?: NoteInsertPosition): TreeNode {
     this.assertNotDiaryCreateTarget(parentId, "新建分组");
-    return this.noteMetadata.createGroup(parentId, title);
+    return this.noteMetadata.createGroup(parentId, title, position);
   }
 
   renameTreeNode(id: string, title: string): TreeNode {

@@ -4,6 +4,17 @@
  * 移动端 folders CRUD 与桌面 tree_nodes 写事务必须使用同一套规则，防止目录语义漂移。
  */
 
+/**
+ * 新建位置（261117 用户点单「新建文档位置」）：顶部新增 / 末尾追加。
+ * 只影响**同级插入顺序**：文档（含表格/多维表/画板/手写板）、分组、笔记本都按它落位；子级同样生效。
+ * 两端共用同一个归一（旧存档缺字段/非法值 = "bottom"），桌面 store / 元数据仓库 / 渲染层都读这里。
+ */
+export type NoteInsertPosition = "top" | "bottom";
+
+export function normalizeNoteInsertPosition(value: unknown): NoteInsertPosition {
+  return value === "top" ? "top" : "bottom";
+}
+
 /** 下一个排序值：MAX(sort_order),-1)+1（桌面 store.ts nextSortOrder 语义；空父级下首个节点为 0）。 */
 export function nextSortOrder(currentMax: number | null): number {
   return (currentMax ?? -1) + 1;
