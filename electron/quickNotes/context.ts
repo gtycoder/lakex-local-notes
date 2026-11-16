@@ -13,7 +13,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { isSafePathSegment as isSafeSegment } from "../../src/core/storeUtils.js";
 import { AppError } from "../../src/core/storeErrors.js";
-import { ASSET_PORT } from "../assetServer.js";
+import { currentAssetServerPort } from "../assetServer.js";
 import { localAssetHttpUrl } from "../../src/core/assetUrl.js";
 import { QuickNoteModelError, validateQuickNoteContent, type StoredQuickNoteContent } from "../quickNoteModel.js";
 
@@ -50,11 +50,12 @@ export function stagingDirOf(paths: QuickNotePaths, draftId: string): string {
 }
 
 export function quickImageUrlOf(noteId: string, filename: string): string {
-  return localAssetHttpUrl(noteId, filename, { port: ASSET_PORT, space: "quick-notes" });
+  // 端口用**实际值**（可能因占用回退过）：写进正文/预览的 URL 必须指向本进程真正监听的端口。
+  return localAssetHttpUrl(noteId, filename, { port: currentAssetServerPort(), space: "quick-notes" });
 }
 
 export function stagingImageUrlOf(draftId: string, filename: string): string {
-  return `http://127.0.0.1:${ASSET_PORT}/quick-notes/staging/${draftId}/${filename}`;
+  return `http://127.0.0.1:${currentAssetServerPort()}/quick-notes/staging/${draftId}/${filename}`;
 }
 
 /** 原子写：同目录临时文件 + rename（pid 后缀防同进程并发同名）。 */

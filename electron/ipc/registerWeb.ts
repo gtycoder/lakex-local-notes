@@ -1,5 +1,5 @@
 import { shell } from "electron";
-import { WEB_API_PORT, type WebServerController } from "../webApiServer.js";
+import { preferredWebApiPort, type WebServerController } from "../webApiServer.js";
 import type { IpcRegistrar } from "./registrar.js";
 
 /**
@@ -8,7 +8,11 @@ import type { IpcRegistrar } from "./registrar.js";
  * 不做局域网伺服（见设置页说明）。
  */
 export function registerWebIpc(ipc: IpcRegistrar, controller: () => WebServerController | null): void {
-  const fallback = () => ({ enabled: false, port: WEB_API_PORT, url: `http://127.0.0.1:${WEB_API_PORT}/` });
+  // 未装配控制器时也要给**当前构建形态的首选端口**（dev 19881 / packaged 19880），不是写死常量。
+  const fallback = () => {
+    const port = preferredWebApiPort();
+    return { enabled: false, port, url: `http://127.0.0.1:${port}/` };
+  };
   ipc.handle("get_web_status", () => controller()?.getStatus() ?? fallback());
   ipc.handle("set_web_enabled", (enabled: unknown) => controller()?.setEnabled(enabled === true) ?? fallback());
   // 用系统默认浏览器打开当前地址。URL 由主进程按固定端口构造，**不接受渲染层传 URL**（避免开放重定向）。

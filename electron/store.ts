@@ -2,7 +2,7 @@ import Database from "better-sqlite3";
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
-import { ASSET_PORT } from "./assetServer.js";
+import { currentAssetServerPort } from "./assetServer.js";
 import { DocumentTagsService } from "./documentTags.js";
 import { BatchNotesRepository } from "./batchNotesRepository.js";
 import { createSilentLoggerScopes, type LoggerScopes } from "../src/core/logger.js";
@@ -1567,7 +1567,8 @@ export class Store {
   }
 
   private assetUrl(noteId: string, filename: string): string {
-    return `http://127.0.0.1:${ASSET_PORT}/${noteId}/${filename}`;
+    // 端口取**实际值**（启动时可能因占用回退）：写进正文的资产 URL 必须指向本进程监听的端口。
+    return `http://127.0.0.1:${currentAssetServerPort()}/${noteId}/${filename}`;
   }
 
   /** 单条删除未引用资源（与 cleanOrphanAssets 同规则：清理前按当前正文/历史引用再校验）。 */

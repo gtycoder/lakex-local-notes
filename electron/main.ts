@@ -16,8 +16,8 @@ import {
   quickNotesDegradedMessage,
   setQuickNotesAvailability,
 } from "./quickNotesAvailability.js";
-import { startAssetServer, ASSET_PORT } from "./assetServer.js";
-import { createWebServerController, type WebServerController, WEB_API_PORT } from "./webApiServer.js";
+import { currentAssetServerPort, startAssetServer } from "./assetServer.js";
+import { configurePreferredWebApiPort, createWebServerController, preferredWebApiPort, type WebServerController } from "./webApiServer.js";
 import { resolveMirroredCdnRedirect, scanMirroredCdnFiles } from "./cdnRedirect.js";
 import type { SyncResult, SyncProgress } from "./syncTypes.js";
 import type { NoteDocument } from "../src/lib/types.js";
@@ -256,7 +256,8 @@ function registerCdnRedirect() {
   session.defaultSession.webRequest.onBeforeRequest(
     { urls: ["*://gw.alipayobjects.com/*"] },
     (details, callback) => {
-      const redirectURL = resolveMirroredCdnRedirect(details.url, ASSET_PORT, (relativePath) => mirrored.has(relativePath));
+      // 端口用实时值（可能因占用回退过）；回调内读，避免注册时机与端口解析耦合。
+      const redirectURL = resolveMirroredCdnRedirect(details.url, currentAssetServerPort(), (relativePath) => mirrored.has(relativePath));
       // 未镜像的资源保持原请求：例如用户粘贴的 gw /zos/skylark 图片。
       callback(redirectURL ? { redirectURL } : {});
     }
@@ -270,7 +271,8 @@ function registerCdnRedirect() {
  */
 function registerAssetTokenRedirect() {
   session.defaultSession.webRequest.onBeforeRequest(
-    { urls: [`http://127.0.0.1:${ASSET_PORT}/*`] },
+    // 必须是**实际**端口（回退后与常量不同）；本函数在 await startAssetServer 之后才注册。
+    { urls: [`http://127.0.0.1:${currentAssetServerPort()}/*`] },
     (details, callback) => {
       if (details.webContentsId === undefined || !trustedWebContents.has(details.webContentsId)) {
         callback({});
@@ -381,6 +383,9 @@ async function createWindow() {
       // 打包版直接指向 app.asar.unpacked 里的真实文件（asar 内 preload 在 Electron 33 有解析 Bug）。
       // 两条分支的路径规则是构建产物契约的一部分，统一在 electron/buildTarget.ts::preloadPath。
       preload: preloadPath(BUILD_DIR, app.isPackaged),
+      // 资产服务**实际**端口显式传给 preload（261117：端口可能因占用回退，不能靠 env 快照；
+      // preload.cjs 的 lakeAssetPort() 优先读这个开关，env 只兜底）。
+      additionalArguments: [`--lake-asset-port=${currentAssetServerPort()}`],
       contextIsolation: true,
       nodeIntegration: false,
       // 260923：preload 已在 package.json 的 build.asarUnpack 中（asar 内沙箱 preload 的旧 Bug 不适用）；
@@ -581,7 +586,7 @@ if (!app.requestSingleInstanceLock()) {
     }
   });
 
-  app.whenReady().then(() => {
+  app.whenReady().then(async () => {
     // 身份与 macOS 菜单（用户 261029：参考思源裁剪版——只 darwin 装自定义菜单，role+中文 label）：
     // ⚠️ macOS 应用菜单的**标题**取运行体 bundle 的 CFBundleName，**不是** MenuItem.label、也不是 app.name：
     // dev 跑 Electron.app ⇒ 标题固定显示 Electron（改名只能靠打包/重签名那层）；打包版由 electron-builder
@@ -885,9 +890,44 @@ if (!app.requestSingleInstanceLock()) {
       },
       log: { info: (message) => log.app.info(message), warn: (message) => log.app.warn(message) },
     });
+    // 资源服务端口（261117 生产 bug 修复）：
+    // ① 默认端口按构建形态分开 —— dev 19877 / packaged 19876（同机双开不再互抢）；env 覆盖优先（隔离测试用）。
+    // ② 仍可能撞（多份 dev 副本、崩溃残留、用户自定端口）⇒ startAssetServer 内部 +1..+10 回退。
+    // ③ **必须 await 到真正 listening** 才继续：端口要写回 env 供 preload/渲染层使用（
+    //    src/lib/assetPort 从 process.env.LAKE_ASSET_PORT 取），webRequest 过滤器与 assetPort 注入也要用实际值。
+    // ④ 失败不再静默：非 EADDRINUSE 的错误在这里记 error，主窗口照常启动（图片降级，其余可用）。
+    const preferredAssetPort = Number(process.env.LAKE_ASSET_PORT) || (app.isPackaged ? 19876 : 19877);
+    try {
+      await startAssetServer(
+        path.join(workspaceRoot(), "note-assets"),
+        vendorCdnDir(APP_DIR),
+        path.join(workspaceRoot(), "quick-notes"),
+        assetToken,
+        {
+          preferredPort: preferredAssetPort,
+          log: {
+            info: (message) => log.app.info(message),
+            warn: (message) => log.app.warn(message),
+            error: (message) => log.app.error(message),
+          },
+        },
+      );
+      // 实际端口写回 env：preload 在渲染进程读它（src/lib/assetPort.ts），渲染层所有资产 URL 由此而来。
+      process.env.LAKE_ASSET_PORT = String(currentAssetServerPort());
+      if (currentAssetServerPort() !== preferredAssetPort) {
+        log.app.warn("[asset-server] 首选端口 " + preferredAssetPort + " 被占用，本实例使用 " + currentAssetServerPort());
+      }
+    } catch (error) {
+      // 降级：服务没起来时图片/附件不可用，但文档、同步、编辑全部照常（别让启动卡死）。
+      log.app.error("[asset-server] 启动失败，图片/附件将不可用" + formatLogFields(errorFields(error)));
+    }
+    // 浏览器端（Web 客户端）端口同样按构建形态分开：packaged 19880 / dev 19881（env LAKE_WEB_PORT 优先）。
+    // 真实监听发生在设置页打开开关时（默认关闭），届时控制器自己 +1..+10 回退并把实际端口回给设置页。
+    const preferredWebApiPortValue = Number(process.env.LAKE_WEB_PORT) || (app.isPackaged ? 19880 : 19881);
+    configurePreferredWebApiPort(preferredWebApiPortValue);
+    log.app.info("[ports] asset=" + currentAssetServerPort() + " webApi=" + preferredWebApiPortValue + "（dev 19877/19881，packaged 19876/19880）");
     registerCdnRedirect();
     registerAssetTokenRedirect();
-    startAssetServer(path.join(workspaceRoot(), "note-assets"), vendorCdnDir(APP_DIR), path.join(workspaceRoot(), "quick-notes"), assetToken);
     // IPC 接线依赖**全部显式传入**（单例仍在 main：token/窗口白名单/定时器/控制器都不搬家）。
     const webApiRegistry = registerIpc({
       store,
@@ -920,8 +960,8 @@ if (!app.requestSingleInstanceLock()) {
       registry: webApiRegistry,
       token: webApiToken,
       assetToken,
-      assetPort: ASSET_PORT,
-      port: WEB_API_PORT,
+      assetPort: currentAssetServerPort(),
+      port: preferredWebApiPort(),
       log: { info: (m) => log.app.info(m), warn: (m) => log.app.warn(m) },
     });
     // 正常启动已跑通 ⇒ 消费崩溃标记（它已在启动日志里提示过；恢复模式不会走到这里，保留给恢复页）。

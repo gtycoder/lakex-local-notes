@@ -13,7 +13,7 @@ import sharp from "sharp";
 const TEST_PORT = 19976;
 process.env.LAKE_ASSET_PORT = String(TEST_PORT);
 
-// ASSET_PORT 在模块加载时求值，需在导入前设置环境变量
+// ASSET_PORT 在模块加载时求值（env 覆盖），需在导入前设置环境变量
 const { startAssetServer } = await import("./assetServer.js");
 
 const TOKEN = "test-token-abc";
@@ -50,8 +50,8 @@ beforeAll(async () => {
   fs.writeFileSync(path.join(noteAssetsDir, "note1", "doc.pdf"), Buffer.from("%PDF-1.4"));
   fs.writeFileSync(path.join(noteAssetsDir, "note1", "anim.mp4"), Buffer.from("mp4"));
   fs.writeFileSync(path.join(noteAssetsDir, "note1", "arch.zip"), Buffer.from("zip"));
-  server = startAssetServer(noteAssetsDir, vendorDir, quickDir, TOKEN);
-  await new Promise<void>((resolve) => server.once("listening", resolve));
+  // startAssetServer 现在会 await 到真正 listening（端口可能回退）后才返回
+  server = await startAssetServer(noteAssetsDir, vendorDir, quickDir, TOKEN);
 });
 
 afterAll(async () => {

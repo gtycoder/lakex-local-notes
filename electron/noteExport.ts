@@ -7,7 +7,7 @@ import { AppError } from "../src/core/storeErrors.js";
 import { isSafePathSegment, sanitizeFileName } from "../src/core/storeUtils.js";
 import { mdToHtml, wrapHtmlPage } from "../src/core/mdToHtml.js";
 import { mimeTypeForFilename } from "../src/core/assetNaming.js";
-import { ASSET_PORT } from "./assetServer.js";
+import { currentAssetServerPort } from "./assetServer.js";
 import { bitableAttachments, parseBitableBody } from "../src/core/bitableDoc.js";
 import { bitableTableCsv, csvFileNameFor } from "../src/core/bitableCsv.js";
 import { parseUsheetBody } from "../src/core/usheetDoc.js";
@@ -506,7 +506,7 @@ export class NoteExport {
     fs.mkdirSync(imagesDir, { recursive: true });
     let body = mdToHtml(markdown);
     // 提取 <img src="http://127.0.0.1:{ASSET_PORT}/{noteId}/{file}"> 并复制 + 改写相对引用
-    const imgRe = localAssetHtmlImgRe(ASSET_PORT);
+    const imgRe = localAssetHtmlImgRe(currentAssetServerPort());
     const seen = new Set<string>();
     let imageCount = 0;
     let skipped = 0;
@@ -668,7 +668,7 @@ export class NoteExport {
     const pdfPath = this.uniqueExportFile(base, title, "pdf");
     let body = mdToHtml(markdown);
     // 图片 → data URI 内嵌（同图复用缓存，避免多次读同一文件）
-    const imgRe = localAssetHtmlImgRe(ASSET_PORT);
+    const imgRe = localAssetHtmlImgRe(currentAssetServerPort());
     const uriCache = new Map<string, string | null>();
     const toDataUri = (noteId: string, filename: string): string | null => {
       const key = `${noteId}/${filename}`;
@@ -723,7 +723,7 @@ export class NoteExport {
     const titleRow = this.ctx.db.prepare("SELECT title FROM notes WHERE id=?").get(id) as { title: string } | undefined;
     const title = sanitizeFileName(titleRow?.title ?? "未命名");
     // 提取图片引用（仅处理本地 assetServer URL；远程 URL 保持原样）
-    const imgRe = localAssetMdImgRe(ASSET_PORT);
+    const imgRe = localAssetMdImgRe(currentAssetServerPort());
     const unique: Array<{ url: string; noteId: string; filename: string }> = [];
     const seen = new Set<string>();
     let m: RegExpExecArray | null;

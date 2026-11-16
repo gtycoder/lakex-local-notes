@@ -24,7 +24,86 @@ function mimeForExtWith(filePath: string, ext: string): string | null {
   return shared === "application/octet-stream" ? null : shared;
 }
 
-export const ASSET_PORT = Number(process.env.LAKE_ASSET_PORT) || 19876;
+/**
+ * 资产服务端口（**可变**：启动时可能因端口占用回退）。
+ *
+ * 为什么是 `let`：dev 与打包版默认端口已分开（dev 19877 / packaged 19876），但同机仍可能撞
+ * （多份 dev 副本、崩溃残留进程、用户自定 LAKE_ASSET_PORT）⇒ 启动时按 +1..+10 回退到真正可用的端口。
+ * **所有 import 方读到的都是实时值**（ESM live binding）：store 的 assetUrl、noteExport 的提取正则、
+ * quickNotes/context 的 URL、main 的 webRequest 过滤器都靠它 —— 别在模块顶层把它拷成常量副本。
+ *
+ * 261117 生产 bug：打包版 listen 19876 失败后静默继续，图片请求打到 dev 实例的 assetServer
+ * ⇒ token 不匹配 403（且无 ACAO）⇒ 浏览器报 CORS、文档图片全挂。
+ */
+export let ASSET_PORT = Number(process.env.LAKE_ASSET_PORT) || 19876;
+
+/** 实际生效的资产端口（回退后 = 真实端口）；渲染层经 preload 的 assetPort 拿到同一个值。 */
+export function currentAssetServerPort(): number {
+  return ASSET_PORT;
+}
+
+/** 端口被占用时的回退尝试上限（+1..+10）。 */
+export const ASSET_PORT_FALLBACK_RANGE = 10;
+
+/** 资源服务的日志出口（main 注入 electron-log；单测省略则用 console）。 */
+export interface AssetServerLogger {
+  info: (message: string) => void;
+  warn: (message: string) => void;
+  error: (message: string) => void;
+}
+
+export interface AssetServerOptions {
+  /** 首选端口（main 传 `app.isPackaged ? 19876 : 19877`）；缺省 = ASSET_PORT（env 或 19876）。 */
+  preferredPort?: number;
+  /** 回退尝试次数上限（默认 ASSET_PORT_FALLBACK_RANGE）。 */
+  maxFallbacks?: number;
+  log?: AssetServerLogger;
+}
+
+/**
+ * 顺序尝试 listen，遇 EADDRINUSE 回退 +1..+maxFallbacks。
+ * 返回真正监听成功的端口；**非 EADDRINUSE 的错误不吞**（记 error 并抛出，由调用方决定降级）。
+ */
+async function listenWithFallback(
+  server: http.Server,
+  preferredPort: number,
+  maxFallbacks: number,
+  log: AssetServerLogger,
+): Promise<number> {
+  let lastError: unknown = null;
+  for (let offset = 0; offset <= maxFallbacks; offset += 1) {
+    const port = preferredPort + offset;
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const onError = (error: Error) => {
+          server.off("listening", onListening);
+          reject(error);
+        };
+        const onListening = () => {
+          server.off("error", onError);
+          resolve();
+        };
+        server.once("error", onError);
+        server.once("listening", onListening);
+        server.listen(port, "127.0.0.1");
+      });
+      return port;
+    } catch (error) {
+      lastError = error;
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code !== "EADDRINUSE") {
+        log.error("[asset-server] 监听失败（端口 " + port + "）：" + (error instanceof Error ? error.message : String(error)));
+        throw error;
+      }
+      if (offset < maxFallbacks) {
+        log.warn("[asset-server] 端口 " + port + " 已被占用，尝试 " + (port + 1));
+      }
+    }
+  }
+  const reason = lastError instanceof Error ? lastError.message : String(lastError);
+  log.error("[asset-server] " + preferredPort + ".." + (preferredPort + maxFallbacks) + " 全部被占用：" + reason);
+  throw lastError instanceof Error ? lastError : new Error("[asset-server] 无可用端口：" + reason);
+}
 
 function sniffMime(bytes: Buffer): string | null {
   const hex = bytes.subarray(0, 16).toString("hex");
@@ -207,7 +286,20 @@ function streamFile(
 }
 
 
-export function startAssetServer(noteAssetsDir: string, vendorCdnDir: string, quickNotesDir?: string, assetToken?: string): http.Server {
+/**
+ * 起本地资源服务（**必须 await 到真正 listening 之后**才去建窗口/注册 webRequest 过滤器）。
+ *
+ * 端口策略（261117 生产 bug 修复）：首选 `options.preferredPort`（main 传 dev 19877 / packaged 19876），
+ * 被占用则 +1..+10 回退；成功后把实际端口写进模块级 `ASSET_PORT`，供所有 URL 构造方与过滤器读取，
+ * 并由 main 写回 `process.env.LAKE_ASSET_PORT`（preload/渲染层据此拿端口）。
+ */
+export async function startAssetServer(
+  noteAssetsDir: string,
+  vendorCdnDir: string,
+  quickNotesDir?: string,
+  assetToken?: string,
+  options: AssetServerOptions = {},
+): Promise<http.Server> {
   fs.mkdirSync(noteAssetsDir, { recursive: true });
   if (quickNotesDir) fs.mkdirSync(quickNotesDir, { recursive: true });
 
@@ -219,8 +311,10 @@ export function startAssetServer(noteAssetsDir: string, vendorCdnDir: string, qu
     return origin === APP_ORIGIN                     // 桌面渲染层（打包版：lakexlocalnotes://app，A1 起不再用 file://）
       || origin === "http://127.0.0.1:1421"
       || origin === "http://localhost:1421"
-      || origin === "http://127.0.0.1:19880"   // Web 客户端（webApiServer）
+      || origin === "http://127.0.0.1:19880"   // Web 客户端（packaged）
       || origin === "http://localhost:19880"
+      || origin === "http://127.0.0.1:19881"   // Web 客户端（dev：端口按构建形态分开后）
+      || origin === "http://localhost:19881"
       || origin === "null"
       || origin.startsWith("file://");
   };
@@ -233,6 +327,7 @@ export function startAssetServer(noteAssetsDir: string, vendorCdnDir: string, qu
     if (origin === APP_ORIGIN) return APP_ORIGIN;
     if (origin === "http://127.0.0.1:1421" || origin === "http://localhost:1421") return origin;
     if (origin === "http://127.0.0.1:19880" || origin === "http://localhost:19880") return origin;
+    if (origin === "http://127.0.0.1:19881" || origin === "http://localhost:19881") return origin; // dev 的 Web 客户端
     if (origin === "null") return "null";
     if (origin.startsWith("file://")) return origin;
     return null;
@@ -249,7 +344,7 @@ export function startAssetServer(noteAssetsDir: string, vendorCdnDir: string, qu
         res.end("forbidden origin");
         return;
       }
-      const parsed = new URL(req.url ?? "/", `http://127.0.0.1:${ASSET_PORT}`);
+      const parsed = new URL(req.url ?? "/", "http://127.0.0.1:" + currentAssetServerPort());
       // 畸形百分号编码（如 /%E0%A4%A）会让 decodeURIComponent 抛 URIError，统一兜底 400
       const urlPath = decodeURIComponent(parsed.pathname);
       // Lake 编辑器 CDN 资源的本地镜像：/vendor/cdn/<path>（主进程 onBeforeRequest 重定向过来）
@@ -280,7 +375,11 @@ export function startAssetServer(noteAssetsDir: string, vendorCdnDir: string, qu
       // 外部网页（含 sandbox iframe 的 Origin: null）没有令牌，无法跨源读取本地图片；
       // <img> 等非 CORS 请求不带 Origin，不受影响（浏览器本就不允许跨源读 img 字节）。
       if (req.headers.origin && assetToken && parsed.searchParams.get("token") !== assetToken) {
-        res.writeHead(403, { "Content-Type": "text/plain" });
+        // 261117 生产 bug：403 不带 ACAO 时，浏览器把「token 不匹配」显示成 CORS 失败，排障被误导
+        // （真实现场是打包版与 dev 实例抢端口 ⇒ 请求打到别的进程 ⇒ token 天然不匹配）。
+        // 对**已允许的 origin** 回显 ACAO，让渲染层拿到可读的 403；不允许的 origin 上面已 403，
+        // corsHeaders 也不会回显（保持「任意网站读不到」）。
+        res.writeHead(403, { "Content-Type": "text/plain", ...corsHeaders(req.headers.origin) });
         res.end("forbidden: missing token");
         return;
       }
@@ -420,9 +519,19 @@ export function startAssetServer(noteAssetsDir: string, vendorCdnDir: string, qu
     }
   });
 
-  server.listen(ASSET_PORT, "127.0.0.1", () => {
-    console.log(`[asset-server] listening on http://127.0.0.1:${ASSET_PORT}, dir=${noteAssetsDir}`);
-  });
-
+  const log: AssetServerLogger = options.log ?? {
+    info: (message) => console.log(message),
+    warn: (message) => console.warn(message),
+    error: (message) => console.error(message),
+  };
+  const preferredPort = options.preferredPort ?? ASSET_PORT;
+  const maxFallbacks = options.maxFallbacks ?? ASSET_PORT_FALLBACK_RANGE;
+  const actualPort = await listenWithFallback(server, preferredPort, maxFallbacks, log);
+  // 实际端口是**唯一真相**：URL 构造（store/noteExport/quickNotes）与 main 的过滤器都读它。
+  ASSET_PORT = actualPort;
+  log.info(
+    "[asset-server] listening on http://127.0.0.1:" + actualPort + ", dir=" + noteAssetsDir
+      + (actualPort === preferredPort ? "" : "（首选 " + preferredPort + " 被占用，已回退）"),
+  );
   return server;
 }

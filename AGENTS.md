@@ -168,7 +168,7 @@ node scripts/s3-ls.mjs --count | --note <id> | --prefix <prefix>   # 云端对�
 ## 7. 踩坑记录
 
 ### 环境 / 进程
-1. vite dev server 会被会话回收 ⇒ 必须长驻 tty；单实例锁按 userData 隔离（资源端口 A=19876 / B=19877）。
+1. vite dev server 会被会话回收 ⇒ 必须长驻 tty；单实例锁按 userData 隔离。**本地端口按构建形态分开**（v1.3.1 起）：资源服务 packaged 19876 / dev 19877（`LAKE_ASSET_PORT` 优先）、Web 客户端 packaged 19880 / dev 19881（`LAKE_WEB_PORT` 优先）；被占用时 +1..+10 自动回退，实际端口写回 env 并经 `--lake-asset-port` 传给 preload；主进程内一律用 `currentAssetServerPort()`，**不要再用常量**（端口表与回退规则见 HANDOFF §0）。
 2. **杀 Electron 只按唯一 CDP 端口定位**（`pgrep -f "remote-debugging-port=92xx"`）；`pkill -f Electron` / `killall` 会误伤 SiYuan/VSCode，**也会打断 DSH 宿主自己**。
 3. **在 DSH 里起本仓 Electron 必须 `env -u ELECTRON_RUN_AS_NODE`**（宿主注入 `ELECTRON_RUN_AS_NODE=1`，否则以纯 Node 启动报 `bad option: --disable-gpu`）；改本仓代码不影响 DSH，但**别动 DSH 安装目录**。同理本机 `git` 要用 `/usr/bin/git`（`/usr/local/bin/git` 是坏的）；patch-package 重建补丁必须 `PATH=/usr/bin:$PATH`。
 
