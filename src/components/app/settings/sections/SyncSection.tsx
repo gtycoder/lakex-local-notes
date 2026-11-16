@@ -46,19 +46,16 @@ export function SyncSection({ c }: { c: SettingsPanelContext }) {
                     disabled={isQiniuEndpoint(s3.endpoint)}
                     onChange={(checked) => setS3Field("forcePathStyle", checked)}
                   />
-                  <Block itemId="s3-connection" name="连接" desc="测试仅探测桶可读性，不写入数据。">
-                    <div className="config-block__actions">
-                      <button className="ln-btn ln-btn--outlined" onClick={() => void testS3()}>测试连接</button>
-                      <button className="ln-btn ln-btn--outlined" onClick={() => void saveS3()}>保存配置</button>
-                    </div>
-                  </Block>
-                  <Block itemId="s3-transfer" name="配置迁移" desc="导出配置文件后在手机「同步设置 → 配置迁移 → 从文件导入」选择它，免去逐项填写。只含 S3 配置，导入会覆盖本机 S3 配置；文件含密钥（已加密），请勿外传。">
-                    <div className="config-block__actions">
-                      <button className="ln-btn ln-btn--outlined" onClick={() => void exportS3ConfigFile()}>导出到文件…</button>
-                      <button className="ln-btn ln-btn--outlined" onClick={() => void importS3ConfigFile()}>从文件导入…</button>
-                      <button className="ln-btn ln-btn--outlined" onClick={() => setS3ImportOpen(true)}>粘贴迁移码…</button>
-                    </div>
-                  </Block>
+                  {/* 261116 用户验收（图1/图2）：动作行改成两列，按钮与说明同行、右列垂直居中。 */}
+                  <Item itemId="s3-connection" name="连接" desc="测试仅探测桶可读性，不写入数据。">
+                    <button className="ln-btn ln-btn--outlined" onClick={() => void testS3()}>测试连接</button>
+                    <button className="ln-btn ln-btn--outlined" onClick={() => void saveS3()}>保存配置</button>
+                  </Item>
+                  <Item itemId="s3-transfer" name="配置迁移" desc="导出配置文件后在手机「同步设置 → 配置迁移 → 从文件导入」选择它，免去逐项填写。只含 S3 配置，导入会覆盖本机 S3 配置；文件含密钥（已加密），请勿外传。">
+                    <button className="ln-btn ln-btn--outlined" onClick={() => void exportS3ConfigFile()}>导出到文件…</button>
+                    <button className="ln-btn ln-btn--outlined" onClick={() => void importS3ConfigFile()}>从文件导入…</button>
+                    <button className="ln-btn ln-btn--outlined" onClick={() => setS3ImportOpen(true)}>粘贴迁移码…</button>
+                  </Item>
                 </Group>
                 <Group title="同步策略（仅保存在当前设备）" icon={<Cloud size={16} />}>
                   {syncCfg && (

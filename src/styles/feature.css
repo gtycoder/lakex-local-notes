@@ -98,9 +98,15 @@ pre {
 .settings-panel .config-item--field { flex-wrap: wrap; column-gap: var(--lake-space-xl); }
 /* flex-basis:0（不是 auto）：否则长说明按 max-content 撑开主列，flex-wrap 下会先把控件挤到下一行 */
 .settings-panel .config-item--field .config-item__main { flex-basis: 0; }
-.settings-panel .config-item--field .config-item__ctl { flex: 0 0 54%; min-width: 200px; justify-content: flex-start; }
-.settings-panel .config-item--field .config-item__ctl > .settings-text-field,
-.settings-panel .config-item--field .config-item__ctl > .settings-select { flex: 1 1 auto; width: auto; min-width: 0; }
+.settings-panel .config-item--field .config-item__ctl { flex: 0 0 54%; min-width: 200px; justify-content: flex-end; }
+/* 261116 用户验收（图3）：同一张卡里控件列必须对齐 —— 下拉自带 min-width:140，会缩在右缘，
+ * 与旁边 200 宽的输入框左缘错开。字段类控件在控件列内铺满（列宽由 .config-item__ctl 的 min-width 决定），
+ * 于是同组的下拉/输入左右边缘一致。只作用于控件列的直接子级，按钮仍按内容宽右对齐。 */
+/* 261116 用户验收（常规页）：下拉类控件不需要铺满控件列 —— 391px 的长条下拉反而难读。
+ * 统一窄栏宽 200px 并右对齐到控件列右缘；同组的下拉/输入因此仍然左右对齐（备份间隔 vs 保留份数）。
+ * ⚠️ 只改 feature 自有的 .settings-select：.ln-select* 属 kit 原语，跨所有权覆盖会被 primitives.test 拦。 */
+.settings-panel .config-item__ctl > .settings-select { flex: 0 0 200px; max-width: 200px; min-width: 0; }
+.settings-panel .config-item--field .config-item__ctl > .settings-text-field { flex: 1 1 auto; width: auto; min-width: 0; }
 .settings-panel .config-item--field .config-item__ctl > .settings-input { flex: 1 1 auto; min-width: 0; }
 .settings-panel .config-item--field .config-item__error { flex: 1 1 100%; }
 /* 字段级错误 / 行内提示（此前 .settings-hint 没有任何定义，这些文案是裸文本） */
