@@ -5,6 +5,7 @@ import { Popover } from "../ui/Overlay";
 import { NoticeToast, type StatusBarNotice } from "./NoticeToast";
 import { usePopoverPosition } from "../../hooks/usePopoverPosition";
 import type { NoteKind } from "../../core/noteKind";
+import { readonlyReasonCopy } from "../../core/capabilities/readonlyReason";
 
 export type { StatusBarNotice } from "./NoticeToast";
 
@@ -73,7 +74,7 @@ export function DesktopStatusBar({ showDocumentStats, docKind = "doc", wordCount
             <span>已锁定</span>
           </button>
         ) : (
-          <span className="document-statusbar-lock" title="文档已锁定（只读）" aria-label="文档已锁定（只读）">
+          <span className="document-statusbar-lock" title={readonlyReasonCopy("locked").title} aria-label={readonlyReasonCopy("locked").title}>
             <Lock size={12} aria-hidden="true" />
             <span>已锁定</span>
           </span>
@@ -101,8 +102,9 @@ export function DesktopStatusBar({ showDocumentStats, docKind = "doc", wordCount
       {locked && onUnlock && unlockOpen && (
         <Popover open onDismiss={() => setUnlockOpen(false)} style={unlockPos.style ?? undefined} surfaceRef={unlockPos.surfaceRef}>
           <div className="document-lock-popover">
-            <strong>本文档已锁定（只读）</strong>
-            <span>锁定期间编辑与工具栏被禁用。</span>
+            {/* 文案单一来源 = core/capabilities/readonlyReason（不再手写第二份）。 */}
+            <strong>{readonlyReasonCopy("locked").title}</strong>
+            <span>{readonlyReasonCopy("locked").releaseHint}</span>
             <button type="button" className="ln-btn ln-btn--primary" onClick={() => { setUnlockOpen(false); onUnlock(); }}>解锁</button>
           </div>
         </Popover>

@@ -15,7 +15,10 @@ describe("状态栏锁定标识", () => {
     expect(SRC).toContain("onUnlock");
     expect(SRC).toMatch(/<Popover open onDismiss=\{\(\) => setUnlockOpen\(false\)\}/);
     expect(SRC).toContain("usePopoverPosition");
-    expect(SRC).toContain("本文档已锁定（只读）");
+    // 261116 文案清理：锁定文案不再手写第二份 —— 状态栏弹层直接取 core 的单一来源。
+    expect(SRC).toContain('readonlyReasonCopy("locked").title');
+    expect(SRC).toContain('readonlyReasonCopy("locked").releaseHint');
+    expect(SRC).not.toContain("本文档已锁定（只读）</strong>");
   });
 
   it("「表格」「同步状态」区域不绑任何点击（保持不可点）", () => {

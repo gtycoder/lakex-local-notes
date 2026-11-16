@@ -12,14 +12,16 @@ describe("readonlyReason（只读原因单一来源）", () => {
       const copy = readonlyReasonCopy(kind);
       expect(copy.title.length, kind).toBeGreaterThan(0);
       expect(copy.releaseHint.length, kind).toBeGreaterThan(0);
-      expect(["open-trash", "unlock", null], kind).toContain(copy.action);
+      expect(["open-trash", null], kind).toContain(copy.action);
       // 界面文案不用中点作分隔符（AGENTS §3#14 观感红线）
       expect(copy.title).not.toContain("·");
       expect(copy.releaseHint).not.toContain("·");
     }
     expect(READONLY_REASON_COPY["cloud-deleted"].title).toContain("云端已删除（仅本地）");
     expect(READONLY_REASON_COPY.trashed.action).toBe("open-trash");
-    expect(READONLY_REASON_COPY.locked.action).toBe("unlock");
+    // 261116 文案清理：横幅不再承载「解锁」动作（入口在状态栏锁图标 /「更多」菜单）。
+    expect(READONLY_REASON_COPY.locked.action).toBeNull();
+    expect(READONLY_REASON_COPY.locked.releaseHint).toContain("「更多」菜单");
     expect(READONLY_REASON_COPY["body-missing"].action).toBeNull();
   });
 

@@ -20,13 +20,19 @@ export interface ReadonlyReasonInput {
   bodyMissing?: boolean;
 }
 
-/** 一条原因的完整文案 + 横幅动作（null = 该原因在面板里自带动作组，横幅不重复给）。 */
+/**
+ * 一条原因的完整文案 + 横幅动作（null = 该原因在面板/状态条里自带动作，横幅不重复给）。
+ *
+ * 261116 文案清理：编辑锁**不再弹横幅**（用户裁决），所以不再有横幅内的「解锁」动作；
+ * 解锁入口只有状态栏锁图标与「更多」菜单 ⇒ action 收窄为「打开回收站」一档。
+ * 锁定的文案仍是**单一来源**：状态栏锁提示直接取这里的 title，不再手写第二份。
+ */
 export interface ReadonlyReasonCopy {
-  /** 横幅标题：一句话说清「为什么只读」。 */
+  /** 一句话说清「为什么只读」。 */
   title: string;
   /** 一句「怎么解除」。 */
   releaseHint: string;
-  action: "open-trash" | "unlock" | null;
+  action: "open-trash" | null;
 }
 
 export interface ReadonlyReason extends ReadonlyReasonCopy {
@@ -45,9 +51,11 @@ export const READONLY_REASON_COPY: Record<ReadonlyReasonKind, ReadonlyReasonCopy
     action: "open-trash",
   },
   locked: {
+    // 横幅已不弹（261116 用户裁决）⇒ 文案只服务状态栏提示与「不弹横幅」判据。
+    // 解锁入口 = 状态栏锁图标 /「更多」菜单；不再写「点横幅里的解锁」那种已不存在的指引。
     title: "本文档已锁定（只读）",
-    releaseHint: "点「解锁」后可继续编辑；锁定期间编辑与工具栏被禁用。",
-    action: "unlock",
+    releaseHint: "在状态栏锁图标或「更多」菜单里解锁后可继续编辑，锁定期间编辑与工具栏被禁用。",
+    action: null,
   },
   "body-missing": {
     title: "正文文件已丢失，已按只读打开",
