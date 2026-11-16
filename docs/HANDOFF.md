@@ -7,6 +7,18 @@
 
 ## 0. 最新交接（最近 3 个批次；更早的见 git）
 
+### 261117 · v1.3.2 发版（Android 卸载保留数据）
+
+- **发布**：`v1.3.1 → v1.3.2`（`package.json` 1.3.2；Android versionName 1.3.2 / versionCode **11302**，设备已装并确认）；注解 tag **`v1.3.2`** 双远端推送。本批 = 1 commit / 5 文件（manifest + 移动设置文案 + 源码护栏 + 调研文档 + 文档/HANDOFF）。
+- **内容**：`android:hasFragileUserData="true"`（Android 10+ 系统卸载确认框的「保留应用数据」）+ 设置「关于 → 卸载与换机」备份引导 + **重装须同签名同来源**说明；**allowBackup 保持 false**（Auto Backup 25MB/隐私/网络开关语义，理由见 `docs/mobile/UNINSTALL-DATA.md` §3）。调研结论：思源移动端未开该属性、Auto Backup 规则覆盖不到大库 ⇒ 不照抄（文档 §6 带 file:line 证据与推荐排序）。
+- **门禁（发版前全量）**：`tsc` 0；`typecheck:electron` 0；全量 vitest **1019 文件 / 6437 用例（1006 passed / 13 skipped；6423 passed / 14 skipped / 0 failed）**；`ui-metrics` 0；`cssLayers`/`primitives`/`mobileLayers` 全绿；`git diff --check` 0。
+- **设备验证**：`android-build.sh --sync --install` 成功（APK 37.36MB）→ `dumpsys package` 确认 versionCode 11302 / versionName 1.3.2；早前 1.3.1 已用 `aapt2 dump xmltree` 验证合并 manifest（hasFragileUserData=true / allowBackup=false，无 backup 规则资源）。
+- **待真机项（文档 §6.6）**：API 29+ 勾选保留 → 同签名重装数据在；不勾选基线；API 28 无选项；`adb uninstall -k`；debug/release 签名矩阵。
+
+### 261117 · Android 卸载保留数据（hasFragileUserData；261117 用户点单）
+
+- 用户点单「卸载不删资源/重装还在」：manifest 加 `android:hasFragileUserData="true"`（**Android 10+ 走系统卸载确认框才会出现「保留应用数据」**——应用信息或启动器卸载菜单一般都有，静默卸载 adb/商店不会；Android 9 及以下没有）；设置「关于 → 卸载与换机」常驻备份引导（桌面导出便携包 / 云同步），并写明**重装须同签名同来源**（正式版与开发版签名不同，不能交叉安装）。**allowBackup 保持 false**（Auto Backup 25MB 限额 + 隐私，理由见 docs/mobile/UNINSTALL-DATA.md §3；**不照抄思源**——它未开 hasFragileUserData、Auto Backup 规则也覆盖不到大库，文档 §6 有 file:line 证据）。护栏 `src/mobile/settings/uninstallData.test.ts`。
+
 ### 261117 · v1.3.1 发版（打包瘦身 + 属性弹窗 + 设置收敛 + 端口隔离）
 
 - **发布**：`v1.3.0 → v1.3.1`（`package.json` 1.3.1；Android versionCode 11301 由根 package.json 派生）；注解 tag **`v1.3.1`**，双远端推送。本批 `v1.3.0..v1.3.1` = 5 commit / 44 文件（含 26 项设置/属性/端口/瘦身改动 + 8 个新测试/文档）。
@@ -308,14 +320,14 @@
 
 > 数值 = 最近一次实测（261113 批，低负载串行）。**任何状态判断以本节 + `git status` / `git log -1` 为准**。
 
-**261117 · v1.3.1 基线（打包瘦身 + 属性弹窗 + 设置收敛 + 端口隔离，tag `v1.3.1`）**
+**261117 · v1.3.2 基线（Android 卸载保留数据，tag `v1.3.2`）**
 
-- **分支**：`v1.3.0..v1.3.1` = 5 commit / 44 文件；master 与双远端同步（HEAD 以 `git log -1` 为准）；上一 release = `v1.3.0`（tag `4f69179c`）。
-- **门禁（发版前最后一次全量）**：`tsc` 0；`typecheck:electron`（无 DOM）0；全量 vitest **文件 1018（1005 passed / 13 skipped）/ 用例 6433（6419 passed / 14 skipped）/ 0 failed**；`ui-metrics` 0；`cssLayers`/`primitives`/`mobileLayers` 全过；`check:arch` 0 违规；`check:bundle` PASS（桌面首屏 593KB / 600KB、移动 345KB / 350KB）。
-- **打包产物（本批实测）**：`.app` **393MB**（536 → 393，−26.7%）、`app.asar` **70MB**（213 → 70，−67.1%）、`asar.unpacked` 34MB 不变；打包 `dependencies` **9** 个（27 → 9）。规则见 `docs/BUILD-SIZE.md`；防回涨判据已在 `architecture.test.ts` R6 / `univerContract` / `noteExport.inkPdf`。
-- **设备/实机验证**：打包产物 14/14 PASS（含文档图片+sharp 缩略、Univer/多维表/画板/手写板、AI 设置、更新中心、导出 Markdown、导入 docx/xlsx、小记、回收站、同步设置）+ `e2e-packaged-smoke` exit 0；移动端更新频率已装 `lake_mobile` 设备验证。
-- **视觉门禁**：本批未重跑桌面 `stylesnap` 42 态与移动 `mobile-snap` 10 态（改动为属性弹窗折叠/缩略图与设置控件替换，不在现有态覆盖内；下一次完整视觉基线仍以 v1.2.0 的 42/10/3 态为历史参照）。
-- **未跑/已知边界**：真实 API Key 下的流式对话；AI 面/属性弹窗视觉基线；多文档推理 PDF 注入；备份不含粘贴图；`better-sqlite3` 外平台 `.node` ≈14MB 未裁。
+- **分支**：`v1.3.1..v1.3.2` = 1 commit / 5 文件；master 与双远端同步（HEAD 以 `git log -1` 为准）；上一 release = `v1.3.1`（tag `39e81c8b`）。
+- **版本**：`package.json 1.3.2`；Android versionName 1.3.2 / versionCode **11302**（设备 `dumpsys` 已确认）。
+- **门禁（发版前最后一次全量）**：`tsc` 0；`typecheck:electron` 0；全量 vitest **文件 1019（1006 passed / 13 skipped）/ 用例 6437（6423 passed / 14 skipped）/ 0 failed**；`ui-metrics` 0；`cssLayers`/`primitives`/`mobileLayers` 全绿；`git diff --check` 0。
+- **能力/限制**：`hasFragileUserData=true`（Android 10+ 系统卸载确认框的「保留应用数据」；重装须同签名同来源；Android 9 及以下无此选项；静默卸载不询问）；`allowBackup=false` 不变（Auto Backup 25MB/隐私/网络开关语义）。调研思源移动端未开该属性、其 Auto Backup 规则覆盖不到大库 ⇒ 不照抄（`docs/mobile/UNINSTALL-DATA.md` §6 带 file:line 证据）。
+- **待真机项**（文档 §6.6）：API 29+ 勾保留→同签名重装数据在 / 不勾基线 / API 28 / `adb uninstall -k` / debug-release 签名矩阵。
+- **视觉门禁**：本批未跑 stylesnap/mobile-snap（移动端只改设置页文案与 manifest，设置页不在 10 态覆盖内）。
 **版本与仓库**
 
 - 主分支 `master`；**HEAD 以 `git log -1` 为准**；R2 已提交 6 笔拆分/设备记录（`a23631f6` sidebar / `fd268432` settings / `231fe845` electron boot / `c00d3a60` lakeRuntime / `4a9b965c` ink 测试 / `e352e2cb` 设备记录）；**产品代码基线 = `8e20a6a3`（R0）/ `e87016bd`（R1）/ `e352e2cb`（R2）/ `3fad8821`（R2 收尾：位置合并 + 同步专用写路径 + 单篇降级）**；**日记收口批产品笔 = `199f3403`（不可变守卫）/ `fd58dc0a`（移动移除取消标记）/ `d4d03260`（移动目标剔除日记子树）/ `f965e62c`（转文档共享弹窗）/ `4b6a524a`（转小记媒体搬运）/ `400dcc75`（showNotice 全空间可见）**；**261113 批 = `839c7a93`（发版复核 P2/P3）/ `a57cf3cf`（移动端「转为小记」+ 22 号报告 §11 + RELEASE.md Secrets 节）**（详见 §0）。

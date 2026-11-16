@@ -1,4 +1,4 @@
-import { Palette, Info } from "lucide-react";
+import { Palette, Info, Archive } from "lucide-react";
 import { Group, Item, Seg, NumField } from "../ui/settingsPrimitives";
 import type { AppSettings } from "../../lib/settings";
 import type { HistoryMobileSettings } from "../bridge";
@@ -57,6 +57,26 @@ export function AboutSettingsSection({ appInfo, diag }: { appInfo: ReturnType<ty
                   <div className="mb-set-item__desc">同步：S3 协议 v{String(S3V3_POINTER_VERSION)}（内容寻址）；本地是真相，S3 只做同步镜像</div>
                   <div className="mb-set-item__desc">本地优先：正文、附件与索引都保存在本机。</div>
                   <div className="mb-set-item__desc">字体：内置 MiSans（小米科技，依《MiSans 字体知识产权许可协议》免费商用并注明）+ JetBrains Mono（SIL OFL 1.1）</div>
+                </div>
+            </Group>
+
+            {/* 261117 用户点单（卸载保留数据）：说明「卸载会删本机数据」+ 两条出口（保留数据选项 / 先备份）。
+                常驻在「关于」页，不弹窗、不打断；文案不用中点作分隔符（DESIGN）。 */}
+            <Group title="卸载与换机" icon={<Archive size={16} />}>
+                <div className="mb-set-block">
+                  <div className="mb-set-block__name">卸载前请先备份</div>
+                  <div className="mb-set-item__desc">
+                    卸载会删除这台手机上保存的正文、附件与索引；云同步只是镜像，没同步过的改动会一起丢失。换机或重装前请先备份：在桌面版「备份与恢复 → 导出便携包」，或确认云同步已经同步完成。
+                  </div>
+                  <div className="mb-set-item__desc">
+                    Android 10 及以上：走系统卸载确认框（应用信息或启动器卸载菜单）一般会出现「保留应用数据」选项，勾选后重装仍在；静默卸载（adb、应用商店）不会询问。Android 9 及以下没有这个选项。
+                  </div>
+                  <div className="mb-set-item__desc">
+                    勾选保留后重装必须是同一签名与来源（正式版与开发版签名不同，不能交叉安装）。
+                  </div>
+                  <div className="mb-set-item__desc">
+                    本机数据量通常超过系统自动备份的 25MB 限额，所以没有启用 Google 云备份；真正的迁移出口是便携包与云同步。
+                  </div>
                 </div>
             </Group>
 

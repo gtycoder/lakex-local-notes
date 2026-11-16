@@ -1,8 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- 261117 用户点单「卸载不删资源 / 卸载时给弹窗」的 Android 官方能力：
+         android:hasFragileUserData="true" ⇒ **Android 10（API 29）及以上**从系统「应用详情 / 系统卸载对话框」
+         卸载时会多一个「保留应用数据」选项，勾选后重装数据仍在；低版本系统忽略该属性、不报错。
+         局限（详见 docs/mobile/UNINSTALL-DATA.md）：① 只在系统卸载对话框出现——桌面长按图标直接拖走、
+         或 ADB pm uninstall 不会问；② Android 9 及以下没有该能力。
+         allowBackup 保持 **false**：本机数据（正文/附件/历史）通常远超 Auto Backup 的 25MB 限额，
+         且正文不加密，走 Google Drive 自动备份既不可靠也不符合隐私预期；迁移改由「保留数据 + 应用内
+         备份引导（桌面导出便携包 / 云同步）」承担。因此也不配置 fullBackupContent / dataExtractionRules。 -->
     <application
         android:allowBackup="false"
+        android:hasFragileUserData="true"
         android:enableOnBackInvokedCallback="true"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
