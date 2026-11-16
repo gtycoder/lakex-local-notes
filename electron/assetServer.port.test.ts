@@ -79,6 +79,13 @@ describe("固定端口（261118 简化）", () => {
     await expect(fetch("http://127.0.0.1:" + (BASE_PORT + 2) + "/n1/a.png?token=tok")).rejects.toBeTruthy();
   });
 
+  it("占用失败后 currentAssetServerPort() 仍是固定端口（降级时 URL 不退回别的端口）", async () => {
+    await occupy(BASE_PORT + 3);
+    const dirs = makeDirs();
+    await expect(startAssetServer(dirs.noteAssets, dirs.vendor, dirs.quick, "tok", { preferredPort: BASE_PORT + 3, log: logger })).rejects.toBeTruthy();
+    expect(currentAssetServerPort()).toBe(BASE_PORT + 3);
+  });
+
   it("非法端口 ⇒ reject + error 日志", async () => {
     const dirs = makeDirs();
     await expect(startAssetServer(dirs.noteAssets, dirs.vendor, dirs.quick, "tok", { preferredPort: 99_999, log: logger })).rejects.toBeTruthy();
@@ -104,7 +111,8 @@ describe("端口配置接线（main / preload / 下游 URL 构造）", () => {
     const main = read("electron/main.ts");
     expect(main).toContain("Number(process.env.LAKE_ASSET_PORT) || (app.isPackaged ? 19876 : 19877)");
     expect(main).toContain("Number(process.env.LAKE_WEB_PORT) || (app.isPackaged ? 19880 : 19881)");
-    expect(main).toContain("process.env.LAKE_ASSET_PORT = String(currentAssetServerPort())");
+    // env 必须在启动监听之前写回（即使失败/降级，渲染层构造的也是本形态固定端口）
+    expect(main.indexOf("process.env.LAKE_ASSET_PORT = String(preferredAssetPort)")).toBeLessThan(main.indexOf("await startAssetServer("));
     expect(main).not.toContain("ASSET_PORT_FALLBACK_RANGE");
     expect(main).not.toContain("+1..+10");
   });
@@ -118,6 +126,9 @@ describe("端口配置接线（main / preload / 下游 URL 构造）", () => {
   it("下游 URL 构造读取 currentAssetServerPort()（store/导出/小记），不硬编码 19876", () => {
     const store = read("electron/store.ts");
     const exportSrc = read("electron/noteExport.ts");
+    // 模块级端口在 listen 之前就固定，失败时也不退回默认常量
+    const assetServer = read("electron/assetServer.ts");
+    expect(assetServer.indexOf("ASSET_PORT = preferredPort")).toBeLessThan(assetServer.indexOf("await listenFixed("));
     expect(store).toContain("currentAssetServerPort()");
     expect(exportSrc).toContain("currentAssetServerPort()");
   });

@@ -8,6 +8,14 @@
 ## 0. 最新交接（最近 3 个批次；更早的见 git）
 
 
+### 261118 · v1.3.6 发版（端口固定化：查漏补缺）
+
+- **发布**：`package.json 1.3.6`（Android versionCode 11306 由根 package.json 派生）；注解 tag **v1.3.6** 双远端推送。本批 = 1 commit（清理/补强，无正常路径行为变更）。
+- **补强**：`LAKE_ASSET_PORT` env 与模块级 `ASSET_PORT` 都在**监听之前**固定 —— 资源服务因端口占用启动失败时，渲染层/URL 构造仍用本形态固定端口（不退回 19876 默认值，避免指向另一实例）；preload 只从 env 读端口（移除 `--lake-asset-port` 传参）。
+- **清理**：HANDOFF/RELEASE-NOTES/AGENTS 与代码注释中的「+1..+10 回退 / 实际端口 / 归一化」表述改为固定端口口径；审计脚本 `scripts/mobile-audit/long-doc-dom.mjs` 的 `ASSET_PORT_FALLBACK` → `ASSET_PORT_DEFAULT`；本地 `release/` 旧打包产物（含旧 preload）已删（ignored，重建即可）。
+- **测试**：新增占用失败后 `currentAssetServerPort()` 仍等于固定端口、`main` 在 `await startAssetServer` 前写 env、`assetServer` 在 `listenFixed` 前设 `ASSET_PORT` 三条断言。
+- **隔离 dev 实测**：`LAKE_ASSET_PORT=19887` → `[asset-server] listening on http://127.0.0.1:19887`，渲染层 `window.lakeNative.assetPort === 19887`，token 存在；同形态占用时日志明确报错（无回退）——符合固定端口预期。
+- **门禁（发版前全量）**：`tsc` 0；`typecheck:electron` 0；全量 vitest **1025 文件 / 6462 用例（0 failed）**；`ui-metrics` 0；`cssLayers`/`primitives`/`mobileLayers` 全绿；`check:arch` 0 违规；`git diff --check` clean。
 ### 261118 · v1.3.5 发版（端口方案简化：固定端口 + 测试/正式分开）
 
 - **用户裁决**：撤销 v1.3.3/v1.3.4 的「资产 URL 端口归一化 + 自动回退」复杂化；端口固定，**正式与开发用不同端口**即可。
@@ -41,7 +49,7 @@
 ### 261117 · v1.3.1 发版（打包瘦身 + 属性弹窗 + 设置收敛 + 端口隔离）
 
 - **发布**：`v1.3.0 → v1.3.1`（`package.json` 1.3.1；Android versionCode 11301 由根 package.json 派生）；注解 tag **`v1.3.1`**，双远端推送。本批 `v1.3.0..v1.3.1` = 5 commit / 44 文件（含 26 项设置/属性/端口/瘦身改动 + 8 个新测试/文档）。
-- **内容**：① 端口隔离（资源 19876/19877、Web 19880/19881，+1..+10 回退，实际端口全链路；见下条）；② 设置三项（更新频率 **24 小时/每周/每月**、主题**下拉**、标签数桌面 8 / 移动 6）；③ 属性弹窗「附件/历史版本」**可折叠（默认收起、不加载）** + 附件缩略图档位 + 回收站孤儿预览缩略；④ 明确「正文=原图，其余=缩略图」口径；⑤ **打包瘦身 −143MB**（见下条）。
+- **内容**：① 端口隔离（资源 19876/19877、Web 19880/19881；261118 起固定端口、不再回退；见下条）；② 设置三项（更新频率 **24 小时/每周/每月**、主题**下拉**、标签数桌面 8 / 移动 6）；③ 属性弹窗「附件/历史版本」**可折叠（默认收起、不加载）** + 附件缩略图档位 + 回收站孤儿预览缩略；④ 明确「正文=原图，其余=缩略图」口径；⑤ **打包瘦身 −143MB**（见下条）。
 - **门禁（发版前全量）**：`tsc` 0；`typecheck:electron` 0；全量 vitest **1018 文件 / 6433 用例（1005 passed / 13 skipped；6419 passed / 14 skipped / 0 failed）**；`ui-metrics` 0；`cssLayers`/`primitives`/`mobileLayers` 全绿；`check:arch` 0 违规；`check:bundle` PASS（桌面首屏 593KB / 600KB、移动 345KB / 350KB）。
 - **验证**：打包产物实机 14/14 PASS（启动/文档图片+sharp 缩略/Univer 表格/多维表/画板/手写板/AI 设置/更新中心/导出 Markdown/导入 docx/导入 xlsx/小记/回收站/同步设置）+ `scripts/e2e-packaged-smoke.mjs` exit 0；移动端更新频率已装 `lake_mobile` 设备验证（选项 24 小时/每周/每月、168 落库）。
 - **已知边界**：`better-sqlite3` 外平台 `.node` ≈14MB 未裁（需按平台打包）；属性弹窗收起态不加载图片（展开才请求）；移动端与桌面更新设置是两份模型（同判据手工对齐，未做单一来源重构）。
@@ -337,15 +345,14 @@
 
 > 数值 = 最近一次实测（261113 批，低负载串行）。**任何状态判断以本节 + `git status` / `git log -1` 为准**。
 
-**261118 · v1.3.5 基线（端口方案简化：固定端口 + 测试/正式分开，tag `v1.3.5`）**
+**261118 · v1.3.6 基线（端口固定化查漏补缺，tag `v1.3.6`）**
 
-- **分支**：`v1.3.3..v1.3.5`（含回退 v1.3.4）= 1 个回退+简化 commit + release；master 与双远端同步（HEAD 以 `git log -1` 为准）；上一 release = `v1.3.3`（tag `43dc1686`；v1.3.4 已发布但被本版回退）。
-- **版本**：`package.json 1.3.5`；Android versionCode 11305（由根 package.json 派生）。
-- **端口（固定，不再回退）**：资源 packaged 19876 / dev 19877；Web packaged 19880 / dev 19881；`LAKE_ASSET_PORT`/`LAKE_WEB_PORT` 可覆盖；占用时明确报错。
-- **已回退**：`normalizeLocalAssetPorts`/`canonicalizeNoteAssetUrls`/渲染层端口归一、`--lake-asset-port`、自动回退与相关测试、S3 假桶验证脚本+文档。保留：`currentAssetServerPort()` 固定值、403 ACAO、资源服务安全面。
-- **门禁（发版前最后一次全量）**：`tsc` 0；`typecheck:electron` 0；全量 vitest 见发版日志（0 failed）；`ui-metrics` 0；`cssLayers`/`primitives`/`mobileLayers` 全绿；`check:arch` 0 违规；`git diff --check` clean。
-- **打包产物**：沿用 v1.3.1 瘦身结果（`.app` 393MB、`app.asar` 70MB、依赖 9 个；见 `docs/BUILD-SIZE.md`）。
-- **视觉门禁**：本批未跑 stylesnap/mobile-snap（只改端口机制/文档，无视觉变更）。
+- **分支**：`v1.3.5..v1.3.6` = 1 commit；master 与双远端同步（HEAD 以 `git log -1` 为准）；上一 release = `v1.3.5`（tag `e9f49cee`）。
+- **版本**：`package.json 1.3.6`；Android versionCode 11306（由根 package.json 派生）。
+- **端口（固定，不再回退）**：资源 packaged 19876 / dev 19877；Web packaged 19880 / dev 19881；`LAKE_ASSET_PORT`/`LAKE_WEB_PORT` 可覆盖；占用时明确报错；端口在 listen 前固定（失败也不退回默认常量），preload 只从 env 读。
+- **门禁（发版前最后一次全量）**：`tsc` 0；`typecheck:electron` 0；全量 vitest **文件 1025 / 用例 6462（0 failed）**；`ui-metrics` 0；`cssLayers`/`primitives`/`mobileLayers` 全绿；`check:arch` 0 违规；`git diff --check` clean。
+- **打包产物**：本地 `release/` 已删（ignored 旧产物）；发版重建，瘦身基线仍为 v1.3.1（`.app` 393MB / `asar` 70MB / 依赖 9 个，见 `docs/BUILD-SIZE.md`）。
+- **视觉门禁**：本批无视觉变更，未跑 stylesnap/mobile-snap。
 
 **版本与仓库**
 

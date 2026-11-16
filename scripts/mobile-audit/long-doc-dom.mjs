@@ -50,7 +50,7 @@ const SAFE = { blocks: 5000, images: 1000 };
 const IMG_B64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
 const IMG_BYTES = 68;
 /** 移动端 ASSET_PORT 固定 19876（仅桌面多端调试会覆盖）⇒ 仅作兜底，实际优先从资源条目嗅探。 */
-const ASSET_PORT_FALLBACK = 19876;
+const ASSET_PORT_DEFAULT = 19876;
 
 /* ------------------------------------------------------------------ *
  * 纯函数区（--self-check 也走这里，保证"没设备也能验"）
@@ -294,7 +294,7 @@ function selfCheck(opts) {
     if (!ok) throw new Error("自检失败：" + name + (detail ? "（" + detail + "）" : ""));
   };
   const noteId = "probe-note-selfcheck";
-  const assetBase = "http://127.0.0.1:" + ASSET_PORT_FALLBACK;
+  const assetBase = "http://127.0.0.1:" + ASSET_PORT_DEFAULT;
   const doc = buildLongDoc({ noteId: noteId, blocks: opts.blocks, images: opts.images, assetBase: assetBase, imageMode: "files" });
   const paragraphs = doc.content.match(/<p /g) || [];
   const cards = doc.content.match(/<card type="inline" name="image"/g) || [];
@@ -858,7 +858,7 @@ async function main(opts) {
   const prepared = await evalJson(pagePrepare(opts.title));
   log((prepared.reused ? "复用已有文档 " : "新建文档 ") + prepared.id + (prepared.parentTitle ? "（笔记本：" + prepared.parentTitle + "）" : ""));
 
-  const assetBase = "http://127.0.0.1:" + (environment.assetPortFromBridge || ASSET_PORT_FALLBACK);
+  const assetBase = "http://127.0.0.1:" + (environment.assetPortFromBridge || ASSET_PORT_DEFAULT);
   const imageMode = environment.hasFilesystem ? "files" : "data-url";
   const built = buildLongDoc({ noteId: prepared.id, blocks: opts.blocks, images: opts.images, assetBase: assetBase, imageMode: imageMode });
   log("合成正文：" + built.blocks + " 块（文本 " + built.textParagraphs + " / 图片 " + built.images + "），" + Math.round(built.content.length / 1024) + "KB");

@@ -894,6 +894,8 @@ if (!app.requestSingleInstanceLock()) {
     //    src/lib/assetPort 从 process.env.LAKE_ASSET_PORT 取），webRequest 过滤器与 assetPort 注入也要用实际值。
     // ④ 失败不再静默：监听失败在这里记 error，主窗口照常启动（图片降级，其余可用）。
     const preferredAssetPort = Number(process.env.LAKE_ASSET_PORT) || (app.isPackaged ? 19876 : 19877);
+    // 先写回 env（即使监听失败也保持固定端口一致）：preload/渲染层在创建窗口时读它。
+    process.env.LAKE_ASSET_PORT = String(preferredAssetPort);
     try {
       await startAssetServer(
         path.join(workspaceRoot(), "note-assets"),
@@ -909,8 +911,7 @@ if (!app.requestSingleInstanceLock()) {
           },
         },
       );
-      // 实际端口写回 env：preload 在渲染进程读它（src/lib/assetPort.ts），渲染层所有资产 URL 由此而来。
-      process.env.LAKE_ASSET_PORT = String(currentAssetServerPort());
+      // 端口已在 listen 前固定并写回 env（见上）；这里只确认模块级值一致。
     } catch (error) {
       // 降级：服务没起来时图片/附件不可用，但文档、同步、编辑全部照常（别让启动卡死）。
       log.app.error("[asset-server] 启动失败，图片/附件将不可用" + formatLogFields(errorFields(error)));

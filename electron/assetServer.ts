@@ -255,8 +255,9 @@ function streamFile(
 /**
  * 起本地资源服务（**必须 await 到真正 listening 之后**才去建窗口/注册 webRequest 过滤器）。
  *
- * 端口策略（261117 生产 bug 修复）：首选 `options.preferredPort`（main 传 dev 19877 / packaged 19876），
- * 被占用则 +1..+10 回退；成功后把实际端口写进模块级 `ASSET_PORT`，供所有 URL 构造方与过滤器读取，
+ * 端口策略（261118 简化定稿）：**固定端口** `options.preferredPort`（main 传 dev 19877 / packaged 19876，
+ * env 覆盖优先）；不做自动回退 —— 被占用时记 error 并抛出，由 main 降级（图片不可用、其余照常）。
+ * 端口在 listen 前就写进模块级 `ASSET_PORT`（供 URL 构造方与过滤器读取），失败时也保持该值一致，
  * 并由 main 写回 `process.env.LAKE_ASSET_PORT`（preload/渲染层据此拿端口）。
  */
 export async function startAssetServer(
@@ -491,9 +492,9 @@ export async function startAssetServer(
     error: (message) => console.error(message),
   };
   const preferredPort = options.preferredPort ?? ASSET_PORT;
-  await listenFixed(server, preferredPort, log);
-  // 固定端口即唯一真相：URL 构造（store/noteExport/quickNotes）与 main 的过滤器都读它。
+  // 固定端口即唯一真相：listen 之前就定下来，失败时 URL 构造方也不会退回默认常量。
   ASSET_PORT = preferredPort;
+  await listenFixed(server, preferredPort, log);
   log.info("[asset-server] listening on http://127.0.0.1:" + preferredPort + ", dir=" + noteAssetsDir);
   return server;
 }
