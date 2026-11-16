@@ -1,5 +1,15 @@
 # AI 写作空间 · 附件（从本机资产选图/文件）方案（261116 · 调研 + 分期）
 
+> **SUPERSEDED（261116 实现后回填）**：本方案已落地并上线；**现状/边界以 [docs/AI-WRITING.md](../AI-WRITING.md) 为准**，本文仅作历史决策记录，行号/分期/通道数都已过期。
+
+## 0.1 实现差异（相对本方案）
+
+- **对话写作**：附件入口 = ①「从文档里选附件」（AiDocPicker 两级浏览，**仅寻址**，不产生 docRefs；对应 §3 S2 的简化）②「从电脑选择文件」（主进程 dialog，只回引用/元数据；图片→image_url，文本/代码→text 块，PDF 选择时解析缓存后→text 块）。
+- **多文档推理**：附件源 = 已选文档里的图片（`list_note_image_assets`），**不做 PDF/文档注入**（本方案 §6 的 docs 侧能力未实现，已作为已知限制写进 AI-WRITING Phase 2）；换选/移除文档会 prune 悬空附件。
+- **粘贴第三方图片**：新增 IPC `ai_save_pasted_image`，落盘 `<userData>/ai-attachments/paste-<uuid>.<ext>`（设备本地、不进 S3/便携包；启动清无引用且 >7 天），跨重启靠 token 反推路径回落读盘。
+- **通道数**：最终 **191**（188→189 `list_note_image_assets`、189→190 `pick_ai_local_files`、190→191 `ai_save_pasted_image`），不是本文的 189/190。
+- **备份边界**：整库 DB 快照会带 AI 会话，但**不含** `<userData>/ai-attachments/` 粘贴图（临时文件，恢复后明确报失效）。
+
 > 背景：用户问「AI 助手支持附件好做吗？同理可以选择我们这里的资产」，随后澄清——**AI 助手不需要附件**（入口已删，工作树注释见 src/features/ai/AiAssistantDialog.tsx:564/602「AI 助手不做附件（附件是 AI 写作空间的需求）」）；**需要附件的是 AI 写作空间**（src/features/aiWriting/**）。
 > 本文只做**只读调研 + 设计**：不 commit、不改 src/**、不跑 --write-baseline；唯一写入 = 本文件。
 > 快照提醒：调研时工作树有**并行未提交改动**（AI 深度思考开关、流式探针、AI 助手入口删除等），AI 写作侧 useAiWriting/AiComposer/AiWritingWorkspace 正在被改；下文行号按本快照，Phase 1 落地前先 rebase 该批。
@@ -24,7 +34,7 @@ AI 写作侧的 4 个硬缺口（决定工作量）：
 
 ## 1. AI 写作请求组装链路（现状，file:line）
 
-```text
+``text
 AiWritingWorkspace.tsx:220/266  <AiComposer …/>（空态卡 / 会话底部 dock 两处，props 同源）
   ↓
 useAiWriting.ts（控制器）
@@ -38,7 +48,7 @@ useAiWriting.ts（控制器）
               electron/ipc/registerAi.ts:77-115
                 assertMessages(core/aiChatMessages.ts:57-88) → resolveAiMessages(electron/ai/aiContentResolver.ts:32-63)
                 → aiChat（electron/ai/aiClient.ts:100-121）
-```
+``
 
 - **消息里能不能带 image part？** 协议层可以（AiChatMessage.content: string | AiContentPart[]，core/aiProviders.ts:361-364；image/document 只允许 user，core/aiChatMessages.ts:20-43），主进程 resolver 对 image/document 都已实现；**AI 写作组装层现在不产出**。
 - 因此 Phase 1 不需要新网络通道/新 Key 通道，也不改主进程多模态解析链；只改 AI 写作的组装 + 持久化 + UI。

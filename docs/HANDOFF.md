@@ -7,13 +7,25 @@
 
 ## 0. 最新交接（最近 3 个批次；更早的见 git）
 
+### 261116 · v1.3.0 发版（AI 写作能力 + review 收口）
+
+- **发布**：`v1.2.0 → v1.3.0`（`package.json` 1.3.0；Android versionName 1.3.0 / versionCode 11300 由根 package.json 派生，未手改 build.gradle）；注解 tag **`v1.3.0`**，双远端推送（tag 触发 GitHub release 流水线）。本批 `v1.2.0..v1.3.0` = 18 commit / 91 文件 / +6.2k −0.4k。
+- **Review 结论（4 路并行：主进程/架构、性能、数据协议、UI/设计系统）**：**都不需要架构改动**。数据模型（attach_refs 只存引用、字节只在主进程、单一 resolver）、模式能力表、本地专属边界、产物契约都成立；问题全是局部实现与登记缺失，已在发版前修完（见下）。唯一「结构类」建议 = 以后附件类常量若继续堆积，把 `core/aiChatMessages` 的 AI 附件预算拆到 `core/aiAttachments`（当前 2 个常量，不动）。
+- **Review 修复（P0/P1/P2 全清）**：
+  - 主进程：本地附件改「**先 stat 判限额再异步读字节**」（图 10MB/张+20MB/次+core `AI_MAX_IMAGES`、文本 200KB、PDF 32MB；PDF 已解析过时连字节都不读）；**HEIC/HEIF 移出图片类型表**（与 `core/assetNaming` 一致）并给「请先转 JPEG/PNG」文案；粘贴写盘改 `fs.promises` + 失败清 `.tmp`；启动清理挪到 4.5s `unref` 定时器（不再压在 `whenReady`）；`/ai-local` 补 nosniff + immutable；pick 对话框传父窗口；**CI 补 `npm run typecheck:electron`**（pr.yml + release.yml 两处）；新增 handler 级测试 20 例（3 个新 IPC + append attachRefs）；门禁源码断言改「剥注释后匹配」+ 扫描副作用 import + 禁白名单目录前缀。
+  - 渲染层：`useAiWriting` 加 **generation epoch/请求快照**（切模式/新建/切会话/删除统一取消在途并丢弃旧异步，不再幽灵回写）；流式 delta **rAF 合帧**（50 push → 每帧 1 次 emit，结束/停止当帧 flush）；`AiMessageView` + 新 `AiMessageList` **memo**（历史消息在 50 delta 期间重渲染 50 次 → **0 次**）；`docTitleById` 改 `useMemo`（打字不再每键重建 O(全树)）；贴底改 rAF 合帧。
+  - UI/设计系统：`.ln-pill` 固定高 → `min-height`（200% 字号不裁字）；**32px 圆形发送收成 kit `.ln-send-circle`**（两端单一实现，token 对齐 L1 `accent-ink`）；删 `aiWriting.css` 22 条死声明；chip 关闭/移除命中区 16→24（透明命中区，行高不变）；AI 助手 textarea 补 `aria-label`；HANDOFF/DESIGN/注释/棘轮注释回填；DESIGN 登记 composer 节（药丸含 --icon、32 圆形主操作、两端 composer 有意分化、chip 24 命中区、聊天 22/24 圆角、输入卡「0.5px 边+轻阴影」例外）。
+  - 探针：delta 计数改事件级（150/150）、`--repeat` 默认 5、记录 longtask 与 appState、允许负 finalFlush 标注；文档写明「只适合同会话相对对比」。新数字：realistic 42.4fps/maxGap 58ms；stress 12.6fps/maxGap 278ms；dense 3.2fps/maxGap 1091ms（单次提交≈1s 是地板）。
+- **已知边界（未做，登记）**：①多文档推理的附件仍只支持图片（PDF/文档注入只在对话写作的本机文件链路），`docs/AI-WRITING.md` 已写明收窄；②整库备份不含 `<userData>/ai-attachments` 粘贴图（临时文件，恢复后失效，文档已注明）；③AI 助手/写作/选图器仍不在桌面 42 态与移动 10 态视觉门禁内（P2-7）；④粘贴图总量无上限（只有 7 天无引用清理）。
+- **门禁（发版前最后一次全量）**：`tsc` 0；`typecheck:electron` 0；全量 vitest **1014 文件 / 6403 用例（1001 passed / 13 skipped；6389 passed / 14 skipped / 0 failed）**；`ui-metrics` 0；`cssLayers`（kit 754 / aiDialogParts 167 / aiWriting 497 / compat 157）/ `primitives` / `mobileLayers` 全绿；`check:arch` 0 违规；`check:bundle` PASS（桌面首屏 590.9KB / 600KB）；`git diff --check` 0。**未重跑**：桌面 stylesnap 42 态（AI 面不在其覆盖内，其余样式改动仅 kit 新增/删除重复规则）与移动 snap（本批未动移动端）。
+
 ### 261116 · AI 输入面补批（发版后，master 增量）
 
-- **输入卡统一 chat-demo 造型**：AI 助手（`src/features/ai/AiAssistantDialog.tsx`）与 AI 写作空间（`src/features/aiWriting/AiComposer.tsx`）都改成「大圆角卡片（--lake-chat-radius-composer）+ 无边框自增高 textarea（field-sizing: content, max 160）+ 底部一行」：左 = 药丸（深度思考 / 提示词 / docs 模式的选文档），右 = 圆形发送（32px，生成中同格变停止）。**AI 助手不做附件**（用户裁决；附件是 AI 写作需求），AI 写作保留附件入口**占位 disabled**，等 Phase 1 管线。
+- **输入卡统一 chat-demo 造型，但两端尺寸有意分化**：AI 助手（`src/features/ai/AiAssistantDialog.tsx`）= **紧凑卡**（`radius-md` 10 / 内距 6/8/4 / textarea **max 120**）；AI 写作空间（`src/features/aiWriting/AiComposer.tsx`）= **大输入卡**（`--lake-chat-radius-composer` 24 / 内距 lg/xl/md / textarea **min 96 / max 240**）。共同点 = 0.5px 边 + `--lake-shadow-card` + 无边框 `field-sizing: content` 自增高 textarea + 底部一行：左 = 药丸（深度思考 / 提示词 / docs 模式的选文档），右 = 圆形发送（**32px，收成 kit `.ln-send-circle`**；生成中同格变停止）。**AI 助手不做附件**（用户裁决；附件是 AI 写作需求）；AI 写作附件入口已落地（图片/本机文件/PDF/粘贴，见本段 AI 写作附件各条）。
 - **深度思考从「强制开启」改为可关**（用户裁决，推翻 261109 定稿）：请求级覆盖 `runAiChat(reqId, messages, onDelta?, onReasoning?, options?: { thinking?: "enabled" | "disabled" })` → `lib/native` → `preload.cjs` → `electron/ipc/registerAi.ts` → `electron/ai/aiThinking.ts` 判据 → `aiClient`；**只在 supportsThinking 的供应商生效**（当前 DeepSeek），不传 = 与改造前 IPC payload 逐字节一致。UI 只在该供应商支持时显示开关，初值取设置里的默认值。
 - **流式节流调参（A+B 实测驱动）**：`useThrottledMarkdown` 的 MAX_WAIT_MS **2000 → 300**、COST_RATE **2 → 1.5**（算法未改）。探针 `scripts/ai-stream-probe.mjs`（loopback 假供应商 → 主进程网关 → IPC → 真实渲染链）实测 3 次中位：dense 640KB 档 **2.3 → 3.3 fps、最大可见间隔 2516 → 1373ms（最坏 3951 → 1453）**；640KB stress 最大间隔 −36%；60KB 档无回归。方法与告警见 [docs/AI-STREAM-PROBE.md](AI-STREAM-PROBE.md)。
 - **AI 写作附件方案**：[docs/ai/ATTACHMENTS-PLAN.md](ai/ATTACHMENTS-PLAN.md)：Phase 1（图片·视觉模型）≈3–3.5 人日，堵点 = 「视觉能力不可探测」（只能发送失败后按 400 报错，不维护硬编码模型清单、不静默去图）；Phase 2（PDF/文档注入）＋1–1.5 人日。Phase 1 已建任务（task-21）排在输入卡改造之后。
-- **门禁（本批全量）**：`tsc` 0；`tsc -p tsconfig.electron.json` 0；全量 vitest **999 文件 / 6297 用例（986 passed / 13 skipped；6283 passed / 14 skipped / 0 failed）**；`ui-metrics` 0；`cssLayers`/`primitives`/`mobileLayers` 全绿（aiDialogParts 148→217、aiWriting 344→382 均按实测登记）；`check:arch`/#core 全过；`git diff --check` 0。
+- **门禁（本批全量）**：`tsc` 0；`tsc -p tsconfig.electron.json` 0；全量 vitest **999 文件 / 6297 用例（986 passed / 13 skipped；6283 passed / 14 skipped / 0 failed）**；`ui-metrics` 0；`cssLayers`/`primitives`/`mobileLayers` 全绿（aiDialogParts / aiWriting 基线按实测登记，当前值见 `cssLayers.test.ts` 顶部注释）；`check:arch`/#core 全过；`git diff --check` 0。
 - **药丸已收单一来源（261116 同批）**：新增 kit 原语 `.ln-pill` / `.ln-pill--icon`（开态支持 `aria-pressed`/`.is-on`），**两端均已迁移**（AI 写作删掉 `.aiw-pill` 三态拷贝）。**两端输入卡有意不同**：AI 助手 = 资料修改的轻对话（紧凑卡 radius md、内距 6/8/4、textarea max 120）；AI 写作 = 纯对话（大输入卡：textarea **min 96 / max 240**、内距 lg/xl/md）。判据已写进 `AiComposer.tsx` 头注释 + `docs/AI-WRITING.md`。
 - **AI 写作粘贴图片（261116 用户需求：第三方剪贴板图片 → 落盘 → 随历史）**：`AiComposer` 的 `onPaste` 只拦截剪贴板里的 `image/*`（纯文本粘贴不受影响）→ 新 IPC `ai_save_pasted_image`（**通道数 190 → 191**，四面同步）→ 主进程校验 image 类型/非空/≤10MB → `tmp+rename` 原子写到 **`<userData>/ai-attachments/paste-<uuid>.<ext>`**（不在 `note-assets/`，不进 S3/便携包）→ 返回普通本机图片引用，复用 chips/缩略图/预览/发送/历史链路；**docs（多文档推理）模式明确拒绝**并给可执行提示。`paste-` token 可反推路径 ⇒ 注册表 miss 时回落读盘，**重启后历史缩略图仍可用**（普通 `loc-` token 仍重启失效）。启动清理「无 `attach_refs` 引用且 >7 天」的粘贴文件，删除会话不立即删。文档见 `docs/AI-WRITING.md`「数据边界：本地专属」。
 - **AI 数据本地专属护栏（261116 用户裁决：「所有历史对话都不进 S3」）**：新增 `electron/aiWritingLocalOnly.test.ts` —— 扫全仓确认 `ai_writing_*` 只出现在 schema/repository/IPC/preload/本地 webApi；同步面（s3v3 / syncEngineController / portable / store / indexRepository）出现 `ai_writing` / `ai-attachments` / `ai-paste` 直接红；便携包白名单不含 AI 目录。现状核实为 0 违规（AI 会话与附件本来就不在同步/便携包链路里）。
@@ -21,7 +33,7 @@
 - **AI 写作模式分化（261116 第四稿）**：能力表单一来源 `core/aiWriting.AI_WRITING_MODE_CAPABILITIES` —— `chat`（对话写作）= 纯对话：`docs:false, docAssets:true, localFiles:true`；`docs`（多文档推理）= 知识库问答：`docs:true, docAssets:true(限已选文档), localFiles:false`。**两向切换都清空**（取消在途 turn、detach 会话、清 messages/promptText/docRefs/attachRefs/input）。对话写作附件来源 = ①「从文档里选附件」（复用 AiDocPicker 同款两级浏览，**仅寻址**，不产生 docRefs）②「从电脑选择文件」（主进程 dialog + 内存 token 注册表，渲染层只拿引用/元数据；图片→image_url，文本/代码→带文件名 text 块，PDF/二进制明确拒绝，token 失效可执行报错）；多文档推理只允许已选文档里的附件，换选/移除文档时 prune 悬空附件；IPC 计数 **189 → 190**（pick_ai_local_files）。简化已写进 `docs/AI-WRITING.md`「按文档取，不做全库扫描」。
 - **AI 写作附件 Phase 2（PDF / 文档内容注入，261116 同批）**：PDF 在**选择文件时解析一次并缓存**（复用 `electron/ai/pdfText.ts` 的 unpdf；源 ≤32MiB / 结果 ≤6 万字符 / 10s），发送时 resolver 复用缓存 → **带文件名与页数的 text 块**（不当 image_url，字节不进渲染层）；文本/代码与 PDF 共享单次 6 万字符注入预算（超出截断并标注）；失败语义在选择阶段即报错（加密/扫描件/损坏/超时/过大，不自动重试不静默跳过）；IPC 复用 `pick_ai_local_files`（过滤加 pdf，**通道数仍 190**）；chips 只加「大小 / N 页」提示。真实链路集成测试（真 unpdf）证明 provider 收到 text 块；原生 NSOpenPanel 本机无法可靠自动化，故未取「真点选 PDF」的 UI 截图（手动复验见 docs/AI-WRITING.md）。
 - **AI 写作图片附件 Phase 1 已落地（261116 同批）**：消息协议 `AiWritingMessage.attachRefs` + `buildAiWritingMessages` **只在本轮 user 拼 image parts**（历史轮纯文本、不重发）；`ai_writing_messages.attach_refs` 列（CREATE + 旧库 ALTER）；新 IPC `list_note_image_assets(noteId)`（只回 filename/size/mimeType，不算 sha）⇒ **通道数 188 → 189**（registrar/preload/WEB_METHODS/native 四面同步）；新 `AiImagePicker`（源 = 已选 docRefs 文档里的图片、分组网格、多选 ≤10、缩略图 `?w=128`、>20MB 禁止）；输入卡附件 chips + 历史气泡只读缩略图（重启后仍在）。**视觉能力不可探测**：照发，400 时保留供应商原文并追加可执行提示（不维护模型清单、不静默去图/不自动重试）。同批修掉两个既有 bug：请求里同一句问两遍（send 把本轮 user 也塞进 history）、主进程 `{ok:false,error}` 被当作成功吞掉 400。
-- **遗留**：① AI 写作附件 Phase 1（task-21）；② AI 助手输入卡的 `a11y-visually-hidden` 文本与图标并存，若换图标库需同步。
+- **遗留**：AI 助手输入卡的 `a11y-visually-hidden` 文本与图标并存，若换图标库需同步。AI 写作附件 Phase 1/2/粘贴均已完成。**P2-7（2026-11-16 review 登记，本轮不做）**：AI 助手 / AI 写作 / 选图器不在桌面 42 态与移动 10 态视觉门禁内，后续补 ≥1 个 AI 态基线（需 provider stub）。
 
 ### 261116 · v1.2.0 发版（`modernize/web-platform-261115` **已合 master 并打 tag**）
 
@@ -260,12 +272,12 @@
 
 > 数值 = 最近一次实测（261113 批，低负载串行）。**任何状态判断以本节 + `git status` / `git log -1` 为准**。
 
-**261116 · v1.2.0 基线（`modernize/web-platform-261115` 已合 master 并打 tag）**
+**261116 · v1.3.0 基线（AI 写作能力 + review 收口，tag `v1.3.0`）**
 
-- **分支**：72 commit / 276 文件 / +11,572 −1,163 / 新增测试文件 35；master 由 `7e2db298` fast-forward 到 `b8713924`（发版 commit 之后），备份 tag `backup/master-261115` → `0f900a1a`；双远端同步（HEAD 以 `git log -1` 为准）。
-- **门禁（发版前最后一次全量）**：`tsc` 0；全量 vitest **文件 992（979 passed / 13 skipped）/ 用例 6219（6205 passed / 14 skipped）/ 0 failed**；`ui-metrics` 0；`check:core`（181 文件 0 违规）/ `check:mobileui` / `check:bundle`+`check:arch`（移动首屏 345.1KB / 350KB、移动 entry 50,402B / 51,200B；桌面首屏 577.1KB / 600KB）/ `cssLayers`/`primitives`/`mobileLayers` 全过。
-- **视觉/设备门禁**：桌面 `stylesnap` 42 态（严格比对 34；跳过 8 窄窗 + `note-info`/`settings-about` 两个异步竞态态，已写入脚本头 `FLAKY_ASYNC` 并说明证据）；移动 `mobile-snap` 10/10；`bitablesnap` 3/3；23 屏走查 23/23；平板窗口矩阵 7 档 `pass:true`；打包版窗口状态 smoke（120,120,1000,700 持久化一致）。
-- **未跑**：真实 API Key 下的流式对话（AI 面板只用 mock DOM 验过样式与分支交互）。
+- **分支**：`v1.2.0..v1.3.0` = 18 commit / 91 文件 / +6.2k −0.4k；master 与双远端同步（HEAD 以 `git log -1` 为准）；上一 release = `v1.2.0`（tag `23efabf4`）。
+- **门禁（发版前最后一次全量）**：`tsc` 0；`typecheck:electron`（无 DOM）0；全量 vitest **文件 1014（1001 passed / 13 skipped）/ 用例 6403（6389 passed / 14 skipped）/ 0 failed**；`ui-metrics` 0；`cssLayers`（kit 754 / aiDialogParts 167 / aiWriting 497 / compat 157）/ `primitives` / `mobileLayers` 全过；`check:arch` 0 违规；`check:bundle` PASS（桌面首屏 590.9KB / 600KB）。
+- **视觉/设备门禁**：本批未重跑桌面 `stylesnap` 42 态与移动 `mobile-snap` 10 态（改动集中在 AI 面与新 kit 原语，AI 面不在覆盖内；其余仅 kit 新增/删除重复规则）。上一次完整视觉基线 = v1.2.0 的 42 态/10 态/3 态（见上一条历史记录）。
+- **未跑/已知边界**：真实 API Key 下的流式对话；AI 面视觉基线（P2-7）；多文档推理 PDF 注入；备份不含粘贴图。
 **版本与仓库**
 
 - 主分支 `master`；**HEAD 以 `git log -1` 为准**；R2 已提交 6 笔拆分/设备记录（`a23631f6` sidebar / `fd268432` settings / `231fe845` electron boot / `c00d3a60` lakeRuntime / `4a9b965c` ink 测试 / `e352e2cb` 设备记录）；**产品代码基线 = `8e20a6a3`（R0）/ `e87016bd`（R1）/ `e352e2cb`（R2）/ `3fad8821`（R2 收尾：位置合并 + 同步专用写路径 + 单篇降级）**；**日记收口批产品笔 = `199f3403`（不可变守卫）/ `fd58dc0a`（移动移除取消标记）/ `d4d03260`（移动目标剔除日记子树）/ `f965e62c`（转文档共享弹窗）/ `4b6a524a`（转小记媒体搬运）/ `400dcc75`（showNotice 全空间可见）**；**261113 批 = `839c7a93`（发版复核 P2/P3）/ `a57cf3cf`（移动端「转为小记」+ 22 号报告 §11 + RELEASE.md Secrets 节）**（详见 §0）。

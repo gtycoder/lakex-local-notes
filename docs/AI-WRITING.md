@@ -55,7 +55,11 @@ ai_writing_messages(id TEXT PK, conversation_id TEXT, role TEXT, content TEXT,
   多选 ≤ 剩余槽位，已添加的标灰；小记图片下一批（资源根路径语义待定）。
 - 资产枚举 IPC：`list_note_image_assets(noteId)`（主进程读 `note-assets/{noteId}`，只回 filename/size/mimeType，
   **不算 sha**；与 Android `listImageAssets` 同口径）——通道数因此 188 → 189。
-- 展示：chips / 历史气泡缩略图都走本地资源服务器直链（`?w=128` + access token），文件被清理则显示破图；
+- 展示：chips / 历史气泡缩略图都走本地资源服务器直链（`?w=128`），文件被清理则显示破图。
+  **两类附件的 URL 形态不同**：文档资产图 = `/{noteId}/{filename}` 且**带 access token**（渲染层可能用
+  fetch 取字节，例如复制/预览）；本机图 = `/ai-local/<token>`，只以 `<img src>` 使用（非 CORS 请求不带
+  Origin ⇒ 资源服务器不要求 asset token），token 本身即不可猜的能力（UUID v4）。将来若要用 fetch 取本机图
+  字节（复制到剪贴板/下载），必须同时补 asset token 与 ACAO，否则会被 403。
   发送时主进程对缺失/超大/非图片**明确报错**（不静默去图）。
 - **视觉能力不可探测**：供应商配置没有 vision 字段、模型名自由填写 ⇒ 照发；失败且错误里含 400/参数类时，
   在 `aiErrors` 归类文案后追加一句可执行提示（换支持视觉的模型 / 移除图片重试），
@@ -90,7 +94,7 @@ UI、请求组装、IPC 校验都读它，测试 `src/core/aiWriting.test.ts` �
 - **不新增「全库附件枚举/分页搜索」IPC**：对话写作先浏览文档（寻址层级）再取该文档附件即可；2 万文档 / 20 万附件
   量级下全库扫描没有收益，且会把「选附件」变成搜索基础设施。若未来真要做全库搜索，先重新过需求三问，不要顺手扩。
 - 附件仍只收录「文档引用的资产」，不列资源页孤儿/缺失。
-- 通道数最终 = **190**（189 + 本机文件选择 `pick_ai_local_files`）；四面 = registrar / preload / native 封装 / WEB_METHODS。
+- 通道数最终 = **191**（189 `list_note_image_assets` + 190 `pick_ai_local_files` + 191 `ai_save_pasted_image`）；四面 = registrar / preload / native 封装 / WEB_METHODS。
 
 ### 本机文件附件（对话写作）
 
@@ -124,14 +128,14 @@ UI、请求组装、IPC 校验都读它，测试 `src/core/aiWriting.test.ts` �
 | --- | --- | --- |
 | 纯逻辑 | `src/core/aiWriting.ts` | 会话/消息形状、标题推导、日期分组、资料/历史预算、请求组装；**IPC 载荷类型也在这里**（native 桥与主进程共用一份） |
 | 主进程数据 | `electron/aiWritingRepository.ts` + `schemaInit.ts` | 两张本地表 + CRUD（级联删除、排序、updated_at 推进） |
-| 主进程入口 | `electron/ipc/registerAiWriting.ts` | 9 个通道：校验/上限 → 仓库；通道三方一致由 `ipcChannelParity` 守 |
+| 主进程入口 | `electron/ipc/registerAiWriting.ts` | 11 个通道：校验/上限 → 仓库（含 `pick_ai_local_files` 与 `ai_save_pasted_image`）；通道三方一致由 `ipcChannelParity` 守 |
 | 一轮生成 | `src/features/aiWriting/aiWritingTurn.ts` | 流式聚合 + **停止/失败语义唯一实现**（stop 先置位再取消；abort 后正常结束也算停止） |
 | 资料读取 | `src/features/aiWriting/aiWritingContext.ts` | 注入 reader；文档优先 Markdown 缓存、小记取纯文本；单篇失败只跳过 |
 | 转换 | `src/features/aiWriting/convertAiMarkdown.ts` | Markdown→Lake（仅 render-timeout 重建重试一次，其它错误不重试；可见性等待 + 可取消） |
 | 答案渲染 | `AiAnswerViewer.tsx` + `aiAnswerViewer.css` | **lazy 边界**：只读 viewer + `setDocument("text/markdown")`（内核原生解析）；懒挂载、单实例复用、pending→rich 切换 |
 | 状态 | `src/features/aiWriting/useAiWriting.ts` | 列表/当前会话/输入卡/发送/停止/重新生成（只做编排，不写网络） |
 | 视图 | `AiWritingSidebar / AiComposer / AiPromptLibrary / AiDocPicker / AiImagePicker / AiMessageView / SaveQuickNoteDialog / AiWritingWorkspace` | 语雀同款交互；样式 `aiWriting.css`（`layer(feature)`，只用令牌） |
-| 图片附件 | `AiImagePicker.tsx` + `aiWritingAttachments.ts` | 选图器（docRefs 文档里的图片）+ 引用→资源 URL 换算（`?w=128` + token；不读字节、不转 base64） |
+| 图片附件 | `AiImagePicker.tsx` + `aiWritingAttachments.ts` | 选图器（docRefs 文档里的图片）+ 引用→资源 URL 换算（`?w=128`；资产图带 token、本机图走 `/ai-local/<token>`；不读字节、不转 base64） |
 | 共享弹窗 | `src/components/app/PublishDocDialog.tsx` + `styles/app/dialogs.css` 的 `.publish-doc*` | 「保存为文档」目标选择（浮窗：只选笔记本 + 标题可改）；与日记「转为文档」共用（261112 task-91，候选由调用方按 core 判据过滤：AI 用 `selectableNotebooks`；日记用 `moveTargetCandidates` 后只留 notebook（不出现分组/日记本），标题默认日期键可改） |
 | 壳层 | `desktopTypes` / `DesktopTopBar` / `useDesktopLifecycle` / `App` | 新空间 `ai-writing`（⌘4，空间菜单第 4 项；隐藏目录栏） |
 
@@ -192,6 +196,7 @@ UI、请求组装、IPC 校验都读它，测试 `src/core/aiWriting.test.ts` �
 ## 已知边界（review 记录）
 
 - 会话/消息只在本机主库：**整库备份**（DB 快照）会带上；**便携包**（桌面→手机）只搬笔记/小记/标签，**不含 AI 会话**（用户定稿：不跨端）。
+- **整库备份不含粘贴图**：`<userData>/ai-attachments/` 是设备本地临时文件（启动时清理无引用且 >7 天的），DB 快照恢复后历史里的粘贴图会失效（明确报「本机文件附件已失效」），不是静默丢；需要保留图片请用原图/文档资产。
 - 答案 viewer 复用固定 noteId `ai-writing-answer` 只为资源解析，不落盘、不建树节点；AI 输出里的远程图片按 URL 直出。
 - 流式期间仍用 MarkdownView（收尾后切内核 viewer），与语雀「直接流进 viewer」不同：实时 viewer 需要高频 `setDocument` 重排，按收益/复杂度暂不做（用户 261109 确认以实际效果为主即可）。
 
@@ -200,7 +205,7 @@ UI、请求组装、IPC 校验都读它，测试 `src/core/aiWriting.test.ts` �
 - 单测：`core/aiWriting.test.ts`（标题/分组/预算/消息组装）、`aiWritingRepository.test.ts`（CRUD/级联/排序）、
   `aiWritingTurn.test.ts`（正常/停止/失败/结果兜底）、`aiWritingContext.test.ts`（缓存回落/跳过/截断）、
   `aiWritingDocs.test.ts`（可选集合/窗口/上限/切换）、`convertAiMarkdown.test.ts`（重试策略）。
-- 通道：`ipcChannelParity`（注册↔preload↔WEB_METHODS；现 189；261116 附件选择器 +1 = `list_note_image_assets`）。
+- 通道：`ipcChannelParity`（注册↔preload↔WEB_METHODS；现 **191**：189 `list_note_image_assets`、190 `pick_ai_local_files`、191 `ai_save_pasted_image`）。
 - 样式：`ui-metrics`（0 颜色字面量 / 0 字号字面量 / !important 不变）+ `cssLayers.test.ts`（新文件已登记基线 430）。
 - 设备/视觉：本页是桌面空间，按 AGENTS §3#21 只在改动外壳几何时跑 `check:stylesnap` 的相关态。
 
@@ -225,7 +230,7 @@ UI、请求组装、IPC 校验都读它，测试 `src/core/aiWriting.test.ts` �
   改为「大小 / N 页」（仅 `kind:"local"` 且 `pages` 存在时）；不新增节点、不动缩略图/预览按钮；
   `AiMessageView` 未改（历史 chips 保持现状）。
 - **IPC**：复用 `pick_ai_local_files`（dialog 过滤扩展名加 `pdf`；选择时解析，失败抛可执行中文错误）；
-  **通道数仍 190**，未新增通道。
+  Phase 2 本身未新增通道（仍 190）；随后粘贴图片批 +1 `ai_save_pasted_image` ⇒ 现 **191**。
 - **持久化/历史**：附件只随当轮 user 发送、历史不重发；`pages` 走 `normalizeAiWritingAttachments` 白名单映射
   （不补字段会被静默丢弃，已有测试钉住）。
 - **已知限制**：加密 PDF 即使知道密码也不支持（不做密码输入 UI）；扫描件不做 OCR；docx/Excel 等不解析；
