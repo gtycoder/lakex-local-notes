@@ -274,7 +274,6 @@ export function LakeEditor({ noteId, content, mode = "editor", interaction = "ed
             openOriginal: openOriginalFromMenu,
             cut: () => { cutCardElement(cardMenu.el); },
             rename: (it) => { setRenameItem({ item: it, el: cardMenu.el }); },
-            copyName: (it) => { void navigator.clipboard.writeText(it.name).catch(() => undefined); },
             saveAs: (it) => { if (it.ref) void native.saveAssetAs(it.ref.noteId, it.ref.filename, it.name)
               .catch((reason) => setError(getNativeErrorMessage(reason))); },
           }}

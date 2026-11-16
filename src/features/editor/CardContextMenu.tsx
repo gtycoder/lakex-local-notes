@@ -1,10 +1,11 @@
 /**
  * 卡片 / 文本右键（移动端为长按）菜单，桌面与移动端共用。
  * 顺序理念与文档右键一致：编辑动作（剪切/复制）→ 打开 → 文件位置 → 导出（另存为）。
- * 复制类动作合并进「复制 ▸」子菜单；动作由调用方注入，组件只负责排版与关闭。
+ * 261116 用户裁决：**复制类动作不再收进子菜单**（图片右键只保留一级菜单）——「复制」「复制路径」直接平铺，
+ * 并移除「复制名称」那一项；动作由调用方注入，组件只负责排版与关闭。
  */
-import { ClipboardPaste, Copy, Download, ExternalLink, FolderOpen, Pencil, Scissors, BoxSelect } from "lucide-react";
-import { Menu, Submenu } from "../../components/ui/Overlay";
+import { ClipboardPaste, Copy, Download, ExternalLink, FolderOpen, Link2, Pencil, Scissors, BoxSelect } from "lucide-react";
+import { Menu } from "../../components/ui/Overlay";
 import { usePopoverPosition } from "../../hooks/usePopoverPosition";
 import type { AttachmentPreviewItem } from "../attachment/attachmentPreviewController";
 
@@ -23,8 +24,6 @@ export interface CardMenuActions {
   copyPath?: (item: AttachmentPreviewItem) => void;
   /** 另存为…（桌面） */
   saveAs?: (item: AttachmentPreviewItem) => void;
-  /** 复制文件名（两端都有） */
-  copyName?: (item: AttachmentPreviewItem) => void;
 }
 
 const MENU_MAX_W = 232;
@@ -49,26 +48,19 @@ export function CardContextMenu({ x, y, item, actions, onClose }: {
   const { surfaceRef, style } = usePopoverPosition({ open: true, at: { x, y }, width: MENU_MAX_W });
   const run = (fn?: (it: AttachmentPreviewItem) => void): void => { fn?.(item); onClose(); };
 
-  const copyItems: Array<[string, (it: AttachmentPreviewItem) => void]> = [];
-  if (ref && item.kind === "image" && actions.copyImage) copyItems.push(["复制图片", actions.copyImage]);
-  if (ref && actions.copyPath) copyItems.push(["复制文件路径", actions.copyPath]);
-  if (actions.copyName) copyItems.push(["复制文件名", actions.copyName]);
+  // 复制类动作平铺在一级菜单（261116 用户裁决）：图片 = 复制，文件 = 复制路径；不再提供名称复制项。
+  const copyItems: Array<{ label: string; icon: React.ReactNode; fn: (it: AttachmentPreviewItem) => void }> = [];
+  if (ref && item.kind === "image" && actions.copyImage) copyItems.push({ label: "复制", icon: <Copy size={15} />, fn: actions.copyImage });
+  if (ref && actions.copyPath) copyItems.push({ label: "复制路径", icon: <Link2 size={15} />, fn: actions.copyPath });
 
   return (
     <Menu surfaceClassName="context-menu" surfaceRef={surfaceRef} onDismiss={onClose} style={style ?? undefined}>
       {actions.cut && (
         <button className="ln-menu__item" role="menuitem" onClick={() => run(actions.cut)}><Scissors size={15} /><span>剪切</span></button>
       )}
-      {copyItems.length === 1 && (
-        <button className="ln-menu__item" role="menuitem" onClick={() => run(copyItems[0][1])}><Copy size={15} /><span>{copyItems[0][0]}</span></button>
-      )}
-      {copyItems.length > 1 && (
-        <Submenu label={<><Copy size={15} /><span>复制</span></>}>
-          {copyItems.map(([label, fn]) => (
-            <button className="ln-menu__item" key={label} role="menuitem" onClick={() => run(fn)}>{label}</button>
-          ))}
-        </Submenu>
-      )}
+      {copyItems.map(({ label, icon, fn }) => (
+        <button className="ln-menu__item" key={label} role="menuitem" onClick={() => run(fn)}>{icon}<span>{label}</span></button>
+      ))}
       {actions.rename && item.cardName === "file" && (
         <button className="ln-menu__item" role="menuitem" onClick={() => run(actions.rename)}><Pencil size={15} /><span>重命名</span></button>
       )}

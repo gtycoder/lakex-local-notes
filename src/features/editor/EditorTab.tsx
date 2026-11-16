@@ -1135,7 +1135,6 @@ export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance
             copyImage: (it) => { if (it.ref) void native.copyAssetImage(it.ref.noteId, it.ref.filename).catch((error) => reportNativeActionError("复制图片", error)); },
             copyPath: (it) => { if (it.ref) void native.copyAssetPath(it.ref.noteId, it.ref.filename).catch((error) => reportNativeActionError("复制资源路径", error)); },
             saveAs: (it) => { if (it.ref) void native.saveAssetAs(it.ref.noteId, it.ref.filename, it.name).catch((error) => reportNativeActionError("另存资源", error)); },
-            copyName: (it) => { void navigator.clipboard.writeText(it.name).catch(() => undefined); },
           }}
           onClose={() => setCardMenu(null)}
         />
