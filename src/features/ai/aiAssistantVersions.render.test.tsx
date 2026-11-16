@@ -16,7 +16,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AiChatResult } from "../../core/aiProviders";
 
 const chat = vi.hoisted(() => ({ run: vi.fn(), cancel: vi.fn() }));
-vi.mock("../../lib/ai", () => ({ newAiRequestId: () => "versions-test", runAiChat: chat.run, cancelAiChat: chat.cancel }));
+vi.mock("../../lib/ai", () => ({ newAiRequestId: () => "versions-test", runAiChat: chat.run, cancelAiChat: chat.cancel, loadAiSettings: () => Promise.resolve({ version: 1, activeProviderId: "deepseek", providers: [{ id: "deepseek", protocol: "openai-compatible", baseUrl: "", model: "", temperature: 0.7, thinking: "enabled", hasApiKey: true }] }) }));
 vi.mock("../../components/ui/Overlay", () => ({
   Popover: ({ open, children }: { open: boolean; children: ReactNode }) => open ? children : null,
   Dialog: ({ open, children }: { open?: boolean; children: ReactNode }) => open === false ? null : children,

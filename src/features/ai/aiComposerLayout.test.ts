@@ -2,44 +2,50 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 /**
- * AI 助手输入条的版式护栏（261116 用户裁决）。
+ * AI 助手输入卡的版式护栏（261116 用户裁决，第三稿 = 对齐 chat-demo）。
  *
- * 背景：8a8ff43c 把输入区改成「DeepSeek 式大卡片」（两行：文本 + 工具行，清除 × 在左下角）。
- * 用户 261116 裁决**恢复原样**：单行输入条（复用 kit 的 .ln-input）、默认一行自增高、清除 × 在输入条最右侧，
- * 生成/发送回到下方动作行。这里用源码断言钉住，避免下次重排时又回到大卡片。
+ * 造型：一张大圆角卡片 = 上方输入（无边框、随内容自增高）+ 底部一行控制；
+ * 左 = 深度思考开关（可关）+ 清除，右 = 添加附件 + 圆形发送（生成中同格变停止）。
+ * 历史：8a8ff43c 曾改「两行大卡片」，261116 先恢复单行输入条，随后按 chat-demo 定稿为本卡片；
+ * 这里用源码断言钉住当前形状，避免下次重排又漂走。
  */
 const read = (file: string) => readFileSync(new URL(file, import.meta.url), "utf8");
 
-describe("AI 助手输入条版式（261116 定稿）", () => {
+describe("AI 助手输入卡版式（261116 chat-demo 定稿）", () => {
   const src = read("./AiAssistantDialog.tsx");
+  const composerStart = src.indexOf('className="ai-dialog__composer ai-dialog__composer--chat"');
+  const composer = composerStart >= 0 ? src.slice(composerStart, src.indexOf("ai-dialog__actions", composerStart)) : "";
 
-  it("输入条是 .ln-input 单行原语，默认一行（rows=1）且随内容自增高", () => {
-    expect(src).toContain('className="ln-input ai-dialog__composer"');
-    expect(src).toContain("rows={1}");
-    expect(src).toContain("ai-dialog__field");
+  it("输入卡是单张卡片，内含自增高 textarea（rows=1）", () => {
+    expect(composerStart).toBeGreaterThan(0);
+    expect(composer).toContain('className="ai-dialog__field"');
+    expect(composer).toContain("rows={1}");
   });
 
-  it("清除 × 是输入条里最后一个元素（最右侧），不在工具行里", () => {
-    const composer = src.slice(src.indexOf('className="ln-input ai-dialog__composer"'));
-    const clearAt = composer.indexOf("ln-input__clear ai-dialog__clear");
-    const composerEnd = composer.indexOf("ai-dialog__actions");
-    expect(clearAt).toBeGreaterThan(0);
-    expect(clearAt).toBeLessThan(composerEnd); // 在输入条内部
-    expect(composer.slice(clearAt + 40, composerEnd)).not.toContain("ai-dialog__composer-bar");
-    expect(src).not.toContain("ai-dialog__composer-bar");
-    expect(src).not.toContain("ai-dialog__composer-tools");
+  it("底部一行：左侧深度思考开关（aria-pressed 可关）+ 右侧圆形发送", () => {
+    expect(composer).toContain("ai-dialog__composer-tools");
+    expect(composer).toContain("ai-dialog__pill");
+    expect(composer).toContain('aria-pressed={thinking}');
+    expect(composer).toContain("深度思考");
+    expect(composer).toContain("ai-dialog__send-circle");
   });
 
-  it("生成/发送/停止在下方动作行（与改造前一致），不在输入条内", () => {
+  it("发送/停止已回到输入卡内，不再挂在动作行", () => {
+    expect(composer).toContain("停止生成");
     const actions = src.slice(src.indexOf('className="ln-dialog__actions ai-dialog__actions"'));
-    expect(actions).toContain("生成");
-    expect(actions.indexOf("生成")).toBeLessThan(actions.indexOf("关闭"));
+    expect(actions).toContain("关闭");
+    expect(actions).not.toContain(">生成<");
+    expect(actions).not.toContain(">发送<");
   });
 
-  it("附加当前文档全文是输入条外的独立行（不混排进输入条）", () => {
+  it("AI 助手不做附件（261116 用户裁决：附件是 AI 写作空间的需求，这里不放入口）", () => {
+    expect(src).not.toContain("ai-dialog__attach");
+    expect(src).not.toContain("添加附件");
+  });
+
+  it("附加当前文档全文仍是输入卡外的独立行（不混排进卡片）", () => {
     const docAt = src.indexOf('className="ai-dialog__doc"');
-    const composerAt = src.indexOf('className="ln-input ai-dialog__composer"');
     expect(docAt).toBeGreaterThan(0);
-    expect(docAt).toBeLessThan(composerAt);
+    expect(docAt).toBeLessThan(composerStart);
   });
 });

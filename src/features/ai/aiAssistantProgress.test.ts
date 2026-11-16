@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AiChatResult } from "../../core/aiProviders";
 
 const chat = vi.hoisted(() => ({ run: vi.fn(), cancel: vi.fn() }));
-vi.mock("../../lib/ai", () => ({ newAiRequestId: () => "progress-test", runAiChat: chat.run, cancelAiChat: chat.cancel }));
+vi.mock("../../lib/ai", () => ({ newAiRequestId: () => "progress-test", runAiChat: chat.run, cancelAiChat: chat.cancel, loadAiSettings: () => Promise.resolve({ version: 1, activeProviderId: "deepseek", providers: [{ id: "deepseek", protocol: "openai-compatible", baseUrl: "", model: "", temperature: 0.7, thinking: "enabled", hasApiKey: true }] }) }));
 // 只隔离浮层定位与 IPC；面板状态、输入、增量渲染和停止逻辑均运行真实组件。
 vi.mock("../../components/ui/Overlay", () => ({
   Popover: ({ open, children }: { open: boolean; children: ReactNode }) => open ? children : null,
@@ -90,5 +90,30 @@ describe("AI 请求状态反馈", () => {
   it("请求抛错时同样不遗留转圈状态", async () => {
     start(); await act(async () => reject(new Error("连接断开")));
     expect(progress()).toBeNull(); expect(host.textContent).toContain("连接断开");
+  });
+
+  it("深度思考开关：默认开时请求带 thinking=enabled，关掉后同一处带 disabled（请求级覆盖）", () => {
+    const pill = host.querySelector<HTMLButtonElement>(".ai-dialog__pill")!;
+    expect(pill).not.toBeNull();
+    expect(pill.getAttribute("aria-pressed")).toBe("true");
+    start();
+    expect(chat.run.mock.calls[0][4]).toEqual({ thinking: "enabled" });
+  });
+
+  it("深度思考关闭后本次请求 thinking=disabled，且不影响下一次的默认值", async () => {
+    const pill = host.querySelector<HTMLButtonElement>(".ai-dialog__pill")!;
+    act(() => pill.click());
+    expect(pill.getAttribute("aria-pressed")).toBe("false");
+    start();
+    expect(chat.run.mock.calls[0][4]).toEqual({ thinking: "disabled" });
+    await act(async () => settle({ ok: true, text: "好" }));
+    // 再问一轮：开关状态保持
+    const field = host.querySelector("textarea")!;
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(field, "再问一次");
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    click("发送");
+    expect(chat.run.mock.calls[1][4]).toEqual({ thinking: "disabled" });
   });
 });

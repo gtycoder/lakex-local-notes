@@ -6,7 +6,7 @@ import type { AiChatResult } from "../../core/aiProviders";
 
 const nativeMock = vi.hoisted(() => ({ readNoteCaches: vi.fn() }));
 const chat = vi.hoisted(() => ({ run: vi.fn(), cancel: vi.fn() }));
-vi.mock("../../lib/ai", () => ({ newAiRequestId: () => "doc-test", runAiChat: chat.run, cancelAiChat: chat.cancel }));
+vi.mock("../../lib/ai", () => ({ newAiRequestId: () => "doc-test", runAiChat: chat.run, cancelAiChat: chat.cancel, loadAiSettings: () => Promise.resolve({ version: 1, activeProviderId: "deepseek", providers: [{ id: "deepseek", protocol: "openai-compatible", baseUrl: "", model: "", temperature: 0.7, thinking: "enabled", hasApiKey: true }] }) }));
 vi.mock("../../lib/native", () => ({ native: nativeMock }));
 // 只隔离浮层定位与 IPC；面板状态、开关、输入与发送全部跑真实组件。
 vi.mock("../../components/ui/Overlay", () => ({

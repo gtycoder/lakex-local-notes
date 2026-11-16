@@ -220,7 +220,9 @@ contextBridge.exposeInMainWorld("lakeNative", {
   aiSaveSettings: (patch) => invoke("ai_save_settings", patch),
   aiTestConnection: (draft) => invoke("ai_test_connection", draft),
   aiListModels: (draft) => invoke("ai_list_models", draft),
-  aiChat: (requestId, messages) => invoke("ai_chat", requestId, messages),
+  // 第三个参数 = 请求级覆盖（{ thinking }: "enabled" | "disabled"）。**不传时只带两个参数**，
+  // 保证未使用该开关时 IPC payload 与本次改动前逐字节一致（AGENTS §7.6 三处同步之②）。
+  aiChat: (requestId, messages, options) => invoke("ai_chat", requestId, messages, ...(options === undefined ? [] : [options])),
   aiCancel: (requestId) => invoke("ai_cancel", requestId),
   // AI 写作空间（261109，桌面本地会话；不走 S3）
   aiWritingList: () => invoke("ai_writing_list"),

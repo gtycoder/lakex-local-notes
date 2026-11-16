@@ -68,6 +68,17 @@ describe("startAiWritingTurn", () => {
     expect(result.stopped).toBe(false);
   });
 
+  it("请求级选项（深度思考）原样透传给 run（不传 = 不覆盖供应商默认值）", async () => {
+    const seen: unknown[] = [];
+    const deps: AiWritingTurnDeps = {
+      run: async (_id, _m, _d, _r, options) => { seen.push(options); return { ok: true }; },
+      cancel: vi.fn(async () => undefined),
+    };
+    await startAiWritingTurn({ requestId: "r1", messages: MSGS, deps, now: NOW, options: { thinking: "disabled" } }).result;
+    await startAiWritingTurn({ requestId: "r2", messages: MSGS, deps, now: NOW }).result;
+    expect(seen).toEqual([{ thinking: "disabled" }, undefined]);
+  });
+
   it("非 Error 抛出也给出可读错误", async () => {
     const deps = makeDeps({ run: async () => { throw "boom"; } });
     const result = await startAiWritingTurn({ requestId: "r1", messages: MSGS, deps, now: NOW }).result;

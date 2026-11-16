@@ -4,7 +4,8 @@ import { Store } from "../store.js";
 import { aiChat, aiListModels, aiTestProvider } from "../ai/aiClient.js";
 import { assertMessages } from "../ai/aiChatMessages.js";
 import { resolveAiMessages } from "../ai/aiContentResolver.js";
-import { activeAiProvider, aiBaseUrlChangeError, aiSettingsView, mergeAiSettings, validateAiBaseUrl, type AiProviderConfig, type AiProviderPatch, type AiSettings, type AiSettingsPatch } from "../../src/core/aiProviders.js";
+import { parseThinkingOverride } from "../ai/aiThinking.js";
+import { activeAiProvider, aiBaseUrlChangeError, aiSettingsView, mergeAiSettings, validateAiBaseUrl, type AiChatRequestOptions, type AiProviderConfig, type AiProviderPatch, type AiSettings, type AiSettingsPatch } from "../../src/core/aiProviders.js";
 import { aiErrorInfo, aiErrorMessage } from "../../src/core/aiErrors.js";
 import { IpcInputError } from "../ipcLimits.js";
 
@@ -74,7 +75,9 @@ export function registerAiIpc(ipc: IpcRegistrar, store: Store): void {
     }
   });
 
-  ipc.handleEvent("ai_chat", async (event: IpcMainInvokeEvent, requestId: unknown, messages: unknown) => {
+  // 第三参 = 请求级覆盖（AiChatRequestOptions）：可选，缺省 = 与改动前行为逐字节一致。
+  // 坏值不抛错（parseThinkingOverride 收敛成 undefined），避免旧渲染层/历史脏值让对话直接失败。
+  ipc.handleEvent("ai_chat", async (event: IpcMainInvokeEvent, requestId: unknown, messages: unknown, requestOptions?: unknown) => {
     const id = typeof requestId === "string" && requestId ? requestId : "ai-" + Date.now();
     const provider = activeAiProvider(store.getAiSettings());
     if (!provider || !provider.apiKey || !provider.model) return { ok: false, error: "尚未配置 AI 供应商（设置 - AI）" };
@@ -86,12 +89,15 @@ export function registerAiIpc(ipc: IpcRegistrar, store: Store): void {
     inflight.set(id, controller);
     try {
       const resolved = await resolveAiMessages(assertMessages(messages), store);
+      // 「深度思考」开关（261116 用户裁决）：只在 provider 支持 thinking 时生效，否则忽略（不伪造参数）。
+      const thinkingOverride = parseThinkingOverride(requestOptions as AiChatRequestOptions | undefined);
       // 思考内容与正文同一条通道：reasoning:true 的增量只给「已深度思考」卡片（不进上下文）。
       let reasoning = "";
       const text = await aiChat({
         provider,
         messages: resolved,
         signal: controller.signal,
+        thinkingOverride,
         onDelta: (delta) => { try { event.sender.send("ai:stream", { requestId: id, delta }); } catch { /* 窗口已关 */ } },
         onReasoning: (delta) => {
           reasoning += delta;

@@ -101,27 +101,40 @@
 .aiw-dock { flex: none; padding: 0 var(--lake-space-xxl) var(--lake-space-lg); }
 .aiw-dock .aiw-composer, .aiw-empty .aiw-composer { width: min(var(--lake-chat-thread-max), 100%); margin: 0 auto; }
 
-/* ---------------- 输入卡 ---------------- */
-.aiw-composer { position: relative; padding: calc(var(--lake-space-sm) + var(--lake-space-xs)) var(--lake-space-lg); border: 0.5px solid var(--lake-ctl-border); border-radius: var(--lake-chat-radius-composer); background: var(--lake-bg-panel); box-shadow: var(--lake-shadow-card); }
+/* ---------------- 输入卡（261116 chat-demo 定稿；对齐 AI 助手 ai-dialog__composer） ---------------- */
+/* 一张大圆角卡片：上方无边框输入 + 底部一行控制。令牌与 AI 助手完全同口径
+   （--lake-chat-radius-composer / --lake-shadow-card / 0.5px 边 / --lake-disabled-opacity）。 */
+.aiw-composer { position: relative; padding: var(--lake-space-md) var(--lake-space-lg) var(--lake-space-sm); border: 0.5px solid var(--lake-ctl-border); border-radius: var(--lake-chat-radius-composer); background: var(--lake-bg-panel); box-shadow: var(--lake-shadow-card); }
 .aiw-composer:focus-within { border-color: var(--lake-accent); box-shadow: 0 0 0 var(--lake-focus-ring-width) var(--lake-focus-halo), var(--lake-shadow-card); }
 .aiw-composer__chips { display: flex; flex-wrap: wrap; gap: var(--lake-space-xs); padding: 0 0 var(--lake-space-sm); }
 /* chip = .ln-tag（标签原语），关闭钮 = .ln-iconbtn--compact；这里只留「不吃满整行」与 16px 命中盒。 */
 .aiw-chip { max-width: 340px; }
 .aiw-chip__close { flex: none; width: 16px; height: 16px; }
-.aiw-composer__input { display: block; width: 100%; min-height: calc(var(--lake-space-giant) + var(--lake-space-lg)); padding: var(--lake-space-sm) 0 0; border: 0; background: transparent; color: var(--lake-text-1); font-family: var(--lake-font-family); font-size: var(--lake-font-size-body); line-height: var(--lake-line-height-chat); resize: none; outline: none; }
+/* 自增高走 field-sizing: content（与 AI 助手同一做法，不再 JS 量 scrollHeight）；max 160px 后内部滚动。 */
+.aiw-composer__input { display: block; width: 100%; max-height: 160px; padding: var(--lake-space-xxs) 0; border: 0; background: transparent; color: var(--lake-text-1); font-family: var(--lake-font-family); font-size: var(--lake-font-size-body); line-height: 1.55; resize: none; field-sizing: content; outline: none; }
 .aiw-composer__input::placeholder { color: var(--lake-text-4); }
 /* 容器已有 focus-within 的主色边 + 柔光环；输入框自身不再叠一圈 outline。 */
 .aiw-composer__input:focus-visible { outline: none; }
-.aiw-composer__bar { display: flex; align-items: center; justify-content: space-between; gap: var(--lake-space-sm); padding: var(--lake-space-sm) 0 0; }
-.aiw-composer__tools { display: flex; align-items: center; gap: var(--lake-space-xs); }
-/* 工具钮 = ln-btn--ghost（激活追加 ln-btn--secondary.is-selected）；这里只留紧凑档高度与内距。 */
-/* 工具钮 = ln-btn--ghost + ln-btn--compact（尺寸/内距/六态全走原语，这里只收紧图标间距）。 */
-.aiw-tool { gap: var(--lake-space-xxs); }
-.aiw-composer__send { display: flex; align-items: center; gap: var(--lake-space-sm); }
-.aiw-composer__hint { display: inline-flex; align-items: center; gap: var(--lake-space-xxs); color: var(--lake-text-4); font-size: var(--lake-font-size-body); }
-/* 发送 = ln-btn--primary / 停止 = **ln-btn--danger**（红字 + 40% 红框，261111 用户点单：
-   中断要看得见；此前用 secondary 中性档，和「发送」并排时读不出哪个是停止）。这里只固定成正方形。 */
-.aiw-send--stop { width: var(--lake-ctl-h-sm); height: var(--lake-ctl-h-sm); padding: 0; justify-content: center; }
+.aiw-composer__bar { display: flex; align-items: center; justify-content: space-between; gap: var(--lake-space-sm); }
+.aiw-composer__tools { display: flex; align-items: center; flex-wrap: wrap; gap: var(--lake-space-xs); min-width: 0; }
+/* 药丸 = 底部一行的三种开关（深度思考 / 提示词 / 请选择文档）。
+   ⚠️ 与 AI 助手的 .ai-dialog__pill 同几何（28 高 / 药丸圆角 / 0.5px 边 / is-on 主色）；
+   两处是独立懒 chunk 各自一份，若要收成单一来源应提升进 kit 原语（已记在 HANDOFF 建议，不在本批）。 */
+.aiw-pill { display: inline-flex; align-items: center; gap: var(--lake-space-sm); height: 28px; padding: 0 var(--lake-space-lg); border: 0.5px solid var(--lake-ctl-border); border-radius: var(--lake-radius-pill); background: transparent; color: var(--lake-text-2); font-size: var(--lake-font-size-small); cursor: pointer; }
+.aiw-pill:hover:not(:disabled) { background: var(--lake-bg-hover); }
+.aiw-pill.is-on { border-color: var(--lake-accent); background: var(--lake-accent-tint); color: var(--lake-accent-text); }
+.aiw-pill:disabled { opacity: var(--lake-disabled-opacity); cursor: default; }
+/* 添加附件 = **占位**（disabled）：不接管线前不伪造可用态，只保留 32px 圆形命中格与纸夹图标。 */
+.aiw-attach { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border: 0; border-radius: var(--lake-radius-pill); background: transparent; color: var(--lake-text-3); cursor: pointer; }
+.aiw-attach:disabled { opacity: var(--lake-disabled-opacity); cursor: default; }
+.aiw-composer__send { display: flex; align-items: center; gap: var(--lake-space-xs); flex: 0 0 auto; }
+/* 发送 = 32px 圆形主色；生成中**同格**变停止（红底），disabled 45% 透明。 */
+.aiw-send-circle { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border: 0; border-radius: var(--lake-radius-pill); background: var(--lake-accent); color: var(--lake-text-on-accent); cursor: pointer; }
+.aiw-send-circle:hover:not(:disabled) { background: var(--lake-accent-ink); }
+.aiw-send-circle:active:not(:disabled) { transform: scale(.96); }
+.aiw-send-circle:disabled { opacity: var(--lake-disabled-opacity); cursor: default; }
+.aiw-send-circle--stop { background: var(--lake-status-error); }
+.aiw-send-circle--stop:hover:not(:disabled) { background: var(--lake-status-error); }
 
 /* ---------------- 提示词库 ---------------- */
 /* 菜单行列表（与全仓菜单同一身份）：每项 = .ln-menu__item，左侧图标 + 两行文本。 */

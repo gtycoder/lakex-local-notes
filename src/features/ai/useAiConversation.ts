@@ -79,7 +79,7 @@ export interface AiConversation {
   stop: () => void;
 }
 
-export function useAiConversation({ open, request }: { open: boolean; request: AiAssistantRequest }): AiConversation {
+export function useAiConversation({ open, request, thinking }: { open: boolean; request: AiAssistantRequest; /** 请求级深度思考覆盖（undefined = 用供应商当前设置，与改造前一致）。 */ thinking?: boolean }): AiConversation {
   const context = request.context;
   const selectionText = aiSelectionText(context);
   const attachments = aiAttachments(context);
@@ -156,7 +156,9 @@ export function useAiConversation({ open, request }: { open: boolean; request: A
     const wireMessages = withAiSystemMessage(messages, { imageOnly });
     const appendAssistant = (delta: string) => setSession((prev) => appendTurnText(prev, assistantId, delta));
     try {
-      const res = await runAiChat(reqId, wireMessages, appendAssistant);
+      // 请求级深度思考覆盖：undefined = 不传（与改造前逐字节一致）；只在 supportsThinking 的供应商上生效（主进程判据）。
+      const thinkingOptions = thinking === undefined ? undefined : ({ thinking: thinking ? "enabled" : "disabled" } as const);
+      const res = await runAiChat(reqId, wireMessages, appendAssistant, undefined, thinkingOptions);
       if (stoppedRef.current) {
         // 主动停止 ≠ 出错：半截回答留在面板里可复制/插入，但不再进入后续上下文；
         // 一个字都没生成 ⇒ 移除这个空的助手版本（父提问回落到上一个版本）。
@@ -180,7 +182,7 @@ export function useAiConversation({ open, request }: { open: boolean; request: A
     } finally {
       setBusy(false); reqRef.current = null;
     }
-  }, [imageOnly]);
+  }, [imageOnly, thinking]);
 
   /** first=true 用预设+选区/全文起头；first=false 用追问，上下文 = 当前可见路径。 */
   const run = useCallback(async (first: boolean) => {

@@ -224,7 +224,9 @@ export function AiWritingWorkspace({ active, treeNodes, topbarLeading, onOpenSet
                     promptText={controller.promptText}
                     docRefs={controller.docRefs}
                     treeNodes={treeNodes}
+                    thinking={controller.thinking}
                     onInput={controller.setInput}
+                    onThinkingChange={controller.setThinking}
                     onSend={() => controller.send()}
                     onStop={controller.stop}
                     onSetPrompt={controller.setPromptText}
@@ -268,7 +270,9 @@ export function AiWritingWorkspace({ active, treeNodes, topbarLeading, onOpenSet
                   promptText={controller.promptText}
                   docRefs={controller.docRefs}
                   treeNodes={treeNodes}
+                  thinking={controller.thinking}
                   onInput={controller.setInput}
+                  onThinkingChange={controller.setThinking}
                   onSend={() => controller.send()}
                   onStop={controller.stop}
                   onSetPrompt={controller.setPromptText}

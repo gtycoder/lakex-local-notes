@@ -2,7 +2,7 @@ import type { CleanOrphanResult, DataHealthReport, DeepCleanupResult, DocumentTa
 import type { TrashItem } from "../core/trashPolicy";
 import type { NoteKind } from "../core/noteKind";
 import type { MissingBodyDoc, MissingQuickNoteDoc } from "../core/missingBody";
-import type { AiChatMessage, AiChatResult, AiListModelsResult, AiProviderPatch, AiSettingsPatch, AiSettingsView, AiStreamEvent, AiTestResult } from "../core/aiProviders";
+import type { AiChatMessage, AiChatRequestOptions, AiChatResult, AiListModelsResult, AiProviderPatch, AiSettingsPatch, AiSettingsView, AiStreamEvent, AiTestResult } from "../core/aiProviders";
 import type {
   AiWritingComposerPatch,
   AiWritingConversation,
@@ -132,7 +132,8 @@ export interface LakeNative {
   aiTestConnection(draft?: AiProviderPatch): Promise<AiTestResult>;
   /** 拉模型列表（草稿同上）；端点不实现时 ok:false，调用方回落手填。 */
   aiListModels(draft?: AiProviderPatch): Promise<AiListModelsResult>;
-  aiChat(requestId: string, messages: AiChatMessage[]): Promise<AiChatResult>;
+  /** options 缺省 = 用 provider 当前 thinking（与改动前一致）；见 core/aiProviders 的 AiChatRequestOptions。 */
+  aiChat(requestId: string, messages: AiChatMessage[], options?: AiChatRequestOptions): Promise<AiChatResult>;
   aiCancel(requestId: string): Promise<void>;
   onAiStream(callback: (chunk: AiStreamEvent) => void): () => void;
   // ---- AI 写作空间（261109，桌面本地会话；不进 S3）----
@@ -465,7 +466,7 @@ export const native = {
   aiSaveSettings: (patch: AiSettingsPatch) => api().aiSaveSettings(patch),
   aiTestConnection: (draft?: AiProviderPatch) => api().aiTestConnection(draft),
   aiListModels: (draft?: AiProviderPatch) => api().aiListModels(draft),
-  aiChat: (requestId: string, messages: AiChatMessage[]) => api().aiChat(requestId, messages),
+  aiChat: (requestId: string, messages: AiChatMessage[], options?: AiChatRequestOptions) => api().aiChat(requestId, messages, options),
   aiCancel: (requestId: string) => api().aiCancel(requestId),
   onAiStream: (callback: (chunk: AiStreamEvent) => void) => api().onAiStream(callback),
   aiWritingList: () => api().aiWritingList(),

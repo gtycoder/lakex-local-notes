@@ -48,6 +48,9 @@ export interface AiWritingController {
   setPromptText: (text: string | null) => void;
   docRefs: AiWritingDocRef[];
   setDocRefs: (refs: AiWritingDocRef[]) => void;
+  /** 深度思考（261116 用户裁决：默认开、可关）。请求级覆盖 = runAiChat options.thinking。 */
+  thinking: boolean;
+  setThinking: (value: boolean) => void;
   /** AI 可用性（总开关 + 供应商配置 + 供应商名） */
   ready: boolean;
   aiEnabled: boolean;
@@ -82,6 +85,8 @@ export function useAiWriting(options: { active: boolean }): AiWritingController 
   const [input, setInput] = useState("");
   const [promptText, setPromptTextState] = useState<string | null>(null);
   const [docRefs, setDocRefsState] = useState<AiWritingDocRef[]>([]);
+  /** 深度思考开关：默认开（与改造前一致）；关闭 = 请求级覆盖 thinking="disabled"（见 runAssistant）。 */
+  const [thinking, setThinking] = useState(true);
   const [aiEnabled, setAiEnabled] = useState(false);
   const [activeProviderId, setActiveProviderId] = useState(AI_PROVIDERS[0].id);
   const [ready, setReady] = useState(false);
@@ -94,8 +99,8 @@ export function useAiWriting(options: { active: boolean }): AiWritingController 
   /** 发送中的哨兵：busyRef 要等占位消息写入后才置位，连点 Enter 会在这之前重复建会话。 */
   const sendingRef = useRef(false);
   const turnRef = useRef<AiWritingTurn | null>(null);
-  const composerRef = useRef({ mode, promptText, docRefs });
-  composerRef.current = { mode, promptText, docRefs };
+  const composerRef = useRef({ mode, promptText, docRefs, thinking });
+  composerRef.current = { mode, promptText, docRefs, thinking };
 
   /** 主进程读取端口（多文档上下文）；集中一处，便于替换成移动端/Host 实现。 */
   const docReader = useMemo<AiWritingDocReader>(() => ({
@@ -221,7 +226,7 @@ export function useAiWriting(options: { active: boolean }): AiWritingController 
     userText: string;
   }) => {
     const { conversation, history, userText } = params;
-    const { mode: currentMode, promptText: currentPrompt, docRefs: currentRefs } = composerRef.current;
+    const { mode: currentMode, promptText: currentPrompt, docRefs: currentRefs, thinking: currentThinking } = composerRef.current;
     busyRef.current = true;
     setBusy(true);
     setLoadError(null);
@@ -243,6 +248,8 @@ export function useAiWriting(options: { active: boolean }): AiWritingController 
       requestId: newAiRequestId(),
       messages: requestMessages,
       deps: { run: runAiChat, cancel: cancelAiChat },
+      // 深度思考 = 请求级覆盖（261116）：不传 ≠ 关；传 "enabled"/"disabled" 才覆盖供应商默认值。
+      options: { thinking: currentThinking ? "enabled" : "disabled" },
       onPartial: (content, reasoning) => setStream({ messageId: placeholder.id, content, reasoning }),
     });
     turnRef.current = turn;
@@ -326,12 +333,13 @@ export function useAiWriting(options: { active: boolean }): AiWritingController 
   return useMemo(() => ({
     conversations, activeConversation, messages, loading, loadError, busy, stream,
     mode, setMode, input, setInput, promptText, setPromptText, docRefs, setDocRefs,
+    thinking, setThinking,
     ready, aiEnabled, providerLabel: providerLabelOf(activeProviderId),
     newConversation, selectConversation, renameConversation, deleteConversation,
     send, stop, regenerate,
   }), [
     conversations, activeConversation, messages, loading, loadError, busy, stream,
-    mode, setMode, input, promptText, setPromptText, docRefs, setDocRefs,
+    mode, setMode, input, promptText, setPromptText, docRefs, setDocRefs, thinking,
     ready, aiEnabled, activeProviderId,
     newConversation, selectConversation, renameConversation, deleteConversation, send, stop, regenerate,
   ]);

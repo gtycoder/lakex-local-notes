@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 import type { AiProviderConfig, AiReasoningEffort, AiThinkingMode } from "../../src/core/aiProviders.js";
 import { aiErrorInfo } from "../../src/core/aiErrors.js";
+import { resolveThinkingMode } from "./aiThinking.js";
 
 /**
  * 主进程 AI 网关（P0：OpenAI / OpenAI 兼容）。
@@ -93,15 +94,23 @@ export interface AiChatOptions {
   onDelta?: (delta: string) => void;
   /** 思考内容增量（供应商没有思考输出时永不回调）。 */
   onReasoning?: (delta: string) => void;
+  /**
+   * 请求级「深度思考」覆盖（用户开关）。
+   * 缺省 = 用 provider.thinking（与改动前逐字节一致）；只在支持 thinking 的供应商上生效，
+   * 不支持则忽略、不伪造参数（判据见 ./aiThinking.ts）。
+   */
+  thinkingOverride?: AiThinkingMode;
   factory?: AiClientFactory;
 }
 
 /** 流式对话：逐块回调，返回累计文本。 */
-export async function aiChat({ provider, messages, signal, onDelta, onReasoning, factory = defaultAiClientFactory }: AiChatOptions): Promise<string> {
+export async function aiChat({ provider, messages, signal, onDelta, onReasoning, thinkingOverride, factory = defaultAiClientFactory }: AiChatOptions): Promise<string> {
   const client = factory(provider);
   let text = "";
+  // thinking：请求级覆盖优先（仅 supportsThinking 的供应商生效）；不传覆盖时与原实现完全一致。
+  const thinking = resolveThinkingMode(provider, thinkingOverride);
   // 重试由 client 一侧负责（默认工厂已给 SDK maxRetries:1）；这里再重试会造成双重重试与重复输出。
-  for await (const delta of client.streamChat({ model: provider.model, messages, temperature: provider.temperature, reasoningEffort: provider.reasoningEffort, thinking: provider.thinking, signal })) {
+  for await (const delta of client.streamChat({ model: provider.model, messages, temperature: provider.temperature, reasoningEffort: provider.reasoningEffort, thinking, signal })) {
     if (delta.reasoning) {
       onReasoning?.(delta.reasoning);
       continue;

@@ -7,7 +7,7 @@
  *   正常结束流（OpenAI SDK 实测可能不抛错），结果仍然是 stopped=true 且保留已生成片段；
  * - 请求 / 取消实现由调用方注入（宿主用 lib/ai；测试用假实现）。
  */
-import type { AiChatMessage, AiChatResult } from "../../core/aiProviders";
+import type { AiChatMessage, AiChatRequestOptions, AiChatResult } from "../../core/aiProviders";
 
 export interface AiWritingTurnDeps {
   run: (
@@ -15,6 +15,7 @@ export interface AiWritingTurnDeps {
     messages: AiChatMessage[],
     onDelta?: (delta: string) => void,
     onReasoning?: (delta: string) => void,
+    options?: AiChatRequestOptions,
   ) => Promise<AiChatResult>;
   cancel: (requestId: string) => Promise<void>;
 }
@@ -40,6 +41,8 @@ export interface StartAiWritingTurnInput {
   deps: AiWritingTurnDeps;
   /** 流式增量回调（每次增量一次；渲染与落库由调用方决定节奏）。 */
   onPartial?: (content: string, reasoning: string) => void;
+  /** 请求级选项（261116：深度思考开关等）——原样透传给 deps.run（宿主实现 = lib/ai 的 runAiChat）。 */
+  options?: AiChatRequestOptions;
   /** 计时起点（默认 Date.now；测试可注入固定时间）。 */
   now?: () => number;
 }
@@ -69,6 +72,7 @@ export function startAiWritingTurn(input: StartAiWritingTurnInput): AiWritingTur
       reasoning += delta;
       onPartial?.(content, reasoning);
     },
+    input.options,
   ).then(
     (value) => ({
       // 供应商可能把正文放在最终结果里（流式增量缺失时兜底）：有结果值就优先用结果。

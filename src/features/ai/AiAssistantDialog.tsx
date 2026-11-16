@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { Check, Copy, CornerDownRight, LoaderCircle, Pencil, Pin, RotateCcw, X } from "lucide-react";
+import { ArrowUp, Brain, Check, Copy, CornerDownRight, LoaderCircle, Pencil, Pin, RotateCcw, Square, X } from "lucide-react";
 import { AiSparkIcon } from "./AiSparkIcon";
 import { Popover } from "../../components/ui/Overlay";
 import { usePopoverPosition } from "../../hooks/usePopoverPosition";
@@ -13,6 +13,8 @@ import { AI_PROMPT_CUSTOM_ID, AI_PROMPT_CUSTOM_LABEL, type AiPromptPreset } from
 import { aiDocumentNoteId, aiOutputLabel, aiSelectionText, type AiAssistantRequest } from "./aiAssistantRequest";
 import { AI_DIALOG_GAP } from "./aiLayout";
 import { useAiConversation } from "./useAiConversation";
+import { loadAiSettings } from "../../lib/ai";
+import { aiProviderDef } from "../../core/aiProviders";
 import { AiBranchSwitcher } from "./AiBranchSwitcher";
 import { versionsOf } from "./aiConversationTree";
 import "./aiDialogParts.css";
@@ -105,7 +107,26 @@ export function AiAssistantDialog({ open, request, scope, onClose }: {
   const scroller = request.placement.kind === "point" ? request.placement.scroller : undefined;
   const at = request.placement.kind === "point" ? request.placement.at : null;
   const anchor = null; // 统一走 placement（point/floating），不再有隐式 anchor 覆盖。
-  const ai = useAiConversation({ open, request });
+  /** 深度思考开关（261116 用户裁决：从"默认开启且不可关"改成可关）。
+   *  默认开 = 与改造前行为一致；关闭时按请求级覆盖 thinking=disabled（管道见 src/lib/ai.ts 的 runAiChat options）。
+   *  只在该供应商支持 thinking 时显示（判据 = core 的 aiProviderDef(activeId).supportsThinking，不硬编码供应商）。 */
+  const [thinking, setThinking] = useState(true);
+  const [thinkingSupported, setThinkingSupported] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    void loadAiSettings().then((view) => {
+      if (cancelled) return;
+      const def = aiProviderDef(view.activeProviderId);
+      const supported = def?.supportsThinking === true;
+      const active = view.providers.find((provider) => provider.id === view.activeProviderId);
+      setThinkingSupported(supported);
+      // 初值取设置里的默认值（enabled/undefined ⇒ 开）；否则 UI 显示会与实发值不一致。
+      setThinking(supported ? active?.thinking !== "disabled" : true);
+    }).catch(() => { /* 读不到设置就保持默认：不显示开关，行为与改造前一致 */ });
+    return () => { cancelled = true; };
+  }, [open]);
+  const ai = useAiConversation({ open, request, thinking: thinkingSupported ? thinking : undefined });
   const {
     instruction, setInstruction, followUp, setFollowUp, turns, session, busy, error, stopped,
     editing, beginEdit, setEditingText, cancelEdit, commitEdit, selectVersion,
@@ -557,13 +578,13 @@ export function AiAssistantDialog({ open, request, scope, onClose }: {
           <span className="ai-dialog__doc-hint">{docHint}</span>
         </div>
       )}
-      {/* 261116 用户裁决：输入区恢复**原样的单行输入条**（复用 kit 的 .ln-input：边框/聚焦环/占位色都由原语给），
-          默认一行、随内容自增高；清除 × 落在输入条最右侧。发送/生成回到下方动作行（与改造前一致）。 */}
-      <div className="ln-input ai-dialog__composer">
-        <span className="ln-input__icon"><AiSparkIcon size={18} /></span>
+      {/* 261116 用户裁决（第三稿，对齐 chat-demo）：输入区 = 一张大圆角卡片。
+          上方输入（无边框、随内容自增高），底部一行：**左 = 深度思考开关（可关）**，右 = 圆形发送（AI 助手不做附件）；
+          生成中「发送」同一格变「停止」（261008 语义不变）。发送键从动作行移回卡片内。 */}
+      <div className="ai-dialog__composer ai-dialog__composer--chat">
         <textarea
           ref={fieldRef}
-          className="ln-input__field ai-dialog__field"
+          className="ai-dialog__field"
           rows={1}
           placeholder={editing ? "编辑提问…" : turns.length === 0 ? "向智能助手提问…" : "继续追问…"}
           value={editing ? editing.text : turns.length === 0 ? instruction : followUp}
@@ -574,26 +595,51 @@ export function AiAssistantDialog({ open, request, scope, onClose }: {
           }}
           onKeyDown={onFieldKeyDown}
         />
-        {!editing && activeValue && (
-          <button type="button" className="ln-iconbtn ln-iconbtn--compact ln-input__clear ai-dialog__clear" aria-label="清除内容" onClick={() => {
-            if (turns.length === 0) setInstruction(""); else setFollowUp("");
-            fieldRef.current?.focus();
-          }}><X size={12} /></button>
-        )}
+        <div className="ai-dialog__composer-bar">
+          <div className="ai-dialog__composer-tools">
+            <button
+              type="button"
+              className={"ai-dialog__pill" + (thinking ? " is-on" : "")}
+              aria-pressed={thinking}
+              aria-label="深度思考"
+              title={thinking ? "深度思考：开（点击关闭）" : "深度思考：关（点击开启）"}
+              disabled={busy || editing !== null}
+              onClick={() => setThinking((value) => !value)}
+            >
+              <Brain size={14} aria-hidden="true" />
+              <span>深度思考</span>
+            </button>
+            {!editing && activeValue && (
+              <button type="button" className="ai-dialog__pill ai-dialog__pill--icon ai-dialog__clear" aria-label="清除内容" onClick={() => {
+                if (turns.length === 0) setInstruction(""); else setFollowUp("");
+                fieldRef.current?.focus();
+              }}><X size={12} /></button>
+            )}
+          </div>
+          <div className="ai-dialog__composer-right">
+            {/* 261116 用户裁决：AI 助手**不做附件**（附件是 AI 写作空间的需求）。这里只保留发送/停止。 */}
+            {busy ? (
+              <button type="button" className="ai-dialog__send-circle ai-dialog__send-circle--stop" aria-label="停止生成" onClick={stop}>
+                <Square size={14} aria-hidden="true" />
+                <span className="a11y-visually-hidden">停止</span>
+              </button>
+            ) : editing ? (
+              <button type="button" className="ai-dialog__send-circle" aria-label="更新提问" disabled={!editing.text.trim()} onClick={() => void commitEdit()}>
+                <ArrowUp size={16} aria-hidden="true" />
+                <span className="a11y-visually-hidden">更新</span>
+              </button>
+            ) : (
+              <button type="button" className="ai-dialog__send-circle" aria-label={turns.length === 0 ? "生成" : "发送"} disabled={turns.length === 0 ? !canSendFirst : !followUp.trim()} onClick={() => void run(turns.length === 0)}>
+                <ArrowUp size={16} aria-hidden="true" />
+                {/* 图标按钮的可读名沿用视觉隐藏文本：既有测试按 textContent 找「生成/发送」，读屏也读得到。 */}
+                <span className="a11y-visually-hidden">{turns.length === 0 ? "生成" : "发送"}</span>
+              </button>
+            )}
+          </div>
+        </div>
       </div>
 
       <div className="ln-dialog__actions ai-dialog__actions">
-        {/* 生成中 = 「生成/发送」**原位**变「停止」（用户 261008）：中断入口就落在发送键那一格，
-            不再是一个旁边的小按钮。AI 助手三个入口（选区浮栏 / 块句柄菜单 / 顶栏）共用本面板 ⇒ 一处即全覆盖。 */}
-        {busy ? (
-          <button type="button" className="ln-btn ln-btn--secondary ai-dialog__btn" onClick={stop}>停止</button>
-        ) : editing ? (
-          <button type="button" className="ln-btn ln-btn--primary ai-dialog__btn" disabled={!editing.text.trim()} onClick={() => void commitEdit()}>更新</button>
-        ) : turns.length === 0 ? (
-          <button type="button" className="ln-btn ln-btn--primary ai-dialog__btn" disabled={!canSendFirst} onClick={() => void run(true)}>生成</button>
-        ) : (
-          <button type="button" className="ln-btn ln-btn--primary ai-dialog__btn" disabled={!followUp.trim()} onClick={() => void run(false)}>发送</button>
-        )}
         {/* 复制 / 插入 / 替换都依赖生成结果：**没有结果就不出这些选项**，只留「关闭」。 */}
         {/* 全文模式的处理对象是整篇：结果不往选区写（避免"整篇改写覆盖一段"，用户 261021 P1）。 */}
         {lastOutput && !conversationDocMode && request.outputs.map((mode) => (

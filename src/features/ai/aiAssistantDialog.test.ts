@@ -206,7 +206,10 @@ describe("AI 弹窗定位护栏（261004）", () => {
   it("生成中「生成/发送」原位变「停止」：走 ai_cancel，且是中性停止、不报红（用户 261008）", () => {
     // 中断入口必须落在发送键那一格（三个入口共用本面板 ⇒ 一处覆盖全部）
     expect(DIALOG).toContain("{busy ? (");
-    expect(DIALOG).toContain("onClick={stop}>停止</button>");
+    // 261116：发送键改成圆形图标（可读名 = 视觉隐藏文本「停止」+ aria-label）
+    expect(DIALOG).toContain('aria-label="停止生成"');
+    expect(DIALOG).toContain("onClick={stop}");
+    expect(DIALOG).toContain("ai-dialog__send-circle--stop");
     expect(CONV).toContain("void cancelAiChat(reqRef.current)");
     // 旧的「disabled 生成中… + 旁边一个次要停止」形态已收敛
     expect(DIALOG).not.toContain("生成中…");
@@ -228,7 +231,7 @@ describe("AI 提示词接线（261021 P0）", () => {
   it("首轮内容走 buildAiUserContent，发送时前置 withAiSystemMessage（历史不存 system）", () => {
     expect(CONV).toContain("const firstPrompt = buildAiUserContent(instruction, selectionText, documentText);");
     expect(CONV).toContain("withAiSystemMessage(messages, { imageOnly })");
-    expect(CONV).toContain("runAiChat(reqId, wireMessages, appendAssistant)");
+    expect(CONV).toContain("runAiChat(reqId, wireMessages, appendAssistant, undefined, thinkingOptions)");
     // 旧的「指令 + 两个换行 + 裸选区」已删除（防注入靠定界符 + 系统提示词）
     expect(DIALOG).not.toContain('instruction.trim() + "\\n\\n" + selectionText');
     expect(DIALOG).not.toContain("const firstPrompt = selectionText.trim() ?");

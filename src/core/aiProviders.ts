@@ -16,6 +16,23 @@ export type AiProtocol = "openai-compatible";
 export type AiReasoningEffort = "low" | "high" | "max";
 /** 思考模式开关（DeepSeek 的 `thinking: {type}`）。 */
 export type AiThinkingMode = "enabled" | "disabled";
+
+/**
+ * **单次对话**的请求级覆盖（不落盘、不进设置）。
+ *
+ * 为什么单独一个类型：设置里的 `thinking` 是「默认值」，而「深度思考」开关是**用户每次提问的意图**
+ * （同一个 provider 下，普通问答要关、深度分析要开）。它跨 IPC 传给主进程 → src/lib/native.ts 与
+ * electron/ipc/registerAi.ts 共用这一份形状，避免两侧各写一个匿名对象类型而静默漂移。
+ *
+ * 约定：
+ * - **不传 = 用 provider 当前值**（逐字节等于本次改动前的行为）；
+ * - 只对 `supportsThinking` 的供应商生效（主进程 electron/ai/aiThinking.ts 判据）；
+ *   不支持的供应商忽略覆盖，也**不会**因此伪造出 `thinking` 参数。
+ */
+export interface AiChatRequestOptions {
+  thinking?: AiThinkingMode;
+}
+
 export const AI_REASONING_EFFORTS: readonly AiReasoningEffort[] = ["low", "high", "max"];
 export const AI_THINKING_MODES: readonly AiThinkingMode[] = ["enabled", "disabled"];
 
