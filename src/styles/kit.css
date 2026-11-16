@@ -388,7 +388,9 @@
   align-items: center;
   justify-content: center;
   gap: var(--lake-space-sm);
-  height: 28px;
+  /* 261116 P1-1：固定 height 会在 200% 字号下裁字（A03 规则：含文字容器不得固定高）。
+     min-height 保留 100% 视觉（内容 15.6 < 28），放大字号时随内容长高。 */
+  min-height: 28px;
   padding: 0 var(--lake-space-lg);
   border: 0.5px solid var(--lake-ctl-border);
   border-radius: var(--lake-radius-pill);
@@ -401,9 +403,26 @@
 .ln-pill:hover:not(:disabled) { background: var(--lake-bg-hover); }
 .ln-pill:focus-visible { outline: 0; border-color: var(--lake-accent); box-shadow: 0 0 0 2px var(--lake-focus-halo); }
 .ln-pill[aria-pressed="true"],
-.ln-pill.is-on { border-color: var(--lake-accent); background: var(--lake-accent-tint); color: var(--lake-accent-text); }
+.ln-pill.is-on { border-color: var(--lake-accent); background: var(--lake-bg-selected); color: var(--lake-fg-selected); }
 .ln-pill:disabled { opacity: var(--lake-disabled-opacity); cursor: default; }
 .ln-pill--icon { width: 28px; padding: 0; }
+
+/* ── 08d 圆形发送 / 停止（261116 P1-2 收单一来源）──────────────
+ * AI 助手与 AI 写作原先各写一份逐字节相同的 32px 圆形发送钮（含 hover/active/disabled/--stop）。
+ * 这里收为 kit 原语 `.ln-send-circle`；过渡期同时命中两端既有类名（TSX 由并行线在改，本轮不动 TSX），
+ * TSX 加 `.ln-send-circle` 后删掉两段别名即可。
+ * token = L1 主操作（--lake-accent-ink / -hover / -press）；停止 = L5 的 status-error（按下仍红）。 */
+.ln-send-circle,
+.ai-dialog__send-circle,
+.aiw-send-circle { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border: 0; border-radius: var(--lake-radius-pill); background: var(--lake-accent-ink); color: var(--lake-text-on-accent); cursor: pointer; }
+:is(.ln-send-circle, .ai-dialog__send-circle, .aiw-send-circle):hover:not(:disabled) { background: var(--lake-accent-ink-hover); }
+:is(.ln-send-circle, .ai-dialog__send-circle, .aiw-send-circle):active:not(:disabled) { background: var(--lake-accent-ink-press); transform: scale(.96); }
+:is(.ln-send-circle, .ai-dialog__send-circle, .aiw-send-circle):disabled { opacity: var(--lake-disabled-opacity); cursor: default; }
+.ln-send-circle--stop,
+.ai-dialog__send-circle--stop,
+.aiw-send-circle--stop { background: var(--lake-status-error); }
+:is(.ln-send-circle--stop, .ai-dialog__send-circle--stop, .aiw-send-circle--stop):hover:not(:disabled),
+:is(.ln-send-circle--stop, .ai-dialog__send-circle--stop, .aiw-send-circle--stop):active:not(:disabled) { background: var(--lake-status-error); }
 
 /* ── 09 开关 ───────────────────────────────────────────────── */
 .ln-switch {

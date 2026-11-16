@@ -52,4 +52,21 @@ describe("现代 CSS 写法契约", () => {
     expect(css).toContain("text-wrap: balance");
     expect(css).toContain("text-wrap: pretty");
   });
+
+  it("AI composer 契约：药丸用 min-height（200% 不裁）、发送钮只有 kit 一份、chip 命中区 24", () => {
+    const kit = read("styles/kit.css");
+    const pillStart = kit.indexOf(".ln-pill {");
+    const pill = kit.slice(pillStart, kit.indexOf("}", pillStart));
+    expect(pill).toContain("min-height: 28px;");
+    // 只允许 min-height，禁止固定 height（A03：含文字容器不得固定高；否则 200% 字号裁字）。
+    expect(pill).not.toMatch(/(^|\n)\s*height: 28px;/);
+    expect(kit).toContain(".ln-send-circle,");
+    for (const rel of ["features/ai/aiDialogParts.css", "features/aiWriting/aiWriting.css"]) {
+      expect(read(rel)).not.toMatch(/^\.(ai-dialog|aiw)-send-circle(\s|,|\{)/m);
+    }
+    const writing = read("features/aiWriting/aiWriting.css");
+    expect(writing).toContain(".aiw-chip__close::before,");
+    expect(writing).toContain(".aiw-attach-chip__remove::before");
+    expect(writing).toContain("inset: -4px;");
+  });
 });

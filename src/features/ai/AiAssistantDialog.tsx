@@ -586,6 +586,8 @@ export function AiAssistantDialog({ open, request, scope, onClose }: {
           ref={fieldRef}
           className="ai-dialog__field"
           rows={1}
+          // 可访问名与 placeholder 同义但常驻（输入后 placeholder 消失，AT 不能只靠它）。
+          aria-label={editing ? "编辑提问" : turns.length === 0 ? "向智能助手提问" : "继续追问"}
           placeholder={editing ? "编辑提问…" : turns.length === 0 ? "向智能助手提问…" : "继续追问…"}
           value={editing ? editing.text : turns.length === 0 ? instruction : followUp}
           onChange={(e) => {

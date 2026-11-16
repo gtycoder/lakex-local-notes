@@ -251,6 +251,8 @@ components:
 
 **The One Declaration Rule.** 一个面要么靠 0.5px 边，要么靠阴影，不要「细边 + 大软阴影」同时上（那是幽灵卡片）。
 
+**输入卡例外（261116）**：AI 助手 / AI 写作的 composer 卡片允许 **0.5px 边 + `--lake-shadow-card`** 同时存在 —— 「可输入」需要可见的控件边，轻卡片阴影表达浮起；这是 composer 的登记例外（`.quick-note-composer` 同型），不推广到普通卡片/行。
+
 ## Motion
 
 **动效只表达状态变化，不做装饰。**（数值唯一来源 = `src/styles/themes/base.css` 的 `--lake-motion-*` / `--lake-ease-*`。）
@@ -283,7 +285,10 @@ components:
 
 ## Shapes
 
-形体语言是**克制的小圆角**：控件 8px（紧凑件 6px），浮层表面 10px，对话框 14px，胶囊只用于开关与徽标。
+形体语言是**克制的小圆角**：控件 8px（紧凑件 6px），浮层表面 10px，对话框 14px，胶囊只用于开关与徽标（AI composer 的药丸/圆形发送见 Components 的「Composer」节）。
+
+**聊天面例外（261116 用户点单）**：AI 对话面的用户气泡 22（`--lake-chat-radius-bubble`）与输入大卡 24（`--lake-chat-radius-composer`），令牌定义在 `src/styles/themes/base.css`；只用于 AI 对话面，不扩散到普通卡片/控件。
+
 边界一律 **0.5px**（发丝线与表面边框）。例外只有**必须被看见的图形描边**：`outline` 焦点环（2px，`--lake-focus-ring-width`）、对勾/勾选符号、进度环与画板笔迹。**文档正文/编辑器内部等「具体内容区」不参与这条统一**（markdown 引用竖线、表格线等保持内容语义原值）。**禁止 >1px 的单侧色条**（卡片、列表项、提示条上的左侧粗色条是 AI 生成界面的典型痕迹）。
 
 **同心圆角（261029 用户定稿，光学对齐）**：贴在外层表面角落里的内层表面，半径 = **外层半径 − 外层到内层的间距**，**下限 2px**。内外同半径会让悬停/选中底色在四角与边上留白不匀（角上窄、边上宽）——那正是"看起来圆、实际不对齐"的来源。
@@ -317,7 +322,7 @@ components:
 | L4b | `.ln-btn--link` | 无框 + `accent-text` 字 | 跳转 / 引导（不当成灰字次要） |
 | L5 | `.ln-btn--danger` | `status-error` 红字 + 40% 红框（配 `--ghost`/`--danger-text` = 纯红字） | 删除 / 清空 / 移入回收站 |
 
-- **Shape:** 8px 圆角，高 27（`--lake-ctl-h`），内距 `0 11px`，13px / 500；紧凑档 `.ln-btn--compact` 高 **26**（`--lake-ctl-h-sm`；261111 厚度 review：22 → 26，与标准档只差 1px，全站「薄一档」观感消失）、内距 `0 9px`。**只有两档尺寸**，不新增第三档；设置页表单控件仍走 `--lake-ctl-h-settings`（32，管理档）。
+- **Shape:** 8px 圆角，高 27（`--lake-ctl-h`），内距 `0 11px`，13px / 500；紧凑档 `.ln-btn--compact` 高 **26**（`--lake-ctl-h-sm`；261111 厚度 review：22 → 26，与标准档只差 1px，全站「薄一档」观感消失）、内距 `0 9px`。**按钮只有两档尺寸，不新增第三档**；**唯一登记例外 = AI composer 的圆形主操作 `.ln-send-circle` 32×32**（纯图标、无文字、只服务 AI 输入卡，见下节 Composer，不并入按钮梯队）；设置页表单控件仍走 `--lake-ctl-h-settings`（32，管理档）。
 - **六态（每层同一套）**：default / hover（`bg-hover`，字色升一档）/ active（`bg-press` + 0.5px 下沉 + 0.98 缩放）/ focus-visible（2px `accent` 环 + offset 0）/ is-selected（`bg-selected` + `fg-selected` + 600）/ disabled（`opacity: .45`，hover 不改底色）。
 - **基座 `.ln-btn` = L4 口径**（无框灰字）：任何裸用也有 hover，不得再出现「点了没反应」的按钮。
 - 图标钮（`.ln-iconbtn` 27 / `--compact` **26**）是**形状**不是层级：静息 `text-3` → hover `bg-hover` + `text-1` → selected `bg-selected` + `fg-selected`；`--accent` 已并入 `is-selected`。危险图标钮 `.ln-iconbtn--danger` = 与 `--danger-text` 同一套令牌口径（红字 + 红柔底只在 hover），**不是第二种危险长相**。
@@ -326,6 +331,12 @@ components:
 - **标签 / 筛选 chip** `.ln-chip`：**26**（261111 厚度 review：24 → 26）/ `--compact` 同高、仅内距更紧（`0 7px`），`is-selected` 只走选中三件套；`--add`（虚线空槽）、`--danger`（筛选「排除」档，选中后走 error 色）、`--static`（不可点展示标签，移除钮用 `.ln-iconbtn--compact`）；调用点只设 `--ln-chip-*` 容器变量。
 - **移动端 `mb-btn` 已按同一模型独立实现**（261110：4 语义 + `--danger`/`--danger-text` + `--link`、六态、`is-selected`；几何沿用触屏档 44/36 与 `--sm`/`--block`，两端不共享 CSS）。
 
+### Composer（261116：AI 助手 / AI 写作输入卡）
+
+- **两端有意不同，不合并**：AI 助手 = 紧凑卡（`radius-md` 10 / 内距 6/8/4 / textarea max 120）；AI 写作 = 大输入卡（`--lake-chat-radius-composer` 24 / 内距 lg/xl/md / textarea min 96、max 240）。共同点 = 0.5px 边 + `--lake-shadow-card` + 无边框 `field-sizing: content` 自增高 textarea + 底部一行（左药丸 / 右圆形发送）。
+- **`.ln-pill`（kit，AI 输入卡专用控件族）**：高 **28**、`border-radius: pill`、0.5px 边、13px / 常规字重、gap 6、左右内距 12；`--icon` 变体 = 28×28 方形纯图标。状态：default 中性描边 / hover `bg-hover` / selected（`aria-pressed=true` 或 `.is-on`）= `bg-selected` + `fg-selected` + 主色边 / focus-visible = 主色边 + 2px `--lake-focus-halo` / disabled = `.45`。**高度用 `min-height` 不用固定 `height`**（A03：200% 字号随内容长高，不裁字）。用途 = 深度思考开关、提示词/选择文档 action 触发。
+- **`.ln-send-circle`（kit，32×32 圆形主操作）**：**唯一来源**；token = L1 主操作 `--lake-accent-ink` / `-hover` / `-press`，文字 `--lake-text-on-accent`；生成中同格变 `--stop`（`--lake-status-error`，按下仍红）；disabled = `.45`。过渡期同时命中 AI 助手/写作的旧类名，TSX 批次后删别名。
+- **间距/命中区**：附件 chip 的关闭/移除钮视觉 16×16，透明命中区扩到 24×24（`::before { inset: -4px }`，WCAG 2.5.8 最小目标）；chip 行高不变。
 
 ### Icon Buttons
 - **Shape:** 27×27（`--compact` 为 **26×26**），圆角 8/6；静息透明，hover 用 `--lake-bg-hover` 并把字色提到 `--lake-text-1`，选中用 `--lake-bg-selected` / `--lake-fg-selected`。
