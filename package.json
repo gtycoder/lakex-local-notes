@@ -47,7 +47,8 @@
     "check:mobileui": "node scripts/check-mobile-ui.mjs",
     "check:android-release": "node scripts/check-android-release-config.mjs",
     "test:bitable:packaged": "node scripts/packaged-performance/bitable/run.mjs",
-    "check:bitablesnap": "node scripts/mobile-audit/check-bitable-snap.mjs"
+    "check:bitablesnap": "node scripts/mobile-audit/check-bitable-snap.mjs",
+    "audit:icons": "node scripts/audit-icons.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1155.0",
