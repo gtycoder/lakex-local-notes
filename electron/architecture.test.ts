@@ -371,8 +371,18 @@ describe("R5 可达性：没有「写了没接进去」的死代码", () => {
 });
 
 describe("R6 external 从 dependencies 派生（A-6）", () => {
-  /** 运行期依赖清单的唯一来源 = package.json dependencies（vite.config.ts 也是读它）。 */
-  const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8")) as { dependencies?: Record<string, string> };
+  /**
+   * 运行期依赖清单的唯一来源 = package.json `dependencies`（vite.config.ts 也是读它）。
+   *
+   * ⚠️ 261117 打包瘦身：**渲染层专用**的重包（`@univerjs/*` / `perfect-freehand` / `rxjs` 等）已移到
+   * `devDependencies` —— 它们只被 `src/**` import、早被 vite 打进 `dist`，留在 `dependencies` 只会被
+   * electron-builder 原样塞进 asar（实测 @univerjs 子树 123MB）。**这不是放宽判据**：R6 的规则一字未改，
+   * 只是「主进程 runtime deps 清单」本身收窄了；下面新增的两条守则是防它涨回去。
+   */
+  const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8")) as {
+    dependencies?: Record<string, string>;
+    devDependencies?: Record<string, string>;
+  };
   const runtimeDeps = Object.keys(pkg.dependencies ?? {});
   /** 测试支撑文件不进产物 ⇒ 它们的 import（如 vitest）不受 external 约束。 */
   const testSupport = new Set(TEST_SUPPORT_FILES.map((entry) => entry.file));
@@ -399,6 +409,38 @@ describe("R6 external 从 dependencies 派生（A-6）", () => {
     expect(isExternal("electron", runtimeDeps)).toBe(true);
     expect(isExternal("electron/main", runtimeDeps)).toBe(true);
     expect(isExternal("lodash", runtimeDeps), "未登记的第三方包不该被 external（会被打进 bundle 才是对的）").toBe(false);
+  });
+
+  it("反方向：dependencies 里的每个包都必须被主进程生产代码 import（否则只是白塞进 asar）", () => {
+    // 打包瘦身的核心不变量：**dependencies = 主进程运行时真正 require 的包**。
+    // 渲染层专用包一旦回流到这里，asar 会立刻按 node_modules 原样膨胀（@univerjs 曾占 123MB）。
+    const packages = new Set<string>();
+    for (const ref of BARE_IMPORTS) {
+      if (testSupport.has(ref.file)) continue;
+      const spec = ref.spec;
+      if (spec.startsWith("node:") || spec === "electron" || spec.startsWith("electron/")) continue;
+      if (spec.startsWith("@smithy/")) continue; // @aws-sdk 的传递依赖，不单独声明
+      const parts = spec.split("/");
+      packages.add(spec.startsWith("@") ? parts.slice(0, 2).join("/") : parts[0]);
+    }
+    const unused = runtimeDeps.filter((dep) => !packages.has(dep));
+    expect(
+      unused,
+      "以下 dependencies 没有被任何主进程生产文件 import：它们只会被 electron-builder 原样打包进 asar。"
+      + "如果它们是渲染层专用（已进 dist）⇒ 移到 devDependencies；如果确有运行时用途 ⇒ 在 buildTarget/本文档登记原因。",
+    ).toEqual([]);
+  });
+
+  it("防回涨：渲染层专用重包不得回到 dependencies（打包瘦身 261117）", () => {
+    const RENDERER_ONLY = ["@univerjs/", "perfect-freehand", "rxjs"] as const;
+    const back = runtimeDeps.filter((dep) => RENDERER_ONLY.some((prefix) => (prefix.endsWith("/") ? dep.startsWith(prefix) : dep === prefix)));
+    expect(back, "这些包只被 src/** import（已打进 dist），放在 dependencies 会让 asar 多出 ~123MB").toEqual([]);
+    // 也不能悄悄删掉：构建期 vite 仍需要它们，必须在 devDependencies 里。
+    for (const dep of Object.keys(pkg.devDependencies ?? {})) {
+      if (!dep.startsWith("@univerjs/") && dep !== "perfect-freehand" && dep !== "rxjs") continue;
+      expect(pkg.dependencies?.[dep], dep + " 必须留在 devDependencies").toBeUndefined();
+    }
+    expect(pkg.devDependencies?.["rxjs"], "rxjs 是 @univerjs 的 peer，必须作为 devDependency 保留").toBeTruthy();
   });
 
   it("vite.config.ts 仍从 package.json dependencies 派生 external（没有改回硬编码清单）", () => {

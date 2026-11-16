@@ -62,6 +62,13 @@ export const ELECTRON_PACKAGE_FILES = [
   "!**/*.map",
   "!node_modules/better-sqlite3/deps/**",
   "!node_modules/better-sqlite3/build/Release/obj/**",
+  // ---- 打包瘦身（261117）：只裁「运行时永远不加载」的文件，不碰任何 native/入口/asarUnpack ----
+  // openai 的 TS 源码（运行时入口是 index.js → dist/*.js；已实测其 js 不引用 ../src）
+  "!node_modules/openai/src/**",
+  // 类型声明：运行时（Node require/ESM import）只解析 .js/.mjs，.d.ts/.d.mts/.d.cts 永不加载
+  "!node_modules/**/*.d.ts",
+  "!node_modules/**/*.d.mts",
+  "!node_modules/**/*.d.cts",
 ] as const;
 
 /** 只读区：`files` 里允许出现的正向条目前缀（产物目录 + 已登记的源树直接进包文件）。 */

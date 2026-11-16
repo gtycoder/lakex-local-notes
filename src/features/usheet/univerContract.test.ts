@@ -73,10 +73,20 @@ const BUNDLE = univerBundleText();
 
 describe("Univer 依赖版本（升级护栏①）", () => {
   it("package.json 里所有 @univerjs/* 必须精确锁定（不许 ^ / ~ / * / latest）", () => {
-    const pkg = JSON.parse(readFileSync(`${ROOT}/package.json`, "utf8")) as { dependencies?: Record<string, string> };
+    const pkg = JSON.parse(readFileSync(`${ROOT}/package.json`, "utf8")) as {
+      dependencies?: Record<string, string>;
+      devDependencies?: Record<string, string>;
+    };
+    // 261117 打包瘦身：@univerjs/* 只被 src/** import（vite 已打进 dist），**必须落在 devDependencies**
+    // —— 留在 dependencies 会被 electron-builder 原样塞进 asar（实测 @univerjs 子树 123MB）。
     const univerDeps = Object.entries(pkg.dependencies ?? {}).filter(([name]) => name.startsWith("@univerjs/"));
-    expect(univerDeps.length).toBeGreaterThan(0);
-    for (const [name, range] of univerDeps) {
+    const univerDevDeps = Object.entries(pkg.devDependencies ?? {}).filter(([name]) => name.startsWith("@univerjs/"));
+    expect(univerDevDeps.length).toBeGreaterThan(0);
+    expect(
+      univerDeps,
+      "渲染层专用依赖不得回到 dependencies：它们只被 src/** import，已随 dist 打包；放回会让 asar 多出上百 MB",
+    ).toEqual([]);
+    for (const [name, range] of univerDevDeps) {
       expect(range, `${name} 必须精确锁定版本（presets 与 engine-render 分叉会出现两份 @univerjs/core）`).toMatch(/^\d+\.\d+\.\d+/);
     }
   });

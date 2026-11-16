@@ -270,9 +270,14 @@ describe("静态契约：export.ts 分流 + UI 只对 ink 放开 PDF", () => {
     expect(src).toContain("exportInkPdfHtml(");
     expect(src).toContain('if ((kindRow?.kind ?? "doc") === "ink") return this.exportInkPdfHtml(id, baseDir, options);');
     expect(src).toContain("strokeToSvgPath");
-    // perfect-freehand 必须在 dependencies（main 的 external 从 dependencies 派生）
-    const pkg = JSON.parse(read("../package.json")) as { dependencies?: Record<string, string> };
-    expect(pkg.dependencies?.["perfect-freehand"]).toBeTruthy();
+    // 261117 打包瘦身：perfect-freehand 是**渲染层依赖**（`src/features/ink/inkGeometry` 用它算笔迹轮廓），
+    // 主进程只是**间接** import inkGeometry 做手写 PDF 导出 ⇒ 它必须留在 devDependencies：
+    //   · 放回 dependencies ⇒ 整套渲染层依赖会被 electron-builder 原样塞进 asar；
+    //   · 它不在 main 的 external 清单后，vite 会把它**打进 dist-electron/main.js**（纯 JS，无 native，
+    //     运行期不需要 node_modules）——这正是「external 只含主进程 runtime deps」的预期结果。
+    const pkg = JSON.parse(read("../package.json")) as { dependencies?: Record<string, string>; devDependencies?: Record<string, string> };
+    expect(pkg.devDependencies?.["perfect-freehand"], "perfect-freehand 必须在 devDependencies（构建期使用）").toBeTruthy();
+    expect(pkg.dependencies?.["perfect-freehand"], "不得回到 dependencies（否则被打进 asar 的 node_modules）").toBeUndefined();
   });
 
   it("导出菜单：ink 只有「导出为 PDF（手写压平）」", () => {
