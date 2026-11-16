@@ -13,8 +13,11 @@ import type { AiWritingMessage } from "../../core/aiWriting";
 import type { AiWritingStream } from "./useAiWriting";
 import { AiMessageView, type AiMessageViewProps } from "./AiMessageView";
 
+const previewMock = vi.hoisted(() => ({ openImagePreview: vi.fn() }));
+
 /** 答案正文的内核 viewer 是 lazy 边界：本文件只测操作条，拦掉它避免真去加载内核 chunk。 */
 vi.mock("./AiAnswerViewer", () => ({ default: () => null }));
+vi.mock("../editor/imagePreview", () => ({ openImagePreview: previewMock.openImagePreview }));
 
 const MESSAGE: AiWritingMessage = {
   id: "m1",
@@ -141,6 +144,20 @@ describe("AiMessageView · 用户消息的随发图片（261116 Phase 1）", () 
     expect(images[0].getAttribute("src")).toContain("/n1/a.png");
     expect(images[1].getAttribute("alt")).toBe("封面");
     expect(document.querySelector(".aiw-msg--user .aiw-bubble")?.textContent).toBe("看这两张图");
+  });
+
+  it("历史轮缩略图可点开大图：传全尺寸档（不带 w）且定位到该张", () => {
+    previewMock.openImagePreview.mockReset();
+    render({ message: userMessage([{ noteId: "n1", filename: "a.png" }, { noteId: "n2", filename: "b.jpg" }]) });
+    const buttons = [...document.querySelectorAll<HTMLButtonElement>(".aiw-bubble-attach__preview")];
+    expect(buttons.length).toBe(2);
+    act(() => { buttons[1].dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true })); });
+    expect(previewMock.openImagePreview).toHaveBeenCalledTimes(1);
+    const [images, index] = previewMock.openImagePreview.mock.calls[0];
+    expect(index).toBe(1);
+    expect(images.length).toBe(2);
+    expect(String(images[1].src)).not.toContain("w=");
+    expect(String(images[0].src)).toContain("/n1/a.png");
   });
 
   it("本机文件附件 = 文件名 chip（渲染层没有字节，不画缩略图）", () => {

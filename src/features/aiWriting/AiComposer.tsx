@@ -31,7 +31,8 @@ import {
   type AiWritingDocRef,
   type AiWritingMode,
 } from "../../core/aiWriting";
-import { aiWritingAttachmentLabel, aiWritingAttachmentPreviewUrl, formatAttachmentBytes } from "./aiWritingAttachments";
+import { aiWritingAttachmentLabel, aiWritingAttachmentPreviewUrl, aiWritingAttachmentUrl, formatAttachmentBytes } from "./aiWritingAttachments";
+import { openImagePreview } from "../editor/imagePreview";
 import { toggleDocRef } from "./aiWritingDocs";
 import { AI_WRITING_PROMPT_CARDS, type AiWritingPromptCard } from "./aiWritingPrompts";
 import { AiPromptLibrary } from "./AiPromptLibrary";
@@ -112,6 +113,13 @@ export function AiComposer({
     }, 0);
   };
 
+  // 已选资产图片 → 可点开的大图集合（全尺寸档：去掉 ?w；本机文件没有可预览 URL，不参与）。
+  const imagePreviews = attachRefs.flatMap((ref) => {
+    if (isAiWritingLocalAttachment(ref) || !aiWritingAttachmentPreviewUrl(ref)) return [];
+    const asset = ref as Exclude<typeof ref, { kind: "local" }>;
+    return [{ key: aiWritingAttachmentKey(ref), src: aiWritingAttachmentUrl(asset, null) }];
+  });
+
   return (
     <div className="aiw-composer">
       {(promptText || (caps.docs && docRefs.length > 0) || attachRefs.length > 0) && (
@@ -140,7 +148,18 @@ export function AiComposer({
             return (
               <div key={aiWritingAttachmentKey(ref)} className="aiw-attach-chip">
                 {previewUrl ? (
-                  <img className="aiw-attach-chip__thumb" src={previewUrl} alt="" loading="lazy" decoding="async" />
+                  <button
+                    type="button"
+                    className="aiw-attach-chip__preview"
+                    aria-label={"预览附件：" + label}
+                    title="点击预览"
+                    onClick={() => {
+                      const index = imagePreviews.findIndex((item) => item.key === aiWritingAttachmentKey(ref));
+                      openImagePreview(imagePreviews.map((item) => ({ src: item.src })), index);
+                    }}
+                  >
+                    <img className="aiw-attach-chip__thumb" src={previewUrl} alt="" loading="lazy" decoding="async" />
+                  </button>
                 ) : (
                   <FileKindIcon name={isAiWritingLocalAttachment(ref) ? ref.name : "文件"} size={18} className="aiw-attach-chip__kind" />
                 )}

@@ -10,8 +10,9 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const h = vi.hoisted(() => ({ listNoteImageAssets: vi.fn(), listAllNoteImages: vi.fn() }));
+const h = vi.hoisted(() => ({ listNoteImageAssets: vi.fn(), listAllNoteImages: vi.fn(), openImagePreview: vi.fn() }));
 vi.mock("../../lib/native", () => ({ native: { listNoteImageAssets: h.listNoteImageAssets, listAllNoteImages: h.listAllNoteImages } }));
+vi.mock("../editor/imagePreview", () => ({ openImagePreview: h.openImagePreview }));
 
 import { AiComposer } from "./AiComposer";
 import { AI_WRITING_PROMPT_CARDS } from "./aiWritingPrompts";
@@ -162,6 +163,22 @@ describe("AiComposer · 底部一行（261116 chat-demo）", () => {
     const remove = buttonByLabel("移除附件：a.png")!;
     act(() => { remove.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true })); });
     expect(onRemoveAttachment).toHaveBeenCalledWith(ref);
+  });
+
+  it("已选图片 chip 可点开大图：传全尺寸档（不带 w）且定位到该张", async () => {
+    h.openImagePreview.mockReset();
+    const a = { noteId: "n1", filename: "a.png" };
+    const b = { noteId: "n1", filename: "b.png" };
+    await renderComposer({ attachRefs: [a, b] });
+    const previews = [...document.querySelectorAll<HTMLButtonElement>(".aiw-attach-chip__preview")];
+    expect(previews.length).toBe(2);
+    act(() => { previews[1].dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true })); });
+    expect(h.openImagePreview).toHaveBeenCalledTimes(1);
+    const [images, index] = h.openImagePreview.mock.calls[0];
+    expect(index).toBe(1);
+    expect(images.length).toBe(2);
+    expect(String(images[1].src)).not.toContain("w=");
+    expect(String(images[0].src)).toContain("/n1/a.png");
   });
 
   it("发送 = 圆形主色按钮；忙态同格变停止（红底圆形），且深度思考被禁用", async () => {

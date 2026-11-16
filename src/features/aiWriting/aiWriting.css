@@ -129,6 +129,8 @@
 /* 附件 chips = 缩略图 + 名称 + 单删（与提示词/文档 chip 同一行，但视觉上是「图」而不是标签）。 */
 .aiw-attach-chip { display: flex; align-items: center; gap: var(--lake-space-xs); max-width: 200px; padding: 2px var(--lake-space-sm) 2px 2px; border: 0.5px solid var(--lake-ctl-border); border-radius: var(--lake-radius-pill); background: var(--lake-bg-block); }
 .aiw-attach-chip__thumb { flex: none; width: 24px; height: 24px; border-radius: var(--lake-radius-pill); object-fit: cover; }
+/* 已选图片可点开大图：按钮只做语义，视觉仍是缩略图本身（262116 用户点单）。 */
+.aiw-attach-chip__preview { flex: none; display: inline-flex; padding: 0; border: 0; background: transparent; border-radius: var(--lake-radius-pill); cursor: zoom-in; }
 .aiw-attach-chip__kind { flex: none; }
 .aiw-attach-chip__doc { flex: none; max-width: 96px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--lake-text-3); font-size: var(--lake-font-size-nano); }
 .aiw-attach-chip__name { min-width: 0; color: var(--lake-text-2); font-size: var(--lake-font-size-small); }
@@ -149,6 +151,8 @@
 .aiw-user-block .aiw-bubble { max-width: 100%; }
 .aiw-bubble-attach { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--lake-space-xs); }
 .aiw-bubble-attach__img { width: 72px; height: 72px; border-radius: var(--lake-radius-card); object-fit: cover; background: var(--lake-bg-block); }
+/* 历史轮缩略图同样可点开大图（与输入卡 chips 同一交互语义）。 */
+.aiw-bubble-attach__preview { display: inline-flex; padding: 0; border: 0; background: transparent; cursor: zoom-in; }
 /* 选图器（Popover 表面）：标题 + 按文档分组的网格 + 底栏。 */
 .aiw-pick { width: 520px; max-width: min(520px, calc(100vw - 24px)); }
 .aiw-pick__head { display: flex; align-items: center; justify-content: space-between; gap: var(--lake-space-sm); padding: var(--lake-space-sm) var(--lake-space-md); border-bottom: 0.5px solid var(--lake-border-2); }
