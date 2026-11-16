@@ -27,7 +27,9 @@ describe("顶栏分隔线（tabbar-divider）", () => {
   it("0.5px 边 + 令牌色，尺寸走小竖线（不是整条边框）", () => {
     expect(css).toContain(".tabbar-divider {");
     expect(css).toContain("height: 14px;");
-    expect(css).toContain("border-left: 0.5px solid var(--lake-border-1);");
+    expect(css).toContain("border-left: 0.5px solid var(--lake-border-strong);");
+    // 261116 用户二次点单：两侧间距再收小（xs → xxs），线更明显（border-1 → border-strong）。
+    expect(css).toContain("margin: 0 var(--lake-space-xxs);");
     expect(css).toContain("width: 0;");
   });
 });
