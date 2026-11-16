@@ -35,10 +35,12 @@ export interface SyncStatusPopoverProps {
   onOpenNote?: (noteId: string) => void;
 }
 
-/** 思源式"云+对钩"组合图标：同步完成后展示（默认色，不变绿）。 */
-function CloudCheckIcon({ size = 14 }: { size?: number }) {
+/** 思源式"云+对钩"组合图标：同步完成后展示（默认色，不变绿）。
+ * 24 网格 + `lucide` 类 ⇒ 描边由 `svg.lucide{stroke-width:1.75}` 统一（261116 去掉原先的
+ * strokeWidth="2"：14px 下等于 1.17px，比同一行相邻的 lucide 图标重 15%）。导出仅供 render 测试。 */
+export function CloudCheckIcon({ size = 14 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <svg className="lucide" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z" />
       <path d="m9.5 14.5 2 2 3.5-3.5" />
     </svg>

@@ -8,6 +8,13 @@
   /* 工具栏 AI 入口图标（IconAiTagNew 的绿色渐变） */
   --lake-ai-tag-from: #4cc871;
   --lake-ai-tag-to: #08b66d;
+  /* 选色盘（LakeColorBoard）的选中对勾：叠在**任意用户色** swatch 上，判据是该 swatch 的亮度
+   * （core/colorPalette.isLightColor(hex, 210)），与主题明暗无关 ⇒ 固定对比色，不随主题变、
+   * 也不需要 dark 覆盖。几何在 src/features/editor/selectionToolbar/LakeColorBoard.tsx（24 网格 fill 图形）。 */
+  --lake-colorboard-check-ink: #8c8c8c;
+  --lake-colorboard-check-paper: #ffffff;
+  /* 「默认」行的文字色样块：表达"黑色文字"这个含义，不是 UI 语义色 ⇒ 不复用 --lake-text-*。 */
+  --lake-colorboard-default-swatch: #000000;
   /* 「文档引用」卡插入面板图标的两套调色板（设计稿 261008；几何在 src/features/editor/noteRefIcon.tsx）。
    * 为什么必须在主题文件里：该图标是 lakex 自定义卡的 <symbol>，内容活在 <use> 的 shadow 树里 ——
    * 选择器打不到、只有「继承」能进去 ⇒ 只能靠这些自定义属性着色（组件里 style={{ fill: var(…) }}）。

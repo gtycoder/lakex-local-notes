@@ -15,11 +15,36 @@ export const DEFAULT_COL_WIDTH = 180;
  */
 export const columnWidth = (field: BitableField) => (field.width ?? DEFAULT_COL_WIDTH) + "px";
 
-/** 云端 lakex 的「展开行」图标（lt-icon-RowExpand）：四角向外箭头。 */
+/**
+ * 多维表行「展开」按钮：**IconPark FullScreen**（261116 用户裁决换图；原为云端 lakex
+ * `lt-icon-RowExpand` 的 1024 网格实心四角箭头）。
+ *
+ * 来源：IconPark `@icon-park/react@1.4.2` 的 `es/icons/FullScreen.js`（Apache-2.0，
+ * 包内无 NOTICE 文件）；本项目**只取图形几何**，未引入其运行时。原 viewBox `0 0 48 48`、
+ * 四条 path（四角折角），此处把坐标整体 ÷2 重写到 24 网格，配色改 `currentColor`。
+ * 许可登记见仓库根 `NOTICE`。
+ *
+ * 描边不在这里写：24 网格 + `className="lucide"` ⇒ 吃 `svg.lucide{stroke-width:1.75}` 单一来源
+ * （15px 档 = 1.09px）。**不要**给它加 `fill` 或改回 48/1024 网格（加了 lucide 类再用大网格会把描边压细）。
+ */
 export function RowExpandIcon({ size = 15 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 1024 1024" aria-hidden="true" focusable="false">
-      <path fill="currentColor" d="M481.528 534.22c15.36 15.36 15.616 40.092.78 55.768l-.78.8-236.68 236.68H394.68c21.716 0 39.392 17.304 39.984 38.88l.016 1.12c0 21.712-17.308 39.388-38.88 39.98l-1.12.016H179.428c-39.32 0-71.28-31.52-71.988-70.68l-.012-1.32V624.072c0-22.092 17.908-40 40-40 21.72 0 39.392 17.308 39.984 38.88l.016 1.12v147.676L424.96 534.22c15.62-15.62 40.948-15.62 56.568 0zM846.68 100.072c39.32 0 71.28 31.52 71.988 70.68l.012 1.32v211.392c0 22.092-17.908 40-40 40-21.72 0-39.392-17.308-39.984-38.88l-.016-1.12-.008-147.572L591.02 483.548c-15.62 15.62-40.944 15.62-56.568 0-15.356-15.36-15.616-40.092-.78-55.768l.78-.8L781.36 180.068H631.428c-21.72 0-39.392-17.304-39.984-38.88l-.016-1.12c0-21.712 17.308-39.388 38.88-39.98l1.12-.016H846.68z" />
+    <svg
+      className="lucide"
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path d="M16.5 3H21V7.5" />
+      <path d="M21 16.5V21H16.5" />
+      <path d="M7.5 21H3V16.5" />
+      <path d="M3 7.5V3H7.5" />
     </svg>
   );
 }

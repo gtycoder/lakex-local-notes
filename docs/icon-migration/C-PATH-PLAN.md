@@ -310,9 +310,45 @@ it("笔记本插画是数据资源：20×20 自带配色、不引主题令牌（
 | `cssLayers.test.ts` 声明数棘轮 | 只对 `FILES` 白名单里的桌面/移动 CSS 计数（`kit.css` 基线 **711 → 713**，Lead 本轮 +2；`compat.css` 也随设置页布局 +声明） | **`styles/themes/*.css` 不在白名单** ⇒ 加 token 不触发棘轮；若批次给 `kit.css` 等加声明则必须同步 bump |
 | `font-size` 字面量 | 只扫 CSS | 与图标无关 |
 
-### 5.4 建议（可选，非门禁）：`scripts/audit-icons.mjs`
+### 5.4 已落地（261116，报告型非门禁）：`scripts/audit-icons.mjs`
 
-与 `audit-dead-css.mjs` 同档的**报告型**脚本（不进 gate），输出三张表：① tsx 里的颜色字面量（补门禁盲区）；② 所有 `<svg` 的 viewBox 汇总；③ 带 `lucide` 类但 viewBox ≠ 24 的违规（R3）；④ `strokeWidth` 出现位置。约 40 行，读 `src/**/*.tsx` 正则即可。
+与 `audit-dead-css.mjs` 同档的**报告型**脚本：**不进 CI、不阻塞任何流程、退出码恒 0**（末行显式 `process.exitCode = 0`，头注释写明"这是报告，不是门禁"）。`package.json` 只加了 `"audit:icons"` 一条 script，**没有**接进任何 `check:*` 链。
+
+- 用法：`node scripts/audit-icons.mjs [--json]` / `npm run audit:icons`。
+- 判据来源（脚本头同样写明）：AGENTS §3#14（颜色字面量只允许在 `src/styles/themes/`；图标只用 lucide、描边 1.75）+ 本文 §4.3 的 **R1/R2/R3**。
+- 实现范围：① `src/**/*.tsx` 里的颜色字面量（`#[0-9a-fA-F]{3,8}`、`rgb()/rgba()`、`hsl()/hsla()`、`data:image/`），按文件分组、带行号与总数；② 三个 svg 上下文计数（内联 svg 标签总数 / 带 `className=lucide` 的自绘 svg / 无 `className` 的内联 svg）；③ 每行额外标注是否落在内联 `<svg>…</svg>` 区间。
+- **与原设想（②③④）的差**：viewBox 汇总、"lucide 类但 viewBox ≠ 24"、"strokeWidth 位置" 三类**未做**——它们与 §4.3 表格里已给的 `grep` 断言重复，加进脚本只会制造第二套口径；真要门禁化再做（届时先过 §3#17）。
+- 行数：**103 行**（含 18 行头注释；纯逻辑约 85 行）。比原估 40 行多，主要花在 `--json`、in-svg 标注、测试文件计数。
+
+#### 5.4.1 首次运行基线（干净 HEAD `cc066930`，261116）
+
+复现方式（**不碰工作区**，用 git archive 取干净 HEAD）：
+
+```bash
+rm -rf /tmp/audit-head && mkdir -p /tmp/audit-head
+/usr/bin/git archive HEAD src | tar -x -C /tmp/audit-head
+AUDIT_ROOT=/tmp/audit-head node scripts/audit-icons.mjs
+```
+
+```
+扫描 415 个 .tsx；命中 14 文件 / 39 行 / 90 处
+（落在内联 <svg> 区间 70 处；测试文件 6 个）
+svg 上下文：内联 svg 标签 40 个；带 className=lucide 1 个；无 className 36 个
+```
+
+> **这是快照，不是承诺**：写本文时批次 1/2 正在并行改图标组件（`CloudCheckIcon` 加 `lucide` 类、`ExpandLevelIcon` 删 `strokeWidth`、`LakeColorBoard` 落 token），同一时刻工作区实测已漂到 **14 文件 / 36 行 / 86 处**、svg **39 / 3 / 33**。所以：**以运行结果为准**；本表只用来回答"首次跑出来长什么样"。
+
+| # | 文件 | 处数 | 性质 | 处置 |
+| --- | --- | ---: | --- | --- |
+| 1 | `src/lib/notebookIcons.tsx` | 70 | **数据资源自带配色**（§3 J1+J4；17 个语雀插画） | **不违规**，冻结；建议按 §3.2 加守卫测试 |
+| 2 | `src/features/editor/selectionToolbar/LakeColorBoard.tsx` | 5 | 色板对勾/默认 swatch 的 hex | **批次 2 整改**（落 `--lake-colorboard-*` 令牌；写本文时正在改，命中数会下降） |
+| 3 | `src/features/ink/inkPageTexts.render.test.tsx` | 2 | 测试夹具里的 `#262626` | 非 UI，可不处理 |
+| 3 | `src/mobile/settings/UpdateCenterSection.tsx` | 2 | TS 颜色常量（`#3f5fa0` / `#5b6472`） | 待看：是否该走令牌 |
+| 3 | `src/mobile/usheet/MobileSignaturePad.tsx` | 2 | `#1f2329` + `rgba(0,0,0,0)` | 待看（签名笔迹色可能需数据驱动例外） |
+
+**解读（比总数更重要）**：90 处里 **70 处（77.8%）是 notebookIcons 的有意例外**；扣掉后真正的待办面 = **20 处 / 13 个文件**，其中批次 2 只涉及 `LakeColorBoard` 的 5 处。另有 3 处 `data:image/`（`BoardEditor.tsx:483` 的 accept/上传分支 + 2 个测试夹具）**不是颜色**，是正则按任务书纳入的噪音——读报告时按 `[svg]` 标注与文件性质过滤即可。
+
+> 口径提醒：这份报告**只回答"哪些 tsx 里有颜色字面量"**，不回答"这个颜色是否该是令牌"；判定仍按 §5.1 的两类令牌 + §3 的 J1–J4。
 
 ---
 
@@ -544,10 +580,82 @@ git status --short
 - 未改 `src/` 任何文件（本文所有处置都是"给执行者的清单"）；未重烤任何快照基线；未跑设备装置（无 Electron/AVD 实例）；未 commit。
 - 未逐个 4× 实拍 13 个图形（无运行实例）；本文的"视觉判定"来自声明值 + 换算 + 文件头设计意图，**执行批次时必须补实拍**。
 - **工作区在本次审计期间被并行改动过两次**（Lead 的设置页改动从 `kit.css` 扩到 `themes/{light,dark,warm,chat}.css` + `compat.css` + 两个设置页 section）；本文 §9 的口径是**按文件**写的（不按他的改动范围猜），因此仍然成立；但执行批次前必须重跑一次 `git status --short` 与 `git diff --stat` 复核。
-- 未做 `docs/DESIGN.md` 的措辞更新（`DESIGN.md:402`「图标只有 lucide 一族、描边 1.75」严格说会被"自绘纳管"扩写）——**该文件不在我的可写范围**，建议 Lead 裁决后在 §3#14 旁加一句「自绘图标例外清单见 `docs/icon-migration/C-PATH-PLAN.md` §3」。
+- ~~未做 `docs/DESIGN.md` 的措辞更新~~ → **261116 已补**（Lead task-10）：`DESIGN.md:402` 原句不动，句末追加「自绘图标的处置与边界（哪些允许脱离 24 网格 / 1.75 描边、J1–J4 判据）见 `docs/icon-migration/C-PATH-PLAN.md` §3」。
 
-**待 Lead/用户裁决（3 个）**：
+**待 Lead/用户裁决（3 个 → 261116 已结 2 个）**：
 
-1. `RowExpandIcon` 是否换 IconPark `FullScreen`？（收益：从"填充 1024 网格"变成"线性 48 网格"，与 lucide 语言更近；代价：`check:bitablesnap` 3 态重烤 + 云端 lakex 视觉分叉）
-2. `docs/DESIGN.md` 是否补"自绘例外"口径（一句）？不补的话，下一轮 review 会再次把 notebookIcons 当违规。
-3. §5.4 的报告型 `scripts/audit-icons.mjs` 要不要做（零门禁、只出报告，约 40 行）？
+1. ~~`RowExpandIcon` 是否换 IconPark `FullScreen`~~ → **261116 用户裁决：换**，已执行（见 §13.1/§13.2）；视觉结论「与 lucide 一致、与云端语雀分叉」记录在 §13.2，回滚点 = 单文件 4 行 path。
+2. ~~`docs/DESIGN.md` 是否补"自绘例外"口径~~ → **已结**：261116 已在 `DESIGN.md:402` 原句后追加 §3 指针（见 §12 上一条）。
+3. ~~§5.4 的报告型 `scripts/audit-icons.mjs` 要不要做~~ → **已结**：261116 已落地（`scripts/audit-icons.mjs` + `npm run audit:icons`，零门禁、退出码恒 0），首次基线见 §5.4.1。
+
+---
+
+## 13. 执行记录（task-9 · 261116）：B1/B2 落地 + RowExpandIcon 换 IconPark FullScreen
+
+> 只改 `src/` + `NOTICE` + 本文件；未 commit；未跑 `--write-baseline`；未 pkill Electron / 模拟器。
+
+### 13.1 改了哪些文件
+
+| 文件 | 改动 | 对应计划 |
+| --- | --- | --- |
+| `src/features/outline/ExpandLevelIcon.tsx` | 删 `strokeWidth={1.7}`（死值：带 `lucide` 类时被 CSS 1.75 压过），头注释写明单一来源 | §0.1 #5 / 批次 1① |
+| `src/components/app/SyncStatusPopover.tsx` | `CloudCheckIcon` 加 `className="lucide"`、删 `strokeWidth="2"`；改为具名导出（仅供 render 测试） | 批次 1② |
+| `src/features/editor/selectionToolbar/LakeColorBoard.tsx` | 对勾抽成 `BoardCheck` 并把 `viewBox` 18→24（几何不动，修裁切）；4 个绘制 hex → 令牌；`<input type="color">` 的 `#000000` 初值收成具名常量 | 批次 2 |
+| `src/styles/themes/base.css` | **+3 个专用调色板令牌**：`--lake-colorboard-check-ink` / `-check-paper` / `-default-swatch`；**未动** `themes/{light,dark,warm,chat}.css`（那是 Lead 的设置页面） | §5.1 |
+| `src/features/ai/AiTagIcon.tsx` | 固定 `id="ai-tag-grad"` → `useId()`（`useId().replace(/[:]/g,"")`，同 notebookIcons 手法）⇒ 同屏两实例不再重复 DOM id | 批次 2 |
+| `src/features/bitable/bitableEditorModel.tsx` | `RowExpandIcon` 换 IconPark `FullScreen`：48 网格坐标 ÷2 → 24 网格、`currentColor`、`className="lucide"`、4 条 path、不写 strokeWidth | 用户裁决 |
+| `NOTICE` | 「二、其它第三方」+ IconPark 一行（Apache-2.0、来源 `es/icons/FullScreen.js`、坐标重写、未引运行时、上游已归档） | §7.4 |
+| 新测试 ×5 | `ExpandLevelIcon.render.test.tsx` / `AiTagIcon.render.test.tsx` / `rowExpandIcon.render.test.tsx` / `LakeColorBoard.render.test.tsx` / `cloudCheckIcon.render.test.tsx`（jsdom + createRoot + `IS_REACT_ACT_ENVIRONMENT`，与 `NativeSelect.render.test.tsx` 同范式） | 批次 1/2 验收 |
+
+### 13.2 视觉判断（4× 实拍 + 实测数字）
+
+**实拍与测量产物**（都在 /tmp，可按需拷贝留存）：
+
+| 产物 | 路径 |
+| --- | --- |
+| 总览 4×（三组图标 旧/新/邻居 并排） | `/tmp/icon-c-path-shots/c-path-icons@4x.png`（4616×2392） |
+| 色板对勾 8×（含「放大 4× 示意被裁」行） | `/tmp/icon-c-path-shots/colorboard-check@8x.png` |
+| 实测数值（盒/描边/溢出） | `/tmp/icon-c-path-shots/measure.json` |
+| 探针脚本（可复跑） | `/tmp/icon-c-path-shots/probe.mjs`；跑法 `node scripts/css-audit/drive.mjs 9222 /tmp/icon-c-path-shots/probe.mjs` |
+
+方法：向**正在运行的 dev 实例**（CDP :9222，`http://127.0.0.1:1421/`）注入一个 `position:fixed` 覆盖层，用**真实 app CSS**（含内核运行时注入的 `.lake-colorboard*`）渲染「旧 / 新 / lucide 邻居」三列，`Page.captureScreenshot` 带 `clip.scale=4`；测完立即移除覆盖层，**不点任何应用控件、不改应用状态**。
+
+| 图标 | 旧 | 新 | 判断 |
+| --- | --- | --- | --- |
+| **RowExpandIcon**（15px 档） | 1024 网格**实心**对角双箭头；盒 15×15，computed `stroke-width: 1px`（fill 图形，描边无关） | 24 网格描边四角折角；盒 15×15，**computed `stroke-width: 1.75px`**（= 15px 下 1.09px，与 lucide 邻居同值），stroke=`currentColor` | **与 lucide 线性语言一致**（与 15px 参照 lucide 同粗细）；**与云端语雀明显分叉**：由「实心双箭头」变「细线四折角」，视觉份量更轻、四角留白更大。按用户裁决执行；若回看觉得偏弱，回滚点 = `bitableEditorModel.tsx` 的 4 行 path（旧 `d` 在 HEAD） |
+| **CloudCheckIcon**（14px 档） | path computed `stroke-width: 2px`（24 网格 ⇒ 14px 下 1.17px） | path computed `1.75px`（⇒ 1.02px），与同按钮 lucide 邻居一致 | 符合预期：14px 下比原来轻 13%，与邻居齐平（原先明显偏重） |
+| **LakeColorBoard 对勾** | 12px 盒（内核 CSS 给），path **11.67×8.94**，**溢出右 2.00px / 下 0.67px ⇒ 确认被裁** | 12px 盒，path **8.75×6.70**，右 -1.50 / 下 -2.50（完整） | 裁切修掉。视觉尺寸 11.67 → 8.75px（≈73%）：旧的是把 24 网格路径塞进 18 视窗（放大 1.33× 后裁边），新的是该路径的规范比例。若用户觉得对勾偏小，备选 = 保持 24 网格再把路径放大到 20×20 安全框（一处 `transform`，需再拍一次） |
+
+### 13.3 门禁结果
+
+| 门禁 | 命令 | 结果 |
+| --- | --- | --- |
+| 类型 | `npx tsc --noEmit` | **exit 0** |
+| 相关 vitest | `npx vitest run src/features/bitable src/features/outline src/features/ai src/features/editor/selectionToolbar src/components/app src/lib/nodeIcons.test.ts` | **102 文件 / 753 测试全绿** |
+| 新增 render 测试 | 上述 5 个新文件单独跑 | **12 测试绿**（描边/网格/几何/令牌/唯一 id 全钉） |
+| 样式指标 | `node scripts/ui-metrics.mjs` | **exit 0**：桌面颜色字面量 hex=0 rgb=0（目标 0）、未定义令牌 0、`!important` 9/9（允许清单内）、字号字面量 0、跨文件重复 45/45 |
+| 层围栏 | `npx vitest run src/styles/cssLayers.test.ts` | **3 测试绿**（未新增 CSS 声明；新令牌在 `themes/base.css`，不在棘轮白名单） |
+| 图标报告（非门禁） | `node scripts/audit-icons.mjs` | 按预期把 `LakeColorBoard.tsx` 的唯一 hex（输入初值）列为 1 处，其余改动文件 0 处 |
+| **一条无关红** | `npx vitest run src/styles` | `primitives.test.ts` 红：`styles/feature.css :: .settings-panel .config-item > .config-item__ctl > :is(.settings-select, .ln-select--native)` 原语跨所有权覆盖 +1。**来自并行的设置页 CSS 改动**（`feature.css` 不在本任务改动集内），需 Lead 在原语侧加变体或调基线 —— 与本任务无关，未自行修改 |
+
+### 13.4 快照结论：**不重烤、不动基线**
+
+实测（`node /tmp/snapshot-impact.cjs`；`.css-audit/snap/base3.json`=42 桌面色 / `mob-after.json`=10 移动态 / `bitable-after.json`=3 多维表态）：
+
+| 组件 | 桌面 42 态 | 移动 10 态 | 多维表 3 态 |
+| --- | --- | --- | --- |
+| ExpandLevelIcon（`.outline-sidebar`） | **0 / 42**（`outline-*` 态是**内核 TOC**，不是我们的 OutlineSidebar） | — | — |
+| CloudCheckIcon | 42/42 有 `sync-status-icon` **容器**，但夹具按钮带 `workspace-local`（`localOnly`）⇒ 渲染 `HardDrive`，走不到 `synced` 分支 ⇒ **0 红** | 无该组件 | — |
+| LakeColorBoard（`.lake-colorboard`） | **0 / 42** | — | — |
+| AiTagIcon（`.ai-tag`） | **0 / 42** | — | — |
+| RowExpandIcon（`.bt-row-expander`） | **0 / 42** | — | **0 / 3**（这 3 态是移动端 `.mbt-*` DOM，桌面行按钮不在里面） |
+| notebookIcons（`.node-icon-glyph` / `.mb-node-glyph`） | 0 / 42 | 0 / 10 | — |
+
+⇒ 按 §5/§10 口径：**命中 0 的不重烤**，本次三份基线都不动、也没有跑 `--write-baseline`。若 Lead 后续在某一态看到差异，先 `check-stylesnap.mjs --states <态>` 复检（注意 §9：设置页 7 态的红归设置页改动，不是图标）；真红再按单一 owner 流程重烤。
+
+### 13.5 遗留与登记
+
+1. **唯一残留 hex**：`LakeColorBoard.tsx` 的 `NATIVE_COLOR_FALLBACK = "#000000"`（`<input type="color">` 的 `value` 属性不能吃 `var()`）。不是绘制色，是全文件唯一残留；`audit-icons.mjs` 会持续列出（预期）。清零方案 = 运行时 `getComputedStyle` 读令牌，但会引入首帧 DOM 读取，不建议。
+2. **Apache-2.0 §4(c) 的 LICENSE 副本**：本次只按任务范围改了 `NOTICE` 一行（记来源/改动/未引运行时）；若要把上游 LICENSE 全文随仓入库（`docs/icon-migration/LICENSE-IconPark.txt`），需 Lead 决定（不在本任务可写范围）。
+3. **计划 §0.1 处置表状态**：⑤ 已 NORMALIZE、⑨ 已 REDRAW+TOKEN、⑥ 已 useId、③ 已按裁决换图；④⑦⑧⑩⑪⑫⑬ 按计划**保持/冻结不变**。
+4. **未做**：没跑设备装置（不涉 `src/mobile/**`，按 §3#21④ 不需要装机验收）；没跑 `check:bitablesnap`（其 3 态是移动端，与本改动无交集，见 §13.4）。

@@ -15,8 +15,30 @@ const RECENT_EMPTY = "暂无";
 
 /** 浅色/深色判定（内核同一套：按亮度决定是否需要描边 & 勾选色）。 */
 const needsBorder = (hex: string): boolean => isLightColor(hex);
+
+/** 选中对勾的两个「固定对比色」：叠在**任意用户色** swatch 上，判据是该 swatch 的亮度
+ *  （isLightColor），与主题明暗无关 ⇒ 只是专用调色板令牌（themes/base.css），不做主题分档。 */
+const CHECK_INK = "var(--lake-colorboard-check-ink)";
+const CHECK_PAPER = "var(--lake-colorboard-check-paper)";
 function checkFill(hex: string): string {
-  return isLightColor(hex, 210) ? "#8C8C8C" : "#FFFFFF";
+  return isLightColor(hex, 210) ? CHECK_INK : CHECK_PAPER;
+}
+
+/** 「默认」行的文字色样块（= 黑色文字的含义，不是 UI 语义色，故不走 --lake-text-*）。 */
+const DEFAULT_SWATCH = "var(--lake-colorboard-default-swatch)";
+
+/** `<input type="color">` 的兜底值：HTML 属性里不能写 var()，所以这一处必须留颜色字面量。
+ *  它不是绘制色（只是表单控件初值），是全文件唯一残留的 hex（登记在 C-PATH-PLAN 执行记录）。 */
+const NATIVE_COLOR_FALLBACK = "#000000";
+
+/** 选中对勾（24 网格）。原实现把 24 网格的 Material 对勾塞进 `viewBox="0 0 18 18"`，
+ *  而路径范围 x∈[3.5,21] / y∈[5.59,19] ⇒ 右下两笔被 svg 视窗裁掉（261116 修：只改视窗，几何不动）。 */
+function BoardCheck({ fill }: { fill: string }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path fill={fill} d="M21,7L9,19L3.5,13.5L4.91,12.09L9,16.17L19.59,5.59L21,7Z" />
+    </svg>
+  );
 }
 
 function Swatch({ color, active, onSelect }: { color: string; active: boolean; onSelect: (c: string) => void }) {
@@ -38,7 +60,7 @@ function Swatch({ color, active, onSelect }: { color: string; active: boolean; o
     >
       <span style={special ? undefined : { backgroundColor: color }}>
         {active ? (
-          <svg viewBox="0 0 18 18"><path fill={checkFill(color)} d="M21,7L9,19L3.5,13.5L4.91,12.09L9,16.17L19.59,5.59L21,7Z" /></svg>
+          <BoardCheck fill={checkFill(color)} />
         ) : null}
       </span>
     </span>
@@ -70,8 +92,8 @@ export function LakeColorBoard({ value, onSelect, variant = "text" }: { value: s
           title={rowLabel}
           aria-hidden="true"
         >
-          <span style={noFill ? undefined : { backgroundColor: "#000000" }}>
-            {rowActive && !noFill ? <svg viewBox="0 0 18 18"><path fill="#FFFFFF" d="M21,7L9,19L3.5,13.5L4.91,12.09L9,16.17L19.59,5.59L21,7Z" /></svg> : null}
+          <span style={noFill ? undefined : { backgroundColor: DEFAULT_SWATCH }}>
+            {rowActive && !noFill ? <BoardCheck fill={CHECK_PAPER} /> : null}
           </span>
         </span>
         <span className="selection-toolbar__colorboard-label">{rowLabel}</span>
@@ -87,7 +109,7 @@ export function LakeColorBoard({ value, onSelect, variant = "text" }: { value: s
         <label className="lake-more-color-container">
           <span className="lake-more-color-preview" />
           <span>更多颜色</span>
-          <input className="selection-toolbar__nativecolor" type="color" value={/^#[0-9a-fA-F]{6}$/.test(value) ? value : "#000000"} onChange={(e) => onSelect(e.target.value)} aria-label="更多颜色" />
+          <input className="selection-toolbar__nativecolor" type="color" value={/^#[0-9a-fA-F]{6}$/.test(value) ? value : NATIVE_COLOR_FALLBACK} onChange={(e) => onSelect(e.target.value)} aria-label="更多颜色" />
           <span className="selection-toolbar__more-arrow ne-icon ne-icon-kitchen ne-icon-right-arrow" data-name="right-arrow"><svg className="ne-icon-symbol" aria-hidden="true"><use xlinkHref="#icon-right-arrow" /></svg></span>
         </label>
       </div>
