@@ -168,8 +168,9 @@ describe("IPC 通道三方一致性（C2-2）", () => {
     // → 189（261116：list_note_image_assets —— AI 写作图片附件选择器按文档列图片；只读 filename/size，不算 sha）。
     // → 190（261116 第四稿：pick_ai_local_files —— 主进程 dialog 选本机文件附件，只回引用/元数据）。
     // 261116 第四稿最终口径：对话写作按文档取附件（复用 list_note_image_assets，不新增全库枚举通道）。
-    expect(registrarChannels().size, "通道数变了 ⇒ 请确认是有意的并在 commit 里说明").toBe(190);
-    expect(preloadChannels().size).toBe(190);
-    expect(Object.keys(WEB_METHODS).length).toBe(190);
+    // → 191（261116：ai_save_pasted_image —— 第三方剪贴板图片落盘为本地附件并登记 token）。
+    expect(registrarChannels().size, "通道数变了 ⇒ 请确认是有意的并在 commit 里说明").toBe(191);
+    expect(preloadChannels().size).toBe(191);
+    expect(Object.keys(WEB_METHODS).length).toBe(191);
   });
 });

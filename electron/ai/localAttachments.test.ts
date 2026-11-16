@@ -7,11 +7,17 @@ const h = vi.hoisted(() => ({ extractPdfText: vi.fn() }));
 vi.mock("./pdfText.js", () => ({ extractPdfText: h.extractPdfText }));
 
 const {
+  AI_PASTED_IMAGE_MAX_AGE_MS,
+  cleanupPastedImages,
+  configurePastedImageDir,
+  localAttachmentImageSource,
   localAttachmentKindOf,
   pdfAttachmentErrorMessage,
   readRegisteredLocalFile,
   registerPickedLocalFile,
   resetLocalAttachmentRegistryForTest,
+  resetPastedImageDirForTest,
+  savePastedImage,
 } = await import("./localAttachments.js");
 
 const dirs: string[] = [];
@@ -82,5 +88,59 @@ describe("本机文件附件注册表（261116 Phase 2）", () => {
 
   it("重启语义：不存在的 token → 读不到（resolver 会报「附件已失效」）", () => {
     expect(readRegisteredLocalFile({ kind: "local", token: "loc-missing", name: "x.txt", size: 1, mimeType: "text/plain" })).toBeNull();
+  });
+});
+
+
+describe("粘贴图片（261116 用户需求）", () => {
+  const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
+  let dir = "";
+
+  beforeEach(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), "lake-paste-"));
+    configurePastedImageDir(dir);
+  });
+  afterEach(() => {
+    resetPastedImageDirForTest();
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("写盘到 <dir>/paste-<uuid>.<ext> 并回引用；非图片/过大/空拒绝", () => {
+    const ref = savePastedImage({ bytes: PNG, mimeType: "image/png", name: "截图.png" });
+    expect(ref.kind).toBe("local");
+    expect(ref.token.startsWith("paste-")).toBe(true);
+    expect(ref.token.endsWith(".png")).toBe(true);
+    expect(fs.existsSync(path.join(dir, ref.token.slice("paste-".length)))).toBe(true);
+    expect(ref.size).toBe(PNG.length);
+    expect(() => savePastedImage({ bytes: PNG, mimeType: "text/plain" })).toThrow(/不支持的粘贴类型/);
+    expect(() => savePastedImage({ bytes: Buffer.alloc(10 * 1024 * 1024 + 1), mimeType: "image/png" })).toThrow(/粘贴图片过大/);
+    expect(() => savePastedImage({ bytes: Buffer.alloc(0), mimeType: "image/png" })).toThrow(/为空/);
+  });
+
+  it("重启回落：清空注册表后，读取与预览仍能按 token 读盘", () => {
+    const ref = savePastedImage({ bytes: PNG, mimeType: "image/png", name: "截图.png" });
+    resetLocalAttachmentRegistryForTest(); // 模拟应用重启（进程内存注册表清空）
+    const read = readRegisteredLocalFile(ref)!;
+    expect(read.bytes.equals(PNG)).toBe(true);
+    expect(read.name).toBe("截图.png");
+    const preview = localAttachmentImageSource(ref.token)!;
+    expect(preview.mimeType).toBe("image/png");
+    expect(fs.existsSync(preview.path)).toBe(true);
+    // 非 paste token 保持现状：重启后失效
+    expect(readRegisteredLocalFile({ kind: "local", token: "loc-dead", name: "x.png", size: 1, mimeType: "image/png" })).toBeNull();
+  });
+
+  it("启动清理：只删「无引用且超过 7 天」的粘贴图", () => {
+    const oldRef = savePastedImage({ bytes: PNG, mimeType: "image/png", name: "old.png" });
+    const oldFile = path.join(dir, oldRef.token.slice("paste-".length));
+    const oldTime = new Date(Date.now() - AI_PASTED_IMAGE_MAX_AGE_MS - 1000);
+    fs.utimesSync(oldFile, oldTime, oldTime);
+    const keptRef = savePastedImage({ bytes: PNG, mimeType: "image/png", name: "kept.png" });
+    const recentRef = savePastedImage({ bytes: PNG, mimeType: "image/png", name: "recent.png" });
+    const removed = cleanupPastedImages(new Set([keptRef.token]));
+    expect(removed).toBe(1);
+    expect(fs.existsSync(oldFile)).toBe(false);
+    expect(fs.existsSync(path.join(dir, keptRef.token.slice("paste-".length)))).toBe(true); // 有引用：保留（即使旧）
+    expect(fs.existsSync(path.join(dir, recentRef.token.slice("paste-".length)))).toBe(true); // 未过期：保留
   });
 });

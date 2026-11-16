@@ -148,6 +148,8 @@ export interface LakeNative {
   aiWritingDeleteLastAssistant(conversationId: string): Promise<{ ok: true }>;
   /** 主进程 dialog 选本机文件，只回引用/元数据（字节不进渲染层）。 */
   pickAiLocalFiles(): Promise<AiLocalFileRef[]>;
+  /** 粘贴图片：字节仅此一次进主进程，落盘后只回 AiLocalFileRef（token 可跨重启预览/发送）。 */
+  aiSavePastedImage(bytes: Uint8Array, mimeType: string, name?: string): Promise<AiLocalFileRef>;
   createNote(title: string): Promise<NoteDocument>;
   /**
    * 保存正文。`baseHash`（可选，Batch4-D 保存版本守卫）= 打开/上次保存时的正文 sha256：
@@ -483,6 +485,7 @@ export const native = {
   aiWritingUpdateMessage: (id: string, patch: AiWritingMessagePatch) => api().aiWritingUpdateMessage(id, patch),
   aiWritingDeleteLastAssistant: (conversationId: string) => api().aiWritingDeleteLastAssistant(conversationId),
   pickAiLocalFiles: () => api().pickAiLocalFiles(),
+  aiSavePastedImage: (bytes: Uint8Array, mimeType: string, name?: string) => api().aiSavePastedImage(bytes, mimeType, name),
   createNote: (title: string) => api().createNote(title),
   saveNote: (id: string, title: string, content: string, caches?: { markdown?: string | null; plain?: string | null }, baseHash?: string) => api().saveNote(id, title, content, caches, baseHash),
   updateNoteCaches: (id: string, markdown: string | null, plain: string | null) => api().updateNoteCaches(id, markdown, plain),

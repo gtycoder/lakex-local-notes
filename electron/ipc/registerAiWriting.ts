@@ -1,4 +1,4 @@
-import { dialog } from "electron";
+import { app, dialog } from "electron";
 import type { IpcRegistrar } from "./registrar.js";
 import { Store } from "../store.js";
 import { IpcInputError } from "../ipcLimits.js";
@@ -15,7 +15,8 @@ import {
   AiWritingMessagePatch,
   AiWritingMode,
 } from "../../src/core/aiWriting.js";
-import { registerPickedLocalFile, LOCAL_ATTACHMENT_IMAGE_EXTS, LOCAL_ATTACHMENT_PDF_EXTS, LOCAL_ATTACHMENT_TEXT_EXTS } from "../ai/localAttachments.js";
+import { AI_PASTED_IMAGE_MAX_BYTES, cleanupPastedImages, configurePastedImageDir, LOCAL_ATTACHMENT_IMAGE_EXTS, LOCAL_ATTACHMENT_PDF_EXTS, LOCAL_ATTACHMENT_TEXT_EXTS, pastedAttachmentDir, registerPickedLocalFile, savePastedImage } from "../ai/localAttachments.js";
+import { toUint8Array } from "./bytes.js";
 
 /**
  * AI 写作空间 IPC（261109，桌面本地）：会话/消息 CRUD。
@@ -84,6 +85,14 @@ function readDuration(value: unknown): number | null {
 
 export function registerAiWritingIpc(ipc: IpcRegistrar, store: Store): void {
   const repo = () => store.getAiWritingRepository();
+  // 粘贴图片目录（单一来源 = <userData>/ai-attachments，设备本地、不进 S3）；启动时做一次过期清理。
+  const pastedDir = pastedAttachmentDir(app.getPath("userData"));
+  configurePastedImageDir(pastedDir);
+  try {
+    cleanupPastedImages(repo().listPastedAttachmentTokens());
+  } catch {
+    // 清理失败不阻断启动（只影响磁盘占用）。
+  }
 
   ipc.handle("ai_writing_list", () => repo().listConversations());
 
@@ -157,6 +166,22 @@ export function registerAiWritingIpc(ipc: IpcRegistrar, store: Store): void {
     }
     if (picked.length === 0) throw new IpcInputError("所选文件无法作为附件（空文件/目录/无权限）");
     return picked;
+  });
+
+  /**
+   * 粘贴图片（261116 用户需求）：渲染层把剪贴板图片字节**只在这一步**交给主进程；
+   * 主进程校验图片类型/≤10MB，写到 <userData>/ai-attachments/paste-<uuid>.<ext> 并登记 token，
+   * 之后渲染层只持有 AiLocalFileRef（取消/发送/历史都只传引用）。
+   */
+  ipc.handle("ai_save_pasted_image", (bytes: unknown, mimeType: unknown, name?: unknown) => {
+    const data = toUint8Array(bytes);
+    if (!data || data.length === 0) throw new IpcInputError("粘贴图片数据无效");
+    if (data.length > AI_PASTED_IMAGE_MAX_BYTES) {
+      throw new IpcInputError("粘贴图片过大（上限 " + Math.round(AI_PASTED_IMAGE_MAX_BYTES / 1024 / 1024) + "MB）");
+    }
+    const mime = readString(mimeType, "图片类型", 100);
+    const displayName = name === undefined || name === null ? undefined : readString(name, "文件名", 200);
+    return savePastedImage({ bytes: Buffer.from(data), mimeType: mime, name: displayName });
   });
 
   ipc.handle("ai_writing_delete", (id: unknown) => {

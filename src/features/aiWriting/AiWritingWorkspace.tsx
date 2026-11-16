@@ -235,6 +235,7 @@ export function AiWritingWorkspace({ active, treeNodes, topbarLeading, onOpenSet
                     onAddAttachments={controller.addAttachments}
                     onRemoveAttachment={controller.removeAttachment}
                     onPickLocalFiles={() => { void controller.pickLocalFiles(); }}
+                    onPasteImages={(files) => { void controller.pasteImages(files); }}
                   />
                   <div className="aiw-suggest">
                     <p className="aiw-suggest__label">点一点试试：</p>
@@ -285,6 +286,7 @@ export function AiWritingWorkspace({ active, treeNodes, topbarLeading, onOpenSet
                   onAddAttachments={controller.addAttachments}
                   onRemoveAttachment={controller.removeAttachment}
                   onPickLocalFiles={() => { void controller.pickLocalFiles(); }}
+                  onPasteImages={(files) => { void controller.pasteImages(files); }}
                 />
               </div>
             )}

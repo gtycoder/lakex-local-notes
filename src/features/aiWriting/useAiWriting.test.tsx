@@ -14,6 +14,7 @@ const h = vi.hoisted(() => ({
   aiSaveSettings: vi.fn(),
   aiGetSettings: vi.fn(async () => ({ activeProviderId: "deepseek", providers: [{ id: "deepseek", label: "DeepSeek", hasApiKey: true, model: "deepseek-chat" }] })),
   aiCancel: vi.fn(async () => undefined),
+  aiSavePastedImage: vi.fn(async () => ({ kind: "local", token: "paste-t", name: "p.png", size: 3, mimeType: "image/png" })),
 }));
 vi.mock("../../lib/native", () => ({
   native: {
@@ -22,6 +23,7 @@ vi.mock("../../lib/native", () => ({
     aiWritingComposer: h.aiWritingComposer,
     aiGetSettings: h.aiGetSettings,
     aiCancel: h.aiCancel,
+    aiSavePastedImage: h.aiSavePastedImage,
     aiWritingAppendMessage: vi.fn(),
     aiWritingUpdateMessage: vi.fn(),
     aiWritingDeleteLastAssistant: vi.fn(),
@@ -51,14 +53,17 @@ function Harness() {
         attachKeys: controller.attachRefs.map((ref) => ("noteId" in ref ? ref.noteId + "/" + ref.filename : "local")),
         input: controller.input,
         promptText: controller.promptText,
+        loadError: controller.loadError,
         messages: controller.messages.length,
         activeId: controller.activeConversation?.id ?? null,
       })}</output>
       <button type="button" onClick={() => controller.selectConversation("c1")}>select</button>
       <button type="button" onClick={() => controller.setMode("chat")}>switch-chat</button>
+      <button type="button" onClick={() => controller.setMode("docs")}>switch-docs</button>
       <button type="button" onClick={() => controller.setInput("草稿")}>type</button>
       <button type="button" onClick={() => controller.addAttachments([{ noteId: "n0", filename: "a.png" }, { noteId: "n1", filename: "b.png" }])}>add-attach</button>
       <button type="button" onClick={() => controller.setDocRefs([{ kind: "note", id: "n1", title: "文档1" }])}>prune-docs</button>
+      <button type="button" onClick={() => { void controller.pasteImages([{ type: "image/png", size: 3, name: "p.png", arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer } as unknown as File]); }}>paste-image</button>
     </div>
   );
 }
@@ -123,6 +128,24 @@ describe("useAiWriting · 模式切换", () => {
     click("prune-docs");
     expect(state().docRefs).toBe(1);
     expect(state().attachKeys).toEqual(["n1/b.png"]);
+  });
+
+  it("粘贴图片：chat 模式落盘并加引用；docs 模式拒绝且不保存", async () => {
+    h.aiSavePastedImage.mockClear();
+    await flush();
+    click("paste-image");
+    await flush();
+    expect(h.aiSavePastedImage).toHaveBeenCalledTimes(1);
+    expect(state().attachKeys).toEqual(["local"]);
+
+    click("switch-docs"); // 切模式清空附件视图
+    await flush();
+    h.aiSavePastedImage.mockClear();
+    click("paste-image");
+    await flush();
+    expect(h.aiSavePastedImage).not.toHaveBeenCalled();
+    expect(state().attachKeys).toEqual([]);
+    expect(String(state().loadError)).toContain("多文档推理");
   });
 
   it("打开 chat 会话时忽略历史里残留的 docRefs（纯对话判据）", async () => {

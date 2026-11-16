@@ -266,6 +266,22 @@ export class AiWritingRepository {
     this.db.prepare("DELETE FROM ai_writing_messages WHERE id = ?").run(id);
   }
 
+  /** 启动清理粘贴图片目录用：所有历史 attach_refs 里的 paste- token（不读正文）。 */
+  listPastedAttachmentTokens(): Set<string> {
+    const rows = this.db
+      .prepare("SELECT attach_refs FROM ai_writing_messages WHERE attach_refs IS NOT NULL")
+      .all() as Array<{ attach_refs: string | null }>;
+    const tokens = new Set<string>();
+    for (const row of rows) {
+      for (const item of safeJsonArray(row.attach_refs)) {
+        if (!item || typeof item !== "object") continue;
+        const ref = item as { kind?: unknown; token?: unknown };
+        if (ref.kind === "local" && typeof ref.token === "string" && ref.token.startsWith("paste-")) tokens.add(ref.token);
+      }
+    }
+    return tokens;
+  }
+
   /** 「重新生成」：删掉最后一条助手消息（不存在则无操作）。 */
   deleteLastAssistantMessage(conversationId: string): void {
     this.db

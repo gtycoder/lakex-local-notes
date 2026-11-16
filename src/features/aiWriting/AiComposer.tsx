@@ -61,6 +61,8 @@ export interface AiComposerProps {
   onRemoveAttachment: (asset: AiWritingAttachment) => void;
   /** 主进程 dialog 选本机文件（只在对话写作可用；docs 模式 UI 不提供入口）。 */
   onPickLocalFiles: () => void;
+  /** 粘贴剪贴板图片（第三方复制）；docs 模式由 controller 拒绝并给可执行提示。 */
+  onPasteImages: (files: File[]) => void;
 }
 
 function promptTitleOf(promptText: string): string {
@@ -70,8 +72,9 @@ function promptTitleOf(promptText: string): string {
 
 export function AiComposer({
   mode, input, busy, promptText, docRefs, attachRefs, treeNodes, thinking, placeholder = "从这里开始对话",
-  onInput, onSend, onStop, onThinkingChange, onSetPrompt, onSetDocRefs, onAddAttachments, onRemoveAttachment, onPickLocalFiles,
+  onInput, onSend, onStop, onThinkingChange, onSetPrompt, onSetDocRefs, onAddAttachments, onRemoveAttachment, onPickLocalFiles, onPasteImages,
 }: AiComposerProps) {
+
   const caps = aiWritingModeCapabilities(mode);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   /**
@@ -188,6 +191,15 @@ export function AiComposer({
         rows={1}
         aria-label={placeholder}
         onChange={(event) => onInput(event.target.value)}
+        onPaste={(event) => {
+          // 第三方图片粘贴：只拦截 clipboardData 里 image/* 的文件项；纯文本粘贴保持默认。
+          const items = Array.from(event.clipboardData?.items ?? []).filter((item) => item.kind === "file" && item.type.startsWith("image/"));
+          if (items.length === 0) return;
+          const files = items.map((item) => item.getAsFile()).filter((file): file is File => Boolean(file));
+          if (files.length === 0) return;
+          event.preventDefault();
+          onPasteImages(files);
+        }}
         onKeyDown={(event) => {
           if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
           event.preventDefault();

@@ -62,6 +62,8 @@ export interface AiWritingController {
   clearAttachments: () => void;
   /** 主进程 dialog 选本机文件（只在允许 localFiles 的模式下可用）。 */
   pickLocalFiles: () => Promise<void>;
+  /** 粘贴剪贴板图片（第三方复制）：字节只此一次进主进程，落盘后只加引用。 */
+  pasteImages: (files: File[]) => Promise<void>;
   /** 深度思考（261116 用户裁决：默认开、可关）。请求级覆盖 = runAiChat options.thinking。 */
   thinking: boolean;
   setThinking: (value: boolean) => void;
@@ -196,6 +198,39 @@ export function useAiWriting(options: { active: boolean }): AiWritingController 
   const clearAttachments = useCallback(() => setAttachRefs([]), []);
 
   /** 本机文件：主进程 dialog 选文件（只回引用/元数据），能力表禁止时给出可执行原因。 */
+  /** 与主进程 AI_PASTED_IMAGE_MAX_BYTES 同口径（10MB/张；附件总数沿用 AI_WRITING_MAX_ATTACHMENTS）。 */
+  const pasteImages = useCallback(async (files: File[]) => {
+    const cap = aiWritingModeCapabilities(composerRef.current.mode);
+    if (!cap.localFiles) {
+      setLoadError("多文档推理只接受「所选文档里的附件」，不能粘贴图片；请切到「对话写作」再粘贴。");
+      return;
+    }
+    const remaining = AI_WRITING_MAX_ATTACHMENTS - composerRef.current.attachRefs.length;
+    if (remaining <= 0) {
+      setLoadError("附件已达 " + AI_WRITING_MAX_ATTACHMENTS + " 个上限，请先移除部分附件再粘贴。");
+      return;
+    }
+    const picked: AiWritingAttachment[] = [];
+    for (const file of files.slice(0, remaining)) {
+      if (!file.type.startsWith("image/")) {
+        setLoadError("只能粘贴图片（剪贴板里的其它类型请用「从电脑选择文件」）。");
+        continue;
+      }
+      if (file.size > 10 * 1024 * 1024) {
+        setLoadError("粘贴图片过大：" + (file.name || "剪贴板图片") + "（上限 10MB）");
+        continue;
+      }
+      try {
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        picked.push(await native.aiSavePastedImage(bytes, file.type, file.name || undefined));
+      } catch (error) {
+        setLoadError(getNativeErrorMessage(error) || "粘贴图片保存失败，请重试");
+      }
+    }
+    if (files.length > remaining) setLoadError("一次最多 " + AI_WRITING_MAX_ATTACHMENTS + " 个附件：本次粘贴 " + files.length + " 张，只添加了前 " + remaining + " 张。");
+    if (picked.length > 0) addAttachments(picked);
+  }, [addAttachments]);
+
   const pickLocalFiles = useCallback(async () => {
     const cap = aiWritingModeCapabilities(composerRef.current.mode);
     if (!cap.localFiles) {
@@ -447,14 +482,14 @@ export function useAiWriting(options: { active: boolean }): AiWritingController 
   return useMemo(() => ({
     conversations, activeConversation, messages, loading, loadError, busy, stream,
     mode, setMode, input, setInput, promptText, setPromptText, docRefs, setDocRefs,
-    attachRefs, addAttachments, removeAttachment, clearAttachments, pickLocalFiles,
+    attachRefs, addAttachments, removeAttachment, clearAttachments, pickLocalFiles, pasteImages,
     thinking, setThinking,
     ready, aiEnabled, providerLabel: providerLabelOf(activeProviderId),
     newConversation, selectConversation, renameConversation, deleteConversation,
     send, stop, regenerate,
   }), [
     conversations, activeConversation, messages, loading, loadError, busy, stream,
-    mode, setMode, input, promptText, setPromptText, docRefs, setDocRefs, attachRefs, addAttachments, removeAttachment, clearAttachments, pickLocalFiles, thinking,
+    mode, setMode, input, promptText, setPromptText, docRefs, setDocRefs, attachRefs, addAttachments, removeAttachment, clearAttachments, pickLocalFiles, pasteImages, thinking,
     ready, aiEnabled, activeProviderId,
     newConversation, selectConversation, renameConversation, deleteConversation, send, stop, regenerate,
   ]);

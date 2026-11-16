@@ -92,6 +92,22 @@ describe("AiWritingRepository", () => {
     expect(repo.listMessages(conversation.id)[1].attachRefs).toBeUndefined();
   });
 
+  it("启动清理用：只收集历史里的 paste- token（资产图/普通本机文件不算）", () => {
+    const { repo } = makeRepo();
+    const conversation = repo.createConversation({ mode: "chat", title: "粘贴" });
+    repo.appendMessage({
+      conversationId: conversation.id,
+      role: "user",
+      content: "看图",
+      attachRefs: [
+        { kind: "local", token: "paste-abc", name: "a.png", size: 10, mimeType: "image/png" },
+        { kind: "local", token: "loc-keep", name: "b.txt", size: 10, mimeType: "text/plain" },
+        { noteId: "n1", filename: "c.png" },
+      ],
+    });
+    expect([...repo.listPastedAttachmentTokens()]).toEqual(["paste-abc"]);
+  });
+
   it("向不存在的会话追加消息 ⇒ 直接报错（不落孤儿消息）", () => {
     const { raw, repo } = makeRepo();
     expect(() => repo.appendMessage({ conversationId: "missing", role: "user", content: "x" })).toThrow(/会话不存在/);

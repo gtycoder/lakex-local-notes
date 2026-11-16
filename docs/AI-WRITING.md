@@ -231,6 +231,28 @@ UI、请求组装、IPC 校验都读它，测试 `src/core/aiWriting.test.ts` �
 - **已知限制**：加密 PDF 即使知道密码也不支持（不做密码输入 UI）；扫描件不做 OCR；docx/Excel 等不解析；
   移动端 AI 写作仍不接（原生 AiChatPlugin 无 document 支持）。
 
+## 数据边界：AI 写作本地专属（不进 S3、不进便携包）
+
+> 用户裁决（261116）：「所有 AI 历史对话与这些附件都只在本地，绝不进 S3」。这不是约定，是护栏机检。
+
+- **会话/消息**：只存本机主库 `metadata.sqlite3` 的 `ai_writing_conversations` / `ai_writing_messages` 两张表；
+  **不进树/搜索/S3/同步/便携包**；没有任何后台外发，只有用户点「发送」时 messages 随 `ai_chat` 请求发给用户配置的供应商。
+- **附件（文档资产图）**：只在 `attach_refs` 里存引用（noteId/filename），字节本来就在 `note-assets`（笔记数据）；
+  **不复制进 AI 会话目录**；AI 请求时才由主进程读取。
+- **粘贴图片**：落盘目录 **`<userData>/ai-attachments/paste-<uuid>.<ext>`**（userData 顶层，单一来源
+  `localAttachments.pastedAttachmentDir`）。**绝不能放 `note-assets/`**（会被资产声明/GC/同步扫到），
+  也不进 `dist/`、不进 workspace 数据根、不进 S3。
+- **跨重启**：`paste-` token 可反推文件名 ⇒ 注册表 miss 时读取/预览回落读盘（历史缩略图、重新生成仍可用）；
+  非 `paste-` token（dialog 选的普通本机文件）保持「重启失效」语义。
+- **粘贴图生命周期**：粘贴时写入（tmp+rename 原子写）；token 存内存注册表；启动时主进程执行一次清理——
+  删除「未被任何 `attach_refs` 引用且 mtime 超过 **7 天**」的粘贴文件；删除会话**不立即删文件**（等启动 GC）；
+  不做同步，不做云备份。目录缺失/清理失败不影响启动。
+- **护栏**：`electron/aiWritingLocalOnly.test.ts` ——
+  ① `ai_writing` 只许出现在 schema/repository/IPC/preload/本地 webApi；
+  ② `electron/s3v3`、`syncEngineController`、`portable`、`store.ts`、`indexRepository.ts` 出现
+  `ai_writing` / `ai-attachments` / `ai-paste` 直接红；
+  ③ 便携包收集白名单不含 AI 会话/附件目录（现状白名单 = 正文 + note-assets + quick-notes）。
+
 ## v1 明确不做（用户 261109 定稿）
 
 - 移动端不接（移动端已有 AI 助手）；会话不跨端、不进 S3。

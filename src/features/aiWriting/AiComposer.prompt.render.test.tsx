@@ -41,10 +41,11 @@ interface RenderOptions {
   onAddAttachments?: (refs: readonly unknown[]) => void;
   onRemoveAttachment?: (asset: unknown) => void;
   onPickLocalFiles?: () => void;
+  onPasteImages?: (files: File[]) => void;
 }
 
 async function renderComposer(options: RenderOptions = {}) {
-  const { input = "", promptText = null, busy = false, thinking = true, mode = "chat", attachRefs = [], onAddAttachments = vi.fn(), onRemoveAttachment = vi.fn(), onPickLocalFiles = vi.fn() } = options;
+  const { input = "", promptText = null, busy = false, thinking = true, mode = "chat", attachRefs = [], onAddAttachments = vi.fn(), onRemoveAttachment = vi.fn(), onPickLocalFiles = vi.fn(), onPasteImages = vi.fn() } = options;
   const onInput = vi.fn();
   const onSetPrompt = vi.fn();
   const onThinkingChange = vi.fn();
@@ -73,10 +74,11 @@ async function renderComposer(options: RenderOptions = {}) {
         onAddAttachments={onAddAttachments}
         onRemoveAttachment={onRemoveAttachment}
         onPickLocalFiles={onPickLocalFiles}
+        onPasteImages={onPasteImages}
       />,
     );
   });
-  return { onInput, onSetPrompt, onThinkingChange, onSend, onStop, onAddAttachments, onRemoveAttachment, onPickLocalFiles };
+  return { onInput, onSetPrompt, onThinkingChange, onSend, onStop, onAddAttachments, onRemoveAttachment, onPickLocalFiles, onPasteImages };
 }
 
 function buttonByLabel(label: string): HTMLButtonElement | null {
@@ -278,5 +280,28 @@ describe("AiComposer · 提示词库点卡片直接写入输入框", () => {
     await act(async () => { clickCard(AI_WRITING_PROMPT_CARDS[0].title); });
     await flush();
     expect(document.querySelectorAll('[role="menuitem"]').length).toBe(0);
+  });
+});
+
+describe("AiComposer · 粘贴图片（第三方剪贴板）", () => {
+  it("粘贴 image/* → 拦截默认并回传 File[]（纯文本粘贴不受影响）", async () => {
+    const file = new File([new Uint8Array([137, 80, 78, 71])], "粘贴截图.png", { type: "image/png" });
+    const { onPasteImages } = await renderComposer();
+    const area = document.querySelector("textarea")!;
+    const imageEvent = new Event("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(imageEvent, "clipboardData", {
+      value: { items: [{ kind: "file", type: "image/png", getAsFile: () => file }] },
+    });
+    act(() => { area.dispatchEvent(imageEvent); });
+    expect(onPasteImages).toHaveBeenCalledWith([file]);
+    expect(imageEvent.defaultPrevented).toBe(true);
+
+    const textEvent = new Event("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(textEvent, "clipboardData", {
+      value: { items: [{ kind: "string", type: "text/plain", getAsFile: () => null }] },
+    });
+    act(() => { area.dispatchEvent(textEvent); });
+    expect(onPasteImages).toHaveBeenCalledTimes(1);
+    expect(textEvent.defaultPrevented).toBe(false);
   });
 });

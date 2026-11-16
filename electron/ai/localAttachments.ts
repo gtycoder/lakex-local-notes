@@ -15,6 +15,7 @@
  */
 import crypto from "node:crypto";
 import fs from "node:fs";
+import path from "node:path";
 import type { AiLocalFileRef } from "../../src/core/aiProviders.js";
 import { AppError } from "../../src/core/storeErrors.js";
 import { extOf, mimeTypeForFilename } from "../../src/core/assetNaming.js";
@@ -130,7 +131,16 @@ export interface AiLocalFileReader {
 /** resolver 只通过这个接口读字节（单测可注入内存实现）。 */
 export function readRegisteredLocalFile(ref: AiLocalFileRef): { bytes: Buffer; size: number; mimeType: string; name: string; pdf?: CachedPdfText } | null {
   const entry = registry.get(ref.token);
-  if (!entry) return null;
+  if (!entry) {
+    // 粘贴图片跨重启：token 可反推粘贴目录里的文件名，直接读盘（非 paste token 仍失效）。
+    const persisted = pastedImageSource(ref.token);
+    if (!persisted) return null;
+    try {
+      return { bytes: fs.readFileSync(persisted.path), size: persisted.size, mimeType: ref.mimeType || persisted.mimeType, name: ref.name || persisted.name };
+    } catch {
+      return null;
+    }
+  }
   try {
     const stat = fs.statSync(entry.path);
     if (!stat.isFile()) return null;
@@ -153,7 +163,128 @@ export function resetLocalAttachmentRegistryForTest(): void {
  */
 export function localAttachmentImageSource(token: string): { path: string; mimeType: string; size: number; name: string } | null {
   const entry = registry.get(token);
-  if (!entry) return null;
-  if (localAttachmentKindOf(entry.name) !== "image") return null;
-  return { path: entry.path, mimeType: entry.mimeType, size: entry.size, name: entry.name };
+  if (entry) {
+    if (localAttachmentKindOf(entry.name) !== "image") return null;
+    return { path: entry.path, mimeType: entry.mimeType, size: entry.size, name: entry.name };
+  }
+  // 粘贴图片跨重启：注册表 miss 时按 token 回落到粘贴目录读盘（历史缩略图仍可用）。
+  const persisted = pastedImageSource(token);
+  return persisted;
+}
+
+// ---------------------------------------------------------------------------
+// 粘贴图片（261116 用户需求：第三方剪贴板图片 → 落盘临时文件 → 跟随历史）
+// ---------------------------------------------------------------------------
+
+/** 粘贴图片目录（单一来源：<userData>/ai-attachments；设备本地，不进 S3/同步）。 */
+export function pastedAttachmentDir(userDataDir: string): string {
+  return path.join(userDataDir, "ai-attachments");
+}
+
+/** 粘贴图片：单张 ≤10MB、只允许图片（与 aiChatImage 限制同口径；单次 ≤10 张由渲染层/附件上限兜住）。 */
+export const AI_PASTED_IMAGE_MAX_BYTES = 10 * 1024 * 1024;
+
+/** 粘贴文件保留期：启动时清理「未被任何历史引用且超过该时长」的文件。 */
+export const AI_PASTED_IMAGE_MAX_AGE_MS = 7 * 24 * 60 * 60_000;
+
+const PASTE_PREFIX = "paste-";
+const IMAGE_MIME_EXT: Record<string, string> = {
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/webp": "webp",
+  "image/gif": "gif",
+  "image/bmp": "bmp",
+  "image/heic": "heic",
+  "image/heif": "heif",
+};
+const PASTE_TOKEN_RE = /^paste-[0-9a-fA-F-]{36}\.(png|jpg|jpeg|webp|gif|bmp|heic|heif)$/;
+
+/** 运行时粘贴目录（IPC 注册时配置；单测可指到临时目录）。 */
+let pastedDir: string | null = null;
+
+export function configurePastedImageDir(dir: string): void {
+  pastedDir = dir;
+}
+
+function pastedImageSource(token: string): { path: string; mimeType: string; size: number; name: string } | null {
+  if (!pastedDir || !PASTE_TOKEN_RE.test(token)) return null;
+  const file = path.join(pastedDir, token.slice(PASTE_PREFIX.length));
+  try {
+    const stat = fs.statSync(file);
+    if (!stat.isFile()) return null;
+    const name = token.slice(PASTE_PREFIX.length);
+    return { path: file, mimeType: mimeTypeForFilename(name), size: stat.size, name };
+  } catch {
+    return null;
+  }
+}
+
+export interface SavePastedImageInput {
+  bytes: Buffer;
+  mimeType: string;
+  name?: string;
+}
+
+/**
+ * 剪贴板图片 → 稳定临时文件 + 注册表引用。
+ * 校验：必须 image/*（png/jpeg/webp/gif/bmp/heic/heif）、非空、≤10MB；写盘用 tmp+rename（原子）。
+ * token 形如 paste-<uuid>.<ext>，路径可由 token 反推 ⇒ 重启后历史缩略图/发送仍可用。
+ */
+export function savePastedImage(input: SavePastedImageInput): AiLocalFileRef {
+  if (!pastedDir) throw new AppError("InvalidInput", "粘贴图片目录未初始化");
+  const mime = String(input.mimeType || "").toLowerCase();
+  const ext = IMAGE_MIME_EXT[mime];
+  if (!ext) throw new AppError("InvalidInput", "不支持的粘贴类型：" + (input.mimeType || "未知") + "（只支持 PNG/JPEG/WebP/GIF/BMP/HEIC）");
+  const bytes = input.bytes;
+  if (!bytes || bytes.length === 0) throw new AppError("InvalidInput", "粘贴图片为空");
+  if (bytes.length > AI_PASTED_IMAGE_MAX_BYTES) {
+    throw new AppError("InvalidInput", "粘贴图片过大（上限 " + Math.round(AI_PASTED_IMAGE_MAX_BYTES / 1024 / 1024) + "MB）");
+  }
+  const token = PASTE_PREFIX + crypto.randomUUID() + "." + ext;
+  const file = path.join(pastedDir, token.slice(PASTE_PREFIX.length));
+  const name = (input.name || "").trim() || "粘贴图片." + ext;
+  try {
+    fs.mkdirSync(pastedDir, { recursive: true });
+    const tmp = file + ".tmp";
+    fs.writeFileSync(tmp, bytes);
+    fs.renameSync(tmp, file);
+  } catch {
+    throw new AppError("InvalidInput", "粘贴图片写盘失败（磁盘空间或权限），请重试");
+  }
+  registry.set(token, { path: file, name, size: bytes.length, mimeType: mime });
+  return { kind: "local", token, name, size: bytes.length, mimeType: mime };
+}
+
+/**
+ * 启动清理：删除粘贴目录里「未被任何 AI 历史引用」且超过 7 天的文件。
+ * 调用方（主进程启动注册 IPC 时）传入当前所有历史 attach_refs 里的 paste token。
+ * 返回删除文件数。失败静默（清理不该阻断启动）。
+ */
+export function cleanupPastedImages(referencedTokens: ReadonlySet<string>, now: number = Date.now()): number {
+  if (!pastedDir || !fs.existsSync(pastedDir)) return 0;
+  let removed = 0;
+  try {
+    for (const name of fs.readdirSync(pastedDir)) {
+      if (!PASTE_TOKEN_RE.test(PASTE_PREFIX + name)) continue;
+      const token = PASTE_TOKEN_PREFIX_TOKEN(name);
+      if (referencedTokens.has(token)) continue;
+      const file = path.join(pastedDir, name);
+      try {
+        const stat = fs.statSync(file);
+        if (now - stat.mtimeMs < AI_PASTED_IMAGE_MAX_AGE_MS) continue;
+        fs.rmSync(file, { force: true });
+        removed += 1;
+      } catch { /* 单文件失败跳过 */ }
+    }
+  } catch { /* 目录不可读：跳过 */ }
+  return removed;
+}
+
+function PASTE_TOKEN_PREFIX_TOKEN(filename: string): string {
+  return PASTE_PREFIX + filename;
+}
+
+/** 仅测试：清空粘贴目录配置（避免串用例）。 */
+export function resetPastedImageDirForTest(): void {
+  pastedDir = null;
 }

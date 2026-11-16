@@ -162,6 +162,7 @@ export const WEB_METHODS: Record<string, string> = {
   readAssetPreview: "read_asset_preview",
   listNoteImageAssets: "list_note_image_assets",
   pickAiLocalFiles: "pick_ai_local_files",
+  aiSavePastedImage: "ai_save_pasted_image",
   openAttachment: "open_attachment",
   showAttachmentInFolder: "show_attachment_in_folder",
   copyAssetPath: "copy_asset_path",
