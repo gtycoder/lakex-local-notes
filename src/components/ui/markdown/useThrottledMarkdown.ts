@@ -19,10 +19,20 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
  * 调用约定：只在「生成中」传 enabled=true；生成结束立即传 false，返回值当帧就是完整 content。
  */
 
-/** 两次提交之间允许的最长等待（毫秒）：渲染再贵也不能把流式界面卡超过这个间隔。 */
-const MAX_WAIT_MS = 2000;
-/** 上次渲染耗时的倍数：渲染越贵，两次更新间隔越长。 */
-const COST_RATE = 2;
+/**
+ * 两次提交之间允许的最长等待（毫秒）：渲染再贵也不能把流式界面卡超过这个间隔。
+ * 261116 由 2000 收紧到 300（依据：scripts/ai-stream-probe.mjs 端到端实测 ——
+ * 640KB/密集 DOM 的贵渲染场景下，旧值出现 1708ms 的可见更新间隔（用户报「2 秒才更新一屏」）；
+ * 收到 300 后同一场景最大间隔压到约 1 个渲染成本 + 300ms，且 60KB 普通回答不受影响。
+ * 300 同时给「最短可见更新节奏」一个下限 3.3fps（<250 会让贵重渲染每次提交都排队过密）。
+ */
+const MAX_WAIT_MS = 300;
+/**
+ * 上次渲染耗时的倍数：渲染越贵，两次更新间隔越长。
+ * 261116 由 2 收到 1.5：2×cost 会把「等一次渲染」翻倍成「等两倍渲染」，对长回答是纯延迟；
+ * 1.5 仍保留「贵渲染降频」的节流收益，同时把成本档（cost 20–200ms）的间隔压到 30–300ms。
+ */
+const COST_RATE = 1.5;
 
 /** SSR 没有 layout effect，退化成 effect（本 hook 不依赖 DOM 布局）。 */
 const useIsomorphicLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : useEffect;
