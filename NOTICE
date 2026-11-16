@@ -22,7 +22,7 @@ Local Lakex Notes — 第三方组件与许可说明
 - IconPark（@icon-park/react 1.4.2，Apache-2.0，bytedance）：多维表行「展开」图标
   （src/features/bitable/bitableEditorModel.tsx 的 RowExpandIcon）四角折角几何取自其
   es/icons/FullScreen.js（原 viewBox 0 0 48 48），本项目把坐标重写到 24 网格并改用 currentColor，
-  未引入其运行时依赖（上游仓库已归档 2023-02-24）；许可全文见上游仓库 LICENSE。
+  未引入其运行时依赖（上游仓库已归档 2023-02-24）；许可全文随仓附带：LICENSES/IconPark-APACHE-2.0.txt。
 - MiSans：小米 MiSans 字体许可
 - JetBrains Mono：SIL OFL 1.1
 
