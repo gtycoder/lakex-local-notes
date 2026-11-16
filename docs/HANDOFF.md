@@ -7,6 +7,15 @@
 
 ## 0. 最新交接（最近 3 个批次；更早的见 git）
 
+### 261116 · AI 输入面补批（发版后，master 增量）
+
+- **输入卡统一 chat-demo 造型**：AI 助手（`src/features/ai/AiAssistantDialog.tsx`）与 AI 写作空间（`src/features/aiWriting/AiComposer.tsx`）都改成「大圆角卡片（--lake-chat-radius-composer）+ 无边框自增高 textarea（field-sizing: content, max 160）+ 底部一行」：左 = 药丸（深度思考 / 提示词 / docs 模式的选文档），右 = 圆形发送（32px，生成中同格变停止）。**AI 助手不做附件**（用户裁决；附件是 AI 写作需求），AI 写作保留附件入口**占位 disabled**，等 Phase 1 管线。
+- **深度思考从「强制开启」改为可关**（用户裁决，推翻 261109 定稿）：请求级覆盖 `runAiChat(reqId, messages, onDelta?, onReasoning?, options?: { thinking?: "enabled" | "disabled" })` → `lib/native` → `preload.cjs` → `electron/ipc/registerAi.ts` → `electron/ai/aiThinking.ts` 判据 → `aiClient`；**只在 supportsThinking 的供应商生效**（当前 DeepSeek），不传 = 与改造前 IPC payload 逐字节一致。UI 只在该供应商支持时显示开关，初值取设置里的默认值。
+- **流式节流调参（A+B 实测驱动）**：`useThrottledMarkdown` 的 MAX_WAIT_MS **2000 → 300**、COST_RATE **2 → 1.5**（算法未改）。探针 `scripts/ai-stream-probe.mjs`（loopback 假供应商 → 主进程网关 → IPC → 真实渲染链）实测 3 次中位：dense 640KB 档 **2.3 → 3.3 fps、最大可见间隔 2516 → 1373ms（最坏 3951 → 1453）**；640KB stress 最大间隔 −36%；60KB 档无回归。方法与告警见 [docs/AI-STREAM-PROBE.md](AI-STREAM-PROBE.md)。
+- **AI 写作附件方案**：[docs/ai/ATTACHMENTS-PLAN.md](ai/ATTACHMENTS-PLAN.md)：Phase 1（图片·视觉模型）≈3–3.5 人日，堵点 = 「视觉能力不可探测」（只能发送失败后按 400 报错，不维护硬编码模型清单、不静默去图）；Phase 2（PDF/文档注入）＋1–1.5 人日。Phase 1 已建任务（task-21）排在输入卡改造之后。
+- **门禁（本批全量）**：`tsc` 0；`tsc -p tsconfig.electron.json` 0；全量 vitest **999 文件 / 6297 用例（986 passed / 13 skipped；6283 passed / 14 skipped / 0 failed）**；`ui-metrics` 0；`cssLayers`/`primitives`/`mobileLayers` 全绿（aiDialogParts 148→217、aiWriting 344→382 均按实测登记）；`check:arch`/#core 全过；`git diff --check` 0。
+- **遗留**：① `.aiw-pill` 与 `.ai-dialog__pill` 是同几何的两份拷贝（两个懒 chunk 各自独立）→ 要收单一来源需提升进 kit 原语（跨 ownership，待排期）；② AI 写作附件 Phase 1（task-21）；③ AI 助手输入卡的 `a11y-visually-hidden` 文本与图标并存，若换图标库需同步。
+
 ### 261116 · v1.2.0 发版（`modernize/web-platform-261115` **已合 master 并打 tag**）
 
 - **发布**：分支合并回 `master`（fast-forward；master 原 `7e2db298`，备份 tag `backup/master-261115`）→ 注解 tag **`v1.2.0`** → 双远端推送（tag 触发 GitHub release 打包流水线）。版本 `package.json 1.1.4 → 1.2.0`（Android versionName/versionCode 从根 package.json 派生，未手改 build.gradle）。
