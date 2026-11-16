@@ -519,6 +519,8 @@ export function MultiTabEditor({
     <div className="multi-tab-editor">
       <div className="tab-bar">
         {topbarLeading && <div className="tabbar-leading">{topbarLeading}</div>}
+        {/* 261116 用户点单：左侧按钮区与多标签区之间加一条小竖线，避免两组控件视觉粘连。 */}
+        {topbarLeading && tabs.length > 0 && <span className="tabbar-divider" aria-hidden="true" />}
         <div className="tab-items" ref={tabItemsRef} role="tablist" aria-label="打开的文档">
           {tabs.map((tab) => (
             splitPair && splitFirstNote != null && (tab.noteId === splitPair.left || tab.noteId === splitPair.right) ? (

@@ -31,6 +31,16 @@
   flex: 0 0 auto;
   -webkit-app-region: no-drag;
 }
+/* 左侧按钮区与多标签区的分隔（261116 用户点单）：0.5px 竖线，高度对齐标签视觉行；
+   只在有标签时出现，避免空态多一条悬空线。 */
+.tabbar-divider {
+  flex: 0 0 auto;
+  align-self: center;
+  width: 0;
+  height: 14px;
+  margin: 0 var(--lake-space-xs);
+  border-left: 0.5px solid var(--lake-border-1);
+}
 .tab-items {
   flex: 1 1 auto;
   min-width: 0;
