@@ -58,6 +58,40 @@ function findOpenModalDialog(): HTMLElement | null {
   return open[open.length - 1];
 }
 
+/**
+ * 261116 task-15 修根因：**外层浮层的 portal 容器不能随内层模态漂移**。
+ *
+ * 旧实现每次渲染都调 resolveOverlayContainer()。当某个内层 NativeDialog（原生 <dialog open>）还挂在
+ * DOM 里时，外层浮层（例如整个「偏好设置」Dialog）只要重渲染一次，它的 .ln-scrim 就会被 React
+ * **搬进那个 dialog**；内层 dialog 随后在同一批提交里卸载 ⇒ 外层 DOM 被一并删掉。
+ * 现场（9222 实测 DOM 时序）：remove ln-scrim from BODY → add ln-scrim into dialog.s3-transfer-dialog
+ * → 设置面板消失；事件日志里没有任何落在 .ln-scrim 的点击，onDismiss 也没被调用（所以不是"点到遮罩"）。
+ *
+ * 规则（按优先级）：
+ *  ① 显式 container（AI 弹窗挂滚动容器）⇒ 永远用它；
+ *  ② 已定死且仍 connected 的 host ⇒ 不动（这是修根因的关键：外层 Dialog 一旦挂到 body 就留在 body）；
+ *  ③ 唯一的「升级」：本浮层确实位于某个模态浮层的 scope 内（菜单/气泡，`parent.modal`）且 host 还是
+ *     body ⇒ 挂进**属于本 scope 的那个** dialog（showModal 让 dialog 之外全 inert，菜单必须在里面；
+ *     用 openOverlayStack 的 ancestors 判定归属，避免把无关的内层 dialog 当成宿主）；
+ *  ④ host 被移除（例如宿主 dialog 关掉）⇒ 重新解析。
+ */
+function pickPortalHost(
+  container: HTMLElement | null | undefined,
+  current: HTMLElement | null,
+  parent: { ancestors: readonly number[]; modal: boolean },
+): HTMLElement {
+  if (container) return container;
+  if (current && current.isConnected) {
+    if (current === document.body && parent.modal) {
+      const dialog = findOpenModalDialog();
+      const entry = dialog ? openOverlayStack.find((item) => item.surface === dialog) : undefined;
+      if (dialog && entry && parent.ancestors.includes(entry.id)) return dialog;
+    }
+    return current;
+  }
+  return resolveOverlayContainer();
+}
+
 export function isInsideOverlaySurface(target: EventTarget | null): boolean {
   if (!(target instanceof Node)) return false;
   const node = target instanceof Element ? target : target.parentElement;
@@ -158,6 +192,9 @@ export function Overlay({ open = true, kind, onDismiss, label, className, style,
    * 用 popover="manual"（不是 auto）：light dismiss / Esc / 嵌套子菜单仍由本组件既有逻辑负责，
    * 语义与今天完全一致；只有层序变了。老 WebView 没有 showPopover ⇒ 退回普通层（现状不变）。 */
   const topLayerMenu = kind !== "dialog" && kind !== "drawer" && parent.modal;
+  /** portal 宿主：只在挂载时解析一次（唯一例外见 pickPortalHost）。 */
+  const portalHostRef = useRef<HTMLElement | null>(null);
+  portalHostRef.current = pickPortalHost(container, portalHostRef.current, parent);
   // 把外部 ref（可拖拽面板）与内部 ref 都挂到同一个表面元素上
   const setSurface = useCallback((el: HTMLElement | null) => {
     innerRef.current = el;
@@ -306,7 +343,7 @@ export function Overlay({ open = true, kind, onDismiss, label, className, style,
           {children}
         </section>
       </div>,
-      resolveOverlayContainer(container),
+      portalHostRef.current!,
     )}</OverlayScope.Provider>;
   }
 
@@ -323,7 +360,7 @@ export function Overlay({ open = true, kind, onDismiss, label, className, style,
     >
       {children}
     </div>,
-    resolveOverlayContainer(container),
+    portalHostRef.current!,
   )}</OverlayScope.Provider>;
 }
 
