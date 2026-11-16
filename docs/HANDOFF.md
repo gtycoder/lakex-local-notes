@@ -7,6 +7,42 @@
 
 ## 0. 最新交接（最近 3 个批次；更早的见 git）
 
+### 261117 · v1.3.1 发版（打包瘦身 + 属性弹窗 + 设置收敛 + 端口隔离）
+
+- **发布**：`v1.3.0 → v1.3.1`（`package.json` 1.3.1；Android versionCode 11301 由根 package.json 派生）；注解 tag **`v1.3.1`**，双远端推送。本批 `v1.3.0..v1.3.1` = 5 commit / 44 文件（含 26 项设置/属性/端口/瘦身改动 + 8 个新测试/文档）。
+- **内容**：① 端口隔离（资源 19876/19877、Web 19880/19881，+1..+10 回退，实际端口全链路；见下条）；② 设置三项（更新频率 **24 小时/每周/每月**、主题**下拉**、标签数桌面 8 / 移动 6）；③ 属性弹窗「附件/历史版本」**可折叠（默认收起、不加载）** + 附件缩略图档位 + 回收站孤儿预览缩略；④ 明确「正文=原图，其余=缩略图」口径；⑤ **打包瘦身 −143MB**（见下条）。
+- **门禁（发版前全量）**：`tsc` 0；`typecheck:electron` 0；全量 vitest **1018 文件 / 6433 用例（1005 passed / 13 skipped；6419 passed / 14 skipped / 0 failed）**；`ui-metrics` 0；`cssLayers`/`primitives`/`mobileLayers` 全绿；`check:arch` 0 违规；`check:bundle` PASS（桌面首屏 593KB / 600KB、移动 345KB / 350KB）。
+- **验证**：打包产物实机 14/14 PASS（启动/文档图片+sharp 缩略/Univer 表格/多维表/画板/手写板/AI 设置/更新中心/导出 Markdown/导入 docx/导入 xlsx/小记/回收站/同步设置）+ `scripts/e2e-packaged-smoke.mjs` exit 0；移动端更新频率已装 `lake_mobile` 设备验证（选项 24 小时/每周/每月、168 落库）。
+- **已知边界**：`better-sqlite3` 外平台 `.node` ≈14MB 未裁（需按平台打包）；属性弹窗收起态不加载图片（展开才请求）；移动端与桌面更新设置是两份模型（同判据手工对齐，未做单一来源重构）。
+
+### 261117 · 打包瘦身（功能零回归）
+
+- **结果**：`.app` **536 → 393 MB（−143 MB / −26.7%）**、`app.asar` **213 → 70 MB（−143 MB / −67.1%）**、`asar.unpacked` 34 MB 不变（**未动任何 native**）；打包 `dependencies` 27 → 9。详见 [BUILD-SIZE.md](BUILD-SIZE.md)。
+- **怎么瘦的**：① 18 个**渲染层专用**包（16×`@univerjs/*` + `perfect-freehand` + `rxjs`）从 `dependencies` 移到 `devDependencies`（它们只被 `src/**` import、早被 vite 打进 `dist`，留在 dependencies 只会被 electron-builder 塞进 asar；@univerjs 子树实测 123.3 MB）；② 排除 `node_modules/openai/src/**`（−4.9 MB）；③ 排除全仓类型声明 `*.d.ts/.d.mts/.d.cts`（−3.8 MB）。三条排除收口在 `electron/buildTarget.ts::ELECTRON_PACKAGE_FILES`（单一来源）。
+- **规则（长期）**：`dependencies` = **主进程运行时真正 require 的包**；渲染层专用一律 `devDependencies`。防回涨判据：`architecture.test.ts` R6 两条（dependencies 必须被主进程 import / 渲染层重包不得回流）+ `univerContract` 与 `noteExport.inkPdf` 的依赖分层断言（已同步成「devDependencies 合法」而不是删断言）。
+- **功能零回归**：真打包产物实机 **14/14 PASS**（启动/文档图片+sharp 缩略/Univer 表格/多维表/画板/手写板/AI 设置/更新中心/导出 Markdown 图片提取/导入 docx/导入 xlsx/小记/回收站/同步设置）+ 官方 `scripts/e2e-packaged-smoke.mjs` exit 0；门禁 tsc/typecheck:electron/全量 vitest（1005 文件 6419 用例）/ui-metrics/cssLayers/check:core/check:arch/check:bundle 全绿。
+- **下一步可选**：`better-sqlite3/prebuilds` 里 8 个外平台 `.node` ≈14 MB（本机只用 darwin-arm64）可按平台配置再裁，属 native 面、本次按纪律未动。
+
+### 261117 · 生产 bug 修复：dev / packaged 本地端口细分 + 占用自动回退
+
+- **现场（用户正式数据 v1.3.0 打包版）**：所有文档图片「图片加载失败」，日志是 CORS「No ACAO」。根因不是权限/资产丢失，而是**端口互抢**：dev 实例占着资源服务 19876，打包版 `listen 19876` **EADDRINUSE 后静默继续**（日志里没有 `[asset-server] listening`），渲染层图片仍请求 19876 ⇒ 打到 dev 进程的 assetServer ⇒ 该进程 token 与打包版注入的 token 不匹配 ⇒ 403（且 403 不带 ACAO）⇒ Chromium 报 CORS。**文件在本机、下载也没问题，纯 HTTP 层被拒。**
+- **端口表（所有本地端口按通道整体隔离；env 覆盖优先）**：
+
+  | 通道 | packaged | dev | 环境变量（优先） | 占用回退 |
+  | --- | --- | --- | --- | --- |
+  | 资源服务（图片/附件） | **19876** | **19877** | `LAKE_ASSET_PORT` | +1..+10（`ASSET_PORT_FALLBACK_RANGE`） |
+  | Web 客户端（浏览器端） | **19880** | **19881** | `LAKE_WEB_PORT` | +1..+10（`WEB_API_PORT_FALLBACK_RANGE`） |
+  | vite dev server | — | 1421 | `LAKE_DEV_SERVER_URL` / `LAKE_DEV_PORT` | 不自动回退（脚本会明确报占用） |
+  | CDP 调试 | 9333（冒烟脚本默认） | 9222 | `LAKE_CDP_PORT` | — |
+
+  userData 也按形态分开（dev `lakex-local-notes-dev` / 正式 `lakex-local-notes`，`LAKE_USER_DATA` 可覆盖）⇒ **同机同时跑 dev 与打包版互不共享端口/路径**。
+- **回退语义（两条服务同一套）**：首选端口被占用 ⇒ 顺序尝试 +1..+10，**成功后才继续启动**（`await` 到 listening）；实际端口是唯一真相 —— 写回 `process.env.LAKE_ASSET_PORT`、经 webPreferences `additionalArguments`（`--lake-asset-port=<实际>`）传给 preload、并经 IPC 状态回给设置页/「打开 Web 客户端」。**非 EADDRINUSE 的错误不再静默**：`log.app.error` 记明确原因（含端口），主窗口照常启动（图片降级，其余功能可用）。
+- **为什么端口不能再用常量**：回退后若仍用常量，写入正文/导出 HTML/小记预览的资产 URL 会指向别的实例（这正是事故放大面）。现在 `assetServer` 的端口是**可变导出 + `currentAssetServerPort()`**，`store.assetUrl` / `noteExport` 的正则 / `quickNotes/context` 的 URL / main 的 webRequest 过滤器与 CDN 重定向**全部读实际值**。
+- **错误可读性**：资源服务早期 403（token 不匹配）对**已允许 origin** 回显 ACAO ⇒ 浏览器不再把它显示成 CORS 失败；未知 origin 仍不回显（任意网站读不到）。
+- **护栏**：`electron/assetServer.port.test.ts`（首选/回退/连续占用/非 EADDRINUSE 报错/双实例/回退后导出与小记 URL/403 ACAO/接线源码断言，12 例）+ `electron/webApiServer.test.ts` 的「+1 回退并把实际端口回给设置页」；既有 `assetServer.test.ts` 覆盖安全面与 `/ai-local`。
+- **dual-instance 预期（以后照此判断）**：同机跑 dev + 打包版时，两边日志应分别出现 `[asset-server] listening on http://127.0.0.1:19877`（dev）与 `:19876`（packaged），并各有一行 `[ports] asset=… webApi=…`；若某端口已被别的程序占，会出现 `端口 N 已被占用，尝试 N+1` **warn** 与 `（首选 N 被占用，已回退）` 的 info —— **没有这两行却图片失败 = 老问题复发**。
+
+
 ### 261116 · v1.3.0 发版（AI 写作能力 + review 收口）
 
 - **发布**：`v1.2.0 → v1.3.0`（`package.json` 1.3.0；Android versionName 1.3.0 / versionCode 11300 由根 package.json 派生，未手改 build.gradle）；注解 tag **`v1.3.0`**，双远端推送（tag 触发 GitHub release 流水线）。本批 `v1.2.0..v1.3.0` = 18 commit / 91 文件 / +6.2k −0.4k。
@@ -272,12 +308,14 @@
 
 > 数值 = 最近一次实测（261113 批，低负载串行）。**任何状态判断以本节 + `git status` / `git log -1` 为准**。
 
-**261116 · v1.3.0 基线（AI 写作能力 + review 收口，tag `v1.3.0`）**
+**261117 · v1.3.1 基线（打包瘦身 + 属性弹窗 + 设置收敛 + 端口隔离，tag `v1.3.1`）**
 
-- **分支**：`v1.2.0..v1.3.0` = 18 commit / 91 文件 / +6.2k −0.4k；master 与双远端同步（HEAD 以 `git log -1` 为准）；上一 release = `v1.2.0`（tag `23efabf4`）。
-- **门禁（发版前最后一次全量）**：`tsc` 0；`typecheck:electron`（无 DOM）0；全量 vitest **文件 1014（1001 passed / 13 skipped）/ 用例 6403（6389 passed / 14 skipped）/ 0 failed**；`ui-metrics` 0；`cssLayers`（kit 754 / aiDialogParts 167 / aiWriting 497 / compat 157）/ `primitives` / `mobileLayers` 全过；`check:arch` 0 违规；`check:bundle` PASS（桌面首屏 590.9KB / 600KB）。
-- **视觉/设备门禁**：本批未重跑桌面 `stylesnap` 42 态与移动 `mobile-snap` 10 态（改动集中在 AI 面与新 kit 原语，AI 面不在覆盖内；其余仅 kit 新增/删除重复规则）。上一次完整视觉基线 = v1.2.0 的 42 态/10 态/3 态（见上一条历史记录）。
-- **未跑/已知边界**：真实 API Key 下的流式对话；AI 面视觉基线（P2-7）；多文档推理 PDF 注入；备份不含粘贴图。
+- **分支**：`v1.3.0..v1.3.1` = 5 commit / 44 文件；master 与双远端同步（HEAD 以 `git log -1` 为准）；上一 release = `v1.3.0`（tag `4f69179c`）。
+- **门禁（发版前最后一次全量）**：`tsc` 0；`typecheck:electron`（无 DOM）0；全量 vitest **文件 1018（1005 passed / 13 skipped）/ 用例 6433（6419 passed / 14 skipped）/ 0 failed**；`ui-metrics` 0；`cssLayers`/`primitives`/`mobileLayers` 全过；`check:arch` 0 违规；`check:bundle` PASS（桌面首屏 593KB / 600KB、移动 345KB / 350KB）。
+- **打包产物（本批实测）**：`.app` **393MB**（536 → 393，−26.7%）、`app.asar` **70MB**（213 → 70，−67.1%）、`asar.unpacked` 34MB 不变；打包 `dependencies` **9** 个（27 → 9）。规则见 `docs/BUILD-SIZE.md`；防回涨判据已在 `architecture.test.ts` R6 / `univerContract` / `noteExport.inkPdf`。
+- **设备/实机验证**：打包产物 14/14 PASS（含文档图片+sharp 缩略、Univer/多维表/画板/手写板、AI 设置、更新中心、导出 Markdown、导入 docx/xlsx、小记、回收站、同步设置）+ `e2e-packaged-smoke` exit 0；移动端更新频率已装 `lake_mobile` 设备验证。
+- **视觉门禁**：本批未重跑桌面 `stylesnap` 42 态与移动 `mobile-snap` 10 态（改动为属性弹窗折叠/缩略图与设置控件替换，不在现有态覆盖内；下一次完整视觉基线仍以 v1.2.0 的 42/10/3 态为历史参照）。
+- **未跑/已知边界**：真实 API Key 下的流式对话；AI 面/属性弹窗视觉基线；多文档推理 PDF 注入；备份不含粘贴图；`better-sqlite3` 外平台 `.node` ≈14MB 未裁。
 **版本与仓库**
 
 - 主分支 `master`；**HEAD 以 `git log -1` 为准**；R2 已提交 6 笔拆分/设备记录（`a23631f6` sidebar / `fd268432` settings / `231fe845` electron boot / `c00d3a60` lakeRuntime / `4a9b965c` ink 测试 / `e352e2cb` 设备记录）；**产品代码基线 = `8e20a6a3`（R0）/ `e87016bd`（R1）/ `e352e2cb`（R2）/ `3fad8821`（R2 收尾：位置合并 + 同步专用写路径 + 单篇降级）**；**日记收口批产品笔 = `199f3403`（不可变守卫）/ `fd58dc0a`（移动移除取消标记）/ `d4d03260`（移动目标剔除日记子树）/ `f965e62c`（转文档共享弹窗）/ `4b6a524a`（转小记媒体搬运）/ `400dcc75`（showNotice 全空间可见）**；**261113 批 = `839c7a93`（发版复核 P2/P3）/ `a57cf3cf`（移动端「转为小记」+ 22 号报告 §11 + RELEASE.md Secrets 节）**（详见 §0）。
