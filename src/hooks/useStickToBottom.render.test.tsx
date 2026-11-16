@@ -28,15 +28,17 @@ function createScroller(initial: Partial<ScrollBox> = {}) {
   const el = document.createElement("div");
   Object.defineProperty(el, "scrollHeight", { configurable: true, get: () => box.scrollHeight });
   Object.defineProperty(el, "clientHeight", { configurable: true, get: () => box.clientHeight });
+  const writes = { count: 0 };
   Object.defineProperty(el, "scrollTop", {
     configurable: true,
     get: () => box.scrollTop,
     set: (value: number) => {
+      writes.count += 1;
       const max = Math.max(0, box.scrollHeight - box.clientHeight);
       box.scrollTop = Math.max(0, Math.min(value, max));
     },
   });
-  return { el, box };
+  return { el, box, writes };
 }
 
 let disconnectSpy: Mock<() => void>;
@@ -72,6 +74,9 @@ beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   disconnectSpy = vi.fn();
   vi.stubGlobal("ResizeObserver", ResizeObserverStub);
+  // 贴底 hook 用 rAF 合帧（261116 P1-2）：测试里同步执行帧回调，保持「render 后立刻可见」的断言口径。
+  vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => { callback(0); return 1; });
+  vi.stubGlobal("cancelAnimationFrame", () => undefined);
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
@@ -128,6 +133,34 @@ describe("useStickToBottom", () => {
     box.scrollHeight = 1200;
     render(ref, 2);
     expect(box.scrollTop).toBe(1100); // 1200 - 100
+  });
+
+  it("同一帧多个信号只应用一次贴底（rAF 合帧）", () => {
+    const queue: FrameRequestCallback[] = [];
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => { queue.push(callback); return queue.length; });
+    vi.stubGlobal("cancelAnimationFrame", (id: number) => { queue[id - 1] = () => undefined; });
+    const { el, box, writes } = createScroller();
+    const ref = { current: el };
+
+    render(ref, 1); // 首帧同步落位
+    expect(box.scrollTop).toBe(400);
+    writes.count = 0;
+
+    box.scrollHeight = 700;
+    render(ref, 2);
+    box.scrollHeight = 900;
+    render(ref, 3);
+    // 两个信号合并到同一帧：尚未执行、未写 scrollTop。
+    expect(queue.length).toBe(1);
+    expect(writes.count).toBe(0);
+
+    act(() => {
+      const callbacks = [...queue];
+      queue.length = 0;
+      callbacks.forEach((callback) => callback(0));
+    });
+    expect(box.scrollTop).toBe(800); // 900 - 100
+    expect(writes.count).toBe(1);
   });
 
   it("卸载时清理 ResizeObserver（disconnect 被调用）", () => {

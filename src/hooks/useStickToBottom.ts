@@ -62,27 +62,65 @@ export function useStickToBottom({
   const lastTopRef = useRef(0);
   const roRef = useRef<ResizeObserver | null>(null);
   const observedChildRef = useRef<Element | null>(null);
+  /** 待执行的贴底帧（同一帧内多个信号只滚一次；261116 P1-2）。 */
+  const frameRef = useRef<number | null>(null);
+  /** 首次挂载/重新启用：同步落位（在绘制前），避免打开长会话闪一帧顶部。 */
+  const firstSignalRef = useRef(true);
 
-  const scrollToBottom = useCallback(() => {
+  const cancelFrame = useCallback(() => {
+    if (frameRef.current === null) return;
+    if (typeof cancelAnimationFrame === "function") cancelAnimationFrame(frameRef.current);
+    else clearTimeout(frameRef.current);
+    frameRef.current = null;
+  }, []);
+
+  const applyFollow = useCallback(() => {
+    frameRef.current = null;
     const el = scrollRef.current;
-    if (!el) return;
-    stuckRef.current = true;
+    if (!el || !stuckRef.current) return;
     el.scrollTop = el.scrollHeight;
     lastTopRef.current = el.scrollTop;
   }, [scrollRef]);
 
-  // 内容变化 / 重新启用：跟随态下贴底。用 layout effect 在绘制前落位，避免闪一帧旧位置。
+  /** 合帧：内容信号/ResizeObserver 可能同帧多次触发，只排一个 rAF（无 rAF 时退 16ms 定时器）。 */
+  const scheduleFollow = useCallback(() => {
+    if (frameRef.current !== null) return;
+    frameRef.current = typeof requestAnimationFrame === "function"
+      ? requestAnimationFrame(applyFollow)
+      : (setTimeout(applyFollow, 16) as unknown as number);
+  }, [applyFollow]);
+
+  const scrollToBottom = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    cancelFrame();
+    stuckRef.current = true;
+    el.scrollTop = el.scrollHeight;
+    lastTopRef.current = el.scrollTop;
+  }, [scrollRef, cancelFrame]);
+
+  // 内容变化 / 重新启用：跟随态下贴底。首帧同步落位；后续信号合并到一帧一次（261116 P1-2）。
   useLayoutEffect(() => {
     if (!enabled) {
       // 关闭期间不跟随；下次打开从最新位置开始。
       stuckRef.current = true;
+      firstSignalRef.current = true;
+      cancelFrame();
       return;
     }
     const el = scrollRef.current;
     if (!el) return;
     if (stuckRef.current) {
-      el.scrollTop = el.scrollHeight;
-      lastTopRef.current = el.scrollTop;
+      if (firstSignalRef.current) {
+        // 首帧同步（绘制前落位）；之后交给 rAF 合帧，避免流式 delta 每信号一次强制 layout。
+        firstSignalRef.current = false;
+        el.scrollTop = el.scrollHeight;
+        lastTopRef.current = el.scrollTop;
+      } else {
+        scheduleFollow();
+      }
+    } else {
+      firstSignalRef.current = false;
     }
     // 内容子节点可能整块替换（空态 → 线程）：把 ResizeObserver 迁到当前内容上。
     const ro = roRef.current;
@@ -92,7 +130,7 @@ export function useStickToBottom({
       if (child) ro.observe(child);
       observedChildRef.current = child;
     }
-  }, [contentSignal, enabled, scrollRef]);
+  }, [contentSignal, enabled, scrollRef, scheduleFollow, cancelFrame]);
 
   // 监听用户主动上滚 + 容器/内容尺寸变化；enabled 变化时重建，关闭期间不挂任何监听。
   useLayoutEffect(() => {
@@ -101,8 +139,8 @@ export function useStickToBottom({
     if (!el) return;
     const follow = () => {
       if (!stuckRef.current) return;
-      el.scrollTop = el.scrollHeight;
-      lastTopRef.current = el.scrollTop;
+      // 与内容信号共用同一个合帧槽：同一帧只滚一次。
+      scheduleFollow();
     };
     const onScroll = () => {
       const top = el.scrollTop;
@@ -155,8 +193,9 @@ export function useStickToBottom({
       ro?.disconnect();
       if (roRef.current === ro) roRef.current = null;
       observedChildRef.current = null;
+      cancelFrame();
     };
-  }, [enabled, scrollRef, threshold]);
+  }, [enabled, scrollRef, threshold, scheduleFollow, cancelFrame]);
 
   const detach = useCallback(() => {
     stuckRef.current = false;

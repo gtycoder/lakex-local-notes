@@ -18,7 +18,7 @@ import { isSaveConflict } from "../../lib/types";
 import { aiWritingTitleFrom } from "../../core/aiWriting";
 import { AiWritingSidebar } from "./AiWritingSidebar";
 import { AiComposer } from "./AiComposer";
-import { AiMessageView } from "./AiMessageView";
+import { AiMessageList } from "./AiMessageList";
 import { PublishDocDialog } from "../../components/app/PublishDocDialog";
 import { selectableNotebooks } from "./aiWritingDocs";
 import { SaveQuickNoteDialog } from "./SaveQuickNoteDialog";
@@ -98,6 +98,9 @@ export function AiWritingWorkspace({ active, treeNodes, topbarLeading, onOpenSet
   }, [onNotice]);
   /** 复制为 Lake：与文档 AI 弹窗同一能力（内核来源由 copyMarkdownAsLakeFromAnywhere 解析）。 */
   const copyAsLake = useCallback((content: string) => copyMarkdownAsLakeFromAnywhere(content), []);
+  /** 消息行回调必须稳定，AiMessageList/AiMessageView 的 memo 才有意义（261116 P1-2）。 */
+  const openPublish = useCallback((content: string) => setPublish({ open: true, content, busy: false, error: null }), []);
+  const openQuickNote = useCallback((content: string) => setQuickNote({ open: true, content, busy: false, error: null }), []);
 
   const closePublish = useCallback(() => {
     publishAbortRef.current?.abort();
@@ -249,21 +252,16 @@ export function AiWritingWorkspace({ active, treeNodes, topbarLeading, onOpenSet
                   </div>
                 </div>
               ) : (
-                <div className="aiw-thread">
-                  {controller.messages.map((message) => (
-                    <AiMessageView
-                      key={message.id}
-                      message={message}
-                      stream={controller.stream}
-                      busy={controller.busy}
-                      onRegenerate={controller.regenerate}
-                      onCopy={copyContent}
-                      onCopyAsLake={copyAsLake}
-                      onPublish={(content) => setPublish({ open: true, content, busy: false, error: null })}
-                      onSaveQuickNote={(content) => setQuickNote({ open: true, content, busy: false, error: null })}
-                    />
-                  ))}
-                </div>
+                <AiMessageList
+                  messages={controller.messages}
+                  stream={controller.stream}
+                  busy={controller.busy}
+                  onRegenerate={controller.regenerate}
+                  onCopy={copyContent}
+                  onCopyAsLake={copyAsLake}
+                  onPublish={openPublish}
+                  onSaveQuickNote={openQuickNote}
+                />
               )}
             </div>
             {controller.messages.length > 0 && (

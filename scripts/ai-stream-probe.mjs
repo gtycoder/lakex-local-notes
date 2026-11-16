@@ -40,7 +40,9 @@ const DENSE = process.argv.includes("--dense");
 const CDP_PORT = Number(arg("cdp", "9222"));
 const OUT_DIR = arg("out", "/tmp/ai-stream-probe");
 const TIMEOUT_MS = Number(arg("timeout", "90000"));
-const REPEAT = Math.max(1, Number(arg("repeat", "1")));
+const REPEAT = Math.max(1, Number(arg("repeat", "5")));
+/** resolve 后 drain 窗口（收被渲染阻塞而排队的 IPC delta；默认 150ms）。 */
+const DRAIN_MS = Number(arg("drain-ms", "150"));
 
 function readParams() {
   const source = fs.readFileSync(HOOK_SOURCE, "utf8");
@@ -143,8 +145,10 @@ async function main() {
   const providerPort = portMatch ? Number(portMatch[1]) : 9123;
   const originalActive = settings.activeProviderId;
 
+  // 应用状态也进 JSON：同一台机器上打开的 tab 数会影响渲染基线，跨会话对比必须能看见。
+  const appState = await page.evaluate("(function(){return { url: location.href, tabs: document.querySelectorAll('.tab-item').length, dirtyTabs: document.querySelectorAll('.tab-item.is-dirty, .tab-item[data-dirty=' + String.fromCharCode(34) + 'true' + String.fromCharCode(34) + ']').length }})()");
   const fake = await startFakeProvider(providerPort, FRAMES, FRAME_MS);
-  const result = { label: LABEL, generatedAt: new Date().toISOString(), cdpPort: CDP_PORT, provider: { id: provider.id, baseUrl: provider.baseUrl, model: provider.model }, params: paramsBefore, fixture: { frames: FRAMES, frameMs: FRAME_MS, requestedChars: CHARS, dense: DENSE, actualChars: fake.state.chars, chunks: fake.state.chunks } };
+  const result = { label: LABEL, generatedAt: new Date().toISOString(), cdpPort: CDP_PORT, appState: appState, drainMs: DRAIN_MS, provider: { id: provider.id, baseUrl: provider.baseUrl, model: provider.model }, params: paramsBefore, fixture: { frames: FRAMES, frameMs: FRAME_MS, requestedChars: CHARS, dense: DENSE, actualChars: fake.state.chars, chunks: fake.state.chunks } };
 
   try {
     if (provider.id !== originalActive) {
@@ -159,7 +163,7 @@ async function main() {
     // 同一页面内重复跑 N 次（每次 runProbe 自己挂/卸 React root）——流式计时对 CPU 抖动敏感，取中位数更稳。
     const runs = [];
     for (let i = 0; i < REPEAT; i += 1) {
-      const probeResult = await page.evaluate("(async () => { const m = await import('/scripts/ai-stream-probe-harness.mjs'); return await m.runProbe({ timeoutMs: " + TIMEOUT_MS + " }); })()");
+      const probeResult = await page.evaluate("(async () => { const m = await import('/scripts/ai-stream-probe-harness.mjs'); return await m.runProbe({ timeoutMs: " + TIMEOUT_MS + ", drainMs: " + DRAIN_MS + " }); })()");
       runs.push(probeResult);
     }
     result.runs = runs;

@@ -117,6 +117,18 @@ export function refsForNotebook(treeNodes: readonly TreeNode[], notebookId: stri
  * 某个笔记本在「当前已选」里的覆盖状态（勾选框三态）。
  * 用户 261111：笔记本要能**整本勾选**，且同时选多个笔记本。
  */
+/**
+ * 文档 id → 标题映射（输入卡附件 chip 显示用）。
+ * 注意：这是 O(全树)；调用方必须 useMemo([treeNodes])，不要每渲染重建（261116 P1-3）。
+ */
+export function buildDocTitleMap(treeNodes: readonly TreeNode[]): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const node of treeNodes) {
+    if (node.nodeType === "note") map.set(node.noteFileId ?? node.id, node.title);
+  }
+  return map;
+}
+
 export type NotebookSelectionState = "none" | "some" | "all";
 
 export function notebookSelectionState(

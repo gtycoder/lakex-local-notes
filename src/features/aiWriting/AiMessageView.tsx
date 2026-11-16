@@ -5,7 +5,7 @@
  * 思考块仍是 MarkdownView（纯文本为主，不值得再起内核实例）；**默认折叠**（261110 用户定稿），
  * 只显示一行「已深度思考（用时 X 秒）」/「正在深度思考…」，点开才渲染正文（见 AiThinkingBlock）。
  */
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { lazy, memo, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { Check, Copy, Feather, FilePlus2, RotateCcw, Sparkles } from "lucide-react";
 import { MarkdownView } from "../../components/ui/markdown/MarkdownView";
 import { useThrottledMarkdown } from "../../components/ui/markdown/useThrottledMarkdown";
@@ -41,7 +41,12 @@ function durationLabel(ms: number): string {
   return "已深度思考（用时 " + (seconds >= 10 ? seconds.toFixed(1) : seconds.toFixed(2)) + " 秒）";
 }
 
-export function AiMessageView(props: AiMessageViewProps) {
+/**
+ * **memo 边界（261116 P1-2）**：流式期间父级每个 delta 都会重渲染，但如果历史消息拿到的
+ * props 完全相等（message 同引用、stream=null、busy 不变、回调稳定），这里直接 bail out。
+ * 调用约定：`stream` 只传给 messageId 命中的那一条（见 AiMessageList），回调必须 useCallback 稳定。
+ */
+export const AiMessageView = memo(function AiMessageView(props: AiMessageViewProps) {
   const { message, stream, busy, onRegenerate, onCopy, onCopyAsLake, onPublish, onSaveQuickNote } = props;
   // hooks 必须在任何 return 之前（用户/助手分支共用同一实例生命周期）。
   const [richReady, setRichReady] = useState(false);
@@ -205,4 +210,4 @@ export function AiMessageView(props: AiMessageViewProps) {
       </div>
     </div>
   );
-}
+});

@@ -91,6 +91,13 @@ dev 实例（CDP 9222）
 | `firstVisibleMs` | `runAiChat` 调用 → 首个非空 DOM 文本出现在屏上 |
 | `finalFlushMs` | 流结束后换 `AiMessageBody` 当帧全量渲染的耗时 |
 | `streamMs` | `runAiChat` 调用的墙钟（含被渲染阻塞的时间） |
+| `deltas` | `runAiChat` 的 onDelta 回调次数（受内部订阅生命周期影响） |
+| `deltaEvents` | **事件级** delta 数：独立订阅 `native.onAiStream` 计数（不依赖 runAiChat resolve，口径修正 261116） |
+| `deltaEventsAfterResolve` | resolve 之后才送达的排队 IPC delta（生产上不会再应用，仅用于暴露口径差） |
+| `drainMs` | resolve 后等待迟到事件的窗口（默认 150ms；主线程忙时实际会略长） |
+| `longTasks` | 流式期间 `PerformanceObserver(longtask)` 的次数/最长/总时长（渲染阻塞的直接证据；不支持的环境为 0） |
+| `finalFlushRawMs` | 结束→最终全量渲染可见的**原始**间隔（可能为负：DOM 帧早于计时采样，保留原值以便识别口径问题） |
+| `appState` | 驱动层记录的应用状态（打开 tab 数 / 脏 tab 数）——跨会话对比必须看它 |
 
 ### 2.3 三档 fixture（合成内容，详见 `scripts/ai-stream-probe-content.mjs`）
 
@@ -102,7 +109,12 @@ dev 实例（CDP 9222）
 
 ---
 
-## 3. 数字（before = 2000/2，after = 300/1.5；同一 fixture、同一机器、各 3 次取中位数）
+## 3. 数字
+
+> **口径声明（261116 修正）**：本探针只适合**同会话相对对比**（同机器、同 app 状态、同一份 fixture 下 before/after），
+> **不适合跨会话的绝对值对比**：dev 构建 + 打开 tab 数 + 机器负载会让同一参数的 maxGap 波动 ±30% 以上（见 §3.2）。
+
+### 3.1 历史批次（before = 2000/2，after = 300/1.5；同一 fixture、同一机器、各 3 次取中位数）
 
 | fixture | 参数 | deltas | 可见更新 | **fps** | **最大间隔** | p50 间隔 | 首帧可见 | 流结束全量渲染 |
 |---|---|---|---|---|---|---|---|---|
@@ -121,6 +133,34 @@ dev 实例（CDP 9222）
 - **首帧可见 4–31ms**、**流结束全量渲染 12–532ms**：两档前后一致 ⇒ 调参只影响「中途更新节奏」，不影响首帧与最终落屏。
 - dense-heavy 只有 3.3fps（目标 2.5–8fps 的下沿）：因为单次提交本身 ≈1s，参数只能削掉额外等待；再往上要渲染器优化。
 
+### 3.2 review 复跑（261116 第二批：探针口径修正后，同会话相对值）
+
+条件：HEAD 5ce5ecf8 + 本批渲染层修复；params=300/1.5（JSON 实测）；同一台机器、**同一会话**（appState: tabs=2, dirty=0）；
+`--repeat` 默认 5（dense 档因重负载 CDP 偶发超时，实际 repeat=3）；数字 = 中位数（范围 = 各次）。
+
+| fixture | runs | **fps** 中位（范围） | **最大间隔** 中位（范围） | p50 间隔 | 首帧可见 | 结束全量渲染 | longtask（次数/最长/总） | deltaEvents（迟到） |
+|---|---|---|---|---|---|---|---|---|
+| realistic 60KB | 5 | **42.4**（41.6–43.7） | **58ms**（46–78） | 21ms | 4–20ms | 0–12ms | 1 / ~55ms / ~55ms | 150（0） |
+| stress 640KB | 5 | **12.6**（11.1–13.2） | **278ms**（218–912，一次孤立 912） | 56ms | 4–56ms | 130–142ms | 10–21 / 565–660ms / 1.7–2.1s | 150（0–2） |
+| dense-heavy 640KB | 3 | **3.2**（3.1–3.6） | **1091ms**（884–1455） | 130ms | 6–30ms | 497–835ms | 19–22 / 907–1002ms / 4.4–5.5s | 150（10–48） |
+
+与历史批次的对照（**只能看方向**，不能逐位比较）：
+
+- stress：本次 12.6fps / 278ms vs 任务-17 review 复跑 12.6fps / 215–241ms、文档 3.1 节 after 12.6fps / 256ms ⇒ 同一档位，波动来自 app 状态/负载。
+- dense：本次 3.2fps / 1091ms vs review 复跑 3.0–3.2fps / 1760–1971ms、文档 after 3.3fps / 1373ms ⇒ 方向一致；口径修正后 `maxGap` 中位更低（旧末帧被 resolve 采样截断，新版把「结束当帧」与可见帧分开量）。
+- realistic：本次 42.4fps / 58ms vs 文档 after 43.7fps / 47ms ⇒ 同一量级（`finalFlush` 从页面 rAF 采样，±1 帧误差）。
+
+**探针口径修正（本批）**：
+
+1. `deltas` 改为**事件级**（独立订阅 `native.onAiStream`）+ resolve 后 drain 150ms ⇒ dense 档现在稳定计到 **150/150**（旧版只计到 117–142/150），并单独报告 `deltaEventsAfterResolve`（dense 档 10–48 个：主线程被渲染阻塞时迟到的 IPC 事件，生产上不会再应用）。
+2. `finalFlushRawMs` 保留原始值（可能为负），`finalFlushMs` clamp≥0；`finalComplete` 改为「最终 DOM 文本不短于流式期间最长可见文本」的长度代理。
+3. 新增 `longTasks`（PerformanceObserver）：dense 档一次最长**约 1s**、总 4.4–5.5s，stress 档最长 0.57–0.66s ⇒ 这些就是「一次提交 ≈1s」的直接证据，也是 300ms 上限之外的地板。
+4. `appState`（tab 数/脏 tab）进 JSON；`--repeat` 默认 5。
+
+**已知不稳定**：dense-heavy 档首次以 repeat=5 跑时（页面 reload + 重负载）出现一次 CDP 调用超时，重跑 repeat=3 全部通过；极端 fixture 建议 `--repeat 3` + `--timeout 200000`。
+
+**探针覆盖边界**：本探针量的是 AI 助手 `AiMessageBody`（流式 Markdown 节流）路径，**不覆盖** 261116 本批新增的 AI 写作工作区合帧（`useAiWriting` 的 rAF 合帧 / `AiMessageList` memo）。后者由渲染次数回归测试覆盖（`AiMessageList.render.test.tsx`、`useAiWriting.stream.render.test.tsx`：历史条 50 delta 期间渲染 **0 次**；结束当帧完整）。
+
 ---
 
 ## 4. 告警 / 限制（读数字前必看）
@@ -128,10 +168,13 @@ dev 实例（CDP 9222）
 1. **无真实网络**：假供应商走 loopback `http://127.0.0.1:9123`（主进程允许本机地址；真实 Key 未使用）。首帧/总耗时不含真实公网 RTT。
 2. **dev 构建**：React 开发模式 + 未压缩 CSS/JS，渲染成本高于生产包；绝对值不能当生产基线，**改前/改后同条件对比**才是结论。
 3. **合成内容**：三档 fixture 是刻意的分布（dense 档不代表平均回答）；真实回答成本落在 realistic 与 stress 之间时参数收益更小。
-4. **CPU 抖动**：流式计时受机器负载影响大（同参数 maxGap 可有 ±30% 波动）⇒ 一律 3 次取中位数，表内保留范围。
+4. **CPU 抖动 + app 状态**：流式计时受机器负载/打开 tab 数影响大（同参数 maxGap 可有 ±30% 以上波动）⇒ `--repeat` 默认 **5** 取中位数、表内保留范围；JSON 的 `appState` 必须一起看，**跨会话绝对值不可比**。
 5. **依赖既有配置**：需要 dev 实例在跑且库里有一条 loopback provider（一次性配置，见 §2.1）；不适合 CI 快跑。
 6. **只量「可见更新」**：不含用户感知的滚动跟随/自动贴底、不含会话落库与输入框状态；也没有做视觉回归。
 7. 早期单次 JSON（`before-*`/`after-*`）未记录 `dense` 字段（脚本已补 `fixture.dense`），以 label 与命令区分为准。
+8. **deltas 口径（已修）**：旧版只数 `runAiChat` 的 onDelta；主线程被渲染阻塞时 resolve 之后仍有排队 IPC 事件，实测只计到 117–142/150。现在 `deltaEvents` 独立订阅 `native.onAiStream` 计数，并在 resolve 后 drain 150ms 收迟到事件；迟到事件**不计入**可见更新窗口（生产上不会再应用），单独记为 `deltaEventsAfterResolve`。
+9. **finalFlushMs 可能为负（已标注）**：DOM 可见帧由 rAF 采样，可能早于 resolve 的计时采样点；`finalFlushMs` 已 clamp≥0，同时保留 `finalFlushRawMs`。
+10. **complete 判据是长度代理**：Markdown 渲染会去掉标记符，不能直接比 `fullText` 长度；`finalComplete` = 最终 DOM 文本不短于流式期间最长可见文本。
 
 ---
 
@@ -141,10 +184,11 @@ dev 实例（CDP 9222）
 # 前置：npm run dev（桌面 dev + CDP 9222）；dev 库里已有 loopback provider（本机 openai→127.0.0.1:9123/v1）
 cd /path/to/lakex-local-notes
 
-# 三档 × 3 次；输出 /tmp/ai-stream-probe/<label>.json
-node scripts/ai-stream-probe.mjs --label run-realistic --chars 60000  --frames 150 --frame-ms 20 --repeat 3
-node scripts/ai-stream-probe.mjs --label run-stress    --chars 640000 --frames 150 --frame-ms 20 --repeat 3
-node scripts/ai-stream-probe.mjs --label run-dense     --chars 640000 --frames 150 --frame-ms 20 --dense --repeat 3
+# 默认 repeat=5（中位数）、drain=150ms；输出 /tmp/ai-stream-probe/<label>.json
+node scripts/ai-stream-probe.mjs --label run-realistic --chars 60000
+node scripts/ai-stream-probe.mjs --label run-stress    --chars 640000
+node scripts/ai-stream-probe.mjs --label run-dense     --chars 640000 --dense
+# 可选：--repeat 3 / --drain-ms 150 / --timeout 200000
 
 # 改参数后同命令再跑一遍，diff 两份 JSON 即得 before/after
 ```
@@ -163,5 +207,7 @@ node scripts/ai-stream-probe.mjs --label run-dense     --chars 640000 --frames 1
 | `scripts/ai-stream-probe-harness.mjs`（新） | 页面内 harness：真实 `runAiChat`/`AiStreamingMessageBody`/`MarkdownView` + DOM 可见更新计量 |
 | `scripts/ai-stream-probe-content.mjs`（新） | 合成 Markdown 生成 + 分帧（Node/页面共用） |
 | `docs/AI-STREAM-PROBE.md`（新） | 本文 |
+| `scripts/ai-stream-probe-harness.mjs`（261116 第二批修正） | 事件级 delta 计数（独立订阅 + drain）、longtask 观测、`finalFlushRawMs` 负值标注、`finalComplete` 长度代理 |
+| `scripts/ai-stream-probe.mjs`（261116 第二批修正） | `--repeat` 默认 5、`--drain-ms`、JSON 记录 appState |
 
 未做：不动 `src/features/ai/**` / `src/features/aiWriting/**` / `electron/**`（其它线在改）；不改 HANDOFF（由 Lead 收口时加一行指针，见文首）。

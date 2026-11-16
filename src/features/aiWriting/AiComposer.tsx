@@ -17,7 +17,7 @@
  * （经 useAiWriting → aiWritingTurn 透传；不传 ≠ 关，传 "enabled"/"disabled" 才覆盖供应商默认值）。
  * 有思考输出时由消息组件显示「已深度思考」。
  */
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { ArrowUp, Brain, FileImage, FilePlus2, FileText, Paperclip, Sparkles, Square, X } from "lucide-react";
 import type { TreeNode } from "../../lib/types";
 import { Popover } from "../../components/ui/Overlay";
@@ -33,7 +33,7 @@ import {
 } from "../../core/aiWriting";
 import { aiWritingAttachmentLabel, aiWritingAttachmentPreviewUrl, aiWritingAttachmentUrl, aiWritingLocalImageUrl, formatAttachmentBytes } from "./aiWritingAttachments";
 import { openImagePreview } from "../editor/imagePreview";
-import { toggleDocRef } from "./aiWritingDocs";
+import { buildDocTitleMap, toggleDocRef } from "./aiWritingDocs";
 import { AI_WRITING_PROMPT_CARDS, type AiWritingPromptCard } from "./aiWritingPrompts";
 import { AiPromptLibrary } from "./AiPromptLibrary";
 import { AiDocPicker } from "./AiDocPicker";
@@ -92,7 +92,8 @@ export function AiComposer({
   const [assetDocAnchor, setAssetDocAnchor] = useState<HTMLElement | null>(null);
   const [assetDoc, setAssetDoc] = useState<AiWritingDocRef | null>(null);
   const attachBtnRef = useRef<HTMLButtonElement | null>(null);
-  const docTitleById = new Map(treeNodes.filter((node) => node.nodeType === "note").map((node) => [node.noteFileId ?? node.id, node.title]));
+  /** 261116 P1-3：O(全树) 映射只在 treeNodes 变时重建（打字/切附件不再每键重算）。 */
+  const docTitleById = useMemo(() => buildDocTitleMap(treeNodes), [treeNodes]);
 
   const canSend = input.trim().length > 0 && !busy;
   /**

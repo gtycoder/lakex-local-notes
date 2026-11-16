@@ -101,15 +101,16 @@
 .aiw-dock { flex: none; padding: 0 var(--lake-space-xxl) var(--lake-space-lg); }
 .aiw-dock .aiw-composer, .aiw-empty .aiw-composer { width: min(var(--lake-chat-thread-max), 100%); margin: 0 auto; }
 
-/* ---------------- 输入卡（261116 chat-demo 定稿；对齐 AI 助手 ai-dialog__composer） ---------------- */
-/* 一张大圆角卡片：上方无边框输入 + 底部一行控制。令牌与 AI 助手完全同口径
-   （--lake-chat-radius-composer / --lake-shadow-card / 0.5px 边 / --lake-disabled-opacity）。 */
+/* ---------------- 输入卡（261116 chat-demo 定稿；与 AI 助手**有意不同**） ---------------- */
+/* 一张大输入卡：上方无边框输入 + 底部一行控制。AI 写作 = 纯对话大卡（radius 24 / min 96），
+   对齐 AI 助手紧凑卡（radius-md 10 / max 120）的**结构**，但尺寸不合并（261116 用户裁决）。
+   共同令牌：--lake-shadow-card / 0.5px 边 / --lake-disabled-opacity / field-sizing。 */
 .aiw-composer { position: relative; padding: var(--lake-space-lg) var(--lake-space-xl) var(--lake-space-md); border: 0.5px solid var(--lake-ctl-border); border-radius: var(--lake-chat-radius-composer); background: var(--lake-bg-panel); box-shadow: var(--lake-shadow-card); }
 .aiw-composer:focus-within { border-color: var(--lake-accent); box-shadow: 0 0 0 var(--lake-focus-ring-width) var(--lake-focus-halo), var(--lake-shadow-card); }
 .aiw-composer__chips { display: flex; flex-wrap: wrap; gap: var(--lake-space-xs); padding: 0 0 var(--lake-space-sm); }
-/* chip = .ln-tag（标签原语），关闭钮 = .ln-iconbtn--compact；这里只留「不吃满整行」与 16px 命中盒。 */
+/* chip = .ln-tag（标签原语），关闭钮 = .ln-iconbtn--compact；这里只留「不吃满整行」与 16px 视觉盒。 */
 .aiw-chip { max-width: 340px; }
-.aiw-chip__close { flex: none; width: 16px; height: 16px; }
+.aiw-chip__close { flex: none; position: relative; width: 16px; height: 16px; }
 /* 自增高走 field-sizing: content（不再 JS 量 scrollHeight）；**min 96px** = 纯对话区明显更大
    （261116 用户裁决：AI 写作=纯对话，要比 AI 助手的紧凑卡大；AI 助手 textarea 上限 120，两端不合并）。 */
 .aiw-composer__input { display: block; width: 100%; min-height: 96px; max-height: 240px; padding: var(--lake-space-xs) 0; border: 0; background: transparent; color: var(--lake-text-1); font-family: var(--lake-font-family); font-size: var(--lake-font-size-body); line-height: 1.55; resize: none; field-sizing: content; outline: none; }
@@ -135,17 +136,17 @@
 .aiw-attach-chip__doc { flex: none; max-width: 96px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--lake-text-3); font-size: var(--lake-font-size-nano); }
 .aiw-attach-chip__name { min-width: 0; color: var(--lake-text-2); font-size: var(--lake-font-size-small); }
 .aiw-attach-chip__size { flex: none; color: var(--lake-text-3); font-size: var(--lake-font-size-nano); }
-.aiw-attach-chip__remove { flex: none; width: 16px; height: 16px; }
+.aiw-attach-chip__remove { flex: none; position: relative; width: 16px; height: 16px; }
+/* 261116 P2-1：视觉仍是 16px 图标钮，命中区扩到 24×24（::before 透明覆盖；不改变 chip 高度/观感）。
+   16px 低于 WCAG 2.5.8 的 24×24 最小目标；删除/关闭是 chip 上唯一操作，必须可稳定命中。 */
+.aiw-chip__close::before,
+.aiw-attach-chip__remove::before { content: ""; position: absolute; inset: -4px; }
 /* 对话写作的附件来源菜单（文档资产图片 / 本机文件）——条目本身走 .ln-row。 */
 .aiw-attach-menu { padding: var(--lake-space-xs); }
 .aiw-attach-menu__item { width: 100%; }
 /* 历史气泡里的本机文件 = 文件名 chip（渲染层没有字节，不画缩略图）。 */
 .aiw-bubble-file { display: inline-flex; align-items: center; gap: var(--lake-space-xs); max-width: 240px; padding: 2px var(--lake-space-sm); border: 0.5px solid var(--lake-ctl-border); border-radius: var(--lake-radius-pill); background: var(--lake-bg-block); color: var(--lake-text-2); font-size: var(--lake-font-size-small); }
 .aiw-bubble-file__size { flex: none; color: var(--lake-text-3); font-size: var(--lake-font-size-nano); }
-/* 对话写作「从文档资产选图片」：先在工作区内挑一篇文档（不产生 docRefs）。 */
-.aiw-pick__doclist { display: flex; flex-direction: column; gap: 2px; }
-.aiw-pick__doc { width: 100%; }
-.aiw-pick__switch { align-self: flex-start; margin: 0 0 var(--lake-space-xs); }
 /* 历史消息里的随发图片（只读）：气泡下方一排缩略图；文件被清理后由浏览器显示破图，不加空占位。 */
 .aiw-user-block { display: flex; flex-direction: column; align-items: flex-end; gap: var(--lake-space-xs); max-width: var(--lake-chat-bubble-max); }
 .aiw-user-block .aiw-bubble { max-width: 100%; }
@@ -158,9 +159,6 @@
 .aiw-pick__head { display: flex; align-items: center; justify-content: space-between; gap: var(--lake-space-sm); padding: var(--lake-space-sm) var(--lake-space-md); border-bottom: 0.5px solid var(--lake-border-2); }
 .aiw-pick__title { display: inline-flex; align-items: center; gap: var(--lake-space-xs); color: var(--lake-text-1); font-size: var(--lake-font-size-body); font-weight: var(--lake-font-weight-medium); }
 .aiw-pick__body { max-height: min(420px, 60vh); overflow-y: auto; padding: var(--lake-space-sm) var(--lake-space-md); }
-.aiw-pick__search { display: flex; align-items: center; gap: var(--lake-space-xs); margin: 0 var(--lake-space-md); padding: var(--lake-space-xs) 0; border-bottom: 0.5px solid var(--lake-border-2); }
-.aiw-pick__search-icon { flex: none; color: var(--lake-text-4); }
-.aiw-pick__search-field { flex: 1 1 auto; min-width: 0; padding: 0; border: 0; background: transparent; color: var(--lake-text-1); font-size: var(--lake-font-size-small); outline: none; }
 .aiw-pick__empty, .aiw-pick__hint { margin: var(--lake-space-lg) 0; color: var(--lake-text-3); font-size: var(--lake-font-size-small); text-align: center; }
 .aiw-pick__hint { margin: var(--lake-space-sm) 0 0; font-size: var(--lake-font-size-tiny); }
 .aiw-pick__group + .aiw-pick__group { margin-top: var(--lake-space-md); }
@@ -176,13 +174,8 @@
 .aiw-pick__meta { color: var(--lake-text-3); font-size: var(--lake-font-size-small); }
 .aiw-pick__meta.is-warn { color: var(--lake-status-error); }
 .aiw-composer__send { display: flex; align-items: center; gap: var(--lake-space-xs); flex: 0 0 auto; }
-/* 发送 = 32px 圆形主色；生成中**同格**变停止（红底），disabled 45% 透明。 */
-.aiw-send-circle { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border: 0; border-radius: var(--lake-radius-pill); background: var(--lake-accent); color: var(--lake-text-on-accent); cursor: pointer; }
-.aiw-send-circle:hover:not(:disabled) { background: var(--lake-accent-ink); }
-.aiw-send-circle:active:not(:disabled) { transform: scale(.96); }
-.aiw-send-circle:disabled { opacity: var(--lake-disabled-opacity); cursor: default; }
-.aiw-send-circle--stop { background: var(--lake-status-error); }
-.aiw-send-circle--stop:hover:not(:disabled) { background: var(--lake-status-error); }
+/* 发送/停止 = kit 原语 .ln-send-circle（261116 P1-2 收单一来源）；本文件不再保留实现。
+   kit 用别名同时命中 .aiw-send-circle / .aiw-send-circle--stop，TSX 批次后删别名即可。 */
 
 /* ---------------- 提示词库 ---------------- */
 /* 菜单行列表（与全仓菜单同一身份）：每项 = .ln-menu__item，左侧图标 + 两行文本。 */

@@ -89,16 +89,20 @@ describe("AI 写作输入卡版式（261116 用户裁决）", () => {
     expect(composer).toContain("caps.localFiles ?");
   });
 
-  it("右侧圆形发送：32px 主色；生成中**同格**变停止（红底），不再有文字「发送」按钮", () => {
+  it("右侧圆形发送：32px 主色；生成中**同格**变停止（红底），实现已收进 kit .ln-send-circle", () => {
     expect(composer).toContain("aiw-send-circle");
     expect(composer).toContain("aiw-send-circle--stop");
     expect(composer).toContain('aria-label="停止生成"');
     expect(composer).not.toContain(">发送<");
-    expect(cssBlock).toContain("width: 32px");
-    expect(cssBlock).toContain("height: 32px");
-    expect(cssBlock).toContain("background: var(--lake-accent)");
-    expect(cssBlock).toContain("background: var(--lake-status-error)");
-    expect(cssBlock).toContain(".aiw-send-circle:disabled");
+    // 261116 P1-2：两端逐字节重复的实现收进 kit；本文件只保留排布/注释，不再自养实现。
+    expect(cssBlock).not.toContain(".aiw-send-circle {");
+    const kit = read("../../styles/kit.css");
+    expect(kit).toContain(".ln-send-circle,");
+    expect(kit).toContain("width: 32px");
+    expect(kit).toContain("height: 32px");
+    expect(kit).toContain("background: var(--lake-accent-ink)");
+    expect(kit).toContain("background: var(--lake-status-error)");
+    expect(kit).toMatch(/:is\(\.ln-send-circle, \.ai-dialog__send-circle, \.aiw-send-circle\):disabled/);
   });
 
   it("全部令牌化：输入卡样式区 0 个颜色字面量、无 1px 实边", () => {
