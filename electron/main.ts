@@ -73,17 +73,21 @@ import {
   workspaceRoot,
 } from "./boot/paths.js";
 import { registerIpc } from "./boot/ipcWiring.js";
+import { appDirOf, bootSplashPath, preloadPath } from "./buildTarget.js";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+/** 构建产物目录（= dist-electron 的运行时绝对路径，**唯一**依赖入口位置的路径）。
+ *  boot.html / preload / dist / CDN 镜像都从它派生：派生规则集中在 `electron/buildTarget.ts`
+ *  （与 vite 构建配置、package.json build.files 的断言共用同一份契约）。
+ *  之所以在入口算而不放进 boot/paths.ts：那里刻意不读 import.meta.url（见该文件头注释）。 */
+const BUILD_DIR = path.dirname(fileURLToPath(import.meta.url));
 /** 主窗口引用（macOS 菜单「设置…」需要给渲染层发事件；单窗口应用，关窗即清空）。 */
 let mainWindow: BrowserWindow | null = null;
 
 /** 启动遮罩窗口：在主进程初始化 + 渲染层加载期间先显示 logo，避免主窗口白屏。 */
 let bootWindow: BrowserWindow | null = null;
 
-/** 构建产物位置锚点（**唯一**依赖入口位置的路径；boot.html / dist / CDN 镜像都按它定位）。
- *  放在入口而不是 boot/paths.ts：那里刻意不读 import.meta.url（见该文件头注释）。 */
-const APP_DIR = path.join(__dirname, "..");
+/** 应用根目录（asar 内一级目录）：dist / public 的定位锚点。 */
+const APP_DIR = appDirOf(BUILD_DIR);
 // userData 隔离必须在 app ready 前生效，且早于任何 userDataDir()/workspaceRoot() 读取。
 applyUserDataPath();
 
@@ -325,7 +329,7 @@ function createBootWindow() {
   boot.on("closed", () => {
     if (bootWindow === boot) bootWindow = null;
   });
-  void boot.loadFile(path.join(__dirname, "../electron/boot.html")).catch((error) => {
+  void boot.loadFile(bootSplashPath(BUILD_DIR)).catch((error) => {
     log.app.warn(`[boot] splash load failed: ${(error as Error).message}`);
     if (!boot.isDestroyed()) boot.destroy();
     if (bootWindow === boot) bootWindow = null;
@@ -374,10 +378,9 @@ async function createWindow() {
     // 头区高单一来源 = src/lib/layoutMetrics.ts 的 TOPBAR_HEIGHT + TOPBAR_SEAM（与 CSS 有单测对齐）。
     trafficLightPosition: { x: 14, y: (TOPBAR_HEIGHT + TOPBAR_SEAM - TRAFFIC_LIGHT_DIAMETER) / 2 },
     webPreferences: {
-      // 打包版直接指向 app.asar.unpacked 里的真实文件（asar 内 preload 在 Electron 33 有解析 Bug）
-      preload: app.isPackaged
-        ? path.join(__dirname, "../../app.asar.unpacked/electron/preload.cjs")
-        : path.join(__dirname, "../electron/preload.cjs"),
+      // 打包版直接指向 app.asar.unpacked 里的真实文件（asar 内 preload 在 Electron 33 有解析 Bug）。
+      // 两条分支的路径规则是构建产物契约的一部分，统一在 electron/buildTarget.ts::preloadPath。
+      preload: preloadPath(BUILD_DIR, app.isPackaged),
       contextIsolation: true,
       nodeIntegration: false,
       // 260923：preload 已在 package.json 的 build.asarUnpack 中（asar 内沙箱 preload 的旧 Bug 不适用）；
@@ -508,8 +511,8 @@ async function createWindow() {
       try { if (!win.isDestroyed()) win.webContents.reload(); } catch { /* 窗口已销毁 */ }
     }, 800);
   });
-  win.webContents.on("preload-error", (_event, preloadPath, error) => {
-    log.app.error("[crash] preload-error" + formatLogFields({ path: preloadPath, ...errorFields(error) }));
+  win.webContents.on("preload-error", (_event, preloadFile, error) => {
+    log.app.error("[crash] preload-error" + formatLogFields({ path: preloadFile, ...errorFields(error) }));
   });
   win.on("unresponsive", () => log.app.warn("[ui] 窗口无响应（unresponsive）"));
   win.on("responsive", () => log.app.info("[ui] 窗口恢复响应（responsive）"));

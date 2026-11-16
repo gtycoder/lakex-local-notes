@@ -4,6 +4,9 @@ import react from "@vitejs/plugin-react";
 import electron from "vite-plugin-electron";
 import { lakexAlipayLocal, lakexGwUrlLocalPostcss } from "./scripts/lakexLocalize";
 import { vendorCssLayerPlugin } from "./scripts/vendorCssLayer";
+// 构建产物布局契约（入口/输出目录/external 判据）的**唯一来源**：与 electron/main.ts 和
+// electron/buildContract.test.ts 共用，避免三处各写一份字面量（见 docs/arch/ELECTRON-LAYERING-AUDIT.md §5-A）。
+import { ELECTRON_MAIN_ENTRY, ELECTRON_OUT_DIR, isMainProcessExternal } from "./electron/buildTarget";
 
 /** V5 §5.6 全本地化：lakex 编辑器 CSS/JS 内 gw.alipayobjects.com 资源（字体/图标 SVG/动态加载脚本）
  * 已本地镜像：public/vendor/lakex/alipay/（字体/图标）+ vendor/cdn/（katex/CodeMirror，复用现有本地）。
@@ -29,14 +32,11 @@ const PROD_CSP = "default-src 'self'; script-src 'self' 'sha256-r1Dc4EBzntnjCYkA
 
 /** 主进程运行期依赖（package.json dependencies）：派生 external，而不是逐个硬编码。
  *  硬编码的旧写法（better-sqlite3/sharp/electron-log/@aws-sdk…）在新增原生依赖或传递依赖时
- *  会漏项 —— 漏项 = 该依赖被打进 bundle，打包后才炸。@smithy 是 @aws-sdk 的传递依赖，仍需显式列出。 */
+ *  会漏项 —— 漏项 = 该依赖被打进 bundle，打包后才炸。@smithy 是 @aws-sdk 的传递依赖，仍需显式列出。
+ *  判据本身在 electron/buildTarget.ts（纯函数，单测覆盖；本文件只负责读 package.json 并注入）。 */
 const mainPkg = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8")) as { dependencies?: Record<string, string> };
 const mainRuntimeDeps = Object.keys(mainPkg.dependencies ?? {});
-function isMainProcessExternal(id: string): boolean {
-  if (id.startsWith("node:") || id === "electron" || id.startsWith("electron/")) return true;
-  if (id.startsWith("@smithy/")) return true; // @aws-sdk/client-s3 的传递依赖
-  return mainRuntimeDeps.some((dep) => id === dep || id.startsWith(dep + "/"));
-}
+const externalForMainProcess = (id: string): boolean => isMainProcessExternal(id, mainRuntimeDeps);
 
 export default defineConfig({
   plugins: [
@@ -46,8 +46,8 @@ export default defineConfig({
     react(),
     electron([
       {
-        entry: "electron/main.ts",
-        vite: { build: { outDir: "dist-electron", rollupOptions: { external: isMainProcessExternal } } },
+        entry: ELECTRON_MAIN_ENTRY,
+        vite: { build: { outDir: ELECTRON_OUT_DIR, rollupOptions: { external: externalForMainProcess } } },
         // CDP 调试：LAKE_CDP_PORT 覆盖端口（默认 9222；开发调试保留，packaged 产物不带此参数）
         onstart: async ({ startup }) => { await startup([".", `--remote-debugging-port=${process.env.LAKE_CDP_PORT ?? "9222"}`]); },
       },

@@ -18,7 +18,7 @@
   - **调研文档（本批新增，用户点名要的交付物）**：[docs/icon-migration/DECISION.md](icon-migration/DECISION.md)（图标不换库的完整依据 + C 路径）、[docs/modern-web/VERIFY-261116.md](modern-web/VERIFY-261116.md)、[docs/modern-web/STRICTER-BACKLOG.md](modern-web/STRICTER-BACKLOG.md)、[docs/arch/SIYUAN-PR-21151.md](arch/SIYUAN-PR-21151.md)、[docs/arch/ELECTRON-LAYERING-AUDIT.md](arch/ELECTRON-LAYERING-AUDIT.md)、[docs/mobile/LOADING-MOTION.md](mobile/LOADING-MOTION.md)、[docs/mobile/SETTINGS-LAYOUT-AUDIT.md](mobile/SETTINGS-LAYOUT-AUDIT.md)。
 - **门禁（发版前最后一次全量）**：`tsc` 0；全量 vitest **992 文件 / 6219 用例（979 passed / 13 skipped；6205 passed / 14 skipped / 0 failed）**；`ui-metrics` 0；`cssLayers`/`primitives`/`mobileLayers` 全绿；`check:core` 181 文件 0 违规；`check:bundle`+`check:arch` PASS（移动首屏 345.1KB/350KB、entry 50,402B/51,200B；桌面 577.1KB/600KB）；桌面 stylesnap 5 态 0 差异、移动 mobile-snap **10/10 0 差异**（lake_gate 专用实例两轮一致后重烤基线）、多维表未动；`git diff --check` 0。
 - **本批明确不做（用户裁决）**：移动端 B 级四项（去分组卡片框、危险操作挪底、Item-stacked 回左右排、Block 动作前后统一）——与既有 v2 定稿冲突，保留现状。
-- **遗留（下一批候选，未阻断发版）**：① `.tree-row` 常驻 `will-change`（现代 Web 复核 A20 重开项，10k 库≈1 万个合成层，需先测后改）；② 桌面 `main.ts` 分层护栏（依赖方向测试 / 打包内容测试，见 `docs/arch/ELECTRON-LAYERING-AUDIT.md` 批次 A，约 2 人日）；③ `/tmp/lake-task15-run` 有一个 4KB root 权限空壳删不掉（无功能影响）。
+- **遗留（下一批候选，未阻断发版）**：① `.tree-row` 常驻 `will-change`（现代 Web 复核 A20 重开项，10k 库≈1 万个合成层，需先测后改）；② ~~桌面 `main.ts` 分层护栏~~ **已完成批次 A**（同日后补：`electron/buildTarget.ts` 产物契约单一来源 + `architecture/buildContract/startupBranches` 三个门禁测试 + `tsconfig.electron.json` 无 DOM typecheck 接入 `npm run build` 首步；只加护栏、`main.ts` 行数未变；批次 B「装配外迁」建议分片择机：B1 非窗口 wiring → ≤760 行、B2 窗口层 → ≤600 行，见该文档 §8）；③ `/tmp/lake-task15-run` 有一个 4KB root 权限空壳删不掉（无功能影响）。
 
 ### 261116 · 现代 Web 平台化第二批 + AI 对话面（分支 `modernize/web-platform-261115`，已随 v1.2.0 合入 master）
 

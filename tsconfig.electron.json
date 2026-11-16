@@ -1,0 +1,20 @@
+{
+  // 主进程「无 DOM」门禁（批次 A-7，docs/arch/ELECTRON-LAYERING-AUDIT.md §5）。
+  //
+  // 为什么单独一份：仓库根 tsconfig 的 lib 带 DOM（渲染层需要），于是 `electron/**` 里误写
+  // `document.`/`window.`/`localStorage` 也能通过类型检查 —— 主进程没有 DOM，运行时才
+  // ReferenceError。这里用 `lib: ["ES2024"]` 把 DOM 从主进程的类型环境里摘掉。
+  //
+  // 只覆盖**生产文件**（exclude 测试）：`electron/s3v3/deviceConformance.mixed.test.ts` 会跨端
+  // import `src/mobile/**`，那些文件需要 DOM 类型；把测试纳入会得到与主进程无关的噪声错误。
+  //
+  // 接入：`npm run typecheck:electron`（`npm run build` 首步）。2026-11-16 落地时实测 0 error
+  // ⇒ 这是纯回归门禁，不是待修清单。
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2024"],
+    "noEmit": true
+  },
+  "include": ["electron"],
+  "exclude": ["electron/**/*.test.ts"]
+}

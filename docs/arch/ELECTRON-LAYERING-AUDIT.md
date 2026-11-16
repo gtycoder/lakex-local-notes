@@ -330,3 +330,113 @@ npx tsc --noEmit && node scripts/check-core-boundaries.mjs && node scripts/check
 - `docs/ARCHITECTURE.md:14,47` 写「187 个通道」，实际 `electron/ipc/ipcChannelParity.test.ts:168-170` 断言 **188**。
 - `docs/ARCHITECTURE.md:12-28` 的目录图缺 `boot/`、`quickNotes/`、`webApi/` 三个子目录；`:28` 仍把 `webApiServer.ts` 描述为实现（现为 244 行门面）。
 - `AGENTS.md:181`「better-sqlite3 是 Electron ABI（系统 Node 跑不了）」与 `docs/DEVELOPMENT.md:88`、`docs/TROUBLESHOOTING.md:92`（13.x = N-API 单二进制）**矛盾**，建议以后者为准。
+
+---
+
+## 8. 批次 A 实施记录（2026-11-16，已在 master 落地）
+
+> 前置：v1.2.0（HEAD `23efabf4`），工作树干净进入；本批**零行为改动**。
+> 结论：§5 批次 A 的 9 项判据全部落地；3 个新门禁都用**已知违规样本自证会红**（不是空跑通过）；
+> 本机全量门禁绿（`tsc --noEmit` / `tsc -p tsconfig.electron.json` / 全量 `vitest run` / `ui-metrics` / `cssLayers` / `vite build`）。
+
+### 8.1 改动清单
+
+| 文件 | 类型 | 作用 |
+| --- | --- | --- |
+| `electron/buildTarget.ts` | **新增**（契约） | 产物布局**唯一来源**：输出目录 / 入口 / main 文件 / 源树直接进包清单 / asarUnpack / 路径派生（`appDirOf` `bootSplashPath` `preloadPath`）/ external 判据纯函数 |
+| `electron/main.ts` | 改（等价重构） | 3 条硬编码相对路径改为契约函数；`__dirname` 更名 `BUILD_DIR`（语义即「构建产物目录」）；`preload-error` 回调参数改名，避免与导入的 `preloadPath` 重名 |
+| `vite.config.ts` | 改（等价重构） | `entry` / `outDir` 改用契约常量；external 改为注入 dependencies 的 `externalForMainProcess`（判据实现搬到可测模块） |
+| `package.json` | 改 | 新增 `typecheck:electron` 脚本；`build` 首步串上它（产物禁 DOM 门禁进主流程） |
+| `tsconfig.electron.json` | **新增** | 主进程「无 DOM」类型环境（`lib: ["ES2024"]`，排除测试） |
+| `electron/architecture.test.ts` | **新增**（15 tests） | R1 入口唯一 / R2 一级目录登记制 / R3 跨层方向 / R4 electron→src 白名单 / R5 可达性 / R6 external 派生 |
+| `electron/buildContract.test.ts` | **新增**（17 tests） | package.json 清单 = 契约常量、asarUnpack ⊆ files、测试/夹具不进包、3 条路径收口 + 防回退字面量断言 |
+| `electron/startupBranches.test.ts` | **新增**（8 tests） | 启动分支**类型穷尽**（`satisfies`）+ 运行时可达性 + main.ts 接线/顺序不变量 |
+| 本文 | 改 | 本节 + §2.3 产物尺寸修正（见 8.7） |
+
+**不动**：`src/**`（含 styles / mobile / icon-migration）、运行期行为、IPC 通道数、`preload.cjs`、`build.files` 内容本身（形态未变，只是加了断言）。
+
+### 8.2 9 项判据逐条结论
+
+| 判据 | 落点 | 实测基线 | 结论 |
+| --- | --- | --- | --- |
+| A-1 架构/依赖方向机检 | `architecture.test.ts`（注释感知扫描器 + allowedDependencies） | 146 文件 / 657 条相对导入 / 211 条 bare import 全部扫描 | ✅ 新增（本仓此前**零** `electron/` 方向门禁） |
+| A-2 R1 入口唯一 | 同上 | 无人 import `main.ts` | ✅ 0 违规 |
+| A-3 R2 一级目录登记制 | 同上（`REGISTERED_SUBDIRS` 与 `ALLOWED_DEPENDENCIES` 双向一致断言） | 8 个目录全登记 | ✅ 0 违规；新增目录必红 |
+| A-4 R3 跨层方向 | 同上 | 见 8.3 方向表 | ✅ 0 违规（表内每个方向都有真实边，无预留） |
+| A-5 R4 electron→src 白名单 | 同上（`SRC_IMPORT_ALLOWLIST` 逐条带理由 + stale 断言） | `src/core/**` 任意；另 5 个文件登记 | ✅ 0 未登记；白名单只减不增 |
+| A-6 external 从 dependencies 派生 | `architecture.test.ts` R6 + `buildTarget.isMainProcessExternal` | 生产代码全部 bare import 判为 external；`vitest` 1 条例外（测试支撑） | ✅ 新增（原先只有注释约定） |
+| A-7 主进程无 DOM | `tsconfig.electron.json` + `npm run typecheck:electron` + `build` 首步 | **0 error** | ✅ 新增（落地前实测即 0 ⇒ 纯回归门禁） |
+| A-8 打包内容测试 + 清单单一来源 | `buildContract.test.ts` + `buildTarget.ELECTRON_PACKAGE_FILES` | `build.files` 9 条与常量逐字相等；4 个源树文件已登记；测试/夹具 0 条 | ✅ 新增 |
+| A-9 三条硬编码路径收口 | 三个路径函数 + `main.ts` 改调用 + 字面量防回退断言 | dev / 打包两条分支路径**字符串等价**（单测逐条断言） | ✅ 新增（P1/P2/P3 从「隐式耦合」变「1 个函数 + 单测」） |
+| ④ 启动分支穷尽 | `startupBranches.test.ts` | 5 个判定 / 全部取值可达 / 接线完整 | ✅ 新增（**未改运行期形状**，见 8.5） |
+
+### 8.3 依赖方向表（= 门禁里的 `ALLOWED_DEPENDENCIES`，按实测定稿）
+
+| 层 | 允许依赖 | 现状边（实测） | 理由 |
+| --- | --- | --- | --- |
+| `entry`（main.ts） | 全部 | 出 43 条 | 唯一装配点，只出不入（R1 钉死） |
+| `domain`（根平铺 83 文件） | domain, quickNotes, s3v3, webApi | →webApi 7 / →s3v3 4 / →quickNotes 2 | 前三者是**门面 re-export**（`webApiServer.ts` / `quickNotes.ts`）与编排委托（`syncEngineController.ts`）；该层此前**只有事实身份**，本批给了名字与边界 |
+| `ipc` | domain, ipc, ai, portable, s3v3, update | →domain 63 / →s3v3 4 / →ai 3 / →portable 1 / →update 1 | 注册层装配各子系统；**禁止**依赖 `boot/`（装配层）与 `webApi/` |
+| `boot` | domain, boot, ipc, update | →ipc 23 / →domain 8 / →update 1 | 启动装配层；反向（ipc→boot）会把启动顺序变成隐式约束 |
+| `quickNotes` | domain, quickNotes | →domain 40 | 小记库内部闭环 |
+| `s3v3` | domain, s3v3 | →domain 8 | 协议纯逻辑在 `src/core/s3v3/` |
+| `ai` / `portable` / `update` | domain + 自身 | 各自 0~2 | 单职责子系统 |
+| `webApi` | domain, ipc, webApi | →ipc 1（错误编码）/ →domain 1（appOrigin） | 传输层复用 IPC 的错误契约 |
+
+### 8.4 白名单逐条理由（门禁里的 `reason` 字段是唯一来源，此处为摘要）
+
+**`electron → src`（方向倒置，逐条登记；`src/core/**` 整体放行）**
+
+| 目标 | 为什么允许 | 移除条件 |
+| --- | --- | --- |
+| `src/lib/types.ts`（10 个文件引用） | IPC 契约类型定义处（NoteSummary / SyncResult / SyncProgress / S3Settings / 诊断报告）；主进程是 IPC 宿主，必须与 preload.cjs / WEB_METHODS / native.ts 同一份类型。共享领域类型已下沉 `src/core/sharedTypes.ts`，此处是 re-export 门面 + 渲染层专属类型 | 若把「IPC 面类型」也整体下沉 core，则改为只依赖 core |
+| `src/lib/layoutMetrics.ts`（main.ts） | 顶栏几何与 CSS `--topbar-height` 的单测胶水；主进程用它把 macOS 红绿灯垂直居中。两侧必须同源，复制常量会复发「顶栏改高、红绿灯没跟」 | 下沉 core 布局模块后删本条 |
+| `src/features/ink/inkGeometry.ts` | 手写板「笔迹→SVG path」纯几何，PDF/SVG 导出复用；屏显与导出必须同一实现 | 下沉 `src/core/inkExport` 后删 |
+| `src/features/ink/inkStrokeStyle.ts` | 描边样式纯函数，同上 | 同上 |
+| `src/features/ink/inkPageTexts.ts` | 页内文字换行/行高纯函数，导出分页依赖 | 同上（需同时改渲染层 import） |
+
+**测试支撑文件（`TEST_SUPPORT_FILES`，同时是 R5「不可达集合」的期望值）**
+
+| 文件 | 为什么不算生产代码 | 证据 |
+| --- | --- | --- |
+| `s3v3/deviceConformance.ts`（844 行） | 设备一致性场景生成器，只被测试 import；含 `vitest` 依赖 | 从 `main.ts` 不可达（R5 断言）；R6 把它排除出 external 检查 |
+| `s3v3/fileDeviceStore.ts` | 测试替身（DeviceStore 文件版） | 同上 |
+| `portable/zipTestReader.ts` | 便携包测试用 zip 读取器 | 同上 |
+
+**external 兜底**：`@smithy/*`（`@aws-sdk/client-s3` 的传递依赖，不在 `dependencies` 里）+ `node:*` + `electron` / `electron/*`。
+
+### 8.5 零行为改动是怎么保证的
+
+1. **路径等价**：`preloadPath` / `bootSplashPath` / `appDirOf` 用 `path.join` 逐段拼接，等价于原来的字面量（单测对 **dev 与打包两条分支逐字符**断言目标路径）。
+2. **构建产物实证**：`npx vite build` exit 0，`dist-electron/main.js` 依旧**单文件、0 动态 import**，产物内仍含 `app.asar.unpacked` 路径语义。
+3. **启动分支**：没有引入思源式 `StartupBranch` 判别联合（那要动 7 处分支顺序 = 语义风险，见 §6-4）。改成**证明**：`satisfies Record<Union, true>`（联合类型加成员 ⇒ typecheck 直接红）+ 运行时可达性矩阵 + `main.ts` 接线/先后顺序断言。
+4. **不碰样式/移动端**：`ui-metrics` 与 `cssLayers` 均绿（基线 45/45、0/0）。
+
+### 8.6 门禁与探针（本机实测）
+
+| 命令 | 结果 |
+| --- | --- |
+| `npx tsc --noEmit` | ✅ 0 error |
+| `npx tsc -p tsconfig.electron.json`（无 DOM） | ✅ 0 error |
+| `npx vitest run`（全量） | ✅ 983 文件通过 / 6249 用例通过（13 文件 skip 为既有 gated/integration） |
+| 新增 3 个测试文件 | ✅ 40 用例（15 + 17 + 8） |
+| `node scripts/ui-metrics.mjs` | ✅ 跨文件重复 45/45、被压声明 0/0（与基线一致） |
+| `npx vitest run src/styles/cssLayers.test.ts` | ✅ 3 用例 |
+| `npx vite build` | ✅ exit 0；`dist-electron/main.js` 839,988 B / gzip 227,440 B |
+
+**负向探针（证明门禁不是空跑；每次注入后立即回滚，工作树已复原）**
+
+| 探针 | 注入 | 期望 & 实际 |
+| --- | --- | --- |
+| 反向依赖 | 新建 `electron/ipc/_probeViolation.ts` import `../boot/paths.js` | R3 红：`ipc/_probeViolation.ts → boot/paths.ts（ipc → boot 未登记；ipc 允许：domain, ipc, ai, portable, s3v3, update）`；R5 同时红（不可达文件） |
+| 打包清单漂移 | `build.files` 插一条未登记源树文件；删 `dependencies.unpdf` | `buildContract` 2 条红（逐字相等 + 未登记源树文件）；R6 红：`ai/pdfText.ts → unpdf` |
+| 分支穷尽 | 给 `decideStartupCheckDepth` 返回类型加 `"medium"` | `tsc --noEmit` 红：`startupBranches.test.ts(72,50): error TS1360: Type '{ light: true; deep: true; }' does not satisfy the expected type 'Record<"medium" \| "light" \| "deep", true>'` |
+
+### 8.7 数据修正 + 剩余项
+
+- **数字修正**：§2.3 原写 `dist-electron/main.js 1,375,153 B` —— 那是 **dev 模式**构建产物；本批 `vite build`（production）实测 **839,988 B / gzip 227,440 B**。「单文件 + 0 动态 import」的结论不变（§2.3 已同步改）。
+- **剩余项（本批明确不做）**：
+  1. `build.files` 仍有 4 个「源树直接进包」文件（preload + 启动页三件 = 376KB）—— 属批次 C-1/C-2/C-3；本批只把「清单 + 路径」收口成单一来源并加负向断言；
+  2. `scripts/scale-acceptance/lib/env.mjs:143` 仍写字面量 `dist-electron/main.js`（`.mjs` 无法 import TS 常量）—— 批次 C 可把常量发布成 `.mjs`，或加一条断言；
+  3. 窗口层 / 启动装配外迁 = 批次 B，未动；
+  4. `main.ts` 仍 1102 行（本批不搬代码，只收口路径并加门禁）。
