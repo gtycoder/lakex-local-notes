@@ -17,7 +17,7 @@ import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Field, TextField } from "../ui/settingsPrimitives";
-import { SETTING_ITEMS } from "../../components/model/settingsSearch";
+import { MOBILE_ONLY_SETTING_IDS, SETTING_ITEMS } from "../../components/model/settingsSearch";
 
 let host: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
@@ -110,8 +110,14 @@ describe("SettingsDrawer 的内容输入行（源码护栏）", () => {
     expect(src).toContain('<Item itemId="history-snapshot-interval"');
   });
 
-  it("data-set-id 与两端共用 SETTING_ITEMS 对齐（settingsSearch 的定位锚点不漂移）", () => {
-    const ids = new Set(SETTING_ITEMS.map((item) => item.id));
-    for (const id of INPUT_ROW_IDS) expect(ids.has(id), `SETTING_ITEMS 缺少 ${id}`).toBe(true);
+  it("data-set-id 落在「共用注册表 ∪ 移动端自有锚点」里，且移动端锚点不混进共用注册表", () => {
+    // 261116：桌面 S3 收进弹窗后注册表只剩 s3-config；移动端仍是逐字段行 ⇒ 锚点登记在
+    // MOBILE_ONLY_SETTING_IDS（两端 UI 独立，AGENTS §4），并反向保证它们没被塞进共用注册表。
+    const shared = new Set(SETTING_ITEMS.map((item) => item.id));
+    const mobileOnly = new Set<string>(MOBILE_ONLY_SETTING_IDS);
+    for (const id of INPUT_ROW_IDS) {
+      expect(shared.has(id) || mobileOnly.has(id), `锚点未登记：${id}`).toBe(true);
+    }
+    for (const id of mobileOnly) expect(shared.has(id), `移动端锚点不应进共用注册表：${id}`).toBe(false);
   });
 });

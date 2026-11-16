@@ -244,13 +244,16 @@
 }
 .mb-set-section > .mb-set-item:first-child, .mb-set-section__title + .mb-set-item { border-top: 0; }
 .mb-set-item--field { align-items: flex-start; }
-.mb-set-item--field .mb-set-item__ctl { flex: 1 1 100%; }
+/* 261116 A1：Field 控件列允许换行 —— 一个 Field 里可能不止一个控件（AI「模型」= 输入框 + 获取模型列表按钮，
+ * 261116 实测 ctl 被 min-content 撑到 382px > 可用 343/321，按钮被卡片 overflow:hidden 静默裁掉）；
+ * 单控件行只有一个子项、视觉与改前逐像素一致（子项仍 grow 吃满），多控件行才在窄屏折到下一行。 */
+.mb-set-item--field .mb-set-item__ctl { flex: 1 1 100%; flex-wrap: wrap; }
 /* 内容输入行（Field）的控件列：直接子控件必须吃满整行（261102 侦察：同页出现「某个输入框比别的短」）。
- * .mb-input 自带 width:100%，但作为 flex 子项默认 min-width:auto + 无 flex 伸展 ⇒ 窄屏/多控件组合下会被
- * 固有宽顶住；这里补 flex:1 1 auto + min-width:0，右缘才一致。只约束直接子控件，不改 --field 既有语义
- * （多维表 6 个面板的 Field 骨架子控件是 .mbt-form-input，不受影响）。 */
+ * .mb-input 自带 width:100%，但作为 flex 子项默认 min-width:auto ⇒ 多控件组合下会被固有宽顶住；
+ * 261116 A1：flex 基础宽改 160px（仍 grow 吃满 / min-width:0 可收缩），给同行的按钮留出空间，溢出才不可能。
+ * 只约束直接子控件，不改 --field 既有语义（多维表 6 个面板的 Field 骨架子控件是 .mbt-form-input，不受影响）。 */
 .mb-set-item--field .mb-set-item__ctl > .mb-input,
-.mb-set-item--field .mb-set-item__ctl > .mb-select--trigger { flex: 1 1 auto; width: 100%; min-width: 0; }
+.mb-set-item--field .mb-set-item__ctl > .mb-select--trigger { flex: 1 1 160px; width: 100%; min-width: 0; }
 /* 密度只由设置页提供；多维表编辑面复用这些类时保留原来的自动宽度、2px 内距与字重。 */
 .mb-set-item__main { flex: 1 1 var(--mb-set-main-basis, auto); min-width: 0; display: flex; flex-direction: column; gap: var(--mb-set-main-gap, 2px); }
 /* 261110：同一原语可以落在 <button> 上（日记条目行 = 可点行；用真按钮保键盘/无障碍语义）。

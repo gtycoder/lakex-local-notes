@@ -128,7 +128,7 @@ export function UpdateCenterSection({ appInfo }: { appInfo: AppInfo | null }) {
 
   return (
     <>
-      <Group title="更新" icon={<RefreshCw size={16} />}>
+      <Group>
         <Item
           itemId="update-check"
           name="检查更新"

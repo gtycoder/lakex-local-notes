@@ -1,4 +1,4 @@
-import { History, Palette, Info } from "lucide-react";
+import { Palette, Info } from "lucide-react";
 import { Group, Item, Seg, NumField } from "../ui/settingsPrimitives";
 import type { AppSettings } from "../../lib/settings";
 import type { HistoryMobileSettings } from "../bridge";
@@ -13,7 +13,7 @@ const LAKEX_KERNEL_VERSION = "1.99.0";
 
 export function AppearanceSettingsSection({ settings, update }: { settings: AppSettings; update(patch: Partial<AppSettings>): void }) {
   return (
-            <Group title="外观" icon={<Palette size={16} />}>
+            <Group>
               {/* 用户 261012：说明文案去掉，只留选项（名字即语义）；261107 v2 增加「纯黑（OLED）」。 */}
               <Item itemId="appearance-theme" name="主题" icon={<Palette size={16} />} tone="#b9822f">
                 <Seg ariaLabel="主题">
@@ -27,7 +27,7 @@ export function AppearanceSettingsSection({ settings, update }: { settings: AppS
 }
 export function HistorySettingsSection({ hist, updateHist }: { hist: HistoryMobileSettings; updateHist(patch: Partial<HistoryMobileSettings>): void }) {
   return (
-            <Group title="历史" icon={<History size={16} />}>
+            <Group>
               <Item itemId="history-max-snapshots" name="每文档快照上限" desc="超过后只保留最新 N 份。">
                 <NumField label="每文档快照上限" value={hist.maxSnapshots} min={1} max={500} floor={1} fallback={100} onSave={(n) => updateHist({ maxSnapshots: n })} />
               </Item>

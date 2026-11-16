@@ -1,4 +1,3 @@
-import { Sparkles } from "lucide-react";
 import { Group, Field, Block, Switch, TextField, Item } from "../ui/settingsPrimitives";
 import { PickerSheet } from "../ui/PickerSheet";
 import { bridge } from "../bridge";
@@ -26,7 +25,7 @@ export function AiSettingsSection({ form }: { form: ReturnType<typeof useAiSetti
   const supportsThinking = activeProviderDef?.supportsThinking === true;
   const showTemperature = !supportsThinking || aiForm.thinking !== "enabled";
   return (
-            <Group title="AI 助手" icon={<Sparkles size={16} />}>
+            <Group>
               {/* 服务：供应商 → 接口地址（桌面 AiSection 的「服务」段同序） */}
               <Item itemId="ai-provider" name="供应商" desc="内置常见 OpenAI 兼容供应商；切换会用该家默认接口地址与模型。">
                 <PickerSheet

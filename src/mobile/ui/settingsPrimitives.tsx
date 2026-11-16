@@ -15,10 +15,12 @@ import { Children, isValidElement, useId, useEffect, useState, type CSSPropertie
 
 import { SettingFieldContext, useSettingField } from "./fieldAccessibility";
 
-export function Group({ title, icon, children }: { title: string; icon?: ReactNode; children: ReactNode }) {
+/** 分组：标题 + 一张卡。**title 可省略** —— 单组页的页标题（h1）已经写了组名，再渲染一遍是重复（261116 A2）。
+ *  省略时不渲染 h2（a11y 跳级由页头 h1 承担；多组页仍必须给 title）。 */
+export function Group({ title, icon, children }: { title?: string; icon?: ReactNode; children: ReactNode }) {
   return (
     <section className="mb-set-group">
-      <h2 className="mb-set-title">{icon}{title}</h2>
+      {title && <h2 className="mb-set-title">{icon}{title}</h2>}
       <div className="mb-set-items">
         {Children.toArray(children).some((child) => isValidElement(child) && child.type === Section)
           ? children

@@ -4,7 +4,7 @@
  * （settingsSearch.ts 的 SETTING_ITEMS 继续生效）。
  * 注意：全部 App 设置为竖向（无横向 tab）；「回收站」并入总回收站（见 TrashList）。 */
 import { Suspense, lazy, useEffect, useRef, useState, type CSSProperties } from "react";
-import { Archive, ArrowLeft, ChevronRight, Cloud, Download, HardDrive, Images, List, Pencil, RefreshCw, Terminal, TriangleAlert, X } from "lucide-react";
+import { Archive, ArrowLeft, ChevronRight, Cloud, Download, List, RefreshCw, Terminal, TriangleAlert, X } from "lucide-react";
 import { loadSettings, saveSettings, fontSizeOptions, MAX_ATTACHMENT_MB_OPTIONS_SETTINGS, MAX_OPEN_TAB_OPTIONS, type AppSettings } from "../../lib/settings";
 import { Group, Item, Block, Switch, TextField, Field } from "../ui/settingsPrimitives";
 import { bridge } from "../bridge";
@@ -316,7 +316,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
       {isSub ? (
         <div className="mobile-settings-content">
           {view === "editor" && (
-            <Group title="常规" icon={<Pencil size={16} />}>
+            <Group>
               <Item itemId="editor-font-size" name="正文字号" desc="作用于当前文档正文。" icon={<List size={16} />} tone="#6b5bd6">
                 <PickerSheet
                   label="正文字号"
@@ -379,7 +379,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
           {view === "history" && hist && <HistorySettingsSection hist={hist} updateHist={updateHist} />}
 
           {view === "import" && (
-            <Group title="导入" icon={<Download size={16} />}>
+            <Group>
               <Block
                 itemId="import-default-notebook"
                 name="默认笔记本"
@@ -405,7 +405,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
           )}
 
           {view === "resources" && (
-            <Group title="资源管理" icon={<Images size={16} />}>
+            <Group>
               <Block itemId="resources-usage" name="本地资源占用" desc="正文引用的图片与附件实际占用（含手写板 / PDF 页图与表格图片；不含历史快照与数据库）。">
                 <span className="mb-row__meta">
                   {assetUsage ? assetUsage.files + " 个文件，" + formatBytes(assetUsage.bytes) : "统计中…"}
@@ -458,7 +458,8 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                   {/* 261102 用户点单 3b：S3 连接信息是内容输入类 ⇒ 一律 Field（标签在上、输入框占满下一行），
                       与桌面设置页同一形态；此前是裸 .mb-set-item + <input class="mb-input">（第二套输入外观，
                       且窄屏上输入框被标签挤到只剩几十像素，Endpoint/AK/SK 长值看不全）。
-                      data-set-id 与桌面 settingsSearch 的 SETTING_ITEMS 对齐（s3-endpoint…s3-secret-key）。
+                      锚点 s3-endpoint…s3-prefix 登记在 settingsSearch 的 MOBILE_ONLY_SETTING_IDS（261116：桌面已把
+                      这六个字段收进「同步服务配置」弹窗，注册表只剩 s3-config；两端 UI 独立，锚点不必强行同名）。
                       261113 用户点单：字段顺序对齐桌面 SyncSection —— Endpoint → Access Key → Secret Key
                       → Bucket → Region → 对象前缀（凭据紧跟 Endpoint，不再垫在最后）。 */}
                   <Field itemId="s3-endpoint" name="Endpoint">
@@ -724,7 +725,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
           )}
 
           {view === "cache" && (
-            <Group title="清理缓存" icon={<HardDrive size={16} />}>
+            <Group>
                 <div className="mb-set-block">
                   <div className="mb-set-item__desc">清理派生搜索索引（FTS + 账本，清完在后台自动重建）与 PDF 渲染临时文件。不会删除正文、附件、历史快照、回收站内容或未同步的修改。</div>
                   {cacheSummary && (
