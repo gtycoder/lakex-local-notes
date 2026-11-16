@@ -11,6 +11,7 @@
  *  2. **只读**：viewer 模式的 onChange 是 no-op，绝不写盘；
  *  3. 滚动交给**调用方容器**（`.trash-preview-viewer` / `.history-preview-viewer` / …）——
  *     宿主本身不抢滚动，避免「外滚 + 内滚」两条。
+ *  4. **正文 = 原图**：本组件是正文 viewer，图片不加 ?w= 缩略档（小图位置才加）。
  */
 import { useEffect, useRef, useState } from "react";
 import { parseLocalAssetUrl } from "../../core/assetUrl.js";

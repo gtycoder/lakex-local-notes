@@ -2,14 +2,17 @@
  * 文档属性弹窗（目录右键 →「属性」）。
  * 第一部分：位置/创建/更新/字数/大小/状态（两列并排，省纵向空间）。
  * 第二部分：文件位置（打开文件位置 / 打开附件文件夹 / 复制 ID）+ 路径 + ID。
- * 第三部分：附件网格（高度受限可滚，避免附件过多撑破布局）；第四部分：历史版本（同一处理 + 内联快照预览）。
+ * 第三部分：附件网格（默认收起；展开走资源服务缩略档位，不 base64）；第四部分：历史版本（默认收起；内联快照预览仍是正文原图）。
+ * 口径：正文/历史快照 viewer = 原图；所有展示用小图 = ?w= 缩略档 + token。
  * 动作复用 native.*；父级路径可点击跳转目录。
  */
 import { useEffect, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { Dialog } from "../ui/Overlay";
-import { Box, ChevronRight, Clock, File, FolderOpen, History, Image as ImageIcon, Paperclip, Tag as TagIcon, X } from "lucide-react";
+import { Box, ChevronDown, ChevronRight, Clock, File, FolderOpen, History, Image as ImageIcon, Paperclip, Tag as TagIcon, X } from "lucide-react";
 import { native } from "../../lib/native";
 import { getNativeErrorMessage } from "../../lib/nativeErrors";
+import { localAssetHttpUrl, withAssetWidth } from "../../core/assetUrl";
+import { ASSET_PORT, assetThumbWidthForCss, withAssetAccessToken } from "../../lib/assetPort";
 import type { NoteInfo } from "../../lib/types";
 import { isMobileEnvironment } from "../../features/editor/clipboardHtml";
 import { HistorySnapshotPreview } from "./HistorySnapshotPreview";
@@ -20,7 +23,8 @@ import { formatNoteInfoSize, formatNoteInfoTime, noteInfoRows } from "../../core
 
 /** 附件/历史条目的渲染上限（超出提示 +N，避免超大文档一次性渲染成千上万节点）。 */
 const ITEM_LIMIT = 200;
-const THUMB_LIMIT = 24;
+/** 附件缩略格 CSS 边长（与 dialog.css 的 .note-info-asset 保持一致）。 */
+const THUMB_CSS_PX = 56;
 
 /** 桌面传 TreeNode 子集；移动端传 { noteFileId: id, title }，与平台解耦。 */
 export function NoteInfoDialog({ note, onClose, onRevealNoteFile, onOpenAssetsDir, onOpenHistory, onJumpToNode, onTagsChanged }: {
@@ -38,7 +42,11 @@ export function NoteInfoDialog({ note, onClose, onRevealNoteFile, onOpenAssetsDi
 }) {
   const [info, setInfo] = useState<NoteInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [thumbs, setThumbs] = useState<Record<string, string>>({});
+  /** 图片加载兜底：thumb（默认）→ original（缩略图失败回落原图一次）→ failed（明确占位）。 */
+  const [imageFallback, setImageFallback] = useState<Record<string, "original" | "failed">>({});
+  /** 附件/历史默认收起：33 张图不在打开属性时全渲染（收起态 0 img / 0 URL 构造）。 */
+  const [assetsOpen, setAssetsOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [histPreview, setHistPreview] = useState<{ id: number; kind: NoteKind; html: string } | null>(null);
   const [histLoading, setHistLoading] = useState<number | null>(null);
@@ -74,28 +82,18 @@ export function NoteInfoDialog({ note, onClose, onRevealNoteFile, onOpenAssetsDi
   }, [note.noteFileId]);
 
   useEffect(() => {
-    let alive = true;
-    if (!info || !note.noteFileId) return;
-    const images = info.assets.filter((a) => a.kind === "image").slice(0, THUMB_LIMIT);
-    void Promise.all(images.map(async (a) => {
-      try {
-        const res = await native.readAssetPreview(note.noteFileId as string, a.filename);
-        return res.supported && res.dataUrl ? [a.filename, res.dataUrl] as const : null;
-      } catch { return null; }
-    })).then((pairs) => {
-      if (!alive) return;
-      const next: Record<string, string> = {};
-      for (const p of pairs) if (p) next[p[0]] = p[1];
-      setThumbs(next);
-    });
-    return () => { alive = false; };
-  }, [info, note.noteFileId]);
-
-  useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
+
+  /** 附件显示 URL：走既有资源服务缩略档位（56px 格按 DPR 选档），并带运行期 token。 */
+  const assetDisplaySrc = (filename: string, width: number | null): string => {
+    if (!note.noteFileId) return "";
+    const base = localAssetHttpUrl(note.noteFileId, filename, { port: ASSET_PORT });
+    return withAssetAccessToken(withAssetWidth(base, width));
+  };
+  const thumbWidth = assetThumbWidthForCss(THUMB_CSS_PX);
 
   const openAsset = (filename: string): void => {
     if (!note.noteFileId) return;
@@ -196,28 +194,69 @@ export function NoteInfoDialog({ note, onClose, onRevealNoteFile, onOpenAssetsDi
 
             {/* 第三部分：附件（高度受限，可滚；附件过多不会撑破布局） */}
             <div className="note-info-section">
-              <div className="note-info-section-title"><Paperclip size={14} /><span>附件 {info.assets.length} 个，{formatNoteInfoSize(info.assetTotalBytes)}</span></div>
-              {info.assets.length === 0 ? <p className="note-info-empty">无附件</p> : (
-                <div className="note-info-assets">
-                  {info.assets.slice(0, ITEM_LIMIT).map((a) => (
-                    <button key={a.filename} className="note-info-asset" onClick={() => openAsset(a.filename)} title={`${a.filename}（${formatNoteInfoSize(a.size)}）`}>
-                      {thumbs[a.filename]
-                        ? <img className="ln-imgfill" src={thumbs[a.filename]} alt={a.filename} loading="lazy" decoding="async" />
-                        : <span className="note-info-asset-glyph">{a.kind === "image" ? <ImageIcon size={16} /> : a.kind === "video" || a.kind === "audio" ? <Box size={16} /> : <Paperclip size={16} />}</span>}
-                    </button>
-                  ))}
+              <button
+                type="button"
+                className="ln-row note-info-section-title"
+                aria-expanded={assetsOpen}
+                aria-controls="note-info-assets-panel"
+                onClick={() => setAssetsOpen((open) => !open)}
+              >
+                <Paperclip size={14} /><span>附件 {info.assets.length} 个，{formatNoteInfoSize(info.assetTotalBytes)}</span>
+                {assetsOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+              </button>
+              {assetsOpen && (info.assets.length === 0 ? <p className="note-info-empty">无附件</p> : (
+                <div id="note-info-assets-panel" className="note-info-assets">
+                  {info.assets.slice(0, ITEM_LIMIT).map((a) => {
+                    const isImage = a.kind === "image";
+                    const fallback = imageFallback[a.filename];
+                    const failed = isImage && fallback === "failed";
+                    return (
+                      <button key={a.filename} className="note-info-asset" onClick={() => openAsset(a.filename)} title={a.filename + "（" + formatNoteInfoSize(a.size) + "）"}>
+                        {isImage && !failed
+                          ? <img
+                            className="ln-imgfill"
+                            src={assetDisplaySrc(a.filename, fallback === "original" ? null : thumbWidth)}
+                            alt={a.filename}
+                            width={THUMB_CSS_PX}
+                            height={THUMB_CSS_PX}
+                            loading="lazy"
+                            decoding="async"
+                            onError={() => setImageFallback((prev) => ({
+                              ...prev,
+                              [a.filename]: prev[a.filename] === "original" ? "failed" : "original",
+                            }))}
+                          />
+                          : <span
+                            className="note-info-asset-glyph"
+                            title={failed ? "图片加载失败" : undefined}
+                            aria-label={failed ? "图片加载失败" : undefined}
+                          >{isImage ? <ImageIcon size={16} /> : a.kind === "video" || a.kind === "audio" ? <Box size={16} /> : <Paperclip size={16} />}</span>}
+                      </button>
+                    );
+                  })}
                   {info.assets.length > ITEM_LIMIT && <span className="note-info-asset-more">+{info.assets.length - ITEM_LIMIT}</span>}
                 </div>
-              )}
+              ))}
             </div>
 
             {/* 第四部分：历史版本（同一滚动约束 + 内联快照预览） */}
             <div className="note-info-section">
-              <div className="note-info-section-title"><History size={14} /><span>历史版本 {info.history.length} 个</span>
+              <button
+                type="button"
+                className="ln-row note-info-section-title"
+                aria-expanded={historyOpen}
+                aria-controls="note-info-history-panel"
+                onClick={() => setHistoryOpen((open) => !open)}
+              >
+                <History size={14} /><span>历史版本 {info.history.length} 个</span>
+                {historyOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+              </button>
+              {historyOpen && (<>
+              <div className="note-info-actions">
                 <button className="ln-btn ln-btn--secondary note-info-btn" onClick={onOpenHistory}>打开历史版本</button>
               </div>
               {info.history.length === 0 ? <p className="note-info-empty">暂无历史快照</p> : (
-                <ul className="note-info-history">
+                <ul id="note-info-history-panel" className="note-info-history">
                   {info.history.slice(0, ITEM_LIMIT).map((h) => (
                     <li key={h.id}>
                       <button className={"ln-row note-info-history-row" + (histPreview?.id === h.id ? " is-active" : "")} onClick={() => toggleHistory(h.id)}>
@@ -237,6 +276,7 @@ export function NoteInfoDialog({ note, onClose, onRevealNoteFile, onOpenAssetsDi
                   ? <NoteDocPreview noteId={note.noteFileId ?? ""} body={histPreview.html} className="note-info-history-viewer" policyKey="history" />
                   : <HistorySnapshotPreview kind={histPreview.kind} noteId={note.noteFileId ?? ""} body={histPreview.html} snapshotId={histPreview.id} />
               )}
+              </>)}
             </div>
           </div>
         )}

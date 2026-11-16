@@ -8,6 +8,9 @@ import { useConfirm } from "../../hooks/useConfirm";
 import { DialogResizeHandles } from "../ui/DialogResizeHandles";
 import { SplitPane } from "../ui/SplitPane";
 import { getNativeErrorMessage } from "../../lib/nativeErrors";
+import { localAssetHttpUrl, withAssetWidth } from "../../core/assetUrl";
+import { ASSET_PORT, withAssetAccessToken } from "../../lib/assetPort";
+import { fileKindOf } from "../../core/assetNaming";
 import { HistorySnapshotPreview } from "./HistorySnapshotPreview";
 import { NoteDocPreview } from "./NoteDocPreview";
 import type { NoteKind } from "../../core/noteKind";
@@ -35,7 +38,8 @@ export interface NoteOrphan {
 type Tab = "history" | "orphans";
 
 /** 文档历史 + 文档孤儿文件（两 tab）。
- * 顺序（用户强调）：默认先展示历史 tab；删历史快照后立即重算孤儿列表（避免漏删）。 */
+ * 顺序（用户强调）：默认先展示历史 tab；删历史快照后立即重算孤儿列表（避免漏删）。
+ * 图片口径：正文/历史快照 viewer = 原图；孤儿文件图片预览 = ?w=1024 缩略档。 */
 export function HistoryPanel({ open, noteId, onClose, onRestored }: {
   open: boolean;
   noteId: string | null;
@@ -52,7 +56,10 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
   const [orphanPv, setOrphanPv] = useState<{
     title: string;
     text?: string;
-    imageData?: string;
+    /** 图片预览：走资源服务 ?w=1024 缩略档（不是原图、不是 base64 data URL）。 */
+    imageSrc?: string;
+    /** onError 只回落原图一次；原图也失败 → text 占位。 */
+    imageOriginal?: string;
     size?: number;
   } | null>(null);
   const [inline, setInline] = useState<{ id: number; title: string; kind: NoteKind; html: string; size?: number } | null>(null);
@@ -239,19 +246,25 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
     setOrphanSel(o.filename);
     setOrphanLoading(true);
     try {
+      // 图片：直接拼资源服务缩略图 URL（1024 档），不读原图字节、不走 IPC/base64。
+      // 正文/历史正文预览仍走 NoteDocPreview / Lake 内核原图，这里只是孤儿文件预览。
+      if (o.mimeType.startsWith("image/") || fileKindOf(o.filename) === "image") {
+        const width1024 = 1024;
+        const base = localAssetHttpUrl(noteId, o.filename, { port: ASSET_PORT });
+        const imageSrc = withAssetAccessToken(withAssetWidth(base, width1024));
+        const imageOriginal = withAssetAccessToken(base);
+        const img = new Image();
+        img.src = imageSrc;
+        try { await img.decode(); } catch { /* 解码失败交给 <img> 自己表现 */ }
+        if (!previewVersionRef.current.isCurrent(version)) return;
+        setOrphanPv({ title: o.filename, imageSrc, imageOriginal, size: o.size });
+        setOrphanLoading(false);
+        return;
+      }
       const r = await native.previewNoteOrphan(noteId, o.filename);
       if (!previewVersionRef.current.isCurrent(version)) return;
       if (!r) { setError("文件预览失败（文件可能已删除）"); setOrphanLoading(false); return; }
-      const next = r.kind === "image"
-        ? { title: o.filename, imageData: r.data, size: r.size }
-        : { title: o.filename, text: r.data, size: r.size };
-      if (next.imageData) {
-        const img = new Image();
-        img.src = next.imageData;
-        try { await img.decode(); } catch { /* 解码失败交给 <img> 自己表现 */ }
-        if (!previewVersionRef.current.isCurrent(version)) return;
-      }
-      setOrphanPv(next);
+      setOrphanPv({ title: o.filename, text: r.data, size: r.size });
       setOrphanLoading(false);
     } catch (e) {
       if (previewVersionRef.current.isCurrent(version)) { setError(getNativeErrorMessage(e)); setOrphanLoading(false); }
@@ -384,8 +397,24 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
                 <div className="history-preview-inline-title">
                   {orphanSel ?? orphanPv.title}{orphanPv.size !== undefined ? `，${(orphanPv.size / 1024).toFixed(1)} KB` : ""}{orphanLoading ? "，加载中" : ""}
                 </div>
-                {orphanPv.imageData
-                  ? <img key={orphanPv.title} className={`history-preview-image${orphanLoading ? " is-loading" : ""}`} src={orphanPv.imageData} alt={orphanPv.title} loading="lazy" decoding="async" />
+                {orphanPv.imageSrc
+                  ? <img
+                    key={orphanPv.title}
+                    className={"history-preview-image" + (orphanLoading ? " is-loading" : "")}
+                    src={orphanPv.imageSrc}
+                    alt={orphanPv.title}
+                    loading="lazy"
+                    decoding="async"
+                    onError={(event) => {
+                      const img = event.currentTarget;
+                      if (orphanPv.imageOriginal && img.src !== orphanPv.imageOriginal) {
+                        img.src = orphanPv.imageOriginal;
+                        return;
+                      }
+                      img.onerror = null;
+                      setOrphanPv((prev) => (prev ? { ...prev, imageSrc: undefined, text: "图片加载失败" } : prev));
+                    }}
+                  />
                   : <pre className="history-preview-text">{orphanPv.text ?? ""}</pre>}
               </>
             ) : (

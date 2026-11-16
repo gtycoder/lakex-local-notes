@@ -24,6 +24,7 @@ vi.mock("../../core/noteInfo.js", () => ({
 }));
 
 import { NoteInfoDialog } from "./NoteInfoDialog";
+import { assetThumbWidthForCss } from "../../lib/assetPort";
 
 /**
  * 文档属性弹窗（261110 第二批）：历史版本行 = kit 的 .ln-row（按钮即行）；
@@ -48,6 +49,7 @@ beforeEach(() => {
   h.listQuickNoteTags.mockResolvedValue([]);
   h.listNoteTagLinks.mockResolvedValue({});
   h.setNoteTags.mockImplementation(async (_id: string, ids: string[]) => ids);
+  (h as unknown as { assetToken?: string }).assetToken = "tok";
   (window as unknown as { lakeNative?: unknown }).lakeNative = h;
   host = document.createElement("div");
   document.body.append(host);
@@ -59,6 +61,8 @@ async function flush(): Promise<void> { await act(async () => { await new Promis
 describe("NoteInfoDialog（261110 第二批）", () => {
   it("历史版本行 = ln-row（按钮即行），类名里只有 ln- + 登记的钩子", async () => {
     act(() => root.render(createElement(NoteInfoDialog, { note: { noteFileId: "n1", title: "文档一" }, onClose: vi.fn(), onOpenHistory: vi.fn(), onJumpToNode: vi.fn() })));
+    await flush();
+    act(() => document.body.querySelector<HTMLButtonElement>("button[aria-controls=\"note-info-history-panel\"]")!.click());
     await flush();
     const row = document.body.querySelector<HTMLButtonElement>(".note-info-history-row")!;
     expect(row).not.toBeNull();
@@ -72,6 +76,8 @@ describe("NoteInfoDialog（261110 第二批）", () => {
     const crumb = document.body.querySelector<HTMLButtonElement>(".note-info-crumb")!;
     expect(crumb).not.toBeNull();
     expect(crumb.className).toContain("note-info-crumb");
+    act(() => document.body.querySelector<HTMLButtonElement>("button[aria-controls=\"note-info-assets-panel\"]")!.click());
+    await flush();
     const asset = document.body.querySelector<HTMLButtonElement>(".note-info-asset")!;
     expect(asset).not.toBeNull();
     expect(asset.className).toContain("note-info-asset");
@@ -79,5 +85,100 @@ describe("NoteInfoDialog（261110 第二批）", () => {
     const secondary = [...document.body.querySelectorAll<HTMLButtonElement>(".note-info-actions button")];
     expect(secondary.length).toBeGreaterThanOrEqual(3);
     for (const btn of secondary) expect(btn.className).toContain("ln-btn--secondary");
+  });
+});
+
+describe("NoteInfoDialog · 附件网格缩略图（task-31）", () => {
+  const renderDialog = async (data: Record<string, unknown>, expandAttachments = true) => {
+    h.getNoteInfo.mockResolvedValue(data);
+    act(() => root.render(createElement(NoteInfoDialog, { note: { noteFileId: "n1", title: "文档一" }, onClose: vi.fn(), onOpenHistory: vi.fn() })));
+    await flush();
+    if (expandAttachments) {
+      act(() => document.body.querySelector<HTMLButtonElement>("button[aria-controls=\"note-info-assets-panel\"]")!.click());
+      await flush();
+    }
+  };
+  const image = (filename: string) => ({ filename, size: 100, kind: "image" });
+
+  it("默认收起：两段标题仍显示摘要，收起态 0 img / 0 网格 / 0 历史行；点击展开、再点收起", async () => {
+    await renderDialog({ ...info, assets: [image("a.png"), image("b.png")], assetTotalBytes: 512 }, false);
+    const assetsToggle = document.body.querySelector<HTMLButtonElement>("button[aria-controls=\"note-info-assets-panel\"]")!;
+    const historyToggle = document.body.querySelector<HTMLButtonElement>("button[aria-controls=\"note-info-history-panel\"]")!;
+    expect(assetsToggle.getAttribute("aria-expanded")).toBe("false");
+    expect(historyToggle.getAttribute("aria-expanded")).toBe("false");
+    expect(assetsToggle.tagName).toBe("BUTTON");
+    expect(assetsToggle.textContent).toContain("附件 2 个，512 B");
+    expect(historyToggle.textContent).toContain("历史版本 1 个");
+    expect(document.querySelector(".note-info-assets")).toBeNull();
+    expect(document.querySelector(".note-info-history")).toBeNull();
+    expect(document.querySelectorAll(".note-info-asset img")).toHaveLength(0);
+    expect(h.readAssetPreview).not.toHaveBeenCalled();
+    assetsToggle.focus();
+    expect(document.activeElement).toBe(assetsToggle);
+
+    act(() => assetsToggle.click());
+    await flush();
+    expect(assetsToggle.getAttribute("aria-expanded")).toBe("true");
+    expect(document.querySelectorAll(".note-info-asset img")).toHaveLength(2);
+    expect(assetsToggle.textContent).toContain("附件 2 个，512 B");
+
+    act(() => assetsToggle.click());
+    await flush();
+    expect(assetsToggle.getAttribute("aria-expanded")).toBe("false");
+    expect(document.querySelector(".note-info-assets")).toBeNull();
+    expect(document.querySelectorAll(".note-info-asset img")).toHaveLength(0);
+
+    // 历史版本同一折叠口径：默认收起；展开有列表，再收起 DOM 消失，摘要不变
+    act(() => historyToggle.click());
+    await flush();
+    expect(historyToggle.getAttribute("aria-expanded")).toBe("true");
+    expect(document.querySelector(".note-info-history")).not.toBeNull();
+    act(() => historyToggle.click());
+    await flush();
+    expect(historyToggle.getAttribute("aria-expanded")).toBe("false");
+    expect(document.querySelector(".note-info-history")).toBeNull();
+    expect(historyToggle.textContent).toContain("历史版本 1 个");
+  });
+
+  it("所有图片都走缩略档位 URL（含 token），不再 base64 预览、不再被 24 张截断", async () => {
+    const assets = Array.from({ length: 30 }, (_, i) => image("img-" + i + ".png"));
+    await renderDialog({ ...info, assets, assetTotalBytes: 3000 });
+    const imgs = [...document.querySelectorAll<HTMLImageElement>(".note-info-asset img")];
+    expect(imgs).toHaveLength(30);
+    const width = assetThumbWidthForCss(56)!;
+    for (const img of imgs) {
+      const src = new URL(img.src);
+      expect(src.searchParams.get("w")).toBe(String(width));
+      expect(src.searchParams.get("token")).toBe("tok");
+      expect(img.getAttribute("width")).toBe("56");
+      expect(img.getAttribute("height")).toBe("56");
+      expect(img.getAttribute("loading")).toBe("lazy");
+      expect(img.getAttribute("decoding")).toBe("async");
+    }
+    expect(h.readAssetPreview).not.toHaveBeenCalled();
+  });
+
+  it("缩略图 onError 回落原图一次，再失败显示明确占位（不无限重试）", async () => {
+    await renderDialog({ ...info, assets: [image("broken.png")], assetTotalBytes: 100 });
+    const first = document.querySelector<HTMLImageElement>(".note-info-asset img")!;
+    expect(first).not.toBeNull();
+    act(() => first.dispatchEvent(new Event("error", { bubbles: true })));
+    const fallback = document.querySelector<HTMLImageElement>(".note-info-asset img")!;
+    expect(fallback).not.toBeNull();
+    const fallbackUrl = new URL(fallback.src);
+    expect(fallbackUrl.searchParams.get("w")).toBeNull();
+    expect(fallbackUrl.searchParams.get("token")).toBe("tok");
+
+    act(() => fallback.dispatchEvent(new Event("error", { bubbles: true })));
+    expect(document.querySelector(".note-info-asset img")).toBeNull();
+    const glyph = document.querySelector(".note-info-asset-glyph")!;
+    expect(glyph.getAttribute("title")).toBe("图片加载失败");
+    expect(glyph.getAttribute("aria-label")).toBe("图片加载失败");
+  });
+
+  it("非图片附件保持文件图标，不受缩略图逻辑影响", async () => {
+    await renderDialog({ ...info, assets: [{ filename: "a.pdf", size: 100, kind: "file" }], assetTotalBytes: 100 });
+    expect(document.querySelector(".note-info-asset img")).toBeNull();
+    expect(document.querySelectorAll(".note-info-asset-glyph")).toHaveLength(1);
   });
 });
