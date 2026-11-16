@@ -160,6 +160,19 @@ describe("AiMessageView · 用户消息的随发图片（261116 Phase 1）", () 
     expect(String(images[0].src)).toContain("/n1/a.png");
   });
 
+  it("本机图片附件：历史里显示缩略图且可点开大图（261116 用户反馈）", () => {
+    previewMock.openImagePreview.mockReset();
+    render({ message: userMessage([{ kind: "local", token: "loc-img", name: "cat.png", size: 2048, mimeType: "image/png" }]) });
+    const img = document.querySelector<HTMLImageElement>(".aiw-bubble-attach__img");
+    expect(img).toBeTruthy();
+    expect(img!.getAttribute("src")).toContain("/ai-local/loc-img");
+    const button = document.querySelector<HTMLButtonElement>(".aiw-bubble-attach__preview")!;
+    act(() => { button.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true })); });
+    expect(previewMock.openImagePreview).toHaveBeenCalledTimes(1);
+    const [images] = previewMock.openImagePreview.mock.calls[0];
+    expect(String(images[0].src)).toContain("/ai-local/loc-img");
+  });
+
   it("本机文件附件 = 文件名 chip（渲染层没有字节，不画缩略图）", () => {
     render({ message: userMessage([{ kind: "local", token: "loc-1", name: "main.ts", size: 2048, mimeType: "text/plain" }]) });
     expect(document.querySelector(".aiw-bubble-attach__img")).toBeNull();

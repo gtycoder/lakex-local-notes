@@ -59,12 +59,15 @@ type Layer = "entry" | "domain" | Subdir;
 const ALLOWED_DEPENDENCIES: Record<Layer, readonly Layer[]> = {
   // 入口：唯一的装配点，可以 import 任何层（它就是把它们装起来的那个文件）。
   entry: ["domain", "ai", "boot", "ipc", "portable", "quickNotes", "s3v3", "update", "webApi"],
-  // 领域层：可依赖子系统。现状只有两类边，都是「门面 re-export」或「编排委托」：
+  // 领域层：可依赖子系统。现状只有三类边，都是「门面 re-export」或「编排委托」：
   //   - domain→webApi（7 条）= electron/webApiServer.ts 门面 re-export electron/webApi/*
   //   - domain→quickNotes（2 条）= electron/quickNotes.ts 门面 re-export electron/quickNotes/*
   //   - domain→s3v3（4 条）  = syncEngineController.ts 委托桌面同步适配
+  //   - domain→ai（1 条）    = assetServer.ts 读 ai/localAttachments 的只读访问器，把「本机图片附件」
+  //     按 token 以文件流返回给 <img>（261116 用户反馈：本机选的图片不能预览）。只读一个函数，
+  //     不回写 AI 状态；AI 子系统的发送链路完全不感知资源服务。
   // 反向（ipc/boot → domain）是主流方向，见下面各层。
-  domain: ["domain", "quickNotes", "s3v3", "webApi"],
+  domain: ["domain", "quickNotes", "s3v3", "webApi", "ai"],
   // IPC 注册层：装配各子系统的 handler。不允许依赖 boot/（装配层）与 webApi/（传输层的另一端）。
   ipc: ["domain", "ipc", "ai", "portable", "s3v3", "update"],
   // 启动装配层：负责把 IPC 注册表与各子系统接起来，所以它能依赖 ipc/ 与其他子系统；

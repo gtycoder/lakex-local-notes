@@ -31,7 +31,7 @@ import {
   type AiWritingDocRef,
   type AiWritingMode,
 } from "../../core/aiWriting";
-import { aiWritingAttachmentLabel, aiWritingAttachmentPreviewUrl, aiWritingAttachmentUrl, formatAttachmentBytes } from "./aiWritingAttachments";
+import { aiWritingAttachmentLabel, aiWritingAttachmentPreviewUrl, aiWritingAttachmentUrl, aiWritingLocalImageUrl, formatAttachmentBytes } from "./aiWritingAttachments";
 import { openImagePreview } from "../editor/imagePreview";
 import { toggleDocRef } from "./aiWritingDocs";
 import { AI_WRITING_PROMPT_CARDS, type AiWritingPromptCard } from "./aiWritingPrompts";
@@ -113,11 +113,12 @@ export function AiComposer({
     }, 0);
   };
 
-  // 已选资产图片 → 可点开的大图集合（全尺寸档：去掉 ?w；本机文件没有可预览 URL，不参与）。
+  // 已选图片 → 可点开的大图集合（资产图走全尺寸档去 ?w；本机图片走 /ai-local/<token>）。
   const imagePreviews = attachRefs.flatMap((ref) => {
-    if (isAiWritingLocalAttachment(ref) || !aiWritingAttachmentPreviewUrl(ref)) return [];
-    const asset = ref as Exclude<typeof ref, { kind: "local" }>;
-    return [{ key: aiWritingAttachmentKey(ref), src: aiWritingAttachmentUrl(asset, null) }];
+    const src = isAiWritingLocalAttachment(ref)
+      ? aiWritingLocalImageUrl(ref, null)
+      : aiWritingAttachmentUrl(ref as Exclude<typeof ref, { kind: "local" }>, null);
+    return src ? [{ key: aiWritingAttachmentKey(ref), src }] : [];
   });
 
   return (
@@ -144,7 +145,7 @@ export function AiComposer({
           )}
           {attachRefs.map((ref) => {
             const label = aiWritingAttachmentLabel(ref);
-            const previewUrl = aiWritingAttachmentPreviewUrl(ref);
+            const previewUrl = aiWritingAttachmentPreviewUrl(ref) ?? aiWritingLocalImageUrl(ref);
             return (
               <div key={aiWritingAttachmentKey(ref)} className="aiw-attach-chip">
                 {previewUrl ? (

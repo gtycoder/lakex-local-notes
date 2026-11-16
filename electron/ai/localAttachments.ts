@@ -144,3 +144,16 @@ export function readRegisteredLocalFile(ref: AiLocalFileRef): { bytes: Buffer; s
 export function resetLocalAttachmentRegistryForTest(): void {
   registry.clear();
 }
+
+/**
+ * 本机图片附件的「预览/缩略图」取用口（261116 用户反馈：本机选的图片不能预览）。
+ *
+ * 只放行 image 类附件，且**只回路径与类型**（字节仍由 assetServer 直接读文件流式返回，不进渲染层）；
+ * token 仍是进程内不透明 id ⇒ 重启后旧 token 404，与发送时的失效语义一致。
+ */
+export function localAttachmentImageSource(token: string): { path: string; mimeType: string; size: number; name: string } | null {
+  const entry = registry.get(token);
+  if (!entry) return null;
+  if (localAttachmentKindOf(entry.name) !== "image") return null;
+  return { path: entry.path, mimeType: entry.mimeType, size: entry.size, name: entry.name };
+}

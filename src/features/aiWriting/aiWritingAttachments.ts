@@ -26,6 +26,20 @@ export function aiWritingAttachmentPreviewUrl(ref: AiWritingAttachment): string 
   return aiWritingAttachmentUrl(ref);
 }
 
+/**
+ * 本机**图片**附件 → 资源服务直链（261116 用户反馈：本机选的图片不能预览）。
+ *
+ * 主进程 assetServer 的 /ai-local/<token> 只放行 image 类、按 token 读盘流式返回；
+ * 路径与字节仍不进渲染层，这里只是把不透明 token 拼成 <img> 可用的 URL。
+ * 非图片（文本/PDF）或 token 失效时返回 null / 404（<img> 自然空白，不伪造占位）。
+ */
+export function aiWritingLocalImageUrl(ref: AiWritingAttachment, width: number | null = AIW_ATTACH_THUMB_WIDTH): string | null {
+  if (!isAiWritingLocalAttachment(ref)) return null;
+  if (!(ref.mimeType || "").startsWith("image/")) return null;
+  const base = "http://127.0.0.1:" + ASSET_PORT + "/ai-local/" + encodeURIComponent(ref.token);
+  return width == null ? base : base + "?w=" + width;
+}
+
 export { aiWritingAttachmentLabel };
 
 /** 人类可读体积（B/KB/MB 三档，避免为一行数字引入更大依赖）。 */

@@ -5,6 +5,7 @@ import path from "node:path";
 import sharp from "sharp";
 import { isSafePathSegment as isSafeSegment } from "../src/core/storeUtils.js";
 import { mimeTypeForFilename } from "../src/core/assetNaming.js";
+import { localAttachmentImageSource } from "./ai/localAttachments.js";
 
 /** 只列「笔记资产表里没有」的 vendor 静态资源类型；其余一律走 core/assetNaming 的单一事实源
  *  （避免又一份与同步/上传/预览漂移的 MIME 表）。 */
@@ -281,6 +282,36 @@ export function startAssetServer(noteAssetsDir: string, vendorCdnDir: string, qu
       if (req.headers.origin && assetToken && parsed.searchParams.get("token") !== assetToken) {
         res.writeHead(403, { "Content-Type": "text/plain" });
         res.end("forbidden: missing token");
+        return;
+      }
+      // 本机图片附件（AI 写作 · 对话写作「从电脑选择文件」）：token 是进程内不透明 id，
+      // 只放行 image 类；字节仍只由主进程读盘流式返回（渲染层拿不到路径/字节，只拿 URL）。
+      if (urlPath.startsWith("/ai-local/")) {
+        const token = urlPath.slice("/ai-local/".length);
+        const source = token && !token.includes("/") ? localAttachmentImageSource(token) : null;
+        if (!source) { res.writeHead(404); res.end("not found"); return; }
+        const stat = await statFile(source.path);
+        if (!stat) { res.writeHead(404); res.end("not found"); return; }
+        // 缩略图档位与笔记资产同口径（?w=128/256/512/1024）；非档位值按原图。
+        const width = thumbWidthOf(parsed.searchParams.get("w"));
+        const thumbs = width != null && source.mimeType.startsWith("image/")
+          ? await thumbnailBuffer(source.path, width, stat)
+          : null;
+        if (thumbs) {
+          res.writeHead(200, {
+            "Content-Type": source.mimeType,
+            "Content-Length": String(thumbs.length),
+            "Cache-Control": "private, max-age=3600",
+            ...corsHeaders(req.headers.origin),
+          });
+          res.end(thumbs);
+          return;
+        }
+        streamFile(res, source.path, stat, {
+          "Content-Type": source.mimeType || "application/octet-stream",
+          "Cache-Control": "private, max-age=3600",
+          ...corsHeaders(req.headers.origin),
+        }, req.headers.range);
         return;
       }
       const segments = urlPath.split("/").filter(Boolean);

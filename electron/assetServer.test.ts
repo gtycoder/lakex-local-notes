@@ -286,3 +286,42 @@ describe("安全响应头（260923 A3：nosniff + SVG CSP）", () => {
     expect(res.headers.get("content-security-policy")).toBeNull();
   });
 });
+
+// ---------------------------------------------------------------------------
+// 本机图片附件预览（261116 用户反馈「本机选的图片不能预览」）
+// 渲染层只有不透明 token；这里验证 /ai-local/<token> 只放行 image、缩略图档位生效、失效/非图片 404。
+// ---------------------------------------------------------------------------
+describe("本机图片附件 /ai-local/<token>", () => {
+  it("注册过的本机图片：200 + 正确 Content-Type，?w=128 走缩略图（尺寸变小）", async () => {
+    const { registerPickedLocalFile, resetLocalAttachmentRegistryForTest } = await import("./ai/localAttachments.js");
+    resetLocalAttachmentRegistryForTest();
+    const imgPath = path.join(root, "local-pick.png");
+    await sharp({ create: { width: 400, height: 300, channels: 3, background: { r: 10, g: 120, b: 40 } } }).png().toFile(imgPath);
+    const picked = await registerPickedLocalFile(imgPath);
+    expect(picked?.kind).toBe("image");
+    const token = picked!.ref.token;
+
+    const full = await fetch(`${BASE}/ai-local/${token}`);
+    expect(full.status).toBe(200);
+    expect(full.headers.get("content-type")).toBe("image/png");
+    expect(full.headers.get("cache-control")).toBe("private, max-age=3600");
+
+    const thumb = await fetch(`${BASE}/ai-local/${token}?w=128`);
+    expect(thumb.status).toBe(200);
+    const meta = await sharp(Buffer.from(await thumb.arrayBuffer())).metadata();
+    expect(meta.width).toBe(128);
+  });
+
+  it("非图片（文本）与未知 token：404（URL 不伪造占位）", async () => {
+    const { registerPickedLocalFile, resetLocalAttachmentRegistryForTest } = await import("./ai/localAttachments.js");
+    resetLocalAttachmentRegistryForTest();
+    const txtPath = path.join(root, "local-note.txt");
+    fs.writeFileSync(txtPath, "hello");
+    const picked = await registerPickedLocalFile(txtPath);
+    expect(picked?.kind).toBe("text");
+    const text = await fetch(`${BASE}/ai-local/${picked!.ref.token}`);
+    expect(text.status).toBe(404);
+    const missing = await fetch(`${BASE}/ai-local/loc-does-not-exist`);
+    expect(missing.status).toBe(404);
+  });
+});

@@ -191,6 +191,23 @@ describe("AiComposer · 底部一行（261116 chat-demo）", () => {
     expect(String(images[0].src)).toContain("/n1/a.png");
   });
 
+  it("本机图片附件：chips 显示缩略图（/ai-local/token?w=128）且可点开大图（全尺寸档）", async () => {
+    h.openImagePreview.mockReset();
+    const local = { kind: "local" as const, token: "loc-1", name: "cat.png", size: 2048, mimeType: "image/png" };
+    await renderComposer({ attachRefs: [local] });
+    const thumb = document.querySelector<HTMLImageElement>(".aiw-attach-chip__preview img");
+    expect(thumb).toBeTruthy();
+    expect(thumb!.getAttribute("src")).toContain("/ai-local/loc-1");
+    expect(thumb!.getAttribute("src")).toContain("w=128");
+    const preview = document.querySelector<HTMLButtonElement>(".aiw-attach-chip__preview")!;
+    act(() => { preview.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true })); });
+    expect(h.openImagePreview).toHaveBeenCalledTimes(1);
+    const [images, index] = h.openImagePreview.mock.calls[0];
+    expect(index).toBe(0);
+    expect(String(images[0].src)).toContain("/ai-local/loc-1");
+    expect(String(images[0].src)).not.toContain("w=");
+  });
+
   it("发送 = 圆形主色按钮；忙态同格变停止（红底圆形），且深度思考被禁用", async () => {
     await renderComposer({ busy: false, input: "", thinking: true });
     const send = buttonByLabel("发送")!;

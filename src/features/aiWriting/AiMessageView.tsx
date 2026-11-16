@@ -12,9 +12,10 @@ import { useThrottledMarkdown } from "../../components/ui/markdown/useThrottledM
 import { AiThinkingBlock } from "./AiThinkingBlock";
 import { FileKindIcon } from "../bitable/FileKindIcon";
 import { aiWritingAttachmentKey, isAiWritingLocalAttachment, type AiWritingMessage } from "../../core/aiWriting";
-import { aiWritingAttachmentUrl, formatAttachmentBytes } from "./aiWritingAttachments";
+import { aiWritingAttachmentUrl, aiWritingLocalImageUrl, formatAttachmentBytes } from "./aiWritingAttachments";
 import { openImagePreview } from "../editor/imagePreview";
 import type { AiWritingStream } from "./useAiWriting";
+import type { AiAssetRef } from "../../core/aiProviders";
 
 /**
  * 答案正文的内核只读渲染 = **lazy 边界**（内核 chunk 约 1.6MB gz，绝不进入口静态图）。
@@ -61,29 +62,40 @@ export function AiMessageView(props: AiMessageViewProps) {
   const content = useThrottledMarkdown(streamedContent, streaming && message.role === "assistant");
   if (message.role === "user") {
     const attachRefs = message.attachRefs ?? [];
-    // 历史轮里的资产图片可点开大图（全尺寸档）；本机文件没有可预览 URL。
-    const imagePreviews = attachRefs.flatMap((ref) => (isAiWritingLocalAttachment(ref)
-      ? []
-      : [{ key: aiWritingAttachmentKey(ref), src: aiWritingAttachmentUrl(ref, null) }]));
+    // 历史轮里的图片可点开大图：资产图走全尺寸档；本机图片走 /ai-local/<token>（261116 用户反馈：本机图片不能预览）。
+    const imagePreviews = attachRefs.flatMap((ref) => {
+      const src = isAiWritingLocalAttachment(ref)
+        ? aiWritingLocalImageUrl(ref, null)
+        : aiWritingAttachmentUrl(ref, null);
+      return src ? [{ key: aiWritingAttachmentKey(ref), src }] : [];
+    });
     return (
       <div className="aiw-msg aiw-msg--user">
         <div className="aiw-user-block">
           <div className="aiw-bubble">{message.content}</div>
           {attachRefs.length > 0 && (
             <div className="aiw-bubble-attach" aria-label={"随发附件 " + attachRefs.length + " 个"}>
-              {attachRefs.map((ref) => (
-                isAiWritingLocalAttachment(ref) ? (
-                  <span key={aiWritingAttachmentKey(ref)} className="aiw-bubble-file" title={ref.name}>
-                    <FileKindIcon name={ref.name} size={16} className="aiw-bubble-file__icon" />
-                    <span className="ln-ellipsis">{ref.name}</span>
-                    <span className="aiw-bubble-file__size">{formatAttachmentBytes(ref.size)}</span>
-                  </span>
-                ) : (
+              {attachRefs.map((ref) => {
+                const localImage = isAiWritingLocalAttachment(ref) ? aiWritingLocalImageUrl(ref) : null;
+                // 本机非图片（文本 / PDF / 未知）仍是文件名 chip（渲染层没有可预览 URL）。
+                if (isAiWritingLocalAttachment(ref) && !localImage) {
+                  return (
+                    <span key={aiWritingAttachmentKey(ref)} className="aiw-bubble-file" title={ref.name}>
+                      <FileKindIcon name={ref.name} size={16} className="aiw-bubble-file__icon" />
+                      <span className="ln-ellipsis">{ref.name}</span>
+                      <span className="aiw-bubble-file__size">{formatAttachmentBytes(ref.size)}</span>
+                    </span>
+                  );
+                }
+                // 走到这里 = 资产图或本机图片（上方已 return 本机非图片）。
+                const label = ref.name ?? (ref as AiAssetRef).filename;
+                const src = localImage ?? aiWritingAttachmentUrl(ref as AiAssetRef);
+                return (
                   <button
                     key={aiWritingAttachmentKey(ref)}
                     type="button"
                     className="aiw-bubble-attach__preview"
-                    aria-label={"预览附件：" + (ref.name ?? ref.filename)}
+                    aria-label={"预览附件：" + label}
                     title="点击预览"
                     onClick={() => {
                       const index = imagePreviews.findIndex((item) => item.key === aiWritingAttachmentKey(ref));
@@ -92,15 +104,15 @@ export function AiMessageView(props: AiMessageViewProps) {
                   >
                     <img
                       className="aiw-bubble-attach__img"
-                      src={aiWritingAttachmentUrl(ref)}
-                      alt={ref.name ?? ref.filename}
-                      title={ref.name ?? ref.filename}
+                      src={src}
+                      alt={label}
+                      title={label}
                       loading="lazy"
                       decoding="async"
                     />
                   </button>
-                )
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
