@@ -12,6 +12,7 @@ import { formatBytes } from "../../lib/formatBytes";
 import { isPortableImportNativeAvailable } from "../native/portablePackage";
 import {
   discardStagedPortablePackage,
+  isMobileSnapshotManifest,
   pickPortablePackageForImport,
   runPortableImport,
   type PortableImportProgress,
@@ -88,6 +89,9 @@ export function PortableImportSection({ onImported }: { onImported?: () => void 
 
   /** 261116 C：只有「第 n/7 步」这种如实阶段（进度回调无字节/行总数 ⇒ 不画百分比）。 */
   const importStep = progress ? portableImportStep(progress.phase) : null;
+  /** 261117 D 项：手机「导出便携包到文件」的整机快照 = 另一种包（原生整机恢复，不做桌面行映射）。 */
+  const snapshot = staged !== null && isMobileSnapshotManifest(staged.manifest);
+  const noun = snapshot ? "恢复" : "导入";
 
   const footer = result ? (
     <div className="mb-set-block__actions">
@@ -95,13 +99,13 @@ export function PortableImportSection({ onImported }: { onImported?: () => void 
     </div>
   ) : busy ? (
     <div className="mb-set-block__actions">
-      <button type="button" className="mb-btn mb-btn--secondary" disabled>导入中…请不要退出 App</button>
+      <button type="button" className="mb-btn mb-btn--secondary" disabled>{noun}中…请不要退出 App</button>
     </div>
   ) : (
     <div className="mb-set-block__actions">
       <button type="button" className="mb-btn mb-btn--secondary" onClick={() => void closeSheet()}>取消</button>
       <button type="button" className="mb-btn mb-btn--danger-text" disabled={!staged} onClick={() => void start()}>
-        覆盖本机并导入
+        覆盖本机并{noun}
       </button>
     </div>
   );
@@ -121,7 +125,7 @@ export function PortableImportSection({ onImported }: { onImported?: () => void 
         </button>
       </div>
       <div className="mb-set-item__desc">
-        用桌面导出的 .zip.lln 包覆盖本机全部笔记、小记、标签与回收站（不含历史快照）；不需要先配置云同步。包内是明文笔记，请自行选择可信的传输方式。
+        用桌面导出的 .zip.lln 包覆盖本机全部笔记、小记、标签与回收站（不含历史快照）；也支持手机「导出便携包到文件」生成的整机快照（含历史快照/草稿/同步基线）。不需要先配置云同步。包内是明文数据，请自行选择可信的传输方式。
       </div>
       {!native && <div className="mb-set-item__desc">浏览器预览不支持（需要 Android 原生解压与只读 SQLite 读取）。</div>}
       {error && <div className="mb-set-item__desc" role="alert">{error}</div>}
@@ -132,22 +136,28 @@ export function PortableImportSection({ onImported }: { onImported?: () => void 
         </div>
       )}
 
-      <MobileSheet open={sheetOpen} title={result ? "导入完成" : "从便携包导入"} dismissible={!busy} onClose={() => void closeSheet()} footer={footer}>
+      <MobileSheet open={sheetOpen} title={result ? (snapshot ? "恢复完成" : "导入完成") : (snapshot ? "从手机快照恢复" : "从便携包导入")} dismissible={!busy} onClose={() => void closeSheet()} footer={footer}>
         <div className="mb-set-items">
           <div className="mb-set-block">
             {staged && !result && (
               <>
-                <div className="mb-set-block__name">包信息</div>
+                <div className="mb-set-block__name">{snapshot ? "包信息（手机整机快照）" : "包信息"}</div>
                 <div className="mb-set-item__desc">
-                  导出于 {staged.manifest.exportedAt.slice(0, 10)}（桌面 {staged.manifest.appVersion}）
+                  导出于 {staged.manifest.exportedAt.slice(0, 10)}（{snapshot ? "手机" : "桌面"} {staged.manifest.appVersion}）
                 </div>
                 <div className="mb-set-item__desc">
-                  笔记 {staged.manifest.counts.notes} / 目录 {staged.manifest.counts.folders}
-                  / 小记 {staged.manifest.counts.quickNotes} / 标签 {staged.manifest.counts.tags}
-                  / 资源 {staged.manifest.counts.assets}（约 {formatBytes(staged.bytes)}）
+                  {snapshot
+                    ? "笔记 " + (staged.manifest.counts.notes ?? 0) + " / 目录 " + (staged.manifest.counts.folders ?? 0)
+                      + " / 小记 " + (staged.manifest.counts.quickNotes ?? 0) + " / 标签 " + (staged.manifest.counts.tags ?? 0)
+                      + "（约 " + formatBytes(staged.bytes) + "）"
+                    : "笔记 " + staged.manifest.counts.notes + " / 目录 " + staged.manifest.counts.folders
+                      + " / 小记 " + staged.manifest.counts.quickNotes + " / 标签 " + staged.manifest.counts.tags
+                      + " / 资源 " + staged.manifest.counts.assets + "（约 " + formatBytes(staged.bytes) + "）"}
                 </div>
                 <div className="mb-set-item__desc" role="alert">
-                  将覆盖本机全部数据（含回收站），不支持合并；导入前的数据会保留一份回滚副本，导入成功后才删除。
+                  {snapshot
+                    ? "将覆盖本机全部数据（含回收站、历史快照、草稿与同步基线），不支持合并；恢复前的数据会保留一份回滚副本，恢复成功后才删除。"
+                    : "将覆盖本机全部数据（含回收站），不支持合并；导入前的数据会保留一份回滚副本，导入成功后才删除。"}
                 </div>
               </>
             )}
@@ -168,7 +178,7 @@ export function PortableImportSection({ onImported }: { onImported?: () => void 
             {error && <div className="mb-set-item__desc" role="alert">{error}</div>}
             {result && (
               <>
-                <div className="mb-set-block__name">已导入</div>
+                <div className="mb-set-block__name">{snapshot ? "已恢复" : "已导入"}</div>
                 <div className="mb-set-item__desc">
                   笔记 {result.counts.notes} / 目录 {result.counts.folders} / 小记 {result.counts.quickNotes}
                   / 标签 {result.counts.tags} / 文件 {result.counts.assets}（{formatBytes(result.counts.bytes)}）

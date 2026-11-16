@@ -60,6 +60,47 @@ export interface PortablePendingInfo {
   stagingPath?: string;
 }
 
+/** 261117 D 项：移动端导出快照（卸载/换机前的 100% 可靠备份）。 */
+export interface PortableSnapshotCounts {
+  notes?: number;
+  folders?: number;
+  quickNotes?: number;
+  tags?: number;
+}
+
+export interface PortableSnapshotExport {
+  ok: boolean;
+  /** App 私有目录里的临时快照路径（随后交给 OpenFile.saveAs 落到用户可见目录）。 */
+  path?: string;
+  name?: string;
+  bytes?: number;
+  entries?: number;
+  counts?: PortableSnapshotCounts;
+  error?: string;
+}
+
+/** 261117 D 项：从手机整机快照恢复（原生做隔离/拷回/回滚，JS 负责关库/重开）。 */
+export interface PortableSnapshotRestore {
+  ok: boolean;
+  counts?: PortableSnapshotCounts;
+  /** 快照里是否带同步基线（sync-v3/baseline.json.gz.b64）；带则恢复后 S3 增量语义不变。 */
+  hasBaseline?: boolean;
+  files?: number;
+  bytes?: number;
+  error?: string;
+}
+
+export interface PortableSnapshotInspect {
+  ok: boolean;
+  entries?: number;
+  bytes?: number;
+  counts?: PortableSnapshotCounts;
+  /** notes 表里有记录但包内找不到正文条目的条数（0 = 正文齐全）。 */
+  missingBodies?: number;
+  manifestJson?: string;
+  error?: string;
+}
+
 export type PortableDbKey = "main" | "quick";
 export type PortableTable =
   | "notes"
@@ -87,6 +128,12 @@ interface PortableImportPluginApi {
   rollbackImport(): Promise<PortableRecoverResult>;
   recoverPending(): Promise<PortableRecoverResult>;
   pendingInfo(): Promise<PortablePendingInfo>;
+  /** 261117 D 项：把当前移动端全量数据打成快照 zip（写到 App 私有目录，返回路径）。 */
+  exportSnapshot(): Promise<PortableSnapshotExport>;
+  /** 解析校验一个快照 zip（manifest + 只读打开包内 SQLite + 正文抽查）。 */
+  inspectSnapshot(options: { path: string }): Promise<PortableSnapshotInspect>;
+  /** 261117 D 项：从手机整机快照恢复（调用前 JS 必须已关闭数据库连接）。 */
+  restoreSnapshot(options: { stagingPath: string }): Promise<PortableSnapshotRestore>;
 }
 
 const PortableImport = registerPlugin<PortableImportPluginApi>("PortableImport");
@@ -191,6 +238,34 @@ export async function nativeRecoverPortableImport(): Promise<PortableRecoverResu
   if (!isPortableImportNativeAvailable()) return { ok: false };
   try {
     return (await PortableImport.recoverPending()) ?? { ok: false };
+  } catch (error) {
+    return { ok: false, error: errorText(error) };
+  }
+}
+
+export async function nativeExportPortableSnapshot(): Promise<PortableSnapshotExport> {
+  if (!isPortableImportNativeAvailable()) return { ok: false, error: "浏览器预览不支持导出便携包，请在 Android 上操作" };
+  try {
+    return (await PortableImport.exportSnapshot()) ?? { ok: false, error: "没有返回结果" };
+  } catch (error) {
+    return { ok: false, error: errorText(error) };
+  }
+}
+
+export async function nativeInspectPortableSnapshot(path: string): Promise<PortableSnapshotInspect> {
+  if (!isPortableImportNativeAvailable()) return { ok: false, error: "浏览器预览不支持便携包自检，请在 Android 上操作" };
+  try {
+    return (await PortableImport.inspectSnapshot({ path })) ?? { ok: false, error: "没有返回结果" };
+  } catch (error) {
+    return { ok: false, error: errorText(error) };
+  }
+}
+
+/** 从手机整机快照恢复（覆盖本机）：原生会先隔离当前数据并写 pending，失败自动回滚。 */
+export async function nativeRestorePortableSnapshot(stagingPath: string): Promise<PortableSnapshotRestore> {
+  if (!isPortableImportNativeAvailable()) return { ok: false, error: "浏览器预览不支持恢复便携包，请在 Android 上操作" };
+  try {
+    return (await PortableImport.restoreSnapshot({ stagingPath })) ?? { ok: false, error: "没有返回结果" };
   } catch (error) {
     return { ok: false, error: errorText(error) };
   }

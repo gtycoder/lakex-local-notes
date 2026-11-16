@@ -36,6 +36,46 @@ android:hasFragileUserData="true"  <!-- 261117：Android 10+ 系统卸载对话�
 - 说明 Android 10+ 系统卸载对话框的「保留应用数据」选项与其出现条件；
 - 说明为什么没有启用 Google 云备份（见 §3）。
 
+### 1.3 D 项已实现：导出便携包到本机文件（用户可见「下载」，卸载后仍留存）
+
+> 需求（261117 用户批准）：设置里给一个导出入口，把**整机数据的便携包**写到用户可见目录；卸载 App 后文件仍在，重装/换机后能再恢复。
+> 代码：`src/mobile/settings/PortableExportBlock.tsx`（入口）、`src/mobile/portable/exportPortable.ts`（编排）、`src/mobile/native/openFileSave.ts`、
+> `src/mobile/native/portablePackage.ts` + `android/**/PortablePackagePlugin.kt`（原生快照/自检/恢复）、`android/**/OpenFilePlugin.kt`（MediaStore Downloads 落盘，toDownloads=true）。
+
+**入口与操作步骤：**
+
+1. 手机「设置 → 关于 → 卸载与换机 → 导出便携包（卸载前最可靠）」；
+2. 点「导出便携包到文件」（进行中按钮禁用、文案「正在导出…」）；
+3. 成功后显示「已保存到 Download：lakex-portable-mobile-<时间戳>.zip.lln（大小，N 篇文档 / M 条小记）」——文件在系统文件管理器「下载」里，**卸载 App 不会删除**（与 App 私有目录不同）；
+4. 重装/换机后：「设置 → 备份与恢复 → 从便携包导入（覆盖本机）」选择该文件恢复。手机快照（source.platform=mobile / layout=mobile-snapshot）走**原生整机恢复**（隔离→替换 DB 与全部数据目录→提交，失败自动回滚；崩溃由启动 pending 恢复兜底），桌面便携包仍走原来的「桌面行映射导入」，两条路在同一个导入入口里自动识别。
+
+**导出链（每一步失败都给可执行错误，不生成半成品）：**
+
+- 关闭 SQLite 连接（复用导入的 closeDbForPortableImport，保证 DB/WAL 一致）；
+- 原生 exportSnapshot：手机单库（含 -wal/-shm/-journal）+ notes/usheets/bitables/boards/inks/note-assets/quick-notes/history/draft-journal/sync-v3 打成 store 快照 zip 到 App 私有 files/portable-export/；
+- 原生 inspectSnapshot 自检：校验 portable.json、只读打开包内 SQLite 数行数、抽查每条文档都有正文条目（缺正文直接在 UI 报「先去资源管理处理缺正文」，不交给用户坏包）；
+- OpenFile.saveAs(toDownloads=true)：Android 10+ 直接写 MediaStore「下载」目录（不弹系统选择器）；API 29 以下回退 SAF 选择器；
+- finally 重开数据库。
+
+**包内容与限制（如实说明）：**
+
+- 包内是**明文全量数据**（正文/附件/回收站/历史快照/草稿/同步基线；不含 S3 密钥与 Keystore 凭据）⇒ UI 必须提醒用户妥善保管；
+- 包含 history/ 与 draft-journal/（比桌面便携包多，目的就是「100% 可靠备份」）；包含 sync-v3/（恢复后 S3 增量语义不变）；
+- 上限沿用 4GiB / 250,000 条目（与便携包同口径，不分卷）；文件名保持 `.zip.lln` 后缀（MediaStore 对 application/zip 会自动追加 .zip ⇒ 改用自定义 MIME `application/x-lakex-portable`；API 36 实测不再追加）；
+- 恢复会**覆盖本机全部数据**（含回收站/历史/草稿/同步基线）；恢复前整份数据先隔离到回滚目录，成功后才删除；
+- 换机到其它手机恢复：文件可拷过去；若快照带 S3 基线且新机未配置 S3，配置后按增量同步；
+- 恢复只保证「同应用版本或向后兼容」：未来若移动端 schema 升级，旧快照按当前 DB 结构整机替换（无迁移）；跨大版本恢复前建议先导出一份当前数据。
+
+**验证（261117 本机 emulator-5554 / lake_mobile / API 36，APK 41.58MB，`scripts/android-build.sh --sync --install`）：**
+
+- **导出**：设备 UI 状态行「已保存到「Download」：lakex-portable-mobile-20261116-202002.zip.lln（16.8 KB，0 篇文档 / 1 条小记）」；`adb ls /sdcard/Download` = 17192 bytes；zip 内 = portable.json(346) + 手机库(262144) + welcome 小记(2589)，manifest `layout=mobile-snapshot / source.platform=mobile / counts 0/1/1/0`；host sqlite3 计数与 App 内一致（inspectSnapshot 自检通过，missingBodies=0）。
+- **卸载后仍在**：`adb uninstall com.lakexlocalnotes.android` → 下载目录里的 .zip.lln **仍在**（17192 bytes）→ 重装同 APK。
+- **恢复**：重装后数据为空 → 原生 `restoreSnapshot` 恢复同一文件 → ok（counts 0/1/1，files=4，bytes=297501）；恢复后 DB 三表 `.dump` sha256 = 快照 **a6f8a3f7…**、welcome 小记正文 sha256 = 快照 **5efb1cd1…**（完全一致）；staging 自动清理。
+- **失败面**：缺 portable.json / 缺数据库的快照被拒（可执行错误），恢复前后 DB sha256 不变 ⇒ 校验在动数据之前。
+- 截图：`/tmp/portable-export/01-about-exporting.png`（进行中）、`02-about-export-done.png`、`05-after-clear-before-restore.png`、`06-after-restore-home.png`、`07-after-restore-quicknotes.png`、`08-settings-backup-restore.png`、`10-after-reinstall-empty.png`、`11-after-uninstall-restore.png`。
+- **未自动化**：系统文件选择器（DocumentsUI）点选文件无法用 CDP 自动化 ⇒ 「从便携包导入」选择快照的 UI 路径建议人工复验一次（原生 pickAndStage 与桌面包导入同一条；桌面→手机导入路径已有设备验证）。
+
+---
 ## 2. 为什么需要这层
 
 移动端数据全部在本机（正文/小记/历史 = App 私有目录文件，SQLite 只存元数据/账本/派生索引，见 AGENTS §4），

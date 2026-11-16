@@ -11,6 +11,7 @@ const state = vi.hoisted(() => ({
   calls: [] as string[],
   savedBaseline: null as unknown,
   batches: [] as Array<{ statement: string; values: unknown[] }>,
+  restoreOk: true,
 }));
 
 vi.mock("../native/portablePackage", () => ({
@@ -28,6 +29,12 @@ vi.mock("../native/portablePackage", () => ({
     const all = state.rows.get(options.table) ?? [];
     const rows = all.slice(options.offset, options.offset + 500);
     return { ok: true, rows, done: options.offset + rows.length >= all.length };
+  },
+  nativeRestorePortableSnapshot: async () => {
+    state.calls.push("restore");
+    return state.restoreOk
+      ? { ok: true, counts: { notes: 2, folders: 1, quickNotes: 1, tags: 1 }, hasBaseline: true, files: 4, bytes: 500 }
+      : { ok: false, error: "快照损坏" };
   },
   nativeCommitPortableImport: async () => {
     state.calls.push("commit");
@@ -79,6 +86,23 @@ const baseline = () => JSON.stringify({
     folders: [{ id: "nb1", title: "个人笔记", parentId: null, sortOrder: 0, nodeType: "notebook", icon: null, updatedAt: TS }],
   },
   quickNotes: { v: 3, space: "quickNotes", items: [{ id: "q1", createdAt: TS, updatedAt: TS, contentHash: H("b") }] },
+});
+
+const snapshotStaged = () => ({
+  stagingPath: "/snapstage",
+  manifest: {
+    format: "lakex-local-notes-portable" as const,
+    formatVersion: 1 as const,
+    appVersion: "1.3.2",
+    exportedAt: TS,
+    source: { platform: "mobile" as const },
+    layout: "mobile-snapshot" as const,
+    hasHistory: true as const,
+    limitBytes: 4 * 1024 * 1024 * 1024,
+    counts: { notes: 2, folders: 1, quickNotes: 1, tags: 1, bytes: 500 },
+  },
+  bytes: 500,
+  entries: 20,
 });
 
 const staged = () => ({
@@ -159,5 +183,25 @@ describe("启动时 pending 恢复", () => {
     await expect(recoverInterruptedPortableImport()).resolves.toBe(true);
     expect(consumePortableRecoveryNotice()).toContain("已自动回滚");
     expect(consumePortableRecoveryNotice()).toBeNull();
+  });
+});
+describe("手机整机快照恢复（261117 D 项）", () => {
+  it("快照包 = 原生整机恢复（关库 → restore），不走桌面行映射", async () => {
+    state.calls = [];
+    state.restoreOk = true;
+    const result = await runPortableImport(snapshotStaged() as never);
+    expect(state.calls).toEqual(["close-db", "restore"]);
+    expect(result.counts).toMatchObject({ notes: 2, folders: 1, quickNotes: 1, tags: 1, assets: 4, bytes: 500 });
+    expect(result.hasCloudBaseline).toBe(true);
+    expect(result.warnings.join()).toContain("整机快照");
+  });
+
+  it("原生恢复失败：报错并尽量回滚/重开数据库", async () => {
+    state.calls = [];
+    state.restoreOk = false;
+    await expect(runPortableImport(snapshotStaged() as never)).rejects.toThrow(/恢复手机快照失败/);
+    expect(state.calls).toContain("restore");
+    expect(state.calls).toContain("rollback");
+    expect(state.calls).toContain("ensure-db");
   });
 });

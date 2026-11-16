@@ -4,6 +4,7 @@ import type { AppSettings } from "../../lib/settings";
 import type { HistoryMobileSettings } from "../bridge";
 import type { useSettingsSectionData } from "./useSettingsSectionData";
 import { S3V3_POINTER_VERSION } from "../../core/s3v3/protocol/s3v3Types";
+import { PortableExportBlock } from "./PortableExportBlock";
 import { HISTORY_SETTINGS_DEFAULTS } from "../../core/settingsDefaults";
 import { formatBytes } from "../../lib/formatBytes";
 import { formatCrashEntries, readCrashLog } from "../lib/crashLog";
@@ -78,6 +79,8 @@ export function AboutSettingsSection({ appInfo, diag }: { appInfo: ReturnType<ty
                     本机数据量通常超过系统自动备份的 25MB 限额，所以没有启用 Google 云备份；真正的迁移出口是便携包与云同步。
                   </div>
                 </div>
+                {/* 261117 D 项（用户已批准）：导出便携包到系统「下载」，卸载后仍留存、可再导入恢复。 */}
+                <PortableExportBlock />
             </Group>
 
             {diag && (

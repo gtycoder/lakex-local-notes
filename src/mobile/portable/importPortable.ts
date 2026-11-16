@@ -9,7 +9,7 @@
  *
  * 映射纯逻辑在 ./portableMapping.ts；原生边界在 ../native/portablePackage.ts。
  */
-import { parsePortableManifest, type PortableCounts, type PortableManifest } from "../../core/portable/portableFormat";
+import { PORTABLE_LIMIT_BYTES, parsePortableManifest, type PortableCounts, type PortableManifest } from "../../core/portable/portableFormat";
 import { executeBatch, type MobileBatchStatement, type MobileDb } from "../data/sqliteDb";
 import { closeDbForPortableImport, ensureDb, reopenDbForPortableImport } from "../bridge/context";
 import { ensureV3StateTable, saveV3State, EMPTY_MOBILE_V3_STATE } from "../data/v3StateRepository";
@@ -28,6 +28,7 @@ import {
   nativeReadPortableBaseline,
   nativeReadPortableRows,
   nativeRecoverPortableImport,
+  nativeRestorePortableSnapshot,
   nativeRollbackPortableImport,
   type PortableDbKey,
   type PortableTable,
@@ -41,11 +42,69 @@ import {
   type MappedQuickData,
 } from "./portableMapping";
 
+/**
+ * 手机整机快照清单（261117 D 项：设置 → 关于 → 卸载与换机 → 导出便携包到文件）。
+ *
+ * 与桌面便携包的**格式外壳相同**（format/formatVersion/limitBytes/counts），但 layout/source 不同：
+ * source.platform=mobile、layout=mobile-snapshot，包内是手机自己的数据库 + 全部 files 目录。
+ * 恢复走原生整机回滚（nativeRestorePortableSnapshot），不做桌面行映射。
+ */
+export interface MobileSnapshotManifest {
+  format: string;
+  formatVersion: 1;
+  appVersion: string;
+  exportedAt: string;
+  source: { platform: "mobile" };
+  layout: "mobile-snapshot";
+  hasHistory: true;
+  limitBytes: number;
+  counts: { notes?: number; folders?: number; quickNotes?: number; tags?: number; assets?: number; bytes?: number };
+  note?: string;
+}
+
 export interface StagedPortablePackage {
   stagingPath: string;
-  manifest: PortableManifest;
+  manifest: PortableManifest | MobileSnapshotManifest;
   bytes: number;
   entries: number;
+}
+
+/** 是否为手机整机快照（决定走「整机恢复」还是「桌面行映射导入」）。 */
+export function isMobileSnapshotManifest(manifest: StagedPortablePackage["manifest"]): manifest is MobileSnapshotManifest {
+  return (manifest as MobileSnapshotManifest).layout === "mobile-snapshot";
+}
+
+function parseMobileSnapshotManifest(raw: unknown): MobileSnapshotManifest {
+  if (!raw || typeof raw !== "object") throw new Error("快照清单不是对象");
+  const value = raw as Record<string, unknown>;
+  if (value.format !== "lakex-local-notes-portable") throw new Error("不是 LakexLocalNotes 便携包");
+  if (value.formatVersion !== 1) throw new Error("便携包格式版本不支持");
+  if (value.layout !== "mobile-snapshot") throw new Error("快照布局不支持");
+  const source = value.source as Record<string, unknown> | undefined;
+  if (!source || source.platform !== "mobile") throw new Error("快照来源非法");
+  if (typeof value.appVersion !== "string" || typeof value.exportedAt !== "string") throw new Error("快照元数据非法");
+  if (value.limitBytes !== PORTABLE_LIMIT_BYTES) throw new Error("便携包上限声明不匹配");
+  const counts = value.counts as Record<string, unknown> | undefined;
+  if (!counts) throw new Error("快照 counts 非法");
+  const picked: MobileSnapshotManifest["counts"] = {};
+  for (const key of ["notes", "folders", "quickNotes", "tags", "assets", "bytes"] as const) {
+    const raw = counts[key];
+    if (raw === undefined) continue;
+    if (!Number.isInteger(raw) || (raw as number) < 0) throw new Error("快照 counts." + key + " 非法");
+    picked[key] = raw as number;
+  }
+  return {
+    format: "lakex-local-notes-portable",
+    formatVersion: 1,
+    appVersion: value.appVersion,
+    exportedAt: value.exportedAt,
+    source: { platform: "mobile" },
+    layout: "mobile-snapshot",
+    hasHistory: true,
+    limitBytes: PORTABLE_LIMIT_BYTES,
+    counts: picked,
+    note: typeof value.note === "string" ? value.note : undefined,
+  };
 }
 
 export type PortableImportPhase =
@@ -91,9 +150,12 @@ export async function pickPortablePackageForImport(): Promise<StagedPortablePack
     await nativeDiscardPortableStaging(picked.stagingPath ?? "");
     throw new Error("便携包无效（缺少 staging 或清单）");
   }
-  let manifest: PortableManifest;
+  let manifest: StagedPortablePackage["manifest"];
   try {
-    manifest = parsePortableManifest(JSON.parse(picked.manifestJson));
+    const raw: unknown = JSON.parse(picked.manifestJson);
+    manifest = isMobileSnapshotManifest(raw as StagedPortablePackage["manifest"])
+      ? parseMobileSnapshotManifest(raw)
+      : parsePortableManifest(raw);
   } catch (error) {
     await nativeDiscardPortableStaging(picked.stagingPath);
     throw new Error("便携包无效：" + (error instanceof Error ? error.message : String(error)));
@@ -101,7 +163,7 @@ export async function pickPortablePackageForImport(): Promise<StagedPortablePack
   return {
     stagingPath: picked.stagingPath,
     manifest,
-    bytes: picked.bytes ?? manifest.counts.bytes,
+    bytes: picked.bytes ?? manifest.counts.bytes ?? 0,
     entries: picked.entries ?? 0,
   };
 }
@@ -269,10 +331,56 @@ function isUpdateImportSyncIdle(): boolean {
   }
 }
 
+/** 手机整机快照恢复：关库 → 原生整机替换（含回滚/pending）→ 重开库。 */
+async function restoreMobileSnapshot(
+  staged: StagedPortablePackage,
+  onProgress?: (progress: PortableImportProgress) => void,
+): Promise<PortableImportResult> {
+  let dbClosed = false;
+  try {
+    onProgress?.({ phase: "rollback-point", detail: "关闭数据库并建立回滚点…" });
+    await closeDbForPortableImport();
+    dbClosed = true;
+    onProgress?.({ phase: "copy-files", detail: "恢复数据库与全部正文/附件/历史…" });
+    const restored = await nativeRestorePortableSnapshot(staged.stagingPath);
+    if (!restored.ok) throw new Error(restored.error || "恢复手机快照失败");
+    onProgress?.({ phase: "commit", detail: "重开数据库…" });
+    await reopenDbForPortableImport();
+    dbClosed = false;
+    onProgress?.({ phase: "done", detail: "恢复完成" });
+    const counts = restored.counts ?? {};
+    return {
+      counts: {
+        notes: counts.notes ?? 0,
+        folders: counts.folders ?? 0,
+        quickNotes: counts.quickNotes ?? 0,
+        tags: counts.tags ?? 0,
+        assets: restored.files ?? 0,
+        bytes: restored.bytes ?? 0,
+      },
+      warnings: ["已从手机整机快照恢复（含历史快照、草稿与同步基线）。如需云端增量同步，请到「云端与同步」配置 S3。"],
+      skippedRows: 0,
+      hasCloudBaseline: restored.hasBaseline === true,
+    };
+  } catch (error) {
+    if (dbClosed) {
+      // 原生 restore 已在内部回滚；这里只兜底重开数据库（失败则下次访问惰性重开）。
+      try { await nativeRollbackPortableImport(); } catch { /* 已回滚或没有 pending */ }
+      try { await ensureDb(); } catch (rebuildError) { console.warn("[portable] 恢复失败后重开数据库失败", rebuildError); }
+    }
+    throw new Error("恢复手机快照失败，已尽量回滚到恢复前数据：" + (error instanceof Error ? error.message : String(error)));
+  }
+}
+
 async function runPortableImportInner(
   staged: StagedPortablePackage,
   onProgress?: (progress: PortableImportProgress) => void,
 ): Promise<PortableImportResult> {
+  // 261117 D 项：手机整机快照 = 手机自己的 DB + files 目录，无需桌面行映射/基线解析；
+  // 走原生整机回滚（隔离 → 拷回 → 提交，失败自动回滚；pending 由启动恢复兜底）。
+  if (isMobileSnapshotManifest(staged.manifest)) {
+    return restoreMobileSnapshot(staged, onProgress);
+  }
   // 先读基线（只读 staging）：基线不合法就在动数据之前失败。
   const baselineFile = await nativeReadPortableBaseline(staged.stagingPath);
   if (!baselineFile.ok || !baselineFile.json) {

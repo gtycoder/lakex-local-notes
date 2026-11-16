@@ -11,6 +11,7 @@ import android.provider.MediaStore
 import android.webkit.MimeTypeMap
 import androidx.activity.result.ActivityResult
 import androidx.core.content.FileProvider
+import com.getcapacitor.JSObject
 import com.getcapacitor.Plugin
 import com.getcapacitor.PluginCall
 import com.getcapacitor.PluginMethod
@@ -115,12 +116,49 @@ class OpenFilePlugin : Plugin() {
         }
         val name = call.getString("name")?.takeIf { it.trim().isNotEmpty() } ?: src.name
         val mime = call.getString("mime")?.takeIf { it.isNotEmpty() } ?: mimeFor(src)
+        // 261117 D 项：便携包等「必须落到用户可见目录、不再走系统选择器」的导出。
+        // Android 10+ 直接写 MediaStore Downloads（文件管理器「下载」里可见，不依赖用户点选）；
+        // 低版本或不支持时回退到 SAF 选择器。
+        val toDownloads = call.getBoolean("toDownloads") == true
 
-        // 图片走相册（系统图库立即可见，最接近小红书/知乎）；低版本或非图片走 SAF。
-        if (mime.startsWith("image/") && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        if (toDownloads && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            saveToDownloads(call, src, name, mime)
+        } else if (mime.startsWith("image/") && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            // 图片走相册（系统图库立即可见，最接近小红书/知乎）；低版本或非图片走 SAF。
             saveImageToGallery(call, src, name, mime)
         } else {
             saveViaSaf(call, src, name, mime)
+        }
+    }
+
+    /**
+     * 写到系统「下载」目录（MediaStore.Downloads，Android 10+）：用户可以立刻在文件管理器里看到，
+     * 卸载 App 后文件仍留存（这是便携包备份的关键）。
+     */
+    private fun saveToDownloads(call: PluginCall, src: File, name: String, mime: String) {
+        var uri: Uri? = null
+        try {
+            val values = ContentValues()
+            values.put(MediaStore.MediaColumns.DISPLAY_NAME, name)
+            values.put(MediaStore.MediaColumns.MIME_TYPE, mime)
+            values.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+            values.put(MediaStore.MediaColumns.IS_PENDING, 1)
+            val inserted = getContext().contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+                ?: throw Exception("insert into MediaStore Downloads failed")
+            uri = inserted
+            FileInputStream(src).use { input ->
+                getContext().contentResolver.openOutputStream(inserted).use { output -> copy(input, output) }
+            }
+            val done = ContentValues()
+            done.put(MediaStore.MediaColumns.IS_PENDING, 0)
+            getContext().contentResolver.update(inserted, done, null, null)
+            // 261117 D 项：回报实际落盘大小（zip 是压缩包，和导出前的累计字节不是一回事）。
+            call.resolve(JSObject().put("ok", true).put("name", name).put("dir", Environment.DIRECTORY_DOWNLOADS).put("bytes", src.length()))
+        } catch (e: Exception) {
+            if (uri != null) {
+                try { getContext().contentResolver.delete(uri, null, null) } catch (ignored: Exception) { /* 清理失败不遮主错误 */ }
+            }
+            call.reject("保存到「下载」失败: " + (e.message ?: e.javaClass.simpleName))
         }
     }
 

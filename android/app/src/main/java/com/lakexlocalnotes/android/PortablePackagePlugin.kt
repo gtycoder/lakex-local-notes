@@ -18,8 +18,11 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.BufferedInputStream
 import java.io.File
+import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.IOException
+import java.io.InputStream
+import java.io.OutputStream
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.zip.ZipInputStream
 
@@ -60,6 +63,15 @@ class PortablePackagePlugin : Plugin() {
             "notes", "usheets", "bitables", "boards", "inks",
             "note-assets", "quick-notes/items", "quick-notes/assets",
         )
+
+        /** 261117 D 项：移动端导出快照（卸载/换机前的 100% 可靠备份）的包标识。 */
+        private const val SNAPSHOT_LAYOUT = "mobile-snapshot"
+        private const val SNAPSHOT_PREFIX = "lakex-portable-mobile-"
+        private const val EXPORT_ROOT = "portable-export"
+        /** 快照要备份的目录：导入用的 8 个正文/资产目录 **加上** 历史快照与草稿日志（全量备份）。 */
+        private val SNAPSHOT_DIRS = PAYLOAD_DIRS + listOf("history", "draft-journal", "sync-v3")
+        /** 快照恢复时也要隔离/回滚的额外目录（导入路径不碰它们）。 */
+        private val SNAPSHOT_EXTRA_DIRS = listOf("history", "draft-journal", "sync-v3")
 
         /** 只允许读取的桌面表（避免把任意 SQL 带进插件）。 */
         private val READONLY_TABLES = mapOf(
@@ -203,18 +215,28 @@ class PortablePackagePlugin : Plugin() {
         val obj = JSONObject(text)
         if (obj.optString("format") != PORTABLE_FORMAT) throw IOException("不是 LakexLocalNotes 便携包")
         if (obj.optInt("formatVersion", 0) != PORTABLE_FORMAT_VERSION) throw IOException("便携包格式版本不支持")
-        if (obj.optBoolean("hasHistory", true)) throw IOException("便携包不应包含历史快照")
         if (obj.optLong("limitBytes", 0L) != PORTABLE_LIMIT_BYTES) throw IOException("便携包上限声明不匹配")
-        val source = obj.optJSONObject("source")
-        if (source == null || source.optString("platform") != "desktop") throw IOException("便携包来源非法")
-        // baseline 允许为 null（纯离线包）：此时包内只有内容哈希，不写同步账本。
-        val baseline = obj.optJSONObject("baseline")
-        if (baseline != null && (baseline.optString("epoch").isEmpty() || baseline.optString("lakeCommit").isEmpty() ||
-                baseline.optString("quickNotesCommit").isEmpty())
-        ) throw IOException("便携包基线不完整")
-        if (!File(stage, "desktop/metadata.sqlite3").isFile) throw IOException("缺少 desktop/metadata.sqlite3")
-        if (!File(stage, "desktop/quick-notes/metadata.sqlite3").isFile) throw IOException("缺少 desktop/quick-notes/metadata.sqlite3")
-        if (!File(stage, "desktop/sync-v3/baseline.json").isFile) throw IOException("缺少 desktop/sync-v3/baseline.json")
+        val source = obj.optJSONObject("source") ?: throw IOException("便携包来源缺失")
+        when (source.optString("platform")) {
+            "desktop" -> {
+                if (obj.optBoolean("hasHistory", true)) throw IOException("便携包不应包含历史快照")
+                // baseline 允许为 null（纯离线包）：此时包内只有内容哈希，不写同步账本。
+                val baseline = obj.optJSONObject("baseline")
+                if (baseline != null && (baseline.optString("epoch").isEmpty() || baseline.optString("lakeCommit").isEmpty() ||
+                        baseline.optString("quickNotesCommit").isEmpty())
+                ) throw IOException("便携包基线不完整")
+                if (!File(stage, "desktop/metadata.sqlite3").isFile) throw IOException("缺少 desktop/metadata.sqlite3")
+                if (!File(stage, "desktop/quick-notes/metadata.sqlite3").isFile) throw IOException("缺少 desktop/quick-notes/metadata.sqlite3")
+                if (!File(stage, "desktop/sync-v3/baseline.json").isFile) throw IOException("缺少 desktop/sync-v3/baseline.json")
+            }
+            // 261117 D 项：手机整机快照（导出便携包到文件）也可以被「从便携包导入」选中并恢复。
+            "mobile" -> {
+                if (obj.optString("layout") != SNAPSHOT_LAYOUT) throw IOException("快照布局不支持")
+                if (!File(stage, "mobile/databases/" + MOBILE_DB_FILE).isFile) throw IOException("快照缺少数据库")
+                if (!File(stage, "mobile/files").isDirectory) throw IOException("快照缺少数据目录")
+            }
+            else -> throw IOException("便携包来源非法")
+        }
         if (totalBytes <= 0L) throw IOException("便携包为空")
         return text
     }
@@ -383,7 +405,7 @@ class PortablePackagePlugin : Plugin() {
         }.start()
     }
 
-    private fun beginImportInternal(stagingPath: String): JSObject {
+    private fun beginImportInternal(stagingPath: String, extraDirs: List<String> = emptyList()): JSObject {
         val stage = File(stagingPath).canonicalFile
         val root = importRoot().canonicalPath
         if (!stage.path.startsWith(root + File.separator)) throw IOException("staging 路径越界")
@@ -408,7 +430,7 @@ class PortablePackagePlugin : Plugin() {
                 if (!file.delete() && file.exists()) throw IOException("无法隔离当前数据库: " + file.name)
             }
 
-            for (relative in PAYLOAD_DIRS) {
+            for (relative in PAYLOAD_DIRS + extraDirs) {
                 val live = File(context.filesDir, relative)
                 if (!live.exists()) continue
                 val backup = File(filesBackupDir, relative)
@@ -461,19 +483,24 @@ class PortablePackagePlugin : Plugin() {
         call.setKeepAlive(true)
         Thread {
             try {
-                val pending = readPending()
-                if (pending != null) {
-                    val rollbackDir = File(pending.optString("rollbackDir"))
-                    if (isInsideImportRoot(rollbackDir)) rollbackDir.deleteRecursively()
-                    deleteStagingDir(pending.optString("stagingPath"))
-                }
-                pendingFile().delete()
-                File(importRoot(), PENDING_FILE + ".tmp").delete()
+                commitPendingInternal()
                 call.resolve(JSObject().put("ok", true))
             } catch (e: Exception) {
                 call.reject("提交导入失败: " + (e.message ?: e.javaClass.simpleName))
             }
         }.start()
+    }
+
+    /** 提交当前 pending：删回滚目录 + staging + pending 标记（导入与快照恢复共用）。 */
+    private fun commitPendingInternal() {
+        val pending = readPending()
+        if (pending != null) {
+            val rollbackDir = File(pending.optString("rollbackDir"))
+            if (isInsideImportRoot(rollbackDir)) rollbackDir.deleteRecursively()
+            deleteStagingDir(pending.optString("stagingPath"))
+        }
+        pendingFile().delete()
+        File(importRoot(), PENDING_FILE + ".tmp").delete()
     }
 
     @PluginMethod
@@ -586,6 +613,374 @@ class PortablePackagePlugin : Plugin() {
             if (value.isNotEmpty()) out.add(value)
         }
         return out
+    }
+
+    // ---- 5) 261117 D 项：移动端导出便携快照（卸载/换机前的 100% 可靠备份） ----
+
+    /**
+     * 把**当前移动端全量数据**打成 store 快照 zip（写到 App 私有 files/portable-export/，再由 JS 调
+     * OpenFile.saveAs 落到用户可见目录）：
+     *   portable.json                              ← 清单（source.platform = mobile，layout = mobile-snapshot）
+     *   mobile/databases/<主库及 wal/shm/journal>   ← 关库后复制，保证一致
+     *   mobile/files 下的 notes / usheets / … / history / draft-journal  ← 全量正文/资产/历史/草稿
+     * 调用方（JS）必须**先关闭数据库连接**（桥的 closeDbForPortableImport），导出完成后重开。
+     */
+    @PluginMethod
+    fun exportSnapshot(call: PluginCall) {
+        call.setKeepAlive(true)
+        Thread {
+            try {
+                call.resolve(exportSnapshotInternal())
+            } catch (e: Exception) {
+                call.reject("导出便携包失败: " + (e.message ?: e.javaClass.simpleName))
+            }
+        }.start()
+    }
+
+    private fun exportSnapshotInternal(): JSObject {
+        val exportRoot = File(context.filesDir, EXPORT_ROOT).apply { mkdirs() }
+        // 清掉上一次导出遗留（同目录只留最新的包，避免占空间）
+        exportRoot.listFiles()?.forEach { it.deleteRecursively() }
+        val stamp = java.text.SimpleDateFormat("yyyyMMdd-HHmmss", java.util.Locale.US).format(java.util.Date())
+        val fileName = SNAPSHOT_PREFIX + stamp + PORTABLE_EXTENSION
+        val outFile = File(exportRoot, fileName)
+        val dbDir = context.getDatabasePath(MOBILE_DB_FILE).parentFile
+            ?: throw IOException("无法定位应用数据库目录")
+        val dbFiles = mainDbFiles(dbDir)
+        if (dbFiles.isEmpty()) throw IOException("本机还没有数据库文件，先打开一次 App 再导出")
+
+        var entries = 0
+        var bytes = 0L
+        val counts = readSnapshotCounts(dbDir)
+        val manifest = JSONObject()
+            .put("format", PORTABLE_FORMAT)
+            .put("formatVersion", PORTABLE_FORMAT_VERSION)
+            .put("layout", SNAPSHOT_LAYOUT)
+            .put("appVersion", appVersionName())
+            .put("exportedAt", isoNow())
+            .put("source", JSONObject().put("platform", "mobile"))
+            .put("hasHistory", true)
+            .put("limitBytes", PORTABLE_LIMIT_BYTES)
+            .put("counts", counts)
+            .put("note", "明文全量备份（含历史快照/草稿），请妥善保管")
+        try {
+            java.util.zip.ZipOutputStream(java.io.BufferedOutputStream(FileOutputStream(outFile))).use { zos ->
+                // 清单先写（用户/工具先看到）
+                writeZipText(zos, "portable.json", manifest.toString())
+                entries += 1
+                // 数据库（关库后复制；wal/shm 一并带上）
+                for (file in dbFiles) {
+                    bytes += writeZipFile(zos, "mobile/databases/" + file.name, file)
+                    entries += 1
+                    if (bytes > PORTABLE_LIMIT_BYTES) throw IOException("数据超过 4GiB，暂不支持分卷")
+                }
+                // 正文/资产/历史/草稿目录
+                val filesRoot = context.filesDir
+                for (relative in SNAPSHOT_DIRS) {
+                    val dir = File(filesRoot, relative)
+                    if (!dir.isDirectory) continue
+                    val added = writeZipDir(zos, "mobile/files/" + relative, dir)
+                    entries += added.first
+                    bytes += added.second
+                    if (bytes > PORTABLE_LIMIT_BYTES) throw IOException("数据超过 4GiB，暂不支持分卷")
+                }
+            }
+        } catch (e: Exception) {
+            outFile.delete()
+            throw e
+        }
+        return JSObject()
+            .put("ok", true)
+            .put("path", outFile.absolutePath)
+            .put("name", fileName)
+            .put("bytes", bytes)
+            .put("entries", entries)
+            .put("counts", counts)
+    }
+
+    /**
+     * 导出自检（解析即校验）：解开刚导出的快照，校验 portable.json、只读打开包内 SQLite 数行数，
+     * 并抽查「notes 表里的每条文档都有正文条目」。返回的 counts 用于 UI 显示「可恢复 N 篇」。
+     */
+    @PluginMethod
+    fun inspectSnapshot(call: PluginCall) {
+        call.setKeepAlive(true)
+        Thread {
+            try {
+                val path = call.getString("path") ?: throw IOException("path required")
+                val file = File(path)
+                if (!isUnderAppSandbox(file)) throw IOException("path outside app sandbox")
+                if (!file.isFile) throw IOException("快照文件不存在")
+                call.resolve(inspectSnapshotInternal(file))
+            } catch (e: Exception) {
+                call.reject("便携包自检失败: " + (e.message ?: e.javaClass.simpleName))
+            }
+        }.start()
+    }
+
+    private fun inspectSnapshotInternal(file: File): JSObject {
+        val tempDir = File(importRoot(), "inspect-" + System.currentTimeMillis()).apply { mkdirs() }
+        try {
+            var entries = 0
+            var totalBytes = 0L
+            val names = mutableSetOf<String>()
+            java.util.zip.ZipFile(file).use { zip ->
+                val manifestEntry = zip.getEntry("portable.json") ?: throw IOException("不是便携包（缺 portable.json）")
+                val manifestText = zip.getInputStream(manifestEntry).use { it.readBytes().toString(Charsets.UTF_8) }
+                if (manifestText.length > MAX_MANIFEST_BYTES) throw IOException("portable.json 过大")
+                val manifest = JSONObject(manifestText)
+                if (manifest.optString("format") != PORTABLE_FORMAT) throw IOException("不是 LakexLocalNotes 便携包")
+                if (manifest.optInt("formatVersion", 0) != PORTABLE_FORMAT_VERSION) throw IOException("便携包格式版本不支持")
+                val source = manifest.optJSONObject("source") ?: throw IOException("便携包来源缺失")
+                if (source.optString("platform") != "mobile") throw IOException("这不是手机导出的快照包（source.platform≠mobile）")
+                if (manifest.optString("layout") != SNAPSHOT_LAYOUT) throw IOException("快照布局不支持")
+
+                val enumeration = zip.entries()
+                while (enumeration.hasMoreElements()) {
+                    val entry = enumeration.nextElement()
+                    entries += 1
+                    if (entries > MAX_ENTRIES) throw IOException("zip 条目过多（上限 " + MAX_ENTRIES + "）")
+                    val name = entry.name ?: continue
+                    if (name.contains("\\") || name.startsWith("/") || name.split('/').any { it == ".." || it == "." }) {
+                        throw IOException("zip 条目含非法路径")
+                    }
+                    names.add(name)
+                    totalBytes += entry.size.coerceAtLeast(0)
+                    if (totalBytes > PORTABLE_LIMIT_BYTES) throw IOException("快照超过 4GiB 上限")
+                }
+                val dbEntryName = "mobile/databases/" + MOBILE_DB_FILE
+                val dbEntry = zip.getEntry(dbEntryName) ?: throw IOException("快照缺少数据库")
+                val dbCopy = File(tempDir, MOBILE_DB_FILE)
+                zip.getInputStream(dbEntry).use { input -> FileOutputStream(dbCopy).use { output -> copy(input, output) } }
+                val db = SQLiteDatabase.openDatabase(dbCopy.path, null, SQLiteDatabase.OPEN_READONLY)
+                val counts = try {
+                    JSONObject()
+                        .put("notes", countOf(db, "notes"))
+                        .put("folders", countOf(db, "folders"))
+                        .put("quickNotes", countOf(db, "quick_notes"))
+                        .put("tags", countOf(db, "tags"))
+                } finally {
+                    db.close()
+                }
+                // 抽查正文：notes 表里每条有 kind 的文档都应有对应的 mobile/files/... 条目。
+                var missingBodies = 0
+                val checked = SQLiteDatabase.openDatabase(dbCopy.path, null, SQLiteDatabase.OPEN_READONLY)
+                try {
+                    checked.rawQuery("SELECT id, doc_kind FROM notes LIMIT 500", null).use { cursor ->
+                        while (cursor.moveToNext()) {
+                            val id = cursor.getString(0)
+                            val kind = cursor.getString(1) ?: "doc"
+                            val dir = when (kind) {
+                                "usheet" -> "usheets"; "bitable" -> "bitables"; "board" -> "boards"; "ink" -> "inks"; else -> "notes"
+                            }
+                            val anyBody = names.any { it.startsWith("mobile/files/" + dir + "/" + id + ".") }
+                            if (!anyBody) missingBodies += 1
+                        }
+                    }
+                } finally {
+                    checked.close()
+                }
+                return JSObject()
+                    .put("ok", true)
+                    .put("entries", entries)
+                    .put("bytes", totalBytes)
+                    .put("counts", counts)
+                    .put("missingBodies", missingBodies)
+                    .put("manifestJson", manifestText)
+            }
+        } finally {
+            tempDir.deleteRecursively()
+        }
+    }
+
+    private fun copy(input: InputStream, output: OutputStream) {
+        val buffer = ByteArray(64 * 1024)
+        while (true) {
+            val read = input.read(buffer)
+            if (read < 0) break
+            output.write(buffer, 0, read)
+        }
+        output.flush()
+    }
+
+    private fun isUnderAppSandbox(file: File): Boolean {
+        return try {
+            val canonical = file.canonicalPath
+            val roots = arrayOf(context.filesDir, context.getExternalFilesDir(null))
+            roots.any { root -> root != null && (canonical == root.canonicalPath || canonical.startsWith(root.canonicalPath + File.separator)) }
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    private fun appVersionName(): String {
+        return try {
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "unknown"
+        } catch (e: Exception) {
+            "unknown"
+        }
+    }
+
+    private fun isoNow(): String {
+        val format = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.US)
+        format.timeZone = java.util.TimeZone.getTimeZone("UTC")
+        return format.format(java.util.Date())
+    }
+
+    private fun countOf(db: SQLiteDatabase, table: String): Long {
+        return try {
+            db.rawQuery("SELECT COUNT(*) FROM " + table, null).use { cursor -> if (cursor.moveToFirst()) cursor.getLong(0) else 0L }
+        } catch (e: Exception) {
+            0L
+        }
+    }
+
+    private fun readSnapshotCounts(dbDir: File): JSONObject {
+        val out = JSONObject()
+        try {
+            val dbFile = File(dbDir, MOBILE_DB_FILE)
+            if (!dbFile.isFile) return out
+            val db = SQLiteDatabase.openDatabase(dbFile.path, null, SQLiteDatabase.OPEN_READONLY)
+            try {
+                out.put("notes", countOf(db, "notes"))
+                out.put("folders", countOf(db, "folders"))
+                out.put("quickNotes", countOf(db, "quick_notes"))
+                out.put("tags", countOf(db, "tags"))
+            } finally {
+                db.close()
+            }
+        } catch (e: Exception) {
+            // 计数失败不影响导出（JSON 里 counts 可能为空）；不阻断。
+        }
+        return out
+    }
+
+    private fun writeZipText(zos: java.util.zip.ZipOutputStream, name: String, text: String) {
+        val data = text.toByteArray(Charsets.UTF_8)
+        zos.putNextEntry(java.util.zip.ZipEntry(name))
+        zos.write(data)
+        zos.closeEntry()
+    }
+
+    private fun writeZipFile(zos: java.util.zip.ZipOutputStream, name: String, file: File): Long {
+        zos.putNextEntry(java.util.zip.ZipEntry(name))
+        var bytes = 0L
+        FileInputStreamSafeCopy(file, zos)
+        zos.closeEntry()
+        return file.length()
+    }
+
+    private fun FileInputStreamSafeCopy(file: File, out: java.io.OutputStream) {
+        java.io.FileInputStream(file).use { input -> copy(input, out) }
+    }
+
+    private fun writeZipDir(zos: java.util.zip.ZipOutputStream, prefix: String, dir: File): Pair<Int, Long> {
+        var entries = 0
+        var bytes = 0L
+        val children = dir.listFiles() ?: return entries to bytes
+        for (child in children) {
+            if (child.isDirectory) {
+                val sub = writeZipDir(zos, prefix + "/" + child.name, child)
+                entries += sub.first
+                bytes += sub.second
+            } else {
+                bytes += writeZipFile(zos, prefix + "/" + child.name, child)
+                entries += 1
+            }
+        }
+        return entries to bytes
+    }
+
+    // ---- 6) 261117 D 项：从手机整机快照恢复（覆盖本机，复用导入的回滚/pending 机制） ----
+
+    /**
+     * 把「导出便携包到文件」生成的手机整机快照恢复到本机：
+     *   校验 staging（mobile-snapshot 清单/库/目录）→ 读计数 → beginImport（隔离当前 DB + 全部快照目录，写 pending）
+     *   → 拷回快照 DB 与 mobile/files 下各目录 → 提交（删回滚/pending）。任何一步失败 ⇒ doRollback 恢复导入前数据。
+     * 调用方（JS）必须**先关闭数据库连接**，成功后重开。
+     */
+    @PluginMethod
+    fun restoreSnapshot(call: PluginCall) {
+        val stagingPath = call.getString("stagingPath") ?: ""
+        call.setKeepAlive(true)
+        Thread {
+            try {
+                val stage = File(stagingPath).canonicalFile
+                val root = importRoot().canonicalPath
+                if (!stage.path.startsWith(root + File.separator)) throw IOException("staging 路径越界")
+                validateSnapshotStaging(stage)
+                val counts = snapshotStagingCounts(stage)
+                val hasBaseline = File(stage, "mobile/files/sync-v3/baseline.json.gz.b64").isFile
+                beginImportInternal(stagingPath, SNAPSHOT_EXTRA_DIRS)
+                try {
+                    val dbDir = context.getDatabasePath(MOBILE_DB_FILE).parentFile
+                        ?: throw IOException("无法定位应用数据库目录")
+                    var files = 0L
+                    var bytes = 0L
+                    val stagedDbDir = File(stage, "mobile/databases")
+                    stagedDbDir.listFiles()?.forEach { file ->
+                        if (file.isFile) {
+                            file.copyTo(File(dbDir, file.name), overwrite = true)
+                            files += 1
+                            bytes += file.length()
+                        }
+                    }
+                    val filesRoot = context.filesDir.canonicalFile
+                    for (relative in SNAPSHOT_DIRS) {
+                        val staged = File(stage, "mobile/files/" + relative)
+                        if (!staged.isDirectory) continue
+                        val live = File(filesRoot, relative).canonicalFile
+                        if (!live.path.startsWith(filesRoot.path + File.separator)) throw IOException("目标路径越界")
+                        if (live.exists()) live.deleteRecursively()
+                        val copied = copyDirectory(staged, live)
+                        files += copied.first
+                        bytes += copied.second
+                    }
+                    commitPendingInternal()
+                    call.resolve(
+                        JSObject()
+                            .put("ok", true)
+                            .put("counts", counts)
+                            .put("hasBaseline", hasBaseline)
+                            .put("files", files)
+                            .put("bytes", bytes)
+                    )
+                } catch (e: Exception) {
+                    try { doRollback() } catch (ignored: Exception) { /* 保留 pending 供下次启动恢复 */ }
+                    throw e
+                }
+            } catch (e: Exception) {
+                call.reject("恢复手机快照失败: " + (e.message ?: e.javaClass.simpleName))
+            }
+        }.start()
+    }
+
+    private fun validateSnapshotStaging(stage: File) {
+        val manifestFile = File(stage, "portable.json")
+        if (!manifestFile.isFile) throw IOException("缺少 portable.json")
+        if (manifestFile.length() > MAX_MANIFEST_BYTES) throw IOException("portable.json 过大")
+        val obj = JSONObject(manifestFile.readText(Charsets.UTF_8))
+        if (obj.optString("format") != PORTABLE_FORMAT) throw IOException("不是 LakexLocalNotes 便携包")
+        if (obj.optInt("formatVersion", 0) != PORTABLE_FORMAT_VERSION) throw IOException("便携包格式版本不支持")
+        val source = obj.optJSONObject("source") ?: throw IOException("便携包来源缺失")
+        if (source.optString("platform") != "mobile") throw IOException("这不是手机快照包")
+        if (obj.optString("layout") != SNAPSHOT_LAYOUT) throw IOException("快照布局不支持")
+        if (!File(stage, "mobile/databases/" + MOBILE_DB_FILE).isFile) throw IOException("快照缺少数据库")
+        if (!File(stage, "mobile/files").isDirectory) throw IOException("快照缺少数据目录")
+    }
+
+    private fun snapshotStagingCounts(stage: File): JSONObject {
+        val dbCopy = File(stage, "mobile/databases/" + MOBILE_DB_FILE)
+        val db = SQLiteDatabase.openDatabase(dbCopy.path, null, SQLiteDatabase.OPEN_READONLY)
+        return try {
+            JSONObject()
+                .put("notes", countOf(db, "notes"))
+                .put("folders", countOf(db, "folders"))
+                .put("quickNotes", countOf(db, "quick_notes"))
+                .put("tags", countOf(db, "tags"))
+        } finally {
+            db.close()
+        }
     }
 
 }
