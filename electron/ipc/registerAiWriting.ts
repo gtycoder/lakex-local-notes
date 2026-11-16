@@ -15,7 +15,7 @@ import {
   AiWritingMessagePatch,
   AiWritingMode,
 } from "../../src/core/aiWriting.js";
-import { registerPickedLocalFile, LOCAL_ATTACHMENT_IMAGE_EXTS, LOCAL_ATTACHMENT_TEXT_EXTS } from "../ai/localAttachments.js";
+import { registerPickedLocalFile, LOCAL_ATTACHMENT_IMAGE_EXTS, LOCAL_ATTACHMENT_PDF_EXTS, LOCAL_ATTACHMENT_TEXT_EXTS } from "../ai/localAttachments.js";
 
 /**
  * AI 写作空间 IPC（261109，桌面本地）：会话/消息 CRUD。
@@ -137,11 +137,11 @@ export function registerAiWritingIpc(ipc: IpcRegistrar, store: Store): void {
    */
   ipc.handle("pick_ai_local_files", async () => {
     const result = await dialog.showOpenDialog({
-      title: "选择附件（图片 / 文本 / 代码）",
+      title: "选择附件（图片 / 文本 / 代码 / PDF）",
       buttonLabel: "添加附件",
       properties: ["openFile", "multiSelections"],
       filters: [
-        { name: "图片与文本/代码", extensions: [...LOCAL_ATTACHMENT_IMAGE_EXTS, ...LOCAL_ATTACHMENT_TEXT_EXTS] },
+        { name: "图片 / 文本 / 代码 / PDF", extensions: [...LOCAL_ATTACHMENT_IMAGE_EXTS, ...LOCAL_ATTACHMENT_TEXT_EXTS, ...LOCAL_ATTACHMENT_PDF_EXTS] },
         { name: "所有文件", extensions: ["*"] },
       ],
     });
@@ -151,7 +151,8 @@ export function registerAiWritingIpc(ipc: IpcRegistrar, store: Store): void {
     }
     const picked = [];
     for (const filePath of result.filePaths) {
-      const item = registerPickedLocalFile(filePath);
+      // PDF 在这里解析一次（失败抛 AppError：加密/扫描件/坏文件的可执行中文提示）。
+      const item = await registerPickedLocalFile(filePath);
       if (item) picked.push(item.ref);
     }
     if (picked.length === 0) throw new IpcInputError("所选文件无法作为附件（空文件/目录/无权限）");

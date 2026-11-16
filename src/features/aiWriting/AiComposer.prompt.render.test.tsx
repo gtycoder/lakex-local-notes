@@ -37,7 +37,7 @@ interface RenderOptions {
   thinking?: boolean;
   mode?: "chat" | "docs";
   docRefs?: never[];
-  attachRefs?: Array<{ noteId: string; filename: string; name?: string }>;
+  attachRefs?: Array<{ noteId: string; filename: string; name?: string } | { kind: "local"; token: string; name: string; size: number; mimeType: string; pages?: number }>;
   onAddAttachments?: (refs: readonly unknown[]) => void;
   onRemoveAttachment?: (asset: unknown) => void;
   onPickLocalFiles?: () => void;
@@ -152,6 +152,16 @@ describe("AiComposer · 底部一行（261116 chat-demo）", () => {
     const local = [...document.querySelectorAll("button")].find((b) => (b.textContent || "").includes("从电脑选择文件"))!;
     act(() => { local.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true })); });
     expect(onPickLocalFiles).toHaveBeenCalledTimes(1);
+  });
+
+  it("PDF 本机附件 chip：文件类型图标 + 「大小 / N 页」（复用现有 chip，不新增节点）", async () => {
+    const ref = { kind: "local" as const, token: "loc-pdf", name: "report.pdf", size: 1024, mimeType: "application/pdf", pages: 3 };
+    await renderComposer({ attachRefs: [ref] });
+    const chip = document.querySelector(".aiw-attach-chip")!;
+    expect(chip.textContent).toContain("report.pdf");
+    expect(chip.textContent).toContain("1.0 KB / 3 页");
+    // 复用 FileKindIcon（PDF 类型图标为文件页图标），不新增图标组件
+    expect(chip.querySelector(".bt-file-icon--pdf")).toBeTruthy();
   });
 
   it("已挂附件 = 缩略图 chip + 单删（删除回调带原引用）", async () => {

@@ -167,7 +167,9 @@ export function AiComposer({
                   <span className="aiw-attach-chip__doc">{docTitleById.get(ref.noteId)}</span>
                 )}
                 <span className="ln-ellipsis aiw-attach-chip__name">{label}</span>
-                {isAiWritingLocalAttachment(ref) && <span className="aiw-attach-chip__size">{formatAttachmentBytes(ref.size)}</span>}
+                {isAiWritingLocalAttachment(ref) && (
+                  <span className="aiw-attach-chip__size">{formatAttachmentBytes(ref.size)}{ref.pages ? " / " + ref.pages + " 页" : ""}</span>
+                )}
                 <button type="button" className="ln-iconbtn ln-iconbtn--compact aiw-attach-chip__remove" aria-label={"移除附件：" + label} onClick={() => onRemoveAttachment(ref)}>
                   <X size={12} aria-hidden="true" />
                 </button>

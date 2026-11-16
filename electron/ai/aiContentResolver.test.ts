@@ -94,12 +94,55 @@ describe("本机文件附件（261116 第四稿）", () => {
     expect(parts[2].image_url?.url.startsWith("data:image/png;base64,")).toBe(true);
   });
 
-  it("PDF/未知二进制 → 明确拒绝（Phase 2 文案）；失效 token → 请重新选择", async () => {
+  it("PDF 本地文件 → 带文件名与页数的 text 块（不是 image_url）；失效 token → 请重新选择", async () => {
     const pdf = [{ type: "local_file" as const, file: { kind: "local" as const, token: "pdf", name: "a.pdf", size: 10, mimeType: "application/pdf" } }];
-    await expect(resolveAiMessages([{ role: "user", content: pdf }], reader({}), localFiles({ pdf: { bytes: Buffer.from("%PDF"), mimeType: "application/pdf", name: "a.pdf" } })))
-      .rejects.toThrow(/暂不支持该文件类型：a\.pdf.*Phase 2/);
+    const out = await resolveAiMessages(
+      [{ role: "user", content: pdf }],
+      reader({}),
+      localFiles({ pdf: { bytes: Buffer.from("%PDF"), mimeType: "application/pdf", name: "a.pdf" } }),
+    );
+    const parts = out[0].content as Array<{ type: string; text?: string; image_url?: unknown }>;
+    expect(parts[0].type).toBe("text");
+    expect(parts[0].text).toContain("【附件：a.pdf（PDF，1 页）】");
+    expect(parts[0].text).toContain("PDF 正文");
+    expect(parts[0].image_url).toBeUndefined();
+    expect(mocks.extractPdfText).toHaveBeenCalled();
     await expect(resolveAiMessages([{ role: "user", content: pdf }], reader({}), localFiles({})))
       .rejects.toThrow(/本机文件附件已失效/);
+  });
+
+  it("PDF 优先用选择时缓存（不再二次解析）；预算截断有标注、超限明确报错", async () => {
+    mocks.extractPdfText.mockClear();
+    const cachedPdf = async () => {
+      const out = await resolveAiMessages(
+        [{ role: "user", content: [{ type: "local_file", file: { kind: "local", token: "cached", name: "cached.pdf", size: 10, mimeType: "application/pdf" } }] }],
+        reader({}),
+        {
+          readLocalFile: (ref: { token: string }) => ref.token === "cached"
+            ? { bytes: Buffer.from("%PDF"), size: 10, mimeType: "application/pdf", name: "cached.pdf", pdf: { text: "x".repeat(100), pages: 7, truncated: true } }
+            : null,
+        },
+      );
+      return out;
+    };
+    const out = await cachedPdf();
+    expect(mocks.extractPdfText).not.toHaveBeenCalled();
+    const text = (out[0].content as Array<{ type: string; text?: string }>)[0].text!;
+    expect(text).toContain("cached.pdf（PDF，7 页，原文过长已截断）");
+    // 预算：60k 之后不再接受新附件（不静默丢）
+    const big = "y".repeat(60_000);
+    await expect(resolveAiMessages(
+      [{ role: "user", content: [
+        { type: "local_file", file: { kind: "local", token: "big", name: "big.pdf", size: 10, mimeType: "application/pdf" } },
+        { type: "local_file", file: { kind: "local", token: "after", name: "after.txt", size: 10, mimeType: "text/plain" } },
+      ] }],
+      reader({}),
+      {
+        readLocalFile: (ref: { token: string }) => ref.token === "big"
+          ? { bytes: Buffer.from("%PDF"), size: 10, mimeType: "application/pdf", name: "big.pdf", pdf: { text: big, pages: 1, truncated: false } }
+          : { bytes: Buffer.from("tail"), size: 4, mimeType: "text/plain", name: "after.txt" },
+      },
+    )).rejects.toThrow(/附件总长度超过上限/);
   });
 
   it("文本附件过大 → 可执行错误（上限 200KB）", async () => {

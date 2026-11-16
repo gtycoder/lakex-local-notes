@@ -192,6 +192,15 @@ describe("AI 写作模式判据表（261116 第四稿）", () => {
     ]);
   });
 
+  it("本机文件 pages 走白名单往返（持久化不会静默丢页数；请求组装的 local_file 带上）", () => {
+    const pdfRef = { kind: "local" as const, token: "t-pdf", name: "报告.pdf", size: 1024, mimeType: "application/pdf", pages: 3 };
+    expect(normalizeAiWritingAttachments([pdfRef])).toEqual([pdfRef]);
+    const messages = buildAiWritingMessages({ mode: "chat", input: "总结这份 PDF", attachments: [pdfRef] });
+    const parts = messages[messages.length - 1].content as Array<{ type: string; file?: { pages?: number; name?: string } }>;
+    expect(parts[1]).toEqual({ type: "local_file", file: pdfRef });
+    expect(parts[1].file?.pages).toBe(3);
+  });
+
   it("filter 与 IPC 判据一致：docs 混入本机文件给出可执行错误", () => {
     expect(filterAiWritingAttachmentsForMode("docs", [assetB, localRef], [docA])).toEqual([]);
     expect(filterAiWritingAttachmentsForMode("chat", [assetB, localRef], [])).toEqual([assetB, localRef]);

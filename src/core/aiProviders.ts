@@ -370,6 +370,8 @@ export interface AiLocalFileRef {
   name: string;
   size: number;
   mimeType: string;
+  /** PDF 页数（主进程选择时解析一次带回；其它类型无此字段）。 */
+  pages?: number;
 }
 
 /**

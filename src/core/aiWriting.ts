@@ -256,14 +256,17 @@ export function normalizeAiWritingAttachments(raw: unknown): AiWritingAttachment
   const seen = new Set<string>();
   for (const item of raw) {
     if (!item || typeof item !== "object") continue;
-    const row = item as { kind?: unknown; token?: unknown; name?: unknown; size?: unknown; mimeType?: unknown; noteId?: unknown; filename?: unknown };
+    const row = item as { kind?: unknown; token?: unknown; name?: unknown; size?: unknown; mimeType?: unknown; pages?: unknown; noteId?: unknown; filename?: unknown };
     let ref: AiWritingAttachment | null = null;
     if (row.kind === "local") {
       if (typeof row.token !== "string" || !row.token) continue;
       if (typeof row.name !== "string" || !row.name) continue;
       if (typeof row.mimeType !== "string" || !row.mimeType) continue;
       if (typeof row.size !== "number" || !Number.isFinite(row.size) || row.size < 0) continue;
-      ref = { kind: "local", token: row.token, name: row.name, size: row.size, mimeType: row.mimeType };
+      const local: AiLocalFileRef = { kind: "local", token: row.token, name: row.name, size: row.size, mimeType: row.mimeType };
+      // 白名单映射：pages 必须显式带过来，否则持久化/历史会静默丢页数。
+      if (typeof row.pages === "number" && Number.isFinite(row.pages) && row.pages > 0) local.pages = Math.round(row.pages);
+      ref = local;
     } else {
       const noteId = typeof row.noteId === "string" ? row.noteId : "";
       const filename = typeof row.filename === "string" ? row.filename : "";
@@ -418,7 +421,7 @@ export function buildAiWritingMessages(input: BuildAiWritingMessagesInput): AiCh
   if (content) userParts.push({ type: "text", text: content });
   for (const ref of attachmentsForMode) {
     if (isAiWritingLocalAttachment(ref)) {
-      userParts.push({ type: "local_file", file: { kind: "local", token: ref.token, name: ref.name, size: ref.size, mimeType: ref.mimeType } });
+      userParts.push({ type: "local_file", file: { kind: "local", token: ref.token, name: ref.name, size: ref.size, mimeType: ref.mimeType, ...(ref.pages ? { pages: ref.pages } : {}) } });
     } else {
       userParts.push({ type: "image", asset: { noteId: ref.noteId, filename: ref.filename, ...(ref.name ? { name: ref.name } : {}) } });
     }

@@ -31,7 +31,9 @@ function normalizeLocalFile(raw: unknown): AiLocalFileRef | null {
   if (typeof f.name !== "string" || !f.name) return null;
   if (typeof f.mimeType !== "string" || !f.mimeType) return null;
   if (typeof f.size !== "number" || !Number.isFinite(f.size) || f.size < 0) return null;
-  return { kind: "local", token: f.token, name: f.name, size: f.size, mimeType: f.mimeType };
+  const ref: AiLocalFileRef = { kind: "local", token: f.token, name: f.name, size: f.size, mimeType: f.mimeType };
+  if (typeof f.pages === "number" && Number.isFinite(f.pages) && f.pages > 0) ref.pages = Math.round(f.pages);
+  return ref;
 }
 
 /** 归一内容块数组：未知块丢弃；图片 / 文档 / 本机文件只允许 user 消息。 */

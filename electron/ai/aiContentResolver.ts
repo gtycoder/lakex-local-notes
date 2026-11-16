@@ -90,13 +90,31 @@ export async function resolveAiMessages(
         const text = local.bytes.toString("utf8");
         if (text.includes("\u0000")) throw new AppError("InvalidInput", "暂不支持二进制文件：" + local.name + "（当前支持图片与文本/代码文件）");
         const remain = AI_LOCAL_TEXT_TOTAL_CHARS - localTextChars;
-        if (remain <= 0) throw new AppError("InvalidInput", "文本附件总长度超过上限（" + AI_LOCAL_TEXT_TOTAL_CHARS + " 字符），请减少文件");
+        if (remain <= 0) throw new AppError("InvalidInput", "附件总长度超过上限（" + AI_LOCAL_TEXT_TOTAL_CHARS + " 字符），请减少附件");
         const clipped = text.length > remain ? text.slice(0, remain) + "\n…（已截断）" : text;
         localTextChars += Math.min(text.length, remain);
         parts.push({ type: "text", text: "【附件：" + local.name + "】\n" + clipped });
         continue;
       }
-      throw new AppError("InvalidInput", "暂不支持该文件类型：" + local.name + "（支持图片与文本/代码文件；PDF 等二进制见 Phase 2）");
+      if (kind === "pdf") {
+        let extracted = local.pdf;
+        if (!extracted) {
+          try {
+            extracted = await extractPdfText(local.bytes, "local/" + local.name + "/" + local.size);
+          } catch (error) {
+            const reason = error instanceof Error ? error.message : "文件损坏或不是有效的 PDF";
+            throw new AppError("InvalidInput", "PDF 解析失败：" + local.name + "（" + reason + "）。请换用可复制文字的 PDF，或取消密码保护后重试。");
+          }
+        }
+        const remain = AI_LOCAL_TEXT_TOTAL_CHARS - localTextChars;
+        if (remain <= 0) throw new AppError("InvalidInput", "附件总长度超过上限（" + AI_LOCAL_TEXT_TOTAL_CHARS + " 字符），请减少附件");
+        const clipped = extracted.text.length > remain ? extracted.text.slice(0, remain) + "\n…（已截断）" : extracted.text;
+        localTextChars += Math.min(extracted.text.length, remain);
+        const head = "【附件：" + local.name + "（PDF，" + extracted.pages + " 页" + (extracted.truncated ? "，原文过长已截断" : "") + "）】\n";
+        parts.push({ type: "text", text: head + clipped });
+        continue;
+      }
+      throw new AppError("InvalidInput", "暂不支持该文件类型：" + local.name + "（支持图片、文本/代码与 PDF）");
     }
     out.push({ role: message.role, content: parts.length ? parts : "" });
   }
