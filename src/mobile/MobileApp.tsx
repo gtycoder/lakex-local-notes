@@ -84,6 +84,7 @@ const bootDebugModules = Promise.all([import("./native/lakeNativeContract"), imp
 /** 第二层工作区（内含 Lake 内核编辑器）：**按需加载**。
  * 冷启动不需要内核；静态引入会把整个内核打进入口 chunk（实测 6.7MB），拖慢所有启动路径。 */
 import { EmptyState } from "./ui/EmptyState";
+import { DelayedLoading } from "./ui/delayedLoading";
 import { PanelLoading } from "./ui/PanelLoading";
 import { consumeBack, pushBackHandler } from "./ui/backStack";
 import { DeferredPanel } from "./ui/DeferredPanel";
@@ -932,7 +933,7 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
       {/* Q04B：回收站文档只读预览（全屏层，层序沿用设置里同一个预览容器） */}
       {trashPreviewId && (
         <div className="mobile-settings-preview">
-          <Suspense fallback={<EmptyState>正在加载预览…</EmptyState>}>
+          <Suspense fallback={<DelayedLoading><EmptyState>正在加载预览…</EmptyState></DelayedLoading>}>
             <MobileErrorBoundary scope="trash-preview" title="回收站预览加载失败">
               <TrashPreviewPage
                 noteId={trashPreviewId}

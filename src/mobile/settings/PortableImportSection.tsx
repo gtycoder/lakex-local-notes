@@ -18,6 +18,7 @@ import {
   type PortableImportResult,
   type StagedPortablePackage,
 } from "../portable/importPortable";
+import { portableImportStep } from "./portableImportStep";
 
 function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error ?? "未知错误");
@@ -85,6 +86,9 @@ export function PortableImportSection({ onImported }: { onImported?: () => void 
     }
   };
 
+  /** 261116 C：只有「第 n/7 步」这种如实阶段（进度回调无字节/行总数 ⇒ 不画百分比）。 */
+  const importStep = progress ? portableImportStep(progress.phase) : null;
+
   const footer = result ? (
     <div className="mb-set-block__actions">
       <button type="button" className="mb-btn mb-btn--primary" onClick={() => void closeSheet()}>完成</button>
@@ -149,7 +153,16 @@ export function PortableImportSection({ onImported }: { onImported?: () => void 
             )}
             {busy && (
               <div className="mb-set-item__desc" aria-live="polite">
-                {progress ? PHASE_TEXT[progress.phase] + "：" + progress.detail : "导入中…"}
+                {progress && importStep
+                  ? "第 " + importStep.step + "/" + importStep.total + " 步 · " + PHASE_TEXT[progress.phase] + "：" + progress.detail
+                  : "导入中…"}
+                {importStep && (
+                  <div className="mb-import-steps" aria-hidden="true">
+                    {Array.from({ length: importStep.total }, (_, index) => (
+                      <span key={index} className={"mb-import-steps__seg" + (index + 1 <= importStep.done ? " is-done" : "")} />
+                    ))}
+                  </div>
+                )}
               </div>
             )}
             {error && <div className="mb-set-item__desc" role="alert">{error}</div>}

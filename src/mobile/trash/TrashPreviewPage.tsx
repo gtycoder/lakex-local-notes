@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { reportNativeActionError } from "../../lib/nativeErrors";
 import { ArrowLeft, LoaderCircle } from "lucide-react";
 import { bridge } from "../bridge";
+import { useDelayedLoading } from "../ui/delayedLoading";
 import { LAKE_PREVIEW_FONT_SIZE, LakeEditor } from "../../features/editor/LakeEditor";
 // 内核样式必须由**本懒加载入口自己**带（261010 护栏）：冷启动直接从「设置 → 回收站 → 预览」进来时，
 // 这条路径是第一个内核消费者 —— 缺样式会渲染成大图标 + 原生控件（261009 在小记上踩过同款）。
@@ -26,6 +27,8 @@ export function TrashPreviewPage({ noteId, onBack, onRestored }: TrashPreviewPag
   // 261026：远端已彻底删除、本机仅保留这份回收站副本 → 顶部说明「云端已删除 · 仅本地」（仍可恢复）。
   const [cloudDeleted, setCloudDeleted] = useState(false);
   const [loading, setLoading] = useState(true);
+  /** 261116 A：<300ms 的快加载直接出正文，不闪「正在加载资源…」；显示后至少 500ms。 */
+  const showLoading = useDelayedLoading(loading);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
 
@@ -77,7 +80,7 @@ export function TrashPreviewPage({ noteId, onBack, onRestored }: TrashPreviewPag
       </div>
       <section className="mobile-doc-body">
         {loading ? (
-          <div className="poc-center"><LoaderCircle className="spin" /><span>正在加载资源…</span></div>
+          showLoading ? <div className="poc-center"><LoaderCircle className="spin" /><span>正在加载资源…</span></div> : null
         ) : kind !== "doc" ? (
           <div className="poc-center">
             <span>{kind === "usheet" ? "表格" : kind === "bitable" ? "多维表" : kind === "ink" ? "手写板" : "画板"}暂不支持在移动端预览，请在桌面端打开。</span>

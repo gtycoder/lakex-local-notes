@@ -302,6 +302,19 @@ button.mb-set-item__main {
 .mb-empty { display: flex; flex-direction: column; align-items: center; gap: var(--lake-space-lg); margin: 0; padding: 32px var(--mb-page-pad); text-align: center; color: var(--lake-text-3); font-size: var(--lake-font-size-small); }
 .mb-empty > svg { flex: 0 0 auto; width: 44px; height: 44px; }
 .mb-empty--inset { padding: 20px 0; }
+/* 空态入场（261116 移动端加载动效 B）：用户模板「400ms 上浮+淡入」按本仓动效红线改写 ——
+   时长 250ms（--mobile-duration-panel）+ 强 ease-out（--mobile-ease-out），只动 opacity/transform，
+   位移 6px→0、终态与未动画时完全一致；reduced-motion 在 mobile.css 的既有登记名单里关闭。
+   默认不动：只有 4 个一级空间空态显式传 enter（EmptyState 的 enter 属性），避免 49 处空态一起动。 */
+@keyframes mb-empty-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.mb-empty--enter { animation: mb-empty-in var(--mobile-duration-panel) var(--mobile-ease-out) both; }
+/* reduced-motion 关闭必须写在**原语自有文件**里（primitives.test：跨所有权覆盖基线 = 0；外壳层改 .mb-* 会被判红）。 */
+@media (prefers-reduced-motion: reduce) { .mb-empty--enter { animation: none; } }
+/* 便携包导入·分阶段指示（261116 C）：7 段 = 导入管线真实阶段数（settings/portableImportStep.ts）。
+   进度回调没有字节/行总数 ⇒ 只画阶段、不画百分比、不做装饰性流动；填充色用主题强调色。 */
+.mb-import-steps { display: flex; gap: 4px; margin-top: var(--lake-space-sm); }
+.mb-import-steps__seg { flex: 1 1 0; height: 3px; border-radius: var(--lake-radius-pill); background: var(--lake-bg-block); }
+.mb-import-steps__seg.is-done { background: var(--lake-accent); }
 /* 统计块（清理缓存 / 关于·数据诊断）：一行一项，避免多个「标签 + 数字」连排成一句读不断。 */
 .mb-set-stats { display: flex; flex-direction: column; gap: 2px; color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); }
 .mb-input--num { flex: 0 0 auto; width: 96px; }

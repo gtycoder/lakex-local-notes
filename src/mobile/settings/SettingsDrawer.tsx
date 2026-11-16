@@ -41,6 +41,7 @@ import { useHiddenHomeTabs } from "./useHiddenHomeTabs";
 import type { HomeTab } from "../home/tabPager";
 import { DefaultNotebookPickerSheet, type DefaultNotebookOption } from "./DefaultNotebookPickerSheet";
 import { EmptyState } from "../ui/EmptyState";
+import { DelayedLoading } from "../ui/delayedLoading";
 import { PortableImportSection } from "./PortableImportSection";
 
 /** 回收站只读预览（内含 Lake 内核编辑器）：**按需加载**——设置页/首屏都不需要内核。 */
@@ -828,7 +829,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
 
       {previewNoteId && (
         <div className="mobile-settings-preview">
-          <Suspense fallback={<EmptyState>正在加载预览…</EmptyState>}>
+          <Suspense fallback={<DelayedLoading><EmptyState>正在加载预览…</EmptyState></DelayedLoading>}>
             <TrashPreviewPage
               noteId={previewNoteId}
               onBack={() => setPreviewNoteId(null)}

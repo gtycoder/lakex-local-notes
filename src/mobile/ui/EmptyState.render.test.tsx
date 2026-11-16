@@ -24,4 +24,11 @@ describe("EmptyState", () => {
     expect(host.querySelector(".mb-empty")!.className).toContain("mb-empty--inset");
     expect(host.querySelector(".mb-empty")!.className).toContain("x");
   });
+
+  it("enter = 追加 .mb-empty--enter（入场动画默认关）", async () => {
+    await act(async () => root.render(createElement(EmptyState, { children: "暂无内容" })));
+    expect(host.querySelector(".mb-empty")!.className).not.toContain("mb-empty--enter");
+    await act(async () => root.render(createElement(EmptyState, { enter: true, children: "暂无内容" })));
+    expect(host.querySelector(".mb-empty")!.className).toContain("mb-empty--enter");
+  });
 });

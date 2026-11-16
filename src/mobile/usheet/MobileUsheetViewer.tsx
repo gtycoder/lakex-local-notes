@@ -65,6 +65,7 @@ import { useNativeSheetFormulaBar } from "./useNativeSheetFormulaBar";
 import { MobileSignaturePad } from "./MobileSignaturePad";
 import { MobileSheetFormView, buildSheetFormRows, type SheetFormRow } from "./MobileSheetFormView";
 import { EmptyState } from "../ui/EmptyState";
+import { useDelayedLoading } from "../ui/delayedLoading";
 
 /** 是否带 URL scheme（data:/blob:/http(s): 原样；裸文件名才是我们的资产）。 */
 const HAS_SCHEME_RE = /^[a-z][a-z0-9+.-]*:/i;
@@ -109,6 +110,8 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
   const hostRef = useRef<HTMLDivElement>(null);
   const [everActive, setEverActive] = useState(active);
   const [ready, setReady] = useState(false);
+  /** 261116 A：Univer 初始化通常 <300ms 的机器上直接出表格，不闪「正在加载表格…」；显示后至少 500ms。 */
+  const showLoading = useDelayedLoading(!ready);
   /**
    * CORE-02：非空且解析不出来的正文一律只读（父级仍可能把 editing 置 true）。
    * 编辑入口（dock / 公式栏 / 双击）与所有保存路径都按 editable / bodyUnreadable 收口。
@@ -906,7 +909,7 @@ export function MobileUsheetViewer({ noteId, content, active, editing, onChange,
           onSearch={openFindDialog}
         />
       )}
-      {ready ? <div id={containerId} className="mobile-usheet-root" /> : <EmptyState>正在加载表格…</EmptyState>}
+      {ready ? <div id={containerId} className="mobile-usheet-root" /> : showLoading ? <EmptyState>正在加载表格…</EmptyState> : null}
       {ready && editable && <div className="mb-usheet-chrome-spacer" aria-hidden="true" />}
       {ready && editable && (
         <SheetDock

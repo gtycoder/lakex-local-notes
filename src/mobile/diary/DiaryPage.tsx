@@ -298,7 +298,7 @@ export function DiaryPage({ nodes, onOpenEntry, onOpenSearch, onChanged }: Diary
         </div>
 
         {years.length === 0 ? (
-          <EmptyState>还没有日记。点上面「写今天」写下第一篇。</EmptyState>
+          <EmptyState enter>还没有日记。点上面「写今天」写下第一篇。</EmptyState>
         ) : years.map((year) => (
           <section className="mb-set-section" key={year.year} aria-label={year.year + " 年"}>
             <div className="mb-set-section__title">{year.year} 年（{year.count}）</div>

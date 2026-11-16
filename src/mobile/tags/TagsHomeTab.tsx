@@ -401,7 +401,7 @@ export function TagsHomeTab({ tags, notes, quickNotes, active, onOpenNote, onOpe
               </div>
             </div>
           ) : tags.length === 0 ? (
-            <EmptyState>还没有标签。新建一个标签，或在文档 / 小记里添加标签。</EmptyState>
+            <EmptyState enter>还没有标签。新建一个标签，或在文档 / 小记里添加标签。</EmptyState>
           ) : (
             // 列表行 = 一个白色强调块（行间发丝）；页头不塞进卡片。
             <div className="mobile-quick-cards">

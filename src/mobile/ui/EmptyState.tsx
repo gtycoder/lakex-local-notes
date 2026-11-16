@@ -16,13 +16,15 @@ export interface EmptyStateProps {
   inset?: boolean;
   /** 读屏语义：搜索结果用 status，错误用 alert。 */
   role?: "status" | "alert";
+  /** 入场动画（261116 B）：上浮+淡入各 250ms ease-out，只动 opacity/transform；默认关（只在显式需要的一级空态开）。 */
+  enter?: boolean;
   className?: string;
 }
 
-export function EmptyState({ children, inset, role, className }: EmptyStateProps) {
+export function EmptyState({ children, inset, role, className, enter }: EmptyStateProps) {
   return (
     <div
-      className={"mb-empty" + (inset ? " mb-empty--inset" : "") + (className ? " " + className : "")}
+      className={"mb-empty" + (inset ? " mb-empty--inset" : "") + (enter ? " mb-empty--enter" : "") + (className ? " " + className : "")}
       {...(role ? { role } : {})}
     >
       {children}

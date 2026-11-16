@@ -5,6 +5,7 @@ import { MobileBoardViewer } from "../board/MobileBoardViewer";
 import type { LakeEditorInstance } from "../../features/editor/lakeRuntime";
 import type { NotebookTab } from "./useNotebookTabs";
 import { EmptyState } from "../ui/EmptyState";
+import { DelayedLoading } from "../ui/delayedLoading";
 import { mobileReadonlyText } from "../lib/readonlyText";
 
 /** 表格 / 多维表视图按需加载：只有真的打开这类文档才进分包（首屏不含它们）。 */
@@ -73,7 +74,7 @@ export function NotePaneHost(props: NotePaneHostProps) {
             onCapture={(capture) => { props.onCapture(t.id, capture); }}
           />
         ) : t.kind === "ink" ? (
-          <Suspense fallback={<EmptyState>正在加载手写板…</EmptyState>}>
+          <Suspense fallback={<DelayedLoading><EmptyState>正在加载手写板…</EmptyState></DelayedLoading>}>
             <MobileInkPad
               noteId={t.id}
               content={t.content}
@@ -87,7 +88,7 @@ export function NotePaneHost(props: NotePaneHostProps) {
         ) : t.kind === "bitable" ? (
           // 多维表：移动端查看/编辑（同一份 core 数据模型与写入纯函数；正文 JSON 绝不给 Lake 编辑器）。
           // 只有当前活动页可编辑：切走后自动收起记录/字段面板，回来再恢复编辑态。
-          <Suspense fallback={<EmptyState>正在加载多维表…</EmptyState>}>
+          <Suspense fallback={<DelayedLoading><EmptyState>正在加载多维表…</EmptyState></DelayedLoading>}>
             <MobileBitableViewer
               noteId={t.id}
               content={t.content}
@@ -102,7 +103,7 @@ export function NotePaneHost(props: NotePaneHostProps) {
           </Suspense>
         ) : t.kind === "usheet" ? (
           // 表格：移动端查看/编辑（同一套 Univer 内核；正文 JSON 绝不喂 Lake 编辑器）
-          <Suspense fallback={<EmptyState>正在加载表格…</EmptyState>}>
+          <Suspense fallback={<DelayedLoading><EmptyState>正在加载表格…</EmptyState></DelayedLoading>}>
             <MobileUsheetViewer
               noteId={t.id}
               content={t.content}

@@ -899,7 +899,7 @@ export function HomePage(props: HomePageProps) {
               </div>
             )}
             {sortedQuickNotes.length === 0 ? (
-              <EmptyState>{quickTagFilter.kind === "all" ? "暂无小记" : "该筛选下暂无小记"}</EmptyState>
+              <EmptyState enter>{quickTagFilter.kind === "all" ? "暂无小记" : "该筛选下暂无小记"}</EmptyState>
             ) : quickVirtualEnabled ? (
               <div
                 ref={quickCardsRef}
