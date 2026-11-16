@@ -61,11 +61,10 @@ export function AboutSection({ c }: { c: SettingsPanelContext }) {
 
 
                     <Group title="诊断" icon={<Search size={16} />}>
-                      <Block itemId="about-diagnostics" name="复制诊断信息" desc="把版本、运行环境、依赖与本机计数拼成一段纯文本，反馈问题时直接贴出来。" descAfter>
-                        <div className="config-block__actions">
-                          <button className="ln-btn ln-btn--outlined" onClick={() => void copyDiagnostics()} disabled={!sysInfo}>复制诊断信息</button>
-                        </div>
-                      </Block>
+                      {/* 261116 用户验收：单动作行统一「说明在左、操作在右」（原 descAfter + 左起按钮会留一条空带）。 */}
+                      <Item itemId="about-diagnostics" name="复制诊断信息" desc="把版本、运行环境、依赖与本机计数拼成一段纯文本，反馈问题时直接贴出来。">
+                        <button className="ln-btn ln-btn--outlined" onClick={() => void copyDiagnostics()} disabled={!sysInfo}>复制诊断信息</button>
+                      </Item>
                       <Block itemId="about-health-entry" name="一致性检查" desc="正文文件、历史快照、孤儿登记、引用资源与目录树父子链的只读体检在「文档与历史」页运行。" />
                     </Group>
                     <Group title="版本与运行环境" icon={<Monitor size={16} />}>

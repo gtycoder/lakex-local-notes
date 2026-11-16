@@ -343,6 +343,10 @@
  * 不写 .ln-select 前缀：那是按钮触发器（display:inline-flex + 固定高），套在 <select> 上会打架。 */
 .ln-select--native {
   appearance: base-select;
+  /* 261116：base-select 的内部内容默认贴顶（UA 给 <select> 的是 display:flex + align-items:normal ⇒ 内部
+     button 被拉满高度，其文字/箭头按行盒贴顶排），实测值/箭头比盒子中心高约 4–5px。这里必须显式居中，
+     与自研 .ln-select（inline-flex + align-items:center）同几何；min-height 保留 A03/400% 的随字号长高。 */
+  align-items: center;
   min-width: 140px;
   min-height: var(--lake-ctl-h);
   padding: 0 8px;
@@ -380,20 +384,22 @@
   display: inline-flex;
   flex: 0 0 auto; /* 固定尺寸：不随行内长说明被压缩（曾有开关被压扁变形） */
   align-items: center;
-  width: 32px;
-  height: 19px;
+  /* 261116 用户验收：原 32×19 + transparent 轨道，关态远看几乎不可见（"没有辨识度"）。
+   * 改为 36×20 + 实体中性轨道（--lake-bg-sunken），关态也一眼是开关；开态仍是 accent 实心。 */
+  width: 36px;
+  height: 20px;
   padding: 0;
   border: 0.5px solid var(--lake-ctl-border);
   border-radius: var(--lake-radius-pill);
-  background: transparent;
+  background: var(--lake-switch-off-track);
   cursor: pointer;
 
 }
 .ln-switch__knob {
   position: absolute;
-  left: 1px;
-  width: 15px;
-  height: 15px;
+  left: 1.5px;
+  width: 16px;
+  height: 16px;
   border-radius: var(--lake-radius-pill);
   background: var(--lake-bg-raised);
   box-shadow: var(--lake-shadow-knob);
@@ -405,8 +411,8 @@
 .ln-switch:active .ln-switch__knob { transform: scale(.92); }
 .ln-switch:focus-visible { outline: var(--lake-focus-ring-width) solid var(--lake-accent); outline-offset: var(--lake-focus-ring-offset); }
 .ln-switch[aria-checked="true"] { background: var(--lake-accent); border-color: var(--lake-accent); }
-.ln-switch[aria-checked="true"] .ln-switch__knob { transform: translateX(13px); }
-.ln-switch[aria-checked="true"]:active .ln-switch__knob { transform: translateX(13px) scale(.92); }
+.ln-switch[aria-checked="true"] .ln-switch__knob { transform: translateX(16px); background: var(--lake-text-on-accent); }
+.ln-switch[aria-checked="true"]:active .ln-switch__knob { transform: translateX(16px) scale(.92); }
 .ln-switch:disabled { opacity: var(--lake-disabled-opacity); cursor: default; }
 
 /* ── 10 徽章与标签 ─────────────────────────────────────────── */

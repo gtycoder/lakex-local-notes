@@ -11,6 +11,8 @@
   --lake-bg-block: #f4f3f0;
   --lake-bg-raised: #ffffff;
   --lake-bg-sunken: #ecebe8;
+  /* 开关关态轨道（同 light 口径，暖色相）。 */
+  --lake-switch-off-track: #e2ded6;
   /* 分组底衬 / 极浅灰通道（同 A 槽位；见 light.css 说明） */
   --lake-bg-subtle: #faf9f7;
   --lake-bg-hover: #f1f0ed;

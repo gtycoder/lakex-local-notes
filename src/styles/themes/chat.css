@@ -13,6 +13,8 @@
   --lake-bg-block: #f2f5f9;
   --lake-bg-raised: #ffffff;
   --lake-bg-sunken: #eef1f6;
+  /* 开关关态轨道（同 light 口径，聊天主题偏蓝）。 */
+  --lake-switch-off-track: #dfe7f2;
   --lake-bg-subtle: #f8fafc;
   --lake-bg-hover: #e9eef6;
   --lake-bg-press: #dee6f1;

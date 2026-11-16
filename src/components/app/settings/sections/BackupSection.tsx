@@ -11,11 +11,10 @@ export function BackupSection({ c }: { c: SettingsPanelContext }) {
     <>
               <>
                 <Group title="备份" icon={<Archive size={16} />}>
-                  <Block itemId="backup-export" name="整库备份（完整目录）" desc="完整复制工作区：数据库快照 + 正文/资源/历史快照 + 小记，导出到所选空目录。用于整机迁移或归档；与下面的数据库快照互补，不能互相替代。" descAfter>
-                    <div className="config-block__actions">
-                      <button className="ln-btn ln-btn--outlined" onClick={() => void runBackup()} disabled={backup.busy}><Archive size={14} /> {backup.busy ? "备份中…" : "整库备份到…"}</button>
-                    </div>
-                  </Block>
+                  {/* 261116 用户验收：单动作行统一「说明在左、操作在右」（原 descAfter + 左起按钮会留一条空带）。 */}
+                  <Item itemId="backup-export" name="整库备份（完整目录）" desc="完整复制工作区：数据库快照 + 正文/资源/历史快照 + 小记，导出到所选空目录。用于整机迁移或归档；与下面的数据库快照互补，不能互相替代。">
+                    <button className="ln-btn ln-btn--outlined" onClick={() => void runBackup()} disabled={backup.busy}><Archive size={14} /> {backup.busy ? "备份中…" : "整库备份到…"}</button>
+                  </Item>
                   <Block itemId="auto-backup" name="自动备份（仅数据库）" desc="每天/每周把主库与小记库 VACUUM INTO 快照到 userData/backups，保留最近 N 份并限制总大小（本机保存、不进云端）。只备份数据库，不含正文/资源/历史快照；恢复用「从数据库快照恢复」。">
                     {backupCfg ? (
                       <>
@@ -40,20 +39,17 @@ export function BackupSection({ c }: { c: SettingsPanelContext }) {
                 </Group>
 
                 <Group title="恢复" icon={<RotateCcw size={16} />}>
-                  <Block itemId="backup-import" name="从数据库快照恢复" desc="选择一个数据库快照（metadata*.sqlite3）：先校验完整性/关键表，再把当前库改名隔离（不删除、可找回）并替换，重启应用后生效。只恢复数据库；正文/资源/历史需用整库备份。" descAfter>
-                    <div className="config-block__actions">
-                      <button className="ln-btn ln-btn--outlined" onClick={() => void runRestoreFromBackup()} disabled={backup.busy}>从备份恢复…</button>
-                    </div>
-                  </Block>
-                  <Block itemId="backup-restore" name="从云端恢复" desc="当前数据先改名隔离保存，再从云端全量拉取重建（不会上传本机数据）。用于换机或本地库损坏。" descAfter>
-                    <div className="config-block__actions">
-                      <button className="ln-btn ln-btn--outlined ln-btn--danger" onClick={() => void runCloudRestore()} disabled={backup.busy || cloudOffline} title={cloudOffline ? "云同步未启用：不会联网" : undefined}>从云端恢复（换机/坏库）…</button>
-                    </div>
-                  </Block>
+                  <Item itemId="backup-import" name="从数据库快照恢复" desc="选择一个数据库快照（metadata*.sqlite3）：先校验完整性/关键表，再把当前库改名隔离（不删除、可找回）并替换，重启应用后生效。只恢复数据库；正文/资源/历史需用整库备份。">
+                    <button className="ln-btn ln-btn--outlined" onClick={() => void runRestoreFromBackup()} disabled={backup.busy}>从备份恢复…</button>
+                  </Item>
+                  <Item itemId="backup-restore" name="从云端恢复" desc="当前数据先改名隔离保存，再从云端全量拉取重建（不会上传本机数据）。用于换机或本地库损坏。">
+                    <button className="ln-btn ln-btn--outlined ln-btn--danger" onClick={() => void runCloudRestore()} disabled={backup.busy || cloudOffline} title={cloudOffline ? "云同步未启用：不会联网" : undefined}>从云端恢复（换机/坏库）…</button>
+                  </Item>
                 </Group>
 
                 <Group title="迁移到手机" icon={<Download size={16} />}>
-                  <Block itemId="backup-portable-export" name="导出便携包（桌面 → 手机）" descAfter desc="把本机全部数据（正文/资源/小记/标签/回收站，不含历史快照）打成一个 .zip.lln（上限 4GiB），经网盘或 USB 拷到手机后导入。未配置 S3 也能离线导出；若已开启云同步，导出前会先同步一次，手机之后只需增量同步。包内是明文笔记，请自行选择传输方式；不包含任何 S3 密钥。">
+                  {/* 261116 用户验收：说明回位到标题下（descAfter 会把说明甩到最后，中间留空带）。 */}
+                  <Block itemId="backup-portable-export" name="导出便携包（桌面 → 手机）" desc="把本机全部数据（正文/资源/小记/标签/回收站，不含历史快照）打成一个 .zip.lln（上限 4GiB），经网盘或 USB 拷到手机后导入。未配置 S3 也能离线导出；若已开启云同步，导出前会先同步一次，手机之后只需增量同步。包内是明文笔记，请自行选择传输方式；不包含任何 S3 密钥。">
                     <div className="config-block__actions">
                       <button
                         className="ln-btn ln-btn--outlined"
@@ -73,7 +69,8 @@ export function BackupSection({ c }: { c: SettingsPanelContext }) {
                 </Group>
 
                 <Group title="存储占用" icon={<HardDrive size={16} />}>
-                  <Block itemId="backup-usage" name="数据库快照占用" desc="只读统计 userData/backups 里的数据库快照份数与总大小（只 stat、不读文件内容）。自动备份按「保留份数」与总大小上限删最旧的备份；这里不提供手动删除，避免误删兜底数据。" descAfter>
+                  {/* 261116 用户验收：说明回位到标题下（原 descAfter 会把说明甩到操作行之后，中间留一条空带）；操作与统计统一在右。 */}
+                  <Block itemId="backup-usage" name="数据库快照占用" desc="只读统计 userData/backups 里的数据库快照份数与总大小（只 stat、不读文件内容）。自动备份按「保留份数」与总大小上限删最旧的备份；这里不提供手动删除，避免误删兜底数据。">
                     <div className="config-block__actions">
                       <button className="ln-btn ln-btn--outlined" onClick={() => void loadBackupUsage()} disabled={backupUsageBusy}>{backupUsageBusy ? "统计中…" : "刷新统计"}</button>
                       <button className="ln-btn ln-btn--outlined" onClick={() => void revealFolder("backups")}>打开备份目录</button>

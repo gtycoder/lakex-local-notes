@@ -172,6 +172,13 @@
 /* 整块行的按钮组：JSX 里用了 11 处，此前却没有任何样式定义 ⇒ 间距/换行/对齐
  * 全凭内联元素之间的空白字符，一排按钮贴在一起且宽度参差（260926 修）。 */
 .config-block__actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--lake-space-md); }
+/* 261116 用户验收（图3/图4）：整块行的动作组原来紧贴说明文字、且一律左起，读起来零散。
+ * 统一为「说明在左、可点操作与统计在右」—— 只作用于 .config-block 的直接子级；
+ * 嵌套在结果行（.checks）里的重试按钮保持左起，不跟着甩到右边。 */
+.config-block > .config-block__actions { justify-content: flex-end; margin-top: var(--lake-space-lg); }
+/* 261116：状态统计行（份数/上限/最新时间…）此前**没有任何样式**，几个 <span> 靠空白字符挤在一起。
+ * 与动作组同侧对齐，给显式间距与次级文字色。 */
+.config-stats { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--lake-space-md) var(--lake-space-lg); margin-top: var(--lake-space-sm); color: var(--lake-text-3); font-size: var(--lake-font-size-small); }
 .config-name { color: var(--lake-text-1); font-size: var(--lake-font-size-body); }
 .config-block { padding: 16px 24px; border-bottom: 0.5px solid var(--lake-border-1); /* 261116 A03/400%：20px 写死会让 400% 字号的行盒仍只有 20 高（文字越出）。用 ratio 表达，100% 仍 = 20px。 */
   line-height: calc(20 / 14 * 1em); }
