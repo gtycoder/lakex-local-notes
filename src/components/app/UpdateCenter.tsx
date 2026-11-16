@@ -18,7 +18,8 @@ import { formatDateTime } from "../../core/dateFormat";
 import { MarkdownView } from "../ui/markdown/MarkdownView";
 import RELEASE_NOTES from "../../../docs/RELEASE-NOTES.md?raw";
 
-const INTERVAL_LABELS: Record<number, string> = { 0: "关闭", 6: "6 小时", 12: "12 小时", 24: "24 小时" };
+/** 261116 用户点单：只留 24 小时 / 每周 / 每月（关闭由上方「自动检查」开关承担；0 只做历史兼容读取）。 */
+const INTERVAL_LABELS: Record<number, string> = { 24: "24 小时", 168: "每周", 720: "每月" };
 
 function statusText(state: UpdateState | null): string {
   if (!state) return "读取中…";
@@ -157,11 +158,12 @@ export function UpdateCenterSection() {
           disabled={!settings || busy}
           onChange={(checked) => saveSettings({ autoCheck: checked })}
         />
-        <Item itemId="update-check-interval" name="检查频率" desc="「关闭」= 不自动检查，仍可手动检查。">
-          {/* 261116 推广：4 档、逐档只改本机更新策略；disabled 由 AdaptiveSelect 原样透传。 */}
+        <Item itemId="update-check-interval" name="检查频率" desc="按这个频率在后台检查；不想自动检查就关掉上面的「自动检查」（仍可手动检查）。">
+          {/* 261116 用户点单：3 档（24 小时 / 每周 / 每月）；逐档只改本机更新策略，disabled 由 AdaptiveSelect 原样透传。
+              历史库里可能存着 0（旧「关闭」）或已下线的 6/12 ⇒ 归一后不在档位里时显示默认 24（不会留空）。 */}
           <AdaptiveSelect
             label="自动检查频率"
-            value={String(settings?.checkIntervalHours ?? 24)}
+            value={String(UPDATE_CHECK_INTERVAL_OPTIONS.find((hours) => hours === settings?.checkIntervalHours) ?? 24)}
             options={UPDATE_CHECK_INTERVAL_OPTIONS.map((hours) => ({ value: String(hours), label: INTERVAL_LABELS[hours] }))}
             onChange={(value) => saveSettings({ checkIntervalHours: Number(value) as UpdateSettingsPatch["checkIntervalHours"] })}
             disabled={!settings || busy}

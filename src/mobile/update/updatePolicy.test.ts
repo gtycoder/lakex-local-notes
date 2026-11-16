@@ -42,10 +42,12 @@ describe("自动检查节流", () => {
     expect(shouldAutoCheck(settings(), now - 24 * HOUR_MS, now)).toBe(true);
   });
 
-  it("6h/12h 间隔按各自阈值判", () => {
-    const now = 1_000 * HOUR_MS;
-    expect(shouldAutoCheck(settings({ checkIntervalHours: 6 }), now - 6 * HOUR_MS, now)).toBe(true);
-    expect(shouldAutoCheck(settings({ checkIntervalHours: 12 }), now - 11 * HOUR_MS, now)).toBe(false);
+  it("每周 / 每月间隔按各自阈值判（261116 新档位 168 / 720）", () => {
+    const now = 10_000 * HOUR_MS;
+    expect(shouldAutoCheck(settings({ checkIntervalHours: 168 }), now - 167 * HOUR_MS, now)).toBe(false);
+    expect(shouldAutoCheck(settings({ checkIntervalHours: 168 }), now - 168 * HOUR_MS, now)).toBe(true);
+    expect(shouldAutoCheck(settings({ checkIntervalHours: 720 }), now - 719 * HOUR_MS, now)).toBe(false);
+    expect(shouldAutoCheck(settings({ checkIntervalHours: 720 }), now - 720 * HOUR_MS, now)).toBe(true);
   });
 });
 

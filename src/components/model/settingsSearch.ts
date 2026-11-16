@@ -48,7 +48,8 @@ export const SETTING_ITEMS: SettingItemEntry[] = [
   { id: "space-diary", category: "editor", label: "日记空间", keywords: "空间 关闭 隐藏 日记 入口 Dock 菜单 ⌘3 diary space" },
   { id: "space-ai-writing", category: "editor", label: "AI 写作空间", keywords: "空间 关闭 隐藏 AI 写作 入口 Dock 菜单 ⌘4 ai writing space" },
   { id: "editor-default-space", category: "editor", label: "默认空间", keywords: "默认空间 启动 首屏 进入 打开 空间 知识库 文档 小记 日记 AI 写作 标签 startup default workspace space 本机" },
-  { id: "appearance-theme", category: "appearance", label: "主题", keywords: "主题 深色 浅色 暖色 纸质 护眼 换肤 dark light warm 夜间 亮蓝 亮橙 暗紫" },
+  // 261116：主题从分段按钮改下拉（值仍是 LAKE_THEMES id）——搜索词补上「清爽 / chat / 冷调」，其余同义词保留。
+  { id: "appearance-theme", category: "appearance", label: "主题", keywords: "主题 深色 浅色 暖色 清爽 纸质 护眼 换肤 dark light warm chat 冷调 夜间 亮蓝 亮橙 暗紫" },
   { id: "shortcut-search", category: "shortcuts", label: "打开全局搜索（标题和正文）", keywords: "搜索 快捷键 ⌘P ⌘K" },
   { id: "shortcut-new-document", category: "shortcuts", label: "新建文档（知识库=弹窗新建，日记=今天新建）", keywords: "新建 文档 日记 今天 ⌘N 快捷键" },
   { id: "shortcut-close-tab", category: "shortcuts", label: "关闭当前标签", keywords: "关闭 标签 页签 ⌘W 快捷键" },

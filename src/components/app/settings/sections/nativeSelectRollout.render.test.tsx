@@ -401,11 +401,12 @@ describe("A13 原生路径（CSS.supports 为 true）", () => {
       expect(select).not.toBeNull();
       expect(select!.disabled).toBe(false);
       expect(select!.value).toBe("24");
-      expect([...select!.options].map((option) => option.textContent)).toEqual(["关闭", "6 小时", "12 小时", "24 小时"]);
+      // 261116 用户点单：只留 24 小时 / 每周 / 每月（关闭由上方「自动检查」开关承担）
+      expect([...select!.options].map((option) => option.textContent)).toEqual(["24 小时", "每周", "每月"]);
 
-      setSelectValue(select!, "12");
+      setSelectValue(select!, "168");
       await act(async () => { await Promise.resolve(); });
-      expect(nativeMock.updateSetSettings).toHaveBeenCalledWith({ checkIntervalHours: 12 });
+      expect(nativeMock.updateSetSettings).toHaveBeenCalledWith({ checkIntervalHours: 168 });
     } finally {
       act(() => root.unmount());
       host.remove();

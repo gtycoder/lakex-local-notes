@@ -1,6 +1,6 @@
 /**
  * 更新中心的**判据**（纯函数，无 IO）：
- *   · 自动检查节流（启动 + 回前台按 24h/6h/12h）—— docs/UPDATE-CENTER.md §2/§4；
+ *   · 自动检查节流（启动 + 回前台按 24 小时 / 每周 / 每月）—— docs/UPDATE-CENTER.md §2/§4；
  *   · 忽略版本（该版本不再提示、不自动下载；下个版本恢复）；
  *   · Android 资产选择（只取 os=android、https、.apk）；
  *   · 自动下载闸门（默认开；Android 仅 Wi-Fi）。

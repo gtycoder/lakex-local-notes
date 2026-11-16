@@ -6,14 +6,20 @@
  */
 import type { UpdateAsset, UpdateManifest } from "./updateManifest.js";
 
-/** 自动检查频率（小时）：0 = 关闭（启动时也不再查）。 */
-export const UPDATE_CHECK_INTERVAL_OPTIONS = [0, 6, 12, 24] as const;
-export type UpdateCheckIntervalHours = (typeof UPDATE_CHECK_INTERVAL_OPTIONS)[number];
+/**
+ * 自动检查频率（小时）——**下拉只给这三档**（261116 用户点单）：
+ * 24 = 24 小时 / 168 = 每周 / 720 = 每月（30 天）。
+ * 「关闭」由上方「自动检查」开关承担，不再是下拉项；历史库里存过 0 的仍按「关闭」读取（兼容），
+ * 历史 6 / 12 小时在读取时**收敛到 24**（见 intervalOf）。
+ */
+export const UPDATE_CHECK_INTERVAL_OPTIONS = [24, 168, 720] as const;
+/** 0 = 历史遗留的「关闭」值（只读兼容；不再是可选项）。 */
+export type UpdateCheckIntervalHours = (typeof UPDATE_CHECK_INTERVAL_OPTIONS)[number] | 0;
 
 export interface UpdateSettings {
   /** 启动检查 + 定时检查；默认开。 */
   autoCheck: boolean;
-  /** 6/12/24 小时；0 = 关闭。默认 24。 */
+  /** 24 小时 / 168（每周）/ 720（每月）；0 = 历史「关闭」值，只读兼容。默认 24。 */
   checkIntervalHours: UpdateCheckIntervalHours;
   /** 发现新版本即后台下载；默认开。 */
   autoDownload: boolean;
@@ -66,7 +72,9 @@ export interface UpdateSettingsPatch {
   ignoredVersion?: string;
 }
 
+/** 归一：0（历史「关闭」）保留；24/168/720 原样；旧 6/12 小时与其它非法值一律收敛到默认 24。 */
 function intervalOf(value: unknown): UpdateCheckIntervalHours {
+  if (value === 0) return 0;
   for (const option of UPDATE_CHECK_INTERVAL_OPTIONS) if (value === option) return option;
   return UPDATE_SETTINGS_DEFAULTS.checkIntervalHours;
 }

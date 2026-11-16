@@ -2,7 +2,7 @@
  * 设置 →「更新中心」（独立菜单项，位于「关于」上方；应用内更新中心，Android）。
  *
  * 四行 + 仅 Wi-Fi 行（docs/UPDATE-CENTER.md §2）：
- *   检查更新 / 自动检查（间隔 关闭·6·12·24h）/ 自动下载 / 仅 Wi-Fi 自动下载 / 更新日志。
+ *   检查更新 / 自动检查（间隔 24 小时 / 每周 / 每月；与桌面同口径）/ 自动下载 / 仅 Wi-Fi 自动下载 / 更新日志。
  * 发现新版本用 MobileSheet 展示版本、大小、更新内容、下载进度与「安装」（系统安装器，不静默安装）。
  * 更新日志直接渲染 docs/RELEASE-NOTES.md（?raw，与应用内/Release 同源）。
  * 视觉只用移动端既有 mb-* 原语与 MobileSheet，不新增 CSS。
@@ -31,6 +31,10 @@ import { loadUpdateRuntimeState, UPDATE_CHECK_INTERVAL_OPTIONS, type UpdateSetti
 import { androidUpdateAsset, isVersionIgnored } from "../update/updatePolicy";
 import { parseReleaseNoteLines, parseReleaseNotes, type ReleaseNoteLine } from "../update/releaseNotes";
 import releaseNotesRaw from "../../../docs/RELEASE-NOTES.md?raw";
+
+/** 检查间隔的三档文案（261116 用户点单：24 小时 / 每周 / 每月；与桌面 UpdateCenter 同文案）。 */
+const INTERVAL_LABELS: Record<number, string> = { 24: "24 小时", 168: "每周", 720: "每月" };
+const INTERVAL_OPTION_VALUES: readonly number[] = UPDATE_CHECK_INTERVAL_OPTIONS;
 
 function lastCheckText(checkedAt: number): string {
   if (!checkedAt || !Number.isFinite(checkedAt)) return "尚未检查";
@@ -154,14 +158,13 @@ export function UpdateCenterSection({ appInfo }: { appInfo: AppInfo | null }) {
           onChange={(next) => applySettings({ autoCheck: next })}
         />
 
-        <Field itemId="update-check-interval" name="检查间隔" desc="「关闭」= 不自动检查，仍可手动检查">
+        {/* 261116 用户点单：与桌面同口径——只留 24 小时 / 每周 / 每月（关闭由上方「自动检查」开关承担；
+            历史 0 / 6 / 12 在模型里已归一，这里再把不在档位里的值显示成默认 24，避免选择器空白）。 */}
+        <Field itemId="update-check-interval" name="检查间隔" desc="按这个间隔在后台检查；不想自动检查就关掉上面的「自动检查」（仍可手动检查）。">
           <PickerSheet
             label="检查间隔"
-            value={settings.checkIntervalHours}
-            options={UPDATE_CHECK_INTERVAL_OPTIONS.map((hours) => ({
-              value: hours,
-              label: hours === 0 ? "关闭" : hours + " 小时",
-            }))}
+            value={INTERVAL_OPTION_VALUES.includes(settings.checkIntervalHours) ? settings.checkIntervalHours : 24}
+            options={UPDATE_CHECK_INTERVAL_OPTIONS.map((hours) => ({ value: hours, label: INTERVAL_LABELS[hours] }))}
             onChange={(hours) => applySettings({ checkIntervalHours: hours })}
           />
         </Field>

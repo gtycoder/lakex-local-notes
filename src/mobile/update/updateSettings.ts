@@ -13,7 +13,7 @@ export const UPDATE_STATE_STORAGE_KEY = "lakex-local-notes-mobile.update.state";
 export interface UpdateSettings {
   /** 启动检查 + 定时检查（默认开）。 */
   autoCheck: boolean;
-  /** 检查间隔（小时）：0/6/12/24；0 = 关闭自动检查。 */
+  /** 检查间隔（小时）：24 / 168 / 720（24 小时 / 每周 / 每月）；0 = 历史「关闭」值（只读兼容）。 */
   checkIntervalHours: number;
   /** 发现新版本即后台下载（默认开；仅 Android 自动下载）。 */
   autoDownload: boolean;
@@ -31,8 +31,13 @@ export const UPDATE_SETTINGS_DEFAULTS: UpdateSettings = {
   ignoredVersion: "",
 };
 
-/** 允许的检查间隔（小时）；0 = 关闭。 */
-export const UPDATE_CHECK_INTERVAL_OPTIONS = [0, 6, 12, 24] as const;
+/**
+ * 允许的检查间隔（小时）——**下拉只给这三档**（261116 用户点单，与桌面同口径）：
+ * 24 = 24 小时 / 168 = 每周 / 720 = 每月（30 天）。
+ * 「关闭」由「自动检查」开关承担，不再是下拉项；历史库里存过 0 的仍按「关闭」读取（兼容），
+ * 历史 6 / 12 小时在读取时**收敛到 24**（见 normalizeCheckIntervalHours）。
+ */
+export const UPDATE_CHECK_INTERVAL_OPTIONS = [24, 168, 720] as const;
 
 /** 运行态（同样只存设备本地）。 */
 export interface UpdateRuntimeState {
@@ -58,6 +63,12 @@ function isAllowedInterval(value: unknown): value is number {
   return typeof value === "number" && (UPDATE_CHECK_INTERVAL_OPTIONS as readonly number[]).includes(value);
 }
 
+/** 归一：0（历史「关闭」）保留；24/168/720 原样；旧 6/12 小时与其它非法值一律收敛到默认 24。 */
+function normalizeCheckIntervalHours(value: unknown): number {
+  if (value === 0) return 0;
+  return isAllowedInterval(value) ? value : UPDATE_SETTINGS_DEFAULTS.checkIntervalHours;
+}
+
 function text(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
@@ -67,9 +78,7 @@ export function normalizeUpdateSettings(raw: unknown): UpdateSettings {
   const value = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
   return {
     autoCheck: typeof value.autoCheck === "boolean" ? value.autoCheck : UPDATE_SETTINGS_DEFAULTS.autoCheck,
-    checkIntervalHours: isAllowedInterval(value.checkIntervalHours)
-      ? value.checkIntervalHours
-      : UPDATE_SETTINGS_DEFAULTS.checkIntervalHours,
+    checkIntervalHours: normalizeCheckIntervalHours(value.checkIntervalHours),
     autoDownload: typeof value.autoDownload === "boolean" ? value.autoDownload : UPDATE_SETTINGS_DEFAULTS.autoDownload,
     autoDownloadWifiOnly:
       typeof value.autoDownloadWifiOnly === "boolean"

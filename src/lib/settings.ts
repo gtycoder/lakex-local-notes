@@ -32,12 +32,17 @@ export interface AppSettings {
   clearTabsOnExit: boolean;
 }
 
+/** 「最大同时打开标签数」的**平台默认**（261116 用户点单）：桌面 8（既有口径不变）、移动端 6。 */
+export const MAX_OPEN_TABS_DESKTOP_DEFAULT = 8;
+export const MAX_OPEN_TABS_MOBILE_DEFAULT = 6;
+
 export const DEFAULT_SETTINGS: AppSettings = {
   fontSize: 16,   // 内核正文字号默认（原 20 不在内核档位里）
   outlineEnhance: false,
   oled: false,
   theme: "light",
-  maxOpenTabs: 8,
+  /** 桌面默认 8（移动端默认 6，见 platformDefaultMaxOpenTabs：无存档时按运行时平台取）。 */
+  maxOpenTabs: MAX_OPEN_TABS_DESKTOP_DEFAULT,
   maxAttachmentBytes: DEFAULT_MAX_ATTACHMENT_BYTES,
   showToolbar: true,
   floatingToolbar: true,
@@ -74,10 +79,23 @@ export const MAX_OPEN_TAB_OPTIONS = [4, 6, 8, 12, 16] as const;
 /** 硬上限：加载/保存都夹（手改 localStorage 或旧存档里的 0/24 一律收敛）。 */
 export const MAX_OPEN_TABS_CAP = 16;
 
+/**
+ * 平台默认的判据 = 移动端入口在模块求值时给 body 加的 `lake-mobile` 标记
+ * （见 src/mobile/main.tsx；与移动端覆盖内核浮层用的是同一个 body 级标记，桌面永远没有它）。
+ * 为什么不在模块常量里判断：lib/settings 在移动端入口的 import 阶段就被求值，那时 class 还没加 ⇒
+ * 默认值必须在**读取时**算（normalize / loadSettings 两处），不能冻结进 DEFAULT_SETTINGS。
+ */
+function platformDefaultMaxOpenTabs(): number {
+  try {
+    if (document.body.classList.contains("lake-mobile")) return MAX_OPEN_TABS_MOBILE_DEFAULT;
+  } catch { /* 无 DOM（纯 Node 测试）⇒ 桌面默认 */ }
+  return MAX_OPEN_TABS_DESKTOP_DEFAULT;
+}
+
 /** 归一 maxOpenTabs：旧「不限」(≤0) 与超限值夹到硬上限，其余取整数并夹在 1..16。 */
 export function normalizeMaxOpenTabs(value: unknown): number {
   const n = typeof value === "number" ? value : Number.NaN;
-  if (!Number.isFinite(n)) return DEFAULT_SETTINGS.maxOpenTabs;
+  if (!Number.isFinite(n)) return platformDefaultMaxOpenTabs();
   if (n <= 0) return MAX_OPEN_TABS_CAP;
   return Math.min(MAX_OPEN_TABS_CAP, Math.max(1, Math.floor(n)));
 }
@@ -107,7 +125,8 @@ export function loadSettings(): AppSettings {
       return cached;
     }
   } catch { /* 损坏数据回退默认 */ }
-  cached = { ...DEFAULT_SETTINGS };
+  // 没有存档（新装库）⇒ 用平台默认档（桌面 8 / 移动 6）；其余字段仍是 DEFAULT_SETTINGS。
+  cached = { ...DEFAULT_SETTINGS, maxOpenTabs: platformDefaultMaxOpenTabs() };
   return cached;
 }
 
