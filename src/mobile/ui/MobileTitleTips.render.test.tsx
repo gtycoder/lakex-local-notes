@@ -93,14 +93,16 @@ describe("MobileTitleTips", () => {
 });
 
 describe("移动端 title 拦截器接线（静态）", () => {
-  it("MobileTitleTips 不 import 桌面组件；MobileApp 只挂一次；kit.css 有 mb-tip 自有规则", () => {
+  it("MobileTitleTips 不 import 桌面组件；MobileApp 空闲后动态安装一次；kit.css 有 mb-tip 自有规则", () => {
     const shell = read("./MobileTitleTips.tsx");
     expect(shell).toContain('from "../../lib/nativeTitleTip"');
     expect(shell).not.toMatch(/components\//);
 
+    // 261116：入口预算吃紧 ⇒ 外壳改为首帧后动态 import，安装一次且可卸载。
     const app = read("../MobileApp.tsx");
-    expect(app).toContain('from "./ui/MobileTitleTips"');
-    expect(app).toContain("<MobileTitleTips />");
+    expect(app).toContain('import("./ui/MobileTitleTips")');
+    expect(app).toContain("installMobileTitleTips()");
+    expect(app).not.toMatch(/<MobileTitleTips \/>/);
     expect(app).not.toMatch(/NativeTitleTips/);
 
     const kit = read("../kit.css");

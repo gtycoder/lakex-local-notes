@@ -49,7 +49,7 @@ import { useAutoSync } from "./hooks/useAutoSync";
 import { useUpdateAutoCheck } from "./hooks/useUpdateAutoCheck";
 import { readSyncProgress, subscribeSyncProgress } from "./sync/syncProgressStore";
 import { Toasts } from "./ui/Toasts";
-import { MobileTitleTips } from "./ui/MobileTitleTips";
+// 261116：MobileTitleTips 改空闲后动态加载（entry 预算吃紧；长按提示不是首屏能力）
 const AttachmentPreview = lazy(() => import("../features/attachment/AttachmentPreview").then((m) => ({ default: m.AttachmentPreview })));
 const ImageLightbox = lazy(() => import("../features/editor/ImageLightbox").then((m) => ({ default: m.ImageLightbox })));
 import { MobileBrandLaunchMark } from "./ui/BrandLaunchMark";
@@ -141,6 +141,16 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
   useEffect(() => {
     if (route.kind === "home" && route.tab !== "ai") lastNonAiTabRef.current = route.tab;
   }, [route]);
+  /** 261115 A04 / 261116：移动端 title 拦截器（触屏长按 450ms）改为**首帧后再动态加载** ——
+   *  它不是首屏能力，但共享的安装逻辑会实打实占移动入口预算（50KB gzip 已吃紧）。
+   *  加载失败不影响任何交互（只是没有自绘 tooltip）。 */
+  useEffect(() => {
+    let dispose: (() => void) | undefined;
+    let cancelled = false;
+    const load = () => { void import("./ui/MobileTitleTips").then((m) => { if (!cancelled) dispose = m.installMobileTitleTips(); }); };
+    const idle = typeof requestIdleCallback === "function" ? requestIdleCallback(load, { timeout: 3000 }) : window.setTimeout(load, 1500);
+    return () => { cancelled = true; if (typeof cancelIdleCallback === "function") cancelIdleCallback(idle as number); else window.clearTimeout(idle as number); dispose?.(); };
+  }, []);
   useEffect(() => {
     if (route.kind !== "home" || route.tab !== "ai") return;
     return pushBackHandler(() => { setRoute({ kind: "home", tab: lastNonAiTabRef.current }); return true; });
@@ -851,8 +861,7 @@ export function MobileApp({ initialCapture = false }: { initialCapture?: boolean
 
   return (
     <div className="mobile-app">
-      {/* 261115 A04：移动端也挂一次 title 拦截器（触屏走长按 450ms，桌面时序不变）。 */}
-      <MobileTitleTips />
+
       <DeferredPanel open={drawerOpen} fallback={<PanelLoading kind="settings" title="设置" onClose={() => setDrawerOpen(false)} />}>
         {/* 大面板各自一层隔离（261105）：设置崩了不连累首页/工作区。 */}
         <MobileErrorBoundary scope="settings" title="设置面板加载失败">
