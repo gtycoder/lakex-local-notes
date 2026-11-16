@@ -80,16 +80,17 @@ const buttonIn = (scope: ParentNode, text: string): HTMLButtonElement => {
 const click = async (btn: HTMLButtonElement) => { await act(async () => { btn.click(); }); };
 
 describe("云端与同步 · S3 行（261116 用户验收）", () => {
-  it("只剩一行常驻「同步服务配置」：显示 endpoint · bucket，右侧竖排 设置/导入/导出", () => {
+  it("只剩一行常驻「同步服务配置」：显示 endpoint · bucket，右侧横排 设置/导入/导出", () => {
     renderSection(makeContext());
     const row = host.querySelector('[data-set-id="s3-config"]')!;
     expect(row).not.toBeNull();
     expect(row.textContent).toContain("同步服务配置");
     expect(row.textContent).toContain("https://s3-cn-east-1.qiniucs.com");
     expect(row.textContent).toContain("lake-bucket");
-    const col = row.querySelector(".settings-ctl-col")!;
-    expect(col).not.toBeNull();
-    expect([...col.querySelectorAll("button")].map((b) => (b.textContent ?? "").trim())).toEqual(["设置", "导入", "导出"]);
+    // 261116 用户定稿：操作横排（直接子级按钮，控件列自身就是 flex row）
+    const ctl = row.querySelector(".config-item__ctl")!;
+    expect(ctl).not.toBeNull();
+    expect([...ctl.querySelectorAll("button")].map((b) => (b.textContent ?? "").trim())).toEqual(["设置", "导入", "导出"]);
     // 字段不再常驻：旧锚点全部消失（否则 settingsSearch.test 的 id↔data-set-id 一致性会红）
     for (const id of ["s3-endpoint", "s3-access-key", "s3-secret-key", "s3-bucket", "s3-region", "s3-prefix", "s3-path-style", "s3-connection", "s3-transfer"]) {
       expect(host.querySelector('[data-set-id="' + id + '"]'), id).toBeNull();

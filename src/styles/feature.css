@@ -282,7 +282,6 @@ pre {
 /* 261116 用户验收（对标新版思源）：S3 配置收进弹窗后，设置页里只剩一行「同步服务配置」+ 右侧一列竖排按钮。
  * 竖排由本类负责：flex 列的 align-items:stretch 让 .ln-btn 自然铺满列宽 —— **不写 .ln-btn 规则**
  * （.ln-btn 是 kit 原语，跨所有权覆盖会被 styles/primitives.test 拦）。 */
-.settings-panel .settings-ctl-col { display: flex; flex-direction: column; gap: var(--lake-space-sm); align-items: stretch; min-width: 96px; }
 /* S3 配置弹窗（NativeDialog = 原生 <dialog> + .ln-dialog 骨架）。宽度沿用同族设置型弹窗（560），
  * 字段在 560px 里改为上下堆叠（左右分栏会把说明挤成两行）。选择器只用自有类，不覆盖 .ln-dialog* 原语。 */
 .s3-config-dialog { width: min(560px, calc(100vw - 32px)); height: auto; max-height: min(82vh, 720px); }

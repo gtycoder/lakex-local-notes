@@ -40,11 +40,10 @@ export function SyncSection({ c }: { c: SettingsPanelContext }) {
               <>
                 <Group title="S3 对象存储" icon={<Cloud size={16} />}>
                   <Item itemId="s3-config" name="同步服务配置" desc={s3Summary}>
-                    <div className="settings-ctl-col">
-                      <button type="button" className="ln-btn ln-btn--outlined" onClick={() => setS3Open(true)}>设置</button>
-                      <button type="button" className="ln-btn ln-btn--outlined" onClick={() => void importS3ConfigFile()}>导入</button>
-                      <button type="button" className="ln-btn ln-btn--outlined" onClick={() => void exportS3ConfigFile()}>导出</button>
-                    </div>
+                    {/* 261116 用户定稿：本仓设置行的操作一律**横排**（与全站一致），不再竖排。 */}
+                    <button type="button" className="ln-btn ln-btn--outlined" onClick={() => setS3Open(true)}>设置</button>
+                    <button type="button" className="ln-btn ln-btn--outlined" onClick={() => void importS3ConfigFile()}>导入</button>
+                    <button type="button" className="ln-btn ln-btn--outlined" onClick={() => void exportS3ConfigFile()}>导出</button>
                   </Item>
                   {s3Open && (
                     <NativeDialog open onDismiss={closeS3} label="同步服务配置" className="s3-config-dialog">
