@@ -2023,8 +2023,9 @@ describe("localAsset*Re 正则工厂", () => {
     const { localAssetLakeSrcRe, localAssetMdImgRe } = await import("./store.js");
     expect(localAssetLakeSrcRe(19877).exec("http://127.0.0.1:19877/n1/a.png")?.[1]).toBe("n1");
     expect(localAssetMdImgRe(19877).exec("![](http://127.0.0.1:19877/n1/a.png)")?.[2]).toBe("n1");
-    // 默认端口正则不匹配其他端口的 URL（不误吞）
-    expect(localAssetLakeSrcRe(19876).exec("http://127.0.0.1:19877/n1/a.png")).toBeNull();
+    // 261118：正则已端口无关（正文按规范端口 19876 落盘、导出/校验可能跑在别的端口实例）
+    expect(localAssetLakeSrcRe(19876).exec("http://127.0.0.1:19877/n1/a.png")?.[1]).toBe("n1");
+    expect(localAssetLakeSrcRe(19876).exec("http://127.0.0.1:19876/n1/a.png")?.[1]).toBe("n1");
   });
 
   it("远程 URL 不匹配（保持原样）", async () => {

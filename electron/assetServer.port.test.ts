@@ -142,9 +142,13 @@ describe("回退端口全链路生效（导出 HTML / 小记 URL 不能再用旧
     const { localAssetHtmlImgRe, localAssetMdImgRe } = await import("./noteExport.js");
     const htmlUrl = "http://127.0.0.1:" + actual + "/note-1/a.png";
     expect('<img src="' + htmlUrl + '">').toMatch(localAssetHtmlImgRe(currentAssetServerPort()));
-    // 旧端口（首选端口）必须**不再**被当作本机资产：否则导出会把图漏掉/复制错文件
-    expect('<img src="http://127.0.0.1:' + (BASE_PORT + 60) + '/note-1/a.png">').not.toMatch(localAssetHtmlImgRe(currentAssetServerPort()));
+    // 261118 端口无关（见 core/assetUrl.normalizeLocalAssetPorts）：正文一律按规范端口 19876 落盘，
+    // 而导出跑在任意实例端口上（dev 19877 / 回退 19878…），所以正则必须认**任意本地端口**；
+    // 取文件只用路径段（noteId/filename），与端口无关。下面两条同时钉住这一点。
+    expect('<img src="http://127.0.0.1:19876/note-1/a.png">').toMatch(localAssetHtmlImgRe(currentAssetServerPort()));
+    expect('<img src="http://127.0.0.1:' + (BASE_PORT + 60) + '/note-1/a.png">').toMatch(localAssetHtmlImgRe(currentAssetServerPort()));
     expect("![x](" + htmlUrl + ")").toMatch(localAssetMdImgRe(currentAssetServerPort()));
+    expect("![x](http://127.0.0.1:19876/note-1/a.png)").toMatch(localAssetMdImgRe(currentAssetServerPort()));
 
     const { quickImageUrlOf, stagingImageUrlOf } = await import("./quickNotes/context.js");
     expect(quickImageUrlOf("n1", "q.png")).toBe("http://127.0.0.1:" + actual + "/quick-notes/n1/q.png");
