@@ -40,22 +40,17 @@
 /* 首轮预设 / 附加全文行：与消息列同宽居中。 */
 .ai-dialog__presets { width: 100%; max-width: var(--lake-chat-thread-max); margin: 0 auto var(--lake-space-sm); padding: 0 var(--lake-space-lg); }
 .ai-dialog__preset-segment { flex-wrap: wrap; height: auto; }
-.ai-dialog__doc { display: flex; align-items: center; flex-wrap: wrap; gap: var(--lake-space-sm); }
+.ai-dialog__doc { display: flex; align-items: center; flex-wrap: wrap; gap: var(--lake-space-sm); margin: 0 var(--lake-space-lg) var(--lake-space-sm); }
 .ai-dialog__doc-label { color: var(--lake-text-2); font-size: var(--lake-font-size-small); }
 .ai-dialog__doc-hint { color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); }
 
-/* 输入区 = 大卡片：24 圆角 + 卡片阴影 + 控件静息边；内部输入框无边框无底色。
-   聚焦时与 .ln-input 同款「主色边 + 2px 柔光环」，阴影保留。 */
-.ai-dialog__composer { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: var(--lake-space-xs); margin: 0 var(--lake-space-lg) var(--lake-space-sm); padding: calc(var(--lake-space-sm) + var(--lake-space-xs)) var(--lake-space-lg); border: 0.5px solid var(--lake-ctl-border); border-radius: var(--lake-chat-radius-composer); background: var(--lake-bg-panel); box-shadow: var(--lake-shadow-card); }
-.ai-dialog__composer:focus-within { border-color: var(--lake-accent); box-shadow: 0 0 0 var(--lake-focus-ring-width) var(--lake-focus-halo), var(--lake-shadow-card); }
-.ai-dialog__composer-icon { grid-column: 1; grid-row: 1; display: inline-flex; margin-top: var(--lake-space-xxs); color: var(--lake-accent-text); }
+/* 输入条：复用 .ln-input（边框/聚焦环/占位色都由原语给），这里只把它从单行改成可自增高。
+   261116 用户裁决：恢复原样 —— 默认单行、随内容长高，清除 × 落在输入条最右侧；发送/生成回到下方动作行。 */
+.ai-dialog__composer { height: auto; min-height: calc(var(--lake-ctl-h) + 8px); align-items: flex-start; margin: 0 var(--lake-space-lg) var(--lake-space-sm); padding: 9px 10px; gap: 8px; }
 /* 261115 A12：自增高走 field-sizing: content（不再 JS 量 scrollHeight）。 */
-.ai-dialog__composer .ai-dialog__field { flex: 1 1 auto; min-width: 0; max-height: calc(var(--lake-space-giant) * 3); padding: var(--lake-space-xxs) 0; line-height: var(--lake-line-height-normal); resize: none; field-sizing: content; }
+.ai-dialog__composer .ai-dialog__field { max-height: 120px; padding: 2px 0; line-height: 1.55; resize: none; field-sizing: content; }
 .ai-dialog__field::placeholder { color: var(--lake-text-4); }
-.ai-dialog__composer-bar { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: var(--lake-space-sm); }
-.ai-dialog__composer-tools { display: flex; align-items: center; flex-wrap: wrap; gap: var(--lake-space-sm); min-width: 0; }
-.ai-dialog__clear { flex: 0 0 auto; }
-.ai-dialog__send { margin-left: auto; }
+.ai-dialog__clear { flex: 0 0 auto; margin-top: -2px; }
 
 /* 动作行：只保留结果回写（替换/插入）与关闭；主操作已在输入卡底部右侧。 */
 .ai-dialog__actions { flex: none; flex-wrap: nowrap; align-items: center; gap: var(--lake-space-xs); padding: var(--lake-space-sm) var(--lake-space-xl) var(--lake-space-md) var(--lake-space-lg); }
