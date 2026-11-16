@@ -4,6 +4,52 @@
 
 ---
 
+# LakexLocalNotes v1.2.0
+
+一次以**桌面设置页体系、现代 Web 平台化、移动端等待体验与图标统一**为主的版本。
+
+## 设置页（桌面）
+
+- **统一「说明在左、操作在右」**：带操作组的整块行改两列网格（操作组与文字块垂直居中，统计/结果/日志仍整宽）；单动作行走两列 Item。一次性覆盖 9 处，替掉逐行排版。
+- **控件列按内容占位**：下拉 200px、单行输入 300px，文字列吃满剩余宽度（例如「附件大小上限」说明列 317 → 508px），同组下拉/输入左右边缘对齐。
+- **下拉垂直居中修复**：原生 `base-select` 的内部内容默认贴顶，值与箭头比盒子中心高 4–5px；补 `align-items: center`。
+- **S3 配置收进弹窗**：列表只留一行「同步服务配置」（显示 endpoint · bucket）+ 横排「设置 / 导入 / 导出」；弹窗内含 Endpoint / AK / SK / Bucket / Region / 对象前缀 / Path-style，底部 粘贴迁移码 / 测试连接 / 取消 / 保存。设置搜索收敛为一条常驻 `s3-config`（endpoint/ak/sk/bucket 等关键词全部保留）。
+- **开关可辨识**：36×20、关态改用实体轨道（新增 `--lake-switch-off-track`，四主题各自取值），开态纯白滑块。
+
+## 现代 Web 平台化
+
+- 桌面 **13/13** 个下拉调用点改原生 `<select appearance: base-select>`（不支持的内核自动退回自研 Select）。
+- **26 处对话框**迁原生 `<dialog showModal>`；模态内菜单/气泡进 top layer。
+- 字号令牌 rem 化（rem×16 = 原 px）+ 28 条文字容器 `min-height`，200%/400% 字号收口。
+- `tsconfig` 升 ES2024（`toSorted`/`toReversed`/`Promise.withResolvers` 73 处 + 老 WebView 运行时兜底）。
+- 图片 `decoding=async`、`forced-colors`、容器查询、地标 role、`enterKeyHint`、焦点环补齐、启动页 476KB → 1.9KB。
+
+## 移动端
+
+- **加载动效**：延迟加载（>300ms 才显示、显示后至少 500ms，快操作直接出结果）、空态入场（250ms 上浮淡入，reduced-motion 关闭）、便携包导入 7 阶段指示（如实阶段，不虚构百分比）。骨架屏扩展/下拉刷新/乐观更新按理由不做。
+- **设置页真 bug 修复**：AI「模型」行控件在 390/412 宽下被卡片裁切（「获取模型列表」只露一半）—— 原语级 `flex-wrap` + 输入基础宽修复，横向溢出 3 → 0；8 个单组页去掉与页标题重复的组标题。
+- **入口预算**：title 长按提示改首帧后动态加载，移动入口 51,440 → **50,402B**（预算 50KB）。
+- 新增第 4 个主题「清爽（浅色）」（token-only）；移动顶栏滚动后不再有玻璃灰条。
+
+## 修复
+
+- **嵌套原生模态根因修复**：设置面板里再打开原生弹窗时，关闭内层会把整个设置面板卸载。根因是 Overlay 每次渲染都现算 portal 容器——内层 `<dialog>` 存在时外层 `.ln-scrim` 被搬进该 dialog，内层卸载连带删掉外层 DOM。改为稳定 host（`pickPortalHost`）+ 6 例回归测试，覆盖任何「外层浮层内嵌原生弹窗」场景。
+- **图标**：多维表行展开图换 IconPark FullScreen（Apache-2.0，NOTICE + `LICENSES/IconPark-APACHE-2.0.txt` 随包，未引运行时依赖）；`ExpandLevelIcon` 删死值描边；`CloudCheckIcon` 补 lucide 类（14px 下重 15% → 与邻居齐平）；色板对勾修复右下被裁（原路径溢出 2.00px / 0.67px）；`AiTagIcon` 渐变 id 改 `useId`。
+- **AI 对话面**：按 DeepSeek 网页观感重排（760 列、无气泡助手、22 圆角用户气泡、24 圆角输入卡，主色仍为自有墨蓝）；消息版本/分支；代码块行号与复制；流式 Markdown 节流 + 贴底跟随。
+
+## 升级说明
+
+- 版本 1.1.4 → **1.2.0**；数据格式与同步协议不变（S3 v3），无需迁移。
+- 老 WebView 已内置 ES2024 兜底与新特性探测，失败自动退回旧实现。
+- 桌面视觉基线（42 态）、移动（10 态）、多维表（3 态）随本版重烤。
+
+## 工程
+
+- 新增护栏：`overlayNestedDialog`、`delayedLoading`、`portableImportStep`、`MobileTitleTips` 动态接线、5 个图标 render 测试；新增报告型 `npm run audit:icons`（不接 CI）。
+- 门禁：`tsc` 0；全量 vitest **992 文件 / 6219 用例**（979 passed / 13 skipped；用例 6205 passed / 14 skipped / 0 failed）；`ui-metrics` 0；移动首屏 345.1KB / 350KB、桌面首屏 577.1KB / 600KB；移动入口 50,402B / 51,200B。
+
+---
+
 # LakexLocalNotes v1.1.4
 
 一次以**图片资产可靠性、语雀书签卡、画板/空间体验与大规模验收**为主的修正版。

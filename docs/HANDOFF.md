@@ -7,7 +7,20 @@
 
 ## 0. 最新交接（最近 3 个批次；更早的见 git）
 
-### 261116 · 现代 Web 平台化第二批 + AI 对话面（分支 `modernize/web-platform-261115`，**未合 master**）
+### 261116 · v1.2.0 发版（`modernize/web-platform-261115` **已合 master 并打 tag**）
+
+- **发布**：分支合并回 `master`（fast-forward；master 原 `7e2db298`，备份 tag `backup/master-261115`）→ 注解 tag **`v1.2.0`** → 双远端推送（tag 触发 GitHub release 打包流水线）。版本 `package.json 1.1.4 → 1.2.0`（Android versionName/versionCode 从根 package.json 派生，未手改 build.gradle）。
+- **本批新增（在 261115/261116 前两批之后）**：
+  - **设置页体系**：带操作组的整块行改两列网格（一条 `:has()` 规则覆盖 9 处）；控件列按内容占位（下拉 200 / 输入 300，说明列吃满剩余，附件上限列 317→508px）；下拉窄栏 200px；S3 配置收进「同步服务配置」弹窗（列表一行 + 横排 设置/导入/导出，弹窗底部 粘贴迁移码/测试连接/取消/保存）；设置搜索收敛为常驻 `s3-config` + `MOBILE_ONLY_SETTING_IDS`；开关 36×20 + 关态实体轨道令牌（四主题）。
+  - **真 bug 修复（通用层）**：`ui/Overlay` 的 portal 容器每次渲染现算 ⇒ 内层原生 `<dialog>` 在栈里时外层 `.ln-scrim` 被搬进 dialog、内层卸载连带删掉整个设置面板。改为 `pickPortalHost()` 稳定 host + 6 例回归（`overlayNestedDialog.render.test`）；`SyncSection` 里 task 级的"两段式"绕行已删。
+  - **图标 C 路径**：不引 IconPark（上游 archived + 几何不 1:1 + 会打断 `svg.lucide{1.75}` 单一来源）；按裁决只做 4 处自绘修正 + `RowExpandIcon` 换 IconPark FullScreen（Apache-2.0，NOTICE + LICENSES 随包）；新增 `npm run audit:icons`（报告型）。
+  - **移动端**：加载动效首批（延迟加载 300/500ms、空态入场 250ms、便携包导入 7 阶段）；设置页 A1（AI 模型行控件在 390/412 被裁，原语级 `flex-wrap` + 输入基础宽，横向溢出 3→0）与 A2（8 个单组页去重复组标题）；title 长按提示改首帧后动态加载 ⇒ 移动入口 51,440 → **50,402B**（预算 51,200B）。
+  - **调研文档（本批新增，用户点名要的交付物）**：[docs/icon-migration/DECISION.md](icon-migration/DECISION.md)（图标不换库的完整依据 + C 路径）、[docs/modern-web/VERIFY-261116.md](modern-web/VERIFY-261116.md)、[docs/modern-web/STRICTER-BACKLOG.md](modern-web/STRICTER-BACKLOG.md)、[docs/arch/SIYUAN-PR-21151.md](arch/SIYUAN-PR-21151.md)、[docs/arch/ELECTRON-LAYERING-AUDIT.md](arch/ELECTRON-LAYERING-AUDIT.md)、[docs/mobile/LOADING-MOTION.md](mobile/LOADING-MOTION.md)、[docs/mobile/SETTINGS-LAYOUT-AUDIT.md](mobile/SETTINGS-LAYOUT-AUDIT.md)。
+- **门禁（发版前最后一次全量）**：`tsc` 0；全量 vitest **992 文件 / 6219 用例（979 passed / 13 skipped；6205 passed / 14 skipped / 0 failed）**；`ui-metrics` 0；`cssLayers`/`primitives`/`mobileLayers` 全绿；`check:core` 181 文件 0 违规；`check:bundle`+`check:arch` PASS（移动首屏 345.1KB/350KB、entry 50,402B/51,200B；桌面 577.1KB/600KB）；桌面 stylesnap 5 态 0 差异、移动 mobile-snap **10/10 0 差异**（lake_gate 专用实例两轮一致后重烤基线）、多维表未动；`git diff --check` 0。
+- **本批明确不做（用户裁决）**：移动端 B 级四项（去分组卡片框、危险操作挪底、Item-stacked 回左右排、Block 动作前后统一）——与既有 v2 定稿冲突，保留现状。
+- **遗留（下一批候选，未阻断发版）**：① `.tree-row` 常驻 `will-change`（现代 Web 复核 A20 重开项，10k 库≈1 万个合成层，需先测后改）；② 桌面 `main.ts` 分层护栏（依赖方向测试 / 打包内容测试，见 `docs/arch/ELECTRON-LAYERING-AUDIT.md` 批次 A，约 2 人日）；③ `/tmp/lake-task15-run` 有一个 4KB root 权限空壳删不掉（无功能影响）。
+
+### 261116 · 现代 Web 平台化第二批 + AI 对话面（分支 `modernize/web-platform-261115`，已随 v1.2.0 合入 master）
 
 - **起点**：261115 批的 A01–A30 已全部结案（见 [MODERN-WEB-AUDIT §11](MODERN-WEB-AUDIT.md)）。
 - **审计收尾**：A03 批 2–4（锁卡/手写板/tag/chip/分段/大纲/多维表/A±/移动端 5 条，共 28 条文字容器 `min-height`，探针证 100% 几何不变）；A17 容器查询（属性弹窗折列改按自身宽度）；A21 收口（**tsconfig 升 ES2024** + `toSorted`/`toReversed` 73 处 + `withResolvers` + 老 WebView 运行时兜底）；A13 试点 → **桌面 13/13 个下拉调用点全量推广**（`AdaptiveSelect`，`Select.tsx` 未动；字号/资源类型/供应商/模型逐档写盘已由用户明确接受）；A10 键盘激活 3 处；200%/400% 字号走查（桌面文字溢出 27→2）。
@@ -231,18 +244,18 @@
 
 > 数值 = 最近一次实测（261113 批，低负载串行）。**任何状态判断以本节 + `git status` / `git log -1` 为准**。
 
-**261116 分支基线（`modernize/web-platform-261115`，未合 master）**
+**261116 · v1.2.0 基线（`modernize/web-platform-261115` 已合 master 并打 tag）**
 
-- **分支**：60 commit / 217 文件 / +约 5900 −约 1000 / 新增测试文件 26；master 仍在 `7e2db298`，备份 tag `backup/master-261115` → `0f900a1a`；双远端同步（HEAD 以 `git log -1` 为准）。
-- **门禁**：`tsc` 0；全量 vitest **文件 983（970 passed / 13 skipped）/ 用例 6182（6168 passed / 14 skipped）/ 0 failed**；`ui-metrics` 0；`check:core` / `check:mobileui` / `check:bundle`（移动 CSS gzip 139.9KB / 预算 141.3KB）/ `check:arch` 全过。
+- **分支**：72 commit / 276 文件 / +11,572 −1,163 / 新增测试文件 35；master 由 `7e2db298` fast-forward 到 `b8713924`（发版 commit 之后），备份 tag `backup/master-261115` → `0f900a1a`；双远端同步（HEAD 以 `git log -1` 为准）。
+- **门禁（发版前最后一次全量）**：`tsc` 0；全量 vitest **文件 992（979 passed / 13 skipped）/ 用例 6219（6205 passed / 14 skipped）/ 0 failed**；`ui-metrics` 0；`check:core`（181 文件 0 违规）/ `check:mobileui` / `check:bundle`+`check:arch`（移动首屏 345.1KB / 350KB、移动 entry 50,402B / 51,200B；桌面首屏 577.1KB / 600KB）/ `cssLayers`/`primitives`/`mobileLayers` 全过。
 - **视觉/设备门禁**：桌面 `stylesnap` 42 态（严格比对 34；跳过 8 窄窗 + `note-info`/`settings-about` 两个异步竞态态，已写入脚本头 `FLAKY_ASYNC` 并说明证据）；移动 `mobile-snap` 10/10；`bitablesnap` 3/3；23 屏走查 23/23；平板窗口矩阵 7 档 `pass:true`；打包版窗口状态 smoke（120,120,1000,700 持久化一致）。
 - **未跑**：真实 API Key 下的流式对话（AI 面板只用 mock DOM 验过样式与分支交互）。
 **版本与仓库**
 
 - 主分支 `master`；**HEAD 以 `git log -1` 为准**；R2 已提交 6 笔拆分/设备记录（`a23631f6` sidebar / `fd268432` settings / `231fe845` electron boot / `c00d3a60` lakeRuntime / `4a9b965c` ink 测试 / `e352e2cb` 设备记录）；**产品代码基线 = `8e20a6a3`（R0）/ `e87016bd`（R1）/ `e352e2cb`（R2）/ `3fad8821`（R2 收尾：位置合并 + 同步专用写路径 + 单篇降级）**；**日记收口批产品笔 = `199f3403`（不可变守卫）/ `fd58dc0a`（移动移除取消标记）/ `d4d03260`（移动目标剔除日记子树）/ `f965e62c`（转文档共享弹窗）/ `4b6a524a`（转小记媒体搬运）/ `400dcc75`（showNotice 全空间可见）**；**261113 批 = `839c7a93`（发版复核 P2/P3）/ `a57cf3cf`（移动端「转为小记」+ 22 号报告 §11 + RELEASE.md Secrets 节）**（详见 §0）。
 - **推送/发布**：本批收口提交 + tag **v1.1.4** 后双推 Gitee/GitHub（tag 触发 release workflow，见 §1 发布事实）；上一个 release = `v1.1.3`（tag ref `a3f47335` → commit `12b5f7d3`）。以后以 `git rev-list --count origin/master..HEAD` 与 `git log -1` 为准。
-- `package.json` = **1.1.4**；Android `versionName 1.1.4` / `versionCode 11104`（从根 package.json 派生：`1000 + major*10000 + minor*100 + patch`，只增不减；**不手改 build.gradle**）。
-- tag：`v1.0.0`–`v1.0.5`、`v1.1.0`、`v1.1.1`（261112 已发）、`v1.1.2`（261114 已发）、`v1.1.3`（261114）、**`v1.1.4`（本批收口，tag 触发 release workflow；发布说明段落 = RELEASE-NOTES 顶部 `# LakexLocalNotes v1.1.4`）**；已发布 tag 不再移动。发布说明 = [docs/RELEASE-NOTES.md](RELEASE-NOTES.md)（**v1.1.3 → v1.0.0** 倒序；当前 tag 段落 = CI 生成 GitHub Release 正文的来源）。
+- `package.json` = **1.2.0**；Android `versionName 1.2.0` / `versionCode 11200`（从根 package.json 派生：`1000 + major*10000 + minor*100 + patch`，只增不减；**不手改 build.gradle**）。
+- tag：`v1.0.0`–`v1.0.5`、`v1.1.0`、`v1.1.1`（261112 已发）、`v1.1.2`（261114 已发）、`v1.1.3`（261114）、`v1.1.4`（261114）、**`v1.2.0`（261116，分支合 master 后发布；tag 触发 release workflow；发布说明段落 = RELEASE-NOTES 顶部 `# LakexLocalNotes v1.2.0`）**；已发布 tag 不再移动。发布说明 = [docs/RELEASE-NOTES.md](RELEASE-NOTES.md)（**v1.1.3 → v1.0.0** 倒序；当前 tag 段落 = CI 生成 GitHub Release 正文的来源）。
 - 分支/远端：`master` 唯一长期分支；`origin` = Gitee（SSH，第二 pushurl = GitHub HTTPS）⇒ `git push origin <branch>` 一次推两边；GitHub 只在推 tag 时构建。remote 不入库 ⇒ 新 clone 跑 `npm run setup:remotes`。
 - **工作树**：261114 批 = `f3a0e60c`（幽灵文档）→ `b676440f`（回收站浮动动作/启动不硬开/保存被拒可退出/移动 gone）→ `bbeddc3f`（级联删除）→ `c3b17bf9`（移动删除 review 收口）→ 发版 commit（1.1.3，见 `git log`）；历史上并行会话共用工作树时一律「只 stage 本批文件」，**绝不用 `git add -A`**。
 - 261110 一次性历史清理（`.ai-writing-recon/` 用 `git filter-repo` 从全部历史移除，重写 v1.1.0 之后的提交；tag 未变）⇒ 旧 clone 需 `git fetch --force --prune && git reset --hard origin/master`。

@@ -1,6 +1,6 @@
 {
   "name": "lakex-local-notes",
-  "version": "1.1.4",
+  "version": "1.2.0",
   "private": true,
   "description": "本地优先的 Lake 编辑器笔记应用（Electron 桌面端）",
   "main": "dist-electron/main.js",
@@ -121,8 +121,8 @@
       "dist-electron/**/*",
       "electron/preload.cjs",
       "electron/boot.html",
-    "electron/boot-anim.apng",
-    "electron/boot-poster.png",
+      "electron/boot-anim.apng",
+      "electron/boot-poster.png",
       "!**/*.map",
       "!node_modules/better-sqlite3/deps/**",
       "!node_modules/better-sqlite3/build/Release/obj/**"
