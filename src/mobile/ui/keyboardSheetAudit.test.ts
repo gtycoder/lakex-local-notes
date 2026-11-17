@@ -74,6 +74,11 @@ describe("弹窗键盘稳定审计（task-94）", () => {
     }
   });
 
+  it("Sheet 标题区/手柄点按收键盘 + 返回键优先收键盘（261117 完成编辑出口）", () => {
+    expect(MOBILE_SHEET, "点标题区/手柄 = 显式收起键盘").toContain("onPointerDown={dismissKeyboardOnPointerDown}");
+    expect(read("src/mobile/ui/backStack.ts"), "返回键先收键盘再轮到返回动作").toContain("activeIsTextInput()");
+  });
+
   it("PickerSheet 不含文本输入（列表选择器，无需键盘补偿；仍复用 mb-sheet 结构）", () => {
     const picker = read("src/mobile/ui/PickerSheet.tsx");
     expect(picker).not.toMatch(/<input|<textarea/);

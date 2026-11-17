@@ -5,13 +5,16 @@
  * 统一口径：**点表单空白处**（落点不是输入控件）或**提交/选完日期**时，把当前可编辑元素 blur 掉。
  * 只用原生 blur —— 不注入 inputmode、不碰焦点环（输入框在移动端没有我们自己的焦点环）。
  */
-export function dismissKeyboard(): void {
+/** 当前焦点是否在文本输入上（软键盘大概率开着）——返回键优先收键盘等判据共用。 */
+export function activeIsTextInput(): boolean {
   const active = document.activeElement as HTMLElement | null;
-  if (!active) return;
-  const tag = active.tagName;
-  if (tag === "INPUT" || tag === "TEXTAREA" || active.isContentEditable) {
-    try { active.blur(); } catch { /* 元素可能已卸载：无副作用 */ }
-  }
+  if (!active) return false;
+  return active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.isContentEditable === true;
+}
+
+export function dismissKeyboard(): void {
+  if (!activeIsTextInput()) return;
+  try { (document.activeElement as HTMLElement).blur(); } catch { /* 元素可能已卸载：无副作用 */ }
 }
 
 /** 点按空白处收键盘：落点仍是输入控件（input/textarea/select/contenteditable）时不动。 */

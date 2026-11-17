@@ -23,6 +23,7 @@ import { restoreFocus } from "../../lib/focusRestore";
 import { X } from "lucide-react";
 import { pushBackHandler } from "./backStack";
 import { useKeyboardStableSheet } from "../hooks/useKeyboardStableSheet";
+import { dismissKeyboardOnPointerDown } from "./dismissKeyboard";
 import { useSwipeDownDismiss } from "./useSwipeDownDismiss";
 
 /** 模态移动浮层共用焦点收放与嵌套滚动锁；不规定头部/正文结构，不增加Tab陷阱。 */
@@ -147,8 +148,9 @@ export function MobileSheet({
         tabIndex={-1}
         data-prevent-swipe
       >
-        <div className="mb-sheet__grab" />
-        <div className="mb-sheet__head mb-glass mb-glass--bar" data-mb-topbar data-edge="sheet">
+        <div className="mb-sheet__grab" onPointerDown={dismissKeyboardOnPointerDown} />
+        {/* 261117：点标题区 = 「完成编辑」的显式出口（收起键盘、露出底部确认钮）；返回键优先收键盘见 backStack。 */}
+        <div className="mb-sheet__head mb-glass mb-glass--bar" data-mb-topbar data-edge="sheet" onPointerDown={dismissKeyboardOnPointerDown}>
           <span className={"mb-sheet__title" + (titleClassName ? " " + titleClassName : "")}>{title}</span>
           {dismissible && (
             <button type="button" className="mobile-icon-btn" onClick={onClose} aria-label="关闭"><X size={20} /></button>

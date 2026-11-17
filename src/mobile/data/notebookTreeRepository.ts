@@ -4,6 +4,8 @@ export interface NotebookTreeItem {
   id: string;
   title: string;
   kind: "group" | "note";
+  /** 文档类型（doc / usheet / bitable / board / ink；分组无）——默认图标按它分型（261117）。 */
+  noteKind?: string;
   parentId: string | null;
   sortOrder: number;
   icon: string | null;
@@ -29,11 +31,11 @@ export async function listNotebookTree(
         ) child
         JOIN subtree parent ON child.parent_id=parent.id
     )
-    SELECT id, title, parent_id, sort_order, 'group' AS kind, icon, NULL AS created_at
+    SELECT id, title, parent_id, sort_order, 'group' AS kind, NULL AS note_kind, icon, NULL AS created_at
       FROM folders
      WHERE node_type='group' AND trashed_at IS NULL AND parent_id IN (SELECT id FROM subtree)
     UNION ALL
-    SELECT id, title, parent_id, sort_order, 'note' AS kind, icon, created_at
+    SELECT id, title, parent_id, sort_order, 'note' AS kind, doc_kind AS note_kind, icon, created_at
       FROM notes
      WHERE trashed_at IS NULL AND parent_id IN (SELECT id FROM subtree)
   `).all(notebookId) as Array<{
@@ -42,6 +44,7 @@ export async function listNotebookTree(
     parent_id: string | null;
     sort_order: number;
     kind: "group" | "note";
+    note_kind: string | null;
     icon: string | null;
     created_at: string | null;
   }>;
@@ -50,6 +53,7 @@ export async function listNotebookTree(
     id: item.id,
     title: item.title,
     kind: item.kind,
+    noteKind: item.note_kind ?? undefined,
     parentId: item.parent_id,
     sortOrder: item.sort_order,
     icon: item.icon ?? null,

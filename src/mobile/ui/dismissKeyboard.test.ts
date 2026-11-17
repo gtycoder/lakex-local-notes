@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from "vitest";
-import { dismissKeyboard, dismissKeyboardOnPointerDown } from "./dismissKeyboard";
+import { activeIsTextInput, dismissKeyboard, dismissKeyboardOnPointerDown } from "./dismissKeyboard";
+import { consumeBack, pushBackHandler } from "./backStack";
 
 afterEach(() => { document.body.innerHTML = ""; });
 
@@ -29,6 +30,21 @@ describe("dismissKeyboard（移动端收键盘口径）", () => {
     document.body.append(blank);
     dismissKeyboardOnPointerDown({ target: blank });
     expect(document.activeElement).not.toBe(el);
+  });
+
+  it("返回键优先收键盘（261117 用户点单，Android 惯例）：焦点在输入上 ⇒ 只收键盘不触发返回", () => {
+    const el = input();
+    el.focus();
+    expect(activeIsTextInput()).toBe(true);
+    let returned = false;
+    const off = pushBackHandler(() => { returned = true; return true; });
+    expect(consumeBack()).toBe(true);
+    expect(returned, "收键盘那一次不许触发返回动作").toBe(false);
+    expect(document.activeElement).not.toBe(el);
+    // 焦点已离开输入 ⇒ 下一次返回才轮到栈顶
+    expect(consumeBack()).toBe(true);
+    expect(returned).toBe(true);
+    off();
   });
 
   it("textarea 同样适用；点 select 不误收", () => {

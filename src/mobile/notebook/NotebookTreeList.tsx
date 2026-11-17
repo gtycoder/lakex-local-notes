@@ -15,7 +15,7 @@
  * 静态视觉仍在 mobile.css / kit.css，不要往这里加颜色/字号。
  */
 import { useCallback, useState } from "react";
-import { ChevronRight, File, FolderOpen, MoreVertical, Plus } from "lucide-react";
+import { ChevronRight, Database, File, Folder, FolderOpen, MoreVertical, PenLine, PenTool, Plus, Table } from "lucide-react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { NotebookTreeItem } from "../data/notebookTreeRepository";
 import type { LongPressHandlers } from "../ui/useLongPress";
@@ -89,7 +89,13 @@ export function NotebookTreeList(props: NotebookTreeListProps) {
   const renderRow = (row: NotebookTreeRow) => {
     const it = row.item;
     const kids = hasChildren(it.id);
-    const NodeIcon = it.kind === "group" ? FolderOpen : File;
+    // 默认图标按 kind 分型（261117 用户点单，对齐桌面 treeIcons.tsx 的语义：分组开合 / 表格 / 多维表 / 画板 / 手写板 / 文档）。
+    const NodeIcon = it.kind === "group" ? (expanded.has(it.id) ? FolderOpen : Folder)
+      : it.noteKind === "usheet" ? Table
+      : it.noteKind === "bitable" ? Database
+      : it.noteKind === "board" ? PenTool
+      : it.noteKind === "ink" ? PenLine
+      : File;
     // 多选模式（261106 task-8）：只允许文档可选；分组/笔记本置灰（保留复选框占位 ⇒ 左缘与文档行对齐）。
     const selecting = props.selection?.active ?? false;
     const selectable = selecting && (props.selection?.canSelect(it) ?? false);

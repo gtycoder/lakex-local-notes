@@ -127,6 +127,29 @@ describe("目录抽屉树窗口化", () => {
     expect(host.querySelector('[data-node-id="c1"]')).not.toBeNull();
   });
 
+  it("默认图标按 kind 分型（261117 用户点单，对齐桌面 treeIcons 语义）", async () => {
+    const tree = [
+      node("g1", "nb1", 0, { kind: "group", title: "分组" }),
+      node("u1", "nb1", 1, { noteKind: "usheet", title: "表格" }),
+      node("b1", "nb1", 2, { noteKind: "bitable", title: "多维表" }),
+      node("d1", "nb1", 3, { noteKind: "board", title: "画板" }),
+      node("k1", "nb1", 4, { noteKind: "ink", title: "手写板" }),
+      node("n1", "nb1", 5, { title: "文档" }),
+    ];
+    const iconOf = (id: string) => host.querySelector('[data-node-id="' + id + '"] svg.mb-tree-icon')?.getAttribute("class") ?? "";
+    await renderList({ rows: rowsFor(tree), expanded: new Set(["nb1"]) });
+    expect(iconOf("g1")).toContain("lucide-folder");
+    expect(iconOf("g1"), "闭合分组不是 folder-open").not.toContain("lucide-folder-open");
+    expect(iconOf("u1")).toContain("lucide-table");
+    expect(iconOf("b1")).toContain("lucide-database");
+    expect(iconOf("d1")).toContain("lucide-pen-tool");
+    expect(iconOf("k1")).toContain("lucide-pen-line");
+    expect(iconOf("n1")).toContain("lucide-file");
+    // 展开的分组 = folder-open（与桌面同语义）
+    await renderList({ rows: rowsFor(tree, ["nb1", "g1"]), expanded: new Set(["nb1", "g1"]) });
+    expect(iconOf("g1")).toContain("lucide-folder-open");
+  });
+
   it("重命名改为弹窗后：虚拟窗口不再 pin 输入框行（行只做展示）", async () => {
     const tree = Array.from({ length: 2000 }, (_, i) => node("fx" + i, "nb1", i));
     await renderList({ rows: rowsFor(tree) });

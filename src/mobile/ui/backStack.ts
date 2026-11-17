@@ -3,6 +3,8 @@
  * 之前返回键只在 MobileApp 里按 route 硬编码优先级，工作区内部的浮层（长按菜单/切换笔记本）
  * 拿不到返回键。改成注册栈：谁在最上层谁先消费。
  */
+import { activeIsTextInput, dismissKeyboard } from "./dismissKeyboard";
+
 type Handler = () => boolean; // 返回 true = 已消费
 const stack: Handler[] = [];
 
@@ -15,8 +17,14 @@ export function pushBackHandler(handler: Handler): () => void {
   };
 }
 
-/** 交给栈顶消费；无人消费返回 false（由调用方走系统/路由兜底）。 */
+/** 交给栈顶消费；无人消费返回 false（由调用方走系统/路由兜底）。
+ *  **返回键优先收键盘**（261117 用户点单，Android 原生惯例）：焦点在文本输入上时第一次返回
+ *  只收起软键盘、不触发返回动作（否则键盘开着按返回会直接关面板/退出，没有「完成编辑」的出口）。 */
 export function consumeBack(): boolean {
+  if (activeIsTextInput()) {
+    dismissKeyboard();
+    return true;
+  }
   const top = stack[stack.length - 1];
   return top ? top() === true : false;
 }
