@@ -353,7 +353,7 @@ button.mb-set-item__main {
 .mb-switch__knob {
   position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: var(--lake-radius-pill);
   background: var(--lake-bg-panel); box-shadow: var(--lake-shadow-knob);
-  transition: transform var(--mb-dur-fast) var(--mb-ease);
+  transition: transform var(--mobile-duration-panel) var(--mobile-ease-out);   /* 261118 P2-9 动效归一：位移统一 --mobile-* */
 }
 .mb-switch[aria-checked="true"] .mb-switch__knob { transform: translateX(18px); }
 .mb-set-block__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }

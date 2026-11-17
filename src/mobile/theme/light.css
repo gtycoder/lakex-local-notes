@@ -25,8 +25,8 @@
   /* 文字（思源 on-background #222 / on-surface #5f6368 为底，辅助两档按 AA 校准） */
   --lake-text-1: #222222;
   --lake-text-2: #5f6368;
-  --lake-text-3: #6b7075;   /* vs 白 4.7:1、vs #f6f6f6 4.5:1 —— AA 辅助文字 */
-  --lake-text-4: #8e9297;   /* vs 白 3.2:1 —— 元信息/占位（有意 3:1 档） */
+  --lake-text-3: #6b7075;   /* vs 白 5.0:1、vs #f6f6f6 4.6:1 —— AA 辅助文字（261118 静态复检实算） */
+  --lake-text-4: #8a8e93;   /* vs 白 3.3:1、vs #f6f6f6 3.05:1 —— 元信息/占位（有意 3:1 档；261118 复检：#8e9297 对块面 2.90:1 越界，压深一档） */
   --lake-text-on-accent: #ffffff;
   /* 边框（思源 --b3-border-color = #e0e0e0；发丝线 0.5px 原则不变） */
   --lake-border-1: #e0e0e0;

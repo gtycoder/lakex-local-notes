@@ -1,21 +1,27 @@
-/* 清爽（浅色）· 移动端副本（261116）：与桌面同名的表面覆盖，几何仍由 base/tokens 决定。
- * 移动端主题是独立文件（不 import 桌面 themes），所以同名主题必须在这里也声明一次。 */
+/* 清爽（浅色）· 移动端副本（261116 立项；261118 P2-8/9 思源化收尾）：
+ * 与桌面同名的表面覆盖，几何仍由 base/tokens 决定（移动端主题是独立文件，不 import 桌面 themes，
+ * 所以同名主题必须在这里也声明一次）。
+ * 261118 口径（与 light.css 的 261117 思源映射**同口径**）：白面 / 中性灰 / 发丝线 / 蓝主色 #3575f0
+ * / AA 文字合同不变 —— 取值来源 = 思源 daylight（app/appearance/themes/daylight/theme.css，AGPL-3.0，
+ * 署名见设置「关于」）。清爽档此前的冷调灰蓝（DeepSeek 网页版观感）随 v2 材质一起退场，与 light 收敛
+ * 为同一套 daylight 取值；主色 / 状态色 / 阴影由 :root（light）继承，不另立一套。
+ * 颜色字面量只允许出现在主题文件（AGENTS §3#14）。 */
 [data-theme="chat"] {
   color-scheme: light;
-  --lake-bg-window: #eef1f6;
+  --lake-bg-window: #ebedf0;      /* 外围通道（= 思源 --b3-body-background） */
   --lake-bg-panel: #ffffff;
   --lake-bg-canvas: #ffffff;
-  --lake-bg-block: #f2f5f9;
+  --lake-bg-block: #f6f6f6;       /* 块面（= 思源 --b3-theme-surface） */
   --lake-bg-raised: #ffffff;
-  --lake-bg-sunken: #eef1f6;
-  --lake-bg-subtle: #f8fafc;
-  --lake-bg-hover: #e9eef6;
-  --lake-bg-press: #dee6f1;
-  --lake-text-1: #1b1f27;
-  --lake-text-2: #47515f;
-  --lake-text-3: #5b6573;
-  --lake-text-4: #8f97a5;
-  --lake-border-1: #dde3ec;
-  --lake-border-2: #ecf0f5;
-  --lake-border-strong: #c2cbd9;
+  --lake-bg-sunken: #f0f0f0;
+  --lake-bg-subtle: #fafafa;
+  --lake-bg-hover: #ededed;
+  --lake-bg-press: #e0e0e0;
+  --lake-text-1: #222222;
+  --lake-text-2: #5f6368;
+  --lake-text-3: #6b7075;   /* vs 白 5.0:1、vs #f6f6f6 4.6:1 —— AA 辅助文字 */
+  --lake-text-4: #8a8e93;   /* vs 白 3.3:1、vs #f6f6f6 3.05:1 —— 元信息/占位（有意 3:1 档，261118 静态复检修） */
+  --lake-border-1: #e0e0e0;
+  --lake-border-2: #eeeeee;
+  --lake-border-strong: #c7c9cc;
 }

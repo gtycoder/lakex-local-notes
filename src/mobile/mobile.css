@@ -444,7 +444,7 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
   .pad-tree, .pad-outline { animation: none; transition: none; }
   .mobile-htab, .mobile-icon-btn, .mobile-doc-row,
   .mobile-bottom-bar, .med-btn, .med-ins-item, .med-f-btn { transition: none; }
-  .mb-skel { animation: none; }
+  .mb-skel, .mobile-sync-strip, .mobile-sync-strip__bar { animation: none; }
   .mobile-topbar { transition: none; }
   .doc-pane--fresh .mobile-doc-body { animation: none; }
   .side-panel.side-panel, .side-mask.side-mask { transition: none; }
@@ -542,7 +542,7 @@ body { font-family: var(--lake-font-family); background: var(--mb-canvas-1); col
   position: fixed; z-index: var(--mobile-z-page); margin: 0; pointer-events: none;
   border-radius: var(--mb-radius-card); box-shadow: var(--mb-shadow-float); overflow: hidden;
   background: var(--lake-bg-panel); will-change: left, top, width, height;
-  transition: opacity var(--mb-dur-fast) var(--mb-ease);
+  transition: opacity var(--mobile-duration-panel) var(--mobile-ease-out);   /* 261118 P2-9 动效归一：转场淡出统一 --mobile-* */
 }
 .mb-morph-card.is-out { opacity: 0; }
 /* 竖向设置菜单：设置项一行一行（思源移动端式），点某项进入新页面 */

@@ -3,7 +3,10 @@
  * 用户 261117 定稿：深色档跟随浅色一起思源化（中性黑灰 + 蓝主色），仅换取值，布局与行为不变。
  * P1 阶段曾逐字节等于桌面 themes/dark.css；261117 起为思源 midnight 映射。 */
 /* v2（261107）：纯黑（OLED）档 —— html[data-theme="dark"].oled 时覆盖画布/纸面/阴影。
- * 只换取值，不改结构；默认深色不受影响。261117：玻璃/渐变同去材质（平涂）。 */
+ * 只换取值，不改结构；默认深色不受影响。261117：玻璃/渐变同去材质（平涂）。
+ * 261118 P2-9 复核（对照 midnight 平涂化「渐变/光晕/玻璃残留清零」）：渐变（canvas 两端同值）、光晕
+ * （--mb-canvas-glow: transparent）、玻璃高光（--mb-glass-highlight: transparent）已清零；漏网一处 =
+ * --mb-glass-bg-bar 仍 96% 半透明 + backdrop blur（滚动顶栏毛玻璃）⇒ 改不透明 #0a0a0a，纯黑档平涂彻底。 */
 [data-theme="dark"].oled {
   --mb-canvas-1: #000000;
   --mb-canvas-2: #000000;
@@ -16,7 +19,7 @@
   --lake-bg-sunken: #050505;
   --lake-bg-subtle: #121212;
   --mb-glass-bg: #0a0a0a;
-  --mb-glass-bg-bar: rgba(10,10,10,.96);
+  --mb-glass-bg-bar: #0a0a0a;   /* 261118：96% 半透明 + blur = 玻璃残留 ⇒ 纯黑档改不透明 */
   --mb-glass-border: rgba(255,255,255,.10);
   --mb-glass-highlight: transparent;
   --mb-shadow-card: 0 1px 2px rgba(0,0,0,.60), 0 2px 8px -4px rgba(0,0,0,.70);
@@ -65,8 +68,8 @@
   /* 文字（思源 midnight on-background #dadada / on-surface #9aa0a6 为底，辅助两档按 AA 校准） */
   --lake-text-1: #dadada;
   --lake-text-2: #9aa0a6;
-  --lake-text-3: #8a9095;   /* vs #1e1e1e 4.7:1 —— AA 辅助文字 */
-  --lake-text-4: #6e747a;   /* vs #1e1e1e 3.1:1 —— 元信息/占位（有意 3:1 档） */
+  --lake-text-3: #8e9499;   /* vs #1e1e1e 5.4:1、vs #2c2c2c 4.55:1 —— AA 辅助文字（261118 复检：#8a9095 对块面 4.33:1 越界，提亮一档） */
+  --lake-text-4: #71777d;   /* vs #1e1e1e 3.7:1、vs #2c2c2c 3.1:1 —— 元信息/占位（有意 3:1 档；261118 复检：#6e747a 对块面 2.95:1 越界） */
   --lake-text-on-accent: #ffffff;
 
   /* ── 移动材质（261117 思源化：平涂 + 发丝线，去 v2 玻璃/渐变/光晕）──────── */

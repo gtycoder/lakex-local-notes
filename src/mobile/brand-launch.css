@@ -12,7 +12,7 @@
   display: block;
   width: 96px;
   height: 96px;
-  animation: mb-launch-in var(--lake-motion-panel) var(--lake-ease-standard) both;
+  animation: mb-launch-in var(--mobile-duration-panel) var(--mobile-ease-out) both;   /* 261118 P2-9 动效归一：入场统一 --mobile-*（250ms 强 ease-out） */
 }
 .mb-launch__label { color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); }
 

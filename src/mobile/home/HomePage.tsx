@@ -422,7 +422,7 @@ export function HomePage(props: HomePageProps) {
     clone.style.height = from.height + "px";
     document.body.appendChild(clone);
     requestAnimationFrame(() => {
-      clone.style.transition = "left var(--mb-dur-page) var(--mb-ease), top var(--mb-dur-page) var(--mb-ease), width var(--mb-dur-page) var(--mb-ease), height var(--mb-dur-page) var(--mb-ease), border-radius var(--mb-dur-page) var(--mb-ease)";
+      clone.style.transition = "left var(--mobile-duration-panel) var(--mobile-ease-out), top var(--mobile-duration-panel) var(--mobile-ease-out), width var(--mobile-duration-panel) var(--mobile-ease-out), height var(--mobile-duration-panel) var(--mobile-ease-out), border-radius var(--mobile-duration-panel) var(--mobile-ease-out)";
       clone.style.left = to.left + "px";
       clone.style.top = to.top + "px";
       clone.style.width = to.width + "px";

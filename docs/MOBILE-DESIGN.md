@@ -62,10 +62,22 @@ components:
 > - **白面为主 + 中性灰分层**：内容面白（#fff）/ 块面 #f6f6f6 / 外围通道 #ebedf0（= 思源 body）；发丝线分隔。
 > - **v2 材质退场**：渐变画布 / 光晕 / 玻璃全部平涂化（--mb-canvas-glow: transparent、--mb-glass-* 平涂、--mb-shadow-* 换思源三档阴影词汇）。
 > - **主色 = 思源蓝 #3575f0**（accent-ink 同色实心；文字蓝按 AA 取深档 #2b5ec7 / 深色 #8ab4f8）；标签 chip 换 primary 浅底（有着重点单保留）。
-> - **文字中性灰阶** #222 / #5f6368 / #6b7075 / #8e9297 —— **AA 合同不变**（1/2/3 ≥4.5:1、text-4 = 有意 3:1 档）。
-> - **深色 = midnight 映射**（内容面 #1e1e1e / 块面 #2c2c2c / 边框 #484848）；OLED 档跟随平涂化。
+> - **文字中性灰阶** #222 / #5f6368 / #6b7075 / #8a8e93 —— **AA 合同不变**（1/2/3 ≥4.5:1、text-4 = 有意 3:1 档；261118 静态复检后 text-4 微调一档，见下表）。
+> - **深色 = midnight 映射**（内容面 #1e1e1e / 块面 #2c2c2c / 边框 #484848）；OLED 档跟随平涂化（261118 P2-9 复核补漏：纯黑档 `--mb-glass-bg-bar` 的 96% 半透明 + blur 毛玻璃残留清零、改不透明）。
 >
-> v2 的几何 / 组件形态口径继续有效（下文保留）；chat.css（清爽浅色）暂未思源化，待用户点单。
+> v2 的几何 / 组件形态口径继续有效（下文保留）；chat.css（清爽浅色）**261118 P2-8/9 已思源化**：与 light 同口径 daylight 映射、**同值收敛**（清爽的冷调灰蓝随 v2 材质一起退场；`[data-theme="chat"]` 档位与选择器保留，主色/状态色/阴影由 :root 继承，不另立一套）。
+>
+> **AA 对比度静态复检（261118 P2-9，WCAG 相对亮度实算；合同面 = 白/内容面 与 块面 两种底）**：
+>
+> | 档 | text-1 | text-2 | text-3 | text-4（有意 3:1 档） |
+> | --- | --- | --- | --- | --- |
+> | light/chat vs 白 #fff | 15.9 | 6.1 | 5.0 | 3.3 |
+> | light/chat vs 块面 #f6f6f6 | 14.7 | 5.6 | 4.63 | 3.05 |
+> | dark vs #1e1e1e / 块面 #2c2c2c | 11.9 / 10.0 | 6.3 / 5.3 | 5.4 / 4.55 | 3.7 / 3.1 |
+> | OLED vs #0a0a0a / 块面 #1a1a1a | 14.2 / 12.5 | 7.5 / 6.6 | 6.45 / 5.67 | 4.4 / 3.8 |
+>
+> 三处越界已修（只调值）：light text-4 `#8e9297 → #8a8e93`（块面 2.90 → 3.05）、dark text-3 `#8a9095 → #8e9499`（块面 4.33 → 4.55）、dark text-4 `#6e747a → #71777d`（块面 2.95 → 3.1）。
+> **登记不修**：外围通道底（#ebedf0 / #2e3236）上的 text-3 为 4.26 / 4.21、text-4 为 2.81 / 2.85 —— 合同面只标定白/块面（261117 同口径）；window 通道要全过需 text-3 贴近 text-2、挤压色阶，不值得。
 
 ## v2 视觉基线 ·「柔光纸面」（261107 用户定稿，落地中）
 
@@ -384,6 +396,15 @@ Toast        .mb-toast-host > .mb-toast[--error] > (.mb-toast__text, .mb-toast__
 - 桌面侧同名令牌的现值是 `--lake-motion-fast/panel/slow = 250ms` + 字面 `ease-out`；移动端这两条是**强 ease-out**（同一意图、更利落的收尾），不要为了"完全一致"改成桌面字面值。
 `prefers-reduced-motion: reduce` 下所有浮层/抽屉/指示线动画与过渡关闭（`mobile.css` 与 `floating.css` 各有一份名单，
 **新增浮层必须登记进去**）。
+
+**261118 P2-9 动效归一（清点 `src/mobile/theme/**` + 顶层 `src/mobile/*.css`）**：范围内 transition/animation 已全部走
+`--mobile-duration-panel` / `--mobile-ease-out`。归一三处（只换令牌引用、不改结构）：`brand-launch.css` 启动入场
+（原 `--lake-motion-panel`/`--lake-ease-standard`）、`kit.css` `.mb-switch__knob` 位移（原 `--mb-dur-fast`/`--mb-ease`）、
+`mobile.css` `.mb-morph-card` 转场淡出（同前）；v2 动效令牌 `--mb-dur-*`/`--mb-ease` 在 CSS 层已零消费（词表保留，见 tokens.css）。
+**留待后批**：① `HomePage.tsx` 共享元素 FLIP 的内联 transition 仍用 `--mb-dur-page`/`--mb-ease`（TS 侧，不在 CSS 写入范围）；
+② 两个循环动画（骨架呼吸 1.4s / 同步条扫动 1.2s）是循环节奏、不属时长令牌词汇，保留字面值；
+③ reduced-motion 名单缺 `.mobile-sync-strip`（入场 + 扫动）与 `features.css` 的 lightbox 淡入 —— 补名单要加声明，
+mobileLayers 棘轮无余量（须 lead 收口时同批调基线）。
 
 ## Gates（移动端指标已转门禁）
 
