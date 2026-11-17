@@ -78,8 +78,8 @@ describe("MobileBitableFieldSheet 迁到 MobileSheet（MOB-11）", () => {
 
   it("内容不丢：字段行与「新建字段」都在 .mb-sheet__body 里", () => {
     renderFieldSheet(() => undefined);
-    expect(host.querySelector(".mb-set-section")?.textContent).toContain("标题");
-    expect(host.querySelector(".mb-set-section")?.textContent).toContain("数量");
+    expect(host.querySelector(".mbt-viewlist-rows")?.textContent).toContain("标题");
+    expect(host.querySelector(".mbt-viewlist-rows")?.textContent).toContain("数量");
     expect(host.querySelector(".mbt-field-add .mb-btn")?.textContent).toContain("新建字段");
   });
 

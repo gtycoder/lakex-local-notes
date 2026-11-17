@@ -1,10 +1,13 @@
 /**
- * 移动端多维表「字段」面板（261020 P0；261030 改：行内铅笔 → 打开「修改字段」面板）。
+ * 移动端多维表「字段」面板（261020 P0；261030 改：行内铅笔 → 打开「修改字段」面板；261117 P1-4：行拖拽重排）。
  *
  * - 行内铅笔 = 编辑该字段（名称 + 类型专属设置 + 必填 + 选项，见 MobileBitableFieldEditorSheet）；
  *   对齐钉钉「字段面板 → 铅笔 → 修改字段 → 确认」的触发与交互，设置项用桌面端已有能力。
  * - 新增类型仍只暴露移动端可编辑的 9 种；其余类型（附件/图片/关联/系统时间/AI/Markdown）不做入口。
  * - 删除带确认，并说明「所有视图里的相关配置会一并清除」；只剩一个字段时明确拒绝（core 同一判据）。
+ * - **长按拖动 = 视图字段顺序**（`view.fieldOrder`，视图级配置、随正文同步；与网格列顺序同源）：
+ *   手势复用 `useBitableOrderDrag`（261111 惯例：不 setPointerCapture、document move/up/cancel、
+ *   长按唯一实现 ui/useLongPress）；行视觉 = 与「视图」列表同一套 `.mbt-viewrow`（不新造第二套行原语）。
  */
 import { useState } from "react";
 import { Pencil, Plus, Trash2 } from "lucide-react";
@@ -15,6 +18,8 @@ import {
   type BitableTable,
 } from "../../core/bitableDoc.js";
 import { MOBILE_EDITABLE_FIELD_TYPES } from "./mobileBitableEdit";
+import { useBitableOrderDrag } from "./useBitableOrderDrag";
+import type { ViewDropPosition } from "./mobileBitableViewOrder";
 import { confirmMobile } from "../ui/ConfirmDialog";
 import { showToast } from "../ui/toastBus";
 import { MobileSheet } from "../ui/MobileSheet";
@@ -22,18 +27,31 @@ import { isImeConfirming } from "../../core/ime";
 
 export interface MobileBitableFieldSheetProps {
   table: BitableTable;
+  /** 字段列表 = **视图字段顺序**（调用方传 `orderedAllTableFields`，与网格列顺序同一来源）。 */
   fields: BitableField[];
   /** 点行内铅笔：打开「修改字段」（名称 + 类型专属设置 + 必填 + 选项）。 */
   onEdit: (field: BitableField) => void;
   onDelete: (fieldId: string) => void;
   onAdd: (type: BitableFieldType, name: string) => void;
+  /**
+   * 长按拖动后的新顺序（父级写成正文 —— 列顺序是**视图级配置**，只改当前视图的 fieldOrder）。
+   * 缺省 = 不提供排序（只读 / 单字段这里也不会起手）。
+   */
+  onReorderFields?: (fromId: string, overId: string, position: ViewDropPosition) => void;
   onClose: () => void;
 }
 
-export function MobileBitableFieldSheet({ table, fields, onEdit, onDelete, onAdd, onClose }: MobileBitableFieldSheetProps) {
+export function MobileBitableFieldSheet({ table, fields, onEdit, onDelete, onAdd, onReorderFields, onClose }: MobileBitableFieldSheetProps) {
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState("");
   const [newType, setNewType] = useState<BitableFieldType>("text");
+  /** 排序：单字段 / 父级没给回调 ⇒ 不起手。 */
+  const canReorder = fields.length > 1 && !!onReorderFields;
+  const { drag, longPress, pressRow, consumeDragClick } = useBitableOrderDrag({
+    enabled: canReorder,
+    rowAttr: "data-field-id",
+    onReorder: (fromId, overId, position) => onReorderFields?.(fromId, overId, position),
+  });
 
   const askDelete = async (field: BitableField) => {
     if (fields.length <= 1) { showToast("至少保留一个字段", { type: "error" }); return; }
@@ -54,23 +72,37 @@ export function MobileBitableFieldSheet({ table, fields, onEdit, onDelete, onAdd
   };
 
   // MOB-11：scrim / 右滑 / 返回栈 / 焦点 / 滚动锁统一由 MobileSheet 负责；
-  // 类名与 DOM 结构沿用原手写版（.mb-sheet__title.mb-ellipsis + .mb-sheet__body，视觉不变）。
+  // 行视觉 = 与「视图」列表同一套 .mbt-viewrow（拖拽态/落点线是同一份规则，不新造第二套）。
   return (
     <MobileSheet open className="mb-sheet--tall" title={"字段：" + table.name} titleClassName="mb-ellipsis" ariaLabel="字段管理" bodyClassName="mb-sheet__body--form" onClose={onClose}>
-      <div className="mb-set-section">
-        {fields.map((field) => (
-          <div key={field.id} className="mb-set-item">
-            <div className="mb-set-item__main">
-              <span className="mb-set-name mb-ellipsis">{field.name}</span>
-              <span className="mb-set-item__note">{BITABLE_FIELD_TYPE_LABEL[field.type as BitableFieldType] ?? field.type}</span>
+      <div className={"mbt-viewlist-rows" + (drag ? " is-dragging" : "")}>
+        {fields.map((field) => {
+          const dropBefore = drag?.overId === field.id && !drag.after;
+          const dropAfter = drag?.overId === field.id && drag.after;
+          return (
+            <div
+              key={field.id}
+              data-field-id={field.id}
+              className={"mbt-viewrow"
+                + (drag?.id === field.id ? " is-dragging" : "")
+                + (dropBefore ? " is-drop-before" : "")
+                + (dropAfter ? " is-drop-after" : "")}
+              onTouchStart={(event) => { pressRow(field.id); longPress.onTouchStart(event); }}
+              onTouchMove={longPress.onTouchMove}
+              onTouchEnd={longPress.onTouchEnd}
+              onTouchCancel={longPress.onTouchCancel}
+            >
+              <span className="mbt-viewrow__name">{field.name}</span>
+              <span className="mbt-viewrow__type">{BITABLE_FIELD_TYPE_LABEL[field.type as BitableFieldType] ?? field.type}</span>
+              <button type="button" className="mb-iconbtn" aria-label={"修改字段 " + field.name}
+                onClick={() => { if (consumeDragClick()) return; onEdit(field); }}><Pencil size={17} /></button>
+              <button type="button" className="mb-iconbtn" aria-label={"删除字段 " + field.name}
+                onClick={() => { if (consumeDragClick()) return; void askDelete(field); }}><Trash2 size={17} /></button>
             </div>
-            <div className="mb-set-item__ctl">
-              <button type="button" className="mb-iconbtn" aria-label={"修改字段 " + field.name} onClick={() => onEdit(field)}><Pencil size={17} /></button>
-              <button type="button" className="mb-iconbtn" aria-label={"删除字段 " + field.name} onClick={() => void askDelete(field)}><Trash2 size={17} /></button>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
+      {canReorder && <div className="mbt-vcfg-hint">长按拖动可排序（列顺序随文档同步）。</div>}
 
       <div className="mbt-field-add">
         {!adding ? (

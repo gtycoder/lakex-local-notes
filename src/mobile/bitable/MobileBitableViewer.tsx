@@ -16,7 +16,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import "./mobileBitable.css";
-import { LayoutList, ListFilter, Menu, Plus, TableProperties } from "lucide-react";
+import { ArrowDown, ArrowUp, LayoutList, ListFilter, ListOrdered, Menu, Plus, TableProperties, Trash2, X } from "lucide-react";
 import { checkDocBody } from "../../core/docBodySafety.js";
 import { fillSurfaceColor } from "../../core/colorPalette.js";
 import {
@@ -28,14 +28,19 @@ import {
   BITABLE_VIEW_TYPE_LABEL,
   buildBitableFillProjection,
   createDefaultBitableTable,
+  filterOperatorsFor,
   groupRecords,
   isKnownViewType,
+  orderedAllTableFields,
   orderedTableFields,
+  sortModeLabel,
+  sortModesForField,
   type BitableDisplayContext,
   type BitableDoc,
   type BitableField,
   type BitableFieldType,
   type BitableRecord,
+  type BitableSortMode,
   type BitableView,
   type BitableViewType,
 } from "../../core/bitableDoc.js";
@@ -72,10 +77,18 @@ import { bitableViewStateSummary, bitableViewStateTab } from "./mobileBitableVie
 import { readBitableRecordLayout, writeBitableRecordLayout } from "./mobileBitableViewPrefs";
 import { submitMobileForm } from "./mobileBitableForm";
 import { EmptyState } from "../ui/EmptyState";
+import { MobileSheetMenu, type MobileSheetItem } from "../ui/MobileSheetMenu";
+import { SelectionTopBar } from "../ui/SelectionTopBar";
+import { SelectionActionBar } from "../ui/SelectionActionBar";
+import { SelectionCheckbox } from "../ui/SelectionCheckbox";
+import { useSelectionMode } from "../ui/useSelectionMode";
+import { useLongPress } from "../ui/useLongPress";
 import {
-  addMobileField, addMobileRecord, deleteMobileField, deleteMobileRecord,
+  addMobileField, addMobileRecord, deleteMobileField, deleteMobileRecord, deleteMobileRecords,
   isMobileEditableField, recordWindow, serializeBitableBody, setMobileCell,
 } from "./mobileBitableEdit";
+import { quickFilterPatch, quickSortClearPatch, quickSortMode, quickSortPatch } from "./mobileBitableQuickActions";
+import { reorderBitableFieldsByDrag } from "./mobileBitableFieldOrder";
 import { isImeConfirming } from "../../core/ime";
 
 /** 分页窗口大小（记录全集不动，只决定挂载多少行；与桌面行窗口契约同一目标）。 */
@@ -189,6 +202,7 @@ export function MobileBitableViewer({ noteId, content, editing = false, onChange
     setFieldSheetOpen(false);
     setEditingFieldId(null);
     setActionsViewId(null);
+    setHeaderFieldId(null);
   }, [editable]);
 
   // 记录详情 = 子页全屏：请求父级隐藏工作区 chrome；返回键先关详情（不是退工作区）。
@@ -231,6 +245,46 @@ export function MobileBitableViewer({ noteId, content, editing = false, onChange
     records.forEach((record, index) => map.set(record.id, index + 1));
     return map;
   }, [records]);
+
+  /** 列头快捷菜单（261117 P1-4）：点列头弹「升序 / 降序 / 筛选此字段」；null = 关闭。 */
+  const [headerFieldId, setHeaderFieldId] = useState<string | null>(null);
+
+  /**
+   * 批量选择记录（261117 P1-4）：长按行进入 —— 与 quickNoteSelection 同一套交互语义
+   * （进入带首行 / 选择态点行切换 / 全选 / 返回键先退多选 / 抬手补发的 click 吞掉），
+   * 复用 ui/selection 纯状态机 + SelectionTopBar / SelectionCheckbox / SelectionActionBar 原语。
+   * 只在**编辑态**可用：动作是删除（正文写入），只读文档不写盘（「打开 = 只读」）。
+   */
+  const recordIds = useMemo(() => records.map((record) => record.id), [records]);
+  const selection = useSelectionMode(recordIds);
+  const pressedRecordId = useRef<string | null>(null);
+  /** 长按进入多选后，抬手补发的那一次 click 要吞掉（否则刚选中的行会被立刻切掉）。 */
+  const suppressRowClick = useRef(false);
+  const rowLongPress = useLongPress(() => {
+    const id = pressedRecordId.current;
+    if (!id || !editable) return;
+    suppressRowClick.current = true;
+    selection.enter(id);
+  }, { moveCancelPx: 10 });
+  const pressRecord = useCallback((id: string) => {
+    pressedRecordId.current = id;
+    suppressRowClick.current = false;
+  }, []);
+  const consumeRowClick = useCallback((): boolean => {
+    if (!suppressRowClick.current) return false;
+    suppressRowClick.current = false;
+    return true;
+  }, []);
+  // 退出编辑态 ⇒ 退多选（删除是正文写入，只读态不留批量操作面）。
+  useEffect(() => {
+    if (!editable) selection.exit();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editable]);
+  // 返回键先退多选（与小记多选同语义：不退工作区 / 不退 App）。
+  useEffect(() => {
+    if (!selection.active) return;
+    return pushBackHandler(() => { selection.exit(); return true; });
+  }, [selection.active, selection.exit]);
 
   if (bodyUnreadable) {
     return (
@@ -281,6 +335,8 @@ export function MobileBitableViewer({ noteId, content, editing = false, onChange
   };
 
   const switchTable = (id: string) => {
+    selection.exit();
+    setHeaderFieldId(null);
     setTableId(id);
     setViewId("");
     setVisibleCount(MOBILE_BITABLE_PAGE);
@@ -331,6 +387,8 @@ export function MobileBitableViewer({ noteId, content, editing = false, onChange
   };
 
   const switchView = (nextViewId: string) => {
+    selection.exit();
+    setHeaderFieldId(null);
     setViewId(nextViewId);
     setVisibleCount(MOBILE_BITABLE_PAGE);
     setRecordId(null);
@@ -393,6 +451,14 @@ export function MobileBitableViewer({ noteId, content, editing = false, onChange
    */
   const reorderViews = (fromId: string, overId: string, position: ViewDropPosition) => {
     mutate((current) => reorderBitableViewsByDrag(current, table.id, fromId, overId, position));
+  };
+
+  /**
+   * 字段拖拽重排（261117 P1-4）：只改**当前视图**的 fieldOrder（列顺序是视图级配置、随正文同步，
+   * 与网格列顺序同源）；路径 = 与重命名/删除同一份 `mutate` ⇒ 只读文档自动拒绝、同一份防抖落盘。
+   */
+  const reorderFields = (fromId: string, overId: string, position: ViewDropPosition) => {
+    mutate((current) => reorderBitableFieldsByDrag(current, table.id, view.id, fromId, overId, position));
   };
 
   /**
@@ -484,6 +550,29 @@ export function MobileBitableViewer({ noteId, content, editing = false, onChange
     setRecordId(null);
   };
 
+  /**
+   * 批量删除所选记录（261117 P1-4）：确认弹窗照单条 deleteRecord 的文案口径（不能撤销），
+   * 记录没有回收站 ⇒ 只有「删除」与退出（不提供移入回收站）。成功后退出多选。
+   */
+  const deleteSelectedRecords = async () => {
+    const ids = [...selection.ids];
+    if (ids.length === 0) { showToast("请先选择记录"); return; }
+    const ok = await confirmMobile({
+      title: "删除 " + ids.length + " 条记录？",
+      body: "所选 " + ids.length + " 条记录及其全部字段值会被删除（不能撤销）。",
+      confirmText: "删除",
+      danger: true,
+    });
+    if (!ok) return;
+    const current = docRef.current;
+    if (!current) return;
+    const next = deleteMobileRecords(current, table.id, ids);
+    selection.exit();
+    if (next === current) return;
+    commit(next);
+    showToast("已删除 " + ids.length + " 条记录");
+  };
+
   const openRecord = (recordIdToOpen: string) => {
     if (editable) setRecordId(recordIdToOpen);
     else setDetailId(recordIdToOpen);
@@ -507,19 +596,37 @@ export function MobileBitableViewer({ noteId, content, editing = false, onChange
   const columnCount = fields.length + 1;
 
   const renderTableRow = (record: BitableRecord) => {
+    const selecting = selection.active;
+    const selected = selection.isSelected(record.id);
     const side = fillProjection?.rowSide.get(record.id)?.color;
     return (
       <tr key={record.id} data-fill-side={side ? "" : undefined}
         style={side ? ({ "--mbt-fill-side": side } as CSSProperties) : undefined}
-        onClick={() => openRecord(record.id)}
-        onKeyDown={(event) => { if (event.key === "Enter" && !isImeConfirming(event)) openRecord(record.id); }}
-        tabIndex={0} role="row" aria-label={"查看记录 " + bitableRecordTitle(table, record, displayCtx)}>
-        <td className="mbt-grid__idx">{indexById.get(record.id) ?? ""}</td>
+        onClick={() => {
+          if (consumeRowClick()) return;
+          if (selecting) { selection.toggle(record.id); return; }
+          openRecord(record.id);
+        }}
+        onKeyDown={(event) => {
+          if (event.key !== "Enter" || isImeConfirming(event)) return;
+          if (selecting) selection.toggle(record.id);
+          else openRecord(record.id);
+        }}
+        onTouchStart={(event) => { pressRecord(record.id); rowLongPress.onTouchStart(event); }}
+        onTouchMove={rowLongPress.onTouchMove}
+        onTouchEnd={rowLongPress.onTouchEnd}
+        onTouchCancel={rowLongPress.onTouchCancel}
+        tabIndex={0} role="row" aria-label={(selecting ? "选择记录 " : "查看记录 ") + bitableRecordTitle(table, record, displayCtx)}>
+        <td className="mbt-grid__idx">
+          {selecting
+            ? <SelectionCheckbox checked={selected} compact label={(selected ? "取消选择 " : "选择 ") + bitableRecordTitle(table, record, displayCtx)} />
+            : indexById.get(record.id) ?? ""}
+        </td>
         {fields.map((field) => {
           const value: ReactNode = <FieldValue noteId={noteId} ctx={displayCtx} field={field} record={record} maxChips={2} />;
           return (
             <td key={field.id} style={fillStyleOf(record.id, field.id)}>
-              {editable ? (
+              {editable && !selecting ? (
                 <button type="button" className="mbt-cell-btn" aria-label={field.name + "：" + (bitableFieldText(record, field, displayCtx) || "空")} onClick={(event) => { event.stopPropagation(); tapCell(record, field); }}>
                   {value}
                 </button>
@@ -531,12 +638,64 @@ export function MobileBitableViewer({ noteId, content, editing = false, onChange
     );
   };
 
+  /** 列头排序指示（261117 P1-4）：该列有排序规则才画小箭头（升序类 ↑ / 降序类 ↓）。 */
+  const sortIconOf = (fieldId: string) => {
+    const mode = quickSortMode(view, fieldId);
+    if (!mode) return null;
+    return mode === "desc" || mode === "optionReverse"
+      ? <ArrowDown size={11} aria-hidden="true" />
+      : <ArrowUp size={11} aria-hidden="true" />;
+  };
+
+  /** 列头快捷菜单（261117 P1-4）：排序方式按字段类型给全（单选/多选含选项语义序）；标「当前」的项 = 该列现行排序。 */
+  const headerMenuField = headerFieldId ? table.fields.find((field) => field.id === headerFieldId) ?? null : null;
+  const headerMenuMode = headerMenuField ? quickSortMode(view, headerMenuField.id) : null;
+  const headerMenuItems: MobileSheetItem[] = headerMenuField ? [
+    ...sortModesForField(headerMenuField).map((mode): MobileSheetItem => ({
+      id: "sort-" + mode,
+      label: sortModeLabel(headerMenuField, mode),
+      icon: mode === "asc" ? ArrowUp : mode === "desc" ? ArrowDown : ListOrdered,
+      note: headerMenuMode === mode ? "当前" : undefined,
+    })),
+    ...(filterOperatorsFor(headerMenuField).length > 0 ? [{ id: "filter", label: "筛选此字段", icon: ListFilter } as MobileSheetItem] : []),
+    ...(headerMenuMode ? [{ id: "sort-clear", label: "清除排序", icon: X } as MobileSheetItem] : []),
+  ] : [];
+
+  /** 列头菜单动作：排序 = 文档数据（view.sorts）、筛选 = 视图配置数据（view.filters），同一份 updateView 写回。 */
+  const runHeaderAction = (itemId: string) => {
+    const field = headerMenuField;
+    setHeaderFieldId(null);
+    if (!field || !editable) return;
+    if (itemId === "filter") {
+      const patch = quickFilterPatch(view, field, filterOperatorsFor(field).length > 0);
+      if (patch) updateView(patch);
+      // 条件值的细化交给共享筛选编辑器（AGENTS §3#19：不造第二套条件 UI）。
+      setConfigInitialTab("filter");
+      setConfigOpen(true);
+      return;
+    }
+    if (itemId === "sort-clear") {
+      const patch = quickSortClearPatch(view, field.id);
+      if (patch) updateView(patch);
+      return;
+    }
+    if (itemId.startsWith("sort-")) {
+      const patch = quickSortPatch(view, field.id, itemId.slice(5) as BitableSortMode);
+      if (patch) updateView(patch);
+    }
+  };
+
   return (
     <div className={"mobile-bitable" + (editable ? " is-editing" : "") + (isFormView ? " mbt-is-form" : "")} data-mobile-bitable data-prevent-swipe>
       {/* 头部 = 两行（261103 四批）：
           第 1 行 [☰ 表名 …… 字段 / 筛选 / ＋]；第 2 行 [视图页签横滚] [视图列表]（仅 header.showViews）。
           哪些部件出现只由 mobileBitableHeaderModel 回答（纯函数、不依赖 records）；
           「编辑中/只读」徽标与记录数不进头部（记录数在网格末尾统计行）。 */}
+      {/* 批量选择态：头部整体换成多选顶栏（与首页小记多选同一形态，edge=nested：嵌在工作区内不重复消费安全区）。 */}
+      {selection.active ? (
+        <SelectionTopBar count={selection.count} allSelected={selection.allSelected}
+          onCancel={() => selection.exit()} onToggleAll={() => selection.toggleAll()} edge="nested" />
+      ) : (
       <header className="mbt-header" role="toolbar" aria-label="多维表头部" data-mb-topbar data-edge="nested">
         <div className="mbt-header__row1">
           <button type="button" className="mb-iconbtn mb-iconbtn--compact mbt-header__tables mb-tap" aria-label="数据表"
@@ -590,6 +749,7 @@ export function MobileBitableViewer({ noteId, content, editing = false, onChange
           </div>
         )}
       </header>
+      )}
 
       {isFormView ? (
         <MobileBitableFormView noteId={noteId} table={table} view={view} ctx={displayCtx} onSubmit={submitForm}
@@ -643,7 +803,14 @@ export function MobileBitableViewer({ noteId, content, editing = false, onChange
                   <tr>
                     <th className="mbt-grid__idx">序号</th>
                     {fields.map((field) => (
-                      <th key={field.id} style={{ minWidth: field.width ?? 120 }}>{field.name}</th>
+                      <th key={field.id} style={{ minWidth: field.width ?? 120 }}>
+                        {editable ? (
+                          <button type="button" className="mbt-cell-btn" aria-label={"排序与筛选 " + field.name}
+                            onClick={() => setHeaderFieldId(field.id)}>
+                            {field.name}{sortIconOf(field.id)}
+                          </button>
+                        ) : <>{field.name}{sortIconOf(field.id)}</>}
+                      </th>
                     ))}
                   </tr>
                 </thead>
@@ -664,7 +831,7 @@ export function MobileBitableViewer({ noteId, content, editing = false, onChange
                     </tr>
                   </tbody>
                 )}
-                {editable && (
+                {editable && !selection.active && (
                   <tbody>
                     <tr>
                       <td className="mbt-add-row" colSpan={Math.max(1, columnCount)}>
@@ -711,10 +878,11 @@ export function MobileBitableViewer({ noteId, content, editing = false, onChange
       {editable && fieldSheetOpen && (
         <MobileBitableFieldSheet
           table={table}
-          fields={table.fields}
+          fields={orderedAllTableFields(table, view)}
           onEdit={(field) => setEditingFieldId(field.id)}
           onDelete={(fieldId) => mutate((current) => deleteMobileField(current, table.id, fieldId))}
           onAdd={addField}
+          onReorderFields={reorderFields}
           onClose={() => setFieldSheetOpen(false)}
         />
       )}
@@ -830,6 +998,23 @@ export function MobileBitableViewer({ noteId, content, editing = false, onChange
           onDuplicate={() => duplicateView(actionsView.id)}
           onDelete={() => deleteView(actionsView.id)}
           onClose={() => setActionsViewId(null)}
+        />
+      )}
+
+      {/* 列头快捷菜单（261117 P1-4）：贴底弹层菜单原语 .mb-menusheet，不新造浮层。 */}
+      <MobileSheetMenu
+        open={!!headerMenuField}
+        items={headerMenuItems}
+        onClose={() => setHeaderFieldId(null)}
+        onSelect={(item) => runHeaderAction(item.id)}
+      />
+
+      {/* 批量选择动作条（261117 P1-4，与小记多选同一原语）：记录无回收站 ⇒ 动作只有「删除 N 条」，退出走顶栏「取消」。 */}
+      {selection.active && (
+        <SelectionActionBar
+          fixed
+          actions={[{ id: "delete", label: "删除 " + selection.count + " 条", icon: Trash2, danger: true }]}
+          onAction={(id) => { if (id === "delete") void deleteSelectedRecords(); }}
         />
       )}
     </div>

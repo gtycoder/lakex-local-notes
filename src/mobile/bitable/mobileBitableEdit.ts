@@ -94,6 +94,11 @@ export function deleteMobileRecord(doc: BitableDoc, tableId: string, recordId: s
   return deleteBitableRecords(doc, tableId, [recordId]);
 }
 
+/** 删除多条记录（批量多选用；core 同一批判据：不存在的 id 忽略、集合无变化返回原引用）。 */
+export function deleteMobileRecords(doc: BitableDoc, tableId: string, recordIds: readonly string[]): BitableDoc {
+  return deleteBitableRecords(doc, tableId, recordIds);
+}
+
 /**
  * 单选/多选：按名称取选项，没有就建（与桌面 addOption 同一行为：同名复用、色板轮转）。
  * 返回新 doc 与选项 id；记录值由调用方用 setMobileCell 写（多选需自行拼数组）。
