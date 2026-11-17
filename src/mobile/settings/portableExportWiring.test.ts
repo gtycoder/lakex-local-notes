@@ -18,6 +18,13 @@ describe("移动端导出便携包到文件（D 项）接线", () => {
     expect(block).toContain("portableExportSummary");
   });
 
+  it("关闭数据库前 wal_checkpoint：陈旧主库不再误报缺正文（261117 恢复演练实锤）", () => {
+    const context = read("src/mobile/bridge/context.ts");
+    expect(context).toContain("PRAGMA wal_checkpoint(TRUNCATE)");
+    // checkpoint 必须发生在 close 之前（原生快照只复制主库文件）
+    expect(context.indexOf("wal_checkpoint")).toBeLessThan(context.indexOf("await current.close()"));
+  });
+
   it("导出编排：原生快照 → 自检 → saveAs(toDownloads)", () => {
     const flow = read("src/mobile/portable/exportPortable.ts");
     expect(flow).toContain("nativeExportPortableSnapshot()");
