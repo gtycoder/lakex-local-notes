@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 /**
- * 记录面板单选/多选折叠式选择器（261117 用户点单重做）：
- * 折叠只显示已选 → 点摘要展开候选 → 单选点选即收起 / 多选连选 → 新建选项跳字段编辑器；
- * 选中态 = 勾选 + 主色选中三件套（不再被选项色底淹没）。
+ * 记录面板单选/多选选择器（261117 用户点单重做，二稿「项移动」模型）：
+ * 折叠只显示已选 → 点箭头/行展开候选 → **选中的项移动到上方已选区、候选区只留未选中**（不重复）；
+ * 点候选 = 移上来（单选取代/多选追加）、点已选 = 移回下方；「新建选项」跳字段编辑器。
  */
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
@@ -16,14 +16,14 @@ beforeEach(() => { vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true); host = docum
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); vi.unstubAllGlobals(); });
 
 const selectField = { ...createBitableField("select", "状态", "f-sel"), options: createBitableFieldOptions(["进行中", "已完成"]) };
-const multiField = { ...createBitableField("multiSelect", "标签", "f-multi"), options: createBitableFieldOptions(["重要", "紧急"]) };
+const multiField = { ...createBitableField("multiSelect", "标签", "f-multi"), options: createBitableFieldOptions(["重要", "紧急", "一般"]) };
 const table: BitableTable = { id: "t1", name: "任务表", activeViewId: "v1", views: [{ id: "v1", name: "表格", type: "grid", rowHeight: "low" }], fields: [selectField, multiField], records: [] };
-const record: BitableRecord = {
+const valueFor = (select: string, multi: string[]): BitableRecord => ({
   id: "r1", createdAt: "2026-10-20T00:00:00.000Z", updatedAt: "2026-10-20T00:00:00.000Z",
-  values: { [selectField.id]: selectField.options?.[0].id ?? "", [multiField.id]: [multiField.options?.[1].id ?? ""] },
-};
+  values: { [selectField.id]: select, [multiField.id]: multi },
+});
 
-const render = async (onPatch = vi.fn(), onEditField = vi.fn()) => {
+const render = async (record: BitableRecord, onPatch = vi.fn(), onEditField = vi.fn()) => {
   await act(async () => {
     root.render(createElement(MobileBitableRecordSheet, {
       noteId: "n1", table, fields: [selectField, multiField], record, ctx: { tables: [table] },
@@ -32,46 +32,48 @@ const render = async (onPatch = vi.fn(), onEditField = vi.fn()) => {
   });
   return { onPatch, onEditField };
 };
-const summaryOf = (name: string) => [...host.querySelectorAll<HTMLButtonElement>(".mbt-select__summary")]
-  .find((b) => b.getAttribute("aria-label")?.startsWith(name + "："))!;
-const optionsOpen = () => host.querySelectorAll(".mbt-select__options").length;
+const selectChosen = () => [...host.querySelectorAll<HTMLButtonElement>('.mbt-select__chosen [aria-label^="取消 "]')].map((b) => b.getAttribute("aria-label")!.replace("取消 ", ""));
+const candidateNames = () => [...host.querySelectorAll<HTMLButtonElement>(".mbt-select__options button")].map((b) => (b.textContent || "").trim());
+const toggleOf = (index: number) => host.querySelectorAll<HTMLButtonElement>(".mbt-select__toggle")[index];
+const ensureOpen = async (index = 0) => { if (!host.querySelector(".mbt-select__options")) await act(async () => { toggleOf(index).click(); }); };
 
-describe("记录面板单选/多选折叠式选择器", () => {
-  it("默认折叠只显示已选值；点摘要展开候选（未选中的不平铺）", async () => {
-    await render();
-    expect(optionsOpen()).toBe(0);
-    expect(summaryOf("状态").textContent).toContain("进行中");
+describe("记录面板选择器（项移动模型）", () => {
+  it("折叠只显示已选；展开后候选区只留未选中（同一选项不重复出现）", async () => {
+    await render(valueFor(selectField.options?.[0].id ?? "", [multiField.options?.[1].id ?? ""]));
+    expect(selectChosen()).toEqual(["进行中", "紧急"]);
     expect(host.textContent).not.toContain("已完成");
-    await act(async () => { summaryOf("状态").click(); });
-    expect(optionsOpen()).toBe(1);
-    expect(host.textContent).toContain("已完成");
+    expect(host.textContent).not.toContain("重要");
+    await act(async () => { toggleOf(0).click(); });
+    // 去重：已选的（进行中）不在候选区；候选只有未选中（已完成）+ 新建选项
+    expect(candidateNames()).toEqual(["已完成", "新建选项"]);
   });
 
-  it("选中态 = 勾选 + is-on（不被选项色底淹没）；单选点选即完成并收起", async () => {
-    const { onPatch } = await render();
-    await act(async () => { summaryOf("状态").click(); });
-    const chosen = host.querySelector<HTMLButtonElement>('.mbt-select__options [role="radio"][aria-checked="true"]')!;
-    expect(chosen.className).toContain("is-on");
-    expect(chosen.querySelector("svg.lucide-check")).not.toBeNull();
-    expect(chosen.getAttribute("style")).toBeNull(); // 选中不铺选项色底
-    const option2 = [...host.querySelectorAll<HTMLButtonElement>('.mbt-select__options [role="radio"]')][1];
-    await act(async () => { option2.click(); });
-    expect(onPatch).toHaveBeenCalledWith("f-sel", expect.any(String));
-    expect(optionsOpen(), "单选点选即收起").toBe(0);
+  it("点候选 = 移上来（单选取代：旧项移回下方）；点已选 = 移回下方", async () => {
+    const { onPatch } = await render(valueFor(selectField.options?.[0].id ?? "", []));
+    await act(async () => { toggleOf(0).click(); });
+    // 项移动后候选区只有一个未选中项（进行中已上移）
+    expect(candidateNames()).toEqual(["已完成", "新建选项"]);
+    await act(async () => { [...host.querySelectorAll<HTMLButtonElement>('.mbt-select__options [role="radio"]')][0].click(); });
+    expect(onPatch).toHaveBeenCalledWith("f-sel", selectField.options?.[1].id);
+    // 用新值重渲染 ⇒ 项移动：已完成上移、进行中回到候选（沿用同一个 mock）
+    await render(valueFor(selectField.options?.[1].id ?? "", []), onPatch);
+    await ensureOpen(0);
+    expect(selectChosen()).toEqual(["已完成"]);
+    expect(candidateNames()).toContain("进行中");
+    // 点已选项 = 取消
+    await act(async () => { host.querySelector<HTMLButtonElement>('.mbt-select__chosen [aria-label^="取消 "]')!.click(); });
+    expect(onPatch).toHaveBeenLastCalledWith("f-sel", "");
   });
 
-  it("多选可连选不自动收起；再点摘要收起；新建选项跳字段编辑器", async () => {
-    const { onPatch, onEditField } = await render();
-    await act(async () => { summaryOf("标签").click(); });
-    const boxes = [...host.querySelectorAll<HTMLButtonElement>('.mbt-select__options [role="checkbox"]')];
-    await act(async () => { boxes[0].click(); });
+  it("多选点候选追加、点已选移除；新建选项跳字段编辑器并收起", async () => {
+    const { onPatch, onEditField } = await render(valueFor("", [multiField.options?.[1].id ?? ""]));
+    await act(async () => { toggleOf(1).click(); }); // 第二个字段（标签）的选择器
+    await act(async () => { [...host.querySelectorAll<HTMLButtonElement>('.mbt-select__options [role="checkbox"]')][0].click(); });
     expect(onPatch).toHaveBeenCalledWith("f-multi", expect.arrayContaining([expect.any(String)]));
-    expect(optionsOpen(), "多选保持展开").toBe(1);
-    await act(async () => { summaryOf("标签").click(); });
-    expect(optionsOpen()).toBe(0);
-    await act(async () => { summaryOf("标签").click(); });
+    await act(async () => { [...host.querySelectorAll<HTMLButtonElement>('.mbt-select__chosen [aria-label^="取消 "]')].find((b) => b.getAttribute("aria-label") === "取消 紧急")!.click(); });
+    expect(onPatch).toHaveBeenLastCalledWith("f-multi", expect.not.arrayContaining([multiField.options?.[1].id ?? ""]));
     await act(async () => { [...host.querySelectorAll<HTMLButtonElement>(".mbt-select__options button")].find((b) => b.textContent?.includes("新建选项"))!.click(); });
     expect(onEditField).toHaveBeenCalledWith("f-multi");
-    expect(optionsOpen(), "跳编辑器时收起").toBe(0);
+    expect(host.querySelector(".mbt-select__options"), "跳编辑器时收起").toBeNull();
   });
 });

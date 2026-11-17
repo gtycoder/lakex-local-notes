@@ -101,11 +101,11 @@ function NumberControl({ value, onChange }: { value: unknown; onChange: (value: 
 
 
 /**
- * 单选/多选字段控件（261117 用户点单重做）：
- * · 默认**折叠**：行内只显示已选值（不再平铺全部选项）；
- * · 点摘要行展开候选：选中 = 勾选 + 主色选中三件套（选项色底只给未选中做色相标识 ——
- *   之前选中态被选项色底淹没、完全看不出来）；
- * · 单选点选即完成并收起；多选可连选，再点摘要行收起；
+ * 单选/多选字段控件（261117 用户点单重做，二稿 = 「项移动」模型）：
+ * · 默认**折叠**：行内只显示已选值；左对齐、宽度拉满；
+ * · **选中的项移动到上方已选区，候选区只留未选中**（同一选项不再两处重复）——
+ *   点候选 = 选中移上来（单选取代、多选追加）；点已选项 = 取消移回下方；
+ * · 点行其它区域/箭头 = 展开收起候选区（选择过程保持展开，移动看得见）；
  * · 「新建选项」= 跳**字段编辑器**（回车流转批量录选项），不在此处内联录入。
  */
 function SelectControl({ field, value, onChange, onEditField }: {
@@ -116,50 +116,50 @@ function SelectControl({ field, value, onChange, onEditField }: {
   const [open, setOpen] = useState(false);
   const options = field.options ?? [];
   const chosen = options.filter((option) => selected.includes(option.id));
-  const toggle = (optionId: string): void => {
-    if (multi) {
-      onChange(selected.includes(optionId) ? selected.filter((id) => id !== optionId) : [...selected, optionId]);
-      return;
-    }
-    onChange(selected.includes(optionId) ? "" : optionId);
-    setOpen(false); // 单选点选即完成
+  const candidates = options.filter((option) => !selected.includes(option.id));
+  const pick = (optionId: string): void => {
+    onChange(multi ? [...selected, optionId] : optionId); // 单选取代（旧项移回下方）、多选追加
+  };
+  const unpick = (optionId: string): void => {
+    onChange(multi ? selected.filter((id) => id !== optionId) : "");
   };
   return (
     <div className="mbt-select">
-      <button
-        type="button"
-        className="mbt-select__summary"
-        aria-expanded={open}
-        aria-label={field.name + "：" + (chosen.length ? chosen.map((option) => option.name).join("、") : "未选择")}
-        onClick={() => setOpen((on) => !on)}
-      >
-        {chosen.length ? (
-          <span className="mb-chip-row">
-            {chosen.map((option) => (
-              <span key={option.id} className="mb-chip" style={optionChipStyle(option.color)}>{option.name}</span>
-            ))}
-          </span>
-        ) : (
+      {/* 已选区：点已选项 = 取消（移回下方）；点行空白/箭头 = 展开收起候选。 */}
+      <div className="mbt-select__chosen" onClick={() => setOpen((on) => !on)}>
+        {chosen.length ? chosen.map((option) => (
+          <button
+            key={option.id}
+            type="button"
+            className="mb-chip"
+            style={optionChipStyle(option.color)}
+            aria-label={"取消 " + option.name}
+            onClick={(event) => { event.stopPropagation(); unpick(option.id); }}
+          ><Check size={13} aria-hidden="true" />{option.name}</button>
+        )) : (
           <span className="mbt-select__placeholder">未选择</span>
         )}
-        {open ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-      </button>
+        <button
+          type="button"
+          className="mbt-select__toggle"
+          aria-expanded={open}
+          aria-label={(open ? "收起 " : "展开 ") + field.name + " 选项"}
+          onClick={(event) => { event.stopPropagation(); setOpen((on) => !on); }}
+        >{open ? <ChevronUp size={16} /> : <ChevronDown size={16} />}</button>
+      </div>
       {open && (
         <div className="mb-chip-row mbt-select__options" role={multi ? "group" : "radiogroup"} aria-label={"选择 " + field.name}>
-          {options.map((option) => {
-            const on = selected.includes(option.id);
-            return (
-              <button
-                key={option.id}
-                type="button"
-                role={multi ? "checkbox" : "radio"}
-                aria-checked={on}
-                className={"mb-chip" + (on ? " is-on" : "")}
-                style={on ? undefined : optionChipStyle(option.color)}
-                onClick={() => toggle(option.id)}
-              >{on && <Check size={13} aria-hidden="true" />}{option.name}</button>
-            );
-          })}
+          {candidates.map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              role={multi ? "checkbox" : "radio"}
+              aria-checked={false}
+              className="mb-chip"
+              style={optionChipStyle(option.color)}
+              onClick={() => pick(option.id)}
+            >{option.name}</button>
+          ))}
           <button type="button" className="mb-chip mbt-select__add" onClick={() => { setOpen(false); onEditField(field.id); }}>
             <Plus size={14} />新建选项
           </button>
