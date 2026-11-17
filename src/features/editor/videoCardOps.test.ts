@@ -40,10 +40,11 @@ function cardWithData(value: Record<string, unknown>) {
 }
 
 describe("视频卡片布局值", () => {
-  it("宽度按 10–100 取整，对齐只接受三个合法值", () => {
+  it("宽度按 10–100 夹取并保留 1 位小数，对齐只接受三个合法值", () => {
     expect(normalizeVideoWidth(undefined)).toBe(100);
     expect(normalizeVideoWidth(9)).toBe(10);
-    expect(normalizeVideoWidth(53.6)).toBe(54);
+    expect(normalizeVideoWidth(53.6)).toBe(53.6);
+    expect(normalizeVideoWidth(53.66)).toBe(53.7);
     expect(normalizeVideoWidth(120)).toBe(100);
     expect(normalizeVideoAlignment("right")).toBe("right");
     expect(normalizeVideoAlignment("justify")).toBe("left");

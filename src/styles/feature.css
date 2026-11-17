@@ -320,12 +320,38 @@ pre {
 .lake-editor-tab ne-card[data-card-name="video"][data-video-align="right"]:has(.ne-card-video-done) { margin-left: auto; margin-right: 0; }
 .lake-editor-tab ne-card[data-card-name="video"]:has(.ne-card-video-done) .ne-card-container,
 .lake-editor-tab ne-card[data-card-name="video"]:has(.ne-card-video-done) .ne-card-video { width: auto; max-width: 100%; }
-.lake-editor-tab :is(ne-card[data-card-name="video"], ne-card[data-card-name="image"]) > .lake-media-resize-handle { position: absolute; z-index: 3; top: 8px; bottom: 8px; width: 16px; display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none; touch-action: none; cursor: col-resize; }
-.lake-editor-tab :is(ne-card[data-card-name="video"], ne-card[data-card-name="image"]) > .lake-media-resize-handle--left { left: -8px; }
-.lake-editor-tab :is(ne-card[data-card-name="video"], ne-card[data-card-name="image"]) > .lake-media-resize-handle--right { right: -8px; }
-.lake-editor-tab :is(ne-card[data-card-name="video"], ne-card[data-card-name="image"]):is(:hover, .ne-focused, .lake-media-selected) > .lake-media-resize-handle,
-.lake-editor-tab :is(ne-card[data-card-name="video"], ne-card[data-card-name="image"]) > .lake-media-resize-handle:focus-visible { opacity: 1; pointer-events: auto; }
-.lake-editor-tab :is(ne-card[data-card-name="video"], ne-card[data-card-name="image"]) > .lake-media-resize-handle::after { content: ""; width: 3px; height: 40px; border-radius: var(--lake-radius-pill); background: var(--lake-accent); box-shadow: var(--lake-shadow-card); }
-.lake-editor-tab :is(ne-card[data-card-name="video"], ne-card[data-card-name="image"]) > .lake-media-resize-handle::before { content: attr(data-value); position: absolute; top: -22px; padding: 2px 6px; border-radius: var(--lake-radius-xs); color: var(--lake-bg-panel); background: var(--lake-text-1); font-size: var(--lake-font-size-micro); font-variant-numeric: tabular-nums; white-space: nowrap; opacity: 0; pointer-events: none; }
-body.lake-media-resizing .lake-media-resize-handle::before { opacity: 1; }
-body.lake-media-resizing { cursor: col-resize; user-select: none; }
+/* 媒体缩放把手（261117 重构，手感对齐思源）：把手盒 = 媒体视觉盒（图片贴 img 实测盒、视频贴卡），
+ * 只在「宽度变化时会移动的边」出边缘长条 + 角点；几何公式与把手清单单一来源 mediaResizeGeometry.ts。
+ * 内核原生 .ne-ui-image-resizer 四角点/命中区由本模块接管（隐藏点与命中区，保留 selection box 描边）：
+ * 旧把手是「画框预览 + 松手跳变」，且右缘把手命中带会盖住右上/右下角（261117「四角不能用」主因）。 */
+.lake-editor-tab :is(ne-card[data-card-name="video"], ne-card[data-card-name="image"]) > .lake-media-resize-box { position: absolute; z-index: 3; pointer-events: none; }
+.lake-editor-tab ne-card[data-card-name="video"] > .lake-media-resize-box { inset: 0; }
+.lake-media-resize-box > .lake-media-resize-handle { position: absolute; z-index: 3; display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none; touch-action: none; }
+.lake-media-resize-box > .lake-media-resize-handle--edge-left,
+.lake-media-resize-box > .lake-media-resize-handle--edge-right { top: 6px; bottom: 6px; width: 16px; cursor: ew-resize; }
+.lake-media-resize-box > .lake-media-resize-handle--edge-left { left: -8px; }
+.lake-media-resize-box > .lake-media-resize-handle--edge-right { right: -8px; }
+.lake-media-resize-box > .lake-media-resize-handle--corner-tl,
+.lake-media-resize-box > .lake-media-resize-handle--corner-tr,
+.lake-media-resize-box > .lake-media-resize-handle--corner-br,
+.lake-media-resize-box > .lake-media-resize-handle--corner-bl { width: 16px; height: 16px; }
+.lake-media-resize-box > .lake-media-resize-handle--corner-tl { left: -8px; top: -8px; cursor: nwse-resize; }
+.lake-media-resize-box > .lake-media-resize-handle--corner-tr { right: -8px; top: -8px; cursor: nesw-resize; }
+.lake-media-resize-box > .lake-media-resize-handle--corner-br { right: -8px; bottom: -8px; cursor: nwse-resize; }
+.lake-media-resize-box > .lake-media-resize-handle--corner-bl { left: -8px; bottom: -8px; cursor: nesw-resize; }
+.lake-editor-tab :is(ne-card[data-card-name="video"], ne-card[data-card-name="image"]):is(:hover, .ne-focused, .lake-media-selected) .lake-media-resize-handle,
+.lake-media-resize-box > .lake-media-resize-handle:focus-visible { opacity: 1; pointer-events: auto; }
+.lake-media-resize-box > .lake-media-resize-handle--edge-left::after,
+.lake-media-resize-box > .lake-media-resize-handle--edge-right::after { content: ""; width: 3px; height: 40px; border-radius: var(--lake-radius-pill); background: var(--lake-accent); box-shadow: var(--lake-shadow-card); }
+.lake-media-resize-box > .lake-media-resize-handle--corner-tl::after,
+.lake-media-resize-box > .lake-media-resize-handle--corner-tr::after,
+.lake-media-resize-box > .lake-media-resize-handle--corner-br::after,
+.lake-media-resize-box > .lake-media-resize-handle--corner-bl::after { content: ""; width: 8px; height: 8px; border-radius: var(--lake-radius-pill); background: var(--lake-accent); box-shadow: var(--lake-shadow-card); }
+.lake-media-resize-box > .lake-media-resize-handle::before { content: attr(data-value); position: absolute; top: -22px; padding: 2px 6px; border-radius: var(--lake-radius-xs); color: var(--lake-bg-panel); background: var(--lake-text-1); font-size: var(--lake-font-size-micro); font-variant-numeric: tabular-nums; white-space: nowrap; opacity: 0; pointer-events: none; }
+body.lake-media-resizing .lake-media-resize-handle.is-active::before { opacity: 1; }
+body.lake-media-resizing { user-select: none; }
+body.lake-media-resizing[data-resize-cursor="ew-resize"] { cursor: ew-resize; }
+body.lake-media-resizing[data-resize-cursor="nesw-resize"] { cursor: nesw-resize; }
+body.lake-media-resizing[data-resize-cursor="nwse-resize"] { cursor: nwse-resize; }
+.lake-editor-tab ne-card[data-card-name="image"] .ne-ui-image-resizer,
+.lake-editor-tab ne-card[data-card-name="image"] .ne-ui-image-resizer-handler { display: none; }

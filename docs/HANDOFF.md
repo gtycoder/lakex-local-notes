@@ -7,6 +7,31 @@
 
 ## 0. 最新交接（最近 3 个批次；更早的见 git）
 
+### 261117 · 图片/视频缩放重构（用户点单：对齐思源手感；动图复核后二轮修视频闪烁）
+
+- **一轮（体验重构）**：旧「边缘拖拽」三病根治 —— ①映射系数错（图宽/卡宽逐帧重算 ⇒ 不跟手/越缩越快/突变；测试 mock 缺卡片 rect 走 fallback，从未测到真实映射）；②把手贴卡片盒而非图片盒（图片卡正文满宽）；③内核四角 resizer 被右缘把手覆盖 + 画框预览松手跳变。新架构 = `mediaResizeGeometry.ts` 纯几何（**起点快照 + 总位移×对齐系数**，思源 multiple 1/2）+ `mediaCardResize.ts` 引擎（拖动零布局读取）：**把手只在会动的边**（左对齐 = 右缘长条 + 右上/右下角点；右对齐 = 左侧 3 个；居中 = 两侧 6 个），把手盒贴 img 实测盒、1:1 跟手；内核 `.ne-ui-image-resizer*` 由 CSS 隐藏接管（保留 selection box 描边）。
+- **二轮（用户动图复核：图片已稳、视频仍剧烈闪烁/突变）**：抽帧取证（GIF 255 帧连帧 f_008/009）实锤根因 = **拖动中布局回写互相打架**（`mountVideoCardLayoutSync` 扫描把持久化旧宽度投影回拖动中的卡 ⇒ 整卡跳回原尺寸；transform/真布局两版共享此根因）。「闪烁」是尺寸跳变不是视频重绘（暂停视频改尺寸与图片同级稳定）。修复：**拖动锁**（`lockVideoLayout`：拖动中禁 applyVideoLayout 回写 + 自扫描跳过）；**中断=提交**（pointercancel/失焦按当前值提交不回退，Esc 才取消）；**提交失败不弹回**；`__videoWidth` 归一化 1 位小数（松手零跳）。
+- **三轮（用户复核：transform 预览不行 —— 缩小时框/把手不跟、放大无法预览、松手剧变；点单「上下位置间隔实时变化」）**：transform 路线**已回退**（合成预览冻结布局 ⇒ 间隔不动/放大被裁/松手落真实布局剧变；jsdom 测试看不出这类渲染问题，教训 = 视觉行为必须真实渲染器验证）；视频预览回到**直写 `--lake-video-max-width` 真布局**（间隔/把手盒实时走位，拖动锁保证不再跳变）。**用户裁决：图片/视频两套预览逻辑分开维护，不强求公共方法**（图片 = img.style.width + 手动盒跟踪「非常稳定」；视频 = 布局变量 + inset-0 自动跟随）。
+- **验证**：mediaResizeGeometry 3 例 + mediaCardResize 14 例 + videoCardOps/Fit 9 例全绿（含「分 100 次 1px 拖不跑飞」「拖动锁」「transform 预览零重排」「Esc 取消/中断提交」）；tsc 0；全量 vitest 0 failed；ui-metrics/cssLayers/mobileLayers/check:core/check:arch/check:bundle 全过（层围栏 feature.css 347 / edit-surface-kernel.css 140 已登记）。**待用户复核**：桌面拖视频（不闪/不回弹）；移动端已改共享模块需装包验收。
+- **落点**：`src/features/editor/mediaResizeGeometry.ts`（新）/ `mediaCardResize.ts`（重写）/ `videoCardOps.ts`（拖动锁 + transform 预览 + 宽度 1 位小数）；CSS `src/styles/feature.css` + `src/mobile/editor/edit-surface-kernel.css`；契约 [LAKEX-CONTRACT](LAKEX-CONTRACT.md) §5.56/§5.58 已回填。
+
+### 261117 · 多维表 UI 审计 + 9 项修复（用户点单：都推进）
+
+- **审计**：`design-plans/bitable-ui-audit-261117.md`（多维表表面族；含已排除的假信号——表头"深灰"系缩略图错觉，computed #eee 正常）。
+- **修复（9 项）**：① kit.css 补实现 **`.mb-tap` 命中盒工具**（44 Rule 约定机制此前注释引用但规则缺失，树行动作裸奔；实现后既有 mb-tap 目标同时达标）；② 选择器 toggle 命中盒 + 已选区行 role/键盘；③ 多维表头部按钮命中盒；④ 记录详情只读文案按收集表语境分支（普通记录不再冒充收集表）；⑤ **详情页「编辑」入口**（用户裁决：进入编辑并打开编辑面板；编辑锁/正文不可读不渲染，onRequestEdit 自 toggleEdit 贯通）；⑥ 创建动词统一「新建记录/新建字段/新建选项/新建视图」；⑦ 字段铅笔 aria 统一「修改字段」；⑧ 网格值溢出 +N 徽标；⑨ cell aria-label 带值。
+- **验证**：全量 `src/mobile` 343 文件/1763 例全绿；tsc 0；mobileLayers 基线 kit 651→659、mobileBitable 1094→1097 登记；已装 emulator-5554。
+
+### 261117 · 推广「项移动选择器」+「拖拽调高 Sheet」（用户点单）
+
+- **推广内容**：① 选择器抽单一来源 `bitable/BitableSelectControl`（记录面板 + **表单视图**共用「项移动」交互，表单填写态不显示「新建选项」）；② MobileSheet 的 `resizable` **默认开启**（~50 个 Sheet 调用点一处生效，头部拖拽调高成为全站统一手势），手写 PickerSheet 同款挂 `useSheetResize`；③ 多维表内容面板默认 72dvh（`mb-sheet--tall`：字段管理/修改字段/视图配置/视图列表）。
+- **验证**：FormView/表单提交断言换折叠式契约；全量 `src/mobile` 343 文件/1763 例全绿；tsc 0；已装 emulator-5554。
+
+### 261117 · Sheet 头部拖拽自主调整高度（用户点单）
+
+- **需求**：编辑记录弹窗太矮、浪费上边区域，长数据行展不开，要能自主上下调整。
+- **实现**：新 hook `ui/useSheetResize` —— Sheet 头部（grabber/标题行）拖拽调高度：上拉变高、下拉变矮、**松手停驻**（自由停驻）；拖到最小高度（35% 视口）继续下拉过阈值松手 = 关闭；范围 [35%, 92%] 视口。**手势边界**：`useSwipeDownDismiss` 新增 `ignoreSelector` 忽略头部起点（内容区下滑关闭/列表滚动语义不变）。MobileSheet 加 `resizable` 属性（原语单点实现）；记录面板启用 + `mb-sheet--tall`（默认 50dvh → 72dvh）。
+- **验证**：纯判据 2 例 + render 2 例（上拉/下拉停驻、最小高度关闭、头部拖拽不触发下滑关闭）；全量 `src/mobile` 345 文件/1764 例全绿；tsc 0；已装 emulator-5554。
+
 ### 261117 · 记录面板单选/多选折叠式选择器（用户点单，已确认两点理解）
 
 - **改造**：默认收起只显示已选值摘要（不再平铺全部选项）；点摘要行展开候选 —— **选中 = 勾选 + 主色选中三件套**（选项色底只给未选中做色相标识，修复「选中看不出来」）；单选点选即完成并收起、多选连选后点摘要收起；**「新建选项」= 跳字段编辑器**（回车流转批量录选项），记录面板内联录入删除（viewer 的 addMobileOption 链路退役，选项创建统一归字段编辑器）。

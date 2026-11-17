@@ -18,7 +18,8 @@ describe("Lakex 视频卡自适应", () => {
     expect(css).toContain('data-video-align="right"');
     expect(css).toContain(".lake-media-resize-handle");
     expect(css).toContain('ne-card[data-card-name="image"]');
-    expect(css).toContain("cursor: col-resize");
+    expect(css).toContain("cursor: ew-resize");
+    expect(css).toContain("cursor: nwse-resize");
     expect(css).not.toContain("max-height: min(72vh, 720px)");
     expect(css).not.toContain(".ne-card-video-content { height: 450px");
   });

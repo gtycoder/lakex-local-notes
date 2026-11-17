@@ -1,7 +1,8 @@
 /**
  * 视频卡片布局桥（桌面/移动端共用）。
  *
- * - `__videoWidth`：正文可用宽度百分比（10–100，缺省 100）。
+ * - `__videoWidth`：正文可用宽度百分比（10–100，缺省 100；保留 1 位小数 —— 拖拽预览即最终几何，
+ *   松手不跳变（261117 重构；旧整数值照常读写）。
  * - `__videoAlign`：left / center / right，缺省 left。
  * - 新插入视频在上传完成后归一为 `done`，并清掉 UploadObserver 中残留的已完成任务；
  *   否则卡片会持续处于 uploaded/upload-task 生命周期，宽度变化时视频层会明显闪烁。
@@ -96,7 +97,7 @@ function finalizeUploadedVideoCards(host: HTMLElement): void {
 
 export function normalizeVideoWidth(value: unknown): number {
   if (typeof value !== "number" || !Number.isFinite(value)) return DEFAULT_VIDEO_LAYOUT.widthPercent;
-  return Math.min(100, Math.max(10, Math.round(value)));
+  return Math.min(100, Math.max(10, Math.round(value * 10) / 10));
 }
 export function normalizeVideoAlignment(value: unknown): VideoAlignment {
   return value === "center" || value === "right" || value === "left" ? value : DEFAULT_VIDEO_LAYOUT.alignment;
@@ -107,12 +108,28 @@ export function readVideoLayout(cardEl: HTMLElement): VideoLayout {
   return { widthPercent: normalizeVideoWidth(value.__videoWidth), alignment: normalizeVideoAlignment(value.__videoAlign) };
 }
 
+const layoutLocks = new WeakSet<HTMLElement>();
+
+/**
+ * 拖动锁：媒体缩放拖动期间禁止把持久化布局重新投影到这张卡上。
+ * 无锁时 MutationObserver/contentchange 触发的 applyVideoLayout 会把旧宽度写回，
+ * 拖动中整卡跳回原尺寸（261117 用户复核「剧烈闪烁/突变」的根因）。
+ */
+export function lockVideoLayout(cardEl: HTMLElement, locked: boolean): void {
+  if (locked) layoutLocks.add(cardEl);
+  else layoutLocks.delete(cardEl);
+}
+export function isVideoLayoutLocked(cardEl: HTMLElement): boolean {
+  return layoutLocks.has(cardEl);
+}
+
 /** 把持久化布局投影为 DOM 百分比上限；拖拽手柄由 mediaCardResize 统一挂载。 */
 export function applyVideoLayout(cardEl: HTMLElement, layout: VideoLayout): VideoLayout {
   const normalized: VideoLayout = {
     widthPercent: normalizeVideoWidth(layout.widthPercent),
     alignment: normalizeVideoAlignment(layout.alignment),
   };
+  if (isVideoLayoutLocked(cardEl)) return readVideoLayout(cardEl);
   cardEl.setAttribute("data-video-width", String(normalized.widthPercent));
   cardEl.setAttribute("data-video-align", normalized.alignment);
   cardEl.style.setProperty("--lake-video-max-width", `${normalized.widthPercent}%`);

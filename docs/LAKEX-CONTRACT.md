@@ -2230,19 +2230,22 @@ DOM 文本节点扫描（移动端文档 `disableVirtualRendering:true`，整篇
   - `__videoAlign: "left" | "center" | "right"`：卡片在正文块内的对齐；缺省 left。
   - 两字段与 `__spacing` 同级；其他阅读器不识别时仍按原视频正常显示，不破坏数据。
 - **渲染口径**：`src/features/editor/videoCardOps.ts` 读取 cardData 后把宽度投影成 DOM `--lake-video-max-width`（正文可用宽度的百分比），再以 `min(100%, …)` 封顶；完成态按 intrinsic ratio 自适应。**100% = 铺满正文栏，不是视频原始像素尺寸**；不再叠加 `72vh / 720px` 高度上限，否则竖屏视频的 75% 与 100% 会被二次压成同一宽度。
-- **桌面/触屏交互**：完成态卡片左右边缘有拖拽手柄（桌面 hover/选中显示，移动端选中显示），拖动实时预览、松手才 `sync(false)` 持久化；每次移动按卡片中心对称缩放，范围 10–100%，键盘 ←/→ 每次 5%、Home/End 到 10/100%。`SelectionToolbar` 同时保留尺寸输入 + 25/50/75/100 档位和左/中/右对齐。上传中/失败态保持原状。
+- **桌面/触屏交互**：把手与几何见 §5.58（261117 重构：只在会动的边出把手、1:1 跟手、拖动锁）；范围 10–100%，键盘 ←/→ 每次 5%、Home/End 到 10/100%。`SelectionToolbar` 同时保留尺寸输入 + 25/50/75/100 档位和左/中/右对齐。上传中/失败态保持原状。
 - **新插入视频闪烁根因（261117 正式数据对比）**：同一视频文件字节 SHA-256 完全一致；旧文档重开后的视频为 `status:"done"`、UploadObserver `_taskManager` 无任务；新插入视频仍是 `status:"uploaded"`，已完成上传任务永久残留在 taskManager。对同卡做 50 次宽度变更：旧卡约 138ms，新卡约 231ms；清空残留 taskManager 后降到约 149ms。上传结束归一 `done + 清理任务` 后，新卡生命周期与旧卡一致。
-- **拖动预览**：视频拖动阶段只做整卡合成层 `transform: scale()`，按左/中/右对齐选择 origin；不逐帧重排 `<video>`，松手一次写真实宽度并清 transform。
+- **拖动预览**：视频拖动阶段直写 `--lake-video-max-width` **真布局**（卡片/把手/下方间隔实时变化；合成层 transform 预览已试并回退——冻结布局、放大被裁、松手剧变）；「拖动锁」（§5.58）保证拖动中无布局回写打架，松手一次写回零跳变。
 - **落点**：模型桥 `src/features/editor/videoCardOps.ts`；浮动栏 `selectionToolbar/{SelectionToolbar.tsx,useSelectionToolbar.ts,selectionToolbar.css}`；桌面 `src/styles/feature.css`，移动端 `src/mobile/editor/edit-surface-kernel.css` ⑦。Android 阅读/编辑态共享持久化布局（目前调整入口在桌面浮动栏，和图片精确缩放入口同端）。
 - **实测（正式开发数据）**：当前竖屏视频（720×1280、正文栏约 515px）75% 为卡片 `386×685`，100% 为 `513×910`，两者已明确不同；边缘拖动 +7.8% 后实时变宽，松手写入 `__videoWidth:83`（验收后已还原用户原值 75%）。此前横屏 `1279×720` 的 25% 档为 `130×73`，右对齐贴正文右缘。护栏 `videoCardOps.test.ts`（含拖动/取消/键盘）、`videoCardFit.test.ts`、selection-toolbar wiring；桌面/移动 CSS 层围栏同步登记。
 
-### 5.58 图片/视频媒体卡边缘缩放（261117 用户反馈）
+### 5.58 图片/视频媒体缩放（261117 用户反馈；同日用户动图复核后整体重构）
 
-- **共享实现**：`src/features/editor/mediaCardResize.ts` 统一管理图片与视频的把手创建、pointer 拖动、实时预览、取消恢复、键盘操作和阅读态禁用。`lakeRuntime` 只在 editor 模式挂 interactive 手柄。
-- **视频**：左右双把手，存正文宽度百分比；拖动用合成层 transform 预览，松手 `resetCardValue + sync(false)` 一次写回。新插入上传任务的生命周期归一由 `videoCardOps.finalizeUploadedVideoCards()` 负责：线程仍存活时只在无 running/pending 任务后归还 manager；线程已正常结束（`_thread=null`）时仍会清掉卡实例 `_task`，覆盖上传完成与 DOM 观察回调之间的时间差。
-- **图片**：右侧单边缘把手，按正文可用像素宽度调整；拖动只改 `<img>` 临时 width，松手走内核 `updateImageData(cardId,{width})`。**内核原生 `.ne-ui-image-resizer` 四角把手完整保留**，最终同时存在四角缩放和右侧边缘缩放。
-- **视觉**：`.lake-media-resize-handle` 蓝色竖条 + 拖动百分比/像素气泡；移动端命中区 44px，桌面 16px。`lake-media-selected` 由 SelectionToolbar 的图片/视频 target 统一维护。
-- **实测**：图片选中后同时存在 4 个原生角点 + 1 个右侧边缘把手；图片 `511px` 向右拖动 `-100px` 实时预览 `424px`，松手写入 `value.width=424`，验收后恢复原图满宽。新视频 `status=done / task=null / taskManager=[]`。护栏 `mediaCardResize.test.ts`、`videoCardOps.test.ts`（上传任务归一）、video/tooling 测试。
+- **重构动机（261117 用户动图取证，旧实现三个结构性问题）**：① 映射基准错 —— `valuePerPixel = 图宽/卡宽` 且逐帧重算，拖动不跟手、缩小时系数漂移「越缩越快」、粗取整突变；护栏测试因 jsdom 未 mock 卡片 rect 走 fallback 分支，从未测到真实映射。② 把手贴**卡片盒**而非**图片盒**（图片卡正文满宽、img 更窄 ⇒ 把手离图片边缘几十 px）。③ 视频「布局回写互相打架」—— `mountVideoCardLayoutSync` 的 MutationObserver/contentchange 扫描把持久化旧宽度重新投影到拖动中的卡片 ⇒ 整卡跳回原尺寸（动图连帧 f_008/009 实锤：84%→87% 拖动中突然弹回起点），transform 预览与真布局预览两版共享此根因。内核原生四角 resizer 另有「画框预览 + 松手跳变」与右缘把手覆盖右上/右下命中区的问题。
+- **几何单一来源** `src/features/editor/mediaResizeGeometry.ts`（纯函数）：值 = **起点快照 + 光标总位移 × 符号 × 对齐系数**（思源 multiple 语义：左/右对齐 1、居中 2）；把手只出现在**宽度变化时会移动的边**（左对齐 = 右缘长条 + 右上/右下角点；右对齐 = 左侧 3 个；居中 = 两侧 6 个），被拖边缘与光标 1:1 贴合。拖动中**零布局读取**（系数/纵横比/基准在 pointerdown 一次性快照）。
+- **图片**：预览 = 直写 `img.style.width`（真布局，实测稳定）；把手盒（`.lake-media-resize-box`）按 **img 实测盒** 锚定（card→img 偏移 + 跟宽解析位移：左 0 / 中 0.5 / 右 1）；松手一次 `updateImageData(cardId,{width})`，Esc 取消精确还原原始内联样式。**内核原生 `.ne-ui-image-resizer*` 四角点/命中区由 CSS 隐藏接管**（保留 selection box 描边；旧角点预览锚定与提交锚定不一致，tl/bl 必然跳变）。
+- **视频**：预览 = 直写 `--lake-video-max-width`（**真布局**）——卡片、把手盒（inset-0 自动跟随）与下方间隔**全部实时走位**（261117 复核点单「上下位置间隔实时变化」）；拖动中零布局读取 ⇒ 样式写入被浏览器合并为每帧一次布局，暂停视频改尺寸与图片同级稳定。松手一次 `resetCardValue + sync(false)`，预览值 = 提交值零跳变。`__videoWidth` 归一化放宽为 10–100 夹取 + **1 位小数**（旧整数值照常读写）。**图片与视频的预览/跟踪逻辑有意分开维护**（261117 用户裁决：不强求公共方法）：图片 = 直写 `img.style.width` + 手动把手盒跟踪（实测「非常稳定」）；视频 = 布局变量 + 自动跟随。合成层 transform 预览路线已试并**回退**（冻结布局 ⇒ 下方间隔不动、放大被裁、松手剧变，261117 复核二轮）。
+- **拖动锁（复核根因③的修复）**：拖动期间 `videoCardOps.lockVideoLayout(cardEl)` 禁止 `applyVideoLayout` 回写该卡（扫描/内容变更不得重置拖动中的宽度）；`mountMediaCardResize` 自身扫描也跳过拖动中的卡片。
+- **中断语义**：Esc = 显式取消（精确还原）；pointercancel / 窗口失焦 = **按当前值提交**（与「绝不静默丢弃编辑」同口径）；提交失败不弹回预览值。键盘 ←/→ ±step、Home/End = 10/100 直接提交；拖动中除 Esc 外不响应键盘步进。
+- **视觉**：边缘长条（3px accent 竖条；桌面命中 16px / 移动 44px）+ 角点（8px accent 圆点）；拖动中被拖把手显示数值气泡（`data-value`），`body[data-resize-cursor]` 按把手方向给光标（ew/nesw/nwse）。`lake-media-selected` 由 SelectionToolbar 的图片/视频 target 维护。
+- **护栏**：`mediaResizeGeometry.test.ts`（纯几何：1:1 / 不跑飞 / 夹取取整 / 把手清单）+ `mediaCardResize.test.ts`（把手集合分型、线性与逐像素不跑飞、transform 预览零重排、拖动锁、Esc 取消、中断提交、键盘、阅读态、内核 resizer 共存、两端 CSS 接管声明）+ `videoCardOps.test.ts` / `videoCardFit.test.ts`。上传任务生命周期归一（uploaded→done + 清残留任务）见 `videoCardOps.finalizeUploadedVideoCards()`，不变。
 
 ### 5.57 附件超限的统一拦截与提示（261117 用户反馈）
 

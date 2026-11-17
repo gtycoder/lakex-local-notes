@@ -73,12 +73,33 @@ body.lake-mobile [data-mb-edit-host] ne-card[data-card-name="video"][data-video-
 body.lake-mobile [data-mb-edit-host] ne-card[data-card-name="video"][data-video-align="right"]:has(.ne-card-video-done) { margin-left: auto; margin-right: 0; }
 body.lake-mobile [data-mb-edit-host] ne-card[data-card-name="video"]:has(.ne-card-video-done) .ne-card-container,
 body.lake-mobile [data-mb-edit-host] ne-card[data-card-name="video"]:has(.ne-card-video-done) .ne-card-video { width: auto; max-width: 100%; }
-body.lake-mobile [data-mb-edit-host] :is(ne-card[data-card-name="video"], ne-card[data-card-name="image"]) > .lake-media-resize-handle { position: absolute; z-index: 3; top: 8px; bottom: 8px; width: 44px; display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none; touch-action: none; cursor: col-resize; }
-body.lake-mobile [data-mb-edit-host] :is(ne-card[data-card-name="video"], ne-card[data-card-name="image"]) > .lake-media-resize-handle--left { left: -22px; }
-body.lake-mobile [data-mb-edit-host] :is(ne-card[data-card-name="video"], ne-card[data-card-name="image"]) > .lake-media-resize-handle--right { right: -22px; }
-body.lake-mobile [data-mb-edit-host] :is(ne-card[data-card-name="video"], ne-card[data-card-name="image"]):is(:hover, .ne-focused, .lake-media-selected) > .lake-media-resize-handle,
-body.lake-mobile [data-mb-edit-host] :is(ne-card[data-card-name="video"], ne-card[data-card-name="image"]) > .lake-media-resize-handle:focus-visible { opacity: 1; pointer-events: auto; }
-body.lake-mobile [data-mb-edit-host] :is(ne-card[data-card-name="video"], ne-card[data-card-name="image"]) > .lake-media-resize-handle::after { content: ""; width: 4px; height: 44px; border-radius: var(--lake-radius-pill); background: var(--lake-accent); box-shadow: var(--lake-shadow-card); }
-body.lake-mobile [data-mb-edit-host] :is(ne-card[data-card-name="video"], ne-card[data-card-name="image"]) > .lake-media-resize-handle::before { content: attr(data-value); position: absolute; top: -24px; padding: 2px 6px; border-radius: var(--lake-radius-xs); color: var(--lake-bg-panel); background: var(--lake-text-1); font-size: var(--lake-font-size-micro); font-variant-numeric: tabular-nums; white-space: nowrap; opacity: 0; pointer-events: none; }
-body.lake-media-resizing .lake-media-resize-handle::before { opacity: 1; }
-body.lake-media-resizing { cursor: col-resize; user-select: none; }
+/* 媒体缩放把手（261117 重构，与桌面 feature.css 同一几何/手感，命中区 44px 触屏档）：
+ * 把手盒贴媒体视觉盒，只在会动的边出边缘长条 + 角点；内核原生 .ne-ui-image-resizer* 隐藏由 JS 模块接管。 */
+body.lake-mobile [data-mb-edit-host] :is(ne-card[data-card-name="video"], ne-card[data-card-name="image"]) > .lake-media-resize-box { position: absolute; z-index: 3; pointer-events: none; }
+body.lake-mobile [data-mb-edit-host] ne-card[data-card-name="video"] > .lake-media-resize-box { inset: 0; }
+body.lake-mobile [data-mb-edit-host] .lake-media-resize-box > .lake-media-resize-handle { position: absolute; z-index: 3; display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none; touch-action: none; }
+body.lake-mobile [data-mb-edit-host] .lake-media-resize-box > .lake-media-resize-handle--edge-left,
+body.lake-mobile [data-mb-edit-host] .lake-media-resize-box > .lake-media-resize-handle--edge-right { top: 8px; bottom: 8px; width: 44px; cursor: ew-resize; }
+body.lake-mobile [data-mb-edit-host] .lake-media-resize-box > .lake-media-resize-handle--edge-left { left: -22px; }
+body.lake-mobile [data-mb-edit-host] .lake-media-resize-box > .lake-media-resize-handle--edge-right { right: -22px; }
+body.lake-mobile [data-mb-edit-host] .lake-media-resize-box > .lake-media-resize-handle--corner-tl,
+body.lake-mobile [data-mb-edit-host] .lake-media-resize-box > .lake-media-resize-handle--corner-tr,
+body.lake-mobile [data-mb-edit-host] .lake-media-resize-box > .lake-media-resize-handle--corner-br,
+body.lake-mobile [data-mb-edit-host] .lake-media-resize-box > .lake-media-resize-handle--corner-bl { width: 44px; height: 44px; }
+body.lake-mobile [data-mb-edit-host] .lake-media-resize-box > .lake-media-resize-handle--corner-tl { left: -22px; top: -22px; cursor: nwse-resize; }
+body.lake-mobile [data-mb-edit-host] .lake-media-resize-box > .lake-media-resize-handle--corner-tr { right: -22px; top: -22px; cursor: nesw-resize; }
+body.lake-mobile [data-mb-edit-host] .lake-media-resize-box > .lake-media-resize-handle--corner-br { right: -22px; bottom: -22px; cursor: nwse-resize; }
+body.lake-mobile [data-mb-edit-host] .lake-media-resize-box > .lake-media-resize-handle--corner-bl { left: -22px; bottom: -22px; cursor: nesw-resize; }
+body.lake-mobile [data-mb-edit-host] :is(ne-card[data-card-name="video"], ne-card[data-card-name="image"]):is(:hover, .ne-focused, .lake-media-selected) .lake-media-resize-handle,
+body.lake-mobile [data-mb-edit-host] .lake-media-resize-box > .lake-media-resize-handle:focus-visible { opacity: 1; pointer-events: auto; }
+body.lake-mobile [data-mb-edit-host] .lake-media-resize-box > .lake-media-resize-handle--edge-left::after,
+body.lake-mobile [data-mb-edit-host] .lake-media-resize-box > .lake-media-resize-handle--edge-right::after { content: ""; width: 4px; height: 44px; border-radius: var(--lake-radius-pill); background: var(--lake-accent); box-shadow: var(--lake-shadow-card); }
+body.lake-mobile [data-mb-edit-host] .lake-media-resize-box > .lake-media-resize-handle--corner-tl::after,
+body.lake-mobile [data-mb-edit-host] .lake-media-resize-box > .lake-media-resize-handle--corner-tr::after,
+body.lake-mobile [data-mb-edit-host] .lake-media-resize-box > .lake-media-resize-handle--corner-br::after,
+body.lake-mobile [data-mb-edit-host] .lake-media-resize-box > .lake-media-resize-handle--corner-bl::after { content: ""; width: 10px; height: 10px; border-radius: var(--lake-radius-pill); background: var(--lake-accent); box-shadow: var(--lake-shadow-card); }
+body.lake-mobile [data-mb-edit-host] .lake-media-resize-box > .lake-media-resize-handle::before { content: attr(data-value); position: absolute; top: -24px; padding: 2px 6px; border-radius: var(--lake-radius-xs); color: var(--lake-bg-panel); background: var(--lake-text-1); font-size: var(--lake-font-size-micro); font-variant-numeric: tabular-nums; white-space: nowrap; opacity: 0; pointer-events: none; }
+body.lake-media-resizing .lake-media-resize-handle.is-active::before { opacity: 1; }
+body.lake-media-resizing { user-select: none; }
+body.lake-mobile [data-mb-edit-host] ne-card[data-card-name="image"] .ne-ui-image-resizer,
+body.lake-mobile [data-mb-edit-host] ne-card[data-card-name="image"] .ne-ui-image-resizer-handler { display: none; }
