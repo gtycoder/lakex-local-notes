@@ -15,12 +15,14 @@ export interface SwipeDownDismissOptions {
   scrollSelector?: string;
   /** 拖动期间挂到表面上的类名（用来禁用过渡），默认 is-dragging。 */
   draggingClass?: string;
+  /** 起点在该选择器内的拖拽不参与下滑关闭（resizable Sheet 的头部拖拽 = 调高度，归 useSheetResize）。 */
+  ignoreSelector?: string;
 }
 
 export function useSwipeDownDismiss(
   ref: RefObject<HTMLElement | null>,
   onDismiss: () => void,
-  { enabled, scrollSelector, draggingClass = "is-dragging" }: SwipeDownDismissOptions,
+  { enabled, scrollSelector, draggingClass = "is-dragging", ignoreSelector }: SwipeDownDismissOptions,
 ): void {
   useEffect(() => {
     const el = ref.current;
@@ -43,6 +45,7 @@ export function useSwipeDownDismiss(
       dragging = false;
     };
     const onStart = (event: TouchEvent): void => {
+      if (ignoreSelector && (event.target as Element | null)?.closest?.(ignoreSelector)) return;
       if (event.touches.length !== 1) { reset(); return; }
       active = true;
       dragging = false;
@@ -77,5 +80,5 @@ export function useSwipeDownDismiss(
       el.removeEventListener("touchcancel", reset);
       reset();
     };
-  }, [ref, onDismiss, enabled, scrollSelector, draggingClass]);
+  }, [ref, onDismiss, enabled, scrollSelector, draggingClass, ignoreSelector]);
 }

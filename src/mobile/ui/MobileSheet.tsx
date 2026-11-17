@@ -24,6 +24,7 @@ import { X } from "lucide-react";
 import { pushBackHandler } from "./backStack";
 import { useKeyboardStableSheet } from "../hooks/useKeyboardStableSheet";
 import { dismissKeyboardOnPointerDown } from "./dismissKeyboard";
+import { useSheetResize } from "./useSheetResize";
 import { useSwipeDownDismiss } from "./useSwipeDownDismiss";
 
 /** 模态移动浮层共用焦点收放与嵌套滚动锁；不规定头部/正文结构，不增加Tab陷阱。 */
@@ -98,6 +99,8 @@ export interface MobileSheetProps {
   bodyRef?: Ref<HTMLDivElement>;
   /** 无障碍名（默认取字符串标题）。 */
   ariaLabel?: string;
+  /** 头部拖拽可**自主调整高度**（261117 用户点单）：上拉变高、下拉变矮、松手停驻；到最小高度继续下拉松手 = 关闭。 */
+  resizable?: boolean;
   children: ReactNode;
 }
 
@@ -112,9 +115,11 @@ export function MobileSheet({
   bodyClassName,
   bodyRef,
   ariaLabel,
+  resizable = false,
   children,
 }: MobileSheetProps) {
   const sheetRef = useRef<HTMLDivElement>(null);
+  const headRef = useRef<HTMLDivElement>(null);
 
   const dismiss = useCallback(() => { if (dismissible) onClose(); }, [dismissible, onClose]);
 
@@ -126,7 +131,14 @@ export function MobileSheet({
 
   // 右滑关闭（阈值沿用浮层默认 64px；data-prevent-swipe 让底层抽屉手势不重复响应）。
   // 261110 用户点单：底部 Sheet = 下滑关闭（手柄的本义）；内部滚动不在顶部时不启动，避免抢列表滚动。
-  useSwipeDownDismiss(sheetRef, dismiss, { enabled: open && dismissible, scrollSelector: ".mb-sheet__body" });
+  // resizable Sheet 的**头部**拖拽归 useSheetResize（调高度）⇒ 下滑关闭忽略头部起点。
+  useSwipeDownDismiss(sheetRef, dismiss, {
+    enabled: open && dismissible,
+    scrollSelector: ".mb-sheet__body",
+    ignoreSelector: resizable ? ".mb-sheet__head" : undefined,
+  });
+  // 261117 用户点单：头部拖拽自主调整高度（自由停驻；到最小高度继续下拉松手 = 关闭）。
+  useSheetResize(headRef, sheetRef, { enabled: open && resizable, onDismiss: dismiss });
 
   useSheetModalFocus(open, sheetRef);
   // 261106 task-94：键盘弹起时**不推动弹窗**（top/height 钉在键盘前几何，键盘覆盖下方列表；输入框自动滚入可见区）。
@@ -150,7 +162,7 @@ export function MobileSheet({
       >
         <div className="mb-sheet__grab" onPointerDown={dismissKeyboardOnPointerDown} />
         {/* 261117：点标题区 = 「完成编辑」的显式出口（收起键盘、露出底部确认钮）；返回键优先收键盘见 backStack。 */}
-        <div className="mb-sheet__head mb-glass mb-glass--bar" data-mb-topbar data-edge="sheet" onPointerDown={dismissKeyboardOnPointerDown}>
+        <div ref={headRef} className="mb-sheet__head mb-glass mb-glass--bar" data-mb-topbar data-edge="sheet" onPointerDown={dismissKeyboardOnPointerDown}>
           <span className={"mb-sheet__title" + (titleClassName ? " " + titleClassName : "")}>{title}</span>
           {dismissible && (
             <button type="button" className="mobile-icon-btn" onClick={onClose} aria-label="关闭"><X size={20} /></button>

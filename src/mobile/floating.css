@@ -95,6 +95,8 @@
 }
 /* （261013 A 批：浮层内空态改用 .mb-empty.mb-empty--inset —— 见 kit.css，空态只有一处定义。） */
 .mb-sheet--search { max-height: 70%; }
+/* 261117：默认更高的 Sheet 变体（记录面板等长表单用）；配合 resizable 头部拖拽可再自主调高。 */
+.mb-sheet--tall { height: 72dvh; }
 
 /* ── ActionSheet（破坏性确认 / 底部动作列表）─────────────────────────── */
 .mb-actionsheet {
