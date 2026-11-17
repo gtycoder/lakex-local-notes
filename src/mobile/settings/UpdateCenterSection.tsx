@@ -45,13 +45,16 @@ function lastCheckText(checkedAt: number): string {
   }
 }
 
-function statusText(snapshot: ReturnType<typeof useUpdateCenter>, settings: UpdateSettings, currentVersion: string): string {
+/** 导出供测试：版本标签的唯一格式化点（261118：appInfo 未就绪时**不打假版本号**）。 */
+export function statusText(snapshot: ReturnType<typeof useUpdateCenter>, settings: UpdateSettings, currentVersion: string): string {
   const manifest = snapshot.manifest;
   switch (snapshot.status) {
     case "checking":
       return "正在检查更新…";
     case "up-to-date":
-      return "已是最新版本（" + currentVersion + "）";
+      // 261118：appInfo 异步取数可能晚于检查结果落定 —— 未就绪就如实说「已是最新版本」，
+      // 绝不打「（0.0.0）」这类假版本号（恢复演练冒烟实测的占位误导）。
+      return currentVersion ? "已是最新版本（" + currentVersion + "）" : "已是最新版本";
     case "available":
       return manifest
         ? "发现新版本 " + manifest.version + (isVersionIgnored(settings, manifest.version) ? "（已忽略）" : "")
@@ -98,7 +101,7 @@ export function UpdateCenterSection({ appInfo }: { appInfo: AppInfo | null }) {
   const [settings, setSettings] = useState<UpdateSettings>(readUpdateSettings);
   const [updateSheetOpen, setUpdateSheetOpen] = useState(false);
   const [notesSheetOpen, setNotesSheetOpen] = useState(false);
-  const currentVersion = appInfo?.version ?? "0.0.0";
+  const currentVersion = appInfo?.version ?? "";
   const manifest = snapshot.manifest;
   const asset = manifest ? androidUpdateAsset(manifest) : null;
   const notesVersions = useMemo(() => parseReleaseNotes(releaseNotesRaw), []);
