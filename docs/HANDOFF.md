@@ -18,9 +18,9 @@
 - **P1-4 多维表第二梯队**（`ba2c05e5`）：列头快捷菜单（排序/筛选/清除）、字段拖拽重排（`view.fieldOrder`）、长按批量选择删除（quickNoteSelection 同语义 + selection 原语）；拖拽手势单一实现 `useBitableOrderDrag`。
 - **P1-6/P0-2 设备专员**（`7596a923`）：CDP 自动重连（Input.* 不重试防双击、桌面端口不劫持）、多维表 7 屏探针（7/7 绿）、缺正文/缺小记恢复演练 11 项全绿（`docs/RESILIENCE.md §3.7`）、欠账清单 `design-plans/device-debt-261117.md`（真机 6 项显式登记；**2 万/20 万规模验收 = 用户裁决不做**）。
 - **集成修复**（`9c46cde1`）：**便携包导出 wal_checkpoint(TRUNCATE)**（演练实锤真缺陷：陈旧主库把已删行误判缺正文、拒绝导出的死胡同）；两份快照基线重烤（思源换值 + 字段行改版，**两轮 0 差异**：mobile-snap 10 态 + bitable-snap 3 态）。
-- **产品边界待裁决**：小记 text_cache 惰性建 ⇒ 从未搜索的新小记缺正文无兜底（历史恢复可用）；更新中心「（0.0.0）」版本标签占位。
+- **产品边界已收口**（用户裁决「都需要做」，tag 后两笔随下版发布）：① 小记 text_cache **保存即建**（`persistQuickNoteContent` 挂点）+ **与 FTS 解耦无条件写**（恢复兜底不该依附搜索；`quickNoteSaveIndex.test` 3 例 + missingBodies 用例换新语义「刚保存即有可重建纯文本」）；② 更新中心版本标签**不再打假版本号**（appInfo 未就绪如实「已是最新版本」，`updateCenterStatus.test` 钉死无 0.0.0）。
 - **门禁**：tsc 0；全量 vitest **1038 文件 / 6583 例 0 failed**；ui-metrics / check:mobileui / check:arch / check:bundle / diff-check 全过；7 屏探针 7/7；已装 lake_mobile 待用户点收（gone 横幅 / 多维表三件套 / 表单草稿 / usheet 公式栏）。
-- **发版**：`d556888d release: v1.4.0`（RELEASE-NOTES 已补段）；注解 tag **v1.4.0** 双推（Gitee+GitHub），release.yml 流水线已触发。
+- **发版**：`d556888d release: v1.4.0`（RELEASE-NOTES 已补段）；注解 tag **v1.4.0** 双推（Gitee+GitHub），release.yml 流水线 **completed/success**——macOS（arm64/x64 dmg+zip）/ Windows Setup.exe / Android release apk（32.1MB）构建全绿，Publish 完成，Release 资产 8 个（含 latest.json 更新中心清单）；master 在 tag 后另有 text_cache/版本标签两笔修复随下版发布。
 
 ### 261117 · 图片/视频缩放重构（用户点单：对齐思源手感；动图复核后二轮修视频闪烁）
 
