@@ -7,6 +7,21 @@
 
 ## 0. 最新交接（最近 3 个批次；更早的见 git）
 
+### 261117 · 六流并发批（P0/P1/P2 全推进）+ v1.4.0 发版
+
+用户授权自主收口：P0 两项 + P1 四项 + P2 两项由 6 个并发流（写入范围互斥、lead 集成）交付，随后全量 review、双推、打 tag 发版。
+
+- **P0-1 gone 只读横幅**（`e112ff78`）：打开中被删/进回收站即时横幅（`isGoneNote` 单一判据 + `noteGoneState` 原料 trashedAt/isPurged 投影）；渲染映射一处收口强制只读（boardEditorMount 护栏不破）。
+- **P1-5 表单草稿**（`f21eef37`）：设备本地暂存（localStorage，键 `bitable-form-draft.<noteId>.<viewId>`）、提交后清空、题目指纹（id:type 有序）变则弃。
+- **P2-8/9 视觉收尾**（`5a385749`）：chat 档思源化（与 light 同值收敛，决策点留 MOBILE-DESIGN）、OLED 平涂补漏、对比度越界三处修正（light text-4 / dark text-3/4 块面）、动效归一到令牌、reduced-motion 名单补同步条+灯箱（+HomePage FLIP 令牌）。
+- **P1-7 Univer 键盘**（`2e1843d4`）：公式栏预留 44→48 对齐 vendor `!univer-h-12`（贴底格裁 4px、进出编辑跳 4px 的根因）；`keyboardCoverage` 判据 + vendor 实高动态对账护栏。
+- **P1-4 多维表第二梯队**（`ba2c05e5`）：列头快捷菜单（排序/筛选/清除）、字段拖拽重排（`view.fieldOrder`）、长按批量选择删除（quickNoteSelection 同语义 + selection 原语）；拖拽手势单一实现 `useBitableOrderDrag`。
+- **P1-6/P0-2 设备专员**（`7596a923`）：CDP 自动重连（Input.* 不重试防双击、桌面端口不劫持）、多维表 7 屏探针（7/7 绿）、缺正文/缺小记恢复演练 11 项全绿（`docs/RESILIENCE.md §3.7`）、欠账清单 `design-plans/device-debt-261117.md`（真机 6 项显式登记；**2 万/20 万规模验收 = 用户裁决不做**）。
+- **集成修复**（`9c46cde1`）：**便携包导出 wal_checkpoint(TRUNCATE)**（演练实锤真缺陷：陈旧主库把已删行误判缺正文、拒绝导出的死胡同）；两份快照基线重烤（思源换值 + 字段行改版，**两轮 0 差异**：mobile-snap 10 态 + bitable-snap 3 态）。
+- **产品边界待裁决**：小记 text_cache 惰性建 ⇒ 从未搜索的新小记缺正文无兜底（历史恢复可用）；更新中心「（0.0.0）」版本标签占位。
+- **门禁**：tsc 0；全量 vitest **1038 文件 / 6583 例 0 failed**；ui-metrics / check:mobileui / check:arch / check:bundle / diff-check 全过；7 屏探针 7/7；已装 lake_mobile 待用户点收（gone 横幅 / 多维表三件套 / 表单草稿 / usheet 公式栏）。
+- **发版**：`d556888d release: v1.4.0`（RELEASE-NOTES 已补段）；注解 tag **v1.4.0** 双推（Gitee+GitHub），release.yml 流水线已触发。
+
 ### 261117 · 图片/视频缩放重构（用户点单：对齐思源手感；动图复核后二轮修视频闪烁）
 
 - **一轮（体验重构）**：旧「边缘拖拽」三病根治 —— ①映射系数错（图宽/卡宽逐帧重算 ⇒ 不跟手/越缩越快/突变；测试 mock 缺卡片 rect 走 fallback，从未测到真实映射）；②把手贴卡片盒而非图片盒（图片卡正文满宽）；③内核四角 resizer 被右缘把手覆盖 + 画框预览松手跳变。新架构 = `mediaResizeGeometry.ts` 纯几何（**起点快照 + 总位移×对齐系数**，思源 multiple 1/2）+ `mediaCardResize.ts` 引擎（拖动零布局读取）：**把手只在会动的边**（左对齐 = 右缘长条 + 右上/右下角点；右对齐 = 左侧 3 个；居中 = 两侧 6 个），把手盒贴 img 实测盒、1:1 跟手；内核 `.ne-ui-image-resizer*` 由 CSS 隐藏接管（保留 selection box 描边）。
