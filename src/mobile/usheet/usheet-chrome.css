@@ -211,7 +211,6 @@
 }
 .mobile-usheet [data-u-comp="mobile-formula-bar"] [data-u-comp="formula-bar"] {
   position: relative;
-  height: var(--mb-usheet-formula-h, 44px);
   padding-left: 56px;
   background: var(--lake-bg-panel);
   border: 0;
@@ -260,6 +259,10 @@
   -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='9 10 4 15 9 20'/%3E%3Cpath d='M20 4v7a4 4 0 0 1-4 4H4'/%3E%3C/svg%3E") center / contain no-repeat;
   mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='9 10 4 15 9 20'/%3E%3Cpath d='M20 4v7a4 4 0 0 1-4 4H4'/%3E%3C/svg%3E") center / contain no-repeat;
 }
+/* ⚠️ 公式栏高度归 vendor：内核给 [data-u-comp="formula-bar"] 挂 `.\!univer-h-12`（3rem，!important），
+ * 普通声明压不过（261117 usheet 键盘排查：此前我们按 44px 预留 ⇒ 实际 48px 的固定栏盖住画布底部 4px ——
+ * 活动格/光标贴底被裁、「刚好露出」判定差 4px，读写态切换还跳 4px）。此处不再声明 height；
+ * 预留口径 = --mb-usheet-formula-h 回落 48px，与 vendor 实高对齐，由 usheetKeyboardAudit.test.ts 钉住升级回归。 */
 /* 最右展开：lucide maximize-2 的 mask */
 .mobile-usheet [data-u-comp="mobile-formula-bar"] .univer-flex.univer-h-full.univer-w-10.univer-cursor-pointer {
   position: absolute;
@@ -288,7 +291,7 @@
   z-index: 21;
   display: flex;
   align-items: center;
-  height: var(--mb-usheet-formula-h, 44px);
+  height: var(--mb-usheet-formula-h, 48px);
   padding: 0;
   border: 0;
   border-top: .5px solid var(--lake-border-1);
@@ -403,8 +406,10 @@
 }
 .mb-usheet-panel[data-open="0"] .mb-usheet-panel__inner { transform: translateY(100%); opacity: 0; }
 .mb-usheet-panel__body { display: flex; flex-direction: column; }
-/* 编辑态底部留白 = 公式栏 + dock（fixed 工具条覆盖在这块留白上，网格不被挡） */
-.mb-usheet-chrome-spacer { flex: none; height: calc(var(--mb-usheet-kb-offset, 0px) + var(--mb-usheet-formula-h, 44px) + var(--mb-usheet-dock-h, 52px)); }
+/* 编辑态底部留白 = 公式栏 + dock（fixed 工具条覆盖在这块留白上，网格不被挡）。
+ * 48px 口径 = vendor `.\!univer-h-12`（3rem !important）的实高，不是 44 —— 预留与实高差几 px，
+ * 固定栏就盖住画布几 px（261117 排查修正；与只读条 .mb-usheet-fbar 同高，进/出编辑不跳）。 */
+.mb-usheet-chrome-spacer { flex: none; height: calc(var(--mb-usheet-kb-offset, 0px) + var(--mb-usheet-formula-h, 48px) + var(--mb-usheet-dock-h, 52px)); }
 
 /* 插入：上排 4 连块（钉钉式浅灰底）+ 4 列白块（文档插入面板同款） */
 .mb-usheet-inserter {
