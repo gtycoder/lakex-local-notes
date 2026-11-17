@@ -32,6 +32,10 @@ export interface LocalNote {
   /** 编辑锁（桌面端锁定 = 只读；移动端必须同语义拦截编辑/保存）。 */
   editLocked?: boolean;
   editLockedAt?: string | null;
+  /** gone 判定原料（AGENTS §3#16）：进回收站时间。**级联删除只标它**（parent_id 不变），判定走 core.isGoneNote。 */
+  trashedAt?: string | null;
+  /** gone 判定原料：已被彻底删除（purge）标记行。判定走 core.isGoneNote（不要在这里自造第二判据）。 */
+  isPurged?: boolean;
 }
 
 /** 列表页只需要元数据；正文在 readNote() 打开文档时按需读取。 */
@@ -51,6 +55,10 @@ function rowToNote(r: Record<string, unknown>, content: string): LocalNote {
     ...(Number(r.cloud_deleted) === 1 ? { cloudDeleted: true } : {}),
     ...(Number(r.is_locked) === 1 ? { editLocked: true } : {}),
     ...(r.locked_at ? { editLockedAt: String(r.locked_at) } : {}),
+    // P0-1（261117）：读正文时把 gone 判定原料一起带出（与 noteGoneState 同口径的两列），
+    // 打开/恢复/同步重读的标签据此过 core.isGoneNote ⇒ 命中即「只读 + 只读横幅」。
+    ...(r.trashed_at ? { trashedAt: String(r.trashed_at) } : {}),
+    ...(Number(r.is_purged) === 1 ? { isPurged: true } : {}),
   };
 }
 
@@ -127,7 +135,7 @@ export async function listNotes(d: MobileDb): Promise<LocalNoteSummary[]> {
 }
 
 export async function readNote(d: MobileDb, id: string): Promise<LocalNote | null> {
-  const row = await d.prepare("SELECT id, title, updated_at, parent_id, doc_kind, cloud_deleted, is_locked, locked_at FROM notes WHERE id = ?").get(id);
+  const row = await d.prepare("SELECT id, title, updated_at, parent_id, doc_kind, cloud_deleted, is_locked, locked_at, trashed_at, is_purged FROM notes WHERE id = ?").get(id);
   if (!row) return null;
   const kind = normalizeNoteKind(row.doc_kind);
   const content = await readNoteBody(kind, id);
@@ -339,7 +347,7 @@ export async function trashNote(d: MobileDb, id: string): Promise<string[]> {
 }
 
 export async function listTrashed(d: MobileDb): Promise<LocalNote[]> {
-  const rows = await d.prepare("SELECT id, title, updated_at, parent_id, doc_kind, cloud_deleted FROM notes WHERE trashed_at IS NOT NULL ORDER BY trashed_at DESC").all() as Array<Record<string, unknown>>;
+  const rows = await d.prepare("SELECT id, title, updated_at, parent_id, doc_kind, cloud_deleted, trashed_at, is_purged FROM notes WHERE trashed_at IS NOT NULL ORDER BY trashed_at DESC").all() as Array<Record<string, unknown>>;
   const notes: LocalNote[] = [];
   for (const row of rows) {
     const kind = normalizeNoteKind(row.doc_kind);

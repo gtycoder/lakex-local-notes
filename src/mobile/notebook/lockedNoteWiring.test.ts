@@ -25,7 +25,7 @@ describe("编辑锁在移动端真正生效（task-56 N4）", () => {
   it("tabs：读正文后落 editLocked 并强制退出编辑态；已知锁定时进入编辑会给宿主回调", () => {
     expect(TABS).toContain("editLocked?: boolean");
     expect(TABS).toContain("editLocked: note.editLocked === true");
-    expect(TABS).toContain("editing: note.editLocked ? false : tab.editing");
+    expect(TABS).toContain("editing: note.editLocked || gone ? false : tab.editing");
     expect(TABS).toContain("onLockedEditRef.current?.(id)");
   });
 

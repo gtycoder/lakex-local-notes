@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { selectEvictionIds } from "../../core/tabLimit";
+import { isGoneNote } from "../../core/syncDecisions";
 import type { NoteKind } from "../../core/noteKind";
 import { loadSettings } from "../../lib/settings";
 import { writeLocalStorage } from "../../lib/localStorageSafe";
@@ -19,6 +20,8 @@ export interface NotebookTab {
   kind: NoteKind;
   /** 编辑锁（桌面端锁定）：移动端必须只读 —— 强制退出编辑态、不给编辑入口（task-56 N4）。 */
   editLocked?: boolean;
+  /** tab gone（P0-1）：文档已进回收站/被他端删除（判定单一来源 core.isGoneNote）⇒ 只读 + 只读横幅。 */
+  gone?: boolean;
 }
 
 export interface OpenNotebookTabOptions {
@@ -155,6 +158,10 @@ export function useNotebookTabs(opts: UseNotebookTabsOptions) {
       }
       setFreshId(id);
       window.setTimeout(() => setFreshId((cur) => (cur === id ? null : cur)), 260);
+      // P0-1（261117）：读正文即过 gone 判定（判定单一来源 = core.isGoneNote，原料与 noteGoneState 同两列）。
+      // 命中 ⇒ 标 gone（NotePaneHost 出只读横幅）并强制退出编辑态：打开/恢复/同步重读都走这里，
+      // 旧实现要等自动保存被拒才发现「编辑已无效」。
+      const gone = isGoneNote({ parentId: note.parentId, trashedAt: note.trashedAt, isPurged: note.isPurged });
       // 261112 task-56（N4）：锁信息在正文读出后才知道 ⇒ 一旦锁定就强制退出编辑态并给可见提示。
       if (note.editLocked) {
         const wasEditing = tabsRef.current.find((tab) => tab.id === id)?.editing === true;
@@ -164,7 +171,8 @@ export function useNotebookTabs(opts: UseNotebookTabsOptions) {
         ? {
             ...tab, title: note.title, content: note.content, kind: note.kind, loaded: true, lastAccessedAt: Date.now(),
             editLocked: note.editLocked === true,
-            editing: note.editLocked ? false : tab.editing,
+            gone,
+            editing: note.editLocked || gone ? false : tab.editing,
           }
         : tab));
     }).catch((reason) => {
@@ -189,8 +197,8 @@ export function useNotebookTabs(opts: UseNotebookTabsOptions) {
         ? prev.map((tab) => tab.id === id
           ? {
               ...tab,
-              // 已锁定（已知）的文档不允许进入编辑态：提示由宿主给，这里保持只读。
-              editing: enterEditor ? (tab.editLocked ? false : true) : tab.editing,
+              // 已锁定（已知）/已 gone 的文档不允许进入编辑态：提示由宿主给，这里保持只读。
+              editing: enterEditor ? (tab.editLocked || tab.gone ? false : true) : tab.editing,
               lastAccessedAt: Date.now(),
             }
           : tab)

@@ -93,6 +93,33 @@ describe("useNotebookTabs 行为", () => {
     expect(session.mountedIds.has("b")).toBe(true);
   });
 
+  it("读到 gone 原料（trashedAt / isPurged）⇒ 标 gone 并强制退出编辑态；进入编辑被拦（P0-1）", async () => {
+    const readBody = vi.fn(async (id: string): Promise<LocalNote | null> => {
+      if (id === "g-trash") return { ...note(id), trashedAt: "2026-11-13T08:43:44.205Z" };
+      if (id === "g-purge") return { ...note(id), isPurged: true };
+      return note(id);
+    });
+    render({ readBody });
+
+    // 级联删除（parent_id 不变、只标 trashed_at）也判 gone；enterEditor 进入的编辑态被强制退出。
+    await act(async () => { await session.openTab("g-trash", { enterEditor: true }); });
+    const trashed = session.tabs.find((tab) => tab.id === "g-trash");
+    expect(trashed?.gone).toBe(true);
+    expect(trashed?.editing).toBe(false);
+
+    await act(async () => { await session.openTab("g-purge", { enterEditor: true }); });
+    expect(session.tabs.find((tab) => tab.id === "g-purge")).toMatchObject({ gone: true, editing: false });
+
+    // 已标 gone 的标签再进编辑也保持只读。
+    await act(async () => { await session.updateTab("g-trash", { editing: true }); });
+    await act(async () => { await session.openTab("g-trash", { enterEditor: true }); });
+    expect(session.tabs.find((tab) => tab.id === "g-trash")?.editing).toBe(false);
+
+    // 正常文档不误标（不能把正常文档翻成只读横幅）。
+    await act(async () => { await session.openTab("ok", { enterEditor: true }); });
+    expect(session.tabs.find((tab) => tab.id === "ok")).toMatchObject({ gone: false, editing: true });
+  });
+
   it("超过标签上限时按 LRU 淘汰非活动页，并释放外部资源", async () => {
     settings.maxOpenTabs = 2;
     vi.useFakeTimers();

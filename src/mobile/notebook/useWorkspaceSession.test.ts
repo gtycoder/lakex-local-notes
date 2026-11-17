@@ -27,6 +27,7 @@ vi.mock("../ui/haptics", () => ({ successFeedback: vi.fn() }));
 import { useWorkspaceSession } from "./useWorkspaceSession";
 import type { NotebookTab } from "./useNotebookTabs";
 import { dismissNoteTabs } from "./tabDismissal";
+import { writeSyncStatus } from "../sync/syncStatusStore";
 
 const GONE = { parentId: "nb1", syncState: "local", trashedAt: "2026-11-13T08:43:44.205Z" };
 const ACTIVE = { parentId: "nb1", syncState: "local", trashedAt: null };
@@ -149,6 +150,8 @@ describe("useWorkspaceSession 保存屏障的 gone 处置", () => {
     await act(async () => { await api.closeTab("n1"); });
     expect(latestTabs.map((t) => t.id)).toEqual(["n1"]);
     expect(mocks.report).toHaveBeenCalled();
+    // 非 gone 的失败不能误标 gone（不能把正常文档翻成只读横幅）。
+    expect(latestTabs[0].gone).toBeUndefined();
   });
 
   it("删除入口广播被软删 ids ⇒ 已打开标签全部丢弃且取消待保存（261114 task-8，与桌面 deleteTreeNode 同语义）", async () => {
@@ -181,6 +184,45 @@ describe("useWorkspaceSession 保存屏障的 gone 处置", () => {
     await act(async () => { await api.toggleEdit(); });
     expect(mocks.saveNote).not.toHaveBeenCalled();
     expect(latestTabs).toHaveLength(0);
+    expect(mocks.showToast).toHaveBeenCalledWith(expect.stringContaining("回收站"), expect.objectContaining({ type: "info" }));
+  });
+
+  it("自动保存被拒后复核 gone 判据 ⇒ 标 tab gone + 强制只读（P0-1 横幅可见性；保存路径不动）", async () => {
+    vi.useFakeTimers();
+    try {
+      mocks.saveNote.mockRejectedValue(new Error("笔记已在回收站或已被删除，保存被拒绝"));
+      render([tab("n-gone", { editing: true })]);
+      act(() => { api.scheduleAutoSave("n-gone", "n-gone", "<p>dirty</p>"); });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1000);
+        for (let i = 0; i < 5; i += 1) await Promise.resolve();
+      });
+      // 保存确实被拒（toast 照旧走原路径）；命中同一 gone 判据 ⇒ 标记 gone、退出编辑态（NotePaneHost 出只读横幅）。
+      expect(mocks.saveNote).toHaveBeenCalled();
+      expect(latestTabs.find((t) => t.id === "n-gone")).toMatchObject({ gone: true, editing: false });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("每轮同步结束复核已打开标签：他端删除传播后立刻翻「只读 + 横幅」（不等保存被拒才发现）", async () => {
+    render([tab("n-gone", { editing: true }), tab("n2", { editing: true })]);
+    await act(async () => {
+      // 写入点唯一 = bridge.syncNow（手动/自动同步同源）⇒ 用同步状态落一轮模拟同步完成。
+      writeSyncStatus({ at: new Date().toISOString(), ok: true, message: "已同步" });
+      for (let i = 0; i < 5; i += 1) await Promise.resolve();
+    });
+    expect(latestTabs.find((t) => t.id === "n-gone")).toMatchObject({ gone: true, editing: false });
+    // 正常文档不误标、编辑态不被打断。
+    expect(latestTabs.find((t) => t.id === "n2")?.gone).toBeUndefined();
+    expect(latestTabs.find((t) => t.id === "n2")?.editing).toBe(true);
+  });
+
+  it("点「编辑」时 gone 标签被拦：同源提示 + 不进入编辑（横幅已在正文上方）", async () => {
+    render([tab("n-gone", { gone: true, editing: false })]);
+    await act(async () => { await api.toggleEdit(); });
+    expect(latestTabs.find((t) => t.id === "n-gone")?.editing).toBe(false);
+    expect(mocks.saveNote).not.toHaveBeenCalled();
     expect(mocks.showToast).toHaveBeenCalledWith(expect.stringContaining("回收站"), expect.objectContaining({ type: "info" }));
   });
 });

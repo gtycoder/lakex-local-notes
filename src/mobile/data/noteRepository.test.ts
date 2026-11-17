@@ -101,6 +101,28 @@ describe("mobile noteRepository 保存写边界（审计 F06）", () => {
     await db.close();
   });
 
+  it("readNote 带出 gone 判定原料（trashedAt/isPurged）：级联只标 trashed_at / purge 行都过 core.isGoneNote（P0-1）", async () => {
+    const db = await freshDb();
+    // 级联软删：parent_id 不变、只标 trashed_at ⇒ 旧口径只看 parentId 会漏。
+    await createNote(db, "child", "子文档", "<p>正文</p>", "nb1", new Map());
+    await db.prepare("UPDATE notes SET trashed_at=?, is_dirty=1 WHERE id=?").run("2026-11-13T08:43:44.205Z", "child");
+    const child = await readNote(db, "child");
+    expect(child).toMatchObject({ parentId: "nb1", trashedAt: "2026-11-13T08:43:44.205Z" });
+    expect(isGoneNote({ parentId: child!.parentId, trashedAt: child!.trashedAt, isPurged: child!.isPurged })).toBe(true);
+    // purge 标记行（行保留）：isPurged 原料单独命中。
+    await createNote(db, "p1", "purge 行", "<p>x</p>", "nb1", new Map());
+    await db.prepare("UPDATE notes SET is_purged=1 WHERE id=?").run("p1");
+    const purged = await readNote(db, "p1");
+    expect(purged!.isPurged).toBe(true);
+    expect(isGoneNote({ parentId: purged!.parentId, trashedAt: purged!.trashedAt, isPurged: purged!.isPurged })).toBe(true);
+    // 活跃文档不能被误判（不能把正常文档翻成只读横幅）。
+    await createNote(db, "act", "活跃", "<p>y</p>", "nb1", new Map());
+    const active = await readNote(db, "act");
+    expect(active!.trashedAt ?? null).toBe(null);
+    expect(isGoneNote({ parentId: active!.parentId, trashedAt: active!.trashedAt, isPurged: active!.isPurged })).toBe(false);
+    await db.close();
+  });
+
   it("孤儿登记只用原生 size，不读资产内容（261027）", async () => {
     const db = await freshDb();
     await createNote(db, "n1", "带附件", "<p>正文无引用</p>", null, new Map());

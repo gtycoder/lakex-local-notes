@@ -7,6 +7,7 @@ import type { NotebookTab } from "./useNotebookTabs";
 import { EmptyState } from "../ui/EmptyState";
 import { DelayedLoading } from "../ui/delayedLoading";
 import { mobileReadonlyText } from "../lib/readonlyText";
+import { GONE_BANNER_TEXT } from "./goneBanner";
 
 /** 表格 / 多维表视图按需加载：只有真的打开这类文档才进分包（首屏不含它们）。 */
 const MobileBitableViewer = lazy(() => import("../bitable/MobileBitableViewer").then((m) => ({ default: m.MobileBitableViewer })));
@@ -48,22 +49,33 @@ export interface NotePaneHostProps {
 
 export function NotePaneHost(props: NotePaneHostProps) {
   const { tabs, active, activeId, freshId, mountedIds, findOpen } = props;
+  // P0-1（261117）：gone 标签在渲染层**统一强制只读**（editing=false）—— 与 editLocked 的强制只读同口径，
+  // 一处收口覆盖全部 kind 的正文宿主（含手写板 readOnly 分支），上面的 t.gone 横幅与之配套。
+  // （不逐条改 editing 字面量：kind 分支的 editing={t.editing && !t.editLocked} 接线被跨侧护栏钉住。）
+  const panes = tabs.map((t) => (t.gone ? { ...t, editing: false } : t));
   return (
     <>
     {/* ⚠️ 已挂载的 keep-alive 页**必须一直留在 DOM 里**（只允许非活动页 display:none）：
         旧实现是「活动页没挂载 ⇒ 用骨架替换整份 pane 列表」，于是打开一篇本会话还没挂载的文档时，
         别的标签的 pane 被一起卸载、scrollTop 归零（R2：切走再切回 752→0）。
         现在骨架只是**并列的占位层**，已挂载的 pane 照常渲染（非活动页隐藏但保留滚动位置）。 */}
-    {tabs.map((t) => (!mountedIds.has(t.id) ? null : (
+    {panes.map((t) => (!mountedIds.has(t.id) ? null : (
       <div key={t.id} className={"doc-pane" + (t.id === activeId ? " active" : "") + (t.id === freshId ? " doc-pane--fresh" : "")}>
         <>
-        {/* 261112 task-56（N4）：编辑锁 = 只读横幅（桌面端锁定的文档在移动端也必须可见、可理解）。
-            task-67：文案单一来源 = core/capabilities/readonlyReason（本端只换成「桌面端解锁」的动作措辞）。 */}
-        {t.editLocked && (
+        {/* P0-1（261117）：tab gone = 只读横幅 —— 文档已被删除（云端/回收站），保存会被拦截、可从回收站恢复。
+            判定单一来源 = core.isGoneNote（t.gone 由 useNotebookTabs / useWorkspaceSession 命中后标记）。
+            gone 是数据事实，优先于编辑锁（与 core/capabilities/readonlyReason 的原因优先级同口径）。 */}
+        {t.gone ? (
+          <div className="mobile-status-msg" role="status">
+            {GONE_BANNER_TEXT}
+          </div>
+        ) : t.editLocked ? (
+        /* 261112 task-56（N4）：编辑锁 = 只读横幅（桌面端锁定的文档在移动端也必须可见、可理解）。
+            task-67：文案单一来源 = core/capabilities/readonlyReason（本端只换成「桌面端解锁」的动作措辞）。 */
           <div className="mobile-status-msg" role="status">
             {mobileReadonlyText({ locked: true })}
           </div>
-        )}
+        ) : null}
         {/* 标题只在顶栏（思源 #toolbarName 口径）；正文区不再重复一个标题输入框 */}
         {t.kind === "board" ? (
           // 画板：移动端查看/编辑（同一套 Drawnix 引擎；正文只进画板实例，绝不喂 Lake 编辑器）

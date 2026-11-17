@@ -8,6 +8,8 @@ import type { NotebookTab } from "./useNotebookTabs";
 import { toastActionError } from "../lib/actionError";
 import { showToast } from "../ui/toastBus";
 import { mobileReadonlyText } from "../lib/readonlyText";
+import { GONE_BANNER_TEXT } from "./goneBanner";
+import { subscribeSyncStatus } from "../sync/syncStatusStore";
 import { isGoneNote } from "../../core/syncDecisions";
 import { registerNoteTabDismisser } from "./tabDismissal";
 
@@ -56,14 +58,6 @@ export function useWorkspaceSession(options: UseWorkspaceSessionOptions) {
   } = options;
   const closingRef = useRef(false);
 
-  // 自动保存：编辑态内容变化防抖 1s 落盘；flush 返回真实写盘 Promise，失败保留界面并提示。
-  const reportAutoSaveError = useCallback((_id: string, reason: unknown) => {
-    toastActionError("保存", reason);
-  }, []);
-  const { schedule: scheduleAutoSave, flush: flushAutoSave, cancel: cancelAutoSave } = useAutoSave(async (id, title, content, plain) => {
-    await bridge.saveNote(id, title, content, null, plain);
-  }, { onError: reportAutoSaveError });
-
   /**
    * 标签对应的文档是否已 gone（本机回收站 / 他端 purge）。
    * 判据与打开入口同一份 core.isGoneNote；**trashedAt 必须传**：删笔记本/分组的级联只标 trashed_at、
@@ -80,6 +74,22 @@ export function useWorkspaceSession(options: UseWorkspaceSessionOptions) {
       return false;
     }
   }, []);
+
+  /** P0-1 可见性：命中 gone 判据 ⇒ 标 tab gone（NotePaneHost 出只读横幅）并强制退出编辑态（编辑已无效要看得见）。 */
+  const markTabGone = useCallback((id: string) => {
+    updateTab(id, { gone: true, editing: false });
+  }, [updateTab]);
+
+  // 自动保存：编辑态内容变化防抖 1s 落盘；flush 返回真实写盘 Promise，失败保留界面并提示。
+  const reportAutoSaveError = useCallback((id: string, reason: unknown) => {
+    toastActionError("保存", reason);
+    // P0-1（261117）：保存被拒后按同一 gone 判据复核一次 —— 命中即标「只读 + 只读横幅」。
+    // **只补可见性**：保存/写边界路径不动（拒绝语义在 bridge/notes + noteRepository.saveNote）。
+    void tabIsGone(id).then((gone) => { if (gone) markTabGone(id); });
+  }, [markTabGone, tabIsGone]);
+  const { schedule: scheduleAutoSave, flush: flushAutoSave, cancel: cancelAutoSave } = useAutoSave(async (id, title, content, plain) => {
+    await bridge.saveNote(id, title, content, null, plain);
+  }, { onError: reportAutoSaveError });
 
   /** 丢弃一个标签：先取消待保存快照（否则全量 flush 仍会去写被拒的行、保存屏障继续失败）。 */
   const discardTab = useCallback((id: string) => {
@@ -100,6 +110,16 @@ export function useWorkspaceSession(options: UseWorkspaceSessionOptions) {
     for (const id of noteIds) cancelAutoSave(id); // 先取消失效待保存，再一次性移出（批量 API，避免旧快照互相覆盖）
     removeTabs(noteIds);
   }), [cancelAutoSave, removeTabs]);
+
+  // P0-1（261117）：每轮同步结束（写入点唯一 = bridge.syncNow，手动/自动同步同源）复核已打开标签的 gone
+  // 状态 —— 他端删除（回收站/purge）传播到本机后，命中同一判据的标签立刻翻「只读 + 只读横幅」，
+  // 不再等到自动保存被拒才发现编辑已无效。**只补可见性**：保存屏障（discardTab + cancelAutoSave）不动。
+  useEffect(() => subscribeSyncStatus(() => {
+    for (const tab of tabsRef.current) {
+      if (tab.gone) continue;
+      void tabIsGone(tab.id).then((gone) => { if (gone) markTabGone(tab.id); });
+    }
+  }), [markTabGone, tabIsGone, tabsRef]);
 
   /** 现取 usheet/board/ink 最新正文并等待保存完成；成功前不释放实例 capture，也不关闭界面。
    *  写盘前先过 gone 判定：已进回收站/被他端 purge 的文档不再尝试保存（写边界必拒），交调用方走 discardTab。 */
@@ -214,6 +234,11 @@ export function useWorkspaceSession(options: UseWorkspaceSessionOptions) {
     // task-67：文案取 core/capabilities/readonlyReason（移动端只覆盖解除动作措辞）。
     if (active.editLocked) {
       showToast(mobileReadonlyText({ locked: true }) ?? "文档已锁定（只读）", { type: "info" });
+      return;
+    }
+    // P0-1：gone 文档点「编辑」不静默 —— 只读横幅已在正文上方，这里补一条同源提示，不进入编辑。
+    if (active.gone) {
+      showToast(GONE_BANNER_TEXT, { type: "info" });
       return;
     }
     // usheet / board / ink 的正文在实例里；完成时同步 capture，不能只读父级 state
