@@ -1,121 +1,120 @@
-/* ── 移动端取色 · 深色（P1）────────────────────────────────────────────
- * 取值来源 = 本项目色阶（用户 261012 定稿：沿用我们的色阶、模仿语雀的形态）；
- * P1 阶段逐字节等于 src/styles/themes/dark.css（暖色移动端暂不做，见 docs/MOBILE-DESIGN §5.2）。 */
-/* v2（261107）：纯黑（OLED）档 —— html[data-theme="dark"].oled 时覆盖画布/纸面/玻璃/阴影。
- * 只换取值，不改结构；默认深色不受影响。 */
+/* ── 移动端取色 · 深色 ─────────────────────────────────────────────────
+ * 取值来源 = 思源 midnight 主题（app/appearance/themes/midnight/theme.css，AGPL-3.0，署名见设置「关于」）——
+ * 用户 261117 定稿：深色档跟随浅色一起思源化（中性黑灰 + 蓝主色），仅换取值，布局与行为不变。
+ * P1 阶段曾逐字节等于桌面 themes/dark.css；261117 起为思源 midnight 映射。 */
+/* v2（261107）：纯黑（OLED）档 —— html[data-theme="dark"].oled 时覆盖画布/纸面/阴影。
+ * 只换取值，不改结构；默认深色不受影响。261117：玻璃/渐变同去材质（平涂）。 */
 [data-theme="dark"].oled {
   --mb-canvas-1: #000000;
-  --mb-canvas-2: #050506;
-  --mb-canvas-glow: color-mix(in srgb, var(--mb-accent) 14%, transparent);
+  --mb-canvas-2: #000000;
+  --mb-canvas-glow: transparent;
   --lake-bg-window: #000000;
-  --lake-bg-panel: #0f0f10;
-  --lake-bg-canvas: #0f0f10;
-  --lake-bg-raised: #141517;
-  --lake-bg-block: #191a1c;
-  --lake-bg-sunken: #080809;
-  --lake-bg-subtle: #121315;
-  --mb-glass-bg: linear-gradient(180deg, rgba(28,30,34,.90), rgba(14,15,17,.82));
-  --mb-glass-bg-bar: linear-gradient(180deg, rgba(8,9,10,.94), rgba(4,5,6,.86));
+  --lake-bg-panel: #0a0a0a;
+  --lake-bg-canvas: #0a0a0a;
+  --lake-bg-raised: #141414;
+  --lake-bg-block: #1a1a1a;
+  --lake-bg-sunken: #050505;
+  --lake-bg-subtle: #121212;
+  --mb-glass-bg: #0a0a0a;
+  --mb-glass-bg-bar: rgba(10,10,10,.96);
   --mb-glass-border: rgba(255,255,255,.10);
-  --mb-glass-highlight: rgba(255,255,255,.12);
-  --mb-shadow-card: inset 0 0 0 .5px rgba(255,255,255,.09), 0 10px 24px -18px rgba(0,0,0,.95);
-  --mb-shadow-float: inset 0 .5px 0 rgba(255,255,255,.12), 0 10px 24px -10px rgba(0,0,0,.8), 0 28px 52px -24px rgba(0,0,0,.9);
+  --mb-glass-highlight: transparent;
+  --mb-shadow-card: 0 1px 2px rgba(0,0,0,.60), 0 2px 8px -4px rgba(0,0,0,.70);
+  --mb-shadow-float: 0 8px 24px rgba(0,0,0,.80);
   --mb-shadow-bar: inset 0 -0.5px 0 rgba(255,255,255,.08);
-  --lake-border-1: #2c2e33;
-  --lake-border-2: #1c1e22;
-  --lake-border-strong: #3d4149;
+  --lake-border-1: #2c2c2c;
+  --lake-border-2: #1c1c1c;
+  --lake-border-strong: #454545;
 }
 
 [data-theme="dark"] {
   color-scheme: dark;
-  /* 表面（260926：panel 与 canvas 取同值——浅色里两者都是 #ffffff，
-   * 深色若不同会出现"顶栏/面包屑/大纲/正文四种黑"的明显色阶。结构不随主题变，只换变量。） */
-  --lake-bg-window: #191a1d;
-  --lake-bg-panel: #1e1f23;
-  --lake-bg-canvas: #1e1f23;
-  --lake-bg-block: #292b30;
-  --lake-bg-raised: #26282d;
-  --lake-bg-sunken: #131417;
-  /* 分组底衬 / 极浅灰通道（260929）：深色里「比 panel 亮一档」才是同一个语义（浅色是深一档）。 */
-  --lake-bg-subtle: #232528;
-  --lake-bg-hover: rgba(255,255,255,.055);
-  --lake-bg-press: rgba(255,255,255,.09);
-  /* 小记标签实底（深色重绘；浅色原值见 themes/light.css）：比 panel 亮一档的灰绿实底，
-   * 文字 --lake-text-1 11.1:1、计数 --lake-text-3 4.7:1。 */
-  --lake-quick-tag-bg: #263029;
+  /* 表面（思源 midnight 分层：内容面 #1e1e1e / 块面 #2c2c2c / 外围 body #2e3236）。
+   * panel 与 canvas 同值（深色四种黑的教训，260926）；结构不随主题变，只换变量。 */
+  --lake-bg-window: #2e3236;
+  --lake-bg-panel: #1e1e1e;
+  --lake-bg-canvas: #1e1e1e;
+  --lake-bg-block: #2c2c2c;
+  --lake-bg-raised: #262626;
+  --lake-bg-sunken: #171717;
+  /* 分组底衬 / 极浅灰通道：深色里「比 panel 亮一档」才是同一个语义。 */
+  --lake-bg-subtle: #242424;
+  --lake-bg-hover: rgba(255,255,255,.10);
+  --lake-bg-press: rgba(255,255,255,.16);
+  /* 小记标签实底（深色重绘；261117 跟随思源 tag 色语言 = primary 深底）：
+   * 文字 --lake-text-1、计数 --lake-text-3。 */
+  --lake-quick-tag-bg: #25344f;
   /* 内核品牌绿在深色下使用 Lake dark schema，提升暗底对比度。 */
   --lake-kernel-brand-green: #2ed790;
   /* 「文档引用」卡插入面板图标的**深色重绘**（几何不动，只换调色板；浅色原值见 themes/base.css）。
    * 口径：底框比 panel 亮一档（像个贴片）、文档面再亮一档、描边用浅墨（≠纯白，避免刺眼）、
    * 高亮线提亮一档蓝、链接绿与 --lake-kernel-brand-green 同值。 */
-  --lake-note-ref-icon-tile: #232528;
-  --lake-note-ref-icon-tile-border: #3b3e45;
-  --lake-note-ref-icon-page: #2b2e34;
+  --lake-note-ref-icon-tile: #242424;
+  --lake-note-ref-icon-tile-border: #3d3d3d;
+  --lake-note-ref-icon-page: #2c2c2c;
   --lake-note-ref-icon-page-ink: #d7dae0;
-  --lake-note-ref-icon-fold: #3b3e45;
+  --lake-note-ref-icon-fold: #3d3d3d;
   --lake-note-ref-icon-rule: #8b93a1;
   --lake-note-ref-icon-accent: #7fb2ff;
   --lake-note-ref-icon-link: #2ed790;
-  --lake-note-ref-icon-knockout: #232528;
+  --lake-note-ref-icon-knockout: #242424;
   /* 「加密文本」卡插入面板图标（深色重绘；浅色原值见 src/mobile/theme/tokens.css）。 */
-  --lake-locked-text-icon-tile: #232528;
-  --lake-locked-text-icon-tile-border: #3b3e45;
+  --lake-locked-text-icon-tile: #242424;
+  --lake-locked-text-icon-tile-border: #3d3d3d;
   --lake-locked-text-icon-ink: #d7dae0;
-  /* 文字 */
-  --lake-text-1: #e7e8ea;
-  --lake-text-2: #bec5d0;
-  --lake-text-3: #aab4c4;   /* 261104：导航面与选中底上保留 AA 辅助文字对比。 */
-  --lake-text-4: #6f7278;   /* vs #1e1f23 3.5:1（旧 #5c5d62 更低） */
+  /* 文字（思源 midnight on-background #dadada / on-surface #9aa0a6 为底，辅助两档按 AA 校准） */
+  --lake-text-1: #dadada;
+  --lake-text-2: #9aa0a6;
+  --lake-text-3: #8a9095;   /* vs #1e1e1e 4.7:1 —— AA 辅助文字 */
+  --lake-text-4: #6e747a;   /* vs #1e1e1e 3.1:1 —— 元信息/占位（有意 3:1 档） */
   --lake-text-on-accent: #ffffff;
 
-  /* ── v2 柔光纸面（261107）────────────────────────────────────────────── */
-  --mb-canvas-1: #0c0d10;
-  --mb-canvas-2: #121419;
-  --mb-canvas-glow: color-mix(in srgb, var(--mb-accent) 20%, transparent);
+  /* ── 移动材质（261117 思源化：平涂 + 发丝线，去 v2 玻璃/渐变/光晕）──────── */
+  --mb-canvas-1: #1e1e1e;
+  --mb-canvas-2: #1e1e1e;
+  --mb-canvas-glow: transparent;
   --mb-accent: var(--lake-accent);
   --mb-accent-ink: var(--lake-accent-ink);
   --mb-accent-soft: color-mix(in srgb, var(--mb-accent) 24%, var(--lake-bg-panel));
-  --mb-glass-bg: linear-gradient(180deg, rgba(36,40,48,.82), rgba(24,26,32,.70));
-  --mb-glass-bg-bar: linear-gradient(180deg, rgba(22,24,29,.94), rgba(18,20,25,.82));
-  --mb-glass-border: rgba(255,255,255,.12);
-  --mb-glass-highlight: rgba(255,255,255,.14);
-  --mb-shadow-card: inset 0 0 0 .5px rgba(255,255,255,.08), 0 10px 24px -18px rgba(0,0,0,.8);
-  --mb-shadow-float: inset 0 .5px 0 rgba(255,255,255,.14), 0 10px 24px -10px rgba(0,0,0,.6), 0 28px 52px -24px rgba(0,0,0,.7);
-  --mb-shadow-bar: inset 0 -0.5px 0 rgba(255,255,255,.07);
+  --mb-glass-bg: #1e1e1e;
+  --mb-glass-bg-bar: rgba(30,30,30,.96);
+  --mb-glass-border: rgba(255,255,255,.10);
+  --mb-glass-highlight: transparent;
+  --mb-shadow-card: 0 1px 2px rgba(0,0,0,.40), 0 2px 8px -4px rgba(0,0,0,.55);
+  --mb-shadow-float: 0 8px 24px rgba(0,0,0,.70);
+  --mb-shadow-bar: inset 0 -0.5px 0 rgba(255,255,255,.08);
 
-  /* 边框 */
-  --lake-border-1: #3b414b;
-  --lake-border-2: #232528;
-  --lake-border-strong: #535e70;
-  /* 主色（261006：中性蓝，按暗底抬高明度）。
-   * 对比度实测：accent vs panel 7.13:1；ink 上的白字 4.89:1。 */
-  --lake-accent: #9aabce;
-  --lake-accent-ink: #5970a6;
-  --lake-accent-ink-hover: #5d73a7;
-  --lake-accent-ink-press: #4f6392;
-  --lake-accent-tint: rgba(154,171,206,.20);
-  --lake-accent-text: #b9c6e2;
-  /* 状态色 */
-  --lake-status-sync: #6fc0cc;
-  --lake-status-pending: #e0ac63;
-  --lake-status-ok: #6cc392;
-  --lake-status-error: #ef8b84;
-  --lake-status-sync-soft: rgba(111,192,204,.14);
-  --lake-status-pending-soft: rgba(224,172,99,.14);
-  --lake-status-ok-soft: rgba(108,195,146,.14);
-  --lake-status-error-soft: rgba(239,139,132,.14);
-  /* 多维表「评分」星（260929）：**已选中**星的颜色，对齐云端语雀的金；深色底比浅色亮一档（同 --lake-status-pending 在深色的处理），未选中星走 --lake-border-strong。 */
+  /* 边框（思源 midnight --b3-border-color = #484848） */
+  --lake-border-1: #484848;
+  --lake-border-2: #383838;
+  --lake-border-strong: #5c5c5c;
+  /* 主色 = 思源蓝 #3575f0（midnight 同值）；文字蓝走 midnight link #8ab4f8 */
+  --lake-accent: #3575f0;
+  --lake-accent-ink: #3575f0;
+  --lake-accent-ink-hover: #2c66e0;
+  --lake-accent-ink-press: #2456c9;
+  --lake-accent-tint: rgba(53,117,240,.24);
+  --lake-accent-text: #8ab4f8;
+  /* 状态色（midnight 色相；文字档为深底可读档） */
+  --lake-status-sync: #78d4e4;
+  --lake-status-pending: #f2bd5c;
+  --lake-status-ok: #81c995;
+  --lake-status-error: #f28b82;
+  --lake-status-sync-soft: rgba(120,212,228,.14);
+  --lake-status-pending-soft: rgba(242,189,92,.14);
+  --lake-status-ok-soft: rgba(129,201,149,.14);
+  --lake-status-error-soft: rgba(242,139,130,.14);
+  /* 多维表「评分」星：深色底比浅色亮一档（同状态色处理），未选中星走 --lake-border-strong。 */
   --lake-rating-star: #e8b339;
-  /* 选区 / 遮罩 / 滚动条 / 焦点 */
-  --lake-scrim: rgba(6,8,10,.55);
-  --lake-scrollbar-thumb: rgba(230,235,242,.22);
-  --lake-scrollbar-thumb-hover: #7d8695;
-  --lake-focus-halo: rgba(230,235,242,.20);
-  /* 阴影 */
-  /* 261105：浮层仅保留近/远两层偏移阴影，去掉零偏移描边与大范围灰雾；卡片档不变。 */
+  /* 选区 / 遮罩 / 滚动条 / 焦点（midnight mask / scroll / link 蓝光环） */
+  --lake-scrim: rgba(10,10,10,.50);
+  --lake-scrollbar-thumb: rgba(230,230,230,.20);
+  --lake-scrollbar-thumb-hover: #9aa0a6;
+  --lake-focus-halo: rgba(138,180,248,.28);
+  /* 阴影（midnight dialog-shadow 精神：更重的黑） */
   --lake-shadow-card: 0 1px 2px rgba(0,0,0,.34), 0 6px 16px -8px rgba(0,0,0,.42);
   --lake-shadow-popover: 0 4px 12px -4px rgba(0,0,0,.46), 0 12px 28px -12px rgba(0,0,0,.42);
-  --lake-shadow-dialog: 0 8px 20px -8px rgba(0,0,0,.50), 0 20px 48px -20px rgba(0,0,0,.46);
+  --lake-shadow-dialog: 0 8px 24px rgba(0,0,0,.60);
   --lake-shadow-knob: 0 1px 2px rgba(0,0,0,.45);
 
 
@@ -143,52 +142,51 @@
   --lake-hairline-soft: rgba(255, 255, 255, .07);
 }
 
-/* ── 移动端内核桥接 · 深色（P1：整块自 src/mobile/editor-dark.css 迁入，值未改）────
- * 编辑区（.lake-editor-mount / 内核 .lakex-default-theme）在深色下跟随 App 的冷灰蓝分层，
- * 不再各用一套中性黑 —— 否则侧栏与正文区肉眼可辨不是一个色系。
+/* ── 移动端内核桥接 · 深色（P1 整块迁入；261117 跟随思源 midnight 中性化）────
+ * 编辑区（.lake-editor-mount / 内核 .lakex-default-theme）在深色下跟随 App 的中性黑灰分层，
+ * 不再各用一套冷灰蓝 —— 否则侧栏与正文区肉眼可辨不是一个色系。
  * 只在这里放**取值**；组件级边界修仍在 src/mobile/editor-dark.css。 */
 [data-theme="dark"] .lake-editor-mount,
 [data-theme="dark"] .lakex-default-theme {
-  --lakex-editor-background: #20242a;          /* = 画布 */
-  --lakex-editor-background-primary: #262a31 !important;  /* = 表面 */
-  --lakex-editor-background-foreground: #262a31 !important;
-  --lakex-editor-background-secondary: #23272e;
-  --lakex-editor-background-tertiary: #2a2e36;
-  --lakex-editor-background-focus: #262a31;
-  --lakex-editor-background-primary-hover: #31363f;
-  --lakex-editor-background-primary-hover-light: #2c313a;
-  --lakex-editor-border-light: #31363f;
-  --lakex-editor-border-primary: #414855;
-  --lakex-editor-border-secondary: #31363f;
-  --lakex-editor-card-background-hover: #262a31;
-  --lakex-editor-card-border-hover: #414855;
+  --lakex-editor-background: #1e1e1e;          /* = 画布 */
+  --lakex-editor-background-primary: #2c2c2c !important;  /* = 表面 */
+  --lakex-editor-background-foreground: #2c2c2c !important;
+  --lakex-editor-background-secondary: #242424;
+  --lakex-editor-background-tertiary: #333333;
+  --lakex-editor-background-focus: #2c2c2c;
+  --lakex-editor-background-primary-hover: #383838;
+  --lakex-editor-background-primary-hover-light: #323232;
+  --lakex-editor-border-light: #383838;
+  --lakex-editor-border-primary: #4a4a4a;
+  --lakex-editor-border-secondary: #383838;
+  --lakex-editor-card-background-hover: #2c2c2c;
+  --lakex-editor-card-border-hover: #4a4a4a;
   --lakex-editor-card-border-selected: var(--lake-accent);
   --lakex-editor-code-background: rgba(255, 255, 255, .06);
   --lakex-editor-column-background-highlight: rgba(255, 255, 255, .04);
   --lakex-editor-cursor: var(--lake-accent);
-  --lakex-editor-selection: rgba(122, 144, 234, .32);
+  --lakex-editor-selection: rgba(53, 117, 240, .32);
   --lakex-editor-table-bar-active: var(--lake-accent);
   --lakex-editor-table-scrollbar-thumb: var(--lake-text-4);
-  --lakex-editor-text-body: #e8ecf3;
-  --lakex-editor-text-caption: #9aa4b2;
-  --lakex-editor-text-color: #e8ecf3;
-  --lakex-editor-text-danger: #d23f31;
-  --lakex-editor-text-disable: #5c6472;
-  --lakex-editor-text-link: #7a90ea;
-  --lakex-editor-text-link-hover: #93a6f0;
-  --lakex-editor-icon-primary: #d5dae4;
-  --lakex-editor-icon-secondary: #9aa4b2;
-  --lakex-editor-overlay-background-tertiary: #2a2e36;
-  --lakex-editor-color-black: #d5dae4;
-  --lakex-editor-color-black-f05: rgba(213, 218, 228, .05);
-  --lakex-editor-color-black-f08: rgba(213, 218, 228, .08);
-  --lakex-editor-color-black-f12: rgba(213, 218, 228, .12);
-  --lakex-editor-color-black-f30: rgba(213, 218, 228, .30);
-  --lakex-editor-color-black-f65: rgba(213, 218, 228, .65);
+  --lakex-editor-text-body: #dadada;
+  --lakex-editor-text-caption: #9aa0a6;
+  --lakex-editor-text-color: #dadada;
+  --lakex-editor-text-danger: #f28b82;
+  --lakex-editor-text-disable: #6a6a6a;
+  --lakex-editor-text-link: #8ab4f8;
+  --lakex-editor-text-link-hover: #a7c7fa;
+  --lakex-editor-icon-primary: #d5d5d5;
+  --lakex-editor-icon-secondary: #9aa0a6;
+  --lakex-editor-overlay-background-tertiary: #333333;
+  --lakex-editor-color-black: #d5d5d5;
+  --lakex-editor-color-black-f05: rgba(213, 213, 213, .05);
+  --lakex-editor-color-black-f08: rgba(213, 213, 213, .08);
+  --lakex-editor-color-black-f12: rgba(213, 213, 213, .12);
+  --lakex-editor-color-black-f30: rgba(213, 213, 213, .30);
+  --lakex-editor-color-black-f65: rgba(213, 213, 213, .65);
   --lakex-editor-color-theme: var(--lake-accent);
   --lakex-editor-color-theme-light: var(--lake-accent-tint);
-  --lakex-editor-color-white: #131519;
-  --lakex-editor-color-white-f60: rgba(19, 21, 25, .60);
-  --lakex-editor-color-white-f90: rgba(19, 21, 25, .90);
+  --lakex-editor-color-white: #131313;
+  --lakex-editor-color-white-f60: rgba(19, 19, 19, .60);
+  --lakex-editor-color-white-f90: rgba(19, 19, 19, .90);
 }
-

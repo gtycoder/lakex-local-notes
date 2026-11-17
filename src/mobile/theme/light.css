@@ -1,83 +1,80 @@
-/* ── 移动端取色 · 浅色（P1）────────────────────────────────────────────
- * 取值来源 = 本项目色阶（用户 261012 定稿：**沿用我们的色阶、模仿语雀的形态**）；
- * P1 阶段逐字节等于 src/styles/themes/light.css；P2 起按移动端需要调整（改这里，不改桌面）。
- * 「文档引用」图标调色板、内核桥接（--lakex-editor-*）等**都留在本文件**：
- * 移动端不 import 桌面 themes 之后，它们必须由移动端自己提供。 */
+/* ── 移动端取色 · 浅色（默认档）─────────────────────────────────────────
+ * 取值来源 = 思源 daylight 主题（app/appearance/themes/daylight/theme.css，AGPL-3.0，署名见设置「关于」）——
+ * 用户 261117 定稿：**不要旧的灰蓝柔光风格，恢复思源 App 的观感**；仅换样式取值，布局与行为不变。
+ * 口径：白面为主 + 中性灰分层 + 发丝线分隔 + 蓝主色（#3575f0）；文字档位保留本项目 AA 合同
+ * （text-1/2/3 ≥4.5:1、text-4 为有意 3:1 档），只把色相从中性蓝灰调到思源的中性灰。
+ * 颜色字面量只允许出现在主题文件（AGENTS §3#14）；使用处一律引用令牌。 */
 :root,
 [data-theme="light"] {
   color-scheme: light;
-  /* 261104 三端质感优化：外围浅灰蓝，卡片与正文保持白色；
-   * 不能把窗底铺进正文/小记卡，否则会退回整屏发灰。 */
-  --lake-bg-window: #f3f5f8;
+  /* 表面：思源分层 = 白（内容面）/ #f6f6f6（块面）/ #ebedf0（外围通道，= 思源 --b3-body-background）。
+   * 不把外围铺进正文/小记卡 —— 卡与正文保持白色。 */
+  --lake-bg-window: #ebedf0;
   --lake-bg-panel: #ffffff;
   --lake-bg-canvas: #ffffff;
-  --lake-bg-block: #f0f3f7;
+  --lake-bg-block: #f6f6f6;
   --lake-bg-raised: #ffffff;
-  --lake-bg-sunken: #eceef1;
-  /* 分组底衬 / 极浅灰通道（260929 多维表复刻云端）：比 panel 深一档、比 block 浅一档，
-   * 用来把「分组之间的通道」和白底卡片分开，不用于常规块面。 */
-  --lake-bg-subtle: #fafbfc;
-  --lake-bg-hover: #e8edf4;
-  --lake-bg-press: #dfe6ef;
-  /* 小记标签实底（261030 用户点单：对齐语雀 App —— 浅灰绿实底、无边框、文字深灰）。
-   * 移动端独有语义：文字走 --lake-text-1（vs 本底 13.8:1），计数走 --lake-text-3（4.9:1）。
-   * 不使用 --lake-status-ok-soft 之类的状态色 —— 标签不是状态，语义不得借用。 */
-  --lake-quick-tag-bg: #e8f2ec;
-  /* 文字 */
-  --lake-text-1: #1f2329;
-  --lake-text-2: #455166;
-  --lake-text-3: #566273;   /* 261104：在导航、选中与按压面上按 AA 4.5 校验。 */
-  --lake-text-4: #8b93a1;   /* vs #fff 3.1:1 —— 元信息/占位（比旧值 #9aa1aa 的 2.6:1 更好） */
+  --lake-bg-sunken: #f0f0f0;
+  /* 分组底衬 / 极浅灰通道：比 panel 深一档、比 block 浅一档。 */
+  --lake-bg-subtle: #fafafa;
+  --lake-bg-hover: #ededed;
+  --lake-bg-press: #e0e0e0;
+  /* 小记标签实底（261030 有着重点单保留，261117 换思源 tag 色语言 = primary 浅底）：
+   * 文字走 --lake-text-1，计数走 --lake-text-3。 */
+  --lake-quick-tag-bg: #e8f0fe;
+  /* 文字（思源 on-background #222 / on-surface #5f6368 为底，辅助两档按 AA 校准） */
+  --lake-text-1: #222222;
+  --lake-text-2: #5f6368;
+  --lake-text-3: #6b7075;   /* vs 白 4.7:1、vs #f6f6f6 4.5:1 —— AA 辅助文字 */
+  --lake-text-4: #8e9297;   /* vs 白 3.2:1 —— 元信息/占位（有意 3:1 档） */
   --lake-text-on-accent: #ffffff;
-  /* 边框 */
-  --lake-border-1: #d6dde7;
-  --lake-border-2: #e6ebf2;
-  --lake-border-strong: #bcc7d6;
-  /* 主色（261006 canon）：同一色相（222°）的墨蓝，从"雾状"收成明确锚点。
-   * 橙是**暖色主题专属**的身份色（见 themes/warm.css），亮/暗保持中性蓝。 */
-  --lake-accent: #3f5fa0;
-  --lake-accent-ink: #33497f;
-  --lake-accent-ink-hover: #3d558f;
-  --lake-accent-ink-press: #293c69;
-  --lake-accent-tint: #e1eafa;
-  --lake-accent-text: #33497f;
-  /* 状态色 */
+  /* 边框（思源 --b3-border-color = #e0e0e0；发丝线 0.5px 原则不变） */
+  --lake-border-1: #e0e0e0;
+  --lake-border-2: #eeeeee;
+  --lake-border-strong: #c7c9cc;
+  /* 主色 = 思源蓝 #3575f0（--b3-theme-primary）；实心钮同色相，文字蓝加深过 AA */
+  --lake-accent: #3575f0;
+  --lake-accent-ink: #3575f0;
+  --lake-accent-ink-hover: #2c66e0;
+  --lake-accent-ink-press: #2456c9;
+  --lake-accent-tint: #e8f0fe;
+  --lake-accent-text: #2b5ec7;
+  /* 状态色（思源 error/success/warning 色相，文字档取同色相深档过 AA） */
   --lake-status-sync: #2a6b80;
-  --lake-status-pending: #8f5f0e;
-  --lake-status-ok: #2b7350;
-  --lake-status-error: #b3382f;
+  --lake-status-pending: #945c00;
+  --lake-status-ok: #417f2f;
+  --lake-status-error: #c2362c;
   --lake-status-sync-soft: #e7f1f3;
-  --lake-status-pending-soft: #f7f0e2;
-  --lake-status-ok-soft: #e8f2ec;
-  --lake-status-error-soft: #f8eae9;
-  /* 多维表「评分」星（260929）：**已选中**星的颜色，对齐云端语雀的金；未选中星走 --lake-border-strong。 */
-  --lake-rating-star: #ecaa06;
-  /* 选区 / 遮罩 / 滚动条 / 焦点 */
-  --lake-scrim: rgba(24,27,32,.28);
-  --lake-scrollbar-thumb: rgba(28,31,36,.22);
-  --lake-scrollbar-thumb-hover: #8c94a0;
-  --lake-focus-halo: rgba(28,31,36,.20);
-  /* 阴影 */
-  /* 261105：浮层仅保留近/远两层偏移阴影，去掉零偏移描边与大范围灰雾；卡片档不变。 */
-  --lake-shadow-card: 0 1px 2px rgba(16,24,40,.04), 0 6px 16px -8px rgba(16,24,40,.10);
-  --lake-shadow-popover: 0 4px 12px -4px rgba(16,24,40,.12), 0 12px 28px -12px rgba(16,24,40,.16);
-  --lake-shadow-dialog: 0 8px 20px -8px rgba(16,24,40,.16), 0 20px 48px -20px rgba(16,24,40,.20);
-  --lake-shadow-knob: 0 1px 2px rgba(16,24,40,.20);
+  --lake-status-pending-soft: #fdf0dd;
+  --lake-status-ok-soft: #e9f4e4;
+  --lake-status-error-soft: #fbe9e7;
+  /* 多维表「评分」星：思源 secondary #ff9200 系的可读档；未选中星走 --lake-border-strong。 */
+  --lake-rating-star: #e8a020;
+  /* 选区 / 遮罩 / 滚动条 / 焦点（思源 mask / scroll / 主色光环） */
+  --lake-scrim: rgba(220,220,220,.50);
+  --lake-scrollbar-thumb: rgba(0,0,0,.20);
+  --lake-scrollbar-thumb-hover: #9aa0a6;
+  --lake-focus-halo: rgba(53,117,240,.25);
+  /* 阴影（思源词汇：point/tooltips/dialog 三档，克制） */
+  --lake-shadow-card: 0 1px 2px rgba(0,0,0,.08), 0 2px 6px -2px rgba(0,0,0,.08);
+  --lake-shadow-popover: 0 2px 8px rgba(0,0,0,.12), 0 8px 24px -8px rgba(0,0,0,.14);
+  --lake-shadow-dialog: 0 8px 24px rgba(0,0,0,.20);
+  --lake-shadow-knob: 0 1px 2px rgba(0,0,0,.30);
 
-  /* ── v2 柔光纸面（261107）────────────────────────────────────────────── */
-  --mb-canvas-1: #f6f7fa;
-  --mb-canvas-2: #eef0f4;
-  --mb-canvas-glow: color-mix(in srgb, var(--mb-accent) 11%, transparent);
+  /* ── 移动材质（261117 思源化：平涂白 + 发丝线，去掉 v2 柔光纸面的渐变/光晕/玻璃）── */
+  --mb-canvas-1: #ffffff;
+  --mb-canvas-2: #ffffff;
+  --mb-canvas-glow: transparent;
   --mb-accent: var(--lake-accent);
   --mb-accent-ink: var(--lake-accent-ink);
   --mb-accent-soft: color-mix(in srgb, var(--mb-accent) 12%, var(--lake-bg-panel));
-  --mb-glass-bg: linear-gradient(180deg, rgba(255,255,255,.78), rgba(255,255,255,.60));
-  --mb-glass-bg-bar: linear-gradient(180deg, rgba(246,247,250,.90), rgba(243,245,248,.76));
-  --mb-glass-border: rgba(255,255,255,.40);
-  --mb-glass-highlight: rgba(255,255,255,.95);
-  --mb-shadow-card: inset 0 0 0 .5px rgba(16,24,40,.05), 0 1px 2px rgba(16,24,40,.04), 0 10px 24px -18px rgba(16,24,40,.35);
-  --mb-shadow-float: inset 0 .5px 0 rgba(255,255,255,.95), 0 8px 20px -10px rgba(16,24,40,.24), 0 24px 48px -24px rgba(16,24,40,.42);
-  --mb-shadow-bar: inset 0 -0.5px 0 rgba(16,24,40,.07);
+  --mb-glass-bg: #ffffff;
+  --mb-glass-bg-bar: rgba(255,255,255,.96);
+  --mb-glass-border: rgba(0,0,0,.06);
+  --mb-glass-highlight: transparent;
+  --mb-shadow-card: 0 1px 2px rgba(0,0,0,.06), 0 2px 8px -4px rgba(0,0,0,.10);
+  --mb-shadow-float: 0 8px 24px rgba(0,0,0,.16);
+  --mb-shadow-bar: inset 0 -0.5px 0 rgba(0,0,0,.08);
 
 
   /* ---- 过渡桥接：lakex 编辑器外围（设计 MIGRATION §3 批准的变量映射；选区色刻意不动） ---- */
@@ -89,18 +86,17 @@
   --lakex-editor-text-body: var(--lake-text-1);
   --lakex-editor-text-caption: var(--lake-text-3);
   --lakex-editor-cursor: var(--lake-accent);
-  /* 阴影色 / 中性叠层 / 半透明遮罩（P7-d）：需要**保留方向**的阴影与叠层在这里取色，
-   * 字面量只允许出现在主题文件；使用处一律引用令牌。 */
+  /* 阴影色 / 中性叠层 / 半透明遮罩（P7-d）：需要**保留方向**的阴影与叠层在这里取色。 */
   --lake-shadow-color-1: rgba(0, 0, 0, .05);
   --lake-shadow-color-2: rgba(0, 0, 0, .06);
-  --lake-shadow-color-3: rgba(16, 24, 40, .08);
-  --lake-shadow-color-4: rgba(16, 24, 40, .16);
+  --lake-shadow-color-3: rgba(0, 0, 0, .08);
+  --lake-shadow-color-4: rgba(0, 0, 0, .16);
   --lake-shadow-color-6: rgba(0, 0, 0, .14);
   --lake-shadow-color-7: rgba(0, 0, 0, .16);
-  --lake-neutral-veil-1: rgba(23, 25, 28, .12);
-  --lake-neutral-veil-2: rgba(23, 25, 28, .06);
+  --lake-neutral-veil-1: rgba(0, 0, 0, .12);
+  --lake-neutral-veil-2: rgba(0, 0, 0, .06);
   --lake-neutral-veil-3: rgba(0, 0, 0, .14);
   --lake-veil-soft: rgba(255, 255, 255, .48);
   --lake-veil-open: rgba(255, 255, 255, .86);
-  --lake-hairline-soft: rgba(232, 234, 238, .55);
+  --lake-hairline-soft: rgba(0, 0, 0, .07);
 }

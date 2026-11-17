@@ -7,6 +7,23 @@
 
 ## 0. 最新交接（最近 3 个批次；更早的见 git）
 
+### 261117 · 移动端思源观感换肤（分支 `theme-siyuan-mobile`，进行中）
+
+- **用户裁决**：仅移动端、替换默认浅色主题（含深色跟随）、布局/行为不动；参考 = 模拟器思源 App + siyuan-master 主题源码。视觉口径登记 `docs/MOBILE-DESIGN.md` v3 节。
+- **已做**：`theme/light.css` / `dark.css` 全量换取值（思源 daylight/midnight 映射：白面+中性灰+发丝线、主色 #3575f0、文字灰阶保 AA 合同、材质平涂化）；设备截图对照通过。
+- **注意**：① 分支上 `git status` 里的非主题文件 = 桌面会话在途改动的**未提交覆盖层**（构建用，不入本分支提交）；② 214ba68b 提交混入了两处他人文件级改动（MobileApp/OutlineSheet），其依赖尚未提交 ⇒ 单独 checkout 该提交 tsc 会红，等桌面会话批次落地自然闭合；③ 合并前 mobile-snap 基线必须重烤（主题必然漂移）。
+- **待做**：深色档设备抽查、暖色/清爽档是否跟随（待点单）、MOBILE-DESIGN v2 节存废整理、合并评审。
+
+
+### 261117 · 附件超限统一提示（图片/视频/PDF/所有附件）
+
+- **问题**：视频/PDF/普通附件虽按设置拦截，但只给卡片内泛化错误；图片还有独立 25 MiB 硬限制，用户把附件上限调到 50/100 后图片仍失败，且提示不说明当前文件多大、上限多少、去哪里调整。
+- **修复**：新增 `lib/attachmentLimit` 单一错误与通知总线：文案包含文件名、实际大小、超出量、当前上限和「设置 → 常规 → 附件大小上限」。`uploadLakeResource` 在大字节读取/队列/重试前预检；Android `bridge.uploadResource` 对表格/多维表/画板/手写板直连入口同样预检；手写板 PDF 导入也复用同一口径。
+- **设置生效范围**：25/50/100 MiB 现在对本地选择的图片、视频、音频、PDF/普通附件统一生效；底层协议硬上限仍 100 MiB。`MAX_IMAGE_BYTES=25 MiB` 收窄为网络图片下载/小记旧入口的内存护栏。设置页说明同步写明覆盖图片、视频、PDF 和其他附件。
+- **通知**：桌面 `useDesktopShell` 订阅后显示 8 秒通知 +「打开设置」，直达常规设置；Android error toast 12 秒。
+- **实测**：开发版当前上限 50 MiB，插入 50 MiB+1 B PDF：错误与桌面通知均显示“文件大小 50 MiB（比上限多 1 B），当前附件上限 50 MiB…”，点击「打开设置」真实打开常规设置；超限文件未落盘（首轮误放行测试资产已清理）。
+- **门禁**：tsc 0；定点 78/78；全量 vitest **1023 files passed / 13 skipped（6478 tests passed / 14 skipped）**；`check:mobileui`、`check:bundle`/arch（mobile entry 50,633/51,200、首屏 346.2KB/350KB；桌面 599.7KB/600KB）、`check:core`、`git diff --check` 全过；Android `--sync --install` 已装 emulator-5554 并启动。
+- **护栏**：`attachmentLimit.test.ts`、`resourceUpload.limit.test.ts`、`attachmentLimitWiring.test.ts`、移动桥 `attachmentLimit.test.ts`、PDF 导入/跨端资源契约。文档：[docs/LAKEX-CONTRACT.md](LAKEX-CONTRACT.md) §5.57。
 
 ### 261117 · 长按＋「速记」失效修复（261114 空间顺序重排的回归）
 
