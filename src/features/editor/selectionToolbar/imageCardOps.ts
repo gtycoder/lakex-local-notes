@@ -54,6 +54,13 @@ interface CardRef {
   _instance?: unknown;
 }
 
+export interface ImageResizeState {
+  width: number;
+  min: number;
+  max: number;
+  step: number;
+}
+
 function cardRef(cardEl: HTMLElement): CardRef | undefined {
   return (cardEl as unknown as { _neRef?: CardRef })._neRef;
 }
@@ -95,6 +102,51 @@ export function readImageMeta(cardEl: HTMLElement): ImageMeta {
     spacing: (cd?.getCardSpacing?.() as string) || "",
     linkSelf: cd?.isOpenLinkInSelf?.() === true,
   };
+}
+
+/** 图片拖拽宽度：当前显示宽度与正文可用宽度（像素），上下限由内核 CSS/正文栏共同约束。 */
+export function readImageResizeState(cardEl: HTMLElement): ImageResizeState | null {
+  const img = cardEl.querySelector<HTMLImageElement>("img");
+  if (!img) return null;
+  const body = cardEl.closest("ne-hole") ?? cardEl.parentElement;
+  const bodyWidth = Math.max(32, Math.floor(body?.getBoundingClientRect().width ?? img.getBoundingClientRect().width));
+  const width = Math.max(32, Math.round(img.getBoundingClientRect().width || readImageMeta(cardEl).width));
+  return { width, min: 32, max: Math.max(32, bodyWidth - 2), step: Math.max(8, Math.round(bodyWidth / 50)) };
+}
+
+/** 拖动中的视觉预览；不改 cardValue，松手后由 updateImageData 正式写回。 */
+export function previewImageWidth(cardEl: HTMLElement, width: number): void {
+  const img = cardEl.querySelector<HTMLImageElement>("img");
+  if (!img) return;
+  img.style.width = `${Math.max(32, Math.round(width))}px`;
+  img.style.height = "auto";
+  img.style.maxWidth = "100%";
+}
+
+/** 取消拖动：恢复内核原始内联样式。 */
+export function restoreImageWidthPreview(cardEl: HTMLElement, originalStyle: string | null): void {
+  const img = cardEl.querySelector<HTMLImageElement>("img");
+  if (!img) return;
+  if (originalStyle === null) img.removeAttribute("style");
+  else img.setAttribute("style", originalStyle);
+}
+
+/** 图片宽度正式写回：与图片工具条共用内核 updateImageData 命令。 */
+export function writeImageDisplayWidth(cardEl: HTMLElement, width: number): boolean {
+  try {
+    const ref = cardRef(cardEl);
+    const inst = (ref?._virtualNode?._instance ?? ref?._instance) as {
+      editor?: { execCommand?: (name: string, ...args: unknown[]) => unknown };
+      _$cardUI?: { editor?: { execCommand?: (name: string, ...args: unknown[]) => unknown } };
+    } | undefined;
+    const editor = inst?.editor ?? inst?._$cardUI?.editor;
+    const cardId = cardEl.getAttribute("id");
+    if (!editor?.execCommand || !cardId) return false;
+    editor.execCommand("updateImageData", cardId, { width: Math.max(32, Math.round(width)) });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** 边距 = 内核 card spacing（cardValue.__spacing，值 both/top/bottom）。走 cardData.setCardSpacing

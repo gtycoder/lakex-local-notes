@@ -32,6 +32,8 @@ export interface UseDesktopLifecycleOptions {
   layoutWidthsRef: MutableRefObject<{ sidebar: number; outline: number }>;
   quickNotesDirty: boolean;
   persistTab: (noteId: string, title?: string, content?: string) => Promise<PersistOutcome>;
+  /** 按需从当前编辑器捕获正文；文档 tab.content 只是“最后已提交版本”，不能拿来当退出草稿。 */
+  captureContent: (noteId: string) => string | undefined;
   /** 该文档最近一次保存是否已被拒绝（saveStates = "error"）。为 true 时内容已经明确存不进去，
    *  退出闸允许丢弃（261114 用户裁决：保存被拒时也要能正常退出）。 */
   isSaveFailed?: (noteId: string) => boolean;
@@ -44,7 +46,7 @@ export function useDesktopLifecycle({
   syncToast, syncBtnRef, setSyncAnchorRect, activeNoteId, conflictSnapshotCount, historyOpen,
   setActiveHistoryCount, openTabs, setPinnedNoteIds, theme, setSettings,
   setSearchPanelQuery, setSearchPanelOpen, flushTimers, openTabsRef, draftTimers, saveTimers,
-  layoutWidthsRef, quickNotesDirty, persistTab, isSaveFailed, onSwitchDesktopWorkspace,
+  layoutWidthsRef, quickNotesDirty, persistTab, captureContent, isSaveFailed, onSwitchDesktopWorkspace,
 }: UseDesktopLifecycleOptions) {
   useEffect(() => {
     if (!syncToast) { setSyncAnchorRect(null); return; }
@@ -65,7 +67,8 @@ export function useDesktopLifecycle({
       flushTimers();
       for (const tab of openTabsRef.current) {
         if (!tab.dirty) continue;
-        void native.saveDraftJournal({ noteId: tab.noteId, title: tab.title, content: tab.content, updatedAt: new Date().toISOString() }).catch((error) => reportNativeActionError("保存退出草稿", error));
+        const content = captureContent(tab.noteId) ?? tab.content;
+        void native.saveDraftJournal({ noteId: tab.noteId, title: tab.title, content, updatedAt: new Date().toISOString() }).catch((error) => reportNativeActionError("保存退出草稿", error));
       }
       draftTimers.current.forEach((timer) => window.clearTimeout(timer));
       draftTimers.current.clear();
@@ -74,7 +77,7 @@ export function useDesktopLifecycle({
       writeLocalStorage("lakex-local-notes-v3.sidebar-width", String(Math.round(Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, widths.sidebar)))));
       writeLocalStorage("lakex-local-notes-v3.outline-sidebar-width", String(Math.round(Math.min(OUTLINE_SIDEBAR_MAX_WIDTH, Math.max(OUTLINE_SIDEBAR_MIN_WIDTH, widths.outline)))));
     };
-  }, [flushTimers, openTabsRef, draftTimers, layoutWidthsRef]);
+  }, [flushTimers, openTabsRef, draftTimers, layoutWidthsRef, captureContent]);
 
   useEffect(() => {
     return subscribeSettings((next) => setSettings(next));
@@ -160,7 +163,8 @@ export function useDesktopLifecycle({
           window.clearTimeout(draftTimer);
           draftTimers.current.delete(tab.noteId);
         }
-        void native.saveDraftJournal({ noteId: tab.noteId, title: tab.title, content: tab.content, updatedAt: new Date().toISOString() }).catch((error) => reportNativeActionError("保存退出草稿", error));
+        const content = captureContent(tab.noteId) ?? tab.content;
+        void native.saveDraftJournal({ noteId: tab.noteId, title: tab.title, content, updatedAt: new Date().toISOString() }).catch((error) => reportNativeActionError("保存退出草稿", error));
       }
       // 只有「还能保存」的脏标签才触发保存并阻止退出；其余允许丢弃。
       for (const tab of blocking) void persistTab(tab.noteId);
@@ -170,7 +174,7 @@ export function useDesktopLifecycle({
     };
     window.addEventListener("beforeunload", onBeforeUnload);
     return () => { window.removeEventListener("beforeunload", onBeforeUnload); };
-  }, [persistTab, quickNotesDirty, openTabsRef, saveTimers, draftTimers, isSaveFailed]);
+  }, [persistTab, quickNotesDirty, openTabsRef, saveTimers, draftTimers, isSaveFailed, captureContent]);
 
   return { handleTogglePin };
 }

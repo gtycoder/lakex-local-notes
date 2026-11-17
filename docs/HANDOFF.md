@@ -7,6 +7,33 @@
 
 ## 0. 最新交接（最近 3 个批次；更早的见 git）
 
+### 261117 · 记录面板单选/多选折叠式选择器（用户点单，已确认两点理解）
+
+- **改造**：默认收起只显示已选值摘要（不再平铺全部选项）；点摘要行展开候选 —— **选中 = 勾选 + 主色选中三件套**（选项色底只给未选中做色相标识，修复「选中看不出来」）；单选点选即完成并收起、多选连选后点摘要收起；**「新建选项」= 跳字段编辑器**（回车流转批量录选项），记录面板内联录入删除（viewer 的 addMobileOption 链路退役，选项创建统一归字段编辑器）。
+- **落点**：`MobileBitableRecordSheet.SelectControl` 重写 + viewer `onEditField` 接线（复用 editingFieldId）；mobileBitable.css +23（mobileLayers 基线登记「新增交互形态」）。
+- **二稿（用户追加）**：**「项移动」模型** —— 选中的项移到上方已选区、候选区只留未选中（同一选项不重复出现）；点候选 = 移上来（单选取代/多选追加）、点已选项 = 移回下方；左对齐、宽度拉满；选择过程保持展开（移动看得见）。
+- **验证**：静态断言换新契约 + `mobileBitableRecordSelect.render.test` 3 例（去重/项移动/单选取代/多选追加移除/新建跳编辑器）；全量 `src/mobile` 344 文件/1762 例全绿；tsc 0；已装 emulator-5554 待用户复核（Nbcss → 编辑记录 → 点「状态/标签」字段行）。
+
+### 261117 · 完成编辑出口 + 树行图标分型（用户点单）
+
+- **① 完成编辑出口**（选项编辑到最后收不了键盘）：不加新按钮，用 Android 惯例 —— **返回键优先收键盘**（`consumeBack` 全局前置：焦点在输入上时第一次返回只收键盘、不触发返回，全站生效）+ **点 Sheet 标题区/手柄收键盘**（MobileSheet 原语挂 `dismissKeyboardOnPointerDown`，全站 Sheet 生效）；收起键盘后底部「确认」露出即完成编辑。
+- **② 树行默认图标按 kind 分型**（此前 3 个不同类型同图标）：对齐桌面 `treeIcons.tsx` 语义（分组开合 folder/folder-open、表格 table、多维表 database、画板 pen-tool、手写板 pen-line、文档 file）；数据层 `notebookTreeRepository` 补 `doc_kind → noteKind` 投影（树模型此前丢弃文档类型）。
+- **验证**：全量 `src/mobile` 343 文件/1756 例全绿；tsc 0；已装 emulator-5554。**待用户复核**（含下条待确认的记录面板交互改造）。
+
+### 261117 · 多维表选项编辑回车流转（用户点单）
+
+- **需求**：多选/单选加选项时回车 = 完成当前选项并跳到下一个（没有下一个就新增并聚焦）——此前没有可靠的「完成当前选项」方式。
+- **落点**：`MobileBitableFieldEditorSheet` 选项输入接 Enter（IME 组字不触发；聚焦走 state + effect，refs 挂载后聚焦，无 rAF 竞态）；记录面板 SelectControl 的加选项 Enter 已是「提交并选中」，语义不同保持不变。
+- **验证**：render 测试 7/7（跳下一个/末尾新增并聚焦/IME 组字不流转/选项名不丢）；bitable+hooks 36 文件/183 例全绿；tsc 0；已装 emulator-5554 待用户复核。
+
+### 261117 · 键盘覆盖输入框修复（多维表输入面 + 全面排查）
+
+- **现场**（用户截图）：多维表「编辑记录」面板输字段内容被键盘盖住；输选项、名称同样被盖。
+- **根因（两类）**：① `useKeyboardStableSheet` 的露出滚动只滚 `.mb-sheet__body` —— **表单内容不足一屏/已滚到底时没有滚动余量，scrollTop 调不动 ⇒ 输入框永远留在键盘后**（261106 task-94 的设计意图「钉住弹窗 + 输入框保持可见」的后半句在小表单上天生失效）；② 内层滚动容器（字段编辑器选项行等）只滚最外层够不着。排查另发现：AiCorpusSheet 手写 Sheet 带输入无键盘补偿；多维表**表单视图**（随视口收缩的独立面）无键盘露出机制。
+- **修复**：`useKeyboardStableSheet` 增强 —— 滚动链逐级滚（共享工具 `revealActiveInputWithin`）+ **滚动余量不足时抬 Sheet 兜底**（`liftToReveal`：只动 top、不改高度、restore 统一还原）；新增轻量 `useKeyboardRevealFocus`（无钉几何，给随视口收缩的面），多维表表单视图已接；AiCorpusSheet 直接挂 hook。
+- **全面排查（28 个输入面归类，钉进 `keyboardSheetAudit.test.ts`）**：MobileSheet 系 14 个（编辑记录/字段编辑器/字段管理/视图与表操作/移动/标签/命名/搜索/S3 导入/AI 资料…）统一由原语覆盖；手写 Sheet 带输入必须直接挂 hook（**通用扫描规则**防再漏）；随视口收缩的非 Sheet 面必须挂 useKeyboardRevealFocus（表单视图）；编辑器/写作卡走 editSurface 既有 owner；设置抽屉行内输入随视口收缩 + 原生 focus 滚动（无风险）；数据表抽屉搜索框位于顶部（无覆盖面，登记不改）。
+- **护栏/验证**：`useKeyboardStableSheet.render.test.tsx` 10 例（+小表单抬升、内层滚动 2 场景 + liftToReveal 纯判据）；`keyboardSheetAudit.test.ts` 5 例（清单补录 + 两条通用规则）；tsc 0、相关 28 文件/127 例全绿；真机实测命名弹窗输入 covered:false（inputBottom 370 ≤ visibleBottom 522）。**待用户复核**：多维表（Nbcss = 你截图的「数据表 1」）的编辑记录/字段编辑器/表单视图三场景 —— 修复构建已装 emulator-5554。
+
 ### 261117 · 移动端思源观感换肤（分支 `theme-siyuan-mobile`，进行中）
 
 - **用户裁决**：仅移动端、替换默认浅色主题（含深色跟随）、布局/行为不动；参考 = 模拟器思源 App + siyuan-master 主题源码。视觉口径登记 `docs/MOBILE-DESIGN.md` v3 节。
@@ -22,7 +49,7 @@
 - **设置生效范围**：25/50/100 MiB 现在对本地选择的图片、视频、音频、PDF/普通附件统一生效；底层协议硬上限仍 100 MiB。`MAX_IMAGE_BYTES=25 MiB` 收窄为网络图片下载/小记旧入口的内存护栏。设置页说明同步写明覆盖图片、视频、PDF 和其他附件。
 - **通知**：桌面 `useDesktopShell` 订阅后显示 8 秒通知 +「打开设置」，直达常规设置；Android error toast 12 秒。
 - **实测**：开发版当前上限 50 MiB，插入 50 MiB+1 B PDF：错误与桌面通知均显示“文件大小 50 MiB（比上限多 1 B），当前附件上限 50 MiB…”，点击「打开设置」真实打开常规设置；超限文件未落盘（首轮误放行测试资产已清理）。
-- **门禁**：tsc 0；定点 78/78；全量 vitest **1023 files passed / 13 skipped（6478 tests passed / 14 skipped）**；`check:mobileui`、`check:bundle`/arch（mobile entry 50,633/51,200、首屏 346.2KB/350KB；桌面 599.7KB/600KB）、`check:core`、`git diff --check` 全过；Android `--sync --install` 已装 emulator-5554 并启动。
+- **门禁（261117 15:58 最终）**：`tsc`、`typecheck:electron` 均 0；全量 vitest **1025 files passed / 13 skipped（6499 tests passed / 14 skipped）**；`check:mobileui`、`check:bundle`/arch（mobile entry 50,639/51,200、首屏 346,441/350,000；桌面 599,783/600,000）、`check:core`、`git diff --check` 全过；Android `--sync --install` 已装 emulator-5554 并启动。
 - **护栏**：`attachmentLimit.test.ts`、`resourceUpload.limit.test.ts`、`attachmentLimitWiring.test.ts`、移动桥 `attachmentLimit.test.ts`、PDF 导入/跨端资源契约。文档：[docs/LAKEX-CONTRACT.md](LAKEX-CONTRACT.md) §5.57。
 
 ### 261117 · 长按＋「速记」失效修复（261114 空间顺序重排的回归）
@@ -42,14 +69,15 @@
 - **§8.4 几何探针已落地（261117）**：`scripts/mobile-audit/top-chrome-geometry.mjs`（四档注入安全区 × 8 页面 × 三不变量断言，实测 **8/8 页 0 违规**；AI 内嵌头恒 44 的动态钉子在内）。用法 `node scripts/css-audit/drive.mjs 9336 scripts/mobile-audit/top-chrome-geometry.mjs`。
 - **B3 剩余（§12）**：过冲 `--mb-chrome-inset-overhang: 8px` 归一化（需 §8.3 矩阵复验 + 用户裁决）；全量设备矩阵（两处行为修复需 inset 模拟 32/48 复核；多选顶栏/标签页列表/表格多维表头部/带标题 Sheet 等探针盲点一并覆盖）。
 
-### 261117 · Lakex 视频卡自适应 + 缩放/对齐（去除白边，布局可持久化）
+### 261117 · Lakex 图片/视频媒体卡自适应、边缘缩放与对齐
 
 - **现象**：Lake 视频完成态固定 `450px` 高，16:9 出现上下白边；竖屏铺满正文宽后出现左右白边，且无条件居中不适合竖屏排版。官方 video 配置没有尺寸/object-fit/对齐项。
-- **修复**：不改 vendor。video `toLake` 原样保留 cardValue，故用 `cardData.resetCardValue + sync(false)` 持久化 `__videoWidth`（正文可用宽度百分比，10–100，缺省 100）和 `__videoAlign`（left/center/right，缺省 left）；`videoCardOps` 把宽度投影为 `--lake-video-max-width`，再以正文宽/`72vh` 封顶。桌面 `styles/feature.css`、移动 `mobile/editor/edit-surface-kernel.css` ⑦ 统一按 intrinsic ratio 渲染，虚拟渲染/contentchange 自动重投影。
-- **交互**：桌面 `SelectionToolbar` 增加视频目标：尺寸输入 + 25/50/75/100 档位，左/中/右对齐；媒体卡在正文顶部时浮栏贴编辑区上沿/卡顶，不翻到整张高竖屏视频底部。Android 共享持久化布局渲染（调整入口与图片精确缩放同端，目前在桌面）。
-- **实测**：`1279×720` 横屏默认由 `511×450` 改为整栏等比；25% 档卡片 `130×73`、播放器 `128×72`，右对齐后贴正文右缘；`.lake` 落盘 `__videoWidth:25 / __videoAlign:"right"`，整页重载恢复同一几何（测试后已还原该开发文档）。护栏 `videoCardOps.test.ts` / `videoCardFit.test.ts` / selection-toolbar wiring；CSS 层围栏登记。
-- **门禁**：tsc 0；针对性 vitest 26/26；全量 vitest **1020 files passed / 13 skipped（6468 tests passed / 14 skipped）**；`check:mobileui`、`check:bundle`/arch（mobile entry 50,526/51,200、首屏 345.7KB/350KB；桌面 598.2KB/600KB）、`check:core`、`git diff --check` 全过；Android `--sync --install` 已装 emulator-5554，重连 CDP 后启动正常（该实例当前无视频样本）。
-- **文档**：[docs/LAKEX-CONTRACT.md](LAKEX-CONTRACT.md) §5.56。
+- **修复**：不改 vendor。video `toLake` 原样保留 cardValue，故用 `cardData.resetCardValue + sync(false)` 持久化 `__videoWidth`（正文可用宽度百分比，10–100，缺省 100）和 `__videoAlign`（left/center/right，缺省 left）；`videoCardOps` 把宽度投影为 `--lake-video-max-width`，完成态按 intrinsic ratio 自适应。**100% = 正文栏宽度，不是原图像素**；移除 `72vh / 720px` 高度二次封顶，解决竖屏视频 75% 与 100% 被压成同宽。
+- **新视频闪烁根因**：两个视频文件 SHA-256 一致（`c8edf372…14de`）；新插入视频保持 `status=uploaded` 且已完成任务残留在 UploadObserver/卡实例 `_task`，旧视频重开后是 `status=done` 且任务表为空。50 次宽度变更：旧约 138ms、新约 231ms；清空残留任务后约 149ms。现上传成功自动归一 `done`；线程仍存活时仅在空闲后归还 manager，线程已结束（`_thread=null`）时也清掉卡实例 `_task`。
+- **交互**：视频左右边缘拖拽，拖动用合成层 transform 预览、松手持久化；键盘 ←/→ 每次 5%、Home/End 到 10/100%。图片新增右侧边缘把手，松手走 `updateImageData`；**内核原生四角 resizer 保留并与右边框共存**。图片边/角、视频双边缘共用 `mediaCardResize`。
+- **实测**：当前竖屏视频 75% 为 `386×685`，100% 为 `513×910`；拖动 +7.8% 实时变宽并写入 `__videoWidth:83`，随后已还原用户原值 75%。此前横屏 25% 为 `130×73`，右对齐贴正文右缘。护栏 `videoCardOps.test.ts` / `videoCardFit.test.ts` / selection-toolbar wiring；CSS 层围栏登记。
+- **门禁（261117 15:58 最终）**：媒体/CSS 定点 **35/35**；`tsc`、`typecheck:electron` 均 0；全量 vitest **1025 files passed / 13 skipped（6499 tests passed / 14 skipped）**；kind 触点与 IME 入口护栏已随最新代码同步；`check:mobileui`、`check:bundle`/arch（mobile entry 50,639/51,200、首屏 346,441/350,000；桌面 599,783/600,000）、`check:core`、`git diff --check` 全过；Android `--sync --install` 已装 emulator-5554，`MainActivity` 已 resume。
+- **文档**：[docs/LAKEX-CONTRACT.md](LAKEX-CONTRACT.md) §5.56 / §5.58。
 
 ### 261117 · 正式数据三问题修复（打开伪保存 / 大纲二次跳 / renderer 恢复空窗）
 
@@ -407,11 +435,11 @@
 
 **261118 · v1.3.6 基线（端口固定化查漏补缺，tag `v1.3.6`）**
 
-- **工作树（未提交）**：移动端顶部 Chrome 契约落地（方案 B B0–B2，含 AI 内嵌副栏修复收编与 Top Chrome 方案文档）；长按＋「速记」失效修复（261114 顺序重排回归）；正式数据三问题修复（打开伪保存 / 大纲二次跳 / renderer 恢复空窗）。相关文件见 `git status` 与 §0。
-- **分支**：`v1.3.5..v1.3.6` = 1 commit；master 与双远端同步（HEAD 以 `git log -1` 为准）；上一 release = `v1.3.5`（tag `e9f49cee`）。
+- **工作树**：本批已收口并通过门禁 —— 移动端顶部 Chrome/键盘/多维表选择器连续修复、正式数据三问题修复（打开伪保存 / 大纲二次跳 / renderer 恢复空窗）、附件超限统一提示、Lake 图片/视频媒体卡自适应与边缘缩放；HEAD 以 `git log -1` 为准。
+- **分支**：`v1.3.5..v1.3.6` = 1 commit；本批提交后推送 master 双远端，无新 tag；上一 release = `v1.3.5`（tag `e9f49cee`）。
 - **版本**：`package.json 1.3.6`；Android versionCode 11306（由根 package.json 派生）。
 - **端口（固定，不再回退）**：资源 packaged 19876 / dev 19877；Web packaged 19880 / dev 19881；`LAKE_ASSET_PORT`/`LAKE_WEB_PORT` 可覆盖；占用时明确报错；端口在 listen 前固定（失败也不退回默认常量），preload 只从 env 读。
-- **门禁（发版前最后一次全量）**：`tsc` 0；`typecheck:electron` 0；全量 vitest **文件 1025 / 用例 6462（0 failed）**；`ui-metrics` 0；`cssLayers`/`primitives`/`mobileLayers` 全绿；`check:arch` 0 违规；`git diff --check` clean。
+- **门禁（本批最后全量）**：`tsc` 0；`typecheck:electron` 0；全量 vitest **1025 files passed / 13 skipped（6499 tests passed / 14 skipped）**；`ui-metrics` 0；`cssLayers`/`primitives`/`mobileLayers` 全绿；`check:arch` 0 违规；Android debug 已构建并安装 emulator-5554；`git diff --check` clean。
 - **打包产物**：本地 `release/` 已删（ignored 旧产物）；发版重建，瘦身基线仍为 v1.3.1（`.app` 393MB / `asar` 70MB / 依赖 9 个，见 `docs/BUILD-SIZE.md`）。
 - **视觉门禁**：本批无视觉变更，未跑 stylesnap/mobile-snap。
 

@@ -374,6 +374,8 @@ async function createWindow() {
     minWidth: 560,
     minHeight: 480,
     show: false,
+    // 与 boot 窗同一个主题底色：渲染进程重载/首帧失败时也不能闪纯白。
+    backgroundColor: nativeTheme.shouldUseDarkColors ? "#1e2126" : "#E9EDF3",
     titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "default",
     // 红绿灯垂直居中到「可见头区」中心：y + 直径/2 = (TOPBAR_HEIGHT + TOPBAR_SEAM)/2。
     // **别再把 y 写成常数**：曾因顶栏 38→32 而红绿灯没跟、中心错位 3px（用户 260923 报）。
@@ -401,10 +403,14 @@ async function createWindow() {
     if (mainWindowRevealed || win.isDestroyed()) return;
     mainWindowRevealed = true;
     if (bootFallback) { clearTimeout(bootFallback); bootFallback = null; }
-    if (bootWindow && !bootWindow.isDestroyed()) bootWindow.destroy();
+    const boot = bootWindow;
+    // 顺序固定：先藏 boot，再显示主窗，最后销毁 boot。
+    // 反过来（先 destroy）会让 macOS 在两者切换间短暂暴露一块空白 backing window。
+    if (boot && !boot.isDestroyed()) boot.hide();
     bootWindow = null;
     win.show();
     win.focus();
+    if (boot && !boot.isDestroyed()) boot.destroy();
     log.app.info(`[boot] main window shown (${reason})`);
     log.perf.info(perfMessage("boot.ready", Date.now() - BOOT_STARTED_AT, { reason }));
   };
@@ -509,9 +515,20 @@ async function createWindow() {
       log.app.error("[crash] 连续崩溃超过 3 次，停止自动恢复，请检查日志/Crashpad 转储");
       return;
     }
+    // reload 期间 renderer 没有任何可绘制内容：把主窗藏起来、重新显示 boot，
+    // 新渲染进程发出 renderer-ready 后走同一个 reveal 流程。避免用户看到一块白色窗口。
+    mainWindowRevealed = false;
+    win.hide();
+    createBootWindow();
+    if (bootFallback) clearTimeout(bootFallback);
+    bootFallback = setTimeout(() => revealMainWindow("crash-fallback-timeout"), 8_000);
     setTimeout(() => {
       try { if (!win.isDestroyed()) win.webContents.reload(); } catch { /* 窗口已销毁 */ }
     }, 800);
+  });
+  win.webContents.on("did-fail-load", (_event, code, description, validatedURL, isMainFrame) => {
+    if (!isMainFrame) return;
+    log.app.error(`[boot] did-fail-load code=${code} description=${description} url=${validatedURL}`);
   });
   win.webContents.on("preload-error", (_event, preloadFile, error) => {
     log.app.error("[crash] preload-error" + formatLogFields({ path: preloadFile, ...errorFields(error) }));

@@ -16,6 +16,8 @@ import { ASSET_ORIGIN } from "../../lib/assetPort";
 import { createImageThumbUploadTracker } from "./imageThumbUploadTracker";
 import { LAKE_KATEX_SCRIPT, LAKE_MHCHEM_SCRIPT, injectKatexScriptsInOrder } from "./lakeKatexInjection";
 import { setupAudioCardRetry } from "./lakeAudioCardRetry";
+import { mountMediaCardResize } from "./mediaCardResize";
+import { mountVideoCardLayoutSync } from "./videoCardOps";
 import { setupTocScrollFollow } from "./lakeTocScrollFollow";
 import { subscribeDocInitPerf } from "./lakePerfSubscription";
 import { setupViewerTocClickAssist } from "./lakeTileRender";
@@ -528,6 +530,9 @@ export function createLakeDocument(
   // 设置播放器（audio 元素 src=canonical，应用内嵌播放）。卡渲染完成后调用才生效——持续重试
   // （最长 ~20s）直到播放器出现；DT-07：重试计时器与清理都收进 lakeAudioCardRetry.ts。
   appendDisposeExtras(editor, setupAudioCardRetry(mount));
+  // 视频卡尺寸/对齐是卡片值的一部分；虚拟渲染替换 DOM 时持续把值投影为布局属性（桌面/移动端/阅读态共用）。
+  appendDisposeExtras(editor, mountVideoCardLayoutSync(mount, editor, { interactive: mode === "editor" }));
+  appendDisposeExtras(editor, mountMediaCardResize(mount, mode === "editor"));
   // 261114 二批：点失败图卡（ne-image-error）→ 立刻重试本篇所有可重试的失败图；
   // 后台定时补拉在 EditorTab（桌面）与 LakeEditor(journalRecovery)（移动）里调度。
   if (journalImageUploads) appendDisposeExtras(editor, attachImageErrorRetryClick(mount, noteId));

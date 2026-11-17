@@ -453,7 +453,8 @@ describe("手写板正式端到端接线", () => {
     expect(PDF_IMPORT).toContain("shouldReplaceEmptyFirstPage");
     expect(PDF_IMPORT).toContain("planPdfPageInsert");
     expect(PDF_IMPORT).toContain("signal?.aborted");
-    expect(PDF_IMPORT).toContain("MAX_ATTACHMENT_BYTES");
+    expect(PDF_IMPORT).toContain("assertAttachmentWithinLimit(bytes.length");
+    expect(PDF_IMPORT).toContain("AttachmentLimitExceededError");
     // 宿主只做注入：桌面 unpdf / 移动原生 PdfRender
     expect(DESKTOP_INK).toContain("renderPdfPagesDesktop(input.bytes, options)");
     // P7：边栅格化边上传（池宽 3）、失败/取消定向清已上传资产

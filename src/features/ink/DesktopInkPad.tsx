@@ -2,6 +2,7 @@ import { useCallback } from "react";
 import { parseLocalAssetUrl } from "../../core/assetUrl.js";
 import type { InkPage } from "../../core/inkDoc.js";
 import { native } from "../../lib/native";
+import { assertAttachmentWithinLimit } from "../../lib/attachmentLimit";
 import InkPad from "./InkPad";
 import type { EditorHostProps } from "../editor/editorHost";
 import { importInkImagePages, pickInkImageFiles, probeInkImageFile } from "./inkImageImport";
@@ -39,6 +40,7 @@ export function DesktopInkPad({ visible, focused, pane, onCapture, noteId, ...pr
   }) => {
     const file = await pickPdfFile();
     if (!file) return null; // 用户取消
+    assertAttachmentWithinLimit(file.size, file.name);
     const bytes = new Uint8Array(await file.arrayBuffer());
     return importPdfPages(
       bytes,

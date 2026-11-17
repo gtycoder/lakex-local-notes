@@ -5,7 +5,7 @@
  */
 import { describe, expect, it, vi } from "vitest";
 import { localAssetHttpUrl } from "../../core/assetUrl";
-import { MAX_ATTACHMENT_BYTES } from "../../core/storeLimits";
+import { DEFAULT_MAX_ATTACHMENT_BYTES } from "../../core/storeLimits";
 import { createInkDoc, inkToBody, type InkDoc, type InkPage } from "../../core/inkDoc";
 import {
   INK_PDF_MAX_PAGES,
@@ -229,9 +229,10 @@ describe("importPdfPages", () => {
 
   it("超限/损坏/加密：给可见错误且不夹带页", async () => {
     const { deps } = makeDeps();
-    const tooBig = await importPdfPages(new Uint8Array(MAX_ATTACHMENT_BYTES + 1), deps);
+    const tooBig = await importPdfPages(new Uint8Array(DEFAULT_MAX_ATTACHMENT_BYTES + 1), deps);
     expect(tooBig.pages).toEqual([]);
-    expect(tooBig.errors[0]).toContain("100 MiB");
+    expect(tooBig.errors[0]).toContain("25 MiB");
+    expect(tooBig.errors[0]).toContain("设置 → 常规 → 附件大小上限");
 
     const encrypted = await importPdfPages(new Uint8Array([1]), makeDeps({ rasterizeError: new Error("PasswordException: password required") }).deps);
     expect(encrypted.errors[0]).toBe("PDF 已加密，暂不支持导入受密码保护的 PDF");

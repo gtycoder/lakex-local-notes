@@ -167,6 +167,98 @@ export interface ScrollIntoViewOptions {
   realignMs?: number;
 }
 
+export interface StabilizeNodeAlignmentOptions {
+  /** 目标块顶部与滚动容器顶部的间距（默认 0）。 */
+  offset?: number;
+  /** 布局持续变化时最长观察时间；默认 2200ms。 */
+  maxMs?: number;
+  /** 最后一次布局变化后保持多久无变化才结束；默认 1000ms。 */
+  quietMs?: number;
+}
+
+/**
+ * 把目标块持续锚定在滚动容器顶部，直到异步水合/图片布局稳定。
+ *
+ * 固定 50/200ms 校正无法覆盖「卡片在 250ms 后才改变高度」的现场：第二次校正已经结束，
+ * 目标随后仍会偏移。这里用 ResizeObserver 在布局提交前立即校正，并用 rAF 兜底采样；
+ * 用户一旦滚动/点击/输入立即取消，绝不和用户抢滚动。
+ */
+export function stabilizeNodeAlignment(
+  host: HTMLElement | null | undefined,
+  scroller: HTMLElement | null | undefined,
+  id: string,
+  options: StabilizeNodeAlignmentOptions = {}
+): () => void {
+  if (!host || !scroller || !id) return () => undefined;
+  const offset = options.offset ?? 0;
+  const maxMs = Math.max(0, options.maxMs ?? 2200);
+  const quietMs = Math.max(0, options.quietMs ?? 1000);
+  let disposed = false;
+  let raf = 0;
+  let observer: ResizeObserver | null = null;
+  let observedEngine: Element | null = null;
+  let lastChangeAt = performance.now();
+  let lastHeight = -1;
+  const startedAt = lastChangeAt;
+
+  const observeEngine = (el: HTMLElement): void => {
+    const engine = el.closest(".ne-engine") ?? scroller.firstElementChild ?? scroller;
+    if (engine === observedEngine || typeof ResizeObserver === "undefined") return;
+    observer?.disconnect();
+    observedEngine = engine;
+    observer = new ResizeObserver(() => {
+      if (disposed) return;
+      const current = findRenderedNode(host, id);
+      if (!current) return;
+      lastChangeAt = performance.now();
+      alignNode(scroller, current, offset);
+    });
+    observer.observe(engine);
+  };
+
+  const cancel = (): void => {
+    if (disposed) return;
+    disposed = true;
+    if (raf) window.cancelAnimationFrame(raf);
+    raf = 0;
+    observer?.disconnect();
+    observer = null;
+    host.removeEventListener("pointerdown", cancel, true);
+    host.removeEventListener("keydown", cancel, true);
+    scroller.removeEventListener("wheel", cancel);
+    scroller.removeEventListener("touchstart", cancel);
+  };
+
+  const tick = (): void => {
+    raf = 0;
+    if (disposed) return;
+    const now = performance.now();
+    const el = findRenderedNode(host, id);
+    if (el) {
+      observeEngine(el);
+      const before = scroller.scrollTop;
+      alignNode(scroller, el, offset);
+      const height = scroller.scrollHeight;
+      if (Math.abs(scroller.scrollTop - before) > 0.5 || height !== lastHeight) lastChangeAt = now;
+      lastHeight = height;
+    } else {
+      lastChangeAt = now;
+    }
+    if (now - startedAt >= maxMs || (el && now - lastChangeAt >= quietMs)) {
+      cancel();
+      return;
+    }
+    raf = window.requestAnimationFrame(tick);
+  };
+
+  host.addEventListener("pointerdown", cancel, true);
+  host.addEventListener("keydown", cancel, true);
+  scroller.addEventListener("wheel", cancel, { passive: true });
+  scroller.addEventListener("touchstart", cancel, { passive: true });
+  raf = window.requestAnimationFrame(tick);
+  return cancel;
+}
+
 /**
  * 把 id 对应的块滚到滚动容器顶部 —— `大綱点击/锚点恢复` 的统一入口。
  *

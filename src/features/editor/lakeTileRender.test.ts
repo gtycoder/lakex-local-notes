@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LakeEditorInstance } from "./lakeRuntime";
-import { findRenderedNode, flushViewerTiles, scrollIntoViewByNodeId, setupViewerTocClickAssist } from "./lakeTileRender";
+import { findRenderedNode, flushViewerTiles, scrollIntoViewByNodeId, setupViewerTocClickAssist, stabilizeNodeAlignment } from "./lakeTileRender";
 
 /**
  * 锁定态（Viewer）分帧渲染（tileRendering）配套（261111）。
@@ -124,6 +124,60 @@ describe("lakeTileRender — findRenderedNode", () => {
     host.innerHTML = '<h2 id="a:b.c">x</h2>';
     expect(findRenderedNode(host, "a:b.c")?.textContent).toBe("x");
     expect(findRenderedNode(host, "")).toBeNull();
+  });
+});
+
+describe("lakeTileRender — stabilizeNodeAlignment", () => {
+  let host: HTMLElement;
+  let scroller: HTMLElement;
+  let frames: FrameRequestCallback[];
+
+  beforeEach(() => {
+    frames = [];
+    vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => {
+      frames.push(cb);
+      return frames.length;
+    });
+    vi.stubGlobal("cancelAnimationFrame", () => undefined);
+    host = document.createElement("div");
+    document.body.appendChild(host);
+    scroller = document.createElement("div");
+    scroller.getBoundingClientRect = fakeRect(100) as unknown as () => DOMRect;
+    host.appendChild(scroller);
+  });
+
+  afterEach(() => {
+    host.remove();
+    vi.unstubAllGlobals();
+  });
+
+  it("初次对齐后布局再次变化，仍在下一帧把目标拉回容器顶部", () => {
+    const el = document.createElement("h2");
+    el.id = "h-drift";
+    el.getBoundingClientRect = fakeRect(200) as unknown as () => DOMRect;
+    scroller.appendChild(el);
+    const cancel = stabilizeNodeAlignment(host, scroller, "h-drift", { maxMs: 10_000, quietMs: 10_000 });
+    frames.shift()?.(0);
+    expect(scroller.scrollTop).toBe(100);
+    el.getBoundingClientRect = fakeRect(260) as unknown as () => DOMRect;
+    frames.shift()?.(0);
+    expect(scroller.scrollTop).toBe(260);
+    cancel();
+  });
+
+  it("用户 pointerdown 立即取消，不在后续帧继续抢滚动", () => {
+    const el = document.createElement("h2");
+    el.id = "h-user";
+    el.getBoundingClientRect = fakeRect(200) as unknown as () => DOMRect;
+    scroller.appendChild(el);
+    stabilizeNodeAlignment(host, scroller, "h-user", { maxMs: 10_000, quietMs: 10_000 });
+    frames.shift()?.(0);
+    const before = frames.length;
+    host.dispatchEvent(new Event("pointerdown"));
+    expect(frames.length).toBe(before);
+    scroller.scrollTop = 999;
+    frames.shift()?.(0);
+    expect(scroller.scrollTop).toBe(999);
   });
 });
 

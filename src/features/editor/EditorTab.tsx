@@ -20,7 +20,7 @@ import { uploadRetryDelayForEntry } from "./uploadRetryScheduler";
 import { addAssetAccessToken, stripAssetAccessToken } from "../../lib/assetPort";
 import { registerOutlineTab, unregisterOutlineTab } from "../outline/registry";
 import { useOutline } from "../outline/useOutline";
-import { flushViewerTiles, scrollIntoViewByNodeId } from "./lakeTileRender";
+import { flushViewerTiles, scrollIntoViewByNodeId, stabilizeNodeAlignment } from "./lakeTileRender";
 import { native } from "../../lib/native";
 // 书签卡浮动工具条由 vendor 包装层提供（内核本版无原生 getCardToolbarConfig）；我们不用 LakexEditor
 // 包装层，所以必须自己挂载，否则 bookmark 卡就是「没有菜单、无法转换回链接/标题」的死卡。
@@ -189,22 +189,23 @@ export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance
     if (locked) {
       const scroller = resolveScrollNode(host);
       cancelOutlineScrollRef.current?.();
-      cancelOutlineScrollRef.current = scroller ? scrollIntoViewByNodeId(host, scroller, id, editor) : null;
+      if (scroller) {
+        const cancelSeek = scrollIntoViewByNodeId(host, scroller, id, editor);
+        const cancelStable = stabilizeNodeAlignment(host, scroller, id);
+        cancelOutlineScrollRef.current = () => { cancelSeek(); cancelStable(); };
+      } else {
+        cancelOutlineScrollRef.current = null;
+      }
       return;
     }
+    const scroller = resolveScrollNode(host);
     try {
       lakeBridge(editor).renderer?.scrollByNodeId?.(id);
     } catch { /* 忽略 */ }
-    // 懒卡片占位高度导致的偏差在渲染/水合稳定后校正两次
-    const scroller = resolveScrollNode(host);
-    const correct = (): void => {
-      const el = host.querySelector(`[id="${escapeId(id)}"]`) as HTMLElement | null;
-      if (!el || !scroller) return;
-      const delta = el.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
-      if (Math.abs(delta) > 2) scroller.scrollTop += delta;
-    };
-    window.setTimeout(correct, 50);
-    window.setTimeout(correct, 200);
+    // 卡片/图片水合会在初滚后继续改版式；固定 50/200ms 校正会漏掉 200ms 之后的位移。
+    // 统一锚定到布局稳定，期间用户一旦滚动/输入立即取消。
+    cancelOutlineScrollRef.current?.();
+    cancelOutlineScrollRef.current = scroller ? stabilizeNodeAlignment(host, scroller, id) : null;
   };
 
   // 面包屑标题路径（261008）：来自**本文档自己的**大纲句柄（`getSelectedId` + `getNode` 上溯），
@@ -490,6 +491,26 @@ export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance
     // 若此时回调里同步 getDocument() 会把整篇大文档（含图片/OCR JSON）序列化一遍，
     // 在主线程上额外叠加耗时；用 setting 标志屏蔽初始化阶段的重复序列化。
     let setting = true;
+    /** 初始化后的异步水合也会发 contentchange（实测约 250ms 后），但此时用户尚未做任何操作。
+     * 只有真实用户输入/操作后才把后续 contentchange 当成编辑；右上角保存点不应因“打开文档”亮起。 */
+    let userContentIntent = false;
+    /** 打开基线：未收到用户意图时，只有“当前序列化正文等于打开基线”的 contentchange 才可忽略；
+     * 内容真的不同（含程序化插入/修复）必须继续走 onChange，宁可多存一次也不能漏数据。 */
+    let initialBaseline = latestDocumentRef.current;
+    const armContentChange = (event: Event): void => {
+      if (event.isTrusted) userContentIntent = true;
+    };
+    const isUnchangedFromOpen = (): boolean => {
+      if (!editor) return false;
+      try { return stripAssetAccessToken(editor.getDocument("text/lake")) === initialBaseline; }
+      catch { return false; }
+    };
+    document.addEventListener("pointerdown", armContentChange, true);
+    document.addEventListener("keydown", armContentChange, true);
+    host.addEventListener("beforeinput", armContentChange, true);
+    host.addEventListener("paste", armContentChange, true);
+    host.addEventListener("cut", armContentChange, true);
+    host.addEventListener("drop", armContentChange, true);
     if (typeof performance !== "undefined") performance.mark("lake:tab-init:start");
     try {
       editor = createLakeDocument(
@@ -501,6 +522,8 @@ export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance
           // 不再每次按键整篇 getDocument 序列化（数 MB 文档实测每键数十 ms）。
           // 正文在保存/草稿/关闭时按需 capture；重建（锁/自愈/换文档）前的最后捕获见下方 cleanup。
           if (setting) return;
+          if (!userContentIntent && isUnchangedFromOpen()) return;
+          userContentIntent = true;
           onChangeRef.current();
           // 画板元素通过键盘 Delete/Backspace 删除，可能没有新的 pointerdown；
           // 用最近一次画板交互锚点兜底恢复异常跳顶。普通文本输入不会进入该分支。
@@ -531,7 +554,10 @@ export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance
       const uploadedRepair = mode === "editor"
         ? repairUploadCards(latestDocumentRef.current, noteId)
         : { content: latestDocumentRef.current, changed: false, repairedTaskIds: [] };
-      if (uploadedRepair.changed) latestDocumentRef.current = uploadedRepair.content;
+      if (uploadedRepair.changed) {
+        latestDocumentRef.current = uploadedRepair.content;
+        initialBaseline = uploadedRepair.content;
+      }
       // 自愈重建时优先使用当前实例最后一次回调拿到的文档，避免 React prop
       // 尚未回流时把刚输入的内容覆盖掉；切换 noteId 时该 ref 已在上面重置。
       editor.setDocument("text/lake", addAssetAccessToken(latestDocumentRef.current));
@@ -977,6 +1003,12 @@ export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance
       host.removeEventListener("copy", copyHandler, true);
       host.removeEventListener("cut", cutHandler, true);
       host.removeEventListener("paste", pasteHandler, true);
+      document.removeEventListener("pointerdown", armContentChange, true);
+      document.removeEventListener("keydown", armContentChange, true);
+      host.removeEventListener("beforeinput", armContentChange, true);
+      host.removeEventListener("paste", armContentChange, true);
+      host.removeEventListener("cut", armContentChange, true);
+      host.removeEventListener("drop", armContentChange, true);
       onEditorReadyRef.current?.(noteId, null);
       detachMediaCardRouter?.();
       // 上一轮遗留的 outgoing 先回收：锁→编辑→锁 快速连点时不能把多层实例叠起来。

@@ -1,5 +1,6 @@
 import type { ResourceUploadInput, ResourceUploadOutput } from "../../lib/types";
-import { MAX_IMAGE_BYTES } from "../../core/storeLimits.js";
+import { MAX_ATTACHMENT_BYTES, MAX_IMAGE_BYTES } from "../../core/storeLimits.js";
+import { assertAttachmentWithinLimit } from "../../lib/attachmentLimit";
 
 /** 图片体积上限的唯一来源在 core/storeLimits（CORE-09）；这里 re-export 保持既有导入。 */
 export { MAX_IMAGE_BYTES };
@@ -24,21 +25,22 @@ export function sniffImageFormat(bytes: ArrayLike<number>): ImageFormat | null {
   return null;
 }
 
-export function normalizeImageInput(bytes: Uint8Array, filename: string): ResourceUploadInput {
-  const validated = validateImageInput(bytes, filename);
+export function normalizeImageInput(bytes: Uint8Array, filename: string, maxBytes = MAX_ATTACHMENT_BYTES): ResourceUploadInput {
+  const validated = validateImageInput(bytes, filename, maxBytes);
   return { bytes: validated.bytes, filename: validated.filename };
 }
 
-function validateImageInput(bytes: Uint8Array, filename: string): ValidatedImageInput {
-  if (bytes.length === 0 || bytes.length > MAX_IMAGE_BYTES) throw new Error("图片为空或超过 25 MiB");
+function validateImageInput(bytes: Uint8Array, filename: string, maxBytes: number): ValidatedImageInput {
+  if (bytes.length === 0) throw new Error("图片为空");
+  assertAttachmentWithinLimit(bytes.length, filename || "图片", maxBytes);
   const format = sniffImageFormat(bytes);
   if (!format) throw new Error("仅支持 PNG、JPEG、GIF、WebP 和 AVIF 图片");
   const stem = filename.replace(/\.[^./\\]+$/, "") || "image";
   return { bytes, filename: `${stem}.${format.extension}`, format };
 }
 
-export function imageDataUrl(input: ResourceUploadInput): ResourceUploadOutput {
-  const normalized = validateImageInput(input.bytes, input.filename);
+export function imageDataUrl(input: ResourceUploadInput, maxBytes = MAX_ATTACHMENT_BYTES): ResourceUploadOutput {
+  const normalized = validateImageInput(input.bytes, input.filename, maxBytes);
   let binary = "";
   for (let offset = 0; offset < normalized.bytes.length; offset += 0x8000) {
     binary += String.fromCharCode(...normalized.bytes.slice(offset, offset + 0x8000));

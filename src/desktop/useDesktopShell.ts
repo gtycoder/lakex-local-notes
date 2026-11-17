@@ -186,6 +186,30 @@ export function useDesktopShell(options: UseDesktopShellOptions) {
     noticeTimer.current = window.setTimeout(() => setNotice(null), 8000);
   }, []);
 
+  // 任意上传入口（图片/视频/PDF/附件/表格/画板/小记）超限都在壳层给同一条可见提示。
+  // 动态加载监听器：用户在真正选文件前必然已注册，同时不让错误文案/设置模块占首屏关键包。
+  useEffect(() => {
+    let cancelled = false;
+    let dispose: (() => void) | undefined;
+    void import("../lib/attachmentLimit").then(({ subscribeAttachmentLimitErrors }) => {
+      if (cancelled) return;
+      dispose = subscribeAttachmentLimitErrors((error) => {
+        showNoticeWithAction(error.message, {
+          label: "打开设置",
+          onClick: () => {
+            setSettingsCategory("editor");
+            setSettingsOpen(true);
+            setNotice(null);
+          },
+        });
+      });
+    }).catch(() => undefined);
+    return () => {
+      cancelled = true;
+      dispose?.();
+    };
+  }, [showNoticeWithAction]);
+
   // 卸载清理
   useEffect(() => {
     return () => {

@@ -205,16 +205,26 @@ export function App() {
   // boot 窗口：等 workspace（或启动错误）已经渲染到主窗口后再显示，避免主窗口先露白/重复播 splash。
   useEffect(() => {
     if (!workspace && !error) return;
+    let sent = false;
+    const notifyReady = () => {
+      if (sent) return;
+      sent = true;
+      const bridge = (window as unknown as { lakeNative?: { rendererReady?: () => void } }).lakeNative;
+      bridge?.rendererReady?.();
+    };
     let second = 0;
     const first = requestAnimationFrame(() => {
       second = requestAnimationFrame(() => {
-        const bridge = (window as unknown as { lakeNative?: { rendererReady?: () => void } }).lakeNative;
-        bridge?.rendererReady?.();
+        notifyReady();
       });
     });
+    // 主窗在 boot 下是隐藏的；renderer 崩溃后重新挂 boot 时，隐藏窗口的 rAF 可能被节流/暂停。
+    // 不能让 renderer-ready 永远等不到（否则 8s fallback 会露出一块尚未绘制的空窗）。
+    const fallback = window.setTimeout(notifyReady, 250);
     return () => {
       cancelAnimationFrame(first);
       if (second) cancelAnimationFrame(second);
+      window.clearTimeout(fallback);
     };
   }, [workspace, error]);
 
@@ -423,7 +433,7 @@ export function App() {
     conflictSnapshotCount: conflictSnapshotNotice.length, historyOpen, setActiveHistoryCount,
     openTabs, setPinnedNoteIds, theme: settings.theme, setSettings,
     setSearchPanelQuery, setSearchPanelOpen, flushTimers, openTabsRef, draftTimers, saveTimers,
-    layoutWidthsRef, quickNotesDirty, persistTab, isSaveFailed,
+    layoutWidthsRef, quickNotesDirty, persistTab, captureContent: handleCaptureContent, isSaveFailed,
   });
 
   useOutlineSync({

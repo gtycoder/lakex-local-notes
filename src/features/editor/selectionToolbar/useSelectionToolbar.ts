@@ -5,11 +5,12 @@ import { isCommandExecuted, isCommandUnavailable, isMarkActive, toFontSize, unwr
 
 export interface TextTarget { kind: "text"; rect: Rect; }
 export interface ImageTarget { kind: "image"; rect: Rect; cardId: string; cardEl: HTMLElement; src: string; }
-export type SelectionTarget = TextTarget | ImageTarget;
+export interface VideoTarget { kind: "video"; rect: Rect; cardId: string; cardEl: HTMLElement; src: string; }
+export type SelectionTarget = TextTarget | ImageTarget | VideoTarget;
 
 /** 浮框不出现的上下文：表格 / 代码块有自己的工具条与交互，v1 让位。 */
 const EXCLUDED_SELECTOR = ".ne-codeblock, ne-card[data-card-name='codeblock'], ne-card[data-card-name='table'], .ne-table";
-const IMAGE_CARD_SELECTOR = "ne-card[data-card-name='image']";
+const MEDIA_CARD_SELECTOR = "ne-card[data-card-name='image'], ne-card[data-card-name='video']";
 
 /** 块级命令（与内核固定栏状态按钮同判据）：checked = queryCommandState===1；disabled 见 readState。 */
 const BLOCK_STATE_COMMANDS = ["orderedList", "unorderedList", "taskList", "quote"] as const;
@@ -52,7 +53,8 @@ export function useSelectionToolbar(editor: LakeEditorInstance, container: HTMLE
   const toolbarRef = useRef<HTMLDivElement | null>(null);
   /** 最新目标（与 target state 同步更新）：滚动时命令式定位要**同步**读它，不能等 React 渲染。 */
   const targetRef = useRef<SelectionTarget | null>(null);
-  const imageRef = useRef<ImageTarget | null>(null);
+  /** 最近点击的图片/视频卡：两者都是块卡片，不能依赖文字选区保持浮栏。 */
+  const mediaRef = useRef<ImageTarget | VideoTarget | null>(null);
   /** 指针按住中（拖选进行中）：此时不弹浮框，等完全松开再弹（否则从下往上选会被挡住）。 */
   const pressingRef = useRef(false);
   /**
@@ -121,11 +123,11 @@ export function useSelectionToolbar(editor: LakeEditorInstance, container: HTMLE
       }
       return null;
     }
-    const img = imageRef.current;
-    if (img && img.cardEl.isConnected && container.contains(img.cardEl)) {
-      if (isImageCropping(img.cardEl)) return null;   // 内核裁剪态：浮框让位给裁剪框
-      const r = img.cardEl.getBoundingClientRect();
-      if (r.width > 0 && r.height > 0) return { ...img, rect: toRect(r) };
+    const media = mediaRef.current;
+    if (media && media.cardEl.isConnected && container.contains(media.cardEl)) {
+      if (media.kind === "image" && isImageCropping(media.cardEl)) return null;   // 内核裁剪态：浮框让位给裁剪框
+      const r = media.cardEl.getBoundingClientRect();
+      if (r.width > 0 && r.height > 0) return { ...media, rect: toRect(r) };
     }
     return null;
   }, [container]);
@@ -181,9 +183,11 @@ export function useSelectionToolbar(editor: LakeEditorInstance, container: HTMLE
   }, [editor, refresh, refreshNow]);
 
   useEffect(() => {
-    const onSelectionChange = () => { if (!imageRef.current) refreshSettled(); };
+    const onSelectionChange = () => { if (!mediaRef.current) refreshSettled(); };
     const onPointerDown = (event: PointerEvent) => {
       const t = event.target as HTMLElement | null;
+      // 图片/视频边缘缩放手柄属于当前媒体卡交互，不能把浮栏及其自身的目标状态清掉。
+      if (t?.closest?.(".lake-media-resize-handle")) return;
       if (toolbarRef.current && t && toolbarRef.current.contains(t)) return;
       // 独立浮层（AI 对话框等）不是挂在浮栏上的菜单：点它**不该**把浮栏整条隐掉。
       // 否则「点生成 → 浮栏消失 → 松手后再出现」就是用户看到的闪烁（260930 报）。
@@ -192,13 +196,21 @@ export function useSelectionToolbar(editor: LakeEditorInstance, container: HTMLE
       // 流程，否则 pointerup 会从仍存活的文字选区把浮栏推导回来。下一次非句柄 pointerdown 自动解除。
       const inBlockHandle = !!t?.closest?.(".lake-block-handle-host");
       handleSuppressRef.current = inBlockHandle;
-      if (inBlockHandle) { imageRef.current = null; setTarget(null); return; }
-      const card = t?.closest?.(IMAGE_CARD_SELECTOR) as HTMLElement | null;
+      if (inBlockHandle) { mediaRef.current = null; setTarget(null); return; }
+      const card = t?.closest?.(MEDIA_CARD_SELECTOR) as HTMLElement | null;
       if (card && container.contains(card)) {
-        const img = card.querySelector("img");
-        imageRef.current = { kind: "image", rect: toRect(card.getBoundingClientRect()), cardId: card.getAttribute("id") ?? "", cardEl: card, src: img?.getAttribute("src") ?? "" };
+        const src = card.getAttribute("data-card-name") === "video"
+          ? card.querySelector("video")?.getAttribute("src") ?? ""
+          : card.querySelector("img")?.getAttribute("src") ?? "";
+        mediaRef.current = {
+          kind: card.getAttribute("data-card-name") === "video" ? "video" : "image",
+          rect: toRect(card.getBoundingClientRect()),
+          cardId: card.getAttribute("id") ?? "",
+          cardEl: card,
+          src,
+        };
       } else {
-        imageRef.current = null;
+        mediaRef.current = null;
       }
       pressingRef.current = true;
       setTarget(null);   // 按住即隐：拖选/点图过程中都不显示
@@ -212,7 +224,7 @@ export function useSelectionToolbar(editor: LakeEditorInstance, container: HTMLE
     };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
-      imageRef.current = null;
+      mediaRef.current = null;
       setTarget(null);
     };
     document.addEventListener("selectionchange", onSelectionChange);

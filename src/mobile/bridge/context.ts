@@ -15,8 +15,8 @@ import { ensureV3StateTable } from "../data/v3StateRepository";
 import { reconcileIndex } from "../data/searchIndex";
 import { createMobileLocalStorePort, type MobileLocalStorePort } from "../data/localStorePort";
 import { sniffImageFormat, readImageDimensions } from "../../core/imageUtils.js";
-import { MAX_ATTACHMENT_BYTES, MAX_IMAGE_BYTES, MAX_IMAGE_PIXELS } from "../../core/storeLimits.js";
-import { loadSettings } from "../../lib/settings";
+import { MAX_IMAGE_PIXELS } from "../../core/storeLimits.js";
+import { assertAttachmentWithinLimit, effectiveAttachmentLimitBytes } from "../../lib/attachmentLimit";
 import { classifyOp, type MaintenanceOp, type PriorityOp, type WriteOp } from "../../core/maintenancePolicy.js";
 import { normalizeSyncSettings } from "../../core/syncSettings.js";
 import { maintenanceQueue, priorityQueue, writeLock } from "../sync/maintenanceLocks";
@@ -70,26 +70,21 @@ let dbInitialization: Promise<NativeSqliteDb> | null = null;
  *  持久化资源不在启动时全量载入。key = "{noteId}/{filename}" */
 export { assets, ASSET_CACHE_MAX_BYTES, BoundedAssetCache } from "./assetCache";
 
-/** 附件实际上限 = 设置里的「附件大小上限」（与设置页同键），并夹到协议上限。
- *  图片仍走 MAX_IMAGE_BYTES（图片档位与附件档位是两件事，不合并）。 */
-export function effectiveAttachmentLimitBytes(): number {
-  const configured = loadSettings().maxAttachmentBytes;
-  if (!Number.isFinite(configured) || configured <= 0) return MAX_ATTACHMENT_BYTES;
-  return Math.min(configured, MAX_ATTACHMENT_BYTES);
-}
+export { effectiveAttachmentLimitBytes };
 
-export function assertResourceBytes(bytes: Uint8Array): void {
+/** 本地插入的所有资源（图片/视频/PDF/其他附件）都遵循同一个设置上限。 */
+export function assertResourceBytes(bytes: Uint8Array, filename = "附件"): void {
   if (sniffImageFormat(bytes) != null) {
-    if (bytes.length === 0 || bytes.length > MAX_IMAGE_BYTES) throw new Error("图片为空或超过 25 MiB");
+    if (bytes.length === 0) throw new Error("图片为空");
     const dimensions = readImageDimensions(bytes);
     if (dimensions && dimensions.width * dimensions.height > MAX_IMAGE_PIXELS) {
       throw new Error(`图片尺寸过大（${dimensions.width}x${dimensions.height}），上限 ${MAX_IMAGE_PIXELS} 像素`);
     }
+    assertAttachmentWithinLimit(bytes.length, filename);
     return;
   }
   if (bytes.length === 0) throw new Error("附件为空");
-  const limit = effectiveAttachmentLimitBytes();
-  if (bytes.length > limit) throw new Error(`附件超过 ${limit / 1024 / 1024} MiB 上传上限`);
+  assertAttachmentWithinLimit(bytes.length, filename);
 }
 
 export async function initializeDb(): Promise<NativeSqliteDb> {

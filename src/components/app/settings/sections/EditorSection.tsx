@@ -51,7 +51,7 @@ export function EditorSection({ c }: { c: SettingsPanelContext }) {
                   <Switch itemId="editor-clear-tabs-on-exit" name="退出时关闭全部标签" desc="开启后下次启动不恢复上次打开的标签；默认关闭。只保存在本机，不参与同步。" checked={settings.clearTabsOnExit} onChange={(checked) => onChange({ clearTabsOnExit: checked })} />
                 </Group>
                 <Group title="附件" icon={<Paperclip size={16} />}>
-                  <Field itemId="editor-max-attachment" name="附件大小上限" desc="插入附件时的本机上限；同步与下载统一按协议上限（100 MiB），不受其他设备设置影响。">
+                  <Field itemId="editor-max-attachment" name="附件大小上限" desc="插入图片、视频、PDF 或其他附件时的本机上限；同步与下载统一按协议上限（100 MiB），不受其他设备设置影响。">
                     {/* 261116 推广：3 档、只改本机上传校验，逐档写盘无害。 */}
                     <AdaptiveSelect label="附件大小上限" value={String(settings.maxAttachmentBytes / (1024 * 1024))} onChange={(v) => onChange({ maxAttachmentBytes: Number(v) * 1024 * 1024 })} options={[
                       { value: "25", label: "25 MiB" }, { value: "50", label: "50 MiB" }, { value: "100", label: "100 MiB" },

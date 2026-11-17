@@ -95,7 +95,7 @@ export const assetsDomain = {
     noteId: string
   ): Promise<{ url: string; resourceRef: string; filename: string; mimeType: string; size: number }> {
     const bytes = input.bytes instanceof Uint8Array ? input.bytes : new Uint8Array(input.bytes as unknown as ArrayLike<number>);
-    assertResourceBytes(bytes);
+    assertResourceBytes(bytes, input.filename);
     // 与桌面一致的资产文件名（共享 buildAssetFilename：{13ts}_{8hex}.{ext}，extractAssetRefs 正则匹配）
     const name = buildAssetFilename(input.filename);
     const key = noteId + "/" + name;

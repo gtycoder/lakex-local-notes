@@ -1,4 +1,4 @@
-/* 桌面编辑态浮动工具栏（选区气泡）：文字选区 / 图片选中两种形态。
+/* 桌面编辑态浮动工具栏（选区气泡）：文字选区 / 图片选中 / 视频选中三种形态。
  * 定位由 SelectionToolbar 内联写 left/top（动态坐标，无法用静态类表达）；
  * 其余全部走 --lake-* 令牌（overlay 层，见 styles/index.css 的导入）。 */
 .selection-toolbar {
@@ -21,7 +21,7 @@
 .selection-toolbar__sep { width: 1px; height: 18px; margin: 0 2px; background: var(--lake-border-2); }
 /* 图片形态：外壳只做定位/浮层；观感（面/边/影/内距/圆角）全部交给内层内核 `.ne-card-toolbar`
    —— 与云端图片工具栏同构，样式来自 vendored lakex-doc.css（非我们自造）。 */
-.selection-toolbar[data-kind="image"] { padding: 0; border: 0; background: transparent; box-shadow: none; }
+.selection-toolbar:is([data-kind="image"], [data-kind="video"]) { padding: 0; border: 0; background: transparent; box-shadow: none; }
 /* 内核原子件外层包裹：display:contents 不生成盒子，只为承接点击冒泡（内核按钮 onClick 透传无承诺）。 */
 .selection-toolbar__kbtn { display: contents; }
 /* hover 说明（名称 + 快捷键，短）：**真实 DOM 浮层**（组件 portal 到 body，position:fixed）。
@@ -117,6 +117,7 @@
 .selection-toolbar__checkrow { display: flex; align-items: center; gap: 8px; font-size: var(--lake-font-size-small); color: var(--lake-text-1); cursor: pointer; }
 .selection-toolbar__switchrow { display: flex; align-items: center; justify-content: space-between; gap: 16px; font-size: var(--lake-font-size-small); color: var(--lake-text-1); }
 .selection-toolbar__scale { align-self: flex-start; }
+.selection-toolbar__video-note { max-width: 300px; color: var(--lake-text-3); font-size: var(--lake-font-size-tiny); line-height: 1.45; }
 /* 链接编辑弹层：只负责浮层定位；表面（背景/边框/阴影/圆角/内距/宽度）全部由内核
    .ne-link-editor 提供 ⇒ 与固定栏链接弹窗一致，不再自造。 */
 .selection-toolbar__popover {

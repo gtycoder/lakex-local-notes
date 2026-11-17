@@ -9,13 +9,14 @@
  * getTocIds，避免 lakeRuntime ↔ 本模块的循环 import。
  */
 import type { LakeEditorInstance, LakeKernelBridge } from "./lakeRuntime";
+import { stabilizeNodeAlignment } from "./lakeTileRender";
 
 /** 虚拟渲染下 Lake 原生 TOC watcher 失效（二分探测视口外标题无 DOM，永远 -1 不选中）。
  * 自研滚动跟随高亮 + 点击精确滚动：
  *  - 高亮：滚动时按文档序遍历 toc 标题，取位于视口上 1/3 带内的最后（即当前）标题，
  *    给对应 .ne-toc-item 加 ne-toc-selected（与 Lake 的 selected 状态同语义）。
  *  - 点击：Lake 的 scrollByNodeId 负责渲染目标单元并初滚；cardLazyInit 下邻近卡片
- *    是占位高度，首次定位会偏，这里在 50/200ms 做两次精确校正。
+ *    是占位高度，首次定位会偏，这里持续锚定到布局稳定（不再依赖固定 50/200ms）。
  * 返回清理函数。 */
 export function setupTocScrollFollow(
   host: HTMLElement,
@@ -31,6 +32,7 @@ export function setupTocScrollFollow(
   let activeId: string | null = null;
   let pollTimer: number | undefined;
   let scrollTimer: number | undefined;
+  let cancelAlignment: (() => void) | null = null;
   let removeTocChangeListener: (() => void) | null = null;
   const pendingTimers = new Set<number>();
   const later = (fn: () => void, ms: number): number => {
@@ -106,14 +108,6 @@ export function setupTocScrollFollow(
     later(update, 500);
   };
 
-  const correctScrollTo = (id: string): void => {
-    const el = host.querySelector(`[id="${id}"]`) as HTMLElement | null;
-    const scroller = getScrollNode();
-    if (!el || !scroller) return;
-    const delta = el.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
-    if (Math.abs(delta) > 2) scroller.scrollTop += delta;
-  };
-
   const onScroll = (): void => {
     scheduleUpdate();
   };
@@ -123,10 +117,12 @@ export function setupTocScrollFollow(
     const item = target?.closest?.(".ne-toc-item") as HTMLElement | null;
     const id = item?.getAttribute?.("data-id");
     if (!id) return;
-    // Lake 的 item onClick（冒泡阶段）会先执行 scrollByNodeId 渲染目标单元并初滚；
-    // 懒卡片占位高度导致的偏差在渲染/水合稳定后校正两次。
-    later(() => correctScrollTo(id), 50);
-    later(() => correctScrollTo(id), 200);
+    // 本监听处于捕获阶段，内核的 item onClick 会在当前事件冒泡阶段执行初滚。
+    // 等它完成后再接管持续对齐；固定 50/200ms 会漏掉更晚的卡片水合位移。
+    later(() => {
+      cancelAlignment?.();
+      cancelAlignment = stabilizeNodeAlignment(host, getScrollNode(), id);
+    }, 0);
   };
 
   const bind = (): boolean => {
@@ -160,6 +156,8 @@ export function setupTocScrollFollow(
       scroller.removeEventListener("scroll", onScroll);
       el.removeEventListener("click", onClick, true);
       try { editor?.off?.("contentchange", onContentChange); } catch { /* 忽略 */ }
+      cancelAlignment?.();
+      cancelAlignment = null;
       clearLater(contentChangeTimer);
       clearPendingTimers();
       observer.disconnect();

@@ -44,10 +44,18 @@ describe("浮动工具栏定位护栏（261004）", () => {
     expect(HOOK).toContain("targetRef");
   });
 
-  it("浮栏始终贴在选区上方：只算上方档，不翻到下方；下方档默认仍夹顶界", () => {
+  it("文字浮栏只在上方；媒体卡在正文顶部时贴卡顶显示，不翻到整张卡底部", () => {
     expect(MODEL).toContain("!allowBelow");
-    expect(SRC).toMatch(/computeToolbarPosition\([\s\S]*?TOOLBAR_MARGIN,\s*false\)/);
+    expect(SRC).toContain("const mediaAnchor = t.kind === \"text\" ? rect :");
+    expect(SRC).toContain("t.kind !== \"text\",");
     expect(MODEL).toContain("Math.max(topLimit, belowTop)");
+  });
+
+  it("图片和视频共用媒体卡命中入口；视频目标只在当前编辑器内生效", () => {
+    expect(HOOK).toContain("ne-card[data-card-name='image'], ne-card[data-card-name='video']");
+    expect(HOOK).toContain('kind: card.getAttribute("data-card-name") === "video" ? "video" : "image"');
+    expect(HOOK).toContain("container.contains(card)");
+    expect(SRC).toContain('classList.add("lake-media-selected")');
   });
 
   it("不做「选区不可见就收起」的显隐切换（避免闪烁）", () => {

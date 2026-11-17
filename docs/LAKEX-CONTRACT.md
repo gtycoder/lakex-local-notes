@@ -2208,3 +2208,47 @@ DOM 文本节点扫描（移动端文档 `disableVirtualRendering:true`，整篇
 - **剪贴板物化（双保险）**：两端 `?base64=1` 分支都在 `?w=` 之前（桌面 `assetServer.ts` / Android `AssetServer.kt`）⇒ 即使请求 URL 带 w 也拿原图；应用侧仍先 `canonicalAssetUrlForCopy` 去掉 w/date 再请求。移动端旧路径 `imageToPngDataUrl(canvas)` 画的是当前显示 `<img>` ⇒ 显示缩略时剪贴板写 1024（微信里糊）；桌面 `electron/assetServer.ts` 的 `?base64=1` 分支**忽略 w、读原文件**（webp/avif→PNG）已保真。⇒ 统一为「本地资产先同步 XHR `?base64=1` 取原图（请求前 `canonicalAssetUrlForCopy` 去掉显示用 `w`/`date`、保留 token），失败才回退 canvas」；Android `AssetServer.kt` 本轮补同等 `?base64=1`（webp/avif→PNG，24MP 上限，超限/失败返回非 200 让 JS 回退）。
 - **落地**：`editor/selectionClipboard.ts`（copy/cut 单一来源：LakeEditor / 移动文档编辑器 / QuickNoteEditor）、`editor/imageThumbUploadTracker.ts`（新插入放行）、`clipboardHtml.canonicalAssetUrlForCopy`、`core/quickNoteImageThumb.imageThumbPendingOrigins`。护栏：`selectionClipboard.test.ts`、`imageThumbUploadTracker.test.ts`、`clipboardHtml.test.ts`、`lakexImageRenderThumb.test.ts`。
 - **剩余边界**：XHR 失败/旧包时 canvas 回退仍可能是显示尺寸；复制多张大图会同步阻塞（剪贴板 API 限制）。
+
+### 5.55 打开文档的延迟 contentchange 与大纲二次位移（261117 正式数据复现）
+
+**结论**：初始化 `setDocument` 之后仍可能在约 200–300ms 再发一次 `contentchange`；它不是用户编辑。大纲点击后的懒卡片/图片布局也会在初滚后继续改高度，固定延时校正不够。
+
+- **打开即保存点（正式数据 `af54a5da-8b5c-4423-9bb3-6126a3e15f37.lake` 隔离副本）**：打开后标签先保持 `dirty=false`，约 250ms 变为 dirty，约 1.25s 后自动保存并清掉 dirty；主进程记录 `note.save chars=177092`，但正文文件 SHA-256 前后均为 `886d39d4ef91105e8e399a664e0d7707ff56301c66f137753c1eb0874d9c8321`，`NoteContentRepository.save()` 走无变化早退。根因 = `EditorTab` 的同步 `setting` 标志在 `setDocument()` 返回后立即关闭，晚到的初始化 `contentchange` 被当成用户编辑。
+- **护栏写法**：`EditorTab` 新增 `userContentIntent + initialBaseline`。无用户意图时，当前 `getDocument("text/lake")`（去 access token）与打开基线**逐字节相同**才忽略；内容真的变化或序列化失败时继续通知 `onChange`，宁可多保存一次也不能漏数据。显式自愈（上传卡回填）仍直接调用 `onChange`。真实输入验证仍会 dirty→1s 后保存。
+- **大纲跳动（JVM 文档隔离副本）**：点击标题后先对齐到 `targetTop=0`；约 250ms 后正文引擎高度从 `23584` 变为 `23538`，目标变成 `targetTop=-27`。原实现只在 50/200ms 各校正一次，正好漏掉这次布局变化。
+- **护栏写法**：`stabilizeNodeAlignment()` 用 `ResizeObserver(.ne-engine)` + rAF 持续把目标块锚定到滚动容器顶部；最后一次布局变化后安静 1s 才停，最多观察 2.2s；用户 pointerdown/keydown/wheel/touchstart 立即取消。自建大纲与 Lake 原生大纲点击共用该路径，不再使用固定 50/200ms 双校正。
+- **实测**：修复后同一目标在布局变化时短暂采样到 `-27px` 后回到 `0px`；打开文档不再触发 `note.save`，真实输入仍正常触发保存。护栏：`editorOpenDirtyGuard.test.ts`、`lakeTileRender.test.ts`。
+- **退出兜底**：`useDesktopLifecycle` 的 unmount / beforeunload 草稿原先写 `tab.content`；doc 的该字段只是最后已提交版本，会丢未满 1s 的最新输入。现统一 `captureContent(noteId) ?? tab.content`，正常关闭仍走 `persistTab`，草稿只做崩溃兜底。
+
+### 5.56 Lakex 视频卡自适应、缩放与对齐（261117 用户反馈 + 真实数据实测）
+
+- **官方文档边界**：官方 `68 - 视频（video）` 只提供 `accept / uploadFileURL / createUploadPromise / crawlVideo / useOriginSrc` 等上传配置，没有卡片尺寸或 `object-fit` 配置项；这是内核表现层规则，不是 upload 配置问题。
+- **vendored CSS 事实**：`.ne-card-video-content` 与内部 `video` 在桌面固定 `height: 450px`；移动端媒体查询虽把高度放开，但仍保持整行宽度。默认 `object-fit: contain` 会把 16:9 视频塞进任意高的卡里，出现上下白边；竖屏视频若铺满正文宽，则出现左右白边。
+- **模型事实**：video `H2.toLake(value)` 原样返回 value，`fromLake` 也 spread 全部字段；通用 `cardData.resetCardValue(next)` + `sync(false)` 会经内核 `setCardValue` 正常写回文档并触发保存/同步。因此不需要改闭源内核，也不需要整篇 JSON 读改写。
+- **持久化契约**（应用扩展字段）：
+  - `__videoWidth: number`：相对**正文可用宽度**的百分比，夹取 10–100；缺省 100。
+  - `__videoAlign: "left" | "center" | "right"`：卡片在正文块内的对齐；缺省 left。
+  - 两字段与 `__spacing` 同级；其他阅读器不识别时仍按原视频正常显示，不破坏数据。
+- **渲染口径**：`src/features/editor/videoCardOps.ts` 读取 cardData 后把宽度投影成 DOM `--lake-video-max-width`（正文可用宽度的百分比），再以 `min(100%, …)` 封顶；完成态按 intrinsic ratio 自适应。**100% = 铺满正文栏，不是视频原始像素尺寸**；不再叠加 `72vh / 720px` 高度上限，否则竖屏视频的 75% 与 100% 会被二次压成同一宽度。
+- **桌面/触屏交互**：完成态卡片左右边缘有拖拽手柄（桌面 hover/选中显示，移动端选中显示），拖动实时预览、松手才 `sync(false)` 持久化；每次移动按卡片中心对称缩放，范围 10–100%，键盘 ←/→ 每次 5%、Home/End 到 10/100%。`SelectionToolbar` 同时保留尺寸输入 + 25/50/75/100 档位和左/中/右对齐。上传中/失败态保持原状。
+- **新插入视频闪烁根因（261117 正式数据对比）**：同一视频文件字节 SHA-256 完全一致；旧文档重开后的视频为 `status:"done"`、UploadObserver `_taskManager` 无任务；新插入视频仍是 `status:"uploaded"`，已完成上传任务永久残留在 taskManager。对同卡做 50 次宽度变更：旧卡约 138ms，新卡约 231ms；清空残留 taskManager 后降到约 149ms。上传结束归一 `done + 清理任务` 后，新卡生命周期与旧卡一致。
+- **拖动预览**：视频拖动阶段只做整卡合成层 `transform: scale()`，按左/中/右对齐选择 origin；不逐帧重排 `<video>`，松手一次写真实宽度并清 transform。
+- **落点**：模型桥 `src/features/editor/videoCardOps.ts`；浮动栏 `selectionToolbar/{SelectionToolbar.tsx,useSelectionToolbar.ts,selectionToolbar.css}`；桌面 `src/styles/feature.css`，移动端 `src/mobile/editor/edit-surface-kernel.css` ⑦。Android 阅读/编辑态共享持久化布局（目前调整入口在桌面浮动栏，和图片精确缩放入口同端）。
+- **实测（正式开发数据）**：当前竖屏视频（720×1280、正文栏约 515px）75% 为卡片 `386×685`，100% 为 `513×910`，两者已明确不同；边缘拖动 +7.8% 后实时变宽，松手写入 `__videoWidth:83`（验收后已还原用户原值 75%）。此前横屏 `1279×720` 的 25% 档为 `130×73`，右对齐贴正文右缘。护栏 `videoCardOps.test.ts`（含拖动/取消/键盘）、`videoCardFit.test.ts`、selection-toolbar wiring；桌面/移动 CSS 层围栏同步登记。
+
+### 5.58 图片/视频媒体卡边缘缩放（261117 用户反馈）
+
+- **共享实现**：`src/features/editor/mediaCardResize.ts` 统一管理图片与视频的把手创建、pointer 拖动、实时预览、取消恢复、键盘操作和阅读态禁用。`lakeRuntime` 只在 editor 模式挂 interactive 手柄。
+- **视频**：左右双把手，存正文宽度百分比；拖动用合成层 transform 预览，松手 `resetCardValue + sync(false)` 一次写回。新插入上传任务的生命周期归一由 `videoCardOps.finalizeUploadedVideoCards()` 负责：线程仍存活时只在无 running/pending 任务后归还 manager；线程已正常结束（`_thread=null`）时仍会清掉卡实例 `_task`，覆盖上传完成与 DOM 观察回调之间的时间差。
+- **图片**：右侧单边缘把手，按正文可用像素宽度调整；拖动只改 `<img>` 临时 width，松手走内核 `updateImageData(cardId,{width})`。**内核原生 `.ne-ui-image-resizer` 四角把手完整保留**，最终同时存在四角缩放和右侧边缘缩放。
+- **视觉**：`.lake-media-resize-handle` 蓝色竖条 + 拖动百分比/像素气泡；移动端命中区 44px，桌面 16px。`lake-media-selected` 由 SelectionToolbar 的图片/视频 target 统一维护。
+- **实测**：图片选中后同时存在 4 个原生角点 + 1 个右侧边缘把手；图片 `511px` 向右拖动 `-100px` 实时预览 `424px`，松手写入 `value.width=424`，验收后恢复原图满宽。新视频 `status=done / task=null / taskManager=[]`。护栏 `mediaCardResize.test.ts`、`videoCardOps.test.ts`（上传任务归一）、video/tooling 测试。
+
+### 5.57 附件超限的统一拦截与提示（261117 用户反馈）
+
+- **适用范围**：文档/小记/表格/多维表/画板/手写板中，从本地选择或粘贴的图片、视频、音频、PDF 和普通附件。上传入口统一先过 `src/lib/attachmentLimit.ts`，再读大字节、进上传队列或重试。
+- **上限事实**：设置里的 `maxAttachmentBytes`（25/50/100 MiB）是本地插入上限；底层协议硬上限仍为 100 MiB。此前文档编辑器图片另有写死 25 MiB 的入口限制，会让“调到 50/100 MiB”对图片失效；261117 起本地图片也按该设置执行，保留 `MAX_IMAGE_BYTES=25 MiB` 仅作网络图片下载/小记旧入口的内存护栏。
+- **提示口径**：`AttachmentLimitExceededError` 统一生成“无法插入「文件名」：文件大小为 X MiB（比上限多 Y），当前附件上限为 Z MiB。可在「设置 → 常规 → 附件大小上限」中调整。”桌面 `useDesktopShell` 订阅后显示 8 秒通知并提供「打开设置」，移动端 `MobileApp` 显示 12 秒 error toast。
+- **移动桥**：`assertResourceBytes(bytes, filename)` 对直接走 `bridge.uploadResource` 的多维表/表格/画板/手写板入口同样生效；错误先发全局提示，再按原路径返回失败。
+- **实测**：开发版当前上限 50 MiB，插入 50 MiB+1 B 的 PDF 时提示“文件大小 50 MiB（比上限多 1 B），当前附件上限 50 MiB”，桌面通知含「打开设置」并确实打开常规设置；测试文件未落盘（首轮误放行的测试资产已清理）。
+- **护栏**：`attachmentLimit.test.ts`、`resourceUpload.limit.test.ts`、`attachmentLimitWiring.test.ts`、移动 `attachmentLimit.test.ts`、PDF 导入与跨端资源行为契约。

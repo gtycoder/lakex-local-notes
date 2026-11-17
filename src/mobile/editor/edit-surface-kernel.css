@@ -62,3 +62,23 @@ body.lake-mobile [data-mb-edit-host][data-mb-kernel="doc"] .text-to-diagram-tool
 body.lake-mobile [data-mb-edit-host][data-mb-kernel="doc"] .text-to-diagram-panels { flex-direction: column; }
 body.lake-mobile [data-mb-edit-host][data-mb-kernel="doc"] .text-to-diagram-editor-panel { flex: 0 0 auto; height: 50%; border-right: none; border-bottom: 1px solid var(--lake-border-1); }
 body.lake-mobile [data-mb-edit-host][data-mb-kernel="doc"] .text-to-diagram-preview-panel { flex: 1 1 auto; }
+
+/* ⑦ 视频卡（261117 用户反馈）：内核桌面规则写死 450px 高，移动端虽然把 video 高度放开，
+ * 但竖屏视频仍占满整行、两侧留白。完成态按 intrinsic ratio 收窄卡片；宽度存储为正文宽度百分比，
+ * DOM 投影到 --lake-video-max-width；默认左对齐，可持久化为居中/右对齐，并提供边缘拖拽手柄。 */
+body.lake-mobile [data-mb-edit-host] .ne-card-video-content.ne-card-video-done { display: flex; justify-content: flex-start; width: fit-content; max-width: 100%; height: auto; margin-inline: 0; background: transparent; }
+body.lake-mobile [data-mb-edit-host] .ne-card-video-content.ne-card-video-done video { display: block; width: auto; max-width: 100%; height: auto; object-fit: contain; border-radius: var(--lake-radius-sm); background: var(--lake-media-video); }
+body.lake-mobile [data-mb-edit-host] ne-card[data-card-name="video"]:has(.ne-card-video-done) { width: fit-content; max-width: min(100%, var(--lake-video-max-width, 100%)); margin-left: 0; margin-right: auto; }
+body.lake-mobile [data-mb-edit-host] ne-card[data-card-name="video"][data-video-align="center"]:has(.ne-card-video-done) { margin-inline: auto; }
+body.lake-mobile [data-mb-edit-host] ne-card[data-card-name="video"][data-video-align="right"]:has(.ne-card-video-done) { margin-left: auto; margin-right: 0; }
+body.lake-mobile [data-mb-edit-host] ne-card[data-card-name="video"]:has(.ne-card-video-done) .ne-card-container,
+body.lake-mobile [data-mb-edit-host] ne-card[data-card-name="video"]:has(.ne-card-video-done) .ne-card-video { width: auto; max-width: 100%; }
+body.lake-mobile [data-mb-edit-host] :is(ne-card[data-card-name="video"], ne-card[data-card-name="image"]) > .lake-media-resize-handle { position: absolute; z-index: 3; top: 8px; bottom: 8px; width: 44px; display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none; touch-action: none; cursor: col-resize; }
+body.lake-mobile [data-mb-edit-host] :is(ne-card[data-card-name="video"], ne-card[data-card-name="image"]) > .lake-media-resize-handle--left { left: -22px; }
+body.lake-mobile [data-mb-edit-host] :is(ne-card[data-card-name="video"], ne-card[data-card-name="image"]) > .lake-media-resize-handle--right { right: -22px; }
+body.lake-mobile [data-mb-edit-host] :is(ne-card[data-card-name="video"], ne-card[data-card-name="image"]):is(:hover, .ne-focused, .lake-media-selected) > .lake-media-resize-handle,
+body.lake-mobile [data-mb-edit-host] :is(ne-card[data-card-name="video"], ne-card[data-card-name="image"]) > .lake-media-resize-handle:focus-visible { opacity: 1; pointer-events: auto; }
+body.lake-mobile [data-mb-edit-host] :is(ne-card[data-card-name="video"], ne-card[data-card-name="image"]) > .lake-media-resize-handle::after { content: ""; width: 4px; height: 44px; border-radius: var(--lake-radius-pill); background: var(--lake-accent); box-shadow: var(--lake-shadow-card); }
+body.lake-mobile [data-mb-edit-host] :is(ne-card[data-card-name="video"], ne-card[data-card-name="image"]) > .lake-media-resize-handle::before { content: attr(data-value); position: absolute; top: -24px; padding: 2px 6px; border-radius: var(--lake-radius-xs); color: var(--lake-bg-panel); background: var(--lake-text-1); font-size: var(--lake-font-size-micro); font-variant-numeric: tabular-nums; white-space: nowrap; opacity: 0; pointer-events: none; }
+body.lake-media-resizing .lake-media-resize-handle::before { opacity: 1; }
+body.lake-media-resizing { cursor: col-resize; user-select: none; }

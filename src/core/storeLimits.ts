@@ -5,6 +5,7 @@
  */
 export const MAX_DOC_BODY_BYTES = 32 * 1024 * 1024;
 
+/** 网络图片下载/小记老旧入口的图像内存护栏。文档编辑器本地插图按用户附件上限（最高同协议 100 MiB）。 */
 export const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
 export const MAX_IMAGE_PIXELS = 50_000_000;
 

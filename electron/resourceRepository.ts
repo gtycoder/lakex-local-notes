@@ -157,7 +157,9 @@ function writeAssetBytes(bytes: Buffer, filename: string, assetsDir: string): st
 }
 
 function imageOutput(bytes: Buffer, _requestedFilename: string, assetsDir: string, makeUrl: (filename: string) => string): ResourceUploadOutput {
-  if (bytes.length === 0 || bytes.length > MAX_IMAGE_BYTES) throw new AppError("InvalidInput", "图片为空或超过 25 MiB");
+  // 本地图片与附件共用协议硬上限；用户可见的 25/50/100 MiB 本机上限由渲染层在入队前执行。
+  if (bytes.length === 0) throw new AppError("InvalidInput", "图片为空");
+  if (bytes.length > MAX_ATTACHMENT_BYTES) throw new AppError("InvalidInput", `图片超过 ${MAX_ATTACHMENT_BYTES / 1024 / 1024} MiB 协议上限`);
   const format = sniffImageFormat(bytes);
   if (!format) throw new AppError("InvalidInput", "仅支持 PNG、JPEG、GIF、WebP 和 AVIF 图片");
   const filename = buildAssetFilename(`image.${format.extension}`);

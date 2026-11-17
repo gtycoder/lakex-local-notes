@@ -1,14 +1,15 @@
 /**
- * 桌面编辑态「浮动工具栏」（选区气泡）——两种形态：
+ * 桌面编辑态「浮动工具栏」（选区气泡）——三种形态：
  *   · 文字选区（对齐内核固定工具栏的 Lake 风格，顺序 260924 用户定）：
  *     清除格式 · 字号 · 加粗 · 倾斜 · 中划线 · 下划线 · 文字颜色 · 背景色 · 格式 · AI
  *     （「格式」= 260930 起把 段落样式(正文/标题1–6) + 有序/无序/待办/引用/行内代码/链接 并成
  *      **一个父入口 + 菜单**；父入口图标跟着当前块类型走，正文时是内核的「正文」图标）
  *   · 图片选中：裁剪 / 旋转 / 宽高 / 链接 / 描述 / 对齐 / 样式 / 边距 / 批量应用 / 复制 / 下载 / 删除
+ *   · 视频选中：原始宽度百分比缩放 / 左中右对齐（值持久化到视频 cardValue，桌面与 Android 共用）
  *
  * 规则：
  *   - 组件自研、能力全走内核：文字用 execCommand/queryCommandValue，图片用 updateImageData/
- *     cardBatchApply/deleteCard + 卡 UI setCro（原生能力），不自实现富文本或图片逻辑。
+ *     cardBatchApply/deleteCard + 卡 UI setCro（原生能力），视频用 cardData resetCardValue/sync。
  *   - 文字形态复用内核固定工具栏的类名与图标 sprite（ant-btn / ne-ui-toolbar-* / ne-icon-*），
  *     不用第三方（钉钉）风格；active 态用内核的 .checked 类。
  *   - 容器 onMouseDown preventDefault：点按钮不丢选区；定位自算 + 避开固定工具栏；表格/代码块内不出现。
@@ -40,8 +41,9 @@ import {
 } from "./colorMemory";
 import { colorApplyCommand, computeToolbarPosition, imageSizeWidth, lineBoxRects, parseAssetRef, TOOLBAR_MARGIN, type SelectionRect } from "./selectionToolbarModel";
 import { collectSelectionImageRefs, imageCardAssetRef } from "./selectionImages";
+import { readVideoLayout, VIDEO_WIDTH_PRESETS, writeVideoLayout, type VideoAlignment } from "../videoCardOps";
 import type { AiAssetRef } from "../../../core/aiProviders";
-import { firstRangeRect, useSelectionToolbar, type ImageTarget } from "./useSelectionToolbar";
+import { firstRangeRect, useSelectionToolbar, type ImageTarget, type VideoTarget } from "./useSelectionToolbar";
 import { placePopoverBeside, placePopoverPosition } from "../../../hooks/topMenuPosition";
 import { isImeConfirming } from "../../../core/ime";
 
@@ -211,6 +213,11 @@ export function SelectionToolbar({ editor, container }: {
   // AI 对话框开着时也冻结：它覆盖浮栏上方，选区的变化不应让浮栏跳动。
   holdRef.current = menu !== null || aiOpen;
   const { target, state, run, refresh, toolbarRef, targetRef } = useSelectionToolbar(editor, container, holdRef);
+  useEffect(() => {
+    const cardEl = target?.kind === "image" || target?.kind === "video" ? target.cardEl : null;
+    cardEl?.classList.add("lake-media-selected");
+    return () => cardEl?.classList.remove("lake-media-selected");
+  }, [target]);
   const [draft, setDraft] = useState("");
   /** 宽高弹窗的「高」输入。 */
   const [draftH, setDraftH] = useState("");
@@ -278,12 +285,30 @@ export function SelectionToolbar({ editor, container }: {
     if (host && host.parentElement !== wrap) wrap.appendChild(host);
     // 用**当前**选区 rect（而非 state 快照）：它与下面的 scrollTop 同一时刻读 ⇒ 内容坐标恒定，滚动不漂移
     const sel = window.getSelection();
-    const rect = t.kind === "image"
+    const rect = t.kind !== "text"
       ? t.cardEl.getBoundingClientRect()
       : (sel && !sel.isCollapsed && sel.rangeCount > 0 ? firstRangeRect(sel.getRangeAt(0)) : null);
     if (!rect) return;
     const size = el.getBoundingClientRect();
-    const p = computeToolbarPosition(rect, { width: size.width, height: size.height }, { width: window.innerWidth, height: window.innerHeight }, TOOLBAR_MARGIN, false);
+    const chrome = chromeToolbarOf(container);
+    const topLimit = Math.max(container.getBoundingClientRect().top, chrome?.getBoundingClientRect().bottom ?? 0) + TOOLBAR_MARGIN;
+    // 文字浮栏保持“只在上方”；媒体卡在正文顶部时上方没有空间，改为贴卡顶/编辑区上沿显示，
+    // 不能翻到整张竖屏视频的底部（那样会直接跑出视口）。
+    const mediaAnchor = t.kind === "text" ? rect : {
+      left: rect.left,
+      top: rect.top,
+      right: rect.right,
+      bottom: rect.top,
+      width: rect.width,
+      height: rect.height,
+    };
+    const p = computeToolbarPosition(
+      mediaAnchor,
+      { width: size.width, height: size.height },
+      { width: window.innerWidth, height: window.innerHeight },
+      topLimit,
+      t.kind !== "text",
+    );
     const wr = wrap.getBoundingClientRect();
     // 水平仍夹在编辑区（wrap）内；再换算成 wrap 的**内容坐标**（+scrollLeft/scrollTop）
     let leftViewport = p.left;
@@ -962,6 +987,90 @@ export function SelectionToolbar({ editor, container }: {
     );
   };
 
+  const renderVideo = (t: VideoTarget) => {
+    const meta = readVideoLayout(t.cardEl);
+    const apply = (patch: Parameters<typeof writeVideoLayout>[1]) => {
+      if (writeVideoLayout(t.cardEl, patch)) refresh();
+      setMenu(null);
+    };
+    const applyWidth = () => {
+      const value = Number(draft);
+      if (Number.isFinite(value)) apply({ widthPercent: value });
+    };
+    const align = (value: VideoAlignment) => apply({ alignment: value });
+
+    return (
+      <>
+        <div className="ne-card-toolbar">
+          <CardItem
+            tip={`尺寸：正文宽度 ${meta.widthPercent}%`}
+            className="ne-card-toolbar-dropdown-item ant-dropdown-trigger"
+            selected={menu === "videosize"}
+            onClick={(e) => openWithDraft("videosize", String(meta.widthPercent), e.currentTarget)}
+          >
+            <IconImageSize />
+          </CardItem>
+          <div className="ne-ui-card-toolbar-divider" />
+          <CardItem
+            tip="对齐"
+            className="ne-card-toolbar-select-item ant-dropdown-trigger"
+            selected={menu === "videoalign"}
+            onClick={(e) => toggleMenu("videoalign", e.currentTarget)}
+          >
+            <IconImageAlign />
+            <span className="ne-card-toolbar-arrow-down-icon" />
+          </CardItem>
+        </div>
+
+        {menu === "videosize" && (
+          <div ref={setPopoverRef} style={popoverStyle ?? OFFSCREEN} className="selection-toolbar__cardpop" data-menu="videosize">
+            <div className="selection-toolbar__inputrow">
+              <span className="ne-card-toolbar-input-title">宽度</span>
+              <input
+                className="ne-card-toolbar-input"
+                type="number"
+                min="10"
+                max="100"
+                step="1"
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !isImeConfirming(e)) {
+                    e.preventDefault();
+                    applyWidth();
+                  }
+                }}
+              />
+              <span className="ne-card-toolbar-input-title">%</span>
+              <button type="button" className="ln-btn ln-btn--primary" onClick={applyWidth}>应用</button>
+            </div>
+            <span className="selection-toolbar__video-note">100% 表示铺满正文栏，不是视频原始像素尺寸；也可直接拖动视频左右边缘。</span>
+            <div className="ln-segment selection-toolbar__scale">
+              {VIDEO_WIDTH_PRESETS.map((pct) => (
+                <button
+                  key={pct}
+                  type="button"
+                  className={"ln-segment__item" + (meta.widthPercent === pct ? " is-active" : "")}
+                  onClick={() => apply({ widthPercent: pct })}
+                >
+                  {pct}%
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {menu === "videoalign" && (
+          <CardMenu menu="videoalign" style={popoverStyle ?? OFFSCREEN} surfaceRef={setPopoverRef}>
+            <CardMenuItem label="左对齐" icon="editor-alignmentLeft" selected={meta.alignment === "left"} onClick={() => align("left")} />
+            <CardMenuItem label="居中对齐" icon="editor-alignmentCenter" selected={meta.alignment === "center"} onClick={() => align("center")} />
+            <CardMenuItem label="右对齐" icon="editor-alignmentRight" selected={meta.alignment === "right"} onClick={() => align("right")} />
+          </CardMenu>
+        )}
+      </>
+    );
+  };
+
   return (
     <>
       {/* ⚠️ AI 对话框必须待在**固定树位置**（工具栏之外、且两条返回分支都在同一处）：
@@ -973,7 +1082,7 @@ export function SelectionToolbar({ editor, container }: {
         className="selection-toolbar lakex-default-theme"
         data-kind={target.kind}
         role="toolbar"
-        aria-label={target.kind === "text" ? "文字格式工具栏" : "图片工具栏"}
+        aria-label={target.kind === "text" ? "文字格式工具栏" : target.kind === "image" ? "图片工具栏" : "视频工具栏"}
         // 首帧占位；实际坐标由 placeToolbarNow 命令式写入（style 常量引用不变，React 不会覆盖它）
         style={OFFSCREEN}
         onMouseDown={(event) => {
@@ -984,7 +1093,7 @@ export function SelectionToolbar({ editor, container }: {
           event.preventDefault();
         }}
       >
-        {target.kind === "text" ? renderText() : renderImage(target)}
+        {target.kind === "text" ? renderText() : target.kind === "image" ? renderImage(target) : renderVideo(target)}
         {target.kind === "text" ? renderTextMenu() : null}
       </div>
       {null}

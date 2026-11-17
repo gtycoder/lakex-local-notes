@@ -12,7 +12,7 @@
  * 因此可在 node 环境用假实现做纯逻辑测试（页映射/截断/替换空首页/取消/错误）。
  */
 import { parseLocalAssetUrl } from "../../core/assetUrl.js";
-import { MAX_ATTACHMENT_BYTES } from "../../core/storeLimits.js";
+import { assertAttachmentWithinLimit, AttachmentLimitExceededError } from "../../lib/attachmentLimit";
 import {
   createInkPage,
   type InkBackgroundImage,
@@ -146,7 +146,12 @@ export async function importPdfPages(
   options: PdfImportOptions = {},
 ): Promise<PdfImportOutcome> {
   if (bytes.length === 0) return emptyOutcome(["PDF 为空"]);
-  if (bytes.length > MAX_ATTACHMENT_BYTES) return emptyOutcome(["PDF 超过 100 MiB 上限"]);
+  try {
+    assertAttachmentWithinLimit(bytes.length, options.fileName || "PDF");
+  } catch (reason) {
+    if (reason instanceof AttachmentLimitExceededError) return emptyOutcome([reason.message]);
+    throw reason;
+  }
   const maxPages = Math.min(INK_PDF_MAX_PAGES, Math.max(1, Math.floor(options.maxPages ?? INK_PDF_MAX_PAGES)));
 
   const errors: string[] = [];

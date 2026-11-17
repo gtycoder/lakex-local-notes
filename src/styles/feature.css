@@ -309,3 +309,23 @@ pre {
 .lake-editor-tab ne-card[data-card-name] .lakex-drawnix-core .draw-toolbar .stack_horizontal { grid-auto-flow: row; grid-template-columns: auto; grid-template-rows: none; }
 .lake-editor-tab ne-card[data-card-name] .lakex-drawnix-core .draw-toolbar .tool-icon { position: relative; }
 .lake-editor-tab ne-card[data-card-name] .lakex-drawnix-core .draw-toolbar .tool-icon > input { position: absolute; left: 0; top: 0; width: 1px; height: 1px; margin: 0; padding: 0; opacity: 0; pointer-events: none; }
+
+/* Lakex 视频卡（261117 用户反馈）：内核给完成态写死 450px 高，16:9/竖屏视频都会出现白边。
+ * 完成态按 intrinsic ratio 自适应；卡片宽度由 cardValue 的 __videoWidth（正文宽度百分比）投影到
+ * --lake-video-max-width。默认左对齐，可持久化为居中/右对齐；左右手柄可直接拖动宽度。 */
+.lake-editor-tab .ne-card-video-content.ne-card-video-done { display: flex; justify-content: flex-start; width: fit-content; max-width: 100%; height: auto; margin-inline: 0; background: transparent; }
+.lake-editor-tab .ne-card-video-content.ne-card-video-done video { display: block; width: auto; max-width: 100%; height: auto; object-fit: contain; border-radius: var(--lake-radius-sm); background: var(--lake-media-video); }
+.lake-editor-tab ne-card[data-card-name="video"]:has(.ne-card-video-done) { width: fit-content; max-width: min(100%, var(--lake-video-max-width, 100%)); margin-left: 0; margin-right: auto; }
+.lake-editor-tab ne-card[data-card-name="video"][data-video-align="center"]:has(.ne-card-video-done) { margin-inline: auto; }
+.lake-editor-tab ne-card[data-card-name="video"][data-video-align="right"]:has(.ne-card-video-done) { margin-left: auto; margin-right: 0; }
+.lake-editor-tab ne-card[data-card-name="video"]:has(.ne-card-video-done) .ne-card-container,
+.lake-editor-tab ne-card[data-card-name="video"]:has(.ne-card-video-done) .ne-card-video { width: auto; max-width: 100%; }
+.lake-editor-tab :is(ne-card[data-card-name="video"], ne-card[data-card-name="image"]) > .lake-media-resize-handle { position: absolute; z-index: 3; top: 8px; bottom: 8px; width: 16px; display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none; touch-action: none; cursor: col-resize; }
+.lake-editor-tab :is(ne-card[data-card-name="video"], ne-card[data-card-name="image"]) > .lake-media-resize-handle--left { left: -8px; }
+.lake-editor-tab :is(ne-card[data-card-name="video"], ne-card[data-card-name="image"]) > .lake-media-resize-handle--right { right: -8px; }
+.lake-editor-tab :is(ne-card[data-card-name="video"], ne-card[data-card-name="image"]):is(:hover, .ne-focused, .lake-media-selected) > .lake-media-resize-handle,
+.lake-editor-tab :is(ne-card[data-card-name="video"], ne-card[data-card-name="image"]) > .lake-media-resize-handle:focus-visible { opacity: 1; pointer-events: auto; }
+.lake-editor-tab :is(ne-card[data-card-name="video"], ne-card[data-card-name="image"]) > .lake-media-resize-handle::after { content: ""; width: 3px; height: 40px; border-radius: var(--lake-radius-pill); background: var(--lake-accent); box-shadow: var(--lake-shadow-card); }
+.lake-editor-tab :is(ne-card[data-card-name="video"], ne-card[data-card-name="image"]) > .lake-media-resize-handle::before { content: attr(data-value); position: absolute; top: -22px; padding: 2px 6px; border-radius: var(--lake-radius-xs); color: var(--lake-bg-panel); background: var(--lake-text-1); font-size: var(--lake-font-size-micro); font-variant-numeric: tabular-nums; white-space: nowrap; opacity: 0; pointer-events: none; }
+body.lake-media-resizing .lake-media-resize-handle::before { opacity: 1; }
+body.lake-media-resizing { cursor: col-resize; user-select: none; }

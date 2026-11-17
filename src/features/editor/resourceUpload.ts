@@ -1,7 +1,7 @@
 import { canDownloadRemoteAsset, hasNativeBridge, isCapacitorNativePlatform, isDesktop, native } from "../../lib/native";
 import type { ResourceUploadInput, ResourceUploadOutput } from "../../lib/types";
 import { MAX_IMAGE_BYTES, MAX_ATTACHMENT_BYTES } from "../../core/storeLimits";
-import { loadSettings } from "../../lib/settings";
+import { assertAttachmentWithinLimit, AttachmentLimitExceededError, effectiveAttachmentLimitBytes } from "../../lib/attachmentLimit";
 import { imageDataUrl, normalizeImageInput } from "./imageFormat";
 import { createConcurrencyQueue } from "../../core/concurrency";
 import { withRetry } from "../../core/retry";
@@ -39,19 +39,26 @@ function uploadKindOf(request: unknown): UploadKind {
   return "file";
 }
 
-/** 当前附件上传上限（MiB 配置项；协议硬上限见 MAX_ATTACHMENT_BYTES）。 */
-function configuredMaxAttachmentBytes(): number {
-  try {
-    return loadSettings().maxAttachmentBytes;
-  } catch {
-    return MAX_ATTACHMENT_BYTES;
-  }
-}
-
 /** base64 文本长度 → 解码字节数（在 atob/数组转换前预检，防止先复制多份内存再拒） */
 function decodedBase64Length(encoded: string): number {
   const len = encoded.replace(/=+$/, "").length;
   return Math.floor(len / 4) * 3 + (len % 4 === 2 ? 1 : len % 4 === 3 ? 2 : 0);
+}
+
+/** 本地选择/粘贴的文件在进入 uploadQueue/重试前先按当前设置拦截一次。 */
+function uploadRequestSize(request: unknown): { filename: string; sizeBytes: number } | null {
+  const payload = request instanceof File
+    ? request
+    : (request as { data?: unknown; file?: unknown } | null)?.data ?? (request as { file?: unknown } | null)?.file;
+  if (payload instanceof File) {
+    return { filename: payload.name || "附件", sizeBytes: payload.size };
+  }
+  if (typeof payload === "string" && payload.startsWith("data:")) {
+    const [header, encoded = ""] = payload.split(",", 2);
+    if (!/;base64(?:;|$)/i.test(header)) return null;
+    return { filename: "粘贴附件", sizeBytes: decodedBase64Length(encoded) };
+  }
+  return null;
 }
 
 export interface RemoteImageDownloadLimits {
@@ -88,6 +95,8 @@ export interface ResourceUploadOptions {
 export const DOCUMENT_IMAGE_DOWNLOAD_LIMITS: RemoteImageDownloadLimits = { timeoutMs: 15_000, maxAttempts: 3 };
 
 export async function uploadLakeResource(request: unknown, noteId: string, options: ResourceUploadOptions = {}): Promise<ResourceUploadOutput> {
+  const requested = uploadRequestSize(request);
+  if (requested) assertAttachmentWithinLimit(requested.sizeBytes, requested.filename);
   const kind = uploadKindOf(request);
   const startedAt = nowMs();
   let retries = 0;
@@ -101,7 +110,7 @@ export async function uploadLakeResource(request: unknown, noteId: string, optio
         backoffMultiplier: 2,
         onRetry: () => { retries += 1; },
         // 永久失败（地址不可用 / 防盗链网页 / 超限）立即抛，不再叠加重试（移动端内层已试 3 次）。
-        shouldRetry: (error) => !(error instanceof PermanentRemoteError),
+        shouldRetry: (error) => !(error instanceof PermanentRemoteError || error instanceof AttachmentLimitExceededError),
       });
     const output = await (options.skipQueue ? runUpload() : uploadQueue.add(runUpload));
     uploadStats.record({ kind, startedAt, endedAt: nowMs(), ok: true, retries });
@@ -133,11 +142,9 @@ function isAudioFile(file: File): boolean {
 /** 非图片附件：作为资产落盘（note-assets/{noteId}/{file}），返回 canonical URL —— 不再 base64 内嵌正文。
  * 上传上限取用户配置（maxAttachmentBytes，默认 25MiB，可到 100MiB）。 */
 async function uploadAttachmentFile(file: File, noteId: string, options: ResourceUploadOptions = {}): Promise<ResourceUploadOutput> {
-  const maxBytes = configuredMaxAttachmentBytes();
-  if (file.size > maxBytes) {
-    throw new Error(`附件超过 ${maxBytes / 1024 / 1024} MiB 上限（可在设置中调整）`);
-  }
+  assertAttachmentWithinLimit(file.size, file.name);
   const bytes = new Uint8Array(await file.arrayBuffer());
+  assertAttachmentWithinLimit(bytes.length, file.name);
   // `saveResource`（小记注入）必须同样覆盖附件：否则小记的附件会落到 `note-assets/<draftId>/`
   // （文档资源空间）而不是小记 staging ⇒ 保存时 promote 找不到文件、转换也搬不走。
   const out = options.saveResource
@@ -162,7 +169,10 @@ async function performUpload(request: unknown, noteId: string, options: Resource
       return uploadAttachmentFile(payload, noteId, options);
     }
     // Image files → preserve the detected source format (including animated GIF/WebP)
-    const input = normalizeImageInput(new Uint8Array(await payload.arrayBuffer()), payload.name || "image");
+    const bytes = new Uint8Array(await payload.arrayBuffer());
+    const limit = effectiveAttachmentLimitBytes();
+    assertAttachmentWithinLimit(bytes.length, payload.name || "图片", limit);
+    const input = normalizeImageInput(bytes, payload.name || "image", limit);
     return uploadWithOriginalFormat(input, noteId, options);
   }
 
@@ -171,12 +181,11 @@ async function performUpload(request: unknown, noteId: string, options: Resource
     // Non-image data URLs pass through as-is（审计 #14：先按 base64 长度预检）
     if (!payload.startsWith("data:image/")) {
       const [header, encoded = ""] = payload.split(",", 2);
-      if (decodedBase64Length(encoded) > configuredMaxAttachmentBytes()) {
-        throw new Error(`附件超过 ${configuredMaxAttachmentBytes() / 1024 / 1024} MiB 上限`);
-      }
-      return { url: payload, resourceRef: payload, filename: "attachment", mimeType: header.replace("data:", "").split(";")[0] || "application/octet-stream", size: decodedBase64Length(encoded) };
+      const size = decodedBase64Length(encoded);
+      assertAttachmentWithinLimit(size, "粘贴附件");
+      return { url: payload, resourceRef: payload, filename: "attachment", mimeType: header.replace("data:", "").split(";")[0] || "application/octet-stream", size };
     }
-    const input = dataUrlInput(payload);
+    const input = dataUrlInput(payload, effectiveAttachmentLimitBytes());
     return uploadWithOriginalFormat(input, noteId);
   }
 
@@ -203,7 +212,7 @@ async function performUpload(request: unknown, noteId: string, options: Resource
     if (hasNativeBridge()) {
       return native.uploadResource(
         downloaded.mime.startsWith("image/")
-          ? normalizeImageInput(downloaded.bytes, downloaded.filename)
+          ? normalizeImageInput(downloaded.bytes, downloaded.filename, MAX_IMAGE_BYTES)
           : { bytes: downloaded.bytes, filename: downloaded.filename },
         noteId
       );
@@ -214,17 +223,15 @@ async function performUpload(request: unknown, noteId: string, options: Resource
   throw new Error("无法识别的上传内容");
 }
 
-function dataUrlInput(value: string): ResourceUploadInput {
+function dataUrlInput(value: string, maxBytes = MAX_ATTACHMENT_BYTES): ResourceUploadInput {
   const [header, encoded = ""] = value.split(",", 2);
   if (!/^data:[^;]+;base64$/i.test(header)) throw new Error("图片 Data URL 格式无效");
   // 审计 #14：atob/数组转换前预检解码长度（大 Data URL 不再先复制多份内存）
-  if (decodedBase64Length(encoded) > MAX_IMAGE_BYTES) {
-    throw new Error("图片超过 25 MiB");
-  }
+  assertAttachmentWithinLimit(decodedBase64Length(encoded), "粘贴图片", maxBytes);
   const binary = atob(encoded);
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return normalizeImageInput(bytes, "image");
+  return normalizeImageInput(bytes, "image", maxBytes);
 }
 
 async function uploadWithOriginalFormat(input: ResourceUploadInput, noteId: string, options: ResourceUploadOptions = {}): Promise<ResourceUploadOutput> {
@@ -367,7 +374,7 @@ function embedAsDataUrl(downloaded: DownloadedRemote): ResourceUploadOutput {
     const url = `data:${downloaded.mime};base64,${bytesToBase64(downloaded.bytes)}`;
     return { url, resourceRef: url, filename: downloaded.filename, mimeType: downloaded.mime, size: downloaded.bytes.length };
   }
-  return imageDataUrl(normalizeImageInput(downloaded.bytes, downloaded.filename));
+  return imageDataUrl(normalizeImageInput(downloaded.bytes, downloaded.filename, MAX_IMAGE_BYTES), MAX_IMAGE_BYTES);
 }
 
 /** Uint8Array → base64（无原生层的演示模式用；分块避免参数栈溢出）。 */
