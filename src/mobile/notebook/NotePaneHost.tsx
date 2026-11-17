@@ -38,6 +38,8 @@ export interface NotePaneHostProps {
   onEditorInstance: (id: string, editor: LakeEditorInstance | null) => void;
   /** 多维表记录详情等子页全屏请求（父层隐藏顶栏/胶囊）。 */
   onFullscreenChange: (fullscreen: boolean) => void;
+  /** 详情页「编辑」入口（261117）：进入编辑（顶栏铅笔同义）；编辑锁文档不传给下层。 */
+  onRequestEdit?: () => void;
   /** DocumentEditor 的查找条关闭（父层收 overlay）。 */
   onCloseFind: () => void;
   /** 工作区统一保存屏障（文档列表批量删除前落盘，G1）。 */
@@ -97,6 +99,8 @@ export function NotePaneHost(props: NotePaneHostProps) {
               // 只读文档里提交表单必须真正落盘（不走「编辑态才自动保存」的防抖路径）：
               // 与「完成编辑」同一条写边界（bridge.saveNote），失败抛出由 viewer 提示。
               onPersistNow={(c) => props.onPersistBitableNow(t, c)}
+              // 详情页「编辑」入口：编辑锁文档不提供（锁语义见 editLocked 横幅）。
+              onRequestEdit={t.editLocked ? undefined : props.onRequestEdit}
               // 记录详情 = 子页全屏：请求隐藏工作区顶栏/底部胶囊（单一入口，child 只声明状态）。
               onFullscreenChange={props.onFullscreenChange}
             />

@@ -90,7 +90,7 @@ describe("MobileBitableFieldEditorSheet（修改字段）", () => {
     const onSave = vi.fn();
     render({ ...createBitableField("select", "类型", "f-type"), options: [{ id: "o1", name: "复盘", color: "green" }] }, onSave);
     expect(host.querySelectorAll(".mbt-feditor__option").length).toBe(1);
-    act(() => btnByText("添加选项")!.click());
+    act(() => btnByText("新建选项")!.click());
     expect(host.querySelectorAll(".mbt-feditor__option").length).toBe(2);
     const second = host.querySelectorAll<HTMLInputElement>('.mbt-feditor__option input')[1];
     act(() => {

@@ -37,7 +37,16 @@ export function BitableSelectControl({ field, value, onChange, onEditField }: Bi
   return (
     <div className="mbt-select">
       {/* 已选区：点已选项 = 取消（移回下方）；点行空白/箭头 = 展开收起候选。 */}
-      <div className="mbt-select__chosen" onClick={() => setOpen((on) => !on)}>
+      <div
+        className="mbt-select__chosen"
+        role="button"
+        tabIndex={0}
+        aria-expanded={open}
+        onClick={() => setOpen((on) => !on)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setOpen((on) => !on); }
+        }}
+      >
         {chosen.length ? chosen.map((option) => (
           <button
             key={option.id}
@@ -52,7 +61,7 @@ export function BitableSelectControl({ field, value, onChange, onEditField }: Bi
         )}
         <button
           type="button"
-          className="mbt-select__toggle"
+          className="mbt-select__toggle mb-tap"
           aria-expanded={open}
           aria-label={(open ? "收起 " : "展开 ") + field.name + " 选项"}
           onClick={(event) => { event.stopPropagation(); setOpen((on) => !on); }}

@@ -65,7 +65,7 @@ export function MobileBitableFieldSheet({ table, fields, onEdit, onDelete, onAdd
               <span className="mb-set-item__note">{BITABLE_FIELD_TYPE_LABEL[field.type as BitableFieldType] ?? field.type}</span>
             </div>
             <div className="mb-set-item__ctl">
-              <button type="button" className="mb-iconbtn" aria-label={"编辑字段 " + field.name} onClick={() => onEdit(field)}><Pencil size={17} /></button>
+              <button type="button" className="mb-iconbtn" aria-label={"修改字段 " + field.name} onClick={() => onEdit(field)}><Pencil size={17} /></button>
               <button type="button" className="mb-iconbtn" aria-label={"删除字段 " + field.name} onClick={() => void askDelete(field)}><Trash2 size={17} /></button>
             </div>
           </div>
@@ -75,7 +75,7 @@ export function MobileBitableFieldSheet({ table, fields, onEdit, onDelete, onAdd
       <div className="mbt-field-add">
         {!adding ? (
           <button type="button" className="mb-btn mb-btn--secondary mb-btn--block" onClick={() => setAdding(true)}>
-            <Plus size={16} />添加字段
+            <Plus size={16} />新建字段
           </button>
         ) : (
           <div className="mbt-field-add__form">

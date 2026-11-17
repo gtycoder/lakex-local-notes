@@ -807,6 +807,8 @@
 .mbt-select__placeholder { color: var(--lake-text-4); font-size: var(--lake-font-size-small); }
 .mbt-select__options { justify-content: flex-start; }
 .mbt-select__add { border-style: dashed; }
+/* 值溢出 +N 徽标（261117）：中性弱化，title 列全量 */
+.mbt-value-more { color: var(--lake-text-3); background: transparent; border: .5px dashed var(--lake-border-strong); }
 
 .mbt-form-edittoggle { display: flex; justify-content: flex-end; padding: var(--lake-space-sm) 0 0; }
 .mbt-form-editor { display: flex; flex-direction: column; gap: var(--lake-space-lg); padding: var(--lake-space-lg) var(--mb-page-pad) var(--lake-space-giant); }

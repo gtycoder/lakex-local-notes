@@ -243,7 +243,7 @@ export function MobileBitableFieldEditorSheet({ open, field, hasData, onSave, on
                       <button type="button" className="mb-iconbtn" aria-label={"删除选项 " + (option.name || index + 1)} onClick={() => removeOption(option.id)}><Trash2 size={17} /></button>
                     </div>
                   ))}
-                  <button type="button" className="mb-btn mb-btn--secondary mb-btn--sm" onClick={addOption}><Plus size={16} />添加选项</button>
+                  <button type="button" className="mb-btn mb-btn--secondary mb-btn--sm" onClick={addOption}><Plus size={16} />新建选项</button>
                 </div>
               </div>
             </div>

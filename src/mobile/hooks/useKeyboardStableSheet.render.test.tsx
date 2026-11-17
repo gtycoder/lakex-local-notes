@@ -127,7 +127,7 @@ describe("useKeyboardStableSheet", () => {
     setInnerHeight(480);
     await act(async () => { window.dispatchEvent(new Event("resize")); });
     expect(sheet.style.top).toBe("200px"); // 先钉住（keyboard 前几何）
-    await act(async () => { await new Promise((resolve) => requestAnimationFrame(resolve)); });
+    await act(async () => { for (let i = 0; i < 3; i++) await new Promise((resolve) => requestAnimationFrame(resolve)); });
     // 滚不动（jsdom 无滚动余量）⇒ 抬 Sheet：200 − min(740+12−472, 200) = 0
     expect(sheet.style.top).toBe("0px");
     expect(sheet.style.height).toBe("600px"); // 抬升不改高度

@@ -124,7 +124,7 @@ describe("MobileBitableViewer（新建表单视图 / 新增字段进编辑）", 
     act(() => host.querySelector<HTMLButtonElement>('button[aria-label="字段管理"]')!.click());
     expect(sheetTitles()).toEqual(["字段：数据表 1"]);
 
-    act(() => btn("添加字段")!.click());
+    act(() => btn("新建字段")!.click());
     setInput(host.querySelector<HTMLInputElement>('input[aria-label="新字段名称"]')!, "截止日");
     act(() => btn("添加")!.click());
 

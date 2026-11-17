@@ -21,6 +21,7 @@ import { checkDocBody } from "../../core/docBodySafety.js";
 import { fillSurfaceColor } from "../../core/colorPalette.js";
 import {
   applyViewToRecords,
+  bitableFieldText,
   bitableFillBackgroundTokens,
   bitableRecordTitle,
   bitableRowHeightPx,
@@ -97,9 +98,11 @@ export interface MobileBitableViewerProps {
    * 打开详情 → true，关闭/卸载 → false。
    */
   onFullscreenChange?: (fullscreen: boolean) => void;
+  /** 详情页「编辑」入口（261117）：进入编辑并打开本记录编辑面板；不传 = 不渲染按钮。 */
+  onRequestEdit?: () => void;
 }
 
-export function MobileBitableViewer({ noteId, content, editing = false, onChange, onPersistNow, onFullscreenChange }: MobileBitableViewerProps) {
+export function MobileBitableViewer({ noteId, content, editing = false, onChange, onPersistNow, onFullscreenChange, onRequestEdit }: MobileBitableViewerProps) {
   /**
    * CORE-02：判据收口在 core（usheet / board / ink / bitable 同一套 `checkDocBody`）。
    * 空正文 = ok + 默认表（新建/清空，仍可编辑）；非空但解析失败 / 结构不对 ⇒ **只读 + 横幅**，
@@ -513,11 +516,11 @@ export function MobileBitableViewer({ noteId, content, editing = false, onChange
         tabIndex={0} role="row" aria-label={"查看记录 " + bitableRecordTitle(table, record, displayCtx)}>
         <td className="mbt-grid__idx">{indexById.get(record.id) ?? ""}</td>
         {fields.map((field) => {
-          const value: ReactNode = <FieldValue noteId={noteId} ctx={displayCtx} field={field} record={record} />;
+          const value: ReactNode = <FieldValue noteId={noteId} ctx={displayCtx} field={field} record={record} maxChips={2} />;
           return (
             <td key={field.id} style={fillStyleOf(record.id, field.id)}>
               {editable ? (
-                <button type="button" className="mbt-cell-btn" aria-label={field.name} onClick={(event) => { event.stopPropagation(); tapCell(record, field); }}>
+                <button type="button" className="mbt-cell-btn" aria-label={field.name + "：" + (bitableFieldText(record, field, displayCtx) || "空")} onClick={(event) => { event.stopPropagation(); tapCell(record, field); }}>
                   {value}
                 </button>
               ) : value}
@@ -536,25 +539,25 @@ export function MobileBitableViewer({ noteId, content, editing = false, onChange
           「编辑中/只读」徽标与记录数不进头部（记录数在网格末尾统计行）。 */}
       <header className="mbt-header" role="toolbar" aria-label="多维表头部" data-mb-topbar data-edge="nested">
         <div className="mbt-header__row1">
-          <button type="button" className="mb-iconbtn mb-iconbtn--compact mbt-header__tables" aria-label="数据表"
+          <button type="button" className="mb-iconbtn mb-iconbtn--compact mbt-header__tables mb-tap" aria-label="数据表"
             onClick={() => setTableDrawerOpen(true)}>
             <Menu size={16} />
           </button>
           <span className="mbt-header__name" title={table.name}>{table.name}</span>
           <span className="mbt-header__spacer" />
           {header.showFieldButton && (
-            <button type="button" className="mb-iconbtn mbt-header__btn" aria-label="字段管理" onClick={() => setFieldSheetOpen(true)}>
+            <button type="button" className="mb-iconbtn mbt-header__btn mb-tap" aria-label="字段管理" onClick={() => setFieldSheetOpen(true)}>
               <TableProperties size={16} />
             </button>
           )}
           {header.showFilterButton && (
-            <button type="button" className="mb-iconbtn mbt-header__btn" aria-label="筛选"
+            <button type="button" className="mb-iconbtn mbt-header__btn mb-tap" aria-label="筛选"
               onClick={() => { setConfigInitialTab("layout"); setConfigOpen(true); }}>
               <ListFilter size={16} />
             </button>
           )}
           {header.showAddRecord && (
-            <button type="button" className="mb-iconbtn mbt-header__btn" aria-label="新增记录" onClick={addRecord}>
+            <button type="button" className="mb-iconbtn mbt-header__btn mb-tap" aria-label="新建记录" onClick={addRecord}>
               <Plus size={16} />
             </button>
           )}
@@ -665,8 +668,8 @@ export function MobileBitableViewer({ noteId, content, editing = false, onChange
                   <tbody>
                     <tr>
                       <td className="mbt-add-row" colSpan={Math.max(1, columnCount)}>
-                        <button type="button" className="mbt-add-row__btn" aria-label="新增记录" onClick={addRecord}>
-                          <Plus size={15} />新增记录
+                        <button type="button" className="mbt-add-row__btn" aria-label="新建记录" onClick={addRecord}>
+                          <Plus size={15} />新建记录
                         </button>
                       </td>
                     </tr>
@@ -761,6 +764,14 @@ export function MobileBitableViewer({ noteId, content, editing = false, onChange
             if (next) setDetailId(next.id);
           }}
           onClose={() => setDetailId(null)}
+          collectForm={isFormView}
+          onRequestEdit={onRequestEdit && !bodyUnreadable ? () => {
+            // 261117 用户裁决：详情页「编辑」= 进入编辑并打开本记录的编辑面板。
+            const id = detailRecord.id;
+            setDetailId(null);
+            onRequestEdit();
+            setRecordId(id);
+          } : undefined}
         />
       )}
 

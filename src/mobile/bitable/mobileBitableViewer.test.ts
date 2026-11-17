@@ -169,7 +169,7 @@ describe("MobileBitableViewer 只读单元", () => {
     expect(row1).toContain('aria-label="数据表"');
     expect(row1).toContain('aria-label="字段管理"');
     expect(row1).toContain('aria-label="筛选"');
-    expect(row1).toContain('aria-label="新增记录"');
+    expect(row1).toContain('aria-label="新建记录"');
     expect(row1).not.toContain('aria-label="视图"');
     // 第 2 行：视图页签 + 视图列表
     expect(html).toContain('class="mbt-header__row2"');
@@ -189,7 +189,7 @@ describe("MobileBitableViewer 只读单元", () => {
     const html = render(body);
     expect(html).not.toContain("is-editing");
     expect(html).not.toContain("mbt-cell-btn");
-    expect(html).not.toContain('aria-label="新增记录"');
+    expect(html).not.toContain('aria-label="新建记录"');
     expect(html).not.toContain('aria-label="字段管理"');
     expect(html).not.toContain('aria-label="筛选"');
     // 只读单视图：第 2 行整段不渲染（头部只剩第 1 行的 ☰ + 表名）；也没有只读徽标
@@ -240,7 +240,7 @@ describe("MobileBitableViewer 只读单元", () => {
     expect(html).toContain('aria-label="视图列表"');
     expect(html).not.toContain('aria-label="字段管理"');
     expect(html).not.toContain('aria-label="筛选"');
-    expect(html).not.toContain('aria-label="新增记录"');
+    expect(html).not.toContain('aria-label="新建记录"');
   });
 
   it("记录超过一页时给「加载更多」（完整模型不裁剪，只限制挂载行）", () => {
@@ -263,7 +263,7 @@ describe("MobileBitableViewer 只读单元", () => {
     expect(html).toContain("120 条记录");
     expect(html).toContain("加载更多（已显示 100 / 120 条）");
     // 首屏只挂 100 行（窗口），不是把 120 行全渲染
-    expect((html.match(/aria-label="文本"/g) ?? []).length).toBe(100);
+    expect((html.match(/aria-label="文本：/g) ?? []).length).toBe(100); // 261117：cell aria 带值（同名按钮可区分）
   });
 
   it("条件填色在移动端只读表格复用桌面投影（背景 + 行侧）", () => {

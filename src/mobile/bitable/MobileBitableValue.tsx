@@ -55,14 +55,18 @@ export function AttachmentCell({ noteId, value, imageOnly }: { noteId: string; v
 }
 
 /** 单选/多选：选项色块（与桌面同一 optionChipStyle）。 */
-export function OptionChips({ field, value }: { field: BitableField; value: unknown }) {
+export function OptionChips({ field, value, maxChips }: { field: BitableField; value: unknown; maxChips?: number }) {
   const options = readOnlyOptions(field, value);
   if (options.length === 0) return <EmptyCell />;
+  // 261117：maxChips 限展示个数 + 溢出 +N（网格单元窄、nowrap 截断看不出「还有更多」；详情页不限）。
+  const shown = maxChips && options.length > maxChips ? options.slice(0, maxChips) : options;
+  const hidden = options.length - shown.length;
   return (
     <>
-      {options.map((option) => (
+      {shown.map((option) => (
         <span key={option.id} className="mb-tag" style={optionChipStyle(option.color)}>{option.name}</span>
       ))}
+      {hidden > 0 && <span className="mb-tag mbt-value-more" title={options.map((o) => o.name).join("、")}>+{hidden}</span>}
     </>
   );
 }
@@ -116,12 +120,12 @@ export function RelationCell({ ctx, field, value }: { ctx: BitableDisplayContext
 }
 
 /** 按字段类型分派只读渲染（未知类型只读文本）。 */
-export function FieldValue({ noteId, ctx, field, record }: { noteId: string; ctx: BitableDisplayContext; field: BitableField; record: BitableRecord }): ReactNode {
+export function FieldValue({ noteId, ctx, field, record, maxChips }: { noteId: string; ctx: BitableDisplayContext; field: BitableField; record: BitableRecord; maxChips?: number }): ReactNode {
   const value = record.values[field.id];
   if (isAttachmentLikeField(field.type)) {
     return <AttachmentCell noteId={noteId} value={value} imageOnly={field.type === "image"} />;
   }
-  if (field.type === "select" || field.type === "multiSelect") return <OptionChips field={field} value={value} />;
+  if (field.type === "select" || field.type === "multiSelect") return <OptionChips field={field} value={value} maxChips={maxChips} />;
   if (field.type === "boolean") {
     const checked = readOnlyBoolean(value);
     return checked === null ? <EmptyCell /> : <input className="mbt-bool" type="checkbox" checked={checked} disabled aria-label="布尔值" />;

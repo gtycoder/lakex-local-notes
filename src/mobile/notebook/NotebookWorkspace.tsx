@@ -509,6 +509,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
           onCapture={handlePaneCapture}
           onEditorInstance={handleEditorInstance}
           onFullscreenChange={setSubpageFullscreen}
+          onRequestEdit={toggleEdit}
           onCloseFind={() => closeOverlay("find")}
           flushSaves={flushAllTabs}
         />

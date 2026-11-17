@@ -325,6 +325,16 @@ button.mb-set-item__main {
 /* 261013：内层 input 必须撑满外壳，否则外壳 44 高、内层只有 25 高（走查 smallTap 实测 70×25）——
    用户点到的是外壳而不是输入框，命中区等于没补。 */
 .mb-input > input { align-self: stretch; min-height: var(--mb-tap-min); margin-block: -1px; }
+
+/* 触屏命中盒扩展（44 Rule 工具类，261117 补实现）：视觉尺寸不变，::after 把可点区域补到
+   --mb-tap-min(44)。AGENTS/DESIGN 一直以 .mb-tap 为「小图标钮凑 44 命中」的约定机制，
+   但规则此前缺失（树行动作 28×28 实际裸奔）——凡视觉小于 44 的可点目标一律挂本类。 */
+.mb-tap { position: relative; }
+.mb-tap::after {
+  content: ""; position: absolute; left: 50%; top: 50%;
+  width: var(--mb-tap-min); height: var(--mb-tap-min);
+  transform: translate(-50%, -50%);
+}
 .mb-kbd {
   display: inline-flex; align-items: center; min-height: 24px; padding: 0 6px;
   border: .5px solid var(--lake-border-strong); border-radius: var(--mb-radius-sm);
