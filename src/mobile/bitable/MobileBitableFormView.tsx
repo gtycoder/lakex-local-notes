@@ -5,6 +5,8 @@
  * - 这是只读文档里**唯一的写入面**：填完提交 = 当前表新增一条记录（不改既有数据）；
  * - 题目顺序 / 必填 / 描述全部来自视图配置（`formFieldIds` / `formDescriptions` / 字段 required）；
  * - 提交失败（落盘失败）保留草稿并提示，不静默丢弃；
+ * - 填写草稿落设备本地（261118 P1-5，`mobileBitableFormDraft`）：打开回填、提交成功清空、
+ *   题目集合/类型变化弃用（宁可丢草稿不给错值），不进正文、不进 S3；
  * - 附件/图片字段可上传（261030 P1，与记录面板共用 MobileBitableAttachmentEditor；映射见 mobileBitableAttachments.ts）。
  */
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -20,6 +22,13 @@ import {
 import { progressValue, ratingValue, textInputValue } from "./mobileBitableEdit";
 import { BitableSelectControl } from "./BitableSelectControl";
 import { formDraftDefaults, formFieldsFor, formMissingFields, formableFields as formableBitableFields } from "./mobileBitableForm";
+import {
+  clearMobileFormDraft,
+  mobileFormDraftKey,
+  mobileFormDraftSignature,
+  readMobileFormDraft,
+  writeMobileFormDraft,
+} from "./mobileBitableFormDraft";
 import { MobileBitableAttachmentEditor } from "./MobileBitableAttachmentEditor";
 import { MobileBitableDateField } from "./MobileBitableDateField";
 import { dismissKeyboard, dismissKeyboardOnPointerDown } from "../ui/dismissKeyboard";
@@ -55,7 +64,37 @@ function fieldIcon(field: BitableField) {
 export function MobileBitableFormView({ noteId, table, view, ctx, onSubmit, editable = false, onUpdateView }: MobileBitableFormViewProps) {
   const fields = useMemo(() => formFieldsFor(table, view), [table, view]);
   const defaults = useMemo(() => formDraftDefaults(table), [table]);
-  const [draft, setDraft] = useState<Record<string, unknown>>(() => ({ ...defaults }));
+  // 261118 P1-5 草稿保护：恢复是**同步**发生在 useState 初始化 —— 不进 effect、不 focus()，
+  // 键盘/焦点稳定（不抢焦点）；恢复值盖在默认值上（表默认值不丢）。
+  const [draft, setDraft] = useState<Record<string, unknown>>(() => {
+    const restored = readMobileFormDraft(noteId, view.id, fields);
+    return restored ? { ...defaults, ...restored } : { ...defaults };
+  });
+  const draftRef = useRef(draft);
+  const replaceDraft = (next: Record<string, unknown>) => {
+    draftRef.current = next;
+    setDraft(next);
+  };
+  // 恢复/丢弃单元 = 存储 key（noteId + viewId）+ 题目指纹（id:type 有序）：
+  // 同一 key 但指纹变了 ⇒ 弃用旧草稿；换了 key（同一挂载实例切到别的表单）⇒ 按新 key 重新回填、互不串。
+  const draftSignature = useMemo(() => mobileFormDraftSignature(fields), [fields]);
+  const draftStorageKey = mobileFormDraftKey(noteId, view.id);
+  const hydratedRef = useRef({ key: draftStorageKey, signature: draftSignature });
+  useEffect(() => {
+    const last = hydratedRef.current;
+    if (last.key === draftStorageKey && last.signature === draftSignature) return;
+    const switched = last.key !== draftStorageKey;
+    hydratedRef.current = { key: draftStorageKey, signature: draftSignature };
+    if (!switched) {
+      clearMobileFormDraft(noteId, view.id);
+      replaceDraft({ ...defaults });
+      return;
+    }
+    const restored = readMobileFormDraft(noteId, view.id, fields);
+    replaceDraft(restored ? { ...defaults, ...restored } : { ...defaults });
+    // 只在 key/指纹变化时动作；defaults/fields 取当轮值即可
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftStorageKey, draftSignature]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [submitted, setSubmitted] = useState(0);
@@ -84,7 +123,12 @@ export function MobileBitableFormView({ noteId, table, view, ctx, onSubmit, edit
   }, []);
 
 
-  const setValue = (fieldId: string, value: unknown) => setDraft((prev) => ({ ...prev, [fieldId]: value }));
+  const setValue = (fieldId: string, value: unknown) => {
+    const next = { ...draftRef.current, [fieldId]: value };
+    replaceDraft(next);
+    // 用户改动即落设备本地（切走/刷新/杀进程可恢复）；提交成功才删。
+    writeMobileFormDraft(noteId, view.id, fields, next);
+  };
 
   const submit = async () => {
     dismissKeyboard();
@@ -99,7 +143,8 @@ export function MobileBitableFormView({ noteId, table, view, ctx, onSubmit, edit
     try {
       const ok = await onSubmit(draft);
       if (!ok) { setError("提交失败，请重试"); return; }
-      setDraft({ ...defaults });
+      replaceDraft({ ...defaults });
+      clearMobileFormDraft(noteId, view.id); // 提交成功 = 草稿已成记录，删草稿
       setSubmitted((count) => count + 1);
       showToast("已提交，记录已加入收集表");
     } finally {
